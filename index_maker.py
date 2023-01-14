@@ -21,11 +21,11 @@ warnings.filterwarnings("ignore")
 # This section creates an index file for all image data for easy search later on
 wd = os.getcwd()
                 
-image_folders = ["wac_data","nac_data"]
+image_folders = ["data/wac_data","data/nac_data"]
 
-spice_index = wd + "/cosp_1000/index"
+spice_index = wd + "data/cosp_1000/index"
 
-spice_path = wd + "/cosp_1000/data"
+spice_path = wd + "data/cosp_1000/data"
 
     # load labels
     

@@ -12,7 +12,7 @@ import os
 
 
 wd = os.getcwd()
-Kernel_index_path = wd + "/cosp_1000/index"
+Kernel_index_path = wd + "data/cosp_1000/index"
        
 loaded = False   
 
