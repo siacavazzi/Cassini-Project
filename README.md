@@ -7,8 +7,8 @@ The Cassini project is my attempt at processing the data from NASA's Cassini mis
  ![Image](https://imgur.com/PAfwi0e.gif)
 
 ### Saturn in color
-![Image](https://imgur.com/Uf4nfLO.gif)
+ ![Image](https://imgur.com/Uf4nfLO.gif)
 
 ### Daphnis in b&w
-![Image](https://imgur.com/8yNcx4g.gif)
+ ![Image](https://imgur.com/8yNcx4g.gif)
 
