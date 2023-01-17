@@ -12,14 +12,9 @@ import os
 
 
 wd = os.getcwd()
-Kernel_index_path = wd + "data/cosp_1000/index"
+Kernel_index_path = wd + "/data/cosp_1000/index"
        
 loaded = False   
-
-
-#utctim = "2004-292T20:20:10.512"
-
-
     
 def check_kernels(start_year,end_year):
     global loaded
@@ -34,7 +29,7 @@ def date_to_clock(start,end):
         start = sp.sce2c(-82,sp.str2et(start))
         end = sp.sce2c(-82,sp.str2et(end))
     except:
-        print("idk man something aint right")
+        print("Error converting image time to spacecraft clock time")
         raise 
         
     return [start, end]
@@ -210,23 +205,7 @@ def find_target(label,plot,output):
         max_y = max_y - range
         y_bound = lines * i
         
-          
-        
-        
-        
-        
-        
-        
-        
-        
-        
-        
-        
-        
-        
-        
-        
-        
+
     
     x = np.interp(targ_loc[0],[min_x,max_x],[1,lines])
     x = lines - x

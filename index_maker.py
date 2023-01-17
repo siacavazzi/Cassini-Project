@@ -24,12 +24,11 @@ wd = os.getcwd()
 image_folders = ["/data/wac_data","/data/nac_data"]
 
 spice_index = wd + "/data/cosp_1000/index"
+spice_data = wd + "/data/cosp_1000/data"
+
 
 spice_path = "SPICE_PATH"
 
-#wd + "data/cosp_1000/data"
-
-    # load labels
     
 """
 Creates a CSV index file with all images. Converts the image date to seconds since Jan 01, 1970 for efficient comparisons later
@@ -79,14 +78,14 @@ def replace(file_path, pattern, subst):
     move(abs_path, file_path)
 
 """
-Kind of a work in progress - replaces SPICE file location in SPICE indecies to make SPICE file location on the local machine
+Replaces SPICE file location in SPICE indecies to make SPICE file location on the local machine
 """    
 def create_spice_index():
     files = os.listdir(spice_index)
     print(files)
     for file in files:
         file = f"{spice_index}/{file}"
-        replace(file, spice_index,spice_path)
+        replace(file, spice_path, spice_data)
         
         
       # helper function   
@@ -159,7 +158,7 @@ def get_images(camera,target,delta,filters,start_loc,make_csv=False):
                     for z in range(0, num_channels):
                    
                         if filters[z] in seq['FILTER_NAME'].iloc[x]:
-                            ch[filters[z]] = seq["path"].iloc[x]
+                            ch[filters[z]] = "data/" + seq["path"].iloc[x]
                             id = seq["seconds_1970"].iloc[x]
             
                   
@@ -192,181 +191,3 @@ def get_images(camera,target,delta,filters,start_loc,make_csv=False):
 
 
 
-#get_images("ISSNA", "TITAN", 300, ["RED","GRN","BL1"], make_csv=True)
-
-
-
-
-
-
-
-
-
-def create_wac_color_index():
-
-    output = pd.DataFrame()
-    delta = 300 # seconds between images
-
-    index = pd.read_csv("Image_index.csv")
-    
-    variables = ["red","grn","blu","TARGET_NAME"]
-    index = index[index["INSTRUMENT_ID"] == "ISSWA"]
-    index["date"] = ""
-    index["color"] = ""    
-    index["SEQUENCE"] = ""
-    runlen = len(index) 
-        
-    i = 0
-    while i < runlen:
-        index["color"].iloc[i] = index["FILTER_NAME"].iloc[i].split(',')[1].replace(')',"")
-        color = index["color"].iloc[i]
-        
-        if  color == "RED" or color == "GRN" or color == "VIO" or color == "BL1":
-            red = None
-            grn = None
-            blu = None
-        
-            seq = pd.DataFrame()
-            #print(f"{color} at {i}")
-        
-            j = 1
-    
-            index["date"].iloc[i] = datetime.datetime.strptime(str(index['IMAGE_TIME'].iloc[i]).replace('Z',''),'%Y-%jT%H:%M:%S.%f')
-            index["date"].iloc[i+1] = datetime.datetime.strptime(str(index['IMAGE_TIME'].iloc[i+1]).replace('Z',''),'%Y-%jT%H:%M:%S.%f')
-        
-
-        
-            while(((index["date"].iloc[i+j] - index["date"].iloc[i])).total_seconds() < delta):
-                print("pass")
-                if j == 1:
-                    seq = seq.append(index.iloc[i])               
-                    index["date"].iloc[i+j+1] = datetime.datetime.strptime(str(index['IMAGE_TIME'].iloc[i+j+1]).replace('Z',''),'%Y-%jT%H:%M:%S.%f')        
-                index["date"].iloc[i+j+1] = datetime.datetime.strptime(str(index['IMAGE_TIME'].iloc[i+j+1]).replace('Z',''),'%Y-%jT%H:%M:%S.%f')     
-                index["color"].iloc[i+j] = index["FILTER_NAME"].iloc[i+j].split(',')[1].replace(')',"")
-                seq = seq.append(index.iloc[i+j])                             
-                j = j + 1
-            
-            for x in range(0,len(seq)):
-                if("RED" in seq['FILTER_NAME'].iloc[x]):
-                    red = seq.iloc[x]
-            
-                if("BL1" in seq['FILTER_NAME'].iloc[x]):
-                    blu = seq.iloc[x]
-                
-                if("VIO" in seq['FILTER_NAME'].iloc[x]):
-                    if(blu is None):
-                        blu = seq.iloc[x]
-        
-                if("GRN" in seq['FILTER_NAME'].iloc[x]):
-                    grn = seq.iloc[x]
-                
-                if red is not None and grn is not None and blu is not None:
-                    print("bingo")
-                    preoutput = {"camera":red["INSTRUMENT_ID"],"red":red["path"],"rt":red["IMAGE_TIME"],"grn":grn["path"],"gt":grn["IMAGE_TIME"],"blu":blu["path"],"bt":blu["IMAGE_TIME"],"TARGET_NAME":red["TARGET_NAME"]}
-                    output = output.append(preoutput,ignore_index=True)
-                    index["SEQUENCE"].iloc[i] = len(output)
-                    i = i + j - 1
-            
-    
-        i = i + 1      
-        print(f"{i} of {runlen}")
-        
-    output.to_csv("wac_trichroma_index.csv")
-    
-        #(red["date"] - grn["date"]).total_secondstot = 0
-   
-    
-     
-   
-def create_nac_color_index():
-
-    output = pd.DataFrame()
-    delta = 300 # seconds between images
-
-    index = pd.read_csv("Image_index.csv")
-    
-    filter_info = pd.read_csv("NAC_filters.csv")
-    
-    variables = ["red","grn","blu","TARGET_NAME"]
-    index = index[index["INSTRUMENT_ID"] == "ISSNA"]
-    index["date"] = ""
-    index["color"] = ""    
-    index["SEQUENCE"] = ""
-    runlen =   1000 #len(index) 
-        
-    i = 0
-    while i < runlen:
-        index["color"].iloc[i] = index["FILTER_NAME"].iloc[i].split(',')[1].replace(')',"")
-        color = index["color"].iloc[i]
-        
-        
-        red = None
-        grn = None
-        blu = None
-                    
-        seq = pd.DataFrame()
-        seq["wavelength"] = ""
-            #print(f"{color} at {i}")
-        
-        j = 1
-    
-        index["date"].iloc[i] = datetime.datetime.strptime(str(index['IMAGE_TIME'].iloc[i]).replace('Z',''),'%Y-%jT%H:%M:%S.%f')
-        index["date"].iloc[i+1] = datetime.datetime.strptime(str(index['IMAGE_TIME'].iloc[i+1]).replace('Z',''),'%Y-%jT%H:%M:%S.%f')
-        
-
-        
-        while(((index["date"].iloc[i+j] - index["date"].iloc[i])).total_seconds() < delta):
-            if j == 1:
-                    seq = seq.append(index.iloc[i])               
-                    index["date"].iloc[i+j+1] = datetime.datetime.strptime(str(index['IMAGE_TIME'].iloc[i+j+1]).replace('Z',''),'%Y-%jT%H:%M:%S.%f')        
-            
-            index["date"].iloc[i+j+1] = datetime.datetime.strptime(str(index['IMAGE_TIME'].iloc[i+j+1]).replace('Z',''),'%Y-%jT%H:%M:%S.%f')     
-            index["color"].iloc[i+j] = index["FILTER_NAME"].iloc[i+j].split(',')[1].replace(')',"")
-            seq = seq.append(index.iloc[i+j])                             
-            j = j + 1
-            
-        for x in range(0,len(seq)):
-            for y in range(0,len(filter_info)):
-                if str(filter_info["Filter 1"].iloc[y]) in str(seq["FILTER_NAME"].iloc[x]) and str(filter_info["Filter 2"].iloc[y]) in str(seq["FILTER_NAME"].iloc[x]):
-                    seq["wavelength"].iloc[x] = filter_info["wavelength"].iloc[y]
-                    #print("test")
-                    
-        min = 1000
-        max = 0
-     
-        unique = seq.wavelength.unique()    
-        if len(unique) > 2:
-            
-            # WORK HEREERERERER
-                     
-                    
-                    if red is not None and grn is not None and blu is not None:
-                
-                #if red["wavelength"] is not grn["wavelength"] and red["wavelength"] is not blu["wavelength"]:
-                        print("hi")
-                        preoutput = {"camera":red["INSTRUMENT_ID"],"red":red["path"],"rt":red["IMAGE_TIME"],"grn":grn["path"],"gt":grn["IMAGE_TIME"],"blu":blu["path"],"bt":blu["IMAGE_TIME"],"TARGET_NAME":red["TARGET_NAME"]}
-                        output = output.append(preoutput,ignore_index=True)
-                        index["SEQUENCE"].iloc[i] = len(output)
-                    i = i + j - 1
-            
-    
-        i = i + 1      
-        print(f"{i} of {runlen}")
-        
-    output.to_csv("nac_trichroma_index.csv")
-    
-        #(red["date"] - grn["date"]).total_secondstot = 0
-
-    
-    
-    
-    
-    
-    
-    
-        
-    
-    
-    
-    
-    

@@ -48,6 +48,7 @@ class label:
             self.info["path"] = self.path
         else:
             self.path = input_file
+            
             self.info["path"] = pointer
         # read label file ans parse into self
         with open(self.path) as f_in:
@@ -124,18 +125,11 @@ class label:
     """
     def translate(self,format, x,y,angle,border):
         
-        # DONT FOTGET!!!!!!!!!!!!!!!
-        #angle = 0 
-        ### ahhh!!!!!!!!!!!!!!!!!!!!
-        #color = self.info["FILTER_NAME"].split(',')[1].replace(')',"")
-        
-        
         if self.color:
             
             img = self.color_img
             lines =1024
-            
-            
+        
            
         else:
             image = label.export(self)
@@ -145,7 +139,7 @@ class label:
         
         print(f"number of lines {lines}")
         
-        #print(image)
+
         
         
         if border:
@@ -160,25 +154,14 @@ class label:
             border = 1024
             img = cv2.cvtColor(img, cv2.COLOR_BGR2RGBA)
             img= cv2.copyMakeBorder(img,border,border,border,border,cv2.BORDER_CONSTANT,value=[0,0,0,0])   
-            #img = cv2.imread(label.export("png",output))
         
         (rows, cols) = img.shape[:2]
         img = cv2.warpAffine(img, M, (cols, rows),borderMode=cv2.BORDER_TRANSPARENT)
-        """
-        if int(self.info["LINES"]) < 1024:
-            
-            #scale_percent = 200
-            #width = int(img.shape[1] * scale_percent / 100)
-            #height = int(img.shape[0] * scale_percent / 100)
-            dim = (3072,3072)
-            img = cv2.resize(img, dim, interpolation = cv2.INTER_AREA)
-            
-         """       
+  
         name = self.info["SPACECRAFT_CLOCK_START_COUNT".split('.')[0]]
         print(name)
         img = rotate_image(img,angle)
-        #path = f'translate_export/{name}.png'    
-        #cv2.imwrite(path, img)
+
         return img
         
     
@@ -205,14 +188,7 @@ class label:
             return True
         else:
             return False
-        
-
-        
-        
-                
-                
-                
-            
+    
 
 """
 Load all labels in the target directory
@@ -233,13 +209,7 @@ def load_lbls(folder_path):
             path = folder_path + "/" + file
            # print(path)
             labels.append(label(path))
-            """
-            if(ticks > start and ticks < end):
-                print(f"Label {cur} of {total} ")
-                path = image_lib + "/" + file
-                labels.append(label(path))
-                """
-    return labels
+
 
 def subset(dictionary, col_names):
     return {key: dictionary[key] for key in col_names}

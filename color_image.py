@@ -4,14 +4,13 @@ Created on Sun Apr  3 01:57:31 2022
 
 @author: Sam
 """
-import pandas as pd
+
 from PIL import Image, ImageEnhance
 import label_handler as lh
 import image_correction as ic
 import index_maker as im
-import os
 import numpy as np
-import cv2
+
 
 output = "output"
 format = "jpg"
@@ -29,26 +28,13 @@ ORDER OF COLORS ***
 
 
 """
-filters = ["RED","GRN","BL"]
+
 triband_from_dualband = True
-target = "SATURN"
 buffer = []
 
-
-
-
-
-
-
-#index = pd.read_csv("ISSNA_JUPITER_3_index.csv")
-
-
-
-# BUG: Image order is incorrect
+# BUG: Image order is incorrect sometimes
 def build_mosaic(img):
-    #img = np.asarray(img)
-    
-    #img = cv2.cvtColor(np.array(img), cv2.COLOR_RGB2BGR)
+
     
     if len(buffer) > 4:
         buffer.pop(0)
@@ -57,15 +43,14 @@ def build_mosaic(img):
         buffer.append(img)  
         composite = buffer[0]
         for image in buffer:
-            #image = image.resize([3072,3072])
-            #composite = Image.fromarray(composite)
+
             composite = Image.alpha_composite(composite, image)
           
         return composite
     else:
         buffer.insert(0,img)
         return img
-        #return img
+
         
 
 def export_sequence(camera, filters, target, delta, folder, mosaic, start_loc):
@@ -80,8 +65,8 @@ def export_sequence(camera, filters, target, delta, folder, mosaic, start_loc):
         
         
         
-        #try:
-        if True:
+        try:
+        
        
             
             
@@ -90,16 +75,11 @@ def export_sequence(camera, filters, target, delta, folder, mosaic, start_loc):
                 image = Image.fromarray(image)
             
             else:
-                
-                #lbl = lh.label(index[filters[0]].iloc[i], as_png = True)
+            
                 for filter in filters:
                     
                     img = lh.label(index[filter].iloc[i], as_png = True)
-                    
-                    
-                    #mosaic = lbl.is_mosaic()
             
-                    
                  
                     imgs.append(img)
                 lbl = imgs[0]    
@@ -107,8 +87,7 @@ def export_sequence(camera, filters, target, delta, folder, mosaic, start_loc):
                     
                     
                     imgs[j] = imgs[j].resize_image()   
-                   
-                    
+                                    
                 try:   
                     
                                 
@@ -118,17 +97,13 @@ def export_sequence(camera, filters, target, delta, folder, mosaic, start_loc):
                 except:                     
                     print("Image alignment failure")
             
-            
-            
-               # mask = Image.fromarray(imgs[0]).split()[3]
                 for j in range(0, len(imgs)):
                     
                     imgs[j] = Image.fromarray(imgs[j]).convert('L')
                 
                 if num_channels == 3:
                     image = Image.merge("RGBA",(imgs[2],imgs[1],imgs[0], mask))
-                    #image = image.convert("RGBA")
-                   
+                    
                     image = np.asarray(image)
                     
                     image = lbl.set_color(image).auto_center()
@@ -174,9 +149,7 @@ def export_sequence(camera, filters, target, delta, folder, mosaic, start_loc):
                         image = Image.merge("P",imgs[0],imgs[1])
             id = index["seconds_1970"].iloc[i]
             title = f"{id}_{target}" 
-        
-            
-            
+
             #image = Image.fromarray(image)
             
             
@@ -186,11 +159,11 @@ def export_sequence(camera, filters, target, delta, folder, mosaic, start_loc):
             
             
             image.save(f"output/{folder}/{title}.png")
-"""
+
         except Exception as e:
            print(e)
            continue
- """
+
 
 
 
