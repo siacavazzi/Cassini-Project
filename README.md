@@ -1,18 +1,10 @@
 # Cassini Project
  ## Overview
 
-The Cassini project is my attempt at processing the data from NASA's Cassini mission into color images and videos. You can learn more about the Cassini mission [here](https://en.wikipedia.org/wiki/Cassini%E2%80%93Huygens). The TL;DR is that Cassini was a probe sent to explore Saturn and its moons. Over the course of the mission it took over 450,000 black and white images. These images are available to the public on [NASA's PDS website](https://pds-imaging.jpl.nasa.gov/search/?fq=-ATLAS_THUMBNAIL_URL%3Abrwsnotavail.jpg&fq=ATLAS_MISSION_NAME%3Acassini&q=*%3A*).
+The Cassini project is my attempt at processing the data from NASA's Cassini mission into color images and videos. You can learn more about the Cassini mission [here](https://en.wikipedia.org/wiki/Cassini%E2%80%93Huygens). The TL;DR is that Cassini was a probe sent to explore Saturn and its moons. Over the course of the mission it took over 450,000 black and white images. These images are available to the public on [NASA's PDS website](https://pds-imaging.jpl.nasa.gov/search/?fq=-ATLAS_THUMBNAIL_URL%3Abrwsnotavail.jpg&fq=ATLAS_MISSION_NAME%3Acassini&q=*%3A*). My main goal with this project is to use the Cassini data to make videos of its encounters with various moons and planets.
 
  ### Iapetus in color
  ![Image](https://imgur.com/PAfwi0e.gif)
-
-### Saturn in color
- ![Image](https://imgur.com/Uf4nfLO.gif)
-
-### Daphnis in b&w
- ![Image](https://imgur.com/8yNcx4g.gif)
-
-
 
 
 ## What does it do??
@@ -28,9 +20,6 @@ Below is a diagram which demonstrates this.
 
 ### Jupiter in false color
 ![Image](https://i.redd.it/emslqzuhnxh91.gif)
-
-
-
 
 ## How to use
 
@@ -78,7 +67,7 @@ Example inputs:
 * 200
 
 ### mosaic: TRUE or FALSE
-Whether or not to clear the image background for a new frame. When a target body does not fit within Cassini's FOV the spacecraft often took mosaic images. Enable this for large bodies such as Saturn or Jupiter, especially when using the narrow FOV camera. When enabled a processed image will be drawn on top of the previous images.
+Whether or not to clear the image background for a new frame. When a target body does not fit within Cassini's FOV the spacecraft often took mosaic images. Enable this for large bodies such as Saturn or Jupiter, especially when using the narrow FOV camera. When enabled a processed image will be drawn on top of the previous images. If this explaination is confusing please refer to part [5] of the diagram below the what does it do?? section.
 Example inputs:
 * TRUE
 * FALSE
