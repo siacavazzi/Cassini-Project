@@ -24,13 +24,13 @@ for i in range(0,len(sequence_input)):
     folder = f"{camera}_{target}_{filters_formatted}"
     
     os.mkdir(f"output/{folder}")
-    #try:
-    if True:    
+    try:
+      
 
         print(sequence["filters"].split("_"))
-        cd.export_sequence(camera,sequence["filters"].split("_"),target,sequence["delta"],folder, sequence["mosaic"], 60000)
+        cd.export_sequence(camera,sequence["filters"].split("_"),target,sequence["delta"],folder, sequence["mosaic"], 0)
         print(sequence["filters"].split("_"))
-   # except:
-    #    continue        
+    except:
+        continue        
             
 

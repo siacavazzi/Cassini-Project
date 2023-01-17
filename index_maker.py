@@ -21,11 +21,13 @@ warnings.filterwarnings("ignore")
 # This section creates an index file for all image data for easy search later on
 wd = os.getcwd()
                 
-image_folders = ["data/wac_data","data/nac_data"]
+image_folders = ["/data/wac_data","/data/nac_data"]
 
-spice_index = wd + "data/cosp_1000/index"
+spice_index = wd + "/data/cosp_1000/index"
 
-spice_path = wd + "data/cosp_1000/data"
+spice_path = "SPICE_PATH"
+
+#wd + "data/cosp_1000/data"
 
     # load labels
     
@@ -84,7 +86,7 @@ def create_spice_index():
     print(files)
     for file in files:
         file = f"{spice_index}/{file}"
-        replace(file, "./data",spice_path)
+        replace(file, spice_index,spice_path)
         
         
       # helper function   
