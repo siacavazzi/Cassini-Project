@@ -17,6 +17,15 @@ The Cassini project is my attempt at processing the data from NASA's Cassini mis
 
 ## What does it do??
 
+
+ This program does 4 main things:
+ * Search through all of Cassini's images for those of interest
+ * Create color images from 3 filter B&W images (including aligning them)
+ * Center the target body within the image frame
+ * Create multi image mosaics
+
+Below is a diagram which demonstrates this.
+
 ### Jupiter in false color
 ![Image](https://i.redd.it/emslqzuhnxh91.gif)
 
