@@ -72,10 +72,12 @@ Example inputs:
 * TRUE
 * FALSE
 
-6. Run the program! Depending on the target and/or filter combination this could take some time since the program must first sort through all images and process those which match the conditions.
+6. Run main.py
 
 
 # Data Sources
+
+[Processed data for use with this program]()
 
 [Images from NASA's PDS website](https://pds-imaging.jpl.nasa.gov/search/?fq=-ATLAS_THUMBNAIL_URL%3Abrwsnotavail.jpg&fq=ATLAS_MISSION_NAME%3Acassini&q=*%3A*) Note: a wget script (included in this repository) is needed to download these images
 
