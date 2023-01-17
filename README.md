@@ -32,7 +32,7 @@ Below is a diagram which demonstrates this.
 * PIL (I know this is kind of redundant with opencv - will fix in a future update)
 * Matplotlib
 
-2. Download Cassini data [here]() Note: this ZIP file is quite large and will take a while to download. This data has been slightly preprocessed from the original NASA data to reduce file sizes and program complexity.
+2. Download Cassini data [here]() Note: this ZIP file is quite large at 97 GB and will take a while to download. This data has been slightly preprocessed from the original NASA data to reduce file sizes and program complexity. This file in its original format would be nearly 1 TB!
 
 3. Unzip cassini data and place the data folder into the main folder.
 
