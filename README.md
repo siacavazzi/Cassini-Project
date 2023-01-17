@@ -72,7 +72,7 @@ Example inputs:
 * TRUE
 * FALSE
 
-6. Run main.py
+6. Run main.py - note: it may take a while to finish.
 
 
 # Data Sources
