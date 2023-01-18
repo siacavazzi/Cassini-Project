@@ -28,12 +28,12 @@ Below is a diagram which demonstrates this.
 ### Required python packages
 * Pandas
 * Numpy
-* SPICEYPY
+* Spiceypy
 * OpenCV 2
 * PIL (I know this is kind of redundant with opencv - will fix in a future update)
 * Matplotlib
 
-2. Download Cassini data [here]() Note: this ZIP file is quite large at 97 GB and will take a while to download. This data has been slightly preprocessed from the original NASA data to reduce file sizes and program complexity. This file in its original format would be nearly 1 TB!
+2. Download Cassini data [here]() (still uploading the data...) Note: this ZIP file is quite large at 97 GB and will take a while to download. This data has been slightly preprocessed from the original NASA data to reduce file sizes and program complexity. This file in its original format would be nearly 1 TB!
 
 3. Unzip cassini data and place the data folder into the main folder.
 
@@ -42,13 +42,13 @@ Below is a diagram which demonstrates this.
 5. Open sequence_input.csv. This is the input used to tell the program which target bodies and images you are interested in. The fields in the CSV are as follows: 
 
 ### camera: ISSWA or ISSNA
-Cassini carried 2 different cameras onboard, one with a narrow FOV and one with a wide FOV. Putting ISSNA into this field will tell the program to search for images from the narrow angle camera and ISSWA is for the wide camera.
+Cassini carried 2 different cameras onboard, one with a narrow FOV and one with a wide FOV. Putting ISSNA into this field will tell the program to search for images from the narrow angle camera and ISSWA to search for the wide camera.
 Example inputs:
 * ISSWA
 * ISSNA
 
 ### filters: 
-Specify the filter(s) from which to create processed images. Cassini's cameras take pictures in B&W and use filter wheels to create color images. Between 1-3 filters can be inputted. If one filter is chosen all images will be outputted as B&W. Otherwise this the filters will correspond to red, green, then blue images. Filters are seperated by an underscore (_). Please refer to the [Cassini imaging user's guide](https://pds-imaging.jpl.nasa.gov/documentation/iss_data_user_guide_180916.pdf) for more information about filters including which filters are availible. Since Cassini uses dual filter wheels the user can specify either one or two filters. If only one is specified, the other filter wheel is ignored. Note: this can lead to some color differences between images. To specify a specific combination of filter wheels a comma (,) can be used between the names of the filters.
+Specify the filter(s) from which to create processed images. Cassini's cameras take pictures in B&W and use filter wheels to create color images. Between 1-3 filters can be inputted. If one filter is chosen all images will be outputted as B&W. Otherwise this the filters will correspond to red, green, then blue images. Filters are seperated by an underscore (_). Please refer to the [Cassini imaging user's guide](https://pds-imaging.jpl.nasa.gov/documentation/iss_data_user_guide_180916.pdf) for more information about filters, including which filters and filter combinations are availible. Since Cassini uses dual filter wheels the user can specify either one or two filters per channel. If only one is specified, the other filter wheel is ignored. Note: this can lead to some color differences between images. To specify a specific combination of filter wheels a comma (,) can be used between the names of the filters.
 Example inputs:
 * RED_GRN_BL1 - uses red, green and blue filters to create true color images. Ignores secondary filter wheel.
 * CL1,RED_CL1,GRN_CL1,BL1 - creates true color images same as before but specifies a clear secondary filter to eliminate color changing. Note: this will result in fewer total images.
@@ -73,7 +73,11 @@ Example inputs:
 * TRUE
 * FALSE
 
-6. Run main.py - note: it may take a while to finish. Data is place into an output folder.
+Note: this is a spreadsheet and can accept multiple entries. Upon finishing one the program will move on to the next.
+
+6. Create a folder in the main directory called output. This is where processed images will be placed.
+
+7. Run main.py - note: it may take a while to finish. Data is place into an output folder.
 
 
 # Data Sources
