@@ -140,7 +140,7 @@ def find_target(label,plot,output):
     x_bound = 0
     y_bound = 0
     
-    """
+ 
     if targ_loc[0] > max_x:
         range = max_x - min_x 
         min_x = min_x + range
@@ -164,7 +164,7 @@ def find_target(label,plot,output):
         min_y = min_y - range
         max_y = max_y - range
         y_bound = -lines
-     """   
+        """   
     i=0
 
     while targ_loc[0] > max_x:
@@ -205,7 +205,7 @@ def find_target(label,plot,output):
         max_y = max_y - range
         y_bound = lines * i
         
-
+    """
     
     x = np.interp(targ_loc[0],[min_x,max_x],[1,lines])
     x = lines - x
