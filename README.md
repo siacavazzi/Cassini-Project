@@ -33,7 +33,7 @@ Below is a diagram which demonstrates this.
 * PIL (I know this is kind of redundant with opencv - will fix in a future update)
 * Matplotlib
 
-2. Download Cassini data [here]() (still uploading the data...) Note: this ZIP file is quite large at 97 GB and will take a while to download. This data has been slightly preprocessed from the original NASA data to reduce file sizes and program complexity. This file in its original format would be nearly 1 TB!
+2. Download Cassini data [here](https://drive.google.com/file/d/1hrxyrGBIkVQfzReZ5hACr2lJZiHwxWBb/view?usp=share_link) Note: this ZIP file is quite large at 97 GB and will take a while to download. This data has been slightly preprocessed from the original NASA data to reduce file sizes and program complexity. This file in its original format would be nearly 1 TB!
 
 3. Unzip cassini data and place the data folder into the main folder.
 
@@ -82,7 +82,7 @@ Note: this is a spreadsheet and can accept multiple entries. Upon finishing one 
 
 # Data Sources
 
-[Processed data for use with this program]()
+[Processed data for use with this program](https://drive.google.com/file/d/1hrxyrGBIkVQfzReZ5hACr2lJZiHwxWBb/view?usp=share_link)
 
 [Images from NASA's PDS website](https://pds-imaging.jpl.nasa.gov/search/?fq=-ATLAS_THUMBNAIL_URL%3Abrwsnotavail.jpg&fq=ATLAS_MISSION_NAME%3Acassini&q=*%3A*) Note: a wget script (included in this repository) is needed to download these images
 
