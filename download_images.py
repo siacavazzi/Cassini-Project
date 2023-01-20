@@ -1,8 +1,8 @@
 # -*- coding: utf-8 -*-
 """
 Spyder Editor
-
-This is a temporary script file.
+This is a wget script for downloading Cassini images from NASA's database. File paths should be modified 
+for a given user's computer. Note: this script is not needed if the data is downloaded from my google drive link.
 """
 import os
 import subprocess
