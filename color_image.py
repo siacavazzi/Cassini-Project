@@ -2,7 +2,7 @@
 """
 Created on Sun Apr  3 01:57:31 2022
 
-@author: Sam
+@author: Sam I
 """
 
 from PIL import Image, ImageEnhance
