@@ -8,7 +8,7 @@ The Cassini project is my attempt at processing the data from NASA's Cassini mis
 
 [Video of Jupiter](https://www.youtube.com/watch?v=r13RPdnDQAQ)
 
-## What does it do??
+## What does it do?
 
 
  This program does 4 main things:
