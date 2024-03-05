@@ -2,7 +2,7 @@
 """
 Created on Sun Apr  3 01:57:31 2022
 
-@author: Sam I
+@author: Sam Iacavazzi
 """
 
 from PIL import Image, ImageEnhance
@@ -24,8 +24,6 @@ ORDER OF COLORS ***
 1 ch: B&W
 2 ch: red, blue *** fake green may be inserted into the middle
 3 ch: red, green, blue
-
-
 
 """
 
