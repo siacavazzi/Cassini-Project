@@ -4,7 +4,7 @@ Created on Tue Dec  7 23:22:08 2021
 
 Cassini project file manager
 
-@author: Sam
+@author: Sam Iacavazzi
 """
 
 import label_handler as lh
