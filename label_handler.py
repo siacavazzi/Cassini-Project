@@ -2,7 +2,7 @@
 """
 Created on Tue Nov  2 12:33:42 2021
 
-@author: Sam
+@author: Sam I
 """
 import os
 import subprocess

@@ -2,7 +2,7 @@
 """
 Created on Fri Nov 19 22:25:30 2021
 https://naif.jpl.nasa.gov/pub/naif/toolkit_docs/C/cspice/inrypl_c.html
-@author: Sam
+@author: Sam Iacavazzi
 """
 import spiceypy as sp
 import numpy as np

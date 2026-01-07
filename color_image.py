@@ -2,7 +2,7 @@
 """
 Created on Sun Apr  3 01:57:31 2022
 
-@author: Sam
+@author: Sam Iacavazzi
 """
 
 from PIL import Image, ImageEnhance
@@ -24,8 +24,6 @@ ORDER OF COLORS ***
 1 ch: B&W
 2 ch: red, blue *** fake green may be inserted into the middle
 3 ch: red, green, blue
-
-
 
 """
 
@@ -163,76 +161,3 @@ def export_sequence(camera, filters, target, delta, folder, mosaic, start_loc):
         except Exception as e:
            print(e)
            continue
-
-
-
-
-
-        
-
-
-
-
-
-
-
-
-
-
-
-
-"""
-
-#index = index[index["TARGET_NAME"] == "SATURN"]
-folder = "saturn_true_color"
-for j in range(0,len(index)):
-    #try:
-    data =  lh.label(index["red"].iloc[j])
-    r = data.auto_center(border)
-    g =  lh.label(index["grn"].iloc[j]).auto_center(border)
-    b =  lh.label(index["blu"].iloc[j]).auto_center(border)
-
-    if last is not None:
-        r = ic.rotationAlign(last,r)
-        last = r
-        
-    else:
-        last = r 
-       
-    try:
-        green = ic.rotationAlign(r, g)
-        blue = ic.rotationAlign(r, b)
-        
-    except:
-        print("align fail")
-        green = g
-        blue = b
-    
-
-    green = Image.fromarray(green).convert('L')
-    red = Image.fromarray(r).convert('L')
-    blue = Image.fromarray(blue).convert('L')
-    #except:
-        #print("poop")
-
-
-    target = index["TARGET_NAME"].iloc[j]
-    name = index["rt"].iloc[j]
-    try:
-       
-       title = data.info["^IMAGE_HEADER"].split(".")[0].replace("(","")
-       image = Image.merge("RGB",(red,green,blue))
-       image.save(f"output/{folder}/{title}.png")
-    except:
-        print("#####FAILED######")
-    
-    
-    print(f"{j} of {len(index)}")
-
-
-
-
-# Read in the three images downloaded from here:
-#rgb_default = make_lupton_rgb(i, r, g, filename="ngc6976-default.jpeg")
-
-"""
