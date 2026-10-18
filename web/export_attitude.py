@@ -15,6 +15,7 @@ Quaternions are SPICE style (w, x, y, z) for the rotation J2000 -> frame; NaN wh
 """
 
 import argparse
+import gzip
 import json
 import os
 import re
@@ -80,7 +81,12 @@ def main():
             sp.furnsh(dst)
 
         cat_path = os.path.join(args.catalog, f"{year}.json")
-        cat = json.load(open(cat_path)) if os.path.exists(cat_path) else {"et": [], "cam": []}
+        if os.path.exists(cat_path):
+            cat = json.load(open(cat_path))
+        elif os.path.exists(cat_path + ".gz"):
+            cat = json.load(gzip.open(cat_path + ".gz"))
+        else:
+            cat = {"et": [], "cam": []}
         img_q = np.array([quat(FRAMES[c], et) for et, c in zip(cat["et"], cat["cam"])], dtype="<f4").reshape(-1, 4)
 
         a = sp.str2et(f"{year}-01-01T00:00:00")
