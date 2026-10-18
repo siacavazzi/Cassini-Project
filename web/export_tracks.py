@@ -65,7 +65,8 @@ MILESTONES = [
     ("2004-06-11T19:33:00", "Phoebe flyby"),
     ("2004-07-01T02:48:00", "Saturn orbit insertion"),
     ("2004-12-25T02:00:00", "Huygens probe released"),
-    ("2005-01-14T10:13:00", "Huygens lands on Titan"),
+    ("2005-01-14T09:05:53", "Huygens enters Titan's atmosphere"),
+    ("2005-01-14T11:38:11", "Huygens lands on Titan"),  # touchdown, ESA DTWG descent reconstruction
     ("2009-08-11T00:00:00", "Saturn equinox"),
     ("2017-04-26T09:00:00", "First Grand Finale dive between Saturn and its rings"),
     ("2017-09-15T10:31:00", "Final plunge into Saturn"),

@@ -30,8 +30,10 @@ body { background: var(--void); color: var(--text); font-family: var(--font-body
 .lbl { position: absolute; left: 0; top: 0; font: 500 12px/1 var(--font-label); letter-spacing: .08em; text-transform: uppercase; color: var(--muted); white-space: nowrap; pointer-events: auto; cursor: pointer; padding: 3px 4px; transform: translate(8px, -50%); }
 .lbl.major { color: #c7d0dc; }
 .lbl.cassini { color: var(--ice); }
+.lbl.probe { color: #ffd08c; }
 .lbl.focus { color: var(--gold); }
 .lbl:hover { color: var(--text); }
+.hud, .lbl { text-shadow: 0 0 3px rgba(0, 0, 0, .95), 0 1px 6px rgba(0, 0, 0, .8); }
 
 .hud { position: absolute; top: calc(env(safe-area-inset-top, 0px) + 14px); left: max(16px, env(safe-area-inset-left, 0px)); max-width: min(460px, calc(100% - 32px)); display: grid; gap: 10px; pointer-events: none; }
 .brand { font: 600 13px/1 var(--font-label); letter-spacing: .22em; text-transform: uppercase; color: var(--gold); }
@@ -97,6 +99,7 @@ body { background: var(--void); color: var(--text); font-family: var(--font-body
       <div class="sub" id="mday">—</div>
     </div>
     <div class="sub" id="rel">—</div>
+    <div class="sub" id="probe" hidden></div>
     <div class="frame img" id="imgcard">
       <div class="k"><i></i><span id="imgk">Camera</span></div>
       <div class="v" id="imgv">—</div>
@@ -434,6 +437,7 @@ function makeCassini() {
 const state = { et: 0, playing: true, speed: 600, focus: "TITAN", enlarge: false, allOrbits: false, view: [0, 0], dragging: false };
 let bodies = {}, tracks = {}, encounters = [], catalog = null, order = null, coverage = [0, 0];
 const pos = {}, meshes = {}, labels = {};
+let probe = null, probeObj = null, probeTrail = null;
 let saturnObj, cassini, trailLine, orbitLines = {}, markerPts, starPts, sunSprite, fov;
 const tmp = v3(), tmp2 = v3(), vA = new THREE.Vector3();
 
@@ -451,6 +455,16 @@ async function load() {
     tracks[name] = parseTrack(buf);
   }));
   coverage = [Math.max(...Object.values(tracks).map(t => t.start)) + 1, Math.min(...Object.values(tracks).map(t => t.end)) - 1];
+  // optional: the Huygens probe, separation to the day after landing (kept out of coverage)
+  try {
+    const r = await fetch("data/huygens.json");
+    if (r.ok) {
+      const h = await r.json(), tr = await fetch(h.file);
+      const s = atob((await tr.text()).trim()), u = new Uint8Array(s.length);
+      for (let i = 0; i < s.length; i++) u[i] = s.charCodeAt(i);
+      probe = { ...h, track: parseTrack(u.buffer) };
+    }
+  } catch (err) { console.warn("Huygens data not loaded", err); probe = null; }
   order = Array.from(catalog.et.keys()).sort((a, b) => catalog.et[a] - catalog.et[b]);
   catalog.sorted = Float64Array.from(order, i => catalog.et[i]);
 }
@@ -475,10 +489,18 @@ function build() {
 
   // always-visible dots so small or distant bodies never vanish
   const names = Object.keys(meshes).concat(["CASSINI"]);
+  if (probe) {
+    pos.HUYGENS = v3(); probeObj = new THREE.Object3D(); names.push("HUYGENS");
+    const N = 600, pg = new THREE.BufferGeometry();
+    pg.setAttribute("position", new THREE.BufferAttribute(new Float32Array(N * 3), 3));
+    pg.setAttribute("color", new THREE.BufferAttribute(new Float32Array(N * 3), 3));
+    probeTrail = new THREE.Line(pg, new THREE.LineBasicMaterial({ vertexColors: true, transparent: true, blending: THREE.AdditiveBlending, depthWrite: false }));
+    probeTrail.userData.N = N; probeTrail.frustumCulled = false; scene.add(probeTrail);
+  }
   const mg = new THREE.BufferGeometry();
   mg.setAttribute("position", new THREE.BufferAttribute(new Float32Array(names.length * 3), 3));
   const col = new Float32Array(names.length * 3);
-  names.forEach((n, i) => { const c = n === "CASSINI" ? [0.56, 0.79, 1] : n === "TITAN" ? [0.88, 0.6, 0.29] : [0.62, 0.66, 0.72]; col.set(c, 3 * i); });
+  names.forEach((n, i) => { const c = n === "CASSINI" ? [0.56, 0.79, 1] : n === "HUYGENS" ? [1, 0.82, 0.55] : n === "TITAN" ? [0.88, 0.6, 0.29] : [0.62, 0.66, 0.72]; col.set(c, 3 * i); });
   mg.setAttribute("color", new THREE.BufferAttribute(col, 3));
   const dc = document.createElement("canvas"); dc.width = dc.height = 64;
   const dg = dc.getContext("2d"), dgr = dg.createRadialGradient(32, 32, 0, 32, 32, 32);
@@ -531,7 +553,7 @@ function build() {
   const host = document.getElementById("labels");
   for (const name of names) {
     const el = document.createElement("div");
-    el.className = "lbl" + (name === "CASSINI" ? " cassini" : MAJOR.includes(name) || name === "SATURN" ? " major" : "");
+    el.className = "lbl" + (name === "CASSINI" ? " cassini" : name === "HUYGENS" ? " probe" : MAJOR.includes(name) || name === "SATURN" ? " major" : "");
     el.textContent = titleCase(name);
     el.addEventListener("click", () => setFocus(name));
     host.appendChild(el); labels[name] = el;
@@ -545,16 +567,20 @@ function imagingTarget() {
   const k = order[i]; if (state.et - catalog.et[k] > 7200) return null;
   const t = catalog.target[k]; return pos[t] ? t : null;
 }
+function probeActive() { return !!probe && state.et >= probe.track.start && state.et <= probe.track.end; }
+function objPos(n) { return n === "CASSINI" ? cassini.position : n === "HUYGENS" ? probeObj.position : meshes[n].group.position; }
 function shown(name) {
+  if (name === "HUYGENS") return probeActive();
   if (state.allOrbits || name === "CASSINI" || name === "SATURN" || name === "TITAN" || name === state.focus) return true;
   if (name === state.target) return true;
   return MAJOR.includes(name) && name !== "PHOEBE" && name !== "HYPERION";
 }
-function bodyRadius(name) { return name === "CASSINI" ? 0.0035 : meshes[name] ? meshes[name].radius : 10; }
+function bodyRadius(name) { return name === "CASSINI" ? 0.0035 : name === "HUYGENS" ? 0.0013 : meshes[name] ? meshes[name].radius : 10; }
 function relScene(name, out) { sub(pos[name], pos[state.focus], tmp); return toScene(tmp, out).multiplyScalar(1 / KM); }
 
 function updateBodies() {
   for (const name in tracks) positionAt(tracks[name], state.et, pos[name]);
+  if (probe) { positionAt(probe.track, state.et, pos.HUYGENS); relScene("HUYGENS", probeObj.position); }
   state.target = imagingTarget();
   const sunv = norm(sub(pos.SUN, pos.SATURN, tmp2));
   toScene(sunv, uSun.value).normalize();
@@ -588,7 +614,7 @@ function updateBodies() {
   const arr = markerPts.geometry.attributes.position.array;
   const mc = markerPts.geometry.attributes.color.array, base = markerPts.userData.base;
   markerPts.userData.names.forEach((n, i) => {
-    const p = n === "CASSINI" ? cassini.position : meshes[n].group.position;
+    const p = objPos(n);
     arr[3 * i] = p.x; arr[3 * i + 1] = p.y; arr[3 * i + 2] = p.z;
     const k = shown(n) ? 1 : 0;   // additive blending: black draws nothing
     mc[3 * i] = base[3 * i] * k; mc[3 * i + 1] = base[3 * i + 1] * k; mc[3 * i + 2] = base[3 * i + 2] * k;
@@ -635,7 +661,7 @@ function updateFov() {
 
 function updateTrail() {
   const N = trailLine.userData.N;
-  const ref = state.focus === "CASSINI" || state.focus === "SATURN" ? "SATURN" : state.focus;
+  const ref = state.focus === "CASSINI" || state.focus === "SATURN" ? "SATURN" : state.focus === "HUYGENS" ? "TITAN" : state.focus;
   const W = ref === "SATURN" ? 4 * 86400 : 20 * 3600;
   const p = trailLine.geometry.attributes.position.array, c = trailLine.geometry.attributes.color.array;
   const a = v3(), b = v3(), d = v3(), v = new THREE.Vector3();
@@ -652,6 +678,27 @@ function updateTrail() {
   trailLine.geometry.attributes.position.needsUpdate = true;
   trailLine.geometry.attributes.color.needsUpdate = true;
   trailLine.position.copy(cassini.position);
+}
+
+// Huygens' path relative to Titan over the last 12 hours, up to landing
+function updateProbeTrail() {
+  if (!probeTrail) return;
+  probeTrail.visible = probeActive() && state.et < probe.events.landing + 6 * 3600;
+  if (!probeTrail.visible) return;
+  const N = probeTrail.userData.N, p = probeTrail.geometry.attributes.position.array, c = probeTrail.geometry.attributes.color.array;
+  const a = v3(), b = v3(), d = v3(), now0 = v3(), v = new THREE.Vector3();
+  const t1 = Math.min(state.et, probe.events.landing), t0 = Math.max(probe.track.start, t1 - 12 * 3600);
+  positionAt(probe.track, state.et, a); positionAt(tracks.TITAN, state.et, b); sub(a, b, now0);
+  for (let i = 0; i < N; i++) {
+    const u = i / (N - 1), t = t1 - (t1 - t0) * u * u;   // samples crowd around the latest point
+    positionAt(probe.track, t, a); positionAt(tracks.TITAN, t, b); sub(a, b, d); sub(d, now0, d); toScene(d, v).multiplyScalar(1 / KM);
+    p[3 * i] = v.x; p[3 * i + 1] = v.y; p[3 * i + 2] = v.z;
+    const br = 0.9 * (1 - u) + 0.06;
+    c[3 * i] = 1.0 * br; c[3 * i + 1] = 0.78 * br; c[3 * i + 2] = 0.45 * br;
+  }
+  probeTrail.geometry.attributes.position.needsUpdate = true;
+  probeTrail.geometry.attributes.color.needsUpdate = true;
+  probeTrail.position.copy(probeObj.position);
 }
 
 function updateOrbits() {
@@ -678,14 +725,14 @@ function updateOrbits() {
 }
 
 // Labels are placed in priority order and skipped when they would overlap one already placed.
-const LABEL_PRIORITY = n => n === state.focus ? 0 : n === "CASSINI" ? 1 : n === "SATURN" ? 2 : n === "TITAN" ? 3 : MAJOR.includes(n) ? 4 : 5;
+const LABEL_PRIORITY = n => n === state.focus ? 0 : n === "CASSINI" || n === "HUYGENS" ? 1 : n === "SATURN" ? 2 : n === "TITAN" ? 3 : MAJOR.includes(n) ? 4 : 5;
 function updateLabels() {
   const w = canvas.clientWidth, h = canvas.clientHeight;
   const placed = [];
   const names = Object.keys(labels).sort((a, b) => LABEL_PRIORITY(a) - LABEL_PRIORITY(b));
   for (const name of names) {
     const el = labels[name];
-    const p = name === "CASSINI" ? cassini.position : meshes[name].group.position;
+    const p = objPos(name);
     vA.copy(p).project(camera);
     const d = camera.position.distanceTo(p);
     const small = LABEL_PRIORITY(name) === 5;
@@ -711,6 +758,7 @@ function fmtDur(s) {
   if (s < 2 * 86400) { const h = Math.floor(s / 3600), m = Math.round((s % 3600) / 60); return `${h} h ${m} min`; }
   return `${(s / 86400).toFixed(1)} days`;
 }
+function lowerIndex(a, x) { let lo = 0, hi = a.length - 1; while (hi - lo > 1) { const m = (lo + hi) >> 1; if (a[m] <= x) lo = m; else hi = m; } return lo; }
 function lastImageIndex(et) {
   const a = catalog.sorted; let lo = 0, hi = a.length - 1;
   if (et < a[0]) return -1;
@@ -724,7 +772,7 @@ function updateHud() {
   $("mday").textContent = `Mission day ${fmtInt(Math.floor((ms - LAUNCH_MS) / 86400000))} · ${SPEEDS.find(s => s[0] === state.speed)[1]}${state.playing ? "" : " · paused"}`;
 
   // Cassini relative to the focus body, or to the nearest large moon when the view is on Cassini
-  let ref = state.focus;
+  let ref = state.focus === "HUYGENS" ? "TITAN" : state.focus;
   if (ref === "CASSINI") {
     let best = Infinity;
     for (const n of MAJOR.concat(["SATURN"])) { const d = len(sub(pos.CASSINI, pos[n], tmp)) - bodyRadius(n); if (d < best) { best = d; ref = n; } }
@@ -736,6 +784,21 @@ function updateHud() {
   positionAt(tc, state.et + 30, a1); positionAt(tc, state.et - 30, a2); positionAt(tr, state.et + 30, b1); positionAt(tr, state.et - 30, b2);
   const vrel = len([(a1[0] - b1[0]) - (a2[0] - b2[0]), (a1[1] - b1[1]) - (a2[1] - b2[1]), (a1[2] - b1[2]) - (a2[2] - b2[2])]) / 60;
   $("rel").innerHTML = `Cassini is <b>${fmtInt(alt)} km</b> above ${titleCase(ref)} · <b>${vrel.toFixed(2)} km/s</b>`;
+
+  const pe = $("probe");
+  pe.hidden = !probeActive();
+  if (!pe.hidden) {
+    const ev = probe.events, t = state.et;
+    if (t >= ev.landing) pe.innerHTML = `Huygens has been on Titan's surface for <b>${fmtDur(t - ev.landing)}</b>`;
+    else if (t >= ev.entry_interface) {
+      const de = probe.descent, j = Math.max(0, Math.min(de.et.length - 2, lowerIndex(de.et, t)));
+      const f = Math.min(1, Math.max(0, (t - de.et[j]) / (de.et[j + 1] - de.et[j]))), alt = de.alt_km[j] + f * (de.alt_km[j + 1] - de.alt_km[j]);
+      pe.innerHTML = `Huygens is <b>${alt < 10 ? alt.toFixed(2) : fmtInt(alt)} km</b> above Titan · ${t < ev.descent_table_start ? "entering the atmosphere" : "descending under parachute"}`;
+    } else {
+      const alt = len(sub(pos.HUYGENS, pos.TITAN, tmp)) - bodyRadius("TITAN");
+      pe.innerHTML = `Huygens is <b>${fmtInt(alt)} km</b> from Titan · coasting since separation on Dec 25`;
+    }
+  }
 
   const i = lastImageIndex(state.et);
   const card = $("imgcard");
@@ -841,9 +904,15 @@ function setTime(et) { state.et = Math.min(coverage[1], Math.max(coverage[0], et
 function setFocus(name, dist) {
   if (!pos[name]) return;
   const old = camera.position.clone();
-  const d = dist || (name === "CASSINI" ? 3.5e-5 : name === "SATURN" ? 420 : Math.max(bodyRadius(name) / KM * 7, 2));
+  const d = dist || (name === "CASSINI" ? 3.5e-5 : name === "HUYGENS" ? 4 : name === "SATURN" ? 420 : Math.max(bodyRadius(name) / KM * 7, 2));
   state.focus = name;
   let dir = old.lengthSq() > 0 ? old.normalize() : new THREE.Vector3(0, 0.3, 1).normalize();
+  if (name === "HUYGENS" && !dist) {
+    // from the side, a little above the probe, so it sits against Titan's limb
+    toScene(norm(sub(pos.HUYGENS, pos.TITAN, v3())), vA);
+    const side = new THREE.Vector3().crossVectors(vA, new THREE.Vector3(0, 1, 0)).normalize();
+    dir = side.clone().addScaledVector(vA, 0.3).normalize();
+  }
   if (name === "CASSINI" && !dist) {
     const look = state.target || "TITAN", p = v3();
     toScene(norm(sub(pos[look], pos.CASSINI, p)), vA);
@@ -857,7 +926,7 @@ function setFocus(name, dist) {
 }
 function buildUi() {
   const fr = $("focusrow");
-  for (const n of FOCUS_LIST) {
+  for (const n of probe ? ["CASSINI", "HUYGENS", ...FOCUS_LIST.slice(1)] : FOCUS_LIST) {
     const b = document.createElement("button"); b.className = "btn chip"; b.dataset.name = n; b.textContent = titleCase(n);
     b.setAttribute("aria-pressed", "false"); b.addEventListener("click", () => setFocus(n)); fr.appendChild(b);
   }
@@ -894,12 +963,13 @@ function buildUi() {
 function setSpeed(v) { state.speed = v; document.querySelectorAll("#speeds .btn").forEach(b => b.setAttribute("aria-pressed", String(+b.dataset.v === v))); }
 function setPlaying(p) { state.playing = p; $("play").textContent = p ? "❚❚" : "▶"; }
 function jump(e) {
-  const body = e.kind === "milestone" ? "TITAN" : e.body;
-  const lead = body === "TITAN" ? 3 * 3600 : 2 * 3600;
+  const huy = e.kind === "milestone" && probe && /^Huygens/.test(e.label) && e.et >= probe.track.start && e.et <= probe.track.end;
+  const body = huy ? "HUYGENS" : e.kind === "milestone" ? "TITAN" : e.body;
+  const lead = huy ? (/lands/.test(e.label) ? 900 : 300) : body === "TITAN" ? 3 * 3600 : 2 * 3600;
   setTime(e.et - lead);
-  setView(2 * 86400, e.et);
+  setView(huy ? 6 * 3600 : 2 * 86400, e.et);
   setFocus(pos[body] ? body : "SATURN");
-  setSpeed(600); setPlaying(true);
+  setSpeed(huy ? 60 : 600); setPlaying(true);
 }
 
 function resize() {
@@ -920,6 +990,7 @@ function frame(now) {
   updateBodies();
   if (Math.abs(state.et - lastTrailEt) > 1 || lastTrailFocus !== state.focus) { updateTrail(); lastTrailEt = state.et; lastTrailFocus = state.focus; }
   else trailLine.position.copy(cassini.position);
+  updateProbeTrail();
   updateOrbits();
   controls.update();
   renderer.clear();

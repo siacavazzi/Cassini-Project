@@ -55,8 +55,10 @@ python web/verify_attitude.py --zip /Volumes/LaCie/cassiniprojectJAN05.zip --dat
 `replay/index.html` is the first viewer: the Saturn system for one year on the exported tracks, with a timeline to scrub or play, camera-frame density, and jumps to flybys. Build its data, then serve the folder with any static server:
 
 ```
-python web/replay/build_data.py --data replay_data --year 2005
+python web/replay/build_data.py --data replay_data --year 2005 [--huygens <huygens replay folder>]
 cd web/replay && python -m http.server
 ```
+
+With `--huygens` (the folder from `tools/build_huygens_track.py`, PR #10), the 2004 or 2005 build also gets `data/huygens.json`: the probe's track from separation to the day after landing, its event times and a 20 s altitude table for the descent. The viewer then shows the probe with its path relative to Titan, a Huygens focus button and an altitude line in the header. Without the file the viewer runs as before.
 
 The page is written as an artifact body (no `<html>` wrapper); browsers render it as is.
