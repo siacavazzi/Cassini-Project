@@ -72,15 +72,26 @@ def build_mosaic(img):
 
 """
 How many processes build frames at once: the CASSINI_WORKERS environment variable,
-otherwise up to 4. Every worker needs several hundred MB of memory, and running out of
-memory makes everything far slower than building frames one at a time, so more is only
-worth it on a machine with memory to spare. 1 runs everything in this process like before.
+otherwise one per 6 GB of memory, at most 4 (so 2 on a 16 GB machine). Every worker
+needs up to ~1 GB, and running short of memory makes everything far slower than
+building frames one at a time. 1 runs everything in this process like before.
 """
-default_workers = 4
+max_default_workers = 4
+gb_per_worker = 6
+
+def total_memory_gb():
+    try:
+        return os.sysconf("SC_PAGE_SIZE") * os.sysconf("SC_PHYS_PAGES") / 1024 ** 3
+    except (ValueError, OSError, AttributeError):
+        return None  # not available on Windows
 
 def worker_count(workers=None):
     if workers is None:
-        workers = os.environ.get("CASSINI_WORKERS") or min(default_workers, os.cpu_count() or 1)
+        workers = os.environ.get("CASSINI_WORKERS")
+    if workers is None:
+        memory = total_memory_gb()
+        by_memory = int(memory // gb_per_worker) if memory else 2
+        workers = min(max_default_workers, os.cpu_count() or 1, by_memory)
     return max(1, int(workers))
 
 
