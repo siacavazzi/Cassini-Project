@@ -11,6 +11,7 @@ import numpy as np
 import cv2
 import bootleg_autonav as ba
 import image_correction as ic
+import data_source as ds
 
 #######################################################################################
 
@@ -51,20 +52,19 @@ class label:
             
             self.info["path"] = pointer
         # read label file ans parse into self
-        with open(self.path) as f_in:
-            for line in f_in:
-                if line:
-                    line = line.strip()
-                    if not line.find("=") == -1:
-                        char = '\\'
-                        values = line.replace(" ","").replace('"',"").replace(char[0],"").strip()
+        for line in ds.read_text(self.path).splitlines():
+            if line:
+                line = line.strip()
+                if not line.find("=") == -1:
+                    char = '\\'
+                    values = line.replace(" ","").replace('"',"").replace(char[0],"").strip()
+                
+                    values = values.split("=")
+                    self.info[values[0]] = values[1]
                     
-                        values = values.split("=")
-                        self.info[values[0]] = values[1]
                         
-                            
 
-                        
+                    
     def get_info(self):
         return self.info
      
@@ -95,7 +95,7 @@ class label:
     
     def export_img(self):
         out = self.export("png","image_output")
-        return cv2.imread(out)
+        return ds.imread(out)
     
     def rotate_image(image, angle):
         image_center = tuple(np.array(image.shape[1::-1]) / 2)
@@ -104,7 +104,7 @@ class label:
         return result
     
     def resize_image(self):
-        img = cv2.imread(self.info["path"].split('.')[0] + ".png")
+        img = ds.imread(self.info["path"].split('.')[0] + ".png")
         if int(self.info["LINES"]) < 1024:
             
             #scale_percent = 200
@@ -134,7 +134,7 @@ class label:
         else:
             image = label.export(self)
             lines = int(self.info["LINES"])
-            img = cv2.imread(image)
+            img = ds.imread(image)
         M = np.float32([[1, 0, x], [0, 1, y]])
         
         print(f"number of lines {lines}")
