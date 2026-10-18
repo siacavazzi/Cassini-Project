@@ -22,16 +22,22 @@ How each frame is made (DATA_CONVERSION_TYPE from its label):
            (no download; exact when the frame has dark sky, see calibration.unstretch)
     8LSB   the old PNG is copied (only the low 8 bits were sent, nothing to recover)
 
+With --add-missing, frames the drive is missing are downloaded too, label included:
+indexed frames whose files are gone, and frames that are in NASA's index but not in
+Image_index.csv (for example the days lost from volumes COISS_2009 to COISS_2022).
+New frames are listed in <out>/Image_index_added.csv, to be merged into Image_index.csv.
+
 The raw IMG is deleted once converted, so only a few files sit on disk at a time.
 It never writes to the old data, so the render pipeline can keep using it while this
 runs. Frames already in <out> are skipped, so it can be stopped and restarted.
 
 Usage (from the main folder, with the old data as CASSINI_DATA as usual):
     python "helper programs/convert_archive.py" OUT [--years 2002 2003] [--limit N]
-        [--table raw|png] [--downloads 4] [--dry-run]
+        [--table raw|png] [--downloads 4] [--dry-run] [--add-missing [--volumes COISS_2009 ...]]
 """
 import argparse
 import csv
+import datetime
 import gzip
 import os
 import re
@@ -80,13 +86,17 @@ def fetch(url, path, tries=5):
 
 
 """
-Where each frame lives in the PDS volumes: {"W1234567890_1": "COISS_2001/data/.../W1234567890_1.IMG"}
-The index tables are downloaded once into <out>/pds_index.
+NASA's index of every frame: {"W1234567890_1": {"location": "COISS_2001/data/.../W1234567890_1.IMG",
+"VOLUME_ID": ..., "FILTER_NAME": "CL1,RED", ...}}. The tables are downloaded once into
+<out>/pds_index.
 """
-def pds_locations(out):
+INDEX_COLUMNS = ["FILE_NAME", "FILE_SPECIFICATION_NAME", "VOLUME_ID", "DATA_CONVERSION_TYPE", "FILTER_NAME",
+                 "IMAGE_MID_TIME", "INSTRUMENT_ID", "MISSING_LINES", "OBSERVATION_ID", "TARGET_DESC", "TARGET_NAME"]
+
+def pds_index(out):
     folder = os.path.join(out, "pds_index")
     os.makedirs(folder, exist_ok=True)
-    locations = {}
+    frames = {}
     for series, url in INDEXES.items():
         lbl, tab = os.path.join(folder, series + ".lbl"), os.path.join(folder, series + ".tab")
         for ext, path in ((".lbl", lbl), (".tab", tab)):
@@ -98,12 +108,14 @@ def pds_locations(out):
             name = re.search(r"NAME\s*=\s*(\S+)", block).group(1)
             cols[name] = (int(re.search(r"START_BYTE\s*=\s*(\d+)", block).group(1)) - 1,
                           int(re.search(r"BYTES\s*=\s*(\d+)", block).group(1)))
-        spans = [cols[k] for k in ("FILE_NAME", "FILE_SPECIFICATION_NAME", "VOLUME_ID")]
+        spans = {k: cols[k] for k in INDEX_COLUMNS}
         with open(tab, encoding="latin-1") as f:
             for line in f:
-                name, spec, volume = (line[s:s + n].replace('"', "").strip() for s, n in spans)
-                locations[name.split(".")[0]] = f"{volume}/{spec}"
-    return locations
+                row = {k: line[s:s + n].replace('"', "").strip() for k, (s, n) in spans.items()}
+                row["FILTER_NAME"] = ",".join(x.strip() for x in row["FILTER_NAME"].split(","))
+                row["location"] = f"{row['VOLUME_ID']}/{row['FILE_SPECIFICATION_NAME']}"
+                frames[row["FILE_NAME"].split(".")[0]] = row
+    return frames
 
 
 def series_of(location):
@@ -152,7 +164,7 @@ class Converter:
         self.out = out
         self.table_source = table_source
         self.lock = threading.Lock()
-        self.locations = None
+        self.pds = None
         path = os.path.join(out, "manifest.csv")
         new = not os.path.exists(path)
         self.manifest = open(path, "a", newline="")
@@ -165,28 +177,46 @@ class Converter:
             self.writer.writerow(row)
             self.manifest.flush()
 
-    def needs_download(self, conversion):
-        return conversion == "12BIT" or (conversion == "TABLE" and self.table_source == "raw")
+    def needs_download(self, frame):
+        conversion = frame["conversion"]
+        return frame.get("missing") or conversion == "12BIT" or (conversion == "TABLE" and self.table_source == "raw")
+
+    def download(self, fid, png_out, ext):
+        row = self.pds.get(fid)
+        if row is None:
+            raise LookupError(f"{fid} is not in the PDS index")
+        location = row["location"][:-4] + ext
+        return fetch(f"{PDS}/{series_of(location)}/{location}", png_out[:-4] + ext)
 
     def convert(self, frame):
-        png_rel, conversion = frame["png"], frame["conversion"]
+        png_rel = frame["png"]
         fid = os.path.basename(png_rel).split(".")[0]
         png_out = os.path.join(self.out, png_rel)
-        old = ds.imread(png_rel, 0)
         downloaded, note = 0, ""
-        if self.needs_download(conversion):
-            location = self.locations.get(fid)
-            if location is None:
-                raise LookupError(f"{fid} is not in the PDS index")
+        if frame.get("missing"):
+            # not on the drive: the label comes from NASA too
+            downloaded += self.download(fid, png_out, ".LBL")
+            frame["info"] = parse_label(open(png_out[:-4] + ".LBL", encoding="latin-1").read())
+            frame["conversion"] = frame["info"].get("DATA_CONVERSION_TYPE", "")
+            old = None
+        else:
+            old = ds.imread(png_rel, 0)
+        conversion = frame["conversion"]
+        if self.needs_download(frame):
             img = png_out[:-4] + ".IMG"
-            downloaded = fetch(f"{PDS}/{series_of(location)}/{location}", img)
+            downloaded += self.download(fid, png_out, ".IMG")
             try:
                 image, prefixes = read_img(img)
             finally:
                 os.remove(img)
-            codes = encode(image, conversion)
+            if conversion in ("12BIT", "TABLE"):
+                codes = encode(image, conversion)
+            else:
+                # 8LSB: only the low 8 bits were sent; stretched like the old PNGs
+                codes = cal.display_stretch(image.astype(np.uint8), {"DATA_CONVERSION_TYPE": "TABLE"})
+                note = "8LSB: stretched"
             save_prefix(prefixes, png_out[:-4] + ".prefix.gz")
-            source = "raw"
+            source = "new from PDS" if frame.get("missing") else "raw"
         elif conversion == "TABLE":
             codes = cal.unstretch(old.astype(np.float64), frame["info"])
             if cal.recover_span(old.astype(np.float64)) is None:
@@ -198,22 +228,70 @@ class Converter:
         if old is not None and codes.shape != old.shape:
             raise ValueError(f"{fid}: new frame is {codes.shape}, old PNG is {old.shape}")
         save_png(codes, png_out)
+        if frame.get("index_row"):
+            self.add_index_row(frame["index_row"])
         self.record(id=fid, conversion=conversion, source=source, lines=codes.shape[0], samples=codes.shape[1],
                     bytes_downloaded=downloaded, png_bytes=os.path.getsize(png_out), note=note)
         return downloaded
+
+    def add_index_row(self, row):
+        path = os.path.join(self.out, "Image_index_added.csv")
+        with self.lock:
+            new = not os.path.exists(path)
+            with open(path, "a", newline="") as f:
+                writer = csv.DictWriter(f, ADDED_INDEX_FIELDS)
+                if new:
+                    writer.writeheader()
+                writer.writerow(row)
 
 
 def label_path(png_rel):
     return png_rel.rsplit(".", 1)[0] + ".LBL"  # labels sit next to their PNGs
 
 
-def plan(out, years, limit):
+def parse_label(text):
+    info = {}
+    for line in text.splitlines():
+        if "=" in line:
+            key, value = line.split("=", 1)
+            info.setdefault(key.strip(), value.strip().replace('"', ""))
+    return info
+
+
+ADDED_INDEX_FIELDS = ["FILTER_NAME", "IMAGE_MID_TIME", "INSTRUMENT_ID", "MISSING_LINES", "OBSERVATION_ID",
+                      "TARGET_DESC", "TARGET_NAME", "filter1", "filter2", "path", "seconds_1970", "year"]
+
+"""
+An Image_index.csv row for a frame that is only in NASA's index
+"""
+def index_row(fid, row):
+    mid = datetime.datetime.strptime(row["IMAGE_MID_TIME"][:17], "%Y-%jT%H:%M:%S").replace(tzinfo=datetime.timezone.utc)
+    filters = row["FILTER_NAME"].split(",")
+    return {"FILTER_NAME": f"({row['FILTER_NAME']})", "IMAGE_MID_TIME": row["IMAGE_MID_TIME"],
+            "INSTRUMENT_ID": row["INSTRUMENT_ID"], "MISSING_LINES": row["MISSING_LINES"],
+            "OBSERVATION_ID": row["OBSERVATION_ID"], "TARGET_DESC": row["TARGET_DESC"],
+            "TARGET_NAME": row["TARGET_NAME"], "filter1": filters[0], "filter2": filters[-1],
+            "path": data_folder(fid) + "/" + fid + ".png", "seconds_1970": float(int(mid.timestamp())),
+            "year": float(mid.year)}
+
+
+def data_folder(fid):
+    return "nac_data" if fid.startswith("N") else "wac_data"
+
+
+"""
+The frames to convert. Frames the drive is missing are fetched from NASA when
+add_missing is set: indexed ones whose files are gone, and, for the given volumes,
+frames that aren't in Image_index.csv at all (added to Image_index_added.csv).
+"""
+def plan(out, years, limit, add_missing=False, volumes=None, pds=None):
     index = pd.read_csv(os.path.join(os.path.dirname(os.path.dirname(os.path.abspath(__file__))), "Image_index.csv"),
                         usecols=["path", "year"])
+    known = set(os.path.basename(p).split(".")[0] for p in index["path"].dropna())
     if years:
         index = index[index["year"].isin(years)]
     frames = []
-    for png_rel in index["path"]:
+    for png_rel in index["path"].dropna():
         if limit and len(frames) >= limit:
             break
         if os.path.exists(os.path.join(out, png_rel)):
@@ -222,18 +300,27 @@ def plan(out, years, limit):
         try:
             text = ds.read_text(lbl_rel)
         except FileNotFoundError:
+            if add_missing:
+                frames.append({"png": png_rel, "conversion": "", "missing": True})
             continue  # ~450 frames are indexed but missing from the drive
         lbl_out = os.path.join(out, lbl_rel)
         os.makedirs(os.path.dirname(lbl_out), exist_ok=True)
         if not os.path.exists(lbl_out):
             with open(lbl_out, "w", encoding="latin-1") as f:
                 f.write(text)
-        info = {}
-        for line in text.splitlines():
-            if "=" in line:
-                key, value = line.split("=", 1)
-                info.setdefault(key.strip(), value.strip().replace('"', ""))
+        info = parse_label(text)
         frames.append({"png": png_rel, "conversion": info.get("DATA_CONVERSION_TYPE", ""), "info": info})
+    if add_missing and pds is not None:
+        for fid, row in pds.items():
+            if limit and len(frames) >= limit:
+                break
+            if fid in known or (volumes and row["VOLUME_ID"] not in volumes):
+                continue
+            new = index_row(fid, row)
+            if (years and new["year"] not in years) or os.path.exists(os.path.join(out, new["path"])):
+                continue
+            frames.append({"png": new["path"], "conversion": row["DATA_CONVERSION_TYPE"], "missing": True,
+                           "index_row": new})
     return frames
 
 
@@ -245,6 +332,10 @@ def main():
     parser.add_argument("--table", choices=["raw", "png"], default="raw", help="where TABLE frames come from")
     parser.add_argument("--downloads", type=int, default=4, help="parallel downloads (NASA throttles above ~4)")
     parser.add_argument("--dry-run", action="store_true", help="count what would be done and stop")
+    parser.add_argument("--add-missing", action="store_true",
+                        help="also fetch frames the drive is missing (labels too), adding new ones to Image_index_added.csv")
+    parser.add_argument("--volumes", nargs="*", help="with --add-missing: only add unindexed frames from these "
+                        "PDS volumes, e.g. COISS_2009 COISS_2010")
     args = parser.parse_args()
 
     out = os.path.abspath(args.out)
@@ -255,15 +346,18 @@ def main():
         with open(os.path.join(out, folder, "FORMAT.txt"), "w") as f:
             f.write(FORMAT)
 
-    frames = plan(out, args.years, args.limit)
     converter = Converter(out, args.table)
-    counts = pd.Series([f["conversion"] for f in frames]).value_counts().to_dict() if frames else {}
-    downloads = sum(converter.needs_download(f["conversion"]) for f in frames)
-    print(f"{len(frames)} frames to do {counts}, {downloads} to download", flush=True)
+    if args.add_missing:
+        converter.pds = pds_index(out)
+    frames = plan(out, args.years, args.limit, args.add_missing, args.volumes, converter.pds)
+    counts = pd.Series([f["conversion"] or "?" for f in frames]).value_counts().to_dict() if frames else {}
+    downloads = sum(bool(converter.needs_download(f)) for f in frames)
+    missing = sum(bool(f.get("missing")) for f in frames)
+    print(f"{len(frames)} frames to do {counts}, {downloads} to download ({missing} missing from the drive)", flush=True)
     if args.dry_run or not frames:
         return
-    if downloads:
-        converter.locations = pds_locations(out)
+    if downloads and converter.pds is None:
+        converter.pds = pds_index(out)
 
     start, done, failed, total_bytes = time.time(), 0, 0, 0
     errors = open(os.path.join(out, "errors.txt"), "a")
