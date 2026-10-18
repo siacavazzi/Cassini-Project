@@ -225,10 +225,24 @@ def extract_to_cache(path):
     out = os.path.join(SPICE_CACHE, relative(path))
     if not os.path.exists(out) or os.path.getsize(out) != info.file_size:
         os.makedirs(os.path.dirname(out), exist_ok=True)
-        with _zip.open(info) as src, open(out + ".part", "wb") as dst:
+        # the part file is named after the process so parallel workers never write into
+        # each other's copy; whoever finishes last replaces an identical file
+        part = f"{out}.{os.getpid()}.part"
+        with _zip.open(info) as src, open(part, "wb") as dst:
             shutil.copyfileobj(src, dst, 16 * 1024 * 1024)
-        os.replace(out + ".part", out)
+        os.replace(part, out)
     return out
+
+
+"""
+Extracts every kernel a meta-kernel lists into the cache without loading them, so the
+parallel workers find them ready instead of all extracting the same files at once
+"""
+def extract_metakernel(path):
+    if not using_zip():
+        return
+    for kernel in metakernel_kernels(read_text(path)):
+        extract_to_cache(kernel_relative(kernel))
 
 
 """
@@ -250,4 +264,5 @@ Deletes the extracted kernels (call after spiceypy.kclear)
 """
 def clear_spice_cache():
     if using_zip() and not KEEP_SPICE_CACHE and os.path.isdir(SPICE_CACHE):
-        shutil.rmtree(SPICE_CACHE)
+        # ignore_errors: on Windows a kernel a worker still has open can't be deleted yet
+        shutil.rmtree(SPICE_CACHE, ignore_errors=True)
