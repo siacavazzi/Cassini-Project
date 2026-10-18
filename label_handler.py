@@ -194,20 +194,19 @@ Load all labels in the target directory
 folder_path = path of labels to load
 """
 def load_lbls(folder_path):
-    data = os.listdir(folder_path)
+    data = ds.listdir(folder_path)
     total = len(data) /2
     cur = 0
     labels = []
     for i in range(0,len(data)):
         file = data[i]
-        if file.endswith(".LBL"):
-            ticks = file.strip('W').strip('.LBL')
-            ticks = ticks[:-2]
+        if file.upper().endswith(".LBL"):
             cur+=1
-            print(f"Label {cur} of {total} ")
+            if cur % 1000 == 0:
+                print(f"Label {cur} of {total} ")
             path = folder_path + "/" + file
-           # print(path)
             labels.append(label(path))
+    return labels
 
 
 def subset(dictionary, col_names):
