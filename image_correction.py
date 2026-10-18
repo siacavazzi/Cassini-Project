@@ -22,9 +22,43 @@ last = None
 def align_images(imgs):
     ref = imgs[0] # set first image as reference
     for i in range(1, len(imgs)):
-        imgs[i] = imgAlign(ref,imgs[i], False)
-        
+        imgs[i] = shift_align(ref,imgs[i])
+
     return imgs
+
+
+"""
+Aligns im2 to im1 with a sub-pixel translation found by phase correlation.
+Filter frames in a color sequence are taken seconds apart, so the target only
+moves across the sensor; a translation is the right motion model.
+max_shift = largest offset in pixels that is accepted as real
+min_response = phase correlation peak below which the match is rejected
+"""
+def shift_align(im1, im2, max_shift=100, min_response=0.05):
+    im1_gray = cv2.cvtColor(im1,cv2.COLOR_BGR2GRAY).astype(np.float32)
+    im2_gray = cv2.cvtColor(im2,cv2.COLOR_BGR2GRAY).astype(np.float32)
+
+    # correlate only the area around the target so empty sky does not dilute the match
+    blurred = cv2.GaussianBlur(im1_gray, (0,0), 3)
+    ys, xs = np.nonzero(blurred > 0.2 * blurred.max())
+    if len(ys) == 0:
+        print("Image alignment skipped: blank reference frame")
+        return im2
+    h, w = im1_gray.shape
+    y0, y1 = max(ys.min() - max_shift, 0), min(ys.max() + max_shift, h)
+    x0, x1 = max(xs.min() - max_shift, 0), min(xs.max() + max_shift, w)
+    a = im1_gray[y0:y1, x0:x1]
+    b = im2_gray[y0:y1, x0:x1]
+
+    window = cv2.createHanningWindow((a.shape[1], a.shape[0]), cv2.CV_32F)
+    (dx, dy), response = cv2.phaseCorrelate(a, b, window)
+
+    if response < min_response or abs(dx) > max_shift or abs(dy) > max_shift:
+        print(f"Image alignment failure: shift ({dx:.1f}, {dy:.1f}) response {response:.2f}")
+        return im2
+
+    M = np.float32([[1, 0, -dx], [0, 1, -dy]])
+    return cv2.warpAffine(im2, M, (w, h), flags=cv2.INTER_CUBIC, borderMode=cv2.BORDER_CONSTANT)
         
         
 def seqAlign(im):
