@@ -23,10 +23,16 @@ sequence_counts = {}
 sequence_list = {}
 cur_lbl = 1
 wd = os.getcwd()
+# transparent padding (pixels) added on every side of a frame before it is moved into place;
+# raise it for close-up mosaics whose panels sit far from the target's center
+canvas_border = 1024
 #tot_lbl = len(data)/2
-def rotate_image(image, angle):
+def rotation_matrix(image, angle):
     image_center = tuple((np.array(image.shape[1::-1]) - 1) / 2)
-    rot_mat = cv2.getRotationMatrix2D(image_center, angle, 1.0)
+    return cv2.getRotationMatrix2D(image_center, angle, 1.0)
+
+def rotate_image(image, angle):
+    rot_mat = rotation_matrix(image, angle)
     result = cv2.warpAffine(image, rot_mat, image.shape[1::-1], flags=cv2.INTER_LINEAR)
     return result
 
@@ -144,15 +150,7 @@ class label:
         
         
         if border:
-            
-            max_bound = max(x,y)
-            
-            if max_bound > (lines*2):
-                border = int(max_bound) + 1024
-            else:
-                border = lines     
-            
-            border = 1024
+            border = canvas_border
             img = cv2.cvtColor(img, cv2.COLOR_BGR2RGBA)
             img= cv2.copyMakeBorder(img,border,border,border,border,cv2.BORDER_CONSTANT,value=[0,0,0,0])   
         
@@ -164,6 +162,12 @@ class label:
         name = self.info["SPACECRAFT_CLOCK_START_COUNT".split('.')[0]]
         print(name)
         img = rotate_image(img,angle)
+
+        # where each pixel of the original image ended up: shift (after the border) then
+        # rotation, as a 3x3 matrix for reproject.py
+        pad = border if border else 0
+        shift = np.array([[1, 0, x + pad], [0, 1, y + pad], [0, 0, 1]])
+        self.placement = np.vstack([rotation_matrix(img, angle), [0, 0, 1]]) @ shift
 
         return img
         

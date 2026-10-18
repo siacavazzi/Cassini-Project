@@ -172,6 +172,9 @@ def find_target(label,plot,output):
         plt.plot(sample,line,marker='o', markerfacecolor='blue', markersize=18)
         plt.savefig(f'{output}/{label.info["PRODUCT_ID"]}.png')
 
+    # what reproject.py needs to map this image's pixels onto the target's surface
+    label.geometry = {"et": et, "camera": frame, "target": target, "center": CCD_CENTER, "scale": scale}
+
     # shift that moves the target to the centre of the image
     x = CCD_CENTER - sample
     y = CCD_CENTER - line

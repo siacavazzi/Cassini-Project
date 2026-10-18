@@ -14,6 +14,7 @@ import calibration as cal
 import bootleg_autonav as ba
 import data_source as ds
 import numpy as np
+import mosaic as mo
 import cv2
 import datetime
 import multiprocessing
@@ -44,29 +45,24 @@ calibrate = True # put every filter on one brightness scale so colors are true (
 buffer = []
 
 """
-Adds a frame to the mosaic window: the last 5 frames
+Adds a frame to the mosaic window: the last mo.buffer_size frames
 """
-def add_to_window(window, img):
-    if len(window) > 4:
+def add_to_window(window, entry):
+    if len(window) >= mo.buffer_size:
         window.pop(0)
-    window.append(img)
+    window.append(entry)
 
 
 """
-Layers the frames in the window on top of each other
+Draws the frames in the window on top of each other (see mosaic.py). Each entry is
+(RGBA numpy array, geometry, view, placement), as frame_task returns them.
 """
-def composite_window(window):
-    if len(window) == 1:
-        return window[0]
-    composite = window[0]
-    for image in window:
-        composite = Image.alpha_composite(composite, image)
-    return composite
+def composite_window(window, reproject=None):
+    return Image.fromarray(mo.compose(window, reproject))
 
 
-# BUG: Image order is incorrect sometimes
-def build_mosaic(img):
-    add_to_window(buffer, img)
+def build_mosaic(entry):
+    add_to_window(buffer, entry)
     return composite_window(buffer)
 
 
@@ -107,7 +103,7 @@ def get_mask():
 """
 Builds one frame up to (not including) the mosaic step
 row = one row of the image index: the label path for each filter plus seconds_1970
-returns a PIL image
+returns a PIL image and the label it was centered with
 """
 def make_frame(row, filters):
     num_channels = len(filters)
@@ -115,8 +111,11 @@ def make_frame(row, filters):
     lbls = []
 
     if num_channels == 1:
-        image = lh.label(row[filters[0]], as_png = True).auto_center(border)
-        return Image.fromarray(image)
+        # same 1024 px RGBA frame with soft edges as the color path, so B&W frames can mosaic
+        lbl = lh.label(row[filters[0]], as_png = True)
+        gray = Image.fromarray(lbl.resize_image()).convert('L')
+        image = np.asarray(Image.merge("RGBA",(gray,gray,gray, get_mask())))
+        return Image.fromarray(lbl.set_color(image).auto_center(border)), lbl
 
     for filter in filters:
         lbl, img = stacking.load_stacked(row[filter], max_frames = 5 if stack_repeats else 1)
@@ -154,7 +153,7 @@ def make_frame(row, filters):
         else:
             image = Image.merge("P",imgs[0],imgs[1])
 
-    return image
+    return image, lbl
 
 
 def frame_path(row, target, folder):
@@ -204,22 +203,23 @@ def uncrop(cropped):
 """
 Builds and saves one mosaic frame from the cropped frames in its window
 """
-def save_mosaic(window, path):
-    save_frame(composite_window([uncrop(c) for c in window]), path)
+def save_mosaic(window, path, reproject):
+    entries = [(np.asarray(uncrop(c)),) + tuple(info) for c, info in window]
+    save_frame(composite_window(entries, reproject), path)
 
 
 """
 Does all the work for one frame that doesn't depend on other frames. Runs in a worker
 process when running in parallel.
-Saves the frame itself, except for mosaics: their frames are returned so they can be
-added to the mosaic in order.
+Saves the frame itself, except for mosaics: their frames are returned, with what
+surface reprojection needs (mosaic.frame_info), so they can be added to the mosaic in order.
 Returns None when there's nothing left to do, including when the frame failed.
 """
 def frame_task(row, filters, target, folder, mosaic):
     try:
-        image = make_frame(row, filters)
-        if mosaic and len(filters) == 3:
-            return image
+        image, lbl = make_frame(row, filters)
+        if mosaic and len(filters) in (1, 3):
+            return (np.asarray(image),) + mo.frame_info(lbl)
         save_frame(image, frame_path(row, target, folder))
     except Exception:
         print(f"Failed to make {row['seconds_1970']}_{target}:")
@@ -231,9 +231,9 @@ def frame_task(row, filters, target, folder, mosaic):
 frame_task for the worker processes: mosaic frames are sent back cropped
 """
 def worker_frame_task(row, filters, target, folder, mosaic):
-    image = frame_task(row, filters, target, folder, mosaic)
-    if image is not None:
-        return crop(np.asarray(image))
+    entry = frame_task(row, filters, target, folder, mosaic)
+    if entry is not None:
+        return crop(entry[0]), entry[1:]
     return None
 
 
@@ -268,9 +268,9 @@ def export_sequence(camera, filters, target, delta, folder, mosaic, start_loc, w
 
     if workers == 1 or len(rows) <= 1:
         for row in rows:
-            image = frame_task(row, filters, target, folder, mosaic)
-            if image is not None:
-                save_frame(build_mosaic(image), frame_path(row, target, folder))
+            entry = frame_task(row, filters, target, folder, mosaic)
+            if entry is not None:
+                save_frame(build_mosaic(entry), frame_path(row, target, folder))
         return
 
     print(f"Building {len(rows)} frames with {workers} worker processes")
@@ -288,7 +288,7 @@ def export_sequence(camera, filters, target, delta, folder, mosaic, start_loc, w
         result = future.result()
         if result is not None:
             add_to_window(window, result)
-            saves.append(pool.submit(save_mosaic, list(window), frame_path(row, target, folder)))
+            saves.append(pool.submit(save_mosaic, list(window), frame_path(row, target, folder), mo.reproject_surface))
             while len(saves) > workers * 2:
                 saves.popleft().result()
 
