@@ -1,2 +1,5 @@
 data
 output
+data.zip
+spice_cache
+__pycache__/

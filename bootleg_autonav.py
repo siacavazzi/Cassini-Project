@@ -9,6 +9,7 @@ import numpy as np
 import math
 import matplotlib.pyplot as plt
 import os
+import data_source as ds
 
 
 wd = os.getcwd()
@@ -38,12 +39,12 @@ def date_to_clock(start,end):
 Loads all SPICE kernels from start_year to end_year
 """
 def load_kernels(start_year, end_year):
-    data = os.listdir(Kernel_index_path)
+    data = ds.listdir(Kernel_index_path)
     for kernel_index in data:
         year = int(kernel_index.split("_")[1])
         if (year >= start_year) and (year <= end_year):
             print(f"Loading {year} kernels...")       
-            sp.furnsh(f"{Kernel_index_path}/{kernel_index}")
+            ds.furnsh_metakernel(f"{Kernel_index_path}/{kernel_index}")
             
  
             
@@ -55,6 +56,7 @@ Unloads all SPICE kernels
 def unload_kernels():
     print("Unloading all kernels...")
     sp.kclear()
+    ds.clear_spice_cache()
 
 """
 label = image label object

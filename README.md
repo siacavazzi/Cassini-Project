@@ -24,7 +24,7 @@ Below is a diagram which demonstrates this.
 
 ## How to use
 
-1. Install required packages
+1. Install required packages: `pip install -r requirements.txt`
 ### Required python packages
 * Pandas
 * Numpy
@@ -35,9 +35,11 @@ Below is a diagram which demonstrates this.
 
 2. Download Cassini data [here](https://drive.google.com/file/d/1hrxyrGBIkVQfzReZ5hACr2lJZiHwxWBb/view?usp=share_link) Note: this ZIP file is quite large at 97 GB and will take a while to download. This data has been slightly preprocessed from the original NASA data to reduce file sizes and program complexity. This file in its original format would be nearly 1 TB!
 
-3. Unzip cassini data and place the data folder into the main folder.
+3. Place data.zip in the main folder. There is no need to unzip it: images and labels are read straight out of the zip, and the SPICE kernels for the year being processed are extracted to a temporary spice_cache folder (deleted again when the program moves on to another year). To keep the zip somewhere else, set the CASSINI_DATA environment variable to its path. If the zip was made with Windows' built in zip tool and Python reports an unsupported compression method, install the zipfile-deflate64 package.
 
-4. Run the create_spice_index() function located within index_maker.py - essentially this function updates the SPICE data indecies with correct file paths for your machine. 
+   You can still unzip the data and place the data folder into the main folder instead; a data folder takes priority over data.zip.
+
+4. Only if you unzipped the data: run the create_spice_index() function located within index_maker.py - essentially this function updates the SPICE data indecies with correct file paths for your machine. This step isn't needed when reading from data.zip.
 
 5. Open sequence_input.csv. This is the input used to tell the program which target bodies and images you are interested in. The fields in the CSV are as follows: 
 
@@ -75,7 +77,7 @@ Example inputs:
 
 Note: this is a spreadsheet and can accept multiple entries. Upon finishing one the program will move on to the next.
 
-6. Create a folder in the main directory called output. This is where processed images will be placed.
+6. Processed images are placed in the output folder, one folder per sequence. If a run is stopped, running it again keeps the frames already made and carries on (mosaic sequences are always redrawn, since each frame is drawn on top of the ones before it).
 
 7. Run main.py - note: it may take a while to finish. Data is place into an output folder.
 

@@ -21,7 +21,7 @@ warnings.filterwarnings("ignore")
 # This section creates an index file for all image data for easy search later on
 wd = os.getcwd()
                 
-image_folders = ["/data/wac_data","/data/nac_data"]
+image_folders = ["wac_data","nac_data"]
 
 spice_index = wd + "/data/cosp_1000/index"
 spice_data = wd + "/data/cosp_1000/data"
@@ -35,17 +35,13 @@ Creates a CSV index file with all images. Converts the image date to seconds sin
 NOTE: This will probably take a long tmime
 """    
 def create_master_index():  
-    output = pd.DataFrame()
+    rows = []
+    # variables of interest to extract from image meta data 
+    target_variables = ["path","IMAGE_MID_TIME","INSTRUMENT_ID","TARGET_NAME","TARGET_DESC","FILTER_NAME","OBSERVATION_ID","MISSING_LINES"]
  
     for camera in image_folders:
-        labels = lh.load_lbls(camera)
-        
-        # variables of interest to extract from image meta data 
-        target_variables = ["path","IMAGE_MID_TIME","INSTRUMENT_ID","TARGET_NAME","TARGET_DESC","FILTER_NAME","OBSERVATION_ID","MISSING_LINES"]
-
-        for i in range(0, len(labels)):
-            image_data = labels[i]
-            image_data = lh.subset(image_data.get_info(), target_variables)
+        for label in lh.load_lbls(camera):
+            image_data = lh.subset(label.get_info(), target_variables)
             
             date = datetime.datetime.strptime(str(image_data['IMAGE_MID_TIME']).replace('Z',''),'%Y-%jT%H:%M:%S.%f')
             
@@ -57,9 +53,13 @@ def create_master_index():
             
             
             image_data["year"] = int(image_data["IMAGE_MID_TIME"].split("-")[0])
-            output = output.append(image_data,ignore_index=True)
-            print(f"Processing loaded labels: {len(output)}")
+            rows.append(image_data)
+        print(f"Processing loaded labels: {len(rows)}")
     
+    # get_images walks the index in time order
+    output = pd.DataFrame(rows).sort_values("seconds_1970", kind="stable")
+    # stored as floats like the original index, so frame names (e.g. 970413901.0_JUPITER.png) stay the same
+    output[["seconds_1970","year"]] = output[["seconds_1970","year"]].astype(float)
     output.to_csv("Image_index.csv")
     
     
@@ -88,7 +88,19 @@ def create_spice_index():
         replace(file, spice_path, spice_data)
         
         
-      # helper function   
+"""
+Reads Image_index.csv once and keeps it for later sequences
+"""
+_index = None
+
+def load_index():
+    global _index
+    if _index is None:
+        _index = pd.read_csv("Image_index.csv", usecols=["path","INSTRUMENT_ID","TARGET_NAME","FILTER_NAME","seconds_1970"])
+    return _index
+
+
+# helper function
 def check_filters(color,filters):
     for filter in filters:
         if filter in color:
@@ -110,84 +122,51 @@ def get_images(camera,target,delta,filters,start_loc,make_csv=False):
     if len(filters) > 3 or len(filters) < 1:
         print("Only 1-3 filters per sequence are supported")
         return
-    output = pd.DataFrame()
    
-    index = pd.read_csv("Image_index.csv")
-    
-    index = index[index["INSTRUMENT_ID"] == camera]
-    index = index[index["TARGET_NAME"] == target]
-    index["date"] = ""
-    index["color"] = ""    
-    index["SEQUENCE"] = ""
+    index = load_index()
+    index = index[(index["INSTRUMENT_ID"] == camera) & (index["TARGET_NAME"] == target)]
+    # plain lists and arrays: indexing a DataFrame row by row is very slow
+    names = index["FILTER_NAME"].tolist()
+    paths = index["path"].tolist()
+    seconds = index["seconds_1970"].to_numpy()
     runlen = len(index) 
     num_channels = len(filters)
-    
-    
+    rows = []
     
     i = start_loc
     while i < runlen:
-        color = index["FILTER_NAME"].iloc[i]
-        ch = {}
-        if len(filters) == 1:
-            if filters[0] in index['FILTER_NAME'].iloc[i]:
-                print("Image found")
-                ch[filters[0]] = index['path'].iloc[i]
-                id = index["seconds_1970"].iloc[i]
-                ch["seconds_1970"] = id
-                output = output.append(ch,ignore_index=True)
-                index["SEQUENCE"].iloc[i] = len(output)
-                print(f"{i} of {runlen}")
-                i = i + 1
-                continue
+        if num_channels == 1:
+            if filters[0] in names[i]:
+                rows.append({filters[0]: paths[i], "seconds_1970": seconds[i]})
+            i = i + 1
+            continue
             
-        if check_filters(color,filters):
+        if check_filters(names[i],filters):
+            # the sequence is image i plus every image taken less than delta seconds after it
+            end = i + 1
+            while end < runlen and seconds[end] - seconds[i] < delta:
+                end = end + 1
+            
             # colors are denoted by channels since there may be 1-3
-            
-            seq = pd.DataFrame()
-            j = 1
-            
-            while((index["seconds_1970"].iloc[i+j] - index["seconds_1970"].iloc[i]) < delta):
-                if j == 1:
-                    seq = seq.append(index.iloc[i]) 
-                    
-                seq = seq.append(index.iloc[i+j])                             
-                j = j + 1
-            
-                for x in range(0,len(seq)):
-                
+            ch = {}
+            if end > i + 1:
+                for x in range(i, end):
                     for z in range(0, num_channels):
-                   
-                        if filters[z] in seq['FILTER_NAME'].iloc[x]:
-                            ch[filters[z]] = "data/" + seq["path"].iloc[x]
-                            id = seq["seconds_1970"].iloc[x]
-            
-                  
-              
+                        if filters[z] in names[x]:
+                            ch[filters[z]] = "data/" + paths[x]
+                            id = seconds[x]
                 
             if len(ch) == num_channels:
-                print("Image found")
                 ch["seconds_1970"] = id
-                output = output.append(ch,ignore_index=True)
-                index["SEQUENCE"].iloc[i] = len(output)
-                i = i + j - 1
-                
-            if i + j + 25 >= runlen:
-                print(f"this error is dumb: {i+j}")
-                break
+                rows.append(ch)
+                # skip past the images used by this sequence
+                i = end - 1
                      
         i = i + 1      
-        print(f"{i} of {runlen}")
         
-    if num_channels == 3:
-        output = output[[filters[0],filters[1],filters[2],'seconds_1970']]
-        
+    print(f"Found {len(rows)} images in {runlen} {camera} images of {target}")
+    output = pd.DataFrame(rows, columns=list(filters) + ["seconds_1970"])
         
     if make_csv is True:
         output.to_csv(f"{camera}_{target}_{num_channels}_index.csv")
     return output
-
-
-
-
-
-

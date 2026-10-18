@@ -11,6 +11,8 @@ import image_correction as ic
 import index_maker as im
 import stacking
 import numpy as np
+import os
+import traceback
 
 
 output = "output"
@@ -59,11 +61,19 @@ def export_sequence(camera, filters, target, delta, folder, mosaic, start_loc):
 
     num_channels = len(filters)
     last = None
+    skipped = 0
     for i in range(0, len(index)):
         imgs = []
         lbls = []
         
-        
+        id = index["seconds_1970"].iloc[i]
+        title = f"{id}_{target}" 
+        out_path = f"output/{folder}/{title}.png"
+        # frames from an earlier run are kept. Mosaics are always redrawn since
+        # each frame is drawn on top of the frames before it
+        if not mosaic and os.path.exists(out_path):
+            skipped += 1
+            continue
         
         try:
         
@@ -71,7 +81,7 @@ def export_sequence(camera, filters, target, delta, folder, mosaic, start_loc):
             
             
             if num_channels == 1:
-                image = lh.label(index[filters[0]].iloc[i]).auto_center(border)
+                image = lh.label(index[filters[0]].iloc[i], as_png = True).auto_center(border)
                 image = Image.fromarray(image)
             
             else:
@@ -141,15 +151,12 @@ def export_sequence(camera, filters, target, delta, folder, mosaic, start_loc):
                 
                 else:
                     if triband_from_dualband:
-                        blank = Image.open("blank2.jpg").convert('L')
+                        blank = Image.new('L', imgs[0].size, 0)
                         green = Image.merge("RGB",(imgs[0],blank,imgs[1])).convert('L')
                         image = Image.merge("RGB",(imgs[0],green,imgs[1]))
                     
                     else:
                         image = Image.merge("P",imgs[0],imgs[1])
-            id = index["seconds_1970"].iloc[i]
-            title = f"{id}_{target}" 
-
             #image = Image.fromarray(image)
             
             
@@ -158,8 +165,11 @@ def export_sequence(camera, filters, target, delta, folder, mosaic, start_loc):
             image =  enhancer.enhance(1.5)
             
             
-            image.save(f"output/{folder}/{title}.png")
+            image.save(out_path)
 
-        except Exception as e:
-           print(e)
+        except Exception:
+           print(f"Failed to make {title}:")
+           traceback.print_exc()
            continue
+    if skipped:
+        print(f"Kept {skipped} frames already in output/{folder}")
