@@ -116,11 +116,12 @@ body { background: var(--void); color: var(--text); font-family: var(--font-body
       <div class="grp" id="speeds" aria-label="Playback speed"></div>
       <div class="grp" id="zooms" aria-label="Timeline span"></div>
       <span class="spacer"></span>
+      <button class="btn" id="allorbits" aria-pressed="false">All moons</button>
       <button class="btn" id="enlarge" aria-pressed="false">Enlarge moons ×10</button>
       <button class="btn" id="mtoggle" aria-pressed="false">Moments</button>
     </div>
     <canvas id="tl" aria-label="Timeline: drag to scrub, scroll to zoom"></canvas>
-    <div class="note">Positions from Cassini's SPICE kernels (J2000, sub-pixel accurate). Timeline bars are camera frames per time slice. Spacecraft pointing and the photos themselves are not loaded in this prototype yet; Cassini's dish is shown aimed at Earth.</div>
+    <div class="note">Positions from Cassini's SPICE kernels (J2000, sub-pixel accurate). Timeline bars are camera frames per time slice. Spacecraft pointing and the photos are not loaded yet: Cassini's dish is shown aimed at Earth, and the camera cone is aimed at the target of each frame.</div>
   </div>
 
   <div id="loading">Loading 2005 trajectories…</div>
@@ -173,6 +174,7 @@ const MOON_LOOK = {
   MIMAS: [0.80, 0.80, 0.80], ENCELADUS: [0.98, 0.98, 1.0], TETHYS: [0.88, 0.87, 0.85], DIONE: [0.84, 0.84, 0.86],
   RHEA: [0.82, 0.80, 0.78], TITAN: [0.86, 0.58, 0.28], HYPERION: [0.62, 0.55, 0.47], IAPETUS: [0.78, 0.76, 0.72], PHOEBE: [0.30, 0.29, 0.28]
 };
+const FOV_HALF = { N: 0.3516 / 2, W: 3.4884 / 2 };   // ISS fields of view, degrees (half width)
 const SPEEDS = [[1, "1×"], [60, "1 min/s"], [600, "10 min/s"], [3600, "1 h/s"], [21600, "6 h/s"], [86400, "1 day/s"]];
 const ZOOMS = [[86400, "Day"], [7 * 86400, "Week"], [30 * 86400, "Month"], [365 * 86400, "Year"]];
 const titleCase = s => s.charAt(0) + s.slice(1).toLowerCase();
@@ -209,15 +211,23 @@ const canvas = document.getElementById("gl");
 const renderer = new THREE.WebGLRenderer({ canvas, antialias: true, logarithmicDepthBuffer: true, preserveDrawingBuffer: true });
 renderer.setPixelRatio(Math.min(window.devicePixelRatio, 2));
 const scene = new THREE.Scene();
-scene.background = new THREE.Color(0x04060b);
-const camera = new THREE.PerspectiveCamera(45, 1, 1e-6, 1e9);
+renderer.setClearColor(0x04060b, 1);   // not scene.background: the scene is drawn in two passes
+const camera = new THREE.PerspectiveCamera(45, 1, 1e-8, 1e9);
 const controls = new THREE.OrbitControls(camera, canvas);
 controls.enableDamping = true; controls.dampingFactor = 0.08; controls.rotateSpeed = 0.6; controls.zoomSpeed = 1.1;
 controls.enablePan = false;
 
-const sunLight = new THREE.DirectionalLight(0xffffff, 1.35);
+const sunLight = new THREE.DirectionalLight(0xffffff, 1.7);
 scene.add(sunLight, sunLight.target);
-scene.add(new THREE.AmbientLight(0x30384a, 0.35));
+const ambient = new THREE.AmbientLight(0x40485c, 0.7);
+scene.add(ambient);
+// Cassini is drawn on layer 1. Up close it gets its own pass with a tight near/far range,
+// because at metre scale the shared log depth buffer cannot separate its parts.
+sunLight.layers.enable(1); ambient.layers.enable(1);
+camera.layers.enable(1);
+const closeCam = new THREE.PerspectiveCamera(45, 1, 1e-8, 1);
+closeCam.layers.set(1);
+renderer.autoClear = false;
 
 // Scene basis: y along Saturn's pole so the rings lie flat; rows are J2000 unit vectors.
 let E = null;
@@ -303,7 +313,7 @@ function makeSaturn(radii) {
             if (u > 0.0 && u < 1.0) sh = texture2D(rings, vec2(u, 0.5)).a; } }
         float L = max(mu0, 0.0);
         L = pow(L, 0.85);
-        gl_FragColor = vec4(base * (L * (1.0 - 0.88 * sh) + 0.012), 1.0);
+        gl_FragColor = vec4(base * (1.12 * L * (1.0 - 0.88 * sh) + 0.045), 1.0);
       }`
   });
   const mesh = new THREE.Mesh(new THREE.SphereGeometry(1, 160, 96), mat);
@@ -371,7 +381,7 @@ function makeMoon(name, b) {
           alb = color * (1.0 + 0.05 * sin(asin(nb.z) * 6.0) + 0.04 * m);
           L = smoothstep(-0.18, 0.75, mu0) * 0.95;
         }
-        gl_FragColor = vec4(alb * L + alb * 0.008, 1.0);
+        gl_FragColor = vec4(alb * (1.1 * L + 0.06), 1.0);
       }`
   });
   const mesh = new THREE.Mesh(new THREE.SphereGeometry(1, 96, 64), mat);
@@ -404,12 +414,12 @@ function makeCassini() {
   // Rough Cassini built from primitives, in metres; the high-gain dish faces +Z.
   const g = new THREE.Group();
   const foil = new THREE.MeshStandardMaterial({ color: 0x9c7a3a, metalness: 0.6, roughness: 0.35 });
-  const white = new THREE.MeshStandardMaterial({ color: 0xeeeeea, metalness: 0.1, roughness: 0.6 });
+  const white = new THREE.MeshStandardMaterial({ color: 0xbcb8ac, metalness: 0.05, roughness: 0.9 });
   const dark = new THREE.MeshStandardMaterial({ color: 0x2a2c30, metalness: 0.3, roughness: 0.7 });
   const bus = new THREE.Mesh(new THREE.CylinderGeometry(0.9, 0.9, 4.2, 20), foil); bus.rotation.x = Math.PI / 2; g.add(bus);
-  const top = new THREE.Mesh(new THREE.CylinderGeometry(0.95, 0.95, 0.5, 10), dark); top.rotation.x = Math.PI / 2; top.position.z = 2.0; g.add(top);
-  const pts = []; for (let i = 0; i <= 16; i++) { const r = 2.0 * i / 16; pts.push(new THREE.Vector2(r, 0.18 * (r * r) / 4 * 4)); }
-  const dish = new THREE.Mesh(new THREE.LatheGeometry(pts, 40), white); dish.rotation.x = -Math.PI / 2; dish.position.z = 2.35; dish.material.side = THREE.DoubleSide; g.add(dish);
+  const top = new THREE.Mesh(new THREE.CylinderGeometry(0.95, 0.95, 0.5, 10), dark); top.rotation.x = Math.PI / 2; top.position.z = 1.85; g.add(top);
+  const pts = []; for (let i = 0; i <= 16; i++) { const r = 0.05 + 1.95 * i / 16; pts.push(new THREE.Vector2(r, 0.18 * (r * r) / 4 * 4)); }
+  const dish = new THREE.Mesh(new THREE.LatheGeometry(pts, 40), white); dish.rotation.x = Math.PI / 2; dish.position.z = 2.3; dish.material.side = THREE.DoubleSide; g.add(dish);
   const boom = new THREE.Mesh(new THREE.CylinderGeometry(0.04, 0.04, 11, 6), dark); boom.rotation.z = Math.PI / 2; boom.position.set(5.6, 0, 1.6); g.add(boom);
   for (let k = 0; k < 3; k++) {
     const a = k * 2.1 + 0.5;
@@ -421,10 +431,10 @@ function makeCassini() {
 }
 
 // ---------- state ----------
-const state = { et: 0, playing: true, speed: 600, focus: "TITAN", enlarge: false, view: [0, 0], dragging: false };
+const state = { et: 0, playing: true, speed: 600, focus: "TITAN", enlarge: false, allOrbits: false, view: [0, 0], dragging: false };
 let bodies = {}, tracks = {}, encounters = [], catalog = null, order = null, coverage = [0, 0];
 const pos = {}, meshes = {}, labels = {};
-let saturnObj, cassini, trailLine, orbitLines = {}, markerPts, starPts, sunSprite;
+let saturnObj, cassini, trailLine, orbitLines = {}, markerPts, starPts, sunSprite, fov;
 const tmp = v3(), tmp2 = v3(), vA = new THREE.Vector3();
 
 async function load() {
@@ -460,6 +470,8 @@ function build() {
     scene.add(m.group); meshes[name] = m;
   }
   cassini = makeCassini(); scene.add(cassini);
+  cassini.traverse(o => o.layers.set(1));
+  buildFov();
 
   // always-visible dots so small or distant bodies never vanish
   const names = Object.keys(meshes).concat(["CASSINI"]);
@@ -468,16 +480,30 @@ function build() {
   const col = new Float32Array(names.length * 3);
   names.forEach((n, i) => { const c = n === "CASSINI" ? [0.56, 0.79, 1] : n === "TITAN" ? [0.88, 0.6, 0.29] : [0.62, 0.66, 0.72]; col.set(c, 3 * i); });
   mg.setAttribute("color", new THREE.BufferAttribute(col, 3));
-  markerPts = new THREE.Points(mg, new THREE.PointsMaterial({ size: 3, sizeAttenuation: false, vertexColors: true, depthWrite: false }));
+  const dc = document.createElement("canvas"); dc.width = dc.height = 64;
+  const dg = dc.getContext("2d"), dgr = dg.createRadialGradient(32, 32, 0, 32, 32, 32);
+  dgr.addColorStop(0, "rgba(255,255,255,1)"); dgr.addColorStop(0.18, "rgba(255,255,255,.9)"); dgr.addColorStop(0.45, "rgba(255,255,255,.22)"); dgr.addColorStop(1, "rgba(255,255,255,0)");
+  dg.fillStyle = dgr; dg.fillRect(0, 0, 64, 64);
+  markerPts = new THREE.Points(mg, new THREE.PointsMaterial({ size: 11, sizeAttenuation: false, vertexColors: true, map: new THREE.CanvasTexture(dc), transparent: true, blending: THREE.AdditiveBlending, depthWrite: false }));
+  markerPts.userData.base = col.slice();
   markerPts.userData.names = names; markerPts.renderOrder = 3;
   scene.add(markerPts);
 
   // stars: decorative, fixed at "infinity"
-  const sg = new THREE.BufferGeometry(), sp = new Float32Array(2600 * 3);
+  starPts = new THREE.Group();
   let seed = 11; const rnd = () => (seed = (seed * 16807) % 2147483647) / 2147483647;
-  for (let i = 0; i < 2600; i++) { const u = rnd() * 2 - 1, th = rnd() * Math.PI * 2, r = Math.sqrt(1 - u * u); sp.set([r * Math.cos(th) * 1e7, u * 1e7, r * Math.sin(th) * 1e7], 3 * i); }
-  sg.setAttribute("position", new THREE.BufferAttribute(sp, 3));
-  starPts = new THREE.Points(sg, new THREE.PointsMaterial({ size: 1.1, sizeAttenuation: false, color: 0x8d97a8, transparent: true, opacity: 0.55, depthWrite: false }));
+  for (const [n, size, op] of [[7000, 1.2, 0.6], [900, 2.0, 0.85], [120, 3.0, 1.0]]) {
+    const sg = new THREE.BufferGeometry(), sp = new Float32Array(n * 3), sc = new Float32Array(n * 3);
+    for (let i = 0; i < n; i++) {
+      const u = rnd() * 2 - 1, th = rnd() * Math.PI * 2, r = Math.sqrt(1 - u * u);
+      sp.set([r * Math.cos(th) * 1e7, u * 1e7, r * Math.sin(th) * 1e7], 3 * i);
+      const tint = rnd(), b = 0.55 + 0.45 * rnd();
+      sc.set(tint < 0.2 ? [b, b * 0.86, b * 0.7] : tint < 0.5 ? [b * 0.8, b * 0.88, b] : [b, b, b], 3 * i);
+    }
+    sg.setAttribute("position", new THREE.BufferAttribute(sp, 3));
+    sg.setAttribute("color", new THREE.BufferAttribute(sc, 3));
+    starPts.add(new THREE.Points(sg, new THREE.PointsMaterial({ size, sizeAttenuation: false, vertexColors: true, transparent: true, opacity: op, depthWrite: false })));
+  }
   scene.add(starPts);
 
   const sc = document.createElement("canvas"); sc.width = sc.height = 128;
@@ -488,7 +514,7 @@ function build() {
   scene.add(sunSprite);
 
   // Cassini trail
-  const N = 1200, tg = new THREE.BufferGeometry();
+  const N = 1601, tg = new THREE.BufferGeometry();
   tg.setAttribute("position", new THREE.BufferAttribute(new Float32Array(N * 3), 3));
   tg.setAttribute("color", new THREE.BufferAttribute(new Float32Array(N * 3), 3));
   trailLine = new THREE.Line(tg, new THREE.LineBasicMaterial({ vertexColors: true, transparent: true, blending: THREE.AdditiveBlending, depthWrite: false }));
@@ -513,11 +539,23 @@ function build() {
 }
 
 // ---------- per-frame update ----------
+// The body Cassini is photographing: the target of the latest frame, if it was taken in the last two hours.
+function imagingTarget() {
+  const i = lastImageIndex(state.et); if (i < 0) return null;
+  const k = order[i]; if (state.et - catalog.et[k] > 7200) return null;
+  const t = catalog.target[k]; return pos[t] ? t : null;
+}
+function shown(name) {
+  if (state.allOrbits || name === "CASSINI" || name === "SATURN" || name === "TITAN" || name === state.focus) return true;
+  if (name === state.target) return true;
+  return MAJOR.includes(name) && name !== "PHOEBE" && name !== "HYPERION";
+}
 function bodyRadius(name) { return name === "CASSINI" ? 0.0035 : meshes[name] ? meshes[name].radius : 10; }
 function relScene(name, out) { sub(pos[name], pos[state.focus], tmp); return toScene(tmp, out).multiplyScalar(1 / KM); }
 
 function updateBodies() {
   for (const name in tracks) positionAt(tracks[name], state.et, pos[name]);
+  state.target = imagingTarget();
   const sunv = norm(sub(pos.SUN, pos.SATURN, tmp2));
   toScene(sunv, uSun.value).normalize();
   sunLight.position.copy(uSun.value); sunLight.target.position.set(0, 0, 0);
@@ -542,21 +580,57 @@ function updateBodies() {
 
   relScene("CASSINI", cassini.position);
   const dist = camera.position.distanceTo(cassini.position);
-  const s = Math.max(1e-6, dist * 0.0045) / 1;   // metres -> units, kept a readable size on screen
-  cassini.scale.setScalar(Math.max(s, 1e-6));
+  // true size (1 m = 1e-6 units) up close; from about 500 m out it is enlarged so it stays visible
+  cassini.scale.setScalar(Math.max(1e-6, dist * 0.002));
   relScene("EARTH", vA); cassini.lookAt(vA);
 
   // markers
   const arr = markerPts.geometry.attributes.position.array;
+  const mc = markerPts.geometry.attributes.color.array, base = markerPts.userData.base;
   markerPts.userData.names.forEach((n, i) => {
     const p = n === "CASSINI" ? cassini.position : meshes[n].group.position;
     arr[3 * i] = p.x; arr[3 * i + 1] = p.y; arr[3 * i + 2] = p.z;
+    const k = shown(n) ? 1 : 0;   // additive blending: black draws nothing
+    mc[3 * i] = base[3 * i] * k; mc[3 * i + 1] = base[3 * i + 1] * k; mc[3 * i + 2] = base[3 * i + 2] * k;
   });
   markerPts.geometry.attributes.position.needsUpdate = true;
+  markerPts.geometry.attributes.color.needsUpdate = true;
+  updateFov();
 
   starPts.position.copy(camera.position);
   sunSprite.position.copy(camera.position).addScaledVector(uSun.value, 1e5);
   sunSprite.scale.setScalar(1e5 * 0.05);
+}
+
+// Camera field of view drawn from Cassini. Until the pointing files are loaded it is aimed at the
+// target of the latest frame, which is where the camera was pointed in most observations.
+function buildFov() {
+  const c = [[-1, -1], [1, -1], [1, 1], [-1, 1]];
+  const ev = []; for (const [x, y] of c) ev.push(0, 0, 0, x, y, 1);
+  for (let k = 0; k < 4; k++) { const [x0, y0] = c[k], [x1, y1] = c[(k + 1) % 4]; ev.push(x0, y0, 1, x1, y1, 1); }
+  const eg = new THREE.BufferGeometry(); eg.setAttribute("position", new THREE.Float32BufferAttribute(ev, 3));
+  const fv = []; for (let k = 0; k < 4; k++) { const [x0, y0] = c[k], [x1, y1] = c[(k + 1) % 4]; fv.push(0, 0, 0, x0, y0, 1, x1, y1, 1); }
+  fv.push(-1, -1, 1, 1, -1, 1, 1, 1, 1, -1, -1, 1, 1, 1, 1, -1, 1, 1);
+  const fg = new THREE.BufferGeometry(); fg.setAttribute("position", new THREE.Float32BufferAttribute(fv, 3));
+  const edgeMat = new THREE.LineBasicMaterial({ color: 0x8ec9ff, transparent: true, opacity: 0.9, blending: THREE.AdditiveBlending, depthWrite: false });
+  const faceMat = new THREE.MeshBasicMaterial({ color: 0x8ec9ff, transparent: true, opacity: 0.09, blending: THREE.AdditiveBlending, depthWrite: false, side: THREE.DoubleSide });
+  fov = new THREE.Group(); fov.add(new THREE.LineSegments(eg, edgeMat), new THREE.Mesh(fg, faceMat));
+  fov.children.forEach(c => c.frustumCulled = false);
+  fov.visible = false; scene.add(fov);
+}
+function updateFov() {
+  const i = lastImageIndex(state.et);
+  fov.visible = false; if (i < 0) return;
+  const k = order[i], age = state.et - catalog.et[k];
+  if (age > Math.max(600, state.speed * 1.5)) return;
+  const t = catalog.target[k]; if (!pos[t] || t === "CASSINI") return;
+  const tp = t === state.focus ? new THREE.Vector3() : meshes[t] ? meshes[t].group.position : null; if (!tp) return;
+  const L = cassini.position.distanceTo(tp); if (!(L > 0)) return;
+  const h = L * Math.tan(rad(FOV_HALF[catalog.cam[k]] || FOV_HALF.N));
+  fov.position.copy(cassini.position); fov.scale.set(h, h, L * 1.02); fov.lookAt(tp);
+  const col = catalog.cam[k] === "N" ? 0x8ec9ff : 0x9fb6d6;
+  fov.children[0].material.color.setHex(col); fov.children[1].material.color.setHex(col);
+  fov.visible = true;
 }
 
 function updateTrail() {
@@ -565,24 +639,27 @@ function updateTrail() {
   const W = ref === "SATURN" ? 4 * 86400 : 20 * 3600;
   const p = trailLine.geometry.attributes.position.array, c = trailLine.geometry.attributes.color.array;
   const a = v3(), b = v3(), d = v3(), v = new THREE.Vector3();
-  const tc = tracks.CASSINI, tr = tracks[ref];
+  const tc = tracks.CASSINI, tr = tracks[ref], now0 = v3();
+  positionAt(tc, state.et, a); positionAt(tr, state.et, b); sub(a, b, now0);
   for (let i = 0; i < N; i++) {
-    const f = i / (N - 1), t = state.et - W + 2 * W * f;
-    positionAt(tc, t, a); positionAt(tr, t, b); sub(a, b, d); toScene(d, v).multiplyScalar(1 / KM);
+    const u = 2 * i / (N - 1) - 1, t = state.et + W * Math.sign(u) * u * u;   // samples crowd around "now"
+    positionAt(tc, t, a); positionAt(tr, t, b); sub(a, b, d); sub(d, now0, d); toScene(d, v).multiplyScalar(1 / KM);
     p[3 * i] = v.x; p[3 * i + 1] = v.y; p[3 * i + 2] = v.z;
-    const past = t <= state.et, age = Math.abs(t - state.et) / W;
+    const past = t <= state.et, age = Math.abs(u);
     const br = past ? 0.95 * (1 - age) + 0.08 : 0.32 * (1 - age) + 0.04;
     c[3 * i] = 0.56 * br; c[3 * i + 1] = 0.79 * br; c[3 * i + 2] = 1.0 * br;
   }
   trailLine.geometry.attributes.position.needsUpdate = true;
   trailLine.geometry.attributes.color.needsUpdate = true;
-  relScene(ref, trailLine.position);
+  trailLine.position.copy(cassini.position);
 }
 
 function updateOrbits() {
   const a = v3(), b = v3(), d = v3(), v = new THREE.Vector3();
   for (const name in orbitLines) {
     const ln = orbitLines[name], tr = tracks[name];
+    ln.visible = state.allOrbits || name === "TITAN" || name === state.focus || name === state.target;
+    if (!ln.visible) continue;
     positionAt(tr, state.et, a); positionAt(tracks.SATURN, state.et, b);
     const r = len(sub(a, b, d)), P = 2 * Math.PI * Math.sqrt(r * r * r / GM_SATURN);
     if (Math.abs(state.et - ln.userData.last) > P / 360 || ln.userData.focus !== state.focus) {
@@ -612,9 +689,9 @@ function updateLabels() {
     vA.copy(p).project(camera);
     const d = camera.position.distanceTo(p);
     const small = LABEL_PRIORITY(name) === 5;
-    let hide = vA.z > 1 || vA.z < -1 || (small && d > 400);
+    let hide = vA.z > 1 || vA.z < -1 || !shown(name) || (small && d > 400 && name !== state.target);
     const pr = (bodyRadius(name) / KM) * (state.enlarge && name !== "SATURN" ? 10 : 1) / d / Math.tan(rad(camera.fov / 2)) * h / 2;
-    const x = (vA.x + 1) / 2 * w + Math.min(pr, 400) + 6, y = (1 - vA.y) / 2 * h;
+    const x = (vA.x + 1) / 2 * w + Math.min(pr, 140) + 6, y = (1 - vA.y) / 2 * h;
     const box = [x, y - 8, x + name.length * 8 + 10, y + 8];
     if (!hide && placed.some(b => box[0] < b[2] && box[2] > b[0] && box[1] < b[3] && box[3] > b[1])) hide = true;
     el.hidden = hide;
@@ -670,6 +747,7 @@ function updateHud() {
   const cam = catalog.cam[k] === "N" ? "Narrow-angle" : "Wide-angle";
   $("imgv").textContent = `${titleCase(catalog.target[k] || "Unknown")} · ${cam} · ${catalog.f1[k]}/${catalog.f2[k]}`;
   const kp = catalog.km_per_px[k];
+  $("imgk").textContent += fov.visible ? " · cone aimed at target" : "";
   const dayStart = state.et - 86400, n24 = i - lastImageIndex(dayStart);
   $("imgm").textContent = `${catalog.id[k]}${kp ? ` · ${kp < 10 ? kp.toFixed(2) : fmtInt(kp)} km/px` : ""} · ${fmtInt(n24)} frames in the last 24 h`;
 }
@@ -763,11 +841,17 @@ function setTime(et) { state.et = Math.min(coverage[1], Math.max(coverage[0], et
 function setFocus(name, dist) {
   if (!pos[name]) return;
   const old = camera.position.clone();
-  const d = dist || (name === "CASSINI" ? 0.06 : name === "SATURN" ? 420 : Math.max(bodyRadius(name) / KM * 7, 2));
+  const d = dist || (name === "CASSINI" ? 3.5e-5 : name === "SATURN" ? 420 : Math.max(bodyRadius(name) / KM * 7, 2));
   state.focus = name;
-  const dir = old.lengthSq() > 0 ? old.normalize() : new THREE.Vector3(0, 0.3, 1).normalize();
+  let dir = old.lengthSq() > 0 ? old.normalize() : new THREE.Vector3(0, 0.3, 1).normalize();
+  if (name === "CASSINI" && !dist) {
+    const look = state.target || "TITAN", p = v3();
+    toScene(norm(sub(pos[look], pos.CASSINI, p)), vA);
+    const side = new THREE.Vector3().crossVectors(vA, new THREE.Vector3(0, 1, 0)).normalize();
+    dir = vA.clone().negate().addScaledVector(new THREE.Vector3(0, 1, 0), 0.12).addScaledVector(side, -0.15).normalize();
+  }
   camera.position.copy(dir.multiplyScalar(d));
-  controls.minDistance = name === "CASSINI" ? 0.004 : (bodyRadius(name) / KM) * (state.enlarge ? 10.5 : 1.05);
+  controls.minDistance = name === "CASSINI" ? 1.2e-5 : (bodyRadius(name) / KM) * (state.enlarge ? 10.5 : 1.05);
   controls.maxDistance = 2e5;
   document.querySelectorAll("#focusrow .btn").forEach(b => b.setAttribute("aria-pressed", String(b.dataset.name === name)));
 }
@@ -789,6 +873,7 @@ function buildUi() {
   }
   $("play").addEventListener("click", () => setPlaying(!state.playing));
   $("enlarge").addEventListener("click", () => { state.enlarge = !state.enlarge; $("enlarge").setAttribute("aria-pressed", String(state.enlarge)); setFocus(state.focus, camera.position.length()); });
+  $("allorbits").addEventListener("click", () => { state.allOrbits = !state.allOrbits; $("allorbits").setAttribute("aria-pressed", String(state.allOrbits)); });
   $("mtoggle").addEventListener("click", () => { const m = $("moments"); m.classList.toggle("closed"); $("mtoggle").setAttribute("aria-pressed", String(!m.classList.contains("closed"))); });
   if (window.matchMedia("(max-width: 860px)").matches) $("moments").classList.add("closed");
   window.addEventListener("keydown", e => { if (e.code === "Space" && e.target === document.body) { e.preventDefault(); setPlaying(!state.playing); } });
@@ -834,10 +919,21 @@ function frame(now) {
   }
   updateBodies();
   if (Math.abs(state.et - lastTrailEt) > 1 || lastTrailFocus !== state.focus) { updateTrail(); lastTrailEt = state.et; lastTrailFocus = state.focus; }
-  else relScene(state.focus === "CASSINI" || state.focus === "SATURN" ? "SATURN" : state.focus, trailLine.position);
+  else trailLine.position.copy(cassini.position);
   updateOrbits();
   controls.update();
-  renderer.render(scene, camera);
+  renderer.clear();
+  const cd = camera.position.distanceTo(cassini.position);
+  if (cd < 0.01) {
+    camera.layers.disable(1);
+    renderer.render(scene, camera);
+    camera.layers.enable(1);
+    closeCam.position.copy(camera.position); closeCam.quaternion.copy(camera.quaternion);
+    closeCam.fov = camera.fov; closeCam.aspect = camera.aspect; closeCam.near = cd * 0.02; closeCam.far = cd * 60;
+    closeCam.updateProjectionMatrix();
+    renderer.clearDepth();
+    renderer.render(scene, closeCam);
+  } else renderer.render(scene, camera);
   updateLabels();
   updateHud();
   drawTimeline();
@@ -852,22 +948,15 @@ function frame(now) {
     $("loading").textContent = "Could not load the trajectory files: " + err.message;
     return;
   }
-  state.et = utcToEt("2005-01-14T07:30:00");
+  state.et = utcToEt("2005-01-14T09:30:00");
   build(); buildUi(); resize();
   setSpeed(600);
   setView(5 * 86400, utcToEt("2005-01-15T12:00:00"));
   updateBodies();
-  // open on Titan, looking down on the plane of Cassini's Jan 14 flyby from the sunlit side
-  const ca = utcToEt("2005-01-14T11:12:00"), c0 = v3(), c1 = v3(), t0 = v3(), t1 = v3();
-  positionAt(tracks.CASSINI, ca, c0); positionAt(tracks.TITAN, ca, t0);
-  positionAt(tracks.CASSINI, ca + 600, c1); positionAt(tracks.TITAN, ca + 600, t1);
-  const r = toScene(sub(c0, t0), new THREE.Vector3()), r1 = toScene(sub(c1, t1), new THREE.Vector3());
-  const n = new THREE.Vector3().crossVectors(r, r1.sub(r)).normalize();
-  if (n.dot(uSun.value) < 0) n.negate();
-  const dir = n.multiplyScalar(0.8).addScaledVector(uSun.value, 0.45).addScaledVector(r.clone().normalize(), -0.3).normalize();
-  state.focus = "TITAN";
-  camera.position.copy(dir.multiplyScalar(170));
-  setFocus("TITAN", 170);
+  // open just behind Cassini, looking past it toward Titan with Saturn in the background
+  state.focus = "CASSINI";
+  setFocus("CASSINI", 1e-4); setFocus("CASSINI");
+  camera.position.multiplyScalar(9e-5 / camera.position.length());
   $("loading").hidden = true;
   requestAnimationFrame(frame);
 })();
