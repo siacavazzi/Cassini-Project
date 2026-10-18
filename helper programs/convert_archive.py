@@ -324,11 +324,16 @@ def plan(out, years, limit, add_missing=False, volumes=None, pds=None):
     known = set(os.path.basename(p).split(".")[0] for p in index["path"].dropna())
     if years:
         index = index[index["year"].isin(years)]
+    # one listing per folder: a stat per frame takes hours on a busy external drive
+    done = set()
+    for folder in ("nac_data", "wac_data"):
+        if os.path.isdir(os.path.join(out, folder)):
+            done.update(f"{folder}/{name}" for name in os.listdir(os.path.join(out, folder)) if name.endswith(".png"))
     frames = []
     for png_rel in index["path"].dropna():
         if limit and len(frames) >= limit:
             break
-        if os.path.exists(os.path.join(out, png_rel)):
+        if png_rel in done:
             continue
         # the label is read when the frame is converted (in parallel); the type here is
         # NASA's, for counting
@@ -342,7 +347,7 @@ def plan(out, years, limit, add_missing=False, volumes=None, pds=None):
             if fid in known or (volumes and row["VOLUME_ID"] not in volumes):
                 continue
             new = index_row(fid, row)
-            if (years and new["year"] not in years) or os.path.exists(os.path.join(out, new["path"])):
+            if (years and new["year"] not in years) or new["path"] in done:
                 continue
             frames.append({"png": new["path"], "conversion": row["DATA_CONVERSION_TYPE"], "missing": True,
                            "index_row": new})
