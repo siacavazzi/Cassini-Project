@@ -8,6 +8,9 @@ Tools that turn the SPICE kernels and `Image_index.csv` into small files a brows
 | `verify_tracks.py` | Checks random points in every track against SPICE and draws overview plots |
 | `tracks.js` | Browser/Node reader: `loadTrack(url)`, `positionAt(track, et)`, `utcToEt(iso)` |
 | `test_tracks.mjs` | Prints interpolated positions from Node, for comparison with SPICE |
+| `export_attitude.py` | Writes `attitude/<year>.bin` from the CK kernels in the archive zip |
+| `verify_attitude.py` | Checks `attitudeAt()` from `tracks.js` against SPICE for random weeks of every exported year |
+| `test_attitude.mjs` | Prints interpolated attitudes from Node (used by `verify_attitude.py`) |
 
 ## Running
 
@@ -38,7 +41,14 @@ Track files are a 16-byte header (`CTRK`, u16 version, u16 flags, u32 count, u32
 
 `manifest.json` lists every body's chunks and coverage, and its IAU rotation constants and radii from the PCK.
 
-Spacecraft attitude is not exported yet: it needs the CK kernels (about 35 GB), which only exist on the LaCie drive.
+`attitude/<year>.bin` (from `export_attitude.py`, which needs the CK kernels, about 35 GB, so it runs against the archive zip on the LaCie) is a 16-byte header (`CATT`, u16 version, u16 flags, u32 n_images, u32 n_background) followed by `f32 image_q[4*n_images]` (camera pointing at each image's mid-time, in catalog order, NaN where there is no CK data), `f64 bg_t[n_background]` and `f32 bg_q[4*n_background]` (spacecraft body attitude every 10 minutes). Quaternions are SPICE style (w, x, y, z) for the rotation J2000 -> frame.
+
+In the browser, `parseAttitude(buffer, catalog.cam)` reads a year and `buildAttitude([{ file, et: catalog.et, cam: catalog.cam }, ...])` merges the background samples with every image's pointing (turned into body pointing with the fixed camera mounting from `cas_v41.tf`) into one series. `attitudeAt(att, et)` slerps between neighbouring samples; across gaps longer than an hour it holds the earlier attitude and eases into the next sample over its last 10 minutes. It returns the J2000 -> `CASSINI_SC_COORD` quaternion; for a three.js object (body -> world) use `new Quaternion(-x, -y, -z, w)`.
+
+```
+python web/verify_attitude.py --zip /Volumes/LaCie/cassiniprojectJAN05.zip --data replay_data \
+    --catalog replay_data/catalog --tmp /Volumes/LaCie/verify_tmp
+```
 
 ## Replay prototype
 
