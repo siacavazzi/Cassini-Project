@@ -269,7 +269,9 @@ def export_catalog(kdir, out, index_csv, years):
         rel = f"catalog/{year}.json"
         os.makedirs(os.path.join(out, "catalog"), exist_ok=True)
         with open(os.path.join(out, rel), "w") as fh:
-            json.dump(cols, fh, separators=(",", ":"))
+            # NaN is not valid JSON (browsers reject it); write null instead
+            clean = {k: [None if isinstance(v, float) and not math.isfinite(v) else v for v in vals] for k, vals in cols.items()}
+            json.dump(clean, fh, separators=(",", ":"), allow_nan=False)
         summary[year] = {"file": rel, "images": len(sub)}
         print(f"catalog {year}: {len(sub)} images", flush=True)
     return summary
