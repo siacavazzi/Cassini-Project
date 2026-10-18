@@ -79,7 +79,7 @@ Note: this is a spreadsheet and can accept multiple entries. Upon finishing one 
 
 6. Processed images are placed in the output folder, one folder per sequence. If a run is stopped, running it again keeps the frames already made and carries on (mosaic sequences are always redrawn, since each frame is drawn on top of the ones before it).
 
-7. Run main.py - note: it may take a while to finish. Data is place into an output folder.
+7. Run main.py - note: it may take a while to finish. Data is place into an output folder. Frames are built in parallel by worker processes: one per 6 GB of memory, at most 4 (2 on a 16 GB machine). Each worker needs up to about 1 GB of memory: set the CASSINI_WORKERS environment variable to use more on a machine with memory to spare, or to 1 to build one frame at a time. The first run with data.zip saves an index of the zip in a zip_index folder (about 370 MB for the full dataset), which later runs and the workers reuse.
 
 
 # Data Sources

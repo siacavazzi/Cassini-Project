@@ -16,7 +16,7 @@ buffer_size = 5     # number of frames kept in the rolling mosaic (including the
 feather_px = 64     # width in pixels of the soft edge where a frame blends into the frames below
 min_overlap = 2000  # overlapping pixels (at 1/4 scale) needed before two frames are brightness matched
 max_gain = 2.0      # older frames are never brightened or darkened by more than this factor
-reproject_surface = False  # line up the target's surface between frames (needs geometry, see add_frame)
+reproject_surface = False  # line up the target's surface between frames (see compose)
 max_reproject_age = 20 * 60  # seconds; older frames are only centered (warping across big rotations tears)
 
 buffer = []
@@ -31,30 +31,50 @@ def reset():
 
 
 """
-Adds a frame and returns the mosaic of the frames in the buffer
-frame = RGBA numpy array (uint8), all frames the same size
-geometry, placement = what find_target and label.translate recorded for the frame. With
-them, older frames are redrawn so the target's surface lines up with the newest frame
-(see reproject.py); without them frames are only centered on the target.
+What a frame needs to take part in surface reprojection, from the label it was centered
+with: (geometry, view, placement), or Nones. Works it out right after auto_center, while
+that frame's SPICE kernels are loaded. Picklable, so worker processes can send it back.
 """
-def add_frame(frame, geometry=None, placement=None):
+def frame_info(lbl):
+    geometry = getattr(lbl, "geometry", None)
+    placement = getattr(lbl, "placement", None)
     view = None
-    if reproject_surface and geometry is not None and placement is not None:
+    if geometry is not None and placement is not None:
         view = rp.spice_view(geometry)
-    buffer.append((np.asarray(frame), geometry, view, placement))
-    if len(buffer) > buffer_size:
-        buffer.pop(0)
+    return geometry, view, placement
 
-    frames = [entry[0] for entry in buffer]
-    newest = buffer[-1]
-    if newest[2] is not None:
-        for i, entry in enumerate(buffer[:-1]):
+
+"""
+The mosaic of a window of frames, oldest first. Each entry is (RGBA numpy array, geometry,
+view, placement); the last three may be None. reproject = line up the target's surface
+(defaults to reproject_surface).
+"""
+def compose(window, reproject=None):
+    if reproject is None:
+        reproject = reproject_surface
+    frames = [np.asarray(entry[0]) for entry in window]
+    newest = window[-1]
+    if reproject and newest[2] is not None:
+        for i, entry in enumerate(window[:-1]):
             if (entry[2] is not None and entry[1]["target"] == newest[1]["target"]
                     and newest[1]["et"] - entry[1]["et"] <= max_reproject_age):
-                frames[i] = rp.warp_to_newest(entry, newest)
+                frames[i] = rp.warp_to_newest((frames[i],) + tuple(entry[1:]), newest)
 
     gains = match_gains(frames)
     return composite(frames, gains)
+
+
+"""
+Adds a frame to the rolling buffer and returns the mosaic of the frames in it
+frame = RGBA numpy array (uint8), all frames the same size
+lbl = the label the frame was centered with (optional, for surface reprojection)
+"""
+def add_frame(frame, lbl=None):
+    geometry, view, placement = frame_info(lbl) if reproject_surface else (None, None, None)
+    buffer.append((np.asarray(frame), geometry, view, placement))
+    if len(buffer) > buffer_size:
+        buffer.pop(0)
+    return compose(buffer)
 
 
 """

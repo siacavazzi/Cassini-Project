@@ -51,6 +51,17 @@ def load_kernels(start_year, end_year):
     print("Done!")
 
 """
+Extracts the SPICE kernels for one year from the zip without loading them
+(does nothing when the data is unzipped)
+"""
+def extract_kernels(year):
+    if not ds.using_zip():
+        return
+    for kernel_index in ds.listdir(Kernel_index_path):
+        if int(kernel_index.split("_")[1]) == year:
+            ds.extract_metakernel(f"{Kernel_index_path}/{kernel_index}")
+
+"""
 Unloads all SPICE kernels
 """
 def unload_kernels():

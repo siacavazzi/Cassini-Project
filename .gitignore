@@ -3,3 +3,4 @@ output
 data.zip
 spice_cache
 __pycache__/
+zip_index
