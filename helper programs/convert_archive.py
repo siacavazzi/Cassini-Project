@@ -77,12 +77,22 @@ def fetch(url, path, tries=5):
                     if not chunk:
                         break
                     f.write(chunk)
+                # read(n) returns b"" when the server drops the connection, so a cut
+                # short download only shows up as the wrong size
+                expected = r.headers.get("Content-Length")
+                if expected is not None and f.tell() != int(expected):
+                    raise IOError(f"{url}: got {f.tell()} of {expected} bytes")
             os.replace(path + ".part", path)
             return os.path.getsize(path)
-        except Exception:
+        except Exception as e:
             if attempt == tries - 1:
                 raise
-            time.sleep(2 ** (attempt + 1))
+            wait = 2 ** (attempt + 1)
+            if getattr(e, "code", None) == 429:
+                # NASA throttles in bursts; a few seconds isn't enough to get past one
+                after = str(e.headers.get("Retry-After") or "")
+                wait = max(wait * 15, int(after) if after.isdigit() else 0)
+            time.sleep(wait)
 
 
 """
@@ -171,11 +181,12 @@ class Converter:
         self.read_lock = threading.Lock()
         self.pds = None
         path = os.path.join(out, "manifest.csv")
-        new = not os.path.exists(path)
+        new = not os.path.exists(path) or os.path.getsize(path) == 0
         self.manifest = open(path, "a", newline="")
         self.writer = csv.DictWriter(self.manifest, MANIFEST_FIELDS)
         if new:
             self.writer.writeheader()
+            self.manifest.flush()  # a run stopped before its first frame still leaves the header
 
     def record(self, **row):
         with self.lock:
