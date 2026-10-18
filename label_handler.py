@@ -157,7 +157,9 @@ class label:
             img= cv2.copyMakeBorder(img,border,border,border,border,cv2.BORDER_CONSTANT,value=[0,0,0,0])   
         
         (rows, cols) = img.shape[:2]
-        img = cv2.warpAffine(img, M, (cols, rows),borderMode=cv2.BORDER_TRANSPARENT)
+        # BORDER_TRANSPARENT leaves pixels the shifted image doesn't cover untouched, so start
+        # from a blank image rather than whatever was left in memory
+        img = cv2.warpAffine(img, M, (cols, rows), dst=np.zeros_like(img), borderMode=cv2.BORDER_TRANSPARENT)
   
         name = self.info["SPACECRAFT_CLOCK_START_COUNT".split('.')[0]]
         print(name)

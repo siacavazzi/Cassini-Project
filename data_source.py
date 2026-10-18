@@ -15,7 +15,9 @@ cache folder and deleted again when the kernels are unloaded.
 import os
 import re
 import shutil
+import struct
 import zipfile
+import zlib
 
 import cv2
 import numpy as np
@@ -29,13 +31,13 @@ except ImportError:
 
 wd = os.getcwd()
 SPICE_CACHE = os.environ.get("CASSINI_SPICE_CACHE", os.path.join(wd, "spice_cache"))
+INDEX_CACHE = os.environ.get("CASSINI_INDEX_CACHE", os.path.join(wd, "zip_index"))
 KEEP_SPICE_CACHE = os.environ.get("CASSINI_KEEP_SPICE_CACHE", "").lower() in ("1", "true", "yes")
 
 DATA_FOLDERS = {"nac_data", "nac_labels", "wac_data", "wac_labels", "cosp_1000"}
 
 _source = None
-_zip = None
-_members = None
+_index = None
 
 
 """
@@ -77,17 +79,29 @@ def relative(path):
 
 
 """
-Opens the zip and indexes its members by their path inside the data folder. Keys are
-lower case because the program was written on case insensitive file systems
-(labels are referred to as .lbl while the files may be .LBL).
+Index of the zip's members: their paths inside the data folder (lower case, sorted),
+their names in the zip, and where their data sits in the zip file. Keys are lower case
+because the program was written on case insensitive file systems (labels are referred
+to as .lbl while the files may be .LBL).
+
+Reading the zip's own directory takes a while and ~1 GB of memory for the full dataset,
+so the index is saved as plain arrays in the INDEX_CACHE folder the first time and then
+memory mapped. Every process (including the parallel workers) shares the one copy the
+operating system keeps in memory, and later runs skip the indexing.
 """
-def _zip_members():
-    global _zip, _members
-    if _members is None:
-        print(f"Indexing {get_source()}...")
-        _zip = zipfile.ZipFile(get_source())
-        _members = {}
-        for info in _zip.infolist():
+INDEX_FIELDS = ["keys", "names", "offsets", "compressed", "sizes", "methods"]
+
+def _index_folder():
+    stat = os.stat(get_source())
+    name = os.path.basename(get_source())
+    return os.path.join(INDEX_CACHE, f"{name}-{stat.st_size}-{int(stat.st_mtime)}")
+
+
+def _build_index(folder):
+    print(f"Indexing {get_source()}...")
+    members = {}
+    with zipfile.ZipFile(get_source()) as z:
+        for info in z.infolist():
             if info.is_dir():
                 continue
             name = info.filename.replace("\\", "/")
@@ -101,16 +115,123 @@ def _zip_members():
                 parts = parts[roots[0]:]
             elif "data" in parts[:-1]:
                 parts = parts[parts.index("data") + 1:]
-            _members["/".join(parts).lower()] = info
-        print(f"Done! {len(_members)} files")
-    return _members
+            members["/".join(parts).lower()] = (info.filename, info.header_offset, info.compress_size, info.file_size, info.compress_type)
+    keys = sorted(members)
+    rows = [members[key] for key in keys]
+    arrays = {
+        "keys": np.array([key.encode("utf-8") for key in keys]),
+        "names": np.array([row[0].encode("utf-8") for row in rows]),
+        "offsets": np.array([row[1] for row in rows], dtype=np.int64),
+        "compressed": np.array([row[2] for row in rows], dtype=np.int64),
+        "sizes": np.array([row[3] for row in rows], dtype=np.int64),
+        "methods": np.array([row[4] for row in rows], dtype=np.int16),
+    }
+    # written to a temporary folder and renamed, so a half written index is never used
+    part = f"{folder}.{os.getpid()}.part"
+    os.makedirs(part, exist_ok=True)
+    for field in INDEX_FIELDS:
+        np.save(os.path.join(part, field + ".npy"), arrays[field])
+    try:
+        os.rename(part, folder)
+    except OSError:
+        shutil.rmtree(part, ignore_errors=True)  # another process finished first
+    # indexes of older versions of this zip are no longer needed
+    prefix = os.path.basename(get_source()) + "-"
+    for old in os.listdir(INDEX_CACHE):
+        if old.startswith(prefix) and os.path.join(INDEX_CACHE, old) != folder and not old.endswith(".part"):
+            shutil.rmtree(os.path.join(INDEX_CACHE, old), ignore_errors=True)
+    print(f"Done! {len(keys)} files")
 
 
-def _zip_info(path):
-    info = _zip_members().get(relative(path).lower())
-    if info is None:
+def _zip_index():
+    global _index
+    if _index is None:
+        folder = _index_folder()
+        if not os.path.isdir(folder):
+            _build_index(folder)
+        _index = {field: np.load(os.path.join(folder, field + ".npy"), mmap_mode="r") for field in INDEX_FIELDS}
+    return _index
+
+
+"""
+Position of a member in the index, or None if it isn't in the zip
+"""
+def _find(path):
+    keys = _zip_index()["keys"]
+    key = relative(path).lower().encode("utf-8")
+    i = int(np.searchsorted(keys, key))
+    if i < len(keys) and keys[i] == key:
+        return i
+    return None
+
+
+def _find_existing(path):
+    i = _find(path)
+    if i is None:
         raise FileNotFoundError(f"{path} is not in {get_source()}")
-    return info
+    return i
+
+
+"""
+The zip file opened by this process (reopened after a fork, so processes never share
+a file position)
+"""
+_file = None
+_file_pid = None
+
+def _zip_file():
+    global _file, _file_pid
+    if _file is None or _file_pid != os.getpid():
+        _file = open(get_source(), "rb")
+        _file_pid = os.getpid()
+    return _file
+
+
+"""
+Yields the uncompressed data of member i in chunks
+"""
+def _member_chunks(i, chunk_size=16 * 1024 * 1024):
+    index = _zip_index()
+    method = int(index["methods"][i])
+    if method not in (zipfile.ZIP_STORED, zipfile.ZIP_DEFLATED):
+        # anything else (Deflate64...) goes through zipfile, which has to read the
+        # whole zip directory first
+        with zipfile.ZipFile(get_source()) as z, z.open(index["names"][i].decode("utf-8")) as src:
+            while True:
+                data = src.read(chunk_size)
+                if not data:
+                    return
+                yield data
+    f = _zip_file()
+    # the local header before the data has its own name and extra field lengths
+    f.seek(int(index["offsets"][i]))
+    header = f.read(30)
+    if header[:4] != b"PK\x03\x04":
+        raise zipfile.BadZipFile(f"Bad local header for {index['names'][i]}")
+    name_length, extra_length = struct.unpack("<HH", header[26:30])
+    f.seek(name_length + extra_length, 1)
+    remaining = int(index["compressed"][i])
+    inflate = zlib.decompressobj(-15) if method == zipfile.ZIP_DEFLATED else None
+    while remaining > 0:
+        # the file position is read again each chunk since a generator can be paused
+        # while something else in this process reads the zip
+        position = f.tell()
+        data = f.read(min(chunk_size, remaining))
+        if not data:
+            raise zipfile.BadZipFile(f"{index['names'][i]} is cut short")
+        remaining -= len(data)
+        position += len(data)
+        yield inflate.decompress(data) if inflate else data
+        f.seek(position)
+    if inflate:
+        yield inflate.flush()
+
+
+def _read_member(i):
+    data = b"".join(_member_chunks(i))
+    if len(data) != int(_zip_index()["sizes"][i]):
+        raise zipfile.BadZipFile(f"{_zip_index()['names'][i]} has the wrong size")
+    return data
 
 
 _folder_listings = {}
@@ -133,14 +254,13 @@ def _folder_path(path):
 
 def exists(path):
     if using_zip():
-        return relative(path).lower() in _zip_members()
+        return _find(path) is not None
     return os.path.exists(_folder_path(path))
 
 
 def read_bytes(path):
     if using_zip():
-        info = _zip_info(path)
-        return _zip.read(info)
+        return _read_member(_find_existing(path))
     with open(_folder_path(path), "rb") as f:
         return f.read()
 
@@ -165,11 +285,15 @@ Lists the file names directly inside a folder of the data (like os.listdir)
 def listdir(path):
     if not using_zip():
         return os.listdir(_folder_path(path))
-    prefix = relative(path).rstrip("/").lower() + "/"
+    index = _zip_index()
+    prefix = (relative(path).rstrip("/").lower() + "/").encode("utf-8")
+    # the keys are sorted, so everything inside the folder is one run of them
+    start = int(np.searchsorted(index["keys"], prefix))
+    end = int(np.searchsorted(index["keys"], prefix + b"\xff"))
     names = []
-    for key, info in _zip_members().items():
-        if key.startswith(prefix) and "/" not in key[len(prefix):]:
-            names.append(info.filename.replace("\\", "/").split("/")[-1])
+    for i in range(start, end):
+        if b"/" not in index["keys"][i][len(prefix):]:
+            names.append(index["names"][i].decode("utf-8").replace("\\", "/").split("/")[-1])
     return sorted(names)
 
 
@@ -221,14 +345,29 @@ def kernel_relative(kernel):
 Extracts one file from the zip into the SPICE cache and returns where it was put
 """
 def extract_to_cache(path):
-    info = _zip_info(path)
+    i = _find_existing(path)
     out = os.path.join(SPICE_CACHE, relative(path))
-    if not os.path.exists(out) or os.path.getsize(out) != info.file_size:
+    if not os.path.exists(out) or os.path.getsize(out) != int(_zip_index()["sizes"][i]):
         os.makedirs(os.path.dirname(out), exist_ok=True)
-        with _zip.open(info) as src, open(out + ".part", "wb") as dst:
-            shutil.copyfileobj(src, dst, 16 * 1024 * 1024)
-        os.replace(out + ".part", out)
+        # the part file is named after the process so parallel workers never write into
+        # each other's copy; whoever finishes last replaces an identical file
+        part = f"{out}.{os.getpid()}.part"
+        with open(part, "wb") as dst:
+            for data in _member_chunks(i):
+                dst.write(data)
+        os.replace(part, out)
     return out
+
+
+"""
+Extracts every kernel a meta-kernel lists into the cache without loading them, so the
+parallel workers find them ready instead of all extracting the same files at once
+"""
+def extract_metakernel(path):
+    if not using_zip():
+        return
+    for kernel in metakernel_kernels(read_text(path)):
+        extract_to_cache(kernel_relative(kernel))
 
 
 """
@@ -250,4 +389,5 @@ Deletes the extracted kernels (call after spiceypy.kclear)
 """
 def clear_spice_cache():
     if using_zip() and not KEEP_SPICE_CACHE and os.path.isdir(SPICE_CACHE):
-        shutil.rmtree(SPICE_CACHE)
+        # ignore_errors: on Windows a kernel a worker still has open can't be deleted yet
+        shutil.rmtree(SPICE_CACHE, ignore_errors=True)

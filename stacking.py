@@ -22,7 +22,7 @@ same_settings = ["EXPOSURE_DURATION", "GAIN_MODE_ID", "INSTRUMENT_MODE_ID"]
 def load_index():
     global index, groups
     if index is None:
-        index = pd.read_csv("Image_index.csv", low_memory=False).set_index("path", drop=False)
+        index = pd.read_csv("Image_index.csv", usecols=keys + ["path", "seconds_1970"], low_memory=False).set_index("path", drop=False)
         # row positions of every camera/target/observation/filter combination, for fast lookup
         groups = index.groupby(keys, sort=False).indices
     return index
