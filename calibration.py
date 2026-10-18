@@ -146,9 +146,10 @@ def recover_span(png):
     if len(levels) < 16:
         return None
     for span in range(len(levels) - 1, 254):
-        x = np.arange(span + 1) * 254.0 / span
-        # transform rounds halves up, and floating point can land either side of .5
-        allowed = np.union1d(np.floor(x + 0.5 - 1e-6), np.floor(x + 0.5 + 1e-6))
+        # level k lands on round_half_up(k * 254 / span), done in integers so
+        # halves are exact (a float tolerance let span 252 cover all 255 values)
+        k = np.arange(span + 1)
+        allowed = (2 * k * 254 + span) // (2 * span)
         if np.isin(levels, allowed).all():
             return span
     return None
