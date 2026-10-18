@@ -10,6 +10,7 @@ import label_handler as lh
 import image_correction as ic
 import index_maker as im
 import numpy as np
+import mosaic as mo
 
 
 output = "output"
@@ -28,26 +29,10 @@ ORDER OF COLORS ***
 """
 
 triband_from_dualband = True
-buffer = []
 
-# BUG: Image order is incorrect sometimes
+
 def build_mosaic(img):
-
-    
-    if len(buffer) > 4:
-        buffer.pop(0)
-    if len(buffer) >= 1:
-        
-        buffer.append(img)  
-        composite = buffer[0]
-        for image in buffer:
-
-            composite = Image.alpha_composite(composite, image)
-          
-        return composite
-    else:
-        buffer.insert(0,img)
-        return img
+    return Image.fromarray(mo.add_frame(np.asarray(img)))
 
         
 
@@ -57,6 +42,7 @@ def export_sequence(camera, filters, target, delta, folder, mosaic, start_loc):
 
     num_channels = len(filters)
     last = None
+    mo.reset()
     for i in range(0, len(index)):
         imgs = []
         lbls = []
@@ -69,8 +55,12 @@ def export_sequence(camera, filters, target, delta, folder, mosaic, start_loc):
             
             
             if num_channels == 1:
-                image = lh.label(index[filters[0]].iloc[i]).auto_center(border)
-                image = Image.fromarray(image)
+                lbl = lh.label(index[filters[0]].iloc[i], as_png = True)
+                gray = Image.fromarray(lbl.resize_image()).convert('L')
+                image = np.asarray(Image.merge("RGBA",(gray,gray,gray, mask)))
+                image = Image.fromarray(lbl.set_color(image).auto_center(border))
+                if mosaic:
+                    image = build_mosaic(image)
             
             else:
             

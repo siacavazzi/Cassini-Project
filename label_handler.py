@@ -23,6 +23,9 @@ sequence_counts = {}
 sequence_list = {}
 cur_lbl = 1
 wd = os.getcwd()
+# transparent padding (pixels) added on every side of a frame before it is moved into place;
+# raise it for close-up mosaics whose panels sit far from the target's center
+canvas_border = 1024
 #tot_lbl = len(data)/2
 def rotate_image(image, angle):
     image_center = tuple(np.array(image.shape[1::-1]) / 2)
@@ -143,15 +146,7 @@ class label:
         
         
         if border:
-            
-            max_bound = max(x,y)
-            
-            if max_bound > (lines*2):
-                border = int(max_bound) + 1024
-            else:
-                border = lines     
-            
-            border = 1024
+            border = canvas_border
             img = cv2.cvtColor(img, cv2.COLOR_BGR2RGBA)
             img= cv2.copyMakeBorder(img,border,border,border,border,cv2.BORDER_CONSTANT,value=[0,0,0,0])   
         
@@ -178,7 +173,9 @@ class label:
             ba.load_kernels(im_year,im_year)
             cur_year = im_year
             
-        target_loc = ba.find_target(self, False, "graphs")    
+        # the color path works on images resized to 1024, the B&W path on the native size
+        lines = 1024 if self.color else int(self.info["LINES"])
+        target_loc = ba.find_target(self, False, "graphs", lines)    
         print(target_loc)
         return self.translate("png", target_loc[0],target_loc[1],target_loc[3],border)
     

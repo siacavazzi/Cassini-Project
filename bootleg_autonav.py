@@ -62,8 +62,9 @@ def unload_kernels():
 label = image label object
 plot = TRUE for plot generation
 output = target output directory
+lines = pixel size of the image that will be translated (defaults to 1024)
 """
-def find_target(label,plot,output):
+def find_target(label,plot,output,lines=None):
     utctim = label.info["IMAGE_TIME"]
     et = sp.str2et( utctim )
     target = label.info["TARGET_NAME"]
@@ -94,7 +95,7 @@ def find_target(label,plot,output):
 
     # get target pos vector and 1 way light time in seconds
     print(f"camera: {camera}")
-    xyzd = sp.spkez(target,et,sp.bodc2n(camera),"NONE",-82)
+    xyzd = sp.spkez(target,et,sp.bodc2n(camera),"LT+S",-82)
     print(xyzd)
     #RAY = xyzd[0][3:6]
     RAY = [0,0,0]
@@ -137,90 +138,18 @@ def find_target(label,plot,output):
     # set z to target distance
     z = DTARG
          
-    lines = 1024 # get image resolution 
-    
-    x_bound = 0
-    y_bound = 0
-    
- 
-    if targ_loc[0] > max_x:
-        range = max_x - min_x 
-        min_x = min_x + range
-        max_x = max_x + range
-        x_bound = -lines
-        
-    if targ_loc[0] < min_x:
-        range = max_x - min_x
-        min_x = min_x - range        
-        max_x = max_x - range
-        x_bound = lines
-        
-    if targ_loc[1] > max_y:
-        range = max_y - min_y
-        max_y = max_y + range
-        min_y = min_y + range
-        y_bound = lines
-        
-    if targ_loc[1] < min_y:
-        range = max_y - min_y
-        min_y = min_y - range
-        max_y = max_y - range
-        y_bound = -lines
-        """   
-    i=0
+    # pixel resolution of the image being placed (512 or 256 for summed images)
+    if lines is None:
+        lines = 1024
 
-    while targ_loc[0] > max_x:
-        i = i + 1
-        range = max_x - min_x 
-        min_x = min_x + range
-        max_x = max_x + range
-        x_bound = lines * i
-        print(1)
-        
-        
-    i = 0
-     
-    while targ_loc[0] < min_x:
-        i = i + 1
-        range = max_x - min_x 
-        min_x = min_x - range
-        max_x = max_x - range
-        x_bound = -lines * i
-        print(2)
-        
-        
-    i = 0
-    while targ_loc[1] > max_y:
-        i = i + 1
-        range = max_y - min_y 
-        min_y = min_y + range
-        max_y = max_y + range
-        y_bound = -lines * i
-        print(3)
-        
-        
-    i = 0
-    while targ_loc[1] < min_y:
-        i = i + 1
-        range = max_y - min_y 
-        min_y = min_y - range
-        max_y = max_y - range
-        y_bound = lines * i
-        
-    """
-    
-    x = np.interp(targ_loc[0],[min_x,max_x],[1,lines])
+    # Map the target's position on the plane to sensor pixels. This is the same linear
+    # map as np.interp(targ, [min, max], [1, lines]) but without clamping at the frame
+    # edge, so a target that sits any distance outside the frame is still placed right.
+    x = 1 + (targ_loc[0] - min_x) / (max_x - min_x) * (lines - 1)
     x = lines - x
-    y = np.interp(targ_loc[1],[min_y,max_y],[1,lines])
+    y = 1 + (targ_loc[1] - min_y) / (max_y - min_y) * (lines - 1)
     print(f"Target location on image sensor x:{x} y:{y}")
-    
-    # if the target is out of camera bounds stop
-  
-    x = x + x_bound
-    y = y + y_bound
 
-    
-            
     if plot:
         date = label.info["IMAGE_TIME"] 
         targ = label.info["TARGET_NAME"]           
