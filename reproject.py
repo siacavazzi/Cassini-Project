@@ -27,6 +27,7 @@ import cv2
 
 minnaert_k = 0.9     # limb darkening (Minnaert exponent); 1 is a plain Lambert surface
 grid_step = 4       # the pixel map is worked out every grid_step pixels and interpolated in between
+max_relight = 1.5   # most the lighting correction may brighten or darken a moved pixel
 margin = 0.15       # how far (fraction of the frame's size) surface features may move between frames
 
 
@@ -154,38 +155,41 @@ def warp_to_newest(old, new):
     gx, gy = np.meshgrid(gx, gy)
     points, hit = surface_points(g_new, v_new, p_new, gx, gy)
     sx, sy, visible = canvas_points(g_old, v_old, p_old, points)
-    # off the target the frame stays where it was (no shift); on the target but out of the
-    # older frame's sight there is nothing to draw
-    shift_x = np.where(hit & visible, sx - gx, 0).astype(np.float32)
-    shift_y = np.where(hit & visible, sy - gy, 0).astype(np.float32)
-    drawn = ~hit | visible
+    # off the target the frame stays where it was (no shift). Where the older frame has
+    # nothing to show (out of its sight, or in its dark), the centered frame is kept too.
+    drawn = hit & visible
     gain = np.ones(gx.shape, np.float32)
     if "sun" in v_old and "sun" in v_new:
         b_new, mu0_new = brightness(v_new, points)
         b_old, mu0_old = brightness(v_old, points)
-        # a point that was in the dark in the older frame has nothing to show
-        drawn &= ~hit | (mu0_old > 0.02) | (mu0_new <= 0.02)
+        drawn &= mu0_old > 0.05
         ratio = np.where(b_old > 1e-6, b_new / np.maximum(b_old, 1e-6), 1.0)
-        gain = np.where(hit & visible, np.clip(ratio, 0.25, 4.0), 1.0).astype(np.float32)
-    drawn = drawn.astype(np.float32)
+        # near the limb and terminator the lighting model is least reliable: only correct
+        # a little, and not at all where the sun or camera is near grazing
+        steady = np.clip((np.minimum(mu0_new, mu0_old) - 0.05) / 0.15, 0, 1)
+        ratio = 1 + (np.clip(ratio, 1 / max_relight, max_relight) - 1) * steady
+        gain = np.where(drawn, ratio, 1.0).astype(np.float32)
+    shift_x = np.where(drawn, sx - gx, 0).astype(np.float32)
+    shift_y = np.where(drawn, sy - gy, 0).astype(np.float32)
+    weight = drawn.astype(np.float32)
 
     # fill in between the grid points. Interpolating the shift (not the map itself) keeps
     # the off-target pixels exactly where they were.
     fine_y = (np.arange(y0, y1) - y0) / grid_step
     fine_x = (np.arange(x0, x1) - x0) / grid_step
     fx, fy = np.meshgrid(fine_x.astype(np.float32), fine_y.astype(np.float32))
-    shift_x = cv2.remap(shift_x, fx, fy, cv2.INTER_LINEAR, borderMode=cv2.BORDER_REPLICATE)
-    shift_y = cv2.remap(shift_y, fx, fy, cv2.INTER_LINEAR, borderMode=cv2.BORDER_REPLICATE)
-    drawn = cv2.remap(drawn, fx, fy, cv2.INTER_LINEAR, borderMode=cv2.BORDER_REPLICATE) > 0.5
-    gain = cv2.remap(gain, fx, fy, cv2.INTER_LINEAR, borderMode=cv2.BORDER_REPLICATE)
+    fine = lambda a: cv2.remap(a, fx, fy, cv2.INTER_LINEAR, borderMode=cv2.BORDER_REPLICATE)
+    shift_x, shift_y, gain = fine(shift_x), fine(shift_y), fine(gain)
+    # soften the edge between moved and centered pixels over a few grid steps, so the
+    # limb doesn't show the grid's staircase
+    weight = cv2.GaussianBlur(fine(weight), (0, 0), grid_step)
     px, py = np.meshgrid(np.arange(x0, x1, dtype=np.float32), np.arange(y0, y1, dtype=np.float32))
-    map_x = np.where(drawn, px + shift_x, -1e6).astype(np.float32)
-    map_y = np.where(drawn, py + shift_y, -1e6).astype(np.float32)
 
+    centered = image[y0:y1, x0:x1].astype(np.float32)
+    warped = cv2.remap(image, px + shift_x, py + shift_y, cv2.INTER_LINEAR,
+                       borderMode=cv2.BORDER_CONSTANT, borderValue=(0, 0, 0, 0)).astype(np.float32)
+    warped[..., :3] *= gain[..., None]
+    w = weight[..., None]
     out = np.zeros_like(image)
-    warped = cv2.remap(image, map_x, map_y, cv2.INTER_LINEAR,
-                       borderMode=cv2.BORDER_CONSTANT, borderValue=(0, 0, 0, 0))
-    color = warped[..., :3] * gain[..., None]
-    warped[..., :3] = np.clip(color, 0, 255).round()
-    out[y0:y1, x0:x1] = warped
+    out[y0:y1, x0:x1] = np.clip(warped * w + centered * (1 - w), 0, 255).round()
     return out

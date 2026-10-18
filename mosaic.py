@@ -16,7 +16,8 @@ buffer_size = 5     # number of frames kept in the rolling mosaic (including the
 feather_px = 64     # width in pixels of the soft edge where a frame blends into the frames below
 min_overlap = 2000  # overlapping pixels (at 1/4 scale) needed before two frames are brightness matched
 max_gain = 2.0      # older frames are never brightened or darkened by more than this factor
-reproject_surface = True  # line up the target's surface between frames (needs geometry, see add_frame)
+reproject_surface = False  # line up the target's surface between frames (needs geometry, see add_frame)
+max_reproject_age = 20 * 60  # seconds; older frames are only centered (warping across big rotations tears)
 
 buffer = []
 
@@ -48,7 +49,8 @@ def add_frame(frame, geometry=None, placement=None):
     newest = buffer[-1]
     if newest[2] is not None:
         for i, entry in enumerate(buffer[:-1]):
-            if entry[2] is not None and entry[1]["target"] == newest[1]["target"]:
+            if (entry[2] is not None and entry[1]["target"] == newest[1]["target"]
+                    and newest[1]["et"] - entry[1]["et"] <= max_reproject_age):
                 frames[i] = rp.warp_to_newest(entry, newest)
 
     gains = match_gains(frames)
