@@ -105,7 +105,7 @@ def main():
         print(f"{year}: {good}/{len(img_q)} images pointed, {len(bg_t)} background samples, "
               f"{os.path.getsize(path) / 1e6:.1f} MB", flush=True)
         sp.kclear()
-        shutil.rmtree(tmp)
+        shutil.rmtree(tmp, ignore_errors=True)  # exFAT ._ AppleDouble files vanish mid-delete
 
 
 if __name__ == "__main__":
