@@ -9,6 +9,7 @@ from PIL import Image, ImageEnhance
 import label_handler as lh
 import image_correction as ic
 import index_maker as im
+import stacking
 import numpy as np
 import os
 import traceback
@@ -30,6 +31,7 @@ ORDER OF COLORS ***
 """
 
 triband_from_dualband = True
+stack_repeats = True # combine repeat exposures of each filter to cut noise
 buffer = []
 
 # BUG: Image order is incorrect sometimes
@@ -86,20 +88,20 @@ def export_sequence(camera, filters, target, delta, folder, mosaic, start_loc):
             
                 for filter in filters:
                     
-                    img = lh.label(index[filter].iloc[i], as_png = True)
+                    lbl, img = stacking.load_stacked(index[filter].iloc[i], max_frames = 5 if stack_repeats else 1)
             
-                 
+                    lbls.append(lbl)
                     imgs.append(img)
-                lbl = imgs[0]    
-                for j in range(0, len(imgs)):
-                    
-                    
-                    imgs[j] = imgs[j].resize_image()   
+                
+                # align to the middle frame in time so the largest offset is as small as possible
+                order = sorted(range(len(lbls)), key=lambda j: lbls[j].info["IMAGE_TIME"])
+                ref = order[len(order)//2]
+                lbl = lbls[ref]
                                     
                 try:   
                     
                                 
-                    imgs = ic.align_images(imgs)
+                    imgs = ic.align_images(imgs, ref)
                         
                             
                 except:                     
