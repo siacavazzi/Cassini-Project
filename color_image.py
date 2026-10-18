@@ -10,6 +10,7 @@ import label_handler as lh
 import image_correction as ic
 import index_maker as im
 import stacking
+import calibration as cal
 import numpy as np
 import os
 import traceback
@@ -32,6 +33,7 @@ ORDER OF COLORS ***
 
 triband_from_dualband = True
 stack_repeats = True # combine repeat exposures of each filter to cut noise
+calibrate = True # put every filter on one brightness scale so colors are true (False = old per frame stretch)
 buffer = []
 
 # BUG: Image order is incorrect sometimes
@@ -92,6 +94,9 @@ def export_sequence(camera, filters, target, delta, folder, mosaic, start_loc):
             
                     lbls.append(lbl)
                     imgs.append(img)
+                if calibrate:
+                    # puts every filter on the same brightness scale (see calibration.py)
+                    imgs = cal.load_channels(lbls, imgs)
                 
                 # align to the middle frame in time so the largest offset is as small as possible
                 order = sorted(range(len(lbls)), key=lambda j: lbls[j].info["IMAGE_TIME"])
