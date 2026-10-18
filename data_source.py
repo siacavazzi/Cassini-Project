@@ -31,6 +31,8 @@ wd = os.getcwd()
 SPICE_CACHE = os.environ.get("CASSINI_SPICE_CACHE", os.path.join(wd, "spice_cache"))
 KEEP_SPICE_CACHE = os.environ.get("CASSINI_KEEP_SPICE_CACHE", "").lower() in ("1", "true", "yes")
 
+DATA_FOLDERS = {"nac_data", "nac_labels", "wac_data", "wac_labels", "cosp_1000"}
+
 _source = None
 _zip = None
 _members = None
@@ -89,9 +91,15 @@ def _zip_members():
             if info.is_dir():
                 continue
             name = info.filename.replace("\\", "/")
+            if name.startswith("__MACOSX/"):
+                continue
             parts = name.split("/")
-            # drop everything up to and including the top level data folder, if there is one
-            if "data" in parts[:-1]:
+            # drop whatever folders the data sits in ("data/", "cassini/"...), so paths
+            # start at one of the data folders
+            roots = [i for i, part in enumerate(parts[:-1]) if part.lower() in DATA_FOLDERS]
+            if roots:
+                parts = parts[roots[0]:]
+            elif "data" in parts[:-1]:
                 parts = parts[parts.index("data") + 1:]
             _members["/".join(parts).lower()] = info
         print(f"Done! {len(_members)} files")
