@@ -93,7 +93,7 @@ NASA's index of every frame: {"W1234567890_1": {"location": "COISS_2001/data/...
 INDEX_COLUMNS = ["FILE_NAME", "FILE_SPECIFICATION_NAME", "VOLUME_ID", "DATA_CONVERSION_TYPE", "FILTER_NAME",
                  "IMAGE_MID_TIME", "INSTRUMENT_ID", "MISSING_LINES", "OBSERVATION_ID", "TARGET_DESC", "TARGET_NAME"]
 
-def pds_index(out):
+def pds_index(out, full=True):
     folder = os.path.join(out, "pds_index")
     os.makedirs(folder, exist_ok=True)
     frames = {}
@@ -114,7 +114,9 @@ def pds_index(out):
                 row = {k: line[s:s + n].replace('"', "").strip() for k, (s, n) in spans.items()}
                 row["FILTER_NAME"] = ",".join(x.strip() for x in row["FILTER_NAME"].split(","))
                 row["location"] = f"{row['VOLUME_ID']}/{row['FILE_SPECIFICATION_NAME']}"
-                frames[row["FILE_NAME"].split(".")[0]] = row
+                if not full:  # ~400k rows: keep memory down when the rest isn't needed
+                    row = {k: row[k] for k in ("location", "VOLUME_ID", "DATA_CONVERSION_TYPE")}
+                frames[row["location"].split("/")[-1].split(".")[0]] = row
     return frames
 
 
@@ -160,10 +162,13 @@ def save_prefix(prefixes, path):
 
 
 class Converter:
-    def __init__(self, out, table_source):
+    def __init__(self, out, table_source, add_missing=False):
         self.out = out
+        self.add_missing = add_missing
         self.table_source = table_source
         self.lock = threading.Lock()
+        # data_source shares one zip file handle per process, so reads must not overlap
+        self.read_lock = threading.Lock()
         self.pds = None
         path = os.path.join(out, "manifest.csv")
         new = not os.path.exists(path)
@@ -193,14 +198,32 @@ class Converter:
         fid = os.path.basename(png_rel).split(".")[0]
         png_out = os.path.join(self.out, png_rel)
         downloaded, note = 0, ""
+        lbl_rel = label_path(png_rel)
+        lbl_out = os.path.join(self.out, lbl_rel)
+        old = None
+        if not frame.get("missing"):
+            try:
+                with self.read_lock:
+                    text = ds.read_text(lbl_rel)
+            except FileNotFoundError:
+                if not self.add_missing:
+                    raise FileNotFoundError(f"{lbl_rel} isn't on the drive (rerun with --add-missing to fetch it)")
+                frame["missing"] = True  # indexed, but its files aren't on the drive
+            else:
+                if not os.path.exists(lbl_out):
+                    with open(lbl_out + ".tmp", "w", encoding="latin-1") as f:
+                        f.write(text)
+                    os.replace(lbl_out + ".tmp", lbl_out)
+                frame["info"] = parse_label(text)
+                with self.read_lock:
+                    old = ds.imread(png_rel, 0)
+                if old is None:
+                    raise ValueError(f"couldn't read {png_rel}")
         if frame.get("missing"):
             # not on the drive: the label comes from NASA too
             downloaded += self.download(fid, png_out, ".LBL")
-            frame["info"] = parse_label(open(png_out[:-4] + ".LBL", encoding="latin-1").read())
-            frame["conversion"] = frame["info"].get("DATA_CONVERSION_TYPE", "")
-            old = None
-        else:
-            old = ds.imread(png_rel, 0)
+            frame["info"] = parse_label(open(lbl_out, encoding="latin-1").read())
+        frame["conversion"] = frame["info"].get("DATA_CONVERSION_TYPE", "")
         conversion = frame["conversion"]
         if self.needs_download(frame):
             img = png_out[:-4] + ".IMG"
@@ -296,20 +319,11 @@ def plan(out, years, limit, add_missing=False, volumes=None, pds=None):
             break
         if os.path.exists(os.path.join(out, png_rel)):
             continue
-        lbl_rel = label_path(png_rel)
-        try:
-            text = ds.read_text(lbl_rel)
-        except FileNotFoundError:
-            if add_missing:
-                frames.append({"png": png_rel, "conversion": "", "missing": True})
-            continue  # ~450 frames are indexed but missing from the drive
-        lbl_out = os.path.join(out, lbl_rel)
-        os.makedirs(os.path.dirname(lbl_out), exist_ok=True)
-        if not os.path.exists(lbl_out):
-            with open(lbl_out, "w", encoding="latin-1") as f:
-                f.write(text)
-        info = parse_label(text)
-        frames.append({"png": png_rel, "conversion": info.get("DATA_CONVERSION_TYPE", ""), "info": info})
+        # the label is read when the frame is converted (in parallel); the type here is
+        # NASA's, for counting
+        fid = os.path.basename(png_rel).split(".")[0]
+        row = pds.get(fid) if pds else None
+        frames.append({"png": png_rel, "conversion": row["DATA_CONVERSION_TYPE"] if row else ""})
     if add_missing and pds is not None:
         for fid, row in pds.items():
             if limit and len(frames) >= limit:
@@ -346,18 +360,17 @@ def main():
         with open(os.path.join(out, folder, "FORMAT.txt"), "w") as f:
             f.write(FORMAT)
 
-    converter = Converter(out, args.table)
-    if args.add_missing:
-        converter.pds = pds_index(out)
+    converter = Converter(out, args.table, args.add_missing)
+    # NASA's index says where each frame is and (for the counts below) its type
+    converter.pds = pds_index(out, full=args.add_missing)
     frames = plan(out, args.years, args.limit, args.add_missing, args.volumes, converter.pds)
     counts = pd.Series([f["conversion"] or "?" for f in frames]).value_counts().to_dict() if frames else {}
     downloads = sum(bool(converter.needs_download(f)) for f in frames)
     missing = sum(bool(f.get("missing")) for f in frames)
-    print(f"{len(frames)} frames to do {counts}, {downloads} to download ({missing} missing from the drive)", flush=True)
+    print(f"{len(frames)} frames to do {counts}, about {downloads} to download "
+          f"({missing} not in Image_index.csv)", flush=True)
     if args.dry_run or not frames:
         return
-    if downloads and converter.pds is None:
-        converter.pds = pds_index(out)
 
     start, done, failed, total_bytes = time.time(), 0, 0, 0
     errors = open(os.path.join(out, "errors.txt"), "a")
