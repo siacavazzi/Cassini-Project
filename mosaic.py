@@ -24,6 +24,7 @@ Empties the rolling mosaic (call at the start of every new sequence)
 """
 def reset():
     buffer.clear()
+    _prepared.clear()
 
 
 """
@@ -98,6 +99,30 @@ def feather_alpha(alpha):
 
 
 """
+Per frame work that doesn't change while the frame sits in the buffer: the box around its
+pixels, its colors as floats, its alpha and its feathered alpha. Kept for the frames in
+the buffer so each frame is only prepared once.
+"""
+_prepared = {}
+
+def prepare(frame):
+    cached = _prepared.get(id(frame))
+    if cached is not None and cached[0] is frame:
+        return cached[1]
+    h, w = frame.shape[:2]
+    ys, xs = np.nonzero(frame[::8, ::8, 3])
+    if len(ys) == 0:
+        info = None
+    else:
+        box = (max(ys.min() * 8 - 8, 0), min(ys.max() * 8 + 9, h),
+               max(xs.min() * 8 - 8, 0), min(xs.max() * 8 + 9, w))
+        f = frame[box[0]:box[1], box[2]:box[3]]
+        info = (box, f[..., :3].astype(np.float32), f[..., 3] * np.float32(1 / 255), feather_alpha(f[..., 3]))
+    _prepared[id(frame)] = (frame, info)
+    return info
+
+
+"""
 Draws the frames oldest first, each over the ones before it. Where there is already
 something underneath, a frame's edge fades in over feather_px; over empty background
 the frame keeps its own alpha, so a lone frame looks the same as before.
@@ -105,16 +130,14 @@ Only the area the frames cover is worked on, then pasted into an empty canvas.
 """
 def composite(frames, gains):
     h, w = frames[0].shape[:2]
-    boxes = []
-    for frame in frames:
-        ys, xs = np.nonzero(frame[::8, ::8, 3])
-        if len(ys) == 0:
-            boxes.append(None)
-            continue
-        boxes.append((max(ys.min() * 8 - 8, 0), min(ys.max() * 8 + 9, h),
-                      max(xs.min() * 8 - 8, 0), min(xs.max() * 8 + 9, w)))
-    used = [b for b in boxes if b is not None]
+    infos = [prepare(frame) for frame in frames]
+    keep = {id(frame) for frame in frames}
+    for key in list(_prepared):
+        if key not in keep:
+            del _prepared[key]
+
     out = np.zeros((h, w, 4), np.uint8)
+    used = [info[0] for info in infos if info is not None]
     if not used:
         return out
     y0, y1 = min(b[0] for b in used), max(b[1] for b in used)
@@ -122,15 +145,14 @@ def composite(frames, gains):
 
     rgb = np.zeros((y1 - y0, x1 - x0, 3), np.float32)
     acc_alpha = np.zeros((y1 - y0, x1 - x0), np.float32)
-    for frame, gain, box in zip(frames, gains, boxes):
-        if box is None:
+    for info, gain in zip(infos, gains):
+        if info is None:
             continue
-        f = frame[box[0]:box[1], box[2]:box[3]]
+        box, color, own, feathered = info
         sl = (slice(box[0] - y0, box[1] - y0), slice(box[2] - x0, box[3] - x0))
-        own = f[..., 3] * np.float32(1 / 255)
         below = acc_alpha[sl]
-        a = feather_alpha(f[..., 3]) * below + own * (1 - below)
-        color = f[..., :3] * gain.astype(np.float32)
+        a = feathered * below + own * (1 - below)
+        color = color * gain.astype(np.float32)
         color -= rgb[sl]
         color *= a[..., None]
         rgb[sl] += color
