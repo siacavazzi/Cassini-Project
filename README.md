@@ -24,7 +24,7 @@ Below is a diagram which demonstrates this.
 
 ## How to use
 
-1. Install required packages
+1. Install required packages: `pip install -r requirements.txt`
 ### Required python packages
 * Pandas
 * Numpy
@@ -77,7 +77,7 @@ Example inputs:
 
 Note: this is a spreadsheet and can accept multiple entries. Upon finishing one the program will move on to the next.
 
-6. Create a folder in the main directory called output. This is where processed images will be placed.
+6. Processed images are placed in the output folder, one folder per sequence. If a run is stopped, running it again keeps the frames already made and carries on (mosaic sequences are always redrawn, since each frame is drawn on top of the ones before it).
 
 7. Run main.py - note: it may take a while to finish. Data is place into an output folder.
 

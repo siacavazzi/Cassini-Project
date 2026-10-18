@@ -51,7 +51,7 @@ def find_edges(gray_img):
     gray_img[gray_img > 100] = 255
     gray_img[gray_img <= 100] = 0
     black_padding = np.zeros((50, width))
-    gray_img = np.row_stack((black_padding, gray_img))
+    gray_img = np.vstack((black_padding, gray_img))
     kernel = np.ones((30, 30), np.uint8)
     closing = cv2.morphologyEx(gray_img, cv2.MORPH_CLOSE, kernel)
     edges = cv2.Canny(closing, 100, 200)
