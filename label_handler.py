@@ -25,7 +25,7 @@ cur_lbl = 1
 wd = os.getcwd()
 #tot_lbl = len(data)/2
 def rotate_image(image, angle):
-    image_center = tuple(np.array(image.shape[1::-1]) / 2)
+    image_center = tuple((np.array(image.shape[1::-1]) - 1) / 2)
     rot_mat = cv2.getRotationMatrix2D(image_center, angle, 1.0)
     result = cv2.warpAffine(image, rot_mat, image.shape[1::-1], flags=cv2.INTER_LINEAR)
     return result
@@ -132,9 +132,10 @@ class label:
         
            
         else:
-            image = label.export(self)
-            lines = int(self.info["LINES"])
-            img = ds.imread(image)
+            # find_target works in full resolution pixels, so bring summed (512/256
+            # line) images up to 1024 lines before shifting them
+            img = self.resize_image()
+            lines = 1024
         M = np.float32([[1, 0, x], [0, 1, y]])
         
         print(f"number of lines {lines}")

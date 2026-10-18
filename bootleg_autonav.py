@@ -58,202 +58,117 @@ def unload_kernels():
     sp.kclear()
     ds.clear_spice_cache()
 
+# NAIF frame names of the two ISS cameras (cas_v4x.tf). These include the in-flight
+# boresight and twist calibration, so no hard coded camera vectors are needed.
+CAMERA_FRAMES = {"NAC": "CASSINI_ISS_NAC", "WAC": "CASSINI_ISS_WAC"}
+
+# Correct for light time and stellar aberration so we get where the body *appears* to
+# Cassini, not where it geometrically is at the instant of the exposure
+ABCORR = "LT+S"
+
+# All pixel values are in full resolution (1024 x 1024) pixels, even for summed images
+FULL_FRAME = 1024
+CCD_CENTER = (FULL_FRAME - 1) / 2  # 511.5, the centre of the CCD in 0 based pixels
+
+"""
+Ephemeris time at the middle of the exposure.
+IMAGE_TIME in Cassini ISS labels is shutter close, not the middle of the exposure
+"""
+def image_et(label):
+    info = label.info
+    if "IMAGE_MID_TIME" in info:
+        return sp.str2et(info["IMAGE_MID_TIME"])
+    exposure = float(info.get("EXPOSURE_DURATION", 0)) / 1000  # ms -> s
+    return sp.str2et(info["IMAGE_TIME"]) - exposure / 2
+
+def camera_frame(label):
+    if label.info["INSTRUMENT_NAME"].find("WIDE") != -1:
+        return CAMERA_FRAMES["WAC"]
+    return CAMERA_FRAMES["NAC"]
+
+"""
+Pixels per unit of tan(angle) off the boresight, from the focal length (mm) and pixel
+size (microns) in the instrument kernel (cas_iss_v10.ti)
+"""
+def pixel_scale(frame):
+    camera = sp.namfrm(frame)
+    focal_length = sp.gdpool(f"INS{camera}_FOCAL_LENGTH", 0, 1)[0]
+    pixel_size = sp.gdpool(f"INS{camera}_PIXEL_SIZE", 0, 1)[0] / 1000
+    return focal_length / pixel_size
+
+"""
+Projects a direction in the camera frame onto the CCD (pinhole model).
+Per cas_iss_v10.ti, samples increase towards -X and lines towards -Y of the camera
+frame. Returns (sample, line) in 0 based full resolution pixels.
+"""
+def project(vector, scale):
+    sample = CCD_CENTER - vector[0] / vector[2] * scale
+    line = CCD_CENTER - vector[1] / vector[2] * scale
+    return sample, line
+
+"""
+Angle (degrees, counter clockwise like cv2.getRotationMatrix2D) to rotate the image by
+so that celestial (J2000) north points up
+"""
+def north_angle(cam, vector, scale):
+    north = sp.mxv(cam, [0.0, 0.0, 1.0])
+    sample, line = project(vector, scale)
+    step = sp.vadd(vector, sp.vscl(1e-4 * sp.vnorm(vector), north))
+    north_sample, north_line = project(step, scale)
+    return math.degrees(math.atan2(north_sample - sample, line - north_line))
+
 """
 label = image label object
 plot = TRUE for plot generation
 output = target output directory
 """
 def find_target(label,plot,output):
-    utctim = label.info["IMAGE_TIME"]
-    et = sp.str2et( utctim )
+    et = image_et(label)
+    frame = camera_frame(label)
     target = label.info["TARGET_NAME"]
-    camera = label.info["INSTRUMENT_NAME"]
-    if camera.find("WIDE") != -1:
-        camera = 'CASSINI_ISS_WAC'
-    else:
-        camera = 'CASSINI_ISS_NAC'
-    print(camera)
-    camera = sp.bods2c(camera)
-    print(camera)
-    camera_data = sp.getfov(camera,4)
-    fov = camera_data[4]
-    
-    if camera == "CASSINI_ISS_NAC":
-        nac = [0.0057600,-0.99999982,-0.00017100]
-        
-        #nac = [-0.99999982,0.0057600,-0.00017100]
-        
-    else:
-        nac = [0.0,0.0,1.0]
-    
     try:
-        target = int(sp.bodn2c(target)) # try to find spice id code of target
+        sp.bodn2c(target) # make sure spice knows the target
     except:
         print("Target not found")
         raise
 
-    # get target pos vector and 1 way light time in seconds
-    print(f"camera: {camera}")
-    xyzd = sp.spkez(target,et,sp.bodc2n(camera),"NONE",-82)
-    print(xyzd)
-    #RAY = xyzd[0][3:6]
-    RAY = [0,0,0]
-    VTARG = xyzd[0][0:3] # target 3d vector
-    DTARG = xyzd[1] * sp.clight() # distance to target in km 
-    
-    # figure out twist angle
-    cam_vec = [math.radians(-90),math.radians(0),math.radians(90)] # camera matrix
-    cam_vec = sp.eul2m(cam_vec[0],cam_vec[1],cam_vec[2],1,2,3)
-    angle = sp.pxform("CASSINI_SC_COORD","J2000",et) # convert camera matrix to j2000
-    angle = sp.mxm(angle,cam_vec)
-    angle = sp.m2eul(angle,3,1,3)
-    angle = math.degrees(angle[2])
+    # apparent position of the target seen from Cassini, in the camera frame
+    position, light_time = sp.spkpos(target, et, "J2000", ABCORR, "CASSINI")
+    cam = sp.pxform("J2000", frame, et)
+    vector = sp.mxv(cam, position)
+    if vector[2] <= 0:
+        raise ValueError(f"{target} is behind the camera")
+
+    scale = pixel_scale(frame)
+    sample, line = project(vector, scale)
+    z = sp.vnorm(position) # distance to target in km
+    angle = north_angle(cam, vector, scale)
+    print(f"Target location on image sensor sample:{sample} line:{line}")
     print(f"Twist: {angle}")
-    
-    
-    
-    im_space = sp.nvc2pl(nac,DTARG) # make spice plane normal to pointing vector
-    
-    targ_loc = sp.inrypl(RAY,VTARG,im_space) # check to see where camera ray intersects target plane
-    
-    targ_loc = targ_loc[1][0:2]  
-    fov_intersects = []
-    
-    for vector in fov:
-        # check where rays intersect target plane
-        fov_intersects.append(sp.inrypl(RAY,vector,im_space)[1])  
-        x_ints = []
-        y_ints = []
-        
-    for intersect in fov_intersects:
-        x_ints.append(intersect[0])
-        y_ints.append(intersect[1] )
-            
-    max_x = max(x_ints)
-    max_y = max(y_ints)
-    min_x = min(x_ints)     
-    min_y = min(y_ints)   
-    
-    # set z to target distance
-    z = DTARG
-         
-    lines = 1024 # get image resolution 
-    
-    x_bound = 0
-    y_bound = 0
-    
- 
-    if targ_loc[0] > max_x:
-        range = max_x - min_x 
-        min_x = min_x + range
-        max_x = max_x + range
-        x_bound = -lines
-        
-    if targ_loc[0] < min_x:
-        range = max_x - min_x
-        min_x = min_x - range        
-        max_x = max_x - range
-        x_bound = lines
-        
-    if targ_loc[1] > max_y:
-        range = max_y - min_y
-        max_y = max_y + range
-        min_y = min_y + range
-        y_bound = lines
-        
-    if targ_loc[1] < min_y:
-        range = max_y - min_y
-        min_y = min_y - range
-        max_y = max_y - range
-        y_bound = -lines
-        """   
-    i=0
 
-    while targ_loc[0] > max_x:
-        i = i + 1
-        range = max_x - min_x 
-        min_x = min_x + range
-        max_x = max_x + range
-        x_bound = lines * i
-        print(1)
-        
-        
-    i = 0
-     
-    while targ_loc[0] < min_x:
-        i = i + 1
-        range = max_x - min_x 
-        min_x = min_x - range
-        max_x = max_x - range
-        x_bound = -lines * i
-        print(2)
-        
-        
-    i = 0
-    while targ_loc[1] > max_y:
-        i = i + 1
-        range = max_y - min_y 
-        min_y = min_y + range
-        max_y = max_y + range
-        y_bound = -lines * i
-        print(3)
-        
-        
-    i = 0
-    while targ_loc[1] < min_y:
-        i = i + 1
-        range = max_y - min_y 
-        min_y = min_y - range
-        max_y = max_y - range
-        y_bound = lines * i
-        
-    """
-    
-    x = np.interp(targ_loc[0],[min_x,max_x],[1,lines])
-    x = lines - x
-    y = np.interp(targ_loc[1],[min_y,max_y],[1,lines])
-    print(f"Target location on image sensor x:{x} y:{y}")
-    
-    # if the target is out of camera bounds stop
-  
-    x = x + x_bound
-    y = y + y_bound
-
-    
-            
     if plot:
-        date = label.info["IMAGE_TIME"] 
-        targ = label.info["TARGET_NAME"]           
+        date = label.info["IMAGE_TIME"]
+        targ = label.info["TARGET_NAME"]
         f = plt.figure(figsize = (10,10))
         ax = f.add_subplot(111)
-        plt.ylim(1,lines)
-        plt.xlim(1,lines)
-        plt.xlabel("X pixels")
-        plt.ylabel("Y pixels")
-        plt.title(f"Location of {targ.title()} on Cassini's wide angle camera sensor")
+        plt.xlim(0,FULL_FRAME)
+        plt.ylim(FULL_FRAME,0) # line 0 is the top of the image
+        plt.xlabel("Sample")
+        plt.ylabel("Line")
+        plt.title(f"Location of {targ.title()} on Cassini's {frame[-3:]} sensor")
         plt.text(0.5,0.9,f"Time: {date} | Target: {targ} | distance: {round(z,1)} km",horizontalalignment='center',
         verticalalignment='center',fontsize=14, transform = ax.transAxes)
-        plt.plot(x,y,marker='o', markerfacecolor='blue', markersize=18)
+        plt.plot(sample,line,marker='o', markerfacecolor='blue', markersize=18)
         plt.savefig(f'{output}/{label.info["PRODUCT_ID"]}.png')
-        
-    x = (lines/2) - x
-    y = y - (lines/2)
-        
-        
+
+    # shift that moves the target to the centre of the image
+    x = CCD_CENTER - sample
+    y = CCD_CENTER - line
+
     """
-    x = x pos of target in camera in pixels
-    y = y pos of target in camera in pixels
+    x = x shift (full resolution pixels) that centres the target
+    y = y shift (full resolution pixels) that centres the target
     z = distance to target in km
-    angle = optical twist angle relative to J2000 frame in degrees
-    """    
+    angle = rotation in degrees that puts celestial north up
+    """
     return [x,y,z,angle]
-            
-
-
-
-
-    
-
-
-
-
