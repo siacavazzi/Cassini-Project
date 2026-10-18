@@ -28,6 +28,8 @@ $P tools/make_evidence.py --root .           # evidence/
 | `images/huygens_enh/<id>.png` | The same frames stretched one by one, for legibility |
 | `images/huygens/stretch.json` | The stretch limits that were used |
 | `verify_huygens.json` | Full verification output |
+| `mosaics/<s>m.png`, `mosaics/mosaics.json` | Karkoschka's landing-site mosaics at 60, 50, 40, 30, 20, 15, 10, 5, 4, 3, 2 and 1 m/pixel, 1250x1600, north up, landing site at the same pixel in each, brightness matched between scales (`build_mosaics.py`) |
+| `catalog/huygens_projection.json` | Per usable descent frame: nadir point, ground footprint outline (m east/north of the landing site) and its correlation with the mosaic, plus the camera model (`project_frames.py`) |
 
 ## How the track is built
 
@@ -115,6 +117,19 @@ Set E values are raw DN × 8 at the frame's auto-exposure time. Pillow rescales 
 - The 11 dark or fallback frames are stretched on their own, because they have no exposure to normalise by.
 
 **`images/huygens_enh/` (per-frame stretch).** Each frame is stretched between its own 0.5 and 99.5 percentiles. Use these for display. To keep the real brightness trend, modulate them with `mean_dn_ms`. `evidence/frames_raw_vs_processed.png` shows the two sets side by side.
+
+## Seeing the frames as one surface
+
+Single DISR frames are hard to read: each covers a thin wedge of ground, the low-altitude ones are dark, and haze washes out the high ones. The imagers share one passband (660 to 1000 nm), so there is no colour to recover.
+
+`build_mosaics.py` takes the twelve mosaics Erich Karkoschka assembled from all the frames (archive `EXTRAS/MOSAICS/MOSIACS_PNG`) and matches their brightness, so the replay can zoom smoothly from 60 m to 1 m per pixel. Each source file was scaled to 16 bits on its own; gains and offsets are fitted from each scale to the next coarser one over their overlap.
+
+`project_frames.py` places every frame on that map. Its camera model is the instrument catalog's (rows run in nadir angle, columns in azimuth). Row direction, column direction and an azimuth offset of +4 deg were fitted against the mosaic: projected HRI/MRI frames at 6 to 14 km correlate with it at a median r = 0.80, and every other convention scores 0.54 or less. Frame by frame (`fit_r`), MRI frames at 1 to 14 km match at r 0.75 to 0.85 and HRI at 6 to 14 km at 0.47. Below 5 km an HRI frame covers only a few hundred metres, less than the uncertainty of the probe's position, so those footprints are approximate. Painting the frames themselves into a map with this geometry was tried and gives a radial patchwork, because the label attitude is not precise enough to line up frames taken at different altitudes, so the mosaic stays the surface and the frames are shown as footprints on it.
+
+```
+python web/huygens/build_mosaics.py --src <DISR>/EXTRAS/MOSAICS/MOSIACS_PNG --out <replay>
+python web/huygens/project_frames.py --replay <replay> --movie descent_mosaic.mp4
+```
 
 ## Evidence (`../evidence/`)
 
