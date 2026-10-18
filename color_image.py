@@ -10,6 +10,7 @@ import label_handler as lh
 import image_correction as ic
 import index_maker as im
 import stacking
+import calibration as cal
 import bootleg_autonav as ba
 import data_source as ds
 import numpy as np
@@ -39,6 +40,7 @@ ORDER OF COLORS ***
 
 triband_from_dualband = True
 stack_repeats = True # combine repeat exposures of each filter to cut noise
+calibrate = True # put every filter on one brightness scale so colors are true (False = old per frame stretch)
 buffer = []
 
 """
@@ -105,6 +107,9 @@ def make_frame(row, filters):
         lbl, img = stacking.load_stacked(row[filter], max_frames = 5 if stack_repeats else 1)
         lbls.append(lbl)
         imgs.append(img)
+    if calibrate:
+        # puts every filter on the same brightness scale (see calibration.py)
+        imgs = cal.load_channels(lbls, imgs)
 
     # align to the middle frame in time so the largest offset is as small as possible
     order = sorted(range(len(lbls)), key=lambda j: lbls[j].info["IMAGE_TIME"])
