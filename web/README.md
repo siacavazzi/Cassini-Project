@@ -39,3 +39,14 @@ Track files are a 16-byte header (`CTRK`, u16 version, u16 flags, u32 count, u32
 `manifest.json` lists every body's chunks and coverage, and its IAU rotation constants and radii from the PCK.
 
 Spacecraft attitude is not exported yet: it needs the CK kernels (about 35 GB), which only exist on the LaCie drive.
+
+## Replay prototype
+
+`replay/index.html` is the first viewer: the Saturn system for one year on the exported tracks, with a timeline to scrub or play, camera-frame density, and jumps to flybys. Build its data, then serve the folder with any static server:
+
+```
+python web/replay/build_data.py --data replay_data --year 2005
+cd web/replay && python -m http.server
+```
+
+The page is written as an artifact body (no `<html>` wrapper); browsers render it as is.
