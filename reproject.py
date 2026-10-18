@@ -159,10 +159,16 @@ def warp_to_newest(old, new):
     # nothing to show (out of its sight, or in its dark), the centered frame is kept too.
     drawn = hit & visible
     gain = np.ones(gx.shape, np.float32)
+    fade = np.ones(gx.shape, np.float32)
     if "sun" in v_old and "sun" in v_new:
         b_new, mu0_new = brightness(v_new, points)
         b_old, mu0_old = brightness(v_old, points)
-        drawn &= mu0_old > 0.05
+        # past the terminator the visible edge of the planet sits well inside the
+        # ellipsoid's limb, so moved pixels there land on dark sky: keep the centered
+        # pixels, and fade the moved ones in gradually as the sun rises
+        lit = np.minimum(mu0_new, mu0_old)
+        drawn &= lit > 0.05
+        fade = np.clip((lit - 0.05) / 0.10, 0, 1).astype(np.float32)
         ratio = np.where(b_old > 1e-6, b_new / np.maximum(b_old, 1e-6), 1.0)
         # near the limb and terminator the lighting model is least reliable: only correct
         # a little, and not at all where the sun or camera is near grazing
@@ -171,7 +177,7 @@ def warp_to_newest(old, new):
         gain = np.where(drawn, ratio, 1.0).astype(np.float32)
     shift_x = np.where(drawn, sx - gx, 0).astype(np.float32)
     shift_y = np.where(drawn, sy - gy, 0).astype(np.float32)
-    weight = drawn.astype(np.float32)
+    weight = np.where(drawn, fade, 0).astype(np.float32)
 
     # fill in between the grid points. Interpolating the shift (not the map itself) keeps
     # the off-target pixels exactly where they were.
