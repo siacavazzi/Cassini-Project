@@ -19,22 +19,25 @@ last = None
 
 
 
-def align_images(imgs):
-    ref = imgs[0] # set first image as reference
-    for i in range(1, len(imgs)):
-        imgs[i] = shift_align(ref,imgs[i])
+def align_images(imgs, ref=0):
+    # ref = index of the frame the others are aligned to; the middle frame in time keeps offsets smallest
+    for i in range(0, len(imgs)):
+        if i != ref:
+            imgs[i] = shift_align(imgs[ref],imgs[i])
 
     return imgs
 
 
 """
-Aligns im2 to im1 with a sub-pixel translation found by phase correlation.
+Finds the sub-pixel translation of im2 relative to im1 by phase correlation.
 Filter frames in a color sequence are taken seconds apart, so the target only
 moves across the sensor; a translation is the right motion model.
 max_shift = largest offset in pixels that is accepted as real
 min_response = phase correlation peak below which the match is rejected
+
+returns (dx, dy) or None if no trustworthy match was found
 """
-def shift_align(im1, im2, max_shift=100, min_response=0.05):
+def find_shift(im1, im2, max_shift=100, min_response=0.3):
     im1_gray = cv2.cvtColor(im1,cv2.COLOR_BGR2GRAY).astype(np.float32)
     im2_gray = cv2.cvtColor(im2,cv2.COLOR_BGR2GRAY).astype(np.float32)
 
@@ -43,7 +46,7 @@ def shift_align(im1, im2, max_shift=100, min_response=0.05):
     ys, xs = np.nonzero(blurred > 0.2 * blurred.max())
     if len(ys) == 0:
         print("Image alignment skipped: blank reference frame")
-        return im2
+        return None
     h, w = im1_gray.shape
     y0, y1 = max(ys.min() - max_shift, 0), min(ys.max() + max_shift, h)
     x0, x1 = max(xs.min() - max_shift, 0), min(xs.max() + max_shift, w)
@@ -55,10 +58,93 @@ def shift_align(im1, im2, max_shift=100, min_response=0.05):
 
     if response < min_response or abs(dx) > max_shift or abs(dy) > max_shift:
         print(f"Image alignment failure: shift ({dx:.1f}, {dy:.1f}) response {response:.2f}")
-        return im2
+        return None
+    return dx, dy
 
+
+def shift_image(im, dx, dy):
+    h, w = im.shape[:2]
     M = np.float32([[1, 0, -dx], [0, 1, -dy]])
-    return cv2.warpAffine(im2, M, (w, h), flags=cv2.INTER_CUBIC, borderMode=cv2.BORDER_CONSTANT)
+    return cv2.warpAffine(im, M, (w, h), flags=cv2.INTER_CUBIC, borderMode=cv2.BORDER_CONSTANT)
+
+
+"""
+Aligns im2 to im1; returns im2 unchanged if no trustworthy match was found
+"""
+def shift_align(im1, im2, max_shift=100, min_response=0.3):
+    shift = find_shift(im1, im2, max_shift, min_response)
+    if shift is None:
+        return im2
+    return shift_image(im2, *shift)
+
+
+"""
+Combines repeat exposures of the same filter into one lower-noise frame.
+frames = list of images of the same target, filter and exposure time; frames[0] is the reference
+sigma = pixels further than this many noise sigmas from the others are rejected
+        (cosmic rays, hot pixels)
+max_shift = largest offset in pixels between repeats; repeats seconds apart barely move,
+        so a bigger offset means a different view or a false match
+
+Each frame is aligned to the reference and brightness-matched to it. Where the scene
+itself changed between exposures (a moon moved), a frame is only used where it agrees
+with the reference, so moving objects come from the reference alone instead of
+leaving ghosts. Frames that cannot be aligned are left out.
+returns the stacked frame in the same format as the input (8-bit, 3 channel gray)
+"""
+def stack_frames(frames, sigma=3.0, max_shift=20):
+    ref = frames[0]
+    ref_gray = cv2.cvtColor(ref,cv2.COLOR_BGR2GRAY).astype(np.float32)
+    blurred = cv2.GaussianBlur(ref_gray, (0,0), 3)
+    target = blurred > 0.1 * blurred.max()
+    unclipped = target & (ref_gray < 250)
+
+    stack = [ref_gray]
+    agrees = [np.ones(ref_gray.shape, bool)]
+    for frame in frames[1:]:
+        if frame.shape != ref.shape:
+            continue
+        shift = find_shift(ref, frame, max_shift)
+        if shift is None:
+            continue
+        gray = cv2.cvtColor(shift_image(frame, *shift),cv2.COLOR_BGR2GRAY).astype(np.float32)
+        if unclipped.sum() > 100:
+            # match brightness to the reference; a gain alone keeps black sky black
+            gain = (gray[unclipped] * ref_gray[unclipped]).sum() / max((gray[unclipped] ** 2).sum(), 1)
+            gray = gain * gray
+        # mark where the scene changed: differences that survive smoothing are structure, not noise
+        # (noise is measured over the whole frame, since a moving moon can fill much of the target)
+        smooth_diff = cv2.GaussianBlur(gray - ref_gray, (0,0), 2)
+        smooth_diff = np.abs(smooth_diff - np.median(smooth_diff))
+        noise = 1.4826 * np.median(smooth_diff)
+        changed = (smooth_diff > max(5 * noise, 3)).astype(np.uint8)
+        # drop specks (cosmic rays, hot pixels are handled per pixel below), then pad what is left
+        changed = cv2.morphologyEx(changed, cv2.MORPH_OPEN, np.ones((7,7), np.uint8))
+        changed = cv2.dilate(changed, np.ones((15,15), np.uint8)) > 0
+        stack.append(gray)
+        agrees.append(~changed)
+
+    if len(stack) == 1:
+        return ref
+    stack = np.array(stack)
+    agrees = np.array(agrees)
+
+    # reject single-pixel outliers among the frames that agree with the reference
+    count = agrees.sum(axis=0)
+    masked = np.where(agrees, stack, np.nan)
+    median = np.nanmedian(masked, axis=0)
+    resid = np.abs(stack - median)
+    noise = 1.4826 * np.nanmedian(np.where(agrees, resid, np.nan)[:, target] if target.any() else resid) + 1
+    keep = agrees & (resid <= sigma * noise)
+    # with two frames an outlier can't be voted out; keep the darker value,
+    # since cosmic rays and hot pixels only ever add light
+    pair = (count == 2) & (keep.sum(axis=0) < 2)
+    out = (stack * keep).sum(axis=0) / np.maximum(keep.sum(axis=0), 1)
+    out = np.where(pair, np.where(agrees, stack, np.inf).min(axis=0), out)
+    out = np.where(keep.any(axis=0) | pair, out, ref_gray)
+
+    out = np.clip(out + 0.5, 0, 255).astype(np.uint8)
+    return cv2.cvtColor(out, cv2.COLOR_GRAY2BGR)
         
         
 def seqAlign(im):
