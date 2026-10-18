@@ -79,7 +79,7 @@ Note: this is a spreadsheet and can accept multiple entries. Upon finishing one 
 
 6. Processed images are placed in the output folder, one folder per sequence. If a run is stopped, running it again keeps the frames already made and carries on (mosaic sequences are always redrawn, since each frame is drawn on top of the ones before it).
 
-7. Run main.py - note: it may take a while to finish. Data is place into an output folder.
+7. Run main.py - note: it may take a while to finish. Data is place into an output folder. Frames are built in parallel, one worker process per CPU core; set the CASSINI_WORKERS environment variable to use fewer (each worker uses a few hundred MB of memory) or to 1 to build one frame at a time.
 
 
 # Data Sources
