@@ -37,8 +37,10 @@ stack_repeats = True # combine repeat exposures of each filter to cut noise
 calibrate = True # put every filter on one brightness scale so colors are true (False = old per frame stretch)
 
 
-def build_mosaic(img):
-    return Image.fromarray(mo.add_frame(np.asarray(img)))
+def build_mosaic(img, lbl=None):
+    geometry = getattr(lbl, "geometry", None)
+    placement = getattr(lbl, "placement", None)
+    return Image.fromarray(mo.add_frame(np.asarray(img), geometry, placement))
 
         
 
@@ -74,7 +76,7 @@ def export_sequence(camera, filters, target, delta, folder, mosaic, start_loc):
                 image = np.asarray(Image.merge("RGBA",(gray,gray,gray, mask)))
                 image = Image.fromarray(lbl.set_color(image).auto_center(border))
                 if mosaic:
-                    image = build_mosaic(image)
+                    image = build_mosaic(image, lbl)
             
             else:
             
@@ -118,7 +120,7 @@ def export_sequence(camera, filters, target, delta, folder, mosaic, start_loc):
                     if mosaic:
         
                         
-                        image = build_mosaic(image)
+                        image = build_mosaic(image, lbl)
                         
                         """
                         if last is None:

@@ -9,12 +9,14 @@ is already underneath, so panel seams don't show.
 """
 import numpy as np
 import cv2
+import reproject as rp
 
 
 buffer_size = 5     # number of frames kept in the rolling mosaic (including the newest)
 feather_px = 64     # width in pixels of the soft edge where a frame blends into the frames below
 min_overlap = 2000  # overlapping pixels (at 1/4 scale) needed before two frames are brightness matched
 max_gain = 2.0      # older frames are never brightened or darkened by more than this factor
+reproject_surface = True  # line up the target's surface between frames (needs geometry, see add_frame)
 
 buffer = []
 
@@ -30,13 +32,27 @@ def reset():
 """
 Adds a frame and returns the mosaic of the frames in the buffer
 frame = RGBA numpy array (uint8), all frames the same size
+geometry, placement = what find_target and label.translate recorded for the frame. With
+them, older frames are redrawn so the target's surface lines up with the newest frame
+(see reproject.py); without them frames are only centered on the target.
 """
-def add_frame(frame):
-    buffer.append(np.asarray(frame))
+def add_frame(frame, geometry=None, placement=None):
+    view = None
+    if reproject_surface and geometry is not None and placement is not None:
+        view = rp.spice_view(geometry)
+    buffer.append((np.asarray(frame), geometry, view, placement))
     if len(buffer) > buffer_size:
         buffer.pop(0)
-    gains = match_gains(buffer)
-    return composite(buffer, gains)
+
+    frames = [entry[0] for entry in buffer]
+    newest = buffer[-1]
+    if newest[2] is not None:
+        for i, entry in enumerate(buffer[:-1]):
+            if entry[2] is not None and entry[1]["target"] == newest[1]["target"]:
+                frames[i] = rp.warp_to_newest(entry, newest)
+
+    gains = match_gains(frames)
+    return composite(frames, gains)
 
 
 """
