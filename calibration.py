@@ -164,6 +164,13 @@ def unstretch(png, info, image=None):
     conversion = _value(info, "DATA_CONVERSION_TYPE", "")
     if conversion not in ("TABLE", "12BIT"):
         return None  # 8LSB frames only kept the low 8 bits
+    if ds.lut8():
+        # the lean archive keeps the camera's codes, so nothing has to be guessed
+        stored = stored_values(png, info)
+        if image is None:
+            return stored
+        low, high = stored.min(), stored.max()
+        return np.asarray(image, dtype=np.float64) * (high - low) / 254.0 + low
     png = np.asarray(png, dtype=np.float64)
     span = recover_span(png)
     if span is None:
@@ -185,6 +192,33 @@ def unstretch(png, info, image=None):
     if image is not None:
         offset = np.asarray(image, dtype=np.float64) * span / 254.0
     return offset + int(darkest)
+
+
+"""
+Lean archive (helper programs/convert_archive.py) only: what the camera sent for each
+pixel, from the 8-bit codes in the PNG. TABLE frames were sent as the codes themselves,
+12BIT frames as DN, which the archive squeezed into the same codes.
+"""
+def stored_values(codes, info):
+    codes = np.asarray(codes)
+    if _value(info, "DATA_CONVERSION_TYPE", "") == "12BIT":
+        return LUT[codes]
+    return codes.astype(np.float64)
+
+
+"""
+Lean archive only: stretches a frame of codes min..max -> 0..254 the way the old
+dataset PNGs were, so code written for those still sees the same images.
+8LSB frames were copied from the old PNGs and are returned as they are.
+"""
+def display_stretch(codes, info):
+    if _value(info, "DATA_CONVERSION_TYPE", "") not in ("TABLE", "12BIT"):
+        return codes
+    stored = stored_values(codes, info)
+    low, span = stored.min(), stored.max() - stored.min()
+    if span <= 0:
+        return np.zeros_like(codes)
+    return np.floor((stored - low) * 254.0 / span + 0.5).astype(np.uint8)
 
 
 """

@@ -12,6 +12,7 @@ import cv2
 import bootleg_autonav as ba
 import image_correction as ic
 import data_source as ds
+import calibration as cal
 
 #######################################################################################
 
@@ -105,6 +106,9 @@ class label:
     
     def resize_image(self):
         img = ds.imread(self.info["path"].split('.')[0] + ".png")
+        if ds.lut8():
+            # the lean archive stores camera codes; stretch them like the old PNGs
+            img = cal.display_stretch(img, self.info)
         if int(self.info["LINES"]) < 1024:
             
             #scale_percent = 200
