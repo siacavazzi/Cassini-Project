@@ -311,7 +311,23 @@ class Converter:
         lbl_rel = label_path(png_rel)
         lbl_out = os.path.join(self.out, lbl_rel)
         old = None
-        if not frame.get("missing"):
+        if self.local and not frame.get("missing"):
+            # whole-volume mode: the label comes from the unpacked volume, and the old PNG is only
+            # read when it's needed (8LSB), sparing the drive a random read of the zip per frame
+            if not (ds.exists(lbl_rel) and ds.exists(png_rel)):
+                if not self.add_missing:
+                    raise FileNotFoundError(f"{png_rel} isn't on the drive (rerun with --add-missing to fetch it)")
+                frame["missing"] = True
+            else:
+                downloaded += self.download(fid, png_out, ".LBL")
+                frame["info"] = parse_label(open(lbl_out, encoding="latin-1").read())
+                frame["conversion"] = frame["info"].get("DATA_CONVERSION_TYPE", "")
+                if not self.needs_download(frame):
+                    with self.read_lock:
+                        old = ds.imread(png_rel, 0)
+                    if old is None:
+                        raise ValueError(f"couldn't read {png_rel}")
+        elif not frame.get("missing"):
             try:
                 with self.read_lock:
                     text = ds.read_text(lbl_rel)
