@@ -267,6 +267,10 @@ class Converter:
         self.read_lock = threading.Lock()
         self.pds = None
         self.local = None  # with --bundles: the folder the current volume was unpacked into
+        # with --bundles, a volume's files are written to a staging folder (dest) and its manifest
+        # and index rows held back (pending) until the whole volume is moved into out
+        self.dest = out
+        self.pending = None
         path = os.path.join(out, "manifest.csv")
         new = not os.path.exists(path) or os.path.getsize(path) == 0
         self.manifest = open(path, "a", newline="")
@@ -277,8 +281,19 @@ class Converter:
 
     def record(self, **row):
         with self.lock:
+            if self.pending is not None:
+                self.pending.append(("manifest", row))
+                return
             self.writer.writerow(row)
             self.manifest.flush()
+
+    def flush_pending(self):
+        pending, self.pending = self.pending or [], None
+        for kind, row in pending:
+            if kind == "manifest":
+                self.record(**row)
+            else:
+                self.add_index_row(row)
 
     def needs_download(self, frame, old=None):
         conversion = frame["conversion"]
@@ -291,30 +306,36 @@ class Converter:
         # auto: download unless the old PNG gives the codes exactly (only known once it's read)
         return old is None or table_from_png(old, frame["info"]) is None
 
+    def local_file(self, fid, ext):
+        location = self.pds[fid]["location"][:-4] + ext
+        # unpacked volumes use lower-case folder names: coiss_2001/data/...
+        volume, rest = location.split("/", 1)
+        return os.path.join(self.local, volume.lower(), rest)
+
     def download(self, fid, png_out, ext):
         row = self.pds.get(fid)
         if row is None:
             raise LookupError(f"{fid} is not in the PDS index")
         location = row["location"][:-4] + ext
         if self.local:
-            # unpacked volumes use lower-case folder names: coiss_2001/data/...
-            volume, rest = location.split("/", 1)
-            shutil.copyfile(os.path.join(self.local, volume.lower(), rest), png_out[:-4] + ext)
+            shutil.copyfile(self.local_file(fid, ext), png_out[:-4] + ext)
             return 0
         return fetch(f"{PDS}/{series_of(location)}/{location}", png_out[:-4] + ext)
 
     def convert(self, frame):
         png_rel = frame["png"]
         fid = os.path.basename(png_rel).split(".")[0]
-        png_out = os.path.join(self.out, png_rel)
+        png_out = os.path.join(self.dest, png_rel)
         downloaded, note = 0, ""
         lbl_rel = label_path(png_rel)
-        lbl_out = os.path.join(self.out, lbl_rel)
+        lbl_out = os.path.join(self.dest, lbl_rel)
         old = None
         if self.local and not frame.get("missing"):
             # whole-volume mode: the label comes from the unpacked volume, and the old PNG is only
             # read when it's needed (8LSB), sparing the drive a random read of the zip per frame
-            if not (ds.exists(lbl_rel) and ds.exists(png_rel)):
+            with self.read_lock:
+                present = ds.exists(lbl_rel) and ds.exists(png_rel)
+            if not present:
                 if not self.add_missing:
                     raise FileNotFoundError(f"{png_rel} isn't on the drive (rerun with --add-missing to fetch it)")
                 frame["missing"] = True
@@ -357,12 +378,15 @@ class Converter:
         frame["conversion"] = frame["info"].get("DATA_CONVERSION_TYPE", "")
         conversion = frame["conversion"]
         if self.needs_download(frame, old):
-            img = png_out[:-4] + ".IMG"
-            downloaded += self.download(fid, png_out, ".IMG")
-            try:
-                image, prefixes = read_img(img)
-            finally:
-                os.remove(img)
+            if self.local:
+                image, prefixes = read_img(self.local_file(fid, ".IMG"))  # read in place
+            else:
+                img = png_out[:-4] + ".IMG"
+                downloaded += self.download(fid, png_out, ".IMG")
+                try:
+                    image, prefixes = read_img(img)
+                finally:
+                    os.remove(img)
             if conversion in ("12BIT", "TABLE"):
                 codes = encode(image, conversion)
             else:
@@ -393,6 +417,9 @@ class Converter:
     def add_index_row(self, row):
         path = os.path.join(self.out, "Image_index_added.csv")
         with self.lock:
+            if self.pending is not None:
+                self.pending.append(("index", row))
+                return
             new = not os.path.exists(path)
             with open(path, "a", newline="") as f:
                 writer = csv.DictWriter(f, ADDED_INDEX_FIELDS)
@@ -502,8 +529,22 @@ def fetch_bundle(volume, bundles, work, fids, connections=8):
 
 
 """
+Moves a volume's staged files into out with one sequential copy each (far kinder to a spinning
+drive than writing frame by frame). Each PNG goes last, since a PNG in out marks its frame done.
+"""
+def move_stage(stage, out):
+    for sub in ("nac_data", "wac_data"):
+        names = sorted(os.listdir(os.path.join(stage, sub)), key=lambda n: n.endswith(".png"))
+        for name in names:
+            dst = os.path.join(out, sub, name)
+            shutil.copyfile(os.path.join(stage, sub, name), dst + ".tmp")
+            os.replace(dst + ".tmp", dst)
+
+
+"""
 --bundles: works volume by volume. The next volume downloads while this one converts;
-each volume's .tar.gz and unpacked files are deleted once its frames are done
+each volume's frames are written under WORK/stage and moved into OUT once all are done, and
+its .tar.gz and unpacked files are deleted
 (unless --keep-bundles). Frames NASA's index doesn't place in a volume are done
 the usual way at the end.
 """
@@ -517,6 +558,7 @@ def run_bundles(converter, frames, args, out, errors):
     bundles = os.path.abspath(args.bundles)
     work = os.path.abspath(args.work or os.path.join(out, "unpacked"))
     os.makedirs(bundles, exist_ok=True)
+    stage = os.path.join(work, "stage")
 
     def prepare(volume):
         fids = [os.path.basename(f["png"]).split(".")[0] for f in by_volume[volume]]
@@ -543,6 +585,10 @@ def run_bundles(converter, frames, args, out, errors):
                 continue
             total_bytes += size
             converter.local = folder
+            shutil.rmtree(stage, ignore_errors=True)
+            for sub in ("nac_data", "wac_data"):
+                os.makedirs(os.path.join(stage, sub))
+            converter.dest, converter.pending = stage, []
             with ThreadPoolExecutor(max(1, args.workers)) as pool:
                 futures = {pool.submit(converter.convert, f): f for f in by_volume[volume]}
                 for future in as_completed(futures):
@@ -553,8 +599,12 @@ def run_bundles(converter, frames, args, out, errors):
                         failed += 1
                         errors.write(f"{futures[future]['png']}\t{type(e).__name__}: {e}\n")
                         errors.flush()
+            move_stage(stage, out)
+            converter.dest = out
+            converter.flush_pending()
             converter.local = None
             shutil.rmtree(folder, ignore_errors=True)
+            shutil.rmtree(stage, ignore_errors=True)
             if not args.keep_bundles:
                 os.remove(os.path.join(bundles, volume.lower() + ".tar.gz"))
             elapsed = time.time() - start
