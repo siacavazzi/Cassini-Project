@@ -270,6 +270,19 @@ def read_text(path):
 
 
 """
+True when the data is the lean archive made by helper programs/convert_archive.py,
+whose PNGs hold the camera's 8-bit codes instead of a per frame stretch
+"""
+_lut8 = None
+
+def lut8():
+    global _lut8
+    if _lut8 is None:
+        _lut8 = exists("wac_data/FORMAT.txt") or exists("nac_data/FORMAT.txt")
+    return _lut8
+
+
+"""
 Same as cv2.imread but works for images inside the zip
 """
 def imread(path, flags=cv2.IMREAD_COLOR):
