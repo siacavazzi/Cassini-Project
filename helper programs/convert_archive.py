@@ -39,7 +39,7 @@ runs. Frames already in <out> are skipped, so it can be stopped and restarted.
 Usage (from the main folder, with the old data as CASSINI_DATA as usual):
     python "helper programs/convert_archive.py" OUT [--years 2002 2003] [--limit N]
         [--table auto|raw|png] [--downloads 4] [--dry-run] [--add-missing [--volumes COISS_2009 ...]]
-        [--bundles DIR [--work DIR] [--keep-bundles] [--only-volumes COISS_2077 ...]] [--pds-index DIR]
+        [--bundles DIR [--work DIR] [--keep-bundles] [--only-volumes COISS_2077 ...] [--connections 8]] [--pds-index DIR]
 """
 import argparse
 import csv
@@ -78,25 +78,44 @@ MIDS = (cal.LUT[:-1] + cal.LUT[1:]) / 2
 MANIFEST_FIELDS = ["id", "conversion", "source", "lines", "samples", "bytes_downloaded", "png_bytes", "note"]
 
 
-def fetch(url, path, tries=5):
-    for attempt in range(tries):
+def fetch(url, path, tries=5, start=0, end=None, part=None):
+    part = part or path + ".part"
+    want = None if end is None else end - start
+    attempt = 0
+    while True:
+        have = os.path.getsize(part) if os.path.exists(part) else 0
+        if want is not None and have >= want:
+            break
         try:
-            request = urllib.request.Request(url, headers={"User-Agent": USER_AGENT})
-            with urllib.request.urlopen(request, timeout=120) as r, open(path + ".part", "wb") as f:
-                while True:
-                    chunk = r.read(1 << 20)
-                    if not chunk:
-                        break
-                    f.write(chunk)
-                # read(n) returns b"" when the server drops the connection, so a cut
-                # short download only shows up as the wrong size
-                expected = r.headers.get("Content-Length")
-                if expected is not None and f.tell() != int(expected):
-                    raise IOError(f"{url}: got {f.tell()} of {expected} bytes")
-            os.replace(path + ".part", path)
-            return os.path.getsize(path)
+            headers = {"User-Agent": USER_AGENT}
+            if have or start or end is not None:
+                last = "" if end is None else str(end - 1)
+                headers["Range"] = f"bytes={start + have}-{last}"
+            request = urllib.request.Request(url, headers=headers)
+            with urllib.request.urlopen(request, timeout=120) as r:
+                resumed = r.status == 206
+                if "Range" in headers and not resumed:
+                    if start or end is not None:
+                        raise IOError(f"{url}: server ignored a range request")
+                    have = 0  # the server sent the whole file again
+                with open(part, "ab" if resumed else "wb") as f:
+                    while True:
+                        chunk = r.read(1 << 20)
+                        if not chunk:
+                            break
+                        f.write(chunk)
+                    # read(n) returns b"" when the server drops the connection, so a cut
+                    # short download only shows up as the wrong size
+                    expected = r.headers.get("Content-Length")
+                    if expected is not None and f.tell() != have + int(expected):
+                        raise IOError(f"{url}: got {f.tell()} of {have + int(expected)} bytes")
+            break
         except Exception as e:
-            if attempt == tries - 1:
+            # a connection cut after some progress resumes from where it stopped, so only
+            # attempts that got nothing count towards giving up
+            now = os.path.getsize(part) if os.path.exists(part) else 0
+            attempt = 0 if now > have else attempt + 1
+            if attempt >= tries:
                 raise
             wait = 2 ** (attempt + 1)
             if getattr(e, "code", None) == 429:
@@ -104,6 +123,40 @@ def fetch(url, path, tries=5):
                 after = str(e.headers.get("Retry-After") or "")
                 wait = max(wait * 15, int(after) if after.isdigit() else 0)
             time.sleep(wait)
+    if part == path + ".part":
+        os.replace(part, path)
+        return os.path.getsize(path)
+    return os.path.getsize(part)
+
+
+"""
+Downloads one big file over several connections at once, each fetching its own byte range
+into path.part<k> (resumed if a run is restarted), then joins them. A single connection to
+the JPL mirror runs at ~3 MB/s some days; several together go much faster.
+"""
+def fetch_ranged(url, path, connections=8):
+    request = urllib.request.Request(url, method="HEAD", headers={"User-Agent": USER_AGENT})
+    with urllib.request.urlopen(request, timeout=120) as r:
+        length = int(r.headers.get("Content-Length") or 0)
+        ranges = r.headers.get("Accept-Ranges", "") == "bytes"
+    if connections <= 1 or not ranges or length < 64 << 20:
+        return fetch(url, path, tries=8)
+    step = -(-length // connections)
+    pieces = [(k * step, min(length, (k + 1) * step)) for k in range(connections)]
+    parts = [f"{path}.part{k}" for k in range(connections)]
+    with ThreadPoolExecutor(connections) as pool:
+        for future in [pool.submit(fetch, url, path, 8, a, b, part) for (a, b), part in zip(pieces, parts)]:
+            future.result()
+    with open(path + ".part", "wb") as out:
+        for part in parts:
+            with open(part, "rb") as f:
+                shutil.copyfileobj(f, out, 16 << 20)
+    if os.path.getsize(path + ".part") != length:
+        raise IOError(f"{url}: joined {os.path.getsize(path + '.part')} of {length} bytes")
+    os.replace(path + ".part", path)
+    for part in parts:
+        os.remove(part)
+    return length
 
 
 """
@@ -411,11 +464,11 @@ def plan(out, years, limit, add_missing=False, volumes=None, pds=None):
 Downloads one volume's .tar.gz and unpacks just the given frames' IMG and LBL files into
 work/<volume>/data/... Returns the bytes downloaded.
 """
-def fetch_bundle(volume, bundles, work, fids):
+def fetch_bundle(volume, bundles, work, fids, connections=8):
     tgz = os.path.join(bundles, volume.lower() + ".tar.gz")
     size = 0
     if not os.path.exists(tgz):
-        size = fetch(BUNDLES.format(volume=volume.lower()), tgz)
+        size = fetch_ranged(BUNDLES.format(volume=volume.lower()), tgz, connections)
     wanted = {fid + ext for fid in fids for ext in (".IMG", ".LBL")}
     # "r|*": some of the mirror's .tar.gz files (coiss_1001) are plain tar despite the name
     with tarfile.open(tgz, "r|*") as tar:
@@ -453,7 +506,7 @@ def run_bundles(converter, frames, args, out, errors):
         fids = [os.path.basename(f["png"]).split(".")[0] for f in by_volume[volume]]
         folder = os.path.join(work, volume.lower() + ".tmp")
         shutil.rmtree(folder, ignore_errors=True)
-        size = fetch_bundle(volume, bundles, folder, fids)
+        size = fetch_bundle(volume, bundles, folder, fids, args.connections)
         return folder, size
 
     start, done, failed, total_bytes = time.time(), 0, 0, 0
@@ -517,6 +570,7 @@ def main():
     parser.add_argument("--pds-index", help="copy NASA's index tables from this folder (e.g. an earlier "
                         "run's OUT/pds_index) instead of downloading them")
     parser.add_argument("--workers", type=int, default=4, help="with --bundles: frames converted at once")
+    parser.add_argument("--connections", type=int, default=8, help="with --bundles: connections per volume download")
     args = parser.parse_args()
 
     out = os.path.abspath(args.out)
