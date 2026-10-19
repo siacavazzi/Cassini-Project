@@ -18,8 +18,9 @@ CASSINI_DATA can point straight at it:
 
 How each frame is made (DATA_CONVERSION_TYPE from its label):
     12BIT  raw IMG downloaded, DN -> nearest LUT code
-    TABLE  raw IMG downloaded (exact), or with --table png the old PNG un-stretched
-           (no download; exact when the frame has dark sky, see calibration.unstretch)
+    TABLE  rebuilt from the old PNG when that is exact (see table_from_png), otherwise
+           the raw IMG is downloaded. --table raw downloads them all; --table png never
+           downloads and guesses the darkest pixel the old way (calibration.unstretch)
     8LSB   the old PNG is copied (only the low 8 bits were sent, nothing to recover)
 
 With --add-missing, frames the drive is missing are downloaded too, label included:
@@ -33,7 +34,7 @@ runs. Frames already in <out> are skipped, so it can be stopped and restarted.
 
 Usage (from the main folder, with the old data as CASSINI_DATA as usual):
     python "helper programs/convert_archive.py" OUT [--years 2002 2003] [--limit N]
-        [--table raw|png] [--downloads 4] [--dry-run] [--add-missing [--volumes COISS_2009 ...]]
+        [--table auto|raw|png] [--downloads 4] [--dry-run] [--add-missing [--volumes COISS_2009 ...]]
 """
 import argparse
 import csv
@@ -160,6 +161,28 @@ def encode(image, conversion):
     return image.astype(np.uint8)  # TABLE frames were sent as LUT codes already
 
 
+"""
+An 8-bit (TABLE) frame's codes from its old stretched PNG, or None when they can't be
+known exactly. The stretch kept the shape (calibration.recover_span finds the span) but
+not the darkest code, and guessing it from the bias was off by 3 to 180 codes in the 1999
+trial: the sky sits above the bias by the dark current, and many frames have no sky.
+Two kinds of frame pin the darkest code down, and were within 1 code in the trial:
+- frames with missing lines: the gaps are filled with 0, so the darkest code is 0
+- frames using the whole 0..255 range (no gaps in the PNG's levels)
+"""
+def table_from_png(old, info):
+    old = np.asarray(old)
+    span = cal.recover_span(old.astype(np.float64))
+    if span is None:
+        if len(np.unique(old)) < 128:
+            return None  # a sparse frame can hide a small span
+        span = 255  # no gaps: 254 or 255 codes, so starting at 0 is within 1 code
+    elif not (info.get("MISSING_LINES", "0").isdigit() and int(info["MISSING_LINES"]) > 0
+              and (old == 0).all(axis=1).any()):
+        return None  # a smaller span with no fill: the darkest code is unknown
+    return np.floor(old.astype(np.float64) * span / 254.0 + 0.5).clip(0, 255).astype(np.uint8)
+
+
 def save_png(codes, path):
     Image.fromarray(codes).save(path + ".tmp.png", optimize=True)
     os.replace(path + ".tmp.png", path)
@@ -193,9 +216,16 @@ class Converter:
             self.writer.writerow(row)
             self.manifest.flush()
 
-    def needs_download(self, frame):
+    def needs_download(self, frame, old=None):
         conversion = frame["conversion"]
-        return frame.get("missing") or conversion == "12BIT" or (conversion == "TABLE" and self.table_source == "raw")
+        if frame.get("missing") or conversion == "12BIT":
+            return True
+        if conversion != "TABLE" or self.table_source == "png":
+            return False
+        if self.table_source == "raw":
+            return True
+        # auto: download unless the old PNG gives the codes exactly (only known once it's read)
+        return old is None or table_from_png(old, frame["info"]) is None
 
     def download(self, fid, png_out, ext):
         row = self.pds.get(fid)
@@ -236,7 +266,7 @@ class Converter:
             frame["info"] = parse_label(open(lbl_out, encoding="latin-1").read())
         frame["conversion"] = frame["info"].get("DATA_CONVERSION_TYPE", "")
         conversion = frame["conversion"]
-        if self.needs_download(frame):
+        if self.needs_download(frame, old):
             img = png_out[:-4] + ".IMG"
             downloaded += self.download(fid, png_out, ".IMG")
             try:
@@ -251,6 +281,8 @@ class Converter:
                 note = "8LSB: stretched"
             save_prefix(prefixes, png_out[:-4] + ".prefix.gz")
             source = "new from PDS" if frame.get("missing") else "raw"
+        elif conversion == "TABLE" and self.table_source == "auto":
+            codes, source = table_from_png(old, frame["info"]), "png"
         elif conversion == "TABLE":
             codes = cal.unstretch(old.astype(np.float64), frame["info"])
             if cal.recover_span(old.astype(np.float64)) is None:
@@ -359,7 +391,8 @@ def main():
     parser.add_argument("out")
     parser.add_argument("--years", type=float, nargs="*")
     parser.add_argument("--limit", type=int, default=0, help="stop after this many frames (for testing)")
-    parser.add_argument("--table", choices=["raw", "png"], default="raw", help="where TABLE frames come from")
+    parser.add_argument("--table", choices=["auto", "raw", "png"], default="auto",
+                        help="where TABLE frames come from (auto: the old PNG when exact, else NASA)")
     parser.add_argument("--downloads", type=int, default=4, help="parallel downloads (NASA throttles above ~4)")
     parser.add_argument("--dry-run", action="store_true", help="count what would be done and stop")
     parser.add_argument("--add-missing", action="store_true",
@@ -383,7 +416,7 @@ def main():
     counts = pd.Series([f["conversion"] or "?" for f in frames]).value_counts().to_dict() if frames else {}
     downloads = sum(bool(converter.needs_download(f)) for f in frames)
     missing = sum(bool(f.get("missing")) for f in frames)
-    print(f"{len(frames)} frames to do {counts}, about {downloads} to download "
+    print(f"{len(frames)} frames to do {counts}, at most {downloads} to download "
           f"({missing} not in Image_index.csv)", flush=True)
     if args.dry_run or not frames:
         return
