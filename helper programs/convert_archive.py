@@ -28,6 +28,10 @@ indexed frames whose files are gone, and frames that are in NASA's index but not
 Image_index.csv (for example the days lost from volumes COISS_2009 to COISS_2022).
 New frames are listed in <out>/Image_index_added.csv, to be merged into Image_index.csv.
 
+With --bundles, whole volumes are downloaded as .tar.gz from NASA's JPL mirror (368 GB for
+all 125, far faster than frame by frame) and every 8-bit frame comes from its raw file:
+    python "helper programs/convert_archive.py" OUT --bundles BUNDLES --work WORK --add-missing
+
 The raw IMG is deleted once converted, so only a few files sit on disk at a time.
 It never writes to the old data, so the render pipeline can keep using it while this
 runs. Frames already in <out> are skipped, so it can be stopped and restarted.
@@ -35,6 +39,7 @@ runs. Frames already in <out> are skipped, so it can be stopped and restarted.
 Usage (from the main folder, with the old data as CASSINI_DATA as usual):
     python "helper programs/convert_archive.py" OUT [--years 2002 2003] [--limit N]
         [--table auto|raw|png] [--downloads 4] [--dry-run] [--add-missing [--volumes COISS_2009 ...]]
+        [--bundles DIR [--work DIR] [--keep-bundles] [--only-volumes COISS_2077 ...]] [--pds-index DIR]
 """
 import argparse
 import csv
@@ -42,7 +47,9 @@ import datetime
 import gzip
 import os
 import re
+import shutil
 import sys
+import tarfile
 import threading
 import time
 import urllib.request
@@ -62,6 +69,9 @@ INDEXES = {
     "COISS_1xxx": f"{PDS}/COISS_1xxx/COISS_1009/index/cumindex",
     "COISS_2xxx": f"{PDS}/COISS_2xxx/COISS_2116/index/cumindex",
 }
+# NASA's JPL mirror (PDS Imaging node) has every volume as one .tar.gz, which is far faster
+# than fetching frames one by one and isn't behind the Rings node's throttling
+BUNDLES = "https://planetarydata.jpl.nasa.gov/img/data/cassini/cassini_orbiter/{volume}.tar.gz"
 FORMAT = "lut8 v1\nPNG values are Cassini ISS 8-bit codes; DN = calibration.LUT[code]. No stretch.\n"
 USER_AGENT = "Cassini-Project archive converter (github.com/siacavazzi/Cassini-Project)"
 MIDS = (cal.LUT[:-1] + cal.LUT[1:]) / 2
@@ -203,6 +213,7 @@ class Converter:
         # data_source shares one zip file handle per process, so reads must not overlap
         self.read_lock = threading.Lock()
         self.pds = None
+        self.local = None  # with --bundles: the folder the current volume was unpacked into
         path = os.path.join(out, "manifest.csv")
         new = not os.path.exists(path) or os.path.getsize(path) == 0
         self.manifest = open(path, "a", newline="")
@@ -232,6 +243,11 @@ class Converter:
         if row is None:
             raise LookupError(f"{fid} is not in the PDS index")
         location = row["location"][:-4] + ext
+        if self.local:
+            # unpacked volumes use lower-case folder names: coiss_2001/data/...
+            volume, rest = location.split("/", 1)
+            shutil.copyfile(os.path.join(self.local, volume.lower(), rest), png_out[:-4] + ext)
+            return 0
         return fetch(f"{PDS}/{series_of(location)}/{location}", png_out[:-4] + ext)
 
     def convert(self, frame):
@@ -386,6 +402,93 @@ def plan(out, years, limit, add_missing=False, volumes=None, pds=None):
     return frames
 
 
+"""
+Downloads one volume's .tar.gz and unpacks just the given frames' IMG and LBL files into
+work/<volume>/data/... Returns the bytes downloaded.
+"""
+def fetch_bundle(volume, bundles, work, fids):
+    tgz = os.path.join(bundles, volume.lower() + ".tar.gz")
+    size = 0
+    if not os.path.exists(tgz):
+        size = fetch(BUNDLES.format(volume=volume.lower()), tgz)
+    wanted = {fid + ext for fid in fids for ext in (".IMG", ".LBL")}
+    with tarfile.open(tgz, "r|gz") as tar:
+        for member in tar:
+            name = os.path.basename(member.name)
+            if member.isfile() and "/data/" in member.name and name in wanted:
+                member.name = os.path.normpath(member.name).lstrip("/")
+                if member.name.startswith(".."):
+                    continue
+                try:
+                    tar.extract(member, work, set_attrs=False, filter="data")
+                except TypeError:  # Python before 3.11.4 has no filter
+                    tar.extract(member, work, set_attrs=False)
+    return size
+
+
+"""
+--bundles: works volume by volume. The next volume downloads while this one converts;
+each volume's .tar.gz and unpacked files are deleted once its frames are done
+(unless --keep-bundles). Frames NASA's index doesn't place in a volume are done
+the usual way at the end.
+"""
+def run_bundles(converter, frames, args, out, errors):
+    by_volume = {}
+    for frame in frames:
+        fid = os.path.basename(frame["png"]).split(".")[0]
+        row = converter.pds.get(fid)
+        by_volume.setdefault(row["VOLUME_ID"] if row else None, []).append(frame)
+    volumes = sorted(v for v in by_volume if v)
+    bundles = os.path.abspath(args.bundles)
+    work = os.path.abspath(args.work or os.path.join(out, "unpacked"))
+    os.makedirs(bundles, exist_ok=True)
+
+    def prepare(volume):
+        fids = [os.path.basename(f["png"]).split(".")[0] for f in by_volume[volume]]
+        folder = os.path.join(work, volume.lower() + ".tmp")
+        shutil.rmtree(folder, ignore_errors=True)
+        size = fetch_bundle(volume, bundles, folder, fids)
+        return folder, size
+
+    start, done, failed, total_bytes = time.time(), 0, 0, 0
+    with ThreadPoolExecutor(1) as downloader:
+        upcoming = downloader.submit(prepare, volumes[0]) if volumes else None
+        for i, volume in enumerate(volumes):
+            try:
+                folder, size = upcoming.result()
+            except Exception as e:
+                folder = None
+                for frame in by_volume[volume]:
+                    errors.write(f"{frame['png']}\t{volume} bundle: {type(e).__name__}: {e}\n")
+                failed += len(by_volume[volume])
+                errors.flush()
+            if i + 1 < len(volumes):
+                upcoming = downloader.submit(prepare, volumes[i + 1])
+            if folder is None:
+                continue
+            total_bytes += size
+            converter.local = folder
+            with ThreadPoolExecutor(max(1, args.workers)) as pool:
+                futures = {pool.submit(converter.convert, f): f for f in by_volume[volume]}
+                for future in as_completed(futures):
+                    try:
+                        future.result()
+                        done += 1
+                    except Exception as e:
+                        failed += 1
+                        errors.write(f"{futures[future]['png']}\t{type(e).__name__}: {e}\n")
+                        errors.flush()
+            converter.local = None
+            shutil.rmtree(folder, ignore_errors=True)
+            if not args.keep_bundles:
+                os.remove(os.path.join(bundles, volume.lower() + ".tar.gz"))
+            elapsed = time.time() - start
+            print(f"{volume}: {len(by_volume[volume])} frames. Total {done + failed}/{len(frames)} done, "
+                  f"{failed} failed, {total_bytes / 1e9:.1f} GB downloaded at "
+                  f"{total_bytes / max(elapsed, 1e-9) / 1e6:.1f} MB/s, {elapsed / 3600:.1f} h so far", flush=True)
+    return by_volume.get(None, []), done, failed
+
+
 def main():
     parser = argparse.ArgumentParser(description=__doc__, formatter_class=argparse.RawDescriptionHelpFormatter)
     parser.add_argument("out")
@@ -399,6 +502,15 @@ def main():
                         help="also fetch frames the drive is missing (labels too), adding new ones to Image_index_added.csv")
     parser.add_argument("--volumes", nargs="*", help="with --add-missing: only add unindexed frames from these "
                         "PDS volumes, e.g. COISS_2009 COISS_2010")
+    parser.add_argument("--bundles", help="download whole volumes (.tar.gz from NASA's JPL mirror) into this "
+                        "folder instead of frame by frame; every 8-bit frame then comes from its raw file")
+    parser.add_argument("--work", help="with --bundles: where volumes are unpacked (default OUT/unpacked); "
+                        "use a fast disk, not exFAT")
+    parser.add_argument("--keep-bundles", action="store_true", help="with --bundles: keep each .tar.gz")
+    parser.add_argument("--only-volumes", nargs="*", help="with --bundles: only do frames in these volumes")
+    parser.add_argument("--pds-index", help="copy NASA's index tables from this folder (e.g. an earlier "
+                        "run's OUT/pds_index) instead of downloading them")
+    parser.add_argument("--workers", type=int, default=4, help="with --bundles: frames converted at once")
     args = parser.parse_args()
 
     out = os.path.abspath(args.out)
@@ -409,10 +521,16 @@ def main():
         with open(os.path.join(out, folder, "FORMAT.txt"), "w") as f:
             f.write(FORMAT)
 
-    converter = Converter(out, args.table, args.add_missing)
+    # a whole volume is downloaded anyway, so 8-bit frames come from their raw files
+    converter = Converter(out, "raw" if args.bundles else args.table, args.add_missing)
+    if args.pds_index and not os.path.isdir(os.path.join(out, "pds_index")):
+        shutil.copytree(args.pds_index, os.path.join(out, "pds_index"))
     # NASA's index says where each frame is and (for the counts below) its type
     converter.pds = pds_index(out, full=args.add_missing)
     frames = plan(out, args.years, args.limit, args.add_missing, args.volumes, converter.pds)
+    if args.only_volumes:
+        frames = [f for f in frames if (converter.pds.get(os.path.basename(f["png"]).split(".")[0]) or {})
+                  .get("VOLUME_ID") in args.only_volumes]
     counts = pd.Series([f["conversion"] or "?" for f in frames]).value_counts().to_dict() if frames else {}
     downloads = sum(bool(converter.needs_download(f)) for f in frames)
     missing = sum(bool(f.get("missing")) for f in frames)
@@ -421,8 +539,15 @@ def main():
     if args.dry_run or not frames:
         return
 
-    start, done, failed, total_bytes = time.time(), 0, 0, 0
     errors = open(os.path.join(out, "errors.txt"), "a")
+    done_bundles = failed_bundles = 0
+    if args.bundles:
+        frames, done_bundles, failed_bundles = run_bundles(converter, frames, args, out, errors)
+        converter.table_source = args.table  # the rest aren't in any volume: done the usual way
+        if not frames:
+            print(f"Finished: {done_bundles} converted, {failed_bundles} failed (see errors.txt; rerun to retry them)")
+            return
+    start, done, failed, total_bytes = time.time(), 0, 0, 0
     with ThreadPoolExecutor(max(1, args.downloads)) as pool:
         futures = {pool.submit(converter.convert, f): f for f in frames}
         for future in as_completed(futures):
@@ -440,7 +565,8 @@ def main():
                 left = (len(frames) - done - failed) * elapsed / (done + failed)
                 print(f"{done + failed}/{len(frames)} done, {failed} failed, {total_bytes / 1e9:.2f} GB at "
                       f"{rate:.1f} MB/s, about {left / 3600:.1f} h left", flush=True)
-    print(f"Finished: {done} converted, {failed} failed (see errors.txt; rerun to retry them)")
+    print(f"Finished: {done + done_bundles} converted, {failed + failed_bundles} failed "
+          f"(see errors.txt; rerun to retry them)")
 
 
 if __name__ == "__main__":
