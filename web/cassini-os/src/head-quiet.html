@@ -1,0 +1,849 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1,viewport-fit=cover">
+<title>Cassini OS Quiet</title>
+<meta name="claude:viewport-fit-sides" content="cover">
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Silkscreen&family=Share+Tech+Mono&display=swap">
+<style>
+/* Cassini OS: the replay as 2003-2005 desktop software looking out at a neon instrument view.
+   Chrome (menu bar, windows, dock, LCD) is metal grey, LCD green-grey and one Aqua blue.
+   Everything drawn in space (orbits, trail, camera cone, body tags) is a phosphor HUD with a glow. */
+:root {
+  color-scheme: dark;
+  --ui: "Lucida Grande", "Lucida Sans Unicode", "Lucida Sans", Verdana, Tahoma, sans-serif;
+  --pixel: "Silkscreen", "Lucida Grande", Verdana, monospace;
+  --hudf: "Share Tech Mono", ui-monospace, Menlo, monospace;
+  --ink: #1d1d1d;
+  --ink-2: #5a5a5a;
+  --edge: #7d7d7d;
+  --aqua-1: #c9e3fb; --aqua-2: #8cbff0; --aqua-3: #5b9de4; --aqua-4: #97d3ff;
+  --select: #3875d7;
+  --zebra: #edf3fe;
+  --lcd-1: #eef0e2; --lcd-2: #d4d9c2; --lcd-ink: #2a2e22; --lcd-ink-2: #5d6450;
+  --neon: #3dff8f;
+  --neon-2: #4fe6ff;
+
+  /* 3D + timeline */
+  --gl-clear: #000000;
+  --gl-fov: #4fe6ff; --gl-fov-w: #3dff8f;
+  --gl-trail: 0.31,0.90,1.0;
+  --gl-mk-cassini: 0.31,0.90,1.0; --gl-mk-titan: 1.0,0.71,0.28; --gl-mk: 0.24,1.0,0.56;
+  --gl-orbit: #1fd46e; --gl-orbit-titan: #ff9f2e;
+  --tl-grid: rgba(42,46,34,0.16); --tl-text: #4d5442; --tl-font: 400 8px Silkscreen, monospace; --tl-efont: 400 8px Silkscreen, monospace;
+  --tl-n: rgba(42,46,34,0.78); --tl-w: rgba(42,46,34,0.38); --tl-axis: rgba(42,46,34,0.35);
+  --tl-ms: #1d2016; --tl-sat: rgba(42,46,34,0.35); --tl-titan: #8a5a1c; --tl-other: #3e4535; --tl-now: #1d2016; --tl-now-glow: transparent;
+  --tl-bar-style: dots;
+}
+* { box-sizing: border-box; }
+html, body { height: 100%; margin: 0; }
+[hidden] { display: none !important; }
+body { background: #000; color: var(--ink); font: 11px/1.35 var(--ui); overflow: hidden; -webkit-font-smoothing: antialiased; user-select: none; }
+#app { position: fixed; inset: 0; }
+#gl, #hud, #glow { position: absolute; inset: 0; width: 100%; height: 100%; display: block; }
+#gl { touch-action: none; }
+#hud, #glow { pointer-events: none; mix-blend-mode: screen; }
+body.nohud #hud, body.nohud #glow, body.nohud #hudline, body.nohud #reticle { display: none; }
+#labels { position: absolute; inset: 0; pointer-events: none; overflow: hidden; }
+
+/* ---------- HUD tags for bodies ---------- */
+.lbl { position: absolute; left: 0; top: 0; font: 11px/1.15 var(--hudf); color: var(--neon); text-transform: uppercase; letter-spacing: .06em; white-space: nowrap;
+  pointer-events: auto; cursor: pointer; padding: 1px 4px 1px 18px; text-shadow: 0 0 6px rgba(61,255,143,.7); }
+.lbl::before { content: ""; position: absolute; left: 2px; top: 7px; width: 12px; height: 1px; background: currentColor; box-shadow: 0 0 4px currentColor; }
+.lbl small { display: block; font-size: 9.5px; color: rgba(61,255,143,.62); text-shadow: none; letter-spacing: .04em; }
+.lbl.cassini { color: var(--neon-2); text-shadow: 0 0 6px rgba(79,230,255,.7); }
+.lbl.cassini small { color: rgba(79,230,255,.6); }
+.lbl.focus { color: #eafff2; }
+.lbl.probe { color: #ffd08c; text-shadow: 0 0 6px rgba(255,190,90,.7); }
+#probe[hidden] { display: none; }
+.lbl:hover { color: #fff; }
+#reticle { position: absolute; left: 0; top: 0; pointer-events: none; }
+#reticle::before, #reticle::after { content: ""; position: absolute; inset: 0;
+  background:
+    linear-gradient(var(--neon), var(--neon)) left top / 10px 1.5px no-repeat, linear-gradient(var(--neon), var(--neon)) left top / 1.5px 10px no-repeat,
+    linear-gradient(var(--neon), var(--neon)) right top / 10px 1.5px no-repeat, linear-gradient(var(--neon), var(--neon)) right top / 1.5px 10px no-repeat,
+    linear-gradient(var(--neon), var(--neon)) left bottom / 10px 1.5px no-repeat, linear-gradient(var(--neon), var(--neon)) left bottom / 1.5px 10px no-repeat,
+    linear-gradient(var(--neon), var(--neon)) right bottom / 10px 1.5px no-repeat, linear-gradient(var(--neon), var(--neon)) right bottom / 1.5px 10px no-repeat;
+  filter: drop-shadow(0 0 3px var(--neon)); }
+#reticle::after { inset: -7px; opacity: .3; animation: lock 2.4s ease-in-out infinite; }
+@keyframes lock { 50% { inset: -2px; opacity: .75; } }
+#hudline { position: absolute; top: calc(env(safe-area-inset-top, 0px) + 32px); left: 50%; transform: translateX(-50%); pointer-events: none;
+  font: 11px/1 var(--hudf); letter-spacing: .12em; color: var(--neon); text-shadow: 0 0 6px rgba(61,255,143,.7); white-space: nowrap; display: flex; gap: 22px; }
+#hudline span { color: rgba(61,255,143,.55); margin-right: 6px; }
+
+/* ---------- menu bar ---------- */
+#menubar { position: absolute; top: 0; left: 0; right: 0; height: calc(22px + env(safe-area-inset-top, 0px)); padding: env(safe-area-inset-top, 0px) max(10px, env(safe-area-inset-right, 0px)) 0 max(10px, env(safe-area-inset-left, 0px));
+  display: flex; align-items: stretch; background: linear-gradient(rgba(250,250,250,.95), rgba(222,222,222,.95)); border-bottom: 1px solid #6e6e6e; box-shadow: 0 1px 6px rgba(0,0,0,.5); z-index: 1000; font: 14px/22px var(--ui); color: #111; }
+.menu { position: relative; }
+.menu > button { all: unset; padding: 0 10px; height: 22px; cursor: default; }
+.menu.app > button { font-weight: bold; display: flex; align-items: center; gap: 6px; }
+.menu.app svg { width: 20px; height: 14px; }
+.menu.open > button { background: var(--select); color: #fff; }
+.menu.open > button svg * { stroke: #fff; fill: #fff; }
+.menu.open > button svg ellipse, .menu.open > button svg path { fill: none; }
+.menu ul { display: none; position: absolute; top: 22px; left: 0; min-width: 210px; margin: 0; padding: 4px 0; list-style: none; background: rgba(255,255,255,.97);
+  border: 1px solid #9a9a9a; border-top: 0; border-radius: 0 0 5px 5px; box-shadow: 0 8px 20px rgba(0,0,0,.45); font-size: 14px; }
+.menu.open ul { display: block; }
+.menu li button { all: unset; box-sizing: border-box; width: 100%; display: flex; gap: 6px; padding: 1px 18px 1px 6px; cursor: default; white-space: nowrap; }
+.menu li button::before { content: ""; width: 14px; text-align: center; }
+.menu li button[aria-checked="true"]::before { content: "✓"; }
+.menu li button:hover, .menu li button:focus-visible { background: var(--select); color: #fff; }
+.menu li.sep { height: 1px; margin: 4px 0; background: #d6d6d6; }
+.menu li .kbd { margin-left: auto; padding-left: 20px; color: #7a7a7a; }
+.menu li button:hover .kbd { color: #dbe8ff; }
+.menuright { margin-left: auto; display: flex; align-items: center; gap: 12px; font-size: 13px; }
+#tray { display: flex; gap: 4px; min-width: 1px; }
+#tray button { all: unset; font: 10px/1 var(--ui); padding: 3px 8px; border-radius: 9px; border: 1px solid #6f8fb8; cursor: default;
+  background: linear-gradient(var(--aqua-1), var(--aqua-2) 50%, var(--aqua-3) 50%, var(--aqua-4)); color: #04203e; }
+#mclock { font-variant-numeric: tabular-nums; white-space: pre; }
+
+/* ---------- windows ---------- */
+.win { position: absolute; background: #fff; border: 1px solid #555; border-radius: 6px 6px 4px 4px; overflow: hidden;
+  box-shadow: 0 14px 34px rgba(0,0,0,.55), 0 0 0 .5px rgba(0,0,0,.4); display: flex; flex-direction: column; pointer-events: auto; z-index: 10; }
+.win.front { box-shadow: 0 20px 44px rgba(0,0,0,.7), 0 0 0 .5px rgba(0,0,0,.4); }
+.titlebar { height: 22px; flex: none; display: flex; align-items: center; justify-content: center; position: relative; cursor: default; touch-action: none;
+  background: linear-gradient(#ececec, #d3d3d3); border-bottom: 1px solid #8f8f8f; font: 13px/1 var(--ui); color: #262626; text-shadow: 0 1px 0 rgba(255,255,255,.7); }
+.win:not(.front) .titlebar { color: #7a7a7a; }
+.lights { position: absolute; left: 8px; top: 4px; display: flex; gap: 7px; }
+.lights button { all: unset; width: 13px; height: 13px; border-radius: 50%; display: grid; place-items: center; font: bold 10px/1 var(--ui); color: transparent; cursor: default;
+  background: radial-gradient(circle at 50% 28%, rgba(255,255,255,.95) 0 16%, transparent 46%), radial-gradient(circle at 50% 78%, var(--l1), var(--l2) 72%);
+  box-shadow: inset 0 0 0 .5px rgba(0,0,0,.5), 0 1px 0 rgba(255,255,255,.6); }
+.lights .close { --l1: #ff8f86; --l2: #c8352b; }
+.lights .min { --l1: #ffe07a; --l2: #c98e12; }
+.lights .zoom { --l1: #9de88a; --l2: #3c9a2a; }
+.win:not(.front) .lights button { --l1: #d9dadc; --l2: #9da1a7; }
+.lights:hover button { color: rgba(60,0,0,.65); }
+.lights:hover .min { color: rgba(80,50,0,.7); }
+.lights:hover .zoom { color: rgba(0,50,0,.65); }
+.lights button:focus-visible { outline: 2px solid var(--aqua-3); }
+.win.shaded > :not(.titlebar) { display: none; }
+
+/* camera inspector */
+#imgcard { top: calc(env(safe-area-inset-top, 0px) + 36px); left: max(14px, env(safe-area-inset-left, 0px)); width: 268px; }
+#imgcard.zoomed { width: 420px; }
+#imgcard .body { padding: 10px 12px 11px; display: grid; gap: 9px; background: linear-gradient(#f4f4f4, #e6e6e6); }
+.well { height: 120px; border: 1px solid #8d8d8d; border-top-color: #6c6c6c; box-shadow: inset 0 1px 3px rgba(0,0,0,.35); border-radius: 2px; position: relative; overflow: hidden;
+  background: #050805; display: grid; place-items: center; color: rgba(61,255,143,.7); font: 10px/1.4 var(--hudf); text-align: center; text-transform: uppercase; letter-spacing: .06em; }
+#imgcard.zoomed .well { height: 236px; }
+/* real frames: the well goes square and the frame fills it */
+.well.has-frame, #imgcard.zoomed .well.has-frame { height: auto; aspect-ratio: 1; }
+.well #shot { position: absolute; inset: 0; width: 100%; height: 100%; object-fit: contain; display: none; background: #000; }
+.well.has-frame #shot { display: block; }
+.well.has-frame #wellmsg { display: none; }
+.well.stale #shot { opacity: .55; }
+#shottag { position: absolute; left: 5px; bottom: 4px; font: 9px/1 var(--hudf); color: rgba(61,255,143,.85); text-shadow: 0 0 3px #000, 0 0 6px #000; display: none; }
+.well.has-frame #shottag { display: block; }
+.well b { display: block; color: var(--neon); font-weight: normal; font-size: 12px; text-shadow: 0 0 6px rgba(61,255,143,.7); }
+.info { display: grid; grid-template-columns: 62px 1fr; gap: 3px 8px; margin: 0; }
+.info dt { font-weight: bold; color: #555; text-align: right; }
+.info dd { margin: 0; overflow-wrap: anywhere; }
+.led { display: inline-block; width: 8px; height: 8px; border-radius: 50%; margin-right: 5px; vertical-align: -1px;
+  background: radial-gradient(circle at 35% 30%, #fff 0 12%, #9a9a9a 40%, #5b5b5b); box-shadow: inset 0 0 0 .5px rgba(0,0,0,.5); }
+#imgcard.live .led { background: radial-gradient(circle at 35% 30%, #fff 0 12%, #6fe36f 40%, #1c8f1c); box-shadow: 0 0 5px #5ee85e, inset 0 0 0 .5px rgba(0,0,0,.4); }
+
+/* moments list */
+#moments { top: calc(env(safe-area-inset-top, 0px) + 36px); right: max(14px, env(safe-area-inset-right, 0px)); width: 340px; height: min(470px, calc(100% - 300px)); }
+#moments.zoomed { width: 440px; height: calc(100% - 290px); }
+#moments.shaded { height: auto; }
+.colhead { display: grid; grid-template-columns: 58px 1fr 76px; flex: none; background: linear-gradient(#fdfdfd, #e9e9e9 55%, #dcdcdc); border-bottom: 1px solid #a5a5a5; font-size: 11px; }
+.colhead span { padding: 2px 6px; border-right: 1px solid #c5c5c5; }
+.colhead span:last-child { border-right: 0; }
+.colhead .sorted { background: linear-gradient(#cfe3fa, #a3c7ef 55%, #8db7e8); }
+#mlist { list-style: none; margin: 0; padding: 0; overflow-y: auto; flex: 1; min-height: 0; background: repeating-linear-gradient(#fff 0 36px, var(--zebra) 36px 72px); }
+#mlist li:nth-child(even) { background: var(--zebra); }
+#mlist button { all: unset; box-sizing: border-box; width: 100%; height: 36px; display: grid; grid-template-columns: 58px 1fr 76px; grid-template-rows: auto auto; align-content: center; cursor: default; }
+#mlist button > span { padding: 0 6px; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+#mlist .d { grid-row: span 2; align-self: center; color: var(--ink-2); }
+#mlist .t { grid-column: 2; }
+#mlist .s { grid-column: 2; font-size: 10px; color: #7a7a7a; }
+#mlist .sc { grid-column: 3; grid-row: 1 / span 2; align-self: center; color: #6b6b6b; font-size: 10px; text-overflow: clip; }
+#mlist li.ms .t { font-weight: bold; }
+#mlist li.past .t, #mlist li.past .d { color: #9b9b9b; }
+#mlist li.next { background: var(--select) !important; }
+#mlist li.next span { color: #fff !important; }
+#mlist button:focus-visible { outline: 2px solid var(--aqua-3); outline-offset: -2px; }
+#moments footer { flex: none; height: 20px; display: grid; place-items: center; font-size: 10px; color: #3a3a3a; background: linear-gradient(#e2e2e2, #c7c7c7); border-top: 1px solid #8f8f8f; }
+
+/* ---------- the main window: brushed metal, docked at the bottom ---------- */
+#dock { left: max(10px, env(safe-area-inset-left, 0px)); right: max(10px, env(safe-area-inset-right, 0px)); bottom: calc(env(safe-area-inset-bottom, 0px) + 10px);
+  border: 1px solid #4a4a4a; border-radius: 7px; box-shadow: 0 16px 40px rgba(0,0,0,.6);
+  background: repeating-linear-gradient(90deg, rgba(255,255,255,.05) 0 1px, rgba(0,0,0,.025) 1px 2px, rgba(255,255,255,.035) 2px 4px, rgba(0,0,0,.02) 4px 7px),
+              linear-gradient(#e2e2e2, #c6c6c6 45%, #b4b4b4); }
+#dock .titlebar { background: none; border: 0; }
+#dock.zoomed #tl { height: 150px; }
+.toolbar { display: grid; grid-template-columns: minmax(0, auto) minmax(0, 1fr) minmax(0, auto); gap: 12px; align-items: stretch; padding: 0 12px 8px; }
+.col { display: flex; flex-direction: column; justify-content: space-between; gap: 6px; min-width: 0; }
+.col.right { width: 250px; }
+.colrow { display: flex; gap: 6px; align-items: center; }
+.colrow.fill > * { flex: 1; }
+.nowcam { border: 1px solid #8a8a8a; border-radius: 4px; padding: 4px 8px 5px; background: linear-gradient(#f6f6f6, #e3e3e3); box-shadow: inset 0 1px 2px rgba(0,0,0,.15); font-size: 11px; line-height: 1.35; min-height: 44px; }
+.nowcam .cap2 { font-size: 9px; text-transform: uppercase; letter-spacing: .08em; color: #6a6a6a; }
+
+/* gel buttons */
+.seg { display: flex; border: 1px solid var(--edge); border-radius: 11px; overflow: hidden; box-shadow: 0 1px 0 rgba(255,255,255,.6); }
+.seg .btn { flex: 1; }
+.btn { all: unset; box-sizing: border-box; font: 11px/1 var(--ui); color: var(--ink); padding: 4px 9px; cursor: default; white-space: nowrap; text-align: center;
+  background: linear-gradient(#fdfdfd, #ececec 50%, #dcdcdc 50%, #f3f3f3); text-shadow: 0 1px 0 rgba(255,255,255,.7); }
+.seg .btn + .btn { border-left: 1px solid #9a9a9a; }
+.btn:active { background: linear-gradient(#cfcfcf, #bcbcbc 50%, #ababab 50%, #cbcbcb); }
+.btn[aria-pressed="true"] { background: linear-gradient(var(--aqua-1), var(--aqua-2) 50%, var(--aqua-3) 50%, var(--aqua-4)); color: #04203e; text-shadow: 0 1px 0 rgba(255,255,255,.45); }
+.btn:focus-visible { box-shadow: 0 0 0 3px rgba(91,157,228,.7); }
+.pill { border: 1px solid var(--edge); border-radius: 11px; box-shadow: 0 1px 0 rgba(255,255,255,.6); }
+.round { border: 1px solid #5d5d5d; border-radius: 50%; padding: 0; display: grid; place-items: center;
+  background: radial-gradient(ellipse 70% 45% at 50% 22%, rgba(255,255,255,.95), rgba(255,255,255,0) 70%), linear-gradient(#f1f1f1, #cfcfcf 55%, #b9b9b9);
+  box-shadow: 0 1px 0 rgba(255,255,255,.6), inset 0 -2px 4px rgba(0,0,0,.12); }
+#play { width: 48px; height: 48px; font-size: 14px; }
+.skip { width: 34px; height: 34px; font-size: 9px; letter-spacing: -2px; }
+.transport { display: flex; align-items: center; justify-content: center; gap: 10px; flex: 1; }
+
+/* LCD read-out with the clock and the scrubber */
+.lcd { min-width: 0; border-radius: 8px; padding: 6px 12px; border: 1px solid #6a6a6a; border-top-color: #4b4b4b;
+  background: linear-gradient(var(--lcd-1), var(--lcd-2)); box-shadow: inset 0 2px 4px rgba(0,0,0,.28), 0 1px 0 rgba(255,255,255,.65); color: var(--lcd-ink); text-align: center; display: grid; gap: 1px; }
+.lcd .clock { font: bold 13px/1.25 var(--ui); font-variant-numeric: tabular-nums; }
+.lcd .clock small { font-weight: normal; font-size: 11px; color: var(--lcd-ink-2); margin-left: 4px; }
+.lcd .sub { font-size: 11px; color: var(--lcd-ink-2); white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+.lcd .sub b { color: var(--lcd-ink); }
+#tl { width: 100%; height: 76px; display: block; cursor: default; touch-action: none; margin-top: 3px; }
+.legend { display: flex; flex-wrap: wrap; gap: 4px 12px; align-items: center; justify-content: space-between; font-size: 10px; color: var(--lcd-ink-2); padding-top: 2px; }
+.legend .keys { display: flex; flex-wrap: wrap; gap: 4px 10px; }
+.legend i { display: inline-block; width: 8px; height: 8px; margin-right: 4px; vertical-align: -1px; border: 1px solid rgba(0,0,0,.25); }
+.legend b { color: var(--lcd-ink); }
+.swatch { display: inline-block; width: 9px; height: 9px; margin-right: 5px; vertical-align: -1px; border: 1px solid rgba(0,0,0,.3); }
+
+/* mission progress: Aqua bar */
+.progress { height: 14px; border: 1px solid #6b6b6b; border-radius: 7px; overflow: hidden; background: linear-gradient(#cfcfcf, #f4f4f4); box-shadow: inset 0 1px 2px rgba(0,0,0,.25); }
+.progress i { display: block; height: 100%; width: 0; border-radius: 7px 0 0 7px;
+  background: repeating-linear-gradient(-45deg, rgba(255,255,255,.22) 0 7px, transparent 7px 14px), linear-gradient(var(--aqua-1), var(--aqua-2) 50%, var(--aqua-3) 50%, var(--aqua-4)); }
+.progress-cap { display: flex; justify-content: space-between; margin-top: 3px; font-size: 10px; color: #3d3d3d; text-shadow: 0 1px 0 rgba(255,255,255,.6); }
+
+/* body picker: one segmented control across the full width */
+#focusrow { display: flex; margin: 0 12px 8px; border: 1px solid var(--edge); border-radius: 4px; overflow-x: auto; scrollbar-width: none; box-shadow: 0 1px 0 rgba(255,255,255,.55); }
+#focusrow::-webkit-scrollbar { display: none; }
+#focusrow .btn { flex: 1 0 auto; padding: 4px 8px; }
+#focusrow .btn + .btn { border-left: 1px solid #9a9a9a; }
+
+.statusbar { height: 18px; display: flex; align-items: center; gap: 6px; padding: 0 10px; font-size: 10px; color: #3d3d3d; border-top: 1px solid #9a9a9a;
+  background: linear-gradient(#cfcfcf, #bdbdbd); text-shadow: 0 1px 0 rgba(255,255,255,.5); white-space: nowrap; overflow: hidden; }
+.statusbar span { overflow: hidden; text-overflow: ellipsis; }
+.statusbar b { margin-left: auto; font-weight: normal; flex: none; }
+
+#mtoggle { display: none; }
+#loading { position: absolute; inset: 0; display: grid; place-items: center; background: #000; color: var(--neon); font: 12px/1.6 var(--hudf); text-transform: uppercase; letter-spacing: .1em; text-align: center; padding: 0 24px; z-index: 2000; text-shadow: 0 0 6px rgba(61,255,143,.7); }
+#loading .bar { width: 200px; height: 12px; margin: 12px auto 0; border: 1px solid #555; border-radius: 6px; overflow: hidden;
+  background: repeating-linear-gradient(-45deg, var(--aqua-3) 0 8px, var(--aqua-2) 8px 16px); background-size: 22px 22px; animation: barber 1s linear infinite; }
+@keyframes barber { to { background-position: 22px 0; } }
+
+@media (max-width: 600px) {
+  #hudline, .menu:not(.app), .statusbar, .progress, .progress-cap { display: none; }
+  #imgcard { width: 46vw; top: calc(env(safe-area-inset-top, 0px) + 30px); left: 8px; }
+  #imgcard .info { display: none; }
+  .toolbar { grid-template-columns: 1fr; }
+  .col, .col.right { width: auto; flex-direction: row; flex-wrap: wrap; justify-content: center; }
+  #moments { top: auto; bottom: 300px; left: max(10px, env(safe-area-inset-left, 0px)); right: max(10px, env(safe-area-inset-right, 0px)); width: auto; height: 38%; }
+  #moments.closed { display: none; }
+  #mtoggle { display: inline-block; }
+}
+@media (prefers-reduced-motion: reduce) { #loading .bar, #reticle::after { animation: none; } }
+
+/* ---------- Aero glass: the empty metal becomes Vista-style frosted glass over space ----------
+   Window frames, the dock body, title bars and status bars are pale see-through glass with a big glossy
+   reflection; captions are dark with a soft white glow, as on Vista. The controls (buttons, LCD, list,
+   read-outs) stay solid Mac OS objects sitting on the glass. */
+body.glass {
+  --glass-tint: rgba(104, 172, 240, .50);
+  --glass-soft: 0 1px 0 rgba(255,255,255,.55), 0 0 4px rgba(255,255,255,.6);
+  --glass-ink: #0d1726;
+  --glass-ink-2: #1f3550;
+  --glass-glow: 0 0 2px #fff, 0 0 6px rgba(255,255,255,.95), 0 0 12px rgba(255,255,255,.8);
+}
+body.glass .win, body.glass #dock {
+  background:
+    radial-gradient(ellipse 70% 120px at 18% -30px, rgba(255,255,255,.62), rgba(255,255,255,0) 100%),
+    linear-gradient(112deg, transparent 0 14%, rgba(255,255,255,.20) 14% 20%, transparent 20% 23%, rgba(255,255,255,.13) 23% 25.5%, transparent 25.5% 58%, rgba(255,255,255,.12) 58% 66%, transparent 66% 70%, rgba(255,255,255,.08) 70% 71.5%, transparent 71.5%),
+    linear-gradient(rgba(255,255,255,.30), rgba(255,255,255,.10) 30px, rgba(255,255,255,0) 31px, rgba(255,255,255,.08)),
+    var(--glass-tint);
+  -webkit-backdrop-filter: blur(6px) saturate(1.6) brightness(1.25);
+  backdrop-filter: blur(6px) saturate(1.6) brightness(1.25);
+  border: 1px solid rgba(12, 28, 52, .9); border-radius: 8px 8px 6px 6px;
+  box-shadow: inset 0 0 0 1px rgba(255,255,255,.75), inset 0 0 0 2px rgba(255,255,255,.18), 0 10px 30px rgba(0,0,0,.55);
+  color: var(--glass-ink);
+}
+body.glass .win.front { box-shadow: inset 0 0 0 1px rgba(255,255,255,.85), inset 0 0 0 2px rgba(255,255,255,.22), 0 0 26px rgba(150,205,255,.35), 0 16px 40px rgba(0,0,0,.7); }
+body.glass .titlebar { background: none; border-bottom: 0; color: var(--glass-ink); text-shadow: var(--glass-glow); font-size: 13.5px; }
+body.glass .win:not(.front) .titlebar { color: var(--glass-ink-2); }
+/* panes inset in the glass, framed the Vista way: dark hairline outside, white highlight around it */
+body.glass .well, body.glass .lcd, body.glass .nowcam, body.glass #mlist, body.glass #moments .colhead {
+  border-color: rgba(10, 24, 44, .85);
+}
+body.glass .well, body.glass .lcd, body.glass .nowcam { box-shadow: inset 0 2px 4px rgba(0,0,0,.3), 0 0 0 1px rgba(255,255,255,.6); }
+/* the camera window: the frame read-out sits on the glass */
+body.glass #imgcard .body { background: none; padding: 2px 9px 10px; }
+body.glass .info dt { color: var(--glass-ink-2); text-shadow: var(--glass-soft); }
+body.glass .info dd { color: var(--glass-ink); text-shadow: var(--glass-soft); }
+/* the moments list: a white pane inside the glass frame */
+body.glass #moments .colhead, body.glass #mlist { margin: 0 8px; }
+body.glass #moments .colhead { border: 1px solid rgba(10,24,44,.85); border-bottom-color: #a5a5a5; border-radius: 3px 3px 0 0; color: var(--ink); }
+body.glass #mlist { background: #fff; border: 1px solid rgba(10,24,44,.85); border-top: 0; color: var(--ink); box-shadow: 0 0 0 1px rgba(255,255,255,.6); }
+body.glass #mlist li:nth-child(even) { background: var(--zebra); }
+body.glass #moments footer { background: none; border-top: 0; color: var(--glass-ink); text-shadow: var(--glass-glow); height: 24px; }
+/* dock: captions on the glass */
+body.glass .nowcam { color: var(--ink); }
+body.glass .progress-cap { color: var(--glass-ink); text-shadow: var(--glass-soft); }
+body.glass .statusbar { background: linear-gradient(rgba(255,255,255,.28), rgba(255,255,255,.12)); border-top: 1px solid rgba(255,255,255,.55); color: var(--glass-ink); text-shadow: var(--glass-soft); }
+body.glass #focusrow, body.glass .seg, body.glass .pill { border-color: rgba(10,24,44,.75); box-shadow: 0 0 0 1px rgba(255,255,255,.45); }
+body.glass .round { border-color: rgba(10,24,44,.8); box-shadow: 0 0 0 1px rgba(255,255,255,.5), 0 2px 6px rgba(0,0,0,.35), inset 0 -2px 4px rgba(0,0,0,.12); }
+
+/* ---------- Quiet: the interface steps back so the view is the subject ----------
+   Mac OS X "HUD panel" style (the translucent black panels of 2005-era pro apps): smoked panels, hairline
+   edges, grey type, one soft blue accent. Colour and glow are kept for the data in space. The main window
+   starts compact (zoom button shows every control), the camera feed is the largest window, and the
+   whole interface fades out when the pointer rests, like a video player. */
+:root {
+  --q-panel: rgba(16, 17, 20, .72);
+  --q-line: rgba(255, 255, 255, .10);
+  --q-text: rgba(232, 236, 242, .86);
+  --q-dim: rgba(232, 236, 242, .48);
+  --q-accent: #8ab6ff;
+  --ink: var(--q-text); --ink-2: var(--q-dim); --edge: var(--q-line);
+  --select: rgba(138, 182, 255, .22); --zebra: transparent;
+  --lcd-1: transparent; --lcd-2: transparent; --lcd-ink: var(--q-text); --lcd-ink-2: var(--q-dim);
+  --tl-grid: rgba(255,255,255,.06); --tl-text: rgba(255,255,255,.38); --tl-font: 400 9px "Lucida Grande", Verdana, sans-serif; --tl-efont: 400 9px "Lucida Grande", Verdana, sans-serif;
+  --tl-n: rgba(255,255,255,.55); --tl-w: rgba(255,255,255,.3); --tl-axis: rgba(255,255,255,.18);
+  --tl-ms: rgba(255,255,255,.75); --tl-sat: rgba(255,255,255,.25); --tl-titan: rgba(255,190,110,.7); --tl-other: rgba(255,255,255,.45); --tl-now: #8ab6ff; --tl-now-glow: transparent;
+}
+body { color: var(--q-text); }
+#menubar, .win, #dock, #hudline, #labels { transition: opacity .7s ease; }
+
+/* menu bar: a thin smoked strip */
+#menubar { background: rgba(14,15,18,.62); -webkit-backdrop-filter: blur(14px); backdrop-filter: blur(14px); border-bottom: 1px solid var(--q-line); box-shadow: none; color: var(--q-text); font-size: 13px; }
+.menu.app svg * { stroke: var(--q-text); fill: var(--q-text); }
+.menu.app svg ellipse { fill: none; }
+.menu.open > button { background: rgba(255,255,255,.14); color: #fff; }
+.menu ul { background: rgba(22,23,27,.92); -webkit-backdrop-filter: blur(16px); backdrop-filter: blur(16px); border: 1px solid var(--q-line); color: var(--q-text); }
+.menu li button:hover, .menu li button:focus-visible { background: rgba(138,182,255,.35); color: #fff; }
+.menu li.sep { background: var(--q-line); }
+.menu li .kbd { color: var(--q-dim); }
+#tray button { background: rgba(255,255,255,.08); border: 1px solid var(--q-line); color: var(--q-text); }
+
+/* windows: smoked HUD panels */
+.win, #dock { background: var(--q-panel); -webkit-backdrop-filter: blur(16px) saturate(1.2); backdrop-filter: blur(16px) saturate(1.2);
+  border: 1px solid var(--q-line); border-radius: 9px; box-shadow: 0 8px 28px rgba(0,0,0,.45); color: var(--q-text); }
+.win.front { box-shadow: 0 10px 34px rgba(0,0,0,.55); }
+.titlebar { height: 20px; background: none; border-bottom: 0; color: var(--q-dim); text-shadow: none; font-size: 11px; letter-spacing: .02em; }
+.win:not(.front) .titlebar { color: rgba(232,236,242,.32); }
+.lights { top: 5px; gap: 6px; }
+.lights button, .win:not(.front) .lights button { width: 10px; height: 10px; background: rgba(255,255,255,.2); box-shadow: none; }
+.lights:hover .close { background: #ff5f57; } .lights:hover .min { background: #febc2e; } .lights:hover .zoom { background: #28c840; }
+.lights:hover button { color: rgba(0,0,0,.55); font-size: 8px; }
+
+/* camera window: the main feature, so it is the biggest thing on screen after the view itself */
+#imgcard { width: clamp(300px, 32vw, 480px); }
+#imgcard.zoomed { width: clamp(420px, 52vw, 860px); }
+#imgcard .body { background: none; padding: 2px 8px 8px; gap: 7px; }
+.well, #imgcard.zoomed .well { border: 1px solid var(--q-line); border-radius: 4px; box-shadow: none; background: rgba(0,0,0,.55); color: var(--q-dim); height: 90px; }
+/* with no picture the window stays small; a frame opens it up to a full square */
+.well.has-frame, #imgcard.zoomed .well.has-frame { height: auto; aspect-ratio: 1; }
+#imgcard:not(:has(.well.has-frame)) { width: 260px; }
+.well b { color: var(--q-text); text-shadow: none; }
+#shottag { color: var(--q-text); }
+.info { grid-template-columns: 50px 1fr; font-size: 10.5px; }
+.info dt { color: var(--q-dim); font-weight: normal; }
+.led { background: rgba(255,255,255,.25); box-shadow: none; }
+#imgcard.live .led { background: var(--q-accent); box-shadow: 0 0 4px var(--q-accent); }
+
+/* moments: plain rows on the panel */
+.colhead { background: none; border-bottom: 1px solid var(--q-line); color: var(--q-dim); }
+.colhead span { border-right: 0; }
+.colhead .sorted { background: none; color: var(--q-text); }
+#mlist { background: none; }
+#mlist li:nth-child(even) { background: rgba(255,255,255,.025); }
+#mlist .d, #mlist .s, #mlist .sc { color: var(--q-dim); }
+#mlist .t { color: var(--q-text); }
+#mlist li.past .t, #mlist li.past .d { color: rgba(232,236,242,.3); }
+#mlist li.next { background: rgba(138,182,255,.16) !important; }
+#mlist li.next span { color: #fff !important; }
+#mlist button:hover { background: rgba(255,255,255,.05); }
+#moments footer { background: none; border-top: 1px solid var(--q-line); color: var(--q-dim); }
+
+/* controls: flat, grey, the accent only for what is on */
+.seg, .pill, #focusrow { border: 1px solid var(--q-line); border-radius: 6px; box-shadow: none; }
+.btn { background: transparent; color: var(--q-text); text-shadow: none; }
+.btn:hover { background: rgba(255,255,255,.07); }
+.seg .btn + .btn, #focusrow .btn + .btn { border-left: 1px solid var(--q-line); }
+.btn:active { background: rgba(255,255,255,.14); }
+.btn[aria-pressed="true"] { background: rgba(138,182,255,.24); color: #fff; text-shadow: none; }
+.round { background: rgba(255,255,255,.06); border: 1px solid var(--q-line); box-shadow: none; color: var(--q-text); }
+#play { width: 40px; height: 40px; }
+.skip { width: 30px; height: 30px; }
+.lcd { background: none; border: 0; box-shadow: none; padding: 2px 6px; }
+.lcd .clock { color: #fff; font-weight: normal; font-size: 13px; }
+.lcd .sub b, .legend b { color: var(--q-text); }
+.nowcam { background: none; border: 1px solid var(--q-line); box-shadow: none; color: var(--q-text); }
+.nowcam .cap2 { color: var(--q-dim); }
+.progress { height: 3px; border: 0; border-radius: 2px; background: rgba(255,255,255,.1); box-shadow: none; }
+.progress i { border-radius: 2px; background: var(--q-accent); }
+.progress-cap { color: var(--q-dim); text-shadow: none; }
+.statusbar { background: none; border-top: 1px solid var(--q-line); color: var(--q-dim); text-shadow: none; }
+.legend i, .swatch { border-color: rgba(255,255,255,.2); }
+
+/* the main window starts compact: transport and the timeline only; zoom (+) shows everything */
+#dock { left: 50%; right: auto; transform: translateX(-50%); width: min(980px, calc(100% - 20px)); }
+#dock[style*="left"] { transform: none; }
+#dock:not(.zoomed) .toolbar { grid-template-columns: auto minmax(0, 1fr); padding-bottom: 6px; }
+#dock:not(.zoomed) :is(#speeds, #zooms, .col.right, #focusrow, .statusbar, .legend) { display: none; }
+#dock.zoomed { width: min(1420px, calc(100% - 20px)); }
+#dock.zoomed #tl { height: 76px; }
+
+/* the HUD in space stays, a little softer */
+#hudline { opacity: .7; }
+.lbl:not(.focus):not(.cassini) { opacity: .75; }
+
+/* resting: the interface fades away until the pointer moves */
+body.idle :is(#menubar, .win, #hudline) { opacity: 0; pointer-events: none; }
+body.idle .lbl:not(.focus):not(.cassini) { opacity: .35; }
+/* ...except the camera feed: while a frame is showing, the picture stays and only its frame fades */
+#imgcard, #imgcard .titlebar, #imgcard .info, .well { transition: opacity .7s ease, background-color .7s ease, border-color .7s ease, box-shadow .7s ease; }
+body.idle #imgcard:has(.well.has-frame) { opacity: 1; pointer-events: auto; background: transparent; border-color: transparent; box-shadow: none; -webkit-backdrop-filter: none; backdrop-filter: none; }
+body.idle #imgcard:has(.well.has-frame) :is(.titlebar, .info) { opacity: 0; }
+body.idle #imgcard .well.has-frame { border-color: transparent; box-shadow: 0 6px 30px rgba(0,0,0,.6); }
+@media (prefers-reduced-motion: reduce) { #menubar, .win, #dock, #hudline, #labels { transition: none; } }
+@media (max-width: 600px) {
+  #dock { width: auto; left: max(10px, env(safe-area-inset-left, 0px)); right: max(10px, env(safe-area-inset-right, 0px)); transform: none; }
+  #dock:not(.zoomed) .toolbar { grid-template-columns: 1fr; }
+}
+</style>
+</head>
+<body>
+<div id="app">
+  <canvas id="gl" aria-label="3D view of the Saturn system"></canvas>
+  <canvas id="hud" aria-hidden="true"></canvas>
+  <canvas id="glow" aria-hidden="true"></canvas>
+  <div id="reticle" hidden></div>
+  <div id="labels"></div>
+  <div id="hudline" aria-hidden="true"></div>
+
+  <nav id="menubar" aria-label="Menu bar">
+    <div class="menu app"><button aria-haspopup="true"><svg viewBox="0 0 40 28" aria-hidden="true"><circle cx="20" cy="14" r="8" fill="#222"/><ellipse cx="20" cy="14" rx="18" ry="5" fill="none" stroke="#222" stroke-width="2.4" transform="rotate(-16 20 14)"/></svg>Cassini OS</button>
+      <ul><li><button data-act="about">About Cassini OS</button></li><li class="sep"></li><li><button data-act="hud" role="menuitemcheckbox" aria-checked="true">Neon HUD</button></li><li><button data-act="autohide" role="menuitemcheckbox" aria-checked="true">Hide Interface When Idle</button></li></ul></div>
+    <div class="menu"><button aria-haspopup="true">View</button>
+      <ul>
+        <li><button data-act="orbits" role="menuitemcheckbox" aria-checked="false">All Moons<span class="kbd">⌘M</span></button></li>
+        <li><button data-act="enlarge" role="menuitemcheckbox" aria-checked="false">Enlarge Moons ×10</button></li>
+        <li class="sep"></li>
+        <li><button data-act="span" data-v="86400">Timeline: Day</button></li>
+        <li><button data-act="span" data-v="604800">Timeline: Week</button></li>
+        <li><button data-act="span" data-v="2592000">Timeline: Month</button></li>
+      </ul></div>
+    <div class="menu"><button aria-haspopup="true">Go</button>
+      <ul id="gomenu">
+        <li><button data-act="prev">Previous Moment<span class="kbd">⌘[</span></button></li>
+        <li><button data-act="next">Next Moment<span class="kbd">⌘]</span></button></li>
+        <li class="sep"></li>
+      </ul></div>
+    <div class="menu"><button aria-haspopup="true">Window</button>
+      <ul>
+        <li><button data-act="win" data-win="dock" role="menuitemcheckbox" aria-checked="true">Cassini Replay</button></li>
+        <li><button data-act="win" data-win="imgcard" role="menuitemcheckbox" aria-checked="true">Camera</button></li>
+        <li><button data-act="win" data-win="moments" role="menuitemcheckbox" aria-checked="true">Moments</button></li>
+      </ul></div>
+    <div class="menuright"><div id="tray"></div><span id="mclock">—</span></div>
+  </nav>
+
+  <section class="win frame img" id="imgcard" aria-label="Camera">
+    <div class="titlebar"><span class="lights"><button class="close" aria-label="Close">×</button><button class="min" aria-label="Minimize">–</button><button class="zoom" aria-label="Zoom">+</button></span>Camera</div>
+    <div class="body">
+      <div class="well"><div id="wellmsg"><b>No signal</b>Waiting for the frame server</div><img id="shot" alt=""><span id="shottag"></span></div>
+      <dl class="info">
+        <dt>Status</dt><dd><span class="led"></span><span id="imgk">Camera</span></dd>
+        <dt>Frame</dt><dd id="imgv">—</dd>
+        <dt>Filter</dt><dd id="ffilt">—</dd>
+        <dt>Colour</dt><dd id="frgb">—</dd>
+        <dt>Details</dt><dd id="imgm">—</dd>
+      </dl>
+    </div>
+  </section>
+
+  <aside class="win" id="moments" aria-label="Moments to jump to">
+    <div class="titlebar"><span class="lights"><button class="close" aria-label="Close">×</button><button class="min" aria-label="Minimize">–</button><button class="zoom" aria-label="Zoom">+</button></span>Moments: 2005</div>
+    <div class="colhead"><span class="sorted">Date ▴</span><span>Moment</span><span>Photo</span></div>
+    <ul id="mlist"></ul>
+    <footer id="mfoot">—</footer>
+  </aside>
+
+  <div class="win" id="dock">
+    <div class="titlebar"><span class="lights"><button class="close" aria-label="Close">×</button><button class="min" aria-label="Minimize">–</button><button class="zoom" aria-label="Zoom">+</button></span>Cassini Replay</div>
+    <div class="toolbar">
+      <div class="col">
+        <div class="transport">
+          <button class="btn round skip" id="prev" aria-label="Previous moment">◀◀</button>
+          <button class="btn round" id="play" aria-label="Play or pause">❚❚</button>
+          <button class="btn round skip" id="next" aria-label="Next moment">▶▶</button>
+        </div>
+        <div class="seg" id="speeds" aria-label="Playback speed"></div>
+        <div class="seg" id="zooms" aria-label="Timeline span"></div>
+      </div>
+      <div class="lcd">
+        <div class="clock" id="clock">—</div>
+        <div class="sub"><span id="rel">—</span> · <span id="mday">—</span></div>
+        <div class="sub probe" id="probe" hidden></div>
+        <canvas id="tl" aria-label="Timeline: drag to scrub, scroll to zoom"></canvas>
+        <div class="legend"><span class="keys" id="lkeys"></span><span id="l24">—</span></div>
+      </div>
+      <div class="col right">
+        <div class="nowcam"><div class="cap2">Camera now</div><div id="nowcam">—</div></div>
+        <div class="colrow fill">
+          <button class="btn pill" id="allorbits" aria-pressed="false">All moons</button>
+          <button class="btn pill" id="enlarge" aria-pressed="false">Moons ×10</button>
+          <button class="btn pill" id="followcam" aria-pressed="false" title="Look where Cassini's camera points">Follow camera</button>
+          <button class="btn pill" id="mtoggle" aria-pressed="false">Moments</button>
+        </div>
+        <div>
+          <div class="progress" aria-hidden="true"><i id="mprog"></i></div>
+          <div class="progress-cap"><span>1997</span><span id="mpct">—</span><span>2017</span></div>
+        </div>
+      </div>
+    </div>
+    <div id="focusrow" aria-label="Centre the view on"></div>
+    <div class="statusbar"><span>Positions from Cassini's SPICE kernels (J2000). LCD lanes: narrow-angle (NAC) and wide-angle (WAC) frames coloured by filter; RGB marks frames that belong to a red, green and blue set.</span><span id="pnote" hidden></span><b id="sbar">—</b></div>
+  </div>
+
+  <div id="loading"><div>Starting Cassini OS<br>Loading 2005 trajectories<div class="bar"></div></div></div>
+</div>
+
+<script>
+// ---------- Cassini OS chrome: window manager, menu bar, HUD layer ----------
+(function () {
+  const $ = id => document.getElementById(id);
+  const START = Date.UTC(1997, 9, 15, 8, 43), END = Date.UTC(2017, 8, 15, 10, 32);
+  const DAYS = ["Sun", "Mon", "Tue", "Wed", "Thu", "Fri", "Sat"], MON = ["Jan", "Feb", "Mar", "Apr", "May", "Jun", "Jul", "Aug", "Sep", "Oct", "Nov", "Dec"];
+  const fmt = n => Math.round(n).toLocaleString("en-US");
+  const NAMES = { dock: "Cassini Replay", imgcard: "Camera", moments: "Moments" };
+  // Aero glass is on unless the page is opened with ?skin=metal (the plain brushed-metal look)
+  const glass = new URLSearchParams(location.search).get("skin") === "glass";
+  document.body.classList.toggle("glass", glass);
+  document.querySelector('[data-act="glass"]')?.setAttribute("aria-checked", String(glass));
+
+  // windows: drag by the title bar, click to bring forward, close / minimize / zoom
+  let z = 30;
+  function front(w) { document.querySelectorAll(".win").forEach(x => x.classList.toggle("front", x === w)); w.style.zIndex = ++z; }
+  function syncMenu() {
+    document.querySelectorAll('[data-act="win"]').forEach(b => b.setAttribute("aria-checked", String(!$(b.dataset.win).hidden)));
+    const tray = $("tray"); tray.innerHTML = "";
+    document.querySelectorAll(".win").forEach(w => {
+      if (!w.hidden || !w.dataset.min) return;
+      const b = document.createElement("button"); b.textContent = NAMES[w.id];
+      b.addEventListener("click", e => { e.stopPropagation(); restore(w); }); tray.appendChild(b);
+    });
+  }
+  // the "genie": shrink toward the tray in the menu bar, and grow back out of it
+  function animateTo(w, target, reverse) {
+    if (matchMedia("(prefers-reduced-motion: reduce)").matches || !w.animate) return Promise.resolve();
+    const r = w.getBoundingClientRect(), t = target.getBoundingClientRect();
+    const dx = t.left + t.width / 2 - (r.left + r.width / 2), dy = t.top + t.height / 2 - (r.top + r.height / 2);
+    const k = [{ transform: "none", opacity: 1 }, { transform: `translate(${dx}px, ${dy}px) scale(.06, .03)`, opacity: .15 }];
+    return w.animate(reverse ? k.reverse() : k, { duration: 340, easing: "cubic-bezier(.55,0,.35,1)" }).finished;
+  }
+  async function minimize(w) {
+    if (w.id === "dock") { w.classList.toggle("shaded"); return; }   // the main window rolls up to its title bar
+    w.dataset.min = "1"; await animateTo(w, $("tray")); w.hidden = true; syncMenu();
+  }
+  async function restore(w) {
+    const wasMin = !!w.dataset.min; delete w.dataset.min;
+    w.hidden = false; front(w); syncMenu();
+    if (wasMin) await animateTo(w, $("tray"), true);
+    w.classList.remove("shaded");
+  }
+  document.querySelectorAll(".win").forEach(w => {
+    const bar = w.querySelector(".titlebar");
+    w.addEventListener("pointerdown", () => front(w));
+    w.querySelector(".close").addEventListener("click", e => { e.stopPropagation(); minimize(w); });   // closing tucks the window into the menu-bar tray, never loses it
+    w.querySelector(".min").addEventListener("click", e => { e.stopPropagation(); minimize(w); });
+    w.querySelector(".zoom").addEventListener("click", e => { e.stopPropagation(); w.classList.remove("shaded"); w.classList.toggle("zoomed"); });
+    bar.addEventListener("dblclick", () => minimize(w));
+    let drag = null;
+    bar.addEventListener("pointerdown", e => {
+      if (e.target.closest(".lights")) return;
+      const r = w.getBoundingClientRect();
+      drag = { dx: e.clientX - r.left, dy: e.clientY - r.top }; bar.setPointerCapture(e.pointerId);
+      w.style.left = r.left + "px"; w.style.top = r.top + "px"; w.style.width = r.width + "px"; w.style.right = "auto"; w.style.bottom = "auto";
+    });
+    bar.addEventListener("pointermove", e => {
+      if (!drag) return;
+      const r = w.getBoundingClientRect();
+      w.style.left = Math.max(60 - r.width, Math.min(innerWidth - 60, e.clientX - drag.dx)) + "px";
+      w.style.top = Math.max(23, Math.min(innerHeight - 24, e.clientY - drag.dy)) + "px";
+    });
+    const end = () => { drag = null; };
+    bar.addEventListener("pointerup", end); bar.addEventListener("pointercancel", end);
+  });
+  front($("dock"));
+
+  // layout is the viewer's own: where windows sit and which are tucked away is remembered on this device
+  const LAYOUT = "cassini-os-layout-v2";
+  function saveLayout() {
+    const out = {};
+    document.querySelectorAll(".win").forEach(w => { out[w.id] = { left: w.style.left, top: w.style.top, width: w.style.width, min: !!w.dataset.min, zoomed: w.classList.contains("zoomed") }; });
+    try { localStorage.setItem(LAYOUT, JSON.stringify(out)); } catch (e) {}
+  }
+  let saved = null;
+  try { saved = JSON.parse(localStorage.getItem(LAYOUT)); } catch (e) {}
+  saved = saved || {};
+  for (const [id, s] of Object.entries(saved)) {
+    const w = $(id); if (!w || !s) continue;
+    if (s.left && innerWidth > 600) Object.assign(w.style, { left: s.left, top: s.top, width: s.width, right: "auto", bottom: "auto" });
+    if (s.zoomed) w.classList.add("zoomed");
+    if (s.min) { w.dataset.min = "1"; w.hidden = true; }
+  }
+  syncMenu();
+  new MutationObserver(saveLayout).observe($("app"), { subtree: true, attributes: true, attributeFilter: ["style", "class", "hidden"] });
+
+  // resting: after a few seconds without the pointer or keyboard, the interface fades out of the way
+  let autoHide = true, idleTimer = 0;
+  function wake() {
+    document.body.classList.remove("idle"); clearTimeout(idleTimer);
+    if (autoHide) idleTimer = setTimeout(() => { if (!document.querySelector(".menu.open, .win:hover")) document.body.classList.add("idle"); else wake(); }, 3500);
+  }
+  ["pointermove", "pointerdown", "keydown", "wheel", "touchstart"].forEach(t => window.addEventListener(t, wake, { passive: true }));
+  wake();
+
+  // menu bar: click to open, then hover across titles, as on the Mac
+  const menus = [...document.querySelectorAll(".menu")];
+  let menuOpen = false;
+  const setOpen = m => { menus.forEach(x => x.classList.toggle("open", x === m)); menuOpen = !!m; };
+  menus.forEach(m => {
+    const b = m.querySelector(":scope > button");
+    b.addEventListener("click", e => { e.stopPropagation(); setOpen(m.classList.contains("open") ? null : m); });
+    b.addEventListener("mouseenter", () => { if (menuOpen) setOpen(m); });
+  });
+  document.addEventListener("click", () => setOpen(null));
+  window.addEventListener("keydown", e => { if (e.key === "Escape") setOpen(null); });
+  function act(btn) {
+    const a = btn.dataset.act;
+    if (a === "autohide") { autoHide = !autoHide; btn.setAttribute("aria-checked", String(autoHide)); wake(); }
+    if (a === "glass") { document.body.classList.toggle("glass"); btn.setAttribute("aria-checked", String(document.body.classList.contains("glass"))); }
+    if (a === "hud") { document.body.classList.toggle("nohud"); btn.setAttribute("aria-checked", String(!document.body.classList.contains("nohud"))); }
+    if (a === "orbits") { $("allorbits").click(); btn.setAttribute("aria-checked", $("allorbits").getAttribute("aria-pressed")); }
+    if (a === "enlarge") { $("enlarge").click(); btn.setAttribute("aria-checked", $("enlarge").getAttribute("aria-pressed")); }
+    if (a === "span") setView(+btn.dataset.v);
+    if (a === "prev") $("prev").click();
+    if (a === "next") $("next").click();
+    if (a === "go") setFocus(btn.dataset.body);
+    if (a === "win") { const w = $(btn.dataset.win); (w.hidden || w.classList.contains("shaded")) ? restore(w) : minimize(w); }
+    if (a === "about") { $("loading").hidden = false; setTimeout(() => { $("loading").hidden = true; }, 1800); }
+  }
+  document.querySelectorAll(".menu ul").forEach(ul => ul.addEventListener("click", e => { const b = e.target.closest("button"); if (b) act(b); }));
+  window.addEventListener("keydown", e => {
+    if (!(e.metaKey || e.ctrlKey)) return;
+    if (e.key === "[") { e.preventDefault(); $("prev").click(); }
+    if (e.key === "]") { e.preventDefault(); $("next").click(); }
+    if (e.key.toLowerCase() === "m") { e.preventDefault(); act(document.querySelector('[data-act="orbits"]')); }
+  });
+
+  // previous / next moment
+  const items = () => [...document.querySelectorAll("#mlist li")];
+  $("next").addEventListener("click", () => { const li = items().find(li => +li.dataset.et > state.et + 3.5 * 3600); if (li) li.querySelector("button").click(); });
+  $("prev").addEventListener("click", () => { const li = items().filter(li => +li.dataset.et < state.et - 60).pop(); if (li) li.querySelector("button").click(); });
+
+  // moments: iTunes-style ratings, a footer count, Go-menu entries for each body
+  window.studyMoments = picks => {
+    document.querySelectorAll("#mlist .sc").forEach(el => {
+      const s = parseFloat(el.style.getPropertyValue("--s")) || 0, n = Math.max(1, Math.round(s / 20));
+      el.textContent = "★".repeat(n) + "·".repeat(5 - n);
+    });
+    const ms = picks.filter(e => e.kind === "milestone").length;
+    $("mfoot").textContent = `${picks.length} moments, ${ms} milestone${ms === 1 ? "" : "s"}`;
+    const go = $("gomenu");
+    for (const n of FOCUS_LIST) { const li = document.createElement("li"); li.innerHTML = `<button data-act="go" data-body="${n}">${titleCase(n)}</button>`; go.appendChild(li); }
+  };
+
+  // body tags: name plus live range from Cassini; the focused body gets a target bracket
+  let reticleSeen = false;
+  let rng = null;
+  window.studyLabel = (name, el, cx, cy, pr) => {
+    rng = rng || v3();
+    if (!el.dataset.hud) { el.dataset.hud = "1"; el.innerHTML = `${titleCase(name)}<small></small>`; }
+    el.lastChild.textContent = name === "CASSINI" ? `v ${(state.vrel || 0).toFixed(2)} km/s` : `r ${fmt(len(sub(pos[name], pos.CASSINI, rng)))} km`;
+    if (name === state.focus && name !== "CASSINI") {
+      const s = Math.max(12, Math.min(pr, 160)) + 9, r = $("reticle");
+      r.hidden = false; r.style.width = r.style.height = 2 * s + "px"; r.style.transform = `translate(${cx - s}px, ${cy - s}px)`;
+      reticleSeen = true;
+    }
+  };
+
+  // occluders: invisible copies of Saturn and the moons in the HUD scene that write depth only,
+  // so orbit lines, the trail and the camera cone pass behind bodies instead of over them
+  let occluders = null;
+  window.studyBeforeHud = () => {
+    if (!occluders) {
+      const mat = new THREE.MeshBasicMaterial({ colorWrite: false });
+      occluders = Object.keys(meshes).map(name => {
+        const src = name === "SATURN" ? meshes.SATURN.group.children[0] : meshes[name].mesh;
+        const o = new THREE.Mesh(src.geometry, mat);
+        o.matrixAutoUpdate = false; o.renderOrder = -1; o.frustumCulled = false;
+        hudScene.add(o);
+        return [o, src];
+      });
+    }
+    for (const [o, src] of occluders) { src.updateMatrixWorld(true); o.matrix.copy(src.matrixWorld); o.matrixWorldNeedsUpdate = true; }
+  };
+
+  // glow: the HUD canvas copied, blurred, at half resolution, screen-blended over the scene
+  const glow = $("glow"), gctx = glow.getContext("2d");
+  window.studyAfterRender = () => {
+    if (document.body.classList.contains("nohud")) return;
+    const hud = $("hud"), w = Math.round(hud.clientWidth / 2), h = Math.round(hud.clientHeight / 2);
+    if (glow.width !== w || glow.height !== h) { glow.width = w; glow.height = h; }
+    gctx.globalCompositeOperation = "source-over"; gctx.filter = "none"; gctx.fillStyle = "#000"; gctx.fillRect(0, 0, w, h);
+    gctx.globalCompositeOperation = "lighter";
+    gctx.filter = "blur(5px)"; gctx.drawImage(hud, 0, 0, w, h);
+    gctx.filter = "blur(1.5px)"; gctx.drawImage(hud, 0, 0, w, h);
+  };
+
+  // per-frame read-outs: menu-bar clock, mission progress, HUD strip, status bar
+  window.studyHud = ms => {
+    let marked = false;
+    document.querySelectorAll("#mlist li").forEach(li => {
+      const next = !marked && +li.dataset.et >= (state.et - 3600);
+      if (next) marked = true;
+      li.classList.toggle("next", next);
+    });
+    if (!reticleSeen) $("reticle").hidden = true;
+    reticleSeen = false;
+    const d = new Date(ms);
+    $("mclock").textContent = `${DAYS[d.getUTCDay()]} ${d.getUTCDate()} ${MON[d.getUTCMonth()]} ${d.getUTCFullYear()}   ${d.toISOString().slice(11, 16)} UTC`;
+    const p = Math.max(0, Math.min(1, (ms - START) / (END - START)));
+    $("mprog").style.width = (p * 100).toFixed(2) + "%";
+    $("mpct").textContent = `Mission ${(p * 100).toFixed(1)}% complete`;
+    const b = document.querySelectorAll("#rel b"), ref = ($("rel").textContent.match(/above (\w+)/) || [])[1] || "";
+    if (b.length === 2) {
+      state.vrel = parseFloat(b[1].textContent);
+      const cam = (($("imgv").textContent.split("·")[1]) || "—").trim().toUpperCase();
+      $("hudline").innerHTML = `<div><span>TGT</span>${ref.toUpperCase()}</div><div><span>ALT</span>${b[0].textContent.toUpperCase()}</div><div><span>VREL</span>${b[1].textContent.toUpperCase()}</div><div><span>CAM</span>${cam}</div><div><span>PTG</span>${window.cassiniPointing === "CK" ? "CK ATTITUDE" : "DISH TO EARTH"}</div>`;
+    }
+    $("sbar").textContent = $("imgm").textContent.split("·").pop().trim();
+  };
+  // the scrubber knob: a small diamond on the "now" line, as on an old LCD progress bar
+  window.studyTimeline = (g, w, h, xn) => {
+    const y = h * LANES.nBase;
+    g.fillStyle = "#1d2016"; g.beginPath(); g.moveTo(xn, y - 6); g.lineTo(xn + 6, y); g.lineTo(xn, y + 6); g.lineTo(xn - 6, y); g.fill();
+  };
+  // ---------- imaging lanes in the LCD: filters, cameras, RGB sets ----------
+  const CLS = [["Clear", "#3a3f33"], ["Red", "#cc3a2e"], ["Green", "#3e9b33"], ["Blue", "#2f63cc"], ["IR / methane", "#8f2f6c"], ["UV", "#7a50d8"]];
+  const LANES = { nTop: .36, nBase: .62, wTop: .66, wBase: .85, rTop: .89, rH: .08 };
+  function classify(a, b) {
+    const f = [a, b].filter(x => x && !/^CL|^P\d|^IRP/.test(x));
+    if (f.some(x => x === "RED")) return 1;
+    if (f.some(x => x === "GRN")) return 2;
+    if (f.some(x => /^BL/.test(x))) return 3;
+    if (f.some(x => /^UV/.test(x))) return 5;
+    return f.length ? 4 : 0;
+  }
+  function prep() {
+    if (catalog.cls) return;
+    const n = catalog.et.length, cls = new Uint8Array(n), rgb = new Uint8Array(n), S = catalog.sorted;
+    for (let k = 0; k < n; k++) cls[k] = classify(catalog.f1[k], catalog.f2[k]);
+    // a frame is part of an RGB set when the same camera saw the same target in red, green and blue within 15 minutes
+    for (let i = 0; i < n; i++) {
+      const k = order[i]; if (cls[k] < 1 || cls[k] > 3) continue;
+      let mask = 0;
+      for (let j = i; j >= 0 && S[i] - S[j] < 900; j--) { const q = order[j]; if (catalog.cam[q] === catalog.cam[k] && catalog.target[q] === catalog.target[k] && cls[q] >= 1 && cls[q] <= 3) mask |= 1 << cls[q]; }
+      for (let j = i + 1; j < n && S[j] - S[i] < 900; j++) { const q = order[j]; if (catalog.cam[q] === catalog.cam[k] && catalog.target[q] === catalog.target[k] && cls[q] >= 1 && cls[q] <= 3) mask |= 1 << cls[q]; }
+      if (mask === 14) rgb[k] = 1;
+    }
+    catalog.cls = cls; catalog.rgb = rgb;
+    $("lkeys").innerHTML = CLS.map(([n, c]) => `<span><i style="background:${c}"></i>${n}</span>`).join("");
+  }
+  window.studyBars = (g, w, h) => {
+    prep();
+    const bw = 2, nT = h * LANES.nTop, nB = h * LANES.nBase, wT = h * LANES.wTop, wB = h * LANES.wBase, rT = h * LANES.rTop, rH = Math.max(4, h * LANES.rH);
+    const sc = v => Math.min(1, Math.log1p(v) / Math.log1p(18));
+    const cN = new Array(6), cW = new Array(6);
+    for (let x = 0; x < w; x += bw) {
+      const i0 = lastImageIndex(xToEt(x, w)) + 1, i1 = lastImageIndex(xToEt(x + bw, w)) + 1;
+      if (i1 <= i0) continue;
+      cN.fill(0); cW.fill(0); let nN = 0, nW = 0, set = false;
+      for (let i = i0; i < i1; i++) { const k = order[i], c = catalog.cls[k]; if (catalog.cam[k] === "N") { cN[c]++; nN++; } else { cW[c]++; nW++; } if (catalog.rgb[k]) set = true; }
+      for (const [cnt, tot, top, base] of [[cN, nN, nT, nB], [cW, nW, wT, wB]]) {
+        if (!tot) continue;
+        let y = base; const H = sc(tot) * (base - top);
+        for (let c = 0; c < 6; c++) { if (!cnt[c]) continue; const hh = H * cnt[c] / tot; g.fillStyle = CLS[c][1]; g.fillRect(x, y - hh, bw - 0.5, hh); y -= hh; }
+      }
+      if (set) { const s = rH / 3; g.fillStyle = CLS[1][1]; g.fillRect(x, rT, bw, s); g.fillStyle = CLS[2][1]; g.fillRect(x, rT + s, bw, s); g.fillStyle = CLS[3][1]; g.fillRect(x, rT + 2 * s, bw, s); }
+    }
+    g.fillStyle = "rgba(255,255,255,0.12)"; g.fillRect(0, nB, w, 1); g.fillRect(0, wB, w, 1);
+    // lane names, on a patch of LCD so they stay readable over the bars
+    g.font = "400 9px 'Lucida Grande', Verdana, sans-serif"; g.textBaseline = "middle";
+    for (const [t, y] of [["NAC", (nT + nB) / 2], ["WAC", (wT + wB) / 2], ["RGB", rT + rH / 2]]) {
+      g.fillStyle = "rgba(16,17,20,0.85)"; g.fillRect(0, y - 6, 26, 12); g.fillStyle = "rgba(232,236,242,0.5)"; g.fillText(t, 2, y);
+    }
+    g.textBaseline = "top";
+  };
+  const FNAME = ["Clear", "Red", "Green", "Blue", "IR / methane", "UV"];
+  let lastI = -2;
+  const baseHud = window.studyHud;
+  window.studyHud = ms => {
+    baseHud(ms);
+    if (!catalog.cls) return;
+    const i = lastImageIndex(state.et); if (i === lastI) return; lastI = i;
+    if (i < 0) { $("nowcam").textContent = "No frames yet"; $("ffilt").textContent = "—"; $("frgb").textContent = "—"; $("l24").textContent = "No frames yet"; return; }
+    const k = order[i], c = catalog.cls[k], pol = /^P\d|^IRP/.test(catalog.f1[k]) ? ` · polarizer ${catalog.f1[k]}` : "";
+    $("ffilt").innerHTML = `<span class="swatch" style="background:${CLS[c][1]}"></span>${FNAME[c]} (${catalog.f1[k]}/${catalog.f2[k]})${pol}`;
+    $("nowcam").innerHTML = `${catalog.cam[k] === "N" ? "Narrow-angle" : "Wide-angle"} · <span class="swatch" style="background:${CLS[c][1]}"></span>${FNAME[c]}${catalog.rgb[k] ? " · <b>RGB set</b>" : ""}<br><span style="color:#6a6a6a">${titleCase(catalog.target[k] || "Unknown")} · ${catalog.f1[k]}/${catalog.f2[k]}</span>`;
+    $("frgb").textContent = catalog.rgb[k] ? "Part of an RGB set" : c >= 1 && c <= 3 ? "Single colour, no full set" : "Single filter";
+    let n = 0, nN = 0, sets = 0;
+    for (let j = lastImageIndex(state.et - 86400) + 1; j <= i; j++) { const q = order[j]; n++; if (catalog.cam[q] === "N") nN++; if (catalog.rgb[q] && catalog.cls[q] === 1) sets++; }
+    $("l24").innerHTML = `Last 24 h: <b>${fmt(n)}</b> frames · <b>${fmt(nN)}</b> NAC · <b>${fmt(n - nN)}</b> WAC · <b>${fmt(sets)}</b> RGB sets`;
+  };
+
+  // ---------- real frames, fetched one at a time from the frame server (web/frames/frame_server.py) ----------
+  // ?frames=<url> picks the server; a page served by the frame server itself uses its own origin.
+  const FRAMES = (() => {
+    const q = new URLSearchParams(location.search).get("frames");
+    if (q) return q.replace(/\/$/, "");
+    if (/^https?:$/.test(location.protocol) && !/claude\.ai$|claudeusercontent\.com$|claude\.site$/.test(location.hostname)) return location.origin;
+    return "http://localhost:8765";
+  })();
+  const well = document.querySelector("#imgcard .well"), shot = $("shot"), card = $("imgcard");
+  let wantId = null, shownKey = null, busy = false, nextIds = [];
+  const frameUrl = id => `${FRAMES}/frames/${id}.webp?size=${card.classList.contains("zoomed") ? 1024 : 512}`;
+  function noFrame(msg) { well.classList.remove("has-frame"); $("wellmsg").innerHTML = msg; }
+  // only one request in flight: during fast playback the window skips to the newest frame instead of queueing
+  function pump() {
+    const key = wantId && frameUrl(wantId);
+    if (busy || key === shownKey) return;
+    if (!wantId) { shownKey = null; return noFrame("<b>No signal</b>No frames yet this year"); }
+    busy = true;
+    const id = wantId, im = new Image();
+    im.onload = () => {
+      busy = false; shownKey = key; shot.src = im.src; well.classList.add("has-frame");
+      for (const n of nextIds) new Image().src = frameUrl(n);   // warm the cache for the next frames
+      pump();
+    };
+    im.onerror = () => {
+      busy = false; shownKey = key;
+      fetch(`${FRAMES}/health`).then(r => r.ok, () => false).then(up => noFrame(up
+        ? `<b>No frame</b>${id} is not in the archive`
+        : `<b>No signal</b>Frame server offline<br>run web/frames/frame_server.py`));
+      pump();
+    };
+    im.src = key;
+  }
+  new MutationObserver(pump).observe(card, { attributes: true, attributeFilter: ["class"] });
+  const frameHud = window.studyHud;
+  window.studyHud = ms => {
+    frameHud(ms);
+    const i = lastImageIndex(state.et);
+    const k = i < 0 ? -1 : order[i], id = k < 0 ? null : catalog.id[k];
+    well.classList.toggle("stale", k >= 0 && state.et - catalog.et[k] > 6 * 3600);
+    if (id === wantId) return;
+    wantId = id;
+    nextIds = i < 0 ? [] : [1, 2, 3].map(d => order[i + d]).filter(q => q !== undefined).map(q => catalog.id[q]);
+    if (k >= 0) $("shottag").textContent = `${id} · ${catalog.f1[k]}/${catalog.f2[k]}`;
+    pump();
+  };
+  syncMenu();
+})();
+</script>

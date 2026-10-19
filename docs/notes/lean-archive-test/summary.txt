@@ -1,0 +1,21 @@
+img   total    82.99 MB  mean   2127.9 KB  vs IMG 1.000
+lbl   total     0.14 MB  mean      3.7 KB  vs IMG 0.002
+old   total    11.21 MB  mean    287.4 KB  vs IMG 0.135
+new   total    11.55 MB  mean    296.2 KB  vs IMG 0.139
+pre   total     0.16 MB  mean      4.1 KB  vs IMG 0.002
+npz   total     0.19 MB  mean      4.8 KB  vs IMG 0.002
+p16   total    31.65 MB  mean    811.6 KB  vs IMG 0.381
+new+prefix total 11.71 MB mean 300.2 KB; vs old 1.04x; vs 16bit 0.37x; vs IMG 0.141
+per-frame new/old ratio range 0.62 2.27
+ratio(err/shot noise) over all frames: max 5.39, median of per-frame p99 2.37, worst p99 4.03, mean rms 1.15
+ratio(err/(shot+read)) : max 2.01, median p99 1.65, worst p99 1.95, mean rms 0.83
+read noise DN median 0.75 (n=21)
+max abs err DN 15.0
+band 1-10 DN above bias: p99 median 3.38, max 4.23
+band 10-100 DN above bias: p99 median 2.32, max 2.87
+band 100-1000 DN above bias: p99 median 1.43, max 1.60
+band 1000-5000 DN above bias: p99 median 1.30, max 1.34
+PROJECTION 200308 12BIT frames (COISS_2xxx): raw download 233 GB; new format 33 GB; old-PNG equivalent 31 GB; 16-bit PNG 88 GB
+  download at 1.6 MB/s: 1.7 days
+  download at 2.2 MB/s: 1.2 days
+  download at 5.9 MB/s: 0.5 days
