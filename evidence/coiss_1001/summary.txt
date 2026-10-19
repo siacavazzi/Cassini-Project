@@ -1,0 +1,7 @@
+nac_venus_BL1-GRN-RED_table: mean|diff| 27.09, max 67, pixels changed 100.0%, mean RGB old [6.6, 14.8, 40.6] new [18.2, 45.9, 79.2], levels RGB old [33, 173, 214] new [23, 165, 208]
+wac_callamps_VIO-RED-IR4_12bit: mean|diff| 79.62, max 249, pixels changed 100.0%, mean RGB old [63.7, 119.9, 59.0] new [147.8, 20.3, 3.9], levels RGB old [245, 199, 182] new [130, 15, 5]
+wac_moon_BL1-GRN-MT2RED_table: mean|diff| 0.27, max 11, pixels changed 15.3%, mean RGB old [1.6, 2.1, 1.2] new [1.5, 1.4, 1.2], levels RGB old [256, 233, 198] new [256, 212, 208]
+
+Rendered with the repo's calibrated colour path (stacking.load_stacked -> calibration.load_channels -> image_correction.align_images),
+old = CASSINI_DATA=/Volumes/LaCie/cassiniprojectJAN05.zip, new = CASSINI_DATA=~/cassini_lut8 (COISS_1001 whole-volume run).
+All 6 renders are byte-identical to /Volumes/LaCie/cassini_lut8_trial/evidence/composites/.
