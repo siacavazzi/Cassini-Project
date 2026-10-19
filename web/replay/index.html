@@ -119,6 +119,7 @@ body { background: var(--void); color: var(--text); font-family: var(--font-body
       <div class="grp" id="speeds" aria-label="Playback speed"></div>
       <div class="grp" id="zooms" aria-label="Timeline span"></div>
       <span class="spacer"></span>
+      <button class="btn" id="followcam" aria-pressed="false" title="Look where Cassini's camera points">Follow camera</button>
       <button class="btn" id="allorbits" aria-pressed="false">All moons</button>
       <button class="btn" id="enlarge" aria-pressed="false">Enlarge moons ×10</button>
       <button class="btn" id="mtoggle" aria-pressed="false">Moments</button>
@@ -352,6 +353,46 @@ function bandTexture() {
   }
   const t = new THREE.CanvasTexture(c); t.wrapS = THREE.ClampToEdgeWrapping; return t;
 }
+// ---------- real surface maps (data/textures/); the procedural look stays as the fallback ----------
+// ?tex=0 keeps the old procedural look, ?tex=1k|2k|4k picks the map size (default 2k); #tex-0 / #tex-4k work too
+const TEX_TIER = (new URLSearchParams(location.search).get("tex") || (location.hash.match(/^#tex-(\w+)$/) || [])[1] || "2k").toLowerCase();
+const TEX_ON = TEX_TIER !== "0" && TEX_TIER !== "off";
+const TEX_DIR = "data/textures/" + (/^[124]k$/.test(TEX_TIER) ? TEX_TIER : "2k") + "/";
+const TEX_FILES = { SATURN: "saturn", MIMAS: "mimas", ENCELADUS: "enceladus", TETHYS: "tethys", DIONE: "dione", RHEA: "rhea",
+                    TITAN: "titan", HYPERION: "hyperion", IAPETUS: "iapetus", PHOEBE: "phoebe", JUPITER: "jupiter" };
+const SHAPES = { HYPERION: "data/textures/models/hyperion.mesh.b64.txt", PHOEBE: "data/textures/models/phoebe.mesh.b64.txt" };
+const shapeGeom = {};
+const texLoader = new THREE.TextureLoader();
+function loadMap(name, uniforms) {
+  const f = TEX_FILES[name]; if (!TEX_ON || !f) return;
+  // Hyperion's map only exists up to 2k
+  const dir = name === "HYPERION" && TEX_DIR.endsWith("4k/") ? "data/textures/2k/" : TEX_DIR;
+  texLoader.load(dir + f + ".webp", t => {
+    t.anisotropy = renderer.capabilities.getMaxAnisotropy();
+    t.wrapS = THREE.RepeatWrapping;
+    uniforms.map.value = t; uniforms.hasMap.value = 1;
+  }, undefined, () => console.warn("texture missing for " + name));
+}
+// shape models: "CMS1", nvert, nidx, int16 xyz (fraction of max radius, body axes), uint16 uv, uint16/uint32 indices
+async function loadShapes() {
+  if (!TEX_ON) return;
+  await Promise.all(Object.entries(SHAPES).map(async ([name, url]) => {
+    try {
+      const r = await fetch(url); if (!r.ok) throw new Error(r.status);
+      const s = atob((await r.text()).trim()), u = new Uint8Array(s.length);
+      for (let i = 0; i < s.length; i++) u[i] = s.charCodeAt(i);
+      const dv = new DataView(u.buffer), nv = dv.getUint32(4, true), ni = dv.getUint32(8, true);
+      const p = new Int16Array(u.buffer, 12, nv * 3), uv = new Uint16Array(u.buffer, 12 + nv * 6, nv * 2);
+      const ix = nv < 65536 ? new Uint16Array(u.buffer, 12 + nv * 10, ni) : new Uint32Array(u.buffer, 12 + nv * 10, ni);
+      const g = new THREE.BufferGeometry();
+      g.setAttribute("position", new THREE.BufferAttribute(Float32Array.from(p, x => x / 32767), 3));
+      g.setAttribute("uv", new THREE.BufferAttribute(Float32Array.from(uv, x => x / 65535), 2));
+      g.setIndex(new THREE.BufferAttribute(ix, 1));
+      g.computeVertexNormals();
+      shapeGeom[name] = g;
+    } catch (err) { console.warn("shape model not loaded for " + name, err); }
+  }));
+}
 const RING_IN = 66900, RING_OUT = 140600;
 function ringTexture() {
   const N = 2048, c = document.createElement("canvas"); c.width = N; c.height = 1;
@@ -376,24 +417,25 @@ function ringTexture() {
   const t = new THREE.CanvasTexture(c); t.wrapS = THREE.ClampToEdgeWrapping; return t;
 }
 const ringTex = ringTexture();
+if (TEX_ON) texLoader.load("data/textures/rings/saturn_rings.png", t => { ringTex.image = t.image; ringTex.needsUpdate = true; });
 const uSun = { value: new THREE.Vector3(1, 0, 0) };
 
 function makeSaturn(radii) {
   const eq = radii[0] / KM, po = radii[2] / KM;
   const mat = new THREE.ShaderMaterial({
-    uniforms: { sunDir: uSun, bands: { value: bandTexture() }, rings: { value: ringTex },
+    uniforms: { sunDir: uSun, bands: { value: bandTexture() }, map: { value: null }, hasMap: { value: 0 }, rings: { value: ringTex },
                 rIn: { value: RING_IN / KM }, rOut: { value: RING_OUT / KM }, eq: { value: eq }, po: { value: po } },
-    vertexShader: VHEAD + `varying vec3 vLocal; void main(){ vLocal = mat3(modelMatrix) * position;
+    vertexShader: VHEAD + `varying vec3 vLocal; varying vec2 vUv; void main(){ vLocal = mat3(modelMatrix) * position; vUv = uv;
       gl_Position = projectionMatrix * modelViewMatrix * vec4(position,1.0);
       #include <logdepthbuf_vertex>
     }`,
-    fragmentShader: FHEAD + `uniform vec3 sunDir; uniform sampler2D bands; uniform sampler2D rings; uniform float rIn, rOut, eq, po;
-      varying vec3 vLocal;
+    fragmentShader: FHEAD + `uniform vec3 sunDir; uniform sampler2D bands; uniform sampler2D map; uniform float hasMap; uniform sampler2D rings; uniform float rIn, rOut, eq, po;
+      varying vec3 vLocal; varying vec2 vUv;
       void main(){
         #include <logdepthbuf_fragment>
         vec3 n = normalize(vLocal / vec3(eq*eq, po*po, eq*eq));
         float lat = asin(clamp(n.y, -1.0, 1.0));
-        vec3 base = texture2D(bands, vec2(0.5, 0.5 - lat / PI)).rgb;
+        vec3 base = hasMap > 0.5 ? texture2D(map, vUv).rgb : texture2D(bands, vec2(0.5, 0.5 - lat / PI)).rgb;
         float mu0 = dot(n, sunDir);
         float sh = 0.0;
         if (abs(sunDir.y) > 1e-5) { float t = -vLocal.y / sunDir.y;
@@ -406,6 +448,7 @@ function makeSaturn(radii) {
   });
   const mesh = new THREE.Mesh(new THREE.SphereGeometry(1, 160, 96), mat);
   mesh.scale.set(eq, po, eq);
+  loadMap("SATURN", mat.uniforms);
   const rmat = new THREE.ShaderMaterial({
     uniforms: { sunDir: uSun, rings: { value: ringTex }, camLocal: { value: new THREE.Vector3() },
                 rIn: { value: RING_IN / KM }, rOut: { value: RING_OUT / KM }, eq: { value: eq }, po: { value: po } },
@@ -445,17 +488,19 @@ function makeMoon(name, b) {
   const kind = name === "IAPETUS" ? 1 : name === "TITAN" ? 2 : 0;
   const mat = new THREE.ShaderMaterial({
     uniforms: { sunDir: uSun, toScene: { value: new THREE.Matrix3() }, radii: { value: new THREE.Vector3(1, 1, 1) },
-                color: { value: new THREE.Vector3(...look) }, kind: { value: kind } },
-    vertexShader: VHEAD + `varying vec3 vBody; void main(){ vBody = position;
+                color: { value: new THREE.Vector3(...look) }, kind: { value: kind },
+                map: { value: null }, hasMap: { value: 0 }, shape: { value: shapeGeom[name] ? 1 : 0 } },
+    vertexShader: VHEAD + `varying vec3 vBody; varying vec3 vNrm; varying vec2 vUv; void main(){ vBody = position; vNrm = normal; vUv = uv;
       gl_Position = projectionMatrix * modelViewMatrix * vec4(position,1.0);
       #include <logdepthbuf_vertex>
     }`,
     fragmentShader: FHEAD + NOISE + `uniform vec3 sunDir; uniform mat3 toScene; uniform vec3 radii; uniform vec3 color; uniform float kind;
-      varying vec3 vBody;
+      uniform sampler2D map; uniform float hasMap; uniform float shape;
+      varying vec3 vBody; varying vec3 vNrm; varying vec2 vUv;
       void main(){
         #include <logdepthbuf_fragment>
         vec3 nb = normalize(vBody / radii);
-        vec3 n = normalize(toScene * nb);
+        vec3 n = normalize(toScene * (shape > 0.5 ? normalize(vNrm) : nb));
         float m = fbm(nb * 5.0) - 0.5;
         float craters = smoothstep(0.62, 0.7, vnoise(nb * 22.0)) * 0.12;
         vec3 alb = color * (1.0 + 0.32 * m - craters);
@@ -469,10 +514,13 @@ function makeMoon(name, b) {
           alb = color * (1.0 + 0.05 * sin(asin(nb.z) * 6.0) + 0.04 * m);
           L = smoothstep(-0.18, 0.75, mu0) * 0.95;
         }
+        if (hasMap > 0.5) alb = texture2D(map, vUv).rgb;
         gl_FragColor = vec4(alb * (1.1 * L + 0.06), 1.0);
       }`
   });
-  const mesh = new THREE.Mesh(new THREE.SphereGeometry(1, 96, 64), mat);
+  // spheres are turned so their UV seam and poles match the IAU body frame (z = pole, x = 0 deg)
+  const mesh = new THREE.Mesh(shapeGeom[name] || new THREE.SphereGeometry(1, 96, 64).rotateX(Math.PI / 2), mat);
+  loadMap(name, mat.uniforms);
   const g = new THREE.Group(); g.add(mesh);
   if (kind === 2) {
     const haze = new THREE.ShaderMaterial({
@@ -495,7 +543,7 @@ function makeMoon(name, b) {
     const hm = new THREE.Mesh(new THREE.SphereGeometry(1.06, 96, 64), haze);
     g.add(hm);
   }
-  return { group: g, mesh, mat, radius: b.radii ? (b.radii[0] + b.radii[1] + b.radii[2]) / 3 : 10 };
+  return { group: g, mesh, mat, shape: !!shapeGeom[name], radius: b.radii ? (b.radii[0] + b.radii[1] + b.radii[2]) / 3 : 10 };
 }
 
 function makeCassini() {
@@ -522,7 +570,7 @@ function makeCassini() {
 }
 
 // ---------- state ----------
-const state = { et: 0, playing: true, speed: 600, focus: "TITAN", enlarge: false, allOrbits: false, view: [0, 0], dragging: false };
+const state = { et: 0, playing: true, speed: 600, focus: "TITAN", enlarge: false, allOrbits: false, follow: false, view: [0, 0], dragging: false };
 let bodies = {}, tracks = {}, encounters = [], catalog = null, order = null, coverage = [0, 0];
 const pos = {}, meshes = {}, labels = {};
 let probe = null, probeObj = null, probeTrail = null, att = null;
@@ -563,6 +611,7 @@ async function load() {
       att = buildAttitude([{ file: parseAttitude(u.buffer, catalog.cam), et: catalog.et, cam: catalog.cam }]);
     }
   } catch (err) { console.warn("pointing not loaded", err); att = null; }
+  await loadShapes();
   order = Array.from(catalog.et.keys()).sort((a, b) => catalog.et[a] - catalog.et[b]);
   catalog.sorted = Float64Array.from(order, i => catalog.et[i]);
 }
@@ -695,7 +744,8 @@ function updateBodies() {
       const r = b.radii.map(x => x / KM * k);
       m.mesh.matrixAutoUpdate = true;
       m.mesh.quaternion.setFromRotationMatrix(new THREE.Matrix4().makeBasis(cx, cy, cz));
-      m.mesh.scale.set(r[0], r[1], r[2]);
+      // shape models already carry their true proportions, so they scale by the largest radius only
+      if (m.shape) m.mesh.scale.setScalar(Math.max(...r)); else m.mesh.scale.set(r[0], r[1], r[2]);
       m.mat.uniforms.radii.value.set(r[0], r[1], r[2]);
       m.mat.uniforms.toScene.value.set(cx.x, cy.x, cz.x, cx.y, cy.y, cz.y, cx.z, cy.z, cz.z);
       if (m.group.children[1]) { const rr = (b.radii[0] / KM) * k; m.group.children[1].scale.setScalar(rr); }
@@ -750,11 +800,20 @@ function buildFov() {
   fov.children.forEach(c => c.frustumCulled = false);
   fov.visible = false; scene.add(fov);
 }
+const FOV_HOLD = 300, FOV_SEQ_GAP = 900;   // seconds of mission time
+// seconds since the last frame, and whether the next one follows within the same observation
+function imagingState(et) {
+  const i = lastImageIndex(et), S = catalog.sorted;
+  if (i < 0) return { i, age: Infinity, inSequence: false };
+  return { i, age: et - S[i], inSequence: i + 1 < S.length && S[i + 1] - S[i] <= FOV_SEQ_GAP };
+}
 function updateFov() {
-  const i = lastImageIndex(state.et);
-  fov.visible = false; if (i < 0) return;
-  const k = order[i], age = state.et - catalog.et[k];
-  if (age > Math.max(600, state.speed * 1.5)) return;
+  fov.visible = false;
+  // only while the camera is imaging: shortly after a frame, or between frames of one observation.
+  // Between observations Cassini holds or turns away, and the cone would point at empty sky.
+  const { i, age, inSequence } = imagingState(state.et);
+  if (i < 0 || (age > FOV_HOLD && !inSequence)) return;
+  const k = order[i];
   const t = catalog.target[k];
   const tp = !pos[t] || t === "CASSINI" ? null : t === state.focus ? new THREE.Vector3() : meshes[t] ? meshes[t].group.position : null;
   const cam = catalog.cam[k] === "W" ? "W" : "N";
@@ -1113,6 +1172,7 @@ function setTime(et) { state.et = Math.min(coverage[1], Math.max(coverage[0], et
 // ---------- controls ----------
 function setFocus(name, dist) {
   if (!pos[name]) return;
+  if (name !== "CASSINI" && state.follow) setFollow(false);
   const old = camera.position.clone();
   const d = dist || (name === "CASSINI" ? 3.5e-5 : name === "HUYGENS" ? 4 : name === "SATURN" ? 420 : Math.max(bodyRadius(name) / KM * 7, 2));
   state.focus = name;
@@ -1152,6 +1212,7 @@ function buildUi() {
   }
   $("play").addEventListener("click", () => setPlaying(!state.playing));
   $("enlarge").addEventListener("click", () => { state.enlarge = !state.enlarge; $("enlarge").setAttribute("aria-pressed", String(state.enlarge)); setFocus(state.focus, camera.position.length()); });
+  $("followcam").addEventListener("click", () => setFollow(!state.follow));
   $("allorbits").addEventListener("click", () => { state.allOrbits = !state.allOrbits; $("allorbits").setAttribute("aria-pressed", String(state.allOrbits)); });
   $("mtoggle").addEventListener("click", () => { const m = $("moments"); m.classList.toggle("closed"); $("mtoggle").setAttribute("aria-pressed", String(!m.classList.contains("closed"))); });
   if (window.matchMedia("(max-width: 860px)").matches) $("moments").classList.add("closed");
@@ -1169,6 +1230,65 @@ function buildUi() {
     li.querySelector("button").addEventListener("click", () => jump(e));
     list.appendChild(li);
   }
+}
+// ---------- follow the camera: the view swings gently to look along Cassini's camera boresight ----------
+const FOLLOW_TAU = 1.2;            // seconds of screen time to close ~63% of the gap
+const FOLLOW_IDLE = 1200;          // mission seconds without imaging before the view turns to the biggest body
+let followHoldUntil = 0;           // the user's own orbiting wins for a moment
+controls.addEventListener("start", () => { followHoldUntil = Infinity; });
+controls.addEventListener("end", () => { followHoldUntil = performance.now() + 2500; });
+function setFollow(on) {
+  state.follow = on && !!att;
+  if (!state.follow) { followBody = null; $("followcam").textContent = "Follow camera"; }
+  $("followcam").setAttribute("aria-pressed", String(state.follow));
+  sBore.set(0, 0, 0);
+  if (state.follow && state.focus !== "CASSINI") setFocus("CASSINI", 6e-5);
+}
+const qFollow = new Float64Array(4), vFollow = new THREE.Vector3(), sBore = new THREE.Vector3(), upFollow = new THREE.Vector3();
+let followLive = false, followBody = null;
+// the body that looks largest from Cassini right now; a new pick must look 20% bigger to take over
+function biggestBody() {
+  let best = null, bestA = 0, curA = 0;
+  for (const n in meshes) {
+    if (!pos[n] || n === "CASSINI" || n === "HUYGENS" || !shown(n)) continue;
+    const d = len(sub(pos[n], pos.CASSINI, tmp)), a = Math.asin(Math.min(1, meshes[n].radius / d));
+    if (a > bestA) { bestA = a; best = n; }
+    if (n === followBody) curA = a;
+  }
+  if (followBody && curA * 1.2 >= bestA) return followBody;
+  return best;
+}
+function updateFollow(dt) {
+  followLive = false;
+  if (!state.follow || !state.pointed || state.focus !== "CASSINI" || performance.now() < followHoldUntil) return;
+  const { i, age, inSequence } = imagingState(state.et);
+  const was = followBody;
+  followBody = age > FOLLOW_IDLE && !inSequence ? biggestBody() : null;
+  if (followBody !== was) $("followcam").textContent = followBody ? `Following ${titleCase(followBody)}` : "Follow camera";
+  if (followBody) toScene(norm(sub(pos[followBody], pos.CASSINI, tmp)), vFollow);
+  else {
+    const c = CAM_TO_BODY[i >= 0 && catalog.cam[order[i]] === "W" ? "W" : "N"];
+    qmul([c[0], -c[1], -c[2], -c[3]], qBody, qFollow, 0);
+    toScene(q2rows(qFollow)[2], vFollow);
+  }
+  // ease the view's direction toward the boresight, turning about the shortest axis
+  if (sBore.lengthSq() < 0.5) sBore.copy(camera.position).negate().normalize();
+  const ang = sBore.angleTo(vFollow);
+  if (ang > 1e-6) {
+    const axis = new THREE.Vector3().crossVectors(sBore, vFollow);
+    if (axis.lengthSq() < 1e-12) axis.set(0, 1, 0).cross(sBore);   // exactly opposite: any perpendicular will do
+    sBore.applyAxisAngle(axis.normalize(), ang * (1 - Math.exp(-dt / FOLLOW_TAU))).normalize();
+  }
+  // sit just behind the spacecraft and a little off to the side, so it stays in view beside the target
+  upFollow.set(0, 1, 0).addScaledVector(sBore, -sBore.y);
+  if (upFollow.lengthSq() < 1e-6) upFollow.set(1, 0, 0); upFollow.normalize();
+  const right = new THREE.Vector3().crossVectors(sBore, upFollow), d = camera.position.length();
+  camera.position.copy(sBore).negate().addScaledVector(upFollow, 0.05).addScaledVector(right, 0.1).normalize().multiplyScalar(d);
+  followLive = true;
+}
+// after the orbit controls have aimed at Cassini, look along the boresight instead
+function aimFollow() {
+  if (followLive) camera.lookAt(camera.position.clone().addScaledVector(sBore, 1e3));
 }
 function setSpeed(v) { state.speed = v; document.querySelectorAll("#speeds .btn").forEach(b => b.setAttribute("aria-pressed", String(+b.dataset.v === v))); }
 function setPlaying(p) { state.playing = p; $("play").textContent = p ? "❚❚" : "▶"; }
@@ -1202,7 +1322,9 @@ function frame(now) {
   else trailLine.position.copy(cassini.position);
   updateProbeTrail();
   updateOrbits();
+  updateFollow(dt);
   controls.update();
+  aimFollow();
   renderer.clear();
   const cd = camera.position.distanceTo(cassini.position);
   if (cd < 0.01) {
