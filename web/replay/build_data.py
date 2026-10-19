@@ -84,6 +84,24 @@ def export_huygens(src, year, out):
     info = {"file": "data/tracks/huygens.b64.txt", "events": man["events_et"], "landing_site": man["landing_site"],
             "descent": {"et": [round(t, 1) for t in d["et"][::step]], "alt_km": [round(a, 3) for a in d["alt_km"][::step]]}}
     info["descent"]["et"].append(round(d["et"][-1], 1)); info["descent"]["alt_km"].append(d["alt_km"][-1])
+    # landing-site map (Karkoschka DISR mosaics, nested levels) and per-frame ground footprints
+    mos = os.path.join(src, "mosaics", "mosaics.json")
+    proj = os.path.join(src, "catalog", "huygens_projection.json")
+    if os.path.exists(mos) and os.path.exists(proj):
+        m = json.load(open(mos))
+        os.makedirs(os.path.join(out, "huygens_map"), exist_ok=True)
+        levels = []
+        for lv in m["levels"]:
+            name = os.path.basename(lv["file"])
+            colour = os.path.join(src, "mosaics", "color", name)
+            shutil.copy(colour if os.path.exists(colour) else os.path.join(src, lv["file"]), os.path.join(out, "huygens_map", name))
+            levels.append({"m_per_px": lv["m_per_px"], "file": f"data/huygens_map/{name}"})
+        p = json.load(open(proj))
+        cat = json.load(open(os.path.join(src, "catalog", "huygens.json")))
+        et_of = dict(zip(cat["id"], cat["et"]))
+        fp = sorted((et_of[i], [[round(e), round(n)] for e, n in pts]) for i, pts in zip(p["id"], p["footprint_en_m"]) if i in et_of)
+        info["map"] = {"width": m["width"], "height": m["height"], "landing_px": m["landing_px"], "levels": levels,
+                       "footprints": {"et": [round(t, 2) for t, _ in fp], "en_m": [pts for _, pts in fp]}}
     json.dump(info, open(path, "w"), separators=(",", ":"))
 
 

@@ -584,6 +584,7 @@ function build() {
   cassini = makeCassini(); scene.add(cassini);
   cassini.traverse(o => o.layers.set(1));
   buildFov();
+  if (probe && probe.map) buildHuygensMap();
 
   // always-visible dots so small or distant bodies never vanish
   const names = Object.keys(meshes).concat(["CASSINI"]);
@@ -701,6 +702,7 @@ function updateBodies() {
     }
   }
   saturnObj.ring.uniforms.camLocal.value.copy(camera.position).sub(saturnObj.group.position);
+  updateHuygensMap();
 
   relScene("CASSINI", cassini.position);
   const dist = camera.position.distanceTo(cassini.position);
@@ -795,6 +797,97 @@ function updateTrail() {
   trailLine.geometry.attributes.position.needsUpdate = true;
   trailLine.geometry.attributes.color.needsUpdate = true;
   trailLine.position.copy(cassini.position);
+}
+
+// ---------- Huygens landing-site map ----------
+// Karkoschka's nested DISR mosaics (60 m down to 1 m per pixel, north up, centred on the landing
+// site) laid on Titan's sphere, plus the ground footprint of each descent frame. Finer levels are
+// lifted a hair above coarser ones (scaled with viewing distance) so the log depth buffer keeps
+// them in order; black pixels are "no data" and show the level below.
+let hmap = null;
+const FP_SLOTS = 9;
+function enToBody(B, e, n, liftKm, out) {
+  const R = B.R * 1000, x = B.up[0] * R + B.east[0] * e + B.north[0] * n, y = B.up[1] * R + B.east[1] * e + B.north[1] * n, z = B.up[2] * R + B.east[2] * e + B.north[2] * n;
+  const k = (B.R + liftKm) / Math.hypot(x, y, z) / KM;
+  return out.set(x * k, y * k, z * k);
+}
+function buildHuygensMap() {
+  const M = probe.map, ls = probe.landing_site, lat = rad(ls.lat_deg), lon = rad(-ls.lon_w_deg);
+  const B = { R: ls.radius_km,
+    up: [Math.cos(lat) * Math.cos(lon), Math.cos(lat) * Math.sin(lon), Math.sin(lat)],
+    east: [-Math.sin(lon), Math.cos(lon), 0],
+    north: [-Math.sin(lat) * Math.cos(lon), -Math.sin(lat) * Math.sin(lon), Math.cos(lat)] };
+  hmap = { B, group: new THREE.Group(), lift: { value: 0 }, site: new THREE.Vector3(), fps: [] };
+  enToBody(B, 0, 0, 0, hmap.site);
+  const loader = new THREE.TextureLoader(), W = M.width, H = M.height, [lx, ly] = M.landing_px, v = new THREE.Vector3();
+  M.levels.forEach((lv, idx) => {   // coarse first
+    const nx = 24, ny = 30, pos = [], uv = [], ind = [];
+    for (let j = 0; j <= ny; j++) for (let i = 0; i <= nx; i++) {
+      const px = W * i / nx, py = H * j / ny;
+      enToBody(B, (px - lx) * lv.m_per_px, (ly - py) * lv.m_per_px, 0, v);
+      pos.push(v.x, v.y, v.z); uv.push(i / nx, 1 - j / ny);
+    }
+    for (let j = 0; j < ny; j++) for (let i = 0; i < nx; i++) {
+      const a = j * (nx + 1) + i, b = a + 1, c = a + nx + 1, d = c + 1;
+      ind.push(a, c, b, b, c, d);
+    }
+    const g = new THREE.BufferGeometry();
+    g.setAttribute("position", new THREE.Float32BufferAttribute(pos, 3));
+    g.setAttribute("uv", new THREE.Float32BufferAttribute(uv, 2));
+    g.setIndex(ind);
+    const tex = loader.load(lv.file); tex.anisotropy = 4;
+    const mat = new THREE.ShaderMaterial({
+      uniforms: { map: { value: tex }, sunDir: uSun, uLift: hmap.lift, uIdx: { value: idx } },
+      vertexShader: VHEAD + `uniform float uLift; uniform float uIdx; varying vec2 vUv; varying vec3 vN;
+        void main(){ vec3 nrm = normalize(position); vUv = uv; vN = normalize(mat3(modelMatrix) * nrm);
+          gl_Position = projectionMatrix * modelViewMatrix * vec4(position + nrm * uLift * uIdx, 1.0);
+          #include <logdepthbuf_vertex>
+        }`,
+      fragmentShader: FHEAD + `uniform sampler2D map; uniform vec3 sunDir; uniform float uIdx; varying vec2 vUv; varying vec3 vN;
+        void main(){
+          #include <logdepthbuf_fragment>
+          // the mosaics clip the dark plain around the landing site to black; lift it to a dark tan
+          vec3 c = max(texture2D(map, vUv).rgb, vec3(0.075, 0.045, 0.02));
+          float L = smoothstep(-0.18, 0.75, dot(normalize(vN), sunDir)) * 0.95;
+          vec2 e = min(vUv, 1.0 - vUv);   // the outermost level fades into Titan's globe
+          float a = uIdx < 0.5 ? smoothstep(0.0, 0.08, min(e.x, e.y)) : 1.0;
+          gl_FragColor = vec4(c * (0.12 + 1.05 * L), a);
+        }`
+    });
+    if (idx === 0) { mat.transparent = true; mat.depthWrite = false; }
+    const mesh = new THREE.Mesh(g, mat); mesh.frustumCulled = false; mesh.renderOrder = 1;
+    hmap.group.add(mesh);
+  });
+  hmap.levels = M.levels.length;
+  for (let k = 0; k < FP_SLOTS; k++) {
+    const g = new THREE.BufferGeometry(); g.setAttribute("position", new THREE.BufferAttribute(new Float32Array(32 * 3), 3));
+    const ln = new THREE.LineLoop(g, new THREE.LineBasicMaterial({ color: k ? 0x8ec9ff : 0xffe2a8, transparent: true, opacity: k ? 0.5 * (1 - k / FP_SLOTS) : 1, depthWrite: false }));
+    ln.frustumCulled = false; ln.visible = false; hmap.group.add(ln); hmap.fps.push(ln);
+  }
+  meshes.TITAN.group.add(hmap.group);
+}
+function updateHuygensMap() {
+  if (!hmap) return;
+  const tm = meshes.TITAN;
+  hmap.group.quaternion.copy(tm.mesh.quaternion);
+  hmap.group.updateMatrixWorld();
+  const site = hmap.site.clone().applyMatrix4(hmap.group.matrixWorld), d = camera.position.distanceTo(site);
+  hmap.group.visible = !state.enlarge && d < 30;
+  if (!hmap.group.visible) return;
+  const lift = Math.max(2e-7, d * 2e-5);   // scene units per level
+  hmap.lift.value = lift;
+  // footprints of the latest frames, newest brightest
+  const F = probe.map.footprints, t = state.et;
+  let i = lowerIndex(F.et, t); if (F.et[i] > t) i = -1;
+  const keep = Math.max(600, state.speed * 4), v = new THREE.Vector3(), liftKm = (hmap.levels + 1) * lift * KM;
+  hmap.fps.forEach((ln, k) => {
+    const j = i - k;
+    ln.visible = j >= 0 && t - F.et[j] < keep && t < probe.events.landing + 600;
+    if (!ln.visible) return;
+    const a = ln.geometry.attributes.position.array, pts = F.en_m[j];
+    pts.forEach(([e, n], q) => { enToBody(hmap.B, e, n, liftKm, v); a[3 * q] = v.x; a[3 * q + 1] = v.y; a[3 * q + 2] = v.z; });
+    ln.geometry.attributes.position.needsUpdate = true;
+  });
 }
 
 // Huygens' path relative to Titan over the last 12 hours, up to landing
@@ -1024,7 +1117,7 @@ function setFocus(name, dist) {
   const d = dist || (name === "CASSINI" ? 3.5e-5 : name === "HUYGENS" ? 4 : name === "SATURN" ? 420 : Math.max(bodyRadius(name) / KM * 7, 2));
   state.focus = name;
   let dir = old.lengthSq() > 0 ? old.normalize() : new THREE.Vector3(0, 0.3, 1).normalize();
-  if (name === "HUYGENS" && !dist) {
+  if (name === "HUYGENS") {
     // from the side, a little above the probe, so it sits against Titan's limb
     toScene(norm(sub(pos.HUYGENS, pos.TITAN, v3())), vA);
     const side = new THREE.Vector3().crossVectors(vA, new THREE.Vector3(0, 1, 0)).normalize();
@@ -1085,7 +1178,7 @@ function jump(e) {
   const lead = huy ? (/lands/.test(e.label) ? 900 : 300) : body === "TITAN" ? 3 * 3600 : 2 * 3600;
   setTime(e.et - lead);
   setView(huy ? 6 * 3600 : 2 * 86400, e.et);
-  setFocus(pos[body] ? body : "SATURN");
+  setFocus(pos[body] ? body : "SATURN", huy && /lands/.test(e.label) ? 0.15 : undefined);
   setSpeed(huy ? 60 : 600); setPlaying(true);
 }
 
