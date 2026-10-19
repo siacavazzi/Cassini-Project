@@ -124,7 +124,7 @@ body { background: var(--void); color: var(--text); font-family: var(--font-body
       <button class="btn" id="mtoggle" aria-pressed="false">Moments</button>
     </div>
     <canvas id="tl" aria-label="Timeline: drag to scrub, scroll to zoom"></canvas>
-    <div class="note">Positions from Cassini's SPICE kernels (J2000, sub-pixel accurate). Timeline bars are camera frames per time slice. Spacecraft pointing and the photos are not loaded yet: Cassini's dish is shown aimed at Earth, and the camera cone is aimed at the target of each frame.</div>
+    <div class="note">Positions from Cassini's SPICE kernels (J2000, sub-pixel accurate). Timeline bars are camera frames per time slice. <span id="pnote">Spacecraft attitude and the camera cone come from the CK pointing kernels (exact at each frame, interpolated every 10 min between frames). The photos are not loaded yet.</span></div>
   </div>
 
   <div id="loading">Loading 2005 trajectories…</div>
@@ -145,6 +145,91 @@ function parseTrack(buffer) {
   const vel = new Float32Array(buffer, 16 + 32 * count, 3 * count);
   return { count, t, pos, vel, start: t[0], end: t[count - 1] };
 }
+// ---------- spacecraft pointing (same code as web/tracks.js) ----------
+// Fixed camera -> CASSINI_SC_COORD rotations from the frames kernel cas_v41.tf, SPICE (w, x, y, z).
+const CAM_TO_BODY = {
+  N: [0.50047271, 0.5002705, 0.49981488, -0.49944126],
+  W: [0.50048319, 0.4997469, 0.5001258, -0.49964368],
+};
+const GAP_S = 3600, EASE_S = 600;
+function qmul(a, b, out, o) { // SPICE qxq: the rotation "b, then a"
+  const [aw, ax, ay, az] = a, bw = b[0], bx = b[1], by = b[2], bz = b[3];
+  out[o] = aw * bw - ax * bx - ay * by - az * bz;
+  out[o + 1] = aw * bx + ax * bw + ay * bz - az * by;
+  out[o + 2] = aw * by - ax * bz + ay * bw + az * bx;
+  out[o + 3] = aw * bz + ax * by - ay * bx + az * bw;
+}
+function parseAttitude(buffer, cams) {
+  const head = new DataView(buffer, 0, 16);
+  const magic = String.fromCharCode(head.getUint8(0), head.getUint8(1), head.getUint8(2), head.getUint8(3));
+  if (magic !== "CATT") throw new Error("not an attitude file");
+  const nImg = head.getUint32(8, true), nBg = head.getUint32(12, true);
+  if (cams.length !== nImg) throw new Error(`catalog has ${cams.length} images, attitude file ${nImg}`);
+  const imgQ = new Float32Array(buffer, 16, 4 * nImg);
+  const bgT = new Float64Array(buffer, 16 + 16 * nImg, nBg);
+  const bgQ = new Float32Array(buffer, 16 + 16 * nImg + 8 * nBg, 4 * nBg);
+  return { nImg, nBg, imgQ, bgT, bgQ };
+}
+function buildAttitude(years) {
+  const ts = [], qs = [];
+  const tmp = new Float64Array(4);
+  for (const { file, et, cam } of years) {
+    for (let i = 0; i < file.nBg; i++) {
+      ts.push(file.bgT[i]);
+      qs.push([file.bgQ[4 * i], file.bgQ[4 * i + 1], file.bgQ[4 * i + 2], file.bgQ[4 * i + 3]]);
+    }
+    for (let i = 0; i < file.nImg; i++) {
+      const q = file.imgQ.subarray(4 * i, 4 * i + 4);
+      if (Number.isNaN(q[0])) continue;
+      qmul(CAM_TO_BODY[cam[i]], q, tmp, 0);
+      ts.push(et[i]);
+      qs.push([tmp[0], tmp[1], tmp[2], tmp[3]]);
+    }
+  }
+  const order = ts.map((_, i) => i).sort((a, b) => ts[a] - ts[b]);
+  const t = new Float64Array(order.length), q = new Float64Array(4 * order.length);
+  let n = 0;
+  for (const i of order) {
+    if (n && ts[i] === t[n - 1]) continue; // simultaneous NAC and WAC frames
+    const [w, x, y, z] = qs[i];
+    let s = Math.hypot(w, x, y, z);
+    // keep neighbours in the same hemisphere so slerp takes the short way round
+    if (n && w * q[4 * n - 4] + x * q[4 * n - 3] + y * q[4 * n - 2] + z * q[4 * n - 1] < 0) s *= -1;
+    t[n] = ts[i];
+    q[4 * n] = w / s; q[4 * n + 1] = x / s; q[4 * n + 2] = y / s; q[4 * n + 3] = z / s;
+    n++;
+  }
+  return { count: n, t: t.subarray(0, n), q: q.subarray(0, 4 * n), start: t[0], end: t[n - 1] };
+}
+// Body attitude (w, x, y, z), J2000 -> CASSINI_SC_COORD; slerp between samples, hold then ease across gaps.
+function attitudeAt(att, et, out = new Float64Array(4)) {
+  if (!att.count || et < att.start || et > att.end) return null;
+  const i = bracket(att, et);
+  const j = Math.min(i + 1, att.count - 1);
+  const t0 = att.t[i], t1 = att.t[j];
+  let u = t1 > t0 ? (et - t0) / (t1 - t0) : 0;
+  if (t1 - t0 > GAP_S) u = Math.max(0, (et - (t1 - EASE_S)) / EASE_S);
+  const a = att.q.subarray(4 * i, 4 * i + 4), b = att.q.subarray(4 * j, 4 * j + 4);
+  const dot = Math.min(1, a[0] * b[0] + a[1] * b[1] + a[2] * b[2] + a[3] * b[3]);
+  let ka = 1 - u, kb = u;
+  if (dot < 0.9999) {
+    const th = Math.acos(dot), s = Math.sin(th);
+    ka = Math.sin((1 - u) * th) / s; kb = Math.sin(u * th) / s;
+  }
+  let len = 0;
+  for (let k = 0; k < 4; k++) { out[k] = ka * a[k] + kb * b[k]; len += out[k] * out[k]; }
+  len = Math.sqrt(len);
+  for (let k = 0; k < 4; k++) out[k] /= len;
+  return out;
+}
+// Rows of the rotation matrix (SPICE q2m): the frame's axes expressed in J2000.
+function q2rows(q) {
+  const [w, x, y, z] = q;
+  return [[1 - 2 * (y * y + z * z), 2 * (x * y - w * z), 2 * (x * z + w * y)],
+          [2 * (x * y + w * z), 1 - 2 * (x * x + z * z), 2 * (y * z - w * x)],
+          [2 * (x * z - w * y), 2 * (y * z + w * x), 1 - 2 * (x * x + y * y)]];
+}
+
 function bracket(track, et) {
   let lo = 0, hi = track.count - 1;
   while (hi - lo > 1) { const mid = (lo + hi) >> 1; if (track.t[mid] <= et) lo = mid; else hi = mid; }
@@ -414,7 +499,7 @@ function makeMoon(name, b) {
 }
 
 function makeCassini() {
-  // Rough Cassini built from primitives, in metres; the high-gain dish faces +Z.
+  // Rough Cassini built from primitives, in metres; the high-gain dish faces +Z, the cameras +Y.
   const g = new THREE.Group();
   const foil = new THREE.MeshStandardMaterial({ color: 0x9c7a3a, metalness: 0.6, roughness: 0.35 });
   const white = new THREE.MeshStandardMaterial({ color: 0xbcb8ac, metalness: 0.05, roughness: 0.9 });
@@ -429,6 +514,9 @@ function makeCassini() {
     const rtg = new THREE.Mesh(new THREE.CylinderGeometry(0.22, 0.22, 1.1, 10), dark);
     rtg.position.set(Math.cos(a) * 1.2, Math.sin(a) * 1.2, -1.7); rtg.rotation.x = Math.PI / 2; g.add(rtg);
   }
+  const pallet = new THREE.Mesh(new THREE.BoxGeometry(1.4, 0.5, 1.6), white); pallet.position.set(0, 1.1, 0.4); g.add(pallet);
+  const nac = new THREE.Mesh(new THREE.CylinderGeometry(0.16, 0.16, 0.9, 12), dark); nac.position.set(0.3, 1.5, 0.4); g.add(nac);
+  const wac = new THREE.Mesh(new THREE.CylinderGeometry(0.11, 0.11, 0.6, 12), dark); wac.position.set(-0.3, 1.45, 0.4); g.add(wac);
   const eng = new THREE.Mesh(new THREE.ConeGeometry(0.45, 0.9, 16, 1, true), dark); eng.rotation.x = -Math.PI / 2; eng.position.z = -2.5; g.add(eng);
   return g;
 }
@@ -437,9 +525,10 @@ function makeCassini() {
 const state = { et: 0, playing: true, speed: 600, focus: "TITAN", enlarge: false, allOrbits: false, view: [0, 0], dragging: false };
 let bodies = {}, tracks = {}, encounters = [], catalog = null, order = null, coverage = [0, 0];
 const pos = {}, meshes = {}, labels = {};
-let probe = null, probeObj = null, probeTrail = null;
+let probe = null, probeObj = null, probeTrail = null, att = null;
 let saturnObj, cassini, trailLine, orbitLines = {}, markerPts, starPts, sunSprite, fov;
 const tmp = v3(), tmp2 = v3(), vA = new THREE.Vector3();
+const qBody = new Float64Array(4), qCam = new Float64Array(4), mB = new THREE.Matrix4();
 
 async function load() {
   const [b, e, c] = await Promise.all(["data/bodies.json", "data/encounters.json", "data/catalog.json"].map(u => fetch(u).then(r => { if (!r.ok) throw new Error(u + ": " + r.status); return r.json(); })));
@@ -465,6 +554,15 @@ async function load() {
       probe = { ...h, track: parseTrack(u.buffer) };
     }
   } catch (err) { console.warn("Huygens data not loaded", err); probe = null; }
+  // optional: spacecraft pointing for the year, in catalog order
+  try {
+    const r = await fetch("data/attitude.b64.txt");
+    if (r.ok) {
+      const s = atob((await r.text()).trim()), u = new Uint8Array(s.length);
+      for (let i = 0; i < s.length; i++) u[i] = s.charCodeAt(i);
+      att = buildAttitude([{ file: parseAttitude(u.buffer, catalog.cam), et: catalog.et, cam: catalog.cam }]);
+    }
+  } catch (err) { console.warn("pointing not loaded", err); att = null; }
   order = Array.from(catalog.et.keys()).sort((a, b) => catalog.et[a] - catalog.et[b]);
   catalog.sorted = Float64Array.from(order, i => catalog.et[i]);
 }
@@ -608,7 +706,13 @@ function updateBodies() {
   const dist = camera.position.distanceTo(cassini.position);
   // true size (1 m = 1e-6 units) up close; from about 500 m out it is enlarged so it stays visible
   cassini.scale.setScalar(Math.max(1e-6, dist * 0.002));
-  relScene("EARTH", vA); cassini.lookAt(vA);
+  const qb = att && attitudeAt(att, state.et, qBody);
+  state.pointed = !!qb;
+  if (qb) {
+    // model +Z is the dish (body -Z), model +Y the camera side (body -Y)
+    const R = q2rows(qb), bx = toScene(R[0], new THREE.Vector3()), by = toScene(R[1], new THREE.Vector3()), bz = toScene(R[2], new THREE.Vector3());
+    cassini.quaternion.setFromRotationMatrix(mB.makeBasis(bx, by.negate(), bz.negate()));
+  } else { relScene("EARTH", vA); cassini.lookAt(vA); }
 
   // markers
   const arr = markerPts.geometry.attributes.position.array;
@@ -649,11 +753,24 @@ function updateFov() {
   fov.visible = false; if (i < 0) return;
   const k = order[i], age = state.et - catalog.et[k];
   if (age > Math.max(600, state.speed * 1.5)) return;
-  const t = catalog.target[k]; if (!pos[t] || t === "CASSINI") return;
-  const tp = t === state.focus ? new THREE.Vector3() : meshes[t] ? meshes[t].group.position : null; if (!tp) return;
-  const L = cassini.position.distanceTo(tp); if (!(L > 0)) return;
-  const h = L * Math.tan(rad(FOV_HALF[catalog.cam[k]] || FOV_HALF.N));
-  fov.position.copy(cassini.position); fov.scale.set(h, h, L * 1.02); fov.lookAt(tp);
+  const t = catalog.target[k];
+  const tp = !pos[t] || t === "CASSINI" ? null : t === state.focus ? new THREE.Vector3() : meshes[t] ? meshes[t].group.position : null;
+  const cam = catalog.cam[k] === "W" ? "W" : "N";
+  if (state.pointed) {
+    // the camera's real pointing now: J2000 -> body, then body -> camera
+    const c = CAM_TO_BODY[cam];
+    qmul([c[0], -c[1], -c[2], -c[3]], qBody, qCam, 0);
+    const R = q2rows(qCam), cx = toScene(R[0], new THREE.Vector3()), cy = toScene(R[1], new THREE.Vector3()), cz = toScene(R[2], new THREE.Vector3());
+    const L = tp ? Math.max(cassini.position.distanceTo(tp), 1e-3) : Math.max(camera.position.distanceTo(cassini.position), 1e-3);
+    const h = L * Math.tan(rad(FOV_HALF[cam]));
+    fov.position.copy(cassini.position); fov.scale.set(h, h, L * 1.02);
+    fov.quaternion.setFromRotationMatrix(mB.makeBasis(cx, cy, cz));
+  } else {
+    if (!tp) return;
+    const L = cassini.position.distanceTo(tp); if (!(L > 0)) return;
+    const h = L * Math.tan(rad(FOV_HALF[cam]));
+    fov.position.copy(cassini.position); fov.scale.set(h, h, L * 1.02); fov.lookAt(tp);
+  }
   const col = catalog.cam[k] === "N" ? 0x8ec9ff : 0x9fb6d6;
   fov.children[0].material.color.setHex(col); fov.children[1].material.color.setHex(col);
   fov.visible = true;
@@ -810,7 +927,7 @@ function updateHud() {
   const cam = catalog.cam[k] === "N" ? "Narrow-angle" : "Wide-angle";
   $("imgv").textContent = `${titleCase(catalog.target[k] || "Unknown")} · ${cam} · ${catalog.f1[k]}/${catalog.f2[k]}`;
   const kp = catalog.km_per_px[k];
-  $("imgk").textContent += fov.visible ? " · cone aimed at target" : "";
+  $("imgk").textContent += fov.visible ? (state.pointed ? " · real pointing" : " · cone aimed at target") : "";
   const dayStart = state.et - 86400, n24 = i - lastImageIndex(dayStart);
   $("imgm").textContent = `${catalog.id[k]}${kp ? ` · ${kp < 10 ? kp.toFixed(2) : fmtInt(kp)} km/px` : ""} · ${fmtInt(n24)} frames in the last 24 h`;
 }
@@ -1021,6 +1138,7 @@ function frame(now) {
   }
   state.et = utcToEt("2005-01-14T09:30:00");
   build(); buildUi(); resize();
+  if (!att) $("pnote").textContent = "Spacecraft pointing is not loaded: Cassini's dish is shown aimed at Earth, and the camera cone is aimed at the target of each frame.";
   setSpeed(600);
   setView(5 * 86400, utcToEt("2005-01-15T12:00:00"));
   updateBodies();

@@ -2,7 +2,8 @@
 """
 Copy one year of exported replay data into web/replay/data for the prototype viewer.
 
-  python web/replay/build_data.py --data <export dir from export_tracks.py> --year 2005
+  python web/replay/build_data.py --data <export dir from export_tracks.py> --year 2005 \
+      [--attitude <dir with <year>.bin>] [--huygens <huygens replay dir>]
 
 Track files are also written base64-wrapped (.b64.txt), because the artifact host that serves
 the prototype does not serve raw binary files. A normal static host can use the .bin files.
@@ -24,6 +25,7 @@ def main():
     ap.add_argument("--data", required=True)
     ap.add_argument("--year", type=int, default=2005)
     ap.add_argument("--out", default=os.path.join(os.path.dirname(__file__), "data"))
+    ap.add_argument("--attitude", help="folder with attitude/<year>.bin from export_attitude.py (same catalog export)")
     ap.add_argument("--huygens", help="Huygens replay folder (tracks/huygens, manifest_huygens.json, huygens_descent.json)")
     args = ap.parse_args()
     os.makedirs(os.path.join(args.out, "tracks"), exist_ok=True)
@@ -50,6 +52,15 @@ def main():
     slim = {k: cat[k] for k in ["id", "et", "cam", "f1", "f2", "target", "obs", "range_km", "km_per_px"]}
     slim["et"] = [round(t, 1) for t in slim["et"]]
     json.dump(slim, open(os.path.join(args.out, "catalog.json"), "w"), separators=(",", ":"))
+    if args.attitude:
+        src = os.path.join(args.attitude, f"{args.year}.bin")
+        raw = open(src, "rb").read()
+        n_img = int.from_bytes(raw[8:12], "little")
+        if raw[:4] != b"CATT" or n_img != len(slim["et"]):
+            raise SystemExit(f"{src}: {n_img} images, catalog has {len(slim['et'])}; re-export one of them")
+        shutil.copy(src, os.path.join(args.out, "attitude.bin"))
+        with open(os.path.join(args.out, "attitude.b64.txt"), "w") as fh:
+            fh.write(base64.b64encode(raw).decode())
     if args.huygens:
         export_huygens(args.huygens, args.year, args.out)
     print(f"{len(bodies)} bodies, {len(enc)} encounters, {len(slim['et'])} images")
