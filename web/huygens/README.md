@@ -29,6 +29,7 @@ $P tools/make_evidence.py --root .           # evidence/
 | `images/huygens/stretch.json` | The stretch limits that were used |
 | `verify_huygens.json` | Full verification output |
 | `mosaics/<s>m.png`, `mosaics/mosaics.json` | Karkoschka's landing-site mosaics at 60, 50, 40, 30, 20, 15, 10, 5, 4, 3, 2 and 1 m/pixel, 1250x1600, north up, landing site at the same pixel in each, brightness matched between scales (`build_mosaics.py`) |
+| `huygens_color.json`, `images/huygens_color/<id>.png`, `mosaics/color/<s>m.png` | Colour from the spectrometers against altitude (1 km steps), the 608 frames tinted with the colour at their altitude, and the mosaics tinted with the near-surface colour (`descent_color.py`) |
 | `catalog/huygens_projection.json` | Per usable descent frame: nadir point, ground footprint outline (m east/north of the landing site) and its correlation with the mosaic, plus the camera model (`project_frames.py`) |
 
 ## How the track is built
@@ -126,9 +127,14 @@ Single DISR frames are hard to read: each covers a thin wedge of ground, the low
 
 `project_frames.py` places every frame on that map. Its camera model is the instrument catalog's (rows run in nadir angle, columns in azimuth). Row direction, column direction and an azimuth offset of +4 deg were fitted against the mosaic: projected HRI/MRI frames at 6 to 14 km correlate with it at a median r = 0.80, and every other convention scores 0.54 or less. Frame by frame (`fit_r`), MRI frames at 1 to 14 km match at r 0.75 to 0.85 and HRI at 6 to 14 km at 0.47. Below 5 km an HRI frame covers only a few hundred metres, less than the uncertainty of the probe's position, so those footprints are approximate. Painting the frames themselves into a map with this geometry was tried and gives a radial patchwork, because the label attitude is not precise enough to line up frames taken at different altitudes, so the mosaic stays the surface and the frames are shown as footprints on it.
 
+### Colour
+
+`descent_color.py` gives the frames the colour the probe's spectrometers measured. The downward-looking visible spectrometer (DLVS, 477 to 977 nm) and the violet photometer (DLV, mean over 350 to 480 nm) cover the eye's range. Below 477 nm, where the spectrometer stops, a straight line is fitted that meets the spectrometer at 477 nm and matches the photometer's mean; about three quarters of the blue (Z) signal comes from that fill, so blue is the least certain channel. Each spectrum goes through the CIE 1931 colour matching functions to sRGB with a D65 white and no adaptation (the Sun is near D65), and only its hue and saturation are applied: brightness still comes from the frame. The probe's lamp lit the ground below about 700 m, so frames below that and on the surface use the 0.7 to 2 km colour. The result is a tan from 140 km down to about 3 km, turning orange-brown near the ground as less haze lies between the probe and the surface.
+
 ```
+python web/huygens/descent_color.py --spec <dir with DLVS_DDP.TAB and DLV_DDP.TAB> --replay <replay>
 python web/huygens/build_mosaics.py --src <DISR>/EXTRAS/MOSAICS/MOSIACS_PNG --out <replay>
-python web/huygens/project_frames.py --replay <replay> --movie descent_mosaic.mp4
+python web/huygens/project_frames.py --replay <replay> --movie descent_mosaic.mp4 [--color <replay>/huygens_color.json]
 ```
 
 ## Evidence (`../evidence/`)

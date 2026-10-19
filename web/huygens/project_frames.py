@@ -29,7 +29,8 @@ and the result is a radial patchwork. Karkoschka's mosaics fitted every frame's
 attitude by hand and are the legible view; the per-frame geometry here is for
 showing where each frame looked.
 
-  python web/huygens/project_frames.py --replay <replay dir> [--movie out.mp4]
+  python web/huygens/project_frames.py --replay <replay dir> [--movie out.mp4
+      [--color <replay>/huygens_color.json]]
 
 writes <replay>/catalog/huygens_projection.json: the camera model, and per
 frame its nadir point, ground footprint outline (metres east/north of the
@@ -218,9 +219,21 @@ def local_contrast(img8, empty, bg=36):
 CAM_COLOR = {"HRI": (255, 90, 60), "MRI": (255, 200, 40), "SLI": (80, 200, 255)}
 
 
-def movie(rp, path, size=600, fps=24, seconds=50, end_alt=400.0):
+def movie(rp, path, size=600, fps=24, seconds=50, end_alt=400.0, color=None):
     """Two panels: the newest raw frame (before) and Karkoschka's mosaic under the
-    probe with the newest frames' footprints outlined (after)."""
+    probe with the newest frames' footprints outlined (after). With `color` (the
+    huygens_color.json table) the mosaic is tinted with the spectrometer colour
+    at the probe's altitude and the frame with the colour at its own altitude."""
+    if not color:
+        tint = None
+    else:
+        import descent_color as dcol
+        ca = np.array(color["alt_km"])[::-1]
+        cr = np.array(color["rgb_linear_unit_Y"])[::-1]
+
+        def tint(g8, alt_km):  # noqa: F811
+            a_ = max(alt_km, 0.0)
+            return dcol.tint(g8, [np.interp(a_, ca, cr[:, k]) for k in range(3)])
     c = rp.c
     usable = sorted([i for i in range(c["count"]) if rp.usable(i)], key=lambda i: c["et"][i])
     ets = np.array([c["et"][i] for i in usable])
@@ -249,7 +262,8 @@ def movie(rp, path, size=600, fps=24, seconds=50, end_alt=400.0):
         gx = cx + (xs - size / 2 + 0.5) * px
         gy = cy - (ys - size / 2 + 0.5) * px
         mos = rp.mosaic(gx, gy, px)
-        p_mos = Image.fromarray(local_contrast(to8(mos), np.isnan(mos))).convert("RGB")
+        m8 = local_contrast(to8(mos), np.isnan(mos))
+        p_mos = Image.fromarray(tint(m8, h / 1e3) if tint else m8).convert("RGB")
         dr = ImageDraw.Draw(p_mos)
         to_px = lambda e, nn: (size / 2 + (e - cx) / px, size / 2 - (nn - cy) / px)
         # the last few frames' footprints, newest brightest
@@ -273,7 +287,8 @@ def movie(rp, path, size=600, fps=24, seconds=50, end_alt=400.0):
         p_raw = Image.new("RGB", (size, size), (20, 20, 20))
         if n:
             j = usable[n - 1]
-            fr = Image.open(os.path.join(rp.root, c["file_enh"][j])).convert("RGB")
+            fr = Image.open(os.path.join(rp.root, c["file_enh"][j])).convert("L")
+            fr = Image.fromarray(tint(np.array(fr), c["alt_km"][j])) if tint else fr.convert("RGB")
             sc = (size - 50) / fr.height
             fr = fr.resize((int(fr.width * sc), size - 50), Image.BILINEAR)
             p_raw.paste(fr, ((size - fr.width) // 2, 12))
@@ -300,6 +315,7 @@ def main():
     ap.add_argument("--replay", required=True)
     ap.add_argument("--movie")
     ap.add_argument("--seconds", type=int, default=50)
+    ap.add_argument("--color", help="huygens_color.json from descent_color.py, to render in colour")
     a = ap.parse_args()
     rp = Replay(a.replay)
     rows = write_json(rp, os.path.join(a.replay, "catalog/huygens_projection.json"))
@@ -311,7 +327,8 @@ def main():
         if sel:
             print(f"  {lo:3d}-{hi:3d} km: {len(sel):3d} frames, median r {np.median(sel):.2f}")
     if a.movie:
-        print("frames in", movie(rp, a.movie, seconds=a.seconds))
+        color = json.load(open(a.color)) if a.color else None
+        print("frames in", movie(rp, a.movie, seconds=a.seconds, color=color))
 
 
 if __name__ == "__main__":
