@@ -39,7 +39,7 @@ runs. Frames already in <out> are skipped, so it can be stopped and restarted.
 Usage (from the main folder, with the old data as CASSINI_DATA as usual):
     python "helper programs/convert_archive.py" OUT [--years 2002 2003] [--limit N]
         [--table auto|raw|png] [--downloads 4] [--dry-run] [--add-missing [--volumes COISS_2009 ...]]
-        [--bundles DIR [--work DIR] [--keep-bundles] [--only-volumes COISS_2077 ...]] [--pds-index DIR]
+        [--bundles DIR [--work DIR] [--keep-bundles] [--only-volumes COISS_2077 ...] [--connections 8]] [--pds-index DIR]
 """
 import argparse
 import csv
@@ -78,25 +78,44 @@ MIDS = (cal.LUT[:-1] + cal.LUT[1:]) / 2
 MANIFEST_FIELDS = ["id", "conversion", "source", "lines", "samples", "bytes_downloaded", "png_bytes", "note"]
 
 
-def fetch(url, path, tries=5):
-    for attempt in range(tries):
+def fetch(url, path, tries=5, start=0, end=None, part=None):
+    part = part or path + ".part"
+    want = None if end is None else end - start
+    attempt = 0
+    while True:
+        have = os.path.getsize(part) if os.path.exists(part) else 0
+        if want is not None and have >= want:
+            break
         try:
-            request = urllib.request.Request(url, headers={"User-Agent": USER_AGENT})
-            with urllib.request.urlopen(request, timeout=120) as r, open(path + ".part", "wb") as f:
-                while True:
-                    chunk = r.read(1 << 20)
-                    if not chunk:
-                        break
-                    f.write(chunk)
-                # read(n) returns b"" when the server drops the connection, so a cut
-                # short download only shows up as the wrong size
-                expected = r.headers.get("Content-Length")
-                if expected is not None and f.tell() != int(expected):
-                    raise IOError(f"{url}: got {f.tell()} of {expected} bytes")
-            os.replace(path + ".part", path)
-            return os.path.getsize(path)
+            headers = {"User-Agent": USER_AGENT}
+            if have or start or end is not None:
+                last = "" if end is None else str(end - 1)
+                headers["Range"] = f"bytes={start + have}-{last}"
+            request = urllib.request.Request(url, headers=headers)
+            with urllib.request.urlopen(request, timeout=120) as r:
+                resumed = r.status == 206
+                if "Range" in headers and not resumed:
+                    if start or end is not None:
+                        raise IOError(f"{url}: server ignored a range request")
+                    have = 0  # the server sent the whole file again
+                with open(part, "ab" if resumed else "wb") as f:
+                    while True:
+                        chunk = r.read(1 << 20)
+                        if not chunk:
+                            break
+                        f.write(chunk)
+                    # read(n) returns b"" when the server drops the connection, so a cut
+                    # short download only shows up as the wrong size
+                    expected = r.headers.get("Content-Length")
+                    if expected is not None and f.tell() != have + int(expected):
+                        raise IOError(f"{url}: got {f.tell()} of {have + int(expected)} bytes")
+            break
         except Exception as e:
-            if attempt == tries - 1:
+            # a connection cut after some progress resumes from where it stopped, so only
+            # attempts that got nothing count towards giving up
+            now = os.path.getsize(part) if os.path.exists(part) else 0
+            attempt = 0 if now > have else attempt + 1
+            if attempt >= tries:
                 raise
             wait = 2 ** (attempt + 1)
             if getattr(e, "code", None) == 429:
@@ -104,6 +123,40 @@ def fetch(url, path, tries=5):
                 after = str(e.headers.get("Retry-After") or "")
                 wait = max(wait * 15, int(after) if after.isdigit() else 0)
             time.sleep(wait)
+    if part == path + ".part":
+        os.replace(part, path)
+        return os.path.getsize(path)
+    return os.path.getsize(part)
+
+
+"""
+Downloads one big file over several connections at once, each fetching its own byte range
+into path.part<k> (resumed if a run is restarted), then joins them. A single connection to
+the JPL mirror runs at ~3 MB/s some days; several together go much faster.
+"""
+def fetch_ranged(url, path, connections=8):
+    request = urllib.request.Request(url, method="HEAD", headers={"User-Agent": USER_AGENT})
+    with urllib.request.urlopen(request, timeout=120) as r:
+        length = int(r.headers.get("Content-Length") or 0)
+        ranges = r.headers.get("Accept-Ranges", "") == "bytes"
+    if connections <= 1 or not ranges or length < 64 << 20:
+        return fetch(url, path, tries=8)
+    step = -(-length // connections)
+    pieces = [(k * step, min(length, (k + 1) * step)) for k in range(connections)]
+    parts = [f"{path}.part{k}" for k in range(connections)]
+    with ThreadPoolExecutor(connections) as pool:
+        for future in [pool.submit(fetch, url, path, 8, a, b, part) for (a, b), part in zip(pieces, parts)]:
+            future.result()
+    with open(path + ".part", "wb") as out:
+        for part in parts:
+            with open(part, "rb") as f:
+                shutil.copyfileobj(f, out, 16 << 20)
+    if os.path.getsize(path + ".part") != length:
+        raise IOError(f"{url}: joined {os.path.getsize(path + '.part')} of {length} bytes")
+    os.replace(path + ".part", path)
+    for part in parts:
+        os.remove(part)
+    return length
 
 
 """
@@ -214,6 +267,10 @@ class Converter:
         self.read_lock = threading.Lock()
         self.pds = None
         self.local = None  # with --bundles: the folder the current volume was unpacked into
+        # with --bundles, a volume's files are written to a staging folder (dest) and its manifest
+        # and index rows held back (pending) until the whole volume is moved into out
+        self.dest = out
+        self.pending = None
         path = os.path.join(out, "manifest.csv")
         new = not os.path.exists(path) or os.path.getsize(path) == 0
         self.manifest = open(path, "a", newline="")
@@ -224,8 +281,19 @@ class Converter:
 
     def record(self, **row):
         with self.lock:
+            if self.pending is not None:
+                self.pending.append(("manifest", row))
+                return
             self.writer.writerow(row)
             self.manifest.flush()
+
+    def flush_pending(self):
+        pending, self.pending = self.pending or [], None
+        for kind, row in pending:
+            if kind == "manifest":
+                self.record(**row)
+            else:
+                self.add_index_row(row)
 
     def needs_download(self, frame, old=None):
         conversion = frame["conversion"]
@@ -238,27 +306,49 @@ class Converter:
         # auto: download unless the old PNG gives the codes exactly (only known once it's read)
         return old is None or table_from_png(old, frame["info"]) is None
 
+    def local_file(self, fid, ext):
+        location = self.pds[fid]["location"][:-4] + ext
+        # unpacked volumes use lower-case folder names: coiss_2001/data/...
+        volume, rest = location.split("/", 1)
+        return os.path.join(self.local, volume.lower(), rest)
+
     def download(self, fid, png_out, ext):
         row = self.pds.get(fid)
         if row is None:
             raise LookupError(f"{fid} is not in the PDS index")
         location = row["location"][:-4] + ext
         if self.local:
-            # unpacked volumes use lower-case folder names: coiss_2001/data/...
-            volume, rest = location.split("/", 1)
-            shutil.copyfile(os.path.join(self.local, volume.lower(), rest), png_out[:-4] + ext)
+            shutil.copyfile(self.local_file(fid, ext), png_out[:-4] + ext)
             return 0
         return fetch(f"{PDS}/{series_of(location)}/{location}", png_out[:-4] + ext)
 
     def convert(self, frame):
         png_rel = frame["png"]
         fid = os.path.basename(png_rel).split(".")[0]
-        png_out = os.path.join(self.out, png_rel)
+        png_out = os.path.join(self.dest, png_rel)
         downloaded, note = 0, ""
         lbl_rel = label_path(png_rel)
-        lbl_out = os.path.join(self.out, lbl_rel)
+        lbl_out = os.path.join(self.dest, lbl_rel)
         old = None
-        if not frame.get("missing"):
+        if self.local and not frame.get("missing"):
+            # whole-volume mode: the label comes from the unpacked volume, and the old PNG is only
+            # read when it's needed (8LSB), sparing the drive a random read of the zip per frame
+            with self.read_lock:
+                present = ds.exists(lbl_rel) and ds.exists(png_rel)
+            if not present:
+                if not self.add_missing:
+                    raise FileNotFoundError(f"{png_rel} isn't on the drive (rerun with --add-missing to fetch it)")
+                frame["missing"] = True
+            else:
+                downloaded += self.download(fid, png_out, ".LBL")
+                frame["info"] = parse_label(open(lbl_out, encoding="latin-1").read())
+                frame["conversion"] = frame["info"].get("DATA_CONVERSION_TYPE", "")
+                if not self.needs_download(frame):
+                    with self.read_lock:
+                        old = ds.imread(png_rel, 0)
+                    if old is None:
+                        raise ValueError(f"couldn't read {png_rel}")
+        elif not frame.get("missing"):
             try:
                 with self.read_lock:
                     text = ds.read_text(lbl_rel)
@@ -288,12 +378,15 @@ class Converter:
         frame["conversion"] = frame["info"].get("DATA_CONVERSION_TYPE", "")
         conversion = frame["conversion"]
         if self.needs_download(frame, old):
-            img = png_out[:-4] + ".IMG"
-            downloaded += self.download(fid, png_out, ".IMG")
-            try:
-                image, prefixes = read_img(img)
-            finally:
-                os.remove(img)
+            if self.local:
+                image, prefixes = read_img(self.local_file(fid, ".IMG"))  # read in place
+            else:
+                img = png_out[:-4] + ".IMG"
+                downloaded += self.download(fid, png_out, ".IMG")
+                try:
+                    image, prefixes = read_img(img)
+                finally:
+                    os.remove(img)
             if conversion in ("12BIT", "TABLE"):
                 codes = encode(image, conversion)
             else:
@@ -324,6 +417,9 @@ class Converter:
     def add_index_row(self, row):
         path = os.path.join(self.out, "Image_index_added.csv")
         with self.lock:
+            if self.pending is not None:
+                self.pending.append(("index", row))
+                return
             new = not os.path.exists(path)
             with open(path, "a", newline="") as f:
                 writer = csv.DictWriter(f, ADDED_INDEX_FIELDS)
@@ -411,11 +507,11 @@ def plan(out, years, limit, add_missing=False, volumes=None, pds=None):
 Downloads one volume's .tar.gz and unpacks just the given frames' IMG and LBL files into
 work/<volume>/data/... Returns the bytes downloaded.
 """
-def fetch_bundle(volume, bundles, work, fids):
+def fetch_bundle(volume, bundles, work, fids, connections=8):
     tgz = os.path.join(bundles, volume.lower() + ".tar.gz")
     size = 0
     if not os.path.exists(tgz):
-        size = fetch(BUNDLES.format(volume=volume.lower()), tgz)
+        size = fetch_ranged(BUNDLES.format(volume=volume.lower()), tgz, connections)
     wanted = {fid + ext for fid in fids for ext in (".IMG", ".LBL")}
     # "r|*": some of the mirror's .tar.gz files (coiss_1001) are plain tar despite the name
     with tarfile.open(tgz, "r|*") as tar:
@@ -433,8 +529,22 @@ def fetch_bundle(volume, bundles, work, fids):
 
 
 """
+Moves a volume's staged files into out with one sequential copy each (far kinder to a spinning
+drive than writing frame by frame). Each PNG goes last, since a PNG in out marks its frame done.
+"""
+def move_stage(stage, out):
+    for sub in ("nac_data", "wac_data"):
+        names = sorted(os.listdir(os.path.join(stage, sub)), key=lambda n: n.endswith(".png"))
+        for name in names:
+            dst = os.path.join(out, sub, name)
+            shutil.copyfile(os.path.join(stage, sub, name), dst + ".tmp")
+            os.replace(dst + ".tmp", dst)
+
+
+"""
 --bundles: works volume by volume. The next volume downloads while this one converts;
-each volume's .tar.gz and unpacked files are deleted once its frames are done
+each volume's frames are written under WORK/stage and moved into OUT once all are done, and
+its .tar.gz and unpacked files are deleted
 (unless --keep-bundles). Frames NASA's index doesn't place in a volume are done
 the usual way at the end.
 """
@@ -448,12 +558,13 @@ def run_bundles(converter, frames, args, out, errors):
     bundles = os.path.abspath(args.bundles)
     work = os.path.abspath(args.work or os.path.join(out, "unpacked"))
     os.makedirs(bundles, exist_ok=True)
+    stage = os.path.join(work, "stage")
 
     def prepare(volume):
         fids = [os.path.basename(f["png"]).split(".")[0] for f in by_volume[volume]]
         folder = os.path.join(work, volume.lower() + ".tmp")
         shutil.rmtree(folder, ignore_errors=True)
-        size = fetch_bundle(volume, bundles, folder, fids)
+        size = fetch_bundle(volume, bundles, folder, fids, args.connections)
         return folder, size
 
     start, done, failed, total_bytes = time.time(), 0, 0, 0
@@ -474,6 +585,10 @@ def run_bundles(converter, frames, args, out, errors):
                 continue
             total_bytes += size
             converter.local = folder
+            shutil.rmtree(stage, ignore_errors=True)
+            for sub in ("nac_data", "wac_data"):
+                os.makedirs(os.path.join(stage, sub))
+            converter.dest, converter.pending = stage, []
             with ThreadPoolExecutor(max(1, args.workers)) as pool:
                 futures = {pool.submit(converter.convert, f): f for f in by_volume[volume]}
                 for future in as_completed(futures):
@@ -484,8 +599,12 @@ def run_bundles(converter, frames, args, out, errors):
                         failed += 1
                         errors.write(f"{futures[future]['png']}\t{type(e).__name__}: {e}\n")
                         errors.flush()
+            move_stage(stage, out)
+            converter.dest = out
+            converter.flush_pending()
             converter.local = None
             shutil.rmtree(folder, ignore_errors=True)
+            shutil.rmtree(stage, ignore_errors=True)
             if not args.keep_bundles:
                 os.remove(os.path.join(bundles, volume.lower() + ".tar.gz"))
             elapsed = time.time() - start
@@ -517,6 +636,7 @@ def main():
     parser.add_argument("--pds-index", help="copy NASA's index tables from this folder (e.g. an earlier "
                         "run's OUT/pds_index) instead of downloading them")
     parser.add_argument("--workers", type=int, default=4, help="with --bundles: frames converted at once")
+    parser.add_argument("--connections", type=int, default=8, help="with --bundles: connections per volume download")
     args = parser.parse_args()
 
     out = os.path.abspath(args.out)
