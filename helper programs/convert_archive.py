@@ -412,7 +412,8 @@ def fetch_bundle(volume, bundles, work, fids):
     if not os.path.exists(tgz):
         size = fetch(BUNDLES.format(volume=volume.lower()), tgz)
     wanted = {fid + ext for fid in fids for ext in (".IMG", ".LBL")}
-    with tarfile.open(tgz, "r|gz") as tar:
+    # "r|*": some of the mirror's .tar.gz files (coiss_1001) are plain tar despite the name
+    with tarfile.open(tgz, "r|*") as tar:
         for member in tar:
             name = os.path.basename(member.name)
             if member.isfile() and "/data/" in member.name and name in wanted:
