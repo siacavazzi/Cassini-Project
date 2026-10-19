@@ -45,6 +45,13 @@ Track files are a 16-byte header (`CTRK`, u16 version, u16 flags, u32 count, u32
 
 In the browser, `parseAttitude(buffer, catalog.cam)` reads a year and `buildAttitude([{ file, et: catalog.et, cam: catalog.cam }, ...])` merges the background samples with every image's pointing (turned into body pointing with the fixed camera mounting from `cas_v41.tf`) into one series. `attitudeAt(att, et)` slerps between neighbouring samples; across gaps longer than an hour it holds the earlier attitude and eases into the next sample over its last 10 minutes. It returns the J2000 -> `CASSINI_SC_COORD` quaternion; for a three.js object (body -> world) use `new Quaternion(-x, -y, -z, w)`.
 
+The 10-minute background samples can miss fast turns (slerp cuts the corner, up to ~20° mid-slew in the Saturn tour). A second pass adds samples only where that happens, halving intervals until slerp is within `--tol` degrees (default 0.1) of SPICE, down to 8 s. It rewrites each finished year in place (same layout, header flags 1) and skips years already refined:
+
+```
+python web/export_attitude.py --zip /Volumes/LaCie/cassiniprojectJAN05.zip --catalog <replay_data>/catalog \
+    --out <replay_data> --tmp /Volumes/LaCie/attitude_tmp --refine
+```
+
 ```
 python web/verify_attitude.py --zip /Volumes/LaCie/cassiniprojectJAN05.zip --data replay_data \
     --catalog replay_data/catalog --tmp /Volumes/LaCie/verify_tmp
