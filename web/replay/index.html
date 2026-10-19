@@ -799,11 +799,15 @@ function buildFov() {
   fov.children.forEach(c => c.frustumCulled = false);
   fov.visible = false; scene.add(fov);
 }
+const FOV_HOLD = 300, FOV_SEQ_GAP = 900;   // seconds of mission time
 function updateFov() {
   const i = lastImageIndex(state.et);
   fov.visible = false; if (i < 0) return;
-  const k = order[i], age = state.et - catalog.et[k];
-  if (age > Math.max(600, state.speed * 1.5)) return;
+  // only while the camera is imaging: shortly after a frame, or between frames of one observation.
+  // Between observations Cassini holds or turns away, and the cone would point at empty sky.
+  const k = order[i], age = state.et - catalog.et[k], S = catalog.sorted;
+  const inSequence = i + 1 < S.length && S[i + 1] - S[i] <= FOV_SEQ_GAP;
+  if (age > FOV_HOLD && !inSequence) return;
   const t = catalog.target[k];
   const tp = !pos[t] || t === "CASSINI" ? null : t === state.focus ? new THREE.Vector3() : meshes[t] ? meshes[t].group.position : null;
   const cam = catalog.cam[k] === "W" ? "W" : "N";
