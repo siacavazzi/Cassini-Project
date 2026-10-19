@@ -1,0 +1,6 @@
+nac_cb2_2x2 before exit=0 secs=49 frames=       0
+nac_cb2_2x2 after exit=0 secs=134 frames=      35
+nac_color before exit=0 secs=55 frames=      10
+nac_color after exit=0 secs=56 frames=      10
+wac_default before exit=0 secs=71 frames=      32
+wac_default after exit=0 secs=152 frames=      32
