@@ -273,8 +273,13 @@ class Converter:
                     os.replace(lbl_out + ".tmp", lbl_out)
                 frame["info"] = parse_label(text)
                 with self.read_lock:
-                    old = ds.imread(png_rel, 0)
-                if old is None:
+                    present = ds.exists(png_rel)
+                    old = ds.imread(png_rel, 0) if present else None
+                if not present:
+                    if not self.add_missing:
+                        raise FileNotFoundError(f"{png_rel} isn't on the drive (rerun with --add-missing to fetch it)")
+                    frame["missing"] = True  # the label is on the drive but the image isn't
+                elif old is None:
                     raise ValueError(f"couldn't read {png_rel}")
         if frame.get("missing"):
             # not on the drive: the label comes from NASA too
