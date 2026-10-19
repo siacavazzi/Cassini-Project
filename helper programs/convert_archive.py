@@ -289,7 +289,8 @@ class Converter:
 
     def flush_pending(self):
         pending, self.pending = self.pending or [], None
-        for kind, row in pending:
+        # index rows first: a frame counts as done only once its manifest row is written too
+        for kind, row in sorted(pending, key=lambda item: item[0] == "manifest"):
             if kind == "manifest":
                 self.record(**row)
             else:
@@ -475,11 +476,18 @@ def plan(out, years, limit, add_missing=False, volumes=None, pds=None):
     known = set(os.path.basename(p).split(".")[0] for p in index["path"].dropna())
     if years:
         index = index[index["year"].isin(years)]
-    # one listing per folder: a stat per frame takes hours on a busy external drive
+    # one listing per folder: a stat per frame takes hours on a busy external drive. A frame is
+    # done when its PNG is there and the manifest has its row (a run stopped while moving a
+    # volume's files into out can leave PNGs whose rows were never written; those are redone)
+    recorded = set()
+    manifest = os.path.join(out, "manifest.csv")
+    if os.path.exists(manifest) and os.path.getsize(manifest):
+        recorded = set(pd.read_csv(manifest, usecols=["id"], dtype=str)["id"])
     done = set()
     for folder in ("nac_data", "wac_data"):
         if os.path.isdir(os.path.join(out, folder)):
-            done.update(f"{folder}/{name}" for name in os.listdir(os.path.join(out, folder)) if name.endswith(".png"))
+            done.update(f"{folder}/{name}" for name in os.listdir(os.path.join(out, folder))
+                        if name.endswith(".png") and name[:-4] in recorded)
     frames = []
     for png_rel in index["path"].dropna():
         if limit and len(frames) >= limit:
