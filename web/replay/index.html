@@ -352,6 +352,46 @@ function bandTexture() {
   }
   const t = new THREE.CanvasTexture(c); t.wrapS = THREE.ClampToEdgeWrapping; return t;
 }
+// ---------- real surface maps (data/textures/); the procedural look stays as the fallback ----------
+// ?tex=0 keeps the old procedural look, ?tex=1k|2k|4k picks the map size (default 2k); #tex-0 / #tex-4k work too
+const TEX_TIER = (new URLSearchParams(location.search).get("tex") || (location.hash.match(/^#tex-(\w+)$/) || [])[1] || "2k").toLowerCase();
+const TEX_ON = TEX_TIER !== "0" && TEX_TIER !== "off";
+const TEX_DIR = "data/textures/" + (/^[124]k$/.test(TEX_TIER) ? TEX_TIER : "2k") + "/";
+const TEX_FILES = { SATURN: "saturn", MIMAS: "mimas", ENCELADUS: "enceladus", TETHYS: "tethys", DIONE: "dione", RHEA: "rhea",
+                    TITAN: "titan", HYPERION: "hyperion", IAPETUS: "iapetus", PHOEBE: "phoebe", JUPITER: "jupiter" };
+const SHAPES = { HYPERION: "data/textures/models/hyperion.mesh.b64.txt", PHOEBE: "data/textures/models/phoebe.mesh.b64.txt" };
+const shapeGeom = {};
+const texLoader = new THREE.TextureLoader();
+function loadMap(name, uniforms) {
+  const f = TEX_FILES[name]; if (!TEX_ON || !f) return;
+  // Hyperion's map only exists up to 2k
+  const dir = name === "HYPERION" && TEX_DIR.endsWith("4k/") ? "data/textures/2k/" : TEX_DIR;
+  texLoader.load(dir + f + ".webp", t => {
+    t.anisotropy = renderer.capabilities.getMaxAnisotropy();
+    t.wrapS = THREE.RepeatWrapping;
+    uniforms.map.value = t; uniforms.hasMap.value = 1;
+  }, undefined, () => console.warn("texture missing for " + name));
+}
+// shape models: "CMS1", nvert, nidx, int16 xyz (fraction of max radius, body axes), uint16 uv, uint16/uint32 indices
+async function loadShapes() {
+  if (!TEX_ON) return;
+  await Promise.all(Object.entries(SHAPES).map(async ([name, url]) => {
+    try {
+      const r = await fetch(url); if (!r.ok) throw new Error(r.status);
+      const s = atob((await r.text()).trim()), u = new Uint8Array(s.length);
+      for (let i = 0; i < s.length; i++) u[i] = s.charCodeAt(i);
+      const dv = new DataView(u.buffer), nv = dv.getUint32(4, true), ni = dv.getUint32(8, true);
+      const p = new Int16Array(u.buffer, 12, nv * 3), uv = new Uint16Array(u.buffer, 12 + nv * 6, nv * 2);
+      const ix = nv < 65536 ? new Uint16Array(u.buffer, 12 + nv * 10, ni) : new Uint32Array(u.buffer, 12 + nv * 10, ni);
+      const g = new THREE.BufferGeometry();
+      g.setAttribute("position", new THREE.BufferAttribute(Float32Array.from(p, x => x / 32767), 3));
+      g.setAttribute("uv", new THREE.BufferAttribute(Float32Array.from(uv, x => x / 65535), 2));
+      g.setIndex(new THREE.BufferAttribute(ix, 1));
+      g.computeVertexNormals();
+      shapeGeom[name] = g;
+    } catch (err) { console.warn("shape model not loaded for " + name, err); }
+  }));
+}
 const RING_IN = 66900, RING_OUT = 140600;
 function ringTexture() {
   const N = 2048, c = document.createElement("canvas"); c.width = N; c.height = 1;
@@ -376,24 +416,25 @@ function ringTexture() {
   const t = new THREE.CanvasTexture(c); t.wrapS = THREE.ClampToEdgeWrapping; return t;
 }
 const ringTex = ringTexture();
+if (TEX_ON) texLoader.load("data/textures/rings/saturn_rings.png", t => { ringTex.image = t.image; ringTex.needsUpdate = true; });
 const uSun = { value: new THREE.Vector3(1, 0, 0) };
 
 function makeSaturn(radii) {
   const eq = radii[0] / KM, po = radii[2] / KM;
   const mat = new THREE.ShaderMaterial({
-    uniforms: { sunDir: uSun, bands: { value: bandTexture() }, rings: { value: ringTex },
+    uniforms: { sunDir: uSun, bands: { value: bandTexture() }, map: { value: null }, hasMap: { value: 0 }, rings: { value: ringTex },
                 rIn: { value: RING_IN / KM }, rOut: { value: RING_OUT / KM }, eq: { value: eq }, po: { value: po } },
-    vertexShader: VHEAD + `varying vec3 vLocal; void main(){ vLocal = mat3(modelMatrix) * position;
+    vertexShader: VHEAD + `varying vec3 vLocal; varying vec2 vUv; void main(){ vLocal = mat3(modelMatrix) * position; vUv = uv;
       gl_Position = projectionMatrix * modelViewMatrix * vec4(position,1.0);
       #include <logdepthbuf_vertex>
     }`,
-    fragmentShader: FHEAD + `uniform vec3 sunDir; uniform sampler2D bands; uniform sampler2D rings; uniform float rIn, rOut, eq, po;
-      varying vec3 vLocal;
+    fragmentShader: FHEAD + `uniform vec3 sunDir; uniform sampler2D bands; uniform sampler2D map; uniform float hasMap; uniform sampler2D rings; uniform float rIn, rOut, eq, po;
+      varying vec3 vLocal; varying vec2 vUv;
       void main(){
         #include <logdepthbuf_fragment>
         vec3 n = normalize(vLocal / vec3(eq*eq, po*po, eq*eq));
         float lat = asin(clamp(n.y, -1.0, 1.0));
-        vec3 base = texture2D(bands, vec2(0.5, 0.5 - lat / PI)).rgb;
+        vec3 base = hasMap > 0.5 ? texture2D(map, vUv).rgb : texture2D(bands, vec2(0.5, 0.5 - lat / PI)).rgb;
         float mu0 = dot(n, sunDir);
         float sh = 0.0;
         if (abs(sunDir.y) > 1e-5) { float t = -vLocal.y / sunDir.y;
@@ -406,6 +447,7 @@ function makeSaturn(radii) {
   });
   const mesh = new THREE.Mesh(new THREE.SphereGeometry(1, 160, 96), mat);
   mesh.scale.set(eq, po, eq);
+  loadMap("SATURN", mat.uniforms);
   const rmat = new THREE.ShaderMaterial({
     uniforms: { sunDir: uSun, rings: { value: ringTex }, camLocal: { value: new THREE.Vector3() },
                 rIn: { value: RING_IN / KM }, rOut: { value: RING_OUT / KM }, eq: { value: eq }, po: { value: po } },
@@ -445,17 +487,19 @@ function makeMoon(name, b) {
   const kind = name === "IAPETUS" ? 1 : name === "TITAN" ? 2 : 0;
   const mat = new THREE.ShaderMaterial({
     uniforms: { sunDir: uSun, toScene: { value: new THREE.Matrix3() }, radii: { value: new THREE.Vector3(1, 1, 1) },
-                color: { value: new THREE.Vector3(...look) }, kind: { value: kind } },
-    vertexShader: VHEAD + `varying vec3 vBody; void main(){ vBody = position;
+                color: { value: new THREE.Vector3(...look) }, kind: { value: kind },
+                map: { value: null }, hasMap: { value: 0 }, shape: { value: shapeGeom[name] ? 1 : 0 } },
+    vertexShader: VHEAD + `varying vec3 vBody; varying vec3 vNrm; varying vec2 vUv; void main(){ vBody = position; vNrm = normal; vUv = uv;
       gl_Position = projectionMatrix * modelViewMatrix * vec4(position,1.0);
       #include <logdepthbuf_vertex>
     }`,
     fragmentShader: FHEAD + NOISE + `uniform vec3 sunDir; uniform mat3 toScene; uniform vec3 radii; uniform vec3 color; uniform float kind;
-      varying vec3 vBody;
+      uniform sampler2D map; uniform float hasMap; uniform float shape;
+      varying vec3 vBody; varying vec3 vNrm; varying vec2 vUv;
       void main(){
         #include <logdepthbuf_fragment>
         vec3 nb = normalize(vBody / radii);
-        vec3 n = normalize(toScene * nb);
+        vec3 n = normalize(toScene * (shape > 0.5 ? normalize(vNrm) : nb));
         float m = fbm(nb * 5.0) - 0.5;
         float craters = smoothstep(0.62, 0.7, vnoise(nb * 22.0)) * 0.12;
         vec3 alb = color * (1.0 + 0.32 * m - craters);
@@ -469,10 +513,13 @@ function makeMoon(name, b) {
           alb = color * (1.0 + 0.05 * sin(asin(nb.z) * 6.0) + 0.04 * m);
           L = smoothstep(-0.18, 0.75, mu0) * 0.95;
         }
+        if (hasMap > 0.5) alb = texture2D(map, vUv).rgb;
         gl_FragColor = vec4(alb * (1.1 * L + 0.06), 1.0);
       }`
   });
-  const mesh = new THREE.Mesh(new THREE.SphereGeometry(1, 96, 64), mat);
+  // spheres are turned so their UV seam and poles match the IAU body frame (z = pole, x = 0 deg)
+  const mesh = new THREE.Mesh(shapeGeom[name] || new THREE.SphereGeometry(1, 96, 64).rotateX(Math.PI / 2), mat);
+  loadMap(name, mat.uniforms);
   const g = new THREE.Group(); g.add(mesh);
   if (kind === 2) {
     const haze = new THREE.ShaderMaterial({
@@ -495,7 +542,7 @@ function makeMoon(name, b) {
     const hm = new THREE.Mesh(new THREE.SphereGeometry(1.06, 96, 64), haze);
     g.add(hm);
   }
-  return { group: g, mesh, mat, radius: b.radii ? (b.radii[0] + b.radii[1] + b.radii[2]) / 3 : 10 };
+  return { group: g, mesh, mat, shape: !!shapeGeom[name], radius: b.radii ? (b.radii[0] + b.radii[1] + b.radii[2]) / 3 : 10 };
 }
 
 function makeCassini() {
@@ -563,6 +610,7 @@ async function load() {
       att = buildAttitude([{ file: parseAttitude(u.buffer, catalog.cam), et: catalog.et, cam: catalog.cam }]);
     }
   } catch (err) { console.warn("pointing not loaded", err); att = null; }
+  await loadShapes();
   order = Array.from(catalog.et.keys()).sort((a, b) => catalog.et[a] - catalog.et[b]);
   catalog.sorted = Float64Array.from(order, i => catalog.et[i]);
 }
@@ -695,7 +743,8 @@ function updateBodies() {
       const r = b.radii.map(x => x / KM * k);
       m.mesh.matrixAutoUpdate = true;
       m.mesh.quaternion.setFromRotationMatrix(new THREE.Matrix4().makeBasis(cx, cy, cz));
-      m.mesh.scale.set(r[0], r[1], r[2]);
+      // shape models already carry their true proportions, so they scale by the largest radius only
+      if (m.shape) m.mesh.scale.setScalar(Math.max(...r)); else m.mesh.scale.set(r[0], r[1], r[2]);
       m.mat.uniforms.radii.value.set(r[0], r[1], r[2]);
       m.mat.uniforms.toScene.value.set(cx.x, cy.x, cz.x, cx.y, cy.y, cz.y, cx.z, cy.z, cz.z);
       if (m.group.children[1]) { const rr = (b.radii[0] / KM) * k; m.group.children[1].scale.setScalar(rr); }
