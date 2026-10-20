@@ -10,14 +10,13 @@ menu-bar tray or zoom, and a Camera window that shows the real frame Cassini too
 
 ## Movie mode
 
-The film button next to the moment arrows (or `M`, or Go > Movie mode) plays one body's frames as a film. It takes
-the body Cassini is imaging (or the one in view), finds the stretch of imaging around the clock (frames of that body
-no more than 14 days apart, at most 100 days back and 200 ahead), and plays every frame from one camera through one
-filter pair, the most used one first, at 2 to 24 frames per second. The mission clock jumps from frame to frame, so
-the empty stretches drop out and the 3D view moves with the film. Space pauses, the arrow keys step, Escape (or the
-window's close button, the main play button, or scrubbing the timeline) leaves. Frames are fetched ahead of the play
-head; a frame that has not arrived holds the film rather than being skipped. `window.cassiniMovie.start({ target, et })`
-starts a movie from code, for a Moments entry later.
+The film button next to the moment arrows (or `M`, or Go > Movie mode) plays the camera frames one after another,
+in time order, at 2 to 24 frames per second, starting from the frame the camera last took. Every frame plays,
+whatever the target, camera or filter. The mission clock jumps from frame to frame, so the stretches without
+pictures drop out (a "skipped" tag says how long) and the 3D view moves with the film. Space pauses, the arrow keys
+step, scrubbing the timeline carries the film on from the new time, and Escape (or the window's close button or the
+main play button) leaves. Frames are fetched ahead of the play head; a frame that has not arrived holds the film
+rather than being skipped.
 
 ## Run it
 
