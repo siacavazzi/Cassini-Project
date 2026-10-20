@@ -75,6 +75,7 @@ BUNDLES = "https://planetarydata.jpl.nasa.gov/img/data/cassini/cassini_orbiter/{
 FORMAT = "lut8 v1\nPNG values are Cassini ISS 8-bit codes; DN = calibration.LUT[code]. No stretch.\n"
 USER_AGENT = "Cassini-Project archive converter (github.com/siacavazzi/Cassini-Project)"
 MIDS = (cal.LUT[:-1] + cal.LUT[1:]) / 2
+UNRECOVERABLE = "isn't in the unpacked volume"
 MANIFEST_FIELDS = ["id", "conversion", "source", "lines", "samples", "bytes_downloaded", "png_bytes", "note"]
 
 
@@ -312,7 +313,7 @@ class Converter:
         # than the one the file sits in inside the volume (COISS_2004)
         path = self.local.get(fid + ext)
         if path is None:
-            raise FileNotFoundError(f"{fid}{ext} isn't in the unpacked volume")
+            raise FileNotFoundError(f"{fid}{ext} {UNRECOVERABLE}")
         return path
 
     def download(self, fid, png_out, ext):
@@ -483,6 +484,12 @@ def plan(out, years, limit, add_missing=False, volumes=None, pds=None):
     manifest = os.path.join(out, "manifest.csv")
     if os.path.exists(manifest) and os.path.getsize(manifest):
         done = {f"{data_folder(fid)}/{fid}.png" for fid in pd.read_csv(manifest, usecols=["id"], dtype=str)["id"]}
+    # frames NASA's index lists in a volume that turned out not to hold them: retrying would only
+    # download the whole volume again to fail them again
+    errors = os.path.join(out, "errors.txt")
+    if os.path.exists(errors):
+        with open(errors) as f:
+            done.update(line.split("\t", 1)[0] for line in f if UNRECOVERABLE in line)
     frames = []
     for png_rel in index["path"].dropna():
         if limit and len(frames) >= limit:
