@@ -5,6 +5,7 @@ Created on Tue Nov  2 12:33:42 2021
 @author: Sam I
 """
 import os
+import gzip
 import subprocess
 import pandas as pd
 import numpy as np
@@ -122,9 +123,36 @@ class label:
             #height = int(img.shape[0] * scale_percent / 100)
             dim = (1024,1024)
             img = cv2.resize(img, dim, interpolation = cv2.INTER_AREA)
-            
+
         return img
-    
+
+    """
+    Which pixels of the frame hold real data, sized like resize_image (True = valid).
+    When the downlink lost packets, the ends of some lines never arrived and were filled
+    with zeros; those show up as streaks in color composites. The binary line prefix
+    (.prefix.gz, lean archive) gives each line's valid pixel count in bytes 2-3. Without
+    it, a frame with MISSING_LINES has its trailing zero runs of 16+ pixels marked instead
+    (packets hold whole multiples of 16 pixels).
+    """
+    def valid_mask(self):
+        base = self.info["path"].split('.')[0]
+        lines, samples = int(self.info["LINES"]), int(self.info["LINE_SAMPLES"])
+        mask = np.ones((lines, samples), bool)
+        if ds.exists(base + ".prefix.gz"):
+            prefix = np.frombuffer(gzip.decompress(ds.read_bytes(base + ".prefix.gz")), np.uint8).reshape(lines, -1)
+            valid = prefix[:, 2].astype(int) * 256 + prefix[:, 3]
+            mask &= np.arange(samples) < valid[:, None]
+        elif int(self.info.get("MISSING_LINES", "0") or 0) > 0:
+            img = ds.imread(base + ".png", cv2.IMREAD_GRAYSCALE)
+            if img is not None and img.shape == mask.shape:
+                nonzero = img[:, ::-1] != 0
+                tail = np.where(nonzero.any(1), np.argmax(nonzero, 1), samples)
+                tail = np.where(tail >= 16, tail, 0)
+                mask &= np.arange(samples) < (samples - tail)[:, None]
+        if lines < 1024:
+            mask = cv2.resize(mask.astype(np.uint8), (1024, 1024), interpolation=cv2.INTER_NEAREST) > 0
+        return mask
+
     """
     Traslates image
     format = output format

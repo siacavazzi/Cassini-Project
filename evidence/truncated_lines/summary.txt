@@ -1,0 +1,18 @@
+mimas_2010_GEOLOG001: transparent pixels before 0.00%, after 8.00%; pixels changed 48.44%; where both are opaque: mean |diff| 0.71, 99th pct 5, max 52
+saturn_2005_RDCOLSCNA001: transparent pixels before 0.00%, after 0.49%; pixels changed 0.48%; where both are opaque: mean |diff| 0.00, 99th pct 0, max 0
+
+Cause (Mimas 2010, ISS_126MI_GEOLOG001, NAC SUM2 512x512, TABLE, LOSSLESS): each frame lost packets in downlink
+(RECEIVED_PACKETS 142-143 of EXPECTED_PACKETS 147), so the ends of some lines never arrived and NASA's files fill them with 0.
+The binary line prefix (.prefix.gz) records each line's valid pixel count in bytes 2-3 (big-endian, repeated in 6-7); on every
+short line the data ends exactly there. Per frame (lines short = the label's MISSING_LINES):
+- BL1 N1644778807_1: 81 lines, 4,704 pixels lost, shortest line 352 px valid
+- GRN N1644778756_1: 102 lines, 5,840 pixels lost, shortest 384
+- RED N1644778824_1: 94 lines, 5,440 pixels lost, shortest 352
+Mostly in the bottom half. Each filter lost different lines, so in the composite a line missing one channel showed as a colored streak.
+
+Fix: label.valid_mask() builds each frame's valid-pixel mask from the prefix (or, without one, from trailing zero runs of 16+ px
+when MISSING_LINES > 0); make_frame fills invalid pixels from their neighbours before calibration (image_correction.fill_invalid)
+so the zeros don't skew the brightness scale or bleed in alignment, shifts the masks with the frames (align_with_masks), and makes
+any pixel some channel lacks transparent in the RGBA frame. Clean frames are unchanged apart from the few pixels at the edge that
+alignment leaves uncovered in one channel, which now go transparent (saturn_2005: 0.48%, opaque pixels identical).
+Images: flattened onto gray 128, so transparent pixels show as flat gray. Rendered from cassini_lut8.zip with render_mask_evidence.py.

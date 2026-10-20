@@ -121,6 +121,9 @@ def make_frame(row, filters):
         lbl, img = stacking.load_stacked(row[filter], max_frames = 5 if stack_repeats else 1)
         lbls.append(lbl)
         imgs.append(img)
+    # pixels each frame lost in downlink (truncated lines); filled so they don't skew the rest
+    masks = [l.valid_mask() for l in lbls]
+    imgs = [ic.fill_invalid(img, mask) for img, mask in zip(imgs, masks)]
     if calibrate:
         # puts every filter on the same brightness scale (see calibration.py)
         imgs = cal.load_channels(lbls, imgs)
@@ -130,16 +133,20 @@ def make_frame(row, filters):
     ref = order[len(order)//2]
     lbl = lbls[ref]
 
+    # masks move with the frames, so pixels alignment leaves uncovered become invalid too
     try:
-        imgs = ic.align_images(imgs, ref)
+        imgs, masks = ic.align_with_masks(imgs, masks, ref)
     except:
         print("Image alignment failure")
+    valid = np.logical_and.reduce(masks)
 
     for j in range(0, len(imgs)):
         imgs[j] = Image.fromarray(imgs[j]).convert('L')
 
     if num_channels == 3:
-        image = Image.merge("RGBA",(imgs[2],imgs[1],imgs[0], get_mask()))
+        # transparent where any channel has no data, instead of a colored streak
+        alpha = Image.fromarray(np.where(valid, np.asarray(get_mask()), 0).astype(np.uint8))
+        image = Image.merge("RGBA",(imgs[2],imgs[1],imgs[0], alpha))
         image = np.asarray(image)
         image = lbl.set_color(image).auto_center()
         image = Image.fromarray(image)
