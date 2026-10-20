@@ -31,6 +31,9 @@ New frames are listed in <out>/Image_index_added.csv, to be merged into Image_in
 With --bundles, whole volumes are downloaded as .tar.gz from NASA's JPL mirror (368 GB for
 all 125, far faster than frame by frame) and every 8-bit frame comes from its raw file:
     python "helper programs/convert_archive.py" OUT --bundles BUNDLES --work WORK --add-missing
+Each volume's frames are kept in OUT/volumes/<volume>-<time>.zip; when all are done,
+    python "helper programs/convert_archive.py" OUT --pack ARCHIVE.zip
+joins everything into one zip that CASSINI_DATA can point at.
 
 The raw IMG is deleted once converted, so only a few files sit on disk at a time.
 It never writes to the old data, so the render pipeline can keep using it while this
@@ -53,6 +56,7 @@ import tarfile
 import threading
 import time
 import urllib.request
+import zipfile
 from concurrent.futures import ThreadPoolExecutor, as_completed
 
 import numpy as np
@@ -543,22 +547,70 @@ def fetch_bundle(volume, bundles, work, fids, connections=8):
 
 
 """
-Moves a volume's staged files into out with one sequential copy each (far kinder to a spinning
-drive than writing frame by frame). Each PNG goes last, since a PNG in out marks its frame done.
+Packs a volume's staged files into one zip and copies that into OUT/volumes as a single file:
+a busy spinning drive manages a few new files a second inside the disk image, but streams one
+big file well. --pack later joins these and the frame folders into the final archive.
 """
-def move_stage(stage, out):
+def move_stage(stage, out, volume):
+    packed = stage + ".zip"
+    with zipfile.ZipFile(packed, "w", zipfile.ZIP_STORED) as z:  # PNGs and prefixes are compressed already
+        for sub in ("nac_data", "wac_data"):
+            for name in sorted(os.listdir(os.path.join(stage, sub))):
+                z.write(os.path.join(stage, sub, name), f"{sub}/{name}")
+    folder = os.path.join(out, "volumes")
+    os.makedirs(folder, exist_ok=True)
+    # a volume redone later (frames that failed the first time) gets a zip of its own
+    dst = os.path.join(folder, f"{volume}-{time.strftime('%Y%m%dT%H%M%S')}.zip")
+    shutil.copyfile(packed, dst + ".tmp")
+    os.replace(dst + ".tmp", dst)
+    os.remove(packed)
+
+
+"""
+--pack DEST: writes the finished archive as one zip: OUT's frame folders plus every volume zip
+in OUT/volumes (where a frame is in several, the newest wins), with the manifest and
+Image_index_added.csv alongside.
+"""
+def pack(out, dest):
+    members = {}  # name in the archive -> (zip it's in or None for a file, path)
     for sub in ("nac_data", "wac_data"):
-        names = sorted(os.listdir(os.path.join(stage, sub)), key=lambda n: n.endswith(".png"))
-        for name in names:
-            dst = os.path.join(out, sub, name)
-            shutil.copyfile(os.path.join(stage, sub, name), dst + ".tmp")
-            os.replace(dst + ".tmp", dst)
+        if os.path.isdir(os.path.join(out, sub)):
+            for name in os.listdir(os.path.join(out, sub)):
+                if not name.endswith(".tmp") and not name.endswith(".tmp.png"):
+                    members[f"{sub}/{name}"] = (None, os.path.join(out, sub, name))
+    volumes = os.path.join(out, "volumes")
+    zips = sorted(os.listdir(volumes), key=lambda n: n.rsplit("-", 1)[-1]) if os.path.isdir(volumes) else []
+    for name in zips:
+        if name.endswith(".zip"):
+            with zipfile.ZipFile(os.path.join(volumes, name)) as z:
+                for member in z.namelist():
+                    members[member] = (os.path.join(volumes, name), member)
+    for name in ("manifest.csv", "Image_index_added.csv"):
+        if os.path.exists(os.path.join(out, name)):
+            members[name] = (None, os.path.join(out, name))
+    opened = {}
+    with zipfile.ZipFile(dest + ".tmp", "w", zipfile.ZIP_STORED, allowZip64=True) as z:
+        for i, name in enumerate(sorted(members)):
+            source, path = members[name]
+            if source is None:
+                z.write(path, name)
+            else:
+                if source not in opened:
+                    opened[source] = zipfile.ZipFile(source)
+                with opened[source].open(path) as f, z.open(name, "w", force_zip64=True) as g:
+                    shutil.copyfileobj(f, g, 1 << 20)
+            if (i + 1) % 50000 == 0:
+                print(f"packed {i + 1}/{len(members)}", flush=True)
+    for z in opened.values():
+        z.close()
+    os.replace(dest + ".tmp", dest)
+    print(f"Packed {len(members)} files into {dest}")
 
 
 """
 --bundles: works volume by volume. The next volume downloads while this one converts;
-each volume's frames are written under WORK/stage and moved into OUT once all are done, and
-its .tar.gz and unpacked files are deleted
+each volume's frames are written under WORK/stage and stored as one zip in OUT/volumes once
+all are done, and its .tar.gz and unpacked files are deleted
 (unless --keep-bundles). Frames NASA's index doesn't place in a volume are done
 the usual way at the end.
 """
@@ -613,7 +665,7 @@ def run_bundles(converter, frames, args, out, errors):
                         failed += 1
                         errors.write(f"{futures[future]['png']}\t{type(e).__name__}: {e}\n")
                         errors.flush()
-            move_stage(stage, out)
+            move_stage(stage, out, volume)
             converter.dest = out
             converter.flush_pending()
             converter.local = None
@@ -650,10 +702,14 @@ def main():
     parser.add_argument("--pds-index", help="copy NASA's index tables from this folder (e.g. an earlier "
                         "run's OUT/pds_index) instead of downloading them")
     parser.add_argument("--workers", type=int, default=4, help="with --bundles: frames converted at once")
+    parser.add_argument("--pack", metavar="DEST", help="write the finished archive in OUT as one zip at DEST and stop")
     parser.add_argument("--connections", type=int, default=8, help="with --bundles: connections per volume download")
     args = parser.parse_args()
 
     out = os.path.abspath(args.out)
+    if args.pack:
+        pack(out, os.path.abspath(args.pack))
+        return
     os.makedirs(out, exist_ok=True)
     for folder in ("nac_data", "wac_data"):
         os.makedirs(os.path.join(out, folder), exist_ok=True)
