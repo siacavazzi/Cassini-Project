@@ -124,7 +124,7 @@ def composite(ids):
 def color_webp(ids, size, cache):
     """The composite as WebP, and its report (also kept in the cache, next to the image)."""
     # bumped whenever the way composites are made changes, so older ones are not served again
-    base = os.path.join(cache, "color-v3", str(size), "_".join(ids))
+    base = os.path.join(cache, "color-v4", str(size), "_".join(ids))
     report = {}
     def make():
         with _color_slots:
