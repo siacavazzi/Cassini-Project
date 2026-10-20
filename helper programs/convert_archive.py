@@ -266,7 +266,7 @@ class Converter:
         # data_source shares one zip file handle per process, so reads must not overlap
         self.read_lock = threading.Lock()
         self.pds = None
-        self.local = None  # with --bundles: the folder the current volume was unpacked into
+        self.local = None  # with --bundles: {file name: path} of the current volume's unpacked files
         # with --bundles, a volume's files are written to a staging folder (dest) and its manifest
         # and index rows held back (pending) until the whole volume is moved into out
         self.dest = out
@@ -289,7 +289,8 @@ class Converter:
 
     def flush_pending(self):
         pending, self.pending = self.pending or [], None
-        for kind, row in pending:
+        # index rows first: a frame counts as done only once its manifest row is written too
+        for kind, row in sorted(pending, key=lambda item: item[0] == "manifest"):
             if kind == "manifest":
                 self.record(**row)
             else:
@@ -307,17 +308,19 @@ class Converter:
         return old is None or table_from_png(old, frame["info"]) is None
 
     def local_file(self, fid, ext):
-        location = self.pds[fid]["location"][:-4] + ext
-        # unpacked volumes use lower-case folder names: coiss_2001/data/...
-        volume, rest = location.split("/", 1)
-        return os.path.join(self.local, volume.lower(), rest)
+        # found by name: NASA's cumulative index sometimes gives a different data/ folder
+        # than the one the file sits in inside the volume (COISS_2004)
+        path = self.local.get(fid + ext)
+        if path is None:
+            raise FileNotFoundError(f"{fid}{ext} isn't in the unpacked volume")
+        return path
 
     def download(self, fid, png_out, ext):
         row = self.pds.get(fid)
         if row is None:
             raise LookupError(f"{fid} is not in the PDS index")
         location = row["location"][:-4] + ext
-        if self.local:
+        if self.local is not None:
             shutil.copyfile(self.local_file(fid, ext), png_out[:-4] + ext)
             return 0
         return fetch(f"{PDS}/{series_of(location)}/{location}", png_out[:-4] + ext)
@@ -330,7 +333,7 @@ class Converter:
         lbl_rel = label_path(png_rel)
         lbl_out = os.path.join(self.dest, lbl_rel)
         old = None
-        if self.local and not frame.get("missing"):
+        if self.local is not None and not frame.get("missing"):
             # whole-volume mode: the label comes from the unpacked volume, and the old PNG is only
             # read when it's needed (8LSB), sparing the drive a random read of the zip per frame
             with self.read_lock:
@@ -378,7 +381,7 @@ class Converter:
         frame["conversion"] = frame["info"].get("DATA_CONVERSION_TYPE", "")
         conversion = frame["conversion"]
         if self.needs_download(frame, old):
-            if self.local:
+            if self.local is not None:
                 image, prefixes = read_img(self.local_file(fid, ".IMG"))  # read in place
             else:
                 img = png_out[:-4] + ".IMG"
@@ -473,11 +476,13 @@ def plan(out, years, limit, add_missing=False, volumes=None, pds=None):
     known = set(os.path.basename(p).split(".")[0] for p in index["path"].dropna())
     if years:
         index = index[index["year"].isin(years)]
-    # one listing per folder: a stat per frame takes hours on a busy external drive
+    # a frame is done once the manifest has its row, which is only written after its PNG is in
+    # out (a run stopped while moving a volume's files can leave PNGs without rows; those are
+    # redone). Listing the output folders instead can take hours on a busy external drive.
     done = set()
-    for folder in ("nac_data", "wac_data"):
-        if os.path.isdir(os.path.join(out, folder)):
-            done.update(f"{folder}/{name}" for name in os.listdir(os.path.join(out, folder)) if name.endswith(".png"))
+    manifest = os.path.join(out, "manifest.csv")
+    if os.path.exists(manifest) and os.path.getsize(manifest):
+        done = {f"{data_folder(fid)}/{fid}.png" for fid in pd.read_csv(manifest, usecols=["id"], dtype=str)["id"]}
     frames = []
     for png_rel in index["path"].dropna():
         if limit and len(frames) >= limit:
@@ -505,7 +510,7 @@ def plan(out, years, limit, add_missing=False, volumes=None, pds=None):
 
 """
 Downloads one volume's .tar.gz and unpacks just the given frames' IMG and LBL files into
-work/<volume>/data/... Returns the bytes downloaded.
+work/<volume>/data/... Returns the bytes downloaded and {file name: unpacked path}.
 """
 def fetch_bundle(volume, bundles, work, fids, connections=8):
     tgz = os.path.join(bundles, volume.lower() + ".tar.gz")
@@ -513,6 +518,7 @@ def fetch_bundle(volume, bundles, work, fids, connections=8):
     if not os.path.exists(tgz):
         size = fetch_ranged(BUNDLES.format(volume=volume.lower()), tgz, connections)
     wanted = {fid + ext for fid in fids for ext in (".IMG", ".LBL")}
+    files = {}
     # "r|*": some of the mirror's .tar.gz files (coiss_1001) are plain tar despite the name
     with tarfile.open(tgz, "r|*") as tar:
         for member in tar:
@@ -525,7 +531,8 @@ def fetch_bundle(volume, bundles, work, fids, connections=8):
                     tar.extract(member, work, set_attrs=False, filter="data")
                 except TypeError:  # Python before 3.11.4 has no filter
                     tar.extract(member, work, set_attrs=False)
-    return size
+                files.setdefault(name, os.path.join(work, member.name))
+    return size, files
 
 
 """
@@ -564,15 +571,15 @@ def run_bundles(converter, frames, args, out, errors):
         fids = [os.path.basename(f["png"]).split(".")[0] for f in by_volume[volume]]
         folder = os.path.join(work, volume.lower() + ".tmp")
         shutil.rmtree(folder, ignore_errors=True)
-        size = fetch_bundle(volume, bundles, folder, fids, args.connections)
-        return folder, size
+        size, files = fetch_bundle(volume, bundles, folder, fids, args.connections)
+        return folder, size, files
 
     start, done, failed, total_bytes = time.time(), 0, 0, 0
     with ThreadPoolExecutor(1) as downloader:
         upcoming = downloader.submit(prepare, volumes[0]) if volumes else None
         for i, volume in enumerate(volumes):
             try:
-                folder, size = upcoming.result()
+                folder, size, files = upcoming.result()
             except Exception as e:
                 folder = None
                 for frame in by_volume[volume]:
@@ -584,7 +591,7 @@ def run_bundles(converter, frames, args, out, errors):
             if folder is None:
                 continue
             total_bytes += size
-            converter.local = folder
+            converter.local = files
             shutil.rmtree(stage, ignore_errors=True)
             for sub in ("nac_data", "wac_data"):
                 os.makedirs(os.path.join(stage, sub))
