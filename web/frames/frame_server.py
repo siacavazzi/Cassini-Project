@@ -123,8 +123,8 @@ def composite(ids):
 
 def color_webp(ids, size, cache):
     """The composite as WebP, and its report (also kept in the cache, next to the image)."""
-    # "color-v2": made by the pipeline's color path; composites from before that are not reused
-    base = os.path.join(cache, "color-v2", str(size), "_".join(ids))
+    # bumped whenever the way composites are made changes, so older ones are not served again
+    base = os.path.join(cache, "color-v3", str(size), "_".join(ids))
     report = {}
     def make():
         with _color_slots:

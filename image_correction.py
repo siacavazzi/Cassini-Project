@@ -56,6 +56,8 @@ def align_with_masks(imgs, masks, ref=0, report=None):
             continue
         shift, how = find_shift(imgs[ref], imgs[i]), "phase"
         if shift is None:
+            shift, how = find_shift(edges(imgs[ref]), edges(imgs[i])), "edges"
+        if shift is None:
             shift, how = centroid_shift(imgs[ref], imgs[i]), "centroid"
         if shift is not None:
             imgs[i] = shift_image(imgs[i], *shift)
@@ -63,6 +65,19 @@ def align_with_masks(imgs, masks, ref=0, report=None):
         if report is not None:
             report.append(f"{how} {shift[0]:+.1f},{shift[1]:+.1f}" if shift is not None else "not aligned")
     return imgs, masks
+
+
+"""
+Gradient magnitude of a frame, as a 3 channel 8-bit image for find_shift. Limbs, terminators
+and crater rims sit in the same place through every filter even when their brightness does
+not (bright haze in blue, dark surface in infrared), so edges can match where the frames don't.
+"""
+def edges(im):
+    gray = cv2.cvtColor(im, cv2.COLOR_BGR2GRAY) if im.ndim == 3 else im
+    gray = cv2.GaussianBlur(gray.astype(np.float32), (0, 0), 1.5)
+    mag = cv2.magnitude(cv2.Sobel(gray, cv2.CV_32F, 1, 0), cv2.Sobel(gray, cv2.CV_32F, 0, 1))
+    mag = np.clip(mag * 255.0 / max(np.percentile(mag, 99.5), 1e-6), 0, 255).astype(np.uint8)
+    return cv2.cvtColor(mag, cv2.COLOR_GRAY2BGR)
 
 
 """
