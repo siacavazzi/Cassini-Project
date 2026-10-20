@@ -238,7 +238,8 @@ def export_catalog(kdir, out, index_csv, years):
     ifov = {"ISSNA": 5.9907e-6, "ISSWA": 5.9907e-5}
     summary = {}
     for year in years:
-        sub = df[df.year == year].sort_values("seconds_1970")
+        # stable, with the path as tie-break, so frames taken at the same instant keep one order on every machine
+        sub = df[df.year == year].sort_values(["seconds_1970", "path"], kind="mergesort")
         if not len(sub) or year not in mks:
             continue
         furnish_year(kdir, mks[year])

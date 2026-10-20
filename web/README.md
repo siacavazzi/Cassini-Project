@@ -57,13 +57,29 @@ python web/verify_attitude.py --zip /Volumes/LaCie/cassiniprojectJAN05.zip --dat
     --catalog replay_data/catalog --tmp /Volumes/LaCie/verify_tmp
 ```
 
+When `Image_index.csv` changes, the catalogs change and so does the order of `image_q`. Instead of re-exporting every year, `--update-from` rebuilds each year from the earlier export: it reuses image pointing by image id, points only the new images, keeps the refined background samples, and copies years whose catalog did not change. Changed years are written with flags 0, so run the `--refine` pass after it. `--old-catalog` must be the catalogs the earlier export was made from (regenerate them with `export_tracks.py --index <old Image_index.csv> --skip tracks,encounters`):
+
+```
+python web/export_attitude.py --zip /Volumes/LaCie/cassiniprojectJAN05.zip --catalog <new>/catalog \
+    --out <new> --tmp /Volumes/LaCie/attitude_tmp --update-from <old>/attitude --old-catalog <old>/catalog
+python web/export_attitude.py ... --out <new> --refine
+```
+
 ## Replay prototype
 
-`replay/index.html` is the first viewer: the Saturn system for one year on the exported tracks, with a timeline to scrub or play, camera-frame density, and jumps to flybys. Build its data, then serve the folder with any static server:
+`replay/index.html` is the viewer: the whole mission from launch to the final plunge on the exported tracks, with a timeline to scrub or play, camera-frame density, and jumps to flybys and milestones. Build its data, then serve the folder with any static server (or the frame server, see `cassini-os/README.md`):
+
+```
+python web/replay/build_data.py --data replay_data --years 1997-2017 [--attitude replay_data/attitude] [--huygens <huygens replay folder>]
+cd web/replay && python -m http.server
+```
+
+`--years` writes `data/mission.json` (bodies and which years each has, the frame catalog per year, pointing per year, frames per day for the timeline) plus `data/tracks/<year>/<body>.bin`, `data/catalog/<year>.json` and `data/attitude/<year>.bin`, about 180 MB for the whole mission. The viewer loads the year on screen and the years either side (about 17 MB a year), and the next one as the clock reaches it; years that are not loaded show on the timeline as muted frame counts. Between planets the view, trail and HUD are heliocentric; within 3 million km of Venus, 5 million km of Earth, 100 million km of Jupiter or 120 million km of Saturn they switch to that planet and its moons. `?t=1999-08-18T03:00` opens at a given moment (UTC).
+
+The older one-year layout still works and is what the claude.ai artifact uses, because that host refuses binary files and caps an artifact at 256 MB (the viewer uses it whenever `data/mission.json` is missing):
 
 ```
 python web/replay/build_data.py --data replay_data --year 2005 [--attitude replay_data/attitude] [--huygens <huygens replay folder>]
-cd web/replay && python -m http.server
 ```
 
 With `--attitude`, the year's pointing file is copied in (it must come from the same catalog export; the script checks the image count). The viewer then turns Cassini's model with the real attitude (dish on body -Z, cameras on body -Y) and draws the camera cone along the actual NAC or WAC boresight, rolled like the frame. Without it, the dish faces Earth and the cone is aimed at each frame's target.

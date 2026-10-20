@@ -15,7 +15,7 @@ from the frame server that serves them. Build the replay data once, then serve t
 `web/frames/frame_server.py`:
 
 ```
-python web/replay/build_data.py --data <export dir> --year 2005 --attitude <dir with 2005.bin> --huygens <huygens replay dir>
+python web/replay/build_data.py --data <export dir> --years 1997-2017 --attitude <attitude dir> --huygens <huygens replay dir>
 CASSINI_DATA=/Volumes/LaCie/cassiniprojectJAN05.zip python web/frames/frame_server.py --site web/cassini-os --host 0.0.0.0
 ```
 
