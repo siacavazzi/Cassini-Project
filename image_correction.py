@@ -29,6 +29,32 @@ def align_images(imgs, ref=0):
 
 
 """
+Fills a frame's invalid pixels (mask False) from the valid ones around them, so the zeros of
+truncated lines don't bleed into neighbouring rows when the frame is shifted or skew its
+brightness scale. The pixels stay invalid; this only keeps them from affecting the rest.
+"""
+def fill_invalid(img, mask):
+    if mask.all():
+        return img
+    return cv2.inpaint(img, (~mask).astype(np.uint8), 3, cv2.INPAINT_TELEA)
+
+
+"""
+Like align_images, but also moves each frame's valid-pixel mask (label.valid_mask) with it,
+so pixels a shift leaves uncovered count as invalid too.
+returns (imgs, masks)
+"""
+def align_with_masks(imgs, masks, ref=0):
+    for i in range(0, len(imgs)):
+        if i != ref:
+            shift = find_shift(imgs[ref], imgs[i])
+            if shift is not None:
+                imgs[i] = shift_image(imgs[i], *shift)
+                masks[i] = shift_image(masks[i].astype(np.float32), *shift) > 0.99
+    return imgs, masks
+
+
+"""
 Finds the sub-pixel translation of im2 relative to im1 by phase correlation.
 Filter frames in a color sequence are taken seconds apart, so the target only
 moves across the sensor; a translation is the right motion model.
