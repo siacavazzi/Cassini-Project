@@ -1,0 +1,21 @@
+mimas_2010_BL1-GRN-RED: mean|diff| 0.32, max 2, pixels changed 68.4%, mean RGB old [168.0, 162.5, 166.9] new [168.3, 162.8, 166.5], levels RGB old [222, 232, 180] new [222, 233, 181]
+saturn_2005_BL1-GRN-RED: mean|diff| 3.67, max 56, pixels changed 78.7%, mean RGB old [83.0, 79.1, 74.4] new [86.5, 83.0, 78.0], levels RGB old [209, 227, 236] new [212, 204, 240]
+saturn_2013_BL1-GRN-RED: mean|diff| 34.48, max 84, pixels changed 100.0%, mean RGB old [134.7, 154.3, 147.0] new [174.4, 176.4, 181.8], levels RGB old [161, 181, 169] new [172, 178, 186]
+titan_2008_BL1-GRN-RED: mean|diff| 12.09, max 221, pixels changed 99.9%, mean RGB old [25.2, 40.5, 31.4] new [39.7, 43.4, 38.0], levels RGB old [211, 256, 228] new [229, 238, 152]
+rhea_2005_N1484584831: new-only frame, mean 63.5, levels 161
+enceladus_N1820596184_12bit: I/F old mean 0.00002 median 0.00002, new mean 0.00035 median 0.00040, distinct values old 5012 new 4247, new/old ratio median 22.1966
+
+How these were made: the pipeline's own path (stacking.load_stacked -> calibration.load_channels -> image_correction.align_images),
+old = CASSINI_DATA=cassiniprojectJAN05.zip, new = CASSINI_DATA=cassini_lut8.zip (the packed full rebuild, 443,177 frames). Side-by-sides are 1600 px wide.
+
+Sets (NAC, channels BL1 / GRN / RED):
+- saturn_2005: ISS_007RI_RDCOLSCNA001_PRIME, N1493537486_1 / N1493537607_1 / N1493537519_1 (TABLE)
+- titan_2008: ISS_057TI_PHOTOOPS001_PRIME, N1580288682_1 / N1580288715_1 / N1580288580_1 (12BIT). The old archive can't calibrate these
+  ("Can't calibrate ..., using the stretched frames"), so the old side is the per-frame stretch; the new side is calibrated, hence the green cast going away.
+- mimas_2010: ISS_126MI_GEOLOG001_PRIME, N1644778807_1 / N1644778756_1 / N1644778824_1 (TABLE); nearly unchanged (mean |diff| 0.32).
+- saturn_2013: ISS_178SA_LIMBSCAN002_PRIME, N1736221587_1 / N1736221621_1 / N1736221729_1 (TABLE); the old side crushes the limb haze to black.
+- rhea_2005_N1484584831 (CL1,CL2, 12BIT, 2005-016): in Image_index_added.csv only, i.e. not in the old archive.
+- enceladus_N1820596184 (CL1,CL2, 12BIT): calibrated I/F. Of 38 random 2009+ NAC 12BIT frames tried, the old archive could calibrate only
+  this one (calibration.unstretch can't recover the span of the others). It is a faint, mostly-sky frame: the new I/F keeps the camera's
+  real low DN (few distinct sky levels, a band near the top), while the old one places the darkest 0.1% at the bias. So the 22x median
+  ratio is mostly a sky-offset difference; read it as "old can't be trusted for 12BIT", not as a measurement of Enceladus.
