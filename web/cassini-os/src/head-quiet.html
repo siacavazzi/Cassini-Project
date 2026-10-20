@@ -365,6 +365,7 @@ body { color: var(--q-text); }
 #mlist li.past .t, #mlist li.past .d { color: rgba(232,236,242,.3); }
 #mlist li.next { background: rgba(138,182,255,.16) !important; }
 #mlist li.next span { color: #fff !important; }
+#mlist li.yr { background: none !important; padding: 10px 10px 3px; font-weight: bold; font-size: 11px; letter-spacing: .12em; color: rgba(232,236,242,.55); }
 #mlist button:hover { background: rgba(255,255,255,.05); }
 #moments footer { background: none; border-top: 1px solid var(--q-line); color: var(--q-dim); }
 
@@ -467,7 +468,7 @@ body.idle #imgcard .well.has-frame { border-color: transparent; box-shadow: 0 6p
   </section>
 
   <aside class="win" id="moments" aria-label="Moments to jump to">
-    <div class="titlebar"><span class="lights"><button class="close" aria-label="Close">×</button><button class="min" aria-label="Minimize">–</button><button class="zoom" aria-label="Zoom">+</button></span>Moments: 2005</div>
+    <div class="titlebar"><span class="lights"><button class="close" aria-label="Close">×</button><button class="min" aria-label="Minimize">–</button><button class="zoom" aria-label="Zoom">+</button></span>Moments</div>
     <div class="colhead"><span class="sorted">Date ▴</span><span>Moment</span><span>Photo</span></div>
     <ul id="mlist"></ul>
     <footer id="mfoot">—</footer>
@@ -510,7 +511,7 @@ body.idle #imgcard .well.has-frame { border-color: transparent; box-shadow: 0 6p
     <div class="statusbar"><span>Positions from Cassini's SPICE kernels (J2000). LCD lanes: narrow-angle (NAC) and wide-angle (WAC) frames coloured by filter; RGB marks frames that belong to a red, green and blue set.</span><span id="pnote" hidden></span><b id="sbar">—</b></div>
   </div>
 
-  <div id="loading"><div>Starting Cassini OS<br>Loading 2005 trajectories<div class="bar"></div></div></div>
+  <div id="loading"><div>Starting Cassini OS<br>Loading trajectories<div class="bar"></div></div></div>
 </div>
 
 <script>
@@ -687,7 +688,12 @@ body.idle #imgcard .well.has-frame { border-color: transparent; box-shadow: 0 6p
         return [o, src];
       });
     }
-    for (const [o, src] of occluders) { src.updateMatrixWorld(true); o.matrix.copy(src.matrixWorld); o.matrixWorldNeedsUpdate = true; }
+    for (const [o, src] of occluders) {
+      src.updateMatrixWorld(true); o.matrix.copy(src.matrixWorld); o.matrixWorldNeedsUpdate = true;
+      // bodies off stage (Venus after the cruise, Saturn's moons before it) must not block lines
+      let vis = true; for (let n = src; n; n = n.parent) vis = vis && n.visible;
+      o.visible = vis;
+    }
   };
 
   // glow: the HUD canvas copied, blurred, at half resolution, screen-blended over the scene
