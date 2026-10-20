@@ -737,6 +737,7 @@ body.idle .camwin .well.has-frame { border-color: transparent; box-shadow: 0 6px
   window.studyAfterRender = () => {
     if (document.body.classList.contains("nohud")) return;
     const hud = $("hud"), w = Math.round(hud.clientWidth / 2), h = Math.round(hud.clientHeight / 2);
+    if (!w || !h || !hud.width || !hud.height) return;   // not laid out yet (first frame, hidden tab): drawing an empty canvas throws
     if (glow.width !== w || glow.height !== h) { glow.width = w; glow.height = h; }
     gctx.globalCompositeOperation = "source-over"; gctx.filter = "none"; gctx.fillStyle = "#000"; gctx.fillRect(0, 0, w, h);
     gctx.globalCompositeOperation = "lighter";
@@ -905,6 +906,7 @@ body.idle .camwin .well.has-frame { border-color: transparent; box-shadow: 0 6px
     return "http://localhost:8765";
   })();
   const CH_COLOUR = ["#e5534b", "#57ab5a", "#539bf5"];
+  const STALE = 6 * 3600;
   // One window per camera, so the feed never flicks between narrow-angle and wide-angle frames. Each shows
   // its camera's latest frame, or, once a filter set's channels are all taken, the set's colour composite
   // (made by the frame server) with the channels that went into it underneath.
@@ -931,7 +933,9 @@ body.idle .camwin .well.has-frame { border-color: transparent; box-shadow: 0 6px
       const w = want, im = new Image();
       im.crossOrigin = "anonymous";
       im.onload = () => {
-        busy = false; shownKey = w.key; shown = w; shot.src = im.src;
+        busy = false;
+        if (!want) return;   // the camera went idle while this was loading
+        shownKey = w.key; shown = w; shot.src = im.src;
         well.classList.add("has-frame"); well.classList.toggle("composite", w.set >= 0);
         card.querySelector(".kindtag").textContent = w.set >= 0 ? KIND[catalog.sets[w.set].kind].toUpperCase() : "";
         if (w.set >= 0) channelsFrom(im, catalog.sets[w.set]);
@@ -991,14 +995,19 @@ body.idle .camwin .well.has-frame { border-color: transparent; box-shadow: 0 6px
       const p = lastOfCam(cam, state.et), k = p < 0 ? -1 : catalog.byCam[cam].ks[p];
       const live = k >= 0 && state.et - catalog.et[k] < 180;
       card.classList.toggle("live", live);
-      if (k < 0) {
-        field("status").textContent = "Camera"; strip(null);
-        if (lastK !== -1) { lastK = -1; want = null; shownKey = null; noFrame("<b>No signal</b>No frames from this camera yet this year"); }
+      // a camera that has been quiet for more than STALE seconds shows nothing rather than an old picture
+      if (k < 0 || state.et - catalog.et[k] > STALE) {
+        field("status").textContent = k < 0 ? "Camera" : `Last frame ${fmtDur(state.et - catalog.et[k])} ago`;
+        strip(null);
+        if (lastK !== -1) {
+          lastK = -1; want = null; shownKey = null; shown = null;
+          noFrame(k < 0 ? "<b>No signal</b>No frames from this camera yet this year" : "<b>Idle</b>No frames from this camera in the last 6 h");
+          for (const f of ["frame", "filter", "colour", "details"]) field(f).textContent = "—";
+        }
         return;
       }
       const ago = state.et - catalog.et[k];
       field("status").textContent = live ? "Imaging now" : `Last frame ${fmtDur(ago)} ago`;
-      well.classList.toggle("stale", ago > 6 * 3600);
       const si = catalog.setOf[k], s = si >= 0 ? catalog.sets[si] : null, ready = !!s && s.ready <= state.et;
       strip(s, state.et, k);
       if (k === lastK && ready === lastReady && !force) return;
