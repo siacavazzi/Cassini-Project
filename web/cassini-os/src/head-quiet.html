@@ -387,6 +387,7 @@ body.idle .camwin .chans { opacity: .8; }
 #mlist li.past .t, #mlist li.past .d { color: rgba(232,236,242,.3); }
 #mlist li.next { background: rgba(138,182,255,.16) !important; }
 #mlist li.next span { color: #fff !important; }
+#mlist li.yr { background: none !important; padding: 10px 10px 3px; font-weight: bold; font-size: 11px; letter-spacing: .12em; color: rgba(232,236,242,.55); }
 #mlist button:hover { background: rgba(255,255,255,.05); }
 #moments footer { background: none; border-top: 1px solid var(--q-line); color: var(--q-dim); }
 
@@ -509,7 +510,7 @@ body.idle .camwin .well.has-frame { border-color: transparent; box-shadow: 0 6px
   <div id="camsink" hidden><span id="imgk"></span><span id="imgv"></span><span id="imgm"></span></div>
 
   <aside class="win" id="moments" aria-label="Moments to jump to">
-    <div class="titlebar"><span class="lights"><button class="close" aria-label="Close">×</button><button class="min" aria-label="Minimize">–</button><button class="zoom" aria-label="Zoom">+</button></span>Moments: 2005</div>
+    <div class="titlebar"><span class="lights"><button class="close" aria-label="Close">×</button><button class="min" aria-label="Minimize">–</button><button class="zoom" aria-label="Zoom">+</button></span>Moments</div>
     <div class="colhead"><span class="sorted">Date ▴</span><span>Moment</span><span>Photo</span></div>
     <ul id="mlist"></ul>
     <footer id="mfoot">—</footer>
@@ -552,7 +553,7 @@ body.idle .camwin .well.has-frame { border-color: transparent; box-shadow: 0 6px
     <div class="statusbar"><span>Positions from Cassini's SPICE kernels (J2000). LCD lanes: narrow-angle (NAC) and wide-angle (WAC) frames coloured by filter; RGB marks frames that belong to a red, green and blue set.</span><span id="pnote" hidden></span><b id="sbar">—</b></div>
   </div>
 
-  <div id="loading"><div>Starting Cassini OS<br>Loading 2005 trajectories<div class="bar"></div></div></div>
+  <div id="loading"><div>Starting Cassini OS<br>Loading trajectories<div class="bar"></div></div></div>
 </div>
 
 <script>
@@ -729,7 +730,12 @@ body.idle .camwin .well.has-frame { border-color: transparent; box-shadow: 0 6px
         return [o, src];
       });
     }
-    for (const [o, src] of occluders) { src.updateMatrixWorld(true); o.matrix.copy(src.matrixWorld); o.matrixWorldNeedsUpdate = true; }
+    for (const [o, src] of occluders) {
+      src.updateMatrixWorld(true); o.matrix.copy(src.matrixWorld); o.matrixWorldNeedsUpdate = true;
+      // bodies off stage (Venus after the cruise, Saturn's moons before it) must not block lines
+      let vis = true; for (let n = src; n; n = n.parent) vis = vis && n.visible;
+      o.visible = vis;
+    }
   };
 
   // glow: the HUD canvas copied, blurred, at half resolution, screen-blended over the scene
@@ -991,7 +997,9 @@ body.idle .camwin .well.has-frame { border-color: transparent; box-shadow: 0 6px
         fig.classList.remove("waiting"); fig.querySelector(".tile").replaceChildren(t);
       }
     }
+    let cat = null;
     function update(force) {
+      if (catalog !== cat) { cat = catalog; lastK = -2; stripKey = ""; failed.clear(); }   // another mission year loaded
       const p = lastOfCam(cam, state.et), k = p < 0 ? -1 : catalog.byCam[cam].ks[p];
       const live = k >= 0 && state.et - catalog.et[k] < 180;
       card.classList.toggle("live", live);
