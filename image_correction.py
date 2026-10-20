@@ -57,6 +57,10 @@ def align_with_masks(imgs, masks, ref=0, report=None):
         shift, how = find_shift(imgs[ref], imgs[i]), "phase"
         if shift is None:
             shift, how = find_shift(edges(imgs[ref]), edges(imgs[i])), "edges"
+            # an edge match at exactly no shift is the camera's own fixed pattern (dust rings, bad
+            # columns) matching itself, not the target: it says nothing
+            if shift is not None and abs(shift[0]) < 0.25 and abs(shift[1]) < 0.25:
+                shift = None
         if shift is None:
             shift, how = centroid_shift(imgs[ref], imgs[i]), "centroid"
         if shift is not None:
