@@ -476,18 +476,13 @@ def plan(out, years, limit, add_missing=False, volumes=None, pds=None):
     known = set(os.path.basename(p).split(".")[0] for p in index["path"].dropna())
     if years:
         index = index[index["year"].isin(years)]
-    # one listing per folder: a stat per frame takes hours on a busy external drive. A frame is
-    # done when its PNG is there and the manifest has its row (a run stopped while moving a
-    # volume's files into out can leave PNGs whose rows were never written; those are redone)
-    recorded = set()
+    # a frame is done once the manifest has its row, which is only written after its PNG is in
+    # out (a run stopped while moving a volume's files can leave PNGs without rows; those are
+    # redone). Listing the output folders instead can take hours on a busy external drive.
+    done = set()
     manifest = os.path.join(out, "manifest.csv")
     if os.path.exists(manifest) and os.path.getsize(manifest):
-        recorded = set(pd.read_csv(manifest, usecols=["id"], dtype=str)["id"])
-    done = set()
-    for folder in ("nac_data", "wac_data"):
-        if os.path.isdir(os.path.join(out, folder)):
-            done.update(f"{folder}/{name}" for name in os.listdir(os.path.join(out, folder))
-                        if name.endswith(".png") and name[:-4] in recorded)
+        done = {f"{data_folder(fid)}/{fid}.png" for fid in pd.read_csv(manifest, usecols=["id"], dtype=str)["id"]}
     frames = []
     for png_rel in index["path"].dropna():
         if limit and len(frames) >= limit:
