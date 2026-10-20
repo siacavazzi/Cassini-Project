@@ -85,8 +85,11 @@ def slerp(a, b, u):
 
 
 def qangle(a, b):
-    """Rotation angle between two attitudes, degrees."""
-    return np.degrees(2 * np.arccos(min(1.0, abs(float(np.dot(a, b))))))
+    """Rotation angle between two attitudes, degrees. Chord form: arccos of a dot product near 1 turns
+    float32 rounding into ~0.05 deg of fake error."""
+    a, b = np.asarray(a, dtype=float), np.asarray(b, dtype=float)
+    d = min(np.linalg.norm(a - b), np.linalg.norm(a + b))
+    return np.degrees(4 * np.arcsin(min(1.0, d / 2)))
 
 
 def refine(times, quats, truth, tol_deg):
