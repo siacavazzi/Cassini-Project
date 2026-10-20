@@ -1034,7 +1034,7 @@ body.idle .mvwell { border-color: transparent; box-shadow: 0 6px 30px rgba(0,0,0
   }
   // the movie's own clock: a frame every 1/fps seconds, holding on a frame until the next one has arrived
   function tick(now) {
-    if (!M.on) return;
+    if (!M.on) { M.looping = false; return; }
     fill();
     const ready = yearReady();
     if (M.playing && ready && M.frames.length && now >= M.due) {
@@ -1107,7 +1107,7 @@ body.idle .mvwell { border-color: transparent; box-shadow: 0 6px 30px rgba(0,0,0
       card.hidden = false; card.dispatchEvent(new Event("pointerdown"));
       $("movie").setAttribute("aria-pressed", "true");
       M.playing = true; $("mvplay").textContent = "❚❚";
-      requestAnimationFrame(tick);
+      if (!M.looping) { M.looping = true; requestAnimationFrame(tick); }
     }
     const opts2 = [...new Set([target, ...near].filter(Boolean))];
     $("mvbody").innerHTML = opts2.map(t => `<option value="${t}">${titleCase(t)}</option>`).join("");

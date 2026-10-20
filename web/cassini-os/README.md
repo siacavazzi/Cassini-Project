@@ -8,6 +8,17 @@ menu-bar tray or zoom, and a Camera window that shows the real frame Cassini too
 | `index.html` | Smoked Mac OS X style panels, the camera feed as the main window, the interface fades when the pointer rests (the camera picture stays), window layout remembered per browser. |
 | `replay/` | Link to the plain replay viewer (`web/replay`), so one server shows both. |
 
+## Movie mode
+
+The film button next to the moment arrows (or `M`, or Go > Movie mode) plays one body's frames as a film. It takes
+the body Cassini is imaging (or the one in view), finds the stretch of imaging around the clock (frames of that body
+no more than 14 days apart, at most 100 days back and 200 ahead), and plays every frame from one camera through one
+filter pair, the most used one first, at 2 to 24 frames per second. The mission clock jumps from frame to frame, so
+the empty stretches drop out and the 3D view moves with the film. Space pauses, the arrow keys step, Escape (or the
+window's close button, the main play button, or scrubbing the timeline) leaves. Frames are fetched ahead of the play
+head; a frame that has not arrived holds the film rather than being skipped. `window.cassiniMovie.start({ target, et })`
+starts a movie from code, for a Moments entry later.
+
 ## Run it
 
 The page reads the replay data through the `data` link (`data -> ../replay/data`), and the camera frames
@@ -37,6 +48,8 @@ python web/cassini-os/src/build.py
 `src/build.py` takes the viewer's script from `web/replay/index.html` and patches in the hooks the heads use
 (colours and fonts from CSS variables, a separate HUD canvas for the glowing orbits, NASA's model). If the
 viewer changes a line a patch depends on, the build stops with an assertion naming that line.
+Movie mode lives in `src/movie.html` (style, window and script); the build splices it into the page.
+
 `src/strip.py` strips the document wrapper for publishing as a claude.ai artifact.
 
 Design rule (Sam, 2026-10-19): the interface should be as unobtrusive as possible; the OS stays because
