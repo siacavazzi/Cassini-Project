@@ -17,10 +17,11 @@ Routes:
                                colour composite of two or three frames of one filter set, made on
                                first request and cached like the frames: R,G,B in that order, or
                                two ids (longer wavelength first) for a two-filter composite with
-                               green made from both. Every channel is calibrated onto one
-                               brightness scale (calibration.load_channels), the channels are
-                               aligned to the middle one in time, and pixels lost in downlink are
-                               transparent
+                               green made from both. Made by the pipeline's color path
+                               (color_image.load_aligned): repeat exposures stacked, every channel
+                               on one brightness scale, aligned to the middle one in time, pixels
+                               lost in downlink transparent. The X-Composite header (and a .json
+                               next to the cached image) says how each channel was made
   /health                      "ok" plus where the frames come from
   anything else                a file from --site, if given (the replay page and its data)
 
@@ -49,10 +50,9 @@ import data_source  # noqa: E402
 # for composites: the pipeline's calibration, alignment and label reading. Loaded here, in the main
 # thread, with matplotlib (pulled in by label_handler) kept off the screen
 os.environ.setdefault("MPLBACKEND", "Agg")
+import json  # noqa: E402
 import numpy as np  # noqa: E402
-import calibration as cal  # noqa: E402
-import image_correction as ic  # noqa: E402
-import label_handler as lh  # noqa: E402
+import color_image  # noqa: E402
 
 FRAME_ID = re.compile(r"^([NW])\d{10}_\d+$")
 SIZES = (128, 256, 384, 512, 768, 1024)
@@ -108,29 +108,36 @@ def webp(frame_id, size, cache):
     return cached(os.path.join(cache, str(size), frame_id + ".webp"), make)
 
 
-def color_image(ids):
-    """RGBA composite of the frames ids (R,G,B, or longer and shorter wavelength), 1024 px."""
-    lbls = [lh.label(f"{FOLDERS[i[0]]}/{i}.png", as_png=True) for i in ids]
-    imgs = [lbl.resize_image() for lbl in lbls]
-    imgs = [img if img.ndim == 3 else np.dstack([img] * 3) for img in imgs]
-    masks = [lbl.valid_mask() for lbl in lbls]
-    imgs = [ic.fill_invalid(img, mask) for img, mask in zip(imgs, masks)]
-    # one brightness scale for every channel, so the colours are what the camera measured
-    imgs = cal.load_channels(lbls, imgs)
-    order = sorted(range(len(lbls)), key=lambda j: lbls[j].info.get("IMAGE_TIME", ""))
-    imgs, masks = ic.align_with_masks(imgs, masks, order[len(order) // 2])
+def composite(ids):
+    """RGBA composite of the frames ids (R,G,B, or longer and shorter wavelength), 1024 px, made by the
+    pipeline's color path (color_image.load_aligned: repeat exposures stacked, calibrated, aligned),
+    and a report of how each channel was made."""
+    imgs, valid, _, report = color_image.load_aligned([f"{FOLDERS[i[0]]}/{i}.png" for i in ids])
     chans = [img[..., 0] if img.ndim == 3 else img for img in imgs]
     if len(chans) == 2:
         chans = [chans[0], ((chans[0].astype(np.uint16) + chans[1]) // 2).astype(np.uint8), chans[1]]
-    alpha = np.where(np.logical_and.reduce(masks), 255, 0).astype(np.uint8)
-    return Image.fromarray(np.dstack(chans + [alpha]), "RGBA")
+    alpha = np.where(valid, 255, 0).astype(np.uint8)
+    report["ids"] = list(ids)
+    return Image.fromarray(np.dstack(chans + [alpha]), "RGBA"), report
 
 
 def color_webp(ids, size, cache):
+    """The composite as WebP, and its report (also kept in the cache, next to the image)."""
+    # "color-v2": made by the pipeline's color path; composites from before that are not reused
+    base = os.path.join(cache, "color-v2", str(size), "_".join(ids))
+    report = {}
     def make():
         with _color_slots:
-            return encode(color_image(ids), size)
-    return cached(os.path.join(cache, "color", str(size), "_".join(ids) + ".webp"), make)
+            im, made = composite(ids)
+        report.update(made)
+        cached(base + ".json", lambda: json.dumps(made).encode())
+        print("composite", json.dumps(made))
+        return encode(im, size)
+    data = cached(base + ".webp", make)
+    if not report and os.path.exists(base + ".json"):
+        with open(base + ".json") as fh:
+            report = json.load(fh)
+    return data, report
 
 
 def make_handler(site, cache):
@@ -140,6 +147,7 @@ def make_handler(site, cache):
 
         def end_headers(self):
             self.send_header("Access-Control-Allow-Origin", "*")
+            self.send_header("Access-Control-Expose-Headers", "X-Composite")
             super().end_headers()
 
         def do_OPTIONS(self):
@@ -149,9 +157,11 @@ def make_handler(site, cache):
             self.send_header("Access-Control-Allow-Private-Network", "true")
             self.end_headers()
 
-        def send_bytes(self, data, mime, cache_forever=True):
+        def send_bytes(self, data, mime, cache_forever=True, headers=None):
             self.send_response(200)
             self.send_header("Content-Type", mime)
+            for key, value in (headers or {}).items():
+                self.send_header(key, value)
             self.send_header("Content-Length", str(len(data)))
             if cache_forever:
                 self.send_header("Cache-Control", "public, max-age=31536000, immutable")
@@ -169,7 +179,8 @@ def make_handler(site, cache):
                     return self.send_error(400, "ids= takes two or three frame ids from one camera")
                 size = min(SIZES, key=lambda s: abs(s - int(query.get("size", ["512"])[0])))
                 try:
-                    return self.send_bytes(color_webp(ids, size, cache), "image/webp")
+                    data, report = color_webp(ids, size, cache)
+                    return self.send_bytes(data, "image/webp", headers={"X-Composite": json.dumps(report)})
                 except FileNotFoundError:
                     return self.send_error(404, "Frame not in the archive")
             m = re.match(r"^/frames/([^/]+)\.(webp|png)$", url.path)

@@ -944,7 +944,7 @@ body.idle .camwin .well.has-frame { border-color: transparent; box-shadow: 0 6px
         shownKey = w.key; shown = w; shot.src = im.src;
         well.classList.add("has-frame"); well.classList.toggle("composite", w.set >= 0);
         card.querySelector(".kindtag").textContent = w.set >= 0 ? KIND[catalog.sets[w.set].kind].toUpperCase() : "";
-        if (w.set >= 0) channelsFrom(im, catalog.sets[w.set]);
+        if (w.set >= 0) { channelsFrom(im, catalog.sets[w.set]); howMade(w); }
         for (const u of next) { const p = new Image(); p.crossOrigin = "anonymous"; p.src = u; }   // warm the cache
         pump();
       };
@@ -962,6 +962,20 @@ body.idle .camwin .well.has-frame { border-color: transparent; box-shadow: 0 6px
         pump();
       };
       im.src = w.key;
+    }
+    const made = new Map();   // set -> how its composite was made
+    const colourText = (s, si) => `${KIND[s.kind]}: ${s.use.map(fname).join(" · ")}${made.has(si) ? ` · ${made.get(si)}` : ""}`;
+    // how the server made the composite (its X-Composite header; the request is answered from the browser cache)
+    function howMade(w) {
+      fetch(w.key).then(r => JSON.parse(r.headers.get("X-Composite") || "null"), () => null).then(rep => {
+        if (!rep || shown !== w) return;
+        const n = rep.aligned.filter(a => a === "not aligned" || a === "failed").length, stacked = rep.stacked.reduce((a, b) => a + b, 0) - rep.stacked.length;
+        const notes = [rep.calibrated ? "calibrated" : "not calibrated (each frame stretched on its own)",
+          stacked ? `${stacked} repeat exposure${stacked > 1 ? "s" : ""} stacked` : "",
+          n ? `${n} channel${n > 1 ? "s" : ""} could not be aligned` : rep.aligned.some(a => a.startsWith("centroid")) ? "aligned by centroid" : "aligned"].filter(Boolean);
+        made.set(w.set, notes.join(", "));
+        if (catalog.setOf[lastK] === w.set) field("colour").textContent = colourText(catalog.sets[w.set], w.set);
+      });
     }
     // the channel strip: each channel's frame as it is taken, then the channels of the composite itself
     // (one shared brightness scale, so their brightness can be compared)
@@ -999,7 +1013,7 @@ body.idle .camwin .well.has-frame { border-color: transparent; box-shadow: 0 6px
     }
     let cat = null;
     function update(force) {
-      if (catalog !== cat) { cat = catalog; lastK = -2; stripKey = ""; failed.clear(); }   // another mission year loaded
+      if (catalog !== cat) { cat = catalog; lastK = -2; stripKey = ""; failed.clear(); made.clear(); }   // another mission year loaded
       const p = lastOfCam(cam, state.et), k = p < 0 ? -1 : catalog.byCam[cam].ks[p];
       const live = k >= 0 && state.et - catalog.et[k] < 180;
       card.classList.toggle("live", live);
@@ -1026,7 +1040,7 @@ body.idle .camwin .well.has-frame { border-color: transparent; box-shadow: 0 6px
       const c = catalog.cls[k], pol = /^P\d|^IRP/.test(catalog.f1[k]) || /^IRP/.test(catalog.f2[k]) ? " · polarizer" : "";
       field("filter").innerHTML = `<span class="swatch" style="background:${CLS[c][1]}"></span>${catalog.f1[k]}/${catalog.f2[k]}${nmOf(k) ? ` · ${Math.round(nmOf(k))} nm` : ""}${pol}`;
       field("colour").textContent = !s ? (colourFilter(k) ? "Single filter" : "Clear, no colour") : ready
-        ? `${KIND[s.kind]}: ${s.use.map(fname).join(" · ")}` : `${KIND[s.kind]} set, ${s.use.filter(q => catalog.et[q] <= state.et).length} of ${s.use.length} channels taken`;
+        ? colourText(s, si) : `${KIND[s.kind]} set, ${s.use.filter(q => catalog.et[q] <= state.et).length} of ${s.use.length} channels taken`;
       const n24 = p - lastOfCam(cam, state.et - 86400);
       field("details").textContent = `${kp ? `${kp < 10 ? kp.toFixed(2) : fmt(kp)} km/px · ` : ""}${fmt(n24)} frames in the last 24 h`;
       card.querySelector(".shottag").textContent = want.set >= 0 ? `${s.use.map(q => catalog.id[q]).join(" ")}` : `${catalog.id[k]} · ${catalog.f1[k]}/${catalog.f2[k]}`;
