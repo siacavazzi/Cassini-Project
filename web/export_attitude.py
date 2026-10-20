@@ -17,6 +17,11 @@ With --refine, years already exported (header flags 0) get extra background samp
 browser's slerp between neighbouring samples (images and background merged, as tracks.js does it)
 misses SPICE by more than --tol degrees; intervals are halved down to MIN_STEP. The file keeps its
 layout (bg_t just stops being evenly spaced) and gets header flags 1, so a rerun skips it.
+
+With --update-from <old dir> --old-catalog <old catalog dir>, years whose catalog changed are
+rebuilt from the old file instead of from scratch: image quaternions are reused by image id,
+only new images are pointed, and the old (already refined) background samples are kept. The
+file is written with flags 0, so a following --refine pass checks the merged series again.
 """
 
 import argparse
@@ -166,6 +171,41 @@ def refine_file(path, cat, tol_deg):
     return len(extra)
 
 
+def load_catalog(path):
+    if os.path.exists(path):
+        return json.load(open(path))
+    if os.path.exists(path + ".gz"):
+        return json.load(gzip.open(path + ".gz"))
+    return {"id": [], "et": [], "cam": []}
+
+
+def update_file(old_path, old_cat, new_cat, out_path, point):
+    """Rewrite old_path for new_cat, reusing image quaternions by id; point(et, cam) supplies the rest."""
+    raw = open(old_path, "rb").read()
+    _, ver, _, n_img, n_bg = struct.unpack("<4sHHII", raw[:16])
+    if n_img != len(old_cat["id"]):
+        raise ValueError(f"{old_path}: {n_img} images but the old catalog has {len(old_cat['id'])}")
+    img_q = np.frombuffer(raw, "<f4", 4 * n_img, 16).reshape(-1, 4)
+    bg = raw[16 + 16 * n_img:]
+    old_ix = {i: k for k, i in enumerate(old_cat["id"])}
+    new_q = np.empty((len(new_cat["id"]), 4), dtype="<f4")
+    fresh = 0
+    for k, (i, et, cam) in enumerate(zip(new_cat["id"], new_cat["et"], new_cat["cam"])):
+        j = old_ix.get(i)
+        if j is not None and old_cat["et"][j] == et and old_cat["cam"][j] == cam:
+            new_q[k] = img_q[j]
+        else:
+            new_q[k] = point(et, cam)
+            fresh += 1
+    tmp_path = out_path + ".tmp"
+    with open(tmp_path, "wb") as fh:
+        fh.write(b"CATT" + struct.pack("<HHII", ver, 0, len(new_q), n_bg))
+        fh.write(new_q.tobytes())
+        fh.write(bg)
+    os.replace(tmp_path, out_path)
+    return fresh
+
+
 def main():
     ap = argparse.ArgumentParser()
     ap.add_argument("--zip", required=True)
@@ -175,6 +215,8 @@ def main():
     ap.add_argument("--years", default="1997-2017")
     ap.add_argument("--refine", action="store_true", help="add samples where slerp misses SPICE (existing files)")
     ap.add_argument("--tol", type=float, default=0.1, help="refinement tolerance, degrees")
+    ap.add_argument("--update-from", help="attitude dir from an earlier export, to reuse for changed catalogs")
+    ap.add_argument("--old-catalog", help="the catalog dir that earlier export was made from")
     args = ap.parse_args()
     y0, y1 = (int(x) for x in args.years.split("-"))
     z = zipfile.ZipFile(args.zip)
@@ -183,7 +225,17 @@ def main():
 
     for year in range(y0, y1 + 1):
         path = os.path.join(args.out, "attitude", f"{year}.bin")
-        if os.path.exists(path) and not args.refine:
+        cat_path = os.path.join(args.catalog, f"{year}.json")
+        if args.update_from:
+            old_path = os.path.join(args.update_from, f"{year}.bin")
+            if os.path.exists(path) or not os.path.exists(old_path):
+                continue
+            old_cat, new_cat = load_catalog(os.path.join(args.old_catalog, f"{year}.json")), load_catalog(cat_path)
+            if all(old_cat[f] == new_cat[f] for f in ("id", "et", "cam")):
+                shutil.copy(old_path, path)
+                print(f"{year}: catalog unchanged, copied", flush=True)
+                continue
+        elif os.path.exists(path) and not args.refine:
             continue
         if args.refine and (not os.path.exists(path) or struct.unpack("<H", open(path, "rb").read(8)[6:8])[0] & FLAG_REFINED):
             continue
@@ -204,13 +256,15 @@ def main():
                     shutil.copyfileobj(fin, fout, 1 << 24)
             sp.furnsh(dst)
 
-        cat_path = os.path.join(args.catalog, f"{year}.json")
-        if os.path.exists(cat_path):
-            cat = json.load(open(cat_path))
-        elif os.path.exists(cat_path + ".gz"):
-            cat = json.load(gzip.open(cat_path + ".gz"))
-        else:
-            cat = {"et": [], "cam": []}
+        cat = load_catalog(cat_path)
+
+        if args.update_from:
+            n = update_file(old_path, old_cat, cat, path, lambda et, cam: quat(FRAMES[cam], et))
+            print(f"{year}: {len(cat['id'])} images, {n} newly pointed, background kept "
+                  f"({os.path.getsize(path) / 1e6:.1f} MB)", flush=True)
+            sp.kclear()
+            shutil.rmtree(tmp, ignore_errors=True)
+            continue
 
         if args.refine:
             n = refine_file(path, cat, args.tol)

@@ -57,6 +57,14 @@ python web/verify_attitude.py --zip /Volumes/LaCie/cassiniprojectJAN05.zip --dat
     --catalog replay_data/catalog --tmp /Volumes/LaCie/verify_tmp
 ```
 
+When `Image_index.csv` changes, the catalogs change and so does the order of `image_q`. Instead of re-exporting every year, `--update-from` rebuilds each year from the earlier export: it reuses image pointing by image id, points only the new images, keeps the refined background samples, and copies years whose catalog did not change. Changed years are written with flags 0, so run the `--refine` pass after it. `--old-catalog` must be the catalogs the earlier export was made from (regenerate them with `export_tracks.py --index <old Image_index.csv> --skip tracks,encounters`):
+
+```
+python web/export_attitude.py --zip /Volumes/LaCie/cassiniprojectJAN05.zip --catalog <new>/catalog \
+    --out <new> --tmp /Volumes/LaCie/attitude_tmp --update-from <old>/attitude --old-catalog <old>/catalog
+python web/export_attitude.py ... --out <new> --refine
+```
+
 ## Replay prototype
 
 `replay/index.html` is the first viewer: the Saturn system for one year on the exported tracks, with a timeline to scrub or play, camera-frame density, and jumps to flybys. Build its data, then serve the folder with any static server:
