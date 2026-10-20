@@ -19,8 +19,8 @@ misses SPICE by more than --tol degrees; intervals are halved down to MIN_STEP. 
 layout (bg_t just stops being evenly spaced) and gets header flags 1, so a rerun skips it.
 
 With --update-from <old dir> --old-catalog <old catalog dir>, years whose catalog changed are
-rebuilt from the old file instead of from scratch: image quaternions are reused by image id,
-only new images are pointed, and the old (already refined) background samples are kept. The
+rebuilt from the old file instead of from scratch: image quaternions are reused by image id
+(for images whose mid-time no other image shares), only the rest are pointed, and the old (already refined) background samples are kept. The
 file is written with flags 0, so a following --refine pass checks the merged series again.
 """
 
@@ -179,7 +179,7 @@ def load_catalog(path):
     return {"id": [], "et": [], "cam": []}
 
 
-def update_file(old_path, old_cat, new_cat, out_path, point):
+def update_file(old_path, old_cat, new_cat, out_path, point, check=50):
     """Rewrite old_path for new_cat, reusing image quaternions by id; point(et, cam) supplies the rest."""
     raw = open(old_path, "rb").read()
     _, ver, _, n_img, n_bg = struct.unpack("<4sHHII", raw[:16])
@@ -187,7 +187,12 @@ def update_file(old_path, old_cat, new_cat, out_path, point):
         raise ValueError(f"{old_path}: {n_img} images but the old catalog has {len(old_cat['id'])}")
     img_q = np.frombuffer(raw, "<f4", 4 * n_img, 16).reshape(-1, 4)
     bg = raw[16 + 16 * n_img:]
-    old_ix = {i: k for k, i in enumerate(old_cat["id"])}
+    # frames that share a mid-time with another frame can sit in either order depending on the machine
+    # that wrote the old catalog, so only images with a unique time are reused; the rest are re-pointed
+    seen = {}
+    for et in old_cat["et"]:
+        seen[et] = seen.get(et, 0) + 1
+    old_ix = {i: k for k, i in enumerate(old_cat["id"]) if seen[old_cat["et"][k]] == 1}
     new_q = np.empty((len(new_cat["id"]), 4), dtype="<f4")
     fresh = 0
     for k, (i, et, cam) in enumerate(zip(new_cat["id"], new_cat["et"], new_cat["cam"])):
@@ -197,6 +202,14 @@ def update_file(old_path, old_cat, new_cat, out_path, point):
         else:
             new_q[k] = point(et, cam)
             fresh += 1
+    # the old file must really be in old_cat's order: re-point a sample of reused images and compare
+    reused = [k for k, i in enumerate(new_cat["id"]) if i in old_ix and not np.isnan(new_q[k, 0])]
+    rng = np.random.default_rng(0)
+    for k in rng.choice(reused, size=min(check, len(reused)), replace=False) if check and reused else []:
+        q = np.array(point(new_cat["et"][k], new_cat["cam"][k]), dtype=float)
+        if not np.isnan(q[0]) and qangle(q, new_q[k].astype(float)) > 0.01:
+            raise ValueError(f"{old_path}: image {new_cat['id'][k]} pointing differs from SPICE; "
+                             "the old catalog is not the one this file was made from")
     tmp_path = out_path + ".tmp"
     with open(tmp_path, "wb") as fh:
         fh.write(b"CATT" + struct.pack("<HHII", ver, 0, len(new_q), n_bg))
