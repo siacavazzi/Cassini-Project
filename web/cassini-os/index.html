@@ -1591,7 +1591,8 @@ function systemOf() {
 }
 // planets show between planets and at home; moons only in their planet's neighbourhood
 function inContext(name) {
-  if (PLANETS.includes(name)) return name === "SATURN" || state.context === "SUN" || state.context === name;
+  // with the view on the Sun, the planets stay on stage even while Cassini is at one of them
+  if (PLANETS.includes(name)) return name === "SATURN" || state.context === "SUN" || state.focus === "SUN" || state.context === name;
   return state.context === parentOf(name);
 }
 function probeActive() { return !!probe && state.et >= probe.track.start && state.et <= probe.track.end; }
@@ -1880,7 +1881,7 @@ function updateOrbits() {
   for (const name in orbitLines) {
     const ln = orbitLines[name], tr = tracks[name], parent = parentOf(name), tp = tracks[parent];
     const planet = PLANETS.includes(name);
-    ln.visible = present(name) && present(parent) && (planet ? state.context === "SUN"
+    ln.visible = present(name) && present(parent) && (planet ? state.context === "SUN" || state.focus === "SUN"
       : inContext(name) && (parent !== "SATURN" || state.allOrbits || name === "TITAN" || name === state.focus || name === state.target));
     if (!ln.visible) continue;
     positionAt(tr, state.et, a); positionAt(tp, state.et, b);
@@ -2125,7 +2126,7 @@ function setFocus(name, dist) {
   if (!pos[name] || (name !== "HUYGENS" && !present(name))) return;
   if (name !== "CASSINI" && state.follow) setFollow(false);
   const old = camera.position.clone();
-  const d = dist || (name === "CASSINI" ? 3.5e-5 : name === "HUYGENS" ? 4 : name === "SATURN" ? 420 : Math.max(bodyRadius(name) / KM * 7, 2));
+  const d = dist || (name === "CASSINI" ? 3.5e-5 : name === "HUYGENS" ? 4 : name === "SUN" ? 6e5 : name === "SATURN" ? 420 : Math.max(bodyRadius(name) / KM * 7, 2));
   state.focus = name;
   let dir = old.lengthSq() > 0 ? old.normalize() : new THREE.Vector3(0, 0.3, 1).normalize();
   if (name === "HUYGENS") {
@@ -2149,7 +2150,8 @@ function setFocus(name, dist) {
 function focusChoices() {
   const near = probe && state.et > probe.track.start - 30 * 86400 && state.et < probe.track.end + 30 * 86400;
   const rest = [...CRUISE_FOCUS, ...FOCUS_LIST.slice(1)].filter(n => present(n) && (n === "SATURN" || inContext(n)));
-  return ["CASSINI", ...(near || (probe && !mission) ? ["HUYGENS"] : []), ...rest];
+  const sun = mission && (state.context === "SUN" || state.focus === "SUN") ? ["SUN"] : [];   // the inner solar system from above
+  return ["CASSINI", ...sun, ...(near || (probe && !mission) ? ["HUYGENS"] : []), ...rest];
 }
 let focusKey = "";
 function updateFocusRow() {
@@ -2279,8 +2281,8 @@ async function jump(e) {
   const launch = /^Launch/.test(e.label || "");
   const [lead, speed, span] = huy ? [/lands/.test(e.label) ? 900 : 300, 60, 6 * 3600] : launch ? [0, 60, 86400]
     : JUMP[body] || [body === "TITAN" ? 3 * 3600 : 2 * 3600, 600, 2 * 86400];
-  if (mission) { setPlaying(false); lastWantedYear = yearOf(e.et - lead); await requestYears(lastWantedYear); }
   setTime(e.et - lead);
+  if (mission) { setPlaying(false); lastWantedYear = yearOf(state.et); await requestYears(lastWantedYear); }
   setView(span, e.et);
   updateBodies();
   setFocus(present(body) || body === "HUYGENS" ? body : "CASSINI", huy && /lands/.test(e.label) ? 0.15 : undefined);
