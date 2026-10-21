@@ -269,7 +269,12 @@ def shot_webp(target, n, size, cache, use_mosaic=True, slots=None):
 
     data = _cached(path, make)
     if not report:
-        report = picture(s["ids"], cache)[1]
+        # served from the cache: the picture's report is kept next to it, no need to open the picture
+        try:
+            with open(os.path.join(cache, VERSION, "pictures", "_".join(s["ids"]) + ".json")) as fh:
+                report = json.load(fh)
+        except (OSError, ValueError):
+            report = picture(s["ids"], cache)[1]
     report["mosaic"] = len(window)
     return data, report
 
