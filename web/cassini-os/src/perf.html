@@ -45,7 +45,7 @@ body.s-noglass .menu ul { background: rgba(22, 23, 27, .97); }
   let auto = 1;                          // automatic quality's share of the user's resolution (1 = all of it)
   // it moves in fixed steps, so the canvas is not reallocated at a new odd size every few seconds
   const STEPS = [1, 0.9, 0.8, 0.7, 0.6, 0.5, 0.4, 0.3];
-  let n = 0, drawn = 0, t0 = 0, tPrev = 0, worst = 0, slow = 0, good = 0, raiseAfter = 0, raiseWait = 8000, lastDrop = 0, fps = 0;
+  let n = 0, drawn = 0, t0 = 0, tPrev = 0, worst = 0, slow = 0, good = 0, raiseAfter = 0, raiseWait = 8000, lastDrop = 0, fps = 0, best = 0, born = 0;
   let lastKey = null, lastDraw = -1e9, busyUntil = 0, applied = 0, meter = null;
   const user = () => S.get("perf.resolution") / 100;
   const P = window.cassiniPerf = {
@@ -68,16 +68,16 @@ body.s-noglass .menu ul { background: rgba(22, 23, 27, .97); }
     frame(now, drew) {
       n++; if (drew) drawn++;
       if (tPrev) worst = Math.max(worst, now - tPrev); tPrev = now;
-      if (!t0) t0 = now;
+      if (!t0) t0 = born = now;
       if (now - t0 < 1000) return;
       // a second with one hitch in it (a picture or a month of data arriving) says nothing about the GPU's load;
       // frames that are all slow do
       const all = drawn === n, rate = 1000 * n / (now - t0), hitch = n > 1 && worst > 250 && worst > 3 * (now - t0 - worst) / (n - 1);
       n = drawn = 0; t0 = now; worst = 0;
-      if (all) fps = rate;
+      if (all) { fps = rate; if (!hitch) best = Math.max(best, rate); }
       if (meter) meter.textContent = `${all ? Math.round(rate) + " fps" : "resting"}  ·  3D ${Math.round(100 * P.pixelRatio() / dpr())}%`;
       // only judge seconds in which every frame was drawn, the tab was visible and no data was being waited on
-      if (!S.get("perf.auto") || !all || document.hidden || hitch || (typeof yearReady === "function" && !yearReady())) { good = 0; return; }
+      if (!S.get("perf.auto") || !all || document.hidden || hitch || now - born < 4000 || (typeof yearReady === "function" && !yearReady())) { good = 0; return; }
       const target = S.get("perf.target");
       if (rate < target * 0.9) {
         good = 0;
@@ -96,9 +96,11 @@ body.s-noglass .menu ul { background: rgba(22, 23, 27, .97); }
         }
       } else {
         slow = 0;
-        // one step up, only after three good seconds and only if the frame rate would still reach the target there
-        const up = STEPS.slice().reverse().find(x => x > auto + 1e-6);
-        if (up && now > raiseAfter && rate * (auto / up) ** 2 >= target && ++good >= 3) { good = 0; auto = up; raiseAfter = now + 3000; apply(); }
+        // one step up, after three good seconds if the frame rate would still reach the target there; held at the
+        // screen's refresh rate (which hides any headroom) it tries a step after six, and a drop that follows
+        // doubles the wait before the next try
+        const up = STEPS.slice().reverse().find(x => x > auto + 1e-6), capped = rate >= best * 0.95;
+        if (up && now > raiseAfter && (rate * (auto / up) ** 2 >= target || capped) && ++good >= (capped ? 6 : 3)) { good = 0; auto = up; raiseAfter = now + 3000; apply(); }
       }
     }
   };
