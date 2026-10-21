@@ -18,7 +18,7 @@ if len(sys.argv) == 1:
         subprocess.run([sys.executable, __file__, os.path.join(root, "..", "replay", "index.html"),
                         os.path.join(HERE, head), os.path.join(root, out)], check=True)
     sys.exit(0)
-import sys, re
+import sys, re, json
 src = open(sys.argv[1]).read()           # prototype source
 study = open(sys.argv[2]).read()          # study: everything up to (not incl.) the three.js script tags
 out = sys.argv[3]
@@ -175,5 +175,21 @@ rep("""    closeCam.position.copy(camera.position); closeCam.quaternion.copy(cam
     renderer.render(scene, closeCam);
     cassini.scale.setScalar(cs);""")
 rep('  state.pointed = !!qb;\n', '  state.pointed = !!qb;\n  window.cassiniPointing = qb ? "CK" : "EARTH";\n')
+rep('  const card = $("imgcard");\n', '  const card = $("camsink");\n')   # the page has a window per camera (see the head)
+# effective wavelength of every filter pair, for placing colour channels: "N:CL1/RED" -> nm
+nm = {}
+for line in open(os.path.join(HERE, "..", "..", "..", "filter_calibration.csv")).read().splitlines()[1:]:
+    camera, filters, wavelength = line.split(",")[:3]
+    nm[camera] = nm.get(camera, []) + [(filters, float(wavelength))]
+pairs = {}
+WHEELS = {"ISSNA": ("CL1", "RED", "BL1", "UV2", "UV1", "IRP0", "P120", "P60", "P0", "HAL", "IR4", "IR2"),
+          "ISSWA": ("CL1", "IR3", "IR4", "IR5", "CB3", "MT3", "CB2", "MT2", "IR2")}
+for camera, rows in nm.items():
+    for filters, wavelength in rows:
+        # the table joins the two wheels' names; split at the first wheel's name it starts with
+        first = max((f for f in WHEELS[camera] if filters.startswith(f)), key=len)
+        pairs[f"{camera[3]}:{first}/{filters[len(first):]}"] = wavelength
+assert study.count("/*FILTER_NM*/{}") == 1
+study = study.replace("/*FILTER_NM*/{}", json.dumps(pairs, separators=(",", ":"), sort_keys=True))
 open(out, 'w').write(study + script)
 print("ok", out, len(study + script))

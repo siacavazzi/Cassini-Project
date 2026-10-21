@@ -5,7 +5,7 @@ menu-bar tray or zoom, and a Camera window that shows the real frame Cassini too
 
 | Page | What it is |
 | --- | --- |
-| `index.html` | Smoked Mac OS X style panels, the camera feed as the main window, the interface fades when the pointer rests (the camera picture stays), window layout remembered per browser. |
+| `index.html` | Smoked Mac OS X style panels, the camera feed as the main window, the interface fades when the pointer rests (the camera picture stays), window layout remembered per browser. Narrow-angle and wide-angle frames each have their own camera window; frames that make a filter set are shown as a colour composite with their channels underneath. |
 | `replay/` | Link to the plain replay viewer (`web/replay`), so one server shows both. |
 
 ## Run it
@@ -38,6 +38,20 @@ python web/cassini-os/src/build.py
 (colours and fonts from CSS variables, a separate HUD canvas for the glowing orbits, NASA's model). If the
 viewer changes a line a patch depends on, the build stops with an assertion naming that line.
 `src/strip.py` strips the document wrapper for publishing as a claude.ai artifact.
+
+## Colour sets
+
+The camera windows find filter sets in the catalog (`findSets` in `src/head-quiet.html`): a run of frames from
+one camera on one target, in one observation, each within 5 minutes of the one before, through different colour
+filters. Clear and polarizer frames end a run, and a filter coming round again starts a new one. Channels are
+placed by each filter's effective wavelength from `filter_calibration.csv` (build.py writes the table into the page):
+
+- RED, GRN and a blue (BL1, else BL2 or VIO): **true colour**
+- any other three or more filters: **false colour**, longest wavelength as red, the middle one as green, the shortest as blue
+- two filters: **two-filter colour**, longer as red, shorter as blue, green from both
+
+Once a set's channels are all taken the window asks the frame server for `/frames/color.webp?ids=R,G,B`, which
+calibrates the frames onto one brightness scale, aligns them and caches the result like the frames.
 
 Design rule (Sam, 2026-10-19): the interface should be as unobtrusive as possible; the OS stays because
 there is a lot to configure, and the camera feed is the main feature.
