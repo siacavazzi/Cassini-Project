@@ -48,6 +48,7 @@ import os
 import re
 import sys
 import threading
+import time
 from http.server import SimpleHTTPRequestHandler, ThreadingHTTPServer
 from urllib.parse import parse_qs, urlparse
 
@@ -75,16 +76,39 @@ FOLDERS = {"N": "nac_data", "W": "wac_data"}
 
 # composites take a second or two of CPU each; at most two at once so frames keep flowing
 _color_slots = threading.Semaphore(2)
+# requests that take longer than this many seconds are logged
+SLOW = float(os.environ.get("FRAME_SERVER_SLOW", "2"))
 
 
 def archive_png(frame_id):
     return data_source.read_bytes(f"{FOLDERS[frame_id[0]]}/{frame_id}.png")
 
 
+# one lock per file being made, so a window's request and another's look-ahead for the same picture make it
+# once (the second waits and reads the first one's file) instead of both taking a composite slot
+_making = {}
+_making_lock = threading.Lock()
+
+
 def cached(path, make):
     if os.path.exists(path):
         with open(path, "rb") as fh:
             return fh.read()
+    with _making_lock:
+        lock = _making.setdefault(path, threading.Lock())
+    try:
+        with lock:
+            if os.path.exists(path):
+                with open(path, "rb") as fh:
+                    return fh.read()
+            return _make_file(path, make)
+    finally:
+        with _making_lock:
+            if _making.get(path) is lock and not lock.locked():
+                del _making[path]
+
+
+def _make_file(path, make):
     data = make()
     # written next to its final name and renamed, so a half written file is never served
     os.makedirs(os.path.dirname(path), exist_ok=True)
@@ -209,12 +233,16 @@ def make_handler(site, cache):
             for key, value in (headers or {}).items():
                 self.send_header(key, value)
             self.send_header("Content-Length", str(len(data)))
+            took = time.monotonic() - self.started
+            if took > SLOW:   # a picture this slow keeps a camera window waiting: say so in the log
+                print(f"slow {took:.1f} s {self.path}", flush=True)
             if cache_forever:
                 self.send_header("Cache-Control", "public, max-age=31536000, immutable")
             self.end_headers()
             self.wfile.write(data)
 
         def do_GET(self):
+            self.started = time.monotonic()
             url = urlparse(self.path)
             # a kept-alive connection reuses this handler, so the last request's choice must not stick
             self.revalidate = False
@@ -324,6 +352,8 @@ def main():
     # every year's kernels stay extracted once used, so a reel going back and forth in time is not slowed
     data_source.KEEP_SPICE_CACHE = True
     data_source._zip_index() if data_source.using_zip() else None  # build or load the zip index up front
+    # the first composite would otherwise wait while stacking reads the whole image index (all ~443k rows)
+    threading.Thread(target=color_image.stacking.load_index, daemon=True).start()
     server = Server((args.host, args.port), make_handler(site, args.cache))
     print(f"Serving on http://{args.host}:{args.port}/" + (f" (site: {site})" if site else ""))
     server.serve_forever()
