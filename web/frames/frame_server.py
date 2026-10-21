@@ -67,18 +67,6 @@ FRAME_ID = re.compile(r"^([NW])\d{10}_\d+$")
 SIZES = (128, 256, 384, 512, 768, 1024)
 FOLDERS = {"N": "nac_data", "W": "wac_data"}
 
-# data_source keeps one open file per process and seeks in it, so reads take turns. Every read
-# from the archive goes through _read_member, composites' labels and line prefixes included.
-_read_lock = threading.Lock()
-_read_member = data_source._read_member
-
-
-def _locked_read_member(*args, **kwargs):
-    with _read_lock:
-        return _read_member(*args, **kwargs)
-
-
-data_source._read_member = _locked_read_member
 # composites take a second or two of CPU each; at most two at once so frames keep flowing
 _color_slots = threading.Semaphore(2)
 
@@ -151,6 +139,13 @@ def color_webp(ids, size, cache):
 
 def make_handler(site, cache):
     class Handler(SimpleHTTPRequestHandler):
+        # keep-alive: a viewer loads frames one after another, and a new connection for each
+        # costs a round trip (more through a tunnel); every reply says its Content-Length
+        protocol_version = "HTTP/1.1"
+        # headers and body go out as separate writes; without this the body waits ~40 ms for
+        # the browser's delayed ACK on a kept-alive connection
+        disable_nagle_algorithm = True
+
         def __init__(self, *args, **kwargs):
             super().__init__(*args, directory=site or os.devnull, **kwargs)
 
