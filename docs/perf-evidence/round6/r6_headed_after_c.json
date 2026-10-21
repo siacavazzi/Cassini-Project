@@ -1,0 +1,146 @@
+{
+ "gpu": "ANGLE (Apple, ANGLE Metal Renderer: Apple M4, Unspecified Version)",
+ "frames": 1223,
+ "fps": 48.9,
+ "p50ms": 16.8,
+ "p95ms": 33.9,
+ "maxms": 234.2,
+ "cpuMsPerFrame": {
+  "frame": 3.18,
+  "drawTimeline": 0.81,
+  "updateHud": 0.73,
+  "studyHud": 0.6,
+  "render": 0.32,
+  "updateLabels": 0.24,
+  "updateBodies": 0.18,
+  "studyAfterRender": 0.1,
+  "updateTrail": 0.09,
+  "2d.putImageData.calls": 0.03,
+  "2d.getImageData": 0.02,
+  "2d.getImageData.calls": 0.01,
+  "2d.drawImage.calls": 0.01,
+  "updateFocusRow": 0.01,
+  "updateOrbits": 0.01,
+  "studyBeforeHud": 0.01,
+  "2d.drawImage": 0.01,
+  "updateProbeTrail": 0,
+  "2d.putImageData": 0
+ },
+ "drawCalls": 9,
+ "triangles": 25064,
+ "textures": 16,
+ "canvas": [
+  3072,
+  1920
+ ],
+ "heapMB": 48,
+ "quality": {
+  "fps": 60,
+  "scale": 0.6,
+  "pixelRatio": 1.2,
+  "auto": true,
+  "target": 50
+ },
+ "scalePath": [
+  1,
+  1,
+  1,
+  1,
+  0.7,
+  0.7,
+  0.7,
+  0.7,
+  0.7,
+  0.7,
+  0.7,
+  0.7,
+  0.7,
+  0.7,
+  0.7,
+  0.7,
+  0.7,
+  0.7,
+  0.8,
+  0.8,
+  0.6,
+  0.6,
+  0.6,
+  0.6,
+  0.6,
+  0.6,
+  0.6,
+  0.6,
+  0.6
+ ],
+ "utc": "2006-09-15T16:29:01.799Z",
+ "mainThreadTop": [
+  [
+   "(idle):0",
+   15.73
+  ],
+  [
+   "(program):0",
+   1.37
+  ],
+  [
+   "drawTimeline:3920",
+   0.65
+  ],
+  [
+   "setSize:6",
+   0.46
+  ],
+  [
+   "big:1391",
+   0.31
+  ],
+  [
+   "(anonymous):6",
+   0.15
+  ],
+  [
+   "fmt:1270",
+   0.1
+  ],
+  [
+   "positionAt:2795",
+   0.09
+  ],
+  [
+   "window.studyHud:1567",
+   0.07
+  ],
+  [
+   "updateLabels:3792",
+   0.07
+  ],
+  [
+   "updateHud:3833",
+   0.06
+  ],
+  [
+   "window.studyLabel:1490",
+   0.06
+  ],
+  [
+   "updateMatrixWorld:6",
+   0.05
+  ],
+  [
+   "toggle:0",
+   0.05
+  ],
+  [
+   "(anonymous):1569",
+   0.05
+  ]
+ ],
+ "url": "http://127.0.0.1:8773/",
+ "viewport": [
+  2560,
+  1600,
+  2
+ ],
+ "seconds": 25,
+ "loadMs": 410
+}
