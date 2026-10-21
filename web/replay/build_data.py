@@ -20,6 +20,11 @@ Both layouts add the moments in web/replay/moments.csv to encounters.json: notab
 observations; the time window, frame count and colour sets are measured from the catalog, so a row
 the archive has no pictures for stops the build instead of pointing the viewer at nothing.
 
+The whole-mission layout also writes data/highlights.json from web/replay/highlights.csv: the short
+highlight reel, a dozen or so moments that matter most and have the richest camera data. A row
+borrows a moment's or milestone's observations and text (its "from" column) or names its own
+observations; each is measured from the catalog the same way, with a thumbnail hint (see highlights).
+
 It also writes the same data cut into months, data/months/<YYYY-MM>.json (that month's catalog)
 and data/months/<YYYY-MM>.bin (every body's track and the pointing for that month, see
 write_months), listed in mission.json under "months". A viewer that knows them loads the month
@@ -42,6 +47,9 @@ SATURN_SYSTEM = ["CASSINI", "SUN", "EARTH", "SATURN", "MIMAS", "ENCELADUS", "TET
 CRUISE = ["VENUS", "MOON", "JUPITER", "IO", "EUROPA", "GANYMEDE", "CALLISTO"]
 CATALOG_KEYS = ["id", "et", "cam", "f1", "f2", "target", "obs", "range_km", "km_per_px"]
 MOMENTS = os.path.join(os.path.dirname(os.path.abspath(__file__)), "moments.csv")
+HIGHLIGHTS = os.path.join(os.path.dirname(os.path.abspath(__file__)), "highlights.csv")
+TRUE_BLUES = ("BL1", "BL2", "VIO")   # the blue of a true colour set (reel.TRUE_BLUES)
+SET_GAP = 300        # seconds between the frames of one filter set (reel.SET_GAP)
 
 
 def main():
@@ -54,6 +62,7 @@ def main():
     ap.add_argument("--huygens", help="Huygens replay folder (tracks/huygens, manifest_huygens.json, huygens_descent.json)")
     ap.add_argument("--moments", default=MOMENTS, help="curated imaging sessions for the Moments list (default: %(default)s)")
     ap.add_argument("--scores", help="observations_scored.csv from the highlight scoring, for each moment's photo score")
+    ap.add_argument("--highlights", default=HIGHLIGHTS, help="the highlight reel, whole mission only (default: %(default)s)")
     args = ap.parse_args()
     if args.years:
         return build_mission(args)
@@ -100,58 +109,165 @@ def slim_catalog(data, year):
     return slim
 
 
+def pictures(data, years, obs):
+    """Every catalog frame of these observations in these years: {obs: [(et, filters, cam, id, km_per_px, target)]}."""
+    want = {o: [] for o in obs}
+    for y in years:
+        path = os.path.join(data, "catalog", f"{y}.json")
+        if not want or not os.path.exists(path):
+            continue
+        cat = json.load(open(path))
+        for i, o in enumerate(cat["obs"]):
+            if o in want:
+                want[o].append((cat["et"][i], cat["f1"][i] + "," + cat["f2"][i], cat["cam"][i], cat["id"][i],
+                                cat["km_per_px"][i], cat["target"][i]))
+    return want
+
+
+def utc_of(t):
+    """UTC label from ET, near enough for display (the leap seconds since 2000, 5 at most, are left out)."""
+    return (datetime.datetime(2000, 1, 1, 12) + datetime.timedelta(seconds=t - 64.184)).strftime("%Y-%m-%dT%H:%M:%S")
+
+
+def measure(pics):
+    """The window, frame count and colour sets of a list of pictures, as moments and highlights carry them.
+    rgb_sets counts 30 minute spans with red, green and blue (or violet) pictures, as the highlight scoring does."""
+    spans = {}
+    for p in pics:
+        s = spans.setdefault(int(p[0] // 1800), set())
+        s.update(c for c, k in (("R", "RED"), ("G", "GRN"), ("B", "BL1"), ("B", "VIO")) if k in p[1])
+    return {"et": round(pics[0][0], 2), "utc": utc_of(pics[0][0]), "start": utc_of(pics[0][0]), "end": utc_of(pics[-1][0]),
+            "end_et": round(pics[-1][0], 2), "frames": len(pics), "rgb_sets": sum(len(s) == 3 for s in spans.values())}
+
+
+def read_scores(args):
+    scores = {}
+    if args.scores:
+        for r in csv.DictReader(open(args.scores, newline="")):
+            scores[r["OBSERVATION_ID"]] = max(scores.get(r["OBSERVATION_ID"], 0), float(r["score"]))
+    return scores
+
+
 def moments(args, years):
     """
     The rows of the moments file that fall in these years, as encounters.json entries:
       {"kind": "observation", "label", "body", "obs": [OBSERVATION_ID, ...], "et", "utc", "start", "end",
        "end_et", "frames", "rgb_sets", "why", "source", "photo_score" (with --scores)}
     et/utc is the first picture of the listed observations and end the last, both from the catalog.
-    rgb_sets counts 30 minute spans with red, green and blue (or violet) pictures, as the highlight
-    scoring does. A row in these years with no pictures in the catalog is an error.
+    A row in these years with no pictures in the catalog is an error.
     """
     if not args.moments or not os.path.exists(args.moments):
         return []
-    rows = list(csv.DictReader(open(args.moments, newline="")))
+    rows = [r for r in csv.DictReader(open(args.moments, newline="")) if int(r["date"][:4]) in years]
     if not rows:
         return []
-    scores = {}
-    if args.scores:
-        for r in csv.DictReader(open(args.scores, newline="")):
-            scores[r["OBSERVATION_ID"]] = max(scores.get(r["OBSERVATION_ID"], 0), float(r["score"]))
-    want = {}
-    for r in rows:
-        if int(r["date"][:4]) in years:
-            for o in r["obs"].split():
-                want[o] = []
-    for y in years:
-        path = os.path.join(args.data, "catalog", f"{y}.json")
-        if not want or not os.path.exists(path):
-            continue
-        cat = json.load(open(path))
-        for i, o in enumerate(cat["obs"]):
-            if o in want:
-                want[o].append((cat["et"][i], cat["f1"][i] + "," + cat["f2"][i]))
-    j2000 = datetime.datetime(2000, 1, 1, 12)
+    scores = read_scores(args)
+    want = pictures(args.data, years, {o for r in rows for o in r["obs"].split()})
     out = []
     for r in rows:
-        if int(r["date"][:4]) not in years:
-            continue
         obs = r["obs"].split()
         pics = sorted(p for o in obs for p in want[o])
         if not pics:
             raise SystemExit(f"{args.moments}: no pictures in the catalog for {r['label']!r} ({' '.join(obs)})")
-        spans = {}
-        for t, f in pics:
-            s = spans.setdefault(int(t // 1800), set())
-            s.update(c for c, k in (("R", "RED"), ("G", "GRN"), ("B", "BL1"), ("B", "VIO")) if k in f)
-        # UTC labels from ET, near enough for display (the leap seconds since 2000, 5 at most, are left out)
-        utc = lambda t: (j2000 + datetime.timedelta(seconds=t - 64.184)).strftime("%Y-%m-%dT%H:%M:%S")
-        e = {"kind": "observation", "label": r["label"], "body": r["body"], "obs": obs,
-             "et": round(pics[0][0], 2), "utc": utc(pics[0][0]), "start": utc(pics[0][0]), "end": utc(pics[-1][0]),
-             "end_et": round(pics[-1][0], 2), "frames": len(pics), "rgb_sets": sum(len(s) == 3 for s in spans.values()),
+        e = {"kind": "observation", "label": r["label"], "body": r["body"], "obs": obs, **measure(pics),
              "why": r["why"], "source": r["source"]}
         if any(o in scores for o in obs):
             e["photo_score"] = round(max(scores.get(o, 0) for o in obs), 1)
+        out.append(e)
+    return out
+
+
+def thumb_hint(pics, main, body, radius_km):
+    """
+    Which picture the highlight reel shows as a highlight's thumbnail, by one rule for every highlight; the page
+    asks the frame server for it, so it is made by the pipeline like any camera window picture:
+      mosaic  the last frame of the main pass (main: the first observation's frames; on the body, in the camera
+              with most of them): /frames/mosaic/<id> answers with the whole pass when it is a mosaic
+      color   the true colour set (red, green, blue or violet, one camera, frames within SET_GAP) that shows
+              the body biggest while it still fits the frame
+      frame   the single frame of the body that shows it biggest while it still fits
+    The page takes the mosaic when the server makes one of three or more tiles, else the colour set, else the frame.
+    """
+    on = [p for p in pics if p[5] == body] or pics
+    def size(p):   # the body's width in full resolution pixels, 0 when unknown
+        return 2 * radius_km / p[4] if radius_km and p[4] else 0
+    def best(cands, key):
+        fit = [c for c in cands if 0 < key(c) <= 900]
+        return max(fit, key=key) if fit else min(cands, key=lambda c: key(c) or 1e9) if cands else None
+    hint = {}
+    main = [p for p in main if p[5] == body] or main
+    cams = {}
+    for p in main:
+        cams[p[2]] = cams.get(p[2], 0) + 1
+    if cams:
+        cam = max(cams, key=cams.get)
+        hint["mosaic"] = max(p for p in main if p[2] == cam)[3]
+    sets = []
+    by_cam = {}
+    for p in sorted(on):
+        by_cam.setdefault(p[2], []).append(p)
+    for cam, ps in by_cam.items():
+        for p in ps:
+            if "RED" not in p[1].split(",") or "IR" in p[1]:
+                continue
+            near = [q for q in ps if abs(q[0] - p[0]) <= SET_GAP]
+            g = [q for q in near if "GRN" in q[1].split(",")]
+            b = [q for q in near if any(f in q[1].split(",") for f in TRUE_BLUES)]
+            if g and b:
+                g = min(g, key=lambda q: abs(q[0] - p[0])); b = min(b, key=lambda q: abs(q[0] - p[0]))
+                sets.append((p, g, b))
+    if sets:
+        hint["color"] = [q[3] for q in best(sets, lambda s: size(s[1]))]
+    # a single frame in clear or a visible colour, not methane, infrared, ultraviolet or a polarizer
+    visible = [p for p in on if not any(f[:2] in ("MT", "IR", "UV", "P0", "P1", "P6") for f in p[1].split(","))]
+    pick = best(visible or on, size)
+    if pick:
+        hint["frame"] = pick[3]
+    return hint
+
+
+def highlights(args, years, enc, bodies):
+    """
+    The highlight reel (data/highlights.json), in the order of the highlights file:
+      {"n", "label", "kind": "observation" or "milestone", "body", "obs", "et", "utc", "start", "end", "end_et",
+       "frames", "cams": {"N": n, "W": n}, "rgb_sets", "why", "source", "thumb": {"mosaic", "color", "frame"}}
+    A row's "from" names a moment (moments.csv label) or a milestone (encounters.json label) whose body,
+    observations, why and source it uses for any column it leaves empty. A milestone highlight with no
+    observations (the Huygens descent) runs from the milestone to the one its "until" column names, and the
+    page draws its thumbnail from the probe's own pictures. Observations with no pictures stop the build.
+    """
+    if not args.highlights or not os.path.exists(args.highlights):
+        return []
+    mom = {r["label"]: r for r in csv.DictReader(open(args.moments, newline=""))} if args.moments and os.path.exists(args.moments) else {}
+    ms = {e["label"]: e for e in enc if e["kind"] == "milestone"}
+    rows = list(csv.DictReader(open(args.highlights, newline="")))
+    for r in rows:
+        src = mom.get(r["from"]) or ms.get(r["from"]) or {}
+        if r["from"] and not src:
+            raise SystemExit(f"{args.highlights}: {r['label']!r} is from {r['from']!r}, which is neither a moment nor a milestone")
+        for k in ("body", "obs", "why", "source"):
+            if not r[k] and isinstance(src.get(k), str):
+                r[k] = src[k]
+        r["milestone"] = r["from"] in ms and not r["obs"]
+    want = pictures(args.data, years, {o for r in rows for o in r["obs"].split()})
+    out = []
+    for n, r in enumerate(rows, 1):
+        obs = r["obs"].split()
+        e = {"n": n, "label": r["label"], "kind": "milestone" if r["milestone"] else "observation", "body": r["body"], "obs": obs}
+        if r["milestone"]:
+            t0, t1 = ms[r["from"]]["et"], (ms[r["until"]]["et"] if r["until"] in ms else ms[r["from"]]["et"] + 3600)
+            e.update({"et": t0, "utc": ms[r["from"]]["utc"], "start": utc_of(t0), "end": utc_of(t1), "end_et": t1,
+                      "frames": 0, "cams": {}, "rgb_sets": 0, "thumb": {}})
+        else:
+            pics = sorted(p for o in obs for p in want[o])
+            if not pics:
+                raise SystemExit(f"{args.highlights}: no pictures in the catalog for {r['label']!r} ({' '.join(obs)})")
+            e.update(measure(pics))
+            e["cams"] = {c: sum(p[2] == c for p in pics) for c in "NW" if any(p[2] == c for p in pics)}
+            radii = (bodies.get(r["body"]) or {}).get("radii") or [0]
+            hint = thumb_hint(pics, sorted(want[obs[0]]), r["body"], max(radii))
+            e["thumb"] = hint
+        e.update({"why": r["why"], "source": r["source"]})
         out.append(e)
     return out
 
@@ -220,8 +336,10 @@ def build_mission(args):
     json.dump(mission, open(os.path.join(out, "mission.json"), "w"), separators=(",", ":"))
     if args.huygens:
         export_huygens(args.huygens, years, out)
+    reel = highlights(args, years, enc, bodies)
+    json.dump(reel, open(os.path.join(out, "highlights.json"), "w"), separators=(",", ":"))
     n = sum(c["images"] for c in catalogs.values())
-    print(f"{years[0]}-{years[-1]}: {len(bodies)} bodies, {len(enc)} encounters, {n} images, pointing for {len(attitude)} years")
+    print(f"{years[0]}-{years[-1]}: {len(bodies)} bodies, {len(enc)} encounters, {len(reel)} highlights, {n} images, pointing for {len(attitude)} years")
 
 
 def month_et(year, month):

@@ -669,6 +669,36 @@ body.idle #reelcard { opacity: 1; pointer-events: auto; background: transparent;
 body.idle #reelcard :is(.titlebar, .rlbar, .rlpick) { opacity: 0; }
 body.idle .rlwell { border-color: transparent; box-shadow: 0 6px 30px rgba(0,0,0,.6); }
 body.phone #reelcard:not(.full) { width: calc(100% - 16px) !important; left: 8px !important; top: calc(env(safe-area-inset-top, 0px) + 30px) !important; }
+
+#hlcard { top: calc(env(safe-area-inset-top, 0px) + 36px); left: 50%; transform: translateX(-50%); width: clamp(340px, 52vw, 780px); max-height: calc(100% - 210px); display: flex; flex-direction: column; }
+#hlcard.zoomed { width: clamp(460px, 76vw, 1180px); max-height: calc(100% - 60px); }
+#hlcard[style*="left"] { transform: none; }
+#hlcard .hlhead { flex: none; display: flex; gap: 10px; align-items: center; padding: 4px 10px 8px; font-size: 11px; color: var(--q-dim, #888); }
+#hlplay { font: inherit; padding: 4px 12px; border-radius: 4px; border: 1px solid var(--q-line, #555); background: rgba(138,182,255,.18); color: var(--q-text, #ddd); cursor: pointer; white-space: nowrap; }
+#hlplay:hover { background: rgba(138,182,255,.3); }
+#hlnow { margin-left: auto; text-align: right; font: 10.5px/1.3 var(--hudf, monospace); font-variant-numeric: tabular-nums; }
+#hllist { flex: 1 1 auto; min-height: 0; overflow-y: auto; list-style: none; margin: 0; padding: 0 8px 8px; display: grid; grid-template-columns: repeat(auto-fill, minmax(230px, 1fr)); gap: 6px; }
+#hllist li button { all: unset; box-sizing: border-box; width: 100%; height: 100%; display: grid; grid-template-columns: 76px minmax(0, 1fr); gap: 4px 9px; padding: 6px; border: 1px solid transparent; border-radius: 5px; cursor: pointer; }
+#hllist li button:hover, #hllist li button:focus-visible { background: rgba(255,255,255,.06); border-color: var(--q-line, #555); }
+#hllist li.on button { background: rgba(138,182,255,.14); border-color: rgba(138,182,255,.55); }
+.hlthumb { grid-row: 1 / span 3; width: 76px; height: 76px; border-radius: 3px; background: #000; overflow: hidden; position: relative; }
+.hlthumb img { width: 100%; height: 100%; object-fit: cover; display: block; opacity: 0; transition: opacity .5s ease; }
+.hlthumb img.ok { opacity: 1; }
+.hlthumb b { position: absolute; left: 4px; top: 3px; font: 600 10px/1 var(--hudf, monospace); color: rgba(232,236,242,.85); text-shadow: 0 0 3px #000, 0 0 6px #000; }
+.hlthumb i { position: absolute; inset: auto 0 0 0; height: 2px; background: var(--q-accent, #8ab6ff); transform-origin: left; transform: scaleX(var(--p, 0)); }
+.hlt { font-size: 12px; color: var(--q-text, #ddd); line-height: 1.25; }
+.hlm { font: 10px/1.3 var(--hudf, monospace); color: var(--q-dim, #888); }
+.hlw { font-size: 10.5px; line-height: 1.3; color: var(--q-dim, #999); display: -webkit-box; -webkit-line-clamp: 2; -webkit-box-orient: vertical; overflow: hidden; }
+#hlmenu li button.on::before { content: "▶"; font-size: 8px; }
+@media (max-width: 600px) {
+  #hlcard, #hlcard.zoomed { width: calc(100% - 12px); left: 6px !important; transform: none; top: calc(env(safe-area-inset-top, 0px) + 36px) !important; max-height: calc(100dvh - 60px); }
+  #hllist { grid-template-columns: 1fr; }
+  #hllist li button { grid-template-columns: 64px minmax(0, 1fr); min-height: 64px; }
+  .hlthumb { width: 64px; height: 64px; }
+}
+body.phone #hlcard { left: var(--side, 6px) !important; right: var(--sider, 6px) !important; width: auto !important; transform: none; top: calc(var(--menu, 30px) + var(--gap, 6px)) !important;
+  max-height: calc(100dvh - var(--menu, 30px) - var(--dockh, 150px) - 4 * var(--gap, 6px)); z-index: 1450 !important; }
+body.phone #hllist { grid-template-columns: 1fr; }
 </style>
 </head>
 <body>
@@ -701,6 +731,8 @@ body.phone #reelcard:not(.full) { width: calc(100% - 16px) !important; left: 8px
         <li><button data-act="next">Next Moment<span class="kbd">⌘]</span></button></li>
         <li class="sep"></li>
       </ul></div>
+    <div class="menu"><button aria-haspopup="true">Highlights</button>
+      <ul id="hlmenu"></ul></div>
     <div class="menu"><button aria-haspopup="true">Window</button>
       <ul>
         <li><button data-act="win" data-win="dock" role="menuitemcheckbox" aria-checked="true">Cassini Replay</button></li>
@@ -825,6 +857,12 @@ body.phone #reelcard:not(.full) { width: calc(100% - 16px) !important; left: 8px
       <span id="rlcount"></span>
     </div>
   </div>
+</section>
+
+  <section class="win" id="hlcard" aria-label="Highlights" hidden>
+  <div class="titlebar"><span class="lights"><button class="close" aria-label="Close the highlights">×</button><button class="min" aria-label="Close the highlights">–</button><button class="zoom" aria-label="Zoom">+</button></span>Highlights</div>
+  <div class="hlhead"><button id="hlplay">▶ Play all</button><span id="hlsum"></span><span id="hlnow"></span></div>
+  <ul id="hllist"></ul>
 </section>
 
   <div id="loading"><div>Starting Cassini OS<br>Loading trajectories<div class="bar"></div></div></div>
@@ -2311,6 +2349,157 @@ body.phone #reelcard:not(.full) { width: calc(100% - 16px) !important; left: 8px
   $("play").addEventListener("click", () => { if (R.open) setReelPlaying(false); }, true);
   const go = $("gomenu");
   if (go) { const li = document.createElement("li"); li.innerHTML = '<button id="goreel">Play a Body…<span class="kbd">B</span></button>'; go.prepend(li); li.querySelector("button").addEventListener("click", open); }
+})();
+</script>
+<script>
+// ---------- highlight reel ----------
+(function () {
+  const $ = id => document.getElementById(id);
+  const FRAMES = (() => {                       // the frame server, chosen as the camera window chooses it
+    const q = new URLSearchParams(location.search).get("frames");
+    if (q) return q.replace(/\/$/, "");
+    if (/^https?:$/.test(location.protocol) && !/claude\.ai$|claudeusercontent\.com$|claude\.site$/.test(location.hostname)) return location.origin;
+    return "http://localhost:8765";
+  })();
+  const card = $("hlcard"), list = $("hllist"), menu = $("hlmenu");
+  const CAMS = { N: "imgcard", W: "wacard" };
+  // H: the reel. list: the highlights; i: the one playing (-1: none); auto: Play all is moving through them;
+  // tucked: camera windows put away while a highlight that has no pictures from them plays
+  const H = { list: [], i: -1, auto: false, tucked: [], left: Infinity, jumping: false };
+  const fmtDate = s => { const d = new Date(s + "Z"); return `${d.getUTCDate()} ${MONTHS[d.getUTCMonth()]} ${d.getUTCFullYear()}`; };
+  function meta(e) {
+    if (e.kind === "milestone") return `Probe camera · ${fmtSpan(e.end_et - e.et)}`;
+    const cams = Object.keys(e.cams).map(c => c === "N" ? "NAC" : "WAC").join(" + ");
+    return `${fmtInt(e.frames)} pictures · ${cams}${e.rgb_sets ? " · colour" : ""} · ${fmtSpan(e.end_et - e.et)}`;
+  }
+
+  // ---- thumbnails: made by the frame server through the pipeline, by the rule in build_data.thumb_hint ----
+  // the whole pass when it is a mosaic of three or more tiles, else the colour set, else the single frame
+  async function thumbUrl(e) {
+    const t = e.thumb || {};
+    if (e.kind === "milestone") {   // the Huygens descent: the probe's own pictures (the coarsest DISR mosaic)
+      for (let k = 0; k < 40 && !(typeof probe !== "undefined" && probe && probe.map); k++) await new Promise(r => setTimeout(r, 500));
+      return typeof probe !== "undefined" && probe && probe.map ? probe.map.levels[0].file : null;
+    }
+    if (t.mosaic) {
+      try {
+        const r = await fetch(`${FRAMES}/frames/mosaic/${t.mosaic}.webp?size=256`);
+        const how = r.ok ? JSON.parse(r.headers.get("X-Reel") || "{}") : null;
+        if (how && Math.max(+how.of || 0, +how.mosaic || 0, (how.tiles || []).length || 0) >= 3) return URL.createObjectURL(await r.blob());
+      } catch (err) {}
+    }
+    if (t.color) return `${FRAMES}/frames/color.webp?ids=${t.color.join(",")}&size=256`;
+    if (t.frame) return `${FRAMES}/frames/${t.frame}.webp?size=256`;
+    return null;
+  }
+  let thumbsAsked = false;
+  async function loadThumbs() {
+    if (thumbsAsked) return;
+    thumbsAsked = true;
+    // two at a time: a mosaic nobody has opened yet takes the server a while the first time
+    const show = async i => {
+      const img = list.children[i].querySelector("img"), url = await thumbUrl(H.list[i]);
+      if (url) await new Promise(res => { img.onload = () => { img.classList.add("ok"); res(); }; img.onerror = res; img.src = url; });
+    };
+    const queue = [];
+    H.list.forEach((e, i) => { if (e.kind === "milestone") show(i); else queue.push(i); });   // the probe's waits on its data, not the server
+    const one = async () => { while (queue.length) await show(queue.shift()); };
+    one(); one();
+  }
+
+  // ---- playing a highlight ----
+  function mark() {
+    [...list.children].forEach((li, k) => li.classList.toggle("on", k === H.i));
+    if (menu) menu.querySelectorAll("button[data-n]").forEach(b => b.classList.toggle("on", +b.dataset.n === H.i));
+    $("hlplay").textContent = H.auto ? "❚❚ Stop" : "▶ Play all";
+    const e = H.list[H.i];
+    $("hlnow").textContent = e ? `${H.i + 1} / ${H.list.length} · ${e.label}` : "";
+  }
+  function untuck() { H.tucked.forEach(w => { if (w.hidden) window.cassiniWM.restore(w); }); H.tucked = []; }
+  async function play(i, auto) {
+    const e = H.list[i];
+    if (!e) return stop();
+    H.i = i; H.auto = !!auto; H.jumping = true; mark();
+    if (window.cassiniReel) window.cassiniReel.close();
+    if (window.cassiniMovie && window.cassiniMovie.on) window.cassiniMovie.stop();
+    // the camera windows that took the highlight's pictures come out; the other one is put away until the reel stops
+    untuck();
+    for (const [cam, id] of Object.entries(CAMS)) {
+      const w = $(id); if (!w) continue;
+      if (e.cams && e.cams[cam]) { if (w.hidden || w.classList.contains("shaded")) window.cassiniWM.restore(w); }
+      else if (!w.hidden && e.kind !== "milestone") { w.hidden = true; H.tucked.push(w); }
+    }
+    if (window.cassiniWM) window.cassiniWM.syncMenu();
+    // a phone has no room for the list while a highlight plays
+    if (document.body.classList.contains("phone") && auto) card.hidden = true;
+    await jump(e);
+    H.left = e.end_et + 60; H.jumping = false;
+  }
+  function stop() { H.auto = false; untuck(); mark(); }
+  function next() { if (H.i + 1 < H.list.length) play(H.i + 1, true); else { stop(); H.i = -1; mark(); } }
+  // Play all moves on a minute after a highlight's last picture; moving the clock away by hand stops it
+  function tick() {
+    const e = H.list[H.i];
+    if (e) {
+      const p = Math.max(0, Math.min(1, (state.et - e.et) / Math.max(1, e.end_et - e.et)));
+      const bar = list.children[H.i] && list.children[H.i].querySelector("i");
+      if (bar) bar.style.setProperty("--p", p.toFixed(3));
+      if (H.auto && !H.jumping) {
+        if (state.et > H.left) next();
+        else if (state.et < e.et - 3 * 3600 || state.et > H.left + 3600) stop();
+      }
+    }
+    requestAnimationFrame(tick);
+  }
+
+  // ---- the window and the menu ----
+  function build() {
+    list.innerHTML = "";
+    H.list.forEach((e, i) => {
+      const li = document.createElement("li");
+      li.innerHTML = `<button><span class="hlthumb"><img alt=""><b>${i + 1}</b><i></i></span><span class="hlt"></span><span class="hlm"></span><span class="hlw"></span></button>`;
+      li.querySelector(".hlt").textContent = e.label;
+      li.querySelector(".hlm").textContent = `${fmtDate(e.start)} · ${meta(e)}`;
+      li.querySelector(".hlw").textContent = e.why;
+      li.querySelector("img").alt = e.label;
+      li.querySelector("button").title = e.why + (e.source ? ` (${e.source})` : "");
+      li.querySelector("button").addEventListener("click", () => play(i, true));
+      list.appendChild(li);
+    });
+    $("hlsum").textContent = `${H.list.length} moments`;
+    if (menu) {
+      menu.innerHTML = '<li><button id="hlshow">Show Highlights<span class="kbd">H</span></button></li><li><button id="hlall">Play All Highlights</button></li><li class="sep"></li>'
+        + H.list.map((e, i) => `<li><button data-n="${i}">${i + 1}. ${e.label.replace(/</g, "&lt;")}</button></li>`).join("");
+      $("hlshow").addEventListener("click", open);
+      $("hlall").addEventListener("click", () => { open(); play(0, true); });
+      menu.querySelectorAll("button[data-n]").forEach(b => b.addEventListener("click", () => play(+b.dataset.n, true)));
+    }
+  }
+  function open() {
+    if (!H.list.length) return;
+    card.hidden = false; delete card.dataset.min; window.cassiniWM.front(card); window.cassiniWM.syncMenu();
+    loadThumbs();
+  }
+  function close() { card.hidden = true; }
+  window.cassiniHighlights = { open, close, play, stop, get state() { return H; } };
+
+  // after the viewer's own script has run (this one comes first in the page), so its jump, state and formats exist
+  const ready = document.readyState === "loading" ? new Promise(r => addEventListener("DOMContentLoaded", r)) : Promise.resolve();
+  Promise.all([ready, fetch("data/highlights.json").then(r => r.ok ? r.json() : []).catch(() => [])]).then(([, h]) => {
+    H.list = h || [];
+    const m = menu && menu.closest(".menu");
+    if (!H.list.length) { if (m) m.hidden = true; return; }
+    build();
+    requestAnimationFrame(tick);
+    if (!card.hidden) loadThumbs();
+  });
+  $("hlplay").addEventListener("click", () => { if (H.auto) stop(); else play(H.i >= 0 ? H.i : 0, true); });
+  card.addEventListener("click", e => { if (e.target.closest(".close, .min")) { e.stopPropagation(); close(); } }, true);
+  window.addEventListener("keydown", e => {
+    if (e.metaKey || e.ctrlKey || e.altKey || /INPUT|SELECT|TEXTAREA/.test(e.target.tagName)) return;
+    if ((e.key === "h" || e.key === "H") && H.list.length) { e.preventDefault(); card.hidden ? open() : close(); }
+    else if (e.key === "Escape" && !card.hidden) close();
+  });
 })();
 </script>
 <script src="https://cdn.jsdelivr.net/npm/three@0.128.0/build/three.min.js"></script>
