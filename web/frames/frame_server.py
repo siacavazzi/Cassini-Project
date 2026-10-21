@@ -33,7 +33,7 @@ Routes:
                                stacked, calibrated, aligned, centred on the body with north up by SPICE)
                                and drawn into the rolling mosaic with the pictures before it; made on
                                first request and cached. X-Reel says how it was made
-  /frames/mosaic/<ID>.webp?size=512
+  /frames/mosaic/<ID>.webp?size=512   (&warm=1: only start making the pass ahead of time, empty answer)
                                the mosaic frame <ID> is a new tile of, made like a reel picture: 404 when
                                the frame is not a mosaic tile (mosaic.panels: same camera, observation and
                                filter, the pointing stepped across the body, panels overlap)
@@ -295,6 +295,12 @@ def make_handler(site, cache):
                 if not FRAME_ID.match(m.group(1)):
                     return self.send_error(400, "Not a frame id")
                 size = min(SIZES, key=lambda s: abs(s - int(parse_qs(url.query).get("size", ["512"])[0])))
+                if parse_qs(url.query).get("warm"):
+                    # the window will reach this frame soon: when it is in a mosaic pass, start working out the
+                    # pass (its plan reads every frame of it, many seconds) and its first tiles now
+                    if reel._index is not None:
+                        threading.Thread(target=obs_mosaic.warm_frame, args=(m.group(1), cache), daemon=True).start()
+                    return self.send_bytes(b"", "text/plain", cache_forever=False)
                 # a whole-body mosaic (obs_mosaic): the observation's mosaic so far, every filter
                 if reel._index is not None:
                     try:

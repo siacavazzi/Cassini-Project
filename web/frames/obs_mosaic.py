@@ -361,9 +361,10 @@ def detail(rgba, sigma):
     return np.dstack([out.round().astype(np.uint8), rgba[..., 3]])
 
 
-def so_far(u, n, cache):
-    """The pass's mosaic with tiles 0..n, RGBA OUT px on its longest side, and its report; (None, None) before
-    any tile is placed."""
+def layout(u, n, cache):
+    """What the pass's mosaic with tiles 0..n is made of: (plan, tiles, view rect, placed tiles per filter, the
+    filters drawn, a name for that picture); None before any tile is placed. Frames whose tile is not one of
+    the filters drawn (a moon's 30 filter colour pass draws 3) give the same picture and the same name."""
     p = plan(u, cache)
     tiles = [tile(u, j, cache, p["display_scale"]) for j in range(n + 1)]
     rect = view_rect(p, tiles)
@@ -372,9 +373,25 @@ def so_far(u, n, cache):
         if "offset" in t:
             count[t["filter"]] = count.get(t["filter"], 0) + 1
     if not count:
-        return None, None
+        return None
     colour = p["colour"]
     if colour and all(count.get(f) for f in colour):
+        used = colour
+    else:
+        used = [p["grey"] if count.get(p["grey"]) else max(count, key=count.get)]
+    name = "_".join(f"{f.replace('/', '-')}{count[f]}" for f in used) + "_" + "_".join(str(round(v)) for v in rect)
+    return p, tiles, rect, count, used, name
+
+
+def so_far(u, n, cache, made=None):
+    """The pass's mosaic with tiles 0..n, RGBA OUT px on its longest side, and its report; (None, None) before
+    any tile is placed. made: layout(u, n, cache), when already worked out."""
+    made = made or layout(u, n, cache)
+    if not made:
+        return None, None
+    p, tiles, rect, count, used, _ = made
+    if len(used) == 3:
+        colour = used
         acc = [filter_mosaic(u, p, f, tiles, rect, cache) for f in colour]
         rgb = np.dstack([a[..., 0] for a in acc])
         # only where every filter has the picture: past one filter's edge the others alone are a coloured rim
@@ -382,8 +399,7 @@ def so_far(u, n, cache):
         rgb = (rgb * (alpha[..., None] / np.float32(255)) + 0.5).astype(np.uint8)
         rgba, used = np.dstack([rgb, alpha]), colour
     else:
-        f = p["grey"] if count.get(p["grey"]) else max(count, key=count.get)
-        rgba, used = filter_mosaic(u, p, f, tiles, rect, cache), [f]
+        rgba = filter_mosaic(u, p, used[0], tiles, rect, cache)
     if p["display_scale"].get("filled"):
         rgba = detail(rgba, DETAIL_SIGMA * FRAME * p["k"])
     im = Image.fromarray(rgba, "RGBA")
@@ -409,27 +425,31 @@ def mosaic_webp(frame_id, size, cache, slots=None, ahead=3):
 
 
 def _mosaic_at(u, n, size, cache, slots=None):
-    """(WebP, report) of the pass's mosaic with tiles 0..n at size, made once (kept in the cache; a request
-    that comes while it is being made waits for it); None before any tile is placed."""
-    path = os.path.join(folder(u, cache), str(size), f"{n}.webp")
+    """(WebP, report) of the pass's mosaic with tiles 0..n at size, made once (kept in the cache under the name
+    of what it is made of, so frames that add nothing to it share it; a request that comes while it is being
+    made waits for it); None before any tile is placed."""
+    made = layout(u, n, cache)
+    if not made:
+        return None
+    path = os.path.join(folder(u, cache), str(size), f"{made[5]}.webp")
     if not os.path.exists(path):
         with _lock:
             lock = _making.setdefault(path, threading.Lock())
         with lock:
             try:
-                return _make_mosaic(u, n, size, path, cache, slots)
+                return _make_mosaic(u, n, size, path, cache, slots, made)
             finally:
                 with _lock:
                     _making.pop(path, None)
-    return _make_mosaic(u, n, size, path, cache, slots)
+    return _make_mosaic(u, n, size, path, cache, slots, made)
 
 
-def _make_mosaic(u, n, size, path, cache, slots):
+def _make_mosaic(u, n, size, path, cache, slots, made):
     report = {}
 
     def make():
         with slots or contextlib.nullcontext():
-            im, rep = so_far(u, n, cache)
+            im, rep = so_far(u, n, cache, made)
         if im is None:
             raise LookupError("no tile placed yet")
         report.update(rep)
