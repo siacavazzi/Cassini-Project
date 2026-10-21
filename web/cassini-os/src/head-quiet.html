@@ -1066,7 +1066,8 @@ body.idle .win.full .titlebar { opacity: 0; }
       if (v.set >= 0) { channelsFrom(im, catalog.sets[v.set]); howMade(v); }
       if (v.tile) mosaicOf(v);
       // the sound (sound.html) hears every picture that goes up: its camera, filter wavelength, target and window
-      if (window.cassiniPicture) window.cassiniPicture({ cam, body, win, k: v.k, nm: nmOf(v.k), set: v.set, use: v.set >= 0 ? catalog.sets[v.set].use.map(nmOf) : null });
+      // (keep: a pass mosaic stays up, so this frame rings when its tile shows, below in mosaicOf)
+      if (window.cassiniPicture) window.cassiniPicture({ cam, body, win, k: v.k, nm: nmOf(v.k), set: v.set, use: v.set >= 0 ? catalog.sets[v.set].use.map(nmOf) : null, keep });
     }
     function request(which, v) {
       lane[which] = v; v.cat = catalog;
@@ -1142,7 +1143,7 @@ body.idle .win.full .titlebar { opacity: 0; }
         shot.src = mosaicUrl = URL.createObjectURL(blob);
         well.classList.add("mosaic");
         if (rep && rep.observation) {
-          if (window.cassiniPicture && rep.mosaic > (obsShown === catalog.obs[w.k] ? obsTiles : 0)) window.cassiniPicture({ cam, body, win, k: w.k, tile: rep.mosaic, of: rep.of });
+          if (window.cassiniPicture && rep.mosaic > (obsShown === catalog.obs[w.k] ? obsTiles : 0)) window.cassiniPicture({ cam, body, win, k: w.k, nm: nmOf(w.k), set: w.set, use: w.set >= 0 ? catalog.sets[w.set].use.map(nmOf) : null, tile: rep.mosaic, of: rep.of });
           obsShown = catalog.obs[w.k]; obsTiles = rep.mosaic;
           well.style.aspectRatio = `${rep.width} / ${rep.height}`;
           card.querySelector(".kindtag").textContent = `${rep.filters >= 3 ? ((rep.filter_names || []).includes("GRN") ? "COLOUR " : "FALSE COLOUR ") : ""}MOSAIC · ${rep.mosaic} OF ${rep.of} TILES${rep.filters > 1 ? ` · ${rep.filters} FILTERS` : ""}`;
