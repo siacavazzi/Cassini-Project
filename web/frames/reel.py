@@ -274,9 +274,10 @@ def shot_webp(target, n, size, cache, use_mosaic=True, slots=None):
     return data, report
 
 
-def build(target, cache, workers=1):
-    """Makes every picture of the body's reel (not the mosaics, which are quick), oldest first."""
-    reel = shots(target)
+def build(target, cache, workers=1, first=0, count=None):
+    """Makes the pictures of the body's reel (not the mosaics, which are quick), oldest first:
+    count of them from number first on, or all."""
+    reel = shots(target)[first:None if count is None else first + count]
     todo = [s["ids"] for s in reel if not os.path.exists(os.path.join(cache, VERSION, "pictures", "_".join(s["ids"]) + ".png"))]
     print(f"{target}: {len(reel)} pictures, {len(reel) - len(todo)} already made, {len(todo)} to make", flush=True)
     start, done = time.time(), 0
@@ -324,6 +325,8 @@ def main():
     ap.add_argument("target", help="e.g. ENCELADUS")
     ap.add_argument("--cache", default=os.path.join(os.getcwd(), "frame_cache"))
     ap.add_argument("--workers", type=int, default=1)
+    ap.add_argument("--first", type=int, default=0, help="start at this picture of the reel")
+    ap.add_argument("--count", type=int, help="make only this many pictures")
     ap.add_argument("--list", action="store_true", help="only print the reel")
     args = ap.parse_args()
     data_source.KEEP_SPICE_CACHE = True
@@ -331,7 +334,7 @@ def main():
         for n, s in enumerate(shots(args.target.upper())):
             print(n, time.strftime("%Y-%m-%d %H:%M:%S", time.gmtime(s["t"])), s["cam"], s["kind"], ",".join(s["ids"]), s["window"])
         return
-    build(args.target.upper(), args.cache, args.workers)
+    build(args.target.upper(), args.cache, args.workers, args.first, args.count)
 
 
 if __name__ == "__main__":
