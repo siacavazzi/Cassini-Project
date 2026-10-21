@@ -52,6 +52,26 @@ for old, new in [
     study = study.replace(old, new)
 study += part("script") + "\n"
 
+# settings (settings.html): its style joins the head's, its window goes into #app, and its script runs before the
+# chrome script, so the chrome, movie mode and the viewer can all read window.cassiniSettings
+settings = open(os.path.join(os.path.dirname(os.path.abspath(sys.argv[2])), "settings.html")).read()
+spart = lambda tag: settings[settings.index(f"<{tag}"):settings.index(f"</{tag}>") + len(tag) + 3]
+for old, new in [
+    ("</style>\n</head>", spart("style")[len("<style>"):] + "\n</head>"),
+    ('  <div id="loading">', "  " + spart("section") + "\n\n" + '  <div id="loading">'),
+    ("<script>\n// ---------- Cassini OS chrome", spart("script") + "\n<script>\n// ---------- Cassini OS chrome"),
+]:
+    assert study.count(old) == 1, old
+    study = study.replace(old, new)
+
+# per-body camera windows (bodywin.html, a setting): its style joins the head's and its script runs after the chrome
+# script, whose camera feed and window manager it reuses
+bodywin = open(os.path.join(os.path.dirname(os.path.abspath(sys.argv[2])), "bodywin.html")).read()
+bpart = lambda tag: bodywin[bodywin.index(f"<{tag}"):bodywin.index(f"</{tag}>") + len(tag) + 3]
+assert study.count("</style>\n</head>") == 1
+study = study.replace("</style>\n</head>", bpart("style")[len("<style>"):] + "\n</head>")
+study += bpart("script") + "\n"
+
 def rep(old, new, count=1):
     global script
     assert script.count(old) == count, (old, script.count(old))
@@ -71,9 +91,15 @@ const THEME = {
   nowGlow: cssVar("--tl-now-glow").replace(/"/g, ""), barStyle: cssVar("--tl-bar-style") || "solid"
 };
 ''')
-# Cassini OS opens on "In Saturn's Shadow" (2006-09-15, the WAC mosaic of Saturn backlit by the Sun, the mosaic
-# benchmark in web/frames/mosaic_benchmark.py) unless ?t= says otherwise
-rep('get("t") || "2005-01-14T09:30:00"', 'get("t") || "2006-09-15T14:28:00"')
+# Cassini OS opens at the Settings window's start time (playback.start; by default "In Saturn's Shadow",
+# 2006-09-15, the WAC mosaic of Saturn backlit by the Sun, the benchmark in web/frames/mosaic_benchmark.py);
+# a ?t= link wins
+rep('get("t") || "2005-01-14T09:30:00"',
+    'get("t") || (window.cassiniSettings && cassiniSettings.get("playback.start")) || "2006-09-15T14:28:00"')
+
+# surface map size: a ?tex= link wins, then the Settings window's choice
+rep('const TEX_TIER = (new URLSearchParams(location.search).get("tex") || (location.hash.match(/^#tex-(\\w+)$/) || [])[1] || "2k").toLowerCase();',
+    'const TEX_TIER = (new URLSearchParams(location.search).get("tex") || (location.hash.match(/^#tex-(\\w+)$/) || [])[1] || (window.cassiniSettings && cassiniSettings.get("view.textures")) || "2k").toLowerCase();')
 rep('renderer.setClearColor(0x04060b, 1);', 'renderer.setClearColor(new THREE.Color(THEME.clear), 1);')
 rep('const c = n === "CASSINI" ? [0.56, 0.79, 1] : n === "HUYGENS" ? [1, 0.82, 0.55] : n === "TITAN" ? [0.88, 0.6, 0.29] : [0.62, 0.66, 0.72];',
     'const c = n === "CASSINI" ? THEME.mkCassini : n === "HUYGENS" ? [1, 0.82, 0.55] : n === "TITAN" ? THEME.mkTitan : THEME.mk;')

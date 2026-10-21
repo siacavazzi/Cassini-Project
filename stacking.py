@@ -8,6 +8,7 @@ Repeats that turn out to point somewhere else (the next panel of a mosaic) are
 dropped later, when image_correction.stack_frames fails to align them.
 """
 
+import threading
 import cv2
 import numpy as np
 import pandas as pd
@@ -18,6 +19,7 @@ import image_correction as ic
 
 index = None
 groups = None
+_index_lock = threading.Lock()
 keys = ["INSTRUMENT_ID", "TARGET_NAME", "OBSERVATION_ID", "FILTER_NAME"]
 # label fields that must match for two frames to be stacked
 same_settings = ["EXPOSURE_DURATION", "GAIN_MODE_ID", "INSTRUMENT_MODE_ID"]
@@ -26,9 +28,13 @@ same_settings = ["EXPOSURE_DURATION", "GAIN_MODE_ID", "INSTRUMENT_MODE_ID"]
 def load_index():
     global index, groups
     if index is None:
-        index = pd.read_csv("Image_index.csv", usecols=keys + ["path", "seconds_1970"], low_memory=False).set_index("path", drop=False)
-        # row positions of every camera/target/observation/filter combination, for fast lookup
-        groups = index.groupby(keys, sort=False).indices
+        # read once, even when several threads (the frame server's) ask at the same time
+        with _index_lock:
+            if index is None:
+                idx = pd.read_csv("Image_index.csv", usecols=keys + ["path", "seconds_1970"], low_memory=False).set_index("path", drop=False)
+                # row positions of every camera/target/observation/filter combination, for fast lookup
+                groups = idx.groupby(keys, sort=False).indices
+                index = idx
     return index
 
 
