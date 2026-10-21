@@ -573,6 +573,29 @@ body.idle #reelcard { opacity: 1; pointer-events: auto; background: transparent;
 body.idle #reelcard :is(.titlebar, .rlbar, .rlpick) { opacity: 0; }
 body.idle .rlwell { border-color: transparent; box-shadow: 0 6px 30px rgba(0,0,0,.6); }
 @media (max-width: 600px) { #reelcard, #reelcard.zoomed { width: calc(100% - 16px); left: 8px; top: calc(env(safe-area-inset-top, 0px) + 30px); } }
+
+#loadscreen { position: fixed; inset: 0; z-index: 2001; display: grid; place-items: center; padding: 0 16px; pointer-events: none;
+  background: radial-gradient(closest-side, rgba(0,0,0,.45), transparent); opacity: 0; transition: opacity .35s ease; }
+#loadscreen.on { opacity: 1; }
+#loadscreen[hidden] { display: none; }
+#loadscreen .ls-card { display: grid; justify-items: center; gap: 12px; width: min(400px, 100%); text-align: center; }
+/* a dark disc behind the model, so a spacecraft already on screen does not show through the wireframe */
+#loadscreen .ls-model { border-radius: 50%; background: radial-gradient(closest-side, rgba(0,0,0,.92) 60%, transparent); }
+#loadscreen canvas { display: block; width: 300px; height: 300px; -webkit-mask-image: radial-gradient(closest-side, #000 62%, transparent); mask-image: radial-gradient(closest-side, #000 62%, transparent); filter: drop-shadow(0 0 2px rgba(61,255,143,.9)) drop-shadow(0 0 9px rgba(61,255,143,.45)); }
+#loadscreen .ls-status { font: 11px/1 var(--hudf); letter-spacing: .18em; text-transform: uppercase; color: var(--neon); text-shadow: 0 0 6px rgba(61,255,143,.7); }
+#loadscreen .ls-status::after { content: ""; display: inline-block; width: 1.6em; text-align: left; animation: lsdots 1.2s steps(4) infinite; }
+@keyframes lsdots { 0% { content: ""; } 25% { content: "."; } 50% { content: ".."; } 75% { content: "..."; } }
+#loadscreen .ls-tip { width: 100%; box-sizing: border-box; padding: 10px 14px 9px; background: var(--q-panel); border: 1px solid var(--q-line); border-radius: 9px;
+  -webkit-backdrop-filter: blur(16px); backdrop-filter: blur(16px); color: var(--q-text); font-size: 12.5px; line-height: 1.45; transition: opacity .4s ease; }
+#loadscreen .ls-tip.out { opacity: 0; }
+#loadscreen .ls-tip b { display: block; margin-bottom: 4px; font-weight: normal; font-size: 9.5px; letter-spacing: .12em; text-transform: uppercase; color: var(--q-dim); }
+#loadscreen .ls-tip small { display: block; margin-top: 5px; font-size: 9.5px; color: var(--q-dim); }
+/* the first load: the black #loading screen stays behind as the backdrop, its own text gives way to this one */
+#loading > div { visibility: hidden; }
+@media (max-width: 600px) { /* a dark disc behind the model, so a spacecraft already on screen does not show through the wireframe */
+#loadscreen .ls-model { border-radius: 50%; background: radial-gradient(closest-side, rgba(0,0,0,.92) 60%, transparent); }
+#loadscreen canvas { display: block; width: min(220px, 60vw); height: min(220px, 60vw); } }
+@media (prefers-reduced-motion: reduce) { #loadscreen, #loadscreen .ls-tip { transition: none; } #loadscreen .ls-status::after { animation: none; content: "..."; } }
 </style>
 </head>
 <body>
@@ -727,6 +750,14 @@ body.idle .rlwell { border-color: transparent; box-shadow: 0 6px 30px rgba(0,0,0
       <label class="chk"><input type="checkbox" id="rlmos" checked>Mosaic</label>
       <span id="rlcount"></span>
     </div>
+  </div>
+</section>
+
+  <section id="loadscreen" hidden>
+  <div class="ls-card">
+    <div class="ls-model"><canvas width="600" height="600" aria-hidden="true"></canvas></div>
+    <div class="ls-status" role="status" aria-live="polite">Loading</div>
+    <div class="ls-tip"><b>Did you know</b><span></span><small></small></div>
   </div>
 </section>
 
@@ -3626,5 +3657,118 @@ function frame(now) {
   $("loading").hidden = true;
   scrollMoments();
   requestAnimationFrame(frame);
+})();
+</script>
+<script>
+// ---------- loading screen: wireframe Cassini and mission facts while data loads ----------
+(function () {
+  const $ = id => document.getElementById(id);
+  const FACTS = [{"text": "Cassini launched on 15 October 1997 from Cape Canaveral, riding a Titan IVB/Centaur rocket.", "source": "https://science.nasa.gov/mission/cassini/the-journey/timeline/"}, {"text": "Cassini-Huygens was the largest interplanetary spacecraft ever built: 6.7 m high, more than 4 m wide and 5.6 tonnes at launch.", "source": "https://www.esa.int/Science_Exploration/Space_Science/Cassini-Huygens/Cassini-Huygens_factsheet2"}, {"text": "Too heavy to fly straight to Saturn, Cassini swung past Venus twice (1998 and 1999), Earth (August 1999) and Jupiter (December 2000) to pick up speed.", "source": "https://science.nasa.gov/mission/cassini/the-journey/timeline/"}, {"text": "Cassini became the first spacecraft to orbit Saturn on 1 July 2004 UTC, which was still 30 June at its home base in California.", "source": "https://science.nasa.gov/mission/cassini/the-journey/timeline/"}, {"text": "To slow into orbit around Saturn, Cassini fired its main engine for 96 minutes.", "source": "https://science.nasa.gov/mission/cassini-huygens/"}, {"text": "Cassini ran on three radioisotope thermoelectric generators, which turn the heat of decaying plutonium-238 into electricity.", "source": "https://science.nasa.gov/mission/cassini/spacecraft/cassini-orbiter/"}, {"text": "On 14 January 2005 the Huygens probe landed on Titan: the first, and so far only, landing on any world in the outer solar system.", "source": "https://science.nasa.gov/mission/cassini/the-journey/timeline/"}, {"text": "The battery-powered Huygens probe kept working for another 72 minutes on the surface of Titan.", "source": "https://science.nasa.gov/mission/cassini/the-journey/timeline/"}, {"text": "In July 2005 Cassini's cameras caught water vapour and ice spraying from warm fractures at the south pole of the small moon Enceladus.", "source": "https://science.nasa.gov/mission/cassini/the-journey/timeline/"}, {"text": "Cassini found large lakes of liquid hydrocarbons in Titan's northern latitudes, and seas of liquid methane.", "source": "https://science.nasa.gov/mission/cassini-huygens/"}, {"text": "Cassini made the highest-resolution movie yet of the hexagon, a six-sided jet stream around Saturn's north pole.", "source": "https://science.nasa.gov/mission/cassini/the-journey/timeline/"}, {"text": "The orbiter carried 12 science instruments and the Huygens probe carried six.", "source": "https://science.nasa.gov/mission/cassini/spacecraft/cassini-orbiter/"}, {"text": "The pictures here come from Cassini's Imaging Science Subsystem: a narrow-angle and a wide-angle digital camera, the NAC and WAC windows.", "source": "https://science.nasa.gov/mission/cassini/spacecraft/cassini-orbiter/imaging-science-subsystem/"}, {"text": "On 19 July 2013 Cassini slipped into Saturn's shadow and photographed the planet, seven of its moons, its inner rings and Earth: \"The Day Earth Smiled\".", "source": "https://science.nasa.gov/mission/cassini/spacecraft/cassini-orbiter/imaging-science-subsystem/"}, {"text": "The mission is named after two astronomers: Giovanni Domenico Cassini, who found Iapetus, Rhea, Tethys and Dione and the Cassini Division in the rings, and Christiaan Huygens, who discovered Titan in 1655.", "source": "https://www.esa.int/Science_Exploration/Space_Science/Cassini-Huygens/Cassini-Huygens_factsheet2"}, {"text": "Cassini-Huygens was a joint mission of NASA, the European Space Agency and the Italian space agency ASI.", "source": "https://science.nasa.gov/mission/cassini/about-the-mission/"}, {"text": "Cassini discovered new moons of Saturn, among them Methone and Pallene in 2004, Daphnis, Anthe and Aegaeon.", "source": "https://science.nasa.gov/mission/cassini-huygens/"}, {"text": "The Equinox extension alone added 60 orbits of Saturn, 26 flybys of Titan and seven of Enceladus.", "source": "https://science.nasa.gov/mission/cassini/science/overview/"}, {"text": "In its Grand Finale, starting April 2017, Cassini made 22 orbits that each passed through the gap between Saturn and its rings.", "source": "https://science.nasa.gov/mission/cassini/grand-finale/overview/"}, {"text": "On 15 September 2017 Cassini was deliberately plunged into Saturn's atmosphere, so it could never crash into and contaminate Enceladus or Titan.", "source": "https://science.nasa.gov/mission/cassini/grand-finale/overview/"}, {"text": "Cassini's last signal was received at 4:55 a.m. PDT on 15 September 2017 by NASA's Deep Space Network antennas in Canberra, Australia.", "source": "https://www.jpl.nasa.gov/news/nasas-cassini-spacecraft-ends-its-historic-exploration-of-saturn"}];
+  const SHOW_AFTER = 300, MIN_SHOWN = 700, TIP_EVERY = 8000;
+  const root = $("loadscreen"), cv = root.querySelector("canvas"), status = root.querySelector(".ls-status"), tip = root.querySelector(".ls-tip");
+  const slow = matchMedia("(prefers-reduced-motion: reduce)").matches;
+  let busySince = null, shownAt = 0, shown = false, hideTimer = 0, tipTimer = 0, raf = 0, lastT = 0;
+  let renderer = null, scene = null, cam = null, spin = null, modelJob = null;
+  // a shuffled deck of facts, so each load shows a new one
+  const deck = FACTS.map((f, i) => i);
+  for (let i = deck.length - 1; i > 0; i--) { const j = Math.floor(Math.random() * (i + 1)); [deck[i], deck[j]] = [deck[j], deck[i]]; }
+  let next = 0;
+
+  // what is loading, or null: the first load while the #loading screen is up (unless it is showing an error), then
+  // the data chunk under the clock (the viewer's yearReady: a year on main, a month with month-chunked data)
+  function busy() {
+    const ld = $("loading");
+    if (ld && !ld.hidden) return ld.querySelector(".bar") ? "Loading mission data" : null;
+    try {
+      if (typeof yearReady !== "function" || yearReady()) return null;
+      const k = typeof partOf === "function" ? partLabel(partOf(state.et)) : yearOf(state.et);
+      return "Loading " + k;
+    } catch (e) { return null; }
+  }
+
+  function source(url) {
+    const h = new URL(url).hostname;
+    return /esa\.int$/.test(h) ? "ESA" : /jpl\.nasa\.gov$/.test(h) ? "NASA/JPL" : "NASA";
+  }
+  function showTip() {
+    if (!FACTS.length) { tip.hidden = true; return; }
+    const f = FACTS[deck[next++ % deck.length]];
+    tip.querySelector("span").textContent = f.text;
+    tip.querySelector("small").textContent = "Source: " + source(f.source);
+  }
+  function rotateTip() {
+    tip.classList.add("out");
+    setTimeout(() => { showTip(); tip.classList.remove("out"); }, 400);
+  }
+
+  // NASA's model (the same file the viewer uses), drawn as glowing edges over a black fill that hides the far side
+  function loadModel() {
+    if (modelJob || !window.THREE || !THREE.GLTFLoader) return;
+    modelJob = fetch("data/models/cassini.glb.b64.txt").then(r => { if (!r.ok) throw new Error(r.status); return r.text(); }).then(t => {
+      const s = atob(t.trim()), u = new Uint8Array(s.length);
+      for (let i = 0; i < s.length; i++) u[i] = s.charCodeAt(i);
+      new THREE.GLTFLoader().parse(u.buffer, "", gltf => {
+        const m = gltf.scene, g = new THREE.Group();
+        m.updateMatrixWorld(true);
+        const line = new THREE.LineBasicMaterial({ color: 0x3dff8f, transparent: true, opacity: 0.9 });
+        const fill = new THREE.MeshBasicMaterial({ color: 0x000000, polygonOffset: true, polygonOffsetFactor: 1, polygonOffsetUnits: 1 });
+        m.traverse(o => {
+          if (!o.isMesh) return;
+          const edges = new THREE.LineSegments(new THREE.EdgesGeometry(o.geometry, 24), line), solid = new THREE.Mesh(o.geometry, fill);
+          edges.applyMatrix4(o.matrixWorld); solid.applyMatrix4(o.matrixWorld);
+          g.add(solid, edges);
+        });
+        // the model is in metres with its +Y the high-gain dish, so it stands dish up; centre and scale on the
+        // spacecraft's body (the 4 m dish down to the engines), letting the long booms run out past the edge
+        const dish = new THREE.Box3().setFromObject(m.getObjectByName("dish") || m), s = 0.27;
+        g.scale.setScalar(s); g.position.set(0, -(dish.max.y - 2.75) * s, 0);
+        spin.add(g);
+      }, e => console.warn("loading screen model:", e));
+    }).catch(e => console.warn("loading screen model:", e));
+  }
+  function setup() {
+    if (renderer || !window.THREE) return;
+    renderer = new THREE.WebGLRenderer({ canvas: cv, alpha: true, antialias: true });
+    renderer.setPixelRatio(1); renderer.setSize(cv.width, cv.height, false); renderer.setClearColor(0x000000, 0);
+    scene = new THREE.Scene(); spin = new THREE.Group(); spin.rotation.z = 0.18; scene.add(spin);
+    cam = new THREE.PerspectiveCamera(32, 1, 0.1, 20); cam.position.set(0, 0.9, 3.4); cam.lookAt(0, 0, 0);
+    loadModel();
+  }
+  function draw(now) {
+    raf = shown ? requestAnimationFrame(draw) : 0;
+    if (!renderer || now - lastT < 30) return;   // about 30 fps is plenty, and leaves the loading its time
+    const dt = Math.min(0.1, (now - (lastT || now)) / 1000); lastT = now;
+    spin.rotation.y += dt * (slow ? 0.08 : 0.7);
+    renderer.render(scene, cam);
+  }
+
+  function show() {
+    shown = true; shownAt = performance.now(); clearTimeout(hideTimer);
+    root.hidden = false; requestAnimationFrame(() => root.classList.add("on"));
+    setup(); showTip();
+    clearInterval(tipTimer); tipTimer = setInterval(rotateTip, TIP_EVERY);
+    lastT = 0; if (!raf) raf = requestAnimationFrame(draw);
+  }
+  function hide() {
+    shown = false; clearInterval(tipTimer);
+    root.classList.remove("on");
+    hideTimer = setTimeout(() => { root.hidden = true; }, 400);
+  }
+  function tick() {
+    const what = busy(), now = performance.now();
+    if (what) {
+      status.textContent = what;
+      if (busySince === null) busySince = now;
+      // the first load shows at once (the screen is black anyway); later loads only once they take a moment
+      if (!shown && (now - busySince >= SHOW_AFTER || !$("loading").hidden)) show();
+    } else {
+      busySince = null;
+      if (shown && now - shownAt >= MIN_SHOWN) hide();
+    }
+  }
+  setInterval(tick, 100);
+  tick();
+  // the viewer also announces loads (cassini:loading, from the month-chunked loader), so react without waiting a tick
+  document.addEventListener("cassini:loading", () => tick());
 })();
 </script>
