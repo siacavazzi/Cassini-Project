@@ -258,6 +258,8 @@ body.phone .srow input[type=range] { width: 96px; }
   // Movie
   D({ key: "movie.fps", section: "Movie", label: "Movie speed", type: "range", value: 8, min: 2, max: 24, step: 1, unit: "fps",
       hint: "Frames per second in movie mode (M). The slider in the Movie window changes this too." });
+  D({ key: "movie.processed", section: "Movie", label: "Processed pictures", type: "toggle", value: true,
+      hint: "Movie frames made by the pipeline like the camera windows' pictures: calibrated, colour composites and mosaics. Off plays the archive frames as they are." });
   window.addEventListener("DOMContentLoaded", () => {
     const r = $("mvfps"); if (!r) return;
     try { const f = +localStorage.getItem("cassini-os-movie-fps"); if (f >= 2 && f <= 24 && !("movie.fps" in saved)) S.set("movie.fps", f); } catch (e) {}

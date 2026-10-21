@@ -26,6 +26,11 @@ Routes:
                                on one brightness scale, aligned to the middle one in time, pixels
                                lost in downlink transparent. The X-Composite header (and a .json
                                next to the cached image) says how each channel was made
+  /frames/processed/<ID>.webp?size=512
+                               the frame alone made like a composite's channel (color_image.load_aligned with
+                               one frame: repeat exposures stacked, lost pixels transparent, calibrated to I/F
+                               and put on the pipeline's display scale), for movie mode; cached like the
+                               composites, X-Composite as theirs
   /reel/bodies.json            every body with frames, most photographed first
   /reel/<TARGET>.json          the body's reel: its pictures in time order (web/frames/reel.py)
   /frames/reel/<TARGET>/<n>.webp?size=768&mosaic=1
@@ -85,6 +90,9 @@ FOLDERS = {"N": "nac_data", "W": "wac_data"}
 
 # composites take a second or two of CPU each; at most two at once so frames keep flowing
 _color_slots = threading.Semaphore(2)
+# movie mode's processed frames: a frame takes a fraction of a second, and a movie asks for many ahead of
+# the play head, so they get their own slots and never hold up the camera windows' composites
+_movie_slots = threading.Semaphore(int(os.environ.get("FRAME_SERVER_MOVIE_SLOTS", 4)))
 # requests that take longer than this many seconds are logged
 SLOW = float(os.environ.get("FRAME_SERVER_SLOW", "2"))
 
@@ -147,13 +155,15 @@ def webp(frame_id, size, cache):
 def composite(ids):
     """RGBA composite of the frames ids (R,G,B, or longer and shorter wavelength), 1024 px, made by the
     pipeline's color path (color_image.load_aligned: repeat exposures stacked, calibrated, aligned),
-    and a report of how each channel was made."""
+    and a report of how each channel was made. One id makes the frame alone, black and white (LA)."""
     imgs, valid, _, report = color_image.load_aligned([f"{FOLDERS[i[0]]}/{i}.png" for i in ids])
     chans = [img[..., 0] if img.ndim == 3 else img for img in imgs]
-    if len(chans) == 2:
-        chans = [chans[0], ((chans[0].astype(np.uint16) + chans[1]) // 2).astype(np.uint8), chans[1]]
     alpha = np.where(valid, 255, 0).astype(np.uint8)
     report["ids"] = list(ids)
+    if len(chans) == 1:
+        return Image.fromarray(np.dstack([chans[0], alpha]), "LA"), report
+    if len(chans) == 2:
+        chans = [chans[0], ((chans[0].astype(np.uint16) + chans[1]) // 2).astype(np.uint8), chans[1]]
     return Image.fromarray(np.dstack(chans + [alpha]), "RGBA"), report
 
 
@@ -168,6 +178,25 @@ def color_webp(ids, size, cache):
         report.update(made)
         cached(base + ".json", lambda: json.dumps(made).encode())
         print("composite", json.dumps(made))
+        return encode(im, size)
+    data = cached(base + ".webp", make)
+    if not report and os.path.exists(base + ".json"):
+        with open(base + ".json") as fh:
+            report = json.load(fh)
+    return data, report
+
+
+def processed_webp(frame_id, size, cache):
+    """One frame made like a composite's channel (composite with one id: repeat exposures stacked, lost pixels
+    filled, calibrated to I/F and put on the pipeline's display scale), for movie mode; and its report. Cached
+    like the composites."""
+    base = os.path.join(cache, "proc-v1", str(size), frame_id)
+    report = {}
+    def make():
+        with _movie_slots:
+            im, made = composite([frame_id])
+        report.update(made)
+        cached(base + ".json", lambda: json.dumps(made).encode())
         return encode(im, size)
     data = cached(base + ".webp", make)
     if not report and os.path.exists(base + ".json"):
@@ -265,6 +294,16 @@ def make_handler(site, cache):
                 size = min(SIZES, key=lambda s: abs(s - int(query.get("size", ["512"])[0])))
                 try:
                     data, report = color_webp(ids, size, cache)
+                    return self.send_bytes(data, "image/webp", headers={"X-Composite": json.dumps(report)})
+                except FileNotFoundError:
+                    return self.send_error(404, "Frame not in the archive")
+            m = re.match(r"^/frames/processed/([^/]+)\.webp$", url.path)
+            if m:
+                if not FRAME_ID.match(m.group(1)):
+                    return self.send_error(400, "Not a frame id")
+                size = min(SIZES, key=lambda s: abs(s - int(parse_qs(url.query).get("size", ["512"])[0])))
+                try:
+                    data, report = processed_webp(m.group(1), size, cache)
                     return self.send_bytes(data, "image/webp", headers={"X-Composite": json.dumps(report)})
                 except FileNotFoundError:
                     return self.send_error(404, "Frame not in the archive")

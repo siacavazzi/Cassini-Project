@@ -69,31 +69,70 @@ body.phone #moviecard:not(.full) { width: calc(100% - 16px) !important; left: 8p
     M.cat = catalog; M.i = i;
     return i;
   }
-  const at = i => { const k = i >= 0 ? order[i] : undefined; return k === undefined ? null : { id: catalog.id[k], et: catalog.et[k], k }; };
+  const at = i => { const k = i >= 0 ? order[i] : undefined; return k === undefined ? null : { id: catalog.id[k], et: catalog.et[k], k, i }; };
 
   // ---- frames: loaded ahead of the play head so 24 fps does not stutter ----
+  // Each frame goes through the pipeline like the camera windows' pictures (movie.processed, on by default): the
+  // frame that completes a filter set shows the set's colour composite, a new tile of a mosaic pass the mosaic so far,
+  // and every other frame is processed on its own (/frames/processed: stacked, calibrated, on the pipeline's display
+  // scale). A picture tries those in turn: a server that has none (404) or cannot make one moves on to the next, and
+  // a composite or mosaic still being made after PATIENCE ms of the film waiting for it gives way to the processed
+  // frame. The plain archive frame is the last resort.
+  const S = window.cassiniSettings, PATIENCE = 2500;
+  const opt = (key, dflt) => (S && S.get(key) !== undefined ? S.get(key) : dflt);
+  const KIND = { true: "true colour", false: "false colour", two: "two-filter colour" };
   const size = () => (window.cassiniWM && window.cassiniWM.big ? window.cassiniWM.big(card, card.querySelector(".mvwell")) : card.classList.contains("zoomed")) ? 1024 : 512;
+  // the pictures frame f can be shown as, best first, each { url, kind }
+  function choices(f) {
+    const id = f.id, sz = size(), raw = { url: `${FRAMES}/frames/${id}.webp?size=${sz}`, kind: "" };
+    if (!opt("movie.processed", true)) return [raw];
+    if (!catalog.setOf && window.cassiniFeeds) window.cassiniFeeds.prep();
+    const out = [], k = f.k, si = catalog.setOf ? catalog.setOf[k] : -1, s = si >= 0 ? catalog.sets[si] : null;
+    const comp = s && s.use.includes(k) && s.ready === catalog.et[k] && opt("cameras.composites", true);
+    // a possible mosaic tile: the camera's frame before this one is of the same body and observation (and a frame of
+    // a colour set only once its composite is up, as in the camera windows)
+    let prev = -1;
+    for (let j = f.i - 1; j >= Math.max(0, f.i - 64); j--) if (catalog.cam[order[j]] === catalog.cam[k]) { prev = order[j]; break; }
+    const tile = prev >= 0 && catalog.target[prev] === catalog.target[k] && catalog.obs[prev] === catalog.obs[k] && (!s || comp);
+    if (tile && opt("cameras.mosaics", true) && window.cassiniMosaics !== false) out.push({ url: `${FRAMES}/frames/mosaic/${comp ? catalog.id[s.use[0]] : id}.webp?size=${sz}`, kind: "mosaic" });
+    if (comp) out.push({ url: `${FRAMES}/frames/color.webp?ids=${s.use.map(q => catalog.id[q]).join(",")}&size=${sz}`, kind: KIND[s.kind] || "colour" });
+    out.push({ url: `${FRAMES}/frames/processed/${id}.webp?size=${sz}`, kind: "processed" }, raw);
+    return out;
+  }
+  function load(b) {
+    const c = b.urls[b.n], im = new Image();
+    b.img = im; b.since = performance.now();
+    im.decoding = "async"; im.crossOrigin = "anonymous";
+    im.onload = () => { if (b.img === im) { b.ok = true; b.kind = c.kind; } };
+    im.onerror = () => { if (b.img !== im) return; if (++b.n < b.urls.length) load(b); else b.ok = false; };
+    im.src = c.url;
+  }
   function want(f) {
     let b = M.buf.get(f.id);
     if (!b || b.size !== size()) {
-      b = { img: new Image(), ok: null, size: size() };
-      b.img.decoding = "async";
-      b.img.onload = () => { b.ok = true; };
-      b.img.onerror = () => { b.ok = false; };
-      b.img.src = `${FRAMES}/frames/${f.id}.webp?size=${b.size}`;
+      b = { urls: choices(f), n: 0, img: null, ok: null, size: size(), kind: "" };
+      load(b);
       M.buf.set(f.id, b);
     }
     return b;
   }
+  // the film is waiting on b: a composite or mosaic that is taking too long gives way to the processed frame
+  function hurry(b) {
+    if (b.ok === null && b.n < b.urls.length - 2 && performance.now() - b.since > PATIENCE) {
+      while (b.n < b.urls.length - 2) b.n++;
+      load(b);
+    }
+  }
   function fill(i) {
-    const ahead = Math.max(6, Math.min(40, Math.round(M.fps * 1.5))), keep = new Set();
+    // processed frames take the server a fraction of a second each the first time, so the film asks well ahead
+    const ahead = Math.max(12, Math.min(72, Math.round(M.fps * 3))), keep = new Set();
     let flying = 0;
     for (let j = Math.max(0, i); j <= i + ahead; j++) {
       const f = at(j); if (!f) break;
       keep.add(f.id);
       const b = M.buf.get(f.id);
       if (b && b.ok === null) flying++;
-      else if (!b && flying < 8) { want(f); flying++; }
+      else if (!b && flying < 10) { want(f); flying++; }
     }
     for (const id of M.buf.keys()) if (!keep.has(id)) M.buf.delete(id);
   }
@@ -108,13 +147,14 @@ body.phone #moviecard:not(.full) { width: calc(100% - 16px) !important; left: 8p
   function show(i) {
     const f = at(i), b = want(f), prev = M.cur;
     M.cur = { id: f.id, et: f.et }; M.cat = catalog; M.i = i;
+    M.late = b.ok ? null : f;   // stepped to a picture still being made: it goes up when it arrives (tick)
     if (b.ok) { draw(b.img); $("mvmsg").textContent = ""; }
     else if (b.ok === false) { blank(); $("mvmsg").innerHTML = "<b>No frame</b>" + f.id; }
     setTime(f.et);
     const span = state.view[1] - state.view[0];
     if (state.et < state.view[0] || state.et > state.view[1] - span * 0.05) setView(span, state.et + span * 0.4);
     const k = f.k;
-    $("mvtag").textContent = `${fmtDate(f.et)} · ${titleCase(catalog.target[k] || "Unknown")} · ${catalog.cam[k] === "N" ? "NAC" : "WAC"} ${catalog.f1[k]}/${catalog.f2[k]}`;
+    $("mvtag").textContent = `${fmtDate(f.et)} · ${titleCase(catalog.target[k] || "Unknown")} · ${catalog.cam[k] === "N" ? "NAC" : "WAC"} ${catalog.f1[k]}/${catalog.f2[k]}${b.ok && b.kind && b.kind !== "processed" ? ` · ${b.kind}` : ""}`;
     $("mvcount").textContent = f.id;
     if (prev && f.et - prev.et > 3 * 3600) {   // a stretch without frames: say how much time the cut left out
       $("mvskip").textContent = `skipped ${fmtDur(f.et - prev.et)}`; $("mvskip").classList.add("on");
@@ -128,6 +168,7 @@ body.phone #moviecard:not(.full) { width: calc(100% - 16px) !important; left: 8p
     if (yearReady() && !state.dragging) {
       const i = here();
       fill(i);
+      if (M.late && M.cur && M.late.id === M.cur.id && M.cat === catalog) { const b = want(M.late); if (b.ok !== null) show(M.late.i); else hurry(b); }
       if (M.playing && now >= M.due) {
         let shown = -1, j = i;
         while (now >= M.due) {
@@ -135,13 +176,14 @@ body.phone #moviecard:not(.full) { width: calc(100% - 16px) !important; left: 8p
           while (at(j) && M.buf.get(at(j).id) && M.buf.get(at(j).id).ok === false) j++;   // frames the server lacks are cut too
           const f = at(j);
           if (!f) { if (shown < 0 && !(mission && yearOf(state.et) < mission.years[mission.years.length - 1])) setMoviePlaying(false); break; }
-          if (!want(f).ok) break;
+          const b = want(f);
+          if (!b.ok) { hurry(b); break; }
           shown = j; M.due += 1000 / M.fps;
         }
         if (shown >= 0) { show(shown); M.due = Math.max(M.due, now - 250); M.waitSince = 0; }
         else if (M.playing && at(j)) {
           if (!M.waitSince) M.waitSince = now;
-          else if (now - M.waitSince > 600) $("mvcount").textContent = "loading…";
+          else if (now - M.waitSince > 600) $("mvcount").textContent = "processing…";
         }
       }
     }
