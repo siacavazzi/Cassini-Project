@@ -1612,7 +1612,18 @@ body.phone #hllist { grid-template-columns: 1fr; }
     // after the colour channels keeps the picture changing instead of holding the composite
     function view(k, et) {
       const si = catalog.setOf[k], s = si >= 0 ? catalog.sets[si] : null;
-      if (s && s.ready <= et && s.use.includes(k) && !failed.has(si) && S.get("cameras.composites")) return { key: colorUrl(s), set: si, k };
+      if (s && S.get("cameras.composites")) {
+        // any frame of a set whose channels are all taken shows the set's composite
+        if (s.ready <= et && !failed.has(si)) return { key: colorUrl(s), set: si, k };
+        // while the next set of a colour movie is being taken (the camera cycling through its filters), the
+        // camera's last finished set of the same observation stays up, so the movie stays in colour
+        for (let j = si - 1; j >= 0; j--) {
+          const q = catalog.sets[j];
+          if (q.cam !== s.cam) continue;
+          if (q.obs === s.obs && q.target === s.target && q.ready <= et && !failed.has(j)) return { key: colorUrl(q), set: j, k: q.use[q.use.length - 1], held: true };
+          break;
+        }
+      }
       return { key: frameUrl(catalog.id[k]), set: -1, k };
     }
     function noFrame(msg) { well.classList.remove("has-frame", "composite"); card.querySelector(".wellmsg").innerHTML = msg; }
@@ -1795,7 +1806,7 @@ body.phone #hllist { grid-template-columns: 1fr; }
       // a possible mosaic tile: the frame before is of the same body and observation, and a frame of a colour
       // set only once its composite is shown (the mosaic is made of composites)
       const kb = framesOf(cam, body).ks[p - 1];   // p counts this feed's frames (a body window's: that body's only)
-      want.tile = kb !== undefined && catalog.target[kb] === catalog.target[k] && catalog.obs[kb] === catalog.obs[k] && (!s || want.set >= 0);
+      want.tile = !want.held && kb !== undefined && catalog.target[kb] === catalog.target[k] && catalog.obs[kb] === catalog.obs[k] && (!s || want.set >= 0);
       const kp = catalog.km_per_px[k];
       field("frame").textContent = `${titleCase(catalog.target[k] || "Unknown")} · ${catalog.id[k]}`;
       const c = catalog.cls[k], pol = /^P\d|^IRP/.test(catalog.f1[k]) || /^IRP/.test(catalog.f2[k]) ? " · polarizer" : "";
