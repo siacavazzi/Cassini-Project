@@ -14,10 +14,16 @@ Whole mission (--years): writes data/mission.json, which the viewer looks for fi
 data/tracks/<year>/<body>.bin, data/catalog/<year>.json and data/attitude/<year>.bin. The viewer
 loads the year on screen and its neighbours as the clock moves. Raw .bin files only, so this
 layout needs a normal static host (the frame server), not the artifact host.
+
+Both layouts add the moments in web/replay/moments.csv to encounters.json: notable imaging sessions
+(long Saturn sessions, famous mosaics, the last pictures) that are not flybys. Each row names its
+observations; the time window, frame count and colour sets are measured from the catalog, so a row
+the archive has no pictures for stops the build instead of pointing the viewer at nothing.
 """
 
 import argparse
 import base64
+import csv
 import json
 import os
 import shutil
@@ -29,6 +35,7 @@ SATURN_SYSTEM = ["CASSINI", "SUN", "EARTH", "SATURN", "MIMAS", "ENCELADUS", "TET
 # the cruise: Venus twice, Earth and the Moon, Jupiter and its large moons
 CRUISE = ["VENUS", "MOON", "JUPITER", "IO", "EUROPA", "GANYMEDE", "CALLISTO"]
 CATALOG_KEYS = ["id", "et", "cam", "f1", "f2", "target", "obs", "range_km", "km_per_px"]
+MOMENTS = os.path.join(os.path.dirname(os.path.abspath(__file__)), "moments.csv")
 
 
 def main():
@@ -39,6 +46,8 @@ def main():
     ap.add_argument("--out", default=os.path.join(os.path.dirname(__file__), "data"))
     ap.add_argument("--attitude", help="folder with attitude/<year>.bin from export_attitude.py (same catalog export)")
     ap.add_argument("--huygens", help="Huygens replay folder (tracks/huygens, manifest_huygens.json, huygens_descent.json)")
+    ap.add_argument("--moments", default=MOMENTS, help="curated imaging sessions for the Moments list (default: %(default)s)")
+    ap.add_argument("--scores", help="observations_scored.csv from the highlight scoring, for each moment's photo score")
     args = ap.parse_args()
     if args.years:
         return build_mission(args)
@@ -60,6 +69,7 @@ def main():
     json.dump(bodies, open(os.path.join(args.out, "bodies.json"), "w"))
 
     enc = [e for e in json.load(open(os.path.join(args.data, "encounters.json"))) if e["utc"].startswith(str(args.year))]
+    enc = sorted(enc + moments(args, [args.year]), key=lambda e: e["et"])
     json.dump(enc, open(os.path.join(args.out, "encounters.json"), "w"))
 
     slim = slim_catalog(args.data, args.year)
@@ -82,6 +92,63 @@ def slim_catalog(data, year):
     slim = {k: cat[k] for k in CATALOG_KEYS}
     slim["et"] = [round(t, 1) for t in slim["et"]]
     return slim
+
+
+def moments(args, years):
+    """
+    The rows of the moments file that fall in these years, as encounters.json entries:
+      {"kind": "observation", "label", "body", "obs": [OBSERVATION_ID, ...], "et", "utc", "start", "end",
+       "end_et", "frames", "rgb_sets", "why", "source", "photo_score" (with --scores)}
+    et/utc is the first picture of the listed observations and end the last, both from the catalog.
+    rgb_sets counts 30 minute spans with red, green and blue (or violet) pictures, as the highlight
+    scoring does. A row in these years with no pictures in the catalog is an error.
+    """
+    import datetime
+    if not args.moments or not os.path.exists(args.moments):
+        return []
+    rows = list(csv.DictReader(open(args.moments, newline="")))
+    if not rows:
+        return []
+    scores = {}
+    if args.scores:
+        for r in csv.DictReader(open(args.scores, newline="")):
+            scores[r["OBSERVATION_ID"]] = max(scores.get(r["OBSERVATION_ID"], 0), float(r["score"]))
+    want = {}
+    for r in rows:
+        if int(r["date"][:4]) in years:
+            for o in r["obs"].split():
+                want[o] = []
+    for y in years:
+        path = os.path.join(args.data, "catalog", f"{y}.json")
+        if not want or not os.path.exists(path):
+            continue
+        cat = json.load(open(path))
+        for i, o in enumerate(cat["obs"]):
+            if o in want:
+                want[o].append((cat["et"][i], cat["f1"][i] + "," + cat["f2"][i]))
+    j2000 = datetime.datetime(2000, 1, 1, 12)
+    out = []
+    for r in rows:
+        if int(r["date"][:4]) not in years:
+            continue
+        obs = r["obs"].split()
+        pics = sorted(p for o in obs for p in want[o])
+        if not pics:
+            raise SystemExit(f"{args.moments}: no pictures in the catalog for {r['label']!r} ({' '.join(obs)})")
+        spans = {}
+        for t, f in pics:
+            s = spans.setdefault(int(t // 1800), set())
+            s.update(c for c, k in (("R", "RED"), ("G", "GRN"), ("B", "BL1"), ("B", "VIO")) if k in f)
+        # UTC labels from ET, near enough for display (the leap seconds since 2000, 5 at most, are left out)
+        utc = lambda t: (j2000 + datetime.timedelta(seconds=t - 64.184)).strftime("%Y-%m-%dT%H:%M:%S")
+        e = {"kind": "observation", "label": r["label"], "body": r["body"], "obs": obs,
+             "et": round(pics[0][0], 2), "utc": utc(pics[0][0]), "start": utc(pics[0][0]), "end": utc(pics[-1][0]),
+             "end_et": round(pics[-1][0], 2), "frames": len(pics), "rgb_sets": sum(len(s) == 3 for s in spans.values()),
+             "why": r["why"], "source": r["source"]}
+        if any(o in scores for o in obs):
+            e["photo_score"] = round(max(scores.get(o, 0) for o in obs), 1)
+        out.append(e)
+    return out
 
 
 def attitude_for(folder, year, n_catalog):
@@ -121,6 +188,7 @@ def build_mission(args):
                         "pole_ra": rot.get("POLE_RA"), "pole_dec": rot.get("POLE_DEC"), "pm": rot.get("PM")}
 
     enc = [e for e in json.load(open(os.path.join(args.data, "encounters.json"))) if int(e["utc"][:4]) in years]
+    enc = sorted(enc + moments(args, years), key=lambda e: e["et"])
     json.dump(enc, open(os.path.join(out, "encounters.json"), "w"))
 
     # frames per day over the whole span, so the timeline can show years that are not loaded
