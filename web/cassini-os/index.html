@@ -700,6 +700,16 @@ body.phone #hlcard { left: var(--side, 6px) !important; right: var(--sider, 6px)
   max-height: calc(100dvh - var(--menu, 30px) - var(--dockh, 150px) - 4 * var(--gap, 6px)); z-index: 1450 !important; }
 body.phone #hllist { grid-template-columns: 1fr; }
 
+#ssound { all: unset; display: grid; place-items: center; width: 18px; height: 18px; border-radius: 4px; cursor: default; color: var(--q-text); margin-right: 2px; }
+#ssound:hover { background: rgba(255,255,255,.14); }
+#ssound svg { width: 14px; height: 14px; }
+#ssound svg * { fill: none; stroke: currentColor; stroke-width: 1.3; stroke-linecap: round; }
+#ssound svg .on { display: none; }
+#ssound[aria-pressed="true"] svg .on { display: inline; }
+#ssound[aria-pressed="true"] svg .off { display: none; }
+#ssound.waiting { opacity: .55; }
+body.phone #ssound { width: 30px; height: 30px; }
+
 #loadscreen { position: fixed; inset: 0; z-index: 2001; display: grid; place-items: center; padding: 0 16px; pointer-events: none;
   background: rgba(0,0,0,.8); opacity: 0; transition: opacity .35s ease; }
 #loadscreen.on { opacity: 1; }
@@ -1632,6 +1642,8 @@ body.phone #hllist { grid-template-columns: 1fr; }
       if (!keep) card.querySelector(".kindtag").textContent = v.set >= 0 ? KIND[catalog.sets[v.set].kind].toUpperCase() : "";
       if (v.set >= 0) { channelsFrom(im, catalog.sets[v.set]); howMade(v); }
       if (v.tile) mosaicOf(v);
+      // the sound (sound.html) hears every picture that goes up: its camera, filter wavelength, target and window
+      if (window.cassiniPicture) window.cassiniPicture({ cam, body, win, k: v.k, nm: nmOf(v.k), set: v.set, use: v.set >= 0 ? catalog.sets[v.set].use.map(nmOf) : null });
     }
     function request(which, v) {
       lane[which] = v; v.cat = catalog;
@@ -1707,6 +1719,7 @@ body.phone #hllist { grid-template-columns: 1fr; }
         shot.src = mosaicUrl = URL.createObjectURL(blob);
         well.classList.add("mosaic");
         if (rep && rep.observation) {
+          if (window.cassiniPicture && rep.mosaic > (obsShown === catalog.obs[w.k] ? obsTiles : 0)) window.cassiniPicture({ cam, body, win, k: w.k, tile: rep.mosaic, of: rep.of });
           obsShown = catalog.obs[w.k]; obsTiles = rep.mosaic;
           well.style.aspectRatio = `${rep.width} / ${rep.height}`;
           card.querySelector(".kindtag").textContent = `${rep.filters >= 3 ? ((rep.filter_names || []).includes("GRN") ? "COLOUR " : "FALSE COLOUR ") : ""}MOSAIC · ${rep.mosaic} OF ${rep.of} TILES${rep.filters > 1 ? ` · ${rep.filters} FILTERS` : ""}`;
@@ -2528,6 +2541,204 @@ body.phone #hllist { grid-template-columns: 1fr; }
     if ((e.key === "h" || e.key === "H") && H.list.length) { e.preventDefault(); card.hidden ? open() : close(); }
     else if (e.key === "Escape" && !card.hidden) close();
   });
+})();
+</script>
+<script>
+// ---------- sound: a chime for every picture that arrives, and two quiet tones for the spacecraft ----------
+(function () {
+  const S = window.cassiniSettings, AC = window.AudioContext || window.webkitAudioContext;
+  if (!S || !AC) return;
+  const D = d => S.define(Object.assign({ section: "Sound" }, d));
+  D({ key: "sound.on", label: "Sound", type: "toggle", value: false,
+      hint: "A chime for each picture that arrives, after the Huygens descent movie. Starts after your next click or key press. The speaker in the menu bar (or S) switches it too." });
+  D({ key: "sound.volume", label: "Volume", type: "range", value: 70, min: 0, max: 100, step: 1, unit: "%" });
+  D({ key: "sound.chimes", label: "Picture chimes", type: "range", value: 80, min: 0, max: 100, step: 1, unit: "%",
+      hint: "Pitch from the filter (blue high, red and infrared low) and the target's size; the narrow-angle camera rings an octave above the wide-angle one." });
+  D({ key: "sound.chords", label: "Colour set chords", type: "range", value: 60, min: 0, max: 100, step: 1, unit: "%",
+      hint: "When a colour picture is complete, its channels' notes together." });
+  D({ key: "sound.mosaic", label: "Mosaic tiles", type: "range", value: 50, min: 0, max: 100, step: 1, unit: "%",
+      hint: "A high note that climbs with each new tile of a mosaic, and a chord when it is finished." });
+  D({ key: "sound.hum", label: "Spacecraft tones", type: "range", value: 25, min: 0, max: 100, step: 1, unit: "%",
+      hint: "Two quiet tones: one rises and wavers while Cassini turns, the other rises as it nears its target." });
+  D({ key: "sound.length", label: "Note length", type: "range", value: 1.4, min: 0.2, max: 4, step: 0.1, unit: "s",
+      hint: "How long a chime rings at 10 min/s. Faster playback shortens it." });
+  D({ key: "sound.echo", label: "Echo", type: "range", value: 35, min: 0, max: 100, step: 1, unit: "%" });
+  D({ key: "sound.stereo", label: "Sound from the window", type: "toggle", value: true,
+      hint: "Each chime comes from where its camera window is on the screen." });
+  D({ key: "sound.test", label: "Test", type: "action", button: "Play a chime",
+      hint: "One chime from each camera, to check the volume.", run: () => { S.set("sound.on", true); start(); test(); } });
+
+  // ---------- the audio graph, made on the first click or key press after sound is switched on ----------
+  let ctx = null, bus, master, echoSend, echoFb, humS = null, humD = null;
+  function build() {
+    ctx = new AC({ latencyHint: "playback" });
+    master = ctx.createGain(); master.gain.value = 0;
+    const comp = ctx.createDynamicsCompressor();
+    comp.threshold.value = -18; comp.ratio.value = 4; comp.attack.value = 0.005; comp.release.value = 0.25;
+    master.connect(comp).connect(ctx.destination);
+    bus = ctx.createGain(); bus.connect(master);
+    // echo: two delays bouncing left and right, each pass darker, like a big empty room
+    echoSend = ctx.createGain();
+    const dl = ctx.createDelay(2), dr = ctx.createDelay(2), lp = ctx.createBiquadFilter(), merge = ctx.createChannelMerger(2);
+    dl.delayTime.value = 0.37; dr.delayTime.value = 0.53; lp.type = "lowpass"; lp.frequency.value = 2400;
+    echoFb = ctx.createGain(); echoFb.gain.value = 0.45;
+    bus.connect(echoSend); echoSend.connect(lp); lp.connect(dl); dl.connect(dr); dr.connect(echoFb); echoFb.connect(lp);
+    dl.connect(merge, 0, 0); dr.connect(merge, 0, 1); merge.connect(master);
+    humS = hum(-0.55, "triangle"); humD = hum(0.55, "sine");
+    levels();
+  }
+  // a continuous tone: two slightly detuned oscillators through a soft filter, with a vibrato it can be given
+  function hum(pan, type) {
+    const o1 = ctx.createOscillator(), o2 = ctx.createOscillator(), f = ctx.createBiquadFilter(), g = ctx.createGain(), p = panner(pan);
+    const lfo = ctx.createOscillator(), depth = ctx.createGain();
+    o1.type = o2.type = type; o2.detune.value = 7; f.type = "lowpass"; f.frequency.value = 700; f.Q.value = 0.4; g.gain.value = 0;
+    lfo.frequency.value = 4.5; depth.gain.value = 0; lfo.connect(depth); depth.connect(o1.detune); depth.connect(o2.detune);
+    o1.connect(f); o2.connect(f); f.connect(g); g.connect(p); p.connect(bus);
+    o1.start(); o2.start(); lfo.start();
+    return { o: [o1, o2], f, g, lfo, depth };
+  }
+  const panner = v => { if (!ctx.createStereoPanner) return ctx.createGain(); const p = ctx.createStereoPanner(); p.pan.value = v; return p; };
+  function levels() {
+    if (!ctx) return;
+    const t = ctx.currentTime, on = S.get("sound.on");
+    master.gain.setTargetAtTime(on ? (S.get("sound.volume") / 100) ** 2 : 0, t, 0.08);
+    echoSend.gain.setTargetAtTime(S.get("sound.echo") / 100 * 0.6, t, 0.1);
+  }
+  let waiting = false;
+  function start() {
+    if (!S.get("sound.on")) return;
+    if (!ctx) build();
+    if (ctx.state !== "running") ctx.resume();
+    levels(); button();
+  }
+  // browsers let a page make sound only after the person clicks or presses a key on it
+  ["pointerdown", "keydown", "touchend"].forEach(t => window.addEventListener(t, () => { if (S.get("sound.on") && (!ctx || ctx.state !== "running")) start(); }, { passive: true, capture: true }));
+  document.addEventListener("visibilitychange", () => { if (!ctx) return; if (document.hidden) ctx.suspend(); else if (S.get("sound.on")) ctx.resume(); });
+
+  // ---------- pitch: a pentatonic scale, so any notes that sound together agree ----------
+  const SCALE = [0, 2, 4, 7, 9], ROOT = { N: 62, W: 50 };   // D major pentatonic: narrow-angle from D4, wide-angle from D3
+  const hz = m => 440 * 2 ** ((m - 69) / 12);
+  const noteOf = (root, deg) => root + 12 * Math.floor(deg / 5) + SCALE[((deg % 5) + 5) % 5];
+  // the filter's wavelength as a step up the scale: 1050 nm (infrared) the bottom, 240 nm (ultraviolet) seven steps up,
+  // so the filters keep their order, as DISR's counters kept theirs
+  const wlStep = nm => nm ? Math.max(0, Math.min(7, Math.round(7 * Math.log(1050 / nm) / Math.log(1050 / 240)))) : 3;
+  // the target lifts the key by its size: Saturn and Jupiter at the bottom, every tenfold smaller half an octave up;
+  // a target without a known size (the rings, stars, the sky) sits at the top
+  function bodyStep(name) {
+    const b = typeof bodies !== "undefined" && name && bodies[name];
+    if (!b || !b.radii) return 6;
+    const r = (b.radii[0] + b.radii[1] + b.radii[2]) / 3;
+    return Math.max(0, Math.min(5, Math.round(2.5 * Math.log10(60268 / r))));
+  }
+  // what one picture's chime is made of
+  function voiceOf(cam, k, nm) {
+    const kp = catalog.km_per_px[k] || 0;
+    return { root: ROOT[cam] || ROOT.N, step: wlStep(nm) + bodyStep(catalog.target[k]),
+      // sharper pictures ring brighter: 0.1 km/px and better is the brightest, 100 km/px and worse the softest
+      bright: kp ? Math.max(0.6, Math.min(4, 4 - 1.1 * Math.log10(Math.max(0.1, kp) / 0.1))) : 1.5,
+      ratio: cam === "W" ? 1 : 3.5 };   // the wide-angle camera a warm tone, the narrow-angle one a bell
+  }
+
+  // ---------- notes ----------
+  let voices = 0;
+  const recent = [];   // when the last chimes rang, so a busy burst plays quieter
+  function busy(t) { while (recent.length && recent[0] < t - 1) recent.shift(); recent.push(t); return 1 / Math.sqrt(Math.max(1, recent.length / 2)); }
+  // how long a note rings: the Note length setting at 10 min/s, shorter at faster speeds
+  const ring = () => S.get("sound.length") * Math.max(0.35, Math.min(1.6, (600 / Math.max(1, state.speed)) ** 0.25));
+  // a frequency-modulated bell: the modulator's ratio sets the timbre, its depth the brightness, falling as it rings
+  function bell(t, f, gain, pan, decay, bright, ratio) {
+    if (voices > 28 || gain < 0.002) return;
+    const car = ctx.createOscillator(), mod = ctx.createOscillator(), mg = ctx.createGain(), amp = ctx.createGain(), p = panner(pan);
+    car.frequency.value = f; mod.frequency.value = f * ratio;
+    mg.gain.setValueAtTime(f * bright, t); mg.gain.exponentialRampToValueAtTime(f * 0.02, t + decay * 0.5);
+    amp.gain.setValueAtTime(0, t); amp.gain.linearRampToValueAtTime(gain, t + 0.006); amp.gain.exponentialRampToValueAtTime(0.0001, t + decay);
+    mod.connect(mg); mg.connect(car.frequency); car.connect(amp); amp.connect(p); p.connect(bus);
+    car.start(t); mod.start(t); car.stop(t + decay + 0.05); mod.stop(t + decay + 0.05);
+    voices++; car.onended = () => { voices--; p.disconnect(); };
+  }
+  // where a window is across the screen, -1 left to 1 right
+  const panOf = win => {
+    if (!S.get("sound.stereo") || !win) return 0;
+    const r = win.getBoundingClientRect();
+    return Math.max(-0.8, Math.min(0.8, ((r.left + r.width / 2) / innerWidth) * 2 - 1));
+  };
+
+  const heard = new Map();   // pictures already rung (the per-body windows show the same pictures again)
+  let lastEt = -Infinity;
+  window.cassiniPicture = p => {
+    if (!ctx || ctx.state !== "running" || !S.get("sound.on") || document.hidden) return;
+    // only pictures that arrive while the mission plays forward: a scrub or a paused clock stays quiet
+    if (!state.playing || state.dragging || state.et < lastEt - 120) { lastEt = state.et; return; }
+    lastEt = state.et;
+    const key = p.tile ? `m:${catalog.obs[p.k]}:${p.tile}` : p.set >= 0 ? `s:${p.set}:${catalog.id[p.k]}` : `f:${catalog.id[p.k]}`, now = performance.now();
+    if (heard.has(key) && now - heard.get(key) < 4000) return;
+    heard.set(key, now);
+    if (heard.size > 400) for (const [k2, t2] of heard) if (now - t2 > 4000) heard.delete(k2);
+    const t = ctx.currentTime + 0.01, v = voiceOf(p.cam, p.k, p.nm), pan = panOf(p.win), len = ring(), quiet = busy(t);
+    if (p.tile) {   // a mosaic grew: a high note climbing with each tile, moving across the pass, and a chord at the end
+      const g = S.get("sound.mosaic") / 100 * 0.18 * quiet, across = p.of > 1 ? (p.tile - 1) / (p.of - 1) * 1.4 - 0.7 : 0;
+      bell(t + 0.05, hz(noteOf(v.root + 12, bodyStep(catalog.target[p.k]) + (p.tile - 1) % 10)), g, S.get("sound.stereo") ? across : 0, len * 0.8, 0.4, 2);
+      if (p.of && p.tile >= p.of) [0, 2, 4, 5].forEach((d, i) => bell(t + 0.12 + i * 0.09, hz(noteOf(v.root, bodyStep(catalog.target[p.k]) + d)), g * 1.2, pan, len * 2.2, 0.6, 1));
+      return;
+    }
+    if (p.set >= 0 && p.use) {   // a colour set is complete: strum its channels, red to blue
+      const g = S.get("sound.chords") / 100 * 0.16 * quiet, base = bodyStep(catalog.target[p.k]);
+      p.use.slice().sort((a, b) => b - a).forEach((nm, i) => bell(t + i * 0.07, hz(noteOf(v.root, base + wlStep(nm))), g, pan + (i - 1) * 0.15, len * 1.8, v.bright * 0.5, 1));
+      return;
+    }
+    bell(t, hz(noteOf(v.root, v.step)), S.get("sound.chimes") / 100 * 0.22 * quiet, pan, len, v.bright, v.ratio);
+  };
+  function test() {
+    if (!ctx) return;
+    const t = ctx.currentTime + 0.05;
+    bell(t, hz(noteOf(ROOT.N, 4)), 0.2, -0.4, 1.4, 2.5, 3.5);
+    bell(t + 0.35, hz(noteOf(ROOT.W, 4)), 0.2, 0.4, 1.4, 1.5, 1);
+  }
+
+  // ---------- the spacecraft tones, updated four times a second (never from the render loop) ----------
+  let lastQ = null, lastT = 0, turn = 0;
+  setInterval(() => {
+    if (!ctx || ctx.state !== "running" || typeof state === "undefined" || typeof pos === "undefined") return;
+    const t = ctx.currentTime, now = performance.now() / 1000, level = S.get("sound.on") && state.playing ? S.get("sound.hum") / 100 : 0;
+    // how fast the camera's pointing turns, in degrees per second of playback (what the viewer sees)
+    let rate = 0;
+    if (state.pointed && typeof qCam !== "undefined") {
+      if (lastQ) { const d = Math.abs(lastQ[0] * qCam[0] + lastQ[1] * qCam[1] + lastQ[2] * qCam[2] + lastQ[3] * qCam[3]); rate = 2 * Math.acos(Math.min(1, d)) * 180 / Math.PI / Math.max(0.05, now - lastT); }
+      lastQ = Float64Array.from(qCam);
+    } else lastQ = null;
+    lastT = now;
+    turn += (Math.min(rate, 360) - turn) * 0.5;
+    // turning: from D2 up to two octaves higher at 90 deg/s or more, with a vibrato that deepens as it turns faster
+    const tu = Math.min(1, Math.log1p(turn) / Math.log1p(90));
+    humS.o.forEach(o => o.frequency.setTargetAtTime(hz(38 + 24 * tu), t, 0.3));
+    humS.depth.gain.setTargetAtTime(tu * 35, t, 0.3); humS.lfo.frequency.setTargetAtTime(3 + 5 * tu, t, 0.3);
+    humS.g.gain.setTargetAtTime(level * 0.05 * (0.25 + tu), t, 0.4);
+    // range to the target (Saturn when there is none): 100 km is the top note, a million km the bottom, on the scale
+    const tg = state.target && pos[state.target] ? state.target : "SATURN";
+    if (pos.CASSINI && pos[tg]) {
+      const b = bodies[tg], r = b && b.radii ? b.radii[0] : 0, range = Math.max(1, Math.hypot(pos.CASSINI[0] - pos[tg][0], pos.CASSINI[1] - pos[tg][1], pos.CASSINI[2] - pos[tg][2]) - r);
+      const step = Math.round(Math.max(0, Math.min(1, (6 - Math.log10(Math.max(100, range))) / 4)) * 10);
+      humD.o.forEach(o => o.frequency.setTargetAtTime(hz(noteOf(38, step)), t, 0.8));
+    }
+    humD.g.gain.setTargetAtTime(level * 0.045, t, 0.6);
+  }, 250);
+
+  // ---------- the speaker in the menu bar, and S ----------
+  const btn = document.createElement("button");
+  btn.id = "ssound"; btn.setAttribute("aria-label", "Sound");
+  btn.innerHTML = '<svg viewBox="0 0 16 16" aria-hidden="true"><path d="M2.5 6h2.5l3.5-3v10l-3.5-3h-2.5z"/><path class="on" d="M10.5 5.5a3.5 3.5 0 0 1 0 5M12.3 3.7a6 6 0 0 1 0 8.6"/><path class="off" d="M11 6l3.5 4M14.5 6l-3.5 4"/></svg>';
+  const gear = document.getElementById("sgear"); if (gear) gear.before(btn);
+  function button() {
+    const on = S.get("sound.on"); waiting = on && (!ctx || ctx.state !== "running");
+    btn.setAttribute("aria-pressed", String(on)); btn.classList.toggle("waiting", waiting);
+    btn.title = on ? (waiting ? "Sound on: click anywhere to start it (S)" : "Sound on (S)") : "Sound off (S)";
+  }
+  btn.addEventListener("click", e => { e.stopPropagation(); S.set("sound.on", !S.get("sound.on")); });
+  window.addEventListener("keydown", e => {
+    if ((e.key === "s" || e.key === "S") && !e.metaKey && !e.ctrlKey && !e.altKey && !/^(INPUT|SELECT|TEXTAREA)$/.test(e.target.tagName)) S.set("sound.on", !S.get("sound.on"));
+  });
+  S.on("sound.on", v => { if (v) start(); levels(); button(); });
+  for (const k of ["sound.volume", "sound.echo"]) S.on(k, levels);
 })();
 </script>
 <script src="https://cdn.jsdelivr.net/npm/three@0.128.0/build/three.min.js"></script>
