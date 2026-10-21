@@ -213,6 +213,19 @@ function momentsBefore(et) {
 }
 """)
 
+# surface maps are decoded off the main thread (createImageBitmap) where the browser can, so a 2k or 4k map arriving
+# does not freeze the view while it decodes; a browser that cannot falls back to the plain loader
+rep('const texLoader = new THREE.TextureLoader();\n', """const texLoader = new THREE.TextureLoader();
+const bitmapLoader = typeof createImageBitmap === "function" && THREE.ImageBitmapLoader ? new THREE.ImageBitmapLoader().setOptions({ imageOrientation: "flipY", premultiplyAlpha: "none" }) : null;
+function loadTexture(url, onLoad, onError) {
+  const plain = () => texLoader.load(url, onLoad, undefined, onError);
+  if (!bitmapLoader) return plain();
+  bitmapLoader.load(url, bmp => { const t = new THREE.CanvasTexture(bmp); t.flipY = false; onLoad(t); }, undefined, plain);
+}
+""")
+rep('  texLoader.load(dir + f + ".webp", t => {', '  loadTexture(dir + f + ".webp", t => {')
+rep('  }, undefined, () => console.warn("texture missing for " + name));', '  }, () => console.warn("texture missing for " + name));')
+
 # HUD hook: studies can add their own read-outs
 rep('''  $("mday").textContent = `Mission day ${fmtInt(Math.floor((ms - LAUNCH_MS) / 86400000))} · ${SPEEDS.find(s => s[0] === state.speed)[1]}${state.playing ? "" : " · paused"}`;''',
     '''  $("mday").textContent = `Mission day ${fmtInt(Math.floor((ms - LAUNCH_MS) / 86400000))} · ${SPEEDS.find(s => s[0] === state.speed)[1]}${state.playing ? "" : " · paused"}`;

@@ -2922,15 +2922,21 @@ const TEX_FILES = { SATURN: "saturn", MIMAS: "mimas", ENCELADUS: "enceladus", TE
 const SHAPES = { HYPERION: "data/textures/models/hyperion.mesh.b64.txt", PHOEBE: "data/textures/models/phoebe.mesh.b64.txt" };
 const shapeGeom = {};
 const texLoader = new THREE.TextureLoader();
+const bitmapLoader = typeof createImageBitmap === "function" && THREE.ImageBitmapLoader ? new THREE.ImageBitmapLoader().setOptions({ imageOrientation: "flipY", premultiplyAlpha: "none" }) : null;
+function loadTexture(url, onLoad, onError) {
+  const plain = () => texLoader.load(url, onLoad, undefined, onError);
+  if (!bitmapLoader) return plain();
+  bitmapLoader.load(url, bmp => { const t = new THREE.CanvasTexture(bmp); t.flipY = false; onLoad(t); }, undefined, plain);
+}
 function loadMap(name, uniforms) {
   const f = TEX_FILES[name]; if (!TEX_ON || !f) return;
   // Hyperion's and Venus's maps only exist up to 2k
   const dir = (name === "HYPERION" || name === "VENUS") && TEX_DIR.endsWith("4k/") ? "data/textures/2k/" : TEX_DIR;
-  texLoader.load(dir + f + ".webp", t => {
+  loadTexture(dir + f + ".webp", t => {
     t.anisotropy = Math.min(8, renderer.capabilities.getMaxAnisotropy());
     t.wrapS = THREE.RepeatWrapping;
     uniforms.map.value = t; uniforms.hasMap.value = 1;
-  }, undefined, () => console.warn("texture missing for " + name));
+  }, () => console.warn("texture missing for " + name));
 }
 // shape models: "CMS1", nvert, nidx, int16 xyz (fraction of max radius, body axes), uint16 uv, uint16/uint32 indices
 async function loadShapes() {
