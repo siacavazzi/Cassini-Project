@@ -78,10 +78,31 @@ def archive_png(frame_id):
     return data_source.read_bytes(f"{FOLDERS[frame_id[0]]}/{frame_id}.png")
 
 
+# one lock per file being made, so a window's request and another's look-ahead for the same picture make it
+# once (the second waits and reads the first one's file) instead of both taking a composite slot
+_making = {}
+_making_lock = threading.Lock()
+
+
 def cached(path, make):
     if os.path.exists(path):
         with open(path, "rb") as fh:
             return fh.read()
+    with _making_lock:
+        lock = _making.setdefault(path, threading.Lock())
+    try:
+        with lock:
+            if os.path.exists(path):
+                with open(path, "rb") as fh:
+                    return fh.read()
+            return _make_file(path, make)
+    finally:
+        with _making_lock:
+            if _making.get(path) is lock and not lock.locked():
+                del _making[path]
+
+
+def _make_file(path, make):
     data = make()
     # written next to its final name and renamed, so a half written file is never served
     os.makedirs(os.path.dirname(path), exist_ok=True)
@@ -224,6 +245,8 @@ def main():
     site = os.path.abspath(os.path.expanduser(args.site)) if args.site else None
     print(f"Frames from {data_source.get_source()}, cache in {args.cache}")
     data_source._zip_index() if data_source.using_zip() else None  # build or load the zip index up front
+    # the first composite would otherwise wait while stacking reads the whole image index (all ~443k rows)
+    threading.Thread(target=color_image.stacking.load_index, daemon=True).start()
     server = ThreadingHTTPServer((args.host, args.port), make_handler(site, args.cache))
     print(f"Serving on http://{args.host}:{args.port}/" + (f" (site: {site})" if site else ""))
     server.serve_forever()

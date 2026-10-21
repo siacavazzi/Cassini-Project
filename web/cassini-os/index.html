@@ -957,49 +957,86 @@ body.idle .mvwell { border-color: transparent; box-shadow: 0 6px 30px rgba(0,0,0
   function cameraFeed(card) {
     const cam = card.dataset.cam, well = card.querySelector(".well"), shot = card.querySelector(".shot"), chans = card.querySelector(".chans");
     const field = f => card.querySelector(`[data-f="${f}"]`) || { set textContent(v) {}, set innerHTML(v) {} };
-    let want = null, shownKey = null, shown = null, busy = false, next = [], lastK = -2, lastReady = null, stripKey = "", stripSet = null, zoomed = false;
+    let want = null, shownKey = null, shown = null, next = [], lastK = -2, lastReady = null, stripKey = "", stripSet = null, zoomed = false;
     const failed = new Set();   // composites the server could not make: those sets show their frames instead
+    const missing = new Set();  // frames the server does not have
     const size = () => card.classList.contains("zoomed") ? 1024 : 512;
     const frameUrl = (id, sz) => `${FRAMES}/frames/${id}.webp?size=${sz || size()}`;
     const colorUrl = s => `${FRAMES}/frames/color.webp?ids=${s.use.map(k => catalog.id[k]).join(",")}&size=${size()}`;
     const fname = k => colourFilter(k) || `${catalog.f1[k]}/${catalog.f2[k]}`;
-    // what the window should show for frame k at time et: the composite of its set once that is ready
+    // what the window should show for frame k at time et: the composite of its set when k is the frame that
+    // completed it (or another of its channels); every other new frame shows itself, so a long run of filters
+    // after the colour channels keeps the picture changing instead of holding the composite
     function view(k, et) {
       const si = catalog.setOf[k], s = si >= 0 ? catalog.sets[si] : null;
-      if (s && s.ready <= et && !failed.has(si)) return { key: colorUrl(s), set: si, k };
+      if (s && s.ready <= et && s.use.includes(k) && !failed.has(si)) return { key: colorUrl(s), set: si, k };
       return { key: frameUrl(catalog.id[k]), set: -1, k };
     }
     function noFrame(msg) { well.classList.remove("has-frame", "composite"); card.querySelector(".wellmsg").innerHTML = msg; }
-    // only one request in flight: during fast playback the window skips to the newest picture instead of queueing
-    function pump() {
-      if (busy || !want || want.key === shownKey) return;
-      busy = true;
-      const w = want, im = new Image();
+    // two lanes, one request in flight each: plain frames (quick) and composites (seconds when the server has to
+    // make one). A composite being made never holds up the frames: the window shows the newest frame meanwhile,
+    // and its composite replaces it once made. During fast playback each lane skips to the newest picture.
+    const lane = { frame: null, comp: null };
+    const warming = new Set(), warmed = new Set();   // look-ahead requests in flight / done, each made once
+    const etOf = v => catalog.et[v.k];
+    // a picture that finished loading goes up if it is the one wanted, or a stand-in no older than what is up
+    // and no newer than what is wanted (after a scrub back, newer pictures still in flight are dropped)
+    const fits = v => v.key === want.key || (shownKey !== want.key && etOf(v) <= etOf(want) && (!shown || etOf(v) > etOf(shown) || (etOf(v) === etOf(shown) && v.set >= shown.set)));
+    // the one place a picture goes on screen
+    function display(v, im) {
+      shownKey = v.key; shown = v; shot.src = im.src;
+      well.classList.add("has-frame"); well.classList.toggle("composite", v.set >= 0);
+      card.querySelector(".kindtag").textContent = v.set >= 0 ? KIND[catalog.sets[v.set].kind].toUpperCase() : "";
+      if (v.set >= 0) { channelsFrom(im, catalog.sets[v.set]); howMade(v); }
+    }
+    function request(which, v) {
+      lane[which] = v; v.cat = catalog;
+      const im = new Image();
       im.crossOrigin = "anonymous";
       im.onload = () => {
-        busy = false;
-        if (!want) return;   // the camera went idle while this was loading
-        shownKey = w.key; shown = w; shot.src = im.src;
-        well.classList.add("has-frame"); well.classList.toggle("composite", w.set >= 0);
-        card.querySelector(".kindtag").textContent = w.set >= 0 ? KIND[catalog.sets[w.set].kind].toUpperCase() : "";
-        if (w.set >= 0) { channelsFrom(im, catalog.sets[w.set]); howMade(w); }
-        for (const u of next) { const p = new Image(); p.crossOrigin = "anonymous"; p.src = u; }   // warm the cache
+        lane[which] = null; warmed.add(v.key);
+        if (want && !v.warm && v.cat === catalog && fits(v)) display(v, im);   // no want: the camera went idle while this loaded
         pump();
       };
       im.onerror = () => {
-        busy = false;
-        if (w.set >= 0) {   // no composite: fall back to the frame itself
-          failed.add(w.set);
-          if (want === w) want = { key: frameUrl(catalog.id[w.k]), set: -1, k: w.k };
-          return pump();
+        lane[which] = null;
+        if (v.warm || v.cat !== catalog) warmed.add(v.key);
+        else if (v.set >= 0) {   // no composite: the set shows its frames instead
+          failed.add(v.set);
+          if (want && want.key === v.key) want = { key: frameUrl(catalog.id[v.k]), set: -1, k: v.k };
+        } else {
+          missing.add(v.key);
+          if (want && want.key === v.key) {
+            shownKey = v.key; shown = v;
+            fetch(`${FRAMES}/health`).then(r => r.ok, () => false).then(up => noFrame(up
+              ? `<b>No frame</b>${catalog.id[v.k]} is not in the archive`
+              : `<b>No signal</b>Frame server offline<br>run web/frames/frame_server.py`));
+          }
         }
-        shownKey = w.key;
-        fetch(`${FRAMES}/health`).then(r => r.ok, () => false).then(up => noFrame(up
-          ? `<b>No frame</b>${catalog.id[w.k]} is not in the archive`
-          : `<b>No signal</b>Frame server offline<br>run web/frames/frame_server.py`));
         pump();
       };
-      im.src = w.key;
+      im.src = v.key;
+    }
+    function pump() {
+      if (!want) return;
+      const plain = want.set >= 0 ? { key: frameUrl(catalog.id[want.k]), set: -1, k: want.k } : want;
+      if (shownKey !== want.key) {
+        if (want.set >= 0 && !lane.comp) request("comp", want);
+        // the frame itself; for a composite, as the stand-in unless this frame is already up
+        if (!lane.frame && !missing.has(plain.key) && (want.set < 0 || !(shown && shown.k === want.k))) request("frame", plain);
+      }
+      // look ahead while a lane is free: the next frames, and the next composite, so they are made before the
+      // clock gets there. Each is asked for once, and only one composite per window is ever being made
+      for (const key of next) {
+        if (warming.size >= 3) break;
+        if (warmed.has(key) || warming.has(key) || key.includes("/color.webp")) continue;
+        warming.add(key);
+        const p = new Image(); p.crossOrigin = "anonymous";
+        p.onload = p.onerror = () => { warming.delete(key); warmed.add(key); };
+        p.src = key;
+      }
+      const comp = next.find(key => key.includes("/color.webp") && !warmed.has(key));
+      if (comp && !lane.comp && (want.set < 0 || shownKey === want.key)) request("comp", { key: comp, set: -1, k: want.k, warm: true });
     }
     const made = new Map();   // set -> how its composite was made
     const colourText = (s, si) => `${KIND[s.kind]}: ${s.use.map(fname).join(" · ")}${made.has(si) ? ` · ${made.get(si)}` : ""}`;
@@ -1051,7 +1088,7 @@ body.idle .mvwell { border-color: transparent; box-shadow: 0 6px 30px rgba(0,0,0
     }
     let cat = null;
     function update(force) {
-      if (catalog !== cat) { cat = catalog; lastK = -2; stripKey = ""; failed.clear(); made.clear(); }   // another mission year loaded
+      if (catalog !== cat) { cat = catalog; lastK = -2; stripKey = ""; failed.clear(); made.clear(); missing.clear(); warmed.clear(); shown = null; shownKey = null; }   // another mission year loaded
       const p = lastOfCam(cam, state.et), k = p < 0 ? -1 : catalog.byCam[cam].ks[p];
       const live = k >= 0 && state.et - catalog.et[k] < 180;
       card.classList.toggle("live", live);
@@ -1083,7 +1120,7 @@ body.idle .mvwell { border-color: transparent; box-shadow: 0 6px 30px rgba(0,0,0
       field("details").textContent = `${kp ? `${kp < 10 ? kp.toFixed(2) : fmt(kp)} km/px · ` : ""}${fmt(n24)} frames in the last 24 h`;
       card.querySelector(".shottag").textContent = want.set >= 0 ? `${s.use.map(q => catalog.id[q]).join(" ")}` : `${catalog.id[k]} · ${catalog.f1[k]}/${catalog.f2[k]}`;
       const ks = catalog.byCam[cam].ks;
-      next = [1, 2, 3].map(d => ks[p + d]).filter(q => q !== undefined).map(q => view(q, catalog.et[q]).key);
+      next = [1, 2, 3, 4, 5, 6].map(d => ks[p + d]).filter(q => q !== undefined).map(q => view(q, catalog.et[q]).key);
       pump();
     }
     // zooming the window asks for the bigger picture
