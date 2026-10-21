@@ -132,8 +132,7 @@ def bench_composites(args, cache):
 
 def bench_http(args, cache):
     import http.client
-    from http.server import ThreadingHTTPServer
-    server = ThreadingHTTPServer(("127.0.0.1", args.port), frame_server.make_handler(None, cache))
+    server = frame_server.Server(("127.0.0.1", args.port), frame_server.make_handler(None, cache))
     threading.Thread(target=server.serve_forever, daemon=True).start()
     ids = sample_ids(args.count, seed=3)
 

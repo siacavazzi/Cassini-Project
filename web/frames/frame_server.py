@@ -137,6 +137,13 @@ def color_webp(ids, size, cache):
     return data, report
 
 
+class Server(ThreadingHTTPServer):
+    # the default backlog of 5 resets connections when several viewers open theirs at once
+    # (a browser opens six per page); the OS caps it at its own limit anyway
+    request_queue_size = 128
+    daemon_threads = True
+
+
 def make_handler(site, cache):
     class Handler(SimpleHTTPRequestHandler):
         # keep-alive: a viewer loads frames one after another, and a new connection for each
@@ -252,7 +259,7 @@ def main():
     # every year's kernels stay extracted once used, so a reel going back and forth in time is not slowed
     data_source.KEEP_SPICE_CACHE = True
     data_source._zip_index() if data_source.using_zip() else None  # build or load the zip index up front
-    server = ThreadingHTTPServer((args.host, args.port), make_handler(site, args.cache))
+    server = Server((args.host, args.port), make_handler(site, args.cache))
     print(f"Serving on http://{args.host}:{args.port}/" + (f" (site: {site})" if site else ""))
     server.serve_forever()
 
