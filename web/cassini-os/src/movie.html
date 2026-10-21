@@ -100,9 +100,10 @@ body.phone #moviecard:not(.full) { width: calc(100% - 16px) !important; left: 8p
     if (comp) best.push({ url: `${FRAMES}/frames/color.webp?ids=${s.use.map(q => catalog.id[q]).join(",")}&size=${sz}`, kind: KIND[s.kind] || "colour" });
     return { best, base: [{ url: `${FRAMES}/frames/processed/${id}.webp?size=${sz}`, kind: "processed" }, raw] };
   }
-  // one chain of choices: tried in turn until one loads (ok true) or none does (ok false)
-  function chain(list, onload) {
-    const c = { list, n: 0, img: null, ok: list.length ? null : false, kind: "" };
+  // one chain of choices: tried in turn until one loads (ok true) or none does (ok false); a deferred one waits for
+  // c.start() (fill starts composites and mosaics a few at a time)
+  function chain(list, onload, deferred) {
+    const c = { list, n: 0, img: null, ok: list.length ? null : false, kind: "", started: false };
     const load = () => {
       const im = new Image(), it = list[c.n];
       c.img = im; im.decoding = "async"; im.crossOrigin = "anonymous";
@@ -110,7 +111,9 @@ body.phone #moviecard:not(.full) { width: calc(100% - 16px) !important; left: 8p
       im.onerror = () => { if (++c.n < list.length) load(); else c.ok = false; };
       im.src = it.url;
     };
-    if (list.length) load();
+    c.start = () => { if (!c.started && list.length) { c.started = true; load(); } };
+    c.stop = () => { if (c.img && c.ok === null) { c.img.onload = c.img.onerror = null; c.img.src = ""; } };
+    if (!deferred) c.start();
     return c;
   }
   // b.ok: null while the film should wait for frame b, then true (b.img, b.kind are what to show) or false (no frame)
@@ -124,28 +127,37 @@ body.phone #moviecard:not(.full) { width: calc(100% - 16px) !important; left: 8p
   function want(f) {
     let b = M.buf.get(f.id);
     if (!b || b.size !== size()) {
+      if (b) { b.best.stop(); b.base.stop(); }
       const c = choices(f);
       b = { ok: null, img: null, kind: "", size: size(), since: performance.now() };
       // a composite or mosaic that arrives while its frame is on screen replaces the processed frame there
-      b.best = chain(c.best, () => { if (M.on && M.cur && M.cur.id === f.id && b.kind !== b.best.kind) { settle(b); draw(b.img); tag(f, b); } });
+      b.best = chain(c.best, () => { if (M.on && M.cur && M.cur.id === f.id && b.kind !== b.best.kind) { settle(b); draw(b.img); tag(f, b); } }, true);
       b.base = chain(c.base, () => {});
       M.buf.set(f.id, b);
     }
     return settle(b);
   }
+  // A browser opens only six connections to the frame server, and a mosaic tile nobody has asked for before takes the
+  // server seconds: so at most BEST_FLYING composites and mosaics are asked for at once, nearest the play head first,
+  // and the processed frames, quick to make, always have connections left.
+  const BEST_FLYING = 2;
   function fill(i) {
     // processed frames take the server a fraction of a second each the first time, so the film asks well ahead
     const ahead = Math.max(12, Math.min(72, Math.round(M.fps * 3))), keep = new Set();
-    let flying = 0;
+    let flying = 0, best = 0;
+    for (const b of M.buf.values()) if (b.best.started && b.best.ok === null) best++;
     for (let j = Math.max(0, i); j <= i + ahead; j++) {
       const f = at(j); if (!f) break;
       keep.add(f.id);
-      const b = M.buf.get(f.id);
-      if (b && (b.base.ok === null || b.best.ok === null)) flying++;
-      else if (!b && flying < 10) { want(f); flying++; }
+      let b = M.buf.get(f.id);
+      if (b && b.base.ok === null) flying++;
+      else if (!b && flying < 8) { b = want(f); flying++; }
+      if (b && !b.best.started && b.best.ok === null && best < BEST_FLYING) { b.best.start(); best++; }
     }
-    for (const id of M.buf.keys()) if (!keep.has(id)) M.buf.delete(id);
+    // pictures the film has passed or skipped: dropped, and their requests called off so they free their connections
+    for (const [id, b] of M.buf) if (!keep.has(id)) { b.best.stop(); b.base.stop(); M.buf.delete(id); }
   }
+  function drop() { for (const b of M.buf.values()) { b.best.stop(); b.base.stop(); } M.buf.clear(); }
   function blank() { g.fillStyle = "#000"; g.fillRect(0, 0, cv.width, cv.height); }
   function draw(img) {
     const s = cv.width, r = Math.min(s / img.naturalWidth, s / img.naturalHeight), w = img.naturalWidth * r, h = img.naturalHeight * r;
@@ -205,7 +217,7 @@ body.phone #moviecard:not(.full) { width: calc(100% - 16px) !important; left: 8p
   // the film starts on the frame the camera last took and carries on from there
   function start() {
     if (!catalog || M.on) return;
-    M.on = true; M.buf.clear(); blank();
+    M.on = true; drop(); blank();
     setPlaying(false);
     // the movie takes the camera's place; the camera windows come back when it ends
     M.hidden = ["imgcard", "wacard"].map($).filter(w => w && !w.hidden);
@@ -222,7 +234,7 @@ body.phone #moviecard:not(.full) { width: calc(100% - 16px) !important; left: 8p
   }
   function stop() {
     if (!M.on) return;
-    M.on = false; M.buf.clear();
+    M.on = false; drop();
     card.hidden = true;
     M.hidden.forEach(w => { w.hidden = false; }); M.hidden = [];
     $("movie").setAttribute("aria-pressed", "false");
