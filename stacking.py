@@ -58,13 +58,14 @@ def find_repeats(path, window=120, max_frames=5):
 
 """
 Loads the frame at path and stacks it with its repeat exposures.
-returns (label of the frame at path, stacked image resized like label.resize_image)
+returns (label of the frame at path, stacked image resized like label.resize_image),
+plus how many frames went in when count is True
 """
-def load_stacked(path, window=120, max_frames=5):
+def load_stacked(path, window=120, max_frames=5, count=False):
     lbl = lh.label(path, as_png=True)
     frames = [lbl.resize_image()]
     if max_frames <= 1:
-        return lbl, frames[0]
+        return (lbl, frames[0], 1) if count else (lbl, frames[0])
     for repeat in find_repeats(path, window, 4 * max_frames)[1:]:
         if len(frames) >= max_frames:
             break
@@ -81,4 +82,5 @@ def load_stacked(path, window=120, max_frames=5):
             frames.append(frame)
     if len(frames) > 1:
         print(f"Stacking {len(frames)} frames for {path}")
-    return lbl, ic.stack_frames(frames)
+    stacked = ic.stack_frames(frames)
+    return (lbl, stacked, len(frames)) if count else (lbl, stacked)
