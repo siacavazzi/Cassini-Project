@@ -326,6 +326,9 @@ body { color: var(--q-text); }
 .menu li button:hover, .menu li button:focus-visible { background: rgba(138,182,255,.35); color: #fff; }
 .menu li.sep { background: var(--q-line); }
 .menu li .kbd { color: var(--q-dim); }
+.menu li.slider { display: flex; flex-direction: column; gap: 3px; padding: 3px 18px 5px 26px; white-space: nowrap; }
+.menu li.slider b { font-weight: 500; color: #fff; }
+.menu li.slider input { width: 100%; margin: 0; accent-color: #8ab6ff; }
 #tray button { background: rgba(255,255,255,.08); border: 1px solid var(--q-line); color: var(--q-text); }
 
 /* windows: smoked HUD panels */
@@ -487,10 +490,8 @@ body.idle .mvwell { border-color: transparent; box-shadow: 0 6px 30px rgba(0,0,0
         <li><button data-act="span" data-v="604800">Timeline: Week</button></li>
         <li><button data-act="span" data-v="2592000">Timeline: Month</button></li>
         <li class="sep" data-rate></li>
-        <li data-rate><button data-act="maxrate" data-v="1" role="menuitemradio" aria-checked="false">Bursts: 1 Image/s</button></li>
-        <li data-rate><button data-act="maxrate" data-v="2" role="menuitemradio" aria-checked="false">Bursts: 2 Images/s</button></li>
-        <li data-rate><button data-act="maxrate" data-v="4" role="menuitemradio" aria-checked="false">Bursts: 4 Images/s</button></li>
-        <li data-rate><button data-act="maxrate" data-v="0" role="menuitemradio" aria-checked="false">Bursts: No Limit</button></li>
+        <li data-rate class="slider"><label for="maxrate">Bursts: at most <b id="maxratev">5 images/s</b></label>
+          <input type="range" id="maxrate" min="0" max="24" step="1" value="5" aria-label="Maximum new images per second during imaging bursts"></li>
       </ul></div>
     <div class="menu"><button aria-haspopup="true">Go</button>
       <ul id="gomenu">
@@ -714,7 +715,6 @@ body.idle .mvwell { border-color: transparent; box-shadow: 0 6px 30px rgba(0,0,0
     if (a === "orbits") { $("allorbits").click(); btn.setAttribute("aria-checked", $("allorbits").getAttribute("aria-pressed")); }
     if (a === "enlarge") { $("enlarge").click(); btn.setAttribute("aria-checked", $("enlarge").getAttribute("aria-pressed")); }
     if (a === "span") setView(+btn.dataset.v);
-    if (a === "maxrate") setMaxRate(+btn.dataset.v);
     if (a === "prev") $("prev").click();
     if (a === "next") $("next").click();
     if (a === "go") setFocus(btn.dataset.body);
@@ -1107,10 +1107,11 @@ body.idle .mvwell { border-color: transparent; box-shadow: 0 6px 30px rgba(0,0,0
   // between two of a camera's frames takes at least 1/maxRate s; it is back to full speed once the burst is over.
   // Movie mode has its own clock. 0 = no limit. The setting lives in the Settings window when the page has one
   // (playback.maxImageRate), otherwise in the View menu.
-  const RATE_DEFAULT = 2, RATE_KEY = "cassini-os-max-image-rate", SETTINGS = window.cassiniSettings;
+  const RATE_DEFAULT = 5, RATE_KEY = "cassini-os-max-image-rate", SETTINGS = window.cassiniSettings;
   let maxRate = RATE_DEFAULT, slowedTo = 0;
   function syncRateMenu() {
-    document.querySelectorAll('[data-act="maxrate"]').forEach(b => b.setAttribute("aria-checked", String(+b.dataset.v === maxRate)));
+    const r = $("maxrate"); if (!r) return;
+    r.value = maxRate; $("maxratev").textContent = maxRate ? `${maxRate} image${maxRate === 1 ? "" : "s"}/s` : "no limit";
   }
   function setMaxRate(v) {
     if (SETTINGS) return SETTINGS.set("playback.maxImageRate", v);
@@ -1121,11 +1122,13 @@ body.idle .mvwell { border-color: transparent; box-shadow: 0 6px 30px rgba(0,0,0
     document.querySelectorAll("#menubar [data-rate]").forEach(li => li.remove());
     maxRate = +SETTINGS.define({ key: "playback.maxImageRate", section: "Playback", label: "Maximum images per second",
       hint: "When Cassini takes a burst of pictures, the timeline slows down so each camera window shows at most this many new images a second. 0 = no limit.",
-      type: "range", value: RATE_DEFAULT, min: 0, max: 12, step: 1, unit: "images/s" }) || 0;
+      type: "range", value: RATE_DEFAULT, min: 0, max: 24, step: 1, unit: "images/s" }) || 0;
     SETTINGS.on("playback.maxImageRate", v => { maxRate = +v || 0; });
   } else {
     try { const v = localStorage.getItem(RATE_KEY); if (v !== null && +v >= 0) maxRate = +v; } catch (e) {}
     syncRateMenu();
+    $("maxrate").addEventListener("input", e => setMaxRate(+e.target.value));
+    $("maxrate").closest("li").addEventListener("click", e => e.stopPropagation());   // keep the menu open while sliding
   }
   // for one camera at et: the fastest the clock may run (Infinity outside a burst) and when its next frame is
   function capOf(cam, et) {
