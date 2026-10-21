@@ -45,12 +45,14 @@ import data_source  # noqa: E402
 import mosaic  # noqa: E402
 
 # bumped whenever the way reel pictures are made changes, so older ones are not served again
-VERSION = "reel-v3"
+VERSION = "reel-v4"
 SET_GAP = 300          # seconds between frames of one filter set
 REPEAT_GAP = 120       # stacking.find_repeats' window
 MOSAIC_GAP = 1800      # pictures more than this far apart never share a mosaic
-VIEW = 1536            # full resolution pixels around the body that a picture shows
+VIEW = 1536            # full resolution pixels a picture shows (a north-up frame fits in 1448)
 OUT = 1024             # ...kept at two thirds of full resolution
+SCALE = OUT / VIEW
+FOLLOW = 300           # full resolution pixels a close-up's newest panel may sit from the middle of the view
 TRUE_BLUES = ("BL1", "BL2", "VIO")
 
 _index = None
@@ -207,15 +209,16 @@ def _cached(path, make):
 
 
 def picture(ids, cache):
-    """The picture of frames ids as RGBA, OUT px square with the body at the centre, and its report."""
+    """The picture of frames ids as RGBA, OUT px square: VIEW full resolution pixels around the frame's
+    middle, north up, and its report (frame_offset: where that middle sits relative to the body's centre)."""
     base = os.path.join(cache, VERSION, "pictures", "_".join(ids))
     made = {}
 
     def make():
         folders = {"N": "nac_data", "W": "wac_data"}
         image, _, report = color_image.processed_frame([f"{folders[i[0]]}/{i}.png" for i in ids])
-        if report["centred"]:
-            # auto_center's canvas has the body at its centre
+        if "frame_offset" in report:
+            # processed_frame's canvas has the frame's middle at its middle
             c = image.shape[0] // 2
             view = image[c - VIEW // 2:c + VIEW // 2, c - VIEW // 2:c + VIEW // 2]
         else:
@@ -253,7 +256,7 @@ def shot_webp(target, n, size, cache, use_mosaic=True, slots=None):
             return made()
 
     def made():
-        frames = [picture(w["ids"], cache) for w in window]
+        frames = place([picture(w["ids"], cache) for w in window])
         report.update(frames[-1][1])
         if len(frames) > 1:
             with _mosaic_lock:
@@ -277,6 +280,32 @@ def shot_webp(target, n, size, cache, use_mosaic=True, slots=None):
             report = picture(s["ids"], cache)[1]
     report["mosaic"] = len(window)
     return data, report
+
+
+def place(frames):
+    """Puts each (image, report) of a mosaic window, oldest first, where it sits on the body, in one
+    view: the body's centre in the middle when the newest picture is centred on it, otherwise (a
+    close-up) the middle of the window's panels, kept within FOLLOW of the newest one. Pictures
+    without SPICE stay where they are, on their own."""
+    newest = frames[-1][1]
+    if "frame_offset" not in newest:
+        return frames[-1:]
+    frames = [f for f in frames if "frame_offset" in f[1]]
+    offsets = np.array([f[1]["frame_offset"] for f in frames])
+    if newest.get("centred"):
+        middle = np.zeros(2)
+    else:
+        middle = offsets.mean(axis=0)
+        middle = np.clip(middle, offsets[-1] - FOLLOW, offsets[-1] + FOLLOW)
+    out = []
+    for (image, report), offset in zip(frames, offsets):
+        dx, dy = np.round((offset - middle) * SCALE).astype(int)
+        if abs(dx) >= OUT or abs(dy) >= OUT:
+            continue   # a panel too far away to show
+        moved = np.zeros_like(image)
+        moved[max(dy, 0):OUT + min(dy, 0), max(dx, 0):OUT + min(dx, 0)] = image[max(-dy, 0):OUT - max(dy, 0), max(-dx, 0):OUT - max(dx, 0)]
+        out.append((moved, report))
+    return out
 
 
 def build(target, cache, workers=1, first=0, count=None):
