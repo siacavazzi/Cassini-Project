@@ -41,7 +41,12 @@ const env = process.env;
       const f = proto[k], name = "2d." + k; T[name + ".calls"] = 0;
       proto[k] = function () { const a = performance.now(); try { return f.apply(this, arguments); } finally { T[name] = (T[name] || 0) + performance.now() - a; T[name + ".calls"]++; } };
     }
-    window.__iv = []; let last = 0; const tick = t => { if (last) window.__iv.push(t - last); last = t; window.__rid = requestAnimationFrame(tick); }; requestAnimationFrame(tick);
+    // camera windows: each picture put up, and how far the clock had gone past its frame's time by then
+    window.__shots = []; window.__et0 = state.et; const idx = new Map(); catalog.id.forEach((id, k) => idx.set(id, k));
+    document.querySelectorAll(".camwin").forEach(card => { const shot = card.querySelector(".shot"); if (!shot) return;
+      new MutationObserver(() => { const k = idx.get((shot.src.split("/frames/")[1] || "").split(".")[0]); if (k !== undefined) window.__shots.push(state.et - catalog.et[k]); })
+        .observe(shot, { attributes: true, attributeFilter: ["src"] }); });
+    window.__iv = []; window.__t0 = performance.now(); let last = 0; const tick = t => { if (last) window.__iv.push(t - last); last = t; window.__rid = requestAnimationFrame(tick); }; requestAnimationFrame(tick);
   });
   await cdp.send("Profiler.enable"); await cdp.send("Profiler.setSamplingInterval", { interval: 500 }); await cdp.send("Profiler.start");
   await page.waitForTimeout(SECS * 1000);
@@ -54,6 +59,9 @@ const env = process.env;
       frames: n, fps: +(1000 * n / sum).toFixed(1), p50ms: +iv[n >> 1].toFixed(1), p95ms: +iv[Math.floor(n * 0.95)].toFixed(1), maxms: +iv[n - 1].toFixed(1),
       cpuMsPerFrame: Object.fromEntries(Object.entries(window.__T).map(([k, v]) => [k, +(v / n).toFixed(2)]).sort((a, b) => b[1] - a[1])),
       drawCalls: renderer.info.render.calls, triangles: renderer.info.render.triangles, textures: renderer.info.memory.textures,
+      pictures: (() => { const L = window.__shots.slice().sort((a, b) => a - b), sim = state.et - window.__et0, due = catalog.et.filter(t => t > window.__et0 && t <= state.et).length;
+        return { due, shown: L.length, missionSecondsPerSecond: +(sim / (performance.now() - window.__t0) * 1000).toFixed(1),
+                 lagMissionSecondsP50: L.length ? Math.round(L[L.length >> 1]) : null, lagMissionSecondsP90: L.length ? Math.round(L[Math.floor(L.length * 0.9)]) : null }; })(),
       canvas: [renderer.domElement.width, renderer.domElement.height], heapMB: performance.memory ? Math.round(performance.memory.usedJSHeapSize / 1e6) : null,
       quality: window.cassiniPerf ? window.cassiniPerf.status() : null, scalePath: window.__q || null, utc: new Date(etToMs(state.et)).toISOString() };
   });

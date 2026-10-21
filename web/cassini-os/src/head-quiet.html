@@ -1099,6 +1099,7 @@ body.idle .win.full .titlebar { opacity: 0; }
       lane[which] = v; v.cat = catalog;
       const im = new Image();
       im.crossOrigin = "anonymous";
+      im.fetchPriority = v.warm ? "low" : "high";   // the picture wanted now goes ahead of look-ahead requests
       im.onload = () => {
         lane[which] = null; warmed.add(v.key);
         if (want && !v.warm && v.cat === catalog && fits(v)) display(v, im);   // no want: the camera went idle while this loaded
@@ -1137,7 +1138,7 @@ body.idle .win.full .titlebar { opacity: 0; }
         if (warming.size >= 3) break;
         if (warmed.has(key) || warming.has(key) || key.includes("/color.webp")) continue;
         warming.add(key);
-        const p = new Image(); p.crossOrigin = "anonymous";
+        const p = new Image(); p.crossOrigin = "anonymous"; p.fetchPriority = "low";
         p.onload = p.onerror = () => { warming.delete(key); warmed.add(key); };
         p.src = key;
       }
@@ -1267,7 +1268,9 @@ body.idle .win.full .titlebar { opacity: 0; }
       field("details").textContent = `${kp ? `${kp < 10 ? kp.toFixed(2) : fmt(kp)} km/px · ` : ""}${fmt(n24)} frames in the last 24 h`;
       card.querySelector(".shottag").textContent = want.set >= 0 ? `${s.use.map(q => catalog.id[q]).join(" ")}` : `${catalog.id[k]} · ${catalog.f1[k]}/${catalog.f2[k]}`;
       const ks = framesOf(cam, body).ks;
-      next = [1, 2, 3, 4, 5, 6].map(d => ks[p + d]).filter(q => q !== undefined).map(q => view(q, catalog.et[q]).key);
+      // look ahead: the next 6 frames, or up to 12 when they come within 4 s of playback (a burst), nearest first
+      const ahead = []; for (let d = 1; d <= 12 && ks[p + d] !== undefined && (d <= 6 || catalog.et[ks[p + d]] - state.et <= 4 * state.speed); d++) ahead.push(ks[p + d]);
+      next = ahead.map(q => view(q, catalog.et[q]).key);
       pump();
     }
     // a window made bigger (zoom, resize, full view) asks for the bigger picture
