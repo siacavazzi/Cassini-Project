@@ -1060,7 +1060,8 @@ body.idle .win.full .titlebar { opacity: 0; }
       // while a pass's mosaic is shown, its next frames keep it up (until the mosaic with them arrives, mosaicOf)
       const keep = obsShown && catalog.obs[v.k] === obsShown;
       shownKey = v.key; shown = v;
-      if (!keep) { shot.src = im.src; obsShown = null; well.style.aspectRatio = ""; well.classList.remove("mosaic"); }
+      // shot.dataset.src / .report: what the picture on screen was made from, for flagging (flag.html)
+      if (!keep) { shot.src = im.src; shot.dataset.src = v.key; shot.dataset.report = ""; obsShown = null; well.style.aspectRatio = ""; well.classList.remove("mosaic"); }
       well.classList.add("has-frame"); well.classList.toggle("composite", v.set >= 0);
       if (!keep) card.querySelector(".kindtag").textContent = v.set >= 0 ? KIND[catalog.sets[v.set].kind].toUpperCase() : "";
       if (v.set >= 0) { channelsFrom(im, catalog.sets[v.set]); howMade(v); }
@@ -1138,6 +1139,7 @@ body.idle .win.full .titlebar { opacity: 0; }
         if (late()) return;
         if (mosaicUrl) URL.revokeObjectURL(mosaicUrl);
         shot.src = mosaicUrl = URL.createObjectURL(blob);
+        shot.dataset.src = r.url; shot.dataset.report = r.headers.get("X-Reel") || "";
         well.classList.add("mosaic");
         if (rep && rep.observation) {
           obsShown = catalog.obs[w.k]; obsTiles = rep.mosaic;

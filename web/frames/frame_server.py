@@ -42,6 +42,15 @@ Routes:
                                filter, in false colour when it cycles three or more; asking for a frame of the
                                pass starts making its tiles
   /health                      "ok" plus where the frames come from
+  POST /flags                  a picture flagged in Cassini OS (the ⚑ button or R in a picture window): JSON with
+                               the picture as shown (a data: URL), what the window showed and an optional note.
+                               Saved under --flags (default ~/Documents/flagged-pictures) as <name>/shown.png,
+                               <name>/raw/<ID>.png (each frame's archive PNG) and <name>/flag.json, with one line
+                               per flag in index.jsonl; answers {"name", "count"}
+  POST /flags/<name>/undo      takes a flag back: its folder moves to undone/ and its index line goes
+  /flags/                      every flag on one page, newest first, each with a link to its moment
+  /flags/index.json            the flags as a list, newest first ({"count", "flags"})
+  /flags/<name>/<file>         a flag's files
   anything else                a file from --site, if given (the replay page and its data)
 
 <ID> is a frame id from the catalog, e.g. N1500060789_2. The camera page picks which frames
@@ -49,11 +58,15 @@ make a filter set (web/cassini-os/src/head-quiet.html, findSets). Frames are sen
 Access-Control-Allow-Origin: * so a page hosted elsewhere can show them.
 """
 import argparse
+import base64
+import datetime
 import email.utils
+import html
 import gzip
 import io
 import os
 import re
+import shutil
 import sys
 import threading
 import time
@@ -176,6 +189,130 @@ def color_webp(ids, size, cache):
     return data, report
 
 
+# ---------- flagged pictures: pictures that look wrong, kept with what was shown so they can be looked into later ----------
+FLAG_NAME = re.compile(r"^[0-9]{8}-[0-9]{6}(-[0-9]+)?_[A-Za-z0-9_]+$")
+FLAG_FILE = re.compile(r"^(shown\.(png|webp|jpg)|flag\.json|raw/[NW][0-9]{10}_[0-9]+\.png)$")
+FLAG_MAX = 40 * 1024 * 1024   # a request bigger than this is refused (a 1024 px PNG is 1-2 MB)
+_flag_lock = threading.Lock()
+FLAGS_README = """Pictures flagged in Cassini OS (the flag button or R in a picture window).
+
+index.jsonl   one line per flag, oldest first: the flag.json below plus "name" (its folder)
+<name>/shown.png       the picture exactly as the window showed it (composite, mosaic, movie or reel picture)
+<name>/raw/<ID>.png    the archive PNG of each frame in it, before any processing
+<name>/flag.json       when it was flagged, the mission time and a link to that moment, the window and how it was
+                       showing the picture (frame, colour composite, mosaic; the server's X-Composite / X-Reel
+                       report), each frame's camera, filters, target and observation, the note and tags, and the
+                       viewer's settings
+undone/       flags taken back with Undo (moved here, not deleted)
+
+Made by web/frames/frame_server.py; the page /flags/ on the frame server shows them all.
+"""
+
+
+def flag_entries(folder):
+    try:
+        with open(os.path.join(folder, "index.jsonl")) as fh:
+            return [json.loads(line) for line in fh if line.strip()]
+    except FileNotFoundError:
+        return []
+
+
+def save_flag(folder, flag):
+    """Writes a flag (the JSON the page sent) into folder: its own folder with the picture as shown, the archive
+    PNG of each frame and flag.json, and a line in index.jsonl. Returns the flag's name and how many there are."""
+    image = flag.pop("image", None) or ""
+    ids = [i for i in flag.get("ids") or [] if isinstance(i, str) and FRAME_ID.match(i)][:24]
+    flag["ids"] = ids
+    flag["received"] = datetime.datetime.now(datetime.timezone.utc).isoformat(timespec="seconds")
+    if isinstance(flag.get("note"), str):
+        flag["note"] = flag["note"][:4000]
+    label = re.sub(r"[^A-Za-z0-9_]", "", ids[0] if ids else str((flag.get("window") or {}).get("id", "picture")))[:40] or "picture"
+    os.makedirs(folder, exist_ok=True)
+    with _flag_lock:
+        stamp = datetime.datetime.now().strftime("%Y%m%d-%H%M%S")
+        name, n = f"{stamp}_{label}", 1
+        while os.path.exists(os.path.join(folder, name)):
+            n += 1
+            name = f"{stamp}-{n}_{label}"
+        path = os.path.join(folder, name)
+        os.makedirs(os.path.join(path, "raw"))
+    files = []
+    m = re.match(r"^data:image/(png|webp|jpeg);base64,(.+)$", image, re.S)
+    if m:
+        ext = {"jpeg": "jpg"}.get(m.group(1), m.group(1))
+        with open(os.path.join(path, f"shown.{ext}"), "wb") as fh:
+            fh.write(base64.b64decode(m.group(2)))
+        files.append(f"shown.{ext}")
+    for i in ids:
+        try:
+            data = archive_png(i)
+        except (FileNotFoundError, KeyError):
+            continue
+        with open(os.path.join(path, "raw", f"{i}.png"), "wb") as fh:
+            fh.write(data)
+        files.append(f"raw/{i}.png")
+    flag["files"] = files
+    with open(os.path.join(path, "flag.json"), "w") as fh:
+        json.dump(flag, fh, indent=1)
+    with _flag_lock:
+        if not os.path.exists(os.path.join(folder, "README.txt")):
+            with open(os.path.join(folder, "README.txt"), "w") as fh:
+                fh.write(FLAGS_README)
+        with open(os.path.join(folder, "index.jsonl"), "a") as fh:
+            fh.write(json.dumps({"name": name, **flag}, separators=(",", ":")) + "\n")
+        count = len(flag_entries(folder))
+    print(f"flagged {name}: {flag.get('note') or ''}", flush=True)
+    return name, count
+
+
+def undo_flag(folder, name):
+    """Takes a flag back: its folder moves to undone/ (nothing is deleted) and its line leaves index.jsonl."""
+    with _flag_lock:
+        if not os.path.isdir(os.path.join(folder, name)):
+            return None
+        os.makedirs(os.path.join(folder, "undone"), exist_ok=True)
+        shutil.move(os.path.join(folder, name), os.path.join(folder, "undone", name))
+        keep = [e for e in flag_entries(folder) if e.get("name") != name]
+        part = os.path.join(folder, f"index.jsonl.{threading.get_ident()}.part")
+        with open(part, "w") as fh:
+            fh.writelines(json.dumps(e, separators=(",", ":")) + "\n" for e in keep)
+        os.replace(part, os.path.join(folder, "index.jsonl"))
+        return len(keep)
+
+
+def flags_page(folder):
+    """Every flag on one page, newest first: the picture as shown, when and what it was, the note."""
+    esc = lambda v: html.escape(str(v if v is not None else ""))
+    cards = []
+    for e in reversed(flag_entries(folder)):
+        name, shown = e.get("name", ""), next((f for f in e.get("files", []) if f.startswith("shown.")), None)
+        win, what = e.get("window") or {}, e.get("shown") or {}
+        frames = e.get("frames") or []
+        detail = " · ".join(filter(None, [f.get("id", "") + (f" {f.get('filters')}" if f.get("filters") else "") for f in frames[:6]]))
+        tags = "".join(f"<span class=tag>{esc(t)}</span>" for t in e.get("tags") or [])
+        cards.append(f"""<figure>
+  <a href="{esc(name)}/{esc(shown or 'flag.json')}">{f'<img loading=lazy src="{esc(name)}/{esc(shown)}" alt="">' if shown else '<div class=none>no picture</div>'}</a>
+  <figcaption><b>{esc(e.get('mission_utc', ''))}</b> {esc(win.get('title', ''))}{' · ' + esc(what.get('what')) if what.get('what') else ''}
+  <div class=ids>{esc(detail)}</div>{tags}{f'<p>{esc(e.get("note"))}</p>' if e.get('note') else ''}
+  <div class=links><a href="{esc(e.get('link') or '#')}">open this moment</a> · <a href="{esc(name)}/flag.json">details</a>{''.join(f' · <a href="{esc(name)}/{esc(f)}">{esc(f.split("/")[-1])}</a>' for f in e.get('files', []) if f.startswith('raw/'))}
+  <div class=when>flagged {esc(e.get('received', ''))}</div></div></figcaption>
+</figure>""")
+    return f"""<!doctype html><html lang=en><head><meta charset=utf-8><meta name=viewport content="width=device-width,initial-scale=1">
+<title>Flagged pictures</title><style>
+:root {{ color-scheme: dark; }}
+body {{ margin: 0; padding: 16px; background: #0b0d11; color: #dfe4ea; font: 13px/1.45 -apple-system, "Helvetica Neue", Arial, sans-serif; }}
+h1 {{ font-size: 15px; font-weight: 600; margin: 0 0 4px; }} .sub {{ color: #8a94a3; margin: 0 0 16px; }}
+main {{ display: grid; grid-template-columns: repeat(auto-fill, minmax(240px, 1fr)); gap: 14px; }}
+figure {{ margin: 0; background: #14171d; border: 1px solid #262b34; border-radius: 6px; overflow: hidden; }}
+figure img, .none {{ display: block; width: 100%; aspect-ratio: 1; object-fit: contain; background: #000; }} .none {{ display: grid; place-items: center; color: #555; }}
+figcaption {{ padding: 8px 10px 10px; }} figcaption p {{ margin: 6px 0 0; white-space: pre-wrap; }}
+.ids, .when {{ font: 11px/1.4 ui-monospace, Menlo, monospace; color: #8a94a3; word-break: break-all; }}
+.tag {{ display: inline-block; margin: 5px 4px 0 0; padding: 1px 7px; border-radius: 9px; background: rgba(138,182,255,.16); color: #b9d0ff; font-size: 11px; }}
+.links {{ margin-top: 6px; font-size: 11.5px; }} a {{ color: #8ab6ff; text-decoration: none; }} a:hover {{ text-decoration: underline; }}
+</style></head><body><h1>Flagged pictures</h1><p class=sub>{len(cards)} flagged · saved in {esc(folder)} · <a href="index.json">index.json</a></p>
+<main>{''.join(cards) or '<p>Nothing flagged yet. In Cassini OS, press the flag in a picture window&#39;s title bar, or R.</p>'}</main></body></html>"""
+
+
 # site files sent gzipped to browsers that take it: a year of replay data is ~18 MB, its catalog JSON
 # shrinks ~7x and the track and pointing files ~25%. Each file is compressed once and kept in memory
 # (until it changes) up to GZIP_KEEP bytes of compressed data
@@ -208,7 +345,7 @@ class Server(ThreadingHTTPServer):
     daemon_threads = True
 
 
-def make_handler(site, cache):
+def make_handler(site, cache, flags=None):
     class Handler(SimpleHTTPRequestHandler):
         # keep-alive: a viewer loads frames one after another, and a new connection for each
         # costs a round trip (more through a tunnel); every reply says its Content-Length
@@ -232,7 +369,8 @@ def make_handler(site, cache):
         def do_OPTIONS(self):
             # Chrome asks before a public https page may load from a server on this machine
             self.send_response(204)
-            self.send_header("Access-Control-Allow-Methods", "GET")
+            self.send_header("Access-Control-Allow-Methods", "GET, POST")
+            self.send_header("Access-Control-Allow-Headers", "Content-Type")
             self.send_header("Access-Control-Allow-Private-Network", "true")
             self.end_headers()
 
@@ -250,11 +388,39 @@ def make_handler(site, cache):
             self.end_headers()
             self.wfile.write(data)
 
+        def do_POST(self):
+            self.started = time.monotonic()
+            self.revalidate = False
+            url = urlparse(self.path)
+            n = int(self.headers.get("Content-Length") or 0)
+            if not flags or not (url.path == "/flags" or re.match(r"^/flags/[^/]+/undo$", url.path)):
+                self.rfile.read(n) if 0 < n <= FLAG_MAX else None
+                return self.send_error(404)
+            if n > FLAG_MAX:
+                self.close_connection = True
+                return self.send_error(413, "Too big")
+            body = self.rfile.read(n)
+            if url.path == "/flags":
+                try:
+                    flag = json.loads(body)
+                    assert isinstance(flag, dict)
+                except (ValueError, AssertionError):
+                    return self.send_error(400, "Not a flag")
+                name, count = save_flag(flags, flag)
+                return self.send_bytes(json.dumps({"name": name, "count": count}).encode(), "application/json", False)
+            name = url.path.split("/")[2]
+            count = undo_flag(flags, name) if FLAG_NAME.match(name) else None
+            if count is None:
+                return self.send_error(404, "No such flag")
+            return self.send_bytes(json.dumps({"name": name, "count": count}).encode(), "application/json", False)
+
         def do_GET(self):
             self.started = time.monotonic()
             url = urlparse(self.path)
             # a kept-alive connection reuses this handler, so the last request's choice must not stick
             self.revalidate = False
+            if flags and (url.path == "/flags" or url.path.startswith("/flags/")):
+                return self.send_flags(url.path)
             if url.path == "/health":
                 return self.send_bytes(f"ok {data_source.get_source()}\n".encode(), "text/plain", False)
             if url.path == "/frames/color.webp":
@@ -336,6 +502,29 @@ def make_handler(site, cache):
                 return
             return super().do_GET()
 
+        def send_flags(self, url_path):
+            if url_path == "/flags":
+                self.send_response(301)
+                self.send_header("Location", "/flags/")
+                self.send_header("Content-Length", "0")
+                return self.end_headers()
+            rest = url_path[len("/flags/"):]
+            if rest == "":
+                return self.send_bytes(flags_page(flags).encode(), "text/html; charset=utf-8", False)
+            if rest == "index.json":
+                entries = flag_entries(flags)[::-1]
+                return self.send_bytes(json.dumps({"count": len(entries), "flags": entries}).encode(), "application/json", False)
+            name, _, file = rest.partition("/")
+            if not FLAG_NAME.match(name) or not FLAG_FILE.match(file):
+                return self.send_error(404)
+            path = os.path.join(flags, name, file)
+            if not os.path.isfile(path):
+                return self.send_error(404)
+            with open(path, "rb") as fh:
+                data = fh.read()
+            mime = {".png": "image/png", ".webp": "image/webp", ".jpg": "image/jpeg", ".json": "application/json"}[os.path.splitext(file)[1]]
+            return self.send_bytes(data, mime, False)
+
         def send_gzipped(self, url_path):
             """A site file gzipped, if the browser takes gzip and it is worth it; False otherwise."""
             if "gzip" not in self.headers.get("Accept-Encoding", ""):
@@ -381,6 +570,8 @@ def main():
     ap.add_argument("--host", default="127.0.0.1", help="0.0.0.0 to let other machines on the network in")
     ap.add_argument("--site", help="folder with the replay page to serve at /")
     ap.add_argument("--cache", default=os.path.join(os.getcwd(), "frame_cache"), help="where made WebP files are kept")
+    ap.add_argument("--flags", default=os.environ.get("CASSINI_FLAGS", "~/Documents/flagged-pictures"),
+                    help="where pictures flagged in Cassini OS are saved (POST /flags, page /flags/)")
     args = ap.parse_args()
     site = os.path.abspath(os.path.expanduser(args.site)) if args.site else None
     print(f"Frames from {data_source.get_source()}, kernels from {data_source.get_kernel_source()}, cache in {args.cache}")
@@ -391,7 +582,9 @@ def main():
     threading.Thread(target=reel.target_of, daemon=True).start()
     # the first composite would otherwise wait while stacking reads the whole image index (all ~443k rows)
     threading.Thread(target=color_image.stacking.load_index, daemon=True).start()
-    server = Server((args.host, args.port), make_handler(site, args.cache))
+    flags = os.path.abspath(os.path.expanduser(args.flags))
+    print(f"Flagged pictures go to {flags}")
+    server = Server((args.host, args.port), make_handler(site, args.cache, flags))
     print(f"Serving on http://{args.host}:{args.port}/" + (f" (site: {site})" if site else ""))
     server.serve_forever()
 
