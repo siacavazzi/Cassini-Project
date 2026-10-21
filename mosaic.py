@@ -78,6 +78,55 @@ def add_frame(frame, lbl=None):
 
 
 """
+Which earlier pictures a picture is drawn over: the rule for telling a real mosaic (the camera
+stepping across a body, a tile at a time) from frames that only follow each other.
+
+pictures = dicts in time order with
+    t       seconds
+    cam     "N" or "W"
+    obs     OBSERVATION_ID
+    filter  anything that compares equal for the same filter (or the same kind of colour set)
+    x, y    find_target's shift that centres the body, full resolution pixels (None without SPICE)
+    z       distance to the body in km (None without SPICE)
+Returns, for each picture, the indices of its panels, oldest first (at most buffer_size - 1).
+
+A picture joins earlier ones of the same camera, observation and filter when the pointing moved
+by at least min_step of a frame since the panel it would cover (a smaller move replaces that panel:
+a stare, a movie, drift or a repeat), it overlaps at least one of them, it is within max_gap of the
+last one and the distance to the body is within max_zoom of each. Different filters are never
+drawn over each other: a Titan mosaic takes MT3, CB3, MT1 and UV3 at every tile, so the frames
+right before a picture are the other filters at the same place.
+"""
+frame_px = 1024     # full resolution frame, both cameras
+min_step = 0.15     # of a frame: a smaller move is the same tile
+max_gap = 1800      # seconds between a panel and the next
+max_zoom = 0.10     # largest change in distance to the body between panels
+
+
+def panels(pictures):
+    tiles = {}   # (cam, obs, filter) -> [(index, x, y, z, t)], oldest first
+    out = []
+    for n, p in enumerate(pictures):
+        key = (p["cam"], p["obs"], p["filter"])
+        if p.get("x") is None or p.get("z") is None:
+            tiles.pop(key, None)
+            out.append([])
+            continue
+        x, y, z, t = p["x"], p["y"], p["z"], p["t"]
+        kept = tiles.get(key, [])
+        if kept and t - kept[-1][4] > max_gap:
+            kept = []
+        kept = [k for k in kept if abs(k[3] / z - 1) <= max_zoom
+                and max(abs(k[1] - x), abs(k[2] - y)) >= min_step * frame_px]
+        if kept and not any(abs(k[1] - x) < frame_px and abs(k[2] - y) < frame_px for k in kept):
+            kept = []   # no overlap: the camera went somewhere else, start again
+        kept = kept[-(buffer_size - 1):] if buffer_size > 1 else []
+        out.append([k[0] for k in kept])
+        tiles[key] = kept + [(n, x, y, z, t)]
+    return out
+
+
+"""
 Works out a brightness gain per frame and color channel so the frames agree where they
 overlap. The newest frame keeps its brightness and the others are matched to it, directly
 or through other frames they overlap. Frames that overlap nothing keep a gain of 1.

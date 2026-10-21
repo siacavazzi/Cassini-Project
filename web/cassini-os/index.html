@@ -373,7 +373,7 @@ body { color: var(--q-text); }
 .chans .more { grid-column: 1 / -1; font-size: 9.5px; color: var(--q-dim); white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
 .camwin .shottag { right: 5px; text-align: left; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
 .kindtag { position: absolute; right: 5px; top: 4px; font: 9px/1 var(--hudf); color: var(--q-text); text-shadow: 0 0 3px #000, 0 0 6px #000; display: none; letter-spacing: .04em; }
-.well.has-frame.composite .kindtag { display: block; }
+.well.has-frame.composite .kindtag, .well.has-frame.mosaic .kindtag { display: block; }
 body.idle .camwin .chans { opacity: .8; }
 
 /* moments: plain rows on the panel */
@@ -1035,6 +1035,8 @@ body.idle .rlwell { border-color: transparent; box-shadow: 0 6px 30px rgba(0,0,0
         well.classList.add("has-frame"); well.classList.toggle("composite", w.set >= 0);
         card.querySelector(".kindtag").textContent = w.set >= 0 ? KIND[catalog.sets[w.set].kind].toUpperCase() : "";
         if (w.set >= 0) { channelsFrom(im, catalog.sets[w.set]); howMade(w); }
+        well.classList.remove("mosaic");
+        if (w.tile) mosaicOf(w);
         for (const u of next) { const p = new Image(); p.crossOrigin = "anonymous"; p.src = u; }   // warm the cache
         pump();
       };
@@ -1052,6 +1054,25 @@ body.idle .rlwell { border-color: transparent; box-shadow: 0 6px 30px rgba(0,0,0
         pump();
       };
       im.src = w.key;
+    }
+    // A frame that may be a new tile of a mosaic (the camera's frame before it is of the same target and
+    // observation) is also asked of /frames/mosaic: the frame server answers 404 at once unless the pointing
+    // stepped across the body with the same filter (mosaic.panels), and otherwise sends the pipeline's mosaic
+    // of this tile over the ones before it, which replaces the picture while it is still the one shown.
+    // window.cassiniMosaics = false turns this off.
+    let mosaicUrl = null;
+    function mosaicOf(w) {
+      if (window.cassiniMosaics === false) return;
+      const id = catalog.id[w.set >= 0 ? catalog.sets[w.set].use[0] : w.k];
+      fetch(`${FRAMES}/frames/mosaic/${id}.webp?size=${size()}`).then(async r => {
+        if (!r.ok || shown !== w) return;
+        const rep = JSON.parse(r.headers.get("X-Reel") || "null"), blob = await r.blob();
+        if (shown !== w) return;
+        if (mosaicUrl) URL.revokeObjectURL(mosaicUrl);
+        shot.src = mosaicUrl = URL.createObjectURL(blob);
+        well.classList.add("mosaic");
+        card.querySelector(".kindtag").textContent = `${w.set >= 0 ? KIND[catalog.sets[w.set].kind].toUpperCase() + " · " : ""}MOSAIC${rep && rep.mosaic ? ` OF ${rep.mosaic}` : ""}`;
+      }, () => {});
     }
     const made = new Map();   // set -> how its composite was made
     const colourText = (s, si) => `${KIND[s.kind]}: ${s.use.map(fname).join(" · ")}${made.has(si) ? ` · ${made.get(si)}` : ""}`;
@@ -1125,6 +1146,10 @@ body.idle .rlwell { border-color: transparent; box-shadow: 0 6px 30px rgba(0,0,0
       if (k === lastK && ready === lastReady && !force) return;
       lastK = k; lastReady = ready;
       want = view(k, state.et);
+      // a possible mosaic tile: the frame before is of the same body and observation, and a frame of a colour
+      // set only once its composite is shown (the mosaic is made of composites)
+      const kb = catalog.byCam[cam].ks[p - 1];
+      want.tile = kb !== undefined && catalog.target[kb] === catalog.target[k] && catalog.obs[kb] === catalog.obs[k] && (!s || want.set >= 0);
       const kp = catalog.km_per_px[k];
       field("frame").textContent = `${titleCase(catalog.target[k] || "Unknown")} · ${catalog.id[k]}`;
       const c = catalog.cls[k], pol = /^P\d|^IRP/.test(catalog.f1[k]) || /^IRP/.test(catalog.f2[k]) ? " · polarizer" : "";

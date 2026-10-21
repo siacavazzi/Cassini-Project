@@ -51,6 +51,17 @@ Movie mode lives in `src/movie.html` (style, window and script); the build splic
 
 `src/strip.py` strips the document wrapper for publishing as a claude.ai artifact.
 
+## Mosaics
+
+When Cassini steps the camera across a body a tile at a time, the camera window shows each new tile drawn over
+the tiles before it. The frame server decides (`/frames/mosaic/<ID>.webp`, rule in `mosaic.panels`): same camera,
+observation and filter (or colour set), the body moved at least 15% of a frame since the last tile, the tiles
+overlap, at most 30 min apart and within 10% of the same distance. Stares, movies and filter cycles at one spot
+stay single frames. It needs the geometry cache (`CASSINI_GEOMETRY_CACHE`, see `bootleg_autonav.py`); without it
+nothing is a mosaic. The window shows its frame straight away and swaps in the mosaic (made by the pipeline like a
+body reel picture: stacked, calibrated, aligned, centred north up by SPICE) when it arrives.
+`window.cassiniMosaics = false` turns it off.
+
 ## Colour sets
 
 The camera windows find filter sets in the catalog (`findSets` in `src/head-quiet.html`): a run of frames from

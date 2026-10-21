@@ -3,7 +3,8 @@
 Body reels for the frame server: every picture Cassini took of one body, in time order, each
 made by the pipeline (color_image.processed_frame: repeat exposures stacked, lost pixels
 filled, calibrated, aligned, centred on the body with north up by SPICE), drawn into the
-pipeline's rolling mosaic (mosaic.compose) with the pictures just before it.
+pipeline's rolling mosaic (mosaic.compose) over the earlier tiles of the same filter when the camera
+is stepping across the body (mosaic.panels decides, from the geometry cache).
 
 A picture is a colour composite where the frames make a filter set, otherwise one black and
 white frame. Filter sets follow the camera window's rule (web/cassini-os/src/head-quiet.html,
@@ -48,7 +49,6 @@ import mosaic  # noqa: E402
 VERSION = "reel-v4"
 SET_GAP = 300          # seconds between frames of one filter set
 REPEAT_GAP = 120       # stacking.find_repeats' window
-MOSAIC_GAP = 1800      # pictures more than this far apart never share a mosaic
 VIEW = 1536            # full resolution pixels a picture shows (a north-up frame fits in 1448)
 OUT = 1024             # ...kept at two thirds of full resolution
 SCALE = OUT / VIEW
@@ -57,6 +57,7 @@ TRUE_BLUES = ("BL1", "BL2", "VIO")
 
 _index = None
 _shots = {}
+_shot_of = {}
 _lock = threading.Lock()
 _mosaic_lock = threading.Lock()   # mosaic keeps per frame work in a module level dict
 
@@ -149,15 +150,17 @@ def bodies():
 
 
 def shots(target):
-    """The body's pictures in time order, each {ids, t (unix seconds), cam, kind, filters, obs, window}:
-    ids longest wavelength first, kind true/false/two/bw, window = how many of the pictures just
-    before it share its mosaic."""
+    """The body's pictures in time order, each {ids, t (unix seconds), cam, kind, filters, obs, panels, window}:
+    ids longest wavelength first, kind true/false/two/bw, panels = the earlier pictures it is drawn over
+    (mosaic.panels: a real mosaic tile of the same filter), window = how many, also = its other frames
+    (stacked into it, or in its colour set but not used)."""
     with _lock:
         if target in _shots:
             return _shots[target]
         idx, sets = load_index()
         rows = idx.index[idx["TARGET_NAME"] == target].tolist()
-        out, done, last_single = [], set(), {}
+        out, done, last_single, last_shot = [], set(), {}, {}
+        members = idx.loc[rows].query("set >= 0").groupby("set")["id"].agg(list).to_dict()
         for q in rows:
             r = idx.loc[q]
             s = int(r["set"])
@@ -169,30 +172,81 @@ def shots(target):
                 st = sets[s]
                 use = [idx.loc[u] for u in st["use"]]
                 out.append({"ids": [u["id"] for u in use], "t": float(st["ready"]), "cam": cam, "kind": st["kind"],
-                            "filters": [colour_filter(str(u["filter1"]), str(u["filter2"])) for u in use], "obs": r["OBSERVATION_ID"]})
+                            "filters": [colour_filter(str(u["filter1"]), str(u["filter2"])) for u in use], "obs": r["OBSERVATION_ID"],
+                            "also": [i for i in members.get(s, []) if i not in {u["id"] for u in use}]})
                 continue
             key = (cam, r["OBSERVATION_ID"], r["FILTER_NAME"])
             if key in last_single and r["seconds_1970"] - last_single[key] <= REPEAT_GAP:
+                last_shot[key].setdefault("also", []).append(r["id"])
                 continue   # a repeat exposure, stacked into the picture before
             last_single[key] = r["seconds_1970"]
-            out.append({"ids": [r["id"]], "t": float(r["seconds_1970"]), "cam": cam, "kind": "bw",
-                        "filters": [f"{r['filter1']}/{r['filter2']}"], "obs": r["OBSERVATION_ID"]})
+            last_shot[key] = {"ids": [r["id"]], "t": float(r["seconds_1970"]), "cam": cam, "kind": "bw",
+                             "filters": [f"{r['filter1']}/{r['filter2']}"], "obs": r["OBSERVATION_ID"]}
+            out.append(last_shot[key])
         out.sort(key=lambda s: s["t"])
-        # the rolling mosaic, like export_sequence's: the pictures before this one from the same camera,
-        # observation and colour, back to a gap of MOSAIC_GAP
-        for n, s in enumerate(out):
-            window, j, t = 0, n - 1, s["t"]
-            while j >= 0 and window < mosaic.buffer_size - 1:
-                p = out[j]
-                j -= 1
-                if p["cam"] != s["cam"]:
-                    continue
-                if p["obs"] != s["obs"] or (p["kind"] == "bw") != (s["kind"] == "bw") or t - p["t"] > MOSAIC_GAP:
-                    break
-                window, t = window + 1, p["t"]
-            s["window"] = window
+        # the mosaic: the earlier pictures of the same filter this one is a new tile next to, by the rule in
+        # mosaic.panels, from where SPICE puts the body in each frame (the geometry cache)
+        where = geometry([i for s in out for i in s["ids"]])
+        pictures = []
+        for s in out:
+            g = where.get(s["ids"][len(s["ids"]) // 2])   # a set is aligned to its middle frame
+            pictures.append({"t": s["t"], "cam": s["cam"], "obs": s["obs"], "filter": (s["kind"], tuple(s["filters"])),
+                             "x": g and g[0], "y": g and g[1], "z": g and g[2]})
+        for s, panels in zip(out, mosaic.panels(pictures)):
+            s["panels"] = panels
+            s["window"] = len(panels)
         _shots[target] = out
+        _shot_of[target] = {i: n for n, s in enumerate(out) for i in s["ids"] + s.get("also", [])}
         return out
+
+
+def geometry(ids):
+    """Where SPICE puts the body in each of the frames ids, from the geometry cache (bootleg_autonav,
+    CASSINI_GEOMETRY_CACHE): {id: (x, y, z)}, find_target's centring shift in full resolution pixels and
+    the distance in km. Frames that are not cached, or that SPICE could not place, are left out."""
+    import bootleg_autonav as ba
+    if not ba.GEOMETRY_CACHE or not os.path.exists(ba.GEOMETRY_CACHE):
+        return {}
+    db, out = ba._geometry_db(), {}
+    for k in range(0, len(ids), 900):
+        part = ids[k:k + 900]
+        for frame, x, y, z in db.execute(f"SELECT frame, x, y, z FROM target WHERE version = ? AND error IS NULL "
+                                         f"AND frame IN ({','.join('?' * len(part))})", (ba.GEOMETRY_VERSION, *part)):
+            out[frame] = (x, y, z)
+    return out
+
+
+_target_of = None
+
+
+_warming = set()
+
+
+def target_of():
+    """{frame id: target} for every frame in the index (the frame server makes it as it starts)."""
+    global _target_of
+    with _lock:
+        if _target_of is None:
+            idx, _ = load_index()
+            _target_of = dict(zip(idx["id"], idx["TARGET_NAME"]))
+    return _target_of
+
+
+def mosaic_of(frame_id, wait=True):
+    """(target, n) when frame_id is in picture n of its body's reel (stacked into it, or one of its colour
+    set) and that picture is a mosaic tile drawn over earlier ones; otherwise None. wait=False answers None
+    while the body's reel is still being worked out (seconds, 20 for Saturn) and works it out meanwhile."""
+    target = target_of().get(frame_id)
+    if not isinstance(target, str):
+        return None
+    if not wait and target not in _shots:
+        if target not in _warming:
+            _warming.add(target)
+            threading.Thread(target=shots, args=(target,), daemon=True).start()
+        return None
+    reel = shots(target)
+    n = _shot_of[target].get(frame_id)
+    return (target, n) if n is not None and reel[n]["panels"] else None
 
 
 def _cached(path, make):
@@ -244,8 +298,8 @@ def shot_webp(target, n, size, cache, use_mosaic=True, slots=None):
     slots = a semaphore held while making it (not while serving it from the cache)"""
     reel = shots(target)
     s = reel[n]
-    window = [reel[j] for j in range(n - 1, -1, -1) if reel[j]["cam"] == s["cam"]][:s["window"]] if use_mosaic else []
-    window = window[::-1] + [s]
+    window = [reel[j] for j in s["panels"]] if use_mosaic else []
+    window = window + [s]
     key = "_".join(s["ids"]) + ("" if len(window) == 1 else "-" + hashlib.sha1(
         ",".join("_".join(w["ids"]) for w in window).encode()).hexdigest()[:12])
     path = os.path.join(cache, VERSION, str(size), key + ".webp")
