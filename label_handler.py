@@ -245,14 +245,17 @@ class label:
     """
     def auto_center(self, border=True):
         im_year = int(self.info["IMAGE_TIME"].split('-')[0])
-        global cur_year
-        
-        if cur_year != im_year:
-            ba.unload_kernels()
-            ba.load_kernels(im_year,im_year)
-            cur_year = im_year
-            
-        target_loc = ba.find_target(self, False, "graphs")    
+
+        def load_year():
+            global cur_year
+            if cur_year != im_year:
+                ba.unload_kernels()
+                # set first: a year whose kernels fail to load is not reloaded for every frame
+                cur_year = im_year
+                ba.load_kernels(im_year,im_year)
+
+        # from the geometry cache when it is on (the frame server), so no kernels have to be loaded
+        target_loc = ba.find_target_cached(self, load_year)
         print(target_loc)
         return self.translate("png", target_loc[0],target_loc[1],target_loc[3],border)
     
