@@ -35,6 +35,10 @@ const env = process.env;
     for (const k of ["frame", "updateBodies", "updateTrail", "updateOrbits", "updateLabels", "updateHud", "drawTimeline", "updateFocusRow",
                      "updateProbeTrail", "studyAfterRender", "studyHud", "studyBeforeHud"]) wrap(window, k);
     T.render = 0; const r0 = renderer.render; renderer.render = function () { const a = performance.now(); r0.apply(this, arguments); T.render += performance.now() - a; };
+    for (const [proto, k] of [[CanvasRenderingContext2D.prototype, "getImageData"], [CanvasRenderingContext2D.prototype, "drawImage"], [CanvasRenderingContext2D.prototype, "putImageData"]]) {
+      const f = proto[k], name = "2d." + k; T[name + ".calls"] = 0;
+      proto[k] = function () { const a = performance.now(); try { return f.apply(this, arguments); } finally { T[name] = (T[name] || 0) + performance.now() - a; T[name + ".calls"]++; } };
+    }
     window.__iv = []; let last = 0; const tick = t => { if (last) window.__iv.push(t - last); last = t; window.__rid = requestAnimationFrame(tick); }; requestAnimationFrame(tick);
   });
   await cdp.send("Profiler.enable"); await cdp.send("Profiler.setSamplingInterval", { interval: 500 }); await cdp.send("Profiler.start");

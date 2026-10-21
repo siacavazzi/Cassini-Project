@@ -63,6 +63,17 @@ for old, new in [
     assert study.count(old) == 1, old
     study = study.replace(old, new)
 
+# performance (perf.html): its style joins the head's and its script runs before the chrome script (after the settings
+# script), so the viewer can ask window.cassiniPerf for its pixel ratio when it makes its renderers
+perf = open(os.path.join(os.path.dirname(os.path.abspath(sys.argv[2])), "perf.html")).read()
+fpart = lambda tag: perf[perf.index(f"<{tag}"):perf.index(f"</{tag}>") + len(tag) + 3]
+for old, new in [
+    ("</style>\n</head>", fpart("style")[len("<style>"):] + "\n</head>"),
+    ("<script>\n// ---------- Cassini OS chrome", fpart("script") + "\n<script>\n// ---------- Cassini OS chrome"),
+]:
+    assert study.count(old) == 1, old
+    study = study.replace(old, new)
+
 # per-body camera windows (bodywin.html, a setting): its style joins the head's and its script runs after the chrome
 # script, whose camera feed and window manager it reuses
 bodywin = open(os.path.join(os.path.dirname(os.path.abspath(sys.argv[2])), "bodywin.html")).read()
@@ -156,6 +167,50 @@ rep('  } else renderer.render(scene, camera);\n', """  } else renderer.render(sc
 """)
 rep('    el.style.transform = `translate(${x}px, ${y}px) translateY(-50%)`;\n', """    el.style.transform = `translate(${x}px, ${y}px) translateY(-50%)`;
     if (window.studyLabel) window.studyLabel(name, el, (vA.x + 1) / 2 * w, y, pr);
+""")
+
+# performance (perf.html): the canvases are not kept between frames (keeping them costs a copy per frame), the pixel
+# ratio follows Settings > Performance, a frame in which nothing moved is not drawn, and the frame rate is measured
+rep('const renderer = new THREE.WebGLRenderer({ canvas, antialias: true, logarithmicDepthBuffer: true, preserveDrawingBuffer: true });\nrenderer.setPixelRatio(Math.min(window.devicePixelRatio, 2));',
+    'const renderer = new THREE.WebGLRenderer({ canvas, antialias: true, logarithmicDepthBuffer: true, powerPreference: "high-performance" });\nrenderer.setPixelRatio(window.cassiniPerf ? cassiniPerf.pixelRatio() : Math.min(window.devicePixelRatio, 2));')
+rep('new THREE.WebGLRenderer({ canvas: hudCanvas, antialias: true, logarithmicDepthBuffer: true, preserveDrawingBuffer: true }) : null;\nif (hudRenderer) { hudRenderer.setPixelRatio(Math.min(window.devicePixelRatio, 2));',
+    'new THREE.WebGLRenderer({ canvas: hudCanvas, antialias: true, logarithmicDepthBuffer: true }) : null;\nif (hudRenderer) { hudRenderer.setPixelRatio(window.cassiniPerf ? cassiniPerf.hudPixelRatio() : Math.min(window.devicePixelRatio, 2));')
+rep("""  renderer.clear();
+  const cd = camera.position.distanceTo(cassini.position);
+  if (cd < 0.01) {""", """  const draw = !window.cassiniPerf || cassiniPerf.draw(now);
+  if (draw) renderer.clear();
+  const cd = camera.position.distanceTo(cassini.position);
+  if (!draw) {}
+  else if (cd < 0.01) {""")
+rep("""  if (hudRenderer) { if (window.studyBeforeHud) window.studyBeforeHud(); hudRenderer.render(hudScene, camera); if (window.studyAfterRender) window.studyAfterRender(); }
+""", """  if (hudRenderer && draw && !document.body.classList.contains("nohud")) {
+    if (window.studyBeforeHud) window.studyBeforeHud();
+    hudRenderer.render(hudScene, camera);
+    if (window.studyAfterRender) window.studyAfterRender();
+  }
+  if (window.cassiniPerf) cassiniPerf.frame(now, draw);
+""")
+# the moons' painted look (noise, craters) is only worked out when there is no surface map to show instead
+rep("""        float m = fbm(nb * 5.0) - 0.5;
+        float craters = smoothstep(0.62, 0.7, vnoise(nb * 22.0)) * 0.12;
+        vec3 alb = color * (1.0 + 0.32 * m - craters);""", """        float m = 0.0, craters = 0.0;
+        if (hasMap < 0.5) { m = fbm(nb * 5.0) - 0.5; craters = smoothstep(0.62, 0.7, vnoise(nb * 22.0)) * 0.12; }
+        vec3 alb = color * (1.0 + 0.32 * m - craters);""")
+rep('t.anisotropy = renderer.capabilities.getMaxAnisotropy();', 't.anisotropy = Math.min(8, renderer.capabilities.getMaxAnisotropy());')
+# the Moments list greys out the moments already past: only touch the list when that count changes
+rep('  document.querySelectorAll("#mlist li").forEach(li => li.classList.toggle("past", +li.dataset.et < state.et - 3600));\n',
+    """  const past = momentsBefore(state.et - 3600);
+  if (past !== lastPast) { lastPast = past; document.querySelectorAll("#mlist li").forEach(li => li.classList.toggle("past", +li.dataset.et < state.et - 3600)); }
+""")
+rep('let lastT = performance.now(), lastTrailEt = -1e99, lastTrailFocus = "", lastReady = true;\n',
+    """let lastT = performance.now(), lastTrailEt = -1e99, lastTrailFocus = "", lastReady = true, lastPast = -1, momentEts = null;
+// how many moments in the list come before et (their times are read from the list once, and again if it changes)
+function momentsBefore(et) {
+  const list = $("mlist");
+  if (!momentEts || momentEts.n !== list.childElementCount) momentEts = { n: list.childElementCount, ets: [...list.querySelectorAll("li[data-et]")].map(li => +li.dataset.et) };
+  let c = 0; for (const t of momentEts.ets) if (t < et) c++;
+  return c;
+}
 """)
 
 # HUD hook: studies can add their own read-outs
