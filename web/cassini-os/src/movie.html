@@ -27,7 +27,7 @@
 body.idle #moviecard { opacity: 1; pointer-events: auto; background: transparent; border-color: transparent; box-shadow: none; -webkit-backdrop-filter: none; backdrop-filter: none; }
 body.idle #moviecard :is(.titlebar, .mvbar) { opacity: 0; }
 body.idle .mvwell { border-color: transparent; box-shadow: 0 6px 30px rgba(0,0,0,.6); }
-@media (max-width: 600px) { #moviecard, #moviecard.zoomed { width: calc(100% - 16px); left: 8px; top: calc(env(safe-area-inset-top, 0px) + 30px); } }
+body.phone #moviecard:not(.full) { width: calc(100% - 16px) !important; left: 8px !important; top: calc(env(safe-area-inset-top, 0px) + 30px) !important; }
 </style>
 
 <section class="win" id="moviecard" aria-label="Movie" hidden>
@@ -72,7 +72,7 @@ body.idle .mvwell { border-color: transparent; box-shadow: 0 6px 30px rgba(0,0,0
   const at = i => { const k = i >= 0 ? order[i] : undefined; return k === undefined ? null : { id: catalog.id[k], et: catalog.et[k], k }; };
 
   // ---- frames: loaded ahead of the play head so 24 fps does not stutter ----
-  const size = () => (card.classList.contains("zoomed") ? 1024 : 512);
+  const size = () => (window.cassiniWM && window.cassiniWM.big ? window.cassiniWM.big(card, card.querySelector(".mvwell")) : card.classList.contains("zoomed")) ? 1024 : 512;
   function want(f) {
     let b = M.buf.get(f.id);
     if (!b || b.size !== size()) {

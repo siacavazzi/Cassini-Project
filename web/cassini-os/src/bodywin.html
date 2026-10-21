@@ -28,7 +28,7 @@
    an id, so it beats the head's id-strength rule that fades every window) */
 body.idle #app .bodywin:has(.well.has-frame) { opacity: 1; pointer-events: auto; background: transparent; border-color: transparent; box-shadow: none; -webkit-backdrop-filter: none; backdrop-filter: none; }
 body.idle .bodywin:has(.well.has-frame) .camlabel { opacity: 0; }
-@media (max-width: 600px) { .bodywin { --pw: 40vw; } .bodywin .info, .bodywin .chans { display: none; } }
+body.phone .bodywin { --pw: 40vw; } body.phone .bodywin:not(.full) :is(.info, .chans) { display: none; }
 </style>
 
 <script>

@@ -53,12 +53,10 @@ body.s-nolabels #labels, body.s-nolabels #reticle { display: none; }
 body.s-nohudline #hudline { display: none; }
 body.s-nochans .camwin .chans { display: none !important; }
 body.s-noinfo .camwin .info { display: none; }
-@media (max-width: 600px) {
-  #settings { left: 8px !important; top: calc(env(safe-area-inset-top, 0px) + 30px) !important; width: calc(100% - 16px) !important; height: calc(100% - 50px); }
-  #settings .sbody { grid-template-columns: 1fr; grid-template-rows: auto minmax(0, 1fr); }
-  #settings nav { flex-direction: row; border-right: 0; border-bottom: 1px solid var(--q-line); overflow-x: auto; }
-  .srow input[type=range] { width: 96px; }
-}
+body.phone #settings { left: 8px !important; top: calc(env(safe-area-inset-top, 0px) + 30px) !important; width: calc(100% - 16px) !important; height: calc(100% - 50px) !important; }
+body.phone #settings .sbody { grid-template-columns: 1fr; grid-template-rows: auto minmax(0, 1fr); }
+body.phone #settings nav { flex-direction: row; border-right: 0; border-bottom: 1px solid var(--q-line); overflow-x: auto; }
+body.phone .srow input[type=range] { width: 96px; }
 </style>
 
 <section class="win" id="settings" aria-label="Settings" hidden>
