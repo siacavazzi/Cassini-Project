@@ -158,8 +158,9 @@ def build_mission(args):
 
 
 def month_et(year, month):
-    """The start of a month as ET (seconds past J2000), near enough for cutting the data: the viewer only
-    uses the values written to mission.json, never works them out itself."""
+    """The start of a month as ET (seconds past J2000), near enough for cutting the data: leap seconds
+    after 2000 are left out, so an edge can sit up to ~5 s early. That is harmless, since the viewer only
+    uses the values written to mission.json and never works them out itself."""
     return (datetime.datetime(year, month, 1) - datetime.datetime(2000, 1, 1, 12)).total_seconds() + 64.184
 
 
