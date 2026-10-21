@@ -584,7 +584,7 @@ body.idle .camwin .well.has-frame { border-color: transparent; box-shadow: 0 6px
     const tray = $("tray"); tray.innerHTML = "";
     document.querySelectorAll(".win").forEach(w => {
       if (!w.hidden || !w.dataset.min) return;
-      const b = document.createElement("button"); b.textContent = NAMES[w.id];
+      const b = document.createElement("button"); b.textContent = NAMES[w.id] || w.dataset.name;
       b.addEventListener("click", e => { e.stopPropagation(); restore(w); }); tray.appendChild(b);
     });
   }
@@ -606,7 +606,8 @@ body.idle .camwin .well.has-frame { border-color: transparent; box-shadow: 0 6px
     if (wasMin) await animateTo(w, $("tray"), true);
     w.classList.remove("shaded");
   }
-  document.querySelectorAll(".win").forEach(w => {
+  // (each window is wired once; windows made later, such as the per-body camera windows, call cassiniWM.wire)
+  function wire(w) {
     const bar = w.querySelector(".titlebar");
     w.addEventListener("pointerdown", () => front(w));
     w.querySelector(".close").addEventListener("click", e => { e.stopPropagation(); minimize(w); });   // closing tucks the window into the menu-bar tray, never loses it
@@ -628,14 +629,16 @@ body.idle .camwin .well.has-frame { border-color: transparent; box-shadow: 0 6px
     });
     const end = () => { drag = null; };
     bar.addEventListener("pointerup", end); bar.addEventListener("pointercancel", end);
-  });
+  }
+  document.querySelectorAll(".win").forEach(wire);
   front($("dock"));
+  window.cassiniWM = { wire, front, minimize, restore, syncMenu: () => syncMenu() };
 
   // layout is the viewer's own: where windows sit and which are tucked away is remembered on this device
   const LAYOUT = "cassini-os-layout-v2";
   function saveLayout() {
     const out = {};
-    document.querySelectorAll(".win").forEach(w => { out[w.id] = { left: w.style.left, top: w.style.top, width: w.style.width, min: !!w.dataset.min, zoomed: w.classList.contains("zoomed") }; });
+    document.querySelectorAll(".win:not(.bodywin)").forEach(w => { out[w.id] = { left: w.style.left, top: w.style.top, width: w.style.width, min: !!w.dataset.min, zoomed: w.classList.contains("zoomed") }; });
     try { localStorage.setItem(LAYOUT, JSON.stringify(out)); } catch (e) {}
   }
   let saved = null;
@@ -866,11 +869,18 @@ body.idle .camwin .well.has-frame { border-color: transparent; box-shadow: 0 6px
     $("lkeys").innerHTML = CLS.map(([n, c]) => `<span><i style="background:${c}"></i>${n}</span>`).join("");
   }
   // position in catalog.byCam[cam] of the camera's latest frame at et, or -1
-  function lastOfCam(cam, et) {
-    const a = catalog.byCam[cam].et; let lo = 0, hi = a.length - 1;
+  function lastOfCam(cam, et, body) {
+    const a = framesOf(cam, body).et; let lo = 0, hi = a.length - 1;
     if (!a.length || et < a[0]) return -1;
     while (hi - lo > 1) { const m = (lo + hi) >> 1; if (a[m] <= et) lo = m; else hi = m; }
     return a[hi] <= et ? hi : lo;
+  }
+  // a camera's frames in time order, all of them or only those of one target (made the first time they are asked for)
+  function framesOf(cam, body) {
+    if (!body) return catalog.byCam[cam];
+    const key = `${cam}:${body}`, by = catalog.byCamBody = catalog.byCamBody || {};
+    if (!by[key]) { const ks = catalog.byCam[cam].ks.filter(k => catalog.target[k] === body); by[key] = { ks, et: Float64Array.from(ks, k => catalog.et[k]) }; }
+    return by[key];
   }
   window.studyBars = (g, w, h) => {
     prep();
@@ -926,13 +936,15 @@ body.idle .camwin .well.has-frame { border-color: transparent; box-shadow: 0 6px
   // One window per camera, so the feed never flicks between narrow-angle and wide-angle frames. Each shows
   // its camera's latest frame, or, once a filter set's channels are all taken, the set's colour composite
   // (made by the frame server) with the channels that went into it underneath.
+  // A feed can also be one camera's frames of one target only (card.dataset.body), for the per-body windows;
+  // win is the window it sits in, whose zoom asks for the bigger picture.
   function cameraFeed(card) {
-    const cam = card.dataset.cam, well = card.querySelector(".well"), shot = card.querySelector(".shot"), chans = card.querySelector(".chans");
+    const cam = card.dataset.cam, body = card.dataset.body || null, win = card.closest(".win") || card, well = card.querySelector(".well"), shot = card.querySelector(".shot"), chans = card.querySelector(".chans");
     const field = f => card.querySelector(`[data-f="${f}"]`) || { set textContent(v) {}, set innerHTML(v) {} };
     let want = null, shownKey = null, shown = null, next = [], lastK = -2, lastReady = null, stripKey = "", stripSet = null, zoomed = false;
     const failed = new Set();   // composites the server could not make: those sets show their frames instead
     const missing = new Set();  // frames the server does not have
-    const size = () => card.classList.contains("zoomed") ? 1024 : 512;
+    const size = () => win.classList.contains("zoomed") ? 1024 : 512;
     const frameUrl = (id, sz) => `${FRAMES}/frames/${id}.webp?size=${sz || size()}`;
     const colorUrl = s => `${FRAMES}/frames/color.webp?ids=${s.use.map(k => catalog.id[k]).join(",")}&size=${size()}`;
     const fname = k => colourFilter(k) || `${catalog.f1[k]}/${catalog.f2[k]}`;
@@ -1061,7 +1073,8 @@ body.idle .camwin .well.has-frame { border-color: transparent; box-shadow: 0 6px
     let cat = null;
     function update(force) {
       if (catalog !== cat) { cat = catalog; lastK = -2; stripKey = ""; failed.clear(); made.clear(); missing.clear(); warmed.clear(); shown = null; shownKey = null; }   // another mission year loaded
-      const p = lastOfCam(cam, state.et), k = p < 0 ? -1 : catalog.byCam[cam].ks[p];
+      if (win.hidden && !force) return;   // a closed or tucked-away window fetches nothing; it catches up when shown
+      const p = lastOfCam(cam, state.et, body), k = p < 0 ? -1 : framesOf(cam, body).ks[p];
       const live = k >= 0 && state.et - catalog.et[k] < 180;
       card.classList.toggle("live", live);
       // a camera that has been quiet for longer than the stale setting shows nothing rather than an old picture
@@ -1089,22 +1102,23 @@ body.idle .camwin .well.has-frame { border-color: transparent; box-shadow: 0 6px
       field("filter").innerHTML = `<span class="swatch" style="background:${CLS[c][1]}"></span>${catalog.f1[k]}/${catalog.f2[k]}${nmOf(k) ? ` · ${Math.round(nmOf(k))} nm` : ""}${pol}`;
       field("colour").textContent = !s ? (colourFilter(k) ? "Single filter" : "Clear, no colour") : ready
         ? colourText(s, si) : `${KIND[s.kind]} set, ${s.use.filter(q => catalog.et[q] <= state.et).length} of ${s.use.length} channels taken`;
-      const n24 = p - lastOfCam(cam, state.et - 86400);
+      const n24 = p - lastOfCam(cam, state.et - 86400, body);
       field("details").textContent = `${kp ? `${kp < 10 ? kp.toFixed(2) : fmt(kp)} km/px · ` : ""}${fmt(n24)} frames in the last 24 h`;
       card.querySelector(".shottag").textContent = want.set >= 0 ? `${s.use.map(q => catalog.id[q]).join(" ")}` : `${catalog.id[k]} · ${catalog.f1[k]}/${catalog.f2[k]}`;
-      const ks = catalog.byCam[cam].ks;
+      const ks = framesOf(cam, body).ks;
       next = [1, 2, 3, 4, 5, 6].map(d => ks[p + d]).filter(q => q !== undefined).map(q => view(q, catalog.et[q]).key);
       pump();
     }
     // zooming the window asks for the bigger picture
     new MutationObserver(() => {
-      if (zoomed === card.classList.contains("zoomed")) return;
+      if (zoomed === win.classList.contains("zoomed")) return;
       zoomed = !zoomed;
       if (catalog && catalog.byCam) update(true);
-    }).observe(card, { attributes: true, attributeFilter: ["class"] });
+    }).observe(win, { attributes: true, attributeFilter: ["class"] });
     return update;
   }
   const feeds = [...document.querySelectorAll(".camwin")].map(cameraFeed);
+  window.cassiniFeeds = { cameraFeed, framesOf, lastOfCam, prep, stale: () => S.get("cameras.stale") * 3600 };
   // a change to what the windows show takes effect straight away
   for (const key of ["cameras.composites", "cameras.stale"]) S.on(key, () => { if (typeof catalog !== "undefined" && catalog && catalog.byCam) feeds.forEach(f => f(true)); });
 

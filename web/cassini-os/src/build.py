@@ -52,6 +52,14 @@ for old, new in [
     assert study.count(old) == 1, old
     study = study.replace(old, new)
 
+# per-body camera windows (bodywin.html, a setting): its style joins the head's and its script runs after the chrome
+# script, whose camera feed and window manager it reuses
+bodywin = open(os.path.join(os.path.dirname(os.path.abspath(sys.argv[2])), "bodywin.html")).read()
+bpart = lambda tag: bodywin[bodywin.index(f"<{tag}"):bodywin.index(f"</{tag}>") + len(tag) + 3]
+assert study.count("</style>\n</head>") == 1
+study = study.replace("</style>\n</head>", bpart("style")[len("<style>"):] + "\n</head>")
+study += bpart("script") + "\n"
+
 def rep(old, new, count=1):
     global script
     assert script.count(old) == count, (old, script.count(old))
