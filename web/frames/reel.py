@@ -224,7 +224,7 @@ def picture(ids, cache):
         report["ids"] = list(ids)
         made.update(report)
         out = io.BytesIO()
-        Image.fromarray(np.ascontiguousarray(view)).resize((OUT, OUT), Image.LANCZOS).save(out, "PNG", compress_level=3)
+        Image.fromarray(np.ascontiguousarray(view)).resize((OUT, OUT), Image.LANCZOS).save(out, "PNG", compress_level=1)
         return out.getvalue()
 
     png = _cached(base + ".png", make)
