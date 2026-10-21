@@ -154,9 +154,13 @@ def make_handler(site, cache):
         def __init__(self, *args, **kwargs):
             super().__init__(*args, directory=site or os.devnull, **kwargs)
 
+        revalidate = False
+
         def end_headers(self):
             self.send_header("Access-Control-Allow-Origin", "*")
             self.send_header("Access-Control-Expose-Headers", "X-Composite, X-Reel")
+            if self.revalidate:
+                self.send_header("Cache-Control", "no-cache")
             super().end_headers()
 
         def do_OPTIONS(self):
@@ -227,6 +231,9 @@ def make_handler(site, cache):
                     return self.send_error(404, "Frame not in the archive")
             if not site:
                 return self.send_error(404)
+            # pages and their JSON change with every rebuild, so browsers must check before reusing them;
+            # frames, textures and track files keep the default heuristic caching
+            self.revalidate = url.path.endswith(("/", ".html", ".json"))
             return super().do_GET()
 
         def log_message(self, fmt, *args):
