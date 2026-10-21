@@ -9,6 +9,10 @@ data.zip (read through data_source, so nothing has to be unzipped).
 Run it from the repo folder so data_source finds the zip index it already built (zip_index/);
 copied elsewhere, point CASSINI_REPO at the repo.
 
+CASSINI_GEOMETRY_CACHE=<file>.sqlite lets body reels centre frames from cached SPICE answers
+instead of loading a year of kernels (seconds from a USB disk) whenever the year changes; fill
+it once with `python bootleg_autonav.py geometry` (see bootleg_autonav.py).
+
 Routes:
   /frames/<ID>.webp?size=256   the frame as WebP, longest side 128-1024 px (default 512),
                                made on first request and cached on disk
