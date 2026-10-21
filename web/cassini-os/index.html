@@ -1179,7 +1179,7 @@ body.phone #hllist { grid-template-columns: 1fr; }
   let auto = 1;                          // automatic quality's share of the user's resolution (1 = all of it)
   // it moves in fixed steps, so the canvas is not reallocated at a new odd size every few seconds
   const STEPS = [1, 0.9, 0.8, 0.7, 0.6, 0.5, 0.4, 0.3];
-  let n = 0, drawn = 0, t0 = 0, tPrev = 0, worst = 0, slow = 0, good = 0, raiseAfter = 0, raiseWait = 8000, lastDrop = 0, fps = 0, best = 0, born = 0;
+  let n = 0, drawn = 0, t0 = 0, tPrev = 0, worst = 0, slow = 0, good = 0, raiseAfter = 0, raiseWait = 8000, lastRaise = -1e9, fps = 0, best = 0, born = 0;
   let lastKey = null, lastDraw = -1e9, busyUntil = 0, applied = 0, meter = null;
   const user = () => S.get("perf.resolution") / 100;
   const P = window.cassiniPerf = {
@@ -1224,9 +1224,9 @@ body.phone #hllist { grid-template-columns: 1fr; }
         const next = fit.length ? (fit.find(x => x <= want) || fit[Math.min(2, fit.length - 1)]) : auto;
         if (next < auto) {
           if (fit.indexOf(next) > 2) auto = fit[2]; else auto = next;
-          // dropping again soon after a raise: wait longer before the next raise
-          if (now - lastDrop < raiseWait + 4000) raiseWait = Math.min(120000, raiseWait * 2);
-          lastDrop = now; raiseAfter = now + raiseWait; apply();
+          // dropping again soon after a raise: wait twice as long before the next try
+          if (now - lastRaise < 10000) raiseWait = Math.min(120000, raiseWait * 2);
+          raiseAfter = now + raiseWait; apply();
         }
       } else {
         slow = 0;
@@ -1234,7 +1234,7 @@ body.phone #hllist { grid-template-columns: 1fr; }
         // screen's refresh rate (which hides any headroom) it tries a step after six, and a drop that follows
         // doubles the wait before the next try
         const up = STEPS.slice().reverse().find(x => x > auto + 1e-6), capped = rate >= best * 0.95;
-        if (up && now > raiseAfter && (rate * (auto / up) ** 2 >= target || capped) && ++good >= (capped ? 6 : 3)) { good = 0; auto = up; raiseAfter = now + 3000; apply(); }
+        if (up && now > raiseAfter && (rate * (auto / up) ** 2 >= target || capped) && ++good >= (capped ? 6 : 3)) { good = 0; auto = up; lastRaise = now; raiseAfter = now + 3000; apply(); }
       }
     }
   };
