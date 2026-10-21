@@ -1060,11 +1060,11 @@ body.idle .win.full .titlebar { opacity: 0; }
       // while a pass's mosaic is shown, its next frames keep it up (until the mosaic with them arrives, mosaicOf)
       const keep = obsShown && catalog.obs[v.k] === obsShown;
       shownKey = v.key; shown = v;
-      if (!keep) { shot.src = im.src; obsShown = null; well.style.aspectRatio = ""; well.classList.remove("mosaic"); }
+      if (!keep) { shot.src = im.src; obsShown = null; obsK = -1; well.style.aspectRatio = ""; well.classList.remove("mosaic"); }
       well.classList.add("has-frame"); well.classList.toggle("composite", v.set >= 0);
       if (!keep) card.querySelector(".kindtag").textContent = v.set >= 0 ? KIND[catalog.sets[v.set].kind].toUpperCase() : "";
       if (v.set >= 0) { channelsFrom(im, catalog.sets[v.set]); howMade(v); }
-      if (v.tile) mosaicOf(v);
+      if (v.tile && !keep) mosaicOf(v);   // a frame kept behind its pass's mosaic asked for it already (update)
     }
     function request(which, v) {
       lane[which] = v; v.cat = catalog;
@@ -1122,17 +1122,32 @@ body.idle .win.full .titlebar { opacity: 0; }
     // The Settings window's "Mosaics in camera windows" (cameras.mosaics) or window.cassiniMosaics = false turns this off.
     // A pass's mosaic (X-Reel names the observation) is every tile so far, every filter, in its own shape: the
     // window takes that shape and keeps it for the rest of the observation.
-    let mosaicUrl = null, obsShown = null, obsTiles = 0;
-    function mosaicOf(w) {
+    // While a pass's mosaic is up, each new frame of the pass asks for the mosaic with it as soon as it is the
+    // window's frame (pass = true: by its own id, every filter, not after its picture or its set's composite
+    // loaded), so the mosaic grows as the pictures are taken. One mosaic request is in flight per window: in a
+    // burst the newest frame waits and the ones it passes are skipped, so the mosaic never falls further behind.
+    let mosaicUrl = null, obsShown = null, obsTiles = 0, obsK = -1, mBusy = false, mNext = null, lastAsk = "";
+    function mosaicOf(w, pass) {
       if (window.cassiniMosaics === false || !S.get("cameras.mosaics")) return;
-      const id = catalog.id[w.set >= 0 ? catalog.sets[w.set].use[0] : w.k];
+      const id = catalog.id[w.set >= 0 && !pass ? catalog.sets[w.set].use[0] : w.k], ask = `${id}:${size()}`;
+      if (ask === lastAsk) return;
+      if (mBusy) { mNext = [w, pass]; return; }
+      lastAsk = ask; mBusy = true;
+      const cat0 = catalog, done = () => {
+        mBusy = false;
+        const q = mNext; mNext = null;
+        if (q && catalog === cat0 && want && catalog.et[q[0].k] <= catalog.et[want.k]) mosaicOf(...q);
+      };
       fetch(`${FRAMES}/frames/mosaic/${id}.webp?size=${size()}`).then(async r => {
         if (!r.ok) return;
         const rep = JSON.parse(r.headers.get("X-Reel") || "null");
-        // a pass's mosaic that arrives after the window moved on to the pass's next frame still shows, unless
-        // the window already has a bigger one
-        const late = () => shown !== w && !(rep && rep.observation && shown && catalog.obs[shown.k] === catalog.obs[w.k]
-          && (obsShown !== catalog.obs[w.k] || rep.mosaic > obsTiles));
+        // a pass's mosaic shows while the window is still in the pass and the clock is not before its frame,
+        // unless the mosaic up already has a later frame (and is not ahead of the clock after a scrub back);
+        // a rolling mosaic only while its frame is the one shown
+        const late = () => catalog !== cat0 || (rep && rep.observation
+          ? !want || catalog.obs[want.k] !== catalog.obs[w.k] || catalog.et[w.k] > catalog.et[want.k]
+            || (obsShown === catalog.obs[w.k] && obsK >= 0 && catalog.et[obsK] >= catalog.et[w.k] && catalog.et[obsK] <= catalog.et[want.k])
+          : shown !== w);
         if (late()) return;
         const blob = await r.blob();
         if (late()) return;
@@ -1140,13 +1155,13 @@ body.idle .win.full .titlebar { opacity: 0; }
         shot.src = mosaicUrl = URL.createObjectURL(blob);
         well.classList.add("mosaic");
         if (rep && rep.observation) {
-          obsShown = catalog.obs[w.k]; obsTiles = rep.mosaic;
+          obsShown = catalog.obs[w.k]; obsTiles = rep.mosaic; obsK = w.k;
           well.style.aspectRatio = `${rep.width} / ${rep.height}`;
           card.querySelector(".kindtag").textContent = `${rep.filters >= 3 ? ((rep.filter_names || []).includes("GRN") ? "COLOUR " : "FALSE COLOUR ") : ""}MOSAIC · ${rep.mosaic} OF ${rep.of} TILES${rep.filters > 1 ? ` · ${rep.filters} FILTERS` : ""}`;
           return;
         }
         card.querySelector(".kindtag").textContent = `${w.set >= 0 ? KIND[catalog.sets[w.set].kind].toUpperCase() + " · " : ""}MOSAIC${rep && rep.mosaic ? ` OF ${rep.mosaic}` : ""}`;
-      }, () => {});
+      }, () => {}).finally(done);
     }
     const made = new Map();   // set -> how its composite was made
     const colourText = (s, si) => `${KIND[s.kind]}: ${s.use.map(fname).join(" · ")}${made.has(si) ? ` · ${made.get(si)}` : ""}`;
@@ -1198,7 +1213,7 @@ body.idle .win.full .titlebar { opacity: 0; }
     }
     let cat = null;
     function update(force) {
-      if (catalog !== cat) { cat = catalog; lastK = -2; stripKey = ""; failed.clear(); made.clear(); missing.clear(); warmed.clear(); shown = null; shownKey = null; }   // another mission year loaded
+      if (catalog !== cat) { cat = catalog; lastK = -2; stripKey = ""; failed.clear(); made.clear(); missing.clear(); warmed.clear(); lastAsk = ""; shown = null; shownKey = null; obsShown = null; obsK = -1; mNext = null; }   // another mission year loaded
       if (win.hidden && !force) return;   // a closed or tucked-away window fetches nothing; it catches up when shown
       const p = lastOfCam(cam, state.et, body), k = p < 0 ? -1 : framesOf(cam, body).ks[p];
       const live = k >= 0 && state.et - catalog.et[k] < 180;
@@ -1226,6 +1241,8 @@ body.idle .win.full .titlebar { opacity: 0; }
       // set only once its composite is shown (the mosaic is made of composites)
       const kb = framesOf(cam, body).ks[p - 1];   // p counts this feed's frames (a body window's: that body's only)
       want.tile = kb !== undefined && catalog.target[kb] === catalog.target[k] && catalog.obs[kb] === catalog.obs[k] && (!s || want.set >= 0);
+      // a new frame of the pass whose mosaic is up: ask for the mosaic with it now, alongside the frame itself
+      if (obsShown && catalog.obs[k] === obsShown) mosaicOf(want, true);
       const kp = catalog.km_per_px[k];
       field("frame").textContent = `${titleCase(catalog.target[k] || "Unknown")} · ${catalog.id[k]}`;
       const c = catalog.cls[k], pol = /^P\d|^IRP/.test(catalog.f1[k]) || /^IRP/.test(catalog.f2[k]) ? " · polarizer" : "";

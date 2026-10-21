@@ -69,6 +69,7 @@ _units = {}           # (target, obs, cam) -> [unit dicts]
 _lock = threading.Lock()
 _unit_locks = {}
 _warming = set()
+_making = {}          # path of a mosaic being made -> its lock, so two requests for it make it once
 
 
 def _row_of():
@@ -395,12 +396,35 @@ def so_far(u, n, cache):
 
 def mosaic_webp(frame_id, size, cache, slots=None, ahead=3):
     """(WebP, report) of the mosaic so far at frame_id when its pass is a mosaic; otherwise None. Then makes the
-    next few tiles in the background, so the next frames are quick."""
+    next few tiles and the mosaics with them in the background, so the next frames' mosaics are ready when the
+    window asks for them."""
     found = unit_of(frame_id)
     if not found or not found[0]["mosaic"] or found[1] < 0:
         return None
     u, n = found
+    made = _mosaic_at(u, n, size, cache, slots)
+    if made and ahead:
+        warm(u, n + ahead, cache, size, slots, start=n + 1)
+    return made
+
+
+def _mosaic_at(u, n, size, cache, slots=None):
+    """(WebP, report) of the pass's mosaic with tiles 0..n at size, made once (kept in the cache; a request
+    that comes while it is being made waits for it); None before any tile is placed."""
     path = os.path.join(folder(u, cache), str(size), f"{n}.webp")
+    if not os.path.exists(path):
+        with _lock:
+            lock = _making.setdefault(path, threading.Lock())
+        with lock:
+            try:
+                return _make_mosaic(u, n, size, path, cache, slots)
+            finally:
+                with _lock:
+                    _making.pop(path, None)
+    return _make_mosaic(u, n, size, path, cache, slots)
+
+
+def _make_mosaic(u, n, size, path, cache, slots):
     report = {}
 
     def make():
@@ -423,30 +447,34 @@ def mosaic_webp(frame_id, size, cache, slots=None, ahead=3):
     if not report:
         with open(path[:-5] + ".json") as fh:
             report = json.load(fh)
-    if ahead:
-        warm(u, n + ahead, cache)
     return data, report
 
 
-def warm(u, upto, cache):
-    """Makes the pass's plan and its tiles up to upto in the background (one thread per pass)."""
+def warm(u, upto, cache, size=None, slots=None, start=0):
+    """Makes the pass's plan and its tiles up to upto in the background (one thread per pass and size), and with
+    a size the mosaics at tiles start..upto."""
     if not u["mosaic"]:
         return
+    key = (u["key"], size)
     with _lock:
-        if u["key"] in _warming:
+        if key in _warming:
             return
-        _warming.add(u["key"])
+        _warming.add(key)
 
     def run():
         try:
             p = plan(u, cache)
-            for j in range(min(upto, len(u["frames"]) - 1) + 1):
+            last = min(upto, len(u["frames"]) - 1)
+            for j in range(last + 1):
                 tile(u, j, cache, p["display_scale"])
+            if size:
+                for j in range(start, last + 1):
+                    _mosaic_at(u, j, size, cache, slots)
         except Exception as e:
             print(f"observation mosaic {u['key']} failed: {type(e).__name__}: {e}", flush=True)
         finally:
             with _lock:
-                _warming.discard(u["key"])
+                _warming.discard(key)
 
     threading.Thread(target=run, daemon=True).start()
 
