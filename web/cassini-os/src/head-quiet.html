@@ -427,9 +427,10 @@ body.idle .camwin .chans { opacity: .8; }
 /* resting: the interface fades away until the pointer moves */
 body.idle :is(#menubar, .win, #hudline) { opacity: 0; pointer-events: none; }
 body.idle .lbl:not(.focus):not(.cassini) { opacity: .35; }
-/* ...except the camera feed: while a frame is showing, the picture stays and only its frame fades */
+/* ...except the camera feed: while a frame is showing, the picture stays and only its frame fades
+   (named by id: the rule above counts as an id selector, so a class-only rule here would lose to it) */
 .camwin, .camwin .titlebar, .camwin .info, .well { transition: opacity .7s ease, background-color .7s ease, border-color .7s ease, box-shadow .7s ease; }
-body.idle .camwin:has(.well.has-frame) { opacity: 1; pointer-events: auto; background: transparent; border-color: transparent; box-shadow: none; -webkit-backdrop-filter: none; backdrop-filter: none; }
+body.idle :is(#imgcard, #wacard):has(.well.has-frame) { opacity: 1; pointer-events: auto; background: transparent; border-color: transparent; box-shadow: none; -webkit-backdrop-filter: none; backdrop-filter: none; }
 body.idle .camwin:has(.well.has-frame) :is(.titlebar, .info) { opacity: 0; }
 body.idle .camwin .well.has-frame { border-color: transparent; box-shadow: 0 6px 30px rgba(0,0,0,.6); }
 @media (prefers-reduced-motion: reduce) { #menubar, .win, #dock, #hudline, #labels { transition: none; } }
