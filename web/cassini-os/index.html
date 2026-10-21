@@ -484,6 +484,9 @@ body.idle .mvwell { border-color: transparent; box-shadow: 0 6px 30px rgba(0,0,0
 @keyframes bwopen { from { opacity: 0; transform: scale(.92) translateY(-6px); } }
 @keyframes bwclose { to { opacity: 0; transform: scale(.96); } }
 @media (prefers-reduced-motion: reduce) { .bodywin.opening, .bodywin.closing { animation: none; } }
+/* resting: like the camera windows, a body window keeps its picture and only its frame fades (#app gives the rule
+   an id, so it beats the head's id-strength rule that fades every window) */
+body.idle #app .bodywin:has(.well.has-frame) { opacity: 1; pointer-events: auto; background: transparent; border-color: transparent; box-shadow: none; -webkit-backdrop-filter: none; backdrop-filter: none; }
 body.idle .bodywin:has(.well.has-frame) .camlabel { opacity: 0; }
 @media (max-width: 600px) { .bodywin { --pw: 40vw; } .bodywin .info, .bodywin .chans { display: none; } }
 </style>
