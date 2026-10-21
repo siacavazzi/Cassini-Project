@@ -272,29 +272,58 @@ def calibrate(png, info, image=None):
 
 
 """
+Which pixels of a frame the camera saturated (the top of its 12 bit range, or of the 8 bit
+table). codes = the frame's PNG as stored; image = optional image on the same scale (resized or
+stacked) to mark instead. A frame whose brightest pixel is below the top has none.
+"""
+def saturated(codes, info, image=None):
+    conversion = _value(info, "DATA_CONVERSION_TYPE", "")
+    image = np.asarray(codes if image is None else image)
+    if ds.lut8() and conversion in ("TABLE", "12BIT"):
+        top = 4095 if conversion == "12BIT" else 255
+        if stored_values(codes, info).max() < top:
+            return np.zeros(image.shape, bool)
+        # the display stretch puts the top at 254; a resized frame's partly full pixels count too
+        return image >= 250
+    return image >= 254
+
+
+"""
 Loads the frames of one color image and puts them on the same brightness scale.
 
 labels = label objects, one per channel
 images = the channels' images as label.resize_image (or stacking.load_stacked) returns
 them; loaded with resize_image if not given
+iofs = optional list, one per label: an I/F image already calibrated (stacking.load_hdr) to use
+instead of calibrating that channel's image, or None
+scale = optional fixed display scale shared by every picture of a mosaic, a dict with "white"
+(the I/F that becomes full brightness), "blacks" (one I/F per channel that becomes black) and
+optionally "gamma"; without it each picture is stretched on its own as below
 Returns one BGR uint8 image per label. If every frame calibrates, all channels share one
 stretch so their relative brightness is what the camera measured. Otherwise the images
 are returned unchanged, each with its own stretch as before.
 """
-def load_channels(labels, images=None, sky_fraction=0.1, sky_percentile=98, gamma=2.2):
+def load_channels(labels, images=None, sky_fraction=0.1, sky_percentile=98, gamma=2.2, iofs=None, scale=None):
     if images is None:
         images = [lbl.resize_image() for lbl in labels]
+    given = iofs or [None] * len(labels)
     iofs = []
-    for lbl, image in zip(labels, images):
-        png = ds.imread(lbl.export(), cv2.IMREAD_GRAYSCALE)
-        gray = cv2.cvtColor(image, cv2.COLOR_BGR2GRAY) if image.ndim == 3 else image
-        iofs.append(calibrate(png, lbl.get_info(), gray))
+    for lbl, image, iof in zip(labels, images, given):
+        if iof is None:
+            png = ds.imread(lbl.export(), cv2.IMREAD_GRAYSCALE)
+            gray = cv2.cvtColor(image, cv2.COLOR_BGR2GRAY) if image.ndim == 3 else image
+            iof = calibrate(png, lbl.get_info(), gray)
+        iofs.append(iof)
     if any(iof is None for iof in iofs):
         failed = [lbl.get_info().get("path") for lbl, iof in zip(labels, iofs) if iof is None]
         print(f"Can't calibrate {failed}, using the stretched frames")
         return images
 
     iofs = [iof.astype(np.float32) for iof in iofs]
+    if scale is not None:
+        # every picture of a mosaic on the same scale, so tiles and filters keep what the camera saw
+        gamma = scale.get("gamma", gamma)
+        return [display(iof, black, scale["white"], gamma) for iof, black in zip(iofs, scale["blacks"])]
     # Black point per channel: just above the sky left after the bias (dark current,
     # stray light, noise), so the sky's noise, DN steps and lossy compression blocks
     # don't come out as colored speckle. Sky is where every channel is dark; without
@@ -310,9 +339,13 @@ def load_channels(labels, images=None, sky_fraction=0.1, sky_percentile=98, gamm
     white = max(cv2.medianBlur(iof - black, 3).max() for iof, black in zip(iofs, blacks))
     if white <= 0:
         return images
-    out = []
-    for iof, black in zip(iofs, blacks):
-        scaled = np.clip((iof - black) / white, 0, 1) ** (1 / gamma)
-        gray = (scaled * 255 + 0.5).astype(np.uint8)
-        out.append(cv2.cvtColor(gray, cv2.COLOR_GRAY2BGR))
-    return out
+    return [display(iof, black, white, gamma) for iof, black in zip(iofs, blacks)]
+
+
+"""
+An I/F image as a BGR uint8 image: black -> 0, black + white -> 255, gamma encoded
+"""
+def display(iof, black, white, gamma=2.2):
+    scaled = np.clip((iof - black) / white, 0, 1) ** (1 / gamma)
+    gray = (scaled * 255 + 0.5).astype(np.uint8)
+    return cv2.cvtColor(gray, cv2.COLOR_GRAY2BGR)
