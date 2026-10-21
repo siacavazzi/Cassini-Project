@@ -61,6 +61,7 @@ body { background: var(--void); color: var(--text); font-family: var(--font-body
 #mlist .s { font: 400 11px/1.3 var(--font-data); color: var(--muted); grid-column: 2; }
 #mlist .sc { font: 500 11px/1 var(--font-data); color: var(--gold); border: 1px solid rgba(230, 187, 104, .4); border-radius: 3px; padding: 2px 4px; grid-row: 1; grid-column: 3; }
 #mlist li.ms .t { color: var(--gold); }
+#mlist li.ob .t { color: var(--accent, #8ab6ff); }
 #mlist li.past { opacity: .55; }
 #mlist li.yr { font: 600 11px/1 var(--font-label); letter-spacing: .18em; color: var(--gold); padding: 12px 12px 4px; }
 
@@ -1352,8 +1353,9 @@ function drawTimeline() {
   let lastLabel = -1e9;
   for (const e of encounters) {
     const x = etToX(e.et, w); if (x < -10 || x > w + 10) continue;
-    const ms = e.kind === "milestone";
+    const ms = e.kind === "milestone" || e.kind === "observation";
     g.fillStyle = ms ? "#e6bb68" : e.body === "SATURN" ? "rgba(230,187,104,0.45)" : e.body === "TITAN" ? "#e0994a" : "#c7d0dc";
+    if (e.kind === "observation") g.fillStyle = "#8ab6ff";   // imaging sessions in the camera blue
     g.beginPath();
     if (ms) { g.moveTo(x, 18); g.lineTo(x + 4, 22); g.lineTo(x, 26); g.lineTo(x - 4, 22); }
     else { g.moveTo(x - 3.5, 18); g.lineTo(x + 3.5, 18); g.lineTo(x, 24); }
@@ -1455,20 +1457,23 @@ function buildUi() {
   if (window.matchMedia("(max-width: 860px)").matches) $("moments").classList.add("closed");
   window.addEventListener("keydown", e => { if (e.code === "Space" && e.target === document.body) { e.preventDefault(); setPlaying(!state.playing); } });
 
-  // moments: milestones, and moon flybys that were close or photographed well
+  // moments: milestones, notable imaging sessions, and moon flybys that were close or photographed well
   const list = $("mlist");
-  const picks = encounters.filter(e => e.kind === "milestone" || (e.body !== "SATURN" && (e.altitude_km < 20000 || (e.photo_score || 0) >= 70)));
+  const picks = encounters.filter(e => e.kind === "milestone" || e.kind === "observation" || (e.body !== "SATURN" && (e.altitude_km < 20000 || (e.photo_score || 0) >= 70)));
   let year = null;
   for (const e of picks) {
     if (mission && e.utc.slice(0, 4) !== year) {   // the whole mission: a heading for each year
       year = e.utc.slice(0, 4);
       const h = document.createElement("li"); h.className = "yr"; h.textContent = year; list.appendChild(h);
     }
-    const li = document.createElement("li"); li.className = e.kind === "milestone" ? "ms" : ""; li.dataset.et = e.et;
+    const li = document.createElement("li"); li.className = e.kind === "milestone" ? "ms" : e.kind === "observation" ? "ob" : ""; li.dataset.et = e.et;
     const d = new Date(etToMs(e.et));
-    const title = e.kind === "milestone" ? e.label : `${titleCase(e.body)} flyby`;
-    const s = e.kind === "milestone" ? d.toISOString().slice(11, 16) + " UTC" : `${fmtInt(e.altitude_km)} km · ${e.speed_km_s.toFixed(1)} km/s`;
+    const title = e.kind === "flyby" ? `${titleCase(e.body)} flyby` : e.label;
+    const s = e.kind === "milestone" ? d.toISOString().slice(11, 16) + " UTC"
+      : e.kind === "observation" ? `${fmtInt(e.frames)} pictures${e.rgb_sets ? ` · ${e.rgb_sets} in colour` : ""} · ${fmtSpan(e.end_et - e.et)}`
+      : `${fmtInt(e.altitude_km)} km · ${e.speed_km_s.toFixed(1)} km/s`;
     li.innerHTML = `<button><span class="d">${MONTHS[d.getUTCMonth()]} ${d.getUTCDate()}</span><span class="t">${title}</span>${e.photo_score ? `<span class="sc" title="Photo score">${Math.round(e.photo_score)}</span>` : ""}<span class="s">${s}</span></button>`;
+    if (e.why) li.querySelector("button").title = e.why + (e.source ? ` (${e.source})` : "");
     li.querySelector("button").addEventListener("click", () => jump(e));
     list.appendChild(li);
   }
@@ -1532,6 +1537,8 @@ function updateFollow(dt) {
 function aimFollow() {
   if (followLive) camera.lookAt(camera.position.clone().addScaledVector(sBore, 1e3));
 }
+// a duration as "40 min" or "2 h 40 min"
+function fmtSpan(sec) { const m = Math.round(sec / 60), h = Math.floor(m / 60); return h ? `${h} h${m % 60 ? ` ${m % 60} min` : ""}` : `${Math.max(1, m)} min`; }
 function setSpeed(v) { state.speed = v; document.querySelectorAll("#speeds .btn").forEach(b => b.setAttribute("aria-pressed", String(+b.dataset.v === v))); }
 function setPlaying(p) { state.playing = p; $("play").textContent = p ? "❚❚" : "▶"; }
 // the body a milestone is about: Earth for the launch, a named planet or moon, otherwise Titan
@@ -1545,7 +1552,10 @@ async function jump(e) {
   const huy = e.kind === "milestone" && probe && /^Huygens/.test(e.label) && e.et >= probe.track.start && e.et <= probe.track.end;
   const body = huy ? "HUYGENS" : e.kind === "milestone" ? milestoneBody(e) : e.body;
   const launch = /^Launch/.test(e.label || "");
-  const [lead, speed, span] = huy ? [/lands/.test(e.label) ? 900 : 300, 60, 6 * 3600] : launch ? [0, 60, 86400]
+  // an imaging session: start a minute before its first picture, at a speed that plays it in about a minute
+  const session = e.kind === "observation" && e.end_et > e.et;
+  const [lead, speed, span] = session ? [60, SPEEDS.map(s => s[0]).filter(v => v >= 60).find(v => (e.end_et - e.et) / v <= 90) || 3600, Math.max(3 * 3600, 2 * (e.end_et - e.et))]
+    : huy ? [/lands/.test(e.label) ? 900 : 300, 60, 6 * 3600] : launch ? [0, 60, 86400]
     : JUMP[body] || [body === "TITAN" ? 3 * 3600 : 2 * 3600, 600, 2 * 86400];
   setTime(e.et - lead);
   if (mission) { setPlaying(false); lastWantedYear = partOf(state.et); await requestYears(lastWantedYear); }

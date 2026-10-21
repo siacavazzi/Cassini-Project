@@ -236,16 +236,7 @@ body.nohud #hud, body.nohud #glow, body.nohud #hudline, body.nohud #reticle { di
   background: repeating-linear-gradient(-45deg, var(--aqua-3) 0 8px, var(--aqua-2) 8px 16px); background-size: 22px 22px; animation: barber 1s linear infinite; }
 @keyframes barber { to { background-position: 22px 0; } }
 
-@media (max-width: 600px) {
-  #hudline, .menu:not(.app), .statusbar, .progress, .progress-cap { display: none; }
-  #imgcard { width: 46vw; top: calc(env(safe-area-inset-top, 0px) + 30px); left: 8px; }
-  .camwin .info { display: none; }
-  .toolbar { grid-template-columns: 1fr; }
-  .col, .col.right { width: auto; flex-direction: row; flex-wrap: wrap; justify-content: center; }
-  #moments { top: auto; bottom: 300px; left: max(10px, env(safe-area-inset-left, 0px)); right: max(10px, env(safe-area-inset-right, 0px)); width: auto; height: 38%; }
-  #moments.closed { display: none; }
-  #mtoggle { display: inline-block; }
-}
+#moments.closed { display: none; }
 @media (prefers-reduced-motion: reduce) { #loading .bar, #reticle::after { animation: none; } }
 
 /* ---------- Aero glass: the empty metal becomes Vista-style frosted glass over space ----------
@@ -437,12 +428,39 @@ body.idle :is(#imgcard, #wacard):has(.well.has-frame) { opacity: 1; pointer-even
 body.idle .camwin:has(.well.has-frame) :is(.titlebar, .info) { opacity: 0; }
 body.idle .camwin .well.has-frame { border-color: transparent; box-shadow: 0 6px 30px rgba(0,0,0,.6); }
 @media (prefers-reduced-motion: reduce) { #menubar, .win, #dock, #hudline, #labels { transition: none; } }
-@media (max-width: 600px) {
-  #wacard { top: calc(env(safe-area-inset-top, 0px) + 30px); left: auto; right: 8px; width: 34vw; }
-  #wacard .info, #wacard .chans { display: none; }
-  #dock { width: auto; left: max(10px, env(safe-area-inset-left, 0px)); right: max(10px, env(safe-area-inset-right, 0px)); transform: none; }
-  #dock:not(.zoomed) .toolbar { grid-template-columns: 1fr; }
-}
+
+/* resizing: every window has a grip in its bottom-right corner; a picture window's picture follows its width */
+.grip { position: absolute; right: 0; bottom: 0; width: 16px; height: 16px; cursor: nwse-resize; touch-action: none; z-index: 5; opacity: 0; transition: opacity .2s ease;
+  background: linear-gradient(135deg, transparent 0 55%, rgba(232,236,242,.35) 55% 60%, transparent 60% 70%, rgba(232,236,242,.35) 70% 75%, transparent 75%); }
+.win:hover > .grip, .grip:active { opacity: 1; }
+.win.shaded > .grip, .win.full > .grip, body.idle .grip { display: none; }
+/* the NAC window's width sets where the WAC window starts, so a bigger NAC window never covers it */
+#wacard { left: calc(max(14px, env(safe-area-inset-left, 0px)) + var(--nacw, clamp(300px, 32vw, 480px)) + 10px); }
+/* full view: a picture window fills the screen under the menu bar, its picture as big as it fits (never stretched) */
+.fullbtn { all: unset; position: absolute; right: 7px; top: 3px; width: 14px; height: 14px; display: grid; place-items: center; border-radius: 3px; color: var(--q-dim); cursor: default; }
+.fullbtn:hover { color: #fff; background: rgba(255,255,255,.12); }
+.fullbtn:focus-visible { outline: 1px solid var(--q-accent); }
+.fullbtn svg { width: 10px; height: 10px; } .fullbtn svg * { fill: none; stroke: currentColor; stroke-width: 1.5; }
+.fullbtn .in { display: none; } .win.full .fullbtn .in { display: block; } .win.full .fullbtn .out { display: none; }
+.win.full { position: fixed; inset: calc(env(safe-area-inset-top, 0px) + 30px) max(8px, env(safe-area-inset-right, 0px)) calc(env(safe-area-inset-bottom, 0px) + 8px) max(8px, env(safe-area-inset-left, 0px)) !important;
+  width: auto !important; height: auto !important; transform: none !important; z-index: 1500 !important; background: rgba(8,9,11,.9); }
+.win.full > .body { flex: 1; min-height: 0; }
+.camwin.full .body { grid-template-rows: minmax(0, 1fr) auto auto; }
+.win.full .well, .win.full .well.has-frame { height: auto !important; aspect-ratio: auto !important; min-height: 0; }
+.camwin.full .chans { grid-template-columns: repeat(var(--n, 3), minmax(0, 140px)); }
+.camwin.full .info { grid-template-columns: 50px minmax(0, 1fr) 50px minmax(0, 1fr); }
+.bodywin.full .panes { height: 100%; align-items: stretch; }
+.bodywin.full .pane { width: auto; flex: 2 1 0; grid-template-rows: auto minmax(0, 1fr); align-content: stretch; }
+.bodywin.full .pane[data-cam="W"] { width: auto; flex: 1 1 0; }
+.win.full :is(.rlwells) { flex: 1; min-height: 0; height: calc(100dvh - 160px); align-items: stretch; }
+.win.full :is(.rlwell, .mvwell) { aspect-ratio: auto; min-height: 0; height: 100%; }
+#moviecard.full .mvwell { height: calc(100dvh - 150px); }
+.win.full :is(.rlwell, .mvwell) canvas { object-fit: contain; }
+.well, .rlwell, .mvwell { cursor: zoom-in; } .win.full :is(.well, .rlwell, .mvwell) { cursor: zoom-out; }
+/* resting: a window in full view keeps its dark backdrop and its picture; only the title bar fades (!important: the
+   rules that fade every window and clear the camera windows' frames are id-strength) */
+body.idle #app .win.full { opacity: 1 !important; pointer-events: auto !important; background: rgba(8,9,11,.9) !important; }
+body.idle .win.full .titlebar { opacity: 0; }
 </style>
 </head>
 <body>
@@ -531,6 +549,7 @@ body.idle .camwin .well.has-frame { border-color: transparent; box-shadow: 0 6px
           <button class="btn round skip" id="prev" aria-label="Previous moment">◀◀</button>
           <button class="btn round" id="play" aria-label="Play or pause">❚❚</button>
           <button class="btn round skip" id="next" aria-label="Next moment">▶▶</button>
+          <button class="btn round skip" id="phmom" aria-pressed="false" aria-label="Moments" title="Moments"><svg viewBox="0 0 16 16" aria-hidden="true"><path d="M3 4h10M3 8h10M3 12h10"/></svg></button>
         </div>
         <div class="seg" id="speeds" aria-label="Playback speed"></div>
         <div class="seg" id="zooms" aria-label="Timeline span"></div>
@@ -604,7 +623,7 @@ body.idle .camwin .well.has-frame { border-color: transparent; box-shadow: 0 6px
     const wasMin = !!w.dataset.min; delete w.dataset.min;
     w.hidden = false; front(w); syncMenu();
     if (wasMin) await animateTo(w, $("tray"), true);
-    w.classList.remove("shaded");
+    w.classList.remove("shaded", "closed");
   }
   // (each window is wired once; windows made later, such as the per-body camera windows, call cassiniWM.wire)
   function wire(w) {
@@ -612,14 +631,14 @@ body.idle .camwin .well.has-frame { border-color: transparent; box-shadow: 0 6px
     w.addEventListener("pointerdown", () => front(w));
     w.querySelector(".close").addEventListener("click", e => { e.stopPropagation(); minimize(w); });   // closing tucks the window into the menu-bar tray, never loses it
     w.querySelector(".min").addEventListener("click", e => { e.stopPropagation(); minimize(w); });
-    w.querySelector(".zoom").addEventListener("click", e => { e.stopPropagation(); w.classList.remove("shaded"); w.classList.toggle("zoomed"); });
-    bar.addEventListener("dblclick", () => minimize(w));
+    w.querySelector(".zoom").addEventListener("click", e => { e.stopPropagation(); zoom(w); });
+    bar.addEventListener("dblclick", e => { if (!e.target.closest(".fullbtn")) minimize(w); });
     let drag = null;
     bar.addEventListener("pointerdown", e => {
-      if (e.target.closest(".lights")) return;
+      if (e.target.closest(".lights, .fullbtn") || phone() || w.classList.contains("full")) return;
       const r = w.getBoundingClientRect();
       drag = { dx: e.clientX - r.left, dy: e.clientY - r.top }; bar.setPointerCapture(e.pointerId);
-      w.style.left = r.left + "px"; w.style.top = r.top + "px"; w.style.width = r.width + "px"; w.style.right = "auto"; w.style.bottom = "auto";
+      w.style.left = r.left + "px"; w.style.top = r.top + "px"; w.style.right = "auto"; w.style.bottom = "auto";
     });
     bar.addEventListener("pointermove", e => {
       if (!drag) return;
@@ -629,16 +648,85 @@ body.idle .camwin .well.has-frame { border-color: transparent; box-shadow: 0 6px
     });
     const end = () => { drag = null; };
     bar.addEventListener("pointerup", end); bar.addEventListener("pointercancel", end);
+    // resize from the bottom-right corner: any size from a thumbnail to the whole screen. Windows with a set height
+    // (Moments, Settings) take both directions; a picture window keeps its picture's shape, so either direction
+    // grows it
+    const grip = document.createElement("div"); grip.className = "grip"; grip.setAttribute("aria-hidden", "true"); w.appendChild(grip);
+    let rs = null;
+    grip.addEventListener("pointerdown", e => {
+      if (phone()) return;
+      e.stopPropagation(); e.preventDefault(); front(w);
+      const r = w.getBoundingClientRect();
+      rs = { x: e.clientX, y: e.clientY, w: r.width, h: r.height, both: w.matches(TALL) };
+      grip.setPointerCapture(e.pointerId);
+      w.classList.remove("zoomed");
+      Object.assign(w.style, { left: r.left + "px", top: r.top + "px", width: r.width + "px", right: "auto", bottom: "auto" });
+      if (rs.both) w.style.height = r.height + "px";
+    });
+    grip.addEventListener("pointermove", e => {
+      if (!rs) return;
+      const r = w.getBoundingClientRect(), dx = e.clientX - rs.x, dy = e.clientY - rs.y;
+      const grow = rs.both || Math.abs(dx) >= Math.abs(dy) ? dx : dy * rs.w / rs.h;
+      const was = w.style.width;
+      w.style.width = Math.round(Math.max(MIN_W, Math.min(innerWidth - r.left - 4, rs.w + grow))) + "px";
+      // a picture window's height follows its width: it stops growing at the bottom of the screen, so the grip stays in reach
+      if (!rs.both && parseFloat(w.style.width) > parseFloat(was) && w.getBoundingClientRect().bottom > innerHeight - 4) w.style.width = was;
+      if (rs.both) w.style.height = Math.round(Math.max(120, Math.min(innerHeight - r.top - 4, rs.h + dy))) + "px";
+    });
+    const rsEnd = () => { rs = null; };
+    grip.addEventListener("pointerup", rsEnd); grip.addEventListener("pointercancel", rsEnd);
+    // full view, for windows that show pictures: the button at the right of the title bar, a double-click on the
+    // picture (a tap on a phone), F while the window is in front, Esc to come back
+    if (w.matches(PICTURES)) {
+      const fb = document.createElement("button"); fb.className = "fullbtn"; fb.setAttribute("aria-label", "Full view"); fb.title = "Full view (F)";
+      fb.innerHTML = '<svg class="out" viewBox="0 0 10 10" aria-hidden="true"><path d="M1 4V1h3M6 1h3v3M9 6v3H6M4 9H1V6"/></svg><svg class="in" viewBox="0 0 10 10" aria-hidden="true"><path d="M4 1v3H1M9 4H6V1M6 9V6h3M1 6h3v3"/></svg>';
+      fb.addEventListener("click", e => { e.stopPropagation(); full(w); });
+      bar.appendChild(fb);
+      w.addEventListener("dblclick", e => { if (!phone() && e.target.closest(".well, .rlwell, .mvwell")) full(w); });
+      w.addEventListener("click", e => { if (phone() && e.target.closest(".well, .rlwell, .mvwell")) full(w); });
+    }
   }
+  const TALL = "#moments, #settings", PICTURES = ".camwin, .bodywin, #reelcard, #moviecard", MIN_W = 180;
+  const phone = () => document.body.classList.contains("phone");
+  // zoom: the bigger standard size, and back to the size the viewer gave the window
+  function zoom(w) {
+    w.classList.remove("shaded");
+    if (!w.classList.contains("zoomed") && (w.style.width || w.style.height)) {
+      w.dataset.uw = w.style.width; w.dataset.uh = w.style.height; w.style.width = w.style.height = "";
+      w.classList.add("zoomed");
+    } else if (w.classList.contains("zoomed") && (w.dataset.uw || w.dataset.uh)) {
+      w.style.width = w.dataset.uw; w.style.height = w.dataset.uh || ""; delete w.dataset.uw; delete w.dataset.uh;
+      w.classList.remove("zoomed");
+    } else w.classList.toggle("zoomed");
+  }
+  function full(w, on) {
+    on = on === undefined ? !w.classList.contains("full") : on;
+    document.querySelectorAll(".win.full").forEach(x => { if (x !== w) x.classList.remove("full"); });
+    w.classList.toggle("full", on); w.classList.remove("shaded");
+    if (on) front(w);
+    const fb = w.querySelector(".fullbtn"); if (fb) fb.setAttribute("aria-label", on ? "Leave full view" : "Full view");
+    document.body.classList.toggle("hasfull", !!document.querySelector(".win.full"));
+  }
+  // is a picture window showing its pictures big enough to want the 1024 px ones: zoomed, in full view, or resized
+  // so its picture is wider than px (CSS pixels, so the standard sizes keep asking for the smaller pictures)
+  const big = (w, well, px = 600) => w.classList.contains("zoomed") || w.classList.contains("full") || (well || w).clientWidth > px;
+  window.addEventListener("keydown", e => {
+    if (e.metaKey || e.ctrlKey || e.altKey || /^(INPUT|SELECT|TEXTAREA)$/.test(e.target.tagName)) return;
+    const f = document.querySelector(".win.full");
+    if (e.key === "Escape" && f) { full(f, false); return; }
+    if (e.key.toLowerCase() === "f") { const w = f || [...document.querySelectorAll(PICTURES)].filter(x => !x.hidden).sort((a, b) => (+b.style.zIndex || 0) - (+a.style.zIndex || 0))[0]; if (w) full(w); }
+  });
   document.querySelectorAll(".win").forEach(wire);
   front($("dock"));
-  window.cassiniWM = { wire, front, minimize, restore, syncMenu: () => syncMenu() };
+  window.cassiniWM = { wire, front, minimize, restore, zoom, full, big, syncMenu: () => syncMenu() };
+  // the WAC window starts where the NAC window ends, however wide that is
+  new ResizeObserver(() => { const n = $("imgcard"); if (n.offsetWidth && (n.style.width || n.querySelector(".well.has-frame"))) $("app").style.setProperty("--nacw", n.offsetWidth + "px"); }).observe($("imgcard"));
 
   // layout is the viewer's own: where windows sit and which are tucked away is remembered on this device
   const LAYOUT = "cassini-os-layout-v2";
   function saveLayout() {
     const out = {};
-    document.querySelectorAll(".win:not(.bodywin)").forEach(w => { out[w.id] = { left: w.style.left, top: w.style.top, width: w.style.width, min: !!w.dataset.min, zoomed: w.classList.contains("zoomed") }; });
+    document.querySelectorAll(".win:not(.bodywin)").forEach(w => { out[w.id] = { left: w.style.left, top: w.style.top, width: w.style.width, height: w.style.height, min: !!w.dataset.min, zoomed: w.classList.contains("zoomed") }; });
     try { localStorage.setItem(LAYOUT, JSON.stringify(out)); } catch (e) {}
   }
   let saved = null;
@@ -646,7 +734,8 @@ body.idle .camwin .well.has-frame { border-color: transparent; box-shadow: 0 6px
   saved = saved || {};
   for (const [id, s] of Object.entries(saved)) {
     const w = $(id); if (!w || !s) continue;
-    if (s.left && innerWidth > 600) Object.assign(w.style, { left: s.left, top: s.top, width: s.width, right: "auto", bottom: "auto" });
+    if (s.left) Object.assign(w.style, { left: s.left, top: s.top, right: "auto", bottom: "auto" });
+    if (s.width || s.height) Object.assign(w.style, { width: s.width || "", height: s.height || "" });
     if (s.zoomed) w.classList.add("zoomed");
     if (s.min) { w.dataset.min = "1"; w.hidden = true; }
   }
@@ -944,7 +1033,7 @@ body.idle .camwin .well.has-frame { border-color: transparent; box-shadow: 0 6px
     let want = null, shownKey = null, shown = null, next = [], lastK = -2, lastReady = null, stripKey = "", stripSet = null, zoomed = false;
     const failed = new Set();   // composites the server could not make: those sets show their frames instead
     const missing = new Set();  // frames the server does not have
-    const size = () => win.classList.contains("zoomed") ? 1024 : 512;
+    const size = () => window.cassiniWM.big(win, well) ? 1024 : 512;
     const frameUrl = (id, sz) => `${FRAMES}/frames/${id}.webp?size=${sz || size()}`;
     const colorUrl = s => `${FRAMES}/frames/color.webp?ids=${s.use.map(k => catalog.id[k]).join(",")}&size=${size()}`;
     const fname = k => colourFilter(k) || `${catalog.f1[k]}/${catalog.f2[k]}`;
@@ -1150,12 +1239,12 @@ body.idle .camwin .well.has-frame { border-color: transparent; box-shadow: 0 6px
       next = [1, 2, 3, 4, 5, 6].map(d => ks[p + d]).filter(q => q !== undefined).map(q => view(q, catalog.et[q]).key);
       pump();
     }
-    // zooming the window asks for the bigger picture
-    new MutationObserver(() => {
-      if (zoomed === win.classList.contains("zoomed")) return;
+    // a window made bigger (zoom, resize, full view) asks for the bigger picture
+    new ResizeObserver(() => {
+      if (zoomed === (size() === 1024)) return;
       zoomed = !zoomed;
-      if (catalog && catalog.byCam) update(true);
-    }).observe(win, { attributes: true, attributeFilter: ["class"] });
+      if (typeof catalog !== "undefined" && catalog && catalog.byCam) update(true);
+    }).observe(well);
     return update;
   }
   const feeds = [...document.querySelectorAll(".camwin")].map(cameraFeed);
