@@ -98,6 +98,14 @@ for old, new in [
     study = study.replace(old, new)
 study += part("script") + "\n"
 
+# sound (sound.html, off until switched on): its style joins the head's and its script runs after the chrome script,
+# whose camera windows call window.cassiniPicture for each picture they put up
+snd = open(os.path.join(os.path.dirname(os.path.abspath(sys.argv[2])), "sound.html")).read()
+part = lambda tag: snd[snd.index(f"<{tag}"):snd.index(f"</{tag}>") + len(tag) + 3]
+assert study.count("</style>\n</head>") == 1
+study = study.replace("</style>\n</head>", part("style")[len("<style>"):] + "\n</head>")
+study += part("script") + "\n"
+
 # movie export (export.html): its style joins the head's, its window goes into #app, and its script runs after the
 # chrome script (it draws the marked stretch through window.studyTimeline and adds "Export Movie…" to the Go menu)
 ex = open(os.path.join(os.path.dirname(os.path.abspath(sys.argv[2])), "export.html")).read()
