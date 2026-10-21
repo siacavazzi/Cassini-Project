@@ -469,40 +469,6 @@ body.idle #moviecard :is(.titlebar, .mvbar) { opacity: 0; }
 body.idle .mvwell { border-color: transparent; box-shadow: 0 6px 30px rgba(0,0,0,.6); }
 @media (max-width: 600px) { #moviecard, #moviecard.zoomed { width: calc(100% - 16px); left: 8px; top: calc(env(safe-area-inset-top, 0px) + 30px); } }
 
-#reelcard { top: calc(env(safe-area-inset-top, 0px) + 36px); left: max(14px, env(safe-area-inset-left, 0px)); width: clamp(340px, 46vw, 760px); }
-#reelcard.zoomed { width: clamp(460px, 70vw, 1200px); }
-/* one well per camera, like the camera windows: narrow-angle big, wide-angle beside it */
-.rlwells { display: grid; grid-template-columns: 2fr 1fr; gap: 6px; align-items: start; }
-.rlwells.one { grid-template-columns: 1fr; }
-.rlwells.one #rlwellW { display: none; }
-#reelcard .body { padding: 2px 8px 8px; display: grid; gap: 7px; }
-.rlpick { display: flex; gap: 8px; align-items: center; font-size: 11px; color: var(--q-dim, #888); }
-.rlpick select { flex: 1; min-width: 0; font: inherit; color: var(--q-text, #ddd); background: rgba(0,0,0,.35); border: 1px solid var(--q-line, #555); border-radius: 4px; padding: 3px 4px; }
-#rlgo { font: inherit; padding: 3px 10px; border-radius: 4px; border: 1px solid var(--q-line, #555); background: rgba(255,255,255,.08); color: var(--q-text, #ddd); cursor: pointer; white-space: nowrap; }
-#rlgo:hover { background: rgba(255,255,255,.16); }
-.rlwell { position: relative; aspect-ratio: 1; background: #000; border: 1px solid var(--q-line, #555); border-radius: 4px; overflow: hidden; }
-.rlwell canvas { position: absolute; inset: 0; width: 100%; height: 100%; display: block; }
-.rltag, .rlhow { position: absolute; left: 7px; right: 7px; font: 10px/1.35 var(--hudf, monospace); color: rgba(232,236,242,.82); text-shadow: 0 0 3px #000, 0 0 6px #000; pointer-events: none; }
-.rltag { bottom: 6px; }
-.rlhow { top: 6px; right: 40px; color: rgba(232,236,242,.55); }
-.rlcam { position: absolute; right: 7px; top: 6px; font: 600 9px/1 var(--hudf, monospace); letter-spacing: .08em; color: rgba(232,236,242,.45); pointer-events: none; }
-#rlwellW .rltag, #rlwellW .rlhow { font-size: 9px; }
-.rlwell.stale canvas { opacity: .45; transition: opacity 1.2s ease; }
-#rlmsg { position: absolute; inset: 0; display: grid; place-items: center; text-align: center; padding: 0 20px; font-size: 12px; color: var(--q-dim, #888); }
-#rlmsg:empty { display: none; }
-.rlbar { display: flex; gap: 10px; align-items: center; font-size: 10.5px; color: var(--q-dim, #888); flex-wrap: wrap; }
-#rlplay { width: 28px; height: 28px; font-size: 11px; flex: none; }
-.rlbar input[type=range] { width: 96px; accent-color: var(--q-accent, #8ab6ff); }
-#rlfpsv { min-width: 38px; color: var(--q-text, #ddd); font-variant-numeric: tabular-nums; }
-#rlpos { flex: 1 1 100%; width: 100%; accent-color: var(--q-accent, #8ab6ff); margin: 0; }
-#rlcount { margin-left: auto; font: 10.5px/1 var(--hudf, monospace); white-space: nowrap; font-variant-numeric: tabular-nums; }
-.rlbar label.chk { display: flex; gap: 4px; align-items: center; cursor: pointer; }
-#reelcard, #reelcard .titlebar, .rlbar, .rlpick, .rlwell { transition: opacity .7s ease, background-color .7s ease, border-color .7s ease, box-shadow .7s ease; }
-body.idle #reelcard { opacity: 1; pointer-events: auto; background: transparent; border-color: transparent; box-shadow: none; -webkit-backdrop-filter: none; backdrop-filter: none; }
-body.idle #reelcard :is(.titlebar, .rlbar, .rlpick) { opacity: 0; }
-body.idle .rlwell { border-color: transparent; box-shadow: 0 6px 30px rgba(0,0,0,.6); }
-@media (max-width: 600px) { #reelcard, #reelcard.zoomed { width: calc(100% - 16px); left: 8px; top: calc(env(safe-area-inset-top, 0px) + 30px); } }
-
 #settings { width: min(620px, calc(100% - 20px)); height: min(460px, calc(100% - 80px)); z-index: 900; }
 #settings .sbody { flex: 1; min-height: 0; display: grid; grid-template-columns: 138px minmax(0, 1fr); border-top: 1px solid var(--q-line); }
 #settings nav { padding: 8px 6px; border-right: 1px solid var(--q-line); display: flex; flex-direction: column; gap: 1px; overflow-y: auto; }
@@ -573,6 +539,40 @@ body.s-noinfo .camwin .info { display: none; }
 body.idle #app .bodywin:has(.well.has-frame) { opacity: 1; pointer-events: auto; background: transparent; border-color: transparent; box-shadow: none; -webkit-backdrop-filter: none; backdrop-filter: none; }
 body.idle .bodywin:has(.well.has-frame) .camlabel { opacity: 0; }
 @media (max-width: 600px) { .bodywin { --pw: 40vw; } .bodywin .info, .bodywin .chans { display: none; } }
+
+#reelcard { top: calc(env(safe-area-inset-top, 0px) + 36px); left: max(14px, env(safe-area-inset-left, 0px)); width: clamp(340px, 46vw, 760px); }
+#reelcard.zoomed { width: clamp(460px, 70vw, 1200px); }
+/* one well per camera, like the camera windows: narrow-angle big, wide-angle beside it */
+.rlwells { display: grid; grid-template-columns: 2fr 1fr; gap: 6px; align-items: start; }
+.rlwells.one { grid-template-columns: 1fr; }
+.rlwells.one #rlwellW { display: none; }
+#reelcard .body { padding: 2px 8px 8px; display: grid; gap: 7px; }
+.rlpick { display: flex; gap: 8px; align-items: center; font-size: 11px; color: var(--q-dim, #888); }
+.rlpick select { flex: 1; min-width: 0; font: inherit; color: var(--q-text, #ddd); background: rgba(0,0,0,.35); border: 1px solid var(--q-line, #555); border-radius: 4px; padding: 3px 4px; }
+#rlgo { font: inherit; padding: 3px 10px; border-radius: 4px; border: 1px solid var(--q-line, #555); background: rgba(255,255,255,.08); color: var(--q-text, #ddd); cursor: pointer; white-space: nowrap; }
+#rlgo:hover { background: rgba(255,255,255,.16); }
+.rlwell { position: relative; aspect-ratio: 1; background: #000; border: 1px solid var(--q-line, #555); border-radius: 4px; overflow: hidden; }
+.rlwell canvas { position: absolute; inset: 0; width: 100%; height: 100%; display: block; }
+.rltag, .rlhow { position: absolute; left: 7px; right: 7px; font: 10px/1.35 var(--hudf, monospace); color: rgba(232,236,242,.82); text-shadow: 0 0 3px #000, 0 0 6px #000; pointer-events: none; }
+.rltag { bottom: 6px; }
+.rlhow { top: 6px; right: 40px; color: rgba(232,236,242,.55); }
+.rlcam { position: absolute; right: 7px; top: 6px; font: 600 9px/1 var(--hudf, monospace); letter-spacing: .08em; color: rgba(232,236,242,.45); pointer-events: none; }
+#rlwellW .rltag, #rlwellW .rlhow { font-size: 9px; }
+.rlwell.stale canvas { opacity: .45; transition: opacity 1.2s ease; }
+#rlmsg { position: absolute; inset: 0; display: grid; place-items: center; text-align: center; padding: 0 20px; font-size: 12px; color: var(--q-dim, #888); }
+#rlmsg:empty { display: none; }
+.rlbar { display: flex; gap: 10px; align-items: center; font-size: 10.5px; color: var(--q-dim, #888); flex-wrap: wrap; }
+#rlplay { width: 28px; height: 28px; font-size: 11px; flex: none; }
+.rlbar input[type=range] { width: 96px; accent-color: var(--q-accent, #8ab6ff); }
+#rlfpsv { min-width: 38px; color: var(--q-text, #ddd); font-variant-numeric: tabular-nums; }
+#rlpos { flex: 1 1 100%; width: 100%; accent-color: var(--q-accent, #8ab6ff); margin: 0; }
+#rlcount { margin-left: auto; font: 10.5px/1 var(--hudf, monospace); white-space: nowrap; font-variant-numeric: tabular-nums; }
+.rlbar label.chk { display: flex; gap: 4px; align-items: center; cursor: pointer; }
+#reelcard, #reelcard .titlebar, .rlbar, .rlpick, .rlwell { transition: opacity .7s ease, background-color .7s ease, border-color .7s ease, box-shadow .7s ease; }
+body.idle #reelcard { opacity: 1; pointer-events: auto; background: transparent; border-color: transparent; box-shadow: none; -webkit-backdrop-filter: none; backdrop-filter: none; }
+body.idle #reelcard :is(.titlebar, .rlbar, .rlpick) { opacity: 0; }
+body.idle .rlwell { border-color: transparent; box-shadow: 0 6px 30px rgba(0,0,0,.6); }
+@media (max-width: 600px) { #reelcard, #reelcard.zoomed { width: calc(100% - 16px); left: 8px; top: calc(env(safe-area-inset-top, 0px) + 30px); } }
 </style>
 </head>
 <body>
@@ -703,6 +703,15 @@ body.idle .bodywin:has(.well.has-frame) .camlabel { opacity: 0; }
   </div>
 </section>
 
+  <section class="win" id="settings" aria-label="Settings" hidden>
+  <div class="titlebar"><span class="lights"><button class="close" aria-label="Close settings">×</button><button class="min" aria-label="Close settings">–</button><button class="zoom" aria-label="Zoom">+</button></span>Settings</div>
+  <div class="sbody">
+    <nav id="snav" role="tablist" aria-label="Settings sections"></nav>
+    <div class="pane" id="spane" role="tabpanel"></div>
+  </div>
+  <footer><span id="snote">Saved on this device</span><button class="btn" id="sreset">Restore defaults</button></footer>
+</section>
+
   <section class="win" id="reelcard" aria-label="Body reel" hidden>
   <div class="titlebar"><span class="lights"><button class="close" aria-label="Close the body reel">×</button><button class="min" aria-label="Close the body reel">–</button><button class="zoom" aria-label="Zoom">+</button></span>Body Reel</div>
   <div class="body">
@@ -719,15 +728,6 @@ body.idle .bodywin:has(.well.has-frame) .camlabel { opacity: 0; }
       <span id="rlcount"></span>
     </div>
   </div>
-</section>
-
-  <section class="win" id="settings" aria-label="Settings" hidden>
-  <div class="titlebar"><span class="lights"><button class="close" aria-label="Close settings">×</button><button class="min" aria-label="Close settings">–</button><button class="zoom" aria-label="Zoom">+</button></span>Settings</div>
-  <div class="sbody">
-    <nav id="snav" role="tablist" aria-label="Settings sections"></nav>
-    <div class="pane" id="spane" role="tabpanel"></div>
-  </div>
-  <footer><span id="snote">Saved on this device</span><button class="btn" id="sreset">Restore defaults</button></footer>
 </section>
 
   <div id="loading"><div>Starting Cassini OS<br>Loading trajectories<div class="bar"></div></div></div>
@@ -1760,6 +1760,172 @@ body.idle .bodywin:has(.well.has-frame) .camlabel { opacity: 0; }
 })();
 </script>
 <script>
+// ---------- per-body camera windows ----------
+(function () {
+  const $ = id => document.getElementById(id);
+  const F = window.cassiniFeeds, WM = window.cassiniWM;
+  if (!F || !WM) return;
+  const S = window.cassiniSettings;
+  const LS = "cassini-os-bodywin-v1";
+  // settings: in the Settings window when the page has one, otherwise remembered here and switched from the Window menu
+  let own = {};
+  try { own = JSON.parse(localStorage.getItem(LS)) || {}; } catch (e) {}
+  const q = new URLSearchParams(location.search).get("bodywin");
+  const B = {
+    on: !!own.on, linger: own.linger > 0 ? own.linger : 20, max: own.max > 0 ? own.max : 4,
+    clock: 0, lastNow: 0, lastEt: null, cat: null, wins: new Map(), rec: new Map(), dismissed: new Set(), hiddenCams: []
+  };
+  const saveOwn = () => { if (S) return; try { localStorage.setItem(LS, JSON.stringify({ on: B.on, linger: B.linger, max: B.max })); } catch (e) {} };
+  if (S) {
+    B.on = !!S.define({ key: "cameras.bodyWindows", section: "Cameras", label: "A window for each body", type: "toggle", value: false,
+      hint: "Each target Cassini images gets its own camera window, which closes after the target has gone unimaged for a while." });
+    B.linger = +S.define({ key: "cameras.bodyWindowLinger", section: "Cameras", label: "Body window stays for", type: "range", value: 20, min: 5, max: 120, step: 5, unit: "s",
+      hint: "Seconds of playback after a target's last picture before its window closes." });
+    B.max = +S.define({ key: "cameras.bodyWindowMax", section: "Cameras", label: "Most body windows at once", type: "range", value: 4, min: 1, max: 8, step: 1 });
+  }
+  if (q !== null) B.on = q !== "0";
+
+  // ---- the mode: switching it on hides the two camera windows, switching it off brings them back ----
+  function setOn(v) {
+    v = !!v;
+    const first = !B.started; B.started = true;
+    if (!first && v === B.on) return;
+    B.on = v; saveOwn();
+    if (v) {
+      B.hiddenCams = camWins().filter(w => !w.hidden);
+      B.hiddenCams.forEach(w => { w.hidden = true; });
+    } else if (!first) {
+      for (const name of [...B.wins.keys()]) close(name, true);
+      B.hiddenCams.forEach(w => { w.hidden = false; }); B.hiddenCams = [];
+    }
+    const m = $("bwmenu"); if (m) m.setAttribute("aria-checked", String(v));
+    document.querySelectorAll('[data-act="win"][data-win="imgcard"], [data-act="win"][data-win="wacard"]').forEach(b => { b.closest("li").hidden = v; });
+    WM.syncMenu();
+  }
+  const camWins = () => ["imgcard", "wacard"].map($).filter(Boolean);
+  if (S) {
+    S.on("cameras.bodyWindows", v => { if (B.started) setOn(v); });
+    S.on("cameras.bodyWindowLinger", v => { B.linger = +v; });
+    S.on("cameras.bodyWindowMax", v => { B.max = +v; });
+  } else {
+    // no Settings window on this page: a Window-menu switch
+    const ul = document.querySelector('[data-act="win"][data-win="dock"]')?.closest("ul");
+    if (ul) {
+      const sep = document.createElement("li"); sep.className = "sep"; ul.appendChild(sep);
+      const li = document.createElement("li");
+      li.innerHTML = '<button id="bwmenu" role="menuitemcheckbox" aria-checked="false">Window for Each Body</button>';
+      ul.appendChild(li);
+      li.querySelector("button").addEventListener("click", () => setOn(!B.on));
+    }
+  }
+
+  // ---- one window per target ----
+  const title = n => n === "UNK" ? "Unknown target" : titleCase(n);
+  function pane(name, cam) {
+    return `<div class="pane" data-cam="${cam}" data-body="${name}">
+        <div class="camlabel"><span class="led"></span>${cam === "N" ? "Narrow-angle" : "Wide-angle"}</div>
+        <div class="well"><div class="wellmsg"><b>No signal</b>Waiting for the frame server</div><img class="shot" alt="" crossorigin="anonymous"><span class="shottag"></span><span class="kindtag"></span></div>
+        <div class="chans" aria-label="Filter channels"></div>
+        <dl class="info"><dt>Status</dt><dd data-f="status">—</dd><dt>Filter</dt><dd data-f="filter">—</dd><dt>Colour</dt><dd data-f="colour">—</dd></dl>
+      </div>`;
+  }
+  // a free place for a new window: the first slot in rows from the top left that no open window covers
+  function place(w) {
+    const r0 = w.getBoundingClientRect(), gap = 10, x0 = 14, y0 = 36;
+    // clear of the other body windows, the main window and the moments list
+    const others = [...B.wins.values()].filter(o => o.el !== w && !o.closing).map(o => o.el)
+      .concat([$("dock"), $("moments")].filter(e => e && !e.hidden)).map(e => e.getBoundingClientRect());
+    const hits = (x, y) => others.some(o => x < o.right + gap && x + r0.width + gap > o.left && y < o.bottom + gap && y + r0.height + gap > o.top);
+    for (let y = y0; y + r0.height <= innerHeight - 8; y += 24)
+      for (let x = x0; x + r0.width <= innerWidth - 14; x += 24)
+        if (!hits(x, y)) return Object.assign(w.style, { left: x + "px", top: y + "px" });
+    const n = B.wins.size;   // no room: cascade
+    Object.assign(w.style, { left: x0 + 24 * n + "px", top: y0 + 24 * n + "px" });
+  }
+  function open(name) {
+    const el = document.createElement("section");
+    el.className = "win frame img camwin bodywin opening";
+    el.dataset.body = name; el.dataset.name = title(name);
+    el.setAttribute("aria-label", `${title(name)} cameras`);
+    el.innerHTML = `<div class="titlebar"><span class="lights"><button class="close" aria-label="Close">×</button><button class="min" aria-label="Minimize">–</button><button class="zoom" aria-label="Zoom">+</button></span>${title(name)}</div>
+      <div class="body"><div class="panes">${pane(name, "N")}${pane(name, "W")}</div></div>`;
+    const dock = $("dock"); dock.parentNode.insertBefore(el, dock);
+    WM.wire(el);
+    // closing a body window dismisses it until that target goes quiet; minimizing tucks it into the tray as usual
+    el.querySelector(".close").addEventListener("click", e => { e.stopImmediatePropagation(); B.dismissed.add(name); close(name); }, true);
+    const panes = [...el.querySelectorAll(".pane")].map(p => ({ el: p, cam: p.dataset.cam, update: F.cameraFeed(p) }));
+    const w = { el, panes, closing: false };
+    B.wins.set(name, w);
+    showPanes(w, name);
+    place(el); WM.front(el);
+    el.addEventListener("animationend", () => el.classList.remove("opening"), { once: true });
+    return w;
+  }
+  function close(name, now) {
+    const w = B.wins.get(name); if (!w || w.closing) return;
+    w.closing = true;
+    const gone = () => { w.el.remove(); if (B.wins.get(name) === w) B.wins.delete(name); WM.syncMenu(); };
+    if (now || w.el.hidden || matchMedia("(prefers-reduced-motion: reduce)").matches) return gone();
+    w.el.classList.add("closing");
+    w.el.addEventListener("animationend", gone, { once: true });
+    setTimeout(gone, 700);
+  }
+  // a camera's pane shows only while that camera has a recent frame of the target
+  function showPanes(w, name) {
+    for (const p of w.panes) {
+      const at = F.lastOfCam(p.cam, state.et, name), ks = F.framesOf(p.cam, name).ks;
+      p.el.hidden = !(at >= 0 && state.et - catalog.et[ks[at]] <= F.stale());
+    }
+  }
+  // the latest frame of target name (either camera) at or before et, as its time, or -Infinity
+  function latest(name) {
+    let t = -Infinity;
+    for (const cam of ["N", "W"]) { const ks = F.framesOf(cam, name).ks, i = F.lastOfCam(cam, state.et, name); if (i >= 0) t = Math.max(t, catalog.et[ks[i]]); }
+    return t;
+  }
+  let targets = null;
+  function tick() {
+    if (!B.started) setOn(B.on);
+    if (!B.on || !catalog || !catalog.byCam) return;
+    const now = performance.now(), movie = window.cassiniMovie && window.cassiniMovie.on;
+    // the linger clock runs only while the mission clock moves forward, so pausing keeps every window up
+    if (B.lastEt !== null && state.et > B.lastEt && !movie) B.clock += Math.min(now - B.lastNow, 250);
+    const jumped = B.lastEt !== null && Math.abs(state.et - B.lastEt) > 6 * 3600;
+    B.lastNow = now; B.lastEt = state.et;
+    if (catalog !== B.cat) { B.cat = catalog; targets = [...new Set(catalog.target)].filter(Boolean); B.rec.clear(); }
+    if (jumped) B.rec.clear();
+    // movie mode takes the camera's place: the body windows step aside until it ends
+    for (const w of B.wins.values()) if (!w.el.dataset.min) w.el.hidden = !!movie;
+    if (movie) return;
+    const stale = F.stale(), wanted = [];
+    let newest = null;
+    for (const name of targets) {
+      const t = latest(name);
+      if (!(state.et - t <= stale)) { B.rec.delete(name); B.dismissed.delete(name); continue; }
+      let r = B.rec.get(name);
+      if (!r || r.t !== t) { r = { t, seen: B.clock }; B.rec.set(name, r); }
+      if (!newest || t > newest.t) newest = { name, t };
+      wanted.push(name);
+    }
+    // a target stays while it was imaged within the linger time; the latest target always stays
+    const keep = wanted.filter(n => n === newest.name || B.clock - B.rec.get(n).seen <= B.linger * 1000)
+      .sort((a, b) => B.rec.get(b).t - B.rec.get(a).t);
+    for (const n of B.dismissed) if (!keep.includes(n)) B.dismissed.delete(n);
+    const show = keep.filter(n => !B.dismissed.has(n)).slice(0, Math.max(1, B.max));
+    for (const name of [...B.wins.keys()]) if (!show.includes(name)) close(name);
+    for (const name of show.slice().reverse()) {   // oldest first, so the newest window lands on top
+      let w = B.wins.get(name);
+      if (!w || w.closing) w = open(name);
+      showPanes(w, name);
+      for (const p of w.panes) if (!p.el.hidden) p.update();
+    }
+  }
+  const base = window.studyHud;
+  window.studyHud = ms => { base(ms); tick(); };
+  window.cassiniBodyWindows = { setOn, get on() { return B.on; }, state: B };
+})();
+</script>
+<script>
 // ---------- body reels ----------
 (function () {
   const $ = id => document.getElementById(id);
@@ -1929,172 +2095,6 @@ body.idle .bodywin:has(.well.has-frame) .camlabel { opacity: 0; }
   $("play").addEventListener("click", () => { if (R.open) setReelPlaying(false); }, true);
   const go = $("gomenu");
   if (go) { const li = document.createElement("li"); li.innerHTML = '<button id="goreel">Play a Body…<span class="kbd">B</span></button>'; go.prepend(li); li.querySelector("button").addEventListener("click", open); }
-})();
-</script>
-<script>
-// ---------- per-body camera windows ----------
-(function () {
-  const $ = id => document.getElementById(id);
-  const F = window.cassiniFeeds, WM = window.cassiniWM;
-  if (!F || !WM) return;
-  const S = window.cassiniSettings;
-  const LS = "cassini-os-bodywin-v1";
-  // settings: in the Settings window when the page has one, otherwise remembered here and switched from the Window menu
-  let own = {};
-  try { own = JSON.parse(localStorage.getItem(LS)) || {}; } catch (e) {}
-  const q = new URLSearchParams(location.search).get("bodywin");
-  const B = {
-    on: !!own.on, linger: own.linger > 0 ? own.linger : 20, max: own.max > 0 ? own.max : 4,
-    clock: 0, lastNow: 0, lastEt: null, cat: null, wins: new Map(), rec: new Map(), dismissed: new Set(), hiddenCams: []
-  };
-  const saveOwn = () => { if (S) return; try { localStorage.setItem(LS, JSON.stringify({ on: B.on, linger: B.linger, max: B.max })); } catch (e) {} };
-  if (S) {
-    B.on = !!S.define({ key: "cameras.bodyWindows", section: "Cameras", label: "A window for each body", type: "toggle", value: false,
-      hint: "Each target Cassini images gets its own camera window, which closes after the target has gone unimaged for a while." });
-    B.linger = +S.define({ key: "cameras.bodyWindowLinger", section: "Cameras", label: "Body window stays for", type: "range", value: 20, min: 5, max: 120, step: 5, unit: "s",
-      hint: "Seconds of playback after a target's last picture before its window closes." });
-    B.max = +S.define({ key: "cameras.bodyWindowMax", section: "Cameras", label: "Most body windows at once", type: "range", value: 4, min: 1, max: 8, step: 1 });
-  }
-  if (q !== null) B.on = q !== "0";
-
-  // ---- the mode: switching it on hides the two camera windows, switching it off brings them back ----
-  function setOn(v) {
-    v = !!v;
-    const first = !B.started; B.started = true;
-    if (!first && v === B.on) return;
-    B.on = v; saveOwn();
-    if (v) {
-      B.hiddenCams = camWins().filter(w => !w.hidden);
-      B.hiddenCams.forEach(w => { w.hidden = true; });
-    } else if (!first) {
-      for (const name of [...B.wins.keys()]) close(name, true);
-      B.hiddenCams.forEach(w => { w.hidden = false; }); B.hiddenCams = [];
-    }
-    const m = $("bwmenu"); if (m) m.setAttribute("aria-checked", String(v));
-    document.querySelectorAll('[data-act="win"][data-win="imgcard"], [data-act="win"][data-win="wacard"]').forEach(b => { b.closest("li").hidden = v; });
-    WM.syncMenu();
-  }
-  const camWins = () => ["imgcard", "wacard"].map($).filter(Boolean);
-  if (S) {
-    S.on("cameras.bodyWindows", v => { if (B.started) setOn(v); });
-    S.on("cameras.bodyWindowLinger", v => { B.linger = +v; });
-    S.on("cameras.bodyWindowMax", v => { B.max = +v; });
-  } else {
-    // no Settings window on this page: a Window-menu switch
-    const ul = document.querySelector('[data-act="win"][data-win="dock"]')?.closest("ul");
-    if (ul) {
-      const sep = document.createElement("li"); sep.className = "sep"; ul.appendChild(sep);
-      const li = document.createElement("li");
-      li.innerHTML = '<button id="bwmenu" role="menuitemcheckbox" aria-checked="false">Window for Each Body</button>';
-      ul.appendChild(li);
-      li.querySelector("button").addEventListener("click", () => setOn(!B.on));
-    }
-  }
-
-  // ---- one window per target ----
-  const title = n => n === "UNK" ? "Unknown target" : titleCase(n);
-  function pane(name, cam) {
-    return `<div class="pane" data-cam="${cam}" data-body="${name}">
-        <div class="camlabel"><span class="led"></span>${cam === "N" ? "Narrow-angle" : "Wide-angle"}</div>
-        <div class="well"><div class="wellmsg"><b>No signal</b>Waiting for the frame server</div><img class="shot" alt="" crossorigin="anonymous"><span class="shottag"></span><span class="kindtag"></span></div>
-        <div class="chans" aria-label="Filter channels"></div>
-        <dl class="info"><dt>Status</dt><dd data-f="status">—</dd><dt>Filter</dt><dd data-f="filter">—</dd><dt>Colour</dt><dd data-f="colour">—</dd></dl>
-      </div>`;
-  }
-  // a free place for a new window: the first slot in rows from the top left that no open window covers
-  function place(w) {
-    const r0 = w.getBoundingClientRect(), gap = 10, x0 = 14, y0 = 36;
-    // clear of the other body windows, the main window and the moments list
-    const others = [...B.wins.values()].filter(o => o.el !== w && !o.closing).map(o => o.el)
-      .concat([$("dock"), $("moments")].filter(e => e && !e.hidden)).map(e => e.getBoundingClientRect());
-    const hits = (x, y) => others.some(o => x < o.right + gap && x + r0.width + gap > o.left && y < o.bottom + gap && y + r0.height + gap > o.top);
-    for (let y = y0; y + r0.height <= innerHeight - 8; y += 24)
-      for (let x = x0; x + r0.width <= innerWidth - 14; x += 24)
-        if (!hits(x, y)) return Object.assign(w.style, { left: x + "px", top: y + "px" });
-    const n = B.wins.size;   // no room: cascade
-    Object.assign(w.style, { left: x0 + 24 * n + "px", top: y0 + 24 * n + "px" });
-  }
-  function open(name) {
-    const el = document.createElement("section");
-    el.className = "win frame img camwin bodywin opening";
-    el.dataset.body = name; el.dataset.name = title(name);
-    el.setAttribute("aria-label", `${title(name)} cameras`);
-    el.innerHTML = `<div class="titlebar"><span class="lights"><button class="close" aria-label="Close">×</button><button class="min" aria-label="Minimize">–</button><button class="zoom" aria-label="Zoom">+</button></span>${title(name)}</div>
-      <div class="body"><div class="panes">${pane(name, "N")}${pane(name, "W")}</div></div>`;
-    const dock = $("dock"); dock.parentNode.insertBefore(el, dock);
-    WM.wire(el);
-    // closing a body window dismisses it until that target goes quiet; minimizing tucks it into the tray as usual
-    el.querySelector(".close").addEventListener("click", e => { e.stopImmediatePropagation(); B.dismissed.add(name); close(name); }, true);
-    const panes = [...el.querySelectorAll(".pane")].map(p => ({ el: p, cam: p.dataset.cam, update: F.cameraFeed(p) }));
-    const w = { el, panes, closing: false };
-    B.wins.set(name, w);
-    showPanes(w, name);
-    place(el); WM.front(el);
-    el.addEventListener("animationend", () => el.classList.remove("opening"), { once: true });
-    return w;
-  }
-  function close(name, now) {
-    const w = B.wins.get(name); if (!w || w.closing) return;
-    w.closing = true;
-    const gone = () => { w.el.remove(); if (B.wins.get(name) === w) B.wins.delete(name); WM.syncMenu(); };
-    if (now || w.el.hidden || matchMedia("(prefers-reduced-motion: reduce)").matches) return gone();
-    w.el.classList.add("closing");
-    w.el.addEventListener("animationend", gone, { once: true });
-    setTimeout(gone, 700);
-  }
-  // a camera's pane shows only while that camera has a recent frame of the target
-  function showPanes(w, name) {
-    for (const p of w.panes) {
-      const at = F.lastOfCam(p.cam, state.et, name), ks = F.framesOf(p.cam, name).ks;
-      p.el.hidden = !(at >= 0 && state.et - catalog.et[ks[at]] <= F.stale());
-    }
-  }
-  // the latest frame of target name (either camera) at or before et, as its time, or -Infinity
-  function latest(name) {
-    let t = -Infinity;
-    for (const cam of ["N", "W"]) { const ks = F.framesOf(cam, name).ks, i = F.lastOfCam(cam, state.et, name); if (i >= 0) t = Math.max(t, catalog.et[ks[i]]); }
-    return t;
-  }
-  let targets = null;
-  function tick() {
-    if (!B.started) setOn(B.on);
-    if (!B.on || !catalog || !catalog.byCam) return;
-    const now = performance.now(), movie = window.cassiniMovie && window.cassiniMovie.on;
-    // the linger clock runs only while the mission clock moves forward, so pausing keeps every window up
-    if (B.lastEt !== null && state.et > B.lastEt && !movie) B.clock += Math.min(now - B.lastNow, 250);
-    const jumped = B.lastEt !== null && Math.abs(state.et - B.lastEt) > 6 * 3600;
-    B.lastNow = now; B.lastEt = state.et;
-    if (catalog !== B.cat) { B.cat = catalog; targets = [...new Set(catalog.target)].filter(Boolean); B.rec.clear(); }
-    if (jumped) B.rec.clear();
-    // movie mode takes the camera's place: the body windows step aside until it ends
-    for (const w of B.wins.values()) if (!w.el.dataset.min) w.el.hidden = !!movie;
-    if (movie) return;
-    const stale = F.stale(), wanted = [];
-    let newest = null;
-    for (const name of targets) {
-      const t = latest(name);
-      if (!(state.et - t <= stale)) { B.rec.delete(name); B.dismissed.delete(name); continue; }
-      let r = B.rec.get(name);
-      if (!r || r.t !== t) { r = { t, seen: B.clock }; B.rec.set(name, r); }
-      if (!newest || t > newest.t) newest = { name, t };
-      wanted.push(name);
-    }
-    // a target stays while it was imaged within the linger time; the latest target always stays
-    const keep = wanted.filter(n => n === newest.name || B.clock - B.rec.get(n).seen <= B.linger * 1000)
-      .sort((a, b) => B.rec.get(b).t - B.rec.get(a).t);
-    for (const n of B.dismissed) if (!keep.includes(n)) B.dismissed.delete(n);
-    const show = keep.filter(n => !B.dismissed.has(n)).slice(0, Math.max(1, B.max));
-    for (const name of [...B.wins.keys()]) if (!show.includes(name)) close(name);
-    for (const name of show.slice().reverse()) {   // oldest first, so the newest window lands on top
-      let w = B.wins.get(name);
-      if (!w || w.closing) w = open(name);
-      showPanes(w, name);
-      for (const p of w.panes) if (!p.el.hidden) p.update();
-    }
-  }
-  const base = window.studyHud;
-  window.studyHud = ms => { base(ms); tick(); };
-  window.cassiniBodyWindows = { setOn, get on() { return B.on; }, state: B };
 })();
 </script>
 <script src="https://cdn.jsdelivr.net/npm/three@0.128.0/build/three.min.js"></script>
