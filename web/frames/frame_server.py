@@ -35,6 +35,7 @@ import os
 import re
 import sys
 import threading
+import time
 from http.server import SimpleHTTPRequestHandler, ThreadingHTTPServer
 from urllib.parse import parse_qs, urlparse
 
@@ -72,6 +73,8 @@ def _locked_read_member(i):
 data_source._read_member = _locked_read_member
 # composites take a second or two of CPU each; at most two at once so frames keep flowing
 _color_slots = threading.Semaphore(2)
+# requests that take longer than this many seconds are logged
+SLOW = float(os.environ.get("FRAME_SERVER_SLOW", "2"))
 
 
 def archive_png(frame_id):
@@ -188,12 +191,16 @@ def make_handler(site, cache):
             for key, value in (headers or {}).items():
                 self.send_header(key, value)
             self.send_header("Content-Length", str(len(data)))
+            took = time.monotonic() - self.started
+            if took > SLOW:   # a picture this slow keeps a camera window waiting: say so in the log
+                print(f"slow {took:.1f} s {self.path}", flush=True)
             if cache_forever:
                 self.send_header("Cache-Control", "public, max-age=31536000, immutable")
             self.end_headers()
             self.wfile.write(data)
 
         def do_GET(self):
+            self.started = time.monotonic()
             url = urlparse(self.path)
             if url.path == "/health":
                 return self.send_bytes(f"ok {data_source.get_source()}\n".encode(), "text/plain", False)
