@@ -33,6 +33,14 @@ Routes:
                                stacked, calibrated, aligned, centred on the body with north up by SPICE)
                                and drawn into the rolling mosaic with the pictures before it; made on
                                first request and cached. X-Reel says how it was made
+  /frames/mosaic/<ID>.webp?size=512
+                               the mosaic frame <ID> is a new tile of, made like a reel picture: 404 when
+                               the frame is not a mosaic tile (mosaic.panels: same camera, observation and
+                               filter, the pointing stepped across the body, panels overlap)
+                               When the frame is in a mosaic pass (obs_mosaic: one camera and observation,
+                               three or more pointings), instead the pass's mosaic so far, every tile and
+                               filter, in false colour when it cycles three or more; asking for a frame of the
+                               pass starts making its tiles
   /health                      "ok" plus where the frames come from
   anything else                a file from --site, if given (the replay page and its data)
 
@@ -69,6 +77,7 @@ import numpy as np  # noqa: E402
 import color_image  # noqa: E402
 sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
 import reel  # noqa: E402
+import obs_mosaic  # noqa: E402
 
 FRAME_ID = re.compile(r"^([NW])\d{10}_\d+$")
 SIZES = (128, 256, 384, 512, 768, 1024)
@@ -279,6 +288,29 @@ def make_handler(site, cache):
                     return self.send_bytes(data, "image/webp", headers={"X-Reel": json.dumps(report, default=str)})
                 except FileNotFoundError:
                     return self.send_error(404, "Frame not in the archive")
+            m = re.match(r"^/frames/mosaic/([^/]+)\.webp$", url.path)
+            if m:
+                # the camera windows ask this for each frame: the mosaic when the frame is a new tile of a
+                # real mosaic (reel.mosaic_of, mosaic.panels), otherwise 404 at once and the window keeps its frame
+                if not FRAME_ID.match(m.group(1)):
+                    return self.send_error(400, "Not a frame id")
+                size = min(SIZES, key=lambda s: abs(s - int(parse_qs(url.query).get("size", ["512"])[0])))
+                # a whole-body mosaic (obs_mosaic): the observation's mosaic so far, every filter
+                if reel._index is not None:
+                    try:
+                        made = obs_mosaic.mosaic_webp(m.group(1), size, cache, _color_slots)
+                    except FileNotFoundError:
+                        made = None
+                    if made:
+                        return self.send_bytes(made[0], "image/webp", headers={"X-Reel": json.dumps(made[1])})
+                found = reel.mosaic_of(m.group(1), wait=False)
+                if not found:
+                    return self.send_error(404, "Not a mosaic tile")
+                try:
+                    data, report = reel.shot_webp(*found, size, cache, True, _color_slots)
+                    return self.send_bytes(data, "image/webp", headers={"X-Reel": json.dumps(report, default=str)})
+                except FileNotFoundError:
+                    return self.send_error(404, "Frame not in the archive")
             m = re.match(r"^/frames/([^/]+)\.(webp|png)$", url.path)
             if m:
                 frame_id, kind = m.groups()
@@ -289,6 +321,9 @@ def make_handler(site, cache):
                         return self.send_bytes(archive_png(frame_id), "image/png")
                     size = int(parse_qs(url.query).get("size", ["512"])[0])
                     size = min(SIZES, key=lambda s: abs(s - size))
+                    if reel._index is not None:
+                        # a frame of a mosaic pass (the window asks for frames a few ahead): start its tiles
+                        threading.Thread(target=obs_mosaic.warm_frame, args=(frame_id, cache), daemon=True).start()
                     return self.send_bytes(webp(frame_id, size, cache), "image/webp")
                 except FileNotFoundError:
                     return self.send_error(404, "Frame not in the archive")
@@ -352,6 +387,8 @@ def main():
     # every year's kernels stay extracted once used, so a reel going back and forth in time is not slowed
     data_source.KEEP_SPICE_CACHE = True
     data_source._zip_index() if data_source.using_zip() else None  # build or load the zip index up front
+    # the camera windows' mosaic route needs the index; read it now rather than on the first request
+    threading.Thread(target=reel.target_of, daemon=True).start()
     # the first composite would otherwise wait while stacking reads the whole image index (all ~443k rows)
     threading.Thread(target=color_image.stacking.load_index, daemon=True).start()
     server = Server((args.host, args.port), make_handler(site, args.cache))

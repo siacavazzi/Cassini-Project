@@ -198,7 +198,7 @@ body.phone .srow input[type=range] { width: 96px; }
   D({ key: "interface.hudline", section: "Interface", label: "Flight data strip", type: "toggle", value: true,
       hint: "Target, altitude, speed, camera and pointing along the top of the view." });
   cls("interface.hudline", "s-nohudline", false);
-  // Cameras (the camera windows read cameras.composites and cameras.stale)
+  // Cameras (the camera windows read cameras.composites, cameras.mosaics and cameras.stale)
   D({ key: "cameras.composites", section: "Cameras", label: "Colour composites", type: "toggle", value: true,
       hint: "Once a filter set is complete, show its colour picture. Off shows every frame on its own." });
   D({ key: "cameras.channels", section: "Cameras", label: "Filter channels", type: "toggle", value: true,
@@ -207,6 +207,8 @@ body.phone .srow input[type=range] { width: 96px; }
   D({ key: "cameras.details", section: "Cameras", label: "Frame details", type: "toggle", value: true,
       hint: "Status, frame, filter, colour and scale under each picture." });
   cls("cameras.details", "s-noinfo", false);
+  D({ key: "cameras.mosaics", section: "Cameras", label: "Mosaics in camera windows", type: "toggle", value: true,
+      hint: "When Cassini steps a camera across a body, the window builds the mosaic tile by tile. Off shows every frame on its own." });
   D({ key: "cameras.stale", section: "Cameras", label: "Clear a quiet camera after", type: "range", value: 6, min: 1, max: 48, step: 1, unit: "h",
       hint: "A camera that has taken nothing for this long shows Idle instead of its last picture." });
 
@@ -225,6 +227,9 @@ body.phone .srow input[type=range] { width: 96px; }
       new MutationObserver(() => S.set(key, pressed())).observe(b, { attributes: true, attributeFilter: ["aria-pressed"] });
     });
   }
+  D({ key: "playback.start", section: "Playback", label: "Start time", type: "choice", value: "2006-09-15T14:28:00", reload: true,
+      options: [["2006-09-15T14:28:00", "In Saturn's Shadow"], ["2005-01-14T09:30:00", "Huygens lands"], ["2004-07-01T00:00:00", "Saturn arrival"]],
+      hint: "The moment Cassini OS opens on. A ?t= link still wins." });
   D({ key: "playback.autoplay", section: "Playback", label: "Play when Cassini OS opens", type: "toggle", value: true,
       hint: "Off opens paused at the starting moment." });
   D({ key: "playback.speed", section: "Playback", label: "Starting speed", type: "choice", value: 600,
