@@ -70,6 +70,15 @@ nothing is a mosaic. The window shows its frame straight away and swaps in the m
 body reel picture: stacked, calibrated, aligned, centred north up by SPICE) when it arrives.
 `window.cassiniMosaics = false` turns it off.
 
+When the observation maps a whole body (`web/frames/obs_mosaic.py`: the body's disk inside the frames' footprint,
+more than two frames and less than 16 across, e.g. In Saturn's Shadow on 2006-09-15, where Cassini OS opens), the
+route sends the observation's mosaic so far instead: every tile up to that frame, every filter, drawn like the
+mosaic benchmark (`mosaic_benchmark.py`: one display scale for the observation, calibrated compose with none
+pinned) and in false colour when it cycles three or more filters. The view fits the whole observation, so it grows
+in place; the window takes its shape and keeps it up between tiles. The first request makes the observation's tiles
+in the background (about 10 s for In Saturn's Shadow; `python web/frames/obs_mosaic.py <frame id> --cache DIR`
+makes them ahead of time), then each frame costs a fraction of a second.
+
 ## Colour sets
 
 The camera windows find filter sets in the catalog (`findSets` in `src/head-quiet.html`): a run of frames from

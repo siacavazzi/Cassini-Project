@@ -948,11 +948,13 @@ body.idle .camwin .well.has-frame { border-color: transparent; box-shadow: 0 6px
       im.onload = () => {
         busy = false;
         if (!want) return;   // the camera went idle while this was loading
-        shownKey = w.key; shown = w; shot.src = im.src;
+        // while an observation's mosaic is shown, its next frames keep it up (until the mosaic with them arrives)
+        const keep = obsShown && catalog.obs[w.k] === obsShown;
+        shownKey = w.key; shown = w;
+        if (!keep) { shot.src = im.src; obsShown = null; well.style.aspectRatio = ""; well.classList.remove("mosaic"); }
         well.classList.add("has-frame"); well.classList.toggle("composite", w.set >= 0);
-        card.querySelector(".kindtag").textContent = w.set >= 0 ? KIND[catalog.sets[w.set].kind].toUpperCase() : "";
+        if (!keep) card.querySelector(".kindtag").textContent = w.set >= 0 ? KIND[catalog.sets[w.set].kind].toUpperCase() : "";
         if (w.set >= 0) { channelsFrom(im, catalog.sets[w.set]); howMade(w); }
-        well.classList.remove("mosaic");
         if (w.tile) mosaicOf(w);
         for (const u of next) { const p = new Image(); p.crossOrigin = "anonymous"; p.src = u; }   // warm the cache
         pump();
@@ -977,7 +979,9 @@ body.idle .camwin .well.has-frame { border-color: transparent; box-shadow: 0 6px
     // stepped across the body with the same filter (mosaic.panels), and otherwise sends the pipeline's mosaic
     // of this tile over the ones before it, which replaces the picture while it is still the one shown.
     // window.cassiniMosaics = false turns this off.
-    let mosaicUrl = null;
+    // A whole-body mosaic (the observation maps the body, X-Reel names it) is the observation's mosaic so far,
+    // every filter, its own shape: the window takes that shape and keeps it for the rest of the observation.
+    let mosaicUrl = null, obsShown = null;
     function mosaicOf(w) {
       if (window.cassiniMosaics === false) return;
       const id = catalog.id[w.set >= 0 ? catalog.sets[w.set].use[0] : w.k];
@@ -988,6 +992,12 @@ body.idle .camwin .well.has-frame { border-color: transparent; box-shadow: 0 6px
         if (mosaicUrl) URL.revokeObjectURL(mosaicUrl);
         shot.src = mosaicUrl = URL.createObjectURL(blob);
         well.classList.add("mosaic");
+        if (rep && rep.observation) {
+          obsShown = catalog.obs[w.k];
+          well.style.aspectRatio = `${rep.width} / ${rep.height}`;
+          card.querySelector(".kindtag").textContent = `${rep.filters >= 3 ? "FALSE COLOUR " : ""}MOSAIC · ${rep.mosaic} OF ${rep.of} TILES${rep.filters > 1 ? ` · ${rep.filters} FILTERS` : ""}`;
+          return;
+        }
         card.querySelector(".kindtag").textContent = `${w.set >= 0 ? KIND[catalog.sets[w.set].kind].toUpperCase() + " · " : ""}MOSAIC${rep && rep.mosaic ? ` OF ${rep.mosaic}` : ""}`;
       }, () => {});
     }

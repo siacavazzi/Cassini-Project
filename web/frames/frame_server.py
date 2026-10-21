@@ -37,6 +37,10 @@ Routes:
                                the mosaic frame <ID> is a new tile of, made like a reel picture: 404 when
                                the frame is not a mosaic tile (mosaic.panels: same camera, observation and
                                filter, the pointing stepped across the body, panels overlap)
+                               When the frame's observation maps a whole body (obs_mosaic: the body's disk
+                               inside the frames' footprint), instead the observation's mosaic so far, every
+                               filter, in false colour when it cycles three or more; the first request starts
+                               making its tiles and gets the rolling mosaic meanwhile
   /health                      "ok" plus where the frames come from
   anything else                a file from --site, if given (the replay page and its data)
 
@@ -72,6 +76,7 @@ import numpy as np  # noqa: E402
 import color_image  # noqa: E402
 sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
 import reel  # noqa: E402
+import obs_mosaic  # noqa: E402
 
 FRAME_ID = re.compile(r"^([NW])\d{10}_\d+$")
 SIZES = (128, 256, 384, 512, 768, 1024)
@@ -261,10 +266,18 @@ def make_handler(site, cache):
                 # real mosaic (reel.mosaic_of, mosaic.panels), otherwise 404 at once and the window keeps its frame
                 if not FRAME_ID.match(m.group(1)):
                     return self.send_error(400, "Not a frame id")
+                size = min(SIZES, key=lambda s: abs(s - int(parse_qs(url.query).get("size", ["512"])[0])))
+                # a whole-body mosaic (obs_mosaic): the observation's mosaic so far, every filter
+                if reel._index is not None:
+                    try:
+                        made = obs_mosaic.mosaic_webp(m.group(1), size, cache, _color_slots)
+                    except FileNotFoundError:
+                        made = None
+                    if made:
+                        return self.send_bytes(made[0], "image/webp", headers={"X-Reel": json.dumps(made[1])})
                 found = reel.mosaic_of(m.group(1), wait=False)
                 if not found:
                     return self.send_error(404, "Not a mosaic tile")
-                size = min(SIZES, key=lambda s: abs(s - int(parse_qs(url.query).get("size", ["512"])[0])))
                 try:
                     data, report = reel.shot_webp(*found, size, cache, True, _color_slots)
                     return self.send_bytes(data, "image/webp", headers={"X-Reel": json.dumps(report, default=str)})
