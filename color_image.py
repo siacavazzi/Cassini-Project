@@ -191,8 +191,10 @@ auto_center. One path makes a black and white picture, two a two-filter one (gre
 paths = the frames' paths, longest wavelength first
 returns (RGBA numpy image, its label, report): the image is on auto_center's canvas when
 centring worked (report["centred"] True), otherwise the 1024 px frame as it is
+max_offset = how far (full resolution pixels) the target's centre may sit from the frame's
+middle for the frame to be centred on it; 600 is just past the frame's corners' reach
 """
-def processed_frame(paths):
+def processed_frame(paths, max_offset=600):
     imgs, valid, lbl, report = load_aligned(list(paths))
     chans = [cv2.cvtColor(img, cv2.COLOR_BGR2GRAY) if img.ndim == 3 else img for img in imgs]
     if len(chans) == 1:
@@ -205,10 +207,14 @@ def processed_frame(paths):
     try:
         with spice_lock:
             centred = lbl.set_color(image).auto_center(border)
-        # a close-up of a big body has its centre far off the frame: centring pushes the frame
-        # off the canvas, so it is shown as it is instead
-        if centred[..., 3].sum() < 0.5 * alpha.astype(np.float64).sum():
-            raise ValueError("the target's centre is far off the frame (close-up)")
+        # how far the target's centre is from the frame's centre: the frame's centre goes to
+        # placement @ (511.5, 511.5) and the target's to the middle of the canvas. A close-up
+        # with the target's centre off the frame is shown as it is instead
+        middle = (centred.shape[1] - 1) / 2, (centred.shape[0] - 1) / 2
+        moved = lbl.placement @ np.array([ba.CCD_CENTER, ba.CCD_CENTER, 1.0])
+        report["offset_px"] = round(float(np.hypot(moved[0] - middle[0], moved[1] - middle[1])), 1)
+        if report["offset_px"] > max_offset:
+            raise ValueError(f"the target's centre is off the frame (close-up), {report['offset_px']:.0f} px from its middle")
         report["centred"] = True
         return centred, lbl, report
     except Exception as e:

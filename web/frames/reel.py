@@ -45,12 +45,12 @@ import data_source  # noqa: E402
 import mosaic  # noqa: E402
 
 # bumped whenever the way reel pictures are made changes, so older ones are not served again
-VERSION = "reel-v1"
+VERSION = "reel-v2"
 SET_GAP = 300          # seconds between frames of one filter set
 REPEAT_GAP = 120       # stacking.find_repeats' window
 MOSAIC_GAP = 1800      # pictures more than this far apart never share a mosaic
-VIEW = 2048            # full resolution pixels around the body that a picture shows
-OUT = 1024             # ...kept at half resolution
+VIEW = 1536            # full resolution pixels around the body that a picture shows
+OUT = 1024             # ...kept at two thirds of full resolution
 TRUE_BLUES = ("BL1", "BL2", "VIO")
 
 _index = None
