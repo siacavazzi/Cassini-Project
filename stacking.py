@@ -8,12 +8,14 @@ Repeats that turn out to point somewhere else (the next panel of a mosaic) are
 dropped later, when image_correction.stack_frames fails to align them.
 """
 
+import threading
 import pandas as pd
 import label_handler as lh
 import image_correction as ic
 
 index = None
 groups = None
+_index_lock = threading.Lock()
 keys = ["INSTRUMENT_ID", "TARGET_NAME", "OBSERVATION_ID", "FILTER_NAME"]
 # label fields that must match for two frames to be stacked
 same_settings = ["EXPOSURE_DURATION", "GAIN_MODE_ID", "INSTRUMENT_MODE_ID"]
@@ -22,9 +24,13 @@ same_settings = ["EXPOSURE_DURATION", "GAIN_MODE_ID", "INSTRUMENT_MODE_ID"]
 def load_index():
     global index, groups
     if index is None:
-        index = pd.read_csv("Image_index.csv", usecols=keys + ["path", "seconds_1970"], low_memory=False).set_index("path", drop=False)
-        # row positions of every camera/target/observation/filter combination, for fast lookup
-        groups = index.groupby(keys, sort=False).indices
+        # read once, even when several threads (the frame server's) ask at the same time
+        with _index_lock:
+            if index is None:
+                idx = pd.read_csv("Image_index.csv", usecols=keys + ["path", "seconds_1970"], low_memory=False).set_index("path", drop=False)
+                # row positions of every camera/target/observation/filter combination, for fast lookup
+                groups = idx.groupby(keys, sort=False).indices
+                index = idx
     return index
 
 
@@ -58,13 +64,14 @@ def find_repeats(path, window=120, max_frames=5):
 
 """
 Loads the frame at path and stacks it with its repeat exposures.
-returns (label of the frame at path, stacked image resized like label.resize_image)
+returns (label of the frame at path, stacked image resized like label.resize_image),
+plus how many frames went in when count is True
 """
-def load_stacked(path, window=120, max_frames=5):
+def load_stacked(path, window=120, max_frames=5, count=False):
     lbl = lh.label(path, as_png=True)
     frames = [lbl.resize_image()]
     if max_frames <= 1:
-        return lbl, frames[0]
+        return (lbl, frames[0], 1) if count else (lbl, frames[0])
     for repeat in find_repeats(path, window, 4 * max_frames)[1:]:
         if len(frames) >= max_frames:
             break
@@ -81,4 +88,5 @@ def load_stacked(path, window=120, max_frames=5):
             frames.append(frame)
     if len(frames) > 1:
         print(f"Stacking {len(frames)} frames for {path}")
-    return lbl, ic.stack_frames(frames)
+    stacked = ic.stack_frames(frames)
+    return (lbl, stacked, len(frames)) if count else (lbl, stacked)

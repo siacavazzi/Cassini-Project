@@ -117,28 +117,7 @@ def make_frame(row, filters):
         image = np.asarray(Image.merge("RGBA",(gray,gray,gray, get_mask())))
         return Image.fromarray(lbl.set_color(image).auto_center(border)), lbl
 
-    for filter in filters:
-        lbl, img = stacking.load_stacked(row[filter], max_frames = 5 if stack_repeats else 1)
-        lbls.append(lbl)
-        imgs.append(img)
-    # pixels each frame lost in downlink (truncated lines); filled so they don't skew the rest
-    masks = [l.valid_mask() for l in lbls]
-    imgs = [ic.fill_invalid(img, mask) for img, mask in zip(imgs, masks)]
-    if calibrate:
-        # puts every filter on the same brightness scale (see calibration.py)
-        imgs = cal.load_channels(lbls, imgs)
-
-    # align to the middle frame in time so the largest offset is as small as possible
-    order = sorted(range(len(lbls)), key=lambda j: lbls[j].info["IMAGE_TIME"])
-    ref = order[len(order)//2]
-    lbl = lbls[ref]
-
-    # masks move with the frames, so pixels alignment leaves uncovered become invalid too
-    try:
-        imgs, masks = ic.align_with_masks(imgs, masks, ref)
-    except:
-        print("Image alignment failure")
-    valid = np.logical_and.reduce(masks)
+    imgs, valid, lbl, _ = load_aligned([row[filter] for filter in filters])
 
     for j in range(0, len(imgs)):
         imgs[j] = Image.fromarray(imgs[j]).convert('L')
@@ -161,6 +140,46 @@ def make_frame(row, filters):
             image = Image.merge("P",imgs[0],imgs[1])
 
     return image, lbl
+
+
+"""
+The color path of make_frame up to the merge, also used by the frame server's composites
+(web/frames/frame_server.py): each frame stacked with its repeat exposures, lost pixels
+filled, every filter put on one brightness scale, then aligned to the middle frame in time.
+paths = the frames' paths, one per channel
+returns (images, mask of pixels valid in every channel, the reference frame's label, report)
+where report says how each frame was calibrated and aligned
+"""
+def load_aligned(paths):
+    lbls, imgs, stacked = [], [], []
+    for path in paths:
+        lbl, img, n = stacking.load_stacked(path, max_frames = 5 if stack_repeats else 1, count=True)
+        lbls.append(lbl)
+        imgs.append(img)
+        stacked.append(n)
+    # pixels each frame lost in downlink (truncated lines); filled so they don't skew the rest
+    masks = [l.valid_mask() for l in lbls]
+    imgs = [ic.fill_invalid(img, mask) for img, mask in zip(imgs, masks)]
+    calibrated = False
+    if calibrate:
+        # puts every filter on the same brightness scale (see calibration.py)
+        before = imgs
+        imgs = cal.load_channels(lbls, imgs)
+        calibrated = imgs is not before
+
+    # align to the middle frame in time so the largest offset is as small as possible
+    order = sorted(range(len(lbls)), key=lambda j: lbls[j].info["IMAGE_TIME"])
+    ref = order[len(order)//2]
+
+    # masks move with the frames, so pixels alignment leaves uncovered become invalid too
+    aligned = []
+    try:
+        imgs, masks = ic.align_with_masks(imgs, masks, ref, aligned)
+    except Exception:
+        print("Image alignment failure")
+        aligned = ["failed"] * len(imgs)
+    report = {"calibrated": calibrated, "stacked": stacked, "aligned": aligned}
+    return imgs, np.logical_and.reduce(masks), lbls[ref], report
 
 
 def frame_path(row, target, folder):

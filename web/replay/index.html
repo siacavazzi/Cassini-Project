@@ -1509,7 +1509,8 @@ async function jump(e) {
   if (mission) { setPlaying(false); lastWantedYear = yearOf(state.et); await requestYears(lastWantedYear); }
   setView(span, e.et);
   updateBodies();
-  setFocus(present(body) || body === "HUYGENS" ? body : "CASSINI", huy && /lands/.test(e.label) ? 0.15 : undefined);
+  // the view stays on Cassini; the focus chips still move it to the flyby body on request
+  if (state.focus !== "CASSINI") setFocus("CASSINI");
   setSpeed(speed); setPlaying(true);
 }
 

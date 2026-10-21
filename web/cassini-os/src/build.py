@@ -18,11 +18,47 @@ if len(sys.argv) == 1:
         subprocess.run([sys.executable, __file__, os.path.join(root, "..", "replay", "index.html"),
                         os.path.join(HERE, head), os.path.join(root, out)], check=True)
     sys.exit(0)
-import sys, re
+import sys, re, json
 src = open(sys.argv[1]).read()           # prototype source
 study = open(sys.argv[2]).read()          # study: everything up to (not incl.) the three.js script tags
 out = sys.argv[3]
 script = src[src.index('<script src="https://cdn.jsdelivr.net/npm/three@0.128.0/build/three.min.js">'):]
+
+# movie mode (movie.html): its style joins the head's, its window goes into #app next to the others, a Movie
+# button joins the transport, and its script runs after the chrome script
+movie = open(os.path.join(os.path.dirname(os.path.abspath(sys.argv[2])), "movie.html")).read()
+part = lambda tag: movie[movie.index(f"<{tag}"):movie.index(f"</{tag}>") + len(tag) + 3]
+for old, new in [
+    ("</style>\n</head>", part("style")[len("<style>"):] + "\n</head>"),
+    ('  <div id="loading">', "  " + part("section") + "\n\n" + '  <div id="loading">'),
+    ('<button class="btn round skip" id="next" aria-label="Next moment">▶▶</button>',
+     '<button class="btn round skip" id="next" aria-label="Next moment">▶▶</button>\n'
+     '          <button class="btn round skip" id="movie" aria-pressed="false" aria-label="Movie mode" title="Movie mode: play one body\'s frames as a film (M)">'
+     '<svg viewBox="0 0 16 16" aria-hidden="true"><rect x="2" y="3" width="12" height="10" rx="1.5"/><path d="M5 3v10M11 3v10M2 6.3h3M2 9.7h3M11 6.3h3M11 9.7h3"/></svg></button>'),
+]:
+    assert study.count(old) == 1, old
+    study = study.replace(old, new)
+study += part("script") + "\n"
+
+# settings (settings.html): its style joins the head's, its window goes into #app, and its script runs before the
+# chrome script, so the chrome, movie mode and the viewer can all read window.cassiniSettings
+settings = open(os.path.join(os.path.dirname(os.path.abspath(sys.argv[2])), "settings.html")).read()
+spart = lambda tag: settings[settings.index(f"<{tag}"):settings.index(f"</{tag}>") + len(tag) + 3]
+for old, new in [
+    ("</style>\n</head>", spart("style")[len("<style>"):] + "\n</head>"),
+    ('  <div id="loading">', "  " + spart("section") + "\n\n" + '  <div id="loading">'),
+    ("<script>\n// ---------- Cassini OS chrome", spart("script") + "\n<script>\n// ---------- Cassini OS chrome"),
+]:
+    assert study.count(old) == 1, old
+    study = study.replace(old, new)
+
+# per-body camera windows (bodywin.html, a setting): its style joins the head's and its script runs after the chrome
+# script, whose camera feed and window manager it reuses
+bodywin = open(os.path.join(os.path.dirname(os.path.abspath(sys.argv[2])), "bodywin.html")).read()
+bpart = lambda tag: bodywin[bodywin.index(f"<{tag}"):bodywin.index(f"</{tag}>") + len(tag) + 3]
+assert study.count("</style>\n</head>") == 1
+study = study.replace("</style>\n</head>", bpart("style")[len("<style>"):] + "\n</head>")
+study += bpart("script") + "\n"
 
 def rep(old, new, count=1):
     global script
@@ -43,6 +79,9 @@ const THEME = {
   nowGlow: cssVar("--tl-now-glow").replace(/"/g, ""), barStyle: cssVar("--tl-bar-style") || "solid"
 };
 ''')
+# surface map size: a ?tex= link wins, then the Settings window's choice
+rep('const TEX_TIER = (new URLSearchParams(location.search).get("tex") || (location.hash.match(/^#tex-(\\w+)$/) || [])[1] || "2k").toLowerCase();',
+    'const TEX_TIER = (new URLSearchParams(location.search).get("tex") || (location.hash.match(/^#tex-(\\w+)$/) || [])[1] || (window.cassiniSettings && cassiniSettings.get("view.textures")) || "2k").toLowerCase();')
 rep('renderer.setClearColor(0x04060b, 1);', 'renderer.setClearColor(new THREE.Color(THEME.clear), 1);')
 rep('const c = n === "CASSINI" ? [0.56, 0.79, 1] : n === "HUYGENS" ? [1, 0.82, 0.55] : n === "TITAN" ? [0.88, 0.6, 0.29] : [0.62, 0.66, 0.72];',
     'const c = n === "CASSINI" ? THEME.mkCassini : n === "HUYGENS" ? [1, 0.82, 0.55] : n === "TITAN" ? THEME.mkTitan : THEME.mk;')
@@ -86,6 +125,9 @@ rep('''    list.appendChild(li);
   }
   if (window.studyMoments) window.studyMoments(picks);
 }''')
+# playback hook: the page can slow the clock (Cassini OS caps the pictures per second during imaging bursts)
+rep('    setTime(state.et + dt * state.speed);\n',
+    '    setTime(window.studyAdvance ? window.studyAdvance(state.et, dt, state.speed) : state.et + dt * state.speed);\n')
 rep('''function setPlaying(p) { state.playing = p; $("play").textContent = p ? "❚❚" : "▶"; }''',
     '''function setPlaying(p) { state.playing = p; $("play").textContent = p ? "❚❚" : "▶"; $("play").classList.toggle("playing", p); }''')
 # timeline colours/fonts
@@ -175,5 +217,21 @@ rep("""    closeCam.position.copy(camera.position); closeCam.quaternion.copy(cam
     renderer.render(scene, closeCam);
     cassini.scale.setScalar(cs);""")
 rep('  state.pointed = !!qb;\n', '  state.pointed = !!qb;\n  window.cassiniPointing = qb ? "CK" : "EARTH";\n')
+rep('  const card = $("imgcard");\n', '  const card = $("camsink");\n')   # the page has a window per camera (see the head)
+# effective wavelength of every filter pair, for placing colour channels: "N:CL1/RED" -> nm
+nm = {}
+for line in open(os.path.join(HERE, "..", "..", "..", "filter_calibration.csv")).read().splitlines()[1:]:
+    camera, filters, wavelength = line.split(",")[:3]
+    nm[camera] = nm.get(camera, []) + [(filters, float(wavelength))]
+pairs = {}
+WHEELS = {"ISSNA": ("CL1", "RED", "BL1", "UV2", "UV1", "IRP0", "P120", "P60", "P0", "HAL", "IR4", "IR2"),
+          "ISSWA": ("CL1", "IR3", "IR4", "IR5", "CB3", "MT3", "CB2", "MT2", "IR2")}
+for camera, rows in nm.items():
+    for filters, wavelength in rows:
+        # the table joins the two wheels' names; split at the first wheel's name it starts with
+        first = max((f for f in WHEELS[camera] if filters.startswith(f)), key=len)
+        pairs[f"{camera[3]}:{first}/{filters[len(first):]}"] = wavelength
+assert study.count("/*FILTER_NM*/{}") == 1
+study = study.replace("/*FILTER_NM*/{}", json.dumps(pairs, separators=(",", ":"), sort_keys=True))
 open(out, 'w').write(study + script)
 print("ok", out, len(study + script))

@@ -42,16 +42,71 @@ def fill_invalid(img, mask):
 """
 Like align_images, but also moves each frame's valid-pixel mask (label.valid_mask) with it,
 so pixels a shift leaves uncovered count as invalid too.
+Phase correlation needs the frames to look alike; through filters far apart (UV against
+IR) it can fail to find a match. A whole target in every frame then still lines up by
+its centroid (centroid_shift).
+report = optional list that gets one entry per frame: how it was aligned
 returns (imgs, masks)
 """
-def align_with_masks(imgs, masks, ref=0):
+def align_with_masks(imgs, masks, ref=0, report=None):
     for i in range(0, len(imgs)):
-        if i != ref:
-            shift = find_shift(imgs[ref], imgs[i])
-            if shift is not None:
-                imgs[i] = shift_image(imgs[i], *shift)
-                masks[i] = shift_image(masks[i].astype(np.float32), *shift) > 0.99
+        if i == ref:
+            if report is not None:
+                report.append("reference")
+            continue
+        shift, how = find_shift(imgs[ref], imgs[i]), "phase"
+        if shift is None:
+            shift, how = find_shift(edges(imgs[ref]), edges(imgs[i])), "edges"
+            # an edge match at exactly no shift is the camera's own fixed pattern (dust rings, bad
+            # columns) matching itself, not the target: it says nothing
+            if shift is not None and abs(shift[0]) < 0.25 and abs(shift[1]) < 0.25:
+                shift = None
+        if shift is None:
+            shift, how = centroid_shift(imgs[ref], imgs[i]), "centroid"
+        if shift is not None:
+            imgs[i] = shift_image(imgs[i], *shift)
+            masks[i] = shift_image(masks[i].astype(np.float32), *shift) > 0.99
+        if report is not None:
+            report.append(f"{how} {shift[0]:+.1f},{shift[1]:+.1f}" if shift is not None else "not aligned")
     return imgs, masks
+
+
+"""
+Gradient magnitude of a frame, as a 3 channel 8-bit image for find_shift. Limbs, terminators
+and crater rims sit in the same place through every filter even when their brightness does
+not (bright haze in blue, dark surface in infrared), so edges can match where the frames don't.
+"""
+def edges(im):
+    gray = cv2.cvtColor(im, cv2.COLOR_BGR2GRAY) if im.ndim == 3 else im
+    gray = cv2.GaussianBlur(gray.astype(np.float32), (0, 0), 1.5)
+    mag = cv2.magnitude(cv2.Sobel(gray, cv2.CV_32F, 1, 0), cv2.Sobel(gray, cv2.CV_32F, 0, 1))
+    mag = np.clip(mag * 255.0 / max(np.percentile(mag, 99.5), 1e-6), 0, 255).astype(np.uint8)
+    return cv2.cvtColor(mag, cv2.COLOR_GRAY2BGR)
+
+
+"""
+Offset of im2 from im1 by the centroid of the target's lit area, for when phase
+correlation fails. Only used when the target sits wholly inside both frames (its lit
+area touches no edge), since a cut-off target moves its centroid.
+returns (dx, dy) or None
+"""
+def centroid_shift(im1, im2, max_shift=100):
+    centres = []
+    for im in (im1, im2):
+        gray = cv2.cvtColor(im, cv2.COLOR_BGR2GRAY).astype(np.float32) if im.ndim == 3 else im.astype(np.float32)
+        blurred = cv2.GaussianBlur(gray, (0, 0), 3)
+        if blurred.max() <= 0:
+            return None
+        lit = blurred > 0.2 * blurred.max()
+        if lit.sum() < 50 or lit[0].any() or lit[-1].any() or lit[:, 0].any() or lit[:, -1].any():
+            return None
+        ys, xs = np.nonzero(lit)
+        weight = blurred[ys, xs]
+        centres.append(((xs * weight).sum() / weight.sum(), (ys * weight).sum() / weight.sum()))
+    dx, dy = centres[1][0] - centres[0][0], centres[1][1] - centres[0][1]
+    if abs(dx) > max_shift or abs(dy) > max_shift:
+        return None
+    return dx, dy
 
 
 """
