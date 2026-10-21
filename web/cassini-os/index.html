@@ -1912,53 +1912,63 @@ body.phone #hllist { grid-template-columns: 1fr; }
   // Each frame goes through the pipeline like the camera windows' pictures (movie.processed, on by default): the
   // frame that completes a filter set shows the set's colour composite, a new tile of a mosaic pass the mosaic so far,
   // and every other frame is processed on its own (/frames/processed: stacked, calibrated, on the pipeline's display
-  // scale). A picture tries those in turn: a server that has none (404) or cannot make one moves on to the next, and
-  // a composite or mosaic still being made after PATIENCE ms of the film waiting for it gives way to the processed
-  // frame. The plain archive frame is the last resort.
-  const S = window.cassiniSettings, PATIENCE = 2500;
+  // scale). The processed frame is always loaded; a composite or mosaic is loaded beside it and shown when it is ready in
+  // time. The film never waits more than GRACE ms (from when the frame was first asked for) for a composite or mosaic:
+  // the server makes a new mosaic tile in seconds the first time, so on a pass nobody has watched yet the film plays the
+  // processed frames and the mosaic comes up where it is ready (a frame still on screen when it arrives swaps to it).
+  // A server that has none (404) or cannot make one moves on to the next choice; the archive frame is the last resort.
+  const S = window.cassiniSettings, GRACE = 1200;
   const opt = (key, dflt) => (S && S.get(key) !== undefined ? S.get(key) : dflt);
   const KIND = { true: "true colour", false: "false colour", two: "two-filter colour" };
   const size = () => (window.cassiniWM && window.cassiniWM.big ? window.cassiniWM.big(card, card.querySelector(".mvwell")) : card.classList.contains("zoomed")) ? 1024 : 512;
-  // the pictures frame f can be shown as, best first, each { url, kind }
+  // the pictures frame f can be shown as, each { url, kind }: best (mosaic, then composite) and base (processed, then raw)
   function choices(f) {
     const id = f.id, sz = size(), raw = { url: `${FRAMES}/frames/${id}.webp?size=${sz}`, kind: "" };
-    if (!opt("movie.processed", true)) return [raw];
+    if (!opt("movie.processed", true)) return { best: [], base: [raw] };
     if (!catalog.setOf && window.cassiniFeeds) window.cassiniFeeds.prep();
-    const out = [], k = f.k, si = catalog.setOf ? catalog.setOf[k] : -1, s = si >= 0 ? catalog.sets[si] : null;
+    const best = [], k = f.k, si = catalog.setOf ? catalog.setOf[k] : -1, s = si >= 0 ? catalog.sets[si] : null;
     const comp = s && s.use.includes(k) && s.ready === catalog.et[k] && opt("cameras.composites", true);
     // a possible mosaic tile: the camera's frame before this one is of the same body and observation (and a frame of
     // a colour set only once its composite is up, as in the camera windows)
     let prev = -1;
     for (let j = f.i - 1; j >= Math.max(0, f.i - 64); j--) if (catalog.cam[order[j]] === catalog.cam[k]) { prev = order[j]; break; }
     const tile = prev >= 0 && catalog.target[prev] === catalog.target[k] && catalog.obs[prev] === catalog.obs[k] && (!s || comp);
-    if (tile && opt("cameras.mosaics", true) && window.cassiniMosaics !== false) out.push({ url: `${FRAMES}/frames/mosaic/${comp ? catalog.id[s.use[0]] : id}.webp?size=${sz}`, kind: "mosaic" });
-    if (comp) out.push({ url: `${FRAMES}/frames/color.webp?ids=${s.use.map(q => catalog.id[q]).join(",")}&size=${sz}`, kind: KIND[s.kind] || "colour" });
-    out.push({ url: `${FRAMES}/frames/processed/${id}.webp?size=${sz}`, kind: "processed" }, raw);
-    return out;
+    if (tile && opt("cameras.mosaics", true) && window.cassiniMosaics !== false) best.push({ url: `${FRAMES}/frames/mosaic/${comp ? catalog.id[s.use[0]] : id}.webp?size=${sz}`, kind: "mosaic" });
+    if (comp) best.push({ url: `${FRAMES}/frames/color.webp?ids=${s.use.map(q => catalog.id[q]).join(",")}&size=${sz}`, kind: KIND[s.kind] || "colour" });
+    return { best, base: [{ url: `${FRAMES}/frames/processed/${id}.webp?size=${sz}`, kind: "processed" }, raw] };
   }
-  function load(b) {
-    const c = b.urls[b.n], im = new Image();
-    b.img = im; b.since = performance.now();
-    im.decoding = "async"; im.crossOrigin = "anonymous";
-    im.onload = () => { if (b.img === im) { b.ok = true; b.kind = c.kind; } };
-    im.onerror = () => { if (b.img !== im) return; if (++b.n < b.urls.length) load(b); else b.ok = false; };
-    im.src = c.url;
+  // one chain of choices: tried in turn until one loads (ok true) or none does (ok false)
+  function chain(list, onload) {
+    const c = { list, n: 0, img: null, ok: list.length ? null : false, kind: "" };
+    const load = () => {
+      const im = new Image(), it = list[c.n];
+      c.img = im; im.decoding = "async"; im.crossOrigin = "anonymous";
+      im.onload = () => { c.ok = true; c.kind = it.kind; onload(); };
+      im.onerror = () => { if (++c.n < list.length) load(); else c.ok = false; };
+      im.src = it.url;
+    };
+    if (list.length) load();
+    return c;
+  }
+  // b.ok: null while the film should wait for frame b, then true (b.img, b.kind are what to show) or false (no frame)
+  function settle(b) {
+    const best = b.best.ok, base = b.base.ok;
+    if (best) Object.assign(b, { ok: true, img: b.best.img, kind: b.best.kind });
+    else if (base && (best === false || performance.now() - b.since > GRACE)) Object.assign(b, { ok: true, img: b.base.img, kind: b.base.kind });
+    else if (base === false && best === false) b.ok = false;
+    return b;
   }
   function want(f) {
     let b = M.buf.get(f.id);
     if (!b || b.size !== size()) {
-      b = { urls: choices(f), n: 0, img: null, ok: null, size: size(), kind: "" };
-      load(b);
+      const c = choices(f);
+      b = { ok: null, img: null, kind: "", size: size(), since: performance.now() };
+      // a composite or mosaic that arrives while its frame is on screen replaces the processed frame there
+      b.best = chain(c.best, () => { if (M.on && M.cur && M.cur.id === f.id && b.kind !== b.best.kind) { settle(b); draw(b.img); tag(f, b); } });
+      b.base = chain(c.base, () => {});
       M.buf.set(f.id, b);
     }
-    return b;
-  }
-  // the film is waiting on b: a composite or mosaic that is taking too long gives way to the processed frame
-  function hurry(b) {
-    if (b.ok === null && b.n < b.urls.length - 2 && performance.now() - b.since > PATIENCE) {
-      while (b.n < b.urls.length - 2) b.n++;
-      load(b);
-    }
+    return settle(b);
   }
   function fill(i) {
     // processed frames take the server a fraction of a second each the first time, so the film asks well ahead
@@ -1968,7 +1978,7 @@ body.phone #hllist { grid-template-columns: 1fr; }
       const f = at(j); if (!f) break;
       keep.add(f.id);
       const b = M.buf.get(f.id);
-      if (b && b.ok === null) flying++;
+      if (b && (b.base.ok === null || b.best.ok === null)) flying++;
       else if (!b && flying < 10) { want(f); flying++; }
     }
     for (const id of M.buf.keys()) if (!keep.has(id)) M.buf.delete(id);
@@ -1979,6 +1989,7 @@ body.phone #hllist { grid-template-columns: 1fr; }
     blank(); g.drawImage(img, (s - w) / 2, (s - h) / 2, w, h);
   }
   const fmtDate = et => { const s = new Date(etToMs(et)).toISOString(); return `${s.slice(0, 10)} ${s.slice(11, 19)} UTC`; };
+  const tag = (f, b) => { const k = f.k; $("mvtag").textContent = `${fmtDate(f.et)} · ${titleCase(catalog.target[k] || "Unknown")} · ${catalog.cam[k] === "N" ? "NAC" : "WAC"} ${catalog.f1[k]}/${catalog.f2[k]}${b.ok && b.kind && b.kind !== "processed" ? ` · ${b.kind}` : ""}`; };
   let skipTimer = 0;
   // put frame i on screen and move the mission clock to it
   function show(i) {
@@ -1990,8 +2001,7 @@ body.phone #hllist { grid-template-columns: 1fr; }
     setTime(f.et);
     const span = state.view[1] - state.view[0];
     if (state.et < state.view[0] || state.et > state.view[1] - span * 0.05) setView(span, state.et + span * 0.4);
-    const k = f.k;
-    $("mvtag").textContent = `${fmtDate(f.et)} · ${titleCase(catalog.target[k] || "Unknown")} · ${catalog.cam[k] === "N" ? "NAC" : "WAC"} ${catalog.f1[k]}/${catalog.f2[k]}${b.ok && b.kind && b.kind !== "processed" ? ` · ${b.kind}` : ""}`;
+    tag(f, b);
     $("mvcount").textContent = f.id;
     if (prev && f.et - prev.et > 3 * 3600) {   // a stretch without frames: say how much time the cut left out
       $("mvskip").textContent = `skipped ${fmtDur(f.et - prev.et)}`; $("mvskip").classList.add("on");
@@ -2005,7 +2015,7 @@ body.phone #hllist { grid-template-columns: 1fr; }
     if (yearReady() && !state.dragging) {
       const i = here();
       fill(i);
-      if (M.late && M.cur && M.late.id === M.cur.id && M.cat === catalog) { const b = want(M.late); if (b.ok !== null) show(M.late.i); else hurry(b); }
+      if (M.late && M.cur && M.late.id === M.cur.id && M.cat === catalog) { const b = want(M.late); if (b.ok !== null) show(M.late.i); }
       if (M.playing && now >= M.due) {
         let shown = -1, j = i;
         while (now >= M.due) {
@@ -2014,7 +2024,7 @@ body.phone #hllist { grid-template-columns: 1fr; }
           const f = at(j);
           if (!f) { if (shown < 0 && !(mission && yearOf(state.et) < mission.years[mission.years.length - 1])) setMoviePlaying(false); break; }
           const b = want(f);
-          if (!b.ok) { hurry(b); break; }
+          if (!b.ok) break;
           shown = j; M.due += 1000 / M.fps;
         }
         if (shown >= 0) { show(shown); M.due = Math.max(M.due, now - 250); M.waitSince = 0; }
