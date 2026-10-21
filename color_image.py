@@ -186,13 +186,17 @@ def load_aligned(paths):
 """
 One picture for the frame server's body reel (web/frames/reel.py): the frames at paths through
 the color path above (load_aligned: stacked with their repeat exposures, lost pixels filled,
-calibrated, aligned), merged like make_frame, then centred on the target with north up by
-auto_center. One path makes a black and white picture, two a two-filter one (green from both).
+calibrated, aligned), merged like make_frame, then placed by auto_center (SPICE): north up, and
+where the frame sits relative to the target's centre. One path makes a black and white
+picture, two a two-filter one (green from both).
 paths = the frames' paths, longest wavelength first
-returns (RGBA numpy image, its label, report): the image is on auto_center's canvas when
-centring worked (report["centred"] True), otherwise the 1024 px frame as it is
 max_offset = how far (full resolution pixels) the target's centre may sit from the frame's
-middle for the frame to be centred on it; 600 is just past the frame's corners' reach
+middle for the picture to count as centred on it; 600 is just past the frame's corners' reach
+returns (RGBA numpy image, its label, report). With SPICE, the image is translate's canvas with
+the frame's middle at the canvas middle, rotated north up, and report["frame_offset"] is where
+that middle sits relative to the target's centre (canvas pixels, x right, y down): a close-up's
+panels keep their places on the body, so they can mosaic. report["centred"] is True when the
+target's centre is on the frame. Without SPICE, the 1024 px frame as it is.
 """
 def processed_frame(paths, max_offset=600):
     imgs, valid, lbl, report = load_aligned(list(paths))
@@ -207,16 +211,20 @@ def processed_frame(paths, max_offset=600):
     try:
         with spice_lock:
             centred = lbl.set_color(image).auto_center(border)
-        # how far the target's centre is from the frame's centre: the frame's centre goes to
-        # placement @ (511.5, 511.5) and the target's to the middle of the canvas. A close-up
-        # with the target's centre off the frame is shown as it is instead
-        middle = (centred.shape[1] - 1) / 2, (centred.shape[0] - 1) / 2
-        moved = lbl.placement @ np.array([ba.CCD_CENTER, ba.CCD_CENTER, 1.0])
-        report["offset_px"] = round(float(np.hypot(moved[0] - middle[0], moved[1] - middle[1])), 1)
-        if report["offset_px"] > max_offset:
-            raise ValueError(f"the target's centre is off the frame (close-up), {report['offset_px']:.0f} px from its middle")
-        report["centred"] = True
-        return centred, lbl, report
+        # the frame's middle goes to placement @ (511.5, 511.5), the target's centre to the
+        # middle of the canvas
+        middle = np.array([(centred.shape[1] - 1) / 2, (centred.shape[0] - 1) / 2])
+        moved = (lbl.placement @ np.array([ba.CCD_CENTER, ba.CCD_CENTER, 1.0]))[:2]
+        offset = moved - middle
+        report["frame_offset"] = [round(float(v), 1) for v in offset]
+        report["offset_px"] = round(float(np.hypot(*offset)), 1)
+        report["centred"] = bool(report["offset_px"] <= max_offset)
+        if not report["centred"]:
+            report["why"] = f"the target's centre is off the frame (close-up), {report['offset_px']:.0f} px from its middle"
+        # the same rotation without the shift: the frame north up at the middle of the canvas
+        # (a close-up's shift would push it off the canvas)
+        angle = np.degrees(np.arctan2(lbl.placement[0, 1], lbl.placement[0, 0]))
+        return lbl.translate("png", 0, 0, angle, border), lbl, report
     except Exception as e:
         print(f"Can't centre {lbl.info.get('PRODUCT_ID')}: {e}")
         report["centred"] = False

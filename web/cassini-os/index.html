@@ -465,8 +465,12 @@ body.idle #moviecard :is(.titlebar, .mvbar) { opacity: 0; }
 body.idle .mvwell { border-color: transparent; box-shadow: 0 6px 30px rgba(0,0,0,.6); }
 @media (max-width: 600px) { #moviecard, #moviecard.zoomed { width: calc(100% - 16px); left: 8px; top: calc(env(safe-area-inset-top, 0px) + 30px); } }
 
-#reelcard { top: calc(env(safe-area-inset-top, 0px) + 36px); left: max(14px, env(safe-area-inset-left, 0px)); width: clamp(320px, 38vw, 600px); }
-#reelcard.zoomed { width: clamp(420px, 60vw, 980px); }
+#reelcard { top: calc(env(safe-area-inset-top, 0px) + 36px); left: max(14px, env(safe-area-inset-left, 0px)); width: clamp(340px, 46vw, 760px); }
+#reelcard.zoomed { width: clamp(460px, 70vw, 1200px); }
+/* one well per camera, like the camera windows: narrow-angle big, wide-angle beside it */
+.rlwells { display: grid; grid-template-columns: 2fr 1fr; gap: 6px; align-items: start; }
+.rlwells.one { grid-template-columns: 1fr; }
+.rlwells.one #rlwellW { display: none; }
 #reelcard .body { padding: 2px 8px 8px; display: grid; gap: 7px; }
 .rlpick { display: flex; gap: 8px; align-items: center; font-size: 11px; color: var(--q-dim, #888); }
 .rlpick select { flex: 1; min-width: 0; font: inherit; color: var(--q-text, #ddd); background: rgba(0,0,0,.35); border: 1px solid var(--q-line, #555); border-radius: 4px; padding: 3px 4px; }
@@ -474,9 +478,12 @@ body.idle .mvwell { border-color: transparent; box-shadow: 0 6px 30px rgba(0,0,0
 #rlgo:hover { background: rgba(255,255,255,.16); }
 .rlwell { position: relative; aspect-ratio: 1; background: #000; border: 1px solid var(--q-line, #555); border-radius: 4px; overflow: hidden; }
 .rlwell canvas { position: absolute; inset: 0; width: 100%; height: 100%; display: block; }
-#rltag, #rlhow { position: absolute; left: 7px; right: 7px; font: 10px/1.35 var(--hudf, monospace); color: rgba(232,236,242,.82); text-shadow: 0 0 3px #000, 0 0 6px #000; pointer-events: none; }
-#rltag { bottom: 6px; }
-#rlhow { top: 6px; color: rgba(232,236,242,.55); }
+.rltag, .rlhow { position: absolute; left: 7px; right: 7px; font: 10px/1.35 var(--hudf, monospace); color: rgba(232,236,242,.82); text-shadow: 0 0 3px #000, 0 0 6px #000; pointer-events: none; }
+.rltag { bottom: 6px; }
+.rlhow { top: 6px; right: 40px; color: rgba(232,236,242,.55); }
+.rlcam { position: absolute; right: 7px; top: 6px; font: 600 9px/1 var(--hudf, monospace); letter-spacing: .08em; color: rgba(232,236,242,.45); pointer-events: none; }
+#rlwellW .rltag, #rlwellW .rlhow { font-size: 9px; }
+.rlwell.stale canvas { opacity: .45; transition: opacity 1.2s ease; }
 #rlmsg { position: absolute; inset: 0; display: grid; place-items: center; text-align: center; padding: 0 20px; font-size: 12px; color: var(--q-dim, #888); }
 #rlmsg:empty { display: none; }
 .rlbar { display: flex; gap: 10px; align-items: center; font-size: 10.5px; color: var(--q-dim, #888); flex-wrap: wrap; }
@@ -622,7 +629,10 @@ body.idle .rlwell { border-color: transparent; box-shadow: 0 6px 30px rgba(0,0,0
   <div class="titlebar"><span class="lights"><button class="close" aria-label="Close the body reel">×</button><button class="min" aria-label="Close the body reel">–</button><button class="zoom" aria-label="Zoom">+</button></span>Body Reel</div>
   <div class="body">
     <div class="rlpick"><label for="rlbody">Body</label><select id="rlbody" aria-label="Body to play"><option>Loading…</option></select><button id="rlgo">▶ Play all</button></div>
-    <div class="rlwell"><canvas id="rlcanvas" width="1024" height="1024"></canvas><span id="rlhow"></span><span id="rltag"></span><div id="rlmsg">Pick a body and press Play all</div></div>
+    <div class="rlwells">
+      <div class="rlwell" id="rlwellN"><canvas id="rlcanvasN" width="1024" height="1024"></canvas><span class="rlhow"></span><span class="rlcam">NAC</span><span class="rltag"></span><div id="rlmsg">Pick a body and press Play all</div></div>
+      <div class="rlwell" id="rlwellW"><canvas id="rlcanvasW" width="768" height="768"></canvas><span class="rlhow"></span><span class="rlcam">WAC</span><span class="rltag"></span></div>
+    </div>
     <div class="rlbar">
       <input type="range" id="rlpos" min="0" max="0" step="1" value="0" aria-label="Picture in the reel">
       <button class="btn round" id="rlplay" aria-label="Play or pause the reel">▶</button>
@@ -1320,7 +1330,11 @@ body.idle .rlwell { border-color: transparent; box-shadow: 0 6px 30px rgba(0,0,0
     if (/^https?:$/.test(location.protocol) && !/claude\.ai$|claudeusercontent\.com$|claude\.site$/.test(location.hostname)) return location.origin;
     return "http://localhost:8765";
   })();
-  const card = $("reelcard"), cv = $("rlcanvas"), g = cv.getContext("2d");
+  const card = $("reelcard");
+  // one well per camera; a picture goes to its own camera's well and the other well keeps its last picture,
+  // so the two cameras never take turns in one place
+  const wells = {};
+  for (const cam of ["N", "W"]) { const cv = $("rlcanvas" + cam); wells[cam] = { el: $("rlwell" + cam), cv, g: cv.getContext("2d"), i: -1 }; }
   const KIND = { true: "True colour", false: "False colour", two: "Two-filter colour", bw: "Black and white" };
   // R: the reel playing. shots: its pictures; i: the one on screen; buf: pictures fetched (or on their way) by index
   const R = { open: false, target: null, shots: [], i: -1, playing: false, fps: 8, mosaic: true, due: 0, buf: new Map(), looping: false, hidden: [], waitSince: 0 };
@@ -1362,14 +1376,15 @@ body.idle .rlwell { border-color: transparent; box-shadow: 0 6px 30px rgba(0,0,0
       if (b && b.ok === null) flying++;
       else if ((!b || b.size !== size() || b.mosaic !== R.mosaic) && flying < 6) { want(j); flying++; }
     }
-    for (const j of R.buf.keys()) if (j < R.i - 2 || j > R.i + ahead) R.buf.delete(j);
+    for (const j of R.buf.keys()) if ((j < R.i - 2 || j > R.i + ahead) && j !== wells.N.i && j !== wells.W.i) R.buf.delete(j);
   }
-  function blank() { g.fillStyle = "#000"; g.fillRect(0, 0, cv.width, cv.height); }
+  function blank(w) { for (const x of w ? [w] : Object.values(wells)) { x.g.fillStyle = "#000"; x.g.fillRect(0, 0, x.cv.width, x.cv.height); } }
+  function paint(w, img) { blank(w); w.g.drawImage(img, 0, 0, w.cv.width, w.cv.height); }
   const fmtDate = t => { const s = new Date(t * 1000).toISOString(); return `${s.slice(0, 10)} ${s.slice(11, 19)} UTC`; };
   function describe(h) {
     if (!h) return "";
     const st = (h.stacked || []).filter(n => n > 1);
-    return [h.centred ? "centred, north up" : "not centred" + (h.why && /off the frame/.test(h.why) ? " (close-up)" : ""),
+    return [h.centred ? "centred, north up" : h.frame_offset ? "close-up, placed on the body, north up" : "not centred",
             st.length ? `stacked ${st.join("+")}` : "", h.calibrated ? "calibrated" : "",
             (h.aligned || []).some(a => /not aligned|failed/.test(a)) ? "channels not aligned" : "",
             h.mosaic > 1 ? `mosaic of ${h.mosaic}` : ""].filter(Boolean).join(" · ");
@@ -1377,10 +1392,14 @@ body.idle .rlwell { border-color: transparent; box-shadow: 0 6px 30px rgba(0,0,0
   function show(i) {
     const s = R.shots[i], b = want(i);
     R.i = i;
-    if (b.ok) { blank(); g.drawImage(b.img, 0, 0, cv.width, cv.height); $("rlmsg").textContent = ""; }
-    else if (b.ok === false) { blank(); $("rlmsg").innerHTML = "<b>No picture</b><br>" + s.ids.join(", "); }
-    $("rltag").textContent = `${fmtDate(s.t)} · ${titleCase(R.target)} · ${s.cam === "N" ? "NAC" : "WAC"} · ${KIND[s.kind]} ${s.filters.join(" ")}`;
-    $("rlhow").textContent = describe(b.how);
+    const w = wells[s.cam];
+    w.i = i;
+    if (b.ok) { paint(w, b.img); $("rlmsg").textContent = ""; }
+    else if (b.ok === false) blank(w);
+    w.el.querySelector(".rltag").textContent = `${fmtDate(s.t)} · ${KIND[s.kind]} ${s.filters.join(" ")}`;
+    w.el.querySelector(".rlhow").textContent = describe(b.how);
+    // a camera that has not taken a picture of the body for 6 hours fades, as the camera windows go idle
+    for (const [cam, x] of Object.entries(wells)) x.el.classList.toggle("stale", x.i < 0 || s.t - R.shots[x.i].t > 6 * 3600);
     $("rlcount").textContent = `${fmtInt(i + 1)} / ${fmtInt(R.shots.length)}`;
     $("rlpos").value = i;
     // the mission clock follows the reel, so the 3D view shows where Cassini was
@@ -1419,12 +1438,14 @@ body.idle .rlwell { border-color: transparent; box-shadow: 0 6px 30px rgba(0,0,0
       try {
         const r = await fetch(`${FRAMES}/reel/${target}.json`); if (!r.ok) throw new Error(r.status);
         R.shots = (await r.json()).shots; R.target = target; R.buf.clear();
+        document.querySelector(".rlwells").classList.toggle("one", !R.shots.some(s => s.cam === "W"));
       } catch (e) { $("rlmsg").innerHTML = "<b>No pictures</b><br>The frame server has no reel for " + titleCase(target); return; }
     }
     $("rlpos").max = R.shots.length - 1;
     const n = R.shots.length, colour = R.shots.filter(s => s.kind !== "bw").length;
     $("rlmsg").textContent = `${fmtInt(n)} pictures of ${titleCase(target)}, ${fmtInt(colour)} in colour`;
-    blank(); R.i = -1; setPlaying(false); setReelPlaying(true);
+    blank(); R.i = -1; for (const w of Object.values(wells)) { w.i = -1; w.el.querySelectorAll(".rltag, .rlhow").forEach(e => { e.textContent = ""; }); }
+    setPlaying(false); setReelPlaying(true);
   }
 
   // ---- opening and closing: the reel takes the camera windows' place while it is open ----
@@ -1455,7 +1476,7 @@ body.idle .rlwell { border-color: transparent; box-shadow: 0 6px 30px rgba(0,0,0
   $("rlpos").addEventListener("input", e => { setReelPlaying(false); show(+e.target.value); });
   card.addEventListener("click", e => { if (e.target.closest(".close, .min")) { e.stopPropagation(); close(); } }, true);
   card.querySelector(".titlebar").addEventListener("dblclick", e => { e.stopPropagation(); close(); }, true);
-  new MutationObserver(() => { const b = R.open && R.buf.get(R.i); if (b && b.ok) { blank(); g.drawImage(b.img, 0, 0, cv.width, cv.height); } }).observe(card, { attributes: true, attributeFilter: ["class"] });
+  new MutationObserver(() => { for (const w of Object.values(wells)) { const b = R.open && R.buf.get(w.i); if (b && b.ok) paint(w, b.img); } }).observe(card, { attributes: true, attributeFilter: ["class"] });
   // while the reel is open: space plays and pauses it, the arrow keys step a picture, Escape closes it
   window.addEventListener("keydown", e => {
     if (!R.open || e.metaKey || e.ctrlKey || /INPUT|SELECT|TEXTAREA/.test(e.target.tagName)) return;
