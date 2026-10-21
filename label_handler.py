@@ -169,7 +169,8 @@ class label:
             prefix = np.frombuffer(gzip.decompress(ds.read_bytes(base + ".prefix.gz")), np.uint8).reshape(lines, -1)
             valid = prefix[:, 2].astype(int) * 256 + prefix[:, 3]
             mask &= np.arange(samples) < valid[:, None]
-        elif int(self.info.get("MISSING_LINES", "0") or 0) > 0:
+        elif str(self.info.get("MISSING_LINES", "0")).isdigit() and int(self.info["MISSING_LINES"]) > 0:
+            # some labels say MISSING_LINES = "N/A"; only a count of lines means anything is missing
             img = ds.imread(base + ".png", cv2.IMREAD_GRAYSCALE)
             if img is not None and img.shape == mask.shape:
                 nonzero = img[:, ::-1] != 0

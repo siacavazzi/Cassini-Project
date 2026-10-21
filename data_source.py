@@ -426,7 +426,10 @@ def extract_metakernel(path):
     if not using_zip(get_kernel_source()):
         return
     for kernel in metakernel_kernels(read_text(path)):
-        extract_to_cache(kernel_relative(kernel))
+        try:
+            extract_to_cache(kernel_relative(kernel))
+        except FileNotFoundError:
+            pass  # furnsh_metakernel says which kernels are missing
 
 
 """
@@ -440,7 +443,14 @@ def furnsh_metakernel(path):
         sp.furnsh(_folder_path(path))
         return
     for kernel in metakernel_kernels(read_text(path)):
-        sp.furnsh(extract_to_cache(kernel_relative(kernel)))
+        try:
+            cached = extract_to_cache(kernel_relative(kernel))
+        except FileNotFoundError as e:
+            # the archive lacks a few kernels a meta-kernel lists (2015's ck/15201_15201ra_hf.bc);
+            # load the rest instead of failing the whole year
+            print(f"Skipping missing kernel: {e}")
+            continue
+        sp.furnsh(cached)
 
 
 """

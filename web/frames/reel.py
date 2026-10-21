@@ -45,12 +45,12 @@ import data_source  # noqa: E402
 import mosaic  # noqa: E402
 
 # bumped whenever the way reel pictures are made changes, so older ones are not served again
-VERSION = "reel-v1"
+VERSION = "reel-v3"
 SET_GAP = 300          # seconds between frames of one filter set
 REPEAT_GAP = 120       # stacking.find_repeats' window
 MOSAIC_GAP = 1800      # pictures more than this far apart never share a mosaic
-VIEW = 2048            # full resolution pixels around the body that a picture shows
-OUT = 1024             # ...kept at half resolution
+VIEW = 1536            # full resolution pixels around the body that a picture shows
+OUT = 1024             # ...kept at two thirds of full resolution
 TRUE_BLUES = ("BL1", "BL2", "VIO")
 
 _index = None
@@ -224,7 +224,7 @@ def picture(ids, cache):
         report["ids"] = list(ids)
         made.update(report)
         out = io.BytesIO()
-        Image.fromarray(np.ascontiguousarray(view)).resize((OUT, OUT), Image.LANCZOS).save(out, "PNG", compress_level=3)
+        Image.fromarray(np.ascontiguousarray(view)).resize((OUT, OUT), Image.LANCZOS).save(out, "PNG", compress_level=1)
         return out.getvalue()
 
     png = _cached(base + ".png", make)
@@ -269,7 +269,12 @@ def shot_webp(target, n, size, cache, use_mosaic=True, slots=None):
 
     data = _cached(path, make)
     if not report:
-        report = picture(s["ids"], cache)[1]
+        # served from the cache: the picture's report is kept next to it, no need to open the picture
+        try:
+            with open(os.path.join(cache, VERSION, "pictures", "_".join(s["ids"]) + ".json")) as fh:
+                report = json.load(fh)
+        except (OSError, ValueError):
+            report = picture(s["ids"], cache)[1]
     report["mosaic"] = len(window)
     return data, report
 

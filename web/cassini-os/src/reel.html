@@ -137,7 +137,11 @@ body.idle .rlwell { border-color: transparent; box-shadow: 0 6px 30px rgba(0,0,0
         if (j >= R.shots.length) setReelPlaying(false);
         else if (want(j).ok) { show(j); R.due = Math.max(R.due + 1000 / R.fps, now - 250); R.waitSince = 0; }
         else if (!R.waitSince) R.waitSince = now;
-        else if (now - R.waitSince > 700) $("rlcount").textContent = `processing ${fmtInt(j + 1)} / ${fmtInt(R.shots.length)}…`;
+        else if (now - R.waitSince > 700) {
+          // the first picture of a year waits on that year's SPICE kernels (about half a minute, once per server start)
+          const yr = new Date(R.shots[j].t * 1000).getUTCFullYear();
+          $("rlcount").textContent = now - R.waitSince > 4000 ? `processing… loading ${yr} pointing (up to a minute)` : `processing ${fmtInt(j + 1)} / ${fmtInt(R.shots.length)}…`;
+        }
       }
     }
     requestAnimationFrame(tick);
