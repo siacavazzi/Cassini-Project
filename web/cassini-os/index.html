@@ -464,6 +464,53 @@ body.idle #moviecard { opacity: 1; pointer-events: auto; background: transparent
 body.idle #moviecard :is(.titlebar, .mvbar) { opacity: 0; }
 body.idle .mvwell { border-color: transparent; box-shadow: 0 6px 30px rgba(0,0,0,.6); }
 @media (max-width: 600px) { #moviecard, #moviecard.zoomed { width: calc(100% - 16px); left: 8px; top: calc(env(safe-area-inset-top, 0px) + 30px); } }
+
+#settings { width: min(620px, calc(100% - 20px)); height: min(460px, calc(100% - 80px)); z-index: 900; }
+#settings .sbody { flex: 1; min-height: 0; display: grid; grid-template-columns: 138px minmax(0, 1fr); border-top: 1px solid var(--q-line); }
+#settings nav { padding: 8px 6px; border-right: 1px solid var(--q-line); display: flex; flex-direction: column; gap: 1px; overflow-y: auto; }
+#settings nav button { all: unset; box-sizing: border-box; padding: 5px 9px; border-radius: 5px; font-size: 12px; color: var(--q-dim); cursor: default; white-space: nowrap; }
+#settings nav button:hover { background: rgba(255,255,255,.05); color: var(--q-text); }
+#settings nav button[aria-selected="true"] { background: rgba(138,182,255,.18); color: #fff; }
+#settings nav button:focus-visible { outline: 1px solid var(--q-accent); }
+#settings .pane { overflow-y: auto; padding: 6px 16px 14px; }
+#settings h3 { margin: 8px 0 4px; font-size: 11px; font-weight: normal; letter-spacing: .1em; text-transform: uppercase; color: var(--q-dim); }
+#settings .note { margin: 0 0 6px; font-size: 10.5px; line-height: 1.45; color: var(--q-dim); }
+.srow { display: grid; grid-template-columns: minmax(0, 1fr) auto; gap: 2px 16px; align-items: center; padding: 9px 0; border-bottom: 1px solid var(--q-line); }
+.srow:last-child { border-bottom: 0; }
+.srow label, .srow .lab { font-size: 12px; color: var(--q-text); }
+.srow .hint { grid-column: 1; font-size: 10.5px; line-height: 1.4; color: var(--q-dim); }
+.srow .ctl { grid-column: 2; grid-row: 1 / span 2; display: flex; align-items: center; gap: 8px; justify-self: end; }
+.srow .tag { font-size: 9.5px; color: var(--q-accent); margin-left: 6px; letter-spacing: .02em; }
+/* a switch: grey when off, the one blue accent when on */
+.sw { all: unset; position: relative; width: 30px; height: 17px; border-radius: 9px; background: rgba(255,255,255,.16); transition: background .2s ease; cursor: default; flex: none; }
+.sw::after { content: ""; position: absolute; left: 2px; top: 2px; width: 13px; height: 13px; border-radius: 50%; background: rgba(232,236,242,.9); transition: transform .2s ease; }
+.sw[aria-checked="true"] { background: var(--q-accent); }
+.sw[aria-checked="true"]::after { transform: translateX(13px); background: #fff; }
+.sw:focus-visible { outline: 1px solid var(--q-accent); outline-offset: 2px; }
+.srow input[type=range] { width: 130px; accent-color: var(--q-accent); }
+.srow .val { min-width: 54px; text-align: right; font-size: 11px; color: var(--q-text); font-variant-numeric: tabular-nums; }
+.srow .seg { flex-wrap: wrap; }
+.srow .seg .btn { padding: 4px 8px; flex: none; }
+.srow .act { border: 1px solid var(--q-line); border-radius: 6px; padding: 4px 10px; }
+#settings footer { flex: none; display: flex; align-items: center; justify-content: space-between; gap: 10px; padding: 6px 12px; border-top: 1px solid var(--q-line); font-size: 10.5px; color: var(--q-dim); }
+#settings footer .btn { border: 1px solid var(--q-line); border-radius: 6px; padding: 3px 9px; }
+#sgear { all: unset; display: grid; place-items: center; width: 18px; height: 18px; border-radius: 4px; cursor: default; color: var(--q-text); }
+#sgear:hover, #sgear[aria-pressed="true"] { background: rgba(255,255,255,.14); }
+#sgear svg { width: 14px; height: 14px; }
+#sgear svg * { fill: none; stroke: currentColor; stroke-width: 1.3; }
+/* open settings stay put while the rest of the interface rests */
+body.idle #settings:not([hidden]) { opacity: 1; pointer-events: auto; }
+/* settings that only show or hide parts of the page */
+body.s-nolabels #labels, body.s-nolabels #reticle { display: none; }
+body.s-nohudline #hudline { display: none; }
+body.s-nochans .camwin .chans { display: none !important; }
+body.s-noinfo .camwin .info { display: none; }
+@media (max-width: 600px) {
+  #settings { left: 8px !important; top: calc(env(safe-area-inset-top, 0px) + 30px) !important; width: calc(100% - 16px) !important; height: calc(100% - 50px); }
+  #settings .sbody { grid-template-columns: 1fr; grid-template-rows: auto minmax(0, 1fr); }
+  #settings nav { flex-direction: row; border-right: 0; border-bottom: 1px solid var(--q-line); overflow-x: auto; }
+  .srow input[type=range] { width: 96px; }
+}
 </style>
 </head>
 <body>
@@ -477,7 +524,7 @@ body.idle .mvwell { border-color: transparent; box-shadow: 0 6px 30px rgba(0,0,0
 
   <nav id="menubar" aria-label="Menu bar">
     <div class="menu app"><button aria-haspopup="true"><svg viewBox="0 0 40 28" aria-hidden="true"><circle cx="20" cy="14" r="8" fill="#222"/><ellipse cx="20" cy="14" rx="18" ry="5" fill="none" stroke="#222" stroke-width="2.4" transform="rotate(-16 20 14)"/></svg>Cassini OS</button>
-      <ul><li><button data-act="about">About Cassini OS</button></li><li class="sep"></li><li><button data-act="hud" role="menuitemcheckbox" aria-checked="true">Neon HUD</button></li><li><button data-act="autohide" role="menuitemcheckbox" aria-checked="true">Hide Interface When Idle</button></li></ul></div>
+      <ul><li><button data-act="about">About Cassini OS</button></li><li class="sep"></li><li><button data-act="settings">Settings…<span class="kbd">⌘,</span></button></li><li class="sep"></li><li><button data-act="hud" role="menuitemcheckbox" aria-checked="true">Neon HUD</button></li><li><button data-act="autohide" role="menuitemcheckbox" aria-checked="true">Hide Interface When Idle</button></li></ul></div>
     <div class="menu"><button aria-haspopup="true">View</button>
       <ul>
         <li><button data-act="orbits" role="menuitemcheckbox" aria-checked="false">All Moons<span class="kbd">⌘M</span></button></li>
@@ -500,7 +547,7 @@ body.idle .mvwell { border-color: transparent; box-shadow: 0 6px 30px rgba(0,0,0
         <li><button data-act="win" data-win="wacard" role="menuitemcheckbox" aria-checked="true">Wide-angle Camera</button></li>
         <li><button data-act="win" data-win="moments" role="menuitemcheckbox" aria-checked="true">Moments</button></li>
       </ul></div>
-    <div class="menuright"><div id="tray"></div><span id="mclock">—</span></div>
+    <div class="menuright"><div id="tray"></div><button id="sgear" aria-pressed="false" aria-label="Settings" title="Settings (⌘,)"><svg viewBox="0 0 16 16" aria-hidden="true"><circle cx="8" cy="8" r="2.3"/><path d="M8 1.5v2M8 12.5v2M1.5 8h2M12.5 8h2M3.4 3.4l1.4 1.4M11.2 11.2l1.4 1.4M3.4 12.6l1.4-1.4M11.2 4.8l1.4-1.4"/></svg></button><span id="mclock">—</span></div>
   </nav>
 
   <section class="win frame img camwin" id="imgcard" data-cam="N" aria-label="Narrow-angle Camera">
@@ -591,9 +638,217 @@ body.idle .mvwell { border-color: transparent; box-shadow: 0 6px 30px rgba(0,0,0
   </div>
 </section>
 
+  <section class="win" id="settings" aria-label="Settings" hidden>
+  <div class="titlebar"><span class="lights"><button class="close" aria-label="Close settings">×</button><button class="min" aria-label="Close settings">–</button><button class="zoom" aria-label="Zoom">+</button></span>Settings</div>
+  <div class="sbody">
+    <nav id="snav" role="tablist" aria-label="Settings sections"></nav>
+    <div class="pane" id="spane" role="tabpanel"></div>
+  </div>
+  <footer><span id="snote">Saved on this device</span><button class="btn" id="sreset">Restore defaults</button></footer>
+</section>
+
   <div id="loading"><div>Starting Cassini OS<br>Loading trajectories<div class="bar"></div></div></div>
 </div>
 
+<script>
+// ---------- settings: one registry for every option on the page, and the Settings window that shows it ----------
+(function () {
+  const $ = id => document.getElementById(id);
+  const KEY = "cassini-os-settings-v1";
+  const SECTIONS = ["Interface", "Cameras", "Playback", "View", "Movie", "Data"];   // sections other code adds go after these
+  const NOTES = {
+    Cameras: "Every picture still goes through the full pipeline (calibration, repeat-exposure stacking, alignment, SPICE centring); these settings only choose what the camera windows show.",
+    Data: "Window positions and these settings are kept in this browser only."
+  };
+  let saved = {};
+  try { saved = JSON.parse(localStorage.getItem(KEY)) || {}; } catch (e) {}
+  const defs = new Map(), subs = new Map(), values = {};
+  const store = () => { try { localStorage.setItem(KEY, JSON.stringify(values)); } catch (e) {} };
+  const valid = (d, v) => {
+    if (d.type === "toggle") return typeof v === "boolean";
+    if (d.type === "range") return typeof v === "number" && isFinite(v) && v >= d.min && v <= d.max;
+    if (d.type === "choice") return d.options.some(o => o[0] === v);
+    return false;
+  };
+  const S = window.cassiniSettings = {
+    define(d) {
+      d = Object.assign({ section: "Interface", hint: "" }, d);
+      defs.set(d.key, d);
+      if (d.type !== "action" && !(d.key in values)) values[d.key] = valid(d, saved[d.key]) ? saved[d.key] : d.value;
+      if (!SECTIONS.includes(d.section)) SECTIONS.push(d.section);
+      if (!card.hidden) render();
+      return values[d.key];
+    },
+    get: key => values[key],
+    set(key, v) {
+      const d = defs.get(key);
+      if (!d || !valid(d, v) || values[key] === v) return;
+      values[key] = v; store();
+      (subs.get(key) || []).forEach(fn => fn(v));
+      if (!card.hidden) sync(key);
+    },
+    on(key, fn) {
+      if (!subs.has(key)) subs.set(key, []);
+      subs.get(key).push(fn);
+      if (key in values) fn(values[key]);
+    },
+    reset() { for (const [k, d] of defs) if (d.type !== "action") S.set(k, d.value); },
+    open: () => show(true), close: () => show(false),
+    get defined() { return [...defs.values()]; }
+  };
+
+  // ---------- the window ----------
+  const card = $("settings"), nav = $("snav"), pane = $("spane");
+  let section = "Interface";
+  try { section = sessionStorage.getItem("cassini-os-settings-tab") || section; } catch (e) {}
+  const fmtVal = (d, v) => d.format ? d.format(v) : `${v}${d.unit ? " " + d.unit : ""}`;
+  function render() {
+    const used = SECTIONS.filter(s => S.defined.some(d => d.section === s));
+    if (!used.includes(section)) section = used[0];
+    nav.innerHTML = used.map(s => `<button role="tab" aria-selected="${s === section}" data-s="${s}">${s}</button>`).join("");
+    pane.innerHTML = `<h3>${section}</h3>` + (NOTES[section] ? `<p class="note">${NOTES[section]}</p>` : "");
+    for (const d of S.defined.filter(d => d.section === section)) {
+      const row = document.createElement("div"), id = "s-" + d.key.replace(/\W/g, "-");
+      row.className = "srow"; row.dataset.key = d.key;
+      const tag = d.reload ? '<span class="tag">after reload</span>' : "";
+      let ctl = "";
+      if (d.type === "toggle") ctl = `<button class="sw" id="${id}" role="switch" aria-checked="false"></button>`;
+      if (d.type === "range") ctl = `<input type="range" id="${id}" min="${d.min}" max="${d.max}" step="${d.step || 1}"><span class="val"></span>`;
+      if (d.type === "choice") ctl = `<div class="seg" role="radiogroup" aria-labelledby="${id}">${d.options.map((o, i) => `<button class="btn" role="radio" data-i="${i}">${o[1]}</button>`).join("")}</div>`;
+      if (d.type === "action") ctl = `<button class="btn act" id="${id}">${d.button || "Run"}</button>`;
+      row.innerHTML = `<${d.type === "choice" ? "span" : "label"} class="lab" id="${d.type === "choice" ? id : ""}"${d.type === "choice" ? "" : ` for="${id}"`}>${d.label}${tag}</${d.type === "choice" ? "span" : "label"}>`
+        + `<div class="ctl">${ctl}</div>` + (d.hint ? `<div class="hint">${d.hint}</div>` : "");
+      if (d.type === "toggle") row.querySelector(".sw").addEventListener("click", () => S.set(d.key, !values[d.key]));
+      if (d.type === "range") row.querySelector("input").addEventListener("input", e => S.set(d.key, +e.target.value));
+      if (d.type === "choice") row.querySelectorAll(".seg .btn").forEach(b => b.addEventListener("click", () => S.set(d.key, d.options[+b.dataset.i][0])));
+      if (d.type === "action") row.querySelector(".act").addEventListener("click", () => d.run());
+      pane.appendChild(row);
+      sync(d.key);
+    }
+  }
+  function sync(key) {
+    const row = pane.querySelector(`.srow[data-key="${CSS.escape(key)}"]`), d = defs.get(key), v = values[key];
+    if (!row) return;
+    if (d.type === "toggle") row.querySelector(".sw").setAttribute("aria-checked", String(v));
+    if (d.type === "range") { row.querySelector("input").value = v; row.querySelector(".val").textContent = fmtVal(d, v); }
+    if (d.type === "choice") row.querySelectorAll(".seg .btn").forEach(b => { const on = d.options[+b.dataset.i][0] === v; b.setAttribute("aria-pressed", String(on)); b.setAttribute("aria-checked", String(on)); });
+  }
+  nav.addEventListener("click", e => {
+    const b = e.target.closest("button"); if (!b) return;
+    section = b.dataset.s; render();
+    try { sessionStorage.setItem("cassini-os-settings-tab", section); } catch (err) {}
+  });
+  function show(on) {
+    if (on === !card.hidden) return;
+    if (on) {
+      render();
+      card.hidden = false;
+      if (!card.style.left) {   // first time: in the middle of the screen
+        const r = card.getBoundingClientRect();
+        Object.assign(card.style, { left: Math.max(8, (innerWidth - r.width) / 2) + "px", top: Math.max(30, (innerHeight - r.height) / 2.4) + "px" });
+      }
+      card.dispatchEvent(new Event("pointerdown"));   // to the front
+    } else card.hidden = true;
+    const g = $("sgear"); if (g) g.setAttribute("aria-pressed", String(on));
+  }
+  // closing or minimizing the window just closes it (it never goes to the menu-bar tray)
+  card.addEventListener("click", e => { if (e.target.closest(".close, .min")) { e.stopImmediatePropagation(); show(false); } }, true);
+  card.addEventListener("dblclick", e => { if (e.target.closest(".titlebar")) { e.stopImmediatePropagation(); show(false); } }, true);
+  $("sreset").addEventListener("click", () => S.reset());
+  window.addEventListener("keydown", e => {
+    if ((e.metaKey || e.ctrlKey) && e.key === ",") { e.preventDefault(); show(card.hidden); }
+    else if (e.key === "Escape" && !card.hidden) { e.stopImmediatePropagation(); show(false); }
+  }, true);
+  document.addEventListener("click", e => {
+    const b = e.target.closest('[data-act="settings"], #sgear'); if (!b) return;
+    e.stopPropagation(); document.querySelectorAll(".menu.open").forEach(m => m.classList.remove("open"));
+    show(card.hidden);
+  }, true);
+
+  // ---------- the settings Cassini OS already had, gathered here ----------
+  const D = d => S.define(d), cls = (key, name, on) => S.on(key, v => document.body.classList.toggle(name, v === on));
+  // Interface (the chrome script reads interface.autohide, interface.idleDelay and interface.hud)
+  D({ key: "interface.autohide", section: "Interface", label: "Hide interface when idle", type: "toggle", value: true,
+      hint: "Menus and windows fade out when the pointer rests, so the view has the screen to itself." });
+  D({ key: "interface.idleDelay", section: "Interface", label: "Fade after", type: "range", value: 3.5, min: 1, max: 30, step: 0.5, unit: "s",
+      hint: "How long the pointer has to rest before the interface fades." });
+  D({ key: "interface.hud", section: "Interface", label: "Neon HUD", type: "toggle", value: true,
+      hint: "Orbits, Cassini's trail and the camera cone drawn with a glow." });
+  D({ key: "interface.labels", section: "Interface", label: "Body labels", type: "toggle", value: true,
+      hint: "Names and ranges next to Saturn, the moons and Cassini, and the target bracket." });
+  cls("interface.labels", "s-nolabels", false);
+  D({ key: "interface.hudline", section: "Interface", label: "Flight data strip", type: "toggle", value: true,
+      hint: "Target, altitude, speed, camera and pointing along the top of the view." });
+  cls("interface.hudline", "s-nohudline", false);
+  // Cameras (the camera windows read cameras.composites and cameras.stale)
+  D({ key: "cameras.composites", section: "Cameras", label: "Colour composites", type: "toggle", value: true,
+      hint: "Once a filter set is complete, show its colour picture. Off shows every frame on its own." });
+  D({ key: "cameras.channels", section: "Cameras", label: "Filter channels", type: "toggle", value: true,
+      hint: "The frames that make up a colour picture, in a strip under it." });
+  cls("cameras.channels", "s-nochans", false);
+  D({ key: "cameras.details", section: "Cameras", label: "Frame details", type: "toggle", value: true,
+      hint: "Status, frame, filter, colour and scale under each picture." });
+  cls("cameras.details", "s-noinfo", false);
+  D({ key: "cameras.stale", section: "Cameras", label: "Clear a quiet camera after", type: "range", value: 6, min: 1, max: 48, step: 1, unit: "h",
+      hint: "A camera that has taken nothing for this long shows Idle instead of its last picture." });
+
+  // the replay viewer's own options: applied once it has loaded, and kept in step with its buttons
+  function whenReady(fn) {
+    const go = () => { if (typeof state !== "undefined" && $("loading").hidden && typeof setSpeed === "function") { fn(); return true; } };
+    if (go()) return;
+    const mo = new MutationObserver(() => { if (go()) mo.disconnect(); });
+    mo.observe($("loading"), { attributes: true, attributeFilter: ["hidden"] });
+  }
+  // a dock button that switches a viewer option, mirrored by a setting both ways
+  function mirror(key, btn) {
+    whenReady(() => {
+      const b = $(btn), pressed = () => b.getAttribute("aria-pressed") === "true";
+      S.on(key, v => { if (pressed() !== v) b.click(); });
+      new MutationObserver(() => S.set(key, pressed())).observe(b, { attributes: true, attributeFilter: ["aria-pressed"] });
+    });
+  }
+  D({ key: "playback.autoplay", section: "Playback", label: "Play when Cassini OS opens", type: "toggle", value: true,
+      hint: "Off opens paused at the starting moment." });
+  D({ key: "playback.speed", section: "Playback", label: "Starting speed", type: "choice", value: 600,
+      options: [[60, "1 min/s"], [600, "10 min/s"], [3600, "1 h/s"], [21600, "6 h/s"], [86400, "1 day/s"]],
+      hint: "Mission time per second of playback when the page opens. Jumping to a moment still picks its own speed." });
+  D({ key: "playback.span", section: "Playback", label: "Timeline shows", type: "choice", value: 432000,
+      options: [[86400, "Day"], [432000, "5 days"], [604800, "Week"], [2592000, "Month"]],
+      hint: "How much of the mission the timeline covers when the page opens." });
+  whenReady(() => {
+    if (!S.get("playback.autoplay")) setPlaying(false);
+    setSpeed(S.get("playback.speed"));
+    const span = S.get("playback.span"); if (span !== 432000) setView(span, state.et + span * 0.3);
+  });
+  S.on("playback.speed", v => { if (typeof state !== "undefined" && typeof setSpeed === "function" && $("loading").hidden) setSpeed(v); });
+  S.on("playback.span", v => { if (typeof state !== "undefined" && typeof setView === "function" && $("loading").hidden) setView(v, state.et + v * 0.3); });
+  // View
+  D({ key: "view.allOrbits", section: "View", label: "All moons", type: "toggle", value: false, hint: "Draw every moon's orbit, not only the nearby ones." });
+  mirror("view.allOrbits", "allorbits");
+  D({ key: "view.enlarge", section: "View", label: "Enlarge moons ×10", type: "toggle", value: false, hint: "Moons drawn ten times their size so they can be seen from afar." });
+  mirror("view.enlarge", "enlarge");
+  D({ key: "view.follow", section: "View", label: "Follow camera", type: "toggle", value: false, hint: "Look where Cassini's camera points (needs the pointing data)." });
+  mirror("view.follow", "followcam");
+  D({ key: "view.textures", section: "View", label: "Surface maps", type: "choice", value: "2k", reload: true,
+      options: [["0", "Off"], ["1k", "1k"], ["2k", "2k"], ["4k", "4k"]],
+      hint: "Map size for Saturn and the moons. 4k is sharper and slower to load; Off keeps the plain painted look. A ?tex= link still wins." });
+  // Movie
+  D({ key: "movie.fps", section: "Movie", label: "Movie speed", type: "range", value: 8, min: 2, max: 24, step: 1, unit: "fps",
+      hint: "Frames per second in movie mode (M). The slider in the Movie window changes this too." });
+  window.addEventListener("DOMContentLoaded", () => {
+    const r = $("mvfps"); if (!r) return;
+    try { const f = +localStorage.getItem("cassini-os-movie-fps"); if (f >= 2 && f <= 24 && !("movie.fps" in saved)) S.set("movie.fps", f); } catch (e) {}
+    S.on("movie.fps", v => { if (+r.value !== v) { r.value = v; r.dispatchEvent(new Event("input")); } });
+    r.addEventListener("input", () => S.set("movie.fps", +r.value));
+  });
+  // Data
+  D({ key: "data.layout", section: "Data", label: "Window layout", type: "action", button: "Reset",
+      hint: "Put every window back where it starts and bring back the ones tucked into the menu bar.",
+      run() { try { localStorage.removeItem("cassini-os-layout-v2"); } catch (e) {} location.reload(); } });
+  D({ key: "data.reset", section: "Data", label: "All settings", type: "action", button: "Restore defaults",
+      hint: "Every setting back to how Cassini OS ships.", run: () => S.reset() });
+})();
+</script>
 <script>
 // ---------- Cassini OS chrome: window manager, menu bar, HUD layer ----------
 (function () {
@@ -681,12 +936,16 @@ body.idle .mvwell { border-color: transparent; box-shadow: 0 6px 30px rgba(0,0,0
   syncMenu();
   new MutationObserver(saveLayout).observe($("app"), { subtree: true, attributes: true, attributeFilter: ["style", "class", "hidden"] });
 
-  // resting: after a few seconds without the pointer or keyboard, the interface fades out of the way
+  // resting: after a few seconds without the pointer or keyboard, the interface fades out of the way (Settings: Interface)
+  const S = window.cassiniSettings;
   let autoHide = true, idleTimer = 0;
   function wake() {
     document.body.classList.remove("idle"); clearTimeout(idleTimer);
-    if (autoHide) idleTimer = setTimeout(() => { if (!document.querySelector(".menu.open, .win:hover")) document.body.classList.add("idle"); else wake(); }, 3500);
+    if (autoHide) idleTimer = setTimeout(() => { if (!document.querySelector(".menu.open, .win:hover")) document.body.classList.add("idle"); else wake(); }, S.get("interface.idleDelay") * 1000);
   }
+  S.on("interface.autohide", v => { autoHide = v; document.querySelector('[data-act="autohide"]').setAttribute("aria-checked", String(v)); wake(); });
+  S.on("interface.idleDelay", () => wake());
+  S.on("interface.hud", v => { document.body.classList.toggle("nohud", !v); document.querySelector('[data-act="hud"]').setAttribute("aria-checked", String(v)); });
   ["pointermove", "pointerdown", "keydown", "wheel", "touchstart"].forEach(t => window.addEventListener(t, wake, { passive: true }));
   wake();
 
@@ -703,9 +962,9 @@ body.idle .mvwell { border-color: transparent; box-shadow: 0 6px 30px rgba(0,0,0
   window.addEventListener("keydown", e => { if (e.key === "Escape") setOpen(null); });
   function act(btn) {
     const a = btn.dataset.act;
-    if (a === "autohide") { autoHide = !autoHide; btn.setAttribute("aria-checked", String(autoHide)); wake(); }
+    if (a === "autohide") S.set("interface.autohide", !autoHide);
     if (a === "glass") { document.body.classList.toggle("glass"); btn.setAttribute("aria-checked", String(document.body.classList.contains("glass"))); }
-    if (a === "hud") { document.body.classList.toggle("nohud"); btn.setAttribute("aria-checked", String(!document.body.classList.contains("nohud"))); }
+    if (a === "hud") S.set("interface.hud", document.body.classList.contains("nohud"));
     if (a === "orbits") { $("allorbits").click(); btn.setAttribute("aria-checked", $("allorbits").getAttribute("aria-pressed")); }
     if (a === "enlarge") { $("enlarge").click(); btn.setAttribute("aria-checked", $("enlarge").getAttribute("aria-pressed")); }
     if (a === "span") setView(+btn.dataset.v);
@@ -950,7 +1209,6 @@ body.idle .mvwell { border-color: transparent; box-shadow: 0 6px 30px rgba(0,0,0
     return "http://localhost:8765";
   })();
   const CH_COLOUR = ["#e5534b", "#57ab5a", "#539bf5"];
-  const STALE = 6 * 3600;
   // One window per camera, so the feed never flicks between narrow-angle and wide-angle frames. Each shows
   // its camera's latest frame, or, once a filter set's channels are all taken, the set's colour composite
   // (made by the frame server) with the channels that went into it underneath.
@@ -966,7 +1224,7 @@ body.idle .mvwell { border-color: transparent; box-shadow: 0 6px 30px rgba(0,0,0
     // what the window should show for frame k at time et: the composite of its set once that is ready
     function view(k, et) {
       const si = catalog.setOf[k], s = si >= 0 ? catalog.sets[si] : null;
-      if (s && s.ready <= et && !failed.has(si)) return { key: colorUrl(s), set: si, k };
+      if (s && s.ready <= et && !failed.has(si) && S.get("cameras.composites")) return { key: colorUrl(s), set: si, k };
       return { key: frameUrl(catalog.id[k]), set: -1, k };
     }
     function noFrame(msg) { well.classList.remove("has-frame", "composite"); card.querySelector(".wellmsg").innerHTML = msg; }
@@ -1055,13 +1313,14 @@ body.idle .mvwell { border-color: transparent; box-shadow: 0 6px 30px rgba(0,0,0
       const p = lastOfCam(cam, state.et), k = p < 0 ? -1 : catalog.byCam[cam].ks[p];
       const live = k >= 0 && state.et - catalog.et[k] < 180;
       card.classList.toggle("live", live);
-      // a camera that has been quiet for more than STALE seconds shows nothing rather than an old picture
-      if (k < 0 || state.et - catalog.et[k] > STALE) {
+      // a camera that has been quiet for longer than the stale setting shows nothing rather than an old picture
+      const stale = S.get("cameras.stale");
+      if (k < 0 || state.et - catalog.et[k] > stale * 3600) {
         field("status").textContent = k < 0 ? "Camera" : `Last frame ${fmtDur(state.et - catalog.et[k])} ago`;
         strip(null);
         if (lastK !== -1) {
           lastK = -1; want = null; shownKey = null; shown = null;
-          noFrame(k < 0 ? "<b>No signal</b>No frames from this camera yet this year" : "<b>Idle</b>No frames from this camera in the last 6 h");
+          noFrame(k < 0 ? "<b>No signal</b>No frames from this camera yet this year" : `<b>Idle</b>No frames from this camera in the last ${stale} h`);
           for (const f of ["frame", "filter", "colour", "details"]) field(f).textContent = "—";
         }
         return;
@@ -1095,6 +1354,8 @@ body.idle .mvwell { border-color: transparent; box-shadow: 0 6px 30px rgba(0,0,0
     return update;
   }
   const feeds = [...document.querySelectorAll(".camwin")].map(cameraFeed);
+  // a change to what the windows show takes effect straight away
+  for (const key of ["cameras.composites", "cameras.stale"]) S.on(key, () => { if (typeof catalog !== "undefined" && catalog && catalog.byCam) feeds.forEach(f => f(true)); });
   const frameHud = window.studyHud;
   window.studyHud = ms => {
     frameHud(ms);
@@ -1524,7 +1785,7 @@ function bandTexture() {
 }
 // ---------- real surface maps (data/textures/); the procedural look stays as the fallback ----------
 // ?tex=0 keeps the old procedural look, ?tex=1k|2k|4k picks the map size (default 2k); #tex-0 / #tex-4k work too
-const TEX_TIER = (new URLSearchParams(location.search).get("tex") || (location.hash.match(/^#tex-(\w+)$/) || [])[1] || "2k").toLowerCase();
+const TEX_TIER = (new URLSearchParams(location.search).get("tex") || (location.hash.match(/^#tex-(\w+)$/) || [])[1] || (window.cassiniSettings && cassiniSettings.get("view.textures")) || "2k").toLowerCase();
 const TEX_ON = TEX_TIER !== "0" && TEX_TIER !== "off";
 const TEX_DIR = "data/textures/" + (/^[124]k$/.test(TEX_TIER) ? TEX_TIER : "2k") + "/";
 const TEX_FILES = { SATURN: "saturn", MIMAS: "mimas", ENCELADUS: "enceladus", TETHYS: "tethys", DIONE: "dione", RHEA: "rhea",
