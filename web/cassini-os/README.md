@@ -8,6 +8,16 @@ menu-bar tray or zoom, and a Camera window that shows the real frame Cassini too
 | `index.html` | Smoked Mac OS X style panels, the camera feed as the main window, the interface fades when the pointer rests (the camera picture stays), window layout remembered per browser. Narrow-angle and wide-angle frames each have their own camera window; frames that make a filter set are shown as a colour composite with their channels underneath. |
 | `replay/` | Link to the plain replay viewer (`web/replay`), so one server shows both. |
 
+## Movie mode
+
+The film button next to the moment arrows (or `M`, or Go > Movie mode) plays the camera frames one after another,
+in time order, at 2 to 24 frames per second, starting from the frame the camera last took. Every frame plays,
+whatever the target, camera or filter. The mission clock jumps from frame to frame, so the stretches without
+pictures drop out (a "skipped" tag says how long) and the 3D view moves with the film. Space pauses, the arrow keys
+step, scrubbing the timeline carries the film on from the new time, and Escape (or the window's close button or the
+main play button) leaves. Frames are fetched ahead of the play head; a frame that has not arrived holds the film
+rather than being skipped.
+
 ## Run it
 
 The page reads the replay data through the `data` link (`data -> ../replay/data`), and the camera frames
@@ -37,6 +47,8 @@ python web/cassini-os/src/build.py
 `src/build.py` takes the viewer's script from `web/replay/index.html` and patches in the hooks the heads use
 (colours and fonts from CSS variables, a separate HUD canvas for the glowing orbits, NASA's model). If the
 viewer changes a line a patch depends on, the build stops with an assertion naming that line.
+Movie mode lives in `src/movie.html` (style, window and script); the build splices it into the page.
+
 `src/strip.py` strips the document wrapper for publishing as a claude.ai artifact.
 
 ## Colour sets

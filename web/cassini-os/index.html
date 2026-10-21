@@ -439,6 +439,31 @@ body.idle .camwin .well.has-frame { border-color: transparent; box-shadow: 0 6px
   #dock { width: auto; left: max(10px, env(safe-area-inset-left, 0px)); right: max(10px, env(safe-area-inset-right, 0px)); transform: none; }
   #dock:not(.zoomed) .toolbar { grid-template-columns: 1fr; }
 }
+
+#movie svg { width: 15px; height: 15px; display: block; }
+#movie svg * { fill: none; stroke: currentColor; stroke-width: 1.4; }
+#moviecard { top: calc(env(safe-area-inset-top, 0px) + 36px); left: max(14px, env(safe-area-inset-left, 0px)); width: clamp(320px, 38vw, 600px); }
+#moviecard.zoomed { width: clamp(420px, 60vw, 980px); }
+#moviecard .body { padding: 2px 8px 8px; display: grid; gap: 7px; }
+.mvwell { position: relative; aspect-ratio: 1; background: rgba(0,0,0,.55); border: 1px solid var(--q-line, #555); border-radius: 4px; overflow: hidden; }
+.mvwell canvas { position: absolute; inset: 0; width: 100%; height: 100%; display: block; }
+#mvtag, #mvskip { position: absolute; font: 10px/1.3 var(--hudf, monospace); color: rgba(232,236,242,.8); text-shadow: 0 0 3px #000, 0 0 6px #000; pointer-events: none; }
+#mvtag { left: 7px; bottom: 6px; right: 7px; }
+#mvskip { right: 7px; top: 6px; color: var(--q-accent, #8ab6ff); transition: opacity .6s ease; opacity: 0; }
+#mvskip.on { opacity: 1; transition: none; }
+#mvmsg { position: absolute; inset: 0; display: grid; place-items: center; text-align: center; padding: 0 20px; font-size: 12px; color: var(--q-dim, #888); }
+#mvmsg:empty { display: none; }
+.mvbar { display: flex; gap: 10px; align-items: center; font-size: 10.5px; color: var(--q-dim, #888); }
+#mvplay { width: 28px; height: 28px; font-size: 11px; flex: none; }
+.mvbar input[type=range] { width: 110px; accent-color: var(--q-accent, #8ab6ff); }
+#mvfpsv { min-width: 38px; color: var(--q-text, #ddd); font-variant-numeric: tabular-nums; }
+#mvcount { margin-left: auto; font: 10.5px/1 var(--hudf, monospace); white-space: nowrap; font-variant-numeric: tabular-nums; }
+/* resting: like the camera window, the picture stays and its frame and controls fade */
+#moviecard, #moviecard .titlebar, .mvbar, .mvwell { transition: opacity .7s ease, background-color .7s ease, border-color .7s ease, box-shadow .7s ease; }
+body.idle #moviecard { opacity: 1; pointer-events: auto; background: transparent; border-color: transparent; box-shadow: none; -webkit-backdrop-filter: none; backdrop-filter: none; }
+body.idle #moviecard :is(.titlebar, .mvbar) { opacity: 0; }
+body.idle .mvwell { border-color: transparent; box-shadow: 0 6px 30px rgba(0,0,0,.6); }
+@media (max-width: 600px) { #moviecard, #moviecard.zoomed { width: calc(100% - 16px); left: 8px; top: calc(env(safe-area-inset-top, 0px) + 30px); } }
 </style>
 </head>
 <body>
@@ -524,6 +549,7 @@ body.idle .camwin .well.has-frame { border-color: transparent; box-shadow: 0 6px
           <button class="btn round skip" id="prev" aria-label="Previous moment">◀◀</button>
           <button class="btn round" id="play" aria-label="Play or pause">❚❚</button>
           <button class="btn round skip" id="next" aria-label="Next moment">▶▶</button>
+          <button class="btn round skip" id="movie" aria-pressed="false" aria-label="Movie mode" title="Movie mode: play one body's frames as a film (M)"><svg viewBox="0 0 16 16" aria-hidden="true"><rect x="2" y="3" width="12" height="10" rx="1.5"/><path d="M5 3v10M11 3v10M2 6.3h3M2 9.7h3M11 6.3h3M11 9.7h3"/></svg></button>
         </div>
         <div class="seg" id="speeds" aria-label="Playback speed"></div>
         <div class="seg" id="zooms" aria-label="Timeline span"></div>
@@ -552,6 +578,18 @@ body.idle .camwin .well.has-frame { border-color: transparent; box-shadow: 0 6px
     <div id="focusrow" aria-label="Centre the view on"></div>
     <div class="statusbar"><span>Positions from Cassini's SPICE kernels (J2000). LCD lanes: narrow-angle (NAC) and wide-angle (WAC) frames coloured by filter; RGB marks frames that belong to a red, green and blue set.</span><span id="pnote" hidden></span><b id="sbar">—</b></div>
   </div>
+
+  <section class="win" id="moviecard" aria-label="Movie" hidden>
+  <div class="titlebar"><span class="lights"><button class="close" aria-label="Leave movie mode">×</button><button class="min" aria-label="Leave movie mode">–</button><button class="zoom" aria-label="Zoom">+</button></span>Movie</div>
+  <div class="body">
+    <div class="mvwell"><canvas id="mvcanvas" width="1024" height="1024"></canvas><span id="mvtag"></span><span id="mvskip"></span><div id="mvmsg"></div></div>
+    <div class="mvbar">
+      <button class="btn round" id="mvplay" aria-label="Play or pause the movie">❚❚</button>
+      <label for="mvfps">Speed</label><input type="range" id="mvfps" min="2" max="24" step="1" value="8" aria-label="Frames per second"><span id="mvfpsv">8 fps</span>
+      <span id="mvcount"></span>
+    </div>
+  </div>
+</section>
 
   <div id="loading"><div>Starting Cassini OS<br>Loading trajectories<div class="bar"></div></div></div>
 </div>
@@ -1064,6 +1102,170 @@ body.idle .camwin .well.has-frame { border-color: transparent; box-shadow: 0 6px
     for (const f of feeds) f();
   };
   syncMenu();
+})();
+</script>
+<script>
+// ---------- movie mode ----------
+(function () {
+  const $ = id => document.getElementById(id);
+  const FRAMES = (() => {                       // the frame server, chosen as the camera window chooses it
+    const q = new URLSearchParams(location.search).get("frames");
+    if (q) return q.replace(/\/$/, "");
+    if (/^https?:$/.test(location.protocol) && !/claude\.ai$|claudeusercontent\.com$|claude\.site$/.test(location.hostname)) return location.origin;
+    return "http://localhost:8765";
+  })();
+  const card = $("moviecard"), cv = $("mvcanvas"), g = cv.getContext("2d");
+  // cur: the frame on screen as { id, et }, or null to carry on from the clock; cat/i: where it sits in the loaded
+  // catalog, which the viewer rebuilds as the clock reaches new years
+  const M = { on: false, looping: false, playing: true, fps: 8, cur: null, cat: null, i: -1, due: 0, buf: new Map(), hidden: [], waitSince: 0 };
+  try { const f = +localStorage.getItem("cassini-os-movie-fps"); if (f >= 2 && f <= 24) M.fps = f; } catch (e) {}
+  $("mvfps").value = M.fps; $("mvfpsv").textContent = M.fps + " fps";
+
+  // ---- the frame on screen and the ones after it, in time order ----
+  function here() {
+    if (!M.cur) return lastImageIndex(state.et);
+    if (M.cat === catalog) return M.i;
+    // the catalog was rebuilt: find the same frame again (frames taken in the same second sort together)
+    let i = lastImageIndex(M.cur.et);
+    for (let j = i; j >= 0 && catalog.sorted[j] >= M.cur.et - 1; j--) if (catalog.id[order[j]] === M.cur.id) { i = j; break; }
+    M.cat = catalog; M.i = i;
+    return i;
+  }
+  const at = i => { const k = i >= 0 ? order[i] : undefined; return k === undefined ? null : { id: catalog.id[k], et: catalog.et[k], k }; };
+
+  // ---- frames: loaded ahead of the play head so 24 fps does not stutter ----
+  const size = () => (card.classList.contains("zoomed") ? 1024 : 512);
+  function want(f) {
+    let b = M.buf.get(f.id);
+    if (!b || b.size !== size()) {
+      b = { img: new Image(), ok: null, size: size() };
+      b.img.decoding = "async";
+      b.img.onload = () => { b.ok = true; };
+      b.img.onerror = () => { b.ok = false; };
+      b.img.src = `${FRAMES}/frames/${f.id}.webp?size=${b.size}`;
+      M.buf.set(f.id, b);
+    }
+    return b;
+  }
+  function fill(i) {
+    const ahead = Math.max(6, Math.min(40, Math.round(M.fps * 1.5))), keep = new Set();
+    let flying = 0;
+    for (let j = Math.max(0, i); j <= i + ahead; j++) {
+      const f = at(j); if (!f) break;
+      keep.add(f.id);
+      const b = M.buf.get(f.id);
+      if (b && b.ok === null) flying++;
+      else if (!b && flying < 8) { want(f); flying++; }
+    }
+    for (const id of M.buf.keys()) if (!keep.has(id)) M.buf.delete(id);
+  }
+  function blank() { g.fillStyle = "#000"; g.fillRect(0, 0, cv.width, cv.height); }
+  function draw(img) {
+    const s = cv.width, r = Math.min(s / img.naturalWidth, s / img.naturalHeight), w = img.naturalWidth * r, h = img.naturalHeight * r;
+    blank(); g.drawImage(img, (s - w) / 2, (s - h) / 2, w, h);
+  }
+  const fmtDate = et => { const s = new Date(etToMs(et)).toISOString(); return `${s.slice(0, 10)} ${s.slice(11, 19)} UTC`; };
+  let skipTimer = 0;
+  // put frame i on screen and move the mission clock to it
+  function show(i) {
+    const f = at(i), b = want(f), prev = M.cur;
+    M.cur = { id: f.id, et: f.et }; M.cat = catalog; M.i = i;
+    if (b.ok) { draw(b.img); $("mvmsg").textContent = ""; }
+    else if (b.ok === false) { blank(); $("mvmsg").innerHTML = "<b>No frame</b>" + f.id; }
+    setTime(f.et);
+    const span = state.view[1] - state.view[0];
+    if (state.et < state.view[0] || state.et > state.view[1] - span * 0.05) setView(span, state.et + span * 0.4);
+    const k = f.k;
+    $("mvtag").textContent = `${fmtDate(f.et)} · ${titleCase(catalog.target[k] || "Unknown")} · ${catalog.cam[k] === "N" ? "NAC" : "WAC"} ${catalog.f1[k]}/${catalog.f2[k]}`;
+    $("mvcount").textContent = f.id;
+    if (prev && f.et - prev.et > 3 * 3600) {   // a stretch without frames: say how much time the cut left out
+      $("mvskip").textContent = `skipped ${fmtDur(f.et - prev.et)}`; $("mvskip").classList.add("on");
+      clearTimeout(skipTimer); skipTimer = setTimeout(() => $("mvskip").classList.remove("on"), 900);
+    }
+  }
+  // the movie's own clock: a frame every 1/fps seconds, holding on a frame until the next one has arrived;
+  // when the page draws slower than the movie runs, frames are dropped to keep time
+  function tick(now) {
+    if (!M.on) { M.looping = false; return; }
+    if (yearReady() && !state.dragging) {
+      const i = here();
+      fill(i);
+      if (M.playing && now >= M.due) {
+        let shown = -1, j = i;
+        while (now >= M.due) {
+          j++;
+          while (at(j) && M.buf.get(at(j).id) && M.buf.get(at(j).id).ok === false) j++;   // frames the server lacks are cut too
+          const f = at(j);
+          if (!f) { if (shown < 0 && !(mission && yearOf(state.et) < mission.years[mission.years.length - 1])) setMoviePlaying(false); break; }
+          if (!want(f).ok) break;
+          shown = j; M.due += 1000 / M.fps;
+        }
+        if (shown >= 0) { show(shown); M.due = Math.max(M.due, now - 250); M.waitSince = 0; }
+        else if (M.playing && at(j)) {
+          if (!M.waitSince) M.waitSince = now;
+          else if (now - M.waitSince > 600) $("mvcount").textContent = "loading…";
+        }
+      }
+    }
+    requestAnimationFrame(tick);
+  }
+  function setMoviePlaying(p) { M.playing = p; $("mvplay").textContent = p ? "❚❚" : "▶"; M.due = performance.now(); }
+
+  // ---- entering and leaving ----
+  // the film starts on the frame the camera last took and carries on from there
+  function start() {
+    if (!catalog || M.on) return;
+    M.on = true; M.buf.clear(); blank();
+    setPlaying(false);
+    // the movie takes the camera's place; the camera windows come back when it ends
+    M.hidden = ["imgcard", "wacard"].map($).filter(w => w && !w.hidden);
+    const cam = M.hidden[0];
+    if (cam && cam.style.left && !card.style.left) Object.assign(card.style, { left: cam.style.left, top: cam.style.top, right: "auto", bottom: "auto" });
+    M.hidden.forEach(w => { w.hidden = true; });
+    card.hidden = false; card.dispatchEvent(new Event("pointerdown"));
+    $("movie").setAttribute("aria-pressed", "true");
+    const i = lastImageIndex(state.et), f = at(i - 1);
+    M.cur = f ? { id: f.id, et: f.et } : null; M.cat = catalog; M.i = i - 1;
+    $("mvmsg").textContent = at(Math.max(0, i)) ? "" : "No frames to play";
+    setMoviePlaying(true);
+    if (!M.looping) { M.looping = true; requestAnimationFrame(tick); }
+  }
+  function stop() {
+    if (!M.on) return;
+    M.on = false; M.buf.clear();
+    card.hidden = true;
+    M.hidden.forEach(w => { w.hidden = false; }); M.hidden = [];
+    $("movie").setAttribute("aria-pressed", "false");
+    setPlaying(false);   // the clock stays on the last frame shown; play carries on from there
+  }
+  window.cassiniMovie = { start, stop, get on() { return M.on; }, state: M };
+
+  // ---- controls ----
+  $("movie").addEventListener("click", () => (M.on ? stop() : start()));
+  $("mvplay").addEventListener("click", () => setMoviePlaying(!M.playing));
+  $("mvfps").addEventListener("input", e => {
+    M.fps = +e.target.value; $("mvfpsv").textContent = M.fps + " fps";
+    try { localStorage.setItem("cassini-os-movie-fps", M.fps); } catch (err) {}
+  });
+  // the window's close and minimize buttons (and a title-bar double-click) leave movie mode rather than tucking it away
+  card.addEventListener("click", e => { if (e.target.closest(".close, .min")) { e.stopPropagation(); stop(); } }, true);
+  card.querySelector(".titlebar").addEventListener("dblclick", e => { e.stopPropagation(); stop(); }, true);
+  new MutationObserver(() => { const b = M.on && M.cur && M.buf.get(M.cur.id); if (b && b.ok) draw(b.img); }).observe(card, { attributes: true, attributeFilter: ["class"] });
+  // while a movie runs: space plays and pauses it, the arrow keys step a frame, Escape leaves; the main play button leaves and plays on
+  window.addEventListener("keydown", e => {
+    if (!M.on || e.metaKey || e.ctrlKey || (/INPUT|SELECT|TEXTAREA/.test(e.target.tagName) && e.code === "Space")) return;
+    if (e.code === "Space") { e.preventDefault(); e.stopImmediatePropagation(); setMoviePlaying(!M.playing); }
+    else if (e.key === "ArrowRight" || e.key === "ArrowLeft") {
+      e.preventDefault(); setMoviePlaying(false);
+      const j = here() + (e.key === "ArrowRight" ? 1 : -1); if (at(j)) show(j);
+    } else if (e.key === "Escape") stop();
+  }, true);
+  window.addEventListener("keydown", e => { if (!M.on && (e.key === "m" || e.key === "M") && !e.metaKey && !e.ctrlKey && e.target === document.body) start(); });
+  $("play").addEventListener("click", () => { if (M.on) stop(); }, true);
+  // scrubbing the timeline moves the film: it carries on from the frame at the new time
+  $("tl").addEventListener("pointerdown", () => { if (M.on) M.cur = null; }, true);
+  const go = $("gomenu");
+  if (go) { const li = document.createElement("li"); li.innerHTML = '<button id="gomovie">Movie mode<span class="kbd">M</span></button>'; go.prepend(li); li.querySelector("button").addEventListener("click", () => (M.on ? stop() : start())); }
 })();
 </script>
 <script src="https://cdn.jsdelivr.net/npm/three@0.128.0/build/three.min.js"></script>
