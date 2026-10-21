@@ -43,7 +43,7 @@ body.s-noglass .menu ul { background: rgba(22, 23, 27, .97); }
   const FLOOR = 0.6;                     // lowest pixel ratio automatic quality goes to
   const dpr = () => Math.min(window.devicePixelRatio || 1, 2);
   let auto = 1;                          // automatic quality's share of the user's resolution (1 = all of it)
-  let n = 0, drawn = 0, t0 = 0, slow = false, good = 0, raiseAfter = 0, raiseWait = 8000, lastDrop = 0, fps = 0;
+  let n = 0, drawn = 0, t0 = 0, tPrev = 0, worst = 0, slow = 0, good = 0, raiseAfter = 0, raiseWait = 8000, lastDrop = 0, fps = 0;
   let lastKey = null, lastDraw = -1e9, busyUntil = 0, applied = 0, meter = null;
   const user = () => S.get("perf.resolution") / 100;
   const P = window.cassiniPerf = {
@@ -65,17 +65,21 @@ body.s-noglass .menu ul { background: rgba(22, 23, 27, .97); }
     },
     frame(now, drew) {
       n++; if (drew) drawn++;
+      if (tPrev) worst = Math.max(worst, now - tPrev); tPrev = now;
       if (!t0) t0 = now;
       if (now - t0 < 1000) return;
-      const all = drawn === n, rate = 1000 * n / (now - t0);
-      n = drawn = 0; t0 = now;
+      // a second with a hitch in it (a picture or a month of data arriving) says nothing about the GPU's load
+      const all = drawn === n, rate = 1000 * n / (now - t0), hitch = worst > 250;
+      n = drawn = 0; t0 = now; worst = 0;
       if (all) fps = rate;
       if (meter) meter.textContent = `${all ? Math.round(rate) + " fps" : "resting"}  ·  3D ${Math.round(100 * P.pixelRatio() / dpr())}%`;
       // only judge seconds in which every frame was drawn, the tab was visible and no data was being waited on
-      if (!S.get("perf.auto") || !all || document.hidden || (typeof yearReady === "function" && !yearReady())) { good = 0; return; }
+      if (!S.get("perf.auto") || !all || document.hidden || hitch || (typeof yearReady === "function" && !yearReady())) { good = 0; return; }
       const target = S.get("perf.target");
       if (rate < target * 0.9) {
         good = 0;
+        if (++slow < 2) return;   // two slow seconds in a row before the resolution drops
+        slow = 0;
         const min = Math.min(1, FLOOR / (dpr() * user()));
         if (auto > min) {
           // the GPU's work goes with the pixel count: scale both sides by sqrt(rate / target), at most 30% a step
@@ -84,8 +88,9 @@ body.s-noglass .menu ul { background: rgba(22, 23, 27, .97); }
           if (now - lastDrop < raiseWait + 4000) raiseWait = Math.min(60000, raiseWait * 2);
           lastDrop = now; raiseAfter = now + raiseWait; apply();
         }
-      } else if (rate >= target * 0.97 && auto < 1 && now > raiseAfter && ++good >= 3) {
-        good = 0; auto = Math.min(1, auto + 0.08); raiseAfter = now + 2000; apply();
+      } else {
+        slow = 0;
+        if (rate >= target * 0.97 && auto < 1 && now > raiseAfter && ++good >= 3) { good = 0; auto = Math.min(1, auto + 0.08); raiseAfter = now + 2000; apply(); }
       }
     }
   };

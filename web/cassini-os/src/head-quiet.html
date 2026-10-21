@@ -1215,7 +1215,9 @@ body.idle .win.full .titlebar { opacity: 0; }
     function channelsFrom(im, s) {
       if (stripSet !== s) return;
       const n = 192, c = document.createElement("canvas"); c.width = c.height = n;
-      const g = c.getContext("2d"); g.drawImage(im, 0, 0, n, n);
+      // willReadFrequently keeps this small canvas in main memory: reading back a GPU canvas waits for the whole
+      // GPU queue, the 3D view included, which froze the page for seconds on a large screen
+      const g = c.getContext("2d", { willReadFrequently: true }); g.drawImage(im, 0, 0, n, n);
       let src;
       try { src = g.getImageData(0, 0, n, n); } catch (e) { return; }   // a server without CORS: keep the frames
       for (const fig of chans.querySelectorAll("figure")) {
