@@ -24,6 +24,22 @@ study = open(sys.argv[2]).read()          # study: everything up to (not incl.) 
 out = sys.argv[3]
 script = src[src.index('<script src="https://cdn.jsdelivr.net/npm/three@0.128.0/build/three.min.js">'):]
 
+# movie mode (movie.html): its style joins the head's, its window goes into #app next to the others, a Movie
+# button joins the transport, and its script runs after the chrome script
+movie = open(os.path.join(os.path.dirname(os.path.abspath(sys.argv[2])), "movie.html")).read()
+part = lambda tag: movie[movie.index(f"<{tag}"):movie.index(f"</{tag}>") + len(tag) + 3]
+for old, new in [
+    ("</style>\n</head>", part("style")[len("<style>"):] + "\n</head>"),
+    ('  <div id="loading">', "  " + part("section") + "\n\n" + '  <div id="loading">'),
+    ('<button class="btn round skip" id="next" aria-label="Next moment">▶▶</button>',
+     '<button class="btn round skip" id="next" aria-label="Next moment">▶▶</button>\n'
+     '          <button class="btn round skip" id="movie" aria-pressed="false" aria-label="Movie mode" title="Movie mode: play one body\'s frames as a film (M)">'
+     '<svg viewBox="0 0 16 16" aria-hidden="true"><rect x="2" y="3" width="12" height="10" rx="1.5"/><path d="M5 3v10M11 3v10M2 6.3h3M2 9.7h3M11 6.3h3M11 9.7h3"/></svg></button>'),
+]:
+    assert study.count(old) == 1, old
+    study = study.replace(old, new)
+study += part("script") + "\n"
+
 # body reels (reel.html): its style joins the head's, its window goes into #app next to the others, and its
 # script runs after the chrome script (it adds "Play a Body…" to the Go menu)
 reel = open(os.path.join(os.path.dirname(os.path.abspath(sys.argv[2])), "reel.html")).read()
