@@ -3120,7 +3120,7 @@ function frame(now) {
 
 (async function main() {
   // ?t=1999-08-18T03:00 opens at that moment
-  const start = utcToEt(new URLSearchParams(location.search).get("t") || "2005-01-14T09:30:00");
+  const start = utcToEt(new URLSearchParams(location.search).get("t") || "2006-09-15T14:28:00");
   try {
     await load(start);
   } catch (err) {

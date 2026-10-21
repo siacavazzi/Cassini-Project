@@ -71,6 +71,9 @@ const THEME = {
   nowGlow: cssVar("--tl-now-glow").replace(/"/g, ""), barStyle: cssVar("--tl-bar-style") || "solid"
 };
 ''')
+# Cassini OS opens on "In Saturn's Shadow" (2006-09-15, the WAC mosaic of Saturn backlit by the Sun, the mosaic
+# benchmark in web/frames/mosaic_benchmark.py) unless ?t= says otherwise
+rep('get("t") || "2005-01-14T09:30:00"', 'get("t") || "2006-09-15T14:28:00"')
 rep('renderer.setClearColor(0x04060b, 1);', 'renderer.setClearColor(new THREE.Color(THEME.clear), 1);')
 rep('const c = n === "CASSINI" ? [0.56, 0.79, 1] : n === "HUYGENS" ? [1, 0.82, 0.55] : n === "TITAN" ? [0.88, 0.6, 0.29] : [0.62, 0.66, 0.72];',
     'const c = n === "CASSINI" ? THEME.mkCassini : n === "HUYGENS" ? [1, 0.82, 0.55] : n === "TITAN" ? THEME.mkTitan : THEME.mk;')
