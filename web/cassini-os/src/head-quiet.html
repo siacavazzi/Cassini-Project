@@ -912,7 +912,10 @@ body.idle .win.full .titlebar { opacity: 0; }
   const nmOf = k => FILTER_NM[`${catalog.cam[k]}:${catalog.f1[k]}/${catalog.f2[k]}`] || 0;
   function pickChannels(s) {
     const by = f => s.frames[s.filters.indexOf(f)], blue = ["BL1", "BL2", "VIO"].find(f => s.filters.includes(f));
-    if (s.filters.includes("RED") && s.filters.includes("GRN") && blue) { s.kind = "true"; s.use = [by("RED"), by("GRN"), by(blue)]; }
+    // red: RED, or the 619 nm continuum filter CB1 when a set has no RED (the narrow-angle camera at Jupiter), as
+    // obs_mosaic picks the filter nearest 650 nm
+    const red = ["RED", "CB1"].find(f => s.filters.includes(f));
+    if (red && s.filters.includes("GRN") && blue) { s.kind = "true"; s.use = [by(red), by("GRN"), by(blue)]; }
     else {
       const w = s.frames.slice().sort((p, q) => nmOf(q) - nmOf(p));
       s.kind = w.length >= 3 ? "false" : "two";
