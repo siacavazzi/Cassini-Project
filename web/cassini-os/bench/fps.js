@@ -6,13 +6,15 @@
 //   CHANNEL=chrome  use the installed Google Chrome (real GPU on a Mac); default is Playwright's Chromium
 //   HEADED=1        show the window
 //   SOFTWARE=1      SwiftShader (cloud containers); THREE_DIR=.../three/package serves three.js locally
+//   VSYNC=1         keep the display's frame cap (60 fps), as a person sees it
 //   PRE='js'        runs in the page before measuring (e.g. cassiniSettings.set(...))
 const { chromium } = require("playwright-core");
 const fs = require("fs");
 const [url, out, W = 1440, H = 900, DPR = 2, SECS = 10] = process.argv.slice(2);
 const env = process.env;
 (async () => {
-  const args = ["--ignore-gpu-blocklist", "--disable-gpu-vsync", "--disable-frame-rate-limit", "--enable-precise-memory-info"];
+  const args = ["--ignore-gpu-blocklist", "--enable-precise-memory-info"];
+  if (!env.VSYNC) args.push("--disable-gpu-vsync", "--disable-frame-rate-limit");
   if (env.SOFTWARE) args.push("--use-gl=swiftshader", "--enable-unsafe-swiftshader");
   const br = await chromium.launch({ channel: env.CHANNEL || undefined, executablePath: env.EXE || undefined, headless: !env.HEADED, args });
   const ctx = await br.newContext({ viewport: { width: +W, height: +H }, deviceScaleFactor: +DPR });
@@ -53,7 +55,7 @@ const env = process.env;
       cpuMsPerFrame: Object.fromEntries(Object.entries(window.__T).map(([k, v]) => [k, +(v / n).toFixed(2)]).sort((a, b) => b[1] - a[1])),
       drawCalls: renderer.info.render.calls, triangles: renderer.info.render.triangles, textures: renderer.info.memory.textures,
       canvas: [renderer.domElement.width, renderer.domElement.height], heapMB: performance.memory ? Math.round(performance.memory.usedJSHeapSize / 1e6) : null,
-      quality: window.cassiniPerf ? window.cassiniPerf.status() : null, utc: new Date(etToMs(state.et)).toISOString() };
+      quality: window.cassiniPerf ? window.cassiniPerf.status() : null, scalePath: window.__q || null, utc: new Date(etToMs(state.et)).toISOString() };
   });
   const self = {}, byId = {}; for (const nd of profile.nodes) byId[nd.id] = nd;
   profile.samples.forEach((id, i) => { const c = byId[id].callFrame, k = `${c.functionName || "(anonymous)"}:${c.lineNumber + 1}`; self[k] = (self[k] || 0) + (profile.timeDeltas[i] || 0) / 1000; });
