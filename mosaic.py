@@ -20,6 +20,7 @@ calibrated_gain = 1.1  # the same for frames already on one calibrated scale (on
 calibrated_overlap = 100  # min_overlap for those: a tight gain and a median offset need few pixels
 max_offset = 6.0    # 8 bit levels; a bigger step is light scattered across the frame (a gradient),
                     # which one offset can't take out, and chained over a mosaic shifts its colours
+offset_ramp = 16.0  # 8 bit levels over which an offset fades in from black (see composite)
 reproject_surface = False  # line up the target's surface between frames (see compose)
 max_reproject_age = 20 * 60  # seconds; older frames are only centered (warping across big rotations tears)
 
@@ -307,7 +308,9 @@ def composite(frames, gains, offsets=None):
         a = feathered * below + own * (1 - below)
         color = color * gain.astype(np.float32)
         if offset.any():
-            color += offset.astype(np.float32)
+            # in full from offset_ramp levels up, fading to none at black, so what is black stays
+            # black (lifting it shows the compression blocks of a dark sky or night side)
+            color += offset.astype(np.float32) * np.minimum(color * np.float32(1 / offset_ramp), 1)
         color -= rgb[sl]
         color *= a[..., None]
         rgb[sl] += color

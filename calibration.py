@@ -324,6 +324,18 @@ def load_channels(labels, images=None, sky_fraction=0.1, sky_percentile=98, gamm
         # every picture of a mosaic on the same scale, so tiles and filters keep what the camera saw
         gamma = scale.get("gamma", gamma)
         return [display(iof, black, scale["white"], gamma) for iof, black in zip(iofs, scale["blacks"])]
+    blacks, white, _ = picture_scale(iofs, sky_fraction, sky_percentile)
+    if white <= 0:
+        return images
+    return [display(iof, black, white, gamma) for iof, black in zip(iofs, blacks)]
+
+
+"""
+One picture's own display scale, as load_channels uses it: (black per channel, white, whether the
+blacks were measured on the sky or left at zero for want of sky), in I/F.
+iofs = the picture's channels, float32 I/F
+"""
+def picture_scale(iofs, sky_fraction=0.1, sky_percentile=98):
     # Black point per channel: just above the sky left after the bias (dark current,
     # stray light, noise), so the sky's noise, DN steps and lossy compression blocks
     # don't come out as colored speckle. Sky is where every channel is dark; without
@@ -332,14 +344,43 @@ def load_channels(labels, images=None, sky_fraction=0.1, sky_percentile=98, gamm
     for iof in iofs:
         sky &= iof < 0.05 * np.percentile(iof, 99.9)
     blacks = [0.0] * len(iofs)
-    if sky.mean() > sky_fraction:
+    measured = bool(sky.mean() > sky_fraction)
+    if measured:
         blacks = [np.percentile(iof[sky], sky_percentile) for iof in iofs]
     # One white point for all channels: the brightest channel's brightest pixel, after a
     # 3x3 median so a single cosmic ray hit or hot pixel can't set it
     white = max(cv2.medianBlur(iof - black, 3).max() for iof, black in zip(iofs, blacks))
-    if white <= 0:
-        return images
-    return [display(iof, black, white, gamma) for iof, black in zip(iofs, blacks)]
+    return blacks, white, measured
+
+
+"""
+The display scale shared by the tiles of a mosaic that would each otherwise be stretched on its
+own (the reel's mosaics): every tile's own scale (picture_scale), then per channel the median of
+the blacks of the tiles that had sky to measure them on (a tile filled by the body says nothing
+about the sky), and one white, the brightest tile's, so no tile clips. Each tile looks much as it
+would alone, but all are on one scale, so they meet without brightness or colour steps.
+pictures = one list of channel I/F images per tile (stacking.load_hdr)
+"""
+def tiles_scale(pictures, gamma=2.2):
+    scales = [picture_scale([iof.astype(np.float32) for iof in iofs]) for iofs in pictures]
+    measured = [s for s in scales if s[2]]
+    blacks = [float(np.median([s[0][c] for s in measured])) if measured else 0.0 for c in range(len(pictures[0]))]
+    white = max(float(s[1]) for s in scales)
+    return {"blacks": blacks, "white": white, "gamma": gamma}
+
+
+"""
+The display scale shared by all the pictures of a mosaic, for load_channels: per channel, the
+sky's floor (the median over the pictures of each one's floor_pct percentile I/F) as its black;
+one white for all channels, the white_pct percentile of every pixel above its channel's black
+(every channel on one white keeps the colour the camera measured).
+channels = one list per channel of the pictures' I/F images (stacking.load_hdr)
+"""
+def shared_scale(channels, white_pct=99.9, floor_pct=5, gamma=2.2):
+    blacks = [float(np.median([np.percentile(iof, floor_pct) for iof in iofs])) for iofs in channels]
+    white = max(float(np.percentile(np.concatenate([iof[::8, ::8].ravel() for iof in iofs]) - black, white_pct))
+                for iofs, black in zip(channels, blacks))
+    return {"blacks": blacks, "white": white, "gamma": gamma}
 
 
 """

@@ -36,6 +36,7 @@ HERE = os.path.dirname(os.path.abspath(__file__))
 REPO = os.path.abspath(os.path.join(HERE, "..", ".."))
 sys.path.insert(0, REPO)
 os.environ.setdefault("MPLBACKEND", "Agg")
+import calibration  # noqa: E402
 import color_image  # noqa: E402
 import mosaic  # noqa: E402
 import stacking  # noqa: E402
@@ -61,20 +62,16 @@ def frames(obs, target, cam):
 
 def display_scale(todo, white_pct, gamma):
     """
-    The display scale shared by every picture: per filter, the sky's floor (the median over the
-    tiles of each tile's 5th percentile I/F) as its black; one white for all filters, the
-    white_pct percentile of every pixel above its filter's black.
+    The display scale shared by every picture (calibration.shared_scale, one channel per filter):
+    {"blacks": {filter: I/F}, "white": I/F, "gamma": gamma}
     """
-    floors, samples = {}, {}
+    by = {}
     for path, f, _ in todo:
         _, iof, _ = stacking.load_hdr(path, REPEAT_GAP)
-        if iof is None:
-            continue
-        floors.setdefault(f, []).append(float(np.percentile(iof, 5)))
-        samples.setdefault(f, []).append(iof[::8, ::8].ravel())
-    blacks = {f: float(np.median(v)) for f, v in floors.items()}
-    white = max(float(np.percentile(np.concatenate(samples[f]) - blacks[f], white_pct)) for f in samples)
-    return {"blacks": blacks, "white": white, "gamma": gamma}
+        if iof is not None:
+            by.setdefault(f, []).append(iof)
+    scale = calibration.shared_scale(list(by.values()), white_pct, gamma=gamma)
+    return {**scale, "blacks": dict(zip(by, scale["blacks"]))}
 
 
 def main():
