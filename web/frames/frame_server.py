@@ -41,6 +41,8 @@ make a filter set (web/cassini-os/src/head-quiet.html, findSets). Frames are sen
 Access-Control-Allow-Origin: * so a page hosted elsewhere can show them.
 """
 import argparse
+import email.utils
+import gzip
 import io
 import os
 import re
@@ -139,6 +141,31 @@ def color_webp(ids, size, cache):
         with open(base + ".json") as fh:
             report = json.load(fh)
     return data, report
+
+
+# site files sent gzipped to browsers that take it: a year of replay data is ~18 MB, its catalog JSON
+# shrinks ~7x and the track and pointing files ~25%. Each file is compressed once and kept in memory
+# (until it changes) up to GZIP_KEEP bytes of compressed data
+GZIP_TYPES = (".json", ".bin", ".html", ".js", ".css", ".txt", ".svg", ".csv")
+GZIP_KEEP = 256 * 1024 * 1024
+_gzipped = {}
+_gzip_lock = threading.Lock()
+
+
+def gzipped(path, st):
+    key = (path, st.st_mtime_ns, st.st_size)
+    with _gzip_lock:
+        data = _gzipped.get(key)
+    if data is None:
+        with open(path, "rb") as fh:
+            data = gzip.compress(fh.read(), 6, mtime=0)
+        with _gzip_lock:
+            for old in [k for k in _gzipped if k[0] == path]:
+                del _gzipped[old]
+            while _gzipped and sum(map(len, _gzipped.values())) + len(data) > GZIP_KEEP:
+                del _gzipped[next(iter(_gzipped))]
+            _gzipped[key] = data
+    return data
 
 
 class Server(ThreadingHTTPServer):
@@ -242,7 +269,41 @@ def make_handler(site, cache):
             # pages and their JSON change with every rebuild, so browsers must check before reusing them;
             # frames, textures and track files keep the default heuristic caching
             self.revalidate = url.path.endswith(("/", ".html", ".json"))
+            if self.send_gzipped(url.path):
+                return
             return super().do_GET()
+
+        def send_gzipped(self, url_path):
+            """A site file gzipped, if the browser takes gzip and it is worth it; False otherwise."""
+            if "gzip" not in self.headers.get("Accept-Encoding", ""):
+                return False
+            path = self.translate_path(url_path)
+            if os.path.isdir(path):
+                path = os.path.join(path, "index.html")
+            if not path.endswith(GZIP_TYPES) or not os.path.isfile(path):
+                return False
+            st = os.stat(path)
+            modified = self.date_time_string(int(st.st_mtime))
+            since = self.headers.get("If-Modified-Since")
+            if since:
+                try:
+                    if email.utils.parsedate_to_datetime(since).timestamp() >= int(st.st_mtime):
+                        self.send_response(304)
+                        self.send_header("Last-Modified", modified)
+                        self.end_headers()
+                        return True
+                except (TypeError, ValueError, OverflowError):
+                    pass
+            data = gzipped(path, st)
+            self.send_response(200)
+            self.send_header("Content-Type", self.guess_type(path))
+            self.send_header("Content-Encoding", "gzip")
+            self.send_header("Vary", "Accept-Encoding")
+            self.send_header("Last-Modified", modified)
+            self.send_header("Content-Length", str(len(data)))
+            self.end_headers()
+            self.wfile.write(data)
+            return True
 
         def log_message(self, fmt, *args):
             if os.environ.get("FRAME_SERVER_QUIET") != "1":
