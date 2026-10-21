@@ -18,6 +18,14 @@ step, scrubbing the timeline carries the film on from the new time, and Escape (
 main play button) leaves. Frames are fetched ahead of the play head; a frame that has not arrived holds the film
 rather than being skipped.
 
+## Imaging bursts
+
+In normal playback each camera window shows at most a set number of new pictures a second (2 by default). When
+Cassini takes a burst of frames faster than that at the chosen speed, the clock slows down so every picture gets its
+turn, then returns to full speed once the burst is over; the status line reads "imaging burst, slowed to …" while
+it does. Change it under View > Bursts, or in the Settings window (Playback > Maximum images per second,
+`playback.maxImageRate`, 0 = no limit) when the page has one. Movie mode keeps its own clock.
+
 ## Run it
 
 The page reads the replay data through the `data` link (`data -> ../replay/data`), and the camera frames

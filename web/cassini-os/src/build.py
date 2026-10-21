@@ -102,6 +102,9 @@ rep('''    list.appendChild(li);
   }
   if (window.studyMoments) window.studyMoments(picks);
 }''')
+# playback hook: the page can slow the clock (Cassini OS caps the pictures per second during imaging bursts)
+rep('    setTime(state.et + dt * state.speed);\n',
+    '    setTime(window.studyAdvance ? window.studyAdvance(state.et, dt, state.speed) : state.et + dt * state.speed);\n')
 rep('''function setPlaying(p) { state.playing = p; $("play").textContent = p ? "❚❚" : "▶"; }''',
     '''function setPlaying(p) { state.playing = p; $("play").textContent = p ? "❚❚" : "▶"; $("play").classList.toggle("playing", p); }''')
 # timeline colours/fonts
