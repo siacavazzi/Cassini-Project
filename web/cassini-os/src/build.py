@@ -52,6 +52,17 @@ for old, new in [
     assert study.count(old) == 1, old
     study = study.replace(old, new)
 
+# phone layout (phone.html): its style joins the head's and its script runs before the chrome script (after the
+# settings script), so the window manager already knows whether it is laying out a phone
+phone = open(os.path.join(os.path.dirname(os.path.abspath(sys.argv[2])), "phone.html")).read()
+ppart = lambda tag: phone[phone.index(f"<{tag}"):phone.index(f"</{tag}>") + len(tag) + 3]
+for old, new in [
+    ("</style>\n</head>", ppart("style")[len("<style>"):] + "\n</head>"),
+    ("<script>\n// ---------- Cassini OS chrome", ppart("script") + "\n<script>\n// ---------- Cassini OS chrome"),
+]:
+    assert study.count(old) == 1, old
+    study = study.replace(old, new)
+
 # per-body camera windows (bodywin.html, a setting): its style joins the head's and its script runs after the chrome
 # script, whose camera feed and window manager it reuses
 bodywin = open(os.path.join(os.path.dirname(os.path.abspath(sys.argv[2])), "bodywin.html")).read()

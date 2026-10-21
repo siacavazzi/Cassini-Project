@@ -37,7 +37,7 @@
 body.idle #reelcard { opacity: 1; pointer-events: auto; background: transparent; border-color: transparent; box-shadow: none; -webkit-backdrop-filter: none; backdrop-filter: none; }
 body.idle #reelcard :is(.titlebar, .rlbar, .rlpick) { opacity: 0; }
 body.idle .rlwell { border-color: transparent; box-shadow: 0 6px 30px rgba(0,0,0,.6); }
-@media (max-width: 600px) { #reelcard, #reelcard.zoomed { width: calc(100% - 16px); left: 8px; top: calc(env(safe-area-inset-top, 0px) + 30px); } }
+body.phone #reelcard:not(.full) { width: calc(100% - 16px) !important; left: 8px !important; top: calc(env(safe-area-inset-top, 0px) + 30px) !important; }
 </style>
 
 <section class="win" id="reelcard" aria-label="Body reel" hidden>
@@ -92,7 +92,7 @@ body.idle .rlwell { border-color: transparent; box-shadow: 0 6px 30px rgba(0,0,0
   }
 
   // ---- pictures: fetched ahead of the play head; the server makes each one the first time it is asked ----
-  const size = () => (card.classList.contains("zoomed") ? 1024 : 768);
+  const size = () => (window.cassiniWM && window.cassiniWM.big ? window.cassiniWM.big(card, $("rlwellN"), 800) : card.classList.contains("zoomed")) ? 1024 : 768;
   function want(i) {
     let b = R.buf.get(i);
     if (b && b.size === size() && b.mosaic === R.mosaic) return b;

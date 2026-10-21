@@ -18,6 +18,26 @@ step, scrubbing the timeline carries the film on from the new time, and Escape (
 main play button) leaves. Frames are fetched ahead of the play head; a frame that has not arrived holds the film
 rather than being skipped.
 
+## Window sizes and full view
+
+Every window resizes from its bottom-right corner, from a thumbnail up to the whole screen; a picture window keeps
+its picture square (a mosaic keeps its own shape, letterboxed) and stops growing at the bottom of the screen. Once a
+picture is shown wider than 600 px the window asks the frame server for the 1024 px picture instead of the 512 px
+one. The zoom button switches between the standard large size and the size you chose. Windows that show pictures
+(the camera windows, per-body windows, Play a Body, Movie) also have a full-view button at the right of the title
+bar: the window fills the screen under the menu bar, its picture as big as it fits. Double-click a picture or press
+`F` for the same, `Esc` to come back. Sizes are remembered with the rest of the layout.
+
+## Phone layout
+
+On a screen under 600 px wide, or a touch screen under 500 px tall (Settings > Interface > Phone layout: Automatic,
+Always or Never; `?phone=1` forces it), the windows dock instead of floating (`src/phone.html`). Upright: the NAC
+and WAC pictures side by side under the menu bar, the 3D view in the middle, the replay controls along the bottom
+(zoom shows speeds, timeline spans and the body picker), and Moments as a sheet over the view, opened from the list
+button next to the moment arrows. Sideways: the two pictures down the left edge and the controls beside them. Tap a
+picture for full screen, tap again to come back. Settings > Interface > Camera pictures on a phone (50 to 100 %) sets
+how big the docked pictures are.
+
 ## Imaging bursts
 
 In normal playback each camera window shows at most a set number of new pictures a second (5 by default). When

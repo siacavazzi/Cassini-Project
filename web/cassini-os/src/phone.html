@@ -1,0 +1,143 @@
+<!-- Phone layout for Cassini OS. build.py splices the style into the head and the script before the chrome script
+     (after the settings script), so body.phone is set before the window manager lays the windows out.
+
+     The desktop is the main target; on a phone (a screen under 600 px wide, or a touch screen under 500 px tall, or
+     Settings > Interface > Phone layout: Always) the same windows dock into fixed places instead of floating:
+       portrait   the two camera pictures side by side under the menu bar, the 3D view in the middle, the replay
+                  controls along the bottom, Moments as a sheet that slides up over the view (the list button)
+       landscape  the camera pictures stacked down the left edge, the replay controls along the bottom right,
+                  Moments as a panel on the right
+     A tap on a picture opens it full screen (every window that shows pictures), a second tap closes it. Windows
+     are not dragged or resized on a phone; Settings > Interface > Camera pictures on a phone sets how big the
+     docked pictures are. -->
+<style>
+#phmom { display: none; }
+#phmom svg { width: 13px; height: 13px; display: block; }
+#phmom svg * { fill: none; stroke: currentColor; stroke-width: 1.5; }
+
+body.phone { --phs: 1; --menu: calc(env(safe-area-inset-top, 0px) + 30px); --gap: 6px; --side: max(6px, env(safe-area-inset-left, 0px)); --sider: max(6px, env(safe-area-inset-right, 0px)); }
+/* menu bar: taller targets for fingers; the date is on the replay controls already */
+body.phone #menubar { height: var(--menu); padding-left: var(--side); padding-right: var(--sider); }
+body.phone .menu > button { height: 30px; line-height: 30px; padding: 0 9px; }
+body.phone .menu.app > button { padding-left: 4px; }
+body.phone .menu ul { top: 30px; max-width: calc(100vw - 12px); max-height: calc(100dvh - 40px); overflow-y: auto; }
+body.phone .menu:nth-last-child(2) ul { left: auto; right: 0; }
+body.phone .menu li button { padding-top: 6px; padding-bottom: 6px; }
+body.phone #mclock, body.phone #hudline { display: none; }
+body.phone #sgear { width: 30px; height: 30px; }
+body.phone .grip { display: none; }
+body.phone .titlebar { cursor: default; }
+
+/* camera windows: docked, picture only (the picture's own tag names the frame), no title bar */
+body.phone .camwin:not(.full) { top: calc(var(--menu) + var(--gap)) !important; bottom: auto !important; right: auto !important; height: auto !important; transform: none !important; }
+body.phone .camwin:not(.full) > .titlebar { display: none; }
+body.phone .camwin:not(.full) .body { padding: 4px; gap: 4px; }
+body.phone .camwin:not(.full) :is(.info, .chans) { display: none !important; }
+body.phone .camwin:not(.full) .well:not(.has-frame) { height: 44px; font-size: 9px; }
+body.phone .camwin .well::after { position: absolute; left: 5px; top: 4px; font: 9px/1 var(--hudf); letter-spacing: .08em; color: rgba(232,236,242,.6); text-shadow: 0 0 3px #000; }
+body.phone #imgcard .well::after { content: "NAC"; }
+body.phone #wacard .well::after { content: "WAC"; }
+body.phone .camwin .kindtag { top: 4px; }
+body.phone .camwin:not(.full) .shottag { font-size: 8px; }
+/* portrait: side by side, the narrow-angle picture a little bigger */
+body.phone:not(.phone-land) #imgcard:not(.full) { left: var(--side) !important; width: calc((100vw - 3 * var(--gap)) * .56 * var(--phs)) !important; }
+body.phone:not(.phone-land) #wacard:not(.full) { left: calc(var(--side) + (100vw - 3 * var(--gap)) * .56 * var(--phs) + var(--gap)) !important; width: calc((100vw - 3 * var(--gap)) * .44 * var(--phs)) !important; }
+body.phone:not(.phone-land) #imgcard[hidden] + #wacard:not(.full) { left: var(--side) !important; }
+/* landscape: one above the other down the left edge */
+body.phone.phone-land { --col: calc((100dvh - var(--menu) - 3 * var(--gap) - env(safe-area-inset-bottom, 0px)) / 2 * var(--phs)); }
+body.phone.phone-land .camwin:not(.full) { left: var(--side) !important; width: var(--col) !important; }
+body.phone.phone-land #wacard:not(.full) { top: calc(var(--menu) + 2 * var(--gap) + var(--col)) !important; }
+body.phone.phone-land #imgcard[hidden] + #wacard:not(.full) { top: calc(var(--menu) + var(--gap)) !important; }
+
+/* replay controls: along the bottom, transport and the clock on one line, the timeline under them */
+body.phone #dock { left: var(--side) !important; right: var(--sider) !important; top: auto !important; bottom: calc(env(safe-area-inset-bottom, 0px) + var(--gap)) !important; width: auto !important; height: auto !important; transform: none !important; }
+body.phone.phone-land #dock { left: calc(var(--side) + var(--col) + var(--gap)) !important; }
+body.phone #dock .titlebar { height: 18px; }
+body.phone #dock .toolbar, body.phone #dock:not(.zoomed) .toolbar { grid-template-columns: 1fr; gap: 4px; padding: 0 8px 6px; }
+body.phone .col, body.phone .col.right { width: auto; flex-direction: row; flex-wrap: wrap; justify-content: center; }
+body.phone .transport { gap: 8px; }
+body.phone #play { width: 38px; height: 38px; }
+body.phone .skip { width: 32px; height: 32px; }
+body.phone #phmom { display: grid; }
+body.phone #phmom[aria-pressed="true"] { background: rgba(138,182,255,.24); color: #fff; }
+body.phone .lcd { padding: 0 2px; }
+body.phone .lcd .sub { font-size: 10px; }
+body.phone #tl { height: 58px; }
+body.phone :is(.statusbar, .progress, .progress-cap, #mtoggle) { display: none; }
+body.phone #dock.zoomed .col.right { display: flex; }
+body.phone #dock.zoomed .col.right .nowcam { flex: 1 1 100%; min-height: 0; }
+body.phone #focusrow { margin: 0 8px 6px; }
+body.phone #focusrow .btn { padding: 7px 10px; }
+body.phone .seg .btn { padding: 7px 8px; }
+body.phone.phone-land .lcd .sub.probe, body.phone.phone-land .legend { display: none; }
+body.phone.phone-land #tl { height: 44px; }
+/* the expanded controls never run off the screen: they scroll inside their window */
+body.phone #dock { max-height: calc(100dvh - var(--menu) - 2 * var(--gap) - env(safe-area-inset-bottom, 0px)); overflow-y: auto; }
+body.phone.phone-land #dock.zoomed :is(.nowcam, .legend, #zooms) { display: none; }
+
+/* Moments: a sheet over the view, opened from the list button */
+body.phone #moments { left: var(--side) !important; right: var(--sider) !important; top: auto !important; width: auto !important;
+  bottom: calc(env(safe-area-inset-bottom, 0px) + var(--dockh, 150px) + 2 * var(--gap)) !important; height: min(48dvh, calc(100dvh - var(--dockh, 150px) - var(--menu) - 4 * var(--gap))) !important; z-index: 1400 !important; }
+body.phone.phone-land #moments { left: auto !important; width: min(380px, 46vw) !important; top: calc(var(--menu) + var(--gap)) !important; height: auto !important; }
+body.phone #mlist button { height: 44px; }
+body.phone #mlist { background: none; }
+
+/* full view on a phone: the whole screen under the menu bar */
+body.phone .win.full { inset: var(--menu) 0 env(safe-area-inset-bottom, 0px) 0 !important; border-radius: 0; border: 0; }
+body.phone .camwin.full .info { grid-template-columns: 42px minmax(0, 1fr); }
+body.phone .camwin.full .chans { grid-template-columns: repeat(var(--n, 3), minmax(0, 1fr)); }
+body.phone .fullbtn { width: 26px; height: 20px; top: 0; }
+
+/* the other windows: full width under the menu bar */
+body.phone .bodywin:not(.full) { left: var(--side) !important; top: calc(var(--menu) + var(--gap)) !important; right: auto !important; }
+</style>
+
+<script>
+// ---------- phone layout ----------
+(function () {
+  const S = window.cassiniSettings, $ = id => document.getElementById(id);
+  const fits = matchMedia("(max-width: 600px), (max-height: 500px) and (pointer: coarse)");
+  let mode = "auto";
+  if (S) {
+    mode = S.define({ key: "interface.phoneLayout", section: "Interface", label: "Phone layout", type: "choice", value: "auto",
+      options: [["auto", "Automatic"], ["on", "Always"], ["off", "Never"]],
+      hint: "Docks the windows for a small touch screen: camera pictures at the top, controls at the bottom, Moments as a sheet. Automatic uses it on screens under 600 px wide." });
+    S.define({ key: "interface.phoneCameraSize", section: "Interface", label: "Camera pictures on a phone", type: "range", value: 100, min: 50, max: 100, step: 5, unit: "%",
+      hint: "How much of the screen's width (or height, held sideways) the docked camera pictures take in the phone layout. Tap a picture for full screen." });
+    S.on("interface.phoneCameraSize", v => document.body.style.setProperty("--phs", (+v || 100) / 100));
+  }
+  const q = new URLSearchParams(location.search).get("phone");
+  function apply() {
+    const m = q !== null ? (q === "0" ? "off" : "on") : S ? S.get("interface.phoneLayout") : mode;
+    const on = m === "on" || (m === "auto" && fits.matches);
+    document.body.classList.toggle("phone", on);
+    document.body.classList.toggle("phone-land", on && innerWidth > innerHeight);
+  }
+  apply();
+  fits.addEventListener("change", apply);
+  addEventListener("resize", apply);
+  if (S) S.on("interface.phoneLayout", apply);
+
+  // once the windows exist: the Moments sheet sits on top of the controls, whatever their height
+  addEventListener("DOMContentLoaded", () => {
+    const dock = $("dock"), mom = $("moments"), btn = $("phmom");
+    new ResizeObserver(() => document.body.style.setProperty("--dockh", dock.offsetHeight + "px")).observe(dock);
+    // the list button: opens and closes the Moments sheet (also brings it back if it was closed from its window)
+    const sync = () => btn.setAttribute("aria-pressed", String(!mom.hidden && !mom.classList.contains("closed")));
+    btn.addEventListener("click", () => {
+      const open = !mom.hidden && !mom.classList.contains("closed");
+      if (open) mom.classList.add("closed");
+      else {
+        mom.classList.remove("closed", "shaded"); if (mom.hidden && window.cassiniWM) window.cassiniWM.restore(mom); else mom.hidden = false;
+        const next = mom.querySelector("li.next"); if (next) next.scrollIntoView({ block: "center" });   // opens at the moment coming up
+      }
+      sync();
+    });
+    new MutationObserver(sync).observe(mom, { attributes: true, attributeFilter: ["class", "hidden"] });
+    // on a phone the sheet starts closed and closes again once a moment is picked, so the view can be seen
+    if (document.body.classList.contains("phone")) mom.classList.add("closed");
+    $("mlist").addEventListener("click", e => { if (document.body.classList.contains("phone") && e.target.closest("button")) setTimeout(() => mom.classList.add("closed"), 150); });
+    sync();
+  });
+})();
+</script>
