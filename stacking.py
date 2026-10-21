@@ -9,7 +9,11 @@ dropped later, when image_correction.stack_frames fails to align them.
 """
 
 import threading
+import cv2
+import numpy as np
 import pandas as pd
+import calibration as cal
+import data_source as ds
 import label_handler as lh
 import image_correction as ic
 
@@ -90,3 +94,56 @@ def load_stacked(path, window=120, max_frames=5, count=False):
         print(f"Stacking {len(frames)} frames for {path}")
     stacked = ic.stack_frames(frames)
     return (lbl, stacked, len(frames)) if count else (lbl, stacked)
+
+
+"""
+Loads the frame at path with every repeat exposure of it, whatever their exposure times, summing
+modes or gains, and merges them in I/F (calibration.calibrate): an exposure bracket (a short
+exposure for the bright parts, a long one for the faint ones) becomes one picture with the range
+of both. Each frame is calibrated on its own, aligned to the frame at path, and averaged weighted by
+its exposure time (the long exposures carry the faint signal), leaving out its saturated pixels
+and the few around them (charge bleeds out of a full pixel), so where a long exposure saturated the
+short one is used. A repeat that can't be matched (a faint frame of mostly empty sky, where phase
+correlation finds nothing) is taken as it is: repeats are seconds apart at the same pointing.
+returns (label of the frame at path, float32 I/F image sized like label.resize_image, how many
+frames went in), or the label, None and 1 when the frame at path can't be calibrated
+"""
+def load_hdr(path, window=120, max_frames=8):
+    lbl = lh.label(path, as_png=True)
+    ref = first = None
+    total, weight, n = None, None, 0
+    for p in find_repeats(path, window, max_frames):
+        try:
+            l = lbl if p == path else lh.label(p, as_png=True)
+            info = l.get_info()
+            image = l.resize_image()
+            gray = cv2.cvtColor(image, cv2.COLOR_BGR2GRAY) if image.ndim == 3 else image
+            codes = ds.imread(l.export(), cv2.IMREAD_GRAYSCALE)
+            iof = cal.calibrate(codes, info, gray)
+        except Exception as e:
+            print(f"Skipping repeat {p}: {e}")
+            continue
+        if iof is None:
+            if p == path:
+                return lbl, None, 1
+            continue
+        if ref is None:
+            ref, first = image, iof
+        else:
+            shift = ic.find_shift(ref, image, 20)
+            if shift is not None:
+                iof = ic.shift_image(iof.astype(np.float32), *shift)
+                gray = ic.shift_image(gray, *shift)
+        good = ~cv2.dilate(cal.saturated(codes, info, gray).astype(np.uint8), np.ones((7, 7), np.uint8)).astype(bool)
+        w = good * np.float32(float(info.get("EXPOSURE_DURATION", 1)) or 1)
+        total = iof * w if total is None else total + iof * w
+        weight = w if weight is None else weight + w
+        n += 1
+    if total is None:
+        return lbl, None, 1
+    # pixels saturated in every exposure keep the reference's (clipped) value
+    merged = total / np.maximum(weight, 1e-9)
+    merged = np.where(weight > 0, merged, first).astype(np.float32)
+    if n > 1:
+        print(f"Merged {n} exposures for {path}")
+    return lbl, merged, n
