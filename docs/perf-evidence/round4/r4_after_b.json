@@ -1,0 +1,136 @@
+{
+ "gpu": "ANGLE (Apple, ANGLE Metal Renderer: Apple M4, Unspecified Version)",
+ "frames": 1344,
+ "fps": 89.2,
+ "p50ms": 11.8,
+ "p95ms": 18.6,
+ "maxms": 57.3,
+ "cpuMsPerFrame": {
+  "frame": 9.49,
+  "render": 7.74,
+  "drawTimeline": 0.55,
+  "updateHud": 0.53,
+  "studyHud": 0.41,
+  "updateLabels": 0.21,
+  "updateBodies": 0.09,
+  "studyAfterRender": 0.08,
+  "updateTrail": 0.06,
+  "2d.getImageData.calls": 0.01,
+  "2d.drawImage.calls": 0.01,
+  "2d.putImageData.calls": 0.01,
+  "updateFocusRow": 0.01,
+  "studyBeforeHud": 0.01,
+  "2d.getImageData": 0.01,
+  "updateProbeTrail": 0,
+  "updateOrbits": 0,
+  "2d.drawImage": 0,
+  "2d.putImageData": 0
+ },
+ "drawCalls": 9,
+ "triangles": 25064,
+ "textures": 16,
+ "canvas": [
+  3840,
+  2160
+ ],
+ "heapMB": 39,
+ "quality": {
+  "fps": 80.4,
+  "scale": 1,
+  "pixelRatio": 2,
+  "auto": true,
+  "target": 50
+ },
+ "utc": "2006-09-15T15:42:03.110Z",
+ "scalePath": [
+  1,
+  1,
+  1,
+  1,
+  1,
+  1,
+  1,
+  1,
+  1,
+  1,
+  1,
+  1,
+  1,
+  1,
+  1,
+  1,
+  1,
+  1,
+  1
+ ],
+ "mainThreadTop": [
+  [
+   "uniformMatrix4fv:0",
+   2.57
+  ],
+  [
+   "(program):0",
+   1.59
+  ],
+  [
+   "uniform3fv:0",
+   0.96
+  ],
+  [
+   "drawElements:0",
+   0.83
+  ],
+  [
+   "useProgram:0",
+   0.74
+  ],
+  [
+   "bindVertexArray:0",
+   0.7
+  ],
+  [
+   "bindTexture:0",
+   0.65
+  ],
+  [
+   "drawTimeline:3918",
+   0.45
+  ],
+  [
+   "uniform3f:0",
+   0.43
+  ],
+  [
+   "depthMask:0",
+   0.26
+  ],
+  [
+   "big:1389",
+   0.18
+  ],
+  [
+   "uniformMatrix3fv:0",
+   0.17
+  ],
+  [
+   "(anonymous):6",
+   0.08
+  ],
+  [
+   "fmt:1268",
+   0.08
+  ],
+  [
+   "updateHud:3831",
+   0.08
+  ]
+ ],
+ "url": "http://127.0.0.1:8773/",
+ "viewport": [
+  1920,
+  1080,
+  2
+ ],
+ "seconds": 15,
+ "loadMs": 423
+}
