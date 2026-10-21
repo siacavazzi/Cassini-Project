@@ -1053,7 +1053,7 @@ body.idle .camwin .well.has-frame { border-color: transparent; box-shadow: 0 6px
         if (rep && rep.observation) {
           obsShown = catalog.obs[w.k]; obsTiles = rep.mosaic;
           well.style.aspectRatio = `${rep.width} / ${rep.height}`;
-          card.querySelector(".kindtag").textContent = `${rep.filters >= 3 ? "FALSE COLOUR " : ""}MOSAIC · ${rep.mosaic} OF ${rep.of} TILES${rep.filters > 1 ? ` · ${rep.filters} FILTERS` : ""}`;
+          card.querySelector(".kindtag").textContent = `${rep.filters >= 3 ? ((rep.filter_names || []).includes("GRN") ? "COLOUR " : "FALSE COLOUR ") : ""}MOSAIC · ${rep.mosaic} OF ${rep.of} TILES${rep.filters > 1 ? ` · ${rep.filters} FILTERS` : ""}`;
           return;
         }
         card.querySelector(".kindtag").textContent = `${w.set >= 0 ? KIND[catalog.sets[w.set].kind].toUpperCase() + " · " : ""}MOSAIC${rep && rep.mosaic ? ` OF ${rep.mosaic}` : ""}`;
