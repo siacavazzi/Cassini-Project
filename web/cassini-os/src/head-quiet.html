@@ -1154,18 +1154,21 @@ body.idle .win.full .titlebar { opacity: 0; }
     // of this tile over the ones before it, which replaces the picture while it is still the one shown.
     // The Settings window's "Mosaics in camera windows" (cameras.mosaics) or window.cassiniMosaics = false turns this off.
     // A pass's mosaic (X-Reel names the observation) is every tile so far, every filter, in its own shape: the
-    // window takes that shape and keeps it for the rest of the observation.
-    let mosaicUrl = null, obsShown = null, obsTiles = 0;
+    // window takes that shape and keeps it for the rest of the observation. A window that grows (or a held picture
+    // in full view) asks for the shown pass's mosaic again at the bigger size (retier below), also while a later
+    // frame of the pass that is not a tile keeps it up.
+    let mosaicUrl = null, obsShown = null, obsTiles = 0, obsFrom = null, obsSize = 0;
+    const rank = sz => sz === "full" ? Infinity : +sz;
     function mosaicOf(w) {
       if (window.cassiniMosaics === false || !S.get("cameras.mosaics")) return;
-      const id = catalog.id[w.set >= 0 ? catalog.sets[w.set].use[0] : w.k];
-      fetch(`${FRAMES}/frames/mosaic/${id}.webp?size=${size()}`).then(async r => {
+      const id = catalog.id[w.set >= 0 ? catalog.sets[w.set].use[0] : w.k], sz = size();
+      fetch(`${FRAMES}/frames/mosaic/${id}.webp?size=${sz}`).then(async r => {
         if (!r.ok) return;
         const rep = JSON.parse(r.headers.get("X-Reel") || "null");
         // a pass's mosaic that arrives after the window moved on to the pass's next frame still shows, unless
         // the window already has a bigger one
         const late = () => shown !== w && !(rep && rep.observation && shown && catalog.obs[shown.k] === catalog.obs[w.k]
-          && (obsShown !== catalog.obs[w.k] || rep.mosaic > obsTiles));
+          && (obsShown !== catalog.obs[w.k] || rep.mosaic > obsTiles || (rep.mosaic === obsTiles && rank(sz) > obsSize)));
         if (late()) return;
         const blob = await r.blob();
         if (late()) return;
@@ -1175,7 +1178,7 @@ body.idle .win.full .titlebar { opacity: 0; }
         saving(r.url);
         well.classList.add("mosaic");
         if (rep && rep.observation) {
-          obsShown = catalog.obs[w.k]; obsTiles = rep.mosaic;
+          obsShown = catalog.obs[w.k]; obsTiles = rep.mosaic; obsFrom = w; obsSize = rank(sz);
           well.style.aspectRatio = `${rep.width} / ${rep.height}`;
           card.querySelector(".kindtag").textContent = `${rep.filters >= 3 ? ((rep.filter_names || []).includes("GRN") ? "COLOUR " : "FALSE COLOUR ") : ""}MOSAIC · ${rep.mosaic} OF ${rep.of} TILES${rep.filters > 1 ? ` · ${rep.filters} FILTERS` : ""}`;
           return;
@@ -1282,6 +1285,7 @@ body.idle .win.full .titlebar { opacity: 0; }
       if (tier === size()) return;
       tier = size();
       if (typeof catalog !== "undefined" && catalog && catalog.byCam && lastK >= 0) update(true);
+      if (obsShown && obsFrom && obsFrom.cat === catalog && rank(tier) > obsSize) mosaicOf(obsFrom);
     }
     new ResizeObserver(retier).observe(well);
     update.retier = retier;
