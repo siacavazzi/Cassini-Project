@@ -60,6 +60,18 @@ assert study.count("</style>\n</head>") == 1
 study = study.replace("</style>\n</head>", bpart("style")[len("<style>"):] + "\n</head>")
 study += bpart("script") + "\n"
 
+# body reels (reel.html): its style joins the head's, its window goes into #app next to the others, and its
+# script runs after the chrome script (it adds "Play a Body…" to the Go menu)
+reel = open(os.path.join(os.path.dirname(os.path.abspath(sys.argv[2])), "reel.html")).read()
+part = lambda tag: reel[reel.index(f"<{tag}"):reel.index(f"</{tag}>") + len(tag) + 3]
+for old, new in [
+    ("</style>\n</head>", part("style")[len("<style>"):] + "\n</head>"),
+    ('  <div id="loading">', "  " + part("section") + "\n\n" + '  <div id="loading">'),
+]:
+    assert study.count(old) == 1, old
+    study = study.replace(old, new)
+study += part("script") + "\n"
+
 def rep(old, new, count=1):
     global script
     assert script.count(old) == count, (old, script.count(old))

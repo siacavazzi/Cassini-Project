@@ -11,6 +11,10 @@ Where the data comes from:
 Images and labels are read from the zip in memory. SPICE can only load kernels from
 real files, so the kernels for the year being processed are extracted into a small
 cache folder and deleted again when the kernels are unloaded.
+
+The lean archive (cassini_lut8.zip) has no SPICE kernels. CASSINI_KERNELS (a data folder
+or .zip that has cosp_1000, e.g. the original archive) is where cosp_1000/... is read
+from then; everything else still comes from CASSINI_DATA.
 """
 import os
 import re
@@ -37,7 +41,8 @@ KEEP_SPICE_CACHE = os.environ.get("CASSINI_KEEP_SPICE_CACHE", "").lower() in ("1
 DATA_FOLDERS = {"nac_data", "nac_labels", "wac_data", "wac_labels", "cosp_1000"}
 
 _source = None
-_index = None
+_kernel_source = None
+_indexes = {}
 
 
 """
@@ -58,8 +63,27 @@ def get_source():
     return _source
 
 
-def using_zip():
-    return get_source().lower().endswith(".zip")
+"""
+Where the SPICE kernels (cosp_1000/...) come from: CASSINI_KERNELS, or the data itself
+"""
+def get_kernel_source():
+    global _kernel_source
+    if _kernel_source is None:
+        _kernel_source = os.environ.get("CASSINI_KERNELS") or get_source()
+    return _kernel_source
+
+
+"""
+The source a path is read from: the kernel source for cosp_1000/..., the data otherwise
+"""
+def source_of(path):
+    if relative(path).lower().startswith("cosp_1000/"):
+        return get_kernel_source()
+    return get_source()
+
+
+def using_zip(source=None):
+    return (source or get_source()).lower().endswith(".zip")
 
 
 """
@@ -91,16 +115,16 @@ operating system keeps in memory, and later runs skip the indexing.
 """
 INDEX_FIELDS = ["keys", "names", "offsets", "compressed", "sizes", "methods"]
 
-def _index_folder():
-    stat = os.stat(get_source())
-    name = os.path.basename(get_source())
+def _index_folder(source):
+    stat = os.stat(source)
+    name = os.path.basename(source)
     return os.path.join(INDEX_CACHE, f"{name}-{stat.st_size}-{int(stat.st_mtime)}")
 
 
-def _build_index(folder):
-    print(f"Indexing {get_source()}...")
+def _build_index(folder, source):
+    print(f"Indexing {source}...")
     members = {}
-    with zipfile.ZipFile(get_source()) as z:
+    with zipfile.ZipFile(source) as z:
         for info in z.infolist():
             if info.is_dir():
                 continue
@@ -136,28 +160,28 @@ def _build_index(folder):
     except OSError:
         shutil.rmtree(part, ignore_errors=True)  # another process finished first
     # indexes of older versions of this zip are no longer needed
-    prefix = os.path.basename(get_source()) + "-"
+    prefix = os.path.basename(source) + "-"
     for old in os.listdir(INDEX_CACHE):
         if old.startswith(prefix) and os.path.join(INDEX_CACHE, old) != folder and not old.endswith(".part"):
             shutil.rmtree(os.path.join(INDEX_CACHE, old), ignore_errors=True)
     print(f"Done! {len(keys)} files")
 
 
-def _zip_index():
-    global _index
-    if _index is None:
-        folder = _index_folder()
+def _zip_index(source=None):
+    source = source or get_source()
+    if source not in _indexes:
+        folder = _index_folder(source)
         if not os.path.isdir(folder):
-            _build_index(folder)
-        _index = {field: np.load(os.path.join(folder, field + ".npy"), mmap_mode="r") for field in INDEX_FIELDS}
-    return _index
+            _build_index(folder, source)
+        _indexes[source] = {field: np.load(os.path.join(folder, field + ".npy"), mmap_mode="r") for field in INDEX_FIELDS}
+    return _indexes[source]
 
 
 """
 Position of a member in the index, or None if it isn't in the zip
 """
 def _find(path):
-    keys = _zip_index()["keys"]
+    keys = _zip_index(source_of(path))["keys"]
     key = relative(path).lower().encode("utf-8")
     i = int(np.searchsorted(keys, key))
     if i < len(keys) and keys[i] == key:
@@ -168,7 +192,7 @@ def _find(path):
 def _find_existing(path):
     i = _find(path)
     if i is None:
-        raise FileNotFoundError(f"{path} is not in {get_source()}")
+        raise FileNotFoundError(f"{path} is not in {source_of(path)}")
     return i
 
 
@@ -176,33 +200,34 @@ def _find_existing(path):
 The zip file opened by this process (reopened after a fork, so processes never share
 a file position)
 """
-_file = None
-_file_pid = None
+_files = {}
 
-def _zip_file():
-    global _file, _file_pid
-    if _file is None or _file_pid != os.getpid():
-        _file = open(get_source(), "rb")
-        _file_pid = os.getpid()
-    return _file
+def _zip_file(source=None):
+    source = source or get_source()
+    f, pid = _files.get(source, (None, None))
+    if f is None or pid != os.getpid():
+        f = open(source, "rb")
+        _files[source] = (f, os.getpid())
+    return f
 
 
 """
 Yields the uncompressed data of member i in chunks
 """
-def _member_chunks(i, chunk_size=16 * 1024 * 1024):
-    index = _zip_index()
+def _member_chunks(i, chunk_size=16 * 1024 * 1024, source=None):
+    source = source or get_source()
+    index = _zip_index(source)
     method = int(index["methods"][i])
     if method not in (zipfile.ZIP_STORED, zipfile.ZIP_DEFLATED):
         # anything else (Deflate64...) goes through zipfile, which has to read the
         # whole zip directory first
-        with zipfile.ZipFile(get_source()) as z, z.open(index["names"][i].decode("utf-8")) as src:
+        with zipfile.ZipFile(source) as z, z.open(index["names"][i].decode("utf-8")) as src:
             while True:
                 data = src.read(chunk_size)
                 if not data:
                     return
                 yield data
-    f = _zip_file()
+    f = _zip_file(source)
     # the local header before the data has its own name and extra field lengths
     f.seek(int(index["offsets"][i]))
     header = f.read(30)
@@ -227,10 +252,11 @@ def _member_chunks(i, chunk_size=16 * 1024 * 1024):
         yield inflate.flush()
 
 
-def _read_member(i):
-    data = b"".join(_member_chunks(i))
-    if len(data) != int(_zip_index()["sizes"][i]):
-        raise zipfile.BadZipFile(f"{_zip_index()['names'][i]} has the wrong size")
+def _read_member(i, source=None):
+    index = _zip_index(source)
+    data = b"".join(_member_chunks(i, source=source))
+    if len(data) != int(index["sizes"][i]):
+        raise zipfile.BadZipFile(f"{index['names'][i]} has the wrong size")
     return data
 
 
@@ -239,7 +265,7 @@ _folder_listings = {}
 def _folder_path(path):
     if os.path.exists(path):
         return path
-    path = os.path.join(get_source(), relative(path))
+    path = os.path.join(source_of(path), relative(path))
     if os.path.exists(path):
         return path
     # case insensitive fallback (.lbl vs .LBL) for case sensitive file systems
@@ -253,14 +279,15 @@ def _folder_path(path):
 
 
 def exists(path):
-    if using_zip():
+    if using_zip(source_of(path)):
         return _find(path) is not None
     return os.path.exists(_folder_path(path))
 
 
 def read_bytes(path):
-    if using_zip():
-        return _read_member(_find_existing(path))
+    source = source_of(path)
+    if using_zip(source):
+        return _read_member(_find_existing(path), source)
     with open(_folder_path(path), "rb") as f:
         return f.read()
 
@@ -286,7 +313,7 @@ def lut8():
 Same as cv2.imread but works for images inside the zip
 """
 def imread(path, flags=cv2.IMREAD_COLOR):
-    if not using_zip():
+    if not using_zip(source_of(path)):
         return cv2.imread(_folder_path(path), flags)
     data = np.frombuffer(read_bytes(path), dtype=np.uint8)
     return cv2.imdecode(data, flags)
@@ -296,9 +323,10 @@ def imread(path, flags=cv2.IMREAD_COLOR):
 Lists the file names directly inside a folder of the data (like os.listdir)
 """
 def listdir(path):
-    if not using_zip():
+    source = source_of(path)
+    if not using_zip(source):
         return os.listdir(_folder_path(path))
-    index = _zip_index()
+    index = _zip_index(source)
     prefix = (relative(path).rstrip("/").lower() + "/").encode("utf-8")
     # the keys are sorted, so everything inside the folder is one run of them
     start = int(np.searchsorted(index["keys"], prefix))
@@ -359,14 +387,15 @@ Extracts one file from the zip into the SPICE cache and returns where it was put
 """
 def extract_to_cache(path):
     i = _find_existing(path)
+    source = source_of(path)
     out = os.path.join(SPICE_CACHE, relative(path))
-    if not os.path.exists(out) or os.path.getsize(out) != int(_zip_index()["sizes"][i]):
+    if not os.path.exists(out) or os.path.getsize(out) != int(_zip_index(source)["sizes"][i]):
         os.makedirs(os.path.dirname(out), exist_ok=True)
         # the part file is named after the process so parallel workers never write into
         # each other's copy; whoever finishes last replaces an identical file
         part = f"{out}.{os.getpid()}.part"
         with open(part, "wb") as dst:
-            for data in _member_chunks(i):
+            for data in _member_chunks(i, source=source):
                 dst.write(data)
         os.replace(part, out)
     return out
@@ -377,10 +406,13 @@ Extracts every kernel a meta-kernel lists into the cache without loading them, s
 parallel workers find them ready instead of all extracting the same files at once
 """
 def extract_metakernel(path):
-    if not using_zip():
+    if not using_zip(get_kernel_source()):
         return
     for kernel in metakernel_kernels(read_text(path)):
-        extract_to_cache(kernel_relative(kernel))
+        try:
+            extract_to_cache(kernel_relative(kernel))
+        except FileNotFoundError:
+            pass  # furnsh_metakernel says which kernels are missing
 
 
 """
@@ -390,17 +422,24 @@ loaded in the same order, so later kernels still take priority.
 """
 def furnsh_metakernel(path):
     import spiceypy as sp
-    if not using_zip():
+    if not using_zip(get_kernel_source()):
         sp.furnsh(_folder_path(path))
         return
     for kernel in metakernel_kernels(read_text(path)):
-        sp.furnsh(extract_to_cache(kernel_relative(kernel)))
+        try:
+            cached = extract_to_cache(kernel_relative(kernel))
+        except FileNotFoundError as e:
+            # the archive lacks a few kernels a meta-kernel lists (2015's ck/15201_15201ra_hf.bc);
+            # load the rest instead of failing the whole year
+            print(f"Skipping missing kernel: {e}")
+            continue
+        sp.furnsh(cached)
 
 
 """
 Deletes the extracted kernels (call after spiceypy.kclear)
 """
 def clear_spice_cache():
-    if using_zip() and not KEEP_SPICE_CACHE and os.path.isdir(SPICE_CACHE):
+    if using_zip(get_kernel_source()) and not KEEP_SPICE_CACHE and os.path.isdir(SPICE_CACHE):
         # ignore_errors: on Windows a kernel a worker still has open can't be deleted yet
         shutil.rmtree(SPICE_CACHE, ignore_errors=True)
