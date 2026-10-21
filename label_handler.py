@@ -38,6 +38,33 @@ def rotate_image(image, angle):
     result = cv2.warpAffine(image, rot_mat, image.shape[1::-1], flags=cv2.INTER_LINEAR)
     return result
 
+
+"""
+Box (top, bottom, left, right) of a canvas of rows x cols that M moves the rectangle
+(x0, y0)-(x1, y1) into, with a margin for interpolation
+"""
+def moved_box(M, x0, y0, x1, y1, rows, cols, margin=2):
+    corners = np.array([[x0, y0, 1], [x1, y0, 1], [x0, y1, 1], [x1, y1, 1]], float) @ np.asarray(M, float).T
+    left, top = np.floor(corners.min(0)).astype(int) - margin
+    right, bottom = np.ceil(corners.max(0)).astype(int) + margin
+    return max(top, 0), min(bottom, rows), max(left, 0), min(right, cols)
+
+
+"""
+cv2.warpAffine of src onto an empty canvas of shape, worked out only inside box: the frame
+covers a small part of the bordered canvas, and everywhere else stays empty anyway
+"""
+def warp_into(src, M, shape, box, **kwargs):
+    out = np.zeros(shape, src.dtype)
+    top, bottom, left, right = box
+    if bottom > top and right > left:
+        M = np.array(M, np.float64)
+        M[0, 2] -= left
+        M[1, 2] -= top
+        # warped into zeros: BORDER_TRANSPARENT leaves pixels outside src as they were
+        out[top:bottom, left:right] = cv2.warpAffine(src, M, (right - left, bottom - top), dst=out[top:bottom, left:right].copy(), **kwargs)
+    return out
+
 # definition of a label - contains essential information for... stuff
 """
 Label class
@@ -175,8 +202,6 @@ class label:
             # line) images up to 1024 lines before shifting them
             img = self.resize_image()
             lines = 1024
-        M = np.float32([[1, 0, x], [0, 1, y]])
-        
         print(f"number of lines {lines}")
         
 
@@ -185,20 +210,30 @@ class label:
         if border:
             border = canvas_border
             img = cv2.cvtColor(img, cv2.COLOR_BGR2RGBA)
-            img= cv2.copyMakeBorder(img,border,border,border,border,cv2.BORDER_CONSTANT,value=[0,0,0,0])   
-        
-        (rows, cols) = img.shape[:2]
-        # BORDER_TRANSPARENT leaves pixels the shifted image doesn't cover untouched, so start
-        # from a blank image rather than whatever was left in memory
-        img = cv2.warpAffine(img, M, (cols, rows), dst=np.zeros_like(img), borderMode=cv2.BORDER_TRANSPARENT)
+        pad = border if border else 0
+        h, w = img.shape[:2]
+        rows, cols = h + 2 * pad, w + 2 * pad
+        shape = (rows, cols) + img.shape[2:]
+
+        # the frame shifted into the middle of the canvas, the same as warping the whole
+        # bordered canvas but only where the frame lands (a few blank pixels around it, so its
+        # edge blends with the border the same way). BORDER_TRANSPARENT leaves pixels the
+        # shifted image doesn't cover blank
+        edge = 2
+        src = cv2.copyMakeBorder(img, edge, edge, edge, edge, cv2.BORDER_CONSTANT, value=[0, 0, 0, 0])
+        M = np.float32([[1, 0, x + pad - edge], [0, 1, y + pad - edge]])
+        frame_box = moved_box(M, 0, 0, w + 2 * edge, h + 2 * edge, rows, cols, 0)
+        img = warp_into(src, M, shape, frame_box, borderMode=cv2.BORDER_TRANSPARENT)
   
         name = self.info["SPACECRAFT_CLOCK_START_COUNT".split('.')[0]]
         print(name)
-        img = rotate_image(img,angle)
+        # rotate_image, again only where the frame is
+        R = rotation_matrix(img, angle)
+        top, bottom, left, right = frame_box
+        img = warp_into(img, R, shape, moved_box(R, left, top, right, bottom, rows, cols), flags=cv2.INTER_LINEAR)
 
         # where each pixel of the original image ended up: shift (after the border) then
         # rotation, as a 3x3 matrix for reproject.py
-        pad = border if border else 0
         shift = np.array([[1, 0, x + pad], [0, 1, y + pad], [0, 0, 1]])
         self.placement = np.vstack([rotation_matrix(img, angle), [0, 0, 1]]) @ shift
 
@@ -211,14 +246,17 @@ class label:
     """
     def auto_center(self, border=True):
         im_year = int(self.info["IMAGE_TIME"].split('-')[0])
-        global cur_year
-        
-        if cur_year != im_year:
-            ba.unload_kernels()
-            ba.load_kernels(im_year,im_year)
-            cur_year = im_year
-            
-        target_loc = ba.find_target(self, False, "graphs")    
+
+        def load_year():
+            global cur_year
+            if cur_year != im_year:
+                ba.unload_kernels()
+                # set first: a year whose kernels fail to load is not reloaded for every frame
+                cur_year = im_year
+                ba.load_kernels(im_year,im_year)
+
+        # from the geometry cache when it is on (the frame server), so no kernels have to be loaded
+        target_loc = ba.find_target_cached(self, load_year)
         print(target_loc)
         return self.translate("png", target_loc[0],target_loc[1],target_loc[3],border)
     

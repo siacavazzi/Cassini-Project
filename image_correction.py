@@ -173,6 +173,18 @@ with the reference, so moving objects come from the reference alone instead of
 leaving ghosts. Frames that cannot be aligned are left out.
 returns the stacked frame in the same format as the input (8-bit, 3 channel gray)
 """
+"""
+Per pixel median of the frames in stack where agrees is True (count = how many per pixel, at
+least one), the same as np.nanmedian with the others set to NaN. A sort of the few frames is
+several times quicker than nanmedian, which goes through masked arrays.
+"""
+def agreeing_median(stack, agrees, count):
+    ordered = np.sort(np.where(agrees, stack, np.inf), axis=0)
+    low = np.take_along_axis(ordered, ((count - 1) // 2)[None], 0)[0]
+    high = np.take_along_axis(ordered, (count // 2)[None], 0)[0]
+    return (low + high) / 2
+
+
 def stack_frames(frames, sigma=3.0, max_shift=20):
     ref = frames[0]
     ref_gray = cv2.cvtColor(ref,cv2.COLOR_BGR2GRAY).astype(np.float32)
@@ -212,10 +224,9 @@ def stack_frames(frames, sigma=3.0, max_shift=20):
 
     # reject single-pixel outliers among the frames that agree with the reference
     count = agrees.sum(axis=0)
-    masked = np.where(agrees, stack, np.nan)
-    median = np.nanmedian(masked, axis=0)
+    median = agreeing_median(stack, agrees, count)
     resid = np.abs(stack - median)
-    noise = 1.4826 * np.nanmedian(np.where(agrees, resid, np.nan)[:, target] if target.any() else resid) + 1
+    noise = 1.4826 * np.median(resid[:, target][agrees[:, target]] if target.any() else resid) + 1
     keep = agrees & (resid <= sigma * noise)
     # with two frames an outlier can't be voted out; keep the darker value,
     # since cosmic rays and hot pixels only ever add light

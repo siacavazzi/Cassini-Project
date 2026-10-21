@@ -14,10 +14,16 @@ Whole mission (--years): writes data/mission.json, which the viewer looks for fi
 data/tracks/<year>/<body>.bin, data/catalog/<year>.json and data/attitude/<year>.bin. The viewer
 loads the year on screen and its neighbours as the clock moves. Raw .bin files only, so this
 layout needs a normal static host (the frame server), not the artifact host.
+
+It also writes the same data cut into months, data/months/<YYYY-MM>.json (that month's catalog)
+and data/months/<YYYY-MM>.bin (every body's track and the pointing for that month, see
+write_months), listed in mission.json under "months". A viewer that knows them loads the month
+on screen first and its neighbours after, instead of three whole years before showing anything.
 """
 
 import argparse
 import base64
+import datetime
 import json
 import os
 import shutil
@@ -143,12 +149,104 @@ def build_mission(args):
             shutil.copy(os.path.join(args.attitude, f"{y}.bin"), os.path.join(out, "attitude", f"{y}.bin"))
             attitude[str(y)] = f"data/attitude/{y}.bin"
     mission = {"years": years, "coverage": [start, end], "bodies": bodies, "catalog": catalogs, "attitude": attitude,
-               "frames_per_day": {"start_et": day0, **per_day}}
+               "frames_per_day": {"start_et": day0, **per_day}, "months": write_months(out, years, bodies, attitude)}
     json.dump(mission, open(os.path.join(out, "mission.json"), "w"), separators=(",", ":"))
     if args.huygens:
         export_huygens(args.huygens, years, out)
     n = sum(c["images"] for c in catalogs.values())
     print(f"{years[0]}-{years[-1]}: {len(bodies)} bodies, {len(enc)} encounters, {n} images, pointing for {len(attitude)} years")
+
+
+def month_et(year, month):
+    """The start of a month as ET (seconds past J2000), near enough for cutting the data: leap seconds
+    after 2000 are left out, so an edge can sit up to ~5 s early. That is harmless, since the viewer only
+    uses the values written to mission.json and never works them out itself."""
+    return (datetime.datetime(year, month, 1) - datetime.datetime(2000, 1, 1, 12)).total_seconds() + 64.184
+
+
+def _blob(parts, data):
+    """Appends data to parts at an 8-byte boundary (the viewer reads Float64Arrays straight from it)."""
+    offset = sum(len(p) for p in parts)
+    parts.append(data + b"\0" * (-len(data) % 8))
+    return [offset, len(data)]
+
+
+def write_months(out, years, bodies, attitude):
+    """
+    Cuts the year files just written into months. For each month with any data:
+      data/months/<YYYY-MM>.json  the catalog rows taken that month, in the year file's order
+      data/months/<YYYY-MM>.bin   "CMON", version, length of a JSON directory, 0 (4 x uint32), the
+                                  directory {"tracks": {body: [offset, length]}, "attitude": [offset,
+                                  length] or null} and the parts it points at (offsets from the start
+                                  of the file, each part at an 8-byte boundary): each body's CTRK track
+                                  for the month, and a CATT pointing file for the month's catalog rows
+    A track part runs from the last sample at or before the month's start to the first sample after its
+    end, so neighbouring months share a sample or two at the boundary (the viewer drops the repeats when
+    it joins them). Background pointing samples get the same margin; the viewer drops repeated times.
+    Returns the list for mission.json: {key, start, end, file, catalog, images}.
+    """
+    import numpy as np
+    os.makedirs(os.path.join(out, "months"), exist_ok=True)
+    months = []
+    for y in years:
+        tracks = {}
+        for name, b in bodies.items():
+            if str(y) in b["years"]:
+                raw = open(os.path.join(out, b["years"][str(y)].split("data/", 1)[1]), "rb").read()
+                n = struct.unpack_from("<I", raw, 8)[0]
+                tracks[name] = (raw[:8], np.frombuffer(raw, "<f8", n, 16), np.frombuffer(raw, "<f8", 3 * n, 16 + 8 * n).reshape(n, 3),
+                                np.frombuffer(raw, "<f4", 3 * n, 16 + 32 * n).reshape(n, 3))
+        cat = json.load(open(os.path.join(out, "catalog", f"{y}.json")))
+        et = np.array(cat["et"], float)
+        att = None
+        if str(y) in attitude:
+            raw = open(os.path.join(out, "attitude", f"{y}.bin"), "rb").read()
+            n_img, n_bg = struct.unpack_from("<II", raw, 8)
+            att = (raw[:8], np.frombuffer(raw, "<f4", 4 * n_img, 16).reshape(n_img, 4), np.frombuffer(raw, "<f8", n_bg, 16 + 16 * n_img),
+                   np.frombuffer(raw, "<f4", 4 * n_bg, 16 + 16 * n_img + 8 * n_bg).reshape(n_bg, 4))
+        for m in range(1, 13):
+            t0, t1 = month_et(y, m), month_et(y + (m == 12), m % 12 + 1)
+            parts, directory = [], {"tracks": {}, "attitude": None}
+            for name, (head, t, pos, vel) in tracks.items():
+                i0 = max(int(np.searchsorted(t, t0, "right")) - 1, 0)
+                i1 = min(int(np.searchsorted(t, t1, "right")) + 1, len(t))
+                if i1 - i0 < 2 or t[i1 - 1] < t0 or t[i0] > t1:
+                    continue
+                k = i1 - i0
+                data = head + struct.pack("<II", k, 0) + t[i0:i1].tobytes() + pos[i0:i1].tobytes() + vel[i0:i1].tobytes()
+                directory["tracks"][name] = _blob(parts, data)
+            if not directory["tracks"]:
+                continue
+            rows = np.flatnonzero((et >= t0) & (et < t1))
+            key = f"{y}-{m:02d}"
+            json.dump({k: [cat[k][i] for i in rows] for k in CATALOG_KEYS}, open(os.path.join(out, "months", key + ".json"), "w"),
+                      separators=(",", ":"))
+            if att is not None:
+                head, img_q, bg_t, bg_q = att
+                j0 = max(int(np.searchsorted(bg_t, t0, "right")) - 1, 0)
+                j1 = min(int(np.searchsorted(bg_t, t1, "right")) + 1, len(bg_t))
+                data = head + struct.pack("<II", len(rows), j1 - j0) + img_q[rows].tobytes() + bg_t[j0:j1].tobytes() + bg_q[j0:j1].tobytes()
+                directory["attitude"] = _blob(parts, data)
+            # offsets so far count from the first part; the parts follow the header and the directory, whose
+            # length depends on the offsets, so it is padded to a fixed size first
+            text = json.dumps(directory, separators=(",", ":")).encode()
+            slack = 16 * (len(directory["tracks"]) + 2)   # each offset grows by a few digits
+            size = len(text) + slack + (-(len(text) + slack) % 8)
+            base = 16 + size
+            directory["tracks"] = {k: [o + base, n] for k, (o, n) in directory["tracks"].items()}
+            if directory["attitude"]:
+                directory["attitude"] = [directory["attitude"][0] + base, directory["attitude"][1]]
+            text = json.dumps(directory, separators=(",", ":")).encode()
+            assert len(text) <= size
+            text += b" " * (size - len(text))
+            with open(os.path.join(out, "months", key + ".bin"), "wb") as fh:
+                fh.write(b"CMON" + struct.pack("<III", 1, len(text), 0))
+                fh.write(text)
+                for p in parts:
+                    fh.write(p)
+            months.append({"key": key, "start": t0, "end": t1, "file": f"data/months/{key}.bin",
+                           "catalog": f"data/months/{key}.json", "images": len(rows)})
+    return months
 
 
 def merge_tracks(raws):

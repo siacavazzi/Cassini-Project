@@ -9,6 +9,10 @@ data.zip (read through data_source, so nothing has to be unzipped).
 Run it from the repo folder so data_source finds the zip index it already built (zip_index/);
 copied elsewhere, point CASSINI_REPO at the repo.
 
+CASSINI_GEOMETRY_CACHE=<file>.sqlite lets body reels centre frames from cached SPICE answers
+instead of loading a year of kernels (seconds from a USB disk) whenever the year changes; fill
+it once with `python bootleg_autonav.py geometry` (see bootleg_autonav.py).
+
 Routes:
   /frames/<ID>.webp?size=256   the frame as WebP, longest side 128-1024 px (default 512),
                                made on first request and cached on disk
@@ -37,6 +41,8 @@ make a filter set (web/cassini-os/src/head-quiet.html, findSets). Frames are sen
 Access-Control-Allow-Origin: * so a page hosted elsewhere can show them.
 """
 import argparse
+import email.utils
+import gzip
 import io
 import os
 import re
@@ -68,18 +74,6 @@ FRAME_ID = re.compile(r"^([NW])\d{10}_\d+$")
 SIZES = (128, 256, 384, 512, 768, 1024)
 FOLDERS = {"N": "nac_data", "W": "wac_data"}
 
-# data_source keeps one open file per process and seeks in it, so reads take turns. Every read
-# from the archive goes through _read_member, composites' labels and line prefixes included.
-_read_lock = threading.Lock()
-_read_member = data_source._read_member
-
-
-def _locked_read_member(*args, **kwargs):
-    with _read_lock:
-        return _read_member(*args, **kwargs)
-
-
-data_source._read_member = _locked_read_member
 # composites take a second or two of CPU each; at most two at once so frames keep flowing
 _color_slots = threading.Semaphore(2)
 # requests that take longer than this many seconds are logged
@@ -173,8 +167,47 @@ def color_webp(ids, size, cache):
     return data, report
 
 
+# site files sent gzipped to browsers that take it: a year of replay data is ~18 MB, its catalog JSON
+# shrinks ~7x and the track and pointing files ~25%. Each file is compressed once and kept in memory
+# (until it changes) up to GZIP_KEEP bytes of compressed data
+GZIP_TYPES = (".json", ".bin", ".html", ".js", ".css", ".txt", ".svg", ".csv")
+GZIP_KEEP = 256 * 1024 * 1024
+_gzipped = {}
+_gzip_lock = threading.Lock()
+
+
+def gzipped(path, st):
+    key = (path, st.st_mtime_ns, st.st_size)
+    with _gzip_lock:
+        data = _gzipped.get(key)
+    if data is None:
+        with open(path, "rb") as fh:
+            data = gzip.compress(fh.read(), 6, mtime=0)
+        with _gzip_lock:
+            for old in [k for k in _gzipped if k[0] == path]:
+                del _gzipped[old]
+            while _gzipped and sum(map(len, _gzipped.values())) + len(data) > GZIP_KEEP:
+                del _gzipped[next(iter(_gzipped))]
+            _gzipped[key] = data
+    return data
+
+
+class Server(ThreadingHTTPServer):
+    # the default backlog of 5 resets connections when several viewers open theirs at once
+    # (a browser opens six per page); the OS caps it at its own limit anyway
+    request_queue_size = 128
+    daemon_threads = True
+
+
 def make_handler(site, cache):
     class Handler(SimpleHTTPRequestHandler):
+        # keep-alive: a viewer loads frames one after another, and a new connection for each
+        # costs a round trip (more through a tunnel); every reply says its Content-Length
+        protocol_version = "HTTP/1.1"
+        # headers and body go out as separate writes; without this the body waits ~40 ms for
+        # the browser's delayed ACK on a kept-alive connection
+        disable_nagle_algorithm = True
+
         def __init__(self, *args, **kwargs):
             super().__init__(*args, directory=site or os.devnull, **kwargs)
 
@@ -211,6 +244,8 @@ def make_handler(site, cache):
         def do_GET(self):
             self.started = time.monotonic()
             url = urlparse(self.path)
+            # a kept-alive connection reuses this handler, so the last request's choice must not stick
+            self.revalidate = False
             if url.path == "/health":
                 return self.send_bytes(f"ok {data_source.get_source()}\n".encode(), "text/plain", False)
             if url.path == "/frames/color.webp":
@@ -262,7 +297,41 @@ def make_handler(site, cache):
             # pages and their JSON change with every rebuild, so browsers must check before reusing them;
             # frames, textures and track files keep the default heuristic caching
             self.revalidate = url.path.endswith(("/", ".html", ".json"))
+            if self.send_gzipped(url.path):
+                return
             return super().do_GET()
+
+        def send_gzipped(self, url_path):
+            """A site file gzipped, if the browser takes gzip and it is worth it; False otherwise."""
+            if "gzip" not in self.headers.get("Accept-Encoding", ""):
+                return False
+            path = self.translate_path(url_path)
+            if os.path.isdir(path):
+                path = os.path.join(path, "index.html")
+            if not path.endswith(GZIP_TYPES) or not os.path.isfile(path):
+                return False
+            st = os.stat(path)
+            modified = self.date_time_string(int(st.st_mtime))
+            since = self.headers.get("If-Modified-Since")
+            if since:
+                try:
+                    if email.utils.parsedate_to_datetime(since).timestamp() >= int(st.st_mtime):
+                        self.send_response(304)
+                        self.send_header("Last-Modified", modified)
+                        self.end_headers()
+                        return True
+                except (TypeError, ValueError, OverflowError):
+                    pass
+            data = gzipped(path, st)
+            self.send_response(200)
+            self.send_header("Content-Type", self.guess_type(path))
+            self.send_header("Content-Encoding", "gzip")
+            self.send_header("Vary", "Accept-Encoding")
+            self.send_header("Last-Modified", modified)
+            self.send_header("Content-Length", str(len(data)))
+            self.end_headers()
+            self.wfile.write(data)
+            return True
 
         def log_message(self, fmt, *args):
             if os.environ.get("FRAME_SERVER_QUIET") != "1":
@@ -285,7 +354,7 @@ def main():
     data_source._zip_index() if data_source.using_zip() else None  # build or load the zip index up front
     # the first composite would otherwise wait while stacking reads the whole image index (all ~443k rows)
     threading.Thread(target=color_image.stacking.load_index, daemon=True).start()
-    server = ThreadingHTTPServer((args.host, args.port), make_handler(site, args.cache))
+    server = Server((args.host, args.port), make_handler(site, args.cache))
     print(f"Serving on http://{args.host}:{args.port}/" + (f" (site: {site})" if site else ""))
     server.serve_forever()
 

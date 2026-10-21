@@ -592,7 +592,7 @@ function makeCassini() {
 const state = { et: 0, playing: true, speed: 600, focus: "TITAN", enlarge: false, allOrbits: false, follow: false, view: [0, 0], dragging: false, context: "SATURN" };
 let bodies = {}, tracks = {}, encounters = [], catalog = null, order = null, coverage = [0, 0];
 // whole-mission data (data/mission.json): years load as the clock reaches them, the year on screen plus its neighbours
-let mission = null, activeYears = [], loadedSpan = [-Infinity, Infinity], yearsJob = null, yearsWanted = null, lastWantedYear = null;
+let mission = null, activeYears = [], keepYears = [], loadedSpan = [-Infinity, Infinity], yearsJob = null, yearsWanted = null, lastWantedYear = null;
 const yearCache = new Map();
 const pos = {}, meshes = {}, labels = {};
 let probe = null, probeObj = null, probeTrail = null, att = null;
@@ -629,9 +629,47 @@ function loadYear(y) {
   job.catch(() => yearCache.delete(y));
   return job;
 }
-// neighbouring yearly chunks share their boundary sample
+// one month of the mission (data/months, see build_data.write_months): the month's catalog, and one file
+// with every body's track and the pointing for it. Loads much less than a year when jumping around
+function loadMonth(i) {
+  if (yearCache.has(i)) return yearCache.get(i);
+  const m = mission.months[i], job = (async () => {
+    const [buf, cat] = await Promise.all([fetchBuf(m.file), fetchJson(m.catalog)]);
+    const head = new DataView(buf, 0, 16);
+    if (head.getUint32(0, false) !== 0x434d4f4e) throw new Error(m.file + ": not a month file");
+    const dir = JSON.parse(new TextDecoder().decode(new Uint8Array(buf, 16, head.getUint32(8, true))));
+    const tr = {};
+    for (const [name, [o, n]] of Object.entries(dir.tracks)) tr[name] = parseTrack(buf.slice(o, o + n));
+    let file = null;
+    if (dir.attitude) try { file = parseAttitude(buf.slice(dir.attitude[0], dir.attitude[0] + dir.attitude[1]), cat.cam); } catch (err) { console.warn(`pointing for ${m.key} not loaded`, err); }
+    return { year: i, tracks: tr, cat, att: file, span: [m.start, m.end] };
+  })();
+  yearCache.set(i, job);
+  job.catch(() => yearCache.delete(i));
+  return job;
+}
+// what loads together: months when mission.json lists them (the month on screen and MONTHS_AROUND either
+// side; more in the cruise, where the Sun-centred trail spans months), otherwise years
+const MONTHS_AROUND = 2, MONTHS_AROUND_CRUISE = 4;
+function monthAt(et) {
+  const ms = mission.months;
+  let lo = 0, hi = ms.length - 1;
+  while (lo < hi) { const mid = (lo + hi + 1) >> 1; if (ms[mid].start <= et) lo = mid; else hi = mid - 1; }
+  return lo;
+}
+const partOf = et => mission.months ? monthAt(et) : yearOf(et);
+const partLabel = k => mission.months ? mission.months[k].key : String(k);
+const loadPart = k => mission.months ? loadMonth(k) : loadYear(k);
+function partsAround(k) {
+  if (!mission.months) return [k - 1, k, k + 1].filter(v => mission.years.includes(v));
+  const r = +mission.months[k].key.slice(0, 4) < 2004 ? MONTHS_AROUND_CRUISE : MONTHS_AROUND;
+  const out = [];
+  for (let i = Math.max(0, k - r); i <= Math.min(mission.months.length - 1, k + r); i++) out.push(i);
+  return out;
+}
+// neighbouring chunks share their boundary sample (monthly ones a sample or two), dropped here
 function joinTracks(chunks) {
-  const skip = chunks.map((c, i) => (i && c.t[0] <= chunks[i - 1].end ? 1 : 0));
+  const skip = chunks.map((c, i) => { let k = 0; if (i) while (k < c.count && c.t[k] <= chunks[i - 1].end) k++; return k; });
   const n = chunks.reduce((s, c, i) => s + c.count - skip[i], 0);
   const t = new Float64Array(n), p = new Float64Array(3 * n), v = new Float32Array(3 * n);
   let o = 0;
@@ -652,8 +690,9 @@ function assemble(parts) {
   const withAtt = parts.filter(p => p.att);
   att = withAtt.length ? buildAttitude(withAtt.map(p => ({ file: p.att, et: p.cat.et, cam: p.cat.cam }))) : null;
   activeYears = parts.map(p => p.year);
-  loadedSpan = [utcToEt(`${activeYears[0]}-01-01T00:00:00`), utcToEt(`${activeYears[activeYears.length - 1] + 1}-01-01T00:00:00`)];
-  for (const y of [...yearCache.keys()]) if (!activeYears.includes(y)) yearCache.delete(y);
+  loadedSpan = parts[0].span ? [parts[0].span[0], parts[parts.length - 1].span[1]]
+    : [utcToEt(`${activeYears[0]}-01-01T00:00:00`), utcToEt(`${activeYears[activeYears.length - 1] + 1}-01-01T00:00:00`)];
+  for (const y of [...yearCache.keys()]) if (!activeYears.includes(y) && !keepYears.includes(y)) yearCache.delete(y);
   if (orbitLines) for (const n in orbitLines) orbitLines[n].userData.last = -1e99;
   lastTrailEt = -1e99;
   if ($("mlist").children.length) scrollMoments();
@@ -664,25 +703,38 @@ function requestYears(y) {
   if (!yearsJob) yearsJob = (async () => {
     try {
       while (yearsWanted !== null) {
-        const ys = [yearsWanted - 1, yearsWanted, yearsWanted + 1].filter(v => mission.years.includes(v));
+        const y = yearsWanted, ys = partsAround(y);
         yearsWanted = null;
         if (ys.join() === activeYears.join()) continue;
-        try { assemble(await Promise.all(ys.map(loadYear))); }
-        catch (err) { console.warn("year not loaded", err); setText("yload", "Could not load " + ys.join(", ")); }
+        keepYears = ys;
+        try {
+          // the year on screen first, on its own so it has the whole connection, and shown as soon as
+          // it is in; its neighbours are downloaded after it and added when they arrive
+          if (!activeYears.includes(y) && ys.length > 1) {
+            assemble([await loadPart(y)]);
+            if (yearsWanted !== null) continue;
+          }
+          assemble(await Promise.all(ys.map(loadPart)));
+        }
+        catch (err) {
+          console.warn("year not loaded", err); setText("yload", "Could not load " + ys.map(partLabel).join(", "));
+          // try again in a moment (a dropped connection shouldn't leave the year empty for good)
+          setTimeout(() => { if (lastWantedYear === y) lastWantedYear = null; }, 2000);
+        }
       }
     } finally { yearsJob = null; }
   })();
   return yearsJob;
 }
-const yearReady = () => !mission || activeYears.includes(yearOf(state.et));
+const yearReady = () => !mission || activeYears.includes(partOf(state.et));
 
 async function load(startEt) {
   try { mission = await fetchJson("data/mission.json"); } catch (err) { mission = null; }
   if (mission) {
     bodies = mission.bodies; encounters = await fetchJson("data/encounters.json");
     coverage = [mission.coverage[0] + 1, mission.coverage[1] - 1];
-    await requestYears(yearOf(Math.min(coverage[1], Math.max(coverage[0], startEt))));
-    lastWantedYear = yearOf(Math.min(coverage[1], Math.max(coverage[0], startEt)));
+    await requestYears(partOf(Math.min(coverage[1], Math.max(coverage[0], startEt))));
+    lastWantedYear = partOf(Math.min(coverage[1], Math.max(coverage[0], startEt)));
     if (!catalog) throw new Error("no mission year could be loaded");
   } else await loadYearFiles();
   // optional: the Huygens probe, separation to the day after landing (kept out of coverage)
@@ -1496,7 +1548,7 @@ async function jump(e) {
   const [lead, speed, span] = huy ? [/lands/.test(e.label) ? 900 : 300, 60, 6 * 3600] : launch ? [0, 60, 86400]
     : JUMP[body] || [body === "TITAN" ? 3 * 3600 : 2 * 3600, 600, 2 * 86400];
   setTime(e.et - lead);
-  if (mission) { setPlaying(false); lastWantedYear = yearOf(state.et); await requestYears(lastWantedYear); }
+  if (mission) { setPlaying(false); lastWantedYear = partOf(state.et); await requestYears(lastWantedYear); }
   setView(span, e.et);
   updateBodies();
   // the view stays on Cassini; the focus chips still move it to the flyby body on request
@@ -1510,15 +1562,20 @@ function resize() {
 }
 window.addEventListener("resize", resize);
 
-let lastT = performance.now(), lastTrailEt = -1e99, lastTrailFocus = "";
+let lastT = performance.now(), lastTrailEt = -1e99, lastTrailFocus = "", lastReady = true;
 function frame(now) {
   const dt = Math.min(0.1, (now - lastT) / 1000); lastT = now;
   const ready = yearReady();
   if (mission) {
-    const y = yearOf(state.et);
+    const y = partOf(state.et);
     if (y !== lastWantedYear) { lastWantedYear = y; requestYears(y); }
     const yl = $("yload");   // pages built on this viewer may leave the note out
-    if (yl) { yl.hidden = ready; if (!ready) yl.textContent = `Loading ${y}…`; }
+    if (yl) { yl.hidden = ready; if (!ready) yl.textContent = `Loading ${partLabel(y)}…`; }
+    // pages on this viewer (a loading screen) hear when the moment on screen starts and stops waiting for data
+    if (ready !== lastReady) {
+      lastReady = ready;
+      document.dispatchEvent(new CustomEvent("cassini:loading", { detail: { loading: !ready, what: partLabel(y) } }));
+    }
   }
   if (state.playing && !state.dragging && ready) {
     setTime(state.et + dt * state.speed);
