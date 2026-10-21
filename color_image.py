@@ -19,6 +19,7 @@ import cv2
 import datetime
 import multiprocessing
 import os
+import threading
 import traceback
 from collections import deque
 from concurrent.futures import ProcessPoolExecutor
@@ -182,10 +183,68 @@ def load_aligned(paths):
     return imgs, np.logical_and.reduce(masks), lbls[ref], report
 
 
+"""
+One picture for the frame server's body reel (web/frames/reel.py): the frames at paths through
+the color path above (load_aligned: stacked with their repeat exposures, lost pixels filled,
+calibrated, aligned), merged like make_frame, then placed by auto_center (SPICE): north up, and
+where the frame sits relative to the target's centre. One path makes a black and white
+picture, two a two-filter one (green from both).
+paths = the frames' paths, longest wavelength first
+max_offset = how far (full resolution pixels) the target's centre may sit from the frame's
+middle for the picture to count as centred on it; 600 is just past the frame's corners' reach
+returns (RGBA numpy image, its label, report). With SPICE, the image is translate's canvas with
+the frame's middle at the canvas middle, rotated north up, and report["frame_offset"] is where
+that middle sits relative to the target's centre (canvas pixels, x right, y down): a close-up's
+panels keep their places on the body, so they can mosaic. report["centred"] is True when the
+target's centre is on the frame. Without SPICE, the 1024 px frame as it is.
+"""
+def processed_frame(paths, max_offset=600):
+    imgs, valid, lbl, report = load_aligned(list(paths))
+    chans = [cv2.cvtColor(img, cv2.COLOR_BGR2GRAY) if img.ndim == 3 else img for img in imgs]
+    if len(chans) == 1:
+        chans = chans * 3
+    elif len(chans) == 2:
+        chans = [chans[0], ((chans[0].astype(np.uint16) + chans[1]) // 2).astype(np.uint8), chans[1]]
+    alpha = np.where(valid, np.asarray(get_mask()), 0).astype(np.uint8)
+    # blue, green, red like make_frame's merge: translate turns it into RGBA
+    image = np.dstack([chans[2], chans[1], chans[0], alpha])
+    try:
+        with spice_lock:
+            centred = lbl.set_color(image).auto_center(border)
+        # the frame's middle goes to placement @ (511.5, 511.5), the target's centre to the
+        # middle of the canvas
+        middle = np.array([(centred.shape[1] - 1) / 2, (centred.shape[0] - 1) / 2])
+        moved = (lbl.placement @ np.array([ba.CCD_CENTER, ba.CCD_CENTER, 1.0]))[:2]
+        offset = moved - middle
+        report["frame_offset"] = [round(float(v), 1) for v in offset]
+        report["offset_px"] = round(float(np.hypot(*offset)), 1)
+        report["centred"] = bool(report["offset_px"] <= max_offset)
+        if not report["centred"]:
+            report["why"] = f"the target's centre is off the frame (close-up), {report['offset_px']:.0f} px from its middle"
+        # the same rotation without the shift: the frame north up at the middle of the canvas
+        # (a close-up's shift would push it off the canvas)
+        angle = np.degrees(np.arctan2(lbl.placement[0, 1], lbl.placement[0, 0]))
+        return lbl.translate("png", 0, 0, angle, border), lbl, report
+    except Exception as e:
+        print(f"Can't centre {lbl.info.get('PRODUCT_ID')}: {e}")
+        report["centred"] = False
+        report["why"] = str(e)[:200]
+        return cv2.cvtColor(image, cv2.COLOR_BGR2RGBA), lbl, report
+
+
+# auto_center loads a year of SPICE kernels into the one SPICE pool when the year changes;
+# a server centring frames on several threads takes turns
+spice_lock = threading.Lock()
+
+
 def frame_path(row, target, folder):
     id = row["seconds_1970"]
     title = f"{id}_{target}"
     return f"output/{folder}/{title}.png"
+
+
+def sharpen(image):
+    return ImageEnhance.Sharpness(image).enhance(1.5)
 
 
 """
@@ -193,9 +252,7 @@ Sharpens and saves a finished frame
 """
 def save_frame(image, path):
     try:
-        enhancer = ImageEnhance.Sharpness(image)
-        image = enhancer.enhance(1.5)
-        image.save(path)
+        sharpen(image).save(path)
     except Exception:
         print(f"Failed to save {path}:")
         traceback.print_exc()

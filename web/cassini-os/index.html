@@ -539,6 +539,40 @@ body.s-noinfo .camwin .info { display: none; }
 body.idle #app .bodywin:has(.well.has-frame) { opacity: 1; pointer-events: auto; background: transparent; border-color: transparent; box-shadow: none; -webkit-backdrop-filter: none; backdrop-filter: none; }
 body.idle .bodywin:has(.well.has-frame) .camlabel { opacity: 0; }
 @media (max-width: 600px) { .bodywin { --pw: 40vw; } .bodywin .info, .bodywin .chans { display: none; } }
+
+#reelcard { top: calc(env(safe-area-inset-top, 0px) + 36px); left: max(14px, env(safe-area-inset-left, 0px)); width: clamp(340px, 46vw, 760px); }
+#reelcard.zoomed { width: clamp(460px, 70vw, 1200px); }
+/* one well per camera, like the camera windows: narrow-angle big, wide-angle beside it */
+.rlwells { display: grid; grid-template-columns: 2fr 1fr; gap: 6px; align-items: start; }
+.rlwells.one { grid-template-columns: 1fr; }
+.rlwells.one #rlwellW { display: none; }
+#reelcard .body { padding: 2px 8px 8px; display: grid; gap: 7px; }
+.rlpick { display: flex; gap: 8px; align-items: center; font-size: 11px; color: var(--q-dim, #888); }
+.rlpick select { flex: 1; min-width: 0; font: inherit; color: var(--q-text, #ddd); background: rgba(0,0,0,.35); border: 1px solid var(--q-line, #555); border-radius: 4px; padding: 3px 4px; }
+#rlgo { font: inherit; padding: 3px 10px; border-radius: 4px; border: 1px solid var(--q-line, #555); background: rgba(255,255,255,.08); color: var(--q-text, #ddd); cursor: pointer; white-space: nowrap; }
+#rlgo:hover { background: rgba(255,255,255,.16); }
+.rlwell { position: relative; aspect-ratio: 1; background: #000; border: 1px solid var(--q-line, #555); border-radius: 4px; overflow: hidden; }
+.rlwell canvas { position: absolute; inset: 0; width: 100%; height: 100%; display: block; }
+.rltag, .rlhow { position: absolute; left: 7px; right: 7px; font: 10px/1.35 var(--hudf, monospace); color: rgba(232,236,242,.82); text-shadow: 0 0 3px #000, 0 0 6px #000; pointer-events: none; }
+.rltag { bottom: 6px; }
+.rlhow { top: 6px; right: 40px; color: rgba(232,236,242,.55); }
+.rlcam { position: absolute; right: 7px; top: 6px; font: 600 9px/1 var(--hudf, monospace); letter-spacing: .08em; color: rgba(232,236,242,.45); pointer-events: none; }
+#rlwellW .rltag, #rlwellW .rlhow { font-size: 9px; }
+.rlwell.stale canvas { opacity: .45; transition: opacity 1.2s ease; }
+#rlmsg { position: absolute; inset: 0; display: grid; place-items: center; text-align: center; padding: 0 20px; font-size: 12px; color: var(--q-dim, #888); }
+#rlmsg:empty { display: none; }
+.rlbar { display: flex; gap: 10px; align-items: center; font-size: 10.5px; color: var(--q-dim, #888); flex-wrap: wrap; }
+#rlplay { width: 28px; height: 28px; font-size: 11px; flex: none; }
+.rlbar input[type=range] { width: 96px; accent-color: var(--q-accent, #8ab6ff); }
+#rlfpsv { min-width: 38px; color: var(--q-text, #ddd); font-variant-numeric: tabular-nums; }
+#rlpos { flex: 1 1 100%; width: 100%; accent-color: var(--q-accent, #8ab6ff); margin: 0; }
+#rlcount { margin-left: auto; font: 10.5px/1 var(--hudf, monospace); white-space: nowrap; font-variant-numeric: tabular-nums; }
+.rlbar label.chk { display: flex; gap: 4px; align-items: center; cursor: pointer; }
+#reelcard, #reelcard .titlebar, .rlbar, .rlpick, .rlwell { transition: opacity .7s ease, background-color .7s ease, border-color .7s ease, box-shadow .7s ease; }
+body.idle #reelcard { opacity: 1; pointer-events: auto; background: transparent; border-color: transparent; box-shadow: none; -webkit-backdrop-filter: none; backdrop-filter: none; }
+body.idle #reelcard :is(.titlebar, .rlbar, .rlpick) { opacity: 0; }
+body.idle .rlwell { border-color: transparent; box-shadow: 0 6px 30px rgba(0,0,0,.6); }
+@media (max-width: 600px) { #reelcard, #reelcard.zoomed { width: calc(100% - 16px); left: 8px; top: calc(env(safe-area-inset-top, 0px) + 30px); } }
 </style>
 </head>
 <body>
@@ -676,6 +710,24 @@ body.idle .bodywin:has(.well.has-frame) .camlabel { opacity: 0; }
     <div class="pane" id="spane" role="tabpanel"></div>
   </div>
   <footer><span id="snote">Saved on this device</span><button class="btn" id="sreset">Restore defaults</button></footer>
+</section>
+
+  <section class="win" id="reelcard" aria-label="Body reel" hidden>
+  <div class="titlebar"><span class="lights"><button class="close" aria-label="Close the body reel">×</button><button class="min" aria-label="Close the body reel">–</button><button class="zoom" aria-label="Zoom">+</button></span>Body Reel</div>
+  <div class="body">
+    <div class="rlpick"><label for="rlbody">Body</label><select id="rlbody" aria-label="Body to play"><option>Loading…</option></select><button id="rlgo">▶ Play all</button></div>
+    <div class="rlwells">
+      <div class="rlwell" id="rlwellN"><canvas id="rlcanvasN" width="1024" height="1024"></canvas><span class="rlhow"></span><span class="rlcam">NAC</span><span class="rltag"></span><div id="rlmsg">Pick a body and press Play all</div></div>
+      <div class="rlwell" id="rlwellW"><canvas id="rlcanvasW" width="768" height="768"></canvas><span class="rlhow"></span><span class="rlcam">WAC</span><span class="rltag"></span></div>
+    </div>
+    <div class="rlbar">
+      <input type="range" id="rlpos" min="0" max="0" step="1" value="0" aria-label="Picture in the reel">
+      <button class="btn round" id="rlplay" aria-label="Play or pause the reel">▶</button>
+      <label for="rlfps">Speed</label><input type="range" id="rlfps" min="2" max="24" step="1" value="8" aria-label="Pictures per second"><span id="rlfpsv">8 fps</span>
+      <label class="chk"><input type="checkbox" id="rlmos" checked>Mosaic</label>
+      <span id="rlcount"></span>
+    </div>
+  </div>
 </section>
 
   <div id="loading"><div>Starting Cassini OS<br>Loading trajectories<div class="bar"></div></div></div>
@@ -1825,6 +1877,178 @@ body.idle .bodywin:has(.well.has-frame) .camlabel { opacity: 0; }
   const base = window.studyHud;
   window.studyHud = ms => { base(ms); tick(); };
   window.cassiniBodyWindows = { setOn, get on() { return B.on; }, state: B };
+})();
+</script>
+<script>
+// ---------- body reels ----------
+(function () {
+  const $ = id => document.getElementById(id);
+  const FRAMES = (() => {                       // the frame server, chosen as the camera window chooses it
+    const q = new URLSearchParams(location.search).get("frames");
+    if (q) return q.replace(/\/$/, "");
+    if (/^https?:$/.test(location.protocol) && !/claude\.ai$|claudeusercontent\.com$|claude\.site$/.test(location.hostname)) return location.origin;
+    return "http://localhost:8765";
+  })();
+  const card = $("reelcard");
+  // one well per camera; a picture goes to its own camera's well and the other well keeps its last picture,
+  // so the two cameras never take turns in one place
+  const wells = {};
+  for (const cam of ["N", "W"]) { const cv = $("rlcanvas" + cam); wells[cam] = { el: $("rlwell" + cam), cv, g: cv.getContext("2d"), i: -1 }; }
+  const KIND = { true: "True colour", false: "False colour", two: "Two-filter colour", bw: "Black and white" };
+  // R: the reel playing. shots: its pictures; i: the one on screen; buf: pictures fetched (or on their way) by index
+  const R = { open: false, target: null, shots: [], i: -1, playing: false, fps: 8, mosaic: true, due: 0, buf: new Map(), looping: false, hidden: [], waitSince: 0 };
+  try { const f = +localStorage.getItem("cassini-os-reel-fps"); if (f >= 2 && f <= 24) R.fps = f; } catch (e) {}
+  $("rlfps").value = R.fps; $("rlfpsv").textContent = R.fps + " fps";
+
+  // ---- the list of bodies, most photographed first ----
+  let bodies = null;
+  async function loadBodies() {
+    if (bodies) return;
+    try {
+      const r = await fetch(`${FRAMES}/reel/bodies.json`); if (!r.ok) throw new Error(r.status);
+      bodies = (await r.json()).filter(b => b.frames >= 20);
+      const pick = (state.focus && state.focus !== "CASSINI" && bodies.find(b => b.target === state.focus)) ? state.focus : "ENCELADUS";
+      $("rlbody").innerHTML = bodies.map(b => `<option value="${b.target}"${b.target === pick ? " selected" : ""}>${titleCase(b.target)} · ${fmtInt(b.frames)} frames</option>`).join("");
+    } catch (e) { $("rlbody").innerHTML = "<option>No frame server</option>"; $("rlmsg").innerHTML = "<b>No signal</b><br>The body reels come from the frame server"; }
+  }
+
+  // ---- pictures: fetched ahead of the play head; the server makes each one the first time it is asked ----
+  const size = () => (card.classList.contains("zoomed") ? 1024 : 768);
+  function want(i) {
+    let b = R.buf.get(i);
+    if (b && b.size === size() && b.mosaic === R.mosaic) return b;
+    b = { ok: null, img: null, how: null, size: size(), mosaic: R.mosaic };
+    R.buf.set(i, b);
+    fetch(`${FRAMES}/frames/reel/${R.target}/${i}.webp?size=${b.size}&mosaic=${R.mosaic ? 1 : 0}`).then(async r => {
+      if (!r.ok) throw new Error(r.status);
+      try { b.how = JSON.parse(r.headers.get("X-Reel") || "null"); } catch (e) {}
+      b.img = await createImageBitmap(await r.blob()); b.ok = true;
+    }).catch(() => { b.ok = false; });
+    return b;
+  }
+  function fill() {
+    // pictures the server already made come back at once, so many go out; new ones take the server a second or two
+    const ahead = Math.max(4, Math.min(36, Math.round(R.fps * 1.5)));
+    let flying = 0;
+    for (let j = Math.max(0, R.i); j <= R.i + ahead && j < R.shots.length; j++) {
+      const b = R.buf.get(j);
+      if (b && b.ok === null) flying++;
+      else if ((!b || b.size !== size() || b.mosaic !== R.mosaic) && flying < 6) { want(j); flying++; }
+    }
+    for (const j of R.buf.keys()) if ((j < R.i - 2 || j > R.i + ahead) && j !== wells.N.i && j !== wells.W.i) R.buf.delete(j);
+  }
+  function blank(w) { for (const x of w ? [w] : Object.values(wells)) { x.g.fillStyle = "#000"; x.g.fillRect(0, 0, x.cv.width, x.cv.height); } }
+  function paint(w, img) { blank(w); w.g.drawImage(img, 0, 0, w.cv.width, w.cv.height); }
+  const fmtDate = t => { const s = new Date(t * 1000).toISOString(); return `${s.slice(0, 10)} ${s.slice(11, 19)} UTC`; };
+  function describe(h) {
+    if (!h) return "";
+    const st = (h.stacked || []).filter(n => n > 1);
+    return [h.centred ? "centred, north up" : h.frame_offset ? "close-up, placed on the body, north up" : "not centred",
+            st.length ? `stacked ${st.join("+")}` : "", h.calibrated ? "calibrated" : "",
+            (h.aligned || []).some(a => /not aligned|failed/.test(a)) ? "channels not aligned" : "",
+            h.mosaic > 1 ? `mosaic of ${h.mosaic}` : ""].filter(Boolean).join(" · ");
+  }
+  function show(i) {
+    const s = R.shots[i], b = want(i);
+    R.i = i;
+    const w = wells[s.cam];
+    w.i = i;
+    if (b.ok) { paint(w, b.img); $("rlmsg").textContent = ""; }
+    else if (b.ok === false) blank(w);
+    w.el.querySelector(".rltag").textContent = `${fmtDate(s.t)} · ${KIND[s.kind]} ${s.filters.join(" ")}`;
+    w.el.querySelector(".rlhow").textContent = describe(b.how);
+    // a camera that has not taken a picture of the body for 6 hours fades, as the camera windows go idle
+    for (const [cam, x] of Object.entries(wells)) x.el.classList.toggle("stale", x.i < 0 || s.t - R.shots[x.i].t > 6 * 3600);
+    $("rlcount").textContent = `${fmtInt(i + 1)} / ${fmtInt(R.shots.length)}`;
+    $("rlpos").value = i;
+    // the mission clock follows the reel, so the 3D view shows where Cassini was
+    setTime(utcToEt(new Date(s.t * 1000).toISOString()));
+    const span = state.view[1] - state.view[0];
+    if (state.et < state.view[0] || state.et > state.view[1] - span * 0.05) setView(span, state.et + span * 0.4);
+  }
+  // a picture every 1/fps seconds, holding on one until the next has arrived; pictures the server can't make are cut
+  function tick(now) {
+    if (!R.open) { R.looping = false; return; }
+    if (R.shots.length) {
+      fill();
+      if (R.playing && now >= R.due) {
+        let j = R.i + 1;
+        while (R.buf.get(j) && R.buf.get(j).ok === false) j++;
+        if (j >= R.shots.length) setReelPlaying(false);
+        else if (want(j).ok) { show(j); R.due = Math.max(R.due + 1000 / R.fps, now - 250); R.waitSince = 0; }
+        else if (!R.waitSince) R.waitSince = now;
+        else if (now - R.waitSince > 700) {
+          // the first picture of a year waits on that year's SPICE kernels (about half a minute, once per server start)
+          const yr = new Date(R.shots[j].t * 1000).getUTCFullYear();
+          $("rlcount").textContent = now - R.waitSince > 4000 ? `processing… loading ${yr} pointing (up to a minute)` : `processing ${fmtInt(j + 1)} / ${fmtInt(R.shots.length)}…`;
+        }
+      }
+    }
+    requestAnimationFrame(tick);
+  }
+  function setReelPlaying(p) { R.playing = p; $("rlplay").textContent = p ? "❚❚" : "▶"; R.due = performance.now(); R.waitSince = 0; }
+
+  async function playAll() {
+    const target = $("rlbody").value;
+    if (!bodies || !target) return;
+    setReelPlaying(false);
+    if (target !== R.target) {
+      $("rlmsg").textContent = `Finding every picture of ${titleCase(target)}…`;
+      try {
+        const r = await fetch(`${FRAMES}/reel/${target}.json`); if (!r.ok) throw new Error(r.status);
+        R.shots = (await r.json()).shots; R.target = target; R.buf.clear();
+        document.querySelector(".rlwells").classList.toggle("one", !R.shots.some(s => s.cam === "W"));
+      } catch (e) { $("rlmsg").innerHTML = "<b>No pictures</b><br>The frame server has no reel for " + titleCase(target); return; }
+    }
+    $("rlpos").max = R.shots.length - 1;
+    const n = R.shots.length, colour = R.shots.filter(s => s.kind !== "bw").length;
+    $("rlmsg").textContent = `${fmtInt(n)} pictures of ${titleCase(target)}, ${fmtInt(colour)} in colour`;
+    blank(); R.i = -1; for (const w of Object.values(wells)) { w.i = -1; w.el.querySelectorAll(".rltag, .rlhow").forEach(e => { e.textContent = ""; }); }
+    setPlaying(false); setReelPlaying(true);
+  }
+
+  // ---- opening and closing: the reel takes the camera windows' place while it is open ----
+  function open() {
+    if (R.open) return;
+    R.open = true; card.hidden = false; card.dispatchEvent(new Event("pointerdown"));
+    R.hidden = ["imgcard", "wacard", "moviecard"].map($).filter(w => w && !w.hidden);
+    R.hidden.forEach(w => { w.hidden = true; });
+    if (window.cassiniMovie && window.cassiniMovie.on) window.cassiniMovie.stop();
+    loadBodies();
+    if (!R.looping) { R.looping = true; requestAnimationFrame(tick); }
+  }
+  function close() {
+    if (!R.open) return;
+    R.open = false; setReelPlaying(false); R.buf.clear();
+    card.hidden = true;
+    R.hidden.forEach(w => { w.hidden = false; }); R.hidden = [];
+  }
+  window.cassiniReel = { open, close, playAll, get state() { return R; } };
+
+  $("rlgo").addEventListener("click", playAll);
+  $("rlplay").addEventListener("click", () => { if (!R.shots.length) playAll(); else setReelPlaying(!R.playing); });
+  $("rlfps").addEventListener("input", e => {
+    R.fps = +e.target.value; $("rlfpsv").textContent = R.fps + " fps";
+    try { localStorage.setItem("cassini-os-reel-fps", R.fps); } catch (err) {}
+  });
+  $("rlmos").addEventListener("change", e => { R.mosaic = e.target.checked; if (R.i >= 0) show(R.i); });
+  $("rlpos").addEventListener("input", e => { setReelPlaying(false); show(+e.target.value); });
+  card.addEventListener("click", e => { if (e.target.closest(".close, .min")) { e.stopPropagation(); close(); } }, true);
+  card.querySelector(".titlebar").addEventListener("dblclick", e => { e.stopPropagation(); close(); }, true);
+  new MutationObserver(() => { for (const w of Object.values(wells)) { const b = R.open && R.buf.get(w.i); if (b && b.ok) paint(w, b.img); } }).observe(card, { attributes: true, attributeFilter: ["class"] });
+  // while the reel is open: space plays and pauses it, the arrow keys step a picture, Escape closes it
+  window.addEventListener("keydown", e => {
+    if (!R.open || e.metaKey || e.ctrlKey || /INPUT|SELECT|TEXTAREA/.test(e.target.tagName)) return;
+    if (e.code === "Space" && R.shots.length) { e.preventDefault(); e.stopImmediatePropagation(); setReelPlaying(!R.playing); }
+    else if ((e.key === "ArrowRight" || e.key === "ArrowLeft") && R.shots.length) {
+      e.preventDefault(); e.stopImmediatePropagation(); setReelPlaying(false);
+      const j = Math.max(0, Math.min(R.shots.length - 1, R.i + (e.key === "ArrowRight" ? 1 : -1))); show(j);
+    } else if (e.key === "Escape") close();
+  }, true);
+  window.addEventListener("keydown", e => { if (!R.open && (e.key === "b" || e.key === "B") && !e.metaKey && !e.ctrlKey && e.target === document.body) open(); });
+  $("play").addEventListener("click", () => { if (R.open) setReelPlaying(false); }, true);
+  const go = $("gomenu");
+  if (go) { const li = document.createElement("li"); li.innerHTML = '<button id="goreel">Play a Body…<span class="kbd">B</span></button>'; go.prepend(li); li.querySelector("button").addEventListener("click", open); }
 })();
 </script>
 <script src="https://cdn.jsdelivr.net/npm/three@0.128.0/build/three.min.js"></script>

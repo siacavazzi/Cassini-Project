@@ -55,7 +55,7 @@ Extracts the SPICE kernels for one year from the zip without loading them
 (does nothing when the data is unzipped)
 """
 def extract_kernels(year):
-    if not ds.using_zip():
+    if not ds.using_zip(ds.get_kernel_source()):
         return
     for kernel_index in ds.listdir(Kernel_index_path):
         if int(kernel_index.split("_")[1]) == year:
