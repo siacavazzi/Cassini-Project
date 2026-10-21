@@ -1204,6 +1204,7 @@ body.idle .win.full .titlebar { opacity: 0; }
     function update(force) {
       if (catalog !== cat) { cat = catalog; lastK = -2; stripKey = ""; failed.clear(); made.clear(); missing.clear(); warmed.clear(); shown = null; shownKey = null; }   // another mission year loaded
       if (win.hidden && !force) return;   // a closed or tucked-away window fetches nothing; it catches up when shown
+      if (window.cassiniMovie && window.cassiniMovie.on) return;   // movie mode has the frame server to itself (its requests are capped)
       const p = lastOfCam(cam, state.et, body), k = p < 0 ? -1 : framesOf(cam, body).ks[p];
       const live = k >= 0 && state.et - catalog.et[k] < 180;
       card.classList.toggle("live", live);

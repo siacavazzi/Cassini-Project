@@ -90,6 +90,9 @@ FOLDERS = {"N": "nac_data", "W": "wac_data"}
 
 # composites take a second or two of CPU each; at most two at once so frames keep flowing
 _color_slots = threading.Semaphore(2)
+# the camera windows' and movie mode's mosaics take seconds each the first time and are often asked for ahead of
+# need; their own slots, so they never keep a colour composite waiting
+_mosaic_slots = threading.Semaphore(2)
 # movie mode's processed frames: a frame takes a fraction of a second, and a movie asks for many ahead of
 # the play head, so they get their own slots and never hold up the camera windows' composites
 _movie_slots = threading.Semaphore(int(os.environ.get("FRAME_SERVER_MOVIE_SLOTS", 4)))
@@ -337,7 +340,7 @@ def make_handler(site, cache):
                 # a whole-body mosaic (obs_mosaic): the observation's mosaic so far, every filter
                 if reel._index is not None:
                     try:
-                        made = obs_mosaic.mosaic_webp(m.group(1), size, cache, _color_slots)
+                        made = obs_mosaic.mosaic_webp(m.group(1), size, cache, _mosaic_slots)
                     except FileNotFoundError:
                         made = None
                     if made:
@@ -346,7 +349,7 @@ def make_handler(site, cache):
                 if not found:
                     return self.send_error(404, "Not a mosaic tile")
                 try:
-                    data, report = reel.shot_webp(*found, size, cache, True, _color_slots)
+                    data, report = reel.shot_webp(*found, size, cache, True, _mosaic_slots)
                     return self.send_bytes(data, "image/webp", headers={"X-Reel": json.dumps(report, default=str)})
                 except FileNotFoundError:
                     return self.send_error(404, "Frame not in the archive")
