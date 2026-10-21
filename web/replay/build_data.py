@@ -186,7 +186,8 @@ def thumb_hint(pics, main, body, radius_km):
       color   the true colour set (red, green, blue or violet, one camera, frames within SET_GAP) that shows
               the body biggest while it still fits the frame
       frame   the single frame of the body that shows it biggest while it still fits
-    The page takes the mosaic when the server makes one of three or more tiles, else the colour set, else the frame.
+    The page takes the mosaic when the server makes one of three or more tiles (in three or more filters when there is
+    a colour set), else the colour set, else the frame.
     """
     on = [p for p in pics if p[5] == body] or pics
     def size(p):   # the body's width in full resolution pixels, 0 when unknown
@@ -231,6 +232,7 @@ def highlights(args, years, enc, bodies):
     The highlight reel (data/highlights.json), in the order of the highlights file:
       {"n", "label", "kind": "observation" or "milestone", "body", "obs", "et", "utc", "start", "end", "end_et",
        "frames", "cams": {"N": n, "W": n}, "rgb_sets", "why", "source", "thumb": {"mosaic", "color", "frame"}}
+    A row's optional "thumb" replaces the rule's thumbnail with a picture chosen by looking (see below).
     A row's "from" names a moment (moments.csv label) or a milestone (encounters.json label) whose body,
     observations, why and source it uses for any column it leaves empty. A milestone highlight with no
     observations (the Huygens descent) runs from the milestone to the one its "until" column names, and the
@@ -266,6 +268,13 @@ def highlights(args, years, enc, bodies):
             e["cams"] = {c: sum(p[2] == c for p in pics) for c in "NW" if any(p[2] == c for p in pics)}
             radii = (bodies.get(r["body"]) or {}).get("radii") or [0]
             hint = thumb_hint(pics, sorted(want[obs[0]]), r["body"], max(radii))
+            # the curated choice, when the rule's picture of a highlight was looked at and found poor: "mosaic <ID>",
+            # "color <R>,<G>,<B>" or "frame <ID>", still made by the frame server like any other thumbnail
+            kind, _, ids = (r.get("thumb") or "").partition(" ")
+            if kind:
+                if kind not in ("mosaic", "color", "frame") or not ids:
+                    raise SystemExit(f"{args.highlights}: {r['label']!r} has thumb {r['thumb']!r}, not mosaic/color/frame and an id")
+                hint = {kind: ids.split(",") if kind == "color" else ids}
             e["thumb"] = hint
         e.update({"why": r["why"], "source": r["source"]})
         out.append(e)

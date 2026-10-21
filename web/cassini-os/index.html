@@ -2402,7 +2402,8 @@ body.phone #hllist { grid-template-columns: 1fr; }
   }
 
   // ---- thumbnails: made by the frame server through the pipeline, by the rule in build_data.thumb_hint ----
-  // the whole pass when it is a mosaic of three or more tiles, else the colour set, else the single frame
+  // the whole pass when it is a mosaic of three or more tiles (in colour, when the highlight has a colour set), else
+  // the colour set, else the single frame
   async function thumbUrl(e) {
     const t = e.thumb || {};
     if (e.kind === "milestone") {   // the Huygens descent: the probe's own pictures (the coarsest DISR mosaic)
@@ -2413,7 +2414,10 @@ body.phone #hllist { grid-template-columns: 1fr; }
       try {
         const r = await fetch(`${FRAMES}/frames/mosaic/${t.mosaic}.webp?size=256`);
         const how = r.ok ? JSON.parse(r.headers.get("X-Reel") || "{}") : null;
-        if (how && Math.max(+how.of || 0, +how.mosaic || 0, (how.tiles || []).length || 0) >= 3) return URL.createObjectURL(await r.blob());
+        const tiles = how && Math.max(+how.of || 0, +how.mosaic || 0, (how.tiles || []).length || 0);
+        const filters = how && (Array.isArray(how.filters) ? how.filters.length : +how.filters || 0);
+        // a grey mosaic gives way to a colour set when the highlight has one
+        if (tiles >= 3 && (filters >= 3 || !t.color)) return URL.createObjectURL(await r.blob());
       } catch (err) {}
     }
     if (t.color) return `${FRAMES}/frames/color.webp?ids=${t.color.join(",")}&size=256`;
