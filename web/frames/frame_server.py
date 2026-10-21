@@ -22,6 +22,13 @@ Routes:
                                on one brightness scale, aligned to the middle one in time, pixels
                                lost in downlink transparent. The X-Composite header (and a .json
                                next to the cached image) says how each channel was made
+  /reel/bodies.json            every body with frames, most photographed first
+  /reel/<TARGET>.json          the body's reel: its pictures in time order (web/frames/reel.py)
+  /frames/reel/<TARGET>/<n>.webp?size=768&mosaic=1
+                               picture n of the reel, made by the pipeline (color_image.processed_frame:
+                               stacked, calibrated, aligned, centred on the body with north up by SPICE)
+                               and drawn into the rolling mosaic with the pictures before it; made on
+                               first request and cached. X-Reel says how it was made
   /health                      "ok" plus where the frames come from
   anything else                a file from --site, if given (the replay page and its data)
 
@@ -53,6 +60,8 @@ os.environ.setdefault("MPLBACKEND", "Agg")
 import json  # noqa: E402
 import numpy as np  # noqa: E402
 import color_image  # noqa: E402
+sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
+import reel  # noqa: E402
 
 FRAME_ID = re.compile(r"^([NW])\d{10}_\d+$")
 SIZES = (128, 256, 384, 512, 768, 1024)
@@ -64,9 +73,9 @@ _read_lock = threading.Lock()
 _read_member = data_source._read_member
 
 
-def _locked_read_member(i):
+def _locked_read_member(*args, **kwargs):
     with _read_lock:
-        return _read_member(i)
+        return _read_member(*args, **kwargs)
 
 
 data_source._read_member = _locked_read_member
@@ -147,7 +156,7 @@ def make_handler(site, cache):
 
         def end_headers(self):
             self.send_header("Access-Control-Allow-Origin", "*")
-            self.send_header("Access-Control-Expose-Headers", "X-Composite")
+            self.send_header("Access-Control-Expose-Headers", "X-Composite, X-Reel")
             super().end_headers()
 
         def do_OPTIONS(self):
@@ -183,6 +192,26 @@ def make_handler(site, cache):
                     return self.send_bytes(data, "image/webp", headers={"X-Composite": json.dumps(report)})
                 except FileNotFoundError:
                     return self.send_error(404, "Frame not in the archive")
+            if url.path == "/reel/bodies.json":
+                return self.send_bytes(json.dumps(reel.bodies()).encode(), "application/json", False)
+            m = re.match(r"^/reel/([A-Z0-9_]+)\.json$", url.path)
+            if m:
+                shots = reel.shots(m.group(1))
+                if not shots:
+                    return self.send_error(404, "No pictures of that body")
+                return self.send_bytes(json.dumps({"target": m.group(1), "shots": shots}).encode(), "application/json", False)
+            m = re.match(r"^/frames/reel/([A-Z0-9_]+)/(\d+)\.webp$", url.path)
+            if m:
+                query = parse_qs(url.query)
+                shots, n = reel.shots(m.group(1)), int(m.group(2))
+                if n >= len(shots):
+                    return self.send_error(404, "No such picture")
+                size = min(SIZES, key=lambda s: abs(s - int(query.get("size", ["768"])[0])))
+                try:
+                    data, report = reel.shot_webp(m.group(1), n, size, cache, query.get("mosaic", ["1"])[0] != "0", _color_slots)
+                    return self.send_bytes(data, "image/webp", headers={"X-Reel": json.dumps(report, default=str)})
+                except FileNotFoundError:
+                    return self.send_error(404, "Frame not in the archive")
             m = re.match(r"^/frames/([^/]+)\.(webp|png)$", url.path)
             if m:
                 frame_id, kind = m.groups()
@@ -215,7 +244,9 @@ def main():
     ap.add_argument("--cache", default=os.path.join(os.getcwd(), "frame_cache"), help="where made WebP files are kept")
     args = ap.parse_args()
     site = os.path.abspath(os.path.expanduser(args.site)) if args.site else None
-    print(f"Frames from {data_source.get_source()}, cache in {args.cache}")
+    print(f"Frames from {data_source.get_source()}, kernels from {data_source.get_kernel_source()}, cache in {args.cache}")
+    # every year's kernels stay extracted once used, so a reel going back and forth in time is not slowed
+    data_source.KEEP_SPICE_CACHE = True
     data_source._zip_index() if data_source.using_zip() else None  # build or load the zip index up front
     server = ThreadingHTTPServer((args.host, args.port), make_handler(site, args.cache))
     print(f"Serving on http://{args.host}:{args.port}/" + (f" (site: {site})" if site else ""))

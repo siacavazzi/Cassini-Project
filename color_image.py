@@ -19,6 +19,7 @@ import cv2
 import datetime
 import multiprocessing
 import os
+import threading
 import traceback
 from collections import deque
 from concurrent.futures import ProcessPoolExecutor
@@ -182,10 +183,54 @@ def load_aligned(paths):
     return imgs, np.logical_and.reduce(masks), lbls[ref], report
 
 
+"""
+One picture for the frame server's body reel (web/frames/reel.py): the frames at paths through
+the color path above (load_aligned: stacked with their repeat exposures, lost pixels filled,
+calibrated, aligned), merged like make_frame, then centred on the target with north up by
+auto_center. One path makes a black and white picture, two a two-filter one (green from both).
+paths = the frames' paths, longest wavelength first
+returns (RGBA numpy image, its label, report): the image is on auto_center's canvas when
+centring worked (report["centred"] True), otherwise the 1024 px frame as it is
+"""
+def processed_frame(paths):
+    imgs, valid, lbl, report = load_aligned(list(paths))
+    chans = [cv2.cvtColor(img, cv2.COLOR_BGR2GRAY) if img.ndim == 3 else img for img in imgs]
+    if len(chans) == 1:
+        chans = chans * 3
+    elif len(chans) == 2:
+        chans = [chans[0], ((chans[0].astype(np.uint16) + chans[1]) // 2).astype(np.uint8), chans[1]]
+    alpha = np.where(valid, np.asarray(get_mask()), 0).astype(np.uint8)
+    # blue, green, red like make_frame's merge: translate turns it into RGBA
+    image = np.dstack([chans[2], chans[1], chans[0], alpha])
+    try:
+        with spice_lock:
+            centred = lbl.set_color(image).auto_center(border)
+        # a close-up of a big body has its centre far off the frame: centring pushes the frame
+        # off the canvas, so it is shown as it is instead
+        if centred[..., 3].sum() < 0.5 * alpha.astype(np.float64).sum():
+            raise ValueError("the target's centre is far off the frame (close-up)")
+        report["centred"] = True
+        return centred, lbl, report
+    except Exception as e:
+        print(f"Can't centre {lbl.info.get('PRODUCT_ID')}: {e}")
+        report["centred"] = False
+        report["why"] = str(e)[:200]
+        return cv2.cvtColor(image, cv2.COLOR_BGR2RGBA), lbl, report
+
+
+# auto_center loads a year of SPICE kernels into the one SPICE pool when the year changes;
+# a server centring frames on several threads takes turns
+spice_lock = threading.Lock()
+
+
 def frame_path(row, target, folder):
     id = row["seconds_1970"]
     title = f"{id}_{target}"
     return f"output/{folder}/{title}.png"
+
+
+def sharpen(image):
+    return ImageEnhance.Sharpness(image).enhance(1.5)
 
 
 """
@@ -193,9 +238,7 @@ Sharpens and saves a finished frame
 """
 def save_frame(image, path):
     try:
-        enhancer = ImageEnhance.Sharpness(image)
-        image = enhancer.enhance(1.5)
-        image.save(path)
+        sharpen(image).save(path)
     except Exception:
         print(f"Failed to save {path}:")
         traceback.print_exc()
