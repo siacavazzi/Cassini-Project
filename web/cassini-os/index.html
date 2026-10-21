@@ -790,7 +790,7 @@ body.idle .rlwell { border-color: transparent; box-shadow: 0 6px 30px rgba(0,0,0
   // moments: iTunes-style ratings, a footer count, Go-menu entries for each body
   window.studyMoments = picks => {
     document.querySelectorAll("#mlist .sc").forEach(el => {
-      const s = parseFloat(el.style.getPropertyValue("--s")) || 0, n = Math.max(1, Math.round(s / 20));
+      const s = parseFloat(el.style.getPropertyValue("--s")) || 0, n = Math.min(5, Math.max(1, Math.round(s / 20)));   // scores pass 100 (mosaics add up to 15)
       el.textContent = "★".repeat(n) + "·".repeat(5 - n);
     });
     const ms = picks.filter(e => e.kind === "milestone").length;
