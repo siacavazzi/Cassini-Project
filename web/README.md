@@ -57,6 +57,14 @@ python web/verify_attitude.py --zip /Volumes/LaCie/cassiniprojectJAN05.zip --dat
     --catalog replay_data/catalog --tmp /Volumes/LaCie/verify_tmp
 ```
 
+The AACS reconstructed CKs are wrong in a few places. During the Jupiter approach they are off by ~50° on 23-27 Jan 2001 and by up to 93° on 2-3 Dec 2000, while the frames show Jupiter. The image-navigated ("c-smithed") ISS CKs are right there, but they only cover a fraction of a second around each shutter. A third pass, `--smith`, measures the AACS -> c-smithed rotation at every image inside a c-smithed window. Where at least 3 consecutive images are more than `--smith-tol` degrees off (default 0.5), it carries that rotation to the background samples and other images within 6 hours. It rewrites each year in place (header flags 2), so run it on a copy, after `--refine`. Across the whole mission it changes only 2000, 2001 and 12 samples in May 2017:
+
+```
+python web/export_attitude.py --zip /Volumes/LaCie/cassiniprojectJAN05.zip --catalog <replay_data>/catalog \
+    --out <copy of replay_data> --tmp /Volumes/LaCie/attitude_tmp --smith
+python web/test_smith.py   # synthetic check of the rule
+```
+
 When `Image_index.csv` changes, the catalogs change and so does the order of `image_q`. Instead of re-exporting every year, `--update-from` rebuilds each year from the earlier export: it reuses image pointing by image id, points only the new images, keeps the refined background samples, and copies years whose catalog did not change. Changed years are written with flags 0, so run the `--refine` pass after it. `--old-catalog` must be the catalogs the earlier export was made from (regenerate them with `export_tracks.py --index <old Image_index.csv> --skip tracks,encounters`):
 
 ```

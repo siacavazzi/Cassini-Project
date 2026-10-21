@@ -376,7 +376,7 @@ body { color: var(--q-text); }
 .chans .more { grid-column: 1 / -1; font-size: 9.5px; color: var(--q-dim); white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
 .camwin .shottag { right: 5px; text-align: left; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
 .kindtag { position: absolute; right: 5px; top: 4px; font: 9px/1 var(--hudf); color: var(--q-text); text-shadow: 0 0 3px #000, 0 0 6px #000; display: none; letter-spacing: .04em; }
-.well.has-frame.composite .kindtag { display: block; }
+.well.has-frame.composite .kindtag, .well.has-frame.mosaic .kindtag { display: block; }
 body.idle .camwin .chans { opacity: .8; }
 
 /* moments: plain rows on the panel */
@@ -891,7 +891,7 @@ body.idle .rlwell { border-color: transparent; box-shadow: 0 6px 30px rgba(0,0,0
   D({ key: "interface.hudline", section: "Interface", label: "Flight data strip", type: "toggle", value: true,
       hint: "Target, altitude, speed, camera and pointing along the top of the view." });
   cls("interface.hudline", "s-nohudline", false);
-  // Cameras (the camera windows read cameras.composites and cameras.stale)
+  // Cameras (the camera windows read cameras.composites, cameras.mosaics and cameras.stale)
   D({ key: "cameras.composites", section: "Cameras", label: "Colour composites", type: "toggle", value: true,
       hint: "Once a filter set is complete, show its colour picture. Off shows every frame on its own." });
   D({ key: "cameras.channels", section: "Cameras", label: "Filter channels", type: "toggle", value: true,
@@ -900,6 +900,8 @@ body.idle .rlwell { border-color: transparent; box-shadow: 0 6px 30px rgba(0,0,0
   D({ key: "cameras.details", section: "Cameras", label: "Frame details", type: "toggle", value: true,
       hint: "Status, frame, filter, colour and scale under each picture." });
   cls("cameras.details", "s-noinfo", false);
+  D({ key: "cameras.mosaics", section: "Cameras", label: "Mosaics in camera windows", type: "toggle", value: true,
+      hint: "When Cassini steps a camera across a body, the window builds the mosaic tile by tile. Off shows every frame on its own." });
   D({ key: "cameras.stale", section: "Cameras", label: "Clear a quiet camera after", type: "range", value: 6, min: 1, max: 48, step: 1, unit: "h",
       hint: "A camera that has taken nothing for this long shows Idle instead of its last picture." });
 
@@ -918,6 +920,9 @@ body.idle .rlwell { border-color: transparent; box-shadow: 0 6px 30px rgba(0,0,0
       new MutationObserver(() => S.set(key, pressed())).observe(b, { attributes: true, attributeFilter: ["aria-pressed"] });
     });
   }
+  D({ key: "playback.start", section: "Playback", label: "Start time", type: "choice", value: "2006-09-15T14:28:00", reload: true,
+      options: [["2006-09-15T14:28:00", "In Saturn's Shadow"], ["2005-01-14T09:30:00", "Huygens lands"], ["2004-07-01T00:00:00", "Saturn arrival"]],
+      hint: "The moment Cassini OS opens on. A ?t= link still wins." });
   D({ key: "playback.autoplay", section: "Playback", label: "Play when Cassini OS opens", type: "toggle", value: true,
       hint: "Off opens paused at the starting moment." });
   D({ key: "playback.speed", section: "Playback", label: "Starting speed", type: "choice", value: 600,
@@ -1104,7 +1109,7 @@ body.idle .rlwell { border-color: transparent; box-shadow: 0 6px 30px rgba(0,0,0
   // moments: iTunes-style ratings, a footer count, Go-menu entries for each body
   window.studyMoments = picks => {
     document.querySelectorAll("#mlist .sc").forEach(el => {
-      const s = parseFloat(el.style.getPropertyValue("--s")) || 0, n = Math.max(1, Math.round(s / 20));
+      const s = parseFloat(el.style.getPropertyValue("--s")) || 0, n = Math.min(5, Math.max(1, Math.round(s / 20)));   // scores pass 100 (mosaics add up to 15)
       el.textContent = "★".repeat(n) + "·".repeat(5 - n);
     });
     const ms = picks.filter(e => e.kind === "milestone").length;
@@ -1365,10 +1370,14 @@ body.idle .rlwell { border-color: transparent; box-shadow: 0 6px 30px rgba(0,0,0
     const fits = v => v.key === want.key || (shownKey !== want.key && etOf(v) <= etOf(want) && (!shown || etOf(v) > etOf(shown) || (etOf(v) === etOf(shown) && v.set >= shown.set)));
     // the one place a picture goes on screen
     function display(v, im) {
-      shownKey = v.key; shown = v; shot.src = im.src;
+      // while a pass's mosaic is shown, its next frames keep it up (until the mosaic with them arrives, mosaicOf)
+      const keep = obsShown && catalog.obs[v.k] === obsShown;
+      shownKey = v.key; shown = v;
+      if (!keep) { shot.src = im.src; obsShown = null; well.style.aspectRatio = ""; well.classList.remove("mosaic"); }
       well.classList.add("has-frame"); well.classList.toggle("composite", v.set >= 0);
-      card.querySelector(".kindtag").textContent = v.set >= 0 ? KIND[catalog.sets[v.set].kind].toUpperCase() : "";
+      if (!keep) card.querySelector(".kindtag").textContent = v.set >= 0 ? KIND[catalog.sets[v.set].kind].toUpperCase() : "";
       if (v.set >= 0) { channelsFrom(im, catalog.sets[v.set]); howMade(v); }
+      if (v.tile) mosaicOf(v);
     }
     function request(which, v) {
       lane[which] = v; v.cat = catalog;
@@ -1418,6 +1427,39 @@ body.idle .rlwell { border-color: transparent; box-shadow: 0 6px 30px rgba(0,0,0
       }
       const comp = next.find(key => key.includes("/color.webp") && !warmed.has(key));
       if (comp && !lane.comp && (want.set < 0 || shownKey === want.key)) request("comp", { key: comp, set: -1, k: want.k, warm: true });
+    }
+    // A frame that may be a new tile of a mosaic (the camera's frame before it is of the same target and
+    // observation) is also asked of /frames/mosaic: the frame server answers 404 at once unless the pointing
+    // stepped across the body with the same filter (mosaic.panels), and otherwise sends the pipeline's mosaic
+    // of this tile over the ones before it, which replaces the picture while it is still the one shown.
+    // The Settings window's "Mosaics in camera windows" (cameras.mosaics) or window.cassiniMosaics = false turns this off.
+    // A pass's mosaic (X-Reel names the observation) is every tile so far, every filter, in its own shape: the
+    // window takes that shape and keeps it for the rest of the observation.
+    let mosaicUrl = null, obsShown = null, obsTiles = 0;
+    function mosaicOf(w) {
+      if (window.cassiniMosaics === false || !S.get("cameras.mosaics")) return;
+      const id = catalog.id[w.set >= 0 ? catalog.sets[w.set].use[0] : w.k];
+      fetch(`${FRAMES}/frames/mosaic/${id}.webp?size=${size()}`).then(async r => {
+        if (!r.ok) return;
+        const rep = JSON.parse(r.headers.get("X-Reel") || "null");
+        // a pass's mosaic that arrives after the window moved on to the pass's next frame still shows, unless
+        // the window already has a bigger one
+        const late = () => shown !== w && !(rep && rep.observation && shown && catalog.obs[shown.k] === catalog.obs[w.k]
+          && (obsShown !== catalog.obs[w.k] || rep.mosaic > obsTiles));
+        if (late()) return;
+        const blob = await r.blob();
+        if (late()) return;
+        if (mosaicUrl) URL.revokeObjectURL(mosaicUrl);
+        shot.src = mosaicUrl = URL.createObjectURL(blob);
+        well.classList.add("mosaic");
+        if (rep && rep.observation) {
+          obsShown = catalog.obs[w.k]; obsTiles = rep.mosaic;
+          well.style.aspectRatio = `${rep.width} / ${rep.height}`;
+          card.querySelector(".kindtag").textContent = `${rep.filters >= 3 ? ((rep.filter_names || []).includes("GRN") ? "COLOUR " : "FALSE COLOUR ") : ""}MOSAIC · ${rep.mosaic} OF ${rep.of} TILES${rep.filters > 1 ? ` · ${rep.filters} FILTERS` : ""}`;
+          return;
+        }
+        card.querySelector(".kindtag").textContent = `${w.set >= 0 ? KIND[catalog.sets[w.set].kind].toUpperCase() + " · " : ""}MOSAIC${rep && rep.mosaic ? ` OF ${rep.mosaic}` : ""}`;
+      }, () => {});
     }
     const made = new Map();   // set -> how its composite was made
     const colourText = (s, si) => `${KIND[s.kind]}: ${s.use.map(fname).join(" · ")}${made.has(si) ? ` · ${made.get(si)}` : ""}`;
@@ -1493,6 +1535,10 @@ body.idle .rlwell { border-color: transparent; box-shadow: 0 6px 30px rgba(0,0,0
       if (k === lastK && ready === lastReady && !force) return;
       lastK = k; lastReady = ready;
       want = view(k, state.et);
+      // a possible mosaic tile: the frame before is of the same body and observation, and a frame of a colour
+      // set only once its composite is shown (the mosaic is made of composites)
+      const kb = framesOf(cam, body).ks[p - 1];   // p counts this feed's frames (a body window's: that body's only)
+      want.tile = kb !== undefined && catalog.target[kb] === catalog.target[k] && catalog.obs[kb] === catalog.obs[k] && (!s || want.set >= 0);
       const kp = catalog.km_per_px[k];
       field("frame").textContent = `${titleCase(catalog.target[k] || "Unknown")} · ${catalog.id[k]}`;
       const c = catalog.cls[k], pol = /^P\d|^IRP/.test(catalog.f1[k]) || /^IRP/.test(catalog.f2[k]) ? " · polarizer" : "";
@@ -3630,7 +3676,7 @@ function frame(now) {
 
 (async function main() {
   // ?t=1999-08-18T03:00 opens at that moment
-  const start = utcToEt(new URLSearchParams(location.search).get("t") || "2005-01-14T09:30:00");
+  const start = utcToEt(new URLSearchParams(location.search).get("t") || (window.cassiniSettings && cassiniSettings.get("playback.start")) || "2006-09-15T14:28:00");
   try {
     await load(start);
   } catch (err) {
