@@ -30,7 +30,8 @@ each shutter, so outside them SPICE falls back to the AACS CK, which in a few pl
 Every image inside a c-smithed window is an anchor: the rotation from the AACS attitude to the smithed one
 there is its offset (offsets under --smith-tol count as none). Background samples and images outside the
 windows get the offset slerped between the anchors either side, or the nearer anchor's offset when only
-one is within SMITH_REACH. The file keeps its layout and gets header flags 2, so a rerun skips it.
+one is within SMITH_REACH. Only runs of at least SMITH_MIN_RUN consecutive offset anchors count: a lone one is
+taken for a bad smithed frame, not an AACS error. The file keeps its layout and gets header flags 2, so a rerun skips it.
 """
 
 import argparse
@@ -54,6 +55,7 @@ MIN_STEP = 8.0   # do not split intervals shorter than this (s)
 FLAG_REFINED = 1
 FLAG_SMITHED = 2
 SMITH_REACH = 6 * 3600.0   # an anchor's offset is carried this far (s)
+SMITH_MIN_RUN = 3          # consecutive offset anchors needed before they count
 PREFIX = "cassini/cosp_1000/"
 
 
@@ -166,7 +168,7 @@ def smith_offsets(anchor_t, anchor_d, times):
 def smith(img_q, cams, ets, smithed, rc_body, bg_t, bg_q, tol_deg, bg_smithed=None):
     """Correct AACS pointing with the c-smithed anchors. smithed[i]: image i lies in a c-smithed window;
     bg_smithed[k]: background sample k does (--refine samples there came from the smithed CK already);
-    rc_body(t): the AACS-only body quaternion. Returns new (img_q, bg_q) and the anchors' offsets (deg)."""
+    rc_body(t): the AACS-only body quaternion. Returns new (img_q, bg_q), the anchors' offsets (deg) and how many offsets were used."""
     img_q, bg_q = np.array(img_q, dtype=float), np.array(bg_q, dtype=float)
     at, ad, angles = [], [], []
     for i in np.argsort(ets, kind="stable"):
@@ -183,8 +185,22 @@ def smith(img_q, cams, ets, smithed, rc_body, bg_t, bg_q, tol_deg, bg_smithed=No
         at.append(ets[i])
         ad.append(d if ang >= tol_deg else None)
         angles.append(ang)
-    if not any(d is not None for d in ad):
-        return img_q, bg_q, angles
+    # an AACS error shows in a run of anchors; a lone offset is more likely a bad smithed frame (one off its
+    # target by a degree in 2013, say), and carrying it SMITH_REACH either way would move good neighbours
+    k = 0
+    while k < len(ad):
+        if ad[k] is None:
+            k += 1
+            continue
+        e = k
+        while e < len(ad) and ad[e] is not None:
+            e += 1
+        if e - k < SMITH_MIN_RUN:
+            ad[k:e] = [None] * (e - k)
+        k = e
+    used = sum(d is not None for d in ad)
+    if not used:
+        return img_q, bg_q, angles, used
     at = np.array(at)
     for k, d in enumerate(smith_offsets(at, ad, bg_t)):
         if d is not None and not (bg_smithed is not None and bg_smithed[k]):
@@ -194,7 +210,7 @@ def smith(img_q, cams, ets, smithed, rc_body, bg_t, bg_q, tol_deg, bg_smithed=No
         if d is not None:
             c = CAM_TO_BODY[cams[i]]
             img_q[i] = qmul(qconj(c), qmul(d, qmul(c, img_q[i])))
-    return img_q, bg_q, angles
+    return img_q, bg_q, angles, used
 
 
 def merged_series(img_q, cat, bg_t, bg_q):
@@ -275,7 +291,7 @@ def smith_file(path, cat, iss_cks, tol_deg):
         q = quat("CASSINI_SC_COORD", t)
         return None if np.isnan(q[0]) else np.array(q, dtype=float)
 
-    new_img, new_bg, angles = smith(img_q, cat["cam"], ets, smithed, rc_body, bg_t, bg_q, tol_deg, bg_smithed)
+    new_img, new_bg, angles, used = smith(img_q, cat["cam"], ets, smithed, rc_body, bg_t, bg_q, tol_deg, bg_smithed)
     tmp_path = path + ".tmp"
     with open(tmp_path, "wb") as fh:
         fh.write(b"CATT" + struct.pack("<HHII", ver, flags | FLAG_SMITHED, n_img, n_bg))
@@ -284,7 +300,7 @@ def smith_file(path, cat, iss_cks, tol_deg):
         fh.write(new_bg.astype("<f4").tobytes())
     os.replace(tmp_path, path)
     angles = np.array(angles)
-    return {"anchors": len(angles), "corrected": int((angles >= tol_deg).sum()),
+    return {"anchors": len(angles), "offset": int((angles >= tol_deg).sum()), "corrected": used,
             "worst_deg": float(angles.max()) if len(angles) else 0.0,
             "bg_changed": int((np.abs(new_bg - bg_q) > 1e-6).any(axis=1).sum()),
             "img_changed": int((np.abs(new_img - img_q) > 1e-6).any(axis=1).sum())}

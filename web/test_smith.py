@@ -18,7 +18,7 @@ cam_of = lambda q, c: qmul(qconj(CAM_TO_BODY[c]), q)
 img_q = np.array([cam_of(truth(t) if s else rc(t), c) for t, s, c in zip(ets, smithed, cams)])
 bg_t = np.arange(0, 3e5, 600.0)
 bg_q = np.array([rc(t) for t in bg_t])
-ni, nb, ang = smith(img_q, cams, ets, smithed, rc, bg_t, bg_q, 0.5)
+ni, nb, ang, _ = smith(img_q, cams, ets, smithed, rc, bg_t, bg_q, 0.5)
 err_bg = [qangle(q, truth(t)) for q, t in zip(nb, bg_t)]
 err_img = [qangle(qmul(CAM_TO_BODY[c], q), truth(t)) for q, t, c in zip(ni, ets, cams)]
 before = [qangle(q, truth(t)) for q, t in zip(bg_q, bg_t)]
@@ -33,8 +33,16 @@ print("ok")
 bg_t2 = np.sort(np.r_[bg_t, ets[smithed] + 0.1])
 in_win = np.isin(bg_t2, ets[smithed] + 0.1)
 bg_q2 = np.array([truth(t) if w else rc(t) for t, w in zip(bg_t2, in_win)])
-_, nb2, _ = smith(img_q, cams, ets, smithed, rc, bg_t2, bg_q2, 0.5, in_win)
+_, nb2, _, _ = smith(img_q, cams, ets, smithed, rc, bg_t2, bg_q2, 0.5, in_win)
 err2 = [qangle(q, truth(t)) for q, t in zip(nb2, bg_t2)]
 assert max(e for e, w in zip(err2, in_win) if w) < 1e-6
 assert max(e for e, t in zip(err2, bg_t2) if 1.03e5 <= t <= 1.37e5) < 1e-3
 print("ok (refined samples inside windows kept)")
+# a lone smithed frame off by a degree (a bad navigation, not an AACS error) must not move its neighbours
+lone = np.array([cam_of(truth(t), c) for t, c in zip(ets, cams)])
+k = 30
+lone[k] = cam_of(qmul(rot([1, 0, 0], 1.3), truth(ets[k])), cams[k])
+bg3 = np.array([truth(t) for t in bg_t])
+li, lb, la, used = smith(lone, cams, ets, smithed, truth, bg_t, bg3, 0.5)
+assert used == 0 and np.abs(lb - bg3).max() < 1e-12 and np.abs(li - lone).max() < 1e-12, used
+print("ok (lone offset anchor ignored)")
