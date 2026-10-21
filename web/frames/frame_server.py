@@ -16,6 +16,12 @@ it once with `python bootleg_autonav.py geometry` (see bootleg_autonav.py).
 Routes:
   /frames/<ID>.webp?size=256   the frame as WebP, longest side 128-1024 px (default 512),
                                made on first request and cached on disk
+  ...?size=full                any picture route below at full resolution, for a picture looked at on its own
+                               (full view): a frame or composite at its native size, losslessly for frames;
+                               a pass's mosaic at its canvas size; never more than CASSINI_FULL_MAX px
+                               (default 2048) on the longest side. Live feeds, bursts, reels and movies keep
+                               the capped sizes. &format=png sends PNG instead, &download=1 as a named
+                               attachment (Cassini_<ID>.png), so the picture can be saved and shared
   /frames/<ID>.png             the archive PNG as it is
   /frames/color.webp?ids=R,G,B&size=512
                                colour composite of two or three frames of one filter set, made on
@@ -81,6 +87,9 @@ import obs_mosaic  # noqa: E402
 
 FRAME_ID = re.compile(r"^([NW])\d{10}_\d+$")
 SIZES = (128, 256, 384, 512, 768, 1024)
+# size=full: the picture at full resolution, capped so a whole-pass mosaic cannot run away with the bandwidth
+FULL = "full"
+FULL_MAX = int(os.environ.get("CASSINI_FULL_MAX", "2048"))
 FOLDERS = {"N": "nac_data", "W": "wac_data"}
 
 # composites take a second or two of CPU each; at most two at once so frames keep flowing
@@ -128,20 +137,47 @@ def _make_file(path, make):
     return data
 
 
-def encode(im, size):
-    if max(im.size) > size:
-        im.thumbnail((size, size), Image.LANCZOS)
+def size_of(query, default):
+    """The size= asked for: FULL, or the nearest of SIZES."""
+    asked = query.get("size", [str(default)])[0]
+    if asked == FULL:
+        return FULL
+    try:
+        return min(SIZES, key=lambda s: abs(s - int(asked)))
+    except ValueError:
+        return default
+
+
+def encode(im, size, fmt="webp", quality=80):
+    """im as WebP (or PNG), longest side at most size; a FULL picture keeps its size up to FULL_MAX, and a
+    grey one is sent losslessly (an 8-bit frame is a few hundred KB that way)"""
+    cap = FULL_MAX if size == FULL else size
+    if max(im.size) > cap:
+        im.thumbnail((cap, cap), Image.LANCZOS)
     out = io.BytesIO()
-    im.save(out, "WEBP", quality=80, method=4)
+    if fmt == "png":
+        im.save(out, "PNG", compress_level=6)
+    elif size == FULL and im.mode == "L":
+        im.save(out, "WEBP", lossless=True, quality=80, method=4)
+    else:
+        im.save(out, "WEBP", quality=94 if size == FULL else quality, method=4)
     return out.getvalue()
 
 
-def webp(frame_id, size, cache):
+def picture_format(query):
+    return "png" if query.get("format", [""])[0] == "png" else "webp"
+
+
+def size_dir(size, fmt):
+    return str(size) + ("-png" if fmt == "png" else "")
+
+
+def webp(frame_id, size, cache, fmt="webp"):
     def make():
         im = Image.open(io.BytesIO(archive_png(frame_id)))
         im = im.convert("L") if im.mode in ("L", "I", "I;16", "P", "1") else im.convert("RGB")
-        return encode(im, size)
-    return cached(os.path.join(cache, str(size), frame_id + ".webp"), make)
+        return encode(im, size, fmt)
+    return cached(os.path.join(cache, size_dir(size, fmt), f"{frame_id}.{fmt}"), make)
 
 
 def composite(ids):
@@ -157,10 +193,10 @@ def composite(ids):
     return Image.fromarray(np.dstack(chans + [alpha]), "RGBA"), report
 
 
-def color_webp(ids, size, cache):
-    """The composite as WebP, and its report (also kept in the cache, next to the image)."""
+def color_webp(ids, size, cache, fmt="webp"):
+    """The composite as WebP (or PNG), and its report (also kept in the cache, next to the image)."""
     # bumped whenever the way composites are made changes, so older ones are not served again
-    base = os.path.join(cache, "color-v4", str(size), "_".join(ids))
+    base = os.path.join(cache, "color-v4", size_dir(size, fmt), "_".join(ids))
     report = {}
     def make():
         with _color_slots:
@@ -168,8 +204,8 @@ def color_webp(ids, size, cache):
         report.update(made)
         cached(base + ".json", lambda: json.dumps(made).encode())
         print("composite", json.dumps(made))
-        return encode(im, size)
-    data = cached(base + ".webp", make)
+        return encode(im, size, fmt)
+    data = cached(f"{base}.{fmt}", make)
     if not report and os.path.exists(base + ".json"):
         with open(base + ".json") as fh:
             report = json.load(fh)
@@ -250,6 +286,13 @@ def make_handler(site, cache):
             self.end_headers()
             self.wfile.write(data)
 
+        def send_picture(self, data, fmt, query, name, headers=None):
+            """A picture route's answer: WebP or PNG, as a named attachment when download=1 asks for one."""
+            headers = dict(headers or {})
+            if query.get("download", ["0"])[0] == "1":
+                headers["Content-Disposition"] = f'attachment; filename="{name}.{fmt}"'
+            return self.send_bytes(data, "image/png" if fmt == "png" else "image/webp", headers=headers)
+
         def do_GET(self):
             self.started = time.monotonic()
             url = urlparse(self.path)
@@ -262,10 +305,10 @@ def make_handler(site, cache):
                 ids = query.get("ids", [""])[0].split(",")
                 if not 2 <= len(ids) <= 3 or not all(FRAME_ID.match(i) for i in ids) or len({i[0] for i in ids}) > 1:
                     return self.send_error(400, "ids= takes two or three frame ids from one camera")
-                size = min(SIZES, key=lambda s: abs(s - int(query.get("size", ["512"])[0])))
+                size, fmt = size_of(query, 512), picture_format(query)
                 try:
-                    data, report = color_webp(ids, size, cache)
-                    return self.send_bytes(data, "image/webp", headers={"X-Composite": json.dumps(report)})
+                    data, report = color_webp(ids, size, cache, fmt)
+                    return self.send_picture(data, fmt, query, f"Cassini_{'_'.join(ids)}_colour", {"X-Composite": json.dumps(report)})
                 except FileNotFoundError:
                     return self.send_error(404, "Frame not in the archive")
             if url.path == "/reel/bodies.json":
@@ -294,21 +337,27 @@ def make_handler(site, cache):
                 # real mosaic (reel.mosaic_of, mosaic.panels), otherwise 404 at once and the window keeps its frame
                 if not FRAME_ID.match(m.group(1)):
                     return self.send_error(400, "Not a frame id")
-                size = min(SIZES, key=lambda s: abs(s - int(parse_qs(url.query).get("size", ["512"])[0])))
-                # a whole-body mosaic (obs_mosaic): the observation's mosaic so far, every filter
+                query = parse_qs(url.query)
+                size, fmt, name = size_of(query, 512), picture_format(query), f"Cassini_{m.group(1)}_mosaic"
+                # a whole-body mosaic (obs_mosaic): the observation's mosaic so far, every filter; at full
+                # resolution, its canvas (obs_mosaic.CANVAS) up to FULL_MAX
                 if reel._index is not None:
                     try:
-                        made = obs_mosaic.mosaic_webp(m.group(1), size, cache, _color_slots)
+                        made = obs_mosaic.mosaic_webp(m.group(1), size, cache, _color_slots, fmt=fmt,
+                                                      out=min(obs_mosaic.CANVAS, FULL_MAX) if size == FULL else obs_mosaic.OUT)
                     except FileNotFoundError:
                         made = None
                     if made:
-                        return self.send_bytes(made[0], "image/webp", headers={"X-Reel": json.dumps(made[1])})
+                        return self.send_picture(made[0], fmt, query, name, {"X-Reel": json.dumps(made[1])})
                 found = reel.mosaic_of(m.group(1), wait=False)
                 if not found:
                     return self.send_error(404, "Not a mosaic tile")
                 try:
-                    data, report = reel.shot_webp(*found, size, cache, True, _color_slots)
-                    return self.send_bytes(data, "image/webp", headers={"X-Reel": json.dumps(report, default=str)})
+                    # a rolling mosaic is drawn at reel.OUT, its full resolution here
+                    data, report = reel.shot_webp(*found, reel.OUT if size == FULL else size, cache, True, _color_slots)
+                    if fmt == "png":
+                        data = encode(Image.open(io.BytesIO(data)), FULL, "png")
+                    return self.send_picture(data, fmt, query, name, {"X-Reel": json.dumps(report, default=str)})
                 except FileNotFoundError:
                     return self.send_error(404, "Frame not in the archive")
             m = re.match(r"^/frames/([^/]+)\.(webp|png)$", url.path)
@@ -319,12 +368,12 @@ def make_handler(site, cache):
                 try:
                     if kind == "png":
                         return self.send_bytes(archive_png(frame_id), "image/png")
-                    size = int(parse_qs(url.query).get("size", ["512"])[0])
-                    size = min(SIZES, key=lambda s: abs(s - size))
-                    if reel._index is not None:
+                    query = parse_qs(url.query)
+                    size, fmt = size_of(query, 512), picture_format(query)
+                    if reel._index is not None and size != FULL:
                         # a frame of a mosaic pass (the window asks for frames a few ahead): start its tiles
                         threading.Thread(target=obs_mosaic.warm_frame, args=(frame_id, cache), daemon=True).start()
-                    return self.send_bytes(webp(frame_id, size, cache), "image/webp")
+                    return self.send_picture(webp(frame_id, size, cache, fmt), fmt, query, f"Cassini_{frame_id}")
                 except FileNotFoundError:
                     return self.send_error(404, "Frame not in the archive")
             if not site:
