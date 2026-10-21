@@ -1983,7 +1983,7 @@ function makeCassini() {
 const state = { et: 0, playing: true, speed: 600, focus: "TITAN", enlarge: false, allOrbits: false, follow: false, view: [0, 0], dragging: false, context: "SATURN" };
 let bodies = {}, tracks = {}, encounters = [], catalog = null, order = null, coverage = [0, 0];
 // whole-mission data (data/mission.json): years load as the clock reaches them, the year on screen plus its neighbours
-let mission = null, activeYears = [], loadedSpan = [-Infinity, Infinity], yearsJob = null, yearsWanted = null, lastWantedYear = null;
+let mission = null, activeYears = [], keepYears = [], loadedSpan = [-Infinity, Infinity], yearsJob = null, yearsWanted = null, lastWantedYear = null;
 const yearCache = new Map();
 const pos = {}, meshes = {}, labels = {};
 let probe = null, probeObj = null, probeTrail = null, att = null;
@@ -2044,7 +2044,7 @@ function assemble(parts) {
   att = withAtt.length ? buildAttitude(withAtt.map(p => ({ file: p.att, et: p.cat.et, cam: p.cat.cam }))) : null;
   activeYears = parts.map(p => p.year);
   loadedSpan = [utcToEt(`${activeYears[0]}-01-01T00:00:00`), utcToEt(`${activeYears[activeYears.length - 1] + 1}-01-01T00:00:00`)];
-  for (const y of [...yearCache.keys()]) if (!activeYears.includes(y)) yearCache.delete(y);
+  for (const y of [...yearCache.keys()]) if (!activeYears.includes(y) && !keepYears.includes(y)) yearCache.delete(y);
   if (orbitLines) for (const n in orbitLines) orbitLines[n].userData.last = -1e99;
   lastTrailEt = -1e99;
   if ($("mlist").children.length) scrollMoments();
@@ -2055,10 +2055,20 @@ function requestYears(y) {
   if (!yearsJob) yearsJob = (async () => {
     try {
       while (yearsWanted !== null) {
-        const ys = [yearsWanted - 1, yearsWanted, yearsWanted + 1].filter(v => mission.years.includes(v));
+        const y = yearsWanted, ys = [y - 1, y, y + 1].filter(v => mission.years.includes(v));
         yearsWanted = null;
         if (ys.join() === activeYears.join()) continue;
-        try { assemble(await Promise.all(ys.map(loadYear))); }
+        keepYears = ys;
+        try {
+          const jobs = ys.map(loadYear);   // all three download at once
+          // the year on screen first, so a jump shows something as soon as its own files are in;
+          // its neighbours are added when they arrive
+          if (!activeYears.includes(y) && ys.length > 1) {
+            assemble([await jobs[ys.indexOf(y)]]);
+            if (yearsWanted !== null) continue;
+          }
+          assemble(await Promise.all(jobs));
+        }
         catch (err) { console.warn("year not loaded", err); setText("yload", "Could not load " + ys.join(", ")); }
       }
     } finally { yearsJob = null; }
