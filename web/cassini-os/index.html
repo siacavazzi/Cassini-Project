@@ -3592,7 +3592,7 @@ function resize() {
 }
 window.addEventListener("resize", resize);
 
-let lastT = performance.now(), lastTrailEt = -1e99, lastTrailFocus = "";
+let lastT = performance.now(), lastTrailEt = -1e99, lastTrailFocus = "", lastReady = true;
 function frame(now) {
   const dt = Math.min(0.1, (now - lastT) / 1000); lastT = now;
   const ready = yearReady();
@@ -3601,6 +3601,11 @@ function frame(now) {
     if (y !== lastWantedYear) { lastWantedYear = y; requestYears(y); }
     const yl = $("yload");   // pages built on this viewer may leave the note out
     if (yl) { yl.hidden = ready; if (!ready) yl.textContent = `Loading ${partLabel(y)}…`; }
+    // pages on this viewer (a loading screen) hear when the moment on screen starts and stops waiting for data
+    if (ready !== lastReady) {
+      lastReady = ready;
+      document.dispatchEvent(new CustomEvent("cassini:loading", { detail: { loading: !ready, what: partLabel(y) } }));
+    }
   }
   if (state.playing && !state.dragging && ready) {
     setTime(window.studyAdvance ? window.studyAdvance(state.et, dt, state.speed) : state.et + dt * state.speed);
