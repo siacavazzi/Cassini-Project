@@ -699,6 +699,26 @@ body.phone #reelcard:not(.full) { width: calc(100% - 16px) !important; left: 8px
 body.phone #hlcard { left: var(--side, 6px) !important; right: var(--sider, 6px) !important; width: auto !important; transform: none; top: calc(var(--menu, 30px) + var(--gap, 6px)) !important;
   max-height: calc(100dvh - var(--menu, 30px) - var(--dockh, 150px) - 4 * var(--gap, 6px)); z-index: 1450 !important; }
 body.phone #hllist { grid-template-columns: 1fr; }
+
+#loadscreen { position: fixed; inset: 0; z-index: 2001; display: grid; place-items: center; padding: 0 16px; pointer-events: none;
+  background: rgba(0,0,0,.8); opacity: 0; transition: opacity .35s ease; }
+#loadscreen.on { opacity: 1; }
+#loadscreen[hidden] { display: none; }
+#loadscreen .ls-card { display: grid; justify-items: center; gap: 12px; width: min(720px, 100%); text-align: center; }
+#loadscreen .ls-tip, #loadscreen .ls-status { max-width: 400px; }
+/* wide enough for the whole spacecraft as it turns, booms included */
+#loadscreen canvas { display: block; width: min(720px, calc(100vw - 32px)); aspect-ratio: 19 / 10; height: auto; filter: drop-shadow(0 0 3px rgba(61,255,143,.8)); }
+#loadscreen .ls-status { font: 11px/1 var(--hudf); letter-spacing: .18em; text-transform: uppercase; color: var(--neon); text-shadow: 0 0 6px rgba(61,255,143,.7); }
+#loadscreen .ls-status::after { content: ""; display: inline-block; width: 1.6em; text-align: left; animation: lsdots 1.2s steps(4) infinite; }
+@keyframes lsdots { 0% { content: ""; } 25% { content: "."; } 50% { content: ".."; } 75% { content: "..."; } }
+#loadscreen .ls-tip { width: 100%; box-sizing: border-box; padding: 10px 14px 9px; background: var(--q-panel); border: 1px solid var(--q-line); border-radius: 9px;
+  -webkit-backdrop-filter: blur(16px); backdrop-filter: blur(16px); color: var(--q-text); font-size: 12.5px; line-height: 1.45; transition: opacity .4s ease; }
+#loadscreen .ls-tip.out { opacity: 0; }
+#loadscreen .ls-tip b { display: block; margin-bottom: 4px; font-weight: normal; font-size: 9.5px; letter-spacing: .12em; text-transform: uppercase; color: var(--q-dim); }
+#loadscreen .ls-tip small { display: block; margin-top: 5px; font-size: 9.5px; color: var(--q-dim); }
+/* the first load: the black #loading screen stays behind as the backdrop, its own text gives way to this one */
+#loading > div { visibility: hidden; }
+@media (prefers-reduced-motion: reduce) { #loadscreen, #loadscreen .ls-tip { transition: none; } #loadscreen .ls-status::after { animation: none; content: "..."; } }
 </style>
 </head>
 <body>
@@ -863,6 +883,14 @@ body.phone #hllist { grid-template-columns: 1fr; }
   <div class="titlebar"><span class="lights"><button class="close" aria-label="Close the highlights">×</button><button class="min" aria-label="Close the highlights">–</button><button class="zoom" aria-label="Zoom">+</button></span>Highlights</div>
   <div class="hlhead"><button id="hlplay">▶ Play all</button><span id="hlsum"></span><span id="hlnow"></span></div>
   <ul id="hllist"></ul>
+</section>
+
+  <section id="loadscreen" hidden>
+  <div class="ls-card">
+    <canvas width="1368" height="720" aria-hidden="true"></canvas>
+    <div class="ls-status" role="status" aria-live="polite">Loading</div>
+    <div class="ls-tip"><b>Did you know</b><span></span><small></small></div>
+  </div>
 </section>
 
   <div id="loading"><div>Starting Cassini OS<br>Loading trajectories<div class="bar"></div></div></div>
@@ -4086,5 +4114,124 @@ function frame(now) {
   $("loading").hidden = true;
   scrollMoments();
   requestAnimationFrame(frame);
+})();
+</script>
+<script>
+// ---------- loading screen: wireframe Cassini and mission facts while data loads ----------
+(function () {
+  const $ = id => document.getElementById(id);
+  const FACTS = [{"text": "Cassini was the biggest spacecraft ever sent to another planet: 6.7 m tall, about two storeys, and 5.6 tonnes at launch.", "source": "https://www.esa.int/Science_Exploration/Space_Science/Cassini-Huygens/Cassini-Huygens_factsheet2"}, {"text": "Cassini was too heavy to fly straight to Saturn. It spent nearly seven years getting there, slingshotting past Venus twice, then Earth, then Jupiter, to pick up speed.", "source": "https://science.nasa.gov/mission/cassini/the-journey/timeline/"}, {"text": "Cassini was the first spacecraft ever to orbit Saturn. To get captured, it fired its main engine for 96 minutes on arrival in July 2004.", "source": "https://science.nasa.gov/mission/cassini-huygens/"}, {"text": "Cassini had no solar panels. Three nuclear generators turned the heat of decaying plutonium-238 into electricity.", "source": "https://science.nasa.gov/mission/cassini/spacecraft/cassini-orbiter/"}, {"text": "Cassini spent 13 years orbiting Saturn, nearly half a Saturn year, long enough to watch the seasons change.", "source": "https://science.nasa.gov/mission/cassini/about-the-mission/"}, {"text": "In January 2005 the Huygens probe parachuted onto Titan. It is still the only landing ever made on a world in the outer solar system.", "source": "https://science.nasa.gov/mission/cassini/the-journey/timeline/"}, {"text": "After landing on Titan, Huygens ran on batteries and kept sending data for another 72 minutes.", "source": "https://science.nasa.gov/mission/cassini/the-journey/timeline/"}, {"text": "The small moon Enceladus is spraying water vapour and ice into space from warm cracks at its south pole. Cassini caught it in the act in 2005.", "source": "https://science.nasa.gov/mission/cassini/the-journey/timeline/"}, {"text": "Titan has lakes and seas on its surface, but they are liquid methane and other hydrocarbons, not water. Cassini mapped them by radar through the haze.", "source": "https://science.nasa.gov/mission/cassini-huygens/"}, {"text": "Saturn's north pole is ringed by a hexagon: a six-sided jet stream wider than the whole Earth.", "source": "https://science.nasa.gov/mission/cassini/the-journey/timeline/"}, {"text": "On 19 July 2013 Cassini hid in Saturn's shadow and photographed Earth as a tiny dot beyond the rings, while people back home were invited to wave at Saturn.", "source": "https://science.nasa.gov/mission/cassini/spacecraft/cassini-orbiter/imaging-science-subsystem/"}, {"text": "Every picture in the camera windows comes from one of Cassini's two cameras: the narrow-angle telephoto (NAC) and the wide-angle (WAC).", "source": "https://science.nasa.gov/mission/cassini/spacecraft/cassini-orbiter/imaging-science-subsystem/"}, {"text": "Giovanni Cassini found the big dark gap in Saturn's rings that still bears his name. Christiaan Huygens discovered Titan in 1655. The spacecraft and its probe are named after them.", "source": "https://www.esa.int/Science_Exploration/Space_Science/Cassini-Huygens/Cassini-Huygens_factsheet2"}, {"text": "Cassini found new moons hiding in and near the rings, among them Methone, Pallene, Daphnis, Anthe and Aegaeon.", "source": "https://science.nasa.gov/mission/cassini-huygens/"}, {"text": "In its last five months Cassini dived 22 times through the gap between Saturn and its rings, where no spacecraft had ever been.", "source": "https://science.nasa.gov/mission/cassini/grand-finale/overview/"}, {"text": "Cassini's ending was on purpose: it was steered into Saturn so it could never crash into Enceladus or Titan and contaminate them.", "source": "https://science.nasa.gov/mission/cassini/grand-finale/overview/"}, {"text": "Cassini kept sending science during its final plunge, for as long as its thrusters could keep the antenna pointed at Earth. The last signal reached Australia on 15 September 2017.", "source": "https://www.jpl.nasa.gov/news/nasas-cassini-spacecraft-ends-its-historic-exploration-of-saturn"}];
+  const SHOW_AFTER = 300, MIN_SHOWN = 700, TIP_EVERY = 8000;
+  const root = $("loadscreen"), cv = root.querySelector("canvas"), status = root.querySelector(".ls-status"), tip = root.querySelector(".ls-tip");
+  const slow = matchMedia("(prefers-reduced-motion: reduce)").matches;
+  let busySince = null, shownAt = 0, shown = false, hideTimer = 0, tipTimer = 0, raf = 0, lastT = 0;
+  let renderer = null, scene = null, cam = null, spin = null, modelJob = null;
+  // a shuffled deck of facts, so each load shows a new one
+  const deck = FACTS.map((f, i) => i);
+  for (let i = deck.length - 1; i > 0; i--) { const j = Math.floor(Math.random() * (i + 1)); [deck[i], deck[j]] = [deck[j], deck[i]]; }
+  let next = 0;
+
+  // what is loading, or null: the first load while the #loading screen is up (unless it is showing an error), then
+  // the data chunk under the clock (the viewer's yearReady: a year on main, a month with month-chunked data)
+  function busy() {
+    const ld = $("loading");
+    if (ld && !ld.hidden) return ld.querySelector(".bar") ? "Loading mission data" : null;
+    try {
+      if (typeof yearReady !== "function" || yearReady()) return null;
+      const k = typeof partOf === "function" ? partLabel(partOf(state.et)) : yearOf(state.et);
+      return "Loading " + k;
+    } catch (e) { return null; }
+  }
+
+  function source(url) {
+    const h = new URL(url).hostname;
+    return /esa\.int$/.test(h) ? "ESA" : /jpl\.nasa\.gov$/.test(h) ? "NASA/JPL" : "NASA";
+  }
+  function showTip() {
+    if (!FACTS.length) { tip.hidden = true; return; }
+    const f = FACTS[deck[next++ % deck.length]];
+    tip.querySelector("span").textContent = f.text;
+    tip.querySelector("small").textContent = "Source: " + source(f.source);
+  }
+  function rotateTip() {
+    tip.classList.add("out");
+    setTimeout(() => { showTip(); tip.classList.remove("out"); }, 400);
+  }
+
+  // NASA's model (the same file the viewer uses), drawn as glowing edges
+  function loadModel() {
+    if (modelJob || !window.THREE || !THREE.GLTFLoader) return;
+    modelJob = fetch("data/models/cassini.glb.b64.txt").then(r => { if (!r.ok) throw new Error(r.status); return r.text(); }).then(t => {
+      const s = atob(t.trim()), u = new Uint8Array(s.length);
+      for (let i = 0; i < s.length; i++) u[i] = s.charCodeAt(i);
+      new THREE.GLTFLoader().parse(u.buffer, "", gltf => {
+        const m = gltf.scene, g = new THREE.Group();
+        m.updateMatrixWorld(true);
+        // only the main edges (faces meeting at 40 degrees or more), and none shorter than 15 cm, so the shape reads
+        // at a glance; every line is drawn, front and back, as one see-through wireframe
+        const pts = [], a = new THREE.Vector3(), b = new THREE.Vector3();
+        m.traverse(o => {
+          if (!o.isMesh) return;
+          const e = new THREE.EdgesGeometry(o.geometry, 40).attributes.position;
+          for (let i = 0; i < e.count; i += 2) {
+            a.fromBufferAttribute(e, i).applyMatrix4(o.matrixWorld); b.fromBufferAttribute(e, i + 1).applyMatrix4(o.matrixWorld);
+            if (a.distanceTo(b) >= 0.15) pts.push(a.x, a.y, a.z, b.x, b.y, b.z);
+          }
+        });
+        const geo = new THREE.BufferGeometry(); geo.setAttribute("position", new THREE.Float32BufferAttribute(pts, 3));
+        g.add(new THREE.LineSegments(geo, new THREE.LineBasicMaterial({ color: 0x3dff8f, transparent: true, opacity: 0.8 })));
+        // the model is in metres with its +Y the high-gain dish, so it stands dish up and turns about its long axis;
+        // scaled so the 11 m magnetometer boom stays inside the frame as it swings round (a far, narrow camera keeps
+        // the boom from growing much when it points at the viewer)
+        const box = new THREE.Box3().setFromObject(m), k = 1 / 7.5;
+        g.scale.setScalar(k); g.position.set(0, -box.getCenter(new THREE.Vector3()).y * k, 0);
+        spin.add(g);
+      }, e => console.warn("loading screen model:", e));
+    }).catch(e => console.warn("loading screen model:", e));
+  }
+  function setup() {
+    if (renderer || !window.THREE) return;
+    renderer = new THREE.WebGLRenderer({ canvas: cv, alpha: true, antialias: true });
+    renderer.setPixelRatio(1); renderer.setSize(cv.width, cv.height, false); renderer.setClearColor(0x000000, 0);
+    scene = new THREE.Scene(); spin = new THREE.Group(); spin.rotation.z = 0.08; scene.add(spin);
+    cam = new THREE.PerspectiveCamera(14, cv.width / cv.height, 0.1, 40); cam.position.set(0, 1.2, 8); cam.lookAt(0, 0, 0);
+    loadModel();
+  }
+  function draw(now) {
+    raf = shown ? requestAnimationFrame(draw) : 0;
+    if (!renderer || now - lastT < 30) return;   // about 30 fps is plenty, and leaves the loading its time
+    const dt = Math.min(0.1, (now - (lastT || now)) / 1000); lastT = now;
+    spin.rotation.y += dt * (slow ? 0.08 : 0.7);
+    renderer.render(scene, cam);
+  }
+
+  function show() {
+    shown = true; shownAt = performance.now(); clearTimeout(hideTimer);
+    root.hidden = false; requestAnimationFrame(() => root.classList.add("on"));
+    setup(); showTip();
+    clearInterval(tipTimer); tipTimer = setInterval(rotateTip, TIP_EVERY);
+    lastT = 0; if (!raf) raf = requestAnimationFrame(draw);
+  }
+  function hide() {
+    shown = false; clearInterval(tipTimer);
+    root.classList.remove("on");
+    hideTimer = setTimeout(() => { root.hidden = true; }, 400);
+  }
+  function tick() {
+    const what = busy(), now = performance.now();
+    if (what) {
+      status.textContent = what;
+      if (busySince === null) busySince = now;
+      // the first load shows at once (the screen is black anyway); later loads only once they take a moment
+      if (!shown && (now - busySince >= SHOW_AFTER || !$("loading").hidden)) show();
+    } else {
+      busySince = null;
+      if (shown && now - shownAt >= MIN_SHOWN) hide();
+    }
+  }
+  setInterval(tick, 100);
+  tick();
+  // the viewer also announces loads (cassini:loading, from the month-chunked loader), so react without waiting a tick
+  document.addEventListener("cassini:loading", () => tick());
 })();
 </script>

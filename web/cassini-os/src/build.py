@@ -277,5 +277,20 @@ for camera, rows in nm.items():
         pairs[f"{camera[3]}:{first}/{filters[len(first):]}"] = wavelength
 assert study.count("/*FILTER_NM*/{}") == 1
 study = study.replace("/*FILTER_NM*/{}", json.dumps(pairs, separators=(",", ":"), sort_keys=True))
+# loading screen (loading.html): its style joins the head's, its overlay goes into #app, and its script runs after the
+# viewer's (it reads yearReady and the viewer's three.js); the facts come from loading-facts.json
+loading = open(os.path.join(os.path.dirname(os.path.abspath(sys.argv[2])), "loading.html")).read()
+lpart = lambda tag: loading[loading.index(f"<{tag}"):loading.index(f"</{tag}>") + len(tag) + 3]
+facts = json.load(open(os.path.join(os.path.dirname(os.path.abspath(sys.argv[2])), "loading-facts.json")))
+assert facts and all(f["text"] and f["source"].startswith("https://") for f in facts)
+for old, new in [
+    ("</style>\n</head>", lpart("style")[len("<style>"):] + "\n</head>"),
+    ('  <div id="loading">', "  " + lpart("section") + "\n\n" + '  <div id="loading">'),
+]:
+    assert study.count(old) == 1, old
+    study = study.replace(old, new)
+lscript = lpart("script")
+assert lscript.count("/*FACTS*/[]") == 1
+script += lscript.replace("/*FACTS*/[]", json.dumps(facts, ensure_ascii=False)) + "\n"
 open(out, 'w').write(study + script)
 print("ok", out, len(study + script))

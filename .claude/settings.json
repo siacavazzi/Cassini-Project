@@ -1,0 +1,24 @@
+{
+  "permissions": {
+    "allow": [
+      "WebSearch",
+      "WebFetch(domain:science.nasa.gov)",
+      "WebFetch(domain:www.nasa.gov)",
+      "WebFetch(domain:nasa.gov)",
+      "WebFetch(domain:www.jpl.nasa.gov)",
+      "WebFetch(domain:photojournal.jpl.nasa.gov)",
+      "WebFetch(domain:solarsystem.nasa.gov)",
+      "WebFetch(domain:nssdc.gsfc.nasa.gov)",
+      "WebFetch(domain:naif.jpl.nasa.gov)",
+      "WebFetch(domain:pds-imaging.jpl.nasa.gov)",
+      "WebFetch(domain:pds-rings.seti.org)",
+      "WebFetch(domain:opus.pds-rings.seti.org)",
+      "WebFetch(domain:www.esa.int)",
+      "WebFetch(domain:sci.esa.int)",
+      "WebFetch(domain:threejs.org)",
+      "WebFetch(domain:developer.mozilla.org)",
+      "WebFetch(domain:github.com)",
+      "WebFetch(domain:raw.githubusercontent.com)"
+    ]
+  }
+}
