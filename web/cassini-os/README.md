@@ -70,14 +70,17 @@ nothing is a mosaic. The window shows its frame straight away and swaps in the m
 body reel picture: stacked, calibrated, aligned, centred north up by SPICE) when it arrives.
 `window.cassiniMosaics = false` turns it off.
 
-When the observation maps a whole body (`web/frames/obs_mosaic.py`: the body's disk inside the frames' footprint,
-more than two frames and less than 16 across, e.g. In Saturn's Shadow on 2006-09-15, where Cassini OS opens), the
-route sends the observation's mosaic so far instead: every tile up to that frame, every filter, drawn like the
-mosaic benchmark (`mosaic_benchmark.py`: one display scale for the observation, calibrated compose with none
-pinned) and in false colour when it cycles three or more filters. The view fits the whole observation, so it grows
-in place; the window takes its shape and keeps it up between tiles. The first request makes the observation's tiles
-in the background (about 10 s for In Saturn's Shadow; `python web/frames/obs_mosaic.py <frame id> --cache DIR`
-makes them ahead of time), then each frame costs a fraction of a second.
+Most mosaics go further (`web/frames/obs_mosaic.py`): when the frame is in a mosaic pass (one camera, target and
+observation, split at a 30 min pause or a 40% change in distance; three or more pointings, footprint under 16
+frames), the route sends the pass's mosaic so far: every tile up to that frame, every filter, each tile scaled to
+one km per pixel for the pass, placed by SPICE (no overlap needed), drawn like the mosaic benchmark
+(`mosaic_benchmark.py`: one display scale for the pass, calibrated compose with none pinned), in false colour when
+it cycles three or more colour filters. Where the body fills the frames (Titan's maps) the scale goes from the
+darkest to the brightest of the body and the local contrast is raised, so surface detail shows. The view is the
+pass's whole footprint (up to 8 frames, or a whole body; bigger ones get a 4 frame window that follows the newest
+tile in steps), so it grows in place; the window takes its shape and keeps it up between tiles. Asking for a frame of
+a pass starts making its tiles (about half a second each), so the mosaic is usually ready as the camera reaches
+it; `python web/frames/obs_mosaic.py <frame id> --cache DIR --all` makes a pass ahead of time.
 
 ## Colour sets
 

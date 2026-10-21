@@ -1069,21 +1069,27 @@ body.idle .rlwell { border-color: transparent; box-shadow: 0 6px 30px rgba(0,0,0
     // stepped across the body with the same filter (mosaic.panels), and otherwise sends the pipeline's mosaic
     // of this tile over the ones before it, which replaces the picture while it is still the one shown.
     // window.cassiniMosaics = false turns this off.
-    // A whole-body mosaic (the observation maps the body, X-Reel names it) is the observation's mosaic so far,
-    // every filter, its own shape: the window takes that shape and keeps it for the rest of the observation.
-    let mosaicUrl = null, obsShown = null;
+    // A pass's mosaic (X-Reel names the observation) is every tile so far, every filter, in its own shape: the
+    // window takes that shape and keeps it for the rest of the observation.
+    let mosaicUrl = null, obsShown = null, obsTiles = 0;
     function mosaicOf(w) {
       if (window.cassiniMosaics === false) return;
       const id = catalog.id[w.set >= 0 ? catalog.sets[w.set].use[0] : w.k];
       fetch(`${FRAMES}/frames/mosaic/${id}.webp?size=${size()}`).then(async r => {
-        if (!r.ok || shown !== w) return;
-        const rep = JSON.parse(r.headers.get("X-Reel") || "null"), blob = await r.blob();
-        if (shown !== w) return;
+        if (!r.ok) return;
+        const rep = JSON.parse(r.headers.get("X-Reel") || "null");
+        // a pass's mosaic that arrives after the window moved on to the pass's next frame still shows, unless
+        // the window already has a bigger one
+        const late = () => shown !== w && !(rep && rep.observation && shown && catalog.obs[shown.k] === catalog.obs[w.k]
+          && (obsShown !== catalog.obs[w.k] || rep.mosaic > obsTiles));
+        if (late()) return;
+        const blob = await r.blob();
+        if (late()) return;
         if (mosaicUrl) URL.revokeObjectURL(mosaicUrl);
         shot.src = mosaicUrl = URL.createObjectURL(blob);
         well.classList.add("mosaic");
         if (rep && rep.observation) {
-          obsShown = catalog.obs[w.k];
+          obsShown = catalog.obs[w.k]; obsTiles = rep.mosaic;
           well.style.aspectRatio = `${rep.width} / ${rep.height}`;
           card.querySelector(".kindtag").textContent = `${rep.filters >= 3 ? "FALSE COLOUR " : ""}MOSAIC · ${rep.mosaic} OF ${rep.of} TILES${rep.filters > 1 ? ` · ${rep.filters} FILTERS` : ""}`;
           return;

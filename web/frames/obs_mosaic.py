@@ -1,29 +1,37 @@
 #!/usr/bin/env python3
 """
-Observation mosaics for the camera windows: when Cassini maps a whole body a tile at a time (In
-Saturn's Shadow, a Titan global map), the window shows the observation's mosaic as it stood when
-each frame came in, every filter, made like the mosaic benchmark (web/frames/mosaic_benchmark.py)
-rather than the reel's rolling window of a few same-filter tiles.
+Observation mosaics for the camera windows: when Cassini steps a camera across a body a tile at a
+time, the window shows every tile of that pass taken so far, all filters, made like the mosaic
+benchmark (web/frames/mosaic_benchmark.py), rather than the reel's rolling window of a few tiles.
 
-An observation (one camera, one target, one OBSERVATION_ID) is a whole-body mosaic when the
-geometry cache puts the body's disk inside the frames' footprint, the footprint is more than two
-frames and less than MAX_FRAMES frames across. Its frames are made once (prepare): every picture
-through color_image.processed_frame (repeat exposures merged in I/F, calibrated, centred north up
-by SPICE) on one display scale for the observation (mosaic_benchmark.display_scale), shrunk onto a
-canvas that fits the whole footprint (so the view does not move or rescale as the mosaic grows),
-and kept in the cache with a manifest. The mosaic "so far" at a frame is then every tile up to that
-frame, each filter drawn by mosaic.compose (calibrated, none pinned) over its own earlier tiles, the
-filters put together like the benchmark: three or more filters make false colour (longest
-wavelength red, middle green, shortest blue; only where all three have the picture), otherwise the
-best covered filter in grey. Each filter's mosaic at each tile count is kept, so a new frame only
-recomposes the filter it adds to.
+A pass (a "unit") is the frames of one camera, one target and one OBSERVATION_ID, split where
+the camera pauses more than GAP or the distance to the body changes by more than ZOOM since the
+pass began. It is a mosaic when the geometry cache puts its frames at three or more places (at
+least mosaic.min_step of a frame apart, once scaled to one distance) and its footprint is less
+than MAX_FRAMES frames across. Overlap is not required: SPICE places every tile.
 
-  CASSINI_DATA=... CASSINI_GEOMETRY_CACHE=... python web/frames/obs_mosaic.py W1537023863_1 --cache DIR
-  (makes the observation the frame is in ahead of time; the frame server makes it on first request)
+Every tile goes through color_image.processed_frame (repeat exposures merged in I/F, calibrated,
+centred north up by SPICE) on one display scale for the pass (mosaic_benchmark.display_scale) and
+is scaled to the pass's reference distance, so a flyby's tiles keep one km per pixel as Cassini
+closes in. Tiles are made when first needed, oldest first, and kept in the cache.
+
+The view: the whole footprint, worked out once from the geometry cache (so it does not move or
+rescale as the mosaic grows), when the pass maps the whole body (its disk inside the footprint) or
+the footprint is at most FIT frames across; otherwise a window FOLLOW frames across that follows
+the newest tile in steps of one frame. The mosaic "so far" at a frame is every tile up to it, each
+filter drawn by mosaic.compose (calibrated, none pinned) over its own earlier tiles; three or more
+filters make false colour (longest wavelength red, middle green, shortest blue, only where all
+three have the picture), otherwise the best covered filter in grey. Different filters are never
+blended into one another.
+
+  CASSINI_DATA=... CASSINI_GEOMETRY_CACHE=... python web/frames/obs_mosaic.py W1537023863_1 --cache DIR [--all]
+  (makes the pass the frame is in ahead of time; the frame server makes it on first request)
 """
 import argparse
+import contextlib
 import io
 import json
+import math
 import os
 import sys
 import threading
@@ -36,197 +44,287 @@ HERE = os.path.dirname(os.path.abspath(__file__))
 sys.path.insert(0, HERE)
 import reel  # noqa: E402  (puts the repo on the path)
 import color_image  # noqa: E402
+import calibration  # noqa: E402
 import mosaic  # noqa: E402
 import mosaic_benchmark  # noqa: E402
+import stacking  # noqa: E402
 
 # bumped whenever the way observation mosaics are made changes, so older ones are not served again
-VERSION = "obs-v1"
-CANVAS = 2048        # longest side of the canvas the tiles are drawn on
+VERSION = "obs-v6"
+CANVAS = 2048        # longest side of the canvas the view is drawn on
 OUT = 1024           # longest side of the picture sent
-MAX_FRAMES = 16      # footprints wider than this many frames (ring scans) stay rolling mosaics
 FRAME = 1024         # full resolution frame
+HALF = 724           # half the side of a north-up frame's canvas (its diagonal)
+GAP = 1800           # seconds without a frame that end a pass (mosaic.max_gap)
+ZOOM = 1.4           # change in distance that ends a pass (tiles closer than this are rescaled)
+MIN_PLACES = 3       # pointings a pass needs to be a mosaic
+MAX_FRAMES = 16      # footprints wider than this many frames stay rolling mosaics
+FIT = 8              # a footprint up to this many frames across is shown whole
+FOLLOW = 4           # otherwise a window this many frames across follows the newest tile
 RADIUS = {"SATURN": 60268, "JUPITER": 69911, "TITAN": 2575, "RHEA": 764, "IAPETUS": 735, "DIONE": 561,
           "TETHYS": 531, "ENCELADUS": 252, "MIMAS": 198, "HYPERION": 135, "PHOEBE": 107}
 IFOV = {"N": 6.0e-6, "W": 60e-6}   # radians per full resolution pixel
 
-_obs = {}             # (target, obs, cam) -> whole-body mosaic or not
+_units = {}           # (target, obs, cam) -> [unit dicts]
 _lock = threading.Lock()
-_preparing = set()
+_unit_locks = {}
+_warming = set()
 
 
-def key_of(frame_id):
-    """(target, obs, cam) of the frame."""
+def _row_of():
     idx, _ = reel.load_index()
     with _lock:
-        if not hasattr(key_of, "row"):
-            key_of.row = dict(zip(idx["id"], range(len(idx))))
-    q = key_of.row.get(frame_id)
-    if q is None:
-        return None
-    r = idx.iloc[q]
-    return r["TARGET_NAME"], r["OBSERVATION_ID"], "N" if r["INSTRUMENT_ID"] == "ISSNA" else "W"
+        if not hasattr(_row_of, "row"):
+            _row_of.row = dict(zip(idx["id"], range(len(idx))))
+    return idx, _row_of.row
 
 
-def rows(key):
-    """The observation's frames in time order, as Image_index rows."""
+def units(target, obs, cam):
+    """The passes of one camera's frames of one observation: [{key, frames: [(path, id, filter, t, nm, x, y, z)],
+    mosaic, whole, z, last}] in time order, from the index and the geometry cache. Repeat exposures (the same
+    filter within REPEAT_GAP) are left out, as stacking.load_hdr merges them in."""
+    with _lock:
+        if (target, obs, cam) in _units:
+            return _units[(target, obs, cam)]
     idx, _ = reel.load_index()
-    target, obs, cam = key
     inst = "ISSNA" if cam == "N" else "ISSWA"
-    return idx[(idx["OBSERVATION_ID"] == obs) & (idx["TARGET_NAME"] == target) & (idx["INSTRUMENT_ID"] == inst)]
-
-
-def whole_body(key):
-    """Whether the observation is a whole-body mosaic (see the module's docstring), from the geometry cache."""
-    with _lock:
-        if key in _obs:
-            return _obs[key]
-    r = rows(key)
-    where = reel.geometry(r["id"].tolist())
-    ok = False
-    if key[0] in RADIUS and len(where) >= 4:
-        pts = np.array(list(where.values()))
-        radius = RADIUS[key[0]] / (np.median(pts[:, 2]) * IFOV[key[2]])
-        lo, hi = pts[:, :2].min(0) - FRAME / 2, pts[:, :2].max(0) + FRAME / 2
-        span = hi - lo
-        ok = bool((lo < -radius).all() and (hi > radius).all() and span.prod() > 2 * FRAME ** 2
-                  and span.max() < MAX_FRAMES * FRAME)
-    with _lock:
-        _obs[key] = ok
-    return ok
-
-
-def frames(key):
-    """The observation's pictures, oldest first: [(path, filter, t, nm)], repeat exposures (the same filter
-    within REPEAT_GAP) left out, as stacking.load_hdr merges them in (mosaic_benchmark.frames)."""
-    out, last = [], {}
-    for r in rows(key).itertuples(index=False):
+    rows = idx[(idx["OBSERVATION_ID"] == obs) & (idx["TARGET_NAME"] == target) & (idx["INSTRUMENT_ID"] == inst)]
+    where = reel.geometry(rows["id"].tolist())
+    out, cur, last = [], None, {}
+    for r in rows.itertuples(index=False):
         f1, f2 = str(r.filter1), str(r.filter2)
         f = "/".join(x for x in (f1, f2) if not x.startswith("CL")) or "CL1/CL2"
-        if f in last and r.seconds_1970 - last[f] <= mosaic_benchmark.REPEAT_GAP:
+        g = where.get(r.id)
+        t = float(r.seconds_1970)
+        if cur is None or t - cur["last"] > GAP or (g and cur["z"] and not 1 / ZOOM < g[2] / cur["z"] < ZOOM):
+            cur = {"frames": [], "z": g and g[2], "last": t}
+            out.append(cur)
+            last = {}
+        cur["last"] = t
+        if not cur["z"] and g:
+            cur["z"] = g[2]
+        if f in last and t - last[f] <= mosaic_benchmark.REPEAT_GAP:
             continue
-        last[f] = r.seconds_1970
-        out.append((r.path, f, float(r.seconds_1970), reel.wavelength("ISSNA" if key[2] == "N" else "ISSWA", f1 + f2)))
+        last[f] = t
+        cur["frames"].append((r.path, r.id, f, t, reel.wavelength(inst, f1 + f2), *(g or (None, None, None))))
+    for n, u in enumerate(out):
+        u["key"] = (target, obs, cam, n)
+        _judge(u)
+    with _lock:
+        _units[(target, obs, cam)] = out
     return out
 
 
-def folder(key, cache):
-    return os.path.join(cache, VERSION, "_".join(key))
+def _judge(u):
+    """Sets u["mosaic"] (enough places, footprint not too big) and u["whole"] (the body's disk inside it)."""
+    pts = [(-x * z / u["z"], -y * z / u["z"]) for _, _, _, _, _, x, y, z in u["frames"] if z]
+    places = []
+    for p in pts:
+        if all(max(abs(p[0] - q[0]), abs(p[1] - q[1])) >= mosaic.min_step * FRAME for q in places):
+            places.append(p)
+    u["mosaic"] = u["whole"] = False
+    if len(places) < MIN_PLACES:
+        return
+    pts = np.array(pts)
+    lo, hi = pts.min(0) - FRAME / 2, pts.max(0) + FRAME / 2
+    if (hi - lo).max() >= MAX_FRAMES * FRAME:
+        return
+    u["mosaic"] = True
+    radius = RADIUS.get(u["key"][0], 0) / (u["z"] * IFOV[u["key"][2]])
+    u["whole"] = bool(radius and (lo < -radius).all() and (hi > radius).all())
 
 
-def prepare(key, cache):
-    """Makes the observation's tiles and manifest (the display scale, the canvas, each tile's filter, time and
-    place), once; returns the manifest."""
-    base = folder(key, cache)
-    path = os.path.join(base, "manifest.json")
-    if os.path.exists(path):
-        with open(path) as fh:
-            return json.load(fh)
-    start = time.time()
-    todo = frames(key)
-    scale = mosaic_benchmark.display_scale([t[:3] for t in todo], 99.9, 3.0)
-    made, failed = [], []
-    for n, (p, f, t, nm) in enumerate(todo):
-        try:
-            image, _, rep = color_image.processed_frame([p], hdr=True,
-                                                        scale={**scale, "blacks": [scale["blacks"].get(f, 0.0)]})
-        except Exception as e:
-            failed.append({"path": p, "why": f"{type(e).__name__}: {e}"[:200]})
-            continue
-        if "frame_offset" not in rep:
-            failed.append({"path": p, "why": rep.get("why", "not placed by SPICE")})
-            continue
-        made.append((p, f, t, nm, image, rep))
-    if not made:
-        manifest = {"tiles": [], "failed": failed}
-    else:
-        # the canvas: every frame on it, the longest side CANVAS pixels
-        half = [m[4].shape[0] / 2 for m in made]
-        xs, ys = [m[5]["frame_offset"][0] for m in made], [m[5]["frame_offset"][1] for m in made]
-        x0, x1 = min(x - r for x, r in zip(xs, half)), max(x + r for x, r in zip(xs, half))
-        y0, y1 = min(y - r for y, r in zip(ys, half)), max(y + r for y, r in zip(ys, half))
-        k = CANVAS / max(x1 - x0, y1 - y0)
-        W, H = int(np.ceil((x1 - x0) * k)) + 2, int(np.ceil((y1 - y0) * k)) + 2
-        tiles = []
-        os.makedirs(os.path.join(base, "tiles"), exist_ok=True)
-        for n, (p, f, t, nm, image, rep) in enumerate(made):
-            side = round(image.shape[0] * k)
-            small = np.asarray(Image.fromarray(image).resize((side, side), Image.LANCZOS))
-            left = round((rep["frame_offset"][0] - x0) * k) - side // 2 + 1
-            top = round((rep["frame_offset"][1] - y0) * k) - side // 2 + 1
-            # kept cropped to the frame's pixels
-            used = np.flatnonzero(small[..., 3].any(1)), np.flatnonzero(small[..., 3].any(0))
-            if not len(used[0]):
-                continue
-            a, b, c, d = used[0][0], used[0][-1] + 1, used[1][0], used[1][-1] + 1
-            Image.fromarray(np.ascontiguousarray(small[a:b, c:d])).save(os.path.join(base, "tiles", f"{n}.png"), compress_level=1)
-            tiles.append({"n": n, "path": p, "id": os.path.basename(p)[:-4], "filter": f, "t": t, "nm": nm,
-                          "left": int(left + c), "top": int(top + a), "stacked": rep.get("stacked"), "calibrated": rep.get("calibrated")})
-        # the filters drawn: three or more with tiles make false colour, longest wavelength red
-        count = {}
-        for tile in tiles:
-            count[tile["filter"]] = count.get(tile["filter"], 0) + 1
-        nms = {tile["filter"]: tile["nm"] for tile in tiles}
-        common = [f for f in count if count[f] >= max(count.values()) / 2]
-        by_nm = sorted(common, key=lambda f: -nms[f])
-        colour = [by_nm[0], by_nm[len(by_nm) // 2], by_nm[-1]] if len(by_nm) >= 3 else None
-        manifest = {"key": list(key), "canvas": [W, H], "scale": k, "display_scale": scale, "colour": colour,
-                    "grey": max(count, key=count.get), "tiles": tiles, "failed": failed}
-    manifest["seconds"] = round(time.time() - start, 1)
-    os.makedirs(base, exist_ok=True)
-    reel._cached(path, lambda: json.dumps(manifest, default=str).encode())
-    print(f"observation mosaic {'_'.join(key)}: {len(manifest['tiles'])} tiles, {len(failed)} failed, "
-          f"{manifest['seconds']} s", flush=True)
-    return manifest
-
-
-def ready(key, cache, start=True):
-    """The manifest when the observation's tiles are made; otherwise None, and (start) makes them in the
-    background."""
-    path = os.path.join(folder(key, cache), "manifest.json")
-    if os.path.exists(path):
-        with open(path) as fh:
-            return json.load(fh)
-    with _lock:
-        if start and key not in _preparing:
-            _preparing.add(key)
-            threading.Thread(target=_prepare, args=(key, cache), daemon=True).start()
+def unit_of(frame_id):
+    """(unit, index of the newest tile at that frame) for the pass frame_id is in, or None."""
+    idx, row = _row_of()
+    q = row.get(frame_id)
+    if q is None:
+        return None
+    r = idx.iloc[q]
+    cam = "N" if r["INSTRUMENT_ID"] == "ISSNA" else "W"
+    t = float(r["seconds_1970"])
+    for u in units(r["TARGET_NAME"], r["OBSERVATION_ID"], cam):
+        ts = [fr[3] for fr in u["frames"]]
+        if ts and ts[0] <= t <= u["last"]:
+            return u, sum(1 for x in ts if x <= t + 1) - 1
     return None
 
 
-def _prepare(key, cache):
-    try:
-        prepare(key, cache)
-    except Exception as e:
-        print(f"observation mosaic {'_'.join(key)} failed: {type(e).__name__}: {e}", flush=True)
+def folder(u, cache):
+    return os.path.join(cache, VERSION, "_".join(map(str, u["key"])))
 
 
-def _tile(base, tile, W, H):
-    part = np.asarray(Image.open(os.path.join(base, "tiles", f"{tile['n']}.png")).convert("RGBA"))
-    frame = np.zeros((H, W, 4), np.uint8)
-    x0, y0 = max(tile["left"], 0), max(tile["top"], 0)
-    x1, y1 = min(tile["left"] + part.shape[1], W), min(tile["top"] + part.shape[0], H)
-    frame[y0:y1, x0:x1] = part[y0 - tile["top"]:y1 - tile["top"], x0 - tile["left"]:x1 - tile["left"]]
-    return frame
+def _ulock(u):
+    with _lock:
+        return _unit_locks.setdefault(u["key"], threading.RLock())
 
 
-def filter_mosaic(manifest, f, count, cache):
-    """The filter f's mosaic of its first count tiles, RGBA on the canvas (kept in the cache)."""
-    base = folder(manifest["key"], cache)
-    path = os.path.join(base, "filters", f"{f.replace('/', '_')}-{count}.png")
+def plan(u, cache):
+    """The pass's display scale, rotation, footprint, view mode and colour filters, worked out once and kept."""
+    path = os.path.join(folder(u, cache), "plan.json")
+    with _ulock(u):
+        if os.path.exists(path):
+            with open(path) as fh:
+                return json.load(fh)
+        frames = u["frames"]
+        scale = pass_scale(frames)
+        # the rotation from the camera's frame to north up: the angle between where the geometry cache puts
+        # the body and where processed_frame does, from the first tile placed well off the body's centre
+        angle = 0.0
+        for k, fr in enumerate(frames):
+            if fr[7] and math.hypot(fr[5], fr[6]) > 200:
+                rep = tile(u, k, cache, scale)
+                if "native_offset" in rep:
+                    fo = rep["native_offset"]
+                    angle = math.atan2(fo[1], fo[0]) - math.atan2(-fr[6], -fr[5])
+                    break
+        c, s = math.cos(angle), math.sin(angle)
+        pts, ks = [], []
+        for *_, x, y, z in frames:
+            if z:
+                k = z / u["z"]
+                pts.append(((c * -x - s * -y) * k, (s * -x + c * -y) * k))
+                ks.append(k)
+        if not pts:
+            pts, ks = [(0.0, 0.0)], [1.0]
+        x0 = min(p[0] - HALF * k for p, k in zip(pts, ks))
+        x1 = max(p[0] + HALF * k for p, k in zip(pts, ks))
+        y0 = min(p[1] - HALF * k for p, k in zip(pts, ks))
+        y1 = max(p[1] + HALF * k for p, k in zip(pts, ks))
+        fixed = u["whole"] or max(x1 - x0, y1 - y0) <= FIT * FRAME
+        view = [x1 - x0, y1 - y0] if fixed else [min(x1 - x0, FOLLOW * FRAME), min(y1 - y0, FOLLOW * FRAME)]
+        count, nms = {}, {}
+        for fr in frames:
+            count[fr[2]] = count.get(fr[2], 0) + 1
+            nms[fr[2]] = fr[4]
+        # colour from the filters taken at most tiles, polarizers left out (they are not a colour)
+        common = sorted([f for f in count if count[f] >= max(count.values()) / 2 and not _polarizer(f)], key=lambda f: -nms[f])
+        p = {"key": list(u["key"]), "display_scale": scale, "angle": angle, "footprint": [x0, y0, x1, y1],
+             "fixed": bool(fixed), "view": view, "k": CANVAS / max(view),
+             "colour": [common[0], common[len(common) // 2], common[-1]] if len(common) >= 3 else None,
+             "grey": max(count, key=count.get), "whole": u["whole"]}
+        reel._cached(path, lambda: json.dumps(p).encode())
+        return p
+
+
+def _polarizer(f):
+    return any(p.startswith("IRP") or (p.startswith("P") and p[1:2].isdigit()) for p in f.split("/"))
+
+
+FILLED = 0.02      # a pass whose sky floor is above this much of white has no dark sky: the body fills it
+DETAIL = 2.0       # filled passes: how much the local contrast is raised (detail())
+DETAIL_SIGMA = 0.05  # ... over this much of a frame
+
+
+def pass_scale(frames):
+    """The display scale of every tile of the pass (calibration.shared_scale over its frames merged in I/F, as
+    mosaic_benchmark.display_scale): {"blacks": {filter: I/F}, "white": I/F, "gamma"}. Where the body fills
+    the frames (Titan's maps: the "sky floor" is the body), black goes to the darkest of the body, white to
+    the 99.5th percentile and the gamma is eased, and the mosaic's local contrast is raised (detail), so
+    the surface's few per cent of contrast shows; passes with dark sky keep the benchmark's scale."""
+    by = {}
+    for path, _, f, *_ in frames:
+        _, iof, _ = stacking.load_hdr(path, mosaic_benchmark.REPEAT_GAP)
+        if iof is not None:
+            by.setdefault(f, []).append(iof[::4, ::4].astype(np.float32))
+    if not by:
+        return {"blacks": {}, "white": 1.0, "gamma": 3.0, "filled": False}
+    scale = calibration.shared_scale(list(by.values()), 99.9, gamma=3.0)
+    blacks, white = dict(zip(by, scale["blacks"])), scale["white"]
+    floor = float(np.median([b / white for b in blacks.values()]))
+    filled = floor > FILLED
+    if filled:
+        blacks = {f: float(np.percentile(np.concatenate([i.ravel() for i in iofs]), 1)) for f, iofs in by.items()}
+        white = max(float(np.percentile(np.concatenate([i.ravel() for i in iofs]) - blacks[f], 99.5))
+                    for f, iofs in by.items())
+    return {"blacks": blacks, "white": white, "gamma": 1.5 if filled else 3.0, "filled": filled, "floor": round(floor, 3)}
+
+
+def tile(u, n, cache, scale=None):
+    """Tile n of the pass, made once: its picture north up, scaled to the pass's reference distance and cropped
+    (tiles/<n>.png), and its report: offset = where the frame's middle sits from the body's centre and box = the
+    crop around it (reference pixels); no offset when SPICE could not place it."""
+    base = os.path.join(folder(u, cache), "tiles", str(n))
+    with _ulock(u):
+        if os.path.exists(base + ".json"):
+            with open(base + ".json") as fh:
+                return json.load(fh)
+        if scale is None:
+            scale = plan(u, cache)["display_scale"]
+        path, fid, f, t, nm, x, y, z = u["frames"][n]
+        k = z / u["z"] if z else 1.0
+        try:
+            image, _, rep = color_image.processed_frame([path], hdr=True,
+                                                        scale={**scale, "blacks": [scale["blacks"].get(f, 0.0)]})
+        except Exception as e:
+            image, rep = None, {"why": f"{type(e).__name__}: {e}"[:200]}
+        out = {"n": n, "id": fid, "filter": f, "t": t, "stacked": rep.get("stacked"), "calibrated": rep.get("calibrated")}
+        os.makedirs(os.path.dirname(base), exist_ok=True)
+        if image is not None and "frame_offset" in rep:
+            side = round(image.shape[0] * k)
+            small = np.asarray(Image.fromarray(image).resize((side, side), Image.LANCZOS)) if side != image.shape[0] else image
+            rows, cols = np.flatnonzero(small[..., 3].any(1)), np.flatnonzero(small[..., 3].any(0))
+            if len(rows):
+                a, b, c, d = rows[0], rows[-1] + 1, cols[0], cols[-1] + 1
+                Image.fromarray(np.ascontiguousarray(small[a:b, c:d])).save(base + ".png", compress_level=1)
+                out.update({"native_offset": rep["frame_offset"], "offset": [v * k for v in rep["frame_offset"]],
+                            "box": [int(c) - side / 2, int(a) - side / 2, int(d - c), int(b - a)]})
+        else:
+            out["why"] = rep.get("why", "not placed by SPICE")
+        reel._cached(base + ".json", lambda: json.dumps(out, default=str).encode())
+        return out
+
+
+def view_rect(p, tiles):
+    """The view (x0, y0, w, h in reference pixels from the body's centre) for these tiles: the footprint, or a
+    window following the newest placed tile in steps of one frame."""
+    x0, y0, x1, y1 = p["footprint"]
+    if p["fixed"]:
+        return x0, y0, x1 - x0, y1 - y0
+    w, h = p["view"]
+    placed = [t for t in tiles if "offset" in t]
+    cx, cy = placed[-1]["offset"] if placed else ((x0 + x1) / 2, (y0 + y1) / 2)
+    vx = x0 + round((cx - w / 2 - x0) / FRAME) * FRAME
+    vy = y0 + round((cy - h / 2 - y0) / FRAME) * FRAME
+    return min(max(vx, x0), x1 - w), min(max(vy, y0), y1 - h), w, h
+
+
+def filter_mosaic(u, p, f, tiles, rect, cache):
+    """The filter f's mosaic of these tiles in the view rect, RGBA on the view's canvas (kept in the cache)."""
+    mine = [t for t in tiles if t["filter"] == f and "offset" in t]
+    name = f"{f.replace('/', '_')}-{len(mine)}-{'_'.join(str(round(v)) for v in rect)}.png"
+    path = os.path.join(folder(u, cache), "filters", name)
+    k = p["k"]
+    W, H = math.ceil(rect[2] * k), math.ceil(rect[3] * k)
 
     def make():
-        W, H = manifest["canvas"]
-        window = [(_tile(base, t, W, H), None, None, None) for t in [t for t in manifest["tiles"] if t["filter"] == f][:count]]
-        feather = mosaic.feather_px
-        with reel._mosaic_lock:
-            try:
-                # the benchmark's soft edge on its 0.5 scale canvas, at this canvas's scale
-                mosaic.feather_px = max(8, round(64 * manifest["scale"] / 0.5))
-                mosaic.reset()
-                rgba = mosaic.compose(window, False, calibrated=True, pin=None)
-                mosaic.reset()
-            finally:
-                mosaic.feather_px = feather
+        window = []
+        for t in mine:
+            bx, by, bw, bh = t["box"]
+            left = round((t["offset"][0] + bx - rect[0]) * k)
+            top = round((t["offset"][1] + by - rect[1]) * k)
+            sw, sh = max(1, round(bw * k)), max(1, round(bh * k))
+            if left >= W or top >= H or left + sw <= 0 or top + sh <= 0:
+                continue
+            part = np.asarray(Image.open(os.path.join(folder(u, cache), "tiles", f"{t['n']}.png")).convert("RGBA")
+                              .resize((sw, sh), Image.LANCZOS))
+            frame = np.zeros((H, W, 4), np.uint8)
+            x0, y0, x1, y1 = max(left, 0), max(top, 0), min(left + sw, W), min(top + sh, H)
+            frame[y0:y1, x0:x1] = part[y0 - top:y1 - top, x0 - left:x1 - left]
+            window.append((frame, None, None, None))
+        if not window:
+            rgba = np.zeros((H, W, 4), np.uint8)
+        else:
+            feather = mosaic.feather_px
+            with reel._mosaic_lock:
+                try:
+                    # the benchmark's soft edge on its 0.5 scale canvas, at this canvas's scale
+                    mosaic.feather_px = max(8, round(64 * k / 0.5))
+                    mosaic.reset()
+                    rgba = mosaic.compose(window, False, calibrated=True, pin=None)
+                    mosaic.reset()
+                finally:
+                    mosaic.feather_px = feather
         out = io.BytesIO()
         Image.fromarray(rgba).save(out, "PNG", compress_level=1)
         return out.getvalue()
@@ -234,52 +332,68 @@ def filter_mosaic(manifest, f, count, cache):
     return np.asarray(Image.open(io.BytesIO(reel._cached(path, make))).convert("RGBA"))
 
 
-def so_far(manifest, t, cache):
-    """The observation's mosaic with every tile taken by time t, RGBA OUT px on its longest side, and how
-    many tiles and filters are in it."""
-    tiles = [x for x in manifest["tiles"] if x["t"] <= t + 1]
+def detail(rgba, sigma):
+    """Raises the local contrast of a mosaic of a body that fills the frames (Titan's surface is a few per cent
+    against its haze): each pixel moved away from its neighbourhood's mean (a Gaussian of sigma canvas pixels,
+    over the mosaic's own pixels only, so the empty canvas does not darken its edges) by DETAIL times the
+    difference. Local, so a new tile only changes the mosaic next to it."""
+    import cv2
+    a = rgba[..., 3].astype(np.float32) / 255
+    rgb = rgba[..., :3].astype(np.float32)
+    weight = cv2.GaussianBlur(a, (0, 0), sigma)
+    mean = cv2.GaussianBlur(rgb * a[..., None], (0, 0), sigma) / np.maximum(weight, 1e-3)[..., None]
+    out = np.clip(rgb + DETAIL * (rgb - mean), 0, 255)
+    return np.dstack([out.round().astype(np.uint8), rgba[..., 3]])
+
+
+def so_far(u, n, cache):
+    """The pass's mosaic with tiles 0..n, RGBA OUT px on its longest side, and its report; (None, None) before
+    any tile is placed."""
+    p = plan(u, cache)
+    tiles = [tile(u, j, cache, p["display_scale"]) for j in range(n + 1)]
+    rect = view_rect(p, tiles)
     count = {}
-    for x in tiles:
-        count[x["filter"]] = count.get(x["filter"], 0) + 1
-    colour = manifest["colour"]
+    for t in tiles:
+        if "offset" in t:
+            count[t["filter"]] = count.get(t["filter"], 0) + 1
+    if not count:
+        return None, None
+    colour = p["colour"]
     if colour and all(count.get(f) for f in colour):
-        acc = [filter_mosaic(manifest, f, count[f], cache) for f in colour]
+        acc = [filter_mosaic(u, p, f, tiles, rect, cache) for f in colour]
         rgb = np.dstack([a[..., 0] for a in acc])
         # only where every filter has the picture: past one filter's edge the others alone are a coloured rim
         alpha = np.min([a[..., 3] for a in acc], axis=0)
         rgb = (rgb * (alpha[..., None] / np.float32(255)) + 0.5).astype(np.uint8)
         rgba, used = np.dstack([rgb, alpha]), colour
     else:
-        f = manifest["grey"] if count.get(manifest["grey"]) else max(count, key=count.get)
-        rgba, used = filter_mosaic(manifest, f, count[f], cache), [f]
+        f = p["grey"] if count.get(p["grey"]) else max(count, key=count.get)
+        rgba, used = filter_mosaic(u, p, f, tiles, rect, cache), [f]
+    if p["display_scale"].get("filled"):
+        rgba = detail(rgba, DETAIL_SIGMA * FRAME * p["k"])
     im = Image.fromarray(rgba, "RGBA")
-    W, H = manifest["canvas"]
-    k = OUT / max(W, H)
-    im = im.resize((round(W * k), round(H * k)), Image.LANCZOS)
-    return im, {"mosaic": len(tiles), "filters": len(used), "filter_names": used, "observation": manifest["key"][1],
-                "of": len(manifest["tiles"]), "width": im.width, "height": im.height}
+    s = OUT / max(im.size)
+    im = im.resize((max(1, round(im.width * s)), max(1, round(im.height * s))), Image.LANCZOS)
+    return im, {"mosaic": sum(count[f] for f in used), "filters": len(used), "filter_names": used,
+                "observation": u["key"][1], "pass": u["key"][3], "of": sum(1 for fr in u["frames"] if fr[2] in used),
+                "fixed": p["fixed"], "width": im.width, "height": im.height}
 
 
-def mosaic_webp(frame_id, size, cache, slots=None):
-    """(WebP, report) of the observation mosaic so far at frame_id, when its observation is a whole-body
-    mosaic whose tiles are made; otherwise None (and the tiles are started in the background)."""
-    key = key_of(frame_id)
-    if key is None or not whole_body(key):
+def mosaic_webp(frame_id, size, cache, slots=None, ahead=3):
+    """(WebP, report) of the mosaic so far at frame_id when its pass is a mosaic; otherwise None. Then makes the
+    next few tiles in the background, so the next frames are quick."""
+    found = unit_of(frame_id)
+    if not found or not found[0]["mosaic"] or found[1] < 0:
         return None
-    manifest = ready(key, cache)
-    if not manifest or not manifest["tiles"]:
-        return None
-    idx, _ = reel.load_index()
-    t = float(idx.iloc[key_of.row[frame_id]]["seconds_1970"])
-    n = sum(1 for x in manifest["tiles"] if x["t"] <= t + 1)
-    if not n:
-        return None
-    path = os.path.join(folder(key, cache), str(size), f"{n}.webp")
+    u, n = found
+    path = os.path.join(folder(u, cache), str(size), f"{n}.webp")
     report = {}
 
     def make():
-        with slots or __import__("contextlib").nullcontext():
-            im, rep = so_far(manifest, t, cache)
+        with slots or contextlib.nullcontext():
+            im, rep = so_far(u, n, cache)
+        if im is None:
+            raise LookupError("no tile placed yet")
         report.update(rep)
         if max(im.size) > size:
             im.thumbnail((size, size), Image.LANCZOS)
@@ -288,27 +402,64 @@ def mosaic_webp(frame_id, size, cache, slots=None):
         reel._cached(path[:-5] + ".json", lambda: json.dumps(rep).encode())
         return out.getvalue()
 
-    data = reel._cached(path, make)
+    try:
+        data = reel._cached(path, make)
+    except LookupError:
+        return None
     if not report:
         with open(path[:-5] + ".json") as fh:
             report = json.load(fh)
+    if ahead:
+        warm(u, n + ahead, cache)
     return data, report
+
+
+def warm(u, upto, cache):
+    """Makes the pass's plan and its tiles up to upto in the background (one thread per pass)."""
+    if not u["mosaic"]:
+        return
+    with _lock:
+        if u["key"] in _warming:
+            return
+        _warming.add(u["key"])
+
+    def run():
+        try:
+            p = plan(u, cache)
+            for j in range(min(upto, len(u["frames"]) - 1) + 1):
+                tile(u, j, cache, p["display_scale"])
+        except Exception as e:
+            print(f"observation mosaic {u['key']} failed: {type(e).__name__}: {e}", flush=True)
+        finally:
+            with _lock:
+                _warming.discard(u["key"])
+
+    threading.Thread(target=run, daemon=True).start()
+
+
+def warm_frame(frame_id, cache, ahead=4):
+    """A frame was asked for: when it is in a mosaic pass, start making that pass's tiles up to a few past it."""
+    found = unit_of(frame_id)
+    if found and found[0]["mosaic"]:
+        warm(found[0], max(found[1], 0) + ahead, cache)
 
 
 def main():
     ap = argparse.ArgumentParser(description=__doc__, formatter_class=argparse.RawDescriptionHelpFormatter)
-    ap.add_argument("frame", help="a frame of the observation, e.g. W1537023863_1")
+    ap.add_argument("frame", help="a frame of the pass, e.g. W1537023863_1")
     ap.add_argument("--cache", required=True)
-    ap.add_argument("--all", action="store_true", help="also make the mosaic at every frame (1024 px)")
+    ap.add_argument("--all", action="store_true", help="also make the mosaic at every tile (1024 px)")
     args = ap.parse_args()
-    key = key_of(args.frame)
-    print(key, "whole-body mosaic" if whole_body(key) else "not a whole-body mosaic")
-    manifest = prepare(key, args.cache)
+    u, _ = unit_of(args.frame)
+    print(u["key"], len(u["frames"]), "tiles", "mosaic" if u["mosaic"] else "not a mosaic", "whole body" if u["whole"] else "")
+    t0 = time.time()
+    p = plan(u, args.cache)
+    print("plan", {k: v for k, v in p.items() if k != "display_scale"}, f"{time.time() - t0:.1f} s", flush=True)
     if args.all:
-        for tile in manifest["tiles"]:
+        for fr in u["frames"]:
             t0 = time.time()
-            _, rep = mosaic_webp(tile["id"], 1024, args.cache)
-            print(tile["id"], tile["filter"], rep["mosaic"], f"{time.time() - t0:.2f} s", flush=True)
+            made = mosaic_webp(fr[1], 1024, args.cache, ahead=0)
+            print(fr[1], fr[2], made and made[1]["mosaic"], f"{time.time() - t0:.2f} s", flush=True)
 
 
 if __name__ == "__main__":

@@ -37,10 +37,10 @@ Routes:
                                the mosaic frame <ID> is a new tile of, made like a reel picture: 404 when
                                the frame is not a mosaic tile (mosaic.panels: same camera, observation and
                                filter, the pointing stepped across the body, panels overlap)
-                               When the frame's observation maps a whole body (obs_mosaic: the body's disk
-                               inside the frames' footprint), instead the observation's mosaic so far, every
-                               filter, in false colour when it cycles three or more; the first request starts
-                               making its tiles and gets the rolling mosaic meanwhile
+                               When the frame is in a mosaic pass (obs_mosaic: one camera and observation,
+                               three or more pointings), instead the pass's mosaic so far, every tile and
+                               filter, in false colour when it cycles three or more; asking for a frame of the
+                               pass starts making its tiles
   /health                      "ok" plus where the frames come from
   anything else                a file from --site, if given (the replay page and its data)
 
@@ -293,6 +293,9 @@ def make_handler(site, cache):
                         return self.send_bytes(archive_png(frame_id), "image/png")
                     size = int(parse_qs(url.query).get("size", ["512"])[0])
                     size = min(SIZES, key=lambda s: abs(s - size))
+                    if reel._index is not None:
+                        # a frame of a mosaic pass (the window asks for frames a few ahead): start its tiles
+                        threading.Thread(target=obs_mosaic.warm_frame, args=(frame_id, cache), daemon=True).start()
                     return self.send_bytes(webp(frame_id, size, cache), "image/webp")
                 except FileNotFoundError:
                     return self.send_error(404, "Frame not in the archive")
