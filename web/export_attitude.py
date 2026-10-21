@@ -163,8 +163,9 @@ def smith_offsets(anchor_t, anchor_d, times):
     return out
 
 
-def smith(img_q, cams, ets, smithed, rc_body, bg_t, bg_q, tol_deg):
+def smith(img_q, cams, ets, smithed, rc_body, bg_t, bg_q, tol_deg, bg_smithed=None):
     """Correct AACS pointing with the c-smithed anchors. smithed[i]: image i lies in a c-smithed window;
+    bg_smithed[k]: background sample k does (--refine samples there came from the smithed CK already);
     rc_body(t): the AACS-only body quaternion. Returns new (img_q, bg_q) and the anchors' offsets (deg)."""
     img_q, bg_q = np.array(img_q, dtype=float), np.array(bg_q, dtype=float)
     at, ad, angles = [], [], []
@@ -186,7 +187,7 @@ def smith(img_q, cams, ets, smithed, rc_body, bg_t, bg_q, tol_deg):
         return img_q, bg_q, angles
     at = np.array(at)
     for k, d in enumerate(smith_offsets(at, ad, bg_t)):
-        if d is not None:
+        if d is not None and not (bg_smithed is not None and bg_smithed[k]):
             bg_q[k] = qmul(d, bg_q[k])
     loose = [i for i in range(len(ets)) if not smithed[i] and not np.isnan(img_q[i, 0])]
     for i, d in zip(loose, smith_offsets(at, ad, [ets[i] for i in loose])):
@@ -265,6 +266,8 @@ def smith_file(path, cat, iss_cks, tol_deg):
     ets = np.asarray(cat["et"], dtype=float)
     j = np.searchsorted(lo, ets, "right") - 1
     smithed = (j >= 0) & (ets <= hi[np.maximum(j, 0)]) if len(cover) else np.zeros(len(ets), bool)
+    jb = np.searchsorted(lo, bg_t, "right") - 1
+    bg_smithed = (jb >= 0) & (bg_t <= hi[np.maximum(jb, 0)]) if len(cover) else np.zeros(len(bg_t), bool)
     for k in iss_cks:
         sp.unload(k)
 
@@ -272,7 +275,7 @@ def smith_file(path, cat, iss_cks, tol_deg):
         q = quat("CASSINI_SC_COORD", t)
         return None if np.isnan(q[0]) else np.array(q, dtype=float)
 
-    new_img, new_bg, angles = smith(img_q, cat["cam"], ets, smithed, rc_body, bg_t, bg_q, tol_deg)
+    new_img, new_bg, angles = smith(img_q, cat["cam"], ets, smithed, rc_body, bg_t, bg_q, tol_deg, bg_smithed)
     tmp_path = path + ".tmp"
     with open(tmp_path, "wb") as fh:
         fh.write(b"CATT" + struct.pack("<HHII", ver, flags | FLAG_SMITHED, n_img, n_bg))

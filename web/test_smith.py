@@ -29,3 +29,12 @@ assert max(inner) < 1e-3, max(inner)
 untouched = [e for e, t in zip(err_bg, bg_t) if t < 1e5 - SMITH_REACH or t > 1.4e5 + SMITH_REACH]
 assert max(untouched) < 1e-4
 print("ok")
+# --refine samples inside a c-smithed window already carry the smithed attitude: they must not be offset again
+bg_t2 = np.sort(np.r_[bg_t, ets[smithed] + 0.1])
+in_win = np.isin(bg_t2, ets[smithed] + 0.1)
+bg_q2 = np.array([truth(t) if w else rc(t) for t, w in zip(bg_t2, in_win)])
+_, nb2, _ = smith(img_q, cams, ets, smithed, rc, bg_t2, bg_q2, 0.5, in_win)
+err2 = [qangle(q, truth(t)) for q, t in zip(nb2, bg_t2)]
+assert max(e for e, w in zip(err2, in_win) if w) < 1e-6
+assert max(e for e, t in zip(err2, bg_t2) if 1.03e5 <= t <= 1.37e5) < 1e-3
+print("ok (refined samples inside windows kept)")
