@@ -326,6 +326,9 @@ body { color: var(--q-text); }
 .menu li button:hover, .menu li button:focus-visible { background: rgba(138,182,255,.35); color: #fff; }
 .menu li.sep { background: var(--q-line); }
 .menu li .kbd { color: var(--q-dim); }
+.menu li.slider { display: flex; flex-direction: column; gap: 3px; padding: 3px 18px 5px 26px; white-space: nowrap; }
+.menu li.slider b { font-weight: 500; color: #fff; }
+.menu li.slider input { width: 100%; margin: 0; accent-color: #8ab6ff; }
 #tray button { background: rgba(255,255,255,.08); border: 1px solid var(--q-line); color: var(--q-text); }
 
 /* windows: smoked HUD panels */
@@ -462,6 +465,9 @@ body.idle .camwin .well.has-frame { border-color: transparent; box-shadow: 0 6px
         <li><button data-act="span" data-v="86400">Timeline: Day</button></li>
         <li><button data-act="span" data-v="604800">Timeline: Week</button></li>
         <li><button data-act="span" data-v="2592000">Timeline: Month</button></li>
+        <li class="sep" data-rate></li>
+        <li data-rate class="slider"><label for="maxrate">Bursts: at most <b id="maxratev">5 images/s</b></label>
+          <input type="range" id="maxrate" min="0" max="24" step="1" value="5" aria-label="Maximum new images per second during imaging bursts"></li>
       </ul></div>
     <div class="menu"><button aria-haspopup="true">Go</button>
       <ul id="gomenu">
@@ -1072,9 +1078,59 @@ body.idle .camwin .well.has-frame { border-color: transparent; box-shadow: 0 6px
   }
   const feeds = [...document.querySelectorAll(".camwin")].map(cameraFeed);
   window.cassiniFeeds = { cameraFeed, framesOf, lastOfCam, prep, stale: () => STALE };
+
+  // ---------- burst limit: in normal playback each camera window gets at most maxRate new pictures a second ----------
+  // The clock runs at the chosen speed except inside an imaging burst, where it slows so that crossing the gap
+  // between two of a camera's frames takes at least 1/maxRate s; it is back to full speed once the burst is over.
+  // Movie mode has its own clock. 0 = no limit. The setting lives in the Settings window when the page has one
+  // (playback.maxImageRate), otherwise in the View menu.
+  const RATE_DEFAULT = 5, RATE_KEY = "cassini-os-max-image-rate", SETTINGS = window.cassiniSettings;
+  let maxRate = RATE_DEFAULT, slowedTo = 0;
+  function syncRateMenu() {
+    const r = $("maxrate"); if (!r) return;
+    r.value = maxRate; $("maxratev").textContent = maxRate ? `${maxRate} image${maxRate === 1 ? "" : "s"}/s` : "no limit";
+  }
+  function setMaxRate(v) {
+    if (SETTINGS) return SETTINGS.set("playback.maxImageRate", v);
+    maxRate = v; syncRateMenu();
+    try { localStorage.setItem(RATE_KEY, v); } catch (e) {}
+  }
+  if (SETTINGS) {
+    document.querySelectorAll("#menubar [data-rate]").forEach(li => li.remove());
+    maxRate = +SETTINGS.define({ key: "playback.maxImageRate", section: "Playback", label: "Maximum images per second",
+      hint: "When Cassini takes a burst of pictures, the timeline slows down so each camera window shows at most this many new images a second. 0 = no limit.",
+      type: "range", value: RATE_DEFAULT, min: 0, max: 24, step: 1, unit: "images/s" }) || 0;
+    SETTINGS.on("playback.maxImageRate", v => { maxRate = +v || 0; });
+  } else {
+    try { const v = localStorage.getItem(RATE_KEY); if (v !== null && +v >= 0) maxRate = +v; } catch (e) {}
+    syncRateMenu();
+    $("maxrate").addEventListener("input", e => setMaxRate(+e.target.value));
+    $("maxrate").closest("li").addEventListener("click", e => e.stopPropagation());   // keep the menu open while sliding
+  }
+  // for one camera at et: the fastest the clock may run (Infinity outside a burst) and when its next frame is
+  function capOf(cam, et) {
+    const a = catalog.byCam[cam].et, p = lastOfCam(cam, et), nx = p + 1 < a.length ? a[p + 1] : Infinity;
+    return [p < 0 || nx === Infinity ? Infinity : Math.max(1, nx - a[p]) * maxRate, nx];
+  }
+  // called by the viewer's frame loop while playing: where the clock should be after dt seconds at this speed
+  window.studyAdvance = (et, dt, speed) => {
+    slowedTo = 0;
+    if (!maxRate || !catalog || !catalog.byCam) return et + dt * speed;
+    for (let n = 0; n < 200; n++) {
+      let s = speed, stop = Infinity;
+      for (const cam in catalog.byCam) { const [cap, nx] = capOf(cam, et); s = Math.min(s, cap); stop = Math.min(stop, nx); }
+      if (s < speed) slowedTo = slowedTo ? Math.min(slowedTo, s) : s;
+      if (et + dt * s <= stop) return et + dt * s;
+      dt -= (stop - et) / s; et = stop;   // the next frame changes the gap, so carry on from there
+    }
+    return et;
+  };
+  const fmtRate = s => s < 60 ? `${Math.round(s)} s/s` : s < 3600 ? `${+(s / 60).toFixed(1)} min/s` : `${+(s / 3600).toFixed(1)} h/s`;
+
   const frameHud = window.studyHud;
   window.studyHud = ms => {
     frameHud(ms);
+    if (slowedTo && state.playing && !state.dragging) $("mday").textContent += ` · imaging burst, slowed to ${fmtRate(slowedTo)}`;
     prep();
     for (const f of feeds) f();
   };
