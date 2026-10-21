@@ -20,6 +20,7 @@ import os
 import re
 import shutil
 import struct
+import threading
 import zipfile
 import zlib
 
@@ -167,13 +168,18 @@ def _build_index(folder, source):
     print(f"Done! {len(keys)} files")
 
 
+_index_lock = threading.Lock()
+
 def _zip_index(source=None):
     source = source or get_source()
     if source not in _indexes:
-        folder = _index_folder(source)
-        if not os.path.isdir(folder):
-            _build_index(folder, source)
-        _indexes[source] = {field: np.load(os.path.join(folder, field + ".npy"), mmap_mode="r") for field in INDEX_FIELDS}
+        # threads of one process (the frame server's) build or load it once, not each their own
+        with _index_lock:
+            if source not in _indexes:
+                folder = _index_folder(source)
+                if not os.path.isdir(folder):
+                    _build_index(folder, source)
+                _indexes[source] = {field: np.load(os.path.join(folder, field + ".npy"), mmap_mode="r") for field in INDEX_FIELDS}
     return _indexes[source]
 
 
@@ -212,6 +218,21 @@ def _zip_file(source=None):
 
 
 """
+size bytes of the open file f from offset on. pread doesn't use the file's position, so
+threads (the frame server's) and paused generators can read the one file at the same time
+without taking turns. Where there is no pread (Windows) they take turns seeking.
+"""
+_seek_lock = threading.Lock()
+
+def _read_at(f, size, offset):
+    if hasattr(os, "pread"):
+        return os.pread(f.fileno(), size, offset)
+    with _seek_lock:
+        f.seek(offset)
+        return f.read(size)
+
+
+"""
 Yields the uncompressed data of member i in chunks
 """
 def _member_chunks(i, chunk_size=16 * 1024 * 1024, source=None):
@@ -229,25 +250,21 @@ def _member_chunks(i, chunk_size=16 * 1024 * 1024, source=None):
                 yield data
     f = _zip_file(source)
     # the local header before the data has its own name and extra field lengths
-    f.seek(int(index["offsets"][i]))
-    header = f.read(30)
+    position = int(index["offsets"][i])
+    header = _read_at(f, 30, position)
     if header[:4] != b"PK\x03\x04":
         raise zipfile.BadZipFile(f"Bad local header for {index['names'][i]}")
     name_length, extra_length = struct.unpack("<HH", header[26:30])
-    f.seek(name_length + extra_length, 1)
+    position += 30 + name_length + extra_length
     remaining = int(index["compressed"][i])
     inflate = zlib.decompressobj(-15) if method == zipfile.ZIP_DEFLATED else None
     while remaining > 0:
-        # the file position is read again each chunk since a generator can be paused
-        # while something else in this process reads the zip
-        position = f.tell()
-        data = f.read(min(chunk_size, remaining))
+        data = _read_at(f, min(chunk_size, remaining), position)
         if not data:
             raise zipfile.BadZipFile(f"{index['names'][i]} is cut short")
         remaining -= len(data)
         position += len(data)
         yield inflate.decompress(data) if inflate else data
-        f.seek(position)
     if inflate:
         yield inflate.flush()
 
