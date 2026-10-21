@@ -2060,16 +2060,19 @@ function requestYears(y) {
         if (ys.join() === activeYears.join()) continue;
         keepYears = ys;
         try {
-          const jobs = ys.map(loadYear);   // all three download at once
-          // the year on screen first, so a jump shows something as soon as its own files are in;
-          // its neighbours are added when they arrive
+          // the year on screen first, on its own so it has the whole connection, and shown as soon as
+          // it is in; its neighbours are downloaded after it and added when they arrive
           if (!activeYears.includes(y) && ys.length > 1) {
-            assemble([await jobs[ys.indexOf(y)]]);
+            assemble([await loadYear(y)]);
             if (yearsWanted !== null) continue;
           }
-          assemble(await Promise.all(jobs));
+          assemble(await Promise.all(ys.map(loadYear)));
         }
-        catch (err) { console.warn("year not loaded", err); setText("yload", "Could not load " + ys.join(", ")); }
+        catch (err) {
+          console.warn("year not loaded", err); setText("yload", "Could not load " + ys.join(", "));
+          // try again in a moment (a dropped connection shouldn't leave the year empty for good)
+          setTimeout(() => { if (lastWantedYear === y) lastWantedYear = null; }, 2000);
+        }
       }
     } finally { yearsJob = null; }
   })();
