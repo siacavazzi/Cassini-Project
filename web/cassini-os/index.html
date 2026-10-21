@@ -1998,7 +1998,14 @@ body.phone #hllist { grid-template-columns: 1fr; }
     }
     if (report && report.ids) ids = ids.concat([report.ids].flat(2));
     ids = [...new Set(ids.filter(i => typeof i === "string" && /^[NW]\d{10}_\d+$/.test(i)))];
-    return { canvas, png: await toPng(canvas), src, report, ids, what };
+    // everything about the picture is read now, with its pixels: playback carries on while the note is typed
+    let tiles = null;
+    if (report && report.observation && typeof catalog !== "undefined" && catalog && catalog.obs) {   // a pass mosaic: its frames so far
+      const cam = ids[0] && ids[0][0];
+      tiles = [];
+      for (let k = 0; k < catalog.id.length; k++) if (catalog.obs[k] === report.observation && catalog.cam[k] === cam && catalog.et[k] <= state.et) tiles.push(catalog.id[k]);
+    }
+    return { canvas, png: await toPng(canvas), src, report, ids, what, labels: texts(w), info: infoFields(w), tiles };
   }
 
   // ---- the panel: the picture is taken the moment the flag is pressed; the note can follow at leisure ----
@@ -2056,7 +2063,7 @@ body.phone #hllist { grid-template-columns: 1fr; }
       note, tags: [...p.tags],
       window: { id: w.id, title: p.title, kind: w.id === "moviecard" ? "movie" : w.id === "reelcard" ? "reel" : w.classList.contains("bodywin") ? "body window" : "camera window",
         full: w.classList.contains("full"), zoomed: w.classList.contains("zoomed"), width: Math.round(w.getBoundingClientRect().width), height: Math.round(w.getBoundingClientRect().height) },
-      shown: { what: got.what, src: got.src ? new URL(got.src, location.href).href : null, report: got.report || null, labels: texts(w), info: infoFields(w),
+      shown: { what: got.what, src: got.src ? new URL(got.src, location.href).href : null, report: got.report || null, labels: got.labels, info: got.info, observation_frames: got.tiles,
         width: got.canvas.width, height: got.canvas.height },
       ids: got.ids, frames: got.ids.map(frameInfo),
       movie: !!(window.cassiniMovie && window.cassiniMovie.on), playing: !!state.playing, speed: state.speed,
