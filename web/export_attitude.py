@@ -22,6 +22,16 @@ With --update-from <old dir> --old-catalog <old catalog dir>, years whose catalo
 rebuilt from the old file instead of from scratch: image quaternions are reused by image id
 (for images whose mid-time no other image shares), only the rest are pointed, and the old (already refined) background samples are kept. The
 file is written with flags 0, so a following --refine pass checks the merged series again.
+
+With --smith (after --refine), the AACS reconstructed pointing is corrected wherever the image-navigated
+("c-smithed", iss_ck/*_ISS.bc) CKs disagree with it. Those CKs only cover a fraction of a second around
+each shutter, so outside them SPICE falls back to the AACS CK, which in a few places is badly off (in
+23-27 Jan 2001 by ~50 deg: the frames show Jupiter while the AACS CK points the camera far from it).
+Every image inside a c-smithed window is an anchor: the rotation from the AACS attitude to the smithed one
+there is its offset (offsets under --smith-tol count as none). Background samples and images outside the
+windows get the offset slerped between the anchors either side, or the nearer anchor's offset when only
+one is within SMITH_REACH. Only runs of at least SMITH_MIN_RUN consecutive offset anchors count: a lone one is
+taken for a bad smithed frame, not an AACS error. The file keeps its layout and gets header flags 2, so a rerun skips it.
 """
 
 import argparse
@@ -43,6 +53,9 @@ CAM_TO_BODY = {"N": np.array([0.50047271, 0.5002705, 0.49981488, -0.49944126]),
 GAP_S = 3600.0   # tracks.js holds instead of slerping across longer gaps
 MIN_STEP = 8.0   # do not split intervals shorter than this (s)
 FLAG_REFINED = 1
+FLAG_SMITHED = 2
+SMITH_REACH = 6 * 3600.0   # an anchor's offset is carried this far (s)
+SMITH_MIN_RUN = 3          # consecutive offset anchors needed before they count
 PREFIX = "cassini/cosp_1000/"
 
 
@@ -124,6 +137,82 @@ def refine(times, quats, truth, tol_deg):
     return extra
 
 
+def qconj(q):
+    return np.array([q[0], -q[1], -q[2], -q[3]])
+
+
+def smith_offsets(anchor_t, anchor_d, times):
+    """Offset rotation at each of times from the anchors (sorted times, offsets as quaternions); None = none."""
+    out = []
+    n = len(anchor_t)
+    for t in times:
+        j = int(np.searchsorted(anchor_t, t, "right"))   # anchors j-1 (<= t) and j (> t)
+        a = j - 1 if j > 0 and t - anchor_t[j - 1] <= SMITH_REACH else None
+        b = j if j < n and anchor_t[j] - t <= SMITH_REACH else None
+        if a is not None and b is not None:
+            da, db = anchor_d[a], anchor_d[b]
+            if da is None and db is None:
+                out.append(None)
+                continue
+            ident = np.array([1.0, 0, 0, 0])
+            u = (t - anchor_t[a]) / (anchor_t[b] - anchor_t[a]) if anchor_t[b] > anchor_t[a] else 0.0
+            out.append(slerp(ident if da is None else da, ident if db is None else db, u))
+        elif a is not None or b is not None:
+            out.append(anchor_d[a if b is None else b if a is None else
+                                (a if t - anchor_t[a] <= anchor_t[b] - t else b)])
+        else:
+            out.append(None)
+    return out
+
+
+def smith(img_q, cams, ets, smithed, rc_body, bg_t, bg_q, tol_deg, bg_smithed=None):
+    """Correct AACS pointing with the c-smithed anchors. smithed[i]: image i lies in a c-smithed window;
+    bg_smithed[k]: background sample k does (--refine samples there came from the smithed CK already);
+    rc_body(t): the AACS-only body quaternion. Returns new (img_q, bg_q), the anchors' offsets (deg) and how many offsets were used."""
+    img_q, bg_q = np.array(img_q, dtype=float), np.array(bg_q, dtype=float)
+    at, ad, angles = [], [], []
+    for i in np.argsort(ets, kind="stable"):
+        if not smithed[i] or np.isnan(img_q[i, 0]):
+            continue
+        rc = rc_body(ets[i])
+        if rc is None:
+            continue
+        d = qmul(qmul(CAM_TO_BODY[cams[i]], img_q[i]), qconj(rc))
+        d = d / np.linalg.norm(d) * (1 if d[0] >= 0 else -1)
+        ang = qangle(d, [1, 0, 0, 0])
+        if at and ets[i] == at[-1]:
+            continue
+        at.append(ets[i])
+        ad.append(d if ang >= tol_deg else None)
+        angles.append(ang)
+    # an AACS error shows in a run of anchors; a lone offset is more likely a bad smithed frame (one off its
+    # target by a degree in 2013, say), and carrying it SMITH_REACH either way would move good neighbours
+    k = 0
+    while k < len(ad):
+        if ad[k] is None:
+            k += 1
+            continue
+        e = k
+        while e < len(ad) and ad[e] is not None:
+            e += 1
+        if e - k < SMITH_MIN_RUN:
+            ad[k:e] = [None] * (e - k)
+        k = e
+    used = sum(d is not None for d in ad)
+    if not used:
+        return img_q, bg_q, angles, used
+    at = np.array(at)
+    for k, d in enumerate(smith_offsets(at, ad, bg_t)):
+        if d is not None and not (bg_smithed is not None and bg_smithed[k]):
+            bg_q[k] = qmul(d, bg_q[k])
+    loose = [i for i in range(len(ets)) if not smithed[i] and not np.isnan(img_q[i, 0])]
+    for i, d in zip(loose, smith_offsets(at, ad, [ets[i] for i in loose])):
+        if d is not None:
+            c = CAM_TO_BODY[cams[i]]
+            img_q[i] = qmul(qconj(c), qmul(d, qmul(c, img_q[i])))
+    return img_q, bg_q, angles, used
+
+
 def merged_series(img_q, cat, bg_t, bg_q):
     """The series tracks.js builds: background samples plus pointed images turned into body pointing."""
     ts, qs = list(bg_t), [np.array(q, dtype=float) for q in bg_q]
@@ -172,6 +261,49 @@ def refine_file(path, cat, tol_deg):
         fh.write(q_all.tobytes())
     os.replace(tmp_path, path)
     return len(extra)
+
+
+def smith_file(path, cat, iss_cks, tol_deg):
+    """Apply smith() to an exported year; the full kernel set must be loaded, iss_cks are unloaded here."""
+    raw = open(path, "rb").read()
+    _, ver, flags, n_img, n_bg = struct.unpack("<4sHHII", raw[:16])
+    if flags & FLAG_SMITHED:
+        return None
+    img_q = np.frombuffer(raw, "<f4", 4 * n_img, 16).reshape(-1, 4)
+    bg_t = np.frombuffer(raw, "<f8", n_bg, 16 + 16 * n_img)
+    bg_q = np.frombuffer(raw, "<f4", 4 * n_bg, 16 + 16 * n_img + 8 * n_bg).reshape(-1, 4)
+    cover = []
+    for k in iss_cks:
+        for obj in sp.ckobj(k):
+            win = sp.ckcov(k, obj, False, "INTERVAL", 0.0, "TDB")
+            cover += [sp.wnfetd(win, j) for j in range(sp.wncard(win))]
+    cover.sort()
+    lo, hi = np.array([c[0] for c in cover]), np.array([c[1] for c in cover])
+    ets = np.asarray(cat["et"], dtype=float)
+    j = np.searchsorted(lo, ets, "right") - 1
+    smithed = (j >= 0) & (ets <= hi[np.maximum(j, 0)]) if len(cover) else np.zeros(len(ets), bool)
+    jb = np.searchsorted(lo, bg_t, "right") - 1
+    bg_smithed = (jb >= 0) & (bg_t <= hi[np.maximum(jb, 0)]) if len(cover) else np.zeros(len(bg_t), bool)
+    for k in iss_cks:
+        sp.unload(k)
+
+    def rc_body(t):
+        q = quat("CASSINI_SC_COORD", t)
+        return None if np.isnan(q[0]) else np.array(q, dtype=float)
+
+    new_img, new_bg, angles, used = smith(img_q, cat["cam"], ets, smithed, rc_body, bg_t, bg_q, tol_deg, bg_smithed)
+    tmp_path = path + ".tmp"
+    with open(tmp_path, "wb") as fh:
+        fh.write(b"CATT" + struct.pack("<HHII", ver, flags | FLAG_SMITHED, n_img, n_bg))
+        fh.write(new_img.astype("<f4").tobytes())
+        fh.write(bg_t.astype("<f8").tobytes())
+        fh.write(new_bg.astype("<f4").tobytes())
+    os.replace(tmp_path, path)
+    angles = np.array(angles)
+    return {"anchors": len(angles), "offset": int((angles >= tol_deg).sum()), "corrected": used,
+            "worst_deg": float(angles.max()) if len(angles) else 0.0,
+            "bg_changed": int((np.abs(new_bg - bg_q) > 1e-6).any(axis=1).sum()),
+            "img_changed": int((np.abs(new_img - img_q) > 1e-6).any(axis=1).sum())}
 
 
 def load_catalog(path):
@@ -231,6 +363,8 @@ def main():
     ap.add_argument("--years", default="1997-2017")
     ap.add_argument("--refine", action="store_true", help="add samples where slerp misses SPICE (existing files)")
     ap.add_argument("--tol", type=float, default=0.1, help="refinement tolerance, degrees")
+    ap.add_argument("--smith", action="store_true", help="correct AACS pointing with the c-smithed ISS CKs (existing files, after --refine)")
+    ap.add_argument("--smith-tol", type=float, default=0.5, help="smaller c-smithed offsets count as none, degrees")
     ap.add_argument("--update-from", help="attitude dir from an earlier export, to reuse for changed catalogs")
     ap.add_argument("--old-catalog", help="the catalog dir that earlier export was made from")
     args = ap.parse_args()
@@ -251,9 +385,11 @@ def main():
                 shutil.copy(old_path, path)
                 print(f"{year}: catalog unchanged, copied", flush=True)
                 continue
-        elif os.path.exists(path) and not args.refine:
+        elif os.path.exists(path) and not (args.refine or args.smith):
             continue
         if args.refine and (not os.path.exists(path) or struct.unpack("<H", open(path, "rb").read(8)[6:8])[0] & FLAG_REFINED):
+            continue
+        if args.smith and (not os.path.exists(path) or struct.unpack("<H", open(path, "rb").read(8)[6:8])[0] & FLAG_SMITHED):
             continue
         kernels = kernels_for_year(z, year)
         if not kernels:
@@ -278,6 +414,14 @@ def main():
             n = update_file(old_path, old_cat, cat, path, lambda et, cam: quat(FRAMES[cam], et))
             print(f"{year}: {len(cat['id'])} images, {n} newly pointed, background kept "
                   f"({os.path.getsize(path) / 1e6:.1f} MB)", flush=True)
+            sp.kclear()
+            shutil.rmtree(tmp, ignore_errors=True)
+            continue
+
+        if args.smith:
+            iss = [os.path.join(tmp, os.path.basename(k)) for k in kernels if k.startswith("iss_ck/")]
+            r = smith_file(path, cat, [k for k in iss if os.path.exists(k)], args.smith_tol)
+            print(f"{year}: smithed, {r}", flush=True)
             sp.kclear()
             shutil.rmtree(tmp, ignore_errors=True)
             continue
