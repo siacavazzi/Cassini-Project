@@ -41,7 +41,7 @@ how big the docked pictures are.
 ## Frame rate
 
 The 3D view is drawn at a share of the screen's pixel density (`src/perf.html`, Settings > Performance). With
-Automatic quality on, that share drops when the frame rate falls under the target (50 fps by default) and climbs
+Automatic quality on, that share drops when the frame rate falls under the target (55 fps by default, so a 60 Hz screen that keeps missing frames steps down) and climbs
 back when there is room; 3D resolution (30 to 100 %) is the most it may use. While nothing moves (paused, nobody
 touching the view) the view is not redrawn, except once a second. Frosted windows off removes the blur behind
 windows, which the browser redoes every frame. Show frame rate puts a read-out in the bottom right corner. The HUD

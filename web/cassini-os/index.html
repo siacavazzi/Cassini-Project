@@ -1162,7 +1162,7 @@ body.phone #hllist { grid-template-columns: 1fr; }
   const S = window.cassiniSettings, D = d => S.define(d);
   D({ key: "perf.auto", section: "Performance", label: "Automatic quality", type: "toggle", value: true,
       hint: "Lowers the 3D view's resolution when the frame rate falls under the target, and raises it again when there is room." });
-  D({ key: "perf.target", section: "Performance", label: "Target frame rate", type: "range", value: 50, min: 24, max: 120, step: 1, unit: "fps",
+  D({ key: "perf.target", section: "Performance", label: "Target frame rate", type: "range", value: 55, min: 24, max: 120, step: 1, unit: "fps",
       hint: "What automatic quality aims for. Most screens show at most 60; a ProMotion screen up to 120." });
   D({ key: "perf.resolution", section: "Performance", label: "3D resolution", type: "range", value: 100, min: 30, max: 100, step: 5, unit: "%",
       hint: "Share of the screen's full sharpness the 3D view is drawn at; automatic quality never goes above it. Lower is faster and softer." });
@@ -1179,7 +1179,7 @@ body.phone #hllist { grid-template-columns: 1fr; }
   let auto = 1;                          // automatic quality's share of the user's resolution (1 = all of it)
   // it moves in fixed steps, so the canvas is not reallocated at a new odd size every few seconds
   const STEPS = [1, 0.9, 0.8, 0.7, 0.6, 0.5, 0.4, 0.3];
-  let n = 0, drawn = 0, t0 = 0, tPrev = 0, worst = 0, slow = 0, good = 0, raiseAfter = 0, raiseWait = 8000, lastRaise = -1e9, fps = 0, best = 0, born = 0;
+  let n = 0, drawn = 0, t0 = 0, tPrev = 0, worst = 0, slow = 0, good = 0, raiseAfter = 0, raiseWait = 8000, lastRaise = -1e9, before = 1, fps = 0, born = 0;
   let lastKey = null, lastDraw = -1e9, busyUntil = 0, applied = 0, meter = null;
   const user = () => S.get("perf.resolution") / 100;
   const P = window.cassiniPerf = {
@@ -1208,12 +1208,12 @@ body.phone #hllist { grid-template-columns: 1fr; }
       // frames that are all slow do
       const all = drawn === n, rate = 1000 * n / (now - t0), hitch = n > 1 && worst > 250 && worst > 3 * (now - t0 - worst) / (n - 1);
       n = drawn = 0; t0 = now; worst = 0;
-      if (all) { fps = rate; if (!hitch) best = Math.max(best, rate); }
+      if (all) fps = rate;
       if (meter) meter.textContent = `${all ? Math.round(rate) + " fps" : "resting"}  ·  3D ${Math.round(100 * P.pixelRatio() / dpr())}%`;
       // only judge seconds in which every frame was drawn, the tab was visible and no data was being waited on
       if (!S.get("perf.auto") || !all || document.hidden || hitch || now - born < 4000 || (typeof yearReady === "function" && !yearReady())) { good = 0; return; }
       const target = S.get("perf.target");
-      if (rate < target * 0.9) {
+      if (rate < target * 0.95) {
         good = 0;
         if (++slow < 2) return;   // two slow seconds in a row before the resolution drops
         slow = 0;
@@ -1222,19 +1222,20 @@ body.phone #hllist { grid-template-columns: 1fr; }
         // target, at least one step down, at most three
         const fit = STEPS.filter(x => x < auto - 1e-6 && x >= min - 1e-6), want = auto * Math.sqrt(rate / target);
         const next = fit.length ? (fit.find(x => x <= want) || fit[Math.min(2, fit.length - 1)]) : auto;
-        if (next < auto) {
-          if (fit.indexOf(next) > 2) auto = fit[2]; else auto = next;
-          // dropping again soon after a raise: wait twice as long before the next try
-          if (now - lastRaise < 10000) raiseWait = Math.min(120000, raiseWait * 2);
+        if (now - lastRaise < 10000 && before < auto) {
+          // a step up that did not hold: back to the step that did, and wait twice as long before the next try
+          auto = before; raiseWait = Math.min(120000, raiseWait * 2); raiseAfter = now + raiseWait; apply();
+        } else if (next < auto) {
+          auto = fit.indexOf(next) > 2 ? fit[2] : next;
           raiseAfter = now + raiseWait; apply();
         }
       } else {
         slow = 0;
-        // one step up, after three good seconds if the frame rate would still reach the target there; held at the
-        // screen's refresh rate (which hides any headroom) it tries a step after six, and a drop that follows
-        // doubles the wait before the next try
-        const up = STEPS.slice().reverse().find(x => x > auto + 1e-6), capped = rate >= best * 0.95;
-        if (up && now > raiseAfter && (rate * (auto / up) ** 2 >= target || capped) && ++good >= (capped ? 6 : 3)) { good = 0; auto = up; lastRaise = now; raiseAfter = now + 3000; apply(); }
+        // one step up, only after three good seconds and only if the measured frame rate would still reach the
+        // target there (held at the screen's refresh rate there is no telling, so it stays put: trying costs a
+        // visible hitch per resize, measured)
+        const up = STEPS.slice().reverse().find(x => x > auto + 1e-6);
+        if (up && now > raiseAfter && rate * (auto / up) ** 2 >= target && ++good >= 3) { good = 0; before = auto; auto = up; lastRaise = now; raiseAfter = now + 3000; apply(); }
       }
     }
   };
