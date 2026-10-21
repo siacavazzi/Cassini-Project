@@ -83,6 +83,21 @@ for old, new in [
     study = study.replace(old, new)
 study += part("script") + "\n"
 
+# highlight reel (highlights.html): its style joins the head's, its window goes into #app, a Highlights menu joins the
+# menu bar before Window (so the chrome script wires it with the other menus), and its script runs after the chrome script
+hl = open(os.path.join(os.path.dirname(os.path.abspath(sys.argv[2])), "highlights.html")).read()
+part = lambda tag: hl[hl.index(f"<{tag}"):hl.index(f"</{tag}>") + len(tag) + 3]
+for old, new in [
+    ("</style>\n</head>", part("style")[len("<style>"):] + "\n</head>"),
+    ('  <div id="loading">', "  " + part("section") + "\n\n" + '  <div id="loading">'),
+    ('    <div class="menu"><button aria-haspopup="true">Window</button>',
+     '    <div class="menu"><button aria-haspopup="true">Highlights</button>\n      <ul id="hlmenu"></ul></div>\n'
+     '    <div class="menu"><button aria-haspopup="true">Window</button>'),
+]:
+    assert study.count(old) == 1, old
+    study = study.replace(old, new)
+study += part("script") + "\n"
+
 def rep(old, new, count=1):
     global script
     assert script.count(old) == count, (old, script.count(old))
