@@ -98,6 +98,18 @@ for old, new in [
     study = study.replace(old, new)
 study += part("script") + "\n"
 
+# movie export (export.html): its style joins the head's, its window goes into #app, and its script runs after the
+# chrome script (it draws the marked stretch through window.studyTimeline and adds "Export Movie…" to the Go menu)
+ex = open(os.path.join(os.path.dirname(os.path.abspath(sys.argv[2])), "export.html")).read()
+part = lambda tag: ex[ex.index(f"<{tag}"):ex.index(f"</{tag}>") + len(tag) + 3]
+for old, new in [
+    ("</style>\n</head>", part("style")[len("<style>"):] + "\n</head>"),
+    ('  <div id="loading">', "  " + part("section") + "\n\n" + '  <div id="loading">'),
+]:
+    assert study.count(old) == 1, old
+    study = study.replace(old, new)
+study += part("script") + "\n"
+
 def rep(old, new, count=1):
     global script
     assert script.count(old) == count, (old, script.count(old))

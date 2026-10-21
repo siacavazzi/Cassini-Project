@@ -41,6 +41,14 @@ Routes:
                                three or more pointings), instead the pass's mosaic so far, every tile and
                                filter, in false colour when it cycles three or more; asking for a frame of the
                                pass starts making its tiles
+  /export/plan.json?from=2006-09-15T14:32&until=2006-09-15T17:12&cams=NW&fps=auto&size=1024
+                               a movie export's plan (web/frames/export.py): its pictures, when each shows in the
+                               film, the film's length and size; nothing is made
+  POST /export?...             (same options, plus sound=1 caption=1) starts making that film, or finds it made
+                               or on its way; one film is made at a time. Answers the job's status, as
+  /export/<JOB>.json           does: state queued/making/sound/done/failed, pictures done of total, seconds left
+  PUT /export/<JOB>/sound.wav  the page's soundtrack for the film (made by the live sound's synth), added as AAC
+  /export/<JOB>.mp4            the film (Range requests work, so it plays as it downloads); ?download=1 saves it
   /health                      "ok" plus where the frames come from
   anything else                a file from --site, if given (the replay page and its data)
 
@@ -78,6 +86,7 @@ import color_image  # noqa: E402
 sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
 import reel  # noqa: E402
 import obs_mosaic  # noqa: E402
+import export  # noqa: E402
 
 FRAME_ID = re.compile(r"^([NW])\d{10}_\d+$")
 SIZES = (128, 256, 384, 512, 768, 1024)
@@ -232,7 +241,8 @@ def make_handler(site, cache):
         def do_OPTIONS(self):
             # Chrome asks before a public https page may load from a server on this machine
             self.send_response(204)
-            self.send_header("Access-Control-Allow-Methods", "GET")
+            self.send_header("Access-Control-Allow-Methods", "GET, POST, PUT")
+            self.send_header("Access-Control-Allow-Headers", "Content-Type")
             self.send_header("Access-Control-Allow-Private-Network", "true")
             self.end_headers()
 
@@ -250,11 +260,102 @@ def make_handler(site, cache):
             self.end_headers()
             self.wfile.write(data)
 
+        def send_json(self, obj, code=200):
+            data = json.dumps(obj).encode()
+            self.send_response(code)
+            self.send_header("Content-Type", "application/json")
+            self.send_header("Content-Length", str(len(data)))
+            self.send_header("Cache-Control", "no-store")
+            self.end_headers()
+            self.wfile.write(data)
+
+        def pictures(self):
+            # the film's pictures come from the same makers (and cache) as the camera windows'
+            return export.Pictures(cache, color=color_webp, processed=globals().get("processed_webp"), frame=webp, slots=_color_slots)
+
+        def do_POST(self):
+            self.started = time.monotonic()
+            self.revalidate = False
+            url = urlparse(self.path)
+            if url.path != "/export":
+                return self.send_error(404)
+            self.rfile.read(int(self.headers.get("Content-Length") or 0))
+            try:
+                return self.send_json(export.submit(export.options(parse_qs(url.query)), cache, self.pictures()))
+            except (ValueError, LookupError) as e:
+                return self.send_json({"error": str(e)}, 400)
+            except OverflowError as e:
+                return self.send_json({"error": str(e)}, 413)
+
+        def do_PUT(self):
+            self.started = time.monotonic()
+            self.revalidate = False
+            m = re.match(r"^/export/([0-9a-f]{16})/sound\.wav$", urlparse(self.path).path)
+            length = int(self.headers.get("Content-Length") or 0)
+            if not m or not 0 < length <= 400 * 1024 * 1024:
+                return self.send_error(400, "PUT /export/<job>/sound.wav with a WAV body")
+            try:
+                export.sound(cache, m.group(1), self.rfile.read(length))
+                return self.send_json({"ok": True})
+            except LookupError as e:
+                return self.send_json({"error": str(e)}, 404)
+
+        def send_film(self, path, job, download):
+            """The film, whole or the byte range asked for (players ask for ranges to start before the end arrives)."""
+            size = os.path.getsize(path)
+            start, end = 0, size - 1
+            m = re.match(r"bytes=(\d*)-(\d*)$", self.headers.get("Range", ""))
+            if m and (m.group(1) or m.group(2)):
+                if m.group(1):
+                    start, end = int(m.group(1)), min(size - 1, int(m.group(2) or size - 1))
+                else:
+                    start = max(0, size - int(m.group(2)))
+                if start > end:
+                    self.send_response(416)
+                    self.send_header("Content-Range", f"bytes */{size}")
+                    self.send_header("Content-Length", "0")
+                    return self.end_headers()
+                self.send_response(206)
+                self.send_header("Content-Range", f"bytes {start}-{end}/{size}")
+            else:
+                self.send_response(200)
+            self.send_header("Content-Type", "video/mp4")
+            self.send_header("Accept-Ranges", "bytes")
+            self.send_header("Content-Length", str(end - start + 1))
+            name = (job or {}).get("name", "cassini.mp4")
+            self.send_header("Content-Disposition", f'{"attachment" if download else "inline"}; filename="{name}"')
+            self.end_headers()
+            with open(path, "rb") as fh:
+                fh.seek(start)
+                left = end - start + 1
+                while left > 0:
+                    chunk = fh.read(min(left, 1 << 20))
+                    if not chunk:
+                        break
+                    self.wfile.write(chunk)
+                    left -= len(chunk)
+
         def do_GET(self):
             self.started = time.monotonic()
             url = urlparse(self.path)
             # a kept-alive connection reuses this handler, so the last request's choice must not stick
             self.revalidate = False
+            if url.path == "/export/plan.json":
+                try:
+                    return self.send_json(export.public_plan(export.plan(export.options(parse_qs(url.query)))))
+                except ValueError as e:
+                    return self.send_json({"error": str(e)}, 400)
+                except OverflowError as e:
+                    return self.send_json({"error": str(e)}, 413)
+            m = re.match(r"^/export/([0-9a-f]{16})\.(json|mp4)$", url.path)
+            if m:
+                job = export.status(cache, m.group(1))
+                if m.group(2) == "json":
+                    return self.send_json(job) if job else self.send_json({"error": "no such export"}, 404)
+                path = export.film_path(cache, m.group(1))
+                if not path:
+                    return self.send_error(404, "That film is not made (yet)")
+                return self.send_film(path, job, parse_qs(url.query).get("download", ["0"])[0] != "0")
             if url.path == "/health":
                 return self.send_bytes(f"ok {data_source.get_source()}\n".encode(), "text/plain", False)
             if url.path == "/frames/color.webp":
