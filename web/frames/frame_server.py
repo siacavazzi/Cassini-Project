@@ -600,7 +600,7 @@ def make_handler(site, cache, flags=None):
                 size, fmt = size_of(query, 512), picture_format(query)
                 try:
                     data, report = color_webp(ids, size, cache, fmt)
-                    return self.send_picture(data, fmt, query, f"Cassini_{'_'.join(ids)}_colour", {"X-Composite": json.dumps(report)})
+                    return self.send_picture(data, fmt, query, f"Cassini_{'_'.join(ids)}_color", {"X-Composite": json.dumps(report)})
                 except FileNotFoundError:
                     return self.send_error(404, "Frame not in the archive")
             m = re.match(r"^/frames/processed/([^/]+)\.webp$", url.path)

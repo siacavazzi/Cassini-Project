@@ -865,7 +865,7 @@ body.phone #excard:not(.full) { width: calc(100% - 16px) !important; left: 8px !
         <dt>Status</dt><dd><span class="led"></span><span data-f="status">Camera</span></dd>
         <dt>Frame</dt><dd data-f="frame">—</dd>
         <dt>Filter</dt><dd data-f="filter">—</dd>
-        <dt>Colour</dt><dd data-f="colour">—</dd>
+        <dt>Color</dt><dd data-f="colour">—</dd>
         <dt>Details</dt><dd data-f="details">—</dd>
       </dl>
     </div>
@@ -879,7 +879,7 @@ body.phone #excard:not(.full) { width: calc(100% - 16px) !important; left: 8px !
       <dl class="info">
         <dt>Status</dt><dd><span class="led"></span><span data-f="status">Camera</span></dd>
         <dt>Filter</dt><dd data-f="filter">—</dd>
-        <dt>Colour</dt><dd data-f="colour">—</dd>
+        <dt>Color</dt><dd data-f="colour">—</dd>
       </dl>
     </div>
   </section>
@@ -929,8 +929,8 @@ body.phone #excard:not(.full) { width: calc(100% - 16px) !important; left: 8px !
         </div>
       </div>
     </div>
-    <div id="focusrow" aria-label="Centre the view on"></div>
-    <div class="statusbar"><span>Positions from Cassini's SPICE kernels (J2000). LCD lanes: narrow-angle (NAC) and wide-angle (WAC) frames coloured by filter; RGB marks frames that belong to a red, green and blue set.</span><span id="pnote" hidden></span><b id="sbar">—</b></div>
+    <div id="focusrow" aria-label="Center the view on"></div>
+    <div class="statusbar"><span>Positions from Cassini's SPICE kernels (J2000). LCD lanes: narrow-angle (NAC) and wide-angle (WAC) frames colored by filter; RGB marks frames that belong to a red, green and blue set.</span><span id="pnote" hidden></span><b id="sbar">—</b></div>
   </div>
 
   <section id="flagpop" role="dialog" aria-label="Flag this picture" hidden>
@@ -949,7 +949,7 @@ body.phone #excard:not(.full) { width: calc(100% - 16px) !important; left: 8px !
     <div class="mvbar">
       <button class="btn round" id="mvplay" aria-label="Play or pause the movie">❚❚</button>
       <label for="mvfps">Speed</label><input type="range" id="mvfps" min="2" max="24" step="1" value="8" aria-label="Frames per second"><span id="mvfpsv">8 fps</span>
-      <button class="btn" id="mvproc" aria-pressed="true" title="Processed: frames calibrated, colour composites and mosaics, as in the camera windows. Off plays the archive frames as they are (P)">Processed</button>
+      <button class="btn" id="mvproc" aria-pressed="true" title="Processed: frames calibrated, color composites and mosaics, as in the camera windows. Off plays the archive frames as they are (P)">Processed</button>
       <span id="mvcount"></span>
     </div>
   </div>
@@ -1026,7 +1026,7 @@ body.phone #excard:not(.full) { width: calc(100% - 16px) !important; left: 8px !
   const KEY = "cassini-os-settings-v1";
   const SECTIONS = ["Interface", "Cameras", "Playback", "View", "Movie", "Data"];   // sections other code adds go after these
   const NOTES = {
-    Cameras: "Every picture still goes through the full pipeline (calibration, repeat-exposure stacking, alignment, SPICE centring); these settings only choose what the camera windows show.",
+    Cameras: "Every picture still goes through the full pipeline (calibration, repeat-exposure stacking, alignment, SPICE centering); these settings only choose what the camera windows show.",
     Data: "Window positions and these settings are kept in this browser only."
   };
   let saved = {};
@@ -1150,13 +1150,13 @@ body.phone #excard:not(.full) { width: calc(100% - 16px) !important; left: 8px !
       hint: "Target, altitude, speed, camera and pointing along the top of the view." });
   cls("interface.hudline", "s-nohudline", false);
   // Cameras (the camera windows read cameras.composites, cameras.mosaics, cameras.fullRes, cameras.fullDelay and cameras.stale)
-  D({ key: "cameras.composites", section: "Cameras", label: "Colour composites", type: "toggle", value: true,
-      hint: "Once a filter set is complete, show its colour picture. Off shows every frame on its own." });
+  D({ key: "cameras.composites", section: "Cameras", label: "Color composites", type: "toggle", value: true,
+      hint: "Once a filter set is complete, show its color picture. Off shows every frame on its own." });
   D({ key: "cameras.channels", section: "Cameras", label: "Filter channels", type: "toggle", value: true,
-      hint: "The frames that make up a colour picture, in a strip under it." });
+      hint: "The frames that make up a color picture, in a strip under it." });
   cls("cameras.channels", "s-nochans", false);
   D({ key: "cameras.details", section: "Cameras", label: "Frame details", type: "toggle", value: true,
-      hint: "Status, frame, filter, colour and scale under each picture." });
+      hint: "Status, frame, filter, color and scale under each picture." });
   cls("cameras.details", "s-noinfo", false);
   D({ key: "cameras.mosaics", section: "Cameras", label: "Mosaics in camera windows", type: "toggle", value: true,
       hint: "When Cassini steps a camera across a body, the window builds the mosaic tile by tile. Off shows every frame on its own." });
@@ -1215,7 +1215,7 @@ body.phone #excard:not(.full) { width: calc(100% - 16px) !important; left: 8px !
   D({ key: "movie.fps", section: "Movie", label: "Movie speed", type: "range", value: 8, min: 2, max: 24, step: 1, unit: "fps",
       hint: "Frames per second in movie mode (M). The slider in the Movie window changes this too." });
   D({ key: "movie.processed", section: "Movie", label: "Processed pictures", type: "toggle", value: true,
-      hint: "Movie frames made by the pipeline like the camera windows' pictures: calibrated, colour composites and mosaics. Off plays the archive frames as they are, with no processing. The Processed button in the Movie window (or P) switches it too." });
+      hint: "Movie frames made by the pipeline like the camera windows' pictures: calibrated, color composites and mosaics. Off plays the archive frames as they are, with no processing. The Processed button in the Movie window (or P) switches it too." });
   D({ key: "movie.mosaics", section: "Movie", label: "Mosaics in movies", type: "toggle", value: true,
       hint: "With processed pictures on, a mosaic pass builds its mosaic in the film. Off shows each tile on its own." });
   window.addEventListener("DOMContentLoaded", () => {
@@ -1738,7 +1738,7 @@ body.phone #excard:not(.full) { width: calc(100% - 16px) !important; left: 8px !
   // filters make a two-filter picture, longer as red, shorter as blue and green from both.
   const FILTER_NM = {"N:BL1/BL2":441.2,"N:BL1/CB1":540.4,"N:BL1/CB1A":516.6,"N:BL1/CB1B":635.4,"N:BL1/CB2":585.9,"N:BL1/CB3":462.6,"N:BL1/CBB":603.8,"N:BL1/CL2":456.8,"N:BL1/GRN":497.4,"N:BL1/IR1":697.6,"N:BL1/IR3":806.7,"N:BL1/MT1":465.9,"N:BL1/MT2":520.2,"N:BL1/MT3":451.1,"N:BL1/UV3":389.6,"N:CL1/BL2":441.1,"N:CL1/CB1":619.5,"N:CL1/CB1A":602.9,"N:CL1/CB1B":634.5,"N:CL1/CB2":750.5,"N:CL1/CB3":937.9,"N:CL1/CBA":634.6,"N:CL1/CBB":603.0,"N:CL1/CL2":661.2,"N:CL1/GRN":569.3,"N:CL1/IR1":751.0,"N:CL1/IR3":925.9,"N:CL1/MT1":619.0,"N:CL1/MT2":727.4,"N:CL1/MT3":889.2,"N:CL1/UV3":343.1,"N:HAL/BL2":586.0,"N:HAL/CB1":650.5,"N:HAL/CB1A":604.2,"N:HAL/CB1B":650.6,"N:HAL/CB2":663.5,"N:HAL/CB3":656.3,"N:HAL/CBA":652.7,"N:HAL/CL2":655.6,"N:HAL/GRN":648.0,"N:HAL/IR1":663.7,"N:HAL/IR3":662.5,"N:HAL/MT1":623.4,"N:HAL/MT2":676.7,"N:HAL/MT3":655.0,"N:HAL/UV3":603.7,"N:IR2/BL2":871.1,"N:IR2/CB1":730.2,"N:IR2/CB1A":602.9,"N:IR2/CB1B":761.9,"N:IR2/CB2":768.4,"N:IR2/CB3":933.5,"N:IR2/CBA":638.9,"N:IR2/CL2":860.8,"N:IR2/GRN":829.6,"N:IR2/IR1":827.4,"N:IR2/IR3":901.4,"N:IR2/MT1":871.9,"N:IR2/MT2":791.9,"N:IR2/MT3":889.2,"N:IR2/UV3":845.0,"N:IR4/BL2":734.2,"N:IR4/CB1":624.1,"N:IR4/CB1A":602.9,"N:IR4/CB1B":634.6,"N:IR4/CB2":750.6,"N:IR4/CB3":972.9,"N:IR4/CL2":1001.5,"N:IR4/GRN":610.8,"N:IR4/IR1":914.6,"N:IR4/IR3":996.2,"N:IR4/MT1":878.9,"N:IR4/MT2":727.2,"N:IR4/MT3":972.4,"N:IR4/UV3":995.0,"N:IRP0/BL2":830.2,"N:IRP0/BL2_B":762.9,"N:IRP0/CB1":622.9,"N:IRP0/CB1A":604.4,"N:IRP0/CB1A_B":604.2,"N:IRP0/CB1B":634.6,"N:IRP0/CB1B_B":633.9,"N:IRP0/CB1_B":615.2,"N:IRP0/CB2":750.5,"N:IRP0/CB2_B":750.5,"N:IRP0/CB3":937.9,"N:IRP0/CB3_B":937.9,"N:IRP0/CBA":634.7,"N:IRP0/CBB":604.5,"N:IRP0/CL2":741.1,"N:IRP0/CL2_B":662.0,"N:IRP0/GRN":613.9,"N:IRP0/GRN_B":612.0,"N:IRP0/IR1":752.0,"N:IRP0/IR1_B":730.2,"N:IRP0/IR3":926.1,"N:IRP0/IR3_B":934.5,"N:IRP0/MT1":619.0,"N:IRP0/MT1_B":618.9,"N:IRP0/MT2":727.4,"N:IRP0/MT2_B":727.4,"N:IRP0/MT3":889.2,"N:IRP0/MT3_B":889.7,"N:IRP0/UV3":825.7,"N:IRP0/UV3_B":853.4,"N:P0/BL2":441.2,"N:P0/BL2_B":439.9,"N:P0/CB1":620.1,"N:P0/CB1A":602.9,"N:P0/CB1A_B":603.1,"N:P0/CB1B":634.6,"N:P0/CB1B_B":634.9,"N:P0/CB1_B":623.7,"N:P0/CB2":750.5,"N:P0/CB2_B":750.7,"N:P0/CB3":647.8,"N:P0/CB3_B":738.2,"N:P0/CBA":634.7,"N:P0/CBB":603.0,"N:P0/CL2":636.3,"N:P0/CL2_B":738.3,"N:P0/GRN":569.7,"N:P0/GRN_B":566.5,"N:P0/IR1":737.0,"N:P0/IR1_B":761.1,"N:P0/IR3":734.7,"N:P0/IR3_B":768.5,"N:P0/MT1":618.9,"N:P0/MT1_B":619.2,"N:P0/MT2":727.4,"N:P0/MT2_B":727.5,"N:P0/MT3":633.3,"N:P0/MT3_B":739.3,"N:P0/UV3":345.4,"N:P0/UV3_B":348.0,"N:P120/BL2":441.2,"N:P120/BL2_B":439.9,"N:P120/CB1":620.1,"N:P120/CB1A":602.9,"N:P120/CB1A_B":603.1,"N:P120/CB1B":634.6,"N:P120/CB1B_B":634.9,"N:P120/CB1_B":623.7,"N:P120/CB2":750.5,"N:P120/CB2_B":750.7,"N:P120/CB3":647.8,"N:P120/CB3_B":738.2,"N:P120/CBA":634.7,"N:P120/CBB":603.0,"N:P120/CL2":636.3,"N:P120/CL2_B":738.3,"N:P120/GRN":569.7,"N:P120/GRN_B":566.5,"N:P120/IR1":737.0,"N:P120/IR1_B":761.1,"N:P120/IR3":734.7,"N:P120/IR3_B":768.5,"N:P120/MT1":618.9,"N:P120/MT1_B":619.2,"N:P120/MT2":727.4,"N:P120/MT2_B":727.5,"N:P120/MT3":633.3,"N:P120/MT3_B":739.3,"N:P120/UV3":345.4,"N:P120/UV3_B":348.0,"N:P60/BL2":441.2,"N:P60/BL2_B":439.9,"N:P60/CB1":620.1,"N:P60/CB1A":602.9,"N:P60/CB1A_B":603.1,"N:P60/CB1B":634.6,"N:P60/CB1B_B":634.9,"N:P60/CB1_B":623.7,"N:P60/CB2":750.5,"N:P60/CB2_B":750.7,"N:P60/CB3":647.8,"N:P60/CB3_B":738.2,"N:P60/CBA":634.7,"N:P60/CBB":603.0,"N:P60/CL2":636.3,"N:P60/CL2_B":738.3,"N:P60/GRN":569.7,"N:P60/GRN_B":566.5,"N:P60/IR1":737.0,"N:P60/IR1_B":761.1,"N:P60/IR3":734.7,"N:P60/IR3_B":768.5,"N:P60/MT1":618.9,"N:P60/MT1_B":619.2,"N:P60/MT2":727.4,"N:P60/MT2_B":727.5,"N:P60/MT3":633.3,"N:P60/MT3_B":739.3,"N:P60/UV3":345.4,"N:P60/UV3_B":348.0,"N:RED/BL2":629.9,"N:RED/CB1":619.7,"N:RED/CB1A":603.0,"N:RED/CB1B":634.6,"N:RED/CB2":744.3,"N:RED/CB3":649.3,"N:RED/CBA":634.6,"N:RED/CBB":603.1,"N:RED/CL2":650.7,"N:RED/GRN":601.0,"N:RED/IR1":701.9,"N:RED/IR3":695.4,"N:RED/MT1":618.9,"N:RED/MT2":726.6,"N:RED/MT3":646.4,"N:RED/UV3":643.6,"N:UV1/BL2":438.0,"N:UV1/CB1":616.3,"N:UV1/CB1A":601.9,"N:UV1/CB1B":634.3,"N:UV1/CB2":747.4,"N:UV1/CB3":929.6,"N:UV1/CL2":266.7,"N:UV1/GRN":569.2,"N:UV1/IR1":753.2,"N:UV1/IR3":920.1,"N:UV1/MT1":611.5,"N:UV1/MT2":711.2,"N:UV1/MT3":886.3,"N:UV1/UV3":353.8,"N:UV2/BL2":413.9,"N:UV2/CB1":600.4,"N:UV2/CB1A":589.0,"N:UV2/CB1B":634.8,"N:UV2/CB2":720.7,"N:UV2/CB3":903.2,"N:UV2/CL2":306.5,"N:UV2/GRN":560.2,"N:UV2/IR1":767.3,"N:UV2/IR3":919.8,"N:UV2/MT1":524.1,"N:UV2/MT2":669.5,"N:UV2/MT3":862.7,"N:UV2/UV3":317.6,"W:CB2/BL1":533.6,"W:CB2/CL2":752.3,"W:CB2/GRN":570.7,"W:CB2/HAL":704.7,"W:CB2/IR1":752.3,"W:CB2/IRP0":752.3,"W:CB2/IRP0_B":752.3,"W:CB2/IRP90":752.3,"W:CB2/IRP90_B":752.3,"W:CB2/RED":747.3,"W:CB2/VIO":670.3,"W:CB3/BL1":485.4,"W:CB3/CL2":938.4,"W:CB3/GRN":579.8,"W:CB3/HAL":708.5,"W:CB3/IR1":817.0,"W:CB3/IRP0":938.6,"W:CB3/IRP0_B":938.5,"W:CB3/IRP90":938.6,"W:CB3/IRP90_B":938.5,"W:CB3/RED":642.8,"W:CB3/VIO":587.4,"W:CL1/BL1":462.0,"W:CL1/CL2":635.0,"W:CL1/GRN":568.6,"W:CL1/HAL":656.4,"W:CL1/IR1":740.5,"W:CL1/IRP0":706.4,"W:CL1/IRP0_B":637.1,"W:CL1/IRP90":706.4,"W:CL1/IRP90_B":637.1,"W:CL1/RED":647.6,"W:CL1/VIO":419.7,"W:IR2/BL1":822.9,"W:IR2/CL2":852.0,"W:IR2/GRN":806.2,"W:IR2/HAL":862.9,"W:IR2/IR1":826.3,"W:IR2/IRP0":852.1,"W:IR2/IRP0_B":883.1,"W:IR2/IRP90":852.1,"W:IR2/IRP90_B":883.1,"W:IR2/RED":718.7,"W:IR2/VIO":863.6,"W:IR3/BL1":907.9,"W:IR3/CL2":914.7,"W:IR3/GRN":907.8,"W:IR3/HAL":764.8,"W:IR3/IR1":783.2,"W:IR3/IRP0":914.7,"W:IR3/IRP0_B":925.7,"W:IR3/IRP90":914.7,"W:IR3/IRP90_B":925.7,"W:IR3/RED":690.2,"W:IR3/VIO":907.4,"W:IR4/BL1":496.3,"W:IR4/CL2":1001.2,"W:IR4/GRN":589.1,"W:IR4/HAL":721.4,"W:IR4/IR1":824.0,"W:IR4/IRP0":1001.3,"W:IR4/IRP0_B":1000.7,"W:IR4/IRP90":1001.3,"W:IR4/IRP90_B":1000.7,"W:IR4/RED":648.3,"W:IR4/VIO":636.5,"W:IR5/BL1":469.2,"W:IR5/CL2":1033.2,"W:IR5/GRN":562.0,"W:IR5/HAL":672.0,"W:IR5/IR1":759.7,"W:IR5/IRP0":1034.5,"W:IR5/IRP0_B":1034.9,"W:IR5/IRP90":1034.5,"W:IR5/IRP90_B":1034.9,"W:IR5/RED":651.3,"W:IR5/VIO":463.7,"W:MT2/BL1":488.1,"W:MT2/CL2":728.6,"W:MT2/GRN":582.4,"W:MT2/HAL":674.1,"W:MT2/IR1":728.4,"W:MT2/IRP0":728.6,"W:MT2/IRP0_B":728.7,"W:MT2/IRP90":728.6,"W:MT2/IRP90_B":728.7,"W:MT2/RED":727.6,"W:MT2/VIO":509.4,"W:MT3/BL1":578.7,"W:MT3/CL2":890.3,"W:MT3/GRN":614.4,"W:MT3/HAL":850.8,"W:MT3/IR1":860.6,"W:MT3/IRP0":890.4,"W:MT3/IRP0_B":890.0,"W:MT3/IRP90":890.4,"W:MT3/IRP90_B":890.0,"W:MT3/RED":656.8,"W:MT3/VIO":775.8};
   const SET_GAP = 300;
-  const KIND = { true: "True colour", false: "False colour", two: "Two-filter colour" };
+  const KIND = { true: "True color", false: "False color", two: "Two-filter color" };
   const colourFilter = k => {
     const a = catalog.f1[k], b = catalog.f2[k];
     if (/^(P\d|IRP)/.test(a) || /^IRP/.test(b)) return null;
@@ -1848,7 +1848,7 @@ body.phone #excard:not(.full) { width: calc(100% - 16px) !important; left: 8px !
     let n = 0, nN = 0, sets = 0;
     for (let j = lastImageIndex(state.et - 86400) + 1; j <= i; j++) { const q = order[j]; n++; if (catalog.cam[q] === "N") nN++; }
     for (const st of catalog.sets) if (st.ready > state.et - 86400 && st.ready <= state.et) sets++;
-    $("l24").innerHTML = `Last 24 h: <b>${fmt(n)}</b> frames · <b>${fmt(nN)}</b> NAC · <b>${fmt(n - nN)}</b> WAC · <b>${fmt(sets)}</b> colour sets`;
+    $("l24").innerHTML = `Last 24 h: <b>${fmt(n)}</b> frames · <b>${fmt(nN)}</b> NAC · <b>${fmt(n - nN)}</b> WAC · <b>${fmt(sets)}</b> color sets`;
   };
 
   // ---------- real frames, fetched one at a time from the frame server (web/frames/frame_server.py) ----------
@@ -2055,7 +2055,7 @@ body.phone #excard:not(.full) { width: calc(100% - 16px) !important; left: 8px !
           if (window.cassiniPicture && rep.mosaic > (obsShown === catalog.obs[w.k] ? obsTiles : 0)) window.cassiniPicture({ cam, body, win, k: w.k, nm: nmOf(w.k), set: w.set, use: w.set >= 0 ? catalog.sets[w.set].use.map(nmOf) : null, tile: rep.mosaic, of: rep.of });
           obsShown = catalog.obs[w.k]; obsTiles = rep.mosaic; obsK = w.k; obsSize = rank(sz);
           well.style.aspectRatio = `${rep.width} / ${rep.height}`;
-          card.querySelector(".kindtag").textContent = `${rep.filters >= 3 ? ((rep.filter_names || []).includes("GRN") ? "COLOUR " : "FALSE COLOUR ") : ""}MOSAIC · ${rep.mosaic} OF ${rep.of} TILES${rep.filters > 1 ? ` · ${rep.filters} FILTERS` : ""}`;
+          card.querySelector(".kindtag").textContent = `${rep.filters >= 3 ? ((rep.filter_names || []).includes("GRN") ? "COLOR " : "FALSE COLOR ") : ""}MOSAIC · ${rep.mosaic} OF ${rep.of} TILES${rep.filters > 1 ? ` · ${rep.filters} FILTERS` : ""}`;
           return;
         }
         card.querySelector(".kindtag").textContent = `${w.set >= 0 ? KIND[catalog.sets[w.set].kind].toUpperCase() + " · " : ""}MOSAIC${rep && rep.mosaic ? ` OF ${rep.mosaic}` : ""}`;
@@ -2154,7 +2154,7 @@ body.phone #excard:not(.full) { width: calc(100% - 16px) !important; left: 8px !
       field("frame").textContent = `${titleCase(catalog.target[k] || "Unknown")} · ${catalog.id[k]}`;
       const c = catalog.cls[k], pol = /^P\d|^IRP/.test(catalog.f1[k]) || /^IRP/.test(catalog.f2[k]) ? " · polarizer" : "";
       field("filter").innerHTML = `<span class="swatch" style="background:${CLS[c][1]}"></span>${catalog.f1[k]}/${catalog.f2[k]}${nmOf(k) ? ` · ${Math.round(nmOf(k))} nm` : ""}${pol}`;
-      field("colour").textContent = !s ? (colourFilter(k) ? "Single filter" : "Clear, no colour") : ready
+      field("colour").textContent = !s ? (colourFilter(k) ? "Single filter" : "Clear, no color") : ready
         ? colourText(s, si) : `${KIND[s.kind]} set, ${s.use.filter(q => catalog.et[q] <= state.et).length} of ${s.use.length} channels taken`;
       const n24 = p - lastOfCam(cam, state.et - 86400, body);
       field("details").textContent = `${kp ? `${kp < 10 ? kp.toFixed(2) : fmt(kp)} km/px · ` : ""}${fmt(n24)} frames in the last 24 h`;
@@ -2263,7 +2263,7 @@ body.phone #excard:not(.full) { width: calc(100% - 16px) !important; left: 8px !
   })();
   const S = window.cassiniSettings, WM = window.cassiniWM;
   const PICTURES = ".camwin, .bodywin, #reelcard, #moviecard";
-  const TAGS = ["Too dark", "Too bright", "Wrong colour", "Channels misaligned", "Stripes or noise", "Blurry", "Blank or missing", "Off-centre", "Mosaic wrong", "Out of sync"];
+  const TAGS = ["Too dark", "Too bright", "Wrong color", "Channels misaligned", "Stripes or noise", "Blurry", "Blank or missing", "Off-center", "Mosaic wrong", "Out of sync"];
   const pop = $("flagpop"), toast = $("flagtoast"), FLAG_ICON = '<svg viewBox="0 0 10 10" aria-hidden="true"><path d="M2 9.5V1h6l-1.4 2.2L8 5.4H2"/></svg>';
   const ID = /[NW]\d{10}_\d+/g;
   let pending = null, count = null;
@@ -2319,7 +2319,7 @@ body.phone #excard:not(.full) { width: calc(100% - 16px) !important; left: 8px !
       if (!well || !well.classList.contains("has-frame") || !shot.naturalWidth) return null;
       canvas = fromImg(shot); src = shot.dataset.src || shot.src;
       try { report = shot.dataset.report ? JSON.parse(shot.dataset.report) : null; } catch (e) {}
-      what = well.classList.contains("mosaic") ? (report && report.observation ? "pass mosaic" : "mosaic") : well.classList.contains("composite") ? "colour composite" : "frame";
+      what = well.classList.contains("mosaic") ? (report && report.observation ? "pass mosaic" : "mosaic") : well.classList.contains("composite") ? "color composite" : "frame";
       if (!report && /\/color\.webp/.test(src)) report = await fetch(src).then(r => JSON.parse(r.headers.get("X-Composite") || "null"), () => null);
       const tag = (w.querySelector(".shottag") || {}).textContent || "";
       ids = tag.match(ID) || [];
@@ -2496,7 +2496,7 @@ body.phone #excard:not(.full) { width: calc(100% - 16px) !important; left: 8px !
   // A server that has none (404) or cannot make one moves on to the next choice; the archive frame is the last resort.
   const S = window.cassiniSettings, GRACE = 1200;
   const opt = (key, dflt) => (S && S.get(key) !== undefined ? S.get(key) : dflt);
-  const KIND = { true: "true colour", false: "false colour", two: "two-filter colour" };
+  const KIND = { true: "true color", false: "false color", two: "two-filter color" };
   const size = () => (window.cassiniWM && window.cassiniWM.big ? window.cassiniWM.big(card, card.querySelector(".mvwell")) : card.classList.contains("zoomed")) ? 1024 : 512;
   // the pictures frame f can be shown as, each { url, kind }: best (mosaic, then composite) and base (processed, then raw)
   function choices(f) {
@@ -2511,7 +2511,7 @@ body.phone #excard:not(.full) { width: calc(100% - 16px) !important; left: 8px !
     for (let j = f.i - 1; j >= Math.max(0, f.i - 64); j--) if (catalog.cam[order[j]] === catalog.cam[k]) { prev = order[j]; break; }
     const tile = prev >= 0 && catalog.target[prev] === catalog.target[k] && catalog.obs[prev] === catalog.obs[k] && (!s || comp);
     if (tile && opt("movie.mosaics", true) && window.cassiniMosaics !== false) best.push({ url: `${FRAMES}/frames/mosaic/${comp ? catalog.id[s.use[0]] : id}.webp?size=${sz}`, kind: "mosaic" });
-    if (comp) best.push({ url: `${FRAMES}/frames/color.webp?ids=${s.use.map(q => catalog.id[q]).join(",")}&size=${sz}`, kind: KIND[s.kind] || "colour" });
+    if (comp) best.push({ url: `${FRAMES}/frames/color.webp?ids=${s.use.map(q => catalog.id[q]).join(",")}&size=${sz}`, kind: KIND[s.kind] || "color" });
     return { best, base: [{ url: `${FRAMES}/frames/processed/${id}.webp?size=${sz}`, kind: "processed" }, raw] };
   }
   // one chain of choices: tried in turn until one loads (ok true) or none does (ok false); a deferred one waits for
@@ -2762,7 +2762,7 @@ body.phone #excard:not(.full) { width: calc(100% - 16px) !important; left: 8px !
         <div class="camlabel"><span class="led"></span>${cam === "N" ? "Narrow-angle" : "Wide-angle"}</div>
         <div class="well"><div class="wellmsg"><b>No signal</b>Waiting for the frame server</div><img class="shot" alt="" crossorigin="anonymous"><span class="shottag"></span><span class="kindtag"></span></div>
         <div class="chans" aria-label="Filter channels"></div>
-        <dl class="info"><dt>Status</dt><dd data-f="status">—</dd><dt>Filter</dt><dd data-f="filter">—</dd><dt>Colour</dt><dd data-f="colour">—</dd></dl>
+        <dl class="info"><dt>Status</dt><dd data-f="status">—</dd><dt>Filter</dt><dd data-f="filter">—</dd><dt>Color</dt><dd data-f="colour">—</dd></dl>
       </div>`;
   }
   // a free place for a new window: the first slot in rows from the top left that no open window covers
@@ -2876,7 +2876,7 @@ body.phone #excard:not(.full) { width: calc(100% - 16px) !important; left: 8px !
   // so the two cameras never take turns in one place
   const wells = {};
   for (const cam of ["N", "W"]) { const cv = $("rlcanvas" + cam); wells[cam] = { el: $("rlwell" + cam), cv, g: cv.getContext("2d"), i: -1 }; }
-  const KIND = { true: "True colour", false: "False colour", two: "Two-filter colour", bw: "Black and white" };
+  const KIND = { true: "True color", false: "False color", two: "Two-filter color", bw: "Black and white" };
   // R: the reel playing. shots: its pictures; i: the one on screen; buf: pictures fetched (or on their way) by index
   const R = { open: false, target: null, shots: [], i: -1, playing: false, fps: 8, mosaic: true, due: 0, buf: new Map(), looping: false, hidden: [], waitSince: 0 };
   try { const f = +localStorage.getItem("cassini-os-reel-fps"); if (f >= 2 && f <= 24) R.fps = f; } catch (e) {}
@@ -2925,7 +2925,7 @@ body.phone #excard:not(.full) { width: calc(100% - 16px) !important; left: 8px !
   function describe(h) {
     if (!h) return "";
     const st = (h.stacked || []).filter(n => n > 1);
-    return [h.centred ? "centred, north up" : h.frame_offset ? "close-up, placed on the body, north up" : "not centred",
+    return [h.centred ? "centered, north up" : h.frame_offset ? "close-up, placed on the body, north up" : "not centered",
             st.length ? `stacked ${st.join("+")}` : "", h.calibrated ? "calibrated" : "",
             (h.aligned || []).some(a => /not aligned|failed/.test(a)) ? "channels not aligned" : "",
             h.mosaic > 1 ? `mosaic of ${h.mosaic}` : ""].filter(Boolean).join(" · ");
@@ -2984,7 +2984,7 @@ body.phone #excard:not(.full) { width: calc(100% - 16px) !important; left: 8px !
     }
     $("rlpos").max = R.shots.length - 1;
     const n = R.shots.length, colour = R.shots.filter(s => s.kind !== "bw").length;
-    $("rlmsg").textContent = `${fmtInt(n)} pictures of ${titleCase(target)}, ${fmtInt(colour)} in colour`;
+    $("rlmsg").textContent = `${fmtInt(n)} pictures of ${titleCase(target)}, ${fmtInt(colour)} in color`;
     blank(); R.i = -1; for (const w of Object.values(wells)) { w.i = -1; w.el.querySelectorAll(".rltag, .rlhow").forEach(e => { e.textContent = ""; }); }
     setPlaying(false); setReelPlaying(true);
   }
@@ -3052,7 +3052,7 @@ body.phone #excard:not(.full) { width: calc(100% - 16px) !important; left: 8px !
   function meta(e) {
     if (e.kind === "milestone") return `Probe camera · ${fmtSpan(e.end_et - e.et)}`;
     const cams = Object.keys(e.cams).map(c => c === "N" ? "NAC" : "WAC").join(" + ");
-    return `${fmtInt(e.frames)} pictures · ${cams}${e.rgb_sets ? " · colour" : ""} · ${fmtSpan(e.end_et - e.et)}`;
+    return `${fmtInt(e.frames)} pictures · ${cams}${e.rgb_sets ? " · color" : ""} · ${fmtSpan(e.end_et - e.et)}`;
   }
 
   // ---- thumbnails: made by the frame server through the pipeline, by the rule in build_data.thumb_hint ----
@@ -3199,8 +3199,8 @@ body.phone #excard:not(.full) { width: calc(100% - 16px) !important; left: 8px !
   D({ key: "sound.volume", label: "Volume", type: "range", value: 70, min: 0, max: 100, step: 1, unit: "%" });
   D({ key: "sound.chimes", label: "Picture chimes", type: "range", value: 80, min: 0, max: 100, step: 1, unit: "%",
       hint: "Pitch from the filter (blue high, red and infrared low) and the target's size; the narrow-angle camera rings an octave above the wide-angle one." });
-  D({ key: "sound.chords", label: "Colour set chords", type: "range", value: 60, min: 0, max: 100, step: 1, unit: "%",
-      hint: "When a colour picture is complete, its channels' notes together." });
+  D({ key: "sound.chords", label: "Color set chords", type: "range", value: 60, min: 0, max: 100, step: 1, unit: "%",
+      hint: "When a color picture is complete, its channels' notes together." });
   D({ key: "sound.mosaic", label: "Mosaic tiles", type: "range", value: 50, min: 0, max: 100, step: 1, unit: "%",
       hint: "A high note that climbs with each new tile of a mosaic, and a chord when it is finished." });
   D({ key: "sound.hum", label: "Spacecraft tones", type: "range", value: 25, min: 0, max: 100, step: 1, unit: "%",
@@ -5151,7 +5151,7 @@ function buildUi() {
     const d = new Date(etToMs(e.et));
     const title = e.kind === "flyby" ? `${titleCase(e.body)} flyby` : e.label;
     const s = e.kind === "milestone" ? d.toISOString().slice(11, 16) + " UTC"
-      : e.kind === "observation" ? `${fmtInt(e.frames)} pictures${e.rgb_sets ? ` · ${e.rgb_sets} in colour` : ""} · ${fmtSpan(e.end_et - e.et)}`
+      : e.kind === "observation" ? `${fmtInt(e.frames)} pictures${e.rgb_sets ? ` · ${e.rgb_sets} in color` : ""} · ${fmtSpan(e.end_et - e.et)}`
       : `${fmtInt(e.altitude_km)} km · ${e.speed_km_s.toFixed(1)} km/s`;
     li.innerHTML = `<button><span class="d">${MONTHS[d.getUTCMonth()]} ${d.getUTCDate()}</span><span class="t">${title}</span>${e.photo_score ? `<span class="sc" title="Photo score" style="--s:${Math.round(e.photo_score)}">${Math.round(e.photo_score)}</span>` : ""}<span class="s">${s}</span></button>`;
     if (e.why) li.querySelector("button").title = e.why + (e.source ? ` (${e.source})` : "");
@@ -5336,7 +5336,7 @@ function frame(now) {
 // ---------- loading screen: wireframe Cassini and mission facts while data loads ----------
 (function () {
   const $ = id => document.getElementById(id);
-  const FACTS = [{"text": "Cassini was the biggest spacecraft ever sent to another planet: 6.7 m tall, about two storeys, and 5.6 tonnes at launch.", "source": "https://www.esa.int/Science_Exploration/Space_Science/Cassini-Huygens/Cassini-Huygens_factsheet2"}, {"text": "Cassini was too heavy to fly straight to Saturn. It spent nearly seven years getting there, slingshotting past Venus twice, then Earth, then Jupiter, to pick up speed.", "source": "https://science.nasa.gov/mission/cassini/the-journey/timeline/"}, {"text": "Cassini was the first spacecraft ever to orbit Saturn. To get captured, it fired its main engine for 96 minutes on arrival in July 2004.", "source": "https://science.nasa.gov/mission/cassini-huygens/"}, {"text": "Cassini had no solar panels. Three nuclear generators turned the heat of decaying plutonium-238 into electricity.", "source": "https://science.nasa.gov/mission/cassini/spacecraft/cassini-orbiter/"}, {"text": "Cassini spent 13 years orbiting Saturn, nearly half a Saturn year, long enough to watch the seasons change.", "source": "https://science.nasa.gov/mission/cassini/about-the-mission/"}, {"text": "In January 2005 the Huygens probe parachuted onto Titan. It is still the only landing ever made on a world in the outer solar system.", "source": "https://science.nasa.gov/mission/cassini/the-journey/timeline/"}, {"text": "After landing on Titan, Huygens ran on batteries and kept sending data for another 72 minutes.", "source": "https://science.nasa.gov/mission/cassini/the-journey/timeline/"}, {"text": "The small moon Enceladus is spraying water vapour and ice into space from warm cracks at its south pole. Cassini caught it in the act in 2005.", "source": "https://science.nasa.gov/mission/cassini/the-journey/timeline/"}, {"text": "Titan has lakes and seas on its surface, but they are liquid methane and other hydrocarbons, not water. Cassini mapped them by radar through the haze.", "source": "https://science.nasa.gov/mission/cassini-huygens/"}, {"text": "Saturn's north pole is ringed by a hexagon: a six-sided jet stream wider than the whole Earth.", "source": "https://science.nasa.gov/mission/cassini/the-journey/timeline/"}, {"text": "On 19 July 2013 Cassini hid in Saturn's shadow and photographed Earth as a tiny dot beyond the rings, while people back home were invited to wave at Saturn.", "source": "https://science.nasa.gov/mission/cassini/spacecraft/cassini-orbiter/imaging-science-subsystem/"}, {"text": "Every picture in the camera windows comes from one of Cassini's two cameras: the narrow-angle telephoto (NAC) and the wide-angle (WAC).", "source": "https://science.nasa.gov/mission/cassini/spacecraft/cassini-orbiter/imaging-science-subsystem/"}, {"text": "Giovanni Cassini found the big dark gap in Saturn's rings that still bears his name. Christiaan Huygens discovered Titan in 1655. The spacecraft and its probe are named after them.", "source": "https://www.esa.int/Science_Exploration/Space_Science/Cassini-Huygens/Cassini-Huygens_factsheet2"}, {"text": "Cassini found new moons hiding in and near the rings, among them Methone, Pallene, Daphnis, Anthe and Aegaeon.", "source": "https://science.nasa.gov/mission/cassini-huygens/"}, {"text": "In its last five months Cassini dived 22 times through the gap between Saturn and its rings, where no spacecraft had ever been.", "source": "https://science.nasa.gov/mission/cassini/grand-finale/overview/"}, {"text": "Cassini's ending was on purpose: it was steered into Saturn so it could never crash into Enceladus or Titan and contaminate them.", "source": "https://science.nasa.gov/mission/cassini/grand-finale/overview/"}, {"text": "Cassini kept sending science during its final plunge, for as long as its thrusters could keep the antenna pointed at Earth. The last signal reached Australia on 15 September 2017.", "source": "https://www.jpl.nasa.gov/news/nasas-cassini-spacecraft-ends-its-historic-exploration-of-saturn"}];
+  const FACTS = [{"text": "Cassini was the biggest spacecraft ever sent to another planet: 6.7 m tall, about two stories, and 5.6 metric tons at launch.", "source": "https://www.esa.int/Science_Exploration/Space_Science/Cassini-Huygens/Cassini-Huygens_factsheet2"}, {"text": "Cassini was too heavy to fly straight to Saturn. It spent nearly seven years getting there, slingshotting past Venus twice, then Earth, then Jupiter, to pick up speed.", "source": "https://science.nasa.gov/mission/cassini/the-journey/timeline/"}, {"text": "Cassini was the first spacecraft ever to orbit Saturn. To get captured, it fired its main engine for 96 minutes on arrival in July 2004.", "source": "https://science.nasa.gov/mission/cassini-huygens/"}, {"text": "Cassini had no solar panels. Three nuclear generators turned the heat of decaying plutonium-238 into electricity.", "source": "https://science.nasa.gov/mission/cassini/spacecraft/cassini-orbiter/"}, {"text": "Cassini spent 13 years orbiting Saturn, nearly half a Saturn year, long enough to watch the seasons change.", "source": "https://science.nasa.gov/mission/cassini/about-the-mission/"}, {"text": "In January 2005 the Huygens probe parachuted onto Titan. It is still the only landing ever made on a world in the outer solar system.", "source": "https://science.nasa.gov/mission/cassini/the-journey/timeline/"}, {"text": "After landing on Titan, Huygens ran on batteries and kept sending data for another 72 minutes.", "source": "https://science.nasa.gov/mission/cassini/the-journey/timeline/"}, {"text": "The small moon Enceladus is spraying water vapor and ice into space from warm cracks at its south pole. Cassini caught it in the act in 2005.", "source": "https://science.nasa.gov/mission/cassini/the-journey/timeline/"}, {"text": "Titan has lakes and seas on its surface, but they are liquid methane and other hydrocarbons, not water. Cassini mapped them by radar through the haze.", "source": "https://science.nasa.gov/mission/cassini-huygens/"}, {"text": "Saturn's north pole is ringed by a hexagon: a six-sided jet stream wider than the whole Earth.", "source": "https://science.nasa.gov/mission/cassini/the-journey/timeline/"}, {"text": "On 19 July 2013 Cassini hid in Saturn's shadow and photographed Earth as a tiny dot beyond the rings, while people back home were invited to wave at Saturn.", "source": "https://science.nasa.gov/mission/cassini/spacecraft/cassini-orbiter/imaging-science-subsystem/"}, {"text": "Every picture in the camera windows comes from one of Cassini's two cameras: the narrow-angle telephoto (NAC) and the wide-angle (WAC).", "source": "https://science.nasa.gov/mission/cassini/spacecraft/cassini-orbiter/imaging-science-subsystem/"}, {"text": "Giovanni Cassini found the big dark gap in Saturn's rings that still bears his name. Christiaan Huygens discovered Titan in 1655. The spacecraft and its probe are named after them.", "source": "https://www.esa.int/Science_Exploration/Space_Science/Cassini-Huygens/Cassini-Huygens_factsheet2"}, {"text": "Cassini found new moons hiding in and near the rings, among them Methone, Pallene, Daphnis, Anthe and Aegaeon.", "source": "https://science.nasa.gov/mission/cassini-huygens/"}, {"text": "In its last five months Cassini dived 22 times through the gap between Saturn and its rings, where no spacecraft had ever been.", "source": "https://science.nasa.gov/mission/cassini/grand-finale/overview/"}, {"text": "Cassini's ending was on purpose: it was steered into Saturn so it could never crash into Enceladus or Titan and contaminate them.", "source": "https://science.nasa.gov/mission/cassini/grand-finale/overview/"}, {"text": "Cassini kept sending science during its final plunge, for as long as its thrusters could keep the antenna pointed at Earth. The last signal reached Australia on 15 September 2017.", "source": "https://www.jpl.nasa.gov/news/nasas-cassini-spacecraft-ends-its-historic-exploration-of-saturn"}];
   const SHOW_AFTER = 300, MIN_SHOWN = 700, TIP_EVERY = 8000;
   const root = $("loadscreen"), cv = root.querySelector("canvas"), status = root.querySelector(".ls-status"), tip = root.querySelector(".ls-tip");
   const slow = matchMedia("(prefers-reduced-motion: reduce)").matches;

@@ -39,7 +39,7 @@ body.phone #moviecard:not(.full) { width: calc(100% - 16px) !important; left: 8p
     <div class="mvbar">
       <button class="btn round" id="mvplay" aria-label="Play or pause the movie">❚❚</button>
       <label for="mvfps">Speed</label><input type="range" id="mvfps" min="2" max="24" step="1" value="8" aria-label="Frames per second"><span id="mvfpsv">8 fps</span>
-      <button class="btn" id="mvproc" aria-pressed="true" title="Processed: frames calibrated, colour composites and mosaics, as in the camera windows. Off plays the archive frames as they are (P)">Processed</button>
+      <button class="btn" id="mvproc" aria-pressed="true" title="Processed: frames calibrated, color composites and mosaics, as in the camera windows. Off plays the archive frames as they are (P)">Processed</button>
       <span id="mvcount"></span>
     </div>
   </div>
@@ -85,7 +85,7 @@ body.phone #moviecard:not(.full) { width: calc(100% - 16px) !important; left: 8p
   // A server that has none (404) or cannot make one moves on to the next choice; the archive frame is the last resort.
   const S = window.cassiniSettings, GRACE = 1200;
   const opt = (key, dflt) => (S && S.get(key) !== undefined ? S.get(key) : dflt);
-  const KIND = { true: "true colour", false: "false colour", two: "two-filter colour" };
+  const KIND = { true: "true color", false: "false color", two: "two-filter color" };
   const size = () => (window.cassiniWM && window.cassiniWM.big ? window.cassiniWM.big(card, card.querySelector(".mvwell")) : card.classList.contains("zoomed")) ? 1024 : 512;
   // the pictures frame f can be shown as, each { url, kind }: best (mosaic, then composite) and base (processed, then raw)
   function choices(f) {
@@ -100,7 +100,7 @@ body.phone #moviecard:not(.full) { width: calc(100% - 16px) !important; left: 8p
     for (let j = f.i - 1; j >= Math.max(0, f.i - 64); j--) if (catalog.cam[order[j]] === catalog.cam[k]) { prev = order[j]; break; }
     const tile = prev >= 0 && catalog.target[prev] === catalog.target[k] && catalog.obs[prev] === catalog.obs[k] && (!s || comp);
     if (tile && opt("movie.mosaics", true) && window.cassiniMosaics !== false) best.push({ url: `${FRAMES}/frames/mosaic/${comp ? catalog.id[s.use[0]] : id}.webp?size=${sz}`, kind: "mosaic" });
-    if (comp) best.push({ url: `${FRAMES}/frames/color.webp?ids=${s.use.map(q => catalog.id[q]).join(",")}&size=${sz}`, kind: KIND[s.kind] || "colour" });
+    if (comp) best.push({ url: `${FRAMES}/frames/color.webp?ids=${s.use.map(q => catalog.id[q]).join(",")}&size=${sz}`, kind: KIND[s.kind] || "color" });
     return { best, base: [{ url: `${FRAMES}/frames/processed/${id}.webp?size=${sz}`, kind: "processed" }, raw] };
   }
   // one chain of choices: tried in turn until one loads (ok true) or none does (ok false); a deferred one waits for

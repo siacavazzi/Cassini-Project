@@ -65,7 +65,7 @@ body.phone #flagtoast { bottom: calc(env(safe-area-inset-bottom, 0px) + 12px); }
   })();
   const S = window.cassiniSettings, WM = window.cassiniWM;
   const PICTURES = ".camwin, .bodywin, #reelcard, #moviecard";
-  const TAGS = ["Too dark", "Too bright", "Wrong colour", "Channels misaligned", "Stripes or noise", "Blurry", "Blank or missing", "Off-centre", "Mosaic wrong", "Out of sync"];
+  const TAGS = ["Too dark", "Too bright", "Wrong color", "Channels misaligned", "Stripes or noise", "Blurry", "Blank or missing", "Off-center", "Mosaic wrong", "Out of sync"];
   const pop = $("flagpop"), toast = $("flagtoast"), FLAG_ICON = '<svg viewBox="0 0 10 10" aria-hidden="true"><path d="M2 9.5V1h6l-1.4 2.2L8 5.4H2"/></svg>';
   const ID = /[NW]\d{10}_\d+/g;
   let pending = null, count = null;
@@ -121,7 +121,7 @@ body.phone #flagtoast { bottom: calc(env(safe-area-inset-bottom, 0px) + 12px); }
       if (!well || !well.classList.contains("has-frame") || !shot.naturalWidth) return null;
       canvas = fromImg(shot); src = shot.dataset.src || shot.src;
       try { report = shot.dataset.report ? JSON.parse(shot.dataset.report) : null; } catch (e) {}
-      what = well.classList.contains("mosaic") ? (report && report.observation ? "pass mosaic" : "mosaic") : well.classList.contains("composite") ? "colour composite" : "frame";
+      what = well.classList.contains("mosaic") ? (report && report.observation ? "pass mosaic" : "mosaic") : well.classList.contains("composite") ? "color composite" : "frame";
       if (!report && /\/color\.webp/.test(src)) report = await fetch(src).then(r => JSON.parse(r.headers.get("X-Composite") || "null"), () => null);
       const tag = (w.querySelector(".shottag") || {}).textContent || "";
       ids = tag.match(ID) || [];

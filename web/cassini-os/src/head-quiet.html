@@ -520,7 +520,7 @@ body.idle .win.full .titlebar { opacity: 0; }
         <dt>Status</dt><dd><span class="led"></span><span data-f="status">Camera</span></dd>
         <dt>Frame</dt><dd data-f="frame">—</dd>
         <dt>Filter</dt><dd data-f="filter">—</dd>
-        <dt>Colour</dt><dd data-f="colour">—</dd>
+        <dt>Color</dt><dd data-f="colour">—</dd>
         <dt>Details</dt><dd data-f="details">—</dd>
       </dl>
     </div>
@@ -534,7 +534,7 @@ body.idle .win.full .titlebar { opacity: 0; }
       <dl class="info">
         <dt>Status</dt><dd><span class="led"></span><span data-f="status">Camera</span></dd>
         <dt>Filter</dt><dd data-f="filter">—</dd>
-        <dt>Colour</dt><dd data-f="colour">—</dd>
+        <dt>Color</dt><dd data-f="colour">—</dd>
       </dl>
     </div>
   </section>
@@ -583,8 +583,8 @@ body.idle .win.full .titlebar { opacity: 0; }
         </div>
       </div>
     </div>
-    <div id="focusrow" aria-label="Centre the view on"></div>
-    <div class="statusbar"><span>Positions from Cassini's SPICE kernels (J2000). LCD lanes: narrow-angle (NAC) and wide-angle (WAC) frames coloured by filter; RGB marks frames that belong to a red, green and blue set.</span><span id="pnote" hidden></span><b id="sbar">—</b></div>
+    <div id="focusrow" aria-label="Center the view on"></div>
+    <div class="statusbar"><span>Positions from Cassini's SPICE kernels (J2000). LCD lanes: narrow-angle (NAC) and wide-angle (WAC) frames colored by filter; RGB marks frames that belong to a red, green and blue set.</span><span id="pnote" hidden></span><b id="sbar">—</b></div>
   </div>
 
   <div id="loading"><div>Starting Cassini OS<br>Loading trajectories<div class="bar"></div></div></div>
@@ -941,7 +941,7 @@ body.idle .win.full .titlebar { opacity: 0; }
   // filters make a two-filter picture, longer as red, shorter as blue and green from both.
   const FILTER_NM = /*FILTER_NM*/{};
   const SET_GAP = 300;
-  const KIND = { true: "True colour", false: "False colour", two: "Two-filter colour" };
+  const KIND = { true: "True color", false: "False color", two: "Two-filter color" };
   const colourFilter = k => {
     const a = catalog.f1[k], b = catalog.f2[k];
     if (/^(P\d|IRP)/.test(a) || /^IRP/.test(b)) return null;
@@ -1051,7 +1051,7 @@ body.idle .win.full .titlebar { opacity: 0; }
     let n = 0, nN = 0, sets = 0;
     for (let j = lastImageIndex(state.et - 86400) + 1; j <= i; j++) { const q = order[j]; n++; if (catalog.cam[q] === "N") nN++; }
     for (const st of catalog.sets) if (st.ready > state.et - 86400 && st.ready <= state.et) sets++;
-    $("l24").innerHTML = `Last 24 h: <b>${fmt(n)}</b> frames · <b>${fmt(nN)}</b> NAC · <b>${fmt(n - nN)}</b> WAC · <b>${fmt(sets)}</b> colour sets`;
+    $("l24").innerHTML = `Last 24 h: <b>${fmt(n)}</b> frames · <b>${fmt(nN)}</b> NAC · <b>${fmt(n - nN)}</b> WAC · <b>${fmt(sets)}</b> color sets`;
   };
 
   // ---------- real frames, fetched one at a time from the frame server (web/frames/frame_server.py) ----------
@@ -1258,7 +1258,7 @@ body.idle .win.full .titlebar { opacity: 0; }
           if (window.cassiniPicture && rep.mosaic > (obsShown === catalog.obs[w.k] ? obsTiles : 0)) window.cassiniPicture({ cam, body, win, k: w.k, nm: nmOf(w.k), set: w.set, use: w.set >= 0 ? catalog.sets[w.set].use.map(nmOf) : null, tile: rep.mosaic, of: rep.of });
           obsShown = catalog.obs[w.k]; obsTiles = rep.mosaic; obsK = w.k; obsSize = rank(sz);
           well.style.aspectRatio = `${rep.width} / ${rep.height}`;
-          card.querySelector(".kindtag").textContent = `${rep.filters >= 3 ? ((rep.filter_names || []).includes("GRN") ? "COLOUR " : "FALSE COLOUR ") : ""}MOSAIC · ${rep.mosaic} OF ${rep.of} TILES${rep.filters > 1 ? ` · ${rep.filters} FILTERS` : ""}`;
+          card.querySelector(".kindtag").textContent = `${rep.filters >= 3 ? ((rep.filter_names || []).includes("GRN") ? "COLOR " : "FALSE COLOR ") : ""}MOSAIC · ${rep.mosaic} OF ${rep.of} TILES${rep.filters > 1 ? ` · ${rep.filters} FILTERS` : ""}`;
           return;
         }
         card.querySelector(".kindtag").textContent = `${w.set >= 0 ? KIND[catalog.sets[w.set].kind].toUpperCase() + " · " : ""}MOSAIC${rep && rep.mosaic ? ` OF ${rep.mosaic}` : ""}`;
@@ -1357,7 +1357,7 @@ body.idle .win.full .titlebar { opacity: 0; }
       field("frame").textContent = `${titleCase(catalog.target[k] || "Unknown")} · ${catalog.id[k]}`;
       const c = catalog.cls[k], pol = /^P\d|^IRP/.test(catalog.f1[k]) || /^IRP/.test(catalog.f2[k]) ? " · polarizer" : "";
       field("filter").innerHTML = `<span class="swatch" style="background:${CLS[c][1]}"></span>${catalog.f1[k]}/${catalog.f2[k]}${nmOf(k) ? ` · ${Math.round(nmOf(k))} nm` : ""}${pol}`;
-      field("colour").textContent = !s ? (colourFilter(k) ? "Single filter" : "Clear, no colour") : ready
+      field("colour").textContent = !s ? (colourFilter(k) ? "Single filter" : "Clear, no color") : ready
         ? colourText(s, si) : `${KIND[s.kind]} set, ${s.use.filter(q => catalog.et[q] <= state.et).length} of ${s.use.length} channels taken`;
       const n24 = p - lastOfCam(cam, state.et - 86400, body);
       field("details").textContent = `${kp ? `${kp < 10 ? kp.toFixed(2) : fmt(kp)} km/px · ` : ""}${fmt(n24)} frames in the last 24 h`;

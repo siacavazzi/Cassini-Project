@@ -56,7 +56,7 @@ MAX_PICTURES = int(os.environ.get("CASSINI_EXPORT_MAX", 3000))
 SIZES = (512, 768, 1024)
 CAPTION = 48                 # caption strip height at 1024 px panes (scaled with the pane)
 SKIP_NOTE = 3 * 3600         # gaps longer than this are named in the caption
-KIND = {"true": "true colour", "false": "false colour", "two": "two-filter colour"}
+KIND = {"true": "true color", "false": "false color", "two": "two-filter color"}
 FFMPEG = os.environ.get("CASSINI_FFMPEG") or shutil.which("ffmpeg") or "/opt/homebrew/bin/ffmpeg"
 
 
@@ -255,7 +255,7 @@ def _font(px):
 
 def label(e, what):
     """The caption under a pane: when, what, which camera and filters, and how the picture was made."""
-    kind = KIND.get(e.get("set"), "colour") if what == "colour" else what if what in ("mosaic",) else ""
+    kind = KIND.get(e.get("set"), "color") if what == "colour" else what if what in ("mosaic",) else ""
     target = (e["target"] or "Unknown").replace("_", " ").title()
     return " · ".join(x for x in (f"{utc(e['t'])} UTC", target, f"{'NAC' if e['cam'] == 'N' else 'WAC'} {e['filters']}", kind) if x)
 

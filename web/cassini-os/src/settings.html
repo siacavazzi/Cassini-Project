@@ -5,7 +5,7 @@
      A setting is declared once with define() and read with get() / on(); the Settings window lists every defined
      setting, grouped by section, and saves the values on this device (localStorage cassini-os-settings-v1).
 
-       const v = cassiniSettings.define({ key: "cameras.composites", section: "Cameras", label: "Colour composites",
+       const v = cassiniSettings.define({ key: "cameras.composites", section: "Cameras", label: "Color composites",
                                           hint: "…", type: "toggle", value: true });
        cassiniSettings.on("cameras.composites", v => { … });   // runs now and on every change
        cassiniSettings.set("cameras.composites", false);
@@ -75,7 +75,7 @@ body.phone .srow input[type=range] { width: 96px; }
   const KEY = "cassini-os-settings-v1";
   const SECTIONS = ["Interface", "Cameras", "Playback", "View", "Movie", "Data"];   // sections other code adds go after these
   const NOTES = {
-    Cameras: "Every picture still goes through the full pipeline (calibration, repeat-exposure stacking, alignment, SPICE centring); these settings only choose what the camera windows show.",
+    Cameras: "Every picture still goes through the full pipeline (calibration, repeat-exposure stacking, alignment, SPICE centering); these settings only choose what the camera windows show.",
     Data: "Window positions and these settings are kept in this browser only."
   };
   let saved = {};
@@ -199,13 +199,13 @@ body.phone .srow input[type=range] { width: 96px; }
       hint: "Target, altitude, speed, camera and pointing along the top of the view." });
   cls("interface.hudline", "s-nohudline", false);
   // Cameras (the camera windows read cameras.composites, cameras.mosaics, cameras.fullRes, cameras.fullDelay and cameras.stale)
-  D({ key: "cameras.composites", section: "Cameras", label: "Colour composites", type: "toggle", value: true,
-      hint: "Once a filter set is complete, show its colour picture. Off shows every frame on its own." });
+  D({ key: "cameras.composites", section: "Cameras", label: "Color composites", type: "toggle", value: true,
+      hint: "Once a filter set is complete, show its color picture. Off shows every frame on its own." });
   D({ key: "cameras.channels", section: "Cameras", label: "Filter channels", type: "toggle", value: true,
-      hint: "The frames that make up a colour picture, in a strip under it." });
+      hint: "The frames that make up a color picture, in a strip under it." });
   cls("cameras.channels", "s-nochans", false);
   D({ key: "cameras.details", section: "Cameras", label: "Frame details", type: "toggle", value: true,
-      hint: "Status, frame, filter, colour and scale under each picture." });
+      hint: "Status, frame, filter, color and scale under each picture." });
   cls("cameras.details", "s-noinfo", false);
   D({ key: "cameras.mosaics", section: "Cameras", label: "Mosaics in camera windows", type: "toggle", value: true,
       hint: "When Cassini steps a camera across a body, the window builds the mosaic tile by tile. Off shows every frame on its own." });
@@ -264,7 +264,7 @@ body.phone .srow input[type=range] { width: 96px; }
   D({ key: "movie.fps", section: "Movie", label: "Movie speed", type: "range", value: 8, min: 2, max: 24, step: 1, unit: "fps",
       hint: "Frames per second in movie mode (M). The slider in the Movie window changes this too." });
   D({ key: "movie.processed", section: "Movie", label: "Processed pictures", type: "toggle", value: true,
-      hint: "Movie frames made by the pipeline like the camera windows' pictures: calibrated, colour composites and mosaics. Off plays the archive frames as they are, with no processing. The Processed button in the Movie window (or P) switches it too." });
+      hint: "Movie frames made by the pipeline like the camera windows' pictures: calibrated, color composites and mosaics. Off plays the archive frames as they are, with no processing. The Processed button in the Movie window (or P) switches it too." });
   D({ key: "movie.mosaics", section: "Movie", label: "Mosaics in movies", type: "toggle", value: true,
       hint: "With processed pictures on, a mosaic pass builds its mosaic in the film. Off shows each tile on its own." });
   window.addEventListener("DOMContentLoaded", () => {

@@ -1,27 +1,27 @@
 date,label,body,obs,why,source
 2000-12-11,Jupiter turning: the approach movie,JUPITER,ISS_C23RI_RMOV001_PRIME ISS_C23RI_RMOV020_PRIME,"Two days of narrow-angle frames as Jupiter turns, the source of the famous approach movies of its bands and the Great Red Spot",
-2000-12-29,Jupiter portrait mosaic,JUPITER,ISS_C23JU_PORTRAIT_PRIME,"The colour mosaic of the whole of Jupiter, the most detailed global portrait of the planet ever made",PIA02873
-2004-05-09,Saturn on approach,SATURN,ISS_C44SA_APPRMVAP001_PRIME,"Approach movie in colour and methane filters, seven weeks before arrival",
-2004-09-06,Watching Saturn turn,SATURN,ISS_00ASA_2X2MOVIEA001_PRIME,"An 18 hour 2x2 mosaic movie of Saturn's atmosphere in colour, the first long weather watch from orbit",
+2000-12-29,Jupiter portrait mosaic,JUPITER,ISS_C23JU_PORTRAIT_PRIME,"The color mosaic of the whole of Jupiter, the most detailed global portrait of the planet ever made",PIA02873
+2004-05-09,Saturn on approach,SATURN,ISS_C44SA_APPRMVAP001_PRIME,"Approach movie in color and methane filters, seven weeks before arrival",
+2004-09-06,Watching Saturn turn,SATURN,ISS_00ASA_2X2MOVIEA001_PRIME,"An 18 hour 2x2 mosaic movie of Saturn's atmosphere in color, the first long weather watch from orbit",
 2005-11-27,Fountains of Enceladus,ENCELADUS,ISS_018EN_HIPHAS001_PRIME ISS_018EN_PLUMES001_PRIME,"Backlit jets spraying from the south pole: the pictures that showed Enceladus is active",PIA07758
 2006-09-15,In Saturn's Shadow,SATURN,ISS_028RI_HIPHWAC001_PRIME,"Saturn eclipsing the Sun, the rings lit from behind and Earth a dot inside them; the mission's most famous mosaic",PIA08329
-2007-07-28,A day of Saturn's storms,SATURN,ISS_048SA_STRMOVIEC001_PRIME,"Nearly a full day of storm-alley movie frames in colour, Saturn turning beneath the camera",
+2007-07-28,A day of Saturn's storms,SATURN,ISS_048SA_STRMOVIEC001_PRIME,"Nearly a full day of storm-alley movie frames in color, Saturn turning beneath the camera",
 2009-07-28,Daphnis makes waves at equinox,DAPHNIS,ISS_115RI_MNRNGSHAD004_PRIME,"Near equinox the low Sun makes the waves Daphnis raises on the Keeler gap edge cast long shadows across the rings",
 2009-08-12,Equinox mosaic,SATURN,ISS_116RI_EQXMOSAIC001_PRIME,"A wide-angle mosaic of the rings and planet the day after equinox, the rings nearly dark with the Sun edge-on",
 2011-03-06,The Great Northern Storm,SATURN,ISS_146SA_HIRESGLOB001_PRIME,"A high-resolution global map while the great storm of 2010-2011 wrapped around the planet",
 2012-11-27,The Rose: north polar vortex,SATURN,ISS_175SA_NPOLVORT001_PIE,"Close look into the hurricane at Saturn's north pole, the eye about 2000 km across",PIA14946
-2012-11-27,The hexagon from above,SATURN,ISS_175SA_NPOLMAP001_VIMS,"Eleven hours mapping the north pole and its hexagon jet stream in colour, the best scored Saturn session in the archive",
+2012-11-27,The hexagon from above,SATURN,ISS_175SA_NPOLMAP001_VIMS,"Eleven hours mapping the north pole and its hexagon jet stream in color, the best scored Saturn session in the archive",
 2013-06-26,A day over the hexagon,SATURN,ISS_193SA_NPOLMOV001_VIMS,"Sixteen hours of wide-angle movie frames of the hexagon turning, the longest polar movie of the mission",
 2013-07-19,The Day the Earth Smiled,SATURN,ISS_195RI_HIPHASEC001_VIMS,"Saturn backlit by the Sun with Earth a pale dot below the rings, while people on Earth waved",PIA17172
-2013-10-10,Saturn from above,SATURN,ISS_198SA_SATURN001_PRIME,"From high above the north pole: the whole planet and its rings in one colour mosaic, the shadow falling across the rings",PIA17474
-2015-09-07,Saturn's equator in colour,SATURN,ISS_221SA_EQUAMAP001_VIMS,"Thirteen hours mapping the equatorial belts in colour",
+2013-10-10,Saturn from above,SATURN,ISS_198SA_SATURN001_PRIME,"From high above the north pole: the whole planet and its rings in one color mosaic, the shadow falling across the rings",PIA17474
+2015-09-07,Saturn's equator in color,SATURN,ISS_221SA_EQUAMAP001_VIMS,"Thirteen hours mapping the equatorial belts in color",
 2016-12-03,Ring-grazing orbits begin,SATURN,ISS_251SA_NPOLMOV001_VIMS,"Polar movie on the first of the ring-grazing orbits that skimmed the outer edge of the main rings",
 2017-01-16,Daphnis up close,DAPHNIS,ISS_257DA_DAPHNIS001_PIE,"The closest look at Daphnis, its ridge and the waves it raises in the Keeler gap",
 2017-03-07,Pan up close,PAN,ISS_264PN_PAN001_PIE,"The ravioli-shaped moon Pan from about 22,000 km, its equatorial ridge built from ring material",
 2017-04-26,Inside the gap: first dive,SATURN,ISS_271SA_HIRESWACS001_PIE,"An hour of the closest pictures of Saturn's clouds ever taken, on the first dive between planet and rings",
 2017-04-13,Earth through the rings,SATURN,ISS_269RI_HIPHASEFB001_PIE,"Looking back at the Sun through the rings from the Grand Finale orbit, Earth a bright point beneath them",
-2017-08-21,The southern hemisphere in colour,SATURN,ISS_289SA_SHEMMAP001_VIMS,"Twelve hours mapping the south in colour from the Grand Finale orbits, a last full look at the planet",
+2017-08-21,The southern hemisphere in color,SATURN,ISS_289SA_SHEMMAP001_VIMS,"Twelve hours mapping the south in color from the Grand Finale orbits, a last full look at the planet",
 2017-09-11,Titan's goodbye kiss,TITAN,ISS_292TI_CLOUD002_PIE,"The last distant Titan flyby, which bent Cassini's orbit into the final plunge",
-2017-09-13,Farewell mosaic,SATURN,ISS_293SA_FAREWELL001_PRIME,"Cassini's last wide-angle colour mosaic of Saturn and its rings",
+2017-09-13,Farewell mosaic,SATURN,ISS_293SA_FAREWELL001_PRIME,"Cassini's last wide-angle color mosaic of Saturn and its rings",
 2017-09-13,Enceladus sets behind Saturn,ENCELADUS,ISS_293EN_ENCSET001_PRIME,"Enceladus, the moon that changed the mission, slipping behind Saturn's limb",
 2017-09-14,The last pictures,SATURN,ISS_293SA_IMPACTOBS001_VIMS,"The final images, of the spot where Cassini would enter the atmosphere the next day",

@@ -63,7 +63,7 @@ body.phone #hllist { grid-template-columns: 1fr; }
   function meta(e) {
     if (e.kind === "milestone") return `Probe camera · ${fmtSpan(e.end_et - e.et)}`;
     const cams = Object.keys(e.cams).map(c => c === "N" ? "NAC" : "WAC").join(" + ");
-    return `${fmtInt(e.frames)} pictures · ${cams}${e.rgb_sets ? " · colour" : ""} · ${fmtSpan(e.end_et - e.et)}`;
+    return `${fmtInt(e.frames)} pictures · ${cams}${e.rgb_sets ? " · color" : ""} · ${fmtSpan(e.end_et - e.et)}`;
   }
 
   // ---- thumbnails: made by the frame server through the pipeline, by the rule in build_data.thumb_hint ----
