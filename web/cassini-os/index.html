@@ -2153,9 +2153,9 @@ body.phone.has-dock { --appdockh: 50px; }
         filmstrip(v.k);
       }
       // the caption on the picture names the picture on screen (a stand-in shown while the one wanted loads, a
-      // colour set held over from the last lap; behind a pass's mosaic, the newest frame taken), and so does the
-      // Filter line for a single frame
-      card.querySelector(".shottag").textContent = v.set >= 0 ? catalog.sets[v.set].use.map(q => catalog.id[q]).join(" ") : `${catalog.id[v.k]} · ${catalog.f1[v.k]}/${catalog.f2[v.k]}`;
+      // colour set held over from the last lap), and so does the Filter line for a single frame; behind a pass's
+      // mosaic, the newest tile the mosaic on screen has (mosaicOf)
+      if (!keep) shotTag(v.set, v.k);
       if (v.set < 0) field("filter").innerHTML = filterHtml(v.k);
       if (v.movie) {
         // the Color line says what the picture shows: the color set the server drew (its X-Movie report; the
@@ -2325,6 +2325,7 @@ body.phone.has-dock { --appdockh: 50px; }
     const passInfos = new Map(), filmAsked = new Set();
     let filmInfo = null, filmN = -1, filmCat = null;
     const unix = k => etToMs(catalog.et[k]) / 1000;
+    const shotTag = (set, k) => { card.querySelector(".shottag").textContent = set >= 0 ? catalog.sets[set].use.map(q => catalog.id[q]).join(" ") : `${catalog.id[k]} · ${catalog.f1[k]}/${catalog.f2[k]}`; };
     const filterHtml = k => {
       const c = catalog.cls[k], pol = /^P\d|^IRP/.test(catalog.f1[k]) || /^IRP/.test(catalog.f2[k]) ? " · polarizer" : "";
       return `<span class="swatch" style="background:${CLS[c][1]}"></span>${catalog.f1[k]}/${catalog.f2[k]}${nmOf(k) ? ` · ${Math.round(nmOf(k))} nm` : ""}${pol}`;
@@ -2463,7 +2464,7 @@ body.phone.has-dock { --appdockh: 50px; }
           if (mode !== "mosaic") mosaicPasses.add(passOf(k));   // the server's call, not one the person asked for
           chipText();
           if (window.cassiniPicture && rep.mosaic > (obsShown === catalog.obs[k] ? obsTiles : 0)) window.cassiniPicture({ cam, body, win, k, nm: nmOf(k), set, use: set >= 0 ? catalog.sets[set].use.map(nmOf) : null, tile: rep.mosaic, of: rep.of });
-          obsShown = catalog.obs[k]; obsTiles = rep.mosaic; obsK = k; obsSize = rank(sz);
+          obsShown = catalog.obs[k]; obsTiles = rep.mosaic; obsK = k; obsSize = rank(sz); shotTag(set, k);
           // the window takes the mosaic's shape, within 1:2 to 3:1 (a whole long strip fits inside, letterboxed,
           // rather than running off the screen)
           well.style.aspectRatio = String(Math.min(3, Math.max(0.5, rep.width / rep.height))); shapeOf = passOf(k);
