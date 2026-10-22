@@ -73,7 +73,7 @@ body.phone #reelcard:not(.full) { width: calc(100% - 16px) !important; left: 8px
   // so the two cameras never take turns in one place
   const wells = {};
   for (const cam of ["N", "W"]) { const cv = $("rlcanvas" + cam); wells[cam] = { el: $("rlwell" + cam), cv, g: cv.getContext("2d"), i: -1 }; }
-  const KIND = { true: "True colour", false: "False colour", two: "Two-filter colour", bw: "Black and white" };
+  const KIND = { true: "True color", false: "False color", two: "Two-filter color", bw: "Black and white" };
   // R: the reel playing. shots: its pictures; i: the one on screen; buf: pictures fetched (or on their way) by index
   const R = { open: false, target: null, shots: [], i: -1, playing: false, fps: 8, mosaic: true, due: 0, buf: new Map(), looping: false, hidden: [], waitSince: 0 };
   try { const f = +localStorage.getItem("cassini-os-reel-fps"); if (f >= 2 && f <= 24) R.fps = f; } catch (e) {}
@@ -122,7 +122,7 @@ body.phone #reelcard:not(.full) { width: calc(100% - 16px) !important; left: 8px
   function describe(h) {
     if (!h) return "";
     const st = (h.stacked || []).filter(n => n > 1);
-    return [h.centred ? "centred, north up" : h.frame_offset ? "close-up, placed on the body, north up" : "not centred",
+    return [h.centred ? "centered, north up" : h.frame_offset ? "close-up, placed on the body, north up" : "not centered",
             st.length ? `stacked ${st.join("+")}` : "", h.calibrated ? "calibrated" : "",
             (h.aligned || []).some(a => /not aligned|failed/.test(a)) ? "channels not aligned" : "",
             h.mosaic > 1 ? `mosaic of ${h.mosaic}` : ""].filter(Boolean).join(" · ");
@@ -181,7 +181,7 @@ body.phone #reelcard:not(.full) { width: calc(100% - 16px) !important; left: 8px
     }
     $("rlpos").max = R.shots.length - 1;
     const n = R.shots.length, colour = R.shots.filter(s => s.kind !== "bw").length;
-    $("rlmsg").textContent = `${fmtInt(n)} pictures of ${titleCase(target)}, ${fmtInt(colour)} in colour`;
+    $("rlmsg").textContent = `${fmtInt(n)} pictures of ${titleCase(target)}, ${fmtInt(colour)} in color`;
     blank(); R.i = -1; for (const w of Object.values(wells)) { w.i = -1; w.el.querySelectorAll(".rltag, .rlhow").forEach(e => { e.textContent = ""; }); }
     setPlaying(false); setReelPlaying(true);
   }

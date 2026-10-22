@@ -116,7 +116,7 @@ body { background: var(--void); color: var(--text); font-family: var(--font-body
   </aside>
 
   <div id="dock">
-    <div class="row scroll" id="focusrow" aria-label="Centre the view on"></div>
+    <div class="row scroll" id="focusrow" aria-label="Center the view on"></div>
     <div class="row">
       <button class="btn" id="play" aria-label="Play or pause">❚❚</button>
       <div class="grp" id="speeds" aria-label="Playback speed"></div>
@@ -1470,7 +1470,7 @@ function buildUi() {
     const d = new Date(etToMs(e.et));
     const title = e.kind === "flyby" ? `${titleCase(e.body)} flyby` : e.label;
     const s = e.kind === "milestone" ? d.toISOString().slice(11, 16) + " UTC"
-      : e.kind === "observation" ? `${fmtInt(e.frames)} pictures${e.rgb_sets ? ` · ${e.rgb_sets} in colour` : ""} · ${fmtSpan(e.end_et - e.et)}`
+      : e.kind === "observation" ? `${fmtInt(e.frames)} pictures${e.rgb_sets ? ` · ${e.rgb_sets} in color` : ""} · ${fmtSpan(e.end_et - e.et)}`
       : `${fmtInt(e.altitude_km)} km · ${e.speed_km_s.toFixed(1)} km/s`;
     li.innerHTML = `<button><span class="d">${MONTHS[d.getUTCMonth()]} ${d.getUTCDate()}</span><span class="t">${title}</span>${e.photo_score ? `<span class="sc" title="Photo score">${Math.round(e.photo_score)}</span>` : ""}<span class="s">${s}</span></button>`;
     if (e.why) li.querySelector("button").title = e.why + (e.source ? ` (${e.source})` : "");
