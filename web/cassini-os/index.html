@@ -456,6 +456,15 @@ body.idle .camwin .well.has-frame { border-color: transparent; box-shadow: 0 6px
 .win.full :is(.rlwell, .mvwell) { aspect-ratio: auto; min-height: 0; height: 100%; }
 #moviecard.full .mvwell { height: calc(100dvh - 150px); }
 .win.full :is(.rlwell, .mvwell) canvas { object-fit: contain; }
+/* full view's save button: the shown picture at full resolution as a PNG (frame_server.py size=full) */
+.savepic { position: absolute; right: 6px; bottom: 5px; display: none; align-items: center; gap: 5px; padding: 3px 7px; border-radius: 4px;
+  font: 9px/1 var(--hudf); letter-spacing: .04em; color: var(--q-text); text-decoration: none; background: rgba(0,0,0,.55); border: 1px solid var(--q-line); cursor: pointer; }
+.savepic:hover { color: #fff; border-color: var(--q-accent); }
+.savepic svg { width: 10px; height: 10px; } .savepic svg * { fill: none; stroke: currentColor; stroke-width: 1.3; }
+.win.full .well.has-frame .savepic { display: flex; }
+.well.fullres .savepic { color: var(--q-accent); }
+.win.full .well.has-frame .shottag { right: 190px; }
+body.idle .win.full .savepic { opacity: .35; } body.idle .win.full .savepic:hover { opacity: 1; }
 .well, .rlwell, .mvwell { cursor: zoom-in; } .win.full :is(.well, .rlwell, .mvwell) { cursor: zoom-out; }
 /* resting: a window in full view keeps its dark backdrop and its picture; only the title bar fades (!important: the
    rules that fade every window and clear the camera windows' frames are id-strength) */
@@ -1140,7 +1149,7 @@ body.phone #excard:not(.full) { width: calc(100% - 16px) !important; left: 8px !
   D({ key: "interface.hudline", section: "Interface", label: "Flight data strip", type: "toggle", value: true,
       hint: "Target, altitude, speed, camera and pointing along the top of the view." });
   cls("interface.hudline", "s-nohudline", false);
-  // Cameras (the camera windows read cameras.composites, cameras.mosaics and cameras.stale)
+  // Cameras (the camera windows read cameras.composites, cameras.mosaics, cameras.fullRes, cameras.fullDelay and cameras.stale)
   D({ key: "cameras.composites", section: "Cameras", label: "Colour composites", type: "toggle", value: true,
       hint: "Once a filter set is complete, show its colour picture. Off shows every frame on its own." });
   D({ key: "cameras.channels", section: "Cameras", label: "Filter channels", type: "toggle", value: true,
@@ -1151,6 +1160,10 @@ body.phone #excard:not(.full) { width: calc(100% - 16px) !important; left: 8px !
   cls("cameras.details", "s-noinfo", false);
   D({ key: "cameras.mosaics", section: "Cameras", label: "Mosaics in camera windows", type: "toggle", value: true,
       hint: "When Cassini steps a camera across a body, the window builds the mosaic tile by tile. Off shows every frame on its own." });
+  D({ key: "cameras.fullRes", section: "Cameras", label: "Full resolution in full view", type: "toggle", value: true,
+      hint: "A picture in full view (double-click it, F or the title bar button) loads at the camera's full resolution, with a button to save it. Live playback, bursts and movies stay at the smaller size." });
+  D({ key: "cameras.fullDelay", section: "Cameras", label: "Full resolution while playing after", type: "range", value: 1.5, min: 0.5, max: 10, step: 0.5, unit: "s",
+      hint: "While the timeline plays, a picture in full view loads in full once it has stayed up this long; paused, it loads at once." });
   D({ key: "cameras.stale", section: "Cameras", label: "Clear a quiet camera after", type: "range", value: 6, min: 1, max: 48, step: 1, unit: "h",
       hint: "A camera that has taken nothing for this long shows Idle instead of its last picture." });
 
@@ -1855,31 +1868,54 @@ body.phone #excard:not(.full) { width: calc(100% - 16px) !important; left: 8px !
   function cameraFeed(card) {
     const cam = card.dataset.cam, body = card.dataset.body || null, win = card.closest(".win") || card, well = card.querySelector(".well"), shot = card.querySelector(".shot"), chans = card.querySelector(".chans");
     const field = f => card.querySelector(`[data-f="${f}"]`) || { set textContent(v) {}, set innerHTML(v) {} };
-    let want = null, shownKey = null, shown = null, next = [], lastK = -2, lastReady = null, stripKey = "", stripSet = null, zoomed = false;
+    let want = null, shownKey = null, shown = null, next = [], lastK = -2, lastReady = null, stripKey = "", stripSet = null;
     const failed = new Set();   // composites the server could not make: those sets show their frames instead
     const missing = new Set();  // frames the server does not have
-    const size = () => window.cassiniWM.big(win, well) ? 1024 : 512;
+    // full view asks for the full resolution picture ("full") once the picture is held: a quarter second while
+    // paused, cameras.fullDelay s while playing, so scrubbing, bursts and playback keep the 1024 px ones
+    let shownAt = 0;
+    const held = () => !state.dragging && performance.now() - shownAt > (state.playing ? S.get("cameras.fullDelay") * 1000 : 250);
+    const size = () => win.classList.contains("full") && S.get("cameras.fullRes") && held() ? "full" : window.cassiniWM.big(win, well) ? 1024 : 512;
+    const capped = () => { const s = size(); return s === "full" ? 1024 : s; };
     const frameUrl = (id, sz) => `${FRAMES}/frames/${id}.webp?size=${sz || size()}`;
-    const colorUrl = s => `${FRAMES}/frames/color.webp?ids=${s.use.map(k => catalog.id[k]).join(",")}&size=${size()}`;
+    const colorUrl = (s, sz) => `${FRAMES}/frames/color.webp?ids=${s.use.map(k => catalog.id[k]).join(",")}&size=${sz || size()}`;
+    // the shown picture at full resolution as a PNG to save (the frame server names the file)
+    const saveUrl = url => url.replace(/size=[^&]*/, "size=full") + "&format=png&download=1";
+    let save = well.querySelector(".savepic");
+    if (!save) {
+      save = document.createElement("a"); save.className = "savepic"; save.title = "Save this picture at full resolution (PNG)";
+      save.innerHTML = '<svg viewBox="0 0 10 10" aria-hidden="true"><path d="M5 1v5.5M2.5 4.5 5 7l2.5-2.5M1.5 9h7"/></svg><span></span>';
+      save.addEventListener("click", e => e.stopPropagation());
+      save.addEventListener("dblclick", e => e.stopPropagation());
+      well.appendChild(save);
+    }
+    // the save button's link and its label: the picture's size once the full one is up
+    function saving(url) {
+      if (url) save.href = saveUrl(url);
+      const full = /size=full/.test(shot.dataset.src || "") && shot.naturalWidth;
+      save.querySelector("span").textContent = full ? `Full resolution · ${shot.naturalWidth} × ${shot.naturalHeight}` : "Save full resolution";
+      well.classList.toggle("fullres", !!full);
+    }
+    shot.addEventListener("load", () => saving());
     const fname = k => colourFilter(k) || `${catalog.f1[k]}/${catalog.f2[k]}`;
     // what the window should show for frame k at time et: the composite of its set when k is the frame that
     // completed it (or another of its channels); every other new frame shows itself, so a long run of filters
     // after the colour channels keeps the picture changing instead of holding the composite
-    function view(k, et) {
+    function view(k, et, sz) {
       const si = catalog.setOf[k], s = si >= 0 ? catalog.sets[si] : null;
       if (s && S.get("cameras.composites")) {
         // any frame of a set whose channels are all taken shows the set's composite
-        if (s.ready <= et && !failed.has(si)) return { key: colorUrl(s), set: si, k };
+        if (s.ready <= et && !failed.has(si)) return { key: colorUrl(s, sz), set: si, k };
         // while the next set of a colour movie is being taken (the camera cycling through its filters), the
         // camera's last finished set of the same observation stays up, so the movie stays in colour
         for (let j = si - 1; j >= 0; j--) {
           const q = catalog.sets[j];
           if (q.cam !== s.cam) continue;
-          if (q.obs === s.obs && q.target === s.target && q.ready <= et && !failed.has(j)) return { key: colorUrl(q), set: j, k: q.use[q.use.length - 1], held: true };
+          if (q.obs === s.obs && q.target === s.target && q.ready <= et && !failed.has(j)) return { key: colorUrl(q, sz), set: j, k: q.use[q.use.length - 1], held: true };
           break;
         }
       }
-      return { key: frameUrl(catalog.id[k]), set: -1, k };
+      return { key: frameUrl(catalog.id[k], sz), set: -1, k };
     }
     function noFrame(msg) { well.classList.remove("has-frame", "composite"); card.querySelector(".wellmsg").innerHTML = msg; }
     // two lanes, one request in flight each: plain frames (quick) and composites (seconds when the server has to
@@ -1895,16 +1931,19 @@ body.phone #excard:not(.full) { width: calc(100% - 16px) !important; left: 8px !
     function display(v, im) {
       // while a pass's mosaic is shown, its next frames keep it up (until the mosaic with them arrives, mosaicOf)
       const keep = obsShown && catalog.obs[v.k] === obsShown;
+      // the same picture again at another size (full view's full resolution one) is not a new picture
+      const again = shown && shown.k === v.k && shown.set === v.set;
+      if (!again) shownAt = performance.now();
       shownKey = v.key; shown = v;
       // shot.dataset.src / .report: what the picture on screen was made from, for flagging (flag.html)
-      if (!keep) { shot.src = im.src; shot.dataset.src = v.key; shot.dataset.report = ""; obsShown = null; obsK = -1; well.style.aspectRatio = ""; well.classList.remove("mosaic"); }
+      if (!keep) { shot.src = im.src; shot.dataset.src = v.key; shot.dataset.report = ""; obsShown = null; obsK = -1; well.style.aspectRatio = ""; well.classList.remove("mosaic"); saving(v.key); }
       well.classList.add("has-frame"); well.classList.toggle("composite", v.set >= 0);
       if (!keep) card.querySelector(".kindtag").textContent = v.set >= 0 ? KIND[catalog.sets[v.set].kind].toUpperCase() : "";
       if (v.set >= 0) { channelsFrom(im, catalog.sets[v.set]); howMade(v); }
       if (v.tile && !keep) mosaicOf(v);   // a frame kept behind its pass's mosaic asked for it already (update)
       // the sound (sound.html) hears every picture that goes up: its camera, filter wavelength, target and window
       // (keep: a pass mosaic stays up, so this frame rings when its tile shows, below in mosaicOf)
-      if (window.cassiniPicture) window.cassiniPicture({ cam, body, win, k: v.k, nm: nmOf(v.k), set: v.set, use: v.set >= 0 ? catalog.sets[v.set].use.map(nmOf) : null, keep });
+      if (window.cassiniPicture && !again) window.cassiniPicture({ cam, body, win, k: v.k, nm: nmOf(v.k), set: v.set, use: v.set >= 0 ? catalog.sets[v.set].use.map(nmOf) : null, keep });
     }
     function request(which, v) {
       lane[which] = v; v.cat = catalog;
@@ -1969,12 +2008,15 @@ body.phone #excard:not(.full) { width: calc(100% - 16px) !important; left: 8px !
     // a burst the newest frame waits and the ones it passes are skipped, so the mosaic never falls further behind.
     // Other frames' requests (mostly a quick 404) go in their own lane, which moves on after 4 s, so a slow one
     // (the server working out a body's reel) never holds up the pass.
-    let mosaicUrl = null, obsShown = null, obsTiles = 0, obsK = -1;
+    // A window that grows (or a held picture in full view) asks for the pass's mosaic again at the bigger size
+    // (update(true) from retier below); that one is never late for the frame it was asked for.
+    let mosaicUrl = null, obsShown = null, obsTiles = 0, obsK = -1, obsSize = 0;
+    const rank = sz => sz === "full" ? Infinity : +sz;
     const mLane = { pass: { busy: false, next: null, last: "" }, other: { busy: false, next: null, last: "" } };
     const warnedObs = new Set();   // observations already named to the server ahead of time (update)
     function mosaicOf(w, pass) {
       if (window.cassiniMosaics === false || !S.get("cameras.mosaics")) return;
-      const id = catalog.id[w.set >= 0 && !pass ? catalog.sets[w.set].use[0] : w.k], ask = `${id}:${size()}`;
+      const sz = size(), id = catalog.id[w.set >= 0 && !pass ? catalog.sets[w.set].use[0] : w.k], ask = `${id}:${sz}`;
       const L = pass ? mLane.pass : mLane.other;
       if (ask === L.last) return;
       if (L.busy) { L.next = [w, pass]; return; }
@@ -1990,7 +2032,7 @@ body.phone #excard:not(.full) { width: calc(100% - 16px) !important; left: 8px !
         if (q && catalog === cat0 && lastK >= 0 && catalog.et[q[0].k] <= catalog.et[lastK]) mosaicOf(...q);
       };
       if (!pass) setTimeout(() => { if (!over) { ctl.abort(); done(); } }, 4000);
-      fetch(`${FRAMES}/frames/mosaic/${id}.webp?size=${size()}`, { signal: ctl.signal }).then(async r => {
+      fetch(`${FRAMES}/frames/mosaic/${id}.webp?size=${sz}`, { signal: ctl.signal }).then(async r => {
         if (!r.ok) return;
         const rep = JSON.parse(r.headers.get("X-Reel") || "null");
         // a pass's mosaic shows while the window is still in the pass and the clock is not before its frame,
@@ -1998,7 +2040,8 @@ body.phone #excard:not(.full) { width: calc(100% - 16px) !important; left: 8px !
         // a rolling mosaic only while its frame is the one shown
         const late = () => catalog !== cat0 || (rep && rep.observation
           ? lastK < 0 || catalog.obs[lastK] !== catalog.obs[w.k] || catalog.et[w.k] > catalog.et[lastK]
-            || (obsShown === catalog.obs[w.k] && obsK >= 0 && catalog.et[obsK] >= catalog.et[w.k] && catalog.et[obsK] <= catalog.et[lastK])
+            || (obsShown === catalog.obs[w.k] && obsK >= 0 && catalog.et[obsK] >= catalog.et[w.k] && catalog.et[obsK] <= catalog.et[lastK]
+              && !(obsK === w.k && rank(sz) > obsSize))
           : shown !== w);
         if (late()) return;
         const blob = await r.blob();
@@ -2006,10 +2049,11 @@ body.phone #excard:not(.full) { width: calc(100% - 16px) !important; left: 8px !
         if (mosaicUrl) URL.revokeObjectURL(mosaicUrl);
         shot.src = mosaicUrl = URL.createObjectURL(blob);
         shot.dataset.src = r.url; shot.dataset.report = r.headers.get("X-Reel") || "";
+        saving(r.url);
         well.classList.add("mosaic");
         if (rep && rep.observation) {
           if (window.cassiniPicture && rep.mosaic > (obsShown === catalog.obs[w.k] ? obsTiles : 0)) window.cassiniPicture({ cam, body, win, k: w.k, nm: nmOf(w.k), set: w.set, use: w.set >= 0 ? catalog.sets[w.set].use.map(nmOf) : null, tile: rep.mosaic, of: rep.of });
-          obsShown = catalog.obs[w.k]; obsTiles = rep.mosaic; obsK = w.k;
+          obsShown = catalog.obs[w.k]; obsTiles = rep.mosaic; obsK = w.k; obsSize = rank(sz);
           well.style.aspectRatio = `${rep.width} / ${rep.height}`;
           card.querySelector(".kindtag").textContent = `${rep.filters >= 3 ? ((rep.filter_names || []).includes("GRN") ? "COLOUR " : "FALSE COLOUR ") : ""}MOSAIC · ${rep.mosaic} OF ${rep.of} TILES${rep.filters > 1 ? ` · ${rep.filters} FILTERS` : ""}`;
           return;
@@ -2038,7 +2082,7 @@ body.phone #excard:not(.full) { width: calc(100% - 16px) !important; left: 8px !
     // (one shared brightness scale, so their brightness can be compared)
     function strip(s, et, k) {
       if (!s) { stripSet = null; chans.classList.remove("on"); chans.innerHTML = ""; stripKey = ""; return; }
-      const key = `${catalog.sets.indexOf(s)}:${size()}`, slots = s.use.length === 2 ? [0, 2] : [0, 1, 2];
+      const key = `${catalog.sets.indexOf(s)}:${capped()}`, slots = s.use.length === 2 ? [0, 2] : [0, 1, 2];
       if (key !== stripKey) {
         stripKey = key; stripSet = s;
         chans.style.setProperty("--n", s.use.length);
@@ -2118,7 +2162,8 @@ body.phone #excard:not(.full) { width: calc(100% - 16px) !important; left: 8px !
       const ks = framesOf(cam, body).ks;
       // look ahead: the next 6 frames, or up to 12 when they come within 4 s of playback (a burst), nearest first
       const ahead = []; for (let d = 1; d <= 12 && ks[p + d] !== undefined && (d <= 6 || catalog.et[ks[p + d]] - state.et <= 4 * state.speed); d++) ahead.push(ks[p + d]);
-      next = ahead.map(q => view(q, catalog.et[q]).key);
+      // looked ahead at the capped size: only the picture on screen is ever fetched in full
+      next = ahead.map(q => view(q, catalog.et[q], capped()).key);
       // further ahead: each observation coming up is named to the server once, so a mosaic pass in it is worked
       // out (seconds for its plan) before the clock gets there
       if (window.cassiniMosaics !== false && S.get("cameras.mosaics"))
@@ -2130,12 +2175,16 @@ body.phone #excard:not(.full) { width: calc(100% - 16px) !important; left: 8px !
         }
       pump();
     }
-    // a window made bigger (zoom, resize, full view) asks for the bigger picture
-    new ResizeObserver(() => {
-      if (zoomed === (size() === 1024)) return;
-      zoomed = !zoomed;
-      if (typeof catalog !== "undefined" && catalog && catalog.byCam) update(true);
-    }).observe(well);
+    // a window made bigger (zoom, resize, full view) asks for the bigger picture, and a held picture in full view
+    // for the full one (checked on every frame, see studyHud below)
+    let tier = size();
+    function retier() {
+      if (tier === size()) return;
+      tier = size();
+      if (typeof catalog !== "undefined" && catalog && catalog.byCam && lastK >= 0) update(true);
+    }
+    new ResizeObserver(retier).observe(well);
+    update.retier = retier;
     return update;
   }
   const feeds = [...document.querySelectorAll(".camwin")].map(cameraFeed);
@@ -2196,8 +2245,9 @@ body.phone #excard:not(.full) { width: calc(100% - 16px) !important; left: 8px !
     frameHud(ms);
     if (slowedTo && state.playing && !state.dragging) $("mday").textContent += ` · imaging burst, slowed to ${fmtRate(slowedTo)}`;
     prep();
-    for (const f of feeds) f();
+    for (const f of feeds) { f(); f.retier(); }
   };
+  for (const key of ["cameras.fullRes", "cameras.fullDelay"]) S.on(key, () => feeds.forEach(f => f.retier()));
   syncMenu();
 })();
 </script>
@@ -2803,7 +2853,7 @@ body.phone #excard:not(.full) { width: calc(100% - 16px) !important; left: 8px !
       let w = B.wins.get(name);
       if (!w || w.closing) w = open(name);
       showPanes(w, name);
-      for (const p of w.panes) if (!p.el.hidden) p.update();
+      for (const p of w.panes) if (!p.el.hidden) { p.update(); p.update.retier(); }
     }
   }
   const base = window.studyHud;
