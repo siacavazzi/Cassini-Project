@@ -90,8 +90,11 @@ def _row_of():
 
 def units(target, obs, cam):
     """The passes of one camera's frames of one observation: [{key, frames: [(path, id, filter, t, nm, x, y, z)],
-    mosaic, whole, z, last}] in time order, from the index and the geometry cache. Repeat exposures (the same
-    filter within REPEAT_GAP) are left out, as stacking.load_hdr merges them in."""
+    mosaic, whole, z, last, repeat_gap}] in time order, from the index and the geometry cache. Repeat exposures
+    (the same filter within the pass's repeat_gap) are left out, as stacking.load_hdr merges them in. repeat_gap
+    is REPEAT_GAP, except in a movie that takes a filter more often than that (a spoke movie every 11 s): there it
+    is half the movie's own pace, so every frame of the movie is its own picture rather than stacked with the
+    next ones (repeat_window)."""
     with _lock:
         if (target, obs, cam) in _units:
             return _units[(target, obs, cam)]
@@ -106,13 +109,14 @@ def units(target, obs, cam):
         g = where.get(r.id)
         t = float(r.seconds_1970)
         if cur is None or t - cur["last"] > GAP or (g and cur["z"] and not 1 / ZOOM < g[2] / cur["z"] < ZOOM):
-            cur = {"frames": [], "taken": [], "z": g and g[2], "last": t}
+            cur = {"frames": [], "all": [], "taken": [], "z": g and g[2], "last": t}
             out.append(cur)
             last = {}
         cur["last"] = t
         cur["taken"].append((f, *(g or (None, None, None))))   # every frame, repeats too, for _judge
         if not cur["z"] and g:
             cur["z"] = g[2]
+        cur["all"].append((r.path, r.id, f, t, reel.wavelength(inst, f1 + f2), *(g or (None, None, None))))
         if f in last and t - last[f] <= mosaic_benchmark.REPEAT_GAP:
             continue
         last[f] = t
@@ -120,9 +124,34 @@ def units(target, obs, cam):
     for n, u in enumerate(out):
         u["key"] = (target, obs, cam, n)
         _judge(u)
+        u["repeat_gap"] = repeat_window(u)
+        if u["repeat_gap"] < mosaic_benchmark.REPEAT_GAP:
+            u["frames"], last = [], {}
+            for fr in u["all"]:
+                if fr[2] in last and fr[3] - last[fr[2]] <= u["repeat_gap"]:
+                    continue
+                last[fr[2]] = fr[3]
+                u["frames"].append(fr)
+        del u["all"]
     with _lock:
         _units[(target, obs, cam)] = out
     return out
+
+
+def repeat_window(u):
+    """How close two frames of one filter must be for stacking to merge them as repeat exposures, for pass u:
+    REPEAT_GAP, or in a movie (u["movie"]) whose same-filter frames come more often than twice that, half the
+    median time between them, so the movie's frames are not stacked into one another (which blurs what moves
+    and puts later frames into earlier ones)."""
+    if not u.get("movie"):
+        return mosaic_benchmark.REPEAT_GAP
+    last, gaps = {}, []
+    for fr in u["all"]:
+        if fr[2] in last:
+            gaps.append(fr[3] - last[fr[2]])
+        last[fr[2]] = fr[3]
+    g = float(np.median(gaps)) if gaps else 2 * mosaic_benchmark.REPEAT_GAP
+    return min(mosaic_benchmark.REPEAT_GAP, round(g / 2, 1)) if g < 2 * mosaic_benchmark.REPEAT_GAP else mosaic_benchmark.REPEAT_GAP
 
 
 def _judge(u):
@@ -203,7 +232,10 @@ def kind_of(frame_id):
 
 
 def folder(u, cache):
-    return os.path.join(cache, VERSION, "_".join(map(str, u["key"])))
+    # a movie's frames stacked with a shorter repeat window are other pictures than the ones made before it
+    gap = u.get("repeat_gap", mosaic_benchmark.REPEAT_GAP)
+    suffix = "" if gap >= mosaic_benchmark.REPEAT_GAP else f"_r{gap:g}"
+    return os.path.join(cache, VERSION, "_".join(map(str, u["key"])) + suffix)
 
 
 def _ulock(u):
@@ -285,7 +317,7 @@ def pass_scale(frames, u):
     the surface's few per cent of contrast shows; passes with dark sky keep the benchmark's scale."""
     by = {}
     for path, _, f, *_ in frames:
-        _, iof, _ = stacking.load_hdr(path, mosaic_benchmark.REPEAT_GAP)
+        _, iof, _ = stacking.load_hdr(path, u.get("repeat_gap", mosaic_benchmark.REPEAT_GAP))
         if iof is not None:
             by.setdefault(f, []).append(iof[::4, ::4].astype(np.float32))
     if not by:
@@ -320,7 +352,8 @@ def tile(u, n, cache, scale=None):
         k = z / u["z"] if z else 1.0
         try:
             image, _, rep = color_image.processed_frame([path], hdr=True,
-                                                        scale={**scale, "blacks": [scale["blacks"].get(f, 0.0)]})
+                                                        scale={**scale, "blacks": [scale["blacks"].get(f, 0.0)]},
+                                                        repeat_window=u.get("repeat_gap", mosaic_benchmark.REPEAT_GAP))
         except Exception as e:
             image, rep = None, {"why": f"{type(e).__name__}: {e}"[:200]}
         out = {"n": n, "id": fid, "filter": f, "t": t, "stacked": rep.get("stacked"), "calibrated": rep.get("calibrated")}

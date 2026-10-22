@@ -1,0 +1,33 @@
+{
+  "about": "Passes that test how obs_mosaic tells mosaics from movies (_judge, u['movie'] / u['mosaic']) and how each plays. expect: mosaic | movie | either (the person's call). now: what Auto does today when it differs from expect (a known gap and the phase that closes it). Threads only add entries.",
+  "passes": [
+    {"obs": "ISS_034RI_SPKDKFORM001_PRIME", "target": "SATURN", "cam": "N", "time": "2006-12-04T12:07", "expect": "movie",
+     "why": "Spoke movie: two ring patches filmed back and forth, one frame every 11 s, 8 visits of ~80 frames. Sam's checkpoint 1 pass; was built as a mosaic because merged repeats looked like jumps (fixed by the dwell test)."},
+    {"obs": "ISS_034RI_SHADBOUND001_PRIME", "target": "SATURN", "cam": "N", "time": "2006-12-04T11:10", "expect": "either",
+     "why": "Shadow boundary, 4 WAC then 10 NAC frames ~197 s apart with exposures 0.3-220 s; too few frames to say."},
+    {"obs": "ISS_137RI_FMOVIE001_VIMS", "target": "SATURN", "cam": "N", "time": "2010-09-02T01:05", "expect": "movie",
+     "why": "F-ring movie, 60 frames every 300 s; smeared into a mosaic before the movie test."},
+    {"obs": "ISS_109RI_LRHPENKMV001_PRIME", "target": "SATURN", "cam": "N", "time": "2009-04-17", "expect": "movie",
+     "why": "Propeller movie, 60 frames every 417 s."},
+    {"obs": "ISS_235SA_SATSTARE001_PRIME", "target": "SATURN", "cam": "W", "time": "2016-04-25", "expect": "movie",
+     "why": "Saturn stare, 1512 frames, six-filter cycle every 21 s; a color movie."},
+    {"obs": "ISS_028RG_HIPHASE002_VIMS", "target": "SATURN", "cam": "W", "time": "2006-09-15T21:50", "expect": "movie",
+     "why": "Gray stare; the window asked for its mosaic 43 times before, once after."},
+    {"obs": "VIMS_C23HI_HIMA1X1001_PRIME", "target": "HIMALIA", "cam": "N", "time": "2000-12-19", "expect": "movie",
+     "why": "1x1 stare cycling filters, no filter taken twice."},
+    {"obs": "ISS_028RI_HIPHWAC001_PRIME", "target": "SATURN", "cam": "W", "time": "2006-09-15T14:32", "expect": "mosaic",
+     "why": "In Saturn's Shadow (PIA08329), the mosaic benchmark: 5x5 raster, CL/VIO/IR3 at each pointing."},
+    {"obs": "IOSIC_034RI_VERTULMP001_SI", "target": "SATURN", "cam": "W", "time": "2006-12-03T04:51", "expect": "mosaic",
+     "why": "WAC ring scan, 17 tiles, 9.4 frames across; went blank at tile 12 (W1543828177_1) with the old follow window."},
+    {"obs": "IOSIC_086RI_VTMPS70MP001_SI", "target": "SATURN", "cam": "W", "time": "2008-09-25", "expect": "mosaic",
+     "why": "Wide WAC scan, emptied four times with the follow window; one far tile makes the whole footprint large."},
+    {"obs": "ISS_040SA_LIMBSCAN011_PRIME", "target": "SATURN", "cam": "N", "time": "2007", "expect": "mosaic", "now": "movie (phase 3)",
+     "why": "Limb scan taking a new filter at every pointing (10 tiles over 13 frames); no filter twice, so no single-filter mosaic until phase 3's gray base."},
+    {"obs": "ISS_042SA_CH4FLUOR001_VIMS", "target": "SATURN", "cam": "W", "time": "2007", "expect": "mosaic", "now": "movie (phase 3)",
+     "why": "Per-filter scan, 11 tiles over 11 frames."},
+    {"obs": "ISS_046SA_GLOMAP001_VIMS", "target": "SATURN", "cam": "N", "time": "2007", "expect": "mosaic", "now": "movie (phase 3)",
+     "why": "Per-filter global map, 6 tiles over 6.5 frames."},
+    {"obs": "ISS_193SA_NPOLMOV001_VIMS", "target": "SATURN", "cam": "W", "time": "2013-06-26", "expect": "either", "now": "mosaic",
+     "why": "Repeated north polar raster for hours (a mosaic movie); time-lapse mode comes with phase 7."}
+  ]
+}
