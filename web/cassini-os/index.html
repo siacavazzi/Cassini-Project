@@ -369,6 +369,17 @@ body { color: var(--q-text); }
 .kindtag { position: absolute; right: 5px; top: 4px; font: 9px/1 var(--hudf); color: var(--q-text); text-shadow: 0 0 3px #000, 0 0 6px #000; display: none; letter-spacing: .04em; }
 .well.has-frame.composite .kindtag, .well.has-frame.mosaic .kindtag { display: block; }
 body.idle .camwin .chans { opacity: .8; }
+/* a movie pass (Settings > Movie): every frame of the pass along a strip under the picture, the frames around the
+   one shown above it; click or drag to move through the pass */
+.filmstrip { display: none; gap: 3px; }
+.filmstrip.on { display: grid; }
+.filmstrip .thumbs { display: grid; grid-template-columns: repeat(7, minmax(0, 1fr)); gap: 3px; }
+.filmstrip .thumbs img { width: 100%; aspect-ratio: 1; object-fit: contain; display: block; border: 1px solid var(--q-line); border-radius: 2px; background: rgba(0,0,0,.55); opacity: .55; cursor: pointer; }
+.filmstrip .thumbs img.now { opacity: 1; border-color: rgba(255,255,255,.45); }
+.filmstrip canvas { width: 100%; height: 14px; display: block; cursor: ew-resize; touch-action: none; }
+.filmstrip .fsline { font-size: 9.5px; color: var(--q-dim); white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+body.idle .camwin .filmstrip { opacity: .8; }
+.well.has-frame.movie .kindtag { display: block; }
 /* steady size (Settings > Cameras, cameras.steady): the picture keeps its size while a color set or a mosaic builds.
    The channel strip keeps its place for the whole observation (between sets it holds the nearest one, dimmed), a
    missing frame keeps the picture's space (.kept), and each detail line keeps one height (the color line two) */
@@ -581,6 +592,7 @@ body.idle #settings:not([hidden]) { opacity: 1; pointer-events: auto; }
 body.s-nolabels #labels, body.s-nolabels #reticle { display: none; }
 body.s-nohudline #hudline { display: none; }
 body.s-nochans .camwin .chans { display: none !important; }
+body.s-nofilmstrip .camwin .filmstrip { display: none !important; }
 body.s-noinfo .camwin .info { display: none; }
 body.phone #settings { left: 8px !important; top: calc(env(safe-area-inset-top, 0px) + 30px) !important; width: calc(100% - 16px) !important; height: calc(100% - 50px) !important; }
 body.phone #settings .sbody { grid-template-columns: 1fr; grid-template-rows: auto minmax(0, 1fr); }
@@ -1308,6 +1320,14 @@ body.phone.has-dock { --appdockh: 50px; }
       hint: "Movie frames made by the pipeline like the camera windows' pictures: calibrated, color composites and mosaics. Off plays the archive frames as they are, with no processing. The Processed button in the Movie window (or P) switches it too." });
   D({ key: "movie.mosaics", section: "Movie", label: "Mosaics in movies", type: "toggle", value: true,
       hint: "With processed pictures on, a mosaic pass builds its mosaic in the film. Off shows each tile on its own." });
+  // movie passes in the camera and body windows (head-quiet.html cameraFeed reads these)
+  D({ key: "movies.steady", section: "Movie", label: "Steady movie passes", type: "toggle", value: true,
+      hint: "When a pass plays as a movie in a camera or body window (a stare, a ring or storm movie), every frame is centered by SPICE, north up, on one brightness scale and one size for the whole pass, so the body holds still and the picture does not pump. Off shows each frame as it is." });
+  D({ key: "movies.filmstrip", section: "Movie", label: "Filmstrip", type: "toggle", value: true,
+      hint: "Under a window playing a movie pass: every frame of the pass along a strip, with the frames around the one shown. Click or drag along it to move through the pass." });
+  cls("movies.filmstrip", "s-nofilmstrip", false);
+  D({ key: "movies.trail", section: "Movie", label: "Rolling trail", type: "range", value: 0, min: 0, max: 12, step: 1, unit: "frames",
+      hint: "In a steady movie pass, this many earlier frames of the same filter stay under the newest one, fading with age, so a moving moon or a ring's shadow leaves a short trail. 0 shows each frame alone." });
   window.addEventListener("DOMContentLoaded", () => {
     const r = $("mvfps"); if (!r) return;
     try { const f = +localStorage.getItem("cassini-os-movie-fps"); if (f >= 2 && f <= 24 && !("movie.fps" in saved)) S.set("movie.fps", f); } catch (e) {}
@@ -2042,11 +2062,20 @@ body.phone.has-dock { --appdockh: 50px; }
       well.classList.toggle("fullres", !!full);
     }
     shot.addEventListener("load", () => saving());
+    let film = card.querySelector(".filmstrip");
+    if (!film) {
+      film = document.createElement("div"); film.className = "filmstrip"; film.setAttribute("aria-label", "Filmstrip of the pass");
+      film.innerHTML = '<div class="thumbs"></div><canvas height="28"></canvas><div class="fsline"></div>';
+      chans.after(film);
+    }
     const fname = k => colourFilter(k) || `${catalog.f1[k]}/${catalog.f2[k]}`;
     // what the window should show for frame k at time et: the composite of its set when k is the frame that
     // completed it (or another of its channels); every other new frame shows itself, so a long run of filters
     // after the colour channels keeps the picture changing instead of holding the composite
     function view(k, et, sz) {
+      // a pass played as a movie: the frame steadied by the server (SPICE-centered on the pass's one scale and view,
+      // its color set drawn together), unless the server could not make that frame
+      if (playsMovie(k) && !movieFailed.has(catalog.id[k])) return { key: movieUrl(catalog.id[k], sz), set: -1, k, movie: true };
       const si = catalog.setOf[k], s = si >= 0 ? catalog.sets[si] : null;
       if (s && S.get("cameras.composites")) {
         // any frame of a set whose channels are all taken shows the set's composite
@@ -2089,8 +2118,8 @@ body.phone.has-dock { --appdockh: 50px; }
         shot.src = im.src; shot.dataset.src = v.key; shot.dataset.report = ""; obsShown = null; obsK = -1; well.classList.remove("mosaic"); saving(v.key);
         if (!steady() || shapeOf !== passOf(v.k)) { well.style.aspectRatio = ""; shapeOf = null; }
       }
-      well.classList.add("has-frame"); well.classList.remove("kept"); well.classList.toggle("composite", v.set >= 0);
-      if (!keep) card.querySelector(".kindtag").textContent = v.set >= 0 ? KIND[catalog.sets[v.set].kind].toUpperCase() : "";
+      well.classList.add("has-frame"); well.classList.remove("kept"); well.classList.toggle("composite", v.set >= 0); well.classList.toggle("movie", !!v.movie);
+      if (!keep) card.querySelector(".kindtag").textContent = v.set >= 0 ? KIND[catalog.sets[v.set].kind].toUpperCase() : v.movie ? "MOVIE" : "";
       if (v.set >= 0) { channelsFrom(im, catalog.sets[v.set]); howMade(v); }
       if (v.tile && !keep && !mosaicPass(v.k)) mosaicOf(v);   // a frame kept behind its pass's mosaic, or of a pass known to be one, asked for it already (update)
       // the sound (sound.html) hears every picture that goes up: its camera, filter wavelength, target and window
@@ -2110,7 +2139,10 @@ body.phone.has-dock { --appdockh: 50px; }
       im.onerror = () => {
         lane[which] = null;
         if (v.warm || v.cat !== catalog) warmed.add(v.key);
-        else if (v.set >= 0) {   // no composite: the set shows its frames instead
+        else if (v.movie) {   // not steadied (the server is still working the pass out, or SPICE could not place it): the frame itself
+          movieFailed.add(catalog.id[v.k]);
+          if (want && want.key === v.key) want = { key: frameUrl(catalog.id[v.k]), set: -1, k: v.k };
+        } else if (v.set >= 0) {   // no composite: the set shows its frames instead
           failed.add(v.set);
           if (want && want.key === v.key) want = { key: frameUrl(catalog.id[v.k]), set: -1, k: v.k };
         } else if (obsShown && catalog.obs[v.k] === obsShown) {
@@ -2175,6 +2207,95 @@ body.phone.has-dock { --appdockh: 50px; }
     const mosaicPasses = new Set();   // target|observation the server said is a mosaic pass
     const mosaicPass = k => mosaicPasses.has(passOf(k));
     const moviePasses = new Set();    // target|observation the server said is a movie or a stare: never a mosaic, never asked
+    // a pass played as a movie (Settings > Movie > Steady movie passes): its frames come from /frames/movie
+    const playsMovie = k => S.get("movies.steady") && moviePasses.has(passOf(k));
+    const movieUrl = (id, sz) => `${FRAMES}/frames/movie/${id}.webp?size=${sz || size()}&trail=${S.get("movies.trail")}&color=${S.get("cameras.composites") ? 1 : 0}`;
+    const movieFailed = new Set();    // frames the server did not steady: they show as they are
+    // the filmstrip: the pass the frame on screen is in (/frames/movie/<ID>.json: its frames, in time order), its
+    // frames drawn along a strip by time, colored by filter, with the frame shown marked and the frames around it
+    const passInfos = new Map(), filmAsked = new Set();
+    let filmInfo = null, filmN = -1, filmCat = null;
+    const unix = k => etToMs(catalog.et[k]) / 1000;
+    function filmstrip(k) {
+      if (k < 0 || !playsMovie(k) || !S.get("movies.filmstrip")) { film.classList.remove("on"); filmInfo = null; return; }
+      const o = `${cam}|${passOf(k)}`, t = unix(k);
+      const inPass = i => i && i.key === o && t >= i.frames[0][1] - 1 && t <= i.frames[i.frames.length - 1][1] + 1;
+      const info = inPass(filmInfo) ? filmInfo : (passInfos.get(o) || []).find(inPass);
+      if (!info) {
+        film.classList.remove("on"); filmInfo = null;
+        const id = catalog.id[k];
+        if (!filmAsked.has(id)) {
+          filmAsked.add(id);
+          fetch(`${FRAMES}/frames/movie/${id}.json`, { priority: "low" }).then(r => r.ok ? r.json() : null).then(i => {
+            if (!i || !i.frames.length) return;
+            i.key = o; passInfos.set(o, (passInfos.get(o) || []).concat([i]));
+            if (lastK >= 0) filmstrip(lastK);
+          }).catch(() => {});
+        }
+        return;
+      }
+      let n = 0;
+      for (let j = 0; j < info.frames.length && info.frames[j][1] <= t + 1; j++) n = j;
+      if (info === filmInfo && n === filmN && filmCat === catalog && film.classList.contains("on")) return;
+      filmInfo = info; filmN = n; filmCat = catalog;
+      film.classList.add("on");
+      // the strip: a tick per frame where it sits in time, so the pass's own pace shows
+      const cv = film.querySelector("canvas"), dpr = window.devicePixelRatio || 1, W = Math.max(1, Math.round(cv.clientWidth * dpr)), H = cv.height;
+      if (cv.width !== W) cv.width = W;
+      const g = cv.getContext("2d"), fr = info.frames, t0 = fr[0][1], span = Math.max(1, fr[fr.length - 1][1] - t0);
+      const xOf = j => 2 + (W - 4) * (fr[j][1] - t0) / span;
+      g.clearRect(0, 0, W, H);
+      g.fillStyle = "rgba(255,255,255,0.08)"; g.fillRect(0, H / 2 - 1, W, 2);
+      for (let j = 0; j < fr.length; j++) {
+        const q = kOf(fr[j][0]);
+        g.fillStyle = q >= 0 ? CLS[catalog.cls[q]][1] : "#666";
+        g.globalAlpha = j <= n ? 0.95 : 0.45;
+        g.fillRect(Math.round(xOf(j)), 6, Math.max(1, Math.round(dpr)), H - 12);
+      }
+      g.globalAlpha = 1; g.fillStyle = "#fff"; g.fillRect(Math.round(xOf(n)) - Math.round(dpr), 1, 3 * Math.round(dpr), H - 2);
+      // the frames around the one shown, as the pass plays them (steadied, at a small size)
+      const thumbs = film.querySelector(".thumbs"), first = Math.max(0, Math.min(fr.length - 7, n - 3));
+      while (thumbs.children.length < Math.min(7, fr.length)) {
+        const im = document.createElement("img"); im.alt = ""; im.crossOrigin = "anonymous"; im.loading = "lazy";
+        im.onerror = () => { if (im.dataset.id && !im.src.includes(`/frames/${im.dataset.id}.webp`)) im.src = frameUrl(im.dataset.id, 128); };
+        thumbs.appendChild(im);
+      }
+      while (thumbs.children.length > Math.min(7, fr.length)) thumbs.lastChild.remove();
+      [...thumbs.children].forEach((im, j) => {
+        const id = fr[first + j][0];
+        if (im.dataset.id !== id) { im.dataset.id = id; im.src = movieUrl(id, 128); }
+        im.classList.toggle("now", first + j === n);
+        im.title = `${id} · ${fr[first + j][2]}`;
+      });
+      const cad = info.cadence ? ` · a frame every ${fmtDur(info.cadence)}` : "";
+      film.querySelector(".fsline").textContent = `Frame ${n + 1} of ${fr.length}${cad} · ${info.observation}`;
+    }
+    // moving through the pass: the mission clock goes to the frame picked (and stops there)
+    function filmGo(j) {
+      if (!filmInfo) return;
+      const fr = filmInfo.frames[Math.max(0, Math.min(filmInfo.frames.length - 1, j))], q = kOf(fr[0]);
+      if (q < 0) return;
+      if (state.playing) setPlaying(false);
+      setTime(catalog.et[q]);
+    }
+    {
+      const cv = film.querySelector("canvas");
+      const pick = e => {
+        if (!filmInfo) return;
+        const r = cv.getBoundingClientRect(), fr = filmInfo.frames, t0 = fr[0][1], span = Math.max(1, fr[fr.length - 1][1] - t0);
+        const t = t0 + span * Math.max(0, Math.min(1, (e.clientX - r.left - 2) / Math.max(1, r.width - 4)));
+        let best = 0;
+        for (let j = 0; j < fr.length; j++) if (Math.abs(fr[j][1] - t) < Math.abs(fr[best][1] - t)) best = j;
+        filmGo(best);
+      };
+      cv.addEventListener("pointerdown", e => { e.stopPropagation(); cv.setPointerCapture(e.pointerId); pick(e); });
+      cv.addEventListener("pointermove", e => { if (cv.hasPointerCapture(e.pointerId)) pick(e); });
+      film.querySelector(".thumbs").addEventListener("click", e => {
+        const im = e.target.closest("img");
+        if (im && filmInfo) filmGo(filmInfo.frames.findIndex(f => f[0] === im.dataset.id));
+      });
+      film.addEventListener("pointerdown", e => e.stopPropagation());
+    }
     const rank = sz => sz === "full" ? Infinity : +sz;
     const mLane = { pass: { busy: false, next: null, last: "" }, other: { busy: false, next: null, last: "" } };
     const warnedObs = new Set();   // observations already named to the server ahead of time (update)
@@ -2305,7 +2426,7 @@ body.phone.has-dock { --appdockh: 50px; }
       if (catalog !== cat) {   // another mission year (or the months around this one) loaded
         // a pass mosaic that is up stays up: its observation is a name, its frame found again by id
         const obsId = cat && obsK >= 0 ? cat.id[obsK] : null;
-        cat = catalog; lastK = -2; near = [-1, null]; stripKey = ""; failed.clear(); made.clear(); missing.clear(); warmed.clear(); warnedObs.clear(); for (const L of Object.values(mLane)) { L.last = ""; L.next = null; } shown = null; shownKey = null;
+        cat = catalog; lastK = -2; near = [-1, null]; stripKey = ""; failed.clear(); movieFailed.clear(); filmAsked.clear(); filmInfo = null; made.clear(); missing.clear(); warmed.clear(); warnedObs.clear(); for (const L of Object.values(mLane)) { L.last = ""; L.next = null; } shown = null; shownKey = null;
         obsK = obsId ? kOf(obsId) : -1;
         if (obsK < 0) { obsShown = null; shapeOf = null; }
       }
@@ -2318,7 +2439,7 @@ body.phone.has-dock { --appdockh: 50px; }
       const stale = S.get("cameras.stale");
       if (k < 0 || state.et - catalog.et[k] > stale * 3600) {
         field("status").textContent = k < 0 ? "Camera" : `Last frame ${fmtDur(state.et - catalog.et[k])} ago`;
-        strip(null);
+        strip(null); filmstrip(-1);
         if (lastK !== -1) {
           lastK = -1; want = null; shownKey = null; shown = null;
           noFrame(k < 0 ? "<b>No signal</b>No frames from this camera yet this year" : `<b>Idle</b>No frames from this camera in the last ${stale} h`);
@@ -2335,6 +2456,7 @@ body.phone.has-dock { --appdockh: 50px; }
       if (k === lastK && ready === lastReady && !force) return;
       lastK = k; lastReady = ready;
       want = view(k, state.et);
+      filmstrip(k);
       // a possible mosaic tile: the frame before is of the same body and observation, and a frame of a colour
       // set only once its composite is shown (the mosaic is made of composites)
       const kb = framesOf(cam, body).ks[p - 1];   // p counts this feed's frames (a body window's: that body's only)
@@ -2361,15 +2483,19 @@ body.phone.has-dock { --appdockh: 50px; }
       next = ahead.map(q => view(q, catalog.et[q], capped()).key);
       // further ahead: each observation coming up is named to the server once, so a mosaic pass in it is worked
       // out (seconds for its plan) before the clock gets there
-      if (window.cassiniMosaics !== false && S.get("cameras.mosaics"))
+      if (window.cassiniMosaics !== false && (S.get("cameras.mosaics") || S.get("movies.steady")))
         for (let d = 0; d <= 120 && ks[p + d] !== undefined; d++) {
           const q = ks[p + d], o = `${catalog.target[q]}|${catalog.obs[q]}`;
           if (warnedObs.has(o)) continue;
           warnedObs.add(o);
           const c0 = catalog;
           fetch(`${FRAMES}/frames/mosaic/${catalog.id[q]}.webp?warm=1`, { priority: "low" }).then(r => r.ok ? r.json() : null).then(a => {
-            if (a && a.movie) moviePasses.add(o);
-            if (!a || !a.mosaic) return;
+            if (a && a.movie) {
+              moviePasses.add(o);
+              // the window is in that pass already: its frame is steadied from now on
+              if (catalog === c0 && lastK >= 0 && passOf(lastK) === o && playsMovie(lastK)) update(true);
+            }
+            if (!a || !a.mosaic || !S.get("cameras.mosaics")) return;
             mosaicPasses.add(o);
             if (catalog !== c0) return;
             // the window is in that pass already: its frame asks now (the server is working the pass out)
@@ -2393,7 +2519,7 @@ body.phone.has-dock { --appdockh: 50px; }
   const feeds = [...document.querySelectorAll(".camwin")].map(cameraFeed);
   window.cassiniFeeds = { cameraFeed, framesOf, lastOfCam, prep, stale: () => S.get("cameras.stale") * 3600 };
   // a change to what the windows show takes effect straight away
-  for (const key of ["cameras.composites", "cameras.stale", "cameras.steady"]) S.on(key, () => { if (typeof catalog !== "undefined" && catalog && catalog.byCam) feeds.forEach(f => f(true)); });
+  for (const key of ["cameras.composites", "cameras.stale", "cameras.steady", "movies.steady", "movies.trail", "movies.filmstrip"]) S.on(key, () => { if (typeof catalog !== "undefined" && catalog && catalog.byCam) feeds.forEach(f => f(true)); });
 
   // ---------- burst limit: in normal playback each camera window gets at most maxRate new pictures a second ----------
   // The clock runs at the chosen speed except inside an imaging burst, where it slows so that crossing the gap

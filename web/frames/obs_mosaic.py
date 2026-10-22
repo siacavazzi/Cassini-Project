@@ -64,6 +64,10 @@ ZOOM = 1.4           # change in distance that ends a pass (tiles closer than th
 MIN_PLACES = 3       # pointings a pass needs to be a mosaic
 MAX_FRAMES = 16      # footprints wider than this many frames stay rolling mosaics
 MOVIE_JUMPS = 0.3    # a pass whose same-filter steps jump (mosaic.min_step) less often than this is a movie
+MOVIE_FIT = 2.0      # a pass played as a movie shows its whole footprint up to this many frames across, else a
+                     # window this wide following the frame, at one scale for the whole pass
+TRAIL = 12           # most earlier frames a movie's rolling trail keeps under the newest
+SCALE_FRAMES = 96    # most frames the pass's display scale is measured on (evenly spread over a long movie)
 RADIUS = {"SATURN": 60268, "JUPITER": 69911, "TITAN": 2575, "RHEA": 764, "IAPETUS": 735, "DIONE": 561,
           "TETHYS": 531, "ENCELADUS": 252, "MIMAS": 198, "HYPERION": 135, "PHOEBE": 107}
 IFOV = {"N": 6.0e-6, "W": 60e-6}   # radians per full resolution pixel
@@ -199,7 +203,9 @@ def plan(u, cache):
             with open(path) as fh:
                 return json.load(fh)
         frames = u["frames"]
-        scale = pass_scale(frames, u)
+        # a long movie's scale from frames spread evenly over it: the same scale, without reading every frame first
+        step = max(1, math.ceil(len(frames) / SCALE_FRAMES))
+        scale = pass_scale(frames[::step], u)
         # the rotation from the camera's frame to north up: the angle between where the geometry cache puts
         # the body and where processed_frame does, from the first tile placed well off the body's centre
         angle = 0.0
@@ -458,6 +464,186 @@ def so_far(u, n, cache, made=None, out=OUT):
     return im, {"mosaic": sum(count.get(f, 0) for f in drawn), "filters": len(used), "filter_names": used,
                 "observation": u["key"][1], "pass": u["key"][3], "of": sum(1 for fr in u["frames"] if fr[2] in drawn),
                 "fixed": p["fixed"], "width": im.width, "height": im.height}
+
+
+def movie_rect(p, t):
+    """The view of a pass played as a movie (x0, y0, w, h in reference pixels from the body's centre): its whole
+    footprint when that is at most MOVIE_FIT frames across, so the body holds still while the pointing wanders;
+    otherwise a window MOVIE_FIT frames across centred on frame t (a creeping ring or limb movie moves along).
+    Either way one size for the whole pass, so the picture never rescales."""
+    x0, y0, x1, y1 = p["footprint"]
+    side = MOVIE_FIT * FRAME
+    if max(x1 - x0, y1 - y0) <= side:
+        return x0, y0, x1 - x0, y1 - y0
+    w, h = min(x1 - x0, side), min(y1 - y0, side)
+    cx, cy = t["offset"]
+    return min(max(cx - w / 2, x0), x1 - w), min(max(cy - h / 2, y0), y1 - h), w, h
+
+
+def _place(u, t, rect, k, W, H, cache):
+    """Tile t drawn where SPICE puts it in the view rect, on a W x H canvas (k canvas pixels per reference pixel)."""
+    bx, by, bw, bh = t["box"]
+    left = round((t["offset"][0] + bx - rect[0]) * k)
+    top = round((t["offset"][1] + by - rect[1]) * k)
+    sw, sh = max(1, round(bw * k)), max(1, round(bh * k))
+    frame = np.zeros((H, W, 4), np.uint8)
+    x0, y0, x1, y1 = max(left, 0), max(top, 0), min(left + sw, W), min(top + sh, H)
+    if x0 < x1 and y0 < y1:
+        part = _part(os.path.join(folder(u, cache), "tiles", f"{t['n']}.png"), sw, sh)
+        frame[y0:y1, x0:x1] = part[y0 - top:y1 - top, x0 - left:x1 - left]
+    return frame
+
+
+def movie_frame(u, n, cache, trail=0, colour=True, out=OUT):
+    """Frame n of the pass played as a movie, RGBA out px on its longest side, and its report; (None, report)
+    when SPICE could not place it. The frame is the pass's tile n (color_image.processed_frame: repeat exposures
+    merged in I/F, calibrated, centred north up by SPICE, scaled to the pass's reference distance, on the pass's
+    one display scale), drawn where SPICE puts it in movie_rect: so the picture keeps one brightness scale and one
+    size for the whole pass, and the body holds still. colour: when the pass's plan has colour filters and the
+    newest frame of each of them was taken within reel.SET_GAP of this one, the three are drawn as one colour
+    picture (each where SPICE puts it), as the pass's mosaic does; otherwise the frame in grey. trail: up to that
+    many earlier frames of the same filter drawn under it, fading with age (a rolling trail)."""
+    p = plan(u, cache)
+    t = tile(u, n, cache, p["display_scale"])
+    rep = {"movie": True, "n": n, "of": len(u["frames"]), "filter": t["filter"], "observation": u["key"][1],
+           "pass": u["key"][3], "id": t["id"]}
+    if "offset" not in t:
+        rep["why"] = t.get("why", "not placed by SPICE")
+        return None, rep
+    rect = movie_rect(p, t)
+    k = out / max(rect[2], rect[3])
+    W, H = max(1, math.ceil(rect[2] * k)), max(1, math.ceil(rect[3] * k))
+    # only the frames this picture needs are made: the newest of each colour filter within SET_GAP, the trail
+    frames, used, newest = u["frames"], None, {}
+    if colour and p["colour"] and t["filter"] in p["colour"]:
+        for j in range(n, -1, -1):
+            f = frames[j][2]
+            if t["t"] - frames[j][3] > reel.SET_GAP or len(newest) == len(p["colour"]):
+                break
+            if f in p["colour"] and f not in newest:
+                q = t if j == n else tile(u, j, cache, p["display_scale"])
+                if "offset" in q:
+                    newest[f] = q
+        if len(newest) == len(p["colour"]):
+            used = p["colour"]
+    if used:
+        planes = [_place(u, newest[f], rect, k, W, H, cache) for f in used]
+        alpha = np.min([a[..., 3] for a in planes], axis=0)
+        rgba = np.dstack([a[..., 0] for a in planes] + [alpha])
+        rep["color"] = used
+        rep["ids"] = [newest[f]["id"] for f in used]
+    else:
+        rgba = _place(u, t, rect, k, W, H, cache)
+        # the rolling trail: earlier frames of this filter under it, older ones fainter
+        if trail:
+            js = [j for j in range(n - 1, max(-1, n - 8 * trail), -1) if frames[j][2] == t["filter"]][:trail]
+            older = [q for q in (tile(u, j, cache, p["display_scale"]) for j in reversed(js)) if "offset" in q]
+            acc = np.zeros((H, W, 4), np.float32)
+            for age, q in zip(range(len(older), 0, -1), older):
+                a = _place(u, q, rect, k, W, H, cache).astype(np.float32)
+                w = a[..., 3:] / 255 * (1 - age / (len(older) + 1))
+                acc[..., :3] = acc[..., :3] * (1 - w) + a[..., :3] * w
+                acc[..., 3:] = np.maximum(acc[..., 3:], w * 255)
+            w = rgba[..., 3:].astype(np.float32) / 255
+            acc[..., :3] = acc[..., :3] * (1 - w) + rgba[..., :3] * w
+            acc[..., 3:] = np.maximum(acc[..., 3:], rgba[..., 3:])
+            rgba = (acc + 0.5).astype(np.uint8)
+            rep["trail"] = len(older)
+    if p["display_scale"].get("filled"):
+        rgba = detail(rgba, DETAIL_SIGMA * FRAME * k)
+    rep.update({"view": [round(v, 1) for v in rect], "width": W, "height": H})
+    return Image.fromarray(rgba, "RGBA"), rep
+
+
+def movie_webp(frame_id, size, cache, trail=0, colour=True, wait=False, ahead=6):
+    """(WebP, report) of frame_id played as a movie of its pass (movie_frame), made once and kept in the cache;
+    None when the frame is in no pass. A pass whose plan is not worked out yet (seconds: it measures the pass's
+    scale) is started in the background and answers (None, report) unless wait, so the window shows the plain
+    frame meanwhile. Then makes the next few tiles in the background."""
+    found = unit_of(frame_id)
+    if not found or found[1] < 0:
+        return None
+    u, n = found
+    if not wait and not os.path.exists(os.path.join(folder(u, cache), "plan.json")):
+        warm_movie(u, n, ahead, cache)
+        return None, {"why": "working out the pass", "observation": u["key"][1], "pass": u["key"][3]}
+    path = os.path.join(folder(u, cache), "movie", str(size), f"{n}_{trail}_{int(bool(colour))}.webp")
+    report, meta = {}, path[:-4] + "json"
+
+    def make():
+        with _asking():
+            im, rep = movie_frame(u, n, cache, trail, colour)
+        report.update(rep)
+        reel._cached(meta, lambda: json.dumps(rep).encode())
+        if im is None:
+            raise LookupError(rep.get("why"))
+        if max(im.size) > size:
+            im.thumbnail((size, size), Image.LANCZOS)
+        buf = io.BytesIO()
+        im.save(buf, "WEBP", quality=88, method=4)
+        return buf.getvalue()
+
+    try:
+        data = reel._cached(path, make)
+    except LookupError:
+        return None, report
+    finally:
+        if ahead:
+            warm_movie(u, n + 1, ahead, cache)
+    if not report:
+        with open(meta) as fh:
+            report = json.load(fh)
+    return data, report
+
+
+_movie_ahead = {}   # pass key -> (first, last) tile a movie wants made ahead; a thread per pass makes them
+
+
+def warm_movie(u, n, ahead, cache):
+    """A movie is at frame n of the pass: work out its plan and make tiles n .. n+ahead in the background (one
+    pass at a time with the mosaics made ahead), from where the movie is rather than from the pass's start."""
+    key, last = u["key"], min(n + ahead, len(u["frames"]) - 1)
+    with _lock:
+        running = key in _movie_ahead
+        _movie_ahead[key] = (n, last)
+        if running:
+            return
+
+    def run():
+        try:
+            with _background:
+                p = plan(u, cache)
+                while True:
+                    with _lock:
+                        first, last = _movie_ahead[key]
+                    todo = [j for j in range(first, last + 1)
+                            if not os.path.exists(os.path.join(folder(u, cache), "tiles", f"{j}.json"))]
+                    if not todo:
+                        break
+                    _yield()
+                    tile(u, todo[0], cache, p["display_scale"])
+        except Exception as e:
+            print(f"movie {key} failed: {type(e).__name__}: {e}", flush=True)
+        finally:
+            with _lock:
+                _movie_ahead.pop(key, None)
+
+    threading.Thread(target=run, daemon=True).start()
+
+
+def pass_info(frame_id, cache):
+    """The pass frame_id is in, for the movie's filmstrip: its observation, which frame this is and every frame
+    of it ([id, seconds since 1970, filter]), and how the server judged it; None when it is in no pass."""
+    found = unit_of(frame_id)
+    if not found:
+        return None
+    u, n = found
+    ts = [fr[3] for fr in u["frames"]]
+    gaps = np.diff(ts) if len(ts) > 1 else []
+    return {"observation": u["key"][1], "target": u["key"][0], "camera": u["key"][2], "pass": u["key"][3], "n": n,
+            "movie": bool(u["movie"]), "mosaic": bool(u["mosaic"]),
+            "cadence": round(float(np.median(gaps)), 1) if len(gaps) else None,
+            "frames": [[fr[1], fr[3], fr[2]] for fr in u["frames"]]}
 
 
 def mosaic_webp(frame_id, size, cache, slots=None, ahead=3, fmt="webp", out=OUT):

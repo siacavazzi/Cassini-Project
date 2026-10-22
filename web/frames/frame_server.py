@@ -53,6 +53,13 @@ Routes:
                                filter, in false colour when it cycles three or more; asking for a frame of the
                                pass starts making its tiles. A movie pass (obs_mosaic: the camera creeps or
                                stares) is never a mosaic; warm=1 answers {"mosaic", "movie"} for the observation
+  /frames/movie/<ID>.webp?size=512&trail=0&color=1
+                               the frame played as a movie of its pass (obs_mosaic.movie_webp): the pass's tile
+                               (processed_frame, centred north up by SPICE) on the pass's one display scale, drawn
+                               where SPICE puts it in one view for the whole pass; color=1 draws the newest frames
+                               of the pass's color filters together, trail=N the N earlier frames of its filter
+                               fading under it. 503 while the pass is being worked out (the window shows the frame)
+  /frames/movie/<ID>.json      the pass the frame is in: its frames [id, time, filter], cadence, movie/mosaic call
   /export/plan.json?from=2006-09-15T14:32&until=2006-09-15T17:12&cams=NW&fps=auto&size=1024
                                a movie export's plan (web/frames/export.py): its pictures, when each shows in the
                                film, the film's length and size; nothing is made
@@ -652,6 +659,37 @@ def make_handler(site, cache, flags=None):
                     return self.send_bytes(data, "image/webp", headers={"X-Reel": json.dumps(report, default=str)})
                 except FileNotFoundError:
                     return self.send_error(404, "Frame not in the archive")
+            m = re.match(r"^/frames/movie/([^/]+)\.(webp|json)$", url.path)
+            if m:
+                # a frame played as a movie of its pass (obs_mosaic.movie_webp): centred by SPICE, on the pass's one
+                # display scale and one view; .json: the pass's frames, for the movie's filmstrip
+                if not FRAME_ID.match(m.group(1)):
+                    return self.send_error(400, "Not a frame id")
+                if reel._index is None:
+                    return self.send_error(404, "No index of the frames")
+                if m.group(2) == "json":
+                    info = obs_mosaic.pass_info(m.group(1), cache)
+                    return self.send_json(info) if info else self.send_error(404, "Not in a pass")
+                query = parse_qs(url.query)
+                size, fmt = size_of(query, 512), picture_format(query)
+                # full resolution: the pass's view at its longest side (obs_mosaic.OUT), as saved from the window
+                size = max(SIZES) if size == FULL else size
+                try:
+                    trail = max(0, min(obs_mosaic.TRAIL, int(query.get("trail", ["0"])[0] or 0)))
+                except ValueError:
+                    return self.send_error(400, "trail= takes a number of frames")
+                try:
+                    with _movie_slots:
+                        made = obs_mosaic.movie_webp(m.group(1), size, cache, trail, query.get("color", ["1"])[0] != "0")
+                except FileNotFoundError:
+                    made = None
+                if not made:
+                    return self.send_error(404, "Not in a pass")
+                if made[0] is None:
+                    # the pass is being worked out, or SPICE could not place the frame: the window shows the frame
+                    return self.send_error(503 if made[1].get("why") == "working out the pass" else 404, made[1].get("why", ""))
+                data = made[0] if fmt == "webp" else encode(Image.open(io.BytesIO(made[0])), FULL, "png")
+                return self.send_picture(data, fmt, query, f"Cassini_{m.group(1)}_movie", {"X-Movie": json.dumps(made[1])})
             m = re.match(r"^/frames/mosaic/([^/]+)\.webp$", url.path)
             if m:
                 # the camera windows ask this for each frame: the mosaic when the frame is a new tile of a

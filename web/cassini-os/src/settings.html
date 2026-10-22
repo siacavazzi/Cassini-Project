@@ -52,6 +52,7 @@ body.idle #settings:not([hidden]) { opacity: 1; pointer-events: auto; }
 body.s-nolabels #labels, body.s-nolabels #reticle { display: none; }
 body.s-nohudline #hudline { display: none; }
 body.s-nochans .camwin .chans { display: none !important; }
+body.s-nofilmstrip .camwin .filmstrip { display: none !important; }
 body.s-noinfo .camwin .info { display: none; }
 body.phone #settings { left: 8px !important; top: calc(env(safe-area-inset-top, 0px) + 30px) !important; width: calc(100% - 16px) !important; height: calc(100% - 50px) !important; }
 body.phone #settings .sbody { grid-template-columns: 1fr; grid-template-rows: auto minmax(0, 1fr); }
@@ -277,6 +278,14 @@ body.phone .srow input[type=range] { width: 96px; }
       hint: "Movie frames made by the pipeline like the camera windows' pictures: calibrated, color composites and mosaics. Off plays the archive frames as they are, with no processing. The Processed button in the Movie window (or P) switches it too." });
   D({ key: "movie.mosaics", section: "Movie", label: "Mosaics in movies", type: "toggle", value: true,
       hint: "With processed pictures on, a mosaic pass builds its mosaic in the film. Off shows each tile on its own." });
+  // movie passes in the camera and body windows (head-quiet.html cameraFeed reads these)
+  D({ key: "movies.steady", section: "Movie", label: "Steady movie passes", type: "toggle", value: true,
+      hint: "When a pass plays as a movie in a camera or body window (a stare, a ring or storm movie), every frame is centered by SPICE, north up, on one brightness scale and one size for the whole pass, so the body holds still and the picture does not pump. Off shows each frame as it is." });
+  D({ key: "movies.filmstrip", section: "Movie", label: "Filmstrip", type: "toggle", value: true,
+      hint: "Under a window playing a movie pass: every frame of the pass along a strip, with the frames around the one shown. Click or drag along it to move through the pass." });
+  cls("movies.filmstrip", "s-nofilmstrip", false);
+  D({ key: "movies.trail", section: "Movie", label: "Rolling trail", type: "range", value: 0, min: 0, max: 12, step: 1, unit: "frames",
+      hint: "In a steady movie pass, this many earlier frames of the same filter stay under the newest one, fading with age, so a moving moon or a ring's shadow leaves a short trail. 0 shows each frame alone." });
   window.addEventListener("DOMContentLoaded", () => {
     const r = $("mvfps"); if (!r) return;
     try { const f = +localStorage.getItem("cassini-os-movie-fps"); if (f >= 2 && f <= 24 && !("movie.fps" in saved)) S.set("movie.fps", f); } catch (e) {}
