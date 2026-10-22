@@ -202,7 +202,7 @@ body.phone .srow input[type=range] { width: 96px; }
   D({ key: "cameras.composites", section: "Cameras", label: "Color composites", type: "toggle", value: true,
       hint: "Once a filter set is complete, show its color picture. Off shows every frame on its own." });
   D({ key: "cameras.balancedColor", section: "Cameras", label: "Balanced color", type: "toggle", value: true,
-      hint: "Color pictures and mosaics drawn on one brightness scale per picture or pass: black at the sky's real level, white at the bright part of the body rather than its single brightest pixel, and mosaic tiles matched on all filters together, so tiles keep one color. Off shows the earlier stretch." });
+      hint: "A gentler color stretch: black sits just above the sky's noise so grain and scan lines stay dark, white sits at the bright part of the body but never stretches dim pictures far, bright edges roll off instead of clipping, and mosaic tiles are evened out without changing the mosaic's overall level. Off shows the earlier stretch." });
   // what the frame server's picture routes are asked to add for it: nothing, or the earlier stretch
   window.cassiniLook = () => S.get("cameras.balancedColor") === false ? "&look=classic" : "";
   D({ key: "cameras.channels", section: "Cameras", label: "Filter channels", type: "toggle", value: true,
