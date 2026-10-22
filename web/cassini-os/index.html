@@ -2180,11 +2180,16 @@ body.phone.has-dock { --appdockh: 50px; }
         if (v.warm || v.cat !== catalog) warmed.add(v.key);
         else if (v.movie) {   // not steadied (the server is still working the pass out, or SPICE could not place it): the frame itself
           // the whole pass plays its frames as they are for a while, so the clock never waits on a pass being
-          // worked out; a frame that fails again once the pass is ready shows as it is from then on
-          if (coldTried.has(v.key)) movieFailed.add(catalog.id[v.k]);
-          coldTried.add(v.key); coldAt.set(passOf(v.k), performance.now());
-          const o = passOf(v.k), c0 = catalog;
-          setTimeout(() => { if (catalog === c0 && lastK >= 0 && passOf(lastK) === o) update(true); }, COLD_RETRY + 50);
+          // worked out (the server answers 503), and its steady frame is asked for again, paused or playing; any
+          // other answer (SPICE could not place the frame) shows that frame as it is from then on
+          const o = passOf(v.k), c0 = catalog, id = catalog.id[v.k];
+          coldAt.set(o, performance.now());
+          fetch(v.key, { priority: "low" }).then(r => r.status, () => 503).then(status => {
+            if (catalog !== c0) return;
+            if (status !== 503 && status !== 200) { movieFailed.add(id); return; }
+            if (status === 200) coldAt.delete(o);
+            setTimeout(() => { if (catalog === c0 && lastK >= 0 && passOf(lastK) === o) update(true); }, status === 200 ? 0 : COLD_RETRY + 50);
+          });
           if (want && want.key === v.key) want = { key: frameUrl(catalog.id[v.k]), set: -1, k: v.k };
         } else if (v.set >= 0) {   // no composite: the set shows its frames instead
           failed.add(v.set);
@@ -2300,7 +2305,7 @@ body.phone.has-dock { --appdockh: 50px; }
     const movieFailed = new Set();    // frames the server did not steady: they show as they are
     // passes the server is still working out (a movie request failed): their frames show as they are, with the
     // steadying note, and the steady frame is asked for again every COLD_RETRY ms
-    const coldAt = new Map(), coldTried = new Set(), COLD_RETRY = 2000;
+    const coldAt = new Map(), COLD_RETRY = 2000;
     const passCold = k => performance.now() - (coldAt.get(passOf(k)) ?? -1e9) < COLD_RETRY;
     // a mosaic movie (the switch's Mosaic movie, or Auto on a pass the server calls one): /frames/movie?mode=rolling,
     // which never empties when the camera starts its raster again (Settings > Movie > Mosaic movies keep)
@@ -2530,7 +2535,7 @@ body.phone.has-dock { --appdockh: 50px; }
       if (catalog !== cat) {   // another mission year (or the months around this one) loaded
         // a pass mosaic that is up stays up: its observation is a name, its frame found again by id
         const obsId = cat && obsK >= 0 ? cat.id[obsK] : null;
-        cat = catalog; lastK = -2; near = [-1, null]; stripKey = ""; failed.clear(); movieFailed.clear(); coldAt.clear(); coldTried.clear(); filmAsked.clear(); filmInfo = null; made.clear(); missing.clear(); warmed.clear(); warnedObs.clear(); for (const L of Object.values(mLane)) { L.last = ""; L.next = null; } shown = null; shownKey = null;
+        cat = catalog; lastK = -2; near = [-1, null]; stripKey = ""; failed.clear(); movieFailed.clear(); coldAt.clear(); filmAsked.clear(); filmInfo = null; made.clear(); missing.clear(); warmed.clear(); warnedObs.clear(); for (const L of Object.values(mLane)) { L.last = ""; L.next = null; } shown = null; shownKey = null;
         obsK = obsId ? kOf(obsId) : -1;
         if (obsK < 0) { obsShown = null; shapeOf = null; }
       }
