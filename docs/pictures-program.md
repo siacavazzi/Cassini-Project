@@ -130,7 +130,7 @@ First batch: phases 1, 2a and A at once. Second batch: 2b once checkpoint 2 is a
 
 | Phase | Thread | PR | Preview | State |
 |---|---|---|---|---|
-| 1 | | | 8791 | briefed |
-| 2a | | | 8792 | briefed |
-| A | | | 8793 | briefed |
+| 1 | Mosaics stop jumping | | 8791 | building |
+| 2a | Color display fixes | | 8792 | building |
+| A | Composite drill-down | | 8793 | building |
 | 2b, 3-8 | | | | waiting |
