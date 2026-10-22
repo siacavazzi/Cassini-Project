@@ -43,10 +43,10 @@ html, body { height: 100%; margin: 0; }
 [hidden] { display: none !important; }
 body { background: #000; color: var(--ink); font: 11px/1.35 var(--ui); overflow: hidden; -webkit-font-smoothing: antialiased; user-select: none; }
 #app { position: fixed; inset: 0; }
-#gl, #hud, #glow { position: absolute; inset: 0; width: 100%; height: 100%; display: block; }
+#gl, #hud { position: absolute; inset: 0; width: 100%; height: 100%; display: block; }
 #gl { touch-action: none; }
-#hud, #glow { pointer-events: none; mix-blend-mode: screen; }
-body.nohud #hud, body.nohud #glow, body.nohud #hudline, body.nohud #reticle { display: none; }
+#hud { pointer-events: none; mix-blend-mode: screen; }
+body.nohud #hud, body.nohud #hudline, body.nohud #reticle { display: none; }
 #labels { position: absolute; inset: 0; pointer-events: none; overflow: hidden; }
 
 /* ---------- HUD tags for bodies ---------- */
@@ -467,7 +467,6 @@ body.idle .win.full .titlebar { opacity: 0; }
 <div id="app">
   <canvas id="gl" aria-label="3D view of the Saturn system"></canvas>
   <canvas id="hud" aria-hidden="true"></canvas>
-  <canvas id="glow" aria-hidden="true"></canvas>
   <div id="reticle" hidden></div>
   <div id="labels"></div>
   <div id="hudline" aria-hidden="true"></div>
@@ -841,17 +840,47 @@ body.idle .win.full .titlebar { opacity: 0; }
     }
   };
 
-  // glow: the HUD canvas copied, blurred, at half resolution, screen-blended over the scene
-  const glow = $("glow"), gctx = glow.getContext("2d");
+  // glow: the HUD drawn again at half resolution into a texture, blurred on the GPU (a wide and a narrow Gaussian,
+  // added) and screen-blended over the sharp HUD in the same canvas. Nothing is read back to the CPU, so the
+  // graphics card never has to stop and wait for the page.
+  let G = null;
+  function glowKit() {
+    const quad = new THREE.Mesh(new THREE.PlaneGeometry(2, 2)), cam = new THREE.OrthographicCamera(-1, 1, 1, -1, 0, 1), sc = new THREE.Scene();
+    quad.frustumCulled = false; sc.add(quad);
+    const VS = "varying vec2 vUv; void main(){ vUv = uv; gl_Position = vec4(position.xy, 0.0, 1.0); }";
+    const blur = new THREE.ShaderMaterial({ uniforms: { src: { value: null }, step: { value: new THREE.Vector2() }, sigma: { value: 1 } }, vertexShader: VS,
+      fragmentShader: `uniform sampler2D src; uniform vec2 step; uniform float sigma; varying vec2 vUv;
+        void main(){ vec3 s = vec3(0.0); float ws = 0.0;
+          for (int i = -12; i <= 12; i++) { float x = float(i) * sigma / 4.0, w = exp(-0.5 * float(i * i) / 16.0);
+            s += w * texture2D(src, vUv + step * x).rgb; ws += w; }
+          gl_FragColor = vec4(s / ws, 1.0); }`, depthTest: false, depthWrite: false });
+    const mix = new THREE.ShaderMaterial({ uniforms: { a: { value: null }, b: { value: null }, gain: { value: 1 } }, vertexShader: VS,
+      fragmentShader: `uniform sampler2D a; uniform sampler2D b; uniform float gain; varying vec2 vUv;
+        void main(){ gl_FragColor = vec4(min(vec3(1.0), gain * (texture2D(a, vUv).rgb + texture2D(b, vUv).rgb)), 1.0); }`,
+      depthTest: false, depthWrite: false, transparent: true,
+      blending: THREE.CustomBlending, blendEquation: THREE.AddEquation, blendSrc: THREE.OneFactor, blendDst: THREE.OneMinusSrcColorFactor });
+    const rt = depth => new THREE.WebGLRenderTarget(1, 1, { depthBuffer: depth, stencilBuffer: false, minFilter: THREE.LinearFilter, magFilter: THREE.LinearFilter });
+    return { quad, cam, sc, blur, mix, hud: rt(true), t1: rt(false), wide: rt(false), narrow: rt(false), w: 0, h: 0 };
+  }
+  function pass(mat, target) { G.quad.material = mat; hudRenderer.setRenderTarget(target); hudRenderer.render(G.sc, G.cam); }
   window.studyAfterRender = () => {
-    if (document.body.classList.contains("nohud")) return;
-    const hud = $("hud"), w = Math.round(hud.clientWidth / 2), h = Math.round(hud.clientHeight / 2);
-    if (!w || !h || !hud.width || !hud.height) return;   // not laid out yet (first frame, hidden tab): drawing an empty canvas throws
-    if (glow.width !== w || glow.height !== h) { glow.width = w; glow.height = h; }
-    gctx.globalCompositeOperation = "source-over"; gctx.filter = "none"; gctx.fillStyle = "#000"; gctx.fillRect(0, 0, w, h);
-    gctx.globalCompositeOperation = "lighter";
-    gctx.filter = "blur(5px)"; gctx.drawImage(hud, 0, 0, w, h);
-    gctx.filter = "blur(1.5px)"; gctx.drawImage(hud, 0, 0, w, h);
+    if (document.body.classList.contains("nohud") || !hudRenderer) return;
+    const c = hudRenderer.domElement, w = Math.round(c.clientWidth / 2), h = Math.round(c.clientHeight / 2);
+    if (!w || !h) return;
+    if (!G) G = glowKit();
+    if (G.w !== w || G.h !== h) { G.w = w; G.h = h; for (const k of ["hud", "t1", "wide", "narrow"]) G[k].setSize(w, h); }
+    const ac = hudRenderer.autoClear, pr = hudRenderer.getPixelRatio();
+    hudRenderer.autoClear = true;
+    hudRenderer.setRenderTarget(G.hud); hudRenderer.render(hudScene, camera);
+    G.blur.uniforms.src.value = G.hud.texture; G.blur.uniforms.step.value.set(1 / w, 0); G.blur.uniforms.sigma.value = 5; pass(G.blur, G.t1);
+    G.blur.uniforms.src.value = G.t1.texture; G.blur.uniforms.step.value.set(0, 1 / h); pass(G.blur, G.wide);
+    G.blur.uniforms.src.value = G.hud.texture; G.blur.uniforms.step.value.set(1 / w, 0); G.blur.uniforms.sigma.value = 1.5; pass(G.blur, G.t1);
+    G.blur.uniforms.src.value = G.t1.texture; G.blur.uniforms.step.value.set(0, 1 / h); pass(G.blur, G.narrow);
+    // the old 2D-canvas glow shrank the full-density HUD by 2 x pixel ratio, which thinned its one-pixel lines by about as much (0.9 / pixel ratio matches its brightness, measured)
+    hudRenderer.autoClear = false;
+    G.mix.uniforms.a.value = G.wide.texture; G.mix.uniforms.b.value = G.narrow.texture; G.mix.uniforms.gain.value = 0.9 / Math.min(window.devicePixelRatio || 1, 2);
+    pass(G.mix, null);
+    hudRenderer.autoClear = ac;
   };
 
   // per-frame read-outs: menu-bar clock, mission progress, HUD strip, status bar
@@ -912,7 +941,10 @@ body.idle .win.full .titlebar { opacity: 0; }
   const nmOf = k => FILTER_NM[`${catalog.cam[k]}:${catalog.f1[k]}/${catalog.f2[k]}`] || 0;
   function pickChannels(s) {
     const by = f => s.frames[s.filters.indexOf(f)], blue = ["BL1", "BL2", "VIO"].find(f => s.filters.includes(f));
-    if (s.filters.includes("RED") && s.filters.includes("GRN") && blue) { s.kind = "true"; s.use = [by("RED"), by("GRN"), by(blue)]; }
+    // red: RED, or the 619 nm continuum filter CB1 when a set has no RED (the narrow-angle camera at Jupiter), as
+    // obs_mosaic picks the filter nearest 650 nm
+    const red = ["RED", "CB1"].find(f => s.filters.includes(f));
+    if (red && s.filters.includes("GRN") && blue) { s.kind = "true"; s.use = [by(red), by("GRN"), by(blue)]; }
     else {
       const w = s.frames.slice().sort((p, q) => nmOf(q) - nmOf(p));
       s.kind = w.length >= 3 ? "false" : "two";
@@ -1042,7 +1074,18 @@ body.idle .win.full .titlebar { opacity: 0; }
     // after the colour channels keeps the picture changing instead of holding the composite
     function view(k, et) {
       const si = catalog.setOf[k], s = si >= 0 ? catalog.sets[si] : null;
-      if (s && s.ready <= et && s.use.includes(k) && !failed.has(si) && S.get("cameras.composites")) return { key: colorUrl(s), set: si, k };
+      if (s && S.get("cameras.composites")) {
+        // any frame of a set whose channels are all taken shows the set's composite
+        if (s.ready <= et && !failed.has(si)) return { key: colorUrl(s), set: si, k };
+        // while the next set of a colour movie is being taken (the camera cycling through its filters), the
+        // camera's last finished set of the same observation stays up, so the movie stays in colour
+        for (let j = si - 1; j >= 0; j--) {
+          const q = catalog.sets[j];
+          if (q.cam !== s.cam) continue;
+          if (q.obs === s.obs && q.target === s.target && q.ready <= et && !failed.has(j)) return { key: colorUrl(q), set: j, k: q.use[q.use.length - 1], held: true };
+          break;
+        }
+      }
       return { key: frameUrl(catalog.id[k]), set: -1, k };
     }
     function noFrame(msg) { well.classList.remove("has-frame", "composite"); card.querySelector(".wellmsg").innerHTML = msg; }
@@ -1073,6 +1116,7 @@ body.idle .win.full .titlebar { opacity: 0; }
       lane[which] = v; v.cat = catalog;
       const im = new Image();
       im.crossOrigin = "anonymous";
+      im.fetchPriority = v.warm ? "low" : "high";   // the picture wanted now goes ahead of look-ahead requests
       im.onload = () => {
         lane[which] = null; warmed.add(v.key);
         if (want && !v.warm && v.cat === catalog && fits(v)) display(v, im);   // no want: the camera went idle while this loaded
@@ -1111,7 +1155,7 @@ body.idle .win.full .titlebar { opacity: 0; }
         if (warming.size >= 3) break;
         if (warmed.has(key) || warming.has(key) || key.includes("/color.webp")) continue;
         warming.add(key);
-        const p = new Image(); p.crossOrigin = "anonymous";
+        const p = new Image(); p.crossOrigin = "anonymous"; p.fetchPriority = "low";
         p.onload = p.onerror = () => { warming.delete(key); warmed.add(key); };
         p.src = key;
       }
@@ -1190,7 +1234,9 @@ body.idle .win.full .titlebar { opacity: 0; }
     function channelsFrom(im, s) {
       if (stripSet !== s) return;
       const n = 192, c = document.createElement("canvas"); c.width = c.height = n;
-      const g = c.getContext("2d"); g.drawImage(im, 0, 0, n, n);
+      // willReadFrequently keeps this small canvas in main memory: reading back a GPU canvas waits for the whole
+      // GPU queue, the 3D view included, which froze the page for seconds on a large screen
+      const g = c.getContext("2d", { willReadFrequently: true }); g.drawImage(im, 0, 0, n, n);
       let src;
       try { src = g.getImageData(0, 0, n, n); } catch (e) { return; }   // a server without CORS: keep the frames
       for (const fig of chans.querySelectorAll("figure")) {
@@ -1229,7 +1275,7 @@ body.idle .win.full .titlebar { opacity: 0; }
       // a possible mosaic tile: the frame before is of the same body and observation, and a frame of a colour
       // set only once its composite is shown (the mosaic is made of composites)
       const kb = framesOf(cam, body).ks[p - 1];   // p counts this feed's frames (a body window's: that body's only)
-      want.tile = kb !== undefined && catalog.target[kb] === catalog.target[k] && catalog.obs[kb] === catalog.obs[k] && (!s || want.set >= 0);
+      want.tile = !want.held && kb !== undefined && catalog.target[kb] === catalog.target[k] && catalog.obs[kb] === catalog.obs[k] && (!s || want.set >= 0);
       const kp = catalog.km_per_px[k];
       field("frame").textContent = `${titleCase(catalog.target[k] || "Unknown")} · ${catalog.id[k]}`;
       const c = catalog.cls[k], pol = /^P\d|^IRP/.test(catalog.f1[k]) || /^IRP/.test(catalog.f2[k]) ? " · polarizer" : "";
@@ -1240,7 +1286,9 @@ body.idle .win.full .titlebar { opacity: 0; }
       field("details").textContent = `${kp ? `${kp < 10 ? kp.toFixed(2) : fmt(kp)} km/px · ` : ""}${fmt(n24)} frames in the last 24 h`;
       card.querySelector(".shottag").textContent = want.set >= 0 ? `${s.use.map(q => catalog.id[q]).join(" ")}` : `${catalog.id[k]} · ${catalog.f1[k]}/${catalog.f2[k]}`;
       const ks = framesOf(cam, body).ks;
-      next = [1, 2, 3, 4, 5, 6].map(d => ks[p + d]).filter(q => q !== undefined).map(q => view(q, catalog.et[q]).key);
+      // look ahead: the next 6 frames, or up to 12 when they come within 4 s of playback (a burst), nearest first
+      const ahead = []; for (let d = 1; d <= 12 && ks[p + d] !== undefined && (d <= 6 || catalog.et[ks[p + d]] - state.et <= 4 * state.speed); d++) ahead.push(ks[p + d]);
+      next = ahead.map(q => view(q, catalog.et[q]).key);
       pump();
     }
     // a window made bigger (zoom, resize, full view) asks for the bigger picture

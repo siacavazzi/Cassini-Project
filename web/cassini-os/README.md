@@ -38,6 +38,18 @@ button next to the moment arrows. Sideways: the two pictures down the left edge 
 picture for full screen, tap again to come back. Settings > Interface > Camera pictures on a phone (50 to 100 %) sets
 how big the docked pictures are.
 
+## Frame rate
+
+The 3D view is drawn at a share of the screen's pixel density (`src/perf.html`, Settings > Performance). With
+Automatic quality on, that share drops when the frame rate falls under the target (55 fps by default, so a 60 Hz screen that keeps missing frames steps down) and climbs
+back when there is room; 3D resolution (30 to 100 %) is the most it may use. While nothing moves (paused, nobody
+touching the view) the view is not redrawn, except once a second. Frosted windows off removes the blur behind
+windows, which the browser redoes every frame. Show frame rate puts a read-out in the bottom right corner. The HUD
+glow is drawn on the GPU in the HUD's own canvas, and surface maps are decoded off the main thread.
+
+To measure: `node bench/fps.js URL OUT [WIDTH HEIGHT DPR SECS]` (needs `npm i playwright-core`; `CHANNEL=chrome`
+on a Mac for the real GPU) reports the uncapped frame rate, the CPU time of each step of the render loop and the GPU.
+
 ## Imaging bursts
 
 In normal playback each camera window shows at most a set number of new pictures a second (5 by default). When
