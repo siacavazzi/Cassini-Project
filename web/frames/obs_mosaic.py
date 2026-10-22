@@ -69,6 +69,9 @@ _units = {}           # (target, obs, cam) -> [unit dicts]
 _lock = threading.Lock()
 _unit_locks = {}
 _warming = set()
+_background = threading.Semaphore(1)   # background work (passes made ahead) runs one at a time, so it never
+                                       # crowds out what a window is waiting for
+_upto, _from = {}, {}   # a pass being made ahead: the last tile to make, the first mosaic to make
 _making = {}          # path of a mosaic being made -> its lock, so two requests for it make it once
 
 
@@ -471,30 +474,44 @@ def _make_mosaic(u, n, size, path, cache, slots, made):
 
 
 def warm(u, upto, cache, size=None, slots=None, start=0):
-    """Makes the pass's plan and its tiles up to upto in the background (one thread per pass and size), and with
-    a size the mosaics at tiles start..upto."""
+    """Makes the pass's plan and its tiles up to upto in the background, and with a size the mosaics at tiles
+    start..upto. One thread per pass and size: a later call while it runs moves its end on. Background work
+    runs one pass at a time (_background)."""
     if not u["mosaic"]:
         return
     key = (u["key"], size)
     with _lock:
+        _upto[key] = max(_upto.get(key, -1), min(upto, len(u["frames"]) - 1))
+        _from[key] = max(_from.get(key, 0), start)
         if key in _warming:
             return
         _warming.add(key)
 
     def run():
         try:
-            p = plan(u, cache)
-            last = min(upto, len(u["frames"]) - 1)
-            for j in range(last + 1):
-                tile(u, j, cache, p["display_scale"])
-            if size:
-                for j in range(start, last + 1):
-                    _mosaic_at(u, j, size, cache, slots)
+            with _background:
+                p = plan(u, cache)
+                done = -1
+                while True:
+                    with _lock:
+                        last, first = _upto[key], _from[key]
+                        if last <= done:   # nothing more asked: finished (a later call starts a new thread)
+                            _warming.discard(key)
+                            _upto.pop(key, None)
+                            _from.pop(key, None)
+                            return
+                    for j in range(done + 1, last + 1):
+                        tile(u, j, cache, p["display_scale"])
+                    if size:
+                        for j in range(max(first, done + 1), last + 1):
+                            _mosaic_at(u, j, size, cache, slots)
+                    done = last
         except Exception as e:
             print(f"observation mosaic {u['key']} failed: {type(e).__name__}: {e}", flush=True)
-        finally:
             with _lock:
                 _warming.discard(key)
+                _upto.pop(key, None)
+                _from.pop(key, None)
 
     threading.Thread(target=run, daemon=True).start()
 

@@ -1710,21 +1710,28 @@ body.phone #ssound { width: 30px; height: 30px; }
     // window takes that shape and keeps it for the rest of the observation.
     // While a pass's mosaic is up, each new frame of the pass asks for the mosaic with it as soon as it is the
     // window's frame (pass = true: by its own id, every filter, not after its picture or its set's composite
-    // loaded), so the mosaic grows as the pictures are taken. One mosaic request is in flight per window: in a
-    // burst the newest frame waits and the ones it passes are skipped, so the mosaic never falls further behind.
-    let mosaicUrl = null, obsShown = null, obsTiles = 0, obsK = -1, mBusy = false, mNext = null, lastAsk = "";
+    // loaded), so the mosaic grows as the pictures are taken. One pass mosaic request is in flight per window: in
+    // a burst the newest frame waits and the ones it passes are skipped, so the mosaic never falls further behind.
+    // Other frames' requests (mostly a quick 404) go in their own lane, which moves on after 4 s, so a slow one
+    // (the server working out a body's reel) never holds up the pass.
+    let mosaicUrl = null, obsShown = null, obsTiles = 0, obsK = -1;
+    const mLane = { pass: { busy: false, next: null, last: "" }, other: { busy: false, next: null, last: "" } };
     const warnedObs = new Set();   // observations already named to the server ahead of time (update)
     function mosaicOf(w, pass) {
       if (window.cassiniMosaics === false || !S.get("cameras.mosaics")) return;
       const id = catalog.id[w.set >= 0 && !pass ? catalog.sets[w.set].use[0] : w.k], ask = `${id}:${size()}`;
-      if (ask === lastAsk) return;
-      if (mBusy) { mNext = [w, pass]; return; }
-      lastAsk = ask; mBusy = true;
+      const L = pass ? mLane.pass : mLane.other;
+      if (ask === L.last) return;
+      if (L.busy) { L.next = [w, pass]; return; }
+      L.last = ask; L.busy = true;
+      let over = false;
       const cat0 = catalog, done = () => {
-        mBusy = false;
-        const q = mNext; mNext = null;
+        if (over) return;
+        over = true; L.busy = false;
+        const q = L.next; L.next = null;
         if (q && catalog === cat0 && want && catalog.et[q[0].k] <= catalog.et[want.k]) mosaicOf(...q);
       };
+      if (!pass) setTimeout(done, 4000);
       fetch(`${FRAMES}/frames/mosaic/${id}.webp?size=${size()}`).then(async r => {
         if (!r.ok) return;
         const rep = JSON.parse(r.headers.get("X-Reel") || "null");
@@ -1801,7 +1808,7 @@ body.phone #ssound { width: 30px; height: 30px; }
     }
     let cat = null;
     function update(force) {
-      if (catalog !== cat) { cat = catalog; lastK = -2; stripKey = ""; failed.clear(); made.clear(); missing.clear(); warmed.clear(); warnedObs.clear(); lastAsk = ""; shown = null; shownKey = null; obsShown = null; obsK = -1; mNext = null; }   // another mission year loaded
+      if (catalog !== cat) { cat = catalog; lastK = -2; stripKey = ""; failed.clear(); made.clear(); missing.clear(); warmed.clear(); warnedObs.clear(); for (const L of Object.values(mLane)) { L.last = ""; L.next = null; } shown = null; shownKey = null; obsShown = null; obsK = -1; }   // another mission year loaded
       if (win.hidden && !force) return;   // a closed or tucked-away window fetches nothing; it catches up when shown
       const p = lastOfCam(cam, state.et, body), k = p < 0 ? -1 : framesOf(cam, body).ks[p];
       const live = k >= 0 && state.et - catalog.et[k] < 180;
