@@ -26,6 +26,18 @@ script = src[src.index('<script src="https://cdn.jsdelivr.net/npm/three@0.128.0/
 
 # movie mode (movie.html): its style joins the head's, its window goes into #app next to the others, a Movie
 # button joins the transport, and its script runs after the chrome script
+# flagging pictures (flag.html): its style joins the head's, its panel and toast go into #app, and its script runs right
+# after the chrome script, ahead of movie mode's and the body reels' (its key handler must see keys typed into a note first)
+flag = open(os.path.join(os.path.dirname(os.path.abspath(sys.argv[2])), "flag.html")).read()
+fpart = lambda tag: flag[flag.index(f"<{tag}"):flag.index(f"</{tag}>") + len(tag) + 3]
+for old, new in [
+    ("</style>\n</head>", fpart("style")[len("<style>"):] + "\n</head>"),
+    ('  <div id="loading">', "  " + fpart("section") + "\n" + flag[flag.index('<div id="flagtoast"'):flag.index("</div>", flag.index('<div id="flagtoast"')) + 6] + "\n\n" + '  <div id="loading">'),
+]:
+    assert study.count(old) == 1, old
+    study = study.replace(old, new)
+study += fpart("script") + "\n"
+
 movie = open(os.path.join(os.path.dirname(os.path.abspath(sys.argv[2])), "movie.html")).read()
 part = lambda tag: movie[movie.index(f"<{tag}"):movie.index(f"</{tag}>") + len(tag) + 3]
 for old, new in [
