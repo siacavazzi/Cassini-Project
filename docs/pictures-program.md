@@ -127,6 +127,9 @@ Effort comes from the reports. Phase A runs alongside 1 and 2; everything else f
 - **Data rebuild** on the Mini with the smithed attitude (command in project memory), written to a preview data folder; the live data is untouched until the final merge.
 - **Depends on.** Phase 4. **Checkpoint 5.**
 
+### Phase R · Sharper previews (proposed, waits for Sam's go) · ~1 day
+- From the resolution study (https://claude.ai/artifact/4HzJfyS9zqcCwREMgNDonT): the blur outside mosaics is the window picking its picture size from CSS pixels and ignoring the screen's pixel density (`big()` in head-quiet.html), so a retina window gets 512 px stretched 2.2×. Fix: size by width × devicePixelRatio. Plus cache each composite once so a 512 → 1024 step only re-encodes (16-54 ms instead of 0.4-2.5 s). Frames and composites at 1024 cost little (~180 KB/s for 4 windows). Load-adaptive sizing is not needed. Mosaic sharpness stays in phase 6a (compose at the size sent, up to 2048 in big windows and full view).
+
 ### Phase 6 · Speed (M5, M7, M6) · ~3 days plus one night · two PRs
 - **6a.** Preview-size tiles, compose at the size sent, grow each pass's canvas in memory (`mosaic.compose` over the new tile and its overlaps only); "Whole mosaic, full resolution" in the save menu (capped canvas up to 4096 px, progress, feeds Save PNG and movie export).
 - **6b.** Overnight pre-build of every real mosaic pass's plan and preview tiles on the LaCie (~108k tiles, 5-8 h, 10-25 GB), started only after every look change above has been accepted.
