@@ -1,0 +1,92 @@
+{
+ "shadow_before": {
+  "median": 35.8,
+  "p90": 46.9,
+  "max": 49.5,
+  "never": "19/75",
+  "first": 25.0,
+  "distinct": 10,
+  "slow": 19,
+  "jserr": []
+ },
+ "shadow_after_run1": {
+  "median": [],
+  "p90": [],
+  "max": [],
+  "never": "75/75",
+  "first": [],
+  "distinct": 0,
+  "slow": 7,
+  "jserr": []
+ },
+ "shadow_after": {
+  "median": 11.5,
+  "p90": 17.4,
+  "max": 21.1,
+  "never": "8/75",
+  "first": 21.9,
+  "distinct": 4,
+  "slow": 6,
+  "jserr": []
+ },
+ "shadowv2a_after": {
+  "median": 25.8,
+  "p90": 27.9,
+  "max": 29.8,
+  "never": "22/75",
+  "first": 27.1,
+  "distinct": 7,
+  "slow": 8,
+  "jserr": []
+ },
+ "shadowv2b_after": {
+  "median": 9.1,
+  "p90": 13.6,
+  "max": 15.1,
+  "never": "8/75",
+  "first": 14.9,
+  "distinct": 9,
+  "slow": 13,
+  "jserr": []
+ },
+ "dione_before": {
+  "median": 36.4,
+  "p90": 39.2,
+  "max": 39.6,
+  "never": "8/41",
+  "first": 40.4,
+  "distinct": 6,
+  "slow": 18,
+  "jserr": []
+ },
+ "dione_after": {
+  "median": [],
+  "p90": [],
+  "max": [],
+  "never": "41/41",
+  "first": 59.7,
+  "distinct": 3,
+  "slow": 8,
+  "jserr": []
+ },
+ "dionev2a_after": {
+  "median": 6.6,
+  "p90": 9.0,
+  "max": 9.8,
+  "never": "0/41",
+  "first": 9.6,
+  "distinct": 6,
+  "slow": 6,
+  "jserr": []
+ },
+ "dionev2b_after": {
+  "median": 6.5,
+  "p90": 8.9,
+  "max": 9.6,
+  "never": "0/41",
+  "first": 9.5,
+  "distinct": 6,
+  "slow": 6,
+  "jserr": []
+ }
+}
