@@ -139,6 +139,38 @@ def panels(pictures):
 
 
 """
+The pairs of frames that overlap, for match_gains and match_offsets: at 1/4 scale, only pixels fully inside
+both frames (not their soft edge), at least overlap pixels (min_overlap by default). Returns the frames at 1/4
+scale and [(i, j, slices of the box both frames cover, overlap mask in that box, its pixel count)].
+Each pair is looked at only inside the box where both frames have pixels, and pairs whose boxes miss
+each other are skipped, so a mosaic of many tiles (most pairs far apart) is quick; the pixels used are
+the same as over the whole frame.
+"""
+def overlaps(frames, overlap=None):
+    small = [f[::4, ::4] for f in frames]
+    inside = [s[..., 3] == 255 for s in small]
+    boxes = []
+    for m in inside:
+        rows, cols = np.flatnonzero(m.any(1)), np.flatnonzero(m.any(0))
+        boxes.append((rows[0], rows[-1] + 1, cols[0], cols[-1] + 1) if len(rows) else None)
+    pairs = []
+    for i in range(len(frames)):
+        for j in range(i + 1, len(frames)):
+            a, b = boxes[i], boxes[j]
+            if a is None or b is None:
+                continue
+            y0, y1, x0, x1 = max(a[0], b[0]), min(a[1], b[1]), max(a[2], b[2]), min(a[3], b[3])
+            if y1 <= y0 or x1 <= x0:
+                continue
+            sl = (slice(y0, y1), slice(x0, x1))
+            ov = inside[i][sl] & inside[j][sl]
+            N = int(ov.sum())
+            if N >= (overlap or min_overlap):
+                pairs.append((i, j, sl, ov, N))
+    return small, pairs
+
+
+"""
 Works out a brightness gain per frame and color channel so the frames agree where they
 overlap. The newest frame (or the frame pin) keeps its brightness and the others are matched
 to it, directly or through other frames they overlap (pin None: all are matched to each other,
@@ -156,27 +188,20 @@ def match_gains(frames, limit=None, pin=-1, overlap=None):
     if n < 2:
         return gains
 
-    # work at 1/4 scale, only on pixels that are fully inside a frame (not its soft edge)
-    small = [f[::4, ::4] for f in frames]
-    inside = [s[..., 3] == 255 for s in small]
+    small, pairs = overlaps(frames, overlap)
 
     sig_n = 10.0   # expected noise in a mean brightness (8 bit levels)
     sig_g = 1.0    # how far a gain may wander from 1 without overlaps pinning it down
     for c in range(3):
         A = np.zeros((n, n))
         b = np.zeros(n)
-        for i in range(n):
-            for j in range(i + 1, n):
-                ov = inside[i] & inside[j]
-                N = int(ov.sum())
-                if N < (overlap or min_overlap):
-                    continue
-                mi = small[i][..., c][ov].mean()
-                mj = small[j][..., c][ov].mean()
-                A[i, i] += N * mi * mi / sig_n ** 2
-                A[j, j] += N * mj * mj / sig_n ** 2
-                A[i, j] -= N * mi * mj / sig_n ** 2
-                A[j, i] -= N * mi * mj / sig_n ** 2
+        for i, j, sl, ov, N in pairs:
+            mi = small[i][sl][..., c][ov].mean()
+            mj = small[j][sl][..., c][ov].mean()
+            A[i, i] += N * mi * mi / sig_n ** 2
+            A[j, j] += N * mj * mj / sig_n ** 2
+            A[i, j] -= N * mi * mj / sig_n ** 2
+            A[j, i] -= N * mi * mj / sig_n ** 2
         # scale the prior with the data so it stays a gentle pull
         prior = max(A.diagonal().max(), 1.0) * 1e-4 / sig_g ** 2
         A += np.eye(n) * prior
@@ -207,30 +232,25 @@ def match_offsets(frames, gains, pin=-1, overlap=None):
     offsets = np.zeros((n, 3))
     if n < 2:
         return offsets
-    small = [f[::4, ::4] for f in frames]
-    inside = [s[..., 3] == 255 for s in small]
+    small, pairs = overlaps(frames, overlap)
     for c in range(3):
         A = np.eye(n) * 1e-3   # small pull toward 0 for frames without overlaps
         b = np.zeros(n)
-        for i in range(n):
-            for j in range(i + 1, n):
-                ov = inside[i] & inside[j]
-                N = int(ov.sum())
-                if N < (overlap or min_overlap):
-                    continue
-                # only where both frames are above black: a sky clipped to 0 hides how far it is off
-                lit = ov & (small[i][..., c] > 2) & (small[j][..., c] > 2)
-                N = int(lit.sum())
-                if N < (overlap or min_overlap):
-                    continue
-                # offset_i - offset_j should make up the median difference j - i
-                d = np.median(small[j][..., c][lit] * gains[j, c] - small[i][..., c][lit] * gains[i, c])
-                A[i, i] += N
-                A[j, j] += N
-                A[i, j] -= N
-                A[j, i] -= N
-                b[i] += N * d
-                b[j] -= N * d
+        for i, j, sl, ov, N in pairs:
+            si, sj = small[i][sl][..., c], small[j][sl][..., c]
+            # only where both frames are above black: a sky clipped to 0 hides how far it is off
+            lit = ov & (si > 2) & (sj > 2)
+            N = int(lit.sum())
+            if N < (overlap or min_overlap):
+                continue
+            # offset_i - offset_j should make up the median difference j - i
+            d = np.median(sj[lit] * gains[j, c] - si[lit] * gains[i, c])
+            A[i, i] += N
+            A[j, j] += N
+            A[i, j] -= N
+            A[j, i] -= N
+            b[i] += N * d
+            b[j] -= N * d
         if pin is not None:
             A[pin, :] = 0
             A[pin, pin] = 1

@@ -162,12 +162,30 @@ def cached(path, make):
 def _make_file(path, make):
     data = make()
     # written next to its final name and renamed, so a half written file is never served
-    os.makedirs(os.path.dirname(path), exist_ok=True)
     part = f"{path}.{threading.get_ident()}.part"
-    with open(part, "wb") as fh:
-        fh.write(data)
-    os.replace(part, path)
+    try:
+        os.makedirs(os.path.dirname(path), exist_ok=True)
+        with open(part, "wb") as fh:
+            fh.write(data)
+        os.replace(part, path)
+    except OSError as e:
+        # a full disk (or a cache folder that cannot be written) costs the cache, never the picture
+        keep_failed(path, part, e)
     return data
+
+
+_keep_failed = [0.0]
+
+
+def keep_failed(path, part, e):
+    """A made file could not be kept: the half written part goes, and the log says so (once a minute)."""
+    try:
+        os.remove(part)
+    except OSError:
+        pass
+    if time.monotonic() - _keep_failed[0] > 60:
+        _keep_failed[0] = time.monotonic()
+        print(f"cannot keep {path} in the cache ({e}); sending it anyway", flush=True)
 
 
 def size_of(query, default):
@@ -643,10 +661,16 @@ def make_handler(site, cache, flags=None):
                 size, fmt, name = size_of(query, 512), picture_format(query), f"Cassini_{m.group(1)}_mosaic"
                 if query.get("warm"):
                     # the window will reach this frame soon: when it is in a mosaic pass, start working out the
-                    # pass (its plan reads every frame of it, many seconds) and its first tiles now
+                    # pass (its plan reads every frame of it, many seconds) and its first tiles now, and say so
+                    # ({"mosaic": true}), so the window asks for that pass's mosaic in its pass lane from the start
+                    found = None
                     if reel._index is not None:
                         threading.Thread(target=obs_mosaic.warm_frame, args=(m.group(1), cache), daemon=True).start()
-                    return self.send_bytes(b"", "text/plain", cache_forever=False)
+                        try:
+                            found = obs_mosaic.unit_of(m.group(1))
+                        except Exception:
+                            found = None
+                    return self.send_json({"mosaic": bool(found and found[0]["mosaic"])})
                 # a whole-body mosaic (obs_mosaic): the observation's mosaic so far, every filter; at full
                 # resolution, its canvas (obs_mosaic.CANVAS) up to FULL_MAX
                 if reel._index is not None:
