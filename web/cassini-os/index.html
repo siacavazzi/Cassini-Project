@@ -2203,7 +2203,10 @@ body.phone.has-dock { --appdockh: 50px; }
       well.classList.toggle("inpass", !!on);
       if (!on) return;
       const m = modeOf(k), p = playsAs(k);
-      chip.textContent = m === "auto" ? `AUTO${p ? " · " + p.toUpperCase() : ""}` : m.toUpperCase();
+      // a pass asked for as a mosaic whose mosaic is not up yet is being built (a long movie's first mosaic deep in
+      // the pass makes every tile before it: minutes when nothing of it is in the cache)
+      const building = p === "mosaic" && obsShown !== catalog.obs[k] && mLane.pass.busy;
+      chip.textContent = (m === "auto" ? `AUTO${p ? " · " + p.toUpperCase() : ""}` : m.toUpperCase()) + (building ? " · BUILDING" : "");
       chip.classList.toggle("chosen", m !== "auto");
     }
     chip.addEventListener("click", e => {
@@ -2232,13 +2235,14 @@ body.phone.has-dock { --appdockh: 50px; }
       if (ask === L.last) return;
       if (L.busy) { L.next = [w, pass, catalog]; return; }
       L.last = ask; L.busy = true;
+      if (pass) chipText();
       let over = false;
       // the request is dropped (its connection freed; the server still finishes and keeps the mosaic) when the
       // other lane gives up on it, or the window is closed (mosaicStop)
       const ctl = L.ctl = new AbortController();
       const cat0 = catalog, wid = catalog.id[w.k], done = () => {
         if (over) return;
-        over = true; L.busy = false; L.ctl = null;
+        over = true; L.busy = false; L.ctl = null; chipText();
         const q = L.next; L.next = null;
         if (q && catalog === q[2] && lastK >= 0 && catalog.et[q[0].k] <= catalog.et[lastK]) mosaicOf(q[0], q[1]);
       };
