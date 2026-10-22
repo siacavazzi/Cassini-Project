@@ -301,8 +301,8 @@ filter stretched and matched on its own). The frame server keeps the two in sepa
 LOOKS = ("balanced", "classic")
 _look = contextvars.ContextVar("look", default="balanced")
 
-NOISE_MARGIN = 3.0   # balanced: the black sits this many median absolute deviations of the sky (pooled
-                     # over the channels) above each channel's sky median
+NOISE_MARGIN = 2.0   # balanced: the black sits this many times the sky's noise (pooled over the channels)
+                     # above each channel's sky level
 WHITE_PCT = 99.5     # balanced: the percentile of the lit pixels of the brightest channel that is white
 SHOULDER = 0.8       # balanced composites: above this share of white, brightness rolls off softly instead
                      # of clipping (limbs and ring highlights past the white keep their shape)
@@ -387,12 +387,12 @@ def picture_scale(iofs, sky_fraction=0.1, sky_percentile=98):
         # 3x3 median so a single cosmic ray hit or hot pixel can't set it
         white = max(cv2.medianBlur(iof - black, 3).max() for iof, black in zip(iofs, blacks))
         return blacks, white, measured
-    # Black per channel: the sky's median, the real offset left after the bias (dark current, stray light),
+    # Black per channel: the sky's level (sky_blacks), the real offset left after the bias (dark current, stray light),
     # which differs between channels, so the sky stays neutral; plus one margin for every channel above the
     # sky's noise, so it doesn't come out as colored speckle. A margin per channel (the 98th percentile) takes
     # more off the noisiest channel (red) and tints dim limbs and terminators.
     if measured:
-        blacks = sky_blacks([iof[sky] for iof in iofs])
+        blacks = sky_blacks([[iof] for iof in iofs], [[sky]] * len(iofs))
     # One white for all channels: the WHITE_PCT percentile of the brightest channel over the lit pixels (the
     # body, not the sky), so a few bright limb or ring pixels don't leave the body dim and gray; the shoulder
     # (display) keeps what is brighter
@@ -405,15 +405,23 @@ def picture_scale(iofs, sky_fraction=0.1, sky_percentile=98):
 
 
 """
-Balanced blacks for channels with sky: each channel's sky median plus NOISE_MARGIN times the median absolute
-deviation of the sky, pooled over the channels (one margin for all).
-skies = per channel, the I/F of its sky pixels
+Balanced blacks: per channel its sky level plus one margin for every channel, NOISE_MARGIN times the sky's
+noise pooled over the channels. The sky level is its median, or, where the sky holds faint diffuse light (a
+ring's glow, a night side lit by the rings), the 20th percentile plus 0.84 noise, whichever is lower: the
+same for a sky of pure noise, and below the glow otherwise. The noise is measured from neighboring sky
+pixels' differences, so a glow's slow change across the picture does not count as noise.
+images = per channel, its pictures (2-D I/F); masks = per channel, the sky of each picture
 """
-def sky_blacks(skies):
-    medians = [float(np.median(s)) for s in skies]
-    spreads = [float(np.median(np.abs(s - m))) for s, m in zip(skies, medians)]
-    margin = NOISE_MARGIN * math.sqrt(sum(d * d for d in spreads) / len(spreads))
-    return [m + margin for m in medians]
+def sky_blacks(images, masks):
+    levels, noises = [], []
+    for ims, ms in zip(images, masks):
+        sky = np.concatenate([im[m] for im, m in zip(ims, ms)])
+        steps = np.concatenate([np.abs(np.diff(im, axis=1))[m[:, 1:] & m[:, :-1]] for im, m in zip(ims, ms)])
+        noise = 1.4826 * float(np.median(steps)) / math.sqrt(2) if steps.size else 0.0
+        levels.append(min(float(np.median(sky)), float(np.percentile(sky, 20)) + 0.84 * noise))
+        noises.append(noise)
+    margin = NOISE_MARGIN * math.sqrt(sum(n * n for n in noises) / len(noises))
+    return [level + margin for level in levels]
 
 
 """
@@ -440,18 +448,18 @@ The display scale shared by all the pictures of a mosaic, for load_channels: per
 one white for all channels, the white_pct percentile of every pixel above its channel's black (every
 channel on one white keeps the colour the camera measured).
 classic: the black is the sky's floor, the median over the pictures of each one's floor_pct percentile I/F.
-balanced: the black is the sky's median plus the shared noise margin (sky_blacks), over the pictures' sky
+balanced: the black is the sky's level plus the shared noise margin (sky_blacks), over the pictures' sky
 (pixels under 5% of the channel's 99.9th percentile); a channel with no sky keeps the classic floor.
 channels = one list per channel of the pictures' I/F images (stacking.load_hdr)
 """
 def shared_scale(channels, white_pct=99.9, floor_pct=5, gamma=2.2):
     blacks = [float(np.median([np.percentile(iof, floor_pct) for iof in iofs])) for iofs in channels]
     if look() == "balanced":
-        pooled = [np.concatenate([iof[::8, ::8].ravel() for iof in iofs]) for iofs in channels]
-        skies = [p[p < 0.05 * np.percentile(p, 99.9)] for p in pooled]
-        has = [c for c, s in enumerate(skies) if s.size > 0.02 * pooled[c].size]
+        tops = [np.percentile(np.concatenate([iof[::8, ::8].ravel() for iof in iofs]), 99.9) for iofs in channels]
+        masks = [[iof < 0.05 * top for iof in iofs] for iofs, top in zip(channels, tops)]
+        has = [c for c, ms in enumerate(masks) if np.mean([m.mean() for m in ms]) > 0.02]
         if has:
-            for c, black in zip(has, sky_blacks([skies[c] for c in has])):
+            for c, black in zip(has, sky_blacks([channels[c] for c in has], [masks[c] for c in has])):
                 blacks[c] = black
     white = max(float(np.percentile(np.concatenate([iof[::8, ::8].ravel() for iof in iofs]) - black, white_pct))
                 for iofs, black in zip(channels, blacks))

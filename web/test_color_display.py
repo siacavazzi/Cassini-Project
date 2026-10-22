@@ -90,12 +90,15 @@ fr = [(f, f"N{i}", f, i, 600, 0.0, 0.0, 1e5) for i, f in enumerate(by)]
 with cal.looking("classic"):
     old = obs_mosaic.pass_scale(fr, u)
 with cal.looking("balanced"):
-    new = obs_mosaic.pass_scale(fr, u)
+    new = obs_mosaic.pass_scale(fr, u, ["RED", "GRN", "BL1"], True)
+    false = obs_mosaic.pass_scale(fr, u, ["RED", "GRN", "BL1"], False)
 print("classic filled", {f: round(b / old["white"], 2) for f, b in old["blacks"].items()}, old["gamma"])
 print("balanced filled", {f: round(b / new["white"], 2) for f, b in new["blacks"].items()}, new["gamma"])
 assert old["filled"] and new["filled"] and new["gamma"] == "srgb"
 assert len(set(new["blacks"].values())) == 1 and all(b <= new["white"] for b in new["blacks"].values())
 assert max(b / old["white"] for b in old["blacks"].values()) > 1      # the classic black sat above the white
+# false colour: every filter its own black and white, none above its white
+assert all(false["blacks"][f] <= false["whites"][f] for f in by) and len(set(false["whites"].values())) == 3
 
 # ---- detail on luminance only: a colored patch keeps its color differences, no channel gets its own texture ----
 rgba = np.zeros((64, 64, 4), np.uint8); rgba[..., 3] = 255

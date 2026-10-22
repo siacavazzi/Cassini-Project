@@ -173,7 +173,24 @@ def plan(u, cache):
             with open(path) as fh:
                 return json.load(fh)
         frames = u["frames"]
-        scale = pass_scale(frames, u)
+        count, nms = {}, {}
+        for fr in frames:
+            count[fr[2]] = count.get(fr[2], 0) + 1
+            nms[fr[2]] = fr[4]
+        # colour: (near) true colour when the pass takes GRN and a blue at a good share of its tiles, with RED or
+        # else the continuum filter nearest red (not a methane band); otherwise false colour from the filters taken
+        # at most tiles (longest wavelength red). Polarizers are left out (they are not a colour)
+        most = max(count.values())
+        good = [f for f in count if count[f] >= most / 4 and not _polarizer(f)]
+        blue = next((b for b in reel.TRUE_BLUES if b in good), None)
+        reds = [f for f in good if "/" not in f and not f.startswith("MT") and nms[f] > 600]
+        red = "RED" if "RED" in good else min(reds, key=lambda f: abs(nms[f] - 650)) if reds else None
+        common = sorted([f for f in count if count[f] >= most / 2 and not _polarizer(f)], key=lambda f: -nms[f])
+        if blue and red and "GRN" in good:
+            colour = [red, "GRN", blue]
+        else:
+            colour = [common[0], common[len(common) // 2], common[-1]] if len(common) >= 3 else None
+        scale = pass_scale(frames, u, colour or [max(count, key=count.get)], bool(colour and colour[1] == "GRN"))
         # the rotation from the camera's frame to north up: the angle between where the geometry cache puts
         # the body and where processed_frame does, from the first tile placed well off the body's centre
         angle = 0.0
@@ -199,23 +216,6 @@ def plan(u, cache):
         y1 = max(p[1] + HALF * k for p, k in zip(pts, ks))
         fixed = u["whole"] or max(x1 - x0, y1 - y0) <= FIT * FRAME
         view = [x1 - x0, y1 - y0] if fixed else [min(x1 - x0, FOLLOW * FRAME), min(y1 - y0, FOLLOW * FRAME)]
-        count, nms = {}, {}
-        for fr in frames:
-            count[fr[2]] = count.get(fr[2], 0) + 1
-            nms[fr[2]] = fr[4]
-        # colour: (near) true colour when the pass takes GRN and a blue at a good share of its tiles, with RED or
-        # else the continuum filter nearest red (not a methane band); otherwise false colour from the filters taken
-        # at most tiles (longest wavelength red). Polarizers are left out (they are not a colour)
-        most = max(count.values())
-        good = [f for f in count if count[f] >= most / 4 and not _polarizer(f)]
-        blue = next((b for b in reel.TRUE_BLUES if b in good), None)
-        reds = [f for f in good if "/" not in f and not f.startswith("MT") and nms[f] > 600]
-        red = "RED" if "RED" in good else min(reds, key=lambda f: abs(nms[f] - 650)) if reds else None
-        common = sorted([f for f in count if count[f] >= most / 2 and not _polarizer(f)], key=lambda f: -nms[f])
-        if blue and red and "GRN" in good:
-            colour = [red, "GRN", blue]
-        else:
-            colour = [common[0], common[len(common) // 2], common[-1]] if len(common) >= 3 else None
         p = {"key": list(u["key"]), "display_scale": scale, "angle": angle, "footprint": [x0, y0, x1, y1],
              "fixed": bool(fixed), "view": view, "k": CANVAS / max(view), "colour": colour,
              "grey": max(count, key=count.get), "whole": u["whole"]}
@@ -232,12 +232,14 @@ DETAIL = 2.0       # filled passes: how much the local contrast is raised (detai
 DETAIL_SIGMA = 0.05  # ... over this much of a frame
 
 
-def pass_scale(frames, u):
+def pass_scale(frames, u, drawn=None, true_colour=False):
     """The display scale of every tile of the pass (calibration.shared_scale over its frames merged in I/F, as
     mosaic_benchmark.display_scale): {"blacks": {filter: I/F}, "white": I/F, "gamma"}. Where the body fills
     the frames (the middle of most frames on its disk, as in Titan's maps), black goes to the darkest of the body, white to
     the 99.5th percentile and the gamma is eased, and the mosaic's local contrast is raised (detail), so
-    the surface's few per cent of contrast shows; passes with dark sky keep the benchmark's scale."""
+    the surface's few per cent of contrast shows; passes with dark sky keep the benchmark's scale.
+    drawn = the filters the mosaic is drawn from (plan's colour, or its grey filter); true_colour = they are a
+    true colour set. Balanced filled passes of false colour or grey also give "whites", one per filter."""
     by = {}
     for path, _, f, *_ in frames:
         _, iof, _ = stacking.load_hdr(path, mosaic_benchmark.REPEAT_GAP)
@@ -255,13 +257,24 @@ def pass_scale(frames, u):
     filled = floor > FILLED
     gamma = 3.0
     if filled and calibration.look() == "balanced":
-        # one black and white for every filter, so the colour is what the filters saw rather than how differently
-        # each was stretched: black the darkest filter's 1st percentile, white the brightest's 99.5th; black at
-        # most half the brightest's level (a black above the white would stretch noise into colour), sRGB curve
-        lows = [float(np.percentile(np.concatenate([i.ravel() for i in iofs]), 1)) for iofs in by.values()]
-        top = max(float(np.percentile(np.concatenate([i.ravel() for i in iofs]), 99.5)) for iofs in by.values())
-        black = min(min(lows), top / 2)
-        blacks, white, gamma = {f: black for f in by}, top - black, "srgb"
+        # sRGB curve, and every black at most half its filter's top (a black above the white stretches noise into
+        # colour). True colour: one black and white for the filters drawn, so the colour is what they saw rather
+        # than how differently each was stretched (black the darkest one's 1st percentile, white the brightest's
+        # 99.5th). False colour (methane bands, UV, IR: no colour to keep) and grey: each filter its own black and
+        # white ("whites"), so every band shows its own contrast
+        lows = {f: float(np.percentile(np.concatenate([i.ravel() for i in iofs]), 1)) for f, iofs in by.items()}
+        tops = {f: float(np.percentile(np.concatenate([i.ravel() for i in iofs]), 99.5)) for f, iofs in by.items()}
+        mine = [f for f in (drawn or by) if f in by] or list(by)
+        gamma = "srgb"
+        if true_colour:
+            top = max(tops[f] for f in mine)
+            black = min(min(lows[f] for f in mine), top / 2)
+            blacks, white = {f: black for f in by}, top - black
+        else:
+            blacks = {f: min(lows[f], tops[f] / 2) for f in by}
+            whites = {f: tops[f] - blacks[f] for f in by}
+            return {"blacks": blacks, "white": max(whites.values()), "whites": whites, "gamma": gamma,
+                    "filled": filled, "floor": round(floor, 3)}
     elif filled:
         blacks = {f: float(np.percentile(np.concatenate([i.ravel() for i in iofs]), 1)) for f, iofs in by.items()}
         white = max(float(np.percentile(np.concatenate([i.ravel() for i in iofs]) - blacks[f], 99.5))
@@ -285,7 +298,8 @@ def tile(u, n, cache, scale=None):
         k = z / u["z"] if z else 1.0
         try:
             image, _, rep = color_image.processed_frame([path], hdr=True,
-                                                        scale={**scale, "blacks": [scale["blacks"].get(f, 0.0)]})
+                                                        scale={**scale, "blacks": [scale["blacks"].get(f, 0.0)],
+                                                               "white": scale.get("whites", {}).get(f, scale["white"])})
         except Exception as e:
             image, rep = None, {"why": f"{type(e).__name__}: {e}"[:200]}
         out = {"n": n, "id": fid, "filter": f, "t": t, "stacked": rep.get("stacked"), "calibrated": rep.get("calibrated")}
