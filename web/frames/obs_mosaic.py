@@ -559,8 +559,8 @@ def movie_frame(u, n, cache, trail=0, colour=True, out=OUT):
     size for the whole pass, and the body holds still. colour: when the pass's plan has colour filters and the
     newest frame of each of them was taken within reel.SET_GAP of this one, the three are drawn as one colour
     picture (each where SPICE puts it), as the pass's mosaic does; otherwise the frame in grey. trail: up to that
-    many earlier frames of the same filter drawn under it, fading with age (a rolling trail). A frame of another
-    filter in a colour pass shows the newest colour set while one was taken within SET_GAP."""
+    many earlier frames of the same filter drawn under it, fading with age (a rolling trail). In a colour pass every
+    frame shows the newest complete colour set, held until the next one is complete."""
     p = plan(u, cache)
     t = tile(u, n, cache, p["display_scale"])
     rep = {"movie": True, "n": n, "of": len(u["frames"]), "filter": t["filter"], "observation": u["key"][1],
@@ -573,19 +573,34 @@ def movie_frame(u, n, cache, trail=0, colour=True, out=OUT):
     W, H = max(1, math.ceil(rect[2] * k)), max(1, math.ceil(rect[3] * k))
     # only the frames this picture needs are made: the newest of each colour filter within SET_GAP, the trail
     frames, used, newest = u["frames"], None, {}
-    # a pass with colour plays in colour: every frame shows the newest colour set (a frame of another filter, CB2 or
-    # a methane band between the sets of a stare, keeps the set up rather than flicking to grey)
+    # a pass with colour plays in colour: every frame shows the newest colour set taken by then (one frame of each
+    # colour filter, all within SET_GAP of one another, no clear frame between them), held until the next set is complete, as the camera
+    # windows hold a colour movie's last set; a frame of another filter (CB2, a methane band) keeps the set up
     if colour and p["colour"]:
-        for j in range(n, -1, -1):
-            f = frames[j][2]
-            if t["t"] - frames[j][3] > reel.SET_GAP or len(newest) == len(p["colour"]):
+        want = set(p["colour"])
+        for m in range(n, max(-1, n - 64), -1):
+            if frames[m][2] not in want:
+                continue
+            got, ts = {}, []
+            for j in range(m, max(-1, m - 64), -1):
+                f = frames[j][2]
+                # a set as the camera windows find them: a clear or polarizer frame ends it, a filter taken again
+                # starts a new one (so a set is never put together from two pointings)
+                if f == "CL1/CL2" or _polarizer(f) or f in got:
+                    break
+                if f in want:
+                    got[f] = j
+                    ts.append(frames[j][3])
+                    if len(got) == len(want):
+                        break
+            if len(got) == len(want) and max(ts) - min(ts) <= reel.SET_GAP:
+                for f, j in got.items():
+                    q = t if j == n else tile(u, j, cache, p["display_scale"])
+                    if "offset" in q:
+                        newest[f] = q
+                if len(newest) == len(want):
+                    used = p["colour"]
                 break
-            if f in p["colour"] and f not in newest:
-                q = t if j == n else tile(u, j, cache, p["display_scale"])
-                if "offset" in q:
-                    newest[f] = q
-        if len(newest) == len(p["colour"]):
-            used = p["colour"]
     if used:
         planes = [_place(u, newest[f], rect, k, W, H, cache) for f in used]
         alpha = np.min([a[..., 3] for a in planes], axis=0)
