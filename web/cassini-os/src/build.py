@@ -26,6 +26,18 @@ script = src[src.index('<script src="https://cdn.jsdelivr.net/npm/three@0.128.0/
 
 # movie mode (movie.html): its style joins the head's, its window goes into #app next to the others, a Movie
 # button joins the transport, and its script runs after the chrome script
+# flagging pictures (flag.html): its style joins the head's, its panel and toast go into #app, and its script runs right
+# after the chrome script, ahead of movie mode's and the body reels' (its key handler must see keys typed into a note first)
+flag = open(os.path.join(os.path.dirname(os.path.abspath(sys.argv[2])), "flag.html")).read()
+fpart = lambda tag: flag[flag.index(f"<{tag}"):flag.index(f"</{tag}>") + len(tag) + 3]
+for old, new in [
+    ("</style>\n</head>", fpart("style")[len("<style>"):] + "\n</head>"),
+    ('  <div id="loading">', "  " + fpart("section") + "\n" + flag[flag.index('<div id="flagtoast"'):flag.index("</div>", flag.index('<div id="flagtoast"')) + 6] + "\n\n" + '  <div id="loading">'),
+]:
+    assert study.count(old) == 1, old
+    study = study.replace(old, new)
+study += fpart("script") + "\n"
+
 movie = open(os.path.join(os.path.dirname(os.path.abspath(sys.argv[2])), "movie.html")).read()
 part = lambda tag: movie[movie.index(f"<{tag}"):movie.index(f"</{tag}>") + len(tag) + 3]
 for old, new in [
@@ -59,6 +71,17 @@ ppart = lambda tag: phone[phone.index(f"<{tag}"):phone.index(f"</{tag}>") + len(
 for old, new in [
     ("</style>\n</head>", ppart("style")[len("<style>"):] + "\n</head>"),
     ("<script>\n// ---------- Cassini OS chrome", ppart("script") + "\n<script>\n// ---------- Cassini OS chrome"),
+]:
+    assert study.count(old) == 1, old
+    study = study.replace(old, new)
+
+# performance (perf.html): its style joins the head's and its script runs before the chrome script (after the settings
+# script), so the viewer can ask window.cassiniPerf for its pixel ratio when it makes its renderers
+perf = open(os.path.join(os.path.dirname(os.path.abspath(sys.argv[2])), "perf.html")).read()
+fpart = lambda tag: perf[perf.index(f"<{tag}"):perf.index(f"</{tag}>") + len(tag) + 3]
+for old, new in [
+    ("</style>\n</head>", fpart("style")[len("<style>"):] + "\n</head>"),
+    ("<script>\n// ---------- Cassini OS chrome", fpart("script") + "\n<script>\n// ---------- Cassini OS chrome"),
 ]:
     assert study.count(old) == 1, old
     study = study.replace(old, new)
@@ -165,6 +188,63 @@ rep('  } else renderer.render(scene, camera);\n', """  } else renderer.render(sc
 rep('    el.style.transform = `translate(${x}px, ${y}px) translateY(-50%)`;\n', """    el.style.transform = `translate(${x}px, ${y}px) translateY(-50%)`;
     if (window.studyLabel) window.studyLabel(name, el, (vA.x + 1) / 2 * w, y, pr);
 """)
+
+# performance (perf.html): the canvases are not kept between frames (keeping them costs a copy per frame), the pixel
+# ratio follows Settings > Performance, a frame in which nothing moved is not drawn, and the frame rate is measured
+rep('const renderer = new THREE.WebGLRenderer({ canvas, antialias: true, logarithmicDepthBuffer: true, preserveDrawingBuffer: true });\nrenderer.setPixelRatio(Math.min(window.devicePixelRatio, 2));',
+    'const renderer = new THREE.WebGLRenderer({ canvas, antialias: true, logarithmicDepthBuffer: true, powerPreference: "high-performance" });\nrenderer.setPixelRatio(window.cassiniPerf ? cassiniPerf.pixelRatio() : Math.min(window.devicePixelRatio, 2));')
+rep('new THREE.WebGLRenderer({ canvas: hudCanvas, antialias: true, logarithmicDepthBuffer: true, preserveDrawingBuffer: true }) : null;\nif (hudRenderer) { hudRenderer.setPixelRatio(Math.min(window.devicePixelRatio, 2));',
+    'new THREE.WebGLRenderer({ canvas: hudCanvas, antialias: true, logarithmicDepthBuffer: true }) : null;\nif (hudRenderer) { hudRenderer.setPixelRatio(window.cassiniPerf ? cassiniPerf.hudPixelRatio() : Math.min(window.devicePixelRatio, 2));')
+rep("""  renderer.clear();
+  const cd = camera.position.distanceTo(cassini.position);
+  if (cd < 0.01) {""", """  const draw = !window.cassiniPerf || cassiniPerf.draw(now);
+  if (draw) renderer.clear();
+  const cd = camera.position.distanceTo(cassini.position);
+  if (!draw) {}
+  else if (cd < 0.01) {""")
+rep("""  if (hudRenderer) { if (window.studyBeforeHud) window.studyBeforeHud(); hudRenderer.render(hudScene, camera); if (window.studyAfterRender) window.studyAfterRender(); }
+""", """  if (hudRenderer && draw && !document.body.classList.contains("nohud")) {
+    if (window.studyBeforeHud) window.studyBeforeHud();
+    hudRenderer.render(hudScene, camera);
+    if (window.studyAfterRender) window.studyAfterRender();
+  }
+  if (window.cassiniPerf) cassiniPerf.frame(now, draw);
+""")
+# the moons' painted look (noise, craters) is only worked out when there is no surface map to show instead
+rep("""        float m = fbm(nb * 5.0) - 0.5;
+        float craters = smoothstep(0.62, 0.7, vnoise(nb * 22.0)) * 0.12;
+        vec3 alb = color * (1.0 + 0.32 * m - craters);""", """        float m = 0.0, craters = 0.0;
+        if (hasMap < 0.5) { m = fbm(nb * 5.0) - 0.5; craters = smoothstep(0.62, 0.7, vnoise(nb * 22.0)) * 0.12; }
+        vec3 alb = color * (1.0 + 0.32 * m - craters);""")
+rep('t.anisotropy = renderer.capabilities.getMaxAnisotropy();', 't.anisotropy = Math.min(8, renderer.capabilities.getMaxAnisotropy());')
+# the Moments list greys out the moments already past: only touch the list when that count changes
+rep('  document.querySelectorAll("#mlist li").forEach(li => li.classList.toggle("past", +li.dataset.et < state.et - 3600));\n',
+    """  const past = momentsBefore(state.et - 3600);
+  if (past !== lastPast) { lastPast = past; document.querySelectorAll("#mlist li").forEach(li => li.classList.toggle("past", +li.dataset.et < state.et - 3600)); }
+""")
+rep('let lastT = performance.now(), lastTrailEt = -1e99, lastTrailFocus = "", lastReady = true;\n',
+    """let lastT = performance.now(), lastTrailEt = -1e99, lastTrailFocus = "", lastReady = true, lastPast = -1, momentEts = null;
+// how many moments in the list come before et (their times are read from the list once, and again if it changes)
+function momentsBefore(et) {
+  const list = $("mlist");
+  if (!momentEts || momentEts.n !== list.childElementCount) momentEts = { n: list.childElementCount, ets: [...list.querySelectorAll("li[data-et]")].map(li => +li.dataset.et) };
+  let c = 0; for (const t of momentEts.ets) if (t < et) c++;
+  return c;
+}
+""")
+
+# surface maps are decoded off the main thread (createImageBitmap) where the browser can, so a 2k or 4k map arriving
+# does not freeze the view while it decodes; a browser that cannot falls back to the plain loader
+rep('const texLoader = new THREE.TextureLoader();\n', """const texLoader = new THREE.TextureLoader();
+const bitmapLoader = typeof createImageBitmap === "function" && THREE.ImageBitmapLoader ? new THREE.ImageBitmapLoader().setOptions({ imageOrientation: "flipY", premultiplyAlpha: "none" }) : null;
+function loadTexture(url, onLoad, onError) {
+  const plain = () => texLoader.load(url, onLoad, undefined, onError);
+  if (!bitmapLoader) return plain();
+  bitmapLoader.load(url, bmp => { const t = new THREE.CanvasTexture(bmp); t.flipY = false; onLoad(t); }, undefined, plain);
+}
+""")
+rep('  texLoader.load(dir + f + ".webp", t => {', '  loadTexture(dir + f + ".webp", t => {')
+rep('  }, undefined, () => console.warn("texture missing for " + name));', '  }, () => console.warn("texture missing for " + name));')
 
 # HUD hook: studies can add their own read-outs
 rep('''  $("mday").textContent = `Mission day ${fmtInt(Math.floor((ms - LAUNCH_MS) / 86400000))} · ${SPEEDS.find(s => s[0] === state.speed)[1]}${state.playing ? "" : " · paused"}`;''',

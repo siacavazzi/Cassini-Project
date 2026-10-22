@@ -69,6 +69,10 @@ _units = {}           # (target, obs, cam) -> [unit dicts]
 _lock = threading.Lock()
 _unit_locks = {}
 _warming = set()
+_background = threading.Semaphore(1)   # background work (passes made ahead) runs one at a time, so it never
+                                       # crowds out what a window is waiting for
+_upto, _from = {}, {}   # a pass being made ahead: the last tile to make, the first mosaic to make
+_making = {}          # path of a mosaic being made -> its lock, so two requests for it make it once
 
 
 def _row_of():
@@ -360,9 +364,10 @@ def detail(rgba, sigma):
     return np.dstack([out.round().astype(np.uint8), rgba[..., 3]])
 
 
-def so_far(u, n, cache, out=OUT):
-    """The pass's mosaic with tiles 0..n, RGBA out px (OUT unless asked for more, up to CANVAS) on its longest
-    side, and its report; (None, None) before any tile is placed."""
+def layout(u, n, cache):
+    """What the pass's mosaic with tiles 0..n is made of: (plan, tiles, view rect, placed tiles per filter, the
+    filters drawn, a name for that picture); None before any tile is placed. Frames whose tile is not one of
+    the filters drawn (a moon's 30 filter colour pass draws 3) give the same picture and the same name."""
     p = plan(u, cache)
     tiles = [tile(u, j, cache, p["display_scale"]) for j in range(n + 1)]
     rect = view_rect(p, tiles)
@@ -371,9 +376,26 @@ def so_far(u, n, cache, out=OUT):
         if "offset" in t:
             count[t["filter"]] = count.get(t["filter"], 0) + 1
     if not count:
-        return None, None
+        return None
     colour = p["colour"]
     if colour and all(count.get(f) for f in colour):
+        used = colour
+    else:
+        used = [p["grey"] if count.get(p["grey"]) else max(count, key=count.get)]
+    name = "_".join(f"{f.replace('/', '-')}{count[f]}" for f in used) + "_" + "_".join(str(round(v)) for v in rect)
+    return p, tiles, rect, count, used, name
+
+
+def so_far(u, n, cache, made=None, out=OUT):
+    """The pass's mosaic with tiles 0..n, RGBA out px (OUT unless asked for more, up to CANVAS) on its longest
+    side, and its report; (None, None) before any tile is placed. made: layout(u, n, cache), when already
+    worked out."""
+    made = made or layout(u, n, cache)
+    if not made:
+        return None, None
+    p, tiles, rect, count, used, _ = made
+    if len(used) == 3:
+        colour = used
         acc = [filter_mosaic(u, p, f, tiles, rect, cache) for f in colour]
         rgb = np.dstack([a[..., 0] for a in acc])
         # only where every filter has the picture: past one filter's edge the others alone are a coloured rim
@@ -381,8 +403,7 @@ def so_far(u, n, cache, out=OUT):
         rgb = (rgb * (alpha[..., None] / np.float32(255)) + 0.5).astype(np.uint8)
         rgba, used = np.dstack([rgb, alpha]), colour
     else:
-        f = p["grey"] if count.get(p["grey"]) else max(count, key=count.get)
-        rgba, used = filter_mosaic(u, p, f, tiles, rect, cache), [f]
+        rgba = filter_mosaic(u, p, used[0], tiles, rect, cache)
     if p["display_scale"].get("filled"):
         rgba = detail(rgba, DETAIL_SIGMA * FRAME * p["k"])
     im = Image.fromarray(rgba, "RGBA")
@@ -395,20 +416,48 @@ def so_far(u, n, cache, out=OUT):
 
 def mosaic_webp(frame_id, size, cache, slots=None, ahead=3, fmt="webp", out=OUT):
     """(WebP, report) of the mosaic so far at frame_id when its pass is a mosaic; otherwise None. Then makes the
-    next few tiles in the background, so the next frames are quick. size "full" = out px on the longest side
-    (the full view's picture); fmt "png" for a PNG instead."""
+    next few tiles and the mosaics with them in the background, so the next frames' mosaics are ready when the
+    window asks for them. size "full" = out px on the longest side (the full view's picture, never warmed
+    ahead); fmt "png" for a PNG instead."""
     found = unit_of(frame_id)
     if not found or not found[0]["mosaic"] or found[1] < 0:
         return None
     u, n = found
+    if size == "full":
+        return _mosaic_at(u, n, size, cache, slots, fmt, out)
+    made = _mosaic_at(u, n, size, cache, slots)
+    if made and ahead:
+        warm(u, n + ahead, cache, size, slots, start=n + 1)
+    return made
+
+
+def _mosaic_at(u, n, size, cache, slots=None, fmt="webp", out=OUT):
+    """(WebP, report) of the pass's mosaic with tiles 0..n at size, made once (kept in the cache under the name
+    of what it is made of, so frames that add nothing to it share it; a request that comes while it is being
+    made waits for it); None before any tile is placed."""
+    made = layout(u, n, cache)
+    if not made:
+        return None
     full = size == "full"
-    path = os.path.join(folder(u, cache), f"full{out}" if full else str(size), f"{n}.{fmt}")
-    meta = path[:-len(fmt)] + "json"
-    report = {}
+    path = os.path.join(folder(u, cache), f"full{out}" if full else str(size), f"{made[5]}.{fmt}")
+    if not os.path.exists(path):
+        with _lock:
+            lock = _making.setdefault(path, threading.Lock())
+        with lock:
+            try:
+                return _make_mosaic(u, n, size, path, cache, slots, made, fmt, out)
+            finally:
+                with _lock:
+                    _making.pop(path, None)
+    return _make_mosaic(u, n, size, path, cache, slots, made, fmt, out)
+
+
+def _make_mosaic(u, n, size, path, cache, slots, made, fmt="webp", out=OUT):
+    report, full, meta = {}, size == "full", path[:-len(fmt)] + "json"
 
     def make():
         with slots or contextlib.nullcontext():
-            im, rep = so_far(u, n, cache, out if full else OUT)
+            im, rep = so_far(u, n, cache, made, out if full else OUT)
         if im is None:
             raise LookupError("no tile placed yet")
         report.update(rep)
@@ -429,30 +478,48 @@ def mosaic_webp(frame_id, size, cache, slots=None, ahead=3, fmt="webp", out=OUT)
     if not report:
         with open(meta) as fh:
             report = json.load(fh)
-    if ahead and not full:
-        warm(u, n + ahead, cache)
     return data, report
 
 
-def warm(u, upto, cache):
-    """Makes the pass's plan and its tiles up to upto in the background (one thread per pass)."""
+def warm(u, upto, cache, size=None, slots=None, start=0):
+    """Makes the pass's plan and its tiles up to upto in the background, and with a size the mosaics at tiles
+    start..upto. One thread per pass and size: a later call while it runs moves its end on. Background work
+    runs one pass at a time (_background)."""
     if not u["mosaic"]:
         return
+    key = (u["key"], size)
     with _lock:
-        if u["key"] in _warming:
+        _upto[key] = max(_upto.get(key, -1), min(upto, len(u["frames"]) - 1))
+        _from[key] = max(_from.get(key, 0), start)
+        if key in _warming:
             return
-        _warming.add(u["key"])
+        _warming.add(key)
 
     def run():
         try:
-            p = plan(u, cache)
-            for j in range(min(upto, len(u["frames"]) - 1) + 1):
-                tile(u, j, cache, p["display_scale"])
+            with _background:
+                p = plan(u, cache)
+                done = -1
+                while True:
+                    with _lock:
+                        last, first = _upto[key], _from[key]
+                        if last <= done:   # nothing more asked: finished (a later call starts a new thread)
+                            _warming.discard(key)
+                            _upto.pop(key, None)
+                            _from.pop(key, None)
+                            return
+                    for j in range(done + 1, last + 1):
+                        tile(u, j, cache, p["display_scale"])
+                    if size:
+                        for j in range(max(first, done + 1), last + 1):
+                            _mosaic_at(u, j, size, cache, slots)
+                    done = last
         except Exception as e:
             print(f"observation mosaic {u['key']} failed: {type(e).__name__}: {e}", flush=True)
-        finally:
             with _lock:
-                _warming.discard(u["key"])
+                _warming.discard(key)
+                _upto.pop(key, None)
+                _from.pop(key, None)
 
     threading.Thread(target=run, daemon=True).start()
 
