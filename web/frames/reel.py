@@ -66,6 +66,7 @@ TRUE_BLUES = ("BL1", "BL2", "VIO")
 _index = None
 _shots = {}
 _shot_of = {}
+_shot_locks = {}   # target -> lock: working out one body's reel (20 s for Saturn) holds up nothing else
 _lock = threading.Lock()
 _mosaic_lock = threading.Lock()   # mosaic keeps per frame work in a module level dict
 
@@ -163,7 +164,11 @@ def shots(target):
     (mosaic.panels: a real mosaic tile of the same filter), window = how many, also = its other frames
     (stacked into it, or in its colour set but not used), group = the first picture of the mosaic it is a
     tile of (every picture linked to it through panels), only on mosaic tiles."""
+    if target in _shots:
+        return _shots[target]
     with _lock:
+        lock = _shot_locks.setdefault(target, threading.Lock())
+    with lock:
         if target in _shots:
             return _shots[target]
         idx, sets = load_index()
@@ -222,8 +227,8 @@ def shots(target):
             if len(members) > 1:
                 for n in members:
                     out[n]["group"] = r
-        _shots[target] = out
         _shot_of[target] = {i: n for n, s in enumerate(out) for i in s["ids"] + s.get("also", [])}
+        _shots[target] = out
         return out
 
 
@@ -252,6 +257,8 @@ _warming = set()
 def target_of():
     """{frame id: target} for every frame in the index (the frame server makes it as it starts)."""
     global _target_of
+    if _target_of is not None:
+        return _target_of
     with _lock:
         if _target_of is None:
             idx, _ = load_index()

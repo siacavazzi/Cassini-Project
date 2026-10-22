@@ -43,10 +43,10 @@ html, body { height: 100%; margin: 0; }
 [hidden] { display: none !important; }
 body { background: #000; color: var(--ink); font: 11px/1.35 var(--ui); overflow: hidden; -webkit-font-smoothing: antialiased; user-select: none; }
 #app { position: fixed; inset: 0; }
-#gl, #hud, #glow { position: absolute; inset: 0; width: 100%; height: 100%; display: block; }
+#gl, #hud { position: absolute; inset: 0; width: 100%; height: 100%; display: block; }
 #gl { touch-action: none; }
-#hud, #glow { pointer-events: none; mix-blend-mode: screen; }
-body.nohud #hud, body.nohud #glow, body.nohud #hudline, body.nohud #reticle { display: none; }
+#hud { pointer-events: none; mix-blend-mode: screen; }
+body.nohud #hud, body.nohud #hudline, body.nohud #reticle { display: none; }
 #labels { position: absolute; inset: 0; pointer-events: none; overflow: hidden; }
 
 /* ---------- HUD tags for bodies ---------- */
@@ -462,6 +462,41 @@ body.idle .camwin .well.has-frame { border-color: transparent; box-shadow: 0 6px
 body.idle #app .win.full { opacity: 1 !important; pointer-events: auto !important; background: rgba(8,9,11,.9) !important; }
 body.idle .win.full .titlebar { opacity: 0; }
 
+.flagbtn { all: unset; position: absolute; right: 26px; top: 3px; width: 14px; height: 14px; display: grid; place-items: center; border-radius: 3px; color: var(--q-dim); cursor: default; }
+.flagbtn:hover { color: #fff; background: rgba(255,255,255,.12); }
+.flagbtn:focus-visible { outline: 1px solid var(--q-accent); }
+.flagbtn svg { width: 10px; height: 10px; } .flagbtn svg * { fill: none; stroke: currentColor; stroke-width: 1.4; stroke-linejoin: round; }
+.flagbtn.done svg path { fill: currentColor; } .flagbtn.done { color: #f0b860; }
+body.noflags .flagbtn { display: none; }
+body.phone .flagbtn { width: 26px; height: 20px; top: 0; right: 36px; }
+body.phone .flagbtn svg { width: 12px; height: 12px; }
+#flagpop { position: fixed; z-index: 3000; width: min(340px, calc(100vw - 16px)); padding: 12px; box-sizing: border-box; border-radius: 9px; border: 1px solid var(--q-line, #444);
+  background: rgba(20,22,27,.97); color: var(--q-text, #ddd); font-size: 12px; box-shadow: 0 12px 40px rgba(0,0,0,.6); }
+#flagpop[hidden] { display: none; }
+#flagpop h4 { margin: 0 0 8px; font-size: 12.5px; font-weight: 600; display: flex; gap: 6px; align-items: center; }
+#flagpop .fpwhat { display: grid; grid-template-columns: 64px minmax(0, 1fr); gap: 8px; margin-bottom: 8px; }
+#flagpop .fpwhat canvas, #flagpop .fpwhat .fpnone { width: 64px; height: 64px; background: #000; border-radius: 3px; object-fit: contain; }
+#flagpop .fpmeta { font: 10.5px/1.4 var(--hudf, monospace); color: var(--q-dim, #999); word-break: break-word; }
+#flagpop .fptags { display: flex; flex-wrap: wrap; gap: 4px; margin-bottom: 8px; }
+#flagpop .fptags button { all: unset; padding: 2px 8px; border-radius: 10px; border: 1px solid var(--q-line, #444); font-size: 11px; color: var(--q-dim, #aaa); cursor: default; }
+#flagpop .fptags button[aria-pressed="true"] { background: rgba(240,184,96,.2); border-color: rgba(240,184,96,.7); color: #f6d39c; }
+#flagpop textarea { width: 100%; box-sizing: border-box; min-height: 52px; resize: vertical; padding: 6px 8px; border-radius: 5px; border: 1px solid var(--q-line, #444);
+  background: rgba(0,0,0,.35); color: inherit; font: inherit; }
+#flagpop textarea:focus { outline: 1px solid var(--q-accent, #8ab6ff); }
+#flagpop .fpbtns { display: flex; justify-content: flex-end; gap: 8px; margin-top: 8px; }
+#flagpop .fpbtns button { font: inherit; padding: 4px 12px; border-radius: 5px; border: 1px solid var(--q-line, #444); background: transparent; color: inherit; cursor: default; }
+#flagpop .fpbtns .go { background: rgba(240,184,96,.22); border-color: rgba(240,184,96,.7); }
+#flagtoast { position: fixed; left: 50%; bottom: 22px; transform: translateX(-50%); z-index: 3001; display: flex; gap: 12px; align-items: center; padding: 7px 12px; border-radius: 8px;
+  background: rgba(20,22,27,.96); border: 1px solid var(--q-line, #444); color: var(--q-text, #ddd); font-size: 12px; box-shadow: 0 8px 30px rgba(0,0,0,.5); }
+#flagtoast[hidden] { display: none; }
+#flagtoast button, #flagtoast a { font: inherit; background: none; border: 0; padding: 0; color: var(--q-accent, #8ab6ff); cursor: pointer; text-decoration: none; }
+/* the panel and toast stay put while the rest of the interface rests */
+body.idle #flagpop, body.idle #flagtoast { opacity: 1; pointer-events: auto; }
+body.phone #flagpop { left: 8px !important; right: 8px; top: auto !important; bottom: calc(env(safe-area-inset-bottom, 0px) + 8px); width: auto; }
+body.phone #flagpop .fptags button { padding: 5px 10px; font-size: 12px; }
+body.phone #flagpop .fpbtns button { padding: 8px 16px; }
+body.phone #flagtoast { bottom: calc(env(safe-area-inset-bottom, 0px) + 12px); }
+
 #movie svg { width: 15px; height: 15px; display: block; }
 #movie svg * { fill: none; stroke: currentColor; stroke-width: 1.4; }
 #moviecard { top: calc(env(safe-area-inset-top, 0px) + 36px); left: max(14px, env(safe-area-inset-left, 0px)); width: clamp(320px, 38vw, 600px); }
@@ -479,6 +514,8 @@ body.idle .win.full .titlebar { opacity: 0; }
 #mvplay { width: 28px; height: 28px; font-size: 11px; flex: none; }
 .mvbar input[type=range] { width: 110px; accent-color: var(--q-accent, #8ab6ff); }
 #mvfpsv { min-width: 38px; color: var(--q-text, #ddd); font-variant-numeric: tabular-nums; }
+#mvproc { height: 22px; padding: 0 8px; font-size: 10.5px; flex: none; opacity: .55; }
+#mvproc[aria-pressed="true"] { opacity: 1; color: var(--q-accent, #8ab6ff); }
 #mvcount { margin-left: auto; font: 10.5px/1 var(--hudf, monospace); white-space: nowrap; font-variant-numeric: tabular-nums; }
 /* resting: like the camera window, the picture stays and its frame and controls fade */
 #moviecard, #moviecard .titlebar, .mvbar, .mvwell { transition: opacity .7s ease, background-color .7s ease, border-color .7s ease, box-shadow .7s ease; }
@@ -611,6 +648,14 @@ body.phone .fullbtn { width: 26px; height: 20px; top: 0; }
 
 /* the other windows: full width under the menu bar */
 body.phone .bodywin:not(.full) { left: var(--side) !important; top: calc(var(--menu) + var(--gap)) !important; right: auto !important; }
+
+/* frosted glass off: plain dark panels, no blur of the view behind them (the blur is redone every frame) */
+body.s-noglass :is(#menubar, .menu ul, .win, #dock) { -webkit-backdrop-filter: none !important; backdrop-filter: none !important; }
+body.s-noglass :is(.win, #dock) { background: rgba(16, 17, 20, .93); }
+body.s-noglass #menubar { background: rgba(14, 15, 18, .9); }
+body.s-noglass .menu ul { background: rgba(22, 23, 27, .97); }
+#perfmeter { position: absolute; right: 10px; bottom: 8px; z-index: 950; pointer-events: none; font: 10px/1.3 var(--hudf, monospace);
+  letter-spacing: .06em; color: rgba(232,236,242,.7); text-shadow: 0 0 3px #000; font-variant-numeric: tabular-nums; white-space: pre; }
 
 .bodywin { top: calc(env(safe-area-inset-top, 0px) + 36px); left: max(14px, env(safe-area-inset-left, 0px)); width: auto; --pw: clamp(180px, 16vw, 280px); }
 .bodywin.zoomed { --pw: clamp(320px, 32vw, 520px); }
@@ -765,7 +810,6 @@ body.phone #excard:not(.full) { width: calc(100% - 16px) !important; left: 8px !
 <div id="app">
   <canvas id="gl" aria-label="3D view of the Saturn system"></canvas>
   <canvas id="hud" aria-hidden="true"></canvas>
-  <canvas id="glow" aria-hidden="true"></canvas>
   <div id="reticle" hidden></div>
   <div id="labels"></div>
   <div id="hudline" aria-hidden="true"></div>
@@ -880,6 +924,15 @@ body.phone #excard:not(.full) { width: calc(100% - 16px) !important; left: 8px !
     <div class="statusbar"><span>Positions from Cassini's SPICE kernels (J2000). LCD lanes: narrow-angle (NAC) and wide-angle (WAC) frames coloured by filter; RGB marks frames that belong to a red, green and blue set.</span><span id="pnote" hidden></span><b id="sbar">—</b></div>
   </div>
 
+  <section id="flagpop" role="dialog" aria-label="Flag this picture" hidden>
+  <h4><svg viewBox="0 0 10 10" width="11" height="11" aria-hidden="true"><path d="M2 9.5V1h6l-1.4 2.2L8 5.4H2" fill="#f0b860" stroke="#f0b860" stroke-width="1" stroke-linejoin="round"/></svg>Flag this picture</h4>
+  <div class="fpwhat"><canvas width="128" height="128"></canvas><div class="fpmeta"></div></div>
+  <div class="fptags" aria-label="What looks wrong"></div>
+  <textarea placeholder="What looks off? (optional)" aria-label="Note"></textarea>
+  <div class="fpbtns"><button class="no">Cancel</button><button class="go">Flag</button></div>
+</section>
+<div id="flagtoast" role="status" hidden><span></span><button class="undo">Undo</button><a target="_blank" rel="noopener">See all</a></div>
+
   <section class="win" id="moviecard" aria-label="Movie" hidden>
   <div class="titlebar"><span class="lights"><button class="close" aria-label="Leave movie mode">×</button><button class="min" aria-label="Leave movie mode">–</button><button class="zoom" aria-label="Zoom">+</button></span>Movie</div>
   <div class="body">
@@ -887,6 +940,7 @@ body.phone #excard:not(.full) { width: calc(100% - 16px) !important; left: 8px !
     <div class="mvbar">
       <button class="btn round" id="mvplay" aria-label="Play or pause the movie">❚❚</button>
       <label for="mvfps">Speed</label><input type="range" id="mvfps" min="2" max="24" step="1" value="8" aria-label="Frames per second"><span id="mvfpsv">8 fps</span>
+      <button class="btn" id="mvproc" aria-pressed="true" title="Processed: frames calibrated, colour composites and mosaics, as in the camera windows. Off plays the archive frames as they are (P)">Processed</button>
       <span id="mvcount"></span>
     </div>
   </div>
@@ -1138,14 +1192,19 @@ body.phone #excard:not(.full) { width: calc(100% - 16px) !important; left: 8px !
   mirror("view.allOrbits", "allorbits");
   D({ key: "view.enlarge", section: "View", label: "Enlarge moons ×10", type: "toggle", value: false, hint: "Moons drawn ten times their size so they can be seen from afar." });
   mirror("view.enlarge", "enlarge");
-  D({ key: "view.follow", section: "View", label: "Follow camera", type: "toggle", value: false, hint: "Look where Cassini's camera points (needs the pointing data)." });
-  mirror("view.follow", "followcam");
+  // a new key, so a saved "off" from when follow started off does not carry over
+  D({ key: "view.followcam", section: "View", label: "Follow camera", type: "toggle", value: true, hint: "Look where Cassini's camera points (needs the pointing data)." });
+  mirror("view.followcam", "followcam");
   D({ key: "view.textures", section: "View", label: "Surface maps", type: "choice", value: "2k", reload: true,
       options: [["0", "Off"], ["1k", "1k"], ["2k", "2k"], ["4k", "4k"]],
       hint: "Map size for Saturn and the moons. 4k is sharper and slower to load; Off keeps the plain painted look. A ?tex= link still wins." });
   // Movie
   D({ key: "movie.fps", section: "Movie", label: "Movie speed", type: "range", value: 8, min: 2, max: 24, step: 1, unit: "fps",
       hint: "Frames per second in movie mode (M). The slider in the Movie window changes this too." });
+  D({ key: "movie.processed", section: "Movie", label: "Processed pictures", type: "toggle", value: true,
+      hint: "Movie frames made by the pipeline like the camera windows' pictures: calibrated, colour composites and mosaics. Off plays the archive frames as they are, with no processing. The Processed button in the Movie window (or P) switches it too." });
+  D({ key: "movie.mosaics", section: "Movie", label: "Mosaics in movies", type: "toggle", value: true,
+      hint: "With processed pictures on, a mosaic pass builds its mosaic in the film. Off shows each tile on its own." });
   window.addEventListener("DOMContentLoaded", () => {
     const r = $("mvfps"); if (!r) return;
     try { const f = +localStorage.getItem("cassini-os-movie-fps"); if (f >= 2 && f <= 24 && !("movie.fps" in saved)) S.set("movie.fps", f); } catch (e) {}
@@ -1207,6 +1266,112 @@ body.phone #excard:not(.full) { width: calc(100% - 16px) !important; left: 8px !
     $("mlist").addEventListener("click", e => { if (document.body.classList.contains("phone") && e.target.closest("button")) setTimeout(() => mom.classList.add("closed"), 150); });
     sync();
   });
+})();
+</script>
+<script>
+// ---------- performance: 3D resolution that follows the frame rate, no redraws while nothing moves ----------
+(function () {
+  const S = window.cassiniSettings, D = d => S.define(d);
+  D({ key: "perf.auto", section: "Performance", label: "Automatic quality", type: "toggle", value: true,
+      hint: "Lowers the 3D view's resolution when the frame rate falls under the target, and raises it again when there is room." });
+  D({ key: "perf.target", section: "Performance", label: "Target frame rate", type: "range", value: 55, min: 24, max: 120, step: 1, unit: "fps",
+      hint: "What automatic quality aims for. Most screens show at most 60; a ProMotion screen up to 120." });
+  D({ key: "perf.resolution", section: "Performance", label: "3D resolution", type: "range", value: 100, min: 30, max: 100, step: 5, unit: "%",
+      hint: "Share of the screen's full sharpness the 3D view is drawn at; automatic quality never goes above it. Lower is faster and softer." });
+  D({ key: "perf.glass", section: "Performance", label: "Frosted windows", type: "toggle", value: true,
+      hint: "Blur the view behind windows and menus. Off is lighter on weak graphics." });
+  D({ key: "perf.rest", section: "Performance", label: "Rest when still", type: "toggle", value: true,
+      hint: "Stop redrawing the 3D view while nothing in it moves (paused, nobody touching it). Saves power." });
+  D({ key: "perf.meter", section: "Performance", label: "Show frame rate", type: "toggle", value: false,
+      hint: "Frames per second and the 3D resolution in the bottom right corner." });
+  S.on("perf.glass", v => document.body.classList.toggle("s-noglass", !v));
+
+  const FLOOR = 0.6;                     // lowest pixel ratio automatic quality goes to
+  const dpr = () => Math.min(window.devicePixelRatio || 1, 2);
+  let auto = 1;                          // automatic quality's share of the user's resolution (1 = all of it)
+  // it moves in fixed steps, so the canvas is not reallocated at a new odd size every few seconds
+  const STEPS = [1, 0.9, 0.8, 0.7, 0.6, 0.5, 0.4, 0.3];
+  let n = 0, drawn = 0, t0 = 0, tPrev = 0, worst = 0, slow = 0, good = 0, raiseAfter = 0, raiseWait = 8000, lastRaise = -1e9, before = 1, fps = 0, born = 0;
+  let lastKey = null, lastDraw = -1e9, busyUntil = 0, applied = 0, meter = null;
+  const user = () => S.get("perf.resolution") / 100;
+  const P = window.cassiniPerf = {
+    pixelRatio: () => Math.max(Math.min(FLOOR, dpr()), dpr() * user() * (S.get("perf.auto") ? auto : 1)),
+    hudPixelRatio: () => Math.max(P.pixelRatio(), Math.min(dpr(), 1)),
+    invalidate() { busyUntil = Math.max(busyUntil, performance.now() + 700); },
+    status: () => ({ fps: +fps.toFixed(1), scale: +(P.pixelRatio() / dpr()).toFixed(2), pixelRatio: +P.pixelRatio().toFixed(2), auto: S.get("perf.auto"), target: S.get("perf.target") }),
+    // the 3D view needs drawing when the camera, the clock or the canvas changed, for a moment after any input or
+    // load, and once a second regardless
+    draw(now) {
+      if (!S.get("perf.rest")) return true;
+      const m = camera.matrixWorld.elements, p = camera.projectionMatrix.elements, c = renderer.domElement;
+      const key = [state.et, c.width, c.height, p[0], p[5], ...m];
+      let same = !!lastKey && lastKey.length === key.length;
+      for (let i = 0; same && i < key.length; i++) same = Math.abs(key[i] - lastKey[i]) <= 1e-9 * Math.max(1, Math.abs(key[i]));
+      lastKey = key;
+      if (same && now > busyUntil && now - lastDraw < 1000) return false;
+      lastDraw = now; return true;
+    },
+    frame(now, drew) {
+      n++; if (drew) drawn++;
+      if (tPrev) worst = Math.max(worst, now - tPrev); tPrev = now;
+      if (!t0) t0 = born = now;
+      if (now - t0 < 1000) return;
+      // a second with one hitch in it (a picture or a month of data arriving) says nothing about the GPU's load;
+      // frames that are all slow do
+      const all = drawn === n, rate = 1000 * n / (now - t0), hitch = n > 1 && worst > 250 && worst > 3 * (now - t0 - worst) / (n - 1);
+      n = drawn = 0; t0 = now; worst = 0;
+      if (all) fps = rate;
+      if (meter) meter.textContent = `${all ? Math.round(rate) + " fps" : "resting"}  ·  3D ${Math.round(100 * P.pixelRatio() / dpr())}%`;
+      // only judge seconds in which every frame was drawn, the tab was visible and no data was being waited on
+      if (!S.get("perf.auto") || !all || document.hidden || hitch || now - born < 4000 || (typeof yearReady === "function" && !yearReady())) { good = 0; return; }
+      const target = S.get("perf.target");
+      if (rate < target * 0.95) {
+        good = 0;
+        if (++slow < 2) return;   // two slow seconds in a row before the resolution drops
+        slow = 0;
+        const min = Math.min(1, FLOOR / (dpr() * user()));
+        // the GPU's work goes with the pixel count: the largest step at which this frame rate would reach the
+        // target, at least one step down, at most three
+        const fit = STEPS.filter(x => x < auto - 1e-6 && x >= min - 1e-6), want = auto * Math.sqrt(rate / target);
+        const next = fit.length ? (fit.find(x => x <= want) || fit[Math.min(2, fit.length - 1)]) : auto;
+        if (now - lastRaise < 10000 && before < auto) {
+          // a step up that did not hold: back to the step that did, and wait twice as long before the next try
+          auto = before; raiseWait = Math.min(120000, raiseWait * 2); raiseAfter = now + raiseWait; apply();
+        } else if (next < auto) {
+          auto = fit.indexOf(next) > 2 ? fit[2] : next;
+          raiseAfter = now + raiseWait; apply();
+        }
+      } else {
+        slow = 0;
+        // one step up, only after three good seconds and only if the measured frame rate would still reach the
+        // target there (held at the screen's refresh rate there is no telling, so it stays put: trying costs a
+        // visible hitch per resize, measured)
+        const up = STEPS.slice().reverse().find(x => x > auto + 1e-6);
+        if (up && now > raiseAfter && rate * (auto / up) ** 2 >= target && ++good >= 3) { good = 0; before = auto; auto = up; lastRaise = now; raiseAfter = now + 3000; apply(); }
+      }
+    }
+  };
+  // the renderers exist once the viewer script has run; until then they read pixelRatio() themselves
+  function apply() {
+    const pr = P.pixelRatio();
+    if (Math.abs(pr - applied) < 0.01 || typeof renderer === "undefined") return;
+    applied = pr;
+    renderer.setPixelRatio(pr);
+    if (typeof hudRenderer !== "undefined" && hudRenderer) hudRenderer.setPixelRatio(P.hudPixelRatio());
+    if (typeof resize === "function") resize();
+    P.invalidate();
+  }
+  S.on("perf.resolution", () => { auto = 1; apply(); });
+  S.on("perf.auto", () => { auto = 1; apply(); });
+  window.addEventListener("resize", () => { applied = 0; apply(); });
+  for (const ev of ["pointerdown", "pointermove", "wheel", "keydown", "touchstart"]) window.addEventListener(ev, P.invalidate, { passive: true, capture: true });
+  document.addEventListener("visibilitychange", P.invalidate);
+  window.addEventListener("DOMContentLoaded", () => {
+    meter = document.createElement("div"); meter.id = "perfmeter"; meter.hidden = true; document.body.appendChild(meter);
+    S.on("perf.meter", v => { meter.hidden = !v; });
+  });
+  // a surface map or a model finishing its load changes the picture without moving anything
+  window.addEventListener("DOMContentLoaded", () => { if (window.THREE) THREE.DefaultLoadingManager.onProgress = () => P.invalidate(); });
 })();
 </script>
 <script>
@@ -1468,17 +1633,47 @@ body.phone #excard:not(.full) { width: calc(100% - 16px) !important; left: 8px !
     }
   };
 
-  // glow: the HUD canvas copied, blurred, at half resolution, screen-blended over the scene
-  const glow = $("glow"), gctx = glow.getContext("2d");
+  // glow: the HUD drawn again at half resolution into a texture, blurred on the GPU (a wide and a narrow Gaussian,
+  // added) and screen-blended over the sharp HUD in the same canvas. Nothing is read back to the CPU, so the
+  // graphics card never has to stop and wait for the page.
+  let G = null;
+  function glowKit() {
+    const quad = new THREE.Mesh(new THREE.PlaneGeometry(2, 2)), cam = new THREE.OrthographicCamera(-1, 1, 1, -1, 0, 1), sc = new THREE.Scene();
+    quad.frustumCulled = false; sc.add(quad);
+    const VS = "varying vec2 vUv; void main(){ vUv = uv; gl_Position = vec4(position.xy, 0.0, 1.0); }";
+    const blur = new THREE.ShaderMaterial({ uniforms: { src: { value: null }, step: { value: new THREE.Vector2() }, sigma: { value: 1 } }, vertexShader: VS,
+      fragmentShader: `uniform sampler2D src; uniform vec2 step; uniform float sigma; varying vec2 vUv;
+        void main(){ vec3 s = vec3(0.0); float ws = 0.0;
+          for (int i = -12; i <= 12; i++) { float x = float(i) * sigma / 4.0, w = exp(-0.5 * float(i * i) / 16.0);
+            s += w * texture2D(src, vUv + step * x).rgb; ws += w; }
+          gl_FragColor = vec4(s / ws, 1.0); }`, depthTest: false, depthWrite: false });
+    const mix = new THREE.ShaderMaterial({ uniforms: { a: { value: null }, b: { value: null }, gain: { value: 1 } }, vertexShader: VS,
+      fragmentShader: `uniform sampler2D a; uniform sampler2D b; uniform float gain; varying vec2 vUv;
+        void main(){ gl_FragColor = vec4(min(vec3(1.0), gain * (texture2D(a, vUv).rgb + texture2D(b, vUv).rgb)), 1.0); }`,
+      depthTest: false, depthWrite: false, transparent: true,
+      blending: THREE.CustomBlending, blendEquation: THREE.AddEquation, blendSrc: THREE.OneFactor, blendDst: THREE.OneMinusSrcColorFactor });
+    const rt = depth => new THREE.WebGLRenderTarget(1, 1, { depthBuffer: depth, stencilBuffer: false, minFilter: THREE.LinearFilter, magFilter: THREE.LinearFilter });
+    return { quad, cam, sc, blur, mix, hud: rt(true), t1: rt(false), wide: rt(false), narrow: rt(false), w: 0, h: 0 };
+  }
+  function pass(mat, target) { G.quad.material = mat; hudRenderer.setRenderTarget(target); hudRenderer.render(G.sc, G.cam); }
   window.studyAfterRender = () => {
-    if (document.body.classList.contains("nohud")) return;
-    const hud = $("hud"), w = Math.round(hud.clientWidth / 2), h = Math.round(hud.clientHeight / 2);
-    if (!w || !h || !hud.width || !hud.height) return;   // not laid out yet (first frame, hidden tab): drawing an empty canvas throws
-    if (glow.width !== w || glow.height !== h) { glow.width = w; glow.height = h; }
-    gctx.globalCompositeOperation = "source-over"; gctx.filter = "none"; gctx.fillStyle = "#000"; gctx.fillRect(0, 0, w, h);
-    gctx.globalCompositeOperation = "lighter";
-    gctx.filter = "blur(5px)"; gctx.drawImage(hud, 0, 0, w, h);
-    gctx.filter = "blur(1.5px)"; gctx.drawImage(hud, 0, 0, w, h);
+    if (document.body.classList.contains("nohud") || !hudRenderer) return;
+    const c = hudRenderer.domElement, w = Math.round(c.clientWidth / 2), h = Math.round(c.clientHeight / 2);
+    if (!w || !h) return;
+    if (!G) G = glowKit();
+    if (G.w !== w || G.h !== h) { G.w = w; G.h = h; for (const k of ["hud", "t1", "wide", "narrow"]) G[k].setSize(w, h); }
+    const ac = hudRenderer.autoClear, pr = hudRenderer.getPixelRatio();
+    hudRenderer.autoClear = true;
+    hudRenderer.setRenderTarget(G.hud); hudRenderer.render(hudScene, camera);
+    G.blur.uniforms.src.value = G.hud.texture; G.blur.uniforms.step.value.set(1 / w, 0); G.blur.uniforms.sigma.value = 5; pass(G.blur, G.t1);
+    G.blur.uniforms.src.value = G.t1.texture; G.blur.uniforms.step.value.set(0, 1 / h); pass(G.blur, G.wide);
+    G.blur.uniforms.src.value = G.hud.texture; G.blur.uniforms.step.value.set(1 / w, 0); G.blur.uniforms.sigma.value = 1.5; pass(G.blur, G.t1);
+    G.blur.uniforms.src.value = G.t1.texture; G.blur.uniforms.step.value.set(0, 1 / h); pass(G.blur, G.narrow);
+    // the old 2D-canvas glow shrank the full-density HUD by 2 x pixel ratio, which thinned its one-pixel lines by about as much (0.9 / pixel ratio matches its brightness, measured)
+    hudRenderer.autoClear = false;
+    G.mix.uniforms.a.value = G.wide.texture; G.mix.uniforms.b.value = G.narrow.texture; G.mix.uniforms.gain.value = 0.9 / Math.min(window.devicePixelRatio || 1, 2);
+    pass(G.mix, null);
+    hudRenderer.autoClear = ac;
   };
 
   // per-frame read-outs: menu-bar clock, mission progress, HUD strip, status bar
@@ -1539,7 +1734,10 @@ body.phone #excard:not(.full) { width: calc(100% - 16px) !important; left: 8px !
   const nmOf = k => FILTER_NM[`${catalog.cam[k]}:${catalog.f1[k]}/${catalog.f2[k]}`] || 0;
   function pickChannels(s) {
     const by = f => s.frames[s.filters.indexOf(f)], blue = ["BL1", "BL2", "VIO"].find(f => s.filters.includes(f));
-    if (s.filters.includes("RED") && s.filters.includes("GRN") && blue) { s.kind = "true"; s.use = [by("RED"), by("GRN"), by(blue)]; }
+    // red: RED, or the 619 nm continuum filter CB1 when a set has no RED (the narrow-angle camera at Jupiter), as
+    // obs_mosaic picks the filter nearest 650 nm
+    const red = ["RED", "CB1"].find(f => s.filters.includes(f));
+    if (red && s.filters.includes("GRN") && blue) { s.kind = "true"; s.use = [by(red), by("GRN"), by(blue)]; }
     else {
       const w = s.frames.slice().sort((p, q) => nmOf(q) - nmOf(p));
       s.kind = w.length >= 3 ? "false" : "two";
@@ -1669,7 +1867,18 @@ body.phone #excard:not(.full) { width: calc(100% - 16px) !important; left: 8px !
     // after the colour channels keeps the picture changing instead of holding the composite
     function view(k, et) {
       const si = catalog.setOf[k], s = si >= 0 ? catalog.sets[si] : null;
-      if (s && s.ready <= et && s.use.includes(k) && !failed.has(si) && S.get("cameras.composites")) return { key: colorUrl(s), set: si, k };
+      if (s && S.get("cameras.composites")) {
+        // any frame of a set whose channels are all taken shows the set's composite
+        if (s.ready <= et && !failed.has(si)) return { key: colorUrl(s), set: si, k };
+        // while the next set of a colour movie is being taken (the camera cycling through its filters), the
+        // camera's last finished set of the same observation stays up, so the movie stays in colour
+        for (let j = si - 1; j >= 0; j--) {
+          const q = catalog.sets[j];
+          if (q.cam !== s.cam) continue;
+          if (q.obs === s.obs && q.target === s.target && q.ready <= et && !failed.has(j)) return { key: colorUrl(q), set: j, k: q.use[q.use.length - 1], held: true };
+          break;
+        }
+      }
       return { key: frameUrl(catalog.id[k]), set: -1, k };
     }
     function noFrame(msg) { well.classList.remove("has-frame", "composite"); card.querySelector(".wellmsg").innerHTML = msg; }
@@ -1687,11 +1896,12 @@ body.phone #excard:not(.full) { width: calc(100% - 16px) !important; left: 8px !
       // while a pass's mosaic is shown, its next frames keep it up (until the mosaic with them arrives, mosaicOf)
       const keep = obsShown && catalog.obs[v.k] === obsShown;
       shownKey = v.key; shown = v;
-      if (!keep) { shot.src = im.src; obsShown = null; well.style.aspectRatio = ""; well.classList.remove("mosaic"); }
+      // shot.dataset.src / .report: what the picture on screen was made from, for flagging (flag.html)
+      if (!keep) { shot.src = im.src; shot.dataset.src = v.key; shot.dataset.report = ""; obsShown = null; obsK = -1; well.style.aspectRatio = ""; well.classList.remove("mosaic"); }
       well.classList.add("has-frame"); well.classList.toggle("composite", v.set >= 0);
       if (!keep) card.querySelector(".kindtag").textContent = v.set >= 0 ? KIND[catalog.sets[v.set].kind].toUpperCase() : "";
       if (v.set >= 0) { channelsFrom(im, catalog.sets[v.set]); howMade(v); }
-      if (v.tile) mosaicOf(v);
+      if (v.tile && !keep) mosaicOf(v);   // a frame kept behind its pass's mosaic asked for it already (update)
       // the sound (sound.html) hears every picture that goes up: its camera, filter wavelength, target and window
       // (keep: a pass mosaic stays up, so this frame rings when its tile shows, below in mosaicOf)
       if (window.cassiniPicture) window.cassiniPicture({ cam, body, win, k: v.k, nm: nmOf(v.k), set: v.set, use: v.set >= 0 ? catalog.sets[v.set].use.map(nmOf) : null, keep });
@@ -1700,6 +1910,7 @@ body.phone #excard:not(.full) { width: calc(100% - 16px) !important; left: 8px !
       lane[which] = v; v.cat = catalog;
       const im = new Image();
       im.crossOrigin = "anonymous";
+      im.fetchPriority = v.warm ? "low" : "high";   // the picture wanted now goes ahead of look-ahead requests
       im.onload = () => {
         lane[which] = null; warmed.add(v.key);
         if (want && !v.warm && v.cat === catalog && fits(v)) display(v, im);   // no want: the camera went idle while this loaded
@@ -1738,7 +1949,7 @@ body.phone #excard:not(.full) { width: calc(100% - 16px) !important; left: 8px !
         if (warming.size >= 3) break;
         if (warmed.has(key) || warming.has(key) || key.includes("/color.webp")) continue;
         warming.add(key);
-        const p = new Image(); p.crossOrigin = "anonymous";
+        const p = new Image(); p.crossOrigin = "anonymous"; p.fetchPriority = "low";
         p.onload = p.onerror = () => { warming.delete(key); warmed.add(key); };
         p.src = key;
       }
@@ -1752,32 +1963,62 @@ body.phone #excard:not(.full) { width: calc(100% - 16px) !important; left: 8px !
     // The Settings window's "Mosaics in camera windows" (cameras.mosaics) or window.cassiniMosaics = false turns this off.
     // A pass's mosaic (X-Reel names the observation) is every tile so far, every filter, in its own shape: the
     // window takes that shape and keeps it for the rest of the observation.
-    let mosaicUrl = null, obsShown = null, obsTiles = 0;
-    function mosaicOf(w) {
+    // While a pass's mosaic is up, each new frame of the pass asks for the mosaic with it as soon as it is the
+    // window's frame (pass = true: by its own id, every filter, not after its picture or its set's composite
+    // loaded), so the mosaic grows as the pictures are taken. One pass mosaic request is in flight per window: in
+    // a burst the newest frame waits and the ones it passes are skipped, so the mosaic never falls further behind.
+    // Other frames' requests (mostly a quick 404) go in their own lane, which moves on after 4 s, so a slow one
+    // (the server working out a body's reel) never holds up the pass.
+    let mosaicUrl = null, obsShown = null, obsTiles = 0, obsK = -1;
+    const mLane = { pass: { busy: false, next: null, last: "" }, other: { busy: false, next: null, last: "" } };
+    const warnedObs = new Set();   // observations already named to the server ahead of time (update)
+    function mosaicOf(w, pass) {
       if (window.cassiniMosaics === false || !S.get("cameras.mosaics")) return;
-      const id = catalog.id[w.set >= 0 ? catalog.sets[w.set].use[0] : w.k];
-      fetch(`${FRAMES}/frames/mosaic/${id}.webp?size=${size()}`).then(async r => {
+      const id = catalog.id[w.set >= 0 && !pass ? catalog.sets[w.set].use[0] : w.k], ask = `${id}:${size()}`;
+      const L = pass ? mLane.pass : mLane.other;
+      if (ask === L.last) return;
+      if (L.busy) { L.next = [w, pass]; return; }
+      L.last = ask; L.busy = true;
+      let over = false;
+      // the request is dropped (its connection freed; the server still finishes and keeps the mosaic) when the
+      // other lane gives up on it, or the window is closed (mosaicStop)
+      const ctl = L.ctl = new AbortController();
+      const cat0 = catalog, done = () => {
+        if (over) return;
+        over = true; L.busy = false; L.ctl = null;
+        const q = L.next; L.next = null;
+        if (q && catalog === cat0 && lastK >= 0 && catalog.et[q[0].k] <= catalog.et[lastK]) mosaicOf(...q);
+      };
+      if (!pass) setTimeout(() => { if (!over) { ctl.abort(); done(); } }, 4000);
+      fetch(`${FRAMES}/frames/mosaic/${id}.webp?size=${size()}`, { signal: ctl.signal }).then(async r => {
         if (!r.ok) return;
         const rep = JSON.parse(r.headers.get("X-Reel") || "null");
-        // a pass's mosaic that arrives after the window moved on to the pass's next frame still shows, unless
-        // the window already has a bigger one
-        const late = () => shown !== w && !(rep && rep.observation && shown && catalog.obs[shown.k] === catalog.obs[w.k]
-          && (obsShown !== catalog.obs[w.k] || rep.mosaic > obsTiles));
+        // a pass's mosaic shows while the window is still in the pass and the clock is not before its frame,
+        // unless the mosaic up already has a later frame (and is not ahead of the clock after a scrub back);
+        // a rolling mosaic only while its frame is the one shown
+        const late = () => catalog !== cat0 || (rep && rep.observation
+          ? lastK < 0 || catalog.obs[lastK] !== catalog.obs[w.k] || catalog.et[w.k] > catalog.et[lastK]
+            || (obsShown === catalog.obs[w.k] && obsK >= 0 && catalog.et[obsK] >= catalog.et[w.k] && catalog.et[obsK] <= catalog.et[lastK])
+          : shown !== w);
         if (late()) return;
         const blob = await r.blob();
         if (late()) return;
         if (mosaicUrl) URL.revokeObjectURL(mosaicUrl);
         shot.src = mosaicUrl = URL.createObjectURL(blob);
+        shot.dataset.src = r.url; shot.dataset.report = r.headers.get("X-Reel") || "";
         well.classList.add("mosaic");
         if (rep && rep.observation) {
           if (window.cassiniPicture && rep.mosaic > (obsShown === catalog.obs[w.k] ? obsTiles : 0)) window.cassiniPicture({ cam, body, win, k: w.k, nm: nmOf(w.k), set: w.set, use: w.set >= 0 ? catalog.sets[w.set].use.map(nmOf) : null, tile: rep.mosaic, of: rep.of });
-          obsShown = catalog.obs[w.k]; obsTiles = rep.mosaic;
+          obsShown = catalog.obs[w.k]; obsTiles = rep.mosaic; obsK = w.k;
           well.style.aspectRatio = `${rep.width} / ${rep.height}`;
           card.querySelector(".kindtag").textContent = `${rep.filters >= 3 ? ((rep.filter_names || []).includes("GRN") ? "COLOUR " : "FALSE COLOUR ") : ""}MOSAIC · ${rep.mosaic} OF ${rep.of} TILES${rep.filters > 1 ? ` · ${rep.filters} FILTERS` : ""}`;
           return;
         }
         card.querySelector(".kindtag").textContent = `${w.set >= 0 ? KIND[catalog.sets[w.set].kind].toUpperCase() + " · " : ""}MOSAIC${rep && rep.mosaic ? ` OF ${rep.mosaic}` : ""}`;
-      }, () => {});
+      }, () => {}).finally(done);
+    }
+    function mosaicStop() {
+      for (const L of Object.values(mLane)) { L.next = null; L.last = ""; if (L.ctl) L.ctl.abort(); }
     }
     const made = new Map();   // set -> how its composite was made
     const colourText = (s, si) => `${KIND[s.kind]}: ${s.use.map(fname).join(" · ")}${made.has(si) ? ` · ${made.get(si)}` : ""}`;
@@ -1817,7 +2058,9 @@ body.phone #excard:not(.full) { width: calc(100% - 16px) !important; left: 8px !
     function channelsFrom(im, s) {
       if (stripSet !== s) return;
       const n = 192, c = document.createElement("canvas"); c.width = c.height = n;
-      const g = c.getContext("2d"); g.drawImage(im, 0, 0, n, n);
+      // willReadFrequently keeps this small canvas in main memory: reading back a GPU canvas waits for the whole
+      // GPU queue, the 3D view included, which froze the page for seconds on a large screen
+      const g = c.getContext("2d", { willReadFrequently: true }); g.drawImage(im, 0, 0, n, n);
       let src;
       try { src = g.getImageData(0, 0, n, n); } catch (e) { return; }   // a server without CORS: keep the frames
       for (const fig of chans.querySelectorAll("figure")) {
@@ -1829,8 +2072,9 @@ body.phone #excard:not(.full) { width: calc(100% - 16px) !important; left: 8px !
     }
     let cat = null;
     function update(force) {
-      if (catalog !== cat) { cat = catalog; lastK = -2; stripKey = ""; failed.clear(); made.clear(); missing.clear(); warmed.clear(); shown = null; shownKey = null; }   // another mission year loaded
-      if (win.hidden && !force) return;   // a closed or tucked-away window fetches nothing; it catches up when shown
+      if (catalog !== cat) { cat = catalog; lastK = -2; stripKey = ""; failed.clear(); made.clear(); missing.clear(); warmed.clear(); warnedObs.clear(); for (const L of Object.values(mLane)) { L.last = ""; L.next = null; } shown = null; shownKey = null; obsShown = null; obsK = -1; }   // another mission year loaded
+      if (win.hidden && !force) { mosaicStop(); return; }   // a closed or tucked-away window fetches nothing; it catches up when shown
+      if (window.cassiniMovie && window.cassiniMovie.on) { mosaicStop(); return; }   // movie mode has the frame server to itself (its requests are capped)
       const p = lastOfCam(cam, state.et, body), k = p < 0 ? -1 : framesOf(cam, body).ks[p];
       const live = k >= 0 && state.et - catalog.et[k] < 180;
       card.classList.toggle("live", live);
@@ -1856,7 +2100,12 @@ body.phone #excard:not(.full) { width: calc(100% - 16px) !important; left: 8px !
       // a possible mosaic tile: the frame before is of the same body and observation, and a frame of a colour
       // set only once its composite is shown (the mosaic is made of composites)
       const kb = framesOf(cam, body).ks[p - 1];   // p counts this feed's frames (a body window's: that body's only)
-      want.tile = kb !== undefined && catalog.target[kb] === catalog.target[k] && catalog.obs[kb] === catalog.obs[k] && (!s || want.set >= 0);
+      // (or the frame after is: the first tile of a pass)
+      const same = q => q !== undefined && catalog.target[q] === catalog.target[k] && catalog.obs[q] === catalog.obs[k];
+      want.tile = !want.held && (same(kb) || same(framesOf(cam, body).ks[p + 1])) && (!s || want.set >= 0);
+      // a new frame of the pass whose mosaic is up: ask for the mosaic with it now, alongside the frame itself
+      // (by this frame, also while the window holds an earlier colour set)
+      if (obsShown && catalog.obs[k] === obsShown) mosaicOf(want.held ? { key: want.key, set: -1, k } : want, true);
       const kp = catalog.km_per_px[k];
       field("frame").textContent = `${titleCase(catalog.target[k] || "Unknown")} · ${catalog.id[k]}`;
       const c = catalog.cls[k], pol = /^P\d|^IRP/.test(catalog.f1[k]) || /^IRP/.test(catalog.f2[k]) ? " · polarizer" : "";
@@ -1867,7 +2116,18 @@ body.phone #excard:not(.full) { width: calc(100% - 16px) !important; left: 8px !
       field("details").textContent = `${kp ? `${kp < 10 ? kp.toFixed(2) : fmt(kp)} km/px · ` : ""}${fmt(n24)} frames in the last 24 h`;
       card.querySelector(".shottag").textContent = want.set >= 0 ? `${s.use.map(q => catalog.id[q]).join(" ")}` : `${catalog.id[k]} · ${catalog.f1[k]}/${catalog.f2[k]}`;
       const ks = framesOf(cam, body).ks;
-      next = [1, 2, 3, 4, 5, 6].map(d => ks[p + d]).filter(q => q !== undefined).map(q => view(q, catalog.et[q]).key);
+      // look ahead: the next 6 frames, or up to 12 when they come within 4 s of playback (a burst), nearest first
+      const ahead = []; for (let d = 1; d <= 12 && ks[p + d] !== undefined && (d <= 6 || catalog.et[ks[p + d]] - state.et <= 4 * state.speed); d++) ahead.push(ks[p + d]);
+      next = ahead.map(q => view(q, catalog.et[q]).key);
+      // further ahead: each observation coming up is named to the server once, so a mosaic pass in it is worked
+      // out (seconds for its plan) before the clock gets there
+      if (window.cassiniMosaics !== false && S.get("cameras.mosaics"))
+        for (let d = 0; d <= 120 && ks[p + d] !== undefined; d++) {
+          const q = ks[p + d], o = `${catalog.target[q]}|${catalog.obs[q]}`;
+          if (warnedObs.has(o)) continue;
+          warnedObs.add(o);
+          fetch(`${FRAMES}/frames/mosaic/${catalog.id[q]}.webp?warm=1`, { priority: "low" }).catch(() => {});
+        }
       pump();
     }
     // a window made bigger (zoom, resize, full view) asks for the bigger picture
@@ -1942,6 +2202,211 @@ body.phone #excard:not(.full) { width: calc(100% - 16px) !important; left: 8px !
 })();
 </script>
 <script>
+// ---------- flagging pictures ----------
+(function () {
+  const $ = id => document.getElementById(id);
+  const FRAMES = (() => {                       // the frame server, chosen as the camera window chooses it
+    const q = new URLSearchParams(location.search).get("frames");
+    if (q) return q.replace(/\/$/, "");
+    if (/^https?:$/.test(location.protocol) && !/claude\.ai$|claudeusercontent\.com$|claude\.site$/.test(location.hostname)) return location.origin;
+    return "http://localhost:8765";
+  })();
+  const S = window.cassiniSettings, WM = window.cassiniWM;
+  const PICTURES = ".camwin, .bodywin, #reelcard, #moviecard";
+  const TAGS = ["Too dark", "Too bright", "Wrong colour", "Channels misaligned", "Stripes or noise", "Blurry", "Blank or missing", "Off-centre", "Mosaic wrong", "Out of sync"];
+  const pop = $("flagpop"), toast = $("flagtoast"), FLAG_ICON = '<svg viewBox="0 0 10 10" aria-hidden="true"><path d="M2 9.5V1h6l-1.4 2.2L8 5.4H2"/></svg>';
+  const ID = /[NW]\d{10}_\d+/g;
+  let pending = null, count = null;
+
+  // ---- a flag in each picture window's title bar, the camera windows and the ones made later (per-body windows) ----
+  function addButton(w) {
+    if (!w.matches || !w.matches(PICTURES) || w.querySelector(".flagbtn")) return;
+    const bar = w.querySelector(".titlebar"); if (!bar) return;
+    const b = document.createElement("button");
+    b.className = "flagbtn"; b.title = "Flag this picture as odd (R)"; b.setAttribute("aria-label", "Flag this picture"); b.innerHTML = FLAG_ICON;
+    b.addEventListener("click", e => { e.stopPropagation(); begin(w); });
+    b.addEventListener("dblclick", e => e.stopPropagation());
+    b.addEventListener("pointerdown", e => e.stopPropagation());   // not the start of a window drag
+    bar.appendChild(b);
+  }
+  document.querySelectorAll(PICTURES).forEach(addButton);
+  new MutationObserver(ms => ms.forEach(m => m.addedNodes.forEach(n => { if (n.nodeType === 1) addButton(n); }))).observe($("dock").parentNode, { childList: true });
+
+  // ---- what the window shows: the picture's pixels, where they came from, and the frames in it ----
+  const toPng = c => new Promise(res => { try { c.toBlob(b => res(b), "image/png"); } catch (e) { res(null); } });   // null: a picture without CORS
+  function fromImg(img) {
+    const c = document.createElement("canvas"); c.width = img.naturalWidth; c.height = img.naturalHeight;
+    c.getContext("2d").drawImage(img, 0, 0); return c;
+  }
+  function frameInfo(id) {
+    const k = typeof catalog !== "undefined" && catalog ? catalog.id.indexOf(id) : -1;
+    if (k < 0) return { id };
+    const kp = catalog.km_per_px ? catalog.km_per_px[k] : null;
+    return { id, camera: catalog.cam[k] === "N" ? "NAC" : "WAC", filters: `${catalog.f1[k]}/${catalog.f2[k]}`, target: catalog.target[k] || null,
+      observation: catalog.obs ? catalog.obs[k] || null : null, utc: utc(catalog.et[k]), km_per_px: kp || null };
+  }
+  const utc = et => new Date(etToMs(et)).toISOString().slice(0, 19) + "Z";
+  const texts = w => [...w.querySelectorAll(".shottag, .kindtag, #mvtag, .rltag, .rlhow")].map(e => e.textContent.trim()).filter(Boolean);
+  function infoFields(w) {
+    const out = {};
+    w.querySelectorAll("dl.info dt").forEach(dt => { const dd = dt.nextElementSibling; if (dd && dd.textContent.trim() !== "—") out[dt.textContent.trim()] = dd.textContent.trim(); });
+    return out;
+  }
+  async function capture(w) {
+    let canvas = null, src = null, report = null, ids = [], what = null;
+    if (w.id === "moviecard") {
+      const M = window.cassiniMovie && window.cassiniMovie.state, b = M && M.cur && M.buf.get(M.cur.id);
+      if (!M || !M.cur) return null;
+      canvas = $("mvcanvas"); ids = [M.cur.id]; src = b && b.img ? b.img.src : null; what = b && b.kind ? `movie (${b.kind})` : "movie frame";
+    } else if (w.id === "reelcard") {
+      const R = window.cassiniReel && window.cassiniReel.state, s = R && R.shots[R.i];
+      if (!s) return null;
+      canvas = $("rlcanvas" + s.cam); ids = s.ids.slice(); what = "body reel picture";
+      src = `${FRAMES}/frames/reel/${R.target}/${R.i}.webp?mosaic=${R.mosaic ? 1 : 0}`;
+      const b = R.buf.get(R.i); report = b && b.how;
+    } else {
+      const well = w.querySelector(".well"), shot = w.querySelector(".shot");
+      if (!well || !well.classList.contains("has-frame") || !shot.naturalWidth) return null;
+      canvas = fromImg(shot); src = shot.dataset.src || shot.src;
+      try { report = shot.dataset.report ? JSON.parse(shot.dataset.report) : null; } catch (e) {}
+      what = well.classList.contains("mosaic") ? (report && report.observation ? "pass mosaic" : "mosaic") : well.classList.contains("composite") ? "colour composite" : "frame";
+      if (!report && /\/color\.webp/.test(src)) report = await fetch(src).then(r => JSON.parse(r.headers.get("X-Composite") || "null"), () => null);
+      const tag = (w.querySelector(".shottag") || {}).textContent || "";
+      ids = tag.match(ID) || [];
+    }
+    if (report && report.ids) ids = ids.concat([report.ids].flat(2));
+    ids = [...new Set(ids.filter(i => typeof i === "string" && /^[NW]\d{10}_\d+$/.test(i)))];
+    // everything about the picture is read now, with its pixels: playback carries on while the note is typed
+    let tiles = null;
+    if (report && report.observation && typeof catalog !== "undefined" && catalog && catalog.obs) {   // a pass mosaic: its frames so far
+      const cam = ids[0] && ids[0][0];
+      tiles = [];
+      for (let k = 0; k < catalog.id.length; k++) if (catalog.obs[k] === report.observation && catalog.cam[k] === cam && catalog.et[k] <= state.et) tiles.push(catalog.id[k]);
+    }
+    return { canvas, png: await toPng(canvas), src, report, ids, what, labels: texts(w), info: infoFields(w), tiles };
+  }
+
+  // ---- the panel: the picture is taken the moment the flag is pressed; the note can follow at leisure ----
+  async function begin(w) {
+    if (pending) close();
+    const got = await capture(w);
+    if (!got) { say("Nothing to flag in this window yet"); return; }
+    const title = (w.getAttribute("aria-label") || w.querySelector(".titlebar").textContent || "").trim();
+    pending = { w, got, title, tags: new Set(), at: new Date(), et: state.et };
+    const th = pop.querySelector("canvas"), g = th.getContext("2d");
+    g.fillStyle = "#000"; g.fillRect(0, 0, th.width, th.height);
+    const c = got.canvas, r = Math.min(th.width / c.width, th.height / c.height);
+    try { g.drawImage(c, (th.width - c.width * r) / 2, (th.height - c.height * r) / 2, c.width * r, c.height * r); } catch (e) {}
+    pop.querySelector(".fpmeta").textContent = `${title} · ${got.what}\n${utc(state.et).replace("T", " ").replace("Z", " UTC")}\n${got.ids.slice(0, 4).join(" ")}${got.ids.length > 4 ? ` +${got.ids.length - 4}` : ""}`;
+    pop.querySelector(".fpmeta").style.whiteSpace = "pre-line";
+    pop.querySelector(".fptags").innerHTML = TAGS.map(t => `<button aria-pressed="false">${t}</button>`).join("");
+    pop.querySelector("textarea").value = "";
+    // beside the window's picture, kept on screen
+    const box = w.getBoundingClientRect();
+    pop.hidden = false;
+    const pw = pop.offsetWidth, ph = pop.offsetHeight;
+    let x = box.right + 8 + pw < innerWidth ? box.right + 8 : box.left - 8 - pw >= 0 ? box.left - 8 - pw : Math.max(8, Math.min(innerWidth - pw - 8, box.left + 12));
+    let y = Math.max(36, Math.min(innerHeight - ph - 8, box.top + 26));
+    Object.assign(pop.style, { left: x + "px", top: y + "px" });
+    if (!document.body.classList.contains("phone")) pop.querySelector("textarea").focus();
+    else pop.querySelector(".go").focus();
+  }
+  function close() { pop.hidden = true; pending = null; }
+  pop.querySelector(".fptags").addEventListener("click", e => {
+    const b = e.target.closest("button"); if (!b || !pending) return;
+    const on = b.getAttribute("aria-pressed") !== "true"; b.setAttribute("aria-pressed", String(on));
+    on ? pending.tags.add(b.textContent) : pending.tags.delete(b.textContent);
+  });
+  pop.querySelector(".no").addEventListener("click", close);
+  pop.querySelector(".go").addEventListener("click", send);
+  // typing a note never drives the viewer (space, arrows, Escape, F, M…): this runs before every other key handler
+  // (build.py puts this script ahead of movie mode's and the body reels')
+  window.addEventListener("keydown", e => {
+    if (pop.hidden || !pop.contains(e.target)) return;
+    e.stopImmediatePropagation();
+    if (e.key === "Escape") { e.preventDefault(); close(); }
+    else if (e.key === "Enter" && !e.shiftKey && e.target.tagName === "TEXTAREA") { e.preventDefault(); send(); }
+  }, true);
+  pop.addEventListener("pointerdown", e => e.stopPropagation());
+
+  const dataUrl = blob => new Promise(res => { if (!blob) return res(null); const f = new FileReader(); f.onload = () => res(f.result); f.onerror = () => res(null); f.readAsDataURL(blob); });
+  function settings() { const out = {}; if (S) for (const d of S.defined) if (d.type !== "action") out[d.key] = S.get(d.key); return out; }
+  async function send() {
+    if (!pending) return;
+    const p = pending, w = p.w, got = p.got, note = pop.querySelector("textarea").value.trim();
+    close();
+    const link = new URL(location.href); link.searchParams.set("t", utc(p.et).slice(0, 19));
+    const flag = {
+      flagged: p.at.toISOString(), mission_utc: utc(p.et), mission_et: p.et, link: link.href,
+      note, tags: [...p.tags],
+      window: { id: w.id, title: p.title, kind: w.id === "moviecard" ? "movie" : w.id === "reelcard" ? "reel" : w.classList.contains("bodywin") ? "body window" : "camera window",
+        full: w.classList.contains("full"), zoomed: w.classList.contains("zoomed"), width: Math.round(w.getBoundingClientRect().width), height: Math.round(w.getBoundingClientRect().height) },
+      shown: { what: got.what, src: got.src ? new URL(got.src, location.href).href : null, report: got.report || null, labels: got.labels, info: got.info, observation_frames: got.tiles,
+        width: got.canvas.width, height: got.canvas.height },
+      ids: got.ids, frames: got.ids.map(frameInfo),
+      movie: !!(window.cassiniMovie && window.cassiniMovie.on), playing: !!state.playing, speed: state.speed,
+      settings: settings(),
+      client: { agent: navigator.userAgent, dpr: devicePixelRatio, viewport: [innerWidth, innerHeight], phone: document.body.classList.contains("phone") },
+      image: await dataUrl(got.png)
+    };
+    try {
+      const r = await fetch(`${FRAMES}/flags`, { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify(flag) });
+      if (!r.ok) throw new Error(r.status);
+      const res = await r.json();
+      setCount(res.count);
+      const b = w.querySelector(".flagbtn"); if (b) { b.classList.add("done"); setTimeout(() => b.classList.remove("done"), 2500); }
+      say(`Flagged · ${res.count} so far`, res.name);
+    } catch (e) {
+      say(e.message === "404" || e.message === "501" ? "This frame server can't save flags yet (it needs restarting on the new version)" : "Could not save the flag: the frame server did not answer");
+    }
+  }
+
+  // ---- the toast: what happened, Undo for a moment, and the page with every flag ----
+  let toastTimer = 0;
+  function say(text, name) {
+    toast.querySelector("span").textContent = text;
+    const undo = toast.querySelector(".undo");
+    undo.hidden = !name; undo.onclick = () => takeBack(name);
+    const all = toast.querySelector("a"); all.href = `${FRAMES}/flags/`; all.hidden = !name;
+    toast.hidden = false; clearTimeout(toastTimer); toastTimer = setTimeout(() => { toast.hidden = true; }, name ? 6000 : 4000);
+  }
+  async function takeBack(name) {
+    try {
+      const r = await fetch(`${FRAMES}/flags/${encodeURIComponent(name)}/undo`, { method: "POST" });
+      if (!r.ok) throw new Error(r.status);
+      setCount((await r.json()).count); say("Flag taken back");
+    } catch (e) { say("Could not take the flag back"); }
+  }
+
+  // ---- how many so far, in the Cassini OS menu ----
+  const app = document.querySelector(".menu.app ul");
+  const li = document.createElement("li");
+  li.innerHTML = '<button data-flags>Flagged Pictures…<span class="kbd"></span></button>';
+  const sep = app.querySelector("li.sep"); app.insertBefore(li, sep ? sep.nextSibling : null);
+  li.querySelector("button").addEventListener("click", () => window.open(`${FRAMES}/flags/`, "_blank", "noopener"));
+  function setCount(n) { count = n; li.querySelector(".kbd").textContent = n ? String(n) : ""; }
+  fetch(`${FRAMES}/flags/index.json`).then(r => r.ok ? r.json() : null, () => null).then(d => { if (d) setCount(d.count); });
+
+  // ---- R flags the picture in front (the one in full view, else the topmost picture window), as F gives it full view ----
+  window.addEventListener("keydown", e => {
+    if (e.metaKey || e.ctrlKey || e.altKey || /^(INPUT|SELECT|TEXTAREA)$/.test(e.target.tagName) || e.key.toLowerCase() !== "r" || !pop.hidden) return;
+    if (document.body.classList.contains("noflags")) return;
+    const f = document.querySelector(".win.full");
+    const w = f || [...document.querySelectorAll(PICTURES)].filter(x => !x.hidden).sort((a, b) => (+b.style.zIndex || 0) - (+a.style.zIndex || 0))[0];
+    if (w) { e.preventDefault(); begin(w); }
+  });
+
+  if (S) {
+    S.define({ key: "interface.flags", section: "Interface", label: "Flag button on picture windows", type: "toggle", value: true,
+      hint: "A flag in each picture window's title bar (or R) saves the picture as shown, with its frames and the mission time, to the frame server's flagged-pictures folder, so odd pictures can be looked into later." });
+    S.on("interface.flags", v => document.body.classList.toggle("noflags", !v));
+    S.define({ key: "interface.flagged", section: "Interface", label: "Flagged pictures", type: "action", button: "Open",
+      hint: "Every flagged picture on one page, newest first, with a link back to its moment.", run: () => window.open(`${FRAMES}/flags/`, "_blank", "noopener") });
+  }
+  window.cassiniFlags = { begin, get count() { return count; } };
+})();
+</script>
+<script>
 // ---------- movie mode ----------
 (function () {
   const $ = id => document.getElementById(id);
@@ -1968,52 +2433,114 @@ body.phone #excard:not(.full) { width: calc(100% - 16px) !important; left: 8px !
     M.cat = catalog; M.i = i;
     return i;
   }
-  const at = i => { const k = i >= 0 ? order[i] : undefined; return k === undefined ? null : { id: catalog.id[k], et: catalog.et[k], k }; };
+  const at = i => { const k = i >= 0 ? order[i] : undefined; return k === undefined ? null : { id: catalog.id[k], et: catalog.et[k], k, i }; };
 
   // ---- frames: loaded ahead of the play head so 24 fps does not stutter ----
+  // Each frame goes through the pipeline like the camera windows' pictures (movie.processed, on by default): the
+  // frame that completes a filter set shows the set's colour composite, a new tile of a mosaic pass the mosaic so far,
+  // and every other frame is processed on its own (/frames/processed: stacked, calibrated, on the pipeline's display
+  // scale). The processed frame is always loaded; a composite or mosaic is loaded beside it and shown when it is ready in
+  // time. The film never waits more than GRACE ms (from when the frame was first asked for) for a composite or mosaic:
+  // the server makes a new mosaic tile in seconds the first time, so on a pass nobody has watched yet the film plays the
+  // processed frames and the mosaic comes up where it is ready (a frame still on screen when it arrives swaps to it).
+  // A server that has none (404) or cannot make one moves on to the next choice; the archive frame is the last resort.
+  const S = window.cassiniSettings, GRACE = 1200;
+  const opt = (key, dflt) => (S && S.get(key) !== undefined ? S.get(key) : dflt);
+  const KIND = { true: "true colour", false: "false colour", two: "two-filter colour" };
   const size = () => (window.cassiniWM && window.cassiniWM.big ? window.cassiniWM.big(card, card.querySelector(".mvwell")) : card.classList.contains("zoomed")) ? 1024 : 512;
+  // the pictures frame f can be shown as, each { url, kind }: best (mosaic, then composite) and base (processed, then raw)
+  function choices(f) {
+    const id = f.id, sz = size(), raw = { url: `${FRAMES}/frames/${id}.webp?size=${sz}`, kind: "" };
+    if (M.raw || !opt("movie.processed", true)) return { best: [], base: [raw] };
+    if (!catalog.setOf && window.cassiniFeeds) window.cassiniFeeds.prep();
+    const best = [], k = f.k, si = catalog.setOf ? catalog.setOf[k] : -1, s = si >= 0 ? catalog.sets[si] : null;
+    const comp = s && s.use.includes(k) && s.ready === catalog.et[k] && opt("cameras.composites", true);
+    // a possible mosaic tile: the camera's frame before this one is of the same body and observation (and a frame of
+    // a colour set only once its composite is up, as in the camera windows)
+    let prev = -1;
+    for (let j = f.i - 1; j >= Math.max(0, f.i - 64); j--) if (catalog.cam[order[j]] === catalog.cam[k]) { prev = order[j]; break; }
+    const tile = prev >= 0 && catalog.target[prev] === catalog.target[k] && catalog.obs[prev] === catalog.obs[k] && (!s || comp);
+    if (tile && opt("movie.mosaics", true) && window.cassiniMosaics !== false) best.push({ url: `${FRAMES}/frames/mosaic/${comp ? catalog.id[s.use[0]] : id}.webp?size=${sz}`, kind: "mosaic" });
+    if (comp) best.push({ url: `${FRAMES}/frames/color.webp?ids=${s.use.map(q => catalog.id[q]).join(",")}&size=${sz}`, kind: KIND[s.kind] || "colour" });
+    return { best, base: [{ url: `${FRAMES}/frames/processed/${id}.webp?size=${sz}`, kind: "processed" }, raw] };
+  }
+  // one chain of choices: tried in turn until one loads (ok true) or none does (ok false); a deferred one waits for
+  // c.start() (fill starts composites and mosaics a few at a time)
+  function chain(list, onload, deferred) {
+    const c = { list, n: 0, img: null, ok: list.length ? null : false, kind: "", started: false };
+    const load = () => {
+      const im = new Image(), it = list[c.n];
+      c.img = im; im.decoding = "async"; im.crossOrigin = "anonymous";
+      im.onload = () => { c.ok = true; c.kind = it.kind; onload(); };
+      im.onerror = () => { if (++c.n < list.length) load(); else c.ok = false; };
+      im.src = it.url;
+    };
+    c.start = () => { if (!c.started && list.length) { c.started = true; load(); } };
+    c.stop = () => { if (c.img && c.ok === null) { c.img.onload = c.img.onerror = null; c.img.src = ""; } };
+    if (!deferred) c.start();
+    return c;
+  }
+  // b.ok: null while the film should wait for frame b, then true (b.img, b.kind are what to show) or false (no frame)
+  function settle(b) {
+    const best = b.best.ok, base = b.base.ok;
+    if (best) Object.assign(b, { ok: true, img: b.best.img, kind: b.best.kind });
+    else if (base && (best === false || performance.now() - b.since > GRACE)) Object.assign(b, { ok: true, img: b.base.img, kind: b.base.kind });
+    else if (base === false && best === false) b.ok = false;
+    return b;
+  }
   function want(f) {
     let b = M.buf.get(f.id);
     if (!b || b.size !== size()) {
-      b = { img: new Image(), ok: null, size: size() };
-      b.img.decoding = "async";
-      b.img.onload = () => { b.ok = true; };
-      b.img.onerror = () => { b.ok = false; };
-      b.img.src = `${FRAMES}/frames/${f.id}.webp?size=${b.size}`;
+      if (b) { b.best.stop(); b.base.stop(); }
+      const c = choices(f);
+      b = { ok: null, img: null, kind: "", size: size(), since: performance.now() };
+      // a composite or mosaic that arrives while its frame is on screen replaces the processed frame there
+      b.best = chain(c.best, () => { if (M.on && M.cur && M.cur.id === f.id && b.kind !== b.best.kind) { settle(b); draw(b.img); tag(f, b); } }, true);
+      b.base = chain(c.base, () => {});
       M.buf.set(f.id, b);
     }
-    return b;
+    return settle(b);
   }
+  // A browser opens only six connections to the frame server, and a mosaic tile nobody has asked for before takes the
+  // server seconds: so at most BEST_FLYING composites and mosaics are asked for at once, nearest the play head first,
+  // and the processed frames, quick to make, always have connections left.
+  const BEST_FLYING = 2;
   function fill(i) {
-    const ahead = Math.max(6, Math.min(40, Math.round(M.fps * 1.5))), keep = new Set();
-    let flying = 0;
+    // processed frames take the server a fraction of a second each the first time, so the film asks well ahead
+    const ahead = Math.max(12, Math.min(72, Math.round(M.fps * 3))), keep = new Set();
+    let flying = 0, best = 0;
+    for (const b of M.buf.values()) if (b.best.started && b.best.ok === null) best++;
     for (let j = Math.max(0, i); j <= i + ahead; j++) {
       const f = at(j); if (!f) break;
       keep.add(f.id);
-      const b = M.buf.get(f.id);
-      if (b && b.ok === null) flying++;
-      else if (!b && flying < 8) { want(f); flying++; }
+      let b = M.buf.get(f.id);
+      if (b && b.base.ok === null) flying++;
+      else if (!b && flying < 8) { b = want(f); flying++; }
+      if (b && !b.best.started && b.best.ok === null && best < BEST_FLYING) { b.best.start(); best++; }
     }
-    for (const id of M.buf.keys()) if (!keep.has(id)) M.buf.delete(id);
+    // pictures the film has passed or skipped: dropped, and their requests called off so they free their connections
+    for (const [id, b] of M.buf) if (!keep.has(id)) { b.best.stop(); b.base.stop(); M.buf.delete(id); }
   }
+  function drop() { for (const b of M.buf.values()) { b.best.stop(); b.base.stop(); } M.buf.clear(); }
   function blank() { g.fillStyle = "#000"; g.fillRect(0, 0, cv.width, cv.height); }
   function draw(img) {
     const s = cv.width, r = Math.min(s / img.naturalWidth, s / img.naturalHeight), w = img.naturalWidth * r, h = img.naturalHeight * r;
     blank(); g.drawImage(img, (s - w) / 2, (s - h) / 2, w, h);
   }
   const fmtDate = et => { const s = new Date(etToMs(et)).toISOString(); return `${s.slice(0, 10)} ${s.slice(11, 19)} UTC`; };
+  const tag = (f, b) => { const k = f.k; $("mvtag").textContent = `${fmtDate(f.et)} · ${titleCase(catalog.target[k] || "Unknown")} · ${catalog.cam[k] === "N" ? "NAC" : "WAC"} ${catalog.f1[k]}/${catalog.f2[k]}${b.ok && b.kind && b.kind !== "processed" ? ` · ${b.kind}` : ""}`; };
   let skipTimer = 0;
   // put frame i on screen and move the mission clock to it
   function show(i) {
     const f = at(i), b = want(f), prev = M.cur;
     M.cur = { id: f.id, et: f.et }; M.cat = catalog; M.i = i;
+    M.late = b.ok ? null : f;   // stepped to a picture still being made: it goes up when it arrives (tick)
     if (b.ok) { draw(b.img); $("mvmsg").textContent = ""; }
     else if (b.ok === false) { blank(); $("mvmsg").innerHTML = "<b>No frame</b>" + f.id; }
     setTime(f.et);
     const span = state.view[1] - state.view[0];
     if (state.et < state.view[0] || state.et > state.view[1] - span * 0.05) setView(span, state.et + span * 0.4);
-    const k = f.k;
-    $("mvtag").textContent = `${fmtDate(f.et)} · ${titleCase(catalog.target[k] || "Unknown")} · ${catalog.cam[k] === "N" ? "NAC" : "WAC"} ${catalog.f1[k]}/${catalog.f2[k]}`;
+    tag(f, b);
     $("mvcount").textContent = f.id;
     if (prev && f.et - prev.et > 3 * 3600) {   // a stretch without frames: say how much time the cut left out
       $("mvskip").textContent = `skipped ${fmtDur(f.et - prev.et)}`; $("mvskip").classList.add("on");
@@ -2027,6 +2554,7 @@ body.phone #excard:not(.full) { width: calc(100% - 16px) !important; left: 8px !
     if (yearReady() && !state.dragging) {
       const i = here();
       fill(i);
+      if (M.late && M.cur && M.late.id === M.cur.id && M.cat === catalog) { const b = want(M.late); if (b.ok !== null) show(M.late.i); }
       if (M.playing && now >= M.due) {
         let shown = -1, j = i;
         while (now >= M.due) {
@@ -2034,13 +2562,14 @@ body.phone #excard:not(.full) { width: calc(100% - 16px) !important; left: 8px !
           while (at(j) && M.buf.get(at(j).id) && M.buf.get(at(j).id).ok === false) j++;   // frames the server lacks are cut too
           const f = at(j);
           if (!f) { if (shown < 0 && !(mission && yearOf(state.et) < mission.years[mission.years.length - 1])) setMoviePlaying(false); break; }
-          if (!want(f).ok) break;
+          const b = want(f);
+          if (!b.ok) break;
           shown = j; M.due += 1000 / M.fps;
         }
         if (shown >= 0) { show(shown); M.due = Math.max(M.due, now - 250); M.waitSince = 0; }
         else if (M.playing && at(j)) {
           if (!M.waitSince) M.waitSince = now;
-          else if (now - M.waitSince > 600) $("mvcount").textContent = "loading…";
+          else if (now - M.waitSince > 600) $("mvcount").textContent = "processing…";
         }
       }
     }
@@ -2052,7 +2581,7 @@ body.phone #excard:not(.full) { width: calc(100% - 16px) !important; left: 8px !
   // the film starts on the frame the camera last took and carries on from there
   function start() {
     if (!catalog || M.on) return;
-    M.on = true; M.buf.clear(); blank();
+    M.on = true; drop(); blank();
     setPlaying(false);
     // the movie takes the camera's place; the camera windows come back when it ends
     M.hidden = ["imgcard", "wacard"].map($).filter(w => w && !w.hidden);
@@ -2069,7 +2598,7 @@ body.phone #excard:not(.full) { width: calc(100% - 16px) !important; left: 8px !
   }
   function stop() {
     if (!M.on) return;
-    M.on = false; M.buf.clear();
+    M.on = false; drop();
     card.hidden = true;
     M.hidden.forEach(w => { w.hidden = false; }); M.hidden = [];
     $("movie").setAttribute("aria-pressed", "false");
@@ -2080,6 +2609,16 @@ body.phone #excard:not(.full) { width: calc(100% - 16px) !important; left: 8px !
   // ---- controls ----
   $("movie").addEventListener("click", () => (M.on ? stop() : start()));
   $("mvplay").addEventListener("click", () => setMoviePlaying(!M.playing));
+  // processing on or off (movie.processed; the mosaics alone: movie.mosaics): the pictures ahead are asked for again
+  const proc = $("mvproc");
+  proc.addEventListener("click", () => { const v = !opt("movie.processed", true); if (S) S.set("movie.processed", v); else { M.raw = !v; refresh(); } });
+  function refresh() {
+    proc.setAttribute("aria-pressed", String(!M.raw && opt("movie.processed", true)));
+    if (!M.on) return;
+    drop();
+    if (M.cur && M.cat === catalog) show(M.i);
+  }
+  if (S) for (const key of ["movie.processed", "movie.mosaics"]) S.on(key, refresh);
   $("mvfps").addEventListener("input", e => {
     M.fps = +e.target.value; $("mvfpsv").textContent = M.fps + " fps";
     try { localStorage.setItem("cassini-os-movie-fps", M.fps); } catch (err) {}
@@ -2095,7 +2634,8 @@ body.phone #excard:not(.full) { width: calc(100% - 16px) !important; left: 8px !
     else if (e.key === "ArrowRight" || e.key === "ArrowLeft") {
       e.preventDefault(); setMoviePlaying(false);
       const j = here() + (e.key === "ArrowRight" ? 1 : -1); if (at(j)) show(j);
-    } else if (e.key === "Escape") stop();
+    } else if (e.key === "p" || e.key === "P") proc.click();
+    else if (e.key === "Escape") stop();
   }, true);
   window.addEventListener("keydown", e => { if (!M.on && (e.key === "m" || e.key === "M") && !e.metaKey && !e.ctrlKey && e.target === document.body) start(); });
   $("play").addEventListener("click", () => { if (M.on) stop(); }, true);
@@ -2466,7 +3006,8 @@ body.phone #excard:not(.full) { width: calc(100% - 16px) !important; left: 8px !
   }
 
   // ---- thumbnails: made by the frame server through the pipeline, by the rule in build_data.thumb_hint ----
-  // the whole pass when it is a mosaic of three or more tiles, else the colour set, else the single frame
+  // the whole pass when it is a mosaic of three or more tiles (in colour, when the highlight has a colour set), else
+  // the colour set, else the single frame
   async function thumbUrl(e) {
     const t = e.thumb || {};
     if (e.kind === "milestone") {   // the Huygens descent: the probe's own pictures (the coarsest DISR mosaic)
@@ -2477,7 +3018,10 @@ body.phone #excard:not(.full) { width: calc(100% - 16px) !important; left: 8px !
       try {
         const r = await fetch(`${FRAMES}/frames/mosaic/${t.mosaic}.webp?size=256`);
         const how = r.ok ? JSON.parse(r.headers.get("X-Reel") || "{}") : null;
-        if (how && Math.max(+how.of || 0, +how.mosaic || 0, (how.tiles || []).length || 0) >= 3) return URL.createObjectURL(await r.blob());
+        const tiles = how && Math.max(+how.of || 0, +how.mosaic || 0, (how.tiles || []).length || 0);
+        const filters = how && (Array.isArray(how.filters) ? how.filters.length : +how.filters || 0);
+        // a grey mosaic gives way to a colour set when the highlight has one
+        if (tiles >= 3 && (filters >= 3 || !t.color)) return URL.createObjectURL(await r.blob());
       } catch (err) {}
     }
     if (t.color) return `${FRAMES}/frames/color.webp?ids=${t.color.join(",")}&size=256`;
@@ -2615,7 +3159,9 @@ body.phone #excard:not(.full) { width: calc(100% - 16px) !important; left: 8px !
       hint: "The closer Cassini is to its target (for its size), the bigger the music: louder, brighter chimes, a swelling chord and a quickening pulse." });
   D({ key: "sound.length", label: "Note length", type: "range", value: 1.4, min: 0.2, max: 4, step: 0.1, unit: "s",
       hint: "How long a chime rings at 10 min/s. Faster playback shortens it." });
-  D({ key: "sound.echo", label: "Echo", type: "range", value: 35, min: 0, max: 100, step: 1, unit: "%" });
+  // (a new key, so a browser that saved the old, heavier echo setting starts from the lighter default)
+  D({ key: "sound.reverb", label: "Reverb", type: "range", value: 15, min: 0, max: 100, step: 1, unit: "%",
+      hint: "How much of each chime echoes back, and for how long." });
   D({ key: "sound.stereo", label: "Sound from the window", type: "toggle", value: true,
       hint: "Each chime comes from where its camera window is on the screen." });
   D({ key: "sound.test", label: "Test", type: "action", button: "Play a chime",
@@ -2631,11 +3177,12 @@ body.phone #excard:not(.full) { width: calc(100% - 16px) !important; left: 8px !
     comp.threshold.value = -18; comp.ratio.value = 4; comp.attack.value = 0.005; comp.release.value = 0.25;
     master.connect(comp).connect(ctx.destination);
     bus = ctx.createGain(); bus.connect(master);
-    // echo: two delays bouncing left and right, each pass darker, like a big empty room
+    // reverb: two short delays bouncing left and right, each pass darker; the Reverb setting sets how much goes in
+    // and how long it rings on
     echoSend = ctx.createGain();
     const dl = ctx.createDelay(2), dr = ctx.createDelay(2), lp = ctx.createBiquadFilter(), merge = ctx.createChannelMerger(2);
-    dl.delayTime.value = 0.37; dr.delayTime.value = 0.53; lp.type = "lowpass"; lp.frequency.value = 2400;
-    echoFb = ctx.createGain(); echoFb.gain.value = 0.45;
+    dl.delayTime.value = 0.23; dr.delayTime.value = 0.31; lp.type = "lowpass"; lp.frequency.value = 1800;
+    echoFb = ctx.createGain(); echoFb.gain.value = 0.2;
     bus.connect(echoSend); echoSend.connect(lp); lp.connect(dl); dl.connect(dr); dr.connect(echoFb); echoFb.connect(lp);
     dl.connect(merge, 0, 0); dr.connect(merge, 0, 1); merge.connect(master);
     humS = hum(-0.55, "triangle"); humD = hum(0.55, "sine");
@@ -2643,7 +3190,7 @@ body.phone #excard:not(.full) { width: calc(100% - 16px) !important; left: 8px !
     padF = ctx.createBiquadFilter(); padF.type = "lowpass"; padF.frequency.value = 300; padF.Q.value = 0.7;
     padG = ctx.createGain(); padG.gain.value = 0; padF.connect(padG); padG.connect(bus);
     [38, 45, 50, 54, 57].forEach((m, i) => { const o = ctx.createOscillator(); o.type = i ? "sine" : "triangle"; o.frequency.value = hz(m); o.detune.value = (i % 2 ? 1 : -1) * 4; o.connect(padF); o.start(); });
-    if (off) { master.gain.value = (S.get("sound.volume") / 100) ** 1.5; echoSend.gain.value = S.get("sound.echo") / 100 * 0.6; }
+    if (off) { const r = S.get("sound.reverb") / 100; master.gain.value = (S.get("sound.volume") / 100) ** 1.5; echoSend.gain.value = r * 0.5; echoFb.gain.value = 0.15 + 0.35 * r; }
     else levels();
   }
   // a continuous tone: two slightly detuned oscillators through a soft filter, with a vibrato it can be given
@@ -2661,7 +3208,8 @@ body.phone #excard:not(.full) { width: calc(100% - 16px) !important; left: 8px !
     if (!ctx) return;
     const t = ctx.currentTime, on = S.get("sound.on");
     master.gain.setTargetAtTime(on ? (S.get("sound.volume") / 100) ** 1.5 : 0, t, 0.08);
-    echoSend.gain.setTargetAtTime(S.get("sound.echo") / 100 * 0.6, t, 0.1);
+    const r = S.get("sound.reverb") / 100;
+    echoSend.gain.setTargetAtTime(r * 0.5, t, 0.1); echoFb.gain.setTargetAtTime(0.15 + 0.35 * r, t, 0.1);
   }
   let waiting = false, gestured = false;
   function start() {
@@ -2891,7 +3439,7 @@ body.phone #excard:not(.full) { width: calc(100% - 16px) !important; left: 8px !
     if ((e.key === "s" || e.key === "S") && !e.metaKey && !e.ctrlKey && !e.altKey && !/^(INPUT|SELECT|TEXTAREA)$/.test(e.target.tagName)) S.set("sound.on", !S.get("sound.on"));
   });
   S.on("sound.on", v => { if (v) start(); levels(); button(); });
-  for (const k of ["sound.volume", "sound.echo"]) S.on(k, levels);
+  for (const k of ["sound.volume", "sound.reverb"]) S.on(k, levels);
 })();
 </script>
 <script>
@@ -3338,15 +3886,15 @@ function iauMatrix(b, et) {
 
 // ---------- scene setup ----------
 const canvas = document.getElementById("gl");
-const renderer = new THREE.WebGLRenderer({ canvas, antialias: true, logarithmicDepthBuffer: true, preserveDrawingBuffer: true });
-renderer.setPixelRatio(Math.min(window.devicePixelRatio, 2));
+const renderer = new THREE.WebGLRenderer({ canvas, antialias: true, logarithmicDepthBuffer: true, powerPreference: "high-performance" });
+renderer.setPixelRatio(window.cassiniPerf ? cassiniPerf.pixelRatio() : Math.min(window.devicePixelRatio, 2));
 const scene = new THREE.Scene();
 // HUD layer: orbits, trail and camera cone render into their own canvas when the page provides one,
 // so the page can give them a neon glow without blurring the planets.
 const hudCanvas = document.getElementById("hud");
 const hudScene = hudCanvas ? new THREE.Scene() : scene;
-const hudRenderer = hudCanvas ? new THREE.WebGLRenderer({ canvas: hudCanvas, antialias: true, logarithmicDepthBuffer: true, preserveDrawingBuffer: true }) : null;
-if (hudRenderer) { hudRenderer.setPixelRatio(Math.min(window.devicePixelRatio, 2)); hudRenderer.setClearColor(0x000000, 1); }
+const hudRenderer = hudCanvas ? new THREE.WebGLRenderer({ canvas: hudCanvas, antialias: true, logarithmicDepthBuffer: true }) : null;
+if (hudRenderer) { hudRenderer.setPixelRatio(window.cassiniPerf ? cassiniPerf.hudPixelRatio() : Math.min(window.devicePixelRatio, 2)); hudRenderer.setClearColor(0x000000, 1); }
 renderer.setClearColor(new THREE.Color(THEME.clear), 1);   // not scene.background: the scene is drawn in two passes
 const camera = new THREE.PerspectiveCamera(45, 1, 1e-8, 1e9);
 const controls = new THREE.OrbitControls(camera, canvas);
@@ -3411,15 +3959,21 @@ const TEX_FILES = { SATURN: "saturn", MIMAS: "mimas", ENCELADUS: "enceladus", TE
 const SHAPES = { HYPERION: "data/textures/models/hyperion.mesh.b64.txt", PHOEBE: "data/textures/models/phoebe.mesh.b64.txt" };
 const shapeGeom = {};
 const texLoader = new THREE.TextureLoader();
+const bitmapLoader = typeof createImageBitmap === "function" && THREE.ImageBitmapLoader ? new THREE.ImageBitmapLoader().setOptions({ imageOrientation: "flipY", premultiplyAlpha: "none" }) : null;
+function loadTexture(url, onLoad, onError) {
+  const plain = () => texLoader.load(url, onLoad, undefined, onError);
+  if (!bitmapLoader) return plain();
+  bitmapLoader.load(url, bmp => { const t = new THREE.CanvasTexture(bmp); t.flipY = false; onLoad(t); }, undefined, plain);
+}
 function loadMap(name, uniforms) {
   const f = TEX_FILES[name]; if (!TEX_ON || !f) return;
   // Hyperion's and Venus's maps only exist up to 2k
   const dir = (name === "HYPERION" || name === "VENUS") && TEX_DIR.endsWith("4k/") ? "data/textures/2k/" : TEX_DIR;
-  texLoader.load(dir + f + ".webp", t => {
-    t.anisotropy = renderer.capabilities.getMaxAnisotropy();
+  loadTexture(dir + f + ".webp", t => {
+    t.anisotropy = Math.min(8, renderer.capabilities.getMaxAnisotropy());
     t.wrapS = THREE.RepeatWrapping;
     uniforms.map.value = t; uniforms.hasMap.value = 1;
-  }, undefined, () => console.warn("texture missing for " + name));
+  }, () => console.warn("texture missing for " + name));
 }
 // shape models: "CMS1", nvert, nidx, int16 xyz (fraction of max radius, body axes), uint16 uv, uint16/uint32 indices
 async function loadShapes() {
@@ -3549,8 +4103,8 @@ function makeMoon(name, b) {
         #include <logdepthbuf_fragment>
         vec3 nb = normalize(vBody / radii);
         vec3 n = normalize(toScene * (shape > 0.5 ? normalize(vNrm) : nb));
-        float m = fbm(nb * 5.0) - 0.5;
-        float craters = smoothstep(0.62, 0.7, vnoise(nb * 22.0)) * 0.12;
+        float m = 0.0, craters = 0.0;
+        if (hasMap < 0.5) { m = fbm(nb * 5.0) - 0.5; craters = smoothstep(0.62, 0.7, vnoise(nb * 22.0)) * 0.12; }
         vec3 alb = color * (1.0 + 0.32 * m - craters);
         float mu0 = dot(n, sunDir);
         float L = max(mu0, 0.0);
@@ -4558,44 +5112,25 @@ function buildUi() {
 }
 // ---------- follow the camera: the view swings gently to look along Cassini's camera boresight ----------
 const FOLLOW_TAU = 1.2;            // seconds of screen time to close ~63% of the gap
-const FOLLOW_IDLE = 1200;          // mission seconds without imaging before the view turns to the biggest body
 let followHoldUntil = 0;           // the user's own orbiting wins for a moment
 controls.addEventListener("start", () => { followHoldUntil = Infinity; });
 controls.addEventListener("end", () => { followHoldUntil = performance.now() + 2500; });
 function setFollow(on) {
   state.follow = on && !!att;
-  if (!state.follow) { followBody = null; $("followcam").textContent = "Follow camera"; }
   $("followcam").setAttribute("aria-pressed", String(state.follow));
   sBore.set(0, 0, 0);
   if (state.follow && state.focus !== "CASSINI") setFocus("CASSINI", 6e-5);
 }
 const qFollow = new Float64Array(4), vFollow = new THREE.Vector3(), sBore = new THREE.Vector3(), upFollow = new THREE.Vector3();
-let followLive = false, followBody = null;
-// the body that looks largest from Cassini right now; a new pick must look 20% bigger to take over
-function biggestBody() {
-  let best = null, bestA = 0, curA = 0;
-  for (const n in meshes) {
-    if (!pos[n] || n === "CASSINI" || n === "HUYGENS" || !shown(n)) continue;
-    const d = len(sub(pos[n], pos.CASSINI, tmp)), a = Math.asin(Math.min(1, meshes[n].radius / d));
-    if (a > bestA) { bestA = a; best = n; }
-    if (n === followBody) curA = a;
-  }
-  if (followBody && curA * 1.2 >= bestA) return followBody;
-  return best;
-}
+let followLive = false;
 function updateFollow(dt) {
   followLive = false;
   if (!state.follow || !state.pointed || state.focus !== "CASSINI" || performance.now() < followHoldUntil) return;
-  const { i, age, inSequence } = imagingState(state.et);
-  const was = followBody;
-  followBody = age > FOLLOW_IDLE && !inSequence ? biggestBody() : null;
-  if (followBody !== was) $("followcam").textContent = followBody ? `Following ${titleCase(followBody)}` : "Follow camera";
-  if (followBody) toScene(norm(sub(pos[followBody], pos.CASSINI, tmp)), vFollow);
-  else {
-    const c = CAM_TO_BODY[i >= 0 && catalog.cam[order[i]] === "W" ? "W" : "N"];
-    qmul([c[0], -c[1], -c[2], -c[3]], qBody, qFollow, 0);
-    toScene(q2rows(qFollow)[2], vFollow);
-  }
+  // always the boresight of the camera that took the latest picture, even through long quiet stretches
+  const { i } = imagingState(state.et);
+  const c = CAM_TO_BODY[i >= 0 && catalog.cam[order[i]] === "W" ? "W" : "N"];
+  qmul([c[0], -c[1], -c[2], -c[3]], qBody, qFollow, 0);
+  toScene(q2rows(qFollow)[2], vFollow);
   // ease the view's direction toward the boresight, turning about the shortest axis
   if (sBore.lengthSq() < 0.5) sBore.copy(camera.position).negate().normalize();
   const ang = sBore.angleTo(vFollow);
@@ -4650,7 +5185,14 @@ function resize() {
 }
 window.addEventListener("resize", resize);
 
-let lastT = performance.now(), lastTrailEt = -1e99, lastTrailFocus = "", lastReady = true;
+let lastT = performance.now(), lastTrailEt = -1e99, lastTrailFocus = "", lastReady = true, lastPast = -1, momentEts = null;
+// how many moments in the list come before et (their times are read from the list once, and again if it changes)
+function momentsBefore(et) {
+  const list = $("mlist");
+  if (!momentEts || momentEts.n !== list.childElementCount) momentEts = { n: list.childElementCount, ets: [...list.querySelectorAll("li[data-et]")].map(li => +li.dataset.et) };
+  let c = 0; for (const t of momentEts.ets) if (t < et) c++;
+  return c;
+}
 function frame(now) {
   const dt = Math.min(0.1, (now - lastT) / 1000); lastT = now;
   const ready = yearReady();
@@ -4681,9 +5223,11 @@ function frame(now) {
   updateFollow(dt);
   controls.update();
   aimFollow();
-  renderer.clear();
+  const draw = !window.cassiniPerf || cassiniPerf.draw(now);
+  if (draw) renderer.clear();
   const cd = camera.position.distanceTo(cassini.position);
-  if (cd < 0.01) {
+  if (!draw) {}
+  else if (cd < 0.01) {
     camera.layers.disable(1);
     renderer.render(scene, camera);
     camera.layers.enable(1);
@@ -4696,11 +5240,17 @@ function frame(now) {
     renderer.render(scene, closeCam);
     cassini.scale.setScalar(cs);
   } else renderer.render(scene, camera);
-  if (hudRenderer) { if (window.studyBeforeHud) window.studyBeforeHud(); hudRenderer.render(hudScene, camera); if (window.studyAfterRender) window.studyAfterRender(); }
+  if (hudRenderer && draw && !document.body.classList.contains("nohud")) {
+    if (window.studyBeforeHud) window.studyBeforeHud();
+    hudRenderer.render(hudScene, camera);
+    if (window.studyAfterRender) window.studyAfterRender();
+  }
+  if (window.cassiniPerf) cassiniPerf.frame(now, draw);
   updateLabels();
   updateHud();
   drawTimeline();
-  document.querySelectorAll("#mlist li").forEach(li => li.classList.toggle("past", +li.dataset.et < state.et - 3600));
+  const past = momentsBefore(state.et - 3600);
+  if (past !== lastPast) { lastPast = past; document.querySelectorAll("#mlist li").forEach(li => li.classList.toggle("past", +li.dataset.et < state.et - 3600)); }
   requestAnimationFrame(frame);
 }
 
