@@ -307,6 +307,7 @@ WHITE_PCT = 99.5     # balanced: the percentile of the lit pixels of the brighte
 MAX_STRETCH = 1.4    # balanced: white at most this many times darker than the classic white (the brightest
                      # pixel), so a picture is never stretched far enough to show its scan lines, compression
                      # blocks and 8-bit steps
+SKY_DARK = 99       # balanced composites: this percentile of the sky's brightness is below the toe (tone)
 SHOULDER = 0.8       # balanced composites: above this share of white, brightness rolls off softly instead
                      # of clipping (limbs and ring highlights past the white keep their shape)
 
@@ -392,10 +393,17 @@ def load_linear(labels, images=None, iofs=None):
     iofs = _calibrated(labels, images, iofs)
     if iofs is None:
         return None
-    levels, margin, white, _ = _balanced_scale(iofs)
+    levels, margin, white, measured = _balanced_scale(iofs)
     if white <= 0:
         return None
-    return [(iof - np.float32(level)) / np.float32(white) for iof, level in zip(iofs, levels)], margin / white
+    channels = [(iof - np.float32(level)) / np.float32(white) for iof, level in zip(iofs, levels)]
+    margin /= white
+    if measured:
+        # the toe starts no lower than the sky's own brightness noise (SKY_DARK of the sky's pixels stay black),
+        # since the gamma lifts even a tiny remainder into visible grain
+        lum = np.mean(channels, axis=0)[_sky(iofs)]
+        margin = max(margin, 1.5 * float(np.percentile(lum, SKY_DARK)))
+    return channels, margin
 
 
 """
@@ -445,6 +453,16 @@ def picture_scale(iofs, sky_fraction=0.1, sky_percentile=98):
 
 
 """
+Sky is where every channel is dark
+"""
+def _sky(iofs):
+    sky = np.ones(iofs[0].shape, dtype=bool)
+    for iof in iofs:
+        sky &= iof < 0.05 * np.percentile(iof, 99.9)
+    return sky
+
+
+"""
 The balanced scale of one picture: (sky level per channel, one noise margin, white, whether the sky was
 measured), in I/F. The sky level (sky_levels) is the real offset left after the bias (dark current, stray
 light), which differs between channels, so the sky stays neutral; the margin above it, the same for every
@@ -452,9 +470,7 @@ channel, keeps the sky's noise from coming out as colored speckle (a margin per 
 percentile, takes more off the noisiest channel and tints dim limbs and terminators).
 """
 def _balanced_scale(iofs, sky_fraction=0.1, sky_percentile=98):
-    sky = np.ones(iofs[0].shape, dtype=bool)
-    for iof in iofs:
-        sky &= iof < 0.05 * np.percentile(iof, 99.9)
+    sky = _sky(iofs)
     measured = bool(sky.mean() > sky_fraction)
     levels, margin = [0.0] * len(iofs), 0.0
     if measured:
