@@ -381,7 +381,8 @@ body.idle .camwin .chans { opacity: .8; }
    one shown above it; click or drag to move through the pass */
 .filmstrip { display: none; gap: 3px; }
 .filmstrip.on { display: grid; }
-.filmstrip .thumbs { display: grid; grid-template-columns: repeat(7, minmax(0, 1fr)); gap: 3px; }
+.filmstrip .thumbs { display: grid; grid-template-columns: repeat(7, minmax(0, 44px)); gap: 3px; }
+.camwin.full .filmstrip .thumbs { grid-template-columns: repeat(7, minmax(0, 72px)); }
 .filmstrip .thumbs img { width: 100%; aspect-ratio: 1; object-fit: contain; display: block; border: 1px solid var(--q-line); border-radius: 2px; background: rgba(0,0,0,.55); opacity: .55; cursor: pointer; }
 .filmstrip .thumbs img.now { opacity: 1; border-color: rgba(255,255,255,.45); }
 .filmstrip canvas { width: 100%; height: 14px; display: block; cursor: ew-resize; touch-action: none; }
@@ -1243,7 +1244,11 @@ body.idle .win.full .titlebar { opacity: 0; }
       if (!keep) card.querySelector(".kindtag").textContent = v.set >= 0 ? KIND[catalog.sets[v.set].kind].toUpperCase() : v.movie ? "MOVIE" : "";
       // a movie frame names itself and its place in the filmstrip when it goes up: at high speed the server can make
       // fewer frames a second than the clock passes, and the caption should say which frame is on screen
-      if (v.movie) { card.querySelector(".shottag").textContent = `${catalog.id[v.k]} · ${catalog.f1[v.k]}/${catalog.f2[v.k]}`; filmstrip(v.k); }
+      if (v.movie) {
+        card.querySelector(".shottag").textContent = `${catalog.id[v.k]} · ${catalog.f1[v.k]}/${catalog.f2[v.k]}`;
+        field("frame").textContent = `${titleCase(catalog.target[v.k] || "Unknown")} · ${catalog.id[v.k]}`;
+        filmstrip(v.k);
+      }
       if (v.set >= 0) { channelsFrom(im, catalog.sets[v.set]); howMade(v); }
       if (v.tile && !keep && !mosaicPass(v.k) && modeOf(v.k) !== "mosaic") mosaicOf(v);   // a frame kept behind its pass's mosaic, or of a pass known to be one, asked for it already (update)
       // the sound (sound.html) hears every picture that goes up: its camera, filter wavelength, target and window
@@ -1628,7 +1633,7 @@ body.idle .win.full .titlebar { opacity: 0; }
       // (by this frame, also while the window holds an earlier colour set)
       if ((obsShown && catalog.obs[k] === obsShown) || (want.tile && (mosaicPass(k) || modeOf(k) === "mosaic"))) mosaicOf(want.held ? { key: want.key, set: -1, k } : want, true);
       const kp = catalog.km_per_px[k];
-      field("frame").textContent = `${titleCase(catalog.target[k] || "Unknown")} · ${catalog.id[k]}`;
+      if (!want.movie) field("frame").textContent = `${titleCase(catalog.target[k] || "Unknown")} · ${catalog.id[k]}`;
       const c = catalog.cls[k], pol = /^P\d|^IRP/.test(catalog.f1[k]) || /^IRP/.test(catalog.f2[k]) ? " · polarizer" : "";
       field("filter").innerHTML = `<span class="swatch" style="background:${CLS[c][1]}"></span>${catalog.f1[k]}/${catalog.f2[k]}${nmOf(k) ? ` · ${Math.round(nmOf(k))} nm` : ""}${pol}`;
       field("colour").textContent = !s ? (colourFilter(k) ? "Single filter" : "Clear, no color") : ready
