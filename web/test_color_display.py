@@ -31,8 +31,9 @@ b_margin = np.array(bb) - sky
 print("classic blacks above sky", c_margin.round(4), "white", round(float(cw), 3))
 print("balanced blacks above sky", b_margin.round(4), "white", round(float(bw), 3))
 assert c_margin[0] > 2 * c_margin[2]                      # classic takes more off red than blue
+assert np.all(b_margin >= c_margin.max() - 0.0005)       # balanced: never below the noisiest channel's classic margin
 assert np.ptp(b_margin) < 0.0005                          # balanced: one margin for every channel
-assert cw > 2.5 * body[0] and 0.8 * body[0] < bw < 1.15 * body[0]   # white from the body, not the patch
+assert cw > 2.5 * body[0] and cw / cal.MAX_STRETCH - 1e-6 <= bw < cw   # white below the patch, never stretched past the cap
 # the shoulder: the patch rolls off below full white instead of clipping flat, the body is untouched below the knee
 x = np.array([0.5, 0.79, 1.0, 3.0])
 r = cal.roll_off(x, cal.SHOULDER)
@@ -66,11 +67,11 @@ print("true gain x solved gain", corrected.round(3), "offsets", offsets.round(4)
 assert abs(np.log(gains).mean()) < 0.01                   # the mosaic keeps its level
 assert np.ptp(corrected) < 0.03                          # the tiles agree after the correction
 assert not np.any(np.isclose(gains, 1 / mosaic.calibrated_gain))   # none at the clip
-assert np.all(np.abs(offsets) <= mosaic.max_linear_offset)
+assert np.all(np.abs(offsets) <= mosaic.max_offset)
 # applied on linear values: the identity changes nothing, a gain of 1.05 is 1.05 in linear brightness
 f = frames[1][..., :3].astype(np.float32)
-assert np.array_equal(mosaic._corrected(f, np.ones(3), np.zeros(3), gamma), f)
-up = mosaic._corrected(f, np.full(3, 1.05), np.zeros(3), gamma)
+assert np.array_equal(mosaic._corrected(f, np.ones(3), gamma), f)
+up = mosaic._corrected(f, np.full(3, 1.05), gamma)
 lin_in, lin_out = cal.decode(f / 255, gamma), cal.decode(up / 255, gamma)
 lit = (f > 120) & (f < 200)
 assert np.abs(lin_out[lit] / lin_in[lit] - 1.05).max() < 0.02
@@ -94,7 +95,7 @@ with cal.looking("balanced"):
     false = obs_mosaic.pass_scale(fr, u, ["RED", "GRN", "BL1"], False)
 print("classic filled", {f: round(b / old["white"], 2) for f, b in old["blacks"].items()}, old["gamma"])
 print("balanced filled", {f: round(b / new["white"], 2) for f, b in new["blacks"].items()}, new["gamma"])
-assert old["filled"] and new["filled"] and new["gamma"] == "srgb"
+assert old["filled"] and new["filled"] and new["gamma"] == 1.5
 assert len(set(new["blacks"].values())) == 1 and all(b <= new["white"] for b in new["blacks"].values())
 assert max(b / old["white"] for b in old["blacks"].values()) > 1      # the classic black sat above the white
 # false colour: every filter's black its own 1st percentile, one white (the widest band's)

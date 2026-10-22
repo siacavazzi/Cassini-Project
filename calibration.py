@@ -304,6 +304,9 @@ _look = contextvars.ContextVar("look", default="balanced")
 NOISE_MARGIN = 2.0   # balanced: the black sits this many times the sky's noise (pooled over the channels)
                      # above each channel's sky level
 WHITE_PCT = 99.5     # balanced: the percentile of the lit pixels of the brightest channel that is white
+MAX_STRETCH = 1.4    # balanced: white at most this many times darker than the classic white (the brightest
+                     # pixel), so a picture is never stretched far enough to show its scan lines, compression
+                     # blocks and 8-bit steps
 SHOULDER = 0.8       # balanced composites: above this share of white, brightness rolls off softly instead
                      # of clipping (limbs and ring highlights past the white keep their shape)
 
@@ -393,14 +396,20 @@ def picture_scale(iofs, sky_fraction=0.1, sky_percentile=98):
     # more off the noisiest channel (red) and tints dim limbs and terminators.
     if measured:
         blacks = sky_blacks([[iof] for iof in iofs], [[sky]] * len(iofs))
+        # noise floor: the margin is at least the noisiest channel's classic one (its 98th percentile above its
+        # median), so no channel shows more of its sky noise, scan lines or compression blocks than before
+        floor = max(float(np.percentile(iof[sky], sky_percentile) - np.median(iof[sky])) for iof in iofs)
+        medians = [float(np.median(iof[sky])) for iof in iofs]
+        blacks = [max(b, m + floor) for b, m in zip(blacks, medians)]
     # One white for all channels: the WHITE_PCT percentile of the brightest channel over the lit pixels (the
     # body, not the sky), so a few bright limb or ring pixels don't leave the body dim and gray; the shoulder
     # (display) keeps what is brighter
     lit = ~sky if measured else np.ones(sky.shape, dtype=bool)
     if lit.sum() < 100:
         lit = np.ones(sky.shape, dtype=bool)
-    white = max(float(np.percentile(cv2.medianBlur(iof - np.float32(black), 3)[lit], WHITE_PCT))
-                for iof, black in zip(iofs, blacks))
+    blurred = [cv2.medianBlur(iof - np.float32(black), 3) for iof, black in zip(iofs, blacks)]
+    white = max(float(np.percentile(b[lit], WHITE_PCT)) for b in blurred)
+    white = max(white, max(float(b.max()) for b in blurred) / MAX_STRETCH)
     return blacks, white, measured
 
 
@@ -459,8 +468,9 @@ def shared_scale(channels, white_pct=99.9, floor_pct=5, gamma=2.2):
         masks = [[iof < 0.05 * top for iof in iofs] for iofs, top in zip(channels, tops)]
         has = [c for c, ms in enumerate(masks) if np.mean([m.mean() for m in ms]) > 0.02]
         if has:
+            # never below the classic floor, so no tile shows more of its sky than before
             for c, black in zip(has, sky_blacks([channels[c] for c in has], [masks[c] for c in has])):
-                blacks[c] = black
+                blacks[c] = max(blacks[c], black)
     white = max(float(np.percentile(np.concatenate([iof[::8, ::8].ravel() for iof in iofs]) - black, white_pct))
                 for iofs, black in zip(channels, blacks))
     return {"blacks": blacks, "white": white, "gamma": gamma}

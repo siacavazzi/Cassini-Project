@@ -258,7 +258,7 @@ def pass_scale(frames, u, drawn=None, true_colour=False):
     filled = floor > FILLED
     gamma = 3.0
     if filled and calibration.look() == "balanced":
-        # sRGB curve. True colour: one black and white for the filters drawn, so the colour is what they saw
+        # The classic gamma 1.5 (a steeper curve lifts the dark end's noise and steps into view). True colour: one black and white for the filters drawn, so the colour is what they saw
         # rather than how differently each was stretched (black the darkest one's 1st percentile, at most half the
         # brightest's 99.5th, which is white: a black above the white would stretch noise into colour). False
         # colour (methane bands, UV, IR: no natural colour to keep) and grey: each filter's black its own 1st
@@ -267,7 +267,7 @@ def pass_scale(frames, u, drawn=None, true_colour=False):
         lows = {f: float(np.percentile(np.concatenate([i.ravel() for i in iofs]), 1)) for f, iofs in by.items()}
         tops = {f: float(np.percentile(np.concatenate([i.ravel() for i in iofs]), 99.5)) for f, iofs in by.items()}
         mine = [f for f in (drawn or by) if f in by] or list(by)
-        gamma = "srgb"
+        gamma = 1.5
         if true_colour:
             top = max(tops[f] for f in mine)
             black = min(min(lows[f] for f in mine), top / 2)
