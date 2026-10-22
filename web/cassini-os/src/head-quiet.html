@@ -391,7 +391,8 @@ body.idle .camwin .chans { opacity: .8; }
 .filmstrip canvas { width: 100%; height: 14px; display: block; cursor: ew-resize; touch-action: none; }
 .filmstrip .fsline { font-size: 9.5px; color: var(--q-dim); white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
 body.idle .camwin .filmstrip { opacity: .8; }
-.well.has-frame.movie .kindtag { display: block; }
+.well.has-frame:is(.movie, .steadying) .kindtag { display: block; }
+.well.steadying .kindtag { color: var(--q-dim); }
 /* steady size (Settings > Cameras, cameras.steady): the picture keeps its size while a color set or a mosaic builds.
    The channel strip keeps its place for the whole observation (between sets it holds the nearest one, dimmed), a
    missing frame keeps the picture's space (.kept), and each detail line keeps one height (the color line two) */
@@ -1246,13 +1247,24 @@ body.idle .win.full .titlebar { opacity: 0; }
         if (!steady() || shapeOf !== passOf(v.k)) { well.style.aspectRatio = ""; shapeOf = null; }
       }
       well.classList.add("has-frame"); well.classList.remove("kept"); well.classList.toggle("composite", v.set >= 0); well.classList.toggle("movie", !!v.movie);
-      if (!keep) card.querySelector(".kindtag").textContent = v.set >= 0 ? KIND[catalog.sets[v.set].kind].toUpperCase() : v.rolling ? "MOSAIC MOVIE" : v.movie ? "MOVIE" : "";
+      // a frame of a movie pass shown as it is: the server is still working the pass out (a pass nobody has
+      // watched takes seconds), so the window shows today's frame and says the steady one is coming
+      const steadying = !v.movie && v.set < 0 && (playsMovie(v.k) || playsRolling(v.k));
+      well.classList.toggle("steadying", steadying);
+      if (!keep) card.querySelector(".kindtag").textContent = v.set >= 0 ? KIND[catalog.sets[v.set].kind].toUpperCase() : v.rolling ? "MOSAIC MOVIE" : v.movie ? "MOVIE" : steadying ? (playsRolling(v.k) ? "BUILDING MOSAIC MOVIE…" : "STEADYING MOVIE…") : "";
       // a movie frame names itself and its place in the filmstrip when it goes up: at high speed the server can make
       // fewer frames a second than the clock passes, and the caption should say which frame is on screen
       if (v.movie) {
         card.querySelector(".shottag").textContent = `${catalog.id[v.k]} · ${catalog.f1[v.k]}/${catalog.f2[v.k]}`;
         field("frame").textContent = `${titleCase(catalog.target[v.k] || "Unknown")} · ${catalog.id[v.k]}`;
         filmstrip(v.k);
+        // the Color line says what the picture shows: the color set the server drew (its X-Movie report; the
+        // request is answered from the browser cache), which a color pass holds over its clear and other frames
+        fetch(v.key).then(r => JSON.parse(r.headers.get("X-Movie") || "null"), () => null).then(rep => {
+          if (!rep || shown !== v) return;
+          if (rep.color) field("colour").textContent = field("colour").title = `${rep.ids && rep.ids.includes(catalog.id[v.k]) ? "Color" : "Color held"}: ${rep.color.join(" · ")}`;
+          else if (rep.filter_names && rep.filter_names.length === 3) field("colour").textContent = field("colour").title = `Mosaic movie: ${rep.filter_names.join(" · ")}`;
+        }).catch(() => {});
       }
       if (v.set >= 0) { channelsFrom(im, catalog.sets[v.set]); howMade(v); }
       if (v.tile && !keep && !mosaicPass(v.k) && modeOf(v.k) !== "mosaic") mosaicOf(v);   // a frame kept behind its pass's mosaic, or of a pass known to be one, asked for it already (update)

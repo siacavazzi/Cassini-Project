@@ -469,7 +469,7 @@ def make_handler(site, cache, flags=None):
 
         def end_headers(self):
             self.send_header("Access-Control-Allow-Origin", "*")
-            self.send_header("Access-Control-Expose-Headers", "X-Composite, X-Reel")
+            self.send_header("Access-Control-Expose-Headers", "X-Composite, X-Reel, X-Movie")
             if self.revalidate:
                 self.send_header("Cache-Control", "no-cache")
             super().end_headers()
