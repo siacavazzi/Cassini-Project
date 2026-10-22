@@ -97,8 +97,8 @@ print("balanced filled", {f: round(b / new["white"], 2) for f, b in new["blacks"
 assert old["filled"] and new["filled"] and new["gamma"] == "srgb"
 assert len(set(new["blacks"].values())) == 1 and all(b <= new["white"] for b in new["blacks"].values())
 assert max(b / old["white"] for b in old["blacks"].values()) > 1      # the classic black sat above the white
-# false colour: every filter stretched on its own, from its 1st to its 99.5th percentile
-assert all(false["whites"][f] > 0 for f in by) and len(set(false["whites"].values())) == 3
+# false colour: every filter's black its own 1st percentile, one white (the widest band's)
+assert len(set(false["blacks"].values())) == 3 and np.isclose(false["white"], max(np.percentile(v[0], 99.5) - np.percentile(v[0], 1) for v in by.values()), rtol=1e-3)
 
 # ---- detail on luminance only: a colored patch keeps its color differences, no channel gets its own texture ----
 rgba = np.zeros((64, 64, 4), np.uint8); rgba[..., 3] = 255

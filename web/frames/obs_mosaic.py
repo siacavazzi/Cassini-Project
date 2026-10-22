@@ -240,7 +240,7 @@ def pass_scale(frames, u, drawn=None, true_colour=False):
     the 99.5th percentile and the gamma is eased, and the mosaic's local contrast is raised (detail), so
     the surface's few per cent of contrast shows; passes with dark sky keep the benchmark's scale.
     drawn = the filters the mosaic is drawn from (plan's colour, or its grey filter); true_colour = they are a
-    true colour set. Balanced filled passes of false colour or grey also give "whites", one per filter."""
+    true colour set."""
     by = {}
     for path, _, f, *_ in frames:
         _, iof, _ = stacking.load_hdr(path, mosaic_benchmark.REPEAT_GAP)
@@ -261,8 +261,9 @@ def pass_scale(frames, u, drawn=None, true_colour=False):
         # sRGB curve. True colour: one black and white for the filters drawn, so the colour is what they saw
         # rather than how differently each was stretched (black the darkest one's 1st percentile, at most half the
         # brightest's 99.5th, which is white: a black above the white would stretch noise into colour). False
-        # colour (methane bands, UV, IR: no natural colour to keep) and grey: each filter stretched from its own
-        # 1st to its 99.5th percentile ("whites"), so every band shows its own contrast
+        # colour (methane bands, UV, IR: no natural colour to keep) and grey: each filter's black its own 1st
+        # percentile, so every band shows its own contrast, under one white (the widest band's): a white per band
+        # would stretch a dim band's (MT2's) tile-to-tile errors several times over into coloured tiles
         lows = {f: float(np.percentile(np.concatenate([i.ravel() for i in iofs]), 1)) for f, iofs in by.items()}
         tops = {f: float(np.percentile(np.concatenate([i.ravel() for i in iofs]), 99.5)) for f, iofs in by.items()}
         mine = [f for f in (drawn or by) if f in by] or list(by)
@@ -272,10 +273,7 @@ def pass_scale(frames, u, drawn=None, true_colour=False):
             black = min(min(lows[f] for f in mine), top / 2)
             blacks, white = {f: black for f in by}, top - black
         else:
-            blacks = dict(lows)
-            whites = {f: tops[f] - blacks[f] for f in by}
-            return {"blacks": blacks, "white": max(whites.values()), "whites": whites, "gamma": gamma,
-                    "filled": filled, "floor": round(floor, 3)}
+            blacks, white = dict(lows), max(tops[f] - lows[f] for f in by)
     elif filled:
         blacks = {f: float(np.percentile(np.concatenate([i.ravel() for i in iofs]), 1)) for f, iofs in by.items()}
         white = max(float(np.percentile(np.concatenate([i.ravel() for i in iofs]) - blacks[f], 99.5))
@@ -299,8 +297,7 @@ def tile(u, n, cache, scale=None):
         k = z / u["z"] if z else 1.0
         try:
             image, _, rep = color_image.processed_frame([path], hdr=True,
-                                                        scale={**scale, "blacks": [scale["blacks"].get(f, 0.0)],
-                                                               "white": scale.get("whites", {}).get(f, scale["white"])})
+                                                        scale={**scale, "blacks": [scale["blacks"].get(f, 0.0)]})
         except Exception as e:
             image, rep = None, {"why": f"{type(e).__name__}: {e}"[:200]}
         out = {"n": n, "id": fid, "filter": f, "t": t, "stacked": rep.get("stacked"), "calibrated": rep.get("calibrated")}
