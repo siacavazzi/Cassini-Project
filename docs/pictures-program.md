@@ -100,7 +100,8 @@ Effort comes from the reports. Phase A runs alongside 1 and 2; everything else f
 ### Phase 2b · Natural color (C6) · ~0.5 day · port 8792
 - **Goal.** For true-color sets (RED/GRN/BL1 and RED/GRN/VIO), apply the fitted 3×3 filter-to-sRGB matrix on linear I/F, then the sRGB curve. "Natural color" setting, on by default, with "Raw filters" as the other option, in the cameras section of Settings. False-color and two-filter sets keep the direct mapping and stay labeled false color.
 - **Files.** `calibration.py` / `color_image.py`, matrices from `/mnt/project-files/color-investigation/filter_to_srgb_matrices.json`, settings, cache version.
-- **Done when.** Hue within about 1° of NASA on 6 of the 8 references, as in the report.
+- **Per-filter-set rules for false color (Sam, 21:50Z).** False-color sets (methane and continuum bands, UV/IR, e.g. the Jupiter approach ISS_C23JU_6ATM2X2B115_PRIME NAC) look off and unpleasant today. Add a small table of rules per filter set (which filter goes to which channel, per-band weights and a balance that keeps the planet's neutral bands near gray), used for every set with those filters, not per moment. They stay labeled false color, and a Raw option keeps the direct mapping.
+- **Done when.** Hue within about 1° of NASA on 6 of the 8 references, as in the report; the Jupiter approach and two other common false-color sets look balanced next to NASA's releases of the same sets where they exist, and pass the image quality checks.
 - **Depends on.** 2a merged into `pictures` after Sam's feedback at checkpoint 2. **Checkpoint 2 (second half).**
 
 ### Phase A · Composite drill-down (D1) · ~2.5 days · port 8793
