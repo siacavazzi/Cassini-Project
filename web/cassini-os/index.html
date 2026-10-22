@@ -6119,7 +6119,7 @@ function frame(now) {
     geo.translate(0, -0.5, 0);   // the tip at the nozzle, widening along -Y over 1 m (scaled to the jet's length)
     const jet = new THREE.Mesh(geo, plumeMaterial());
     jet.layers.set(1); jet.frustumCulled = false;
-    const core = sprite(0xeef4ff, 0.09);
+    const core = sprite(0xeef4ff, 0.14);
     g.add(jet, core);
     g.position.copy(pos);
     g.quaternion.setFromUnitVectors(new THREE.Vector3(0, -1, 0), dir);
@@ -6438,7 +6438,7 @@ function frame(now) {
         const help = p.userData.torque.clone().normalize().dot(want);
         const on = L >= 1 || (L > 0.02 && help > 0.25 && Math.random() < Math.min(1, 0.25 + 2 * L) * help);
         const lit = on ? 0.6 + 0.4 * Math.random() : 0;
-        p.userData.jet.material.uniforms.glow.value = lit * (0.5 + 0.5 * Math.min(1, L));
+        p.userData.jet.material.uniforms.glow.value = lit * (0.8 + 0.6 * Math.min(1, L));
         p.userData.core.material.opacity = lit;
         p.userData.jet.scale.set(1, (0.3 + 0.5 * Math.min(1, L)) * (0.85 + 0.3 * Math.random()), 1);
       });
@@ -6474,7 +6474,7 @@ function frame(now) {
       // brings the rings rising beyond the horizon into the frame and across it
       const yaw = (-40 - 55 * k) * Math.PI / 180 + look.yaw, pitch = 0.16 + 0.06 * k + look.pitch;
       const dirv = rScene.clone().applyAxisAngle(uScene, yaw).multiplyScalar(Math.cos(pitch)).addScaledVector(uScene, -Math.sin(pitch)).normalize();
-      const d = (4.4e-5 - 1.8e-5 * clamp01((s + LEAD) / LEAD)) * look.zoom;
+      const d = (3.6e-5 - 1.6e-5 * clamp01((s + LEAD) / LEAD)) * look.zoom;
       // shake: the struggle, then the heating
       const L = load(altitude(F.tau)), heat = F.lost ? clamp01((s - 0.3) / 5) : 0, sh = d * (0.004 * Math.min(1, L) + 0.03 * heat);
       camera.position.copy(cassini.position).addScaledVector(dirv, -d);
