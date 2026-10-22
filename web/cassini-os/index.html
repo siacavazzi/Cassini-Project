@@ -5265,7 +5265,7 @@ function setFollow(on) {
 }
 // ---------- spins: Cassini's long rolls for the fields-and-particles instruments, not for pictures ----------
 // A stretch where Cassini keeps turning (faster than SPIN_RATE, never pausing longer than SPIN_GAP) and turns through
-// more than the setting's angle in all is a spin; the follow camera holds still through it, then eases back.
+// more than the setting's angle in all, with no picture taken, is a spin; the follow camera holds still through it, then eases back.
 // Turns between targets stay under ~200°; the rolls run for hours and add up to thousands of degrees (2005: 448 spins, none with a picture).
 const SPIN_RATE = 0.02, SPIN_GAP = 180;               // deg/s, s of mission time
 const followOpt = (key, fallback) => window.cassiniSettings ? cassiniSettings.get(key) : fallback;
@@ -5295,7 +5295,12 @@ function spinAt(et) {
   if (spinsOf !== att || spinsTurn !== minTurn) { spins = findSpins(att, minTurn); spinsOf = att; spinsTurn = minTurn; }
   let lo = 0, hi = spins.length / 2;
   while (lo < hi) { const mid = (lo + hi) >> 1; if (spins[2 * mid + 1] < et) lo = mid + 1; else hi = mid; }
-  return lo < spins.length / 2 && spins[2 * lo] <= et ? [spins[2 * lo], spins[2 * lo + 1]] : null;
+  if (lo >= spins.length / 2 || spins[2 * lo] > et) return null;
+  // a turn with pictures in it is Cassini imaging as it turns, which the view follows
+  const s0 = spins[2 * lo], s1 = spins[2 * lo + 1], ts = catalog.sorted;
+  let a = 0, b = ts.length;
+  while (a < b) { const mid = (a + b) >> 1; if (ts[mid] < s0) a = mid + 1; else b = mid; }
+  return a < ts.length && ts[a] <= s1 ? null : [s0, s1];
 }
 const qFollow = new Float64Array(4), vFollow = new THREE.Vector3(), sBore = new THREE.Vector3(), upFollow = new THREE.Vector3();
 let followLive = false, followHeld = false, followEasing = false;
