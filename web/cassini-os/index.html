@@ -2149,10 +2149,14 @@ body.phone.has-dock { --appdockh: 50px; }
       // fewer frames a second than the clock passes, and the caption should say which frame is on screen (also a
       // frame shown as it is while its pass is steadied, which went up in place of the movie frame asked for)
       if (v.movie || steadying) {
-        card.querySelector(".shottag").textContent = `${catalog.id[v.k]} · ${catalog.f1[v.k]}/${catalog.f2[v.k]}`;
         field("frame").textContent = `${titleCase(catalog.target[v.k] || "Unknown")} · ${catalog.id[v.k]}`;
-        filmstrip(v.k); field("filter").innerHTML = filterHtml(v.k);
+        filmstrip(v.k);
       }
+      // the caption on the picture names the picture on screen (a stand-in shown while the one wanted loads, a
+      // colour set held over from the last lap; behind a pass's mosaic, the newest frame taken), and so does the
+      // Filter line for a single frame
+      card.querySelector(".shottag").textContent = v.set >= 0 ? catalog.sets[v.set].use.map(q => catalog.id[q]).join(" ") : `${catalog.id[v.k]} · ${catalog.f1[v.k]}/${catalog.f2[v.k]}`;
+      if (v.set < 0) field("filter").innerHTML = filterHtml(v.k);
       if (v.movie) {
         // the Color line says what the picture shows: the color set the server drew (its X-Movie report; the
         // request is answered from the browser cache), which a color pass holds over its clear and other frames
@@ -2595,7 +2599,6 @@ body.phone.has-dock { --appdockh: 50px; }
       const n24 = p - lastOfCam(cam, state.et - 86400, body);
       field("details").textContent = `${kp ? `${kp < 10 ? kp.toFixed(2) : fmt(kp)} km/px · ` : ""}${fmt(n24)} frames in the last 24 h`;
       card.querySelectorAll(".info dd[data-f]").forEach(dd => { dd.title = dd.textContent; });   // the whole line, when steady size cuts it short
-      if (!want.movie) card.querySelector(".shottag").textContent = want.set >= 0 ? `${s.use.map(q => catalog.id[q]).join(" ")}` : `${catalog.id[k]} · ${catalog.f1[k]}/${catalog.f2[k]}`;
       const ks = framesOf(cam, body).ks;
       // look ahead: the next 6 frames, or up to 12 when they come within 4 s of playback (a burst), nearest first
       const ahead = []; for (let d = 1; d <= 12 && ks[p + d] !== undefined && (d <= 6 || catalog.et[ks[p + d]] - state.et <= 4 * state.speed); d++) ahead.push(ks[p + d]);
