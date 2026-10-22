@@ -1204,8 +1204,8 @@ body.idle .win.full .titlebar { opacity: 0; }
       well.appendChild(saveWrap);
     }
     const save = saveWrap.querySelector(".savepic"), saveMenu = saveWrap.querySelector(".savemenu");
-    save.addEventListener("click", () => saveOpen(!saveWrap.classList.contains("open")));
-    saveMenu.addEventListener("click", e => { if (e.target.closest("a")) setTimeout(() => saveOpen(false), 0); });
+    save.addEventListener("click", e => { saveOpen(!saveWrap.classList.contains("open")); if (e.detail) save.blur(); });
+    saveMenu.addEventListener("click", e => { if (e.target.closest("a")) setTimeout(() => { saveOpen(false); if (e.detail) document.activeElement.blur(); }, 0); });
     document.addEventListener("click", () => saveOpen(false));
     window.addEventListener("keydown", e => { if (e.key === "Escape" && saveWrap.classList.contains("open")) { e.stopImmediatePropagation(); saveOpen(false); } }, true);
     function saveOpen(on) {
@@ -1523,7 +1523,7 @@ body.idle .win.full .titlebar { opacity: 0; }
     crumbs.className = "crumbs"; crumbs.hidden = true; crumbs.setAttribute("aria-label", "Where this window is");
     well.parentNode.insertBefore(crumbs, well);
     crumbs.addEventListener("click", e => {
-      e.stopPropagation();
+      e.stopPropagation(); unfocus(e);
       const b = e.target.closest("button"); if (!b) return;
       if (b.classList.contains("heldbadge") || b.dataset.lv === "live") return release();
       hold.levels.length = +b.dataset.lv + 1; showLevel();
@@ -1555,7 +1555,9 @@ body.idle .win.full .titlebar { opacity: 0; }
       hold.levels.push({ kind: "channel", ch, label: `${fname(q)} ${Math.round(nmOf(q))} nm · ${catalog.id[q]}`, name: fname(q), id: catalog.id[q], url: sz => `${colorUrl(s, sz)}&channel=${ch}` });
       showLevel();
     }
-    chans.addEventListener("click", e => { const fig = e.target.closest("figure"); if (fig && chans.classList.contains("drill")) { e.stopPropagation(); openChannel(fig); } });
+    // a click leaves no focus behind, so Space still plays and pauses (index.html takes it only from the page itself)
+    const unfocus = e => { if (e.detail && document.activeElement && document.activeElement !== document.body) document.activeElement.blur(); };
+    chans.addEventListener("click", e => { const fig = e.target.closest("figure"); if (fig && chans.classList.contains("drill")) { e.stopPropagation(); unfocus(e); openChannel(fig); } });
     chans.addEventListener("keydown", e => { const fig = e.target.closest("figure"); if (fig && e.key === "Enter" && chans.classList.contains("drill")) { e.preventDefault(); openChannel(fig); } });
     let levelKey = "";
     // the held window's picture: its top level, at the size the window wants (full view: full, once held long enough)
