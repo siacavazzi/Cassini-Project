@@ -850,7 +850,8 @@ body.phone #excard:not(.full) { width: calc(100% - 16px) !important; left: 8px !
 .dk.mini .tag { position: absolute; left: 3px; bottom: 2px; right: 3px; font: 8px/1 var(--hudf); letter-spacing: .04em; color: rgba(232,236,242,.85); text-shadow: 0 0 3px #000, 0 0 5px #000; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; text-align: left; }
 .dk.arrive { animation: dkin .34s ease-out; }
 @keyframes dkin { from { width: 0; opacity: 0; } }
-/* the dock takes the bottom of the screen: the main window sits on top of it, and the tray in the menu bar gives way */
+/* the dock takes the bottom of the screen: the main window sits on top of it (a window the viewer moved keeps its own
+   inline position, which wins over this), and the tray in the menu bar gives way */
 body.has-dock.dock-bottom:not(.phone) #dock { bottom: calc(env(safe-area-inset-bottom, 0px) + var(--appdockh, 0px) + 14px); }
 body.has-dock #tray { display: none; }
 /* ...and on a side, the windows that start along that edge start beside it */
