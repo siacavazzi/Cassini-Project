@@ -21,6 +21,8 @@
 #mvplay { width: 28px; height: 28px; font-size: 11px; flex: none; }
 .mvbar input[type=range] { width: 110px; accent-color: var(--q-accent, #8ab6ff); }
 #mvfpsv { min-width: 38px; color: var(--q-text, #ddd); font-variant-numeric: tabular-nums; }
+#mvproc { height: 22px; padding: 0 8px; font-size: 10.5px; flex: none; opacity: .55; }
+#mvproc[aria-pressed="true"] { opacity: 1; color: var(--q-accent, #8ab6ff); }
 #mvcount { margin-left: auto; font: 10.5px/1 var(--hudf, monospace); white-space: nowrap; font-variant-numeric: tabular-nums; }
 /* resting: like the camera window, the picture stays and its frame and controls fade */
 #moviecard, #moviecard .titlebar, .mvbar, .mvwell { transition: opacity .7s ease, background-color .7s ease, border-color .7s ease, box-shadow .7s ease; }
@@ -37,6 +39,7 @@ body.phone #moviecard:not(.full) { width: calc(100% - 16px) !important; left: 8p
     <div class="mvbar">
       <button class="btn round" id="mvplay" aria-label="Play or pause the movie">❚❚</button>
       <label for="mvfps">Speed</label><input type="range" id="mvfps" min="2" max="24" step="1" value="8" aria-label="Frames per second"><span id="mvfpsv">8 fps</span>
+      <button class="btn" id="mvproc" aria-pressed="true" title="Processed: frames calibrated, color composites and mosaics, as in the camera windows. Off plays the archive frames as they are (P)">Processed</button>
       <span id="mvcount"></span>
     </div>
   </div>
@@ -69,52 +72,114 @@ body.phone #moviecard:not(.full) { width: calc(100% - 16px) !important; left: 8p
     M.cat = catalog; M.i = i;
     return i;
   }
-  const at = i => { const k = i >= 0 ? order[i] : undefined; return k === undefined ? null : { id: catalog.id[k], et: catalog.et[k], k }; };
+  const at = i => { const k = i >= 0 ? order[i] : undefined; return k === undefined ? null : { id: catalog.id[k], et: catalog.et[k], k, i }; };
 
   // ---- frames: loaded ahead of the play head so 24 fps does not stutter ----
+  // Each frame goes through the pipeline like the camera windows' pictures (movie.processed, on by default): the
+  // frame that completes a filter set shows the set's colour composite, a new tile of a mosaic pass the mosaic so far,
+  // and every other frame is processed on its own (/frames/processed: stacked, calibrated, on the pipeline's display
+  // scale). The processed frame is always loaded; a composite or mosaic is loaded beside it and shown when it is ready in
+  // time. The film never waits more than GRACE ms (from when the frame was first asked for) for a composite or mosaic:
+  // the server makes a new mosaic tile in seconds the first time, so on a pass nobody has watched yet the film plays the
+  // processed frames and the mosaic comes up where it is ready (a frame still on screen when it arrives swaps to it).
+  // A server that has none (404) or cannot make one moves on to the next choice; the archive frame is the last resort.
+  const S = window.cassiniSettings, GRACE = 1200;
+  const opt = (key, dflt) => (S && S.get(key) !== undefined ? S.get(key) : dflt);
+  const KIND = { true: "true color", false: "false color", two: "two-filter color" };
   const size = () => (window.cassiniWM && window.cassiniWM.big ? window.cassiniWM.big(card, card.querySelector(".mvwell")) : card.classList.contains("zoomed")) ? 1024 : 512;
+  // the pictures frame f can be shown as, each { url, kind }: best (mosaic, then composite) and base (processed, then raw)
+  function choices(f) {
+    const id = f.id, sz = size(), raw = { url: `${FRAMES}/frames/${id}.webp?size=${sz}`, kind: "" };
+    if (M.raw || !opt("movie.processed", true)) return { best: [], base: [raw] };
+    if (!catalog.setOf && window.cassiniFeeds) window.cassiniFeeds.prep();
+    const best = [], k = f.k, si = catalog.setOf ? catalog.setOf[k] : -1, s = si >= 0 ? catalog.sets[si] : null;
+    const comp = s && s.use.includes(k) && s.ready === catalog.et[k] && opt("cameras.composites", true);
+    // a possible mosaic tile: the camera's frame before this one is of the same body and observation (and a frame of
+    // a colour set only once its composite is up, as in the camera windows)
+    let prev = -1;
+    for (let j = f.i - 1; j >= Math.max(0, f.i - 64); j--) if (catalog.cam[order[j]] === catalog.cam[k]) { prev = order[j]; break; }
+    const tile = prev >= 0 && catalog.target[prev] === catalog.target[k] && catalog.obs[prev] === catalog.obs[k] && (!s || comp);
+    if (tile && opt("movie.mosaics", true) && window.cassiniMosaics !== false) best.push({ url: `${FRAMES}/frames/mosaic/${comp ? catalog.id[s.use[0]] : id}.webp?size=${sz}`, kind: "mosaic" });
+    if (comp) best.push({ url: `${FRAMES}/frames/color.webp?ids=${s.use.map(q => catalog.id[q]).join(",")}&size=${sz}`, kind: KIND[s.kind] || "color" });
+    return { best, base: [{ url: `${FRAMES}/frames/processed/${id}.webp?size=${sz}`, kind: "processed" }, raw] };
+  }
+  // one chain of choices: tried in turn until one loads (ok true) or none does (ok false); a deferred one waits for
+  // c.start() (fill starts composites and mosaics a few at a time)
+  function chain(list, onload, deferred) {
+    const c = { list, n: 0, img: null, ok: list.length ? null : false, kind: "", started: false };
+    const load = () => {
+      const im = new Image(), it = list[c.n];
+      c.img = im; im.decoding = "async"; im.crossOrigin = "anonymous";
+      im.onload = () => { c.ok = true; c.kind = it.kind; onload(); };
+      im.onerror = () => { if (++c.n < list.length) load(); else c.ok = false; };
+      im.src = it.url;
+    };
+    c.start = () => { if (!c.started && list.length) { c.started = true; load(); } };
+    c.stop = () => { if (c.img && c.ok === null) { c.img.onload = c.img.onerror = null; c.img.src = ""; } };
+    if (!deferred) c.start();
+    return c;
+  }
+  // b.ok: null while the film should wait for frame b, then true (b.img, b.kind are what to show) or false (no frame)
+  function settle(b) {
+    const best = b.best.ok, base = b.base.ok;
+    if (best) Object.assign(b, { ok: true, img: b.best.img, kind: b.best.kind });
+    else if (base && (best === false || performance.now() - b.since > GRACE)) Object.assign(b, { ok: true, img: b.base.img, kind: b.base.kind });
+    else if (base === false && best === false) b.ok = false;
+    return b;
+  }
   function want(f) {
     let b = M.buf.get(f.id);
     if (!b || b.size !== size()) {
-      b = { img: new Image(), ok: null, size: size() };
-      b.img.decoding = "async";
-      b.img.onload = () => { b.ok = true; };
-      b.img.onerror = () => { b.ok = false; };
-      b.img.src = `${FRAMES}/frames/${f.id}.webp?size=${b.size}`;
+      if (b) { b.best.stop(); b.base.stop(); }
+      const c = choices(f);
+      b = { ok: null, img: null, kind: "", size: size(), since: performance.now() };
+      // a composite or mosaic that arrives while its frame is on screen replaces the processed frame there
+      b.best = chain(c.best, () => { if (M.on && M.cur && M.cur.id === f.id && b.kind !== b.best.kind) { settle(b); draw(b.img); tag(f, b); } }, true);
+      b.base = chain(c.base, () => {});
       M.buf.set(f.id, b);
     }
-    return b;
+    return settle(b);
   }
+  // A browser opens only six connections to the frame server, and a mosaic tile nobody has asked for before takes the
+  // server seconds: so at most BEST_FLYING composites and mosaics are asked for at once, nearest the play head first,
+  // and the processed frames, quick to make, always have connections left.
+  const BEST_FLYING = 2;
   function fill(i) {
-    const ahead = Math.max(6, Math.min(40, Math.round(M.fps * 1.5))), keep = new Set();
-    let flying = 0;
+    // processed frames take the server a fraction of a second each the first time, so the film asks well ahead
+    const ahead = Math.max(12, Math.min(72, Math.round(M.fps * 3))), keep = new Set();
+    let flying = 0, best = 0;
+    for (const b of M.buf.values()) if (b.best.started && b.best.ok === null) best++;
     for (let j = Math.max(0, i); j <= i + ahead; j++) {
       const f = at(j); if (!f) break;
       keep.add(f.id);
-      const b = M.buf.get(f.id);
-      if (b && b.ok === null) flying++;
-      else if (!b && flying < 8) { want(f); flying++; }
+      let b = M.buf.get(f.id);
+      if (b && b.base.ok === null) flying++;
+      else if (!b && flying < 8) { b = want(f); flying++; }
+      if (b && !b.best.started && b.best.ok === null && best < BEST_FLYING) { b.best.start(); best++; }
     }
-    for (const id of M.buf.keys()) if (!keep.has(id)) M.buf.delete(id);
+    // pictures the film has passed or skipped: dropped, and their requests called off so they free their connections
+    for (const [id, b] of M.buf) if (!keep.has(id)) { b.best.stop(); b.base.stop(); M.buf.delete(id); }
   }
+  function drop() { for (const b of M.buf.values()) { b.best.stop(); b.base.stop(); } M.buf.clear(); }
   function blank() { g.fillStyle = "#000"; g.fillRect(0, 0, cv.width, cv.height); }
   function draw(img) {
     const s = cv.width, r = Math.min(s / img.naturalWidth, s / img.naturalHeight), w = img.naturalWidth * r, h = img.naturalHeight * r;
     blank(); g.drawImage(img, (s - w) / 2, (s - h) / 2, w, h);
   }
   const fmtDate = et => { const s = new Date(etToMs(et)).toISOString(); return `${s.slice(0, 10)} ${s.slice(11, 19)} UTC`; };
+  const tag = (f, b) => { const k = f.k; $("mvtag").textContent = `${fmtDate(f.et)} · ${titleCase(catalog.target[k] || "Unknown")} · ${catalog.cam[k] === "N" ? "NAC" : "WAC"} ${catalog.f1[k]}/${catalog.f2[k]}${b.ok && b.kind && b.kind !== "processed" ? ` · ${b.kind}` : ""}`; };
   let skipTimer = 0;
   // put frame i on screen and move the mission clock to it
   function show(i) {
     const f = at(i), b = want(f), prev = M.cur;
     M.cur = { id: f.id, et: f.et }; M.cat = catalog; M.i = i;
+    M.late = b.ok ? null : f;   // stepped to a picture still being made: it goes up when it arrives (tick)
     if (b.ok) { draw(b.img); $("mvmsg").textContent = ""; }
     else if (b.ok === false) { blank(); $("mvmsg").innerHTML = "<b>No frame</b>" + f.id; }
     setTime(f.et);
     const span = state.view[1] - state.view[0];
     if (state.et < state.view[0] || state.et > state.view[1] - span * 0.05) setView(span, state.et + span * 0.4);
-    const k = f.k;
-    $("mvtag").textContent = `${fmtDate(f.et)} · ${titleCase(catalog.target[k] || "Unknown")} · ${catalog.cam[k] === "N" ? "NAC" : "WAC"} ${catalog.f1[k]}/${catalog.f2[k]}`;
+    tag(f, b);
     $("mvcount").textContent = f.id;
     if (prev && f.et - prev.et > 3 * 3600) {   // a stretch without frames: say how much time the cut left out
       $("mvskip").textContent = `skipped ${fmtDur(f.et - prev.et)}`; $("mvskip").classList.add("on");
@@ -128,6 +193,7 @@ body.phone #moviecard:not(.full) { width: calc(100% - 16px) !important; left: 8p
     if (yearReady() && !state.dragging) {
       const i = here();
       fill(i);
+      if (M.late && M.cur && M.late.id === M.cur.id && M.cat === catalog) { const b = want(M.late); if (b.ok !== null) show(M.late.i); }
       if (M.playing && now >= M.due) {
         let shown = -1, j = i;
         while (now >= M.due) {
@@ -135,13 +201,14 @@ body.phone #moviecard:not(.full) { width: calc(100% - 16px) !important; left: 8p
           while (at(j) && M.buf.get(at(j).id) && M.buf.get(at(j).id).ok === false) j++;   // frames the server lacks are cut too
           const f = at(j);
           if (!f) { if (shown < 0 && !(mission && yearOf(state.et) < mission.years[mission.years.length - 1])) setMoviePlaying(false); break; }
-          if (!want(f).ok) break;
+          const b = want(f);
+          if (!b.ok) break;
           shown = j; M.due += 1000 / M.fps;
         }
         if (shown >= 0) { show(shown); M.due = Math.max(M.due, now - 250); M.waitSince = 0; }
         else if (M.playing && at(j)) {
           if (!M.waitSince) M.waitSince = now;
-          else if (now - M.waitSince > 600) $("mvcount").textContent = "loading…";
+          else if (now - M.waitSince > 600) $("mvcount").textContent = "processing…";
         }
       }
     }
@@ -153,7 +220,7 @@ body.phone #moviecard:not(.full) { width: calc(100% - 16px) !important; left: 8p
   // the film starts on the frame the camera last took and carries on from there
   function start() {
     if (!catalog || M.on) return;
-    M.on = true; M.buf.clear(); blank();
+    M.on = true; drop(); blank();
     setPlaying(false);
     // the movie takes the camera's place; the camera windows come back when it ends
     M.hidden = ["imgcard", "wacard"].map($).filter(w => w && !w.hidden);
@@ -170,7 +237,7 @@ body.phone #moviecard:not(.full) { width: calc(100% - 16px) !important; left: 8p
   }
   function stop() {
     if (!M.on) return;
-    M.on = false; M.buf.clear();
+    M.on = false; drop();
     card.hidden = true;
     M.hidden.forEach(w => { w.hidden = false; }); M.hidden = [];
     $("movie").setAttribute("aria-pressed", "false");
@@ -181,6 +248,16 @@ body.phone #moviecard:not(.full) { width: calc(100% - 16px) !important; left: 8p
   // ---- controls ----
   $("movie").addEventListener("click", () => (M.on ? stop() : start()));
   $("mvplay").addEventListener("click", () => setMoviePlaying(!M.playing));
+  // processing on or off (movie.processed; the mosaics alone: movie.mosaics): the pictures ahead are asked for again
+  const proc = $("mvproc");
+  proc.addEventListener("click", () => { const v = !opt("movie.processed", true); if (S) S.set("movie.processed", v); else { M.raw = !v; refresh(); } });
+  function refresh() {
+    proc.setAttribute("aria-pressed", String(!M.raw && opt("movie.processed", true)));
+    if (!M.on) return;
+    drop();
+    if (M.cur && M.cat === catalog) show(M.i);
+  }
+  if (S) for (const key of ["movie.processed", "movie.mosaics"]) S.on(key, refresh);
   $("mvfps").addEventListener("input", e => {
     M.fps = +e.target.value; $("mvfpsv").textContent = M.fps + " fps";
     try { localStorage.setItem("cassini-os-movie-fps", M.fps); } catch (err) {}
@@ -196,7 +273,8 @@ body.phone #moviecard:not(.full) { width: calc(100% - 16px) !important; left: 8p
     else if (e.key === "ArrowRight" || e.key === "ArrowLeft") {
       e.preventDefault(); setMoviePlaying(false);
       const j = here() + (e.key === "ArrowRight" ? 1 : -1); if (at(j)) show(j);
-    } else if (e.key === "Escape") stop();
+    } else if (e.key === "p" || e.key === "P") proc.click();
+    else if (e.key === "Escape") stop();
   }, true);
   window.addEventListener("keydown", e => { if (!M.on && (e.key === "m" || e.key === "M") && !e.metaKey && !e.ctrlKey && e.target === document.body) start(); });
   $("play").addEventListener("click", () => { if (M.on) stop(); }, true);

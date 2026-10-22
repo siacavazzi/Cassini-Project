@@ -1,0 +1,260 @@
+<!-- Flagging pictures that look wrong, for Cassini OS. build.py splices the three parts below into the page: the style
+     into the head, the panel and the toast into #app, and the script after the other window scripts (it reads the
+     camera windows, movie mode and body reels).
+     Every picture window gets a flag in its title bar (R flags the picture in front, as F gives it full view). A flag
+     keeps the picture exactly as the window shows it, what it was made from (the frame server URL and its
+     X-Composite / X-Reel report), each frame's catalog details, the mission time with a link back to it, the
+     viewer's settings and an optional note and tags. The frame server saves it (POST /flags) with each frame's
+     archive PNG into its flagged-pictures folder; /flags/ on the server shows them all. Nothing here knows about
+     any particular picture or moment. -->
+<style>
+.flagbtn { all: unset; position: absolute; right: 26px; top: 3px; width: 14px; height: 14px; display: grid; place-items: center; border-radius: 3px; color: var(--q-dim); cursor: default; }
+.flagbtn:hover { color: #fff; background: rgba(255,255,255,.12); }
+.flagbtn:focus-visible { outline: 1px solid var(--q-accent); }
+.flagbtn svg { width: 10px; height: 10px; } .flagbtn svg * { fill: none; stroke: currentColor; stroke-width: 1.4; stroke-linejoin: round; }
+.flagbtn.done svg path { fill: currentColor; } .flagbtn.done { color: #f0b860; }
+body.noflags .flagbtn { display: none; }
+body.phone .flagbtn { width: 26px; height: 20px; top: 0; right: 36px; }
+body.phone .flagbtn svg { width: 12px; height: 12px; }
+#flagpop { position: fixed; z-index: 3000; width: min(340px, calc(100vw - 16px)); padding: 12px; box-sizing: border-box; border-radius: 9px; border: 1px solid var(--q-line, #444);
+  background: rgba(20,22,27,.97); color: var(--q-text, #ddd); font-size: 12px; box-shadow: 0 12px 40px rgba(0,0,0,.6); }
+#flagpop[hidden] { display: none; }
+#flagpop h4 { margin: 0 0 8px; font-size: 12.5px; font-weight: 600; display: flex; gap: 6px; align-items: center; }
+#flagpop .fpwhat { display: grid; grid-template-columns: 64px minmax(0, 1fr); gap: 8px; margin-bottom: 8px; }
+#flagpop .fpwhat canvas, #flagpop .fpwhat .fpnone { width: 64px; height: 64px; background: #000; border-radius: 3px; object-fit: contain; }
+#flagpop .fpmeta { font: 10.5px/1.4 var(--hudf, monospace); color: var(--q-dim, #999); word-break: break-word; }
+#flagpop .fptags { display: flex; flex-wrap: wrap; gap: 4px; margin-bottom: 8px; }
+#flagpop .fptags button { all: unset; padding: 2px 8px; border-radius: 10px; border: 1px solid var(--q-line, #444); font-size: 11px; color: var(--q-dim, #aaa); cursor: default; }
+#flagpop .fptags button[aria-pressed="true"] { background: rgba(240,184,96,.2); border-color: rgba(240,184,96,.7); color: #f6d39c; }
+#flagpop textarea { width: 100%; box-sizing: border-box; min-height: 52px; resize: vertical; padding: 6px 8px; border-radius: 5px; border: 1px solid var(--q-line, #444);
+  background: rgba(0,0,0,.35); color: inherit; font: inherit; }
+#flagpop textarea:focus { outline: 1px solid var(--q-accent, #8ab6ff); }
+#flagpop .fpbtns { display: flex; justify-content: flex-end; gap: 8px; margin-top: 8px; }
+#flagpop .fpbtns button { font: inherit; padding: 4px 12px; border-radius: 5px; border: 1px solid var(--q-line, #444); background: transparent; color: inherit; cursor: default; }
+#flagpop .fpbtns .go { background: rgba(240,184,96,.22); border-color: rgba(240,184,96,.7); }
+#flagtoast { position: fixed; left: 50%; bottom: 22px; transform: translateX(-50%); z-index: 3001; display: flex; gap: 12px; align-items: center; padding: 7px 12px; border-radius: 8px;
+  background: rgba(20,22,27,.96); border: 1px solid var(--q-line, #444); color: var(--q-text, #ddd); font-size: 12px; box-shadow: 0 8px 30px rgba(0,0,0,.5); }
+#flagtoast[hidden] { display: none; }
+#flagtoast button, #flagtoast a { font: inherit; background: none; border: 0; padding: 0; color: var(--q-accent, #8ab6ff); cursor: pointer; text-decoration: none; }
+/* the panel and toast stay put while the rest of the interface rests */
+body.idle #flagpop, body.idle #flagtoast { opacity: 1; pointer-events: auto; }
+body.phone #flagpop { left: 8px !important; right: 8px; top: auto !important; bottom: calc(env(safe-area-inset-bottom, 0px) + 8px); width: auto; }
+body.phone #flagpop .fptags button { padding: 5px 10px; font-size: 12px; }
+body.phone #flagpop .fpbtns button { padding: 8px 16px; }
+body.phone #flagtoast { bottom: calc(env(safe-area-inset-bottom, 0px) + 12px); }
+</style>
+
+<section id="flagpop" role="dialog" aria-label="Flag this picture" hidden>
+  <h4><svg viewBox="0 0 10 10" width="11" height="11" aria-hidden="true"><path d="M2 9.5V1h6l-1.4 2.2L8 5.4H2" fill="#f0b860" stroke="#f0b860" stroke-width="1" stroke-linejoin="round"/></svg>Flag this picture</h4>
+  <div class="fpwhat"><canvas width="128" height="128"></canvas><div class="fpmeta"></div></div>
+  <div class="fptags" aria-label="What looks wrong"></div>
+  <textarea placeholder="What looks off? (optional)" aria-label="Note"></textarea>
+  <div class="fpbtns"><button class="no">Cancel</button><button class="go">Flag</button></div>
+</section>
+<div id="flagtoast" role="status" hidden><span></span><button class="undo">Undo</button><a target="_blank" rel="noopener">See all</a></div>
+
+<script>
+// ---------- flagging pictures ----------
+(function () {
+  const $ = id => document.getElementById(id);
+  const FRAMES = (() => {                       // the frame server, chosen as the camera window chooses it
+    const q = new URLSearchParams(location.search).get("frames");
+    if (q) return q.replace(/\/$/, "");
+    if (/^https?:$/.test(location.protocol) && !/claude\.ai$|claudeusercontent\.com$|claude\.site$/.test(location.hostname)) return location.origin;
+    return "http://localhost:8765";
+  })();
+  const S = window.cassiniSettings, WM = window.cassiniWM;
+  const PICTURES = ".camwin, .bodywin, #reelcard, #moviecard";
+  const TAGS = ["Too dark", "Too bright", "Wrong color", "Channels misaligned", "Stripes or noise", "Blurry", "Blank or missing", "Off-center", "Mosaic wrong", "Out of sync"];
+  const pop = $("flagpop"), toast = $("flagtoast"), FLAG_ICON = '<svg viewBox="0 0 10 10" aria-hidden="true"><path d="M2 9.5V1h6l-1.4 2.2L8 5.4H2"/></svg>';
+  const ID = /[NW]\d{10}_\d+/g;
+  let pending = null, count = null;
+
+  // ---- a flag in each picture window's title bar, the camera windows and the ones made later (per-body windows) ----
+  function addButton(w) {
+    if (!w.matches || !w.matches(PICTURES) || w.querySelector(".flagbtn")) return;
+    const bar = w.querySelector(".titlebar"); if (!bar) return;
+    const b = document.createElement("button");
+    b.className = "flagbtn"; b.title = "Flag this picture as odd (R)"; b.setAttribute("aria-label", "Flag this picture"); b.innerHTML = FLAG_ICON;
+    b.addEventListener("click", e => { e.stopPropagation(); begin(w); });
+    b.addEventListener("dblclick", e => e.stopPropagation());
+    b.addEventListener("pointerdown", e => e.stopPropagation());   // not the start of a window drag
+    bar.appendChild(b);
+  }
+  document.querySelectorAll(PICTURES).forEach(addButton);
+  new MutationObserver(ms => ms.forEach(m => m.addedNodes.forEach(n => { if (n.nodeType === 1) addButton(n); }))).observe($("dock").parentNode, { childList: true });
+
+  // ---- what the window shows: the picture's pixels, where they came from, and the frames in it ----
+  const toPng = c => new Promise(res => { try { c.toBlob(b => res(b), "image/png"); } catch (e) { res(null); } });   // null: a picture without CORS
+  function fromImg(img) {
+    const c = document.createElement("canvas"); c.width = img.naturalWidth; c.height = img.naturalHeight;
+    c.getContext("2d").drawImage(img, 0, 0); return c;
+  }
+  function frameInfo(id) {
+    const k = typeof catalog !== "undefined" && catalog ? catalog.id.indexOf(id) : -1;
+    if (k < 0) return { id };
+    const kp = catalog.km_per_px ? catalog.km_per_px[k] : null;
+    return { id, camera: catalog.cam[k] === "N" ? "NAC" : "WAC", filters: `${catalog.f1[k]}/${catalog.f2[k]}`, target: catalog.target[k] || null,
+      observation: catalog.obs ? catalog.obs[k] || null : null, utc: utc(catalog.et[k]), km_per_px: kp || null };
+  }
+  const utc = et => new Date(etToMs(et)).toISOString().slice(0, 19) + "Z";
+  const texts = w => [...w.querySelectorAll(".shottag, .kindtag, #mvtag, .rltag, .rlhow")].map(e => e.textContent.trim()).filter(Boolean);
+  function infoFields(w) {
+    const out = {};
+    w.querySelectorAll("dl.info dt").forEach(dt => { const dd = dt.nextElementSibling; if (dd && dd.textContent.trim() !== "—") out[dt.textContent.trim()] = dd.textContent.trim(); });
+    return out;
+  }
+  async function capture(w) {
+    let canvas = null, src = null, report = null, ids = [], what = null;
+    if (w.id === "moviecard") {
+      const M = window.cassiniMovie && window.cassiniMovie.state, b = M && M.cur && M.buf.get(M.cur.id);
+      if (!M || !M.cur) return null;
+      canvas = $("mvcanvas"); ids = [M.cur.id]; src = b && b.img ? b.img.src : null; what = b && b.kind ? `movie (${b.kind})` : "movie frame";
+    } else if (w.id === "reelcard") {
+      const R = window.cassiniReel && window.cassiniReel.state, s = R && R.shots[R.i];
+      if (!s) return null;
+      canvas = $("rlcanvas" + s.cam); ids = s.ids.slice(); what = "body reel picture";
+      src = `${FRAMES}/frames/reel/${R.target}/${R.i}.webp?mosaic=${R.mosaic ? 1 : 0}`;
+      const b = R.buf.get(R.i); report = b && b.how;
+    } else {
+      const well = w.querySelector(".well"), shot = w.querySelector(".shot");
+      if (!well || !well.classList.contains("has-frame") || !shot.naturalWidth) return null;
+      canvas = fromImg(shot); src = shot.dataset.src || shot.src;
+      try { report = shot.dataset.report ? JSON.parse(shot.dataset.report) : null; } catch (e) {}
+      what = well.classList.contains("mosaic") ? (report && report.observation ? "pass mosaic" : "mosaic") : well.classList.contains("composite") ? "color composite" : "frame";
+      if (!report && /\/color\.webp/.test(src)) report = await fetch(src).then(r => JSON.parse(r.headers.get("X-Composite") || "null"), () => null);
+      const tag = (w.querySelector(".shottag") || {}).textContent || "";
+      ids = tag.match(ID) || [];
+    }
+    if (report && report.ids) ids = ids.concat([report.ids].flat(2));
+    ids = [...new Set(ids.filter(i => typeof i === "string" && /^[NW]\d{10}_\d+$/.test(i)))];
+    // everything about the picture is read now, with its pixels: playback carries on while the note is typed
+    let tiles = null;
+    if (report && report.observation && typeof catalog !== "undefined" && catalog && catalog.obs) {   // a pass mosaic: its frames so far
+      const cam = ids[0] && ids[0][0];
+      tiles = [];
+      for (let k = 0; k < catalog.id.length; k++) if (catalog.obs[k] === report.observation && catalog.cam[k] === cam && catalog.et[k] <= state.et) tiles.push(catalog.id[k]);
+    }
+    return { canvas, png: await toPng(canvas), src, report, ids, what, labels: texts(w), info: infoFields(w), tiles };
+  }
+
+  // ---- the panel: the picture is taken the moment the flag is pressed; the note can follow at leisure ----
+  async function begin(w) {
+    if (pending) close();
+    const got = await capture(w);
+    if (!got) { say("Nothing to flag in this window yet"); return; }
+    const title = (w.getAttribute("aria-label") || w.querySelector(".titlebar").textContent || "").trim();
+    pending = { w, got, title, tags: new Set(), at: new Date(), et: state.et };
+    const th = pop.querySelector("canvas"), g = th.getContext("2d");
+    g.fillStyle = "#000"; g.fillRect(0, 0, th.width, th.height);
+    const c = got.canvas, r = Math.min(th.width / c.width, th.height / c.height);
+    try { g.drawImage(c, (th.width - c.width * r) / 2, (th.height - c.height * r) / 2, c.width * r, c.height * r); } catch (e) {}
+    pop.querySelector(".fpmeta").textContent = `${title} · ${got.what}\n${utc(state.et).replace("T", " ").replace("Z", " UTC")}\n${got.ids.slice(0, 4).join(" ")}${got.ids.length > 4 ? ` +${got.ids.length - 4}` : ""}`;
+    pop.querySelector(".fpmeta").style.whiteSpace = "pre-line";
+    pop.querySelector(".fptags").innerHTML = TAGS.map(t => `<button aria-pressed="false">${t}</button>`).join("");
+    pop.querySelector("textarea").value = "";
+    // beside the window's picture, kept on screen
+    const box = w.getBoundingClientRect();
+    pop.hidden = false;
+    const pw = pop.offsetWidth, ph = pop.offsetHeight;
+    let x = box.right + 8 + pw < innerWidth ? box.right + 8 : box.left - 8 - pw >= 0 ? box.left - 8 - pw : Math.max(8, Math.min(innerWidth - pw - 8, box.left + 12));
+    let y = Math.max(36, Math.min(innerHeight - ph - 8, box.top + 26));
+    Object.assign(pop.style, { left: x + "px", top: y + "px" });
+    if (!document.body.classList.contains("phone")) pop.querySelector("textarea").focus();
+    else pop.querySelector(".go").focus();
+  }
+  function close() { pop.hidden = true; pending = null; }
+  pop.querySelector(".fptags").addEventListener("click", e => {
+    const b = e.target.closest("button"); if (!b || !pending) return;
+    const on = b.getAttribute("aria-pressed") !== "true"; b.setAttribute("aria-pressed", String(on));
+    on ? pending.tags.add(b.textContent) : pending.tags.delete(b.textContent);
+  });
+  pop.querySelector(".no").addEventListener("click", close);
+  pop.querySelector(".go").addEventListener("click", send);
+  // typing a note never drives the viewer (space, arrows, Escape, F, M…): this runs before every other key handler
+  // (build.py puts this script ahead of movie mode's and the body reels')
+  window.addEventListener("keydown", e => {
+    if (pop.hidden || !pop.contains(e.target)) return;
+    e.stopImmediatePropagation();
+    if (e.key === "Escape") { e.preventDefault(); close(); }
+    else if (e.key === "Enter" && !e.shiftKey && e.target.tagName === "TEXTAREA") { e.preventDefault(); send(); }
+  }, true);
+  pop.addEventListener("pointerdown", e => e.stopPropagation());
+
+  const dataUrl = blob => new Promise(res => { if (!blob) return res(null); const f = new FileReader(); f.onload = () => res(f.result); f.onerror = () => res(null); f.readAsDataURL(blob); });
+  function settings() { const out = {}; if (S) for (const d of S.defined) if (d.type !== "action") out[d.key] = S.get(d.key); return out; }
+  async function send() {
+    if (!pending) return;
+    const p = pending, w = p.w, got = p.got, note = pop.querySelector("textarea").value.trim();
+    close();
+    const link = new URL(location.href); link.searchParams.set("t", utc(p.et).slice(0, 19));
+    const flag = {
+      flagged: p.at.toISOString(), mission_utc: utc(p.et), mission_et: p.et, link: link.href,
+      note, tags: [...p.tags],
+      window: { id: w.id, title: p.title, kind: w.id === "moviecard" ? "movie" : w.id === "reelcard" ? "reel" : w.classList.contains("bodywin") ? "body window" : "camera window",
+        full: w.classList.contains("full"), zoomed: w.classList.contains("zoomed"), width: Math.round(w.getBoundingClientRect().width), height: Math.round(w.getBoundingClientRect().height) },
+      shown: { what: got.what, src: got.src ? new URL(got.src, location.href).href : null, report: got.report || null, labels: got.labels, info: got.info, observation_frames: got.tiles,
+        width: got.canvas.width, height: got.canvas.height },
+      ids: got.ids, frames: got.ids.map(frameInfo),
+      movie: !!(window.cassiniMovie && window.cassiniMovie.on), playing: !!state.playing, speed: state.speed,
+      settings: settings(),
+      client: { agent: navigator.userAgent, dpr: devicePixelRatio, viewport: [innerWidth, innerHeight], phone: document.body.classList.contains("phone") },
+      image: await dataUrl(got.png)
+    };
+    try {
+      const r = await fetch(`${FRAMES}/flags`, { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify(flag) });
+      if (!r.ok) throw new Error(r.status);
+      const res = await r.json();
+      setCount(res.count);
+      const b = w.querySelector(".flagbtn"); if (b) { b.classList.add("done"); setTimeout(() => b.classList.remove("done"), 2500); }
+      say(`Flagged · ${res.count} so far`, res.name);
+    } catch (e) {
+      say(e.message === "404" || e.message === "501" ? "This frame server can't save flags yet (it needs restarting on the new version)" : "Could not save the flag: the frame server did not answer");
+    }
+  }
+
+  // ---- the toast: what happened, Undo for a moment, and the page with every flag ----
+  let toastTimer = 0;
+  function say(text, name) {
+    toast.querySelector("span").textContent = text;
+    const undo = toast.querySelector(".undo");
+    undo.hidden = !name; undo.onclick = () => takeBack(name);
+    const all = toast.querySelector("a"); all.href = `${FRAMES}/flags/`; all.hidden = !name;
+    toast.hidden = false; clearTimeout(toastTimer); toastTimer = setTimeout(() => { toast.hidden = true; }, name ? 6000 : 4000);
+  }
+  async function takeBack(name) {
+    try {
+      const r = await fetch(`${FRAMES}/flags/${encodeURIComponent(name)}/undo`, { method: "POST" });
+      if (!r.ok) throw new Error(r.status);
+      setCount((await r.json()).count); say("Flag taken back");
+    } catch (e) { say("Could not take the flag back"); }
+  }
+
+  // ---- how many so far, in the Cassini OS menu ----
+  const app = document.querySelector(".menu.app ul");
+  const li = document.createElement("li");
+  li.innerHTML = '<button data-flags>Flagged Pictures…<span class="kbd"></span></button>';
+  const sep = app.querySelector("li.sep"); app.insertBefore(li, sep ? sep.nextSibling : null);
+  li.querySelector("button").addEventListener("click", () => window.open(`${FRAMES}/flags/`, "_blank", "noopener"));
+  function setCount(n) { count = n; li.querySelector(".kbd").textContent = n ? String(n) : ""; }
+  fetch(`${FRAMES}/flags/index.json`).then(r => r.ok ? r.json() : null, () => null).then(d => { if (d) setCount(d.count); });
+
+  // ---- R flags the picture in front (the one in full view, else the topmost picture window), as F gives it full view ----
+  window.addEventListener("keydown", e => {
+    if (e.metaKey || e.ctrlKey || e.altKey || /^(INPUT|SELECT|TEXTAREA)$/.test(e.target.tagName) || e.key.toLowerCase() !== "r" || !pop.hidden) return;
+    if (document.body.classList.contains("noflags")) return;
+    const f = document.querySelector(".win.full");
+    const w = f || [...document.querySelectorAll(PICTURES)].filter(x => !x.hidden).sort((a, b) => (+b.style.zIndex || 0) - (+a.style.zIndex || 0))[0];
+    if (w) { e.preventDefault(); begin(w); }
+  });
+
+  if (S) {
+    S.define({ key: "interface.flags", section: "Interface", label: "Flag button on picture windows", type: "toggle", value: true,
+      hint: "A flag in each picture window's title bar (or R) saves the picture as shown, with its frames and the mission time, to the frame server's flagged-pictures folder, so odd pictures can be looked into later." });
+    S.on("interface.flags", v => document.body.classList.toggle("noflags", !v));
+    S.define({ key: "interface.flagged", section: "Interface", label: "Flagged pictures", type: "action", button: "Open",
+      hint: "Every flagged picture on one page, newest first, with a link back to its moment.", run: () => window.open(`${FRAMES}/flags/`, "_blank", "noopener") });
+  }
+  window.cassiniFlags = { begin, get count() { return count; } };
+})();
+</script>

@@ -1,0 +1,304 @@
+<!-- Movie export for Cassini OS. build.py splices the three parts below into the page: the style into the head,
+     the window into #app (so the window manager picks it up) and the script after the chrome script.
+     Mark a stretch of the timeline (shift-drag across it, or I at the start and O at the end; drag a marked edge to
+     move it) and press Export: the frame server makes the film from the pipeline's pictures, the same ones the camera
+     windows show (web/frames/export.py), and the page adds the sound, made by the live sound's own synth
+     (cassiniSound.render, sound.html) from the film's picture list. The film downloads, plays here, and has a link. -->
+<style>
+#excard { top: calc(env(safe-area-inset-top, 0px) + 36px); right: max(14px, env(safe-area-inset-right, 0px)); width: clamp(320px, 30vw, 440px); }
+#excard .body { padding: 4px 10px 10px; display: grid; gap: 8px; font-size: 11px; color: var(--q-dim, #888); }
+.exrow { display: flex; gap: 8px; align-items: center; flex-wrap: wrap; }
+.exrow > span:first-child { min-width: 64px; }
+.exrow input[type=text] { flex: 1; min-width: 0; font: 10.5px/1.2 var(--hudf, monospace); color: var(--q-text, #ddd); background: rgba(0,0,0,.35); border: 1px solid var(--q-line, #555); border-radius: 4px; padding: 3px 5px; }
+.exrow input[type=range] { flex: 1; min-width: 80px; accent-color: var(--q-accent, #8ab6ff); }
+.exrow .val { min-width: 54px; text-align: right; color: var(--q-text, #ddd); font-variant-numeric: tabular-nums; }
+.exrow label.chk { display: flex; gap: 5px; align-items: center; cursor: pointer; color: var(--q-text, #ddd); }
+.exbtn { font: inherit; padding: 3px 9px; border-radius: 4px; border: 1px solid var(--q-line, #555); background: rgba(255,255,255,.08); color: var(--q-text, #ddd); cursor: pointer; white-space: nowrap; text-decoration: none; }
+.exbtn:hover { background: rgba(255,255,255,.16); }
+.exbtn:disabled { opacity: .45; cursor: default; }
+.exbtn.go { background: var(--q-accent, #8ab6ff); border-color: transparent; color: #0b1019; font-weight: 600; }
+.exseg { display: flex; border: 1px solid var(--q-line, #555); border-radius: 5px; overflow: hidden; }
+.exseg button { all: unset; padding: 3px 9px; color: var(--q-text, #ddd); cursor: pointer; }
+.exseg button[aria-pressed="true"] { background: rgba(138,182,255,.25); color: #fff; }
+#exsum { color: var(--q-text, #ddd); line-height: 1.45; min-height: 2.9em; }
+#exsum .warn { color: #e6bb68; }
+#exhint { line-height: 1.4; }
+#exbar { height: 4px; border-radius: 2px; background: rgba(255,255,255,.1); overflow: hidden; }
+#exbar i { display: block; height: 100%; width: 0; background: var(--q-accent, #8ab6ff); transition: width .3s ease; }
+#exvid { width: 100%; border-radius: 4px; background: #000; display: block; }
+#exdone[hidden], #exvid[hidden] { display: none; }
+body.phone #excard:not(.full) { width: calc(100% - 16px) !important; left: 8px !important; right: auto !important; top: calc(env(safe-area-inset-top, 0px) + 30px) !important; }
+</style>
+
+<section class="win" id="excard" aria-label="Export Movie" hidden>
+  <div class="titlebar"><span class="lights"><button class="close" aria-label="Close">×</button><button class="min" aria-label="Minimize">–</button><button class="zoom" aria-label="Zoom">+</button></span>Export Movie</div>
+  <div class="body">
+    <div id="exhint">Shift-drag across the timeline to mark a stretch, or press I at its start and O at its end.</div>
+    <div class="exrow"><span>From</span><input type="text" id="exfrom" placeholder="YYYY-MM-DD hh:mm:ss" spellcheck="false" aria-label="Start, UTC"><button class="exbtn" id="exin" title="Start at the mission clock (I)">Here</button></div>
+    <div class="exrow"><span>Until</span><input type="text" id="exuntil" placeholder="YYYY-MM-DD hh:mm:ss" spellcheck="false" aria-label="End, UTC"><button class="exbtn" id="exout" title="End at the mission clock (O)">Here</button></div>
+    <div id="exsum"></div>
+    <div class="exrow"><span>Cameras</span><div class="exseg" id="excams"><button data-v="NW">Both</button><button data-v="N">NAC</button><button data-v="W">WAC</button></div></div>
+    <div class="exrow"><span>Frame rate</span><label class="chk"><input type="checkbox" id="exauto"> Adaptive</label><input type="range" id="exfps" min="2" max="30" step="1" aria-label="Pictures per second"><span class="val" id="exfpsv"></span></div>
+    <div class="exrow"><span>Picture size</span><input type="range" id="exsize" min="0" max="2" step="1" aria-label="Picture size per camera"><span class="val" id="exsizev"></span></div>
+    <div class="exrow"><span></span><label class="chk"><input type="checkbox" id="exsound"> Sound</label><label class="chk"><input type="checkbox" id="excap"> Captions</label></div>
+    <div class="exrow"><button class="exbtn go" id="exgo" disabled>Export</button><button class="exbtn" id="exclear">Clear marks</button><span id="exstate"></span></div>
+    <div id="exbar"><i></i></div>
+    <div id="exdone" hidden>
+      <video id="exvid" controls playsinline preload="metadata" hidden></video>
+      <div class="exrow" style="margin-top:7px"><a class="exbtn go" id="exdl" download>Download</a><button class="exbtn" id="excopy">Copy link</button><span id="exsize2"></span></div>
+    </div>
+  </div>
+</section>
+
+<script>
+// ---------- movie export ----------
+(function () {
+  const $ = id => document.getElementById(id);
+  const FRAMES = (() => {                       // the frame server, chosen as the camera window chooses it
+    const q = new URLSearchParams(location.search).get("frames");
+    if (q) return q.replace(/\/$/, "");
+    if (/^https?:$/.test(location.protocol) && !/claude\.ai$|claudeusercontent\.com$|claude\.site$/.test(location.hostname)) return location.origin;
+    return "http://localhost:8765";
+  })();
+  const S = window.cassiniSettings, card = $("excard");
+  const SIZES = [512, 768, 1024];
+  // the export's choices live in the settings registry, so they are kept on this device and listed in Settings
+  if (S) {
+    const D = d => S.define(Object.assign({ section: "Export" }, d));
+    D({ key: "export.adaptive", label: "Adaptive frame rate", type: "toggle", value: true,
+        hint: "Pictures stay on screen for their real gap to the next one, sped up: bursts flip fast, quiet spells linger (1/30 to 1/2 s each)." });
+    D({ key: "export.fps", label: "Fixed frame rate", type: "range", value: 12, min: 2, max: 30, step: 1, unit: "fps",
+        hint: "Pictures per second when the frame rate is not adaptive." });
+    D({ key: "export.size", label: "Picture size", type: "range", value: 1024, min: 512, max: 1024, step: 256, unit: "px",
+        hint: "Pixels per camera in an exported film; 1024 is a full Cassini frame." });
+    D({ key: "export.sound", label: "Sound", type: "toggle", value: true, hint: "Exported films carry the picture sounds, set as in Settings > Sound." });
+    D({ key: "export.caption", label: "Captions", type: "toggle", value: true, hint: "A strip under each camera with the time, target, filters and kind of picture." });
+  }
+  const opt = (k, d) => (S && S.get(k) !== undefined ? S.get(k) : d);
+  const setOpt = (k, v) => { if (S) S.set(k, v); };
+
+  // ---------- the marked stretch, in mission time (et) ----------
+  const X = { a: null, b: null, cams: null, plan: null, planKey: "", job: null, poll: 0, sent: new Set() };
+  const iso = et => new Date(etToMs(et)).toISOString().slice(0, 19);
+  const show = et => iso(et).replace("T", " ");
+  const parse = s => { const t = s.trim().replace(" ", "T"); return /^\d{4}-\d\d-\d\d(T\d\d:\d\d(:\d\d)?)?$/.test(t) ? utcToEt(t.length === 10 ? t + "T00:00:00" : t) : null; };
+  const redraw = () => { if (typeof drawTimeline === "function" && catalog) drawTimeline(); };
+  function mark(a, b) {
+    if (a != null) X.a = a;
+    if (b != null) X.b = b;
+    if (X.a != null && X.b != null && X.b < X.a) [X.a, X.b] = [X.b, X.a];
+    $("exfrom").value = X.a != null ? show(X.a) : "";
+    $("exuntil").value = X.b != null ? show(X.b) : "";
+    $("exhint").hidden = X.a != null && X.b != null;
+    redraw(); estimate();
+  }
+  function clear() { X.a = X.b = null; mark(); }
+
+  // drawn over the timeline: the stretch lit in the camera blue, a handle at each end
+  const prevTimeline = window.studyTimeline;
+  window.studyTimeline = (g, w, h, xn) => {
+    if (X.a != null || X.b != null) {
+      const xa = X.a != null ? etToX(X.a, w) : null, xb = X.b != null ? etToX(X.b, w) : null;
+      if (xa != null && xb != null) { g.fillStyle = "rgba(138,182,255,0.16)"; g.fillRect(xa, 0, xb - xa, h); }
+      g.fillStyle = "rgba(138,182,255,0.95)";
+      for (const [x, dir] of [[xa, 1], [xb, -1]]) {
+        if (x == null || x < -8 || x > w + 8) continue;
+        g.fillRect(Math.round(x) - 1, 0, 2, h);
+        g.beginPath(); g.moveTo(x, 0); g.lineTo(x + 7 * dir, 0); g.lineTo(x, 9); g.fill();
+      }
+    }
+    if (prevTimeline) prevTimeline(g, w, h, xn);
+  };
+
+  // shift-drag marks a stretch; dragging a marked edge moves it; anything else scrubs as before
+  const tl = $("tl");
+  let drag = null;
+  const etAt = e => { const r = tl.getBoundingClientRect(); return xToEt(e.clientX - r.left, r.width); };
+  window.addEventListener("pointerdown", e => {
+    if (e.target !== tl || !catalog) return;
+    const r = tl.getBoundingClientRect(), x = e.clientX - r.left, near = v => v != null && Math.abs(etToX(v, r.width) - x) < 7;
+    if (e.shiftKey) drag = { from: etAt(e), edge: null };
+    else if (near(X.a)) drag = { edge: "a" };
+    else if (near(X.b)) drag = { edge: "b" };
+    else return;
+    e.stopImmediatePropagation(); e.preventDefault();
+    tl.setPointerCapture(e.pointerId);
+  }, true);
+  window.addEventListener("pointermove", e => {
+    if (!drag) return;
+    e.stopImmediatePropagation();
+    const t = etAt(e);
+    if (drag.edge) mark(drag.edge === "a" ? t : null, drag.edge === "b" ? t : null);
+    else { X.a = Math.min(drag.from, t); X.b = Math.max(drag.from, t); mark(); }
+  }, true);
+  window.addEventListener("pointerup", e => {
+    if (!drag) return;
+    e.stopImmediatePropagation();
+    const made = !drag.edge;
+    drag = null;
+    if (made && X.a != null && X.b - X.a > 1) open();
+  }, true);
+  // the cursor says when an edge can be dragged
+  tl.addEventListener("pointermove", e => {
+    if (drag || !catalog) return;
+    const r = tl.getBoundingClientRect(), x = e.clientX - r.left;
+    const edge = [X.a, X.b].some(v => v != null && Math.abs(etToX(v, r.width) - x) < 7);
+    tl.style.cursor = edge ? "col-resize" : e.shiftKey ? "crosshair" : "";
+  });
+
+  // ---------- what the film will be: the server's plan, asked for as the choices change ----------
+  const params = () => {
+    const q = new URLSearchParams({ from: iso(X.a), until: iso(X.b), cams: X.cams || "NW", fps: opt("export.adaptive", true) ? "auto" : String(opt("export.fps", 12)),
+      size: String(opt("export.size", 1024)), sound: opt("export.sound", true) ? "1" : "0", caption: opt("export.caption", true) ? "1" : "0" });
+    return q.toString();
+  };
+  let timer = 0;
+  function estimate() {
+    clearTimeout(timer);
+    $("exgo").disabled = true;
+    if (X.a == null || X.b == null || X.b - X.a < 1) { $("exsum").textContent = X.a != null || X.b != null ? "Mark the other end too." : ""; return; }
+    $("exsum").textContent = "Counting pictures…";
+    timer = setTimeout(async () => {
+      const key = params();
+      try {
+        const r = await fetch(`${FRAMES}/export/plan.json?${key}`), p = await r.json();
+        if (key !== params()) return;
+        if (!r.ok) { $("exsum").innerHTML = `<span class="warn">${p.error || "The server cannot plan that film."}</span>`; return; }
+        // first plan of a stretch: both cameras when both take part, otherwise the one that does
+        if (!X.cams) {
+          const n = { N: 0, W: 0 }; p.pictures.forEach(e => n[e.cam]++);
+          X.cams = n.N >= 0.1 * p.count && n.W >= 0.1 * p.count ? "NW" : n.N > n.W ? "N" : "W";
+          segs(); if (X.cams !== "NW") return estimate();
+        }
+        X.plan = p; X.planKey = key;
+        const n = { N: 0, W: 0 }; p.pictures.forEach(e => n[e.cam]++);
+        // measured on the Mac Mini: about 0.065 MB a second of film at 1024 x 1072, 0.11 at 2048 x 1072, sound included
+        const mb = p.frames ? Math.max(0.1, p.seconds * (0.03 + 0.035 * p.width * p.height / (1024 * 1072))) : 0;
+        $("exsum").innerHTML = p.count ? `${p.count.toLocaleString()} pictures (NAC ${n.N.toLocaleString()}, WAC ${n.W.toLocaleString()}) · film ${fmtDur(p.seconds)} at ${p.width}×${p.height} · about ${mb.toFixed(mb < 10 ? 1 : 0)} MB` : `<span class="warn">No pictures in this stretch.</span>`;
+        $("exgo").disabled = !p.count;
+      } catch (err) { $("exsum").innerHTML = `<span class="warn">No frame server at ${FRAMES}.</span>`; }
+    }, 250);
+  }
+
+  // ---------- making the film ----------
+  async function go() {
+    if (!X.plan || X.planKey !== params()) return;
+    $("exgo").disabled = true; setState("Starting…", 0); $("exdone").hidden = true;
+    const plan = X.plan;
+    try {
+      const r = await fetch(`${FRAMES}/export?${params()}`, { method: "POST" }), job = await r.json();
+      if (!r.ok) return setState(job.error || "The server refused the export.", 0);
+      X.job = job;
+      if (opt("export.sound", true) && !job.audio && job.state !== "failed") soundtrack(job.id, plan);
+      follow(job);
+    } catch (err) { setState("No frame server.", 0); }
+  }
+  function setState(text, frac) { $("exstate").textContent = text; $("exbar").firstElementChild.style.width = `${(frac * 100).toFixed(1)}%`; }
+  function follow(job) {
+    clearTimeout(X.poll);
+    const id = job.id;
+    if (!X.job || X.job.id !== id) return;
+    if (job.state === "done") return done(job);
+    if (job.state === "failed") return setState(`Failed: ${job.error || "see the server log"}`, 0);
+    const frac = job.total ? job.done / job.total : 0;
+    setState(job.state === "queued" ? "Waiting for the film before it…" : job.state === "sound" ? "Adding the sound…"
+      : `${job.done.toLocaleString()} of ${job.total.toLocaleString()} pictures${job.eta != null ? ` · ${fmtDur(job.eta)} left` : ""}`, frac * 0.97);
+    X.poll = setTimeout(async () => {
+      try { const r = await fetch(`${FRAMES}/export/${id}.json`, { cache: "no-store" }); follow(await r.json()); } catch (err) { follow(job); }
+    }, 1000);
+  }
+  function done(job) {
+    const url = `${FRAMES}/export/${job.id}.mp4`;
+    setState(`Done${job.took ? ` in ${fmtDur(job.took)}` : ""}${job.audio ? " · with sound" : ""}`, 1);
+    $("exdone").hidden = false;
+    const v = $("exvid"); v.hidden = false; if (v.dataset.src !== url) { v.src = url; v.dataset.src = url; }
+    $("exdl").href = `${url}?download=1`; $("exdl").setAttribute("download", job.name || "cassini.mp4");
+    $("exsize2").textContent = job.bytes ? `${(job.bytes / 1048576).toFixed(1)} MB · ${job.name}` : job.name || "";
+    $("excopy").onclick = async () => { try { await navigator.clipboard.writeText(url); $("excopy").textContent = "Copied"; setTimeout(() => { $("excopy").textContent = "Copy link"; }, 1500); } catch (e) { prompt("Film link", url); } };
+  }
+
+  // the soundtrack: the film's picture list played through the live sound's synth, offline, sent to the job as a WAV
+  async function soundtrack(id, plan) {
+    const snd = window.cassiniSound;
+    if (!snd || !snd.render || X.sent.has(id)) return;
+    X.sent.add(id);
+    const byId = new Map(); for (let k = 0; k < catalog.id.length; k++) byId.set(catalog.id[k], k);
+    const both = new Set(plan.pictures.map(e => e.cam)).size > 1, run = {}, events = [];
+    for (const e of plan.pictures) {
+      const ev = { t: e.at, cam: e.cam, k: byId.get(e.id), nm: e.nm || 0, et: utcToEt(new Date(e.t * 1000).toISOString().slice(0, 19)), pan: both ? (e.cam === "N" ? -0.5 : 0.5) : 0 };
+      if (e.set_nm) ev.set = e.set_nm;
+      if (e.first === "mosaic") { ev.tile = run[e.cam] = (run[e.cam] || 0) + 1; } else run[e.cam] = 0;
+      events.push(ev);
+    }
+    markEnds(events);
+    try {
+      const span = plan.pictures.length > 1 ? plan.pictures[plan.pictures.length - 1].t - plan.pictures[0].t : 600;
+      const buf = await snd.render(events.filter(ev => ev.k !== undefined), plan.seconds, 48000, { speed: Math.max(1, span / Math.max(1, plan.seconds)) });
+      await fetch(`${FRAMES}/export/${id}/sound.wav`, { method: "PUT", body: wav(buf), headers: { "Content-Type": "audio/wav" } });
+    } catch (err) { console.warn("export sound", err); }
+  }
+  // each run of mosaic tiles on one camera: every tile learns how many the run has
+  function markEnds(events) {
+    const open = {};
+    const close = cam => { const r = open[cam]; if (r) r.forEach(ev => { ev.of = r.length; }); open[cam] = null; };
+    for (const ev of events) {
+      if (ev.tile) (open[ev.cam] = open[ev.cam] || []).push(ev);
+      else close(ev.cam);
+    }
+    close("N"); close("W");
+  }
+  // 16-bit PCM WAV of an AudioBuffer
+  function wav(buf) {
+    const ch = buf.numberOfChannels, n = buf.length, out = new DataView(new ArrayBuffer(44 + n * ch * 2));
+    const str = (o, s) => { for (let i = 0; i < s.length; i++) out.setUint8(o + i, s.charCodeAt(i)); };
+    str(0, "RIFF"); out.setUint32(4, 36 + n * ch * 2, true); str(8, "WAVE"); str(12, "fmt ");
+    out.setUint32(16, 16, true); out.setUint16(20, 1, true); out.setUint16(22, ch, true); out.setUint32(24, buf.sampleRate, true);
+    out.setUint32(28, buf.sampleRate * ch * 2, true); out.setUint16(32, ch * 2, true); out.setUint16(34, 16, true); str(36, "data"); out.setUint32(40, n * ch * 2, true);
+    const data = Array.from({ length: ch }, (_, c) => buf.getChannelData(c));
+    for (let i = 0, o = 44; i < n; i++) for (let c = 0; c < ch; c++, o += 2) out.setInt16(o, Math.max(-1, Math.min(1, data[c][i])) * 32767, true);
+    return new Blob([out], { type: "audio/wav" });
+  }
+
+  // ---------- the window ----------
+  function segs() { document.querySelectorAll("#excams button").forEach(b => b.setAttribute("aria-pressed", String(b.dataset.v === (X.cams || "NW")))); }
+  function controls() {
+    $("exauto").checked = opt("export.adaptive", true);
+    $("exfps").value = opt("export.fps", 12); $("exfps").disabled = $("exauto").checked;
+    $("exfpsv").textContent = $("exauto").checked ? "adaptive" : `${opt("export.fps", 12)} fps`;
+    const sz = opt("export.size", 1024); $("exsize").value = Math.max(0, SIZES.indexOf(sz)); $("exsizev").textContent = `${sz} px`;
+    $("exsound").checked = opt("export.sound", true); $("excap").checked = opt("export.caption", true);
+    segs();
+  }
+  function open() {
+    controls();
+    card.hidden = false; card.dispatchEvent(new Event("pointerdown"));
+    mark();
+  }
+  function close() { card.hidden = true; }
+  window.cassiniExport = { open, close, mark, clear, get state() { return X; } };
+
+  $("exin").addEventListener("click", () => mark(state.et, null));
+  $("exout").addEventListener("click", () => mark(null, state.et));
+  for (const [id, end] of [["exfrom", "a"], ["exuntil", "b"]]) $(id).addEventListener("change", e => { const t = parse(e.target.value); if (t != null) mark(end === "a" ? t : null, end === "b" ? t : null); else mark(); });
+  $("excams").addEventListener("click", e => { const b = e.target.closest("button"); if (!b) return; X.cams = b.dataset.v; segs(); estimate(); });
+  $("exauto").addEventListener("change", e => { setOpt("export.adaptive", e.target.checked); controls(); estimate(); });
+  $("exfps").addEventListener("input", e => { setOpt("export.fps", +e.target.value); controls(); estimate(); });
+  $("exsize").addEventListener("input", e => { setOpt("export.size", SIZES[+e.target.value]); controls(); estimate(); });
+  $("exsound").addEventListener("change", e => { setOpt("export.sound", e.target.checked); estimate(); });
+  $("excap").addEventListener("change", e => { setOpt("export.caption", e.target.checked); estimate(); });
+  $("exgo").addEventListener("click", go);
+  $("exclear").addEventListener("click", () => { clear(); X.cams = null; });
+  card.addEventListener("click", e => { if (e.target.closest(".close")) { e.stopPropagation(); close(); } }, true);
+  // I and O mark the start and end at the mission clock, E opens the window, Escape closes it
+  window.addEventListener("keydown", e => {
+    if (e.metaKey || e.ctrlKey || e.altKey || /INPUT|SELECT|TEXTAREA/.test(e.target.tagName) || !catalog) return;
+    const k = e.key.toLowerCase();
+    if (k === "i") { mark(state.et, null); if (X.b != null) open(); }
+    else if (k === "o") { mark(null, state.et); open(); }
+    else if (k === "e") { card.hidden ? open() : close(); }
+    else if (e.key === "Escape" && !card.hidden) close();
+  });
+  const go2 = $("gomenu");
+  if (go2) { const li = document.createElement("li"); li.innerHTML = '<button id="goexport">Export Movie…<span class="kbd">E</span></button>'; go2.appendChild(li); li.querySelector("button").addEventListener("click", open); }
+})();
+</script>
