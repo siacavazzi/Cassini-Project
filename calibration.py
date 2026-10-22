@@ -301,7 +301,7 @@ filter stretched and matched on its own). The frame server keeps the two in sepa
 LOOKS = ("balanced", "classic")
 _look = contextvars.ContextVar("look", default="balanced")
 
-NOISE_MARGIN = 2.5   # balanced: the black sits this many median absolute deviations of the sky (pooled
+NOISE_MARGIN = 3.0   # balanced: the black sits this many median absolute deviations of the sky (pooled
                      # over the channels) above each channel's sky median
 WHITE_PCT = 99.5     # balanced: the percentile of the lit pixels of the brightest channel that is white
 SHOULDER = 0.8       # balanced composites: above this share of white, brightness rolls off softly instead

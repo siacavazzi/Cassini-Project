@@ -346,9 +346,9 @@ SAME_PLACE = 0.25   # of a frame: tiles of different filters this close are the 
 
 def seams(u, p, tiles, rect, ref, cache):
     """Balanced look: the seam correction of every pointing, solved once on the filter ref (the best covered of
-    the filters drawn) on linear values, with the gains anchored (mosaic.seams, none pinned), and shared by
-    every filter's tile at that pointing, so the filters at one spot get the same correction and keep their
-    colour. {tile n: (gain, offset)}; a tile with no tile of ref at its pointing gets none. Kept in the cache."""
+    the filters drawn) on linear values, with the gains anchored (mosaic.seams, none pinned), for every filter's
+    tile at that pointing, so the filters at one spot start from the same correction and keep their colour.
+    {tile n: (gain, offset)}; a tile with no tile of ref at its pointing gets none. Kept in the cache."""
     mine = [t for t in tiles if t["filter"] == ref and "offset" in t]
     name = f"{ref.replace('/', '_')}-{len(mine)}-{'_'.join(str(round(v)) for v in rect)}.json"
     path = os.path.join(folder(u, cache), "seams", name)
@@ -395,9 +395,13 @@ def filter_mosaic(u, p, f, tiles, rect, cache, ref=None):
         window, shown = _window(u, p, mine, rect, cache)
         corrections = None
         if balanced and window:
+            # ref's seams at each pointing; another filter's own overlaps then adjust them where they clearly
+            # differ (a frame's own exposure error), pulled toward them, so the filter keeps their overall level
             solved = seams(u, p, tiles, rect, ref, cache)
             pick = [solved.get(t["n"], (1.0, 0.0)) for t in shown]
             corrections = (np.array([[g] * 3 for g, _ in pick]), np.array([[o] * 3 for _, o in pick]))
+            if f != ref:
+                corrections = mosaic.seams([w[0] for w in window], None, p["display_scale"]["gamma"], corrections)
         if not window:
             rgba = np.zeros((H, W, 4), np.uint8)
         else:

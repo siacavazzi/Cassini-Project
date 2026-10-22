@@ -90,11 +90,16 @@ def compose(window, reproject=None, calibrated=False, pin=-1, gamma=None, correc
 The gains and offsets compose uses for frames already on one calibrated scale: (gains, offsets), each
 of shape (frames, 3). gamma as compose; with pin None and gamma given, the gains are anchored (the mean
 log gain held at 0, see match_gains), so they keep the mosaic's overall level instead of shrinking.
+toward = (gains, offsets) the corrections are pulled toward instead of 1 and 0 (anchored only): another
+filter's seams at the same pointings, so this filter keeps their overall level and takes them where its
+own overlaps say nothing.
 """
-def seams(frames, pin=-1, gamma=None):
+def seams(frames, pin=-1, gamma=None, toward=None):
     anchored = pin is None and gamma is not None
-    gains = match_gains(frames, calibrated_gain, pin, calibrated_overlap, gamma, anchored)
-    return gains, match_offsets(frames, gains, pin, calibrated_overlap, gamma)
+    toward = toward if anchored else None
+    gains = match_gains(frames, calibrated_gain, pin, calibrated_overlap, gamma, anchored,
+                        None if toward is None else toward[0])
+    return gains, match_offsets(frames, gains, pin, calibrated_overlap, gamma, None if toward is None else toward[1])
 
 
 """
@@ -218,9 +223,10 @@ gamma = solve on linear values (compose). anchored = solve the log gains instead
 pair asks log g_i - log g_j = log(mean_j / mean_i), weighted by how well the pair's means are measured,
 and every log gain is pulled toward 0 (anchor_pull), which holds their mean at 0. Without that the
 pull above is too weak for a whole mosaic: the solve shrinks every gain until the limit stops it.
+toward = gains (frames, 3) to pull toward instead of 1 (anchored), whose mean log the result keeps.
 returns array of shape (frames, 3)
 """
-def match_gains(frames, limit=None, pin=-1, overlap=None, gamma=None, anchored=False):
+def match_gains(frames, limit=None, pin=-1, overlap=None, gamma=None, anchored=False, toward=None):
     n = len(frames)
     gains = np.ones((n, 3))
     if n < 2:
@@ -231,7 +237,7 @@ def match_gains(frames, limit=None, pin=-1, overlap=None, gamma=None, anchored=F
         small = linear(small, gamma)
     limit = limit or max_gain
     if anchored:
-        return np.clip(_anchored_gains(small, pairs, n), 1 / limit, limit)
+        return np.clip(_anchored_gains(small, pairs, n, toward), 1 / limit, limit)
 
     sig_n = 10.0   # expected noise in a mean brightness (8 bit levels)
     sig_g = 1.0    # how far a gain may wander from 1 without overlaps pinning it down
@@ -259,9 +265,9 @@ def match_gains(frames, limit=None, pin=-1, overlap=None, gamma=None, anchored=F
     return np.clip(gains, 1 / limit, limit)
 
 
-def _anchored_gains(small, pairs, n):
+def _anchored_gains(small, pairs, n, toward=None):
     sig_n = 10.0   # expected noise in a mean brightness (levels)
-    gains = np.ones((n, 3))
+    gains = np.ones((n, 3)) if toward is None else np.array(toward, dtype=float)
     for c in range(3):
         rows = []
         for i, j, sl, ov, N in pairs:
@@ -275,7 +281,7 @@ def _anchored_gains(small, pairs, n):
             continue
         top = max(w for *_, w, _ in rows)
         A = np.eye(n) * anchor_pull
-        b = np.zeros(n)
+        b = anchor_pull * np.log(gains[:, c])
         for i, j, w, d in rows:
             w /= top
             A[i, i] += w
@@ -296,10 +302,10 @@ frame to frame and shows as a step at every seam of a faint background. The pinn
 (pin None: the offsets average about 0); the others are matched to it through their overlaps, by least squares on the median difference
 over each overlap where both are above black (stars and cosmic rays don't move a median). Frames that overlap nothing (fewer
 than overlap pixels, as match_gains) keep 0. gamma = solve on linear values (compose): the offsets are then a share of white,
-at most max_linear_offset.
+at most max_linear_offset. toward = offsets (frames, 3) to pull toward instead of 0 (pin None).
 returns array of shape (frames, 3)
 """
-def match_offsets(frames, gains, pin=-1, overlap=None, gamma=None):
+def match_offsets(frames, gains, pin=-1, overlap=None, gamma=None, toward=None):
     n = len(frames)
     offsets = np.zeros((n, 3))
     if n < 2:
@@ -309,8 +315,8 @@ def match_offsets(frames, gains, pin=-1, overlap=None, gamma=None):
     if gamma is not None:
         levels = [f / 255 for f in linear(small, gamma)]
     for c in range(3):
-        A = np.eye(n) * 1e-3   # small pull toward 0 for frames without overlaps
-        b = np.zeros(n)
+        A = np.eye(n) * 1e-3   # small pull toward 0 (or toward) for frames without overlaps
+        b = np.zeros(n) if toward is None else 1e-3 * np.asarray(toward, dtype=float)[:, c]
         for i, j, sl, ov, N in pairs:
             si, sj = small[i][sl][..., c], small[j][sl][..., c]
             # only where both frames are above black: a sky clipped to 0 hides how far it is off

@@ -75,6 +75,10 @@ lin_in, lin_out = cal.decode(f / 255, gamma), cal.decode(up / 255, gamma)
 lit = (f > 120) & (f < 200)
 assert np.abs(lin_out[lit] / lin_in[lit] - 1.05).max() < 0.02
 out = mosaic.compose([(fr, None, None, None) for fr in frames], False, calibrated=True, pin=None, gamma=gamma)
+# another filter pulled toward these seams keeps their overall level and still evens out its own tiles
+shared = (np.full((4, 3), 1.02), np.zeros((4, 3)))
+g2, _ = mosaic.seams(frames, None, gamma, shared)
+assert abs(np.log(g2[:, 0]).mean() - np.log(1.02)) < 0.01 and np.ptp(true_gain * g2[:, 0]) < 0.03
 assert out.shape == (T, W, 4) and out[..., 3].max() == 255
 
 # ---- a filled pass (a bright moon filling every frame): one black and white for every filter, black below white ----
