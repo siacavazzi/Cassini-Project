@@ -2542,7 +2542,7 @@ body.phone.has-dock { --appdockh: 50px; }
       const kb = framesOf(cam, body).ks[p - 1];   // p counts this feed's frames (a body window's: that body's only)
       // (or the frame after is: the first tile of a pass)
       const same = q => q !== undefined && catalog.target[q] === catalog.target[k] && catalog.obs[q] === catalog.obs[k];
-      want.tile = !want.held && (same(kb) || same(framesOf(cam, body).ks[p + 1])) && (!s || want.set >= 0);
+      want.tile = !want.held && (same(kb) || same(framesOf(cam, body).ks[p + 1])) && (!s || want.set >= 0 || !!want.movie);
       // a new frame of the pass whose mosaic is up: ask for the mosaic with it now, alongside the frame itself
       // (by this frame, also while the window holds an earlier colour set)
       if ((obsShown && catalog.obs[k] === obsShown) || (want.tile && (mosaicPass(k) || modeOf(k) === "mosaic" || modeOf(k) === "mosaic_movie"))) mosaicOf(want.held ? { key: want.key, set: -1, k } : want, true);

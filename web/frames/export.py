@@ -215,7 +215,7 @@ class Pictures:
             return (made[0], "movie") if made and made[0] else None
         if kind == "rolling":
             made = obs_mosaic.rolling_webp(arg, size, self.cache, slots=self.slots, wait=True)
-            return (made[0], "mosaic") if made and made[0] else None
+            return (made[0], "mosaic movie") if made and made[0] else None
         if kind == "color":
             if self._color:
                 return self._color(arg, size, self.cache)[0], "colour"
@@ -281,7 +281,7 @@ def _font(px):
 
 def label(e, what):
     """The caption under a pane: when, what, which camera and filters, and how the picture was made."""
-    kind = KIND.get(e.get("set"), "color") if what == "colour" else what if what in ("mosaic", "movie") else ""
+    kind = KIND.get(e.get("set"), "color") if what == "colour" else what if what in ("mosaic", "movie", "mosaic movie") else ""
     target = (e["target"] or "Unknown").replace("_", " ").title()
     return " · ".join(x for x in (f"{utc(e['t'])} UTC", target, f"{'NAC' if e['cam'] == 'N' else 'WAC'} {e['filters']}", kind) if x)
 
@@ -350,7 +350,7 @@ def render(opt, p, pictures, path, progress=lambda done, total: None, workers=3)
                 kinds[what or "none"] += 1
                 # a mosaic stays up while its observation goes on: the pass's other frames (another filter, a frame
                 # that is not a tile) would otherwise flash in and out between its tiles
-                if what == "mosaic":
+                if what in ("mosaic", "mosaic movie"):
                     building[e["cam"]] = e["obs"]
                 elif building.get(e["cam"]) == e["obs"] and e["obs"]:
                     kinds["held behind mosaic"] += 1

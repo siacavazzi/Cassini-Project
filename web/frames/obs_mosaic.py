@@ -69,6 +69,7 @@ MOVIE_JUMPS = 0.3    # a pass whose same-filter steps jump (mosaic.min_step) les
 MOVIE_FIT = 2.0      # a pass played as a movie shows its whole footprint up to this many frames across, else a
                      # window this wide following the frame, at one scale for the whole pass
 MOVIE_MARGIN = 0.15  # of a frame, round a movie's footprint
+MOVIE_SAMPLES = 6    # tiles a movie's footprint is measured on
 TRAIL = 12           # most earlier frames a movie's rolling trail keeps under the newest
 SCALE_FRAMES = 96    # most frames the pass's display scale is measured on (evenly spread over a long movie)
 PAN_STEP = 0.45      # a pan steps less than this share of a frame between frames of one filter (median) ...
@@ -600,17 +601,44 @@ def so_far(u, n, cache, made=None, out=OUT):
                 "fixed": p["fixed"], "width": im.width, "height": im.height}
 
 
-def movie_rect(p, t):
+def movie_footprint(u, cache, p=None):
+    """The ground a movie's frames cover (x0, y0, x1, y1, reference pixels from the body's centre), from where SPICE
+    put the tiles themselves rather than the geometry cache (which can be a third of a frame off by the end of a
+    movie tracking a propeller): MOVIE_SAMPLES tiles spread over the pass, with MOVIE_MARGIN round them for the
+    frames between. Worked out once and kept with the pass."""
+    path = os.path.join(folder(u, cache), "movie_footprint.json")
+    if os.path.exists(path):
+        with open(path) as fh:
+            return json.load(fh)
+    p = p or plan(u, cache)
+    n = len(u["frames"])
+    picks = sorted({round(i * (n - 1) / max(1, MOVIE_SAMPLES - 1)) for i in range(MOVIE_SAMPLES)}) if n else []
+    boxes = []
+    for j in picks:
+        t = tile(u, j, cache, p["display_scale"])
+        if "offset" in t:
+            bx, by, bw, bh = t["box"]
+            boxes.append((t["offset"][0] + bx, t["offset"][1] + by, t["offset"][0] + bx + bw, t["offset"][1] + by + bh))
+    if boxes:
+        m = MOVIE_MARGIN * FRAME
+        fp = [min(b[0] for b in boxes) - m, min(b[1] for b in boxes) - m, max(b[2] for b in boxes) + m, max(b[3] for b in boxes) + m]
+        # the geometry cache's footprint too, so no frame between the samples falls outside both
+        g = p["footprint"]
+        fp = [min(fp[0], g[0]), min(fp[1], g[1]), max(fp[2], g[2]), max(fp[3], g[3])]
+    else:
+        fp = list(p["footprint"])
+    reel._cached(path, lambda: json.dumps(fp).encode())
+    return fp
+
+
+def movie_rect(fp, t):
     """The view of a pass played as a movie (x0, y0, w, h in reference pixels from the body's centre): its whole
-    footprint when that is at most MOVIE_FIT frames across, so the body holds still while the pointing wanders;
-    otherwise a window MOVIE_FIT frames across centred on frame t (a creeping ring or limb movie moves along).
-    Either way one size for the whole pass, so the picture never rescales."""
-    # a margin round the footprint the geometry cache gives, so a frame SPICE puts a little further out (a movie
-    # tracking a propeller across the rings) is not cut at the view's edge
-    m = MOVIE_MARGIN * FRAME
-    x0, y0, x1, y1 = p["footprint"][0] - m, p["footprint"][1] - m, p["footprint"][2] + m, p["footprint"][3] + m
+    footprint fp (movie_footprint) when that is at most MOVIE_FIT frames across, so the body holds still while the
+    pointing wanders; otherwise a window MOVIE_FIT frames across centred on frame t, kept inside fp (a creeping
+    ring or limb movie moves along). Either way one size for the whole pass, so the picture never rescales."""
+    x0, y0, x1, y1 = fp
     side = MOVIE_FIT * FRAME
-    if max(x1 - x0, y1 - y0) <= side + 2 * m:
+    if max(x1 - x0, y1 - y0) <= side:
         return x0, y0, x1 - x0, y1 - y0
     w, h = min(x1 - x0, side), min(y1 - y0, side)
     cx, cy = t["offset"]
@@ -648,7 +676,7 @@ def movie_frame(u, n, cache, trail=0, colour=True, out=OUT):
     if "offset" not in t:
         rep["why"] = t.get("why", "not placed by SPICE")
         return None, rep
-    rect = movie_rect(p, t)
+    rect = movie_rect(movie_footprint(u, cache, p), t)
     k = out / max(rect[2], rect[3])
     W, H = max(1, math.ceil(rect[2] * k)), max(1, math.ceil(rect[3] * k))
     # only the frames this picture needs are made: the newest of each colour filter within SET_GAP, the trail
@@ -719,7 +747,7 @@ def movie_webp(frame_id, size, cache, trail=0, colour=True, wait=False, ahead=6)
     if not found or found[1] < 0:
         return None
     u, n = found
-    if not wait and not os.path.exists(os.path.join(folder(u, cache), "plan.json")):
+    if not wait and not all(os.path.exists(os.path.join(folder(u, cache), f)) for f in ("plan.json", "movie_footprint.json")):
         warm_movie(u, n, ahead, cache)
         return None, {"why": "working out the pass", "observation": u["key"][1], "pass": u["key"][3]}
     path = os.path.join(folder(u, cache), "movie", str(size), f"{n}_{trail}_{int(bool(colour))}.webp")
@@ -773,6 +801,8 @@ def warm_movie(u, n, ahead, cache):
         try:
             with _movie_background:
                 p = plan(u, cache)
+                if u.get("kind", "movie" if u.get("movie") else None) != "mosaic_movie":
+                    movie_footprint(u, cache, p)
                 while True:
                     with _lock:
                         first, last = _movie_ahead.get(key, (0, -1))
