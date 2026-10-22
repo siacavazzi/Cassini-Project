@@ -362,6 +362,13 @@ rep("""    closeCam.position.copy(camera.position); closeCam.quaternion.copy(cam
     cassini.scale.setScalar(cs);""")
 rep('  state.pointed = !!qb;\n', '  state.pointed = !!qb;\n  window.cassiniPointing = qb ? "CK" : "EARTH";\n')
 rep('  const card = $("imgcard");\n', '  const card = $("camsink");\n')   # the page has a window per camera (see the head)
+# finale hooks (finale.html): its own clock before the bodies are placed, Cassini carried on past the end of the data,
+# its attitude, and the camera after the orbit controls
+rep('  updateBodies();\n  if (ready && state.focus', '  if (window.studyFrame) window.studyFrame(dt);\n  updateBodies();\n  if (ready && state.focus')
+rep('  for (const name in tracks) positionAt(tracks[name], state.et, pos[name]);\n',
+    '  for (const name in tracks) positionAt(tracks[name], state.et, pos[name]);\n  if (window.studyPositions) window.studyPositions();\n')
+rep('  } else { relScene("EARTH", vA); cassini.lookAt(vA); }\n', '  } else { relScene("EARTH", vA); cassini.lookAt(vA); }\n  if (window.studyAttitude) window.studyAttitude();\n')
+rep('  aimFollow();\n', '  aimFollow();\n  if (window.studyCamera) window.studyCamera();\n')
 # effective wavelength of every filter pair, for placing colour channels: "N:CL1/RED" -> nm
 nm = {}
 for line in open(os.path.join(HERE, "..", "..", "..", "filter_calibration.csv")).read().splitlines()[1:]:
@@ -392,5 +399,16 @@ for old, new in [
 lscript = lpart("script")
 assert lscript.count("/*FACTS*/[]") == 1
 script += lscript.replace("/*FACTS*/[]", json.dumps(facts, ensure_ascii=False)) + "\n"
+# the Grand Finale (finale.html): its style joins the head's, its overlay goes into #app, and its script runs last (it
+# wraps the clock's studyAdvance hook and fills the finale hooks patched into the viewer below)
+fin = open(os.path.join(os.path.dirname(os.path.abspath(sys.argv[2])), "finale.html")).read()
+npart = lambda tag: fin[fin.index(f"<{tag}"):fin.index(f"</{tag}>") + len(tag) + 3]
+for old, new in [
+    ("</style>\n</head>", npart("style")[len("<style>"):] + "\n</head>"),
+    ('  <div id="loading">', "  " + npart("section") + "\n\n" + '  <div id="loading">'),
+]:
+    assert study.count(old) == 1, old
+    study = study.replace(old, new)
+script += npart("script") + "\n"
 open(out, 'w').write(study + script)
 print("ok", out, len(study + script))

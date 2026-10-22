@@ -251,6 +251,21 @@ body.phone #ssound { width: 30px; height: 30px; }
     return off.startRendering();
   }
   window.cassiniSound = { render, get intensity() { return intensity; } };
+  // the Grand Finale (finale.html): Cassini's radio carrier as a pure tone that wavers as the antenna wobbles off Earth
+  // and stops at loss of signal, and a slow chord under each line of the mission recap, a step higher each time
+  let carrierTone = null;
+  window.cassiniSound.carrier = (level, waver) => {
+    if (!ctx || ctx.state !== "running") return;
+    if (!carrierTone) { carrierTone = hum(0, "sine"); carrierTone.o.forEach(o => { o.frequency.value = hz(noteOf(ROOT.N, 4)); }); carrierTone.f.frequency.value = 1600; }
+    const t = ctx.currentTime;
+    carrierTone.depth.gain.setTargetAtTime(waver * 30, t, 0.2); carrierTone.lfo.frequency.setTargetAtTime(2 + 9 * waver, t, 0.3);
+    carrierTone.g.gain.setTargetAtTime(level * 0.03, t, level ? 0.3 : 0.02);
+  };
+  window.cassiniSound.chord = (step = 0) => {
+    if (!ctx || ctx.state !== "running") return;
+    const t = ctx.currentTime + 0.05;
+    [0, 2, 4, 7].forEach((d, i) => bell(t + i * 0.14, hz(noteOf(ROOT.W, step + d)), 0.09, (i - 1.5) * 0.3, 5, 0.5, 1));
+  };
   // a soft low drum: a sine falling from 110 to 45 Hz
   let nextBeat = 0;
   function thump(t, g) {

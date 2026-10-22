@@ -823,6 +823,33 @@ body.phone #excard:not(.full) { width: calc(100% - 16px) !important; left: 8px !
 /* the first load: the black #loading screen stays behind as the backdrop, its own text gives way to this one */
 #loading > div { visibility: hidden; }
 @media (prefers-reduced-motion: reduce) { #loadscreen, #loadscreen .ls-tip { transition: none; } #loadscreen .ls-status::after { animation: none; content: "..."; } }
+
+#finale { position: fixed; inset: 0; z-index: 2002; pointer-events: none; }
+#finale[hidden] { display: none; }
+#finale .fx-black { position: absolute; inset: 0; background: #000; opacity: 0; }
+/* a shade under the captions, so they read over Saturn's bright clouds */
+#finale .fx-shade { position: absolute; inset: 0; background: linear-gradient(to top, rgba(0,0,0,.78) 0, rgba(0,0,0,.55) 22%, rgba(0,0,0,0) 48%); }
+#finale .fx-caps { position: absolute; left: 50%; bottom: 15vh; transform: translateX(-50%); width: min(640px, calc(100vw - 32px)); display: grid; }
+#finale .fx-cap { grid-area: 1 / 1; align-self: end; text-align: center; color: var(--q-text); font: 300 19px/1.5 -apple-system, "Helvetica Neue", var(--ui);
+  letter-spacing: .01em; text-shadow: 0 1px 12px rgba(0,0,0,.9), 0 0 2px rgba(0,0,0,.8); opacity: 0; }
+#finale .fx-cap b { display: block; margin-bottom: 8px; font-weight: normal; font-size: 10.5px; letter-spacing: .22em; text-transform: uppercase; color: var(--q-dim); }
+#finale .fx-cap.big { font-size: 26px; }
+#finale .fx-cap ul { list-style: none; margin: 0; padding: 0; }
+#finale .fx-cap li { margin: 3px 0; }
+#finale .fx-cap small { display: block; margin-top: 10px; font-size: 12px; color: var(--q-dim); }
+#finale .fx-read { position: absolute; left: 50%; bottom: 7vh; transform: translateX(-50%); white-space: nowrap; font: 11px/1 var(--hudf); letter-spacing: .08em;
+  color: var(--q-dim); opacity: 0; transition: opacity 1.2s ease; }
+#finale .fx-read.on { opacity: 1; }
+#finale .fx-read i { font-style: normal; color: var(--q-accent); }
+#finale .fx-note { position: absolute; left: 16px; bottom: 14px; max-width: min(460px, calc(100vw - 32px)); font-size: 10.5px; line-height: 1.4; color: rgba(232,236,242,.34); opacity: 0; transition: opacity 1.5s ease; }
+#finale .fx-skip { position: absolute; right: 16px; bottom: 14px; font-size: 10.5px; color: rgba(232,236,242,.34); opacity: 0; transition: opacity 1.5s ease; }
+#finale .fx-note.on, #finale .fx-skip.on { opacity: 1; }
+body.finale { cursor: none; }
+body.finale #app > :not(#gl):not(#finale) { opacity: 0 !important; pointer-events: none !important; transition: opacity 1.2s ease !important; }
+body.finale-out #app * { pointer-events: none !important; }
+body.phone #finale .fx-cap { font-size: 16px; } body.phone #finale .fx-cap.big { font-size: 21px; }
+body.phone #finale .fx-read { font-size: 9.5px; bottom: 9vh; }
+body.phone #finale .fx-note { bottom: 32px; }
 </style>
 </head>
 <body>
@@ -1024,6 +1051,15 @@ body.phone #excard:not(.full) { width: calc(100% - 16px) !important; left: 8px !
     <div class="ls-status" role="status" aria-live="polite">Loading</div>
     <div class="ls-tip"><b>Did you know</b><span></span><small></small></div>
   </div>
+</section>
+
+  <section id="finale" hidden aria-live="polite">
+  <div class="fx-shade"></div>
+  <div class="fx-black"></div>
+  <div class="fx-caps"></div>
+  <div class="fx-read" aria-hidden="true"></div>
+  <div class="fx-note">An interpretation. Cassini's path is its real trajectory; the way it fights to hold its antenna on Earth follows a rule pinned to NASA's numbers, not telemetry.</div>
+  <div class="fx-skip">Esc or click to skip</div>
 </section>
 
   <div id="loading"><div>Starting Cassini OS<br>Loading trajectories<div class="bar"></div></div></div>
@@ -3482,6 +3518,21 @@ body.phone #excard:not(.full) { width: calc(100% - 16px) !important; left: 8px !
     return off.startRendering();
   }
   window.cassiniSound = { render, get intensity() { return intensity; } };
+  // the Grand Finale (finale.html): Cassini's radio carrier as a pure tone that wavers as the antenna wobbles off Earth
+  // and stops at loss of signal, and a slow chord under each line of the mission recap, a step higher each time
+  let carrierTone = null;
+  window.cassiniSound.carrier = (level, waver) => {
+    if (!ctx || ctx.state !== "running") return;
+    if (!carrierTone) { carrierTone = hum(0, "sine"); carrierTone.o.forEach(o => { o.frequency.value = hz(noteOf(ROOT.N, 4)); }); carrierTone.f.frequency.value = 1600; }
+    const t = ctx.currentTime;
+    carrierTone.depth.gain.setTargetAtTime(waver * 30, t, 0.2); carrierTone.lfo.frequency.setTargetAtTime(2 + 9 * waver, t, 0.3);
+    carrierTone.g.gain.setTargetAtTime(level * 0.03, t, level ? 0.3 : 0.02);
+  };
+  window.cassiniSound.chord = (step = 0) => {
+    if (!ctx || ctx.state !== "running") return;
+    const t = ctx.currentTime + 0.05;
+    [0, 2, 4, 7].forEach((d, i) => bell(t + i * 0.14, hz(noteOf(ROOT.W, step + d)), 0.09, (i - 1.5) * 0.3, 5, 0.5, 1));
+  };
   // a soft low drum: a sine falling from 110 to 45 Hz
   let nextBeat = 0;
   function thump(t, g) {
@@ -4642,6 +4693,7 @@ function relScene(name, out) { sub(pos[name], pos[state.focus], tmp); return toS
 
 function updateBodies() {
   for (const name in tracks) positionAt(tracks[name], state.et, pos[name]);
+  if (window.studyPositions) window.studyPositions();
   if (probe) { positionAt(probe.track, state.et, pos.HUYGENS); relScene("HUYGENS", probeObj.position); }
   state.target = imagingTarget();
   state.context = systemOf();
@@ -4685,6 +4737,7 @@ function updateBodies() {
     const R = q2rows(qb), bx = toScene(R[0], new THREE.Vector3()), by = toScene(R[1], new THREE.Vector3()), bz = toScene(R[2], new THREE.Vector3());
     cassini.quaternion.setFromRotationMatrix(mB.makeBasis(bx, by.negate(), bz.negate()));
   } else { relScene("EARTH", vA); cassini.lookAt(vA); }
+  if (window.studyAttitude) window.studyAttitude();
 
   // markers
   const arr = markerPts.geometry.attributes.position.array;
@@ -5346,6 +5399,7 @@ function frame(now) {
     const span = state.view[1] - state.view[0];
     if (state.et > state.view[1] - span * 0.05 || state.et < state.view[0]) setView(span, state.et + span * 0.4);
   }
+  if (window.studyFrame) window.studyFrame(dt);
   updateBodies();
   if (ready && state.focus !== "HUYGENS" && !present(state.focus)) setFocus("CASSINI");
   if (ready) updateFocusRow();
@@ -5356,6 +5410,7 @@ function frame(now) {
   updateFollow(dt);
   controls.update();
   aimFollow();
+  if (window.studyCamera) window.studyCamera();
   const draw = !window.cassiniPerf || cassiniPerf.draw(now);
   if (draw) renderer.clear();
   const cd = camera.position.distanceTo(cassini.position);
@@ -5532,5 +5587,294 @@ function frame(now) {
   tick();
   // the viewer also announces loads (cassini:loading, from the month-chunked loader), so react without waiting a tick
   document.addEventListener("cassini:loading", () => tick());
+})();
+</script>
+<script>
+// ---------- the Grand Finale: Cassini's last minutes and a mission recap, at the end of the data ----------
+(function () {
+  const root = document.getElementById("finale"), black = root.querySelector(".fx-black"), caps = root.querySelector(".fx-caps");
+  const read = root.querySelector(".fx-read"), note = root.querySelector(".fx-note"), skipHint = root.querySelector(".fx-skip");
+  // NASA's numbers (JPL, 2017-09-13 "Final Approach" and 2017-09-15 "Ends Its Historic Exploration of Saturn")
+  const H_LOS = 1500;          // km above the cloud tops at loss of signal
+  const RAMP = 60;             // s from 10 percent of the thrusters' capacity to 100 percent
+  const BEAM = 0.3;            // deg off Earth at which the link is half gone ("a few fractions of a degree")
+  const VIS = 15;              // the wobble is drawn this many times larger than the angle it stands for
+  const LEAD = 100;            // s of the descent shown before loss of signal
+  const NASA_IMAGES = 453048;  // NASA, "Cassini by the Numbers"
+  // the recap: screen seconds from the start of the recap, and the line
+  const RECAP = images => [
+    [1.5, 8, `<b>Received on Earth</b>Cassini's last signal crossed the solar system for 83 minutes. NASA's Deep Space Network in Canberra, Australia, heard it end at 11:55:46 UTC, 4:55 a.m. in Pasadena.`],
+    [10.5, 8.5, `<b>The last data</b>Eight of its twelve instruments were on to the end. Its mass spectrometer, facing into the wind, tasted Saturn's air directly, the first and only time, while its magnetosphere, plasma, radio, infrared and ultraviolet instruments sent their readings home live.`],
+    [20.5, 7, `<b>1997 &ndash; 2017</b>Twenty years in space. Thirteen at Saturn. 294 orbits.`, "big"],
+    [29, 7, `<b>Pictures</b>${fmtInt(NASA_IMAGES)} pictures of Saturn, its rings and its moons.${images ? `<small>${fmtInt(images)} of them play in this replay.</small>` : ""}`, "big"],
+    [37.5, 10, `<b>What it found</b><ul><li>An ocean under the ice of Enceladus, spraying into space</li><li>Seas and lakes of liquid methane on Titan, and Huygens on its surface</li><li>A six-sided jet stream circling Saturn's north pole</li><li>Moonlets stirring propellers in the rings, and new moons</li></ul>`],
+    [50, 9, `Cassini turned points of light into worlds, and two of them into places where life could be. Much of what humanity knows about Saturn and its moons, we know because it went and looked.`, "big"],
+    [61, 6, `<b>Thank you, Cassini</b>Cassini-Huygens · NASA, ESA and the Italian Space Agency · 1997 &ndash; 2017`],
+  ];
+  const RECAP_END = 69;
+  // the descent: mission seconds from loss of signal, how long, and the line
+  const DESCENT = [
+    [-96, 13, `<b>September 15, 2017 · 10:30 UTC at Saturn</b>After thirteen years in orbit, Cassini is diving into Saturn at 70,000 miles per hour.`],
+    [-80, 13, `<b>The Grand Finale</b>With its fuel nearly gone, it was sent into the planet so it could never contaminate the moons it found might hold life.`],
+    [-64, 14, `Nothing is recorded anymore. Every reading goes straight home, live, through the dish pointed at Earth.`],
+    [-47, 17, `As the air thickens, its thrusters fire harder to hold the antenna on Earth, from 10 percent of their power to 100 percent in about a minute.`],
+    [-27, 17, `Fighting to keep its dish on Earth, Cassini sends the last of its data.`],
+    [1, 8, `<b>Loss of signal</b>The thrusters can do no more. The antenna slips a fraction of a degree off Earth.`],
+  ];
+
+  let F = null;   // the running finale
+  const tmpS = v3(), tmpC = v3(), tmpE = v3();
+  const vScene = new THREE.Vector3(), eScene = new THREE.Vector3(), uScene = new THREE.Vector3(), wScene = new THREE.Vector3();
+
+  // the end of the data is the end of the mission: a milestone within its last hour (the final plunge)
+  function endsMission() {
+    return Array.isArray(encounters) && encounters.some(e => e.kind === "milestone" && e.et <= coverage[1] + 1 && coverage[1] - e.et < 3600);
+  }
+  // Cassini relative to Saturn (J2000, km) at et, carried on along its last velocity past the end of the data
+  function rel(et, out) {
+    const end = coverage[1], t = Math.min(et, end);
+    sub(positionAt(tracks.CASSINI, t, tmpC), positionAt(tracks.SATURN, t, tmpS), out);
+    if (et > end) {
+      const a = sub(positionAt(tracks.CASSINI, end - 2, tmpC), positionAt(tracks.SATURN, end - 2, tmpS), tmpE);
+      for (let k = 0; k < 3; k++) out[k] += (out[k] - a[k]) / 2 * (et - end);
+    }
+    return out;
+  }
+  // height above Saturn's ellipsoid (km)
+  function altitude(et) {
+    const r = rel(et, v3()), R = iauMatrix(bodies.SATURN, Math.min(et, coverage[1])), [a, b, c] = bodies.SATURN.radii;
+    const x = dot(R[0], r), y = dot(R[1], r), z = dot(R[2], r);
+    return len(r) * (1 - 1 / Math.sqrt(x * x / (a * a) + y * y / (b * b) + z * z / (c * c)));
+  }
+  // when the altitude drops through NASA's loss-of-signal height, and the altitude a minute before (10 percent load)
+  function calibrate() {
+    let lo = coverage[1] - 6 * 3600, hi = coverage[1] + 1800;
+    if (altitude(lo) < H_LOS) return null;
+    for (let i = 0; i < 60; i++) { const m = (lo + hi) / 2; if (altitude(m) > H_LOS) lo = m; else hi = m; }
+    const tLos = (lo + hi) / 2;
+    return { tLos, span: Math.max(50, altitude(tLos - RAMP) - H_LOS) };
+  }
+  // the thrusters' load (1 = full capacity) at this height: tenfold for every `span` km lower
+  const load = h => Math.pow(10, -(h - H_LOS) / F.span);
+  // pseudo-random but smooth, in -1..1
+  const wob = (t, k) => (Math.sin(1.7 * t + k) + Math.sin(2.9 * t + 2.1 * k) + 0.5 * Math.sin(6.3 * t + 3.7 * k)) / 2.5;
+
+  // a soft round light for the thruster flickers and the glow of entry
+  let glowTex = null;
+  function sprite(color, size) {
+    if (!glowTex) {
+      const c = document.createElement("canvas"); c.width = c.height = 64;
+      const g = c.getContext("2d"), gr = g.createRadialGradient(32, 32, 0, 32, 32, 32);
+      gr.addColorStop(0, "rgba(255,255,255,1)"); gr.addColorStop(0.25, "rgba(255,255,255,.55)"); gr.addColorStop(1, "rgba(255,255,255,0)");
+      g.fillStyle = gr; g.fillRect(0, 0, 64, 64); glowTex = new THREE.CanvasTexture(c);
+    }
+    const s = new THREE.Sprite(new THREE.SpriteMaterial({ map: glowTex, color, transparent: true, opacity: 0, blending: THREE.AdditiveBlending, depthWrite: false }));
+    s.scale.setScalar(size); s.layers.set(1); s.userData.size = size;
+    return s;
+  }
+  function addEffects() {
+    // the four thruster clusters, low on the spacecraft, about 5.5 m below the top of the dish (the booms and
+    // antennas would throw a whole-model box off)
+    const dish = window.cassiniModel && window.cassiniModel.getObjectByName("dish");
+    let top = 1.5;
+    if (dish) { cassini.updateMatrixWorld(true); top = new THREE.Box3().setFromObject(dish).applyMatrix4(cassini.matrixWorld.clone().invert()).max.z; }
+    const z = top - 5.5;
+    const thr = [[1.1, 0.4], [-1.1, 0.4], [0.4, -1.1], [-0.4, 1.1]].map(([x, y]) => { const s = sprite(0xcfe4ff, 0.7); s.position.set(x, y, z); cassini.add(s); return s; });
+    const glow = sprite(0xffa24a, 4); cassini.add(glow);
+    return { thr, glow };
+  }
+
+  // fades run on the viewer's frame clock (performance.now), not CSS transitions, so a recording stepped frame by
+  // frame keeps their pace
+  const fades = new Map(), slow = matchMedia("(prefers-reduced-motion: reduce)").matches;
+  function fadeTo(el, to, secs, then) { fades.set(el, { from: +el.style.opacity || 0, to, t0: performance.now(), secs, then }); }
+  function stepFades() {
+    for (const [el, f] of fades) {
+      const k = Math.min(1, (performance.now() - f.t0) / 1000 / f.secs), e = k * k * (3 - 2 * k), o = f.from + (f.to - f.from) * e;
+      el.style.opacity = o;
+      if (el.classList.contains("fx-cap") && !slow) el.style.transform = `translateY(${(1 - o) * 6}px)`;
+      if (k >= 1) { fades.delete(el); if (f.then) f.then(); }
+    }
+  }
+  function caption(html, cls) {
+    const el = document.createElement("div");
+    el.className = "fx-cap" + (cls ? " " + cls : ""); el.innerHTML = html; caps.appendChild(el);
+    fadeTo(el, 1, 1.2);
+    return el;
+  }
+  function drop(el) { fadeTo(el, 0, 1.1, () => el.remove()); }
+  // run each line of a list whose time has come, and take it down when its time is up
+  function runCaptions(list, t, shown, chord) {
+    list.forEach(([at, dur, html, cls], i) => {
+      if (!shown[i] && t >= at && t < at + dur) { shown[i] = caption(html, cls); if (chord && window.cassiniSound && cassiniSound.chord) cassiniSound.chord(i); }
+      if (shown[i] && shown[i] !== true && t >= at + dur) { drop(shown[i]); shown[i] = true; }
+    });
+  }
+  const carrier = (level, waver) => { if (window.cassiniSound && cassiniSound.carrier) cassiniSound.carrier(level, waver); };
+
+  function play() {
+    if (F || !tracks.CASSINI || !tracks.SATURN || !bodies.SATURN) return;
+    const cal = calibrate();
+    if (!cal) return;
+    F = Object.assign(cal, { t0: performance.now(), phase: "out", tau: null, lost: false, tumble: 0, tumbleAxis: new THREE.Vector3(1, 0.45, 0.2).normalize(),
+      shownD: [], shownR: [], follow: state.follow, fx: null, recapAt: 0, dist: 4.6e-5, orbit: 0 });
+    if (state.follow) setFollow(false);
+    setPlaying(false);
+    controls.enabled = false;
+    root.hidden = false;
+    document.body.classList.add("finale");
+    fadeTo(black, 1, 1.5);
+    setTimeout(() => { if (F) { skipHint.classList.add("on"); setTimeout(() => skipHint.classList.remove("on"), 5000); } }, 1800);
+  }
+  function finish() {
+    if (!F) return;
+    const f = F; F = null;
+    carrier(0, 0);
+    if (f.fx) { f.fx.thr.forEach(s => cassini.remove(s)); cassini.remove(f.fx.glow); }
+    cassini.visible = true; markerPts.visible = true; cassini.up.set(0, 1, 0);
+    camera.up.set(0, 1, 0);
+    controls.enabled = true;
+    caps.textContent = ""; [read, note, skipHint].forEach(e => e.classList.remove("on"));
+    fades.forEach((f, el) => { if (el !== black) fades.delete(el); });
+    setTime(coverage[1]);
+    if (state.focus !== "CASSINI") setFocus("CASSINI");
+    setFocus("CASSINI", 6e-5);
+    if (f.follow) setFollow(true);
+    document.body.classList.add("finale-out");
+    document.body.classList.remove("finale");
+    fadeTo(black, 0, 1.5, () => { document.body.classList.remove("finale-out"); if (!F) root.hidden = true; });
+    if (window.cassiniPerf) cassiniPerf.invalidate();
+  }
+
+  // the viewer's frame loop, before it places the bodies: the finale runs its own clock
+  window.studyFrame = dt => {
+    stepFades();
+    if (!F) return;
+    if (window.cassiniPerf) cassiniPerf.invalidate();
+    state.playing = false;
+    const T = (performance.now() - F.t0) / 1000;
+    if (F.phase === "out" && T >= 1.7) {
+      // behind the black: back to a hundred seconds before loss of signal, on Cassini
+      F.phase = "descent"; F.tau = F.tLos - LEAD; F.fx = addEffects();
+      setFocus("CASSINI", 4e-5); markerPts.visible = false;
+      fadeTo(black, 0, 3);
+      note.classList.add("on"); read.classList.add("on");
+    }
+    if (F.phase === "descent") {
+      F.tau += dt;
+      const s = F.tau - F.tLos;
+      runCaptions(DESCENT, s, F.shownD);
+      if (s > 6 && !F.dark) { F.dark = true; fadeTo(black, 1, 2.5); note.classList.remove("on"); read.classList.remove("on"); }
+      if (s > 9.5) {
+        // the recap: Cassini is gone, the view pulls back to Saturn
+        F.phase = "recap"; F.recapAt = performance.now();
+        DESCENT.forEach((d, i) => { if (F.shownD[i] && F.shownD[i] !== true) drop(F.shownD[i]); });
+        carrier(0, 0);
+        cassini.visible = false; setFocus("SATURN");
+        fadeTo(black, 0.3, 4);
+      }
+    }
+    if (F.phase === "recap") {
+      const R = (performance.now() - F.recapAt) / 1000;
+      const images = mission && mission.catalog ? Object.values(mission.catalog).reduce((n, c) => n + (c.images || 0), 0) : catalog ? catalog.et.length : 0;
+      if (!F.recap) F.recap = RECAP(images);
+      runCaptions(F.recap, R, F.shownR, true);
+      if (R > RECAP_END - 2.5 && !F.closing) { F.closing = true; fadeTo(black, 1, 2.5); }
+      if (R > RECAP_END) finish();
+    }
+    if (F && F.tau !== null) state.et = Math.min(F.tau, coverage[1]);
+  };
+  // past the end of the data, Cassini carries on along its last velocity
+  window.studyPositions = () => {
+    if (!F || F.tau === null || F.tau <= coverage[1]) return;
+    rel(F.tau, tmpE);
+    for (let k = 0; k < 3; k++) pos.CASSINI[k] = pos.SATURN[k] + tmpE[k];
+  };
+  // the dish held on Earth by the rule above, then lost
+  window.studyAttitude = () => {
+    if (!F || F.phase !== "descent") return;
+    const h = altitude(F.tau), L = load(h), t = F.tau;
+    // the local vertical (away from Saturn) and the direction to Earth, in the scene
+    relScene("SATURN", uScene).sub(cassini.position).negate().normalize();
+    relScene("EARTH", eScene).sub(cassini.position).normalize();
+    // held: the error grows with the load; past full load the torque wins and the spacecraft starts to tumble
+    let err = 0.01 + 0.2 * Math.min(1, L) ** 2;
+    if (L > 1) err += 25 * (L - 1) ** 1.5;
+    const signal = F.lost ? 0 : 1 / (1 + (err / BEAM) ** 8);
+    if (!F.lost && signal < 0.1) F.lost = true;
+    cassini.up.copy(uScene);
+    cassini.lookAt(eScene.clone().add(cassini.position));
+    const a = Math.min(err * VIS, 160) * Math.PI / 180;
+    if (err < 1) { cassini.rotateX(a * wob(t, 0)); cassini.rotateY(a * wob(t, 5)); }
+    else { cassini.rotateX(0.2 * wob(t, 0)); cassini.rotateOnAxis(F.tumbleAxis, a); }
+    // thrusters flicker on with a chance that grows with the load; past full load they all stay lit
+    if (F.fx) {
+      F.fx.thr.forEach((s, i) => {
+        const on = L >= 1 || Math.random() < Math.min(1, L * 1.6);
+        s.material.opacity = L < 0.02 ? 0 : on ? 0.55 + 0.45 * Math.random() : s.material.opacity * 0.5;
+        s.scale.setScalar(s.userData.size * (0.7 + 0.6 * Math.min(1, L)));
+      });
+      // after loss of signal the air heats the leading side (the direction of motion, where the mass spectrometer looks)
+      const heat = Math.max(0, Math.min(1, (F.tau - F.tLos) / 7));
+      rel(F.tau + 1, tmpS); rel(F.tau, tmpC);
+      toScene(sub(tmpS, tmpC, tmpS), vScene).normalize();
+      const local = vScene.clone().applyQuaternion(cassini.quaternion.clone().invert());
+      F.fx.glow.position.copy(local.multiplyScalar(3.5));
+      F.fx.glow.material.opacity = heat * (0.75 + 0.25 * Math.random());
+      F.fx.glow.scale.setScalar(3 + 14 * heat * heat);
+    }
+    carrier(signal, Math.min(1, L));
+    read.innerHTML = `Altitude ${fmtInt(h)} km · Thrusters <i>${Math.round(Math.min(100, L * 100))}%</i> · Antenna <i>${err < 10 ? err.toFixed(2) : fmtInt(err)}°</i> off Earth · Signal <i>${F.lost ? "lost" : Math.round(signal * 100) + "%"}</i>`;
+  };
+  // the camera: beside Cassini with Saturn's clouds below and the horizon level, then far back from Saturn
+  window.studyCamera = () => {
+    if (!F || F.phase === "out") return;
+    if (F.phase === "descent") {
+      relScene("SATURN", uScene).sub(cassini.position).negate().normalize();
+      relScene("EARTH", eScene).sub(cassini.position).normalize();
+      wScene.crossVectors(eScene, uScene);
+      if (wScene.lengthSq() < 1e-6) wScene.set(1, 0, 0).cross(uScene);
+      wScene.normalize();
+      const s = (F.tau - F.tLos + LEAD) / (LEAD + 10);   // 0 .. 1 over the descent
+      wScene.applyAxisAngle(uScene, 0.5 - 0.7 * s);        // a slow drift round the spacecraft
+      const d = 4.6e-5 - 2.2e-5 * Math.min(1, s);
+      camera.position.copy(cassini.position).addScaledVector(wScene, d).addScaledVector(uScene, 0.32 * d).addScaledVector(eScene, -0.35 * d);
+      camera.up.copy(uScene);
+      camera.lookAt(cassini.position.clone().addScaledVector(uScene, -0.12 * d));
+    } else {
+      // Saturn from the sunlit side, a little above the rings, turning slowly
+      const R = iauMatrix(bodies.SATURN, state.et), pole = toScene(R[2], new THREE.Vector3()).normalize();
+      toScene(norm(sub(pos.SUN, pos.SATURN, tmpS)), vScene).normalize();
+      const side = new THREE.Vector3().crossVectors(pole, vScene).normalize();
+      const k = (performance.now() - F.recapAt) / 1000;
+      const dir = vScene.clone().multiplyScalar(0.75).addScaledVector(side, 0.55).addScaledVector(pole, 0.38).normalize().applyAxisAngle(pole, -0.004 * k);
+      const d = 440 - 1.0 * k;
+      camera.position.copy(dir.multiplyScalar(d));
+      camera.up.copy(pole);
+      camera.lookAt(new THREE.Vector3().addScaledVector(pole, -22));
+    }
+  };
+
+  // playback reaching the end of the data starts it
+  const advance = window.studyAdvance;
+  window.studyAdvance = (et, dt, speed) => {
+    const next = advance ? advance(et, dt, speed) : et + dt * speed;
+    if (!F && et < coverage[1] - 0.5 && next >= coverage[1] - 0.5 && endsMission()) setTimeout(play, 0);
+    return next;
+  };
+  // Escape, a click or a tap skips it
+  window.addEventListener("keydown", e => { if (F && e.key === "Escape") { e.preventDefault(); e.stopImmediatePropagation(); finish(); } }, true);
+  window.addEventListener("pointerdown", e => { if (F) { e.preventDefault(); e.stopImmediatePropagation(); finish(); } }, true);
+  window.cassiniFinale = { play, skip: finish, get running() { return !!F; } };
+  // ?finale plays it as soon as the end of the mission is loaded
+  if (new URLSearchParams(location.search).has("finale")) {
+    const wait = setInterval(() => {
+      if (!coverage[1] || !tracks.CASSINI || $("loading") && !$("loading").hidden) return;
+      if (!endsMission()) { clearInterval(wait); return; }
+      if (Math.abs(state.et - coverage[1]) > 7200) { setTime(coverage[1]); return; }
+      if (typeof yearReady === "function" && !yearReady()) return;
+      clearInterval(wait); play();
+    }, 250);
+  }
 })();
 </script>
