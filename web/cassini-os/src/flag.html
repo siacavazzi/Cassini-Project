@@ -109,7 +109,7 @@ body.phone #flagtoast { bottom: calc(env(safe-area-inset-bottom, 0px) + 12px); }
     if (w.id === "moviecard") {
       const M = window.cassiniMovie && window.cassiniMovie.state, b = M && M.cur && M.buf.get(M.cur.id);
       if (!M || !M.cur) return null;
-      canvas = $("mvcanvas"); ids = [M.cur.id]; src = b && b.img ? b.img.src : null; what = "movie frame";
+      canvas = $("mvcanvas"); ids = [M.cur.id]; src = b && b.img ? b.img.src : null; what = b && b.kind ? `movie (${b.kind})` : "movie frame";
     } else if (w.id === "reelcard") {
       const R = window.cassiniReel && window.cassiniReel.state, s = R && R.shots[R.i];
       if (!s) return null;
