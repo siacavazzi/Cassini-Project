@@ -1223,6 +1223,13 @@ body.phone #excard:not(.full) { width: calc(100% - 16px) !important; left: 8px !
   // a new key, so a saved "off" from when follow started off does not carry over
   D({ key: "view.followcam", section: "View", label: "Follow camera", type: "toggle", value: true, hint: "Look where Cassini's camera points (needs the pointing data)." });
   mirror("view.followcam", "followcam");
+  // the viewer's follow camera reads view.spinHold, view.spinTurn and view.spinEase
+  D({ key: "view.spinHold", section: "View", label: "Hold still through spins", type: "toggle", value: true,
+      hint: "When Cassini rolls for hours for its fields-and-particles instruments (no pictures), the follow camera keeps looking where it was instead of spinning with it. Off follows every turn." });
+  D({ key: "view.spinTurn", section: "View", label: "Counts as a spin after", type: "range", value: 300, min: 180, max: 1080, step: 30, unit: "°",
+      hint: "How far Cassini has to keep turning without a pause before the view holds. Turns between targets stay under about 200°." });
+  D({ key: "view.spinEase", section: "View", label: "Ease back over", type: "range", value: 4, min: 1, max: 15, step: 1, unit: "s",
+      hint: "How long the view takes to swing back to the camera's pointing once a spin ends." });
   D({ key: "view.textures", section: "View", label: "Surface maps", type: "choice", value: "2k", reload: true,
       options: [["0", "Off"], ["1k", "1k"], ["2k", "2k"], ["4k", "4k"]],
       hint: "Map size for Saturn and the moons. 4k is sharper and slower to load; Off keeps the plain painted look. A ?tex= link still wins." });
@@ -5256,8 +5263,55 @@ function setFollow(on) {
   sBore.set(0, 0, 0);
   if (state.follow && state.focus !== "CASSINI") setFocus("CASSINI", 6e-5);
 }
+// ---------- spins: Cassini's long rolls for the fields-and-particles instruments, not for pictures ----------
+// A stretch where Cassini keeps turning (faster than SPIN_RATE, never pausing longer than SPIN_GAP) and turns through
+// more than the setting's angle in all is a spin; the follow camera holds still through it, then eases back.
+// Turns between targets stay under ~200°; the rolls run for hours and add up to thousands of degrees (2005: 448 spins, none with a picture).
+const SPIN_RATE = 0.02, SPIN_GAP = 180;               // deg/s, s of mission time
+const followOpt = (key, fallback) => window.cassiniSettings ? cassiniSettings.get(key) : fallback;
+let spins = new Float64Array(0), spinsOf = null, spinsTurn = 0;
+function findSpins(a, minTurn) {
+  const out = [];
+  let start = -1, last = 0, turned = 0;
+  for (let k = 0; k + 1 < a.count; k++) {
+    const dt = a.t[k + 1] - a.t[k];
+    if (dt < 5 || dt > GAP_S) continue;                 // NAC and WAC frames a moment apart; pointing gaps
+    const dot = Math.abs(a.q[4 * k] * a.q[4 * k + 4] + a.q[4 * k + 1] * a.q[4 * k + 5] + a.q[4 * k + 2] * a.q[4 * k + 6] + a.q[4 * k + 3] * a.q[4 * k + 7]);
+    const ang = 2 * Math.acos(Math.min(1, dot)) * 180 / Math.PI;
+    if (ang / dt <= SPIN_RATE) continue;
+    if (start < 0 || a.t[k] - last > SPIN_GAP) {
+      if (start >= 0 && turned > minTurn) out.push(start, last);
+      start = a.t[k]; turned = 0;
+    }
+    turned += ang; last = a.t[k + 1];
+  }
+  if (start >= 0 && turned > minTurn) out.push(start, last);
+  return Float64Array.from(out);
+}
+// the spin under way at et as [start, end], or null
+function spinAt(et) {
+  if (!att) return null;
+  const minTurn = followOpt("view.spinTurn", 300);
+  if (spinsOf !== att || spinsTurn !== minTurn) { spins = findSpins(att, minTurn); spinsOf = att; spinsTurn = minTurn; }
+  let lo = 0, hi = spins.length / 2;
+  while (lo < hi) { const mid = (lo + hi) >> 1; if (spins[2 * mid + 1] < et) lo = mid + 1; else hi = mid; }
+  return lo < spins.length / 2 && spins[2 * lo] <= et ? [spins[2 * lo], spins[2 * lo + 1]] : null;
+}
 const qFollow = new Float64Array(4), vFollow = new THREE.Vector3(), sBore = new THREE.Vector3(), upFollow = new THREE.Vector3();
-let followLive = false;
+let followLive = false, followHeld = false, followEasing = false;
+// other parts of the page (the Grand Finale ending) can hold the follow camera still too, and reuse its easing
+window.cassiniFollow = { hold: false, spinAt, held: () => followHeld, easeDir };
+// turn the unit vector `from` toward `to` about the shortest axis, closing 1 - e^(-dt/tau) of the angle; returns the angle left
+function easeDir(from, to, dt, tau) {
+  const ang = from.angleTo(to);
+  if (ang > 1e-6) {
+    const axis = new THREE.Vector3().crossVectors(from, to);
+    if (axis.lengthSq() < 1e-12) axis.set(0, 1, 0).cross(from);   // exactly opposite: any perpendicular will do
+    if (axis.lengthSq() < 1e-12) axis.set(1, 0, 0);
+    from.applyAxisAngle(axis.normalize(), ang * (1 - Math.exp(-dt / tau))).normalize();
+  }
+  return from.angleTo(to);
+}
 function updateFollow(dt) {
   followLive = false;
   if (!state.follow || !state.pointed || state.focus !== "CASSINI" || performance.now() < followHoldUntil) return;
@@ -5266,13 +5320,14 @@ function updateFollow(dt) {
   const c = CAM_TO_BODY[i >= 0 && catalog.cam[order[i]] === "W" ? "W" : "N"];
   qmul([c[0], -c[1], -c[2], -c[3]], qBody, qFollow, 0);
   toScene(q2rows(qFollow)[2], vFollow);
-  // ease the view's direction toward the boresight, turning about the shortest axis
   if (sBore.lengthSq() < 0.5) sBore.copy(camera.position).negate().normalize();
-  const ang = sBore.angleTo(vFollow);
-  if (ang > 1e-6) {
-    const axis = new THREE.Vector3().crossVectors(sBore, vFollow);
-    if (axis.lengthSq() < 1e-12) axis.set(0, 1, 0).cross(sBore);   // exactly opposite: any perpendicular will do
-    sBore.applyAxisAngle(axis.normalize(), ang * (1 - Math.exp(-dt / FOLLOW_TAU))).normalize();
+  // through a spin the view holds where it was looking; afterwards it eases back to the boresight over the setting's time
+  const held = window.cassiniFollow.hold || (followOpt("view.spinHold", true) && !!spinAt(state.et));
+  if (followHeld && !held) followEasing = true;
+  followHeld = held;
+  if (!held) {
+    const left = easeDir(sBore, vFollow, dt, followEasing ? Math.max(FOLLOW_TAU, followOpt("view.spinEase", 4) / 3) : FOLLOW_TAU);
+    if (left < 0.01) followEasing = false;
   }
   // sit just behind the spacecraft and a little off to the side, so it stays in view beside the target
   upFollow.set(0, 1, 0).addScaledVector(sBore, -sBore.y);
