@@ -2737,7 +2737,9 @@ body.phone #ssound { width: 30px; height: 30px; }
       hint: "The closer Cassini is to its target (for its size), the bigger the music: louder, brighter chimes, a swelling chord and a quickening pulse." });
   D({ key: "sound.length", label: "Note length", type: "range", value: 1.4, min: 0.2, max: 4, step: 0.1, unit: "s",
       hint: "How long a chime rings at 10 min/s. Faster playback shortens it." });
-  D({ key: "sound.echo", label: "Echo", type: "range", value: 35, min: 0, max: 100, step: 1, unit: "%" });
+  // (a new key, so a browser that saved the old, heavier echo setting starts from the lighter default)
+  D({ key: "sound.reverb", label: "Reverb", type: "range", value: 15, min: 0, max: 100, step: 1, unit: "%",
+      hint: "How much of each chime echoes back, and for how long." });
   D({ key: "sound.stereo", label: "Sound from the window", type: "toggle", value: true,
       hint: "Each chime comes from where its camera window is on the screen." });
   D({ key: "sound.test", label: "Test", type: "action", button: "Play a chime",
@@ -2753,11 +2755,12 @@ body.phone #ssound { width: 30px; height: 30px; }
     comp.threshold.value = -18; comp.ratio.value = 4; comp.attack.value = 0.005; comp.release.value = 0.25;
     master.connect(comp).connect(ctx.destination);
     bus = ctx.createGain(); bus.connect(master);
-    // echo: two delays bouncing left and right, each pass darker, like a big empty room
+    // reverb: two short delays bouncing left and right, each pass darker; the Reverb setting sets how much goes in
+    // and how long it rings on
     echoSend = ctx.createGain();
     const dl = ctx.createDelay(2), dr = ctx.createDelay(2), lp = ctx.createBiquadFilter(), merge = ctx.createChannelMerger(2);
-    dl.delayTime.value = 0.37; dr.delayTime.value = 0.53; lp.type = "lowpass"; lp.frequency.value = 2400;
-    echoFb = ctx.createGain(); echoFb.gain.value = 0.45;
+    dl.delayTime.value = 0.23; dr.delayTime.value = 0.31; lp.type = "lowpass"; lp.frequency.value = 1800;
+    echoFb = ctx.createGain(); echoFb.gain.value = 0.2;
     bus.connect(echoSend); echoSend.connect(lp); lp.connect(dl); dl.connect(dr); dr.connect(echoFb); echoFb.connect(lp);
     dl.connect(merge, 0, 0); dr.connect(merge, 0, 1); merge.connect(master);
     humS = hum(-0.55, "triangle"); humD = hum(0.55, "sine");
@@ -2765,7 +2768,7 @@ body.phone #ssound { width: 30px; height: 30px; }
     padF = ctx.createBiquadFilter(); padF.type = "lowpass"; padF.frequency.value = 300; padF.Q.value = 0.7;
     padG = ctx.createGain(); padG.gain.value = 0; padF.connect(padG); padG.connect(bus);
     [38, 45, 50, 54, 57].forEach((m, i) => { const o = ctx.createOscillator(); o.type = i ? "sine" : "triangle"; o.frequency.value = hz(m); o.detune.value = (i % 2 ? 1 : -1) * 4; o.connect(padF); o.start(); });
-    if (off) { master.gain.value = (S.get("sound.volume") / 100) ** 1.5; echoSend.gain.value = S.get("sound.echo") / 100 * 0.6; }
+    if (off) { const r = S.get("sound.reverb") / 100; master.gain.value = (S.get("sound.volume") / 100) ** 1.5; echoSend.gain.value = r * 0.5; echoFb.gain.value = 0.15 + 0.35 * r; }
     else levels();
   }
   // a continuous tone: two slightly detuned oscillators through a soft filter, with a vibrato it can be given
@@ -2783,7 +2786,8 @@ body.phone #ssound { width: 30px; height: 30px; }
     if (!ctx) return;
     const t = ctx.currentTime, on = S.get("sound.on");
     master.gain.setTargetAtTime(on ? (S.get("sound.volume") / 100) ** 1.5 : 0, t, 0.08);
-    echoSend.gain.setTargetAtTime(S.get("sound.echo") / 100 * 0.6, t, 0.1);
+    const r = S.get("sound.reverb") / 100;
+    echoSend.gain.setTargetAtTime(r * 0.5, t, 0.1); echoFb.gain.setTargetAtTime(0.15 + 0.35 * r, t, 0.1);
   }
   let waiting = false, gestured = false;
   function start() {
@@ -3013,7 +3017,7 @@ body.phone #ssound { width: 30px; height: 30px; }
     if ((e.key === "s" || e.key === "S") && !e.metaKey && !e.ctrlKey && !e.altKey && !/^(INPUT|SELECT|TEXTAREA)$/.test(e.target.tagName)) S.set("sound.on", !S.get("sound.on"));
   });
   S.on("sound.on", v => { if (v) start(); levels(); button(); });
-  for (const k of ["sound.volume", "sound.echo"]) S.on(k, levels);
+  for (const k of ["sound.volume", "sound.reverb"]) S.on(k, levels);
 })();
 </script>
 <script src="https://cdn.jsdelivr.net/npm/three@0.128.0/build/three.min.js"></script>
