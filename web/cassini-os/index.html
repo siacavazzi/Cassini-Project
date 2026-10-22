@@ -1725,14 +1725,17 @@ body.phone #ssound { width: 30px; height: 30px; }
       if (L.busy) { L.next = [w, pass]; return; }
       L.last = ask; L.busy = true;
       let over = false;
+      // the request is dropped (its connection freed; the server still finishes and keeps the mosaic) when the
+      // other lane gives up on it, or the window is closed (mosaicStop)
+      const ctl = L.ctl = new AbortController();
       const cat0 = catalog, done = () => {
         if (over) return;
-        over = true; L.busy = false;
+        over = true; L.busy = false; L.ctl = null;
         const q = L.next; L.next = null;
         if (q && catalog === cat0 && want && catalog.et[q[0].k] <= catalog.et[want.k]) mosaicOf(...q);
       };
-      if (!pass) setTimeout(done, 4000);
-      fetch(`${FRAMES}/frames/mosaic/${id}.webp?size=${size()}`).then(async r => {
+      if (!pass) setTimeout(() => { if (!over) { ctl.abort(); done(); } }, 4000);
+      fetch(`${FRAMES}/frames/mosaic/${id}.webp?size=${size()}`, { signal: ctl.signal }).then(async r => {
         if (!r.ok) return;
         const rep = JSON.parse(r.headers.get("X-Reel") || "null");
         // a pass's mosaic shows while the window is still in the pass and the clock is not before its frame,
@@ -1757,6 +1760,9 @@ body.phone #ssound { width: 30px; height: 30px; }
         }
         card.querySelector(".kindtag").textContent = `${w.set >= 0 ? KIND[catalog.sets[w.set].kind].toUpperCase() + " · " : ""}MOSAIC${rep && rep.mosaic ? ` OF ${rep.mosaic}` : ""}`;
       }, () => {}).finally(done);
+    }
+    function mosaicStop() {
+      for (const L of Object.values(mLane)) { L.next = null; L.last = ""; if (L.ctl) L.ctl.abort(); }
     }
     const made = new Map();   // set -> how its composite was made
     const colourText = (s, si) => `${KIND[s.kind]}: ${s.use.map(fname).join(" · ")}${made.has(si) ? ` · ${made.get(si)}` : ""}`;
@@ -1809,7 +1815,7 @@ body.phone #ssound { width: 30px; height: 30px; }
     let cat = null;
     function update(force) {
       if (catalog !== cat) { cat = catalog; lastK = -2; stripKey = ""; failed.clear(); made.clear(); missing.clear(); warmed.clear(); warnedObs.clear(); for (const L of Object.values(mLane)) { L.last = ""; L.next = null; } shown = null; shownKey = null; obsShown = null; obsK = -1; }   // another mission year loaded
-      if (win.hidden && !force) return;   // a closed or tucked-away window fetches nothing; it catches up when shown
+      if (win.hidden && !force) { mosaicStop(); return; }   // a closed or tucked-away window fetches nothing; it catches up when shown
       const p = lastOfCam(cam, state.et, body), k = p < 0 ? -1 : framesOf(cam, body).ks[p];
       const live = k >= 0 && state.et - catalog.et[k] < 180;
       card.classList.toggle("live", live);
