@@ -141,6 +141,19 @@ for old, new in [
     study = study.replace(old, new)
 study += part("script") + "\n"
 
+# the dock (dock.html): its style joins the head's, the dock goes into #app, and its script runs after the chrome
+# script (the window manager minimizes into it through window.cassiniDock) and after the body windows' and the
+# highlight reel's, whose windows it opens
+dk = open(os.path.join(os.path.dirname(os.path.abspath(sys.argv[2])), "dock.html")).read()
+part = lambda tag: dk[dk.index(f"<{tag}"):dk.index(f"</{tag}>") + len(tag) + 3]
+for old, new in [
+    ("</style>\n</head>", part("style")[len("<style>"):] + "\n</head>"),
+    ('  <div id="loading">', "  " + part("nav") + "\n\n" + '  <div id="loading">'),
+]:
+    assert study.count(old) == 1, old
+    study = study.replace(old, new)
+study += part("script") + "\n"
+
 def rep(old, new, count=1):
     global script
     assert script.count(old) == count, (old, script.count(old))
@@ -217,7 +230,7 @@ rep("""  renderer.clear();
 rep("""  if (hudRenderer) { if (window.studyBeforeHud) window.studyBeforeHud(); hudRenderer.render(hudScene, camera); if (window.studyAfterRender) window.studyAfterRender(); }
 """, """  if (hudRenderer && draw && !document.body.classList.contains("nohud")) {
     if (window.studyBeforeHud) window.studyBeforeHud();
-    hudRenderer.render(hudScene, camera);
+    hudRenderer.render(hudScene, window.studyHudCam || camera);
     if (window.studyAfterRender) window.studyAfterRender();
   }
   if (window.cassiniPerf) cassiniPerf.frame(now, draw);

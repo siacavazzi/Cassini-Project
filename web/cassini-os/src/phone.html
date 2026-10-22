@@ -50,7 +50,7 @@ body.phone.phone-land #wacard:not(.full) { top: calc(var(--menu) + 2 * var(--gap
 body.phone.phone-land #imgcard[hidden] + #wacard:not(.full) { top: calc(var(--menu) + var(--gap)) !important; }
 
 /* replay controls: along the bottom, transport and the clock on one line, the timeline under them */
-body.phone #dock { left: var(--side) !important; right: var(--sider) !important; top: auto !important; bottom: calc(env(safe-area-inset-bottom, 0px) + var(--gap)) !important; width: auto !important; height: auto !important; transform: none !important; }
+body.phone #dock { left: var(--side) !important; right: var(--sider) !important; top: auto !important; bottom: calc(env(safe-area-inset-bottom, 0px) + var(--appdockh, 0px) + var(--gap)) !important; width: auto !important; height: auto !important; transform: none !important; }
 body.phone.phone-land #dock { left: calc(var(--side) + var(--col) + var(--gap)) !important; }
 body.phone #dock .titlebar { height: 18px; }
 body.phone #dock .toolbar, body.phone #dock:not(.zoomed) .toolbar { grid-template-columns: 1fr; gap: 4px; padding: 0 8px 6px; }
@@ -72,12 +72,12 @@ body.phone .seg .btn { padding: 7px 8px; }
 body.phone.phone-land .lcd .sub.probe, body.phone.phone-land .legend { display: none; }
 body.phone.phone-land #tl { height: 44px; }
 /* the expanded controls never run off the screen: they scroll inside their window */
-body.phone #dock { max-height: calc(100dvh - var(--menu) - 2 * var(--gap) - env(safe-area-inset-bottom, 0px)); overflow-y: auto; }
+body.phone #dock { max-height: calc(100dvh - var(--menu) - 2 * var(--gap) - var(--appdockh, 0px) - env(safe-area-inset-bottom, 0px)); overflow-y: auto; }
 body.phone.phone-land #dock.zoomed :is(.nowcam, .legend, #zooms) { display: none; }
 
 /* Moments: a sheet over the view, opened from the list button */
 body.phone #moments { left: var(--side) !important; right: var(--sider) !important; top: auto !important; width: auto !important;
-  bottom: calc(env(safe-area-inset-bottom, 0px) + var(--dockh, 150px) + 2 * var(--gap)) !important; height: min(48dvh, calc(100dvh - var(--dockh, 150px) - var(--menu) - 4 * var(--gap))) !important; z-index: 1400 !important; }
+  bottom: calc(env(safe-area-inset-bottom, 0px) + var(--dockh, 150px) + var(--appdockh, 0px) + 2 * var(--gap)) !important; height: min(48dvh, calc(100dvh - var(--dockh, 150px) - var(--appdockh, 0px) - var(--menu) - 4 * var(--gap))) !important; z-index: 1400 !important; }
 body.phone.phone-land #moments { left: auto !important; width: min(380px, 46vw) !important; top: calc(var(--menu) + var(--gap)) !important; height: auto !important; }
 body.phone #mlist button { height: 44px; }
 body.phone #mlist { background: none; }
