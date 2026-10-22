@@ -458,8 +458,10 @@ body.idle .camwin .well.has-frame { border-color: transparent; box-shadow: 0 6px
 .camwin.full .chans { grid-template-columns: repeat(var(--n, 3), minmax(0, 140px)); }
 .camwin.full .info { grid-template-columns: 50px minmax(0, 1fr) 50px minmax(0, 1fr); }
 .bodywin.full .panes { height: 100%; align-items: stretch; }
-.bodywin.full .pane { width: auto; flex: 2 1 0; grid-template-rows: auto minmax(0, 1fr); align-content: stretch; }
-.bodywin.full .pane[data-cam="W"] { width: auto; flex: 1 1 0; }
+/* a body window holds one camera's pane (bodywin.html): in full view, and once the viewer has given the window a
+   width with its corner, the pane fills the window and its picture takes the room the strip and details leave */
+.bodywin.full .pane { width: auto; flex: 1 1 0; min-width: 0; grid-template-rows: minmax(0, 1fr) auto auto; align-content: stretch; }
+.bodywin[style*="width"]:not(.full) .pane { width: auto; flex: 1 1 0; min-width: 0; }
 .win.full :is(.rlwells) { flex: 1; min-height: 0; height: calc(100dvh - 160px); align-items: stretch; }
 .win.full :is(.rlwell, .mvwell) { aspect-ratio: auto; min-height: 0; height: 100%; }
 #moviecard.full .mvwell { height: calc(100dvh - 150px); }
