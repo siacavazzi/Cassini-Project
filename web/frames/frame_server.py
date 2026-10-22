@@ -241,7 +241,7 @@ def composite(ids, channel=None):
     and a report of how each channel was made. One id makes the frame alone, black and white (LA);
     channel=0|1|2 the composite's red, green or blue alone, black and white on the composite's scale (LA)."""
     if channel is not None:
-        im, report = composite(ids)
+        im, report = _recent_composite(ids)
         bands = im.split()
         return Image.merge("LA", (bands[channel], bands[-1])), dict(report, channel=channel)
     imgs, valid, _, report = color_image.load_aligned([f"{FOLDERS[i[0]]}/{i}.png" for i in ids])
@@ -255,6 +255,25 @@ def composite(ids, channel=None):
     return Image.fromarray(np.dstack(chans + [alpha]), "RGBA"), report
 
 
+# the last few composites made, so a window opening each of a set's channels in turn runs load_aligned once
+_recent, _recent_lock, RECENT = {}, threading.Lock(), 4
+
+
+def _recent_composite(ids):
+    key = tuple(ids)
+    with _recent_lock:
+        hit = _recent.pop(key, None)
+        if hit:
+            _recent[key] = hit
+            return hit
+    made = composite(ids)
+    with _recent_lock:
+        _recent[key] = made
+        while len(_recent) > RECENT:
+            _recent.pop(next(iter(_recent)))
+    return made
+
+
 def color_webp(ids, size, cache, fmt="webp", channel=None):
     """The composite (or one of its channels) as WebP (or PNG), and its report (also kept in the cache, next to
     the image)."""
@@ -263,7 +282,7 @@ def color_webp(ids, size, cache, fmt="webp", channel=None):
     report = {}
     def make():
         with _color_slots:
-            im, made = composite(ids, channel)
+            im, made = composite(ids, channel) if channel is not None else _recent_composite(ids)
         report.update(made)
         cached(base + ".json", lambda: json.dumps(made).encode())
         print("composite", json.dumps(made))
