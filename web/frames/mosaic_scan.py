@@ -33,9 +33,9 @@ def build_units(rows, target, obs, cam):
         g = G.get(r.id); g = g and g[:3]
         t = float(r.seconds_1970)
         if cur is None or t - cur["last"] > om.GAP or (g and cur["z"] and not 1 / om.ZOOM < g[2] / cur["z"] < om.ZOOM):
-            cur = {"frames": [], "z": g and g[2], "last": t, "raw": 0}
+            cur = {"frames": [], "taken": [], "z": g and g[2], "last": t, "raw": 0}
             out.append(cur); last = {}
-        cur["last"] = t; cur["raw"] += 1
+        cur["last"] = t; cur["raw"] += 1; cur["taken"].append((f, *(g or (None, None, None))))
         if not cur["z"] and g:
             cur["z"] = g[2]
         if f in last and t - last[f] <= mosaic_benchmark.REPEAT_GAP:
@@ -179,7 +179,7 @@ for (target, obs, inst), g in sub.groupby(["TARGET_NAME", "OBSERVATION_ID", "INS
              "mosaic_passes_in_obs": nmos, "frames": u["raw"], "tiles": len(u["frames"]), "placed": len(placed),
              "start": u["frames"][0][3], "first_id": u["frames"][0][1], "mosaic": u["mosaic"], "whole": u["whole"],
              "name_hint": "movie" if MOVIE.search(obs) else "mosaic" if MOSAIC.search(obs) else "",
-             "movie": u.get("movie")}
+             "movie": u.get("movie"), "dwell": u.get("dwell"), "jump_frac_om": u.get("jump_frac")}
         if len(placed) >= 2:
             m = motion(u); r.update(m); r["verdict"] = verdict(m, u)
         if u["mosaic"]:

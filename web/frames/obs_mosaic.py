@@ -11,8 +11,9 @@ least mosaic.min_step of a frame apart, once scaled to one distance), its footpr
 MAX_FRAMES frames across, and the camera jumps rather than creeps: a movie (a stare, a ring or
 storm movie, a moon turning) drifts a little between frames until the drift adds up to "three
 places", so a pass whose steps between frames of one filter are at least mosaic.min_step of a
-frame less than MOVIE_JUMPS of the time (or that never takes a filter twice) is a movie, and plays
-as frames (no mosaic of any kind).
+frame less than MOVIE_JUMPS of the time (or that never takes a filter twice), or whose camera stays
+MOVIE_DWELL frames of one filter at each place (counting repeat exposures), is a movie, and plays
+as frames (no mosaic of any kind) unless the person asks for its mosaic.
 Overlap is not required: SPICE places every tile.
 
 Every tile goes through color_image.processed_frame (repeat exposures merged in I/F, calibrated,
@@ -68,6 +69,7 @@ MOVIE_FIT = 2.0      # a pass played as a movie shows its whole footprint up to 
                      # window this wide following the frame, at one scale for the whole pass
 TRAIL = 12           # most earlier frames a movie's rolling trail keeps under the newest
 SCALE_FRAMES = 96    # most frames the pass's display scale is measured on (evenly spread over a long movie)
+MOVIE_DWELL = 8      # ... or whose camera stays this many frames of one filter (median) at each place it goes
 RADIUS = {"SATURN": 60268, "JUPITER": 69911, "TITAN": 2575, "RHEA": 764, "IAPETUS": 735, "DIONE": 561,
           "TETHYS": 531, "ENCELADUS": 252, "MIMAS": 198, "HYPERION": 135, "PHOEBE": 107}
 IFOV = {"N": 6.0e-6, "W": 60e-6}   # radians per full resolution pixel
@@ -111,10 +113,11 @@ def units(target, obs, cam):
         g = where.get(r.id)
         t = float(r.seconds_1970)
         if cur is None or t - cur["last"] > GAP or (g and cur["z"] and not 1 / ZOOM < g[2] / cur["z"] < ZOOM):
-            cur = {"frames": [], "all": [], "z": g and g[2], "last": t}
+            cur = {"frames": [], "all": [], "taken": [], "z": g and g[2], "last": t}
             out.append(cur)
             last = {}
         cur["last"] = t
+        cur["taken"].append((f, *(g or (None, None, None))))   # every frame, repeats too, for _judge
         if not cur["z"] and g:
             cur["z"] = g[2]
         cur["all"].append((r.path, r.id, f, t, reel.wavelength(inst, f1 + f2), *(g or (None, None, None))))
@@ -170,7 +173,24 @@ def _judge(u):
     # no filter taken twice (a stare cycling its filters): every filter's mosaic would be one frame, so it plays
     # as frames too
     u["jump_frac"] = float(np.mean([s >= mosaic.min_step for s in steps])) if steps else 0.0 if len(pts) > 1 else None
-    u["movie"] = u["jump_frac"] is not None and u["jump_frac"] < MOVIE_JUMPS
+    # dwell: over every frame taken (repeat exposures too, which the tiles merge), how many frames of one filter
+    # the camera takes at a place before it jumps. A raster takes one to a few per pointing; a movie films the
+    # same field for minutes (a spoke movie going back and forth between two patches of ring, one frame every
+    # 11 s, looks like a jump every tile once its repeats are merged)
+    last, runs = {}, []
+    for f, x, y, z in u.get("taken", ()):
+        if not z:
+            continue
+        p = (-x * z / u["z"], -y * z / u["z"])
+        if f in last and max(abs(p[0] - last[f][0][0]), abs(p[1] - last[f][0][1])) < mosaic.min_step * FRAME:
+            last[f] = [p, last[f][1] + 1]   # from the frame before, so a field drifting slowly stays one place
+        else:
+            if f in last:
+                runs.append(last[f][1])
+            last[f] = [p, 1]
+    runs += [n for _, n in last.values()]
+    u["dwell"] = float(np.median(runs)) if runs else None
+    u["movie"] = u["jump_frac"] is not None and (u["jump_frac"] < MOVIE_JUMPS or (u["dwell"] or 0) >= MOVIE_DWELL)
     places = []
     for p in pts:
         if all(max(abs(p[0] - q[0]), abs(p[1] - q[1])) >= mosaic.min_step * FRAME for q in places):
@@ -679,13 +699,14 @@ def pass_info(frame_id, cache):
             "frames": [[fr[1], fr[3], fr[2]] for fr in u["frames"]]}
 
 
-def mosaic_webp(frame_id, size, cache, slots=None, ahead=3, fmt="webp", out=OUT):
-    """(WebP, report) of the mosaic so far at frame_id when its pass is a mosaic; otherwise None. Then makes the
-    next few tiles and the mosaics with them in the background, so the next frames' mosaics are ready when the
-    window asks for them. size "full" = out px on the longest side (the full view's picture, never warmed
-    ahead); fmt "png" for a PNG instead."""
+def mosaic_webp(frame_id, size, cache, slots=None, ahead=3, fmt="webp", out=OUT, force=False):
+    """(WebP, report) of the mosaic so far at frame_id when its pass is a mosaic (or force: the person asked for
+    the pass as a mosaic, whatever _judge says); otherwise None. Then makes the next few tiles and the mosaics
+    with them in the background, so the next frames' mosaics are ready when the window asks for them. size
+    "full" = out px on the longest side (the full view's picture, never warmed ahead); fmt "png" for a PNG
+    instead."""
     found = unit_of(frame_id)
-    if not found or not found[0]["mosaic"] or found[1] < 0:
+    if not found or not (found[0]["mosaic"] or force) or found[1] < 0:
         return None
     u, n = found
     with _asking():
@@ -693,7 +714,7 @@ def mosaic_webp(frame_id, size, cache, slots=None, ahead=3, fmt="webp", out=OUT)
             return _mosaic_at(u, n, size, cache, slots, fmt, out)
         made = _mosaic_at(u, n, size, cache, slots)
     if made and ahead:
-        warm(u, n + ahead, cache, size, slots, start=n + 1)
+        warm(u, n + ahead, cache, size, slots, start=n + 1, force=force)
     return made
 
 
@@ -769,11 +790,11 @@ def _make_mosaic(u, n, size, path, cache, slots, made, fmt="webp", out=OUT):
     return data, report
 
 
-def warm(u, upto, cache, size=None, slots=None, start=0):
+def warm(u, upto, cache, size=None, slots=None, start=0, force=False):
     """Makes the pass's plan and its tiles up to upto in the background, and with a size the mosaics at tiles
     start..upto. One thread per pass and size: a later call while it runs moves its end on. Background work
-    runs one pass at a time (_background)."""
-    if not u["mosaic"]:
+    runs one pass at a time (_background). force: a pass _judge does not call a mosaic, asked for as one."""
+    if not (u["mosaic"] or force):
         return
     key = (u["key"], size)
     with _lock:

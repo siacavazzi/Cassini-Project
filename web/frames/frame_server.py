@@ -52,7 +52,8 @@ Routes:
                                three or more pointings), instead the pass's mosaic so far, every tile and
                                filter, in false colour when it cycles three or more; asking for a frame of the
                                pass starts making its tiles. A movie pass (obs_mosaic: the camera creeps or
-                               stares) is never a mosaic; warm=1 answers {"mosaic", "movie"} for the observation
+                               stares) is never a mosaic; warm=1 answers {"mosaic", "movie"} for the observation;
+                               force=1 makes the pass's mosaic whatever obs_mosaic calls it (Mosaic switch)
   /frames/movie/<ID>.webp?size=512&trail=0&color=1
                                the frame played as a movie of its pass (obs_mosaic.movie_webp): the pass's tile
                                (processed_frame, centred north up by SPICE) on the pass's one display scale, drawn
@@ -715,14 +716,18 @@ def make_handler(site, cache, flags=None):
                 # resolution, its canvas (obs_mosaic.CANVAS) up to FULL_MAX
                 if reel._index is not None:
                     try:
+                        # force=1: the window's Mosaic switch, the pass's mosaic whatever obs_mosaic calls it
                         made = obs_mosaic.mosaic_webp(m.group(1), size, cache, _mosaic_slots, fmt=fmt,
-                                                      out=min(obs_mosaic.CANVAS, FULL_MAX) if size == FULL else obs_mosaic.OUT)
+                                                      out=min(obs_mosaic.CANVAS, FULL_MAX) if size == FULL else obs_mosaic.OUT,
+                                                      force=bool(query.get("force")))
                     except FileNotFoundError:
                         made = None
                     if made:
                         return self.send_picture(made[0], fmt, query, name, {"X-Reel": json.dumps(made[1])})
                     # a movie plays as frames: no rolling mosaic either (its drift would paste frames together)
                     found = obs_mosaic.unit_of(m.group(1))
+                    if query.get("force"):
+                        return self.send_error(404, "No tile of this pass placed yet")
                     if found and found[0]["movie"]:
                         return self.send_error(404, "A movie, not a mosaic")
                 found = reel.mosaic_of(m.group(1), wait=False)
