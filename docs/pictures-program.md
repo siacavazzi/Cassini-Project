@@ -88,6 +88,7 @@ Effort comes from the reports. Phase A runs alongside 1 and 2; everything else f
 ### Phase 3 · Mosaics as placed tiles (M3 = C7, D2) · ~2 days
 - **Goal.** A gray luminance base from every tile, drawn everywhere it exists, with color laid over it only where all three filters cover, feathered to gray at that edge; the gray filter fixed by the plan. The server writes the picture manifest (pointings with outline polygons as 0-1 fractions, center, set, tiles, `also`, and an L layer beside the color set) into the `.json` beside each cached mosaic and serves it at `/frames/mosaic/<ID>.json`; outlines backfilled from cached tile PNGs.
 - **Files.** `web/frames/obs_mosaic.py` (`so_far`, `tile`, plan), `mosaic.py` if needed, `web/frames/frame_server.py` (manifest route).
+- **Also.** Once the gray base draws every tile, `_judge` counts steps across filters for passes that never repeat a filter, so per-filter scans (LIMBSCAN011, CH4FLUOR001, GLOMAP001, RHEA003; 70 passes reclassified as movies in phase 1, see PR #61) come back as mosaics where they step.
 - **Done when.** The mosaic never shrinks when color begins (19 cases) or when the gray filter changes (Titan ISS_181TI_TEA001_CIRS); the manifest validates for the benchmark passes.
 - **Depends on.** Phases 1 and 2a merged into `pictures`. Shown to Sam with phase 4.
 
