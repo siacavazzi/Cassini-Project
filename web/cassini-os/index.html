@@ -336,8 +336,9 @@ body { color: var(--q-text); }
 /* camera window: the main feature, so it is the biggest thing on screen after the view itself */
 #imgcard { width: clamp(300px, 32vw, 480px); }
 /* zoomed, the window still fits above the dock on a laptop screen: its square picture, details and filmstrip */
-#imgcard.zoomed { width: min(clamp(420px, 52vw, 860px), max(420px, calc(100vh - 330px))); }
-#imgcard.zoomed:has(.chans.on) { width: min(clamp(420px, 52vw, 860px), max(420px, calc(100vh - 480px))); }
+/* never narrower than the window unzoomed */
+#imgcard.zoomed { width: max(clamp(300px, 32vw, 480px), min(clamp(420px, 52vw, 860px), max(420px, calc(100vh - 330px)))); }
+#imgcard.zoomed:has(.chans.on) { width: max(clamp(300px, 32vw, 480px), min(clamp(420px, 52vw, 860px), max(420px, calc(100vh - 480px)))); }
 .camwin .body { background: none; padding: 2px 8px 8px; gap: 7px; }
 .well, .camwin.zoomed .well { border: 1px solid var(--q-line); border-radius: 4px; box-shadow: none; background: rgba(0,0,0,.55); color: var(--q-dim); height: 90px; }
 /* with no picture the window stays small; a frame opens it up to a full square */
@@ -2093,9 +2094,9 @@ body.phone.has-dock { --appdockh: 50px; }
     function view(k, et, sz) {
       // a pass played as a movie: the frame steadied by the server (SPICE-centered on the pass's one scale and view,
       // its color set drawn together), unless the server could not make that frame
-      if (playsMovie(k) && !movieFailed.has(catalog.id[k])) return { key: movieUrl(catalog.id[k], sz), set: -1, k, movie: true };
+      if (playsMovie(k) && !movieFailed.has(catalog.id[k]) && !passCold(k)) return { key: movieUrl(catalog.id[k], sz), set: -1, k, movie: true };
       // a mosaic movie (a raster repeated over the same places): its rolling mosaic, every place's newest tile
-      if (playsRolling(k) && !movieFailed.has(catalog.id[k])) return { key: rollingUrl(catalog.id[k], sz), set: -1, k, movie: true, rolling: true };
+      if (playsRolling(k) && !movieFailed.has(catalog.id[k]) && !passCold(k)) return { key: rollingUrl(catalog.id[k], sz), set: -1, k, movie: true, rolling: true };
       const si = catalog.setOf[k], s = si >= 0 ? catalog.sets[si] : null;
       if (s && S.get("cameras.composites")) {
         // any frame of a set whose channels are all taken shows the set's composite
@@ -2178,7 +2179,12 @@ body.phone.has-dock { --appdockh: 50px; }
         lane[which] = null;
         if (v.warm || v.cat !== catalog) warmed.add(v.key);
         else if (v.movie) {   // not steadied (the server is still working the pass out, or SPICE could not place it): the frame itself
-          movieFailed.add(catalog.id[v.k]);
+          // the whole pass plays its frames as they are for a while, so the clock never waits on a pass being
+          // worked out; a frame that fails again once the pass is ready shows as it is from then on
+          if (coldTried.has(v.key)) movieFailed.add(catalog.id[v.k]);
+          coldTried.add(v.key); coldAt.set(passOf(v.k), performance.now());
+          const o = passOf(v.k), c0 = catalog;
+          setTimeout(() => { if (catalog === c0 && lastK >= 0 && passOf(lastK) === o) update(true); }, COLD_RETRY + 50);
           if (want && want.key === v.key) want = { key: frameUrl(catalog.id[v.k]), set: -1, k: v.k };
         } else if (v.set >= 0) {   // no composite: the set shows its frames instead
           failed.add(v.set);
@@ -2292,6 +2298,10 @@ body.phone.has-dock { --appdockh: 50px; }
     const playsMovie = k => S.get("movies.steady") && playsAs(k) === "movie";
     const movieUrl = (id, sz) => `${FRAMES}/frames/movie/${id}.webp?size=${sz || size()}&trail=${S.get("movies.trail")}&color=${S.get("cameras.composites") ? 1 : 0}`;
     const movieFailed = new Set();    // frames the server did not steady: they show as they are
+    // passes the server is still working out (a movie request failed): their frames show as they are, with the
+    // steadying note, and the steady frame is asked for again every COLD_RETRY ms
+    const coldAt = new Map(), coldTried = new Set(), COLD_RETRY = 2000;
+    const passCold = k => performance.now() - (coldAt.get(passOf(k)) ?? -1e9) < COLD_RETRY;
     // a mosaic movie (the switch's Mosaic movie, or Auto on a pass the server calls one): /frames/movie?mode=rolling,
     // which never empties when the camera starts its raster again (Settings > Movie > Mosaic movies keep)
     const playsRolling = k => playsAs(k) === "mosaic_movie";
@@ -2520,7 +2530,7 @@ body.phone.has-dock { --appdockh: 50px; }
       if (catalog !== cat) {   // another mission year (or the months around this one) loaded
         // a pass mosaic that is up stays up: its observation is a name, its frame found again by id
         const obsId = cat && obsK >= 0 ? cat.id[obsK] : null;
-        cat = catalog; lastK = -2; near = [-1, null]; stripKey = ""; failed.clear(); movieFailed.clear(); filmAsked.clear(); filmInfo = null; made.clear(); missing.clear(); warmed.clear(); warnedObs.clear(); for (const L of Object.values(mLane)) { L.last = ""; L.next = null; } shown = null; shownKey = null;
+        cat = catalog; lastK = -2; near = [-1, null]; stripKey = ""; failed.clear(); movieFailed.clear(); coldAt.clear(); coldTried.clear(); filmAsked.clear(); filmInfo = null; made.clear(); missing.clear(); warmed.clear(); warnedObs.clear(); for (const L of Object.values(mLane)) { L.last = ""; L.next = null; } shown = null; shownKey = null;
         obsK = obsId ? kOf(obsId) : -1;
         if (obsK < 0) { obsShown = null; shapeOf = null; }
       }

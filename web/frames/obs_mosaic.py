@@ -33,6 +33,7 @@ blended into one another.
 """
 import argparse
 import collections
+import concurrent.futures
 import contextlib
 import hashlib
 import io
@@ -614,8 +615,10 @@ def movie_footprint(u, cache, p=None):
     n = len(u["frames"])
     picks = sorted({round(i * (n - 1) / max(1, MOVIE_SAMPLES - 1)) for i in range(MOVIE_SAMPLES)}) if n else []
     boxes = []
-    for j in picks:
-        t = tile(u, j, cache, p["display_scale"])
+    # the samples made side by side (MOVIE_WORKERS at once): a cold pass's first steady frame waits on them
+    with concurrent.futures.ThreadPoolExecutor(MOVIE_WORKERS) as pool:
+        made = list(pool.map(lambda j: tile(u, j, cache, p["display_scale"]), picks))
+    for t in made:
         if "offset" in t:
             bx, by, bw, bh = t["box"]
             boxes.append((t["offset"][0] + bx, t["offset"][1] + by, t["offset"][0] + bx + bw, t["offset"][1] + by + bh))
