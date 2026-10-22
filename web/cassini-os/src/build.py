@@ -409,6 +409,12 @@ for old, new in [
 ]:
     assert study.count(old) == 1, old
     study = study.replace(old, new)
-script += npart("script") + "\n"
+# the real readings from the final plunge (finale-data.json, from NASA's Planetary Data System), when there are some
+fd = os.path.join(os.path.dirname(os.path.abspath(sys.argv[2])), "finale-data.json")
+fscript = npart("script")
+assert fscript.count("/*FINALE_DATA*/null") == 1
+if os.path.exists(fd):
+    fscript = fscript.replace("/*FINALE_DATA*/null", json.dumps(json.load(open(fd)), separators=(",", ":")))
+script += fscript + "\n"
 open(out, 'w').write(study + script)
 print("ok", out, len(study + script))
