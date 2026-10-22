@@ -55,7 +55,7 @@ import mosaic_benchmark  # noqa: E402
 import stacking  # noqa: E402
 
 # bumped whenever the way observation mosaics are made changes, so older ones are not served again
-VERSION = "obs-v11"
+VERSION = "obs-v12"
 CANVAS = 2048        # longest side of the canvas the view is drawn on
 OUT = 1024           # longest side of the picture sent
 FRAME = 1024         # full resolution frame

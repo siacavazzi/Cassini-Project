@@ -1323,7 +1323,7 @@ body.idle .win.full .titlebar { opacity: 0; }
       well.appendChild(chip);
     }
     function chipText() {
-      const k = lastK >= 0 ? lastK : -1, on = k >= 0 && want && (want.tile || obsShown === catalog.obs[k]);
+      const k = lastK >= 0 ? lastK : -1, on = k >= 0 && want && (want.tile || want.held || obsShown === catalog.obs[k]);
       well.classList.toggle("inpass", !!on);
       if (!on) return;
       const m = modeOf(k), p = playsAs(k);
@@ -1526,7 +1526,8 @@ body.idle .win.full .titlebar { opacity: 0; }
       want.tile = !want.held && (same(kb) || same(framesOf(cam, body).ks[p + 1])) && (!s || want.set >= 0);
       // a new frame of the pass whose mosaic is up: ask for the mosaic with it now, alongside the frame itself
       // (by this frame, also while the window holds an earlier colour set)
-      if ((obsShown && catalog.obs[k] === obsShown) || (want.tile && (mosaicPass(k) || modeOf(k) === "mosaic" || modeOf(k) === "mosaic_movie"))) mosaicOf(want.held ? { key: want.key, set: -1, k } : want, true);
+      // (want.held: a colour set held up while the next is taken, as on opening paused inside a pass)
+      if ((obsShown && catalog.obs[k] === obsShown) || ((want.tile || want.held) && (mosaicPass(k) || modeOf(k) === "mosaic" || modeOf(k) === "mosaic_movie"))) mosaicOf(want.held ? { key: want.key, set: -1, k } : want, true);
       const kp = catalog.km_per_px[k];
       field("frame").textContent = `${titleCase(catalog.target[k] || "Unknown")} · ${catalog.id[k]}`;
       const c = catalog.cls[k], pol = /^P\d|^IRP/.test(catalog.f1[k]) || /^IRP/.test(catalog.f2[k]) ? " · polarizer" : "";
@@ -1557,7 +1558,7 @@ body.idle .win.full .titlebar { opacity: 0; }
             mosaicPasses.add(o); chipText();
             if (catalog !== c0) return;
             // the window is in that pass already: its frame asks now (the server is working the pass out)
-            if (lastK >= 0 && passOf(lastK) === o && want && want.tile) mosaicOf(want.held ? { key: want.key, set: -1, k: lastK } : want, true);
+            if (lastK >= 0 && passOf(lastK) === o && want && (want.tile || want.held)) mosaicOf(want.held ? { key: want.key, set: -1, k: lastK } : want, true);
           }).catch(() => {});
         }
       chipText();
