@@ -2146,15 +2146,19 @@ body.phone.has-dock { --appdockh: 50px; }
       well.classList.toggle("steadying", steadying);
       if (!keep) card.querySelector(".kindtag").textContent = v.set >= 0 ? KIND[catalog.sets[v.set].kind].toUpperCase() : v.rolling ? "MOSAIC MOVIE" : v.movie ? "MOVIE" : steadying ? (playsRolling(v.k) ? "BUILDING MOSAIC MOVIE…" : "STEADYING MOVIE…") : "";
       // a movie frame names itself and its place in the filmstrip when it goes up: at high speed the server can make
-      // fewer frames a second than the clock passes, and the caption should say which frame is on screen
-      if (v.movie) {
+      // fewer frames a second than the clock passes, and the caption should say which frame is on screen (also a
+      // frame shown as it is while its pass is steadied, which went up in place of the movie frame asked for)
+      if (v.movie || steadying) {
         card.querySelector(".shottag").textContent = `${catalog.id[v.k]} · ${catalog.f1[v.k]}/${catalog.f2[v.k]}`;
         field("frame").textContent = `${titleCase(catalog.target[v.k] || "Unknown")} · ${catalog.id[v.k]}`;
-        filmstrip(v.k);
+        filmstrip(v.k); field("filter").innerHTML = filterHtml(v.k);
+      }
+      if (v.movie) {
         // the Color line says what the picture shows: the color set the server drew (its X-Movie report; the
         // request is answered from the browser cache), which a color pass holds over its clear and other frames
         fetch(v.key).then(r => JSON.parse(r.headers.get("X-Movie") || "null"), () => null).then(rep => {
           if (!rep || shown !== v) return;
+          if (rep.rolling && rep.lap) card.querySelector(".kindtag").textContent = `${rep.filters >= 3 ? ((rep.filter_names || []).includes("GRN") ? "COLOR " : "FALSE COLOR ") : ""}MOSAIC MOVIE · LAP ${rep.lap} OF ${rep.laps} · ${rep.places} PLACES`;
           if (rep.color) field("colour").textContent = field("colour").title = `${rep.ids && rep.ids.includes(catalog.id[v.k]) ? "Color" : "Color held"}: ${rep.color.join(" · ")}`;
           else if (rep.filter_names && rep.filter_names.length === 3) field("colour").textContent = field("colour").title = `Mosaic movie: ${rep.filter_names.join(" · ")}`;
         }).catch(() => {});
@@ -2317,6 +2321,10 @@ body.phone.has-dock { --appdockh: 50px; }
     const passInfos = new Map(), filmAsked = new Set();
     let filmInfo = null, filmN = -1, filmCat = null;
     const unix = k => etToMs(catalog.et[k]) / 1000;
+    const filterHtml = k => {
+      const c = catalog.cls[k], pol = /^P\d|^IRP/.test(catalog.f1[k]) || /^IRP/.test(catalog.f2[k]) ? " · polarizer" : "";
+      return `<span class="swatch" style="background:${CLS[c][1]}"></span>${catalog.f1[k]}/${catalog.f2[k]}${nmOf(k) ? ` · ${Math.round(nmOf(k))} nm` : ""}${pol}`;
+    };
     function filmstrip(k) {
       if (k < 0 || !(playsMovie(k) || playsRolling(k)) || !S.get("movies.filmstrip")) { film.classList.remove("on"); filmInfo = null; return; }
       const o = `${cam}|${passOf(k)}`, t = unix(k);
@@ -2581,8 +2589,7 @@ body.phone.has-dock { --appdockh: 50px; }
       if ((obsShown && catalog.obs[k] === obsShown) || ((want.tile || want.held) && (mosaicPass(k) || modeOf(k) === "mosaic" || modeOf(k) === "mosaic_movie"))) mosaicOf(want.held ? { key: want.key, set: -1, k } : want, true);
       const kp = catalog.km_per_px[k];
       if (!want.movie) field("frame").textContent = `${titleCase(catalog.target[k] || "Unknown")} · ${catalog.id[k]}`;
-      const c = catalog.cls[k], pol = /^P\d|^IRP/.test(catalog.f1[k]) || /^IRP/.test(catalog.f2[k]) ? " · polarizer" : "";
-      field("filter").innerHTML = `<span class="swatch" style="background:${CLS[c][1]}"></span>${catalog.f1[k]}/${catalog.f2[k]}${nmOf(k) ? ` · ${Math.round(nmOf(k))} nm` : ""}${pol}`;
+      if (!want.movie) field("filter").innerHTML = filterHtml(k);
       field("colour").textContent = !s ? (colourFilter(k) ? "Single filter" : "Clear, no color") : ready
         ? colourText(s, si) : `${KIND[s.kind]} set, ${s.use.filter(q => catalog.et[q] <= state.et).length} of ${s.use.length} channels taken`;
       const n24 = p - lastOfCam(cam, state.et - 86400, body);

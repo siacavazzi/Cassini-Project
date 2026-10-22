@@ -913,7 +913,7 @@ def rolling_webp(frame_id, size, cache, laps=1, slots=None, fmt="webp", out=OUT,
         res = _make_mosaic(u, n, size, path, cache, slots, made, fmt, out)
     warm_movie(u, n + 1, 6, cache)
     if res:
-        res[1].update({"rolling": True, "laps": laps, "n": n})
+        res[1].update({"rolling": True, "keep": laps, "n": n})   # laps: the pass's own, from _make_mosaic
     return res
 
 
