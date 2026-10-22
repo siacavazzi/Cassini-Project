@@ -624,23 +624,28 @@ body.idle .win.full .titlebar { opacity: 0; }
       const b = document.createElement("button"); b.textContent = NAMES[w.id] || w.dataset.name;
       b.addEventListener("click", e => { e.stopPropagation(); restore(w); }); tray.appendChild(b);
     });
+    if (window.cassiniDock) cassiniDock.sync();
   }
-  // the "genie": shrink toward the tray in the menu bar, and grow back out of it
+  // where a minimized window goes: its tile in the dock (dock.html), or the tray in the menu bar when the dock is off
+  const sink = w => (window.cassiniDock && cassiniDock.tile(w)) || $("tray");
+  // the "genie": shrink toward the window's place in the dock (or the tray), and grow back out of it
   function animateTo(w, target, reverse) {
     if (matchMedia("(prefers-reduced-motion: reduce)").matches || !w.animate) return Promise.resolve();
-    const r = w.getBoundingClientRect(), t = target.getBoundingClientRect();
+    const r = w.getBoundingClientRect(), t = target.getBoundingClientRect ? target.getBoundingClientRect() : target;
     const dx = t.left + t.width / 2 - (r.left + r.width / 2), dy = t.top + t.height / 2 - (r.top + r.height / 2);
     const k = [{ transform: "none", opacity: 1 }, { transform: `translate(${dx}px, ${dy}px) scale(.06, .03)`, opacity: .15 }];
     return w.animate(reverse ? k.reverse() : k, { duration: 340, easing: "cubic-bezier(.55,0,.35,1)" }).finished;
   }
   async function minimize(w) {
-    if (w.id === "dock") { w.classList.toggle("shaded"); return; }   // the main window rolls up to its title bar
-    w.dataset.min = "1"; await animateTo(w, $("tray")); w.hidden = true; syncMenu();
+    // with no dock the main window rolls up to its title bar; with one it goes into the dock like the others
+    if (w.id === "dock" && !(window.cassiniDock && cassiniDock.on)) { w.classList.toggle("shaded"); return; }
+    if (w.dataset.min) return;
+    w.dataset.min = "1"; syncMenu(); await animateTo(w, sink(w)); w.hidden = true; syncMenu();
   }
   async function restore(w) {
-    const wasMin = !!w.dataset.min; delete w.dataset.min;
+    const wasMin = !!w.dataset.min, from = wasMin && sink(w).getBoundingClientRect(); delete w.dataset.min;
     w.hidden = false; front(w); syncMenu();
-    if (wasMin) await animateTo(w, $("tray"), true);
+    if (wasMin) await animateTo(w, from, true);
     w.classList.remove("shaded", "closed");
   }
   // (each window is wired once; windows made later, such as the per-body camera windows, call cassiniWM.wire)
