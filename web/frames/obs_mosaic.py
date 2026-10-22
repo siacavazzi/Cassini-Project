@@ -177,19 +177,7 @@ def plan(u, cache):
         for fr in frames:
             count[fr[2]] = count.get(fr[2], 0) + 1
             nms[fr[2]] = fr[4]
-        # colour: (near) true colour when the pass takes GRN and a blue at a good share of its tiles, with RED or
-        # else the continuum filter nearest red (not a methane band); otherwise false colour from the filters taken
-        # at most tiles (longest wavelength red). Polarizers are left out (they are not a colour)
-        most = max(count.values())
-        good = [f for f in count if count[f] >= most / 4 and not _polarizer(f)]
-        blue = next((b for b in reel.TRUE_BLUES if b in good), None)
-        reds = [f for f in good if "/" not in f and not f.startswith("MT") and nms[f] > 600]
-        red = "RED" if "RED" in good else min(reds, key=lambda f: abs(nms[f] - 650)) if reds else None
-        common = sorted([f for f in count if count[f] >= most / 2 and not _polarizer(f)], key=lambda f: -nms[f])
-        if blue and red and "GRN" in good:
-            colour = [red, "GRN", blue]
-        else:
-            colour = [common[0], common[len(common) // 2], common[-1]] if len(common) >= 3 else None
+        colour = colour_of(count, nms)
         scale = pass_scale(frames, u, colour or [max(count, key=count.get)],
                            bool(colour and colour[1] == "GRN" and colour[2] in reel.TRUE_BLUES))
         # the rotation from the camera's frame to north up: the angle between where the geometry cache puts
@@ -222,6 +210,31 @@ def plan(u, cache):
              "grey": max(count, key=count.get), "whole": u["whole"]}
         reel._cached(path, lambda: json.dumps(p).encode())
         return p
+
+
+# filter sets with a colour mapping of their own, looked up before the general rule in colour_of: frozenset of the
+# pass's filters (as units() names them, e.g. "MT3", "CB2", "BL1") -> [red, green, blue] filters. Empty for now;
+# the per-filter-set rules for false colour (color plan phase 2b) go here
+COLOUR_SETS = {}
+
+
+def colour_of(count, nms):
+    """The pass's colour filters, [red, green, blue], or None for grey. count = tiles per filter, nms = each
+    filter's wavelength. (Near) true colour when the pass takes GRN and a blue at a good share of its tiles, with
+    RED or else the continuum filter nearest red (not a methane band); otherwise false colour from the filters
+    taken at most tiles (longest wavelength red). Polarizers are left out (they are not a colour)."""
+    most = max(count.values())
+    good = [f for f in count if count[f] >= most / 4 and not _polarizer(f)]
+    for filters, rgb in COLOUR_SETS.items():
+        if filters <= set(good):
+            return list(rgb)
+    blue = next((b for b in reel.TRUE_BLUES if b in good), None)
+    reds = [f for f in good if "/" not in f and not f.startswith("MT") and nms[f] > 600]
+    red = "RED" if "RED" in good else min(reds, key=lambda f: abs(nms[f] - 650)) if reds else None
+    common = sorted([f for f in count if count[f] >= most / 2 and not _polarizer(f)], key=lambda f: -nms[f])
+    if blue and red and "GRN" in good:
+        return [red, "GRN", blue]
+    return [common[0], common[len(common) // 2], common[-1]] if len(common) >= 3 else None
 
 
 def _polarizer(f):
