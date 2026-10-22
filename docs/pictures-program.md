@@ -79,14 +79,16 @@ Effort comes from the reports. Phase A runs alongside 1 and 2; everything else f
   - Re-check the detection on that pass and on a sample of the passes still called mosaics (contact sheets of the frames in time order next to the mosaic), and tighten the rule where it is wrong. Report how many passes change.
   - A per-window **Mosaic / Movie** switch (Auto by default, which follows the server's call). Movie plays the pass's frames in place; Mosaic builds it. The choice sticks for that pass while it plays and is a `cassiniSettings` default ("Mosaic passes: Auto / Always mosaic / Always movie"). The server builds a mosaic for any pass when asked, whatever `_judge` says.
   - Low mosaic resolution is noted and belongs to phase 6 (full-resolution mosaic); not in this PR.
-- **Depends on.** Nothing. **Checkpoint 1** (shown again after the rework).
+- **Second round of feedback (Sam, 21:36Z).** Three kinds, not two: **mosaic** (places covered once), **movie** (one place, or a slow creep), and **mosaic movie** (the same set of places taken again and again, e.g. the Jupiter approach: a cycle of about 12 color frames repeated). The classifier names all three, and the switch offers Mosaic / Movie / Mosaic movie with Auto first. Known wrong or doubtful calls go into `pass_benchmarks.json` with Sam's verdict: ISS_064RI_AZSCAN001_PRIME NAC pass 1 (called mosaic, looks like a movie), ISS_222TI_REGMAP001_VIMS NAC pass 0 (debatable; possibly a movie of a few spots or a mosaic movie), the Jupiter approach (mosaic movie). The rule is checked against every benchmark and the random sample before Sam sees it again.
+- **Depends on.** Nothing. **Checkpoint 1** (shown again, together with phase M, as one "mosaic or movie" checkpoint).
 
 ### Phase M · Movies worth watching (D7 and the movie presentation, moved up) · ~2 days · port 8794
 - **Why moved up.** Sam (checkpoint 1) does not love today's movie mode, and with the movie/mosaic switch more passes play as movies, so how a movie looks matters now, not after the speed work.
 - **Goal.** A pass played as a movie looks like a movie: frames held steady in place (SPICE-centered through the pipeline, one display scale for the pass so brightness does not pump), smooth timing at the pass's own pace or the playback speed, a scrubbable filmstrip of the pass under the window (D7) that opens any frame or set, and an optional short Rolling trail. Starts with a short look at today's movie mode (#23, #40) and what Sam dislikes in it; the brief lists the faults found before building.
 - **Files.** `head-quiet.html`, `movie.html`, `bodywin.html`, `web/frames/frame_server.py` / `reel.py` for the pass's shared scale.
 - **Benchmarks.** The 2006-12-04 ring pass, ISS_137RI_FMOVIE001_VIMS, ISS_109RI_LRHPENKMV001_PRIME, ISS_235SA_SATSTARE001_PRIME, a spoke movie.
-- **Depends on.** Phase 1's movie flag and switch; folds phase A in if A merges first. **Checkpoint M.** Mosaic movie modes (Build, Rolling, Time-lapse; 7b) still wait for phase 6.
+- **Mosaic movies (moved up from 7b, Sam 21:36Z).** A mosaic movie plays as a rolling mosaic that persists: the picture never resets to empty when a new cycle begins; each new tile replaces or fades over its own earlier copy (Rolling with a persistence slider, Time-lapse where a tile replaces its earlier self), and it exports through movie export (#43) looking the same. Speed work (phase 6) makes it faster later but is not a precondition.
+- **Depends on.** Phase 1's pass kinds and switch; folds phase A in if A merges first. **Checkpoint M**, shown together with phase 1.
 
 ### Phase 2a · Color looks right (C1 to C5) · ~2 days · port 8792
 - **Goal.** One display model on linear I/F: mosaic gains anchored (mean log gain held at 0, stronger pull to 1); one seam gain and offset per tile solved on linear luminance and applied to every filter; filled passes share one black and white across filters, sRGB curve instead of gamma 1.5, `detail()` on luminance only; composite white at the 99.5th percentile of the brightest channel over lit pixels with a soft shoulder; black per channel = sky median plus one shared noise margin.
@@ -132,7 +134,7 @@ Effort comes from the reports. Phase A runs alongside 1 and 2; everything else f
 
 ### Phase 7 · Movies (D7, M8) · ~5 days · two PRs
 - **7a.** Moved up into phase M.
-- **7b.** Mosaic movie mode: Build, Rolling (older tiles fade over the last N, persistence slider in Settings) and Time-lapse (a tile replaces its own earlier copy; the NPOLMOV_VIMS polar passes). The rolling persistence mosaic stays.
+- **7b.** Moved up into phase M (mosaic movies). What remains here: speed-dependent polish of Build, Rolling (older tiles fade over the last N, persistence slider in Settings) and Time-lapse (a tile replaces its own earlier copy; the NPOLMOV_VIMS polar passes). The rolling persistence mosaic stays.
 - **Depends on.** Phase 6. **Checkpoint 7.**
 
 ### Phase 8 · Finishing (C8, C9, D9, D8) · ~4 days · separate PRs
