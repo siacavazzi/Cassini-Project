@@ -68,6 +68,7 @@ MAX_FRAMES = 16      # footprints wider than this many frames stay rolling mosai
 MOVIE_JUMPS = 0.3    # a pass whose same-filter steps jump (mosaic.min_step) less often than this is a movie
 MOVIE_FIT = 2.0      # a pass played as a movie shows its whole footprint up to this many frames across, else a
                      # window this wide following the frame, at one scale for the whole pass
+MOVIE_MARGIN = 0.15  # of a frame, round a movie's footprint
 TRAIL = 12           # most earlier frames a movie's rolling trail keeps under the newest
 SCALE_FRAMES = 96    # most frames the pass's display scale is measured on (evenly spread over a long movie)
 MOVIE_DWELL = 8      # ... or whose camera stays this many frames of one filter (median) at each place it goes
@@ -531,9 +532,12 @@ def movie_rect(p, t):
     footprint when that is at most MOVIE_FIT frames across, so the body holds still while the pointing wanders;
     otherwise a window MOVIE_FIT frames across centred on frame t (a creeping ring or limb movie moves along).
     Either way one size for the whole pass, so the picture never rescales."""
-    x0, y0, x1, y1 = p["footprint"]
+    # a margin round the footprint the geometry cache gives, so a frame SPICE puts a little further out (a movie
+    # tracking a propeller across the rings) is not cut at the view's edge
+    m = MOVIE_MARGIN * FRAME
+    x0, y0, x1, y1 = p["footprint"][0] - m, p["footprint"][1] - m, p["footprint"][2] + m, p["footprint"][3] + m
     side = MOVIE_FIT * FRAME
-    if max(x1 - x0, y1 - y0) <= side:
+    if max(x1 - x0, y1 - y0) <= side + 2 * m:
         return x0, y0, x1 - x0, y1 - y0
     w, h = min(x1 - x0, side), min(y1 - y0, side)
     cx, cy = t["offset"]
