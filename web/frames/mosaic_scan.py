@@ -162,7 +162,7 @@ for (target, obs, inst), g in sub.groupby(["TARGET_NAME", "OBSERVATION_ID", "INS
              "start": u["frames"][0][3], "first_id": u["frames"][0][1], "mosaic": u["mosaic"], "whole": u["whole"],
              "name_hint": "movie" if MOVIE.search(obs) else "mosaic" if MOSAIC.search(obs) else "",
              "movie": u.get("movie"), "dwell": u.get("dwell"), "jump_frac_om": u.get("jump_frac"),
-             "kind": u.get("kind"), "repeats": u.get("repeats"), "pan": u.get("pan")}
+             "kind": u.get("kind"), "repeats": u.get("repeats")}
         if len(placed) >= 2:
             m = motion(u); r.update(m); r["verdict"] = verdict(m, u)
         if u["mosaic"]:

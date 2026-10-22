@@ -157,7 +157,8 @@
    "pass": 1,
    "time": "2008-04",
    "expect": "movie",
-   "why": "Sam (checkpoint 1, second round): looks like a movie. A one-lap pan along the ring, 34 frames 0.35 frame apart in a straight line; every frame shows nearly the same rings (pan rule: PAN_STEP, PAN_STRAIGHT)."
+   "why": "Sam (checkpoint 1, second round): looks like a movie. A one-lap pan along the ring, 34 frames 0.35 frame apart; every frame shows nearly the same rings. A pointing rule for pans also caught radial ring scans (TEMPL55MP001, TEMPU57MP001) and a 1x2 Saturn mosaic, which are good mosaics, so Auto leaves pans as mosaics; telling an along-ring pan apart needs the pictures themselves.",
+   "now": "mosaic (the window's chip makes it a movie)"
   },
   {
    "obs": "ISS_222TI_REGMAP001_VIMS",
