@@ -114,7 +114,7 @@ body.phone #flagtoast { bottom: calc(env(safe-area-inset-bottom, 0px) + 12px); }
       const R = window.cassiniReel && window.cassiniReel.state, s = R && R.shots[R.i];
       if (!s) return null;
       canvas = $("rlcanvas" + s.cam); ids = s.ids.slice(); what = "body reel picture";
-      src = `${FRAMES}/frames/reel/${R.target}/${R.i}.webp?mosaic=${R.mosaic ? 1 : 0}`;
+      src = `${FRAMES}/frames/reel/${R.target}/${R.i}.webp?mosaic=${R.mosaic ? 1 : 0}${window.cassiniLook()}`;
       const b = R.buf.get(R.i); report = b && b.how;
     } else {
       const well = w.querySelector(".well"), shot = w.querySelector(".shot");

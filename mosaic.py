@@ -10,6 +10,7 @@ is already underneath, so panel seams don't show.
 import numpy as np
 import cv2
 import reproject as rp
+import calibration
 
 
 buffer_size = 5     # number of frames kept in the rolling mosaic (including the newest)
@@ -21,6 +22,11 @@ calibrated_overlap = 100  # min_overlap for those: a tight gain and a median off
 max_offset = 6.0    # 8 bit levels; a bigger step is light scattered across the frame (a gradient),
                     # which one offset can't take out, and chained over a mosaic shifts its colours
 offset_ramp = 16.0  # 8 bit levels over which an offset fades in from black (see composite)
+max_linear_offset = 0.01  # the same for offsets solved on linear values (gamma given): a share of white;
+                          # the sky's real offset left after the bias is 0.1-1.3% of white
+linear_ramp = 0.02  # ... and the share of white over which such an offset fades in from black
+anchor_pull = 0.05  # anchored gains: how hard every log gain is pulled toward 0, against a tile's overlaps
+                    # (weights scaled so the best measured overlap counts 1)
 reproject_surface = False  # line up the target's surface between frames (see compose)
 max_reproject_age = 20 * 60  # seconds; older frames are only centered (warping across big rotations tears)
 
@@ -57,9 +63,12 @@ view, placement); the last three may be None. reproject = line up the target's s
 offset per frame takes out what is left of the sky level (bias, stray light). pin = the frame
 whose brightness the others are matched to (the newest by default); None pins none, so the
 corrections only pull the frames together and keep their overall level (a whole calibrated
-mosaic in one window).
+mosaic in one window). gamma = how the frames' levels encode linear brightness (calibration.encode):
+the corrections are then solved and applied on linear values. corrections = (gains, offsets) worked
+out beforehand (seams), used instead of solving them here; offsets are on linear values when gamma
+is given.
 """
-def compose(window, reproject=None, calibrated=False, pin=-1):
+def compose(window, reproject=None, calibrated=False, pin=-1, gamma=None, corrections=None):
     if reproject is None:
         reproject = reproject_surface
     frames = [np.asarray(entry[0]) for entry in window]
@@ -70,10 +79,35 @@ def compose(window, reproject=None, calibrated=False, pin=-1):
                     and newest[1]["et"] - entry[1]["et"] <= max_reproject_age):
                 frames[i] = rp.warp_to_newest((frames[i],) + tuple(entry[1:]), newest)
 
+    if corrections is not None:
+        return composite(frames, *corrections, gamma=gamma)
     if not calibrated:
         return composite(frames, match_gains(frames, pin=pin))
-    gains = match_gains(frames, calibrated_gain, pin, calibrated_overlap)
-    return composite(frames, gains, match_offsets(frames, gains, pin, calibrated_overlap))
+    return composite(frames, *seams(frames, pin, gamma), gamma=gamma)
+
+
+"""
+The gains and offsets compose uses for frames already on one calibrated scale: (gains, offsets), each
+of shape (frames, 3). gamma as compose; with pin None and gamma given, the gains are anchored (the mean
+log gain held at 0, see match_gains), so they keep the mosaic's overall level instead of shrinking.
+"""
+def seams(frames, pin=-1, gamma=None):
+    anchored = pin is None and gamma is not None
+    gains = match_gains(frames, calibrated_gain, pin, calibrated_overlap, gamma, anchored)
+    return gains, match_offsets(frames, gains, pin, calibrated_overlap, gamma)
+
+
+"""
+The frames' 1/4 scale copies as overlaps gives them, as linear brightness 0-255 (gamma as compose), with
+the alpha left as it is.
+"""
+def linear(small, gamma):
+    out = []
+    for s in small:
+        f = s.astype(np.float32)
+        f[..., :3] = calibration.decode(f[..., :3] / 255, gamma) * 255
+        out.append(f)
+    return out
 
 
 """
@@ -180,15 +214,24 @@ default). Gains stay within 1 / limit and limit (max_gain by default).
 
 Least squares over every overlapping pair, as in Brown & Lowe's panorama gain compensation:
     sum over pairs of N_ij * (g_i * mean_i - g_j * mean_j)^2 + small pull of every gain toward 1
+gamma = solve on linear values (compose). anchored = solve the log gains instead, with pin None: every
+pair asks log g_i - log g_j = log(mean_j / mean_i), weighted by how well the pair's means are measured,
+and every log gain is pulled toward 0 (anchor_pull), which holds their mean at 0. Without that the
+pull above is too weak for a whole mosaic: the solve shrinks every gain until the limit stops it.
 returns array of shape (frames, 3)
 """
-def match_gains(frames, limit=None, pin=-1, overlap=None):
+def match_gains(frames, limit=None, pin=-1, overlap=None, gamma=None, anchored=False):
     n = len(frames)
     gains = np.ones((n, 3))
     if n < 2:
         return gains
 
     small, pairs = overlaps(frames, overlap)
+    if gamma is not None:
+        small = linear(small, gamma)
+    limit = limit or max_gain
+    if anchored:
+        return np.clip(_anchored_gains(small, pairs, n), 1 / limit, limit)
 
     sig_n = 10.0   # expected noise in a mean brightness (8 bit levels)
     sig_g = 1.0    # how far a gain may wander from 1 without overlaps pinning it down
@@ -213,8 +256,36 @@ def match_gains(frames, limit=None, pin=-1, overlap=None):
             b[pin] = 1
         gains[:, c] = np.linalg.solve(A, b)
 
-    limit = limit or max_gain
     return np.clip(gains, 1 / limit, limit)
+
+
+def _anchored_gains(small, pairs, n):
+    sig_n = 10.0   # expected noise in a mean brightness (levels)
+    gains = np.ones((n, 3))
+    for c in range(3):
+        rows = []
+        for i, j, sl, ov, N in pairs:
+            mi = small[i][sl][..., c][ov].mean()
+            mj = small[j][sl][..., c][ov].mean()
+            if min(mi, mj) < 1:
+                continue   # black in one of them: the ratio says nothing
+            # the variance of log(mj / mi) is about sig_n^2 (1 / mi^2 + 1 / mj^2) / N
+            rows.append((i, j, N / (sig_n ** 2 * (1 / mi ** 2 + 1 / mj ** 2)), np.log(mj / mi)))
+        if not rows:
+            continue
+        top = max(w for *_, w, _ in rows)
+        A = np.eye(n) * anchor_pull
+        b = np.zeros(n)
+        for i, j, w, d in rows:
+            w /= top
+            A[i, i] += w
+            A[j, j] += w
+            A[i, j] -= w
+            A[j, i] -= w
+            b[i] += w * d
+            b[j] -= w * d
+        gains[:, c] = np.exp(np.linalg.solve(A, b))
+    return gains
 
 
 """
@@ -224,15 +295,19 @@ keeps a little of the camera's bias and of the light scattered in the optics, wh
 frame to frame and shows as a step at every seam of a faint background. The pinned frame keeps an offset of 0
 (pin None: the offsets average about 0); the others are matched to it through their overlaps, by least squares on the median difference
 over each overlap where both are above black (stars and cosmic rays don't move a median). Frames that overlap nothing (fewer
-than overlap pixels, as match_gains) keep 0.
+than overlap pixels, as match_gains) keep 0. gamma = solve on linear values (compose): the offsets are then a share of white,
+at most max_linear_offset.
 returns array of shape (frames, 3)
 """
-def match_offsets(frames, gains, pin=-1, overlap=None):
+def match_offsets(frames, gains, pin=-1, overlap=None, gamma=None):
     n = len(frames)
     offsets = np.zeros((n, 3))
     if n < 2:
         return offsets
     small, pairs = overlaps(frames, overlap)
+    levels = small
+    if gamma is not None:
+        levels = [f / 255 for f in linear(small, gamma)]
     for c in range(3):
         A = np.eye(n) * 1e-3   # small pull toward 0 for frames without overlaps
         b = np.zeros(n)
@@ -243,6 +318,7 @@ def match_offsets(frames, gains, pin=-1, overlap=None):
             N = int(lit.sum())
             if N < (overlap or min_overlap):
                 continue
+            si, sj = levels[i][sl][..., c], levels[j][sl][..., c]
             # offset_i - offset_j should make up the median difference j - i
             d = np.median(sj[lit] * gains[j, c] - si[lit] * gains[i, c])
             A[i, i] += N
@@ -256,7 +332,8 @@ def match_offsets(frames, gains, pin=-1, overlap=None):
             A[pin, pin] = 1
             b[pin] = 0
         offsets[:, c] = np.linalg.solve(A, b)
-    return np.clip(offsets, -max_offset, max_offset)
+    limit = max_offset if gamma is None else max_linear_offset
+    return np.clip(offsets, -limit, limit)
 
 
 """
@@ -299,8 +376,10 @@ something underneath, a frame's edge fades in over feather_px; over empty backgr
 the frame keeps its own alpha, so a lone frame looks the same as before.
 Only the area the frames cover is worked on, then pasted into an empty canvas.
 offsets = optional levels added to each frame after its gain (match_offsets)
+gamma = the frames' levels encode linear brightness so (compose): gains and offsets (a share of white)
+are applied to linear values, then encoded again
 """
-def composite(frames, gains, offsets=None):
+def composite(frames, gains, offsets=None, gamma=None):
     if offsets is None:
         offsets = np.zeros((len(frames), 3))
     h, w = frames[0].shape[:2]
@@ -326,8 +405,11 @@ def composite(frames, gains, offsets=None):
         sl = (slice(box[0] - y0, box[1] - y0), slice(box[2] - x0, box[3] - x0))
         below = acc_alpha[sl]
         a = feathered * below + own * (1 - below)
-        color = color * gain.astype(np.float32)
-        if offset.any():
+        if gamma is not None:
+            color = _corrected(color, gain, offset, gamma)
+        else:
+            color = color * gain.astype(np.float32)
+        if gamma is None and offset.any():
             # in full from offset_ramp levels up, fading to none at black, so what is black stays
             # black (lifting it shows the compression blocks of a dark sky or night side)
             color += offset.astype(np.float32) * np.minimum(color * np.float32(1 / offset_ramp), 1)
@@ -342,3 +424,30 @@ def composite(frames, gains, offsets=None):
     out[y0:y1, x0:x1, :3] = np.clip(rgb, 0, 255).round()
     out[y0:y1, x0:x1, 3] = (acc_alpha * 255).round()
     return out
+
+
+def _corrected(color, gain, offset, gamma):
+    """A frame's levels with its gain and offset applied on linear brightness; the offset fades in over
+    linear_ramp from black, so what is black stays black (as offset_ramp). Through lookup tables, since
+    the levels are whole numbers 0-255 and the result is only kept to 8 bits."""
+    if np.all(gain == 1) and not np.any(offset):
+        return color.copy()
+    to_linear, edges = _tables(gamma)
+    lin = to_linear[color.astype(np.uint8)]
+    lin *= gain.astype(np.float32)
+    if np.any(offset):
+        lin += offset.astype(np.float32) * np.minimum(lin * np.float32(1 / linear_ramp), 1)
+    # the level whose span of linear brightness lin falls in: encoding rounded to 8 bits
+    return np.searchsorted(edges, lin).astype(np.float32)
+
+
+_luts = {}
+
+
+def _tables(gamma):
+    """(linear brightness of each level 0-255, the linear brightness halfway between each level and the next)"""
+    if gamma not in _luts:
+        to_linear = calibration.decode(np.arange(256) / 255, gamma).astype(np.float32)
+        edges = calibration.decode((np.arange(255) + 0.5) / 255, gamma).astype(np.float32)
+        _luts[gamma] = to_linear, edges
+    return _luts[gamma]

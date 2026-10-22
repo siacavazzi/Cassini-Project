@@ -54,7 +54,11 @@ import mosaic  # noqa: E402
 import stacking  # noqa: E402
 
 # bumped whenever the way reel pictures are made changes, so older ones are not served again
-VERSION = "reel-v5"
+VERSIONS = {"balanced": "reel-v6", "classic": "reel-v5"}   # one per look (calibration.LOOKS)
+
+
+def version():
+    return VERSIONS[calibration.look()]
 SET_GAP = 300          # seconds between frames of one filter set
 REPEAT_GAP = 120       # stacking.find_repeats' window
 VIEW = 1536            # full resolution pixels a picture shows (a north-up frame fits in 1448)
@@ -322,7 +326,7 @@ def mosaic_scale(group, cache):
     in I/F (calibration.tiles_scale: each tile's own scale, combined), worked out once and kept in the
     cache. None when no tile calibrates."""
     key = hashlib.sha1(",".join("_".join(ids) for ids in group).encode()).hexdigest()[:16]
-    path = os.path.join(cache, VERSION, "scales", key + ".json")
+    path = os.path.join(cache, version(), "scales", key + ".json")
 
     def make():
         tiles = []
@@ -345,7 +349,7 @@ def picture(ids, cache, group=None):
     middle, north up, and its report (frame_offset: where that middle sits relative to the body's centre).
     group = the ids of every tile of the mosaic it is a tile of (group_of): then its frames' exposures are
     merged in I/F and it is drawn on the mosaic's shared display scale (report["shared_scale"])."""
-    base = os.path.join(cache, VERSION, "pictures", "_".join(ids))
+    base = os.path.join(cache, version(), "pictures", "_".join(ids))
     made = {}
 
     def make():
@@ -387,7 +391,7 @@ def shot_webp(target, n, size, cache, use_mosaic=True, slots=None):
     window = window + [s]
     key = "_".join(s["ids"]) + ("" if len(window) == 1 else "-" + hashlib.sha1(
         ",".join("_".join(w["ids"]) for w in window).encode()).hexdigest()[:12])
-    path = os.path.join(cache, VERSION, str(size), key + ".webp")
+    path = os.path.join(cache, version(), str(size), key + ".webp")
     report = {}
 
     def make():
@@ -416,7 +420,7 @@ def shot_webp(target, n, size, cache, use_mosaic=True, slots=None):
     if not report:
         # served from the cache: the picture's report is kept next to it, no need to open the picture
         try:
-            with open(os.path.join(cache, VERSION, "pictures", "_".join(s["ids"]) + ".json")) as fh:
+            with open(os.path.join(cache, version(), "pictures", "_".join(s["ids"]) + ".json")) as fh:
                 report = json.load(fh)
         except (OSError, ValueError):
             report = picture(s["ids"], cache, group_of(target, n))[1]
@@ -455,7 +459,7 @@ def build(target, cache, workers=1, first=0, count=None):
     count of them from number first on, or all."""
     reel = shots(target)[first:None if count is None else first + count]
     todo = [(s["ids"], group_of(target, first + k)) for k, s in enumerate(reel)
-            if not os.path.exists(os.path.join(cache, VERSION, "pictures", "_".join(s["ids"]) + ".png"))]
+            if not os.path.exists(os.path.join(cache, version(), "pictures", "_".join(s["ids"]) + ".png"))]
     print(f"{target}: {len(reel)} pictures, {len(reel) - len(todo)} already made, {len(todo)} to make", flush=True)
     start, done = time.time(), 0
 
