@@ -250,8 +250,9 @@ body.phone .srow input[type=range] { width: 96px; }
   mirror("view.allOrbits", "allorbits");
   D({ key: "view.enlarge", section: "View", label: "Enlarge moons ×10", type: "toggle", value: false, hint: "Moons drawn ten times their size so they can be seen from afar." });
   mirror("view.enlarge", "enlarge");
-  D({ key: "view.follow", section: "View", label: "Follow camera", type: "toggle", value: false, hint: "Look where Cassini's camera points (needs the pointing data)." });
-  mirror("view.follow", "followcam");
+  // a new key, so a saved "off" from when follow started off does not carry over
+  D({ key: "view.followcam", section: "View", label: "Follow camera", type: "toggle", value: true, hint: "Look where Cassini's camera points (needs the pointing data)." });
+  mirror("view.followcam", "followcam");
   D({ key: "view.textures", section: "View", label: "Surface maps", type: "choice", value: "2k", reload: true,
       options: [["0", "Off"], ["1k", "1k"], ["2k", "2k"], ["4k", "4k"]],
       hint: "Map size for Saturn and the moons. 4k is sharper and slower to load; Off keeps the plain painted look. A ?tex= link still wins." });
