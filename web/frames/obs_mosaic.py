@@ -190,7 +190,8 @@ def plan(u, cache):
             colour = [red, "GRN", blue]
         else:
             colour = [common[0], common[len(common) // 2], common[-1]] if len(common) >= 3 else None
-        scale = pass_scale(frames, u, colour or [max(count, key=count.get)], bool(colour and colour[1] == "GRN"))
+        scale = pass_scale(frames, u, colour or [max(count, key=count.get)],
+                           bool(colour and colour[1] == "GRN" and colour[2] in reel.TRUE_BLUES))
         # the rotation from the camera's frame to north up: the angle between where the geometry cache puts
         # the body and where processed_frame does, from the first tile placed well off the body's centre
         angle = 0.0
@@ -257,11 +258,11 @@ def pass_scale(frames, u, drawn=None, true_colour=False):
     filled = floor > FILLED
     gamma = 3.0
     if filled and calibration.look() == "balanced":
-        # sRGB curve, and every black at most half its filter's top (a black above the white stretches noise into
-        # colour). True colour: one black and white for the filters drawn, so the colour is what they saw rather
-        # than how differently each was stretched (black the darkest one's 1st percentile, white the brightest's
-        # 99.5th). False colour (methane bands, UV, IR: no colour to keep) and grey: each filter its own black and
-        # white ("whites"), so every band shows its own contrast
+        # sRGB curve. True colour: one black and white for the filters drawn, so the colour is what they saw
+        # rather than how differently each was stretched (black the darkest one's 1st percentile, at most half the
+        # brightest's 99.5th, which is white: a black above the white would stretch noise into colour). False
+        # colour (methane bands, UV, IR: no natural colour to keep) and grey: each filter stretched from its own
+        # 1st to its 99.5th percentile ("whites"), so every band shows its own contrast
         lows = {f: float(np.percentile(np.concatenate([i.ravel() for i in iofs]), 1)) for f, iofs in by.items()}
         tops = {f: float(np.percentile(np.concatenate([i.ravel() for i in iofs]), 99.5)) for f, iofs in by.items()}
         mine = [f for f in (drawn or by) if f in by] or list(by)
@@ -271,7 +272,7 @@ def pass_scale(frames, u, drawn=None, true_colour=False):
             black = min(min(lows[f] for f in mine), top / 2)
             blacks, white = {f: black for f in by}, top - black
         else:
-            blacks = {f: min(lows[f], tops[f] / 2) for f in by}
+            blacks = dict(lows)
             whites = {f: tops[f] - blacks[f] for f in by}
             return {"blacks": blacks, "white": max(whites.values()), "whites": whites, "gamma": gamma,
                     "filled": filled, "floor": round(floor, 3)}

@@ -24,9 +24,10 @@ max_offset = 6.0    # 8 bit levels; a bigger step is light scattered across the 
 offset_ramp = 16.0  # 8 bit levels over which an offset fades in from black (see composite)
 max_linear_offset = 0.01  # the same for offsets solved on linear values (gamma given): a share of white;
                           # the sky's real offset left after the bias is 0.1-1.3% of white
-linear_ramp = 0.02  # ... and the share of white over which such an offset fades in from black
 anchor_pull = 0.05  # anchored gains: how hard every log gain is pulled toward 0, against a tile's overlaps
                     # (weights scaled so the best measured overlap counts 1)
+toward_pull = 0.3   # ... and toward another filter's seams (seams' toward): a filter departs from them only
+                    # where its own overlaps clearly say so
 reproject_surface = False  # line up the target's surface between frames (see compose)
 max_reproject_age = 20 * 60  # seconds; older frames are only centered (warping across big rotations tears)
 
@@ -280,8 +281,9 @@ def _anchored_gains(small, pairs, n, toward=None):
         if not rows:
             continue
         top = max(w for *_, w, _ in rows)
-        A = np.eye(n) * anchor_pull
-        b = anchor_pull * np.log(gains[:, c])
+        pull = anchor_pull if toward is None else toward_pull
+        A = np.eye(n) * pull
+        b = pull * np.log(gains[:, c])
         for i, j, w, d in rows:
             w /= top
             A[i, i] += w
@@ -434,7 +436,8 @@ def composite(frames, gains, offsets=None, gamma=None):
 
 def _corrected(color, gain, offset, gamma):
     """A frame's levels with its gain and offset applied on linear brightness; the offset fades in over
-    linear_ramp from black, so what is black stays black (as offset_ramp). Through lookup tables, since
+    offset_ramp levels from black (counted on the levels, as without gamma), so what is black stays black
+    while a faint sky just above it gets its whole offset. Through lookup tables, since
     the levels are whole numbers 0-255 and the result is only kept to 8 bits."""
     if np.all(gain == 1) and not np.any(offset):
         return color.copy()
@@ -442,7 +445,7 @@ def _corrected(color, gain, offset, gamma):
     lin = to_linear[color.astype(np.uint8)]
     lin *= gain.astype(np.float32)
     if np.any(offset):
-        lin += offset.astype(np.float32) * np.minimum(lin * np.float32(1 / linear_ramp), 1)
+        lin += offset.astype(np.float32) * np.minimum(color * np.float32(1 / offset_ramp), 1)
     # the level whose span of linear brightness lin falls in: encoding rounded to 8 bits
     return np.searchsorted(edges, lin).astype(np.float32)
 
