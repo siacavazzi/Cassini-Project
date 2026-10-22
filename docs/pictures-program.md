@@ -43,6 +43,8 @@ Every PR that changes anything a person can see carries both kinds:
 3. **A preview server** of the phase branch on its port, with the exact URL (and `?t=` moment) that shows the change.
 4. **Numbers where the phase promises numbers** (restarts left, movies reclassified, hue error against NASA, seconds per tile), measured with the investigation scripts (`mosaic-investigation/scan_passes.py`, `color-investigation/fit_matrix.py`) or their successors.
 
+5. **Image quality pass (after checkpoint 2, 2026-10-22).** Every PR that changes how pictures look measures each before/after pair at a 100% crop of sky and body: sky noise (std in output levels), banding (distinct levels and histogram gaps over a smooth gradient) and scan lines (row-mean ripple). The after may not be worse than the before on any of them. The phase thread looks at every pair itself at 100% and writes one honest line per pair (better, worse, why). 100% crops of the hardest pairs go on an orphan `evidence/<phase>` branch so the lead can view them in the cloud, and the lead looks at them before Sam sees anything.
+
 Phases with nothing visible (for example the tile map) carry test output and a sample of the new data instead.
 
 ## Checkpoints where work pauses for Sam
