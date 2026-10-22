@@ -11,8 +11,9 @@ least mosaic.min_step of a frame apart, once scaled to one distance), its footpr
 MAX_FRAMES frames across, and the camera jumps rather than creeps: a movie (a stare, a ring or
 storm movie, a moon turning) drifts a little between frames until the drift adds up to "three
 places", so a pass whose steps between frames of one filter are at least mosaic.min_step of a
-frame less than MOVIE_JUMPS of the time (or that never takes a filter twice) is a movie, and plays
-as frames (no mosaic of any kind).
+frame less than MOVIE_JUMPS of the time (or that never takes a filter twice), or whose camera stays
+MOVIE_DWELL frames of one filter at each place (counting repeat exposures), is a movie, and plays
+as frames (no mosaic of any kind) unless the person asks for its mosaic.
 Overlap is not required: SPICE places every tile.
 
 Every tile goes through color_image.processed_frame (repeat exposures merged in I/F, calibrated,
@@ -64,6 +65,7 @@ ZOOM = 1.4           # change in distance that ends a pass (tiles closer than th
 MIN_PLACES = 3       # pointings a pass needs to be a mosaic
 MAX_FRAMES = 16      # footprints wider than this many frames stay rolling mosaics
 MOVIE_JUMPS = 0.3    # a pass whose same-filter steps jump (mosaic.min_step) less often than this is a movie
+MOVIE_DWELL = 8      # ... or whose camera stays this many frames of one filter (median) at each place it goes
 RADIUS = {"SATURN": 60268, "JUPITER": 69911, "TITAN": 2575, "RHEA": 764, "IAPETUS": 735, "DIONE": 561,
           "TETHYS": 531, "ENCELADUS": 252, "MIMAS": 198, "HYPERION": 135, "PHOEBE": 107}
 IFOV = {"N": 6.0e-6, "W": 60e-6}   # radians per full resolution pixel
@@ -104,10 +106,11 @@ def units(target, obs, cam):
         g = where.get(r.id)
         t = float(r.seconds_1970)
         if cur is None or t - cur["last"] > GAP or (g and cur["z"] and not 1 / ZOOM < g[2] / cur["z"] < ZOOM):
-            cur = {"frames": [], "z": g and g[2], "last": t}
+            cur = {"frames": [], "taken": [], "z": g and g[2], "last": t}
             out.append(cur)
             last = {}
         cur["last"] = t
+        cur["taken"].append((f, *(g or (None, None, None))))   # every frame, repeats too, for _judge
         if not cur["z"] and g:
             cur["z"] = g[2]
         if f in last and t - last[f] <= mosaic_benchmark.REPEAT_GAP:
@@ -137,7 +140,24 @@ def _judge(u):
     # no filter taken twice (a stare cycling its filters): every filter's mosaic would be one frame, so it plays
     # as frames too
     u["jump_frac"] = float(np.mean([s >= mosaic.min_step for s in steps])) if steps else 0.0 if len(pts) > 1 else None
-    u["movie"] = u["jump_frac"] is not None and u["jump_frac"] < MOVIE_JUMPS
+    # dwell: over every frame taken (repeat exposures too, which the tiles merge), how many frames of one filter
+    # the camera takes at a place before it jumps. A raster takes one to a few per pointing; a movie films the
+    # same field for minutes (a spoke movie going back and forth between two patches of ring, one frame every
+    # 11 s, looks like a jump every tile once its repeats are merged)
+    last, runs = {}, []
+    for f, x, y, z in u.get("taken", ()):
+        if not z:
+            continue
+        p = (-x * z / u["z"], -y * z / u["z"])
+        if f in last and max(abs(p[0] - last[f][0][0]), abs(p[1] - last[f][0][1])) < mosaic.min_step * FRAME:
+            last[f] = [p, last[f][1] + 1]   # from the frame before, so a field drifting slowly stays one place
+        else:
+            if f in last:
+                runs.append(last[f][1])
+            last[f] = [p, 1]
+    runs += [n for _, n in last.values()]
+    u["dwell"] = float(np.median(runs)) if runs else None
+    u["movie"] = u["jump_frac"] is not None and (u["jump_frac"] < MOVIE_JUMPS or (u["dwell"] or 0) >= MOVIE_DWELL)
     places = []
     for p in pts:
         if all(max(abs(p[0] - q[0]), abs(p[1] - q[1])) >= mosaic.min_step * FRAME for q in places):
