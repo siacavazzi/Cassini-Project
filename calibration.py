@@ -307,7 +307,7 @@ WHITE_PCT = 99.5     # balanced: the percentile of the lit pixels of the brighte
 MAX_STRETCH = 1.4    # balanced: white at most this many times darker than the classic white (the brightest
                      # pixel), so a picture is never stretched far enough to show its scan lines, compression
                      # blocks and 8-bit steps
-SKY_DARK = 99       # balanced composites: this percentile of the sky's brightness is below the toe (tone)
+SKY_DARK = 2.33     # balanced composites: the toe starts this many times the sky's brightness noise up (99% black)
 SHOULDER = 0.8       # balanced composites: above this share of white, brightness rolls off softly instead
                      # of clipping (limbs and ring highlights past the white keep their shape)
 
@@ -399,10 +399,13 @@ def load_linear(labels, images=None, iofs=None):
     channels = [(iof - np.float32(level)) / np.float32(white) for iof, level in zip(iofs, levels)]
     margin /= white
     if measured:
-        # the toe starts no lower than the sky's own brightness noise (SKY_DARK of the sky's pixels stay black),
-        # since the gamma lifts even a tiny remainder into visible grain
-        lum = np.mean(channels, axis=0)[_sky(iofs)]
-        margin = max(margin, 1.5 * float(np.percentile(lum, SKY_DARK)))
+        # the toe starts no lower than the noise of the sky's brightness (SKY_DARK of it stays black), since the
+        # gamma lifts even a tiny remainder into visible grain. The noise is what is left after a 5x5 median, so
+        # faint ring glow or a night side in the sky (slow changes) doesn't count, but grain a few pixels wide does
+        lum = np.mean(channels, axis=0)
+        grain = (lum - cv2.medianBlur(lum, 5))[_sky(iofs)]
+        noise = 1.4826 * float(np.median(np.abs(grain - np.median(grain))))
+        margin = max(margin, 1.5 * SKY_DARK * noise)
     return channels, margin
 
 
