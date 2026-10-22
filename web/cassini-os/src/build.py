@@ -230,7 +230,7 @@ rep("""  renderer.clear();
 rep("""  if (hudRenderer) { if (window.studyBeforeHud) window.studyBeforeHud(); hudRenderer.render(hudScene, camera); if (window.studyAfterRender) window.studyAfterRender(); }
 """, """  if (hudRenderer && draw && !document.body.classList.contains("nohud")) {
     if (window.studyBeforeHud) window.studyBeforeHud();
-    hudRenderer.render(hudScene, camera);
+    hudRenderer.render(hudScene, window.studyHudCam || camera);
     if (window.studyAfterRender) window.studyAfterRender();
   }
   if (window.cassiniPerf) cassiniPerf.frame(now, draw);

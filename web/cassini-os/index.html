@@ -1728,10 +1728,41 @@ body.phone.has-dock { --appdockh: 50px; }
     }
   };
 
-  // occluders: invisible copies of Saturn and the moons in the HUD scene that write depth only,
-  // so orbit lines, the trail and the camera cone pass behind bodies instead of over them
-  let occluders = null;
+  // occluders: invisible copies of Saturn, the moons and Cassini itself in the HUD scene that write depth only,
+  // so orbit lines, the trail and the camera cone pass behind bodies and the spacecraft instead of over them
+  let occluders = null, craftOcc = [], craftModel, craftMat = null, hudCam = null;
+  // the HUD camera sees the same view with every distance multiplied by K: the log depth buffer is linear
+  // within a scene unit of the eye, too coarse (about a metre) to put lines in front of or behind
+  // a 7 m spacecraft up close; scaled up it resolves millimetres there and loses nothing far out
+  const HUD_K = 1e6;
   window.studyBeforeHud = () => {
+    if (!hudCam) {
+      hudCam = window.studyHudCam = new THREE.PerspectiveCamera(); hudCam.scale.setScalar(1 / HUD_K);
+      craftMat = new THREE.MeshBasicMaterial({ colorWrite: false, side: THREE.DoubleSide });
+    }
+    hudCam.position.copy(camera.position); hudCam.quaternion.copy(camera.quaternion);
+    hudCam.fov = camera.fov; hudCam.aspect = camera.aspect; hudCam.zoom = camera.zoom;
+    hudCam.near = camera.near * HUD_K; hudCam.far = camera.far * HUD_K;
+    hudCam.updateProjectionMatrix();
+    // the NASA model replaces the primitive one once it loads: copy whichever is in the group now
+    if (craftModel !== cassini.children[0]) {
+      craftModel = cassini.children[0];
+      for (const [o] of craftOcc) hudScene.remove(o);
+      craftOcc = [];
+      cassini.traverse(src => {
+        if (!src.isMesh) return;
+        const o = new THREE.Mesh(src.geometry, craftMat);
+        o.matrixAutoUpdate = false; o.renderOrder = -1; o.frustumCulled = false;
+        hudScene.add(o); craftOcc.push([o, src]);
+      });
+    }
+    // the close-up pass leaves Cassini's matrices blown up; recompute them at the size the HUD sees
+    cassini.updateMatrixWorld(true);
+    for (const [o, src] of craftOcc) {
+      o.matrix.copy(src.matrixWorld); o.matrixWorldNeedsUpdate = true;
+      let vis = true; for (let n = src; n; n = n.parent) vis = vis && n.visible;   // Huygens after release
+      o.visible = vis;
+    }
     if (!occluders) {
       const mat = new THREE.MeshBasicMaterial({ colorWrite: false });
       occluders = Object.keys(meshes).map(name => {
@@ -1781,7 +1812,7 @@ body.phone.has-dock { --appdockh: 50px; }
     if (G.w !== w || G.h !== h) { G.w = w; G.h = h; for (const k of ["hud", "t1", "wide", "narrow"]) G[k].setSize(w, h); }
     const ac = hudRenderer.autoClear, pr = hudRenderer.getPixelRatio();
     hudRenderer.autoClear = true;
-    hudRenderer.setRenderTarget(G.hud); hudRenderer.render(hudScene, camera);
+    hudRenderer.setRenderTarget(G.hud); hudRenderer.render(hudScene, hudCam);
     G.blur.uniforms.src.value = G.hud.texture; G.blur.uniforms.step.value.set(1 / w, 0); G.blur.uniforms.sigma.value = 5; pass(G.blur, G.t1);
     G.blur.uniforms.src.value = G.t1.texture; G.blur.uniforms.step.value.set(0, 1 / h); pass(G.blur, G.wide);
     G.blur.uniforms.src.value = G.hud.texture; G.blur.uniforms.step.value.set(1 / w, 0); G.blur.uniforms.sigma.value = 1.5; pass(G.blur, G.t1);
@@ -5712,7 +5743,7 @@ function frame(now) {
   } else renderer.render(scene, camera);
   if (hudRenderer && draw && !document.body.classList.contains("nohud")) {
     if (window.studyBeforeHud) window.studyBeforeHud();
-    hudRenderer.render(hudScene, camera);
+    hudRenderer.render(hudScene, window.studyHudCam || camera);
     if (window.studyAfterRender) window.studyAfterRender();
   }
   if (window.cassiniPerf) cassiniPerf.frame(now, draw);
