@@ -7,18 +7,20 @@ benchmark (web/frames/mosaic_benchmark.py), rather than the reel's rolling windo
 A pass (a "unit") is the frames of one camera, one target and one OBSERVATION_ID, split where
 the camera pauses more than GAP or the distance to the body changes by more than ZOOM since the
 pass began. It is a mosaic when the geometry cache puts its frames at three or more places (at
-least mosaic.min_step of a frame apart, once scaled to one distance) and its footprint is less
-than MAX_FRAMES frames across. Overlap is not required: SPICE places every tile.
+least mosaic.min_step of a frame apart, once scaled to one distance), its footprint is less than
+MAX_FRAMES frames across, and the camera jumps rather than creeps: a movie (a stare, a ring or
+storm movie, a moon turning) drifts a little between frames until the drift adds up to "three
+places", so a pass whose steps between frames of one filter are at least mosaic.min_step of a
+frame less than MOVIE_JUMPS of the time is a movie, and plays as frames (no mosaic of any kind).
+Overlap is not required: SPICE places every tile.
 
 Every tile goes through color_image.processed_frame (repeat exposures merged in I/F, calibrated,
 centred north up by SPICE) on one display scale for the pass (mosaic_benchmark.display_scale) and
 is scaled to the pass's reference distance, so a flyby's tiles keep one km per pixel as Cassini
 closes in. Tiles are made when first needed, oldest first, and kept in the cache.
 
-The view: the whole footprint, worked out once from the geometry cache (so it does not move or
-rescale as the mosaic grows), when the pass maps the whole body (its disk inside the footprint) or
-the footprint is at most FIT frames across; otherwise a window FOLLOW frames across that follows
-the newest tile in steps of one frame. The mosaic "so far" at a frame is every tile up to it, each
+The view: the whole footprint, scaled to fit, worked out once from the geometry cache (so it does
+not move or rescale as the mosaic grows, and a tile once drawn never leaves the picture). The mosaic "so far" at a frame is every tile up to it, each
 filter drawn by mosaic.compose (calibrated, none pinned) over its own earlier tiles; three or more
 filters make false colour (longest wavelength red, middle green, shortest blue, only where all
 three have the picture), otherwise the best covered filter in grey. Different filters are never
@@ -51,7 +53,7 @@ import mosaic_benchmark  # noqa: E402
 import stacking  # noqa: E402
 
 # bumped whenever the way observation mosaics are made changes, so older ones are not served again
-VERSION = "obs-v9"
+VERSION = "obs-v10"
 CANVAS = 2048        # longest side of the canvas the view is drawn on
 OUT = 1024           # longest side of the picture sent
 FRAME = 1024         # full resolution frame
@@ -60,8 +62,7 @@ GAP = 1800           # seconds without a frame that end a pass (mosaic.max_gap)
 ZOOM = 1.4           # change in distance that ends a pass (tiles closer than this are rescaled)
 MIN_PLACES = 3       # pointings a pass needs to be a mosaic
 MAX_FRAMES = 16      # footprints wider than this many frames stay rolling mosaics
-FIT = 8              # a footprint up to this many frames across is shown whole
-FOLLOW = 4           # otherwise a window this many frames across follows the newest tile
+MOVIE_JUMPS = 0.3    # a pass whose same-filter steps jump (mosaic.min_step) less often than this is a movie
 RADIUS = {"SATURN": 60268, "JUPITER": 69911, "TITAN": 2575, "RHEA": 764, "IAPETUS": 735, "DIONE": 561,
           "TETHYS": 531, "ENCELADUS": 252, "MIMAS": 198, "HYPERION": 135, "PHOEBE": 107}
 IFOV = {"N": 6.0e-6, "W": 60e-6}   # radians per full resolution pixel
@@ -121,14 +122,25 @@ def units(target, obs, cam):
 
 
 def _judge(u):
-    """Sets u["mosaic"] (enough places, footprint not too big) and u["whole"] (the body's disk inside it)."""
+    """Sets u["movie"] (the camera creeps or stares), u["jump_frac"], u["mosaic"] (enough places, footprint not
+    too big, not a movie) and u["whole"] (the body's disk inside it)."""
     pts = [(-x * z / u["z"], -y * z / u["z"]) for _, _, _, _, _, x, y, z in u["frames"] if z]
+    # the steps between consecutive frames of one filter, in frames: a mosaic jumps, a movie creeps
+    last, steps = {}, []
+    for _, _, f, _, _, x, y, z in u["frames"]:
+        if z:
+            p = (-x * z / u["z"], -y * z / u["z"])
+            if f in last:
+                steps.append(max(abs(p[0] - last[f][0]), abs(p[1] - last[f][1])) / FRAME)
+            last[f] = p
+    u["jump_frac"] = float(np.mean([s >= mosaic.min_step for s in steps])) if steps else None
+    u["movie"] = bool(steps) and u["jump_frac"] < MOVIE_JUMPS
     places = []
     for p in pts:
         if all(max(abs(p[0] - q[0]), abs(p[1] - q[1])) >= mosaic.min_step * FRAME for q in places):
             places.append(p)
     u["mosaic"] = u["whole"] = False
-    if len(places) < MIN_PLACES:
+    if len(places) < MIN_PLACES or u["movie"]:
         return
     pts = np.array(pts)
     lo, hi = pts.min(0) - FRAME / 2, pts.max(0) + FRAME / 2
@@ -153,6 +165,18 @@ def unit_of(frame_id):
         if ts and ts[0] <= t <= u["last"]:
             return u, sum(1 for x in ts if x <= t + 1) - 1
     return None
+
+
+def kind_of(frame_id):
+    """What the camera windows do with the frames of frame_id's observation (one camera): {"mosaic": its pass is
+    a mosaic, "movie": every pass of the observation with the camera moving is a movie or a stare, so its frames
+    never make a mosaic of any kind and the window need not ask}."""
+    found = unit_of(frame_id)
+    if not found:
+        return {"mosaic": False, "movie": False}
+    us = units(*found[0]["key"][:3])
+    judged = [v for v in us if v["jump_frac"] is not None]
+    return {"mosaic": bool(found[0]["mosaic"]), "movie": bool(judged) and all(v["movie"] for v in judged)}
 
 
 def folder(u, cache):
@@ -196,8 +220,7 @@ def plan(u, cache):
         x1 = max(p[0] + HALF * k for p, k in zip(pts, ks))
         y0 = min(p[1] - HALF * k for p, k in zip(pts, ks))
         y1 = max(p[1] + HALF * k for p, k in zip(pts, ks))
-        fixed = u["whole"] or max(x1 - x0, y1 - y0) <= FIT * FRAME
-        view = [x1 - x0, y1 - y0] if fixed else [min(x1 - x0, FOLLOW * FRAME), min(y1 - y0, FOLLOW * FRAME)]
+        view = [x1 - x0, y1 - y0]
         count, nms = {}, {}
         for fr in frames:
             count[fr[2]] = count.get(fr[2], 0) + 1
@@ -216,7 +239,7 @@ def plan(u, cache):
         else:
             colour = [common[0], common[len(common) // 2], common[-1]] if len(common) >= 3 else None
         p = {"key": list(u["key"]), "display_scale": scale, "angle": angle, "footprint": [x0, y0, x1, y1],
-             "fixed": bool(fixed), "view": view, "k": CANVAS / max(view), "colour": colour,
+             "fixed": True, "view": view, "k": CANVAS / max(view), "colour": colour,
              "grey": max(count, key=count.get), "whole": u["whole"]}
         reel._cached(path, lambda: json.dumps(p).encode())
         return p
@@ -294,18 +317,11 @@ def tile(u, n, cache, scale=None):
         return out
 
 
-def view_rect(p, tiles):
-    """The view (x0, y0, w, h in reference pixels from the body's centre) for these tiles: the footprint, or a
-    window following the newest placed tile in steps of one frame."""
+def view_rect(p, tiles=None):
+    """The view (x0, y0, w, h in reference pixels from the body's centre): the pass's whole footprint, the same
+    for every tile, so what is drawn stays drawn."""
     x0, y0, x1, y1 = p["footprint"]
-    if p["fixed"]:
-        return x0, y0, x1 - x0, y1 - y0
-    w, h = p["view"]
-    placed = [t for t in tiles if "offset" in t]
-    cx, cy = placed[-1]["offset"] if placed else ((x0 + x1) / 2, (y0 + y1) / 2)
-    vx = x0 + round((cx - w / 2 - x0) / FRAME) * FRAME
-    vy = y0 + round((cy - h / 2 - y0) / FRAME) * FRAME
-    return min(max(vx, x0), x1 - w), min(max(vy, y0), y1 - h), w, h
+    return x0, y0, x1 - x0, y1 - y0
 
 
 def filter_mosaic(u, p, f, tiles, rect, cache):
@@ -433,8 +449,11 @@ def so_far(u, n, cache, made=None, out=OUT):
     im = Image.fromarray(rgba, "RGBA")
     s = min(out, CANVAS) / max(im.size)
     im = im.resize((max(1, round(im.width * s)), max(1, round(im.height * s))), Image.LANCZOS)
-    return im, {"mosaic": sum(count[f] for f in used), "filters": len(used), "filter_names": used,
-                "observation": u["key"][1], "pass": u["key"][3], "of": sum(1 for fr in u["frames"] if fr[2] in used),
+    # the label counts the tiles of the filters the plan draws (its colour filters, or its grey one), taken so far
+    # of all the pass takes, so its total stays the same while the grey mosaic turns to colour
+    drawn = p["colour"] or [p["grey"]]
+    return im, {"mosaic": sum(count.get(f, 0) for f in drawn), "filters": len(used), "filter_names": used,
+                "observation": u["key"][1], "pass": u["key"][3], "of": sum(1 for fr in u["frames"] if fr[2] in drawn),
                 "fixed": p["fixed"], "width": im.width, "height": im.height}
 
 
