@@ -11,7 +11,8 @@ Each try that the server cannot make moves on to the next; the archive frame as 
 reel.load_index's, the Python port of the camera windows' findSets.
 
 The film shows one pane per camera (narrow-angle left, wide-angle right), each holding its last picture until the
-next one arrives, as its window does, over a caption strip. Timing:
+next one arrives, as its window does, over a caption strip. Once a pane shows a mosaic it keeps it while that
+observation goes on, so the pass builds without its other frames flashing in between tiles. Timing:
   fixed:    every new picture is one step at the chosen pictures per second
   adaptive: each picture stays for its gap to the next picture divided by one time compression C, held between
             HOLD_MIN and HOLD_MAX; C is chosen so the stretch's median gap lasts 1/8 s. Bursts flip fast, quiet
@@ -310,7 +311,7 @@ def render(opt, p, pictures, path, progress=lambda done, total: None, workers=3)
     """Makes the film of plan p at path: pictures made a few ahead on worker threads, drawn and encoded in order."""
     film = Film(opt, path)
     pics, ahead = p["pictures"], max(2, workers * 3)
-    kinds = Counter()
+    kinds, building = Counter(), {}
     try:
         with ThreadPoolExecutor(workers) as pool:
             todo = deque()
@@ -321,6 +322,17 @@ def render(opt, p, pictures, path, progress=lambda done, total: None, workers=3)
                     nxt += 1
                 im, what = todo.popleft().result()
                 kinds[what or "none"] += 1
+                # a mosaic stays up while its observation goes on: the pass's other frames (another filter, a frame
+                # that is not a tile) would otherwise flash in and out between its tiles
+                if what == "mosaic":
+                    building[e["cam"]] = e["obs"]
+                elif building.get(e["cam"]) == e["obs"] and e["obs"]:
+                    kinds["held behind mosaic"] += 1
+                    film.hold(e["frames"])
+                    progress(n + 1, len(pics))
+                    continue
+                else:
+                    building.pop(e["cam"], None)
                 film.put(e, im, what)
                 film.hold(e["frames"])
                 progress(n + 1, len(pics))
