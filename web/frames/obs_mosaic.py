@@ -460,13 +460,14 @@ def so_far(u, n, cache, made=None, out=OUT):
                 "fixed": p["fixed"], "width": im.width, "height": im.height}
 
 
-def mosaic_webp(frame_id, size, cache, slots=None, ahead=3, fmt="webp", out=OUT):
-    """(WebP, report) of the mosaic so far at frame_id when its pass is a mosaic; otherwise None. Then makes the
-    next few tiles and the mosaics with them in the background, so the next frames' mosaics are ready when the
-    window asks for them. size "full" = out px on the longest side (the full view's picture, never warmed
-    ahead); fmt "png" for a PNG instead."""
+def mosaic_webp(frame_id, size, cache, slots=None, ahead=3, fmt="webp", out=OUT, force=False):
+    """(WebP, report) of the mosaic so far at frame_id when its pass is a mosaic (or force: the person asked for
+    the pass as a mosaic, whatever _judge says); otherwise None. Then makes the next few tiles and the mosaics
+    with them in the background, so the next frames' mosaics are ready when the window asks for them. size
+    "full" = out px on the longest side (the full view's picture, never warmed ahead); fmt "png" for a PNG
+    instead."""
     found = unit_of(frame_id)
-    if not found or not found[0]["mosaic"] or found[1] < 0:
+    if not found or not (found[0]["mosaic"] or force) or found[1] < 0:
         return None
     u, n = found
     with _asking():
@@ -474,7 +475,7 @@ def mosaic_webp(frame_id, size, cache, slots=None, ahead=3, fmt="webp", out=OUT)
             return _mosaic_at(u, n, size, cache, slots, fmt, out)
         made = _mosaic_at(u, n, size, cache, slots)
     if made and ahead:
-        warm(u, n + ahead, cache, size, slots, start=n + 1)
+        warm(u, n + ahead, cache, size, slots, start=n + 1, force=force)
     return made
 
 
@@ -550,11 +551,11 @@ def _make_mosaic(u, n, size, path, cache, slots, made, fmt="webp", out=OUT):
     return data, report
 
 
-def warm(u, upto, cache, size=None, slots=None, start=0):
+def warm(u, upto, cache, size=None, slots=None, start=0, force=False):
     """Makes the pass's plan and its tiles up to upto in the background, and with a size the mosaics at tiles
     start..upto. One thread per pass and size: a later call while it runs moves its end on. Background work
-    runs one pass at a time (_background)."""
-    if not u["mosaic"]:
+    runs one pass at a time (_background). force: a pass _judge does not call a mosaic, asked for as one."""
+    if not (u["mosaic"] or force):
         return
     key = (u["key"], size)
     with _lock:
