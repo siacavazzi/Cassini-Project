@@ -1,0 +1,130 @@
+<!-- Performance for Cassini OS. build.py splices the style into the head and the script before the chrome script
+     (after the settings script), so the viewer can read window.cassiniPerf when it creates its renderers.
+
+     The 3D view is drawn at a share of the screen's pixel density (Settings > Performance > 3D resolution, at most 2x).
+     With Automatic quality on, that share drops when the frame rate falls under the target and climbs back when
+     there is room again: the GPU's work grows with the pixel count, so this is the knob that matters on a laptop's
+     high-density screen. While nothing moves (paused, nobody touching the view) the 3D view is not redrawn at all,
+     except once a second to pick up anything that loaded meanwhile.
+
+       cassiniPerf.pixelRatio()    pixel ratio the 3D canvas draws at now
+       cassiniPerf.hudPixelRatio() pixel ratio for the HUD lines (never under one canvas pixel per CSS pixel)
+       cassiniPerf.draw(now)       true when this frame has to be drawn (the render loop asks once per frame)
+       cassiniPerf.frame(now, drew) after each frame: measures the frame rate and adapts the resolution
+       cassiniPerf.invalidate()    draw the next frames even if nothing seems to have moved
+       cassiniPerf.status()        { fps, scale, pixelRatio, auto, target } -->
+<style>
+/* frosted glass off: plain dark panels, no blur of the view behind them (the blur is redone every frame) */
+body.s-noglass :is(#menubar, .menu ul, .win, #dock) { -webkit-backdrop-filter: none !important; backdrop-filter: none !important; }
+body.s-noglass :is(.win, #dock) { background: rgba(16, 17, 20, .93); }
+body.s-noglass #menubar { background: rgba(14, 15, 18, .9); }
+body.s-noglass .menu ul { background: rgba(22, 23, 27, .97); }
+#perfmeter { position: absolute; right: 10px; bottom: 8px; z-index: 950; pointer-events: none; font: 10px/1.3 var(--hudf, monospace);
+  letter-spacing: .06em; color: rgba(232,236,242,.7); text-shadow: 0 0 3px #000; font-variant-numeric: tabular-nums; white-space: pre; }
+</style>
+<script>
+// ---------- performance: 3D resolution that follows the frame rate, no redraws while nothing moves ----------
+(function () {
+  const S = window.cassiniSettings, D = d => S.define(d);
+  D({ key: "perf.auto", section: "Performance", label: "Automatic quality", type: "toggle", value: true,
+      hint: "Lowers the 3D view's resolution when the frame rate falls under the target, and raises it again when there is room." });
+  D({ key: "perf.target", section: "Performance", label: "Target frame rate", type: "range", value: 55, min: 24, max: 120, step: 1, unit: "fps",
+      hint: "What automatic quality aims for. Most screens show at most 60; a ProMotion screen up to 120." });
+  D({ key: "perf.resolution", section: "Performance", label: "3D resolution", type: "range", value: 100, min: 30, max: 100, step: 5, unit: "%",
+      hint: "Share of the screen's full sharpness the 3D view is drawn at; automatic quality never goes above it. Lower is faster and softer." });
+  D({ key: "perf.glass", section: "Performance", label: "Frosted windows", type: "toggle", value: true,
+      hint: "Blur the view behind windows and menus. Off is lighter on weak graphics." });
+  D({ key: "perf.rest", section: "Performance", label: "Rest when still", type: "toggle", value: true,
+      hint: "Stop redrawing the 3D view while nothing in it moves (paused, nobody touching it). Saves power." });
+  D({ key: "perf.meter", section: "Performance", label: "Show frame rate", type: "toggle", value: false,
+      hint: "Frames per second and the 3D resolution in the bottom right corner." });
+  S.on("perf.glass", v => document.body.classList.toggle("s-noglass", !v));
+
+  const FLOOR = 0.6;                     // lowest pixel ratio automatic quality goes to
+  const dpr = () => Math.min(window.devicePixelRatio || 1, 2);
+  let auto = 1;                          // automatic quality's share of the user's resolution (1 = all of it)
+  // it moves in fixed steps, so the canvas is not reallocated at a new odd size every few seconds
+  const STEPS = [1, 0.9, 0.8, 0.7, 0.6, 0.5, 0.4, 0.3];
+  let n = 0, drawn = 0, t0 = 0, tPrev = 0, worst = 0, slow = 0, good = 0, raiseAfter = 0, raiseWait = 8000, lastRaise = -1e9, before = 1, fps = 0, born = 0;
+  let lastKey = null, lastDraw = -1e9, busyUntil = 0, applied = 0, meter = null;
+  const user = () => S.get("perf.resolution") / 100;
+  const P = window.cassiniPerf = {
+    pixelRatio: () => Math.max(Math.min(FLOOR, dpr()), dpr() * user() * (S.get("perf.auto") ? auto : 1)),
+    hudPixelRatio: () => Math.max(P.pixelRatio(), Math.min(dpr(), 1)),
+    invalidate() { busyUntil = Math.max(busyUntil, performance.now() + 700); },
+    status: () => ({ fps: +fps.toFixed(1), scale: +(P.pixelRatio() / dpr()).toFixed(2), pixelRatio: +P.pixelRatio().toFixed(2), auto: S.get("perf.auto"), target: S.get("perf.target") }),
+    // the 3D view needs drawing when the camera, the clock or the canvas changed, for a moment after any input or
+    // load, and once a second regardless
+    draw(now) {
+      if (!S.get("perf.rest")) return true;
+      const m = camera.matrixWorld.elements, p = camera.projectionMatrix.elements, c = renderer.domElement;
+      const key = [state.et, c.width, c.height, p[0], p[5], ...m];
+      let same = !!lastKey && lastKey.length === key.length;
+      for (let i = 0; same && i < key.length; i++) same = Math.abs(key[i] - lastKey[i]) <= 1e-9 * Math.max(1, Math.abs(key[i]));
+      lastKey = key;
+      if (same && now > busyUntil && now - lastDraw < 1000) return false;
+      lastDraw = now; return true;
+    },
+    frame(now, drew) {
+      n++; if (drew) drawn++;
+      if (tPrev) worst = Math.max(worst, now - tPrev); tPrev = now;
+      if (!t0) t0 = born = now;
+      if (now - t0 < 1000) return;
+      // a second with one hitch in it (a picture or a month of data arriving) says nothing about the GPU's load;
+      // frames that are all slow do
+      const all = drawn === n, rate = 1000 * n / (now - t0), hitch = n > 1 && worst > 250 && worst > 3 * (now - t0 - worst) / (n - 1);
+      n = drawn = 0; t0 = now; worst = 0;
+      if (all) fps = rate;
+      if (meter) meter.textContent = `${all ? Math.round(rate) + " fps" : "resting"}  ·  3D ${Math.round(100 * P.pixelRatio() / dpr())}%`;
+      // only judge seconds in which every frame was drawn, the tab was visible and no data was being waited on
+      if (!S.get("perf.auto") || !all || document.hidden || hitch || now - born < 4000 || (typeof yearReady === "function" && !yearReady())) { good = 0; return; }
+      const target = S.get("perf.target");
+      if (rate < target * 0.95) {
+        good = 0;
+        if (++slow < 2) return;   // two slow seconds in a row before the resolution drops
+        slow = 0;
+        const min = Math.min(1, FLOOR / (dpr() * user()));
+        // the GPU's work goes with the pixel count: the largest step at which this frame rate would reach the
+        // target, at least one step down, at most three
+        const fit = STEPS.filter(x => x < auto - 1e-6 && x >= min - 1e-6), want = auto * Math.sqrt(rate / target);
+        const next = fit.length ? (fit.find(x => x <= want) || fit[Math.min(2, fit.length - 1)]) : auto;
+        if (now - lastRaise < 10000 && before < auto) {
+          // a step up that did not hold: back to the step that did, and wait twice as long before the next try
+          auto = before; raiseWait = Math.min(120000, raiseWait * 2); raiseAfter = now + raiseWait; apply();
+        } else if (next < auto) {
+          auto = fit.indexOf(next) > 2 ? fit[2] : next;
+          raiseAfter = now + raiseWait; apply();
+        }
+      } else {
+        slow = 0;
+        // one step up, only after three good seconds and only if the measured frame rate would still reach the
+        // target there (held at the screen's refresh rate there is no telling, so it stays put: trying costs a
+        // visible hitch per resize, measured)
+        const up = STEPS.slice().reverse().find(x => x > auto + 1e-6);
+        if (up && now > raiseAfter && rate * (auto / up) ** 2 >= target && ++good >= 3) { good = 0; before = auto; auto = up; lastRaise = now; raiseAfter = now + 3000; apply(); }
+      }
+    }
+  };
+  // the renderers exist once the viewer script has run; until then they read pixelRatio() themselves
+  function apply() {
+    const pr = P.pixelRatio();
+    if (Math.abs(pr - applied) < 0.01 || typeof renderer === "undefined") return;
+    applied = pr;
+    renderer.setPixelRatio(pr);
+    if (typeof hudRenderer !== "undefined" && hudRenderer) hudRenderer.setPixelRatio(P.hudPixelRatio());
+    if (typeof resize === "function") resize();
+    P.invalidate();
+  }
+  S.on("perf.resolution", () => { auto = 1; apply(); });
+  S.on("perf.auto", () => { auto = 1; apply(); });
+  window.addEventListener("resize", () => { applied = 0; apply(); });
+  for (const ev of ["pointerdown", "pointermove", "wheel", "keydown", "touchstart"]) window.addEventListener(ev, P.invalidate, { passive: true, capture: true });
+  document.addEventListener("visibilitychange", P.invalidate);
+  window.addEventListener("DOMContentLoaded", () => {
+    meter = document.createElement("div"); meter.id = "perfmeter"; meter.hidden = true; document.body.appendChild(meter);
+    S.on("perf.meter", v => { meter.hidden = !v; });
+  });
+  // a surface map or a model finishing its load changes the picture without moving anything
+  window.addEventListener("DOMContentLoaded", () => { if (window.THREE) THREE.DefaultLoadingManager.onProgress = () => P.invalidate(); });
+})();
+</script>
