@@ -2131,6 +2131,9 @@ body.phone.has-dock { --appdockh: 50px; }
       }
       well.classList.add("has-frame"); well.classList.remove("kept"); well.classList.toggle("composite", v.set >= 0); well.classList.toggle("movie", !!v.movie);
       if (!keep) card.querySelector(".kindtag").textContent = v.set >= 0 ? KIND[catalog.sets[v.set].kind].toUpperCase() : v.movie ? "MOVIE" : "";
+      // a movie frame names itself and its place in the filmstrip when it goes up: at high speed the server can make
+      // fewer frames a second than the clock passes, and the caption should say which frame is on screen
+      if (v.movie) { card.querySelector(".shottag").textContent = `${catalog.id[v.k]} · ${catalog.f1[v.k]}/${catalog.f2[v.k]}`; filmstrip(v.k); }
       if (v.set >= 0) { channelsFrom(im, catalog.sets[v.set]); howMade(v); }
       if (v.tile && !keep && !mosaicPass(v.k) && modeOf(v.k) !== "mosaic") mosaicOf(v);   // a frame kept behind its pass's mosaic, or of a pass known to be one, asked for it already (update)
       // the sound (sound.html) hears every picture that goes up: its camera, filter wavelength, target and window
@@ -2504,7 +2507,7 @@ body.phone.has-dock { --appdockh: 50px; }
       if (k === lastK && ready === lastReady && !force) return;
       lastK = k; lastReady = ready;
       want = view(k, state.et);
-      filmstrip(k);
+      if (!want.movie) filmstrip(k);   // a movie frame moves the filmstrip when it is on screen (display)
       // a possible mosaic tile: the frame before is of the same body and observation, and a frame of a colour
       // set only once its composite is shown (the mosaic is made of composites)
       const kb = framesOf(cam, body).ks[p - 1];   // p counts this feed's frames (a body window's: that body's only)
@@ -2523,7 +2526,7 @@ body.phone.has-dock { --appdockh: 50px; }
       const n24 = p - lastOfCam(cam, state.et - 86400, body);
       field("details").textContent = `${kp ? `${kp < 10 ? kp.toFixed(2) : fmt(kp)} km/px · ` : ""}${fmt(n24)} frames in the last 24 h`;
       card.querySelectorAll(".info dd[data-f]").forEach(dd => { dd.title = dd.textContent; });   // the whole line, when steady size cuts it short
-      card.querySelector(".shottag").textContent = want.set >= 0 ? `${s.use.map(q => catalog.id[q]).join(" ")}` : `${catalog.id[k]} · ${catalog.f1[k]}/${catalog.f2[k]}`;
+      if (!want.movie) card.querySelector(".shottag").textContent = want.set >= 0 ? `${s.use.map(q => catalog.id[q]).join(" ")}` : `${catalog.id[k]} · ${catalog.f1[k]}/${catalog.f2[k]}`;
       const ks = framesOf(cam, body).ks;
       // look ahead: the next 6 frames, or up to 12 when they come within 4 s of playback (a burst), nearest first
       const ahead = []; for (let d = 1; d <= 12 && ks[p + d] !== undefined && (d <= 6 || catalog.et[ks[p + d]] - state.et <= 4 * state.speed); d++) ahead.push(ks[p + d]);

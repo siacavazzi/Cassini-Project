@@ -81,6 +81,7 @@ _warming = set()
 _background = threading.Semaphore(1)   # background work (passes made ahead) runs one at a time, so it never
                                        # crowds out what a window is waiting for
 _upto, _from = {}, {}   # a pass being made ahead: the last tile to make, the first mosaic to make
+_tile_locks = {}      # (pass key, tile) -> its lock
 _making = {}          # path of a mosaic being made -> its lock, so two requests for it make it once
 
 
@@ -348,7 +349,10 @@ def tile(u, n, cache, scale=None):
     (tiles/<n>.png), and its report: offset = where the frame's middle sits from the body's centre and box = the
     crop around it (reference pixels); no offset when SPICE could not place it."""
     base = os.path.join(folder(u, cache), "tiles", str(n))
-    with _ulock(u):
+    # one lock per tile, so a movie's frames made ahead can be made side by side
+    with _lock:
+        lock = _tile_locks.setdefault((u["key"], n), threading.RLock())
+    with lock:
         if os.path.exists(base + ".json"):
             with open(base + ".json") as fh:
                 return json.load(fh)
@@ -555,7 +559,8 @@ def movie_frame(u, n, cache, trail=0, colour=True, out=OUT):
     size for the whole pass, and the body holds still. colour: when the pass's plan has colour filters and the
     newest frame of each of them was taken within reel.SET_GAP of this one, the three are drawn as one colour
     picture (each where SPICE puts it), as the pass's mosaic does; otherwise the frame in grey. trail: up to that
-    many earlier frames of the same filter drawn under it, fading with age (a rolling trail)."""
+    many earlier frames of the same filter drawn under it, fading with age (a rolling trail). A frame of another
+    filter in a colour pass shows the newest colour set while one was taken within SET_GAP."""
     p = plan(u, cache)
     t = tile(u, n, cache, p["display_scale"])
     rep = {"movie": True, "n": n, "of": len(u["frames"]), "filter": t["filter"], "observation": u["key"][1],
@@ -568,7 +573,9 @@ def movie_frame(u, n, cache, trail=0, colour=True, out=OUT):
     W, H = max(1, math.ceil(rect[2] * k)), max(1, math.ceil(rect[3] * k))
     # only the frames this picture needs are made: the newest of each colour filter within SET_GAP, the trail
     frames, used, newest = u["frames"], None, {}
-    if colour and p["colour"] and t["filter"] in p["colour"]:
+    # a pass with colour plays in colour: every frame shows the newest colour set (a frame of another filter, CB2 or
+    # a methane band between the sets of a stare, keeps the set up rather than flicking to grey)
+    if colour and p["colour"]:
         for j in range(n, -1, -1):
             f = frames[j][2]
             if t["t"] - frames[j][3] > reel.SET_GAP or len(newest) == len(p["colour"]):
@@ -649,12 +656,15 @@ def movie_webp(frame_id, size, cache, trail=0, colour=True, wait=False, ahead=6)
     return data, report
 
 
-_movie_ahead = {}   # pass key -> (first, last) tile a movie wants made ahead; a thread per pass makes them
+_movie_ahead = {}   # pass key -> (first, last) tile a movie wants made ahead; MOVIE_WORKERS threads per pass make them
+MOVIE_WORKERS = int(os.environ.get("CASSINI_MOVIE_WORKERS", "2"))
+_movie_background = threading.Semaphore(MOVIE_WORKERS)   # movie frames made ahead, beside the mosaics' one at a time
 
 
 def warm_movie(u, n, ahead, cache):
-    """A movie is at frame n of the pass: work out its plan and make tiles n .. n+ahead in the background (one
-    pass at a time with the mosaics made ahead), from where the movie is rather than from the pass's start."""
+    """A movie is at frame n of the pass: work out its plan and make tiles n .. n+ahead in the background, from
+    where the movie is rather than from the pass's start, MOVIE_WORKERS at once (a fast movie at high playback
+    speed needs several frames a second)."""
     key, last = u["key"], min(n + ahead, len(u["frames"]) - 1)
     with _lock:
         running = key in _movie_ahead
@@ -662,26 +672,33 @@ def warm_movie(u, n, ahead, cache):
         if running:
             return
 
+    taking = set()
+
     def run():
         try:
-            with _background:
+            with _movie_background:
                 p = plan(u, cache)
                 while True:
                     with _lock:
-                        first, last = _movie_ahead[key]
-                    todo = [j for j in range(first, last + 1)
-                            if not os.path.exists(os.path.join(folder(u, cache), "tiles", f"{j}.json"))]
-                    if not todo:
-                        break
+                        first, last = _movie_ahead.get(key, (0, -1))
+                        todo = [j for j in range(first, last + 1) if j not in taking
+                                and not os.path.exists(os.path.join(folder(u, cache), "tiles", f"{j}.json"))]
+                        if not todo:
+                            break
+                        taking.add(todo[0])
                     _yield()
                     tile(u, todo[0], cache, p["display_scale"])
         except Exception as e:
             print(f"movie {key} failed: {type(e).__name__}: {e}", flush=True)
         finally:
             with _lock:
-                _movie_ahead.pop(key, None)
+                workers[0] -= 1
+                if not workers[0]:
+                    _movie_ahead.pop(key, None)
 
-    threading.Thread(target=run, daemon=True).start()
+    workers = [MOVIE_WORKERS]
+    for _ in range(MOVIE_WORKERS):
+        threading.Thread(target=run, daemon=True).start()
 
 
 def pass_info(frame_id, cache):
