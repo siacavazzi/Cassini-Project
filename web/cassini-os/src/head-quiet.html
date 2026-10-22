@@ -416,7 +416,6 @@ body.s-steady .info dd[data-f="colour"] { white-space: normal; display: -webkit-
 
 /* the main window starts compact: transport and the timeline only; zoom (+) shows everything */
 #dock { left: 50%; right: auto; transform: translateX(-50%); width: min(980px, calc(100% - 20px)); }
-#dock[style*="left"] { transform: none; }
 #dock:not(.zoomed) .toolbar { grid-template-columns: auto minmax(0, 1fr); padding-bottom: 6px; }
 #dock:not(.zoomed) :is(#speeds, #zooms, .col.right, #focusrow, .statusbar, .legend) { display: none; }
 #dock.zoomed { width: min(1420px, calc(100% - 20px)); }
@@ -624,24 +623,37 @@ body.idle .win.full .titlebar { opacity: 0; }
       const b = document.createElement("button"); b.textContent = NAMES[w.id] || w.dataset.name;
       b.addEventListener("click", e => { e.stopPropagation(); restore(w); }); tray.appendChild(b);
     });
+    if (window.cassiniDock) cassiniDock.sync();
   }
-  // the "genie": shrink toward the tray in the menu bar, and grow back out of it
+  // where a minimized window goes: its tile in the dock (dock.html), or the tray in the menu bar when the dock is off
+  const sink = w => (window.cassiniDock && cassiniDock.tile(w)) || $("tray");
+  // the "genie": shrink toward the window's place in the dock (or the tray), and grow back out of it
   function animateTo(w, target, reverse) {
     if (matchMedia("(prefers-reduced-motion: reduce)").matches || !w.animate) return Promise.resolve();
-    const r = w.getBoundingClientRect(), t = target.getBoundingClientRect();
+    const r = w.getBoundingClientRect(), t = target.getBoundingClientRect ? target.getBoundingClientRect() : target;
     const dx = t.left + t.width / 2 - (r.left + r.width / 2), dy = t.top + t.height / 2 - (r.top + r.height / 2);
     const k = [{ transform: "none", opacity: 1 }, { transform: `translate(${dx}px, ${dy}px) scale(.06, .03)`, opacity: .15 }];
     return w.animate(reverse ? k.reverse() : k, { duration: 340, easing: "cubic-bezier(.55,0,.35,1)" }).finished;
   }
   async function minimize(w) {
-    if (w.id === "dock") { w.classList.toggle("shaded"); return; }   // the main window rolls up to its title bar
-    w.dataset.min = "1"; await animateTo(w, $("tray")); w.hidden = true; syncMenu();
+    // with no dock the main window rolls up to its title bar; with one it goes into the dock like the others
+    if (w.id === "dock" && !(window.cassiniDock && cassiniDock.on)) { w.classList.toggle("shaded"); return; }
+    if (w.dataset.min) return;
+    w.dataset.min = "1"; syncMenu(); await animateTo(w, sink(w)); w.hidden = true; syncMenu();
   }
   async function restore(w) {
-    const wasMin = !!w.dataset.min; delete w.dataset.min;
+    const wasMin = !!w.dataset.min, from = wasMin && sink(w).getBoundingClientRect(); delete w.dataset.min;
     w.hidden = false; front(w); syncMenu();
-    if (wasMin) await animateTo(w, $("tray"), true);
+    if (wasMin) await animateTo(w, from, true);
     w.classList.remove("shaded", "closed");
+  }
+  // pin a window by its left and top where it is now, without moving it: whatever placed it before (right, bottom, a
+  // centering translate like the main window's and Highlights') gives way, so the grabbed point stays under the pointer
+  function place(w) {
+    const r = w.getBoundingClientRect();
+    Object.assign(w.style, { left: r.left + "px", top: r.top + "px", right: "auto", bottom: "auto", transform: "none" });
+    const n = w.getBoundingClientRect();
+    if (n.left !== r.left || n.top !== r.top) Object.assign(w.style, { left: 2 * r.left - n.left + "px", top: 2 * r.top - n.top + "px" });
   }
   // (each window is wired once; windows made later, such as the per-body camera windows, call cassiniWM.wire)
   function wire(w) {
@@ -651,15 +663,16 @@ body.idle .win.full .titlebar { opacity: 0; }
     w.querySelector(".min").addEventListener("click", e => { e.stopPropagation(); minimize(w); });
     w.querySelector(".zoom").addEventListener("click", e => { e.stopPropagation(); zoom(w); });
     bar.addEventListener("dblclick", e => { if (!e.target.closest(".fullbtn")) minimize(w); });
+    // the window stays put on the press and moves only once the pointer does, held by the point that was grabbed
     let drag = null;
     bar.addEventListener("pointerdown", e => {
       if (e.target.closest(".lights, .fullbtn") || phone() || w.classList.contains("full")) return;
       const r = w.getBoundingClientRect();
-      drag = { dx: e.clientX - r.left, dy: e.clientY - r.top }; bar.setPointerCapture(e.pointerId);
-      w.style.left = r.left + "px"; w.style.top = r.top + "px"; w.style.right = "auto"; w.style.bottom = "auto";
+      drag = { x: e.clientX, y: e.clientY, dx: e.clientX - r.left, dy: e.clientY - r.top, moved: false }; bar.setPointerCapture(e.pointerId);
     });
     bar.addEventListener("pointermove", e => {
       if (!drag) return;
+      if (!drag.moved) { if (Math.hypot(e.clientX - drag.x, e.clientY - drag.y) < 3) return; drag.moved = true; place(w); }
       const r = w.getBoundingClientRect();
       w.style.left = Math.max(60 - r.width, Math.min(innerWidth - 60, e.clientX - drag.dx)) + "px";
       w.style.top = Math.max(23, Math.min(innerHeight - 24, e.clientY - drag.dy)) + "px";
@@ -678,7 +691,7 @@ body.idle .win.full .titlebar { opacity: 0; }
       rs = { x: e.clientX, y: e.clientY, w: r.width, h: r.height, both: w.matches(TALL) };
       grip.setPointerCapture(e.pointerId);
       w.classList.remove("zoomed");
-      Object.assign(w.style, { left: r.left + "px", top: r.top + "px", width: r.width + "px", right: "auto", bottom: "auto" });
+      place(w); w.style.width = r.width + "px";
       if (rs.both) w.style.height = r.height + "px";
     });
     grip.addEventListener("pointermove", e => {
@@ -752,7 +765,7 @@ body.idle .win.full .titlebar { opacity: 0; }
   saved = saved || {};
   for (const [id, s] of Object.entries(saved)) {
     const w = $(id); if (!w || !s) continue;
-    if (s.left) Object.assign(w.style, { left: s.left, top: s.top, right: "auto", bottom: "auto" });
+    if (s.left) Object.assign(w.style, { left: s.left, top: s.top, right: "auto", bottom: "auto", transform: "none" });
     if (s.width || s.height) Object.assign(w.style, { width: s.width || "", height: s.height || "" });
     if (s.zoomed) w.classList.add("zoomed");
     if (s.min) { w.dataset.min = "1"; w.hidden = true; }

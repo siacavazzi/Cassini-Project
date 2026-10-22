@@ -260,6 +260,13 @@ body.phone .srow input[type=range] { width: 96px; }
   // a new key, so a saved "off" from when follow started off does not carry over
   D({ key: "view.followcam", section: "View", label: "Follow camera", type: "toggle", value: true, hint: "Look where Cassini's camera points (needs the pointing data)." });
   mirror("view.followcam", "followcam");
+  // the viewer's follow camera reads view.spinHold, view.spinTurn and view.spinEase
+  D({ key: "view.spinHold", section: "View", label: "Hold still through spins", type: "toggle", value: true,
+      hint: "When Cassini rolls for hours for its fields-and-particles instruments (no pictures), the follow camera keeps looking where it was instead of spinning with it. Off follows every turn." });
+  D({ key: "view.spinTurn", section: "View", label: "Counts as a spin after", type: "range", value: 300, min: 180, max: 1080, step: 30, unit: "°",
+      hint: "How far Cassini has to keep turning without a pause before the view holds. Turns between targets stay under about 200°." });
+  D({ key: "view.spinEase", section: "View", label: "Ease back over", type: "range", value: 4, min: 1, max: 15, step: 1, unit: "s",
+      hint: "How long the view takes to swing back to the camera's pointing once a spin ends." });
   D({ key: "view.textures", section: "View", label: "Surface maps", type: "choice", value: "2k", reload: true,
       options: [["0", "Off"], ["1k", "1k"], ["2k", "2k"], ["4k", "4k"]],
       hint: "Map size for Saturn and the moons. 4k is sharper and slower to load; Off keeps the plain painted look. A ?tex= link still wins." });
