@@ -1353,7 +1353,10 @@ body.idle .win.full .titlebar { opacity: 0; }
       well.classList.toggle("inpass", !!on);
       if (!on) return;
       const m = modeOf(k), p = playsAs(k);
-      chip.textContent = m === "auto" ? `AUTO${p ? " · " + p.toUpperCase() : ""}` : m.toUpperCase();
+      // a pass asked for as a mosaic whose mosaic is not up yet is being built (a long movie's first mosaic deep in
+      // the pass makes every tile before it: minutes when nothing of it is in the cache)
+      const building = p === "mosaic" && obsShown !== catalog.obs[k] && mLane.pass.busy;
+      chip.textContent = (m === "auto" ? `AUTO${p ? " · " + p.toUpperCase() : ""}` : m.toUpperCase()) + (building ? " · BUILDING" : "");
       chip.classList.toggle("chosen", m !== "auto");
     }
     chip.addEventListener("click", e => {
@@ -1472,13 +1475,14 @@ body.idle .win.full .titlebar { opacity: 0; }
       if (ask === L.last) return;
       if (L.busy) { L.next = [w, pass, catalog]; return; }
       L.last = ask; L.busy = true;
+      if (pass) chipText();
       let over = false;
       // the request is dropped (its connection freed; the server still finishes and keeps the mosaic) when the
       // other lane gives up on it, or the window is closed (mosaicStop)
       const ctl = L.ctl = new AbortController();
       const cat0 = catalog, wid = catalog.id[w.k], done = () => {
         if (over) return;
-        over = true; L.busy = false; L.ctl = null;
+        over = true; L.busy = false; L.ctl = null; chipText();
         const q = L.next; L.next = null;
         if (q && catalog === q[2] && lastK >= 0 && catalog.et[q[0].k] <= catalog.et[lastK]) mosaicOf(q[0], q[1]);
       };
@@ -1511,7 +1515,9 @@ body.idle .win.full .titlebar { opacity: 0; }
           chipText();
           if (window.cassiniPicture && rep.mosaic > (obsShown === catalog.obs[k] ? obsTiles : 0)) window.cassiniPicture({ cam, body, win, k, nm: nmOf(k), set, use: set >= 0 ? catalog.sets[set].use.map(nmOf) : null, tile: rep.mosaic, of: rep.of });
           obsShown = catalog.obs[k]; obsTiles = rep.mosaic; obsK = k; obsSize = rank(sz);
-          well.style.aspectRatio = `${rep.width} / ${rep.height}`; shapeOf = passOf(k);
+          // the window takes the mosaic's shape, within 1:2 to 3:1 (a whole long strip fits inside, letterboxed,
+          // rather than running off the screen)
+          well.style.aspectRatio = String(Math.min(3, Math.max(0.5, rep.width / rep.height))); shapeOf = passOf(k);
           card.querySelector(".kindtag").textContent = `${rep.filters >= 3 ? ((rep.filter_names || []).includes("GRN") ? "COLOR " : "FALSE COLOR ") : ""}MOSAIC · ${rep.mosaic} OF ${rep.of} TILES${rep.filters > 1 ? ` · ${rep.filters} FILTERS` : ""}`;
           return;
         }
