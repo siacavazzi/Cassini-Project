@@ -47,7 +47,7 @@ sys.path.insert(0, HERE)
 import reel  # noqa: E402  (puts the repo on the path)
 
 # bumped whenever the way films are made changes, so older ones are not served again
-VERSION = "export-v1"
+VERSION = "export-v2"
 FPS = 30                     # frames a second in the file
 HOLD_MIN, HOLD_MAX = 1 / FPS, 0.5
 TYPICAL = 1 / 8              # adaptive: how long the stretch's median gap lasts on screen
