@@ -655,8 +655,15 @@ body.phone .camwin.full .info { grid-template-columns: 42px minmax(0, 1fr); }
 body.phone .camwin.full .chans { grid-template-columns: repeat(var(--n, 3), minmax(0, 1fr)); }
 body.phone .fullbtn { width: 26px; height: 20px; top: 0; }
 
-/* the other windows: full width under the menu bar */
-body.phone .bodywin:not(.full) { left: var(--side) !important; top: calc(var(--menu) + var(--gap)) !important; right: auto !important; }
+/* body windows: each body's narrow-angle and wide-angle windows sit where the two camera windows do */
+body.phone .bodywin:not(.full) .pane { width: auto !important; flex: 1 1 0; }
+body.phone .bodywin[data-cam="N"] .well::after { content: "NAC"; }
+body.phone .bodywin[data-cam="W"] .well::after { content: "WAC"; }
+body.phone:not(.phone-land) .bodywin[data-cam="N"]:not(.full) { left: var(--side) !important; width: calc((100vw - 3 * var(--gap)) * .56 * var(--phs)) !important; }
+body.phone:not(.phone-land) .bodywin[data-cam="W"]:not(.full) { left: calc(var(--side) + (100vw - 3 * var(--gap)) * .56 * var(--phs) + var(--gap)) !important; width: calc((100vw - 3 * var(--gap)) * .44 * var(--phs)) !important; }
+body.phone:not(.phone-land) .bodywin.alone[data-cam="W"]:not(.full) { left: var(--side) !important; }
+body.phone.phone-land .bodywin[data-cam="W"]:not(.full) { top: calc(var(--menu) + 2 * var(--gap) + var(--col)) !important; }
+body.phone.phone-land .bodywin.alone[data-cam="W"]:not(.full) { top: calc(var(--menu) + var(--gap)) !important; }
 
 /* frosted glass off: plain dark panels, no blur of the view behind them (the blur is redone every frame) */
 body.s-noglass :is(#menubar, .menu ul, .win, #dock) { -webkit-backdrop-filter: none !important; backdrop-filter: none !important; }
@@ -671,9 +678,6 @@ body.s-noglass .menu ul { background: rgba(22, 23, 27, .97); }
 .bodywin .panes { display: flex; gap: 8px; align-items: flex-start; }
 .bodywin .pane { width: var(--pw); display: grid; gap: 6px; }
 .bodywin .pane[data-cam="W"] { width: calc(var(--pw) * .72); }
-.bodywin .pane[hidden] { display: none; }
-.bodywin .camlabel { font-size: 9.5px; letter-spacing: .08em; text-transform: uppercase; color: var(--q-dim); display: flex; align-items: center; }
-.bodywin .pane.live .led { background: var(--q-accent); box-shadow: 0 0 4px var(--q-accent); }
 .bodywin .info { grid-template-columns: 38px 1fr; font-size: 10px; }
 .bodywin .well { height: 70px; }
 .bodywin .well.has-frame { height: auto; }
@@ -687,8 +691,6 @@ body.s-noglass .menu ul { background: rgba(22, 23, 27, .97); }
 /* resting: like the camera windows, a body window keeps its picture and only its frame fades (#app gives the rule
    an id, so it beats the head's id-strength rule that fades every window) */
 body.idle #app .bodywin:has(.well.has-frame) { opacity: 1; pointer-events: auto; background: transparent; border-color: transparent; box-shadow: none; -webkit-backdrop-filter: none; backdrop-filter: none; }
-body.idle .bodywin:has(.well.has-frame) .camlabel { opacity: 0; }
-body.phone .bodywin { --pw: 40vw; } body.phone .bodywin:not(.full) :is(.info, .chans) { display: none; }
 
 #reelcard { top: calc(env(safe-area-inset-top, 0px) + 36px); left: max(14px, env(safe-area-inset-left, 0px)); width: clamp(340px, 46vw, 760px); }
 #reelcard.zoomed { width: clamp(460px, 70vw, 1200px); }
@@ -2714,10 +2716,10 @@ body.phone #excard:not(.full) { width: calc(100% - 16px) !important; left: 8px !
   const saveOwn = () => { if (S) return; try { localStorage.setItem(LS, JSON.stringify({ on: B.on, linger: B.linger, max: B.max })); } catch (e) {} };
   if (S) {
     B.on = !!S.define({ key: "cameras.bodyWindows", section: "Cameras", label: "A window for each body", type: "toggle", value: false,
-      hint: "Each target Cassini images gets its own camera window, which closes after the target has gone unimaged for a while." });
+      hint: "Each target Cassini images gets its own narrow-angle and wide-angle windows, which close after that camera has gone a while without imaging the target." });
     B.linger = +S.define({ key: "cameras.bodyWindowLinger", section: "Cameras", label: "Body window stays for", type: "range", value: 20, min: 5, max: 120, step: 5, unit: "s",
-      hint: "Seconds of playback after a target's last picture before its window closes." });
-    B.max = +S.define({ key: "cameras.bodyWindowMax", section: "Cameras", label: "Most body windows at once", type: "range", value: 4, min: 1, max: 8, step: 1 });
+      hint: "Seconds of playback after a camera's last picture of a target before that window closes." });
+    B.max = +S.define({ key: "cameras.bodyWindowMax", section: "Cameras", label: "Most bodies with windows at once", type: "range", value: 4, min: 1, max: 8, step: 1 });
   }
   if (q !== null) B.on = q !== "0";
 
@@ -2755,14 +2757,15 @@ body.phone #excard:not(.full) { width: calc(100% - 16px) !important; left: 8px !
     }
   }
 
-  // ---- one window per target ----
+  // ---- one window per target and camera ----
   const title = n => n === "UNK" ? "Unknown target" : titleCase(n);
+  const CAMS = ["N", "W"], CAMNAME = { N: "Narrow-angle", W: "Wide-angle" };
+  const key = (name, cam) => name + "|" + cam;
   function pane(name, cam) {
     return `<div class="pane" data-cam="${cam}" data-body="${name}">
-        <div class="camlabel"><span class="led"></span>${cam === "N" ? "Narrow-angle" : "Wide-angle"}</div>
         <div class="well"><div class="wellmsg"><b>No signal</b>Waiting for the frame server</div><img class="shot" alt="" crossorigin="anonymous"><span class="shottag"></span><span class="kindtag"></span></div>
         <div class="chans" aria-label="Filter channels"></div>
-        <dl class="info"><dt>Status</dt><dd data-f="status">—</dd><dt>Filter</dt><dd data-f="filter">—</dd><dt>Color</dt><dd data-f="colour">—</dd></dl>
+        <dl class="info"><dt>Status</dt><dd><span class="led"></span><span data-f="status">—</span></dd><dt>Filter</dt><dd data-f="filter">—</dd><dt>Color</dt><dd data-f="colour">—</dd></dl>
       </div>`;
   }
   // a free place for a new window: the first slot in rows from the top left that no open window covers
@@ -2778,47 +2781,40 @@ body.phone #excard:not(.full) { width: calc(100% - 16px) !important; left: 8px !
     const n = B.wins.size;   // no room: cascade
     Object.assign(w.style, { left: x0 + 24 * n + "px", top: y0 + 24 * n + "px" });
   }
-  function open(name) {
+  function open(name, cam) {
+    const k = key(name, cam), label = `${title(name)} · ${cam}AC`;
     const el = document.createElement("section");
     el.className = "win frame img camwin bodywin opening";
-    el.dataset.body = name; el.dataset.name = title(name);
-    el.setAttribute("aria-label", `${title(name)} cameras`);
-    el.innerHTML = `<div class="titlebar"><span class="lights"><button class="close" aria-label="Close">×</button><button class="min" aria-label="Minimize">–</button><button class="zoom" aria-label="Zoom">+</button></span>${title(name)}</div>
-      <div class="body"><div class="panes">${pane(name, "N")}${pane(name, "W")}</div></div>`;
+    el.dataset.body = name; el.dataset.cam = cam; el.dataset.name = label;
+    el.setAttribute("aria-label", `${title(name)} ${CAMNAME[cam].toLowerCase()} camera`);
+    el.innerHTML = `<div class="titlebar"><span class="lights"><button class="close" aria-label="Close">×</button><button class="min" aria-label="Minimize">–</button><button class="zoom" aria-label="Zoom">+</button></span>${label}</div>
+      <div class="body"><div class="panes">${pane(name, cam)}</div></div>`;
     const dock = $("dock"); dock.parentNode.insertBefore(el, dock);
     WM.wire(el);
-    // closing a body window dismisses it until that target goes quiet; minimizing tucks it into the tray as usual
-    el.querySelector(".close").addEventListener("click", e => { e.stopImmediatePropagation(); B.dismissed.add(name); close(name); }, true);
-    const panes = [...el.querySelectorAll(".pane")].map(p => ({ el: p, cam: p.dataset.cam, update: F.cameraFeed(p) }));
-    const w = { el, panes, closing: false };
-    B.wins.set(name, w);
-    showPanes(w, name);
+    // closing a body window dismisses it until its camera goes quiet on that target; minimizing tucks it into the tray as usual
+    el.querySelector(".close").addEventListener("click", e => { e.stopImmediatePropagation(); B.dismissed.add(k); close(k); }, true);
+    const p = el.querySelector(".pane");
+    const w = { el, name, cam, update: F.cameraFeed(p), closing: false };
+    B.wins.set(k, w);
     place(el); WM.front(el);
     el.addEventListener("animationend", () => el.classList.remove("opening"), { once: true });
     return w;
   }
-  function close(name, now) {
-    const w = B.wins.get(name); if (!w || w.closing) return;
+  function close(k, now) {
+    const w = B.wins.get(k); if (!w || w.closing) return;
     w.closing = true;
-    const gone = () => { w.el.remove(); if (B.wins.get(name) === w) B.wins.delete(name); WM.syncMenu(); };
+    const gone = () => { w.el.remove(); if (B.wins.get(k) === w) B.wins.delete(k); WM.syncMenu(); };
     if (now || w.el.hidden || matchMedia("(prefers-reduced-motion: reduce)").matches) return gone();
     w.el.classList.add("closing");
     w.el.addEventListener("animationend", gone, { once: true });
     setTimeout(gone, 700);
   }
-  // a camera's pane shows only while that camera has a recent frame of the target
-  function showPanes(w, name) {
-    for (const p of w.panes) {
-      const at = F.lastOfCam(p.cam, state.et, name), ks = F.framesOf(p.cam, name).ks;
-      p.el.hidden = !(at >= 0 && state.et - catalog.et[ks[at]] <= F.stale());
-    }
+  // the latest frame of target name by camera cam at or before et, as its time, or -Infinity
+  function latestOf(name, cam) {
+    const ks = F.framesOf(cam, name).ks, i = F.lastOfCam(cam, state.et, name);
+    return i >= 0 ? catalog.et[ks[i]] : -Infinity;
   }
-  // the latest frame of target name (either camera) at or before et, as its time, or -Infinity
-  function latest(name) {
-    let t = -Infinity;
-    for (const cam of ["N", "W"]) { const ks = F.framesOf(cam, name).ks, i = F.lastOfCam(cam, state.et, name); if (i >= 0) t = Math.max(t, catalog.et[ks[i]]); }
-    return t;
-  }
+  const latest = name => Math.max(...CAMS.map(cam => latestOf(name, cam)));
   let targets = null;
   function tick() {
     if (!B.started) setOn(B.on);
@@ -2835,25 +2831,36 @@ body.phone #excard:not(.full) { width: calc(100% - 16px) !important; left: 8px !
     if (movie) return;
     const stale = F.stale(), wanted = [];
     let newest = null;
+    // one record per target and camera: when that camera last imaged the target, and on the linger clock when that was seen
     for (const name of targets) {
-      const t = latest(name);
-      if (!(state.et - t <= stale)) { B.rec.delete(name); B.dismissed.delete(name); continue; }
-      let r = B.rec.get(name);
-      if (!r || r.t !== t) { r = { t, seen: B.clock }; B.rec.set(name, r); }
-      if (!newest || t > newest.t) newest = { name, t };
-      wanted.push(name);
+      let any = false;
+      for (const cam of CAMS) {
+        const k = key(name, cam), t = latestOf(name, cam);
+        if (!(state.et - t <= stale)) { B.rec.delete(k); B.dismissed.delete(k); continue; }
+        let r = B.rec.get(k);
+        if (!r || r.t !== t) { r = { t, seen: B.clock }; B.rec.set(k, r); }
+        if (!newest || t > newest.t) newest = { k, t };
+        any = true;
+      }
+      if (any) wanted.push(name);
     }
-    // a target stays while it was imaged within the linger time; the latest target always stays
-    const keep = wanted.filter(n => n === newest.name || B.clock - B.rec.get(n).seen <= B.linger * 1000)
-      .sort((a, b) => B.rec.get(b).t - B.rec.get(a).t);
-    for (const n of B.dismissed) if (!keep.includes(n)) B.dismissed.delete(n);
-    const show = keep.filter(n => !B.dismissed.has(n)).slice(0, Math.max(1, B.max));
-    for (const name of [...B.wins.keys()]) if (!show.includes(name)) close(name);
-    for (const name of show.slice().reverse()) {   // oldest first, so the newest window lands on top
-      let w = B.wins.get(name);
-      if (!w || w.closing) w = open(name);
-      showPanes(w, name);
-      for (const p of w.panes) if (!p.el.hidden) { p.update(); p.update.retier(); }
+    // a window stays while its camera imaged its target within the linger time; the latest picture's window always stays
+    const fresh = k => k === newest.k || (B.rec.has(k) && B.clock - B.rec.get(k).seen <= B.linger * 1000);
+    const keepKeys = wanted.flatMap(n => CAMS.map(c => key(n, c))).filter(fresh);
+    for (const k of B.dismissed) if (!keepKeys.includes(k)) B.dismissed.delete(k);
+    const showKeys = keepKeys.filter(k => !B.dismissed.has(k));
+    // at most max targets have windows, the most recently imaged first
+    const bodies = [...new Set(showKeys.map(k => k.split("|")[0]))].sort((a, b) => latest(b) - latest(a)).slice(0, Math.max(1, B.max));
+    const show = showKeys.filter(k => bodies.includes(k.split("|")[0]));
+    for (const k of [...B.wins.keys()]) if (!show.includes(k)) close(k);
+    // oldest target first, so the newest windows land on top; the narrow-angle window first, so the wide-angle one sits beside it
+    for (const name of bodies.slice().reverse()) for (const cam of CAMS) {
+      const k = key(name, cam); if (!show.includes(k)) continue;
+      let w = B.wins.get(k);
+      if (!w || w.closing) w = open(name, cam);
+      // a wide-angle window with no narrow-angle one beside it takes its place on a phone
+      w.el.classList.toggle("alone", !show.includes(key(name, cam === "N" ? "W" : "N")));
+      w.update(); w.update.retier();
     }
   }
   const base = window.studyHud;
