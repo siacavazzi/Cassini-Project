@@ -1090,6 +1090,8 @@ body.idle .win.full .titlebar { opacity: 0; }
     // keeps for every picture of that observation
     const steady = () => S.get("cameras.steady"), passOf = k => `${catalog.target[k]}|${catalog.obs[k]}`;
     let shapeOf = null;
+    // what kind of picture is up (a color composite, a mosaic, both), for how long it stays (importance)
+    let kind = { color: false, mosaic: false };
     const failed = new Set();   // composites the server could not make: those sets show their frames instead
     const missing = new Set();  // frames the server does not have
     // full view asks for the full resolution picture ("full") once the picture is held: a quarter second while
@@ -1142,6 +1144,7 @@ body.idle .win.full .titlebar { opacity: 0; }
     function noFrame(msg, kept) {
       well.classList.toggle("kept", !!kept && steady() && well.matches(".has-frame, .kept"));
       well.classList.remove("has-frame", "composite"); card.querySelector(".wellmsg").innerHTML = msg;
+      kind = { color: false, mosaic: false };
     }
     // two lanes, one request in flight each: plain frames (quick) and composites (seconds when the server has to
     // make one). A composite being made never holds up the frames: the window shows the newest frame meanwhile,
@@ -1163,6 +1166,7 @@ body.idle .win.full .titlebar { opacity: 0; }
       // shot.dataset.src / .report: what the picture on screen was made from, for flagging (flag.html)
       if (!keep) {
         shot.src = im.src; shot.dataset.src = v.key; shot.dataset.report = ""; obsShown = null; obsK = -1; well.classList.remove("mosaic"); saving(v.key);
+        kind = { color: v.set >= 0, mosaic: false };
         if (!steady() || shapeOf !== passOf(v.k)) { well.style.aspectRatio = ""; shapeOf = null; }
       }
       well.classList.add("has-frame"); well.classList.remove("kept"); well.classList.toggle("composite", v.set >= 0);
@@ -1297,12 +1301,13 @@ body.idle .win.full .titlebar { opacity: 0; }
         if (rep && rep.observation) {
           mosaicPasses.add(passOf(k));
           if (window.cassiniPicture && rep.mosaic > (obsShown === catalog.obs[k] ? obsTiles : 0)) window.cassiniPicture({ cam, body, win, k, nm: nmOf(k), set, use: set >= 0 ? catalog.sets[set].use.map(nmOf) : null, tile: rep.mosaic, of: rep.of });
-          obsShown = catalog.obs[k]; obsTiles = rep.mosaic; obsK = k; obsSize = rank(sz);
+          obsShown = catalog.obs[k]; obsTiles = rep.mosaic; obsK = k; obsSize = rank(sz); kind = { color: rep.filters >= 3, mosaic: true };
           well.style.aspectRatio = `${rep.width} / ${rep.height}`; shapeOf = passOf(k);
           card.querySelector(".kindtag").textContent = `${rep.filters >= 3 ? ((rep.filter_names || []).includes("GRN") ? "COLOR " : "FALSE COLOR ") : ""}MOSAIC · ${rep.mosaic} OF ${rep.of} TILES${rep.filters > 1 ? ` · ${rep.filters} FILTERS` : ""}`;
           return;
         }
         card.querySelector(".kindtag").textContent = `${w.set >= 0 ? KIND[catalog.sets[w.set].kind].toUpperCase() + " · " : ""}MOSAIC${rep && rep.mosaic ? ` OF ${rep.mosaic}` : ""}`;
+        kind = { color: w.set >= 0, mosaic: true };
       }, () => {}).finally(done);
     }
     function mosaicStop() {
@@ -1388,14 +1393,16 @@ body.idle .win.full .titlebar { opacity: 0; }
       const p = lastOfCam(cam, state.et, body), k = p < 0 ? -1 : framesOf(cam, body).ks[p];
       const live = k >= 0 && state.et - catalog.et[k] < 180;
       card.classList.toggle("live", live);
-      // a camera that has been quiet for longer than the stale setting shows nothing rather than an old picture
-      const stale = S.get("cameras.stale");
-      if (k < 0 || state.et - catalog.et[k] > stale * 3600) {
+      // a camera that has been quiet for longer than the stale setting shows nothing rather than an old picture; an
+      // important picture (color, mosaic) stays that many times longer, and a window that holds (a body window,
+      // which closes by itself) keeps its picture
+      const stale = S.get("cameras.stale") * (lastK >= 0 ? importance() : 1);
+      if (k < 0 || (!update.hold && state.et - catalog.et[k] > stale * 3600)) {
         field("status").textContent = k < 0 ? "Camera" : `Last frame ${fmtDur(state.et - catalog.et[k])} ago`;
         strip(null);
         if (lastK !== -1) {
           lastK = -1; want = null; shownKey = null; shown = null;
-          noFrame(k < 0 ? "<b>No signal</b>No frames from this camera yet this year" : `<b>Idle</b>No frames from this camera in the last ${stale} h`);
+          noFrame(k < 0 ? "<b>No signal</b>No frames from this camera yet this year" : `<b>Idle</b>No frames from this camera in the last ${+stale.toFixed(1)} h`);
           for (const f of ["frame", "filter", "colour", "details"]) field(f).textContent = "—";
         }
         return;
@@ -1461,12 +1468,21 @@ body.idle .win.full .titlebar { opacity: 0; }
     }
     new ResizeObserver(retier).observe(well);
     update.retier = retier;
+    const importance = () => weight(kind);
+    update.importance = importance;
+    update.kind = () => kind;
     return update;
   }
+  // how important a picture is, as how many times longer it stays up than a single frame: a color picture
+  // cameras.lingerColor times, a mosaic cameras.lingerMosaic times, a color mosaic both
+  function weight(kind) {
+    const c = +S.get("cameras.lingerColor") || 1.5, m = +S.get("cameras.lingerMosaic") || 2;
+    return (kind.color ? c : 1) * (kind.mosaic ? m : 1);
+  }
   const feeds = [...document.querySelectorAll(".camwin")].map(cameraFeed);
-  window.cassiniFeeds = { cameraFeed, framesOf, lastOfCam, prep, stale: () => S.get("cameras.stale") * 3600 };
+  window.cassiniFeeds = { cameraFeed, framesOf, lastOfCam, prep, weight, stale: () => S.get("cameras.stale") * 3600 };
   // a change to what the windows show takes effect straight away
-  for (const key of ["cameras.composites", "cameras.stale", "cameras.steady"]) S.on(key, () => { if (typeof catalog !== "undefined" && catalog && catalog.byCam) feeds.forEach(f => f(true)); });
+  for (const key of ["cameras.composites", "cameras.stale", "cameras.steady", "cameras.lingerColor", "cameras.lingerMosaic"]) S.on(key, () => { if (typeof catalog !== "undefined" && catalog && catalog.byCam) feeds.forEach(f => f(true)); });
 
   // ---------- burst limit: in normal playback each camera window gets at most maxRate new pictures a second ----------
   // The clock runs at the chosen speed except inside an imaging burst, where it slows so that crossing the gap
