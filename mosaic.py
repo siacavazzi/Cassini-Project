@@ -26,8 +26,6 @@ max_linear_offset = 0.01  # the same for offsets solved on linear values (gamma 
                           # the sky's real offset left after the bias is 0.1-1.3% of white
 anchor_pull = 0.05  # anchored gains: how hard every log gain is pulled toward 0, against a tile's overlaps
                     # (weights scaled so the best measured overlap counts 1)
-toward_pull = 0.3   # ... and toward another filter's seams (seams' toward): a filter departs from them only
-                    # where its own overlaps clearly say so
 reproject_surface = False  # line up the target's surface between frames (see compose)
 max_reproject_age = 20 * 60  # seconds; older frames are only centered (warping across big rotations tears)
 
@@ -281,9 +279,8 @@ def _anchored_gains(small, pairs, n, toward=None):
         if not rows:
             continue
         top = max(w for *_, w, _ in rows)
-        pull = anchor_pull if toward is None else toward_pull
-        A = np.eye(n) * pull
-        b = pull * np.log(gains[:, c])
+        A = np.eye(n) * anchor_pull
+        b = anchor_pull * np.log(gains[:, c])
         for i, j, w, d in rows:
             w /= top
             A[i, i] += w
