@@ -33,7 +33,7 @@ body.phone .camwin:not(.full) { top: calc(var(--menu) + var(--gap)) !important; 
 body.phone .camwin:not(.full) > .titlebar { display: none; }
 body.phone .camwin:not(.full) .body { padding: 4px; gap: 4px; }
 body.phone .camwin:not(.full) :is(.info, .chans) { display: none !important; }
-body.phone .camwin:not(.full) .well:not(.has-frame) { height: 44px; font-size: 9px; }
+body.phone .camwin:not(.full) .well:not(.has-frame, .kept) { height: 44px; font-size: 9px; }
 body.phone .camwin .well::after { position: absolute; left: 5px; top: 4px; font: 9px/1 var(--hudf); letter-spacing: .08em; color: rgba(232,236,242,.6); text-shadow: 0 0 3px #000; }
 body.phone #imgcard .well::after { content: "NAC"; }
 body.phone #wacard .well::after { content: "WAC"; }
@@ -88,8 +88,15 @@ body.phone .camwin.full .info { grid-template-columns: 42px minmax(0, 1fr); }
 body.phone .camwin.full .chans { grid-template-columns: repeat(var(--n, 3), minmax(0, 1fr)); }
 body.phone .fullbtn { width: 26px; height: 20px; top: 0; }
 
-/* the other windows: full width under the menu bar */
-body.phone .bodywin:not(.full) { left: var(--side) !important; top: calc(var(--menu) + var(--gap)) !important; right: auto !important; }
+/* body windows: each body's narrow-angle and wide-angle windows sit where the two camera windows do */
+body.phone .bodywin:not(.full) .pane { width: auto !important; flex: 1 1 0; }
+body.phone .bodywin[data-cam="N"] .well::after { content: "NAC"; }
+body.phone .bodywin[data-cam="W"] .well::after { content: "WAC"; }
+body.phone:not(.phone-land) .bodywin[data-cam="N"]:not(.full) { left: var(--side) !important; width: calc((100vw - 3 * var(--gap)) * .56 * var(--phs)) !important; }
+body.phone:not(.phone-land) .bodywin[data-cam="W"]:not(.full) { left: calc(var(--side) + (100vw - 3 * var(--gap)) * .56 * var(--phs) + var(--gap)) !important; width: calc((100vw - 3 * var(--gap)) * .44 * var(--phs)) !important; }
+body.phone:not(.phone-land) .bodywin.alone[data-cam="W"]:not(.full) { left: var(--side) !important; }
+body.phone.phone-land .bodywin[data-cam="W"]:not(.full) { top: calc(var(--menu) + 2 * var(--gap) + var(--col)) !important; }
+body.phone.phone-land .bodywin.alone[data-cam="W"]:not(.full) { top: calc(var(--menu) + var(--gap)) !important; }
 </style>
 
 <script>
