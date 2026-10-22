@@ -235,8 +235,8 @@ def webp(frame_id, size, cache, fmt="webp"):
 
 # the caches of the pictures drawn from I/F, one per look (calibration.LOOKS), so the classic look keeps the
 # pictures made before the balanced display model
-COLOR_VERSIONS = {"balanced": "color-v8", "classic": "color-v4"}
-PROC_VERSIONS = {"balanced": "proc-v5", "classic": "proc-v1"}
+COLOR_VERSIONS = {"balanced": "color-v9", "classic": "color-v4"}
+PROC_VERSIONS = {"balanced": "proc-v6", "classic": "proc-v1"}
 
 
 def in_background(target, *args):
