@@ -307,7 +307,8 @@ WHITE_PCT = 99.5     # balanced: the percentile of the lit pixels of the brighte
 MAX_STRETCH = 1.4    # balanced: white at most this many times darker than the classic white (the brightest
                      # pixel), so a picture is never stretched far enough to show its scan lines, compression
                      # blocks and 8-bit steps
-SKY_DARK = 99       # balanced composites: this percentile of the dark sky's brightness is below the toe (tone)
+SPIKE = 6.0          # balanced composites: a one-channel spike this many times the sky's grain is cleaned (_clean_spikes)
+SKY_DARK = 99        # balanced composites: this percentile of the dark sky's brightness is below the toe (tone)
 SHOULDER = 0.8       # balanced composites: above this share of white, brightness rolls off softly instead
                      # of clipping (limbs and ring highlights past the white keep their shape)
 
@@ -407,22 +408,47 @@ def load_linear(labels, images=None, iofs=None):
         local = cv2.blur(lum, (15, 15))
         dark = sky & (local <= np.median(local[sky]))
         if dark.sum() > 100:
-            margin = max(margin, 1.5 * float(np.percentile(lum[dark], SKY_DARK)))
+            margin = max(margin, float(np.percentile(lum[dark], SKY_DARK)))
+        if len(channels) > 1:
+            channels = _clean_spikes(channels, sky)
     return channels, margin
 
 
 """
+Hot pixels and cosmic ray hits in one channel of a composite: a pixel far above its 3x3 median in its own
+channel (SPIKE times that channel's sky grain, and above twice the median) where no other channel has a
+peak within 2 pixels, is set to its median. Drawn together (tone), such a pixel would be a pastel dot; a
+star or a small bright feature is in every channel, so it stays.
+channels = linear channels, not yet aligned; sky = the sky mask
+"""
+def _clean_spikes(channels, sky):
+    meds = [cv2.medianBlur(c, 3) for c in channels]
+    res = [c - m for c, m in zip(channels, meds)]
+    noises = [float(np.percentile(np.abs(r[sky]), 99)) / 2.6 for r in res]
+    peaks = [cv2.dilate(r, np.ones((5, 5), np.uint8)) > SPIKE * n for r, n in zip(res, noises)]
+    out = []
+    for i, (c, m, r, n) in enumerate(zip(channels, meds, res, noises)):
+        spike = (r > SPIKE * n) & (r > m) & (r > 0)
+        for j, p in enumerate(peaks):
+            if j != i:
+                spike &= ~p
+        out.append(np.where(spike, m, c))
+    return out
+
+
+"""
 Balanced composites' channels (load_linear, aligned) as BGR uint8 images: the noise margin comes off the
-brightness (the channels' mean) through a toe, black up to two thirds of the margin, then curving into the
-brightness less the margin, and every channel is scaled by the same factor, so a pixel keeps its color.
+brightness (the channels' mean) through a toe, black up to the margin (the sky at or below its own level is
+black), then turning within an eighth of the margin into the brightness less the margin, and every channel is scaled by the same factor, so a pixel keeps its color.
 Past the shoulder the brightest channel rolls off softly (roll_off), the others by the same factor.
 """
 def tone(channels, margin, shoulder=SHOULDER, gamma=2.2):
     x = np.stack(channels).astype(np.float32)
     lum = x.mean(axis=0)
-    a = 2 * margin / 3
-    if a > 0:
-        toed = np.where(lum <= a, 0, np.where(lum <= 2 * a, (lum - a) ** 2 / (2 * a), lum - 1.5 * a))
+    w = margin / 8
+    if w > 0:
+        toed = np.where(lum <= margin, 0, np.where(lum <= margin + w, (lum - margin) ** 2 / (2 * w),
+                                                  lum - margin - w / 2))
         x *= np.where(lum > 0, toed / np.maximum(lum, 1e-12), 0)
     if shoulder:
         top = x.max(axis=0)

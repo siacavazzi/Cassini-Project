@@ -53,6 +53,16 @@ assert np.abs(lin / lin[0] - true).max() < 0.06                          # the c
 assert np.abs(per_channel / per_channel[0] - true).max() > 0.05          # what a black per channel would draw
 sky_px = (yy > 200) & (xx < 60)
 assert np.mean([t[sky_px, 0] > 8 for t in toned]) < 0.01                 # the sky's noise stays dark
+# a hot pixel in one channel is cleaned, a star (in every channel) stays
+spiky = [im.copy() for im in iofs]
+spiky[1][230, 30] += 0.2
+for c in range(3):
+    spiky[c][240, 40] += 0.2
+with cal.looking("balanced"):
+    levels, margin, white, _ = cal._balanced_scale(spiky)
+    clean = cal._clean_spikes([(im - lv) / white for im, lv in zip(spiky, levels)], cal._sky(spiky))
+assert clean[1][230, 30] < 0.05 and all(c[240, 40] > 0.2 for c in clean)
+assert np.array_equal(clean[0][disk], ((spiky[0] - levels[0]) / white)[disk])
 # encode and decode are inverses, for a power and for sRGB
 v = np.linspace(0, 1, 101)
 for g in (2.2, 3.0, "srgb"):
