@@ -288,11 +288,19 @@ def _cached(path, make):
         with open(path, "rb") as fh:
             return fh.read()
     data = make()
-    os.makedirs(os.path.dirname(path), exist_ok=True)
     part = f"{path}.{os.getpid()}.{threading.get_ident()}.part"
-    with open(part, "wb") as fh:
-        fh.write(data)
-    os.replace(part, path)
+    try:
+        os.makedirs(os.path.dirname(path), exist_ok=True)
+        with open(part, "wb") as fh:
+            fh.write(data)
+        os.replace(part, path)
+    except OSError as e:
+        # a full disk costs the cache, never the picture (the next request makes it again)
+        try:
+            os.remove(part)
+        except OSError:
+            pass
+        print(f"cannot keep {path} in the cache ({e})", flush=True)
     return data
 
 

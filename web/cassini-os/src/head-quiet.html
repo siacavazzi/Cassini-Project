@@ -1013,6 +1013,12 @@ body.idle .win.full .titlebar { opacity: 0; }
     while (hi - lo > 1) { const m = (lo + hi) >> 1; if (a[m] <= et) lo = m; else hi = m; }
     return a[hi] <= et ? hi : lo;
   }
+  // a frame's index in the catalog loaded now, from its id (-1 when it is not in it)
+  function kOf(id) {
+    const m = catalog.kOf = catalog.kOf || new Map(catalog.id.map((v, i) => [v, i]));
+    const k = m.get(id);
+    return k === undefined ? -1 : k;
+  }
   // a camera's frames in time order, all of them or only those of one target (made the first time they are asked for)
   function framesOf(cam, body) {
     if (!body) return catalog.byCam[cam];
@@ -1162,7 +1168,7 @@ body.idle .win.full .titlebar { opacity: 0; }
       well.classList.add("has-frame"); well.classList.remove("kept"); well.classList.toggle("composite", v.set >= 0);
       if (!keep) card.querySelector(".kindtag").textContent = v.set >= 0 ? KIND[catalog.sets[v.set].kind].toUpperCase() : "";
       if (v.set >= 0) { channelsFrom(im, catalog.sets[v.set]); howMade(v); }
-      if (v.tile && !keep) mosaicOf(v);   // a frame kept behind its pass's mosaic asked for it already (update)
+      if (v.tile && !keep && !mosaicPass(v.k)) mosaicOf(v);   // a frame kept behind its pass's mosaic, or of a pass known to be one, asked for it already (update)
       // the sound (sound.html) hears every picture that goes up: its camera, filter wavelength, target and window
       // (keep: a pass mosaic stays up, so this frame rings when its tile shows, below in mosaicOf)
       if (window.cassiniPicture && !again) window.cassiniPicture({ cam, body, win, k: v.k, nm: nmOf(v.k), set: v.set, use: v.set >= 0 ? catalog.sets[v.set].use.map(nmOf) : null, keep });
@@ -1183,6 +1189,11 @@ body.idle .win.full .titlebar { opacity: 0; }
         else if (v.set >= 0) {   // no composite: the set shows its frames instead
           failed.add(v.set);
           if (want && want.key === v.key) want = { key: frameUrl(catalog.id[v.k]), set: -1, k: v.k };
+        } else if (obsShown && catalog.obs[v.k] === obsShown) {
+          // a frame of the pass whose mosaic is up was only ever going behind it (display keeps the mosaic): the
+          // mosaic stays, as when the frame loads, and it is not marked missing (a busy or full server fails one
+          // now and then; a scrub back asks for it again)
+          if (want && want.key === v.key) { shownKey = v.key; shown = v; }
         } else {
           missing.add(v.key);
           if (want && want.key === v.key) {
@@ -1232,7 +1243,13 @@ body.idle .win.full .titlebar { opacity: 0; }
     // (the server working out a body's reel) never holds up the pass.
     // A window that grows (or a held picture in full view) asks for the pass's mosaic again at the bigger size
     // (update(true) from retier below); that one is never late for the frame it was asked for.
+    // The look-ahead (update) names each observation coming up to the server, which answers whether it is a
+    // mosaic pass: the frames of one go to the pass lane from the first, so its first tiles are never dropped
+    // after 4 s while the server works out the pass (seconds), and the mosaic comes back in the pass lane
+    // after anything took it down.
     let mosaicUrl = null, obsShown = null, obsTiles = 0, obsK = -1, obsSize = 0;
+    const mosaicPasses = new Set();   // target|observation the server said is a mosaic pass
+    const mosaicPass = k => mosaicPasses.has(passOf(k));
     const rank = sz => sz === "full" ? Infinity : +sz;
     const mLane = { pass: { busy: false, next: null, last: "" }, other: { busy: false, next: null, last: "" } };
     const warnedObs = new Set();   // observations already named to the server ahead of time (update)
@@ -1241,42 +1258,47 @@ body.idle .win.full .titlebar { opacity: 0; }
       const sz = size(), id = catalog.id[w.set >= 0 && !pass ? catalog.sets[w.set].use[0] : w.k], ask = `${id}:${sz}`;
       const L = pass ? mLane.pass : mLane.other;
       if (ask === L.last) return;
-      if (L.busy) { L.next = [w, pass]; return; }
+      if (L.busy) { L.next = [w, pass, catalog]; return; }
       L.last = ask; L.busy = true;
       let over = false;
       // the request is dropped (its connection freed; the server still finishes and keeps the mosaic) when the
       // other lane gives up on it, or the window is closed (mosaicStop)
       const ctl = L.ctl = new AbortController();
-      const cat0 = catalog, done = () => {
+      const cat0 = catalog, wid = catalog.id[w.k], done = () => {
         if (over) return;
         over = true; L.busy = false; L.ctl = null;
         const q = L.next; L.next = null;
-        if (q && catalog === cat0 && lastK >= 0 && catalog.et[q[0].k] <= catalog.et[lastK]) mosaicOf(...q);
+        if (q && catalog === q[2] && lastK >= 0 && catalog.et[q[0].k] <= catalog.et[lastK]) mosaicOf(q[0], q[1]);
       };
       if (!pass) setTimeout(() => { if (!over) { ctl.abort(); done(); } }, 4000);
       fetch(`${FRAMES}/frames/mosaic/${id}.webp?size=${sz}`, { signal: ctl.signal }).then(async r => {
         if (!r.ok) return;
         const rep = JSON.parse(r.headers.get("X-Reel") || "null");
+        // the frame in the catalog loaded now (another catalog object once the months around have loaded; a
+        // pass's mosaic still goes up, found by its frame id)
+        const kNow = () => catalog === cat0 ? w.k : rep && rep.observation ? kOf(wid) : -1;
         // a pass's mosaic shows while the window is still in the pass and the clock is not before its frame,
         // unless the mosaic up already has a later frame (and is not ahead of the clock after a scrub back);
         // a rolling mosaic only while its frame is the one shown
-        const late = () => catalog !== cat0 || (rep && rep.observation
-          ? lastK < 0 || catalog.obs[lastK] !== catalog.obs[w.k] || catalog.et[w.k] > catalog.et[lastK]
-            || (obsShown === catalog.obs[w.k] && obsK >= 0 && catalog.et[obsK] >= catalog.et[w.k] && catalog.et[obsK] <= catalog.et[lastK]
-              && !(obsK === w.k && rank(sz) > obsSize))
-          : shown !== w);
+        const late = () => { const k = kNow(); return k < 0 || (rep && rep.observation
+          ? lastK < 0 || catalog.obs[lastK] !== catalog.obs[k] || catalog.et[k] > catalog.et[lastK]
+            || (obsShown === catalog.obs[k] && obsK >= 0 && catalog.et[obsK] >= catalog.et[k] && catalog.et[obsK] <= catalog.et[lastK]
+              && !(obsK === k && rank(sz) > obsSize))
+          : shown !== w); };
         if (late()) return;
         const blob = await r.blob();
         if (late()) return;
+        const k = kNow(), set = catalog === cat0 ? w.set : -1;
         if (mosaicUrl) URL.revokeObjectURL(mosaicUrl);
         shot.src = mosaicUrl = URL.createObjectURL(blob);
         shot.dataset.src = r.url; shot.dataset.report = r.headers.get("X-Reel") || "";
         saving(r.url);
         well.classList.add("mosaic");
         if (rep && rep.observation) {
-          if (window.cassiniPicture && rep.mosaic > (obsShown === catalog.obs[w.k] ? obsTiles : 0)) window.cassiniPicture({ cam, body, win, k: w.k, nm: nmOf(w.k), set: w.set, use: w.set >= 0 ? catalog.sets[w.set].use.map(nmOf) : null, tile: rep.mosaic, of: rep.of });
-          obsShown = catalog.obs[w.k]; obsTiles = rep.mosaic; obsK = w.k; obsSize = rank(sz);
-          well.style.aspectRatio = `${rep.width} / ${rep.height}`; shapeOf = passOf(w.k);
+          mosaicPasses.add(passOf(k));
+          if (window.cassiniPicture && rep.mosaic > (obsShown === catalog.obs[k] ? obsTiles : 0)) window.cassiniPicture({ cam, body, win, k, nm: nmOf(k), set, use: set >= 0 ? catalog.sets[set].use.map(nmOf) : null, tile: rep.mosaic, of: rep.of });
+          obsShown = catalog.obs[k]; obsTiles = rep.mosaic; obsK = k; obsSize = rank(sz);
+          well.style.aspectRatio = `${rep.width} / ${rep.height}`; shapeOf = passOf(k);
           card.querySelector(".kindtag").textContent = `${rep.filters >= 3 ? ((rep.filter_names || []).includes("GRN") ? "COLOR " : "FALSE COLOR ") : ""}MOSAIC · ${rep.mosaic} OF ${rep.of} TILES${rep.filters > 1 ? ` · ${rep.filters} FILTERS` : ""}`;
           return;
         }
@@ -1354,7 +1376,13 @@ body.idle .win.full .titlebar { opacity: 0; }
     }
     let cat = null;
     function update(force) {
-      if (catalog !== cat) { cat = catalog; lastK = -2; shapeOf = null; near = [-1, null]; stripKey = ""; failed.clear(); made.clear(); missing.clear(); warmed.clear(); warnedObs.clear(); for (const L of Object.values(mLane)) { L.last = ""; L.next = null; } shown = null; shownKey = null; obsShown = null; obsK = -1; }   // another mission year loaded
+      if (catalog !== cat) {   // another mission year (or the months around this one) loaded
+        // a pass mosaic that is up stays up: its observation is a name, its frame found again by id
+        const obsId = cat && obsK >= 0 ? cat.id[obsK] : null;
+        cat = catalog; lastK = -2; near = [-1, null]; stripKey = ""; failed.clear(); made.clear(); missing.clear(); warmed.clear(); warnedObs.clear(); for (const L of Object.values(mLane)) { L.last = ""; L.next = null; } shown = null; shownKey = null;
+        obsK = obsId ? kOf(obsId) : -1;
+        if (obsK < 0) { obsShown = null; shapeOf = null; }
+      }
       if (win.hidden && !force) { mosaicStop(); return; }   // a closed or tucked-away window fetches nothing; it catches up when shown
       if (window.cassiniMovie && window.cassiniMovie.on) { mosaicStop(); return; }   // movie mode has the frame server to itself (its requests are capped)
       const p = lastOfCam(cam, state.et, body), k = p < 0 ? -1 : framesOf(cam, body).ks[p];
@@ -1389,7 +1417,7 @@ body.idle .win.full .titlebar { opacity: 0; }
       want.tile = !want.held && (same(kb) || same(framesOf(cam, body).ks[p + 1])) && (!s || want.set >= 0);
       // a new frame of the pass whose mosaic is up: ask for the mosaic with it now, alongside the frame itself
       // (by this frame, also while the window holds an earlier colour set)
-      if (obsShown && catalog.obs[k] === obsShown) mosaicOf(want.held ? { key: want.key, set: -1, k } : want, true);
+      if ((obsShown && catalog.obs[k] === obsShown) || (want.tile && mosaicPass(k))) mosaicOf(want.held ? { key: want.key, set: -1, k } : want, true);
       const kp = catalog.km_per_px[k];
       field("frame").textContent = `${titleCase(catalog.target[k] || "Unknown")} · ${catalog.id[k]}`;
       const c = catalog.cls[k], pol = /^P\d|^IRP/.test(catalog.f1[k]) || /^IRP/.test(catalog.f2[k]) ? " · polarizer" : "";
@@ -1412,7 +1440,14 @@ body.idle .win.full .titlebar { opacity: 0; }
           const q = ks[p + d], o = `${catalog.target[q]}|${catalog.obs[q]}`;
           if (warnedObs.has(o)) continue;
           warnedObs.add(o);
-          fetch(`${FRAMES}/frames/mosaic/${catalog.id[q]}.webp?warm=1`, { priority: "low" }).catch(() => {});
+          const c0 = catalog;
+          fetch(`${FRAMES}/frames/mosaic/${catalog.id[q]}.webp?warm=1`, { priority: "low" }).then(r => r.ok ? r.json() : null).then(a => {
+            if (!a || !a.mosaic) return;
+            mosaicPasses.add(o);
+            if (catalog !== c0) return;
+            // the window is in that pass already: its frame asks now (the server is working the pass out)
+            if (lastK >= 0 && passOf(lastK) === o && want && want.tile) mosaicOf(want.held ? { key: want.key, set: -1, k: lastK } : want, true);
+          }).catch(() => {});
         }
       pump();
     }

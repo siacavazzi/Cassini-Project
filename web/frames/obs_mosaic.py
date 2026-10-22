@@ -28,6 +28,7 @@ blended into one another.
   (makes the pass the frame is in ahead of time; the frame server makes it on first request)
 """
 import argparse
+import collections
 import contextlib
 import io
 import json
@@ -324,8 +325,7 @@ def filter_mosaic(u, p, f, tiles, rect, cache):
             sw, sh = max(1, round(bw * k)), max(1, round(bh * k))
             if left >= W or top >= H or left + sw <= 0 or top + sh <= 0:
                 continue
-            part = np.asarray(Image.open(os.path.join(folder(u, cache), "tiles", f"{t['n']}.png")).convert("RGBA")
-                              .resize((sw, sh), Image.LANCZOS))
+            part = _part(os.path.join(folder(u, cache), "tiles", f"{t['n']}.png"), sw, sh)
             frame = np.zeros((H, W, 4), np.uint8)
             x0, y0, x1, y1 = max(left, 0), max(top, 0), min(left + sw, W), min(top + sh, H)
             frame[y0:y1, x0:x1] = part[y0 - top:y1 - top, x0 - left:x1 - left]
@@ -348,6 +348,30 @@ def filter_mosaic(u, p, f, tiles, rect, cache):
         return out.getvalue()
 
     return np.asarray(Image.open(io.BytesIO(reel._cached(path, make))).convert("RGBA"))
+
+
+_parts = collections.OrderedDict()   # (tile file, width, height) -> the tile at that size, most recently used last
+_parts_bytes = [0]
+PARTS_KEEP = int(os.environ.get("CASSINI_MOSAIC_PARTS_MB", "256")) << 20
+
+
+def _part(path, w, h):
+    """A tile at w x h canvas pixels (RGBA): read and resized once and kept in memory (up to PARTS_KEEP bytes),
+    since every mosaic of a pass is drawn again from all of its tiles and a tile never changes once made."""
+    key = (path, w, h)
+    with _lock:
+        part = _parts.get(key)
+        if part is not None:
+            _parts.move_to_end(key)
+            return part
+    part = np.asarray(Image.open(path).convert("RGBA").resize((w, h), Image.LANCZOS))
+    with _lock:
+        if key not in _parts:
+            _parts[key] = part
+            _parts_bytes[0] += part.nbytes
+            while _parts_bytes[0] > PARTS_KEEP and len(_parts) > 1:
+                _parts_bytes[0] -= _parts.popitem(last=False)[1].nbytes
+    return part
 
 
 def detail(rgba, sigma):
@@ -423,12 +447,35 @@ def mosaic_webp(frame_id, size, cache, slots=None, ahead=3, fmt="webp", out=OUT)
     if not found or not found[0]["mosaic"] or found[1] < 0:
         return None
     u, n = found
-    if size == "full":
-        return _mosaic_at(u, n, size, cache, slots, fmt, out)
-    made = _mosaic_at(u, n, size, cache, slots)
+    with _asking():
+        if size == "full":
+            return _mosaic_at(u, n, size, cache, slots, fmt, out)
+        made = _mosaic_at(u, n, size, cache, slots)
     if made and ahead:
         warm(u, n + ahead, cache, size, slots, start=n + 1)
     return made
+
+
+_asked = [0]   # mosaics a window is waiting for right now: work made ahead waits while there are any
+
+
+@contextlib.contextmanager
+def _asking():
+    with _lock:
+        _asked[0] += 1
+    try:
+        yield
+    finally:
+        with _lock:
+            _asked[0] -= 1
+
+
+def _yield():
+    """Background work waits here, between one tile or mosaic and the next, while a window waits for a
+    mosaic, so the mosaic asked for goes first (one compose at a time, reel._mosaic_lock) instead of after
+    the ones being made ahead of it."""
+    while _asked[0]:
+        time.sleep(0.02)
 
 
 def _mosaic_at(u, n, size, cache, slots=None, fmt="webp", out=OUT):
@@ -509,10 +556,14 @@ def warm(u, upto, cache, size=None, slots=None, start=0):
                             _from.pop(key, None)
                             return
                     for j in range(done + 1, last + 1):
+                        _yield()
                         tile(u, j, cache, p["display_scale"])
                     if size:
                         for j in range(max(first, done + 1), last + 1):
-                            _mosaic_at(u, j, size, cache, slots)
+                            _yield()
+                            # a window that has asked for a later frame meanwhile (a burst) has passed this one
+                            if j >= _from[key]:
+                                _mosaic_at(u, j, size, cache, slots)
                     done = last
         except Exception as e:
             print(f"observation mosaic {u['key']} failed: {type(e).__name__}: {e}", flush=True)
