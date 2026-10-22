@@ -11,7 +11,8 @@ least mosaic.min_step of a frame apart, once scaled to one distance), its footpr
 MAX_FRAMES frames across, and the camera jumps rather than creeps: a movie (a stare, a ring or
 storm movie, a moon turning) drifts a little between frames until the drift adds up to "three
 places", so a pass whose steps between frames of one filter are at least mosaic.min_step of a
-frame less than MOVIE_JUMPS of the time is a movie, and plays as frames (no mosaic of any kind).
+frame less than MOVIE_JUMPS of the time (or that never takes a filter twice) is a movie, and plays
+as frames (no mosaic of any kind).
 Overlap is not required: SPICE places every tile.
 
 Every tile goes through color_image.processed_frame (repeat exposures merged in I/F, calibrated,
@@ -133,8 +134,10 @@ def _judge(u):
             if f in last:
                 steps.append(max(abs(p[0] - last[f][0]), abs(p[1] - last[f][1])) / FRAME)
             last[f] = p
-    u["jump_frac"] = float(np.mean([s >= mosaic.min_step for s in steps])) if steps else None
-    u["movie"] = bool(steps) and u["jump_frac"] < MOVIE_JUMPS
+    # no filter taken twice (a stare cycling its filters): every filter's mosaic would be one frame, so it plays
+    # as frames too
+    u["jump_frac"] = float(np.mean([s >= mosaic.min_step for s in steps])) if steps else 0.0 if len(pts) > 1 else None
+    u["movie"] = u["jump_frac"] is not None and u["jump_frac"] < MOVIE_JUMPS
     places = []
     for p in pts:
         if all(max(abs(p[0] - q[0]), abs(p[1] - q[1])) >= mosaic.min_step * FRAME for q in places):
