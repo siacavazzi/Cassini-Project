@@ -25,5 +25,5 @@ Each file is `{"source", "dataset", "time", "last_sample", "window", "bins", "se
   plus a log10 electric spectrogram (61 times × 73 frequencies).
 
 ## Not included
-- INMS densities. The Grand Finale density products (Waite et al. 2018) are not in PDS as a plunge time series, so these are count rates only.
+- INMS densities. I did not find a Grand Finale density product (Waite et al. 2018) in PDS PPI, so these are count rates only.
 - The MAG 1 s average dataset stops at orbit 292 (day 255), so full resolution was used instead.
