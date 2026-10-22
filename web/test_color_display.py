@@ -38,6 +38,21 @@ assert cw > 2.5 * body[0] and cw / cal.MAX_STRETCH - 1e-6 <= bw < cw   # white b
 x = np.array([0.5, 0.79, 1.0, 3.0])
 r = cal.roll_off(x, cal.SHOULDER)
 assert r[0] == 0.5 and r[1] == 0.79 and 0.9 < r[2] < 0.97 and r[3] < 1 and np.all(np.diff(r) > 0)
+# tone: the margin comes off the brightness, so a dim patch (a shadowed ring) keeps its color, and the sky stays black
+dim = [im.copy() for im in iofs]
+for c in range(3):
+    dim[c][20:60, 20:60] = sky[c] + 0.04 * body[c] / body.sum() * 3 + rng.normal(0, noise[c] / 4, (40, 40))
+with cal.looking("balanced"):
+    levels, margin, white, _ = cal._balanced_scale(dim)
+    toned = cal.tone([(im - lv) / white for im, lv in zip(dim, levels)], margin / white)
+lin = np.array([cal.decode(t[20:60, 20:60, 0].mean() / 255, 2.2) for t in toned])
+true = body / body[0]
+per_channel = np.array([(im[20:60, 20:60].mean() - lv - margin) for im, lv in zip(dim, levels)])
+print("dim patch ratios: tone", (lin / lin[0]).round(3), "per-channel black", (per_channel / per_channel[0]).round(3), "true", true.round(3))
+assert np.abs(lin / lin[0] - true).max() < 0.06                          # the color the camera measured
+assert np.abs(per_channel / per_channel[0] - true).max() > 0.05          # what a black per channel would draw
+sky_px = (yy > 200) & (xx < 60)
+assert np.mean([t[sky_px, 0] > 8 for t in toned]) < 0.01                 # the sky's noise stays dark
 # encode and decode are inverses, for a power and for sRGB
 v = np.linspace(0, 1, 101)
 for g in (2.2, 3.0, "srgb"):
