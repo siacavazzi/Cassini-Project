@@ -52,7 +52,7 @@ import stacking  # noqa: E402
 
 # bumped whenever the way observation mosaics are made changes, so older ones are not served again; one per
 # look (calibration.LOOKS), classic being the mosaics made before the balanced display model
-VERSIONS = {"balanced": "obs-v10", "classic": "obs-v9"}
+VERSIONS = {"balanced": "obs-v11", "classic": "obs-v9"}
 CANVAS = 2048        # longest side of the canvas the view is drawn on
 OUT = 1024           # longest side of the picture sent
 FRAME = 1024         # full resolution frame
@@ -367,6 +367,11 @@ def _window(u, p, mine, rect, cache):
 
 
 SAME_PLACE = 0.25   # of a frame: tiles of different filters this close are the same pointing (seams)
+# balanced look: solve the seams once per pointing on linear values (seams) instead of each filter on its own, as
+# the classic look does. Off: on real passes it changed the faint sky's tile colours (Saturn's Shadow, the Jupiter
+# approach mosaic's stray light) more often than it helped, and the gains it kept from collapsing to 0.909
+# collapse evenly, which only dims a mosaic a little
+SHARED_SEAMS = False
 
 
 def seams(u, p, tiles, rect, ref, cache):
@@ -408,7 +413,7 @@ def filter_mosaic(u, p, f, tiles, rect, cache, ref=None):
     """The filter f's mosaic of these tiles in the view rect, RGBA on the view's canvas (kept in the cache).
     ref = the filter the seams are solved on (balanced look, seams)."""
     mine = [t for t in tiles if t["filter"] == f and "offset" in t]
-    balanced = calibration.look() == "balanced"
+    balanced = calibration.look() == "balanced" and SHARED_SEAMS
     ref = ref or f
     solved_on = f"-{ref.replace('/', '_')}{sum(1 for t in tiles if t['filter'] == ref and 'offset' in t)}" if balanced else ""
     name = f"{f.replace('/', '_')}-{len(mine)}{solved_on}-{'_'.join(str(round(v)) for v in rect)}.png"
