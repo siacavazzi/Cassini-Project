@@ -337,6 +337,7 @@ body { color: var(--q-text); }
 #imgcard { width: clamp(300px, 32vw, 480px); }
 /* zoomed, the window still fits above the dock on a laptop screen: its square picture, details and filmstrip */
 #imgcard.zoomed { width: min(clamp(420px, 52vw, 860px), max(420px, calc(100vh - 330px))); }
+#imgcard.zoomed:has(.chans.on) { width: min(clamp(420px, 52vw, 860px), max(420px, calc(100vh - 480px))); }
 .camwin .body { background: none; padding: 2px 8px 8px; gap: 7px; }
 .well, .camwin.zoomed .well { border: 1px solid var(--q-line); border-radius: 4px; box-shadow: none; background: rgba(0,0,0,.55); color: var(--q-dim); height: 90px; }
 /* with no picture the window stays small; a frame opens it up to a full square */
@@ -351,6 +352,7 @@ body { color: var(--q-text); }
 /* the wide-angle camera: its own, smaller window beside the narrow-angle one, so the feeds never alternate */
 #wacard { top: calc(env(safe-area-inset-top, 0px) + 36px); left: calc(max(14px, env(safe-area-inset-left, 0px)) + clamp(300px, 32vw, 480px) + 10px); width: clamp(200px, 19vw, 300px); }
 #wacard.zoomed { width: min(clamp(300px, 34vw, 560px), max(300px, calc(100vh - 330px))); }
+#wacard.zoomed:has(.chans.on) { width: min(clamp(300px, 34vw, 560px), max(300px, calc(100vh - 480px))); }
 #wacard:not(:has(.well.has-frame, .well.kept)) { width: 200px; }
 #wacard .info { grid-template-columns: 42px 1fr; }
 /* colour sets: the channels that went into the composite, under the main picture */
