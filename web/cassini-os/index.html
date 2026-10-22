@@ -465,15 +465,49 @@ body.idle .camwin .well.has-frame { border-color: transparent; box-shadow: 0 6px
 .win.full :is(.rlwell, .mvwell) { aspect-ratio: auto; min-height: 0; height: 100%; }
 #moviecard.full .mvwell { height: calc(100dvh - 150px); }
 .win.full :is(.rlwell, .mvwell) canvas { object-fit: contain; }
-/* full view's save button: the shown picture at full resolution as a PNG (frame_server.py size=full) */
-.savepic { position: absolute; right: 6px; bottom: 5px; display: none; align-items: center; gap: 5px; padding: 3px 7px; border-radius: 4px;
-  font: 9px/1 var(--hudf); letter-spacing: .04em; color: var(--q-text); text-decoration: none; background: rgba(0,0,0,.55); border: 1px solid var(--q-line); cursor: pointer; }
-.savepic:hover { color: #fff; border-color: var(--q-accent); }
+/* the save menu (full view, or a held window): the picture shown and every level under and around it, at full
+   resolution as PNG (frame_server.py size=full, format=png, download=1) */
+.savewrap { position: absolute; right: 6px; bottom: 5px; display: none; z-index: 3; cursor: default; }
+.savepic { all: unset; display: flex; align-items: center; gap: 5px; padding: 3px 7px; border-radius: 4px; box-sizing: border-box;
+  font: 9px/1 var(--hudf); letter-spacing: .04em; color: var(--q-text); background: rgba(0,0,0,.55); border: 1px solid var(--q-line); cursor: pointer; }
+.savepic:hover, .savewrap.open .savepic { color: #fff; border-color: var(--q-accent); }
+.savepic:focus-visible { outline: 1px solid var(--q-accent); }
 .savepic svg { width: 10px; height: 10px; } .savepic svg * { fill: none; stroke: currentColor; stroke-width: 1.3; }
-.win.full .well.has-frame .savepic { display: flex; }
+.savepic .caret { font-size: 8px; opacity: .7; }
+:is(.win.full, .win[data-held]) .well.has-frame .savewrap { display: block; }
 .well.fullres .savepic { color: var(--q-accent); }
 .win.full .well.has-frame .shottag { right: 190px; }
-body.idle .win.full .savepic { opacity: .35; } body.idle .win.full .savepic:hover { opacity: 1; }
+body.idle .win.full .savewrap { opacity: .35; } body.idle .win.full .savewrap:hover { opacity: 1; }
+.savemenu { display: none; position: absolute; right: 0; bottom: calc(100% + 4px); min-width: 250px; margin: 0; padding: 4px 0; list-style: none; border-radius: 6px;
+  background: rgba(16,17,21,.97); border: 1px solid var(--q-line); box-shadow: 0 10px 30px rgba(0,0,0,.6); font: 11px/1.2 var(--ui); text-transform: none; letter-spacing: normal; text-align: left; }
+.savewrap.open .savemenu { display: block; }
+.savemenu li.sep { height: 1px; margin: 4px 0; background: var(--q-line); }
+.savemenu a { display: flex; justify-content: space-between; gap: 18px; padding: 6px 12px; color: var(--q-text); text-decoration: none; white-space: nowrap; }
+.savemenu a:hover, .savemenu a:focus-visible { background: rgba(138,182,255,.16); color: #fff; outline: none; }
+.savemenu a span { color: var(--q-dim); font-size: 10px; }
+.savemenu li.now a { color: #fff; }
+/* on a phone the save menu is a sheet along the bottom of the screen */
+body.phone .savemenu { position: fixed; left: 8px; right: 8px; bottom: calc(env(safe-area-inset-bottom, 0px) + 8px); min-width: 0; z-index: 2000; font-size: 13px; }
+body.phone .savemenu a { padding: 11px 14px; }
+/* drill-down: a window held on a part of its picture (a color composite's channel) shows where it is, and a badge
+   that brings it back to live (Esc does too); the channel open is ringed in the strip */
+.crumbs { display: flex; flex-wrap: wrap; align-items: center; gap: 3px 6px; font-size: 10.5px; line-height: 1.25; color: var(--q-dim); min-width: 0; }
+.crumbs[hidden] { display: none; }
+.crumbs button { all: unset; cursor: pointer; color: var(--q-accent); min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; max-width: 100%; }
+.crumbs button:hover { text-decoration: underline; }
+.crumbs .here { color: var(--q-text); min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.crumbs .sep { opacity: .6; }
+.crumbs .heldbadge { margin-left: auto; padding: 2px 7px; border-radius: 9px; border: 1px solid rgba(227,179,65,.7); color: #e3b341; font-size: 9.5px; }
+.crumbs .heldbadge:hover { text-decoration: none; background: rgba(227,179,65,.14); }
+.win[data-held] .well { border-color: rgba(227,179,65,.35); }
+.chans.drill figure:not(.waiting) { cursor: pointer; }
+.chans.drill figure:not(.waiting):hover .tile { border-color: rgba(255,255,255,.6); }
+.chans figure.sel .tile { border-color: var(--q-accent); box-shadow: 0 0 0 1px var(--q-accent); }
+.chans figure.sel figcaption b { color: #fff; }
+.camwin.full .body:has(> .crumbs:not([hidden])) { grid-template-rows: auto minmax(0, 1fr) auto auto; }
+.bodywin.full .pane:has(> .crumbs:not([hidden])) { grid-template-rows: auto minmax(0, 1fr) auto auto; }
+body.idle .camwin:has(.well.has-frame) .crumbs { opacity: 0; }
+body.idle #app .win.full .crumbs { opacity: 1; }
 .well, .rlwell, .mvwell { cursor: zoom-in; } .win.full :is(.well, .rlwell, .mvwell) { cursor: zoom-out; }
 /* resting: a window in full view keeps its dark backdrop and its picture; only the title bar fades (!important: the
    rules that fade every window and clear the camera windows' frames are id-strength) */
@@ -836,6 +870,8 @@ body.phone #excard:not(.full) { width: calc(100% - 16px) !important; left: 8px !
 .dk::before { content: ""; position: absolute; left: 50%; bottom: -4px; width: 4px; height: 4px; margin-left: -2px; border-radius: 50%; background: transparent; }
 .dk.open::before { background: rgba(232,236,242,.7); }
 .dk.here::before { background: var(--q-accent); box-shadow: 0 0 4px var(--q-accent); }
+/* a window held on a part of its picture (drill-down): an amber dot on its body (or its tile), so it is easy to find and release */
+.dk.held::before { background: #e3b341; box-shadow: 0 0 4px rgba(227,179,65,.8); }
 #appdock.side-left .dk::before { left: -4px; bottom: 50%; margin: 0 0 -2px; }
 #appdock.side-right .dk::before { left: auto; right: -4px; bottom: 50%; margin: 0 0 -2px; }
 /* the name, above the icon (beside it on a side dock) */
@@ -1229,7 +1265,7 @@ body.phone.has-dock { --appdockh: 50px; }
   D({ key: "interface.hudline", section: "Interface", label: "Flight data strip", type: "toggle", value: true,
       hint: "Target, altitude, speed, camera and pointing along the top of the view." });
   cls("interface.hudline", "s-nohudline", false);
-  // Cameras (the camera windows read cameras.composites, cameras.steady, cameras.mosaics, cameras.fullRes, cameras.fullDelay and cameras.stale)
+  // Cameras (the camera windows read cameras.composites, cameras.steady, cameras.mosaics, cameras.fullRes, cameras.fullDelay, cameras.drill and cameras.stale)
   D({ key: "cameras.composites", section: "Cameras", label: "Color composites", type: "toggle", value: true,
       hint: "Once a filter set is complete, show its color picture. Off shows every frame on its own." });
   D({ key: "cameras.channels", section: "Cameras", label: "Filter channels", type: "toggle", value: true,
@@ -1247,6 +1283,8 @@ body.phone.has-dock { --appdockh: 50px; }
       hint: "A picture in full view (double-click it, F or the title bar button) loads at the camera's full resolution, with a button to save it. Live playback, bursts and movies stay at the smaller size." });
   D({ key: "cameras.fullDelay", section: "Cameras", label: "Full resolution while playing after", type: "range", value: 1.5, min: 0.5, max: 10, step: 0.5, unit: "s",
       hint: "While the timeline plays, a picture in full view loads in full once it has stayed up this long; paused, it loads at once." });
+  D({ key: "cameras.drill", section: "Cameras", label: "Open channels in place", type: "toggle", value: true,
+      hint: "Click a channel under a color picture to open it in that window on the picture's own scale. The window holds still until you press Esc or its held badge; other windows play on." });
   D({ key: "cameras.stale", section: "Cameras", label: "Clear a quiet camera after", type: "range", value: 6, min: 1, max: 48, step: 1, unit: "h",
       hint: "A camera that has taken nothing for this long shows Idle instead of its last picture." });
 
@@ -2001,6 +2039,19 @@ body.phone.has-dock { --appdockh: 50px; }
     return "http://localhost:8765";
   })();
   const CH_COLOUR = ["#e5534b", "#57ab5a", "#539bf5"];
+  // the camera windows held on a part of their picture (drill-down, in cameraFeed); Esc brings one back to live: the
+  // held window in full view, else the one in front, else the one held last. A panel in front (Settings, a reel...)
+  // takes its Esc first
+  const holding = new Set();
+  window.cassiniHeld = holding;
+  window.addEventListener("keydown", e => {
+    if (e.key !== "Escape" || !holding.size || e.metaKey || e.ctrlKey || e.altKey || /^(INPUT|SELECT|TEXTAREA)$/.test(e.target.tagName)) return;
+    if (document.querySelector(".menu.open") || (window.cassiniMovie && window.cassiniMovie.on)) return;
+    const panel = document.querySelector("#settings.front, #hlcard.front, #reelcard.front, #excard.front");
+    if (panel && !panel.hidden) return;
+    const list = [...holding], h = list.find(x => x.win.classList.contains("full")) || list.find(x => x.win.classList.contains("front")) || list[list.length - 1];
+    e.stopImmediatePropagation(); h.release();
+  }, true);
   // One window per camera, so the feed never flicks between narrow-angle and wide-angle frames. Each shows
   // its camera's latest frame, or, once a filter set's channels are all taken, the set's colour composite
   // (made by the frame server) with the channels that went into it underneath.
@@ -2024,19 +2075,62 @@ body.phone.has-dock { --appdockh: 50px; }
     const capped = () => { const s = size(); return s === "full" ? 1024 : s; };
     const frameUrl = (id, sz) => `${FRAMES}/frames/${id}.webp?size=${sz || size()}`;
     const colorUrl = (s, sz) => `${FRAMES}/frames/color.webp?ids=${s.use.map(k => catalog.id[k]).join(",")}&size=${sz || size()}`;
-    // the shown picture at full resolution as a PNG to save (the frame server names the file)
-    const saveUrl = url => url.replace(/size=[^&]*/, "size=full") + "&format=png&download=1";
-    let save = well.querySelector(".savepic");
-    if (!save) {
-      save = document.createElement("a"); save.className = "savepic"; save.title = "Save this picture at full resolution (PNG)";
-      save.innerHTML = '<svg viewBox="0 0 10 10" aria-hidden="true"><path d="M5 1v5.5M2.5 4.5 5 7l2.5-2.5M1.5 9h7"/></svg><span></span>';
-      save.addEventListener("click", e => e.stopPropagation());
-      save.addEventListener("dblclick", e => e.stopPropagation());
-      well.appendChild(save);
+    // a picture at full resolution as a PNG to save (the frame server names the file)
+    const saveUrl = url => (/size=/.test(url) ? url.replace(/size=[^&]*/, "size=full") : url + (url.includes("?") ? "&" : "?") + "size=full") + "&format=png&download=1";
+    // the save menu: the picture shown and the levels under and around it (savesFor below), each at full resolution
+    let saveWrap = well.querySelector(".savewrap");
+    if (!saveWrap) {
+      saveWrap = document.createElement("div"); saveWrap.className = "savewrap";
+      saveWrap.innerHTML = '<button class="savepic" aria-haspopup="true" aria-expanded="false" title="Save at full resolution (PNG)"><svg viewBox="0 0 10 10" aria-hidden="true"><path d="M5 1v5.5M2.5 4.5 5 7l2.5-2.5M1.5 9h7"/></svg><span></span><i class="caret">▾</i></button><ul class="savemenu" role="menu"></ul>';
+      for (const t of ["click", "dblclick", "pointerdown"]) saveWrap.addEventListener(t, e => e.stopPropagation());
+      well.appendChild(saveWrap);
     }
-    // the save button's link and its label: the picture's size once the full one is up
-    function saving(url) {
-      if (url) save.href = saveUrl(url);
+    const save = saveWrap.querySelector(".savepic"), saveMenu = saveWrap.querySelector(".savemenu");
+    save.addEventListener("click", () => saveOpen(!saveWrap.classList.contains("open")));
+    saveMenu.addEventListener("click", e => { if (e.target.closest("a")) setTimeout(() => saveOpen(false), 0); });
+    document.addEventListener("click", () => saveOpen(false));
+    window.addEventListener("keydown", e => { if (e.key === "Escape" && saveWrap.classList.contains("open")) { e.stopImmediatePropagation(); saveOpen(false); } }, true);
+    function saveOpen(on) {
+      if (on) {
+        const rows = savesFor(shot.dataset.src || "");
+        saveMenu.innerHTML = rows.map(r => r === "-" ? '<li class="sep" role="separator"></li>'
+          : `<li class="${r.now ? "now" : ""}"><a role="menuitem" href="${r.href}" download>${r.label}<span>${r.note}</span></a></li>`).join("");
+      }
+      saveWrap.classList.toggle("open", !!on); save.setAttribute("aria-expanded", String(!!on));
+    }
+    // what can be saved from the picture at url: the picture as shown first, then the parts and sources of it
+    // (a composite's channels on its scale; a frame on the pipeline's scale and as archived), each a frame server route
+    const nameOf = id => { const k = kOf(id); return k >= 0 ? `${fname(k)} ${Math.round(nmOf(k))} nm` : id; };
+    const kindOf = ids => { const k = kOf(ids[0]), si = k >= 0 ? catalog.setOf[k] : -1; return si >= 0 ? KIND[catalog.sets[si].kind].toLowerCase() : ids.length === 2 ? "two-filter color" : "color"; };
+    function savesFor(url) {
+      if (!url) return [];
+      const u = new URL(url, location.href), q = u.searchParams, rows = [];
+      const frame = id => [
+        { label: "This frame on its own scale", note: "PNG · calibrated", href: saveUrl(`${FRAMES}/frames/processed/${id}.webp`) },
+        { label: "Archive frame, unprocessed", note: "PNG · raw", href: `${FRAMES}/frames/${id}.png?download=1` }];
+      if (u.pathname.endsWith("/frames/color.webp")) {
+        const ids = (q.get("ids") || "").split(","), ch = q.get("channel"), slots = ids.length === 2 ? [0, 2] : [0, 1, 2];
+        const whole = { label: `Whole ${kindOf(ids)} picture`, note: "PNG", href: saveUrl(url.replace(/&channel=\d/, "")) };
+        if (ch !== null) {
+          const id = ids[slots.indexOf(+ch)];
+          rows.push({ label: "This channel as shown", note: "PNG · composite's scale", href: saveUrl(url), now: true });
+          if (id) rows.push(...frame(id));
+          rows.push("-", whole);
+        } else {
+          rows.push(Object.assign(whole, { label: `This ${kindOf(ids)} picture`, now: true }), "-");
+          ids.forEach((id, j) => rows.push({ label: `${nameOf(id)} channel, as in it`, note: "PNG", href: saveUrl(`${url}&channel=${slots[j]}`) }));
+        }
+      } else if (/\/frames\/mosaic\//.test(u.pathname)) {
+        rows.push({ label: "Whole mosaic, as shown", note: "PNG", href: saveUrl(url), now: true });
+      } else {
+        const m = u.pathname.match(/\/frames\/(?:processed\/)?([NW]\d{10}_\d+)\.webp$/);
+        rows.push({ label: "This frame as shown", note: "PNG", href: saveUrl(url), now: true });
+        if (m) rows.push(...frame(m[1]).filter(r => !(u.pathname.includes("/processed/") && r.note.includes("calibrated"))));
+      }
+      return rows;
+    }
+    // the save button's label: the picture's size once the full one is up
+    function saving() {
       const full = /size=full/.test(shot.dataset.src || "") && shot.naturalWidth;
       save.querySelector("span").textContent = full ? `Full resolution · ${shot.naturalWidth} × ${shot.naturalHeight}` : "Save full resolution";
       well.classList.toggle("fullres", !!full);
@@ -2092,6 +2186,7 @@ body.phone.has-dock { --appdockh: 50px; }
       well.classList.add("has-frame"); well.classList.remove("kept"); well.classList.toggle("composite", v.set >= 0);
       if (!keep) card.querySelector(".kindtag").textContent = v.set >= 0 ? KIND[catalog.sets[v.set].kind].toUpperCase() : "";
       if (v.set >= 0) { channelsFrom(im, catalog.sets[v.set]); howMade(v); }
+      drillable();
       if (v.tile && !keep && !mosaicPass(v.k)) mosaicOf(v);   // a frame kept behind its pass's mosaic, or of a pass known to be one, asked for it already (update)
       // the sound (sound.html) hears every picture that goes up: its camera, filter wavelength, target and window
       // (keep: a pass mosaic stays up, so this frame rings when its tile shows, below in mosaicOf)
@@ -2104,7 +2199,7 @@ body.phone.has-dock { --appdockh: 50px; }
       im.fetchPriority = v.warm ? "low" : "high";   // the picture wanted now goes ahead of look-ahead requests
       im.onload = () => {
         lane[which] = null; warmed.add(v.key);
-        if (want && !v.warm && v.cat === catalog && fits(v)) display(v, im);   // no want: the camera went idle while this loaded
+        if (want && !hold && !v.warm && v.cat === catalog && fits(v)) display(v, im);   // no want: the camera went idle (or was held) while this loaded
         pump();
       };
       im.onerror = () => {
@@ -2178,7 +2273,7 @@ body.phone.has-dock { --appdockh: 50px; }
     const mLane = { pass: { busy: false, next: null, last: "" }, other: { busy: false, next: null, last: "" } };
     const warnedObs = new Set();   // observations already named to the server ahead of time (update)
     function mosaicOf(w, pass) {
-      if (window.cassiniMosaics === false || !S.get("cameras.mosaics")) return;
+      if (hold || window.cassiniMosaics === false || !S.get("cameras.mosaics")) return;
       const sz = size(), id = catalog.id[w.set >= 0 && !pass ? catalog.sets[w.set].use[0] : w.k], ask = `${id}:${sz}`;
       const L = pass ? mLane.pass : mLane.other;
       if (ask === L.last) return;
@@ -2204,7 +2299,7 @@ body.phone.has-dock { --appdockh: 50px; }
         // a pass's mosaic shows while the window is still in the pass and the clock is not before its frame,
         // unless the mosaic up already has a later frame (and is not ahead of the clock after a scrub back);
         // a rolling mosaic only while its frame is the one shown
-        const late = () => { const k = kNow(); return k < 0 || (rep && rep.observation
+        const late = () => { const k = kNow(); return hold || k < 0 || (rep && rep.observation
           ? lastK < 0 || catalog.obs[lastK] !== catalog.obs[k] || catalog.et[k] > catalog.et[lastK]
             || (obsShown === catalog.obs[k] && obsK >= 0 && catalog.et[obsK] >= catalog.et[k] && catalog.et[obsK] <= catalog.et[lastK]
               && !(obsK === k && rank(sz) > obsSize))
@@ -2217,7 +2312,7 @@ body.phone.has-dock { --appdockh: 50px; }
         shot.src = mosaicUrl = URL.createObjectURL(blob);
         shot.dataset.src = r.url; shot.dataset.report = r.headers.get("X-Reel") || "";
         saving(r.url);
-        well.classList.add("mosaic");
+        well.classList.add("mosaic"); drillable();
         if (rep && rep.observation) {
           mosaicPasses.add(passOf(k));
           if (window.cassiniPicture && rep.mosaic > (obsShown === catalog.obs[k] ? obsTiles : 0)) window.cassiniPicture({ cam, body, win, k, nm: nmOf(k), set, use: set >= 0 ? catalog.sets[set].use.map(nmOf) : null, tile: rep.mosaic, of: rep.of });
@@ -2261,6 +2356,7 @@ body.phone.has-dock { --appdockh: 50px; }
         chans.classList.add("on");
         if (shown && shown.set >= 0 && catalog.sets[shown.set] === s) channelsFrom(shot, s);
       }
+      drillable();
       chans.querySelectorAll("figure").forEach((fig, j) => {
         const q = s.use[j], taken = catalog.et[q] <= et, tile = fig.querySelector(".tile");
         fig.classList.toggle("now", q === k); fig.classList.toggle("waiting", !taken);
@@ -2298,6 +2394,87 @@ body.phone.has-dock { --appdockh: 50px; }
         fig.classList.remove("waiting"); fig.querySelector(".tile").replaceChildren(t);
       }
     }
+    // ---- drill-down: the window held on a part of its picture ----
+    // Clicking a channel under a color composite opens that channel in the same window: the composite's own channel
+    // at full size (color.webp &channel=, cut from the composite, so on its scale and aligned as in it). The window
+    // is then held: it stops following the clock (other windows play on), keeps the levels it went down as a
+    // breadcrumb, is silent, is never closed by linger nor counted by crowding (bodywin.html), shows a dot in the
+    // dock, and a flag records the path (shot.dataset.path). Esc, the badge or the camera's level bring it back to live.
+    let hold = null;   // { s: the set, levels: [{ kind: "composite" | "channel", label, url(size), ch }] }
+    const crumbs = document.createElement("div");
+    crumbs.className = "crumbs"; crumbs.hidden = true; crumbs.setAttribute("aria-label", "Where this window is");
+    well.parentNode.insertBefore(crumbs, well);
+    crumbs.addEventListener("click", e => {
+      e.stopPropagation();
+      const b = e.target.closest("button"); if (!b) return;
+      if (b.classList.contains("heldbadge") || b.dataset.lv === "live") return release();
+      hold.levels.length = +b.dataset.lv + 1; showLevel();
+    });
+    const drillOn = () => S.get("cameras.drill") !== false;
+    // the strip opens channels while the set's composite is up, or the window is held on that set
+    function drillable() {
+      const s = hold ? hold.s : shown && shown.set >= 0 && !well.classList.contains("mosaic") && well.classList.contains("has-frame") ? catalog.sets[shown.set] : null;
+      const on = !!s && s === stripSet && drillOn();
+      chans.classList.toggle("drill", on);
+      const top = hold && hold.levels[hold.levels.length - 1];
+      chans.querySelectorAll("figure").forEach(fig => {
+        fig.classList.toggle("sel", !!top && top.kind === "channel" && +fig.dataset.ch === top.ch);
+        if (on) { fig.tabIndex = 0; fig.setAttribute("role", "button"); fig.title = `Open the ${fig.querySelector("b").textContent} channel`; }
+        else { fig.removeAttribute("tabindex"); fig.removeAttribute("role"); fig.title = ""; }
+      });
+      return on ? s : null;
+    }
+    function openChannel(fig) {
+      const s = drillable(); if (!s || fig.classList.contains("waiting")) return;
+      const ch = +fig.dataset.ch, j = [...chans.querySelectorAll("figure")].indexOf(fig), q = s.use[j];
+      const top = hold && hold.levels[hold.levels.length - 1];
+      if (top && top.kind === "channel" && top.ch === ch) { hold.levels.length = 1; return showLevel(); }   // the open channel again: back up
+      if (!hold) {
+        hold = { s, levels: [{ kind: "composite", label: `${KIND[s.kind]} · ${s.use.map(fname).join(" ")}`, url: sz => colorUrl(s, sz), ids: s.use.map(k => catalog.id[k]) }] };
+        want = null; mosaicStop(); win.dataset.held = "1"; holding.add(feedApi);
+      }
+      hold.levels.length = 1;
+      hold.levels.push({ kind: "channel", ch, label: `${fname(q)} ${Math.round(nmOf(q))} nm · ${catalog.id[q]}`, name: fname(q), id: catalog.id[q], url: sz => `${colorUrl(s, sz)}&channel=${ch}` });
+      showLevel();
+    }
+    chans.addEventListener("click", e => { const fig = e.target.closest("figure"); if (fig && chans.classList.contains("drill")) { e.stopPropagation(); openChannel(fig); } });
+    chans.addEventListener("keydown", e => { const fig = e.target.closest("figure"); if (fig && e.key === "Enter" && chans.classList.contains("drill")) { e.preventDefault(); openChannel(fig); } });
+    let levelKey = "";
+    // the held window's picture: its top level, at the size the window wants (full view: full, once held long enough)
+    function showLevel(again) {
+      const top = hold.levels[hold.levels.length - 1], url = top.url(size());
+      if (!again) shownAt = performance.now();
+      crumbs.hidden = false;
+      crumbs.innerHTML = '<button data-lv="live" title="Back to the live camera">Live</button><span class="sep">›</span>' + hold.levels.map((l, i) => i < hold.levels.length - 1
+        ? `<button data-lv="${i}">${l.label}</button><span class="sep">›</span>` : `<span class="here" title="${l.label}">${l.label}</span>`).join("")
+        + '<button class="heldbadge" title="Back to live (Esc)">held · Esc back to live</button>';
+      // flags (flag.html) record where the window is
+      shot.dataset.path = JSON.stringify(hold.levels.map(l => ({ kind: l.kind, label: l.label, src: l.url(capped()) })));
+      card.querySelector(".kindtag").textContent = top.kind === "channel" ? `CHANNEL · ${top.name} · AS IN THE COMPOSITE` : KIND[hold.s.kind].toUpperCase();
+      card.querySelector(".shottag").textContent = top.kind === "channel" ? top.id : hold.levels[0].ids.join(" ");
+      drillable();
+      if (url === levelKey) return;
+      const im = new Image(); im.crossOrigin = "anonymous";
+      im.onload = () => {
+        if (!hold || hold.levels[hold.levels.length - 1] !== top || top.url(size()) !== url) return;
+        levelKey = url;
+        shot.src = im.src; shot.dataset.src = url; shot.dataset.report = "";
+        well.classList.add("has-frame", "composite"); well.classList.remove("mosaic", "kept");
+        if (top.kind === "composite") channelsFrom(im, hold.s);
+        saving();
+      };
+      im.src = url;
+    }
+    function release() {
+      if (!hold) return;
+      hold = null; levelKey = ""; crumbs.hidden = true; crumbs.innerHTML = ""; delete win.dataset.held; holding.delete(feedApi);
+      delete shot.dataset.path; saveOpen(false);
+      // back to live: the clock's picture again, from the top
+      lastK = -2; shownKey = null; shown = null; obsShown = null; obsK = -1; stripKey = "";
+      for (const L of Object.values(mLane)) { L.last = ""; L.next = null; }
+      if (typeof catalog !== "undefined" && catalog && catalog.byCam) update(true);
+    }
+    const feedApi = { win, release, get held() { return !!hold; } };
     let cat = null;
     function update(force) {
       if (catalog !== cat) {   // another mission year (or the months around this one) loaded
@@ -2308,6 +2485,7 @@ body.phone.has-dock { --appdockh: 50px; }
         if (obsK < 0) { obsShown = null; shapeOf = null; }
       }
       if (win.hidden && !force) { mosaicStop(); return; }   // a closed or tucked-away window fetches nothing; it catches up when shown
+      if (hold) { if (force) showLevel(true); return; }   // held: the clock moves on without it (a bigger window asks for the bigger picture)
       if (window.cassiniMovie && window.cassiniMovie.on) { mosaicStop(); return; }   // movie mode has the frame server to itself (its requests are capped)
       const p = lastOfCam(cam, state.et, body), k = p < 0 ? -1 : framesOf(cam, body).ks[p];
       const live = k >= 0 && state.et - catalog.et[k] < 180;
@@ -2385,6 +2563,7 @@ body.phone.has-dock { --appdockh: 50px; }
     }
     new ResizeObserver(retier).observe(well);
     update.retier = retier;
+    update.release = release;
     return update;
   }
   const feeds = [...document.querySelectorAll(".camwin")].map(cameraFeed);
@@ -2503,7 +2682,7 @@ body.phone.has-dock { --appdockh: 50px; }
     return out;
   }
   async function capture(w) {
-    let canvas = null, src = null, report = null, ids = [], what = null;
+    let canvas = null, src = null, report = null, ids = [], what = null, path = null;
     if (w.id === "moviecard") {
       const M = window.cassiniMovie && window.cassiniMovie.state, b = M && M.cur && M.buf.get(M.cur.id);
       if (!M || !M.cur) return null;
@@ -2518,8 +2697,10 @@ body.phone.has-dock { --appdockh: 50px; }
       const well = w.querySelector(".well"), shot = w.querySelector(".shot");
       if (!well || !well.classList.contains("has-frame") || !shot.naturalWidth) return null;
       canvas = fromImg(shot); src = shot.dataset.src || shot.src;
+      try { path = shot.dataset.path ? JSON.parse(shot.dataset.path) : null; } catch (e) {}
       try { report = shot.dataset.report ? JSON.parse(shot.dataset.report) : null; } catch (e) {}
       what = well.classList.contains("mosaic") ? (report && report.observation ? "pass mosaic" : "mosaic") : well.classList.contains("composite") ? "color composite" : "frame";
+      if (path && path.length && path[path.length - 1].kind === "channel") what = "composite channel";
       if (!report && /\/color\.webp/.test(src)) report = await fetch(src).then(r => JSON.parse(r.headers.get("X-Composite") || "null"), () => null);
       const tag = (w.querySelector(".shottag") || {}).textContent || "";
       ids = tag.match(ID) || [];
@@ -2533,7 +2714,7 @@ body.phone.has-dock { --appdockh: 50px; }
       tiles = [];
       for (let k = 0; k < catalog.id.length; k++) if (catalog.obs[k] === report.observation && catalog.cam[k] === cam && catalog.et[k] <= state.et) tiles.push(catalog.id[k]);
     }
-    return { canvas, png: await toPng(canvas), src, report, ids, what, labels: texts(w), info: infoFields(w), tiles };
+    return { canvas, png: await toPng(canvas), src, report, ids, what, labels: texts(w), info: infoFields(w), tiles, path };
   }
 
   // ---- the panel: the picture is taken the moment the flag is pressed; the note can follow at leisure ----
@@ -2592,6 +2773,7 @@ body.phone.has-dock { --appdockh: 50px; }
       window: { id: w.id, title: p.title, kind: w.id === "moviecard" ? "movie" : w.id === "reelcard" ? "reel" : w.classList.contains("bodywin") ? "body window" : "camera window",
         full: w.classList.contains("full"), zoomed: w.classList.contains("zoomed"), width: Math.round(w.getBoundingClientRect().width), height: Math.round(w.getBoundingClientRect().height) },
       shown: { what: got.what, src: got.src ? new URL(got.src, location.href).href : null, report: got.report || null, labels: got.labels, info: got.info, observation_frames: got.tiles,
+        path: got.path ? got.path.map(l => Object.assign({}, l, { src: new URL(l.src, location.href).href })) : null,
         width: got.canvas.width, height: got.canvas.height },
       ids: got.ids, frames: got.ids.map(frameInfo),
       movie: !!(window.cassiniMovie && window.cassiniMovie.on), playing: !!state.playing, speed: state.speed,
@@ -3047,12 +3229,14 @@ body.phone.has-dock { --appdockh: 50px; }
     const keepKeys = wanted.flatMap(n => CAMS.map(c => key(n, c))).filter(fresh);
     for (const k of B.dismissed) if (!keepKeys.includes(k)) B.dismissed.delete(k);
     const showKeys = keepKeys.filter(k => !B.dismissed.has(k));
+    // a window held on a part of its picture (drill-down) stays until it goes back to live, and is not counted
+    const held = [...B.wins].filter(([, w]) => !w.closing && w.el.dataset.held).map(([k]) => k);
     // at most max targets have windows, the most recently imaged first
-    const bodies = [...new Set(showKeys.map(k => k.split("|")[0]))].sort((a, b) => latest(b) - latest(a)).slice(0, Math.max(1, B.max));
-    const show = showKeys.filter(k => bodies.includes(k.split("|")[0]));
+    const bodies = [...new Set(showKeys.filter(k => !held.includes(k)).map(k => k.split("|")[0]))].sort((a, b) => latest(b) - latest(a)).slice(0, Math.max(1, B.max));
+    const show = showKeys.filter(k => bodies.includes(k.split("|")[0])).concat(held);
     for (const k of [...B.wins.keys()]) if (!show.includes(k)) close(k);
     // oldest target first, so the newest windows land on top; the narrow-angle window first, so the wide-angle one sits beside it
-    for (const name of bodies.slice().reverse()) for (const cam of CAMS) {
+    for (const name of [...new Set(bodies.concat(held.map(k => k.split("|")[0])))].reverse()) for (const cam of CAMS) {
       const k = key(name, cam); if (!show.includes(k)) continue;
       let w = B.wins.get(k);
       if (!w || w.closing) w = open(name, cam);
@@ -4081,12 +4265,14 @@ body.phone.has-dock { --appdockh: 50px; }
   }
   // which apps are open and which body is in view
   function marks() {
+    for (const [w, t] of tiles) t.classList.toggle("held", !!w.dataset.held);
     for (const b of dock.children) {
       const k = b.dataset && b.dataset.key; if (!k) continue;
       if (k.startsWith("body:")) {
         const n = k.slice(5);
         b.classList.toggle("here", typeof state !== "undefined" && state.focus === n);
         b.classList.toggle("open", bodyWins(n).length > 0);
+        b.classList.toggle("held", bodyWins(n).some(w => w.dataset.held));
       } else if (k.startsWith("app:")) {
         const a = APPS.find(a => "app:" + a.key === k); b.classList.toggle("open", !!a && a.open());
       }

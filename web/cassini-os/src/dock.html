@@ -41,6 +41,8 @@
 .dk::before { content: ""; position: absolute; left: 50%; bottom: -4px; width: 4px; height: 4px; margin-left: -2px; border-radius: 50%; background: transparent; }
 .dk.open::before { background: rgba(232,236,242,.7); }
 .dk.here::before { background: var(--q-accent); box-shadow: 0 0 4px var(--q-accent); }
+/* a window held on a part of its picture (drill-down): an amber dot on its body (or its tile), so it is easy to find and release */
+.dk.held::before { background: #e3b341; box-shadow: 0 0 4px rgba(227,179,65,.8); }
 #appdock.side-left .dk::before { left: -4px; bottom: 50%; margin: 0 0 -2px; }
 #appdock.side-right .dk::before { left: auto; right: -4px; bottom: 50%; margin: 0 0 -2px; }
 /* the name, above the icon (beside it on a side dock) */
@@ -212,12 +214,14 @@ body.phone.has-dock { --appdockh: 50px; }
   }
   // which apps are open and which body is in view
   function marks() {
+    for (const [w, t] of tiles) t.classList.toggle("held", !!w.dataset.held);
     for (const b of dock.children) {
       const k = b.dataset && b.dataset.key; if (!k) continue;
       if (k.startsWith("body:")) {
         const n = k.slice(5);
         b.classList.toggle("here", typeof state !== "undefined" && state.focus === n);
         b.classList.toggle("open", bodyWins(n).length > 0);
+        b.classList.toggle("held", bodyWins(n).some(w => w.dataset.held));
       } else if (k.startsWith("app:")) {
         const a = APPS.find(a => "app:" + a.key === k); b.classList.toggle("open", !!a && a.open());
       }

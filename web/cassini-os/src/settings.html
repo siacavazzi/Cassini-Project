@@ -198,7 +198,7 @@ body.phone .srow input[type=range] { width: 96px; }
   D({ key: "interface.hudline", section: "Interface", label: "Flight data strip", type: "toggle", value: true,
       hint: "Target, altitude, speed, camera and pointing along the top of the view." });
   cls("interface.hudline", "s-nohudline", false);
-  // Cameras (the camera windows read cameras.composites, cameras.steady, cameras.mosaics, cameras.fullRes, cameras.fullDelay and cameras.stale)
+  // Cameras (the camera windows read cameras.composites, cameras.steady, cameras.mosaics, cameras.fullRes, cameras.fullDelay, cameras.drill and cameras.stale)
   D({ key: "cameras.composites", section: "Cameras", label: "Color composites", type: "toggle", value: true,
       hint: "Once a filter set is complete, show its color picture. Off shows every frame on its own." });
   D({ key: "cameras.channels", section: "Cameras", label: "Filter channels", type: "toggle", value: true,
@@ -216,6 +216,8 @@ body.phone .srow input[type=range] { width: 96px; }
       hint: "A picture in full view (double-click it, F or the title bar button) loads at the camera's full resolution, with a button to save it. Live playback, bursts and movies stay at the smaller size." });
   D({ key: "cameras.fullDelay", section: "Cameras", label: "Full resolution while playing after", type: "range", value: 1.5, min: 0.5, max: 10, step: 0.5, unit: "s",
       hint: "While the timeline plays, a picture in full view loads in full once it has stayed up this long; paused, it loads at once." });
+  D({ key: "cameras.drill", section: "Cameras", label: "Open channels in place", type: "toggle", value: true,
+      hint: "Click a channel under a color picture to open it in that window on the picture's own scale. The window holds still until you press Esc or its held badge; other windows play on." });
   D({ key: "cameras.stale", section: "Cameras", label: "Clear a quiet camera after", type: "range", value: 6, min: 1, max: 48, step: 1, unit: "h",
       hint: "A camera that has taken nothing for this long shows Idle instead of its last picture." });
 

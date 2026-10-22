@@ -179,12 +179,14 @@ body.idle #app .bodywin:has(.well.has-frame) { opacity: 1; pointer-events: auto;
     const keepKeys = wanted.flatMap(n => CAMS.map(c => key(n, c))).filter(fresh);
     for (const k of B.dismissed) if (!keepKeys.includes(k)) B.dismissed.delete(k);
     const showKeys = keepKeys.filter(k => !B.dismissed.has(k));
+    // a window held on a part of its picture (drill-down) stays until it goes back to live, and is not counted
+    const held = [...B.wins].filter(([, w]) => !w.closing && w.el.dataset.held).map(([k]) => k);
     // at most max targets have windows, the most recently imaged first
-    const bodies = [...new Set(showKeys.map(k => k.split("|")[0]))].sort((a, b) => latest(b) - latest(a)).slice(0, Math.max(1, B.max));
-    const show = showKeys.filter(k => bodies.includes(k.split("|")[0]));
+    const bodies = [...new Set(showKeys.filter(k => !held.includes(k)).map(k => k.split("|")[0]))].sort((a, b) => latest(b) - latest(a)).slice(0, Math.max(1, B.max));
+    const show = showKeys.filter(k => bodies.includes(k.split("|")[0])).concat(held);
     for (const k of [...B.wins.keys()]) if (!show.includes(k)) close(k);
     // oldest target first, so the newest windows land on top; the narrow-angle window first, so the wide-angle one sits beside it
-    for (const name of bodies.slice().reverse()) for (const cam of CAMS) {
+    for (const name of [...new Set(bodies.concat(held.map(k => k.split("|")[0])))].reverse()) for (const cam of CAMS) {
       const k = key(name, cam); if (!show.includes(k)) continue;
       let w = B.wins.get(k);
       if (!w || w.closing) w = open(name, cam);

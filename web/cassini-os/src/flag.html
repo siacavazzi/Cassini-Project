@@ -105,7 +105,7 @@ body.phone #flagtoast { bottom: calc(env(safe-area-inset-bottom, 0px) + 12px); }
     return out;
   }
   async function capture(w) {
-    let canvas = null, src = null, report = null, ids = [], what = null;
+    let canvas = null, src = null, report = null, ids = [], what = null, path = null;
     if (w.id === "moviecard") {
       const M = window.cassiniMovie && window.cassiniMovie.state, b = M && M.cur && M.buf.get(M.cur.id);
       if (!M || !M.cur) return null;
@@ -120,8 +120,10 @@ body.phone #flagtoast { bottom: calc(env(safe-area-inset-bottom, 0px) + 12px); }
       const well = w.querySelector(".well"), shot = w.querySelector(".shot");
       if (!well || !well.classList.contains("has-frame") || !shot.naturalWidth) return null;
       canvas = fromImg(shot); src = shot.dataset.src || shot.src;
+      try { path = shot.dataset.path ? JSON.parse(shot.dataset.path) : null; } catch (e) {}
       try { report = shot.dataset.report ? JSON.parse(shot.dataset.report) : null; } catch (e) {}
       what = well.classList.contains("mosaic") ? (report && report.observation ? "pass mosaic" : "mosaic") : well.classList.contains("composite") ? "color composite" : "frame";
+      if (path && path.length && path[path.length - 1].kind === "channel") what = "composite channel";
       if (!report && /\/color\.webp/.test(src)) report = await fetch(src).then(r => JSON.parse(r.headers.get("X-Composite") || "null"), () => null);
       const tag = (w.querySelector(".shottag") || {}).textContent || "";
       ids = tag.match(ID) || [];
@@ -135,7 +137,7 @@ body.phone #flagtoast { bottom: calc(env(safe-area-inset-bottom, 0px) + 12px); }
       tiles = [];
       for (let k = 0; k < catalog.id.length; k++) if (catalog.obs[k] === report.observation && catalog.cam[k] === cam && catalog.et[k] <= state.et) tiles.push(catalog.id[k]);
     }
-    return { canvas, png: await toPng(canvas), src, report, ids, what, labels: texts(w), info: infoFields(w), tiles };
+    return { canvas, png: await toPng(canvas), src, report, ids, what, labels: texts(w), info: infoFields(w), tiles, path };
   }
 
   // ---- the panel: the picture is taken the moment the flag is pressed; the note can follow at leisure ----
@@ -194,6 +196,7 @@ body.phone #flagtoast { bottom: calc(env(safe-area-inset-bottom, 0px) + 12px); }
       window: { id: w.id, title: p.title, kind: w.id === "moviecard" ? "movie" : w.id === "reelcard" ? "reel" : w.classList.contains("bodywin") ? "body window" : "camera window",
         full: w.classList.contains("full"), zoomed: w.classList.contains("zoomed"), width: Math.round(w.getBoundingClientRect().width), height: Math.round(w.getBoundingClientRect().height) },
       shown: { what: got.what, src: got.src ? new URL(got.src, location.href).href : null, report: got.report || null, labels: got.labels, info: got.info, observation_frames: got.tiles,
+        path: got.path ? got.path.map(l => Object.assign({}, l, { src: new URL(l.src, location.href).href })) : null,
         width: got.canvas.width, height: got.canvas.height },
       ids: got.ids, frames: got.ids.map(frameInfo),
       movie: !!(window.cassiniMovie && window.cassiniMovie.on), playing: !!state.playing, speed: state.speed,
