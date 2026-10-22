@@ -189,7 +189,7 @@ body.phone .bodywin { --pw: 40vw; } body.phone .bodywin:not(.full) :is(.info, .c
       let w = B.wins.get(name);
       if (!w || w.closing) w = open(name);
       showPanes(w, name);
-      for (const p of w.panes) if (!p.el.hidden) p.update();
+      for (const p of w.panes) if (!p.el.hidden) { p.update(); p.update.retier(); }
     }
   }
   const base = window.studyHud;

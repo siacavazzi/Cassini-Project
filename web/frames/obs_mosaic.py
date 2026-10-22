@@ -386,9 +386,10 @@ def layout(u, n, cache):
     return p, tiles, rect, count, used, name
 
 
-def so_far(u, n, cache, made=None):
-    """The pass's mosaic with tiles 0..n, RGBA OUT px on its longest side, and its report; (None, None) before
-    any tile is placed. made: layout(u, n, cache), when already worked out."""
+def so_far(u, n, cache, made=None, out=OUT):
+    """The pass's mosaic with tiles 0..n, RGBA out px (OUT unless asked for more, up to CANVAS) on its longest
+    side, and its report; (None, None) before any tile is placed. made: layout(u, n, cache), when already
+    worked out."""
     made = made or layout(u, n, cache)
     if not made:
         return None, None
@@ -406,69 +407,76 @@ def so_far(u, n, cache, made=None):
     if p["display_scale"].get("filled"):
         rgba = detail(rgba, DETAIL_SIGMA * FRAME * p["k"])
     im = Image.fromarray(rgba, "RGBA")
-    s = OUT / max(im.size)
+    s = min(out, CANVAS) / max(im.size)
     im = im.resize((max(1, round(im.width * s)), max(1, round(im.height * s))), Image.LANCZOS)
     return im, {"mosaic": sum(count[f] for f in used), "filters": len(used), "filter_names": used,
                 "observation": u["key"][1], "pass": u["key"][3], "of": sum(1 for fr in u["frames"] if fr[2] in used),
                 "fixed": p["fixed"], "width": im.width, "height": im.height}
 
 
-def mosaic_webp(frame_id, size, cache, slots=None, ahead=3):
+def mosaic_webp(frame_id, size, cache, slots=None, ahead=3, fmt="webp", out=OUT):
     """(WebP, report) of the mosaic so far at frame_id when its pass is a mosaic; otherwise None. Then makes the
     next few tiles and the mosaics with them in the background, so the next frames' mosaics are ready when the
-    window asks for them."""
+    window asks for them. size "full" = out px on the longest side (the full view's picture, never warmed
+    ahead); fmt "png" for a PNG instead."""
     found = unit_of(frame_id)
     if not found or not found[0]["mosaic"] or found[1] < 0:
         return None
     u, n = found
+    if size == "full":
+        return _mosaic_at(u, n, size, cache, slots, fmt, out)
     made = _mosaic_at(u, n, size, cache, slots)
     if made and ahead:
         warm(u, n + ahead, cache, size, slots, start=n + 1)
     return made
 
 
-def _mosaic_at(u, n, size, cache, slots=None):
+def _mosaic_at(u, n, size, cache, slots=None, fmt="webp", out=OUT):
     """(WebP, report) of the pass's mosaic with tiles 0..n at size, made once (kept in the cache under the name
     of what it is made of, so frames that add nothing to it share it; a request that comes while it is being
     made waits for it); None before any tile is placed."""
     made = layout(u, n, cache)
     if not made:
         return None
-    path = os.path.join(folder(u, cache), str(size), f"{made[5]}.webp")
+    full = size == "full"
+    path = os.path.join(folder(u, cache), f"full{out}" if full else str(size), f"{made[5]}.{fmt}")
     if not os.path.exists(path):
         with _lock:
             lock = _making.setdefault(path, threading.Lock())
         with lock:
             try:
-                return _make_mosaic(u, n, size, path, cache, slots, made)
+                return _make_mosaic(u, n, size, path, cache, slots, made, fmt, out)
             finally:
                 with _lock:
                     _making.pop(path, None)
-    return _make_mosaic(u, n, size, path, cache, slots, made)
+    return _make_mosaic(u, n, size, path, cache, slots, made, fmt, out)
 
 
-def _make_mosaic(u, n, size, path, cache, slots, made):
-    report = {}
+def _make_mosaic(u, n, size, path, cache, slots, made, fmt="webp", out=OUT):
+    report, full, meta = {}, size == "full", path[:-len(fmt)] + "json"
 
     def make():
         with slots or contextlib.nullcontext():
-            im, rep = so_far(u, n, cache, made)
+            im, rep = so_far(u, n, cache, made, out if full else OUT)
         if im is None:
             raise LookupError("no tile placed yet")
         report.update(rep)
-        if max(im.size) > size:
+        if not full and max(im.size) > size:
             im.thumbnail((size, size), Image.LANCZOS)
-        out = io.BytesIO()
-        im.save(out, "WEBP", quality=85, method=4)
-        reel._cached(path[:-5] + ".json", lambda: json.dumps(rep).encode())
-        return out.getvalue()
+        buf = io.BytesIO()
+        if fmt == "png":
+            im.save(buf, "PNG", compress_level=6)
+        else:
+            im.save(buf, "WEBP", quality=92 if full else 85, method=4)
+        reel._cached(meta, lambda: json.dumps(rep).encode())
+        return buf.getvalue()
 
     try:
         data = reel._cached(path, make)
     except LookupError:
         return None
     if not report:
-        with open(path[:-5] + ".json") as fh:
+        with open(meta) as fh:
             report = json.load(fh)
     return data, report
 
