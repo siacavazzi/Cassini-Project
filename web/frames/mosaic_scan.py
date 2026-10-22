@@ -24,29 +24,11 @@ MOSAIC = re.compile(r"MOSAIC|MOS\d|\dX\d|GLOBMAP|REGMAP|MAP|HIRES|HIGHRES|SCAN|C
 
 
 def build_units(rows, target, obs, cam):
-    """obs_mosaic.units() over these rows, verbatim logic, geometry from G."""
-    inst = "ISSNA" if cam == "N" else "ISSWA"
-    out, cur, last = [], None, {}
-    for r in rows:
-        f1, f2 = str(r.filter1), str(r.filter2)
-        f = "/".join(x for x in (f1, f2) if not x.startswith("CL")) or "CL1/CL2"
-        g = G.get(r.id); g = g and g[:3]
-        t = float(r.seconds_1970)
-        if cur is None or t - cur["last"] > om.GAP or (g and cur["z"] and not 1 / om.ZOOM < g[2] / cur["z"] < om.ZOOM):
-            cur = {"frames": [], "taken": [], "z": g and g[2], "last": t, "raw": 0}
-            out.append(cur); last = {}
-        cur["last"] = t; cur["raw"] += 1; cur["taken"].append((f, *(g or (None, None, None))))
-        if not cur["z"] and g:
-            cur["z"] = g[2]
-        if f in last and t - last[f] <= mosaic_benchmark.REPEAT_GAP:
-            continue
-        last[f] = t
-        cur["frames"].append((r.path, r.id, f, t, reel.wavelength(inst, f1 + f2), *(g or (None, None, None))))
-    for n, u in enumerate(out):
-        u["key"] = (target, obs, cam, n)
-        om._judge(u)
+    """obs_mosaic.units() itself (the checkout's own pass rules: GAP split, laps, _judge), with the frame count."""
+    out = om.units(target, obs, cam)
+    for u in out:
+        u["raw"] = len(u.get("taken", u["frames"]))
     return out
-
 
 def colour_of(frames):
     """plan()'s colour / grey choice, verbatim."""
@@ -179,7 +161,8 @@ for (target, obs, inst), g in sub.groupby(["TARGET_NAME", "OBSERVATION_ID", "INS
              "mosaic_passes_in_obs": nmos, "frames": u["raw"], "tiles": len(u["frames"]), "placed": len(placed),
              "start": u["frames"][0][3], "first_id": u["frames"][0][1], "mosaic": u["mosaic"], "whole": u["whole"],
              "name_hint": "movie" if MOVIE.search(obs) else "mosaic" if MOSAIC.search(obs) else "",
-             "movie": u.get("movie"), "dwell": u.get("dwell"), "jump_frac_om": u.get("jump_frac")}
+             "movie": u.get("movie"), "dwell": u.get("dwell"), "jump_frac_om": u.get("jump_frac"),
+             "kind": u.get("kind"), "repeats": u.get("repeats"), "pan": u.get("pan")}
         if len(placed) >= 2:
             m = motion(u); r.update(m); r["verdict"] = verdict(m, u)
         if u["mosaic"]:
@@ -208,6 +191,8 @@ P("passes", len(df), "mosaic passes", int(df.mosaic.sum()), "frames in mosaic pa
 P("mosaic passes the pointing test calls movies:", int((df.mosaic & (df.verdict == "movie")).sum()),
   "| passes obs_mosaic calls movies:", int((df.movie == True).sum()) if "movie" in df else "n/a")  # noqa: E712
 m = df[df.mosaic]
+if "kind" in df:
+    P("\nkinds:\n", df.kind.value_counts(dropna=False).to_string())
 P("\nmosaic passes by target:\n", m.target.value_counts().head(15).to_string())
 P("\nmosaic passes by pointing verdict:\n", m.verdict.value_counts(dropna=False).to_string())
 P("\nby verdict x camera:\n", pd.crosstab(m.verdict.fillna("?"), m.cam).to_string())
