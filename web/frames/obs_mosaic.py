@@ -65,8 +65,6 @@ ZOOM = 1.4           # change in distance that ends a pass (tiles closer than th
 MIN_PLACES = 3       # pointings a pass needs to be a mosaic
 MAX_FRAMES = 16      # footprints wider than this many frames stay rolling mosaics
 MOVIE_JUMPS = 0.3    # a pass whose same-filter steps jump (mosaic.min_step) less often than this is a movie
-PAN_STEP = 0.45      # a pan steps less than this share of a frame between frames of one filter (median) ...
-PAN_STRAIGHT = 0.9   # ... along a line this straight (how far it gets / how far it goes)
 LAP_GAP = 7200       # a mosaic taken again over the same ground within this many seconds is its next lap
 LAP_OVERLAP = 0.6    # ... when the two footprints share at least this much (area both cover / either covers)
 MOVIE_LAPS = 2       # a mosaic whose places are taken again (median, per filter) this many times is a mosaic movie
@@ -250,16 +248,8 @@ def _judge(u):
             seq.append(i)
     visits = [max(seq.count(i) for seq in runs.values()) for i in range(len(places))] if runs else []
     u["repeats"] = int(np.median(visits)) if visits else 0
-    # a pan: one lap along a straight line in small steps (a ring scan taking a frame every third of a frame): every
-    # frame shows nearly the same scene shifted a little, which plays as a moving picture, not as a strip
-    xy = np.array(pts) / FRAME if len(pts) > 1 else None
-    path = float(np.abs(np.diff(xy, axis=0)).max(1).sum()) if xy is not None else 0.0
-    span = float((xy.max(0) - xy.min(0)).max()) if xy is not None else 0.0
-    same = [s for s in steps if s >= mosaic.min_step]
-    u["pan"] = bool(u["repeats"] <= 1 and same and np.median(same) < PAN_STEP and path and span / path >= PAN_STRAIGHT
-                    and len(places) >= MIN_PLACES)
-    if u["pan"]:
-        u["movie"] = True
+    # (a pan along a ring, where every frame shows nearly the same rings, looks like a movie, but a pan across the
+    # rings is a good strip mosaic, and the pointing alone cannot tell them apart: the window's chip decides those)
     u["mosaic"] = u["whole"] = False
     u["kind"] = "movie" if u["movie"] else None
     if len(places) < MIN_PLACES or u["movie"]:
@@ -581,7 +571,17 @@ def so_far(u, n, cache, made=None, out=OUT):
     # the label counts the tiles of the filters the plan draws (its colour filters, or its grey one), taken so far
     # of all the pass takes, so its total stays the same while the grey mosaic turns to colour
     drawn = p["colour"] or [p["grey"]]
-    return im, {"mosaic": sum(count.get(f, 0) for f in drawn), "filters": len(used), "filter_names": used,
+    # a mosaic movie counts laps: the lap is how many times the camera has come back to a place by tile n
+    runs, lap = {}, 1
+    for fr, i in zip(u["frames"][:n + 1], u.get("place", [])):
+        if i is None:
+            continue
+        seq = runs.setdefault(fr[2], [])
+        if not seq or seq[-1] != i:
+            seq.append(i)
+            lap = max(lap, seq.count(i))
+    laps = {"kind": u.get("kind"), "lap": lap, "laps": u.get("repeats"), "places": len(set(x for x in u.get("place", []) if x is not None))}
+    return im, {**laps, "mosaic": sum(count.get(f, 0) for f in drawn), "filters": len(used), "filter_names": used,
                 "observation": u["key"][1], "pass": u["key"][3], "of": sum(1 for fr in u["frames"] if fr[2] in drawn),
                 "fixed": p["fixed"], "width": im.width, "height": im.height}
 
