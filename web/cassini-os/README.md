@@ -28,6 +28,16 @@ one. The zoom button switches between the standard large size and the size you c
 bar: the window fills the screen under the menu bar, its picture as big as it fits. Double-click a picture or press
 `F` for the same, `Esc` to come back. Sizes are remembered with the rest of the layout.
 
+## Dock
+
+Along the bottom of the screen, as on the Mac (`src/dock.html`): Cassini and each body on stage now (the same list as
+the main window's body picker; a click flies the view there and brings that body's windows forward, a blue dot marks
+the body in view, a grey dot one with windows open), then Moments, Highlights and Settings (a click opens the window,
+brings it forward, or tucks it away). A minimized window shrinks into the dock as a tile showing its last picture,
+including the main window, and a click brings it back. Settings > Interface: Dock on or off (off brings back the
+menu-bar tray), Dock position (bottom, left, right), icon size and magnification. On a phone the dock is a strip under
+the replay controls that scrolls sideways.
+
 ## Phone layout
 
 On a screen under 600 px wide, or a touch screen under 500 px tall (Settings > Interface > Phone layout: Automatic,

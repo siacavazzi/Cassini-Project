@@ -106,9 +106,9 @@ body.idle #app .bodywin:has(.well.has-frame) { opacity: 1; pointer-events: auto;
   // a free place for a new window: the first slot in rows from the top left that no open window covers
   function place(w) {
     const r0 = w.getBoundingClientRect(), gap = 10, x0 = 14, y0 = 36;
-    // clear of the other body windows, the main window and the moments list
+    // clear of the other body windows, the main window, the moments list and the dock
     const others = [...B.wins.values()].filter(o => o.el !== w && !o.closing).map(o => o.el)
-      .concat([$("dock"), $("moments")].filter(e => e && !e.hidden)).map(e => e.getBoundingClientRect());
+      .concat([$("dock"), $("moments"), $("appdock")].filter(e => e && !e.hidden)).map(e => e.getBoundingClientRect());
     const hits = (x, y) => others.some(o => x < o.right + gap && x + r0.width + gap > o.left && y < o.bottom + gap && y + r0.height + gap > o.top);
     for (let y = y0; y + r0.height <= innerHeight - 8; y += 24)
       for (let x = x0; x + r0.width <= innerWidth - 14; x += 24)
