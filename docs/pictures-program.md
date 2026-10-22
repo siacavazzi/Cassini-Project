@@ -51,7 +51,8 @@ At each checkpoint the lead posts in the program thread what changed, the eviden
 
 | Checkpoint | When | What Sam judges |
 |---|---|---|
-| **1 · Mosaics stop jumping** | Phase 1 PR ready | No blank-and-restart; movies play as frames |
+| **1 · Mosaics stop jumping** | Phase 1 PR ready, again after the rework | No blank-and-restart; movies told apart; Mosaic / Movie switch |
+| **M · Movies worth watching** | Phase M PR ready | How a pass looks played as a movie; filmstrip |
 | **2 · Color looks right** | Phase 2a PR ready, then again for 2b | Composites and mosaics no longer dim, gray or tinted; then natural color against NASA |
 | **A · Composite drill-down** | Phase A PR ready | Clicking channels, held window, save menu |
 | **4 · Explore mosaics** | Phase 4 PR ready | Hover, click into pointings, pointing matches its spot |
@@ -72,7 +73,18 @@ Effort comes from the reports. Phase A runs alongside 1 and 2; everything else f
 - **Files.** `web/frames/obs_mosaic.py` (`_judge`, `view_rect`, label), `web/frames/frame_server.py` / `reel.py` if the route changes, `web/cassini-os/src/head-quiet.html` (mosaic requests), `index.html`.
 - **Done when.** The scan finds no follow-window restarts (was 329 of 352); the 945 movie passes are no longer mosaics; the gray stare is asked about once, not 36 times a minute; obs cache version bumped.
 - **Benchmarks.** IOSIC_034RI_VERTULMP001_SI (2006-12-03, tile 12 W1543828177_1), ISS_034RI_SPKDKFORM001_PRIME, IOSIC_086RI_VTMPS70MP001_SI; movies ISS_109RI_LRHPENKMV001_PRIME, ISS_137RI_FMOVIE001_VIMS; stare ISS_028RG_HIPHASE002_VIMS; regression ISS_028RI_HIPHWAC001_PRIME (Saturn's Shadow).
-- **Depends on.** Nothing. **Checkpoint 1.**
+- **Rework after checkpoint 1 (Sam, 2026-10-22 20:53Z).** Sam is not convinced movies and mosaics are told apart: the WAC ring pass building from about 2006-12-04 11:00 on the 8791 preview looks to him like a ring movie built as a mosaic. Mosaics and movies overlap (a mosaic can be a movie), so the call must be the person's too:
+  - Re-check the detection on that pass and on a sample of the passes still called mosaics (contact sheets of the frames in time order next to the mosaic), and tighten the rule where it is wrong. Report how many passes change.
+  - A per-window **Mosaic / Movie** switch (Auto by default, which follows the server's call). Movie plays the pass's frames in place; Mosaic builds it. The choice sticks for that pass while it plays and is a `cassiniSettings` default ("Mosaic passes: Auto / Always mosaic / Always movie"). The server builds a mosaic for any pass when asked, whatever `_judge` says.
+  - Low mosaic resolution is noted and belongs to phase 6 (full-resolution mosaic); not in this PR.
+- **Depends on.** Nothing. **Checkpoint 1** (shown again after the rework).
+
+### Phase M · Movies worth watching (D7 and the movie presentation, moved up) · ~2 days · port 8794
+- **Why moved up.** Sam (checkpoint 1) does not love today's movie mode, and with the movie/mosaic switch more passes play as movies, so how a movie looks matters now, not after the speed work.
+- **Goal.** A pass played as a movie looks like a movie: frames held steady in place (SPICE-centered through the pipeline, one display scale for the pass so brightness does not pump), smooth timing at the pass's own pace or the playback speed, a scrubbable filmstrip of the pass under the window (D7) that opens any frame or set, and an optional short Rolling trail. Starts with a short look at today's movie mode (#23, #40) and what Sam dislikes in it; the brief lists the faults found before building.
+- **Files.** `head-quiet.html`, `movie.html`, `bodywin.html`, `web/frames/frame_server.py` / `reel.py` for the pass's shared scale.
+- **Benchmarks.** The 2006-12-04 ring pass, ISS_137RI_FMOVIE001_VIMS, ISS_109RI_LRHPENKMV001_PRIME, ISS_235SA_SATSTARE001_PRIME, a spoke movie.
+- **Depends on.** Phase 1's movie flag and switch; folds phase A in if A merges first. **Checkpoint M.** Mosaic movie modes (Build, Rolling, Time-lapse; 7b) still wait for phase 6.
 
 ### Phase 2a · Color looks right (C1 to C5) · ~2 days · port 8792
 - **Goal.** One display model on linear I/F: mosaic gains anchored (mean log gain held at 0, stronger pull to 1); one seam gain and offset per tile solved on linear luminance and applied to every filter; filled passes share one black and white across filters, sRGB curve instead of gamma 1.5, `detail()` on luminance only; composite white at the 99.5th percentile of the brightest channel over lit pixels with a soft shoulder; black per channel = sky median plus one shared noise margin.
@@ -117,7 +129,7 @@ Effort comes from the reports. Phase A runs alongside 1 and 2; everything else f
 - **Depends on.** Phases 1-5 (all look changes) accepted. **Checkpoint 6** before the pre-build runs.
 
 ### Phase 7 · Movies (D7, M8) · ~5 days · two PRs
-- **7a.** Movie passes open as a scrubbable filmstrip of frames or sets.
+- **7a.** Moved up into phase M.
 - **7b.** Mosaic movie mode: Build, Rolling (older tiles fade over the last N, persistence slider in Settings) and Time-lapse (a tile replaces its own earlier copy; the NPOLMOV_VIMS polar passes). The rolling persistence mosaic stays.
 - **Depends on.** Phase 6. **Checkpoint 7.**
 
@@ -128,6 +140,7 @@ Effort comes from the reports. Phase A runs alongside 1 and 2; everything else f
 ## Parallel lanes
 
 ```
+Lane 0 (movies):  Phase 1 ── Phase M
 Lane 1 (mosaic):  Phase 1 ──┐
 Lane 2 (color):   Phase 2a ─┴─ 2b ── Phase 3 ── Phase 4 ── Phase 5 ── Phase 6 ── Phase 7
 Lane 3 (window):  Phase A ──────────────────────┘                          Phase 8 (C8, C9 after 2b)
