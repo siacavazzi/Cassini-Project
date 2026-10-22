@@ -456,21 +456,13 @@ def tiles_scale(pictures, gamma=2.2):
 The display scale shared by all the pictures of a mosaic, for load_channels: per channel a black, and
 one white for all channels, the white_pct percentile of every pixel above its channel's black (every
 channel on one white keeps the colour the camera measured).
-classic: the black is the sky's floor, the median over the pictures of each one's floor_pct percentile I/F.
-balanced: the black is the sky's level plus the shared noise margin (sky_blacks), over the pictures' sky
-(pixels under 5% of the channel's 99.9th percentile); a channel with no sky keeps the classic floor.
+the black is the sky's floor, the median over the pictures of each one's floor_pct percentile I/F, in both
+looks: a mosaic's faint sky changes from tile to tile, and any black other than its floor (a sky level plus a
+noise margin was tried) raised one filter's black more than another's and tinted that sky.
 channels = one list per channel of the pictures' I/F images (stacking.load_hdr)
 """
 def shared_scale(channels, white_pct=99.9, floor_pct=5, gamma=2.2):
     blacks = [float(np.median([np.percentile(iof, floor_pct) for iof in iofs])) for iofs in channels]
-    if look() == "balanced":
-        tops = [np.percentile(np.concatenate([iof[::8, ::8].ravel() for iof in iofs]), 99.9) for iofs in channels]
-        masks = [[iof < 0.05 * top for iof in iofs] for iofs, top in zip(channels, tops)]
-        has = [c for c, ms in enumerate(masks) if np.mean([m.mean() for m in ms]) > 0.02]
-        if has:
-            # never below the classic floor, so no tile shows more of its sky than before
-            for c, black in zip(has, sky_blacks([channels[c] for c in has], [masks[c] for c in has])):
-                blacks[c] = max(blacks[c], black)
     white = max(float(np.percentile(np.concatenate([iof[::8, ::8].ravel() for iof in iofs]) - black, white_pct))
                 for iofs, black in zip(channels, blacks))
     return {"blacks": blacks, "white": white, "gamma": gamma}
