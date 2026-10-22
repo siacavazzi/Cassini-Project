@@ -340,7 +340,7 @@ body { color: var(--q-text); }
 .well, .camwin.zoomed .well { border: 1px solid var(--q-line); border-radius: 4px; box-shadow: none; background: rgba(0,0,0,.55); color: var(--q-dim); height: 90px; }
 /* with no picture the window stays small; a frame opens it up to a full square */
 .well.has-frame, .camwin.zoomed .well.has-frame { height: auto; aspect-ratio: 1; }
-#imgcard:not(:has(.well.has-frame)) { width: 260px; }
+#imgcard:not(:has(.well.has-frame, .well.kept)) { width: 260px; }
 .well b { color: var(--q-text); text-shadow: none; }
 .shottag { color: var(--q-text); }
 .info { grid-template-columns: 50px 1fr; font-size: 10.5px; }
@@ -350,7 +350,7 @@ body { color: var(--q-text); }
 /* the wide-angle camera: its own, smaller window beside the narrow-angle one, so the feeds never alternate */
 #wacard { top: calc(env(safe-area-inset-top, 0px) + 36px); left: calc(max(14px, env(safe-area-inset-left, 0px)) + clamp(300px, 32vw, 480px) + 10px); width: clamp(200px, 19vw, 300px); }
 #wacard.zoomed { width: clamp(300px, 34vw, 560px); }
-#wacard:not(:has(.well.has-frame)) { width: 200px; }
+#wacard:not(:has(.well.has-frame, .well.kept)) { width: 200px; }
 #wacard .info { grid-template-columns: 42px 1fr; }
 /* colour sets: the channels that went into the composite, under the main picture */
 .chans { display: none; grid-template-columns: repeat(var(--n, 3), minmax(0, 76px)); gap: 6px; }
@@ -369,6 +369,14 @@ body { color: var(--q-text); }
 .kindtag { position: absolute; right: 5px; top: 4px; font: 9px/1 var(--hudf); color: var(--q-text); text-shadow: 0 0 3px #000, 0 0 6px #000; display: none; letter-spacing: .04em; }
 .well.has-frame.composite .kindtag, .well.has-frame.mosaic .kindtag { display: block; }
 body.idle .camwin .chans { opacity: .8; }
+/* steady size (Settings > Cameras, cameras.steady): the picture keeps its size while a color set or a mosaic builds.
+   The channel strip keeps its place for the whole observation (between sets it holds the nearest one, dimmed), a
+   missing frame keeps the picture's space (.kept), and each detail line keeps one height (the color line two) */
+.chans.held .tile { opacity: .5; }
+:is(.well, .camwin.zoomed .well).kept { height: auto; aspect-ratio: 1; }
+body.s-steady .chans .more { min-height: 1.2em; }
+body.s-steady .info dd { white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+body.s-steady .info dd[data-f="colour"] { white-space: normal; display: -webkit-box; -webkit-box-orient: vertical; -webkit-line-clamp: 2; line-clamp: 2; min-height: 2lh; }
 
 /* moments: plain rows on the panel */
 .colhead { background: none; border-bottom: 1px solid var(--q-line); color: var(--q-dim); }
@@ -600,7 +608,7 @@ body.phone .camwin:not(.full) { top: calc(var(--menu) + var(--gap)) !important; 
 body.phone .camwin:not(.full) > .titlebar { display: none; }
 body.phone .camwin:not(.full) .body { padding: 4px; gap: 4px; }
 body.phone .camwin:not(.full) :is(.info, .chans) { display: none !important; }
-body.phone .camwin:not(.full) .well:not(.has-frame) { height: 44px; font-size: 9px; }
+body.phone .camwin:not(.full) .well:not(.has-frame, .kept) { height: 44px; font-size: 9px; }
 body.phone .camwin .well::after { position: absolute; left: 5px; top: 4px; font: 9px/1 var(--hudf); letter-spacing: .08em; color: rgba(232,236,242,.6); text-shadow: 0 0 3px #000; }
 body.phone #imgcard .well::after { content: "NAC"; }
 body.phone #wacard .well::after { content: "WAC"; }
@@ -1149,7 +1157,7 @@ body.phone #excard:not(.full) { width: calc(100% - 16px) !important; left: 8px !
   D({ key: "interface.hudline", section: "Interface", label: "Flight data strip", type: "toggle", value: true,
       hint: "Target, altitude, speed, camera and pointing along the top of the view." });
   cls("interface.hudline", "s-nohudline", false);
-  // Cameras (the camera windows read cameras.composites, cameras.mosaics, cameras.fullRes, cameras.fullDelay and cameras.stale)
+  // Cameras (the camera windows read cameras.composites, cameras.steady, cameras.mosaics, cameras.fullRes, cameras.fullDelay and cameras.stale)
   D({ key: "cameras.composites", section: "Cameras", label: "Color composites", type: "toggle", value: true,
       hint: "Once a filter set is complete, show its color picture. Off shows every frame on its own." });
   D({ key: "cameras.channels", section: "Cameras", label: "Filter channels", type: "toggle", value: true,
@@ -1158,6 +1166,9 @@ body.phone #excard:not(.full) { width: calc(100% - 16px) !important; left: 8px !
   D({ key: "cameras.details", section: "Cameras", label: "Frame details", type: "toggle", value: true,
       hint: "Status, frame, filter, color and scale under each picture." });
   cls("cameras.details", "s-noinfo", false);
+  D({ key: "cameras.steady", section: "Cameras", label: "Steady picture size", type: "toggle", value: true,
+      hint: "While a color set or a mosaic builds, the picture keeps its size: the filter strip stays in place for the whole observation and a mosaic's shape holds until the observation ends. Off lets the window fit each picture." });
+  cls("cameras.steady", "s-steady", true);
   D({ key: "cameras.mosaics", section: "Cameras", label: "Mosaics in camera windows", type: "toggle", value: true,
       hint: "When Cassini steps a camera across a body, the window builds the mosaic tile by tile. Off shows every frame on its own." });
   D({ key: "cameras.fullRes", section: "Cameras", label: "Full resolution in full view", type: "toggle", value: true,
@@ -1869,6 +1880,10 @@ body.phone #excard:not(.full) { width: calc(100% - 16px) !important; left: 8px !
     const cam = card.dataset.cam, body = card.dataset.body || null, win = card.closest(".win") || card, well = card.querySelector(".well"), shot = card.querySelector(".shot"), chans = card.querySelector(".chans");
     const field = f => card.querySelector(`[data-f="${f}"]`) || { set textContent(v) {}, set innerHTML(v) {} };
     let want = null, shownKey = null, shown = null, next = [], lastK = -2, lastReady = null, stripKey = "", stripSet = null;
+    // steady size: shapeOf is the target and observation whose pass mosaic gave the picture its shape, which it
+    // keeps for every picture of that observation
+    const steady = () => S.get("cameras.steady"), passOf = k => `${catalog.target[k]}|${catalog.obs[k]}`;
+    let shapeOf = null;
     const failed = new Set();   // composites the server could not make: those sets show their frames instead
     const missing = new Set();  // frames the server does not have
     // full view asks for the full resolution picture ("full") once the picture is held: a quarter second while
@@ -1917,7 +1932,11 @@ body.phone #excard:not(.full) { width: calc(100% - 16px) !important; left: 8px !
       }
       return { key: frameUrl(catalog.id[k], sz), set: -1, k };
     }
-    function noFrame(msg) { well.classList.remove("has-frame", "composite"); card.querySelector(".wellmsg").innerHTML = msg; }
+    // kept: a frame that cannot be shown keeps the picture's space (steady size) instead of shrinking the window
+    function noFrame(msg, kept) {
+      well.classList.toggle("kept", !!kept && steady() && well.matches(".has-frame, .kept"));
+      well.classList.remove("has-frame", "composite"); card.querySelector(".wellmsg").innerHTML = msg;
+    }
     // two lanes, one request in flight each: plain frames (quick) and composites (seconds when the server has to
     // make one). A composite being made never holds up the frames: the window shows the newest frame meanwhile,
     // and its composite replaces it once made. During fast playback each lane skips to the newest picture.
@@ -1936,8 +1955,11 @@ body.phone #excard:not(.full) { width: calc(100% - 16px) !important; left: 8px !
       if (!again) shownAt = performance.now();
       shownKey = v.key; shown = v;
       // shot.dataset.src / .report: what the picture on screen was made from, for flagging (flag.html)
-      if (!keep) { shot.src = im.src; shot.dataset.src = v.key; shot.dataset.report = ""; obsShown = null; obsK = -1; well.style.aspectRatio = ""; well.classList.remove("mosaic"); saving(v.key); }
-      well.classList.add("has-frame"); well.classList.toggle("composite", v.set >= 0);
+      if (!keep) {
+        shot.src = im.src; shot.dataset.src = v.key; shot.dataset.report = ""; obsShown = null; obsK = -1; well.classList.remove("mosaic"); saving(v.key);
+        if (!steady() || shapeOf !== passOf(v.k)) { well.style.aspectRatio = ""; shapeOf = null; }
+      }
+      well.classList.add("has-frame"); well.classList.remove("kept"); well.classList.toggle("composite", v.set >= 0);
       if (!keep) card.querySelector(".kindtag").textContent = v.set >= 0 ? KIND[catalog.sets[v.set].kind].toUpperCase() : "";
       if (v.set >= 0) { channelsFrom(im, catalog.sets[v.set]); howMade(v); }
       if (v.tile && !keep) mosaicOf(v);   // a frame kept behind its pass's mosaic asked for it already (update)
@@ -1967,7 +1989,7 @@ body.phone #excard:not(.full) { width: calc(100% - 16px) !important; left: 8px !
             shownKey = v.key; shown = v;
             fetch(`${FRAMES}/health`).then(r => r.ok, () => false).then(up => noFrame(up
               ? `<b>No frame</b>${catalog.id[v.k]} is not in the archive`
-              : `<b>No signal</b>Frame server offline<br>run web/frames/frame_server.py`));
+              : `<b>No signal</b>Frame server offline<br>run web/frames/frame_server.py`, true));
           }
         }
         pump();
@@ -2054,7 +2076,7 @@ body.phone #excard:not(.full) { width: calc(100% - 16px) !important; left: 8px !
         if (rep && rep.observation) {
           if (window.cassiniPicture && rep.mosaic > (obsShown === catalog.obs[w.k] ? obsTiles : 0)) window.cassiniPicture({ cam, body, win, k: w.k, nm: nmOf(w.k), set: w.set, use: w.set >= 0 ? catalog.sets[w.set].use.map(nmOf) : null, tile: rep.mosaic, of: rep.of });
           obsShown = catalog.obs[w.k]; obsTiles = rep.mosaic; obsK = w.k; obsSize = rank(sz);
-          well.style.aspectRatio = `${rep.width} / ${rep.height}`;
+          well.style.aspectRatio = `${rep.width} / ${rep.height}`; shapeOf = passOf(w.k);
           card.querySelector(".kindtag").textContent = `${rep.filters >= 3 ? ((rep.filter_names || []).includes("GRN") ? "COLOR " : "FALSE COLOR ") : ""}MOSAIC · ${rep.mosaic} OF ${rep.of} TILES${rep.filters > 1 ? ` · ${rep.filters} FILTERS` : ""}`;
           return;
         }
@@ -2075,20 +2097,21 @@ body.phone #excard:not(.full) { width: calc(100% - 16px) !important; left: 8px !
           stacked ? `${stacked} repeat exposure${stacked > 1 ? "s" : ""} stacked` : "",
           n ? `${n} channel${n > 1 ? "s" : ""} could not be aligned` : rep.aligned.some(a => a.startsWith("centroid")) ? "aligned by centroid" : "aligned"].filter(Boolean);
         made.set(w.set, notes.join(", "));
-        if (catalog.setOf[lastK] === w.set) field("colour").textContent = colourText(catalog.sets[w.set], w.set);
+        if (catalog.setOf[lastK] === w.set) field("colour").textContent = field("colour").title = colourText(catalog.sets[w.set], w.set);
       });
     }
     // the channel strip: each channel's frame as it is taken, then the channels of the composite itself
     // (one shared brightness scale, so their brightness can be compared)
     function strip(s, et, k) {
       if (!s) { stripSet = null; chans.classList.remove("on"); chans.innerHTML = ""; stripKey = ""; return; }
-      const key = `${catalog.sets.indexOf(s)}:${capped()}`, slots = s.use.length === 2 ? [0, 2] : [0, 1, 2];
+      const key = `${catalog.sets.indexOf(s)}:${capped()}:${steady()}`, slots = s.use.length === 2 ? [0, 2] : [0, 1, 2];
       if (key !== stripKey) {
         stripKey = key; stripSet = s;
-        chans.style.setProperty("--n", s.use.length);
+        // steady size: three columns for every set, so a two-filter set's tiles are no bigger than a three-filter one's
+        chans.style.setProperty("--n", steady() ? 3 : s.use.length);
         chans.innerHTML = s.use.map((q, j) => `<figure data-ch="${slots[j]}"><div class="tile"></div>
           <figcaption><i style="background:${CH_COLOUR[slots[j]]}"></i><b>${fname(q)}</b> ${Math.round(nmOf(q))} nm</figcaption></figure>`).join("")
-          + (s.frames.length > s.use.length ? `<div class="more">Also in this set: ${s.frames.filter(q => !s.use.includes(q)).map(fname).join(", ")}</div>` : "");
+          + (s.frames.length > s.use.length ? `<div class="more">Also in this set: ${s.frames.filter(q => !s.use.includes(q)).map(fname).join(", ")}</div>` : steady() ? '<div class="more"></div>' : "");
         chans.classList.add("on");
         if (shown && shown.set >= 0 && catalog.sets[shown.set] === s) channelsFrom(shot, s);
       }
@@ -2098,6 +2121,21 @@ body.phone #excard:not(.full) { width: calc(100% - 16px) !important; left: 8px !
         if (taken && !tile.firstChild) tile.innerHTML = `<img alt="" src="${frameUrl(catalog.id[q], 256)}" onerror="this.style.visibility='hidden'">`;
         if (!taken && tile.firstChild) tile.replaceChildren();   // scrubbed back before this channel
       });
+    }
+    // steady size: the set the strip holds for a frame outside a color set, so the strip keeps its place for the
+    // whole observation: the observation's last set before the frame, or else its first set to come
+    let near = [-1, null];
+    function nearSet(k) {
+      if (near[0] === k) return near[1];
+      if (!catalog.setsByPass) {
+        catalog.setsByPass = new Map();
+        catalog.sets.forEach(s => { const key = `${s.cam}|${s.target}|${s.obs}`; catalog.setsByPass.has(key) ? catalog.setsByPass.get(key).push(s) : catalog.setsByPass.set(key, [s]); });
+      }
+      const list = catalog.obs[k] ? catalog.setsByPass.get(`${catalog.cam[k]}|${passOf(k)}`) : null;
+      let s = list ? list[0] : null;
+      if (list) for (const q of list) if (catalog.et[q.frames[0]] <= catalog.et[k]) s = q;
+      near = [k, s];
+      return s;
     }
     function channelsFrom(im, s) {
       if (stripSet !== s) return;
@@ -2116,7 +2154,7 @@ body.phone #excard:not(.full) { width: calc(100% - 16px) !important; left: 8px !
     }
     let cat = null;
     function update(force) {
-      if (catalog !== cat) { cat = catalog; lastK = -2; stripKey = ""; failed.clear(); made.clear(); missing.clear(); warmed.clear(); warnedObs.clear(); for (const L of Object.values(mLane)) { L.last = ""; L.next = null; } shown = null; shownKey = null; obsShown = null; obsK = -1; }   // another mission year loaded
+      if (catalog !== cat) { cat = catalog; lastK = -2; shapeOf = null; near = [-1, null]; stripKey = ""; failed.clear(); made.clear(); missing.clear(); warmed.clear(); warnedObs.clear(); for (const L of Object.values(mLane)) { L.last = ""; L.next = null; } shown = null; shownKey = null; obsShown = null; obsK = -1; }   // another mission year loaded
       if (win.hidden && !force) { mosaicStop(); return; }   // a closed or tucked-away window fetches nothing; it catches up when shown
       if (window.cassiniMovie && window.cassiniMovie.on) { mosaicStop(); return; }   // movie mode has the frame server to itself (its requests are capped)
       const p = lastOfCam(cam, state.et, body), k = p < 0 ? -1 : framesOf(cam, body).ks[p];
@@ -2137,7 +2175,9 @@ body.phone #excard:not(.full) { width: calc(100% - 16px) !important; left: 8px !
       const ago = state.et - catalog.et[k];
       field("status").textContent = live ? "Imaging now" : `Last frame ${fmtDur(ago)} ago`;
       const si = catalog.setOf[k], s = si >= 0 ? catalog.sets[si] : null, ready = !!s && s.ready <= state.et;
-      strip(s, state.et, k);
+      const held = !s && steady() ? nearSet(k) : null;
+      strip(s || held, state.et, k);
+      chans.classList.toggle("held", !!held);
       if (k === lastK && ready === lastReady && !force) return;
       lastK = k; lastReady = ready;
       want = view(k, state.et);
@@ -2158,6 +2198,7 @@ body.phone #excard:not(.full) { width: calc(100% - 16px) !important; left: 8px !
         ? colourText(s, si) : `${KIND[s.kind]} set, ${s.use.filter(q => catalog.et[q] <= state.et).length} of ${s.use.length} channels taken`;
       const n24 = p - lastOfCam(cam, state.et - 86400, body);
       field("details").textContent = `${kp ? `${kp < 10 ? kp.toFixed(2) : fmt(kp)} km/px · ` : ""}${fmt(n24)} frames in the last 24 h`;
+      card.querySelectorAll(".info dd[data-f]").forEach(dd => { dd.title = dd.textContent; });   // the whole line, when steady size cuts it short
       card.querySelector(".shottag").textContent = want.set >= 0 ? `${s.use.map(q => catalog.id[q]).join(" ")}` : `${catalog.id[k]} · ${catalog.f1[k]}/${catalog.f2[k]}`;
       const ks = framesOf(cam, body).ks;
       // look ahead: the next 6 frames, or up to 12 when they come within 4 s of playback (a burst), nearest first
@@ -2190,7 +2231,7 @@ body.phone #excard:not(.full) { width: calc(100% - 16px) !important; left: 8px !
   const feeds = [...document.querySelectorAll(".camwin")].map(cameraFeed);
   window.cassiniFeeds = { cameraFeed, framesOf, lastOfCam, prep, stale: () => S.get("cameras.stale") * 3600 };
   // a change to what the windows show takes effect straight away
-  for (const key of ["cameras.composites", "cameras.stale"]) S.on(key, () => { if (typeof catalog !== "undefined" && catalog && catalog.byCam) feeds.forEach(f => f(true)); });
+  for (const key of ["cameras.composites", "cameras.stale", "cameras.steady"]) S.on(key, () => { if (typeof catalog !== "undefined" && catalog && catalog.byCam) feeds.forEach(f => f(true)); });
 
   // ---------- burst limit: in normal playback each camera window gets at most maxRate new pictures a second ----------
   // The clock runs at the chosen speed except inside an imaging burst, where it slows so that crossing the gap
