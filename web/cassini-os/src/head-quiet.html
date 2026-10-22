@@ -1296,11 +1296,13 @@ body.idle .win.full .titlebar { opacity: 0; }
     let mosaicUrl = null, obsShown = null, obsTiles = 0, obsK = -1, obsSize = 0;
     const mosaicPasses = new Set();   // target|observation the server said is a mosaic pass
     const mosaicPass = k => mosaicPasses.has(passOf(k));
+    const moviePasses = new Set();    // target|observation the server said is a movie or a stare: never a mosaic, never asked
     const rank = sz => sz === "full" ? Infinity : +sz;
     const mLane = { pass: { busy: false, next: null, last: "" }, other: { busy: false, next: null, last: "" } };
     const warnedObs = new Set();   // observations already named to the server ahead of time (update)
     function mosaicOf(w, pass) {
       if (window.cassiniMosaics === false || !S.get("cameras.mosaics")) return;
+      if (moviePasses.has(passOf(w.k))) return;   // a movie plays as frames
       const sz = size(), id = catalog.id[w.set >= 0 && !pass ? catalog.sets[w.set].use[0] : w.k], ask = `${id}:${sz}`;
       const L = pass ? mLane.pass : mLane.other;
       if (ask === L.last) return;
@@ -1488,6 +1490,7 @@ body.idle .win.full .titlebar { opacity: 0; }
           warnedObs.add(o);
           const c0 = catalog;
           fetch(`${FRAMES}/frames/mosaic/${catalog.id[q]}.webp?warm=1`, { priority: "low" }).then(r => r.ok ? r.json() : null).then(a => {
+            if (a && a.movie) moviePasses.add(o);
             if (!a || !a.mosaic) return;
             mosaicPasses.add(o);
             if (catalog !== c0) return;
