@@ -26,6 +26,14 @@ The mosaic, color science, and drill-down plans, built together on the `pictures
 - **Disk rule.** Anything over 1 GB (worktrees, caches, scratch renders) lives on `/Volumes/LaCie/claude_scratch_spk/`; the Mini keeps 50 GB free; never `~/dev/scratch`.
 - **Preview servers** run from a worktree on the LaCie with their own `--cache` on the LaCie, the same `CASSINI_DATA`, `CASSINI_KERNELS` and `CASSINI_GEOMETRY_CACHE` as live, in their own tmux session. Ports are listed per phase below.
 
+## Preview recipe (every port)
+
+1. Worktree on the LaCie: `git -C ~/dev/Cassini-Project worktree add /Volumes/LaCie/claude_scratch_spk/wt-<name> <branch>`.
+2. **Replay data.** `web/replay/data` and the site's `data` are generated and not in git, so a fresh worktree has none and the page stops with "trajectory data could not be loaded". Symlink every untracked data file and folder from the live checkout (`~/dev/Cassini-Project/web/cassini-os/data` and `~/dev/Cassini-Project/web/replay/data`, whichever the site serves) into the worktree, keeping the branch's own tracked files (textures, models). Phase 5 writes its own rebuilt data folder instead.
+3. Server in its own tmux session with the live environment, `--port <port> --cache /Volumes/LaCie/claude_scratch_spk/cache-<name>`.
+4. **Check before posting a link:** `/health` answers ok; `/data/mission.json`, the tracks, attitude and month chunk for the linked `?t=` moment all return 200; a frame returns a real picture; and the page itself, opened at the exact link in headless Chromium on the Mini, shows the scene with no error overlay and no failed `data/` requests in the console. A link that has not passed this check is not posted.
+5. After every push to the branch: check out the new head, restart the server if `frame_server.py` changed, and run the check again.
+
 ## Evidence every PR must carry
 
 Every PR that changes anything a person can see carries both kinds:
@@ -88,6 +96,7 @@ Effort comes from the reports. Phase A runs alongside 1 and 2; everything else f
 ### Phase 3 · Mosaics as placed tiles (M3 = C7, D2) · ~2 days
 - **Goal.** A gray luminance base from every tile, drawn everywhere it exists, with color laid over it only where all three filters cover, feathered to gray at that edge; the gray filter fixed by the plan. The server writes the picture manifest (pointings with outline polygons as 0-1 fractions, center, set, tiles, `also`, and an L layer beside the color set) into the `.json` beside each cached mosaic and serves it at `/frames/mosaic/<ID>.json`; outlines backfilled from cached tile PNGs.
 - **Files.** `web/frames/obs_mosaic.py` (`so_far`, `tile`, plan), `mosaic.py` if needed, `web/frames/frame_server.py` (manifest route).
+- **Also.** Once the gray base draws every tile, `_judge` counts steps across filters for passes that never repeat a filter, so per-filter scans (LIMBSCAN011, CH4FLUOR001, GLOMAP001, RHEA003; 70 passes reclassified as movies in phase 1, see PR #61) come back as mosaics where they step.
 - **Done when.** The mosaic never shrinks when color begins (19 cases) or when the gray filter changes (Titan ISS_181TI_TEA001_CIRS); the manifest validates for the benchmark passes.
 - **Depends on.** Phases 1 and 2a merged into `pictures`. Shown to Sam with phase 4.
 
@@ -130,7 +139,7 @@ First batch: phases 1, 2a and A at once. Second batch: 2b once checkpoint 2 is a
 
 | Phase | Thread | PR | Preview | State |
 |---|---|---|---|---|
-| 1 | | | 8791 | briefed |
-| 2a | | | 8792 | briefed |
-| A | | | 8793 | briefed |
+| 1 | Mosaics stop jumping | | 8791 | building |
+| 2a | Color display fixes | | 8792 | building |
+| A | Composite drill-down | | 8793 | building |
 | 2b, 3-8 | | | | waiting |
