@@ -60,6 +60,10 @@ Routes:
                                where SPICE puts it in one view for the whole pass; color=1 draws the newest frames
                                of the pass's color filters together, trail=N the N earlier frames of its filter
                                fading under it. 503 while the pass is being worked out (the window shows the frame)
+  /frames/movie/<ID>.webp?mode=rolling&laps=1
+                               a mosaic movie (a raster repeated over the same places): every place's newest tile
+                               by this frame (laps=N: its N newest copies, older under newer), composed like the
+                               pass's mosaic (obs_mosaic.rolling_webp), so it never empties when a lap begins
   /frames/movie/<ID>.json      the pass the frame is in: its frames [id, time, filter], cadence, movie/mosaic call
   /export/plan.json?from=2006-09-15T14:32&until=2006-09-15T17:12&cams=NW&fps=auto&size=1024
                                a movie export's plan (web/frames/export.py): its pictures, when each shows in the
@@ -680,9 +684,18 @@ def make_handler(site, cache, flags=None):
                 except ValueError:
                     return self.send_error(400, "trail= takes a number of frames")
                 try:
-                    with _movie_slots:
-                        made = obs_mosaic.movie_webp(m.group(1), size, cache, trail, query.get("color", ["1"])[0] != "0")
-                except FileNotFoundError:
+                    if query.get("mode", [""])[0] == "rolling":
+                        # a mosaic movie: every place's newest tile (laps= newest copies of each), never emptied
+                        laps = max(1, min(obs_mosaic.TRAIL, int(query.get("laps", ["1"])[0] or 1)))
+                        full = size_of(query, 512) == FULL
+                        made = obs_mosaic.rolling_webp(m.group(1), FULL if full else size, cache, laps, _mosaic_slots, fmt,
+                                                       out=min(obs_mosaic.CANVAS, FULL_MAX) if full else obs_mosaic.OUT)
+                        if made and made[0] is not None:
+                            return self.send_picture(made[0], fmt, query, f"Cassini_{m.group(1)}_mosaic_movie", {"X-Movie": json.dumps(made[1])})
+                    else:
+                        with _movie_slots:
+                            made = obs_mosaic.movie_webp(m.group(1), size, cache, trail, query.get("color", ["1"])[0] != "0")
+                except (FileNotFoundError, ValueError):
                     made = None
                 if not made:
                     return self.send_error(404, "Not in a pass")

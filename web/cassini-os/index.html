@@ -335,7 +335,8 @@ body { color: var(--q-text); }
 
 /* camera window: the main feature, so it is the biggest thing on screen after the view itself */
 #imgcard { width: clamp(300px, 32vw, 480px); }
-#imgcard.zoomed { width: clamp(420px, 52vw, 860px); }
+/* zoomed, the window still fits above the dock on a laptop screen: its square picture, details and filmstrip */
+#imgcard.zoomed { width: min(clamp(420px, 52vw, 860px), max(420px, calc(100vh - 330px))); }
 .camwin .body { background: none; padding: 2px 8px 8px; gap: 7px; }
 .well, .camwin.zoomed .well { border: 1px solid var(--q-line); border-radius: 4px; box-shadow: none; background: rgba(0,0,0,.55); color: var(--q-dim); height: 90px; }
 /* with no picture the window stays small; a frame opens it up to a full square */
@@ -349,7 +350,7 @@ body { color: var(--q-text); }
 .camwin.live .led { background: var(--q-accent); box-shadow: 0 0 4px var(--q-accent); }
 /* the wide-angle camera: its own, smaller window beside the narrow-angle one, so the feeds never alternate */
 #wacard { top: calc(env(safe-area-inset-top, 0px) + 36px); left: calc(max(14px, env(safe-area-inset-left, 0px)) + clamp(300px, 32vw, 480px) + 10px); width: clamp(200px, 19vw, 300px); }
-#wacard.zoomed { width: clamp(300px, 34vw, 560px); }
+#wacard.zoomed { width: min(clamp(300px, 34vw, 560px), max(300px, calc(100vh - 330px))); }
 #wacard:not(:has(.well.has-frame, .well.kept)) { width: 200px; }
 #wacard .info { grid-template-columns: 42px 1fr; }
 /* colour sets: the channels that went into the composite, under the main picture */
@@ -1340,6 +1341,8 @@ body.phone.has-dock { --appdockh: 50px; }
   cls("movies.filmstrip", "s-nofilmstrip", false);
   D({ key: "movies.trail", section: "Movie", label: "Rolling trail", type: "range", value: 0, min: 0, max: 12, step: 1, unit: "frames",
       hint: "In a steady movie pass, this many earlier frames of the same filter stay under the newest one, fading with age, so a moving moon or a ring's shadow leaves a short trail. 0 shows each frame alone." });
+  D({ key: "movies.laps", section: "Movie", label: "Mosaic movies keep", type: "range", value: 1, min: 1, max: 6, step: 1, unit: "laps",
+      hint: "A mosaic movie (the camera going over the same mosaic again and again, as on the approach to Jupiter) plays as a mosaic that never empties: each new tile replaces its own earlier copy. 1 is a time-lapse; more keeps that many copies of each tile, older ones under the newest." });
   window.addEventListener("DOMContentLoaded", () => {
     const r = $("mvfps"); if (!r) return;
     try { const f = +localStorage.getItem("cassini-os-movie-fps"); if (f >= 2 && f <= 24 && !("movie.fps" in saved)) S.set("movie.fps", f); } catch (e) {}
@@ -2088,6 +2091,8 @@ body.phone.has-dock { --appdockh: 50px; }
       // a pass played as a movie: the frame steadied by the server (SPICE-centered on the pass's one scale and view,
       // its color set drawn together), unless the server could not make that frame
       if (playsMovie(k) && !movieFailed.has(catalog.id[k])) return { key: movieUrl(catalog.id[k], sz), set: -1, k, movie: true };
+      // a mosaic movie (a raster repeated over the same places): its rolling mosaic, every place's newest tile
+      if (playsRolling(k) && !movieFailed.has(catalog.id[k])) return { key: rollingUrl(catalog.id[k], sz), set: -1, k, movie: true, rolling: true };
       const si = catalog.setOf[k], s = si >= 0 ? catalog.sets[si] : null;
       if (s && S.get("cameras.composites")) {
         // any frame of a set whose channels are all taken shows the set's composite
@@ -2131,7 +2136,7 @@ body.phone.has-dock { --appdockh: 50px; }
         if (!steady() || shapeOf !== passOf(v.k)) { well.style.aspectRatio = ""; shapeOf = null; }
       }
       well.classList.add("has-frame"); well.classList.remove("kept"); well.classList.toggle("composite", v.set >= 0); well.classList.toggle("movie", !!v.movie);
-      if (!keep) card.querySelector(".kindtag").textContent = v.set >= 0 ? KIND[catalog.sets[v.set].kind].toUpperCase() : v.movie ? "MOVIE" : "";
+      if (!keep) card.querySelector(".kindtag").textContent = v.set >= 0 ? KIND[catalog.sets[v.set].kind].toUpperCase() : v.rolling ? "MOSAIC MOVIE" : v.movie ? "MOVIE" : "";
       // a movie frame names itself and its place in the filmstrip when it goes up: at high speed the server can make
       // fewer frames a second than the clock passes, and the caption should say which frame is on screen
       if (v.movie) {
@@ -2267,13 +2272,17 @@ body.phone.has-dock { --appdockh: 50px; }
     const playsMovie = k => S.get("movies.steady") && playsAs(k) === "movie";
     const movieUrl = (id, sz) => `${FRAMES}/frames/movie/${id}.webp?size=${sz || size()}&trail=${S.get("movies.trail")}&color=${S.get("cameras.composites") ? 1 : 0}`;
     const movieFailed = new Set();    // frames the server did not steady: they show as they are
+    // a mosaic movie (the switch's Mosaic movie, or Auto on a pass the server calls one): /frames/movie?mode=rolling,
+    // which never empties when the camera starts its raster again (Settings > Movie > Mosaic movies keep)
+    const playsRolling = k => playsAs(k) === "mosaic_movie";
+    const rollingUrl = (id, sz) => `${FRAMES}/frames/movie/${id}.webp?mode=rolling&laps=${S.get("movies.laps")}&size=${sz || size()}`;
     // the filmstrip: the pass the frame on screen is in (/frames/movie/<ID>.json: its frames, in time order), its
     // frames drawn along a strip by time, colored by filter, with the frame shown marked and the frames around it
     const passInfos = new Map(), filmAsked = new Set();
     let filmInfo = null, filmN = -1, filmCat = null;
     const unix = k => etToMs(catalog.et[k]) / 1000;
     function filmstrip(k) {
-      if (k < 0 || !playsMovie(k) || !S.get("movies.filmstrip")) { film.classList.remove("on"); filmInfo = null; return; }
+      if (k < 0 || !(playsMovie(k) || playsRolling(k)) || !S.get("movies.filmstrip")) { film.classList.remove("on"); filmInfo = null; return; }
       const o = `${cam}|${passOf(k)}`, t = unix(k);
       const inPass = i => i && i.key === o && t >= i.frames[0][1] - 1 && t <= i.frames[i.frames.length - 1][1] + 1;
       const info = inPass(filmInfo) ? filmInfo : (passInfos.get(o) || []).find(inPass);
@@ -2582,7 +2591,7 @@ body.phone.has-dock { --appdockh: 50px; }
   const feeds = [...document.querySelectorAll(".camwin")].map(cameraFeed);
   window.cassiniFeeds = { cameraFeed, framesOf, lastOfCam, prep, stale: () => S.get("cameras.stale") * 3600 };
   // a change to what the windows show takes effect straight away
-  for (const key of ["cameras.composites", "cameras.stale", "cameras.steady", "cameras.passes", "movies.steady", "movies.trail", "movies.filmstrip"]) S.on(key, () => { if (typeof catalog !== "undefined" && catalog && catalog.byCam) feeds.forEach(f => f(true)); });
+  for (const key of ["cameras.composites", "cameras.stale", "cameras.steady", "cameras.passes", "movies.steady", "movies.trail", "movies.filmstrip", "movies.laps"]) S.on(key, () => { if (typeof catalog !== "undefined" && catalog && catalog.byCam) feeds.forEach(f => f(true)); });
 
   // ---------- burst limit: in normal playback each camera window gets at most maxRate new pictures a second ----------
   // The clock runs at the chosen speed except inside an imaging burst, where it slows so that crossing the gap

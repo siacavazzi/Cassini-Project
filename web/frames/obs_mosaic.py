@@ -34,6 +34,7 @@ blended into one another.
 import argparse
 import collections
 import contextlib
+import hashlib
 import io
 import json
 import math
@@ -390,10 +391,11 @@ def view_rect(p, tiles=None):
     return x0, y0, x1 - x0, y1 - y0
 
 
-def filter_mosaic(u, p, f, tiles, rect, cache):
-    """The filter f's mosaic of these tiles in the view rect, RGBA on the view's canvas (kept in the cache)."""
+def filter_mosaic(u, p, f, tiles, rect, cache, tag=""):
+    """The filter f's mosaic of these tiles in the view rect, RGBA on the view's canvas (kept in the cache). tag
+    names a set of tiles that is not every tile up to the newest (a mosaic movie's lap, rolling_layout)."""
     mine = [t for t in tiles if t["filter"] == f and "offset" in t]
-    name = f"{f.replace('/', '_')}-{len(mine)}-{'_'.join(str(round(v)) for v in rect)}.png"
+    name = f"{f.replace('/', '_')}-{len(mine)}-{'_'.join(str(round(v)) for v in rect)}{tag}.png"
     path = os.path.join(folder(u, cache), "filters", name)
     k = p["k"]
     W, H = math.ceil(rect[2] * k), math.ceil(rect[3] * k)
@@ -499,17 +501,18 @@ def so_far(u, n, cache, made=None, out=OUT):
     made = made or layout(u, n, cache)
     if not made:
         return None, None
-    p, tiles, rect, count, used, _ = made
+    p, tiles, rect, count, used, name = made
+    tag = "-" + name.rsplit("-", 1)[1] if name.startswith("lap-") else ""
     if len(used) == 3:
         colour = used
-        acc = [filter_mosaic(u, p, f, tiles, rect, cache) for f in colour]
+        acc = [filter_mosaic(u, p, f, tiles, rect, cache, tag) for f in colour]
         rgb = np.dstack([a[..., 0] for a in acc])
         # only where every filter has the picture: past one filter's edge the others alone are a coloured rim
         alpha = np.min([a[..., 3] for a in acc], axis=0)
         rgb = (rgb * (alpha[..., None] / np.float32(255)) + 0.5).astype(np.uint8)
         rgba, used = np.dstack([rgb, alpha]), colour
     else:
-        rgba = filter_mosaic(u, p, used[0], tiles, rect, cache)
+        rgba = filter_mosaic(u, p, used[0], tiles, rect, cache, tag)
     if p["display_scale"].get("filled"):
         rgba = detail(rgba, DETAIL_SIGMA * FRAME * p["k"])
     im = Image.fromarray(rgba, "RGBA")
@@ -729,6 +732,79 @@ def pass_info(frame_id, cache):
             "movie": bool(u["movie"]), "mosaic": bool(u["mosaic"]),
             "cadence": round(float(np.median(gaps)), 1) if len(gaps) else None,
             "frames": [[fr[1], fr[3], fr[2]] for fr in u["frames"]]}
+
+
+def places(u):
+    """The place (pointing) index of each frame of the pass: u["place"] from the classifier when it has one,
+    otherwise worked out here the same way, frames closer than mosaic.min_step of a frame (at the pass's
+    reference distance) being one place."""
+    if u.get("place"):
+        return u["place"]
+    out, seen = [], []
+    for *_, x, y, z in u["frames"]:
+        if not z:
+            out.append(out[-1] if out else 0)
+            continue
+        pt = (-x * z / u["z"], -y * z / u["z"])
+        for i, q in enumerate(seen):
+            if max(abs(pt[0] - q[0]), abs(pt[1] - q[1])) < mosaic.min_step * FRAME:
+                out.append(i)
+                break
+        else:
+            seen.append(pt)
+            out.append(len(seen) - 1)
+    return out
+
+
+def rolling_layout(u, n, cache, laps=1):
+    """What a mosaic movie (a raster repeated over the same places: kind "mosaic_movie") shows at frame n, in the
+    form of layout(): every place's newest tile of each filter taken by then, so the mosaic never empties when a
+    new lap begins and each tile replaces its own earlier copy (laps=1, a time-lapse); laps=N keeps the N newest
+    copies of each place, older under newer (a rolling mosaic). Drawn by so_far through filter_mosaic and
+    mosaic.compose like the pass's mosaic, on its scale and in its view."""
+    p = plan(u, cache)
+    where = places(u)
+    keep, seen = [], {}
+    for j in range(n, -1, -1):
+        key = (where[j], u["frames"][j][2])
+        if seen.get(key, 0) < laps:
+            seen[key] = seen.get(key, 0) + 1
+            keep.append(j)
+    tiles = [tile(u, j, cache, p["display_scale"]) for j in sorted(keep)]
+    rect = view_rect(p, tiles)
+    count = {}
+    for t in tiles:
+        if "offset" in t:
+            count[t["filter"]] = count.get(t["filter"], 0) + 1
+    if not count:
+        return None
+    colour = p["colour"]
+    used = colour if colour and all(count.get(f) for f in colour) else [p["grey"] if count.get(p["grey"]) else max(count, key=count.get)]
+    ids = hashlib.sha1(",".join(str(t["n"]) for t in tiles if t["filter"] in used).encode()).hexdigest()[:12]
+    return p, tiles, rect, count, used, f"lap-{laps}-{ids}"
+
+
+def rolling_webp(frame_id, size, cache, laps=1, slots=None, fmt="webp", out=OUT, wait=False):
+    """(WebP, report) of frame_id's pass played as a mosaic movie (rolling_layout), made once and kept; None when
+    the frame is in no pass, (None, report) while the pass is being worked out (unless wait)."""
+    found = unit_of(frame_id)
+    if not found or found[1] < 0:
+        return None
+    u, n = found
+    if not wait and not os.path.exists(os.path.join(folder(u, cache), "plan.json")):
+        warm_movie(u, n, 6, cache)
+        return None, {"why": "working out the pass", "observation": u["key"][1], "pass": u["key"][3]}
+    with _asking():
+        made = rolling_layout(u, n, cache, laps)
+        if not made:
+            return None, {"why": "no tile placed yet"}
+        full = size == "full"
+        path = os.path.join(folder(u, cache), "rolling", f"full{out}" if full else str(size), f"{made[5]}.{fmt}")
+        res = _make_mosaic(u, n, size, path, cache, slots, made, fmt, out)
+    warm_movie(u, n + 1, 6, cache)
+    if res:
+        res[1].update({"rolling": True, "laps": laps, "n": n})
+    return res
 
 
 def mosaic_webp(frame_id, size, cache, slots=None, ahead=3, fmt="webp", out=OUT, force=False):

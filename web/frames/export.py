@@ -97,6 +97,19 @@ def job_id(opt):
 
 # ---------- the plan: which picture shows when ----------
 
+def pass_kind(frame_id):
+    """How the server plays frame_id's pass: "mosaic", "movie", "mosaic_movie" or None (obs_mosaic's call)."""
+    import obs_mosaic
+    try:
+        found = obs_mosaic.unit_of(frame_id)
+    except Exception:
+        return None
+    if not found:
+        return None
+    u = found[0]
+    return u.get("kind") or ("movie" if u.get("movie") else "mosaic" if u.get("mosaic") else None)
+
+
 def plan(opt):
     """The film's pictures in time order, each {id, cam, t, target, filters, try, kind, at (film seconds), hold,
     frames, nm, set_nm?, tile?, skipped?}, and the film's length. try = the pictures to make, best first."""
@@ -121,7 +134,14 @@ def plan(opt):
         comp = st is not None and q in st["use"] and q == max(st["use"], key=lambda u: t[u])
         tile = prev is not None and targets[prev] == targets[q] and obs[prev] == obs[q] and (st is None or comp)
         tries = []
-        if tile:
+        # a pass the server calls a movie plays as steady movie frames, a mosaic movie as its rolling mosaic, as
+        # the camera windows play them on Auto (obs_mosaic.movie_webp, rolling_webp)
+        kind = pass_kind(ids[q])
+        if kind == "movie":
+            tries.append(("movie", ids[q]))
+        elif kind == "mosaic_movie":
+            tries.append(("rolling", ids[q]))
+        elif tile:
             tries.append(("mosaic", ids[st["use"][0]] if comp else ids[q]))
         if comp:
             tries.append(("color", [ids[u] for u in st["use"]]))
@@ -190,6 +210,12 @@ class Pictures:
                 return made[0], "mosaic"
             found = reel.mosaic_of(arg, wait=True)
             return (reel.shot_webp(*found, size, self.cache, True, self.slots)[0], "mosaic") if found else None
+        if kind == "movie":
+            made = obs_mosaic.movie_webp(arg, size, self.cache, wait=True, ahead=0)
+            return (made[0], "movie") if made and made[0] else None
+        if kind == "rolling":
+            made = obs_mosaic.rolling_webp(arg, size, self.cache, slots=self.slots, wait=True)
+            return (made[0], "mosaic") if made and made[0] else None
         if kind == "color":
             if self._color:
                 return self._color(arg, size, self.cache)[0], "colour"
@@ -255,7 +281,7 @@ def _font(px):
 
 def label(e, what):
     """The caption under a pane: when, what, which camera and filters, and how the picture was made."""
-    kind = KIND.get(e.get("set"), "color") if what == "colour" else what if what in ("mosaic",) else ""
+    kind = KIND.get(e.get("set"), "color") if what == "colour" else what if what in ("mosaic", "movie") else ""
     target = (e["target"] or "Unknown").replace("_", " ").title()
     return " · ".join(x for x in (f"{utc(e['t'])} UTC", target, f"{'NAC' if e['cam'] == 'N' else 'WAC'} {e['filters']}", kind) if x)
 
