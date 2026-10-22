@@ -55,7 +55,7 @@ import mosaic_benchmark  # noqa: E402
 import stacking  # noqa: E402
 
 # bumped whenever the way observation mosaics are made changes, so older ones are not served again
-VERSION = "obs-v10"
+VERSION = "obs-v11"
 CANVAS = 2048        # longest side of the canvas the view is drawn on
 OUT = 1024           # longest side of the picture sent
 FRAME = 1024         # full resolution frame
@@ -65,6 +65,11 @@ ZOOM = 1.4           # change in distance that ends a pass (tiles closer than th
 MIN_PLACES = 3       # pointings a pass needs to be a mosaic
 MAX_FRAMES = 16      # footprints wider than this many frames stay rolling mosaics
 MOVIE_JUMPS = 0.3    # a pass whose same-filter steps jump (mosaic.min_step) less often than this is a movie
+PAN_STEP = 0.45      # a pan steps less than this share of a frame between frames of one filter (median) ...
+PAN_STRAIGHT = 0.9   # ... along a line this straight (how far it gets / how far it goes)
+LAP_GAP = 7200       # a mosaic taken again over the same ground within this many seconds is its next lap
+LAP_OVERLAP = 0.6    # ... when the two footprints share at least this much (area both cover / either covers)
+MOVIE_LAPS = 2       # a mosaic whose places are taken again (median, per filter) this many times is a mosaic movie
 MOVIE_DWELL = 8      # ... or whose camera stays this many frames of one filter (median) at each place it goes
 RADIUS = {"SATURN": 60268, "JUPITER": 69911, "TITAN": 2575, "RHEA": 764, "IAPETUS": 735, "DIONE": 561,
           "TETHYS": 531, "ENCELADUS": 252, "MIMAS": 198, "HYPERION": 135, "PHOEBE": 107}
@@ -121,6 +126,23 @@ def units(target, obs, cam):
             continue
         last[f] = t
         cur["frames"].append((r.path, r.id, f, t, reel.wavelength(inst, f1 + f2), *(g or (None, None, None))))
+    # laps: a mosaic taken again over the same places after a pause longer than GAP (the Jupiter approach's 2x2
+    # color mosaics, six laps 74 minutes apart in one observation) is one pass, a mosaic movie, rather than a
+    # mosaic that starts again from nothing every lap
+    laps = []
+    for u in out:
+        u["key"] = (target, obs, cam, len(laps))
+        _judge(u)
+        prev = laps[-1] if laps else None
+        if (prev and prev["mosaic"] and u["mosaic"] and u["frames"][0][3] - prev["last"] <= LAP_GAP and u["z"]
+                and 1 / ZOOM < u["z"] / prev["z"] < ZOOM and _overlap(prev, u) >= LAP_OVERLAP):
+            for k in ("frames", "all", "taken"):
+                prev[k] += u[k]
+            prev["last"] = u["last"]
+            _judge(prev)
+        else:
+            laps.append(u)
+    out = laps
     for n, u in enumerate(out):
         u["key"] = (target, obs, cam, n)
         _judge(u)
@@ -136,6 +158,26 @@ def units(target, obs, cam):
     with _lock:
         _units[(target, obs, cam)] = out
     return out
+
+
+def _box(u, z):
+    """The footprint of pass u's placed frames (x0, y0, x1, y1, reference pixels at distance z from the body's centre)."""
+    pts = [(-x * fz / z, -y * fz / z) for *_, x, y, fz in u["frames"] if fz]
+    if not pts:
+        return None
+    pts = np.array(pts)
+    return (*(pts.min(0) - HALF), *(pts.max(0) + HALF))
+
+
+def _overlap(a, b):
+    """How much the footprints of passes a and b cover the same ground: area both cover over area either covers."""
+    p, q = _box(a, a["z"]), _box(b, a["z"])
+    if not p or not q:
+        return 0.0
+    w, h = min(p[2], q[2]) - max(p[0], q[0]), min(p[3], q[3]) - max(p[1], q[1])
+    both = max(w, 0) * max(h, 0)
+    either = (p[2] - p[0]) * (p[3] - p[1]) + (q[2] - q[0]) * (q[3] - q[1]) - both
+    return both / either if either > 0 else 0.0
 
 
 def repeat_window(u):
@@ -155,8 +197,9 @@ def repeat_window(u):
 
 
 def _judge(u):
-    """Sets u["movie"] (the camera creeps or stares), u["jump_frac"], u["mosaic"] (enough places, footprint not
-    too big, not a movie) and u["whole"] (the body's disk inside it)."""
+    """Sets u["movie"] (the camera creeps or stares), u["jump_frac"], u["dwell"], u["mosaic"] (enough places,
+    footprint not too big, not a movie), u["whole"] (the body's disk inside it), u["place"], u["repeats"] and
+    u["kind"]: "movie", "mosaic", "mosaic_movie" (a mosaic whose places are taken lap after lap) or None."""
     pts = [(-x * z / u["z"], -y * z / u["z"]) for _, _, _, _, _, x, y, z in u["frames"] if z]
     # the steps between consecutive frames of one filter, in frames: a mosaic jumps, a movie creeps
     last, steps = {}, []
@@ -191,7 +234,34 @@ def _judge(u):
     for p in pts:
         if all(max(abs(p[0] - q[0]), abs(p[1] - q[1])) >= mosaic.min_step * FRAME for q in places):
             places.append(p)
+    # u["place"]: for each of u["frames"], the place it was taken at (index into places; None when SPICE has no
+    # place for it). visits: how many separate times the camera comes back to a place in one filter; a mosaic
+    # takes each place once per filter, a mosaic movie goes round the same places again and again (laps)
+    u["place"], runs = [], {}
+    for _, _, f, _, _, x, y, z in u["frames"]:
+        if not z:
+            u["place"].append(None)
+            continue
+        p = (-x * z / u["z"], -y * z / u["z"])
+        i = min(range(len(places)), key=lambda j: max(abs(p[0] - places[j][0]), abs(p[1] - places[j][1])))
+        u["place"].append(i)
+        seq = runs.setdefault(f, [])
+        if not seq or seq[-1] != i:
+            seq.append(i)
+    visits = [max(seq.count(i) for seq in runs.values()) for i in range(len(places))] if runs else []
+    u["repeats"] = int(np.median(visits)) if visits else 0
+    # a pan: one lap along a straight line in small steps (a ring scan taking a frame every third of a frame): every
+    # frame shows nearly the same scene shifted a little, which plays as a moving picture, not as a strip
+    xy = np.array(pts) / FRAME if len(pts) > 1 else None
+    path = float(np.abs(np.diff(xy, axis=0)).max(1).sum()) if xy is not None else 0.0
+    span = float((xy.max(0) - xy.min(0)).max()) if xy is not None else 0.0
+    same = [s for s in steps if s >= mosaic.min_step]
+    u["pan"] = bool(u["repeats"] <= 1 and same and np.median(same) < PAN_STEP and path and span / path >= PAN_STRAIGHT
+                    and len(places) >= MIN_PLACES)
+    if u["pan"]:
+        u["movie"] = True
     u["mosaic"] = u["whole"] = False
+    u["kind"] = "movie" if u["movie"] else None
     if len(places) < MIN_PLACES or u["movie"]:
         return
     pts = np.array(pts)
@@ -199,6 +269,7 @@ def _judge(u):
     if (hi - lo).max() >= MAX_FRAMES * FRAME:
         return
     u["mosaic"] = True
+    u["kind"] = "mosaic_movie" if len(places) >= 2 and u["repeats"] >= MOVIE_LAPS else "mosaic"
     radius = RADIUS.get(u["key"][0], 0) / (u["z"] * IFOV[u["key"][2]])
     u["whole"] = bool(radius and (lo < -radius).all() and (hi > radius).all())
 
@@ -222,13 +293,15 @@ def unit_of(frame_id):
 def kind_of(frame_id):
     """What the camera windows do with the frames of frame_id's observation (one camera): {"mosaic": its pass is
     a mosaic, "movie": every pass of the observation with the camera moving is a movie or a stare, so its frames
-    never make a mosaic of any kind and the window need not ask}."""
+    never make a mosaic of any kind and the window need not ask, "kind": its pass's kind (mosaic, movie,
+    mosaic_movie or None), "repeats": its laps}."""
     found = unit_of(frame_id)
     if not found:
-        return {"mosaic": False, "movie": False}
+        return {"mosaic": False, "movie": False, "kind": None}
     us = units(*found[0]["key"][:3])
     judged = [v for v in us if v["jump_frac"] is not None]
-    return {"mosaic": bool(found[0]["mosaic"]), "movie": bool(judged) and all(v["movie"] for v in judged)}
+    return {"mosaic": bool(found[0]["mosaic"]), "movie": bool(judged) and all(v["movie"] for v in judged),
+            "kind": found[0]["kind"], "repeats": found[0]["repeats"]}
 
 
 def folder(u, cache):
