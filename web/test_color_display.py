@@ -117,7 +117,9 @@ with cal.looking("classic"):
     old = obs_mosaic.pass_scale(fr, u)
 with cal.looking("balanced"):
     new = obs_mosaic.pass_scale(fr, u, ["RED", "GRN", "BL1"], True)
-    false = obs_mosaic.pass_scale(fr, u, ["RED", "GRN", "BL1"], False)
+    with cal.coloring("raw"):
+        false = obs_mosaic.pass_scale(fr, u, ["RED", "GRN", "BL1"], False)
+    natural_false = obs_mosaic.pass_scale(fr, u, ["RED", "GRN", "BL1"], False)
 print("classic filled", {f: round(b / old["white"], 2) for f, b in old["blacks"].items()}, old["gamma"])
 print("balanced filled", {f: round(b / new["white"], 2) for f, b in new["blacks"].items()}, new["gamma"])
 assert old["filled"] and new["filled"] and new["gamma"] == 1.5
@@ -125,6 +127,10 @@ assert len(set(new["blacks"].values())) == 1 and all(b <= new["white"] for b in 
 assert max(b / old["white"] for b in old["blacks"].values()) > 1      # the classic black sat above the white
 # false colour: every filter's black its own 1st percentile, one white (the widest band's)
 assert len(set(false["blacks"].values())) == 3 and np.isclose(false["white"], max(np.percentile(v[0][::4, ::4], 99.5) - np.percentile(v[0][::4, ::4], 1) for v in by.values()), rtol=1e-3)
+# natural false colour: every band on the widest band's range, and a balance toward gray
+tops = {f: np.percentile(v[0][::4, ::4], 99.5) for f, v in by.items()}
+assert all(np.isclose(tops[f] - natural_false["blacks"][f], natural_false["white"], rtol=1e-3) for f in by)
+assert "balance" in natural_false and "balance" not in false
 
 # ---- detail on luminance only: a colored patch keeps its color differences, no channel gets its own texture ----
 rgba = np.zeros((64, 64, 4), np.uint8); rgba[..., 3] = 255
@@ -155,7 +161,7 @@ assert np.abs(cal.mix_display(rgb, m, 3.0).astype(int) - rgb).max() <= 2
 # a false color mix holds a hot pink line (a ring bright in a dim band) to a pastel, and leaves a near-gray body be
 pink = cal.apply_mix(np.eye(3), np.array([1.0, 0.2, 0.9], np.float32).reshape(3, 1, 1)).ravel()
 near = cal.apply_mix(np.eye(3), np.array([0.5, 0.48, 0.46], np.float32).reshape(3, 1, 1)).ravel()
-assert (pink.max() - pink.min()) / pink.max() < 0.3 and np.allclose(near, [0.5, 0.48, 0.46], atol=0.002)
+assert (pink.max() - pink.min()) / pink.max() < 0.6 and np.allclose(near, [0.5, 0.48, 0.46], atol=0.002)
 gray = [np.full((8, 8), 0.4, np.float32)] * 3
 t = cal.tone(gray, 0.01, m)
 assert abs(int(t[0][0, 0, 0]) - int(t[2][0, 0, 0])) <= 2

@@ -438,7 +438,7 @@ False color gains that bring levels (the body's brightness per band) toward thei
 in log terms, keeping their total: all the way would give a dim band like MT3 over four times its brightness and lift
 its noise, so the body is left a little tinted instead (apply_mix holds what still stands out)
 """
-FALSE_BALANCE = 0.85
+FALSE_BALANCE = 0.9
 
 
 def balance(levels):
@@ -449,21 +449,23 @@ def balance(levels):
 
 
 """
-A channel mix (color_mix) on linear channels (3 x H x W). A false color mix (a gain per band, diagonal) is then
-held to FALSE_CHROMA saturation through a soft knee: what differs from the body's typical balance in a dim band
-(Saturn's rings in MT3, Jupiter's limb haze) would otherwise come out a hot pink or red line, and a frame unlike the
-mission's typical one (high latitudes) a strong tint; the body's gentle differences between bands are kept.
+A channel mix (color_mix) on linear channels (3 x H x W). A false color mix (a gain per band, diagonal) then holds
+saturation past FALSE_CHROMA[0] through a soft knee to at most FALSE_CHROMA[1] (on linear values): what differs
+from the body's typical balance in a dim band (Saturn's rings in MT3, Jupiter's limb haze) would otherwise come out
+a hot pink or red line; the body's gentler differences between bands, below the knee, are kept as they are.
 """
-FALSE_CHROMA = 0.2
+FALSE_CHROMA = (0.3, 0.5)
 
 
 def apply_mix(mix, x):
     mix = np.asarray(mix, np.float32)
     x = np.tensordot(mix, x, axes=1)
     if np.count_nonzero(mix - np.diag(np.diagonal(mix))) == 0:
+        knee, cap = FALSE_CHROMA
         top, low = x.max(axis=0), x.min(axis=0)
         sat = np.where(top > 0, (top - low) / np.maximum(top, 1e-12), 0)
-        k = np.where(sat > 0, FALSE_CHROMA * np.tanh(sat / FALSE_CHROMA) / np.maximum(sat, 1e-12), 1)
+        held = knee + (cap - knee) * np.tanh((sat - knee) / (cap - knee))
+        k = np.where(sat > knee, held / np.maximum(sat, 1e-12), 1)
         lum = x.mean(axis=0)
         x = lum + (x - lum) * k
     return x
