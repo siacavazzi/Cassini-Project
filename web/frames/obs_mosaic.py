@@ -762,7 +762,7 @@ def _grown(u, p, f, mine, rect, cache):
 _rolling = contextvars.ContextVar("rolling", default=False)   # drawing a laps=1 mosaic movie (rolling_webp)
 _rolled = collections.OrderedDict()   # (pass, look, filter, view) -> [(tiles drawn, RGBA)]: each mosaic movie's last pictures
 ROLLED_KEEP = 6    # mosaic movie filters kept (two passes of three; a canvas is up to 16 MB)
-ROLLED_EACH = 3    # pictures kept of each
+ROLLED_EACH = 2    # pictures kept of each
 
 
 def _rolled_put(key, drawn, rgba):
