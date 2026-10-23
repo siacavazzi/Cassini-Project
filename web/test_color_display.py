@@ -204,6 +204,17 @@ with cal.looking("balanced"):
 floor = cal.noise_floor([v[0][~disk] for v in coarse.values()])
 assert floor > 0.004 and all(t >= floor - 1e-9 for t in coarse_scale["sky_tops"].values()), coarse_scale["sky_tops"]
 obs_mosaic.stacking.load_hdr = lambda path, gap=None: (None, lined[path][0], 1)
+# faint diffuse light in the sky (an E ring, a haze limb) doesn't raise the black: it is measured on the darker half
+# of the sky, so the ring stays visible
+ring_band = (np.abs(yy - 200) < 30) & ~disk
+ringed = {f: [np.round(np.where(disk, 0.5, off + 0.006 * ring_band + 0.0005 * rng.standard_normal((256, 256))) / step) * step]
+          for f, off in (("MT3", 0.004), ("MT2", 0.010), ("UV1", 0.007))}
+obs_mosaic.stacking.load_hdr = lambda path, gap=None: (None, ringed[path][0], 1)
+with cal.looking("balanced"):
+    ringed_scale = obs_mosaic.pass_scale(fr_sky, {"key": ("JUPITER", "TEST", "N", 0), "z": 1e5}, list(ringed), False)
+for f, v in ringed.items():
+    assert np.mean(v[0][ring_band] > ringed_scale["blacks"][f]) > 0.9, (f, ringed_scale["sky_tops"])
+obs_mosaic.stacking.load_hdr = lambda path, gap=None: (None, lined[path][0], 1)
 # each filter's sky black (its height over the sky) comes back with the scale and can be overridden
 with cal.looking("balanced"):
     fixed = obs_mosaic.pass_scale(fr_sky, {"key": ("JUPITER", "TEST", "N", 0), "z": 1e5}, list(lined), False,
