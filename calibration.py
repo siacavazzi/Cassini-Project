@@ -373,7 +373,7 @@ def color_mix(camera, bands, target=None, gains=None):
     m = natural_mix(camera, bands)
     if m is not None:
         return m
-    gains = gains or false_gains(target, bands)
+    gains = gains or false_gains(target, bands, camera)
     return np.diag(np.asarray(gains, np.float32)) if gains else None
 
 
@@ -402,12 +402,19 @@ _bodies = None
 
 """
 False color: per band, the gain that brings the body's typical lit brightness in that band (false_color_bodies.json,
-the median over the mission's frames of the body) to the mean of the set's bands, so the body as a whole comes out
-gray and only its differences between bands show as color: a methane band (MT2, MT3) is far darker than its
-neighbors and otherwise turns the whole planet teal or magenta. One table for the mission, not a balance per
-picture, so a movie of the set doesn't change color from frame to frame. None when the table lacks the body or a band.
+the median over the mission's frames of the body, per camera) to the mean of the set's bands, so the body as a
+whole comes out gray and only its differences between bands show as color: a methane band (MT2, MT3) is far darker
+than its neighbors and otherwise turns the whole planet teal or magenta. One table for the mission, not a balance per
+picture, so a movie of the set doesn't change color from frame to frame. None (filters drawn straight) when the
+table lacks the body or a band, or its measure is unsure (BODY_MIN frames, a spread past BODY_SPREAD: a two-toned
+or phase-dependent body, like Iapetus).
+camera = "N" or "W"; target = TARGET_NAME
 """
-def false_gains(target, bands):
+BODY_MIN = 10
+BODY_SPREAD = 3.0    # the upper quartile over the lower
+
+
+def false_gains(target, bands, camera=None):
     global _bodies
     if _bodies is None:
         path = os.path.join(os.path.dirname(os.path.abspath(__file__)), "false_color_bodies.json")
@@ -416,9 +423,13 @@ def false_gains(target, bands):
             with open(path) as f:
                 _bodies = json.load(f)
     body = _bodies.get(str(target or "").upper(), {})
-    meds = [body.get(b, {}).get("median") for b in bands]
-    if any(not m or m <= 0 for m in meds):
-        return None
+    cam = "N" if str(camera or "").startswith("N") or camera == "ISSNA" else "W"
+    meds = []
+    for b in bands:
+        m = body.get(cam, {}).get(b) or body.get(b)
+        if not m or m.get("n", 0) < BODY_MIN or m["median"] <= 0 or m["iqr"][1] > BODY_SPREAD * max(m["iqr"][0], 1e-9):
+            return None
+        meds.append(m["median"])
     return balance(meds)
 
 
