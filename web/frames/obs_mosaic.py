@@ -1775,14 +1775,33 @@ def _mosaic_at(u, n, size, cache, slots=None, fmt="webp", out=OUT):
     return _make_mosaic(u, n, size, path, cache, slots, made, fmt, out)
 
 
+BLANK_LEVEL = 2   # a mosaic whose 99th percentile over its tiles is at most this many levels holds nothing yet
+_blank = set()    # mosaics found blank (paths): asked again, they are blank again
+
+
+def blank(im):
+    """Whether a mosaic picture (RGBA) shows nothing above black over the tiles placed: a pass's first tiles of
+    sky at its own noise level (Saturn's Shadow's outer E ring), drawn black. The window keeps showing its frame
+    (the single picture, processed on its own scale) until a tile with something in it is placed."""
+    a = np.asarray(im)
+    covered = a[..., 3] > 0
+    return not covered.any() or float(np.percentile(a[..., :3].max(axis=2)[covered], 99)) <= BLANK_LEVEL
+
+
 def _make_mosaic(u, n, size, path, cache, slots, made, fmt="webp", out=OUT):
     report, full, meta = {}, size == "full", path[:-len(fmt)] + "json"
+    if path in _blank:
+        return None
 
     def make():
         with slots or contextlib.nullcontext():
             im, rep = so_far(u, n, cache, made, out if full else OUT)
         if im is None:
             raise LookupError("no tile placed yet")
+        if blank(im):
+            with _lock:
+                _blank.add(path)
+            raise LookupError("nothing above black yet")
         report.update(rep)
         if not full and max(im.size) > size:
             im.thumbnail((size, size), Image.LANCZOS)
