@@ -166,6 +166,9 @@ def make_pass(u, cache, sizes=(1024, 512), within=None, style=None):
         for size in sizes:
             if kind == "mosaic_movie":
                 obs_mosaic.rolling_webp(f[1], size, cache, style.get("laps", 1), wait=True)
+                # a window asks a mosaic movie's frames of /frames/mosaic too (its pass lane, the Mosaic switch)
+                if within:
+                    obs_mosaic._mosaic_at(u, j, size, cache)
             elif u["mosaic"]:
                 obs_mosaic._mosaic_at(u, j, size, cache)
             else:
@@ -408,7 +411,9 @@ def segment_items(o):
             movie = u.get("kind") != "mosaic_movie" and not u["mosaic"]
             if (o["mosaics"] if not movie else o["steady"] and (u.get("kind") == "movie" or u.get("movie"))):
                 first = next(f[3] for f in u["frames"] if f[3] >= t0)
-                out.append(("_".join(map(str, u["key"])), first, n, lambda c, u=u: make_pass(u, c, sizes, (t0, t1), o["style"])))
+                work = lambda c, u=u: make_pass(u, c, sizes, (t0, t1), o["style"])
+                work.pass_key = u["key"]
+                out.append(("_".join(map(str, u["key"])), first, n, work))
     out.sort(key=lambda x: x[1])
     return out
 
@@ -461,7 +466,7 @@ class Segments:
             return self._public(job)
 
     def _public(self, job):
-        """What the page reads: state (queued, making, waiting, done, failed, stopped), pictures done of total, how
+        """What the page reads: state (queued, planning, making, waiting, finishing, done, failed, stopped), pictures done of total, how
         far in time every picture is made (through, UTC), seconds left and the place in line."""
         out = {k: job[k] for k in ("id", "state", "total", "done", "errors", "took", "why_waiting", "error")}
         through = job["options"]["from"]
@@ -544,6 +549,17 @@ class Segments:
                         job["done"] += items[k][2]
                         job["errors"] += bool(err)
                         job["recent"].append((time.monotonic(), job["done"]))
+        # the makers start the next tiles and mosaic-movie pictures of a pass in the background (obs_mosaic
+        # tiles_ahead, rolling_ahead): done once those threads for the stretch's passes are through too (up to 2 min)
+        keys = {k for k in (getattr(it[3], "pass_key", None) for it in items) if k}
+        until = time.monotonic() + 120
+        while keys and not job["stop"] and time.monotonic() < until:
+            with obs_mosaic._lock:
+                busy_keys = {k for k in keys if k in obs_mosaic._ahead_running or any(r[0] == k for r in obs_mosaic._roll_ahead)}
+            if not busy_keys:
+                break
+            job["state"] = "finishing"
+            time.sleep(1)
         job["took"] = time.monotonic() - t_start
         job["state"] = "stopped" if job["stop"] else "done"
 

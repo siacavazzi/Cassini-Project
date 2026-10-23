@@ -5248,7 +5248,7 @@ body.phone #launch .lx-clock { font-size: 9.5px; bottom: 9vh; }
   function progress(frac) { $("segprog").hidden = frac == null; if (frac != null) $("segprog").firstElementChild.style.width = `${(frac * 100).toFixed(1)}%`; }
   function fpsUi() { const f = Math.round(window.cassiniMovie && window.cassiniMovie.fps ? window.cassiniMovie.fps() : opt("movie.fps", 8)); $("segfps").value = f; $("segfpsv").textContent = `${f} fps`; }
   function buttons() {
-    const j = P.job, busy = j && /^(queued|planning|making|waiting)$/.test(j.state), done = j && j.state === "done" && P.key === params();
+    const j = P.job, busy = j && /^(queued|planning|making|waiting|finishing)$/.test(j.state), done = j && j.state === "done" && P.key === params();
     $("segprep").hidden = busy || done; $("segstop").hidden = !busy;
     $("segplay").classList.toggle("go", !!done);
     $("segplay").textContent = P.playing && state.playing ? "❚❚ Pause" : "▶ Play";
@@ -5298,6 +5298,7 @@ body.phone #launch .lx-clock { font-size: 9.5px; bottom: 9vh; }
     progress(frac);
     say(j.state === "queued" ? (j.ahead ? `Waiting for ${j.ahead} stretch${j.ahead > 1 ? "es" : ""} before it…` : "Starting…")
       : j.state === "planning" ? "Finding every picture in the stretch…"
+      : j.state === "finishing" ? "Finishing the last mosaic tiles…"
       : j.state === "waiting" ? `Waiting while the frame server is busy · ${j.done.toLocaleString()} of ${j.total.toLocaleString()}`
       : `Pre-processing ${j.done.toLocaleString()} of ${j.total.toLocaleString()} pictures${j.eta != null ? ` · ${fmtDur(j.eta)} left` : ""}`);
     P.poll = setTimeout(async () => {
@@ -5358,7 +5359,7 @@ body.phone #launch .lx-clock { font-size: 9.5px; bottom: 9vh; }
   // ---- the note when movie mode keeps waiting ----
   let hintTimer = 0;
   function showHint() {
-    if (!opt("segment.hint", true) || performance.now() - P.hintAt < 10 * 60e3 || (P.job && /^(queued|planning|making|waiting)$/.test(P.job.state))) return;
+    if (!opt("segment.hint", true) || performance.now() - P.hintAt < 10 * 60e3 || (P.job && /^(queued|planning|making|waiting|finishing)$/.test(P.job.state))) return;
     if (!bar.hidden && P.playing) return;   // playing a highlighted stretch already
     P.hintAt = performance.now();
     const r = $("tl").getBoundingClientRect();
