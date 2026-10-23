@@ -153,6 +153,11 @@ Movie mode (M) becomes a clock rule only: skip the gaps without pictures and ste
 the normal camera and body windows show every picture through the full pipeline. The separate Movie window and its own
 loading go. The per-window chip (Auto / Mosaic / Movie / Mosaic movie) stays. Waits use MR's maxBehind bound.
 
+### Phase AC · Camera window settings and auto center (Sam, 2026-10-23 20:34Z) · thread "Camera window settings and auto center"
+A settings button on every camera window holds the per-window choices (the Auto/Mosaic/Movie/Mosaic movie chip and
+"Auto center", on by default). Auto center extends #64's SPICE centering to all pictures as a style parameter; off is
+today's framing. Owns cameraFeed's per-window menu; MM owns movie.html and the clock.
+
 ### Phase 3 · Mosaics as placed tiles (M3 = C7, D2) · ~2 days
 - **Goal.** A gray luminance base from every tile, drawn everywhere it exists, with color laid over it only where all three filters cover, feathered to gray at that edge; the gray filter fixed by the plan. The server writes the picture manifest (pointings with outline polygons as 0-1 fractions, center, set, tiles, `also`, and an L layer beside the color set) into the `.json` beside each cached mosaic and serves it at `/frames/mosaic/<ID>.json`; outlines backfilled from cached tile PNGs.
 - **Files.** `web/frames/obs_mosaic.py` (`so_far`, `tile`, plan), `mosaic.py` if needed, `web/frames/frame_server.py` (manifest route).

@@ -178,8 +178,7 @@ body.phone #moviecard:not(.full) { width: calc(100% - 16px) !important; left: 8p
     if (b.ok) { draw(b.img); $("mvmsg").textContent = ""; }
     else if (b.ok === false) { blank(); $("mvmsg").innerHTML = "<b>No frame</b>" + f.id; }
     setTime(f.et);
-    const span = state.view[1] - state.view[0];
-    if (state.et < state.view[0] || state.et > state.view[1] - span * 0.05) setView(span, state.et + span * 0.4);
+    keepNowInView();
     tag(f, b);
     $("mvcount").textContent = f.id;
     if (prev && f.et - prev.et > 3 * 3600) {   // a stretch without frames: say how much time the cut left out
@@ -215,6 +214,12 @@ body.phone #moviecard:not(.full) { width: calc(100% - 16px) !important; left: 8p
     }
     requestAnimationFrame(tick);
   }
+  // paused in the background (away.html): the pictures still loading are called off (the film asks again when it
+  // carries on), and the film's clock moves on by the time away, so it picks up on the frame it was on
+  document.addEventListener("cassini:away", e => {
+    if (e.detail.away) { for (const [id, b] of M.buf) if (b.base.ok === null || (b.best.started && b.best.ok === null)) { b.best.stop(); b.base.stop(); M.buf.delete(id); } }
+    else { M.due += e.detail.ms; if (M.waitSince) M.waitSince += e.detail.ms; for (const b of M.buf.values()) b.since += e.detail.ms; }
+  });
   function setMoviePlaying(p) { M.playing = p; $("mvplay").textContent = p ? "❚❚" : "▶"; M.due = performance.now(); }
 
   // ---- entering and leaving ----

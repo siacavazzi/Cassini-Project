@@ -438,6 +438,42 @@ body.s-steady .info dd[data-f="colour"] { white-space: normal; display: -webkit-
 #dock.zoomed { width: min(1420px, calc(100% - 20px)); }
 #dock.zoomed #tl { height: 76px; }
 
+/* the replay window's head: the controls in one small cluster on the left, the clock in the middle, the timeline's
+   zoom and "back to now" on the right, so the timeline under them gets the whole width */
+.lcdhead { display: grid; grid-template-columns: auto minmax(0, 1fr) auto; align-items: center; gap: 10px; }
+.lcdhead .clockbox { min-width: 0; display: grid; gap: 1px; }
+.lcdhead .transport { flex: none; justify-self: start; gap: 1px; padding: 2px; border: 1px solid var(--q-line); border-radius: 16px; }
+.lcdhead .transport .round { border: 0; background: none; }
+.lcdhead .transport .round:hover { background: rgba(255,255,255,.1); }
+.lcdhead .transport .round[aria-pressed="true"] { background: rgba(138,182,255,.24); color: #fff; }
+.lcdhead #play { width: 30px; height: 30px; font-size: 11px; background: rgba(255,255,255,.08); }
+.lcdhead .skip { width: 26px; height: 26px; font-size: 8px; }
+.lcdhead .skip svg { width: 13px !important; height: 13px !important; }
+.tltools { justify-self: end; display: flex; align-items: center; gap: 4px; color: var(--q-dim); font-size: 10px; }
+.tltools input[type=range] { -webkit-appearance: none; appearance: none; width: 110px; height: 18px; margin: 0; background: none; cursor: default; }
+.tltools input[type=range]::-webkit-slider-runnable-track { height: 3px; border-radius: 2px; background: rgba(255,255,255,.18); }
+.tltools input[type=range]::-moz-range-track { height: 3px; border-radius: 2px; background: rgba(255,255,255,.18); }
+.tltools input[type=range]::-webkit-slider-thumb { -webkit-appearance: none; width: 11px; height: 11px; margin-top: -4px; border-radius: 50%; background: #d9dee6; border: 0; }
+.tltools input[type=range]::-moz-range-thumb { width: 11px; height: 11px; border-radius: 50%; background: #d9dee6; border: 0; }
+.tltools input[type=range]:hover::-webkit-slider-thumb { background: #fff; }
+.tltools input[type=range]:focus-visible { outline: 1px solid var(--q-accent); outline-offset: 2px; border-radius: 3px; }
+.tlstep { all: unset; width: 16px; height: 18px; display: grid; place-items: center; border-radius: 4px; color: var(--q-dim); font-size: 13px; cursor: default; }
+.tlstep:hover { color: #fff; background: rgba(255,255,255,.08); }
+#tlspan { min-width: 46px; text-align: left; font-variant-numeric: tabular-nums; white-space: nowrap; }
+#tlnow { margin-left: 2px; }
+#tlnow svg { width: 14px; height: 14px; display: block; }
+#tlnow svg * { fill: none; stroke: currentColor; stroke-width: 1.3; }
+#tlnow svg .dot { fill: currentColor; stroke: none; }
+/* following the clock it rests; scrolled away it lights up to bring you back */
+#tlnow[aria-pressed="true"] { background: none; color: var(--q-dim); }
+#tlnow[aria-pressed="false"] { background: rgba(138,182,255,.24); color: #fff; border-color: rgba(138,182,255,.5); }
+#tl { height: 84px; }
+#dock.zoomed #tl { height: 110px; }
+/* the zoom slider replaces the fixed spans */
+#zooms { display: none !important; }
+#dock:not(.zoomed) .toolbar { grid-template-columns: minmax(0, 1fr); }
+#dock:not(.zoomed) .toolbar > .col:first-child { display: none; }
+
 /* the HUD in space stays, a little softer */
 #hudline { opacity: .7; }
 .lbl:not(.focus):not(.cassini) { opacity: .75; }
@@ -676,6 +712,13 @@ body.phone #settings .sbody { grid-template-columns: 1fr; grid-template-rows: au
 body.phone #settings nav { flex-direction: row; border-right: 0; border-bottom: 1px solid var(--q-line); overflow-x: auto; }
 body.phone .srow input[type=range] { width: 96px; }
 
+/* the note while the window is visible but not focused (a second screen); a hidden tab shows nothing anyway */
+#awaynote { position: fixed; left: 50%; bottom: 96px; transform: translateX(-50%); z-index: 90; pointer-events: none;
+  padding: 7px 14px; border-radius: 999px; font: 12px/1.2 var(--ui); letter-spacing: .02em;
+  color: var(--q-text); background: var(--q-panel); border: 1px solid var(--q-line); backdrop-filter: blur(12px);
+  opacity: 0; transition: opacity .25s; }
+#awaynote.on { opacity: 1; }
+
 #phmom { display: none; }
 #phmom svg { width: 13px; height: 13px; display: block; }
 #phmom svg * { fill: none; stroke: currentColor; stroke-width: 1.5; }
@@ -720,7 +763,14 @@ body.phone.phone-land #dock { left: calc(var(--side) + var(--col) + var(--gap)) 
 body.phone #dock .titlebar { height: 18px; }
 body.phone #dock .toolbar, body.phone #dock:not(.zoomed) .toolbar { grid-template-columns: 1fr; gap: 4px; padding: 0 8px 6px; }
 body.phone .col, body.phone .col.right { width: auto; flex-direction: row; flex-wrap: wrap; justify-content: center; }
-body.phone .transport { gap: 8px; }
+body.phone .lcdhead { grid-template-columns: auto minmax(0, 1fr); grid-template-areas: "clock clock" "tr tools"; row-gap: 4px; column-gap: 12px; }
+body.phone .lcdhead .clockbox { grid-area: clock; }
+body.phone .lcdhead .transport { grid-area: tr; }
+body.phone .lcdhead .tltools { grid-area: tools; min-width: 0; width: 100%; }
+body.phone .lcdhead .tltools input[type=range] { width: auto; min-width: 60px; flex: 1 1 90px; }
+body.phone .lcdhead :is(.tlstep, #tlspan) { display: none; }
+body.phone .lcdhead #play { width: 34px; height: 34px; }
+body.phone .lcdhead .skip { width: 29px; height: 29px; }
 body.phone #play { width: 38px; height: 38px; }
 body.phone .skip { width: 32px; height: 32px; }
 body.phone #phmom { display: grid; }
@@ -762,6 +812,12 @@ body.phone:not(.phone-land) .bodywin[data-cam="W"]:not(.full) { left: calc(var(-
 body.phone:not(.phone-land) .bodywin.alone[data-cam="W"]:not(.full) { left: var(--side) !important; }
 body.phone.phone-land .bodywin[data-cam="W"]:not(.full) { top: calc(var(--menu) + 2 * var(--gap) + var(--col)) !important; }
 body.phone.phone-land .bodywin.alone[data-cam="W"]:not(.full) { top: calc(var(--menu) + var(--gap)) !important; }
+
+#linktoast { position: fixed; left: 50%; bottom: 22px; transform: translateX(-50%); z-index: 3001; padding: 7px 12px; border-radius: 8px;
+  background: rgba(20,22,27,.96); border: 1px solid var(--q-line, #444); color: var(--q-text, #ddd); font-size: 12px; box-shadow: 0 8px 30px rgba(0,0,0,.5); }
+#linktoast[hidden] { display: none; }
+body.idle #linktoast { opacity: 1; }
+body.phone #linktoast { bottom: calc(env(safe-area-inset-bottom, 0px) + 12px); }
 
 /* frosted glass off: plain dark panels, no blur of the view behind them (the blur is redone every frame) */
 body.s-noglass :is(#menubar, .menu ul, .win, #dock) { -webkit-backdrop-filter: none !important; backdrop-filter: none !important; }
@@ -1117,6 +1173,7 @@ body.phone #finale .fx-data { width: min(220px, calc(100vw - 32px)); top: 10px; 
       <ul id="gomenu">
         <li><button data-act="prev">Previous Moment<span class="kbd">⌘[</span></button></li>
         <li><button data-act="next">Next Moment<span class="kbd">⌘]</span></button></li>
+        <li><button data-act="copylink">Copy Link to This Moment<span class="kbd">⇧⌘C</span></button></li>
         <li class="sep"></li>
       </ul></div>
     <div class="menu"><button aria-haspopup="true">Highlights</button>
@@ -1175,21 +1232,32 @@ body.phone #finale .fx-data { width: min(220px, calc(100vw - 32px)); top: 10px; 
     <div class="titlebar"><span class="lights"><button class="close" aria-label="Close">×</button><button class="min" aria-label="Minimize">–</button><button class="zoom" aria-label="Zoom">+</button></span>Cassini Replay</div>
     <div class="toolbar">
       <div class="col">
-        <div class="transport">
-          <button class="btn round skip" id="prev" aria-label="Previous moment">◀◀</button>
-          <button class="btn round" id="play" aria-label="Play or pause">❚❚</button>
-          <button class="btn round skip" id="next" aria-label="Next moment">▶▶</button>
-          <button class="btn round skip" id="movie" aria-pressed="false" aria-label="Movie mode" title="Movie mode: play one body's frames as a film (M)"><svg viewBox="0 0 16 16" aria-hidden="true"><rect x="2" y="3" width="12" height="10" rx="1.5"/><path d="M5 3v10M11 3v10M2 6.3h3M2 9.7h3M11 6.3h3M11 9.7h3"/></svg></button>
-          <button class="btn round skip" id="phmom" aria-pressed="false" aria-label="Moments" title="Moments"><svg viewBox="0 0 16 16" aria-hidden="true"><path d="M3 4h10M3 8h10M3 12h10"/></svg></button>
-        </div>
         <div class="seg" id="speeds" aria-label="Playback speed"></div>
         <div class="seg" id="zooms" aria-label="Timeline span"></div>
       </div>
       <div class="lcd">
-        <div class="clock" id="clock">—</div>
-        <div class="sub"><span id="rel">—</span> · <span id="mday">—</span></div>
+        <div class="lcdhead">
+          <div class="transport">
+            <button class="btn round skip" id="prev" aria-label="Previous moment">◀◀</button>
+            <button class="btn round" id="play" aria-label="Play or pause">❚❚</button>
+            <button class="btn round skip" id="next" aria-label="Next moment">▶▶</button>
+          <button class="btn round skip" id="movie" aria-pressed="false" aria-label="Movie mode" title="Movie mode: play one body's frames as a film (M)"><svg viewBox="0 0 16 16" aria-hidden="true"><rect x="2" y="3" width="12" height="10" rx="1.5"/><path d="M5 3v10M11 3v10M2 6.3h3M2 9.7h3M11 6.3h3M11 9.7h3"/></svg></button>
+            <button class="btn round skip" id="phmom" aria-pressed="false" aria-label="Moments" title="Moments"><svg viewBox="0 0 16 16" aria-hidden="true"><path d="M3 4h10M3 8h10M3 12h10"/></svg></button>
+          </div>
+          <div class="clockbox">
+            <div class="clock" id="clock">—</div>
+            <div class="sub"><span id="rel">—</span> · <span id="mday">—</span></div>
+          </div>
+          <div class="tltools">
+            <button class="tlstep" id="tlout" aria-label="Zoom the timeline out" title="Zoom out">−</button>
+            <input type="range" id="tlzoom" min="0" max="1000" step="1" value="500" aria-label="Timeline zoom" title="Timeline zoom: how much time the timeline shows">
+            <button class="tlstep" id="tlin" aria-label="Zoom the timeline in" title="Zoom in">+</button>
+            <span id="tlspan">—</span>
+            <button class="btn round skip" id="tlnow" aria-pressed="true" aria-label="Back to now" title="Back to now: center the timeline on the current moment and follow it"><svg viewBox="0 0 16 16" aria-hidden="true"><circle cx="8" cy="8" r="4.2"/><path d="M8 1v3M8 12v3M1 8h3M12 8h3"/><circle class="dot" cx="8" cy="8" r="1.2"/></svg></button>
+          </div>
+        </div>
         <div class="sub probe" id="probe" hidden></div>
-        <canvas id="tl" aria-label="Timeline: drag to scrub, scroll to zoom"></canvas>
+        <canvas id="tl" aria-label="Timeline: drag to scrub, drag the top edge or scroll to move through time, pinch or use the slider to zoom"></canvas>
         <div class="legend"><span class="keys" id="lkeys"></span><span id="l24">—</span></div>
       </div>
       <div class="col right">
@@ -1240,6 +1308,10 @@ body.phone #finale .fx-data { width: min(220px, calc(100vw - 32px)); top: 10px; 
   </div>
   <footer><span id="snote">Saved on this device</span><button class="btn" id="sreset">Restore defaults</button></footer>
 </section>
+
+  <div id="awaynote" role="status" aria-live="polite">Paused while Cassini OS is in the background</div>
+
+  <div id="linktoast" role="status" hidden></div>
 
   <section class="win" id="reelcard" aria-label="Body reel" hidden>
   <div class="titlebar"><span class="lights"><button class="close" aria-label="Close the body reel">×</button><button class="min" aria-label="Close the body reel">–</button><button class="zoom" aria-label="Zoom">+</button></span>Body Reel</div>
@@ -1499,17 +1571,20 @@ body.phone #finale .fx-data { width: min(220px, calc(100vw - 32px)); top: 10px; 
     const mo = new MutationObserver(() => { if (go()) mo.disconnect(); });
     mo.observe($("loading"), { attributes: true, attributeFilter: ["hidden"] });
   }
+  // S.transient(fn): what fn does to a mirrored button stays out of the settings (a shared link's view is for that visit only)
+  let quiet = 0;
+  S.transient = fn => { quiet++; try { return fn(); } finally { setTimeout(() => quiet--, 0); } };
   // a dock button that switches a viewer option, mirrored by a setting both ways
   function mirror(key, btn) {
     whenReady(() => {
       const b = $(btn), pressed = () => b.getAttribute("aria-pressed") === "true";
       S.on(key, v => { if (pressed() !== v) b.click(); });
-      new MutationObserver(() => S.set(key, pressed())).observe(b, { attributes: true, attributeFilter: ["aria-pressed"] });
+      new MutationObserver(() => { if (!quiet) S.set(key, pressed()); }).observe(b, { attributes: true, attributeFilter: ["aria-pressed"] });
     });
   }
   D({ key: "playback.start", section: "Playback", label: "Start time", type: "choice", value: "2006-09-15T14:28:00", reload: true,
       options: [["2006-09-15T14:28:00", "In Saturn's Shadow"], ["2005-01-14T09:30:00", "Huygens lands"], ["2004-07-01T00:00:00", "Saturn arrival"]],
-      hint: "The moment Cassini OS opens on. A ?t= link still wins." });
+      hint: "The moment Cassini OS opens on. A shared link still opens on its own moment." });
   D({ key: "playback.autoplay", section: "Playback", label: "Play when Cassini OS opens", type: "toggle", value: true,
       hint: "Off opens paused at the starting moment." });
   D({ key: "playback.speed", section: "Playback", label: "Starting speed", type: "choice", value: 600,
@@ -1585,6 +1660,55 @@ body.phone #finale .fx-data { width: min(220px, calc(100vw - 32px)); top: 10px; 
 })();
 </script>
 <script>
+// ---------- pause in the background ----------
+(function () {
+  const S = window.cassiniSettings;
+  S.define({ key: "playback.pauseHidden", section: "Playback", label: "Pause in the background", type: "toggle", value: true,
+    hint: "While the tab is hidden or the browser is minimized, everything stops: the clock, the 3D view, picture requests and sound. It carries on where it stopped when you come back." });
+  S.define({ key: "playback.pauseBlur", section: "Playback", label: "Also when the window loses focus", type: "toggle", value: true,
+    hint: "Pause while you work in another window too, even if Cassini OS is still on screen. Off keeps it playing on a second screen." });
+
+  const A = window.cassiniAway = { on: false, since: 0, total: 0 };
+  let focused = true;   // until the window says otherwise (a page opened in front has focus)
+  // every animation frame loop asks again each frame, so holding the requests stops them all; ids for held ones are
+  // negative (never 0, which loops use for "none"), and map to the real request once it is made
+  const raf = window.requestAnimationFrame.bind(window), caf = window.cancelAnimationFrame.bind(window);
+  const held = new Map(), real = new Map();
+  let nextId = -1;
+  window.requestAnimationFrame = cb => {
+    if (!A.on) return raf(cb);
+    const id = nextId--; held.set(id, cb); return id;
+  };
+  window.cancelAnimationFrame = id => {
+    if (held.delete(id)) return;
+    caf(real.has(id) ? real.get(id) : id); real.delete(id);
+  };
+  const note = document.getElementById("awaynote");
+  function check() {
+    const away = S.get("playback.pauseHidden") && (document.hidden || (S.get("playback.pauseBlur") && !focused));
+    if (away === A.on) return;
+    A.on = away;
+    note.classList.toggle("on", away && !document.hidden);
+    if (away) {
+      A.since = performance.now();
+      document.dispatchEvent(new CustomEvent("cassini:away", { detail: { away: true } }));
+    } else {
+      const ms = performance.now() - A.since; A.total += ms;
+      // the clocks move on first, then the loops get their frames
+      document.dispatchEvent(new CustomEvent("cassini:away", { detail: { away: false, ms } }));
+      real.clear();
+      for (const [id, cb] of held) real.set(id, raf(cb));
+      held.clear();
+    }
+  }
+  document.addEventListener("visibilitychange", check);
+  window.addEventListener("blur", () => { focused = false; check(); });
+  window.addEventListener("focus", () => { focused = true; check(); });
+  S.on("playback.pauseHidden", check); S.on("playback.pauseBlur", check);
+  check();
+})();
+</script>
+<script>
 // ---------- phone layout ----------
 (function () {
   const S = window.cassiniSettings, $ = id => document.getElementById(id);
@@ -1631,6 +1755,86 @@ body.phone #finale .fx-data { width: min(220px, calc(100vw - 32px)); top: 10px; 
     $("mlist").addEventListener("click", e => { if (document.body.classList.contains("phone") && e.target.closest("button")) setTimeout(() => mom.classList.add("closed"), 150); });
     sync();
   });
+})();
+</script>
+<script>
+// ---------- shareable links: the address bar follows the moment on screen ----------
+(function () {
+  const KEYS = ["t", "view", "speed", "play", "movie", "cam"];
+  const S = window.cassiniSettings, $ = id => document.getElementById(id);
+  const num = v => (+(+v).toPrecision(4)).toString().replace("e+", "e");   // short, and no "+" (a space in a query)
+  const utc = et => new Date(etToMs(et)).toISOString().slice(0, 19);
+  // the link for the moment on screen; other pages (flagging) use it too
+  function params() {
+    const p = [["t", utc(state.et)]];
+    const view = state.focus !== "CASSINI" ? state.focus.toLowerCase() : state.follow ? "follow" : "cassini";
+    p.push(["view", view]);
+    p.push(["speed", num(state.speed)]);
+    if (!state.playing) p.push(["play", "0"]);
+    if (window.cassiniMovie && window.cassiniMovie.on) p.push(["movie", "1"]);
+    if (view !== "follow") p.push(["cam", [camera.position.x, camera.position.y, camera.position.z].map(num).join(",")]);
+    return p;
+  }
+  function href(extra) {
+    const u = new URL(location.href), keep = [...u.searchParams].filter(([k]) => !KEYS.includes(k));
+    const enc = s => encodeURIComponent(s).replace(/%3A/gi, ":").replace(/%2C/gi, ",");
+    const q = [...params(), ...(extra || []), ...keep].map(([k, v]) => v === "" ? enc(k) : `${enc(k)}=${enc(v)}`).join("&");
+    return u.origin + u.pathname + (q ? "?" + q : "") + u.hash;
+  }
+
+  // a link's view, speed and play state, once the viewer and the settings have set themselves up
+  function apply() {
+    const q = new URLSearchParams(location.search), view = (q.get("view") || "").toUpperCase();
+    // the follow button is mirrored into Settings; a link's view is for this visit only
+    const quietly = fn => (S && S.transient ? S.transient(fn) : fn());
+    if (view === "FOLLOW") { if (!state.follow) quietly(() => setFollow(true)); }
+    else if (view === "CASSINI") { if (state.follow) quietly(() => setFollow(false)); }
+    else if (view) quietly(() => setFocus(view));
+    const cam = (q.get("cam") || "").split(",").map(Number);
+    if (cam.length === 3 && cam.every(isFinite) && !state.follow && cam.some(Boolean)) {
+      const r = Math.hypot(...cam), lo = controls.minDistance, hi = controls.maxDistance;
+      camera.position.set(...cam).multiplyScalar(Math.min(hi, Math.max(lo, r)) / r);
+      controls.update();
+    }
+    const sp = +q.get("speed");
+    if (q.has("speed") && isFinite(sp) && sp > 0 && sp <= 1e7) setSpeed(sp);
+    if (q.get("play") === "0") setPlaying(false);
+    else if (q.has("play")) setPlaying(true);
+    if (q.get("movie") === "1" && window.cassiniMovie && !window.cassiniMovie.on) window.cassiniMovie.start();
+  }
+  let last = "";
+  function write() {
+    if (typeof state === "undefined" || !$("loading").hidden) return;
+    const h = href();
+    if (h === last) return;
+    last = h;
+    try { history.replaceState(history.state, "", h); } catch (e) {}
+  }
+
+  function toast(text) {
+    const t = $("linktoast"); t.textContent = text; t.hidden = false;
+    clearTimeout(toast.t); toast.t = setTimeout(() => { t.hidden = true; }, 2200);
+  }
+  async function copy() {
+    write();
+    const h = href();
+    try { await navigator.clipboard.writeText(h); toast("Link to this moment copied"); }
+    catch (e) { if (navigator.share) navigator.share({ url: h }).catch(() => {}); else toast(h); }
+  }
+  document.addEventListener("click", e => {
+    if (!e.target.closest('[data-act="copylink"]')) return;
+    e.stopPropagation(); document.querySelectorAll(".menu.open").forEach(m => m.classList.remove("open"));
+    copy();
+  }, true);
+  window.addEventListener("keydown", e => {
+    if ((e.metaKey || e.ctrlKey) && e.shiftKey && e.key.toLowerCase() === "c") { e.preventDefault(); copy(); }
+  }, true);
+
+  window.cassiniLink = { href, params, copy };
+  const ready = () => typeof state !== "undefined" && typeof setSpeed === "function" && $("loading").hidden;
+  const start = () => { apply(); write(); setInterval(write, 500); addEventListener("pagehide", write); };
+  if (ready()) start();
+  else { const mo = new MutationObserver(() => { if (ready()) { mo.disconnect(); start(); } }); mo.observe($("loading"), { attributes: true, attributeFilter: ["hidden"] }); }
 })();
 </script>
 <script>
@@ -1965,6 +2169,36 @@ body.phone #finale .fx-data { width: min(220px, calc(100vw - 32px)); top: 10px; 
     if (e.key.toLowerCase() === "m") { e.preventDefault(); act(document.querySelector('[data-act="orbits"]')); }
   });
 
+  // ---------- the timeline's zoom slider and "back to now" ----------
+  // The slider is logarithmic, from the whole mission at the left to ten minutes at the right (like a video editor's
+  // zoom); while the timeline follows the clock it zooms around now, otherwise around the middle of the view.
+  const tlSpanMax = () => Math.max(TL_MIN_SPAN * 2, coverage[1] - coverage[0]);
+  const tlSpanAt = v => tlSpanMax() * Math.pow(TL_MIN_SPAN / tlSpanMax(), v / 1000);
+  const tlValueOf = span => 1000 * Math.log(tlSpanMax() / span) / Math.log(tlSpanMax() / TL_MIN_SPAN);
+  const fmtTlSpan = sec => {
+    const r = (v, u) => `${v < 10 ? +v.toFixed(1) : Math.round(v)} ${u}${Math.round(v * 10) === 10 ? "" : "s"}`;
+    return sec < 5400 ? r(sec / 60, "min") : sec < 2 * 86400 ? r(sec / 3600, "hour") : sec < 60 * 86400 ? r(sec / 86400, "day")
+      : sec < 2 * 365.25 * 86400 ? r(sec / (30.44 * 86400), "month") : r(sec / (365.25 * 86400), "year");
+  };
+  let tlShown = { span: 0, follow: null };
+  window.syncTimelineTools = () => {
+    const span = state.view[1] - state.view[0];
+    if (span !== tlShown.span) {
+      tlShown.span = span;
+      if (document.activeElement !== $("tlzoom")) $("tlzoom").value = Math.round(tlValueOf(span));
+      $("tlspan").textContent = fmtTlSpan(span);
+    }
+    if (state.tlFollow !== tlShown.follow) {
+      tlShown.follow = state.tlFollow;
+      $("tlnow").setAttribute("aria-pressed", String(state.tlFollow));
+      $("tlnow").title = state.tlFollow ? "Following the current moment (click to center it)" : "Back to now: center the timeline on the current moment and follow it";
+    }
+  };
+  $("tlzoom").addEventListener("input", e => zoomTimeline(tlSpanAt(+e.target.value)));
+  $("tlout").addEventListener("click", () => zoomTimeline((state.view[1] - state.view[0]) * 2));
+  $("tlin").addEventListener("click", () => zoomTimeline((state.view[1] - state.view[0]) / 2));
+  $("tlnow").addEventListener("click", () => recenterTimeline());
+
   // previous / next moment
   const items = () => [...document.querySelectorAll("#mlist li")];
   $("next").addEventListener("click", () => { const li = items().find(li => +li.dataset.et > state.et + 3.5 * 3600); if (li) li.querySelector("button").click(); });
@@ -2117,6 +2351,7 @@ body.phone #finale .fx-data { width: min(220px, calc(100vw - 32px)); top: 10px; 
   };
   // the scrubber knob: a small diamond on the "now" line, as on an old LCD progress bar
   window.studyTimeline = (g, w, h, xn) => {
+    window.syncTimelineTools();
     const y = h * LANES.nBase;
     g.fillStyle = "#1d2016"; g.beginPath(); g.moveTo(xn, y - 6); g.lineTo(xn + 6, y); g.lineTo(xn, y + 6); g.lineTo(xn - 6, y); g.fill();
   };
@@ -2356,9 +2591,12 @@ body.phone #finale .fx-data { width: min(220px, calc(100vw - 32px)); top: 10px; 
     };
     return api;
   }
+  const STUCK = 8000;
+  const allFeeds = new Set();   // every camera window's feed, the body windows' too (playback.maxBehind)
   function cameraFeed(card) {
     const cam = card.dataset.cam, body = card.dataset.body || null, win = card.closest(".win") || card, well = card.querySelector(".well"), shot = card.querySelector(".shot"), chans = card.querySelector(".chans");
     const field = f => card.querySelector(`[data-f="${f}"]`) || { set textContent(v) {}, set innerHTML(v) {} };
+    let shownAt = 0, mosaicAt = 0;   // when the last picture and the last pass mosaic went up (behind)
     let want = null, shownKey = null, shown = null, next = [], lastK = -2, lastReady = null, stripKey = "", stripSet = null;
     // steady size: shapeOf is the target and observation whose pass mosaic gave the picture its shape, which it
     // keeps for every picture of that observation
@@ -2502,7 +2740,7 @@ body.phone #finale .fx-data { width: min(220px, calc(100vw - 32px)); top: 10px; 
       const keep = obsShown && catalog.obs[v.k] === obsShown && playsAs(v.k) !== "movie" && !(playsAs(v.k) === "mosaic_movie" && rolls());
       // the same picture again at another size (full view's full resolution one) is not a new picture
       const again = shown && shown.k === v.k && shown.set === v.set;
-      shownKey = v.key; shown = v;
+      shownKey = v.key; shown = v; shownAt = performance.now();
       // shot.dataset.src / .report: what the picture on screen was made from, for flagging (flag.html)
       if (!keep) {
         shot.src = im.src; shot.dataset.src = v.key; shot.dataset.report = ""; obsShown = null; obsK = -1; well.classList.remove("mosaic"); saving(v.key);
@@ -2616,7 +2854,8 @@ body.phone #finale .fx-data { width: min(220px, calc(100vw - 32px)); top: 10px; 
       // clock gets there. Each is asked for once, and only one composite per window is ever being made
       for (const key of next) {
         if (warming.size >= 3) break;
-        if (warmed.has(key) || warming.has(key) || key.includes("/color.webp")) continue;
+        // (a mosaic movie's next pictures are made ahead by the frame server, in order: obs_mosaic.rolling_ahead)
+        if (warmed.has(key) || warming.has(key) || key.includes("/color.webp") || key.includes("mode=rolling")) continue;
         const p = new Image(); p.crossOrigin = "anonymous"; p.fetchPriority = "low";
         p.onload = p.onerror = () => { warming.delete(key); warmed.add(key); };
         warming.set(key, p);
@@ -2762,7 +3001,7 @@ body.phone #finale .fx-data { width: min(220px, calc(100vw - 32px)); top: 10px; 
       while (thumbs.children.length > Math.min(7, fr.length)) thumbs.lastChild.remove();
       [...thumbs.children].forEach((im, j) => {
         const id = fr[first + j][0];
-        if (im.dataset.id !== id) { im.dataset.id = id; im.src = movieUrl(id, 128); }
+        if (im.dataset.id !== id) { im.dataset.id = id; im.src = playsRolling(k) ? frameUrl(id, 128) : movieUrl(id, 128); }
         im.classList.toggle("now", first + j === n);
         im.title = `${id} · ${fr[first + j][2]}`;
       });
@@ -2858,7 +3097,7 @@ body.phone #finale .fx-data { width: min(220px, calc(100vw - 32px)); top: 10px; 
           if (mode !== "mosaic") mosaicPasses.add(passOf(k));   // the server's call, not one the person asked for
           chipText();
           if (window.cassiniPicture && rep.mosaic > (obsShown === catalog.obs[k] ? obsTiles : 0)) window.cassiniPicture({ cam, body, win, k, nm: nmOf(k), set, use: set >= 0 ? catalog.sets[set].use.map(nmOf) : null, tile: rep.mosaic, of: rep.of });
-          obsShown = catalog.obs[k]; obsTiles = rep.mosaic; obsK = k; obsSize = rank(sz); shotTag(set, k); kind = { color: rep.filters >= 3, mosaic: true };
+          obsShown = catalog.obs[k]; obsTiles = rep.mosaic; obsK = k; mosaicAt = performance.now(); obsSize = rank(sz); shotTag(set, k); kind = { color: rep.filters >= 3, mosaic: true };
           // the window takes the mosaic's shape, within 1:2 to 3:1 (a whole long strip fits inside, letterboxed,
           // rather than running off the screen)
           well.style.aspectRatio = String(Math.min(3, Math.max(0.5, rep.width / rep.height))); shapeOf = passOf(k);
@@ -3209,8 +3448,10 @@ body.phone #finale .fx-data { width: min(220px, calc(100vw - 32px)); top: 10px; 
     // whose SPICE kernels are not loaded yet) can hold them all, so the data waited behind them on the loading screen.
     // The server still finishes what was dropped and keeps it; the window asks again once the data is in.
     let warnCtl = new AbortController();   // the look-ahead's notes to the server (?warm=1)
-    const dataWait = () => typeof yearReady === "function" && !yearReady();
-    function letGo() {
+    // the same while the page is paused in the background (away.html): nothing in flight, nothing asked for
+    const dataWait = () => (window.cassiniAway && cassiniAway.on) || (typeof yearReady === "function" && !yearReady());
+    // (away: paused in the background, away.html; the server keeps the look-ahead notes it already has, so they are not sent again)
+    function letGo(away) {
       for (const which of ["frame", "comp"]) {
         const v = lane[which];
         if (!v) continue;
@@ -3219,13 +3460,13 @@ body.phone #finale .fx-data { width: min(220px, calc(100vw - 32px)); top: 10px; 
       }
       for (const p of warming.values()) { p.onload = p.onerror = null; p.removeAttribute("src"); }
       warming.clear();
-      warnCtl.abort(); warnCtl = new AbortController(); warnedObs.clear();
+      warnCtl.abort(); warnCtl = new AbortController(); if (!away) warnedObs.clear();
       mosaicStop();
       lastK = -2;   // asks again for what it shows, once the data is in
     }
     let cat = null, letGone = false;
     function update(force) {
-      if (dataWait()) { if (!letGone) { letGone = true; letGo(); } return; }
+      if (dataWait()) { if (!letGone) { letGone = true; letGo(window.cassiniAway && cassiniAway.on); } return; }
       letGone = false;
       if (catalog !== cat) {   // another mission year (or the months around this one) loaded
         // a pass mosaic that is up stays up: its observation is a name, its frame found again by id
@@ -3322,6 +3563,18 @@ body.phone #finale .fx-data { width: min(220px, calc(100vw - 32px)); top: 10px; 
     update.release = release;
     const importance = () => weight(kind);
     update.importance = importance;
+    // how many of this window's frames the picture on screen is behind the clock: the picture asked for and not
+    // up yet, and behind a pass's mosaic, the mosaic's newest tile (playback.maxBehind slows the clock by it). A
+    // picture or mosaic nothing new has come for in STUCK ms does not count, so a server that stops answering (or
+    // a pass minutes from being made) never stops the clock
+    update.behind = () => {
+      if (!want || hold || win.hidden || !win.isConnected || lastK < 0 || !shown || shown.cat !== catalog) return 0;
+      const pos = q => lastOfCam(cam, catalog.et[q], body), now = performance.now();
+      let b = shownKey !== want.key && now - shownAt < STUCK ? pos(want.k) - pos(shown.k) : 0;
+      if (obsShown && obsK >= 0 && catalog.obs[lastK] === obsShown && now - mosaicAt < STUCK) b = Math.max(b, pos(lastK) - pos(obsK));
+      return Math.max(0, b);
+    };
+    allFeeds.add(update);
     update.kind = () => kind;
     return update;
   }
@@ -3339,10 +3592,12 @@ body.phone #finale .fx-data { width: min(220px, calc(100vw - 32px)); top: 10px; 
   // ---------- burst limit: in normal playback each camera window gets at most maxRate new pictures a second ----------
   // The clock runs at the chosen speed except inside an imaging burst, where it slows so that crossing the gap
   // between two of a camera's frames takes at least 1/maxRate s; it is back to full speed once the burst is over.
+  // A faster speed is always faster: a burst never slows the clock below a share of the chosen speed
+  // (playback.burstFloor), so 1 day/s skips pictures in a long burst instead of crawling like 10 min/s does.
   // Movie mode has its own clock. 0 = no limit. The setting lives in the Settings window when the page has one
   // (playback.maxImageRate), otherwise in the View menu.
-  const RATE_DEFAULT = 5, RATE_KEY = "cassini-os-max-image-rate", SETTINGS = window.cassiniSettings;
-  let maxRate = RATE_DEFAULT, slowedTo = 0;
+  const RATE_DEFAULT = 5, FLOOR_DEFAULT = 0.25, RATE_KEY = "cassini-os-max-image-rate", SETTINGS = window.cassiniSettings;
+  let maxRate = RATE_DEFAULT, burstFloor = FLOOR_DEFAULT, slowedTo = 0;
   function syncRateMenu() {
     const r = $("maxrate"); if (!r) return;
     r.value = maxRate; $("maxratev").textContent = maxRate ? `${maxRate} image${maxRate === 1 ? "" : "s"}/s` : "no limit";
@@ -3358,11 +3613,36 @@ body.phone #finale .fx-data { width: min(220px, calc(100vw - 32px)); top: 10px; 
       hint: "When Cassini takes a burst of pictures, the timeline slows down so each camera window shows at most this many new images a second. 0 = no limit.",
       type: "range", value: RATE_DEFAULT, min: 0, max: 24, step: 1, unit: "images/s" }) || 0;
     SETTINGS.on("playback.maxImageRate", v => { maxRate = +v || 0; });
+    SETTINGS.define({ key: "playback.burstFloor", section: "Playback", label: "Bursts slow playback to no less than",
+      hint: "However many pictures a burst has, the timeline keeps at least this share of the chosen speed, so a faster speed always plays faster (skipping pictures in long bursts). 100 % = never slow down.",
+      type: "range", value: FLOOR_DEFAULT * 100, min: 5, max: 100, step: 5, unit: "%" });
+    SETTINGS.on("playback.burstFloor", v => { burstFloor = (+v || 0) / 100; });
   } else {
     try { const v = localStorage.getItem(RATE_KEY); if (v !== null && +v >= 0) maxRate = +v; } catch (e) {}
     syncRateMenu();
     $("maxrate").addEventListener("input", e => setMaxRate(+e.target.value));
     $("maxrate").closest("li").addEventListener("click", e => e.stopPropagation());   // keep the menu open while sliding
+  }
+  // ---------- pictures behind: the clock slows while a window's picture is behind it ----------
+  // A burst caps the pictures a window is asked for; this caps the work it has waiting. When the picture on
+  // screen in any camera window is more than maxBehind of its frames behind the clock (the frame server is still
+  // making it: a cold pass, a mosaic movie's new picture), the clock slows in proportion, to maxBehind / behind of
+  // its speed, so the window catches up and every picture of a mosaic movie gets its turn instead of the clock
+  // running on while the window shows nothing new. Back to full speed as soon as it has caught up. 0 = off.
+  const BEHIND_DEFAULT = 2;
+  let maxBehind = BEHIND_DEFAULT, paced = 1;
+  if (SETTINGS) {
+    maxBehind = +SETTINGS.define({ key: "playback.maxBehind", section: "Playback", label: "Pictures a window may fall behind",
+      hint: "When the frame server cannot make pictures as fast as the timeline passes them (a mosaic movie nobody has watched yet), the timeline slows down in proportion so each camera window stays within this many frames of the clock. 0 = never slow down.",
+      type: "range", value: BEHIND_DEFAULT, min: 0, max: 10, step: 1, unit: "frames" });
+    if (!isFinite(maxBehind)) maxBehind = BEHIND_DEFAULT;
+    SETTINGS.on("playback.maxBehind", v => { maxBehind = +v || 0; });
+  }
+  function pace() {
+    if (!maxBehind) return 1;
+    let b = 0;
+    for (const f of allFeeds) b = Math.max(b, f.behind());
+    return b > maxBehind ? maxBehind / b : 1;
   }
   // for one camera at et: the fastest the clock may run (Infinity outside a burst) and when its next frame is
   function capOf(cam, et) {
@@ -3372,10 +3652,13 @@ body.phone #finale .fx-data { width: min(220px, calc(100vw - 32px)); top: 10px; 
   // called by the viewer's frame loop while playing: where the clock should be after dt seconds at this speed
   window.studyAdvance = (et, dt, speed) => {
     slowedTo = 0;
+    paced = catalog && catalog.byCam ? pace() : 1;
+    dt *= paced;
     if (!maxRate || !catalog || !catalog.byCam) return et + dt * speed;
     for (let n = 0; n < 200; n++) {
       let s = speed, stop = Infinity;
       for (const cam in catalog.byCam) { const [cap, nx] = capOf(cam, et); s = Math.min(s, cap); stop = Math.min(stop, nx); }
+      s = Math.max(s, speed * burstFloor);
       if (s < speed) slowedTo = slowedTo ? Math.min(slowedTo, s) : s;
       if (et + dt * s <= stop) return et + dt * s;
       dt -= (stop - et) / s; et = stop;   // the next frame changes the gap, so carry on from there
@@ -3388,10 +3671,14 @@ body.phone #finale .fx-data { width: min(220px, calc(100vw - 32px)); top: 10px; 
   window.studyHud = ms => {
     frameHud(ms);
     if (slowedTo && state.playing && !state.dragging) $("mday").textContent += ` · imaging burst, slowed to ${fmtRate(slowedTo)}`;
+    if (paced < 1 && state.playing && !state.dragging) $("mday").textContent += ` · catching up on pictures, ${Math.round(paced * 100)}% speed`;
     prep();
     for (const f of feeds) { f(); f.retier(); }
   };
   for (const key of ["cameras.fullRes"]) S.on(key, () => feeds.forEach(f => f.retier()));
+  // paused in the background (away.html): each window lets go of its pictures at once (the frame loop that drives
+  // them is held); back, the next frame asks again for what each one shows
+  document.addEventListener("cassini:away", e => { if (e.detail.away) feeds.forEach(f => f()); });
   syncMenu();
 })();
 </script>
@@ -3531,7 +3818,7 @@ body.phone #finale .fx-data { width: min(220px, calc(100vw - 32px)); top: 10px; 
     if (!pending) return;
     const p = pending, w = p.w, got = p.got, note = pop.querySelector("textarea").value.trim();
     close();
-    const link = new URL(location.href); link.searchParams.set("t", utc(p.et).slice(0, 19));
+    const link = new URL(window.cassiniLink ? cassiniLink.href() : location.href); link.searchParams.set("t", utc(p.et).slice(0, 19));
     const flag = {
       flagged: p.at.toISOString(), mission_utc: utc(p.et), mission_et: p.et, link: link.href,
       note, tags: [...p.tags],
@@ -3736,8 +4023,7 @@ body.phone #finale .fx-data { width: min(220px, calc(100vw - 32px)); top: 10px; 
     if (b.ok) { draw(b.img); $("mvmsg").textContent = ""; }
     else if (b.ok === false) { blank(); $("mvmsg").innerHTML = "<b>No frame</b>" + f.id; }
     setTime(f.et);
-    const span = state.view[1] - state.view[0];
-    if (state.et < state.view[0] || state.et > state.view[1] - span * 0.05) setView(span, state.et + span * 0.4);
+    keepNowInView();
     tag(f, b);
     $("mvcount").textContent = f.id;
     if (prev && f.et - prev.et > 3 * 3600) {   // a stretch without frames: say how much time the cut left out
@@ -3773,6 +4059,12 @@ body.phone #finale .fx-data { width: min(220px, calc(100vw - 32px)); top: 10px; 
     }
     requestAnimationFrame(tick);
   }
+  // paused in the background (away.html): the pictures still loading are called off (the film asks again when it
+  // carries on), and the film's clock moves on by the time away, so it picks up on the frame it was on
+  document.addEventListener("cassini:away", e => {
+    if (e.detail.away) { for (const [id, b] of M.buf) if (b.base.ok === null || (b.best.started && b.best.ok === null)) { b.best.stop(); b.base.stop(); M.buf.delete(id); } }
+    else { M.due += e.detail.ms; if (M.waitSince) M.waitSince += e.detail.ms; for (const b of M.buf.values()) b.since += e.detail.ms; }
+  });
   function setMoviePlaying(p) { M.playing = p; $("mvplay").textContent = p ? "❚❚" : "▶"; M.due = performance.now(); }
 
   // ---- entering and leaving ----
@@ -4028,6 +4320,8 @@ body.phone #finale .fx-data { width: min(220px, calc(100vw - 32px)); top: 10px; 
   }
   const base = window.studyHud;
   window.studyHud = ms => { base(ms); tick(); };
+  // paused in the background (away.html): the body windows let go of their pictures too
+  document.addEventListener("cassini:away", e => { if (e.detail.away) for (const w of B.wins.values()) w.update(); });
   window.cassiniBodyWindows = { setOn, get on() { return B.on; }, state: B };
 })();
 </script>
@@ -4070,9 +4364,9 @@ body.phone #finale .fx-data { width: min(220px, calc(100vw - 32px)); top: 10px; 
   function want(i) {
     let b = R.buf.get(i);
     if (b && b.size === size() && b.mosaic === R.mosaic) return b;
-    b = { ok: null, img: null, how: null, size: size(), mosaic: R.mosaic };
+    b = { ok: null, img: null, how: null, size: size(), mosaic: R.mosaic, ctl: new AbortController() };
     R.buf.set(i, b);
-    fetch(`${FRAMES}/frames/reel/${R.target}/${i}.webp?size=${b.size}&mosaic=${R.mosaic ? 1 : 0}${window.cassiniLook()}`).then(async r => {
+    fetch(`${FRAMES}/frames/reel/${R.target}/${i}.webp?size=${b.size}&mosaic=${R.mosaic ? 1 : 0}${window.cassiniLook()}`, { signal: b.ctl.signal }).then(async r => {
       if (!r.ok) throw new Error(r.status);
       try { b.how = JSON.parse(r.headers.get("X-Reel") || "null"); } catch (e) {}
       b.img = await createImageBitmap(await r.blob()); b.ok = true;
@@ -4139,6 +4433,12 @@ body.phone #finale .fx-data { width: min(220px, calc(100vw - 32px)); top: 10px; 
     }
     requestAnimationFrame(tick);
   }
+  // paused in the background (away.html): the pictures still loading are called off (asked again on the way back),
+  // and the reel's clock moves on by the time away
+  document.addEventListener("cassini:away", e => {
+    if (e.detail.away) { for (const [j, b] of R.buf) if (b.ok === null) { b.ctl.abort(); R.buf.delete(j); } }
+    else { R.due += e.detail.ms; if (R.waitSince) R.waitSince += e.detail.ms; }
+  });
   function setReelPlaying(p) { R.playing = p; $("rlplay").textContent = p ? "❚❚" : "▶"; R.due = performance.now(); R.waitSince = 0; }
 
   async function playAll() {
@@ -4441,7 +4741,9 @@ body.phone #finale .fx-data { width: min(220px, calc(100vw - 32px)); top: 10px; 
   }
   // browsers let a page make sound only after the person clicks or presses a key on it
   ["pointerdown", "keydown", "touchend"].forEach(t => window.addEventListener(t, () => { gestured = true; if (S.get("sound.on") && (!ctx || ctx.state !== "running")) start(); }, { passive: true, capture: true }));
-  document.addEventListener("visibilitychange", () => { if (!ctx) return; if (document.hidden) ctx.suspend(); else if (S.get("sound.on")) ctx.resume(); });
+  document.addEventListener("visibilitychange", () => { if (!ctx) return; if (document.hidden) ctx.suspend(); else if (S.get("sound.on") && !(window.cassiniAway && cassiniAway.on)) ctx.resume(); });
+  // paused in the background (away.html), also when the tab is still on screen but the window lost focus
+  document.addEventListener("cassini:away", e => { if (!ctx) return; if (e.detail.away) ctx.suspend(); else if (S.get("sound.on") && !document.hidden) ctx.resume(); });
 
   // ---------- pitch: a pentatonic scale, so any notes that sound together agree ----------
   const SCALE = [0, 2, 4, 7, 9], ROOT = { N: 62, W: 50 };   // D major pentatonic: narrow-angle from D4, wide-angle from D3
@@ -5831,7 +6133,7 @@ function makeCassini() {
 }
 
 // ---------- state ----------
-const state = { et: 0, playing: true, speed: 600, focus: "TITAN", enlarge: false, allOrbits: false, follow: false, view: [0, 0], dragging: false, context: "SATURN" };
+const state = { et: 0, playing: true, speed: 600, focus: "TITAN", enlarge: false, allOrbits: false, follow: false, view: [0, 0], tlFollow: true, dragging: false, context: "SATURN" };
 let bodies = {}, tracks = {}, encounters = [], catalog = null, order = null, coverage = [0, 0];
 // whole-mission data (data/mission.json): years load as the clock reaches them, the year on screen plus its neighbours
 let mission = null, activeYears = [], keepYears = [], loadedSpan = [-Infinity, Infinity], yearsJob = null, yearsWanted = null, lastWantedYear = null;
@@ -6543,7 +6845,7 @@ function updateHud() {
 // ---------- timeline ----------
 const tl = $("tl"), tctx = tl.getContext("2d");
 const YEAR = 365.25 * 86400;
-const TICKS = [3600, 3 * 3600, 6 * 3600, 12 * 3600, 86400, 2 * 86400, 7 * 86400, 14 * 86400, 30.44 * 86400, 3 * 30.44 * 86400, YEAR, 2 * YEAR, 5 * YEAR];
+const TICKS = [60, 5 * 60, 15 * 60, 30 * 60, 3600, 3 * 3600, 6 * 3600, 12 * 3600, 86400, 2 * 86400, 7 * 86400, 14 * 86400, 30.44 * 86400, 3 * 30.44 * 86400, YEAR, 2 * YEAR, 5 * YEAR];
 const MONTHS = ["Jan", "Feb", "Mar", "Apr", "May", "Jun", "Jul", "Aug", "Sep", "Oct", "Nov", "Dec"];
 function etToX(et, w) { return (et - state.view[0]) / (state.view[1] - state.view[0]) * w; }
 function xToEt(x, w) { return state.view[0] + x / w * (state.view[1] - state.view[0]); }
@@ -6638,23 +6940,63 @@ function drawTimeline() {
   g.fillStyle = THEME.now; g.fillRect(Math.round(xn) - 1, 0, 2, h);
   if (window.studyTimeline) window.studyTimeline(g, w, h, xn);
 }
-function setView(span, center = state.et) { span = Math.min(span, coverage[1] - coverage[0]); state.view = [center - span / 2, center + span / 2]; clampView(); }
+// The view follows the clock (state.tlFollow) until the user scrolls or zooms it away; then it stays where they left
+// it, as far from now as they like, until a jump, a scrub or recenterTimeline() brings it back.
+const TL_MIN_SPAN = 600;   // closest zoom: ten minutes across the timeline
+function setView(span, center = state.et) { span = Math.max(TL_MIN_SPAN, Math.min(span, coverage[1] - coverage[0])); state.view = [center - span / 2, center + span / 2]; clampView(); state.tlFollow = true; }
+// while following, a clock that runs off the right edge turns the page: now goes back near the left
+function keepNowInView() {
+  if (!state.tlFollow) return;
+  const span = state.view[1] - state.view[0];
+  if (state.et > state.view[1] - span * 0.05 || state.et < state.view[0]) setView(span, state.et + span * 0.4);
+}
+function recenterTimeline() { setView(state.view[1] - state.view[0], state.et); }
+// zoom to span keeping the time at fraction f of the width where it is; following, that time is now
+function zoomTimeline(span, at, f) {
+  const old = state.view[1] - state.view[0];
+  span = Math.max(TL_MIN_SPAN, Math.min(coverage[1] - coverage[0], span));
+  if (at === undefined) {
+    const fn = (state.et - state.view[0]) / old;
+    if (state.tlFollow && fn >= 0 && fn <= 1) { at = state.et; f = fn; } else { at = state.view[0] + old / 2; f = 0.5; }
+  }
+  state.view = [at - f * span, at + (1 - f) * span]; clampView();
+}
+function panTimeline(dt) { state.view = [state.view[0] + dt, state.view[1] + dt]; clampView(); state.tlFollow = false; }
 function scrubTo(clientX) { const r = tl.getBoundingClientRect(); setTime(xToEt(clientX - r.left, r.width)); }
-tl.addEventListener("pointerdown", e => { state.dragging = true; tl.setPointerCapture(e.pointerId); scrubTo(e.clientX); });
-tl.addEventListener("pointermove", e => { if (state.dragging) scrubTo(e.clientX); });
-tl.addEventListener("pointerup", () => { state.dragging = false; });
-tl.addEventListener("pointercancel", () => { state.dragging = false; });
+// dragging in the ruler along the top moves the view; anywhere else it moves the clock
+const TL_RULER = 18;
+let tlPan = null;
+const inRuler = e => e.offsetY < (e.pointerType === "touch" ? 26 : TL_RULER);
+tl.addEventListener("pointerdown", e => {
+  tl.setPointerCapture(e.pointerId);
+  if (inRuler(e)) { tlPan = { x: e.clientX, view: state.view.slice() }; tl.style.cursor = "grabbing"; return; }
+  state.dragging = true; state.tlFollow = true; scrubTo(e.clientX);
+});
+tl.addEventListener("pointermove", e => {
+  if (tlPan) {
+    const span = tlPan.view[1] - tlPan.view[0], dt = -(e.clientX - tlPan.x) / tl.clientWidth * span;
+    state.view = [tlPan.view[0] + dt, tlPan.view[1] + dt]; clampView(); state.tlFollow = false;
+  } else if (state.dragging) scrubTo(e.clientX);
+  else tl.style.cursor = inRuler(e) ? "grab" : "ew-resize";
+});
+const tlUp = () => { state.dragging = false; if (tlPan) { tlPan = null; tl.style.cursor = "grab"; } };
+tl.addEventListener("pointerup", tlUp);
+tl.addEventListener("pointercancel", tlUp);
+// the wheel or a two-finger swipe scrolls through time; a pinch (or ⌘/Ctrl + wheel) zooms at the pointer
 tl.addEventListener("wheel", e => {
   e.preventDefault();
   const r = tl.getBoundingClientRect(), w = r.width, x = e.clientX - r.left;
   const span = state.view[1] - state.view[0];
-  if (Math.abs(e.deltaX) > Math.abs(e.deltaY)) { const dt = e.deltaX / w * span; state.view = [state.view[0] + dt, state.view[1] + dt]; }
-  else {
-    const at = xToEt(x, w), f = Math.exp(e.deltaY * 0.0015);
-    const ns = Math.max(3 * 3600, Math.min(coverage[1] - coverage[0], span * f));
-    state.view = [at - (x / w) * ns, at + (1 - x / w) * ns];
+  const unit = e.deltaMode === 1 ? 16 : e.deltaMode === 2 ? w : 1;
+  if (e.ctrlKey || e.metaKey) {
+    const ns = span * Math.exp(e.deltaY * unit * 0.01);
+    zoomTimeline(ns, xToEt(x, w), x / w);
+    const fn = (state.et - state.view[0]) / (state.view[1] - state.view[0]);
+    if (fn < 0 || fn > 1) state.tlFollow = false;
+  } else {
+    const d = Math.abs(e.deltaX) > Math.abs(e.deltaY) ? e.deltaX : e.deltaY;
+    panTimeline(d * unit / w * span);
   }
-  clampView();
 }, { passive: false });
 
 function setTime(et) { state.et = Math.min(coverage[1], Math.max(coverage[0], et)); }
@@ -6884,8 +7226,9 @@ function momentsBefore(et) {
   let c = 0; for (const t of momentEts.ets) if (t < et) c++;
   return c;
 }
+document.addEventListener("cassini:away", e => { if (!e.detail.away) lastT = performance.now(); });
 function frame(now) {
-  const dt = Math.min(0.1, (now - lastT) / 1000); lastT = now;
+  const dt = Math.max(0, Math.min(0.1, (now - lastT) / 1000)); lastT = now;
   const ready = yearReady();
   if (mission) {
     const y = partOf(state.et);
@@ -6901,8 +7244,7 @@ function frame(now) {
   if (state.playing && !state.dragging && ready) {
     setTime(window.studyAdvance ? window.studyAdvance(state.et, dt, state.speed) : state.et + dt * state.speed);
     if (state.et >= coverage[1]) setPlaying(false);
-    const span = state.view[1] - state.view[0];
-    if (state.et > state.view[1] - span * 0.05 || state.et < state.view[0]) setView(span, state.et + span * 0.4);
+    keepNowInView();
   }
   if (window.studyFrame) window.studyFrame(dt);
   updateBodies();
@@ -7104,6 +7446,8 @@ function frame(now) {
   }
 
   function tick() {
+    // paused in the background (away.html): a load that waits on it is not a slow load, so its clock starts over
+    if (window.cassiniAway && cassiniAway.on) { busySince = null; return; }
     const what = busy(), now = performance.now();
     if (what) {
       status.textContent = what;
@@ -7417,6 +7761,8 @@ function frame(now) {
       if (k >= 1) { fades.delete(el); if (f.then) f.then(); }
     }
   }
+  // paused in the background (away.html): the fades carry on where they stopped
+  document.addEventListener("cassini:away", e => { if (!e.detail.away) for (const f of fades.values()) f.t0 += e.detail.ms; });
   function caption(html, cls) {
     const el = document.createElement("div");
     el.className = "fx-cap" + (cls ? " " + cls : ""); el.innerHTML = html; caps.appendChild(el);
@@ -7551,6 +7897,12 @@ function frame(now) {
   }
 
   // the viewer's frame loop, before it places the bodies: the finale runs its own clock
+  // paused in the background (away.html): the cutscene's clock moves on by the time away, so it carries on where it stopped
+  document.addEventListener("cassini:away", e => {
+    if (e.detail.away || !F) return;
+    const ms = e.detail.ms; F.t0 += ms; F.lastFrame += ms; look.last += ms;
+    for (const k of ["recapAt", "rollAt", "rollHeld", "rollEnd", "rollClose"]) if (F[k]) F[k] += ms;
+  });
   window.studyFrame = dt => {
     stepFades();
     if (!F) return;

@@ -538,6 +538,19 @@ def _saturation(x):
     return np.where(top > 0, (top - low) / np.maximum(top, 1e-12), 0)
 
 
+def _broad_blur(v, sigma):
+    """cv2.GaussianBlur(v, (0, 0), sigma) for a wide sigma (a tenth of a mosaic's canvas, hundreds of pixels):
+    blurred at 1/f of the size and scaled back up, which is the same picture to well under a level (the blur
+    leaves nothing finer than sigma) at a hundredth of the cost; a mosaic movie's color picture took seconds."""
+    f = int(sigma // 8)
+    h, w = v.shape[:2]
+    if f < 2 or min(h, w) < 8 * f:
+        return cv2.GaussianBlur(v, (0, 0), sigma)
+    small = cv2.resize(v, (max(1, round(w / f)), max(1, round(h / f))), interpolation=cv2.INTER_AREA)
+    small = cv2.GaussianBlur(small, (0, 0), sigma / f)
+    return cv2.resize(small, (w, h), interpolation=cv2.INTER_LINEAR)
+
+
 def _flatten_broad(x, lit, typical=None):
     if lit.sum() < 100:
         return x
@@ -548,7 +561,7 @@ def _flatten_broad(x, lit, typical=None):
     typical = np.asarray(typical, np.float32).reshape(3, 1, 1)
     sigma = FALSE_BROAD * max(x.shape[1:])
     weight = np.where(lit, lum, 0).astype(np.float32)
-    soft = lambda v: cv2.GaussianBlur(v, (0, 0), sigma)
+    soft = lambda v: _broad_blur(v, sigma)
     norm = np.maximum(soft(weight), 1e-12)
     broad = np.stack([soft(c * weight) / norm for c in (share - typical)])
     flat = np.exp(share - FALSE_FLAT * broad)
