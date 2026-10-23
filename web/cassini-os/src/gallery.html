@@ -11,7 +11,7 @@
        recipe   the moment it was saved at (the share-link parameters t, view, cam, play=0) and how the frame server
                 makes it: src, the /frames/... address of the picture (its pipeline: frame, composite, mosaic,
                 processing), or film, the movie export's options (/export, same options give the same film)
-       file     the picture at full resolution as the server sends it (WebP), or the film (MP4); a 320 px thumbnail
+       file     the picture at full resolution as the server sends it (WebP; it leaves the gallery as JPEG), or the film (MP4); a 320 px thumbnail
      A browser may clear a site's storage (Safari after 7 days without a visit); an item without its file is made
      again from its recipe when opened. Export Library writes everything to one .zip (gallery.json and the files),
      Import Library reads it back.
@@ -359,6 +359,18 @@ body.phone #galtoast { bottom: calc(env(safe-area-inset-bottom, 0px) + var(--app
   const esc = s => String(s == null ? "" : s).replace(/[&<>"]/g, c => ({ "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;" })[c]);
   function revoke() { G.urls.forEach(u => URL.revokeObjectURL(u)); G.urls = []; }
   const objUrl = b => { const u = URL.createObjectURL(b); G.urls.push(u); return u; };
+  // pictures leave the gallery as JPEG (Download, Share, Export Library): most apps and sites still refuse WebP. Drawn on
+  // black (space; JPEG has no transparency) at quality 0.92; the WebP stays in the gallery as the server sent it
+  async function asJpeg(blob) {
+    if (!blob || /jpeg/.test(blob.type)) return blob;
+    try {
+      const bm = await createImageBitmap(blob), c = document.createElement("canvas");
+      c.width = bm.width; c.height = bm.height;
+      const g = c.getContext("2d"); g.fillStyle = "#000"; g.fillRect(0, 0, c.width, c.height); g.drawImage(bm, 0, 0); bm.close();
+      return await new Promise(res => c.toBlob(b => res(b || blob), "image/jpeg", 0.92));
+    } catch (e) { return blob; }
+  }
+  const extOf = b => /jpeg/.test(b.type) ? "jpg" : /png/.test(b.type) ? "png" : "webp";
   async function refresh() {
     try { G.items = await allItems(); } catch (e) { G.items = []; $("galsum").textContent = "This browser keeps no storage for the gallery here"; }
     if (G.cur || G.shared) return;
@@ -418,12 +430,18 @@ body.phone #galtoast { bottom: calc(env(safe-area-inset-bottom, 0px) + var(--app
       else filmFrom(item, v, dl, base);
     } else {
       const im = new Image(); im.alt = item.title; im.crossOrigin = "anonymous"; st.appendChild(im);
-      if (file) { im.src = objUrl(file); dl.href = im.src; dl.setAttribute("download", base + (/png/.test(file.type) ? ".png" : ".webp")); }
+      if (file) {
+        im.src = objUrl(file); dl.href = im.src; dl.setAttribute("download", base + "." + extOf(file));
+        asJpeg(file).then(j => { if (G.cur === item && j !== file) { dl.href = objUrl(j); dl.setAttribute("download", base + ".jpg"); } });
+      }
       else if (item.src) {
         const wait = document.createElement("div"); wait.className = "galwait"; wait.textContent = "The frame server is making this picture…"; st.appendChild(wait);
         im.onload = () => wait.remove(); im.onerror = () => { wait.textContent = "The frame server could not make this picture (is it running?)"; };
         im.src = sized(item.src, "full");
         dl.href = sized(item.src, "full") + "&format=png&download=1"; dl.setAttribute("download", base + ".png");
+        fetch(sized(item.src, "full")).then(r => r.ok ? r.blob() : null).then(asJpeg).then(j => {
+          if (j && /jpeg/.test(j.type) && (G.cur === item || G.shared === item)) { dl.href = objUrl(j); dl.setAttribute("download", base + ".jpg"); }
+        }).catch(() => {});
       }
     }
   }
@@ -480,8 +498,9 @@ body.phone #galtoast { bottom: calc(env(safe-area-inset-bottom, 0px) + var(--app
     let b = item.hasFile ? await getFile(item.id).catch(() => null) : null;
     if (!b && item.src) { try { const r = await fetch(sized(item.src, "full")); if (r.ok) b = await r.blob(); } catch (e) {} }
     if (!b) return null;
-    const ext = item.kind === "movie" ? "mp4" : /png/.test(b.type) ? "png" : "webp";
-    return new File([b], `Cassini_${(item.ids[0] || "picture").replace(/[^\w.-]+/g, "_")}.${ext}`, { type: b.type || (item.kind === "movie" ? "video/mp4" : "image/webp") });
+    if (item.kind !== "movie") b = await asJpeg(b);
+    const ext = item.kind === "movie" ? "mp4" : extOf(b);
+    return new File([b], `Cassini_${(item.ids[0] || "picture").replace(/[^\w.-]+/g, "_")}.${ext}`, { type: b.type || (item.kind === "movie" ? "video/mp4" : "image/jpeg") });
   }
   async function copyText(text, said) {
     try { await navigator.clipboard.writeText(text); toast(said); } catch (e) { toast(text); }
@@ -602,9 +621,10 @@ body.phone #galtoast { bottom: calc(env(safe-area-inset-bottom, 0px) + var(--app
       const entries = [], meta = [];
       for (const i of items) {
         const m = Object.assign({}, i); delete m.thumb;
-        if (i.thumb) { entries.push([`thumbs/${i.id}.webp`, i.thumb]); m.thumbFile = `thumbs/${i.id}.webp`; }
-        const f = i.hasFile ? await getFile(i.id).catch(() => null) : null;
-        if (f) { const name = `files/${i.id}.${i.kind === "movie" ? "mp4" : /png/.test(f.type) ? "png" : "webp"}`; entries.push([name, f]); m.file = name; }
+        if (i.thumb) { const t = await asJpeg(i.thumb); m.thumbFile = `thumbs/${i.id}.${extOf(t)}`; entries.push([m.thumbFile, t]); }
+        let f = i.hasFile ? await getFile(i.id).catch(() => null) : null;
+        if (f && i.kind !== "movie") { f = await asJpeg(f); m.type = f.type; m.bytes = f.size; }
+        if (f) { const name = `files/${i.id}.${i.kind === "movie" ? "mp4" : extOf(f)}`; entries.push([name, f]); m.file = name; }
         meta.push(m);
       }
       entries.unshift(["gallery.json", new Blob([JSON.stringify({ app: "Cassini OS gallery", version: 1, frames: FRAMES, exported: new Date().toISOString(), items: meta }, null, 1)], { type: "application/json" })]);
@@ -623,7 +643,7 @@ body.phone #galtoast { bottom: calc(env(safe-area-inset-bottom, 0px) + var(--app
       for (const m of j.items) {
         if (!m.id || have.has(m.id) || !Array.isArray(m.moment)) continue;
         const f = m.file && files.get(m.file), th = m.thumbFile && files.get(m.thumbFile);
-        const item = Object.assign({}, m, { thumb: th ? new Blob([th], { type: "image/webp" }) : null, hasFile: !!f, src: recipe(m.src) });
+        const item = Object.assign({}, m, { thumb: th ? new Blob([th], { type: /\.jpg$/.test(m.thumbFile) ? "image/jpeg" : "image/webp" }) : null, hasFile: !!f, src: recipe(m.src) });
         delete item.file; delete item.thumbFile;
         await putItem(item, f ? new Blob([f], { type: m.type || "" }) : null); n++;
       }
