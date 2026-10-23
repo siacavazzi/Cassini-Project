@@ -98,7 +98,7 @@ body.phone #reelcard:not(.full) { width: calc(100% - 16px) !important; left: 8px
     if (b && b.size === size() && b.mosaic === R.mosaic) return b;
     b = { ok: null, img: null, how: null, size: size(), mosaic: R.mosaic };
     R.buf.set(i, b);
-    fetch(`${FRAMES}/frames/reel/${R.target}/${i}.webp?size=${b.size}&mosaic=${R.mosaic ? 1 : 0}`).then(async r => {
+    fetch(`${FRAMES}/frames/reel/${R.target}/${i}.webp?size=${b.size}&mosaic=${R.mosaic ? 1 : 0}${window.cassiniLook()}`).then(async r => {
       if (!r.ok) throw new Error(r.status);
       try { b.how = JSON.parse(r.headers.get("X-Reel") || "null"); } catch (e) {}
       b.img = await createImageBitmap(await r.blob()); b.ok = true;

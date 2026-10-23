@@ -48,11 +48,19 @@ its centroid (centroid_shift).
 report = optional list that gets one entry per frame: how it was aligned
 returns (imgs, masks)
 """
-def align_with_masks(imgs, masks, ref=0, report=None):
+def align_with_masks(imgs, masks, ref=0, report=None, found=None, use=None):
     for i in range(0, len(imgs)):
         if i == ref:
             if report is not None:
                 report.append("reference")
+            if found is not None:
+                found.append(None)
+            continue
+        if use is not None:
+            # shifts found on other versions of these frames (see color_image.load_aligned)
+            if use[i] is not None:
+                imgs[i] = shift_image(imgs[i], *use[i])
+                masks[i] = shift_image(masks[i].astype(np.float32), *use[i]) > 0.99
             continue
         shift, how = find_shift(imgs[ref], imgs[i]), "phase"
         if shift is None:
@@ -68,6 +76,8 @@ def align_with_masks(imgs, masks, ref=0, report=None):
             masks[i] = shift_image(masks[i].astype(np.float32), *shift) > 0.99
         if report is not None:
             report.append(f"{how} {shift[0]:+.1f},{shift[1]:+.1f}" if shift is not None else "not aligned")
+        if found is not None:
+            found.append(shift)
     return imgs, masks
 
 

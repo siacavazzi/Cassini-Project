@@ -43,6 +43,8 @@ Every PR that changes anything a person can see carries both kinds:
 3. **A preview server** of the phase branch on its port, with the exact URL (and `?t=` moment) that shows the change.
 4. **Numbers where the phase promises numbers** (restarts left, movies reclassified, hue error against NASA, seconds per tile), measured with the investigation scripts (`mosaic-investigation/scan_passes.py`, `color-investigation/fit_matrix.py`) or their successors.
 
+5. **Image quality pass (after checkpoint 2, 2026-10-22).** Every PR that changes how pictures look measures each before/after pair at a 100% crop of sky and body: sky noise (std in output levels), banding (distinct levels and histogram gaps over a smooth gradient) and scan lines (row-mean ripple). The after may not be worse than the before on any of them. The phase thread looks at every pair itself at 100% and writes one honest line per pair (better, worse, why). 100% crops of the hardest pairs go on an orphan `evidence/<phase>` branch so the lead can view them in the cloud, and the lead looks at them before Sam sees anything.
+
 Phases with nothing visible (for example the tile map) carry test output and a sample of the new data instead.
 
 ## Checkpoints where work pauses for Sam
@@ -77,14 +79,16 @@ Effort comes from the reports. Phase A runs alongside 1 and 2; everything else f
   - Re-check the detection on that pass and on a sample of the passes still called mosaics (contact sheets of the frames in time order next to the mosaic), and tighten the rule where it is wrong. Report how many passes change.
   - A per-window **Mosaic / Movie** switch (Auto by default, which follows the server's call). Movie plays the pass's frames in place; Mosaic builds it. The choice sticks for that pass while it plays and is a `cassiniSettings` default ("Mosaic passes: Auto / Always mosaic / Always movie"). The server builds a mosaic for any pass when asked, whatever `_judge` says.
   - Low mosaic resolution is noted and belongs to phase 6 (full-resolution mosaic); not in this PR.
-- **Depends on.** Nothing. **Checkpoint 1** (shown again after the rework).
+- **Second round of feedback (Sam, 21:36Z).** Three kinds, not two: **mosaic** (places covered once), **movie** (one place, or a slow creep), and **mosaic movie** (the same set of places taken again and again, e.g. the Jupiter approach: a cycle of about 12 color frames repeated). The classifier names all three, and the switch offers Mosaic / Movie / Mosaic movie with Auto first. Known wrong or doubtful calls go into `pass_benchmarks.json` with Sam's verdict: ISS_064RI_AZSCAN001_PRIME NAC pass 1 (called mosaic, looks like a movie), ISS_222TI_REGMAP001_VIMS NAC pass 0 (debatable; possibly a movie of a few spots or a mosaic movie), the Jupiter approach (mosaic movie; Sam's canonical example, top of the list: JUPITER ISS_C23JU_6ATM2X2B115_PRIME NAC and the neighboring 2x2 ATM passes of late 2000). The rule is checked against every benchmark and the random sample before Sam sees it again.
+- **Depends on.** Nothing. **Checkpoint 1** (shown again, together with phase M, as one "mosaic or movie" checkpoint).
 
 ### Phase M · Movies worth watching (D7 and the movie presentation, moved up) · ~2 days · port 8794
 - **Why moved up.** Sam (checkpoint 1) does not love today's movie mode, and with the movie/mosaic switch more passes play as movies, so how a movie looks matters now, not after the speed work.
 - **Goal.** A pass played as a movie looks like a movie: frames held steady in place (SPICE-centered through the pipeline, one display scale for the pass so brightness does not pump), smooth timing at the pass's own pace or the playback speed, a scrubbable filmstrip of the pass under the window (D7) that opens any frame or set, and an optional short Rolling trail. Starts with a short look at today's movie mode (#23, #40) and what Sam dislikes in it; the brief lists the faults found before building.
 - **Files.** `head-quiet.html`, `movie.html`, `bodywin.html`, `web/frames/frame_server.py` / `reel.py` for the pass's shared scale.
 - **Benchmarks.** The 2006-12-04 ring pass, ISS_137RI_FMOVIE001_VIMS, ISS_109RI_LRHPENKMV001_PRIME, ISS_235SA_SATSTARE001_PRIME, a spoke movie.
-- **Depends on.** Phase 1's movie flag and switch; folds phase A in if A merges first. **Checkpoint M.** Mosaic movie modes (Build, Rolling, Time-lapse; 7b) still wait for phase 6.
+- **Mosaic movies (moved up from 7b, Sam 21:36Z).** A mosaic movie plays as a rolling mosaic that persists: the picture never resets to empty when a new cycle begins; each new tile replaces or fades over its own earlier copy (Rolling with a persistence slider, Time-lapse where a tile replaces its earlier self), and it exports through movie export (#43) looking the same. Speed work (phase 6) makes it faster later but is not a precondition.
+- **Depends on.** Phase 1's pass kinds and switch; folds phase A in if A merges first. **Checkpoint M**, shown together with phase 1.
 
 ### Phase 2a · Color looks right (C1 to C5) · ~2 days · port 8792
 - **Goal.** One display model on linear I/F: mosaic gains anchored (mean log gain held at 0, stronger pull to 1); one seam gain and offset per tile solved on linear luminance and applied to every filter; filled passes share one black and white across filters, sRGB curve instead of gamma 1.5, `detail()` on luminance only; composite white at the 99.5th percentile of the brightest channel over lit pixels with a soft shoulder; black per channel = sky median plus one shared noise margin.
@@ -96,7 +100,8 @@ Effort comes from the reports. Phase A runs alongside 1 and 2; everything else f
 ### Phase 2b · Natural color (C6) · ~0.5 day · port 8792
 - **Goal.** For true-color sets (RED/GRN/BL1 and RED/GRN/VIO), apply the fitted 3×3 filter-to-sRGB matrix on linear I/F, then the sRGB curve. "Natural color" setting, on by default, with "Raw filters" as the other option, in the cameras section of Settings. False-color and two-filter sets keep the direct mapping and stay labeled false color.
 - **Files.** `calibration.py` / `color_image.py`, matrices from `/mnt/project-files/color-investigation/filter_to_srgb_matrices.json`, settings, cache version.
-- **Done when.** Hue within about 1° of NASA on 6 of the 8 references, as in the report.
+- **Per-filter-set rules for false color (Sam, 21:50Z).** False-color sets (methane and continuum bands, UV/IR, e.g. the Jupiter approach ISS_C23JU_6ATM2X2B115_PRIME NAC) look off and unpleasant today. Add a small table of rules per filter set (which filter goes to which channel, per-band weights and a balance that keeps the planet's neutral bands near gray), used for every set with those filters, not per moment. They stay labeled false color, and a Raw option keeps the direct mapping.
+- **Done when.** Hue within about 1° of NASA on 6 of the 8 references, as in the report; the Jupiter approach and two other common false-color sets look balanced next to NASA's releases of the same sets where they exist, and pass the image quality checks.
 - **Depends on.** 2a merged into `pictures` after Sam's feedback at checkpoint 2. **Checkpoint 2 (second half).**
 
 ### Phase A · Composite drill-down (D1) · ~2.5 days · port 8793
@@ -122,6 +127,9 @@ Effort comes from the reports. Phase A runs alongside 1 and 2; everything else f
 - **Data rebuild** on the Mini with the smithed attitude (command in project memory), written to a preview data folder; the live data is untouched until the final merge.
 - **Depends on.** Phase 4. **Checkpoint 5.**
 
+### Phase R · Sharper previews (proposed, waits for Sam's go) · ~1 day
+- From the resolution study (https://claude.ai/artifact/4HzJfyS9zqcCwREMgNDonT): the blur outside mosaics is the window picking its picture size from CSS pixels and ignoring the screen's pixel density (`big()` in head-quiet.html), so a retina window gets 512 px stretched 2.2×. Fix: size by width × devicePixelRatio. Plus cache each composite once so a 512 → 1024 step only re-encodes (16-54 ms instead of 0.4-2.5 s). Frames and composites at 1024 cost little (~180 KB/s for 4 windows). Load-adaptive sizing is not needed. Mosaic sharpness stays in phase 6a (compose at the size sent, up to 2048 in big windows and full view).
+
 ### Phase 6 · Speed (M5, M7, M6) · ~3 days plus one night · two PRs
 - **6a.** Preview-size tiles, compose at the size sent, grow each pass's canvas in memory (`mosaic.compose` over the new tile and its overlaps only); "Whole mosaic, full resolution" in the save menu (capped canvas up to 4096 px, progress, feeds Save PNG and movie export).
 - **6b.** Overnight pre-build of every real mosaic pass's plan and preview tiles on the LaCie (~108k tiles, 5-8 h, 10-25 GB), started only after every look change above has been accepted.
@@ -130,7 +138,7 @@ Effort comes from the reports. Phase A runs alongside 1 and 2; everything else f
 
 ### Phase 7 · Movies (D7, M8) · ~5 days · two PRs
 - **7a.** Moved up into phase M.
-- **7b.** Mosaic movie mode: Build, Rolling (older tiles fade over the last N, persistence slider in Settings) and Time-lapse (a tile replaces its own earlier copy; the NPOLMOV_VIMS polar passes). The rolling persistence mosaic stays.
+- **7b.** Moved up into phase M (mosaic movies). What remains here: speed-dependent polish of Build, Rolling (older tiles fade over the last N, persistence slider in Settings) and Time-lapse (a tile replaces its own earlier copy; the NPOLMOV_VIMS polar passes). The rolling persistence mosaic stays.
 - **Depends on.** Phase 6. **Checkpoint 7.**
 
 ### Phase 8 · Finishing (C8, C9, D9, D8) · ~4 days · separate PRs
