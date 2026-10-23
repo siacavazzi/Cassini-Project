@@ -323,6 +323,31 @@ def processed_webp(frame_id, size, cache):
     return data, report
 
 
+# ---------- slow loads: the page reports a wait for data on the loading screen, kept to find out what held it ----------
+# POST /jumplog takes the page's report (what loaded, each data file's timings, the picture requests under way, the
+# page's long tasks); the server adds when, who and how busy it was, and appends it to <cache>/jump-log.jsonl.
+# GET /jumplog answers the last 50 reports.
+JUMPLOG_MAX = 256 * 1024
+_jumplog_lock = threading.Lock()
+
+
+def save_jumplog(cache, report, client):
+    entry = {"server_time": time.strftime("%Y-%m-%dT%H:%M:%SZ", time.gmtime()), "client": client,
+             "server_threads": threading.active_count(), **report}
+    os.makedirs(cache, exist_ok=True)
+    with _jumplog_lock, open(os.path.join(cache, "jump-log.jsonl"), "a") as fh:
+        fh.write(json.dumps(entry) + "\n")
+    print(f"slow load {report.get('seconds', '?')} s ({report.get('what', '')}) from {client}", flush=True)
+
+
+def jumplog(cache, n=50):
+    try:
+        with open(os.path.join(cache, "jump-log.jsonl")) as fh:
+            return [json.loads(line) for line in fh.readlines()[-n:]]
+    except FileNotFoundError:
+        return []
+
+
 # ---------- flagged pictures: pictures that look wrong, kept with what was shown so they can be looked into later ----------
 FLAG_NAME = re.compile(r"^[0-9]{8}-[0-9]{6}(-[0-9]+)?_[A-Za-z0-9_]+$")
 FLAG_FILE = re.compile(r"^(shown\.(png|webp|jpg)|flag\.json|raw/[NW][0-9]{10}_[0-9]+\.png)$")
@@ -555,6 +580,17 @@ def make_handler(site, cache, flags=None):
                 except OverflowError as e:
                     return self.send_json({"error": str(e)}, 413)
             n = int(self.headers.get("Content-Length") or 0)
+            if url.path == "/jumplog":
+                if not 0 < n <= JUMPLOG_MAX:
+                    self.close_connection = True
+                    return self.send_error(413, "Too big")
+                try:
+                    report = json.loads(self.rfile.read(n))
+                    assert isinstance(report, dict)
+                except (ValueError, AssertionError):
+                    return self.send_error(400, "Not a report")
+                save_jumplog(cache, report, self.client_address[0])
+                return self.send_json({"ok": True})
             if not flags or not (url.path == "/flags" or re.match(r"^/flags/[^/]+/undo$", url.path)):
                 self.rfile.read(n) if 0 < n <= FLAG_MAX else None
                 return self.send_error(404)
@@ -652,6 +688,8 @@ def make_handler(site, cache, flags=None):
                 return self.send_film(path, job, parse_qs(url.query).get("download", ["0"])[0] != "0")
             if flags and (url.path == "/flags" or url.path.startswith("/flags/")):
                 return self.send_flags(url.path)
+            if url.path == "/jumplog":
+                return self.send_json(jumplog(cache))
             if url.path == "/health":
                 return self.send_bytes(f"ok {data_source.get_source()}\n".encode(), "text/plain", False)
             if url.path == "/frames/color.webp":
@@ -807,9 +845,15 @@ def make_handler(site, cache, flags=None):
             # pages and their JSON change with every rebuild, so browsers must check before reusing them;
             # frames, textures and track files keep the default heuristic caching
             self.revalidate = url.path.endswith(("/", ".html", ".json"))
-            if self.send_gzipped(url.path):
-                return
-            return super().do_GET()
+            try:
+                if self.send_gzipped(url.path):
+                    return
+                return super().do_GET()
+            finally:
+                # replay data is small and quick to send: one that took a while says the server was busy
+                took = time.monotonic() - self.started
+                if took > 1 and "/data/" in url.path:
+                    print(f"slow data {took:.1f} s {url.path} ({threading.active_count()} threads)", flush=True)
 
         def send_flags(self, url_path):
             if url_path == "/flags":
