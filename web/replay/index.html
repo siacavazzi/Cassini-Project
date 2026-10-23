@@ -825,6 +825,9 @@ function requestYears(y) {
   yearsWanted = y;
   if (yearsWake) yearsWake();
   if (!yearsJob) yearsJob = (async () => {
+    // after this assignment: with the part already in, the loop below ends at once, and its finally
+    // must not run before yearsJob is set (that left a finished job in yearsJob, so no later jump loaded)
+    await null;
     try {
       while (yearsWanted !== null) {
         const y = yearsWanted, ys = partsAround(y);

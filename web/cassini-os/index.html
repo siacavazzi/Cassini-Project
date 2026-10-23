@@ -4838,6 +4838,7 @@ body.phone #launch .lx-clock { font-size: 9.5px; bottom: 9vh; }
     setView(Math.max(3 * 3600, 2 * dur), s[1] + dur / 2);
     setSpeed(SPEEDS.map(v => v[0]).filter(v => v >= 60).find(v => dur / v <= 90) || 3600);
     setPlaying(true);
+    look();
   }
 
   // ---- in and out ----
@@ -4878,6 +4879,8 @@ body.phone #launch .lx-clock { font-size: 9.5px; bottom: 9vh; }
     } catch (e) {}
   }
   const onStage = n => typeof focusChoices === "function" && focusChoices().includes(n);
+  // the 3D view centers on the body in view (a jump puts it back on Cassini); setFocus skips a body with no position now
+  const look = () => { if (M.name && state.focus !== M.name && typeof setFocus === "function") setFocus(M.name); };
   // jump: when the body is not on stage now, go to its moment nearest to now, else its busiest session
   async function enter(n, how = {}) {
     n = String(n).toUpperCase();
@@ -4891,7 +4894,7 @@ body.phone #launch .lx-clock { font-size: 9.5px; bottom: 9vh; }
     retitle(); filterMoments(); setUrl();
     document.dispatchEvent(new CustomEvent("cassini:bodymode", { detail: { name: n } }));
     if (window.cassiniDock) cassiniDock.sync();
-    if (onStage(n)) setFocus(n);
+    look();
     const d = await loadBody(n);
     if (M.name !== n) return;
     M.data = d; M.sessions = d ? d.sessions : []; M.perDay = perDay(d);
@@ -4904,6 +4907,7 @@ body.phone #launch .lx-clock { font-size: 9.5px; bottom: 9vh; }
       else { let k = 0; M.sessions.forEach((s, i) => { if (s[3] + s[4] > M.sessions[k][3] + M.sessions[k][4]) k = i; }); await goSession(k); }
       if (M.name !== n) return;
     }
+    look();
     if (how.overview !== false) overview();
     mark();
   }
@@ -4930,6 +4934,8 @@ body.phone #launch .lx-clock { font-size: 9.5px; bottom: 9vh; }
   let lastMark = 0;
   window.studyHud = ms => {
     if (base) base(ms);
+    // a moment's jump keeps the view on the body too
+    if (typeof jump === "function" && !jump.bodyLook) { const j = jump; jump = async e => { const r = await j(e); look(); return r; }; jump.bodyLook = true; }
     if (want && !M.pending && typeof catalog !== "undefined" && catalog) { M.pending = true; enter(want, { jump: false }); }
     const now = performance.now();
     if (M.name && now - lastMark > 250) { lastMark = now; mark(); }
@@ -5998,6 +6004,9 @@ function requestYears(y) {
   yearsWanted = y;
   if (yearsWake) yearsWake();
   if (!yearsJob) yearsJob = (async () => {
+    // after this assignment: with the part already in, the loop below ends at once, and its finally
+    // must not run before yearsJob is set (that left a finished job in yearsJob, so no later jump loaded)
+    await null;
     try {
       while (yearsWanted !== null) {
         const y = yearsWanted, ys = partsAround(y);
