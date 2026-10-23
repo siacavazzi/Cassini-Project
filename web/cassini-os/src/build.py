@@ -486,8 +486,15 @@ for old, new in [
 lscript = lpart("script")
 assert lscript.count("/*FACTS*/[]") == 1
 script += lscript.replace("/*FACTS*/[]", json.dumps(facts, ensure_ascii=False)) + "\n"
+# what every cutscene shares (cutscene.html): its style joins the head's and its script runs before any cutscene's (it
+# fills the viewer's cutscene hooks patched in below and wraps the clock's studyAdvance hook for their triggers)
+cs = open(os.path.join(os.path.dirname(os.path.abspath(sys.argv[2])), "cutscene.html")).read()
+cpart = lambda tag: cs[cs.index(f"<{tag}"):cs.index(f"</{tag}>") + len(tag) + 3]
+assert study.count("</style>\n</head>") == 1
+study = study.replace("</style>\n</head>", cpart("style")[len("<style>"):] + "\n</head>")
+script += cpart("script") + "\n"
 # the Grand Finale (finale.html): its style joins the head's, its overlay goes into #app, and its script runs last (it
-# wraps the clock's studyAdvance hook and fills the finale hooks patched into the viewer below)
+# registers its hooks and its trigger with cutscene.html)
 fin = open(os.path.join(os.path.dirname(os.path.abspath(sys.argv[2])), "finale.html")).read()
 npart = lambda tag: fin[fin.index(f"<{tag}"):fin.index(f"</{tag}>") + len(tag) + 3]
 for old, new in [
@@ -509,5 +516,28 @@ assert all(s.get("title") and (s.get("people") or s.get("names") or s.get("text"
 assert fscript.count("/*MISSION_TEAM*/null") == 1
 fscript = fscript.replace("/*MISSION_TEAM*/null", json.dumps({k: team[k] for k in ("intro", "sections", "closing", "sources")}, ensure_ascii=False, separators=(",", ":")))
 script += fscript + "\n"
+# more cutscenes, each its own file spliced like the finale (style into the head, section into #app, script after the
+# finale's; each chains the study* hooks): skipped while a file is not there yet
+CUTSCENES = ["soi.html", "launch.html", "huygens-release.html"]
+for name in CUTSCENES:
+    cpath = os.path.join(os.path.dirname(os.path.abspath(sys.argv[2])), name)
+    if not os.path.exists(cpath):
+        continue
+    cut = open(cpath).read()
+    cpart = lambda tag: cut[cut.index(f"<{tag}"):cut.index(f"</{tag}>") + len(tag) + 3]
+    for old, new in [
+        ("</style>\n</head>", cpart("style")[len("<style>"):] + "\n</head>"),
+        ('  <div id="loading">', "  " + cpart("section") + "\n\n" + '  <div id="loading">'),
+    ]:
+        assert study.count(old) == 1, old
+        study = study.replace(old, new)
+    cscript = cpart("script")
+    # a cutscene's published numbers (<name>-data.json), written in where its script asks for them
+    cdata = cpath[:-len(".html")] + "-data.json"
+    marker = "/*" + name[:-len(".html")].upper().replace("-", "_") + "_DATA*/null"
+    if marker in cscript:
+        assert os.path.exists(cdata), cdata
+        cscript = cscript.replace(marker, json.dumps(json.load(open(cdata)), ensure_ascii=False, separators=(",", ":")))
+    script += cscript + "\n"
 open(out, 'w').write(study + script)
 print("ok", out, len(study + script))

@@ -112,6 +112,15 @@ share of the chosen speed (Playback > Bursts slow playback to no less than, `pla
 so a faster speed always plays faster: during the Saturn tour, where Cassini images almost all the time, 1 day/s used to
 crawl at about 2 min/s.
 
+## Launch
+
+Playing the mission from the very start of the data (the Launch moment does that, or `?t=1997-10-15T08:43` and
+Play), or opening `?launch`, plays a short opening (`src/launch.html`, about 25 seconds; Escape or Skip ends it, as in
+every cutscene). The data begins where the Centaur upper stage let Cassini go, 42 min 40 s after liftoff, in low Earth
+orbit: the screen fades to black, then up on Cassini on its own with Earth falling away beneath it, the clock reading
+its real distance and speed from Earth, and the captions name the plan ahead (borrow speed from Venus twice, Earth and
+Jupiter, then Saturn). Then the interface comes back and the mission plays on from there.
+
 ## Run it
 
 The page reads the replay data through the `data` link (`data -> ../replay/data`), and the camera frames
