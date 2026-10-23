@@ -1338,18 +1338,21 @@ def _rolling_picture(u, n, size, cache, laps, slots, fmt, out, made_only):
 
 _roll_ahead = {}   # (pass, look) -> [the frame a window is at, size, out]: the mosaic movie pictures to make ahead
 ROLL_AHEAD = 10    # frames of a mosaic movie made ahead of the window playing it
+ROLL_WORKERS = int(os.environ.get("CASSINI_ROLL_WORKERS", "2"))   # ... this many at once (a color picture's mix is ~1 s)
 
 
 def rolling_ahead(u, n, size, cache, slots=None, out=OUT):
     """A window plays the mosaic movie at frame n: make the pictures of frames n+1 .. n+ROLL_AHEAD (their tiles
-    first) in the background, in order, each grown from the one before (_roll), so the window's next requests
-    are answered from the cache. One thread per pass; a later call moves it on. Waits while a window waits for
-    a mosaic (_yield)."""
+    first) in the background, in order, each grown from one before it (_roll), so the window's next requests
+    are answered from the cache. ROLL_WORKERS threads per pass, each taking the next frame not taken (a picture
+    waits for the tiles before it, which the other thread may be making); a later call moves them on. Waits
+    while a window waits for a mosaic (_yield)."""
     look = calibration.look()
     key = (u["key"], look)
     with _lock:
         running = key in _roll_ahead
-        _roll_ahead[key] = [n, size, out]
+        taken = _roll_ahead[key][3] if running else [-1]
+        _roll_ahead[key] = [n, size, out, taken, ROLL_WORKERS if not running else _roll_ahead[key][4]]
         if running:
             return
 
@@ -1357,25 +1360,27 @@ def rolling_ahead(u, n, size, cache, slots=None, out=OUT):
         try:
             with calibration.looking(look):
                 p = plan(u, cache)
-                done = -1
                 while True:
                     with _lock:
-                        at, sz, o = _roll_ahead[key]
-                    j = max(at, done) + 1
+                        at, sz, o, taken = _roll_ahead[key][:4]
+                        j = taken[0] = max(at, taken[0]) + 1
                     if j > min(at + ROLL_AHEAD, len(u["frames"]) - 1):
                         return
-                    _yield()
-                    tile(u, j, cache, p["display_scale"])
+                    for i in range(at + 1, j + 1):
+                        _yield()
+                        tile(u, i, cache, p["display_scale"])
                     _yield()
                     _rolling_picture(u, j, sz, cache, 1, slots, "webp", o, made_only=True)
-                    done = j
         except Exception as e:
             print(f"mosaic movie ahead {u['key']} failed: {type(e).__name__}: {e}", flush=True)
         finally:
             with _lock:
-                _roll_ahead.pop(key, None)
+                _roll_ahead[key][4] -= 1
+                if not _roll_ahead[key][4]:
+                    _roll_ahead.pop(key, None)
 
-    threading.Thread(target=contextvars.copy_context().run, args=(run,), daemon=True).start()
+    for _ in range(ROLL_WORKERS):
+        threading.Thread(target=contextvars.copy_context().run, args=(run,), daemon=True).start()
 
 
 def rolling_webp(frame_id, size, cache, laps=1, slots=None, fmt="webp", out=OUT, wait=False):
