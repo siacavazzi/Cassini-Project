@@ -1623,6 +1623,8 @@ body.phone.has-dock { --appdockh: 50px; }
   // pixels (CSS pixels times the screen's density, so a retina window counts what it really shows)
   const sized = (w, well, small = 512) => {
     if (w.classList.contains("zoomed") || w.classList.contains("full")) return 1024;
+    // a camera window still waiting for its first picture is only a sliver tall: it asks as if the picture were up
+    if (well && well.classList.contains("well") && !well.matches(".has-frame, .kept")) return phone() ? small : 1024;
     const el = well || w, px = Math.max(el.clientWidth, el.clientHeight) * Math.min(window.devicePixelRatio || 1, 2);
     return phone() || px <= small ? small : 1024;
   };
