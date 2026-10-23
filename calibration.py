@@ -224,6 +224,21 @@ def display_stretch(codes, info):
 
 
 """
+The frame's bias level, in the units of its stored values (DN for 12BIT frames, codes for TABLE ones): its bias
+strip's mean. A frame that lost lines in transmission can lose its bias strip with them (a strip mean of 0 or
+below, as in the last frames of the 2006-12-04 spoke movie, -235): in the lean archive, dark sky sits at the bias
+level, so the darkest 0.1% of the frame is taken instead, leaving out the lost lines (code 0).
+"""
+def bias_of(png, info):
+    bias = float(_value(info, "BIAS_STRIP_MEAN", "0"))
+    if bias <= 0 and ds.lut8():
+        stored = stored_values(png, info)
+        kept = stored[np.asarray(png) > 0]
+        bias = float(np.percentile(kept, 0.1)) if kept.size else 0.0
+    return bias
+
+
+"""
 Calibrates one frame to I/F. Returns None if the frame can't be calibrated.
 png = the frame's PNG as stored in the dataset
 image = optional image on the same scale as png to calibrate instead (see unstretch)
@@ -250,14 +265,7 @@ def calibrate(png, info, image=None):
     if dn is None:
         return None
 
-    bias = float(_value(info, "BIAS_STRIP_MEAN", "0"))
-    if bias <= 0 and ds.lut8():
-        # a frame that lost lines in transmission can lose its bias strip with them (a negative strip mean, as
-        # in the last frames of the 2006-12-04 spoke movie): dark sky sits at the bias level, so put it at the
-        # darkest 0.1% of the frame, leaving out the lost lines (code 0)
-        stored = stored_values(png, info)
-        kept = stored[np.asarray(png) > 0]
-        bias = float(np.percentile(kept, 0.1)) if kept.size else 0.0   # (a TABLE frame's in codes, as its strip mean)
+    bias = bias_of(png, info)
     if _value(info, "DATA_CONVERSION_TYPE") == "TABLE":
         dn = np.interp(dn, np.arange(256), LUT)
         bias = LUT[int(min(max(bias, 0), 255))]
