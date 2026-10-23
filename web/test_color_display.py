@@ -230,6 +230,33 @@ with cal.looking("balanced"):
 for f in ("MT3", "MT2", "UV1"):
     early = hazy_frames[f + "b"][1]
     assert np.mean(early > hazy_scale["blacks"][f]) > 0.8, (f, hazy_scale.get("sky_tops"), np.mean(early > hazy_scale["blacks"][f]))
+# each tile's black from its own sky (obs_mosaic.tile_scale), as in Saturn's Shadow (clear filter, numbers as the
+# pass measured): the pass's level is set by the sky beside Saturn (9e-5); early frames hold only haze 3 to 5 times
+# darker (1.2e-5 to 3e-5, a smooth glow, 8-bit steps), which a pass-wide black clipped to black; and a frame whose
+# stray light lifts its whole sky above the pass's (the Jupiter approach's gray square) gets its sky back to black
+q = lambda v: np.round(v / 8e-7) * 8e-7
+sat = (yy - 128) ** 2 + (xx - 60) ** 2 < 40 ** 2
+shadow = {}
+for n in range(4):
+    shadow[f"s{n}"] = ("CL1/CL2", q(np.where(sat, 0.05, 9e-5 + 4e-5 * xx / 255.0) + 4e-6 * rng.standard_normal((256, 256))))
+shadow["haze"] = ("CL1/CL2", q(1.2e-5 + 1.8e-5 * np.exp(-((yy - 60) ** 2 + (xx - 200) ** 2) / 8000.0)
+                              + 1e-6 * rng.standard_normal((256, 256))))
+shadow["lit"] = ("CL1/CL2", q(np.where(sat, 0.05, 3e-4) + 4e-6 * rng.standard_normal((256, 256))))
+obs_mosaic.stacking.load_hdr = lambda path, gap=None: (None, shadow[path][1], 1)
+fr_shadow = [(p_, p_, f, n, 610, 0.0, 0.0, 1e5) for n, (p_, (f, _)) in enumerate(shadow.items())]
+with cal.looking("balanced"):
+    shadow_scale = obs_mosaic.pass_scale(fr_shadow, {"key": ("SATURN", "TEST", "W", 0), "z": 1e5}, ["CL1/CL2"], False)
+    shown = {}
+    for name in ("haze", "lit", "s0"):
+        ts = obs_mosaic.tile_scale(shadow_scale, "CL1/CL2")
+        shown[name] = cal.load_channels([None], [None], iofs=[shadow[name][1].astype(np.float32)], scale=ts)[0][..., 0]
+        flat = cal.display(shadow[name][1], shadow_scale["blacks"]["CL1/CL2"], ts["white"], ts["gamma"], None, ts["toe"])[..., 0]
+        if name == "haze":
+            assert np.mean(flat > 0) < 0.05     # the pass's one black: the haze frame all black
+haze_px = shadow["haze"][1] > 1.6e-5
+assert np.mean(shown["haze"][haze_px] > 0) > 0.6, np.mean(shown["haze"][haze_px] > 0)
+assert np.mean(shown["lit"][~sat] > 0) < 0.05, np.mean(shown["lit"][~sat] > 0)
+assert np.mean(shown["s0"][~sat] > 0) < 0.5 and shown["s0"][sat].min() > 200
 obs_mosaic.stacking.load_hdr = lambda path, gap=None: (None, lined[path][0], 1)
 # each filter's sky black (its height over the sky) comes back with the scale and can be overridden
 with cal.looking("balanced"):

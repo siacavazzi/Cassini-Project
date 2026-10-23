@@ -61,7 +61,7 @@ import stacking  # noqa: E402
 # bumped whenever the way observation mosaics are made changes, so older ones are not served again; one per
 # display model (calibration.style), classic being the mosaics made before the balanced display model, raw the
 # balanced ones before natural color
-VERSIONS = {"balanced": "obs-v40", "raw": "obs-v23", "classic": "obs-v13-classic"}
+VERSIONS = {"balanced": "obs-v41", "raw": "obs-v24", "classic": "obs-v13-classic"}
 CANVAS = 2048        # longest side of the canvas the view is drawn on
 OUT = 1024           # longest side of the picture sent
 FRAME = 1024         # full resolution frame
@@ -451,8 +451,55 @@ SKY_MIN = 0.05   # balanced: the share of a pass's pixels that must be dark sky 
 SKY_FLOOR_PCT = 90
 SKY_TOP_PCT = 99     # ... and each band's black at least this percentile of that dark sky (a single picture's SKY_DARK)
 SKY_SMOOTH = 9      # ... on the sky less its mean over this many pixels (of the quarter-size frames, 36 full size)
+SKY_CUT = 0.05   # ... the sky being what is darker than this share of the band's brightest
 SKY_TOE = 1.0    # ... and the soft toe above those blacks, this many times the black's height over the sky wide
                  # (calibration.display): the sky's scan lines, not its pixel noise, set how far grain reaches
+
+
+def _sky_fine(iofs, masks):
+    """The fine structure of the sky (masks) of these quarter-size I/F frames: each less its own mean over
+    SKY_SMOOTH pixels, on the darker half of the sky by its 5 x 5 mean."""
+    local = [cv2.blur(i, (5, 5)) for i in iofs]
+    sky = np.concatenate([l[m] for l, m in zip(local, masks)])
+    if not sky.size:
+        return sky
+    dark = float(np.median(sky))
+    return np.concatenate([(i - cv2.blur(i, (SKY_SMOOTH, SKY_SMOOTH)))[m & (l <= dark)]
+                           for i, l, m in zip(iofs, local, masks)])
+
+
+def _sky_height(fine, margin):
+    """How far a black sits over its sky: SKY_TOP_PCT of the sky's fine structure above its median, at least margin."""
+    return max(margin, float(np.percentile(fine, SKY_TOP_PCT) - np.median(fine)) if fine.size > 100 else 0.0)
+
+
+def tile_scale(scale, f, seen=None):
+    """The display scale of one tile of filter f: the pass's scale, with the black (and its toe) from the tile's
+    own sky where it has some (SKY_MIN, below the pass's sky_cuts): its own sky level plus its own fine
+    structure's height, as pass_scale measures the pass's. A pass's sky is rarely one level: Saturn's Shadow's
+    early frames hold only haze, 3 to 5 times darker than the sky beside Saturn that set the pass's level (they
+    came out black), and a Jupiter approach frame's stray light sits above the pass's (a gray square in the
+    sky). seen: a dict the tile's black and toe are put in."""
+    out = {**scale, "blacks": [scale["blacks"].get(f, 0.0)]}
+    cut = scale.get("sky_cuts", {}).get(f)
+    if cut is None:
+        return out
+
+    def black_of(iof):
+        q = iof[::4, ::4].astype(np.float32)
+        m = q < cut
+        if m.mean() <= SKY_MIN:
+            return None
+        (level,), margin = calibration.sky_levels([[q]], [[m]])
+        v = _sky_fine([q], [m])
+        top = _sky_height(v, max(margin, calibration.noise_floor([v], SKY_FLOOR_PCT)))
+        found = {"black": level + top, "toe": SKY_TOE * top}
+        if seen is not None:
+            seen.update(found)
+        return found
+
+    out["black_of"] = black_of
+    return out
 
 
 def pass_scale(frames, u, drawn=None, true_colour=False, sky_tops=None):
@@ -514,29 +561,23 @@ def pass_scale(frames, u, drawn=None, true_colour=False, sky_tops=None):
             # less its own mean over SKY_SMOOTH pixels (its row and column stray-light stripes, compression
             # blocks and noise), on the darker half of the sky. Smooth faint light (Saturn's Shadow's haze and E
             # ring, a haze limb, the body's glow) is not in it, so it stays above black
-            fine = {}
-            for (f, iofs), level in zip(by.items(), levels):
-                local = [cv2.blur(i, (5, 5)) for i in iofs]
-                sky = np.concatenate([l[m] for l, m in zip(local, masks[f])])
-                fine[f] = np.concatenate([(i - cv2.blur(i, (SKY_SMOOTH, SKY_SMOOTH)))[m & (l <= np.median(sky))]
-                                          for i, l, m in zip(iofs, local, masks[f])])
+            fine = {f: _sky_fine(iofs, masks[f]) for f, iofs in by.items()}
             # with a noise floor (the noisiest band's SKY_FLOOR_PCT percentile above the median): the pixel-difference
             # noise is about 0 on frames stored in 8 bits
             margin = max(margin, calibration.noise_floor(list(fine.values()), SKY_FLOOR_PCT))
             # and each band on its own over SKY_TOP_PCT of that fine structure: the false color gains (MT3's up to
             # 5x) lift whatever of a dim band's sky is left above its black far more than the others'
-            tops = {}
-            for f, v in fine.items():
-                if sky_tops and f in sky_tops:
-                    tops[f] = float(sky_tops[f])
-                else:
-                    top = float(np.percentile(v, SKY_TOP_PCT) - np.median(v)) if v.size > 100 else 0.0
-                    tops[f] = max(margin, top)
+            tops = {f: float(sky_tops[f]) if sky_tops and f in sky_tops else _sky_height(v, margin)
+                    for f, v in fine.items()}
             toe = SKY_TOE * max(tops.values())
             blacks = {f: max(blacks[f], level + tops[f]) for f, level in zip(by, levels)}
+            # the pass's sky, for each tile's own black (tile_scale): a band's sky is what lies below SKY_CUT of
+            # its brightest over the whole pass, so a frame of haze alone is all sky
+            cuts = {f: SKY_CUT * float(np.percentile(np.concatenate([i.ravel() for i in iofs]), 99.9))
+                    for f, iofs in by.items() if not (sky_tops and f in sky_tops)}
     out = {"blacks": blacks, "white": white, "gamma": gamma, "filled": filled, "floor": round(floor, 3)}
     if toe:
-        out["toe"], out["sky_tops"] = toe, tops
+        out["toe"], out["sky_tops"], out["sky_cuts"] = toe, tops, cuts
     mine = [f for f in (drawn or []) if f in by]
     if calibration.style() == "balanced" and len(mine) == 3 and not true_colour:
         # false color: each band's gain to bring the body's lit median (above that band's black) to the bands'
@@ -571,13 +612,13 @@ def tile(u, n, cache, scale=None):
                 return json.load(fh)
         path, fid, f, t, nm, x, y, z = u["frames"][n]
         k = z / u["z"] if z else 1.0
+        seen = {}
         try:
-            image, _, rep = color_image.processed_frame([path], hdr=True,
-                                                        scale={**scale, "blacks": [scale["blacks"].get(f, 0.0)]},
+            image, _, rep = color_image.processed_frame([path], hdr=True, scale=tile_scale(scale, f, seen),
                                                         repeat_window=u.get("repeat_gap", mosaic_benchmark.REPEAT_GAP))
         except Exception as e:
             image, rep = None, {"why": f"{type(e).__name__}: {e}"[:200]}
-        out = {"n": n, "id": fid, "filter": f, "t": t, "stacked": rep.get("stacked"), "calibrated": rep.get("calibrated")}
+        out = {"n": n, "id": fid, "filter": f, "t": t, "stacked": rep.get("stacked"), "calibrated": rep.get("calibrated"), **seen}
         os.makedirs(os.path.dirname(base), exist_ok=True)
         if image is not None and "frame_offset" in rep:
             side = round(image.shape[0] * k)
@@ -1610,7 +1651,7 @@ def _pointing(u, p, tiles, rect, count, used, mine, cache):
     layers = []
     for t in mine:
         fpath, _, f, *_, z = by_n[t["id"]]
-        image, _, rep = color_image.processed_frame([fpath], hdr=True, scale={**scale, "blacks": [scale["blacks"].get(f, 0.0)]},
+        image, _, rep = color_image.processed_frame([fpath], hdr=True, scale=tile_scale(scale, f),
                                                     repeat_window=u.get("repeat_gap", mosaic_benchmark.REPEAT_GAP))
         grey = image[..., 0].astype(np.float32)
         gain, offset = _seam_of(u, p, tiles, rect, ref, t, cache)
