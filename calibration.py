@@ -430,21 +430,37 @@ def false_gains(target, bands, camera=None):
         if not m or m.get("n", 0) < BODY_MIN or m["median"] <= 0 or m["iqr"][1] > BODY_SPREAD * max(m["iqr"][0], 1e-9):
             return None
         meds.append(m["median"])
-    return balance(meds)
+    return balance(meds, tint_of(target))
 
 
 """
-False color gains that bring levels (the body's brightness per band) toward their mean, FALSE_BALANCE of the way
+False color gains that bring levels (the body's brightness per band) toward their mean (times the body's natural
+tint, BODY_TINTS, where it has one), FALSE_BALANCE of the way
 in log terms, keeping their total: all the way would give a dim band like MT3 over four times its brightness and lift
 its noise, so the body is left a little tinted instead (apply_mix holds what still stands out)
 """
 FALSE_BALANCE = 0.9
 FALSE_OWN = 0.75
 
+# the target of the balance for bodies with a color of their own, instead of gray: their natural color (sRGB, the color
+# investigation's references, /mnt/project-files/color-investigation/filter_to_srgb_matrices.json), so a false color
+# Jupiter comes out cream and tan rather than blue-gray
+BODY_TINTS = {"JUPITER": (255, 237, 206), "SATURN": (255, 242, 214), "TITAN": (255, 217, 162)}
 
-def balance(levels):
+
+def tint_of(target):
+    """The body's natural color as linear red, green, blue of mean 1, or None (gray)."""
+    t = BODY_TINTS.get(str(target or "").upper())
+    if t is None:
+        return None
+    lin = [float(decode(np.float64(v / 255), "srgb")) for v in t]
+    return [v * 3 / sum(lin) for v in lin]
+
+
+def balance(levels, tint=None):
     mean = sum(levels) / len(levels)
-    gains = [(mean / v) ** FALSE_BALANCE for v in levels]
+    tint = tint or [1.0] * len(levels)
+    gains = [(mean * t / v) ** FALSE_BALANCE for v, t in zip(levels, tint)]
     k = sum(levels) / sum(g * v for g, v in zip(gains, levels))
     return [g * k for g in gains]
 
@@ -583,7 +599,7 @@ def load_linear(labels, images=None, iofs=None):
         lit = lum > 0.2 * np.percentile(lum, 99)
         own = [float(np.median(c[lit])) * g for c, g in zip(channels, np.diagonal(mix))] if lit.sum() > 100 else []
         if own and min(own) > 0:
-            mix = mix * np.diag([g ** FALSE_OWN for g in balance(own)]).astype(np.float32)
+            mix = mix * np.diag([g ** FALSE_OWN for g in balance(own, tint_of(_value(infos[0], "TARGET_NAME", "")))]).astype(np.float32)
     margin /= white
     if measured:
         # the toe starts no lower than the darker half of the sky's own brightness (SKY_DARK of it stays black),

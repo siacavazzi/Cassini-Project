@@ -54,7 +54,7 @@ import mosaic  # noqa: E402
 import stacking  # noqa: E402
 
 # bumped whenever the way reel pictures are made changes, so older ones are not served again
-VERSIONS = {"balanced": "reel-v17", "raw": "reel-v11", "classic": "reel-v5"}   # one per calibration.style()
+VERSIONS = {"balanced": "reel-v18", "raw": "reel-v11", "classic": "reel-v5"}   # one per calibration.style()
 
 
 def version():

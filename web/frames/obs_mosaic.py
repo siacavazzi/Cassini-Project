@@ -53,7 +53,7 @@ import stacking  # noqa: E402
 # bumped whenever the way observation mosaics are made changes, so older ones are not served again; one per
 # display model (calibration.style), classic being the mosaics made before the balanced display model, raw the
 # balanced ones before natural color
-VERSIONS = {"balanced": "obs-v18", "raw": "obs-v12", "classic": "obs-v9"}
+VERSIONS = {"balanced": "obs-v19", "raw": "obs-v12", "classic": "obs-v9"}
 CANVAS = 2048        # longest side of the canvas the view is drawn on
 OUT = 1024           # longest side of the picture sent
 FRAME = 1024         # full resolution frame
@@ -305,7 +305,7 @@ def pass_scale(frames, u, drawn=None, true_colour=False):
             lit = v[v > 0.2 * np.percentile(v, 99)]
             levels.append(float(np.median(lit)) if lit.size else 0.0)
         if min(levels) > 0:
-            out["balance"] = dict(zip(mine, calibration.balance(levels)))
+            out["balance"] = dict(zip(mine, calibration.balance(levels, calibration.tint_of(u["key"][0]))))
     return out
 
 
