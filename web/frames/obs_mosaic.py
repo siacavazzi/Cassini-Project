@@ -54,7 +54,7 @@ import stacking  # noqa: E402
 # bumped whenever the way observation mosaics are made changes, so older ones are not served again; one per
 # display model (calibration.style), classic being the mosaics made before the balanced display model, raw the
 # balanced ones before natural color
-VERSIONS = {"balanced": "obs-v37", "raw": "obs-v20", "classic": "obs-v9"}
+VERSIONS = {"balanced": "obs-v38", "raw": "obs-v21", "classic": "obs-v9"}
 CANVAS = 2048        # longest side of the canvas the view is drawn on
 OUT = 1024           # longest side of the picture sent
 FRAME = 1024         # full resolution frame
@@ -259,6 +259,7 @@ SKY_MIN = 0.05   # balanced: the share of a pass's pixels that must be dark sky 
 # picture's is the 98th; lower here, since a long-exposure pass's whole sky can glow faintly, Saturn's Shadow's E ring)
 SKY_FLOOR_PCT = 90
 SKY_TOP_PCT = 99     # ... and each band's black at least this percentile of that dark sky (a single picture's SKY_DARK)
+SKY_BLACK_MAX = 0.004   # ... and no more than this share of the pass's white over its sky
 SKY_TOE = 1.0    # ... and the soft toe above those blacks, this many times the black's height over the sky wide
                  # (calibration.display): the sky's scan lines, not its pixel noise, set how far grain reaches
 
@@ -336,7 +337,10 @@ def pass_scale(frames, u, drawn=None, true_colour=False, sky_tops=None):
                 if sky_tops and f in sky_tops:
                     tops[f] = float(sky_tops[f])
                 else:
-                    tops[f] = max(margin, float(np.percentile(dark, SKY_TOP_PCT)) - level if dark.size > 100 else 0)
+                    # at most SKY_BLACK_MAX of the pass's white: on a long exposure whose whole sky glows (Saturn's
+                    # Shadow's E and G rings) the dark sky's spread is the faint light itself, at gamma 3 a visible share
+                    top = float(np.percentile(dark, SKY_TOP_PCT)) - level if dark.size > 100 else 0
+                    tops[f] = min(max(margin, top), SKY_BLACK_MAX * white)
             toe = SKY_TOE * max(tops.values())
             blacks = {f: max(blacks[f], level + tops[f]) for f, level in zip(by, levels)}
     out = {"blacks": blacks, "white": white, "gamma": gamma, "filled": filled, "floor": round(floor, 3)}
