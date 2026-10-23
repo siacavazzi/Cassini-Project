@@ -61,8 +61,13 @@ in the top right corner holds the body's picture counts, previous and next sessi
 from one of the body's imaging sessions to the next instead of playing through the days or months between; Settings >
 Body view sets how long a gap has to be), the list of its sessions (one per observation, with its NAC and WAC counts
 and color sets) to jump to, "Whole history" to show it all on the timeline again, and every other body Cassini
-photographed. Every planet Cassini photographed stays in the dock wherever the mission is (Jupiter while at Saturn,
-Saturn in the cruise); picking a body that is not on stage now goes to its Moment nearest to now, or its busiest
+photographed. The camera windows never go blank or shrink in a body's view: each keeps its last picture of the body
+across jumps to other months until the next one arrives (a window with nothing yet shows the body's next picture),
+pictures keep a square (a mosaic is letterboxed), and the picture after a jump dissolves in over the one before.
+Every planet Cassini photographed a lot (1,000 pictures or more) stays in the dock wherever the mission is (Jupiter
+while at Saturn, Saturn in the cruise); the dock's All bodies folder holds every body photographed, in groups
+(planets and the Sun, Saturn's moons, Jupiter's moons, Earth's Moon, others), each with its surface map or else its
+sharpest real picture. Picking a body that is not on stage now goes to its Moment nearest to now, or its busiest
 session. Click Cassini in the dock, or close the body window, to go back. `?body=TITAN` opens a link in Titan's view.
 On a phone the body window is a bar over the replay controls; tap its name for the sessions.
 

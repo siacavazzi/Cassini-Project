@@ -892,6 +892,12 @@ body.bodymode:not(.phone) #moments:not([style*="top"]) { top: calc(env(safe-area
 #bmlist li.on { background: rgba(138,182,255,.16) !important; }
 #bmlist li.on span { color: #fff; }
 #bodymenu footer { flex: none; height: 20px; display: grid; place-items: center; font-size: 10px; color: var(--q-dim); border-top: 1px solid var(--q-line); }
+/* a jump to another session: the picture before dissolves into the new one */
+.well .bmfade { position: absolute; inset: 0; width: 100%; height: 100%; object-fit: contain; background: #000; pointer-events: none; animation: bmfade .7s ease forwards; }
+@keyframes bmfade { to { opacity: 0; } }
+@media (prefers-reduced-motion: reduce) { .well .bmfade { display: none; } }
+/* in a body's view the camera pictures keep a square, a mosaic letterboxed in it, so the windows hold their size */
+body.bodymode .camwin:not(.full) .well.has-frame { aspect-ratio: 1 !important; }
 #mlist li.bmnone { padding: 14px 12px; font-size: 11px; line-height: 1.4; color: var(--q-dim); background: none !important; }
 /* the main window says whose timeline it shows */
 #dock .titlebar .bmtag { color: var(--q-accent); }
@@ -933,10 +939,10 @@ body.phone.phone-land #bodymenu { left: auto !important; width: min(380px, 46vw)
 .dk .gl svg { width: 58%; height: 58%; } .dk .gl svg * { fill: none; stroke: currentColor; stroke-width: 1.3; stroke-linecap: round; stroke-linejoin: round; }
 .dk:hover .gl { background: rgba(255,255,255,.12); color: #fff; }
 /* bodies: the body itself, from its surface map, lit from the upper left */
-.dk .orb { width: 78%; height: 78%; border-radius: 50%; position: relative; background-color: var(--c, #888); background-size: 200% 100%; background-position: 30% 50%;
+:is(.dk, #dkfolder) .orb { width: 78%; height: 78%; border-radius: 50%; position: relative; background-color: var(--c, #888); background-size: 200% 100%; background-position: 30% 50%;
   box-shadow: inset calc(var(--ds) * -.12) calc(var(--ds) * -.1) calc(var(--ds) * .2) rgba(0,0,0,.75), 0 0 0 1px rgba(255,255,255,.06); }
-.dk .orb.ringed::after { content: ""; position: absolute; left: -30%; right: -30%; top: 38%; bottom: 38%; border-radius: 50%; border: calc(var(--ds) * .05) solid rgba(222,204,170,.7); border-top-color: transparent; transform: rotate(-14deg); }
-.dk .orb.sun { background: radial-gradient(circle at 40% 40%, #fff6d8, #ffc95a 55%, #e08a1e); box-shadow: 0 0 calc(var(--ds) * .2) rgba(255,190,90,.45); }
+:is(.dk, #dkfolder) .orb.ringed::after { content: ""; position: absolute; left: -30%; right: -30%; top: 38%; bottom: 38%; border-radius: 50%; border: calc(var(--ds) * .05) solid rgba(222,204,170,.7); border-top-color: transparent; transform: rotate(-14deg); }
+:is(.dk, #dkfolder) .orb.sun { background: radial-gradient(circle at 40% 40%, #fff6d8, #ffc95a 55%, #e08a1e); box-shadow: 0 0 calc(var(--ds) * .2) rgba(255,190,90,.45); }
 /* running dot: a window of that app is open; blue: the body in view */
 .dk::before { content: ""; position: absolute; left: 50%; bottom: -4px; width: 4px; height: 4px; margin-left: -2px; border-radius: 50%; background: transparent; }
 .dk.open::before { background: rgba(232,236,242,.7); }
@@ -949,6 +955,23 @@ body.phone.phone-land #bodymenu { left: auto !important; width: min(380px, 46vw)
 .dk:hover::after { opacity: 1; }
 #appdock.side-left .dk::after { bottom: auto; top: 50%; left: calc(100% + 8px); transform: translateY(-50%); }
 #appdock.side-right .dk::after { bottom: auto; top: 50%; left: auto; right: calc(100% + 8px); transform: translateY(-50%); }
+/* All bodies: a folder that opens above its icon, as a stack does on the Mac */
+#dkfolder { position: fixed; z-index: 1360; width: min(560px, calc(100vw - 20px)); max-height: min(520px, calc(100dvh - 140px)); overflow-y: auto; box-sizing: border-box; padding: 10px 12px 12px;
+  background: var(--q-panel); -webkit-backdrop-filter: blur(18px) saturate(1.2); backdrop-filter: blur(18px) saturate(1.2); border: 1px solid var(--q-line); border-radius: 12px; box-shadow: 0 12px 36px rgba(0,0,0,.55); font: 11px var(--ui); color: var(--q-text); }
+#dkfolder[hidden] { display: none; }
+#dkfolder h3 { margin: 8px 2px 6px; font: bold 10px/1 var(--ui); letter-spacing: .12em; text-transform: uppercase; color: var(--q-dim); }
+#dkfolder h3:first-child { margin-top: 2px; }
+#dkfolder .fgrid { display: grid; grid-template-columns: repeat(auto-fill, minmax(84px, 1fr)); gap: 4px; }
+#dkfolder button { all: unset; display: grid; justify-items: center; gap: 4px; padding: 6px 2px; border-radius: 8px; cursor: default; text-align: center; }
+#dkfolder button:hover, #dkfolder button:focus-visible { background: rgba(255,255,255,.08); }
+#dkfolder button.inview { background: rgba(138,182,255,.18); }
+#dkfolder .fic { width: 44px; height: 44px; display: grid; place-items: center; --ds: 50px; }
+#dkfolder .fic .orb { width: 40px; height: 40px; }
+#dkfolder .fic .orb.ringed { width: 34px; height: 34px; }
+#dkfolder .pic { width: 44px; height: 44px; border-radius: 50%; background: #000 center / 150% no-repeat; box-shadow: inset 0 0 0 1px rgba(255,255,255,.1); }
+#dkfolder .fn { max-width: 84px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+#dkfolder .fc { font: 9.5px/1 var(--hudf); color: var(--q-dim); }
+body.idle #dkfolder { opacity: 0; pointer-events: none; }
 /* minimized windows: a tile of the window's last picture, or its glyph */
 .dk.mini .gl { background: rgba(0,0,0,.55) center / cover no-repeat; }
 .dk.mini .gl.pic svg { display: none; }
@@ -2733,25 +2756,32 @@ body.phone #finale .fx-data { width: min(220px, calc(100vw - 32px)); top: 10px; 
       }
       if (win.hidden && !force) { mosaicStop(); return; }   // a closed or tucked-away window fetches nothing; it catches up when shown
       if (window.cassiniMovie && window.cassiniMovie.on) { mosaicStop(); return; }   // movie mode has the frame server to itself (its requests are capped)
-      const p = lastOfCam(cam, state.et, body), k = p < 0 ? -1 : framesOf(cam, body).ks[p];
+      let p = lastOfCam(cam, state.et, body), k = p < 0 ? -1 : framesOf(cam, body).ks[p];
+      // holding: a body window, or a camera window in a body's view (bodymode.html), never goes blank: its picture stays
+      // up however long the camera is quiet and across a jump to another month, until the body's next picture; a
+      // window with nothing up yet shows the body's next picture rather than "no signal"
+      const hold = update.hold || (!own && !!body), coming = k < 0 && hold && !well.classList.contains("has-frame") && framesOf(cam, body).ks.length > 0;
+      if (coming) { p = 0; k = framesOf(cam, body).ks[0]; }
       const live = k >= 0 && state.et - catalog.et[k] < 180;
       card.classList.toggle("live", live);
       // a camera that has been quiet for longer than the stale setting shows nothing rather than an old picture; an
       // important picture (color, mosaic) stays that many times longer, and a window that holds (a body window,
       // which closes by itself) keeps its picture
       const stale = S.get("cameras.stale") * (lastK >= 0 ? importance() : 1);
-      if (k < 0 || (!update.hold && state.et - catalog.et[k] > stale * 3600)) {
+      if (k < 0 && hold && well.classList.contains("has-frame")) { field("status").textContent = "Waiting for the next picture"; return; }
+      if (k < 0 || (!hold && state.et - catalog.et[k] > stale * 3600)) {
         field("status").textContent = k < 0 ? "Camera" : `Last frame ${fmtDur(state.et - catalog.et[k])} ago`;
         strip(null);
         if (lastK !== -1) {
           lastK = -1; want = null; shownKey = null; shown = null;
-          noFrame(k < 0 ? "<b>No signal</b>No frames from this camera yet this year" : `<b>Idle</b>No frames from this camera in the last ${+stale.toFixed(1)} h`);
+          noFrame(k < 0 && hold ? `<b>${titleCase(body)}</b>No ${cam === "N" ? "narrow" : "wide"}-angle pictures of it near this time`
+            : k < 0 ? "<b>No signal</b>No frames from this camera yet this year" : `<b>Idle</b>No frames from this camera in the last ${+stale.toFixed(1)} h`, hold);
           for (const f of ["frame", "filter", "colour", "details"]) field(f).textContent = "—";
         }
         return;
       }
       const ago = state.et - catalog.et[k];
-      field("status").textContent = live ? "Imaging now" : `Last frame ${fmtDur(ago)} ago`;
+      field("status").textContent = coming ? `Next picture in ${fmtDur(-ago)}` : live ? "Imaging now" : `Last frame ${fmtDur(ago)} ago`;
       const si = catalog.setOf[k], s = si >= 0 ? catalog.sets[si] : null, ready = !!s && s.ready <= state.et;
       const held = !s && steady() ? nearSet(k) : null;
       strip(s || held, state.et, k);
@@ -2824,7 +2854,7 @@ body.phone #finale .fx-data { width: min(220px, calc(100vw - 32px)); top: 10px; 
   }
   const feeds = [...document.querySelectorAll(".camwin")].map(cameraFeed);
   document.addEventListener("cassini:bodymode", () => { if (typeof catalog !== "undefined" && catalog && catalog.byCam) feeds.forEach(f => f(true)); });
-  window.cassiniFeeds = { cameraFeed, framesOf, lastOfCam, prep, weight, stale: () => S.get("cameras.stale") * 3600 };
+  window.cassiniFeeds = { frames: FRAMES, cameraFeed, framesOf, lastOfCam, prep, weight, stale: () => S.get("cameras.stale") * 3600 };
   // a change to what the windows show takes effect straight away
   for (const key of ["cameras.composites", "cameras.stale", "cameras.steady", "cameras.lingerColor", "cameras.lingerMosaic"]) S.on(key, () => { if (typeof catalog !== "undefined" && catalog && catalog.byCam) feeds.forEach(f => f(true)); });
 
@@ -4494,10 +4524,12 @@ body.phone #finale .fx-data { width: min(220px, calc(100vw - 32px)); top: 10px; 
   window.studyFramesPerDay = () => M.name ? (M.perDay || { start_et: 0, N: [], W: [] }) : null;
   window.studyEncounterShown = e => !M.name || momentBody(e) === M.name;
 
-  // ---- the bodies in the dock: every planet Cassini photographed, wherever the mission is, and the body in view ----
+  // ---- the bodies in the dock: every planet Cassini photographed a lot (PLANET_PICTURES or more; the rest are in the
+  // dock's All bodies folder), wherever the mission is, and the body in view ----
+  const PLANET_PICTURES = 1000;
   function planets() {
     const ix = M.index && M.index.bodies;
-    const out = typeof PLANETS !== "undefined" ? PLANETS.filter(n => (!ix || ix[n]) && typeof bodies !== "undefined" && bodies[n]) : [];
+    const out = ix && typeof PLANETS !== "undefined" ? PLANETS.filter(n => ix[n] && ix[n].frames >= PLANET_PICTURES && typeof bodies !== "undefined" && bodies[n]) : [];
     if (M.name && !out.includes(M.name)) out.push(M.name);
     return out;
   }
@@ -4602,17 +4634,47 @@ body.phone #finale .fx-data { width: min(220px, calc(100vw - 32px)); top: 10px; 
     const i = sessionAt(state.et);
     const s = i >= 0 ? M.sessions[i] : null, now = !!s && s[1] <= state.et;
     $("bmnow").textContent = !s ? "After the last session" : now ? `Session ${fmt(i + 1)} of ${fmt(M.sessions.length)}` : `Next: ${fmtLong(s[1])}, in ${fmtDur(s[1] - state.et)}`;
-    if (i === M.cur) return;
+    if (i === M.cur) { if (!M.placed && performance.now() - listTouched > 4000) showCur(); return; }
     if (M.rows[M.cur]) M.rows[M.cur].classList.remove("on");
     M.rows.forEach((li, k) => li && li.classList.toggle("past", i < 0 || k < i));
-    M.cur = i;
+    M.cur = i; M.placed = false;
     if (M.rows[i]) M.rows[i].classList.add("on");
     if (performance.now() - listTouched > 4000) showCur();
   }
   // the marked session in view in the list (not while the viewer is scrolling it)
   function showCur() {
     const li = M.rows[M.cur], ul = $("bmlist");
-    if (li && !win.hidden && ul.offsetParent) ul.scrollTop = Math.max(0, li.offsetTop - ul.offsetTop - 50);
+    if (li && !win.hidden && ul.offsetParent && li.offsetTop) { ul.scrollTop = Math.max(0, li.offsetTop - ul.offsetTop - 50); M.placed = true; }
+  }
+
+  // ---- the camera windows stay steady in a body's view ----
+  // a window never shrinks while the view is open (its biggest size so far is its least), and a picture that comes
+  // after a jump (more than JUMP_FADE of mission time since the last one) dissolves in over the one before
+  const JUMP_FADE = 1800, cams = ["imgcard", "wacard"].map($).filter(Boolean);
+  const grown = new Map();
+  const ro = new ResizeObserver(es => {
+    if (!M.name) return;
+    for (const e of es) {
+      const w = e.target, h = w.offsetHeight, wd = w.offsetWidth, g = grown.get(w) || [0, 0];
+      if (w.classList.contains("full") || w.hidden) continue;
+      if (h > g[0] || wd > g[1]) { grown.set(w, [Math.max(h, g[0]), Math.max(wd, g[1])]); w.style.minHeight = Math.max(h, g[0]) + "px"; w.style.minWidth = Math.max(wd, g[1]) + "px"; }
+    }
+  });
+  cams.forEach(w => ro.observe(w));
+  function unsteady() { for (const w of cams) { w.style.minHeight = ""; w.style.minWidth = ""; } grown.clear(); }
+  for (const w of cams) {
+    const shot = w.querySelector(".shot"), well = w.querySelector(".well");
+    let lastEt = null;
+    new MutationObserver(ms => {
+      if (!M.name || typeof state === "undefined") return;
+      const old = ms[0].oldValue, jumped = lastEt !== null && Math.abs(state.et - lastEt) > JUMP_FADE;
+      lastEt = state.et;
+      if (!jumped || !old || old === shot.src) return;
+      well.querySelector(".bmfade")?.remove();
+      const im = document.createElement("img"); im.className = "bmfade"; im.alt = ""; im.src = old;
+      im.addEventListener("animationend", () => im.remove());
+      well.appendChild(im);
+    }).observe(shot, { attributes: true, attributeFilter: ["src"], attributeOldValue: true });
   }
 
   // ---- moving through the body's history ----
@@ -4677,6 +4739,7 @@ body.phone #finale .fx-data { width: min(220px, calc(100vw - 32px)); top: 10px; 
     n = String(n).toUpperCase();
     const first = !M.name;
     if (first) M.saved = { span: state.view[1] - state.view[0] };
+    if (M.name !== n) unsteady();
     M.name = n; M.data = null; M.perDay = null; M.sessions = []; M.cur = -2; M.rows = [];
     document.body.classList.add("bodymode");
     if (win.hidden || win.dataset.min) WM.restore(win); else WM.front(win);
@@ -4704,6 +4767,7 @@ body.phone #finale .fx-data { width: min(220px, calc(100vw - 32px)); top: 10px; 
   function exit() {
     if (!M.name) return;
     M.name = null; M.data = null; M.perDay = null; M.sessions = []; M.rows = [];
+    unsteady();
     document.body.classList.remove("bodymode");
     win.hidden = true; delete win.dataset.min; WM.syncMenu();
     retitle(); filterMoments(); setUrl();
@@ -4758,6 +4822,7 @@ body.phone #finale .fx-data { width: min(220px, calc(100vw - 32px)); top: 10px; 
     highlights: svg('<rect x="3.5" y="5.5" width="17" height="13" rx="1.6"/><path d="M10 9.3v5.4l4.6-2.7z"/>'),
     settings: svg('<circle cx="12" cy="12" r="3.2"/><path d="M12 3v2.6M12 18.4V21M3 12h2.6M18.4 12H21M5.6 5.6l1.9 1.9M16.5 16.5l1.9 1.9M5.6 18.4l1.9-1.9M16.5 7.5l1.9-1.9"/>'),
     window: svg('<rect x="3.5" y="5" width="17" height="14" rx="1.6"/><path d="M3.5 8.5h17"/><circle cx="6" cy="6.8" r=".5"/><circle cx="7.8" cy="6.8" r=".5"/>'),
+    folder: svg('<path d="M3.5 7.5v10a1.5 1.5 0 0 0 1.5 1.5h14a1.5 1.5 0 0 0 1.5-1.5v-8.5a1.5 1.5 0 0 0-1.5-1.5h-7l-2-2h-5a1.5 1.5 0 0 0-1.5 1.5z"/><circle cx="9" cy="13.5" r="2"/><circle cx="15" cy="13.5" r="1.3"/>'),
     replay: svg('<path d="M3.5 16.5h17"/><path d="M6 16.5v-3M9 16.5v-6M12 16.5v-4M15 16.5v-8M18 16.5v-2"/><path d="M8 5.5l3 2-3 2z"/>')
   };
   const MAP = { SATURN: "saturn", TITAN: "titan", ENCELADUS: "enceladus", MIMAS: "mimas", TETHYS: "tethys", DIONE: "dione", RHEA: "rhea", HYPERION: "hyperion",
@@ -4815,6 +4880,58 @@ body.phone #finale .fx-data { width: min(220px, calc(100vw - 32px)); top: 10px; 
   // the planets (and the body in view) that are not on stage now
   function awayList(list) { try { return window.cassiniBodyMode ? cassiniBodyMode.planets().filter(n => !list.includes(n)) : []; } catch (e) { return []; } }
 
+  // ---- All bodies: every body Cassini photographed, in groups ----
+  // the group: a planet (or the Sun) by its NAIF id, a moon by its planet's; a body with no track by where Cassini was
+  // when it took most of its pictures (at Saturn from mid-2004, at Jupiter for the flyby months)
+  const AT_SATURN = typeof utcToEt === "function" ? utcToEt("2004-06-01T00:00:00") : 139320000;
+  const GROUPS = [["planets", "Planets and the Sun"], ["saturn", "Saturn's moons"], ["jupiter", "Jupiter's moons"], ["earth", "Earth's Moon"], ["other", "Other bodies"]];
+  function groupOf(n, b) {
+    const id = b.naif;
+    if (n === "SUN" || (id && id % 100 === 99)) return "planets";
+    if (id) return ({ 3: "earth", 5: "jupiter", 6: "saturn" })[Math.floor(id / 100)] || "other";
+    const mid = (b.first + b.last) / 2;
+    if (b.first >= AT_SATURN) return "saturn";
+    if (typeof utcToEt === "function" && mid > utcToEt("2000-10-01T00:00:00") && mid < utcToEt("2001-04-01T00:00:00")) return "jupiter";
+    return "other";
+  }
+  // a body's icon in the folder: its surface map, or else its sharpest real picture from the frame server
+  function folderIcon(n, b) {
+    if (MAP[n] || n === "SUN" || !b.best || !window.cassiniFeeds) return `<span class="fic">${bodyIcon(n)}</span>`;
+    return `<span class="fic"><span class="pic" style="background-image:url('${cassiniFeeds.frames}/frames/${b.best}.webp?size=256')"></span></span>`;
+  }
+  const folder = document.createElement("div");
+  folder.id = "dkfolder"; folder.hidden = true; folder.setAttribute("role", "dialog"); folder.setAttribute("aria-label", "All bodies");
+  document.body.appendChild(folder);
+  let folderMade = false;
+  async function fillFolder() {
+    const BM = window.cassiniBodyMode, ix = BM && (BM.index || await BM.loadIndex());
+    if (!ix) { folder.textContent = "The list of bodies could not be loaded."; return; }
+    const by = {};
+    for (const [n, b] of Object.entries(ix.bodies)) (by[groupOf(n, b)] = by[groupOf(n, b)] || []).push([n, b]);
+    folder.innerHTML = GROUPS.filter(([g]) => by[g]).map(([g, label]) => `<h3>${label}</h3><div class="fgrid">${by[g].sort((a, c) => c[1].frames - a[1].frames)
+      .map(([n, b]) => `<button data-body="${n}" title="${name(n)}: ${b.frames.toLocaleString("en-US")} pictures">${folderIcon(n, b)}<span class="fn">${name(n)}</span><span class="fc">${b.frames.toLocaleString("en-US")}</span></button>`).join("")}</div>`).join("");
+    folderMade = true;
+  }
+  folder.addEventListener("click", e => { e.stopPropagation(); const b = e.target.closest("button[data-body]"); if (b) { closeFolder(); goBody(b.dataset.body); } });
+  function placeFolder(anchor) {
+    const r = anchor.getBoundingClientRect(), fw = folder.offsetWidth, fh = folder.offsetHeight;
+    const side = dock.classList.contains("side-left") ? "left" : dock.classList.contains("side-right") ? "right" : "bottom";
+    let x = side === "left" ? r.right + 12 : side === "right" ? r.left - 12 - fw : r.left + r.width / 2 - fw / 2;
+    let y = side === "bottom" ? r.top - 12 - fh : r.top + r.height / 2 - fh / 2;
+    x = Math.max(10, Math.min(innerWidth - fw - 10, x)); y = Math.max(34, Math.min(innerHeight - fh - 10, y));
+    Object.assign(folder.style, { left: x + "px", top: y + "px" });
+  }
+  async function toggleFolder(anchor) {
+    if (!folder.hidden) { closeFolder(); return; }
+    if (!folderMade) await fillFolder();
+    const now = window.cassiniBodyMode && cassiniBodyMode.name;
+    folder.querySelectorAll("button[data-body]").forEach(b => b.classList.toggle("inview", b.dataset.body === now));
+    folder.hidden = false; anchor.classList.add("open"); placeFolder(anchor);
+  }
+  function closeFolder() { folder.hidden = true; const a = made.get("app:bodies"); if (a) a.classList.remove("open"); }
+  document.addEventListener("click", () => { if (!folder.hidden) closeFolder(); });
+  addEventListener("keydown", e => { if (e.key === "Escape" && !folder.hidden) closeFolder(); });
+
   // ---- minimized windows ----
   const winLabel = w => w.dataset.name || ({ dock: "Cassini Replay", imgcard: "Narrow-angle Camera", wacard: "Wide-angle Camera" })[w.id] || w.getAttribute("aria-label") || "Window";
   const winGlyph = w => w.id === "dock" ? GLYPH.replay : w.id === "moments" ? GLYPH.moments : GLYPH.window;
@@ -4858,6 +4975,7 @@ body.phone #finale .fx-data { width: min(220px, calc(100vw - 32px)); top: 10px; 
     const kids = [
       ...bodies.map(n => item("body:" + n, name(n), bodyIcon(n), () => goBody(n))),
       ...(away.length ? [seps[2], ...away.map(n => item("body:" + n, name(n), bodyIcon(n), () => goBody(n)))] : []),
+      item("app:bodies", "All bodies", `<span class="gl">${GLYPH.folder}</span>`, b => toggleFolder(b)),
       seps[0],
       ...APPS.map(a => item("app:" + a.key, a.label, `<span class="gl">${GLYPH[a.key]}</span>`, () => a.run())),
       seps[1],

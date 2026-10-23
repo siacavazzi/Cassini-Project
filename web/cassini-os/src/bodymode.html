@@ -50,6 +50,12 @@ body.bodymode:not(.phone) #moments:not([style*="top"]) { top: calc(env(safe-area
 #bmlist li.on { background: rgba(138,182,255,.16) !important; }
 #bmlist li.on span { color: #fff; }
 #bodymenu footer { flex: none; height: 20px; display: grid; place-items: center; font-size: 10px; color: var(--q-dim); border-top: 1px solid var(--q-line); }
+/* a jump to another session: the picture before dissolves into the new one */
+.well .bmfade { position: absolute; inset: 0; width: 100%; height: 100%; object-fit: contain; background: #000; pointer-events: none; animation: bmfade .7s ease forwards; }
+@keyframes bmfade { to { opacity: 0; } }
+@media (prefers-reduced-motion: reduce) { .well .bmfade { display: none; } }
+/* in a body's view the camera pictures keep a square, a mosaic letterboxed in it, so the windows hold their size */
+body.bodymode .camwin:not(.full) .well.has-frame { aspect-ratio: 1 !important; }
 #mlist li.bmnone { padding: 14px 12px; font-size: 11px; line-height: 1.4; color: var(--q-dim); background: none !important; }
 /* the main window says whose timeline it shows */
 #dock .titlebar .bmtag { color: var(--q-accent); }
@@ -138,10 +144,12 @@ body.phone.phone-land #bodymenu { left: auto !important; width: min(380px, 46vw)
   window.studyFramesPerDay = () => M.name ? (M.perDay || { start_et: 0, N: [], W: [] }) : null;
   window.studyEncounterShown = e => !M.name || momentBody(e) === M.name;
 
-  // ---- the bodies in the dock: every planet Cassini photographed, wherever the mission is, and the body in view ----
+  // ---- the bodies in the dock: every planet Cassini photographed a lot (PLANET_PICTURES or more; the rest are in the
+  // dock's All bodies folder), wherever the mission is, and the body in view ----
+  const PLANET_PICTURES = 1000;
   function planets() {
     const ix = M.index && M.index.bodies;
-    const out = typeof PLANETS !== "undefined" ? PLANETS.filter(n => (!ix || ix[n]) && typeof bodies !== "undefined" && bodies[n]) : [];
+    const out = ix && typeof PLANETS !== "undefined" ? PLANETS.filter(n => ix[n] && ix[n].frames >= PLANET_PICTURES && typeof bodies !== "undefined" && bodies[n]) : [];
     if (M.name && !out.includes(M.name)) out.push(M.name);
     return out;
   }
@@ -246,17 +254,47 @@ body.phone.phone-land #bodymenu { left: auto !important; width: min(380px, 46vw)
     const i = sessionAt(state.et);
     const s = i >= 0 ? M.sessions[i] : null, now = !!s && s[1] <= state.et;
     $("bmnow").textContent = !s ? "After the last session" : now ? `Session ${fmt(i + 1)} of ${fmt(M.sessions.length)}` : `Next: ${fmtLong(s[1])}, in ${fmtDur(s[1] - state.et)}`;
-    if (i === M.cur) return;
+    if (i === M.cur) { if (!M.placed && performance.now() - listTouched > 4000) showCur(); return; }
     if (M.rows[M.cur]) M.rows[M.cur].classList.remove("on");
     M.rows.forEach((li, k) => li && li.classList.toggle("past", i < 0 || k < i));
-    M.cur = i;
+    M.cur = i; M.placed = false;
     if (M.rows[i]) M.rows[i].classList.add("on");
     if (performance.now() - listTouched > 4000) showCur();
   }
   // the marked session in view in the list (not while the viewer is scrolling it)
   function showCur() {
     const li = M.rows[M.cur], ul = $("bmlist");
-    if (li && !win.hidden && ul.offsetParent) ul.scrollTop = Math.max(0, li.offsetTop - ul.offsetTop - 50);
+    if (li && !win.hidden && ul.offsetParent && li.offsetTop) { ul.scrollTop = Math.max(0, li.offsetTop - ul.offsetTop - 50); M.placed = true; }
+  }
+
+  // ---- the camera windows stay steady in a body's view ----
+  // a window never shrinks while the view is open (its biggest size so far is its least), and a picture that comes
+  // after a jump (more than JUMP_FADE of mission time since the last one) dissolves in over the one before
+  const JUMP_FADE = 1800, cams = ["imgcard", "wacard"].map($).filter(Boolean);
+  const grown = new Map();
+  const ro = new ResizeObserver(es => {
+    if (!M.name) return;
+    for (const e of es) {
+      const w = e.target, h = w.offsetHeight, wd = w.offsetWidth, g = grown.get(w) || [0, 0];
+      if (w.classList.contains("full") || w.hidden) continue;
+      if (h > g[0] || wd > g[1]) { grown.set(w, [Math.max(h, g[0]), Math.max(wd, g[1])]); w.style.minHeight = Math.max(h, g[0]) + "px"; w.style.minWidth = Math.max(wd, g[1]) + "px"; }
+    }
+  });
+  cams.forEach(w => ro.observe(w));
+  function unsteady() { for (const w of cams) { w.style.minHeight = ""; w.style.minWidth = ""; } grown.clear(); }
+  for (const w of cams) {
+    const shot = w.querySelector(".shot"), well = w.querySelector(".well");
+    let lastEt = null;
+    new MutationObserver(ms => {
+      if (!M.name || typeof state === "undefined") return;
+      const old = ms[0].oldValue, jumped = lastEt !== null && Math.abs(state.et - lastEt) > JUMP_FADE;
+      lastEt = state.et;
+      if (!jumped || !old || old === shot.src) return;
+      well.querySelector(".bmfade")?.remove();
+      const im = document.createElement("img"); im.className = "bmfade"; im.alt = ""; im.src = old;
+      im.addEventListener("animationend", () => im.remove());
+      well.appendChild(im);
+    }).observe(shot, { attributes: true, attributeFilter: ["src"], attributeOldValue: true });
   }
 
   // ---- moving through the body's history ----
@@ -321,6 +359,7 @@ body.phone.phone-land #bodymenu { left: auto !important; width: min(380px, 46vw)
     n = String(n).toUpperCase();
     const first = !M.name;
     if (first) M.saved = { span: state.view[1] - state.view[0] };
+    if (M.name !== n) unsteady();
     M.name = n; M.data = null; M.perDay = null; M.sessions = []; M.cur = -2; M.rows = [];
     document.body.classList.add("bodymode");
     if (win.hidden || win.dataset.min) WM.restore(win); else WM.front(win);
@@ -348,6 +387,7 @@ body.phone.phone-land #bodymenu { left: auto !important; width: min(380px, 46vw)
   function exit() {
     if (!M.name) return;
     M.name = null; M.data = null; M.perDay = null; M.sessions = []; M.rows = [];
+    unsteady();
     document.body.classList.remove("bodymode");
     win.hidden = true; delete win.dataset.min; WM.syncMenu();
     retitle(); filterMoments(); setUrl();

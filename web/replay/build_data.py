@@ -364,18 +364,22 @@ def write_targets(out, slims, day0, bodies):
     """
     Every body Cassini photographed, for the body views:
       data/targets.json          {"start_et": day0, "bodies": {NAME: {"frames", "N", "W", "sessions", "rgb_sets",
-                                  "first", "last", "naif" (bodies with a track), "file"}}}, most pictures first
+                                  "first", "last", "best", "naif" (bodies with a track), "file"}}}, most pictures first
       data/targets/<body>.json   {"name", "days": [[day, narrow, wide], ...], "sessions": [[obs, start, end, narrow,
                                   wide, rgb_sets], ...]}
     day counts from day0 (as frames_per_day); a session is one observation's pictures of that body, start and end
-    its first and last picture, rgb_sets its 30 minute spans with red, green and blue pictures (as measure).
+    its first and last picture, rgb_sets its 30 minute spans with red, green and blue pictures (as measure). best is
+    the id of its sharpest picture (fewest km per pixel), the picture the dock shows for a body with no surface map.
     """
     per = {}
     for slim in slims:
-        for t, cam, f1, f2, target, obs in zip(slim["et"], slim["cam"], slim["f1"], slim["f2"], slim["target"], slim["obs"]):
+        for t, cam, f1, f2, target, obs, fid, kpp in zip(slim["et"], slim["cam"], slim["f1"], slim["f2"], slim["target"], slim["obs"],
+                                                         slim["id"], slim["km_per_px"]):
             if not target or target in NOT_BODIES:
                 continue
-            b = per.setdefault(target, {"days": {}, "sessions": {}})
+            b = per.setdefault(target, {"days": {}, "sessions": {}, "best": (float("inf"), None)})
+            if kpp and kpp > 0 and kpp < b["best"][0]:
+                b["best"] = (kpp, fid)
             d = b["days"].setdefault(int((t - day0) // 86400), [0, 0])
             d[cam != "N"] += 1
             s = b["sessions"].get(obs)
@@ -396,7 +400,7 @@ def write_targets(out, slims, day0, bodies):
                   open(os.path.join(out, "targets", f"{slug}.json"), "w"), separators=(",", ":"))
         n, w = sum(d[1] for d in days), sum(d[2] for d in days)
         index[name] = {"frames": n + w, "N": n, "W": w, "sessions": len(sessions), "rgb_sets": sum(r[5] for r in sessions),
-                       "first": sessions[0][1], "last": sessions[-1][2], "file": f"data/targets/{slug}.json"}
+                       "first": sessions[0][1], "last": sessions[-1][2], "best": b["best"][1], "file": f"data/targets/{slug}.json"}
         if name in bodies:
             index[name]["naif"] = bodies[name]["naif"]
     json.dump({"start_et": day0, "bodies": index}, open(os.path.join(out, "targets.json"), "w"), separators=(",", ":"))

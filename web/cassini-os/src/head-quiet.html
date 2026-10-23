@@ -1572,25 +1572,32 @@ body.idle .win.full .titlebar { opacity: 0; }
       }
       if (win.hidden && !force) { mosaicStop(); return; }   // a closed or tucked-away window fetches nothing; it catches up when shown
       if (window.cassiniMovie && window.cassiniMovie.on) { mosaicStop(); return; }   // movie mode has the frame server to itself (its requests are capped)
-      const p = lastOfCam(cam, state.et, body), k = p < 0 ? -1 : framesOf(cam, body).ks[p];
+      let p = lastOfCam(cam, state.et, body), k = p < 0 ? -1 : framesOf(cam, body).ks[p];
+      // holding: a body window, or a camera window in a body's view (bodymode.html), never goes blank: its picture stays
+      // up however long the camera is quiet and across a jump to another month, until the body's next picture; a
+      // window with nothing up yet shows the body's next picture rather than "no signal"
+      const hold = update.hold || (!own && !!body), coming = k < 0 && hold && !well.classList.contains("has-frame") && framesOf(cam, body).ks.length > 0;
+      if (coming) { p = 0; k = framesOf(cam, body).ks[0]; }
       const live = k >= 0 && state.et - catalog.et[k] < 180;
       card.classList.toggle("live", live);
       // a camera that has been quiet for longer than the stale setting shows nothing rather than an old picture; an
       // important picture (color, mosaic) stays that many times longer, and a window that holds (a body window,
       // which closes by itself) keeps its picture
       const stale = S.get("cameras.stale") * (lastK >= 0 ? importance() : 1);
-      if (k < 0 || (!update.hold && state.et - catalog.et[k] > stale * 3600)) {
+      if (k < 0 && hold && well.classList.contains("has-frame")) { field("status").textContent = "Waiting for the next picture"; return; }
+      if (k < 0 || (!hold && state.et - catalog.et[k] > stale * 3600)) {
         field("status").textContent = k < 0 ? "Camera" : `Last frame ${fmtDur(state.et - catalog.et[k])} ago`;
         strip(null);
         if (lastK !== -1) {
           lastK = -1; want = null; shownKey = null; shown = null;
-          noFrame(k < 0 ? "<b>No signal</b>No frames from this camera yet this year" : `<b>Idle</b>No frames from this camera in the last ${+stale.toFixed(1)} h`);
+          noFrame(k < 0 && hold ? `<b>${titleCase(body)}</b>No ${cam === "N" ? "narrow" : "wide"}-angle pictures of it near this time`
+            : k < 0 ? "<b>No signal</b>No frames from this camera yet this year" : `<b>Idle</b>No frames from this camera in the last ${+stale.toFixed(1)} h`, hold);
           for (const f of ["frame", "filter", "colour", "details"]) field(f).textContent = "—";
         }
         return;
       }
       const ago = state.et - catalog.et[k];
-      field("status").textContent = live ? "Imaging now" : `Last frame ${fmtDur(ago)} ago`;
+      field("status").textContent = coming ? `Next picture in ${fmtDur(-ago)}` : live ? "Imaging now" : `Last frame ${fmtDur(ago)} ago`;
       const si = catalog.setOf[k], s = si >= 0 ? catalog.sets[si] : null, ready = !!s && s.ready <= state.et;
       const held = !s && steady() ? nearSet(k) : null;
       strip(s || held, state.et, k);
@@ -1663,7 +1670,7 @@ body.idle .win.full .titlebar { opacity: 0; }
   }
   const feeds = [...document.querySelectorAll(".camwin")].map(cameraFeed);
   document.addEventListener("cassini:bodymode", () => { if (typeof catalog !== "undefined" && catalog && catalog.byCam) feeds.forEach(f => f(true)); });
-  window.cassiniFeeds = { cameraFeed, framesOf, lastOfCam, prep, weight, stale: () => S.get("cameras.stale") * 3600 };
+  window.cassiniFeeds = { frames: FRAMES, cameraFeed, framesOf, lastOfCam, prep, weight, stale: () => S.get("cameras.stale") * 3600 };
   // a change to what the windows show takes effect straight away
   for (const key of ["cameras.composites", "cameras.stale", "cameras.steady", "cameras.lingerColor", "cameras.lingerMosaic"]) S.on(key, () => { if (typeof catalog !== "undefined" && catalog && catalog.byCam) feeds.forEach(f => f(true)); });
 
