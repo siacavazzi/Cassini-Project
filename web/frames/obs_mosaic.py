@@ -54,7 +54,7 @@ import stacking  # noqa: E402
 # bumped whenever the way observation mosaics are made changes, so older ones are not served again; one per
 # display model (calibration.style), classic being the mosaics made before the balanced display model, raw the
 # balanced ones before natural color
-VERSIONS = {"balanced": "obs-v31", "raw": "obs-v15", "classic": "obs-v9"}
+VERSIONS = {"balanced": "obs-v32", "raw": "obs-v15", "classic": "obs-v9"}
 CANVAS = 2048        # longest side of the canvas the view is drawn on
 OUT = 1024           # longest side of the picture sent
 FRAME = 1024         # full resolution frame
@@ -226,6 +226,12 @@ def colour_of(count, nms):
     RED or else the continuum filter nearest red (not a methane band); otherwise false colour from the filters
     taken at most tiles (longest wavelength red). Polarizers are left out (they are not a colour)."""
     most = max(count.values())
+    # a clear frame is no color: it is left out wherever the color filters still make a set of their own (it
+    # sees several times their light, so as a channel it outshines them, green on Saturn's rings)
+    plain = [f for f in count if f != "CL1/CL2" and not _polarizer(f)]
+    if len([f for f in plain if count[f] >= most / 2]) >= 3:
+        count = {f: count[f] for f in plain}
+        most = max(count.values())
     good = [f for f in count if count[f] >= most / 4 and not _polarizer(f)]
     for filters, rgb in COLOUR_SETS.items():
         if filters <= set(good):

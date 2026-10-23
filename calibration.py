@@ -367,13 +367,17 @@ target = the body the set is of (TARGET_NAME), for false color
 gains = false color: per band, the gain that brings the body's typical brightness to the set's mean
 (false_gains), when the caller has measured it itself (a mosaic's pass); otherwise the table's
 """
-def color_mix(camera, bands, target=None, gains=None):
+def color_mix(camera, bands, target=None, gains=None, own=False):
     if style() != "balanced" or len(bands) != 3:
         return None
     m = natural_mix(camera, bands)
     if m is not None:
         return m
     gains = gains or false_gains(target, bands, camera)
+    if not gains and own:
+        # no mission measure of the body in these bands (a clear frame, a rare filter or body): the picture's own
+        # balance alone (load_linear's FALSE_OWN), so no band outshines the others
+        gains = [1.0] * len(bands)
     if not gains:
         return None
     m = np.diag(np.asarray(gains, np.float32)).view(FalseMix)
@@ -663,7 +667,8 @@ def load_linear(labels, images=None, iofs=None):
         return None
     channels = [(iof - np.float32(level)) / np.float32(white) for iof, level in zip(iofs, levels)]
     infos = [lbl.get_info() for lbl in labels]
-    mix = color_mix(_value(infos[0], "INSTRUMENT_ID", ""), [band_of(i) for i in infos], _value(infos[0], "TARGET_NAME", ""))
+    mix = color_mix(_value(infos[0], "INSTRUMENT_ID", ""), [band_of(i) for i in infos], _value(infos[0], "TARGET_NAME", ""),
+                    own=True)
     false = isinstance(mix, FalseMix)
     if false:
         # false color: the mission's typical balance of the body (the table) misses a frame unlike it (Saturn's

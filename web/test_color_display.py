@@ -178,6 +178,14 @@ with cal.looking("balanced"):
     assert np.ptp(lv) < 0.5 * (0.054 - 0.018) and np.isclose(lv.sum(), 0.108)   # toward gray, brightness kept
 with cal.looking("classic"):
     assert cal.style() == "classic" and cal.color_mix("N", ["RED", "GRN", "BL1"]) is None
+# a clear frame is no color channel where the color filters make a set of their own; where they don't (Saturn's
+# Shadow, IR3/clear/VIO) it stays, and a composite without a mission measure of its bands balances on itself
+nms = {"IR3": 930, "CL1/CL2": 610, "GRN": 568, "UV3": 338, "VIO": 420}
+assert obs_mosaic.colour_of({"IR3": 10, "CL1/CL2": 10, "GRN": 10, "UV3": 10}, nms) == ["IR3", "GRN", "UV3"]
+assert obs_mosaic.colour_of({"IR3": 10, "CL1/CL2": 10, "VIO": 10}, nms) == ["IR3", "CL1/CL2", "VIO"]
+with cal.looking("balanced"):
+    assert cal.color_mix("W", ["IR3", "CL1/CL2", "VIO"], "SATURN") is None
+    assert isinstance(cal.color_mix("W", ["IR3", "CL1/CL2", "VIO"], "SATURN", own=True), cal.FalseMix)
 # a NAC set with BL2 has its own fitted matrix, which keeps gray gray too
 b2 = cal.natural_mix("N", ["RED", "GRN", "BL2"])
 assert b2 is not None and not np.allclose(b2, cal.natural_mix("N", ["RED", "GRN", "BL1"])) and np.allclose(b2.sum(axis=1), 1, atol=1e-3)
