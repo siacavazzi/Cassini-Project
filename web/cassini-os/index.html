@@ -2149,7 +2149,7 @@ body.phone #finale .fx-data { width: min(220px, calc(100vw - 32px)); top: 10px; 
     // make one). A composite being made never holds up the frames: the window shows the newest frame meanwhile,
     // and its composite replaces it once made. During fast playback each lane skips to the newest picture.
     const lane = { frame: null, comp: null };
-    const warming = new Set(), warmed = new Set();   // look-ahead requests in flight / done, each made once
+    const warming = new Map(), warmed = new Set();   // look-ahead requests in flight (their images) / done, each made once
     const etOf = v => catalog.et[v.k];
     // a picture that finished loading goes up if it is the one wanted, or a stand-in no older than what is up
     // and no newer than what is wanted (after a scrub back, newer pictures still in flight are dropped)
@@ -2177,7 +2177,7 @@ body.phone #finale .fx-data { width: min(220px, calc(100vw - 32px)); top: 10px; 
     }
     function request(which, v) {
       lane[which] = v; v.cat = catalog;
-      const im = new Image();
+      const im = v.im = new Image();
       im.crossOrigin = "anonymous";
       im.fetchPriority = v.warm ? "low" : "high";   // the picture wanted now goes ahead of look-ahead requests
       im.onload = () => {
@@ -2222,9 +2222,9 @@ body.phone #finale .fx-data { width: min(220px, calc(100vw - 32px)); top: 10px; 
       for (const key of next) {
         if (warming.size >= 3) break;
         if (warmed.has(key) || warming.has(key) || key.includes("/color.webp")) continue;
-        warming.add(key);
         const p = new Image(); p.crossOrigin = "anonymous"; p.fetchPriority = "low";
         p.onload = p.onerror = () => { warming.delete(key); warmed.add(key); };
+        warming.set(key, p);
         p.src = key;
       }
       const comp = next.find(key => key.includes("/color.webp") && !warmed.has(key));
@@ -2442,8 +2442,30 @@ body.phone #finale .fx-data { width: min(220px, calc(100vw - 32px)); top: 10px; 
         fig.classList.remove("waiting"); fig.querySelector(".tile").replaceChildren(t);
       }
     }
-    let cat = null;
+    // Data first: while the moment on screen waits for its data (a jump to another month), the window lets go of
+    // every picture it is fetching and asks for nothing. A browser keeps only six connections open to the frame
+    // server, and pictures that take the server seconds to make (a mosaic or a color set, or any picture of a year
+    // whose SPICE kernels are not loaded yet) can hold them all, so the data waited behind them on the loading screen.
+    // The server still finishes what was dropped and keeps it; the window asks again once the data is in.
+    let warnCtl = new AbortController();   // the look-ahead's notes to the server (?warm=1)
+    const dataWait = () => typeof yearReady === "function" && !yearReady();
+    function letGo() {
+      for (const which of ["frame", "comp"]) {
+        const v = lane[which];
+        if (!v) continue;
+        lane[which] = null;
+        v.im.onload = v.im.onerror = null; v.im.removeAttribute("src");
+      }
+      for (const p of warming.values()) { p.onload = p.onerror = null; p.removeAttribute("src"); }
+      warming.clear();
+      warnCtl.abort(); warnCtl = new AbortController(); warnedObs.clear();
+      mosaicStop();
+      lastK = -2;   // asks again for what it shows, once the data is in
+    }
+    let cat = null, letGone = false;
     function update(force) {
+      if (dataWait()) { if (!letGone) { letGone = true; letGo(); } return; }
+      letGone = false;
       if (catalog !== cat) {   // another mission year (or the months around this one) loaded
         // a pass mosaic that is up stays up: its observation is a name, its frame found again by id
         const obsId = cat && obsK >= 0 ? cat.id[obsK] : null;
@@ -2512,7 +2534,7 @@ body.phone #finale .fx-data { width: min(220px, calc(100vw - 32px)); top: 10px; 
           if (warnedObs.has(o)) continue;
           warnedObs.add(o);
           const c0 = catalog;
-          fetch(`${FRAMES}/frames/mosaic/${catalog.id[q]}.webp?warm=1${window.cassiniLook()}`, { priority: "low" }).then(r => r.ok ? r.json() : null).then(a => {
+          fetch(`${FRAMES}/frames/mosaic/${catalog.id[q]}.webp?warm=1${window.cassiniLook()}`, { priority: "low", signal: warnCtl.signal }).then(r => r.ok ? r.json() : null).then(a => {
             if (a && a.movie) { moviePasses.add(o); chipText(); }
             if (a && a.kind === "mosaic_movie") { lapPasses.add(o); chipText(); }
             if (!a || !a.mosaic) return;
@@ -4968,9 +4990,13 @@ function assemble(parts) {
   lastTrailEt = -1e99;
   if ($("mlist").children.length) scrollMoments();
 }
-// load the years around y; calls made while loading only keep the latest year asked for
+// load the years around y; calls made while loading only keep the latest year asked for, and a call made while
+// a download is under way does not wait for it: the chunk under the new moment goes first
+let yearsWake = null;   // ends the current wait when another year is asked for
+const orJump = job => Promise.race([job, new Promise(r => { yearsWake = r; })]).finally(() => { yearsWake = null; });
 function requestYears(y) {
   yearsWanted = y;
+  if (yearsWake) yearsWake();
   if (!yearsJob) yearsJob = (async () => {
     try {
       while (yearsWanted !== null) {
@@ -4980,12 +5006,19 @@ function requestYears(y) {
         keepYears = ys;
         try {
           // the year on screen first, on its own so it has the whole connection, and shown as soon as
-          // it is in; its neighbours are downloaded after it and added when they arrive
+          // it is in; its neighbours are downloaded after it and added when they arrive. A jump meanwhile
+          // leaves these downloads to finish into the cache (the ones the new moment shares are reused)
           if (!activeYears.includes(y) && ys.length > 1) {
-            assemble([await loadPart(y)]);
+            const one = loadPart(y);
+            await orJump(one);
+            if (yearsWanted !== null) { one.catch(() => {}); continue; }
+            assemble([await one]);
             if (yearsWanted !== null) continue;
           }
-          assemble(await Promise.all(ys.map(loadPart)));
+          const all = Promise.all(ys.map(loadPart));
+          await orJump(all);
+          if (yearsWanted !== null) { all.catch(() => {}); continue; }
+          assemble(await all);
         }
         catch (err) {
           console.warn("year not loaded", err); setText("yload", "Could not load " + ys.map(partLabel).join(", "));
@@ -6091,14 +6124,42 @@ function frame(now) {
     root.classList.remove("on");
     hideTimer = setTimeout(() => { root.hidden = true; }, 400);
   }
+  // ---------- a slow load is reported to the frame server (POST /jumplog, kept in its jump-log.jsonl) ----------
+  // so a wait that only happens now and then can be looked into afterwards: each data file's timings (waiting for
+  // a connection, the server's answer, the download), the picture requests that were under way, and the page's own
+  // long tasks. The page keeps the latest network and long-task entries itself (the browser's buffer fills up).
+  const REPORT_AFTER = 2000, net = [], long = [];
+  try {
+    new PerformanceObserver(l => { net.push(...l.getEntries()); if (net.length > 600) net.splice(0, net.length - 400); }).observe({ type: "resource" });
+    new PerformanceObserver(l => { long.push(...l.getEntries()); if (long.length > 200) long.splice(0, long.length - 100); }).observe({ type: "longtask" });
+  } catch (e) {}
+  let busyWhat = "";
+  function report(t0, t1) {
+    if (!/^https?:$/.test(location.protocol) || /claude\.ai$|claudeusercontent\.com$|claude\.site$/.test(location.hostname)) return;
+    const r = n => Math.round(n);
+    const data = net.filter(e => /\/data\//.test(e.name) && e.startTime >= t0 - 1000 && e.startTime <= t1).map(e => ({
+      file: new URL(e.name).pathname, start_ms: r(e.startTime - t0), queued_ms: r((e.requestStart || e.startTime) - e.startTime),
+      server_ms: r(e.responseStart - (e.requestStart || e.startTime)), download_ms: r(e.responseEnd - e.responseStart), bytes: e.transferSize }));
+    const pics = net.filter(e => /\/frames\//.test(e.name) && e.startTime <= t1 && e.responseEnd >= t0);
+    const body = {
+      seconds: +((t1 - t0) / 1000).toFixed(2), what: busyWhat, moment: (() => { try { return new Date(etToMs(state.et)).toISOString(); } catch (e) { return null; } })(),
+      data, pictures_under_way: pics.length, slowest_pictures: pics.sort((a, b) => b.duration - a.duration).slice(0, 8).map(e => ({ url: new URL(e.name).pathname + new URL(e.name).search, start_ms: r(e.startTime - t0), ms: r(e.duration) })),
+      long_tasks: long.filter(e => e.startTime + e.duration >= t0 && e.startTime <= t1).map(e => [r(e.startTime - t0), r(e.duration)]),
+      windows_open: document.querySelectorAll(".camwin:not([hidden])").length, playing: typeof state !== "undefined" && !!state.playing,
+      connection: navigator.connection ? { type: navigator.connection.effectiveType, mbps: navigator.connection.downlink, rtt_ms: navigator.connection.rtt } : null,
+      browser: navigator.userAgent, page: location.href };
+    fetch("jumplog", { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify(body) }).catch(() => {});
+  }
+
   function tick() {
     const what = busy(), now = performance.now();
     if (what) {
       status.textContent = what;
-      if (busySince === null) busySince = now;
+      if (busySince === null) { busySince = now; busyWhat = what; }
       // the first load shows at once (the screen is black anyway); later loads only once they take a moment
       if (!shown && (now - busySince >= SHOW_AFTER || !$("loading").hidden)) show();
     } else {
+      if (busySince !== null && now - busySince >= REPORT_AFTER && $("loading").hidden) report(busySince, now);
       busySince = null;
       if (shown && now - shownAt >= MIN_SHOWN) hide();
     }
