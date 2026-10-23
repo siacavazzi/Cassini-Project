@@ -18,12 +18,14 @@
   const S = window.cassiniSettings;
   const opt = (key, dflt) => (S && S.get(key) !== undefined ? S.get(key) : dflt);
   const fps = () => Math.min(24, Math.max(1, +opt("movie.fps", 8) || 8));
-  // A step waits for the camera windows: while a window has not yet put up the picture the clock is at (the frame
-  // server is still making it: a cold composite, a mosaic's new tile), the next step waits up to GRACE ms past its
-  // time, then goes on as long as no window is playback.maxBehind frames behind or more (the windows' own count,
-  // cassiniFeeds.behind, which stops counting a picture that has been stuck for seconds, so the film never stalls)
-  const GRACE = 1500, CUT = 3 * 3600;
-  const M = { on: false, stepAt: 0, waiting: false, cut: 0, cutAt: -1e9 };
+  // A step waits for the camera windows (Sam: movie mode slows, it never skips a picture): while a window has not
+  // yet put up the picture the clock is at (the frame server is still making it: a cold composite, a mosaic's new
+  // tile), the next step waits. cassiniFeeds.behind stops counting a picture that has been stuck for seconds, so a
+  // server that stops answering never stalls the film.
+  // Slow: when the film has spent more than SLOW_SHARE of the last SLOW_SPAN ms waiting, the page hears
+  // "cassini:movie-slow" (once, until it has caught up again), so it can offer to make a stretch ahead of time.
+  const CUT = 3 * 3600, SLOW_SPAN = 20000, SLOW_SHARE = 0.5;
+  const M = { on: false, stepAt: 0, waiting: false, cut: 0, cutAt: -1e9, until: Infinity, waits: [], slow: false, lastAt: 0 };
   const ready = () => typeof catalog !== "undefined" && catalog && catalog.byCam && window.cassiniFeeds;
 
   const base = window.studyAdvance;
@@ -32,10 +34,12 @@
     if (!M.on || !ready()) return base ? base(et, dt, speed) : et + dt * speed;
     const F = window.cassiniFeeds, now = performance.now(), due = M.stepAt + 1000 / fps();
     M.waiting = false;
-    if (now < due) return et;
-    const behind = F.behind(), most = +opt("playback.maxBehind", 2) || Infinity;
-    if (behind > 0 && (now < due + GRACE || behind >= most)) { M.waiting = now > due + 300; return et; }
+    if (now < due) { track(now, false); return et; }
+    if (F.behind() > 0) { M.waiting = now > due + 300; track(now, true); return et; }
+    track(now, false);
     const next = F.nextPicture(et);
+    // a stretch played as a movie (start's until) ends on its last picture
+    if (next > M.until) { setPlaying(false); stop(); return et; }
     // no picture after this one in the months loaded now: the clock runs a day a frame until the next ones are in
     // (the viewer holds it while a month is loading) or the mission ends
     if (next === Infinity) return et + 86400;
@@ -43,6 +47,16 @@
     if (next - et > CUT) { M.cut = next - et; M.cutAt = now; }
     return next;
   };
+
+  // the waiting kept for the last SLOW_SPAN ms, as [from, to] spans
+  function track(now, waiting) {
+    const dt = Math.min(250, now - (M.lastAt || now)); M.lastAt = now;
+    if (waiting && dt > 0) M.waits.push([now - dt, now]);
+    while (M.waits.length && M.waits[0][1] < now - SLOW_SPAN) M.waits.shift();
+    const share = M.waits.reduce((a, w) => a + w[1] - Math.max(w[0], now - SLOW_SPAN), 0) / SLOW_SPAN;
+    if (!M.slow && share > SLOW_SHARE) { M.slow = true; document.dispatchEvent(new CustomEvent("cassini:movie-slow", { detail: { slow: true, share, et: state.et } })); }
+    else if (M.slow && share < SLOW_SHARE / 4) { M.slow = false; document.dispatchEvent(new CustomEvent("cassini:movie-slow", { detail: { slow: false, share, et: state.et } })); }
+  }
 
   // paused in the background (away.html): the step carries on where it was, by the time away
   document.addEventListener("cassini:away", e => { if (!e.detail.away) { M.stepAt += e.detail.ms; M.cutAt += e.detail.ms; } });
@@ -60,20 +74,26 @@
   };
 
   // ---- on and off ----
-  // play: also start the clock (the Movie button, M); a shared link (link.html) leaves play as the link says
-  function start(play) {
-    if (M.on) return;
-    M.on = true; M.stepAt = 0; M.cutAt = -1e9;
+  // play: also start the clock (the Movie button, M); a shared link (link.html) leaves play as the link says.
+  // range { from, until } (mission times): play one stretch, from its first picture, and leave movie mode after
+  // its last (a stretch made ahead of time plays at movie.fps, its pictures all waiting in the server's cache)
+  function start(play, range) {
+    if (M.on && !range) return;
+    M.on = true; M.stepAt = 0; M.cutAt = -1e9; M.waits = []; M.slow = false; M.lastAt = 0;
+    M.until = range && range.until !== undefined ? range.until : Infinity;
+    if (range && range.from !== undefined) { setTime(range.from - 1e-3); keepNowInView(); }
     $("movie").setAttribute("aria-pressed", "true");
     if (play) setPlaying(true);
   }
   function stop() {
     if (!M.on) return;
-    M.on = false;
+    M.on = false; M.until = Infinity;
+    if (M.slow) { M.slow = false; document.dispatchEvent(new CustomEvent("cassini:movie-slow", { detail: { slow: false, share: 0, et: state.et } })); }
     $("movie").setAttribute("aria-pressed", "false");
   }
   const toggle = () => (M.on ? stop() : start(true));
-  window.cassiniMovie = { start, stop, get on() { return M.on; }, state: M };
+  // fps: the frame rate (the movie.fps setting, Settings > Playback; set it with cassiniSettings.set("movie.fps", n))
+  window.cassiniMovie = { start, stop, get on() { return M.on; }, get slow() { return M.slow; }, fps, state: M };
 
   // ---- controls ----
   $("movie").addEventListener("click", toggle);
