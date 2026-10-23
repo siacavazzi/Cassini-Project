@@ -249,12 +249,19 @@ def size_dir(size, fmt):
     return str(size) + ("-png" if fmt == "png" else "")
 
 
+# plain frames at quality 90: at 80 WebP drops the faintest stars and specks of sparse frames (lit PSNR 29-30 dB on
+# star fields, 38+ at 90; planets and rings look the same at both), for about 1.8x the bytes (6.6 KB a 512 px frame).
+# The folder is named after the quality, so frames made at 80 are not served again
+FRAME_QUALITY = 90
+FRAME_VERSION = "frames-q90"
+
+
 def webp(frame_id, size, cache, fmt="webp"):
     def make():
         im = Image.open(io.BytesIO(archive_png(frame_id)))
         im = im.convert("L") if im.mode in ("L", "I", "I;16", "P", "1") else im.convert("RGB")
-        return encode(im, size, fmt)
-    return cached(os.path.join(cache, size_dir(size, fmt), f"{frame_id}.{fmt}"), make)
+        return encode(im, size, fmt, FRAME_QUALITY)
+    return cached(os.path.join(cache, FRAME_VERSION, size_dir(size, fmt), f"{frame_id}.{fmt}"), make)
 
 
 # the caches of the pictures drawn from I/F, one per display model (calibration.style), so the classic look keeps the

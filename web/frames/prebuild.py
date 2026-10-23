@@ -6,7 +6,8 @@ processed_webp; obs_mosaic.plan, tile, _mosaic_at) into the same cache folders a
 the server (or a static copy of the cache) finds it there. Nothing here processes a picture itself.
 
 Phases (each its own run; a run picks up where the last one stopped, since a made file is never made again):
-  frames      /frames/<ID>.webp at 512 and 1024 px, every frame of the mission. No version: safe to build any time
+  frames      /frames/<ID>.webp at 512 and 1024 px, every frame of the mission (frame_server.FRAME_VERSION). No
+              processing in them, so safe to build before the look is final
   composites  /frames/color.webp?ids=R,G,B for every filter set the page makes (its findSets rule), at 1024 (which
               also writes full) and 512, in the default look (balanced, natural colors)
   mosaics     every mosaic pass's plan and tiles (obs_mosaic), then its mosaic so far at each of its frames, 1024
