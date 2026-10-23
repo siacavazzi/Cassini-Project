@@ -544,6 +544,7 @@ body.idle .win.full .titlebar { opacity: 0; }
       <ul id="gomenu">
         <li><button data-act="prev">Previous Moment<span class="kbd">⌘[</span></button></li>
         <li><button data-act="next">Next Moment<span class="kbd">⌘]</span></button></li>
+        <li><button data-act="copylink">Copy Link to This Moment<span class="kbd">⇧⌘C</span></button></li>
         <li class="sep"></li>
       </ul></div>
     <div class="menu"><button aria-haspopup="true">Window</button>
@@ -1636,10 +1637,12 @@ body.idle .win.full .titlebar { opacity: 0; }
   // ---------- burst limit: in normal playback each camera window gets at most maxRate new pictures a second ----------
   // The clock runs at the chosen speed except inside an imaging burst, where it slows so that crossing the gap
   // between two of a camera's frames takes at least 1/maxRate s; it is back to full speed once the burst is over.
+  // A faster speed is always faster: a burst never slows the clock below a share of the chosen speed
+  // (playback.burstFloor), so 1 day/s skips pictures in a long burst instead of crawling like 10 min/s does.
   // Movie mode has its own clock. 0 = no limit. The setting lives in the Settings window when the page has one
   // (playback.maxImageRate), otherwise in the View menu.
-  const RATE_DEFAULT = 5, RATE_KEY = "cassini-os-max-image-rate", SETTINGS = window.cassiniSettings;
-  let maxRate = RATE_DEFAULT, slowedTo = 0;
+  const RATE_DEFAULT = 5, FLOOR_DEFAULT = 0.25, RATE_KEY = "cassini-os-max-image-rate", SETTINGS = window.cassiniSettings;
+  let maxRate = RATE_DEFAULT, burstFloor = FLOOR_DEFAULT, slowedTo = 0;
   function syncRateMenu() {
     const r = $("maxrate"); if (!r) return;
     r.value = maxRate; $("maxratev").textContent = maxRate ? `${maxRate} image${maxRate === 1 ? "" : "s"}/s` : "no limit";
@@ -1655,6 +1658,10 @@ body.idle .win.full .titlebar { opacity: 0; }
       hint: "When Cassini takes a burst of pictures, the timeline slows down so each camera window shows at most this many new images a second. 0 = no limit.",
       type: "range", value: RATE_DEFAULT, min: 0, max: 24, step: 1, unit: "images/s" }) || 0;
     SETTINGS.on("playback.maxImageRate", v => { maxRate = +v || 0; });
+    SETTINGS.define({ key: "playback.burstFloor", section: "Playback", label: "Bursts slow playback to no less than",
+      hint: "However many pictures a burst has, the timeline keeps at least this share of the chosen speed, so a faster speed always plays faster (skipping pictures in long bursts). 100 % = never slow down.",
+      type: "range", value: FLOOR_DEFAULT * 100, min: 5, max: 100, step: 5, unit: "%" });
+    SETTINGS.on("playback.burstFloor", v => { burstFloor = (+v || 0) / 100; });
   } else {
     try { const v = localStorage.getItem(RATE_KEY); if (v !== null && +v >= 0) maxRate = +v; } catch (e) {}
     syncRateMenu();
@@ -1673,6 +1680,7 @@ body.idle .win.full .titlebar { opacity: 0; }
     for (let n = 0; n < 200; n++) {
       let s = speed, stop = Infinity;
       for (const cam in catalog.byCam) { const [cap, nx] = capOf(cam, et); s = Math.min(s, cap); stop = Math.min(stop, nx); }
+      s = Math.max(s, speed * burstFloor);
       if (s < speed) slowedTo = slowedTo ? Math.min(slowedTo, s) : s;
       if (et + dt * s <= stop) return et + dt * s;
       dt -= (stop - et) / s; et = stop;   // the next frame changes the gap, so carry on from there

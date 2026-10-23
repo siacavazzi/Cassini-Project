@@ -724,6 +724,12 @@ body.phone:not(.phone-land) .bodywin.alone[data-cam="W"]:not(.full) { left: var(
 body.phone.phone-land .bodywin[data-cam="W"]:not(.full) { top: calc(var(--menu) + 2 * var(--gap) + var(--col)) !important; }
 body.phone.phone-land .bodywin.alone[data-cam="W"]:not(.full) { top: calc(var(--menu) + var(--gap)) !important; }
 
+#linktoast { position: fixed; left: 50%; bottom: 22px; transform: translateX(-50%); z-index: 3001; padding: 7px 12px; border-radius: 8px;
+  background: rgba(20,22,27,.96); border: 1px solid var(--q-line, #444); color: var(--q-text, #ddd); font-size: 12px; box-shadow: 0 8px 30px rgba(0,0,0,.5); }
+#linktoast[hidden] { display: none; }
+body.idle #linktoast { opacity: 1; }
+body.phone #linktoast { bottom: calc(env(safe-area-inset-bottom, 0px) + 12px); }
+
 /* frosted glass off: plain dark panels, no blur of the view behind them (the blur is redone every frame) */
 body.s-noglass :is(#menubar, .menu ul, .win, #dock) { -webkit-backdrop-filter: none !important; backdrop-filter: none !important; }
 body.s-noglass :is(.win, #dock) { background: rgba(16, 17, 20, .93); }
@@ -1076,6 +1082,7 @@ body.phone #finale .fx-data { width: min(220px, calc(100vw - 32px)); top: 10px; 
       <ul id="gomenu">
         <li><button data-act="prev">Previous Moment<span class="kbd">⌘[</span></button></li>
         <li><button data-act="next">Next Moment<span class="kbd">⌘]</span></button></li>
+        <li><button data-act="copylink">Copy Link to This Moment<span class="kbd">⇧⌘C</span></button></li>
         <li class="sep"></li>
       </ul></div>
     <div class="menu"><button aria-haspopup="true">Highlights</button>
@@ -1212,6 +1219,8 @@ body.phone #finale .fx-data { width: min(220px, calc(100vw - 32px)); top: 10px; 
 </section>
 
   <div id="awaynote" role="status" aria-live="polite">Paused while Cassini OS is in the background</div>
+
+  <div id="linktoast" role="status" hidden></div>
 
   <section class="win" id="reelcard" aria-label="Body reel" hidden>
   <div class="titlebar"><span class="lights"><button class="close" aria-label="Close the body reel">×</button><button class="min" aria-label="Close the body reel">–</button><button class="zoom" aria-label="Zoom">+</button></span>Body Reel</div>
@@ -1454,17 +1463,20 @@ body.phone #finale .fx-data { width: min(220px, calc(100vw - 32px)); top: 10px; 
     const mo = new MutationObserver(() => { if (go()) mo.disconnect(); });
     mo.observe($("loading"), { attributes: true, attributeFilter: ["hidden"] });
   }
+  // S.transient(fn): what fn does to a mirrored button stays out of the settings (a shared link's view is for that visit only)
+  let quiet = 0;
+  S.transient = fn => { quiet++; try { return fn(); } finally { setTimeout(() => quiet--, 0); } };
   // a dock button that switches a viewer option, mirrored by a setting both ways
   function mirror(key, btn) {
     whenReady(() => {
       const b = $(btn), pressed = () => b.getAttribute("aria-pressed") === "true";
       S.on(key, v => { if (pressed() !== v) b.click(); });
-      new MutationObserver(() => S.set(key, pressed())).observe(b, { attributes: true, attributeFilter: ["aria-pressed"] });
+      new MutationObserver(() => { if (!quiet) S.set(key, pressed()); }).observe(b, { attributes: true, attributeFilter: ["aria-pressed"] });
     });
   }
   D({ key: "playback.start", section: "Playback", label: "Start time", type: "choice", value: "2006-09-15T14:28:00", reload: true,
       options: [["2006-09-15T14:28:00", "In Saturn's Shadow"], ["2005-01-14T09:30:00", "Huygens lands"], ["2004-07-01T00:00:00", "Saturn arrival"]],
-      hint: "The moment Cassini OS opens on. A ?t= link still wins." });
+      hint: "The moment Cassini OS opens on. A shared link still opens on its own moment." });
   D({ key: "playback.autoplay", section: "Playback", label: "Play when Cassini OS opens", type: "toggle", value: true,
       hint: "Off opens paused at the starting moment." });
   D({ key: "playback.speed", section: "Playback", label: "Starting speed", type: "choice", value: 600,
@@ -1625,6 +1637,86 @@ body.phone #finale .fx-data { width: min(220px, calc(100vw - 32px)); top: 10px; 
     $("mlist").addEventListener("click", e => { if (document.body.classList.contains("phone") && e.target.closest("button")) setTimeout(() => mom.classList.add("closed"), 150); });
     sync();
   });
+})();
+</script>
+<script>
+// ---------- shareable links: the address bar follows the moment on screen ----------
+(function () {
+  const KEYS = ["t", "view", "speed", "play", "movie", "cam"];
+  const S = window.cassiniSettings, $ = id => document.getElementById(id);
+  const num = v => (+(+v).toPrecision(4)).toString().replace("e+", "e");   // short, and no "+" (a space in a query)
+  const utc = et => new Date(etToMs(et)).toISOString().slice(0, 19);
+  // the link for the moment on screen; other pages (flagging) use it too
+  function params() {
+    const p = [["t", utc(state.et)]];
+    const view = state.focus !== "CASSINI" ? state.focus.toLowerCase() : state.follow ? "follow" : "cassini";
+    p.push(["view", view]);
+    p.push(["speed", num(state.speed)]);
+    if (!state.playing) p.push(["play", "0"]);
+    if (window.cassiniMovie && window.cassiniMovie.on) p.push(["movie", "1"]);
+    if (view !== "follow") p.push(["cam", [camera.position.x, camera.position.y, camera.position.z].map(num).join(",")]);
+    return p;
+  }
+  function href(extra) {
+    const u = new URL(location.href), keep = [...u.searchParams].filter(([k]) => !KEYS.includes(k));
+    const enc = s => encodeURIComponent(s).replace(/%3A/gi, ":").replace(/%2C/gi, ",");
+    const q = [...params(), ...(extra || []), ...keep].map(([k, v]) => v === "" ? enc(k) : `${enc(k)}=${enc(v)}`).join("&");
+    return u.origin + u.pathname + (q ? "?" + q : "") + u.hash;
+  }
+
+  // a link's view, speed and play state, once the viewer and the settings have set themselves up
+  function apply() {
+    const q = new URLSearchParams(location.search), view = (q.get("view") || "").toUpperCase();
+    // the follow button is mirrored into Settings; a link's view is for this visit only
+    const quietly = fn => (S && S.transient ? S.transient(fn) : fn());
+    if (view === "FOLLOW") { if (!state.follow) quietly(() => setFollow(true)); }
+    else if (view === "CASSINI") { if (state.follow) quietly(() => setFollow(false)); }
+    else if (view) quietly(() => setFocus(view));
+    const cam = (q.get("cam") || "").split(",").map(Number);
+    if (cam.length === 3 && cam.every(isFinite) && !state.follow && cam.some(Boolean)) {
+      const r = Math.hypot(...cam), lo = controls.minDistance, hi = controls.maxDistance;
+      camera.position.set(...cam).multiplyScalar(Math.min(hi, Math.max(lo, r)) / r);
+      controls.update();
+    }
+    const sp = +q.get("speed");
+    if (q.has("speed") && isFinite(sp) && sp > 0 && sp <= 1e7) setSpeed(sp);
+    if (q.get("play") === "0") setPlaying(false);
+    else if (q.has("play")) setPlaying(true);
+    if (q.get("movie") === "1" && window.cassiniMovie && !window.cassiniMovie.on) window.cassiniMovie.start();
+  }
+  let last = "";
+  function write() {
+    if (typeof state === "undefined" || !$("loading").hidden) return;
+    const h = href();
+    if (h === last) return;
+    last = h;
+    try { history.replaceState(history.state, "", h); } catch (e) {}
+  }
+
+  function toast(text) {
+    const t = $("linktoast"); t.textContent = text; t.hidden = false;
+    clearTimeout(toast.t); toast.t = setTimeout(() => { t.hidden = true; }, 2200);
+  }
+  async function copy() {
+    write();
+    const h = href();
+    try { await navigator.clipboard.writeText(h); toast("Link to this moment copied"); }
+    catch (e) { if (navigator.share) navigator.share({ url: h }).catch(() => {}); else toast(h); }
+  }
+  document.addEventListener("click", e => {
+    if (!e.target.closest('[data-act="copylink"]')) return;
+    e.stopPropagation(); document.querySelectorAll(".menu.open").forEach(m => m.classList.remove("open"));
+    copy();
+  }, true);
+  window.addEventListener("keydown", e => {
+    if ((e.metaKey || e.ctrlKey) && e.shiftKey && e.key.toLowerCase() === "c") { e.preventDefault(); copy(); }
+  }, true);
+
+  window.cassiniLink = { href, params, copy };
+  const ready = () => typeof state !== "undefined" && typeof setSpeed === "function" && $("loading").hidden;
+  const start = () => { apply(); write(); setInterval(write, 500); addEventListener("pagehide", write); };
+  if (ready()) start();
+  else { const mo = new MutationObserver(() => { if (ready()) { mo.disconnect(); start(); } }); mo.observe($("loading"), { attributes: true, attributeFilter: ["hidden"] }); }
 })();
 </script>
 <script>
@@ -2721,10 +2813,12 @@ body.phone #finale .fx-data { width: min(220px, calc(100vw - 32px)); top: 10px; 
   // ---------- burst limit: in normal playback each camera window gets at most maxRate new pictures a second ----------
   // The clock runs at the chosen speed except inside an imaging burst, where it slows so that crossing the gap
   // between two of a camera's frames takes at least 1/maxRate s; it is back to full speed once the burst is over.
+  // A faster speed is always faster: a burst never slows the clock below a share of the chosen speed
+  // (playback.burstFloor), so 1 day/s skips pictures in a long burst instead of crawling like 10 min/s does.
   // Movie mode has its own clock. 0 = no limit. The setting lives in the Settings window when the page has one
   // (playback.maxImageRate), otherwise in the View menu.
-  const RATE_DEFAULT = 5, RATE_KEY = "cassini-os-max-image-rate", SETTINGS = window.cassiniSettings;
-  let maxRate = RATE_DEFAULT, slowedTo = 0;
+  const RATE_DEFAULT = 5, FLOOR_DEFAULT = 0.25, RATE_KEY = "cassini-os-max-image-rate", SETTINGS = window.cassiniSettings;
+  let maxRate = RATE_DEFAULT, burstFloor = FLOOR_DEFAULT, slowedTo = 0;
   function syncRateMenu() {
     const r = $("maxrate"); if (!r) return;
     r.value = maxRate; $("maxratev").textContent = maxRate ? `${maxRate} image${maxRate === 1 ? "" : "s"}/s` : "no limit";
@@ -2740,6 +2834,10 @@ body.phone #finale .fx-data { width: min(220px, calc(100vw - 32px)); top: 10px; 
       hint: "When Cassini takes a burst of pictures, the timeline slows down so each camera window shows at most this many new images a second. 0 = no limit.",
       type: "range", value: RATE_DEFAULT, min: 0, max: 24, step: 1, unit: "images/s" }) || 0;
     SETTINGS.on("playback.maxImageRate", v => { maxRate = +v || 0; });
+    SETTINGS.define({ key: "playback.burstFloor", section: "Playback", label: "Bursts slow playback to no less than",
+      hint: "However many pictures a burst has, the timeline keeps at least this share of the chosen speed, so a faster speed always plays faster (skipping pictures in long bursts). 100 % = never slow down.",
+      type: "range", value: FLOOR_DEFAULT * 100, min: 5, max: 100, step: 5, unit: "%" });
+    SETTINGS.on("playback.burstFloor", v => { burstFloor = (+v || 0) / 100; });
   } else {
     try { const v = localStorage.getItem(RATE_KEY); if (v !== null && +v >= 0) maxRate = +v; } catch (e) {}
     syncRateMenu();
@@ -2758,6 +2856,7 @@ body.phone #finale .fx-data { width: min(220px, calc(100vw - 32px)); top: 10px; 
     for (let n = 0; n < 200; n++) {
       let s = speed, stop = Infinity;
       for (const cam in catalog.byCam) { const [cap, nx] = capOf(cam, et); s = Math.min(s, cap); stop = Math.min(stop, nx); }
+      s = Math.max(s, speed * burstFloor);
       if (s < speed) slowedTo = slowedTo ? Math.min(slowedTo, s) : s;
       if (et + dt * s <= stop) return et + dt * s;
       dt -= (stop - et) / s; et = stop;   // the next frame changes the gap, so carry on from there
@@ -2914,7 +3013,7 @@ body.phone #finale .fx-data { width: min(220px, calc(100vw - 32px)); top: 10px; 
     if (!pending) return;
     const p = pending, w = p.w, got = p.got, note = pop.querySelector("textarea").value.trim();
     close();
-    const link = new URL(location.href); link.searchParams.set("t", utc(p.et).slice(0, 19));
+    const link = new URL(window.cassiniLink ? cassiniLink.href() : location.href); link.searchParams.set("t", utc(p.et).slice(0, 19));
     const flag = {
       flagged: p.at.toISOString(), mission_utc: utc(p.et), mission_et: p.et, link: link.href,
       note, tags: [...p.tags],
