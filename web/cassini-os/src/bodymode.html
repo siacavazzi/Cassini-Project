@@ -22,6 +22,7 @@ body.bodymode:not(.phone) #moments:not([style*="top"]) { top: calc(env(safe-area
 #bodymenu .bmorb { grid-row: span 2; width: 40px; height: 40px; border-radius: 50%; background-color: var(--c, #888); background-size: 200% 100%; background-position: 30% 50%;
   box-shadow: inset -5px -4px 8px rgba(0,0,0,.75), 0 0 0 1px rgba(255,255,255,.06); }
 #bodymenu .bmname { font-size: 15px; color: var(--q-text); letter-spacing: .02em; }
+#bodymenu .bmname small { font: 10px var(--hudf); color: var(--q-dim); margin-left: 6px; letter-spacing: 0; }
 #bodymenu .bmstats { grid-column: 2 / span 2; white-space: pre-line; font: 10px/1.4 var(--hudf); color: var(--q-dim); font-variant-numeric: tabular-nums; }
 #bmall { font: 10px/1 var(--ui); padding: 4px 8px; border-radius: 4px; border: 1px solid var(--q-line); background: rgba(255,255,255,.05); color: var(--q-text); cursor: pointer; white-space: nowrap; }
 #bmall:hover { background: rgba(255,255,255,.1); }
@@ -202,10 +203,10 @@ body.phone.phone-land #bodymenu { left: auto !important; width: min(380px, 46vw)
   const years = b => { const a = dateOf(b.first).getUTCFullYear(), z = dateOf(b.last).getUTCFullYear(); return a === z ? String(a) : `${a}–${z}`; };
   function fillHead() {
     const n = M.name, b = M.index && M.index.bodies[n];
-    $("bmname").textContent = tc(n); $("bmtitle").textContent = `${tc(n)}`;
+    $("bmname").innerHTML = `${tc(n)}${b ? ` <small>${years(b)}</small>` : ""}`; $("bmtitle").textContent = `${tc(n)}`;
     $("bmorb").setAttribute("style", bodyLook(n));
     $("bmstats").textContent = !b ? (M.index ? "No pictures of it in the archive" : "Loading…")
-      : `${fmt(b.frames)} pictures · ${fmt(b.sessions)} sessions · ${years(b)}\n${fmt(b.N)} NAC · ${fmt(b.W)} WAC${b.rgb_sets ? ` · ${fmt(b.rgb_sets)} in color` : ""}`;
+      : `${fmt(b.frames)} pictures · ${fmt(b.sessions)} sessions\n${fmt(b.N)} NAC · ${fmt(b.W)} WAC${b.rgb_sets ? ` · ${fmt(b.rgb_sets)} in color` : ""}`;
     $("bmskip").checked = !!opt("bodies.skipGaps", true);
   }
   function fillList() {
