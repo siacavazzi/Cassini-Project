@@ -317,7 +317,7 @@ def _ulock(u):
         return _unit_locks.setdefault(u["key"], threading.RLock())
 
 
-PLAN_FILE = "plan2.json"   # renamed when the plan's rules change, so cached plans are worked out again
+PLAN_FILE = "plan3.json"   # renamed when the plan's rules change, so cached plans are worked out again
 
 
 def _tiles(u, cache, scale):
@@ -339,7 +339,7 @@ def plan(u, cache):
             count[fr[2]] = count.get(fr[2], 0) + 1
             nms[fr[2]] = fr[4]
         # the filters chosen from those pointed at the body: a pass whose most taken filter looks beside it (the
-        # clear frames of ISS_C23RI_RMOV001_PRIME are a frame and a third off Jupiter, on dark sky) is drawn in
+        # clear frames of ISS_C23RI_RMOV001_PRIME are a frame further off Jupiter, on dark sky) is drawn in
         # the filters that see the body, not as a black mosaic of that sky
         aside = _aside(frames, u)
         count = {f: c for f, c in count.items() if f not in aside} or count
@@ -384,8 +384,10 @@ def plan(u, cache):
 
 
 def _aside(frames, u):
-    """The filters whose frames point, as a rule, more than a frame further from the body's centre than the
-    filter pointed closest (median over each filter's placed frames, at the pass's reference distance)."""
+    """The filters whose frames point, as a rule, more than half a frame further from the body's centre than the
+    filter pointed closest (median over each filter's placed frames, at the pass's reference distance). In
+    ISS_C23RI_RMOV001_PRIME the colour frames sit 316 px from Jupiter's centre, on the disk, and the clear and IR1
+    frames 1331 px out, beside it; the filters of a mosaic share their pointings and come out within pixels."""
     far = {}
     for fr in frames:
         if fr[7]:
@@ -394,7 +396,7 @@ def _aside(frames, u):
     if not med:
         return set()
     near = min(med.values())
-    return {f for f, m in med.items() if m > near + FRAME}
+    return {f for f, m in med.items() if m > near + FRAME / 2}
 
 
 # filter sets with a colour mapping of their own, looked up before the general rule in colour_of: frozenset of the
