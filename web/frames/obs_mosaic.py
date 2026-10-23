@@ -1067,11 +1067,12 @@ _centre_views = {}   # pass key -> centre_view's decision for it
 def centre_view(frame_id):
     """Auto center for a picture shown on its own (a frame or a color composite) in the camera windows: the rule
     of a movie centred on its body (centre_half), decided once for the pass the frame is in, from the geometry
-    cache's footprint of the pass (_box), so a pass is centred all through or not at all and its picture keeps one
-    size. A frame in no pass is its own pass. Answers {"centre": True, "side": the view's side in this frame's full
-    resolution pixels (the pass's view at the frame's distance, so the body keeps its size through the pass),
-    "pass": [...]} or {"centre": False, "why": ...}: a ring, spoke or sky frame, a body too big for the view, or a
-    frame SPICE has no place for keep the picture as it is."""
+    cache's footprint of the pass (_box), so a pass is centred all through or not at all. A frame in no pass is its
+    own pass. Each picture keeps its frame's own scale: the view is one frame (FRAME full resolution pixels) square
+    round the body, so the picture is the size it is today, only moved so the body is in the middle (a movie's view
+    is the pass's, movie_rect). Answers {"centre": True, "side": FRAME, "pass": [...]} or {"centre": False,
+    "why": ...}: a ring, spoke or sky frame, a body too big for the view, or a frame SPICE has no place for keep the
+    picture as it is."""
     idx, row = _row_of()
     q = row.get(frame_id)
     if q is None:
@@ -1093,16 +1094,13 @@ def centre_view(frame_id):
         radius = RADIUS.get(target, 0) / (z * IFOV[cam])
         fp = _box(u, z) if found else (-g[0] - HALF, -g[1] - HALF, -g[0] + HALF, -g[1] + HALF)
         half = centre_half(fp, radius) if fp and radius else None
-        hit = {"centre": bool(half), "half": half, "z": z, "pass": [str(v) for v in key]}
+        hit = {"centre": bool(half), "pass": [str(v) for v in key]}
         if not half:
             hit["why"] = "no disk of a known body that fits the view" if not radius else \
                 "the body is too big for the view or the frames do not look at it"
         with _lock:
             _centre_views[key] = hit
-    out = {k: v for k, v in hit.items() if k not in ("half", "z")}
-    if hit["centre"]:
-        out["side"] = round(2 * hit["half"] * hit["z"] / g[2])
-    return out
+    return dict(hit, side=FRAME) if hit["centre"] else dict(hit)
 
 
 def _place(u, t, rect, k, W, H, cache, scale):

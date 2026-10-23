@@ -37,8 +37,9 @@ Routes:
                                from the same composite so it keeps the composite's shared brightness scale and
                                alignment: what a composite's channel looks like opened on its own (drill-down)
   ...&center=1                 Auto center (a camera window's setting): the picture centred on the body, north up,
-                               by SPICE (color_image.processed_frame), in a square view decided once for the pass
-                               (obs_mosaic.centre_view, the rule of a movie centred on its body) so it keeps one size.
+                               by SPICE (color_image.processed_frame), at the frame's own scale (one frame square
+                               round the body); whether to centre is decided once for the pass (obs_mosaic.centre_view,
+                               the rule of a movie centred on its body).
                                404 with X-Center {"centre": false, "why"} when the pass is not centred (rings, sky,
                                a body too big for the view), and the window shows the picture as it is. Also on
                                /frames/processed below
@@ -302,8 +303,8 @@ def composite(ids, channel=None, centre=None):
 def centred(ids, view):
     """The composite of ids (or one frame) centred on the body, north up: the pipeline's color path and SPICE
     placement (color_image.processed_frame: load_aligned as composite, then auto_center), cut to the square of
-    view["side"] full resolution pixels round the body's centre that Auto center chose for the pass
-    (obs_mosaic.centre_view). RGBA (LA for one frame) and the report; LookupError when SPICE cannot place it."""
+    view["side"] full resolution pixels round the body's centre (obs_mosaic.centre_view: one frame, the frame's own
+    scale). RGBA (LA for one frame) and the report; LookupError when SPICE cannot place it."""
     image, _, report = color_image.processed_frame([f"{FOLDERS[i[0]]}/{i}.png" for i in ids])
     if "frame_offset" not in report:
         raise LookupError(report.get("why", "not placed by SPICE"))
