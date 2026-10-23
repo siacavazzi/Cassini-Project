@@ -1374,6 +1374,14 @@ body.idle .win.full .titlebar { opacity: 0; }
         if (q && catalog === q[2] && lastK >= 0 && catalog.et[q[0].k] <= catalog.et[lastK]) mosaicOf(q[0], q[1]);
       };
       if (!pass) setTimeout(() => { if (!over) { ctl.abort(); done(); } }, 4000);
+      // the pass lane waits for a slow mosaic (a cold pass makes every tile before it) only while no newer frame
+      // of the window is waiting: after 8 s one that is moves on to the newest, so one long build (minutes deep
+      // in a pass nobody has looked at) never holds the window on a mosaic the clock left behind. The server
+      // still finishes the one dropped and keeps its tiles.
+      else {
+        const patience = () => { if (over) return; if (L.next) { ctl.abort(); done(); } else setTimeout(patience, 1000); };
+        setTimeout(patience, 8000);
+      }
       fetch(`${FRAMES}/frames/mosaic/${id}.webp?size=${sz}${mode === "mosaic" || mode === "mosaic_movie" ? "&force=1" : ""}${window.cassiniLook()}`, { signal: ctl.signal }).then(async r => {
         if (!r.ok) return;
         const rep = JSON.parse(r.headers.get("X-Reel") || "null");
