@@ -34,6 +34,10 @@ The mosaic, color science, and drill-down plans, built together on the `pictures
 4. **Check before posting a link:** `/health` answers ok; `/data/mission.json`, the tracks, attitude and month chunk for the linked `?t=` moment all return 200; a frame returns a real picture; and the page itself, opened at the exact link in headless Chromium on the Mini, shows the scene with no error overlay and no failed `data/` requests in the console. A link that has not passed this check is not posted.
 5. After every push to the branch: check out the new head, restart the server if `frame_server.py` changed, and run the check again.
 
+## One heavy Mini job at a time (2026-10-23)
+
+The LaCie is the shared bottleneck: every preview server reads the same archive zip and writes its cache there, and small random reads cap it at a few MB/s. Batch renders, timing plays and headless browser runs from several threads at once starved every preview (Sam saw frozen pictures). Rule: a thread asks the lead before starting any Mini job longer than about a minute (batch render, scan, timing play, Playwright session), runs one at a time, and closes its headless browser when done. Preview servers stay up, but idle ones from merged PRs are stopped.
+
 ## Evidence every PR must carry
 
 Every PR that changes anything a person can see carries both kinds:
@@ -130,6 +134,12 @@ Effort comes from the reports. Phase A runs alongside 1 and 2; everything else f
 ### Phase R · Sharper previews (proposed, waits for Sam's go) · ~1 day
 - From the resolution study (https://claude.ai/artifact/4HzJfyS9zqcCwREMgNDonT): the blur outside mosaics is the window picking its picture size from CSS pixels and ignoring the screen's pixel density (`big()` in head-quiet.html), so a retina window gets 512 px stretched 2.2×. Fix: size by width × devicePixelRatio. Plus cache each composite once so a 512 → 1024 step only re-encodes (16-54 ms instead of 0.4-2.5 s). Frames and composites at 1024 cost little (~180 KB/s for 4 windows). Load-adaptive sizing is not needed. Mosaic sharpness stays in phase 6a (compose at the size sent, up to 2048 in big windows and full view).
 
+### Phase 6a moved up · Mosaic build speed (Sam, 2026-10-23 04:37Z: "the mosaic lagging is a core issue")
+- **Owner:** the mosaic thread (it owns `obs_mosaic`'s build); the movie thread's rolling route uses the same incremental canvas and folds it in. One implementation.
+- **Goal:** a mosaic (and a mosaic movie) keeps up with the frames at playback speed. Grow each pass's canvas in memory (compose only the new tile and what it overlaps), compose at the size sent instead of 2048 → 1024 → 512, preview-size tiles, always ask for the newest step and drop stale requests, make the next tiles ahead.
+- **Done when:** a 10-minute play of B115 and Saturn's Shadow at 1x and 10x shows no growing lag (lag-over-time plot), warm steps under 0.3 s, and the frame strip never stalls.
+- **Not moved:** the overnight pre-build (6b) still waits for every look change, so it runs once.
+
 ### Phase 6 · Speed (M5, M7, M6) · ~3 days plus one night · two PRs
 - **6a.** Preview-size tiles, compose at the size sent, grow each pass's canvas in memory (`mosaic.compose` over the new tile and its overlaps only); "Whole mosaic, full resolution" in the save menu (capped canvas up to 4096 px, progress, feeds Save PNG and movie export).
 - **6b.** Overnight pre-build of every real mosaic pass's plan and preview tiles on the LaCie (~108k tiles, 5-8 h, 10-25 GB), started only after every look change above has been accepted.
@@ -158,9 +168,12 @@ First batch: phases 1, 2a and A at once. Second batch: 2b once checkpoint 2 is a
 
 ## Status
 
-| Phase | Thread | PR | Preview | State |
-|---|---|---|---|---|
-| 1 | Mosaics stop jumping | | 8791 | building |
-| 2a | Color display fixes | | 8792 | building |
-| A | Composite drill-down | | 8793 | building |
-| 2b, 3-8 | | | | waiting |
+| Phase | PR | Preview | State |
+|---|---|---|---|
+| 1 Mosaic or movie | #61 | 8791 | reworked (three kinds, switch); waiting on Sam |
+| M Movies worth watching | #64 | 8794 | ready with #61; waiting on Sam |
+| 2a Color display | #63 | 8792 | **merged into `pictures`** 2026-10-23 after Sam's "big improvement" |
+| 2b Natural color + false-color rules | | 8792 | starting |
+| A Composite drill-down | #62 | 8793 | waiting on Sam |
+| R Sharper previews | | | proposed, waiting on Sam |
+| 3-8 | | | waiting |

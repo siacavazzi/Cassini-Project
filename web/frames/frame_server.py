@@ -121,6 +121,8 @@ SIZES = (128, 256, 384, 512, 768, 1024)
 # size=full: the picture at full resolution, capped so a whole-pass mosaic cannot run away with the bandwidth
 FULL = "full"
 FULL_MAX = int(os.environ.get("CASSINI_FULL_MAX", "2048"))
+# the sizes the camera windows ask for (head-quiet.html size()): true resolution, or full in full view
+WINDOW_SIZES = (1024, FULL)
 FOLDERS = {"N": "nac_data", "W": "wac_data"}
 
 # composites take a second or two of CPU each; at most two at once so frames keep flowing
@@ -264,7 +266,8 @@ def composite(ids):
 def color_webp(ids, size, cache, fmt="webp"):
     """The composite as WebP (or PNG), and its report (also kept in the cache, next to the image)."""
     # bumped whenever the way composites are made changes, so older ones are not served again
-    base = os.path.join(cache, COLOR_VERSIONS[calibration.look()], size_dir(size, fmt), "_".join(ids))
+    folder = os.path.join(cache, COLOR_VERSIONS[calibration.look()])
+    base = os.path.join(folder, size_dir(size, fmt), "_".join(ids))
     report = {}
     def make():
         with _color_slots:
@@ -272,6 +275,15 @@ def color_webp(ids, size, cache, fmt="webp"):
         report.update(made)
         cached(base + ".json", lambda: json.dumps(made).encode())
         print("composite", json.dumps(made))
+        # the camera windows' other sizes are encoded now too (a few tens of ms each), so a window that grows or
+        # goes to full view gets the composite at once instead of making it again
+        for other in WINDOW_SIZES:
+            if other != size:
+                path = os.path.join(folder, size_dir(other, "webp"), "_".join(ids))
+                if not os.path.exists(path + ".webp"):
+                    _make_file(path + ".webp", lambda: encode(im, other))
+                    if not os.path.exists(path + ".json"):
+                        _make_file(path + ".json", lambda: json.dumps(made).encode())
         return encode(im, size, fmt)
     data = cached(f"{base}.{fmt}", make)
     if not report and os.path.exists(base + ".json"):

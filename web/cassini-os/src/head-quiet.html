@@ -746,9 +746,16 @@ body.idle .win.full .titlebar { opacity: 0; }
     const fb = w.querySelector(".fullbtn"); if (fb) fb.setAttribute("aria-label", on ? "Leave full view" : "Full view");
     document.body.classList.toggle("hasfull", !!document.querySelector(".win.full"));
   }
-  // is a picture window showing its pictures big enough to want the 1024 px ones: zoomed, in full view, or resized
-  // so its picture is wider than px (CSS pixels, so the standard sizes keep asking for the smaller pictures)
-  const big = (w, well, px = 600) => w.classList.contains("zoomed") || w.classList.contains("full") || (well || w).clientWidth > px;
+  // the picture size a window asks for: the picture's true resolution (1024, the cameras' full frame; smaller frames
+  // come at their own size), or small (512) on a phone or when the picture fills no more than that many screen
+  // pixels (CSS pixels times the screen's density, so a retina window counts what it really shows)
+  const sized = (w, well, small = 512) => {
+    if (w.classList.contains("zoomed") || w.classList.contains("full")) return 1024;
+    // a camera window still waiting for its first picture is only a sliver tall: it asks as if the picture were up
+    if (well && well.classList.contains("well") && !well.matches(".has-frame, .kept")) return phone() ? small : 1024;
+    const el = well || w, px = Math.max(el.clientWidth, el.clientHeight) * Math.min(window.devicePixelRatio || 1, 2);
+    return phone() || px <= small ? small : 1024;
+  };
   window.addEventListener("keydown", e => {
     if (e.metaKey || e.ctrlKey || e.altKey || /^(INPUT|SELECT|TEXTAREA)$/.test(e.target.tagName)) return;
     const f = document.querySelector(".win.full");
@@ -757,7 +764,7 @@ body.idle .win.full .titlebar { opacity: 0; }
   });
   document.querySelectorAll(".win").forEach(wire);
   front($("dock"));
-  window.cassiniWM = { wire, front, minimize, restore, zoom, full, big, syncMenu: () => syncMenu() };
+  window.cassiniWM = { wire, front, minimize, restore, zoom, full, sized, syncMenu: () => syncMenu() };
   // the WAC window starts where the NAC window ends, however wide that is
   new ResizeObserver(() => { const n = $("imgcard"); if (n.offsetWidth && (n.style.width || n.querySelector(".well.has-frame"))) $("app").style.setProperty("--nacw", n.offsetWidth + "px"); }).observe($("imgcard"));
 
@@ -1144,13 +1151,13 @@ body.idle .win.full .titlebar { opacity: 0; }
     // keeps for every picture of that observation
     const steady = () => S.get("cameras.steady"), passOf = k => `${catalog.target[k]}|${catalog.obs[k]}`;
     let shapeOf = null;
+    // what kind of picture is up (a color composite, a mosaic, both), for how long it stays (importance)
+    let kind = { color: false, mosaic: false };
     const failed = new Set();   // composites the server could not make: those sets show their frames instead
     const missing = new Set();  // frames the server does not have
-    // full view asks for the full resolution picture ("full") once the picture is held: a quarter second while
-    // paused, cameras.fullDelay s while playing, so scrubbing, bursts and playback keep the 1024 px ones
-    let shownAt = 0;
-    const held = () => !state.dragging && performance.now() - shownAt > (state.playing ? S.get("cameras.fullDelay") * 1000 : 250);
-    const size = () => win.classList.contains("full") && S.get("cameras.fullRes") && held() ? "full" : window.cassiniWM.big(win, well) ? 1024 : 512;
+    // full view always asks for the full resolution picture ("full"), playing or not; every other window for the
+    // picture's true resolution (1024, the cameras' full frame), or 512 when it is shown that small (cassiniWM.sized)
+    const size = () => win.classList.contains("full") && S.get("cameras.fullRes") ? "full" : window.cassiniWM.sized(win, well);
     const capped = () => { const s = size(); return s === "full" ? 1024 : s; };
     const frameUrl = (id, sz) => `${FRAMES}/frames/${id}.webp?size=${sz || size()}`;
     const colorUrl = (s, sz) => `${FRAMES}/frames/color.webp?ids=${s.use.map(k => catalog.id[k]).join(",")}&size=${sz || size()}${window.cassiniLook()}`;
@@ -1196,6 +1203,7 @@ body.idle .win.full .titlebar { opacity: 0; }
     function noFrame(msg, kept) {
       well.classList.toggle("kept", !!kept && steady() && well.matches(".has-frame, .kept"));
       well.classList.remove("has-frame", "composite"); card.querySelector(".wellmsg").innerHTML = msg;
+      kind = { color: false, mosaic: false };
     }
     // two lanes, one request in flight each: plain frames (quick) and composites (seconds when the server has to
     // make one). A composite being made never holds up the frames: the window shows the newest frame meanwhile,
@@ -1212,11 +1220,11 @@ body.idle .win.full .titlebar { opacity: 0; }
       const keep = obsShown && catalog.obs[v.k] === obsShown && playsAs(v.k) !== "movie" && !(playsAs(v.k) === "mosaic_movie" && rolls());
       // the same picture again at another size (full view's full resolution one) is not a new picture
       const again = shown && shown.k === v.k && shown.set === v.set;
-      if (!again) shownAt = performance.now();
       shownKey = v.key; shown = v;
       // shot.dataset.src / .report: what the picture on screen was made from, for flagging (flag.html)
       if (!keep) {
         shot.src = im.src; shot.dataset.src = v.key; shot.dataset.report = ""; obsShown = null; obsK = -1; well.classList.remove("mosaic"); saving(v.key);
+        kind = { color: v.set >= 0, mosaic: false };
         if (!steady() || shapeOf !== passOf(v.k)) { well.style.aspectRatio = ""; shapeOf = null; }
       }
       well.classList.add("has-frame"); well.classList.remove("kept"); well.classList.toggle("composite", v.set >= 0);
@@ -1409,7 +1417,7 @@ body.idle .win.full .titlebar { opacity: 0; }
           if (mode !== "mosaic") mosaicPasses.add(passOf(k));   // the server's call, not one the person asked for
           chipText();
           if (window.cassiniPicture && rep.mosaic > (obsShown === catalog.obs[k] ? obsTiles : 0)) window.cassiniPicture({ cam, body, win, k, nm: nmOf(k), set, use: set >= 0 ? catalog.sets[set].use.map(nmOf) : null, tile: rep.mosaic, of: rep.of });
-          obsShown = catalog.obs[k]; obsTiles = rep.mosaic; obsK = k; obsSize = rank(sz);
+          obsShown = catalog.obs[k]; obsTiles = rep.mosaic; obsK = k; obsSize = rank(sz); kind = { color: rep.filters >= 3, mosaic: true };
           // the window takes the mosaic's shape, within 1:2 to 3:1 (a whole long strip fits inside, letterboxed,
           // rather than running off the screen)
           well.style.aspectRatio = String(Math.min(3, Math.max(0.5, rep.width / rep.height))); shapeOf = passOf(k);
@@ -1422,6 +1430,7 @@ body.idle .win.full .titlebar { opacity: 0; }
           return;
         }
         card.querySelector(".kindtag").textContent = `${w.set >= 0 ? KIND[catalog.sets[w.set].kind].toUpperCase() + " · " : ""}MOSAIC${rep && rep.mosaic ? ` OF ${rep.mosaic}` : ""}`;
+        kind = { color: w.set >= 0, mosaic: true };
       }, () => {}).finally(done);
     }
     function mosaicStop() {
@@ -1507,14 +1516,16 @@ body.idle .win.full .titlebar { opacity: 0; }
       const p = lastOfCam(cam, state.et, body), k = p < 0 ? -1 : framesOf(cam, body).ks[p];
       const live = k >= 0 && state.et - catalog.et[k] < 180;
       card.classList.toggle("live", live);
-      // a camera that has been quiet for longer than the stale setting shows nothing rather than an old picture
-      const stale = S.get("cameras.stale");
-      if (k < 0 || state.et - catalog.et[k] > stale * 3600) {
+      // a camera that has been quiet for longer than the stale setting shows nothing rather than an old picture; an
+      // important picture (color, mosaic) stays that many times longer, and a window that holds (a body window,
+      // which closes by itself) keeps its picture
+      const stale = S.get("cameras.stale") * (lastK >= 0 ? importance() : 1);
+      if (k < 0 || (!update.hold && state.et - catalog.et[k] > stale * 3600)) {
         field("status").textContent = k < 0 ? "Camera" : `Last frame ${fmtDur(state.et - catalog.et[k])} ago`;
         strip(null);
         if (lastK !== -1) {
           lastK = -1; want = null; shownKey = null; shown = null; well.classList.remove("inpass");
-          noFrame(k < 0 ? "<b>No signal</b>No frames from this camera yet this year" : `<b>Idle</b>No frames from this camera in the last ${stale} h`);
+          noFrame(k < 0 ? "<b>No signal</b>No frames from this camera yet this year" : `<b>Idle</b>No frames from this camera in the last ${+stale.toFixed(1)} h`);
           for (const f of ["frame", "filter", "colour", "details"]) field(f).textContent = "—";
         }
         return;
@@ -1551,8 +1562,8 @@ body.idle .win.full .titlebar { opacity: 0; }
       const ks = framesOf(cam, body).ks;
       // look ahead: the next 6 frames, or up to 12 when they come within 4 s of playback (a burst), nearest first
       const ahead = []; for (let d = 1; d <= 12 && ks[p + d] !== undefined && (d <= 6 || catalog.et[ks[p + d]] - state.et <= 4 * state.speed); d++) ahead.push(ks[p + d]);
-      // looked ahead at the capped size: only the picture on screen is ever fetched in full
-      next = ahead.map(q => view(q, catalog.et[q], capped()).key);
+      // looked ahead at the size shown, so full view plays in full resolution too
+      next = ahead.map(q => view(q, catalog.et[q], size()).key);
       // further ahead: each observation coming up is named to the server once, so a mosaic pass in it is worked
       // out (seconds for its plan) before the clock gets there
       if (window.cassiniMosaics !== false && S.get("cameras.mosaics"))
@@ -1574,8 +1585,7 @@ body.idle .win.full .titlebar { opacity: 0; }
       chipText();
       pump();
     }
-    // a window made bigger (zoom, resize, full view) asks for the bigger picture, and a held picture in full view
-    // for the full one (checked on every frame, see studyHud below)
+    // a window made bigger or smaller (zoom, resize, full view) asks for the picture of its new size
     let tier = size();
     function retier() {
       if (tier === size()) return;
@@ -1584,12 +1594,21 @@ body.idle .win.full .titlebar { opacity: 0; }
     }
     new ResizeObserver(retier).observe(well);
     update.retier = retier;
+    const importance = () => weight(kind);
+    update.importance = importance;
+    update.kind = () => kind;
     return update;
   }
+  // how important a picture is, as how many times longer it stays up than a single frame: a color picture
+  // cameras.lingerColor times, a mosaic cameras.lingerMosaic times, a color mosaic both
+  function weight(kind) {
+    const c = +S.get("cameras.lingerColor") || 1.5, m = +S.get("cameras.lingerMosaic") || 2;
+    return (kind.color ? c : 1) * (kind.mosaic ? m : 1);
+  }
   const feeds = [...document.querySelectorAll(".camwin")].map(cameraFeed);
-  window.cassiniFeeds = { cameraFeed, framesOf, lastOfCam, prep, stale: () => S.get("cameras.stale") * 3600 };
+  window.cassiniFeeds = { cameraFeed, framesOf, lastOfCam, prep, weight, stale: () => S.get("cameras.stale") * 3600 };
   // a change to what the windows show takes effect straight away
-  for (const key of ["cameras.composites", "cameras.stale", "cameras.steady", "cameras.passes", "cameras.balancedColor"]) S.on(key, () => { if (typeof catalog !== "undefined" && catalog && catalog.byCam) feeds.forEach(f => f(true)); });
+  for (const key of ["cameras.composites", "cameras.stale", "cameras.steady", "cameras.passes", "cameras.balancedColor", "cameras.lingerColor", "cameras.lingerMosaic"]) S.on(key, () => { if (typeof catalog !== "undefined" && catalog && catalog.byCam) feeds.forEach(f => f(true)); });
 
   // ---------- burst limit: in normal playback each camera window gets at most maxRate new pictures a second ----------
   // The clock runs at the chosen speed except inside an imaging burst, where it slows so that crossing the gap
@@ -1646,7 +1665,7 @@ body.idle .win.full .titlebar { opacity: 0; }
     prep();
     for (const f of feeds) { f(); f.retier(); }
   };
-  for (const key of ["cameras.fullRes", "cameras.fullDelay"]) S.on(key, () => feeds.forEach(f => f.retier()));
+  for (const key of ["cameras.fullRes"]) S.on(key, () => feeds.forEach(f => f.retier()));
   syncMenu();
 })();
 </script>
