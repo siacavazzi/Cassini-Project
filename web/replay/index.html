@@ -439,14 +439,14 @@ const uSun = { value: new THREE.Vector3(1, 0, 0) };
 
 // ---------- the real sky (data/textures/sky/): NASA SVS Deep Star Maps 2020, equirectangular in J2000 ----------
 // RA 0h at the middle of the map, RA growing to the left, Dec +90 at the top. ?sky=0 keeps the painted dots,
-// ?sky=2k|4k|8k picks the map size; by default 2k on a phone or a GPU that cannot hold 8k, 4k on a small-memory device, 8k otherwise
+// ?sky=2k|4k|8k picks the map size; by default 8k on a desktop, 4k on a phone or a GPU that cannot hold 8k, 2k on the smallest devices
 const SKY_TIER = (new URLSearchParams(location.search).get("sky") || "auto").toLowerCase();
 function skyTier() {
   if (SKY_TIER === "0" || SKY_TIER === "off") return null;
   if (/^[248]k$/.test(SKY_TIER)) return renderer.capabilities.maxTextureSize >= 2048 * +SKY_TIER[0] ? SKY_TIER : "2k";
-  const phone = matchMedia("(max-width: 600px), (pointer: coarse) and (max-height: 500px)").matches;
-  if (phone || renderer.capabilities.maxTextureSize < 8192) return "2k";
-  return navigator.deviceMemory && navigator.deviceMemory <= 4 ? "4k" : "8k";
+  const phone = matchMedia("(max-width: 600px), (pointer: coarse) and (max-height: 500px)").matches, mem = navigator.deviceMemory || 8;
+  if (renderer.capabilities.maxTextureSize < 4096 || mem <= 2) return "2k";
+  return phone || mem <= 4 || renderer.capabilities.maxTextureSize < 8192 ? "4k" : "8k";
 }
 let skyMesh = null;
 const uSkyGain = { value: 1 };

@@ -277,7 +277,7 @@ body.phone .srow input[type=range] { width: 96px; }
   // the viewer reads view.sky when it builds the scene and follows view.skyBrightness live
   D({ key: "view.sky", section: "View", label: "Star sky", type: "choice", value: "auto", reload: true,
       options: [["auto", "Auto"], ["0", "Off"], ["2k", "2k"], ["4k", "4k"], ["8k", "8k"]],
-      hint: "The real night sky (NASA's Deep Star Maps: Hipparcos, Tycho-2 and Gaia stars and the Milky Way), placed where Cassini saw it. Auto picks 2k on a phone and 8k on a desktop; 8k is the sharpest and takes the most memory. Off keeps the old painted dots. A ?sky= link still wins." });
+      hint: "The real night sky (NASA's Deep Star Maps: Hipparcos, Tycho-2 and Gaia stars and the Milky Way), placed where Cassini saw it. Auto picks 8k on a desktop and 4k on a phone; 8k is the sharpest and takes the most memory (11 MB to load), 2k is the lightest but soft. Off keeps the old painted dots. A ?sky= link still wins." });
   D({ key: "view.skyBrightness", section: "View", label: "Star brightness", type: "range", value: 1, min: 0, max: 2.5, step: 0.05,
       format: v => `${Math.round(v * 100)}%`, hint: "How bright the stars and the Milky Way are drawn." });
   // Movie
