@@ -458,7 +458,7 @@ OWN_NEAR = 0.3       # ... measured where every band's share is within this (log
 # the most one band's gain may be over another's: MT3 is so dark on Saturn (gains of 8 to 11) that whatever is less
 # methane-absorbed (the rings, the equatorial haze, the limb) would come out a vivid pink and its structure stand out
 # like scan lines
-GAIN_SPREAD = 4.0
+GAIN_SPREAD = 12.0
 
 
 def spread_capped(gains):
@@ -495,10 +495,11 @@ take the body's tint away; where it makes a pixel more colorful than drawn strai
 methane doesn't darken, or Jupiter's limb haze, bright in MT3), the pixel goes to the body's tint (gray where it has
 none) at the balanced brightness,
 fully once the balance adds FALSE_REVERT of saturation (its straight color, teal on Jupiter, would stand out too). Then saturation past FALSE_CHROMA[0]
-rolls off through a soft knee to at most FALSE_CHROMA[1] (on linear values).
+rolls off through a soft knee to at most FALSE_CHROMA[1] (on linear values, against the tint).
 """
-FALSE_CHROMA = (0.3, 0.4)
+FALSE_CHROMA = (0.15, 0.25)
 FALSE_REVERT = 0.1
+FALSE_DETAIL = 3.0    # ... and fine detail below this blur (pixels) taken from the straight picture
 REVERT_FLOOR = 0.02   # ... where the bands' mean is at least this share of white
 
 
@@ -526,6 +527,13 @@ def apply_mix(mix, x):
         held = knee + (cap - knee) * np.tanh((sat - knee) / (cap - knee))
         k = np.where(sat > knee, held / np.maximum(sat, 1e-12), 1)
         x = lum * tint + (x - lum * tint) * k
+        # the balance's color and broad brightness, the straight picture's fine detail: a dim band's gain (MT3 on
+        # Saturn, 8 to 10) would otherwise lift its ring, limb and haze structure and noise far above the others'
+        soft = lambda v: cv2.GaussianBlur(v, (0, 0), FALSE_DETAIL)
+        base, flat = soft(x.mean(axis=0)), soft(mean)
+        ok = flat > REVERT_FLOOR
+        detail = np.where(ok, mean * base / np.maximum(flat, 1e-12), x.mean(axis=0))
+        x = np.stack([np.where(ok, detail * soft(c) / np.maximum(base, 1e-12), c) for c in x])
     return x
 
 
