@@ -468,8 +468,8 @@ def balance(levels, tint=None):
 """
 A channel mix (color_mix) on linear channels (3 x H x W). A false color mix (a gain per band, diagonal) is meant to
 take the body's tint away; where it makes a pixel more colorful than drawn straight instead (Saturn's rings, which
-methane doesn't darken, or Jupiter's limb haze, bright in MT3), the pixel keeps its straight band ratio at the
-balanced brightness, fully once the balance adds FALSE_REVERT of saturation. Then saturation past FALSE_CHROMA[0]
+methane doesn't darken, or Jupiter's limb haze, bright in MT3), the pixel goes gray at the balanced brightness,
+fully once the balance adds FALSE_REVERT of saturation (its straight color, teal on Jupiter, would stand out too). Then saturation past FALSE_CHROMA[0]
 rolls off through a soft knee to at most FALSE_CHROMA[1] (on linear values).
 """
 FALSE_CHROMA = (0.3, 0.4)
@@ -491,9 +491,9 @@ def apply_mix(mix, x):
         mean = raw.mean(axis=0)
         straight = raw * (lum / np.maximum(mean, 1e-12))
         w = np.clip((_saturation(x) - _saturation(straight)) / FALSE_REVERT, 0, 1)
-        # only where every band has signal: the sky's noise has no band ratio worth keeping
+        # only where every band has signal: the sky's noise has no band ratio to compare
         w = np.where((raw.min(axis=0) > 0) & (mean > REVERT_FLOOR), w, 0)
-        x = x + (straight - x) * w
+        x = x + (lum - x) * w
         knee, cap = FALSE_CHROMA
         sat = _saturation(x)
         held = knee + (cap - knee) * np.tanh((sat - knee) / (cap - knee))
@@ -623,21 +623,23 @@ def load_linear(labels, images=None, iofs=None):
 """
 Hot pixels and cosmic ray hits in one channel of a composite: a pixel far above its 3x3 median in its own
 channel (SPIKE times that channel's sky grain, and above twice the median) where no other channel has a
-peak within 2 pixels, is set to its median. Drawn together (tone), such a pixel would be a pastel dot; a
+peak within 2 pixels, is set to its median. Natural color, whose balance would make them salmon or cyan dots:
+against a 5x5 median, so 2x2 clusters go too, and where not every other channel peaks, so two-channel hits go. Drawn together (tone), such a pixel would be a pastel dot; a
 star or a small bright feature is in every channel, so it stays.
 channels = linear channels, not yet aligned; sky = the sky mask
 """
 def _clean_spikes(channels, sky):
-    meds = [cv2.medianBlur(c, 3) for c in channels]
+    natural = style() == "balanced"
+    meds = [cv2.medianBlur(c, 5 if natural else 3) for c in channels]
     res = [c - m for c, m in zip(channels, meds)]
     noises = [float(np.percentile(np.abs(r[sky]), 99)) / 2.6 for r in res]
     peaks = [cv2.dilate(r, np.ones((5, 5), np.uint8)) > SPIKE * n for r, n in zip(res, noises)]
     out = []
     for i, (c, m, r, n) in enumerate(zip(channels, meds, res, noises)):
         spike = (r > SPIKE * n) & (r > m) & (r > 0)
-        for j, p in enumerate(peaks):
-            if j != i:
-                spike &= ~p
+        others = [p for j, p in enumerate(peaks) if j != i]
+        # natural color: not where every other channel peaks too (a star or a moon); raw: where none does
+        spike &= ~np.logical_and.reduce(others) if natural else ~np.logical_or.reduce(others)
         out.append(np.where(spike, m, c))
     return out
 
