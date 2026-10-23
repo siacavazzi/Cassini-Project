@@ -204,8 +204,12 @@ body.phone .srow input[type=range] { width: 96px; }
       hint: "Once a filter set is complete, show its color picture. Off shows every frame on its own." });
   D({ key: "cameras.balancedColor", section: "Cameras", label: "Balanced color", type: "toggle", value: true,
       hint: "A gentler color stretch: black sits just above the sky's noise so grain and scan lines stay dark, white sits at the bright part of the body but never stretches dim pictures far, bright edges roll off instead of clipping, and mosaic tiles are evened out without changing the mosaic's overall level. Off shows the earlier stretch." });
-  // what the frame server's picture routes are asked to add for it: nothing, or the earlier stretch
-  window.cassiniLook = () => S.get("cameras.balancedColor") === false ? "&look=classic" : "";
+  D({ key: "cameras.colors", section: "Cameras", label: "Filter colors", type: "choice", value: "natural",
+      options: [["natural", "Natural color"], ["raw", "Raw filters"]],
+      hint: "Natural color turns red, green and blue filter sets into the colors an eye would see, and balances false color sets (methane, ultraviolet, infrared) so the planet comes out gray and only its differences between filters show as color. Raw filters draws each filter straight as a channel. Needs Balanced color." });
+  // what the frame server's picture routes are asked to add for them: nothing, the earlier stretch, or raw filters
+  window.cassiniLook = () => S.get("cameras.balancedColor") === false ? "&look=classic"
+    : S.get("cameras.colors") === "raw" ? "&colors=raw" : "";
   // how a movie pass looks (Settings > Movie), for the camera windows' movie pictures and the film export alike
   window.cassiniMovieStyle = () => `${S.get("movies.center") === false ? "&center=0" : ""}&trail=${S.get("movies.trail") || 0}&laps=${S.get("movies.laps") || 1}`;
   D({ key: "cameras.channels", section: "Cameras", label: "Filter channels", type: "toggle", value: true,

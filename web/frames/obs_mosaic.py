@@ -44,6 +44,7 @@ import sys
 import threading
 import time
 
+import cv2
 import numpy as np
 from PIL import Image
 
@@ -57,8 +58,9 @@ import mosaic_benchmark  # noqa: E402
 import stacking  # noqa: E402
 
 # bumped whenever the way observation mosaics are made changes, so older ones are not served again; one per
-# look (calibration.LOOKS), classic being the mosaics made before the balanced display model
-VERSIONS = {"balanced": "obs-v13", "classic": "obs-v13-classic"}
+# display model (calibration.style), classic being the mosaics made before the balanced display model, raw the
+# balanced ones before natural color
+VERSIONS = {"balanced": "obs-v39", "raw": "obs-v22", "classic": "obs-v13-classic"}
 CANVAS = 2048        # longest side of the canvas the view is drawn on
 OUT = 1024           # longest side of the picture sent
 FRAME = 1024         # full resolution frame
@@ -309,7 +311,7 @@ def folder(u, cache):
     # a movie's frames stacked with a shorter repeat window are other pictures than the ones made before it
     gap = u.get("repeat_gap", mosaic_benchmark.REPEAT_GAP)
     suffix = "" if gap >= mosaic_benchmark.REPEAT_GAP else f"_r{gap:g}"
-    return os.path.join(cache, VERSIONS[calibration.look()], "_".join(map(str, u["key"])) + suffix)
+    return os.path.join(cache, VERSIONS[calibration.style()], "_".join(map(str, u["key"])) + suffix)
 
 
 def _ulock(u):
@@ -409,6 +411,12 @@ def colour_of(count, nms):
     RED or else the continuum filter nearest red (not a methane band); otherwise false colour from the filters
     taken at most tiles (longest wavelength red). Polarizers are left out (they are not a colour)."""
     most = max(count.values())
+    # a clear frame is no color: it is left out wherever the color filters still make a set of their own (it
+    # sees several times their light, so as a channel it outshines them, green on Saturn's rings)
+    plain = [f for f in count if f != "CL1/CL2" and not _polarizer(f)]
+    if len([f for f in plain if count[f] >= most / 2]) >= 3:
+        count = {f: count[f] for f in plain}
+        most = max(count.values())
     good = [f for f in count if count[f] >= most / 4 and not _polarizer(f)]
     for filters, rgb in COLOUR_SETS.items():
         if filters <= set(good):
@@ -431,14 +439,25 @@ DETAIL = 2.0       # filled passes: how much the local contrast is raised (detai
 DETAIL_SIGMA = 0.05  # ... over this much of a frame
 
 
-def pass_scale(frames, u, drawn=None, true_colour=False):
+SKY_MIN = 0.05   # balanced: the share of a pass's pixels that must be dark sky for its blacks to be set from the sky
+# ... measured on the darker half of the sky: the noise floor at this percentile above its median (a single
+# picture's is the 98th; lower here, since a long-exposure pass's whole sky can glow faintly, Saturn's Shadow's E ring)
+SKY_FLOOR_PCT = 90
+SKY_TOP_PCT = 99     # ... and each band's black at least this percentile of that dark sky (a single picture's SKY_DARK)
+SKY_BLACK_MAX = 0.004   # ... and no more than this share of the pass's white over its sky
+SKY_TOE = 1.0    # ... and the soft toe above those blacks, this many times the black's height over the sky wide
+                 # (calibration.display): the sky's scan lines, not its pixel noise, set how far grain reaches
+
+
+def pass_scale(frames, u, drawn=None, true_colour=False, sky_tops=None):
     """The display scale of every tile of the pass (calibration.shared_scale over its frames merged in I/F, as
     mosaic_benchmark.display_scale): {"blacks": {filter: I/F}, "white": I/F, "gamma"}. Where the body fills
     the frames (the middle of most frames on its disk, as in Titan's maps), black goes to the darkest of the body, white to
     the 99.5th percentile and the gamma is eased, and the mosaic's local contrast is raised (detail), so
     the surface's few per cent of contrast shows; passes with dark sky keep the benchmark's scale.
     drawn = the filters the mosaic is drawn from (plan's colour, or its grey filter); true_colour = they are a
-    true colour set."""
+    true colour set; sky_tops = optional {filter: I/F} overriding how far above its sky each filter's black sits
+    (the measured values come back as "sky_tops", with the soft "toe" above black)."""
     by = {}
     for path, _, f, *_ in frames:
         _, iof, _ = stacking.load_hdr(path, u.get("repeat_gap", mosaic_benchmark.REPEAT_GAP))
@@ -477,7 +496,57 @@ def pass_scale(frames, u, drawn=None, true_colour=False):
         white = max(float(np.percentile(np.concatenate([i.ravel() for i in iofs]) - blacks[f], 99.5))
                     for f, iofs in by.items())
         gamma = 1.5
-    return {"blacks": blacks, "white": white, "gamma": gamma, "filled": filled, "floor": round(floor, 3)}
+    toe = None
+    if calibration.look() == "balanced":
+        # where the pass has dark sky, no band's black below that sky's level plus the noise margin, as a single
+        # picture's (calibration.sky_levels): the 1st percentile of a pass that is mostly sky sits in the sky's
+        # noise, so the sky came out a gray, scan-lined veil around the body once the tiles were put together
+        masks = {f: [i < 0.05 * np.percentile(i, 99.9) for i in iofs] for f, iofs in by.items()}
+        if all(sum(int(m.sum()) for m in ms) > SKY_MIN * sum(m.size for m in ms) for ms in masks.values()):
+            levels, margin = calibration.sky_levels(list(by.values()), list(masks.values()))
+            # The darker half of each band's sky (by its mean over 5 pixels): faint diffuse light in the sky (the
+            # E and G rings, a haze limb, the body's glow) is not sky noise and must not raise the black
+            darks = {}
+            for (f, iofs), level in zip(by.items(), levels):
+                local = [cv2.blur(i, (5, 5)) for i in iofs]
+                sky = np.concatenate([l[m] for l, m in zip(local, masks[f])])
+                darks[f] = np.concatenate([i[m & (l <= np.median(sky))] for i, l, m in zip(iofs, local, masks[f])])
+            # with a single picture's noise floor (the 98th percentile above the median, the noisiest band's) on that
+            # dark sky: the pixel-difference noise is about 0 on frames stored in 8 bits
+            margin = max(margin, calibration.noise_floor(list(darks.values()), SKY_FLOOR_PCT))
+            # and, as a single picture's toe, above SKY_DARK of that dark sky's own brightness: the frames' sky carries
+            # stray-light stripes far broader than its pixel noise. Each band on its own: the false color gains
+            # (MT3's up to 5x) lift whatever of a dim band's sky is left above its black far more than the others'
+            tops = {}
+            for (f, dark), level in zip(darks.items(), levels):
+                if sky_tops and f in sky_tops:
+                    tops[f] = float(sky_tops[f])
+                else:
+                    # at most SKY_BLACK_MAX of the pass's white: on a long exposure whose whole sky glows (Saturn's
+                    # Shadow's E and G rings) the dark sky's spread is the faint light itself, at gamma 3 a visible share
+                    top = float(np.percentile(dark, SKY_TOP_PCT)) - level if dark.size > 100 else 0
+                    tops[f] = min(max(margin, top), SKY_BLACK_MAX * white)
+            toe = SKY_TOE * max(tops.values())
+            blacks = {f: max(blacks[f], level + tops[f]) for f, level in zip(by, levels)}
+    out = {"blacks": blacks, "white": white, "gamma": gamma, "filled": filled, "floor": round(floor, 3)}
+    if toe:
+        out["toe"], out["sky_tops"] = toe, tops
+    mine = [f for f in (drawn or []) if f in by]
+    if calibration.style() == "balanced" and len(mine) == 3 and not true_colour:
+        # false color: each band's gain to bring the body's lit median (above that band's black) to the bands'
+        # mean, so the planet comes out gray and only its differences between bands show (calibration.false_gains);
+        # measured on the whole pass, so every tile has the same balance
+        levels = []
+        for f in mine:
+            v = np.concatenate([i.ravel() for i in by[f]]) - blacks[f]
+            lit = v[v > 0.2 * np.percentile(v, 99)]
+            levels.append(float(np.median(lit)) if lit.size else 0.0)
+        if min(levels) > 0:
+            out["balance"] = dict(zip(mine, calibration.balance(levels, calibration.tint_of(u["key"][0]))))
+            # and the body's typical color after it, so the broad-color flattening holds one color as tiles arrive
+            shown = [out["balance"][f] * v for f, v in zip(mine, levels)]
+            out["typical"] = {f: float(np.log(v * len(shown) / sum(shown))) for f, v in zip(mine, shown)}
+    return out
 
 
 def tile(u, n, cache, scale=None):
@@ -802,6 +871,15 @@ def so_far(u, n, cache, made=None, out=OUT):
         colour = used
         acc = [filter_mosaic(u, p, f, tiles, rect, cache, ref, tag) for f in colour]
         rgb = np.dstack([a[..., 0] for a in acc])
+        # natural color: a true color pass turned into what an eye would see, a false color one balanced so the
+        # body comes out gray, on the pass's own measure of its body (pass_scale's balance)
+        scale = p["display_scale"]
+        bal = scale.get("balance")
+        mix = calibration.color_mix(u["key"][2], colour, u["key"][0], [bal[f] for f in colour] if bal else None)
+        if mix is not None and scale.get("typical"):
+            mix.typical = [scale["typical"][f] for f in colour]
+        if mix is not None:
+            rgb = calibration.mix_display(rgb, mix, scale["gamma"])
         # only where every filter has the picture: past one filter's edge the others alone are a coloured rim
         alpha = np.min([a[..., 3] for a in acc], axis=0)
         rgb = (rgb * (alpha[..., None] / np.float32(255)) + 0.5).astype(np.uint8)
@@ -1311,8 +1389,8 @@ def warm(u, upto, cache, size=None, slots=None, start=0, force=False):
     runs one pass at a time (_background). force: a pass _judge does not call a mosaic, asked for as one."""
     if not (u["mosaic"] or force):
         return
-    look = calibration.look()
-    key = (u["key"], size, look)
+    look, colors = calibration.look(), calibration.colors()
+    key = (u["key"], size, look, colors)
     with _lock:
         _upto[key] = max(_upto.get(key, -1), min(upto, len(u["frames"]) - 1))
         _from[key] = max(_from.get(key, 0), start)
@@ -1322,7 +1400,7 @@ def warm(u, upto, cache, size=None, slots=None, start=0, force=False):
 
     def run():
         try:
-            with _background, calibration.looking(look):
+            with _background, calibration.looking(look), calibration.coloring(colors):
                 p = plan(u, cache)
                 done = -1
                 while True:
