@@ -54,7 +54,7 @@ import stacking  # noqa: E402
 # bumped whenever the way observation mosaics are made changes, so older ones are not served again; one per
 # display model (calibration.style), classic being the mosaics made before the balanced display model, raw the
 # balanced ones before natural color
-VERSIONS = {"balanced": "obs-v32", "raw": "obs-v15", "classic": "obs-v9"}
+VERSIONS = {"balanced": "obs-v33", "raw": "obs-v16", "classic": "obs-v9"}
 CANVAS = 2048        # longest side of the canvas the view is drawn on
 OUT = 1024           # longest side of the picture sent
 FRAME = 1024         # full resolution frame
@@ -255,7 +255,8 @@ DETAIL_SIGMA = 0.05  # ... over this much of a frame
 
 
 SKY_MIN = 0.05   # balanced: the share of a pass's pixels that must be dark sky for its blacks to be set from the sky
-SKY_TOE = 2.0    # ... and the soft toe above those blacks, this many noise margins wide (calibration.display)
+SKY_TOE = 1.0    # ... and the soft toe above those blacks, this many times the black's height over the sky wide
+                 # (calibration.display): the sky's scan lines, not its pixel noise, set how far grain reaches
 
 
 def pass_scale(frames, u, drawn=None, true_colour=False):
@@ -322,8 +323,8 @@ def pass_scale(frames, u, drawn=None, true_colour=False):
                 dark = np.concatenate([i[m & (l <= np.median(sky))] for i, l, m in zip(iofs, local, masks[f])])
                 if dark.size > 100:
                     tops.append(float(np.percentile(dark, calibration.SKY_DARK)) - level)
-            toe = SKY_TOE * margin
             margin = max([margin, float(np.mean(tops))] if tops else [margin])
+            toe = SKY_TOE * margin
             blacks = {f: max(blacks[f], level + margin) for f, level in zip(by, levels)}
     out = {"blacks": blacks, "white": white, "gamma": gamma, "filled": filled, "floor": round(floor, 3)}
     if toe:

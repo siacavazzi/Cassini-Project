@@ -147,13 +147,19 @@ for f, v in by_sky.items():
 # a faint glow around the body fades into black through a soft toe: no black salt (a pixel at 0 among gray
 # neighbors) where the glow's noise crosses the black point
 rr = np.hypot(yy - 128, xx - 128)
-glow = np.where(disk, 0.5, 0.010 + 0.03 * np.exp(-(rr - 40) / 25.0)) + 0.002 * rng.standard_normal((256, 256))
+# (scan lines far above the pixel noise, as in the frames, so the toe follows the lines' height, not the noise)
+fine = lambda v: v + 0.0003 * rng.standard_normal((256, 256))
+lined = {f: [fine(np.where(disk, 0.5, off + stripes))] for f, off in (("MT3", 0.004), ("MT2", 0.010), ("UV1", 0.007))}
+obs_mosaic.stacking.load_hdr = lambda path, gap=None: (None, lined[path][0], 1)
+with cal.looking("balanced"):
+    sky_scale = obs_mosaic.pass_scale(fr_sky, {"key": ("JUPITER", "TEST", "N", 0), "z": 1e5}, list(lined), False)
+glow = fine(np.where(disk, 0.5, 0.010 + stripes + 0.03 * np.exp(-(rr - 40) / 25.0)))
 assert sky_scale.get("toe")
 shown = cal.display(glow, sky_scale["blacks"]["MT2"], sky_scale["white"], sky_scale["gamma"], None,
                     sky_scale["toe"])[..., 0].astype(np.float32)
 around = (cv2.blur(shown, (3, 3)) * 9 - shown) / 8
 ring_px = (rr > 45) & (rr < 110)
-assert np.mean((shown[ring_px] == 0) & (around[ring_px] >= 8)) < 0.0005
+assert np.mean((shown[ring_px] == 0) & (around[ring_px] >= 5)) < 0.001
 
 # ---- detail on luminance only: a colored patch keeps its color differences, no channel gets its own texture ----
 rgba = np.zeros((64, 64, 4), np.uint8); rgba[..., 3] = 255
