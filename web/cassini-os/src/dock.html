@@ -166,9 +166,9 @@ body.phone.has-dock { --appdockh: 50px; }
   const winLabel = w => w.dataset.name || ({ dock: "Cassini Replay", imgcard: "Narrow-angle Camera", wacard: "Wide-angle Camera" })[w.id] || w.getAttribute("aria-label") || "Window";
   const winGlyph = w => w.id === "dock" ? GLYPH.replay : w.id === "moments" ? GLYPH.moments : GLYPH.window;
   function snapshot(w) {
-    const img = w.querySelector(".well.has-frame .shot, .rlwell img, .mvwell img");
+    const img = w.querySelector(".well.has-frame .shot, .rlwell img");
     if (img && img.src && img.naturalWidth) return img.src;
-    const cv = w.querySelector(".rlwell canvas, .mvwell canvas");
+    const cv = w.querySelector(".rlwell canvas");
     if (cv && cv.width) { try { return cv.toDataURL("image/jpeg", 0.7); } catch (e) {} }
     return "";
   }

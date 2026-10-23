@@ -132,7 +132,7 @@ python web/cassini-os/src/build.py
 `src/build.py` takes the viewer's script from `web/replay/index.html` and patches in the hooks the heads use
 (colours and fonts from CSS variables, a separate HUD canvas for the glowing orbits, NASA's model). If the
 viewer changes a line a patch depends on, the build stops with an assertion naming that line.
-Movie mode lives in `src/movie.html` (style, window and script); the build splices it into the page.
+Movie mode lives in `src/movie.html` (style and script); the build splices it into the page. It is only a rule for the clock: it skips the time between pictures and steps from one to the next at `movie.fps`, and the camera windows show each picture as usual.
 
 `src/strip.py` strips the document wrapper for publishing as a claude.ai artifact.
 

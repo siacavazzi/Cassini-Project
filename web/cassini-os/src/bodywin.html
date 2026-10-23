@@ -155,17 +155,16 @@ body.idle #app .bodywin:has(.well.has-frame) { opacity: 1; pointer-events: auto;
     if (!B.started) setOn(B.on);
     if (!B.on || !catalog || !catalog.byCam) return;
     const now = performance.now(), movie = window.cassiniMovie && window.cassiniMovie.on;
-    // the linger clock runs only while the mission clock moves forward, so pausing keeps every window up
-    if (B.lastEt !== null && state.et > B.lastEt && !movie) B.clock += Math.min(now - B.lastNow, 250);
-    const jumped = B.lastEt !== null && Math.abs(state.et - B.lastEt) > 6 * 3600;
+    // the linger clock runs only while the mission clock moves forward (or movie mode plays, holding the clock on
+    // each picture between its steps), so pausing keeps every window up
+    if (B.lastEt !== null && (state.et > B.lastEt || (movie && state.playing))) B.clock += Math.min(now - B.lastNow, 250);
+    // (movie mode's cuts over the time without pictures are not jumps)
+    const jumped = B.lastEt !== null && Math.abs(state.et - B.lastEt) > 6 * 3600 && !(movie && state.et > B.lastEt);
     B.lastNow = now; B.lastEt = state.et;
     // records hold mission times, so they carry over when the months around this one load; a jump starts afresh
     const reset = jumped;
     if (catalog !== B.cat) { B.cat = catalog; targets = [...new Set(catalog.target)].filter(Boolean); }
     if (reset) B.rec.clear();
-    // movie mode takes the camera's place: the body windows step aside until it ends
-    for (const w of B.wins.values()) if (!w.el.dataset.min) w.el.hidden = !!movie;
-    if (movie) return;
     const stale = F.stale(), keepKeys = [];
     let newest = null;
     // one record per target and camera: when that camera last imaged the target, and on the linger clock when that
