@@ -86,7 +86,8 @@ body.phone #moviecard:not(.full) { width: calc(100% - 16px) !important; left: 8p
   const S = window.cassiniSettings, GRACE = 1200;
   const opt = (key, dflt) => (S && S.get(key) !== undefined ? S.get(key) : dflt);
   const KIND = { true: "true color", false: "false color", two: "two-filter color" };
-  const size = () => (window.cassiniWM && window.cassiniWM.big ? window.cassiniWM.big(card, card.querySelector(".mvwell")) : card.classList.contains("zoomed")) ? 1024 : 512;
+  // true resolution (1024) unless the card shows its pictures small (cassiniWM.sized)
+  const size = () => window.cassiniWM && window.cassiniWM.sized ? window.cassiniWM.sized(card, card.querySelector(".mvwell")) : 1024;
   // the pictures frame f can be shown as, each { url, kind }: best (mosaic, then composite) and base (processed, then raw)
   function choices(f) {
     const id = f.id, sz = size(), raw = { url: `${FRAMES}/frames/${id}.webp?size=${sz}`, kind: "" };
