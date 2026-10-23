@@ -54,7 +54,7 @@ import stacking  # noqa: E402
 # bumped whenever the way observation mosaics are made changes, so older ones are not served again; one per
 # display model (calibration.style), classic being the mosaics made before the balanced display model, raw the
 # balanced ones before natural color
-VERSIONS = {"balanced": "obs-v33", "raw": "obs-v16", "classic": "obs-v9"}
+VERSIONS = {"balanced": "obs-v34", "raw": "obs-v17", "classic": "obs-v9"}
 CANVAS = 2048        # longest side of the canvas the view is drawn on
 OUT = 1024           # longest side of the picture sent
 FRAME = 1024         # full resolution frame
@@ -259,14 +259,15 @@ SKY_TOE = 1.0    # ... and the soft toe above those blacks, this many times the 
                  # (calibration.display): the sky's scan lines, not its pixel noise, set how far grain reaches
 
 
-def pass_scale(frames, u, drawn=None, true_colour=False):
+def pass_scale(frames, u, drawn=None, true_colour=False, sky_tops=None):
     """The display scale of every tile of the pass (calibration.shared_scale over its frames merged in I/F, as
     mosaic_benchmark.display_scale): {"blacks": {filter: I/F}, "white": I/F, "gamma"}. Where the body fills
     the frames (the middle of most frames on its disk, as in Titan's maps), black goes to the darkest of the body, white to
     the 99.5th percentile and the gamma is eased, and the mosaic's local contrast is raised (detail), so
     the surface's few per cent of contrast shows; passes with dark sky keep the benchmark's scale.
     drawn = the filters the mosaic is drawn from (plan's colour, or its grey filter); true_colour = they are a
-    true colour set."""
+    true colour set; sky_tops = optional {filter: I/F} overriding how far above its sky each filter's black sits
+    (the measured values come back as "sky_tops", with the soft "toe" above black)."""
     by = {}
     for path, _, f, *_ in frames:
         _, iof, _ = stacking.load_hdr(path, mosaic_benchmark.REPEAT_GAP)
@@ -316,19 +317,22 @@ def pass_scale(frames, u, drawn=None, true_colour=False):
             # and, as a single picture's toe, above the darker half of the sky's own brightness (SKY_DARK of it):
             # the frames' sky carries stray-light stripes far broader than its pixel noise, which the margin
             # alone leaves showing as scan lines
-            tops = []
+            # Each band on its own: the false color gains (MT3's up to 5x) lift whatever of a dim band's sky is
+            # left above its black far more than the others'
+            tops = {}
             for (f, iofs), level in zip(by.items(), levels):
+                if sky_tops and f in sky_tops:
+                    tops[f] = float(sky_tops[f])
+                    continue
                 local = [cv2.blur(i, (5, 5)) for i in iofs]
                 sky = np.concatenate([l[m] for l, m in zip(local, masks[f])])
                 dark = np.concatenate([i[m & (l <= np.median(sky))] for i, l, m in zip(iofs, local, masks[f])])
-                if dark.size > 100:
-                    tops.append(float(np.percentile(dark, calibration.SKY_DARK)) - level)
-            margin = max([margin, float(np.mean(tops))] if tops else [margin])
-            toe = SKY_TOE * margin
-            blacks = {f: max(blacks[f], level + margin) for f, level in zip(by, levels)}
+                tops[f] = max(margin, float(np.percentile(dark, calibration.SKY_DARK)) - level if dark.size > 100 else 0)
+            toe = SKY_TOE * max(tops.values())
+            blacks = {f: max(blacks[f], level + tops[f]) for f, level in zip(by, levels)}
     out = {"blacks": blacks, "white": white, "gamma": gamma, "filled": filled, "floor": round(floor, 3)}
     if toe:
-        out["toe"] = toe
+        out["toe"], out["sky_tops"] = toe, tops
     mine = [f for f in (drawn or []) if f in by]
     if calibration.style() == "balanced" and len(mine) == 3 and not true_colour:
         # false color: each band's gain to bring the body's lit median (above that band's black) to the bands'

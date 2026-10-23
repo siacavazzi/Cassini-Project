@@ -192,6 +192,11 @@ assert obs_mosaic.colour_of({"IR3": 10, "CL1/CL2": 10, "VIO": 10}, nms) == ["IR3
 with cal.looking("balanced"):
     assert cal.color_mix("W", ["IR3", "CL1/CL2", "VIO"], "SATURN") is None
     assert isinstance(cal.color_mix("W", ["IR3", "CL1/CL2", "VIO"], "SATURN", own=True), cal.FalseMix)
+# each filter's sky black (its height over the sky) comes back with the scale and can be overridden
+with cal.looking("balanced"):
+    fixed = obs_mosaic.pass_scale(fr_sky, {"key": ("JUPITER", "TEST", "N", 0), "z": 1e5}, list(lined), False,
+                                  sky_tops={"MT2": 0.05})
+assert set(sky_scale["sky_tops"]) == {"MT3", "MT2", "UV1"} and fixed["blacks"]["MT2"] > sky_scale["blacks"]["MT2"] + 0.03
 # a NAC set with BL2 has its own fitted matrix, which keeps gray gray too
 b2 = cal.natural_mix("N", ["RED", "GRN", "BL2"])
 assert b2 is not None and not np.allclose(b2, cal.natural_mix("N", ["RED", "GRN", "BL1"])) and np.allclose(b2.sum(axis=1), 1, atol=1e-3)
