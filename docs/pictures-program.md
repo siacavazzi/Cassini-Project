@@ -130,6 +130,12 @@ Effort comes from the reports. Phase A runs alongside 1 and 2; everything else f
 ### Phase R · Sharper previews (proposed, waits for Sam's go) · ~1 day
 - From the resolution study (https://claude.ai/artifact/4HzJfyS9zqcCwREMgNDonT): the blur outside mosaics is the window picking its picture size from CSS pixels and ignoring the screen's pixel density (`big()` in head-quiet.html), so a retina window gets 512 px stretched 2.2×. Fix: size by width × devicePixelRatio. Plus cache each composite once so a 512 → 1024 step only re-encodes (16-54 ms instead of 0.4-2.5 s). Frames and composites at 1024 cost little (~180 KB/s for 4 windows). Load-adaptive sizing is not needed. Mosaic sharpness stays in phase 6a (compose at the size sent, up to 2048 in big windows and full view).
 
+### Phase 6a moved up · Mosaic build speed (Sam, 2026-10-23 04:37Z: "the mosaic lagging is a core issue")
+- **Owner:** the mosaic thread (it owns `obs_mosaic`'s build); the movie thread's rolling route uses the same incremental canvas and folds it in. One implementation.
+- **Goal:** a mosaic (and a mosaic movie) keeps up with the frames at playback speed. Grow each pass's canvas in memory (compose only the new tile and what it overlaps), compose at the size sent instead of 2048 → 1024 → 512, preview-size tiles, always ask for the newest step and drop stale requests, make the next tiles ahead.
+- **Done when:** a 10-minute play of B115 and Saturn's Shadow at 1x and 10x shows no growing lag (lag-over-time plot), warm steps under 0.3 s, and the frame strip never stalls.
+- **Not moved:** the overnight pre-build (6b) still waits for every look change, so it runs once.
+
 ### Phase 6 · Speed (M5, M7, M6) · ~3 days plus one night · two PRs
 - **6a.** Preview-size tiles, compose at the size sent, grow each pass's canvas in memory (`mosaic.compose` over the new tile and its overlaps only); "Whole mosaic, full resolution" in the save menu (capped canvas up to 4096 px, progress, feeds Save PNG and movie export).
 - **6b.** Overnight pre-build of every real mosaic pass's plan and preview tiles on the LaCie (~108k tiles, 5-8 h, 10-25 GB), started only after every look change above has been accepted.
