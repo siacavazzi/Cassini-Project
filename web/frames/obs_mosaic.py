@@ -54,7 +54,7 @@ import stacking  # noqa: E402
 # bumped whenever the way observation mosaics are made changes, so older ones are not served again; one per
 # display model (calibration.style), classic being the mosaics made before the balanced display model, raw the
 # balanced ones before natural color
-VERSIONS = {"balanced": "obs-v36", "raw": "obs-v19", "classic": "obs-v9"}
+VERSIONS = {"balanced": "obs-v37", "raw": "obs-v20", "classic": "obs-v9"}
 CANVAS = 2048        # longest side of the canvas the view is drawn on
 OUT = 1024           # longest side of the picture sent
 FRAME = 1024         # full resolution frame
@@ -255,6 +255,10 @@ DETAIL_SIGMA = 0.05  # ... over this much of a frame
 
 
 SKY_MIN = 0.05   # balanced: the share of a pass's pixels that must be dark sky for its blacks to be set from the sky
+# ... measured on the darker half of the sky: the noise floor at this percentile above its median (a single
+# picture's is the 98th; lower here, since a long-exposure pass's whole sky can glow faintly, Saturn's Shadow's E ring)
+SKY_FLOOR_PCT = 90
+SKY_TOP_PCT = 99     # ... and each band's black at least this percentile of that dark sky (a single picture's SKY_DARK)
 SKY_TOE = 1.0    # ... and the soft toe above those blacks, this many times the black's height over the sky wide
                  # (calibration.display): the sky's scan lines, not its pixel noise, set how far grain reaches
 
@@ -323,7 +327,7 @@ def pass_scale(frames, u, drawn=None, true_colour=False, sky_tops=None):
                 darks[f] = np.concatenate([i[m & (l <= np.median(sky))] for i, l, m in zip(iofs, local, masks[f])])
             # with a single picture's noise floor (the 98th percentile above the median, the noisiest band's) on that
             # dark sky: the pixel-difference noise is about 0 on frames stored in 8 bits
-            margin = max(margin, calibration.noise_floor(list(darks.values())))
+            margin = max(margin, calibration.noise_floor(list(darks.values()), SKY_FLOOR_PCT))
             # and, as a single picture's toe, above SKY_DARK of that dark sky's own brightness: the frames' sky carries
             # stray-light stripes far broader than its pixel noise. Each band on its own: the false color gains
             # (MT3's up to 5x) lift whatever of a dim band's sky is left above its black far more than the others'
@@ -332,7 +336,7 @@ def pass_scale(frames, u, drawn=None, true_colour=False, sky_tops=None):
                 if sky_tops and f in sky_tops:
                     tops[f] = float(sky_tops[f])
                 else:
-                    tops[f] = max(margin, float(np.percentile(dark, calibration.SKY_DARK)) - level if dark.size > 100 else 0)
+                    tops[f] = max(margin, float(np.percentile(dark, SKY_TOP_PCT)) - level if dark.size > 100 else 0)
             toe = SKY_TOE * max(tops.values())
             blacks = {f: max(blacks[f], level + tops[f]) for f, level in zip(by, levels)}
     out = {"blacks": blacks, "white": white, "gamma": gamma, "filled": filled, "floor": round(floor, 3)}

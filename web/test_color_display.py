@@ -193,7 +193,7 @@ with cal.looking("balanced"):
     assert cal.color_mix("W", ["IR3", "CL1/CL2", "VIO"], "SATURN") is None
     assert isinstance(cal.color_mix("W", ["IR3", "CL1/CL2", "VIO"], "SATURN", own=True), cal.FalseMix)
 # frames stored in 8 bits: neighboring sky pixels are mostly equal, so the noise from their differences is about 0;
-# every band's black still sits a single picture's noise floor over its sky (the noisiest band's 98th percentile
+# every band's black still sits a noise floor over its sky (the noisiest band's SKY_FLOOR_PCT percentile
 # above its median), as the gains lift a quiet band's leftover sky as much as a noisy one's
 step = 0.002
 coarse = {f: [np.round(np.where(disk, 0.5, off + noise * rng.standard_normal((256, 256))) / step) * step]
@@ -201,8 +201,8 @@ coarse = {f: [np.round(np.where(disk, 0.5, off + noise * rng.standard_normal((25
 obs_mosaic.stacking.load_hdr = lambda path, gap=None: (None, coarse[path][0], 1)
 with cal.looking("balanced"):
     coarse_scale = obs_mosaic.pass_scale(fr_sky, {"key": ("JUPITER", "TEST", "N", 0), "z": 1e5}, list(coarse), False)
-floor = cal.noise_floor([v[0][~disk] for v in coarse.values()])
-assert floor > 0.004 and all(t >= floor - 1e-9 for t in coarse_scale["sky_tops"].values()), coarse_scale["sky_tops"]
+floor = cal.noise_floor([v[0][~disk] for v in coarse.values()], obs_mosaic.SKY_FLOOR_PCT)
+assert floor > 0.003 and all(t >= floor - 1e-9 for t in coarse_scale["sky_tops"].values()), coarse_scale["sky_tops"]
 obs_mosaic.stacking.load_hdr = lambda path, gap=None: (None, lined[path][0], 1)
 # faint diffuse light in the sky (an E ring, a haze limb) doesn't raise the black: it is measured on the darker half
 # of the sky, so the ring stays visible
