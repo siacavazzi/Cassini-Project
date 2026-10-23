@@ -2425,7 +2425,7 @@ body.phone #finale .fx-data { width: min(220px, calc(100vw - 32px)); top: 10px; 
     // body: a body window's own target; the two camera windows show the body in view in the body view, else every target
     const own = card.dataset.body || null, cam = card.dataset.cam, win = card.closest(".win") || card, well = card.querySelector(".well"), shot = card.querySelector(".shot"), chans = card.querySelector(".chans");
     const field = f => card.querySelector(`[data-f="${f}"]`) || { set textContent(v) {}, set innerHTML(v) {} };
-    let body = own || viewBody();
+    let body = own || viewBody(), heldBody = null;   // heldBody: the body the picture up is of
     let want = null, shownKey = null, shown = null, next = [], lastK = -2, lastReady = null, stripKey = "", stripSet = null;
     // steady size: shapeOf is the target and observation whose pass mosaic gave the picture its shape, which it
     // keeps for every picture of that observation
@@ -2510,7 +2510,7 @@ body.phone #finale .fx-data { width: min(220px, calc(100vw - 32px)); top: 10px; 
         kind = { color: v.set >= 0, mosaic: false };
         if (!steady() || shapeOf !== passOf(v.k)) { well.style.aspectRatio = ""; shapeOf = null; }
       }
-      well.classList.add("has-frame"); well.classList.remove("kept"); well.classList.toggle("composite", v.set >= 0);
+      well.classList.add("has-frame"); well.classList.remove("kept"); heldBody = body; well.classList.toggle("composite", v.set >= 0);
       if (!keep) card.querySelector(".kindtag").textContent = v.set >= 0 ? KIND[catalog.sets[v.set].kind].toUpperCase() : "";
       if (v.set >= 0) { channelsFrom(im, catalog.sets[v.set]); howMade(v); }
       if (v.tile && !keep && !mosaicPass(v.k)) mosaicOf(v);   // a frame kept behind its pass's mosaic, or of a pass known to be one, asked for it already (update)
@@ -2760,7 +2760,8 @@ body.phone #finale .fx-data { width: min(220px, calc(100vw - 32px)); top: 10px; 
       // holding: a body window, or a camera window in a body's view (bodymode.html), never goes blank: its picture stays
       // up however long the camera is quiet and across a jump to another month, until the body's next picture; a
       // window with nothing up yet shows the body's next picture rather than "no signal"
-      const hold = update.hold || (!own && !!body), coming = k < 0 && hold && !well.classList.contains("has-frame") && framesOf(cam, body).ks.length > 0;
+      const hold = update.hold || (!own && !!body), up = well.classList.contains("has-frame") && heldBody === body;
+      const coming = k < 0 && hold && !up && framesOf(cam, body).ks.length > 0;
       if (coming) { p = 0; k = framesOf(cam, body).ks[0]; }
       const live = k >= 0 && state.et - catalog.et[k] < 180;
       card.classList.toggle("live", live);
@@ -2768,7 +2769,7 @@ body.phone #finale .fx-data { width: min(220px, calc(100vw - 32px)); top: 10px; 
       // important picture (color, mosaic) stays that many times longer, and a window that holds (a body window,
       // which closes by itself) keeps its picture
       const stale = S.get("cameras.stale") * (lastK >= 0 ? importance() : 1);
-      if (k < 0 && hold && well.classList.contains("has-frame")) { field("status").textContent = "Waiting for the next picture"; return; }
+      if (k < 0 && hold && up) { field("status").textContent = "Waiting for the next picture"; return; }
       if (k < 0 || (!hold && state.et - catalog.et[k] > stale * 3600)) {
         field("status").textContent = k < 0 ? "Camera" : `Last frame ${fmtDur(state.et - catalog.et[k])} ago`;
         strip(null);
@@ -4739,7 +4740,6 @@ body.phone #finale .fx-data { width: min(220px, calc(100vw - 32px)); top: 10px; 
     n = String(n).toUpperCase();
     const first = !M.name;
     if (first) M.saved = { span: state.view[1] - state.view[0] };
-    if (M.name !== n) unsteady();
     M.name = n; M.data = null; M.perDay = null; M.sessions = []; M.cur = -2; M.rows = [];
     document.body.classList.add("bodymode");
     if (win.hidden || win.dataset.min) WM.restore(win); else WM.front(win);

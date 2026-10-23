@@ -359,7 +359,6 @@ body.phone.phone-land #bodymenu { left: auto !important; width: min(380px, 46vw)
     n = String(n).toUpperCase();
     const first = !M.name;
     if (first) M.saved = { span: state.view[1] - state.view[0] };
-    if (M.name !== n) unsteady();
     M.name = n; M.data = null; M.perDay = null; M.sessions = []; M.cur = -2; M.rows = [];
     document.body.classList.add("bodymode");
     if (win.hidden || win.dataset.min) WM.restore(win); else WM.front(win);
