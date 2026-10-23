@@ -45,7 +45,7 @@ body.phone #excard:not(.full) { width: calc(100% - 16px) !important; left: 8px !
     <div id="exbar"><i></i></div>
     <div id="exdone" hidden>
       <video id="exvid" controls playsinline preload="metadata" hidden></video>
-      <div class="exrow" style="margin-top:7px"><a class="exbtn go" id="exdl" download>Download</a><button class="exbtn" id="excopy">Copy link</button><span id="exsize2"></span></div>
+      <div class="exrow" style="margin-top:7px"><a class="exbtn go" id="exdl" download>Download</a><button class="exbtn" id="exgal" title="Keep this film in your Gallery">Add to Gallery</button><button class="exbtn" id="excopy">Copy link</button><span id="exsize2"></span></div>
     </div>
   </div>
 </section>
@@ -214,6 +214,16 @@ body.phone #excard:not(.full) { width: calc(100% - 16px) !important; left: 8px !
     const v = $("exvid"); v.hidden = false; if (v.dataset.src !== url) { v.src = url; v.dataset.src = url; }
     $("exdl").href = `${url}?download=1`; $("exdl").setAttribute("download", job.name || "cassini.mp4");
     $("exsize2").textContent = job.bytes ? `${(job.bytes / 1048576).toFixed(1)} MB · ${job.name}` : job.name || "";
+    const film = X.planKey || params(), from = X.a;
+    $("exgal").hidden = !window.cassiniGallery;
+    $("exgal").onclick = async () => {
+      const G = window.cassiniGallery; if (!G) return;
+      $("exgal").disabled = true;
+      const moment = [["t", iso(from)], ["view", state.focus !== "CASSINI" ? state.focus.toLowerCase() : state.follow ? "follow" : "cassini"], ["play", "0"]];
+      const item = await G.add({ kind: "movie", src: url, film, title: `Film · ${show(from)} UTC`, sub: `${job.name || ""}${job.bytes ? ` · ${(job.bytes / 1048576).toFixed(1)} MB` : ""}`, moment });
+      $("exgal").disabled = false; if (item) $("exgal").textContent = "In Gallery";
+    };
+    $("exgal").textContent = "Add to Gallery";
     $("excopy").onclick = async () => { try { await navigator.clipboard.writeText(url); $("excopy").textContent = "Copied"; setTimeout(() => { $("excopy").textContent = "Copy link"; }, 1500); } catch (e) { prompt("Film link", url); } };
   }
 
@@ -275,7 +285,7 @@ body.phone #excard:not(.full) { width: calc(100% - 16px) !important; left: 8px !
     mark();
   }
   function close() { card.hidden = true; }
-  window.cassiniExport = { open, close, mark, clear, get state() { return X; } };
+  window.cassiniExport = { open, close, mark, clear, soundtrack, get state() { return X; } };
 
   $("exin").addEventListener("click", () => mark(state.et, null));
   $("exout").addEventListener("click", () => mark(null, state.et));

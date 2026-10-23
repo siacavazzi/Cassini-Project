@@ -1,0 +1,691 @@
+<!-- The gallery for Cassini OS: the viewer's own library of saved pictures and movies. build.py splices the style into
+     the head, the window, share menu and toast into #app, and the script after the chrome script (after movie export,
+     before the dock, which opens it).
+
+     Saving: the ＋ in a picture window's title bar (or G) adds the picture on screen; full view has "Add to Gallery"
+     beside its save button; a finished movie export has "Add to Gallery" beside Download. Pages that make pictures of
+     their own call window.cassiniGallery.add({ kind: "picture" | "movie", src, film, title, sub }).
+
+     Storage: this device only, in the browser's IndexedDB (database "cassini-gallery"; no server keeps anything).
+     Each item is a recipe and, unless Settings > Gallery says otherwise, a copy of the file:
+       recipe   the moment it was saved at (the share-link parameters t, view, cam, play=0) and how the frame server
+                makes it: src, the /frames/... address of the picture (its pipeline: frame, composite, mosaic,
+                processing), or film, the movie export's options (/export, same options give the same film)
+       file     the picture at full resolution as the server sends it (WebP), or the film (MP4); a 320 px thumbnail
+     A browser may clear a site's storage (Safari after 7 days without a visit); an item without its file is made
+     again from its recipe when opened. Export Library writes everything to one .zip (gallery.json and the files),
+     Import Library reads it back.
+
+     Sharing: a link carries the recipe, never the picture: ?t=…&view=…&play=0 opens the moment (the share-link
+     pattern) and pic=/frames/… (or film=from=…&until=…) shows the picture over it, made by the frame server through
+     the pipeline. Share also offers the file itself (the phone's share sheet), copying it, and Reddit, X, Bluesky,
+     Facebook, a text message and email. Link previews on social sites need the server reachable from the internet. -->
+<style>
+#galcard { top: calc(env(safe-area-inset-top, 0px) + 36px); left: 50%; transform: translateX(-50%); width: clamp(360px, 56vw, 860px); max-height: calc(100% - 200px); display: flex; flex-direction: column; }
+#galcard.zoomed { width: clamp(460px, 80vw, 1280px); max-height: calc(100% - 60px); }
+#galcard[style*="left"] { transform: none; }
+#galcard .galhead { flex: none; display: flex; gap: 8px; align-items: center; flex-wrap: wrap; padding: 4px 10px 8px; font-size: 11px; color: var(--q-dim, #888); }
+#galcard .galhead .sp { flex: 1; }
+.galseg { display: flex; border: 1px solid var(--q-line, #555); border-radius: 5px; overflow: hidden; }
+.galseg button { all: unset; padding: 3px 9px; color: var(--q-text, #ddd); cursor: pointer; font-size: 11px; }
+.galseg button[aria-pressed="true"] { background: rgba(138,182,255,.25); color: #fff; }
+.galbtn { font: inherit; font-size: 11px; padding: 3px 9px; border-radius: 4px; border: 1px solid var(--q-line, #555); background: rgba(255,255,255,.08); color: var(--q-text, #ddd); cursor: pointer; white-space: nowrap; text-decoration: none; display: inline-flex; align-items: center; gap: 5px; }
+.galbtn:hover { background: rgba(255,255,255,.16); color: #fff; }
+.galbtn:disabled { opacity: .45; cursor: default; }
+.galbtn.go { background: var(--q-accent, #8ab6ff); border-color: transparent; color: #0b1019; font-weight: 600; }
+.galbtn svg { width: 11px; height: 11px; } .galbtn svg * { fill: none; stroke: currentColor; stroke-width: 1.4; stroke-linecap: round; stroke-linejoin: round; }
+#galgrid { flex: 1 1 auto; min-height: 0; overflow-y: auto; list-style: none; margin: 0; padding: 0 8px 8px; display: grid; grid-template-columns: repeat(auto-fill, minmax(150px, 1fr)); gap: 6px; align-content: start; }
+#galgrid li button { all: unset; box-sizing: border-box; display: block; width: 100%; padding: 4px; border: 1px solid transparent; border-radius: 5px; cursor: pointer; }
+#galgrid li button:hover, #galgrid li button:focus-visible { background: rgba(255,255,255,.06); border-color: var(--q-line, #555); }
+.galthumb { aspect-ratio: 1; border-radius: 3px; background: #000 center / contain no-repeat; position: relative; overflow: hidden; }
+.galthumb b { position: absolute; left: 4px; top: 3px; font: 600 9px/1 var(--hudf, monospace); color: rgba(232,236,242,.85); text-shadow: 0 0 3px #000, 0 0 6px #000; letter-spacing: .04em; }
+.galthumb i { position: absolute; right: 4px; bottom: 3px; font: 9px/1 var(--hudf, monospace); font-style: normal; color: #e6bb68; text-shadow: 0 0 3px #000; }
+.galt { margin-top: 4px; font-size: 11.5px; color: var(--q-text, #ddd); line-height: 1.25; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+.galm { font: 10px/1.3 var(--hudf, monospace); color: var(--q-dim, #888); white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+#galempty { padding: 18px 14px 22px; font-size: 12px; line-height: 1.5; color: var(--q-dim, #999); text-align: center; }
+#galempty[hidden], #galview[hidden], #galgrid[hidden], #galcard .galhead[hidden], .galbtn[hidden] { display: none; }
+/* one item: the picture or film as large as the window allows, its moment, and what to do with it */
+#galview { flex: 1 1 auto; min-height: 0; display: flex; flex-direction: column; gap: 8px; padding: 0 10px 10px; }
+#galview .galstage { flex: 1 1 auto; min-height: 160px; display: grid; place-items: center; background: #000; border-radius: 4px; overflow: hidden; position: relative; }
+#galview .galstage :is(img, video) { max-width: 100%; max-height: min(62vh, 900px); display: block; object-fit: contain; }
+#galcard.zoomed #galview .galstage :is(img, video) { max-height: calc(100vh - 260px); }
+#galview .galwait { position: absolute; inset: auto 0 10px 0; text-align: center; font: 10.5px/1.3 var(--hudf, monospace); color: var(--q-dim, #999); }
+#galview .galtitle { font-size: 13px; color: var(--q-text, #ddd); }
+#galview .galinfo { font: 10.5px/1.45 var(--hudf, monospace); color: var(--q-dim, #888); word-break: break-word; }
+#galview .galacts { display: flex; gap: 6px; flex-wrap: wrap; align-items: center; }
+#galview .galacts .sp { flex: 1; }
+#galview .galnote { font-size: 10.5px; line-height: 1.4; color: var(--q-dim, #888); }
+/* the share menu */
+#galshare { position: fixed; z-index: 3002; min-width: 220px; margin: 0; padding: 4px 0; list-style: none; border-radius: 7px; border: 1px solid var(--q-line, #444);
+  background: rgba(20,22,27,.97); box-shadow: 0 12px 40px rgba(0,0,0,.6); font-size: 12px; }
+#galshare[hidden] { display: none; }
+#galshare li.sep { height: 1px; margin: 4px 0; background: var(--q-line, #444); }
+#galshare li.note { padding: 5px 12px 6px; font-size: 10px; line-height: 1.4; color: var(--q-dim, #888); max-width: 240px; }
+#galshare :is(a, button) { all: unset; box-sizing: border-box; display: flex; width: 100%; gap: 9px; align-items: center; padding: 6px 12px; color: var(--q-text, #ddd); cursor: pointer; white-space: nowrap; }
+#galshare :is(a, button):hover, #galshare :is(a, button):focus-visible { background: rgba(138,182,255,.16); color: #fff; }
+#galshare svg { width: 13px; height: 13px; flex: none; } #galshare svg * { fill: none; stroke: currentColor; stroke-width: 1.3; stroke-linecap: round; stroke-linejoin: round; }
+#galtoast { position: fixed; left: 50%; bottom: 74px; transform: translateX(-50%); z-index: 3003; display: flex; gap: 10px; align-items: center; padding: 7px 12px; border-radius: 8px;
+  background: rgba(20,22,27,.96); border: 1px solid var(--q-line, #444); color: var(--q-text, #ddd); font-size: 12px; box-shadow: 0 8px 30px rgba(0,0,0,.5); }
+#galtoast[hidden] { display: none; }
+#galtoast button { all: unset; color: var(--q-accent, #8ab6ff); cursor: pointer; }
+body.idle #galtoast { opacity: 1; }
+/* the ＋ in each picture window's title bar, beside the flag */
+.galadd { all: unset; position: absolute; right: 44px; top: 3px; width: 14px; height: 14px; display: grid; place-items: center; border-radius: 3px; color: var(--q-dim); cursor: default; }
+.galadd:hover { color: #fff; background: rgba(255,255,255,.12); }
+.galadd:focus-visible { outline: 1px solid var(--q-accent); }
+.galadd svg { width: 10px; height: 10px; } .galadd svg * { fill: none; stroke: currentColor; stroke-width: 1.4; stroke-linecap: round; stroke-linejoin: round; }
+.galadd.done { color: var(--q-accent); }
+body.noflags .galadd { right: 26px; }
+body.phone .galadd { width: 26px; height: 20px; top: 0; right: 64px; }
+body.phone.noflags .galadd { right: 36px; }
+body.phone .galadd svg { width: 12px; height: 12px; }
+/* full view: "Add to Gallery" beside the save button */
+.galpic { all: unset; position: absolute; bottom: 5px; display: none; align-items: center; gap: 5px; padding: 3px 7px; border-radius: 4px; font: 9px/1 var(--hudf); letter-spacing: .04em;
+  text-transform: uppercase; color: var(--q-text); background: rgba(0,0,0,.55); border: 1px solid var(--q-line); cursor: pointer; z-index: 3; }
+.galpic:hover { color: #fff; border-color: var(--q-accent); }
+.galpic svg { width: 10px; height: 10px; } .galpic svg * { fill: none; stroke: currentColor; stroke-width: 1.3; stroke-linecap: round; }
+.win.full .well.has-frame .galpic { display: flex; }
+body.idle .win.full .galpic { opacity: .35; } body.idle .win.full .galpic:hover { opacity: 1; }
+@media (max-width: 600px) {
+  #galcard, #galcard.zoomed { width: calc(100% - 12px); left: 6px !important; transform: none; top: calc(env(safe-area-inset-top, 0px) + 36px) !important; max-height: calc(100dvh - 60px); }
+  #galgrid { grid-template-columns: repeat(auto-fill, minmax(104px, 1fr)); }
+}
+body.phone #galcard { left: var(--side, 6px) !important; right: var(--sider, 6px) !important; width: auto !important; transform: none; top: calc(var(--menu, 30px) + var(--gap, 6px)) !important;
+  max-height: calc(100dvh - var(--menu, 30px) - var(--dockh, 150px) - var(--appdockh, 0px) - 4 * var(--gap, 6px)); z-index: 1450 !important; }
+body.phone #galgrid { grid-template-columns: repeat(auto-fill, minmax(96px, 1fr)); }
+body.phone #galview .galstage :is(img, video) { max-height: 40vh; }
+body.phone #galtoast { bottom: calc(env(safe-area-inset-bottom, 0px) + var(--appdockh, 0px) + 16px); }
+</style>
+
+<section class="win" id="galcard" aria-label="Gallery" hidden>
+  <div class="titlebar"><span class="lights"><button class="close" aria-label="Close the gallery">×</button><button class="min" aria-label="Close the gallery">–</button><button class="zoom" aria-label="Zoom">+</button></span>Gallery</div>
+  <div class="galhead" id="galhead">
+    <div class="galseg" id="galfilter"><button data-v="all" aria-pressed="true">All</button><button data-v="picture" aria-pressed="false">Pictures</button><button data-v="movie" aria-pressed="false">Movies</button></div>
+    <span id="galsum"></span><span class="sp"></span>
+    <button class="galbtn" id="galexport" title="Save the whole gallery as one .zip file (pictures, films and how each was made)">Export Library</button>
+    <button class="galbtn" id="galimport" title="Add the items of an exported gallery .zip">Import</button>
+    <input type="file" id="galfile" accept=".zip,application/zip" hidden>
+  </div>
+  <div id="galempty" hidden>Nothing saved yet.<br>Press <b>G</b>, or the ＋ in a picture window's title bar, to add the picture on screen. A finished movie export has <b>Add to Gallery</b> too.</div>
+  <ul id="galgrid"></ul>
+  <div id="galview" hidden>
+    <div class="galacts"><button class="galbtn" id="galback">‹ Gallery</button><span class="sp"></span><span class="galinfo" id="galpos"></span></div>
+    <div class="galstage" id="galstage"></div>
+    <div class="galtitle" id="galtitle"></div>
+    <div class="galinfo" id="galinfo"></div>
+    <div class="galacts">
+      <button class="galbtn go" id="galgo" title="Set the mission clock and the view to when this was saved">Go to this moment</button>
+      <button class="galbtn" id="galsharebtn" aria-haspopup="true">Share…</button>
+      <a class="galbtn" id="galdl" download>Download</a>
+      <button class="galbtn" id="galkeep" hidden>Add to my Gallery</button>
+      <span class="sp"></span>
+      <button class="galbtn" id="galdel">Remove</button>
+    </div>
+    <div class="galnote" id="galnote"></div>
+  </div>
+</section>
+<ul id="galshare" role="menu" hidden></ul>
+<div id="galtoast" role="status" hidden><span></span></div>
+
+<script>
+// ---------- the gallery ----------
+(function () {
+  const $ = id => document.getElementById(id);
+  const FRAMES = (() => {                       // the frame server, chosen as the camera window chooses it
+    const q = new URLSearchParams(location.search).get("frames");
+    if (q) return q.replace(/\/$/, "");
+    if (/^https?:$/.test(location.protocol) && !/claude\.ai$|claudeusercontent\.com$|claude\.site$/.test(location.hostname)) return location.origin;
+    return "http://localhost:8765";
+  })();
+  const S = window.cassiniSettings, WM = window.cassiniWM, card = $("galcard"), grid = $("galgrid");
+  const PICTURES = ".camwin, .bodywin, #reelcard, #moviecard";
+  if (S) S.define({ key: "gallery.keepFiles", section: "Gallery", label: "Keep a copy of each file", type: "toggle", value: true,
+    hint: "Saved pictures and films are kept on this device, in the browser. Off: only how each was made is kept, and the frame server makes it again when you open it (needs the server)." });
+  const keepFiles = () => !S || S.get("gallery.keepFiles") !== false;
+  const ICON = {
+    add: '<svg viewBox="0 0 10 10" aria-hidden="true"><path d="M5 1.5v7M1.5 5h7"/></svg>',
+    link: '<svg viewBox="0 0 16 16"><path d="M7 9a3 3 0 0 0 4.2 0l2.3-2.3a3 3 0 0 0-4.2-4.2L8.2 3.6M9 7a3 3 0 0 0-4.2 0L2.5 9.3a3 3 0 0 0 4.2 4.2l1.1-1.1"/></svg>',
+    share: '<svg viewBox="0 0 16 16"><path d="M8 10V2M5 4.5 8 1.5l3 3M3.5 7.5v6h9v-6"/></svg>',
+    copy: '<svg viewBox="0 0 16 16"><rect x="5" y="5" width="8.5" height="8.5" rx="1.3"/><path d="M10.5 5V3.5a1 1 0 0 0-1-1h-6a1 1 0 0 0-1 1v6a1 1 0 0 0 1 1H5"/></svg>',
+    text: '<svg viewBox="0 0 16 16"><path d="M2.5 3.5h11v7.5h-6L4.5 13.5V11h-2z"/></svg>',
+    mail: '<svg viewBox="0 0 16 16"><rect x="2" y="3.5" width="12" height="9" rx="1.3"/><path d="m2.5 4.5 5.5 4.5 5.5-4.5"/></svg>',
+    reddit: '<svg viewBox="0 0 16 16"><ellipse cx="8" cy="9.6" rx="5.6" ry="3.9"/><circle cx="12.6" cy="3.3" r="1.1"/><path d="M8 5.7 9 2.3l3.5.9"/><circle cx="6" cy="9.2" r=".5"/><circle cx="10" cy="9.2" r=".5"/><path d="M6.2 11.2c1 .7 2.6.7 3.6 0"/></svg>',
+    x: '<svg viewBox="0 0 16 16"><path d="M3 2.5 13 13.5M13 2.5 3 13.5"/></svg>',
+    bsky: '<svg viewBox="0 0 16 16"><path d="M8 7.5C6.6 4.8 3.6 2.6 2.4 3.1c-1 .4-.4 4.1.4 5 .9.9 2.7.8 2.7.8s-2.6.6-1.6 2.6c1 2 3.4.1 4.1-2 .7 2.1 3.1 4 4.1 2 1-2-1.6-2.6-1.6-2.6s1.8.1 2.7-.8c.8-.9 1.4-4.6.4-5C12.4 2.6 9.4 4.8 8 7.5z"/></svg>',
+    fb: '<svg viewBox="0 0 16 16"><circle cx="8" cy="8" r="6"/><path d="M9.2 14V8.6h1.6l.2-1.9H9.2V5.6c0-.5.2-.9.9-.9h1V3.1H9.8c-1.6 0-2.4 1-2.4 2.4v1.2H6v1.9h1.4V14"/></svg>',
+    file: '<svg viewBox="0 0 16 16"><path d="M8 2v8M5 7.5 8 10.5l3-3M3 13.5h10"/></svg>'
+  };
+
+  // ---------- the store: IndexedDB, items (recipe, thumbnail) and files ----------
+  let dbp = null;
+  function db() {
+    if (dbp) return dbp;
+    dbp = new Promise((res, rej) => {
+      let r;
+      try { r = indexedDB.open("cassini-gallery", 1); } catch (e) { return rej(e); }
+      r.onupgradeneeded = () => { const d = r.result; if (!d.objectStoreNames.contains("items")) d.createObjectStore("items", { keyPath: "id" }); if (!d.objectStoreNames.contains("files")) d.createObjectStore("files"); };
+      r.onsuccess = () => res(r.result);
+      r.onerror = () => rej(r.error);
+    });
+    dbp.catch(() => { dbp = null; });
+    return dbp;
+  }
+  async function tx(stores, mode, fn) {
+    const d = await db();
+    return new Promise((res, rej) => {
+      const t = d.transaction(stores, mode), out = fn(...[stores].flat().map(s => t.objectStore(s)));
+      t.oncomplete = () => res(out && "result" in out ? out.result : out);
+      t.onerror = t.onabort = () => rej(t.error || new Error("storage"));
+    });
+  }
+  const allItems = () => tx("items", "readonly", s => s.getAll()).then(a => a.sort((x, y) => y.added - x.added));
+  const getFile = id => tx("files", "readonly", s => s.get(id));
+  const putItem = (item, file) => tx(["items", "files"], "readwrite", (si, sf) => { si.put(item); if (file) sf.put(file, item.id); });
+  const delItem = id => tx(["items", "files"], "readwrite", (si, sf) => { si.delete(id); sf.delete(id); });
+
+  // ---------- recipes ----------
+  const utc = et => new Date(etToMs(et)).toISOString().slice(0, 19);
+  const num = v => (+(+v).toPrecision(4)).toString().replace("e+", "e");
+  const ID = /[NW]\d{10}_\d+/g;
+  // the moment on screen as share-link parameters, paused (the link page's own when it is there)
+  function moment() {
+    let p;
+    if (window.cassiniLink && window.cassiniLink.params) p = window.cassiniLink.params().filter(([k]) => k !== "play" && k !== "speed" && k !== "movie");
+    else {
+      const view = state.focus !== "CASSINI" ? state.focus.toLowerCase() : state.follow ? "follow" : "cassini";
+      p = [["t", utc(state.et)], ["view", view]];
+      if (view !== "follow" && typeof camera !== "undefined") p.push(["cam", [camera.position.x, camera.position.y, camera.position.z].map(num).join(",")]);
+    }
+    p.push(["play", "0"]);
+    return p;
+  }
+  // a picture's frame-server address without its server or size: /frames/color.webp?ids=… (the pipeline's recipe)
+  function recipe(src) {
+    if (!src) return null;
+    try {
+      const u = new URL(src, location.href);
+      if (!/^\/frames\//.test(u.pathname) || u.pathname.includes("..")) return null;
+      ["size", "format", "download"].forEach(k => u.searchParams.delete(k));
+      const q = u.searchParams.toString().replace(/%2C/gi, ",");
+      return u.pathname + (q ? "?" + q : "");
+    } catch (e) { return null; }
+  }
+  const sized = (rec, size) => `${FRAMES}${rec}${rec.includes("?") ? "&" : "?"}size=${size}`;
+  const filmUrl = film => `${FRAMES}/export?${film}`;
+  const filmKey = film => { try { const f = new URLSearchParams(film); return f.get("from") && f.get("until") ? f.toString().replace(/%3A/gi, ":") : null; } catch (e) { return null; } };
+  function link(item) {
+    const u = new URL(location.href), keep = [...u.searchParams].filter(([k]) => !["t", "view", "cam", "speed", "play", "movie", "pic", "film"].includes(k));
+    const enc = s => encodeURIComponent(s).replace(/%3A/gi, ":").replace(/%2C/gi, ",").replace(/%2F/gi, "/");
+    const p = [...item.moment, ...(item.src ? [["pic", item.src]] : []), ...(item.film ? [["film", item.film]] : []), ...keep];
+    return u.origin + u.pathname + "?" + p.map(([k, v]) => v === "" ? enc(k) : `${enc(k)}=${enc(v)}`).join("&");
+  }
+  const cap = s => s ? s.charAt(0) + s.slice(1).toLowerCase() : "";
+  function describe(ids, what) {
+    const k = typeof catalog !== "undefined" && catalog && ids.length ? catalog.id.indexOf(ids[ids.length - 1]) : -1;
+    if (k < 0) return { title: what ? cap(what) : "Picture", sub: ids.slice(0, 3).join(" ") };
+    const camName = catalog.cam[k] === "N" ? "NAC" : "WAC", target = cap(catalog.target[k] || "") || "Sky";
+    return { title: `${target} · ${what || camName}`, sub: `${camName} · ${utc(catalog.et[k]).replace("T", " ")} UTC · ${ids.length > 1 ? ids.length + " frames" : ids[0]}` };
+  }
+  function whatOf(rec, well) {
+    if (!rec) return "picture";
+    if (/\/frames\/mosaic\//.test(rec)) return /\/frame\.webp/.test(rec) ? "frame from a mosaic" : "mosaic";
+    if (/\/frames\/color\.webp/.test(rec)) {
+      if (/channel=/.test(rec)) return "color channel";
+      const tag = well && well.closest(".win") && well.closest(".win").querySelector(".kindtag");
+      if (tag && tag.textContent.trim()) return tag.textContent.trim().toLowerCase();
+      // no window to read: the set in the catalog says what kind of color it is
+      const ids = rec.match(ID) || [], set = typeof catalog !== "undefined" && catalog && catalog.sets ? catalog.sets.find(t => t.use.length === ids.length && t.use.every((k, j) => catalog.id[k] === ids[j])) : null;
+      return set ? ({ true: "true color", false: "false color", two: "two-filter color" })[set.kind] || "color picture" : "color picture";
+    }
+    if (/\/frames\/processed\//.test(rec)) return "processed frame";
+    if (/\/frames\/reel\//.test(rec)) return "body reel picture";
+    return "frame";
+  }
+
+  // ---------- adding ----------
+  const busy = new Set();
+  async function thumbOf(blob, kind) {
+    try {
+      let src;
+      if (kind === "movie") {
+        const v = document.createElement("video"), url = URL.createObjectURL(blob);
+        v.muted = true; v.playsInline = true; v.src = url;
+        await new Promise((res, rej) => { v.onloadeddata = res; v.onerror = rej; setTimeout(rej, 8000); });
+        v.currentTime = Math.min(1, (v.duration || 2) / 3);
+        await new Promise(res => { v.onseeked = res; setTimeout(res, 3000); });
+        src = v; setTimeout(() => URL.revokeObjectURL(url), 1000);
+      } else src = await createImageBitmap(blob);
+      const w0 = src.videoWidth || src.width, h0 = src.videoHeight || src.height, r = Math.min(1, 320 / Math.max(w0, h0));
+      const c = document.createElement("canvas"); c.width = Math.max(1, Math.round(w0 * r)); c.height = Math.max(1, Math.round(h0 * r));
+      c.getContext("2d").drawImage(src, 0, 0, c.width, c.height);
+      return { thumb: await new Promise(res => c.toBlob(res, "image/webp", 0.8)), w: w0, h: h0 };
+    } catch (e) { return { thumb: null, w: 0, h: 0 }; }
+  }
+  // opts: kind ("picture" | "movie"), src (a frame-server address) or film (export options), blob (the file, when the
+  // caller has it), title, sub, moment (share-link parameters; the moment on screen when left out)
+  async function add(opts) {
+    const kind = opts.kind === "movie" ? "movie" : "picture";
+    const rec = kind === "picture" ? recipe(opts.src) : null, film = kind === "movie" && opts.film ? filmKey(opts.film) : null, key = rec || film || opts.src;
+    if (!key || busy.has(key)) return null;
+    busy.add(key);
+    try {
+      const ids = [...new Set(((rec || "") + " " + (opts.ids || []).join(" ")).match(ID) || [])];
+      const d = opts.title ? { title: opts.title, sub: opts.sub || "" } : describe(ids, opts.what);
+      const item = { id: Date.now().toString(36) + Math.random().toString(36).slice(2, 7), kind, added: Date.now(), title: d.title, sub: d.sub,
+        moment: opts.moment || moment(), src: rec, film, ids, bytes: 0, type: "", w: 0, h: 0, thumb: null, hasFile: false };
+      let blob = opts.blob || null;
+      if (!blob) {
+        const url = rec ? sized(rec, "full") : kind === "movie" ? opts.src : opts.src;
+        try { const r = await fetch(url); if (r.ok) blob = await r.blob(); } catch (e) {}
+      }
+      if (!blob && opts.canvas) blob = await new Promise(res => { try { opts.canvas.toBlob(res, "image/webp", 0.95); } catch (e) { res(null); } });
+      if (!blob && !rec && !film) { toast("Could not get that picture from the frame server"); return null; }
+      if (blob) {
+        Object.assign(item, await thumbOf(blob, kind));
+        item.type = blob.type || (kind === "movie" ? "video/mp4" : "image/webp"); item.bytes = blob.size;
+      }
+      item.hasFile = !!blob && keepFiles();
+      await putItem(item, item.hasFile ? blob : null);
+      if (navigator.storage && navigator.storage.persist) navigator.storage.persist().catch(() => {});
+      toast(`Added to Gallery · ${item.title}`, "Show", () => { open(); view(item.id); });
+      if (!card.hidden) refresh();
+      return item;
+    } catch (e) {
+      console.warn("gallery", e);
+      toast(/quota/i.test(String(e && e.name)) ? "The gallery is full: this browser gave it no more room" : "Could not save to the gallery");
+      return null;
+    } finally { busy.delete(key); }
+  }
+  // what a picture window shows, the way flagging reads it (flag.html)
+  function fromWindow(w) {
+    if (w.id === "moviecard") {
+      const M = window.cassiniMovie && window.cassiniMovie.state, b = M && M.cur && M.buf.get(M.cur.id);
+      if (!M || !M.cur) return null;
+      return { src: b && b.img ? b.img.src : null, canvas: $("mvcanvas"), ids: [M.cur.id], what: "movie frame" };
+    }
+    if (w.id === "reelcard") {
+      const R = window.cassiniReel && window.cassiniReel.state, s = R && R.shots[R.i];
+      if (!s) return null;
+      return { src: `${FRAMES}/frames/reel/${R.target}/${R.i}.webp?mosaic=${R.mosaic ? 1 : 0}`, canvas: $("rlcanvas" + s.cam), ids: s.ids.slice(), what: "body reel picture" };
+    }
+    const well = w.querySelector(".well"), shot = w.querySelector(".shot");
+    if (!well || !well.classList.contains("has-frame") || !shot || !shot.naturalWidth) return null;
+    const src = shot.dataset.src || shot.src, tag = (w.querySelector(".shottag") || {}).textContent || "";
+    let what = whatOf(recipe(src), well);
+    if (well.classList.contains("mosaic")) what = "mosaic";
+    return { src, ids: tag.match(ID) || [], what };
+  }
+  async function addWindow(w, btn) {
+    const got = fromWindow(w);
+    if (!got) { toast("No picture in this window yet"); return; }
+    if (btn) btn.classList.add("done");
+    const item = await add(Object.assign({ kind: "picture" }, got));
+    if (btn) setTimeout(() => btn.classList.remove("done"), item ? 1500 : 0);
+  }
+  // the ＋ in each picture window's title bar, and "Add to Gallery" beside full view's save button
+  function addButtons(w) {
+    if (!w.matches || !w.matches(PICTURES)) return;
+    const bar = w.querySelector(".titlebar");
+    if (bar && !bar.querySelector(".galadd")) {
+      const b = document.createElement("button");
+      b.className = "galadd"; b.title = "Add this picture to your Gallery (G)"; b.setAttribute("aria-label", "Add to Gallery"); b.innerHTML = ICON.add;
+      b.addEventListener("click", e => { e.stopPropagation(); addWindow(w, b); });
+      b.addEventListener("dblclick", e => e.stopPropagation());
+      b.addEventListener("pointerdown", e => e.stopPropagation());
+      bar.appendChild(b);
+    }
+    const well = w.querySelector(".well");
+    if (well && !well.querySelector(".galpic")) {
+      const b = document.createElement("button");
+      b.className = "galpic"; b.innerHTML = ICON.add + "<span>Add to Gallery</span>";
+      b.addEventListener("click", e => { e.stopPropagation(); addWindow(w, b); });
+      b.addEventListener("dblclick", e => e.stopPropagation());
+      well.appendChild(b);
+      place(well);
+    }
+  }
+  // the button sits just left of the save button, however wide its label is
+  function place(well) {
+    const g = well.querySelector(".galpic"), s = well.querySelector(".savepic, .savewrap");
+    if (g) g.style.right = (s && s.offsetWidth ? s.offsetWidth + 12 : 6) + "px";
+  }
+  document.querySelectorAll(PICTURES).forEach(addButtons);
+  new MutationObserver(ms => ms.forEach(m => m.addedNodes.forEach(n => { if (n.nodeType === 1) addButtons(n); }))).observe($("dock").parentNode, { childList: true });
+  new MutationObserver(() => document.querySelectorAll(".win.full .well").forEach(place)).observe($("dock").parentNode, { subtree: true, attributes: true, attributeFilter: ["class"] });
+
+  // ---------- the window ----------
+  const G = { items: [], filter: "all", cur: null, shared: null, urls: [] };
+  const fmtBytes = b => b >= 1073741824 ? (b / 1073741824).toFixed(1) + " GB" : b >= 1048576 ? (b / 1048576).toFixed(b < 10485760 ? 1 : 0) + " MB" : Math.max(1, Math.round(b / 1024)) + " KB";
+  const esc = s => String(s == null ? "" : s).replace(/[&<>"]/g, c => ({ "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;" })[c]);
+  function revoke() { G.urls.forEach(u => URL.revokeObjectURL(u)); G.urls = []; }
+  const objUrl = b => { const u = URL.createObjectURL(b); G.urls.push(u); return u; };
+  async function refresh() {
+    try { G.items = await allItems(); } catch (e) { G.items = []; $("galsum").textContent = "This browser keeps no storage for the gallery here"; }
+    if (G.cur || G.shared) return;
+    revoke();
+    const list = G.items.filter(i => G.filter === "all" || i.kind === G.filter);
+    grid.replaceChildren(...list.map(i => {
+      const li = document.createElement("li"), when = (i.moment.find(p => p[0] === "t") || [, ""])[1].replace("T", " ");
+      li.innerHTML = `<button><div class="galthumb"><b>${i.kind === "movie" ? "FILM" : ""}</b>${i.hasFile ? "" : '<i title="Kept as a recipe only: the frame server makes it again when opened">◌</i>'}</div><div class="galt"></div><div class="galm"></div></button>`;
+      if (i.thumb) li.querySelector(".galthumb").style.backgroundImage = `url("${objUrl(i.thumb)}")`;
+      li.querySelector(".galt").textContent = i.title;
+      li.querySelector(".galm").textContent = when;
+      li.querySelector("button").title = `${i.title}\n${i.sub}`;
+      li.querySelector("button").addEventListener("click", () => view(i.id));
+      return li;
+    }));
+    const bytes = G.items.reduce((s, i) => s + (i.hasFile ? i.bytes : 0), 0), n = G.items.length;
+    let quota = "";
+    try { const e = navigator.storage && navigator.storage.estimate ? await navigator.storage.estimate() : null; if (e && e.quota) quota = ` of about ${fmtBytes(e.quota)} this browser allows`; } catch (e) {}
+    $("galsum").textContent = n ? `${n} saved · ${fmtBytes(bytes)} on this device${quota}` : "";
+    $("galempty").hidden = n > 0; grid.hidden = false; $("galview").hidden = true; $("galhead").hidden = false;
+    $("galexport").disabled = !n;
+  }
+  function open() {
+    card.hidden = false; delete card.dataset.min; if (WM) { WM.front(card); WM.syncMenu(); }
+    refresh();
+  }
+  function close() { card.hidden = true; closeShare(); }
+  function back() {
+    closeShare(); stopFilm();
+    if (G.shared) { dropShared(); }
+    G.cur = null; G.shared = null; refresh();
+  }
+
+  // one item, large: its file when it has one, else made again from its recipe by the frame server
+  let filmPoll = 0;
+  function stopFilm() { clearTimeout(filmPoll); filmPoll = 0; }
+  async function view(id, shared) {
+    closeShare(); stopFilm(); revoke();
+    const item = shared || G.items.find(i => i.id === id);
+    if (!item) return;
+    G.cur = shared ? null : item; G.shared = shared || null;
+    $("galhead").hidden = true; grid.hidden = true; $("galempty").hidden = true; $("galview").hidden = false;
+    const st = $("galstage"); st.replaceChildren();
+    $("galtitle").textContent = item.title;
+    const when = (item.moment.find(p => p[0] === "t") || [, ""])[1].replace("T", " ");
+    $("galinfo").textContent = [item.sub, when && `saved at ${when} UTC`, item.hasFile ? `${fmtBytes(item.bytes)} on this device` : shared ? "shared link" : "kept as a recipe"].filter(Boolean).join(" · ");
+    const pos = G.items.indexOf(item);
+    $("galpos").textContent = shared ? "Shared with you" : `${pos + 1} of ${G.items.length}`;
+    $("galdel").hidden = !!shared; $("galkeep").hidden = !shared;
+    $("galnote").textContent = shared ? "Made just now by the frame server from the archive, the same way it was made for whoever shared it." : "";
+    const file = item.hasFile && !shared ? await getFile(item.id).catch(() => null) : null;
+    const dl = $("galdl"), base = `Cassini_${(item.ids[0] || item.title).replace(/[^\w.-]+/g, "_")}_${when.replace(/[: ]/g, "-")}`;
+    if (item.kind === "movie") {
+      const v = document.createElement("video"); v.controls = true; v.playsInline = true; v.preload = "metadata";
+      st.appendChild(v);
+      if (file) { v.src = objUrl(file); dl.href = v.src; dl.setAttribute("download", base + ".mp4"); }
+      else filmFrom(item, v, dl, base);
+    } else {
+      const im = new Image(); im.alt = item.title; im.crossOrigin = "anonymous"; st.appendChild(im);
+      if (file) { im.src = objUrl(file); dl.href = im.src; dl.setAttribute("download", base + (/png/.test(file.type) ? ".png" : ".webp")); }
+      else if (item.src) {
+        const wait = document.createElement("div"); wait.className = "galwait"; wait.textContent = "The frame server is making this picture…"; st.appendChild(wait);
+        im.onload = () => wait.remove(); im.onerror = () => { wait.textContent = "The frame server could not make this picture (is it running?)"; };
+        im.src = sized(item.src, "full");
+        dl.href = sized(item.src, "full") + "&format=png&download=1"; dl.setAttribute("download", base + ".png");
+      }
+    }
+  }
+  // a film from its export options: the server's film when it has it, otherwise it makes it (sound by the page)
+  async function filmFrom(item, v, dl, base) {
+    const st = $("galstage"), wait = document.createElement("div"); wait.className = "galwait"; wait.textContent = "Asking the frame server for this film…"; st.appendChild(wait);
+    try {
+      const r = await fetch(filmUrl(item.film), { method: "POST" }), job = await r.json();
+      if (!r.ok) { wait.textContent = job.error || "The frame server cannot make this film."; return; }
+      if (/sound=1/.test(item.film) && !job.audio && job.state !== "done" && window.cassiniExport && window.cassiniExport.soundtrack) {
+        fetch(`${FRAMES}/export/plan.json?${item.film}`).then(r => r.json()).then(p => window.cassiniExport.soundtrack(job.id, p)).catch(() => {});
+      }
+      const follow = async j => {
+        if (G.cur !== item && G.shared !== item) return;
+        if (j.state === "done") {
+          wait.remove(); v.src = `${FRAMES}/export/${j.id}.mp4`; dl.href = `${v.src}?download=1`; dl.setAttribute("download", j.name || base + ".mp4"); return;
+        }
+        if (j.state === "failed") { wait.textContent = `The film failed: ${j.error || "see the server log"}`; return; }
+        wait.textContent = j.total ? `The frame server is making this film · ${j.done.toLocaleString()} of ${j.total.toLocaleString()} pictures` : "The frame server is making this film…";
+        filmPoll = setTimeout(async () => { try { follow(await (await fetch(`${FRAMES}/export/${j.id}.json`, { cache: "no-store" })).json()); } catch (e) { follow(j); } }, 1000);
+      };
+      follow(job);
+    } catch (e) { wait.textContent = "No frame server to make this film."; }
+  }
+
+  // go to the moment: the mission clock, paused, the view and the camera as they were
+  async function goTo(item, stay) {
+    const q = new Map(item.moment), t = q.get("t");
+    if (!t || typeof utcToEt !== "function") return;
+    const et = utcToEt(t);
+    if (window.cassiniMovie && window.cassiniMovie.on) window.cassiniMovie.stop();
+    if (window.cassiniReel && window.cassiniReel.close) window.cassiniReel.close();
+    setPlaying(false);
+    const span = state.view ? state.view[1] - state.view[0] : 6 * 3600;
+    setTime(et);
+    if (mission) { lastWantedYear = partOf(state.et); await requestYears(lastWantedYear); }
+    setTime(et); setView(span, et); updateBodies();
+    const v = (q.get("view") || "follow").toUpperCase();
+    if (v === "FOLLOW") { if (state.focus !== "CASSINI") setFocus("CASSINI"); if (!state.follow) setFollow(true); }
+    else if (v === "CASSINI") { if (state.focus !== "CASSINI") setFocus("CASSINI"); if (state.follow) setFollow(false); }
+    else setFocus(v);
+    const c = (q.get("cam") || "").split(",").map(Number);
+    if (c.length === 3 && c.every(isFinite) && c.some(Boolean) && !state.follow) {
+      camera.position.set(...c); if (typeof controls !== "undefined") controls.update();
+    }
+    setPlaying(false);
+    if (!stay && document.body.classList.contains("phone")) close();
+  }
+
+  // ---------- sharing ----------
+  const shareMenu = $("galshare");
+  function closeShare() { shareMenu.hidden = true; }
+  async function fileFor(item) {
+    let b = item.hasFile ? await getFile(item.id).catch(() => null) : null;
+    if (!b && item.src) { try { const r = await fetch(sized(item.src, "full")); if (r.ok) b = await r.blob(); } catch (e) {} }
+    if (!b) return null;
+    const ext = item.kind === "movie" ? "mp4" : /png/.test(b.type) ? "png" : "webp";
+    return new File([b], `Cassini_${(item.ids[0] || "picture").replace(/[^\w.-]+/g, "_")}.${ext}`, { type: b.type || (item.kind === "movie" ? "video/mp4" : "image/webp") });
+  }
+  async function copyText(text, said) {
+    try { await navigator.clipboard.writeText(text); toast(said); } catch (e) { toast(text); }
+  }
+  function share(item, at) {
+    const url = link(item), text = `${item.title} · seen by Cassini`, e = encodeURIComponent;
+    const rows = [];
+    if (navigator.share) rows.push({ icon: ICON.share, label: "Share…", run: async () => {
+      // the file itself when the device takes files (a phone's share sheet), with the link beside it
+      const f = await fileFor(item).catch(() => null);
+      const data = f && navigator.canShare && navigator.canShare({ files: [f] }) ? { files: [f], title: item.title, text: `${text}\n${url}` } : { title: item.title, text, url };
+      try { await navigator.share(data); } catch (err) { if (err && err.name !== "AbortError") copyText(url, "Link copied"); }
+    } });
+    rows.push({ icon: ICON.link, label: "Copy link", run: () => copyText(url, "Link copied: it opens this moment and makes the picture again") });
+    if (item.kind === "picture" && window.ClipboardItem && navigator.clipboard && navigator.clipboard.write) rows.push({ icon: ICON.copy, label: "Copy picture", run: async () => {
+      try {
+        const f = await fileFor(item); if (!f) throw new Error("no file");
+        const bmp = await createImageBitmap(f), c = document.createElement("canvas"); c.width = bmp.width; c.height = bmp.height; c.getContext("2d").drawImage(bmp, 0, 0);
+        const png = await new Promise(r => c.toBlob(r, "image/png"));
+        await navigator.clipboard.write([new ClipboardItem({ "image/png": png })]); toast("Picture copied");
+      } catch (err) { toast("This browser would not copy the picture"); }
+    } });
+    rows.push("-");
+    rows.push({ icon: ICON.reddit, label: "Reddit", href: `https://www.reddit.com/submit?url=${e(url)}&title=${e(text)}` });
+    rows.push({ icon: ICON.x, label: "X (Twitter)", href: `https://x.com/intent/post?text=${e(text)}&url=${e(url)}` });
+    rows.push({ icon: ICON.bsky, label: "Bluesky", href: `https://bsky.app/intent/compose?text=${e(text + " " + url)}` });
+    rows.push({ icon: ICON.fb, label: "Facebook", href: `https://www.facebook.com/sharer/sharer.php?u=${e(url)}` });
+    rows.push({ icon: ICON.text, label: "Text message", href: `sms:?&body=${e(text + " " + url)}`, self: true });
+    rows.push({ icon: ICON.mail, label: "Email", href: `mailto:?subject=${e(text)}&body=${e(url)}`, self: true });
+    rows.push("-");
+    rows.push({ icon: ICON.file, label: item.kind === "movie" ? "Download the film" : "Download the picture", run: () => $("galdl").click() });
+    rows.push({ note: /^https?:\/\/(localhost|127\.|10\.|192\.168\.|100\.)/.test(url) ? "This server is private: the link opens for people on your network. Downloading the file and sharing that works anywhere." : "The link makes the picture again from the archive; nothing is uploaded." });
+    shareMenu.replaceChildren(...rows.map(r => {
+      const li = document.createElement("li");
+      if (r === "-") { li.className = "sep"; return li; }
+      if (r.note) { li.className = "note"; li.textContent = r.note; return li; }
+      const el = document.createElement(r.href ? "a" : "button");
+      el.innerHTML = r.icon + `<span>${esc(r.label)}</span>`; el.setAttribute("role", "menuitem");
+      if (r.href) { el.href = r.href; if (!r.self) { el.target = "_blank"; el.rel = "noopener"; } el.addEventListener("click", () => closeShare()); }
+      else el.addEventListener("click", ev => { ev.stopPropagation(); closeShare(); r.run(); });
+      li.appendChild(el); return li;
+    }));
+    shareMenu.hidden = false;
+    const r = at.getBoundingClientRect(), mw = shareMenu.offsetWidth, mh = shareMenu.offsetHeight;
+    shareMenu.style.left = Math.max(8, Math.min(innerWidth - mw - 8, r.left)) + "px";
+    shareMenu.style.top = (r.top - mh - 6 >= 30 ? r.top - mh - 6 : Math.min(innerHeight - mh - 8, r.bottom + 6)) + "px";
+    const first = shareMenu.querySelector("a, button"); if (first) first.focus({ preventScroll: true });
+  }
+  document.addEventListener("pointerdown", e => { if (!shareMenu.hidden && !shareMenu.contains(e.target) && e.target !== $("galsharebtn")) closeShare(); }, true);
+
+  // ---------- a shared link: ?pic=/frames/… or ?film=… shows the picture over the moment it opens on ----------
+  function sharedFromUrl() {
+    const q = new URLSearchParams(location.search), pic = recipe(q.get("pic") || ""), film = q.get("film");
+    const filmOk = film ? filmKey(film) : null;
+    if (!pic && !filmOk) return null;
+    const m = [...q].filter(([k]) => ["t", "view", "cam"].includes(k));
+    if (!m.some(([k]) => k === "t")) m.unshift(["t", filmOk ? new URLSearchParams(filmOk).get("from") : ""]);
+    m.push(["play", "0"]);
+    const ids = [...new Set(((pic || filmOk) || "").match(ID) || [])];
+    return { id: "shared", kind: filmOk ? "movie" : "picture", added: Date.now(), moment: m, src: pic, film: filmOk, ids, hasFile: false, bytes: 0,
+      title: filmOk ? `Film · ${new URLSearchParams(filmOk).get("from").replace("T", " ")} UTC` : cap(whatOf(pic)), sub: ids.slice(0, 3).join(" ") };
+  }
+  function dropShared() {
+    try { const u = new URL(location.href); u.searchParams.delete("pic"); u.searchParams.delete("film"); history.replaceState(history.state, "", u.href); } catch (e) {}
+  }
+  function showShared() {
+    const it = sharedFromUrl(); if (!it) return;
+    const named = () => { if (it.ids.length && !it.film) { const d = describe(it.ids, whatOf(it.src)); it.title = d.title; it.sub = d.sub; if (G.shared === it) { $("galtitle").textContent = it.title; $("galinfo").textContent = `${it.sub} · shared link`; } } };
+    card.hidden = false; delete card.dataset.min; if (WM) { WM.front(card); WM.syncMenu(); }
+    view(null, it);
+    goTo(it, true);   // the moment it was saved at, paused, the view as it was
+    // the catalog of that month names it once it has loaded
+    let n = 0; const t = setInterval(() => { if (++n > 60 || (typeof catalog !== "undefined" && catalog && it.ids.length && catalog.id.indexOf(it.ids[it.ids.length - 1]) >= 0)) { clearInterval(t); named(); } }, 1000);
+  }
+
+  // ---------- export and import: one .zip (stored, no compression: pictures and films are compressed already) ----------
+  const CRC = (() => { const t = new Uint32Array(256); for (let n = 0; n < 256; n++) { let c = n; for (let k = 0; k < 8; k++) c = c & 1 ? 0xEDB88320 ^ (c >>> 1) : c >>> 1; t[n] = c >>> 0; } return t; })();
+  function crc32(u8) { let c = 0xFFFFFFFF; for (let i = 0; i < u8.length; i++) c = CRC[(c ^ u8[i]) & 255] ^ (c >>> 8); return (c ^ 0xFFFFFFFF) >>> 0; }
+  async function zip(entries) {   // entries: [name, Blob]
+    const parts = [], central = []; let off = 0;
+    const enc = new TextEncoder();
+    for (const [name, blob] of entries) {
+      const data = new Uint8Array(await blob.arrayBuffer()), nm = enc.encode(name), crc = crc32(data);
+      const h = new DataView(new ArrayBuffer(30));
+      h.setUint32(0, 0x04034b50, true); h.setUint16(4, 20, true); h.setUint16(6, 0x0800, true); h.setUint16(8, 0, true);
+      h.setUint32(14, crc, true); h.setUint32(18, data.length, true); h.setUint32(22, data.length, true); h.setUint16(26, nm.length, true);
+      parts.push(h.buffer, nm, data);
+      const c = new DataView(new ArrayBuffer(46));
+      c.setUint32(0, 0x02014b50, true); c.setUint16(4, 20, true); c.setUint16(6, 20, true); c.setUint16(8, 0x0800, true);
+      c.setUint32(16, crc, true); c.setUint32(20, data.length, true); c.setUint32(24, data.length, true); c.setUint16(28, nm.length, true); c.setUint32(42, off, true);
+      central.push(c.buffer, nm);
+      off += 30 + nm.length + data.length;
+    }
+    const size = central.reduce((s, b) => s + b.byteLength, 0), end = new DataView(new ArrayBuffer(22));
+    end.setUint32(0, 0x06054b50, true); end.setUint16(8, entries.length, true); end.setUint16(10, entries.length, true); end.setUint32(12, size, true); end.setUint32(16, off, true);
+    return new Blob([...parts, ...central, end.buffer], { type: "application/zip" });
+  }
+  async function unzip(file) {    // stored entries only, as zip() writes them: name -> Blob
+    const buf = await file.arrayBuffer(), dv = new DataView(buf), dec = new TextDecoder(), out = new Map();
+    let e = buf.byteLength - 22;
+    while (e >= 0 && dv.getUint32(e, true) !== 0x06054b50) e--;
+    if (e < 0) throw new Error("not a zip");
+    let p = dv.getUint32(e + 16, true);
+    for (let i = 0, n = dv.getUint16(e + 10, true); i < n; i++) {
+      if (dv.getUint32(p, true) !== 0x02014b50) break;
+      const method = dv.getUint16(p + 10, true), size = dv.getUint32(p + 20, true), nl = dv.getUint16(p + 28, true), xl = dv.getUint16(p + 30, true), cl = dv.getUint16(p + 32, true), lo = dv.getUint32(p + 42, true);
+      const name = dec.decode(new Uint8Array(buf, p + 46, nl));
+      const start = lo + 30 + dv.getUint16(lo + 26, true) + dv.getUint16(lo + 28, true);
+      if (method === 0) out.set(name, new Blob([new Uint8Array(buf, start, size)]));
+      p += 46 + nl + xl + cl;
+    }
+    return out;
+  }
+  async function exportLibrary() {
+    const items = await allItems(); if (!items.length) return;
+    $("galexport").disabled = true; toast("Packing the gallery…");
+    try {
+      const entries = [], meta = [];
+      for (const i of items) {
+        const m = Object.assign({}, i); delete m.thumb;
+        if (i.thumb) { entries.push([`thumbs/${i.id}.webp`, i.thumb]); m.thumbFile = `thumbs/${i.id}.webp`; }
+        const f = i.hasFile ? await getFile(i.id).catch(() => null) : null;
+        if (f) { const name = `files/${i.id}.${i.kind === "movie" ? "mp4" : /png/.test(f.type) ? "png" : "webp"}`; entries.push([name, f]); m.file = name; }
+        meta.push(m);
+      }
+      entries.unshift(["gallery.json", new Blob([JSON.stringify({ app: "Cassini OS gallery", version: 1, frames: FRAMES, exported: new Date().toISOString(), items: meta }, null, 1)], { type: "application/json" })]);
+      const z = await zip(entries), a = document.createElement("a");
+      a.href = URL.createObjectURL(z); a.download = `Cassini-gallery-${new Date().toISOString().slice(0, 10)}.zip`;
+      document.body.appendChild(a); a.click(); a.remove(); setTimeout(() => URL.revokeObjectURL(a.href), 60000);
+      toast(`Gallery exported · ${items.length} items · ${fmtBytes(z.size)}`);
+    } catch (e) { console.warn("gallery export", e); toast("Could not export the gallery"); }
+    $("galexport").disabled = false;
+  }
+  async function importLibrary(file) {
+    try {
+      const files = await unzip(file), j = JSON.parse(await (files.get("gallery.json") || new Blob(["{}"])).text());
+      if (!j.items) throw new Error("no gallery.json");
+      const have = new Set((await allItems()).map(i => i.id)); let n = 0;
+      for (const m of j.items) {
+        if (!m.id || have.has(m.id) || !Array.isArray(m.moment)) continue;
+        const f = m.file && files.get(m.file), th = m.thumbFile && files.get(m.thumbFile);
+        const item = Object.assign({}, m, { thumb: th ? new Blob([th], { type: "image/webp" }) : null, hasFile: !!f, src: recipe(m.src) });
+        delete item.file; delete item.thumbFile;
+        await putItem(item, f ? new Blob([f], { type: m.type || "" }) : null); n++;
+      }
+      toast(n ? `Imported ${n} item${n === 1 ? "" : "s"}` : "Nothing new in that file");
+      refresh();
+    } catch (e) { console.warn("gallery import", e); toast("That file is not an exported gallery"); }
+  }
+
+  // ---------- toast ----------
+  function toast(text, act, fn) {
+    const t = $("galtoast"); t.firstElementChild.textContent = text;
+    const old = t.querySelector("button"); if (old) old.remove();
+    if (act) { const b = document.createElement("button"); b.textContent = act; b.addEventListener("click", () => { t.hidden = true; fn(); }); t.appendChild(b); }
+    t.hidden = false; clearTimeout(toast.t); toast.t = setTimeout(() => { t.hidden = true; }, act ? 6000 : 2600);
+  }
+
+  // ---------- wiring ----------
+  $("galfilter").addEventListener("click", e => { const b = e.target.closest("button"); if (!b) return; G.filter = b.dataset.v; $("galfilter").querySelectorAll("button").forEach(x => x.setAttribute("aria-pressed", String(x === b))); refresh(); });
+  $("galback").addEventListener("click", back);
+  $("galgo").addEventListener("click", () => { const it = G.cur || G.shared; if (it) goTo(it); });
+  $("galsharebtn").addEventListener("click", e => { e.stopPropagation(); const it = G.cur || G.shared; if (!it) return; if (!shareMenu.hidden) closeShare(); else share(it, e.currentTarget); });
+  $("galkeep").addEventListener("click", async () => {
+    const it = G.shared; if (!it) return;
+    const saved = await add({ kind: it.kind, src: it.src ? sized(it.src, "full") : null, film: it.film, title: it.title, sub: it.sub, moment: it.moment,
+      blob: it.kind === "movie" && $("galstage").querySelector("video") && $("galstage").querySelector("video").src ? await fetch($("galstage").querySelector("video").src).then(r => r.ok ? r.blob() : null, () => null) : null });
+    if (saved) { dropShared(); G.shared = null; await refresh(); view(saved.id); }
+  });
+  // removing: gone at once, with a moment to take it back
+  $("galdel").addEventListener("click", async () => {
+    const it = G.cur; if (!it) return;
+    const file = it.hasFile ? await getFile(it.id).catch(() => null) : null;
+    await delItem(it.id); back();
+    toast(`Removed · ${it.title}`, "Undo", async () => { await putItem(it, file); refresh(); });
+  });
+  $("galexport").addEventListener("click", exportLibrary);
+  $("galimport").addEventListener("click", () => $("galfile").click());
+  $("galfile").addEventListener("change", e => { const f = e.target.files[0]; e.target.value = ""; if (f) importLibrary(f); });
+  card.addEventListener("click", e => { if (e.target.closest(".close, .min")) { e.stopPropagation(); close(); } }, true);
+  // G adds the picture in the front picture window; the arrows step through the gallery while an item is open
+  window.addEventListener("keydown", e => {
+    if (e.metaKey || e.ctrlKey || e.altKey || /INPUT|SELECT|TEXTAREA/.test(e.target.tagName)) return;
+    if (e.key === "Escape" && !shareMenu.hidden) { e.stopImmediatePropagation(); closeShare(); return; }
+    if (e.key === "g" || e.key === "G") {
+      const w = document.querySelector(".win.full") || [...document.querySelectorAll(PICTURES)].filter(x => !x.hidden && x.querySelector(".well.has-frame, canvas")).sort((a, b) => (+b.style.zIndex || 0) - (+a.style.zIndex || 0))[0];
+      if (w) { e.preventDefault(); addWindow(w, w.querySelector(".galadd")); }
+      return;
+    }
+    if (card.hidden || !card.classList.contains("front") || !G.cur) return;
+    if (e.key === "ArrowRight" || e.key === "ArrowLeft") {
+      const j = G.items.indexOf(G.cur) + (e.key === "ArrowRight" ? 1 : -1);
+      if (G.items[j]) { e.preventDefault(); e.stopImmediatePropagation(); view(G.items[j].id); }
+    } else if (e.key === "Escape") { e.stopImmediatePropagation(); back(); }
+  }, true);
+  const go = $("gomenu");
+  if (go) { const li = document.createElement("li"); li.innerHTML = '<button id="gogallery">Gallery…</button>'; go.appendChild(li); li.querySelector("button").addEventListener("click", open); }
+
+  window.cassiniGallery = { open, close, add, addWindow, view, link, get state() { return G; }, _zip: zip, _unzip: unzip };
+  // a shared link opens once the viewer has loaded the moment
+  const ready = () => typeof state !== "undefined" && $("loading") && $("loading").hidden;
+  if (sharedFromUrl()) {
+    if (ready()) showShared();
+    else { const mo = new MutationObserver(() => { if (ready()) { mo.disconnect(); showShared(); } }); mo.observe($("loading"), { attributes: true, attributeFilter: ["hidden"] }); }
+  }
+})();
+</script>
