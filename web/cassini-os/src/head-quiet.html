@@ -523,9 +523,8 @@ body.idle .camwin .well.has-frame { border-color: transparent; box-shadow: 0 6px
 .bodywin.full .pane { width: auto; flex: 1 1 0; min-width: 0; grid-template-rows: minmax(0, 1fr) auto auto; align-content: stretch; }
 .bodywin[style*="width"]:not(.full) .pane { width: auto; flex: 1 1 0; min-width: 0; }
 .win.full :is(.rlwells) { flex: 1; min-height: 0; height: calc(100dvh - 160px); align-items: stretch; }
-.win.full :is(.rlwell, .mvwell) { aspect-ratio: auto; min-height: 0; height: 100%; }
-#moviecard.full .mvwell { height: calc(100dvh - 150px); }
-.win.full :is(.rlwell, .mvwell) canvas { object-fit: contain; }
+.win.full .rlwell { aspect-ratio: auto; min-height: 0; height: 100%; }
+.win.full .rlwell canvas { object-fit: contain; }
 /* the save menu (full view, or a held window): the picture shown and every level under and around it, at full
    resolution as PNG (frame_server.py size=full, format=png, download=1) */
 .savewrap { position: absolute; right: 6px; bottom: 5px; display: none; z-index: 3; cursor: default; }
@@ -581,7 +580,7 @@ body.phone .savemenu a { padding: 11px 14px; }
 .bodywin.full .pane:has(> .crumbs:not([hidden])) { grid-template-rows: auto minmax(0, 1fr) auto auto; }
 body.idle .camwin:has(.well.has-frame) .crumbs { opacity: 0; }
 body.idle #app .win.full .crumbs { opacity: 1; }
-.well, .rlwell, .mvwell { cursor: zoom-in; } .win.full :is(.well, .rlwell, .mvwell) { cursor: zoom-out; }
+.well, .rlwell { cursor: zoom-in; } .win.full :is(.well, .rlwell) { cursor: zoom-out; }
 /* resting: a window in full view keeps its dark backdrop and its picture; only the title bar fades (!important: the
    rules that fade every window and clear the camera windows' frames are id-strength) */
 body.idle #app .win.full { opacity: 1 !important; pointer-events: auto !important; background: rgba(8,9,11,.9) !important; }
@@ -834,11 +833,11 @@ body.idle .win.full .titlebar { opacity: 0; }
       fb.innerHTML = '<svg class="out" viewBox="0 0 10 10" aria-hidden="true"><path d="M1 4V1h3M6 1h3v3M9 6v3H6M4 9H1V6"/></svg><svg class="in" viewBox="0 0 10 10" aria-hidden="true"><path d="M4 1v3H1M9 4H6V1M6 9V6h3M1 6h3v3"/></svg>';
       fb.addEventListener("click", e => { e.stopPropagation(); full(w); });
       bar.appendChild(fb);
-      w.addEventListener("dblclick", e => { if (!phone() && e.target.closest(".well, .rlwell, .mvwell")) full(w); });
-      w.addEventListener("click", e => { if (phone() && e.target.closest(".well, .rlwell, .mvwell")) full(w); });
+      w.addEventListener("dblclick", e => { if (!phone() && e.target.closest(".well, .rlwell")) full(w); });
+      w.addEventListener("click", e => { if (phone() && e.target.closest(".well, .rlwell")) full(w); });
     }
   }
-  const TALL = "#moments, #settings, #about", PICTURES = ".camwin, .bodywin, #reelcard, #moviecard", MIN_W = 180;
+  const TALL = "#moments, #settings, #about", PICTURES = ".camwin, .bodywin, #reelcard", MIN_W = 180;
   const phone = () => document.body.classList.contains("phone");
   // zoom: the bigger standard size, and back to the size the viewer gave the window
   function zoom(w) {
@@ -1288,7 +1287,7 @@ body.idle .win.full .titlebar { opacity: 0; }
   window.cassiniHeld = holding;
   window.addEventListener("keydown", e => {
     if (e.key !== "Escape" || !holding.size || e.metaKey || e.ctrlKey || e.altKey || /^(INPUT|SELECT|TEXTAREA)$/.test(e.target.tagName)) return;
-    if (document.querySelector(".menu.open") || (window.cassiniMovie && window.cassiniMovie.on)) return;
+    if (document.querySelector(".menu.open")) return;
     const panel = document.querySelector("#settings.front, #hlcard.front, #reelcard.front, #excard.front");
     if (panel && !panel.hidden) return;
     const list = [...holding], h = list.find(x => x.win.classList.contains("full")) || list.find(x => x.win.classList.contains("front")) || list[list.length - 1];
@@ -2163,7 +2162,6 @@ body.idle .win.full .titlebar { opacity: 0; }
       }
       if (win.hidden && !force) { mosaicStop(); return; }   // a closed or tucked-away window fetches nothing; it catches up when shown
       if (hold) { if (force) showLevel(); return; }   // held: the clock moves on without it (a bigger window asks for the bigger picture)
-      if (window.cassiniMovie && window.cassiniMovie.on) { mosaicStop(); return; }   // movie mode has the frame server to itself (its requests are capped)
       const p = lastOfCam(cam, state.et, body), k = p < 0 ? -1 : framesOf(cam, body).ks[p];
       const live = k >= 0 && state.et - catalog.et[k] < 180;
       card.classList.toggle("live", live);
@@ -2271,7 +2269,22 @@ body.idle .win.full .titlebar { opacity: 0; }
     return (kind.color ? c : 1) * (kind.mosaic ? m : 1);
   }
   const feeds = [...document.querySelectorAll(".camwin")].map(cameraFeed);
-  window.cassiniFeeds = { cameraFeed, framesOf, lastOfCam, prep, weight, stale: () => S.get("cameras.stale") * 3600 };
+  // the time of the first picture after et (any camera; one body's only when body is given), or Infinity when none
+  // is in the months loaded now; before: the last picture before et. Movie mode steps the clock from one to the next
+  function nextPicture(et, body) {
+    if (!body) { const a = catalog.sorted, i = lastImageIndex(et) + 1; return i < a.length ? a[i] : Infinity; }
+    let t = Infinity;
+    for (const cam in catalog.byCam) { const a = framesOf(cam, body).et, p = lastOfCam(cam, et, body) + 1; if (p < a.length) t = Math.min(t, a[p]); }
+    return t;
+  }
+  function prevPicture(et, body) {
+    let t = -Infinity;
+    for (const cam in catalog.byCam) { const a = framesOf(cam, body).et, p = lastOfCam(cam, et - 1e-3, body); if (p >= 0) t = Math.max(t, a[p]); }
+    return t;
+  }
+  // how many frames the furthest-behind camera window's picture is behind the clock (update.behind, below)
+  const behind = () => { let b = 0; for (const f of allFeeds) b = Math.max(b, f.behind()); return b; };
+  window.cassiniFeeds = { cameraFeed, framesOf, lastOfCam, prep, weight, nextPicture, prevPicture, behind, stale: () => S.get("cameras.stale") * 3600 };
   // a change to what the windows show takes effect straight away
   for (const key of ["cameras.composites", "cameras.stale", "cameras.steady", "cameras.passes", "cameras.balancedColor", "cameras.colors", "cameras.lingerColor", "cameras.lingerMosaic", "movies.steady", "movies.center", "movies.trail", "movies.filmstrip", "movies.laps"]) S.on(key, () => { if (typeof catalog !== "undefined" && catalog && catalog.byCam) feeds.forEach(f => f(true)); });
 
@@ -2280,7 +2293,7 @@ body.idle .win.full .titlebar { opacity: 0; }
   // between two of a camera's frames takes at least 1/maxRate s; it is back to full speed once the burst is over.
   // A faster speed is always faster: a burst never slows the clock below a share of the chosen speed
   // (playback.burstFloor), so 1 day/s skips pictures in a long burst instead of crawling like 10 min/s does.
-  // Movie mode has its own clock. 0 = no limit. The setting lives in the Settings window when the page has one
+  // Movie mode steps the clock itself (movie.html). 0 = no limit. The setting lives in the Settings window when the page has one
   // (playback.maxImageRate), otherwise in the View menu.
   const RATE_DEFAULT = 5, FLOOR_DEFAULT = 0.25, RATE_KEY = "cassini-os-max-image-rate", SETTINGS = window.cassiniSettings;
   let maxRate = RATE_DEFAULT, burstFloor = FLOOR_DEFAULT, slowedTo = 0;
@@ -2326,8 +2339,7 @@ body.idle .win.full .titlebar { opacity: 0; }
   }
   function pace() {
     if (!maxBehind) return 1;
-    let b = 0;
-    for (const f of allFeeds) b = Math.max(b, f.behind());
+    const b = behind();
     return b > maxBehind ? maxBehind / b : 1;
   }
   // for one camera at et: the fastest the clock may run (Infinity outside a burst) and when its next frame is
@@ -2356,8 +2368,9 @@ body.idle .win.full .titlebar { opacity: 0; }
   const frameHud = window.studyHud;
   window.studyHud = ms => {
     frameHud(ms);
-    if (slowedTo && state.playing && !state.dragging) $("mday").textContent += ` · imaging burst, slowed to ${fmtRate(slowedTo)}`;
-    if (paced < 1 && state.playing && !state.dragging) $("mday").textContent += ` · catching up on pictures, ${Math.round(paced * 100)}% speed`;
+    const movie = window.cassiniMovie && window.cassiniMovie.on;
+    if (slowedTo && state.playing && !state.dragging && !movie) $("mday").textContent += ` · imaging burst, slowed to ${fmtRate(slowedTo)}`;
+    if (paced < 1 && state.playing && !state.dragging && !movie) $("mday").textContent += ` · catching up on pictures, ${Math.round(paced * 100)}% speed`;
     prep();
     for (const f of feeds) { f(); f.retier(); }
   };

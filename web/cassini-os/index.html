@@ -523,9 +523,8 @@ body.idle .camwin .well.has-frame { border-color: transparent; box-shadow: 0 6px
 .bodywin.full .pane { width: auto; flex: 1 1 0; min-width: 0; grid-template-rows: minmax(0, 1fr) auto auto; align-content: stretch; }
 .bodywin[style*="width"]:not(.full) .pane { width: auto; flex: 1 1 0; min-width: 0; }
 .win.full :is(.rlwells) { flex: 1; min-height: 0; height: calc(100dvh - 160px); align-items: stretch; }
-.win.full :is(.rlwell, .mvwell) { aspect-ratio: auto; min-height: 0; height: 100%; }
-#moviecard.full .mvwell { height: calc(100dvh - 150px); }
-.win.full :is(.rlwell, .mvwell) canvas { object-fit: contain; }
+.win.full .rlwell { aspect-ratio: auto; min-height: 0; height: 100%; }
+.win.full .rlwell canvas { object-fit: contain; }
 /* the save menu (full view, or a held window): the picture shown and every level under and around it, at full
    resolution as PNG (frame_server.py size=full, format=png, download=1) */
 .savewrap { position: absolute; right: 6px; bottom: 5px; display: none; z-index: 3; cursor: default; }
@@ -581,7 +580,7 @@ body.phone .savemenu a { padding: 11px 14px; }
 .bodywin.full .pane:has(> .crumbs:not([hidden])) { grid-template-rows: auto minmax(0, 1fr) auto auto; }
 body.idle .camwin:has(.well.has-frame) .crumbs { opacity: 0; }
 body.idle #app .win.full .crumbs { opacity: 1; }
-.well, .rlwell, .mvwell { cursor: zoom-in; } .win.full :is(.well, .rlwell, .mvwell) { cursor: zoom-out; }
+.well, .rlwell { cursor: zoom-in; } .win.full :is(.well, .rlwell) { cursor: zoom-out; }
 /* resting: a window in full view keeps its dark backdrop and its picture; only the title bar fades (!important: the
    rules that fade every window and clear the camera windows' frames are id-strength) */
 body.idle #app .win.full { opacity: 1 !important; pointer-events: auto !important; background: rgba(8,9,11,.9) !important; }
@@ -624,30 +623,7 @@ body.phone #flagtoast { bottom: calc(env(safe-area-inset-bottom, 0px) + 12px); }
 
 #movie svg { width: 15px; height: 15px; display: block; }
 #movie svg * { fill: none; stroke: currentColor; stroke-width: 1.4; }
-#moviecard { top: calc(env(safe-area-inset-top, 0px) + 36px); left: max(14px, env(safe-area-inset-left, 0px)); width: clamp(320px, 38vw, 600px); }
-#moviecard.zoomed { width: clamp(420px, 60vw, 980px); }
-#moviecard .body { padding: 2px 8px 8px; display: grid; gap: 7px; }
-.mvwell { position: relative; aspect-ratio: 1; background: rgba(0,0,0,.55); border: 1px solid var(--q-line, #555); border-radius: 4px; overflow: hidden; }
-.mvwell canvas { position: absolute; inset: 0; width: 100%; height: 100%; display: block; }
-#mvtag, #mvskip { position: absolute; font: 10px/1.3 var(--hudf, monospace); color: rgba(232,236,242,.8); text-shadow: 0 0 3px #000, 0 0 6px #000; pointer-events: none; }
-#mvtag { left: 7px; bottom: 6px; right: 7px; }
-#mvskip { right: 7px; top: 6px; color: var(--q-accent, #8ab6ff); transition: opacity .6s ease; opacity: 0; }
-#mvskip.on { opacity: 1; transition: none; }
-#mvmsg { position: absolute; inset: 0; display: grid; place-items: center; text-align: center; padding: 0 20px; font-size: 12px; color: var(--q-dim, #888); }
-#mvmsg:empty { display: none; }
-.mvbar { display: flex; gap: 10px; align-items: center; font-size: 10.5px; color: var(--q-dim, #888); }
-#mvplay { width: 28px; height: 28px; font-size: 11px; flex: none; }
-.mvbar input[type=range] { width: 110px; accent-color: var(--q-accent, #8ab6ff); }
-#mvfpsv { min-width: 38px; color: var(--q-text, #ddd); font-variant-numeric: tabular-nums; }
-#mvproc { height: 22px; padding: 0 8px; font-size: 10.5px; flex: none; opacity: .55; }
-#mvproc[aria-pressed="true"] { opacity: 1; color: var(--q-accent, #8ab6ff); }
-#mvcount { margin-left: auto; font: 10.5px/1 var(--hudf, monospace); white-space: nowrap; font-variant-numeric: tabular-nums; }
-/* resting: like the camera window, the picture stays and its frame and controls fade */
-#moviecard, #moviecard .titlebar, .mvbar, .mvwell { transition: opacity .7s ease, background-color .7s ease, border-color .7s ease, box-shadow .7s ease; }
-body.idle #moviecard { opacity: 1; pointer-events: auto; background: transparent; border-color: transparent; box-shadow: none; -webkit-backdrop-filter: none; backdrop-filter: none; }
-body.idle #moviecard :is(.titlebar, .mvbar) { opacity: 0; }
-body.idle .mvwell { border-color: transparent; box-shadow: 0 6px 30px rgba(0,0,0,.6); }
-body.phone #moviecard:not(.full) { width: calc(100% - 16px) !important; left: 8px !important; top: calc(env(safe-area-inset-top, 0px) + 30px) !important; }
+#movie[aria-pressed="true"] { color: var(--q-accent, #8ab6ff); border-color: var(--q-accent, #8ab6ff); }
 
 #settings { width: min(620px, calc(100% - 20px)); height: min(460px, calc(100% - 80px)); z-index: 900; }
 #settings .sbody { flex: 1; min-height: 0; display: grid; grid-template-columns: 138px minmax(0, 1fr); border-top: 1px solid var(--q-line); }
@@ -1245,7 +1221,7 @@ body.phone #launch .lx-clock { font-size: 9.5px; bottom: 9vh; }
             <button class="btn round skip" id="prev" aria-label="Previous moment">◀◀</button>
             <button class="btn round" id="play" aria-label="Play or pause">❚❚</button>
             <button class="btn round skip" id="next" aria-label="Next moment">▶▶</button>
-          <button class="btn round skip" id="movie" aria-pressed="false" aria-label="Movie mode" title="Movie mode: play one body's frames as a film (M)"><svg viewBox="0 0 16 16" aria-hidden="true"><rect x="2" y="3" width="12" height="10" rx="1.5"/><path d="M5 3v10M11 3v10M2 6.3h3M2 9.7h3M11 6.3h3M11 9.7h3"/></svg></button>
+          <button class="btn round skip" id="movie" aria-pressed="false" aria-label="Movie mode" title="Movie mode: skip the time between pictures and play them at a set frame rate (M)"><svg viewBox="0 0 16 16" aria-hidden="true"><rect x="2" y="3" width="12" height="10" rx="1.5"/><path d="M5 3v10M11 3v10M2 6.3h3M2 9.7h3M11 6.3h3M11 9.7h3"/></svg></button>
             <button class="btn round skip" id="phmom" aria-pressed="false" aria-label="Moments" title="Moments"><svg viewBox="0 0 16 16" aria-hidden="true"><path d="M3 4h10M3 8h10M3 12h10"/></svg></button>
           </div>
           <div class="clockbox">
@@ -1290,19 +1266,6 @@ body.phone #launch .lx-clock { font-size: 9.5px; bottom: 9vh; }
   <div class="fpbtns"><button class="no">Cancel</button><button class="go">Flag</button></div>
 </section>
 <div id="flagtoast" role="status" hidden><span></span><button class="undo">Undo</button><a target="_blank" rel="noopener">See all</a></div>
-
-  <section class="win" id="moviecard" aria-label="Movie" hidden>
-  <div class="titlebar"><span class="lights"><button class="close" aria-label="Leave movie mode">×</button><button class="min" aria-label="Leave movie mode">–</button><button class="zoom" aria-label="Zoom">+</button></span>Movie</div>
-  <div class="body">
-    <div class="mvwell"><canvas id="mvcanvas" width="1024" height="1024"></canvas><span id="mvtag"></span><span id="mvskip"></span><div id="mvmsg"></div></div>
-    <div class="mvbar">
-      <button class="btn round" id="mvplay" aria-label="Play or pause the movie">❚❚</button>
-      <label for="mvfps">Speed</label><input type="range" id="mvfps" min="2" max="24" step="1" value="8" aria-label="Frames per second"><span id="mvfpsv">8 fps</span>
-      <button class="btn" id="mvproc" aria-pressed="true" title="Processed: frames calibrated, color composites and mosaics, as in the camera windows. Off plays the archive frames as they are (P)">Processed</button>
-      <span id="mvcount"></span>
-    </div>
-  </div>
-</section>
 
   <section class="win" id="settings" aria-label="Settings" hidden>
   <div class="titlebar"><span class="lights"><button class="close" aria-label="Close settings">×</button><button class="min" aria-label="Close settings">–</button><button class="zoom" aria-label="Zoom">+</button></span>Settings</div>
@@ -1636,13 +1599,9 @@ body.phone #launch .lx-clock { font-size: 9.5px; bottom: 9vh; }
   D({ key: "view.atmospheres", section: "View", label: "Atmospheres", type: "choice", value: "full",
       options: [["off", "Off"], ["light", "Light"], ["full", "Full"]],
       hint: "Titan's orange haze, with its high detached layer, and Saturn's thin haze at the limb, lit by the Sun: soft twilight past the terminator and a bright ring when Titan is backlit. Light is quicker on weak graphics; Off draws the bare globes." });
-  // Movie
-  D({ key: "movie.fps", section: "Movie", label: "Movie speed", type: "range", value: 8, min: 2, max: 24, step: 1, unit: "fps",
-      hint: "Frames per second in movie mode (M). The slider in the Movie window changes this too." });
-  D({ key: "movie.processed", section: "Movie", label: "Processed pictures", type: "toggle", value: true,
-      hint: "Movie frames made by the pipeline like the camera windows' pictures: calibrated, color composites and mosaics. Off plays the archive frames as they are, with no processing. The Processed button in the Movie window (or P) switches it too." });
-  D({ key: "movie.mosaics", section: "Movie", label: "Mosaics in movies", type: "toggle", value: true,
-      hint: "With processed pictures on, a mosaic pass builds its mosaic in the film. Off shows each tile on its own." });
+  // movie mode (movie.html) is a rule for the clock, so its speed sits with the playback settings
+  D({ key: "movie.fps", section: "Playback", label: "Movie mode speed", type: "range", value: 8, min: 2, max: 24, step: 1, unit: "fps",
+      hint: "Movie mode (M) skips the time between pictures and steps from one picture to the next this many times a second. The camera windows show every picture as they always do." });
   // movie passes in the camera and body windows (head-quiet.html cameraFeed reads these)
   D({ key: "movies.steady", section: "Movie", label: "Steady movie passes", type: "toggle", value: true,
       hint: "When a pass plays as a movie in a camera or body window (a stare, a ring or storm movie), every frame is centered by SPICE, north up, on one brightness scale and one size for the whole pass, so the body holds still and the picture does not pump. Off shows each frame as it is." });
@@ -1655,12 +1614,6 @@ body.phone #launch .lx-clock { font-size: 9.5px; bottom: 9vh; }
       hint: "In a steady movie pass, this many earlier frames of the same filter stay under the newest one, fading with age, so a moving moon or a ring's shadow leaves a short trail. 0 shows each frame alone." });
   D({ key: "movies.laps", section: "Movie", label: "Mosaic movies keep", type: "range", value: 1, min: 1, max: 6, step: 1, unit: "laps",
       hint: "A mosaic movie (the camera going over the same mosaic again and again, as on the approach to Jupiter) plays as a mosaic that never empties: each new tile replaces its own earlier copy. 1 is a time-lapse; more keeps that many copies of each tile, older ones under the newest." });
-  window.addEventListener("DOMContentLoaded", () => {
-    const r = $("mvfps"); if (!r) return;
-    try { const f = +localStorage.getItem("cassini-os-movie-fps"); if (f >= 2 && f <= 24 && !("movie.fps" in saved)) S.set("movie.fps", f); } catch (e) {}
-    S.on("movie.fps", v => { if (+r.value !== v) { r.value = v; r.dispatchEvent(new Event("input")); } });
-    r.addEventListener("input", () => S.set("movie.fps", +r.value));
-  });
   // Data
   D({ key: "data.layout", section: "Data", label: "Window layout", type: "action", button: "Reset",
       hint: "Put every window back where it starts and bring back the ones tucked into the menu bar.",
@@ -2067,11 +2020,11 @@ body.phone #launch .lx-clock { font-size: 9.5px; bottom: 9vh; }
       fb.innerHTML = '<svg class="out" viewBox="0 0 10 10" aria-hidden="true"><path d="M1 4V1h3M6 1h3v3M9 6v3H6M4 9H1V6"/></svg><svg class="in" viewBox="0 0 10 10" aria-hidden="true"><path d="M4 1v3H1M9 4H6V1M6 9V6h3M1 6h3v3"/></svg>';
       fb.addEventListener("click", e => { e.stopPropagation(); full(w); });
       bar.appendChild(fb);
-      w.addEventListener("dblclick", e => { if (!phone() && e.target.closest(".well, .rlwell, .mvwell")) full(w); });
-      w.addEventListener("click", e => { if (phone() && e.target.closest(".well, .rlwell, .mvwell")) full(w); });
+      w.addEventListener("dblclick", e => { if (!phone() && e.target.closest(".well, .rlwell")) full(w); });
+      w.addEventListener("click", e => { if (phone() && e.target.closest(".well, .rlwell")) full(w); });
     }
   }
-  const TALL = "#moments, #settings, #about", PICTURES = ".camwin, .bodywin, #reelcard, #moviecard", MIN_W = 180;
+  const TALL = "#moments, #settings, #about", PICTURES = ".camwin, .bodywin, #reelcard", MIN_W = 180;
   const phone = () => document.body.classList.contains("phone");
   // zoom: the bigger standard size, and back to the size the viewer gave the window
   function zoom(w) {
@@ -2521,7 +2474,7 @@ body.phone #launch .lx-clock { font-size: 9.5px; bottom: 9vh; }
   window.cassiniHeld = holding;
   window.addEventListener("keydown", e => {
     if (e.key !== "Escape" || !holding.size || e.metaKey || e.ctrlKey || e.altKey || /^(INPUT|SELECT|TEXTAREA)$/.test(e.target.tagName)) return;
-    if (document.querySelector(".menu.open") || (window.cassiniMovie && window.cassiniMovie.on)) return;
+    if (document.querySelector(".menu.open")) return;
     const panel = document.querySelector("#settings.front, #hlcard.front, #reelcard.front, #excard.front");
     if (panel && !panel.hidden) return;
     const list = [...holding], h = list.find(x => x.win.classList.contains("full")) || list.find(x => x.win.classList.contains("front")) || list[list.length - 1];
@@ -3396,7 +3349,6 @@ body.phone #launch .lx-clock { font-size: 9.5px; bottom: 9vh; }
       }
       if (win.hidden && !force) { mosaicStop(); return; }   // a closed or tucked-away window fetches nothing; it catches up when shown
       if (hold) { if (force) showLevel(); return; }   // held: the clock moves on without it (a bigger window asks for the bigger picture)
-      if (window.cassiniMovie && window.cassiniMovie.on) { mosaicStop(); return; }   // movie mode has the frame server to itself (its requests are capped)
       const p = lastOfCam(cam, state.et, body), k = p < 0 ? -1 : framesOf(cam, body).ks[p];
       const live = k >= 0 && state.et - catalog.et[k] < 180;
       card.classList.toggle("live", live);
@@ -3504,7 +3456,22 @@ body.phone #launch .lx-clock { font-size: 9.5px; bottom: 9vh; }
     return (kind.color ? c : 1) * (kind.mosaic ? m : 1);
   }
   const feeds = [...document.querySelectorAll(".camwin")].map(cameraFeed);
-  window.cassiniFeeds = { cameraFeed, framesOf, lastOfCam, prep, weight, stale: () => S.get("cameras.stale") * 3600 };
+  // the time of the first picture after et (any camera; one body's only when body is given), or Infinity when none
+  // is in the months loaded now; before: the last picture before et. Movie mode steps the clock from one to the next
+  function nextPicture(et, body) {
+    if (!body) { const a = catalog.sorted, i = lastImageIndex(et) + 1; return i < a.length ? a[i] : Infinity; }
+    let t = Infinity;
+    for (const cam in catalog.byCam) { const a = framesOf(cam, body).et, p = lastOfCam(cam, et, body) + 1; if (p < a.length) t = Math.min(t, a[p]); }
+    return t;
+  }
+  function prevPicture(et, body) {
+    let t = -Infinity;
+    for (const cam in catalog.byCam) { const a = framesOf(cam, body).et, p = lastOfCam(cam, et - 1e-3, body); if (p >= 0) t = Math.max(t, a[p]); }
+    return t;
+  }
+  // how many frames the furthest-behind camera window's picture is behind the clock (update.behind, below)
+  const behind = () => { let b = 0; for (const f of allFeeds) b = Math.max(b, f.behind()); return b; };
+  window.cassiniFeeds = { cameraFeed, framesOf, lastOfCam, prep, weight, nextPicture, prevPicture, behind, stale: () => S.get("cameras.stale") * 3600 };
   // a change to what the windows show takes effect straight away
   for (const key of ["cameras.composites", "cameras.stale", "cameras.steady", "cameras.passes", "cameras.balancedColor", "cameras.colors", "cameras.lingerColor", "cameras.lingerMosaic", "movies.steady", "movies.center", "movies.trail", "movies.filmstrip", "movies.laps"]) S.on(key, () => { if (typeof catalog !== "undefined" && catalog && catalog.byCam) feeds.forEach(f => f(true)); });
 
@@ -3513,7 +3480,7 @@ body.phone #launch .lx-clock { font-size: 9.5px; bottom: 9vh; }
   // between two of a camera's frames takes at least 1/maxRate s; it is back to full speed once the burst is over.
   // A faster speed is always faster: a burst never slows the clock below a share of the chosen speed
   // (playback.burstFloor), so 1 day/s skips pictures in a long burst instead of crawling like 10 min/s does.
-  // Movie mode has its own clock. 0 = no limit. The setting lives in the Settings window when the page has one
+  // Movie mode steps the clock itself (movie.html). 0 = no limit. The setting lives in the Settings window when the page has one
   // (playback.maxImageRate), otherwise in the View menu.
   const RATE_DEFAULT = 5, FLOOR_DEFAULT = 0.25, RATE_KEY = "cassini-os-max-image-rate", SETTINGS = window.cassiniSettings;
   let maxRate = RATE_DEFAULT, burstFloor = FLOOR_DEFAULT, slowedTo = 0;
@@ -3559,8 +3526,7 @@ body.phone #launch .lx-clock { font-size: 9.5px; bottom: 9vh; }
   }
   function pace() {
     if (!maxBehind) return 1;
-    let b = 0;
-    for (const f of allFeeds) b = Math.max(b, f.behind());
+    const b = behind();
     return b > maxBehind ? maxBehind / b : 1;
   }
   // for one camera at et: the fastest the clock may run (Infinity outside a burst) and when its next frame is
@@ -3589,8 +3555,9 @@ body.phone #launch .lx-clock { font-size: 9.5px; bottom: 9vh; }
   const frameHud = window.studyHud;
   window.studyHud = ms => {
     frameHud(ms);
-    if (slowedTo && state.playing && !state.dragging) $("mday").textContent += ` · imaging burst, slowed to ${fmtRate(slowedTo)}`;
-    if (paced < 1 && state.playing && !state.dragging) $("mday").textContent += ` · catching up on pictures, ${Math.round(paced * 100)}% speed`;
+    const movie = window.cassiniMovie && window.cassiniMovie.on;
+    if (slowedTo && state.playing && !state.dragging && !movie) $("mday").textContent += ` · imaging burst, slowed to ${fmtRate(slowedTo)}`;
+    if (paced < 1 && state.playing && !state.dragging && !movie) $("mday").textContent += ` · catching up on pictures, ${Math.round(paced * 100)}% speed`;
     prep();
     for (const f of feeds) { f(); f.retier(); }
   };
@@ -3612,7 +3579,7 @@ body.phone #launch .lx-clock { font-size: 9.5px; bottom: 9vh; }
     return "http://localhost:8765";
   })();
   const S = window.cassiniSettings, WM = window.cassiniWM;
-  const PICTURES = ".camwin, .bodywin, #reelcard, #moviecard";
+  const PICTURES = ".camwin, .bodywin, #reelcard";
   const TAGS = ["Too dark", "Too bright", "Wrong color", "Channels misaligned", "Stripes or noise", "Blurry", "Blank or missing", "Off-center", "Mosaic wrong", "Out of sync"];
   const pop = $("flagpop"), toast = $("flagtoast"), FLAG_ICON = '<svg viewBox="0 0 10 10" aria-hidden="true"><path d="M2 9.5V1h6l-1.4 2.2L8 5.4H2"/></svg>';
   const ID = /[NW]\d{10}_\d+/g;
@@ -3654,11 +3621,7 @@ body.phone #launch .lx-clock { font-size: 9.5px; bottom: 9vh; }
   }
   async function capture(w) {
     let canvas = null, src = null, report = null, ids = [], what = null, path = null;
-    if (w.id === "moviecard") {
-      const M = window.cassiniMovie && window.cassiniMovie.state, b = M && M.cur && M.buf.get(M.cur.id);
-      if (!M || !M.cur) return null;
-      canvas = $("mvcanvas"); ids = [M.cur.id]; src = b && b.img ? b.img.src : null; what = b && b.kind ? `movie (${b.kind})` : "movie frame";
-    } else if (w.id === "reelcard") {
+    if (w.id === "reelcard") {
       const R = window.cassiniReel && window.cassiniReel.state, s = R && R.shots[R.i];
       if (!s) return null;
       canvas = $("rlcanvas" + s.cam); ids = s.ids.slice(); what = "body reel picture";
@@ -3741,7 +3704,7 @@ body.phone #launch .lx-clock { font-size: 9.5px; bottom: 9vh; }
     const flag = {
       flagged: p.at.toISOString(), mission_utc: utc(p.et), mission_et: p.et, link: link.href,
       note, tags: [...p.tags],
-      window: { id: w.id, title: p.title, kind: w.id === "moviecard" ? "movie" : w.id === "reelcard" ? "reel" : w.classList.contains("bodywin") ? "body window" : "camera window",
+      window: { id: w.id, title: p.title, kind: w.id === "reelcard" ? "reel" : w.classList.contains("bodywin") ? "body window" : "camera window",
         full: w.classList.contains("full"), zoomed: w.classList.contains("zoomed"), width: Math.round(w.getBoundingClientRect().width), height: Math.round(w.getBoundingClientRect().height) },
       shown: { what: got.what, src: got.src ? new URL(got.src, location.href).href : null, report: got.report || null, labels: got.labels, info: got.info, observation_frames: got.tiles,
         path: got.path ? got.path.map(l => Object.assign({}, l, { src: new URL(l.src, location.href).href })) : null,
@@ -3813,245 +3776,105 @@ body.phone #launch .lx-clock { font-size: 9.5px; bottom: 9vh; }
 // ---------- movie mode ----------
 (function () {
   const $ = id => document.getElementById(id);
-  const FRAMES = (() => {                       // the frame server, chosen as the camera window chooses it
-    const q = new URLSearchParams(location.search).get("frames");
-    if (q) return q.replace(/\/$/, "");
-    if (/^https?:$/.test(location.protocol) && !/claude\.ai$|claudeusercontent\.com$|claude\.site$/.test(location.hostname)) return location.origin;
-    return "http://localhost:8765";
-  })();
-  const card = $("moviecard"), cv = $("mvcanvas"), g = cv.getContext("2d");
-  // cur: the frame on screen as { id, et }, or null to carry on from the clock; cat/i: where it sits in the loaded
-  // catalog, which the viewer rebuilds as the clock reaches new years
-  const M = { on: false, looping: false, playing: true, fps: 8, cur: null, cat: null, i: -1, due: 0, buf: new Map(), hidden: [], waitSince: 0 };
-  try { const f = +localStorage.getItem("cassini-os-movie-fps"); if (f >= 2 && f <= 24) M.fps = f; } catch (e) {}
-  $("mvfps").value = M.fps; $("mvfpsv").textContent = M.fps + " fps";
-
-  // ---- the frame on screen and the ones after it, in time order ----
-  function here() {
-    if (!M.cur) return lastImageIndex(state.et);
-    if (M.cat === catalog) return M.i;
-    // the catalog was rebuilt: find the same frame again (frames taken in the same second sort together)
-    let i = lastImageIndex(M.cur.et);
-    for (let j = i; j >= 0 && catalog.sorted[j] >= M.cur.et - 1; j--) if (catalog.id[order[j]] === M.cur.id) { i = j; break; }
-    M.cat = catalog; M.i = i;
-    return i;
-  }
-  const at = i => { const k = i >= 0 ? order[i] : undefined; return k === undefined ? null : { id: catalog.id[k], et: catalog.et[k], k, i }; };
-
-  // ---- frames: loaded ahead of the play head so 24 fps does not stutter ----
-  // Each frame goes through the pipeline like the camera windows' pictures (movie.processed, on by default): the
-  // frame that completes a filter set shows the set's colour composite, a new tile of a mosaic pass the mosaic so far,
-  // and every other frame is processed on its own (/frames/processed: stacked, calibrated, on the pipeline's display
-  // scale). The processed frame is always loaded; a composite or mosaic is loaded beside it and shown when it is ready in
-  // time. The film never waits more than GRACE ms (from when the frame was first asked for) for a composite or mosaic:
-  // the server makes a new mosaic tile in seconds the first time, so on a pass nobody has watched yet the film plays the
-  // processed frames and the mosaic comes up where it is ready (a frame still on screen when it arrives swaps to it).
-  // A server that has none (404) or cannot make one moves on to the next choice; the archive frame is the last resort.
-  const S = window.cassiniSettings, GRACE = 1200;
+  const S = window.cassiniSettings;
   const opt = (key, dflt) => (S && S.get(key) !== undefined ? S.get(key) : dflt);
-  const KIND = { true: "true color", false: "false color", two: "two-filter color" };
-  // true resolution (1024) unless the card shows its pictures small (cassiniWM.sized)
-  const size = () => window.cassiniWM && window.cassiniWM.sized ? window.cassiniWM.sized(card, card.querySelector(".mvwell")) : 1024;
-  // the pictures frame f can be shown as, each { url, kind }: best (mosaic, then composite) and base (processed, then raw)
-  function choices(f) {
-    const id = f.id, sz = size(), raw = { url: `${FRAMES}/frames/${id}.webp?size=${sz}`, kind: "" };
-    if (M.raw || !opt("movie.processed", true)) return { best: [], base: [raw] };
-    if (!catalog.setOf && window.cassiniFeeds) window.cassiniFeeds.prep();
-    const best = [], k = f.k, si = catalog.setOf ? catalog.setOf[k] : -1, s = si >= 0 ? catalog.sets[si] : null;
-    const comp = s && s.use.includes(k) && s.ready === catalog.et[k] && opt("cameras.composites", true);
-    // a possible mosaic tile: the camera's frame before this one is of the same body and observation (and a frame of
-    // a colour set only once its composite is up, as in the camera windows)
-    let prev = -1;
-    for (let j = f.i - 1; j >= Math.max(0, f.i - 64); j--) if (catalog.cam[order[j]] === catalog.cam[k]) { prev = order[j]; break; }
-    const tile = prev >= 0 && catalog.target[prev] === catalog.target[k] && catalog.obs[prev] === catalog.obs[k] && (!s || comp);
-    if (tile && opt("movie.mosaics", true) && window.cassiniMosaics !== false) best.push({ url: `${FRAMES}/frames/mosaic/${comp ? catalog.id[s.use[0]] : id}.webp?size=${sz}${window.cassiniLook()}`, kind: "mosaic" });
-    if (comp) best.push({ url: `${FRAMES}/frames/color.webp?ids=${s.use.map(q => catalog.id[q]).join(",")}&size=${sz}${window.cassiniLook()}`, kind: KIND[s.kind] || "color" });
-    return { best, base: [{ url: `${FRAMES}/frames/processed/${id}.webp?size=${sz}${window.cassiniLook()}`, kind: "processed" }, raw] };
-  }
-  // one chain of choices: tried in turn until one loads (ok true) or none does (ok false); a deferred one waits for
-  // c.start() (fill starts composites and mosaics a few at a time)
-  function chain(list, onload, deferred) {
-    const c = { list, n: 0, img: null, ok: list.length ? null : false, kind: "", started: false };
-    const load = () => {
-      const im = new Image(), it = list[c.n];
-      c.img = im; im.decoding = "async"; im.crossOrigin = "anonymous";
-      im.onload = () => { c.ok = true; c.kind = it.kind; onload(); };
-      im.onerror = () => { if (++c.n < list.length) load(); else c.ok = false; };
-      im.src = it.url;
-    };
-    c.start = () => { if (!c.started && list.length) { c.started = true; load(); } };
-    c.stop = () => { if (c.img && c.ok === null) { c.img.onload = c.img.onerror = null; c.img.src = ""; } };
-    if (!deferred) c.start();
-    return c;
-  }
-  // b.ok: null while the film should wait for frame b, then true (b.img, b.kind are what to show) or false (no frame)
-  function settle(b) {
-    const best = b.best.ok, base = b.base.ok;
-    if (best) Object.assign(b, { ok: true, img: b.best.img, kind: b.best.kind });
-    else if (base && (best === false || performance.now() - b.since > GRACE)) Object.assign(b, { ok: true, img: b.base.img, kind: b.base.kind });
-    else if (base === false && best === false) b.ok = false;
-    return b;
-  }
-  function want(f) {
-    let b = M.buf.get(f.id);
-    if (!b || b.size !== size()) {
-      if (b) { b.best.stop(); b.base.stop(); }
-      const c = choices(f);
-      b = { ok: null, img: null, kind: "", size: size(), since: performance.now() };
-      // a composite or mosaic that arrives while its frame is on screen replaces the processed frame there
-      b.best = chain(c.best, () => { if (M.on && M.cur && M.cur.id === f.id && b.kind !== b.best.kind) { settle(b); draw(b.img); tag(f, b); } }, true);
-      b.base = chain(c.base, () => {});
-      M.buf.set(f.id, b);
-    }
-    return settle(b);
-  }
-  // A browser opens only six connections to the frame server, and a mosaic tile nobody has asked for before takes the
-  // server seconds: so at most BEST_FLYING composites and mosaics are asked for at once, nearest the play head first,
-  // and the processed frames, quick to make, always have connections left.
-  const BEST_FLYING = 2;
-  function fill(i) {
-    // processed frames take the server a fraction of a second each the first time, so the film asks well ahead
-    const ahead = Math.max(12, Math.min(72, Math.round(M.fps * 3))), keep = new Set();
-    let flying = 0, best = 0;
-    for (const b of M.buf.values()) if (b.best.started && b.best.ok === null) best++;
-    for (let j = Math.max(0, i); j <= i + ahead; j++) {
-      const f = at(j); if (!f) break;
-      keep.add(f.id);
-      let b = M.buf.get(f.id);
-      if (b && b.base.ok === null) flying++;
-      else if (!b && flying < 8) { b = want(f); flying++; }
-      if (b && !b.best.started && b.best.ok === null && best < BEST_FLYING) { b.best.start(); best++; }
-    }
-    // pictures the film has passed or skipped: dropped, and their requests called off so they free their connections
-    for (const [id, b] of M.buf) if (!keep.has(id)) { b.best.stop(); b.base.stop(); M.buf.delete(id); }
-  }
-  function drop() { for (const b of M.buf.values()) { b.best.stop(); b.base.stop(); } M.buf.clear(); }
-  function blank() { g.fillStyle = "#000"; g.fillRect(0, 0, cv.width, cv.height); }
-  function draw(img) {
-    const s = cv.width, r = Math.min(s / img.naturalWidth, s / img.naturalHeight), w = img.naturalWidth * r, h = img.naturalHeight * r;
-    blank(); g.drawImage(img, (s - w) / 2, (s - h) / 2, w, h);
-  }
-  const fmtDate = et => { const s = new Date(etToMs(et)).toISOString(); return `${s.slice(0, 10)} ${s.slice(11, 19)} UTC`; };
-  const tag = (f, b) => { const k = f.k; $("mvtag").textContent = `${fmtDate(f.et)} · ${titleCase(catalog.target[k] || "Unknown")} · ${catalog.cam[k] === "N" ? "NAC" : "WAC"} ${catalog.f1[k]}/${catalog.f2[k]}${b.ok && b.kind && b.kind !== "processed" ? ` · ${b.kind}` : ""}`; };
-  let skipTimer = 0;
-  // put frame i on screen and move the mission clock to it
-  function show(i) {
-    const f = at(i), b = want(f), prev = M.cur;
-    M.cur = { id: f.id, et: f.et }; M.cat = catalog; M.i = i;
-    M.late = b.ok ? null : f;   // stepped to a picture still being made: it goes up when it arrives (tick)
-    if (b.ok) { draw(b.img); $("mvmsg").textContent = ""; }
-    else if (b.ok === false) { blank(); $("mvmsg").innerHTML = "<b>No frame</b>" + f.id; }
-    setTime(f.et);
-    keepNowInView();
-    tag(f, b);
-    $("mvcount").textContent = f.id;
-    if (prev && f.et - prev.et > 3 * 3600) {   // a stretch without frames: say how much time the cut left out
-      $("mvskip").textContent = `skipped ${fmtDur(f.et - prev.et)}`; $("mvskip").classList.add("on");
-      clearTimeout(skipTimer); skipTimer = setTimeout(() => $("mvskip").classList.remove("on"), 900);
-    }
-  }
-  // the movie's own clock: a frame every 1/fps seconds, holding on a frame until the next one has arrived;
-  // when the page draws slower than the movie runs, frames are dropped to keep time
-  function tick(now) {
-    if (!M.on) { M.looping = false; return; }
-    if (yearReady() && !state.dragging) {
-      const i = here();
-      fill(i);
-      if (M.late && M.cur && M.late.id === M.cur.id && M.cat === catalog) { const b = want(M.late); if (b.ok !== null) show(M.late.i); }
-      if (M.playing && now >= M.due) {
-        let shown = -1, j = i;
-        while (now >= M.due) {
-          j++;
-          while (at(j) && M.buf.get(at(j).id) && M.buf.get(at(j).id).ok === false) j++;   // frames the server lacks are cut too
-          const f = at(j);
-          if (!f) { if (shown < 0 && !(mission && yearOf(state.et) < mission.years[mission.years.length - 1])) setMoviePlaying(false); break; }
-          const b = want(f);
-          if (!b.ok) break;
-          shown = j; M.due += 1000 / M.fps;
-        }
-        if (shown >= 0) { show(shown); M.due = Math.max(M.due, now - 250); M.waitSince = 0; }
-        else if (M.playing && at(j)) {
-          if (!M.waitSince) M.waitSince = now;
-          else if (now - M.waitSince > 600) $("mvcount").textContent = "processing…";
-        }
-      }
-    }
-    requestAnimationFrame(tick);
-  }
-  // paused in the background (away.html): the pictures still loading are called off (the film asks again when it
-  // carries on), and the film's clock moves on by the time away, so it picks up on the frame it was on
-  document.addEventListener("cassini:away", e => {
-    if (e.detail.away) { for (const [id, b] of M.buf) if (b.base.ok === null || (b.best.started && b.best.ok === null)) { b.best.stop(); b.base.stop(); M.buf.delete(id); } }
-    else { M.due += e.detail.ms; if (M.waitSince) M.waitSince += e.detail.ms; for (const b of M.buf.values()) b.since += e.detail.ms; }
-  });
-  function setMoviePlaying(p) { M.playing = p; $("mvplay").textContent = p ? "❚❚" : "▶"; M.due = performance.now(); }
+  const fps = () => Math.min(24, Math.max(1, +opt("movie.fps", 8) || 8));
+  // A step waits for the camera windows (Sam: movie mode slows, it never skips a picture): while a window has not
+  // yet put up the picture the clock is at (the frame server is still making it: a cold composite, a mosaic's new
+  // tile), the next step waits. cassiniFeeds.behind stops counting a picture that has been stuck for seconds, so a
+  // server that stops answering never stalls the film.
+  // Slow: when the film has spent more than SLOW_SHARE of the last SLOW_SPAN ms waiting, the page hears
+  // "cassini:movie-slow" (once, until it has caught up again), so it can offer to make a stretch ahead of time.
+  const CUT = 3 * 3600, SLOW_SPAN = 20000, SLOW_SHARE = 0.5;
+  const M = { on: false, stepAt: 0, waiting: false, cut: 0, cutAt: -1e9, until: Infinity, waits: [], slow: false, lastAt: 0 };
+  const ready = () => typeof catalog !== "undefined" && catalog && catalog.byCam && window.cassiniFeeds;
 
-  // ---- entering and leaving ----
-  // the film starts on the frame the camera last took and carries on from there
-  function start() {
-    if (!catalog || M.on) return;
-    M.on = true; drop(); blank();
-    setPlaying(false);
-    // the movie takes the camera's place; the camera windows come back when it ends
-    M.hidden = ["imgcard", "wacard"].map($).filter(w => w && !w.hidden);
-    const cam = M.hidden[0];
-    if (cam && cam.style.left && !card.style.left) Object.assign(card.style, { left: cam.style.left, top: cam.style.top, right: "auto", bottom: "auto" });
-    M.hidden.forEach(w => { w.hidden = true; });
-    card.hidden = false; card.dispatchEvent(new Event("pointerdown"));
+  const base = window.studyAdvance;
+  // called by the viewer's frame loop while playing: where the clock goes now
+  window.studyAdvance = (et, dt, speed) => {
+    if (!M.on || !ready()) return base ? base(et, dt, speed) : et + dt * speed;
+    const F = window.cassiniFeeds, now = performance.now(), due = M.stepAt + 1000 / fps();
+    M.waiting = false;
+    if (now < due) { track(now, false); return et; }
+    if (F.behind() > 0) { M.waiting = now > due + 300; track(now, true); return et; }
+    track(now, false);
+    const next = F.nextPicture(et);
+    // a stretch played as a movie (start's until) ends on its last picture
+    if (next > M.until) { setPlaying(false); stop(); return et; }
+    // no picture after this one in the months loaded now: the clock runs a day a frame until the next ones are in
+    // (the viewer holds it while a month is loading) or the mission ends
+    if (next === Infinity) return et + 86400;
+    M.stepAt = now;
+    if (next - et > CUT) { M.cut = next - et; M.cutAt = now; }
+    return next;
+  };
+
+  // the waiting kept for the last SLOW_SPAN ms, as [from, to] spans
+  function track(now, waiting) {
+    const dt = Math.min(250, now - (M.lastAt || now)); M.lastAt = now;
+    if (waiting && dt > 0) M.waits.push([now - dt, now]);
+    while (M.waits.length && M.waits[0][1] < now - SLOW_SPAN) M.waits.shift();
+    const share = M.waits.reduce((a, w) => a + w[1] - Math.max(w[0], now - SLOW_SPAN), 0) / SLOW_SPAN;
+    if (!M.slow && share > SLOW_SHARE) { M.slow = true; document.dispatchEvent(new CustomEvent("cassini:movie-slow", { detail: { slow: true, share, et: state.et } })); }
+    else if (M.slow && share < SLOW_SHARE / 4) { M.slow = false; document.dispatchEvent(new CustomEvent("cassini:movie-slow", { detail: { slow: false, share, et: state.et } })); }
+  }
+
+  // paused in the background (away.html): the step carries on where it was, by the time away
+  document.addEventListener("cassini:away", e => { if (!e.detail.away) { M.stepAt += e.detail.ms; M.cutAt += e.detail.ms; } });
+
+  // the status line under the timeline says movie mode is on, how fast, and how much time a cut left out
+  const hud = window.studyHud;
+  window.studyHud = ms => {
+    if (hud) hud(ms);
+    if (!M.on) return;
+    const el = $("mday"); if (!el) return;
+    let t = ` · movie, ${fps()} fps`;
+    if (M.waiting && state.playing) t += ", waiting for pictures";
+    if (performance.now() - M.cutAt < 1500) t += ` · skipped ${fmtDur(M.cut)}`;
+    el.textContent += t;
+  };
+
+  // ---- on and off ----
+  // play: also start the clock (the Movie button, M); a shared link (link.html) leaves play as the link says.
+  // range { from, until } (mission times): play one stretch, from its first picture, and leave movie mode after
+  // its last (a stretch made ahead of time plays at movie.fps, its pictures all waiting in the server's cache)
+  function start(play, range) {
+    if (M.on && !range) return;
+    M.on = true; M.stepAt = 0; M.cutAt = -1e9; M.waits = []; M.slow = false; M.lastAt = 0;
+    M.until = range && range.until !== undefined ? range.until : Infinity;
+    if (range && range.from !== undefined) { setTime(range.from - 1e-3); keepNowInView(); }
     $("movie").setAttribute("aria-pressed", "true");
-    const i = lastImageIndex(state.et), f = at(i - 1);
-    M.cur = f ? { id: f.id, et: f.et } : null; M.cat = catalog; M.i = i - 1;
-    $("mvmsg").textContent = at(Math.max(0, i)) ? "" : "No frames to play";
-    setMoviePlaying(true);
-    if (!M.looping) { M.looping = true; requestAnimationFrame(tick); }
+    if (play) setPlaying(true);
   }
   function stop() {
     if (!M.on) return;
-    M.on = false; drop();
-    card.hidden = true;
-    M.hidden.forEach(w => { w.hidden = false; }); M.hidden = [];
+    M.on = false; M.until = Infinity;
+    if (M.slow) { M.slow = false; document.dispatchEvent(new CustomEvent("cassini:movie-slow", { detail: { slow: false, share: 0, et: state.et } })); }
     $("movie").setAttribute("aria-pressed", "false");
-    setPlaying(false);   // the clock stays on the last frame shown; play carries on from there
   }
-  window.cassiniMovie = { start, stop, get on() { return M.on; }, state: M };
+  const toggle = () => (M.on ? stop() : start(true));
+  // fps: the frame rate (the movie.fps setting, Settings > Playback; set it with cassiniSettings.set("movie.fps", n))
+  window.cassiniMovie = { start, stop, get on() { return M.on; }, get slow() { return M.slow; }, fps, state: M };
 
   // ---- controls ----
-  $("movie").addEventListener("click", () => (M.on ? stop() : start()));
-  $("mvplay").addEventListener("click", () => setMoviePlaying(!M.playing));
-  // processing on or off (movie.processed; the mosaics alone: movie.mosaics): the pictures ahead are asked for again
-  const proc = $("mvproc");
-  proc.addEventListener("click", () => { const v = !opt("movie.processed", true); if (S) S.set("movie.processed", v); else { M.raw = !v; refresh(); } });
-  function refresh() {
-    proc.setAttribute("aria-pressed", String(!M.raw && opt("movie.processed", true)));
-    if (!M.on) return;
-    drop();
-    if (M.cur && M.cat === catalog) show(M.i);
+  $("movie").addEventListener("click", toggle);
+  // step one picture forward or back (paused), keeping the timeline on the clock
+  function step(dir) {
+    if (!ready()) return;
+    const F = window.cassiniFeeds, t = dir > 0 ? F.nextPicture(state.et) : F.prevPicture(state.et);
+    if (!isFinite(t)) return;
+    setPlaying(false); setTime(t); keepNowInView();
   }
-  if (S) for (const key of ["movie.processed", "movie.mosaics"]) S.on(key, refresh);
-  $("mvfps").addEventListener("input", e => {
-    M.fps = +e.target.value; $("mvfpsv").textContent = M.fps + " fps";
-    try { localStorage.setItem("cassini-os-movie-fps", M.fps); } catch (err) {}
-  });
-  // the window's close and minimize buttons (and a title-bar double-click) leave movie mode rather than tucking it away
-  card.addEventListener("click", e => { if (e.target.closest(".close, .min")) { e.stopPropagation(); stop(); } }, true);
-  card.querySelector(".titlebar").addEventListener("dblclick", e => { e.stopPropagation(); stop(); }, true);
-  new MutationObserver(() => { const b = M.on && M.cur && M.buf.get(M.cur.id); if (b && b.ok) draw(b.img); }).observe(card, { attributes: true, attributeFilter: ["class"] });
-  // while a movie runs: space plays and pauses it, the arrow keys step a frame, Escape leaves; the main play button leaves and plays on
+  // M turns movie mode on and off; while it is on, the arrow keys step a picture and Escape leaves
   window.addEventListener("keydown", e => {
-    if (!M.on || e.metaKey || e.ctrlKey || (/INPUT|SELECT|TEXTAREA/.test(e.target.tagName) && e.code === "Space")) return;
-    if (e.code === "Space") { e.preventDefault(); e.stopImmediatePropagation(); setMoviePlaying(!M.playing); }
-    else if (e.key === "ArrowRight" || e.key === "ArrowLeft") {
-      e.preventDefault(); setMoviePlaying(false);
-      const j = here() + (e.key === "ArrowRight" ? 1 : -1); if (at(j)) show(j);
-    } else if (e.key === "p" || e.key === "P") proc.click();
-    else if (e.key === "Escape") stop();
-  }, true);
-  window.addEventListener("keydown", e => { if (!M.on && (e.key === "m" || e.key === "M") && !e.metaKey && !e.ctrlKey && e.target === document.body) start(); });
-  $("play").addEventListener("click", () => { if (M.on) stop(); }, true);
-  // scrubbing the timeline moves the film: it carries on from the frame at the new time
-  $("tl").addEventListener("pointerdown", () => { if (M.on) M.cur = null; }, true);
+    if (e.metaKey || e.ctrlKey || e.altKey || /^(INPUT|SELECT|TEXTAREA)$/.test(e.target.tagName)) return;
+    if ((e.key === "m" || e.key === "M") && e.target === document.body) toggle();
+    else if (!M.on) return;
+    else if (e.key === "ArrowRight" || e.key === "ArrowLeft") { e.preventDefault(); step(e.key === "ArrowRight" ? 1 : -1); }
+    else if (e.key === "Escape" && !document.querySelector(".menu.open, .win.full")) stop();
+  });
   const go = $("gomenu");
-  if (go) { const li = document.createElement("li"); li.innerHTML = '<button id="gomovie">Movie mode<span class="kbd">M</span></button>'; go.prepend(li); li.querySelector("button").addEventListener("click", () => (M.on ? stop() : start())); }
+  if (go) { const li = document.createElement("li"); li.innerHTML = '<button id="gomovie">Movie mode<span class="kbd">M</span></button>'; go.prepend(li); li.querySelector("button").addEventListener("click", toggle); }
 })();
 </script>
 <script>
@@ -4180,17 +4003,16 @@ body.phone #launch .lx-clock { font-size: 9.5px; bottom: 9vh; }
     if (!B.started) setOn(B.on);
     if (!B.on || !catalog || !catalog.byCam) return;
     const now = performance.now(), movie = window.cassiniMovie && window.cassiniMovie.on;
-    // the linger clock runs only while the mission clock moves forward, so pausing keeps every window up
-    if (B.lastEt !== null && state.et > B.lastEt && !movie) B.clock += Math.min(now - B.lastNow, 250);
-    const jumped = B.lastEt !== null && Math.abs(state.et - B.lastEt) > 6 * 3600;
+    // the linger clock runs only while the mission clock moves forward (or movie mode plays, holding the clock on
+    // each picture between its steps), so pausing keeps every window up
+    if (B.lastEt !== null && (state.et > B.lastEt || (movie && state.playing))) B.clock += Math.min(now - B.lastNow, 250);
+    // (movie mode's cuts over the time without pictures are not jumps)
+    const jumped = B.lastEt !== null && Math.abs(state.et - B.lastEt) > 6 * 3600 && !(movie && state.et > B.lastEt);
     B.lastNow = now; B.lastEt = state.et;
     // records hold mission times, so they carry over when the months around this one load; a jump starts afresh
     const reset = jumped;
     if (catalog !== B.cat) { B.cat = catalog; targets = [...new Set(catalog.target)].filter(Boolean); }
     if (reset) B.rec.clear();
-    // movie mode takes the camera's place: the body windows step aside until it ends
-    for (const w of B.wins.values()) if (!w.el.dataset.min) w.el.hidden = !!movie;
-    if (movie) return;
     const stale = F.stale(), keepKeys = [];
     let newest = null;
     // one record per target and camera: when that camera last imaged the target, and on the linger clock when that
@@ -4383,7 +4205,7 @@ body.phone #launch .lx-clock { font-size: 9.5px; bottom: 9vh; }
   function open() {
     if (R.open) return;
     R.open = true; card.hidden = false; card.dispatchEvent(new Event("pointerdown"));
-    R.hidden = ["imgcard", "wacard", "moviecard"].map($).filter(w => w && !w.hidden);
+    R.hidden = ["imgcard", "wacard"].map($).filter(w => w && !w.hidden);
     R.hidden.forEach(w => { w.hidden = true; });
     if (window.cassiniMovie && window.cassiniMovie.on) window.cassiniMovie.stop();
     loadBodies();
@@ -5265,9 +5087,9 @@ body.phone #launch .lx-clock { font-size: 9.5px; bottom: 9vh; }
   const winLabel = w => w.dataset.name || ({ dock: "Cassini Replay", imgcard: "Narrow-angle Camera", wacard: "Wide-angle Camera" })[w.id] || w.getAttribute("aria-label") || "Window";
   const winGlyph = w => w.id === "dock" ? GLYPH.replay : w.id === "moments" ? GLYPH.moments : GLYPH.window;
   function snapshot(w) {
-    const img = w.querySelector(".well.has-frame .shot, .rlwell img, .mvwell img");
+    const img = w.querySelector(".well.has-frame .shot, .rlwell img");
     if (img && img.src && img.naturalWidth) return img.src;
-    const cv = w.querySelector(".rlwell canvas, .mvwell canvas");
+    const cv = w.querySelector(".rlwell canvas");
     if (cv && cv.width) { try { return cv.toDataURL("image/jpeg", 0.7); } catch (e) {} }
     return "";
   }
