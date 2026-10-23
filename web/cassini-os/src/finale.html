@@ -451,6 +451,12 @@ body.phone #finale .fx-data { width: min(220px, calc(100vw - 32px)); top: 10px; 
     fadeTo(black, 1, 1.5);
   }
   const finish = () => CS.end("finale");
+  // paused in the background (away.html): the cutscene's clock moves on by the time away, so it carries on where it stopped
+  document.addEventListener("cassini:away", e => {
+    if (e.detail.away || !F) return;
+    const ms = e.detail.ms; F.t0 += ms; F.lastFrame += ms;
+    for (const k of ["recapAt", "rollAt", "rollHeld", "rollEnd", "rollClose"]) if (F[k]) F[k] += ms;
+  });
   // its own tidying when it ends (cutscene.html brings the interface back)
   function cleanUp() {
     const f = F; F = null;
