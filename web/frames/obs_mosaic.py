@@ -937,6 +937,26 @@ def layout(u, n, cache):
     return p, tiles, rect, count, used, name
 
 
+def colour_picture(u, p, colour, planes):
+    """The colour picture of a pass's three colour filters' planes (RGBA, each on the pass's display scale), RGBA:
+    the pass's mosaic and its movie frames mixed alike. Natural color: a true color pass turned into what an eye
+    would see, a false color one balanced so the body comes out gray, on the pass's own measure of its body
+    (pass_scale's balance); without the mix the bands stay on the grey scale, where the blue and green of a red
+    body are close to black."""
+    rgb = np.dstack([a[..., 0] for a in planes])
+    scale = p["display_scale"]
+    bal = scale.get("balance")
+    mix = calibration.color_mix(u["key"][2], colour, u["key"][0], [bal[f] for f in colour] if bal else None)
+    if mix is not None and scale.get("typical"):
+        mix.typical = [scale["typical"][f] for f in colour]
+    if mix is not None:
+        rgb = calibration.mix_display(rgb, mix, scale["gamma"])
+    # only where every filter has the picture: past one filter's edge the others alone are a coloured rim
+    alpha = np.min([a[..., 3] for a in planes], axis=0)
+    rgb = (rgb * (alpha[..., None] / np.float32(255)) + 0.5).astype(np.uint8)
+    return np.dstack([rgb, alpha])
+
+
 def so_far(u, n, cache, made=None, out=OUT):
     """The pass's mosaic with tiles 0..n, RGBA out px (OUT unless asked for more, up to CANVAS) on its longest
     side, and its report; (None, None) before any tile is placed. made: layout(u, n, cache), when already
@@ -951,20 +971,7 @@ def so_far(u, n, cache, made=None, out=OUT):
     if len(used) == 3:
         colour = used
         acc = [filter_mosaic(u, p, f, tiles, rect, cache, ref, tag) for f in colour]
-        rgb = np.dstack([a[..., 0] for a in acc])
-        # natural color: a true color pass turned into what an eye would see, a false color one balanced so the
-        # body comes out gray, on the pass's own measure of its body (pass_scale's balance)
-        scale = p["display_scale"]
-        bal = scale.get("balance")
-        mix = calibration.color_mix(u["key"][2], colour, u["key"][0], [bal[f] for f in colour] if bal else None)
-        if mix is not None and scale.get("typical"):
-            mix.typical = [scale["typical"][f] for f in colour]
-        if mix is not None:
-            rgb = calibration.mix_display(rgb, mix, scale["gamma"])
-        # only where every filter has the picture: past one filter's edge the others alone are a coloured rim
-        alpha = np.min([a[..., 3] for a in acc], axis=0)
-        rgb = (rgb * (alpha[..., None] / np.float32(255)) + 0.5).astype(np.uint8)
-        rgba, used = np.dstack([rgb, alpha]), colour
+        rgba, used = colour_picture(u, p, colour, acc), colour
     else:
         rgba = filter_mosaic(u, p, used[0], tiles, rect, cache, ref, tag)
     if p["display_scale"].get("filled"):
@@ -1065,6 +1072,26 @@ def _place(u, t, rect, k, W, H, cache, scale):
     return frame
 
 
+def colour_sets(frames):
+    """The pass's frames grouped into filter sets as the camera windows find them (head-quiet's findSets,
+    reel.load_index): a run of frames, each taken within reel.SET_GAP of the one before, through different
+    filters; a clear or polarizer frame ends it, and a filter coming round again starts a new one (the next
+    pointing of a mosaic, the next colour cycle). Each set is a list of (filter, frame index), in time order."""
+    sets, run, last = [], None, None
+    for j, fr in enumerate(frames):
+        f = fr[2]
+        if f == "CL1/CL2" or _polarizer(f):
+            run = None
+            continue
+        if run is not None and fr[3] - last <= reel.SET_GAP and all(f != g for g, _ in run):
+            run.append((f, j))
+        else:
+            run = [(f, j)]
+            sets.append(run)
+        last = fr[3]
+    return sets
+
+
 def movie_frame(u, n, cache, trail=0, colour=True, out=OUT, centre=True):
     """Frame n of the pass played as a movie, RGBA out px on its longest side, and its report; (None, report)
     when SPICE could not place it. The frame is the pass's tile n (color_image.processed_frame: repeat exposures
@@ -1090,38 +1117,25 @@ def movie_frame(u, n, cache, trail=0, colour=True, out=OUT, centre=True):
     W, H = max(1, math.ceil(rect[2] * k)), max(1, math.ceil(rect[3] * k))
     # only the frames this picture needs are made: the newest of each colour filter within SET_GAP, the trail
     frames, used, newest = u["frames"], None, {}
-    # a pass with colour plays in colour: every frame shows the newest colour set taken by then (one frame of each
-    # colour filter, all within SET_GAP of one another, no clear frame between them), held until the next set is complete, as the camera
-    # windows hold a colour movie's last set; a frame of another filter (CB2, a methane band) keeps the set up
+    # a pass with colour plays in colour: every frame shows the newest colour set taken by then (colour_sets, the
+    # camera windows' sets, so the movie mixes the frames color.webp does), held until the next set is complete, as
+    # the camera windows hold a colour movie's last set; a frame of another filter (CB2, a methane band) keeps it up
     if colour and p["colour"]:
-        want = set(p["colour"])
-        for m in range(n, max(-1, n - 64), -1):
-            if frames[m][2] not in want:
+        want = p["colour"]
+        for run in reversed(colour_sets(frames[:n + 1])):
+            got = {f: j for f, j in run if f in want}
+            if len(got) < len(want):
                 continue
-            got, ts = {}, []
-            for j in range(m, max(-1, m - 64), -1):
-                f = frames[j][2]
-                # a set as the camera windows find them: a clear or polarizer frame ends it, a filter taken again
-                # starts a new one (so a set is never put together from two pointings)
-                if f == "CL1/CL2" or _polarizer(f) or f in got:
-                    break
-                if f in want:
-                    got[f] = j
-                    ts.append(frames[j][3])
-                    if len(got) == len(want):
-                        break
-            if len(got) == len(want) and max(ts) - min(ts) <= reel.SET_GAP:
-                for f, j in got.items():
-                    q = t if j == n else tile(u, j, cache, p["display_scale"])
-                    if "offset" in q:
-                        newest[f] = q
-                if len(newest) == len(want):
-                    used = p["colour"]
-                break
+            for f, j in got.items():
+                q = t if j == n else tile(u, j, cache, p["display_scale"])
+                if "offset" in q:
+                    newest[f] = q
+            if len(newest) == len(want):
+                used = want
+            break
     if used:
         planes = [_place(u, newest[f], rect, k, W, H, cache, p["display_scale"]) for f in used]
-        alpha = np.min([a[..., 3] for a in planes], axis=0)
-        rgba = np.dstack([a[..., 0] for a in planes] + [alpha])
+        rgba = colour_picture(u, p, used, planes)
         rep["color"] = used
         rep["ids"] = [newest[f]["id"] for f in used]
     else:
@@ -1147,6 +1161,10 @@ def movie_frame(u, n, cache, trail=0, colour=True, out=OUT, centre=True):
     return Image.fromarray(rgba, "RGBA"), rep
 
 
+# a pass's movie frames, renamed whenever the way they are drawn changes (movie-2: colour frames mixed as the mosaic is)
+MOVIE_DIR = "movie-2"
+
+
 def movie_webp(frame_id, size, cache, trail=0, colour=True, wait=False, ahead=6, centre=True):
     """(WebP, report) of frame_id played as a movie of its pass (movie_frame), made once and kept in the cache;
     None when the frame is in no pass. A pass whose plan is not worked out yet (seconds: it measures the pass's
@@ -1159,7 +1177,7 @@ def movie_webp(frame_id, size, cache, trail=0, colour=True, wait=False, ahead=6,
     if not wait and not all(os.path.exists(os.path.join(folder(u, cache), f)) for f in (PLAN_FILE, FOOTPRINT_FILE)):
         warm_movie(u, n, ahead, cache)
         return None, {"why": "working out the pass", "observation": u["key"][1], "pass": u["key"][3]}
-    path = os.path.join(folder(u, cache), "movie", str(size), f"{n}_{trail}_{int(bool(colour))}{'_c2' if centre else ''}.webp")
+    path = os.path.join(folder(u, cache), MOVIE_DIR, str(size), f"{n}_{trail}_{int(bool(colour))}{'_c2' if centre else ''}.webp")
     report, meta = {}, path[:-4] + "json"
 
     def make():
