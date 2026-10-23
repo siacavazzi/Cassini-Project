@@ -431,6 +431,12 @@ fscript = npart("script")
 assert fscript.count("/*FINALE_DATA*/null") == 1
 if os.path.exists(fd):
     fscript = fscript.replace("/*FINALE_DATA*/null", json.dumps(json.load(open(fd)), separators=(",", ":")))
+# the people who made the mission happen (mission-team.json, from NASA's and ESA's team pages): the credits roll after
+# the finale, and window.cassiniTeam for the About window
+team = json.load(open(os.path.join(os.path.dirname(os.path.abspath(sys.argv[2])), "mission-team.json")))
+assert all(s.get("title") and (s.get("people") or s.get("names") or s.get("text") or s.get("groups")) for s in team["sections"]), "mission-team.json: every section needs a title and people, names, text or groups"
+assert fscript.count("/*MISSION_TEAM*/null") == 1
+fscript = fscript.replace("/*MISSION_TEAM*/null", json.dumps({k: team[k] for k in ("intro", "sections", "closing", "sources")}, ensure_ascii=False, separators=(",", ":")))
 script += fscript + "\n"
 open(out, 'w').write(study + script)
 print("ok", out, len(study + script))
