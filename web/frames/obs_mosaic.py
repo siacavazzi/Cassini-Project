@@ -1046,15 +1046,68 @@ def movie_rect(fp, t, radius=0.0, centre=False):
     past Saturn's limb) keeps the view above. All of it decided once for the pass (fp and radius are the pass's)."""
     x0, y0, x1, y1 = fp
     side = MOVIE_FIT * FRAME
-    around = max(FRAME, 2 * radius * (1 + CENTRE_MARGIN))
-    if centre and radius > 0 and around <= side and x0 <= 0 <= x1 and y0 <= 0 <= y1:
-        half = min(side, max(around, 2 * max(-x0, x1, -y0, y1))) / 2
+    half = centre_half(fp, radius) if centre else None
+    if half:
         return -half, -half, 2 * half, 2 * half
     if max(x1 - x0, y1 - y0) <= side:
         return x0, y0, x1 - x0, y1 - y0
     w, h = min(x1 - x0, side), min(y1 - y0, side)
     cx, cy = t["offset"]
     return min(max(cx - w / 2, x0), x1 - w), min(max(cy - h / 2, y0), y1 - h), w, h
+
+
+def centre_half(fp, radius):
+    """Half the side of the square view centred on the body that movie_rect uses (reference pixels), or None when
+    the body is not centred: its disk (radius) does not fit MOVIE_FIT frames with CENTRE_MARGIN round it, or the
+    frames do not look at it (its centre outside the footprint fp)."""
+    x0, y0, x1, y1 = fp
+    side = MOVIE_FIT * FRAME
+    around = max(FRAME, 2 * radius * (1 + CENTRE_MARGIN))
+    if radius > 0 and around <= side and x0 <= 0 <= x1 and y0 <= 0 <= y1:
+        return min(side, max(around, 2 * max(-x0, x1, -y0, y1))) / 2
+    return None
+
+
+_centre_views = {}   # pass key -> centre_view's decision for it
+
+
+def centre_view(frame_id):
+    """Auto center for a picture shown on its own (a frame or a color composite) in the camera windows: the rule
+    of a movie centred on its body (centre_half), decided once for the pass the frame is in, from the geometry
+    cache's footprint of the pass (_box), so a pass is centred all through or not at all. A frame in no pass is its
+    own pass. Each picture keeps its frame's own scale: the view is one frame (FRAME full resolution pixels) square
+    round the body, so the picture is the size it is today, only moved so the body is in the middle (a movie's view
+    is the pass's, movie_rect). Answers {"centre": True, "side": FRAME, "pass": [...]} or {"centre": False,
+    "why": ...}: a ring, spoke or sky frame, a body too big for the view, or a frame SPICE has no place for keep the
+    picture as it is."""
+    idx, row = _row_of()
+    q = row.get(frame_id)
+    if q is None:
+        return {"centre": False, "why": "not in the index"}
+    g = reel.geometry([frame_id]).get(frame_id)
+    if not g or not g[2]:
+        return {"centre": False, "why": "SPICE has no place for the frame"}
+    found = unit_of(frame_id)
+    if found:
+        u = found[0]
+        key, target, cam, z = u["key"], u["key"][0], u["key"][2], u["z"]
+    else:
+        r = idx.iloc[q]
+        target, cam, z = r["TARGET_NAME"], "N" if r["INSTRUMENT_ID"] == "ISSNA" else "W", g[2]
+        key = (target, frame_id, cam)
+    with _lock:
+        hit = _centre_views.get(key)
+    if hit is None:
+        radius = RADIUS.get(target, 0) / (z * IFOV[cam])
+        fp = _box(u, z) if found else (-g[0] - HALF, -g[1] - HALF, -g[0] + HALF, -g[1] + HALF)
+        half = centre_half(fp, radius) if fp and radius else None
+        hit = {"centre": bool(half), "pass": [str(v) for v in key]}
+        if not half:
+            hit["why"] = "no disk of a known body that fits the view" if not radius else \
+                "the body is too big for the view or the frames do not look at it"
+        with _lock:
+            _centre_views[key] = hit
+    return dict(hit, side=FRAME) if hit["centre"] else dict(hit)
 
 
 def _place(u, t, rect, k, W, H, cache, scale):
