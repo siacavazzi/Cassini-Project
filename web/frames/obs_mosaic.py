@@ -61,7 +61,7 @@ import stacking  # noqa: E402
 # bumped whenever the way observation mosaics are made changes, so older ones are not served again; one per
 # display model (calibration.style), classic being the mosaics made before the balanced display model, raw the
 # balanced ones before natural color
-VERSIONS = {"balanced": "obs-v42", "raw": "obs-v25", "classic": "obs-v13-classic"}
+VERSIONS = {"balanced": "obs-v43", "raw": "obs-v26", "classic": "obs-v13-classic"}
 CANVAS = 2048        # longest side of the canvas the view is drawn on
 OUT = 1024           # longest side of the picture sent
 FRAME = 1024         # full resolution frame
@@ -455,6 +455,36 @@ SKY_TOE = 1.0    # ... and the soft toe above those blacks, this many times the 
                  # (calibration.display): the sky's scan lines, not its pixel noise, set how far grain reaches
 
 
+def tile_scale(scale, f, own_sky=False, seen=None):
+    """The display scale of one tile of filter f: the pass's, and with own_sky (a movie's frames, each shown
+    alone) a black raised to the frame's own sky level plus the band's height over it (sky_tops) where that sky
+    sits above the pass's: in the Jupiter approach movie one color set's stray light lifts its sky over the
+    pass's level, and its frame showed as an olive square that the next set's didn't. Never lowered (the sky's
+    stripes would come back as a veil), and never in a mosaic, whose tiles meet (one tile's black of its own
+    shows as a step). seen: a dict the raised black is put in."""
+    out = {**scale, "blacks": [scale["blacks"].get(f, 0.0)]}
+    top = scale.get("sky_tops", {}).get(f)
+    if not own_sky or top is None:
+        return out
+    black = out["blacks"][0]
+
+    def black_of(iof):
+        # the frame's sky as pass_scale finds it, at the size it measures on
+        q = iof[::4, ::4].astype(np.float32)
+        m = q < 0.05 * np.percentile(q, 99.9)
+        if m.mean() <= SKY_MIN:
+            return None
+        (level,), _ = calibration.sky_levels([[q]], [[m]])
+        if level + top <= black:
+            return None
+        if seen is not None:
+            seen["black"] = level + top
+        return {"black": level + top, "toe": scale.get("toe")}
+
+    out["black_of"] = black_of
+    return out
+
+
 def pass_scale(frames, u, drawn=None, true_colour=False, sky_tops=None):
     """The display scale of every tile of the pass (calibration.shared_scale over its frames merged in I/F, as
     mosaic_benchmark.display_scale): {"blacks": {filter: I/F}, "white": I/F, "gamma"}. Where the body fills
@@ -571,13 +601,13 @@ def tile(u, n, cache, scale=None):
                 return json.load(fh)
         path, fid, f, t, nm, x, y, z = u["frames"][n]
         k = z / u["z"] if z else 1.0
+        seen = {}
         try:
-            image, _, rep = color_image.processed_frame([path], hdr=True,
-                                                        scale={**scale, "blacks": [scale["blacks"].get(f, 0.0)]},
+            image, _, rep = color_image.processed_frame([path], hdr=True, scale=tile_scale(scale, f, bool(u.get("movie")), seen),
                                                         repeat_window=u.get("repeat_gap", mosaic_benchmark.REPEAT_GAP))
         except Exception as e:
             image, rep = None, {"why": f"{type(e).__name__}: {e}"[:200]}
-        out = {"n": n, "id": fid, "filter": f, "t": t, "stacked": rep.get("stacked"), "calibrated": rep.get("calibrated")}
+        out = {"n": n, "id": fid, "filter": f, "t": t, "stacked": rep.get("stacked"), "calibrated": rep.get("calibrated"), **seen}
         os.makedirs(os.path.dirname(base), exist_ok=True)
         if image is not None and "frame_offset" in rep:
             side = round(image.shape[0] * k)
