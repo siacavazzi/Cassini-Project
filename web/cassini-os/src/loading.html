@@ -163,6 +163,8 @@
   }
 
   function tick() {
+    // paused in the background (away.html): a load that waits on it is not a slow load, so its clock starts over
+    if (window.cassiniAway && cassiniAway.on) { busySince = null; return; }
     const what = busy(), now = performance.now();
     if (what) {
       status.textContent = what;

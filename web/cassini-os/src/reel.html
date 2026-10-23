@@ -96,9 +96,9 @@ body.phone #reelcard:not(.full) { width: calc(100% - 16px) !important; left: 8px
   function want(i) {
     let b = R.buf.get(i);
     if (b && b.size === size() && b.mosaic === R.mosaic) return b;
-    b = { ok: null, img: null, how: null, size: size(), mosaic: R.mosaic };
+    b = { ok: null, img: null, how: null, size: size(), mosaic: R.mosaic, ctl: new AbortController() };
     R.buf.set(i, b);
-    fetch(`${FRAMES}/frames/reel/${R.target}/${i}.webp?size=${b.size}&mosaic=${R.mosaic ? 1 : 0}`).then(async r => {
+    fetch(`${FRAMES}/frames/reel/${R.target}/${i}.webp?size=${b.size}&mosaic=${R.mosaic ? 1 : 0}`, { signal: b.ctl.signal }).then(async r => {
       if (!r.ok) throw new Error(r.status);
       try { b.how = JSON.parse(r.headers.get("X-Reel") || "null"); } catch (e) {}
       b.img = await createImageBitmap(await r.blob()); b.ok = true;
@@ -165,6 +165,12 @@ body.phone #reelcard:not(.full) { width: calc(100% - 16px) !important; left: 8px
     }
     requestAnimationFrame(tick);
   }
+  // paused in the background (away.html): the pictures still loading are called off (asked again on the way back),
+  // and the reel's clock moves on by the time away
+  document.addEventListener("cassini:away", e => {
+    if (e.detail.away) { for (const [j, b] of R.buf) if (b.ok === null) { b.ctl.abort(); R.buf.delete(j); } }
+    else { R.due += e.detail.ms; if (R.waitSince) R.waitSince += e.detail.ms; }
+  });
   function setReelPlaying(p) { R.playing = p; $("rlplay").textContent = p ? "❚❚" : "▶"; R.due = performance.now(); R.waitSince = 0; }
 
   async function playAll() {
