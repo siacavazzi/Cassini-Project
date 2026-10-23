@@ -135,14 +135,42 @@
     root.classList.remove("on");
     hideTimer = setTimeout(() => { root.hidden = true; }, 400);
   }
+  // ---------- a slow load is reported to the frame server (POST /jumplog, kept in its jump-log.jsonl) ----------
+  // so a wait that only happens now and then can be looked into afterwards: each data file's timings (waiting for
+  // a connection, the server's answer, the download), the picture requests that were under way, and the page's own
+  // long tasks. The page keeps the latest network and long-task entries itself (the browser's buffer fills up).
+  const REPORT_AFTER = 2000, net = [], long = [];
+  try {
+    new PerformanceObserver(l => { net.push(...l.getEntries()); if (net.length > 600) net.splice(0, net.length - 400); }).observe({ type: "resource" });
+    new PerformanceObserver(l => { long.push(...l.getEntries()); if (long.length > 200) long.splice(0, long.length - 100); }).observe({ type: "longtask" });
+  } catch (e) {}
+  let busyWhat = "";
+  function report(t0, t1) {
+    if (!/^https?:$/.test(location.protocol) || /claude\.ai$|claudeusercontent\.com$|claude\.site$/.test(location.hostname)) return;
+    const r = n => Math.round(n);
+    const data = net.filter(e => /\/data\//.test(e.name) && e.startTime >= t0 - 1000 && e.startTime <= t1).map(e => ({
+      file: new URL(e.name).pathname, start_ms: r(e.startTime - t0), queued_ms: r((e.requestStart || e.startTime) - e.startTime),
+      server_ms: r(e.responseStart - (e.requestStart || e.startTime)), download_ms: r(e.responseEnd - e.responseStart), bytes: e.transferSize }));
+    const pics = net.filter(e => /\/frames\//.test(e.name) && e.startTime <= t1 && e.responseEnd >= t0);
+    const body = {
+      seconds: +((t1 - t0) / 1000).toFixed(2), what: busyWhat, moment: (() => { try { return new Date(etToMs(state.et)).toISOString(); } catch (e) { return null; } })(),
+      data, pictures_under_way: pics.length, slowest_pictures: pics.sort((a, b) => b.duration - a.duration).slice(0, 8).map(e => ({ url: new URL(e.name).pathname + new URL(e.name).search, start_ms: r(e.startTime - t0), ms: r(e.duration) })),
+      long_tasks: long.filter(e => e.startTime + e.duration >= t0 && e.startTime <= t1).map(e => [r(e.startTime - t0), r(e.duration)]),
+      windows_open: document.querySelectorAll(".camwin:not([hidden])").length, playing: typeof state !== "undefined" && !!state.playing,
+      connection: navigator.connection ? { type: navigator.connection.effectiveType, mbps: navigator.connection.downlink, rtt_ms: navigator.connection.rtt } : null,
+      browser: navigator.userAgent, page: location.href };
+    fetch("jumplog", { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify(body) }).catch(() => {});
+  }
+
   function tick() {
     const what = busy(), now = performance.now();
     if (what) {
       status.textContent = what;
-      if (busySince === null) busySince = now;
+      if (busySince === null) { busySince = now; busyWhat = what; }
       // the first load shows at once (the screen is black anyway); later loads only once they take a moment
       if (!shown && (now - busySince >= SHOW_AFTER || !$("loading").hidden)) show();
     } else {
+      if (busySince !== null && now - busySince >= REPORT_AFTER && $("loading").hidden) report(busySince, now);
       busySince = null;
       if (shown && now - shownAt >= MIN_SHOWN) hide();
     }

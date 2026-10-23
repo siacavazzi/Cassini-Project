@@ -437,6 +437,41 @@ const ringTex = ringTexture();
 if (TEX_ON) texLoader.load("data/textures/rings/saturn_rings.png", t => { ringTex.image = t.image; ringTex.needsUpdate = true; });
 const uSun = { value: new THREE.Vector3(1, 0, 0) };
 
+// ---------- the real sky (data/textures/sky/): NASA SVS Deep Star Maps 2020, equirectangular in J2000 ----------
+// RA 0h at the middle of the map, RA growing to the left, Dec +90 at the top. ?sky=0 keeps the painted dots,
+// ?sky=2k|4k|8k picks the map size; by default 8k on a desktop, 4k on a phone or a GPU that cannot hold 8k, 2k on the smallest devices
+const SKY_TIER = (new URLSearchParams(location.search).get("sky") || "auto").toLowerCase();
+function skyTier() {
+  if (SKY_TIER === "0" || SKY_TIER === "off") return null;
+  if (/^[248]k$/.test(SKY_TIER)) return renderer.capabilities.maxTextureSize >= 2048 * +SKY_TIER[0] ? SKY_TIER : "2k";
+  const phone = matchMedia("(max-width: 600px), (pointer: coarse) and (max-height: 500px)").matches, mem = navigator.deviceMemory || 8;
+  if (renderer.capabilities.maxTextureSize < 4096 || mem <= 2) return "2k";
+  return phone || mem <= 4 || renderer.capabilities.maxTextureSize < 8192 ? "4k" : "8k";
+}
+let skyMesh = null;
+const uSkyGain = { value: 1 };
+function buildSky() {
+  const tier = skyTier(); if (!tier) return;
+  const mat = new THREE.ShaderMaterial({
+    uniforms: { map: { value: null }, gain: uSkyGain },
+    vertexShader: "varying vec2 vUv; void main(){ vUv = uv; gl_Position = projectionMatrix * modelViewMatrix * vec4(position, 1.0); }",
+    // a black point of 0.1 keeps the faint star haze of NASA's display curve from veiling the view in grey
+    fragmentShader: "uniform sampler2D map; uniform float gain; varying vec2 vUv; void main(){ gl_FragColor = vec4(max(texture2D(map, vUv).rgb - 0.1, 0.0) * (0.8 / 0.9) * gain, 1.0); }",
+    side: THREE.DoubleSide, depthTest: false, depthWrite: false });
+  skyMesh = new THREE.Mesh(new THREE.SphereGeometry(1e7, 96, 48), mat);
+  // SphereGeometry puts u at (-cos 2πu, ·, sin 2πu) around its y axis; with RA = 2π(0.5 - u) that is J2000 (x, z, y)
+  const jx = toScene([1, 0, 0], new THREE.Vector3()), jy = toScene([0, 1, 0], new THREE.Vector3()), jz = toScene([0, 0, 1], new THREE.Vector3());
+  skyMesh.matrixAutoUpdate = false; skyMesh.userData.basis = new THREE.Matrix4().makeBasis(jx, jz, jy);
+  skyMesh.matrix.copy(skyMesh.userData.basis);
+  skyMesh.renderOrder = -1000; skyMesh.frustumCulled = false; skyMesh.visible = false;
+  scene.add(skyMesh);
+  texLoader.load("data/textures/sky/sky_" + tier + ".webp", t => {
+    t.anisotropy = Math.min(8, renderer.capabilities.getMaxAnisotropy());
+    mat.uniforms.map.value = t; skyMesh.visible = true; starPts.visible = false;
+  }, undefined, () => console.warn("sky map missing for " + tier));
+  if (window.cassiniSettings) cassiniSettings.on("view.skyBrightness", v => { uSkyGain.value = v; });
+}
+
 function makeSaturn(radii) {
   const eq = radii[0] / KM, po = radii[2] / KM;
   const mat = new THREE.ShaderMaterial({
@@ -795,9 +830,13 @@ function assemble(parts) {
   lastTrailEt = -1e99;
   if ($("mlist").children.length) scrollMoments();
 }
-// load the years around y; calls made while loading only keep the latest year asked for
+// load the years around y; calls made while loading only keep the latest year asked for, and a call made while
+// a download is under way does not wait for it: the chunk under the new moment goes first
+let yearsWake = null;   // ends the current wait when another year is asked for
+const orJump = job => Promise.race([job, new Promise(r => { yearsWake = r; })]).finally(() => { yearsWake = null; });
 function requestYears(y) {
   yearsWanted = y;
+  if (yearsWake) yearsWake();
   if (!yearsJob) yearsJob = (async () => {
     try {
       while (yearsWanted !== null) {
@@ -807,12 +846,19 @@ function requestYears(y) {
         keepYears = ys;
         try {
           // the year on screen first, on its own so it has the whole connection, and shown as soon as
-          // it is in; its neighbours are downloaded after it and added when they arrive
+          // it is in; its neighbours are downloaded after it and added when they arrive. A jump meanwhile
+          // leaves these downloads to finish into the cache (the ones the new moment shares are reused)
           if (!activeYears.includes(y) && ys.length > 1) {
-            assemble([await loadPart(y)]);
+            const one = loadPart(y);
+            await orJump(one);
+            if (yearsWanted !== null) { one.catch(() => {}); continue; }
+            assemble([await one]);
             if (yearsWanted !== null) continue;
           }
-          assemble(await Promise.all(ys.map(loadPart)));
+          const all = Promise.all(ys.map(loadPart));
+          await orJump(all);
+          if (yearsWanted !== null) { all.catch(() => {}); continue; }
+          assemble(await all);
         }
         catch (err) {
           console.warn("year not loaded", err); setText("yload", "Could not load " + ys.map(partLabel).join(", "));
@@ -919,6 +965,7 @@ function build() {
     starPts.add(new THREE.Points(sg, new THREE.PointsMaterial({ size, sizeAttenuation: false, vertexColors: true, transparent: true, opacity: op, depthWrite: false })));
   }
   scene.add(starPts);
+  buildSky();
 
   const sc = document.createElement("canvas"); sc.width = sc.height = 128;
   const sgc = sc.getContext("2d"), grd = sgc.createRadialGradient(64, 64, 0, 64, 64, 64);
@@ -1044,6 +1091,7 @@ function updateBodies() {
   updateFov();
 
   starPts.position.copy(camera.position);
+  if (skyMesh) { skyMesh.matrix.copy(skyMesh.userData.basis).setPosition(camera.position); skyMesh.matrixWorld.copy(skyMesh.matrix); }
   // the Sun where it really is: a glow of constant apparent size, never smaller than its disc
   relScene("SUN", sunSprite.position);
   sunSprite.scale.setScalar(Math.max(camera.position.distanceTo(sunSprite.position) * 0.05, 696000 / KM * 4));
