@@ -845,15 +845,17 @@ def movie_rect(fp, t, radius=0.0, centre=False):
     footprint fp (movie_footprint) when that is at most MOVIE_FIT frames across, so the body holds still while the
     pointing wanders; otherwise a window MOVIE_FIT frames across centred on frame t, kept inside fp (a creeping
     ring or limb movie moves along). Either way one size for the whole pass, so the picture never rescales.
-    centre: a square view centred on the body (radius: its disk, reference pixels), a frame across or its disk
-    with CENTRE_MARGIN round it, when that is at most MOVIE_FIT frames and the frames look at the body (its centre
-    in fp), so the body sits in the middle of every frame, north up; a body bigger than that or not in the frames
-    (a ring or spoke movie past Saturn's limb) keeps the view above."""
+    centre: a square view centred on the body (radius: its disk, reference pixels), wide enough for the whole
+    footprint round it (a stare's rings stay in) and at least a frame or the disk with CENTRE_MARGIN round it, up
+    to MOVIE_FIT frames, when the disk fits that and the frames look at the body (its centre in fp): the body sits
+    in the middle of every frame, north up. A body bigger than that or not in the frames (a ring or spoke movie
+    past Saturn's limb) keeps the view above. All of it decided once for the pass (fp and radius are the pass's)."""
     x0, y0, x1, y1 = fp
     side = MOVIE_FIT * FRAME
     around = max(FRAME, 2 * radius * (1 + CENTRE_MARGIN))
     if centre and radius > 0 and around <= side and x0 <= 0 <= x1 and y0 <= 0 <= y1:
-        return -around / 2, -around / 2, around, around
+        half = min(side, max(around, 2 * max(-x0, x1, -y0, y1))) / 2
+        return -half, -half, 2 * half, 2 * half
     if max(x1 - x0, y1 - y0) <= side:
         return x0, y0, x1 - x0, y1 - y0
     w, h = min(x1 - x0, side), min(y1 - y0, side)
@@ -969,7 +971,7 @@ def movie_webp(frame_id, size, cache, trail=0, colour=True, wait=False, ahead=6,
     if not wait and not all(os.path.exists(os.path.join(folder(u, cache), f)) for f in ("plan.json", "movie_footprint.json")):
         warm_movie(u, n, ahead, cache)
         return None, {"why": "working out the pass", "observation": u["key"][1], "pass": u["key"][3]}
-    path = os.path.join(folder(u, cache), "movie", str(size), f"{n}_{trail}_{int(bool(colour))}{'_c' if centre else ''}.webp")
+    path = os.path.join(folder(u, cache), "movie", str(size), f"{n}_{trail}_{int(bool(colour))}{'_c2' if centre else ''}.webp")
     report, meta = {}, path[:-4] + "json"
 
     def make():
