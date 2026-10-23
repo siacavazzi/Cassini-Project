@@ -367,6 +367,8 @@ body.phone #finale .fx-data { width: min(220px, calc(100vw - 32px)); top: 10px; 
       if (k >= 1) { fades.delete(el); if (f.then) f.then(); }
     }
   }
+  // paused in the background (away.html): the fades carry on where they stopped
+  document.addEventListener("cassini:away", e => { if (!e.detail.away) for (const f of fades.values()) f.t0 += e.detail.ms; });
   function caption(html, cls) {
     const el = document.createElement("div");
     el.className = "fx-cap" + (cls ? " " + cls : ""); el.innerHTML = html; caps.appendChild(el);
@@ -444,6 +446,11 @@ body.phone #finale .fx-data { width: min(220px, calc(100vw - 32px)); top: 10px; 
   }
 
   // the viewer's frame loop, before it places the bodies: the finale runs its own clock
+  // paused in the background (away.html): the cutscene's clock moves on by the time away, so it carries on where it stopped
+  document.addEventListener("cassini:away", e => {
+    if (e.detail.away || !F) return;
+    const ms = e.detail.ms; F.t0 += ms; F.lastFrame += ms; if (F.recapAt) F.recapAt += ms; look.last += ms;
+  });
   window.studyFrame = dt => {
     stepFades();
     if (!F) return;

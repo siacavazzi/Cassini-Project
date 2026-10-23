@@ -587,6 +587,13 @@ body.phone #settings .sbody { grid-template-columns: 1fr; grid-template-rows: au
 body.phone #settings nav { flex-direction: row; border-right: 0; border-bottom: 1px solid var(--q-line); overflow-x: auto; }
 body.phone .srow input[type=range] { width: 96px; }
 
+/* the note while the window is visible but not focused (a second screen); a hidden tab shows nothing anyway */
+#awaynote { position: fixed; left: 50%; bottom: 96px; transform: translateX(-50%); z-index: 90; pointer-events: none;
+  padding: 7px 14px; border-radius: 999px; font: 12px/1.2 var(--ui); letter-spacing: .02em;
+  color: var(--q-text); background: var(--q-panel); border: 1px solid var(--q-line); backdrop-filter: blur(12px);
+  opacity: 0; transition: opacity .25s; }
+#awaynote.on { opacity: 1; }
+
 #phmom { display: none; }
 #phmom svg { width: 13px; height: 13px; display: block; }
 #phmom svg * { fill: none; stroke: currentColor; stroke-width: 1.5; }
@@ -1083,6 +1090,8 @@ body.phone #finale .fx-data { width: min(220px, calc(100vw - 32px)); top: 10px; 
   <footer><span id="snote">Saved on this device</span><button class="btn" id="sreset">Restore defaults</button></footer>
 </section>
 
+  <div id="awaynote" role="status" aria-live="polite">Paused while Cassini OS is in the background</div>
+
   <section class="win" id="reelcard" aria-label="Body reel" hidden>
   <div class="titlebar"><span class="lights"><button class="close" aria-label="Close the body reel">×</button><button class="min" aria-label="Close the body reel">–</button><button class="zoom" aria-label="Zoom">+</button></span>Body Reel</div>
   <div class="body">
@@ -1387,6 +1396,55 @@ body.phone #finale .fx-data { width: min(220px, calc(100vw - 32px)); top: 10px; 
       run() { try { localStorage.removeItem("cassini-os-layout-v2"); } catch (e) {} location.reload(); } });
   D({ key: "data.reset", section: "Data", label: "All settings", type: "action", button: "Restore defaults",
       hint: "Every setting back to how Cassini OS ships.", run: () => S.reset() });
+})();
+</script>
+<script>
+// ---------- pause in the background ----------
+(function () {
+  const S = window.cassiniSettings;
+  S.define({ key: "playback.pauseHidden", section: "Playback", label: "Pause in the background", type: "toggle", value: true,
+    hint: "While the tab is hidden or the browser is minimized, everything stops: the clock, the 3D view, picture requests and sound. It carries on where it stopped when you come back." });
+  S.define({ key: "playback.pauseBlur", section: "Playback", label: "Also when the window loses focus", type: "toggle", value: true,
+    hint: "Pause while you work in another window too, even if Cassini OS is still on screen. Off keeps it playing on a second screen." });
+
+  const A = window.cassiniAway = { on: false, since: 0, total: 0 };
+  let focused = true;   // until the window says otherwise (a page opened in front has focus)
+  // every animation frame loop asks again each frame, so holding the requests stops them all; ids for held ones are
+  // negative (never 0, which loops use for "none"), and map to the real request once it is made
+  const raf = window.requestAnimationFrame.bind(window), caf = window.cancelAnimationFrame.bind(window);
+  const held = new Map(), real = new Map();
+  let nextId = -1;
+  window.requestAnimationFrame = cb => {
+    if (!A.on) return raf(cb);
+    const id = nextId--; held.set(id, cb); return id;
+  };
+  window.cancelAnimationFrame = id => {
+    if (held.delete(id)) return;
+    caf(real.has(id) ? real.get(id) : id); real.delete(id);
+  };
+  const note = document.getElementById("awaynote");
+  function check() {
+    const away = S.get("playback.pauseHidden") && (document.hidden || (S.get("playback.pauseBlur") && !focused));
+    if (away === A.on) return;
+    A.on = away;
+    note.classList.toggle("on", away && !document.hidden);
+    if (away) {
+      A.since = performance.now();
+      document.dispatchEvent(new CustomEvent("cassini:away", { detail: { away: true } }));
+    } else {
+      const ms = performance.now() - A.since; A.total += ms;
+      // the clocks move on first, then the loops get their frames
+      document.dispatchEvent(new CustomEvent("cassini:away", { detail: { away: false, ms } }));
+      real.clear();
+      for (const [id, cb] of held) real.set(id, raf(cb));
+      held.clear();
+    }
+  }
+  document.addEventListener("visibilitychange", check);
+  window.addEventListener("blur", () => { focused = false; check(); });
+  window.addEventListener("focus", () => { focused = true; check(); });
+  S.on("playback.pauseHidden", check); S.on("playback.pauseBlur", check);
+  check();
 })();
 </script>
 <script>
@@ -2376,7 +2434,8 @@ body.phone #finale .fx-data { width: min(220px, calc(100vw - 32px)); top: 10px; 
     // whose SPICE kernels are not loaded yet) can hold them all, so the data waited behind them on the loading screen.
     // The server still finishes what was dropped and keeps it; the window asks again once the data is in.
     let warnCtl = new AbortController();   // the look-ahead's notes to the server (?warm=1)
-    const dataWait = () => typeof yearReady === "function" && !yearReady();
+    // the same while the page is paused in the background (away.html): nothing in flight, nothing asked for
+    const dataWait = () => (window.cassiniAway && cassiniAway.on) || (typeof yearReady === "function" && !yearReady());
     function letGo() {
       for (const which of ["frame", "comp"]) {
         const v = lane[which];
@@ -2553,6 +2612,9 @@ body.phone #finale .fx-data { width: min(220px, calc(100vw - 32px)); top: 10px; 
     for (const f of feeds) { f(); f.retier(); }
   };
   for (const key of ["cameras.fullRes", "cameras.fullDelay"]) S.on(key, () => feeds.forEach(f => f.retier()));
+  // paused in the background (away.html): each window lets go of its pictures at once (the frame loop that drives
+  // them is held); back, the next frame asks again for what each one shows
+  document.addEventListener("cassini:away", e => { if (e.detail.away) feeds.forEach(f => f()); });
   syncMenu();
 })();
 </script>
@@ -2930,6 +2992,12 @@ body.phone #finale .fx-data { width: min(220px, calc(100vw - 32px)); top: 10px; 
     }
     requestAnimationFrame(tick);
   }
+  // paused in the background (away.html): the pictures still loading are called off (the film asks again when it
+  // carries on), and the film's clock moves on by the time away, so it picks up on the frame it was on
+  document.addEventListener("cassini:away", e => {
+    if (e.detail.away) { for (const [id, b] of M.buf) if (b.base.ok === null || (b.best.started && b.best.ok === null)) { b.best.stop(); b.base.stop(); M.buf.delete(id); } }
+    else { M.due += e.detail.ms; if (M.waitSince) M.waitSince += e.detail.ms; for (const b of M.buf.values()) b.since += e.detail.ms; }
+  });
   function setMoviePlaying(p) { M.playing = p; $("mvplay").textContent = p ? "❚❚" : "▶"; M.due = performance.now(); }
 
   // ---- entering and leaving ----
@@ -3181,6 +3249,8 @@ body.phone #finale .fx-data { width: min(220px, calc(100vw - 32px)); top: 10px; 
   }
   const base = window.studyHud;
   window.studyHud = ms => { base(ms); tick(); };
+  // paused in the background (away.html): the body windows let go of their pictures too
+  document.addEventListener("cassini:away", e => { if (e.detail.away) for (const w of B.wins.values()) w.update(); });
   window.cassiniBodyWindows = { setOn, get on() { return B.on; }, state: B };
 })();
 </script>
@@ -3222,9 +3292,9 @@ body.phone #finale .fx-data { width: min(220px, calc(100vw - 32px)); top: 10px; 
   function want(i) {
     let b = R.buf.get(i);
     if (b && b.size === size() && b.mosaic === R.mosaic) return b;
-    b = { ok: null, img: null, how: null, size: size(), mosaic: R.mosaic };
+    b = { ok: null, img: null, how: null, size: size(), mosaic: R.mosaic, ctl: new AbortController() };
     R.buf.set(i, b);
-    fetch(`${FRAMES}/frames/reel/${R.target}/${i}.webp?size=${b.size}&mosaic=${R.mosaic ? 1 : 0}`).then(async r => {
+    fetch(`${FRAMES}/frames/reel/${R.target}/${i}.webp?size=${b.size}&mosaic=${R.mosaic ? 1 : 0}`, { signal: b.ctl.signal }).then(async r => {
       if (!r.ok) throw new Error(r.status);
       try { b.how = JSON.parse(r.headers.get("X-Reel") || "null"); } catch (e) {}
       b.img = await createImageBitmap(await r.blob()); b.ok = true;
@@ -3291,6 +3361,12 @@ body.phone #finale .fx-data { width: min(220px, calc(100vw - 32px)); top: 10px; 
     }
     requestAnimationFrame(tick);
   }
+  // paused in the background (away.html): the pictures still loading are called off (asked again on the way back),
+  // and the reel's clock moves on by the time away
+  document.addEventListener("cassini:away", e => {
+    if (e.detail.away) { for (const [j, b] of R.buf) if (b.ok === null) { b.ctl.abort(); R.buf.delete(j); } }
+    else { R.due += e.detail.ms; if (R.waitSince) R.waitSince += e.detail.ms; }
+  });
   function setReelPlaying(p) { R.playing = p; $("rlplay").textContent = p ? "❚❚" : "▶"; R.due = performance.now(); R.waitSince = 0; }
 
   async function playAll() {
@@ -3593,7 +3669,9 @@ body.phone #finale .fx-data { width: min(220px, calc(100vw - 32px)); top: 10px; 
   }
   // browsers let a page make sound only after the person clicks or presses a key on it
   ["pointerdown", "keydown", "touchend"].forEach(t => window.addEventListener(t, () => { gestured = true; if (S.get("sound.on") && (!ctx || ctx.state !== "running")) start(); }, { passive: true, capture: true }));
-  document.addEventListener("visibilitychange", () => { if (!ctx) return; if (document.hidden) ctx.suspend(); else if (S.get("sound.on")) ctx.resume(); });
+  document.addEventListener("visibilitychange", () => { if (!ctx) return; if (document.hidden) ctx.suspend(); else if (S.get("sound.on") && !(window.cassiniAway && cassiniAway.on)) ctx.resume(); });
+  // paused in the background (away.html), also when the tab is still on screen but the window lost focus
+  document.addEventListener("cassini:away", e => { if (!ctx) return; if (e.detail.away) ctx.suspend(); else if (S.get("sound.on") && !document.hidden) ctx.resume(); });
 
   // ---------- pitch: a pentatonic scale, so any notes that sound together agree ----------
   const SCALE = [0, 2, 4, 7, 9], ROOT = { N: 62, W: 50 };   // D major pentatonic: narrow-angle from D4, wide-angle from D3
@@ -5977,8 +6055,9 @@ function momentsBefore(et) {
   let c = 0; for (const t of momentEts.ets) if (t < et) c++;
   return c;
 }
+document.addEventListener("cassini:away", e => { if (!e.detail.away) lastT = performance.now(); });
 function frame(now) {
-  const dt = Math.min(0.1, (now - lastT) / 1000); lastT = now;
+  const dt = Math.max(0, Math.min(0.1, (now - lastT) / 1000)); lastT = now;
   const ready = yearReady();
   if (mission) {
     const y = partOf(state.et);
@@ -6197,6 +6276,8 @@ function frame(now) {
   }
 
   function tick() {
+    // paused in the background (away.html): a load that waits on it is not a slow load, so its clock starts over
+    if (window.cassiniAway && cassiniAway.on) { busySince = null; return; }
     const what = busy(), now = performance.now();
     if (what) {
       status.textContent = what;
@@ -6501,6 +6582,8 @@ function frame(now) {
       if (k >= 1) { fades.delete(el); if (f.then) f.then(); }
     }
   }
+  // paused in the background (away.html): the fades carry on where they stopped
+  document.addEventListener("cassini:away", e => { if (!e.detail.away) for (const f of fades.values()) f.t0 += e.detail.ms; });
   function caption(html, cls) {
     const el = document.createElement("div");
     el.className = "fx-cap" + (cls ? " " + cls : ""); el.innerHTML = html; caps.appendChild(el);
@@ -6578,6 +6661,11 @@ function frame(now) {
   }
 
   // the viewer's frame loop, before it places the bodies: the finale runs its own clock
+  // paused in the background (away.html): the cutscene's clock moves on by the time away, so it carries on where it stopped
+  document.addEventListener("cassini:away", e => {
+    if (e.detail.away || !F) return;
+    const ms = e.detail.ms; F.t0 += ms; F.lastFrame += ms; if (F.recapAt) F.recapAt += ms; look.last += ms;
+  });
   window.studyFrame = dt => {
     stepFades();
     if (!F) return;

@@ -1431,7 +1431,8 @@ body.idle .win.full .titlebar { opacity: 0; }
     // whose SPICE kernels are not loaded yet) can hold them all, so the data waited behind them on the loading screen.
     // The server still finishes what was dropped and keeps it; the window asks again once the data is in.
     let warnCtl = new AbortController();   // the look-ahead's notes to the server (?warm=1)
-    const dataWait = () => typeof yearReady === "function" && !yearReady();
+    // the same while the page is paused in the background (away.html): nothing in flight, nothing asked for
+    const dataWait = () => (window.cassiniAway && cassiniAway.on) || (typeof yearReady === "function" && !yearReady());
     function letGo() {
       for (const which of ["frame", "comp"]) {
         const v = lane[which];
@@ -1608,6 +1609,9 @@ body.idle .win.full .titlebar { opacity: 0; }
     for (const f of feeds) { f(); f.retier(); }
   };
   for (const key of ["cameras.fullRes", "cameras.fullDelay"]) S.on(key, () => feeds.forEach(f => f.retier()));
+  // paused in the background (away.html): each window lets go of its pictures at once (the frame loop that drives
+  // them is held); back, the next frame asks again for what each one shows
+  document.addEventListener("cassini:away", e => { if (e.detail.away) feeds.forEach(f => f()); });
   syncMenu();
 })();
 </script>
