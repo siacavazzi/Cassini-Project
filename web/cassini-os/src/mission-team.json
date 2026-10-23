@@ -1,0 +1,974 @@
+{
+ "_readme": "The people who made Cassini-Huygens happen, for the credits roll after the Grand Finale (finale.html) and the About window (window.cassiniTeam). build.py bakes it in. Every name and role comes from the sources listed at the end, as those pages write them (initials where they give only initials); obvious typos on the source page were fixed (Scott G. Edgington, Norbert Krupp, S. Chatterjee, Hao Cao). Add a name only with a source. Sections: title, sub (optional line), people [{role, name, note}], names [plain list], text, groups [same shape, with their own title]. The order follows Sam's wish: the imaging team first, since every picture in Cassini OS is theirs, then the mission's leaders, then navigation, then everyone else.",
+ "intro": {
+  "head": "Cassini was made by people.",
+  "text": "Thousands of them built it, flew it for twenty years and read what it sent home. These are some of their names, as NASA and ESA list them."
+ },
+ "sections": [
+  {
+   "title": "Imaging Science Subsystem",
+   "sub": "Cassini's two cameras. Every picture in this replay is theirs.",
+   "people": [
+    {
+     "role": "Team leader",
+     "name": "Carolyn C. Porco",
+     "note": "Space Science Institute, Boulder · CICLOPS"
+    },
+    {
+     "role": "Deputy team leader",
+     "name": "Robert A. West"
+    }
+   ],
+   "groups": [
+    {
+     "title": "Imaging team",
+     "names": [
+      "Joseph Burns",
+      "Anthony Del Genio",
+      "H. Luke Dones",
+      "Andrew Ingersoll",
+      "Torrence Johnson",
+      "Alfred McEwen",
+      "Steven Squyres",
+      "Peter Thomas",
+      "Joseph Veverka",
+      "Carl Murray"
+     ]
+    },
+    {
+     "title": "Camera operations at JPL",
+     "names": [
+      "H. Breneman",
+      "J. Gerhard",
+      "V. Hammerle",
+      "F. Loaiza",
+      "L. Ly-Hollins",
+      "C. To",
+      "J. Yoshimizu"
+     ]
+    }
+   ]
+  },
+  {
+   "title": "Mission leadership",
+   "people": [
+    {
+     "role": "Program manager",
+     "name": "Earl Maize",
+     "note": "NASA's Jet Propulsion Laboratory"
+    },
+    {
+     "role": "Project scientist",
+     "name": "Linda J. Spilker",
+     "note": "NASA's Jet Propulsion Laboratory"
+    },
+    {
+     "role": "Deputy project scientist",
+     "name": "Scott G. Edgington",
+     "note": "NASA's Jet Propulsion Laboratory"
+    },
+    {
+     "role": "Program executive",
+     "name": "Bill Knopf",
+     "note": "NASA Headquarters"
+    },
+    {
+     "role": "Program scientist",
+     "name": "Curt Niebur",
+     "note": "NASA Headquarters"
+    },
+    {
+     "role": "Project scientist",
+     "name": "Nicolas Altobelli",
+     "note": "European Space Agency"
+    },
+    {
+     "role": "Project manager, Cassini's radio antenna and other contributions",
+     "name": "Enrico Flamini",
+     "note": "Italian Space Agency"
+    }
+   ],
+   "groups": [
+    {
+     "title": "Earlier leaders",
+     "people": [
+      {
+       "role": "Program manager, development and launch",
+       "name": "Richard J. Spehalski",
+       "note": "1992 to 1998"
+      },
+      {
+       "role": "Program manager",
+       "name": "Robert T. Mitchell",
+       "note": "from 1998"
+      },
+      {
+       "role": "Project scientist",
+       "name": "Dennis Matson",
+       "note": "NASA's Jet Propulsion Laboratory"
+      }
+     ]
+    }
+   ]
+  },
+  {
+   "title": "Navigation and trajectory",
+   "sub": "The people who flew Cassini's path, the path this replay follows.",
+   "people": [
+    {
+     "role": "Navigation team",
+     "name": "Duane Roth"
+    },
+    {
+     "role": "Maneuver and trajectory",
+     "name": "Y. Hahn"
+    },
+    {
+     "role": "Orbit determination",
+     "name": "Julie Bellerose"
+    },
+    {
+     "role": "Mission planning",
+     "name": "Erick J. Sturm II"
+    },
+    {
+     "role": "SPICE, NASA's Navigation and Ancillary Information Facility",
+     "name": "C. Acton"
+    },
+    {
+     "role": "Software development",
+     "name": "I. Roundhill"
+    },
+    {
+     "role": "System administration",
+     "name": "R. Beswick"
+    }
+   ],
+   "names": [
+    "S. Hernandez-Doran",
+    "F. Laipert",
+    "P. Valerino",
+    "M. Vaquero",
+    "S. Wagner",
+    "M. Wong",
+    "D. Boone",
+    "K. Criddle",
+    "R. Ionasecu",
+    "R. Jacobson",
+    "K. Kelleher",
+    "W. Owen",
+    "Z. Tarzi",
+    "M. Bittner",
+    "D. Seal"
+   ]
+  },
+  {
+   "title": "Spacecraft operations",
+   "people": [
+    {
+     "role": "Spacecraft operations office",
+     "name": "Julie L. Webster"
+    },
+    {
+     "role": "Propulsion",
+     "name": "Todd Barber"
+    },
+    {
+     "role": "Telecom",
+     "name": "A. Thomas"
+    },
+    {
+     "role": "Power",
+     "name": "Jonathan Grandidier"
+    },
+    {
+     "role": "Thermal devices",
+     "name": "William Ledeboer"
+    },
+    {
+     "role": "Command and data subsystem",
+     "name": "P. Morgan"
+    },
+    {
+     "role": "Integrated test lab",
+     "name": "K. Baldaruddin"
+    },
+    {
+     "role": "Systems",
+     "name": "L. Burke"
+    },
+    {
+     "role": "Attitude control",
+     "name": "T. Burk"
+    }
+   ],
+   "names": [
+    "C. Garner",
+    "A. Mitchell",
+    "J. Shell",
+    "B. Marshall",
+    "S. Adamiak",
+    "D. Beach",
+    "L. Tatge",
+    "J. Hernandez",
+    "C. Huynh",
+    "C. Sagoian",
+    "M. Bittner",
+    "J. Glibert",
+    "C. Kirby",
+    "M. Mizukami",
+    "K. Naviaux",
+    "L. Andrade",
+    "D. Bates",
+    "T. Brown",
+    "A. Lee",
+    "C. Lee",
+    "F. Rizvi",
+    "J. Stupik",
+    "T. Sung",
+    "E. Wang"
+   ]
+  },
+  {
+   "title": "Science and uplink",
+   "people": [
+    {
+     "role": "Science and uplink office",
+     "name": "Kathryn Weld"
+    },
+    {
+     "role": "Project science and system engineering",
+     "name": "Nora Alonge"
+    },
+    {
+     "role": "Assistant",
+     "name": "Morgan Cable"
+    },
+    {
+     "role": "Mission sequencing",
+     "name": "Diane Conner"
+    },
+    {
+     "role": "Deputy",
+     "name": "David Tong"
+    },
+    {
+     "role": "Science planning and sequencing",
+     "name": "William Heventhal"
+    },
+    {
+     "role": "Deputy",
+     "name": "Trina Ray"
+    },
+    {
+     "role": "Instrument operations",
+     "name": "Luis Morales"
+    },
+    {
+     "role": "Deep Space Network schedulers",
+     "name": "R. Espinueva, K. Yetter"
+    }
+   ],
+   "names": [
+    "J. Boyer",
+    "J. Castello",
+    "S. Fleischer",
+    "U. Guduri",
+    "W. Kaye",
+    "S. Payan",
+    "S. Petrosian",
+    "J. Berkeley",
+    "R. Boehmer",
+    "S. Boll",
+    "S. Brooks",
+    "K. Cloutier",
+    "E. Eelkema-Stough",
+    "S. Goo",
+    "K. Kelleher",
+    "E. Kowalski",
+    "J. Pitesky",
+    "K. Uchida",
+    "N. Vandermey",
+    "A. Anabtawi",
+    "B. Buratti",
+    "M. Burton",
+    "S. Edgington",
+    "R. Lopes",
+    "K. Mitchell",
+    "S. Perl",
+    "K. Perry",
+    "M. Roy",
+    "B. Wallis",
+    "Y. Anderson",
+    "P. Andres",
+    "J. Henricks",
+    "E. Barbins",
+    "D. Buccino",
+    "G. Hamilton",
+    "D. Kahan",
+    "S. Kwan",
+    "A. Rinion",
+    "C. Veeramachaneni",
+    "R. West",
+    "S. Chatterjee",
+    "G. Earle",
+    "P. Lee",
+    "B. Stromberg",
+    "A. Tinio"
+   ]
+  },
+  {
+   "title": "Program operations",
+   "people": [
+    {
+     "role": "Resource management",
+     "name": "Patricia Ramirez"
+    },
+    {
+     "role": "Deep Space Network mission interface",
+     "name": "Stefan Waldherr"
+    },
+    {
+     "role": "Program outreach",
+     "name": "Alice Wessen"
+    },
+    {
+     "role": "Mission assurance",
+     "name": "Nazilla Rouse"
+    },
+    {
+     "role": "Science communication",
+     "name": "Preston Dyches"
+    },
+    {
+     "role": "Real-time operations",
+     "name": "David Doody"
+    },
+    {
+     "role": "System engineering",
+     "name": "Julia Henricks, Luis Morales"
+    },
+    {
+     "role": "Administrative services",
+     "name": "Carmen Vetter"
+    },
+    {
+     "role": "Downlink ground system",
+     "name": "Tammy Fujii"
+    },
+    {
+     "role": "Program science archive",
+     "name": "S. Chatterjee"
+    }
+   ],
+   "names": [
+    "M. Caranza",
+    "J. Rowley",
+    "Phil Davis",
+    "Bill Dunford",
+    "Enrico Piazza",
+    "Jay R. Thompson",
+    "Rachel Zimmerman-Brachman",
+    "G. Eller",
+    "S. Hilabrand",
+    "W. Hoffman",
+    "W. Mogensen",
+    "M. Orr",
+    "M. Staab",
+    "A. Vaughs",
+    "S. Payan",
+    "R. Austin",
+    "K. Chan",
+    "N. Knadzhyan",
+    "M. Martin",
+    "M. Weisenfelder",
+    "V. Villa",
+    "M. Arias",
+    "O. Castillo",
+    "C. Crodel",
+    "E. Gillingham",
+    "C. Lush",
+    "A. Mirabel",
+    "N. Patel",
+    "G. Razo",
+    "R. Sumagaysay"
+   ]
+  },
+  {
+   "title": "Instrument teams",
+   "sub": "Eleven more instruments, and the scientists who ran them.",
+   "groups": [
+    {
+     "title": "Cassini Plasma Spectrometer (CAPS)",
+     "people": [
+      {
+       "role": "Principal investigator",
+       "name": "J. Hunter Waite"
+      },
+      {
+       "role": "Earlier principal investigator",
+       "name": "David T. Young",
+       "note": "Southwest Research Institute"
+      }
+     ],
+     "names": [
+      "Scott J. Bolton",
+      "James L. Burch",
+      "Frank Crary",
+      "Raymond Goldstein",
+      "Thomas W. Hill",
+      "Robert E. Johnson",
+      "David J. McComas",
+      "Edward C. Sittler Jr.",
+      "Michelle Thomsen",
+      "Jean-Jacques Berthelier",
+      "Michel Blanc",
+      "Andrew J. Coates",
+      "Manuel Grande",
+      "Knut R. Svenes",
+      "Karoly Szego"
+     ]
+    },
+    {
+     "title": "Composite Infrared Spectrometer (CIRS)",
+     "people": [
+      {
+       "role": "Principal investigator",
+       "name": "F. Michael Flasar",
+       "note": "NASA Goddard Space Flight Center"
+      },
+      {
+       "role": "Deputy principal investigator",
+       "name": "Conor Nixon"
+      },
+      {
+       "role": "Original principal investigator",
+       "name": "Virgil G. Kunde"
+      }
+     ],
+     "names": [
+      "Mian M. Abbas",
+      "Richard K. Achterberg",
+      "Carrie M. Anderson",
+      "Gordon L. Bjoraker",
+      "John C. Brasunas",
+      "Peter J. Gierasch",
+      "Brigette E. Hesman",
+      "Carly Howett",
+      "Donald E. Jennings",
+      "Glenn S. Orton",
+      "Tobias Owen",
+      "John C. Pearl",
+      "Paul N. Romani",
+      "Robert E. Samuelson",
+      "Mark Showalter",
+      "Amy A. Simon",
+      "John Spencer",
+      "Linda J. Spilker",
+      "Peter A. R. Ade",
+      "M. Antonella Barucci",
+      "Bruno Bezard",
+      "Simon B. Calcutt",
+      "Regis Denis Courtin",
+      "Athena Coustenis",
+      "Cecile Ferrari",
+      "Leigh N. Fletcher",
+      "Thierry Fouchet",
+      "Daniel Gautier",
+      "Sandrine Guerlet",
+      "Patrick Irwin",
+      "Emmanuel Lellouch",
+      "Andre Marten",
+      "Renee Prange",
+      "Francois Raulin",
+      "Peter L. Read",
+      "Fredric Taylor",
+      "Nicolas A. Teanby",
+      "Sandrine Vinatier"
+     ]
+    },
+    {
+     "title": "Cosmic Dust Analyzer (CDA)",
+     "people": [
+      {
+       "role": "Principal investigator",
+       "name": "Ralf Srama",
+       "note": "Max Planck Institut für Kernphysik, Heidelberg"
+      }
+     ],
+     "names": [
+      "Siegfried Auer",
+      "Thomas Economou",
+      "Torrence V. Johnson",
+      "Mihaly Horanyi",
+      "Sascha Kempf",
+      "Nicolas Altobelli",
+      "H. Fechtig",
+      "M. Grande",
+      "Eberhard Gruen",
+      "Ove Havnes",
+      "Eduard Igenbergs",
+      "Elmar Jessberger",
+      "H. Krüger",
+      "Phillipe Lamy",
+      "Franz Lura",
+      "J. Anthony M. McDonnell",
+      "Dietrich Möhlmann",
+      "Gregor E. Morfill",
+      "Ernst Pernicka",
+      "Frank Postberg",
+      "Juergen Schmidt",
+      "Gerhard Schwehm",
+      "F. Spahn",
+      "Jiri Svestka",
+      "Richard Wasch"
+     ]
+    },
+    {
+     "title": "Ion and Neutral Mass Spectrometer (INMS)",
+     "people": [
+      {
+       "role": "Principal investigator",
+       "name": "J. Hunter Waite"
+      }
+     ],
+     "names": [
+      "Thomas E. Cravens",
+      "Wayne Kasprzak",
+      "Janet G. Luhmann",
+      "Ralph L. McNutt Jr.",
+      "Roger V. Yelle",
+      "Wing-Huen Ip"
+     ]
+    },
+    {
+     "title": "Magnetometer (MAG)",
+     "people": [
+      {
+       "role": "Principal investigator",
+       "name": "Michele Dougherty",
+       "note": "Imperial College London"
+      }
+     ],
+     "names": [
+      "Christopher T. Russell",
+      "Edward J. Smith",
+      "Krishan Khurana",
+      "Nicholas Achilleos",
+      "Andre Balogh",
+      "Emma Bunce",
+      "Stanley W.H. Cowley",
+      "Geza Erdos",
+      "Karl-Heinz W. Glassmeier",
+      "Fritz M. Neubauer",
+      "David Southwood"
+     ]
+    },
+    {
+     "title": "Magnetospheric Imaging Instrument (MIMI)",
+     "people": [
+      {
+       "role": "Principal investigator",
+       "name": "Don Mitchell"
+      },
+      {
+       "role": "Earlier principal investigator",
+       "name": "Stamatios M. Krimigis",
+       "note": "Johns Hopkins University Applied Physics Laboratory"
+      }
+     ],
+     "names": [
+      "Thomas P. Armstrong",
+      "James Carbary",
+      "George Gloeckler",
+      "Douglas C. Hamilton",
+      "Lou Lanzerotti",
+      "Barry H. Mauk",
+      "Chris Paranicas",
+      "Edmond C. Roelof",
+      "Denis Alcayde",
+      "Jean-Michel Bosqued",
+      "Ioannis Jean Dandouras",
+      "Wing-Huen Ip",
+      "Norbert Krupp",
+      "Andreas Lagg",
+      "Stefano Livi",
+      "Henri Reme",
+      "Jean-Andre Sauvaud"
+     ]
+    },
+    {
+     "title": "Radar",
+     "people": [
+      {
+       "role": "Team lead",
+       "name": "Charles Elachi",
+       "note": "NASA's Jet Propulsion Laboratory"
+      },
+      {
+       "role": "Deputy team lead",
+       "name": "Stephen D. Wall"
+      }
+     ],
+     "names": [
+      "Michael Allison",
+      "Michael A. Janssen",
+      "Randolph L. Kirk",
+      "Ralph D. Lorenz",
+      "Jonathan Lunine",
+      "Larry Soderblom",
+      "Charles Wood",
+      "Howard Zebker",
+      "Pierre J. Encrenaz",
+      "Giorgio Franceschetti",
+      "Giovanni Picardi",
+      "Francesco Posa",
+      "Roberto Seu",
+      "Sergio Vetrella"
+     ]
+    },
+    {
+     "title": "Radio and Plasma Wave Science (RPWS)",
+     "people": [
+      {
+       "role": "Principal investigator",
+       "name": "William S. Kurth"
+      },
+      {
+       "role": "Deputy principal investigator",
+       "name": "Donald A. Gurnett",
+       "note": "earlier principal investigator, University of Iowa"
+      }
+     ],
+     "names": [
+      "George B. Hospodarsky",
+      "William M. Farrell",
+      "Robert J. MacDowall",
+      "J. Douglas Menietti",
+      "Ann M. Persoon",
+      "Rolf Bostrom",
+      "Patrick Canu",
+      "Baptiste Cecconi",
+      "Nicole Cornilleau-Wehrlin",
+      "Georg Fischer",
+      "Patrick Galopeau",
+      "Georg Gustafsson",
+      "Laurent Lamy",
+      "Alain Lecacheux",
+      "Philippe Louarn",
+      "Ronan Modolo",
+      "Michiko Morooka",
+      "Arne Pedersen",
+      "Jan-Erik Wahlund",
+      "Philippe Zarka"
+     ]
+    },
+    {
+     "title": "Radio Science Subsystem (RSS)",
+     "people": [
+      {
+       "role": "Principal investigator",
+       "name": "Richard French"
+      },
+      {
+       "role": "Earlier team leader",
+       "name": "Arvydas J. Kliore",
+       "note": "NASA's Jet Propulsion Laboratory"
+      }
+     ],
+     "names": [
+      "John W. Armstrong",
+      "F. Michael Flasar",
+      "Essam A. Marouf",
+      "Andrew F. Nagy",
+      "Luciano Iess",
+      "Paolo Tortora"
+     ]
+    },
+    {
+     "title": "Ultraviolet Imaging Spectrograph (UVIS)",
+     "people": [
+      {
+       "role": "Principal investigator",
+       "name": "Larry W. Esposito",
+       "note": "Laboratory for Atmospheric and Space Physics, University of Colorado"
+      }
+     ],
+     "names": [
+      "Joseph M. Ajello",
+      "Joshua E. Colwell",
+      "Candice J. Hansen",
+      "Amanda R. Hendrix",
+      "William E. McClintock",
+      "Wayne R. Pryor",
+      "Donald E. Shemansky",
+      "A. Ian F. Stewart",
+      "Robert A. West",
+      "Yuk L. Yung",
+      "H. Uwe Keller",
+      "Ralf Reulke"
+     ]
+    },
+    {
+     "title": "Visible and Infrared Mapping Spectrometer (VIMS)",
+     "people": [
+      {
+       "role": "Principal investigator",
+       "name": "Bob Brown",
+       "note": "Lunar and Planetary Laboratory, University of Arizona"
+      }
+     ],
+     "names": [
+      "Kevin H. Baines",
+      "Bonnie J. Buratti",
+      "Roger Clark",
+      "Dale P. Cruikshank",
+      "Dennis L. Matson",
+      "Thomas McCord",
+      "Robert Nelson",
+      "Philip D. Nicholson",
+      "Giancarlo Bellucci",
+      "Jean-Pierre Bibring",
+      "Fabrizio Capaccioni",
+      "Priscilla Cerroni",
+      "Pierre Drossart",
+      "Ralf Jaumann",
+      "Yves Langevin",
+      "Bruno Sicardy",
+      "Christophe Sotin"
+     ]
+    }
+   ]
+  },
+  {
+   "title": "Huygens probe",
+   "sub": "ESA's probe, which rode Cassini to Saturn and landed on Titan on January 14, 2005.",
+   "people": [
+    {
+     "role": "Huygens project scientist and mission manager",
+     "name": "Jean-Pierre Lebreton",
+     "note": "European Space Agency"
+    },
+    {
+     "role": "Mission operations manager",
+     "name": "Claudio Sollazzo"
+    },
+    {
+     "role": "Probe operations engineer",
+     "name": "Shaun Standley"
+    },
+    {
+     "role": "Mission analyst",
+     "name": "Artemio Castillo"
+    },
+    {
+     "role": "Systems engineering manager",
+     "name": "Miguel Perez-Ayucar"
+    },
+    {
+     "role": "Operations scientist",
+     "name": "Thierry Blancquaert"
+    },
+    {
+     "role": "Science operations engineer",
+     "name": "Olivier Witasse"
+    },
+    {
+     "role": "Local operations manager, ESOC",
+     "name": "Joe Wheadon"
+    },
+    {
+     "role": "Operations engineers, ESOC",
+     "name": "Dave Salt, Martin Hermes, Martin Johnson"
+    }
+   ],
+   "groups": [
+    {
+     "title": "Huygens instruments",
+     "people": [
+      {
+       "role": "Descent Imager and Spectral Radiometer",
+       "name": "Martin G. Tomasko",
+       "note": "University of Arizona"
+      },
+      {
+       "role": "Huygens Atmospheric Structure Instrument",
+       "name": "Marcello Fulchignoni",
+       "note": "Observatoire de Paris-Meudon"
+      },
+      {
+       "role": "Gas Chromatograph Mass Spectrometer",
+       "name": "Hasso B. Niemann",
+       "note": "NASA Goddard Space Flight Center"
+      },
+      {
+       "role": "Aerosol Collector and Pyrolyser",
+       "name": "Guy M. Israel",
+       "note": "Service d'Aéronomie, CNRS"
+      },
+      {
+       "role": "Surface Science Package",
+       "name": "John C. Zarnecki",
+       "note": "Open University"
+      },
+      {
+       "role": "Doppler Wind Experiment",
+       "name": "Michael K. Bird",
+       "note": "University of Bonn"
+      }
+     ]
+    },
+    {
+     "title": "Titan interdisciplinary scientists",
+     "people": [
+      {
+       "role": "Titan organic chemistry",
+       "name": "Francois Raulin"
+      },
+      {
+       "role": "Titan aeronomy",
+       "name": "Daniel Gautier"
+      },
+      {
+       "role": "Titan atmosphere and surface",
+       "name": "Jonathan I. Lunine"
+      }
+     ]
+    }
+   ]
+  },
+  {
+   "title": "Interdisciplinary scientists",
+   "people": [
+    {
+     "role": "Aeronomy and solar wind",
+     "name": "Darrell F. Strobel"
+    },
+    {
+     "role": "Atmospheres",
+     "name": "Tobias C. Owen"
+    },
+    {
+     "role": "Magnetospheres and plasma",
+     "name": "Tamas I. Gombosi, Norbert Krupp"
+    },
+    {
+     "role": "Rings and dust",
+     "name": "Jeffrey N. Cuzzi"
+    },
+    {
+     "role": "Satellites",
+     "name": "Laurence A. Soderblom"
+    },
+    {
+     "role": "Saturn",
+     "name": "Andy Ingersoll"
+    }
+   ]
+  },
+  {
+   "title": "Participating scientists",
+   "names": [
+    "Alberto Adriani",
+    "Carrie Anderson",
+    "Jason Barnes",
+    "Gianrico Filacchione",
+    "Matthew Hedman",
+    "Brigette Hesman",
+    "Carly Howett",
+    "Ozgur Karatekin",
+    "Panayotis Lavvas",
+    "Carol Paty",
+    "Paul Schenk",
+    "Jason Soderblom",
+    "Caitlin Griffith",
+    "Alex Hayes",
+    "Henrik Melin",
+    "Francis Nimmo",
+    "Christopher Parkinson",
+    "Mark Perry",
+    "Joseph Spitale",
+    "Matthew Tiscareno",
+    "Ann Verbiscer",
+    "Tilmann Denk",
+    "Tommi Koskinen",
+    "Giuseppe Mitri",
+    "G. Wesley Patterson",
+    "Darci Snowden",
+    "Federico Tosi",
+    "Veronique Vuitton",
+    "Sarah Badman",
+    "Hao Cao",
+    "Carolyn Ernst",
+    "Liming Li",
+    "Luke Moore",
+    "Hsiang-Wen (Sean) Hsu",
+    "Jonathan Fortney"
+   ]
+  },
+  {
+   "title": "Agencies and partners",
+   "people": [
+    {
+     "role": "Built and flew the Cassini orbiter",
+     "name": "NASA's Jet Propulsion Laboratory",
+     "note": "a division of Caltech, Pasadena"
+    },
+    {
+     "role": "Built the Huygens probe",
+     "name": "European Space Agency",
+     "note": "ESTEC, Noordwijk, and ESOC, Darmstadt"
+    },
+    {
+     "role": "Cassini's high-gain antenna",
+     "name": "Italian Space Agency (ASI)"
+    },
+    {
+     "role": "Huygens prime contractor",
+     "name": "Aerospatiale, Cannes"
+    },
+    {
+     "role": "Launch vehicle, upper stage and propulsion module",
+     "name": "Lockheed Martin"
+    },
+    {
+     "role": "Radioisotope thermoelectric generators",
+     "name": "U.S. Department of Energy"
+    },
+    {
+     "role": "Every signal home",
+     "name": "NASA's Deep Space Network",
+     "note": "Goldstone, Madrid and Canberra, which heard Cassini's last signal"
+    }
+   ],
+   "text": "Seventeen nations contributed to building the spacecraft, and the European academic and industrial teams behind its instruments are too many to name here."
+  }
+ ],
+ "closing": "To everyone who built Cassini, flew it, and listened: thank you.",
+ "sources": [
+  {
+   "title": "NASA: Cassini, The Team",
+   "url": "https://science.nasa.gov/mission/cassini/team/"
+  },
+  {
+   "title": "ESA: Cassini orbiter investigators",
+   "url": "https://www.esa.int/Science_Exploration/Space_Science/Cassini-Huygens/Cassini_orbiter_investigators_1"
+  },
+  {
+   "title": "ESA: Huygens investigators",
+   "url": "https://www.esa.int/Science_Exploration/Space_Science/Cassini-Huygens/Huygens_investigators"
+  },
+  {
+   "title": "ESA: Huygens mission team",
+   "url": "https://www.esa.int/Science_Exploration/Space_Science/Cassini-Huygens/Huygens_Mission_Team"
+  },
+  {
+   "title": "ESA: International collaboration",
+   "url": "https://www.esa.int/Science_Exploration/Space_Science/Cassini-Huygens/International_collaboration"
+  },
+  {
+   "title": "JPL: Spehalski and Mitchell (1998)",
+   "url": "https://www.jpl.nasa.gov/news/new-managers-appointed-for-cassini-and-galileo-missions"
+  }
+ ]
+}

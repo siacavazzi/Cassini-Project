@@ -100,7 +100,7 @@ body.idle #app .bodywin:has(.well.has-frame) { opacity: 1; pointer-events: auto;
     return `<div class="pane" data-cam="${cam}" data-body="${name}">
         <div class="well"><div class="wellmsg"><b>No signal</b>Waiting for the frame server</div><img class="shot" alt="" crossorigin="anonymous"><span class="shottag"></span><span class="kindtag"></span></div>
         <div class="chans" aria-label="Filter channels"></div>
-        <dl class="info"><dt>Status</dt><dd><span class="led"></span><span data-f="status">—</span></dd><dt>Filter</dt><dd data-f="filter">—</dd><dt>Color</dt><dd data-f="colour">—</dd></dl>
+        <dl class="info"><dt>Status</dt><dd><span class="led"></span><span data-f="status">—</span></dd><dt>Filter</dt><dd data-f="filter">—</dd><dt>Color</dt><dd data-f="colour">—</dd><dt>Credit</dt><dd><button class="credit" data-about="iss" title="Credits">NASA/JPL-Caltech/SSI</button></dd></dl>
       </div>`;
   }
   // a free place for a new window: the first slot in rows from the top left that no open window covers
