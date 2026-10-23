@@ -6609,6 +6609,15 @@ function frame(now) {
     e.stopPropagation(); finish();
     if (b.dataset.roll === "about" && window.cassiniAbout) setTimeout(() => cassiniAbout.open("Mission team"), 1600);
   });
+  // the same list as a tab in the About window (about.html), when it is there
+  if (TEAM && window.cassiniAbout && cassiniAbout.addTab) {
+    const tab = b => (b.sub ? `<p class="note">${esc(b.sub)}</p>` : "")
+      + (b.people || []).map(p => `<div class="cr"><b>${esc(p.name)}</b><div class="by">${esc(p.role)}</div>${p.note ? `<div class="what">${esc(p.note)}</div>` : ""}</div>`).join("")
+      + (b.names && b.names.length ? `<p>${b.names.map(esc).join(" · ")}</p>` : "") + (b.text ? `<p>${esc(b.text)}</p>` : "");
+    cassiniAbout.addTab("Mission team", () => `<h2>${esc(TEAM.intro.head)}</h2><p>${esc(TEAM.intro.text)}</p>`
+      + TEAM.sections.map(s => `<h3>${esc(s.title)}</h3>` + tab(s) + (s.groups || []).map(g => `<p><b>${esc(g.title)}</b></p>` + tab(g)).join("")).join("")
+      + `<p class="note">Sources: ${TEAM.sources.map(x => `<a href="${esc(x.url)}" target="_blank" rel="noopener">${esc(x.title)}</a>`).join(" · ")}</p>`);
+  }
   function stepRoll(dt) {
     const now = performance.now(), C = (now - F.rollAt) / 1000;
     if (C < ROLL_IN) return;
