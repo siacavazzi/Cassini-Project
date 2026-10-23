@@ -41,8 +41,8 @@
 #hrel .cs-cap button:hover { color: var(--q-text); border-color: rgba(232,236,242,.35); }
 #hrel .cs-cap small { font-size: 10.5px; color: rgba(232,236,242,.4); }
 #hrel .cs-cap small a { color: inherit; pointer-events: auto; }
-body.phone #hrel .hr-read { font-size: 9.5px; bottom: 9vh; }
-body.phone #hrel .hr-note { bottom: 40px; }
+body.phone #hrel .hr-read { font-size: 9.5px; bottom: 9vh; white-space: normal; width: calc(100vw - 32px); text-align: center; line-height: 1.6; }
+body.phone #hrel .hr-note { bottom: auto; top: 40px; max-width: calc(100vw - 32px); }
 </style>
 
 <section id="hrel" class="cs-root" hidden aria-live="polite">
@@ -354,7 +354,9 @@ body.phone #hrel .hr-note { bottom: 40px; }
     const yaw = -0.35 + 0.01 * T + look.yaw;
     const dirN = side.clone().multiplyScalar(Math.cos(yaw)).addScaledVector(axisW, Math.sin(yaw) + 0.25).addScaledVector(upW, 0.28 + look.pitch).normalize();
     const tgtNear = cassini.position.clone().lerp(pW, 0.5);
-    const dN = (15 + 1.1 * gap) * look.zoom;
+    // an upright phone sees less across, so the camera stands further back and looks less far off to the side
+    const fit = Math.max(1, 0.9 / camera.aspect), aside = 0.5 * Math.min(1, camera.aspect);
+    const dN = (15 + 1.1 * gap) * look.zoom * fit;
     const camNear = tgtNear.clone().addScaledVector(dirN, dN * 1e-6);
     let cam = camNear, lookDir = tgtNear.clone().sub(camNear).normalize();
     // then over to the probe: close beside it, a little behind and above, looking past it toward Titan, as it heads off
@@ -363,8 +365,8 @@ body.phone #hrel .hr-note { bottom: 40px; }
     if (k > 0) {
       const sideW = new THREE.Vector3().crossVectors(upW, tW).normalize();
       const dirF = sideW.clone().multiplyScalar(0.85).addScaledVector(tW, -0.45).addScaledVector(upW, 0.25 + look.pitch).normalize().applyAxisAngle(upW, look.yaw);
-      const camFar = pW.clone().addScaledVector(dirF, FAR_M * look.zoom * 1e-6);
-      const lookFar = pW.clone().sub(camFar).normalize().addScaledVector(tW, 0.5).normalize();
+      const camFar = pW.clone().addScaledVector(dirF, FAR_M * look.zoom * fit * 1e-6);
+      const lookFar = pW.clone().sub(camFar).normalize().addScaledVector(tW, aside).normalize();
       cam = camNear.clone().lerp(camFar, k);
       lookDir = lookDir.clone().lerp(lookFar, k).normalize();
     }
