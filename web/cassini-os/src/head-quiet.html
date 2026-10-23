@@ -602,6 +602,7 @@ body.idle .win.full .titlebar { opacity: 0; }
         <dt>Filter</dt><dd data-f="filter">—</dd>
         <dt>Color</dt><dd data-f="colour">—</dd>
         <dt>Details</dt><dd data-f="details">—</dd>
+        <dt>Credit</dt><dd><button class="credit" data-about="iss" title="Credits">NASA/JPL-Caltech/SSI</button></dd>
       </dl>
     </div>
   </section>
@@ -615,6 +616,7 @@ body.idle .win.full .titlebar { opacity: 0; }
         <dt>Status</dt><dd><span class="led"></span><span data-f="status">Camera</span></dd>
         <dt>Filter</dt><dd data-f="filter">—</dd>
         <dt>Color</dt><dd data-f="colour">—</dd>
+        <dt>Credit</dt><dd><button class="credit" data-about="iss" title="Credits">NASA/JPL-Caltech/SSI</button></dd>
       </dl>
     </div>
   </section>
@@ -788,7 +790,7 @@ body.idle .win.full .titlebar { opacity: 0; }
       w.addEventListener("click", e => { if (phone() && e.target.closest(".well, .rlwell, .mvwell")) full(w); });
     }
   }
-  const TALL = "#moments, #settings", PICTURES = ".camwin, .bodywin, #reelcard, #moviecard", MIN_W = 180;
+  const TALL = "#moments, #settings, #about", PICTURES = ".camwin, .bodywin, #reelcard, #moviecard", MIN_W = 180;
   const phone = () => document.body.classList.contains("phone");
   // zoom: the bigger standard size, and back to the size the viewer gave the window
   function zoom(w) {
@@ -887,7 +889,6 @@ body.idle .win.full .titlebar { opacity: 0; }
     if (a === "next") $("next").click();
     if (a === "go") setFocus(btn.dataset.body);
     if (a === "win") { const w = $(btn.dataset.win); (w.hidden || w.classList.contains("shaded")) ? restore(w) : minimize(w); }
-    if (a === "about") { $("loading").hidden = false; setTimeout(() => { $("loading").hidden = true; }, 1800); }
   }
   document.querySelectorAll(".menu ul").forEach(ul => ul.addEventListener("click", e => { const b = e.target.closest("button"); if (b) act(b); }));
   window.addEventListener("keydown", e => {
@@ -1219,9 +1220,12 @@ body.idle .win.full .titlebar { opacity: 0; }
   // (made by the frame server) with the channels that went into it underneath.
   // A feed can also be one camera's frames of one target only (card.dataset.body), for the per-body windows;
   // win is the window it sits in, whose zoom asks for the bigger picture.
+  const STUCK = 8000;
+  const allFeeds = new Set();   // every camera window's feed, the body windows' too (playback.maxBehind)
   function cameraFeed(card) {
     const cam = card.dataset.cam, body = card.dataset.body || null, win = card.closest(".win") || card, well = card.querySelector(".well"), shot = card.querySelector(".shot"), chans = card.querySelector(".chans");
     const field = f => card.querySelector(`[data-f="${f}"]`) || { set textContent(v) {}, set innerHTML(v) {} };
+    let shownAt = 0, mosaicAt = 0;   // when the last picture and the last pass mosaic went up (behind)
     let want = null, shownKey = null, shown = null, next = [], lastK = -2, lastReady = null, stripKey = "", stripSet = null;
     // steady size: shapeOf is the target and observation whose pass mosaic gave the picture its shape, which it
     // keeps for every picture of that observation
@@ -1356,7 +1360,7 @@ body.idle .win.full .titlebar { opacity: 0; }
       const keep = obsShown && catalog.obs[v.k] === obsShown && playsAs(v.k) !== "movie" && !(playsAs(v.k) === "mosaic_movie" && rolls());
       // the same picture again at another size (full view's full resolution one) is not a new picture
       const again = shown && shown.k === v.k && shown.set === v.set;
-      shownKey = v.key; shown = v;
+      shownKey = v.key; shown = v; shownAt = performance.now();
       // shot.dataset.src / .report: what the picture on screen was made from, for flagging (flag.html)
       if (!keep) {
         shot.src = im.src; shot.dataset.src = v.key; shot.dataset.report = ""; obsShown = null; obsK = -1; well.classList.remove("mosaic"); saving(v.key);
@@ -1458,7 +1462,8 @@ body.idle .win.full .titlebar { opacity: 0; }
       // clock gets there. Each is asked for once, and only one composite per window is ever being made
       for (const key of next) {
         if (warming.size >= 3) break;
-        if (warmed.has(key) || warming.has(key) || key.includes("/color.webp")) continue;
+        // (a mosaic movie's next pictures are made ahead by the frame server, in order: obs_mosaic.rolling_ahead)
+        if (warmed.has(key) || warming.has(key) || key.includes("/color.webp") || key.includes("mode=rolling")) continue;
         const p = new Image(); p.crossOrigin = "anonymous"; p.fetchPriority = "low";
         p.onload = p.onerror = () => { warming.delete(key); warmed.add(key); };
         warming.set(key, p);
@@ -1603,7 +1608,7 @@ body.idle .win.full .titlebar { opacity: 0; }
       while (thumbs.children.length > Math.min(7, fr.length)) thumbs.lastChild.remove();
       [...thumbs.children].forEach((im, j) => {
         const id = fr[first + j][0];
-        if (im.dataset.id !== id) { im.dataset.id = id; im.src = movieUrl(id, 128); }
+        if (im.dataset.id !== id) { im.dataset.id = id; im.src = playsRolling(k) ? frameUrl(id, 128) : movieUrl(id, 128); }
         im.classList.toggle("now", first + j === n);
         im.title = `${id} · ${fr[first + j][2]}`;
       });
@@ -1699,7 +1704,7 @@ body.idle .win.full .titlebar { opacity: 0; }
           if (mode !== "mosaic") mosaicPasses.add(passOf(k));   // the server's call, not one the person asked for
           chipText();
           if (window.cassiniPicture && rep.mosaic > (obsShown === catalog.obs[k] ? obsTiles : 0)) window.cassiniPicture({ cam, body, win, k, nm: nmOf(k), set, use: set >= 0 ? catalog.sets[set].use.map(nmOf) : null, tile: rep.mosaic, of: rep.of });
-          obsShown = catalog.obs[k]; obsTiles = rep.mosaic; obsK = k; obsSize = rank(sz); shotTag(set, k); kind = { color: rep.filters >= 3, mosaic: true };
+          obsShown = catalog.obs[k]; obsTiles = rep.mosaic; obsK = k; mosaicAt = performance.now(); obsSize = rank(sz); shotTag(set, k); kind = { color: rep.filters >= 3, mosaic: true };
           // the window takes the mosaic's shape, within 1:2 to 3:1 (a whole long strip fits inside, letterboxed,
           // rather than running off the screen)
           well.style.aspectRatio = String(Math.min(3, Math.max(0.5, rep.width / rep.height))); shapeOf = passOf(k);
@@ -2050,8 +2055,10 @@ body.idle .win.full .titlebar { opacity: 0; }
     // whose SPICE kernels are not loaded yet) can hold them all, so the data waited behind them on the loading screen.
     // The server still finishes what was dropped and keeps it; the window asks again once the data is in.
     let warnCtl = new AbortController();   // the look-ahead's notes to the server (?warm=1)
-    const dataWait = () => typeof yearReady === "function" && !yearReady();
-    function letGo() {
+    // the same while the page is paused in the background (away.html): nothing in flight, nothing asked for
+    const dataWait = () => (window.cassiniAway && cassiniAway.on) || (typeof yearReady === "function" && !yearReady());
+    // (away: paused in the background, away.html; the server keeps the look-ahead notes it already has, so they are not sent again)
+    function letGo(away) {
       for (const which of ["frame", "comp"]) {
         const v = lane[which];
         if (!v) continue;
@@ -2060,13 +2067,13 @@ body.idle .win.full .titlebar { opacity: 0; }
       }
       for (const p of warming.values()) { p.onload = p.onerror = null; p.removeAttribute("src"); }
       warming.clear();
-      warnCtl.abort(); warnCtl = new AbortController(); warnedObs.clear();
+      warnCtl.abort(); warnCtl = new AbortController(); if (!away) warnedObs.clear();
       mosaicStop();
       lastK = -2;   // asks again for what it shows, once the data is in
     }
     let cat = null, letGone = false;
     function update(force) {
-      if (dataWait()) { if (!letGone) { letGone = true; letGo(); } return; }
+      if (dataWait()) { if (!letGone) { letGone = true; letGo(window.cassiniAway && cassiniAway.on); } return; }
       letGone = false;
       if (catalog !== cat) {   // another mission year (or the months around this one) loaded
         // a pass mosaic that is up stays up: its observation is a name, its frame found again by id
@@ -2163,6 +2170,18 @@ body.idle .win.full .titlebar { opacity: 0; }
     update.release = release;
     const importance = () => weight(kind);
     update.importance = importance;
+    // how many of this window's frames the picture on screen is behind the clock: the picture asked for and not
+    // up yet, and behind a pass's mosaic, the mosaic's newest tile (playback.maxBehind slows the clock by it). A
+    // picture or mosaic nothing new has come for in STUCK ms does not count, so a server that stops answering (or
+    // a pass minutes from being made) never stops the clock
+    update.behind = () => {
+      if (!want || hold || win.hidden || !win.isConnected || lastK < 0 || !shown || shown.cat !== catalog) return 0;
+      const pos = q => lastOfCam(cam, catalog.et[q], body), now = performance.now();
+      let b = shownKey !== want.key && now - shownAt < STUCK ? pos(want.k) - pos(shown.k) : 0;
+      if (obsShown && obsK >= 0 && catalog.obs[lastK] === obsShown && now - mosaicAt < STUCK) b = Math.max(b, pos(lastK) - pos(obsK));
+      return Math.max(0, b);
+    };
+    allFeeds.add(update);
     update.kind = () => kind;
     return update;
   }
@@ -2205,6 +2224,27 @@ body.idle .win.full .titlebar { opacity: 0; }
     $("maxrate").addEventListener("input", e => setMaxRate(+e.target.value));
     $("maxrate").closest("li").addEventListener("click", e => e.stopPropagation());   // keep the menu open while sliding
   }
+  // ---------- pictures behind: the clock slows while a window's picture is behind it ----------
+  // A burst caps the pictures a window is asked for; this caps the work it has waiting. When the picture on
+  // screen in any camera window is more than maxBehind of its frames behind the clock (the frame server is still
+  // making it: a cold pass, a mosaic movie's new picture), the clock slows in proportion, to maxBehind / behind of
+  // its speed, so the window catches up and every picture of a mosaic movie gets its turn instead of the clock
+  // running on while the window shows nothing new. Back to full speed as soon as it has caught up. 0 = off.
+  const BEHIND_DEFAULT = 2;
+  let maxBehind = BEHIND_DEFAULT, paced = 1;
+  if (SETTINGS) {
+    maxBehind = +SETTINGS.define({ key: "playback.maxBehind", section: "Playback", label: "Pictures a window may fall behind",
+      hint: "When the frame server cannot make pictures as fast as the timeline passes them (a mosaic movie nobody has watched yet), the timeline slows down in proportion so each camera window stays within this many frames of the clock. 0 = never slow down.",
+      type: "range", value: BEHIND_DEFAULT, min: 0, max: 10, step: 1, unit: "frames" });
+    if (!isFinite(maxBehind)) maxBehind = BEHIND_DEFAULT;
+    SETTINGS.on("playback.maxBehind", v => { maxBehind = +v || 0; });
+  }
+  function pace() {
+    if (!maxBehind) return 1;
+    let b = 0;
+    for (const f of allFeeds) b = Math.max(b, f.behind());
+    return b > maxBehind ? maxBehind / b : 1;
+  }
   // for one camera at et: the fastest the clock may run (Infinity outside a burst) and when its next frame is
   function capOf(cam, et) {
     const a = catalog.byCam[cam].et, p = lastOfCam(cam, et), nx = p + 1 < a.length ? a[p + 1] : Infinity;
@@ -2213,6 +2253,8 @@ body.idle .win.full .titlebar { opacity: 0; }
   // called by the viewer's frame loop while playing: where the clock should be after dt seconds at this speed
   window.studyAdvance = (et, dt, speed) => {
     slowedTo = 0;
+    paced = catalog && catalog.byCam ? pace() : 1;
+    dt *= paced;
     if (!maxRate || !catalog || !catalog.byCam) return et + dt * speed;
     for (let n = 0; n < 200; n++) {
       let s = speed, stop = Infinity;
@@ -2229,10 +2271,14 @@ body.idle .win.full .titlebar { opacity: 0; }
   window.studyHud = ms => {
     frameHud(ms);
     if (slowedTo && state.playing && !state.dragging) $("mday").textContent += ` · imaging burst, slowed to ${fmtRate(slowedTo)}`;
+    if (paced < 1 && state.playing && !state.dragging) $("mday").textContent += ` · catching up on pictures, ${Math.round(paced * 100)}% speed`;
     prep();
     for (const f of feeds) { f(); f.retier(); }
   };
   for (const key of ["cameras.fullRes"]) S.on(key, () => feeds.forEach(f => f.retier()));
+  // paused in the background (away.html): each window lets go of its pictures at once (the frame loop that drives
+  // them is held); back, the next frame asks again for what each one shows
+  document.addEventListener("cassini:away", e => { if (e.detail.away) feeds.forEach(f => f()); });
   syncMenu();
 })();
 </script>

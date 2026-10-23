@@ -704,6 +704,32 @@ def _compose(window, k, **kw):
     return rgba
 
 
+def _over(u, p, rgba, t, rect, cache, match=True):
+    """Tile t composed over the mosaic rgba (in place) and matched to it (pin 0): only the tile's part of the
+    canvas, and a margin for its soft edge, is composed, since nothing outside it changes. match=False: drawn
+    over it with its soft edge as it is, on the pass's one scale (a mosaic movie's new lap is not pulled toward
+    the older picture of its place under it)."""
+    k = p["k"]
+    H, W = rgba.shape[:2]
+    pad = max(8, round(64 * k / 0.5)) + 1
+    bx, by, bw, bh = t["box"]
+    left = round((t["offset"][0] + bx - rect[0]) * k)
+    top = round((t["offset"][1] + by - rect[1]) * k)
+    sw, sh = max(1, round(bw * k)), max(1, round(bh * k))
+    x0, y0 = max(left - pad, 0), max(top - pad, 0)
+    x1, y1 = min(left + sw + pad, W), min(top + sh + pad, H)
+    if x1 > x0 and y1 > y0:
+        part = _part(os.path.join(_tiles(u, cache, p["display_scale"]), f"{t['n']}.png"), sw, sh)
+        frame = np.zeros((y1 - y0, x1 - x0, 4), np.uint8)
+        a0, b0 = max(left, 0), max(top, 0)
+        a1, b1 = min(left + sw, W), min(top + sh, H)
+        frame[b0 - y0:b1 - y0, a0 - x0:a1 - x0] = part[b0 - top:b1 - top, a0 - left:a1 - left]
+        below = np.ascontiguousarray(rgba[y0:y1, x0:x1])
+        same = (np.ones((2, 3)), np.zeros((2, 3)))
+        rgba[y0:y1, x0:x1] = _compose([(below, None, None, None), (frame, None, None, None)], k,
+                                      **({"pin": 0} if match else {"corrections": same}))
+
+
 _grown_last = collections.OrderedDict()   # path of a grown filter mosaic -> its RGBA, the few made last
 GROWN_KEEP = 6
 
@@ -720,25 +746,8 @@ def _grown(u, p, f, mine, rect, cache):
             and not os.path.exists(_filter_path(u, f, m, rect, cache)):
         m -= 1
     rgba = filter_mosaic(u, p, f, mine[:m], rect, cache).copy()
-    k = p["k"]
-    H, W = rgba.shape[:2]
-    pad = max(8, round(64 * k / 0.5)) + 1
     for j in range(m, len(mine)):
-        t = mine[j]
-        bx, by, bw, bh = t["box"]
-        left = round((t["offset"][0] + bx - rect[0]) * k)
-        top = round((t["offset"][1] + by - rect[1]) * k)
-        sw, sh = max(1, round(bw * k)), max(1, round(bh * k))
-        x0, y0 = max(left - pad, 0), max(top - pad, 0)
-        x1, y1 = min(left + sw + pad, W), min(top + sh + pad, H)
-        if x1 > x0 and y1 > y0:
-            part = _part(os.path.join(_tiles(u, cache, p["display_scale"]), f"{t['n']}.png"), sw, sh)
-            frame = np.zeros((y1 - y0, x1 - x0, 4), np.uint8)
-            a0, b0 = max(left, 0), max(top, 0)
-            a1, b1 = min(left + sw, W), min(top + sh, H)
-            frame[b0 - y0:b1 - y0, a0 - x0:a1 - x0] = part[b0 - top:b1 - top, a0 - left:a1 - left]
-            below = np.ascontiguousarray(rgba[y0:y1, x0:x1])
-            rgba[y0:y1, x0:x1] = _compose([(below, None, None, None), (frame, None, None, None)], k, pin=0)
+        _over(u, p, rgba, mine[j], rect, cache)
         path = _filter_path(u, f, j + 1, rect, cache)
         with _lock:
             _grown_last[path] = rgba.copy() if j + 1 < len(mine) else rgba
@@ -748,6 +757,48 @@ def _grown(u, p, f, mine, rect, cache):
         if j + 1 < len(mine):
             reel._cached(path, lambda: _png(rgba))
     return _png(rgba)
+
+
+_rolling = contextvars.ContextVar("rolling", default=False)   # drawing a laps=1 mosaic movie (rolling_webp)
+_rolled = collections.OrderedDict()   # (pass, look, filter, view) -> [(tiles drawn, RGBA)]: each mosaic movie's last pictures
+ROLLED_KEEP = 6    # mosaic movie filters kept (two passes of three; a canvas is up to 16 MB)
+ROLLED_EACH = 2    # pictures kept of each
+
+
+def _rolled_put(key, drawn, rgba):
+    with _lock:
+        kept = [x for x in _rolled.get(key, []) if x[0] != drawn][-(ROLLED_EACH - 1):] + [(drawn, rgba)]
+        _rolled[key] = kept
+        _rolled.move_to_end(key)
+        while len(_rolled) > ROLLED_KEEP:
+            _rolled.popitem(last=False)
+ROLL_STEPS = 8   # most new tiles a mosaic movie's picture grows by from its last one; further than that, it is drawn anew
+
+
+def _roll(u, p, key, mine, rect, cache):
+    """A mosaic movie's picture of one filter (every place's newest tile, mine), grown from the last one drawn
+    (_rolled) by composing its new tiles over it, a tile's part of the canvas each (_over, as _grown does for a
+    pass's mosaic), so a new frame costs one tile's compose instead of every place's again: a playing window
+    gets its pictures about as fast as tiles are made. None when there is nothing to grow from (the first
+    picture, a jump, a step back in time): the caller draws it whole."""
+    with _lock:
+        kept = list(_rolled.get(key, []))
+    want = {t["n"] for t in mine}
+    # only forward: what is kept of a picture is all still wanted or covered by a newer copy of its place; the
+    # one kept with the fewest tiles to add
+    best = None
+    for drawn, rgba in kept:
+        new = sorted(want - drawn)
+        if new and len(new) <= ROLL_STEPS and (not drawn or new[0] > max(drawn)) and (best is None or len(new) < len(best[0])):
+            best = (new, rgba)
+    if best is None:
+        return None
+    new, rgba = best
+    rgba = rgba.copy()
+    by_n = {t["n"]: t for t in mine}
+    for n in new:
+        _over(u, p, rgba, by_n[n], rect, cache, match=False)
+    return rgba
 
 
 def filter_mosaic(u, p, f, tiles, rect, cache, ref=None, tag=""):
@@ -764,6 +815,9 @@ def filter_mosaic(u, p, f, tiles, rect, cache, ref=None, tag=""):
     path = path[:-len(".png")] + tag + ".png"
     k = p["k"]
     W, H = math.ceil(rect[2] * k), math.ceil(rect[3] * k)
+
+    roll = (u["key"], calibration.look(), f, tuple(round(v) for v in rect)) if tag and _rolling.get() and not balanced else None
+    drew = {}
 
     def make():
         if not balanced and not tag and len(mine) > GROW_FROM:
@@ -784,16 +838,36 @@ def filter_mosaic(u, p, f, tiles, rect, cache, ref=None, tag=""):
             rgba = _compose(window, k, pin=None, gamma=p["display_scale"]["gamma"], corrections=corrections)
         else:
             rgba = _compose(window, k, pin=None)
+        drew["rgba"] = rgba
         return _png(rgba)
 
     with _lock:
         kept = _grown_last.get(path)
+        same = [x[1] for x in _rolled.get(roll, []) if x[0] == frozenset(t["n"] for t in mine)] if roll else []
     if kept is not None:
         return kept
+    # a mosaic movie's filter whose tiles did not change since one of its last pictures (the new tile is another
+    # filter's): that picture again, though the movie's picture has a new name
+    if same:
+        return same[0]
+    # a mosaic movie's next picture, grown from one before it: kept in memory only (the movie's picture made of
+    # it is kept in the cache), as writing the filter's whole canvas costs more than growing it
+    grew = _roll(u, p, roll, mine, rect, cache) if roll and not os.path.exists(path) else None
+    if grew is not None:
+        _rolled_put(roll, frozenset(t["n"] for t in mine), grew)
+        return grew
     data = reel._cached(path, make)
     with _lock:
         kept = _grown_last.get(path)
-    return kept if kept is not None else np.asarray(Image.open(io.BytesIO(data)).convert("RGBA"))
+    if kept is not None:
+        return kept
+    rgba = drew.get("rgba")
+    if rgba is None:
+        rgba = np.asarray(Image.open(io.BytesIO(data)).convert("RGBA"))
+    if roll:
+        # a picture the mosaic movie's next ones grow from (_roll)
+        _rolled_put(roll, frozenset(t["n"] for t in mine), rgba)
+    return rgba
 
 
 _parts = collections.OrderedDict()   # (tile file, width, height) -> the tile at that size, most recently used last
@@ -1240,6 +1314,75 @@ def rolling_layout(u, n, cache, laps=1, made_only=False):
     return p, tiles, rect, count, used, f"lap-{laps}-{ids}"
 
 
+def _rolling_picture(u, n, size, cache, laps, slots, fmt, out, made_only):
+    """(WebP, report) of the pass's mosaic movie at frame n, made once and kept; None before any tile is placed.
+    One frame's picture is made once at a time (a window's request and the one made ahead wait for each other)."""
+    made = rolling_layout(u, n, cache, laps, made_only=made_only)
+    if not made:
+        return None
+    full = size == "full"
+    path = os.path.join(folder(u, cache), "rolling-level", f"full{out}" if full else str(size), f"{made[5]}.{fmt}")
+    if os.path.exists(path):
+        return _make_mosaic(u, n, size, path, cache, slots, made, fmt, out)
+    with _lock:
+        lock = _making.setdefault(path, threading.Lock())
+    token = _rolling.set(laps == 1)
+    try:
+        with lock:
+            return _make_mosaic(u, n, size, path, cache, slots, made, fmt, out)
+    finally:
+        _rolling.reset(token)
+        with _lock:
+            _making.pop(path, None)
+
+
+_roll_ahead = {}   # (pass, look) -> [the frame a window is at, size, out]: the mosaic movie pictures to make ahead
+ROLL_AHEAD = 10    # frames of a mosaic movie made ahead of the window playing it
+ROLL_WORKERS = int(os.environ.get("CASSINI_ROLL_WORKERS", "2"))   # ... this many at once (a color picture's mix is ~1 s)
+
+
+def rolling_ahead(u, n, size, cache, slots=None, out=OUT):
+    """A window plays the mosaic movie at frame n: make the pictures of frames n+1 .. n+ROLL_AHEAD (their tiles
+    first) in the background, in order, each grown from one before it (_roll), so the window's next requests
+    are answered from the cache. ROLL_WORKERS threads per pass, each taking the next frame not taken (a picture
+    waits for the tiles before it, which the other thread may be making); a later call moves them on. Waits
+    while a window waits for a mosaic (_yield)."""
+    look = calibration.look()
+    key = (u["key"], look)
+    with _lock:
+        running = key in _roll_ahead
+        taken = _roll_ahead[key][3] if running else [-1]
+        _roll_ahead[key] = [n, size, out, taken, ROLL_WORKERS if not running else _roll_ahead[key][4]]
+        if running:
+            return
+
+    def run():
+        try:
+            with calibration.looking(look):
+                p = plan(u, cache)
+                while True:
+                    with _lock:
+                        at, sz, o, taken = _roll_ahead[key][:4]
+                        j = taken[0] = max(at, taken[0]) + 1
+                    if j > min(at + ROLL_AHEAD, len(u["frames"]) - 1):
+                        return
+                    for i in range(at + 1, j + 1):
+                        _yield()
+                        tile(u, i, cache, p["display_scale"])
+                    _yield()
+                    _rolling_picture(u, j, sz, cache, 1, slots, "webp", o, made_only=True)
+        except Exception as e:
+            print(f"mosaic movie ahead {u['key']} failed: {type(e).__name__}: {e}", flush=True)
+        finally:
+            with _lock:
+                _roll_ahead[key][4] -= 1
+                if not _roll_ahead[key][4]:
+                    _roll_ahead.pop(key, None)
+
+    for _ in range(ROLL_WORKERS):
+        threading.Thread(target=contextvars.copy_context().run, args=(run,), daemon=True).start()
+
+
 def rolling_webp(frame_id, size, cache, laps=1, slots=None, fmt="webp", out=OUT, wait=False):
     """(WebP, report) of frame_id's pass played as a mosaic movie (rolling_layout), made once and kept; None when
     the frame is in no pass, (None, report) while the pass is being worked out (unless wait)."""
@@ -1251,14 +1394,14 @@ def rolling_webp(frame_id, size, cache, laps=1, slots=None, fmt="webp", out=OUT,
         warm_movie(u, n, 6, cache)
         return None, {"why": "working out the pass", "observation": u["key"][1], "pass": u["key"][3]}
     with _asking():
-        made = rolling_layout(u, n, cache, laps, made_only=not wait)
-        if not made:
+        res = _rolling_picture(u, n, size, cache, laps, slots, fmt, out, made_only=not wait)
+        if res is None:
             return None, {"why": "no tile placed yet"}
-        full = size == "full"
-        path = os.path.join(folder(u, cache), "rolling-level", f"full{out}" if full else str(size), f"{made[5]}.{fmt}")
-        res = _make_mosaic(u, n, size, path, cache, slots, made, fmt, out)
-    # the tiles ahead, by the pass's one background thread (tiles_ahead, as a pass mosaic's)
+    # the tiles ahead, by the pass's one background thread (tiles_ahead, as a pass mosaic's), and the pictures of
+    # the next frames, so a playing window finds them made (rolling_ahead)
     tiles_ahead(u, n + 1, cache)
+    if laps == 1 and size != "full" and fmt == "webp":
+        rolling_ahead(u, n, size, cache, slots, out)
     if res:
         res[1].update({"rolling": True, "keep": laps, "n": n})   # laps: the pass's own, from _make_mosaic
     return res

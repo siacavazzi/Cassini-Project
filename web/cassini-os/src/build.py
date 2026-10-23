@@ -64,6 +64,19 @@ for old, new in [
     assert study.count(old) == 1, old
     study = study.replace(old, new)
 
+# pause in the background (away.html): its style joins the head's, its note goes into #app, and its script runs right
+# after the settings script (it adds two Playback settings), ahead of every script that draws or fetches: it holds the
+# page's animation frames while the tab is hidden or the window has lost focus
+away = open(os.path.join(os.path.dirname(os.path.abspath(sys.argv[2])), "away.html")).read()
+apart = lambda tag: away[away.index(f"<{tag}"):away.index(f"</{tag}>") + len(tag) + 3]
+for old, new in [
+    ("</style>\n</head>", apart("style")[len("<style>"):] + "\n</head>"),
+    ('  <div id="loading">', "  " + away[away.index('<div id="awaynote"'):away.index("</div>", away.index('<div id="awaynote"')) + 6] + "\n\n" + '  <div id="loading">'),
+    ("<script>\n// ---------- Cassini OS chrome", apart("script") + "\n<script>\n// ---------- Cassini OS chrome"),
+]:
+    assert study.count(old) == 1, old
+    study = study.replace(old, new)
+
 # phone layout (phone.html): its style joins the head's and its script runs before the chrome script (after the
 # settings script), so the window manager already knows whether it is laying out a phone
 phone = open(os.path.join(os.path.dirname(os.path.abspath(sys.argv[2])), "phone.html")).read()
@@ -153,6 +166,32 @@ for old, new in [
     assert study.count(old) == 1, old
     study = study.replace(old, new)
 study += part("script") + "\n"
+
+# About (about.html): its style joins the head's, its window goes into #app, and its script runs after the chrome script;
+# the Credits tab lists credits.json, the one list of every credit, and every surface map, ring and shape file under
+# web/replay/data/textures has to have an entry there
+ab = open(os.path.join(os.path.dirname(os.path.abspath(sys.argv[2])), "about.html")).read()
+part = lambda tag: ab[ab.index(f"<{tag}"):ab.index(f"</{tag}>") + len(tag) + 3]
+credits = json.load(open(os.path.join(os.path.dirname(os.path.abspath(sys.argv[2])), "credits.json")))
+ids = [e["id"] for g in credits["groups"] for e in g["entries"]]
+assert len(ids) == len(set(ids)), "credits.json: an id is used twice"
+assert all(e.get("title") and e.get("credit") and e.get("license") for g in credits["groups"] for e in g["entries"]), "credits.json: every entry needs a title, credit and license"
+covered = {f for g in credits["groups"] for e in g["entries"] for f in e.get("files", [])}
+texdir = os.path.join(HERE, "..", "..", "replay", "data", "textures")
+for dirpath, _, names in os.walk(texdir):
+    for n in names:
+        rel = os.path.relpath(os.path.join(dirpath, n), texdir).replace(os.sep, "/")
+        rel = re.sub(r"^[0-9]+k/", "", rel)
+        assert n.endswith(".md") or rel in covered, f"{rel} has no credit: add it to the files of an entry in web/cassini-os/src/credits.json"
+for old, new in [
+    ("</style>\n</head>", part("style")[len("<style>"):] + "\n</head>"),
+    ('  <div id="loading">', "  " + part("section") + "\n\n" + '  <div id="loading">'),
+]:
+    assert study.count(old) == 1, old
+    study = study.replace(old, new)
+ascript = part("script")
+assert ascript.count('/*CREDITS*/{"groups":[]}') == 1
+study += ascript.replace('/*CREDITS*/{"groups":[]}', json.dumps({"groups": credits["groups"]}, ensure_ascii=False, separators=(",", ":"))) + "\n"
 
 def rep(old, new, count=1):
     global script
@@ -260,6 +299,12 @@ function momentsBefore(et) {
   return c;
 }
 """)
+
+# after a pause in the background (away.html) the clock carries on from where it stopped: the first frame back
+# counts from the moment the page came back, not from the last frame before it went
+rep('  const dt = Math.min(0.1, (now - lastT) / 1000); lastT = now;\n',
+    '  const dt = Math.max(0, Math.min(0.1, (now - lastT) / 1000)); lastT = now;\n')
+rep('function frame(now) {\n', 'document.addEventListener("cassini:away", e => { if (!e.detail.away) lastT = performance.now(); });\nfunction frame(now) {\n')
 
 # surface maps are decoded off the main thread (createImageBitmap) where the browser can, so a 2k or 4k map arriving
 # does not freeze the view while it decodes; a browser that cannot falls back to the plain loader
@@ -431,6 +476,12 @@ fscript = npart("script")
 assert fscript.count("/*FINALE_DATA*/null") == 1
 if os.path.exists(fd):
     fscript = fscript.replace("/*FINALE_DATA*/null", json.dumps(json.load(open(fd)), separators=(",", ":")))
+# the people who made the mission happen (mission-team.json, from NASA's and ESA's team pages): the credits roll after
+# the finale, and window.cassiniTeam for the About window
+team = json.load(open(os.path.join(os.path.dirname(os.path.abspath(sys.argv[2])), "mission-team.json")))
+assert all(s.get("title") and (s.get("people") or s.get("names") or s.get("text") or s.get("groups")) for s in team["sections"]), "mission-team.json: every section needs a title and people, names, text or groups"
+assert fscript.count("/*MISSION_TEAM*/null") == 1
+fscript = fscript.replace("/*MISSION_TEAM*/null", json.dumps({k: team[k] for k in ("intro", "sections", "closing", "sources")}, ensure_ascii=False, separators=(",", ":")))
 script += fscript + "\n"
 open(out, 'w').write(study + script)
 print("ok", out, len(study + script))

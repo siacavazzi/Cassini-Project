@@ -23,7 +23,11 @@
      wheel zooms. The real readings Cassini sent in its last hour (finale-data.json, from NASA's Planetary Data
      System, written in by build.py) run as a strip chart while it falls. Captions turn quiet and sad as it fights to
      keep the dish on Earth, then the view pulls back to Saturn for a warmer recap of what it did. Escape or the Skip
-     button ends it; ?finale plays it at once. Sound (sound.html): Cassini's carrier as a pure tone that wavers with
+     button ends it; ?finale plays it at once. After "Thank you, Cassini" the screen goes dark and the credits roll, like
+     the end of a film: the people who made the mission happen (mission-team.json, from NASA's and ESA's team pages,
+     written in by build.py), the imaging team first since every picture here is theirs. The roll moves on its own; a
+     wheel, drag or swipe scrolls it by hand and it carries on from there a few seconds later. Its last card links to
+     About, and the Skip button or Escape still ends it. Sound (sound.html): Cassini's carrier as a pure tone that wavers with
      the wobble and stops at loss of signal, a low minor drone that grows with the struggle, one low bell at the
      break-up, and chords under the recap that open from minor to bright major. -->
 <style>
@@ -63,6 +67,39 @@ body.finale #gl { cursor: grab; }
 body.finale.fx-drag #gl { cursor: grabbing; }
 body.finale #app > :not(#gl):not(#finale) { opacity: 0 !important; pointer-events: none !important; transition: opacity 1.2s ease !important; }
 body.finale-out #app * { pointer-events: none !important; }
+/* the credits roll: a column that scrolls up over the darkened sky, fading in and out at its top and bottom edges */
+#finale .fx-roll { position: absolute; inset: 0; overflow-y: auto; overscroll-behavior: contain; scrollbar-width: none; opacity: 0; pointer-events: none;
+  -webkit-mask-image: linear-gradient(to bottom, transparent 0, #000 16%, #000 84%, transparent 100%); mask-image: linear-gradient(to bottom, transparent 0, #000 16%, #000 84%, transparent 100%); }
+#finale .fx-roll::-webkit-scrollbar { display: none; }
+#finale .fx-roll.on { pointer-events: auto; }
+#finale .fx-roll .in { width: min(620px, calc(100vw - 32px)); margin: 0 auto; padding: 100vh 0 calc(50vh - 120px); text-align: center; color: var(--q-text);
+  font: 300 15px/1.5 -apple-system, "Helvetica Neue", var(--ui); text-shadow: 0 1px 10px rgba(0,0,0,.9); }
+#finale .fx-roll .head { font-size: 23px; line-height: 1.45; margin: 0 0 24px; }
+#finale .fx-roll .lede { color: var(--q-dim); margin: 0 auto 120px; max-width: 30em; }
+#finale .fx-roll section { margin: 0 0 96px; }
+#finale .fx-roll h3 { margin: 0 0 6px; font-weight: normal; font-size: 10.5px; letter-spacing: .22em; text-transform: uppercase; color: var(--q-dim); }
+#finale .fx-roll h4 { margin: 34px 0 12px; font-weight: normal; font-size: 12px; letter-spacing: .06em; color: var(--q-accent); }
+#finale .fx-roll .sub { margin: 0 auto 20px; font-size: 12.5px; color: var(--q-dim); max-width: 34em; }
+#finale .fx-roll dl { display: grid; grid-template-columns: 1fr 1fr; column-gap: 18px; row-gap: 7px; margin: 0; }
+#finale .fx-roll dt { text-align: right; font-size: 12.5px; color: var(--q-dim); padding-top: 2px; }
+#finale .fx-roll dd { text-align: left; margin: 0; }
+#finale .fx-roll dd small { display: block; font-size: 11.5px; color: var(--q-dim); }
+#finale .fx-roll .names { margin: 14px auto 0; max-width: 36em; line-height: 1.9; }
+/* the dot rides at the end of the name before it, so a wrapped line never starts with one */
+#finale .fx-roll .names span { white-space: nowrap; }
+#finale .fx-roll .names span:not(:last-child)::after { content: "·"; margin: 0 .3em 0 .55em; color: rgba(232,236,242,.3); }
+#finale .fx-roll .text { color: var(--q-dim); max-width: 32em; margin: 10px auto 0; }
+#finale .fx-roll .end { margin-top: 160px; }
+#finale .fx-roll .end p { font-size: 21px; line-height: 1.5; margin: 0 0 26px; }
+#finale .fx-roll .end .btns { display: flex; gap: 10px; justify-content: center; flex-wrap: wrap; }
+#finale .fx-roll .end button { all: unset; padding: 6px 15px; border-radius: 13px; border: 1px solid var(--q-line); background: rgba(16,17,20,.55); color: rgba(232,236,242,.75); font-size: 12px; cursor: pointer; }
+#finale .fx-roll .end button:hover { color: var(--q-text); border-color: rgba(232,236,242,.35); }
+#finale .fx-roll .src { margin-top: 40px; font-size: 10.5px; line-height: 1.5; color: rgba(232,236,242,.34); }
+#finale .fx-roll .src a { color: inherit; }
+body.phone #finale .fx-roll .in { font-size: 14px; }
+body.phone #finale .fx-roll dl { grid-template-columns: 1fr; row-gap: 2px; }
+body.phone #finale .fx-roll dt, body.phone #finale .fx-roll dd { text-align: center; }
+body.phone #finale .fx-roll dd { margin-bottom: 10px; }
 body.phone #finale .fx-cap { font-size: 16px; } body.phone #finale .fx-cap.big { font-size: 21px; }
 body.phone #finale .fx-read { font-size: 9.5px; bottom: 9vh; }
 body.phone #finale .fx-note { bottom: 40px; }
@@ -74,6 +111,7 @@ body.phone #finale .fx-data { width: min(220px, calc(100vw - 32px)); top: 10px; 
   <div class="fx-shade"></div>
   <div class="fx-black"></div>
   <div class="fx-caps"></div>
+  <div class="fx-roll" tabindex="-1" aria-label="Credits"><div class="in"></div></div>
   <div class="fx-read" aria-hidden="true"></div>
   <div class="fx-data" aria-hidden="true"><b>Its last readings · real data</b><canvas width="556" height="290"></canvas><small></small></div>
   <div class="fx-note">An interpretation. Cassini's path is its real trajectory and the readings are what it sent; the way it fights to hold its antenna on Earth follows a rule pinned to NASA's numbers, not telemetry.</div>
@@ -86,10 +124,15 @@ body.phone #finale .fx-data { width: min(220px, calc(100vw - 32px)); top: 10px; 
 (function () {
   const root = document.getElementById("finale"), black = root.querySelector(".fx-black"), caps = root.querySelector(".fx-caps"), air = root.querySelector(".fx-air");
   const read = root.querySelector(".fx-read"), note = root.querySelector(".fx-note"), hint = root.querySelector(".fx-hint"), skipBtn = root.querySelector(".fx-skip");
+  const roll = root.querySelector(".fx-roll"), rollIn = roll.querySelector(".in");
   const dataBox = root.querySelector(".fx-data"), dataCv = dataBox.querySelector("canvas"), dataNote = dataBox.querySelector("small");
   // the real readings from the last hour, written in by build.py from finale-data.json (null when there are none):
   // { window: s, credit, series: [{ label, unit, color, log, t: [ms UTC], v: [...] }] }
   const FINALE_DATA = /*FINALE_DATA*/null;
+  // the mission team for the credits roll, written in by build.py from mission-team.json:
+  // { intro: { head, text }, sections: [{ title, sub, people: [{ role, name, note }], names: [...], text, groups: [same] }], closing, sources: [{ title, url }] }
+  const TEAM = /*MISSION_TEAM*/null;
+  window.cassiniTeam = TEAM;
   // NASA's numbers (JPL, 2017-09-13 "Final Approach" and 2017-09-15 "Ends Its Historic Exploration of Saturn")
   const H_LOS = 1500;          // km above the cloud tops at loss of signal
   const RAMP = 60;             // s from 10 percent of the thrusters' capacity to 100 percent
@@ -121,6 +164,10 @@ body.phone #finale .fx-data { width: min(220px, calc(100vw - 32px)); top: 10px; 
     [55.5, 5.5, `<b>Cassini-Huygens · 1997 &ndash; 2017</b>Thank you, Cassini.`, "big", [0, 2, 3, 5, 7, 10]],
   ];
   const RECAP_END = 62;
+  const ROLL_IN = 1.4;         // s of darkness between "Thank you, Cassini" and the credits
+  const ROLL_SPEED = 60;       // px/s the credits move up (48 on a phone)
+  const ROLL_HOLD = 3.5;       // s after a hand scroll before the roll moves on its own again
+  const ROLL_REST = 9;         // s the last card stays before it all fades back to the mission
 
   let F = null;   // the running finale
   const tmpS = v3(), tmpC = v3(), tmpE = v3();
@@ -367,6 +414,8 @@ body.phone #finale .fx-data { width: min(220px, calc(100vw - 32px)); top: 10px; 
       if (k >= 1) { fades.delete(el); if (f.then) f.then(); }
     }
   }
+  // paused in the background (away.html): the fades carry on where they stopped
+  document.addEventListener("cassini:away", e => { if (!e.detail.away) for (const f of fades.values()) f.t0 += e.detail.ms; });
   function caption(html, cls) {
     const el = document.createElement("div");
     el.className = "fx-cap" + (cls ? " " + cls : ""); el.innerHTML = html; caps.appendChild(el);
@@ -398,7 +447,7 @@ body.phone #finale .fx-data { width: min(220px, calc(100vw - 32px)); top: 10px; 
   }
   function onUp() { look.drag = null; look.last = performance.now(); document.body.classList.remove("fx-drag"); }
   function onWheel(e) {
-    if (!F) return;
+    if (!F || F.phase === "credits") return;
     look.zoom = Math.max(0.35, Math.min(4, look.zoom * Math.exp(e.deltaY * 0.0012))); look.last = performance.now();
     e.preventDefault(); e.stopImmediatePropagation();
   }
@@ -406,6 +455,62 @@ body.phone #finale .fx-data { width: min(220px, calc(100vw - 32px)); top: 10px; 
     if (look.drag || performance.now() - look.last < 4000) return;
     const k = 1 - Math.exp(-dt / 1.6);
     look.yaw -= look.yaw * k; look.pitch -= look.pitch * k; look.zoom += (1 - look.zoom) * k;
+  }
+
+  // ---------- the credits roll ----------
+  const esc = t => String(t).replace(/[&<>"]/g, c => ({ "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;" })[c]);
+  function block(b, h) {
+    let out = h + (b.sub ? `<p class="sub">${esc(b.sub)}</p>` : "");
+    if (b.people && b.people.length) out += `<dl>${b.people.map(p => `<dt>${esc(p.role)}</dt><dd>${esc(p.name)}${p.note ? `<small>${esc(p.note)}</small>` : ""}</dd>`).join("")}</dl>`;
+    if (b.names && b.names.length) out += `<div class="names">${b.names.map(n => `<span>${esc(n)}</span>`).join(" ")}</div>`;
+    if (b.text) out += `<p class="text">${esc(b.text)}</p>`;
+    return out;
+  }
+  function buildRoll() {
+    rollIn.innerHTML = `<p class="head">${esc(TEAM.intro.head)}</p><p class="lede">${esc(TEAM.intro.text)}</p>`
+      + TEAM.sections.map(s => `<section>${block(s, `<h3>${esc(s.title)}</h3>`)}${(s.groups || []).map(g => block(g, `<h4>${esc(g.title)}</h4>`)).join("")}</section>`).join("")
+      + `<div class="end"><p>${esc(TEAM.closing)}</p><div class="btns">${window.cassiniAbout ? `<button type="button" data-roll="about">About Cassini OS</button>` : ""}<button type="button" data-roll="back">Back to the mission</button></div>`
+      + `<div class="src">${TEAM.sources.map(s => `<a href="${esc(s.url)}" target="_blank" rel="noopener">${esc(s.title)}</a>`).join(" · ")}</div></div>`;
+    roll.scrollTop = 0;
+  }
+  // a hand on the roll (wheel, touch, drag, keys) holds it where it is put; it moves on again a few seconds later
+  const holdRoll = () => { if (F && F.phase === "credits") { F.rollHeld = performance.now(); F.rollEnd = 0; } };
+  ["wheel", "touchstart", "touchmove", "pointerdown", "keydown"].forEach(t => roll.addEventListener(t, holdRoll, { passive: true }));
+  roll.addEventListener("scroll", () => { if (F && F.phase === "credits" && performance.now() - F.rollHeld < ROLL_HOLD * 1000) F.rollY = roll.scrollTop; });
+  roll.addEventListener("click", e => {
+    const b = e.target.closest("[data-roll]"); if (!b) return;
+    e.stopPropagation(); finish();
+    if (b.dataset.roll === "about" && window.cassiniAbout) setTimeout(() => cassiniAbout.open("Mission team"), 1600);
+  });
+  // the same list as a tab in the About window (about.html), when it is there
+  if (TEAM && window.cassiniAbout && cassiniAbout.addTab) {
+    const tab = b => (b.sub ? `<p class="note">${esc(b.sub)}</p>` : "")
+      + (b.people || []).map(p => `<div class="cr"><b>${esc(p.name)}</b><div class="by">${esc(p.role)}</div>${p.note ? `<div class="what">${esc(p.note)}</div>` : ""}</div>`).join("")
+      + (b.names && b.names.length ? `<p>${b.names.map(esc).join(" · ")}</p>` : "") + (b.text ? `<p>${esc(b.text)}</p>` : "");
+    cassiniAbout.addTab("Mission team", () => `<h2>${esc(TEAM.intro.head)}</h2><p>${esc(TEAM.intro.text)}</p>`
+      + TEAM.sections.map(s => `<h3>${esc(s.title)}</h3>` + tab(s) + (s.groups || []).map(g => `<p><b>${esc(g.title)}</b></p>` + tab(g)).join("")).join("")
+      + `<p class="note">Sources: ${TEAM.sources.map(x => `<a href="${esc(x.url)}" target="_blank" rel="noopener">${esc(x.title)}</a>`).join(" · ")}</p>`);
+  }
+  function stepRoll(dt) {
+    const now = performance.now(), C = (now - F.rollAt) / 1000;
+    if (C < ROLL_IN) return;
+    if (!F.rollOn) {
+      F.rollOn = true; F.rollY = 0; F.rollHeld = 0; F.rollEnd = 0;
+      buildRoll(); roll.classList.add("on"); fadeTo(roll, 1, 2.5); fadeTo(black, 0.86, 4);
+      sound("chord", [0, 2, 4, 7]);
+      return;
+    }
+    const max = roll.scrollHeight - roll.clientHeight;
+    if (now - F.rollHeld > ROLL_HOLD * 1000) {
+      F.rollY = Math.min(max, F.rollY + dt * (document.body.classList.contains("phone") ? ROLL_SPEED * 0.8 : ROLL_SPEED));
+      roll.scrollTop = F.rollY;
+    }
+    // the last card rests a while, then the roll fades and the mission comes back
+    if (F.rollY >= max - 1 && now - F.rollHeld > ROLL_HOLD * 1000) {
+      if (!F.rollEnd) { F.rollEnd = now; if (!F.rollChord) { F.rollChord = true; sound("chord", [0, 2, 3, 5, 7, 10]); } }
+      if (now - F.rollEnd > ROLL_REST * 1000 && !F.rollClose) { F.rollClose = now; fadeTo(roll, 0, 2); fadeTo(black, 1, 2); }
+    } else if (!F.rollClose) F.rollEnd = 0;
+    if (F.rollClose && now - F.rollClose > 2100) finish();
   }
 
   function play() {
@@ -430,7 +535,8 @@ body.phone #finale .fx-data { width: min(220px, calc(100vw - 32px)); top: 10px; 
     cassini.visible = true; markerPts.visible = true; cassini.up.set(0, 1, 0);
     camera.up.set(0, 1, 0);
     controls.enabled = true;
-    caps.textContent = ""; [read, note, hint, dataBox].forEach(e => e.classList.remove("on"));
+    caps.textContent = ""; [read, note, hint, dataBox, roll].forEach(e => e.classList.remove("on"));
+    roll.style.opacity = 0; rollIn.textContent = "";
     air.style.opacity = 0;
     fades.forEach((v, el) => { if (el !== black) fades.delete(el); });
     setTime(coverage[1]);
@@ -444,6 +550,12 @@ body.phone #finale .fx-data { width: min(220px, calc(100vw - 32px)); top: 10px; 
   }
 
   // the viewer's frame loop, before it places the bodies: the finale runs its own clock
+  // paused in the background (away.html): the cutscene's clock moves on by the time away, so it carries on where it stopped
+  document.addEventListener("cassini:away", e => {
+    if (e.detail.away || !F) return;
+    const ms = e.detail.ms; F.t0 += ms; F.lastFrame += ms; look.last += ms;
+    for (const k of ["recapAt", "rollAt", "rollHeld", "rollEnd", "rollClose"]) if (F[k]) F[k] += ms;
+  });
   window.studyFrame = dt => {
     stepFades();
     if (!F) return;
@@ -487,8 +599,13 @@ body.phone #finale .fx-data { width: min(220px, calc(100vw - 32px)); top: 10px; 
       stepFlare(R);
       runCaptions(F.recap, R, F.shownR);
       if (R > RECAP_END - 2.5 && !F.closing) { F.closing = true; fadeTo(black, 1, 2.5); }
-      if (R > RECAP_END) finish();
+      if (R > RECAP_END) {
+        // after a moment of darkness, the credits roll
+        F.recap.forEach((d, i) => { if (F.shownR[i] && F.shownR[i] !== true) drop(F.shownR[i]); });
+        if (!TEAM) finish(); else { F.phase = "credits"; F.rollAt = performance.now(); }
+      }
     }
+    if (F && F.phase === "credits") stepRoll(dt);
     if (F && F.tau !== null) state.et = Math.min(F.tau, coverage[1]);
   };
   // past the end of the data, Cassini carries on along its last velocity
