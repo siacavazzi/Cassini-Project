@@ -171,6 +171,18 @@ assert titan[0] > 1.5 * titan[2]
 pink = cal.apply_mix(np.eye(3).view(cal.FalseMix), np.array([1.0, 0.2, 0.9], np.float32).reshape(3, 1, 1)).ravel()
 near = cal.apply_mix(np.eye(3).view(cal.FalseMix), np.array([0.5, 0.48, 0.46], np.float32).reshape(3, 1, 1)).ravel()
 assert (pink.max() - pink.min()) / pink.max() < 0.6 and np.allclose(near, [0.5, 0.48, 0.46], atol=0.002)
+# a body pink on one half and sage on the other comes out much closer to one color; a spot keeps its color
+halves = np.full((3, 512, 512), 0.4, np.float32)
+halves[:, :256] *= np.array([1.1, 0.95, 0.95], np.float32).reshape(3, 1, 1)
+halves[:, 256:] *= np.array([0.92, 1.05, 0.98], np.float32).reshape(3, 1, 1)
+halves[:, 100:116, 400:416] *= np.array([1.2, 0.9, 0.9], np.float32).reshape(3, 1, 1)
+red = lambda v, r, c: v[0, r, c] / v[:, r, c].mean()
+out = cal.apply_mix(np.eye(3).view(cal.FalseMix), halves)
+flat, cal.FALSE_FLAT = cal.FALSE_FLAT, 0.0
+kept = cal.apply_mix(np.eye(3).view(cal.FalseMix), halves)
+cal.FALSE_FLAT = flat
+assert abs(red(out, 40, 40) - red(out, 400, 40)) < 0.6 * abs(red(kept, 40, 40) - red(kept, 400, 40))
+assert red(out, 108, 408) - red(out, 60, 408) > 0.8 * (red(kept, 108, 408) - red(kept, 60, 408))
 gray = [np.full((8, 8), 0.4, np.float32)] * 3
 t = cal.tone(gray, 0.01, m)
 assert abs(int(t[0][0, 0, 0]) - int(t[2][0, 0, 0])) <= 2

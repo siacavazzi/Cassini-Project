@@ -502,11 +502,33 @@ FALSE_REVERT = 0.1
 FALSE_DETAIL = 3.0    # ... and fine detail below this blur (pixels) taken from the bands at gentler gains:
 DETAIL_SPREAD = 4.0   # none over this times another's (4x keeps the scan lines down; the full gains lift them)
 REVERT_FLOOR = 0.02   # ... where the bands' mean is at least this share of white
+# broad color differences across the body (a dusty-rose band under the ring shadow, one half of a disk pink and the
+# other sage, a lavender side, one mosaic tile olive and the next mauve) are what a dim band's full gain makes of small
+# real changes in its share; FALSE_FLAT of the picture's color variation broader than FALSE_BROAD (a share of the
+# picture's size) is taken out, toward its typical color, while finer color (belts, clouds, storms) stays
+FALSE_BROAD = 0.06
+FALSE_FLAT = 0.6
 
 
 def _saturation(x):
     top, low = x.max(axis=0), x.min(axis=0)
     return np.where(top > 0, (top - low) / np.maximum(top, 1e-12), 0)
+
+
+def _flatten_broad(x, lit):
+    if lit.sum() < 100:
+        return x
+    lum = x.mean(axis=0)
+    share = np.log(np.maximum(x, 1e-6) / np.maximum(lum, 1e-6))
+    typical = np.array([np.median(c[lit]) for c in share], np.float32).reshape(3, 1, 1)
+    sigma = FALSE_BROAD * max(x.shape[1:])
+    weight = np.where(lit, lum, 0).astype(np.float32)
+    soft = lambda v: cv2.GaussianBlur(v, (0, 0), sigma)
+    norm = np.maximum(soft(weight), 1e-12)
+    broad = np.stack([soft(c * weight) / norm for c in (share - typical)])
+    flat = np.exp(share - FALSE_FLAT * broad)
+    flat *= 3 / np.maximum(flat.sum(axis=0), 1e-12)
+    return np.where(lit & (x.min(axis=0) > 0), lum * flat, x)
 
 
 def apply_mix(mix, x):
@@ -528,6 +550,7 @@ def apply_mix(mix, x):
         held = knee + (cap - knee) * np.tanh((sat - knee) / (cap - knee))
         k = np.where(sat > knee, held / np.maximum(sat, 1e-12), 1)
         x = lum * tint + (x - lum * tint) * k
+        x = _flatten_broad(x, mean > REVERT_FLOOR)
         # the balance's color and broad brightness, the fine detail of the bands at gains no more than DETAIL_SPREAD
         # apart: a dim band's full gain (MT3 on Saturn, 8 to 10) would lift its ring, limb and haze structure and noise
         # far above the others', while equal weights (the straight picture) lose the detail only that band shows
