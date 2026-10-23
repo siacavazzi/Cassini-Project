@@ -549,7 +549,7 @@ GROW_FROM = 16   # tiles of one filter: a mosaic with more is the one before it 
 
 def _filter_path(u, f, count, rect, cache, solved_on=""):
     name = f"{f.replace('/', '_')}-{count}{solved_on}-{'_'.join(str(round(v)) for v in rect)}.png"
-    return os.path.join(folder(u, cache), "filters", name)
+    return os.path.join(folder(u, cache), "filters-level", name)
 
 
 def _png(rgba):
@@ -566,6 +566,14 @@ def _compose(window, k, **kw):
         try:
             mosaic.feather_px = max(8, round(64 * k / 0.5))
             mosaic.reset()
+            if kw.get("pin", -1) is None and "corrections" not in kw and "gamma" not in kw and len(window) > 1:
+                # pinned to none, the seams' gains all sink together toward their limit as overlaps come in (the
+                # data asks only that they agree), so a mosaic dimmed about 9% while it filled: their mean log is
+                # held at 0 instead, so the pass keeps the level its scale gave it from the first tile to the last
+                frames = [np.asarray(w[0]) for w in window]
+                gains = mosaic.match_gains(frames, mosaic.calibrated_gain, None, mosaic.calibrated_overlap)
+                gains = gains / np.exp(np.log(gains).mean(axis=0))
+                kw = {**kw, "corrections": (gains, mosaic.match_offsets(frames, gains, None, mosaic.calibrated_overlap))}
             rgba = mosaic.compose(window, False, calibrated=True, **kw)
             mosaic.reset()
         finally:
