@@ -317,9 +317,12 @@ def _ulock(u):
         return _unit_locks.setdefault(u["key"], threading.RLock())
 
 
+PLAN_FILE = "plan2.json"   # the pass's plan in its folder (plan2: colour and grey leave out frames pointed aside)
+
+
 def plan(u, cache):
     """The pass's display scale, rotation, footprint, view mode and colour filters, worked out once and kept."""
-    path = os.path.join(folder(u, cache), "plan.json")
+    path = os.path.join(folder(u, cache), PLAN_FILE)
     with _ulock(u):
         if os.path.exists(path):
             with open(path) as fh:
@@ -329,6 +332,11 @@ def plan(u, cache):
         for fr in frames:
             count[fr[2]] = count.get(fr[2], 0) + 1
             nms[fr[2]] = fr[4]
+        # the filters chosen from those pointed at the body: a pass whose most taken filter looks beside it (the
+        # clear frames of ISS_C23RI_RMOV001_PRIME are a frame and a third off Jupiter, on dark sky) is drawn in
+        # the filters that see the body, not as a black mosaic of that sky
+        aside = _aside(frames, u)
+        count = {f: c for f, c in count.items() if f not in aside} or count
         colour = colour_of(count, nms)
         # a long movie's scale from frames spread evenly over it, each filter's on its own (a step in time could
         # fall in step with the filter wheel and miss a filter): the same scale, without reading every frame first
@@ -367,6 +375,20 @@ def plan(u, cache):
              "grey": max(count, key=count.get), "whole": u["whole"]}
         reel._cached(path, lambda: json.dumps(p).encode())
         return p
+
+
+def _aside(frames, u):
+    """The filters whose frames point, as a rule, more than a frame further from the body's centre than the
+    filter pointed closest (median over each filter's placed frames, at the pass's reference distance)."""
+    far = {}
+    for fr in frames:
+        if fr[7]:
+            far.setdefault(fr[2], []).append(math.hypot(fr[5], fr[6]) * fr[7] / u["z"])
+    med = {f: sorted(v)[len(v) // 2] for f, v in far.items()}
+    if not med:
+        return set()
+    near = min(med.values())
+    return {f for f, m in med.items() if m > near + FRAME}
 
 
 # filter sets with a colour mapping of their own, looked up before the general rule in colour_of: frozenset of the
@@ -968,7 +990,7 @@ def movie_webp(frame_id, size, cache, trail=0, colour=True, wait=False, ahead=6,
     if not found or found[1] < 0:
         return None
     u, n = found
-    if not wait and not all(os.path.exists(os.path.join(folder(u, cache), f)) for f in ("plan.json", "movie_footprint.json")):
+    if not wait and not all(os.path.exists(os.path.join(folder(u, cache), f)) for f in (PLAN_FILE, "movie_footprint.json")):
         warm_movie(u, n, ahead, cache)
         return None, {"why": "working out the pass", "observation": u["key"][1], "pass": u["key"][3]}
     path = os.path.join(folder(u, cache), "movie", str(size), f"{n}_{trail}_{int(bool(colour))}{'_c2' if centre else ''}.webp")
@@ -1133,7 +1155,7 @@ def rolling_webp(frame_id, size, cache, laps=1, slots=None, fmt="webp", out=OUT,
     if not found or found[1] < 0:
         return None
     u, n = found
-    if not wait and not os.path.exists(os.path.join(folder(u, cache), "plan.json")):
+    if not wait and not os.path.exists(os.path.join(folder(u, cache), PLAN_FILE)):
         warm_movie(u, n, 6, cache)
         return None, {"why": "working out the pass", "observation": u["key"][1], "pass": u["key"][3]}
     with _asking():

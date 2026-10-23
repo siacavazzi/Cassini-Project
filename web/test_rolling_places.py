@@ -20,7 +20,7 @@ for i,(_,fid,f,t,*_r) in enumerate(fr):
     if i in (6,): continue                                          # lap 2 place 2: not made yet
     json.dump(j,open(f"{d}/tiles/{i}.json","w"))
 json.dump({"key":list(u["key"]),"display_scale":{"blacks":{},"white":1,"gamma":3},"angle":0,"footprint":[-1124,-1124,1124,1124],
- "fixed":True,"view":[2248,2248],"k":2048/2248,"colour":None,"grey":"CB2","whole":False},open(d+"/plan.json","w"))
+ "fixed":True,"view":[2248,2248],"k":2048/2248,"colour":None,"grey":"CB2","whole":False},open(d+"/"+om.PLAN_FILE,"w"))
 om.unit_of=lambda fid:(u,[x[1] for x in fr].index(fid))
 om.tiles_ahead=lambda *a,**k:None
 om.tile=lambda u_,j,c,s: json.load(open(f"{d}/tiles/{j}.json")) if os.path.exists(f"{d}/tiles/{j}.json") else {"n":j,"why":"not made"}
