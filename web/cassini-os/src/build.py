@@ -168,6 +168,32 @@ for old, new in [
     study = study.replace(old, new)
 study += part("script") + "\n"
 
+# About (about.html): its style joins the head's, its window goes into #app, and its script runs after the chrome script;
+# the Credits tab lists credits.json, the one list of every credit, and every surface map, ring and shape file under
+# web/replay/data/textures has to have an entry there
+ab = open(os.path.join(os.path.dirname(os.path.abspath(sys.argv[2])), "about.html")).read()
+part = lambda tag: ab[ab.index(f"<{tag}"):ab.index(f"</{tag}>") + len(tag) + 3]
+credits = json.load(open(os.path.join(os.path.dirname(os.path.abspath(sys.argv[2])), "credits.json")))
+ids = [e["id"] for g in credits["groups"] for e in g["entries"]]
+assert len(ids) == len(set(ids)), "credits.json: an id is used twice"
+assert all(e.get("title") and e.get("credit") and e.get("license") for g in credits["groups"] for e in g["entries"]), "credits.json: every entry needs a title, credit and license"
+covered = {f for g in credits["groups"] for e in g["entries"] for f in e.get("files", [])}
+texdir = os.path.join(HERE, "..", "..", "replay", "data", "textures")
+for dirpath, _, names in os.walk(texdir):
+    for n in names:
+        rel = os.path.relpath(os.path.join(dirpath, n), texdir).replace(os.sep, "/")
+        rel = re.sub(r"^[0-9]+k/", "", rel)
+        assert n.endswith(".md") or rel in covered, f"{rel} has no credit: add it to the files of an entry in web/cassini-os/src/credits.json"
+for old, new in [
+    ("</style>\n</head>", part("style")[len("<style>"):] + "\n</head>"),
+    ('  <div id="loading">', "  " + part("section") + "\n\n" + '  <div id="loading">'),
+]:
+    assert study.count(old) == 1, old
+    study = study.replace(old, new)
+ascript = part("script")
+assert ascript.count('/*CREDITS*/{"groups":[]}') == 1
+study += ascript.replace('/*CREDITS*/{"groups":[]}', json.dumps({"groups": credits["groups"]}, ensure_ascii=False, separators=(",", ":"))) + "\n"
+
 def rep(old, new, count=1):
     global script
     assert script.count(old) == count, (old, script.count(old))
@@ -445,6 +471,12 @@ fscript = npart("script")
 assert fscript.count("/*FINALE_DATA*/null") == 1
 if os.path.exists(fd):
     fscript = fscript.replace("/*FINALE_DATA*/null", json.dumps(json.load(open(fd)), separators=(",", ":")))
+# the people who made the mission happen (mission-team.json, from NASA's and ESA's team pages): the credits roll after
+# the finale, and window.cassiniTeam for the About window
+team = json.load(open(os.path.join(os.path.dirname(os.path.abspath(sys.argv[2])), "mission-team.json")))
+assert all(s.get("title") and (s.get("people") or s.get("names") or s.get("text") or s.get("groups")) for s in team["sections"]), "mission-team.json: every section needs a title and people, names, text or groups"
+assert fscript.count("/*MISSION_TEAM*/null") == 1
+fscript = fscript.replace("/*MISSION_TEAM*/null", json.dumps({k: team[k] for k in ("intro", "sections", "closing", "sources")}, ensure_ascii=False, separators=(",", ":")))
 script += fscript + "\n"
 open(out, 'w').write(study + script)
 print("ok", out, len(study + script))
