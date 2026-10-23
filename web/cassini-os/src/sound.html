@@ -281,6 +281,21 @@ body.phone #ssound { width: 30px; height: 30px; }
     const t = ctx.currentTime + 0.05;
     steps.forEach((d, i) => bell(t + i * 0.16, hz(noteOf(ROOT.W, d)), 0.085, (i / Math.max(1, steps.length - 1) - 0.5) * 0.8, 5.5, 0.45, 1));
   };
+  // Saturn arrival (soi.html): the main engine as a low rumble, brown noise under a lowpass that wavers a little
+  let rumbleG = null;
+  window.cassiniSound.rumble = level => {
+    if (!ctx || ctx.state !== "running") return;
+    if (!rumbleG) {
+      const n = ctx.createBuffer(1, ctx.sampleRate * 4, ctx.sampleRate), d = n.getChannelData(0);
+      for (let i = 0, b = 0; i < d.length; i++) { b = (b + 0.02 * (Math.random() * 2 - 1)) / 1.02; d[i] = b * 3.5; }
+      const src = ctx.createBufferSource(); src.buffer = n; src.loop = true;
+      const f = ctx.createBiquadFilter(); f.type = "lowpass"; f.frequency.value = 170; f.Q.value = 0.7;
+      const lfo = ctx.createOscillator(), depth = ctx.createGain(); lfo.frequency.value = 0.37; depth.gain.value = 40; lfo.connect(depth); depth.connect(f.frequency); lfo.start();
+      rumbleG = ctx.createGain(); rumbleG.gain.value = 0;
+      src.connect(f); f.connect(rumbleG); rumbleG.connect(bus); src.start();
+    }
+    rumbleG.gain.setTargetAtTime(level * 0.22, ctx.currentTime, level ? 0.4 : 0.12);
+  };
   // a soft low drum: a sine falling from 110 to 45 Hz
   let nextBeat = 0;
   function thump(t, g) {

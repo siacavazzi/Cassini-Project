@@ -1,5 +1,5 @@
 {
-  "_readme": "Every credit for Cassini OS, in one place: build.py bakes this file into the About window (about.html). Add an entry to the group it belongs to whenever a page starts using new data, a new map, a model, a sound, a library or a font. Fields: id (short, unique; a callout elsewhere on the page links to it with data-about=\"<id>\"), title, credit (the attribution line, as the source asks for it), short (optional: the few words a callout on the page shows), detail (optional: what it is and how Cassini OS uses it), license, url (optional), files (optional: the files under web/replay/data/textures it covers, without the 1k/2k/4k folder; build.py refuses to build while a file there has no entry), note (optional: anything still to do, such as a missing license).",
+  "_readme": "Every credit for Cassini OS, in one place: build.py bakes this file into the About window (about.html). Add an entry to the group it belongs to whenever a page starts using new data, a new map, a model, a sound, a library or a font. Fields: id (short, unique; a callout elsewhere on the page links to it with data-about=\"<id>\"), title, credit (the attribution line, as the source asks for it), short (optional: the few words a callout on the page shows), detail (optional: what it is and how Cassini OS uses it), license, url (optional), files (optional: the files under web/replay/data/textures it covers, without the 1k/2k/4k folder, and the pictures under web/cassini-os/media it covers, as media/...; build.py refuses to build while a file there has no entry), note (optional: anything still to do, such as a missing license).",
   "groups": [
     {
       "title": "Cassini mission data",
@@ -43,9 +43,19 @@
           "id": "facts",
           "title": "Mission facts and numbers",
           "credit": "NASA, NASA/JPL and ESA mission pages",
-          "detail": "The facts on the loading screen (each one names its source as it shows), and the numbers and timings the Grand Finale is pinned to (JPL, \"Cassini Spacecraft Makes Its Final Approach to Saturn\", 13 September 2017; \"Cassini by the Numbers\").",
+          "detail": "The facts on the loading screen (each one names its source as it shows), and the numbers and timings the Grand Finale is pinned to (JPL, \"Cassini Spacecraft Makes Its Final Approach to Saturn\", 13 September 2017; \"Cassini by the Numbers\"), and the launch cutscene's (ESA, \"Cassini-Huygens: Launch information\" and \"The launcher\"; NASA, \"Cassini Quick Facts\").",
           "license": "Facts, with their sources named",
           "url": "https://science.nasa.gov/mission/cassini/"
+        },
+        {
+          "id": "launch-photos",
+          "title": "Launch photos",
+          "credit": "NASA/Kennedy Space Center (KSC-97PC1273, KSC-97PC1542, KSC-97PC1543, KSC-97PC1545); U.S. Department of Defense, Defense Visual Information Center (National Archives 6504408)",
+          "short": "NASA/KSC; U.S. DoD",
+          "detail": "The five photographs the launch cutscene tells the launch with: Cassini and Huygens in the clean room in August 1997, the Titan IVB/Centaur on Launch Complex 40 the night before, liftoff at 4:43 a.m. EDT on 15 October 1997, the climb, and a long exposure of its arc over the booster recovery ship Liberty Star. From the NASA Image and Video Library and, for the climb, the National Archives via Wikimedia Commons; resized for the page.",
+          "license": "Public domain (U.S. Government works)",
+          "url": "https://images.nasa.gov/details/KSC-97PC1545",
+          "files": ["media/launch/KSC-97PC1273.jpg", "media/launch/KSC-97PC1542.jpg", "media/launch/KSC-97PC1543.jpg", "media/launch/KSC-97PC1545.jpg", "media/launch/NARA-6504408.jpg"]
         }
       ]
     },

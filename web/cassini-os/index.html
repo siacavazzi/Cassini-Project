@@ -998,6 +998,47 @@ body.phone #finale .fx-roll dd { margin-bottom: 10px; }
 body.phone #finale .fx-read { font-size: 9.5px; bottom: 9vh; }
 body.phone #finale .fx-note { bottom: 40px; }
 body.phone #finale .fx-data { width: min(220px, calc(100vw - 32px)); top: 10px; right: 10px; }
+
+#launch { position: fixed; inset: 0; z-index: 2002; pointer-events: none; overflow: hidden; }
+#launch[hidden] { display: none; }
+#launch .lx-black { position: absolute; inset: 0; background: #000; opacity: 0; }
+#launch .lx-photo { position: absolute; inset: 0; opacity: 0; background: #000; overflow: hidden; }
+/* the photo whole, as tall as the screen, over a blurred and darkened copy of itself that fills the rest */
+#launch .lx-photo img { position: absolute; inset: 0; width: 100%; height: 100%; object-fit: contain; transform-origin: 50% 50%; will-change: transform; }
+#launch .lx-photo img.bg { object-fit: cover; filter: blur(28px) brightness(.38) saturate(1.2); transform: scale(1.15); will-change: auto; }
+/* the flash of liftoff, and a shade under the captions so they read over a bright photo or Earth */
+#launch .lx-flash { position: absolute; inset: 0; opacity: 0; background: radial-gradient(ellipse 80% 70% at 50% 85%, rgba(255,214,150,.9), rgba(255,170,80,.35) 50%, transparent 80%); mix-blend-mode: screen; }
+#launch .lx-shade { position: absolute; inset: 0; background: linear-gradient(to top, rgba(0,0,0,.8) 0, rgba(0,0,0,.5) 24%, rgba(0,0,0,0) 50%); }
+#launch .lx-caps { position: absolute; left: 50%; bottom: 15vh; transform: translateX(-50%); width: min(640px, calc(100vw - 32px)); display: grid; }
+#launch .lx-cap { grid-area: 1 / 1; align-self: end; text-align: center; color: var(--q-text); font: 300 19px/1.5 -apple-system, "Helvetica Neue", var(--ui);
+  letter-spacing: .01em; text-shadow: 0 1px 12px rgba(0,0,0,.9), 0 0 2px rgba(0,0,0,.8); opacity: 0; }
+#launch .lx-cap b { display: block; margin-bottom: 8px; font-weight: normal; font-size: 10.5px; letter-spacing: .22em; text-transform: uppercase; color: var(--q-dim); }
+#launch .lx-cap.big { font-size: 30px; letter-spacing: .03em; }
+#launch .lx-cap small { display: block; margin-top: 10px; font-size: 12px; color: var(--q-dim); }
+/* the road to Saturn: five stops on a line, each lighting up in turn */
+#launch .lx-road { display: flex; justify-content: space-between; position: relative; margin: 16px 4px 2px; }
+#launch .lx-road::before { content: ""; position: absolute; left: 6px; right: 6px; top: 5px; height: 1px; background: rgba(232,236,242,.25); }
+#launch .lx-road span { position: relative; display: flex; flex-direction: column; align-items: center; gap: 4px; font-size: 12.5px; line-height: 1.3; opacity: .35; transition: opacity .8s ease; }
+#launch .lx-road span::before { content: ""; width: 9px; height: 9px; border-radius: 50%; background: var(--q-dim); box-shadow: 0 0 0 2px rgba(0,0,0,.6); margin-bottom: 4px; }
+#launch .lx-road span.on { opacity: 1; }
+#launch .lx-road span.on::before { background: var(--q-accent); }
+#launch .lx-road span:last-child::before { background: #e6bb68; }
+#launch .lx-road small { margin: 0; font-size: 10.5px; }
+#launch .lx-clock { position: absolute; left: 50%; bottom: 7vh; transform: translateX(-50%); white-space: nowrap; font: 11px/1 var(--hudf); letter-spacing: .08em;
+  color: var(--q-dim); opacity: 0; transition: opacity 1.2s ease; }
+#launch .lx-clock.on { opacity: 1; }
+#launch .lx-clock i { font-style: normal; color: var(--q-accent); }
+#launch .lx-credit { position: absolute; left: 16px; bottom: 14px; max-width: min(460px, calc(100vw - 140px)); font-size: 10.5px; line-height: 1.4; color: rgba(232,236,242,.42); opacity: 0; transition: opacity 1.2s ease; }
+#launch .lx-credit.on { opacity: 1; }
+#launch .lx-skip { all: unset; position: absolute; right: 16px; bottom: 12px; padding: 4px 11px; border-radius: 11px; border: 1px solid var(--q-line);
+  background: rgba(16,17,20,.5); color: rgba(232,236,242,.55); font-size: 11px; cursor: pointer; pointer-events: auto; }
+#launch .lx-skip:hover { color: var(--q-text); }
+body.launch #app > :not(#gl):not(#launch) { opacity: 0 !important; pointer-events: none !important; transition: opacity 1.2s ease !important; }
+body.launch-out #app * { pointer-events: none !important; }
+body.phone #launch .lx-cap { font-size: 16px; } body.phone #launch .lx-cap.big { font-size: 23px; }
+body.phone #launch .lx-road span { font-size: 11px; } body.phone #launch .lx-road small { font-size: 9.5px; }
+body.phone #launch .lx-clock { font-size: 9.5px; bottom: 9vh; }
+body.phone #launch .lx-credit { bottom: 40px; }
 </style>
 </head>
 <body>
@@ -1225,6 +1266,16 @@ body.phone #finale .fx-data { width: min(220px, calc(100vw - 32px)); top: 10px; 
   <div class="fx-note">An interpretation. Cassini's path is its real trajectory and the readings are what it sent; the way it fights to hold its antenna on Earth follows a rule pinned to NASA's numbers, not telemetry.</div>
   <div class="cs-hint">Drag to look around</div>
   <button class="cs-skip" type="button">Skip ▸</button>
+</section>
+
+  <section id="launch" hidden aria-live="polite">
+  <div class="lx-black"></div>
+  <div class="lx-flash"></div>
+  <div class="lx-shade"></div>
+  <div class="lx-caps"></div>
+  <div class="lx-clock" aria-hidden="true"></div>
+  <div class="lx-credit"></div>
+  <button class="lx-skip" type="button">Skip ▸</button>
 </section>
 
   <div id="loading"><div>Starting Cassini OS<br>Loading trajectories<div class="bar"></div></div></div>
@@ -3829,6 +3880,21 @@ body.phone #finale .fx-data { width: min(220px, calc(100vw - 32px)); top: 10px; 
     const t = ctx.currentTime + 0.05;
     steps.forEach((d, i) => bell(t + i * 0.16, hz(noteOf(ROOT.W, d)), 0.085, (i / Math.max(1, steps.length - 1) - 0.5) * 0.8, 5.5, 0.45, 1));
   };
+  // Saturn arrival (soi.html): the main engine as a low rumble, brown noise under a lowpass that wavers a little
+  let rumbleG = null;
+  window.cassiniSound.rumble = level => {
+    if (!ctx || ctx.state !== "running") return;
+    if (!rumbleG) {
+      const n = ctx.createBuffer(1, ctx.sampleRate * 4, ctx.sampleRate), d = n.getChannelData(0);
+      for (let i = 0, b = 0; i < d.length; i++) { b = (b + 0.02 * (Math.random() * 2 - 1)) / 1.02; d[i] = b * 3.5; }
+      const src = ctx.createBufferSource(); src.buffer = n; src.loop = true;
+      const f = ctx.createBiquadFilter(); f.type = "lowpass"; f.frequency.value = 170; f.Q.value = 0.7;
+      const lfo = ctx.createOscillator(), depth = ctx.createGain(); lfo.frequency.value = 0.37; depth.gain.value = 40; lfo.connect(depth); depth.connect(f.frequency); lfo.start();
+      rumbleG = ctx.createGain(); rumbleG.gain.value = 0;
+      src.connect(f); f.connect(rumbleG); rumbleG.connect(bus); src.start();
+    }
+    rumbleG.gain.setTargetAtTime(level * 0.22, ctx.currentTime, level ? 0.4 : 0.12);
+  };
   // a soft low drum: a sine falling from 110 to 45 Hz
   let nextBeat = 0;
   function thump(t, g) {
@@ -4371,7 +4437,7 @@ body.phone #finale .fx-data { width: min(220px, calc(100vw - 32px)); top: 10px; 
 // ---------- About: what Cassini OS is, and every credit in one list (credits.json) ----------
 (function () {
   const $ = id => document.getElementById(id);
-  const CREDITS = {"groups":[{"title":"Cassini mission data","entries":[{"id":"iss","title":"Cassini camera pictures","credit":"NASA/JPL-Caltech/Space Science Institute","short":"NASA/JPL-Caltech/SSI","detail":"Every picture in the camera windows, mosaics, color sets, movies and highlights is a frame from Cassini's Imaging Science Subsystem (the narrow-angle and wide-angle cameras), archived by NASA's Planetary Data System, Cartography and Imaging Sciences Node. Cassini OS calibrates, stacks, aligns and centers them with SPICE; the colors are its own reconstruction, not NASA's.","license":"NASA material, not copyrighted in the US (NASA media usage guidelines)","url":"https://pds-imaging.jpl.nasa.gov/"},{"id":"spice","title":"Trajectory, pointing and planet positions","credit":"NASA/JPL Navigation and Ancillary Information Facility (NAIF), Cassini SPICE archive co-s_j_e_v-spice-6-v1.0","short":"NASA/JPL NAIF SPICE","detail":"Where Cassini, the planets and the moons were, which way Cassini pointed (its reconstructed attitude kernels), and the camera frames. Read with SpiceyPy.","license":"NASA material, not copyrighted in the US","url":"https://naif.jpl.nasa.gov/naif/"},{"id":"calibration","title":"Camera calibration","credit":"Cassini ISS team: CISSCAL and the Cassini ISS Data User's Guide (Porco et al. 2004; West et al. 2010; Knowles et al. 2020)","detail":"The steps and constants Cassini OS uses to turn raw frames into brightness (I/F): the bias, exposure, gain and per-filter sensitivity, and each filter's effective wavelength.","license":"Published by NASA's Planetary Data System","url":"https://pds-imaging.jpl.nasa.gov/documentation/iss_data_user_guide_180916.pdf"},{"id":"finale-data","title":"Grand Finale readings","credit":"NASA Planetary Data System, Planetary Plasma Interactions Node; Cassini INMS (Southwest Research Institute), MAG (Imperial College London) and RPWS (University of Iowa) teams","short":"NASA PDS · INMS, MAG, RPWS","detail":"The real readings from Cassini's last hour shown in the Grand Finale: INMS raw count rates (counts, not densities), the magnetometer at full resolution, and RPWS 60 s key parameters, from 15 September 2017.","license":"NASA material, not copyrighted in the US","url":"https://pds-ppi.igpp.ucla.edu/"},{"id":"facts","title":"Mission facts and numbers","credit":"NASA, NASA/JPL and ESA mission pages","detail":"The facts on the loading screen (each one names its source as it shows), and the numbers and timings the Grand Finale is pinned to (JPL, \"Cassini Spacecraft Makes Its Final Approach to Saturn\", 13 September 2017; \"Cassini by the Numbers\").","license":"Facts, with their sources named","url":"https://science.nasa.gov/mission/cassini/"}]},{"title":"Huygens probe","entries":[{"id":"disr","title":"Huygens descent pictures","credit":"ESA/NASA/JPL/University of Arizona; mosaics by Erich Karkoschka (DISR team)","short":"ESA/NASA/JPL/UA","detail":"The probe's own pictures of Titan from its Descent Imager/Spectral Radiometer (DISR), and the nested mosaics of the landing site (60 m down to 1 m per pixel) Erich Karkoschka assembled from them, from ESA's Planetary Science Archive (HP-SSA-DISR-2-3-EDR-RDR-V1.3).","license":"ESA Planetary Science Archive data","url":"https://archives.esac.esa.int/psa/"},{"id":"huygens-track","title":"Huygens trajectory","credit":"ESA Huygens Descent Trajectory Working Group (B. Kazeminejad, ESTEC), HP-SSA-DTWG-6-TRAJECTORY-V2.0; NASA/JPL NAIF","detail":"The probe's path through Titan's atmosphere to the ground; its coast from Cassini to Titan comes from NAIF's reconstructed trajectory.","license":"ESA Planetary Science Archive data","url":"https://archives.esac.esa.int/psa/"}]},{"title":"Surface maps and shapes","note":"Maps come from the Celestia project's CelestiaContent collection, resized into the 1k, 2k and 4k sizes; credit lines follow Celestia's license files. Maps marked \"No license stated\" are reworks of NASA/JPL and other material without a license file and will be rebuilt from public-domain originals before a public launch.","entries":[{"id":"map-saturn","title":"Saturn","credit":"Cassini imagery, Björn Jónsson; recolored by Askaniy Anpilogov (via Celestia)","license":"CC BY 3.0","url":"https://github.com/CelestiaProject/CelestiaContent","files":["saturn.webp"]},{"id":"map-rings","title":"Saturn's rings","credit":"Björn Jónsson ring data (Celestia composite)","license":"No license stated","url":"https://bjj.mmedia.is/","files":["rings/saturn_rings.png"]},{"id":"map-icy","title":"Mimas, Enceladus, Tethys, Dione, Iapetus","credit":"Paul Schenk's Cassini color maps (NASA/JPL/LPI), via Celestia","license":"No license stated","files":["mimas.webp","enceladus.webp","tethys.webp","dione.webp","iapetus.webp"]},{"id":"map-rhea","title":"Rhea","credit":"Paul Schenk's map and Björn Jónsson's albedo, via Celestia","license":"No license stated","files":["rhea.webp"]},{"id":"map-titan","title":"Titan","credit":"Cassini haze images, Gordan Ugarković, Kevin M. Gill, ShadowDragon777, AstroChara (via Celestia)","license":"CC BY 4.0","files":["titan.webp"]},{"id":"map-titan-surface","title":"Titan's surface","credit":"Cassini VIMS and ISS map (Seignovert et al. 2019) with radar lakes, via Celestia","license":"CC BY 3.0","files":["titan_surface.webp"]},{"id":"map-hyperion","title":"Hyperion","credit":"Map: reprojected Cassini imagery (ItzImcool), via Celestia. Shape: P. C. Thomas et al., NASA Planetary Data System","license":"Map CC BY 4.0; shape CC0","files":["hyperion.webp","models/hyperion.mesh.b64.txt"]},{"id":"map-phoebe","title":"Phoebe","credit":"Map: John van Vliet, via Celestia. Shape: R. W. Gaskell, NASA Planetary Data System","license":"No license stated","files":["phoebe.webp","models/phoebe.mesh.b64.txt"]},{"id":"map-jupiter","title":"Jupiter","credit":"Cassini 2000 flyby and Juno data, recolored by Askaniy Anpilogov (via Celestia)","license":"CC BY 3.0","files":["jupiter.webp"]},{"id":"map-venus","title":"Venus","credit":"Cloud tops by Björn Jónsson, recolored by FarGetaNik (via Celestia)","license":"No license stated","files":["venus.webp"]},{"id":"map-earth","title":"Earth","credit":"\"Mappamondo\" (earthstartsbeating.com), Natural Earth II (Tom Patterson), NASA Blue Marble Next Generation (via Celestia)","license":"No license stated","files":["earth.webp"]},{"id":"map-moon","title":"The Moon","credit":"Celestia's lunar map (NASA data)","license":"No license stated","files":["moon.webp"]},{"id":"map-io","title":"Io","credit":"ItzImcool, AstroChara; NASA/JPL-Caltech/ASI/USGS; NASA/JPL/SwRI/MSSS/Gerald Eichstädt/Jason Perry/John Rogers (via Celestia)","license":"CC BY 4.0","files":["io.webp"]},{"id":"map-europa","title":"Europa","credit":"John van Vliet (via Celestia)","license":"No license stated","files":["europa.webp"]},{"id":"map-ganymede","title":"Ganymede","credit":"Askaniy Anpilogov; NASA/JPL-Caltech/ASI/USGS; Björn Jónsson; NASA/JPL-Caltech/SwRI/MSSS/Brian Swift (via Celestia)","license":"CC BY 3.0","files":["ganymede.webp"]},{"id":"map-callisto","title":"Callisto","credit":"Askaniy Anpilogov, from John van Vliet's map (via Celestia)","license":"No license stated","files":["callisto.webp"]}]},{"title":"Sky","entries":[{"id":"star-sky","title":"Stars and the Milky Way","credit":"NASA/Goddard Space Flight Center Scientific Visualization Studio. Gaia DR2: ESA/Gaia/DPAC","short":"NASA SVS Deep Star Maps","detail":"The background sky, from NASA's \"Deep Star Maps 2020\": Hipparcos, Tycho-2 and Gaia DR2 stars plus the Milky Way, placed in J2000 where Cassini saw them.","license":"NASA material, public domain","url":"https://svs.gsfc.nasa.gov/4851","files":["sky/sky_2k.webp","sky/sky_4k.webp","sky/sky_8k.webp"]}]},{"title":"Spacecraft","entries":[{"id":"model","title":"Cassini-Huygens 3D model","credit":"NASA/JPL-Caltech, NASA 3D Resources \"Cassini-Huygens\"","detail":"The spacecraft in the 3D view and the wireframe on the loading screen (decoded from Draco compression for the page).","license":"NASA material, not copyrighted in the US","url":"https://github.com/nasa/NASA-3D-Resources"}]},{"title":"Sound","entries":[{"id":"sound","title":"Sonification","credit":"Made for Cassini OS, after Erich Karkoschka's \"Titan Descent Data Movie with Bells and Whistles\" (DISR team, University of Arizona)","detail":"Every sound is synthesized in the browser from what Cassini is doing (no recordings); the idea of a chime for each instrument part follows Karkoschka's Huygens descent movie.","license":"Part of Cassini OS"}]},{"title":"Software and fonts","entries":[{"id":"threejs","title":"three.js","credit":"three.js authors, r128, with OrbitControls and GLTFLoader","license":"MIT","url":"https://threejs.org/"},{"id":"draco","title":"Draco","credit":"Google, used to decode the spacecraft model ahead of time","license":"Apache 2.0","url":"https://google.github.io/draco/"},{"id":"pipeline-libs","title":"Picture pipeline","credit":"SpiceyPy (Andrew Annex et al.), NumPy, pandas, OpenCV, Pillow, scikit-image, Matplotlib","detail":"The Python libraries the frame server and the image pipeline run on.","license":"MIT, BSD and Apache 2.0 (each project's own)"},{"id":"font-silkscreen","title":"Silkscreen","credit":"Jason Kottke, via Google Fonts","license":"SIL Open Font License 1.1","url":"https://fonts.google.com/specimen/Silkscreen"},{"id":"font-sharetech","title":"Share Tech Mono","credit":"Carrois Apostrophe, via Google Fonts","license":"SIL Open Font License 1.1","url":"https://fonts.google.com/specimen/Share+Tech+Mono"}]}]};
+  const CREDITS = {"groups":[{"title":"Cassini mission data","entries":[{"id":"iss","title":"Cassini camera pictures","credit":"NASA/JPL-Caltech/Space Science Institute","short":"NASA/JPL-Caltech/SSI","detail":"Every picture in the camera windows, mosaics, color sets, movies and highlights is a frame from Cassini's Imaging Science Subsystem (the narrow-angle and wide-angle cameras), archived by NASA's Planetary Data System, Cartography and Imaging Sciences Node. Cassini OS calibrates, stacks, aligns and centers them with SPICE; the colors are its own reconstruction, not NASA's.","license":"NASA material, not copyrighted in the US (NASA media usage guidelines)","url":"https://pds-imaging.jpl.nasa.gov/"},{"id":"spice","title":"Trajectory, pointing and planet positions","credit":"NASA/JPL Navigation and Ancillary Information Facility (NAIF), Cassini SPICE archive co-s_j_e_v-spice-6-v1.0","short":"NASA/JPL NAIF SPICE","detail":"Where Cassini, the planets and the moons were, which way Cassini pointed (its reconstructed attitude kernels), and the camera frames. Read with SpiceyPy.","license":"NASA material, not copyrighted in the US","url":"https://naif.jpl.nasa.gov/naif/"},{"id":"calibration","title":"Camera calibration","credit":"Cassini ISS team: CISSCAL and the Cassini ISS Data User's Guide (Porco et al. 2004; West et al. 2010; Knowles et al. 2020)","detail":"The steps and constants Cassini OS uses to turn raw frames into brightness (I/F): the bias, exposure, gain and per-filter sensitivity, and each filter's effective wavelength.","license":"Published by NASA's Planetary Data System","url":"https://pds-imaging.jpl.nasa.gov/documentation/iss_data_user_guide_180916.pdf"},{"id":"finale-data","title":"Grand Finale readings","credit":"NASA Planetary Data System, Planetary Plasma Interactions Node; Cassini INMS (Southwest Research Institute), MAG (Imperial College London) and RPWS (University of Iowa) teams","short":"NASA PDS · INMS, MAG, RPWS","detail":"The real readings from Cassini's last hour shown in the Grand Finale: INMS raw count rates (counts, not densities), the magnetometer at full resolution, and RPWS 60 s key parameters, from 15 September 2017.","license":"NASA material, not copyrighted in the US","url":"https://pds-ppi.igpp.ucla.edu/"},{"id":"facts","title":"Mission facts and numbers","credit":"NASA, NASA/JPL and ESA mission pages","detail":"The facts on the loading screen (each one names its source as it shows), and the numbers and timings the Grand Finale is pinned to (JPL, \"Cassini Spacecraft Makes Its Final Approach to Saturn\", 13 September 2017; \"Cassini by the Numbers\"), and the launch cutscene's (ESA, \"Cassini-Huygens: Launch information\" and \"The launcher\"; NASA, \"Cassini Quick Facts\").","license":"Facts, with their sources named","url":"https://science.nasa.gov/mission/cassini/"},{"id":"launch-photos","title":"Launch photos","credit":"NASA/Kennedy Space Center (KSC-97PC1273, KSC-97PC1542, KSC-97PC1543, KSC-97PC1545); U.S. Department of Defense, Defense Visual Information Center (National Archives 6504408)","short":"NASA/KSC; U.S. DoD","detail":"The five photographs the launch cutscene tells the launch with: Cassini and Huygens in the clean room in August 1997, the Titan IVB/Centaur on Launch Complex 40 the night before, liftoff at 4:43 a.m. EDT on 15 October 1997, the climb, and a long exposure of its arc over the booster recovery ship Liberty Star. From the NASA Image and Video Library and, for the climb, the National Archives via Wikimedia Commons; resized for the page.","license":"Public domain (U.S. Government works)","url":"https://images.nasa.gov/details/KSC-97PC1545","files":["media/launch/KSC-97PC1273.jpg","media/launch/KSC-97PC1542.jpg","media/launch/KSC-97PC1543.jpg","media/launch/KSC-97PC1545.jpg","media/launch/NARA-6504408.jpg"]}]},{"title":"Huygens probe","entries":[{"id":"disr","title":"Huygens descent pictures","credit":"ESA/NASA/JPL/University of Arizona; mosaics by Erich Karkoschka (DISR team)","short":"ESA/NASA/JPL/UA","detail":"The probe's own pictures of Titan from its Descent Imager/Spectral Radiometer (DISR), and the nested mosaics of the landing site (60 m down to 1 m per pixel) Erich Karkoschka assembled from them, from ESA's Planetary Science Archive (HP-SSA-DISR-2-3-EDR-RDR-V1.3).","license":"ESA Planetary Science Archive data","url":"https://archives.esac.esa.int/psa/"},{"id":"huygens-track","title":"Huygens trajectory","credit":"ESA Huygens Descent Trajectory Working Group (B. Kazeminejad, ESTEC), HP-SSA-DTWG-6-TRAJECTORY-V2.0; NASA/JPL NAIF","detail":"The probe's path through Titan's atmosphere to the ground; its coast from Cassini to Titan comes from NAIF's reconstructed trajectory.","license":"ESA Planetary Science Archive data","url":"https://archives.esac.esa.int/psa/"}]},{"title":"Surface maps and shapes","note":"Maps come from the Celestia project's CelestiaContent collection, resized into the 1k, 2k and 4k sizes; credit lines follow Celestia's license files. Maps marked \"No license stated\" are reworks of NASA/JPL and other material without a license file and will be rebuilt from public-domain originals before a public launch.","entries":[{"id":"map-saturn","title":"Saturn","credit":"Cassini imagery, Björn Jónsson; recolored by Askaniy Anpilogov (via Celestia)","license":"CC BY 3.0","url":"https://github.com/CelestiaProject/CelestiaContent","files":["saturn.webp"]},{"id":"map-rings","title":"Saturn's rings","credit":"Björn Jónsson ring data (Celestia composite)","license":"No license stated","url":"https://bjj.mmedia.is/","files":["rings/saturn_rings.png"]},{"id":"map-icy","title":"Mimas, Enceladus, Tethys, Dione, Iapetus","credit":"Paul Schenk's Cassini color maps (NASA/JPL/LPI), via Celestia","license":"No license stated","files":["mimas.webp","enceladus.webp","tethys.webp","dione.webp","iapetus.webp"]},{"id":"map-rhea","title":"Rhea","credit":"Paul Schenk's map and Björn Jónsson's albedo, via Celestia","license":"No license stated","files":["rhea.webp"]},{"id":"map-titan","title":"Titan","credit":"Cassini haze images, Gordan Ugarković, Kevin M. Gill, ShadowDragon777, AstroChara (via Celestia)","license":"CC BY 4.0","files":["titan.webp"]},{"id":"map-titan-surface","title":"Titan's surface","credit":"Cassini VIMS and ISS map (Seignovert et al. 2019) with radar lakes, via Celestia","license":"CC BY 3.0","files":["titan_surface.webp"]},{"id":"map-hyperion","title":"Hyperion","credit":"Map: reprojected Cassini imagery (ItzImcool), via Celestia. Shape: P. C. Thomas et al., NASA Planetary Data System","license":"Map CC BY 4.0; shape CC0","files":["hyperion.webp","models/hyperion.mesh.b64.txt"]},{"id":"map-phoebe","title":"Phoebe","credit":"Map: John van Vliet, via Celestia. Shape: R. W. Gaskell, NASA Planetary Data System","license":"No license stated","files":["phoebe.webp","models/phoebe.mesh.b64.txt"]},{"id":"map-jupiter","title":"Jupiter","credit":"Cassini 2000 flyby and Juno data, recolored by Askaniy Anpilogov (via Celestia)","license":"CC BY 3.0","files":["jupiter.webp"]},{"id":"map-venus","title":"Venus","credit":"Cloud tops by Björn Jónsson, recolored by FarGetaNik (via Celestia)","license":"No license stated","files":["venus.webp"]},{"id":"map-earth","title":"Earth","credit":"\"Mappamondo\" (earthstartsbeating.com), Natural Earth II (Tom Patterson), NASA Blue Marble Next Generation (via Celestia)","license":"No license stated","files":["earth.webp"]},{"id":"map-moon","title":"The Moon","credit":"Celestia's lunar map (NASA data)","license":"No license stated","files":["moon.webp"]},{"id":"map-io","title":"Io","credit":"ItzImcool, AstroChara; NASA/JPL-Caltech/ASI/USGS; NASA/JPL/SwRI/MSSS/Gerald Eichstädt/Jason Perry/John Rogers (via Celestia)","license":"CC BY 4.0","files":["io.webp"]},{"id":"map-europa","title":"Europa","credit":"John van Vliet (via Celestia)","license":"No license stated","files":["europa.webp"]},{"id":"map-ganymede","title":"Ganymede","credit":"Askaniy Anpilogov; NASA/JPL-Caltech/ASI/USGS; Björn Jónsson; NASA/JPL-Caltech/SwRI/MSSS/Brian Swift (via Celestia)","license":"CC BY 3.0","files":["ganymede.webp"]},{"id":"map-callisto","title":"Callisto","credit":"Askaniy Anpilogov, from John van Vliet's map (via Celestia)","license":"No license stated","files":["callisto.webp"]}]},{"title":"Sky","entries":[{"id":"star-sky","title":"Stars and the Milky Way","credit":"NASA/Goddard Space Flight Center Scientific Visualization Studio. Gaia DR2: ESA/Gaia/DPAC","short":"NASA SVS Deep Star Maps","detail":"The background sky, from NASA's \"Deep Star Maps 2020\": Hipparcos, Tycho-2 and Gaia DR2 stars plus the Milky Way, placed in J2000 where Cassini saw them.","license":"NASA material, public domain","url":"https://svs.gsfc.nasa.gov/4851","files":["sky/sky_2k.webp","sky/sky_4k.webp","sky/sky_8k.webp"]}]},{"title":"Spacecraft","entries":[{"id":"model","title":"Cassini-Huygens 3D model","credit":"NASA/JPL-Caltech, NASA 3D Resources \"Cassini-Huygens\"","detail":"The spacecraft in the 3D view and the wireframe on the loading screen (decoded from Draco compression for the page).","license":"NASA material, not copyrighted in the US","url":"https://github.com/nasa/NASA-3D-Resources"}]},{"title":"Sound","entries":[{"id":"sound","title":"Sonification","credit":"Made for Cassini OS, after Erich Karkoschka's \"Titan Descent Data Movie with Bells and Whistles\" (DISR team, University of Arizona)","detail":"Every sound is synthesized in the browser from what Cassini is doing (no recordings); the idea of a chime for each instrument part follows Karkoschka's Huygens descent movie.","license":"Part of Cassini OS"}]},{"title":"Software and fonts","entries":[{"id":"threejs","title":"three.js","credit":"three.js authors, r128, with OrbitControls and GLTFLoader","license":"MIT","url":"https://threejs.org/"},{"id":"draco","title":"Draco","credit":"Google, used to decode the spacecraft model ahead of time","license":"Apache 2.0","url":"https://google.github.io/draco/"},{"id":"pipeline-libs","title":"Picture pipeline","credit":"SpiceyPy (Andrew Annex et al.), NumPy, pandas, OpenCV, Pillow, scikit-image, Matplotlib","detail":"The Python libraries the frame server and the image pipeline run on.","license":"MIT, BSD and Apache 2.0 (each project's own)"},{"id":"font-silkscreen","title":"Silkscreen","credit":"Jason Kottke, via Google Fonts","license":"SIL Open Font License 1.1","url":"https://fonts.google.com/specimen/Silkscreen"},{"id":"font-sharetech","title":"Share Tech Mono","credit":"Carrois Apostrophe, via Google Fonts","license":"SIL Open Font License 1.1","url":"https://fonts.google.com/specimen/Share+Tech+Mono"}]}]};
   const card = $("about"), nav = $("anav"), pane = $("apane");
   const esc = s => String(s).replace(/[&<>"]/g, c => ({ "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;" })[c]);
   const TABS = {
@@ -7012,5 +7078,231 @@ function frame(now) {
   CS.at(() => coverage[1] ? coverage[1] - 0.5 : null, play, endsMission);
   CS.fromUrl("finale", () => coverage[1], play, endsMission);
   window.cassiniFinale = { play, skip: finish, get running() { return !!F; } };
+})();
+</script>
+<script>
+// ---------- the launch: NASA's photos of the night of October 15, 1997, then Cassini on its own in space ----------
+(function () {
+  const root = document.getElementById("launch"), black = root.querySelector(".lx-black"), flash = root.querySelector(".lx-flash");
+  const caps = root.querySelector(".lx-caps"), clock = root.querySelector(".lx-clock"), credit = root.querySelector(".lx-credit"), skipBtn = root.querySelector(".lx-skip");
+  // the photos, written in by build.py from launch-data.json: { role: { file, credit, focus, from: [scale, x %, y %], to: [...] } }
+  const PHOTOS = {"_readme":"The photos the launch cutscene (launch.html) shows, by role, written in by build.py. file is under web/cassini-os/media/launch (resized to 1600 px from the originals at url); credit is the line shown under the photo; from/to are [scale, x %, y %] for the slow drift across it; focus is the CSS object-position of the photo when it fills a screen of another shape. Every photo here needs its own line in credits.json (the launch-photos entry).","prep":{"file":"KSC-97PC1273.jpg","credit":"NASA/KSC · KSC-97PC1273","url":"https://images.nasa.gov/details/KSC-97PC1273","alt":"Cassini, wrapped in gold foil with the Huygens probe on its side, in a clean room at Kennedy Space Center","from":[1.02,50,30],"to":[1.12,50,20]},"pad":{"file":"KSC-97PC1542.jpg","credit":"NASA/KSC · KSC-97PC1542","url":"https://images.nasa.gov/details/KSC-97PC1542","alt":"The Titan IVB/Centaur lit up on Launch Complex 40 at night, its service tower pulled back","from":[1.0,50,60],"to":[1.1,50,25]},"liftoff":{"file":"KSC-97PC1545.jpg","credit":"NASA/KSC · KSC-97PC1545","url":"https://images.nasa.gov/details/KSC-97PC1545","alt":"Liftoff: the Titan IVB clears the tower on a column of flame","from":[1.06,50,55],"to":[1.14,50,20]},"climb":{"file":"NARA-6504408.jpg","credit":"U.S. Department of Defense, Defense Visual Information Center · National Archives 6504408","url":"https://catalog.archives.gov/id/6504408","alt":"The Titan IVB climbing away from the pad on its flame","from":[1.04,50,50],"to":[1.16,45,20]},"trail":{"file":"KSC-97PC1543.jpg","credit":"NASA/KSC · KSC-97PC1543","url":"https://images.nasa.gov/details/KSC-97PC1543","alt":"A long exposure of the rocket's arc into the night sky over the booster recovery ship Liberty Star","from":[1.0,60,30],"to":[1.12,70,15]}} || {};
+  // NASA's and ESA's numbers (see the note at the top)
+  const LIFTOFF = 12.4;       // s into the cutscene the countdown reaches zero
+  const CLOCK = 6.4;          // s into the cutscene the countdown clock comes up
+  const SEP = 42 * 60 + 40;   // s from liftoff to separation from the Centaur, where the data begins
+  const SPACE = 30;           // s into the cutscene the photos give way to the 3D view
+  const SPEED = 40;           // mission seconds per second in space, so Earth visibly falls away
+  const END = 52;             // s into the cutscene the interface comes back
+  // the photos in order: role, screen seconds in, how long, and how fast it comes in (they cross-fade over FADE s;
+  // liftoff cuts in with the flash)
+  const FADE = 1.4;
+  const SHOTS = [["prep", 0.4, 5.2], ["pad", 6, 5.6], ["liftoff", LIFTOFF - 0.05, 4.6, 0.12], ["climb", 17, 4.6], ["trail", 22, 6.4]];
+  // the captions: screen seconds in, how long, the line, a class, a chord under it (steps on the scale, see sound.html)
+  const CAPS = [
+    [1, 4.6, `<b>August 1997 · Kennedy Space Center</b>Cassini, with ESA's Huygens probe on its side. Fueled, the pair weigh 5,712 kilograms, one of the heaviest spacecraft ever sent to another planet.`],
+    [6.6, 5.2, `<b>October 15, 1997 · Launch Complex 40, Cape Canaveral</b>Before dawn. A Titan IVB with a Centaur upper stage, 56 meters tall, stands ready.`],
+    [12.5, 4, `<b>08:43:00 UTC · 4:43 a.m. local</b>Liftoff`, "big"],
+    [17.3, 4.5, `<b>T+2 min 23 s</b>91 kilometers up, the two solid boosters fall away.`],
+    [22.4, 6.2, `<b>The Centaur</b>After a coast in a low parking orbit, the upper stage fires again and sends Cassini out of Earth's orbit for good.`],
+    [SPACE + 1.6, 6.6, `<b>T+42 min 40 s</b>The Centaur lets go. Cassini is on its own, and ten minutes later a dish near Canberra, Australia, hears its first signal.`, "", [0, 2, 4]],
+    [SPACE + 8.8, 7.4, `<b>The road to Saturn</b>Too heavy to fly straight there, it borrows speed from the planets on the way.`
+      + `<div class="lx-road"><span>Venus<small>Apr 1998</small></span><span>Venus<small>Jun 1999</small></span><span>Earth<small>Aug 1999</small></span><span>Jupiter<small>Dec 2000</small></span><span>Saturn<small>Jul 2004</small></span></div>`, "road", [1, 3, 5]],
+    [SPACE + 16.8, 4.6, `<b>3.4 billion kilometers · 6 years, 8 months</b>Next stop: Venus.`, "big", [0, 2, 4, 7]],
+  ];
+
+
+  let L = null;   // the running launch
+  let preloaded = false;
+  const tmpA = v3(), tmpB = v3(), vE = new THREE.Vector3(), vS = new THREE.Vector3();
+  const clamp01 = x => Math.max(0, Math.min(1, x)), ease = k => k * k * (3 - 2 * k);
+  const sound = (what, ...a) => { if (window.cassiniSound && cassiniSound[what]) cassiniSound[what](...a); };
+
+  // ---------- the photos: one layer each, drifting from `from` to `to` (scale, and the point it moves toward) ----------
+  const layers = {};
+  for (const [role] of SHOTS) {
+    const p = PHOTOS[role]; if (!p) continue;
+    const el = document.createElement("div"); el.className = "lx-photo";
+    const bg = document.createElement("img"); bg.className = "bg"; bg.alt = ""; bg.decoding = "async";
+    const img = document.createElement("img"); img.alt = p.alt || ""; img.decoding = "async";
+    if (p.focus) img.style.objectPosition = p.focus;
+    el.append(bg, img); root.insertBefore(el, flash);
+    layers[role] = { el, img, bg, p };
+  }
+  // the photos load once the start of the mission is near (or the launch plays), not with every page
+  function preload() { for (const role in layers) if (!layers[role].img.src) layers[role].img.src = layers[role].bg.src = "media/launch/" + layers[role].p.file; }
+  function stepPhotos(T) {
+    let shown = null;
+    for (const [role, at, dur, fin = FADE] of SHOTS) {
+      const l = layers[role]; if (!l) continue;
+      const o = T < at || T > at + dur + FADE ? 0 : Math.min(ease(clamp01((T - at) / fin)), ease(clamp01((at + dur + FADE - T) / FADE)));
+      l.el.style.opacity = o;
+      if (o > 0) {
+        const k = clamp01((T - at) / (dur + FADE)), f = l.p.from || [1.04, 50, 50], t = l.p.to || [1.14, 50, 45];
+        const s = f[0] + (t[0] - f[0]) * k, x = f[1] + (t[1] - f[1]) * k, y = f[2] + (t[2] - f[2]) * k;
+        // liftoff shakes the frame a little, less as the rocket climbs away
+        const sh = role === "liftoff" ? 5 * Math.max(0, 1 - (T - LIFTOFF) / 5) * (T > LIFTOFF ? 1 : 0) : 0;
+        l.img.style.transformOrigin = `${x}% ${y}%`;
+        l.img.style.transform = `translate(${(Math.random() - 0.5) * sh}px, ${(Math.random() - 0.5) * sh}px) scale(${s})`;
+        if (o > 0.5) shown = l;
+      }
+    }
+    const txt = shown ? `Photo: ${shown.p.credit}` : "";
+    if (credit.textContent !== txt) { credit.textContent = txt; credit.classList.toggle("on", !!txt); }
+  }
+
+  // ---------- captions and fades, on the viewer's frame clock (performance.now), so a recording keeps their pace ----------
+  const fades = new Map(), slow = matchMedia("(prefers-reduced-motion: reduce)").matches;
+  function fadeTo(el, to, secs, then) { fades.set(el, { from: +el.style.opacity || 0, to, t0: performance.now(), secs, then }); }
+  function stepFades() {
+    for (const [el, f] of fades) {
+      const k = Math.min(1, (performance.now() - f.t0) / 1000 / f.secs), o = f.from + (f.to - f.from) * ease(k);
+      el.style.opacity = o;
+      if (el.classList.contains("lx-cap") && !slow) el.style.transform = `translateY(${(1 - o) * 6}px)`;
+      if (k >= 1) { fades.delete(el); if (f.then) f.then(); }
+    }
+  }
+  function runCaptions(T) {
+    CAPS.forEach(([at, dur, html, cls, chord], i) => {
+      if (!L.shown[i] && T >= at && T < at + dur) {
+        const el = document.createElement("div"); el.className = "lx-cap" + (cls ? " " + cls : ""); el.innerHTML = html; caps.appendChild(el);
+        fadeTo(el, 1, 1.1); L.shown[i] = el;
+        if (chord) sound("chord", chord);
+      }
+      const el = L.shown[i];
+      if (el && el !== true) {
+        // the stops on the road light up one by one
+        el.querySelectorAll(".lx-road span").forEach((s, j) => s.classList.toggle("on", T > at + 1 + j * 0.9));
+        if (T >= at + dur) { fadeTo(el, 0, 1, () => el.remove()); L.shown[i] = true; }
+      }
+    });
+  }
+  // the countdown, then the mission clock from liftoff, with Cassini's distance and speed from Earth once it is in space
+  const pad = n => String(n).padStart(2, "0");
+  const hms = s => `${pad(Math.floor(s / 3600))}:${pad(Math.floor(s / 60) % 60)}:${pad(Math.floor(s) % 60)}`;
+  function stepClock(T) {
+    clock.classList.toggle("on", T >= CLOCK && T < END - 1.5);
+    if (L.phase !== "space") {
+      const s = T - LIFTOFF;
+      clock.innerHTML = s < 0 ? `T&minus;${hms(Math.ceil(-s))}` : `T+<i>${hms(s)}</i>`;
+      return;
+    }
+    const s = L.tau - LAUNCH_MS / 1000 + etToMs(0) / 1000;
+    sub(positionAt(tracks.CASSINI, L.tau, tmpA), positionAt(tracks.EARTH, L.tau, tmpB), tmpA);
+    const d = len(tmpA), rate = (len(sub(positionAt(tracks.CASSINI, L.tau + 1, tmpB), positionAt(tracks.EARTH, L.tau + 1, vT3), tmpB)) - d);
+    clock.innerHTML = `T+<i>${hms(s)}</i> · ${fmtInt(d)} km from Earth · moving away at <i>${rate.toFixed(1)}</i> km/s`;
+  }
+  const vT3 = v3();
+
+  function play() {
+    if (L || !tracks.CASSINI || !tracks.EARTH || document.body.classList.contains("cutscene")) return;
+    L = { t0: performance.now(), phase: "photos", tau: null, shown: [], follow: state.follow, speed: state.speed, wasPlaying: state.playing };
+    if (state.follow) setFollow(false);
+    setPlaying(false);
+    controls.enabled = false;
+    root.hidden = false;
+    preload();
+    document.body.classList.add("launch", "cutscene");
+    fadeTo(black, 1, 0.6);   // the photos sit on the black, so a cross-fade between two never shows the 3D view
+    if (window.cassiniPerf) cassiniPerf.invalidate();
+  }
+  function finish() {
+    if (!L) return;
+    const l = L; L = null;
+    sound("rumble", 0);
+    caps.textContent = ""; [clock, credit].forEach(e => e.classList.remove("on"));
+    fades.forEach((v, el) => { if (el !== black) fades.delete(el); });
+    for (const role in layers) layers[role].el.style.opacity = 0;
+    flash.style.opacity = 0;
+    cassini.visible = true; markerPts.visible = true; cassini.up.set(0, 1, 0); camera.up.set(0, 1, 0);
+    controls.enabled = true;
+    // the mission carries on from where the cutscene left it (or the start of the data, when it ended early)
+    setTime(l.tau !== null ? l.tau : coverage[0]);
+    spent = true;
+    if (state.focus !== "CASSINI") setFocus("CASSINI");
+    setFocus("CASSINI", 6e-5);
+    if (l.follow) setFollow(true);
+    setSpeed(l.speed); setPlaying(true);
+    document.body.classList.add("launch-out");
+    document.body.classList.remove("launch", "cutscene");
+    black.style.opacity = Math.max(+black.style.opacity || 0, 0.6);
+    fadeTo(black, 0, 1.5, () => { document.body.classList.remove("launch-out"); if (!L) root.hidden = true; });
+    if (window.cassiniPerf) cassiniPerf.invalidate();
+  }
+
+  // the viewer's frame loop, before it places the bodies: the launch runs its own clock
+  const prevFrame = window.studyFrame;
+  window.studyFrame = dt => {
+    if (prevFrame) prevFrame(dt);
+    stepFades();
+    if (!L && !preloaded && coverage[0] && state.et < coverage[0] + 2 * 86400) { preloaded = true; preload(); }
+    if (!L) return;
+    if (window.cassiniPerf) cassiniPerf.invalidate();
+    state.playing = false;
+    const T = (performance.now() - L.t0) / 1000;
+    if (L.phase === "photos") {
+      stepPhotos(T);
+      // liftoff: a flash from below and the rumble, which dies away as the rocket climbs
+      const k = T - LIFTOFF;
+      flash.style.opacity = k < 0 ? 0 : Math.min(1, k / 0.35) * Math.exp(-k / 1.8) * (0.85 + 0.15 * Math.random());
+      sound("rumble", k < -0.5 ? 0 : clamp01(Math.min((k + 0.5) / 0.8, Math.exp(-Math.max(0, k - 2) / 6))));
+      if (T >= SPACE) {
+        // behind the black: the start of the data, close to Cassini with Earth beyond it
+        L.phase = "space"; L.spaceAt = T; L.tau = coverage[0];
+        sound("rumble", 0);
+        for (const role in layers) layers[role].el.style.opacity = 0;
+        credit.classList.remove("on"); credit.textContent = "";
+        setFocus("CASSINI", 5e-5); markerPts.visible = false;
+        fadeTo(black, 0, 2.2);
+      }
+    }
+    if (L.phase === "space") {
+      L.tau = Math.min(coverage[1], coverage[0] + (T - L.spaceAt) * SPEED);
+      if (T > END - 1.5 && !L.closing) { L.closing = true; fadeTo(black, 0.6, 1.4); }
+    }
+    runCaptions(T);
+    stepClock(T);
+    if (L.tau !== null) state.et = L.tau;
+    if (T >= END) finish();
+  };
+  // in space: beside Cassini, looking past it at Earth falling away behind
+  const prevCamera = window.studyCamera;
+  window.studyCamera = () => {
+    if (prevCamera) prevCamera();
+    if (!L || L.phase !== "space") return;
+    const k = (performance.now() - L.t0) / 1000 - L.spaceAt;
+    relScene("EARTH", vE).sub(cassini.position);   // Cassini -> Earth
+    const toEarth = vE.clone().normalize();
+    toScene([0, 0, 1], vS).normalize();             // the celestial north pole, for an up
+    const side = new THREE.Vector3().crossVectors(toEarth, vS).normalize();
+    // behind Cassini as seen from Earth, swung off to one side so Earth sits beside it, drifting slowly round
+    const yaw = (62 - 0.6 * k) * Math.PI / 180, pitch = 0.3;
+    const dir = toEarth.clone().applyAxisAngle(vS, yaw).addScaledVector(vS, pitch).normalize();
+    const d = (2.6e-5 + 1.2e-6 * k);
+    camera.position.copy(cassini.position).addScaledVector(dir, -d);
+    camera.up.copy(vS).addScaledVector(side, 0.08).normalize();
+    camera.lookAt(cassini.position.clone().addScaledVector(toEarth, d * 0.35));
+  };
+  // playback running forward from the very start of the data starts it (the Launch moment does that)
+  let spent = false;
+  const advance = window.studyAdvance;
+  window.studyAdvance = (et, dt, speed) => {
+    const next = advance ? advance(et, dt, speed) : et + dt * speed;
+    if (et > coverage[0] + 30) spent = false;
+    if (!L && !spent && speed > 0 && et <= coverage[0] + 1 && next > et && !document.body.classList.contains("cutscene")) { spent = true; setTimeout(play, 0); return et; }
+    return next;
+  };
+  window.addEventListener("keydown", e => { if (L && e.key === "Escape") { e.preventDefault(); e.stopImmediatePropagation(); finish(); } }, true);
+  skipBtn.addEventListener("click", e => { e.stopPropagation(); finish(); });
+  window.cassiniLaunch = { play, skip: finish, get running() { return !!L; } };
+  // ?launch plays it as soon as the start of the mission is loaded
+  if (new URLSearchParams(location.search).has("launch")) {
+    const wait = setInterval(() => {
+      if (!coverage[0] || !tracks.CASSINI || $("loading") && !$("loading").hidden) return;
+      if (Math.abs(state.et - coverage[0]) > 7200) { setTime(coverage[0]); return; }
+      if (typeof yearReady === "function" && !yearReady()) return;
+      clearInterval(wait); spent = true; play();
+    }, 250);
+  }
 })();
 </script>

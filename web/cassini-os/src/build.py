@@ -170,6 +170,12 @@ for dirpath, _, names in os.walk(texdir):
         rel = os.path.relpath(os.path.join(dirpath, n), texdir).replace(os.sep, "/")
         rel = re.sub(r"^[0-9]+k/", "", rel)
         assert n.endswith(".md") or rel in covered, f"{rel} has no credit: add it to the files of an entry in web/cassini-os/src/credits.json"
+# the same for the pictures the page itself shows (the launch photos under media/), named by their path from web/cassini-os
+mediadir = os.path.join(HERE, "..", "media")
+for dirpath, _, names in os.walk(mediadir):
+    for n in names:
+        rel = os.path.relpath(os.path.join(dirpath, n), os.path.dirname(mediadir)).replace(os.sep, "/")
+        assert rel in covered, f"{rel} has no credit: add it to the files of an entry in web/cassini-os/src/credits.json"
 for old, new in [
     ("</style>\n</head>", part("style")[len("<style>"):] + "\n</head>"),
     ('  <div id="loading">', "  " + part("section") + "\n\n" + '  <div id="loading">'),
@@ -471,5 +477,28 @@ assert all(s.get("title") and (s.get("people") or s.get("names") or s.get("text"
 assert fscript.count("/*MISSION_TEAM*/null") == 1
 fscript = fscript.replace("/*MISSION_TEAM*/null", json.dumps({k: team[k] for k in ("intro", "sections", "closing", "sources")}, ensure_ascii=False, separators=(",", ":")))
 script += fscript + "\n"
+# more cutscenes, each its own file spliced like the finale (style into the head, section into #app, script after the
+# finale's; each chains the study* hooks): skipped while a file is not there yet
+CUTSCENES = ["soi.html", "launch.html", "huygens-release.html"]
+for name in CUTSCENES:
+    cpath = os.path.join(os.path.dirname(os.path.abspath(sys.argv[2])), name)
+    if not os.path.exists(cpath):
+        continue
+    cut = open(cpath).read()
+    cpart = lambda tag: cut[cut.index(f"<{tag}"):cut.index(f"</{tag}>") + len(tag) + 3]
+    for old, new in [
+        ("</style>\n</head>", cpart("style")[len("<style>"):] + "\n</head>"),
+        ('  <div id="loading">', "  " + cpart("section") + "\n\n" + '  <div id="loading">'),
+    ]:
+        assert study.count(old) == 1, old
+        study = study.replace(old, new)
+    cscript = cpart("script")
+    # a cutscene's published numbers (<name>-data.json), written in where its script asks for them
+    cdata = cpath[:-len(".html")] + "-data.json"
+    marker = "/*" + name[:-len(".html")].upper().replace("-", "_") + "_DATA*/null"
+    if marker in cscript:
+        assert os.path.exists(cdata), cdata
+        cscript = cscript.replace(marker, json.dumps(json.load(open(cdata)), ensure_ascii=False, separators=(",", ":")))
+    script += cscript + "\n"
 open(out, 'w').write(study + script)
 print("ok", out, len(study + script))

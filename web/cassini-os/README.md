@@ -68,6 +68,19 @@ turn, then returns to full speed once the burst is over; the status line reads "
 it does. Change it with the slider under View > Bursts (0 to 24, 0 = no limit), or in the Settings window (Playback > Maximum images per second,
 `playback.maxImageRate`, 0 = no limit) when the page has one. Movie mode keeps its own clock.
 
+## Launch
+
+Playing the mission from the very start of the data (the Launch moment does that, or `?t=1997-10-15T08:43` and
+Play), or opening `?launch`, plays a short opening (`src/launch.html`, about 50 seconds; Escape or Skip ends it).
+Nothing of the rocket is modeled: five public-domain photos from NASA/KSC and the Defense Department tell the launch
+night (Cassini in the clean room, the Titan IVB/Centaur on Launch Complex 40, liftoff, the climb, its arc in a long
+exposure), each drifting slowly under a caption and a countdown clock, with a flash and a low rumble at liftoff. When
+the Centaur lets go (42 min 40 s after liftoff, where the trajectory data begins) the photos give way to the 3D view
+beside Cassini with Earth falling away, the clock reading its real distance and speed from Earth, and the road to
+Saturn (Venus, Venus, Earth, Jupiter). Then the interface comes back and the mission plays on from there. The photos
+and their credits are in `src/launch-data.json` (files under `media/launch`); every file under `media/` needs an entry
+in `src/credits.json`, or the build stops.
+
 ## Run it
 
 The page reads the replay data through the `data` link (`data -> ../replay/data`), and the camera frames
