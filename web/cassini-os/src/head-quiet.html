@@ -1196,7 +1196,7 @@ body.idle .win.full .titlebar { opacity: 0; }
     // make one). A composite being made never holds up the frames: the window shows the newest frame meanwhile,
     // and its composite replaces it once made. During fast playback each lane skips to the newest picture.
     const lane = { frame: null, comp: null };
-    const warming = new Set(), warmed = new Set();   // look-ahead requests in flight / done, each made once
+    const warming = new Map(), warmed = new Set();   // look-ahead requests in flight (their images) / done, each made once
     const etOf = v => catalog.et[v.k];
     // a picture that finished loading goes up if it is the one wanted, or a stand-in no older than what is up
     // and no newer than what is wanted (after a scrub back, newer pictures still in flight are dropped)
@@ -1225,7 +1225,7 @@ body.idle .win.full .titlebar { opacity: 0; }
     }
     function request(which, v) {
       lane[which] = v; v.cat = catalog;
-      const im = new Image();
+      const im = v.im = new Image();
       im.crossOrigin = "anonymous";
       im.fetchPriority = v.warm ? "low" : "high";   // the picture wanted now goes ahead of look-ahead requests
       im.onload = () => {
@@ -1270,9 +1270,9 @@ body.idle .win.full .titlebar { opacity: 0; }
       for (const key of next) {
         if (warming.size >= 3) break;
         if (warmed.has(key) || warming.has(key) || key.includes("/color.webp")) continue;
-        warming.add(key);
         const p = new Image(); p.crossOrigin = "anonymous"; p.fetchPriority = "low";
         p.onload = p.onerror = () => { warming.delete(key); warmed.add(key); };
+        warming.set(key, p);
         p.src = key;
       }
       const comp = next.find(key => key.includes("/color.webp") && !warmed.has(key));
@@ -1425,8 +1425,30 @@ body.idle .win.full .titlebar { opacity: 0; }
         fig.classList.remove("waiting"); fig.querySelector(".tile").replaceChildren(t);
       }
     }
-    let cat = null;
+    // Data first: while the moment on screen waits for its data (a jump to another month), the window lets go of
+    // every picture it is fetching and asks for nothing. A browser keeps only six connections open to the frame
+    // server, and pictures that take the server seconds to make (a mosaic or a color set, or any picture of a year
+    // whose SPICE kernels are not loaded yet) can hold them all, so the data waited behind them on the loading screen.
+    // The server still finishes what was dropped and keeps it; the window asks again once the data is in.
+    let warnCtl = new AbortController();   // the look-ahead's notes to the server (?warm=1)
+    const dataWait = () => typeof yearReady === "function" && !yearReady();
+    function letGo() {
+      for (const which of ["frame", "comp"]) {
+        const v = lane[which];
+        if (!v) continue;
+        lane[which] = null;
+        v.im.onload = v.im.onerror = null; v.im.removeAttribute("src");
+      }
+      for (const p of warming.values()) { p.onload = p.onerror = null; p.removeAttribute("src"); }
+      warming.clear();
+      warnCtl.abort(); warnCtl = new AbortController(); warnedObs.clear();
+      mosaicStop();
+      lastK = -2;   // asks again for what it shows, once the data is in
+    }
+    let cat = null, letGone = false;
     function update(force) {
+      if (dataWait()) { if (!letGone) { letGone = true; letGo(); } return; }
+      letGone = false;
       if (catalog !== cat) {   // another mission year (or the months around this one) loaded
         // a pass mosaic that is up stays up: its observation is a name, its frame found again by id
         const obsId = cat && obsK >= 0 ? cat.id[obsK] : null;
@@ -1494,7 +1516,7 @@ body.idle .win.full .titlebar { opacity: 0; }
           if (warnedObs.has(o)) continue;
           warnedObs.add(o);
           const c0 = catalog;
-          fetch(`${FRAMES}/frames/mosaic/${catalog.id[q]}.webp?warm=1`, { priority: "low" }).then(r => r.ok ? r.json() : null).then(a => {
+          fetch(`${FRAMES}/frames/mosaic/${catalog.id[q]}.webp?warm=1`, { priority: "low", signal: warnCtl.signal }).then(r => r.ok ? r.json() : null).then(a => {
             if (!a || !a.mosaic) return;
             mosaicPasses.add(o);
             if (catalog !== c0) return;
