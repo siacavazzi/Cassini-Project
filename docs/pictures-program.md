@@ -144,6 +144,20 @@ Effort comes from the reports. Phase A runs alongside 1 and 2; everything else f
 - **Done when.** Click a channel under any composite, it opens in place; Esc returns to live; every level saves at full resolution; works in full view, body windows and on a phone; a channel opened alone matches its brightness in the composite.
 - **Depends on.** Nothing; it does not touch mosaic or calibration code. If 2a lands first, the channel route uses the new scale through the same pipeline call. **Checkpoint A.**
 
+### Phase MR · Mosaic movie playback rate (Sam, 2026-10-23 19:31Z) · thread "Mosaic movie playback rate"
+Rolling pictures grow from the last one, two are made ahead, the broad-color blur runs at reduced size, and the clock
+slows (playback.maxBehind) while a window falls behind. Bar: mosaic movies play at 5 fps or better. Preview 8791.
+
+### Phase MM · Movie mode redefined (Sam, 2026-10-23 20:34Z) · thread "Movie mode redefined", after MR
+Movie mode (M) becomes a clock rule only: skip the gaps without pictures and step frame to frame at movie.fps, while
+the normal camera and body windows show every picture through the full pipeline. The separate Movie window and its own
+loading go. The per-window chip (Auto / Mosaic / Movie / Mosaic movie) stays. Waits use MR's maxBehind bound.
+
+### Phase AC · Camera window settings and auto center (Sam, 2026-10-23 20:34Z) · thread "Camera window settings and auto center"
+A settings button on every camera window holds the per-window choices (the Auto/Mosaic/Movie/Mosaic movie chip and
+"Auto center", on by default). Auto center extends #64's SPICE centering to all pictures as a style parameter; off is
+today's framing. Owns cameraFeed's per-window menu; MM owns movie.html and the clock.
+
 ### Phase 3 · Mosaics as placed tiles (M3 = C7, D2) · ~2 days
 - **Goal.** A gray luminance base from every tile, drawn everywhere it exists, with color laid over it only where all three filters cover, feathered to gray at that edge; the gray filter fixed by the plan. The server writes the picture manifest (pointings with outline polygons as 0-1 fractions, center, set, tiles, `also`, and an L layer beside the color set) into the `.json` beside each cached mosaic and serves it at `/frames/mosaic/<ID>.json`; outlines backfilled from cached tile PNGs.
 - **Files.** `web/frames/obs_mosaic.py` (`so_far`, `tile`, plan), `mosaic.py` if needed, `web/frames/frame_server.py` (manifest route).

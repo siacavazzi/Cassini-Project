@@ -601,6 +601,7 @@ body.idle .win.full .titlebar { opacity: 0; }
         <dt>Filter</dt><dd data-f="filter">—</dd>
         <dt>Color</dt><dd data-f="colour">—</dd>
         <dt>Details</dt><dd data-f="details">—</dd>
+        <dt>Credit</dt><dd><button class="credit" data-about="iss" title="Credits">NASA/JPL-Caltech/SSI</button></dd>
       </dl>
     </div>
   </section>
@@ -614,6 +615,7 @@ body.idle .win.full .titlebar { opacity: 0; }
         <dt>Status</dt><dd><span class="led"></span><span data-f="status">Camera</span></dd>
         <dt>Filter</dt><dd data-f="filter">—</dd>
         <dt>Color</dt><dd data-f="colour">—</dd>
+        <dt>Credit</dt><dd><button class="credit" data-about="iss" title="Credits">NASA/JPL-Caltech/SSI</button></dd>
       </dl>
     </div>
   </section>
@@ -787,7 +789,7 @@ body.idle .win.full .titlebar { opacity: 0; }
       w.addEventListener("click", e => { if (phone() && e.target.closest(".well, .rlwell")) full(w); });
     }
   }
-  const TALL = "#moments, #settings", PICTURES = ".camwin, .bodywin, #reelcard", MIN_W = 180;
+  const TALL = "#moments, #settings, #about", PICTURES = ".camwin, .bodywin, #reelcard", MIN_W = 180;
   const phone = () => document.body.classList.contains("phone");
   // zoom: the bigger standard size, and back to the size the viewer gave the window
   function zoom(w) {
@@ -886,7 +888,6 @@ body.idle .win.full .titlebar { opacity: 0; }
     if (a === "next") $("next").click();
     if (a === "go") setFocus(btn.dataset.body);
     if (a === "win") { const w = $(btn.dataset.win); (w.hidden || w.classList.contains("shaded")) ? restore(w) : minimize(w); }
-    if (a === "about") { $("loading").hidden = false; setTimeout(() => { $("loading").hidden = true; }, 1800); }
   }
   document.querySelectorAll(".menu ul").forEach(ul => ul.addEventListener("click", e => { const b = e.target.closest("button"); if (b) act(b); }));
   window.addEventListener("keydown", e => {
@@ -2053,8 +2054,10 @@ body.idle .win.full .titlebar { opacity: 0; }
     // whose SPICE kernels are not loaded yet) can hold them all, so the data waited behind them on the loading screen.
     // The server still finishes what was dropped and keeps it; the window asks again once the data is in.
     let warnCtl = new AbortController();   // the look-ahead's notes to the server (?warm=1)
-    const dataWait = () => typeof yearReady === "function" && !yearReady();
-    function letGo() {
+    // the same while the page is paused in the background (away.html): nothing in flight, nothing asked for
+    const dataWait = () => (window.cassiniAway && cassiniAway.on) || (typeof yearReady === "function" && !yearReady());
+    // (away: paused in the background, away.html; the server keeps the look-ahead notes it already has, so they are not sent again)
+    function letGo(away) {
       for (const which of ["frame", "comp"]) {
         const v = lane[which];
         if (!v) continue;
@@ -2063,13 +2066,13 @@ body.idle .win.full .titlebar { opacity: 0; }
       }
       for (const p of warming.values()) { p.onload = p.onerror = null; p.removeAttribute("src"); }
       warming.clear();
-      warnCtl.abort(); warnCtl = new AbortController(); warnedObs.clear();
+      warnCtl.abort(); warnCtl = new AbortController(); if (!away) warnedObs.clear();
       mosaicStop();
       lastK = -2;   // asks again for what it shows, once the data is in
     }
     let cat = null, letGone = false;
     function update(force) {
-      if (dataWait()) { if (!letGone) { letGone = true; letGo(); } return; }
+      if (dataWait()) { if (!letGone) { letGone = true; letGo(window.cassiniAway && cassiniAway.on); } return; }
       letGone = false;
       if (catalog !== cat) {   // another mission year (or the months around this one) loaded
         // a pass mosaic that is up stays up: its observation is a name, its frame found again by id
@@ -2286,6 +2289,9 @@ body.idle .win.full .titlebar { opacity: 0; }
     for (const f of feeds) { f(); f.retier(); }
   };
   for (const key of ["cameras.fullRes"]) S.on(key, () => feeds.forEach(f => f.retier()));
+  // paused in the background (away.html): each window lets go of its pictures at once (the frame loop that drives
+  // them is held); back, the next frame asks again for what each one shows
+  document.addEventListener("cassini:away", e => { if (e.detail.away) feeds.forEach(f => f()); });
   syncMenu();
 })();
 </script>

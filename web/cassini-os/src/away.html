@@ -1,0 +1,73 @@
+<!--
+  Pause in the background (build.py puts its style in the head's, its note into #app, and its script right after the
+  settings script, ahead of every other script that draws or fetches).
+
+  While the tab is hidden, the browser is minimized, or (a second setting) the window has lost focus, Cassini OS stops
+  outright so a page left open in the background costs the computer and the frame server nothing: every animation
+  frame loop on the page is held (the viewer's clock and render, movie mode, the body reels, the highlights, the
+  loading screen, the Grand Finale), the camera windows let go of the pictures they are fetching and of their
+  look-ahead, and the sound goes quiet. Coming back, each loop gets its frame again, the clocks carry on from where
+  they stopped (no catch-up), and the camera windows ask again for the picture they show and nothing else first.
+
+  window.cassiniAway: { on, since, total } (total: ms spent away so far). The page hears "cassini:away" on document,
+  detail { away: true } when it stops and { away: false, ms } when it carries on (ms: how long it was away), so scripts
+  that keep time on performance.now() move their clocks on by ms.
+-->
+<style>
+/* the note while the window is visible but not focused (a second screen); a hidden tab shows nothing anyway */
+#awaynote { position: fixed; left: 50%; bottom: 96px; transform: translateX(-50%); z-index: 90; pointer-events: none;
+  padding: 7px 14px; border-radius: 999px; font: 12px/1.2 var(--ui); letter-spacing: .02em;
+  color: var(--q-text); background: var(--q-panel); border: 1px solid var(--q-line); backdrop-filter: blur(12px);
+  opacity: 0; transition: opacity .25s; }
+#awaynote.on { opacity: 1; }
+</style>
+<div id="awaynote" role="status" aria-live="polite">Paused while Cassini OS is in the background</div>
+<script>
+// ---------- pause in the background ----------
+(function () {
+  const S = window.cassiniSettings;
+  S.define({ key: "playback.pauseHidden", section: "Playback", label: "Pause in the background", type: "toggle", value: true,
+    hint: "While the tab is hidden or the browser is minimized, everything stops: the clock, the 3D view, picture requests and sound. It carries on where it stopped when you come back." });
+  S.define({ key: "playback.pauseBlur", section: "Playback", label: "Also when the window loses focus", type: "toggle", value: true,
+    hint: "Pause while you work in another window too, even if Cassini OS is still on screen. Off keeps it playing on a second screen." });
+
+  const A = window.cassiniAway = { on: false, since: 0, total: 0 };
+  let focused = true;   // until the window says otherwise (a page opened in front has focus)
+  // every animation frame loop asks again each frame, so holding the requests stops them all; ids for held ones are
+  // negative (never 0, which loops use for "none"), and map to the real request once it is made
+  const raf = window.requestAnimationFrame.bind(window), caf = window.cancelAnimationFrame.bind(window);
+  const held = new Map(), real = new Map();
+  let nextId = -1;
+  window.requestAnimationFrame = cb => {
+    if (!A.on) return raf(cb);
+    const id = nextId--; held.set(id, cb); return id;
+  };
+  window.cancelAnimationFrame = id => {
+    if (held.delete(id)) return;
+    caf(real.has(id) ? real.get(id) : id); real.delete(id);
+  };
+  const note = document.getElementById("awaynote");
+  function check() {
+    const away = S.get("playback.pauseHidden") && (document.hidden || (S.get("playback.pauseBlur") && !focused));
+    if (away === A.on) return;
+    A.on = away;
+    note.classList.toggle("on", away && !document.hidden);
+    if (away) {
+      A.since = performance.now();
+      document.dispatchEvent(new CustomEvent("cassini:away", { detail: { away: true } }));
+    } else {
+      const ms = performance.now() - A.since; A.total += ms;
+      // the clocks move on first, then the loops get their frames
+      document.dispatchEvent(new CustomEvent("cassini:away", { detail: { away: false, ms } }));
+      real.clear();
+      for (const [id, cb] of held) real.set(id, raf(cb));
+      held.clear();
+    }
+  }
+  document.addEventListener("visibilitychange", check);
+  window.addEventListener("blur", () => { focused = false; check(); });
+  window.addEventListener("focus", () => { focused = true; check(); });
+  S.on("playback.pauseHidden", check); S.on("playback.pauseBlur", check);
+  check();
+})();
+</script>

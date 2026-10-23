@@ -44,6 +44,9 @@
     return next;
   };
 
+  // paused in the background (away.html): the step carries on where it was, by the time away
+  document.addEventListener("cassini:away", e => { if (!e.detail.away) { M.stepAt += e.detail.ms; M.cutAt += e.detail.ms; } });
+
   // the status line under the timeline says movie mode is on, how fast, and how much time a cut left out
   const hud = window.studyHud;
   window.studyHud = ms => {
