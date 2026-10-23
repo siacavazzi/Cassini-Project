@@ -306,6 +306,9 @@ def pass_scale(frames, u, drawn=None, true_colour=False):
             levels.append(float(np.median(lit)) if lit.size else 0.0)
         if min(levels) > 0:
             out["balance"] = dict(zip(mine, calibration.balance(levels, calibration.tint_of(u["key"][0]))))
+            # and the body's typical color after it, so the broad-color flattening holds one color as tiles arrive
+            shown = [out["balance"][f] * v for f, v in zip(mine, levels)]
+            out["typical"] = {f: float(np.log(v * len(shown) / sum(shown))) for f, v in zip(mine, shown)}
     return out
 
 
@@ -556,6 +559,8 @@ def so_far(u, n, cache, made=None, out=OUT):
         scale = p["display_scale"]
         bal = scale.get("balance")
         mix = calibration.color_mix(u["key"][2], colour, u["key"][0], [bal[f] for f in colour] if bal else None)
+        if mix is not None and scale.get("typical"):
+            mix.typical = [scale["typical"][f] for f in colour]
         if mix is not None:
             rgb = calibration.mix_display(rgb, mix, scale["gamma"])
         # only where every filter has the picture: past one filter's edge the others alone are a coloured rim

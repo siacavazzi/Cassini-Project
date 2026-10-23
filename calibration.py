@@ -382,11 +382,15 @@ def color_mix(camera, bands, target=None, gains=None):
 
 
 class FalseMix(np.ndarray):
-    """A false color mix (a gain per band, diagonal) and the tint its balance aims at (tint_of), kept through arithmetic."""
+    """A false color mix (a gain per band, diagonal), the tint its balance aims at (tint_of) and, for a mosaic, its
+    pass's typical color (each band's log share of the brightness, so the color doesn't shift as tiles arrive), kept
+    through arithmetic."""
     tint = None
+    typical = None
 
     def __array_finalize__(self, obj):
         self.tint = getattr(obj, "tint", None)
+        self.typical = getattr(obj, "typical", None)
 
 
 _matrices = None
@@ -515,12 +519,14 @@ def _saturation(x):
     return np.where(top > 0, (top - low) / np.maximum(top, 1e-12), 0)
 
 
-def _flatten_broad(x, lit):
+def _flatten_broad(x, lit, typical=None):
     if lit.sum() < 100:
         return x
     lum = x.mean(axis=0)
     share = np.log(np.maximum(x, 1e-6) / np.maximum(lum, 1e-6))
-    typical = np.array([np.median(c[lit]) for c in share], np.float32).reshape(3, 1, 1)
+    if typical is None:
+        typical = [np.median(c[lit]) for c in share]
+    typical = np.asarray(typical, np.float32).reshape(3, 1, 1)
     sigma = FALSE_BROAD * max(x.shape[1:])
     weight = np.where(lit, lum, 0).astype(np.float32)
     soft = lambda v: cv2.GaussianBlur(v, (0, 0), sigma)
@@ -550,7 +556,7 @@ def apply_mix(mix, x):
         held = knee + (cap - knee) * np.tanh((sat - knee) / (cap - knee))
         k = np.where(sat > knee, held / np.maximum(sat, 1e-12), 1)
         x = lum * tint + (x - lum * tint) * k
-        x = _flatten_broad(x, mean > REVERT_FLOOR)
+        x = _flatten_broad(x, mean > REVERT_FLOOR, mix.typical)
         # the balance's color and broad brightness, the fine detail of the bands at gains no more than DETAIL_SPREAD
         # apart: a dim band's full gain (MT3 on Saturn, 8 to 10) would lift its ring, limb and haze structure and noise
         # far above the others', while equal weights (the straight picture) lose the detail only that band shows
