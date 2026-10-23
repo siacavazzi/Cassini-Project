@@ -29,22 +29,12 @@
      wheel, drag or swipe scrolls it by hand and it carries on from there a few seconds later. Its last card links to
      About, and the Skip button or Escape still ends it. Sound (sound.html): Cassini's carrier as a pure tone that wavers with
      the wobble and stops at loss of signal, a low minor drone that grows with the struggle, one low bell at the
-     break-up, and chords under the recap that open from minor to bright major. -->
+     break-up, and chords under the recap that open from minor to bright major. Hiding the interface, the hooks, Skip and
+     Escape, captions, fades and looking around are shared with the other cutscenes (cutscene.html). -->
 <style>
-#finale { position: fixed; inset: 0; z-index: 2002; pointer-events: none; }
-#finale[hidden] { display: none; }
-#finale .fx-black { position: absolute; inset: 0; background: #000; opacity: 0; }
 /* the air's glow from below as it heats, and a shade under the captions so they read over Saturn's bright clouds */
 #finale .fx-air { position: absolute; inset: 0; opacity: 0; background: radial-gradient(ellipse 90% 70% at 50% 100%, rgba(255,120,40,.55), rgba(255,80,20,.18) 55%, transparent 80%); mix-blend-mode: screen; }
 #finale .fx-shade { position: absolute; inset: 0; background: linear-gradient(to top, rgba(0,0,0,.78) 0, rgba(0,0,0,.55) 22%, rgba(0,0,0,0) 48%); }
-#finale .fx-caps { position: absolute; left: 50%; bottom: 15vh; transform: translateX(-50%); width: min(640px, calc(100vw - 32px)); display: grid; }
-#finale .fx-cap { grid-area: 1 / 1; align-self: end; text-align: center; color: var(--q-text); font: 300 19px/1.5 -apple-system, "Helvetica Neue", var(--ui);
-  letter-spacing: .01em; text-shadow: 0 1px 12px rgba(0,0,0,.9), 0 0 2px rgba(0,0,0,.8); opacity: 0; }
-#finale .fx-cap b { display: block; margin-bottom: 8px; font-weight: normal; font-size: 10.5px; letter-spacing: .22em; text-transform: uppercase; color: var(--q-dim); }
-#finale .fx-cap.big { font-size: 26px; }
-#finale .fx-cap ul { list-style: none; margin: 0; padding: 0; }
-#finale .fx-cap li { margin: 3px 0; }
-#finale .fx-cap small { display: block; margin-top: 10px; font-size: 12px; color: var(--q-dim); }
 #finale .fx-read { position: absolute; left: 50%; bottom: 7vh; transform: translateX(-50%); white-space: nowrap; font: 11px/1 var(--hudf); letter-spacing: .08em;
   color: var(--q-dim); opacity: 0; transition: opacity 1.2s ease; }
 #finale .fx-read.on { opacity: 1; }
@@ -58,15 +48,6 @@
 #finale .fx-data small { display: block; margin-top: 5px; font-size: 9.5px; line-height: 1.35; color: rgba(232,236,242,.38); }
 #finale .fx-note { position: absolute; left: 16px; bottom: 14px; max-width: min(460px, calc(100vw - 140px)); font-size: 10.5px; line-height: 1.4; color: rgba(232,236,242,.34); opacity: 0; transition: opacity 1.5s ease; }
 #finale .fx-note.on { opacity: 1; }
-#finale .fx-skip { all: unset; position: absolute; right: 16px; bottom: 12px; padding: 4px 11px; border-radius: 11px; border: 1px solid var(--q-line);
-  background: rgba(16,17,20,.5); color: rgba(232,236,242,.55); font-size: 11px; cursor: pointer; pointer-events: auto; }
-#finale .fx-skip:hover { color: var(--q-text); }
-#finale .fx-hint { position: absolute; left: 50%; top: 18px; transform: translateX(-50%); font-size: 11px; color: rgba(232,236,242,.45); opacity: 0; transition: opacity 1.5s ease; }
-#finale .fx-hint.on { opacity: 1; }
-body.finale #gl { cursor: grab; }
-body.finale.fx-drag #gl { cursor: grabbing; }
-body.finale #app > :not(#gl):not(#finale) { opacity: 0 !important; pointer-events: none !important; transition: opacity 1.2s ease !important; }
-body.finale-out #app * { pointer-events: none !important; }
 /* the credits roll: a column that scrolls up over the darkened sky, fading in and out at its top and bottom edges */
 #finale .fx-roll { position: absolute; inset: 0; overflow-y: auto; overscroll-behavior: contain; scrollbar-width: none; opacity: 0; pointer-events: none;
   -webkit-mask-image: linear-gradient(to bottom, transparent 0, #000 16%, #000 84%, transparent 100%); mask-image: linear-gradient(to bottom, transparent 0, #000 16%, #000 84%, transparent 100%); }
@@ -100,30 +81,31 @@ body.phone #finale .fx-roll .in { font-size: 14px; }
 body.phone #finale .fx-roll dl { grid-template-columns: 1fr; row-gap: 2px; }
 body.phone #finale .fx-roll dt, body.phone #finale .fx-roll dd { text-align: center; }
 body.phone #finale .fx-roll dd { margin-bottom: 10px; }
-body.phone #finale .fx-cap { font-size: 16px; } body.phone #finale .fx-cap.big { font-size: 21px; }
 body.phone #finale .fx-read { font-size: 9.5px; bottom: 9vh; }
 body.phone #finale .fx-note { bottom: 40px; }
 body.phone #finale .fx-data { width: min(220px, calc(100vw - 32px)); top: 10px; right: 10px; }
 </style>
 
-<section id="finale" hidden aria-live="polite">
+<section id="finale" class="cs-root" hidden aria-live="polite">
   <div class="fx-air"></div>
   <div class="fx-shade"></div>
-  <div class="fx-black"></div>
-  <div class="fx-caps"></div>
+  <div class="cs-black"></div>
+  <div class="cs-caps"></div>
   <div class="fx-roll" tabindex="-1" aria-label="Credits"><div class="in"></div></div>
   <div class="fx-read" aria-hidden="true"></div>
   <div class="fx-data" aria-hidden="true"><b>Its last readings · real data</b><canvas width="556" height="290"></canvas><small></small></div>
   <div class="fx-note">An interpretation. Cassini's path is its real trajectory and the readings are what it sent; the way it fights to hold its antenna on Earth follows a rule pinned to NASA's numbers, not telemetry.</div>
-  <div class="fx-hint">Drag to look around</div>
-  <button class="fx-skip" type="button">Skip ▸</button>
+  <div class="cs-hint">Drag to look around</div>
+  <button class="cs-skip" type="button">Skip ▸</button>
 </section>
 
 <script>
 // ---------- the Grand Finale: Cassini's last minute and a mission recap, at the end of the data ----------
 (function () {
-  const root = document.getElementById("finale"), black = root.querySelector(".fx-black"), caps = root.querySelector(".fx-caps"), air = root.querySelector(".fx-air");
-  const read = root.querySelector(".fx-read"), note = root.querySelector(".fx-note"), hint = root.querySelector(".fx-hint"), skipBtn = root.querySelector(".fx-skip");
+  const root = document.getElementById("finale"), black = root.querySelector(".cs-black"), caps = root.querySelector(".cs-caps"), air = root.querySelector(".fx-air");
+  const read = root.querySelector(".fx-read"), note = root.querySelector(".fx-note"), hint = root.querySelector(".cs-hint");
+  // what every cutscene shares (cutscene.html)
+  const CS = cassiniCutscene, { fadeTo, drop, sound, look } = CS, runCaptions = (list, t, shown) => CS.runCaptions(caps, list, t, shown);
   const roll = root.querySelector(".fx-roll"), rollIn = roll.querySelector(".in");
   const dataBox = root.querySelector(".fx-data"), dataCv = dataBox.querySelector("canvas"), dataNote = dataBox.querySelector("small");
   // the real readings from the last hour, written in by build.py from finale-data.json (null when there are none):
@@ -403,60 +385,6 @@ body.phone #finale .fx-data { width: min(220px, calc(100vw - 32px)); top: 10px; 
     dataNote.textContent = FINALE_DATA.credit || "";
   }
 
-  // ---------- captions and fades, on the viewer's frame clock (performance.now), so a recording keeps their pace ----------
-  const fades = new Map(), slow = matchMedia("(prefers-reduced-motion: reduce)").matches;
-  function fadeTo(el, to, secs, then) { fades.set(el, { from: +el.style.opacity || 0, to, t0: performance.now(), secs, then }); }
-  function stepFades() {
-    for (const [el, f] of fades) {
-      const k = Math.min(1, (performance.now() - f.t0) / 1000 / f.secs), e = k * k * (3 - 2 * k), o = f.from + (f.to - f.from) * e;
-      el.style.opacity = o;
-      if (el.classList.contains("fx-cap") && !slow) el.style.transform = `translateY(${(1 - o) * 6}px)`;
-      if (k >= 1) { fades.delete(el); if (f.then) f.then(); }
-    }
-  }
-  // paused in the background (away.html): the fades carry on where they stopped
-  document.addEventListener("cassini:away", e => { if (!e.detail.away) for (const f of fades.values()) f.t0 += e.detail.ms; });
-  function caption(html, cls) {
-    const el = document.createElement("div");
-    el.className = "fx-cap" + (cls ? " " + cls : ""); el.innerHTML = html; caps.appendChild(el);
-    fadeTo(el, 1, 1.2);
-    return el;
-  }
-  function drop(el) { fadeTo(el, 0, 1.1, () => el.remove()); }
-  // run each line of a list whose time has come, and take it down when its time is up
-  function runCaptions(list, t, shown) {
-    list.forEach(([at, dur, html, cls, chord], i) => {
-      if (!shown[i] && t >= at && t < at + dur) { shown[i] = caption(html, cls); if (chord) sound("chord", chord); }
-      if (shown[i] && shown[i] !== true && t >= at + dur) { drop(shown[i]); shown[i] = true; }
-    });
-  }
-  const sound = (what, ...a) => { if (window.cassiniSound && cassiniSound[what]) cassiniSound[what](...a); };
-
-  // ---------- looking around: a drag turns the view, the wheel zooms; it eases back a few seconds after ----------
-  const look = { yaw: 0, pitch: 0, zoom: 1, drag: null, last: 0 };
-  function onDown(e) {
-    if (!F || e.target !== document.getElementById("gl")) return;
-    look.drag = [e.clientX, e.clientY]; look.last = performance.now(); document.body.classList.add("fx-drag");
-    e.stopImmediatePropagation();
-  }
-  function onMove(e) {
-    if (!F || !look.drag) return;
-    look.yaw -= (e.clientX - look.drag[0]) * 0.006; look.pitch = Math.max(-1.2, Math.min(1.2, look.pitch + (e.clientY - look.drag[1]) * 0.005));
-    look.drag = [e.clientX, e.clientY]; look.last = performance.now();
-    e.stopImmediatePropagation();
-  }
-  function onUp() { look.drag = null; look.last = performance.now(); document.body.classList.remove("fx-drag"); }
-  function onWheel(e) {
-    if (!F || F.phase === "credits") return;
-    look.zoom = Math.max(0.35, Math.min(4, look.zoom * Math.exp(e.deltaY * 0.0012))); look.last = performance.now();
-    e.preventDefault(); e.stopImmediatePropagation();
-  }
-  function easeLook(dt) {
-    if (look.drag || performance.now() - look.last < 4000) return;
-    const k = 1 - Math.exp(-dt / 1.6);
-    look.yaw -= look.yaw * k; look.pitch -= look.pitch * k; look.zoom += (1 - look.zoom) * k;
-  }
-
   // ---------- the credits roll ----------
   const esc = t => String(t).replace(/[&<>"]/g, c => ({ "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;" })[c]);
   function block(b, h) {
@@ -514,54 +442,36 @@ body.phone #finale .fx-data { width: min(220px, calc(100vw - 32px)); top: 10px; 
   }
 
   function play() {
-    if (F || !tracks.CASSINI || !tracks.SATURN || !bodies.SATURN) return;
+    if (F || CS.active || !tracks.CASSINI || !tracks.SATURN || !bodies.SATURN) return;
     const cal = calibrate();
     if (!cal) return;
     F = Object.assign(cal, { t0: performance.now(), phase: "out", tau: null, lost: false, tumbleAxis: new THREE.Vector3(1, 0.45, 0.2).normalize(),
-      shownD: [], shownR: [], follow: state.follow, fx: null, recapAt: 0, lastFrame: performance.now() });
-    Object.assign(look, { yaw: 0, pitch: 0, zoom: 1, drag: null, last: 0 });
-    if (state.follow) setFollow(false);
-    setPlaying(false);
-    controls.enabled = false;
-    root.hidden = false;
-    document.body.classList.add("finale");
+      shownD: [], shownR: [], fx: null, recapAt: 0, lastFrame: performance.now() });
+    CS.begin("finale");
     fadeTo(black, 1, 1.5);
   }
-  function finish() {
-    if (!F) return;
-    const f = F; F = null;
-    sound("carrier", 0, 0); sound("drone", 0);
-    removeEffects(f.fx); removeFlare(f.flare);
-    cassini.visible = true; markerPts.visible = true; cassini.up.set(0, 1, 0);
-    camera.up.set(0, 1, 0);
-    controls.enabled = true;
-    caps.textContent = ""; [read, note, hint, dataBox, roll].forEach(e => e.classList.remove("on"));
-    roll.style.opacity = 0; rollIn.textContent = "";
-    air.style.opacity = 0;
-    fades.forEach((v, el) => { if (el !== black) fades.delete(el); });
-    setTime(coverage[1]);
-    if (state.focus !== "CASSINI") setFocus("CASSINI");
-    setFocus("CASSINI", 6e-5);
-    if (f.follow) setFollow(true);
-    document.body.classList.add("finale-out");
-    document.body.classList.remove("finale", "fx-drag");
-    fadeTo(black, 0, 1.5, () => { document.body.classList.remove("finale-out"); if (!F) root.hidden = true; });
-    if (window.cassiniPerf) cassiniPerf.invalidate();
-  }
-
-  // the viewer's frame loop, before it places the bodies: the finale runs its own clock
+  const finish = () => CS.end("finale");
   // paused in the background (away.html): the cutscene's clock moves on by the time away, so it carries on where it stopped
   document.addEventListener("cassini:away", e => {
     if (e.detail.away || !F) return;
-    const ms = e.detail.ms; F.t0 += ms; F.lastFrame += ms; look.last += ms;
+    const ms = e.detail.ms; F.t0 += ms; F.lastFrame += ms;
     for (const k of ["recapAt", "rollAt", "rollHeld", "rollEnd", "rollClose"]) if (F[k]) F[k] += ms;
   });
-  window.studyFrame = dt => {
-    stepFades();
-    if (!F) return;
-    if (window.cassiniPerf) cassiniPerf.invalidate();
-    state.playing = false;
-    easeLook(dt);
+  // its own tidying when it ends (cutscene.html brings the interface back)
+  function cleanUp() {
+    const f = F; F = null;
+    sound("carrier", 0, 0); sound("drone", 0);
+    removeEffects(f.fx); removeFlare(f.flare);
+    caps.textContent = ""; [read, note, hint, dataBox, roll].forEach(e => e.classList.remove("on"));
+    roll.style.opacity = 0; rollIn.textContent = "";
+    air.style.opacity = 0;
+    setTime(coverage[1]);
+    if (state.focus !== "CASSINI") setFocus("CASSINI");
+    setFocus("CASSINI", 6e-5);
+  }
+
+  // before the bodies are placed: the finale runs its own clock
+  function frame(dt) {
     const T = (performance.now() - F.t0) / 1000;
     if (F.phase === "out" && T >= 1.7) {
       // behind the black: back to a minute before loss of signal, on Cassini
@@ -582,11 +492,11 @@ body.phone #finale .fx-data { width: min(220px, calc(100vw - 32px)); top: 10px; 
       if (s > AFTER) {
         // the recap: the view cuts to Saturn from far away, where Cassini burns up as a flare
         F.phase = "recap"; F.recapAt = performance.now();
-        DESCENT.forEach((d, i) => { if (F.shownD[i] && F.shownD[i] !== true) drop(F.shownD[i]); });
+        CS.dropAll(F.shownD);
         sound("carrier", 0, 0); sound("drone", 0);
         removeEffects(F.fx); F.fx = null;
         cassini.visible = false; air.style.opacity = 0; setFocus("SATURN");
-        Object.assign(look, { yaw: 0, pitch: 0, zoom: 1 });
+        CS.resetLook();
         F.flare = addFlare();
         fadeTo(black, 0, 1.5);
       }
@@ -601,22 +511,23 @@ body.phone #finale .fx-data { width: min(220px, calc(100vw - 32px)); top: 10px; 
       if (R > RECAP_END - 2.5 && !F.closing) { F.closing = true; fadeTo(black, 1, 2.5); }
       if (R > RECAP_END) {
         // after a moment of darkness, the credits roll
-        F.recap.forEach((d, i) => { if (F.shownR[i] && F.shownR[i] !== true) drop(F.shownR[i]); });
-        if (!TEAM) finish(); else { F.phase = "credits"; F.rollAt = performance.now(); }
+        CS.dropAll(F.shownR);
+        if (!TEAM) { finish(); return; }
+        F.phase = "credits"; F.rollAt = performance.now(); look.wheel = false;
       }
     }
-    if (F && F.phase === "credits") stepRoll(dt);
+    if (F.phase === "credits") stepRoll(dt);
     if (F && F.tau !== null) state.et = Math.min(F.tau, coverage[1]);
-  };
+  }
   // past the end of the data, Cassini carries on along its last velocity
-  window.studyPositions = () => {
-    if (!F || F.tau === null || F.tau <= coverage[1]) return;
+  function positions() {
+    if (F.tau === null || F.tau <= coverage[1]) return;
     rel(F.tau, tmpE);
     for (let k = 0; k < 3; k++) pos.CASSINI[k] = pos.SATURN[k] + tmpE[k];
-  };
+  }
   // the dish held on Earth by the rule above, then lost; and the effects that go with it
-  window.studyAttitude = () => {
-    if (!F || F.phase !== "descent") return;
+  function attitude() {
+    if (F.phase !== "descent") return;
     const now = performance.now(), dt = Math.min(0.1, (now - F.lastFrame) / 1000); F.lastFrame = now;
     const h = altitude(F.tau), L = load(h), t = F.tau, s = F.tau - F.tLos;
     // the local vertical (away from Saturn), the direction to Earth and the direction of motion, in the scene
@@ -663,11 +574,11 @@ body.phone #finale .fx-data { width: min(220px, calc(100vw - 32px)); top: 10px; 
     if (!F.lost) { sound("carrier", signal, Math.min(1, L)); sound("drone", Math.min(1, 0.15 + L)); }
     read.innerHTML = `Altitude ${fmtInt(h)} km · Thrusters <i>${Math.round(Math.min(100, L * 100))}%</i> · Antenna <i>${err < 10 ? err.toFixed(2) : fmtInt(err)}°</i> off Earth · Signal <i>${F.lost ? "lost" : Math.round(signal * 100) + "%"}</i>`;
     drawData(F.tau);
-  };
+  }
   // the camera: beside Cassini with Saturn's clouds below and the horizon level, drifting round toward the rings;
   // then far back from Saturn. A drag turns it, the wheel zooms
-  window.studyCamera = () => {
-    if (!F || F.phase === "out") return;
+  function cameraAt() {
+    if (F.phase === "out") return;
     if (F.phase === "descent") {
       const s = F.tau - F.tLos, k = clamp01((s + LEAD) / (LEAD + 10));
       relScene("SATURN", vT).sub(cassini.position);   // Cassini -> Saturn's centre
@@ -703,33 +614,12 @@ body.phone #finale .fx-data { width: min(220px, calc(100vw - 32px)); top: 10px; 
       camera.up.copy(pole);
       camera.lookAt(new THREE.Vector3().addScaledVector(pole, -22));
     }
-  };
-
-  // playback reaching the end of the data starts it
-  const advance = window.studyAdvance;
-  window.studyAdvance = (et, dt, speed) => {
-    const next = advance ? advance(et, dt, speed) : et + dt * speed;
-    if (!F && et < coverage[1] - 0.5 && next >= coverage[1] - 0.5 && endsMission()) setTimeout(play, 0);
-    return next;
-  };
-  // Escape or Skip ends it; dragging and the wheel look around
-  window.addEventListener("keydown", e => { if (F && e.key === "Escape") { e.preventDefault(); e.stopImmediatePropagation(); finish(); } }, true);
-  skipBtn.addEventListener("click", e => { e.stopPropagation(); finish(); });
-  window.addEventListener("pointerdown", onDown, true);
-  window.addEventListener("pointermove", onMove, true);
-  window.addEventListener("pointerup", onUp, true);
-  window.addEventListener("pointercancel", onUp, true);
-  window.addEventListener("wheel", onWheel, { capture: true, passive: false });
-  window.cassiniFinale = { play, skip: finish, get running() { return !!F; } };
-  // ?finale plays it as soon as the end of the mission is loaded
-  if (new URLSearchParams(location.search).has("finale")) {
-    const wait = setInterval(() => {
-      if (!coverage[1] || !tracks.CASSINI || $("loading") && !$("loading").hidden) return;
-      if (!endsMission()) { clearInterval(wait); return; }
-      if (Math.abs(state.et - coverage[1]) > 7200) { setTime(coverage[1]); return; }
-      if (typeof yearReady === "function" && !yearReady()) return;
-      clearInterval(wait); play();
-    }, 250);
   }
+
+  CS.register("finale", { root, frame, positions, attitude, camera: cameraAt, onEnd: cleanUp });
+  // playback reaching the end of the data starts it, when the data ends with the mission; ?finale plays it at once
+  CS.at(() => coverage[1] ? coverage[1] - 0.5 : null, play, endsMission);
+  CS.fromUrl("finale", () => coverage[1], play, endsMission);
+  window.cassiniFinale = { play, skip: finish, get running() { return !!F; } };
 })();
 </script>
