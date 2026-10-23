@@ -45,9 +45,10 @@ a picture window's title bar (or G) adds the picture on screen, full view has Ad
 finished movie export has Add to Gallery beside Download. Everything stays on this device, in the browser's IndexedDB
 (database `cassini-gallery`); no server keeps anything. Each item is its recipe (the moment, as share-link parameters
 `t`, `view`, `cam`, `play=0`, plus the `/frames/...` address or the export options that make it through the pipeline)
-and, unless Settings > Gallery > Keep a copy of each file is off, the file itself (full-resolution WebP, or the MP4).
+and, unless Settings > Gallery > Keep a copy of each file is off, the file itself (full-resolution JPEG, or the MP4).
 An item without its file (the browser cleared storage, or the setting is off) is made again by the server when opened.
-Export Library writes one `.zip` (gallery.json, files/, thumbs/); Import reads it back.
+Export Library writes one `.zip` of the pictures (JPEG) and films (MP4); with Include metadata
+(Settings > Gallery > Export with metadata) it adds gallery.json and thumbs/, and Import reads that back.
 
 Open an item to see it large, go to its moment, download it, remove it (with Undo) or share it. A shared link carries
 the recipe, never the picture: `?t=…&view=…&play=0&pic=/frames/color.webp?ids=…` (or `film=from=…&until=…`) opens the

@@ -11,10 +11,10 @@
        recipe   the moment it was saved at (the share-link parameters t, view, cam, play=0) and how the frame server
                 makes it: src, the /frames/... address of the picture (its pipeline: frame, composite, mosaic,
                 processing), or film, the movie export's options (/export, same options give the same film)
-       file     the picture at full resolution as the server sends it (WebP), or the film (MP4); a 320 px thumbnail
+       file     the picture at full resolution as a JPEG (the server sends WebP; JPEG is what people's apps take), or the film (MP4); a 320 px thumbnail
      A browser may clear a site's storage (Safari after 7 days without a visit); an item without its file is made
-     again from its recipe when opened. Export Library writes everything to one .zip (gallery.json and the files),
-     Import Library reads it back.
+     again from its recipe when opened. Export Library writes the pictures (JPEG) and films (MP4) to one .zip; with
+     Include metadata (gallery.exportMeta) it adds gallery.json and the thumbnails, and Import reads that back.
 
      Sharing: a link carries the recipe, never the picture: ?t=…&view=…&play=0 opens the moment (the share-link
      pattern) and pic=/frames/… (or film=from=…&until=…) shows the picture over it, made by the frame server through
@@ -30,6 +30,8 @@
 .galseg button { all: unset; padding: 3px 9px; color: var(--q-text, #ddd); cursor: pointer; font-size: 11px; }
 .galseg button[aria-pressed="true"] { background: rgba(138,182,255,.25); color: #fff; }
 .galbtn { font: inherit; font-size: 11px; padding: 3px 9px; border-radius: 4px; border: 1px solid var(--q-line, #555); background: rgba(255,255,255,.08); color: var(--q-text, #ddd); cursor: pointer; white-space: nowrap; text-decoration: none; display: inline-flex; align-items: center; gap: 5px; }
+.galchk { display: inline-flex; gap: 5px; align-items: center; cursor: pointer; color: var(--q-text, #ddd); white-space: nowrap; }
+.galchk input { margin: 0; accent-color: var(--q-accent, #8ab6ff); }
 .galbtn:hover { background: rgba(255,255,255,.16); color: #fff; }
 .galbtn:disabled { opacity: .45; cursor: default; }
 .galbtn.go { background: var(--q-accent, #8ab6ff); border-color: transparent; color: #0b1019; font-weight: 600; }
@@ -102,8 +104,9 @@ body.phone #galtoast { bottom: calc(env(safe-area-inset-bottom, 0px) + var(--app
   <div class="galhead" id="galhead">
     <div class="galseg" id="galfilter"><button data-v="all" aria-pressed="true">All</button><button data-v="picture" aria-pressed="false">Pictures</button><button data-v="movie" aria-pressed="false">Movies</button></div>
     <span id="galsum"></span><span class="sp"></span>
-    <button class="galbtn" id="galexport" title="Save the whole gallery as one .zip file (pictures, films and how each was made)">Export Library</button>
-    <button class="galbtn" id="galimport" title="Add the items of an exported gallery .zip">Import</button>
+    <button class="galbtn" id="galexport" title="Save every picture (JPEG) and film (MP4) in the gallery as one .zip file">Export Library</button>
+    <label class="galchk" title="Also put in how each item was made and its thumbnail (gallery.json), so Import can bring the whole gallery back"><input type="checkbox" id="galmeta"> Include metadata</label>
+    <button class="galbtn" id="galimport" title="Add the items of a gallery .zip exported with its metadata">Import</button>
     <input type="file" id="galfile" accept=".zip,application/zip" hidden>
   </div>
   <div id="galempty" hidden>Nothing saved yet.<br>Press <b>G</b>, or the ＋ in a picture window's title bar, to add the picture on screen. A finished movie export has <b>Add to Gallery</b> too.</div>
@@ -142,6 +145,9 @@ body.phone #galtoast { bottom: calc(env(safe-area-inset-bottom, 0px) + var(--app
   if (S) S.define({ key: "gallery.keepFiles", section: "Gallery", label: "Keep a copy of each file", type: "toggle", value: true,
     hint: "Saved pictures and films are kept on this device, in the browser. Off: only how each was made is kept, and the frame server makes it again when you open it (needs the server)." });
   const keepFiles = () => !S || S.get("gallery.keepFiles") !== false;
+  if (S) S.define({ key: "gallery.exportMeta", section: "Gallery", label: "Export with metadata", type: "toggle", value: false,
+    hint: "Export Library also writes how each item was made and its thumbnail (gallery.json), so Import can bring the gallery back. Off: just the pictures and films." });
+  const withMeta = () => !!(S && S.get("gallery.exportMeta"));
   const ICON = {
     add: '<svg viewBox="0 0 10 10" aria-hidden="true"><path d="M5 1.5v7M1.5 5h7"/></svg>',
     link: '<svg viewBox="0 0 16 16"><path d="M7 9a3 3 0 0 0 4.2 0l2.3-2.3a3 3 0 0 0-4.2-4.2L8.2 3.6M9 7a3 3 0 0 0-4.2 0L2.5 9.3a3 3 0 0 0 4.2 4.2l1.1-1.1"/></svg>',
@@ -244,6 +250,20 @@ body.phone #galtoast { bottom: calc(env(safe-area-inset-bottom, 0px) + var(--app
 
   // ---------- adding ----------
   const busy = new Set();
+  // a file's name: what and when, as people see it in the gallery (Cassini Rhea true color 2005-01-16 0038)
+  const fileName = i => `Cassini ${i.title.replace(/ · /g, " ")} ${(i.moment.find(p => p[0] === "t") || [, ""])[1].replace("T", " ").replace(/:\d\d$/, "").replace(":", "")}`
+    .replace(/[^\w .()-]+/g, "").replace(/\s+/g, " ").trim();
+  // pictures are kept and handed out as JPEG, the format everyone's apps take (the server sends WebP); black under
+  // any transparency, as in the camera windows
+  const ext = type => /mp4/.test(type) ? "mp4" : /png/.test(type) ? "png" : /jpe?g/.test(type) ? "jpg" : "webp";
+  async function jpeg(blob, q = 0.92) {
+    if (!blob || /jpe?g/.test(blob.type)) return blob;
+    try {
+      const bmp = await createImageBitmap(blob), c = document.createElement("canvas"); c.width = bmp.width; c.height = bmp.height;
+      const g = c.getContext("2d"); g.fillStyle = "#000"; g.fillRect(0, 0, c.width, c.height); g.drawImage(bmp, 0, 0);
+      return await new Promise(res => c.toBlob(b => res(b || blob), "image/jpeg", q));
+    } catch (e) { return blob; }
+  }
   async function thumbOf(blob, kind) {
     try {
       let src;
@@ -258,7 +278,8 @@ body.phone #galtoast { bottom: calc(env(safe-area-inset-bottom, 0px) + var(--app
       const w0 = src.videoWidth || src.width, h0 = src.videoHeight || src.height, r = Math.min(1, 320 / Math.max(w0, h0));
       const c = document.createElement("canvas"); c.width = Math.max(1, Math.round(w0 * r)); c.height = Math.max(1, Math.round(h0 * r));
       c.getContext("2d").drawImage(src, 0, 0, c.width, c.height);
-      return { thumb: await new Promise(res => c.toBlob(res, "image/webp", 0.8)), w: w0, h: h0 };
+      const g = c.getContext("2d"); g.globalCompositeOperation = "destination-over"; g.fillStyle = "#000"; g.fillRect(0, 0, c.width, c.height);
+      return { thumb: await new Promise(res => c.toBlob(res, "image/jpeg", 0.8)), w: w0, h: h0 };
     } catch (e) { return { thumb: null, w: 0, h: 0 }; }
   }
   // opts: kind ("picture" | "movie"), src (a frame-server address) or film (export options), blob (the file, when the
@@ -278,11 +299,12 @@ body.phone #galtoast { bottom: calc(env(safe-area-inset-bottom, 0px) + var(--app
         const url = rec ? sized(rec, "full") : kind === "movie" ? opts.src : opts.src;
         try { const r = await fetch(url); if (r.ok) blob = await r.blob(); } catch (e) {}
       }
-      if (!blob && opts.canvas) blob = await new Promise(res => { try { opts.canvas.toBlob(res, "image/webp", 0.95); } catch (e) { res(null); } });
+      if (!blob && opts.canvas) blob = await new Promise(res => { try { opts.canvas.toBlob(res, "image/jpeg", 0.92); } catch (e) { res(null); } });
       if (!blob && !rec && !film) { toast("Could not get that picture from the frame server"); return null; }
+      if (blob && kind === "picture") blob = await jpeg(blob);
       if (blob) {
         Object.assign(item, await thumbOf(blob, kind));
-        item.type = blob.type || (kind === "movie" ? "video/mp4" : "image/webp"); item.bytes = blob.size;
+        item.type = blob.type || (kind === "movie" ? "video/mp4" : "image/jpeg"); item.bytes = blob.size;
       }
       item.hasFile = !!blob && keepFiles();
       await putItem(item, item.hasFile ? blob : null);
@@ -376,8 +398,9 @@ body.phone #galtoast { bottom: calc(env(safe-area-inset-bottom, 0px) + var(--app
     }));
     const bytes = G.items.reduce((s, i) => s + (i.hasFile ? i.bytes : 0), 0), n = G.items.length;
     let quota = "";
-    try { const e = navigator.storage && navigator.storage.estimate ? await navigator.storage.estimate() : null; if (e && e.quota) quota = ` of about ${fmtBytes(e.quota)} this browser allows`; } catch (e) {}
-    $("galsum").textContent = n ? `${n} saved · ${fmtBytes(bytes)} on this device${quota}` : "";
+    try { const e = navigator.storage && navigator.storage.estimate ? await navigator.storage.estimate() : null; if (e && e.quota) quota = ` of ~${fmtBytes(e.quota)}`; } catch (e) {}
+    $("galsum").textContent = n ? `${n} saved · ${fmtBytes(bytes)}${quota}` : "";
+    $("galsum").title = "Kept on this device, in this browser; the second figure is how much room the browser allows the site";
     $("galempty").hidden = n > 0; grid.hidden = false; $("galview").hidden = true; $("galhead").hidden = false;
     $("galexport").disabled = !n;
   }
@@ -409,8 +432,9 @@ body.phone #galtoast { bottom: calc(env(safe-area-inset-bottom, 0px) + var(--app
     $("galpos").textContent = shared ? "Shared with you" : `${pos + 1} of ${G.items.length}`;
     $("galdel").hidden = !!shared; $("galkeep").hidden = !shared;
     $("galnote").textContent = shared ? "Made just now by the frame server from the archive, the same way it was made for whoever shared it." : "";
-    const file = item.hasFile && !shared ? await getFile(item.id).catch(() => null) : null;
-    const dl = $("galdl"), base = `Cassini_${(item.ids[0] || item.title).replace(/[^\w.-]+/g, "_")}_${when.replace(/[: ]/g, "-")}`;
+    let file = item.hasFile && !shared ? await getFile(item.id).catch(() => null) : null;
+    if (file && item.kind === "picture") file = await jpeg(file);   // items saved as WebP before pictures were kept as JPEG
+    const dl = $("galdl"), base = fileName(item);
     if (item.kind === "movie") {
       const v = document.createElement("video"); v.controls = true; v.playsInline = true; v.preload = "metadata";
       st.appendChild(v);
@@ -418,7 +442,7 @@ body.phone #galtoast { bottom: calc(env(safe-area-inset-bottom, 0px) + var(--app
       else filmFrom(item, v, dl, base);
     } else {
       const im = new Image(); im.alt = item.title; im.crossOrigin = "anonymous"; st.appendChild(im);
-      if (file) { im.src = objUrl(file); dl.href = im.src; dl.setAttribute("download", base + (/png/.test(file.type) ? ".png" : ".webp")); }
+      if (file) { im.src = objUrl(file); dl.href = im.src; dl.setAttribute("download", base + "." + ext(file.type)); }
       else if (item.src) {
         const wait = document.createElement("div"); wait.className = "galwait"; wait.textContent = "The frame server is making this picture…"; st.appendChild(wait);
         im.onload = () => wait.remove(); im.onerror = () => { wait.textContent = "The frame server could not make this picture (is it running?)"; };
@@ -480,8 +504,9 @@ body.phone #galtoast { bottom: calc(env(safe-area-inset-bottom, 0px) + var(--app
     let b = item.hasFile ? await getFile(item.id).catch(() => null) : null;
     if (!b && item.src) { try { const r = await fetch(sized(item.src, "full")); if (r.ok) b = await r.blob(); } catch (e) {} }
     if (!b) return null;
-    const ext = item.kind === "movie" ? "mp4" : /png/.test(b.type) ? "png" : "webp";
-    return new File([b], `Cassini_${(item.ids[0] || "picture").replace(/[^\w.-]+/g, "_")}.${ext}`, { type: b.type || (item.kind === "movie" ? "video/mp4" : "image/webp") });
+    if (item.kind === "picture") b = await jpeg(b);
+    const type = b.type || (item.kind === "movie" ? "video/mp4" : "image/jpeg");
+    return new File([b], `${fileName(item)}.${ext(type)}`, { type });
   }
   async function copyText(text, said) {
     try { await navigator.clipboard.writeText(text); toast(said); } catch (e) { toast(text); }
@@ -595,35 +620,46 @@ body.phone #galtoast { bottom: calc(env(safe-area-inset-bottom, 0px) + var(--app
     }
     return out;
   }
+  // plain: the pictures (JPEG) and films (MP4), named by what and when; with metadata: also gallery.json and the
+  // thumbnails, which Import reads back
   async function exportLibrary() {
     const items = await allItems(); if (!items.length) return;
+    const meta = withMeta(), used = new Set();
     $("galexport").disabled = true; toast("Packing the gallery…");
+    const nice = i => {
+      let n = fileName(i), k = 2, out = n;
+      while (used.has(out.toLowerCase())) out = `${n} (${k++})`;
+      used.add(out.toLowerCase()); return out;
+    };
     try {
-      const entries = [], meta = [];
+      const entries = [], list = []; let missing = 0;
       for (const i of items) {
         const m = Object.assign({}, i); delete m.thumb;
-        if (i.thumb) { entries.push([`thumbs/${i.id}.webp`, i.thumb]); m.thumbFile = `thumbs/${i.id}.webp`; }
-        const f = i.hasFile ? await getFile(i.id).catch(() => null) : null;
-        if (f) { const name = `files/${i.id}.${i.kind === "movie" ? "mp4" : /png/.test(f.type) ? "png" : "webp"}`; entries.push([name, f]); m.file = name; }
-        meta.push(m);
+        let f = i.hasFile ? await getFile(i.id).catch(() => null) : null;
+        if (!f && i.kind === "picture" && i.src) { try { const r = await fetch(sized(i.src, "full")); if (r.ok) f = await r.blob(); } catch (e) {} }
+        if (f && i.kind === "picture") { f = await jpeg(f); m.type = f.type; }
+        if (f) { m.file = `${meta ? "files/" : ""}${nice(i)}.${ext(f.type || m.type)}`; entries.push([m.file, f]); } else missing++;
+        if (meta && i.thumb) { m.thumbFile = `thumbs/${i.id}.${ext(i.thumb.type)}`; entries.push([m.thumbFile, i.thumb]); }
+        list.push(m);
       }
-      entries.unshift(["gallery.json", new Blob([JSON.stringify({ app: "Cassini OS gallery", version: 1, frames: FRAMES, exported: new Date().toISOString(), items: meta }, null, 1)], { type: "application/json" })]);
+      if (meta) entries.unshift(["gallery.json", new Blob([JSON.stringify({ app: "Cassini OS gallery", version: 1, frames: FRAMES, exported: new Date().toISOString(), items: list }, null, 1)], { type: "application/json" })]);
+      if (!entries.length) { toast("Nothing to export: the frame server could not make the pictures"); $("galexport").disabled = false; return; }
       const z = await zip(entries), a = document.createElement("a");
       a.href = URL.createObjectURL(z); a.download = `Cassini-gallery-${new Date().toISOString().slice(0, 10)}.zip`;
       document.body.appendChild(a); a.click(); a.remove(); setTimeout(() => URL.revokeObjectURL(a.href), 60000);
-      toast(`Gallery exported · ${items.length} items · ${fmtBytes(z.size)}`);
+      toast(`Gallery exported · ${items.length - missing} item${items.length - missing === 1 ? "" : "s"}${missing ? ` (${missing} could not be made)` : ""} · ${fmtBytes(z.size)}`);
     } catch (e) { console.warn("gallery export", e); toast("Could not export the gallery"); }
     $("galexport").disabled = false;
   }
   async function importLibrary(file) {
     try {
       const files = await unzip(file), j = JSON.parse(await (files.get("gallery.json") || new Blob(["{}"])).text());
-      if (!j.items) throw new Error("no gallery.json");
+      if (!j.items) { toast(files.size ? "That zip has only pictures: export with Include metadata to make one Import can read" : "That file is not an exported gallery"); return; }
       const have = new Set((await allItems()).map(i => i.id)); let n = 0;
       for (const m of j.items) {
         if (!m.id || have.has(m.id) || !Array.isArray(m.moment)) continue;
         const f = m.file && files.get(m.file), th = m.thumbFile && files.get(m.thumbFile);
-        const item = Object.assign({}, m, { thumb: th ? new Blob([th], { type: "image/webp" }) : null, hasFile: !!f, src: recipe(m.src) });
+        const item = Object.assign({}, m, { thumb: th ? new Blob([th], { type: /\.jpg$/.test(m.thumbFile) ? "image/jpeg" : "image/webp" }) : null, hasFile: !!f, src: recipe(m.src) });
         delete item.file; delete item.thumbFile;
         await putItem(item, f ? new Blob([f], { type: m.type || "" }) : null); n++;
       }
@@ -659,6 +695,9 @@ body.phone #galtoast { bottom: calc(env(safe-area-inset-bottom, 0px) + var(--app
     toast(`Removed · ${it.title}`, "Undo", async () => { await putItem(it, file); refresh(); });
   });
   $("galexport").addEventListener("click", exportLibrary);
+  $("galmeta").checked = withMeta();
+  $("galmeta").addEventListener("change", e => { if (S) S.set("gallery.exportMeta", e.target.checked); });
+  if (S) S.on("gallery.exportMeta", v => { $("galmeta").checked = !!v; });
   $("galimport").addEventListener("click", () => $("galfile").click());
   $("galfile").addEventListener("change", e => { const f = e.target.files[0]; e.target.value = ""; if (f) importLibrary(f); });
   card.addEventListener("click", e => { if (e.target.closest(".close, .min")) { e.stopPropagation(); close(); } }, true);
