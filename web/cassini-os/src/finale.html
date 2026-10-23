@@ -553,7 +553,8 @@ body.phone #finale .fx-data { width: min(220px, calc(100vw - 32px)); top: 10px; 
   // paused in the background (away.html): the cutscene's clock moves on by the time away, so it carries on where it stopped
   document.addEventListener("cassini:away", e => {
     if (e.detail.away || !F) return;
-    const ms = e.detail.ms; F.t0 += ms; F.lastFrame += ms; if (F.recapAt) F.recapAt += ms; look.last += ms;
+    const ms = e.detail.ms; F.t0 += ms; F.lastFrame += ms; look.last += ms;
+    for (const k of ["recapAt", "rollAt", "rollHeld", "rollEnd", "rollClose"]) if (F[k]) F[k] += ms;
   });
   window.studyFrame = dt => {
     stepFades();

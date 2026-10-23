@@ -1434,7 +1434,8 @@ body.idle .win.full .titlebar { opacity: 0; }
     let warnCtl = new AbortController();   // the look-ahead's notes to the server (?warm=1)
     // the same while the page is paused in the background (away.html): nothing in flight, nothing asked for
     const dataWait = () => (window.cassiniAway && cassiniAway.on) || (typeof yearReady === "function" && !yearReady());
-    function letGo() {
+    // (away: paused in the background, away.html; the server keeps the look-ahead notes it already has, so they are not sent again)
+    function letGo(away) {
       for (const which of ["frame", "comp"]) {
         const v = lane[which];
         if (!v) continue;
@@ -1443,13 +1444,13 @@ body.idle .win.full .titlebar { opacity: 0; }
       }
       for (const p of warming.values()) { p.onload = p.onerror = null; p.removeAttribute("src"); }
       warming.clear();
-      warnCtl.abort(); warnCtl = new AbortController(); warnedObs.clear();
+      warnCtl.abort(); warnCtl = new AbortController(); if (!away) warnedObs.clear();
       mosaicStop();
       lastK = -2;   // asks again for what it shows, once the data is in
     }
     let cat = null, letGone = false;
     function update(force) {
-      if (dataWait()) { if (!letGone) { letGone = true; letGo(); } return; }
+      if (dataWait()) { if (!letGone) { letGone = true; letGo(window.cassiniAway && cassiniAway.on); } return; }
       letGone = false;
       if (catalog !== cat) {   // another mission year (or the months around this one) loaded
         // a pass mosaic that is up stays up: its observation is a name, its frame found again by id

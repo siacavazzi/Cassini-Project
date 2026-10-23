@@ -2512,7 +2512,8 @@ body.phone #finale .fx-data { width: min(220px, calc(100vw - 32px)); top: 10px; 
     let warnCtl = new AbortController();   // the look-ahead's notes to the server (?warm=1)
     // the same while the page is paused in the background (away.html): nothing in flight, nothing asked for
     const dataWait = () => (window.cassiniAway && cassiniAway.on) || (typeof yearReady === "function" && !yearReady());
-    function letGo() {
+    // (away: paused in the background, away.html; the server keeps the look-ahead notes it already has, so they are not sent again)
+    function letGo(away) {
       for (const which of ["frame", "comp"]) {
         const v = lane[which];
         if (!v) continue;
@@ -2521,13 +2522,13 @@ body.phone #finale .fx-data { width: min(220px, calc(100vw - 32px)); top: 10px; 
       }
       for (const p of warming.values()) { p.onload = p.onerror = null; p.removeAttribute("src"); }
       warming.clear();
-      warnCtl.abort(); warnCtl = new AbortController(); warnedObs.clear();
+      warnCtl.abort(); warnCtl = new AbortController(); if (!away) warnedObs.clear();
       mosaicStop();
       lastK = -2;   // asks again for what it shows, once the data is in
     }
     let cat = null, letGone = false;
     function update(force) {
-      if (dataWait()) { if (!letGone) { letGone = true; letGo(); } return; }
+      if (dataWait()) { if (!letGone) { letGone = true; letGo(window.cassiniAway && cassiniAway.on); } return; }
       letGone = false;
       if (catalog !== cat) {   // another mission year (or the months around this one) loaded
         // a pass mosaic that is up stays up: its observation is a name, its frame found again by id
@@ -6863,7 +6864,8 @@ function frame(now) {
   // paused in the background (away.html): the cutscene's clock moves on by the time away, so it carries on where it stopped
   document.addEventListener("cassini:away", e => {
     if (e.detail.away || !F) return;
-    const ms = e.detail.ms; F.t0 += ms; F.lastFrame += ms; if (F.recapAt) F.recapAt += ms; look.last += ms;
+    const ms = e.detail.ms; F.t0 += ms; F.lastFrame += ms; look.last += ms;
+    for (const k of ["recapAt", "rollAt", "rollHeld", "rollEnd", "rollClose"]) if (F[k]) F[k] += ms;
   });
   window.studyFrame = dt => {
     stepFades();
