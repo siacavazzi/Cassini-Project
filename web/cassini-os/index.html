@@ -1229,7 +1229,7 @@ body.phone.has-dock { --appdockh: 50px; }
   D({ key: "interface.hudline", section: "Interface", label: "Flight data strip", type: "toggle", value: true,
       hint: "Target, altitude, speed, camera and pointing along the top of the view." });
   cls("interface.hudline", "s-nohudline", false);
-  // Cameras (the camera windows read cameras.composites, cameras.steady, cameras.mosaics, cameras.fullRes, cameras.fullDelay and cameras.stale)
+  // Cameras (the camera windows read cameras.composites, cameras.steady, cameras.mosaics, cameras.fullRes and cameras.stale)
   D({ key: "cameras.composites", section: "Cameras", label: "Color composites", type: "toggle", value: true,
       hint: "Once a filter set is complete, show its color picture. Off shows every frame on its own." });
   D({ key: "cameras.balancedColor", section: "Cameras", label: "Balanced color", type: "toggle", value: true,
@@ -1248,9 +1248,7 @@ body.phone.has-dock { --appdockh: 50px; }
   D({ key: "cameras.mosaics", section: "Cameras", label: "Mosaics in camera windows", type: "toggle", value: true,
       hint: "When Cassini steps a camera across a body, the window builds the mosaic tile by tile. Off shows every frame on its own." });
   D({ key: "cameras.fullRes", section: "Cameras", label: "Full resolution in full view", type: "toggle", value: true,
-      hint: "A picture in full view (double-click it, F or the title bar button) loads at the camera's full resolution, with a button to save it. Live playback, bursts and movies stay at the smaller size." });
-  D({ key: "cameras.fullDelay", section: "Cameras", label: "Full resolution while playing after", type: "range", value: 1.5, min: 0.5, max: 10, step: 0.5, unit: "s",
-      hint: "While the timeline plays, a picture in full view loads in full once it has stayed up this long; paused, it loads at once." });
+      hint: "A picture in full view (double-click it, F or the title bar button) always loads at the camera's full resolution, playing or paused, with a button to save it. Other windows show each picture at its true resolution, or smaller only when the window or screen is too small to show more." });
   D({ key: "cameras.stale", section: "Cameras", label: "Clear a quiet camera after", type: "range", value: 6, min: 1, max: 48, step: 1, unit: "h",
       hint: "A camera that has taken nothing for this long shows Idle instead of its last picture." });
 
@@ -1620,9 +1618,14 @@ body.phone.has-dock { --appdockh: 50px; }
     const fb = w.querySelector(".fullbtn"); if (fb) fb.setAttribute("aria-label", on ? "Leave full view" : "Full view");
     document.body.classList.toggle("hasfull", !!document.querySelector(".win.full"));
   }
-  // is a picture window showing its pictures big enough to want the 1024 px ones: zoomed, in full view, or resized
-  // so its picture is wider than px (CSS pixels, so the standard sizes keep asking for the smaller pictures)
-  const big = (w, well, px = 600) => w.classList.contains("zoomed") || w.classList.contains("full") || (well || w).clientWidth > px;
+  // the picture size a window asks for: the picture's true resolution (1024, the cameras' full frame; smaller frames
+  // come at their own size), or small (512) on a phone or when the picture fills no more than that many screen
+  // pixels (CSS pixels times the screen's density, so a retina window counts what it really shows)
+  const sized = (w, well, small = 512) => {
+    if (w.classList.contains("zoomed") || w.classList.contains("full")) return 1024;
+    const el = well || w, px = Math.max(el.clientWidth, el.clientHeight) * Math.min(window.devicePixelRatio || 1, 2);
+    return phone() || px <= small ? small : 1024;
+  };
   window.addEventListener("keydown", e => {
     if (e.metaKey || e.ctrlKey || e.altKey || /^(INPUT|SELECT|TEXTAREA)$/.test(e.target.tagName)) return;
     const f = document.querySelector(".win.full");
@@ -1631,7 +1634,7 @@ body.phone.has-dock { --appdockh: 50px; }
   });
   document.querySelectorAll(".win").forEach(wire);
   front($("dock"));
-  window.cassiniWM = { wire, front, minimize, restore, zoom, full, big, syncMenu: () => syncMenu() };
+  window.cassiniWM = { wire, front, minimize, restore, zoom, full, sized, syncMenu: () => syncMenu() };
   // the WAC window starts where the NAC window ends, however wide that is
   new ResizeObserver(() => { const n = $("imgcard"); if (n.offsetWidth && (n.style.width || n.querySelector(".well.has-frame"))) $("app").style.setProperty("--nacw", n.offsetWidth + "px"); }).observe($("imgcard"));
 
@@ -2020,11 +2023,9 @@ body.phone.has-dock { --appdockh: 50px; }
     let shapeOf = null;
     const failed = new Set();   // composites the server could not make: those sets show their frames instead
     const missing = new Set();  // frames the server does not have
-    // full view asks for the full resolution picture ("full") once the picture is held: a quarter second while
-    // paused, cameras.fullDelay s while playing, so scrubbing, bursts and playback keep the 1024 px ones
-    let shownAt = 0;
-    const held = () => !state.dragging && performance.now() - shownAt > (state.playing ? S.get("cameras.fullDelay") * 1000 : 250);
-    const size = () => win.classList.contains("full") && S.get("cameras.fullRes") && held() ? "full" : window.cassiniWM.big(win, well) ? 1024 : 512;
+    // full view always asks for the full resolution picture ("full"), playing or not; every other window for the
+    // picture's true resolution (1024, the cameras' full frame), or 512 when it is shown that small (cassiniWM.sized)
+    const size = () => win.classList.contains("full") && S.get("cameras.fullRes") ? "full" : window.cassiniWM.sized(win, well);
     const capped = () => { const s = size(); return s === "full" ? 1024 : s; };
     const frameUrl = (id, sz) => `${FRAMES}/frames/${id}.webp?size=${sz || size()}`;
     const colorUrl = (s, sz) => `${FRAMES}/frames/color.webp?ids=${s.use.map(k => catalog.id[k]).join(",")}&size=${sz || size()}${window.cassiniLook()}`;
@@ -2086,7 +2087,6 @@ body.phone.has-dock { --appdockh: 50px; }
       const keep = obsShown && catalog.obs[v.k] === obsShown;
       // the same picture again at another size (full view's full resolution one) is not a new picture
       const again = shown && shown.k === v.k && shown.set === v.set;
-      if (!again) shownAt = performance.now();
       shownKey = v.key; shown = v;
       // shot.dataset.src / .report: what the picture on screen was made from, for flagging (flag.html)
       if (!keep) {
@@ -2359,8 +2359,8 @@ body.phone.has-dock { --appdockh: 50px; }
       const ks = framesOf(cam, body).ks;
       // look ahead: the next 6 frames, or up to 12 when they come within 4 s of playback (a burst), nearest first
       const ahead = []; for (let d = 1; d <= 12 && ks[p + d] !== undefined && (d <= 6 || catalog.et[ks[p + d]] - state.et <= 4 * state.speed); d++) ahead.push(ks[p + d]);
-      // looked ahead at the capped size: only the picture on screen is ever fetched in full
-      next = ahead.map(q => view(q, catalog.et[q], capped()).key);
+      // looked ahead at the size shown, so full view plays in full resolution too
+      next = ahead.map(q => view(q, catalog.et[q], size()).key);
       // further ahead: each observation coming up is named to the server once, so a mosaic pass in it is worked
       // out (seconds for its plan) before the clock gets there
       if (window.cassiniMosaics !== false && S.get("cameras.mosaics"))
@@ -2379,8 +2379,7 @@ body.phone.has-dock { --appdockh: 50px; }
         }
       pump();
     }
-    // a window made bigger (zoom, resize, full view) asks for the bigger picture, and a held picture in full view
-    // for the full one (checked on every frame, see studyHud below)
+    // a window made bigger or smaller (zoom, resize, full view) asks for the picture of its new size
     let tier = size();
     function retier() {
       if (tier === size()) return;
@@ -2451,7 +2450,7 @@ body.phone.has-dock { --appdockh: 50px; }
     prep();
     for (const f of feeds) { f(); f.retier(); }
   };
-  for (const key of ["cameras.fullRes", "cameras.fullDelay"]) S.on(key, () => feeds.forEach(f => f.retier()));
+  for (const key of ["cameras.fullRes"]) S.on(key, () => feeds.forEach(f => f.retier()));
   syncMenu();
 })();
 </script>
@@ -2701,7 +2700,8 @@ body.phone.has-dock { --appdockh: 50px; }
   const S = window.cassiniSettings, GRACE = 1200;
   const opt = (key, dflt) => (S && S.get(key) !== undefined ? S.get(key) : dflt);
   const KIND = { true: "true color", false: "false color", two: "two-filter color" };
-  const size = () => (window.cassiniWM && window.cassiniWM.big ? window.cassiniWM.big(card, card.querySelector(".mvwell")) : card.classList.contains("zoomed")) ? 1024 : 512;
+  // true resolution (1024) unless the card shows its pictures small (cassiniWM.sized)
+  const size = () => window.cassiniWM && window.cassiniWM.sized ? window.cassiniWM.sized(card, card.querySelector(".mvwell")) : 1024;
   // the pictures frame f can be shown as, each { url, kind }: best (mosaic, then composite) and base (processed, then raw)
   function choices(f) {
     const id = f.id, sz = size(), raw = { url: `${FRAMES}/frames/${id}.webp?size=${sz}`, kind: "" };
@@ -3104,7 +3104,8 @@ body.phone.has-dock { --appdockh: 50px; }
   }
 
   // ---- pictures: fetched ahead of the play head; the server makes each one the first time it is asked ----
-  const size = () => (window.cassiniWM && window.cassiniWM.big ? window.cassiniWM.big(card, $("rlwellN"), 800) : card.classList.contains("zoomed")) ? 1024 : 768;
+  // the reel's full size (1024) unless the card shows its pictures small (cassiniWM.sized)
+  const size = () => window.cassiniWM && window.cassiniWM.sized ? window.cassiniWM.sized(card, $("rlwellN"), 768) : 1024;
   function want(i) {
     let b = R.buf.get(i);
     if (b && b.size === size() && b.mosaic === R.mosaic) return b;

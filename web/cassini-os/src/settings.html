@@ -198,7 +198,7 @@ body.phone .srow input[type=range] { width: 96px; }
   D({ key: "interface.hudline", section: "Interface", label: "Flight data strip", type: "toggle", value: true,
       hint: "Target, altitude, speed, camera and pointing along the top of the view." });
   cls("interface.hudline", "s-nohudline", false);
-  // Cameras (the camera windows read cameras.composites, cameras.steady, cameras.mosaics, cameras.fullRes, cameras.fullDelay and cameras.stale)
+  // Cameras (the camera windows read cameras.composites, cameras.steady, cameras.mosaics, cameras.fullRes and cameras.stale)
   D({ key: "cameras.composites", section: "Cameras", label: "Color composites", type: "toggle", value: true,
       hint: "Once a filter set is complete, show its color picture. Off shows every frame on its own." });
   D({ key: "cameras.balancedColor", section: "Cameras", label: "Balanced color", type: "toggle", value: true,
@@ -217,9 +217,7 @@ body.phone .srow input[type=range] { width: 96px; }
   D({ key: "cameras.mosaics", section: "Cameras", label: "Mosaics in camera windows", type: "toggle", value: true,
       hint: "When Cassini steps a camera across a body, the window builds the mosaic tile by tile. Off shows every frame on its own." });
   D({ key: "cameras.fullRes", section: "Cameras", label: "Full resolution in full view", type: "toggle", value: true,
-      hint: "A picture in full view (double-click it, F or the title bar button) loads at the camera's full resolution, with a button to save it. Live playback, bursts and movies stay at the smaller size." });
-  D({ key: "cameras.fullDelay", section: "Cameras", label: "Full resolution while playing after", type: "range", value: 1.5, min: 0.5, max: 10, step: 0.5, unit: "s",
-      hint: "While the timeline plays, a picture in full view loads in full once it has stayed up this long; paused, it loads at once." });
+      hint: "A picture in full view (double-click it, F or the title bar button) always loads at the camera's full resolution, playing or paused, with a button to save it. Other windows show each picture at its true resolution, or smaller only when the window or screen is too small to show more." });
   D({ key: "cameras.stale", section: "Cameras", label: "Clear a quiet camera after", type: "range", value: 6, min: 1, max: 48, step: 1, unit: "h",
       hint: "A camera that has taken nothing for this long shows Idle instead of its last picture." });
 
