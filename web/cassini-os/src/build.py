@@ -208,6 +208,9 @@ rep('get("t") || "2005-01-14T09:30:00"',
 # surface map size: a ?tex= link wins, then the Settings window's choice
 rep('const TEX_TIER = (new URLSearchParams(location.search).get("tex") || (location.hash.match(/^#tex-(\\w+)$/) || [])[1] || "2k").toLowerCase();',
     'const TEX_TIER = (new URLSearchParams(location.search).get("tex") || (location.hash.match(/^#tex-(\\w+)$/) || [])[1] || (window.cassiniSettings && cassiniSettings.get("view.textures")) || "2k").toLowerCase();')
+# star sky size: a ?sky= link wins, then the Settings window's choice
+rep('const SKY_TIER = (new URLSearchParams(location.search).get("sky") || "auto").toLowerCase();',
+    'const SKY_TIER = (new URLSearchParams(location.search).get("sky") || (window.cassiniSettings && cassiniSettings.get("view.sky")) || "auto").toLowerCase();')
 rep('renderer.setClearColor(0x04060b, 1);', 'renderer.setClearColor(new THREE.Color(THEME.clear), 1);')
 rep('const c = n === "CASSINI" ? [0.56, 0.79, 1] : n === "HUYGENS" ? [1, 0.82, 0.55] : n === "TITAN" ? [0.88, 0.6, 0.29] : [0.62, 0.66, 0.72];',
     'const c = n === "CASSINI" ? THEME.mkCassini : n === "HUYGENS" ? [1, 0.82, 0.55] : n === "TITAN" ? THEME.mkTitan : THEME.mk;')

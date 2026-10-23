@@ -11,3 +11,13 @@ Celestia's `.license` files and README.
 The CC BY maps are fine on a public site with this credit list. The maps marked "none stated" are reworks of
 NASA/JPL and other material without a licence file; before a public launch, rebuild them from public-domain
 originals (USGS Astrogeology mosaics, NASA Blue Marble, Björn Jónsson's own releases) with the same tool.
+
+## Star sky
+
+| What | File | Built from | Licence |
+|---|---|---|---|
+| Stars and Milky Way | sky/sky_2k.webp, sky_4k.webp, sky_8k.webp | NASA SVS "Deep Star Maps 2020" (https://svs.gsfc.nasa.gov/4851), `starmap_2020_8k.exr`: Hipparcos, Tycho-2 and Gaia DR2 stars plus the Milky Way, equirectangular in J2000 (RA 0h in the middle, RA growing to the left) | NASA, public domain. Credit: NASA/Goddard Space Flight Center Scientific Visualization Studio. Gaia DR2: ESA/Gaia/DPAC. |
+
+`web/replay/make_sky.py` turns the linear HDR map into the three WebP tiers: it averages down in linear light, maps
+brightness with an exposure curve fitted to NASA's own display thumbnail (`starmap_2020_4k_print.jpg`), and checks
+the orientation against 15 bright stars.
