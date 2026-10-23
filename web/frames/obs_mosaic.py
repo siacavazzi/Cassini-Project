@@ -317,7 +317,13 @@ def _ulock(u):
         return _unit_locks.setdefault(u["key"], threading.RLock())
 
 
-PLAN_FILE = "plan2.json"   # the pass's plan in its folder (plan2: colour and grey leave out frames pointed aside)
+PLAN_FILE = "plan2.json"   # renamed when the plan's rules change, so cached plans are worked out again
+
+
+def _tiles(u, cache, scale):
+    """The folder of the pass's tiles made on this display scale: a plan that changes its scale (its rules
+    changed) makes its tiles again instead of drawing them next to tiles on the old one."""
+    return os.path.join(folder(u, cache), "tiles-" + hashlib.md5(json.dumps(scale, sort_keys=True).encode()).hexdigest()[:8])
 
 
 def plan(u, cache):
@@ -476,9 +482,11 @@ def pass_scale(frames, u, drawn=None, true_colour=False):
 
 def tile(u, n, cache, scale=None):
     """Tile n of the pass, made once: its picture north up, scaled to the pass's reference distance and cropped
-    (tiles/<n>.png), and its report: offset = where the frame's middle sits from the body's centre and box = the
+    (_tiles/<n>.png), and its report: offset = where the frame's middle sits from the body's centre and box = the
     crop around it (reference pixels); no offset when SPICE could not place it."""
-    base = os.path.join(folder(u, cache), "tiles", str(n))
+    if scale is None:
+        scale = plan(u, cache)["display_scale"]
+    base = os.path.join(_tiles(u, cache, scale), str(n))
     # one lock per tile, so a movie's frames made ahead can be made side by side
     with _lock:
         lock = _tile_locks.setdefault((u["key"], n), threading.RLock())
@@ -486,8 +494,6 @@ def tile(u, n, cache, scale=None):
         if os.path.exists(base + ".json"):
             with open(base + ".json") as fh:
                 return json.load(fh)
-        if scale is None:
-            scale = plan(u, cache)["display_scale"]
         path, fid, f, t, nm, x, y, z = u["frames"][n]
         k = z / u["z"] if z else 1.0
         try:
@@ -533,7 +539,7 @@ def _window(u, p, mine, rect, cache):
         sw, sh = max(1, round(bw * k)), max(1, round(bh * k))
         if left >= W or top >= H or left + sw <= 0 or top + sh <= 0:
             continue
-        part = _part(os.path.join(folder(u, cache), "tiles", f"{t['n']}.png"), sw, sh)
+        part = _part(os.path.join(_tiles(u, cache, p["display_scale"]), f"{t['n']}.png"), sw, sh)
         frame = np.zeros((H, W, 4), np.uint8)
         x0, y0, x1, y1 = max(left, 0), max(top, 0), min(left + sw, W), min(top + sh, H)
         frame[y0:y1, x0:x1] = part[y0 - top:y1 - top, x0 - left:x1 - left]
@@ -650,7 +656,7 @@ def _grown(u, p, f, mine, rect, cache):
         x0, y0 = max(left - pad, 0), max(top - pad, 0)
         x1, y1 = min(left + sw + pad, W), min(top + sh + pad, H)
         if x1 > x0 and y1 > y0:
-            part = _part(os.path.join(folder(u, cache), "tiles", f"{t['n']}.png"), sw, sh)
+            part = _part(os.path.join(_tiles(u, cache, p["display_scale"]), f"{t['n']}.png"), sw, sh)
             frame = np.zeros((y1 - y0, x1 - x0, 4), np.uint8)
             a0, b0 = max(left, 0), max(top, 0)
             a1, b1 = min(left + sw, W), min(top + sh, H)
@@ -885,8 +891,9 @@ def movie_rect(fp, t, radius=0.0, centre=False):
     return min(max(cx - w / 2, x0), x1 - w), min(max(cy - h / 2, y0), y1 - h), w, h
 
 
-def _place(u, t, rect, k, W, H, cache):
-    """Tile t drawn where SPICE puts it in the view rect, on a W x H canvas (k canvas pixels per reference pixel)."""
+def _place(u, t, rect, k, W, H, cache, scale):
+    """Tile t (made on the display scale) drawn where SPICE puts it in the view rect, on a W x H canvas (k canvas
+    pixels per reference pixel)."""
     bx, by, bw, bh = t["box"]
     left = round((t["offset"][0] + bx - rect[0]) * k)
     top = round((t["offset"][1] + by - rect[1]) * k)
@@ -894,7 +901,7 @@ def _place(u, t, rect, k, W, H, cache):
     frame = np.zeros((H, W, 4), np.uint8)
     x0, y0, x1, y1 = max(left, 0), max(top, 0), min(left + sw, W), min(top + sh, H)
     if x0 < x1 and y0 < y1:
-        part = _part(os.path.join(folder(u, cache), "tiles", f"{t['n']}.png"), sw, sh)
+        part = _part(os.path.join(_tiles(u, cache, scale), f"{t['n']}.png"), sw, sh)
         frame[y0:y1, x0:x1] = part[y0 - top:y1 - top, x0 - left:x1 - left]
     return frame
 
@@ -953,20 +960,20 @@ def movie_frame(u, n, cache, trail=0, colour=True, out=OUT, centre=True):
                     used = p["colour"]
                 break
     if used:
-        planes = [_place(u, newest[f], rect, k, W, H, cache) for f in used]
+        planes = [_place(u, newest[f], rect, k, W, H, cache, p["display_scale"]) for f in used]
         alpha = np.min([a[..., 3] for a in planes], axis=0)
         rgba = np.dstack([a[..., 0] for a in planes] + [alpha])
         rep["color"] = used
         rep["ids"] = [newest[f]["id"] for f in used]
     else:
-        rgba = _place(u, t, rect, k, W, H, cache)
+        rgba = _place(u, t, rect, k, W, H, cache, p["display_scale"])
         # the rolling trail: earlier frames of this filter under it, older ones fainter
         if trail:
             js = [j for j in range(n - 1, max(-1, n - 8 * trail), -1) if frames[j][2] == t["filter"]][:trail]
             older = [q for q in (tile(u, j, cache, p["display_scale"]) for j in reversed(js)) if "offset" in q]
             acc = np.zeros((H, W, 4), np.float32)
             for age, q in zip(range(len(older), 0, -1), older):
-                a = _place(u, q, rect, k, W, H, cache).astype(np.float32)
+                a = _place(u, q, rect, k, W, H, cache, p["display_scale"]).astype(np.float32)
                 w = a[..., 3:] / 255 * (1 - age / (len(older) + 1))
                 acc[..., :3] = acc[..., :3] * (1 - w) + a[..., :3] * w
                 acc[..., 3:] = np.maximum(acc[..., 3:], w * 255)
@@ -1051,7 +1058,7 @@ def warm_movie(u, n, ahead, cache):
                     with _lock:
                         first, last = _movie_ahead.get(key, (0, -1))
                         todo = [j for j in range(first, last + 1) if j not in taking
-                                and not os.path.exists(os.path.join(folder(u, cache), "tiles", f"{j}.json"))]
+                                and not os.path.exists(os.path.join(_tiles(u, cache, p["display_scale"]), f"{j}.json"))]
                         if not todo:
                             break
                         taking.add(todo[0])
@@ -1117,7 +1124,7 @@ def rolling_layout(u, n, cache, laps=1, made_only=False):
     tiles_ahead makes them)."""
     p = plan(u, cache)
     where = places(u)
-    there = os.path.join(folder(u, cache), "tiles")
+    there = _tiles(u, cache, p["display_scale"])
     # each place's newest copies that are there to draw: a copy not made yet (made_only) or one SPICE could not
     # place leaves the copy before it up, so a place never drops out of the mosaic and comes back
     keep, seen = [], {}
@@ -1213,12 +1220,12 @@ def _made_through(u, n, cache):
     Tile 0 is made here when nothing is (with the plan, seconds), so a pass's first mosaic does not wait for
     the background."""
     key = (u["key"], calibration.look())
-    base = os.path.join(folder(u, cache), "tiles")
     with _lock:
         j = _made.get(key, -1)
-    if j < 0 and not os.path.exists(os.path.join(base, "0.json")):
+    if j < 0:
         with _asking():
             tile(u, 0, cache)
+    base = _tiles(u, cache, plan(u, cache)["display_scale"])
     while j < n and os.path.exists(os.path.join(base, f"{j + 1}.json")):
         j += 1
     with _lock:

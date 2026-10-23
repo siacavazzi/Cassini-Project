@@ -11,19 +11,19 @@ offs=[(-400,-400),(400,-400),(-400,400),(400,400)]
 fr=[(f"p{i}", f"N{1500000000+i}_1", "CB2", 1000.0+30*i, 600, 0,0,1e6) for i in range(12)]
 u={"key":("JUPITER","OBS","N",0),"frames":fr,"z":1e6,"movie":False,"mosaic":True,"last":1400,"place":[i%4 for i in range(12)]}
 u["place"][1] = u["place"][3] = None                       # two frames with no place: both stay up
-d=om.folder(u,cache); os.makedirs(d+"/tiles",exist_ok=True)
+d=om.folder(u,cache); TD = om._tiles(u, cache, {"blacks":{},"white":1,"gamma":3}); os.makedirs(TD, exist_ok=True)
 for i,(_,fid,f,t,*_r) in enumerate(fr):
     im=np.zeros((1448,1448,4),np.uint8); c=(1448-1024)//2; im[c:c+1024,c:c+1024,3]=255; im[c:c+1024,c:c+1024,:3]=60+60*(i//4)
-    Image.fromarray(im).save(f"{d}/tiles/{i}.png")
+    Image.fromarray(im).save(f"{TD}/{i}.png")
     j={"n":i,"id":fid,"filter":f,"t":t,"offset":list(map(float,offs[i%4])),"box":[-724,-724,1448,1448]}
     if i==5: j={"n":i,"id":fid,"filter":f,"t":t,"why":"not placed"}   # lap 2 place 1: SPICE failed
     if i in (6,): continue                                          # lap 2 place 2: not made yet
-    json.dump(j,open(f"{d}/tiles/{i}.json","w"))
+    json.dump(j,open(f"{TD}/{i}.json","w"))
 json.dump({"key":list(u["key"]),"display_scale":{"blacks":{},"white":1,"gamma":3},"angle":0,"footprint":[-1124,-1124,1124,1124],
  "fixed":True,"view":[2248,2248],"k":2048/2248,"colour":None,"grey":"CB2","whole":False},open(d+"/"+om.PLAN_FILE,"w"))
 om.unit_of=lambda fid:(u,[x[1] for x in fr].index(fid))
 om.tiles_ahead=lambda *a,**k:None
-om.tile=lambda u_,j,c,s: json.load(open(f"{d}/tiles/{j}.json")) if os.path.exists(f"{d}/tiles/{j}.json") else {"n":j,"why":"not made"}
+om.tile=lambda u_,j,c,s: json.load(open(f"{TD}/{j}.json")) if os.path.exists(f"{TD}/{j}.json") else {"n":j,"why":"not made"}
 for n in (4,5,6,7):
     data,rep=om.rolling_webp(fr[n][1],512,cache,1)
     im=np.asarray(Image.open(io.BytesIO(data)).convert("RGBA"))
