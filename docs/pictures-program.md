@@ -34,6 +34,10 @@ The mosaic, color science, and drill-down plans, built together on the `pictures
 4. **Check before posting a link:** `/health` answers ok; `/data/mission.json`, the tracks, attitude and month chunk for the linked `?t=` moment all return 200; a frame returns a real picture; and the page itself, opened at the exact link in headless Chromium on the Mini, shows the scene with no error overlay and no failed `data/` requests in the console. A link that has not passed this check is not posted.
 5. After every push to the branch: check out the new head, restart the server if `frame_server.py` changed, and run the check again.
 
+## One heavy Mini job at a time (2026-10-23)
+
+The LaCie is the shared bottleneck: every preview server reads the same archive zip and writes its cache there, and small random reads cap it at a few MB/s. Batch renders, timing plays and headless browser runs from several threads at once starved every preview (Sam saw frozen pictures). Rule: a thread asks the lead before starting any Mini job longer than about a minute (batch render, scan, timing play, Playwright session), runs one at a time, and closes its headless browser when done. Preview servers stay up, but idle ones from merged PRs are stopped.
+
 ## Evidence every PR must carry
 
 Every PR that changes anything a person can see carries both kinds:
