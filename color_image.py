@@ -203,7 +203,7 @@ def load_aligned(paths, hdr=False, scale=None):
             shifts = []
             ic.align_with_masks(guide, [m.copy() for m in masks], ref, aligned, found=shifts)
             channels, masks = ic.align_with_masks(linear[0], masks, ref, use=shifts)
-            imgs = cal.tone(channels, linear[1])
+            imgs = cal.tone(channels, linear[1], linear[2])
         else:
             imgs, masks = ic.align_with_masks(imgs, masks, ref, aligned)
     except Exception:
@@ -212,7 +212,7 @@ def load_aligned(paths, hdr=False, scale=None):
         if linear is not None:
             guide = None
     if linear is not None and guide is None:
-        imgs = cal.tone(linear[0], linear[1])
+        imgs = cal.tone(linear[0], linear[1], linear[2])
     report = {"calibrated": calibrated, "stacked": stacked, "aligned": aligned}
     return imgs, np.logical_and.reduce(masks), lbls[ref], report
 

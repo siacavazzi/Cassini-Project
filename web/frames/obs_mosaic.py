@@ -51,8 +51,9 @@ import mosaic_benchmark  # noqa: E402
 import stacking  # noqa: E402
 
 # bumped whenever the way observation mosaics are made changes, so older ones are not served again; one per
-# look (calibration.LOOKS), classic being the mosaics made before the balanced display model
-VERSIONS = {"balanced": "obs-v12", "classic": "obs-v9"}
+# display model (calibration.style), classic being the mosaics made before the balanced display model, raw the
+# balanced ones before natural color
+VERSIONS = {"balanced": "obs-v13", "raw": "obs-v12", "classic": "obs-v9"}
 CANVAS = 2048        # longest side of the canvas the view is drawn on
 OUT = 1024           # longest side of the picture sent
 FRAME = 1024         # full resolution frame
@@ -157,7 +158,7 @@ def unit_of(frame_id):
 
 
 def folder(u, cache):
-    return os.path.join(cache, VERSIONS[calibration.look()], "_".join(map(str, u["key"])))
+    return os.path.join(cache, VERSIONS[calibration.style()], "_".join(map(str, u["key"])))
 
 
 def _ulock(u):
@@ -292,7 +293,20 @@ def pass_scale(frames, u, drawn=None, true_colour=False):
         white = max(float(np.percentile(np.concatenate([i.ravel() for i in iofs]) - blacks[f], 99.5))
                     for f, iofs in by.items())
         gamma = 1.5
-    return {"blacks": blacks, "white": white, "gamma": gamma, "filled": filled, "floor": round(floor, 3)}
+    out = {"blacks": blacks, "white": white, "gamma": gamma, "filled": filled, "floor": round(floor, 3)}
+    mine = [f for f in (drawn or []) if f in by]
+    if calibration.style() == "balanced" and len(mine) == 3 and not true_colour:
+        # false color: each band's gain to bring the body's lit median (above that band's black) to the bands'
+        # mean, so the planet comes out gray and only its differences between bands show (calibration.false_gains);
+        # measured on the whole pass, so every tile has the same balance
+        levels = []
+        for f in mine:
+            v = np.concatenate([i.ravel() for i in by[f]]) - blacks[f]
+            lit = v[v > 0.2 * np.percentile(v, 99)]
+            levels.append(float(np.median(lit)) if lit.size else 0.0)
+        if min(levels) > 0:
+            out["balance"] = dict(zip(mine, calibration.balance(levels)))
+    return out
 
 
 def tile(u, n, cache, scale=None):
@@ -537,6 +551,13 @@ def so_far(u, n, cache, made=None, out=OUT):
         colour = used
         acc = [filter_mosaic(u, p, f, tiles, rect, cache, ref) for f in colour]
         rgb = np.dstack([a[..., 0] for a in acc])
+        # natural color: a true color pass turned into what an eye would see, a false color one balanced so the
+        # body comes out gray, on the pass's own measure of its body (pass_scale's balance)
+        scale = p["display_scale"]
+        bal = scale.get("balance")
+        mix = calibration.color_mix(u["key"][2], colour, u["key"][0], [bal[f] for f in colour] if bal else None)
+        if mix is not None:
+            rgb = calibration.mix_display(rgb, mix, scale["gamma"])
         # only where every filter has the picture: past one filter's edge the others alone are a coloured rim
         alpha = np.min([a[..., 3] for a in acc], axis=0)
         rgb = (rgb * (alpha[..., None] / np.float32(255)) + 0.5).astype(np.uint8)
@@ -649,8 +670,8 @@ def warm(u, upto, cache, size=None, slots=None, start=0):
     runs one pass at a time (_background)."""
     if not u["mosaic"]:
         return
-    look = calibration.look()
-    key = (u["key"], size, look)
+    look, colors = calibration.look(), calibration.colors()
+    key = (u["key"], size, look, colors)
     with _lock:
         _upto[key] = max(_upto.get(key, -1), min(upto, len(u["frames"]) - 1))
         _from[key] = max(_from.get(key, 0), start)
@@ -660,7 +681,7 @@ def warm(u, upto, cache, size=None, slots=None, start=0):
 
     def run():
         try:
-            with _background, calibration.looking(look):
+            with _background, calibration.looking(look), calibration.coloring(colors):
                 p = plan(u, cache)
                 done = -1
                 while True:

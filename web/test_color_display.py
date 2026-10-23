@@ -134,4 +134,24 @@ with cal.looking("balanced"):
     d = obs_mosaic.detail(rgba, 4).astype(int)
 diff = d[..., :3] - rgba[..., :3].astype(int)
 assert np.abs(diff[..., 0] - diff[..., 1]).max() <= 1 and np.abs(diff[..., 1] - diff[..., 2]).max() <= 1
+# ---- natural color (phase 2b): the fitted matrix keeps gray gray and warms an orange body's hue as fitted; raw and
+# classic draw the filters straight; a false color set is balanced so the body comes out gray ----
+with cal.looking("balanced"):
+    m = cal.color_mix("N", ["RED", "GRN", "BL1"])
+    assert m is not None and np.allclose(m.sum(axis=1), 1, atol=0.01)
+    assert cal.color_mix("W", ["RED", "GRN", "VIO"]) is not None and cal.color_mix("N", ["RED", "GRN", "VIO"]) is None
+    orange = m @ np.array([1.0, 0.85, 0.6])
+    assert orange[0] > 1.0 and orange[2] < 0.6                      # more saturated than the filters' straight mix
+    with cal.coloring("raw"):
+        assert cal.style() == "raw" and cal.color_mix("N", ["RED", "GRN", "BL1"]) is None
+    g = cal.color_mix("N", ["CB2", "MT2", "BL1"], gains=cal.balance([0.054, 0.018, 0.036]))
+    assert np.allclose(np.diag(g) * [0.054, 0.018, 0.036], 0.036)
+with cal.looking("classic"):
+    assert cal.style() == "classic" and cal.color_mix("N", ["RED", "GRN", "BL1"]) is None
+# mixing a drawn picture with the identity changes nothing; tone with a mix keeps a gray pixel gray
+rgb = rng.integers(0, 200, (32, 32, 3)).astype(np.uint8)
+assert np.abs(cal.mix_display(rgb, np.eye(3), 3.0).astype(int) - rgb).max() <= 1
+gray = [np.full((8, 8), 0.4, np.float32)] * 3
+t = cal.tone(gray, 0.01, m)
+assert abs(int(t[0][0, 0, 0]) - int(t[2][0, 0, 0])) <= 2
 print("ok")

@@ -49,7 +49,7 @@ import reel  # noqa: E402  (puts the repo on the path)
 import calibration  # noqa: E402
 
 # bumped whenever the way films are made changes, so older ones are not served again
-VERSION = "export-v2"
+VERSION = "export-v3"
 FPS = 30                     # frames a second in the file
 HOLD_MIN, HOLD_MAX = 1 / FPS, 0.5
 TYPICAL = 1 / 8              # adaptive: how long the stretch's median gap lasts on screen
@@ -87,10 +87,11 @@ def options(q):
     fps = get("fps", "auto")
     fps = "auto" if fps == "auto" else max(1, min(FPS, int(float(fps))))
     size = min(SIZES, key=lambda s: abs(s - int(get("size", "1024"))))
-    look = get("look", calibration.LOOKS[0])
+    look, colors = get("look", calibration.LOOKS[0]), get("colors", calibration.COLORS[0])
     return {"from": t0, "until": t1, "cams": cams, "fps": fps, "size": size,
             "sound": get("sound", "1") != "0", "caption": get("caption", "1") != "0",
-            "look": look if look in calibration.LOOKS else calibration.LOOKS[0]}
+            "look": look if look in calibration.LOOKS else calibration.LOOKS[0],
+            "colors": colors if colors in calibration.COLORS else calibration.COLORS[0]}
 
 
 def job_id(opt):
@@ -98,6 +99,8 @@ def job_id(opt):
     key = {k: opt[k] for k in ("from", "until", "cams", "fps", "size", "sound", "caption")}
     if opt.get("look", "balanced") != "balanced":
         key["look"] = opt["look"]
+    if opt.get("colors", "natural") != "natural":
+        key["colors"] = opt["colors"]
     return hashlib.sha1(json.dumps([VERSION, key], sort_keys=True).encode()).hexdigest()[:16]
 
 
@@ -466,7 +469,7 @@ def _work(pictures):
         try:
             job["state"] = "making"
             video = os.path.join(d, "video.mp4")
-            with calibration.looking(opt.get("look", "balanced")):
+            with calibration.looking(opt.get("look", "balanced")), calibration.coloring(opt.get("colors", "natural")):
                 job["made_as"] = render(opt, job["plan"], pictures, video + ".part.mp4", progress)
             os.replace(video + ".part.mp4", video)
             wav = os.path.join(d, "sound.wav")

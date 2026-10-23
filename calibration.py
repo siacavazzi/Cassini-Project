@@ -30,6 +30,7 @@ Frames that can't be unstretched return None and the caller keeps the old behavi
 import contextlib
 import contextvars
 import datetime
+import json
 import math
 import os
 
@@ -317,6 +318,38 @@ def look():
     return _look.get()
 
 
+"""
+How a balanced color picture maps its filters to color (color plan phase 2b): "natural" (the default) turns a
+true color set into the colors an eye would see (natural_mix) and balances a false color set so the body comes
+out gray (false_mix); "raw" draws each filter straight as a channel, as before. The classic look is always raw.
+"""
+COLORS = ("natural", "raw")
+_colors = contextvars.ContextVar("colors", default="natural")
+
+
+def colors():
+    return _colors.get()
+
+
+@contextlib.contextmanager
+def coloring(name):
+    token = _colors.set(name if name in COLORS else COLORS[0])
+    try:
+        yield
+    finally:
+        _colors.reset(token)
+
+
+"""
+The display model in use, for cache names: "classic", "balanced" (natural color) or "raw" (balanced, filters drawn
+straight)
+"""
+def style():
+    if look() == "classic":
+        return "classic"
+    return "raw" if colors() == "raw" else "balanced"
+
+
 @contextlib.contextmanager
 def looking(name):
     token = _look.set(name if name in LOOKS else LOOKS[0])
@@ -324,6 +357,96 @@ def looking(name):
         yield
     finally:
         _look.reset(token)
+
+
+"""
+The channel mix of a color set, a 3x3 matrix on linear values ([red, green, blue] out of the set's channels in
+order), or None to draw each filter straight: natural color only, in the balanced look.
+camera = "N" or "W"; bands = the set's color filters in channel order ("RED", "GRN", "BL1", "CB2", "MT3"...)
+target = the body the set is of (TARGET_NAME), for false color
+gains = false color: per band, the gain that brings the body's typical brightness to the set's mean
+(false_gains), when the caller has measured it itself (a mosaic's pass); otherwise the table's
+"""
+def color_mix(camera, bands, target=None, gains=None):
+    if style() != "balanced" or len(bands) != 3:
+        return None
+    m = natural_mix(camera, bands)
+    if m is not None:
+        return m
+    gains = gains or false_gains(target, bands)
+    return np.diag(np.asarray(gains, np.float32)) if gains else None
+
+
+_matrices = None
+
+
+"""
+True color sets (RED, GRN and BL1, BL2 or VIO): the fitted filter-to-sRGB matrix of the camera
+(color_matrices.json), which turns what the three filters saw into the color an eye would see; a gray body
+stays gray. None for other sets, and for a NAC set with VIO (no fit).
+"""
+def natural_mix(camera, bands):
+    global _matrices
+    if list(bands[:2]) != ["RED", "GRN"] or bands[2] not in ("BL1", "BL2", "VIO"):
+        return None
+    if _matrices is None:
+        with open(os.path.join(os.path.dirname(os.path.abspath(__file__)), "color_matrices.json")) as f:
+            _matrices = json.load(f)
+    key = ("NAC" if camera.startswith("N") or camera == "ISSNA" else "WAC") + ("vio" if bands[2] == "VIO" else "")
+    m = _matrices.get(key)
+    return None if m is None else np.asarray(m, np.float32)
+
+
+_bodies = None
+
+
+"""
+False color: per band, the gain that brings the body's typical lit brightness in that band (false_color_bodies.json,
+the median over the mission's frames of the body) to the mean of the set's bands, so the body as a whole comes out
+gray and only its differences between bands show as color: a methane band (MT2, MT3) is far darker than its
+neighbors and otherwise turns the whole planet teal or magenta. One table for the mission, not a balance per
+picture, so a movie of the set doesn't change color from frame to frame. None when the table lacks the body or a band.
+"""
+def false_gains(target, bands):
+    global _bodies
+    if _bodies is None:
+        path = os.path.join(os.path.dirname(os.path.abspath(__file__)), "false_color_bodies.json")
+        _bodies = {}
+        if os.path.exists(path):
+            with open(path) as f:
+                _bodies = json.load(f)
+    body = _bodies.get(str(target or "").upper(), {})
+    meds = [body.get(b, {}).get("median") for b in bands]
+    if any(not m or m <= 0 for m in meds):
+        return None
+    return balance(meds)
+
+
+"""
+Gains that bring each of levels to their mean (a gray body)
+"""
+def balance(levels):
+    mean = sum(levels) / len(levels)
+    return [mean / v for v in levels]
+
+
+"""
+A color picture already drawn (H x W x 3 uint8, gamma encoded, its channels on one white) with its channel mix
+(color_mix) applied on the linear values, the brightest channel rolling off past the shoulder as in tone
+"""
+def mix_display(rgb, mix, gamma=2.2, shoulder=SHOULDER):
+    x = decode(np.moveaxis(rgb[..., :3].astype(np.float32) / 255, -1, 0), gamma).astype(np.float32)
+    x = np.tensordot(np.asarray(mix, np.float32), x, axes=1)
+    top = x.max(axis=0)
+    x *= np.where(top > shoulder, roll_off(top, shoulder) / np.maximum(top, 1e-12), 1)
+    return np.moveaxis((encode(np.clip(x, 0, 1), gamma) * 255 + 0.5).astype(np.uint8), 0, -1)
+
+
+"""
+A frame's color filter ("RED", "CB2", "BL1/GRN"...), the filters other than the clear ones, as reel.colour_filter
+"""
+def band_of(info):
+    return "/".join(f for f in _filters_of(info) if not f.startswith("CL")) or "CL1/CL2"
 
 
 """
@@ -386,7 +509,7 @@ everything only a little brighter than the sky, a shadowed ring or a night side:
 dimmest there loses the largest share of itself. tone takes it off the picture's brightness instead, so
 dim parts keep the color the camera measured and only get darker.
 labels, images, iofs = as load_channels
-returns (channels, margin), or None when a frame can't be calibrated or there is nothing to draw
+returns (channels, margin, the channel mix (color_mix) or None), or None when a frame can't be calibrated or there is nothing to draw
 """
 def load_linear(labels, images=None, iofs=None):
     if images is None:
@@ -398,6 +521,8 @@ def load_linear(labels, images=None, iofs=None):
     if white <= 0:
         return None
     channels = [(iof - np.float32(level)) / np.float32(white) for iof, level in zip(iofs, levels)]
+    infos = [lbl.get_info() for lbl in labels]
+    mix = color_mix(_value(infos[0], "INSTRUMENT_ID", ""), [band_of(i) for i in infos], _value(infos[0], "TARGET_NAME", ""))
     margin /= white
     if measured:
         # the toe starts no lower than the darker half of the sky's own brightness (SKY_DARK of it stays black),
@@ -411,7 +536,7 @@ def load_linear(labels, images=None, iofs=None):
             margin = max(margin, float(np.percentile(lum[dark], SKY_DARK)))
         if len(channels) > 1:
             channels = _clean_spikes(channels, sky)
-    return channels, margin
+    return channels, margin, mix
 
 
 """
@@ -440,10 +565,13 @@ def _clean_spikes(channels, sky):
 Balanced composites' channels (load_linear, aligned) as BGR uint8 images: the noise margin comes off the
 brightness (the channels' mean) through a toe, black up to the margin (the sky at or below its own level is
 black), then turning within an eighth of the margin into the brightness less the margin, and every channel is scaled by the same factor, so a pixel keeps its color.
-Past the shoulder the brightest channel rolls off softly (roll_off), the others by the same factor.
+Past the shoulder the brightest channel rolls off softly (roll_off), the others by the same factor. mix = the
+set's channel mix (color_mix), applied first, on the linear values.
 """
-def tone(channels, margin, shoulder=SHOULDER, gamma=2.2):
+def tone(channels, margin, mix=None, shoulder=SHOULDER, gamma=2.2):
     x = np.stack(channels).astype(np.float32)
+    if mix is not None:
+        x = np.tensordot(np.asarray(mix, np.float32), x, axes=1)
     lum = x.mean(axis=0)
     w = margin / 8
     if w > 0:
