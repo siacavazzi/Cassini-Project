@@ -408,7 +408,7 @@ def natural_mix(camera, bands):
     if _matrices is None:
         with open(os.path.join(os.path.dirname(os.path.abspath(__file__)), "color_matrices.json")) as f:
             _matrices = json.load(f)
-    key = ("NAC" if camera.startswith("N") or camera == "ISSNA" else "WAC") + ("vio" if bands[2] == "VIO" else "")
+    key = ("NAC" if camera.startswith("N") or camera == "ISSNA" else "WAC") + {"VIO": "vio", "BL2": "bl2"}.get(bands[2], "")
     m = _matrices.get(key)
     return None if m is None else np.asarray(m, np.float32)
 

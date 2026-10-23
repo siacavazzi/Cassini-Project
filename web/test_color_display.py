@@ -153,6 +153,9 @@ with cal.looking("balanced"):
     assert np.ptp(lv) < 0.5 * (0.054 - 0.018) and np.isclose(lv.sum(), 0.108)   # toward gray, brightness kept
 with cal.looking("classic"):
     assert cal.style() == "classic" and cal.color_mix("N", ["RED", "GRN", "BL1"]) is None
+# a NAC set with BL2 has its own fitted matrix, which keeps gray gray too
+b2 = cal.natural_mix("N", ["RED", "GRN", "BL2"])
+assert b2 is not None and not np.allclose(b2, cal.natural_mix("N", ["RED", "GRN", "BL1"])) and np.allclose(b2.sum(axis=1), 1, atol=1e-3)
 # mixing a drawn picture with the identity changes nothing; tone with a mix keeps a gray pixel gray
 rgb = np.repeat(rng.integers(0, 200, (32, 32, 1)), 3, axis=2).astype(np.uint8)
 assert np.abs(cal.mix_display(rgb, m, 3.0).astype(int) - rgb).max() <= 2
