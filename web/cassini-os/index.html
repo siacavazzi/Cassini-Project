@@ -6742,12 +6742,18 @@ function frame(now) {
     return el;
   }
   function drop(el) { fadeTo(el, 0, 1.1, () => el.remove()); }
-  // one line at a time in a caption box: a new line takes the place of the one before (null just takes it down)
+  // one line at a time in a caption box: a new line takes the place of the one before, which goes quickly first so the
+  // two never sit on top of each other (null just takes it down)
   const lines = new WeakMap();
   function line(caps, html, cls) {
     const was = lines.get(caps);
-    if (was && was.isConnected) drop(was);
-    const el = html == null ? null : caption(caps, html, cls);
+    let el = null;
+    if (html != null) {
+      el = document.createElement("div");
+      el.className = "cs-cap" + (cls ? " " + cls : ""); el.innerHTML = html; el.style.opacity = 0; caps.appendChild(el);
+    }
+    const show = () => { if (el) fadeTo(el, 1, 1.2); };
+    if (was && was.isConnected) fadeTo(was, 0, 0.4, () => { was.remove(); show(); }); else show();
     lines.set(caps, el);
     return el;
   }
@@ -7842,7 +7848,7 @@ function frame(now) {
     const l = L; L = null;
     caps.textContent = ""; clock.classList.remove("on");
     setTime(l.tau);
-    spent = true;
+    start.spend();   // playback picks up from here, which may be the very start of the data: not a second launch
     if (state.focus !== "CASSINI") setFocus("CASSINI");
     setFocus("CASSINI", 6e-5);
     setSpeed(l.speed); setPlaying(true);
@@ -7884,18 +7890,11 @@ function frame(now) {
     camera.lookAt(cassini.position.clone().addScaledVector(toEarth, tall ? 0 : d * 0.35));
   }
   CS.register("launch", { root, frame, camera: camera_, onEnd });
-  // playback running forward from the very start of the data starts it (the Launch moment does that); the data starts
-  // at separation, so the clock never crosses a moment before it and cutscene.html's crossing trigger cannot catch it
-  let spent = false;
-  const advance = window.studyAdvance;
-  window.studyAdvance = (et, dt, speed) => {
-    const next = advance ? advance(et, dt, speed) : et + dt * speed;
-    if (et > coverage[0] + 30) spent = false;
-    if (!L && !spent && !CS.active && speed > 0 && et <= coverage[0] + 1 && next > et) { spent = true; setTimeout(play, 0); return et; }
-    return next;
-  };
+  // playback setting off forward from the very start of the data plays it (the Launch moment does that): the data
+  // starts at separation, so there is no moment before it to cross
+  const start = CS.atStart(() => play());
   window.cassiniLaunch = { play, skip: () => CS.end("launch"), get running() { return !!L; } };
   // ?launch plays it as soon as the start of the mission is loaded
-  CS.fromUrl("launch", () => coverage[0], () => { spent = true; play(); });
+  CS.fromUrl("launch", () => coverage[0], () => { start.spend(); play(); });
 })();
 </script>
