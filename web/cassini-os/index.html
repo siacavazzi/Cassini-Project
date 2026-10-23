@@ -1282,7 +1282,7 @@ body.phone #finale .fx-data { width: min(220px, calc(100vw - 32px)); top: 10px; 
   D({ key: "interface.hudline", section: "Interface", label: "Flight data strip", type: "toggle", value: true,
       hint: "Target, altitude, speed, camera and pointing along the top of the view." });
   cls("interface.hudline", "s-nohudline", false);
-  // Cameras (the camera windows read cameras.composites, cameras.steady, cameras.mosaics, cameras.fullRes, cameras.fullDelay and cameras.stale)
+  // Cameras (the camera windows read cameras.composites, cameras.steady, cameras.mosaics, cameras.fullRes, cameras.fullDelay, cameras.stale and cameras.lingerColor / lingerMosaic)
   D({ key: "cameras.composites", section: "Cameras", label: "Color composites", type: "toggle", value: true,
       hint: "Once a filter set is complete, show its color picture. Off shows every frame on its own." });
   D({ key: "cameras.channels", section: "Cameras", label: "Filter channels", type: "toggle", value: true,
@@ -1301,7 +1301,11 @@ body.phone #finale .fx-data { width: min(220px, calc(100vw - 32px)); top: 10px; 
   D({ key: "cameras.fullDelay", section: "Cameras", label: "Full resolution while playing after", type: "range", value: 1.5, min: 0.5, max: 10, step: 0.5, unit: "s",
       hint: "While the timeline plays, a picture in full view loads in full once it has stayed up this long; paused, it loads at once." });
   D({ key: "cameras.stale", section: "Cameras", label: "Clear a quiet camera after", type: "range", value: 6, min: 1, max: 48, step: 1, unit: "h",
-      hint: "A camera that has taken nothing for this long shows Idle instead of its last picture." });
+      hint: "A camera that has taken nothing for this long shows Idle instead of its last picture (an important picture stays longer, below)." });
+  D({ key: "cameras.lingerColor", section: "Cameras", label: "Color pictures stay longer", type: "range", value: 1.5, min: 1, max: 4, step: 0.25, format: v => `${v}×`,
+      hint: "How much longer a color picture stays up than a single black-and-white frame, before its window closes or its camera clears." });
+  D({ key: "cameras.lingerMosaic", section: "Cameras", label: "Mosaics stay longer", type: "range", value: 2, min: 1, max: 4, step: 0.25, format: v => `${v}×`,
+      hint: "How much longer a mosaic stays up than a single frame. A color mosaic gets both: 1.5 × 2 = 3 times as long." });
 
   // the replay viewer's own options: applied once it has loaded, and kept in step with its buttons
   function whenReady(fn) {
@@ -2067,6 +2071,8 @@ body.phone #finale .fx-data { width: min(220px, calc(100vw - 32px)); top: 10px; 
     // keeps for every picture of that observation
     const steady = () => S.get("cameras.steady"), passOf = k => `${catalog.target[k]}|${catalog.obs[k]}`;
     let shapeOf = null;
+    // what kind of picture is up (a color composite, a mosaic, both), for how long it stays (importance)
+    let kind = { color: false, mosaic: false };
     const failed = new Set();   // composites the server could not make: those sets show their frames instead
     const missing = new Set();  // frames the server does not have
     // full view asks for the full resolution picture ("full") once the picture is held: a quarter second while
@@ -2119,6 +2125,7 @@ body.phone #finale .fx-data { width: min(220px, calc(100vw - 32px)); top: 10px; 
     function noFrame(msg, kept) {
       well.classList.toggle("kept", !!kept && steady() && well.matches(".has-frame, .kept"));
       well.classList.remove("has-frame", "composite"); card.querySelector(".wellmsg").innerHTML = msg;
+      kind = { color: false, mosaic: false };
     }
     // two lanes, one request in flight each: plain frames (quick) and composites (seconds when the server has to
     // make one). A composite being made never holds up the frames: the window shows the newest frame meanwhile,
@@ -2140,6 +2147,7 @@ body.phone #finale .fx-data { width: min(220px, calc(100vw - 32px)); top: 10px; 
       // shot.dataset.src / .report: what the picture on screen was made from, for flagging (flag.html)
       if (!keep) {
         shot.src = im.src; shot.dataset.src = v.key; shot.dataset.report = ""; obsShown = null; obsK = -1; well.classList.remove("mosaic"); saving(v.key);
+        kind = { color: v.set >= 0, mosaic: false };
         if (!steady() || shapeOf !== passOf(v.k)) { well.style.aspectRatio = ""; shapeOf = null; }
       }
       well.classList.add("has-frame"); well.classList.remove("kept"); well.classList.toggle("composite", v.set >= 0);
@@ -2274,12 +2282,13 @@ body.phone #finale .fx-data { width: min(220px, calc(100vw - 32px)); top: 10px; 
         if (rep && rep.observation) {
           mosaicPasses.add(passOf(k));
           if (window.cassiniPicture && rep.mosaic > (obsShown === catalog.obs[k] ? obsTiles : 0)) window.cassiniPicture({ cam, body, win, k, nm: nmOf(k), set, use: set >= 0 ? catalog.sets[set].use.map(nmOf) : null, tile: rep.mosaic, of: rep.of });
-          obsShown = catalog.obs[k]; obsTiles = rep.mosaic; obsK = k; obsSize = rank(sz);
+          obsShown = catalog.obs[k]; obsTiles = rep.mosaic; obsK = k; obsSize = rank(sz); kind = { color: rep.filters >= 3, mosaic: true };
           well.style.aspectRatio = `${rep.width} / ${rep.height}`; shapeOf = passOf(k);
           card.querySelector(".kindtag").textContent = `${rep.filters >= 3 ? ((rep.filter_names || []).includes("GRN") ? "COLOR " : "FALSE COLOR ") : ""}MOSAIC · ${rep.mosaic} OF ${rep.of} TILES${rep.filters > 1 ? ` · ${rep.filters} FILTERS` : ""}`;
           return;
         }
         card.querySelector(".kindtag").textContent = `${w.set >= 0 ? KIND[catalog.sets[w.set].kind].toUpperCase() + " · " : ""}MOSAIC${rep && rep.mosaic ? ` OF ${rep.mosaic}` : ""}`;
+        kind = { color: w.set >= 0, mosaic: true };
       }, () => {}).finally(done);
     }
     function mosaicStop() {
@@ -2365,14 +2374,16 @@ body.phone #finale .fx-data { width: min(220px, calc(100vw - 32px)); top: 10px; 
       const p = lastOfCam(cam, state.et, body), k = p < 0 ? -1 : framesOf(cam, body).ks[p];
       const live = k >= 0 && state.et - catalog.et[k] < 180;
       card.classList.toggle("live", live);
-      // a camera that has been quiet for longer than the stale setting shows nothing rather than an old picture
-      const stale = S.get("cameras.stale");
-      if (k < 0 || state.et - catalog.et[k] > stale * 3600) {
+      // a camera that has been quiet for longer than the stale setting shows nothing rather than an old picture; an
+      // important picture (color, mosaic) stays that many times longer, and a window that holds (a body window,
+      // which closes by itself) keeps its picture
+      const stale = S.get("cameras.stale") * (lastK >= 0 ? importance() : 1);
+      if (k < 0 || (!update.hold && state.et - catalog.et[k] > stale * 3600)) {
         field("status").textContent = k < 0 ? "Camera" : `Last frame ${fmtDur(state.et - catalog.et[k])} ago`;
         strip(null);
         if (lastK !== -1) {
           lastK = -1; want = null; shownKey = null; shown = null;
-          noFrame(k < 0 ? "<b>No signal</b>No frames from this camera yet this year" : `<b>Idle</b>No frames from this camera in the last ${stale} h`);
+          noFrame(k < 0 ? "<b>No signal</b>No frames from this camera yet this year" : `<b>Idle</b>No frames from this camera in the last ${+stale.toFixed(1)} h`);
           for (const f of ["frame", "filter", "colour", "details"]) field(f).textContent = "—";
         }
         return;
@@ -2438,12 +2449,21 @@ body.phone #finale .fx-data { width: min(220px, calc(100vw - 32px)); top: 10px; 
     }
     new ResizeObserver(retier).observe(well);
     update.retier = retier;
+    const importance = () => weight(kind);
+    update.importance = importance;
+    update.kind = () => kind;
     return update;
   }
+  // how important a picture is, as how many times longer it stays up than a single frame: a color picture
+  // cameras.lingerColor times, a mosaic cameras.lingerMosaic times, a color mosaic both
+  function weight(kind) {
+    const c = +S.get("cameras.lingerColor") || 1.5, m = +S.get("cameras.lingerMosaic") || 2;
+    return (kind.color ? c : 1) * (kind.mosaic ? m : 1);
+  }
   const feeds = [...document.querySelectorAll(".camwin")].map(cameraFeed);
-  window.cassiniFeeds = { cameraFeed, framesOf, lastOfCam, prep, stale: () => S.get("cameras.stale") * 3600 };
+  window.cassiniFeeds = { cameraFeed, framesOf, lastOfCam, prep, weight, stale: () => S.get("cameras.stale") * 3600 };
   // a change to what the windows show takes effect straight away
-  for (const key of ["cameras.composites", "cameras.stale", "cameras.steady"]) S.on(key, () => { if (typeof catalog !== "undefined" && catalog && catalog.byCam) feeds.forEach(f => f(true)); });
+  for (const key of ["cameras.composites", "cameras.stale", "cameras.steady", "cameras.lingerColor", "cameras.lingerMosaic"]) S.on(key, () => { if (typeof catalog !== "undefined" && catalog && catalog.byCam) feeds.forEach(f => f(true)); });
 
   // ---------- burst limit: in normal playback each camera window gets at most maxRate new pictures a second ----------
   // The clock runs at the chosen speed except inside an imaging burst, where it slows so that crossing the gap
@@ -2961,15 +2981,17 @@ body.phone #finale .fx-data { width: min(220px, calc(100vw - 32px)); top: 10px; 
   try { own = JSON.parse(localStorage.getItem(LS)) || {}; } catch (e) {}
   const q = new URLSearchParams(location.search).get("bodywin");
   const B = {
-    on: !!own.on, linger: own.linger > 0 ? own.linger : 20, max: own.max > 0 ? own.max : 4,
+    on: !!own.on, linger: own.linger > 0 ? own.linger : 30, max: own.max > 0 ? own.max : 4, room: own.room > 0 ? own.room : 4,
     clock: 0, lastNow: 0, lastEt: null, cat: null, wins: new Map(), rec: new Map(), dismissed: new Set(), hiddenCams: []
   };
-  const saveOwn = () => { if (S) return; try { localStorage.setItem(LS, JSON.stringify({ on: B.on, linger: B.linger, max: B.max })); } catch (e) {} };
+  const saveOwn = () => { if (S) return; try { localStorage.setItem(LS, JSON.stringify({ on: B.on, linger: B.linger, max: B.max, room: B.room })); } catch (e) {} };
   if (S) {
     B.on = !!S.define({ key: "cameras.bodyWindows", section: "Cameras", label: "A window for each body", type: "toggle", value: false,
-      hint: "Each target Cassini images gets its own narrow-angle and wide-angle windows, which close after that camera has gone a while without imaging the target." });
-    B.linger = +S.define({ key: "cameras.bodyWindowLinger", section: "Cameras", label: "Body window stays for", type: "range", value: 20, min: 5, max: 120, step: 5, unit: "s",
-      hint: "Seconds of playback after a camera's last picture of a target before that window closes." });
+      hint: "Each target Cassini images gets its own narrow-angle and wide-angle windows. They stay up while the screen is calm and make way for new ones when it gets busy." });
+    B.room = +S.define({ key: "cameras.bodyWindowRoom", section: "Cameras", label: "Body windows before they make way", type: "range", value: 4, min: 1, max: 12, step: 1,
+      hint: "Up to this many body windows stay up however long their cameras go quiet. With more, the least relevant close first." });
+    B.linger = +S.define({ key: "cameras.bodyWindowLinger", section: "Cameras", label: "Body window stays for at least", type: "range", value: 30, min: 5, max: 120, step: 5, unit: "s",
+      hint: "Seconds of playback a single frame stays up when the screen is busy, shortened as more windows crowd in. Color pictures and mosaics stay longer (the two settings below)." });
     B.max = +S.define({ key: "cameras.bodyWindowMax", section: "Cameras", label: "Most bodies with windows at once", type: "range", value: 4, min: 1, max: 8, step: 1 });
   }
   if (q !== null) B.on = q !== "0";
@@ -2996,6 +3018,7 @@ body.phone #finale .fx-data { width: min(220px, calc(100vw - 32px)); top: 10px; 
     S.on("cameras.bodyWindows", v => { if (B.started) setOn(v); });
     S.on("cameras.bodyWindowLinger", v => { B.linger = +v; });
     S.on("cameras.bodyWindowMax", v => { B.max = +v; });
+    S.on("cameras.bodyWindowRoom", v => { B.room = +v; });
   } else {
     // no Settings window on this page: a Window-menu switch
     const ul = document.querySelector('[data-act="win"][data-win="dock"]')?.closest("ul");
@@ -3075,40 +3098,50 @@ body.phone #finale .fx-data { width: min(220px, calc(100vw - 32px)); top: 10px; 
     if (B.lastEt !== null && state.et > B.lastEt && !movie) B.clock += Math.min(now - B.lastNow, 250);
     const jumped = B.lastEt !== null && Math.abs(state.et - B.lastEt) > 6 * 3600;
     B.lastNow = now; B.lastEt = state.et;
-    if (catalog !== B.cat) { B.cat = catalog; targets = [...new Set(catalog.target)].filter(Boolean); B.rec.clear(); }
-    if (jumped) B.rec.clear();
+    // records hold mission times, so they carry over when the months around this one load; a jump starts afresh
+    const reset = jumped;
+    if (catalog !== B.cat) { B.cat = catalog; targets = [...new Set(catalog.target)].filter(Boolean); }
+    if (reset) B.rec.clear();
     // movie mode takes the camera's place: the body windows step aside until it ends
     for (const w of B.wins.values()) if (!w.el.dataset.min) w.el.hidden = !!movie;
     if (movie) return;
-    const stale = F.stale(), wanted = [];
+    const stale = F.stale(), keepKeys = [];
     let newest = null;
-    // one record per target and camera: when that camera last imaged the target, and on the linger clock when that was seen
-    for (const name of targets) {
-      let any = false;
-      for (const cam of CAMS) {
-        const k = key(name, cam), t = latestOf(name, cam);
-        if (!(state.et - t <= stale)) { B.rec.delete(k); B.dismissed.delete(k); continue; }
-        let r = B.rec.get(k);
-        if (!r || r.t !== t) { r = { t, seen: B.clock }; B.rec.set(k, r); }
-        if (!newest || t > newest.t) newest = { k, t };
-        any = true;
-      }
-      if (any) wanted.push(name);
+    // one record per target and camera: when that camera last imaged the target, and on the linger clock when that
+    // was seen. A camera that imaged its target within the stale time wants a window; an open window stays however
+    // long its camera then goes quiet (after a jump, only the recent ones do; one
+    // whose frames are no longer in the loaded months closes)
+    for (const name of targets) for (const cam of CAMS) {
+      const k = key(name, cam), t = latestOf(name, cam), w = B.wins.get(k), up = w && !w.closing;
+      if (!(t > -Infinity) || (!(state.et - t <= stale) && (!up || reset))) { B.rec.delete(k); B.dismissed.delete(k); continue; }
+      let r = B.rec.get(k);
+      if (!r || r.t !== t) { r = { t, seen: B.clock }; B.rec.set(k, r); }
+      if (r.gone && !up) continue;   // made way for others: back with its camera's next picture of the target
+      if (!newest || t > newest.t) newest = { k, t };
+      keepKeys.push(k);
     }
-    // a window stays while its camera imaged its target within the linger time; the latest picture's window always stays
-    const fresh = k => k === newest.k || (B.rec.has(k) && B.clock - B.rec.get(k).seen <= B.linger * 1000);
-    const keepKeys = wanted.flatMap(n => CAMS.map(c => key(n, c))).filter(fresh);
     for (const k of B.dismissed) if (!keepKeys.includes(k)) B.dismissed.delete(k);
-    const showKeys = keepKeys.filter(k => !B.dismissed.has(k));
+    let showKeys = keepKeys.filter(k => !B.dismissed.has(k));
     // at most max targets have windows, the most recently imaged first
     const bodies = [...new Set(showKeys.map(k => k.split("|")[0]))].sort((a, b) => latest(b) - latest(a)).slice(0, Math.max(1, B.max));
-    const show = showKeys.filter(k => bodies.includes(k.split("|")[0]));
+    let show = showKeys.filter(k => bodies.includes(k.split("|")[0]));
+    // more windows than there is room for: the least relevant make way. A window's relevance is how long ago (on the
+    // linger clock) its camera last imaged its target, over how important the picture it shows is; one goes once
+    // that is past the linger time, shortened in step with how crowded the screen is (room / windows). The latest
+    // picture's window always stays, and a window that has only just opened is never past its time.
+    if (show.length > B.room) {
+      const age = k => (B.clock - B.rec.get(k).seen) / 1000;
+      const weight = k => { const w = B.wins.get(k); return w && !w.closing ? w.update.importance() : 1; };
+      const limit = B.linger * B.room / show.length;
+      const over = show.filter(k => k !== newest.k && age(k) / weight(k) > limit).sort((a, b) => age(b) / weight(b) - age(a) / weight(a));
+      while (show.length > B.room && over.length) { const k = over.shift(); B.rec.get(k).gone = true; show = show.filter(x => x !== k); }
+    }
     for (const k of [...B.wins.keys()]) if (!show.includes(k)) close(k);
     // oldest target first, so the newest windows land on top; the narrow-angle window first, so the wide-angle one sits beside it
     for (const name of bodies.slice().reverse()) for (const cam of CAMS) {
       const k = key(name, cam); if (!show.includes(k)) continue;
       let w = B.wins.get(k);
-      if (!w || w.closing) w = open(name, cam);
+      if (!w || w.closing) { w = open(name, cam); w.update.hold = true; }   // the window, not the stale time, decides when its picture goes
       // a wide-angle window with no narrow-angle one beside it takes its place on a phone
       w.el.classList.toggle("alone", !show.includes(key(name, cam === "N" ? "W" : "N")));
       w.update(); w.update.retier();
