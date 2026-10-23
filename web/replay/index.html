@@ -455,7 +455,8 @@ function buildSky() {
   const mat = new THREE.ShaderMaterial({
     uniforms: { map: { value: null }, gain: uSkyGain },
     vertexShader: "varying vec2 vUv; void main(){ vUv = uv; gl_Position = projectionMatrix * modelViewMatrix * vec4(position, 1.0); }",
-    fragmentShader: "uniform sampler2D map; uniform float gain; varying vec2 vUv; void main(){ gl_FragColor = vec4(texture2D(map, vUv).rgb * gain, 1.0); }",
+    // a black point of 0.1 keeps the faint star haze of NASA's display curve from veiling the view in grey
+    fragmentShader: "uniform sampler2D map; uniform float gain; varying vec2 vUv; void main(){ gl_FragColor = vec4(max(texture2D(map, vUv).rgb - 0.1, 0.0) * (0.8 / 0.9) * gain, 1.0); }",
     side: THREE.DoubleSide, depthTest: false, depthWrite: false });
   skyMesh = new THREE.Mesh(new THREE.SphereGeometry(1e7, 96, 48), mat);
   // SphereGeometry puts u at (-cos 2πu, ·, sin 2πu) around its y axis; with RA = 2π(0.5 - u) that is J2000 (x, z, y)
