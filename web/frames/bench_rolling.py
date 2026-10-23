@@ -54,6 +54,7 @@ def main():
     ap.add_argument("--cache", required=True)
     ap.add_argument("--tiles", type=int, default=40, help="how many of the pass's tiles to time")
     ap.add_argument("--size", type=int, default=512)
+    ap.add_argument("--profile", action="store_true", help="print where the rolling mosaics' time goes (cProfile)")
     args = ap.parse_args()
     data_source.KEEP_SPICE_CACHE = True
     us = [u for u in obs_mosaic.units(args.target, args.obs, args.cam) if u.get("kind") == "mosaic_movie"] \
@@ -79,6 +80,10 @@ def main():
         print(json.dumps({"step": "tile", "n": n, "id": fr[n][1], "filter": fr[n][2], "s": round(s, 3),
                           "read_s": round(rs, 3), "read_mb": round(rb / 1e6, 2)}), flush=True)
     rolls, again = [], []
+    if args.profile:
+        import cProfile
+        prof = cProfile.Profile()
+        prof.enable()
     for n in range(N):
         t0 = time.perf_counter()
         made = obs_mosaic.rolling_webp(fr[n][1], args.size, args.cache, wait=True)
@@ -89,8 +94,14 @@ def main():
         rolls.append(s)
         again.append(s2)
         rep = made[1] if made else {}
-        print(json.dumps({"step": "rolling", "n": n, "s": round(s, 3), "cached_s": round(s2, 3),
-                          "tiles_drawn": rep.get("mosaic"), "places": rep.get("places")}), flush=True)
+        print(json.dumps({"step": "rolling", "n": n, "filter": fr[n][2], "place": obs_mosaic.places(u)[n], "s": round(s, 3),
+                          "cached_s": round(s2, 3), "tiles_drawn": rep.get("mosaic"), "places": rep.get("places"),
+                          "rolled": [len(v) for v in obs_mosaic._rolled.values()]}), flush=True)
+    if args.profile:
+        import pstats
+        prof.disable()
+        pstats.Stats(prof).sort_stats("cumulative").print_stats(40)
+        pstats.Stats(prof).sort_stats("tottime").print_stats(20)
     med = lambda xs: round(statistics.median(xs), 3) if xs else None
     print(json.dumps({"summary": {
         "tile_s_median": med([t[0] for t in tiles]), "tile_read_s_median": med([t[1] for t in tiles]),
