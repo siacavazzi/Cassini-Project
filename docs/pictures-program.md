@@ -70,6 +70,36 @@ At each checkpoint the lead posts in the program thread what changed, the eviden
 
 Checkpoints 1 and 2a together are the roadmap's "quickest visible win". Phase 3 has nothing visible except "the mosaic no longer shrinks when color begins", which is shown at checkpoint 4 with it.
 
+## Keep photo editing possible later (Sam, 2026-10-23 17:20Z)
+
+Sam plans a later project where users adjust a picture themselves (levels, colors, their own processing). It is not
+being built now. Every phase keeps that door open by following these rules. A review of the open work (#61, #62, #64, #66)
+found nothing that closes it.
+
+- **One pipeline in stages, each stage's settings as data.** A picture goes calibrated I/F (`load_linear`) → display
+  scale (the `scale` dict: blacks, white, gamma, shoulder, toe) → color mix (`color_mix`: matrix or false-color gains,
+  with the tables in color_matrices.json and false_color_bodies.json) → `encode`. Each stage works out its settings
+  automatically, but it must also accept them passed in, the way `load_channels(scale=...)` and
+  `color_mix(gains=...)` already do. New processing (knees, flattening, spike cleaning, centering) adds a setting with
+  an automatic default. It does not bury a fixed choice inside a function.
+- **Keep the automatic settings readable.** Where a stage works out a value (a pass's blacks and white, the per-pass
+  typical color, the seam gains), keep it in one returned object, not scattered locals, so a later editor can show it
+  as the starting point and change it.
+- **Style is set per request, in one place.** The frame server reads the look from the request (`look=`, `colors=`,
+  `center=`, the mosaic kind) into `calibration.style()`, and the cache folder follows the style. A later user edit
+  becomes one more style dimension, keyed by a hash of its settings. Do not add style switches that bypass
+  `style()` or the per-style cache.
+- **Raw stays one click away.** Every processing feature keeps its raw option (classic look, raw colors, Auto/Mosaic
+  chip, center off). An editor will start from raw or from our default.
+- **The page builds picture URLs in one place.** Keep `window.cassiniLook()` (and its successors) as the single
+  function that adds style parameters. The held window and the save button derive their URL from the shown one, so
+  whatever a user changes carries over to full view, save and export.
+- **Pre-built and placed tiles are caches, not the source** (phases 3 and 6b). The manifest stores geometry and
+  per-tile settings. Pixels can always be made again from I/F under another style, and nothing deletes the path back
+  to calibrated I/F.
+- **Mosaic scale is one per-pass object** (`pass_scale`, seam offsets and gains). A later edit to a mosaic changes that
+  object once, and every tile follows.
+
 ## Phases in order
 
 Effort comes from the reports. Phase A runs alongside 1 and 2; everything else follows the order below.
