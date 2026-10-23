@@ -532,6 +532,7 @@ body.idle .win.full .titlebar { opacity: 0; }
         <dt>Filter</dt><dd data-f="filter">—</dd>
         <dt>Color</dt><dd data-f="colour">—</dd>
         <dt>Details</dt><dd data-f="details">—</dd>
+        <dt>Credit</dt><dd><button class="credit" data-about="iss" title="Credits">NASA/JPL-Caltech/SSI</button></dd>
       </dl>
     </div>
   </section>
@@ -545,6 +546,7 @@ body.idle .win.full .titlebar { opacity: 0; }
         <dt>Status</dt><dd><span class="led"></span><span data-f="status">Camera</span></dd>
         <dt>Filter</dt><dd data-f="filter">—</dd>
         <dt>Color</dt><dd data-f="colour">—</dd>
+        <dt>Credit</dt><dd><button class="credit" data-about="iss" title="Credits">NASA/JPL-Caltech/SSI</button></dd>
       </dl>
     </div>
   </section>
@@ -718,7 +720,7 @@ body.idle .win.full .titlebar { opacity: 0; }
       w.addEventListener("click", e => { if (phone() && e.target.closest(".well, .rlwell, .mvwell")) full(w); });
     }
   }
-  const TALL = "#moments, #settings", PICTURES = ".camwin, .bodywin, #reelcard, #moviecard", MIN_W = 180;
+  const TALL = "#moments, #settings, #about", PICTURES = ".camwin, .bodywin, #reelcard, #moviecard", MIN_W = 180;
   const phone = () => document.body.classList.contains("phone");
   // zoom: the bigger standard size, and back to the size the viewer gave the window
   function zoom(w) {
@@ -810,7 +812,6 @@ body.idle .win.full .titlebar { opacity: 0; }
     if (a === "next") $("next").click();
     if (a === "go") setFocus(btn.dataset.body);
     if (a === "win") { const w = $(btn.dataset.win); (w.hidden || w.classList.contains("shaded")) ? restore(w) : minimize(w); }
-    if (a === "about") { $("loading").hidden = false; setTimeout(() => { $("loading").hidden = true; }, 1800); }
   }
   document.querySelectorAll(".menu ul").forEach(ul => ul.addEventListener("click", e => { const b = e.target.closest("button"); if (b) act(b); }));
   window.addEventListener("keydown", e => {
