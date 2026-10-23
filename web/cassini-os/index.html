@@ -7600,6 +7600,7 @@ function frame(now) {
     const l = L; L = null;
     caps.textContent = ""; clock.classList.remove("on");
     setTime(l.tau);
+    start.spend();   // playback picks up from here, which may be the very start of the data: not a second launch
     if (state.focus !== "CASSINI") setFocus("CASSINI");
     setFocus("CASSINI", 6e-5);
     setSpeed(l.speed); setPlaying(true);
