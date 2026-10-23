@@ -187,7 +187,7 @@ body.phone #flagtoast { bottom: calc(env(safe-area-inset-bottom, 0px) + 12px); }
     if (!pending) return;
     const p = pending, w = p.w, got = p.got, note = pop.querySelector("textarea").value.trim();
     close();
-    const link = new URL(location.href); link.searchParams.set("t", utc(p.et).slice(0, 19));
+    const link = new URL(window.cassiniLink ? cassiniLink.href() : location.href); link.searchParams.set("t", utc(p.et).slice(0, 19));
     const flag = {
       flagged: p.at.toISOString(), mission_utc: utc(p.et), mission_et: p.et, link: link.href,
       note, tags: [...p.tags],

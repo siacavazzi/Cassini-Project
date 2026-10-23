@@ -18,6 +18,18 @@ step, scrubbing the timeline carries the film on from the new time, and Escape (
 main play button) leaves. Frames are fetched ahead of the play head; a frame that has not arrived holds the film
 rather than being skipped.
 
+## Timeline
+
+The Cassini Replay window is mostly timeline. Its head holds the controls in one small cluster on the left (previous
+moment, play/pause, next moment, movie mode, sound), the clock in the middle, and the timeline's zoom on the right.
+The view follows the clock, turning the page when now runs off the right edge, until you move it yourself: the
+mouse wheel or a two-finger swipe over the timeline scrolls through time, as far as the mission goes, and dragging
+the top edge (the row of dates) does the same; a pinch, or ⌘/Ctrl with the wheel, zooms at the pointer. The view
+then stays where you left it while playback carries on, and the "back to now" button at the top right lights up;
+click it to center the current moment and follow it again. Jumping to a moment or clicking in the timeline (which
+moves the clock there) follows again too. The slider zooms from the whole mission (left) to ten minutes (right),
+around now while following, otherwise around the middle of the view; − and + halve and double the span.
+
 ## Window sizes and full view
 
 Every window resizes from its bottom-right corner, from a thumbnail up to the whole screen; a picture window keeps
@@ -38,12 +50,23 @@ including the main window, and a click brings it back. Settings > Interface: Doc
 menu-bar tray), Dock position (bottom, left, right), icon size and magnification. On a phone the dock is a strip under
 the replay controls that scrolls sideways.
 
+## Shareable links
+
+The address bar always holds the moment on screen (`src/link.html`), so a copied link opens on it again:
+`?t=2005-02-16T23:27:00&view=enceladus&speed=3600&play=0&cam=1.836,0.4572,-0.6478`. `t` is the mission time
+(UTC, to the second) and follows playback; `view` is `follow` (Cassini, looking where its camera points), `cassini`
+(Cassini, free camera) or a body; `cam` is where the free camera sits around it; `speed` is mission seconds per
+second; `play=0` opens paused and `movie=1` in movie mode. Other parameters (`?frames=`, `?tex=`, `?finale`) are kept.
+The page rewrites the URL with `history.replaceState` at most twice a second, so the back button is unaffected, and
+a link's view is for that visit only (it does not change the Follow camera setting). Go > Copy Link to This Moment
+(⇧⌘C) copies it.
+
 ## Phone layout
 
 On a screen under 600 px wide, or a touch screen under 500 px tall (Settings > Interface > Phone layout: Automatic,
 Always or Never; `?phone=1` forces it), the windows dock instead of floating (`src/phone.html`). Upright: the NAC
 and WAC pictures side by side under the menu bar, the 3D view in the middle, the replay controls along the bottom
-(zoom shows speeds, timeline spans and the body picker), and Moments as a sheet over the view, opened from the list
+(zoom shows speeds and the body picker), and Moments as a sheet over the view, opened from the list
 button next to the moment arrows. Sideways: the two pictures down the left edge and the controls beside them. Tap a
 picture for full screen, tap again to come back. Settings > Interface > Camera pictures on a phone (50 to 100 %) sets
 how big the docked pictures are.
@@ -66,7 +89,19 @@ In normal playback each camera window shows at most a set number of new pictures
 Cassini takes a burst of frames faster than that at the chosen speed, the clock slows down so every picture gets its
 turn, then returns to full speed once the burst is over; the status line reads "imaging burst, slowed to …" while
 it does. Change it with the slider under View > Bursts (0 to 24, 0 = no limit), or in the Settings window (Playback > Maximum images per second,
-`playback.maxImageRate`, 0 = no limit) when the page has one. Movie mode keeps its own clock.
+`playback.maxImageRate`, 0 = no limit) when the page has one. Movie mode keeps its own clock. A burst never slows the clock below a
+share of the chosen speed (Playback > Bursts slow playback to no less than, `playback.burstFloor`, 25 % by default),
+so a faster speed always plays faster: during the Saturn tour, where Cassini images almost all the time, 1 day/s used to
+crawl at about 2 min/s.
+
+## Launch
+
+Playing the mission from the very start of the data (the Launch moment does that, or `?t=1997-10-15T08:43` and
+Play), or opening `?launch`, plays a short opening (`src/launch.html`, about 25 seconds; Escape or Skip ends it, as in
+every cutscene). The data begins where the Centaur upper stage let Cassini go, 42 min 40 s after liftoff, in low Earth
+orbit: the screen fades to black, then up on Cassini on its own with Earth falling away beneath it, the clock reading
+its real distance and speed from Earth, and the captions name the plan ahead (borrow speed from Venus twice, Earth and
+Jupiter, then Saturn). Then the interface comes back and the mission plays on from there.
 
 ## Run it
 
