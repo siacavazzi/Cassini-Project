@@ -145,7 +145,8 @@ with cal.looking("balanced"):
     with cal.coloring("raw"):
         assert cal.style() == "raw" and cal.color_mix("N", ["RED", "GRN", "BL1"]) is None
     g = cal.color_mix("N", ["CB2", "MT2", "BL1"], gains=cal.balance([0.054, 0.018, 0.036]))
-    assert np.allclose(np.diag(g) * [0.054, 0.018, 0.036], 0.036)
+    lv = np.diag(g) * [0.054, 0.018, 0.036]
+    assert np.ptp(lv) < 0.5 * (0.054 - 0.018) and np.isclose(lv.sum(), 0.108)   # toward gray, brightness kept
 with cal.looking("classic"):
     assert cal.style() == "classic" and cal.color_mix("N", ["RED", "GRN", "BL1"]) is None
 # mixing a drawn picture with the identity changes nothing; tone with a mix keeps a gray pixel gray

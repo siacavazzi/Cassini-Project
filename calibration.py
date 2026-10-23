@@ -434,11 +434,18 @@ def false_gains(target, bands, camera=None):
 
 
 """
-Gains that bring each of levels to their mean (a gray body)
+False color gains that bring levels (the body's brightness per band) toward their mean, FALSE_BALANCE of the way
+in log terms, keeping their total: all the way would give a dim band like MT3 four times its brightness and throw
+whatever is not dark in it (rings, limb haze) and its noise far out, so the body is left a little tinted instead
 """
+FALSE_BALANCE = 0.6
+
+
 def balance(levels):
     mean = sum(levels) / len(levels)
-    return [mean / v for v in levels]
+    gains = [(mean / v) ** FALSE_BALANCE for v in levels]
+    k = sum(levels) / sum(g * v for g, v in zip(gains, levels))
+    return [g * k for g in gains]
 
 
 """
