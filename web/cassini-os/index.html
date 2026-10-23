@@ -999,9 +999,7 @@ body.phone #finale .fx-read { font-size: 9.5px; bottom: 9vh; }
 body.phone #finale .fx-note { bottom: 40px; }
 body.phone #finale .fx-data { width: min(220px, calc(100vw - 32px)); top: 10px; right: 10px; }
 
-#launch { position: fixed; inset: 0; z-index: 2002; pointer-events: none; overflow: hidden; }
-#launch[hidden] { display: none; }
-#launch .lx-black { position: absolute; inset: 0; background: #000; opacity: 0; }
+#launch { overflow: hidden; }
 #launch .lx-photo { position: absolute; inset: 0; opacity: 0; background: #000; overflow: hidden; }
 /* the photo whole, as tall as the screen, over a blurred and darkened copy of itself that fills the rest */
 #launch .lx-photo img { position: absolute; inset: 0; width: 100%; height: 100%; object-fit: contain; transform-origin: 50% 50%; will-change: transform; }
@@ -1009,12 +1007,7 @@ body.phone #finale .fx-data { width: min(220px, calc(100vw - 32px)); top: 10px; 
 /* the flash of liftoff, and a shade under the captions so they read over a bright photo or Earth */
 #launch .lx-flash { position: absolute; inset: 0; opacity: 0; background: radial-gradient(ellipse 80% 70% at 50% 85%, rgba(255,214,150,.9), rgba(255,170,80,.35) 50%, transparent 80%); mix-blend-mode: screen; }
 #launch .lx-shade { position: absolute; inset: 0; background: linear-gradient(to top, rgba(0,0,0,.8) 0, rgba(0,0,0,.5) 24%, rgba(0,0,0,0) 50%); }
-#launch .lx-caps { position: absolute; left: 50%; bottom: 15vh; transform: translateX(-50%); width: min(640px, calc(100vw - 32px)); display: grid; }
-#launch .lx-cap { grid-area: 1 / 1; align-self: end; text-align: center; color: var(--q-text); font: 300 19px/1.5 -apple-system, "Helvetica Neue", var(--ui);
-  letter-spacing: .01em; text-shadow: 0 1px 12px rgba(0,0,0,.9), 0 0 2px rgba(0,0,0,.8); opacity: 0; }
-#launch .lx-cap b { display: block; margin-bottom: 8px; font-weight: normal; font-size: 10.5px; letter-spacing: .22em; text-transform: uppercase; color: var(--q-dim); }
-#launch .lx-cap.big { font-size: 30px; letter-spacing: .03em; }
-#launch .lx-cap small { display: block; margin-top: 10px; font-size: 12px; color: var(--q-dim); }
+#launch .cs-cap.big { font-size: 30px; letter-spacing: .03em; }
 /* the road to Saturn: five stops on a line, each lighting up in turn */
 #launch .lx-road { display: flex; justify-content: space-between; position: relative; margin: 16px 4px 2px; }
 #launch .lx-road::before { content: ""; position: absolute; left: 6px; right: 6px; top: 5px; height: 1px; background: rgba(232,236,242,.25); }
@@ -1030,12 +1023,7 @@ body.phone #finale .fx-data { width: min(220px, calc(100vw - 32px)); top: 10px; 
 #launch .lx-clock i { font-style: normal; color: var(--q-accent); }
 #launch .lx-credit { position: absolute; left: 16px; bottom: 14px; max-width: min(460px, calc(100vw - 140px)); font-size: 10.5px; line-height: 1.4; color: rgba(232,236,242,.42); opacity: 0; transition: opacity 1.2s ease; }
 #launch .lx-credit.on { opacity: 1; }
-#launch .lx-skip { all: unset; position: absolute; right: 16px; bottom: 12px; padding: 4px 11px; border-radius: 11px; border: 1px solid var(--q-line);
-  background: rgba(16,17,20,.5); color: rgba(232,236,242,.55); font-size: 11px; cursor: pointer; pointer-events: auto; }
-#launch .lx-skip:hover { color: var(--q-text); }
-body.launch #app > :not(#gl):not(#launch) { opacity: 0 !important; pointer-events: none !important; transition: opacity 1.2s ease !important; }
-body.launch-out #app * { pointer-events: none !important; }
-body.phone #launch .lx-cap { font-size: 16px; } body.phone #launch .lx-cap.big { font-size: 23px; }
+body.phone #launch .cs-cap.big { font-size: 23px; }
 body.phone #launch .lx-road span { font-size: 11px; } body.phone #launch .lx-road small { font-size: 9.5px; }
 body.phone #launch .lx-clock { font-size: 9.5px; bottom: 9vh; }
 body.phone #launch .lx-credit { bottom: 40px; }
@@ -1268,14 +1256,14 @@ body.phone #launch .lx-credit { bottom: 40px; }
   <button class="cs-skip" type="button">Skip ▸</button>
 </section>
 
-  <section id="launch" hidden aria-live="polite">
-  <div class="lx-black"></div>
+  <section id="launch" class="cs-root" hidden aria-live="polite">
+  <div class="cs-black"></div>
   <div class="lx-flash"></div>
   <div class="lx-shade"></div>
-  <div class="lx-caps"></div>
+  <div class="cs-caps"></div>
   <div class="lx-clock" aria-hidden="true"></div>
   <div class="lx-credit"></div>
-  <button class="lx-skip" type="button">Skip ▸</button>
+  <button class="cs-skip" type="button">Skip ▸</button>
 </section>
 
   <div id="loading"><div>Starting Cassini OS<br>Loading trajectories<div class="bar"></div></div></div>
@@ -7083,8 +7071,9 @@ function frame(now) {
 <script>
 // ---------- the launch: NASA's photos of the night of October 15, 1997, then Cassini on its own in space ----------
 (function () {
-  const root = document.getElementById("launch"), black = root.querySelector(".lx-black"), flash = root.querySelector(".lx-flash");
-  const caps = root.querySelector(".lx-caps"), clock = root.querySelector(".lx-clock"), credit = root.querySelector(".lx-credit"), skipBtn = root.querySelector(".lx-skip");
+  const CS = window.cassiniCutscene, { fadeTo, sound } = CS;
+  const root = document.getElementById("launch"), black = root.querySelector(".cs-black"), flash = root.querySelector(".lx-flash");
+  const caps = root.querySelector(".cs-caps"), clock = root.querySelector(".lx-clock"), credit = root.querySelector(".lx-credit");
   // the photos, written in by build.py from launch-data.json: { role: { file, credit, focus, from: [scale, x %, y %], to: [...] } }
   const PHOTOS = {"_readme":"The photos the launch cutscene (launch.html) shows, by role, written in by build.py. file is under web/cassini-os/media/launch (resized to 1600 px from the originals at url); credit is the line shown under the photo; from/to are [scale, x %, y %] for the slow drift across it; focus is the CSS object-position of the photo when it fills a screen of another shape. Every photo here needs its own line in credits.json (the launch-photos entry).","prep":{"file":"KSC-97PC1273.jpg","credit":"NASA/KSC · KSC-97PC1273","url":"https://images.nasa.gov/details/KSC-97PC1273","alt":"Cassini, wrapped in gold foil with the Huygens probe on its side, in a clean room at Kennedy Space Center","from":[1.02,50,30],"to":[1.12,50,20]},"pad":{"file":"KSC-97PC1542.jpg","credit":"NASA/KSC · KSC-97PC1542","url":"https://images.nasa.gov/details/KSC-97PC1542","alt":"The Titan IVB/Centaur lit up on Launch Complex 40 at night, its service tower pulled back","from":[1.0,50,60],"to":[1.1,50,25]},"liftoff":{"file":"KSC-97PC1545.jpg","credit":"NASA/KSC · KSC-97PC1545","url":"https://images.nasa.gov/details/KSC-97PC1545","alt":"Liftoff: the Titan IVB clears the tower on a column of flame","from":[1.06,50,55],"to":[1.14,50,20]},"climb":{"file":"NARA-6504408.jpg","credit":"U.S. Department of Defense, Defense Visual Information Center · National Archives 6504408","url":"https://catalog.archives.gov/id/6504408","alt":"The Titan IVB climbing away from the pad on its flame","from":[1.04,50,50],"to":[1.16,45,20]},"trail":{"file":"KSC-97PC1543.jpg","credit":"NASA/KSC · KSC-97PC1543","url":"https://images.nasa.gov/details/KSC-97PC1543","alt":"A long exposure of the rocket's arc into the night sky over the booster recovery ship Liberty Star","from":[1.0,60,30],"to":[1.12,70,15]}} || {};
   // NASA's and ESA's numbers (see the note at the top)
@@ -7116,7 +7105,6 @@ function frame(now) {
   let preloaded = false;
   const tmpA = v3(), tmpB = v3(), vE = new THREE.Vector3(), vS = new THREE.Vector3();
   const clamp01 = x => Math.max(0, Math.min(1, x)), ease = k => k * k * (3 - 2 * k);
-  const sound = (what, ...a) => { if (window.cassiniSound && cassiniSound[what]) cassiniSound[what](...a); };
 
   // ---------- the photos: one layer each, drifting from `from` to `to` (scale, and the point it moves toward) ----------
   const layers = {};
@@ -7151,30 +7139,12 @@ function frame(now) {
     if (credit.textContent !== txt) { credit.textContent = txt; credit.classList.toggle("on", !!txt); }
   }
 
-  // ---------- captions and fades, on the viewer's frame clock (performance.now), so a recording keeps their pace ----------
-  const fades = new Map(), slow = matchMedia("(prefers-reduced-motion: reduce)").matches;
-  function fadeTo(el, to, secs, then) { fades.set(el, { from: +el.style.opacity || 0, to, t0: performance.now(), secs, then }); }
-  function stepFades() {
-    for (const [el, f] of fades) {
-      const k = Math.min(1, (performance.now() - f.t0) / 1000 / f.secs), o = f.from + (f.to - f.from) * ease(k);
-      el.style.opacity = o;
-      if (el.classList.contains("lx-cap") && !slow) el.style.transform = `translateY(${(1 - o) * 6}px)`;
-      if (k >= 1) { fades.delete(el); if (f.then) f.then(); }
-    }
-  }
+  // ---------- captions (cutscene.html runs them); the stops on the road light up one by one ----------
   function runCaptions(T) {
-    CAPS.forEach(([at, dur, html, cls, chord], i) => {
-      if (!L.shown[i] && T >= at && T < at + dur) {
-        const el = document.createElement("div"); el.className = "lx-cap" + (cls ? " " + cls : ""); el.innerHTML = html; caps.appendChild(el);
-        fadeTo(el, 1, 1.1); L.shown[i] = el;
-        if (chord) sound("chord", chord);
-      }
+    CS.runCaptions(caps, CAPS, T, L.shown);
+    CAPS.forEach(([at], i) => {
       const el = L.shown[i];
-      if (el && el !== true) {
-        // the stops on the road light up one by one
-        el.querySelectorAll(".lx-road span").forEach((s, j) => s.classList.toggle("on", T > at + 1 + j * 0.9));
-        if (T >= at + dur) { fadeTo(el, 0, 1, () => el.remove()); L.shown[i] = true; }
-      }
+      if (el && el !== true) el.querySelectorAll(".lx-road span").forEach((s, j) => s.classList.toggle("on", T > at + 1 + j * 0.9));
     });
   }
   // the countdown, then the mission clock from liftoff, with Cassini's distance and speed from Earth once it is in space
@@ -7195,50 +7165,32 @@ function frame(now) {
   const vT3 = v3();
 
   function play() {
-    if (L || !tracks.CASSINI || !tracks.EARTH || document.body.classList.contains("cutscene")) return;
-    L = { t0: performance.now(), phase: "photos", tau: null, shown: [], follow: state.follow, speed: state.speed, wasPlaying: state.playing };
-    if (state.follow) setFollow(false);
-    setPlaying(false);
-    controls.enabled = false;
-    root.hidden = false;
+    if (L || !tracks.CASSINI || !tracks.EARTH) return;
+    const was = { speed: state.speed };
+    if (!CS.begin("launch")) return;
+    L = Object.assign(was, { t0: performance.now(), phase: "photos", tau: null, shown: [] });
     preload();
-    document.body.classList.add("launch", "cutscene");
     fadeTo(black, 1, 0.6);   // the photos sit on the black, so a cross-fade between two never shows the 3D view
-    if (window.cassiniPerf) cassiniPerf.invalidate();
   }
-  function finish() {
-    if (!L) return;
+  // cutscene.html ends it (Escape, Skip, or the end of the scene below); the mission carries on from where the
+  // cutscene left it, or from the start of the data when it ended early
+  function onEnd() {
     const l = L; L = null;
     sound("rumble", 0);
     caps.textContent = ""; [clock, credit].forEach(e => e.classList.remove("on"));
-    fades.forEach((v, el) => { if (el !== black) fades.delete(el); });
     for (const role in layers) layers[role].el.style.opacity = 0;
     flash.style.opacity = 0;
-    cassini.visible = true; markerPts.visible = true; cassini.up.set(0, 1, 0); camera.up.set(0, 1, 0);
-    controls.enabled = true;
-    // the mission carries on from where the cutscene left it (or the start of the data, when it ended early)
     setTime(l.tau !== null ? l.tau : coverage[0]);
     spent = true;
     if (state.focus !== "CASSINI") setFocus("CASSINI");
     setFocus("CASSINI", 6e-5);
-    if (l.follow) setFollow(true);
     setSpeed(l.speed); setPlaying(true);
-    document.body.classList.add("launch-out");
-    document.body.classList.remove("launch", "cutscene");
     black.style.opacity = Math.max(+black.style.opacity || 0, 0.6);
-    fadeTo(black, 0, 1.5, () => { document.body.classList.remove("launch-out"); if (!L) root.hidden = true; });
-    if (window.cassiniPerf) cassiniPerf.invalidate();
   }
 
   // the viewer's frame loop, before it places the bodies: the launch runs its own clock
-  const prevFrame = window.studyFrame;
-  window.studyFrame = dt => {
-    if (prevFrame) prevFrame(dt);
-    stepFades();
-    if (!L && !preloaded && coverage[0] && state.et < coverage[0] + 2 * 86400) { preloaded = true; preload(); }
+  function frame() {
     if (!L) return;
-    if (window.cassiniPerf) cassiniPerf.invalidate();
-    state.playing = false;
     const T = (performance.now() - L.t0) / 1000;
     if (L.phase === "photos") {
       stepPhotos(T);
@@ -7263,12 +7215,10 @@ function frame(now) {
     runCaptions(T);
     stepClock(T);
     if (L.tau !== null) state.et = L.tau;
-    if (T >= END) finish();
-  };
+    if (T >= END) CS.end("launch");
+  }
   // in space: beside Cassini, looking past it at Earth falling away behind
-  const prevCamera = window.studyCamera;
-  window.studyCamera = () => {
-    if (prevCamera) prevCamera();
+  function camera_() {
     if (!L || L.phase !== "space") return;
     const k = (performance.now() - L.t0) / 1000 - L.spaceAt;
     relScene("EARTH", vE).sub(cassini.position);   // Cassini -> Earth
@@ -7282,27 +7232,22 @@ function frame(now) {
     camera.position.copy(cassini.position).addScaledVector(dir, -d);
     camera.up.copy(vS).addScaledVector(side, 0.08).normalize();
     camera.lookAt(cassini.position.clone().addScaledVector(toEarth, d * 0.35));
-  };
-  // playback running forward from the very start of the data starts it (the Launch moment does that)
+  }
+  CS.register("launch", { root, frame, camera: camera_, onEnd });
+  // playback running forward from the very start of the data starts it (the Launch moment does that); the data
+  // starts at separation, so the clock never crosses the launch itself and cutscene.html's crossing trigger cannot
+  // catch it. The photos load once the start of the mission is near
   let spent = false;
   const advance = window.studyAdvance;
   window.studyAdvance = (et, dt, speed) => {
     const next = advance ? advance(et, dt, speed) : et + dt * speed;
+    if (!preloaded && et < coverage[0] + 2 * 86400) { preloaded = true; preload(); }
     if (et > coverage[0] + 30) spent = false;
-    if (!L && !spent && speed > 0 && et <= coverage[0] + 1 && next > et && !document.body.classList.contains("cutscene")) { spent = true; setTimeout(play, 0); return et; }
+    if (!L && !spent && !CS.active && speed > 0 && et <= coverage[0] + 1 && next > et) { spent = true; setTimeout(play, 0); return et; }
     return next;
   };
-  window.addEventListener("keydown", e => { if (L && e.key === "Escape") { e.preventDefault(); e.stopImmediatePropagation(); finish(); } }, true);
-  skipBtn.addEventListener("click", e => { e.stopPropagation(); finish(); });
-  window.cassiniLaunch = { play, skip: finish, get running() { return !!L; } };
+  window.cassiniLaunch = { play, skip: () => CS.end("launch"), get running() { return !!L; } };
   // ?launch plays it as soon as the start of the mission is loaded
-  if (new URLSearchParams(location.search).has("launch")) {
-    const wait = setInterval(() => {
-      if (!coverage[0] || !tracks.CASSINI || $("loading") && !$("loading").hidden) return;
-      if (Math.abs(state.et - coverage[0]) > 7200) { setTime(coverage[0]); return; }
-      if (typeof yearReady === "function" && !yearReady()) return;
-      clearInterval(wait); spent = true; play();
-    }, 250);
-  }
+  CS.fromUrl("launch", () => coverage[0], () => { spent = true; play(); });
 })();
 </script>
