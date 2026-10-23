@@ -499,7 +499,8 @@ rolls off through a soft knee to at most FALSE_CHROMA[1] (on linear values, agai
 """
 FALSE_CHROMA = (0.15, 0.25)
 FALSE_REVERT = 0.1
-FALSE_DETAIL = 3.0    # ... and fine detail below this blur (pixels) taken from the straight picture
+FALSE_DETAIL = 3.0    # ... and fine detail below this blur (pixels) taken from the bands at gentler gains:
+DETAIL_SPREAD = 4.0   # none over this times another's (4x keeps the scan lines down; the full gains lift them)
 REVERT_FLOOR = 0.02   # ... where the bands' mean is at least this share of white
 
 
@@ -527,12 +528,16 @@ def apply_mix(mix, x):
         held = knee + (cap - knee) * np.tanh((sat - knee) / (cap - knee))
         k = np.where(sat > knee, held / np.maximum(sat, 1e-12), 1)
         x = lum * tint + (x - lum * tint) * k
-        # the balance's color and broad brightness, the straight picture's fine detail: a dim band's gain (MT3 on
-        # Saturn, 8 to 10) would otherwise lift its ring, limb and haze structure and noise far above the others'
+        # the balance's color and broad brightness, the fine detail of the bands at gains no more than DETAIL_SPREAD
+        # apart: a dim band's full gain (MT3 on Saturn, 8 to 10) would lift its ring, limb and haze structure and noise
+        # far above the others', while equal weights (the straight picture) lose the detail only that band shows
+        gains = np.diagonal(np.asarray(mix, np.float32))
+        gentle = np.minimum(gains, gains.min() * DETAIL_SPREAD)
+        sharp = np.tensordot(gentle / gentle.mean(), raw, axes=([0], [0])) / len(gains)
         soft = lambda v: cv2.GaussianBlur(v, (0, 0), FALSE_DETAIL)
-        base, flat = soft(x.mean(axis=0)), soft(mean)
-        ok = flat > REVERT_FLOOR
-        detail = np.where(ok, mean * base / np.maximum(flat, 1e-12), x.mean(axis=0))
+        base, flat = soft(x.mean(axis=0)), soft(sharp)
+        ok = (flat > REVERT_FLOOR) & (soft(mean) > REVERT_FLOOR)
+        detail = np.where(ok, sharp * base / np.maximum(flat, 1e-12), x.mean(axis=0))
         x = np.stack([np.where(ok, detail * soft(c) / np.maximum(base, 1e-12), c) for c in x])
     return x
 
