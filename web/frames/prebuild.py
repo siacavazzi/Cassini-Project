@@ -15,11 +15,12 @@ Phases (each its own run; a run picks up where the last one stopped, since a mad
 
 Made to share the Mac Mini with the live and preview servers: run it under `nice -n 19 taskpolicy -b` (low CPU and
 disk priority), one process with a few threads. It waits while the 1-minute load is over --max-load, while the
-live server's /health answers slower than a second, or while the pause file exists (touch it to hold the job,
+live server's (or a --watch preview's) /health answers slower than a
+second, while the LaCie (--disk) moves more than --max-tps transfers a second, or while the pause file exists (touch it to hold the job,
 remove it to go on). status.json (and a page reading it, index.html) in --status says how far it is.
 
   CASSINI_DATA=/Volumes/LaCie/cassini_lut8.zip CASSINI_KERNELS=... CASSINI_GEOMETRY_CACHE=... \\
-    nice -n 19 taskpolicy -b python web/frames/prebuild.py frames --cache /Volumes/LaCie/cassini-cache \\
+    nice -n 19 taskpolicy -b python web/frames/prebuild.py frames --cache /Volumes/cassini-cache \\
     --status web/cassini-os/prebuild
   ... prebuild.py composites --sample 200      times 200 spread-out items into a scratch cache and prints the
                                                 seconds and bytes per item (and the totals they mean)
@@ -33,6 +34,7 @@ import json
 import os
 import random
 import shutil
+import subprocess
 import sys
 import threading
 import time
@@ -147,14 +149,24 @@ def busy(args):
     load = os.getloadavg()[0]
     if load > args.max_load:
         return f"load {load:.1f} > {args.max_load}"
-    if args.live:
+    for url in filter(None, [args.live] + (args.watch or "").split(",")):
         t0 = time.monotonic()
         try:
-            urllib.request.urlopen(args.live.rstrip("/") + "/health", timeout=5).read()
+            urllib.request.urlopen(url.rstrip("/") + "/health", timeout=5).read()
         except Exception:
-            return None   # the live server down is no reason to wait
+            continue   # a server down is no reason to wait
         if time.monotonic() - t0 > 1:
-            return "live server slow"
+            return f"{url} slow"
+    if args.disk:
+        # the LaCie is a USB spinning disk: past ~100 transfers a second the previews' pictures stall
+        # (2026-10-23), so the job waits while it is that busy (its own reads and writes count too)
+        try:
+            out = subprocess.run(["iostat", "-d", "-w", "2", "-c", "2", args.disk], capture_output=True, text=True, timeout=10).stdout
+            kb, tps, mb = map(float, out.strip().splitlines()[-1].split()[:3])
+            if tps > args.max_tps:
+                return f"{args.disk} busy ({tps:.0f} transfers/s)"
+        except Exception:
+            pass
     return None
 
 
@@ -294,6 +306,9 @@ def main():
     ap.add_argument("--sample", type=int, help="only time this many items, spread over the mission")
     ap.add_argument("--max-load", type=float, default=float(os.cpu_count() or 8) * 0.8)
     ap.add_argument("--live", default="http://127.0.0.1:8765", help="the live server, waited for while slow ('' for none)")
+    ap.add_argument("--watch", default="", help="more servers to wait for while slow, comma separated (previews)")
+    ap.add_argument("--disk", help="BSD name of the LaCie (diskutil list), waited for while busier than --max-tps")
+    ap.add_argument("--max-tps", type=float, default=100)
     ap.add_argument("--pause", default="~/prebuild.pause", help="while this file exists the job waits")
     args = ap.parse_args()
     if args.phase == "count":
