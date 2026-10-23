@@ -37,6 +37,7 @@ def _timed_read_at(f, size, offset):
 
 data_source._read_at = _timed_read_at
 obs_mosaic.tiles_ahead = lambda *a, **k: None   # nothing made in the background while timing
+obs_mosaic.rolling_ahead = lambda *a, **k: None
 
 
 def reads():

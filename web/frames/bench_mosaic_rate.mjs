@@ -4,7 +4,9 @@
 //
 //   node web/frames/bench_mosaic_rate.mjs http://127.0.0.1:8790 out.json [speed=600] [seconds=90] [t=2000-11-28T12:50]
 //
-// Needs the playwright package (NODE_PATH or a node_modules beside it) and a Chromium.
+// Needs the playwright package (NODE_PATH or a node_modules beside it) and a Chromium (CHROME=its path). HEADED=1
+// runs a real window with the GPU: headless software rendering draws a few frames a second, and the clock moves
+// at most 0.1 s of playback per drawn frame, so it runs far slower than its speed.
 import { createRequire } from "module";
 import fs from "fs";
 const require = createRequire(import.meta.url);
@@ -12,9 +14,13 @@ const { chromium } = require("playwright");
 
 const [base, out, speed = "600", secs = "90", t = "2000-11-28T12:50"] = process.argv.slice(2);
 const exe = process.env.CHROME || undefined;
-const browser = await chromium.launch({ executablePath: exe, args: ["--use-gl=swiftshader", "--ignore-gpu-blocklist"] });
-const page = await browser.newPage({ viewport: { width: 1600, height: 1000 } });
-await page.goto(`${base}/?t=${t}`, { waitUntil: "load", timeout: 120000 });
+const headed = !!process.env.HEADED;
+const browser = await chromium.launch({ executablePath: exe, headless: !headed,
+  args: headed ? ["--ignore-gpu-blocklist"] : ["--use-gl=swiftshader", "--ignore-gpu-blocklist"] });
+// VIDEO=folder records the run (a .webm in that folder)
+const page = await (await browser.newContext({ viewport: { width: 1600, height: 1000 },
+  ...(process.env.VIDEO ? { recordVideo: { dir: process.env.VIDEO, size: { width: 1600, height: 1000 } } } : {}) })).newPage();
+await page.goto(`${base}/?t=${t}`, { waitUntil: "domcontentloaded", timeout: 120000 });
 // hold the clock until the page has its catalog, so every speed starts from the same moment
 await page.waitForFunction(() => typeof state !== "undefined", null, { timeout: 120000 });
 await page.evaluate(() => { setPlaying(false); performance.setResourceTimingBufferSize(100000); });
@@ -39,6 +45,7 @@ while (Date.now() < end) {
 }
 const res = await page.evaluate(() => performance.getEntriesByType("resource").filter(e => /\/frames\//.test(e.name))
   .map(e => ({ url: e.name.replace(/^https?:\/\/[^/]+/, ""), start: e.startTime, wait: e.responseStart - e.requestStart, dur: e.duration })));
+await page.context().close();
 await browser.close();
 
 // the pass: samples whose clock frame is in the observation
@@ -60,6 +67,13 @@ const summary = {
   first_mosaic_after_s: firstRolling ? +((firstRolling.t - inPass[0].t) / 1000).toFixed(1) : null,
   lag_frames: { median: pct(lags, 0.5), p90: pct(lags, 0.9), max: lags.length ? lags[lags.length - 1] : null },
   clock_frames_passed: inPass.length ? inPass[inPass.length - 1].pc - inPass[0].pc : 0,
+  // of the frames the clock passed, how many had their own picture on screen
+  frames_shown: new Set(inPass.filter(s => s.rolling).map(s => s.src)).size,
+  // pictures a second while the camera is taking its laps (the clock passing its frames at least once a second)
+  lap_pictures_per_s: (() => { let n = 0, T = 0; for (let i = 10; i < inPass.length; i += 10) { const a = inPass[i - 10], b = inPass[i], dt = (b.t - a.t) / 1000;
+    if ((b.pc - a.pc) / dt >= 1) { T += dt; n += new Set(inPass.slice(i - 10, i).map(s => s.src)).size - 1; } } return T ? +(n / T).toFixed(2) : null; })(),
+  clock_speed: inPass.length > 1 ? +((inPass[inPass.length - 1].et - inPass[0].et) / ((inPass[inPass.length - 1].t - inPass[0].t) / 1000)).toFixed(1) : null,
+  catching_up_share: inPass.length ? +(inPass.filter(s => /catching up/.test(s.hud)).length / inPass.length).toFixed(2) : 0,
   rolling_requests: rollingReq.length, rolling_ms: { median: pct(rollingReq, 0.5), p90: pct(rollingReq, 0.9), max: rollingReq[rollingReq.length - 1] },
   movie_thumb_requests: movie.filter(r => /size=128/.test(r.url)).length,
   all_frame_requests: res.length,
