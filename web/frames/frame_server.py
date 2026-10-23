@@ -51,7 +51,21 @@ Routes:
                                When the frame is in a mosaic pass (obs_mosaic: one camera and observation,
                                three or more pointings), instead the pass's mosaic so far, every tile and
                                filter, in false colour when it cycles three or more; asking for a frame of the
-                               pass starts making its tiles
+                               pass starts making its tiles. A movie pass (obs_mosaic: the camera creeps or
+                               stares) is never a mosaic; warm=1 answers {"mosaic", "movie"} for the observation;
+                               force=1 makes the pass's mosaic whatever obs_mosaic calls it (Mosaic switch)
+  /frames/movie/<ID>.webp?size=512&trail=0&color=1&center=1
+                               the frame played as a movie of its pass (obs_mosaic.movie_webp): the pass's tile
+                               (processed_frame, centred north up by SPICE) on the pass's one display scale, drawn
+                               where SPICE puts it in one view for the whole pass; color=1 draws the newest frames
+                               of the pass's color filters together, trail=N the N earlier frames of its filter
+                               fading under it; center=1 (the default) the body in the middle of every frame, when
+                               its disk fits the view. 503 while the pass is being worked out (the window shows the frame)
+  /frames/movie/<ID>.webp?mode=rolling&laps=1
+                               a mosaic movie (a raster repeated over the same places): every place's newest tile
+                               by this frame (laps=N: its N newest copies, older under newer), composed like the
+                               pass's mosaic (obs_mosaic.rolling_webp), so it never empties when a lap begins
+  /frames/movie/<ID>.json      the pass the frame is in: its frames [id, time, filter], cadence, movie/mosaic call
   /export/plan.json?from=2006-09-15T14:32&until=2006-09-15T17:12&cams=NW&fps=auto&size=1024
                                a movie export's plan (web/frames/export.py): its pictures, when each shows in the
                                film, the film's length and size; nothing is made
@@ -506,7 +520,7 @@ def make_handler(site, cache, flags=None):
 
         def end_headers(self):
             self.send_header("Access-Control-Allow-Origin", "*")
-            self.send_header("Access-Control-Expose-Headers", "X-Composite, X-Reel")
+            self.send_header("Access-Control-Expose-Headers", "X-Composite, X-Reel, X-Movie")
             if self.revalidate:
                 self.send_header("Cache-Control", "no-cache")
             super().end_headers()
@@ -722,6 +736,47 @@ def make_handler(site, cache, flags=None):
                     return self.send_bytes(data, "image/webp", headers={"X-Reel": json.dumps(report, default=str)})
                 except FileNotFoundError:
                     return self.send_error(404, "Frame not in the archive")
+            m = re.match(r"^/frames/movie/([^/]+)\.(webp|json)$", url.path)
+            if m:
+                # a frame played as a movie of its pass (obs_mosaic.movie_webp): centred by SPICE, on the pass's one
+                # display scale and one view; .json: the pass's frames, for the movie's filmstrip
+                if not FRAME_ID.match(m.group(1)):
+                    return self.send_error(400, "Not a frame id")
+                if reel._index is None:
+                    return self.send_error(404, "No index of the frames")
+                if m.group(2) == "json":
+                    info = obs_mosaic.pass_info(m.group(1), cache)
+                    return self.send_json(info) if info else self.send_error(404, "Not in a pass")
+                query = parse_qs(url.query)
+                size, fmt = size_of(query, 512), picture_format(query)
+                # full resolution: the pass's view at its longest side (obs_mosaic.OUT), as saved from the window
+                size = max(SIZES) if size == FULL else size
+                try:
+                    trail = max(0, min(obs_mosaic.TRAIL, int(query.get("trail", ["0"])[0] or 0)))
+                except ValueError:
+                    return self.send_error(400, "trail= takes a number of frames")
+                try:
+                    if query.get("mode", [""])[0] == "rolling":
+                        # a mosaic movie: every place's newest tile (laps= newest copies of each), never emptied
+                        laps = max(1, min(obs_mosaic.TRAIL, int(query.get("laps", ["1"])[0] or 1)))
+                        full = size_of(query, 512) == FULL
+                        made = obs_mosaic.rolling_webp(m.group(1), FULL if full else size, cache, laps, _mosaic_slots, fmt,
+                                                       out=min(obs_mosaic.CANVAS, FULL_MAX) if full else obs_mosaic.OUT)
+                        if made and made[0] is not None:
+                            return self.send_picture(made[0], fmt, query, f"Cassini_{m.group(1)}_mosaic_movie", {"X-Movie": json.dumps(made[1])})
+                    else:
+                        with _movie_slots:
+                            made = obs_mosaic.movie_webp(m.group(1), size, cache, trail, query.get("color", ["1"])[0] != "0",
+                                                       centre=query.get("center", ["1"])[0] != "0")
+                except (FileNotFoundError, ValueError):
+                    made = None
+                if not made:
+                    return self.send_error(404, "Not in a pass")
+                if made[0] is None:
+                    # the pass is being worked out, or SPICE could not place the frame: the window shows the frame
+                    return self.send_error(503 if made[1].get("why") == "working out the pass" else 404, made[1].get("why", ""))
+                data = made[0] if fmt == "webp" else encode(Image.open(io.BytesIO(made[0])), FULL, "png")
+                return self.send_picture(data, fmt, query, f"Cassini_{m.group(1)}_movie", {"X-Movie": json.dumps(made[1])})
             m = re.match(r"^/frames/mosaic/([^/]+)\.webp$", url.path)
             if m:
                 # the camera windows ask this for each frame: the mosaic when the frame is a new tile of a
@@ -734,24 +789,33 @@ def make_handler(site, cache, flags=None):
                     # the window will reach this frame soon: when it is in a mosaic pass, start working out the
                     # pass (its plan reads every frame of it, many seconds) and its first tiles now, and say so
                     # ({"mosaic": true}), so the window asks for that pass's mosaic in its pass lane from the start
-                    found = None
+                    # ({"movie": true}: the observation is a movie or a stare, so the window never asks for its frames)
+                    kind = {"mosaic": False, "movie": False}
                     if reel._index is not None:
                         in_background(obs_mosaic.warm_frame, m.group(1), cache)
                         try:
-                            found = obs_mosaic.unit_of(m.group(1))
+                            kind = obs_mosaic.kind_of(m.group(1))
                         except Exception:
-                            found = None
-                    return self.send_json({"mosaic": bool(found and found[0]["mosaic"])})
+                            pass
+                    return self.send_json(kind)
                 # a whole-body mosaic (obs_mosaic): the observation's mosaic so far, every filter; at full
                 # resolution, its canvas (obs_mosaic.CANVAS) up to FULL_MAX
                 if reel._index is not None:
                     try:
+                        # force=1: the window's Mosaic switch, the pass's mosaic whatever obs_mosaic calls it
                         made = obs_mosaic.mosaic_webp(m.group(1), size, cache, _mosaic_slots, fmt=fmt,
-                                                      out=min(obs_mosaic.CANVAS, FULL_MAX) if size == FULL else obs_mosaic.OUT)
+                                                      out=min(obs_mosaic.CANVAS, FULL_MAX) if size == FULL else obs_mosaic.OUT,
+                                                      force=bool(query.get("force")))
                     except FileNotFoundError:
                         made = None
                     if made:
                         return self.send_picture(made[0], fmt, query, name, {"X-Reel": json.dumps(made[1])})
+                    # a movie plays as frames: no rolling mosaic either (its drift would paste frames together)
+                    found = obs_mosaic.unit_of(m.group(1))
+                    if query.get("force"):
+                        return self.send_error(404, "No tile of this pass placed yet")
+                    if found and found[0]["movie"]:
+                        return self.send_error(404, "A movie, not a mosaic")
                 found = reel.mosaic_of(m.group(1), wait=False)
                 if not found:
                     return self.send_error(404, "Not a mosaic tile")

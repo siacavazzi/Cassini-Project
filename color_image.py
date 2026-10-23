@@ -152,17 +152,19 @@ hdr = merge every repeat exposure, whatever its exposure time, in I/F (stacking.
 instead of averaging only identical ones: the faint parts come from the long exposures, the
 bright ones from the short
 scale = a fixed display scale shared by all the pictures of a mosaic (calibration.load_channels)
+repeat_window = how close (seconds) a frame of the same filter must be to be stacked in as a repeat exposure;
+a movie taking frames faster than that passes less, so its frames are not stacked into one another
 returns (images, mask of pixels valid in every channel, the reference frame's label, report)
 where report says how each frame was calibrated and aligned
 """
-def load_aligned(paths, hdr=False, scale=None):
+def load_aligned(paths, hdr=False, scale=None, repeat_window=120):
     lbls, imgs, stacked, iofs = [], [], [], []
     for path in paths:
         iof = None
         if hdr and calibrate:
-            lbl, iof, n = stacking.load_hdr(path)
+            lbl, iof, n = stacking.load_hdr(path, repeat_window)
         if iof is None:
-            lbl, img, n = stacking.load_stacked(path, max_frames = 5 if stack_repeats else 1, count=True)
+            lbl, img, n = stacking.load_stacked(path, repeat_window, max_frames = 5 if stack_repeats else 1, count=True)
         else:
             img = lbl.resize_image()
         lbls.append(lbl)
@@ -231,10 +233,10 @@ the frame's middle at the canvas middle, rotated north up, and report["frame_off
 that middle sits relative to the target's centre (canvas pixels, x right, y down): a close-up's
 panels keep their places on the body, so they can mosaic. report["centred"] is True when the
 target's centre is on the frame. Without SPICE, the 1024 px frame as it is.
-hdr, scale = as load_aligned (for whole-observation mosaics)
+hdr, scale, repeat_window = as load_aligned (for whole-observation mosaics and movies)
 """
-def processed_frame(paths, max_offset=600, hdr=False, scale=None):
-    imgs, valid, lbl, report = load_aligned(list(paths), hdr, scale)
+def processed_frame(paths, max_offset=600, hdr=False, scale=None, repeat_window=120):
+    imgs, valid, lbl, report = load_aligned(list(paths), hdr, scale, repeat_window)
     chans = [cv2.cvtColor(img, cv2.COLOR_BGR2GRAY) if img.ndim == 3 else img for img in imgs]
     if len(chans) == 1:
         chans = chans * 3

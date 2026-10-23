@@ -52,6 +52,7 @@ body.idle #settings:not([hidden]) { opacity: 1; pointer-events: auto; }
 body.s-nolabels #labels, body.s-nolabels #reticle { display: none; }
 body.s-nohudline #hudline { display: none; }
 body.s-nochans .camwin .chans { display: none !important; }
+body.s-nofilmstrip .camwin .filmstrip { display: none !important; }
 body.s-noinfo .camwin .info { display: none; }
 body.phone #settings { left: 8px !important; top: calc(env(safe-area-inset-top, 0px) + 30px) !important; width: calc(100% - 16px) !important; height: calc(100% - 50px) !important; }
 body.phone #settings .sbody { grid-template-columns: 1fr; grid-template-rows: auto minmax(0, 1fr); }
@@ -198,7 +199,7 @@ body.phone .srow input[type=range] { width: 96px; }
   D({ key: "interface.hudline", section: "Interface", label: "Flight data strip", type: "toggle", value: true,
       hint: "Target, altitude, speed, camera and pointing along the top of the view." });
   cls("interface.hudline", "s-nohudline", false);
-  // Cameras (the camera windows read cameras.composites, cameras.steady, cameras.mosaics, cameras.fullRes, cameras.stale and cameras.lingerColor / lingerMosaic)
+  // Cameras (the camera windows read cameras.composites, cameras.steady, cameras.mosaics, cameras.passes, cameras.fullRes, cameras.fullDelay, cameras.stale and cameras.lingerColor / lingerMosaic)
   D({ key: "cameras.composites", section: "Cameras", label: "Color composites", type: "toggle", value: true,
       hint: "Once a filter set is complete, show its color picture. Off shows every frame on its own." });
   D({ key: "cameras.balancedColor", section: "Cameras", label: "Balanced color", type: "toggle", value: true,
@@ -209,6 +210,8 @@ body.phone .srow input[type=range] { width: 96px; }
   // what the frame server's picture routes are asked to add for them: nothing, the earlier stretch, or raw filters
   window.cassiniLook = () => S.get("cameras.balancedColor") === false ? "&look=classic"
     : S.get("cameras.colors") === "raw" ? "&colors=raw" : "";
+  // how a movie pass looks (Settings > Movie), for the camera windows' movie pictures and the film export alike
+  window.cassiniMovieStyle = () => `${S.get("movies.center") === false ? "&center=0" : ""}&trail=${S.get("movies.trail") || 0}&laps=${S.get("movies.laps") || 1}`;
   D({ key: "cameras.channels", section: "Cameras", label: "Filter channels", type: "toggle", value: true,
       hint: "The frames that make up a color picture, in a strip under it." });
   cls("cameras.channels", "s-nochans", false);
@@ -220,6 +223,9 @@ body.phone .srow input[type=range] { width: 96px; }
   cls("cameras.steady", "s-steady", true);
   D({ key: "cameras.mosaics", section: "Cameras", label: "Mosaics in camera windows", type: "toggle", value: true,
       hint: "When Cassini steps a camera across a body, the window builds the mosaic tile by tile. Off shows every frame on its own." });
+  D({ key: "cameras.passes", section: "Cameras", label: "Mosaic passes", type: "choice", value: "auto",
+      options: [["auto", "Auto"], ["mosaic", "Always mosaic"], ["movie", "Always movie"], ["mosaic_movie", "Always mosaic movie"]],
+      hint: "How a pass of pictures plays: Auto builds the passes that step across a body as mosaics, rolls the ones that go round the same places again and again as mosaic movies, and plays movies and stares as frames. The others force one way for every pass. The chip on a picture changes it for one pass." });
   D({ key: "cameras.fullRes", section: "Cameras", label: "Full resolution in full view", type: "toggle", value: true,
       hint: "A picture in full view (double-click it, F or the title bar button) always loads at the camera's full resolution, playing or paused, with a button to save it. Other windows show each picture at its true resolution, or smaller only when the window or screen is too small to show more." });
   D({ key: "cameras.stale", section: "Cameras", label: "Clear a quiet camera after", type: "range", value: 6, min: 1, max: 48, step: 1, unit: "h",
@@ -293,6 +299,18 @@ body.phone .srow input[type=range] { width: 96px; }
       hint: "Movie frames made by the pipeline like the camera windows' pictures: calibrated, color composites and mosaics. Off plays the archive frames as they are, with no processing. The Processed button in the Movie window (or P) switches it too." });
   D({ key: "movie.mosaics", section: "Movie", label: "Mosaics in movies", type: "toggle", value: true,
       hint: "With processed pictures on, a mosaic pass builds its mosaic in the film. Off shows each tile on its own." });
+  // movie passes in the camera and body windows (head-quiet.html cameraFeed reads these)
+  D({ key: "movies.steady", section: "Movie", label: "Steady movie passes", type: "toggle", value: true,
+      hint: "When a pass plays as a movie in a camera or body window (a stare, a ring or storm movie), every frame is centered by SPICE, north up, on one brightness scale and one size for the whole pass, so the body holds still and the picture does not pump. Off shows each frame as it is." });
+  D({ key: "movies.center", section: "Movie", label: "Center the body", type: "toggle", value: true,
+      hint: "In a steady movie pass, the body sits in the middle of every frame, north up, when its whole disk fits the picture (a moon, a planet from far off). A ring or spoke movie close to Saturn keeps its own view. Off keeps the view the frames cover, with the body where the camera put it." });
+  D({ key: "movies.filmstrip", section: "Movie", label: "Filmstrip", type: "toggle", value: true,
+      hint: "Under a window playing a movie pass: every frame of the pass along a strip, with the frames around the one shown. Click or drag along it to move through the pass." });
+  cls("movies.filmstrip", "s-nofilmstrip", false);
+  D({ key: "movies.trail", section: "Movie", label: "Rolling trail", type: "range", value: 0, min: 0, max: 12, step: 1, unit: "frames",
+      hint: "In a steady movie pass, this many earlier frames of the same filter stay under the newest one, fading with age, so a moving moon or a ring's shadow leaves a short trail. 0 shows each frame alone." });
+  D({ key: "movies.laps", section: "Movie", label: "Mosaic movies keep", type: "range", value: 1, min: 1, max: 6, step: 1, unit: "laps",
+      hint: "A mosaic movie (the camera going over the same mosaic again and again, as on the approach to Jupiter) plays as a mosaic that never empties: each new tile replaces its own earlier copy. 1 is a time-lapse; more keeps that many copies of each tile, older ones under the newest." });
   window.addEventListener("DOMContentLoaded", () => {
     const r = $("mvfps"); if (!r) return;
     try { const f = +localStorage.getItem("cassini-os-movie-fps"); if (f >= 2 && f <= 24 && !("movie.fps" in saved)) S.set("movie.fps", f); } catch (e) {}
