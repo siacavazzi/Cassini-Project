@@ -10,8 +10,9 @@ Phases (each its own run; a run picks up where the last one stopped, since a mad
               processing in them, so safe to build before the look is final
   composites  /frames/color.webp?ids=R,G,B for every filter set the page makes (its findSets rule), at 1024 (which
               also writes full) and 512, in the default look (balanced, natural colors)
-  mosaics     every mosaic pass's plan and tiles (obs_mosaic), then its mosaic so far at each of its frames, 1024
-              and 512
+  mosaics     every mosaic pass's plan and tiles (obs_mosaic), then what the window shows at each of its frames,
+              1024 and 512: its mosaic so far, or a mosaic movie's rolling picture
+  movies      the same for every movie pass: its steadied frames (movie_webp)
   processed   /frames/processed/<ID>.webp at 1024 for movie mode, every frame not in a filter set
 
 Made to share the Mac Mini with the live and preview servers: run it under `nice -n 19 taskpolicy -b` (low CPU and
@@ -48,7 +49,7 @@ import calibration  # noqa: E402
 import obs_mosaic  # noqa: E402
 import reel  # noqa: E402
 
-PHASES = ("frames", "composites", "mosaics", "processed")
+PHASES = ("frames", "composites", "mosaics", "movies", "processed")
 SET_GAP = 300   # head-quiet.html findSets
 
 
@@ -102,7 +103,13 @@ def page_sets():
 
 @functools.lru_cache(None)
 def mosaic_passes():
-    """Every pass obs_mosaic calls a mosaic, in time order."""
+    """Every pass the windows play as a mosaic or a mosaic movie, in time order."""
+    return [u for u in all_passes() if u["mosaic"] or u.get("kind") == "mosaic_movie"]
+
+
+@functools.lru_cache(None)
+def all_passes():
+    """Every pass of every observation (obs_mosaic.units), in time order."""
     idx, _ = reel.load_index()
     seen, out = set(), []
     for r in idx[["TARGET_NAME", "OBSERVATION_ID", "INSTRUMENT_ID"]].itertuples(index=False):
@@ -110,14 +117,15 @@ def mosaic_passes():
         if key in seen or not isinstance(key[1], str):
             continue
         seen.add(key)
-        out += [u for u in obs_mosaic.units(*key) if u["mosaic"]]
+        out += [u for u in obs_mosaic.units(*key) if u["frames"]]
     return out
 
 
 def items(phase):
     """(name, work) of every item of the phase, in time order; work() makes it (a made file is found, not made)."""
     if phase == "frames":
-        return [(i, lambda c, i=i: [frame_server.webp(i, s, c) for s in (1024, 512)]) for i in frame_ids()]
+        # 128: a pass's filmstrip
+        return [(i, lambda c, i=i: [frame_server.webp(i, s, c) for s in (1024, 512, 128)]) for i in frame_ids()]
     if phase == "composites":
         # 1024 first: it also writes full, and keeps the composite in memory for the 512 one
         return [("_".join(s), lambda c, s=s: [frame_server.color_webp(s, z, c) for z in (1024, 512)]) for s in page_sets()]
@@ -126,18 +134,29 @@ def items(phase):
         return [(i, lambda c, i=i: frame_server.processed_webp(i, 1024, c)) for i in frame_ids() if i not in in_sets]
     if phase == "mosaics":
         return [("_".join(map(str, u["key"])), lambda c, u=u: make_pass(u, c)) for u in mosaic_passes()]
+    if phase == "movies":
+        return [("_".join(map(str, u["key"])), lambda c, u=u: make_pass(u, c))
+                for u in all_passes() if u.get("kind") == "movie" or (u.get("movie") and not u["mosaic"])]
     raise ValueError(phase)
 
 
 def make_pass(u, cache):
-    """The pass's plan, every tile, then its mosaic so far at every frame at 1024 and 512: what mosaic_webp makes as
-    a window plays through it."""
+    """What a window shows as it plays through the pass, at every frame at 1024 and 512, after the pass's plan and
+    every tile (as web/frames/warm_pass.py does for one observation): a mosaic movie's rolling picture
+    (rolling_webp, wait=True, in frame order, so each grows from the one before and is named after every tile
+    drawn, the name a window asks for), a mosaic's mosaic so far, a movie's steadied frame."""
     p = obs_mosaic.plan(u, cache)
     for j in range(len(u["frames"])):
         obs_mosaic.tile(u, j, cache, p["display_scale"])
-    for j in range(len(u["frames"])):
+    kind = u.get("kind")
+    for j, f in enumerate(u["frames"]):
         for size in (1024, 512):
-            obs_mosaic._mosaic_at(u, j, size, cache)
+            if kind == "mosaic_movie":
+                obs_mosaic.rolling_webp(f[1], size, cache, 1, wait=True)
+            elif u["mosaic"]:
+                obs_mosaic._mosaic_at(u, j, size, cache)
+            else:
+                obs_mosaic.movie_webp(f[1], size, cache, wait=True, ahead=0)
     return len(u["frames"])
 
 
@@ -317,6 +336,8 @@ def main():
         print(json.dumps({"frames": len(frame_ids()), "sets": len(sets), "set_frames": sum(map(len, sets)),
                           "mosaic_passes": len(passes), "mosaic_frames": sum(len(u["frames"]) for u in passes)}))
         return
+    obs_mosaic.tiles_ahead = lambda *a, **k: None      # everything is made here, in order (warm_pass.py)
+    obs_mosaic.rolling_ahead = lambda *a, **k: None
     data_source = frame_server.data_source
     data_source.KEEP_SPICE_CACHE = True
     data_source._zip_index() if data_source.using_zip() else None
