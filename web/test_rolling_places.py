@@ -10,6 +10,7 @@ cache = tempfile.mkdtemp()
 offs=[(-400,-400),(400,-400),(-400,400),(400,400)]
 fr=[(f"p{i}", f"N{1500000000+i}_1", "CB2", 1000.0+30*i, 600, 0,0,1e6) for i in range(12)]
 u={"key":("JUPITER","OBS","N",0),"frames":fr,"z":1e6,"movie":False,"mosaic":True,"last":1400,"place":[i%4 for i in range(12)]}
+u["place"][1] = u["place"][3] = None                       # two frames with no place: both stay up
 d=om.folder(u,cache); os.makedirs(d+"/tiles",exist_ok=True)
 for i,(_,fid,f,t,*_r) in enumerate(fr):
     im=np.zeros((1448,1448,4),np.uint8); c=(1448-1024)//2; im[c:c+1024,c:c+1024,3]=255; im[c:c+1024,c:c+1024,:3]=60+60*(i//4)

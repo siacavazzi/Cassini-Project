@@ -1100,7 +1100,9 @@ def rolling_layout(u, n, cache, laps=1, made_only=False):
     # place leaves the copy before it up, so a place never drops out of the mosaic and comes back
     keep, seen = [], {}
     for j in range(n, -1, -1):
-        key = (where[j], u["frames"][j][2])
+        # (a frame the classifier gave no place stays up on its own, under the newer ones, rather than taking the
+        # place of every other such frame)
+        key = (where[j] if where[j] is not None else ("frame", j), u["frames"][j][2])
         if seen.get(key, 0) >= laps:
             continue
         if made_only and j != n and not os.path.exists(os.path.join(there, f"{j}.json")):
