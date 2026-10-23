@@ -1091,20 +1091,26 @@ def rolling_layout(u, n, cache, laps=1, made_only=False):
     new lap begins and each tile replaces its own earlier copy (laps=1, a time-lapse); laps=N keeps the N newest
     copies of each place, older under newer (a rolling mosaic). Drawn by so_far through filter_mosaic and
     mosaic.compose like the pass's mosaic, on its scale and in its view. made_only: only tile n is made here, the
-    other places show the tiles already made (a window playing fast never waits on the tiles it missed; warm_movie
-    makes them)."""
+    other places show the tiles already made (a window playing fast never waits on the tiles it missed;
+    tiles_ahead makes them)."""
     p = plan(u, cache)
     where = places(u)
+    there = os.path.join(folder(u, cache), "tiles")
+    # each place's newest copies that are there to draw: a copy not made yet (made_only) or one SPICE could not
+    # place leaves the copy before it up, so a place never drops out of the mosaic and comes back
     keep, seen = [], {}
     for j in range(n, -1, -1):
         key = (where[j], u["frames"][j][2])
-        if seen.get(key, 0) < laps:
-            seen[key] = seen.get(key, 0) + 1
-            keep.append(j)
-    if made_only:
-        there = os.path.join(folder(u, cache), "tiles")
-        keep = [j for j in keep if j == n or os.path.exists(os.path.join(there, f"{j}.json"))]
-    tiles = [tile(u, j, cache, p["display_scale"]) for j in sorted(keep)]
+        if seen.get(key, 0) >= laps:
+            continue
+        if made_only and j != n and not os.path.exists(os.path.join(there, f"{j}.json")):
+            continue
+        t = tile(u, j, cache, p["display_scale"])
+        if "offset" not in t:
+            continue
+        seen[key] = seen.get(key, 0) + 1
+        keep.append(t)
+    tiles = sorted(keep, key=lambda t: t["n"])
     rect = view_rect(p, tiles)
     count = {}
     for t in tiles:
