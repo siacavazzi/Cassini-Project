@@ -998,6 +998,34 @@ body.phone #finale .fx-roll dd { margin-bottom: 10px; }
 body.phone #finale .fx-read { font-size: 9.5px; bottom: 9vh; }
 body.phone #finale .fx-note { bottom: 40px; }
 body.phone #finale .fx-data { width: min(220px, calc(100vw - 32px)); top: 10px; right: 10px; }
+
+#soi { position: fixed; inset: 0; z-index: 2002; pointer-events: none; }
+#soi[hidden] { display: none; }
+#soi .sx-black { position: absolute; inset: 0; background: #000; opacity: 0; }
+#soi .sx-shade { position: absolute; inset: 0; background: linear-gradient(to top, rgba(0,0,0,.72) 0, rgba(0,0,0,.45) 22%, rgba(0,0,0,0) 46%); }
+#soi .sx-caps { position: absolute; left: 50%; bottom: 15vh; transform: translateX(-50%); width: min(640px, calc(100vw - 32px)); display: grid; }
+#soi .sx-cap { grid-area: 1 / 1; align-self: end; text-align: center; color: var(--q-text); font: 300 19px/1.5 -apple-system, "Helvetica Neue", var(--ui);
+  letter-spacing: .01em; text-shadow: 0 1px 12px rgba(0,0,0,.9), 0 0 2px rgba(0,0,0,.8); opacity: 0; }
+#soi .sx-cap b { display: block; margin-bottom: 8px; font-weight: normal; font-size: 10.5px; letter-spacing: .22em; text-transform: uppercase; color: var(--q-dim); }
+#soi .sx-cap.big { font-size: 26px; }
+#soi .sx-read { position: absolute; left: 50%; bottom: 7vh; transform: translateX(-50%); white-space: nowrap; font: 11px/1 var(--hudf); letter-spacing: .08em;
+  color: var(--q-dim); opacity: 0; transition: opacity 1.2s ease; }
+#soi .sx-read.on { opacity: 1; }
+#soi .sx-read i { font-style: normal; color: var(--q-accent); }
+#soi .sx-note { position: absolute; left: 16px; bottom: 14px; max-width: min(460px, calc(100vw - 140px)); font-size: 10.5px; line-height: 1.4; color: rgba(232,236,242,.34); opacity: 0; transition: opacity 1.5s ease; }
+#soi .sx-note.on { opacity: 1; }
+#soi .sx-skip { all: unset; position: absolute; right: 16px; bottom: 12px; padding: 4px 11px; border-radius: 11px; border: 1px solid var(--q-line);
+  background: rgba(16,17,20,.5); color: rgba(232,236,242,.55); font-size: 11px; cursor: pointer; pointer-events: auto; }
+#soi .sx-skip:hover { color: var(--q-text); }
+#soi .sx-hint { position: absolute; left: 50%; top: 18px; transform: translateX(-50%); font-size: 11px; color: rgba(232,236,242,.45); opacity: 0; transition: opacity 1.5s ease; }
+#soi .sx-hint.on { opacity: 1; }
+body.soi #gl { cursor: grab; }
+body.soi.sx-drag #gl { cursor: grabbing; }
+body.soi #app > :not(#gl):not(#soi) { opacity: 0 !important; pointer-events: none !important; transition: opacity 1.2s ease !important; }
+body.soi-out #app * { pointer-events: none !important; }
+body.phone #soi .sx-cap { font-size: 16px; } body.phone #soi .sx-cap.big { font-size: 21px; }
+body.phone #soi .sx-read { font-size: 9.5px; bottom: 9vh; white-space: normal; text-align: center; width: calc(100vw - 32px); line-height: 1.5; }
+body.phone #soi .sx-note { bottom: 40px; }
 </style>
 </head>
 <body>
@@ -1225,6 +1253,16 @@ body.phone #finale .fx-data { width: min(220px, calc(100vw - 32px)); top: 10px; 
   <div class="fx-note">An interpretation. Cassini's path is its real trajectory and the readings are what it sent; the way it fights to hold its antenna on Earth follows a rule pinned to NASA's numbers, not telemetry.</div>
   <div class="cs-hint">Drag to look around</div>
   <button class="cs-skip" type="button">Skip ▸</button>
+</section>
+
+  <section id="soi" hidden aria-live="polite">
+  <div class="sx-shade"></div>
+  <div class="sx-black"></div>
+  <div class="sx-caps"></div>
+  <div class="sx-read" aria-hidden="true"></div>
+  <div class="sx-note"></div>
+  <div class="sx-hint">Drag to look around</div>
+  <button class="sx-skip" type="button">Skip ▸</button>
 </section>
 
   <div id="loading"><div>Starting Cassini OS<br>Loading trajectories<div class="bar"></div></div></div>
@@ -3828,6 +3866,21 @@ body.phone #finale .fx-data { width: min(220px, calc(100vw - 32px)); top: 10px; 
     if (!ctx || ctx.state !== "running") return;
     const t = ctx.currentTime + 0.05;
     steps.forEach((d, i) => bell(t + i * 0.16, hz(noteOf(ROOT.W, d)), 0.085, (i / Math.max(1, steps.length - 1) - 0.5) * 0.8, 5.5, 0.45, 1));
+  };
+  // Saturn arrival (soi.html): the main engine as a low rumble, brown noise under a lowpass that wavers a little
+  let rumbleG = null;
+  window.cassiniSound.rumble = level => {
+    if (!ctx || ctx.state !== "running") return;
+    if (!rumbleG) {
+      const n = ctx.createBuffer(1, ctx.sampleRate * 4, ctx.sampleRate), d = n.getChannelData(0);
+      for (let i = 0, b = 0; i < d.length; i++) { b = (b + 0.02 * (Math.random() * 2 - 1)) / 1.02; d[i] = b * 3.5; }
+      const src = ctx.createBufferSource(); src.buffer = n; src.loop = true;
+      const f = ctx.createBiquadFilter(); f.type = "lowpass"; f.frequency.value = 170; f.Q.value = 0.7;
+      const lfo = ctx.createOscillator(), depth = ctx.createGain(); lfo.frequency.value = 0.37; depth.gain.value = 40; lfo.connect(depth); depth.connect(f.frequency); lfo.start();
+      rumbleG = ctx.createGain(); rumbleG.gain.value = 0;
+      src.connect(f); f.connect(rumbleG); rumbleG.connect(bus); src.start();
+    }
+    rumbleG.gain.setTargetAtTime(level * 0.22, ctx.currentTime, level ? 0.4 : 0.12);
   };
   // a soft low drum: a sine falling from 110 to 45 Hz
   let nextBeat = 0;
@@ -7012,5 +7065,356 @@ function frame(now) {
   CS.at(() => coverage[1] ? coverage[1] - 0.5 : null, play, endsMission);
   CS.fromUrl("finale", () => coverage[1], play, endsMission);
   window.cassiniFinale = { play, skip: finish, get running() { return !!F; } };
+})();
+</script>
+<script>
+// ---------- Saturn arrival: the orbit insertion burn, when playback reaches it ----------
+(function () {
+  const root = document.getElementById("soi"), black = root.querySelector(".sx-black"), caps = root.querySelector(".sx-caps");
+  const read = root.querySelector(".sx-read"), note = root.querySelector(".sx-note"), hint = root.querySelector(".sx-hint"), skipBtn = root.querySelector(".sx-skip");
+  // the published times and numbers, written in by build.py from soi-data.json
+  const D = {"note":"Saturn Orbit Insertion, 2004-07-01. Times are UTC at the spacecraft (SCET), the clock the replay runs on. Every number here is quoted from the sources below; soi.html derives nothing else but the running counters (rocket equation fitted to these totals).","ring_crossing":{"utc":"2004-07-01T00:47:00","from_center_km":158500,"where":"the gap between the F and G rings","source":"esa-arrival"},"burn_start":{"utc":"2004-07-01T01:12:00","source":"esa-arrival"},"burn_minutes":{"value":96.4,"source":"sfn-presoi"},"closest_approach":{"utc":"2004-07-01T02:39:00","above_clouds_km":19980,"source":"esa-arrival"},"delta_v_ms":{"value":626.17,"source":"nasa-ser-0709"},"steering":{"total_deg":46,"rate_deg_s":0.008,"source":"nasa-ser-0709"},"propellant_kg":{"value":850,"pounds":1874,"source":"sfn-goforburn"},"thrust_n":{"value":445,"pounds":100,"source":"sfn-goforburn"},"light_time_min":{"value":83,"source":"sfn-presoi"},"earth_ignition":{"local":"10:35:42 p.m. EDT, June 30","source":"sfn-presoi"},"signal_fade":{"from_min":30,"for_min":25,"why":"passing behind the A ring","source":"sfn-presoi"},"sources":{"esa-arrival":{"title":"ESA, Cassini-Huygens: approach and arrival at Saturn","url":"https://sci.esa.int/web/cassini-huygens/-/approach-and-arrival-at-saturn"},"nasa-ser-0702":{"title":"NASA, Cassini Significant Event Report for week ending 7/2/2004","url":"https://science.nasa.gov/missions/cassini/significant-event-report-for-week-ending-722004/"},"nasa-ser-0709":{"title":"NASA, Cassini Significant Event Report for week ending 7/9/2004","url":"https://science.nasa.gov/missions/cassini/significant-event-report-for-week-ending-792004"},"jpl-presskit":{"title":"NASA/JPL, Cassini-Huygens Saturn Arrival press kit (June 2004)","url":"https://www.jpl.nasa.gov/news/press_kits/cassini-arrival.pdf"},"sfn-presoi":{"title":"Spaceflight Now, Cassini orbit insertion timeline (June 29, 2004)","url":"https://spaceflightnow.com/cassini/040629presoi.html"},"sfn-goforburn":{"title":"Spaceflight Now, Cassini go for orbit insertion burn (June 30, 2004)","url":"https://spaceflightnow.com/cassini/040630goforburn.html"}}};
+  if (!D) return;
+  const T_CROSS = utcToEt(D.ring_crossing.utc), T_IGN = utcToEt(D.burn_start.utc), BURN = D.burn_minutes.value * 60, T_OFF = T_IGN + BURN;
+  const T_CA = utcToEt(D.closest_approach.utc);
+  const START = T_CROSS - 150;   // mission seconds the cutscene opens on, a little before the ring plane
+  const AFTER = 14;              // screen seconds after shutdown before it fades back to the mission
+  // the counters: constant thrust and flow, the flow and starting mass fitted so the totals are the published ones
+  const MDOT = D.propellant_kg.value / BURN, VE = D.thrust_n.value / MDOT, M0 = D.propellant_kg.value / (1 - Math.exp(-D.delta_v_ms.value / VE));
+  const dvAt = s => VE * Math.log(M0 / (M0 - MDOT * s));
+  // the clock: fast between the moments that matter, slowing toward each of them: [mission time, rate there, how fast
+  // the rate grows per mission second away from it]
+  const RMAX = 260;
+  const MOMENTS = [[T_CROSS, 6, 0.25], [T_IGN, 1, 0.8], [T_OFF, 1, 0.8]];
+  const rateAt = t => Math.min(t > T_OFF ? 90 : RMAX, ...MOMENTS.map(([m, r, k]) => r + Math.abs(t - m) * k));
+  const hhmm = et => new Date(etToMs(et)).toISOString().slice(11, 19);
+  // captions: mission seconds from ignition, screen seconds shown, the line, a class
+  const steer = D.steering.total_deg;
+  const LINES = [
+    [START - T_IGN + 1, 7, `<b>July 1, 2004 · Saturn</b>After a journey of nearly seven years, Cassini arrives.`],
+    [T_CROSS - T_IGN - 40, 8, `It crosses the ring plane through ${D.ring_crossing.where}, its dish turned forward as a shield against dust.`],
+    [T_CROSS - T_IGN + 200, 6, `Then it turns end for end, to point its main engine the way it is going.`],
+    [0, 7, `<b>${hhmm(T_IGN).slice(0, 5)} UTC · Main engine on</b>To be caught by Saturn's gravity it has to brake, for ${Math.round(D.burn_minutes.value)} minutes.`],
+    [500, 7, `One engine, ${D.thrust_n.value} newtons (${D.thrust_n.pounds} pounds) of thrust. A gentle push, about a hundredth of Earth's gravity, kept up for an hour and a half.`],
+    [1350, 7, `Nobody on Earth can watch. Its signal takes ${D.light_time_min.value} minutes to get home, so by the time Earth hears the engine start, the burn is nearly over.`],
+    [D.signal_fade.from_min * 60, 6.5, `Passing behind the A ring, its signal to Earth fades for about ${D.signal_fade.for_min} minutes.`],
+    [3150, 6.5, `It steers as it burns, turning its engine through ${steer} degrees to follow the curve of its path.`],
+    [T_CA - T_IGN - 60, 7, `<b>Closest approach</b>${fmtInt(D.closest_approach.above_clouds_km)} km above Saturn's clouds, closer than it would come again until the Grand Finale, thirteen years later.`],
+    [BURN, 6.5, `<b>${hhmm(T_OFF).slice(0, 5)} UTC · Engine off</b>${Math.round(D.delta_v_ms.value)} meters per second slower, and about ${fmtInt(D.propellant_kg.value)} kg of propellant lighter.`],
+    [BURN + 1e-3, 0, null],   // (screen-timed below)
+  ];
+  const LAST = `<b>In orbit</b>Saturn has caught it. Cassini is the first spacecraft ever to orbit Saturn, and this is the first of its 294 orbits.`;
+
+  let S = null;   // the running cutscene
+  const tmpA = v3(), tmpB = v3(), tmpC = v3();
+  const uS = new THREE.Vector3(), vS = new THREE.Vector3(), nS = new THREE.Vector3();
+  const clamp01 = x => Math.max(0, Math.min(1, x));
+  const sound = (what, ...a) => { if (window.cassiniSound && cassiniSound[what]) cassiniSound[what](...a); };
+  const playable = () => tracks.CASSINI && tracks.SATURN && bodies.SATURN && coverage[0] <= START && coverage[1] >= T_OFF + 600;
+
+  // Cassini relative to Saturn (J2000, km), its velocity direction, and the local frame in the scene:
+  // uS away from Saturn, vS along the path, nS the orbit's normal
+  function frame(et) {
+    sub(positionAt(tracks.CASSINI, et, tmpA), positionAt(tracks.SATURN, et, tmpB), tmpA);
+    sub(positionAt(tracks.CASSINI, et + 1, tmpC), positionAt(tracks.SATURN, et + 1, tmpB), tmpC);
+    const r = tmpA, v = sub(tmpC, r, tmpB);
+    toScene(r, uS).normalize(); toScene(v, vS).normalize(); nS.crossVectors(uS, vS).normalize();
+    return { r: len(r), v: len(v) };
+  }
+  function altitude(et) {
+    sub(positionAt(tracks.CASSINI, et, tmpA), positionAt(tracks.SATURN, et, tmpB), tmpA);
+    const R = iauMatrix(bodies.SATURN, et), [a, b, c] = bodies.SATURN.radii;
+    const x = dot(R[0], tmpA), y = dot(R[1], tmpA), z = dot(R[2], tmpA);
+    return len(tmpA) * (1 - 1 / Math.sqrt(x * x / (a * a) + y * y / (b * b) + z * z / (c * c)));
+  }
+
+  // ---------- the main engine: nozzle glow and plume, children of the Cassini group (metres, close-up pass) ----------
+  let glowTex = null;
+  function glowTexture() {
+    if (glowTex) return glowTex;
+    const c = document.createElement("canvas"); c.width = c.height = 64;
+    const g = c.getContext("2d"), gr = g.createRadialGradient(32, 32, 0, 32, 32, 32);
+    gr.addColorStop(0, "rgba(255,255,255,1)"); gr.addColorStop(0.25, "rgba(255,255,255,.5)"); gr.addColorStop(1, "rgba(255,255,255,0)");
+    g.fillStyle = gr; g.fillRect(0, 0, 64, 64);
+    return glowTex = new THREE.CanvasTexture(c);
+  }
+  // a soft additive shell: brightest where it is seen face-on and near its start, fading along its length, with a slow
+  // shimmer running down it. Keeps the viewer's logarithmic depth
+  function shellMaterial(near, far, fall, shimmer) {
+    return new THREE.ShaderMaterial({
+      uniforms: { glow: { value: 0 }, time: { value: 0 }, near: { value: new THREE.Color(near) }, far: { value: new THREE.Color(far) }, fall: { value: fall }, shimmer: { value: shimmer } },
+      vertexShader: `varying float vAlong; varying vec3 vN; varying vec3 vV;
+        #include <common>
+        #include <logdepthbuf_pars_vertex>
+        void main() { vAlong = -position.y; vec4 mv = modelViewMatrix * vec4(position, 1.0); vN = normalize(normalMatrix * normal); vV = normalize(-mv.xyz);
+          gl_Position = projectionMatrix * mv;
+          #include <logdepthbuf_vertex>
+        }`,
+      fragmentShader: `uniform float glow; uniform float time; uniform vec3 near; uniform vec3 far; uniform float fall; uniform float shimmer;
+        varying float vAlong; varying vec3 vN; varying vec3 vV;
+        #include <logdepthbuf_pars_fragment>
+        void main() {
+          #include <logdepthbuf_fragment>
+          float a = clamp(vAlong, 0.0, 1.0);
+          float along = exp(-fall * a) * smoothstep(1.0, 0.75, a);
+          float edge = pow(abs(dot(normalize(vN), normalize(vV))), 1.6);
+          float run = 1.0 + shimmer * (0.6 * sin(a * 31.0 - time * 23.0) + 0.4 * sin(a * 13.0 - time * 9.0 + 1.3));
+          gl_FragColor = vec4(mix(near, far, sqrt(a)) * glow * along * edge * run, 1.0);
+        }`,
+      transparent: true, blending: THREE.AdditiveBlending, depthWrite: false, side: THREE.DoubleSide });
+  }
+  function shell(r0, r1, length, mat) {
+    const geo = new THREE.CylinderGeometry(r0, r1, 1, 32, 16, true);
+    geo.translate(0, -0.5, 0);   // starts at the nozzle exit, widening along -Y over 1 m (scaled to its length)
+    const m = new THREE.Mesh(geo, mat);
+    m.scale.set(1, length, 1); m.layers.set(1); m.frustumCulled = false;
+    return m;
+  }
+  function sprite(color, size) {
+    const s = new THREE.Sprite(new THREE.SpriteMaterial({ map: glowTexture(), color, transparent: true, opacity: 0, blending: THREE.AdditiveBlending, depthWrite: false }));
+    s.scale.setScalar(size); s.layers.set(1);
+    return s;
+  }
+  function addEngine() {
+    // Cassini's two 445 N main engines hang side by side under the base, one the spare. On NASA's model each nozzle
+    // runs from its throat 2.92 m below the model's origin to an exit 3.26 m below, 0.28 m to either side of the axis,
+    // its exit 0.14 m across the radius; it fires along body +Z, away from the dish. The model's axes become the
+    // group's as (-x, z, y), so the engine fires along the group's -Z
+    const e = new THREE.Group();
+    e.position.set(-0.036, 0.279, -3.26);
+    e.quaternion.setFromUnitVectors(new THREE.Vector3(0, -1, 0), new THREE.Vector3(0, 0, -1));
+    // the exhaust: a short bright core and a long faint plume spreading wide, as exhaust does in vacuum
+    const core = shell(0.12, 0.55, 3.2, shellMaterial(0xf2f6ff, 0x9fb4ff, 2.4, 0.08));
+    const plume = shell(0.135, 5.5, 26, shellMaterial(0xc9d6ff, 0x9a6fd0, 2.6, 0.18));
+    const mouth = sprite(0xffffff, 0.75); mouth.position.set(0, -0.08, 0);
+    const flash = sprite(0xdfe8ff, 6); flash.position.set(0, -1.5, 0);
+    // the nozzle itself warming: a shell over the bell, throat (0.065 m) to exit (0.142 m)
+    const bellGeo = new THREE.CylinderGeometry(0.068, 0.146, 0.34, 32, 6, true); bellGeo.translate(0, 0.17, 0);
+    const bell = new THREE.Mesh(bellGeo, shellMaterial(0xff6a1a, 0xffb04a, 0.0, 0.0));
+    bell.layers.set(1); bell.frustumCulled = false;
+    e.add(core, plume, mouth, flash, bell);
+    cassini.add(e);
+    return { e, core, plume, mouth, flash, bell };
+  }
+  function removeEngine(x) { if (x) cassini.remove(x.e); }
+  // how hot the nozzle is (0..1): warming over a few minutes of burn, cooling over a few after it
+  function nozzleHeat(t) {
+    if (t < T_IGN) return 0;
+    const on = 1 - Math.exp(-(Math.min(t, T_OFF) - T_IGN) / 150);
+    return t <= T_OFF ? on : on * Math.exp(-(t - T_OFF) / 240);
+  }
+  function stepEngine(x, t, rate) {
+    const now = performance.now() / 1000, burning = t >= T_IGN && t < T_OFF;
+    // brightness: the first second after ignition flares, then steady with a faint flicker; out within a moment at shutdown
+    const sinceIgn = t - T_IGN, toOff = T_OFF - t;
+    let k = burning ? Math.min(1, sinceIgn / 0.6) * Math.min(1, toOff / 0.8) : 0;
+    const flick = 0.92 + 0.08 * Math.sin(now * 37) * Math.sin(now * 23.7) + 0.04 * Math.random();
+    [x.core, x.plume].forEach(m => { m.material.uniforms.glow.value = k * flick * (m === x.core ? 0.9 : 0.42); m.material.uniforms.time.value = now; });
+    x.core.scale.y = 3.2 * (0.95 + 0.1 * Math.random());
+    x.mouth.material.opacity = k * (0.85 + 0.15 * Math.random());
+    // the ignition flash, in real seconds of the mission, so it always shows
+    const fl = burning && sinceIgn < 1.6 ? Math.exp(-sinceIgn / 0.35) : 0;
+    x.flash.material.opacity = fl; x.flash.scale.setScalar(4 + 8 * (1 - fl));
+    const h = nozzleHeat(t);
+    x.bell.material.uniforms.glow.value = 0.85 * h * h;
+  }
+
+  // ---------- captions and fades, on the viewer's frame clock ----------
+  const fades = new Map(), slow = matchMedia("(prefers-reduced-motion: reduce)").matches;
+  function fadeTo(el, to, secs, then) { fades.set(el, { from: +el.style.opacity || 0, to, t0: performance.now(), secs, then }); }
+  function stepFades() {
+    for (const [el, f] of fades) {
+      const k = Math.min(1, (performance.now() - f.t0) / 1000 / f.secs), e = k * k * (3 - 2 * k), o = f.from + (f.to - f.from) * e;
+      el.style.opacity = o;
+      if (el.classList.contains("sx-cap") && !slow) el.style.transform = `translateY(${(1 - o) * 6}px)`;
+      if (k >= 1) { fades.delete(el); if (f.then) f.then(); }
+    }
+  }
+  function caption(html, cls) {
+    // one line at a time: a new line takes the place of the one before
+    caps.querySelectorAll(".sx-cap").forEach(el => { if (!el.dataset.going) drop(el); });
+    const el = document.createElement("div");
+    el.className = "sx-cap" + (cls ? " " + cls : ""); el.innerHTML = html; caps.appendChild(el);
+    fadeTo(el, 1, 1.1);
+    return el;
+  }
+  function drop(el) { el.dataset.going = 1; fadeTo(el, 0, 1, () => el.remove()); }
+
+  // ---------- looking around: a drag turns the view, the wheel zooms; it eases back a few seconds after ----------
+  const look = { yaw: 0, pitch: 0, zoom: 1, drag: null, last: 0 };
+  window.addEventListener("pointerdown", e => {
+    if (!S || e.target !== document.getElementById("gl")) return;
+    look.drag = [e.clientX, e.clientY]; look.last = performance.now(); document.body.classList.add("sx-drag"); e.stopImmediatePropagation();
+  }, true);
+  window.addEventListener("pointermove", e => {
+    if (!S || !look.drag) return;
+    look.yaw -= (e.clientX - look.drag[0]) * 0.006; look.pitch = Math.max(-1.2, Math.min(1.2, look.pitch + (e.clientY - look.drag[1]) * 0.005));
+    look.drag = [e.clientX, e.clientY]; look.last = performance.now(); e.stopImmediatePropagation();
+  }, true);
+  const up = () => { look.drag = null; look.last = performance.now(); document.body.classList.remove("sx-drag"); };
+  window.addEventListener("pointerup", up, true); window.addEventListener("pointercancel", up, true);
+  window.addEventListener("wheel", e => {
+    if (!S) return;
+    look.zoom = Math.max(0.35, Math.min(5, look.zoom * Math.exp(e.deltaY * 0.0012))); look.last = performance.now();
+    e.preventDefault(); e.stopImmediatePropagation();
+  }, { capture: true, passive: false });
+  function easeLook(dt) {
+    if (look.drag || performance.now() - look.last < 4000) return;
+    const k = 1 - Math.exp(-dt / 1.6);
+    look.yaw -= look.yaw * k; look.pitch -= look.pitch * k; look.zoom += (1 - look.zoom) * k;
+  }
+
+  function play() {
+    if (S || document.body.classList.contains("cutscene") || !playable()) return;
+    S = { t0: performance.now(), phase: "out", tau: null, shown: [], playing: state.playing, follow: state.follow, focus: state.focus, eng: null, real: null, last: false };
+    Object.assign(look, { yaw: 0, pitch: 0, zoom: 1, drag: null, last: 0 });
+    if (state.follow) setFollow(false);
+    setPlaying(false);
+    controls.enabled = false;
+    root.hidden = false;
+    document.body.classList.add("soi", "cutscene");
+    fadeTo(black, 1, 1.2);
+  }
+  // ends it at the end of the burn, and the mission plays on from there as it was
+  function finish() {
+    if (!S) return;
+    const s = S; S = null;
+    sound("rumble", 0);
+    removeEngine(s.eng);
+    markerPts.visible = true; cassini.up.set(0, 1, 0); camera.up.set(0, 1, 0);
+    controls.enabled = true;
+    caps.textContent = ""; [read, note, hint].forEach(e => e.classList.remove("on"));
+    fades.forEach((v, el) => { if (el !== black) fades.delete(el); });
+    setTime(T_OFF + 1);
+    setFocus("CASSINI");
+    if (s.follow) setFollow(true);
+    setPlaying(s.playing);
+    document.body.classList.add("soi-out");
+    document.body.classList.remove("soi", "cutscene", "sx-drag");
+    fadeTo(black, 0, 1.4, () => { document.body.classList.remove("soi-out"); if (!S) root.hidden = true; });
+    if (window.cassiniPerf) cassiniPerf.invalidate();
+  }
+
+  // is the real attitude (CK) there, with the engine facing the way Cassini moves? Checked once, at mid-burn
+  function realAttitude() {
+    if (!att) return false;
+    const q = attitudeAt(att, T_IGN + BURN / 2, new Float64Array(4));
+    if (!q) return false;
+    frame(T_IGN + BURN / 2);
+    const R = q2rows(q), bz = toScene(R[2], new THREE.Vector3()).normalize();   // body +Z: where the exhaust goes
+    return bz.dot(vS) > Math.cos(50 * Math.PI / 180);
+  }
+
+  // ---------- the viewer's hooks, chained after the finale's ----------
+  const prevFrame = window.studyFrame, prevAttitude = window.studyAttitude, prevCamera = window.studyCamera, prevAdvance = window.studyAdvance;
+  window.studyFrame = dt => {
+    if (prevFrame) prevFrame(dt);
+    stepFades();
+    if (!S) return;
+    if (window.cassiniPerf) cassiniPerf.invalidate();
+    state.playing = false;
+    easeLook(dt);
+    const T = (performance.now() - S.t0) / 1000;
+    if (S.phase === "out" && T >= 1.4) {
+      // behind the black: a few minutes before the ring plane, beside Cassini
+      S.phase = "run"; S.tau = START; S.eng = addEngine();
+      if (S.real === null) S.real = realAttitude();
+      note.innerHTML = S.real
+        ? `An interpretation. Cassini's path and its pointing are real, and the times and numbers are NASA's and ESA's; the engine's plume is drawn, not photographed.`
+        : `An interpretation. Cassini's path is real and the times and numbers are NASA's and ESA's; how it points follows the burn's published steering, and the engine's plume is drawn, not photographed.`;
+      setFocus("CASSINI", 4e-5); markerPts.visible = false;
+      fadeTo(black, 0, 2.5);
+      note.classList.add("on"); read.classList.add("on"); hint.classList.add("on");
+      S.hintOff = T + 7;
+    }
+    if (S.phase === "run") {
+      const was = S.tau;
+      S.tau += Math.min(dt, 0.1) * rateAt(S.tau);
+      if (T > S.hintOff) hint.classList.remove("on");
+      if (S.tau > T_IGN + 300) note.classList.remove("on");
+      const s = S.tau - T_IGN;
+      LINES.forEach(([at, dur, html], i) => { if (html && !S.shown[i] && s >= at) S.shown[i] = { el: caption(html), until: T + dur }; });
+      S.shown.forEach(x => { if (x && x.el && !x.el.dataset.going && T > x.until) drop(x.el); });
+      if (was < T_IGN && S.tau >= T_IGN) S.tau = Math.max(S.tau, T_IGN);   // the ignition lands on its second
+      if (S.tau >= T_IGN && S.tau < T_OFF) sound("rumble", Math.min(1, (S.tau - T_IGN) / 1.5));
+      if (was < T_OFF && S.tau >= T_OFF) { sound("rumble", 0); sound("bell"); S.offAt = T; }
+      if (S.offAt && T > S.offAt + 6.5 && !S.last) { S.last = caption(LAST, "big"); S.lastUntil = T + 7; sound("chord", [0, 2, 4, 7]); read.classList.remove("on"); }
+      if (S.last && T > S.lastUntil && !S.closing) { S.closing = T; drop(S.last); fadeTo(black, 1, 1.6); }
+      if (S.closing && T > S.closing + 1.7) { finish(); return; }
+    }
+    if (S && S.tau !== null) state.et = S.tau;
+  };
+  // how Cassini points: the real attitude when it is there and fits, otherwise the rule in the header
+  window.studyAttitude = () => {
+    if (prevAttitude) prevAttitude();
+    if (!S || S.phase !== "run") return;
+    const t = S.tau;
+    frame(t);
+    if (!S.real) {
+      // the exhaust direction (body +Z, the group's -Z): along the path during the burn, steering at a steady rate;
+      // against it through the ring plane (the dish forward); turning end for end between
+      if (!S.d0) { frame(T_IGN); S.d0 = vS.clone(); S.axis = nS.clone(); frame(t); }
+      const ex = S.d0.clone().applyAxisAngle(S.axis, steer * Math.PI / 180 * clamp01((t - T_IGN) / BURN));
+      const w = clamp01((t - (T_CROSS + 120)) / (T_IGN - 60 - (T_CROSS + 120)));
+      const turn = w * w * (3 - 2 * w);
+      // the dish forward: exhaust backward. Turned about the orbit normal so it swings end for end in the plane
+      const back = vS.clone().negate();
+      const ang = back.angleTo(ex), ax = new THREE.Vector3().crossVectors(back, ex);
+      if (ax.lengthSq() < 1e-12) ax.copy(nS); else ax.normalize();
+      const exNow = back.applyAxisAngle(ax, ang * turn);
+      cassini.up.copy(uS);
+      cassini.lookAt(cassini.position.clone().sub(exNow));   // the group's +Z (the dish) points away from the exhaust
+    }
+    if (S.eng) stepEngine(S.eng, t, rateAt(t));
+    const h = altitude(t), v = frame(t).v, s = t - T_IGN;
+    const burning = s >= 0 && s < BURN, done = s >= BURN;
+    const fade = s > D.signal_fade.from_min * 60 && s < (D.signal_fade.from_min + D.signal_fade.for_min) * 60;
+    const clock = `${hhmm(t)} UTC`;
+    if (s < 0) read.innerHTML = `${clock} · ${fmtInt(h)} km above the clouds · <i>${v.toFixed(1)} km/s</i>` + (Math.abs(t - T_CROSS) < 200 ? ` · <i>Ring plane</i>` : "");
+    else {
+      const b = Math.min(s, BURN), mm = Math.floor(b / 60), ss = Math.floor(b % 60);
+      read.innerHTML = `${clock} · Burn <i>${mm}:${String(ss).padStart(2, "0")}</i> · Braked <i>${Math.round(dvAt(b))} m/s</i> · Propellant <i>${fmtInt(MDOT * b)} kg</i> · ${fmtInt(h)} km up` + (fade ? ` · Signal <i>behind the A ring</i>` : "") + (done ? ` · <i>Engine off</i>` : "");
+    }
+  };
+  // the camera: beside Cassini, a little behind and above it with Saturn below, drifting round; after the burn it
+  // pulls back to show it on its way around Saturn
+  window.studyCamera = () => {
+    if (prevCamera) prevCamera();
+    if (!S || S.phase !== "run") return;
+    const t = S.tau, T = (performance.now() - S.t0) / 1000;
+    frame(t);
+    const prog = clamp01((t - START) / (T_OFF - START));
+    const az = (62 + 70 * prog) * Math.PI / 180 + look.yaw, el = 0.22 - 0.1 * prog + look.pitch;
+    const dir = vS.clone().negate().multiplyScalar(Math.cos(az)).addScaledVector(nS, Math.sin(az)).normalize();
+    dir.multiplyScalar(Math.cos(el)).addScaledVector(uS, Math.sin(el)).normalize();
+    let d = (t < T_IGN ? 3.4e-5 : 4.2e-5) * look.zoom;
+    if (S.offAt) d *= Math.exp(Math.min(9, (T - S.offAt) * 0.75));   // pull back: tens of metres to hundreds of km
+    // during the burn, aim a little ahead of Cassini so the plume, which goes forward, sits in the frame
+    const aim = cassini.position.clone();
+    if (t >= T_IGN && !S.offAt) aim.addScaledVector(vS, 6e-6 * clamp01((t - T_IGN) / 3));
+    camera.position.copy(aim).addScaledVector(dir, d);
+    camera.up.copy(uS);
+    camera.lookAt(aim);
+  };
+  // playback crossing the ignition starts it
+  window.studyAdvance = (et, dt, speed) => {
+    const next = prevAdvance ? prevAdvance(et, dt, speed) : et + dt * speed;
+    if (!S && et < T_IGN && next >= T_IGN && playable()) setTimeout(play, 0);
+    return next;
+  };
+  window.addEventListener("keydown", e => { if (S && e.key === "Escape") { e.preventDefault(); e.stopImmediatePropagation(); finish(); } }, true);
+  skipBtn.addEventListener("click", e => { e.stopPropagation(); finish(); });
+  window.cassiniSOI = { play, skip: finish, get running() { return !!S; }, data: D };
+  // ?soi plays it as soon as the arrival is loaded
+  if (new URLSearchParams(location.search).has("soi")) {
+    const wait = setInterval(() => {
+      if (!coverage[1] || !tracks.CASSINI || $("loading") && !$("loading").hidden) return;
+      if (coverage[0] > START || coverage[1] < T_OFF + 600) { clearInterval(wait); return; }
+      if (Math.abs(state.et - T_IGN) > 7200) { setTime(T_IGN - 1800); return; }
+      if (typeof yearReady === "function" && !yearReady()) return;
+      if (!playable()) return;
+      clearInterval(wait); play();
+    }, 250);
+  }
 })();
 </script>
