@@ -158,9 +158,12 @@ First batch: phases 1, 2a and A at once. Second batch: 2b once checkpoint 2 is a
 
 ## Status
 
-| Phase | Thread | PR | Preview | State |
-|---|---|---|---|---|
-| 1 | Mosaics stop jumping | | 8791 | building |
-| 2a | Color display fixes | | 8792 | building |
-| A | Composite drill-down | | 8793 | building |
-| 2b, 3-8 | | | | waiting |
+| Phase | PR | Preview | State |
+|---|---|---|---|
+| 1 Mosaic or movie | #61 | 8791 | reworked (three kinds, switch); waiting on Sam |
+| M Movies worth watching | #64 | 8794 | ready with #61; waiting on Sam |
+| 2a Color display | #63 | 8792 | **merged into `pictures`** 2026-10-23 after Sam's "big improvement" |
+| 2b Natural color + false-color rules | | 8792 | starting |
+| A Composite drill-down | #62 | 8793 | waiting on Sam |
+| R Sharper previews | | | proposed, waiting on Sam |
+| 3-8 | | | waiting |
