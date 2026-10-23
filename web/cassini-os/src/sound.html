@@ -251,6 +251,36 @@ body.phone #ssound { width: 30px; height: 30px; }
     return off.startRendering();
   }
   window.cassiniSound = { render, get intensity() { return intensity; } };
+  // the Grand Finale (finale.html): Cassini's radio carrier as a pure tone that wavers as the antenna wobbles off Earth
+  // and stops at loss of signal; a low B minor drone that grows with the struggle; one low bell at the break-up; and a
+  // slow chord under each line of the recap (steps on the scale, so the recap can open from minor to major)
+  let carrierTone = null, droneG = null;
+  window.cassiniSound.carrier = (level, waver) => {
+    if (!ctx || ctx.state !== "running") return;
+    if (!carrierTone) { carrierTone = hum(0, "sine"); carrierTone.o.forEach(o => { o.frequency.value = hz(noteOf(ROOT.N, 4)); }); carrierTone.f.frequency.value = 1600; }
+    const t = ctx.currentTime;
+    carrierTone.depth.gain.setTargetAtTime(waver * 30, t, 0.2); carrierTone.lfo.frequency.setTargetAtTime(2 + 9 * waver, t, 0.3);
+    carrierTone.g.gain.setTargetAtTime(level * 0.03, t, level ? 0.3 : 0.02);
+  };
+  window.cassiniSound.drone = level => {
+    if (!ctx || ctx.state !== "running") return;
+    if (!droneG) {
+      const f = ctx.createBiquadFilter(); f.type = "lowpass"; f.frequency.value = 520; droneG = ctx.createGain(); droneG.gain.value = 0;
+      f.connect(droneG); droneG.connect(bus);
+      [35, 42, 47, 50].forEach((m, i) => { const o = ctx.createOscillator(); o.type = i ? "sine" : "triangle"; o.frequency.value = hz(m); o.detune.value = (i % 2 ? 1 : -1) * 5; o.connect(f); o.start(); });   // B1 F#2 B2 D3
+    }
+    droneG.gain.setTargetAtTime(level * 0.05, ctx.currentTime, level ? 1.2 : 0.08);
+  };
+  window.cassiniSound.bell = () => {
+    if (!ctx || ctx.state !== "running") return;
+    const t = ctx.currentTime + 0.02;
+    bell(t, hz(35), 0.25, 0, 7, 1.2, 1.4); bell(t + 0.01, hz(47), 0.12, 0, 6, 0.8, 2);
+  };
+  window.cassiniSound.chord = (steps = [0, 2, 4]) => {
+    if (!ctx || ctx.state !== "running") return;
+    const t = ctx.currentTime + 0.05;
+    steps.forEach((d, i) => bell(t + i * 0.16, hz(noteOf(ROOT.W, d)), 0.085, (i / Math.max(1, steps.length - 1) - 0.5) * 0.8, 5.5, 0.45, 1));
+  };
   // a soft low drum: a sine falling from 110 to 45 Hz
   let nextBeat = 0;
   function thump(t, g) {
