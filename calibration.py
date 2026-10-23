@@ -251,6 +251,13 @@ def calibrate(png, info, image=None):
         return None
 
     bias = float(_value(info, "BIAS_STRIP_MEAN", "0"))
+    if bias <= 0 and ds.lut8():
+        # a frame that lost lines in transmission can lose its bias strip with them (a negative strip mean, as
+        # in the last frames of the 2006-12-04 spoke movie): dark sky sits at the bias level, so put it at the
+        # darkest 0.1% of the frame, leaving out the lost lines (code 0)
+        stored = stored_values(png, info)
+        kept = stored[np.asarray(png) > 0]
+        bias = float(np.percentile(kept, 0.1)) if kept.size else 0.0   # (a TABLE frame's in codes, as its strip mean)
     if _value(info, "DATA_CONVERSION_TYPE") == "TABLE":
         dn = np.interp(dn, np.arange(256), LUT)
         bias = LUT[int(min(max(bias, 0), 255))]
