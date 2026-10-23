@@ -36,6 +36,12 @@ Routes:
   ...&channel=0|1|2            one channel of that composite (0 red, 1 green, 2 blue), black and white, cut
                                from the same composite so it keeps the composite's shared brightness scale and
                                alignment: what a composite's channel looks like opened on its own (drill-down)
+  ...&center=1                 Auto center (a camera window's setting): the picture centred on the body, north up,
+                               by SPICE (color_image.processed_frame), in a square view decided once for the pass
+                               (obs_mosaic.centre_view, the rule of a movie centred on its body) so it keeps one size.
+                               404 with X-Center {"centre": false, "why"} when the pass is not centred (rings, sky,
+                               a body too big for the view), and the window shows the picture as it is. Also on
+                               /frames/processed below
   /frames/processed/<ID>.webp?size=512
                                the frame alone made like a composite's channel (color_image.load_aligned with
                                one frame: repeat exposures stacked, lost pixels transparent, calibrated to I/F
@@ -261,6 +267,8 @@ def webp(frame_id, size, cache, fmt="webp"):
 # pictures made before the balanced display model and raw colors the balanced ones made before natural color
 COLOR_VERSIONS = {"balanced": "color-v27", "raw": "color-v10", "classic": "color-v4"}
 PROC_VERSIONS = {"balanced": "proc-v7", "raw": "proc-v7", "classic": "proc-v1"}   # one frame: no colors to mix
+# Auto center (center=1): the same pictures centred on the body by SPICE, cached beside them in folders of their own
+CENTRE_VERSION = "ctr1"
 
 
 def in_background(target, *args):
@@ -268,15 +276,18 @@ def in_background(target, *args):
     threading.Thread(target=contextvars.copy_context().run, args=(target, *args), daemon=True).start()
 
 
-def composite(ids, channel=None):
+def composite(ids, channel=None, centre=None):
     """RGBA composite of the frames ids (R,G,B, or longer and shorter wavelength), 1024 px, made by the
     pipeline's color path (color_image.load_aligned: repeat exposures stacked, calibrated, aligned),
     and a report of how each channel was made. One id makes the frame alone, black and white (LA);
-    channel=0|1|2 the composite's red, green or blue alone, black and white on the composite's scale (LA)."""
+    channel=0|1|2 the composite's red, green or blue alone, black and white on the composite's scale (LA).
+    centre: Auto center's view for the pass (obs_mosaic.centre_view), when the picture is centred on the body."""
     if channel is not None:
-        im, report = _recent_composite(ids)
+        im, report = _recent_composite(ids, centre)
         bands = im.split()
         return Image.merge("LA", (bands[channel], bands[-1])), dict(report, channel=channel)
+    if centre:
+        return centred(ids, centre)
     imgs, valid, _, report = color_image.load_aligned([f"{FOLDERS[i[0]]}/{i}.png" for i in ids])
     chans = [img[..., 0] if img.ndim == 3 else img for img in imgs]
     alpha = np.where(valid, 255, 0).astype(np.uint8)
@@ -288,18 +299,42 @@ def composite(ids, channel=None):
     return Image.fromarray(np.dstack(chans + [alpha]), "RGBA"), report
 
 
+def centred(ids, view):
+    """The composite of ids (or one frame) centred on the body, north up: the pipeline's color path and SPICE
+    placement (color_image.processed_frame: load_aligned as composite, then auto_center), cut to the square of
+    view["side"] full resolution pixels round the body's centre that Auto center chose for the pass
+    (obs_mosaic.centre_view). RGBA (LA for one frame) and the report; LookupError when SPICE cannot place it."""
+    image, _, report = color_image.processed_frame([f"{FOLDERS[i[0]]}/{i}.png" for i in ids])
+    if "frame_offset" not in report:
+        raise LookupError(report.get("why", "not placed by SPICE"))
+    # processed_frame puts the frame's middle at the canvas middle; the body's centre is frame_offset from it
+    h, w = image.shape[:2]
+    side = int(view["side"])
+    cx = (w - 1) / 2 - report["frame_offset"][0]
+    cy = (h - 1) / 2 - report["frame_offset"][1]
+    left, top = round(cx - side / 2), round(cy - side / 2)
+    out = np.zeros((side, side, 4), np.uint8)
+    x0, y0, x1, y1 = max(left, 0), max(top, 0), min(left + side, w), min(top + side, h)
+    if x0 < x1 and y0 < y1:
+        out[y0 - top:y1 - top, x0 - left:x1 - left] = image[y0:y1, x0:x1]
+    report = dict(report, ids=list(ids), centred_view={"side": side, "pass": view.get("pass")})
+    if len(ids) == 1:
+        return Image.fromarray(np.ascontiguousarray(out[..., [0, 3]]), "LA"), report
+    return Image.fromarray(out, "RGBA"), report
+
+
 # the last few composites made, so a window opening each of a set's channels in turn runs load_aligned once
 _recent, _recent_lock, RECENT = {}, threading.Lock(), 4
 
 
-def _recent_composite(ids):
-    key = (calibration.style(), tuple(ids))
+def _recent_composite(ids, centre=None):
+    key = (calibration.style(), tuple(ids), centre and centre["side"])
     with _recent_lock:
         hit = _recent.pop(key, None)
         if hit:
             _recent[key] = hit
             return hit
-    made = composite(ids)
+    made = composite(ids, centre=centre)
     with _recent_lock:
         _recent[key] = made
         while len(_recent) > RECENT:
@@ -307,16 +342,21 @@ def _recent_composite(ids):
     return made
 
 
-def color_webp(ids, size, cache, fmt="webp", channel=None):
+def centre_folder(folder, centre):
+    """The cache folder of the pictures in folder, centred by Auto center on a view of centre["side"] px."""
+    return f"{folder}-{CENTRE_VERSION}-s{int(centre['side'])}" if centre else folder
+
+
+def color_webp(ids, size, cache, fmt="webp", channel=None, centre=None):
     """The composite (or one of its channels) as WebP (or PNG), and its report (also kept in the cache, next to
-    the image)."""
+    the image). centre: centred on the body (composite)."""
     # bumped whenever the way composites are made changes, so older ones are not served again
-    folder = os.path.join(cache, COLOR_VERSIONS[calibration.style()])
+    folder = centre_folder(os.path.join(cache, COLOR_VERSIONS[calibration.style()]), centre)
     base = os.path.join(folder, size_dir(size, fmt), "_".join(ids) + ("" if channel is None else f"_c{channel}"))
     report = {}
     def make():
         with _color_slots:
-            im, made = composite(ids, channel) if channel is not None else _recent_composite(ids)
+            im, made = composite(ids, channel, centre) if channel is not None else _recent_composite(ids, centre)
         report.update(made)
         cached(base + ".json", lambda: json.dumps(made).encode())
         print("composite", json.dumps(made))
@@ -337,15 +377,15 @@ def color_webp(ids, size, cache, fmt="webp", channel=None):
     return data, report
 
 
-def processed_webp(frame_id, size, cache, fmt="webp"):
+def processed_webp(frame_id, size, cache, fmt="webp", centre=None):
     """One frame made like a composite's channel (composite with one id: repeat exposures stacked, lost pixels
     filled, calibrated to I/F and put on the pipeline's display scale), for movie mode; and its report. Cached
-    like the composites."""
-    base = os.path.join(cache, PROC_VERSIONS[calibration.style()], size_dir(size, fmt), frame_id)
+    like the composites. centre: centred on the body (composite)."""
+    base = os.path.join(centre_folder(os.path.join(cache, PROC_VERSIONS[calibration.style()]), centre), size_dir(size, fmt), frame_id)
     report = {}
     def make():
         with _movie_slots:
-            im, made = composite([frame_id])
+            im, made = composite([frame_id], centre=centre)
         report.update(made)
         cached(base + ".json", lambda: json.dumps(made).encode())
         return encode(im, size, fmt)
@@ -553,7 +593,7 @@ def make_handler(site, cache, flags=None):
 
         def end_headers(self):
             self.send_header("Access-Control-Allow-Origin", "*")
-            self.send_header("Access-Control-Expose-Headers", "X-Composite, X-Reel, X-Movie")
+            self.send_header("Access-Control-Expose-Headers", "X-Composite, X-Reel, X-Movie, X-Center")
             if self.revalidate:
                 self.send_header("Cache-Control", "no-cache")
             super().end_headers()
@@ -599,6 +639,30 @@ def make_handler(site, cache, flags=None):
             if query.get("download", ["0"])[0] == "1":
                 headers["Content-Disposition"] = f'attachment; filename="{name}.{fmt}"'
             return self.send_bytes(data, "image/png" if fmt == "png" else "image/webp", headers=headers)
+
+        def centre_of(self, query, frame_id):
+            """center=1 (Auto center in a camera window): the pass's centred view (obs_mosaic.centre_view), or None
+            for the picture as it is. False when the pass is not centred: the answer (404, X-Center says why)
+            is sent, so the window shows the picture as it is for the whole pass."""
+            if query.get("center", ["0"])[0] != "1" or reel._index is None:
+                return None
+            try:
+                view = obs_mosaic.centre_view(frame_id)
+            except Exception as e:
+                view = {"centre": False, "why": f"{type(e).__name__}: {e}"[:200]}
+            if view.get("centre"):
+                return view
+            self.not_centred(view)
+            return False
+
+        def not_centred(self, view):
+            body = json.dumps(view).encode()
+            self.send_response(404)
+            self.send_header("Content-Type", "application/json")
+            self.send_header("X-Center", json.dumps(view))
+            self.send_header("Content-Length", str(len(body)))
+            self.end_headers()
+            self.wfile.write(body)
 
         def do_POST(self):
             self.started = time.monotonic()
@@ -745,22 +809,32 @@ def make_handler(site, cache, flags=None):
                     name = f"Cassini_{'_'.join(ids)}_green"
                 else:
                     name = f"Cassini_{ids[channel if len(ids) == 3 else channel // 2]}_in_color"
+                centre = self.centre_of(query, ids[-1])
+                if centre is False:
+                    return
                 try:
-                    data, report = color_webp(ids, size, cache, fmt, channel)
+                    data, report = color_webp(ids, size, cache, fmt, channel, centre)
                     return self.send_picture(data, fmt, query, name, {"X-Composite": json.dumps(report)})
                 except FileNotFoundError:
                     return self.send_error(404, "Frame not in the archive")
+                except LookupError as e:
+                    return self.not_centred({"centre": False, "frame": True, "why": str(e)[:200]})
             m = re.match(r"^/frames/processed/([^/]+)\.webp$", url.path)
             if m:
                 if not FRAME_ID.match(m.group(1)):
                     return self.send_error(400, "Not a frame id")
                 query = parse_qs(url.query)
                 size, fmt = size_of(query, 512), picture_format(query)
+                centre = self.centre_of(query, m.group(1))
+                if centre is False:
+                    return
                 try:
-                    data, report = processed_webp(m.group(1), size, cache, fmt)
+                    data, report = processed_webp(m.group(1), size, cache, fmt, centre)
                     return self.send_picture(data, fmt, query, f"Cassini_{m.group(1)}_processed", {"X-Composite": json.dumps(report)})
                 except FileNotFoundError:
                     return self.send_error(404, "Frame not in the archive")
+                except LookupError as e:
+                    return self.not_centred({"centre": False, "frame": True, "why": str(e)[:200]})
             if url.path == "/reel/bodies.json":
                 return self.send_bytes(json.dumps(reel.bodies()).encode(), "application/json", False)
             m = re.match(r"^/reel/([A-Z0-9_]+)\.json$", url.path)
