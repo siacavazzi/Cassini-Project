@@ -698,9 +698,13 @@ function assemble(parts) {
   lastTrailEt = -1e99;
   if ($("mlist").children.length) scrollMoments();
 }
-// load the years around y; calls made while loading only keep the latest year asked for
+// load the years around y; calls made while loading only keep the latest year asked for, and a call made while
+// a download is under way does not wait for it: the chunk under the new moment goes first
+let yearsWake = null;   // ends the current wait when another year is asked for
+const orJump = job => Promise.race([job, new Promise(r => { yearsWake = r; })]).finally(() => { yearsWake = null; });
 function requestYears(y) {
   yearsWanted = y;
+  if (yearsWake) yearsWake();
   if (!yearsJob) yearsJob = (async () => {
     try {
       while (yearsWanted !== null) {
@@ -710,12 +714,19 @@ function requestYears(y) {
         keepYears = ys;
         try {
           // the year on screen first, on its own so it has the whole connection, and shown as soon as
-          // it is in; its neighbours are downloaded after it and added when they arrive
+          // it is in; its neighbours are downloaded after it and added when they arrive. A jump meanwhile
+          // leaves these downloads to finish into the cache (the ones the new moment shares are reused)
           if (!activeYears.includes(y) && ys.length > 1) {
-            assemble([await loadPart(y)]);
+            const one = loadPart(y);
+            await orJump(one);
+            if (yearsWanted !== null) { one.catch(() => {}); continue; }
+            assemble([await one]);
             if (yearsWanted !== null) continue;
           }
-          assemble(await Promise.all(ys.map(loadPart)));
+          const all = Promise.all(ys.map(loadPart));
+          await orJump(all);
+          if (yearsWanted !== null) { all.catch(() => {}); continue; }
+          assemble(await all);
         }
         catch (err) {
           console.warn("year not loaded", err); setText("yload", "Could not load " + ys.map(partLabel).join(", "));
