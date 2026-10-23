@@ -6728,12 +6728,18 @@ function frame(now) {
     return el;
   }
   function drop(el) { fadeTo(el, 0, 1.1, () => el.remove()); }
-  // one line at a time in a caption box: a new line takes the place of the one before (null just takes it down)
+  // one line at a time in a caption box: a new line takes the place of the one before, which goes quickly first so the
+  // two never sit on top of each other (null just takes it down)
   const lines = new WeakMap();
   function line(caps, html, cls) {
     const was = lines.get(caps);
-    if (was && was.isConnected) drop(was);
-    const el = html == null ? null : caption(caps, html, cls);
+    let el = null;
+    if (html != null) {
+      el = document.createElement("div");
+      el.className = "cs-cap" + (cls ? " " + cls : ""); el.innerHTML = html; el.style.opacity = 0; caps.appendChild(el);
+    }
+    const show = () => { if (el) fadeTo(el, 1, 1.2); };
+    if (was && was.isConnected) fadeTo(was, 0, 0.4, () => { was.remove(); show(); }); else show();
     lines.set(caps, el);
     return el;
   }
