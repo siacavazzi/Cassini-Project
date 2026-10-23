@@ -7160,7 +7160,7 @@ function frame(now) {
     const s = L.tau - LAUNCH_MS / 1000 + etToMs(0) / 1000;
     sub(positionAt(tracks.CASSINI, L.tau, tmpA), positionAt(tracks.EARTH, L.tau, tmpB), tmpA);
     const d = len(tmpA), rate = (len(sub(positionAt(tracks.CASSINI, L.tau + 1, tmpB), positionAt(tracks.EARTH, L.tau + 1, vT3), tmpB)) - d);
-    clock.innerHTML = `T+<i>${hms(s)}</i> · ${fmtInt(d)} km from Earth · moving away at <i>${rate.toFixed(1)}</i> km/s`;
+    clock.innerHTML = `T+<i>${hms(s)}</i> · ${fmtInt(d)} km from Earth · ${document.body.classList.contains("phone") ? "" : "moving away at "}<i>${rate.toFixed(1)}</i> km/s`;
   }
   const vT3 = v3();
 
@@ -7228,10 +7228,11 @@ function frame(now) {
     // behind Cassini as seen from Earth, swung off to one side so Earth sits beside it, drifting slowly round
     const yaw = (62 - 0.6 * k) * Math.PI / 180, pitch = 0.3;
     const dir = toEarth.clone().applyAxisAngle(vS, yaw).addScaledVector(vS, pitch).normalize();
-    const d = (2.6e-5 + 1.2e-6 * k);
+    // a tall screen (a phone held upright) keeps Cassini in the middle and stands back further
+    const tall = camera.aspect < 1, d = (2.6e-5 + 1.2e-6 * k) * (tall ? 1.7 : 1);
     camera.position.copy(cassini.position).addScaledVector(dir, -d);
     camera.up.copy(vS).addScaledVector(side, 0.08).normalize();
-    camera.lookAt(cassini.position.clone().addScaledVector(toEarth, d * 0.35));
+    camera.lookAt(cassini.position.clone().addScaledVector(toEarth, tall ? 0 : d * 0.35));
   }
   CS.register("launch", { root, frame, camera: camera_, onEnd });
   // playback running forward from the very start of the data starts it (the Launch moment does that); the data
