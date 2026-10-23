@@ -18,6 +18,18 @@ step, scrubbing the timeline carries the film on from the new time, and Escape (
 main play button) leaves. Frames are fetched ahead of the play head; a frame that has not arrived holds the film
 rather than being skipped.
 
+## Timeline
+
+The Cassini Replay window is mostly timeline. Its head holds the controls in one small cluster on the left (previous
+moment, play/pause, next moment, movie mode, sound), the clock in the middle, and the timeline's zoom on the right.
+The view follows the clock, turning the page when now runs off the right edge, until you move it yourself: the
+mouse wheel or a two-finger swipe over the timeline scrolls through time, as far as the mission goes, and dragging
+the top edge (the row of dates) does the same; a pinch, or ⌘/Ctrl with the wheel, zooms at the pointer. The view
+then stays where you left it while playback carries on, and the "back to now" button at the top right lights up;
+click it to center the current moment and follow it again. Jumping to a moment or clicking in the timeline (which
+moves the clock there) follows again too. The slider zooms from the whole mission (left) to ten minutes (right),
+around now while following, otherwise around the middle of the view; − and + halve and double the span.
+
 ## Window sizes and full view
 
 Every window resizes from its bottom-right corner, from a thumbnail up to the whole screen; a picture window keeps
@@ -43,7 +55,7 @@ the replay controls that scrolls sideways.
 On a screen under 600 px wide, or a touch screen under 500 px tall (Settings > Interface > Phone layout: Automatic,
 Always or Never; `?phone=1` forces it), the windows dock instead of floating (`src/phone.html`). Upright: the NAC
 and WAC pictures side by side under the menu bar, the 3D view in the middle, the replay controls along the bottom
-(zoom shows speeds, timeline spans and the body picker), and Moments as a sheet over the view, opened from the list
+(zoom shows speeds and the body picker), and Moments as a sheet over the view, opened from the list
 button next to the moment arrows. Sideways: the two pictures down the left edge and the controls beside them. Tap a
 picture for full screen, tap again to come back. Settings > Interface > Camera pictures on a phone (50 to 100 %) sets
 how big the docked pictures are.
