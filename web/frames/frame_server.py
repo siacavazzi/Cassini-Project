@@ -235,7 +235,7 @@ def webp(frame_id, size, cache, fmt="webp"):
 
 # the caches of the pictures drawn from I/F, one per display model (calibration.style), so the classic look keeps the
 # pictures made before the balanced display model and raw colors the balanced ones made before natural color
-COLOR_VERSIONS = {"balanced": "color-v15", "raw": "color-v10", "classic": "color-v4"}
+COLOR_VERSIONS = {"balanced": "color-v16", "raw": "color-v10", "classic": "color-v4"}
 PROC_VERSIONS = {"balanced": "proc-v7", "raw": "proc-v7", "classic": "proc-v1"}   # one frame: no colors to mix
 
 

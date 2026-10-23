@@ -156,6 +156,10 @@ with cal.looking("classic"):
 # mixing a drawn picture with the identity changes nothing; tone with a mix keeps a gray pixel gray
 rgb = np.repeat(rng.integers(0, 200, (32, 32, 1)), 3, axis=2).astype(np.uint8)
 assert np.abs(cal.mix_display(rgb, m, 3.0).astype(int) - rgb).max() <= 2
+# a false color mix leaves a ring bright in the dim band (gray when drawn straight) gray instead of turning it pink
+ring = cal.apply_mix(np.diag([3.0, 1.0, 1.0]), np.array([0.3, 0.3, 0.3], np.float32).reshape(3, 1, 1)).ravel()
+body = cal.apply_mix(np.diag([3.0, 1.0, 1.0]), np.array([0.1, 0.3, 0.3], np.float32).reshape(3, 1, 1)).ravel()
+assert np.ptp(ring) < 0.01 and np.ptp(body) < 0.01
 # a false color mix holds a hot pink line (a ring bright in a dim band) to a pastel, and leaves a near-gray body be
 pink = cal.apply_mix(np.eye(3), np.array([1.0, 0.2, 0.9], np.float32).reshape(3, 1, 1)).ravel()
 near = cal.apply_mix(np.eye(3), np.array([0.5, 0.48, 0.46], np.float32).reshape(3, 1, 1)).ravel()

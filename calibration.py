@@ -439,7 +439,7 @@ in log terms, keeping their total: all the way would give a dim band like MT3 ov
 its noise, so the body is left a little tinted instead (apply_mix holds what still stands out)
 """
 FALSE_BALANCE = 0.9
-FALSE_OWN = 0.5
+FALSE_OWN = 0.75
 
 
 def balance(levels):
@@ -450,24 +450,34 @@ def balance(levels):
 
 
 """
-A channel mix (color_mix) on linear channels (3 x H x W). A false color mix (a gain per band, diagonal) then holds
-saturation past FALSE_CHROMA[0] through a soft knee to at most FALSE_CHROMA[1] (on linear values): what differs
-from the body's typical balance in a dim band (Saturn's rings in MT3, Jupiter's limb haze) would otherwise come out
-a hot pink or red line; the body's gentler differences between bands, below the knee, are kept as they are.
+A channel mix (color_mix) on linear channels (3 x H x W). A false color mix (a gain per band, diagonal) is meant to
+take the body's tint away; where it makes a pixel more colorful than drawn straight instead (Saturn's rings, which
+methane doesn't darken, or Jupiter's limb haze, bright in MT3), the pixel keeps its straight band ratio at the
+balanced brightness, fully once the balance adds FALSE_REVERT of saturation. Then saturation past FALSE_CHROMA[0]
+rolls off through a soft knee to at most FALSE_CHROMA[1] (on linear values).
 """
 FALSE_CHROMA = (0.3, 0.4)
+FALSE_REVERT = 0.1
+
+
+def _saturation(x):
+    top, low = x.max(axis=0), x.min(axis=0)
+    return np.where(top > 0, (top - low) / np.maximum(top, 1e-12), 0)
 
 
 def apply_mix(mix, x):
     mix = np.asarray(mix, np.float32)
+    raw = x
     x = np.tensordot(mix, x, axes=1)
     if np.count_nonzero(mix - np.diag(np.diagonal(mix))) == 0:
+        lum = x.mean(axis=0)
+        straight = raw * (lum / np.maximum(raw.mean(axis=0), 1e-12))
+        w = np.clip((_saturation(x) - _saturation(straight)) / FALSE_REVERT, 0, 1)
+        x = x + (straight - x) * w
         knee, cap = FALSE_CHROMA
-        top, low = x.max(axis=0), x.min(axis=0)
-        sat = np.where(top > 0, (top - low) / np.maximum(top, 1e-12), 0)
+        sat = _saturation(x)
         held = knee + (cap - knee) * np.tanh((sat - knee) / (cap - knee))
         k = np.where(sat > knee, held / np.maximum(sat, 1e-12), 1)
-        lum = x.mean(axis=0)
         x = lum + (x - lum) * k
     return x
 
@@ -567,8 +577,8 @@ def load_linear(labels, images=None, iofs=None):
     mix = color_mix(_value(infos[0], "INSTRUMENT_ID", ""), [band_of(i) for i in infos], _value(infos[0], "TARGET_NAME", ""))
     if mix is not None and np.count_nonzero(mix - np.diag(np.diagonal(mix))) == 0:
         # false color: the mission's typical balance of the body (the table) misses a frame unlike it (Saturn's
-        # high latitudes); FALSE_OWN of what is left between the picture's own lit bands is taken off as well. Half,
-        # so a movie of one scene, whose frames are alike, keeps one color
+        # high latitudes); FALSE_OWN of what is left between the picture's own lit bands is taken off as well. A
+        # movie of one scene, whose frames are alike, still keeps one color
         lum = np.mean(channels, axis=0)
         lit = lum > 0.2 * np.percentile(lum, 99)
         own = [float(np.median(c[lit])) * g for c, g in zip(channels, np.diagonal(mix))] if lit.sum() > 100 else []
