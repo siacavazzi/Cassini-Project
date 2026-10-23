@@ -496,7 +496,8 @@ function makeSaturn(radii) {
   const rg = new THREE.RingGeometry(RING_IN / KM, RING_OUT / KM, 720, 1); rg.rotateX(-Math.PI / 2);
   const ring = new THREE.Mesh(rg, rmat);
   ring.renderOrder = 2;
-  const g = new THREE.Group(); g.add(mesh, ring);
+  const atm = makeAtmosphere(ATMOSPHERES.SATURN, uSun); atm.scale.set(eq, po, eq);
+  const g = new THREE.Group(); g.add(mesh, ring, atm);
   return { group: g, ring: rmat, radius: radii[0] };
 }
 
@@ -542,28 +543,124 @@ function makeMoon(name, b) {
   const mesh = new THREE.Mesh(shapeGeom[name] || new THREE.SphereGeometry(1, 96, 64).rotateX(Math.PI / 2), mat);
   loadMap(name, mat.uniforms);
   const g = new THREE.Group(); g.add(mesh);
-  if (kind === 2) {
-    const haze = new THREE.ShaderMaterial({
-      uniforms: { sunDir: mat.uniforms.sunDir },
-      vertexShader: VHEAD + `varying vec3 vN; varying vec3 vV; varying vec3 vW;
-        void main(){ vec4 mv = modelViewMatrix * vec4(position,1.0); vN = normalize(normalMatrix * normal); vV = normalize(-mv.xyz);
-          vW = normalize(mat3(modelMatrix) * position);
-          gl_Position = projectionMatrix * mv;
-          #include <logdepthbuf_vertex>
-        }`,
-      fragmentShader: FHEAD + `uniform vec3 sunDir; varying vec3 vN; varying vec3 vV; varying vec3 vW;
-        void main(){
-          #include <logdepthbuf_fragment>
-          float rim = pow(1.0 - abs(dot(vN, vV)), 2.6);
-          float lit = smoothstep(-0.45, 0.35, dot(vW, sunDir));
-          gl_FragColor = vec4(vec3(0.95, 0.62, 0.32) * rim * lit * 1.1, 1.0);
-        }`,
-      transparent: true, blending: THREE.AdditiveBlending, depthWrite: false
-    });
-    const hm = new THREE.Mesh(new THREE.SphereGeometry(1.06, 96, 64), haze);
-    g.add(hm);
-  }
+  if (ATMOSPHERES[name]) g.add(makeAtmosphere(ATMOSPHERES[name], mat.uniforms.sunDir));
   return { group: g, mesh, mat, shape: !!shapeGeom[name], radius: b.radii ? (b.radii[0] + b.radii[1] + b.radii[2]) / 3 : 10 };
+}
+
+// ---------- atmospheres: a haze shell around the globe, shaded by marching the view ray through it ----------
+// Exponential haze (scale height H) plus an optional thin detached layer, both lit by the Sun through their own
+// haze (so light reddens and fades past the terminator) and scattered mostly forward (Henyey-Greenstein), which gives
+// the bright ring of a backlit Titan. Lengths are in body radii; the globe is 1, the shell's top is `top`.
+//   tau: vertical optical depth from the top to the globe; ext: extinction per color; albedo: share scattered
+//   detached: [height, width, column, r, g, b] of a thin layer, its column as a share of the main haze's vertical one
+const atmospheres = [];
+const atmosphereLevel = () => window.cassiniSettings ? cassiniSettings.get("view.atmospheres") || "full" : "full";
+function applyAtmospheres() {
+  const lv = atmosphereLevel();
+  for (const m of atmospheres) { m.visible = lv !== "off"; m.material.uniforms.steps.value = lv === "light" ? m.userData.steps / 2 : m.userData.steps; }
+  if (window.cassiniPerf) cassiniPerf.invalidate();
+}
+const ATMOSPHERES = {
+  // haze up to ~770 km, scale height ~90 km, the detached layer near 500 km (Cassini ISS/UVIS)
+  TITAN: { top: 1.3, H: 0.034, tau: 0.68, ext: [0.9, 1.0, 1.15], albedo: [1.0, 0.68, 0.36], g: 0.7, strength: 1.5,
+           detached: [0.19, 0.008, 0.006, 0.7, 0.76, 0.92] },
+  // a thin haze over the cloud tops: scale height ~60 km, top ~700 km, warm like the clouds under it
+  SATURN: { top: 1.012, H: 0.0011, tau: 0.12, ext: [0.9, 0.97, 1.08], albedo: [1.0, 0.92, 0.78], g: 0.6, strength: 1.0, steps: 12 }
+};
+function makeAtmosphere(a, sunDir) {
+  const mat = new THREE.ShaderMaterial({
+    uniforms: { sunDir, top: { value: a.top }, H: { value: a.H }, tau: { value: a.tau }, ext: { value: new THREE.Vector3(...a.ext) },
+                albedo: { value: new THREE.Vector3(...a.albedo) }, g: { value: a.g }, strength: { value: a.strength },
+                det: { value: new THREE.Vector3(...(a.detached || [0.5, 0.01, 0]).slice(0, 3)) },
+                detCol: { value: new THREE.Vector3(...(a.detached || [0, 0, 0, 1, 1, 1]).slice(3)) },
+                radii: { value: new THREE.Vector3(1, 1, 1) }, inside: { value: 0 }, steps: { value: a.steps || 20 } },
+    vertexShader: VHEAD + `varying vec3 vLocal; varying vec3 vView;
+      void main(){ vLocal = position; vec4 mv = modelViewMatrix * vec4(position, 1.0); vView = mv.xyz;
+        gl_Position = projectionMatrix * mv;
+        #include <logdepthbuf_vertex>
+      }`,
+    fragmentShader: FHEAD + `uniform vec3 sunDir; uniform float top, H, tau, g, strength, inside, steps; uniform vec3 ext, albedo, det, detCol, radii;
+      varying vec3 vLocal; varying vec3 vView;
+      #define STEPS 24
+      float hg(float c, float k) { float q = 1.0 + k * k - 2.0 * k * c; return (1.0 - k * k) / (q * sqrt(q)); }
+      // the Sun's light reaching a point at radius r (sun angle cz): through the haze between it and the Sun, nothing in the globe's shadow
+      vec3 sunlight(vec3 x, float r) {
+        float cz = dot(x, sunDir) / r;
+        float hMin = cz >= 0.0 ? r - 1.0 : r * sqrt(max(1.0 - cz * cz, 0.0)) - 1.0;   // lowest point of the path to the Sun
+        float Fg = sqrt(1.5708 * r / H);                                               // grazing path length, in scale heights
+        float path = cz >= 0.0 ? 1.0 / (cz + 1.0 / Fg) : Fg * (1.0 + smoothstep(0.0, 0.25, -cz));
+        float t = tau * exp(-max(hMin, 0.0) / H) * path;
+        return exp(-t * ext) * (cz >= 0.0 ? 1.0 : smoothstep(-0.1 * H, 0.35 * H, hMin));
+      }
+      void main(){
+        #include <logdepthbuf_fragment>
+        // in body space the globe is the unit sphere (an oblate body is squashed back to round)
+        vec3 dw = normalize(vView) * mat3(viewMatrix);                 // view ray, scene axes
+        vec3 p = vLocal, d = normalize(dw / radii);
+        vec3 cam = p - dw * length(vView) / radii;                       // the camera in body space
+        float chord = 2.0 * max(dot(p, -d), 0.0);                       // front face: the ray crosses the shell from p
+        vec3 o = inside > 0.5 ? cam : p;
+        float L = inside > 0.5 ? length(p - cam) : chord;
+        float b = dot(o, d), c = dot(o, o) - 1.0, disc = b * b - c;
+        if (disc > 0.0) { float t0 = -b - sqrt(disc); if (t0 > 0.0 && t0 < L) L = t0; }
+        float mu = dot(d, sunDir);
+        float ph = 0.8 + 0.5 * hg(mu, g);                                  // some light from every side (multiple scattering), most of it forward
+        float k = tau / H, fade = top - 1.0;
+        // samples bunch up toward the ray's lowest point (or where it meets the globe), where nearly all the haze is
+        float tm = clamp(-b, 0.0, L);
+        vec3 T = vec3(1.0), I = vec3(0.0);
+        float t1 = 0.0;
+        float nh = floor(steps / 2.0);   // samples on each side of the lowest point
+        for (int i = 0; i < STEPS; i++) {
+          if (float(i) >= 2.0 * nh) break;
+          float u = float(i + 1) / nh;
+          float t2 = float(i) < nh ? tm - tm * (1.0 - u) * (1.0 - u) : tm + (L - tm) * (u - 1.0) * (u - 1.0);
+          float ds = t2 - t1;
+          vec3 x = o + d * (0.5 * (t1 + t2));
+          t1 = t2;
+          float r = max(length(x), 1.0), h = r - 1.0;
+          float n = k * exp(-h / H) * smoothstep(fade, fade * 0.8, h);
+          vec3 dT = exp(-n * ds * ext);
+          I += T * sunlight(x, r) * albedo * (1.0 - dT);
+          T *= dT;
+        }
+        I *= ph;
+        // the detached layer: a thin shell at 1 + det.x, its column through each crossing in closed form
+        if (det.z > 0.0) {
+          float rd = 1.0 + det.x, cd = dot(o, o) - rd * rd, dd = b * b - cd;
+          if (dd > 0.0) {
+            float s = sqrt(dd);
+            for (int j = 0; j < 2; j++) {
+              float t = j == 0 ? -b - s : -b + s;
+              if (t <= 0.0 || t >= L) continue;
+              vec3 x = o + d * t;
+              float m = abs(dot(x / rd, d));
+              float col = det.z * tau / sqrt(m * m + 2.0 * det.y / rd);   // vertical column over the slant through the shell
+              vec3 dT = exp(-col * ext);
+              I += (j == 0 ? vec3(1.0) : T) * sunlight(x, rd) * detCol * (1.0 - dT) * ph;   // the near crossing is above nearly all the haze
+            }
+          }
+        }
+        float a = 1.0 - dot(T, vec3(0.3, 0.45, 0.25));
+        gl_FragColor = vec4(1.0 - exp(-1.25 * strength * I), a);          // soft shoulder: a bright backlit ring keeps its color
+      }`,
+    transparent: true, depthWrite: false, blending: THREE.CustomBlending,
+    blendSrc: THREE.OneFactor, blendDst: THREE.OneMinusSrcAlphaFactor
+  });
+  const mesh = new THREE.Mesh(new THREE.SphereGeometry(a.top, 96, 64), mat);
+  mesh.renderOrder = 1;
+  mesh.userData.steps = a.steps || 20;
+  atmospheres.push(mesh);
+  // from inside the shell its far side is drawn instead, and nothing in front of the globe hides it
+  mesh.onBeforeRender = (r, sc, cam) => {
+    const s = mesh.scale, rel = mesh.getWorldPosition(vA).sub(cam.getWorldPosition(new THREE.Vector3()));
+    const q = Math.hypot(rel.x / s.x, rel.y / s.y, rel.z / s.z);
+    const inn = q < a.top * 1.001;
+    mat.uniforms.inside.value = inn ? 1 : 0;
+    mat.side = inn ? THREE.BackSide : THREE.FrontSide; mat.depthTest = !inn;
+    mat.uniforms.radii.value.copy(s);
+  };
+  return mesh;
 }
 
 function makeCassini() {
@@ -778,6 +875,7 @@ function build() {
   }
   cassini = makeCassini(); scene.add(cassini);
   cassini.traverse(o => o.layers.set(1));
+  if (window.cassiniSettings) cassiniSettings.on("view.atmospheres", applyAtmospheres); else applyAtmospheres();
   buildFov();
   if (probe && probe.map) buildHuygensMap();
 

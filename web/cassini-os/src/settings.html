@@ -274,6 +274,10 @@ body.phone .srow input[type=range] { width: 96px; }
   D({ key: "view.textures", section: "View", label: "Surface maps", type: "choice", value: "2k", reload: true,
       options: [["0", "Off"], ["1k", "1k"], ["2k", "2k"], ["4k", "4k"]],
       hint: "Map size for Saturn and the moons. 4k is sharper and slower to load; Off keeps the plain painted look. A ?tex= link still wins." });
+  // the viewer reads view.atmospheres (makeAtmosphere)
+  D({ key: "view.atmospheres", section: "View", label: "Atmospheres", type: "choice", value: "full",
+      options: [["off", "Off"], ["light", "Light"], ["full", "Full"]],
+      hint: "Titan's orange haze, with its high detached layer, and Saturn's thin haze at the limb, lit by the Sun: soft twilight past the terminator and a bright ring when Titan is backlit. Light is quicker on weak graphics; Off draws the bare globes." });
   // Movie
   D({ key: "movie.fps", section: "Movie", label: "Movie speed", type: "range", value: 8, min: 2, max: 24, step: 1, unit: "fps",
       hint: "Frames per second in movie mode (M). The slider in the Movie window changes this too." });
