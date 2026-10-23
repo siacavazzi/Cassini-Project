@@ -1,0 +1,153 @@
+<!-- The start of the mission, a short opening for whoever plays it from the beginning. build.py splices the style into
+     the head, the section into #app and the script after the Grand Finale's.
+
+     The data begins at separation from the Centaur upper stage, 42 min 40 s after liftoff, in low Earth orbit. The
+     screen fades to black, then up on Cassini on its own with Earth beneath it, falling away as the clock runs; the
+     captions say where it is and what it means to do next: borrow speed from Venus twice, Earth and Jupiter, then
+     Saturn. Then the interface comes back and the mission plays on from there.
+
+     Facts: ESA, "Cassini-Huygens: Launch information" (liftoff 08:43:00 UTC on 15 October 1997; separation at
+     42 min 40 s; first contact through the Deep Space Network near Canberra ten minutes later) and NASA, "Cassini Quick
+     Facts" (the flyby dates; 3.4 billion km to Saturn).
+
+     It plays when playback runs forward from the very start of the data (the Launch moment does that), or at once with
+     ?launch. Escape or the Skip button ends it, like every cutscene (cutscene.html). Sound (sound.html): soft chords
+     under the captions. -->
+<style>
+/* a shade under the captions so they read over Earth */
+#launch .lx-shade { position: absolute; inset: 0; background: linear-gradient(to top, rgba(0,0,0,.8) 0, rgba(0,0,0,.5) 24%, rgba(0,0,0,0) 50%); }
+#launch .cs-cap.big { font-size: 30px; letter-spacing: .03em; }
+/* the road to Saturn: five stops on a line, each lighting up in turn */
+#launch .lx-road { display: flex; justify-content: space-between; position: relative; margin: 16px 4px 2px; }
+#launch .lx-road::before { content: ""; position: absolute; left: 6px; right: 6px; top: 5px; height: 1px; background: rgba(232,236,242,.25); }
+#launch .lx-road span { position: relative; display: flex; flex-direction: column; align-items: center; gap: 4px; font-size: 12.5px; line-height: 1.3; opacity: .35; transition: opacity .8s ease; }
+#launch .lx-road span::before { content: ""; width: 9px; height: 9px; border-radius: 50%; background: var(--q-dim); box-shadow: 0 0 0 2px rgba(0,0,0,.6); margin-bottom: 4px; }
+#launch .lx-road span.on { opacity: 1; }
+#launch .lx-road span.on::before { background: var(--q-accent); }
+#launch .lx-road span:last-child::before { background: #e6bb68; }
+#launch .lx-road small { margin: 0; font-size: 10.5px; }
+#launch .lx-clock { position: absolute; left: 50%; bottom: 7vh; transform: translateX(-50%); white-space: nowrap; font: 11px/1 var(--hudf); letter-spacing: .08em;
+  color: var(--q-dim); opacity: 0; transition: opacity 1.2s ease; }
+#launch .lx-clock.on { opacity: 1; }
+#launch .lx-clock i { font-style: normal; color: var(--q-accent); }
+body.phone #launch .cs-cap.big { font-size: 23px; }
+body.phone #launch .lx-road span { font-size: 11px; } body.phone #launch .lx-road small { font-size: 9.5px; }
+body.phone #launch .lx-clock { font-size: 9.5px; bottom: 9vh; }
+</style>
+
+<section id="launch" class="cs-root" hidden aria-live="polite">
+  <div class="lx-shade"></div>
+  <div class="cs-black"></div>
+  <div class="cs-caps"></div>
+  <div class="lx-clock" aria-hidden="true"></div>
+  <button class="cs-skip" type="button">Skip ▸</button>
+</section>
+
+<script>
+// ---------- the start of the mission: Cassini on its own in low Earth orbit, and the road to Saturn ahead ----------
+(function () {
+  const CS = window.cassiniCutscene, { fadeTo } = CS;
+  const root = document.getElementById("launch"), black = root.querySelector(".cs-black");
+  const caps = root.querySelector(".cs-caps"), clock = root.querySelector(".lx-clock");
+  const UP = 1.4;             // s into the cutscene the black lifts off Cassini
+  const SPEED = 40;           // mission seconds per second, so Earth visibly falls away
+  const END = 24;             // s into the cutscene the interface comes back
+  // the captions: screen seconds in, how long, the line, a class, a chord under it (steps on the scale, see sound.html)
+  const CAPS = [
+    [3, 6.6, `<b>October 15, 1997 · 42 minutes after launch</b>The Centaur upper stage lets go. Cassini is on its own, and ten minutes later a dish near Canberra, Australia, hears its first signal.`, "", [0, 2, 4]],
+    [10.2, 7.4, `<b>The road to Saturn</b>Too heavy to fly straight there, it plans to borrow speed from the planets on the way.`
+      + `<div class="lx-road"><span>Venus<small>Apr 1998</small></span><span>Venus<small>Jun 1999</small></span><span>Earth<small>Aug 1999</small></span><span>Jupiter<small>Dec 2000</small></span><span>Saturn<small>Jul 2004</small></span></div>`, "road", [1, 3, 5]],
+    [18.2, 4.4, `<b>3.4 billion kilometers · 6 years, 8 months</b>Next stop: Venus.`, "big", [0, 2, 4, 7]],
+  ];
+
+  let L = null;   // the running opening
+  const tmpA = v3(), tmpB = v3(), tmpC = v3(), vE = new THREE.Vector3(), vS = new THREE.Vector3();
+
+  // ---------- captions (cutscene.html runs them); the stops on the road light up one by one ----------
+  function runCaptions(T) {
+    CS.runCaptions(caps, CAPS, T, L.shown);
+    CAPS.forEach(([at], i) => {
+      const el = L.shown[i];
+      if (el && el !== true) el.querySelectorAll(".lx-road span").forEach((s, j) => s.classList.toggle("on", T > at + 1 + j * 0.9));
+    });
+  }
+  // the mission clock from liftoff, with Cassini's distance and speed from Earth
+  const pad = n => String(n).padStart(2, "0");
+  const hms = s => `${pad(Math.floor(s / 3600))}:${pad(Math.floor(s / 60) % 60)}:${pad(Math.floor(s) % 60)}`;
+  function stepClock(T) {
+    clock.classList.toggle("on", T >= UP + 0.6 && T < END - 1.5);
+    const s = L.tau - LAUNCH_MS / 1000 + etToMs(0) / 1000;
+    const d = len(sub(positionAt(tracks.CASSINI, L.tau, tmpA), positionAt(tracks.EARTH, L.tau, tmpB), tmpA));
+    const rate = len(sub(positionAt(tracks.CASSINI, L.tau + 1, tmpB), positionAt(tracks.EARTH, L.tau + 1, tmpC), tmpB)) - d;
+    clock.innerHTML = `T+<i>${hms(s)}</i> · ${fmtInt(d)} km from Earth · ${document.body.classList.contains("phone") ? "" : "moving away at "}<i>${rate.toFixed(1)}</i> km/s`;
+  }
+
+  function play() {
+    if (L || !tracks.CASSINI || !tracks.EARTH) return;
+    const was = { speed: state.speed };
+    if (!CS.begin("launch")) return;
+    L = Object.assign(was, { t0: performance.now(), up: false, tau: coverage[0], shown: [] });
+    fadeTo(black, 1, 0.8);
+  }
+  // cutscene.html ends it (Escape, Skip, or the end below); the mission carries on from where the opening left it
+  function onEnd() {
+    const l = L; L = null;
+    caps.textContent = ""; clock.classList.remove("on");
+    setTime(l.tau);
+    spent = true;
+    if (state.focus !== "CASSINI") setFocus("CASSINI");
+    setFocus("CASSINI", 6e-5);
+    setSpeed(l.speed); setPlaying(true);
+    black.style.opacity = Math.max(+black.style.opacity || 0, 0.6);
+  }
+
+  // the viewer's frame loop, before it places the bodies: the opening runs its own clock
+  function frame() {
+    if (!L) return;
+    const T = (performance.now() - L.t0) / 1000;
+    if (!L.up && T >= UP) {
+      // behind the black: close to Cassini with Earth beyond it, then the black lifts
+      L.up = true; L.upAt = T;
+      setFocus("CASSINI", 5e-5); markerPts.visible = false;
+      fadeTo(black, 0, 2.6);
+    }
+    if (L.up) L.tau = Math.min(coverage[1], coverage[0] + (T - L.upAt) * SPEED);
+    if (T > END - 1.5 && !L.closing) { L.closing = true; fadeTo(black, 0.6, 1.4); }
+    runCaptions(T);
+    stepClock(T);
+    state.et = L.tau;
+    if (T >= END) CS.end("launch");
+  }
+  // beside Cassini, looking past it at Earth falling away behind
+  function camera_() {
+    if (!L || !L.up) return;
+    const k = (performance.now() - L.t0) / 1000 - L.upAt;
+    relScene("EARTH", vE).sub(cassini.position);   // Cassini -> Earth
+    const toEarth = vE.clone().normalize();
+    toScene([0, 0, 1], vS).normalize();             // the celestial north pole, for an up
+    const side = new THREE.Vector3().crossVectors(toEarth, vS).normalize();
+    // behind Cassini as seen from Earth, swung off to one side so Earth sits beside it, drifting slowly round
+    const yaw = (62 - 0.6 * k) * Math.PI / 180, pitch = 0.3;
+    const dir = toEarth.clone().applyAxisAngle(vS, yaw).addScaledVector(vS, pitch).normalize();
+    // a tall screen (a phone held upright) keeps Cassini in the middle and stands back further
+    const tall = camera.aspect < 1, d = (2.6e-5 + 1.2e-6 * k) * (tall ? 1.7 : 1);
+    camera.position.copy(cassini.position).addScaledVector(dir, -d);
+    camera.up.copy(vS).addScaledVector(side, 0.08).normalize();
+    camera.lookAt(cassini.position.clone().addScaledVector(toEarth, tall ? 0 : d * 0.35));
+  }
+  CS.register("launch", { root, frame, camera: camera_, onEnd });
+  // playback running forward from the very start of the data starts it (the Launch moment does that); the data starts
+  // at separation, so the clock never crosses a moment before it and cutscene.html's crossing trigger cannot catch it
+  let spent = false;
+  const advance = window.studyAdvance;
+  window.studyAdvance = (et, dt, speed) => {
+    const next = advance ? advance(et, dt, speed) : et + dt * speed;
+    if (et > coverage[0] + 30) spent = false;
+    if (!L && !spent && !CS.active && speed > 0 && et <= coverage[0] + 1 && next > et) { spent = true; setTimeout(play, 0); return et; }
+    return next;
+  };
+  window.cassiniLaunch = { play, skip: () => CS.end("launch"), get running() { return !!L; } };
+  // ?launch plays it as soon as the start of the mission is loaded
+  CS.fromUrl("launch", () => coverage[0], () => { spent = true; play(); });
+})();
+</script>

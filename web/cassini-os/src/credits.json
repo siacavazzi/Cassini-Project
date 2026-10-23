@@ -43,7 +43,7 @@
           "id": "facts",
           "title": "Mission facts and numbers",
           "credit": "NASA, NASA/JPL and ESA mission pages",
-          "detail": "The facts on the loading screen (each one names its source as it shows), and the numbers and timings the Grand Finale is pinned to (JPL, \"Cassini Spacecraft Makes Its Final Approach to Saturn\", 13 September 2017; \"Cassini by the Numbers\").",
+          "detail": "The facts on the loading screen (each one names its source as it shows), and the numbers and timings the Grand Finale is pinned to (JPL, \"Cassini Spacecraft Makes Its Final Approach to Saturn\", 13 September 2017; \"Cassini by the Numbers\"), and the opening at the start of the mission (ESA, \"Cassini-Huygens: Launch information\"; NASA, \"Cassini Quick Facts\").",
           "license": "Facts, with their sources named",
           "url": "https://science.nasa.gov/mission/cassini/"
         },

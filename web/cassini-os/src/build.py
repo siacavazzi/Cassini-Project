@@ -64,6 +64,19 @@ for old, new in [
     assert study.count(old) == 1, old
     study = study.replace(old, new)
 
+# pause in the background (away.html): its style joins the head's, its note goes into #app, and its script runs right
+# after the settings script (it adds two Playback settings), ahead of every script that draws or fetches: it holds the
+# page's animation frames while the tab is hidden or the window has lost focus
+away = open(os.path.join(os.path.dirname(os.path.abspath(sys.argv[2])), "away.html")).read()
+apart = lambda tag: away[away.index(f"<{tag}"):away.index(f"</{tag}>") + len(tag) + 3]
+for old, new in [
+    ("</style>\n</head>", apart("style")[len("<style>"):] + "\n</head>"),
+    ('  <div id="loading">', "  " + away[away.index('<div id="awaynote"'):away.index("</div>", away.index('<div id="awaynote"')) + 6] + "\n\n" + '  <div id="loading">'),
+    ("<script>\n// ---------- Cassini OS chrome", apart("script") + "\n<script>\n// ---------- Cassini OS chrome"),
+]:
+    assert study.count(old) == 1, old
+    study = study.replace(old, new)
+
 # phone layout (phone.html): its style joins the head's and its script runs before the chrome script (after the
 # settings script), so the window manager already knows whether it is laying out a phone
 phone = open(os.path.join(os.path.dirname(os.path.abspath(sys.argv[2])), "phone.html")).read()
@@ -71,6 +84,18 @@ ppart = lambda tag: phone[phone.index(f"<{tag}"):phone.index(f"</{tag}>") + len(
 for old, new in [
     ("</style>\n</head>", ppart("style")[len("<style>"):] + "\n</head>"),
     ("<script>\n// ---------- Cassini OS chrome", ppart("script") + "\n<script>\n// ---------- Cassini OS chrome"),
+]:
+    assert study.count(old) == 1, old
+    study = study.replace(old, new)
+
+# shareable links (link.html): its style joins the head's, its toast goes into #app, and its script runs before the chrome
+# script (after the settings script), so a link's view is applied after the settings have set the viewer up
+link = open(os.path.join(os.path.dirname(os.path.abspath(sys.argv[2])), "link.html")).read()
+lpart = lambda tag: link[link.index(f"<{tag}"):link.index(f"</{tag}>") + len(tag) + 3]
+for old, new in [
+    ("</style>\n</head>", lpart("style")[len("<style>"):] + "\n</head>"),
+    ('  <div id="loading">', "  " + lpart("div") + "\n\n" + '  <div id="loading">'),
+    ("<script>\n// ---------- Cassini OS chrome", lpart("script") + "\n<script>\n// ---------- Cassini OS chrome"),
 ]:
     assert study.count(old) == 1, old
     study = study.replace(old, new)
@@ -286,6 +311,12 @@ function momentsBefore(et) {
   return c;
 }
 """)
+
+# after a pause in the background (away.html) the clock carries on from where it stopped: the first frame back
+# counts from the moment the page came back, not from the last frame before it went
+rep('  const dt = Math.min(0.1, (now - lastT) / 1000); lastT = now;\n',
+    '  const dt = Math.max(0, Math.min(0.1, (now - lastT) / 1000)); lastT = now;\n')
+rep('function frame(now) {\n', 'document.addEventListener("cassini:away", e => { if (!e.detail.away) lastT = performance.now(); });\nfunction frame(now) {\n')
 
 # surface maps are decoded off the main thread (createImageBitmap) where the browser can, so a 2k or 4k map arriving
 # does not freeze the view while it decodes; a browser that cannot falls back to the plain loader
