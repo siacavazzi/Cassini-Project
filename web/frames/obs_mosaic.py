@@ -30,6 +30,7 @@ blended into one another.
 import argparse
 import collections
 import contextlib
+import contextvars
 import io
 import json
 import math
@@ -324,6 +325,7 @@ def tile(u, n, cache, scale=None):
                 Image.fromarray(np.ascontiguousarray(small[a:b, c:d])).save(base + ".png", compress_level=1)
                 out.update({"native_offset": rep["frame_offset"], "offset": [v * k for v in rep["frame_offset"]],
                             "box": [int(c) - side / 2, int(a) - side / 2, int(d - c), int(b - a)]})
+                out["outline"] = _corners(out, small[a:b, c:d, 3])
         else:
             out["why"] = rep.get("why", "not placed by SPICE")
         reel._cached(base + ".json", lambda: json.dumps(out, default=str).encode())
@@ -553,18 +555,23 @@ def so_far(u, n, cache, made=None, out=OUT):
                 "fixed": p["fixed"], "width": im.width, "height": im.height}
 
 
+def _corners(t, alpha):
+    """The four corners of the frame in a tile's picture (its alpha): the smallest rotated rectangle around it, so
+    a frame turned north up keeps its slant, in reference pixels from the body's centre."""
+    import cv2
+    pts = cv2.findNonZero((alpha > 0).astype(np.uint8))
+    corners = cv2.boxPoints(cv2.minAreaRect(pts)) if pts is not None else np.zeros((4, 2))
+    bx, by = t["box"][:2]
+    return [[float(t["offset"][0] + bx + x), float(t["offset"][1] + by + y)] for x, y in corners]
+
+
 def outline(u, t, cache):
-    """Tile t's outline: the four corners of its frame (the smallest rotated rectangle around the tile's
-    picture, so a frame turned north up keeps its slant) in reference pixels from the body's centre; measured
-    once from tiles/<n>.png and kept beside it."""
+    """Tile t's outline (_corners): kept in its report when the tile is made; for a tile made before that,
+    measured once from tiles/<n>.png and kept beside it."""
+    if "outline" in t:
+        return t["outline"]
     base = os.path.join(folder(u, cache), "tiles", str(t["n"]))
-    def make():
-        import cv2
-        alpha = np.asarray(Image.open(base + ".png"))[..., 3]
-        pts = cv2.findNonZero((alpha > 0).astype(np.uint8))
-        corners = cv2.boxPoints(cv2.minAreaRect(pts)) if pts is not None else np.zeros((4, 2))
-        bx, by = t["box"][:2]
-        return json.dumps([[float(t["offset"][0] + bx + x), float(t["offset"][1] + by + y)] for x, y in corners]).encode()
+    make = lambda: json.dumps(_corners(t, np.asarray(Image.open(base + ".png"))[..., 3])).encode()
     return json.loads(reel._cached(base + ".outline.json", make))
 
 
@@ -582,12 +589,19 @@ def tile_map(frame_id, cache):
     made = layout(u, n, cache)
     if not made:
         return None
+    key = (folder(u, cache), made[5])
+    with _lock:
+        if key in _maps:
+            return _maps[key]
     p, tiles, rect, count, used, _ = made
     x0, y0, w, h = rect
     frac = lambda x, y: [round((x - x0) / w, 5), round((y - y0) / h, 5)]
-    pointings = []
+    pointings, complete = [], True
     for t in tiles:
-        if "offset" not in t or t["filter"] not in used or not os.path.exists(os.path.join(folder(u, cache), "tiles", f"{t['n']}.png")):
+        if "offset" not in t or t["filter"] not in used:
+            continue
+        if not os.path.exists(os.path.join(folder(u, cache), "tiles", f"{t['n']}.png")):
+            complete = False   # still being written: this map is not kept
             continue
         last = pointings[-1] if pointings else None
         if last and t["filter"] not in last["ids"] and t["t"] - last["t1"] <= REPEAT_POINTING and \
@@ -608,8 +622,17 @@ def tile_map(frame_id, cache):
         if not (max(c[0] for c in q["poly"]) <= 0 or min(c[0] for c in q["poly"]) >= 1 or
                 max(c[1] for c in q["poly"]) <= 0 or min(c[1] for c in q["poly"]) >= 1):   # in the view
             out.append(dict(q, n=i + 1))
-    return {"observation": u["key"][1], "target": u["key"][0], "pass": u["key"][3], "filters": used,
-            "fixed": p["fixed"], "pointings": out}
+    found = {"observation": u["key"][1], "target": u["key"][0], "pass": u["key"][3], "filters": used,
+             "fixed": p["fixed"], "pointings": out}
+    with _lock:
+        if complete:
+            _maps[key] = found
+        while len(_maps) > 64:
+            _maps.pop(next(iter(_maps)))
+    return found
+
+
+_maps = {}   # (pass folder, layout name) -> its tile map: a mosaic's map is asked for on every hover of a new picture
 
 
 REPEAT_POINTING = 600   # s: a filter's tiles at one place are one pointing when taken within this of each other
@@ -625,12 +648,24 @@ def mosaic_webp(frame_id, size, cache, slots=None, ahead=3, fmt="webp", out=OUT)
         return None
     u, n = found
     with _asking():
-        if size == "full":
-            return _mosaic_at(u, n, size, cache, slots, fmt, out)
-        made = _mosaic_at(u, n, size, cache, slots)
+        made = _mosaic_at(u, n, size, cache, slots, fmt, out) if size == "full" else _mosaic_at(u, n, size, cache, slots)
+    if made:
+        # its tile map too, once the mosaic is made, so the window's first hover finds it ready (tiles made before
+        # outlines were kept in their reports are measured once here)
+        threading.Thread(target=contextvars.copy_context().run, args=(_map_quietly, frame_id, cache), daemon=True).start()
+    if size == "full":
+        return made
     if made and ahead:
         warm(u, n + ahead, cache, size, slots, start=n + 1)
     return made
+
+
+def _map_quietly(frame_id, cache):
+    try:
+        _yield()
+        tile_map(frame_id, cache)
+    except Exception:   # a tile not made yet: the window's own request works it out
+        pass
 
 
 _asked = [0]   # mosaics a window is waiting for right now: work made ahead waits while there are any
