@@ -961,6 +961,10 @@ def make_handler(site, cache, flags=None):
                         return self.send_error(404, "No tile of this pass placed yet")
                     if found and found[0]["movie"]:
                         return self.send_error(404, "A movie, not a mosaic")
+                    # a mosaic pass with no tile placed, or none with anything above black yet: the window
+                    # keeps its frame (obs_mosaic.blank)
+                    if found and found[0]["mosaic"] and found[1] >= 0:
+                        return self.send_error(404, "Nothing in this pass's mosaic yet")
                 found = reel.mosaic_of(m.group(1), wait=False)
                 if not found:
                     return self.send_error(404, "Not a mosaic tile")
