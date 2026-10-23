@@ -53,7 +53,7 @@ import stacking  # noqa: E402
 # bumped whenever the way observation mosaics are made changes, so older ones are not served again; one per
 # display model (calibration.style), classic being the mosaics made before the balanced display model, raw the
 # balanced ones before natural color
-VERSIONS = {"balanced": "obs-v16", "raw": "obs-v12", "classic": "obs-v9"}
+VERSIONS = {"balanced": "obs-v17", "raw": "obs-v12", "classic": "obs-v9"}
 CANVAS = 2048        # longest side of the canvas the view is drawn on
 OUT = 1024           # longest side of the picture sent
 FRAME = 1024         # full resolution frame
@@ -288,11 +288,6 @@ def pass_scale(frames, u, drawn=None, true_colour=False):
             blacks, white = {f: black for f in by}, top - black
         else:
             blacks, white = dict(lows), max(tops[f] - lows[f] for f in by)
-            if calibration.style() == "balanced":
-                # natural color: every band on the widest band's range (its black that far below its top), so a band
-                # with little contrast (CB2 a few hundredths above its floor) doesn't stretch its frame-to-frame
-                # shading of a few per cent into color steps between tiles
-                blacks = {f: tops[f] - white for f in by}
     elif filled:
         blacks = {f: float(np.percentile(np.concatenate([i.ravel() for i in iofs]), 1)) for f, iofs in by.items()}
         white = max(float(np.percentile(np.concatenate([i.ravel() for i in iofs]) - blacks[f], 99.5))

@@ -127,9 +127,7 @@ assert len(set(new["blacks"].values())) == 1 and all(b <= new["white"] for b in 
 assert max(b / old["white"] for b in old["blacks"].values()) > 1      # the classic black sat above the white
 # false colour: every filter's black its own 1st percentile, one white (the widest band's)
 assert len(set(false["blacks"].values())) == 3 and np.isclose(false["white"], max(np.percentile(v[0][::4, ::4], 99.5) - np.percentile(v[0][::4, ::4], 1) for v in by.values()), rtol=1e-3)
-# natural false colour: every band on the widest band's range, and a balance toward gray
-tops = {f: np.percentile(v[0][::4, ::4], 99.5) for f, v in by.items()}
-assert all(np.isclose(tops[f] - natural_false["blacks"][f], natural_false["white"], rtol=1e-3) for f in by)
+# natural false colour: a balance toward gray
 assert "balance" in natural_false and "balance" not in false
 
 # ---- detail on luminance only: a colored patch keeps its color differences, no channel gets its own texture ----

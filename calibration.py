@@ -439,6 +439,7 @@ in log terms, keeping their total: all the way would give a dim band like MT3 ov
 its noise, so the body is left a little tinted instead (apply_mix holds what still stands out)
 """
 FALSE_BALANCE = 0.9
+FALSE_OWN = 0.5
 
 
 def balance(levels):
@@ -454,7 +455,7 @@ saturation past FALSE_CHROMA[0] through a soft knee to at most FALSE_CHROMA[1] (
 from the body's typical balance in a dim band (Saturn's rings in MT3, Jupiter's limb haze) would otherwise come out
 a hot pink or red line; the body's gentler differences between bands, below the knee, are kept as they are.
 """
-FALSE_CHROMA = (0.3, 0.5)
+FALSE_CHROMA = (0.3, 0.4)
 
 
 def apply_mix(mix, x):
@@ -564,6 +565,15 @@ def load_linear(labels, images=None, iofs=None):
     channels = [(iof - np.float32(level)) / np.float32(white) for iof, level in zip(iofs, levels)]
     infos = [lbl.get_info() for lbl in labels]
     mix = color_mix(_value(infos[0], "INSTRUMENT_ID", ""), [band_of(i) for i in infos], _value(infos[0], "TARGET_NAME", ""))
+    if mix is not None and np.count_nonzero(mix - np.diag(np.diagonal(mix))) == 0:
+        # false color: the mission's typical balance of the body (the table) misses a frame unlike it (Saturn's
+        # high latitudes); FALSE_OWN of what is left between the picture's own lit bands is taken off as well. Half,
+        # so a movie of one scene, whose frames are alike, keeps one color
+        lum = np.mean(channels, axis=0)
+        lit = lum > 0.2 * np.percentile(lum, 99)
+        own = [float(np.median(c[lit])) * g for c, g in zip(channels, np.diagonal(mix))] if lit.sum() > 100 else []
+        if own and min(own) > 0:
+            mix = mix * np.diag([g ** FALSE_OWN for g in balance(own)]).astype(np.float32)
     margin /= white
     if measured:
         # the toe starts no lower than the darker half of the sky's own brightness (SKY_DARK of it stays black),
