@@ -321,6 +321,8 @@ def _ulock(u):
 
 
 PLAN_FILE = "plan4.json"   # renamed when the plan's rules change, so cached plans are worked out again
+# a movie's footprint (movie_footprint), worked out with the plan and named after it, so a new plan redoes it
+FOOTPRINT_FILE = "movie_footprint-" + PLAN_FILE
 
 
 def _tiles(u, cache, scale):
@@ -919,7 +921,7 @@ def movie_footprint(u, cache, p=None):
     put the tiles themselves rather than the geometry cache (which can be a third of a frame off by the end of a
     movie tracking a propeller): MOVIE_SAMPLES tiles spread over the pass, with MOVIE_MARGIN round them for the
     frames between. Worked out once and kept with the pass."""
-    path = os.path.join(folder(u, cache), "movie_footprint.json")
+    path = os.path.join(folder(u, cache), FOOTPRINT_FILE)
     if os.path.exists(path):
         with open(path) as fh:
             return json.load(fh)
@@ -1080,7 +1082,7 @@ def movie_webp(frame_id, size, cache, trail=0, colour=True, wait=False, ahead=6,
     if not found or found[1] < 0:
         return None
     u, n = found
-    if not wait and not all(os.path.exists(os.path.join(folder(u, cache), f)) for f in (PLAN_FILE, "movie_footprint.json")):
+    if not wait and not all(os.path.exists(os.path.join(folder(u, cache), f)) for f in (PLAN_FILE, FOOTPRINT_FILE)):
         warm_movie(u, n, ahead, cache)
         return None, {"why": "working out the pass", "observation": u["key"][1], "pass": u["key"][3]}
     path = os.path.join(folder(u, cache), "movie", str(size), f"{n}_{trail}_{int(bool(colour))}{'_c2' if centre else ''}.webp")
