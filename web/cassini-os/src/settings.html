@@ -230,17 +230,20 @@ body.phone .srow input[type=range] { width: 96px; }
     const mo = new MutationObserver(() => { if (go()) mo.disconnect(); });
     mo.observe($("loading"), { attributes: true, attributeFilter: ["hidden"] });
   }
+  // S.transient(fn): what fn does to a mirrored button stays out of the settings (a shared link's view is for that visit only)
+  let quiet = 0;
+  S.transient = fn => { quiet++; try { return fn(); } finally { setTimeout(() => quiet--, 0); } };
   // a dock button that switches a viewer option, mirrored by a setting both ways
   function mirror(key, btn) {
     whenReady(() => {
       const b = $(btn), pressed = () => b.getAttribute("aria-pressed") === "true";
       S.on(key, v => { if (pressed() !== v) b.click(); });
-      new MutationObserver(() => S.set(key, pressed())).observe(b, { attributes: true, attributeFilter: ["aria-pressed"] });
+      new MutationObserver(() => { if (!quiet) S.set(key, pressed()); }).observe(b, { attributes: true, attributeFilter: ["aria-pressed"] });
     });
   }
   D({ key: "playback.start", section: "Playback", label: "Start time", type: "choice", value: "2006-09-15T14:28:00", reload: true,
       options: [["2006-09-15T14:28:00", "In Saturn's Shadow"], ["2005-01-14T09:30:00", "Huygens lands"], ["2004-07-01T00:00:00", "Saturn arrival"]],
-      hint: "The moment Cassini OS opens on. A ?t= link still wins." });
+      hint: "The moment Cassini OS opens on. A shared link still opens on its own moment." });
   D({ key: "playback.autoplay", section: "Playback", label: "Play when Cassini OS opens", type: "toggle", value: true,
       hint: "Off opens paused at the starting moment." });
   D({ key: "playback.speed", section: "Playback", label: "Starting speed", type: "choice", value: 600,

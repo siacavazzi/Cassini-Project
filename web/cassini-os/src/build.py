@@ -75,6 +75,18 @@ for old, new in [
     assert study.count(old) == 1, old
     study = study.replace(old, new)
 
+# shareable links (link.html): its style joins the head's, its toast goes into #app, and its script runs before the chrome
+# script (after the settings script), so a link's view is applied after the settings have set the viewer up
+link = open(os.path.join(os.path.dirname(os.path.abspath(sys.argv[2])), "link.html")).read()
+lpart = lambda tag: link[link.index(f"<{tag}"):link.index(f"</{tag}>") + len(tag) + 3]
+for old, new in [
+    ("</style>\n</head>", lpart("style")[len("<style>"):] + "\n</head>"),
+    ('  <div id="loading">', "  " + lpart("div") + "\n\n" + '  <div id="loading">'),
+    ("<script>\n// ---------- Cassini OS chrome", lpart("script") + "\n<script>\n// ---------- Cassini OS chrome"),
+]:
+    assert study.count(old) == 1, old
+    study = study.replace(old, new)
+
 # performance (perf.html): its style joins the head's and its script runs before the chrome script (after the settings
 # script), so the viewer can ask window.cassiniPerf for its pixel ratio when it makes its renderers
 perf = open(os.path.join(os.path.dirname(os.path.abspath(sys.argv[2])), "perf.html")).read()

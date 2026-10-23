@@ -38,6 +38,17 @@ including the main window, and a click brings it back. Settings > Interface: Doc
 menu-bar tray), Dock position (bottom, left, right), icon size and magnification. On a phone the dock is a strip under
 the replay controls that scrolls sideways.
 
+## Shareable links
+
+The address bar always holds the moment on screen (`src/link.html`), so a copied link opens on it again:
+`?t=2005-02-16T23:27:00&view=enceladus&speed=3600&play=0&cam=1.836,0.4572,-0.6478`. `t` is the mission time
+(UTC, to the second) and follows playback; `view` is `follow` (Cassini, looking where its camera points), `cassini`
+(Cassini, free camera) or a body; `cam` is where the free camera sits around it; `speed` is mission seconds per
+second; `play=0` opens paused and `movie=1` in movie mode. Other parameters (`?frames=`, `?tex=`, `?finale`) are kept.
+The page rewrites the URL with `history.replaceState` at most twice a second, so the back button is unaffected, and
+a link's view is for that visit only (it does not change the Follow camera setting). Go > Copy Link to This Moment
+(⇧⌘C) copies it.
+
 ## Phone layout
 
 On a screen under 600 px wide, or a touch screen under 500 px tall (Settings > Interface > Phone layout: Automatic,
