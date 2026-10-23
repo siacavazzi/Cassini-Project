@@ -94,6 +94,21 @@
       ]
     },
     {
+      "title": "Sky",
+      "entries": [
+        {
+          "id": "star-sky",
+          "title": "Stars and the Milky Way",
+          "credit": "NASA/Goddard Space Flight Center Scientific Visualization Studio. Gaia DR2: ESA/Gaia/DPAC",
+          "short": "NASA SVS Deep Star Maps",
+          "detail": "The background sky, from NASA's \"Deep Star Maps 2020\": Hipparcos, Tycho-2 and Gaia DR2 stars plus the Milky Way, placed in J2000 where Cassini saw them.",
+          "license": "NASA material, public domain",
+          "url": "https://svs.gsfc.nasa.gov/4851",
+          "files": ["sky/sky_2k.webp", "sky/sky_4k.webp", "sky/sky_8k.webp"]
+        }
+      ]
+    },
+    {
       "title": "Spacecraft",
       "entries": [
         {
