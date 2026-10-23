@@ -34,6 +34,7 @@ blended into one another.
 import argparse
 import collections
 import contextlib
+import hashlib
 import io
 import json
 import math
@@ -307,9 +308,18 @@ def _ulock(u):
         return _unit_locks.setdefault(u["key"], threading.RLock())
 
 
+PLAN_FILE = "plan2.json"   # renamed when the plan's rules change, so cached plans are worked out again
+
+
+def _tiles(u, cache, scale):
+    """The folder of the pass's tiles made on this display scale: a plan that changes its scale (its rules
+    changed) makes its tiles again instead of drawing them next to tiles on the old one."""
+    return os.path.join(folder(u, cache), "tiles-" + hashlib.md5(json.dumps(scale, sort_keys=True).encode()).hexdigest()[:8])
+
+
 def plan(u, cache):
     """The pass's display scale, rotation, footprint, view mode and colour filters, worked out once and kept."""
-    path = os.path.join(folder(u, cache), "plan2.json")
+    path = os.path.join(folder(u, cache), PLAN_FILE)
     with _ulock(u):
         if os.path.exists(path):
             with open(path) as fh:
@@ -457,15 +467,15 @@ def pass_scale(frames, u, drawn=None, true_colour=False):
 
 def tile(u, n, cache, scale=None):
     """Tile n of the pass, made once: its picture north up, scaled to the pass's reference distance and cropped
-    (tiles/<n>.png), and its report: offset = where the frame's middle sits from the body's centre and box = the
+    (_tiles/<n>.png), and its report: offset = where the frame's middle sits from the body's centre and box = the
     crop around it (reference pixels); no offset when SPICE could not place it."""
-    base = os.path.join(folder(u, cache), "tiles", str(n))
     with _ulock(u):
+        if scale is None:
+            scale = plan(u, cache)["display_scale"]
+        base = os.path.join(_tiles(u, cache, scale), str(n))
         if os.path.exists(base + ".json"):
             with open(base + ".json") as fh:
                 return json.load(fh)
-        if scale is None:
-            scale = plan(u, cache)["display_scale"]
         path, fid, f, t, nm, x, y, z = u["frames"][n]
         k = z / u["z"] if z else 1.0
         try:
@@ -511,7 +521,7 @@ def _window(u, p, mine, rect, cache):
         sw, sh = max(1, round(bw * k)), max(1, round(bh * k))
         if left >= W or top >= H or left + sw <= 0 or top + sh <= 0:
             continue
-        part = _part(os.path.join(folder(u, cache), "tiles", f"{t['n']}.png"), sw, sh)
+        part = _part(os.path.join(_tiles(u, cache, p["display_scale"]), f"{t['n']}.png"), sw, sh)
         frame = np.zeros((H, W, 4), np.uint8)
         x0, y0, x1, y1 = max(left, 0), max(top, 0), min(left + sw, W), min(top + sh, H)
         frame[y0:y1, x0:x1] = part[y0 - top:y1 - top, x0 - left:x1 - left]
@@ -628,7 +638,7 @@ def _grown(u, p, f, mine, rect, cache):
         x0, y0 = max(left - pad, 0), max(top - pad, 0)
         x1, y1 = min(left + sw + pad, W), min(top + sh + pad, H)
         if x1 > x0 and y1 > y0:
-            part = _part(os.path.join(folder(u, cache), "tiles", f"{t['n']}.png"), sw, sh)
+            part = _part(os.path.join(_tiles(u, cache, p["display_scale"]), f"{t['n']}.png"), sw, sh)
             frame = np.zeros((y1 - y0, x1 - x0, 4), np.uint8)
             a0, b0 = max(left, 0), max(top, 0)
             a1, b1 = min(left + sw, W), min(top + sh, H)
@@ -840,12 +850,12 @@ def _made_through(u, n, cache):
     Tile 0 is made here when nothing is (with the plan, seconds), so a pass's first mosaic does not wait for
     the background."""
     key = (u["key"], calibration.look())
-    base = os.path.join(folder(u, cache), "tiles")
     with _lock:
         j = _made.get(key, -1)
-    if j < 0 and not os.path.exists(os.path.join(base, "0.json")):
+    if j < 0:
         with _asking():
             tile(u, 0, cache)
+    base = _tiles(u, cache, plan(u, cache)["display_scale"])
     while j < n and os.path.exists(os.path.join(base, f"{j + 1}.json")):
         j += 1
     with _lock:
