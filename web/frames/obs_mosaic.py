@@ -309,7 +309,7 @@ def _ulock(u):
 
 def plan(u, cache):
     """The pass's display scale, rotation, footprint, view mode and colour filters, worked out once and kept."""
-    path = os.path.join(folder(u, cache), "plan.json")
+    path = os.path.join(folder(u, cache), "plan2.json")
     with _ulock(u):
         if os.path.exists(path):
             with open(path) as fh:
@@ -319,6 +319,11 @@ def plan(u, cache):
         for fr in frames:
             count[fr[2]] = count.get(fr[2], 0) + 1
             nms[fr[2]] = fr[4]
+        # the filters chosen from those pointed at the body: a pass whose most taken filter looks beside it (the
+        # clear frames of ISS_C23RI_RMOV001_PRIME are a frame and a third off Jupiter, on dark sky) is drawn in
+        # the filters that see the body, not as a black mosaic of that sky
+        aside = _aside(frames, u)
+        count = {f: c for f, c in count.items() if f not in aside} or count
         colour = colour_of(count, nms)
         scale = pass_scale(frames, u, colour or [max(count, key=count.get)],
                            bool(colour and colour[1] == "GRN" and colour[2] in reel.TRUE_BLUES))
@@ -351,6 +356,20 @@ def plan(u, cache):
              "grey": max(count, key=count.get), "whole": u["whole"]}
         reel._cached(path, lambda: json.dumps(p).encode())
         return p
+
+
+def _aside(frames, u):
+    """The filters whose frames point, as a rule, more than a frame further from the body's centre than the
+    filter pointed closest (median over each filter's placed frames, at the pass's reference distance)."""
+    far = {}
+    for fr in frames:
+        if fr[7]:
+            far.setdefault(fr[2], []).append(math.hypot(fr[5], fr[6]) * fr[7] / u["z"])
+    med = {f: sorted(v)[len(v) // 2] for f, v in far.items()}
+    if not med:
+        return set()
+    near = min(med.values())
+    return {f for f, m in med.items() if m > near + FRAME}
 
 
 # filter sets with a colour mapping of their own, looked up before the general rule in colour_of: frozenset of the
