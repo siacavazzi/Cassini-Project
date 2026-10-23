@@ -909,6 +909,38 @@ body.phone #ssound { width: 30px; height: 30px; }
 #exdone[hidden], #exvid[hidden] { display: none; }
 body.phone #excard:not(.full) { width: calc(100% - 16px) !important; left: 8px !important; right: auto !important; top: calc(env(safe-area-inset-top, 0px) + 30px) !important; }
 
+#segbar { position: fixed; z-index: 60; display: grid; gap: 6px; padding: 7px 9px 8px; width: max-content; max-width: calc(100vw - 16px); box-sizing: border-box;
+  border-radius: 8px; background: var(--q-panel, rgba(16,17,20,.72)); border: 1px solid var(--q-line, rgba(255,255,255,.1)); color: var(--q-text, #ddd);
+  -webkit-backdrop-filter: blur(16px) saturate(1.2); backdrop-filter: blur(16px) saturate(1.2); box-shadow: 0 8px 30px rgba(0,0,0,.45);
+  font: 11px/1.25 var(--ui); transition: opacity .7s ease; }
+#segbar[hidden], #seghint[hidden], #segbar [hidden] { display: none !important; }
+#segbar .segrow { display: flex; gap: 8px; align-items: center; flex-wrap: wrap; }
+#segwhen { color: var(--q-text, #ddd); font-variant-numeric: tabular-nums; white-space: nowrap; }
+#segwhat { color: var(--q-dim, #888); font-variant-numeric: tabular-nums; white-space: nowrap; }
+#segbar button { font: inherit; padding: 3px 9px; border-radius: 4px; border: 1px solid var(--q-line, #555); background: rgba(255,255,255,.08); color: var(--q-text, #ddd); cursor: pointer; white-space: nowrap; }
+#segbar button:hover { background: rgba(255,255,255,.16); }
+#segbar button:disabled { opacity: .45; cursor: default; }
+#segbar button.go { background: var(--q-accent, #8ab6ff); border-color: transparent; color: #0b1019; font-weight: 600; }
+#segbar #segx { border: 0; background: none; padding: 0 2px; color: var(--q-dim, #888); font-size: 14px; line-height: 1; margin-left: auto; }
+#segbar #segx:hover { color: var(--q-text, #ddd); }
+#segfps { width: 96px; accent-color: var(--q-accent, #8ab6ff); }
+#segfpsv { min-width: 40px; font-variant-numeric: tabular-nums; color: var(--q-dim, #888); }
+#segstate { color: var(--q-dim, #888); font-variant-numeric: tabular-nums; }
+#segstate.warn { color: #e6bb68; }
+#segprog { height: 3px; border-radius: 2px; background: rgba(255,255,255,.1); overflow: hidden; }
+#segprog i { display: block; height: 100%; width: 0; background: var(--q-accent, #8ab6ff); transition: width .4s ease; }
+/* resting: the bar rests with the windows, except while a stretch is being made */
+body.idle #segbar:not(.busy) { opacity: 0; pointer-events: none; }
+#seghint { position: fixed; left: 50%; transform: translateX(-50%); z-index: 61; display: flex; gap: 12px; align-items: center; max-width: min(560px, calc(100vw - 16px)); box-sizing: border-box;
+  padding: 7px 12px; border-radius: 8px; background: var(--q-panel, rgba(16,17,20,.72)); border: 1px solid var(--q-line, rgba(255,255,255,.1)); color: var(--q-text, #ddd);
+  -webkit-backdrop-filter: blur(16px); backdrop-filter: blur(16px); font: 11.5px/1.35 var(--ui); box-shadow: 0 8px 30px rgba(0,0,0,.45); opacity: 0; transition: opacity .4s ease; }
+#seghint.on { opacity: 1; }
+#seghint button { font: inherit; background: none; border: 0; padding: 0; color: var(--q-accent, #8ab6ff); cursor: pointer; white-space: nowrap; }
+#seghint button.x { color: var(--q-dim, #888); font-size: 14px; line-height: 1; }
+body.phone #segbar { left: 8px !important; right: 8px; width: auto; }
+body.phone #segbar button { padding: 6px 11px; }
+body.phone #segfps { flex: 1; }
+
 #appdock { position: fixed; z-index: 1350; display: flex; align-items: flex-end; gap: 4px; padding: 5px 6px; --ds: 40px;
   left: 50%; bottom: calc(env(safe-area-inset-bottom, 0px) + 6px); transform: translateX(-50%); max-width: calc(100% - 20px);
   background: var(--q-panel); -webkit-backdrop-filter: blur(16px) saturate(1.2); backdrop-filter: blur(16px) saturate(1.2);
@@ -1307,7 +1339,7 @@ body.phone #launch .lx-clock { font-size: 9.5px; bottom: 9vh; }
   <section class="win" id="excard" aria-label="Export Movie" hidden>
   <div class="titlebar"><span class="lights"><button class="close" aria-label="Close">×</button><button class="min" aria-label="Minimize">–</button><button class="zoom" aria-label="Zoom">+</button></span>Export Movie</div>
   <div class="body">
-    <div id="exhint">Shift-drag across the timeline to mark a stretch, or press I at its start and O at its end.</div>
+    <div id="exhint">Shift-drag across the timeline to mark a stretch (or press and hold on it, then drag), or press I at its start and O at its end.</div>
     <div class="exrow"><span>From</span><input type="text" id="exfrom" placeholder="YYYY-MM-DD hh:mm:ss" spellcheck="false" aria-label="Start, UTC"><button class="exbtn" id="exin" title="Start at the mission clock (I)">Here</button></div>
     <div class="exrow"><span>Until</span><input type="text" id="exuntil" placeholder="YYYY-MM-DD hh:mm:ss" spellcheck="false" aria-label="End, UTC"><button class="exbtn" id="exout" title="End at the mission clock (O)">Here</button></div>
     <div id="exsum"></div>
@@ -1323,6 +1355,22 @@ body.phone #launch .lx-clock { font-size: 9.5px; bottom: 9vh; }
     </div>
   </div>
 </section>
+
+  <aside id="segbox">
+  <div id="segbar" role="group" aria-label="Highlighted stretch" hidden>
+    <div class="segrow"><span id="segwhen"></span><span id="segwhat"></span><button id="segx" aria-label="Clear the highlight" title="Clear the highlight (Esc)">×</button></div>
+    <div class="segrow">
+      <button id="segprep" title="Make every picture of this stretch ahead of time, so it plays smoothly at any frame rate">Pre-process</button>
+      <button id="segstop" hidden>Stop</button>
+      <button id="segplay" title="Play this stretch as a movie">▶ Play</button>
+      <input type="range" id="segfps" min="2" max="24" step="1" aria-label="Movie frame rate"><span id="segfpsv"></span>
+      <button id="segexport" title="Make a film of this stretch to download (E)">Export…</button>
+    </div>
+    <div id="segprog" hidden><i></i></div>
+    <div class="segrow" id="segstaterow" hidden><span id="segstate" role="status" aria-live="polite"></span></div>
+  </div>
+  <div id="seghint" role="status" aria-live="polite" hidden><span>Movie mode is waiting for pictures to be made. Highlight a stretch of the timeline and pre-process it to watch it smoothly.</span><button id="seghintgo">Highlight what’s next</button><button class="x" id="seghintx" aria-label="Dismiss">×</button></div>
+</aside>
 
   <nav id="appdock" aria-label="Dock" hidden></nav>
 
@@ -4792,7 +4840,11 @@ body.phone #launch .lx-clock { font-size: 9.5px; bottom: 9vh; }
     $("exuntil").value = X.b != null ? show(X.b) : "";
     $("exhint").hidden = X.a != null && X.b != null;
     redraw(); estimate();
+    // the highlighted stretch's bar (segment.html: pre-process it, play it) follows the marks
+    document.dispatchEvent(new CustomEvent("cassini:marks", { detail: { a: X.a, b: X.b } }));
   }
+  // a stretch just highlighted: the bar over it comes up (segment.html), or this window where there is no bar
+  const marked = () => { if (!window.cassiniSegment) open(); };
   function clear() { X.a = X.b = null; mark(); }
 
   // drawn over the timeline: the stretch lit in the camera blue, a handle at each end
@@ -4811,9 +4863,10 @@ body.phone #launch .lx-clock { font-size: 9.5px; bottom: 9vh; }
     if (prevTimeline) prevTimeline(g, w, h, xn);
   };
 
-  // shift-drag marks a stretch; dragging a marked edge moves it; anything else scrubs as before
-  const tl = $("tl");
-  let drag = null;
+  // shift-drag marks a stretch, and so does pressing and holding on the timeline and then dragging (no keyboard
+  // needed, on a phone too); dragging a marked edge moves it; anything else scrubs as before
+  const tl = $("tl"), HOLD = 450;
+  let drag = null, held = null;
   const etAt = e => { const r = tl.getBoundingClientRect(); return xToEt(e.clientX - r.left, r.width); };
   window.addEventListener("pointerdown", e => {
     if (e.target !== tl || !catalog) return;
@@ -4821,11 +4874,26 @@ body.phone #launch .lx-clock { font-size: 9.5px; bottom: 9vh; }
     if (e.shiftKey) drag = { from: etAt(e), edge: null };
     else if (near(X.a)) drag = { edge: "a" };
     else if (near(X.b)) drag = { edge: "b" };
-    else return;
+    else {
+      // a press that stays put for HOLD ms turns the scrub it started into a highlight from where it was pressed
+      if (e.offsetY >= (e.pointerType === "touch" ? 26 : 18)) {
+        const from = etAt(e), x0 = e.clientX, y0 = e.clientY, id = e.pointerId;
+        held = { x0, y0, id, timer: setTimeout(() => {
+          held = null;
+          state.dragging = false;
+          drag = { from, edge: null };
+          X.a = X.b = from; tl.style.cursor = "crosshair";
+          try { tl.setPointerCapture(id); } catch (err) {}
+          if (navigator.vibrate) navigator.vibrate(10);
+        }, HOLD) };
+      }
+      return;
+    }
     e.stopImmediatePropagation(); e.preventDefault();
     tl.setPointerCapture(e.pointerId);
   }, true);
   window.addEventListener("pointermove", e => {
+    if (held && Math.hypot(e.clientX - held.x0, e.clientY - held.y0) > 6) { clearTimeout(held.timer); held = null; }
     if (!drag) return;
     e.stopImmediatePropagation();
     const t = etAt(e);
@@ -4833,12 +4901,15 @@ body.phone #launch .lx-clock { font-size: 9.5px; bottom: 9vh; }
     else { X.a = Math.min(drag.from, t); X.b = Math.max(drag.from, t); mark(); }
   }, true);
   window.addEventListener("pointerup", e => {
+    if (held) { clearTimeout(held.timer); held = null; }
     if (!drag) return;
     e.stopImmediatePropagation();
     const made = !drag.edge;
-    drag = null;
-    if (made && X.a != null && X.b - X.a > 1) open();
+    drag = null; tl.style.cursor = "";
+    if (made && X.a != null && X.b - X.a > 1) marked();
+    else if (made) clear();
   }, true);
+  window.addEventListener("pointercancel", () => { if (held) { clearTimeout(held.timer); held = null; } }, true);
   // the cursor says when an edge can be dragged
   tl.addEventListener("pointermove", e => {
     if (drag || !catalog) return;
@@ -4994,13 +5065,210 @@ body.phone #launch .lx-clock { font-size: 9.5px; bottom: 9vh; }
   window.addEventListener("keydown", e => {
     if (e.metaKey || e.ctrlKey || e.altKey || /INPUT|SELECT|TEXTAREA/.test(e.target.tagName) || !catalog) return;
     const k = e.key.toLowerCase();
-    if (k === "i") { mark(state.et, null); if (X.b != null) open(); }
-    else if (k === "o") { mark(null, state.et); open(); }
+    if (k === "i") { mark(state.et, null); if (X.b != null) marked(); }
+    else if (k === "o") { mark(null, state.et); marked(); }
     else if (k === "e") { card.hidden ? open() : close(); }
     else if (e.key === "Escape" && !card.hidden) close();
   });
   const go2 = $("gomenu");
   if (go2) { const li = document.createElement("li"); li.innerHTML = '<button id="goexport">Export Movie…<span class="kbd">E</span></button>'; go2.appendChild(li); li.querySelector("button").addEventListener("click", open); }
+})();
+</script>
+<script>
+// ---------- pre-processing a stretch of the timeline ----------
+(function () {
+  const $ = id => document.getElementById(id);
+  const FRAMES = (() => {                       // the frame server, chosen as the camera window chooses it
+    const q = new URLSearchParams(location.search).get("frames");
+    if (q) return q.replace(/\/$/, "");
+    if (/^https?:$/.test(location.protocol) && !/claude\.ai$|claudeusercontent\.com$|claude\.site$/.test(location.hostname)) return location.origin;
+    return "http://localhost:8765";
+  })();
+  const S = window.cassiniSettings, EX = window.cassiniExport;
+  if (!EX) return;
+  const opt = (k, d) => (S && S.get(k) !== undefined ? S.get(k) : d);
+  if (S) {
+    S.define({ key: "segment.autoplay", section: "Playback", label: "Play a pre-processed stretch when it is ready", type: "toggle", value: true,
+      hint: "After Pre-process on a highlighted stretch of the timeline, it plays as a movie from its start at the bar's frame rate." });
+    S.define({ key: "segment.hint", section: "Playback", label: "Suggest pre-processing when movie mode waits", type: "toggle", value: true,
+      hint: "A quiet note when movie mode spends most of its time waiting for pictures to be made." });
+  }
+  const bar = $("segbar"), hint = $("seghint");
+  // P: the stretch's job on the frame server (null until Pre-process), the key of the choices it was made with,
+  // and whether the stretch is playing as a movie now
+  const P = { job: null, key: "", poll: 0, playing: false, a: null, b: null, hintAt: -1e9 };
+  const isoOf = et => new Date(etToMs(et)).toISOString().slice(0, 19);
+  const short = et => { const d = new Date(etToMs(et)).toISOString(); return `${d.slice(0, 10)} ${d.slice(11, 16)}`; };
+
+  // ---- what the camera windows will ask for: their cameras and sizes, and the page's look ----
+  // A window's size changes with the picture in it (cassiniWM.sized: 1024, or 512 when it shows the picture that small,
+  // which a window often does once its first picture is up), so both are made, except on a phone, which asks for 512
+  function windows() {
+    const cams = new Set();
+    for (const card of document.querySelectorAll(".win:not([hidden]) [data-cam]")) if (/^[NW]$/.test(card.dataset.cam)) cams.add(card.dataset.cam);
+    if (!cams.size) { cams.add("N"); cams.add("W"); }
+    return { cams: ["N", "W"].filter(c => cams.has(c)).join(""), sizes: document.body.classList.contains("phone") ? "512" : "512,1024" };
+  }
+  function params() {
+    const w = windows();
+    const q = new URLSearchParams({ from: isoOf(P.a), until: isoOf(P.b), cams: w.cams, sizes: w.sizes,
+      mosaics: opt("cameras.mosaics", true) && window.cassiniMosaics !== false ? "1" : "0", steady: opt("movies.steady", true) ? "1" : "0",
+      color: opt("cameras.composites", true) ? "1" : "0" });
+    return q.toString() + (window.cassiniMovieStyle ? window.cassiniMovieStyle() : "") + (window.cassiniLook ? window.cassiniLook() : "");
+  }
+  // frames of the windows' cameras in the stretch (in the months loaded now)
+  function frames() {
+    if (!catalog || P.a == null) return 0;
+    const cams = windows().cams, i0 = lastImageIndex(P.a) + 1, i1 = lastImageIndex(P.b) + 1;
+    let n = 0; for (let i = i0; i < i1; i++) if (cams.includes(catalog.cam[order[i]])) n++;
+    return n;
+  }
+
+  // ---- the bar, over the stretch on the timeline ----
+  function place() {
+    if (bar.hidden) return;
+    const tl = $("tl"), r = tl.getBoundingClientRect(), w = bar.offsetWidth;
+    bar.style.bottom = `${Math.max(8, innerHeight - r.top + 8)}px`;
+    if (document.body.classList.contains("phone")) return;
+    const xa = Math.max(0, etToX(P.a, r.width)), xb = Math.min(r.width, etToX(P.b, r.width));
+    const mid = r.left + (xb > xa ? (xa + xb) / 2 : etToX((P.a + P.b) / 2, r.width));
+    bar.style.left = `${Math.round(Math.max(8, Math.min(innerWidth - w - 8, mid - w / 2)))}px`;
+  }
+  function say(text, warn) { $("segstate").textContent = text || ""; $("segstate").classList.toggle("warn", !!warn); $("segstaterow").hidden = !text; }
+  function progress(frac) { $("segprog").hidden = frac == null; if (frac != null) $("segprog").firstElementChild.style.width = `${(frac * 100).toFixed(1)}%`; }
+  function fpsUi() { const f = Math.round(window.cassiniMovie && window.cassiniMovie.fps ? window.cassiniMovie.fps() : opt("movie.fps", 8)); $("segfps").value = f; $("segfpsv").textContent = `${f} fps`; }
+  function buttons() {
+    const j = P.job, busy = j && /^(queued|planning|making|waiting)$/.test(j.state), done = j && j.state === "done" && P.key === params();
+    $("segprep").hidden = busy || done; $("segstop").hidden = !busy;
+    $("segplay").classList.toggle("go", !!done);
+    $("segplay").textContent = P.playing && state.playing ? "❚❚ Pause" : "▶ Play";
+    bar.classList.toggle("busy", !!busy);
+  }
+  function summary() {
+    $("segwhen").textContent = `${short(P.a)} → ${short(P.b)} UTC`;
+    const n = frames();
+    $("segwhat").textContent = n ? `· ${fmtDur(P.b - P.a)} · ${n.toLocaleString()} frame${n === 1 ? "" : "s"}` : `· ${fmtDur(P.b - P.a)} · no pictures`;
+    $("segprep").disabled = $("segplay").disabled = !n;
+  }
+  // a stretch marked (export.html's marks, also its window's From and Until): the bar comes up for it
+  function marked(a, b) {
+    if (a == null || b == null || b - a < 1) { hide(); return; }
+    const moved = a !== P.a || b !== P.b;
+    P.a = a; P.b = b;
+    if (moved && P.job && P.key !== params()) { stopPoll(); P.job = null; progress(null); say(""); }
+    bar.hidden = false; summary(); fpsUi(); buttons(); place();
+  }
+  function hide() { bar.hidden = true; stopPoll(); P.job = null; P.a = P.b = null; P.playing = false; progress(null); say(""); }
+  document.addEventListener("cassini:marks", e => marked(e.detail.a, e.detail.b));
+
+  // ---- making it ahead: the frame server's job, followed every second ----
+  async function prep() {
+    const key = params();
+    P.key = key; say("Asking the frame server…"); progress(0);
+    try {
+      const r = await fetch(`${FRAMES}/prebuild?${key}`, { method: "POST" }), j = await r.json();
+      if (!r.ok) { P.job = null; progress(null); say(j.error || "The frame server cannot pre-process that.", true); buttons(); return; }
+      follow(j);
+    } catch (err) { P.job = null; progress(null); say(`No frame server at ${FRAMES} that pre-processes.`, true); buttons(); }
+  }
+  function stopPoll() { clearTimeout(P.poll); P.poll = 0; }
+  function follow(j) {
+    stopPoll();
+    const was = P.job && P.job.state;
+    P.job = j; buttons(); redraw();
+    const frac = j.total ? j.done / j.total : 0;
+    if (j.state === "done") {
+      progress(1);
+      say(`Ready: ${j.total.toLocaleString()} pictures made ahead${j.took ? ` in ${fmtDur(j.took)}` : ""}${j.errors ? ` (${j.errors} could not be made)` : ""}`);
+      if (was && was !== "done" && opt("segment.autoplay", true)) play();
+      return;
+    }
+    if (j.state === "failed") { progress(null); say(j.error || "Pre-processing failed; see the frame server's log.", true); return; }
+    if (j.state === "stopped") { progress(frac); say(`Stopped at ${j.done.toLocaleString()} of ${j.total.toLocaleString()}; what is made stays made.`); return; }
+    progress(frac);
+    say(j.state === "queued" ? (j.ahead ? `Waiting for ${j.ahead} stretch${j.ahead > 1 ? "es" : ""} before it…` : "Starting…")
+      : j.state === "planning" ? "Finding every picture in the stretch…"
+      : j.state === "waiting" ? `Waiting while the frame server is busy · ${j.done.toLocaleString()} of ${j.total.toLocaleString()}`
+      : `Pre-processing ${j.done.toLocaleString()} of ${j.total.toLocaleString()} pictures${j.eta != null ? ` · ${fmtDur(j.eta)} left` : ""}`);
+    P.poll = setTimeout(async () => {
+      try { const r = await fetch(`${FRAMES}/prebuild/${j.id}.json`, { cache: "no-store" }); if (r.ok) follow(await r.json()); else follow(j); }
+      catch (err) { follow(j); }
+    }, 1000);
+  }
+  async function stop() {
+    if (!P.job) return;
+    try { const r = await fetch(`${FRAMES}/prebuild/${P.job.id}/stop`, { method: "POST" }); if (r.ok) follow(await r.json()); } catch (err) {}
+  }
+
+  // ---- playing it: movie mode over the stretch, at the bar's frame rate ----
+  function play() {
+    if (P.a == null || !window.cassiniMovie) return;
+    const M = window.cassiniMovie;
+    if (P.playing && M.on) { setPlaying(!state.playing); buttons(); return; }
+    P.playing = true;
+    M.start(true, { from: P.a, until: P.b });
+    buttons();
+  }
+  // movie mode left (the stretch's last picture, Escape, the Movie button): the bar says Play again
+  setInterval(() => {
+    if (P.playing && !(window.cassiniMovie && window.cassiniMovie.on)) { P.playing = false; buttons(); }
+    else if (P.playing) buttons();
+  }, 400);
+
+  // ---- the timeline: how far the stretch is made, a line along its foot ----
+  const redraw = () => { if (typeof drawTimeline === "function" && catalog) drawTimeline(); };
+  const prevTimeline = window.studyTimeline;
+  window.studyTimeline = (g, w, h, xn) => {
+    if (prevTimeline) prevTimeline(g, w, h, xn);
+    const j = P.job;
+    if (P.a != null && j && j.through && j.state !== "failed") {
+      const xa = etToX(P.a, w), xt = etToX(Math.min(P.b, utcToEt(j.through)), w);
+      g.fillStyle = j.state === "done" ? "rgba(138,182,255,0.95)" : "rgba(138,182,255,0.7)";
+      if (xt > xa) g.fillRect(xa, h - 3, xt - xa, 3);
+    }
+    place();
+  };
+  window.addEventListener("resize", place);
+
+  // ---- the controls ----
+  $("segprep").addEventListener("click", prep);
+  $("segstop").addEventListener("click", stop);
+  $("segplay").addEventListener("click", play);
+  $("segexport").addEventListener("click", () => EX.open());
+  $("segx").addEventListener("click", () => { EX.clear(); hide(); });
+  $("segfps").addEventListener("input", e => { if (S) S.set("movie.fps", +e.target.value); fpsUi(); });
+  if (S) S.on("movie.fps", fpsUi);
+  for (const k of ["cameras.composites", "cameras.mosaics", "movies.steady", "movies.trail", "movies.laps", "movies.center", "cameras.balancedColor", "cameras.colors"])
+    if (S && S.get(k) !== undefined) S.on(k, () => { if (!bar.hidden) { if (P.job && P.key !== params()) { stopPoll(); P.job = null; progress(null); say(""); } buttons(); } });
+  window.addEventListener("keydown", e => {
+    if (bar.hidden || e.key !== "Escape" || document.querySelector(".menu.open, .win.full") || (window.cassiniMovie && window.cassiniMovie.on)) return;
+    if (!$("excard") || $("excard").hidden) { EX.clear(); hide(); }
+  });
+
+  // ---- the note when movie mode keeps waiting ----
+  let hintTimer = 0;
+  function showHint() {
+    if (!opt("segment.hint", true) || performance.now() - P.hintAt < 10 * 60e3 || (P.job && /^(queued|planning|making|waiting)$/.test(P.job.state))) return;
+    if (!bar.hidden && P.playing) return;   // playing a highlighted stretch already
+    P.hintAt = performance.now();
+    const r = $("tl").getBoundingClientRect();
+    hint.style.bottom = `${Math.max(8, innerHeight - r.top + 8)}px`;
+    hint.hidden = false; requestAnimationFrame(() => hint.classList.add("on"));
+    clearTimeout(hintTimer); hintTimer = setTimeout(hideHint, 15000);
+  }
+  function hideHint() { hint.classList.remove("on"); setTimeout(() => { if (!hint.classList.contains("on")) hint.hidden = true; }, 400); }
+  document.addEventListener("cassini:movie-slow", e => (e.detail.slow ? showHint() : hideHint()));
+  $("seghintx").addEventListener("click", hideHint);
+  // what's next: from the clock to the 300th frame after it (or the end of the months loaded)
+  $("seghintgo").addEventListener("click", () => {
+    hideHint();
+    if (!catalog) return;
+    const i = lastImageIndex(state.et), j = Math.min(catalog.sorted.length - 1, i + 300);
+    if (j <= i) return;
+    if (window.cassiniMovie && window.cassiniMovie.on) setPlaying(false);
+    EX.mark(state.et, catalog.sorted[j] + 1);
+  });
+  window.cassiniSegment = { prep, play, stop, hide, get state() { return P; } };
 })();
 </script>
 <script>

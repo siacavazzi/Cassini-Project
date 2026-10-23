@@ -31,6 +31,7 @@ import argparse
 import collections
 import concurrent.futures
 import contextvars
+import datetime
 import functools
 import json
 import os
@@ -140,24 +141,37 @@ def items(phase):
     raise ValueError(phase)
 
 
-def make_pass(u, cache):
+def make_pass(u, cache, sizes=(1024, 512), within=None, style=None):
     """What a window shows as it plays through the pass, at every frame at 1024 and 512, after the pass's plan and
     every tile (as web/frames/warm_pass.py does for one observation): a mosaic movie's rolling picture
     (rolling_webp, wait=True, in frame order, so each grows from the one before and is named after every tile
-    drawn, the name a window asks for), a mosaic's mosaic so far, a movie's steadied frame."""
+    drawn, the name a window asks for), a mosaic's mosaic so far, a movie's steadied frame.
+    within (t0, t1), seconds since 1970: only the pictures of frames taken then (a stretch of the timeline, segment
+    below), after every tile up to the last of them (and every rolling picture before them, each grown from the
+    last). style: the page's Settings > Movie choices, as the window puts them in its request ({trail, laps,
+    center, color}; the defaults when None)."""
+    style = style or {}
+    t0, t1 = within or (-float("inf"), float("inf"))
+    last = max((j for j, f in enumerate(u["frames"]) if f[3] <= t1), default=-1)
+    if last < 0:
+        return 0
     p = obs_mosaic.plan(u, cache)
-    for j in range(len(u["frames"])):
+    for j in range(last + 1):
         obs_mosaic.tile(u, j, cache, p["display_scale"])
-    kind = u.get("kind")
-    for j, f in enumerate(u["frames"]):
-        for size in (1024, 512):
+    kind, n = u.get("kind"), 0
+    for j, f in enumerate(u["frames"][:last + 1]):
+        if f[3] < t0 and kind != "mosaic_movie":
+            continue
+        n += f[3] >= t0
+        for size in sizes:
             if kind == "mosaic_movie":
-                obs_mosaic.rolling_webp(f[1], size, cache, 1, wait=True)
+                obs_mosaic.rolling_webp(f[1], size, cache, style.get("laps", 1), wait=True)
             elif u["mosaic"]:
                 obs_mosaic._mosaic_at(u, j, size, cache)
             else:
-                obs_mosaic.movie_webp(f[1], size, cache, wait=True, ahead=0)
-    return len(u["frames"])
+                obs_mosaic.movie_webp(f[1], size, cache, style.get("trail", 0), style.get("color", True), wait=True, ahead=0,
+                                      centre=style.get("center", True))
+    return n
 
 
 # ---------- sharing the Mini ----------
@@ -314,6 +328,224 @@ def sample(args):
         os.makedirs(args.status, exist_ok=True)
         with open(os.path.join(args.status, f"sample-{args.phase}.json"), "w") as fh:
             json.dump(out, fh, indent=1)
+
+
+# ---------- one stretch of the timeline, made ahead for the page (the frame server's POST /prebuild) ----------
+# Cassini OS: highlight a stretch of the timeline and press Pre-process; the frame server makes every picture the
+# camera windows will ask for in that stretch, with the makers above (the same files the windows' requests find),
+# and the stretch then plays as a movie at the frame rate the person picks, from the cache. One stretch is made at
+# a time, behind the server's own requests (SEGMENT_THREADS), and it waits while the Mini is busy, like run().
+
+SEGMENT_THREADS = 2
+SEGMENT_MAX = 6000      # pictures in one stretch (a busy day near Saturn has ~1,500)
+SEGMENT_SIZES = (512, 768, 1024)
+
+
+def segment_options(q):
+    """The stretch and the page's choices from a POST /prebuild query (parse_qs): from/until (UTC, ISO), cams (N,
+    W or NW), sizes (the windows' picture sizes), look/colors (as on every picture route), mosaics/steady/color
+    (Settings > Cameras and Movie) and trail/laps/center (the movie style). ValueError for anything else."""
+    get = lambda k, d=None: q.get(k, [d])[0]
+    when = lambda s: datetime.datetime.fromisoformat(s.replace("Z", "")).replace(tzinfo=datetime.timezone.utc).timestamp()
+    try:
+        t0, t1 = when(get("from", "")), when(get("until", ""))
+    except ValueError:
+        raise ValueError("from= and until= take UTC times, 2006-09-15T14:32:00")
+    if not t1 > t0:
+        raise ValueError("until= must come after from=")
+    cams = "".join(c for c in "NW" if c in (get("cams") or "NW"))
+    try:
+        sizes = sorted({min(SEGMENT_SIZES, key=lambda z: abs(z - int(x))) for x in (get("sizes") or "1024").split(",") if x})
+        trail, laps = int(get("trail", "0") or 0), int(get("laps", "1") or 1)
+    except ValueError:
+        raise ValueError("sizes=, trail= and laps= take numbers")
+    if not cams or not sizes:
+        raise ValueError("cams= takes N, W or NW")
+    on = lambda k: get(k, "1") != "0"
+    return {"from": t0, "until": t1, "cams": cams, "sizes": sizes,
+            "look": get("look", calibration.LOOKS[0]), "colors": get("colors", calibration.COLORS[0]),
+            "mosaics": on("mosaics"), "steady": on("steady"),
+            "style": {"trail": max(0, min(obs_mosaic.TRAIL, trail)), "laps": max(1, min(obs_mosaic.TRAIL, laps)),
+                      "center": on("center"), "color": on("color")}}
+
+
+@functools.lru_cache(None)
+def frame_times():
+    """Each frame's time, seconds since 1970, by id."""
+    idx, _ = reel.load_index()
+    return dict(zip(idx["id"].tolist(), idx["seconds_1970"].astype(float).tolist()))
+
+
+def segment_items(o):
+    """(name, time, pictures, work) for every picture the camera windows ask for in the stretch o
+    (segment_options), in time order: each frame (at the windows' sizes, and 128 for a pass's filmstrip), each
+    filter set's composite (at the frame that completes it, when the window shows it), and each mosaic, mosaic
+    movie or movie pass with frames in the stretch (make_pass within it)."""
+    import frame_server
+    idx, _ = reel.load_index()
+    t0, t1, cams, sizes = o["from"], o["until"], o["cams"], o["sizes"]
+    t = idx["seconds_1970"].to_numpy()
+    lo, hi = t.searchsorted(t0, "left"), t.searchsorted(t1, "right")
+    rows = idx.iloc[lo:hi]
+    out, keys = [], {}
+    for r in rows[["id", "INSTRUMENT_ID", "TARGET_NAME", "OBSERVATION_ID", "seconds_1970"]].itertuples(index=False):
+        cam = "N" if r.INSTRUMENT_ID == "ISSNA" else "W"
+        if cam not in cams:
+            continue
+        out.append((r.id, float(r.seconds_1970), 1, lambda c, i=r.id: [frame_server.webp(i, z, c) for z in (*sizes, 128)]))
+        if isinstance(r.OBSERVATION_ID, str):
+            keys.setdefault((r.TARGET_NAME, r.OBSERVATION_ID, cam), None)
+    times = frame_times()
+    for s in page_sets():
+        ready = max(times[i] for i in s)
+        if t0 <= ready <= t1 and s[0][0] in cams:
+            out.append(("_".join(s), ready, 1, lambda c, s=s: [frame_server.color_webp(s, z, c) for z in sizes]))
+    for key in keys:
+        for u in obs_mosaic.units(*key):
+            n = sum(t0 <= f[3] <= t1 for f in u["frames"])
+            if not n:
+                continue
+            movie = u.get("kind") != "mosaic_movie" and not u["mosaic"]
+            if (o["mosaics"] if not movie else o["steady"] and (u.get("kind") == "movie" or u.get("movie"))):
+                first = next(f[3] for f in u["frames"] if f[3] >= t0)
+                out.append(("_".join(map(str, u["key"])), first, n, lambda c, u=u: make_pass(u, c, sizes, (t0, t1), o["style"])))
+    out.sort(key=lambda x: x[1])
+    return out
+
+
+class Segments:
+    """The stretches asked for, made one at a time in the order asked. A stretch asked for again (the same
+    options) is the same job: its status, or a new run when it failed or was stopped."""
+
+    def __init__(self, cache, pause="~/prebuild.pause"):
+        self.cache, self.lock, self.jobs, self.queue = cache, threading.Lock(), {}, []
+        # someone is waiting on this one: it holds back only for the pause file (the pictures lead's hold on the Mini)
+        # and a machine far busier than a full pre-build run would put up with
+        self.args = argparse.Namespace(pause=pause, max_load=float(os.cpu_count() or 8) * 1.5, live="", watch="", disk=None)
+        self.wake = threading.Event()
+        threading.Thread(target=self._worker, daemon=True).start()
+
+    @staticmethod
+    def key(o):
+        import hashlib
+        return hashlib.sha1(json.dumps(o, sort_keys=True).encode()).hexdigest()[:16]
+
+    def submit(self, o):
+        jid = self.key(o)
+        with self.lock:
+            job = self.jobs.get(jid)
+            if job and job["state"] not in ("failed", "stopped"):
+                return self._public(job)
+            job = {"id": jid, "state": "queued", "options": o, "items": [], "total": 0, "done": 0, "errors": 0,
+                   "finished": [], "asked": time.time(), "took": None, "why_waiting": None, "error": None,
+                   "stop": False, "recent": collections.deque(maxlen=60)}
+            self.jobs[jid] = job
+            self.queue.append(jid)
+        self.wake.set()
+        return self._public(job)
+
+    def status(self, jid):
+        with self.lock:
+            job = self.jobs.get(jid)
+            return self._public(job) if job else None
+
+    def stop(self, jid):
+        with self.lock:
+            job = self.jobs.get(jid)
+            if not job:
+                return None
+            job["stop"] = True
+            if job["state"] == "queued":
+                job["state"] = "stopped"
+                self.queue.remove(jid)
+            return self._public(job)
+
+    def _public(self, job):
+        """What the page reads: state (queued, making, waiting, done, failed, stopped), pictures done of total, how
+        far in time every picture is made (through, UTC), seconds left and the place in line."""
+        out = {k: job[k] for k in ("id", "state", "total", "done", "errors", "took", "why_waiting", "error")}
+        through = job["options"]["from"]
+        for item, ok in zip(job["items"], job["finished"]):
+            if not ok:
+                break
+            through = item[1]
+        if job["finished"] and all(job["finished"]):
+            through = job["options"]["until"]
+        out["through"] = datetime.datetime.fromtimestamp(through, datetime.timezone.utc).strftime("%Y-%m-%dT%H:%M:%S")
+        r = job["recent"]
+        if job["state"] == "making" and len(r) > 1 and r[-1][0] > r[0][0] and r[-1][1] > r[0][1]:
+            out["eta"] = (job["total"] - job["done"]) / ((r[-1][1] - r[0][1]) / (r[-1][0] - r[0][0]))
+        if job["state"] == "queued":
+            out["ahead"] = self.queue.index(job["id"])
+        return out
+
+    def _worker(self):
+        while True:
+            self.wake.wait(5)
+            self.wake.clear()
+            while True:
+                with self.lock:
+                    if not self.queue:
+                        break
+                    job = self.jobs[self.queue[0]]
+                try:
+                    self._run(job)
+                except Exception as e:   # noqa: BLE001  (a stretch that fails says why; the next one goes on)
+                    job["state"], job["error"] = "failed", f"{type(e).__name__}: {e}"[:300]
+                    traceback.print_exc()
+                with self.lock:
+                    if self.queue and self.queue[0] == job["id"]:
+                        self.queue.pop(0)
+
+    def _run(self, job):
+        o, t_start = job["options"], time.monotonic()
+        job["state"] = "planning"
+        items = segment_items(o)
+        total = sum(x[2] for x in items)
+        if total > SEGMENT_MAX:
+            job["state"], job["error"], job["total"] = "failed", f"{total:,} pictures in that stretch; pre-process up to {SEGMENT_MAX:,} at a time", total
+            return
+        with self.lock:
+            job.update(items=items, total=total, finished=[False] * len(items), state="making")
+
+        def one(k):
+            if job["stop"]:
+                return k, "stopped"
+            try:
+                job["items"][k][3](self.cache)
+                return k, None
+            except Exception as e:   # noqa: BLE001  (counted and logged; the stretch goes on)
+                return k, f"{type(e).__name__}: {e}"
+
+        with calibration.looking(o["look"]), calibration.coloring(o["colors"]), \
+                concurrent.futures.ThreadPoolExecutor(SEGMENT_THREADS) as pool:
+            pending, i = set(), 0
+            while i < len(items) or pending:
+                while i < len(items) and len(pending) < SEGMENT_THREADS * 2 and not job["stop"]:
+                    why = busy(self.args) if i % 20 == 0 else None
+                    while why and not job["stop"]:
+                        job["state"], job["why_waiting"] = "waiting", why
+                        time.sleep(3)
+                        why = busy(self.args)
+                    job["state"], job["why_waiting"] = "making", None
+                    pending.add(pool.submit(contextvars.copy_context().run, one, i))
+                    i += 1
+                if not pending:
+                    break
+                done, pending = concurrent.futures.wait(pending, return_when=concurrent.futures.FIRST_COMPLETED)
+                for f in done:
+                    k, err = f.result()
+                    if err == "stopped":
+                        continue
+                    if err:
+                        print(f"prebuild segment {job['id']} {items[k][0]}: {err}", flush=True)
+                    with self.lock:
+                        job["finished"][k] = True
+                        job["done"] += items[k][2]
+                        job["errors"] += bool(err)
+                        job["recent"].append((time.monotonic(), job["done"]))
+        job["took"] = time.monotonic() - t_start
+        job["state"] = "stopped" if job["stop"] else "done"
 
 
 def main():
