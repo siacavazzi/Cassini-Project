@@ -144,6 +144,15 @@ body.phone #hrel .hr-note { bottom: auto; top: 40px; max-width: calc(100vw - 32p
     return { q, real: !!qb };
   }
   const fromScene = v => [v.x * E[0][0] + v.y * E[1][0] + v.z * E[2][0], v.x * E[0][1] + v.y * E[1][1] + v.z * E[2][1], v.x * E[0][2] + v.y * E[1][2] + v.z * E[2][2]];
+  // the probe alone: a clone of NASA's model with everything but the probe hidden, framed like the model in Cassini's
+  // group (a part that holds the probe stays, drawn with nothing, so the probe under it still shows)
+  const none = new THREE.MeshBasicMaterial({ visible: false });
+  const holds = o => { let h = false; o.traverse(c => { if (c !== o && /_h$/.test(c.name)) h = true; }); return h; };
+  function probeClone(m) {
+    const model = m.clone();
+    model.traverse(o => { o.layers.set(1); if (isProbe(o)) o.visible = true; else if (o.isMesh) { if (holds(o)) o.material = none; else o.visible = false; } });
+    return model;
+  }
   function coastSetup() {
     if (co) {
       // the turn at the release, once the attitude that covers it has loaded
@@ -156,17 +165,13 @@ body.phone #hrel .hr-note { bottom: auto; top: 40px; max-width: calc(100vw - 32p
     const saved = [cassini.position.clone(), cassini.quaternion.clone(), cassini.scale.clone()];
     cassini.position.set(0, 0, 0); cassini.quaternion.identity(); cassini.scale.setScalar(1); cassini.updateMatrixWorld(true);
     const box = objs => { const b = new THREE.Box3(); objs.forEach(o => b.expandByObject(o)); return b.getCenter(new THREE.Vector3()); };
-    const dish = m.getObjectByName("dish"), others = [];
-    m.traverse(o => { if (o.isMesh && !isProbe(o) && o !== dish && !/aluminum/.test(o.name)) others.push(o); });
-    const p0 = box(cassiniProbe), bus = box(others), up = dish ? box([dish]).sub(bus).normalize() : new THREE.Vector3(0, 0, 1);
-    const axis = p0.clone().sub(bus); axis.addScaledVector(up, -axis.dot(up)).normalize();
+    // the bus's axis runs through the dish's centre along the group's +Z (the viewer turns the model so the dish faces
+    // +Z); the probe leaves straight out from it
+    const dish = m.getObjectByName("dish"), up = new THREE.Vector3(0, 0, 1);
+    const p0 = box(cassiniProbe), hub = dish ? box([dish]) : new THREE.Vector3();
+    const axis = p0.clone().sub(hub); axis.addScaledVector(up, -axis.dot(up)).normalize();
     cassini.position.copy(saved[0]); cassini.quaternion.copy(saved[1]); cassini.scale.copy(saved[2]); cassini.updateMatrixWorld(true);
-    // the probe alone: a clone of the model with everything but the probe hidden, in a group framed like Cassini's
-    const group = new THREE.Group(), model = m.clone();
-    // (a part that holds the probe stays, drawn with nothing, so the probe under it still shows)
-    const holds = o => { let h = false; o.traverse(c => { if (c !== o && /_h$/.test(c.name)) h = true; }); return h; };
-    const none = new THREE.MeshBasicMaterial({ visible: false });
-    model.traverse(o => { o.layers.set(1); if (isProbe(o)) o.visible = true; else if (o.isMesh) { if (holds(o)) o.material = none; else o.visible = false; } });
+    const group = new THREE.Group(), model = probeClone(m);
     const beacon = new THREE.Sprite(new THREE.SpriteMaterial({ map: glowTexture(), color: 0xffd7a0, transparent: true, opacity: 0, blending: THREE.AdditiveBlending, depthWrite: false }));
     beacon.layers.set(1); beacon.position.copy(p0);
     group.add(model, beacon); group.visible = false;
@@ -196,6 +201,14 @@ body.phone #hrel .hr-note { bottom: auto; top: 40px; max-width: calc(100vw - 32p
     modelShown: et => et >= RELEASE && et < lastEt() && !!coastSetup(),
     // the model, after the viewer has placed the probe's marker
     draw: () => drawCoast(),
+    // a fresh copy of the probe for another scene to place itself (the landing): a group framed like Cassini's, in
+    // metres, with the probe's centre p0 and the axis it left along (outward, the heat shield's side); null until
+    // NASA's model has loaded
+    probeModel() {
+      if (!coastSetup()) return null;
+      const group = new THREE.Group(); group.add(probeClone(window.cassiniModel));
+      return { group, p0: co.p0.clone(), axis: co.axis.clone() };
+    },
     place(et, out) {
       if (et < RELEASE || et >= lastEt() || !coastSetup() || !tracks.CASSINI) return;
       if (probe && et > RELEASE + 2 * OWN) return;
@@ -269,7 +282,9 @@ body.phone #hrel .hr-note { bottom: auto; top: 40px; max-width: calc(100vw - 32p
     // the mission carries on from where the cutscene left it
     setTime(RELEASE + Math.max(60, h.s));
     const entry = (encounters || []).find(x => x.kind === "milestone" && /^Huygens enters/.test(x.label));
-    if (h.how === "landing" && entry && typeof jump === "function") jump(entry);
+    // the landing's own cutscene when it is there (huygens-landing.html), once this one has fully ended
+    if (h.how === "landing" && window.cassiniHuygensLanding) setTimeout(() => cassiniHuygensLanding.play(), 0);
+    else if (h.how === "landing" && entry && typeof jump === "function") jump(entry);
     else if (h.how === "stay" && studyCoast.modelShown(state.et)) {
       setPlaying(false);
       // once cutscene.html has put the interface back (it may turn follow on again)
