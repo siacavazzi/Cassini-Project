@@ -50,6 +50,8 @@ Routes:
                                first request and cached. X-Reel says how it was made
   /frames/mosaic/<ID>.json     where each frame sits in that mosaic (obs_mosaic.tile_map): its pointings, each with
                                its frames by filter and its outline and centre as fractions of the picture
+  /frames/mosaic/<ID>/frame.webp?ids=A,B,C&size=full   one frame of that mosaic on its own, on the mosaic's levels
+                               and colours (obs_mosaic.pointing_picture; format=png, download=1 as below)
   /frames/mosaic/<ID>.webp?size=512   (&warm=1: only start making the pass ahead of time, empty answer)
                                the mosaic frame <ID> is a new tile of, made like a reel picture: 404 when
                                the frame is not a mosaic tile (mosaic.panels: same camera, observation and
@@ -732,6 +734,23 @@ def make_handler(site, cache, flags=None):
                     return self.send_error(400, "Not a frame id")
                 found = obs_mosaic.tile_map(m.group(1), cache) if reel._index is not None else None
                 return self.send_json(found) if found else self.send_json({"error": "not a mosaic pass"}, 404)
+            m = re.match(r"^/frames/mosaic/([^/]+)/frame\.webp$", url.path)
+            if m:
+                # one frame of that mosaic on its own at full resolution, with the mosaic's levels and colours
+                # (obs_mosaic.pointing_picture): ids = its frames, one per filter as the tile map gives them
+                # (&channel=0-2: one filter's channel of it)
+                query = parse_qs(url.query)
+                ids = [i for i in query.get("ids", [""])[0].split(",") if i]
+                if not FRAME_ID.match(m.group(1)) or not ids or len(ids) > 3 or not all(FRAME_ID.match(i) for i in ids):
+                    return self.send_error(400, "Not frame ids")
+                size, fmt, ch = size_of(query, FULL), picture_format(query), query.get("channel", [None])[0]
+                if ch is not None and ch not in ("0", "1", "2"):
+                    return self.send_error(400, "channel is 0, 1 or 2")
+                made = obs_mosaic.pointing_picture(m.group(1), ids, cache, size, fmt, _mosaic_slots, None if ch is None else int(ch)) \
+                    if reel._index is not None else None
+                if not made:
+                    return self.send_error(404, "Not frames of that mosaic")
+                return self.send_picture(made[0], fmt, query, f"Cassini_{'_'.join(ids)}_in_mosaic" + ("" if ch is None else f"_channel{ch}"), {"X-Reel": json.dumps(made[1])})
             m = re.match(r"^/frames/mosaic/([^/]+)\.webp$", url.path)
             if m:
                 # the camera windows ask this for each frame: the mosaic when the frame is a new tile of a
