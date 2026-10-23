@@ -1120,7 +1120,7 @@ def rolling_webp(frame_id, size, cache, laps=1, slots=None, fmt="webp", out=OUT,
         if not made:
             return None, {"why": "no tile placed yet"}
         full = size == "full"
-        path = os.path.join(folder(u, cache), "rolling", f"full{out}" if full else str(size), f"{made[5]}.{fmt}")
+        path = os.path.join(folder(u, cache), "rolling-level", f"full{out}" if full else str(size), f"{made[5]}.{fmt}")
         res = _make_mosaic(u, n, size, path, cache, slots, made, fmt, out)
     # the tiles ahead, by the pass's one background thread (tiles_ahead, as a pass mosaic's)
     tiles_ahead(u, n + 1, cache)
