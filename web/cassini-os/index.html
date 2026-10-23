@@ -490,15 +490,61 @@ body.idle .camwin .well.has-frame { border-color: transparent; box-shadow: 0 6px
 .win.full :is(.rlwell, .mvwell) { aspect-ratio: auto; min-height: 0; height: 100%; }
 #moviecard.full .mvwell { height: calc(100dvh - 150px); }
 .win.full :is(.rlwell, .mvwell) canvas { object-fit: contain; }
-/* full view's save button: the shown picture at full resolution as a PNG (frame_server.py size=full) */
-.savepic { position: absolute; right: 6px; bottom: 5px; display: none; align-items: center; gap: 5px; padding: 3px 7px; border-radius: 4px;
-  font: 9px/1 var(--hudf); letter-spacing: .04em; color: var(--q-text); text-decoration: none; background: rgba(0,0,0,.55); border: 1px solid var(--q-line); cursor: pointer; }
-.savepic:hover { color: #fff; border-color: var(--q-accent); }
+/* the save menu (full view, or a held window): the picture shown and every level under and around it, at full
+   resolution as PNG (frame_server.py size=full, format=png, download=1) */
+.savewrap { position: absolute; right: 6px; bottom: 5px; display: none; z-index: 3; cursor: default; }
+.savepic { all: unset; display: flex; align-items: center; gap: 5px; padding: 3px 7px; border-radius: 4px; box-sizing: border-box;
+  font: 9px/1 var(--hudf); letter-spacing: .04em; color: var(--q-text); background: rgba(0,0,0,.55); border: 1px solid var(--q-line); cursor: pointer; }
+.savepic:hover, .savewrap.open .savepic { color: #fff; border-color: var(--q-accent); }
+.savepic:focus-visible { outline: 1px solid var(--q-accent); }
 .savepic svg { width: 10px; height: 10px; } .savepic svg * { fill: none; stroke: currentColor; stroke-width: 1.3; }
-.win.full .well.has-frame .savepic { display: flex; }
+.savepic .caret { font-size: 8px; opacity: .7; }
+:is(.win.full, .win[data-held]) .well.has-frame .savewrap { display: block; }
 .well.fullres .savepic { color: var(--q-accent); }
 .win.full .well.has-frame .shottag { right: 190px; }
-body.idle .win.full .savepic { opacity: .35; } body.idle .win.full .savepic:hover { opacity: 1; }
+body.idle .win.full .savewrap { opacity: .35; } body.idle .win.full .savewrap:hover { opacity: 1; }
+.savemenu { display: none; position: absolute; right: 0; bottom: calc(100% + 4px); min-width: 250px; margin: 0; padding: 4px 0; list-style: none; border-radius: 6px;
+  background: rgba(16,17,21,.97); border: 1px solid var(--q-line); box-shadow: 0 10px 30px rgba(0,0,0,.6); font: 11px/1.2 var(--ui); text-transform: none; letter-spacing: normal; text-align: left; }
+.savewrap.open .savemenu { display: block; }
+.savemenu li.sep { height: 1px; margin: 4px 0; background: var(--q-line); }
+.savemenu a { display: flex; justify-content: space-between; gap: 18px; padding: 6px 12px; color: var(--q-text); text-decoration: none; white-space: nowrap; }
+.savemenu a:hover, .savemenu a:focus-visible { background: rgba(138,182,255,.16); color: #fff; outline: none; }
+.savemenu a span { color: var(--q-dim); font-size: 10px; }
+.savemenu li.now a { color: #fff; }
+/* on a phone the save menu is a sheet along the bottom of the screen */
+body.phone .savemenu { position: fixed; left: 8px; right: 8px; bottom: calc(env(safe-area-inset-bottom, 0px) + 8px); min-width: 0; z-index: 2000; font-size: 13px; }
+body.phone .savemenu a { padding: 11px 14px; }
+/* drill-down: a window held on a part of its picture (a color composite's channel) shows where it is, and a badge
+   that brings it back to live (Esc does too); the channel open is ringed in the strip */
+.crumbs { display: flex; flex-wrap: wrap; align-items: center; gap: 3px 6px; font-size: 10.5px; line-height: 1.25; color: var(--q-dim); min-width: 0; }
+.crumbs[hidden] { display: none; }
+.crumbs button { all: unset; cursor: pointer; color: var(--q-accent); min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; max-width: 100%; }
+.crumbs button:hover { text-decoration: underline; }
+.crumbs .here { color: var(--q-text); min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.crumbs .sep { opacity: .6; }
+.crumbs .heldbadge { margin-left: auto; padding: 2px 7px; border-radius: 9px; border: 1px solid rgba(227,179,65,.7); color: #e3b341; font-size: 9.5px; }
+.crumbs .heldbadge:hover { text-decoration: none; background: rgba(227,179,65,.14); }
+.win[data-held] .well { border-color: rgba(227,179,65,.35); }
+/* a mosaic's frames: the one under the pointer outlined, the rest dimmed, the others as faint lines */
+.tilemap { position: absolute; display: none; pointer-events: none; overflow: visible; z-index: 2; }
+.tilemap.on { display: block; }
+.tilemap .dim { fill: rgba(0,0,0,.42); }
+.tilemap polygon { fill: none; stroke-linejoin: round; }
+.tilemap .other { stroke: rgba(232,236,242,.28); stroke-width: 1; }
+.tilemap .hot { stroke: #fff; stroke-width: 1.6; filter: drop-shadow(0 0 2px rgba(0,0,0,.9)); }
+.well.tilehover, .win.full .well.tilehover { cursor: pointer; }
+.tiletip { position: absolute; z-index: 3; pointer-events: none; padding: 5px 8px; border-radius: 5px; max-width: 220px; font: 10.5px/1.35 var(--ui); text-transform: none; letter-spacing: normal; text-align: left;
+  color: var(--q-text); background: rgba(16,17,21,.92); border: 1px solid var(--q-line); white-space: nowrap; }
+.tiletip[hidden] { display: none; }
+.tiletip b { color: #fff; font-weight: 600; } .tiletip span { color: var(--q-dim); }
+.chans.drill figure:not(.waiting) { cursor: pointer; }
+.chans.drill figure:not(.waiting):hover .tile { border-color: rgba(255,255,255,.6); }
+.chans figure.sel .tile { border-color: var(--q-accent); box-shadow: 0 0 0 1px var(--q-accent); }
+.chans figure.sel figcaption b { color: #fff; }
+.camwin.full .body:has(> .crumbs:not([hidden])) { grid-template-rows: auto minmax(0, 1fr) auto auto; }
+.bodywin.full .pane:has(> .crumbs:not([hidden])) { grid-template-rows: auto minmax(0, 1fr) auto auto; }
+body.idle .camwin:has(.well.has-frame) .crumbs { opacity: 0; }
+body.idle #app .win.full .crumbs { opacity: 1; }
 .well, .rlwell, .mvwell { cursor: zoom-in; } .win.full :is(.well, .rlwell, .mvwell) { cursor: zoom-out; }
 /* resting: a window in full view keeps its dark backdrop and its picture; only the title bar fades (!important: the
    rules that fade every window and clear the camera windows' frames are id-strength) */
@@ -862,6 +908,8 @@ body.phone #excard:not(.full) { width: calc(100% - 16px) !important; left: 8px !
 .dk::before { content: ""; position: absolute; left: 50%; bottom: -4px; width: 4px; height: 4px; margin-left: -2px; border-radius: 50%; background: transparent; }
 .dk.open::before { background: rgba(232,236,242,.7); }
 .dk.here::before { background: var(--q-accent); box-shadow: 0 0 4px var(--q-accent); }
+/* a window held on a part of its picture (drill-down): an amber dot on its body (or its tile), so it is easy to find and release */
+.dk.held::before { background: #e3b341; box-shadow: 0 0 4px rgba(227,179,65,.8); }
 #appdock.side-left .dk::before { left: -4px; bottom: 50%; margin: 0 0 -2px; }
 #appdock.side-right .dk::before { left: auto; right: -4px; bottom: 50%; margin: 0 0 -2px; }
 /* the name, above the icon (beside it on a side dock) */
@@ -1308,7 +1356,7 @@ body.phone #finale .fx-data { width: min(220px, calc(100vw - 32px)); top: 10px; 
   D({ key: "interface.hudline", section: "Interface", label: "Flight data strip", type: "toggle", value: true,
       hint: "Target, altitude, speed, camera and pointing along the top of the view." });
   cls("interface.hudline", "s-nohudline", false);
-  // Cameras (the camera windows read cameras.composites, cameras.steady, cameras.mosaics, cameras.passes, cameras.fullRes, cameras.fullDelay, cameras.stale and cameras.lingerColor / lingerMosaic)
+  // Cameras (the camera windows read cameras.composites, cameras.steady, cameras.mosaics, cameras.passes, cameras.fullRes, cameras.fullDelay, cameras.drill, cameras.stale and cameras.lingerColor / lingerMosaic)
   D({ key: "cameras.composites", section: "Cameras", label: "Color composites", type: "toggle", value: true,
       hint: "Once a filter set is complete, show its color picture. Off shows every frame on its own." });
   D({ key: "cameras.balancedColor", section: "Cameras", label: "Balanced color", type: "toggle", value: true,
@@ -1337,6 +1385,8 @@ body.phone #finale .fx-data { width: min(220px, calc(100vw - 32px)); top: 10px; 
       hint: "How a pass of pictures plays: Auto builds the passes that step across a body as mosaics, rolls the ones that go round the same places again and again as mosaic movies, and plays movies and stares as frames. The others force one way for every pass. The chip on a picture changes it for one pass." });
   D({ key: "cameras.fullRes", section: "Cameras", label: "Full resolution in full view", type: "toggle", value: true,
       hint: "A picture in full view (double-click it, F or the title bar button) always loads at the camera's full resolution, playing or paused, with a button to save it. Other windows show each picture at its true resolution, or smaller only when the window or screen is too small to show more." });
+  D({ key: "cameras.drill", section: "Cameras", label: "Open channels in place", type: "toggle", value: true,
+      hint: "Click a channel under a color picture to open it in that window on the picture's own scale. The window holds still until you press Esc or its held badge; other windows play on." });
   D({ key: "cameras.stale", section: "Cameras", label: "Clear a quiet camera after", type: "range", value: 6, min: 1, max: 48, step: 1, unit: "h",
       hint: "A camera that has taken nothing for this long shows Idle instead of its last picture (an important picture stays longer, below)." });
   D({ key: "cameras.lingerColor", section: "Cameras", label: "Color pictures stay longer", type: "range", value: 1.5, min: 1, max: 4, step: 0.25, format: v => `${v}×`,
@@ -2124,6 +2174,19 @@ body.phone #finale .fx-data { width: min(220px, calc(100vw - 32px)); top: 10px; 
     return "http://localhost:8765";
   })();
   const CH_COLOUR = ["#e5534b", "#57ab5a", "#539bf5"];
+  // the camera windows held on a part of their picture (drill-down, in cameraFeed); Esc brings one back to live: the
+  // held window in full view, else the one in front, else the one held last. A panel in front (Settings, a reel...)
+  // takes its Esc first
+  const holding = new Set();
+  window.cassiniHeld = holding;
+  window.addEventListener("keydown", e => {
+    if (e.key !== "Escape" || !holding.size || e.metaKey || e.ctrlKey || e.altKey || /^(INPUT|SELECT|TEXTAREA)$/.test(e.target.tagName)) return;
+    if (document.querySelector(".menu.open") || (window.cassiniMovie && window.cassiniMovie.on)) return;
+    const panel = document.querySelector("#settings.front, #hlcard.front, #reelcard.front, #excard.front");
+    if (panel && !panel.hidden) return;
+    const list = [...holding], h = list.find(x => x.win.classList.contains("full")) || list.find(x => x.win.classList.contains("front")) || list[list.length - 1];
+    e.stopImmediatePropagation(); h.back();
+  }, true);
   // One window per camera, so the feed never flicks between narrow-angle and wide-angle frames. Each shows
   // its camera's latest frame, or, once a filter set's channels are all taken, the set's colour composite
   // (made by the frame server) with the channels that went into it underneath.
@@ -2147,19 +2210,68 @@ body.phone #finale .fx-data { width: min(220px, calc(100vw - 32px)); top: 10px; 
     const capped = () => { const s = size(); return s === "full" ? 1024 : s; };
     const frameUrl = (id, sz) => `${FRAMES}/frames/${id}.webp?size=${sz || size()}`;
     const colorUrl = (s, sz) => `${FRAMES}/frames/color.webp?ids=${s.use.map(k => catalog.id[k]).join(",")}&size=${sz || size()}${window.cassiniLook()}`;
-    // the shown picture at full resolution as a PNG to save (the frame server names the file)
-    const saveUrl = url => url.replace(/size=[^&]*/, "size=full") + "&format=png&download=1";
-    let save = well.querySelector(".savepic");
-    if (!save) {
-      save = document.createElement("a"); save.className = "savepic"; save.title = "Save this picture at full resolution (PNG)";
-      save.innerHTML = '<svg viewBox="0 0 10 10" aria-hidden="true"><path d="M5 1v5.5M2.5 4.5 5 7l2.5-2.5M1.5 9h7"/></svg><span></span>';
-      save.addEventListener("click", e => e.stopPropagation());
-      save.addEventListener("dblclick", e => e.stopPropagation());
-      well.appendChild(save);
+    // a picture at full resolution as a PNG to save (the frame server names the file)
+    const saveUrl = url => (/size=/.test(url) ? url.replace(/size=[^&]*/, "size=full") : url + (url.includes("?") ? "&" : "?") + "size=full") + "&format=png&download=1";
+    // the save menu: the picture shown and the levels under and around it (savesFor below), each at full resolution
+    let saveWrap = well.querySelector(".savewrap");
+    if (!saveWrap) {
+      saveWrap = document.createElement("div"); saveWrap.className = "savewrap";
+      saveWrap.innerHTML = '<button class="savepic" aria-haspopup="true" aria-expanded="false" title="Save at full resolution (PNG)"><svg viewBox="0 0 10 10" aria-hidden="true"><path d="M5 1v5.5M2.5 4.5 5 7l2.5-2.5M1.5 9h7"/></svg><span></span><i class="caret">▾</i></button><ul class="savemenu" role="menu"></ul>';
+      for (const t of ["click", "dblclick", "pointerdown"]) saveWrap.addEventListener(t, e => e.stopPropagation());
+      well.appendChild(saveWrap);
     }
-    // the save button's link and its label: the picture's size once the full one is up
-    function saving(url) {
-      if (url) save.href = saveUrl(url);
+    const save = saveWrap.querySelector(".savepic"), saveMenu = saveWrap.querySelector(".savemenu");
+    save.addEventListener("click", e => { saveOpen(!saveWrap.classList.contains("open")); if (e.detail) save.blur(); });
+    saveMenu.addEventListener("click", e => { if (e.target.closest("a")) setTimeout(() => { saveOpen(false); if (e.detail) document.activeElement.blur(); }, 0); });
+    document.addEventListener("click", () => saveOpen(false));
+    window.addEventListener("keydown", e => { if (e.key === "Escape" && saveWrap.classList.contains("open")) { e.stopImmediatePropagation(); saveOpen(false); } }, true);
+    function saveOpen(on) {
+      if (on) {
+        const rows = savesFor(shot.dataset.src || "");
+        saveMenu.innerHTML = rows.map(r => r === "-" ? '<li class="sep" role="separator"></li>'
+          : `<li class="${r.now ? "now" : ""}"><a role="menuitem" href="${r.href}" download>${r.label}<span>${r.note}</span></a></li>`).join("");
+      }
+      saveWrap.classList.toggle("open", !!on); save.setAttribute("aria-expanded", String(!!on));
+    }
+    // what can be saved from the picture at url: the picture as shown first, then the parts and sources of it
+    // (a composite's channels on its scale; a frame on the pipeline's scale and as archived), each a frame server route
+    const nameOf = id => { const k = kOf(id); return k >= 0 ? `${fname(k)} ${Math.round(nmOf(k))} nm` : id; };
+    const kindOf = ids => { const k = kOf(ids[0]), si = k >= 0 ? catalog.setOf[k] : -1; return si >= 0 ? KIND[catalog.sets[si].kind].toLowerCase() : ids.length === 2 ? "two-filter color" : "color"; };
+    function savesFor(url) {
+      if (!url) return [];
+      const u = new URL(url, location.href), q = u.searchParams, rows = [];
+      const frame = id => [
+        { label: "This frame on its own scale", note: "PNG · calibrated", href: saveUrl(`${FRAMES}/frames/processed/${id}.webp?size=full${window.cassiniLook()}`) },
+        { label: "Archive frame, unprocessed", note: "PNG · raw", href: `${FRAMES}/frames/${id}.png?download=1` }];
+      if (u.pathname.endsWith("/frames/color.webp")) {
+        const ids = (q.get("ids") || "").split(","), ch = q.get("channel"), slots = ids.length === 2 ? [0, 2] : [0, 1, 2];
+        const whole = { label: `Whole ${kindOf(ids)} picture`, note: "PNG", href: saveUrl(url.replace(/&channel=\d/, "")) };
+        if (ch !== null) {
+          const id = ids[slots.indexOf(+ch)];
+          rows.push({ label: "This channel as shown", note: "PNG · composite's scale", href: saveUrl(url), now: true });
+          if (id) rows.push(...frame(id));
+          rows.push("-", whole);
+        } else {
+          rows.push(Object.assign(whole, { label: `This ${kindOf(ids)} picture`, now: true }), "-");
+          ids.forEach((id, j) => rows.push({ label: `${nameOf(id)} channel, as in it`, note: "PNG", href: saveUrl(`${url}&channel=${slots[j]}`) }));
+        }
+      } else if (/\/frames\/mosaic\/[^/]+\/frame\.webp$/.test(u.pathname)) {
+        const ids = (q.get("ids") || "").split(","), ch = q.get("channel"), whole = url.replace(/&channel=\d/, "");
+        rows.push({ label: ch !== null ? "This channel as shown" : "This frame as in the mosaic", note: "PNG · mosaic's look", href: saveUrl(url), now: true });
+        if (ch !== null) rows.push({ label: "The whole frame, as in the mosaic", note: "PNG", href: saveUrl(whole) });
+        else if (ids.length === 3) ids.forEach((id, j) => rows.push({ label: `${nameOf(id)} channel, as in it`, note: "PNG", href: saveUrl(`${url}&channel=${j}`) }));
+        rows.push("-", ...frame(ch !== null ? ids[+ch] || ids[0] : ids[ids.length - 1]));
+      } else if (/\/frames\/mosaic\//.test(u.pathname)) {
+        rows.push({ label: "Whole mosaic, as shown", note: "PNG", href: saveUrl(url), now: true });
+      } else {
+        const m = u.pathname.match(/\/frames\/(?:processed\/)?([NW]\d{10}_\d+)\.webp$/);
+        rows.push({ label: "This frame as shown", note: "PNG", href: saveUrl(url), now: true });
+        if (m) rows.push(...frame(m[1]).filter(r => !(u.pathname.includes("/processed/") && r.note.includes("calibrated"))));
+      }
+      return rows;
+    }
+    // the save button's label: the picture's size once the full one is up
+    function saving() {
       const full = /size=full/.test(shot.dataset.src || "") && shot.naturalWidth;
       save.querySelector("span").textContent = full ? `Full resolution · ${shot.naturalWidth} × ${shot.naturalHeight}` : "Save full resolution";
       well.classList.toggle("fullres", !!full);
@@ -2221,6 +2333,7 @@ body.phone #finale .fx-data { width: min(220px, calc(100vw - 32px)); top: 10px; 
       // shot.dataset.src / .report: what the picture on screen was made from, for flagging (flag.html)
       if (!keep) {
         shot.src = im.src; shot.dataset.src = v.key; shot.dataset.report = ""; obsShown = null; obsK = -1; well.classList.remove("mosaic"); saving(v.key);
+        mosaicId = null; draw(null);
         kind = { color: v.set >= 0, mosaic: false };
         if (!steady() || shapeOf !== passOf(v.k)) { well.style.aspectRatio = ""; shapeOf = null; }
       }
@@ -2253,6 +2366,7 @@ body.phone #finale .fx-data { width: min(220px, calc(100vw - 32px)); top: 10px; 
         }).catch(() => {});
       }
       if (v.set >= 0) { channelsFrom(im, catalog.sets[v.set]); howMade(v); }
+      drillable();
       if (v.tile && !keep && !mosaicPass(v.k) && modeOf(v.k) !== "mosaic") mosaicOf(v);   // a frame kept behind its pass's mosaic, or of a pass known to be one, asked for it already (update)
       // the sound (sound.html) hears every picture that goes up: its camera, filter wavelength, target and window
       // (keep: a pass mosaic stays up, so this frame rings when its tile shows, below in mosaicOf)
@@ -2265,7 +2379,7 @@ body.phone #finale .fx-data { width: min(220px, calc(100vw - 32px)); top: 10px; 
       im.fetchPriority = v.warm ? "low" : "high";   // the picture wanted now goes ahead of look-ahead requests
       im.onload = () => {
         lane[which] = null; warmed.add(v.key);
-        if (want && !v.warm && v.cat === catalog && fits(v)) display(v, im);   // no want: the camera went idle while this loaded
+        if (want && !hold && !v.warm && v.cat === catalog && fits(v)) display(v, im);   // no want: the camera went idle (or was held) while this loaded
         pump();
       };
       im.onerror = () => {
@@ -2499,7 +2613,7 @@ body.phone #finale .fx-data { width: min(220px, calc(100vw - 32px)); top: 10px; 
     const mLane = { pass: { busy: false, next: null, last: "" }, other: { busy: false, next: null, last: "" } };
     const warnedObs = new Set();   // observations already named to the server ahead of time (update)
     function mosaicOf(w, pass) {
-      if (window.cassiniMosaics === false || !S.get("cameras.mosaics")) return;
+      if (hold || window.cassiniMosaics === false || !S.get("cameras.mosaics")) return;
       const mode = modeOf(w.k), plays = playsAs(w.k);
       if (mode === "movie" || (mode === "auto" && moviePasses.has(passOf(w.k)))) return;   // a movie plays as frames
       if (plays === "mosaic_movie" && rolls()) return;   // a mosaic movie rolls (the movie route), never the pass mosaic
@@ -2539,7 +2653,7 @@ body.phone #finale .fx-data { width: min(220px, calc(100vw - 32px)); top: 10px; 
         // a pass's mosaic shows while the window is still in the pass and the clock is not before its frame,
         // unless the mosaic up already has a later frame (and is not ahead of the clock after a scrub back);
         // a rolling mosaic only while its frame is the one shown
-        const late = () => { const k = kNow(); return k < 0 || modeOf(k) === "movie" || (rep && rep.observation
+        const late = () => { const k = kNow(); return hold || k < 0 || modeOf(k) === "movie" || (rep && rep.observation
           ? lastK < 0 || catalog.obs[lastK] !== catalog.obs[k] || catalog.et[k] > catalog.et[lastK]
             || (obsShown === catalog.obs[k] && obsK >= 0 && catalog.et[obsK] >= catalog.et[k] && catalog.et[obsK] <= catalog.et[lastK]
               && !(obsK === k && rank(sz) > obsSize))
@@ -2552,7 +2666,8 @@ body.phone #finale .fx-data { width: min(220px, calc(100vw - 32px)); top: 10px; 
         shot.src = mosaicUrl = URL.createObjectURL(blob);
         shot.dataset.src = r.url; shot.dataset.report = r.headers.get("X-Reel") || "";
         saving(r.url);
-        well.classList.add("mosaic");
+        well.classList.add("mosaic"); drillable();
+        mosaicId = rep && rep.observation ? id : null; redraw();
         if (rep && rep.observation) {
           if (mode !== "mosaic") mosaicPasses.add(passOf(k));   // the server's call, not one the person asked for
           chipText();
@@ -2571,7 +2686,7 @@ body.phone #finale .fx-data { width: min(220px, calc(100vw - 32px)); top: 10px; 
         }
         card.querySelector(".kindtag").textContent = `${w.set >= 0 ? KIND[catalog.sets[w.set].kind].toUpperCase() + " · " : ""}MOSAIC${rep && rep.mosaic ? ` OF ${rep.mosaic}` : ""}`;
         kind = { color: w.set >= 0, mosaic: true };
-      }, () => {}).finally(done);
+      }, () => {}).finally(done).catch(() => {});   // a request dropped while its picture was read (mosaicStop) is no error
     }
     function mosaicStop() {
       for (const L of Object.values(mLane)) { L.next = null; L.last = ""; if (L.ctl) L.ctl.abort(); }
@@ -2594,7 +2709,7 @@ body.phone #finale .fx-data { width: min(220px, calc(100vw - 32px)); top: 10px; 
     // (one shared brightness scale, so their brightness can be compared)
     function strip(s, et, k) {
       if (!s) { stripSet = null; chans.classList.remove("on"); chans.innerHTML = ""; stripKey = ""; return; }
-      const key = `${catalog.sets.indexOf(s)}:${capped()}:${steady()}`, slots = s.use.length === 2 ? [0, 2] : [0, 1, 2];
+      const key = `${s.use.join(",")}:${capped()}:${steady()}`, slots = s.use.length === 2 ? [0, 2] : [0, 1, 2];
       if (key !== stripKey) {
         stripKey = key; stripSet = s;
         // steady size: three columns for every set, so a two-filter set's tiles are no bigger than a three-filter one's
@@ -2605,6 +2720,7 @@ body.phone #finale .fx-data { width: min(220px, calc(100vw - 32px)); top: 10px; 
         chans.classList.add("on");
         if (shown && shown.set >= 0 && catalog.sets[shown.set] === s) channelsFrom(shot, s);
       }
+      drillable();
       chans.querySelectorAll("figure").forEach((fig, j) => {
         const q = s.use[j], taken = catalog.et[q] <= et, tile = fig.querySelector(".tile");
         fig.classList.toggle("now", q === k); fig.classList.toggle("waiting", !taken);
@@ -2642,6 +2758,265 @@ body.phone #finale .fx-data { width: min(220px, calc(100vw - 32px)); top: 10px; 
         fig.classList.remove("waiting"); fig.querySelector(".tile").replaceChildren(t);
       }
     }
+    // ---- drill-down: the window held on a part of its picture ----
+    // A picture opens its parts in the same window: a pass's mosaic its frames (hover outlines the frame under the
+    // pointer, a click opens it), a color composite its channels (the strip under it). A frame of a mosaic opens on its
+    // own at full resolution with the mosaic's levels and colors (/frames/mosaic/<id>/frame.webp); a channel is the
+    // picture's own (&channel=, cut from it, so on its scale and aligned as in it). The window is then held: it stops following the clock (other windows play
+    // on), keeps the levels it went down as a breadcrumb, is silent, is never closed by linger nor counted by
+    // crowding (bodywin.html), shows a dot in the dock, and a flag records the path (shot.dataset.path). Esc goes one
+    // step back (back()); the badge or "Live" bring it back to live.
+    // levels: [{ kind: "mosaic" | "composite" | "frame" | "channel", label, url(size), tag, shot, s (the set whose
+    // channels the strip opens: a catalog set, or a mosaic frame's own), mid (a mosaic's frame id, for its tile map),
+    // lines (the info lines for this picture: the live ones when it was opened, or its own) }]
+    let hold = null;
+    const crumbs = document.createElement("div");
+    crumbs.className = "crumbs"; crumbs.hidden = true; crumbs.setAttribute("aria-label", "Where this window is");
+    well.parentNode.insertBefore(crumbs, well);
+    crumbs.addEventListener("click", e => {
+      e.stopPropagation(); unfocus(e);
+      const b = e.target.closest("button"); if (!b) return;
+      if (b.classList.contains("heldbadge") || b.dataset.lv === "live") return release();
+      hold.levels.length = +b.dataset.lv + 1; showLevel();
+    });
+    const drillOn = () => S.get("cameras.drill") !== false;
+    const top = () => hold && hold.levels[hold.levels.length - 1];
+    // the set whose channels the strip opens: the held composite's, or the live composite's
+    const heldSet = () => { if (!hold) return null; for (let i = hold.levels.length - 1; i >= 0; i--) if (hold.levels[i].s) return hold.levels[i].s; return null; };
+    // the live picture as it was when the window was held, put back at once on the way back to live (the mosaic
+    // that was up stays up, instead of the window starting again from the newest frame and waiting for it)
+    let live = null;
+    function hold1(levels) {
+      if (!hold) {
+        live = { src: shot.src, dsrc: shot.dataset.src, report: shot.dataset.report, mosaicId, mosaic: well.classList.contains("mosaic"),
+          composite: well.classList.contains("composite"), tag: card.querySelector(".kindtag").textContent, pass: lastK >= 0 ? passOf(lastK) : null };
+        want = null; mosaicStop(); win.dataset.held = "1"; holding.add(feedApi);
+      }
+      hold = { levels };
+      showLevel();
+    }
+    // the strip opens channels while the set's composite is up, or the window is held on that set
+    function drillable() {
+      const s = hold ? (top().s || (top().kind === "channel" ? heldSet() : null))
+        : shown && shown.set >= 0 && !well.classList.contains("mosaic") && well.classList.contains("has-frame") ? catalog.sets[shown.set] : null;
+      const on = !!s && s === stripSet && drillOn();
+      chans.classList.toggle("drill", on);
+      const t = top();
+      chans.querySelectorAll("figure").forEach(fig => {
+        fig.classList.toggle("sel", !!t && t.kind === "channel" && +fig.dataset.ch === t.ch);
+        if (on) { fig.tabIndex = 0; fig.setAttribute("role", "button"); fig.title = `Open the ${fig.querySelector("b").textContent} channel`; }
+        else { fig.removeAttribute("tabindex"); fig.removeAttribute("role"); fig.title = ""; }
+      });
+      return on ? s : null;
+    }
+    const setLevel = s => ({ kind: "composite", s, label: `${KIND[s.kind]} · ${s.use.map(fname).join(" ")}`, url: sz => colorUrl(s, sz),
+      tag: KIND[s.kind].toUpperCase(), shot: s.use.map(k => catalog.id[k]).join(" "), lines: liveLines() });
+    // the info lines as they are now (they describe the live picture), to show again for a level opened from it
+    const LINES = ["frame", "filter", "colour", "details"];
+    const liveLines = () => Object.fromEntries(LINES.map(f => [f, card.querySelector(`[data-f="${f}"]`) ? field(f).innerHTML : ""]));
+    function openChannel(fig) {
+      const s = drillable(); if (!s || fig.classList.contains("waiting")) return;
+      const ch = +fig.dataset.ch, j = [...chans.querySelectorAll("figure")].indexOf(fig), q = s.use[j];
+      const t = top();
+      let levels = hold ? hold.levels.slice() : [Object.assign(setLevel(s), { live: true })];
+      while (levels.length && levels[levels.length - 1].kind === "channel") levels.pop();
+      if (t && t.kind === "channel" && t.ch === ch) { hold.levels = levels; return showLevel(); }   // the open channel again: back up
+      const up = levels[levels.length - 1].lines || {};
+      levels.push({ kind: "channel", ch, label: `${fname(q)} ${Math.round(nmOf(q))} nm · ${catalog.id[q]}`, url: sz => `${s.url ? s.url(sz) : colorUrl(s, sz)}&channel=${ch}`,
+        tag: `CHANNEL · ${fname(q)} · AS IN THE ${s.url ? "MOSAIC" : "COMPOSITE"}`, shot: catalog.id[q],
+        lines: { frame: `${titleCase(catalog.target[q] || "Unknown")} · ${catalog.id[q]}`, filter: `${catalog.f1[q]}/${catalog.f2[q]}${nmOf(q) ? ` · ${Math.round(nmOf(q))} nm` : ""}`,
+          colour: s.url ? "One channel of the frame, as in the mosaic" : "One channel of the composite, on its brightness scale", details: up.details || "" } });
+      hold1(levels);
+    }
+    // a click leaves no focus behind, so Space still plays and pauses (index.html takes it only from the page itself)
+    const unfocus = e => { if (e.detail && document.activeElement && document.activeElement !== document.body) document.activeElement.blur(); };
+    chans.addEventListener("click", e => { const fig = e.target.closest("figure"); if (fig && chans.classList.contains("drill")) { e.stopPropagation(); unfocus(e); openChannel(fig); } });
+    chans.addEventListener("keydown", e => { const fig = e.target.closest("figure"); if (fig && e.key === "Enter" && chans.classList.contains("drill")) { e.preventDefault(); openChannel(fig); } });
+
+    // ---- a mosaic's frames: hover outlines the frame under the pointer, a click opens it ----
+    // The tile map (/frames/mosaic/<ID>.json, obs_mosaic.tile_map) is the mosaic builder's own placement of each
+    // tile, outlines as fractions of the picture, so it fits every size the mosaic is sent at. Asked for once per
+    // mosaic picture, on the first hover. While the clock runs the outline waits until the pointer rests a quarter
+    // second. On a phone (full view) the first tap outlines a frame and a second tap on it opens it.
+    let mosaicId = null, tmap = null, hot = null, clickT = 0, pointer = null;
+    const NS = "http://www.w3.org/2000/svg";
+    const overlay = document.createElementNS(NS, "svg");
+    overlay.setAttribute("class", "tilemap"); overlay.setAttribute("viewBox", "0 0 1 1"); overlay.setAttribute("preserveAspectRatio", "none");
+    const tip = document.createElement("div"); tip.className = "tiletip"; tip.hidden = true;
+    well.append(overlay, tip);
+    const look = () => (window.cassiniLook ? window.cassiniLook() : "");
+    const mosaicObs = () => { const k = mosaicId ? kOf(mosaicId) : -1; return k >= 0 ? `${catalog.cam[k]}|${catalog.obs[k]}` : null; };
+    function mapFor() {
+      if (!mosaicId || !drillOn()) return null;
+      const key = `${mosaicId}|${shot.dataset.src}`;
+      if (tmap && tmap.key === key) return tmap.data || tmap.prev;
+      // a mosaic still being built is a new picture with each tile: the outlines of the one before stay until the
+      // new map comes, so they never blink out under the pointer
+      tmap = { key, data: null, prev: tmap && (tmap.data || tmap.prev) && tmap.obs === mosaicObs() ? tmap.data || tmap.prev : null, obs: mosaicObs() };
+      fetch(`${FRAMES}/frames/mosaic/${mosaicId}.json?x=1${look()}`).then(r => r.ok ? r.json() : null, () => null).then(d => {
+        if (!tmap || tmap.key !== key) return;
+        tmap.data = d || { pointings: [] };
+        if (pointer) draw(hitAt(pointer));   // the map came while the pointer rests on the mosaic: outline under it now
+      });
+      return tmap.prev;
+    }
+    // the picture's box inside the well (object-fit: contain)
+    function picBox() {
+      const r = shot.getBoundingClientRect(), nw = shot.naturalWidth, nh = shot.naturalHeight;
+      if (!nw || !r.width) return null;
+      const s = Math.min(r.width / nw, r.height / nh), w = nw * s, h = nh * s;
+      return { x: r.left + (r.width - w) / 2, y: r.top + (r.height - h) / 2, w, h, well: well.getBoundingClientRect() };
+    }
+    const inside = (pt, poly) => { let c = false; for (let i = 0, j = poly.length - 1; i < poly.length; j = i++) { const [xi, yi] = poly[i], [xj, yj] = poly[j]; if ((yi > pt[1]) !== (yj > pt[1]) && pt[0] < (xj - xi) * (pt[1] - yi) / (yj - yi) + xi) c = !c; } return c; };
+    function hitAt(e) {
+      const m = mapFor(), b = picBox();
+      if (m && !b) return hot;   // the next picture of the mosaic still decoding: what is outlined stays
+      if (!m || !b || !m.pointings.length) return null;
+      const pt = [(e.clientX - b.x) / b.w, (e.clientY - b.y) / b.h];
+      let best = null, bd = Infinity;
+      // neighbors overlap: of the frames under the pointer, the one whose middle is nearest wins
+      for (const q of m.pointings) if (inside(pt, q.poly)) { const d = Math.hypot(pt[0] - q.center[0], pt[1] - q.center[1]); if (d < bd) { bd = d; best = q; } }
+      return best;
+    }
+    const polyStr = q => q.poly.map(c => c.join(",")).join(" ");
+    const hhmm = t => new Date(t * 1000).toISOString().slice(11, 19);
+    function draw(q) {
+      hot = q;
+      const m = tmap && (tmap.data || tmap.prev), b = picBox();
+      if (q && m && !b) return;   // decoding: drawn again once it is up (shot load)
+      if (!q || !m || !b) { overlay.classList.remove("on"); tip.hidden = true; well.classList.remove("tilehover"); return; }
+      Object.assign(overlay.style, { left: b.x - b.well.left + "px", top: b.y - b.well.top + "px", width: b.w + "px", height: b.h + "px" });
+      overlay.innerHTML = `<path class="dim" fill-rule="evenodd" d="M0 0H1V1H0Z M${q.poly.map(c => c.join(" ")).join("L")}Z"/>`
+        + m.pointings.map(p => `<polygon class="${p === q ? "hot" : "other"}" points="${polyStr(p)}" vector-effect="non-scaling-stroke"/>`).join("");
+      overlay.classList.add("on"); well.classList.add("tilehover");
+      const fs = m.filters.filter(f => q.ids[f]);
+      tip.innerHTML = `<b>Frame ${q.n} of ${m.pointings.length}</b><br>${fs.join(" ")} · ${hhmm(q.t)} UTC<br><span>${phoneNow() ? "Tap again" : "Click"} to open it</span>`;
+      tip.hidden = false;
+      const cx = (Math.max(...q.poly.map(c => c[0])) + Math.min(...q.poly.map(c => c[0]))) / 2, top0 = Math.min(...q.poly.map(c => c[1]));
+      tip.style.left = Math.max(4, Math.min(b.well.width - 220, b.x - b.well.left + cx * b.w - 100)) + "px";
+      tip.style.top = Math.max(4, b.y - b.well.top + top0 * b.h - 40) + "px";
+    }
+    const phoneNow = () => document.body.classList.contains("phone");
+    well.addEventListener("pointermove", e => {
+      if (e.pointerType === "touch") return;
+      pointer = { clientX: e.clientX, clientY: e.clientY };
+      const q = hitAt(e);
+      if (q !== hot) draw(q);
+    });
+    well.addEventListener("pointerleave", () => { pointer = null; draw(null); });
+    // a new picture of the mosaic (another tile came): the outline under the pointer is drawn again on it
+    const redraw = () => (pointer && mosaicId ? draw(hitAt(pointer)) : draw(null));
+    shot.addEventListener("load", () => { if (pointer && mosaicId) draw(hitAt(pointer)); });
+    function openPointing(q) {
+      const m = tmap.data || tmap.prev, fs = m.filters.filter(f => q.ids[f]), ids = fs.map(f => q.ids[f]);
+      const base = hold ? hold.levels.slice() : [{ kind: "mosaic", live: true, mid: mosaicId, label: `Mosaic · ${m.observation}`, src: shot.dataset.src,
+        url(sz) { return this.src.replace(/size=[^&]*/, `size=${sz}`); }, tag: card.querySelector(".kindtag").textContent, shot: m.observation,
+        lines: { ...liveLines(), filter: m.filters.join(" "), colour: `Mosaic of ${m.pointings.length} frames` } }];
+      while (base.length && base[base.length - 1].kind !== "mosaic") base.pop();
+      // the frame's own info lines (not the live frame's)
+      const ks = ids.map(kOf), k0 = ks[0], kp = k0 >= 0 ? catalog.km_per_px[k0] : 0;
+      const lines = { frame: `${titleCase(m.target || (k0 >= 0 && catalog.target[k0]) || "Unknown")} · ${ids[0]}${ids.length > 1 ? ` +${ids.length - 1}` : ""}`,
+        filter: fs.join(" "), details: `${hhmm(q.t)} UTC${kp ? ` · ${kp < 10 ? kp.toFixed(2) : fmt(kp)} km/px` : ""}` };
+      // on its own, the frame keeps the mosaic's levels and colors (obs_mosaic.pointing_picture), not a composite's
+      // or a frame's own stretch, so opening it changes nothing but its size
+      const mid = base[base.length - 1].mid, inMosaic = (use, sz) => `${FRAMES}/frames/mosaic/${mid}/frame.webp?ids=${use.join(",")}&size=${sz}${look()}`;
+      let lv;
+      if (ids.length === 3) {
+        const si = k0 >= 0 ? catalog.setOf[k0] : -1, cs = si >= 0 ? catalog.sets[si] : null;
+        const cat = cs && cs.use.length === 3 && cs.use.every((u, j) => catalog.id[u] === ids[j]) ? cs : null;
+        const kind = cat ? KIND[cat.kind] : (fs.includes("GRN") ? "Color" : "False color");
+        // the frame is a set of its own (its channels in the strip open on the mosaic's look too)
+        const s = ks.every(k => k >= 0) ? { use: ks, frames: ks, kind: cat ? cat.kind : "false", ready: -Infinity, url: sz => inMosaic(ids, sz) } : null;
+        lv = { kind: "composite", s, label: `Frame ${q.n} · ${kind} · ${fs.join(" ")}`, url: sz => inMosaic(ids, sz),
+          tag: `FRAME ${q.n} OF THE MOSAIC · ${kind.toUpperCase()} · AS IN THE MOSAIC`, shot: ids.join(" "),
+          lines: { ...lines, colour: `${kind}, frame ${q.n} of ${m.pointings.length} of the mosaic` } };
+      } else {
+        const id = ids[ids.length - 1];
+        lv = { kind: "frame", label: `Frame ${q.n} · ${nameOf(id)} · ${id}`, url: sz => inMosaic([id], sz),
+          tag: `FRAME ${q.n} OF THE MOSAIC · AS IN THE MOSAIC`, shot: id,
+          lines: { ...lines, frame: `${titleCase(m.target || "Unknown")} · ${id}`, filter: nameOf(id), colour: `Single filter, frame ${q.n} of ${m.pointings.length} of the mosaic` } };
+      }
+      draw(null);
+      hold1(base.concat([lv]));
+    }
+    well.addEventListener("click", e => {
+      if (!mosaicId) return;
+      const q = hitAt(e); if (!q) return;
+      if (phoneNow()) {
+        if (!win.classList.contains("full")) return;   // a tap on a small window opens full view, as before
+        e.stopPropagation();
+        if (hot !== q) return draw(q);
+        return openPointing(q);
+      }
+      // a double-click (full view) is not two clicks into the mosaic
+      clearTimeout(clickT);
+      if (e.detail > 1) return;
+      clickT = setTimeout(() => openPointing(q), 260);
+    });
+    well.addEventListener("dblclick", () => clearTimeout(clickT));
+
+    let levelKey = "";
+    // the held window's picture: its top level, at the size the window wants (full view: full)
+    function showLevel() {
+      const t = top(), url = t.url(size());
+      crumbs.hidden = false;
+      crumbs.innerHTML = '<button data-lv="live" title="Back to the live camera">Live</button><span class="sep">›</span>' + hold.levels.map((l, i) => i < hold.levels.length - 1
+        ? `<button data-lv="${i}">${l.label}</button><span class="sep">›</span>` : `<span class="here" title="${l.label}">${l.label}</span>`).join("")
+        + '<button class="heldbadge" title="Back to the live camera (Esc goes one step back)">held · Esc goes back</button>';
+      // flags (flag.html) record where the window is
+      shot.dataset.path = JSON.stringify(hold.levels.map(l => ({ kind: l.kind, label: l.label, src: l.url(capped()) })));
+      card.querySelector(".kindtag").textContent = t.tag;
+      card.querySelector(".shottag").textContent = t.shot;
+      // a held composite's channels in the strip (a frame opened from a mosaic is a set of its own)
+      const s = t.s || (t.kind === "channel" ? heldSet() : null);
+      if (s !== stripSet) strip(s, Infinity, -1);   // a picture with no set of its own: no strip (it would be the live one's)
+      chans.classList.remove("held");
+      // the info lines describe the held picture, not the live camera
+      field("status").textContent = "Held · the clock plays on";
+      if (t.lines) for (const f of LINES) field(f).innerHTML = t.lines[f] || "—";
+      card.querySelectorAll(".info dd[data-f]").forEach(dd => { dd.title = dd.textContent; });
+      drillable();
+      draw(null);
+      if (url === levelKey) return;
+      const im = new Image(); im.crossOrigin = "anonymous";
+      im.onload = () => {
+        if (!hold || top() !== t || t.url(size()) !== url) return;
+        levelKey = url;
+        shot.src = im.src; shot.dataset.src = url; shot.dataset.report = "";
+        mosaicId = t.kind === "mosaic" ? t.mid : null;
+        well.classList.add("has-frame"); well.classList.remove("kept");
+        well.classList.toggle("composite", t.kind !== "mosaic"); well.classList.toggle("mosaic", t.kind === "mosaic");
+        if (t.kind === "composite" && t.s) channelsFrom(im, t.s);
+        saving();
+      };
+      im.src = url;
+    }
+    function release() {
+      if (!hold) return;
+      hold = null; levelKey = ""; mosaicId = null; crumbs.hidden = true; crumbs.innerHTML = ""; delete win.dataset.held; holding.delete(feedApi);
+      delete shot.dataset.path; saveOpen(false); draw(null);
+      // back to live: the live picture as it was, then the clock's picture from there (a mosaic still being
+      // built is asked for again, and its newer tiles come in as before)
+      if (live) {
+        shot.src = live.src; shot.dataset.src = live.dsrc || ""; shot.dataset.report = live.report || "";
+        well.classList.toggle("mosaic", live.mosaic); well.classList.toggle("composite", live.composite);
+        card.querySelector(".kindtag").textContent = live.tag; mosaicId = live.mosaicId; saving();
+        live = null;
+      }
+      lastK = -2; stripKey = "";
+      for (const L of Object.values(mLane)) { L.last = ""; L.next = null; }
+      if (typeof catalog !== "undefined" && catalog && catalog.byCam) update(true);
+    }
+    // Esc: one step back. From a frame opened from the live picture, back to live while the camera is still on
+    // that pass (the live mosaic, with any tiles taken since), otherwise to the picture it was opened from
+    function back() {
+      if (!hold) return;
+      const lv = hold.levels;
+      if (lv.length > 2 || (lv.length === 2 && !(lv[0].live && stillOn()))) { lv.pop(); return showLevel(); }
+      release();
+    }
+    const stillOn = () => { const p = lastOfCam(cam, state.et, body), k = p < 0 ? -1 : framesOf(cam, body).ks[p]; return !!live && k >= 0 && passOf(k) === live.pass; };
+    const feedApi = { win, release, back, get held() { return !!hold; } };
     // Data first: while the moment on screen waits for its data (a jump to another month), the window lets go of
     // every picture it is fetching and asks for nothing. A browser keeps only six connections open to the frame
     // server, and pictures that take the server seconds to make (a mosaic or a color set, or any picture of a year
@@ -2674,6 +3049,7 @@ body.phone #finale .fx-data { width: min(220px, calc(100vw - 32px)); top: 10px; 
         if (obsK < 0) { obsShown = null; shapeOf = null; }
       }
       if (win.hidden && !force) { mosaicStop(); return; }   // a closed or tucked-away window fetches nothing; it catches up when shown
+      if (hold) { if (force) showLevel(); return; }   // held: the clock moves on without it (a bigger window asks for the bigger picture)
       if (window.cassiniMovie && window.cassiniMovie.on) { mosaicStop(); return; }   // movie mode has the frame server to itself (its requests are capped)
       const p = lastOfCam(cam, state.et, body), k = p < 0 ? -1 : framesOf(cam, body).ks[p];
       const live = k >= 0 && state.et - catalog.et[k] < 180;
@@ -2757,6 +3133,7 @@ body.phone #finale .fx-data { width: min(220px, calc(100vw - 32px)); top: 10px; 
     }
     new ResizeObserver(retier).observe(well);
     update.retier = retier;
+    update.release = release;
     const importance = () => weight(kind);
     update.importance = importance;
     update.kind = () => kind;
@@ -2884,7 +3261,7 @@ body.phone #finale .fx-data { width: min(220px, calc(100vw - 32px)); top: 10px; 
     return out;
   }
   async function capture(w) {
-    let canvas = null, src = null, report = null, ids = [], what = null;
+    let canvas = null, src = null, report = null, ids = [], what = null, path = null;
     if (w.id === "moviecard") {
       const M = window.cassiniMovie && window.cassiniMovie.state, b = M && M.cur && M.buf.get(M.cur.id);
       if (!M || !M.cur) return null;
@@ -2899,8 +3276,10 @@ body.phone #finale .fx-data { width: min(220px, calc(100vw - 32px)); top: 10px; 
       const well = w.querySelector(".well"), shot = w.querySelector(".shot");
       if (!well || !well.classList.contains("has-frame") || !shot.naturalWidth) return null;
       canvas = fromImg(shot); src = shot.dataset.src || shot.src;
+      try { path = shot.dataset.path ? JSON.parse(shot.dataset.path) : null; } catch (e) {}
       try { report = shot.dataset.report ? JSON.parse(shot.dataset.report) : null; } catch (e) {}
       what = well.classList.contains("mosaic") ? (report && report.observation ? "pass mosaic" : "mosaic") : well.classList.contains("composite") ? "color composite" : "frame";
+      if (path && path.length && path[path.length - 1].kind === "channel") what = "composite channel";
       if (!report && /\/color\.webp/.test(src)) report = await fetch(src).then(r => JSON.parse(r.headers.get("X-Composite") || "null"), () => null);
       const tag = (w.querySelector(".shottag") || {}).textContent || "";
       ids = tag.match(ID) || [];
@@ -2914,7 +3293,7 @@ body.phone #finale .fx-data { width: min(220px, calc(100vw - 32px)); top: 10px; 
       tiles = [];
       for (let k = 0; k < catalog.id.length; k++) if (catalog.obs[k] === report.observation && catalog.cam[k] === cam && catalog.et[k] <= state.et) tiles.push(catalog.id[k]);
     }
-    return { canvas, png: await toPng(canvas), src, report, ids, what, labels: texts(w), info: infoFields(w), tiles };
+    return { canvas, png: await toPng(canvas), src, report, ids, what, labels: texts(w), info: infoFields(w), tiles, path };
   }
 
   // ---- the panel: the picture is taken the moment the flag is pressed; the note can follow at leisure ----
@@ -2973,6 +3352,7 @@ body.phone #finale .fx-data { width: min(220px, calc(100vw - 32px)); top: 10px; 
       window: { id: w.id, title: p.title, kind: w.id === "moviecard" ? "movie" : w.id === "reelcard" ? "reel" : w.classList.contains("bodywin") ? "body window" : "camera window",
         full: w.classList.contains("full"), zoomed: w.classList.contains("zoomed"), width: Math.round(w.getBoundingClientRect().width), height: Math.round(w.getBoundingClientRect().height) },
       shown: { what: got.what, src: got.src ? new URL(got.src, location.href).href : null, report: got.report || null, labels: got.labels, info: got.info, observation_frames: got.tiles,
+        path: got.path ? got.path.map(l => Object.assign({}, l, { src: new URL(l.src, location.href).href })) : null,
         width: got.canvas.width, height: got.canvas.height },
       ids: got.ids, frames: got.ids.map(frameInfo),
       movie: !!(window.cassiniMovie && window.cassiniMovie.on), playing: !!state.playing, speed: state.speed,
@@ -3431,6 +3811,9 @@ body.phone #finale .fx-data { width: min(220px, calc(100vw - 32px)); top: 10px; 
     }
     for (const k of B.dismissed) if (!keepKeys.includes(k)) B.dismissed.delete(k);
     let showKeys = keepKeys.filter(k => !B.dismissed.has(k));
+    // a window held on a part of its picture (drill-down) stays until it goes back to live, and is not counted
+    const held = [...B.wins].filter(([, w]) => !w.closing && w.el.dataset.held).map(([k]) => k);
+    showKeys = showKeys.filter(k => !held.includes(k));
     // at most max targets have windows, the most recently imaged first
     const bodies = [...new Set(showKeys.map(k => k.split("|")[0]))].sort((a, b) => latest(b) - latest(a)).slice(0, Math.max(1, B.max));
     let show = showKeys.filter(k => bodies.includes(k.split("|")[0]));
@@ -3445,9 +3828,10 @@ body.phone #finale .fx-data { width: min(220px, calc(100vw - 32px)); top: 10px; 
       const over = show.filter(k => k !== newest.k && age(k) / weight(k) > limit).sort((a, b) => age(b) / weight(b) - age(a) / weight(a));
       while (show.length > B.room && over.length) { const k = over.shift(); B.rec.get(k).gone = true; show = show.filter(x => x !== k); }
     }
+    show = show.concat(held);
     for (const k of [...B.wins.keys()]) if (!show.includes(k)) close(k);
     // oldest target first, so the newest windows land on top; the narrow-angle window first, so the wide-angle one sits beside it
-    for (const name of bodies.slice().reverse()) for (const cam of CAMS) {
+    for (const name of [...new Set(bodies.concat(held.map(k => k.split("|")[0])))].reverse()) for (const cam of CAMS) {
       const k = key(name, cam); if (!show.includes(k)) continue;
       let w = B.wins.get(k);
       if (!w || w.closing) { w = open(name, cam); w.update.hold = true; }   // the window, not the stale time, decides when its picture goes
@@ -4507,12 +4891,14 @@ body.phone #finale .fx-data { width: min(220px, calc(100vw - 32px)); top: 10px; 
   }
   // which apps are open and which body is in view
   function marks() {
+    for (const [w, t] of tiles) t.classList.toggle("held", !!w.dataset.held);
     for (const b of dock.children) {
       const k = b.dataset && b.dataset.key; if (!k) continue;
       if (k.startsWith("body:")) {
         const n = k.slice(5);
         b.classList.toggle("here", typeof state !== "undefined" && state.focus === n);
         b.classList.toggle("open", bodyWins(n).length > 0);
+        b.classList.toggle("held", bodyWins(n).some(w => w.dataset.held));
       } else if (k.startsWith("app:")) {
         const a = APPS.find(a => "app:" + a.key === k); b.classList.toggle("open", !!a && a.open());
       }

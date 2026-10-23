@@ -23,6 +23,7 @@ Routes:
                                the capped sizes. &format=png sends PNG instead, &download=1 as a named
                                attachment (Cassini_<ID>.png), so the picture can be saved and shared
   /frames/<ID>.png             the archive PNG as it is
+  /frames/<ID>.png?download=1  the archive PNG as a named attachment (Cassini_<ID>_archive.png)
   /frames/color.webp?ids=R,G,B&size=512
                                colour composite of two or three frames of one filter set, made on
                                first request and cached like the frames: R,G,B in that order, or
@@ -32,11 +33,14 @@ Routes:
                                on one brightness scale, aligned to the middle one in time, pixels
                                lost in downlink transparent. The X-Composite header (and a .json
                                next to the cached image) says how each channel was made
+  ...&channel=0|1|2            one channel of that composite (0 red, 1 green, 2 blue), black and white, cut
+                               from the same composite so it keeps the composite's shared brightness scale and
+                               alignment: what a composite's channel looks like opened on its own (drill-down)
   /frames/processed/<ID>.webp?size=512
                                the frame alone made like a composite's channel (color_image.load_aligned with
                                one frame: repeat exposures stacked, lost pixels transparent, calibrated to I/F
-                               and put on the pipeline's display scale), for movie mode; cached like the
-                               composites, X-Composite as theirs
+                               and put on the pipeline's display scale, its own), for movie mode; cached like the
+                               composites, X-Composite as theirs. size=full, format=png and download=1 as above
   /reel/bodies.json            every body with frames, most photographed first
   /reel/<TARGET>.json          the body's reel: its pictures in time order (web/frames/reel.py)
   /frames/reel/<TARGET>/<n>.webp?size=768&mosaic=1
@@ -44,6 +48,10 @@ Routes:
                                stacked, calibrated, aligned, centred on the body with north up by SPICE)
                                and drawn into the rolling mosaic with the pictures before it; made on
                                first request and cached. X-Reel says how it was made
+  /frames/mosaic/<ID>.json     where each frame sits in that mosaic (obs_mosaic.tile_map): its pointings, each with
+                               its frames by filter and its outline and centre as fractions of the picture
+  /frames/mosaic/<ID>/frame.webp?ids=A,B,C&size=full   one frame of that mosaic on its own, on the mosaic's levels
+                               and colours (obs_mosaic.pointing_picture; format=png, download=1 as below)
   /frames/mosaic/<ID>.webp?size=512   (&warm=1: only start making the pass ahead of time, empty answer)
                                the mosaic frame <ID> is a new tile of, made like a reel picture: 404 when
                                the frame is not a mosaic tile (mosaic.panels: same camera, observation and
@@ -260,10 +268,15 @@ def in_background(target, *args):
     threading.Thread(target=contextvars.copy_context().run, args=(target, *args), daemon=True).start()
 
 
-def composite(ids):
+def composite(ids, channel=None):
     """RGBA composite of the frames ids (R,G,B, or longer and shorter wavelength), 1024 px, made by the
     pipeline's color path (color_image.load_aligned: repeat exposures stacked, calibrated, aligned),
-    and a report of how each channel was made. One id makes the frame alone, black and white (LA)."""
+    and a report of how each channel was made. One id makes the frame alone, black and white (LA);
+    channel=0|1|2 the composite's red, green or blue alone, black and white on the composite's scale (LA)."""
+    if channel is not None:
+        im, report = _recent_composite(ids)
+        bands = im.split()
+        return Image.merge("LA", (bands[channel], bands[-1])), dict(report, channel=channel)
     imgs, valid, _, report = color_image.load_aligned([f"{FOLDERS[i[0]]}/{i}.png" for i in ids])
     chans = [img[..., 0] if img.ndim == 3 else img for img in imgs]
     alpha = np.where(valid, 255, 0).astype(np.uint8)
@@ -275,21 +288,41 @@ def composite(ids):
     return Image.fromarray(np.dstack(chans + [alpha]), "RGBA"), report
 
 
-def color_webp(ids, size, cache, fmt="webp"):
-    """The composite as WebP (or PNG), and its report (also kept in the cache, next to the image)."""
+# the last few composites made, so a window opening each of a set's channels in turn runs load_aligned once
+_recent, _recent_lock, RECENT = {}, threading.Lock(), 4
+
+
+def _recent_composite(ids):
+    key = (calibration.style(), tuple(ids))
+    with _recent_lock:
+        hit = _recent.pop(key, None)
+        if hit:
+            _recent[key] = hit
+            return hit
+    made = composite(ids)
+    with _recent_lock:
+        _recent[key] = made
+        while len(_recent) > RECENT:
+            _recent.pop(next(iter(_recent)))
+    return made
+
+
+def color_webp(ids, size, cache, fmt="webp", channel=None):
+    """The composite (or one of its channels) as WebP (or PNG), and its report (also kept in the cache, next to
+    the image)."""
     # bumped whenever the way composites are made changes, so older ones are not served again
     folder = os.path.join(cache, COLOR_VERSIONS[calibration.style()])
-    base = os.path.join(folder, size_dir(size, fmt), "_".join(ids))
+    base = os.path.join(folder, size_dir(size, fmt), "_".join(ids) + ("" if channel is None else f"_c{channel}"))
     report = {}
     def make():
         with _color_slots:
-            im, made = composite(ids)
+            im, made = composite(ids, channel) if channel is not None else _recent_composite(ids)
         report.update(made)
         cached(base + ".json", lambda: json.dumps(made).encode())
         print("composite", json.dumps(made))
         # the camera windows' other sizes are encoded now too (a few tens of ms each), so a window that grows or
         # goes to full view gets the composite at once instead of making it again
-        for other in WINDOW_SIZES:
+        for other in WINDOW_SIZES if channel is None else ():   # a channel is asked for at the size it is shown
             if other != size:
                 path = os.path.join(folder, size_dir(other, "webp"), "_".join(ids))
                 if not os.path.exists(path + ".webp"):
@@ -304,19 +337,19 @@ def color_webp(ids, size, cache, fmt="webp"):
     return data, report
 
 
-def processed_webp(frame_id, size, cache):
+def processed_webp(frame_id, size, cache, fmt="webp"):
     """One frame made like a composite's channel (composite with one id: repeat exposures stacked, lost pixels
     filled, calibrated to I/F and put on the pipeline's display scale), for movie mode; and its report. Cached
     like the composites."""
-    base = os.path.join(cache, PROC_VERSIONS[calibration.style()], str(size), frame_id)
+    base = os.path.join(cache, PROC_VERSIONS[calibration.style()], size_dir(size, fmt), frame_id)
     report = {}
     def make():
         with _movie_slots:
             im, made = composite([frame_id])
         report.update(made)
         cached(base + ".json", lambda: json.dumps(made).encode())
-        return encode(im, size)
-    data = cached(base + ".webp", make)
+        return encode(im, size, fmt)
+    data = cached(f"{base}.{fmt}", make)
     if not report and os.path.exists(base + ".json"):
         with open(base + ".json") as fh:
             report = json.load(fh)
@@ -701,19 +734,31 @@ def make_handler(site, cache, flags=None):
                 if not 2 <= len(ids) <= 3 or not all(FRAME_ID.match(i) for i in ids) or len({i[0] for i in ids}) > 1:
                     return self.send_error(400, "ids= takes two or three frame ids from one camera")
                 size, fmt = size_of(query, 512), picture_format(query)
+                channel = query.get("channel", [""])[0]
+                if channel and channel not in ("0", "1", "2"):
+                    return self.send_error(400, "channel= takes 0, 1 or 2")
+                channel = int(channel) if channel else None
+                # a channel is named after its frame (a two-filter composite's green, made from both, after the set)
+                if channel is None:
+                    name = f"Cassini_{'_'.join(ids)}_color"
+                elif len(ids) == 2 and channel == 1:
+                    name = f"Cassini_{'_'.join(ids)}_green"
+                else:
+                    name = f"Cassini_{ids[channel if len(ids) == 3 else channel // 2]}_in_color"
                 try:
-                    data, report = color_webp(ids, size, cache, fmt)
-                    return self.send_picture(data, fmt, query, f"Cassini_{'_'.join(ids)}_color", {"X-Composite": json.dumps(report)})
+                    data, report = color_webp(ids, size, cache, fmt, channel)
+                    return self.send_picture(data, fmt, query, name, {"X-Composite": json.dumps(report)})
                 except FileNotFoundError:
                     return self.send_error(404, "Frame not in the archive")
             m = re.match(r"^/frames/processed/([^/]+)\.webp$", url.path)
             if m:
                 if not FRAME_ID.match(m.group(1)):
                     return self.send_error(400, "Not a frame id")
-                size = min(SIZES, key=lambda s: abs(s - int(parse_qs(url.query).get("size", ["512"])[0])))
+                query = parse_qs(url.query)
+                size, fmt = size_of(query, 512), picture_format(query)
                 try:
-                    data, report = processed_webp(m.group(1), size, cache)
-                    return self.send_bytes(data, "image/webp", headers={"X-Composite": json.dumps(report)})
+                    data, report = processed_webp(m.group(1), size, cache, fmt)
+                    return self.send_picture(data, fmt, query, f"Cassini_{m.group(1)}_processed", {"X-Composite": json.dumps(report)})
                 except FileNotFoundError:
                     return self.send_error(404, "Frame not in the archive")
             if url.path == "/reel/bodies.json":
@@ -736,6 +781,31 @@ def make_handler(site, cache, flags=None):
                     return self.send_bytes(data, "image/webp", headers={"X-Reel": json.dumps(report, default=str)})
                 except FileNotFoundError:
                     return self.send_error(404, "Frame not in the archive")
+            m = re.match(r"^/frames/mosaic/([^/]+)\.json$", url.path)
+            if m:
+                # where each frame sits in the mosaic shown for that frame (obs_mosaic.tile_map), for hover and
+                # click-to-open in the camera windows; 404 when the frame is not in a mosaic pass
+                if not FRAME_ID.match(m.group(1)):
+                    return self.send_error(400, "Not a frame id")
+                found = obs_mosaic.tile_map(m.group(1), cache) if reel._index is not None else None
+                return self.send_json(found) if found else self.send_json({"error": "not a mosaic pass"}, 404)
+            m = re.match(r"^/frames/mosaic/([^/]+)/frame\.webp$", url.path)
+            if m:
+                # one frame of that mosaic on its own at full resolution, with the mosaic's levels and colours
+                # (obs_mosaic.pointing_picture): ids = its frames, one per filter as the tile map gives them
+                # (&channel=0-2: one filter's channel of it)
+                query = parse_qs(url.query)
+                ids = [i for i in query.get("ids", [""])[0].split(",") if i]
+                if not FRAME_ID.match(m.group(1)) or not ids or len(ids) > 3 or not all(FRAME_ID.match(i) for i in ids):
+                    return self.send_error(400, "Not frame ids")
+                size, fmt, ch = size_of(query, FULL), picture_format(query), query.get("channel", [None])[0]
+                if ch is not None and ch not in ("0", "1", "2"):
+                    return self.send_error(400, "channel is 0, 1 or 2")
+                made = obs_mosaic.pointing_picture(m.group(1), ids, cache, size, fmt, _mosaic_slots, None if ch is None else int(ch)) \
+                    if reel._index is not None else None
+                if not made:
+                    return self.send_error(404, "Not frames of that mosaic")
+                return self.send_picture(made[0], fmt, query, f"Cassini_{'_'.join(ids)}_in_mosaic" + ("" if ch is None else f"_channel{ch}"), {"X-Reel": json.dumps(made[1])})
             m = re.match(r"^/frames/movie/([^/]+)\.(webp|json)$", url.path)
             if m:
                 # a frame played as a movie of its pass (obs_mosaic.movie_webp): centred by SPICE, on the pass's one
@@ -833,9 +903,9 @@ def make_handler(site, cache, flags=None):
                 if not FRAME_ID.match(frame_id):
                     return self.send_error(400, "Not a frame id")
                 try:
-                    if kind == "png":
-                        return self.send_bytes(archive_png(frame_id), "image/png")
                     query = parse_qs(url.query)
+                    if kind == "png":
+                        return self.send_picture(archive_png(frame_id), "png", query, f"Cassini_{frame_id}_archive")
                     size, fmt = size_of(query, 512), picture_format(query)
                     if reel._index is not None and size != FULL:
                         # a frame of a mosaic pass (the window asks for frames a few ahead): start its tiles
