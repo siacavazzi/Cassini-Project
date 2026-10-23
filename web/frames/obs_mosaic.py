@@ -1134,6 +1134,7 @@ def mosaic_webp(frame_id, size, cache, slots=None, ahead=3, fmt="webp", out=OUT,
         if size == "full":
             return _mosaic_at(u, n, size, cache, slots, fmt, out)
         made = _mosaic_at(u, n, size, cache, slots)
+    tiles_ahead(u, n + 1, cache)
     if made and ahead:
         warm(u, n + ahead, cache, size, slots, start=n + 1, force=force)
     return made
@@ -1259,11 +1260,47 @@ def warm(u, upto, cache, size=None, slots=None, start=0, force=False):
     threading.Thread(target=run, daemon=True).start()
 
 
+_ahead_passes = collections.deque(maxlen=2)   # the passes windows were in last (a NAC and a WAC window)
+_ahead_running = set()
+
+
+def tiles_ahead(u, n, cache):
+    """Makes the pass's tiles from n to its end in the background, one thread per pass, so a playing window's
+    mosaic finds its tiles made (processing a frame is the slow part of a cold mosaic) instead of waiting for
+    each. Stops once windows have moved on to two other passes. Waits between tiles while a window waits for a
+    mosaic (_yield), so the pass's lock goes to the request first instead of to the next tile ahead."""
+    with _lock:
+        if u["key"] in _ahead_passes:
+            _ahead_passes.remove(u["key"])
+        _ahead_passes.append(u["key"])
+        if u["key"] in _ahead_running:
+            return
+        _ahead_running.add(u["key"])
+    look = calibration.look()
+
+    def run():
+        try:
+            with calibration.looking(look):
+                p = plan(u, cache)
+                for j in range(max(n, 0), len(u["frames"])):
+                    _yield()
+                    if u["key"] not in _ahead_passes:
+                        return
+                    tile(u, j, cache, p["display_scale"])
+        except Exception as e:
+            print(f"observation tiles {u['key']} failed: {type(e).__name__}: {e}", flush=True)
+        finally:
+            with _lock:
+                _ahead_running.discard(u["key"])
+
+    threading.Thread(target=run, daemon=True).start()
+
+
 def warm_frame(frame_id, cache, ahead=4):
-    """A frame was asked for: when it is in a mosaic pass, start making that pass's tiles up to a few past it."""
+    """A frame was asked for: when it is in a mosaic pass, start making that pass's tiles from it on."""
     found = unit_of(frame_id)
     if found and found[0]["mosaic"]:
-        warm(found[0], max(found[1], 0) + ahead, cache)
+        tiles_ahead(found[0], max(found[1], 0), cache)
 
 
 def main():
