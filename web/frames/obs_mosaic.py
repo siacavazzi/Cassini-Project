@@ -53,7 +53,7 @@ import stacking  # noqa: E402
 # bumped whenever the way observation mosaics are made changes, so older ones are not served again; one per
 # display model (calibration.style), classic being the mosaics made before the balanced display model, raw the
 # balanced ones before natural color
-VERSIONS = {"balanced": "obs-v27", "raw": "obs-v12", "classic": "obs-v9"}
+VERSIONS = {"balanced": "obs-v28", "raw": "obs-v13", "classic": "obs-v9"}
 CANVAS = 2048        # longest side of the canvas the view is drawn on
 OUT = 1024           # longest side of the picture sent
 FRAME = 1024         # full resolution frame
@@ -247,6 +247,9 @@ DETAIL = 2.0       # filled passes: how much the local contrast is raised (detai
 DETAIL_SIGMA = 0.05  # ... over this much of a frame
 
 
+SKY_MIN = 0.05   # balanced: the share of a pass's pixels that must be dark sky for its blacks to be set from the sky
+
+
 def pass_scale(frames, u, drawn=None, true_colour=False):
     """The display scale of every tile of the pass (calibration.shared_scale over its frames merged in I/F, as
     mosaic_benchmark.display_scale): {"blacks": {filter: I/F}, "white": I/F, "gamma"}. Where the body fills
@@ -293,6 +296,14 @@ def pass_scale(frames, u, drawn=None, true_colour=False):
         white = max(float(np.percentile(np.concatenate([i.ravel() for i in iofs]) - blacks[f], 99.5))
                     for f, iofs in by.items())
         gamma = 1.5
+    if calibration.look() == "balanced":
+        # where the pass has dark sky, no band's black below that sky's level plus the noise margin, as a single
+        # picture's (calibration.sky_levels): the 1st percentile of a pass that is mostly sky sits in the sky's
+        # noise, so the sky came out a gray, scan-lined veil around the body once the tiles were put together
+        masks = {f: [i < 0.05 * np.percentile(i, 99.9) for i in iofs] for f, iofs in by.items()}
+        if all(sum(int(m.sum()) for m in ms) > SKY_MIN * sum(m.size for m in ms) for ms in masks.values()):
+            levels, margin = calibration.sky_levels(list(by.values()), list(masks.values()))
+            blacks = {f: max(blacks[f], level + margin) for f, level in zip(by, levels)}
     out = {"blacks": blacks, "white": white, "gamma": gamma, "filled": filled, "floor": round(floor, 3)}
     mine = [f for f in (drawn or []) if f in by]
     if calibration.style() == "balanced" and len(mine) == 3 and not true_colour:

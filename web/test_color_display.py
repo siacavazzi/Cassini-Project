@@ -129,6 +129,18 @@ assert max(b / old["white"] for b in old["blacks"].values()) > 1      # the clas
 assert len(set(false["blacks"].values())) == 3 and np.isclose(false["white"], max(np.percentile(v[0][::4, ::4], 99.5) - np.percentile(v[0][::4, ::4], 1) for v in by.values()), rtol=1e-3)
 # natural false colour: a balance toward gray
 assert "balance" in natural_false and "balance" not in false
+# a pass of mostly sky around a small body: each band's black sits above its sky (level plus noise margin), so the
+# sky between the tiles comes out black, not a gray veil
+yy, xx = np.mgrid[:256, :256]
+disk = np.hypot(yy - 128, xx - 128) < 40
+by_sky = {f: [np.where(disk, 0.5, off) + 0.002 * rng.standard_normal((256, 256))] for f, off in
+          (("MT3", 0.004), ("MT2", 0.010), ("UV1", 0.007))}
+obs_mosaic.stacking.load_hdr = lambda path, gap=None: (None, by_sky[path][0], 1)
+fr_sky = [(f, f"N{i}", f, i, 600, 0.0, 0.0, 1e5) for i, f in enumerate(by_sky)]
+with cal.looking("balanced"):
+    sky_scale = obs_mosaic.pass_scale(fr_sky, {"key": ("JUPITER", "TEST", "N", 0), "z": 1e5}, list(by_sky), False)
+for f, v in by_sky.items():
+    assert np.mean(v[0][~disk] > sky_scale["blacks"][f]) < 0.05, f
 
 # ---- detail on luminance only: a colored patch keeps its color differences, no channel gets its own texture ----
 rgba = np.zeros((64, 64, 4), np.uint8); rgba[..., 3] = 255
