@@ -1344,6 +1344,8 @@ body.phone.has-dock { --appdockh: 50px; }
   // movie passes in the camera and body windows (head-quiet.html cameraFeed reads these)
   D({ key: "movies.steady", section: "Movie", label: "Steady movie passes", type: "toggle", value: true,
       hint: "When a pass plays as a movie in a camera or body window (a stare, a ring or storm movie), every frame is centered by SPICE, north up, on one brightness scale and one size for the whole pass, so the body holds still and the picture does not pump. Off shows each frame as it is." });
+  D({ key: "movies.center", section: "Movie", label: "Center the body", type: "toggle", value: true,
+      hint: "In a steady movie pass, the body sits in the middle of every frame, north up, when its whole disk fits the picture (a moon, a planet from far off). A ring or spoke movie close to Saturn keeps its own view. Off keeps the view the frames cover, with the body where the camera put it." });
   D({ key: "movies.filmstrip", section: "Movie", label: "Filmstrip", type: "toggle", value: true,
       hint: "Under a window playing a movie pass: every frame of the pass along a strip, with the frames around the one shown. Click or drag along it to move through the pass." });
   cls("movies.filmstrip", "s-nofilmstrip", false);
@@ -2313,7 +2315,7 @@ body.phone.has-dock { --appdockh: 50px; }
     // a pass played as a movie (the Mosaic / Movie switch, with Settings > Movie > Steady movie passes on): its
     // frames come from /frames/movie
     const playsMovie = k => S.get("movies.steady") && playsAs(k) === "movie";
-    const movieUrl = (id, sz) => `${FRAMES}/frames/movie/${id}.webp?size=${sz || size()}&trail=${S.get("movies.trail")}&color=${S.get("cameras.composites") ? 1 : 0}${window.cassiniLook()}`;
+    const movieUrl = (id, sz) => `${FRAMES}/frames/movie/${id}.webp?size=${sz || size()}&trail=${S.get("movies.trail")}&color=${S.get("cameras.composites") ? 1 : 0}${S.get("movies.center") ? "" : "&center=0"}${window.cassiniLook()}`;
     const movieFailed = new Set();    // frames the server did not steady: they show as they are
     // passes the server is still working out (a movie request failed): their frames show as they are, with the
     // steadying note, and the steady frame is asked for again every COLD_RETRY ms
@@ -2657,7 +2659,7 @@ body.phone.has-dock { --appdockh: 50px; }
   const feeds = [...document.querySelectorAll(".camwin")].map(cameraFeed);
   window.cassiniFeeds = { cameraFeed, framesOf, lastOfCam, prep, stale: () => S.get("cameras.stale") * 3600 };
   // a change to what the windows show takes effect straight away
-  for (const key of ["cameras.composites", "cameras.stale", "cameras.steady", "cameras.passes", "cameras.balancedColor", "movies.steady", "movies.trail", "movies.filmstrip", "movies.laps"]) S.on(key, () => { if (typeof catalog !== "undefined" && catalog && catalog.byCam) feeds.forEach(f => f(true)); });
+  for (const key of ["cameras.composites", "cameras.stale", "cameras.steady", "cameras.passes", "cameras.balancedColor", "movies.steady", "movies.center", "movies.trail", "movies.filmstrip", "movies.laps"]) S.on(key, () => { if (typeof catalog !== "undefined" && catalog && catalog.byCam) feeds.forEach(f => f(true)); });
 
   // ---------- burst limit: in normal playback each camera window gets at most maxRate new pictures a second ----------
   // The clock runs at the chosen speed except inside an imaging burst, where it slows so that crossing the gap

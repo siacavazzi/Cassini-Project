@@ -71,6 +71,7 @@ MOVIE_JUMPS = 0.3    # a pass whose same-filter steps jump (mosaic.min_step) les
 MOVIE_FIT = 2.0      # a pass played as a movie shows its whole footprint up to this many frames across, else a
                      # window this wide following the frame, at one scale for the whole pass
 MOVIE_MARGIN = 0.15  # of a frame, round a movie's footprint
+CENTRE_MARGIN = 0.2  # of the body's diameter, round its disk in a movie centred on it
 MOVIE_SAMPLES = 6    # tiles a movie's footprint is measured on
 TRAIL = 12           # most earlier frames a movie's rolling trail keeps under the newest
 SCALE_FRAMES = 96    # most frames the pass's display scale is measured on (evenly spread over a long movie)
@@ -839,13 +840,20 @@ def movie_footprint(u, cache, p=None):
     return fp
 
 
-def movie_rect(fp, t):
+def movie_rect(fp, t, radius=0.0, centre=False):
     """The view of a pass played as a movie (x0, y0, w, h in reference pixels from the body's centre): its whole
     footprint fp (movie_footprint) when that is at most MOVIE_FIT frames across, so the body holds still while the
     pointing wanders; otherwise a window MOVIE_FIT frames across centred on frame t, kept inside fp (a creeping
-    ring or limb movie moves along). Either way one size for the whole pass, so the picture never rescales."""
+    ring or limb movie moves along). Either way one size for the whole pass, so the picture never rescales.
+    centre: a square view centred on the body (radius: its disk, reference pixels), a frame across or its disk
+    with CENTRE_MARGIN round it, when that is at most MOVIE_FIT frames and the frames look at the body (its centre
+    in fp), so the body sits in the middle of every frame, north up; a body bigger than that or not in the frames
+    (a ring or spoke movie past Saturn's limb) keeps the view above."""
     x0, y0, x1, y1 = fp
     side = MOVIE_FIT * FRAME
+    around = max(FRAME, 2 * radius * (1 + CENTRE_MARGIN))
+    if centre and radius > 0 and around <= side and x0 <= 0 <= x1 and y0 <= 0 <= y1:
+        return -around / 2, -around / 2, around, around
     if max(x1 - x0, y1 - y0) <= side:
         return x0, y0, x1 - x0, y1 - y0
     w, h = min(x1 - x0, side), min(y1 - y0, side)
@@ -867,7 +875,7 @@ def _place(u, t, rect, k, W, H, cache):
     return frame
 
 
-def movie_frame(u, n, cache, trail=0, colour=True, out=OUT):
+def movie_frame(u, n, cache, trail=0, colour=True, out=OUT, centre=True):
     """Frame n of the pass played as a movie, RGBA out px on its longest side, and its report; (None, report)
     when SPICE could not place it. The frame is the pass's tile n (color_image.processed_frame: repeat exposures
     merged in I/F, calibrated, centred north up by SPICE, scaled to the pass's reference distance, on the pass's
@@ -876,7 +884,8 @@ def movie_frame(u, n, cache, trail=0, colour=True, out=OUT):
     newest frame of each of them was taken within reel.SET_GAP of this one, the three are drawn as one colour
     picture (each where SPICE puts it), as the pass's mosaic does; otherwise the frame in grey. trail: up to that
     many earlier frames of the same filter drawn under it, fading with age (a rolling trail). In a colour pass every
-    frame shows the newest complete colour set, held until the next one is complete."""
+    frame shows the newest complete colour set, held until the next one is complete. centre: the body in the
+    middle of the view (movie_rect)."""
     p = plan(u, cache)
     t = tile(u, n, cache, p["display_scale"])
     rep = {"movie": True, "n": n, "of": len(u["frames"]), "filter": t["filter"], "observation": u["key"][1],
@@ -884,7 +893,9 @@ def movie_frame(u, n, cache, trail=0, colour=True, out=OUT):
     if "offset" not in t:
         rep["why"] = t.get("why", "not placed by SPICE")
         return None, rep
-    rect = movie_rect(movie_footprint(u, cache, p), t)
+    radius = RADIUS.get(u["key"][0], 0) / (u["z"] * IFOV[u["key"][2]])
+    rect = movie_rect(movie_footprint(u, cache, p), t, radius, centre)
+    rep["centred"] = rect[0] == -rect[2] / 2 and rect[1] == -rect[3] / 2
     k = out / max(rect[2], rect[3])
     W, H = max(1, math.ceil(rect[2] * k)), max(1, math.ceil(rect[3] * k))
     # only the frames this picture needs are made: the newest of each colour filter within SET_GAP, the trail
@@ -946,11 +957,11 @@ def movie_frame(u, n, cache, trail=0, colour=True, out=OUT):
     return Image.fromarray(rgba, "RGBA"), rep
 
 
-def movie_webp(frame_id, size, cache, trail=0, colour=True, wait=False, ahead=6):
+def movie_webp(frame_id, size, cache, trail=0, colour=True, wait=False, ahead=6, centre=True):
     """(WebP, report) of frame_id played as a movie of its pass (movie_frame), made once and kept in the cache;
     None when the frame is in no pass. A pass whose plan is not worked out yet (seconds: it measures the pass's
     scale) is started in the background and answers (None, report) unless wait, so the window shows the plain
-    frame meanwhile. Then makes the next few tiles in the background."""
+    frame meanwhile. Then makes the next few tiles in the background. centre: the body in the middle (movie_rect)."""
     found = unit_of(frame_id)
     if not found or found[1] < 0:
         return None
@@ -958,12 +969,12 @@ def movie_webp(frame_id, size, cache, trail=0, colour=True, wait=False, ahead=6)
     if not wait and not all(os.path.exists(os.path.join(folder(u, cache), f)) for f in ("plan.json", "movie_footprint.json")):
         warm_movie(u, n, ahead, cache)
         return None, {"why": "working out the pass", "observation": u["key"][1], "pass": u["key"][3]}
-    path = os.path.join(folder(u, cache), "movie", str(size), f"{n}_{trail}_{int(bool(colour))}.webp")
+    path = os.path.join(folder(u, cache), "movie", str(size), f"{n}_{trail}_{int(bool(colour))}{'_c' if centre else ''}.webp")
     report, meta = {}, path[:-4] + "json"
 
     def make():
         with _asking():
-            im, rep = movie_frame(u, n, cache, trail, colour)
+            im, rep = movie_frame(u, n, cache, trail, colour, centre=centre)
         report.update(rep)
         reel._cached(meta, lambda: json.dumps(rep).encode())
         if im is None:
