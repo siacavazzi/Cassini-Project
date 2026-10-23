@@ -319,7 +319,7 @@ def _ulock(u):
         return _unit_locks.setdefault(u["key"], threading.RLock())
 
 
-PLAN_FILE = "plan3.json"   # renamed when the plan's rules change, so cached plans are worked out again
+PLAN_FILE = "plan4.json"   # renamed when the plan's rules change, so cached plans are worked out again
 
 
 def _tiles(u, cache, scale):
@@ -366,8 +366,9 @@ def plan(u, cache):
                     break
         c, s = math.cos(angle), math.sin(angle)
         pts, ks = [], []
-        for *_, x, y, z in frames:
-            if z:
+        # the footprint of the filters drawn: frames of a filter left out (aside) would only hold empty canvas
+        for _, _, f, _, _, x, y, z in frames:
+            if z and f not in aside:
                 k = z / u["z"]
                 pts.append(((c * -x - s * -y) * k, (s * -x + c * -y) * k))
                 ks.append(k)
