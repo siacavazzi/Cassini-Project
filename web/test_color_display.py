@@ -2,6 +2,7 @@
 black and white (calibration.picture_scale), anchored mosaic gains and linear offsets (mosaic.seams), the
 filled-pass scale (obs_mosaic.pass_scale) and luminance-only detail. Run: python web/test_color_display.py"""
 import sys; import os; sys.path.insert(0, os.path.join(os.path.dirname(os.path.abspath(__file__)), "frames"))
+import cv2
 import numpy as np
 import obs_mosaic  # noqa: E402  (puts the repo on the path)
 import calibration as cal  # noqa: E402
@@ -143,6 +144,16 @@ with cal.looking("balanced"):
     sky_scale = obs_mosaic.pass_scale(fr_sky, {"key": ("JUPITER", "TEST", "N", 0), "z": 1e5}, list(by_sky), False)
 for f, v in by_sky.items():
     assert np.mean(v[0][~disk] > sky_scale["blacks"][f]) < 0.05, f
+# a faint glow around the body fades into black through a soft toe: no black salt (a pixel at 0 among gray
+# neighbors) where the glow's noise crosses the black point
+rr = np.hypot(yy - 128, xx - 128)
+glow = np.where(disk, 0.5, 0.010 + 0.03 * np.exp(-(rr - 40) / 25.0)) + 0.002 * rng.standard_normal((256, 256))
+assert sky_scale.get("toe")
+shown = cal.display(glow, sky_scale["blacks"]["MT2"], sky_scale["white"], sky_scale["gamma"], None,
+                    sky_scale["toe"])[..., 0].astype(np.float32)
+around = (cv2.blur(shown, (3, 3)) * 9 - shown) / 8
+ring_px = (rr > 45) & (rr < 110)
+assert np.mean((shown[ring_px] == 0) & (around[ring_px] >= 8)) < 0.0005
 
 # ---- detail on luminance only: a colored patch keeps its color differences, no channel gets its own texture ----
 rgba = np.zeros((64, 64, 4), np.uint8); rgba[..., 3] = 255

@@ -614,7 +614,7 @@ def load_channels(labels, images=None, sky_fraction=0.1, sky_percentile=98, gamm
     if scale is not None:
         # every picture of a mosaic on the same scale, so tiles and filters keep what the camera saw
         gamma = scale.get("gamma", gamma)
-        return [display(iof, black, scale["white"], gamma, scale.get("shoulder"))
+        return [display(iof, black, scale["white"], gamma, scale.get("shoulder"), scale.get("toe"))
                 for iof, black in zip(iofs, scale["blacks"])]
     blacks, white, _ = picture_scale(iofs, sky_fraction, sky_percentile)
     if white <= 0:
@@ -905,8 +905,13 @@ def roll_off(x, knee):
 An I/F image as a BGR uint8 image: black -> 0, black + white -> 255, gamma encoded (or the sRGB curve,
 gamma "srgb"); with a shoulder, brightness past it rolls off softly (roll_off) instead of clipping
 """
-def display(iof, black, white, gamma=2.2, shoulder=None):
-    x = (iof - black) / white
+def display(iof, black, white, gamma=2.2, shoulder=None, toe=None):
+    x = iof - black
+    if toe:
+        # a soft toe instead of a hard clip at black: values just above it fade in quadratically over toe (I/F),
+        # so noise sitting at the black point is a smooth dark fade, not black salt among gray grain
+        x = np.where(x <= 0, 0, np.where(x <= toe, x * x / (2 * toe), x - toe / 2))
+    x = x / white
     x = np.clip(roll_off(x, shoulder) if shoulder else x, 0, 1)
     gray = (encode(x, gamma) * 255 + 0.5).astype(np.uint8)
     return cv2.cvtColor(gray, cv2.COLOR_GRAY2BGR)

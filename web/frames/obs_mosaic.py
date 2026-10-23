@@ -54,7 +54,7 @@ import stacking  # noqa: E402
 # bumped whenever the way observation mosaics are made changes, so older ones are not served again; one per
 # display model (calibration.style), classic being the mosaics made before the balanced display model, raw the
 # balanced ones before natural color
-VERSIONS = {"balanced": "obs-v30", "raw": "obs-v14", "classic": "obs-v9"}
+VERSIONS = {"balanced": "obs-v31", "raw": "obs-v15", "classic": "obs-v9"}
 CANVAS = 2048        # longest side of the canvas the view is drawn on
 OUT = 1024           # longest side of the picture sent
 FRAME = 1024         # full resolution frame
@@ -249,6 +249,7 @@ DETAIL_SIGMA = 0.05  # ... over this much of a frame
 
 
 SKY_MIN = 0.05   # balanced: the share of a pass's pixels that must be dark sky for its blacks to be set from the sky
+SKY_TOE = 2.0    # ... and the soft toe above those blacks, this many noise margins wide (calibration.display)
 
 
 def pass_scale(frames, u, drawn=None, true_colour=False):
@@ -297,6 +298,7 @@ def pass_scale(frames, u, drawn=None, true_colour=False):
         white = max(float(np.percentile(np.concatenate([i.ravel() for i in iofs]) - blacks[f], 99.5))
                     for f, iofs in by.items())
         gamma = 1.5
+    toe = None
     if calibration.look() == "balanced":
         # where the pass has dark sky, no band's black below that sky's level plus the noise margin, as a single
         # picture's (calibration.sky_levels): the 1st percentile of a pass that is mostly sky sits in the sky's
@@ -314,9 +316,12 @@ def pass_scale(frames, u, drawn=None, true_colour=False):
                 dark = np.concatenate([i[m & (l <= np.median(sky))] for i, l, m in zip(iofs, local, masks[f])])
                 if dark.size > 100:
                     tops.append(float(np.percentile(dark, calibration.SKY_DARK)) - level)
+            toe = SKY_TOE * margin
             margin = max([margin, float(np.mean(tops))] if tops else [margin])
             blacks = {f: max(blacks[f], level + margin) for f, level in zip(by, levels)}
     out = {"blacks": blacks, "white": white, "gamma": gamma, "filled": filled, "floor": round(floor, 3)}
+    if toe:
+        out["toe"] = toe
     mine = [f for f in (drawn or []) if f in by]
     if calibration.style() == "balanced" and len(mine) == 3 and not true_colour:
         # false color: each band's gain to bring the body's lit median (above that band's black) to the bands'
