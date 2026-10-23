@@ -508,7 +508,7 @@ body.phone .savemenu a { padding: 11px 14px; }
 .tilemap .other { stroke: rgba(232,236,242,.28); stroke-width: 1; }
 .tilemap .hot { stroke: #fff; stroke-width: 1.6; filter: drop-shadow(0 0 2px rgba(0,0,0,.9)); }
 .well.tilehover, .win.full .well.tilehover { cursor: pointer; }
-.tiletip { position: absolute; z-index: 3; pointer-events: none; padding: 5px 8px; border-radius: 5px; max-width: 220px; font-size: 10.5px; line-height: 1.35;
+.tiletip { position: absolute; z-index: 3; pointer-events: none; padding: 5px 8px; border-radius: 5px; max-width: 220px; font: 10.5px/1.35 var(--ui); text-transform: none; letter-spacing: normal; text-align: left;
   color: var(--q-text); background: rgba(16,17,21,.92); border: 1px solid var(--q-line); white-space: nowrap; }
 .tiletip[hidden] { display: none; }
 .tiletip b { color: #fff; font-weight: 600; } .tiletip span { color: var(--q-dim); }
@@ -1463,7 +1463,7 @@ body.idle .win.full .titlebar { opacity: 0; }
         }
         card.querySelector(".kindtag").textContent = `${w.set >= 0 ? KIND[catalog.sets[w.set].kind].toUpperCase() + " · " : ""}MOSAIC${rep && rep.mosaic ? ` OF ${rep.mosaic}` : ""}`;
         kind = { color: w.set >= 0, mosaic: true };
-      }, () => {}).finally(done);
+      }, () => {}).finally(done).catch(() => {});   // a request dropped while its picture was read (mosaicStop) is no error
     }
     function mosaicStop() {
       for (const L of Object.values(mLane)) { L.next = null; L.last = ""; if (L.ctl) L.ctl.abort(); }
@@ -1644,7 +1644,7 @@ body.idle .win.full .titlebar { opacity: 0; }
         + m.pointings.map(p => `<polygon class="${p === q ? "hot" : "other"}" points="${polyStr(p)}" vector-effect="non-scaling-stroke"/>`).join("");
       overlay.classList.add("on"); well.classList.add("tilehover");
       const fs = m.filters.filter(f => q.ids[f]);
-      tip.innerHTML = `<b>Frame ${q.n} of ${m.pointings.length}</b> · ${fs.join(" ")} · ${hhmm(q.t)} UTC<br><span>${phoneNow() ? "Tap again" : "Click"} to open it</span>`;
+      tip.innerHTML = `<b>Frame ${q.n} of ${m.pointings.length}</b><br>${fs.join(" ")} · ${hhmm(q.t)} UTC<br><span>${phoneNow() ? "Tap again" : "Click"} to open it</span>`;
       tip.hidden = false;
       const cx = (Math.max(...q.poly.map(c => c[0])) + Math.min(...q.poly.map(c => c[0]))) / 2, top0 = Math.min(...q.poly.map(c => c[1]));
       tip.style.left = Math.max(4, Math.min(b.well.width - 220, b.x - b.well.left + cx * b.w - 100)) + "px";
