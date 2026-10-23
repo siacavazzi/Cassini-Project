@@ -991,12 +991,14 @@ def places(u):
     return out
 
 
-def rolling_layout(u, n, cache, laps=1):
+def rolling_layout(u, n, cache, laps=1, made_only=False):
     """What a mosaic movie (a raster repeated over the same places: kind "mosaic_movie") shows at frame n, in the
     form of layout(): every place's newest tile of each filter taken by then, so the mosaic never empties when a
     new lap begins and each tile replaces its own earlier copy (laps=1, a time-lapse); laps=N keeps the N newest
     copies of each place, older under newer (a rolling mosaic). Drawn by so_far through filter_mosaic and
-    mosaic.compose like the pass's mosaic, on its scale and in its view."""
+    mosaic.compose like the pass's mosaic, on its scale and in its view. made_only: only tile n is made here, the
+    other places show the tiles already made (a window playing fast never waits on the tiles it missed; warm_movie
+    makes them)."""
     p = plan(u, cache)
     where = places(u)
     keep, seen = [], {}
@@ -1005,6 +1007,9 @@ def rolling_layout(u, n, cache, laps=1):
         if seen.get(key, 0) < laps:
             seen[key] = seen.get(key, 0) + 1
             keep.append(j)
+    if made_only:
+        there = os.path.join(folder(u, cache), "tiles")
+        keep = [j for j in keep if j == n or os.path.exists(os.path.join(there, f"{j}.json"))]
     tiles = [tile(u, j, cache, p["display_scale"]) for j in sorted(keep)]
     rect = view_rect(p, tiles)
     count = {}
@@ -1030,7 +1035,7 @@ def rolling_webp(frame_id, size, cache, laps=1, slots=None, fmt="webp", out=OUT,
         warm_movie(u, n, 6, cache)
         return None, {"why": "working out the pass", "observation": u["key"][1], "pass": u["key"][3]}
     with _asking():
-        made = rolling_layout(u, n, cache, laps)
+        made = rolling_layout(u, n, cache, laps, made_only=not wait)
         if not made:
             return None, {"why": "no tile placed yet"}
         full = size == "full"
