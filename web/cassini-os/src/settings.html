@@ -207,11 +207,13 @@ body.phone .srow input[type=range] { width: 96px; }
   D({ key: "cameras.colors", section: "Cameras", label: "Filter colors", type: "choice", value: "natural",
       options: [["natural", "Natural color"], ["raw", "Raw filters"]],
       hint: "Natural color turns red, green and blue filter sets into the colors an eye would see, and balances false color sets (methane, ultraviolet, infrared) so the planet comes out gray and only its differences between filters show as color. Raw filters draws each filter straight as a channel. Needs Balanced color." });
-  // what the frame server's picture routes are asked to add for them: nothing, the earlier stretch, or raw filters
-  window.cassiniLook = () => S.get("cameras.balancedColor") === false ? "&look=classic"
-    : S.get("cameras.colors") === "raw" ? "&colors=raw" : "";
-  // how a movie pass looks (Settings > Movie), for the camera windows' movie pictures and the film export alike
-  window.cassiniMovieStyle = () => `${S.get("movies.center") === false ? "&center=0" : ""}&trail=${S.get("movies.trail") || 0}&laps=${S.get("movies.laps") || 1}`;
+  // what the frame server's picture routes are asked to add for them: nothing, the earlier stretch, or raw filters;
+  // o.center: the picture centred on its body (a camera window's Auto center, decided by the window for each pass)
+  window.cassiniLook = (o = {}) => (S.get("cameras.balancedColor") === false ? "&look=classic"
+    : S.get("cameras.colors") === "raw" ? "&colors=raw" : "") + (o.center ? "&center=1" : "");
+  // how a movie pass looks (Settings > Movie), for the camera windows' movie pictures and the film export alike;
+  // o.center: the window's Auto center (else the Settings default)
+  window.cassiniMovieStyle = (o = {}) => `${(o.center ?? S.get("cameras.autoCenter")) === false ? "&center=0" : ""}&trail=${S.get("movies.trail") || 0}&laps=${S.get("movies.laps") || 1}`;
   D({ key: "cameras.channels", section: "Cameras", label: "Filter channels", type: "toggle", value: true,
       hint: "The frames that make up a color picture, in a strip under it." });
   cls("cameras.channels", "s-nochans", false);
@@ -223,9 +225,11 @@ body.phone .srow input[type=range] { width: 96px; }
   cls("cameras.steady", "s-steady", true);
   D({ key: "cameras.mosaics", section: "Cameras", label: "Mosaics in camera windows", type: "toggle", value: true,
       hint: "When Cassini steps a camera across a body, the window builds the mosaic tile by tile. Off shows every frame on its own." });
+  D({ key: "cameras.autoCenter", section: "Cameras", label: "Auto center", type: "toggle", value: true,
+      hint: "Every picture of a moon or a planet whose whole disk fits is turned north up with the body in the middle, by SPICE, at one size for the whole pass, so the body holds still from picture to picture. Ring, spoke and sky pictures, and a body too big for the picture, stay as the camera took them. Each camera window's settings button (the slider icon in its title bar) can turn it on or off for that window." });
   D({ key: "cameras.passes", section: "Cameras", label: "Mosaic passes", type: "choice", value: "auto",
       options: [["auto", "Auto"], ["mosaic", "Always mosaic"], ["movie", "Always movie"], ["mosaic_movie", "Always mosaic movie"]],
-      hint: "How a pass of pictures plays: Auto builds the passes that step across a body as mosaics, rolls the ones that go round the same places again and again as mosaic movies, and plays movies and stares as frames. The others force one way for every pass. The chip on a picture changes it for one pass." });
+      hint: "How a pass of pictures plays: Auto builds the passes that step across a body as mosaics, rolls the ones that go round the same places again and again as mosaic movies, and plays movies and stares as frames. The others force one way for every pass. A camera window's settings button changes it for the pass it is showing." });
   D({ key: "cameras.fullRes", section: "Cameras", label: "Full resolution in full view", type: "toggle", value: true,
       hint: "A picture in full view (double-click it, F or the title bar button) always loads at the camera's full resolution, playing or paused, with a button to save it. Other windows show each picture at its true resolution, or smaller only when the window or screen is too small to show more." });
   D({ key: "cameras.drill", section: "Cameras", label: "Open channels in place", type: "toggle", value: true,
@@ -307,8 +311,6 @@ body.phone .srow input[type=range] { width: 96px; }
   // movie passes in the camera and body windows (head-quiet.html cameraFeed reads these)
   D({ key: "movies.steady", section: "Movie", label: "Steady movie passes", type: "toggle", value: true,
       hint: "When a pass plays as a movie in a camera or body window (a stare, a ring or storm movie), every frame is centered by SPICE, north up, on one brightness scale and one size for the whole pass, so the body holds still and the picture does not pump. Off shows each frame as it is." });
-  D({ key: "movies.center", section: "Movie", label: "Center the body", type: "toggle", value: true,
-      hint: "In a steady movie pass, the body sits in the middle of every frame, north up, when its whole disk fits the picture (a moon, a planet from far off). A ring or spoke movie close to Saturn keeps its own view. Off keeps the view the frames cover, with the body where the camera put it." });
   D({ key: "movies.filmstrip", section: "Movie", label: "Filmstrip", type: "toggle", value: true,
       hint: "Under a window playing a movie pass: every frame of the pass along a strip, with the frames around the one shown. Click or drag along it to move through the pass." });
   cls("movies.filmstrip", "s-nofilmstrip", false);
