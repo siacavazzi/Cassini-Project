@@ -7240,8 +7240,8 @@ function frame(now) {
     };
     g.globalCompositeOperation = "lighter";
     // the bloom round the point
-    blob(x, y, S * (0.05 + 0.12 * k), "255,226,190", 0.8 * k);
-    blob(x, y, S * 0.012 * (0.5 + k), "255,250,240", 0.9 * k);
+    blob(x, y, S * (0.07 + 0.16 * k), "255,214,170", 0.85 * k);
+    blob(x, y, S * 0.02 * (0.5 + k), "255,250,240", k);
     // the streak: a thin horizontal line of light, warm in the middle
     g.save(); g.translate(x, y); g.scale(1, 0.018);
     blob(0, 0, S * (0.3 + 0.5 * k), "255,190,140", 0.75 * k);
@@ -7539,12 +7539,15 @@ function frame(now) {
       const side = new THREE.Vector3().crossVectors(pole, vScene).normalize();
       const k = (performance.now() - F.recapAt) / 1000;
       // facing the spot where Cassini went in at first, then drifting round to the sunlit side as it pulls back
-      rel(F.tau, tmpC); const entry = toScene(tmpC, new THREE.Vector3()).normalize(), m = clamp01(k / 25);
+      // starting closer, on the burn-up itself, so the flare and its trail read, then easing out to the whole planet
+      rel(F.tau, tmpC); const spot = toScene(tmpC, new THREE.Vector3()).multiplyScalar(1 / KM), entry = spot.clone().normalize(), m = clamp01(k / 25);
       const dir = entry.multiplyScalar(0.9 * (1 - m)).addScaledVector(vScene, 0.25 + 0.5 * m).addScaledVector(side, 0.25 + 0.3 * m).normalize();
       dir.addScaledVector(pole, 0.3 + look.pitch).normalize().applyAxisAngle(pole, -0.003 * k + look.yaw);
-      camera.position.copy(dir.multiplyScalar((260 + 180 * (1 - Math.exp(-k / 9))) * look.zoom));
+      const out = clamp01((k - 5) / 9), e = out * out * (3 - 2 * out);
+      const aim = new THREE.Vector3().addScaledVector(pole, -22).lerp(spot, 0.8 * (1 - e));
+      camera.position.copy(aim).addScaledVector(dir, (130 + 310 * e) * look.zoom);
       camera.up.copy(pole);
-      camera.lookAt(new THREE.Vector3().addScaledVector(pole, -22));
+      camera.lookAt(aim);
     }
   }
 
