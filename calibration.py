@@ -796,15 +796,23 @@ light), which differs between channels, so the sky stays neutral; the margin abo
 channel, keeps the sky's noise from coming out as colored speckle (a margin per channel, the 98th
 percentile, takes more off the noisiest channel and tints dim limbs and terminators).
 """
+"""
+The noise floor of a balanced black: the noisiest channel's classic margin (its sky's 98th percentile above its
+median), so no channel shows more of its sky noise, scan lines or compression blocks than before. The margin from
+neighboring pixels' differences alone is about 0 on frames stored in 8 bits (most neighbors are equal).
+skies = per channel, its sky pixels (I/F)
+"""
+def noise_floor(skies, sky_percentile=98):
+    return max(float(np.percentile(v, sky_percentile) - np.median(v)) for v in skies if v.size) if skies else 0.0
+
+
 def _balanced_scale(iofs, sky_fraction=0.1, sky_percentile=98):
     sky = _sky(iofs)
     measured = bool(sky.mean() > sky_fraction)
     levels, margin = [0.0] * len(iofs), 0.0
     if measured:
         levels, margin = sky_levels([[iof] for iof in iofs], [[sky]] * len(iofs))
-        # noise floor: the margin is at least the noisiest channel's classic one (its 98th percentile above its
-        # median), so no channel shows more of its sky noise, scan lines or compression blocks than before
-        margin = max(margin, max(float(np.percentile(iof[sky], sky_percentile) - np.median(iof[sky])) for iof in iofs))
+        margin = max(margin, noise_floor([iof[sky] for iof in iofs], sky_percentile))
     blacks = [level + margin for level in levels]
     # One white for all channels: the WHITE_PCT percentile of the brightest channel over the lit pixels (the
     # body, not the sky), so a few bright limb or ring pixels don't leave the body dim and gray; the shoulder

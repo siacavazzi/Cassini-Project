@@ -54,7 +54,7 @@ import stacking  # noqa: E402
 # bumped whenever the way observation mosaics are made changes, so older ones are not served again; one per
 # display model (calibration.style), classic being the mosaics made before the balanced display model, raw the
 # balanced ones before natural color
-VERSIONS = {"balanced": "obs-v34", "raw": "obs-v17", "classic": "obs-v9"}
+VERSIONS = {"balanced": "obs-v35", "raw": "obs-v18", "classic": "obs-v9"}
 CANVAS = 2048        # longest side of the canvas the view is drawn on
 OUT = 1024           # longest side of the picture sent
 FRAME = 1024         # full resolution frame
@@ -314,6 +314,9 @@ def pass_scale(frames, u, drawn=None, true_colour=False, sky_tops=None):
         masks = {f: [i < 0.05 * np.percentile(i, 99.9) for i in iofs] for f, iofs in by.items()}
         if all(sum(int(m.sum()) for m in ms) > SKY_MIN * sum(m.size for m in ms) for ms in masks.values()):
             levels, margin = calibration.sky_levels(list(by.values()), list(masks.values()))
+            # with a single picture's noise floor (its sky's 98th percentile above its median, the noisiest band's)
+            margin = max(margin, calibration.noise_floor(
+                [np.concatenate([i[m] for i, m in zip(iofs, masks[f])]) for f, iofs in by.items()]))
             # and, as a single picture's toe, above the darker half of the sky's own brightness (SKY_DARK of it):
             # the frames' sky carries stray-light stripes far broader than its pixel noise, which the margin
             # alone leaves showing as scan lines
