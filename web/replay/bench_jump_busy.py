@@ -31,6 +31,8 @@ def main():
     ap.add_argument("--busy", type=float, default=25, help="seconds of playback before each jump")
     ap.add_argument("--video", help="folder for a recording of the run")
     ap.add_argument("--json", help="write the numbers here")
+    ap.add_argument("--mbps", type=float, default=0, help="limit the download speed like Wi-Fi (0 = no limit)")
+    ap.add_argument("--cpu", type=float, default=1, help="slow the CPU down this many times, like a busy laptop")
     ap.add_argument("--chromium", action="store_true", help="Playwright's own Chromium instead of Chrome")
     args = ap.parse_args()
     with sync_playwright() as pw:
@@ -40,6 +42,14 @@ def main():
         page = ctx.new_page()
         cdp = ctx.new_cdp_session(page)
         cdp.send("Network.enable")
+        if args.mbps:
+            rate = args.mbps * 1e6 / 8
+            cdp.send("Network.emulateNetworkConditions", {"offline": False, "latency": 20, "downloadThroughput": rate, "uploadThroughput": rate})
+        if args.cpu > 1:
+            cdp.send("Emulation.setCPUThrottlingRate", {"rate": args.cpu})
+        # long tasks (the page busy for 50 ms or more) keep the loading screen painted even after the data is in
+        page.add_init_script("""window.__long = []; try { new PerformanceObserver(l => { for (const e of l.getEntries())
+            window.__long.push([e.startTime, e.duration]); }).observe({ type: "longtask", buffered: true }); } catch (e) {}""")
         reqs = {}   # requestId -> {url, sent, queued, done, canceled}
         cdp.on("Network.requestWillBeSent", lambda e: reqs.setdefault(e["requestId"], {"url": e["request"]["url"], "sent": e["timestamp"]}))
         cdp.on("Network.requestServedFromCache", lambda e: reqs.get(e["requestId"], {}).update(cached=True))
@@ -63,21 +73,31 @@ def main():
             frames = lambda: [k for k, r in reqs.items() if "/frames/" in r["url"]]
             in_flight = sum(1 for k in frames() if "done" not in reqs[k])
             before = set(reqs)
-            took = page.evaluate("""async m => {
-                const t0 = performance.now();
+            # the wait for data, and until the loading screen is gone (it can stay painted while the page works)
+            took, gone, longest, busy_ms = page.evaluate("""async m => {
+                const t0 = performance.now(), ls = document.getElementById("loadscreen");
+                let ready = null;
                 setTime(utcToEt(m));
-                while (!yearReady()) await new Promise(r => setTimeout(r, 20));
-                return (performance.now() - t0) / 1000;
+                while (performance.now() - t0 < 120000) {
+                  if (ready === null && yearReady()) ready = performance.now();
+                  if (ready !== null && (!ls || ls.hidden) && performance.now() - ready > 1500) break;
+                  await new Promise(r => setTimeout(r, 20));
+                }
+                const gone = !ls ? ready : performance.now() - 1500;
+                const lt = window.__long.filter(([s]) => s >= t0 && s < t0 + 10000);
+                return [(ready - t0) / 1000, (gone - t0) / 1000, Math.max(0, ...lt.map(e => e[1])), lt.reduce((a, e) => a + e[1], 0)];
             }""", moment)
             page.wait_for_timeout(300)   # the last network events
             new = [reqs[k] for k in reqs if k not in before]
             data = [r for r in new if "/data/months/" in r["url"] or "/data/years/" in r["url"]]
             queued = max((r.get("queued", 0) for r in data), default=0)
             canceled = sum(1 for k in frames() if k in before and reqs[k].get("canceled"))
-            row = {"to": moment, "wait_s": round(took, 2), "frame_requests_in_flight": in_flight,
+            row = {"to": moment, "wait_s": round(took, 2), "screen_gone_s": round(gone, 2), "longest_task_ms": round(longest),
+                   "busy_ms": round(busy_ms), "frame_requests_in_flight": in_flight,
                    "data_queued_s": round(queued, 2), "data_files": len(data), "pictures_dropped": canceled}
             out.append(row)
-            print(f"jump to {moment}: {took:.2f} s; {in_flight} picture requests in flight, data waited "
+            print(f"jump to {moment}: data in {took:.2f} s, loading screen gone {gone:.2f} s, page busy {busy_ms:.0f} ms "
+                  f"(longest {longest:.0f} ms); {in_flight} picture requests in flight, data waited "
                   f"{queued:.2f} s for a connection ({len(data)} files), {canceled} picture requests dropped", flush=True)
         w = sorted(r["wait_s"] for r in out)
         summary = {"median_s": w[len(w) // 2], "max_s": w[-1], "mean_s": round(sum(w) / len(w), 2)}
