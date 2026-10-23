@@ -1058,14 +1058,8 @@ body.phone #finale .fx-roll dd { margin-bottom: 10px; }
 body.phone #finale .fx-data { width: min(220px, calc(100vw - 32px)); top: 10px; right: 10px; }
 
 #soi .sx-shade { position: absolute; inset: 0; background: linear-gradient(to top, rgba(0,0,0,.72) 0, rgba(0,0,0,.45) 22%, rgba(0,0,0,0) 46%); }
-#soi .sx-read { position: absolute; left: 50%; bottom: 7vh; transform: translateX(-50%); white-space: nowrap; font: 11px/1 var(--hudf); letter-spacing: .08em;
-  color: var(--q-dim); opacity: 0; transition: opacity 1.2s ease; }
-#soi .sx-read.on { opacity: 1; }
-#soi .sx-read i { font-style: normal; color: var(--q-accent); }
-#soi .sx-note { position: absolute; left: 16px; bottom: 14px; max-width: min(460px, calc(100vw - 140px)); font-size: 10.5px; line-height: 1.4; color: rgba(232,236,242,.34); opacity: 0; transition: opacity 1.5s ease; }
-#soi .sx-note.on { opacity: 1; }
-body.phone #soi .sx-read { font-size: 9.5px; bottom: 9vh; white-space: normal; text-align: center; width: calc(100vw - 32px); line-height: 1.5; }
-body.phone #soi .sx-note { bottom: 40px; }
+/* the burn's readout is long: on a phone it wraps */
+body.phone #soi .cs-read { white-space: normal; text-align: center; width: calc(100vw - 32px); line-height: 1.5; }
 
 /* a shade under the captions so they read over Earth */
 #launch .lx-shade { position: absolute; inset: 0; background: linear-gradient(to top, rgba(0,0,0,.8) 0, rgba(0,0,0,.5) 24%, rgba(0,0,0,0) 50%); }
@@ -1335,8 +1329,8 @@ body.phone #launch .lx-clock { font-size: 9.5px; bottom: 9vh; }
   <div class="sx-shade"></div>
   <div class="cs-black"></div>
   <div class="cs-caps"></div>
-  <div class="sx-read" aria-hidden="true"></div>
-  <div class="sx-note"></div>
+  <div class="cs-read" aria-hidden="true"></div>
+  <div class="cs-note"></div>
   <div class="cs-hint">Drag to look around</div>
   <button class="cs-skip" type="button">Skip ▸</button>
 </section>
@@ -7573,7 +7567,7 @@ function frame(now) {
 // ---------- Saturn arrival: the orbit insertion burn, when playback reaches it ----------
 (function () {
   const root = document.getElementById("soi"), black = root.querySelector(".cs-black"), caps = root.querySelector(".cs-caps");
-  const read = root.querySelector(".sx-read"), note = root.querySelector(".sx-note"), hint = root.querySelector(".cs-hint");
+  const read = root.querySelector(".cs-read"), note = root.querySelector(".cs-note"), hint = root.querySelector(".cs-hint");
   const CS = window.cassiniCutscene;
   // the published times and numbers, written in by build.py from soi-data.json
   const D = {"note":"Saturn Orbit Insertion, 2004-07-01. Times are UTC at the spacecraft (SCET), the clock the replay runs on. Every number here is quoted from the sources below; soi.html derives nothing else but the running counters (rocket equation fitted to these totals).","ring_crossing":{"utc":"2004-07-01T00:47:00","from_center_km":158500,"where":"the gap between the F and G rings","source":"esa-arrival"},"burn_start":{"utc":"2004-07-01T01:12:00","source":"esa-arrival"},"burn_minutes":{"value":96.4,"source":"sfn-presoi"},"closest_approach":{"utc":"2004-07-01T02:39:00","above_clouds_km":19980,"source":"esa-arrival"},"delta_v_ms":{"value":626.17,"source":"nasa-ser-0709"},"steering":{"total_deg":46,"rate_deg_s":0.008,"source":"nasa-ser-0709"},"propellant_kg":{"value":850,"pounds":1874,"source":"sfn-goforburn"},"thrust_n":{"value":445,"pounds":100,"source":"sfn-goforburn"},"light_time_min":{"value":83,"source":"sfn-presoi"},"earth_ignition":{"local":"10:35:42 p.m. EDT, June 30","source":"sfn-presoi"},"signal_fade":{"from_min":30,"for_min":25,"why":"passing behind the A ring","source":"sfn-presoi"},"sources":{"esa-arrival":{"title":"ESA, Cassini-Huygens: approach and arrival at Saturn","url":"https://sci.esa.int/web/cassini-huygens/-/approach-and-arrival-at-saturn"},"nasa-ser-0702":{"title":"NASA, Cassini Significant Event Report for week ending 7/2/2004","url":"https://science.nasa.gov/missions/cassini/significant-event-report-for-week-ending-722004/"},"nasa-ser-0709":{"title":"NASA, Cassini Significant Event Report for week ending 7/9/2004","url":"https://science.nasa.gov/missions/cassini/significant-event-report-for-week-ending-792004"},"jpl-presskit":{"title":"NASA/JPL, Cassini-Huygens Saturn Arrival press kit (June 2004)","url":"https://www.jpl.nasa.gov/news/press_kits/cassini-arrival.pdf"},"sfn-presoi":{"title":"Spaceflight Now, Cassini orbit insertion timeline (June 29, 2004)","url":"https://spaceflightnow.com/cassini/040629presoi.html"},"sfn-goforburn":{"title":"Spaceflight Now, Cassini go for orbit insertion burn (June 30, 2004)","url":"https://spaceflightnow.com/cassini/040630goforburn.html"}}};

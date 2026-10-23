@@ -51,7 +51,7 @@ const env = process.env, T0 = Date.now(), t = () => +((Date.now() - T0) / 1000).
       if (n % (+env.STRIDE || 1) === 0) await page.screenshot({ path: path.join(dir, `${String(n / (+env.STRIDE || 1)).padStart(6, "0")}.jpg`), type: "jpeg", quality: 88 });
       n++;
       if (n % VIRT === 0) {
-        const s = await page.evaluate(() => ({ running: cassiniSOI.running, caps: [...document.querySelectorAll("#soi .cs-cap")].map(e => e.textContent).join(" | "), read: document.querySelector("#soi .sx-read").textContent }));
+        const s = await page.evaluate(() => ({ running: cassiniSOI.running, caps: [...document.querySelectorAll("#soi .cs-cap")].map(e => e.textContent).join(" | "), read: document.querySelector("#soi .cs-read").textContent }));
         if (n % (VIRT * 5) === 0) console.log(t(), "frame", n, s.read, "|", s.caps.slice(0, 60));
         if (!s.running && !endAt) endAt = n + 3 * VIRT;
       }
@@ -73,7 +73,7 @@ const env = process.env, T0 = Date.now(), t = () => +((Date.now() - T0) / 1000).
   }
   const shot = async k => { mark(k); await page.screenshot({ path: `${out}_${k.replace(/\W+/g, "_")}.png` }); };
   const st = () => page.evaluate(() => ({ running: cassiniSOI.running, et: state.et, caps: [...document.querySelectorAll("#soi .cs-cap")].map(e => e.textContent).join(" | "),
-    read: document.querySelector("#soi .sx-read").textContent }));
+    read: document.querySelector("#soi .cs-read").textContent }));
   const WANT = [["Arriving", "July 1, 2004"], ["ring plane", "crosses the ring plane"], ["turn", "turns end for end"], ["ignition", "Main engine on"],
     ["thrust", "gentle push"], ["light time", "Nobody on Earth"], ["A ring", "behind the A ring"], ["steering", "steers as it burns"], ["closest", "Closest approach"],
     ["engine off", "Engine off"], ["in orbit", "Saturn has caught it"]];

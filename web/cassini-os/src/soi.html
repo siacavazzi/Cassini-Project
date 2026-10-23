@@ -22,22 +22,16 @@
      bell at shutdown, a bright chord when Saturn has caught it. -->
 <style>
 #soi .sx-shade { position: absolute; inset: 0; background: linear-gradient(to top, rgba(0,0,0,.72) 0, rgba(0,0,0,.45) 22%, rgba(0,0,0,0) 46%); }
-#soi .sx-read { position: absolute; left: 50%; bottom: 7vh; transform: translateX(-50%); white-space: nowrap; font: 11px/1 var(--hudf); letter-spacing: .08em;
-  color: var(--q-dim); opacity: 0; transition: opacity 1.2s ease; }
-#soi .sx-read.on { opacity: 1; }
-#soi .sx-read i { font-style: normal; color: var(--q-accent); }
-#soi .sx-note { position: absolute; left: 16px; bottom: 14px; max-width: min(460px, calc(100vw - 140px)); font-size: 10.5px; line-height: 1.4; color: rgba(232,236,242,.34); opacity: 0; transition: opacity 1.5s ease; }
-#soi .sx-note.on { opacity: 1; }
-body.phone #soi .sx-read { font-size: 9.5px; bottom: 9vh; white-space: normal; text-align: center; width: calc(100vw - 32px); line-height: 1.5; }
-body.phone #soi .sx-note { bottom: 40px; }
+/* the burn's readout is long: on a phone it wraps */
+body.phone #soi .cs-read { white-space: normal; text-align: center; width: calc(100vw - 32px); line-height: 1.5; }
 </style>
 
 <section id="soi" class="cs-root" hidden aria-live="polite">
   <div class="sx-shade"></div>
   <div class="cs-black"></div>
   <div class="cs-caps"></div>
-  <div class="sx-read" aria-hidden="true"></div>
-  <div class="sx-note"></div>
+  <div class="cs-read" aria-hidden="true"></div>
+  <div class="cs-note"></div>
   <div class="cs-hint">Drag to look around</div>
   <button class="cs-skip" type="button">Skip ▸</button>
 </section>
@@ -46,7 +40,7 @@ body.phone #soi .sx-note { bottom: 40px; }
 // ---------- Saturn arrival: the orbit insertion burn, when playback reaches it ----------
 (function () {
   const root = document.getElementById("soi"), black = root.querySelector(".cs-black"), caps = root.querySelector(".cs-caps");
-  const read = root.querySelector(".sx-read"), note = root.querySelector(".sx-note"), hint = root.querySelector(".cs-hint");
+  const read = root.querySelector(".cs-read"), note = root.querySelector(".cs-note"), hint = root.querySelector(".cs-hint");
   const CS = window.cassiniCutscene;
   // the published times and numbers, written in by build.py from soi-data.json
   const D = /*SOI_DATA*/null;
