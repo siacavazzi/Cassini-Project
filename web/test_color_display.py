@@ -230,6 +230,24 @@ with cal.looking("balanced"):
 for f in ("MT3", "MT2", "UV1"):
     early = hazy_frames[f + "b"][1]
     assert np.mean(early > hazy_scale["blacks"][f]) > 0.8, (f, hazy_scale.get("sky_tops"), np.mean(early > hazy_scale["blacks"][f]))
+# a movie whose color sets' stray light differs (the Jupiter approach: one set's sky above the pass's level showed as
+# an olive square): a movie frame's black is raised to its own sky where that sits higher, never lowered, and a
+# mosaic's tiles keep the pass's one black
+sat = (yy - 128) ** 2 + (xx - 128) ** 2 < 50 ** 2
+movie_sky = {f"{f}{n}": (f, np.where(sat, 0.5, off * (3 if n == 2 else 0.8 if n == 1 else 1)) + 3e-5 * rng.standard_normal((256, 256)))
+             for n in range(4) for f, off in (("RED", 8e-4), ("GRN", 1e-3), ("VIO", 6e-4))}
+obs_mosaic.stacking.load_hdr = lambda path, gap=None: (None, movie_sky[path][1], 1)
+fr_movie = [(p_, p_, f, n, 600, 0.0, 0.0, 0) for n, (p_, (f, _)) in enumerate(movie_sky.items())]   # no place: the sky pass is not taken for a body-filled one
+with cal.looking("balanced"):
+    movie_scale = obs_mosaic.pass_scale(fr_movie, {"key": ("JUPITER", "TEST", "W", 0), "z": 1e5}, ["RED", "GRN", "VIO"], False)
+    for name, (f, im) in movie_sky.items():
+        lit = cal.load_channels([None], [None], iofs=[im.astype(np.float32)], scale=obs_mosaic.tile_scale(movie_scale, f, True))[0][..., 0]
+        tiled = cal.load_channels([None], [None], iofs=[im.astype(np.float32)], scale=obs_mosaic.tile_scale(movie_scale, f))[0][..., 0]
+        assert np.mean(lit[~sat] > 4) < 0.02, (name, np.median(lit[~sat]))
+        assert np.abs(tiled.astype(int) - lit).mean() < 10 or name[-1] == "2", name   # the lifted set's frame changes most
+        if name[-1] == "2":
+            assert np.median(tiled[~sat]) > 10                           # ... which a mosaic's one black leaves gray
+        assert lit[sat].min() > 200
 obs_mosaic.stacking.load_hdr = lambda path, gap=None: (None, lined[path][0], 1)
 # each filter's sky black (its height over the sky) comes back with the scale and can be overridden
 with cal.looking("balanced"):
