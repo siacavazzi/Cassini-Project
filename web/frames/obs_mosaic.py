@@ -562,20 +562,99 @@ def seams(u, p, tiles, rect, ref, cache):
     return out
 
 
+GROW_FROM = 16   # tiles of one filter: a mosaic with more is the one before it with the new tile drawn over it
+
+
+def _filter_path(u, f, count, rect, cache, solved_on=""):
+    name = f"{f.replace('/', '_')}-{count}{solved_on}-{'_'.join(str(round(v)) for v in rect)}.png"
+    return os.path.join(folder(u, cache), "filters", name)
+
+
+def _png(rgba):
+    out = io.BytesIO()
+    Image.fromarray(rgba).save(out, "PNG", compress_level=1)
+    return out.getvalue()
+
+
+def _compose(window, k, **kw):
+    """mosaic.compose on the view's canvas, with the benchmark's soft edge on its 0.5 scale canvas at this
+    canvas's scale."""
+    feather = mosaic.feather_px
+    with reel._mosaic_lock:
+        try:
+            mosaic.feather_px = max(8, round(64 * k / 0.5))
+            mosaic.reset()
+            rgba = mosaic.compose(window, False, calibrated=True, **kw)
+            mosaic.reset()
+        finally:
+            mosaic.feather_px = feather
+    return rgba
+
+
+_grown_last = collections.OrderedDict()   # path of a grown filter mosaic -> its RGBA, the few made last
+GROWN_KEEP = 6
+
+
+def _grown(u, p, f, mine, rect, cache):
+    """The filter f's mosaic of mine (more than GROW_FROM tiles), grown a tile at a time: the mosaic of the
+    tiles before the newest, as it was drawn, with the newest composed over it and matched to it (pin 0), so
+    each new tile costs one tile's compose, not all of them again, and what is drawn stays as it was drawn.
+    Only the newest tile's part of the canvas (and a margin for its soft edge) is composed, since nothing
+    outside it changes. Starts from the largest of those mosaics already made (the first GROW_FROM tiles
+    solved together otherwise) and keeps each one it makes on the way."""
+    m = len(mine) - 1
+    while m > GROW_FROM and _filter_path(u, f, m, rect, cache) not in _grown_last \
+            and not os.path.exists(_filter_path(u, f, m, rect, cache)):
+        m -= 1
+    rgba = filter_mosaic(u, p, f, mine[:m], rect, cache).copy()
+    k = p["k"]
+    H, W = rgba.shape[:2]
+    pad = max(8, round(64 * k / 0.5)) + 1
+    for j in range(m, len(mine)):
+        t = mine[j]
+        bx, by, bw, bh = t["box"]
+        left = round((t["offset"][0] + bx - rect[0]) * k)
+        top = round((t["offset"][1] + by - rect[1]) * k)
+        sw, sh = max(1, round(bw * k)), max(1, round(bh * k))
+        x0, y0 = max(left - pad, 0), max(top - pad, 0)
+        x1, y1 = min(left + sw + pad, W), min(top + sh + pad, H)
+        if x1 > x0 and y1 > y0:
+            part = _part(os.path.join(folder(u, cache), "tiles", f"{t['n']}.png"), sw, sh)
+            frame = np.zeros((y1 - y0, x1 - x0, 4), np.uint8)
+            a0, b0 = max(left, 0), max(top, 0)
+            a1, b1 = min(left + sw, W), min(top + sh, H)
+            frame[b0 - y0:b1 - y0, a0 - x0:a1 - x0] = part[b0 - top:b1 - top, a0 - left:a1 - left]
+            below = np.ascontiguousarray(rgba[y0:y1, x0:x1])
+            rgba[y0:y1, x0:x1] = _compose([(below, None, None, None), (frame, None, None, None)], k, pin=0)
+        path = _filter_path(u, f, j + 1, rect, cache)
+        with _lock:
+            _grown_last[path] = rgba.copy() if j + 1 < len(mine) else rgba
+            _grown_last.move_to_end(path)
+            while len(_grown_last) > GROWN_KEEP:
+                _grown_last.popitem(last=False)
+        if j + 1 < len(mine):
+            reel._cached(path, lambda: _png(rgba))
+    return _png(rgba)
+
+
 def filter_mosaic(u, p, f, tiles, rect, cache, ref=None, tag=""):
     """The filter f's mosaic of these tiles in the view rect, RGBA on the view's canvas (kept in the cache).
-    ref = the filter the seams are solved on (balanced look, seams); tag names a set of tiles that is not every
-    tile up to the newest (a mosaic movie's lap, rolling_layout)."""
+    ref = the filter the seams are solved on (balanced look, seams). Past GROW_FROM tiles it grows from the
+    one before (_grown) instead of composing every tile again. tag names a set of tiles that is not every tile
+    up to the newest (a mosaic movie's lap, rolling_layout): it has a name of its own and is not grown, since
+    growing takes the tiles as the pass's first ones in time order."""
     mine = [t for t in tiles if t["filter"] == f and "offset" in t]
     balanced = calibration.look() == "balanced" and SHARED_SEAMS
     ref = ref or f
     solved_on = f"-{ref.replace('/', '_')}{sum(1 for t in tiles if t['filter'] == ref and 'offset' in t)}" if balanced else ""
-    name = f"{f.replace('/', '_')}-{len(mine)}{solved_on}-{'_'.join(str(round(v)) for v in rect)}{tag}.png"
-    path = os.path.join(folder(u, cache), "filters", name)
+    path = _filter_path(u, f, len(mine), rect, cache, solved_on)
+    path = path[:-len(".png")] + tag + ".png"
     k = p["k"]
     W, H = math.ceil(rect[2] * k), math.ceil(rect[3] * k)
 
     def make():
+        if not balanced and not tag and len(mine) > GROW_FROM:
+            return _grown(u, p, f, mine, rect, cache)
         window, shown = _window(u, p, mine, rect, cache)
         corrections = None
         if balanced and window:
@@ -588,26 +667,20 @@ def filter_mosaic(u, p, f, tiles, rect, cache, ref=None, tag=""):
                 corrections = mosaic.seams([w[0] for w in window], None, p["display_scale"]["gamma"], corrections)
         if not window:
             rgba = np.zeros((H, W, 4), np.uint8)
+        elif corrections:
+            rgba = _compose(window, k, pin=None, gamma=p["display_scale"]["gamma"], corrections=corrections)
         else:
-            feather = mosaic.feather_px
-            with reel._mosaic_lock:
-                try:
-                    # the benchmark's soft edge on its 0.5 scale canvas, at this canvas's scale
-                    mosaic.feather_px = max(8, round(64 * k / 0.5))
-                    mosaic.reset()
-                    if corrections:
-                        rgba = mosaic.compose(window, False, calibrated=True, pin=None,
-                                              gamma=p["display_scale"]["gamma"], corrections=corrections)
-                    else:
-                        rgba = mosaic.compose(window, False, calibrated=True, pin=None)
-                    mosaic.reset()
-                finally:
-                    mosaic.feather_px = feather
-        out = io.BytesIO()
-        Image.fromarray(rgba).save(out, "PNG", compress_level=1)
-        return out.getvalue()
+            rgba = _compose(window, k, pin=None)
+        return _png(rgba)
 
-    return np.asarray(Image.open(io.BytesIO(reel._cached(path, make))).convert("RGBA"))
+    with _lock:
+        kept = _grown_last.get(path)
+    if kept is not None:
+        return kept
+    data = reel._cached(path, make)
+    with _lock:
+        kept = _grown_last.get(path)
+    return kept if kept is not None else np.asarray(Image.open(io.BytesIO(data)).convert("RGBA"))
 
 
 _parts = collections.OrderedDict()   # (tile file, width, height) -> the tile at that size, most recently used last
