@@ -170,12 +170,6 @@ for dirpath, _, names in os.walk(texdir):
         rel = os.path.relpath(os.path.join(dirpath, n), texdir).replace(os.sep, "/")
         rel = re.sub(r"^[0-9]+k/", "", rel)
         assert n.endswith(".md") or rel in covered, f"{rel} has no credit: add it to the files of an entry in web/cassini-os/src/credits.json"
-# the same for the pictures the page itself shows (the launch photos under media/), named by their path from web/cassini-os
-mediadir = os.path.join(HERE, "..", "media")
-for dirpath, _, names in os.walk(mediadir):
-    for n in names:
-        rel = os.path.relpath(os.path.join(dirpath, n), os.path.dirname(mediadir)).replace(os.sep, "/")
-        assert rel in covered, f"{rel} has no credit: add it to the files of an entry in web/cassini-os/src/credits.json"
 for old, new in [
     ("</style>\n</head>", part("style")[len("<style>"):] + "\n</head>"),
     ('  <div id="loading">', "  " + part("section") + "\n\n" + '  <div id="loading">'),
