@@ -1,0 +1,104 @@
+<!-- About Cassini OS. build.py splices the three parts below into the page: the style into the head, the window into
+     #app (so the window manager picks it up) and the script after the chrome script.
+
+     The window is where every credit lives: the Credits tab lists credits.json (every data source, map, model, sound,
+     library and font, in one file), which build.py writes into the script. Everywhere else the page only shows a short
+     callout, such as "NASA/JPL-Caltech/SSI" under a picture; give it data-about="<entry id>" and a click opens this
+     window at that entry. Other code opens it with cassiniAbout.open("credits", "iss"). -->
+<style>
+#about { width: min(600px, calc(100% - 20px)); height: min(500px, calc(100% - 80px)); z-index: 900; }
+#about .abody { flex: 1; min-height: 0; display: grid; grid-template-columns: 120px minmax(0, 1fr); border-top: 1px solid var(--q-line); }
+#about nav { padding: 8px 6px; border-right: 1px solid var(--q-line); display: flex; flex-direction: column; gap: 1px; }
+#about nav button { all: unset; box-sizing: border-box; padding: 5px 9px; border-radius: 5px; font-size: 12px; color: var(--q-dim); cursor: default; white-space: nowrap; }
+#about nav button:hover { background: rgba(255,255,255,.05); color: var(--q-text); }
+#about nav button[aria-selected="true"] { background: rgba(138,182,255,.18); color: #fff; }
+#about nav button:focus-visible { outline: 1px solid var(--q-accent); }
+#about .pane { overflow-y: auto; padding: 6px 16px 16px; font-size: 12px; line-height: 1.5; }
+#about h2 { margin: 12px 0 2px; font-size: 15px; font-weight: normal; color: #fff; }
+#about h3 { margin: 16px 0 4px; font-size: 11px; font-weight: normal; letter-spacing: .1em; text-transform: uppercase; color: var(--q-dim); }
+#about p { margin: 6px 0; color: var(--q-text); }
+#about .note { font-size: 10.5px; line-height: 1.45; color: var(--q-dim); }
+#about a { color: var(--q-accent); text-decoration: none; }
+#about a:hover { text-decoration: underline; }
+#about .cr { padding: 8px 0; border-bottom: 1px solid var(--q-line); scroll-margin-top: 8px; transition: background-color 1.2s ease; border-radius: 4px; }
+#about .cr:last-child { border-bottom: 0; }
+#about .cr.lit { background: rgba(138,182,255,.12); transition: none; }
+#about .cr b { font-weight: normal; color: #fff; }
+#about .cr .by { color: var(--q-text); }
+#about .cr .what { margin-top: 2px; font-size: 10.5px; line-height: 1.45; color: var(--q-dim); }
+#about .cr .lic { margin-top: 2px; font-size: 10px; color: var(--q-dim); }
+#about .cr .lic a { margin-left: 8px; }
+#about footer { flex: none; padding: 6px 12px; border-top: 1px solid var(--q-line); font-size: 10.5px; color: var(--q-dim); }
+/* a short credit on the page that opens the full one here */
+.credit { all: unset; cursor: default; color: inherit; opacity: .8; }
+.credit:hover { opacity: 1; text-decoration: underline; text-underline-offset: 2px; }
+.credit:focus-visible { outline: 1px solid var(--q-accent); }
+body.idle #about:not([hidden]) { opacity: 1; pointer-events: auto; }
+body.phone #about { left: 8px !important; top: calc(env(safe-area-inset-top, 0px) + 30px) !important; width: calc(100% - 16px) !important; height: calc(100% - 50px - var(--appdockh, 0px) - var(--gap, 0px)) !important; }
+body.phone #about .abody { grid-template-columns: 1fr; grid-template-rows: auto minmax(0, 1fr); }
+body.phone #about nav { flex-direction: row; border-right: 0; border-bottom: 1px solid var(--q-line); overflow-x: auto; }
+</style>
+
+<section class="win" id="about" aria-label="About Cassini OS" hidden>
+  <div class="titlebar"><span class="lights"><button class="close" aria-label="Close About">×</button><button class="min" aria-label="Close About">–</button><button class="zoom" aria-label="Zoom">+</button></span>About Cassini OS</div>
+  <div class="abody">
+    <nav id="anav" role="tablist" aria-label="About sections"></nav>
+    <div class="pane" id="apane" role="tabpanel"></div>
+  </div>
+  <footer>An independent project, not affiliated with NASA, JPL, ESA or the Space Science Institute.</footer>
+</section>
+
+<script>
+// ---------- About: what Cassini OS is, and every credit in one list (credits.json) ----------
+(function () {
+  const $ = id => document.getElementById(id);
+  const CREDITS = /*CREDITS*/{"groups":[]};
+  const card = $("about"), nav = $("anav"), pane = $("apane");
+  const esc = s => String(s).replace(/[&<>"]/g, c => ({ "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;" })[c]);
+  const TABS = {
+    "Cassini OS": () => `<h2>Cassini OS</h2>
+      <p>A replay of NASA and ESA's Cassini-Huygens mission, from launch in 1997 to the plunge into Saturn in 2017. The spacecraft flies its real path and turns the way it really turned, and the camera windows show the pictures it took at that moment, each one calibrated, stacked and aligned from the raw frames.</p>
+      <p class="note">More about the project is coming here.</p>
+      <h3>Credits</h3>
+      <p>The pictures are NASA/JPL-Caltech/Space Science Institute, the probe's are ESA/NASA/JPL/University of Arizona, and the flight data is from NASA/JPL's SPICE archive. The maps, models, sound, software and fonts have their own authors. <a href="#" data-tab="Credits">See all credits</a>.</p>`,
+    Credits: () => CREDITS.groups.map(g => `<h3>${esc(g.title)}</h3>` + (g.note ? `<p class="note">${esc(g.note)}</p>` : "")
+      + g.entries.map(e => `<div class="cr" id="cr-${esc(e.id)}"><b>${esc(e.title)}</b><div class="by">${esc(e.credit)}</div>`
+        + (e.detail ? `<div class="what">${esc(e.detail)}</div>` : "")
+        + `<div class="lic">${esc(e.license || "")}${e.url ? `<a href="${esc(e.url)}" target="_blank" rel="noopener">${esc(new URL(e.url).hostname.replace(/^www\./, ""))}</a>` : ""}</div></div>`).join("")).join("")
+  };
+  let tab = "Cassini OS";
+  function render() {
+    nav.innerHTML = Object.keys(TABS).map(t => `<button role="tab" aria-selected="${t === tab}" data-t="${t}">${t}</button>`).join("");
+    pane.innerHTML = TABS[tab](); pane.scrollTop = 0;
+  }
+  nav.addEventListener("click", e => { const b = e.target.closest("button"); if (b) { tab = b.dataset.t; render(); } });
+  pane.addEventListener("click", e => { const a = e.target.closest("[data-tab]"); if (a) { e.preventDefault(); tab = a.dataset.tab; render(); } });
+  function show(on) {
+    if (on === !card.hidden) { if (on) card.dispatchEvent(new Event("pointerdown")); return; }
+    if (on) {
+      card.hidden = false;
+      if (!card.style.left) {   // first time: in the middle of the screen
+        const r = card.getBoundingClientRect();
+        Object.assign(card.style, { left: Math.max(8, (innerWidth - r.width) / 2) + "px", top: Math.max(30, (innerHeight - r.height) / 2.4) + "px" });
+      }
+      card.dispatchEvent(new Event("pointerdown"));   // to the front
+    } else card.hidden = true;
+  }
+  // open at a tab, and at one credit in it (the entry lights up for a moment)
+  function open(t, id) {
+    tab = TABS[t] ? t : id ? "Credits" : tab; render(); show(true);
+    const el = id && $("cr-" + id);
+    if (el) { el.scrollIntoView({ block: "start" }); el.classList.add("lit"); setTimeout(() => el.classList.remove("lit"), 1400); }
+  }
+  window.cassiniAbout = { open, close: () => show(false), credits: CREDITS };
+  // closing or minimizing the window just closes it (it never goes to the menu-bar tray)
+  card.addEventListener("click", e => { if (e.target.closest(".close, .min")) { e.stopImmediatePropagation(); show(false); } }, true);
+  card.addEventListener("dblclick", e => { if (e.target.closest(".titlebar")) { e.stopImmediatePropagation(); show(false); } }, true);
+  window.addEventListener("keydown", e => { if (e.key === "Escape" && !card.hidden) { e.stopImmediatePropagation(); show(false); } }, true);
+  document.addEventListener("click", e => {
+    const b = e.target.closest('[data-act="about"], [data-about]'); if (!b) return;
+    e.preventDefault(); e.stopPropagation(); document.querySelectorAll(".menu.open").forEach(m => m.classList.remove("open"));
+    b.dataset.about ? open("Credits", b.dataset.about) : open("Cassini OS");
+  }, true);
+})();
+</script>
