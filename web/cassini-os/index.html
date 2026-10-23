@@ -2427,7 +2427,7 @@ body.phone #finale .fx-data { width: min(220px, calc(100vw - 32px)); top: 10px; 
     // (one shared brightness scale, so their brightness can be compared)
     function strip(s, et, k) {
       if (!s) { stripSet = null; chans.classList.remove("on"); chans.innerHTML = ""; stripKey = ""; return; }
-      const key = `${catalog.sets.indexOf(s)}:${capped()}:${steady()}`, slots = s.use.length === 2 ? [0, 2] : [0, 1, 2];
+      const key = `${s.use.join(",")}:${capped()}:${steady()}`, slots = s.use.length === 2 ? [0, 2] : [0, 1, 2];
       if (key !== stripKey) {
         stripKey = key; stripSet = s;
         // steady size: three columns for every set, so a two-filter set's tiles are no bigger than a three-filter one's
@@ -2485,8 +2485,9 @@ body.phone #finale .fx-data { width: min(220px, calc(100vw - 32px)); top: 10px; 
     // on), keeps the levels it went down as a breadcrumb, is silent, is never closed by linger nor counted by
     // crowding (bodywin.html), shows a dot in the dock, and a flag records the path (shot.dataset.path). Esc, the
     // badge or "Live" bring it back to live.
-    // levels: [{ kind: "mosaic" | "composite" | "frame" | "channel", label, url(size), tag, shot, s (a catalog set
-    // whose channels the strip opens), mid (a mosaic's frame id, for its tile map) }]
+    // levels: [{ kind: "mosaic" | "composite" | "frame" | "channel", label, url(size), tag, shot, s (the set whose
+    // channels the strip opens: a catalog set, or a mosaic frame's own), mid (a mosaic's frame id, for its tile map),
+    // lines (the info lines for this picture: the live ones when it was opened, or its own) }]
     let hold = null;
     const crumbs = document.createElement("div");
     crumbs.className = "crumbs"; crumbs.hidden = true; crumbs.setAttribute("aria-label", "Where this window is");
@@ -2521,7 +2522,10 @@ body.phone #finale .fx-data { width: min(220px, calc(100vw - 32px)); top: 10px; 
       return on ? s : null;
     }
     const setLevel = s => ({ kind: "composite", s, label: `${KIND[s.kind]} · ${s.use.map(fname).join(" ")}`, url: sz => colorUrl(s, sz),
-      tag: KIND[s.kind].toUpperCase(), shot: s.use.map(k => catalog.id[k]).join(" ") });
+      tag: KIND[s.kind].toUpperCase(), shot: s.use.map(k => catalog.id[k]).join(" "), lines: liveLines() });
+    // the info lines as they are now (they describe the live picture), to show again for a level opened from it
+    const LINES = ["frame", "filter", "colour", "details"];
+    const liveLines = () => Object.fromEntries(LINES.map(f => [f, card.querySelector(`[data-f="${f}"]`) ? field(f).innerHTML : ""]));
     function openChannel(fig) {
       const s = drillable(); if (!s || fig.classList.contains("waiting")) return;
       const ch = +fig.dataset.ch, j = [...chans.querySelectorAll("figure")].indexOf(fig), q = s.use[j];
@@ -2529,8 +2533,11 @@ body.phone #finale .fx-data { width: min(220px, calc(100vw - 32px)); top: 10px; 
       let levels = hold ? hold.levels.slice() : [setLevel(s)];
       while (levels.length && levels[levels.length - 1].kind === "channel") levels.pop();
       if (t && t.kind === "channel" && t.ch === ch) { hold.levels = levels; return showLevel(); }   // the open channel again: back up
+      const up = levels[levels.length - 1].lines || {};
       levels.push({ kind: "channel", ch, label: `${fname(q)} ${Math.round(nmOf(q))} nm · ${catalog.id[q]}`, url: sz => `${colorUrl(s, sz)}&channel=${ch}`,
-        tag: `CHANNEL · ${fname(q)} · AS IN THE COMPOSITE`, shot: catalog.id[q] });
+        tag: `CHANNEL · ${fname(q)} · AS IN THE COMPOSITE`, shot: catalog.id[q],
+        lines: { frame: `${titleCase(catalog.target[q] || "Unknown")} · ${catalog.id[q]}`, filter: `${catalog.f1[q]}/${catalog.f2[q]}${nmOf(q) ? ` · ${Math.round(nmOf(q))} nm` : ""}`,
+          colour: "One channel of the composite, on its brightness scale", details: up.details || "" } });
       hold1(levels);
     }
     // a click leaves no focus behind, so Space still plays and pauses (index.html takes it only from the page itself)
@@ -2543,7 +2550,7 @@ body.phone #finale .fx-data { width: min(220px, calc(100vw - 32px)); top: 10px; 
     // tile, outlines as fractions of the picture, so it fits every size the mosaic is sent at. Asked for once per
     // mosaic picture, on the first hover. While the clock runs the outline waits until the pointer rests a quarter
     // second. On a phone (full view) the first tap outlines a frame and a second tap on it opens it.
-    let mosaicId = null, tmap = null, hot = null, rest = 0, clickT = 0;
+    let mosaicId = null, tmap = null, hot = null, rest = 0, clickT = 0, over = null;
     const NS = "http://www.w3.org/2000/svg";
     const overlay = document.createElementNS(NS, "svg");
     overlay.setAttribute("class", "tilemap"); overlay.setAttribute("viewBox", "0 0 1 1"); overlay.setAttribute("preserveAspectRatio", "none");
@@ -2555,7 +2562,11 @@ body.phone #finale .fx-data { width: min(220px, calc(100vw - 32px)); top: 10px; 
       const key = `${mosaicId}|${shot.dataset.src}`;
       if (tmap && tmap.key === key) return tmap.data;
       tmap = { key, data: null };
-      fetch(`${FRAMES}/frames/mosaic/${mosaicId}.json?x=1${look()}`).then(r => r.ok ? r.json() : null, () => null).then(d => { if (tmap && tmap.key === key) tmap.data = d || { pointings: [] }; });
+      fetch(`${FRAMES}/frames/mosaic/${mosaicId}.json?x=1${look()}`).then(r => r.ok ? r.json() : null, () => null).then(d => {
+        if (!tmap || tmap.key !== key) return;
+        tmap.data = d || { pointings: [] };
+        if (over) draw(hitAt(over));   // the map came while the pointer rests on the mosaic: outline under it now
+      });
       return null;
     }
     // the picture's box inside the well (object-fit: contain)
@@ -2594,28 +2605,38 @@ body.phone #finale .fx-data { width: min(220px, calc(100vw - 32px)); top: 10px; 
     const phoneNow = () => document.body.classList.contains("phone");
     well.addEventListener("pointermove", e => {
       if (e.pointerType === "touch") return;
+      over = { clientX: e.clientX, clientY: e.clientY };
       const q = hitAt(e);
       if (q === hot) return;
       clearTimeout(rest);
       if (state.playing && q) { draw(null); rest = setTimeout(() => draw(hitAt(e)), 250); } else draw(q);
     });
-    well.addEventListener("pointerleave", () => { clearTimeout(rest); draw(null); });
+    well.addEventListener("pointerleave", () => { over = null; clearTimeout(rest); draw(null); });
     function openPointing(q) {
       const m = tmap.data, fs = m.filters.filter(f => q.ids[f]), ids = fs.map(f => q.ids[f]);
       const base = hold ? hold.levels.slice() : [{ kind: "mosaic", mid: mosaicId, label: `Mosaic · ${m.observation}`, src: shot.dataset.src,
-        url(sz) { return this.src.replace(/size=[^&]*/, `size=${sz}`); }, tag: card.querySelector(".kindtag").textContent, shot: m.observation }];
+        url(sz) { return this.src.replace(/size=[^&]*/, `size=${sz}`); }, tag: card.querySelector(".kindtag").textContent, shot: m.observation,
+        lines: { ...liveLines(), filter: m.filters.join(" "), colour: `Mosaic of ${m.pointings.length} frames` } }];
       while (base.length && base[base.length - 1].kind !== "mosaic") base.pop();
+      // the frame's own info lines (not the live frame's)
+      const ks = ids.map(kOf), k0 = ks[0], kp = k0 >= 0 ? catalog.km_per_px[k0] : 0;
+      const lines = { frame: `${titleCase(m.target || (k0 >= 0 && catalog.target[k0]) || "Unknown")} · ${ids[0]}${ids.length > 1 ? ` +${ids.length - 1}` : ""}`,
+        filter: fs.join(" "), details: `${hhmm(q.t)} UTC${kp ? ` · ${kp < 10 ? kp.toFixed(2) : fmt(kp)} km/px` : ""}` };
       let lv;
       if (ids.length === 3) {
-        const k = kOf(ids[0]), si = k >= 0 ? catalog.setOf[k] : -1, cs = si >= 0 ? catalog.sets[si] : null;
-        const s = cs && cs.use.length === 3 && cs.use.every((u, j) => catalog.id[u] === ids[j]) ? cs : null;
-        const kind = s ? KIND[s.kind] : (fs.includes("GRN") ? "Color" : "False color");
+        const si = k0 >= 0 ? catalog.setOf[k0] : -1, cs = si >= 0 ? catalog.sets[si] : null;
+        const cat = cs && cs.use.length === 3 && cs.use.every((u, j) => catalog.id[u] === ids[j]) ? cs : null;
+        const kind = cat ? KIND[cat.kind] : (fs.includes("GRN") ? "Color" : "False color");
+        // not a catalog set: the frame is a set of its own, so the strip shows (and opens) its channels
+        const s = cat || (ks.every(k => k >= 0) ? { use: ks, frames: ks, kind: "false", ready: -Infinity } : null);
         lv = { kind: "composite", s, label: `Frame ${q.n} · ${kind} · ${fs.join(" ")}`, url: sz => `${FRAMES}/frames/color.webp?ids=${ids.join(",")}&size=${sz}${look()}`,
-          tag: `FRAME ${q.n} OF THE MOSAIC · ${kind.toUpperCase()} · ON ITS OWN`, shot: ids.join(" ") };
+          tag: `FRAME ${q.n} OF THE MOSAIC · ${kind.toUpperCase()} · ON ITS OWN`, shot: ids.join(" "),
+          lines: { ...lines, colour: `${kind}, frame ${q.n} of ${m.pointings.length} of the mosaic` } };
       } else {
         const id = ids[ids.length - 1];
         lv = { kind: "frame", label: `Frame ${q.n} · ${nameOf(id)} · ${id}`, url: sz => `${FRAMES}/frames/processed/${id}.webp?size=${sz}${look()}`,
-          tag: `FRAME ${q.n} OF THE MOSAIC · ON ITS OWN`, shot: id };
+          tag: `FRAME ${q.n} OF THE MOSAIC · ON ITS OWN`, shot: id,
+          lines: { ...lines, frame: `${titleCase(m.target || "Unknown")} · ${id}`, filter: nameOf(id), colour: `Single filter, frame ${q.n} of ${m.pointings.length} of the mosaic` } };
       }
       draw(null);
       hold1(base.concat([lv]));
@@ -2650,7 +2671,12 @@ body.phone #finale .fx-data { width: min(220px, calc(100vw - 32px)); top: 10px; 
       card.querySelector(".shottag").textContent = t.shot;
       // a held composite's channels in the strip (a frame opened from a mosaic is a set of its own)
       const s = t.s || (t.kind === "channel" ? heldSet() : null);
-      if (s && s !== stripSet) strip(s, Infinity, -1);
+      if (s !== stripSet) strip(s, Infinity, -1);   // a picture with no set of its own: no strip (it would be the live one's)
+      chans.classList.remove("held");
+      // the info lines describe the held picture, not the live camera
+      field("status").textContent = "Held · the clock plays on";
+      if (t.lines) for (const f of LINES) field(f).innerHTML = t.lines[f] || "—";
+      card.querySelectorAll(".info dd[data-f]").forEach(dd => { dd.title = dd.textContent; });
       drillable();
       draw(null);
       if (url === levelKey) return;

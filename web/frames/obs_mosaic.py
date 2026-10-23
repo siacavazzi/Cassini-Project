@@ -617,11 +617,11 @@ def tile_map(frame_id, cache):
         last["poly"] = [frac(x, y) for x, y in outline(u, t, cache)]
         last["center"] = frac(*t["offset"])
     out = []
-    for i, q in enumerate(pointings):
+    for q in pointings:
         q.pop("t1"); q.pop("at")
         if not (max(c[0] for c in q["poly"]) <= 0 or min(c[0] for c in q["poly"]) >= 1 or
                 max(c[1] for c in q["poly"]) <= 0 or min(c[1] for c in q["poly"]) >= 1):   # in the view
-            out.append(dict(q, n=i + 1))
+            out.append(dict(q, n=len(out) + 1))   # numbered as shown, so "n of N" holds
     found = {"observation": u["key"][1], "target": u["key"][0], "pass": u["key"][3], "filters": used,
              "fixed": p["fixed"], "pointings": out}
     with _lock:
