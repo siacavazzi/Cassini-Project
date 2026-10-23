@@ -996,19 +996,24 @@ body.phone #about nav { flex-direction: row; border-right: 0; border-bottom: 1px
 .cs-root .cs-skip:hover { color: var(--q-text); }
 .cs-root .cs-hint { position: absolute; left: 50%; top: 18px; transform: translateX(-50%); font-size: 11px; color: rgba(232,236,242,.45); opacity: 0; transition: opacity 1.5s ease; }
 .cs-root .cs-hint.on { opacity: 1; }
+/* a quiet mono readout line low in the middle, and a small dim note bottom left; .on shows them */
+.cs-root .cs-read { position: absolute; left: 50%; bottom: 7vh; transform: translateX(-50%); white-space: nowrap; font: 11px/1 var(--hudf); letter-spacing: .08em;
+  color: var(--q-dim); opacity: 0; transition: opacity 1.2s ease; }
+.cs-root .cs-read.on { opacity: 1; }
+.cs-root .cs-read i { font-style: normal; color: var(--q-accent); }
+.cs-root .cs-note { position: absolute; left: 16px; bottom: 14px; max-width: min(460px, calc(100vw - 140px)); font-size: 10.5px; line-height: 1.4; color: rgba(232,236,242,.34); opacity: 0; transition: opacity 1.5s ease; }
+.cs-root .cs-note.on { opacity: 1; }
 body.cutscene #gl { cursor: grab; }
 body.cutscene.cs-drag #gl { cursor: grabbing; }
 body.cutscene #app > :not(#gl):not(.cs-root) { opacity: 0 !important; pointer-events: none !important; transition: opacity 1.2s ease !important; }
 body.cutscene-out #app * { pointer-events: none !important; }
+body.phone .cs-root .cs-read { font-size: 9.5px; bottom: 9vh; }
+body.phone .cs-root .cs-note { bottom: 40px; }
 body.phone .cs-root .cs-cap { font-size: 16px; } body.phone .cs-root .cs-cap.big { font-size: 21px; }
 
 /* the air's glow from below as it heats, and a shade under the captions so they read over Saturn's bright clouds */
 #finale .fx-air { position: absolute; inset: 0; opacity: 0; background: radial-gradient(ellipse 90% 70% at 50% 100%, rgba(255,120,40,.55), rgba(255,80,20,.18) 55%, transparent 80%); mix-blend-mode: screen; }
 #finale .fx-shade { position: absolute; inset: 0; background: linear-gradient(to top, rgba(0,0,0,.78) 0, rgba(0,0,0,.55) 22%, rgba(0,0,0,0) 48%); }
-#finale .fx-read { position: absolute; left: 50%; bottom: 7vh; transform: translateX(-50%); white-space: nowrap; font: 11px/1 var(--hudf); letter-spacing: .08em;
-  color: var(--q-dim); opacity: 0; transition: opacity 1.2s ease; }
-#finale .fx-read.on { opacity: 1; }
-#finale .fx-read i { font-style: normal; color: var(--q-accent); }
 /* the real readings: a quiet strip chart, top right */
 #finale .fx-data { position: absolute; right: 16px; top: 16px; width: min(300px, calc(100vw - 32px)); box-sizing: border-box; padding: 9px 11px 8px; background: var(--q-panel); border: 1px solid var(--q-line); border-radius: 9px;
   -webkit-backdrop-filter: blur(14px); backdrop-filter: blur(14px); opacity: 0; transition: opacity 1.5s ease; }
@@ -1016,8 +1021,6 @@ body.phone .cs-root .cs-cap { font-size: 16px; } body.phone .cs-root .cs-cap.big
 #finale .fx-data b { display: block; font-weight: normal; font-size: 9.5px; letter-spacing: .14em; text-transform: uppercase; color: var(--q-dim); margin-bottom: 6px; }
 #finale .fx-data canvas { display: block; width: 100%; height: auto; }
 #finale .fx-data small { display: block; margin-top: 5px; font-size: 9.5px; line-height: 1.35; color: rgba(232,236,242,.38); }
-#finale .fx-note { position: absolute; left: 16px; bottom: 14px; max-width: min(460px, calc(100vw - 140px)); font-size: 10.5px; line-height: 1.4; color: rgba(232,236,242,.34); opacity: 0; transition: opacity 1.5s ease; }
-#finale .fx-note.on { opacity: 1; }
 /* the credits roll: a column that scrolls up over the darkened sky, fading in and out at its top and bottom edges */
 #finale .fx-roll { position: absolute; inset: 0; overflow-y: auto; overscroll-behavior: contain; scrollbar-width: none; opacity: 0; pointer-events: none;
   -webkit-mask-image: linear-gradient(to bottom, transparent 0, #000 16%, #000 84%, transparent 100%); mask-image: linear-gradient(to bottom, transparent 0, #000 16%, #000 84%, transparent 100%); }
@@ -1051,8 +1054,6 @@ body.phone #finale .fx-roll .in { font-size: 14px; }
 body.phone #finale .fx-roll dl { grid-template-columns: 1fr; row-gap: 2px; }
 body.phone #finale .fx-roll dt, body.phone #finale .fx-roll dd { text-align: center; }
 body.phone #finale .fx-roll dd { margin-bottom: 10px; }
-body.phone #finale .fx-read { font-size: 9.5px; bottom: 9vh; }
-body.phone #finale .fx-note { bottom: 40px; }
 body.phone #finale .fx-data { width: min(220px, calc(100vw - 32px)); top: 10px; right: 10px; }
 
 /* a shade under the captions so they read over Earth */
@@ -1335,9 +1336,9 @@ body.phone #hrel .hr-note { bottom: auto; top: 40px; max-width: calc(100vw - 32p
   <div class="cs-black"></div>
   <div class="cs-caps"></div>
   <div class="fx-roll" tabindex="-1" aria-label="Credits"><div class="in"></div></div>
-  <div class="fx-read" aria-hidden="true"></div>
+  <div class="cs-read" aria-hidden="true"></div>
   <div class="fx-data" aria-hidden="true"><b>Its last readings · real data</b><canvas width="556" height="290"></canvas><small></small></div>
-  <div class="fx-note">An interpretation. Cassini's path is its real trajectory and the readings are what it sent; the way it fights to hold its antenna on Earth follows a rule pinned to NASA's numbers, not telemetry.</div>
+  <div class="cs-note">An interpretation. Cassini's path is its real trajectory and the readings are what it sent; the way it fights to hold its antenna on Earth follows a rule pinned to NASA's numbers, not telemetry.</div>
   <div class="cs-hint">Drag to look around</div>
   <button class="cs-skip" type="button">Skip ▸</button>
 </section>
@@ -6771,6 +6772,15 @@ function frame(now) {
     return el;
   }
   function drop(el) { fadeTo(el, 0, 1.1, () => el.remove()); }
+  // one line at a time in a caption box: a new line takes the place of the one before (null just takes it down)
+  const lines = new WeakMap();
+  function line(caps, html, cls) {
+    const was = lines.get(caps);
+    if (was && was.isConnected) drop(was);
+    const el = html == null ? null : caption(caps, html, cls);
+    lines.set(caps, el);
+    return el;
+  }
   // run each line of a list ([at, dur, html, cls, chord]) whose time has come, and take it down when its time is up
   function runCaptions(caps, list, t, shown) {
     list.forEach(([at, dur, html, cls, chord], i) => {
@@ -6808,13 +6818,65 @@ function frame(now) {
     look.yaw -= look.yaw * k; look.pitch -= look.pitch * k; look.zoom += (1 - look.zoom) * k;
   }
 
+  // ---------- effects every cutscene can use, in the Cassini group's close-up pass (layer 1, metres) ----------
+  // a soft round glow, white so a material's colour tints it
+  let glowTex = null;
+  function glowTexture() {
+    if (glowTex) return glowTex;
+    const c = document.createElement("canvas"); c.width = c.height = 64;
+    const g = c.getContext("2d"), gr = g.createRadialGradient(32, 32, 0, 32, 32, 32);
+    gr.addColorStop(0, "rgba(255,255,255,1)"); gr.addColorStop(0.25, "rgba(255,255,255,.55)"); gr.addColorStop(1, "rgba(255,255,255,0)");
+    g.fillStyle = gr; g.fillRect(0, 0, 64, 64);
+    return glowTex = new THREE.CanvasTexture(c);
+  }
+  // an additive glow sprite (opacity starts at 0)
+  function sprite(color, size) {
+    const s = new THREE.Sprite(new THREE.SpriteMaterial({ map: glowTexture(), color, transparent: true, opacity: 0, blending: THREE.AdditiveBlending, depthWrite: false }));
+    s.scale.setScalar(size); s.layers.set(1);
+    return s;
+  }
+  // a soft additive shell for exhaust and glows: brightest where it is seen face-on and near its start, fading along its
+  // length (fall), colour going from near to far, with a shimmer running down it. Uniforms glow and time are set each
+  // frame. Keeps the viewer's logarithmic depth
+  function shellMaterial(near, far, fall, shimmer) {
+    return new THREE.ShaderMaterial({
+      uniforms: { glow: { value: 0 }, time: { value: 0 }, near: { value: new THREE.Color(near) }, far: { value: new THREE.Color(far) }, fall: { value: fall }, shimmer: { value: shimmer } },
+      vertexShader: `varying float vAlong; varying vec3 vN; varying vec3 vV;
+        #include <common>
+        #include <logdepthbuf_pars_vertex>
+        void main() { vAlong = -position.y; vec4 mv = modelViewMatrix * vec4(position, 1.0); vN = normalize(normalMatrix * normal); vV = normalize(-mv.xyz);
+          gl_Position = projectionMatrix * mv;
+          #include <logdepthbuf_vertex>
+        }`,
+      fragmentShader: `uniform float glow; uniform float time; uniform vec3 near; uniform vec3 far; uniform float fall; uniform float shimmer;
+        varying float vAlong; varying vec3 vN; varying vec3 vV;
+        #include <logdepthbuf_pars_fragment>
+        void main() {
+          #include <logdepthbuf_fragment>
+          float a = clamp(vAlong, 0.0, 1.0);
+          float along = exp(-fall * a) * smoothstep(1.0, 0.75, a);
+          float edge = pow(abs(dot(normalize(vN), normalize(vV))), 1.6);
+          float run = 1.0 + shimmer * (0.6 * sin(a * 31.0 - time * 23.0) + 0.4 * sin(a * 13.0 - time * 9.0 + 1.3));
+          gl_FragColor = vec4(mix(near, far, sqrt(a)) * glow * along * edge * run, 1.0);
+        }`,
+      transparent: true, blending: THREE.AdditiveBlending, depthWrite: false, side: THREE.DoubleSide });
+  }
+  // an open cylinder from a nozzle along -Y: radius r0 at the start to r1 at the end, `length` metres long
+  function shell(r0, r1, length, mat) {
+    const geo = new THREE.CylinderGeometry(r0, r1, 1, 32, 16, true);
+    geo.translate(0, -0.5, 0);
+    const m = new THREE.Mesh(geo, mat);
+    m.scale.set(1, length, 1); m.layers.set(1); m.frustumCulled = false;
+    return m;
+  }
+
   // ---------- begin and end ----------
   // a cutscene's hooks and its section (root, with the .cs-root class); onEnd tidies up its own effects
   function register(name, s) { scenes[name] = s; const b = s.root && s.root.querySelector(".cs-skip"); if (b) b.addEventListener("click", e => { e.stopPropagation(); end(name); }); }
   function begin(name) {
     const s = scenes[name];
     if (active || !s) return false;
-    active = name; saved = { follow: state.follow };
+    active = name; saved = { follow: state.follow, playing: state.playing };
     resetLook(); look.wheel = true;
     if (state.follow) setFollow(false);
     setPlaying(false);
@@ -6828,13 +6890,15 @@ function frame(now) {
   function end(name) {
     if (!active || (name && name !== active)) return;
     const s = scenes[active], was = saved; active = null; saved = null;
-    if (s.onEnd) s.onEnd();
+    // onEnd may return { follow: false } to leave follow off (an ending that leaves the view on something else)
+    const keep = (s.onEnd && s.onEnd()) || {};
     cassini.visible = true; markerPts.visible = true; cassini.up.set(0, 1, 0);
     camera.up.set(0, 1, 0);
     controls.enabled = true;
     const black = s.root.querySelector(".cs-black");
     fades.forEach((v, el) => { if (el !== black) fades.delete(el); });
-    if (was.follow) setFollow(true);
+    if (was.follow && keep.follow !== false) setFollow(true);
+    if (was.playing && state.et < coverage[1] - 1) setPlaying(true);
     document.body.classList.add("cutscene-out");
     document.body.classList.remove("cutscene", "cs-drag");
     const done = () => { document.body.classList.remove("cutscene-out"); if (!active) s.root.hidden = true; };
@@ -6861,9 +6925,18 @@ function frame(now) {
   // playback crossing a moment going forward plays a cutscene (when(et) can say no: not this time)
   const triggers = [];
   function at(et, play, when) { triggers.push({ et, play, when }); }
+  // playback setting off forward from the very start of the data (where setTime clamps, so nothing is crossed) plays
+  // one: once per visit, armed again once playback is 30 s past the start. Returns { spend() } to count a play from
+  // elsewhere (?name) as this visit's
+  const starts = [];
+  function atStart(play, when) { const g = { play, when, spent: false, spend() { g.spent = true; } }; starts.push(g); return g; }
   const advance = window.studyAdvance;
   window.studyAdvance = (et, dt, speed) => {
     const next = advance ? advance(et, dt, speed) : et + dt * speed;
+    for (const g of starts) {
+      if (et > coverage[0] + 30) g.spent = false;
+      if (!active && !g.spent && speed > 0 && et <= coverage[0] + 1 && next > et && (!g.when || g.when())) { g.spent = true; setTimeout(g.play, 0); return et; }
+    }
     if (!active) for (const g of triggers) {
       const t = typeof g.et === "function" ? g.et() : g.et;
       if (t != null && et < t && next >= t && (!g.when || g.when(t))) { setTimeout(g.play, 0); break; }
@@ -6890,7 +6963,8 @@ function frame(now) {
   window.addEventListener("pointerup", onUp, true);
   window.addEventListener("pointercancel", onUp, true);
   window.addEventListener("wheel", onWheel, { capture: true, passive: false });
-  window.cassiniCutscene = { register, begin, end, at, fromUrl, fadeTo, caption, drop, dropAll, runCaptions, sound, look, resetLook,
+  window.cassiniCutscene = { register, begin, end, at, atStart, fromUrl, fadeTo, caption, drop, dropAll, line, runCaptions, sound, look, resetLook,
+    fx: { glowTexture, sprite, shellMaterial, shell }, glowTexture, sprite,
     get active() { return active; } };
 })();
 </script>
@@ -6898,7 +6972,7 @@ function frame(now) {
 // ---------- the Grand Finale: Cassini's last minute and a mission recap, at the end of the data ----------
 (function () {
   const root = document.getElementById("finale"), black = root.querySelector(".cs-black"), caps = root.querySelector(".cs-caps"), air = root.querySelector(".fx-air");
-  const read = root.querySelector(".fx-read"), note = root.querySelector(".fx-note"), hint = root.querySelector(".cs-hint");
+  const read = root.querySelector(".cs-read"), note = root.querySelector(".cs-note"), hint = root.querySelector(".cs-hint");
   // what every cutscene shares (cutscene.html)
   const CS = cassiniCutscene, { fadeTo, drop, sound, look } = CS, runCaptions = (list, t, shown) => CS.runCaptions(caps, list, t, shown);
   const roll = root.querySelector(".fx-roll"), rollIn = roll.querySelector(".in");
@@ -6990,20 +7064,7 @@ function frame(now) {
   const jitter = s => new THREE.Vector3(Math.random() - 0.5, Math.random() - 0.5, Math.random() - 0.5).multiplyScalar(s);
 
   // ---------- effects, all children of the Cassini group (so they share its close-up render pass), in metres ----------
-  let glowTex = null;
-  function glowTexture() {
-    if (glowTex) return glowTex;
-    const c = document.createElement("canvas"); c.width = c.height = 64;
-    const g = c.getContext("2d"), gr = g.createRadialGradient(32, 32, 0, 32, 32, 32);
-    gr.addColorStop(0, "rgba(255,255,255,1)"); gr.addColorStop(0.25, "rgba(255,255,255,.55)"); gr.addColorStop(1, "rgba(255,255,255,0)");
-    g.fillStyle = gr; g.fillRect(0, 0, 64, 64);
-    return glowTex = new THREE.CanvasTexture(c);
-  }
-  function sprite(color, size) {
-    const s = new THREE.Sprite(new THREE.SpriteMaterial({ map: glowTexture(), color, transparent: true, opacity: 0, blending: THREE.AdditiveBlending, depthWrite: false }));
-    s.scale.setScalar(size); s.layers.set(1);
-    return s;
-  }
+  const { glowTexture, sprite } = CS.fx;
   // a thruster plume: a 1 N hydrazine jet is small and faint, so a soft glow that fades along its length and toward its
   // edges (no hard cone), with a bright point at the nozzle. The shader keeps the viewer's logarithmic depth
   let plumeMat = null;
