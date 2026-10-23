@@ -409,7 +409,7 @@ body.phone #galtoast { bottom: calc(env(safe-area-inset-bottom, 0px) + var(--app
     card.hidden = false; delete card.dataset.min; if (WM) { WM.front(card); WM.syncMenu(); }
     refresh();
   }
-  function close() { card.hidden = true; closeShare(); }
+  function close() { card.hidden = true; closeShare(); if (G.shared) { stopFilm(); dropShared(); G.shared = null; } }
   function back() {
     closeShare(); stopFilm();
     if (G.shared) { dropShared(); }

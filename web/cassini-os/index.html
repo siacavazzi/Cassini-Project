@@ -421,6 +421,42 @@ body.s-steady .info dd[data-f="colour"] { white-space: normal; display: -webkit-
 #dock.zoomed { width: min(1420px, calc(100% - 20px)); }
 #dock.zoomed #tl { height: 76px; }
 
+/* the replay window's head: the controls in one small cluster on the left, the clock in the middle, the timeline's
+   zoom and "back to now" on the right, so the timeline under them gets the whole width */
+.lcdhead { display: grid; grid-template-columns: auto minmax(0, 1fr) auto; align-items: center; gap: 10px; }
+.lcdhead .clockbox { min-width: 0; display: grid; gap: 1px; }
+.lcdhead .transport { flex: none; justify-self: start; gap: 1px; padding: 2px; border: 1px solid var(--q-line); border-radius: 16px; }
+.lcdhead .transport .round { border: 0; background: none; }
+.lcdhead .transport .round:hover { background: rgba(255,255,255,.1); }
+.lcdhead .transport .round[aria-pressed="true"] { background: rgba(138,182,255,.24); color: #fff; }
+.lcdhead #play { width: 30px; height: 30px; font-size: 11px; background: rgba(255,255,255,.08); }
+.lcdhead .skip { width: 26px; height: 26px; font-size: 8px; }
+.lcdhead .skip svg { width: 13px !important; height: 13px !important; }
+.tltools { justify-self: end; display: flex; align-items: center; gap: 4px; color: var(--q-dim); font-size: 10px; }
+.tltools input[type=range] { -webkit-appearance: none; appearance: none; width: 110px; height: 18px; margin: 0; background: none; cursor: default; }
+.tltools input[type=range]::-webkit-slider-runnable-track { height: 3px; border-radius: 2px; background: rgba(255,255,255,.18); }
+.tltools input[type=range]::-moz-range-track { height: 3px; border-radius: 2px; background: rgba(255,255,255,.18); }
+.tltools input[type=range]::-webkit-slider-thumb { -webkit-appearance: none; width: 11px; height: 11px; margin-top: -4px; border-radius: 50%; background: #d9dee6; border: 0; }
+.tltools input[type=range]::-moz-range-thumb { width: 11px; height: 11px; border-radius: 50%; background: #d9dee6; border: 0; }
+.tltools input[type=range]:hover::-webkit-slider-thumb { background: #fff; }
+.tltools input[type=range]:focus-visible { outline: 1px solid var(--q-accent); outline-offset: 2px; border-radius: 3px; }
+.tlstep { all: unset; width: 16px; height: 18px; display: grid; place-items: center; border-radius: 4px; color: var(--q-dim); font-size: 13px; cursor: default; }
+.tlstep:hover { color: #fff; background: rgba(255,255,255,.08); }
+#tlspan { min-width: 46px; text-align: left; font-variant-numeric: tabular-nums; white-space: nowrap; }
+#tlnow { margin-left: 2px; }
+#tlnow svg { width: 14px; height: 14px; display: block; }
+#tlnow svg * { fill: none; stroke: currentColor; stroke-width: 1.3; }
+#tlnow svg .dot { fill: currentColor; stroke: none; }
+/* following the clock it rests; scrolled away it lights up to bring you back */
+#tlnow[aria-pressed="true"] { background: none; color: var(--q-dim); }
+#tlnow[aria-pressed="false"] { background: rgba(138,182,255,.24); color: #fff; border-color: rgba(138,182,255,.5); }
+#tl { height: 84px; }
+#dock.zoomed #tl { height: 110px; }
+/* the zoom slider replaces the fixed spans */
+#zooms { display: none !important; }
+#dock:not(.zoomed) .toolbar { grid-template-columns: minmax(0, 1fr); }
+#dock:not(.zoomed) .toolbar > .col:first-child { display: none; }
+
 /* the HUD in space stays, a little softer */
 #hudline { opacity: .7; }
 .lbl:not(.focus):not(.cassini) { opacity: .75; }
@@ -638,7 +674,14 @@ body.phone.phone-land #dock { left: calc(var(--side) + var(--col) + var(--gap)) 
 body.phone #dock .titlebar { height: 18px; }
 body.phone #dock .toolbar, body.phone #dock:not(.zoomed) .toolbar { grid-template-columns: 1fr; gap: 4px; padding: 0 8px 6px; }
 body.phone .col, body.phone .col.right { width: auto; flex-direction: row; flex-wrap: wrap; justify-content: center; }
-body.phone .transport { gap: 8px; }
+body.phone .lcdhead { grid-template-columns: auto minmax(0, 1fr); grid-template-areas: "clock clock" "tr tools"; row-gap: 4px; column-gap: 12px; }
+body.phone .lcdhead .clockbox { grid-area: clock; }
+body.phone .lcdhead .transport { grid-area: tr; }
+body.phone .lcdhead .tltools { grid-area: tools; min-width: 0; width: 100%; }
+body.phone .lcdhead .tltools input[type=range] { width: auto; min-width: 60px; flex: 1 1 90px; }
+body.phone .lcdhead :is(.tlstep, #tlspan) { display: none; }
+body.phone .lcdhead #play { width: 34px; height: 34px; }
+body.phone .lcdhead .skip { width: 29px; height: 29px; }
 body.phone #play { width: 38px; height: 38px; }
 body.phone .skip { width: 32px; height: 32px; }
 body.phone #phmom { display: grid; }
@@ -680,6 +723,12 @@ body.phone:not(.phone-land) .bodywin[data-cam="W"]:not(.full) { left: calc(var(-
 body.phone:not(.phone-land) .bodywin.alone[data-cam="W"]:not(.full) { left: var(--side) !important; }
 body.phone.phone-land .bodywin[data-cam="W"]:not(.full) { top: calc(var(--menu) + 2 * var(--gap) + var(--col)) !important; }
 body.phone.phone-land .bodywin.alone[data-cam="W"]:not(.full) { top: calc(var(--menu) + var(--gap)) !important; }
+
+#linktoast { position: fixed; left: 50%; bottom: 22px; transform: translateX(-50%); z-index: 3001; padding: 7px 12px; border-radius: 8px;
+  background: rgba(20,22,27,.96); border: 1px solid var(--q-line, #444); color: var(--q-text, #ddd); font-size: 12px; box-shadow: 0 8px 30px rgba(0,0,0,.5); }
+#linktoast[hidden] { display: none; }
+body.idle #linktoast { opacity: 1; }
+body.phone #linktoast { bottom: calc(env(safe-area-inset-bottom, 0px) + 12px); }
 
 /* frosted glass off: plain dark panels, no blur of the view behind them (the blur is redone every frame) */
 body.s-noglass :is(#menubar, .menu ul, .win, #dock) { -webkit-backdrop-filter: none !important; backdrop-filter: none !important; }
@@ -1111,6 +1160,7 @@ body.phone #finale .fx-data { width: min(220px, calc(100vw - 32px)); top: 10px; 
       <ul id="gomenu">
         <li><button data-act="prev">Previous Moment<span class="kbd">⌘[</span></button></li>
         <li><button data-act="next">Next Moment<span class="kbd">⌘]</span></button></li>
+        <li><button data-act="copylink">Copy Link to This Moment<span class="kbd">⇧⌘C</span></button></li>
         <li class="sep"></li>
       </ul></div>
     <div class="menu"><button aria-haspopup="true">Highlights</button>
@@ -1169,21 +1219,32 @@ body.phone #finale .fx-data { width: min(220px, calc(100vw - 32px)); top: 10px; 
     <div class="titlebar"><span class="lights"><button class="close" aria-label="Close">×</button><button class="min" aria-label="Minimize">–</button><button class="zoom" aria-label="Zoom">+</button></span>Cassini Replay</div>
     <div class="toolbar">
       <div class="col">
-        <div class="transport">
-          <button class="btn round skip" id="prev" aria-label="Previous moment">◀◀</button>
-          <button class="btn round" id="play" aria-label="Play or pause">❚❚</button>
-          <button class="btn round skip" id="next" aria-label="Next moment">▶▶</button>
-          <button class="btn round skip" id="movie" aria-pressed="false" aria-label="Movie mode" title="Movie mode: play one body's frames as a film (M)"><svg viewBox="0 0 16 16" aria-hidden="true"><rect x="2" y="3" width="12" height="10" rx="1.5"/><path d="M5 3v10M11 3v10M2 6.3h3M2 9.7h3M11 6.3h3M11 9.7h3"/></svg></button>
-          <button class="btn round skip" id="phmom" aria-pressed="false" aria-label="Moments" title="Moments"><svg viewBox="0 0 16 16" aria-hidden="true"><path d="M3 4h10M3 8h10M3 12h10"/></svg></button>
-        </div>
         <div class="seg" id="speeds" aria-label="Playback speed"></div>
         <div class="seg" id="zooms" aria-label="Timeline span"></div>
       </div>
       <div class="lcd">
-        <div class="clock" id="clock">—</div>
-        <div class="sub"><span id="rel">—</span> · <span id="mday">—</span></div>
+        <div class="lcdhead">
+          <div class="transport">
+            <button class="btn round skip" id="prev" aria-label="Previous moment">◀◀</button>
+            <button class="btn round" id="play" aria-label="Play or pause">❚❚</button>
+            <button class="btn round skip" id="next" aria-label="Next moment">▶▶</button>
+          <button class="btn round skip" id="movie" aria-pressed="false" aria-label="Movie mode" title="Movie mode: play one body's frames as a film (M)"><svg viewBox="0 0 16 16" aria-hidden="true"><rect x="2" y="3" width="12" height="10" rx="1.5"/><path d="M5 3v10M11 3v10M2 6.3h3M2 9.7h3M11 6.3h3M11 9.7h3"/></svg></button>
+            <button class="btn round skip" id="phmom" aria-pressed="false" aria-label="Moments" title="Moments"><svg viewBox="0 0 16 16" aria-hidden="true"><path d="M3 4h10M3 8h10M3 12h10"/></svg></button>
+          </div>
+          <div class="clockbox">
+            <div class="clock" id="clock">—</div>
+            <div class="sub"><span id="rel">—</span> · <span id="mday">—</span></div>
+          </div>
+          <div class="tltools">
+            <button class="tlstep" id="tlout" aria-label="Zoom the timeline out" title="Zoom out">−</button>
+            <input type="range" id="tlzoom" min="0" max="1000" step="1" value="500" aria-label="Timeline zoom" title="Timeline zoom: how much time the timeline shows">
+            <button class="tlstep" id="tlin" aria-label="Zoom the timeline in" title="Zoom in">+</button>
+            <span id="tlspan">—</span>
+            <button class="btn round skip" id="tlnow" aria-pressed="true" aria-label="Back to now" title="Back to now: center the timeline on the current moment and follow it"><svg viewBox="0 0 16 16" aria-hidden="true"><circle cx="8" cy="8" r="4.2"/><path d="M8 1v3M8 12v3M1 8h3M12 8h3"/><circle class="dot" cx="8" cy="8" r="1.2"/></svg></button>
+          </div>
+        </div>
         <div class="sub probe" id="probe" hidden></div>
-        <canvas id="tl" aria-label="Timeline: drag to scrub, scroll to zoom"></canvas>
+        <canvas id="tl" aria-label="Timeline: drag to scrub, drag the top edge or scroll to move through time, pinch or use the slider to zoom"></canvas>
         <div class="legend"><span class="keys" id="lkeys"></span><span id="l24">—</span></div>
       </div>
       <div class="col right">
@@ -1236,6 +1297,8 @@ body.phone #finale .fx-data { width: min(220px, calc(100vw - 32px)); top: 10px; 
 </section>
 
   <div id="awaynote" role="status" aria-live="polite">Paused while Cassini OS is in the background</div>
+
+  <div id="linktoast" role="status" hidden></div>
 
   <section class="win" id="reelcard" aria-label="Body reel" hidden>
   <div class="titlebar"><span class="lights"><button class="close" aria-label="Close the body reel">×</button><button class="min" aria-label="Close the body reel">–</button><button class="zoom" aria-label="Zoom">+</button></span>Body Reel</div>
@@ -1509,17 +1572,20 @@ body.phone #finale .fx-data { width: min(220px, calc(100vw - 32px)); top: 10px; 
     const mo = new MutationObserver(() => { if (go()) mo.disconnect(); });
     mo.observe($("loading"), { attributes: true, attributeFilter: ["hidden"] });
   }
+  // S.transient(fn): what fn does to a mirrored button stays out of the settings (a shared link's view is for that visit only)
+  let quiet = 0;
+  S.transient = fn => { quiet++; try { return fn(); } finally { setTimeout(() => quiet--, 0); } };
   // a dock button that switches a viewer option, mirrored by a setting both ways
   function mirror(key, btn) {
     whenReady(() => {
       const b = $(btn), pressed = () => b.getAttribute("aria-pressed") === "true";
       S.on(key, v => { if (pressed() !== v) b.click(); });
-      new MutationObserver(() => S.set(key, pressed())).observe(b, { attributes: true, attributeFilter: ["aria-pressed"] });
+      new MutationObserver(() => { if (!quiet) S.set(key, pressed()); }).observe(b, { attributes: true, attributeFilter: ["aria-pressed"] });
     });
   }
   D({ key: "playback.start", section: "Playback", label: "Start time", type: "choice", value: "2006-09-15T14:28:00", reload: true,
       options: [["2006-09-15T14:28:00", "In Saturn's Shadow"], ["2005-01-14T09:30:00", "Huygens lands"], ["2004-07-01T00:00:00", "Saturn arrival"]],
-      hint: "The moment Cassini OS opens on. A ?t= link still wins." });
+      hint: "The moment Cassini OS opens on. A shared link still opens on its own moment." });
   D({ key: "playback.autoplay", section: "Playback", label: "Play when Cassini OS opens", type: "toggle", value: true,
       hint: "Off opens paused at the starting moment." });
   D({ key: "playback.speed", section: "Playback", label: "Starting speed", type: "choice", value: 600,
@@ -1680,6 +1746,86 @@ body.phone #finale .fx-data { width: min(220px, calc(100vw - 32px)); top: 10px; 
     $("mlist").addEventListener("click", e => { if (document.body.classList.contains("phone") && e.target.closest("button")) setTimeout(() => mom.classList.add("closed"), 150); });
     sync();
   });
+})();
+</script>
+<script>
+// ---------- shareable links: the address bar follows the moment on screen ----------
+(function () {
+  const KEYS = ["t", "view", "speed", "play", "movie", "cam"];
+  const S = window.cassiniSettings, $ = id => document.getElementById(id);
+  const num = v => (+(+v).toPrecision(4)).toString().replace("e+", "e");   // short, and no "+" (a space in a query)
+  const utc = et => new Date(etToMs(et)).toISOString().slice(0, 19);
+  // the link for the moment on screen; other pages (flagging) use it too
+  function params() {
+    const p = [["t", utc(state.et)]];
+    const view = state.focus !== "CASSINI" ? state.focus.toLowerCase() : state.follow ? "follow" : "cassini";
+    p.push(["view", view]);
+    p.push(["speed", num(state.speed)]);
+    if (!state.playing) p.push(["play", "0"]);
+    if (window.cassiniMovie && window.cassiniMovie.on) p.push(["movie", "1"]);
+    if (view !== "follow") p.push(["cam", [camera.position.x, camera.position.y, camera.position.z].map(num).join(",")]);
+    return p;
+  }
+  function href(extra) {
+    const u = new URL(location.href), keep = [...u.searchParams].filter(([k]) => !KEYS.includes(k));
+    const enc = s => encodeURIComponent(s).replace(/%3A/gi, ":").replace(/%2C/gi, ",");
+    const q = [...params(), ...(extra || []), ...keep].map(([k, v]) => v === "" ? enc(k) : `${enc(k)}=${enc(v)}`).join("&");
+    return u.origin + u.pathname + (q ? "?" + q : "") + u.hash;
+  }
+
+  // a link's view, speed and play state, once the viewer and the settings have set themselves up
+  function apply() {
+    const q = new URLSearchParams(location.search), view = (q.get("view") || "").toUpperCase();
+    // the follow button is mirrored into Settings; a link's view is for this visit only
+    const quietly = fn => (S && S.transient ? S.transient(fn) : fn());
+    if (view === "FOLLOW") { if (!state.follow) quietly(() => setFollow(true)); }
+    else if (view === "CASSINI") { if (state.follow) quietly(() => setFollow(false)); }
+    else if (view) quietly(() => setFocus(view));
+    const cam = (q.get("cam") || "").split(",").map(Number);
+    if (cam.length === 3 && cam.every(isFinite) && !state.follow && cam.some(Boolean)) {
+      const r = Math.hypot(...cam), lo = controls.minDistance, hi = controls.maxDistance;
+      camera.position.set(...cam).multiplyScalar(Math.min(hi, Math.max(lo, r)) / r);
+      controls.update();
+    }
+    const sp = +q.get("speed");
+    if (q.has("speed") && isFinite(sp) && sp > 0 && sp <= 1e7) setSpeed(sp);
+    if (q.get("play") === "0") setPlaying(false);
+    else if (q.has("play")) setPlaying(true);
+    if (q.get("movie") === "1" && window.cassiniMovie && !window.cassiniMovie.on) window.cassiniMovie.start();
+  }
+  let last = "";
+  function write() {
+    if (typeof state === "undefined" || !$("loading").hidden) return;
+    const h = href();
+    if (h === last) return;
+    last = h;
+    try { history.replaceState(history.state, "", h); } catch (e) {}
+  }
+
+  function toast(text) {
+    const t = $("linktoast"); t.textContent = text; t.hidden = false;
+    clearTimeout(toast.t); toast.t = setTimeout(() => { t.hidden = true; }, 2200);
+  }
+  async function copy() {
+    write();
+    const h = href();
+    try { await navigator.clipboard.writeText(h); toast("Link to this moment copied"); }
+    catch (e) { if (navigator.share) navigator.share({ url: h }).catch(() => {}); else toast(h); }
+  }
+  document.addEventListener("click", e => {
+    if (!e.target.closest('[data-act="copylink"]')) return;
+    e.stopPropagation(); document.querySelectorAll(".menu.open").forEach(m => m.classList.remove("open"));
+    copy();
+  }, true);
+  window.addEventListener("keydown", e => {
+    if ((e.metaKey || e.ctrlKey) && e.shiftKey && e.key.toLowerCase() === "c") { e.preventDefault(); copy(); }
+  }, true);
+
+  window.cassiniLink = { href, params, copy };
+  const ready = () => typeof state !== "undefined" && typeof setSpeed === "function" && $("loading").hidden;
+  const start = () => { apply(); write(); setInterval(write, 500); addEventListener("pagehide", write); };
+  if (ready()) start();
+  else { const mo = new MutationObserver(() => { if (ready()) { mo.disconnect(); start(); } }); mo.observe($("loading"), { attributes: true, attributeFilter: ["hidden"] }); }
 })();
 </script>
 <script>
@@ -2007,6 +2153,36 @@ body.phone #finale .fx-data { width: min(220px, calc(100vw - 32px)); top: 10px; 
     if (e.key.toLowerCase() === "m") { e.preventDefault(); act(document.querySelector('[data-act="orbits"]')); }
   });
 
+  // ---------- the timeline's zoom slider and "back to now" ----------
+  // The slider is logarithmic, from the whole mission at the left to ten minutes at the right (like a video editor's
+  // zoom); while the timeline follows the clock it zooms around now, otherwise around the middle of the view.
+  const tlSpanMax = () => Math.max(TL_MIN_SPAN * 2, coverage[1] - coverage[0]);
+  const tlSpanAt = v => tlSpanMax() * Math.pow(TL_MIN_SPAN / tlSpanMax(), v / 1000);
+  const tlValueOf = span => 1000 * Math.log(tlSpanMax() / span) / Math.log(tlSpanMax() / TL_MIN_SPAN);
+  const fmtTlSpan = sec => {
+    const r = (v, u) => `${v < 10 ? +v.toFixed(1) : Math.round(v)} ${u}${Math.round(v * 10) === 10 ? "" : "s"}`;
+    return sec < 5400 ? r(sec / 60, "min") : sec < 2 * 86400 ? r(sec / 3600, "hour") : sec < 60 * 86400 ? r(sec / 86400, "day")
+      : sec < 2 * 365.25 * 86400 ? r(sec / (30.44 * 86400), "month") : r(sec / (365.25 * 86400), "year");
+  };
+  let tlShown = { span: 0, follow: null };
+  window.syncTimelineTools = () => {
+    const span = state.view[1] - state.view[0];
+    if (span !== tlShown.span) {
+      tlShown.span = span;
+      if (document.activeElement !== $("tlzoom")) $("tlzoom").value = Math.round(tlValueOf(span));
+      $("tlspan").textContent = fmtTlSpan(span);
+    }
+    if (state.tlFollow !== tlShown.follow) {
+      tlShown.follow = state.tlFollow;
+      $("tlnow").setAttribute("aria-pressed", String(state.tlFollow));
+      $("tlnow").title = state.tlFollow ? "Following the current moment (click to center it)" : "Back to now: center the timeline on the current moment and follow it";
+    }
+  };
+  $("tlzoom").addEventListener("input", e => zoomTimeline(tlSpanAt(+e.target.value)));
+  $("tlout").addEventListener("click", () => zoomTimeline((state.view[1] - state.view[0]) * 2));
+  $("tlin").addEventListener("click", () => zoomTimeline((state.view[1] - state.view[0]) / 2));
+  $("tlnow").addEventListener("click", () => recenterTimeline());
+
   // previous / next moment
   const items = () => [...document.querySelectorAll("#mlist li")];
   $("next").addEventListener("click", () => { const li = items().find(li => +li.dataset.et > state.et + 3.5 * 3600); if (li) li.querySelector("button").click(); });
@@ -2159,6 +2335,7 @@ body.phone #finale .fx-data { width: min(220px, calc(100vw - 32px)); top: 10px; 
   };
   // the scrubber knob: a small diamond on the "now" line, as on an old LCD progress bar
   window.studyTimeline = (g, w, h, xn) => {
+    window.syncTimelineTools();
     const y = h * LANES.nBase;
     g.fillStyle = "#1d2016"; g.beginPath(); g.moveTo(xn, y - 6); g.lineTo(xn + 6, y); g.lineTo(xn, y + 6); g.lineTo(xn - 6, y); g.fill();
   };
@@ -2745,10 +2922,12 @@ body.phone #finale .fx-data { width: min(220px, calc(100vw - 32px)); top: 10px; 
   // ---------- burst limit: in normal playback each camera window gets at most maxRate new pictures a second ----------
   // The clock runs at the chosen speed except inside an imaging burst, where it slows so that crossing the gap
   // between two of a camera's frames takes at least 1/maxRate s; it is back to full speed once the burst is over.
+  // A faster speed is always faster: a burst never slows the clock below a share of the chosen speed
+  // (playback.burstFloor), so 1 day/s skips pictures in a long burst instead of crawling like 10 min/s does.
   // Movie mode has its own clock. 0 = no limit. The setting lives in the Settings window when the page has one
   // (playback.maxImageRate), otherwise in the View menu.
-  const RATE_DEFAULT = 5, RATE_KEY = "cassini-os-max-image-rate", SETTINGS = window.cassiniSettings;
-  let maxRate = RATE_DEFAULT, slowedTo = 0;
+  const RATE_DEFAULT = 5, FLOOR_DEFAULT = 0.25, RATE_KEY = "cassini-os-max-image-rate", SETTINGS = window.cassiniSettings;
+  let maxRate = RATE_DEFAULT, burstFloor = FLOOR_DEFAULT, slowedTo = 0;
   function syncRateMenu() {
     const r = $("maxrate"); if (!r) return;
     r.value = maxRate; $("maxratev").textContent = maxRate ? `${maxRate} image${maxRate === 1 ? "" : "s"}/s` : "no limit";
@@ -2764,6 +2943,10 @@ body.phone #finale .fx-data { width: min(220px, calc(100vw - 32px)); top: 10px; 
       hint: "When Cassini takes a burst of pictures, the timeline slows down so each camera window shows at most this many new images a second. 0 = no limit.",
       type: "range", value: RATE_DEFAULT, min: 0, max: 24, step: 1, unit: "images/s" }) || 0;
     SETTINGS.on("playback.maxImageRate", v => { maxRate = +v || 0; });
+    SETTINGS.define({ key: "playback.burstFloor", section: "Playback", label: "Bursts slow playback to no less than",
+      hint: "However many pictures a burst has, the timeline keeps at least this share of the chosen speed, so a faster speed always plays faster (skipping pictures in long bursts). 100 % = never slow down.",
+      type: "range", value: FLOOR_DEFAULT * 100, min: 5, max: 100, step: 5, unit: "%" });
+    SETTINGS.on("playback.burstFloor", v => { burstFloor = (+v || 0) / 100; });
   } else {
     try { const v = localStorage.getItem(RATE_KEY); if (v !== null && +v >= 0) maxRate = +v; } catch (e) {}
     syncRateMenu();
@@ -2782,6 +2965,7 @@ body.phone #finale .fx-data { width: min(220px, calc(100vw - 32px)); top: 10px; 
     for (let n = 0; n < 200; n++) {
       let s = speed, stop = Infinity;
       for (const cam in catalog.byCam) { const [cap, nx] = capOf(cam, et); s = Math.min(s, cap); stop = Math.min(stop, nx); }
+      s = Math.max(s, speed * burstFloor);
       if (s < speed) slowedTo = slowedTo ? Math.min(slowedTo, s) : s;
       if (et + dt * s <= stop) return et + dt * s;
       dt -= (stop - et) / s; et = stop;   // the next frame changes the gap, so carry on from there
@@ -2938,7 +3122,7 @@ body.phone #finale .fx-data { width: min(220px, calc(100vw - 32px)); top: 10px; 
     if (!pending) return;
     const p = pending, w = p.w, got = p.got, note = pop.querySelector("textarea").value.trim();
     close();
-    const link = new URL(location.href); link.searchParams.set("t", utc(p.et).slice(0, 19));
+    const link = new URL(window.cassiniLink ? cassiniLink.href() : location.href); link.searchParams.set("t", utc(p.et).slice(0, 19));
     const flag = {
       flagged: p.at.toISOString(), mission_utc: utc(p.et), mission_et: p.et, link: link.href,
       note, tags: [...p.tags],
@@ -3141,8 +3325,7 @@ body.phone #finale .fx-data { width: min(220px, calc(100vw - 32px)); top: 10px; 
     if (b.ok) { draw(b.img); $("mvmsg").textContent = ""; }
     else if (b.ok === false) { blank(); $("mvmsg").innerHTML = "<b>No frame</b>" + f.id; }
     setTime(f.et);
-    const span = state.view[1] - state.view[0];
-    if (state.et < state.view[0] || state.et > state.view[1] - span * 0.05) setView(span, state.et + span * 0.4);
+    keepNowInView();
     tag(f, b);
     $("mvcount").textContent = f.id;
     if (prev && f.et - prev.et > 3 * 3600) {   // a stretch without frames: say how much time the cut left out
@@ -4649,7 +4832,7 @@ body.phone #finale .fx-data { width: min(220px, calc(100vw - 32px)); top: 10px; 
     card.hidden = false; delete card.dataset.min; if (WM) { WM.front(card); WM.syncMenu(); }
     refresh();
   }
-  function close() { card.hidden = true; closeShare(); }
+  function close() { card.hidden = true; closeShare(); if (G.shared) { stopFilm(); dropShared(); G.shared = null; } }
   function back() {
     closeShare(); stopFilm();
     if (G.shared) { dropShared(); }
@@ -5860,7 +6043,7 @@ function makeCassini() {
 }
 
 // ---------- state ----------
-const state = { et: 0, playing: true, speed: 600, focus: "TITAN", enlarge: false, allOrbits: false, follow: false, view: [0, 0], dragging: false, context: "SATURN" };
+const state = { et: 0, playing: true, speed: 600, focus: "TITAN", enlarge: false, allOrbits: false, follow: false, view: [0, 0], tlFollow: true, dragging: false, context: "SATURN" };
 let bodies = {}, tracks = {}, encounters = [], catalog = null, order = null, coverage = [0, 0];
 // whole-mission data (data/mission.json): years load as the clock reaches them, the year on screen plus its neighbours
 let mission = null, activeYears = [], keepYears = [], loadedSpan = [-Infinity, Infinity], yearsJob = null, yearsWanted = null, lastWantedYear = null;
@@ -6572,7 +6755,7 @@ function updateHud() {
 // ---------- timeline ----------
 const tl = $("tl"), tctx = tl.getContext("2d");
 const YEAR = 365.25 * 86400;
-const TICKS = [3600, 3 * 3600, 6 * 3600, 12 * 3600, 86400, 2 * 86400, 7 * 86400, 14 * 86400, 30.44 * 86400, 3 * 30.44 * 86400, YEAR, 2 * YEAR, 5 * YEAR];
+const TICKS = [60, 5 * 60, 15 * 60, 30 * 60, 3600, 3 * 3600, 6 * 3600, 12 * 3600, 86400, 2 * 86400, 7 * 86400, 14 * 86400, 30.44 * 86400, 3 * 30.44 * 86400, YEAR, 2 * YEAR, 5 * YEAR];
 const MONTHS = ["Jan", "Feb", "Mar", "Apr", "May", "Jun", "Jul", "Aug", "Sep", "Oct", "Nov", "Dec"];
 function etToX(et, w) { return (et - state.view[0]) / (state.view[1] - state.view[0]) * w; }
 function xToEt(x, w) { return state.view[0] + x / w * (state.view[1] - state.view[0]); }
@@ -6667,23 +6850,63 @@ function drawTimeline() {
   g.fillStyle = THEME.now; g.fillRect(Math.round(xn) - 1, 0, 2, h);
   if (window.studyTimeline) window.studyTimeline(g, w, h, xn);
 }
-function setView(span, center = state.et) { span = Math.min(span, coverage[1] - coverage[0]); state.view = [center - span / 2, center + span / 2]; clampView(); }
+// The view follows the clock (state.tlFollow) until the user scrolls or zooms it away; then it stays where they left
+// it, as far from now as they like, until a jump, a scrub or recenterTimeline() brings it back.
+const TL_MIN_SPAN = 600;   // closest zoom: ten minutes across the timeline
+function setView(span, center = state.et) { span = Math.max(TL_MIN_SPAN, Math.min(span, coverage[1] - coverage[0])); state.view = [center - span / 2, center + span / 2]; clampView(); state.tlFollow = true; }
+// while following, a clock that runs off the right edge turns the page: now goes back near the left
+function keepNowInView() {
+  if (!state.tlFollow) return;
+  const span = state.view[1] - state.view[0];
+  if (state.et > state.view[1] - span * 0.05 || state.et < state.view[0]) setView(span, state.et + span * 0.4);
+}
+function recenterTimeline() { setView(state.view[1] - state.view[0], state.et); }
+// zoom to span keeping the time at fraction f of the width where it is; following, that time is now
+function zoomTimeline(span, at, f) {
+  const old = state.view[1] - state.view[0];
+  span = Math.max(TL_MIN_SPAN, Math.min(coverage[1] - coverage[0], span));
+  if (at === undefined) {
+    const fn = (state.et - state.view[0]) / old;
+    if (state.tlFollow && fn >= 0 && fn <= 1) { at = state.et; f = fn; } else { at = state.view[0] + old / 2; f = 0.5; }
+  }
+  state.view = [at - f * span, at + (1 - f) * span]; clampView();
+}
+function panTimeline(dt) { state.view = [state.view[0] + dt, state.view[1] + dt]; clampView(); state.tlFollow = false; }
 function scrubTo(clientX) { const r = tl.getBoundingClientRect(); setTime(xToEt(clientX - r.left, r.width)); }
-tl.addEventListener("pointerdown", e => { state.dragging = true; tl.setPointerCapture(e.pointerId); scrubTo(e.clientX); });
-tl.addEventListener("pointermove", e => { if (state.dragging) scrubTo(e.clientX); });
-tl.addEventListener("pointerup", () => { state.dragging = false; });
-tl.addEventListener("pointercancel", () => { state.dragging = false; });
+// dragging in the ruler along the top moves the view; anywhere else it moves the clock
+const TL_RULER = 18;
+let tlPan = null;
+const inRuler = e => e.offsetY < (e.pointerType === "touch" ? 26 : TL_RULER);
+tl.addEventListener("pointerdown", e => {
+  tl.setPointerCapture(e.pointerId);
+  if (inRuler(e)) { tlPan = { x: e.clientX, view: state.view.slice() }; tl.style.cursor = "grabbing"; return; }
+  state.dragging = true; state.tlFollow = true; scrubTo(e.clientX);
+});
+tl.addEventListener("pointermove", e => {
+  if (tlPan) {
+    const span = tlPan.view[1] - tlPan.view[0], dt = -(e.clientX - tlPan.x) / tl.clientWidth * span;
+    state.view = [tlPan.view[0] + dt, tlPan.view[1] + dt]; clampView(); state.tlFollow = false;
+  } else if (state.dragging) scrubTo(e.clientX);
+  else tl.style.cursor = inRuler(e) ? "grab" : "ew-resize";
+});
+const tlUp = () => { state.dragging = false; if (tlPan) { tlPan = null; tl.style.cursor = "grab"; } };
+tl.addEventListener("pointerup", tlUp);
+tl.addEventListener("pointercancel", tlUp);
+// the wheel or a two-finger swipe scrolls through time; a pinch (or ⌘/Ctrl + wheel) zooms at the pointer
 tl.addEventListener("wheel", e => {
   e.preventDefault();
   const r = tl.getBoundingClientRect(), w = r.width, x = e.clientX - r.left;
   const span = state.view[1] - state.view[0];
-  if (Math.abs(e.deltaX) > Math.abs(e.deltaY)) { const dt = e.deltaX / w * span; state.view = [state.view[0] + dt, state.view[1] + dt]; }
-  else {
-    const at = xToEt(x, w), f = Math.exp(e.deltaY * 0.0015);
-    const ns = Math.max(3 * 3600, Math.min(coverage[1] - coverage[0], span * f));
-    state.view = [at - (x / w) * ns, at + (1 - x / w) * ns];
+  const unit = e.deltaMode === 1 ? 16 : e.deltaMode === 2 ? w : 1;
+  if (e.ctrlKey || e.metaKey) {
+    const ns = span * Math.exp(e.deltaY * unit * 0.01);
+    zoomTimeline(ns, xToEt(x, w), x / w);
+    const fn = (state.et - state.view[0]) / (state.view[1] - state.view[0]);
+    if (fn < 0 || fn > 1) state.tlFollow = false;
+  } else {
+    const d = Math.abs(e.deltaX) > Math.abs(e.deltaY) ? e.deltaX : e.deltaY;
+    panTimeline(d * unit / w * span);
   }
-  clampView();
 }, { passive: false });
 
 function setTime(et) { state.et = Math.min(coverage[1], Math.max(coverage[0], et)); }
@@ -6931,8 +7154,7 @@ function frame(now) {
   if (state.playing && !state.dragging && ready) {
     setTime(window.studyAdvance ? window.studyAdvance(state.et, dt, state.speed) : state.et + dt * state.speed);
     if (state.et >= coverage[1]) setPlaying(false);
-    const span = state.view[1] - state.view[0];
-    if (state.et > state.view[1] - span * 0.05 || state.et < state.view[0]) setView(span, state.et + span * 0.4);
+    keepNowInView();
   }
   if (window.studyFrame) window.studyFrame(dt);
   updateBodies();
