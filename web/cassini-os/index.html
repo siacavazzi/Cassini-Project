@@ -810,12 +810,15 @@ body.phone #excard:not(.full) { width: calc(100% - 16px) !important; left: 8px !
 #galcard[style*="left"] { transform: none; }
 #galcard .galhead { flex: none; display: flex; gap: 8px; align-items: center; flex-wrap: wrap; padding: 4px 10px 8px; font-size: 11px; color: var(--q-dim, #888); }
 #galcard .galhead .sp { flex: 1; }
+#galcard #galsum { flex: 1 1 0; min-width: 60px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }   /* gives way before the buttons wrap */
 .galseg { display: flex; border: 1px solid var(--q-line, #555); border-radius: 5px; overflow: hidden; }
 .galseg button { all: unset; padding: 3px 9px; color: var(--q-text, #ddd); cursor: pointer; font-size: 11px; }
 .galseg button[aria-pressed="true"] { background: rgba(138,182,255,.25); color: #fff; }
 .galbtn { font: inherit; font-size: 11px; padding: 3px 9px; border-radius: 4px; border: 1px solid var(--q-line, #555); background: rgba(255,255,255,.08); color: var(--q-text, #ddd); cursor: pointer; white-space: nowrap; text-decoration: none; display: inline-flex; align-items: center; gap: 5px; }
 .galbtn:hover { background: rgba(255,255,255,.16); color: #fff; }
 .galbtn:disabled { opacity: .45; cursor: default; }
+.galopt { font-size: 11px; display: inline-flex; align-items: center; gap: 4px; color: var(--q-dim, #aaa); cursor: pointer; white-space: nowrap; }
+.galopt input { margin: 0; accent-color: var(--q-accent, #8ab6ff); }
 .galbtn.go { background: var(--q-accent, #8ab6ff); border-color: transparent; color: #0b1019; font-weight: 600; }
 .galbtn svg { width: 11px; height: 11px; } .galbtn svg * { fill: none; stroke: currentColor; stroke-width: 1.4; stroke-linecap: round; stroke-linejoin: round; }
 #galgrid { flex: 1 1 auto; min-height: 0; overflow-y: auto; list-style: none; margin: 0; padding: 0 8px 8px; display: grid; grid-template-columns: repeat(auto-fill, minmax(150px, 1fr)); gap: 6px; align-content: start; }
@@ -1274,8 +1277,9 @@ body.phone #finale .fx-data { width: min(220px, calc(100vw - 32px)); top: 10px; 
   <div class="galhead" id="galhead">
     <div class="galseg" id="galfilter"><button data-v="all" aria-pressed="true">All</button><button data-v="picture" aria-pressed="false">Pictures</button><button data-v="movie" aria-pressed="false">Movies</button></div>
     <span id="galsum"></span><span class="sp"></span>
-    <button class="galbtn" id="galexport" title="Save the whole gallery as one .zip file (pictures, films and how each was made)">Export Library</button>
-    <button class="galbtn" id="galimport" title="Add the items of an exported gallery .zip">Import</button>
+    <label class="galopt" title="Also put gallery.json (how each was made, its moment) and the thumbnails in the .zip, so Import can read it back"><input type="checkbox" id="galmeta">Include metadata</label>
+    <button class="galbtn" id="galexport" title="Save the whole gallery as one .zip file of its pictures (JPEG) and films (MP4)">Export Library</button>
+    <button class="galbtn" id="galimport" title="Add the items of a gallery .zip exported with its metadata">Import</button>
     <input type="file" id="galfile" accept=".zip,application/zip" hidden>
   </div>
   <div id="galempty" hidden>Nothing saved yet.<br>Press <b>G</b>, or the ＋ in a picture window's title bar, to add the picture on screen. A finished movie export has <b>Add to Gallery</b> too.</div>
@@ -4775,31 +4779,58 @@ body.phone #finale .fx-data { width: min(220px, calc(100vw - 32px)); top: 10px; 
     }
     return out;
   }
+  // the plain export: each picture (JPEG; made again by the frame server when only its recipe is kept) and each kept film,
+  // named for what it shows and when it was saved
+  const META_KEY = "cassini.gallery.exportMeta";
+  try { $("galmeta").checked = localStorage.getItem(META_KEY) === "1"; } catch (e) {}
+  $("galmeta").addEventListener("change", e => { try { localStorage.setItem(META_KEY, e.target.checked ? "1" : "0"); } catch (err) {} });
+  async function plainEntries(items) {
+    const entries = [], used = new Set(); let skipped = 0;
+    for (const i of items) {
+      let f = i.hasFile ? await getFile(i.id).catch(() => null) : null;
+      if (!f && i.kind !== "movie" && i.src) { try { const r = await fetch(sized(i.src, "full")); if (r.ok) f = await r.blob(); } catch (e) {} }
+      if (!f) { skipped++; continue; }
+      if (i.kind !== "movie") f = await asJpeg(f);
+      const when = ((i.moment.find(p => p[0] === "t") || [, ""])[1] || "").replace(/[:T]/g, "-");
+      const stem = `Cassini_${(i.ids[0] || i.title).replace(/[^\w.-]+/g, "_")}${when ? "_" + when : ""}`, ext = i.kind === "movie" ? "mp4" : extOf(f);
+      let name = `${stem}.${ext}`;
+      for (let n = 2; used.has(name); n++) name = `${stem}_${n}.${ext}`;
+      used.add(name); entries.push([name, f]);
+    }
+    return { entries, skipped };
+  }
+  async function metaEntries(items) {
+    const entries = [], meta = [];
+    for (const i of items) {
+      const m = Object.assign({}, i); delete m.thumb;
+      if (i.thumb) { const t = await asJpeg(i.thumb); m.thumbFile = `thumbs/${i.id}.${extOf(t)}`; entries.push([m.thumbFile, t]); }
+      let f = i.hasFile ? await getFile(i.id).catch(() => null) : null;
+      if (f && i.kind !== "movie") { f = await asJpeg(f); m.type = f.type; m.bytes = f.size; }
+      if (f) { const name = `files/${i.id}.${i.kind === "movie" ? "mp4" : extOf(f)}`; entries.push([name, f]); m.file = name; }
+      meta.push(m);
+    }
+    entries.unshift(["gallery.json", new Blob([JSON.stringify({ app: "Cassini OS gallery", version: 1, frames: FRAMES, exported: new Date().toISOString(), items: meta }, null, 1)], { type: "application/json" })]);
+    return { entries, skipped: 0 };
+  }
   async function exportLibrary() {
     const items = await allItems(); if (!items.length) return;
+    const withMeta = $("galmeta").checked;
     $("galexport").disabled = true; toast("Packing the gallery…");
     try {
-      const entries = [], meta = [];
-      for (const i of items) {
-        const m = Object.assign({}, i); delete m.thumb;
-        if (i.thumb) { const t = await asJpeg(i.thumb); m.thumbFile = `thumbs/${i.id}.${extOf(t)}`; entries.push([m.thumbFile, t]); }
-        let f = i.hasFile ? await getFile(i.id).catch(() => null) : null;
-        if (f && i.kind !== "movie") { f = await asJpeg(f); m.type = f.type; m.bytes = f.size; }
-        if (f) { const name = `files/${i.id}.${i.kind === "movie" ? "mp4" : extOf(f)}`; entries.push([name, f]); m.file = name; }
-        meta.push(m);
-      }
-      entries.unshift(["gallery.json", new Blob([JSON.stringify({ app: "Cassini OS gallery", version: 1, frames: FRAMES, exported: new Date().toISOString(), items: meta }, null, 1)], { type: "application/json" })]);
+      const { entries, skipped } = await (withMeta ? metaEntries(items) : plainEntries(items));
+      if (!entries.length) { toast("Nothing to export: the frame server could not make the pictures"); $("galexport").disabled = false; return; }
       const z = await zip(entries), a = document.createElement("a");
       a.href = URL.createObjectURL(z); a.download = `Cassini-gallery-${new Date().toISOString().slice(0, 10)}.zip`;
       document.body.appendChild(a); a.click(); a.remove(); setTimeout(() => URL.revokeObjectURL(a.href), 60000);
-      toast(`Gallery exported · ${items.length} items · ${fmtBytes(z.size)}`);
+      const n = withMeta ? items.length : entries.length;
+      toast(`Gallery exported · ${n} item${n === 1 ? "" : "s"}${skipped ? ` (${skipped} left out: no file on this device)` : ""} · ${fmtBytes(z.size)}`);
     } catch (e) { console.warn("gallery export", e); toast("Could not export the gallery"); }
     $("galexport").disabled = false;
   }
   async function importLibrary(file) {
     try {
       const files = await unzip(file), j = JSON.parse(await (files.get("gallery.json") || new Blob(["{}"])).text());
-      if (!j.items) throw new Error("no gallery.json");
+      if (!j.items) { toast(files.size ? "That .zip has no metadata: export with Include metadata ticked to import it" : "That file is not an exported gallery"); return; }
       const have = new Set((await allItems()).map(i => i.id)); let n = 0;
       for (const m of j.items) {
         if (!m.id || have.has(m.id) || !Array.isArray(m.moment)) continue;
