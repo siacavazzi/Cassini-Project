@@ -77,6 +77,9 @@ def utc(t, seconds=True):
     return time.strftime("%Y-%m-%d %H:%M:%S" if seconds else "%Y-%m-%d-%H%M", time.gmtime(t))
 
 
+MOVIE = {"center": True, "trail": 0, "laps": 1}   # the movie style by default (a film named as before)
+
+
 def options(q):
     """The export's options from a query (dict of lists, as parse_qs gives), checked, with defaults."""
     get = lambda k, d: (q.get(k) or [d])[0]
@@ -88,9 +91,12 @@ def options(q):
     fps = "auto" if fps == "auto" else max(1, min(FPS, int(float(fps))))
     size = min(SIZES, key=lambda s: abs(s - int(get("size", "1024"))))
     look = get("look", calibration.LOOKS[0])
+    # how movie passes look, as the camera windows play them (Settings > Movie; the page's cassiniMovieStyle)
+    movie = {"center": get("center", "1") != "0", "trail": max(0, min(12, int(get("trail", "0") or 0))),
+             "laps": max(1, min(12, int(get("laps", "1") or 1)))}
     return {"from": t0, "until": t1, "cams": cams, "fps": fps, "size": size,
             "sound": get("sound", "1") != "0", "caption": get("caption", "1") != "0",
-            "look": look if look in calibration.LOOKS else calibration.LOOKS[0]}
+            "look": look if look in calibration.LOOKS else calibration.LOOKS[0], "movie": movie}
 
 
 def job_id(opt):
@@ -98,6 +104,8 @@ def job_id(opt):
     key = {k: opt[k] for k in ("from", "until", "cams", "fps", "size", "sound", "caption")}
     if opt.get("look", "balanced") != "balanced":
         key["look"] = opt["look"]
+    if opt.get("movie", MOVIE) != MOVIE:
+        key["movie"] = opt["movie"]
     return hashlib.sha1(json.dumps([VERSION, key], sort_keys=True).encode()).hexdigest()[:16]
 
 
@@ -205,7 +213,7 @@ class Pictures:
     called here. Each make(...) returns WebP or PNG bytes, or None when it has no such picture."""
 
     def __init__(self, cache, color=None, processed=None, frame=None, slots=None):
-        self.cache, self.slots = cache, slots
+        self.cache, self.slots, self.movie = cache, slots, dict(MOVIE)
         self._color, self._processed, self._frame = color, processed, frame
 
     def make(self, kind, arg, size):
@@ -217,10 +225,11 @@ class Pictures:
             found = reel.mosaic_of(arg, wait=True)
             return (reel.shot_webp(*found, size, self.cache, True, self.slots)[0], "mosaic") if found else None
         if kind == "movie":
-            made = obs_mosaic.movie_webp(arg, size, self.cache, wait=True, ahead=0)
+            made = obs_mosaic.movie_webp(arg, size, self.cache, self.movie["trail"], wait=True, ahead=0,
+                                         centre=self.movie["center"])
             return (made[0], "movie") if made and made[0] else None
         if kind == "rolling":
-            made = obs_mosaic.rolling_webp(arg, size, self.cache, slots=self.slots, wait=True)
+            made = obs_mosaic.rolling_webp(arg, size, self.cache, self.movie["laps"], slots=self.slots, wait=True)
             return (made[0], "mosaic movie") if made and made[0] else None
         if kind == "color":
             if self._color:
@@ -342,6 +351,7 @@ def dur(s):
 def render(opt, p, pictures, path, progress=lambda done, total: None, workers=3):
     """Makes the film of plan p at path: pictures made a few ahead on worker threads, drawn and encoded in order."""
     film = Film(opt, path)
+    pictures.movie = {**MOVIE, **opt.get("movie", {})}   # movie passes as the windows showed them
     pics, ahead = p["pictures"], max(2, workers * 3)
     kinds, building = Counter(), {}
     try:

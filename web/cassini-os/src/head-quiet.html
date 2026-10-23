@@ -1425,7 +1425,7 @@ body.idle .win.full .titlebar { opacity: 0; }
     // a pass played as a movie (the Mosaic / Movie switch, with Settings > Movie > Steady movie passes on): its
     // frames come from /frames/movie
     const playsMovie = k => S.get("movies.steady") && playsAs(k) === "movie";
-    const movieUrl = (id, sz) => `${FRAMES}/frames/movie/${id}.webp?size=${sz || size()}&trail=${S.get("movies.trail")}&color=${S.get("cameras.composites") ? 1 : 0}${S.get("movies.center") ? "" : "&center=0"}${window.cassiniLook()}`;
+    const movieUrl = (id, sz) => `${FRAMES}/frames/movie/${id}.webp?size=${sz || size()}&color=${S.get("cameras.composites") ? 1 : 0}${window.cassiniMovieStyle()}${window.cassiniLook()}`;
     const movieFailed = new Set();    // frames the server did not steady: they show as they are
     // passes the server is still working out (a movie request failed): their frames show as they are, with the
     // steadying note, and the steady frame is asked for again every COLD_RETRY ms
@@ -1435,7 +1435,7 @@ body.idle .win.full .titlebar { opacity: 0; }
     // which never empties when the camera starts its raster again (Settings > Movie > Mosaic movies keep)
     const playsRolling = k => playsAs(k) === "mosaic_movie";
     window.cassiniRolling = true;   // so the pass mosaic lane leaves mosaic movies to this route (mosaicOf)
-    const rollingUrl = (id, sz) => `${FRAMES}/frames/movie/${id}.webp?mode=rolling&laps=${S.get("movies.laps")}&size=${sz || size()}${window.cassiniLook()}`;
+    const rollingUrl = (id, sz) => `${FRAMES}/frames/movie/${id}.webp?mode=rolling&size=${sz || size()}${window.cassiniMovieStyle()}${window.cassiniLook()}`;
     // the filmstrip: the pass the frame on screen is in (/frames/movie/<ID>.json: its frames, in time order), its
     // frames drawn along a strip by time, colored by filter, with the frame shown marked and the frames around it
     const passInfos = new Map(), filmAsked = new Set();

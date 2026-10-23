@@ -1315,6 +1315,8 @@ body.phone #finale .fx-data { width: min(220px, calc(100vw - 32px)); top: 10px; 
       hint: "A gentler color stretch: black sits just above the sky's noise so grain and scan lines stay dark, white sits at the bright part of the body but never stretches dim pictures far, bright edges roll off instead of clipping, and mosaic tiles are evened out without changing the mosaic's overall level. Off shows the earlier stretch." });
   // what the frame server's picture routes are asked to add for it: nothing, or the earlier stretch
   window.cassiniLook = () => S.get("cameras.balancedColor") === false ? "&look=classic" : "";
+  // how a movie pass looks (Settings > Movie), for the camera windows' movie pictures and the film export alike
+  window.cassiniMovieStyle = () => `${S.get("movies.center") === false ? "&center=0" : ""}&trail=${S.get("movies.trail") || 0}&laps=${S.get("movies.laps") || 1}`;
   D({ key: "cameras.channels", section: "Cameras", label: "Filter channels", type: "toggle", value: true,
       hint: "The frames that make up a color picture, in a strip under it." });
   cls("cameras.channels", "s-nochans", false);
@@ -2378,7 +2380,7 @@ body.phone #finale .fx-data { width: min(220px, calc(100vw - 32px)); top: 10px; 
     // a pass played as a movie (the Mosaic / Movie switch, with Settings > Movie > Steady movie passes on): its
     // frames come from /frames/movie
     const playsMovie = k => S.get("movies.steady") && playsAs(k) === "movie";
-    const movieUrl = (id, sz) => `${FRAMES}/frames/movie/${id}.webp?size=${sz || size()}&trail=${S.get("movies.trail")}&color=${S.get("cameras.composites") ? 1 : 0}${S.get("movies.center") ? "" : "&center=0"}${window.cassiniLook()}`;
+    const movieUrl = (id, sz) => `${FRAMES}/frames/movie/${id}.webp?size=${sz || size()}&color=${S.get("cameras.composites") ? 1 : 0}${window.cassiniMovieStyle()}${window.cassiniLook()}`;
     const movieFailed = new Set();    // frames the server did not steady: they show as they are
     // passes the server is still working out (a movie request failed): their frames show as they are, with the
     // steadying note, and the steady frame is asked for again every COLD_RETRY ms
@@ -2388,7 +2390,7 @@ body.phone #finale .fx-data { width: min(220px, calc(100vw - 32px)); top: 10px; 
     // which never empties when the camera starts its raster again (Settings > Movie > Mosaic movies keep)
     const playsRolling = k => playsAs(k) === "mosaic_movie";
     window.cassiniRolling = true;   // so the pass mosaic lane leaves mosaic movies to this route (mosaicOf)
-    const rollingUrl = (id, sz) => `${FRAMES}/frames/movie/${id}.webp?mode=rolling&laps=${S.get("movies.laps")}&size=${sz || size()}${window.cassiniLook()}`;
+    const rollingUrl = (id, sz) => `${FRAMES}/frames/movie/${id}.webp?mode=rolling&size=${sz || size()}${window.cassiniMovieStyle()}${window.cassiniLook()}`;
     // the filmstrip: the pass the frame on screen is in (/frames/movie/<ID>.json: its frames, in time order), its
     // frames drawn along a strip by time, colored by filter, with the frame shown marked and the frames around it
     const passInfos = new Map(), filmAsked = new Set();
@@ -4185,7 +4187,7 @@ body.phone #finale .fx-data { width: min(220px, calc(100vw - 32px)); top: 10px; 
   const params = () => {
     const q = new URLSearchParams({ from: iso(X.a), until: iso(X.b), cams: X.cams || "NW", fps: opt("export.adaptive", true) ? "auto" : String(opt("export.fps", 12)),
       size: String(opt("export.size", 1024)), sound: opt("export.sound", true) ? "1" : "0", caption: opt("export.caption", true) ? "1" : "0" });
-    return q.toString() + window.cassiniLook();
+    return q.toString() + window.cassiniLook() + (window.cassiniMovieStyle ? window.cassiniMovieStyle() : "");
   };
   let timer = 0;
   function estimate() {
