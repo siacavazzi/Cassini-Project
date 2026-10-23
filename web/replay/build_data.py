@@ -25,6 +25,10 @@ highlight reel, a dozen or so moments that matter most and have the richest came
 borrows a moment's or milestone's observations and text (its "from" column) or names its own
 observations; each is measured from the catalog the same way, with a thumbnail hint (see highlights).
 
+For the body views it writes data/targets.json, every body Cassini photographed with its picture counts, and
+data/targets/<body>.json for each: its pictures per day (the timeline's bars for the months not loaded) and its
+imaging sessions (one per observation), see write_targets.
+
 It also writes the same data cut into months, data/months/<YYYY-MM>.json (that month's catalog)
 and data/months/<YYYY-MM>.bin (every body's track and the pointing for that month, see
 write_months), listed in mission.json under "months". A viewer that knows them loads the month
@@ -47,6 +51,8 @@ SATURN_SYSTEM = ["CASSINI", "SUN", "EARTH", "SATURN", "MIMAS", "ENCELADUS", "TET
 CRUISE = ["VENUS", "MOON", "JUPITER", "IO", "EUROPA", "GANYMEDE", "CALLISTO"]
 CATALOG_KEYS = ["id", "et", "cam", "f1", "f2", "target", "obs", "range_km", "km_per_px"]
 MOMENTS = os.path.join(os.path.dirname(os.path.abspath(__file__)), "moments.csv")
+# targets in the catalog that are not bodies (the sky, calibration stars, unknown), left out of the body views
+NOT_BODIES = {"SKY", "DARKSKY", "UNK", "NONE", "SPICA", "FOMALHAUT"}
 HIGHLIGHTS = os.path.join(os.path.dirname(os.path.abspath(__file__)), "highlights.csv")
 TRUE_BLUES = ("BL1", "BL2", "VIO")   # the blue of a true colour set (reel.TRUE_BLUES)
 SET_GAP = 300        # seconds between the frames of one filter set (reel.SET_GAP)
@@ -325,10 +331,11 @@ def build_mission(args):
     day0 = start - start % 86400
     ndays = int((end - day0) // 86400) + 1
     per_day = {"N": [0] * ndays, "W": [0] * ndays}
-    catalogs, attitude = {}, {}
+    catalogs, attitude, slims = {}, {}, []
     os.makedirs(os.path.join(out, "catalog"), exist_ok=True)
     for y in years:
         slim = slim_catalog(args.data, y)
+        slims.append(slim)
         json.dump(slim, open(os.path.join(out, "catalog", f"{y}.json"), "w"), separators=(",", ":"))
         catalogs[str(y)] = {"file": f"data/catalog/{y}.json", "images": len(slim["et"])}
         for t, cam in zip(slim["et"], slim["cam"]):
@@ -343,12 +350,57 @@ def build_mission(args):
     mission = {"years": years, "coverage": [start, end], "bodies": bodies, "catalog": catalogs, "attitude": attitude,
                "frames_per_day": {"start_et": day0, **per_day}, "months": write_months(out, years, bodies, attitude)}
     json.dump(mission, open(os.path.join(out, "mission.json"), "w"), separators=(",", ":"))
+    n_targets = write_targets(out, slims, day0, bodies)
     if args.huygens:
         export_huygens(args.huygens, years, out)
     reel = highlights(args, years, enc, bodies)
     json.dump(reel, open(os.path.join(out, "highlights.json"), "w"), separators=(",", ":"))
     n = sum(c["images"] for c in catalogs.values())
-    print(f"{years[0]}-{years[-1]}: {len(bodies)} bodies, {len(enc)} encounters, {len(reel)} highlights, {n} images, pointing for {len(attitude)} years")
+    print(f"{years[0]}-{years[-1]}: {len(bodies)} bodies, {len(enc)} encounters, {len(reel)} highlights, {n} images, "
+          f"{n_targets} bodies photographed, pointing for {len(attitude)} years")
+
+
+def write_targets(out, slims, day0, bodies):
+    """
+    Every body Cassini photographed, for the body views:
+      data/targets.json          {"start_et": day0, "bodies": {NAME: {"frames", "N", "W", "sessions", "rgb_sets",
+                                  "first", "last", "naif" (bodies with a track), "file"}}}, most pictures first
+      data/targets/<body>.json   {"name", "days": [[day, narrow, wide], ...], "sessions": [[obs, start, end, narrow,
+                                  wide, rgb_sets], ...]}
+    day counts from day0 (as frames_per_day); a session is one observation's pictures of that body, start and end
+    its first and last picture, rgb_sets its 30 minute spans with red, green and blue pictures (as measure).
+    """
+    per = {}
+    for slim in slims:
+        for t, cam, f1, f2, target, obs in zip(slim["et"], slim["cam"], slim["f1"], slim["f2"], slim["target"], slim["obs"]):
+            if not target or target in NOT_BODIES:
+                continue
+            b = per.setdefault(target, {"days": {}, "sessions": {}})
+            d = b["days"].setdefault(int((t - day0) // 86400), [0, 0])
+            d[cam != "N"] += 1
+            s = b["sessions"].get(obs)
+            if s is None:
+                s = b["sessions"][obs] = {"start": t, "end": t, "n": [0, 0], "spans": {}}
+            s["start"], s["end"] = min(s["start"], t), max(s["end"], t)
+            s["n"][cam != "N"] += 1
+            sp = s["spans"].setdefault(int(t // 1800), set())
+            sp.update(c for c, k in (("R", "RED"), ("G", "GRN"), ("B", "BL1"), ("B", "VIO")) if k in (f1, f2))
+    os.makedirs(os.path.join(out, "targets"), exist_ok=True)
+    index = {}
+    for name, b in sorted(per.items(), key=lambda kv: -sum(sum(d) for d in kv[1]["days"].values())):
+        sessions = sorted(([obs, round(s["start"], 1), round(s["end"], 1), s["n"][0], s["n"][1],
+                            sum(len(v) == 3 for v in s["spans"].values())] for obs, s in b["sessions"].items()), key=lambda r: r[1])
+        days = [[d, n, w] for d, (n, w) in sorted(b["days"].items())]
+        slug = name.lower().replace(" ", "_")
+        json.dump({"name": name, "days": days, "sessions": sessions},
+                  open(os.path.join(out, "targets", f"{slug}.json"), "w"), separators=(",", ":"))
+        n, w = sum(d[1] for d in days), sum(d[2] for d in days)
+        index[name] = {"frames": n + w, "N": n, "W": w, "sessions": len(sessions), "rgb_sets": sum(r[5] for r in sessions),
+                       "first": sessions[0][1], "last": sessions[-1][2], "file": f"data/targets/{slug}.json"}
+        if name in bodies:
+            index[name]["naif"] = bodies[name]["naif"]
+    json.dump({"start_et": day0, "bodies": index}, open(os.path.join(out, "targets.json"), "w"), separators=(",", ":"))
+    return len(index)
 
 
 def month_et(year, month):

@@ -1,9 +1,13 @@
 <!-- The dock for Cassini OS, as on the Mac. build.py splices the style into the head, the dock into #app and the script
      after the chrome script. A strip of apps along the bottom of the screen (Settings > Interface: on or off, bottom,
      left or right, icon size, magnification):
-       Cassini and each body on stage now   a click flies the view there (the viewer's own focus, the same list as
-                                             the main window's focus row) and brings back that body's windows; a dot
-                                             under a body that has windows open, a blue one under the body in view
+       Cassini and each body on stage now   a click on a body opens its body view (bodymode.html: the timeline,
+                                             Moments and camera windows show that body only), flies the view there
+                                             and brings back that body's windows; a click on Cassini goes back to
+                                             Cassini's mission. A dot under a body that has windows open, a blue one
+                                             under the body the view is on, a ring round the body whose view is open
+       the planets elsewhere                 every planet Cassini photographed stays in the dock wherever the mission
+                                             is (Jupiter at Saturn, Saturn in the cruise), after the bodies on stage
        Moments, Highlights, Settings         a click opens the window, brings it forward, or tucks it away
        minimized windows                     a minimized window shrinks into the dock (instead of the menu-bar tray)
                                              as a tile showing its last picture; a click brings it back
@@ -129,7 +133,7 @@ body.phone.has-dock { --appdockh: 50px; }
     b.addEventListener("click", e => { e.stopPropagation(); onclick(b); });
     return b;
   }
-  const seps = [0, 1].map(() => { const s = document.createElement("span"); s.className = "dsep"; s.setAttribute("aria-hidden", "true"); return s; });
+  const seps = [0, 1, 2].map(() => { const s = document.createElement("span"); s.className = "dsep"; s.setAttribute("aria-hidden", "true"); return s; });
 
   // ---- apps ----
   // a window app: hidden or minimized, it comes back; in front, it tucks away; behind others, it comes forward
@@ -153,12 +157,17 @@ body.phone.has-dock { --appdockh: 50px; }
   // ---- bodies: the viewer's focus list (Cassini, the Sun, Huygens near its descent, the bodies on stage) ----
   const bodyWins = n => [...document.querySelectorAll(".bodywin")].filter(w => w.dataset.body === n);
   function goBody(n) {
-    if (typeof setFocus === "function") setFocus(n);
+    const BM = window.cassiniBodyMode;
+    if (n === "CASSINI" && BM && BM.name) BM.exit();
+    if (n !== "CASSINI" && n !== "SUN" && BM) BM.enter(n);
+    else if (typeof setFocus === "function") setFocus(n);
     // its windows come back from the dock and forward
     for (const w of bodyWins(n)) { if (w.dataset.min) WM.restore(w); else WM.front(w); }
   }
-  let bodies = [], bodyKey = "";
+  let bodies = [], away = [], bodyKey = "";
   function bodyList() { try { return typeof focusChoices === "function" ? focusChoices() : []; } catch (e) { return []; } }
+  // the planets (and the body in view) that are not on stage now
+  function awayList(list) { try { return window.cassiniBodyMode ? cassiniBodyMode.planets().filter(n => !list.includes(n)) : []; } catch (e) { return []; } }
 
   // ---- minimized windows ----
   const winLabel = w => w.dataset.name || ({ dock: "Cassini Replay", imgcard: "Narrow-angle Camera", wacard: "Wide-angle Camera" })[w.id] || w.getAttribute("aria-label") || "Window";
@@ -202,6 +211,7 @@ body.phone.has-dock { --appdockh: 50px; }
     for (const w of [...tiles.keys()]) if (!mins.includes(w) || !w.isConnected) { made.delete(tiles.get(w).dataset.key); tiles.delete(w); }
     const kids = [
       ...bodies.map(n => item("body:" + n, name(n), bodyIcon(n), () => goBody(n))),
+      ...(away.length ? [seps[2], ...away.map(n => item("body:" + n, name(n), bodyIcon(n), () => goBody(n)))] : []),
       seps[0],
       ...APPS.map(a => item("app:" + a.key, a.label, `<span class="gl">${GLYPH[a.key]}</span>`, () => a.run())),
       seps[1],
@@ -217,6 +227,7 @@ body.phone.has-dock { --appdockh: 50px; }
       if (k.startsWith("body:")) {
         const n = k.slice(5);
         b.classList.toggle("here", typeof state !== "undefined" && state.focus === n);
+        b.classList.toggle("inview", !!window.cassiniBodyMode && cassiniBodyMode.name === n);
         b.classList.toggle("open", bodyWins(n).length > 0);
       } else if (k.startsWith("app:")) {
         const a = APPS.find(a => "app:" + a.key === k); b.classList.toggle("open", !!a && a.open());
@@ -265,8 +276,8 @@ body.phone.has-dock { --appdockh: 50px; }
   let lastMarks = 0;
   window.studyHud = ms => {
     if (base) base(ms);
-    const list = bodyList(), key = list.join();
-    if (key !== bodyKey) { bodyKey = key; bodies = list; render(); }
+    const list = bodyList(), aw = awayList(list), key = list.join() + "|" + aw.join();
+    if (key !== bodyKey) { bodyKey = key; bodies = list; away = aw; render(); }
     const now = performance.now();
     if (now - lastMarks > 250) { lastMarks = now; marks(); }
   };

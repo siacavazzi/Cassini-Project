@@ -1,0 +1,375 @@
+<!-- The body view for Cassini OS: the mission from one body's side. build.py splices the style into the head, the body
+     window into #app and the script after the chrome script (before the dock's, which opens it).
+     A click on a body in the dock (or ?body=TITAN in a link) switches the page from Cassini's mission to that body's:
+       the timeline     shows only that body's pictures, over its whole history (the months not loaded from
+                        data/targets/<body>.json, the months loaded from the catalog itself), and its moments only
+       Moments          lists only the moments about that body
+       camera windows   the narrow-angle and wide-angle windows show only that body's pictures
+       body window      top right: the body's picture count, previous and next session, "skip the gaps" (playback
+                        jumps from one of the body's sessions to the next instead of crawling through the months
+                        between), its imaging sessions to jump to, and every other body Cassini photographed
+     Clicking Cassini in the dock, or closing the body window, brings back Cassini's mission. The list of bodies comes
+     from data/targets.json (build_data.write_targets), so nothing here is about any one body.
+     window.cassiniBodyMode is the way in for other parts of the page (the dock, later the studio):
+       name, enter(name), exit(), index (data/targets.json), sessions (the body's), planets() -->
+<style>
+#bodymenu { top: calc(env(safe-area-inset-top, 0px) + 36px); right: max(14px, env(safe-area-inset-right, 0px)); width: 340px; height: min(360px, calc(100% - 330px)); min-height: 220px; display: flex; flex-direction: column; }
+#bodymenu.zoomed { width: 440px; height: calc(100% - 290px); }
+#bodymenu.shaded { height: auto; min-height: 0; }
+/* the moments of the body sit under its window */
+body.bodymode:not(.phone) #moments:not([style*="top"]) { top: calc(env(safe-area-inset-top, 0px) + 36px + var(--bmh, 360px) + 10px); height: min(300px, calc(100% - var(--bmh, 360px) - 330px)); min-height: 150px; }
+#bodymenu .bmhead { flex: none; display: grid; grid-template-columns: 44px 1fr auto; gap: 2px 10px; align-items: center; padding: 8px 10px 6px; }
+#bodymenu .bmorb { grid-row: span 2; width: 40px; height: 40px; border-radius: 50%; background-color: var(--c, #888); background-size: 200% 100%; background-position: 30% 50%;
+  box-shadow: inset -5px -4px 8px rgba(0,0,0,.75), 0 0 0 1px rgba(255,255,255,.06); }
+#bodymenu .bmname { font-size: 15px; color: var(--q-text); letter-spacing: .02em; }
+#bodymenu .bmstats { grid-column: 2 / span 2; white-space: pre-line; font: 10px/1.4 var(--hudf); color: var(--q-dim); font-variant-numeric: tabular-nums; }
+#bmall { font: 10px/1 var(--ui); padding: 4px 8px; border-radius: 4px; border: 1px solid var(--q-line); background: rgba(255,255,255,.05); color: var(--q-text); cursor: pointer; white-space: nowrap; }
+#bmall:hover { background: rgba(255,255,255,.1); }
+#bodymenu .bmnav { flex: none; display: grid; grid-template-columns: auto 1fr auto; gap: 8px; align-items: center; padding: 0 10px 6px; }
+#bodymenu .bmnav button { font: 11px/1 var(--ui); padding: 5px 9px; border-radius: 4px; border: 1px solid var(--q-line); background: rgba(138,182,255,.14); color: var(--q-text); cursor: pointer; white-space: nowrap; }
+#bodymenu .bmnav button:hover { background: rgba(138,182,255,.26); }
+#bmnow { font: 10px/1.3 var(--hudf); color: var(--q-dim); text-align: center; min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+#bodymenu .bmopts { flex: none; display: flex; gap: 10px; align-items: center; justify-content: space-between; padding: 0 10px 6px; font-size: 11px; color: var(--q-text); }
+#bodymenu .bmopts label { display: flex; gap: 6px; align-items: center; cursor: pointer; }
+#bodymenu .bmopts input { accent-color: var(--q-accent); margin: 0; }
+#bmpick { font: 11px var(--ui); max-width: 150px; background: rgba(255,255,255,.05); color: var(--q-text); border: 1px solid var(--q-line); border-radius: 4px; padding: 2px 4px; }
+#bmpick option, #bmpick optgroup { background: #1b1c20; color: #e8ecf2; }
+#bmlist { flex: 1; min-height: 0; overflow-y: auto; list-style: none; margin: 0; padding: 0; border-top: 1px solid var(--q-line); }
+#bmlist li.yr { padding: 9px 10px 3px; font-weight: bold; font-size: 11px; letter-spacing: .12em; color: rgba(232,236,242,.55); }
+#bmlist li:not(.yr):nth-child(even) { background: rgba(255,255,255,.025); }
+#bmlist button { all: unset; box-sizing: border-box; width: 100%; display: grid; grid-template-columns: 52px 1fr auto; gap: 0 6px; padding: 4px 10px; cursor: default; }
+#bmlist button:hover { background: rgba(255,255,255,.05); }
+#bmlist button:focus-visible { outline: 1px solid var(--q-accent); outline-offset: -1px; }
+#bmlist .d { color: var(--q-dim); font-size: 11px; grid-row: span 2; align-self: center; }
+#bmlist .o { color: var(--q-text); font-size: 11px; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+#bmlist .n { grid-column: 2; font: 10px/1.3 var(--hudf); color: var(--q-dim); white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+#bmlist .c { grid-column: 3; grid-row: 1 / span 2; align-self: center; font: 10px/1 var(--hudf); color: var(--q-dim); }
+#bmlist .c i { display: inline-block; width: 4px; height: 9px; margin-left: 1px; vertical-align: -1px; }
+#bmlist li.past .o, #bmlist li.past .d { color: rgba(232,236,242,.32); }
+#bmlist li.on { background: rgba(138,182,255,.16) !important; }
+#bmlist li.on span { color: #fff; }
+#bodymenu footer { flex: none; height: 20px; display: grid; place-items: center; font-size: 10px; color: var(--q-dim); border-top: 1px solid var(--q-line); }
+#mlist li.bmnone { padding: 14px 12px; font-size: 11px; line-height: 1.4; color: var(--q-dim); background: none !important; }
+/* the main window says whose timeline it shows */
+#dock .titlebar .bmtag { color: var(--q-accent); }
+/* the body in view in the dock: a ring round its icon */
+.dk.inview .orb, .dk.inview .gl { box-shadow: 0 0 0 1.5px var(--q-accent), inset calc(var(--ds) * -.12) calc(var(--ds) * -.1) calc(var(--ds) * .2) rgba(0,0,0,.75); }
+/* phone: a bar on top of the replay controls; the sessions open from it as a sheet */
+body.phone #bodymenu { left: var(--side) !important; right: var(--sider) !important; top: auto !important; width: auto !important; height: auto !important; min-height: 0;
+  bottom: calc(env(safe-area-inset-bottom, 0px) + var(--dockh, 150px) + var(--appdockh, 0px) + 2 * var(--gap)) !important; z-index: 1390 !important; }
+body.phone #bodymenu .bmhead { grid-template-columns: 30px 1fr auto; padding: 5px 8px 3px; }
+body.phone #bodymenu .bmorb { width: 28px; height: 28px; }
+body.phone #bodymenu .bmname { font-size: 13px; }
+body.phone #bodymenu .bmnav { padding: 0 8px 5px; }
+body.phone #bodymenu .bmnav button { padding: 7px 10px; }
+body.phone #bodymenu:not(.open) :is(#bmlist, footer, .bmopts) { display: none; }
+body.phone #bodymenu.open #bmlist { max-height: 34dvh; }
+body.phone #bodymenu #bmlist button { padding: 7px 10px; }
+body.phone.phone-land #bodymenu { left: auto !important; width: min(380px, 46vw) !important; top: calc(var(--menu) + var(--gap)) !important; bottom: auto !important; }
+</style>
+
+<section class="win" id="bodymenu" data-name="Body view" aria-label="Body view" hidden>
+  <div class="titlebar"><span class="lights"><button class="close" aria-label="Back to Cassini" title="Back to Cassini's mission">×</button><button class="min" aria-label="Minimize">–</button><button class="zoom" aria-label="Zoom">+</button></span><span id="bmtitle">Body</span></div>
+  <div class="bmhead">
+    <span class="bmorb" id="bmorb"></span>
+    <span class="bmname" id="bmname">—</span>
+    <button id="bmall" title="Show the body's whole history on the timeline">Whole history</button>
+    <span class="bmstats" id="bmstats">—</span>
+  </div>
+  <div class="bmnav">
+    <button id="bmprev" aria-label="Previous session" title="Previous imaging session of this body">◀ Prev</button>
+    <span id="bmnow">—</span>
+    <button id="bmnext" aria-label="Next session" title="Next imaging session of this body">Next ▶</button>
+  </div>
+  <div class="bmopts">
+    <label title="Playback jumps from one of this body's sessions to the next instead of playing through the time between"><input type="checkbox" id="bmskip"> Skip the gaps</label>
+    <select id="bmpick" aria-label="Another body"></select>
+  </div>
+  <ul id="bmlist" aria-label="Imaging sessions"></ul>
+  <footer id="bmfoot">—</footer>
+</section>
+
+<script>
+// ---------- the body view ----------
+(function () {
+  const $ = id => document.getElementById(id);
+  const S = window.cassiniSettings, WM = window.cassiniWM, win = $("bodymenu");
+  if (!WM || !win) return;
+  const D = d => S ? S.define(d) : d.value;
+  D({ key: "bodies.skipGaps", section: "Body view", label: "Skip the gaps", type: "toggle", value: true,
+    hint: "In a body's view, playback jumps from one of the body's imaging sessions to the next instead of playing through the days or months between." });
+  D({ key: "bodies.gapSeconds", section: "Body view", label: "Skip a gap longer than", type: "range", value: 3, min: 1, max: 30, step: 1, unit: "s",
+    hint: "A stretch without pictures of the body is skipped when it would take longer than this to play at the chosen speed." });
+  const opt = (k, v) => S ? S.get(k) : v;
+
+  const M = { name: null, index: null, data: null, perDay: null, sessions: [], cur: -1, saved: null, pending: null, rows: [] };
+  const fmt = n => Math.round(n).toLocaleString("en-US");
+  const tc = n => typeof titleCase === "function" ? titleCase(n) : n.charAt(0) + n.slice(1).toLowerCase();
+  const MON = ["Jan", "Feb", "Mar", "Apr", "May", "Jun", "Jul", "Aug", "Sep", "Oct", "Nov", "Dec"];
+  const dateOf = et => new Date(etToMs(et));
+  const fmtDate = et => { const d = dateOf(et); return `${MON[d.getUTCMonth()]} ${d.getUTCDate()}`; };
+  const fmtLong = et => { const d = dateOf(et); return `${MON[d.getUTCMonth()]} ${d.getUTCDate()}, ${d.getUTCFullYear()}`; };
+  const fmtDur = s => s < 90 ? `${Math.max(1, Math.round(s))} s` : s < 5400 ? `${Math.round(s / 60)} min` : s < 2 * 86400 ? `${+(s / 3600).toFixed(1)} h` : `${Math.round(s / 86400)} days`;
+  // an observation's name without the instrument and the mission phase around it: ISS_028RI_HIPHWAC001_PRIME -> 028RI HIPHWAC001
+  const obsName = o => o.replace(/^ISS_/, "").replace(/_(PRIME|PIE|VIMS|UVIS|CIRS|RADAR|INMS|RSS|MAG|SCI)$/, "").replace(/_/g, " ");
+
+  // ---- data: the bodies Cassini photographed, and one body's days and sessions ----
+  let indexJob = null;
+  function loadIndex() {
+    return indexJob = indexJob || fetch("data/targets.json").then(r => r.ok ? r.json() : null).catch(() => null).then(j => { M.index = j; fillPick(); return j; });
+  }
+  const bodyJobs = new Map();
+  function loadBody(n) {
+    if (!bodyJobs.has(n)) bodyJobs.set(n, loadIndex().then(ix => {
+      const b = ix && ix.bodies[n];
+      return b ? fetch(b.file).then(r => r.ok ? r.json() : null).catch(() => null) : null;
+    }));
+    return bodyJobs.get(n);
+  }
+  // the body's pictures per day as the timeline reads the whole mission's (drawUnloadedBars)
+  function perDay(d) {
+    if (!d || typeof mission === "undefined" || !mission) return null;
+    const F = mission.frames_per_day, n = F.N.length, N = new Float32Array(n), W = new Float32Array(n);
+    const shift = Math.round(((M.index && M.index.start_et) - F.start_et) / 86400) || 0;
+    for (const [day, a, b] of d.days) { const k = day + shift; if (k >= 0 && k < n) { N[k] = a; W[k] = b; } }
+    return { start_et: F.start_et, N, W };
+  }
+  window.studyFramesPerDay = () => M.name ? (M.perDay || { start_et: 0, N: [], W: [] }) : null;
+  window.studyEncounterShown = e => !M.name || momentBody(e) === M.name;
+
+  // ---- the bodies in the dock: every planet Cassini photographed, wherever the mission is, and the body in view ----
+  function planets() {
+    const ix = M.index && M.index.bodies;
+    const out = typeof PLANETS !== "undefined" ? PLANETS.filter(n => (!ix || ix[n]) && typeof bodies !== "undefined" && bodies[n]) : [];
+    if (M.name && !out.includes(M.name)) out.push(M.name);
+    return out;
+  }
+
+  // ---- the session at a time: the one under way, else the next (-1 after the last) ----
+  function sessionAt(et) {
+    const s = M.sessions; let lo = 0, hi = s.length;
+    while (lo < hi) { const m = (lo + hi) >> 1; if (s[m][1] <= et) lo = m + 1; else hi = m; }
+    // lo: first session starting after et; the one before may still be under way
+    if (lo > 0 && s[lo - 1][2] >= et) return lo - 1;
+    return lo < s.length ? lo : -1;
+  }
+  // when the body's next picture after et is: the loaded months from the catalog, the rest from its sessions
+  function nextPicture(et) {
+    let best = Infinity;
+    const loaded = t => t >= loadedSpan[0] && t < loadedSpan[1];
+    if (loaded(et) && catalog && catalog.byCam) {
+      for (const cam of ["N", "W"]) {
+        const a = cassiniFeeds.framesOf(cam, M.name).et; let lo = 0, hi = a.length;
+        while (lo < hi) { const m = (lo + hi) >> 1; if (a[m] <= et) lo = m + 1; else hi = m; }
+        if (lo < a.length && loaded(a[lo])) best = Math.min(best, a[lo]);
+      }
+    }
+    // sessions in the loaded months are the catalog's to answer; the first one beyond them counts
+    const fromCatalog = loaded(et) && catalog && catalog.byCam;
+    for (let i = Math.max(0, sessionAt(et)); i >= 0 && i < M.sessions.length; i++) {
+      const s = M.sessions[i]; if (s[2] < et) continue;
+      const t = Math.max(et, s[1]);
+      if (fromCatalog && loaded(t)) continue;
+      best = Math.min(best, t); break;
+    }
+    return best;
+  }
+
+  // ---- skip the gaps: in a body's view the clock leaps over the stretches without its pictures ----
+  const baseAdvance = window.studyAdvance;
+  window.studyAdvance = (et, dt, speed) => {
+    const n = baseAdvance ? baseAdvance(et, dt, speed) : et + dt * speed;
+    if (!M.name || !M.sessions.length || !opt("bodies.skipGaps", true) || (window.cassiniMovie && cassiniMovie.on)) return n;
+    const nx = nextPicture(et);
+    if (nx === Infinity || nx - n <= speed * opt("bodies.gapSeconds", 3)) return n;
+    return Math.max(n, nx - speed * 0.5);   // half a second ahead of the picture
+  };
+
+  // ---- the window ----
+  function bodyLook(n) {
+    const look = typeof MOON_LOOK !== "undefined" && MOON_LOOK[n], c = look ? `rgb(${look.map(v => Math.round(v * 255)).join(",")})` : "#888";
+    const has = typeof bodies !== "undefined" && bodies[n] && n !== "SUN";
+    return `--c:${c};${has ? `background-image:url(data/textures/1k/${n.toLowerCase()}.webp);` : ""}`;
+  }
+  function fillPick() {
+    const sel = $("bmpick"), ix = M.index && M.index.bodies;
+    if (!ix) { sel.hidden = true; return; }
+    const names = Object.keys(ix), big = names.filter(n => ix[n].naif), small = names.filter(n => !ix[n].naif);
+    const opt = n => `<option value="${n}">${tc(n)} · ${fmt(ix[n].frames)}</option>`;
+    sel.innerHTML = `<option value="">Other bodies (${names.length})…</option><optgroup label="Planets and major moons">${big.map(opt).join("")}</optgroup><optgroup label="Small moons and others">${small.map(opt).join("")}</optgroup>`;
+  }
+  $("bmpick").addEventListener("change", e => { const n = e.target.value; e.target.value = ""; if (n) enter(n); });
+  const years = b => { const a = dateOf(b.first).getUTCFullYear(), z = dateOf(b.last).getUTCFullYear(); return a === z ? String(a) : `${a}–${z}`; };
+  function fillHead() {
+    const n = M.name, b = M.index && M.index.bodies[n];
+    $("bmname").textContent = tc(n); $("bmtitle").textContent = `${tc(n)}`;
+    $("bmorb").setAttribute("style", bodyLook(n));
+    $("bmstats").textContent = !b ? (M.index ? "No pictures of it in the archive" : "Loading…")
+      : `${fmt(b.frames)} pictures · ${fmt(b.sessions)} sessions · ${years(b)}\n${fmt(b.N)} NAC · ${fmt(b.W)} WAC${b.rgb_sets ? ` · ${fmt(b.rgb_sets)} in color` : ""}`;
+    $("bmskip").checked = !!opt("bodies.skipGaps", true);
+  }
+  function fillList() {
+    const ul = $("bmlist"), out = [];
+    M.rows = [];
+    let year = null;
+    M.sessions.forEach((s, i) => {
+      const y = dateOf(s[1]).getUTCFullYear();
+      if (y !== year) { year = y; out.push(`<li class="yr">${y}</li>`); }
+      const cams = [s[3] ? `${fmt(s[3])} NAC` : "", s[4] ? `${fmt(s[4])} WAC` : ""].filter(Boolean).join(" · ");
+      out.push(`<li data-i="${i}"><button title="${s[0]}"><span class="d">${fmtDate(s[1])}</span><span class="o">${obsName(s[0])}</span><span class="n">${cams} · ${fmtDur(s[2] - s[1])}</span>`
+        + `<span class="c">${s[5] ? `${s[5]}<i style="background:#cc3a2e"></i><i style="background:#3e9b33"></i><i style="background:#2f63cc"></i>` : ""}</span></button></li>`);
+    });
+    ul.innerHTML = out.join("");
+    ul.querySelectorAll("li[data-i]").forEach(li => { M.rows[+li.dataset.i] = li; });
+    $("bmfoot").textContent = M.sessions.length ? `${fmt(M.sessions.length)} imaging sessions` : "No imaging sessions";
+    M.cur = -2;
+  }
+  $("bmlist").addEventListener("click", e => { const li = e.target.closest("li[data-i]"); if (li) goSession(+li.dataset.i); });
+  let listTouched = 0;
+  $("bmlist").addEventListener("wheel", () => { listTouched = performance.now(); }, { passive: true });
+  $("bmlist").addEventListener("touchstart", () => { listTouched = performance.now(); }, { passive: true });
+  $("bmskip").addEventListener("change", e => { if (S) S.set("bodies.skipGaps", e.target.checked); });
+  if (S) S.on("bodies.skipGaps", v => { $("bmskip").checked = !!v; });
+  $("bmall").addEventListener("click", () => overview());
+  $("bmprev").addEventListener("click", () => { const i = M.sessions.findLastIndex(s => s[1] < state.et - 60); if (i >= 0) goSession(i); });
+  $("bmnext").addEventListener("click", () => { const i = M.sessions.findIndex(s => s[1] > state.et + 60); if (i >= 0) goSession(i); });
+  // on a phone the bar opens into a sheet of sessions
+  win.querySelector(".bmhead").addEventListener("click", e => { if (document.body.classList.contains("phone") && !e.target.closest("button")) { win.classList.toggle("open"); showCur(); } });
+  // the close button goes back to Cassini's mission (it would otherwise tuck the window away)
+  win.addEventListener("click", e => { if (e.target.closest(".titlebar .close")) { e.stopPropagation(); exit(); } }, true);
+  new ResizeObserver(() => document.body.style.setProperty("--bmh", win.offsetHeight + "px")).observe(win);
+
+  // the session under way (or next) is marked and kept in view; the line under the buttons says where playback is
+  function mark() {
+    if (!M.name || !M.sessions.length) { $("bmnow").textContent = M.name && M.data ? "No pictures" : "Loading…"; return; }
+    const i = sessionAt(state.et);
+    const s = i >= 0 ? M.sessions[i] : null, now = !!s && s[1] <= state.et;
+    $("bmnow").textContent = !s ? "After the last session" : now ? `Session ${fmt(i + 1)} of ${fmt(M.sessions.length)}` : `Next: ${fmtLong(s[1])}, in ${fmtDur(s[1] - state.et)}`;
+    if (i === M.cur) return;
+    if (M.rows[M.cur]) M.rows[M.cur].classList.remove("on");
+    M.rows.forEach((li, k) => li && li.classList.toggle("past", i < 0 || k < i));
+    M.cur = i;
+    if (M.rows[i]) M.rows[i].classList.add("on");
+    if (performance.now() - listTouched > 4000) showCur();
+  }
+  // the marked session in view in the list (not while the viewer is scrolling it)
+  function showCur() {
+    const li = M.rows[M.cur], ul = $("bmlist");
+    if (li && !win.hidden && ul.offsetParent) ul.scrollTop = Math.max(0, li.offsetTop - ul.offsetTop - 50);
+  }
+
+  // ---- moving through the body's history ----
+  // the timeline shows the body's whole history (from its first picture to its last), the view held there
+  function overview() {
+    const b = M.index && M.index.bodies[M.name];
+    if (!b) return;
+    const span = Math.max(2 * 86400, b.last - b.first), pad = span * 0.04;
+    state.view = [b.first - pad, b.last + pad]; clampView(); state.tlFollow = false;
+  }
+  // a session: from a minute before its first picture, at a speed that plays it in about a minute
+  async function goSession(i) {
+    const s = M.sessions[i]; if (!s) return;
+    const dur = s[2] - s[1];
+    setTime(s[1] - 60);
+    if (mission) { setPlaying(false); lastWantedYear = partOf(state.et); await requestYears(lastWantedYear); }
+    setView(Math.max(3 * 3600, 2 * dur), s[1] + dur / 2);
+    setSpeed(SPEEDS.map(v => v[0]).filter(v => v >= 60).find(v => dur / v <= 90) || 3600);
+    setPlaying(true);
+  }
+
+  // ---- in and out ----
+  function retitle() {
+    const name = M.name ? tc(M.name) : null;
+    // as the per-body windows name theirs: "Titan · NAC"
+    for (const [id, base, short] of [["imgcard", "Narrow-angle Camera", "NAC"], ["wacard", "Wide-angle Camera", "WAC"]]) {
+      const bar = $(id) && $(id).querySelector(".titlebar"); if (!bar) continue;
+      const t = [...bar.childNodes].find(n => n.nodeType === 3 && n.textContent.trim());
+      if (t) t.textContent = name ? `${name} · ${short}` : base;
+    }
+    const bar = $("dock").querySelector(".titlebar");
+    let tag = bar.querySelector(".bmtag");
+    if (name) { if (!tag) { tag = document.createElement("span"); tag.className = "bmtag"; bar.appendChild(tag); } tag.textContent = ` · ${name}'s timeline`; }
+    else if (tag) tag.remove();
+  }
+  // Moments: only the body's; a body with none says so
+  function filterMoments() {
+    const list = $("mlist"); list.querySelector(".bmnone")?.remove();
+    let yr = null, any = false, shown = 0;
+    for (const li of list.children) {
+      if (li.classList.contains("yr")) { if (yr) yr.hidden = !any; yr = li; any = false; continue; }
+      const on = !M.name || li.dataset.body === M.name;
+      li.hidden = !on; if (on) { any = true; shown++; }
+    }
+    if (yr) yr.hidden = !any;
+    if (typeof scrollMoments === "function") scrollMoments();
+    if (M.name && !shown) { const li = document.createElement("li"); li.className = "bmnone"; li.textContent = `No moments of ${tc(M.name)} in the list yet. Its imaging sessions are in the ${tc(M.name)} window.`; list.appendChild(li); }
+    const foot = $("mfoot");
+    if (M.name) { if (!foot.dataset.all) foot.dataset.all = foot.textContent; foot.textContent = `${shown} moment${shown === 1 ? "" : "s"} of ${tc(M.name)}`; }
+    else if (foot.dataset.all) { foot.textContent = foot.dataset.all; delete foot.dataset.all; }
+  }
+  function setUrl() {
+    try {
+      const u = new URL(location.href);
+      if (M.name) u.searchParams.set("body", M.name); else u.searchParams.delete("body");
+      history.replaceState(history.state, "", u);
+    } catch (e) {}
+  }
+  const onStage = n => typeof focusChoices === "function" && focusChoices().includes(n);
+  // jump: when the body is not on stage now, go to its moment nearest to now, else its busiest session
+  async function enter(n, how = {}) {
+    n = String(n).toUpperCase();
+    const first = !M.name;
+    if (first) M.saved = { span: state.view[1] - state.view[0] };
+    M.name = n; M.data = null; M.perDay = null; M.sessions = []; M.cur = -2; M.rows = [];
+    document.body.classList.add("bodymode");
+    if (win.hidden || win.dataset.min) WM.restore(win); else WM.front(win);
+    win.classList.remove("closed");
+    fillHead(); $("bmlist").innerHTML = ""; $("bmfoot").textContent = "Loading…";
+    retitle(); filterMoments(); setUrl();
+    document.dispatchEvent(new CustomEvent("cassini:bodymode", { detail: { name: n } }));
+    if (window.cassiniDock) cassiniDock.sync();
+    if (onStage(n)) setFocus(n);
+    const d = await loadBody(n);
+    if (M.name !== n) return;
+    M.data = d; M.sessions = d ? d.sessions : []; M.perDay = perDay(d);
+    fillHead(); fillList();
+    if (how.jump !== false && !onStage(n) && M.sessions.length) {
+      // the moments the Moments list shows for it
+      const listed = new Set([...document.querySelectorAll("#mlist li[data-et]")].filter(li => li.dataset.body === n).map(li => +li.dataset.et));
+      const near = encounters.filter(e => listed.has(e.et)).sort((a, b) => Math.abs(a.et - state.et) - Math.abs(b.et - state.et))[0];
+      if (near) await jump(near);
+      else { let k = 0; M.sessions.forEach((s, i) => { if (s[3] + s[4] > M.sessions[k][3] + M.sessions[k][4]) k = i; }); await goSession(k); }
+      if (M.name !== n) return;
+    }
+    if (how.overview !== false) overview();
+    mark();
+  }
+  function exit() {
+    if (!M.name) return;
+    M.name = null; M.data = null; M.perDay = null; M.sessions = []; M.rows = [];
+    document.body.classList.remove("bodymode");
+    win.hidden = true; delete win.dataset.min; WM.syncMenu();
+    retitle(); filterMoments(); setUrl();
+    document.dispatchEvent(new CustomEvent("cassini:bodymode", { detail: { name: null } }));
+    if (window.cassiniDock) cassiniDock.sync();
+    setView(M.saved ? M.saved.span : 30 * 86400, state.et);
+    M.saved = null;
+  }
+  window.cassiniBodyMode = {
+    get name() { return M.name; }, get index() { return M.index; }, get sessions() { return M.sessions; },
+    enter, exit, planets, sessionAt, loadIndex
+  };
+
+  // ---- every frame: a link's ?body= once the mission is in, and the session marks ----
+  const want = new URLSearchParams(location.search).get("body");
+  const base = window.studyHud;
+  let lastMark = 0;
+  window.studyHud = ms => {
+    if (base) base(ms);
+    if (want && !M.pending && typeof catalog !== "undefined" && catalog) { M.pending = true; enter(want, { jump: false }); }
+    const now = performance.now();
+    if (M.name && now - lastMark > 250) { lastMark = now; mark(); }
+  };
+  loadIndex();
+})();
+</script>
