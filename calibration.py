@@ -503,14 +503,14 @@ rolls off through a soft knee to at most FALSE_CHROMA[1] (on linear values, agai
 """
 FALSE_CHROMA = (0.15, 0.25)
 FALSE_REVERT = 0.1
-FALSE_DETAIL = 3.0    # ... and fine detail below this blur (pixels) taken from the bands at gentler gains:
+FALSE_DETAIL = 5.0    # ... and fine detail below this blur (pixels) taken from the bands at gentler gains:
 DETAIL_SPREAD = 4.0   # none over this times another's (4x keeps the scan lines down; the full gains lift them)
 REVERT_FLOOR = 0.02   # ... where the bands' mean is at least this share of white
 # broad color differences across the body (a dusty-rose band under the ring shadow, one half of a disk pink and the
 # other sage, a lavender side, one mosaic tile olive and the next mauve) are what a dim band's full gain makes of small
 # real changes in its share; FALSE_FLAT of the picture's color variation broader than FALSE_BROAD (a share of the
 # picture's size) is taken out, toward its typical color, while finer color (belts, clouds, storms) stays
-FALSE_BROAD = 0.06
+FALSE_BROAD = 0.10
 FALSE_FLAT = 0.6
 
 
