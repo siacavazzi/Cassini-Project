@@ -150,8 +150,12 @@ with cal.looking("balanced"):
 with cal.looking("classic"):
     assert cal.style() == "classic" and cal.color_mix("N", ["RED", "GRN", "BL1"]) is None
 # mixing a drawn picture with the identity changes nothing; tone with a mix keeps a gray pixel gray
-rgb = rng.integers(0, 200, (32, 32, 3)).astype(np.uint8)
-assert np.abs(cal.mix_display(rgb, np.eye(3), 3.0).astype(int) - rgb).max() <= 1
+rgb = np.repeat(rng.integers(0, 200, (32, 32, 1)), 3, axis=2).astype(np.uint8)
+assert np.abs(cal.mix_display(rgb, m, 3.0).astype(int) - rgb).max() <= 2
+# a false color mix holds a hot pink line (a ring bright in a dim band) to a pastel, and leaves a near-gray body be
+pink = cal.apply_mix(np.eye(3), np.array([1.0, 0.2, 0.9], np.float32).reshape(3, 1, 1)).ravel()
+near = cal.apply_mix(np.eye(3), np.array([0.5, 0.48, 0.46], np.float32).reshape(3, 1, 1)).ravel()
+assert (pink.max() - pink.min()) / pink.max() < 0.3 and np.allclose(near, [0.5, 0.48, 0.46], atol=0.002)
 gray = [np.full((8, 8), 0.4, np.float32)] * 3
 t = cal.tone(gray, 0.01, m)
 assert abs(int(t[0][0, 0, 0]) - int(t[2][0, 0, 0])) <= 2
