@@ -374,7 +374,19 @@ def color_mix(camera, bands, target=None, gains=None):
     if m is not None:
         return m
     gains = gains or false_gains(target, bands, camera)
-    return np.diag(np.asarray(gains, np.float32)) if gains else None
+    if not gains:
+        return None
+    m = np.diag(np.asarray(gains, np.float32)).view(FalseMix)
+    m.tint = tint_of(target)
+    return m
+
+
+class FalseMix(np.ndarray):
+    """A false color mix (a gain per band, diagonal) and the tint its balance aims at (tint_of), kept through arithmetic."""
+    tint = None
+
+    def __array_finalize__(self, obj):
+        self.tint = getattr(obj, "tint", None)
 
 
 _matrices = None
@@ -468,7 +480,8 @@ def balance(levels, tint=None):
 """
 A channel mix (color_mix) on linear channels (3 x H x W). A false color mix (a gain per band, diagonal) is meant to
 take the body's tint away; where it makes a pixel more colorful than drawn straight instead (Saturn's rings, which
-methane doesn't darken, or Jupiter's limb haze, bright in MT3), the pixel goes gray at the balanced brightness,
+methane doesn't darken, or Jupiter's limb haze, bright in MT3), the pixel goes to the body's tint (gray where it has
+none) at the balanced brightness,
 fully once the balance adds FALSE_REVERT of saturation (its straight color, teal on Jupiter, would stand out too). Then saturation past FALSE_CHROMA[0]
 rolls off through a soft knee to at most FALSE_CHROMA[1] (on linear values).
 """
@@ -483,22 +496,24 @@ def _saturation(x):
 
 
 def apply_mix(mix, x):
-    mix = np.asarray(mix, np.float32)
+    false = isinstance(mix, FalseMix)
+    tint = np.asarray(mix.tint if false and mix.tint else [1.0, 1.0, 1.0], np.float32).reshape(3, 1, 1)
     raw = x
-    x = np.tensordot(mix, x, axes=1)
-    if np.count_nonzero(mix - np.diag(np.diagonal(mix))) == 0:
+    x = np.tensordot(np.asarray(mix, np.float32), x, axes=1)
+    if false:
+        # judged against the tint the balance aims at, not gray, so a body's own color (Titan's orange) is no outlier
         lum = x.mean(axis=0)
         mean = raw.mean(axis=0)
         straight = raw * (lum / np.maximum(mean, 1e-12))
-        w = np.clip((_saturation(x) - _saturation(straight)) / FALSE_REVERT, 0, 1)
+        w = np.clip((_saturation(x / tint) - _saturation(straight / tint)) / FALSE_REVERT, 0, 1)
         # only where every band has signal: the sky's noise has no band ratio to compare
         w = np.where((raw.min(axis=0) > 0) & (mean > REVERT_FLOOR), w, 0)
-        x = x + (lum - x) * w
+        x = x + (lum * tint - x) * w
         knee, cap = FALSE_CHROMA
-        sat = _saturation(x)
+        sat = _saturation(x / tint)
         held = knee + (cap - knee) * np.tanh((sat - knee) / (cap - knee))
         k = np.where(sat > knee, held / np.maximum(sat, 1e-12), 1)
-        x = lum + (x - lum) * k
+        x = lum * tint + (x - lum * tint) * k
     return x
 
 
@@ -595,7 +610,8 @@ def load_linear(labels, images=None, iofs=None):
     channels = [(iof - np.float32(level)) / np.float32(white) for iof, level in zip(iofs, levels)]
     infos = [lbl.get_info() for lbl in labels]
     mix = color_mix(_value(infos[0], "INSTRUMENT_ID", ""), [band_of(i) for i in infos], _value(infos[0], "TARGET_NAME", ""))
-    if mix is not None and np.count_nonzero(mix - np.diag(np.diagonal(mix))) == 0:
+    false = isinstance(mix, FalseMix)
+    if false:
         # false color: the mission's typical balance of the body (the table) misses a frame unlike it (Saturn's
         # high latitudes); FALSE_OWN of what is left between the picture's own lit bands is taken off as well. A
         # movie of one scene, whose frames are alike, still keeps one color
@@ -605,31 +621,31 @@ def load_linear(labels, images=None, iofs=None):
         if own and min(own) > 0:
             mix = mix * np.diag([g ** FALSE_OWN for g in balance(own, tint_of(_value(infos[0], "TARGET_NAME", "")))]).astype(np.float32)
     margin /= white
+    sky = _sky(iofs) if measured else np.ones(iofs[0].shape, dtype=bool)
     if measured:
         # the toe starts no lower than the darker half of the sky's own brightness (SKY_DARK of it stays black),
         # since the gamma lifts even a tiny remainder into visible grain. Only the darker half, by its mean over
         # 15 pixels, so faint ring glow or a night side in the sky doesn't count as sky
-        sky = _sky(iofs)
         lum = np.mean(channels, axis=0)
         local = cv2.blur(lum, (15, 15))
         dark = sky & (local <= np.median(local[sky]))
         if dark.sum() > 100:
             margin = max(margin, float(np.percentile(lum[dark], SKY_DARK)))
-        if len(channels) > 1:
-            channels = _clean_spikes(channels, sky)
+    if len(channels) > 1 and (measured or false):
+        # without sky (a body filling the frame) the grain is measured on the whole picture
+        channels = _clean_spikes(channels, sky, false)
     return channels, margin, mix
 
 
 """
 Hot pixels and cosmic ray hits in one channel of a composite: a pixel far above its 3x3 median in its own
 channel (SPIKE times that channel's sky grain, and above twice the median) where no other channel has a
-peak within 2 pixels, is set to its median. Natural color, whose balance would make them salmon or cyan dots:
+peak within 2 pixels, is set to its median. False color (natural), whose balance would make them salmon or cyan dots:
 against a 5x5 median, so 2x2 clusters go too, and where not every other channel peaks, so two-channel hits go. Drawn together (tone), such a pixel would be a pastel dot; a
 star or a small bright feature is in every channel, so it stays.
 channels = linear channels, not yet aligned; sky = the sky mask
 """
-def _clean_spikes(channels, sky):
-    natural = style() == "balanced"
+def _clean_spikes(channels, sky, natural=False):
     meds = [cv2.medianBlur(c, 5 if natural else 3) for c in channels]
     res = [c - m for c, m in zip(channels, meds)]
     noises = [float(np.percentile(np.abs(r[sky]), 99)) / 2.6 for r in res]
