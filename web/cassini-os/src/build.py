@@ -546,7 +546,7 @@ fscript = fscript.replace("/*MISSION_TEAM*/null", json.dumps({k: team[k] for k i
 script += fscript + "\n"
 # more cutscenes, each its own file spliced like the finale (style into the head, section into #app, script after the
 # finale's; each chains the study* hooks): skipped while a file is not there yet
-CUTSCENES = ["soi.html", "launch.html", "huygens-release.html"]
+CUTSCENES = ["soi.html", "launch.html", "huygens-release.html", "huygens-landing.html"]
 for name in CUTSCENES:
     cpath = os.path.join(os.path.dirname(os.path.abspath(sys.argv[2])), name)
     if not os.path.exists(cpath):

@@ -1097,6 +1097,27 @@ body.phone #launch .lx-clock { font-size: 9.5px; bottom: 9vh; }
 #hrel .cs-cap small a { color: inherit; pointer-events: auto; }
 body.phone #hrel .hr-read { font-size: 9.5px; bottom: 9vh; white-space: normal; width: calc(100vw - 32px); text-align: center; line-height: 1.6; }
 body.phone #hrel .hr-note { bottom: auto; top: 40px; max-width: calc(100vw - 32px); }
+
+#hland .hl-read { position: absolute; left: 50%; bottom: 7vh; transform: translateX(-50%); white-space: nowrap; font: 11px/1 var(--hudf); letter-spacing: .08em;
+  color: var(--q-dim); opacity: 0; transition: opacity 1.2s ease; }
+#hland .hl-read.on { opacity: 1; }
+#hland .hl-read i { font-style: normal; color: var(--q-accent); }
+#hland .hl-note { position: absolute; left: 16px; bottom: 14px; max-width: min(460px, calc(100vw - 140px)); font-size: 10.5px; line-height: 1.4; color: rgba(232,236,242,.34); opacity: 0; transition: opacity 1.5s ease; }
+#hland .hl-note.on { opacity: 1; }
+#hland .hl-shade { position: absolute; inset: 0; background: linear-gradient(to top, rgba(0,0,0,.72) 0, rgba(0,0,0,.45) 22%, rgba(0,0,0,0) 46%); }
+#hland .hl-tag { position: absolute; left: 0; top: 0; font: 10.5px/1 var(--hudf); letter-spacing: .1em; text-transform: uppercase; color: rgba(232,236,242,.7);
+  white-space: nowrap; opacity: 0; transition: opacity 1s ease; text-shadow: 0 1px 6px rgba(0,0,0,.9); }
+#hland .hl-tag::before { content: ""; display: inline-block; width: 14px; height: 1px; margin: 0 6px 3px 0; background: currentColor; vertical-align: middle; }
+#hland .hl-tag.on { opacity: 1; }
+#hland .hl-tag small { font-size: 9.5px; color: rgba(232,236,242,.45); letter-spacing: .06em; text-transform: none; }
+#hland .cs-cap .btns { display: flex; gap: 10px; justify-content: center; flex-wrap: wrap; margin-top: 16px; }
+#hland .cs-cap button { all: unset; pointer-events: auto; padding: 6px 15px; border-radius: 13px; border: 1px solid var(--q-line); background: rgba(16,17,20,.55);
+  color: rgba(232,236,242,.8); font-size: 12px; cursor: pointer; }
+#hland .cs-cap button:hover { color: var(--q-text); border-color: rgba(232,236,242,.35); }
+#hland .cs-cap small { font-size: 10.5px; color: rgba(232,236,242,.4); }
+#hland .cs-cap small a { color: inherit; pointer-events: auto; }
+body.phone #hland .hl-read { font-size: 9.5px; bottom: 9vh; white-space: normal; width: calc(100vw - 32px); text-align: center; line-height: 1.5; }
+body.phone #hland .hl-note { bottom: 40px; }
 </style>
 </head>
 <body>
@@ -1359,6 +1380,19 @@ body.phone #hrel .hr-note { bottom: auto; top: 40px; max-width: calc(100vw - 32p
   <div class="cs-caps"></div>
   <div class="hr-read" aria-hidden="true"></div>
   <div class="hr-note">Cassini's path and pointing are its real trajectory and attitude. The release follows ESA's numbers; after the first seconds the clock runs faster.</div>
+  <div class="cs-hint">Drag to look around</div>
+  <button class="cs-skip" type="button">Skip ▸</button>
+</section>
+
+  <section id="hland" class="cs-root" hidden aria-live="polite">
+  <div class="hl-shade"></div>
+  <div class="cs-black"></div>
+  <div class="hl-tag" data-tag="probe">Huygens</div>
+  <div class="hl-tag" data-tag="cassini">Cassini</div>
+  <div class="hl-tag" data-tag="earth">Earth</div>
+  <div class="cs-caps"></div>
+  <div class="hl-read" aria-hidden="true"></div>
+  <div class="hl-note">The probe's path, speed and altitude are its reconstructed track; Cassini's are its real trajectory. The clock runs faster than real time, shown below. Parachute lines are drawn to a guessed length.</div>
   <div class="cs-hint">Drag to look around</div>
   <button class="cs-skip" type="button">Skip ▸</button>
 </section>
@@ -7877,5 +7911,436 @@ function frame(now) {
   CS.at(RELEASE, play, inData);
   CS.fromUrl("huygens", () => RELEASE - 600, play, inData);
   window.cassiniHuygensRelease = { play, skip: () => finish("back"), get running() { return !!H; }, get facts() { return DATA.facts; } };
+})();
+</script>
+<script>
+// ---------- Huygens lands on Titan: January 14, 2005, from entry to the first data on Earth ----------
+(function () {
+  const root = document.getElementById("hland"), black = root.querySelector(".cs-black"), caps = root.querySelector(".cs-caps");
+  const read = root.querySelector(".hl-read"), note = root.querySelector(".hl-note"), hint = root.querySelector(".cs-hint");
+  const tags = {}; root.querySelectorAll("[data-tag]").forEach(el => { tags[el.dataset.tag] = el; });
+  const CS = cassiniCutscene, { fadeTo, sound, look } = CS, runCaptions = (list, t, shown) => CS.runCaptions(caps, list, t, shown);
+  // the descent team's reconstructed times and ESA's facts, written in by build.py from huygens-landing-data.json:
+  // { t0_utc, events: { name: s from t0 }, chutes_m, green_bank_earth_utc, esoc_first_data_utc, pictures, surface_k, facts }
+  const DATA = {"t0_utc":"2005-01-14T09:10:20.828","t0_note":"t0, the start of the descent sequence (the pilot parachute's firing), from the Huygens key events table (PDS Atmospheres Node); every offset below is in seconds from it. Entry interface, the descent altitudes and the landing come from the probe's own track (data/huygens.json: DTWG reconstruction), not from this file.","events":{"pilot":1.4,"main_deploy":2.5,"main_open":4.9,"shield":32.5,"transmitter":45,"data":143.6,"drogue":900,"lamp":8745,"landing":8870,"link_end":13203,"last_earth":20559},"chutes_m":{"pilot":2.59,"main":8.3,"drogue":3.03},"green_bank_earth_utc":"2005-01-14T10:25:00","esoc_first_data_utc":"2005-01-14T16:19:00","pictures":{"received":350,"planned":700},"surface_k":93.8,"facts":[{"id":"timeline","text":"Reconstructed times of the descent from t0 = 2005-014T09:10:20.828 UTC: pilot chute inflates +1.4 s, back cover released and main chute deployed +2.5 s, main chute inflated +4.9 s, heat shield separation +32.5 s, data transmission begins +143.6 s, main chute released and stabilizer deployed +900 s (111 km), surface lamp on +8745 s, surface impact +8870 s (11:38:10.8 UTC), end of the Cassini-probe link +13203 s (12:50:23.8 UTC), last signal detected by Earth-based radio telescopes +20559 s.","source":"https://atmos.nmsu.edu/data_and_services/atmospheres_data/Huygens/Key%20Events.htm"},{"id":"chutes","text":"The pilot parachute is 2.6 m across, the main parachute 8.3 m; after about 15 minutes the main chute is released and a 3 m drogue carries the probe the rest of the way. Huygens reaches Titan's air at 1,270 km.","source":"https://www.esa.int/Science_Exploration/Space_Science/Cassini-Huygens/Huygens_descent_timeline"},{"id":"cassini","text":"Cassini stops collecting data once the landing site drops below Titan's horizon, then turns its high-gain antenna to Earth and sends the data, several copies of it.","source":"https://www.esa.int/Science_Exploration/Space_Science/Cassini-Huygens/Huygens_descent_timeline"},{"id":"earth","text":"Huygens was known to be alive at 11:25 CET (10:25 UTC) when the Green Bank radio telescope picked up its faint carrier directly; the first science data reached ESOC in Darmstadt at 17:19 CET (16:19 UTC).","source":"https://www.esa.int/export/esaCP/Pr_3_2005_p_EN.html"},{"id":"channel_a","text":"Cassini never listened to the probe's channel A because of a missing command, so only about 350 of the 700 planned pictures came back, and the Doppler wind measurement was lost.","source":"https://en.wikipedia.org/wiki/Huygens_(spacecraft)"},{"id":"surface","text":"The temperature at the landing site was 93.8 K (-179 C); the probe landed among rounded pebbles of water ice.","source":"https://en.wikipedia.org/wiki/Huygens_(spacecraft)"}]};
+  if (!DATA) return;
+  const T0 = utcToEt(DATA.t0_utc), EV = DATA.events, CH = DATA.chutes_m;
+  const GM_TITAN = 8978.14;    // km^3/s^2
+  const C_KM_S = 299792.458;
+  const END = 112;             // screen s when it closes by itself
+  const esc = t => String(t).replace(/[&<>"]/g, c => ({ "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;" })[c]);
+  const SOURCES = [...new Set(DATA.facts.map(f => f.source))].map(u => `<a href="${esc(u)}" target="_blank" rel="noopener">${esc(new URL(u).hostname.replace(/^www\./, ""))}</a>`).join(" · ");
+  const clamp01 = x => Math.max(0, Math.min(1, x));
+  const ease = x => { x = clamp01(x); return x * x * (3 - 2 * x); };
+  const utc = et => new Date(etToMs(et)).toISOString().slice(11, 19);
+  const ok = () => !!probe && !!probe.events && probe.events.entry_interface >= coverage[0] && probe.events.landing <= coverage[1];
+
+  // ---------- what the track says: speed, deceleration, altitude ----------
+  const pa = v3(), pb = v3(), pc = v3(), ta = v3(), tb = v3(), tc = v3();
+  // the probe's position relative to Titan at et (km, J2000)
+  function rel(et, out) { positionAt(probe.track, et, out); positionAt(tracks.TITAN, et, ta); return sub(out, ta, out); }
+  // velocity relative to Titan's ground (it turns with Titan, 12 m/s at the equator), km/s, in J2000
+  const bodyFixed = (et, r) => { const R = iauMatrix(bodies.TITAN, et); return [dot(R[0], r), dot(R[1], r), dot(R[2], r)]; };
+  function velocity(et) {
+    const a = bodyFixed(et + 1, rel(et + 1, pa)), b = bodyFixed(et - 1, rel(et - 1, pb)), R = iauMatrix(bodies.TITAN, et);
+    const d = [(a[0] - b[0]) / 2, (a[1] - b[1]) / 2, (a[2] - b[2]) / 2];
+    return [0, 1, 2].map(i => R[0][i] * d[0] + R[1][i] * d[1] + R[2][i] * d[2]);
+  }
+  // what the probe feels (everything but Titan's gravity), in g: a second difference over 6 s, gravity taken out
+  function gLoad(et) {
+    const h = 6; rel(et - h, pa); rel(et, pb); rel(et + h, pc);
+    const a = [0, 1, 2].map(i => (pa[i] - 2 * pb[i] + pc[i]) / (h * h)), r = len(pb), g = GM_TITAN / (r * r * r);
+    return Math.hypot(a[0] + g * pb[0], a[1] + g * pb[1], a[2] + g * pb[2]) * 1000 / 9.80665;
+  }
+  // altitude above the 2,575 km sphere the descent was reconstructed on: the descent table, else the track
+  function altitude(et) {
+    const de = probe.descent;
+    if (de && et >= de.et[0] && et <= de.et[de.et.length - 1]) {
+      const j = Math.max(0, Math.min(de.et.length - 2, lowerIndex(de.et, et))), f = clamp01((et - de.et[j]) / (de.et[j + 1] - de.et[j]));
+      return de.alt_km[j] + f * (de.alt_km[j + 1] - de.alt_km[j]);
+    }
+    return len(rel(et, pa)) - (probe.landing_site ? probe.landing_site.radius_km : 2575);
+  }
+  // numbers for the captions, worked out once from the track and the trajectories
+  let NUM = null;
+  function numbers() {
+    if (NUM) return NUM;
+    const E = probe.events.entry_interface, L = T0 + EV.landing;
+    let peak = 0, peakEt = E;
+    for (let t = E; t < T0; t += 2) { const g = gLoad(t); if (g > peak) { peak = g; peakEt = t; } }
+    const de = probe.descent, n = de.et.length - 1;
+    // the last minute of the descent table, for the touchdown speed
+    let j = n; while (j > 0 && de.et[n] - de.et[j] < 60) j--;
+    const vLand = (de.alt_km[j] - de.alt_km[n]) * 1000 / (de.et[n] - de.et[j]);
+    const light = et => len(sub(positionAt(tracks.EARTH, et, v3()), positionAt(tracks.CASSINI, et, v3()), v3())) / C_KM_S;
+    const esoc = utcToEt(DATA.esoc_first_data_utc), lt = light(esoc);
+    const cassiniKm = len(sub(positionAt(tracks.CASSINI, T0 + 1800, v3()), positionAt(tracks.TITAN, T0 + 1800, v3()), v3()));
+    return NUM = { E, L, peak, peakEt, vEntry: len(velocity(E + 1)), vT0: len(velocity(T0)) * 1000, vLand, lt, send: esoc - lt, cassiniKm,
+      earthKm: len(sub(positionAt(tracks.EARTH, esoc, v3()), positionAt(tracks.CASSINI, esoc, v3()), v3())) };
+  }
+
+  // ---------- the clock: screen seconds T -> mission seconds from t0, through these points, smooth and never back ----------
+  let KEYS = null;
+  function keys() {
+    const N = numbers(), E = N.E - T0, L = EV.landing, K = EV.link_end, S = N.send - T0;
+    return [[0, E + 1], [10, -35], [13.5, -3], [18, 5], [24, 38], [29, 150], [33.5, EV.drogue + 5], [34.5, EV.drogue + 250],
+      [44.5, 2600], [57, L - 150], [64, L - 6], [66.5, L + 3], [71.5, L + 40], [72.5, L + 70], [80, K - 90], [84, K + 30], [93, S], [END, S + 600]];
+  }
+  // a monotone cubic through the points, so the clock speeds up and slows down without jolts
+  function missionAt(T) {
+    const k = KEYS, n = k.length;
+    if (T <= k[0][0]) return k[0][1];
+    if (T >= k[n - 1][0]) return k[n - 1][1];
+    if (!k.m) {
+      const d = []; for (let i = 0; i < n - 1; i++) d.push((k[i + 1][1] - k[i][1]) / (k[i + 1][0] - k[i][0]));
+      // the harmonic mean of the slopes on either side (Fritsch and Butland): never overshoots, so time never runs back
+      const m = [d[0]]; for (let i = 1; i < n - 1; i++) m.push(d[i - 1] * d[i] <= 0 ? 0 : 2 / (1 / d[i - 1] + 1 / d[i]));
+      m.push(d[n - 2]); k.m = m;
+    }
+    let i = 0; while (k[i + 1][0] < T) i++;
+    const h = k[i + 1][0] - k[i][0], s = (T - k[i][0]) / h, s2 = s * s, s3 = s2 * s;
+    return (2 * s3 - 3 * s2 + 1) * k[i][1] + (s3 - 2 * s2 + s) * h * k.m[i] + (-2 * s3 + 3 * s2) * k[i + 1][1] + (s3 - s2) * h * k.m[i + 1];
+  }
+  const rateAt = T => (missionAt(T + 0.05) - missionAt(T - 0.05)) / 0.1;
+
+  // ---------- captions, in screen seconds: when, how long, the line, a class, the chord under it ----------
+  function captions() {
+    const N = numbers(), lt = Math.round(N.lt / 60), surfaceMin = Math.round((EV.link_end - EV.landing) / 60);
+    const P = DATA.pictures;
+    return [
+      [1.5, 6.5, `<b>January 14, 2005 · ${utc(N.E).slice(0, 5)} UTC</b>After twenty days asleep, Huygens hits Titan's air 1,270 km up, at ${N.vEntry.toFixed(1)} km/s.`, "", [0, 2, 4]],
+      [8.5, 5, `Its heat shield takes the blow. Titan's air slows it to ${Math.round(N.vT0 / 10) * 10} m/s in under five minutes, at up to ${N.peak.toFixed(0)} g.`, "", null],
+      [14, 5, `${utc(T0).slice(0, 5)} UTC · A ${CH.pilot.toFixed(1)} m pilot chute pulls out the ${CH.main} m main parachute.`, "", [0, 4, 7]],
+      [19.5, 4.5, `Half a minute later the heat shield falls away, and the instruments meet Titan's air.`, "", null],
+      [25, 4.5, `${utc(T0 + EV.data).slice(0, 5)} UTC · Huygens starts talking to Cassini. Its camera takes pictures as it turns.`, "", [2, 4, 7]],
+      [30, 4, `At 111 km the main chute lets go. A ${CH.drogue.toFixed(0)} m drogue carries it the rest of the way, for more than two hours.`, "", null],
+      [35.5, 4.5, `Cassini, ${fmtInt(Math.round(N.cassiniKm / 1000) * 1000)} km away, has its dish on Titan, recording everything Huygens sends.`, "", [0, 3, 5]],
+      [40, 4.5, `Earth heard it too. At 10:25 UTC the Green Bank telescope caught Huygens's faint carrier, ${lt} minutes after it left.`, "", null],
+      [46, 5.5, `Under the haze its camera maps the ground it falls toward. Each outline is where one picture fell.`, "", [1, 3, 5]],
+      [57, 5, `${utc(T0 + EV.lamp).slice(0, 5)} UTC · A lamp switches on, to light the ground for the last pictures.`, "", null],
+      [65, 6.5, `<b>${utc(N.L)} UTC · Touchdown</b>At ${N.vLand.toFixed(1)} m/s, about walking pace. The first landing in the outer solar system.`, "big", [0, 2, 4, 7, 9]],
+      [73, 5.5, `Huygens keeps talking from the ground: ${DATA.surface_k} K, ice pebbles all around. Cassini listens for another ${surfaceMin} minutes.`, "", null],
+      [79.5, 5, `${utc(T0 + EV.link_end).slice(0, 5)} UTC · The landing site sinks below Titan's edge as Cassini sees it, and the link ends.`, "", [2, 4, 5]],
+      [85, 5, `Cassini turns its dish to Earth and plays the recording back, more than once to be safe.`, "", null],
+      [90.5, 5.5, `${DATA.esoc_first_data_utc.slice(11, 16)} UTC · ${lt} minutes later the first data reach ESA in Darmstadt. Only half came home: Cassini never listened on one of the two channels, so ${P.received} of ${P.planned} pictures arrived.`, "", [0, 2, 4]],
+      [96.5, 99, `<b>Huygens on Titan · January 14, 2005</b>Its pictures are the landing-site map under the probe.<div class="btns"><button type="button" data-hl="stay">Stay at the landing site</button><button type="button" data-hl="back">Back to Cassini</button></div><small>Sources: ${SOURCES}</small>`, "big", [0, 2, 4, 7, 9]],
+    ];
+  }
+
+  // ---------- the probe: the release cutscene's model in its shell, the descent module, the parachutes ----------
+  const sprite = (color, size) => {
+    if (CS.sprite) return CS.sprite(color, size);
+    const c = document.createElement("canvas"); c.width = c.height = 64;
+    const g = c.getContext("2d"), gr = g.createRadialGradient(32, 32, 0, 32, 32, 32);
+    gr.addColorStop(0, "rgba(255,255,255,1)"); gr.addColorStop(0.25, "rgba(255,255,255,.5)"); gr.addColorStop(1, "rgba(255,255,255,0)");
+    g.fillStyle = gr; g.fillRect(0, 0, 64, 64);
+    const s = new THREE.Sprite(new THREE.SpriteMaterial({ map: new THREE.CanvasTexture(c), color, transparent: true, opacity: 0, blending: THREE.AdditiveBlending, depthWrite: false }));
+    s.scale.setScalar(size);
+    return s;
+  };
+  // a canopy of diameter d (m): a shallow dome opening toward -Y, with lines down to the origin `riser` m below its rim
+  function chute(d, riser, color) {
+    const g = new THREE.Group(), a = 1.05, r = d / 2 / Math.sin(a);
+    const dome = new THREE.Mesh(new THREE.SphereGeometry(r, 36, 10, 0, Math.PI * 2, 0, a),
+      new THREE.MeshStandardMaterial({ color, roughness: 0.9, metalness: 0, side: THREE.DoubleSide, transparent: true, opacity: 1 }));
+    dome.position.y = riser - r * Math.cos(a);
+    const pts = [];
+    for (let i = 0; i < 16; i++) { const f = i / 16 * Math.PI * 2; pts.push(0, 0.85, 0, Math.cos(f) * d / 2, riser, Math.sin(f) * d / 2); }
+    const lg = new THREE.BufferGeometry(); lg.setAttribute("position", new THREE.Float32BufferAttribute(pts, 3));
+    const lines = new THREE.LineSegments(lg, new THREE.LineBasicMaterial({ color: 0xcfd3d8, transparent: true, opacity: 0.55 }));
+    g.add(dome, lines); g.userData = { dome, lines };
+    return g;
+  }
+  function chuteOpacity(c, o) { c.visible = o > 0.01; c.userData.dome.material.opacity = o; c.userData.lines.material.opacity = 0.55 * o; }
+  function build() {
+    const m = window.studyCoast && studyCoast.probeModel && studyCoast.probeModel();
+    if (!m) return null;
+    const P = { root: new THREE.Group(), shell: m.group, p0: m.p0, axis: m.axis.clone().normalize() };
+    // the descent module: a squat cylinder 1.3 m across with its top platform and the probe's foil underneath
+    const mod = new THREE.Group(), foil = new THREE.MeshStandardMaterial({ color: 0xb9b2a0, roughness: 0.55, metalness: 0.6 });
+    const body = new THREE.Mesh(new THREE.CylinderGeometry(0.65, 0.6, 0.55, 32), foil);
+    const top = new THREE.Mesh(new THREE.CylinderGeometry(0.66, 0.66, 0.05, 32), new THREE.MeshStandardMaterial({ color: 0x8d8f93, roughness: 0.7, metalness: 0.4 }));
+    top.position.y = 0.3;
+    const base = new THREE.Mesh(new THREE.ConeGeometry(0.6, 0.25, 32), foil); base.rotation.x = Math.PI; base.position.y = -0.4;
+    mod.add(body, top, base); mod.position.y = 0.53;
+    P.mod = mod;
+    P.pilot = chute(CH.pilot, 9, 0xd9d4c8); P.main = chute(CH.main, 22, 0xe8e2d6); P.drogue = chute(CH.drogue, 12, 0xd8cdb8);
+    P.glow = sprite(0xffb070, 8); P.core = sprite(0xffe2c0, 3);
+    P.root.add(mod, P.pilot, P.main, P.drogue, P.glow, P.core);
+    P.ground = ground();
+    [P.root, P.shell, P.ground].forEach(o => o.traverse(c => c.layers.set(1)));
+    P.root.visible = P.shell.visible = P.ground.visible = false;
+    scene.add(P.root, P.shell, P.ground);
+    return P;
+  }
+  // the ground the probe lands on, for the last few hundred metres: the finest level of the viewer's landing-site map
+  // (Karkoschka's DISR mosaic, 1 m a pixel, north up), on a flat patch 400 m across centered on the landing point, in
+  // metres like the probe so the close-up pass draws them together (Titan's globe is too coarse that close). The
+  // mosaic's dark plain, clipped to black, is lifted to a dark tan as the viewer does
+  const PATCH = 400;
+  function ground() {
+    const M = probe.map, g = new THREE.Group();
+    if (!M) return g;
+    const lv = M.levels[M.levels.length - 1], [lx, ly] = M.landing_px, half = PATCH / 2 / lv.m_per_px;
+    const geo = new THREE.PlaneGeometry(PATCH, PATCH, 1, 1), uv = geo.attributes.uv;
+    for (let i = 0; i < uv.count; i++) uv.setXY(i, (lx + (uv.getX(i) * 2 - 1) * half) / M.width, 1 - (ly - (uv.getY(i) * 2 - 1) * half) / M.height);
+    const mat = new THREE.ShaderMaterial({
+      uniforms: { map: { value: new THREE.TextureLoader().load(lv.file) }, uLight: { value: 1 }, uOp: { value: 0 } },
+      vertexShader: VHEAD + `varying vec2 vUv; void main(){ vUv = uv; gl_Position = projectionMatrix * modelViewMatrix * vec4(position, 1.0);
+        #include <logdepthbuf_vertex>
+      }`,
+      fragmentShader: FHEAD + `uniform sampler2D map; uniform float uLight; uniform float uOp; varying vec2 vUv;
+        void main(){
+          #include <logdepthbuf_fragment>
+          vec3 c = max(texture2D(map, vUv).rgb * 1.3, vec3(0.14, 0.085, 0.04));
+          vec2 e = abs(vUv - 0.5) * 2.0; vec2 q = vec2(${(PATCH / 2 / lv.m_per_px / M.width).toFixed(5)}, ${(PATCH / 2 / lv.m_per_px / M.height).toFixed(5)});
+          float a = 1.0 - smoothstep(0.55, 1.0, length((vUv - vec2(${(lx / M.width).toFixed(5)}, ${(1 - ly / M.height).toFixed(5)})) / q));
+          gl_FragColor = vec4(c * uLight, a * uOp);
+        }`,
+      transparent: true, depthWrite: false });
+    g.add(new THREE.Mesh(geo, mat)); g.userData.mat = mat;
+    return g;
+  }
+  // the ground patch where the probe lands: the landing point on the 2,575 km sphere, east and north across it
+  function placeGround(et, alt) {
+    const G = P.ground, mat = G.userData.mat;
+    if (!mat || !probe.landing_site) { G.visible = false; return; }
+    const ls = probe.landing_site, lat = rad(ls.lat_deg), lon = rad(-ls.lon_w_deg), R = iauMatrix(bodies.TITAN, et);
+    const bodyUp = [Math.cos(lat) * Math.cos(lon), Math.cos(lat) * Math.sin(lon), Math.sin(lat)], bodyE = [-Math.sin(lon), Math.cos(lon), 0];
+    const bodyN = cross(bodyUp, bodyE);
+    const j = b => [0, 1, 2].map(i => R[0][i] * b[0] + R[1][i] * b[1] + R[2][i] * b[2]);
+    const up = toScene(j(bodyUp), new THREE.Vector3()), east = toScene(j(bodyE), new THREE.Vector3()), north = toScene(j(bodyN), new THREE.Vector3());
+    const site = j(bodyUp).map((x, i) => pos.TITAN[i] + x * ls.radius_km - pos[state.focus][i]);
+    G.position.copy(toScene(site, new THREE.Vector3()).multiplyScalar(1 / KM));
+    G.quaternion.setFromRotationMatrix(new THREE.Matrix4().makeBasis(east, north, up));
+    G.scale.setScalar(1e-6);
+    mat.uniforms.uOp.value = ease((0.45 - alt) / 0.25);
+    mat.uniforms.uLight.value = 0.35 + 0.9 * Math.max(0, uSun.value.dot(up));
+    G.visible = H.shot === "probe" && mat.uniforms.uOp.value > 0.01;
+  }
+  let P = null;
+  // the close-up pass blows up these too (the viewer's studyCloseObjects, the release cutscene's model besides)
+  const prevClose = window.studyCloseObjects;
+  window.studyCloseObjects = () => (prevClose ? prevClose() : []).concat(H && P ? [P.root, P.shell, P.ground].filter(o => o.visible) : []);
+
+  let H = null;   // the running cutscene
+  let waiting = null;
+  function play() {
+    if (H || CS.active || !tracks.CASSINI || !ok()) return;
+    // from far off (the release cutscene's "Watch the landing", a Moment): go there first, and start once that part of
+    // the mission has loaded
+    const E = probe.events.entry_interface;
+    if (Math.abs(state.et - E) > 3600 || typeof yearReady === "function" && !yearReady()) {
+      if (Math.abs(state.et - E) > 3600) { setPlaying(false); setTime(E - 5); }
+      clearInterval(waiting);
+      waiting = setInterval(() => { if (typeof yearReady !== "function" || yearReady()) { clearInterval(waiting); waiting = null; play(); } }, 250);
+      return;
+    }
+    if (!P) P = build();
+    if (!CS.begin("huygens-landing")) return;
+    KEYS = keys();
+    H = { t0: performance.now(), phase: "out", T: 0, s: KEYS[0][1], shown: [], playing: state.playing, speed: state.speed, how: "back",
+      shot: null, cuts: {}, spin: 0, lastFrame: performance.now(), caps: captions() };
+    fadeTo(black, 1, 1.4);
+  }
+  // "stay": paused just after the landing, the view on the probe; "back": the mission carries on from where the
+  // cutscene left it, on Cassini, playing as before. Skip and Escape are "back"
+  function finish(how) { if (H) H.how = how; CS.end("huygens-landing"); }
+  function cleanUp() {
+    const h = H; H = null;
+    if (!h) return;
+    if (P) { P.root.visible = P.shell.visible = P.ground.visible = false; }
+    sound("rumble", 0);
+    caps.textContent = ""; [read, note, hint].forEach(e => e.classList.remove("on"));
+    Object.values(tags).forEach(e => e.classList.remove("on"));
+    if (h.how === "stay") {
+      setTime(T0 + EV.landing + 120); setPlaying(false);
+      // once cutscene.html has put the interface back (it may turn follow on again)
+      setTimeout(() => { if (state.follow) setFollow(false); setFocus("HUYGENS", 4e-5); }, 0);
+    } else {
+      setTime(T0 + Math.max(h.s, 60)); setFocus("CASSINI");
+      if (h.playing) { setSpeed(h.speed); setPlaying(true); }
+    }
+  }
+  caps.addEventListener("click", e => {
+    const b = e.target.closest("[data-hl]"); if (!b) return;
+    e.stopPropagation(); finish(b.dataset.hl);
+  });
+
+  // ---------- the shots ----------
+  const SHOTS = [[0, "probe"], [34.5, "cassini"], [44.5, "probe"], [72.5, "cassini"]];
+  function shotAt(T) { let s = SHOTS[0][1]; for (const [t, n] of SHOTS) if (T >= t) s = n; return s; }
+  function frame() {
+    const now = performance.now();
+    if (H.phase === "out" && now - H.t0 >= 1600) {
+      H.phase = "run"; H.runAt = now;
+      fadeTo(black, 0, 2.5);
+      note.classList.add("on"); read.classList.add("on"); hint.classList.add("on");
+    }
+    if (H.phase !== "run") return;
+    const T = (now - H.runAt) / 1000;
+    H.T = T; H.s = missionAt(T);
+    // a short dip to black over each cut
+    for (const [t] of SHOTS) if (t > 0 && T >= t - 0.55 && !H.cuts[t]) { H.cuts[t] = true; fadeTo(black, 1, 0.5, () => fadeTo(black, 0, 0.9)); }
+    const want = shotAt(T);
+    if (want !== H.shot) {
+      H.shot = want;
+      setFocus(want === "probe" ? "HUYGENS" : "CASSINI", 4e-5); markerPts.visible = false;
+      resetLookSoft();
+    }
+    if (T > 7) hint.classList.remove("on");
+    if (T > 30) note.classList.remove("on");
+    runCaptions(H.caps, T, H.shown);
+    if (T > END - 2 && !H.closing) { H.closing = true; fadeTo(black, 1, 2); }
+    if (T > END) { finish("stay"); return; }
+    state.et = T0 + H.s;
+  }
+  function resetLookSoft() { look.yaw = 0; look.pitch = 0; look.zoom = 1; }
+
+  // ---------- after the viewer has turned Cassini: the probe's parts, sizes, glow, Cassini's dish, the readout ----------
+  const qA = new THREE.Quaternion(), qS = new THREE.Quaternion(), vS = new THREE.Vector3(), uS = new THREE.Vector3(), tmpV = new THREE.Vector3();
+  const qShell = new THREE.Quaternion(), shellOff = new THREE.Vector3(), qTurn = new THREE.Quaternion();
+  function attitude() {
+    if (H.phase !== "run") return;
+    const now = performance.now(), dt = Math.min(0.1, (now - H.lastFrame) / 1000); H.lastFrame = now;
+    const et = state.et, s = H.s, N = numbers();
+    // which way the probe moves through the air (scene), and which way is up
+    toScene(norm(velocity(et)), vS); toScene(norm(rel(et, pa)), uS);
+    H.vS = vS.clone(); H.uS = uS.clone();
+    const landed = s >= EV.landing, g = H.g = s < 0 ? gLoad(et) : 0;
+    if (!P) P = build();
+    if (P) {
+      P.root.visible = true; P.root.scale.setScalar(1e-6); P.root.position.copy(probeObj.position);
+      // the chutes hang straight up the air flow; on the ground, up
+      const upChute = landed ? uS : vS.clone().negate();
+      P.root.quaternion.setFromUnitVectors(new THREE.Vector3(0, 1, 0), upChute);
+      // the drawn spin, slow enough to read
+      H.spin += dt * 0.8 * (landed ? 0 : 1);
+      P.root.quaternion.multiply(qS.setFromAxisAngle(new THREE.Vector3(0, 1, 0), H.spin));
+      // the entry shell (NASA's model): heat shield first, until it falls away and drops below
+      const shellOn = s < EV.shield + 30;
+      P.shell.visible = shellOn;
+      if (shellOn) {
+        qShell.setFromUnitVectors(P.axis, landed ? uS.clone().negate() : vS);
+        P.shell.quaternion.copy(qShell);
+        const k = Math.max(0, s - EV.shield);
+        shellOff.copy(vS).multiplyScalar((0.5 * 2.2 * k * k + 0.6) * 1e-6);
+        if (k > 0) P.shell.quaternion.premultiply(qTurn.setFromAxisAngle(tmpV.crossVectors(vS, uS).normalize(), k * 0.25));
+        P.shell.scale.setScalar(1e-6);
+        P.shell.position.copy(P.p0).applyQuaternion(P.shell.quaternion).multiplyScalar(-1e-6).add(probeObj.position).add(shellOff);
+      }
+      P.mod.visible = s >= EV.main_deploy;
+      // the parachutes: the pilot pulls the main out; the main gives way to the drogue at 111 km; on the ground the
+      // drogue settles and fades
+      const grow = (t0, t1) => ease((s - t0) / (t1 - t0));
+      const pilotO = s >= EV.pilot - 0.6 && s < EV.main_open + 6 ? 1 : 0;
+      P.pilot.scale.setScalar(0.15 + 0.85 * grow(EV.pilot - 0.6, EV.pilot));
+      P.pilot.position.set(0, Math.max(0, s - EV.main_deploy) * 6, 0);
+      chuteOpacity(P.pilot, pilotO * (1 - clamp01((s - EV.main_open) / 6)));
+      P.main.scale.set(0.2 + 0.8 * grow(EV.main_deploy, EV.main_open), 0.4 + 0.6 * grow(EV.main_deploy, EV.main_open), 0.2 + 0.8 * grow(EV.main_deploy, EV.main_open));
+      P.main.position.set(0, Math.max(0, s - EV.drogue) * 9, 0);
+      chuteOpacity(P.main, s >= EV.main_deploy ? 1 - clamp01((s - EV.drogue) / 25) : 0);
+      P.drogue.scale.setScalar(0.2 + 0.8 * grow(EV.drogue, EV.drogue + 3));
+      chuteOpacity(P.drogue, s >= EV.drogue ? 1 - clamp01((s - EV.landing) / 12) : 0);
+      if (landed) P.drogue.rotation.z = Math.min(1.4, (s - EV.landing) * 0.12); else P.drogue.rotation.z = 0;
+      // the entry glow ahead of the heat shield, as hot as the deceleration is hard
+      const heat = clamp01(g / N.peak) * clamp01(len(velocity(et)) / 1.2);
+      [P.glow, P.core].forEach((o, i) => { o.position.copy(vS).applyQuaternion(P.root.quaternion.clone().invert()).multiplyScalar(i ? 1.6 : 2.4); o.material.opacity = heat * (i ? 0.9 : 0.6) * (0.9 + 0.1 * Math.random()); });
+      P.glow.scale.setScalar(6 + 10 * heat);
+      sound("rumble", s < 6 ? 0.35 + 0.65 * heat : 0);
+      placeGround(et, landed ? 0 : altitude(et));
+    }
+    // Cassini at its true size in its shots; without a recorded attitude its dish is on the probe until the link ends,
+    // then turns to Earth over twenty minutes
+    if (H.shot === "cassini") cassini.scale.setScalar(1e-6);
+    if (!state.pointed) {
+      relScene("HUYGENS", tmpV).sub(cassini.position);
+      const q1 = new THREE.Quaternion().setFromUnitVectors(new THREE.Vector3(0, 0, 1), tmpV.normalize());
+      relScene("EARTH", tmpV).sub(cassini.position);
+      const q2 = new THREE.Quaternion().setFromUnitVectors(new THREE.Vector3(0, 0, 1), tmpV.normalize());
+      cassini.quaternion.copy(q1).slerp(q2, ease((s - EV.link_end) / 1200));
+    }
+    // the readout
+    const rate = rateAt(H.T), clock = `${utc(et)} UTC`, fast = rate > 1.5 ? ` · Time <i>×${rate < 20 ? rate.toFixed(0) : Math.round(rate / 10) * 10}</i>` : "";
+    if (H.shot === "probe" && !landed) {
+      const alt = altitude(et), v = len(velocity(et)), chuteName = s < EV.pilot ? "" : s < EV.main_open ? " · Parachutes <i>opening</i>" : s < EV.drogue ? ` · Main chute <i>${CH.main} m</i>` : ` · Drogue <i>${CH.drogue.toFixed(1)} m</i>`;
+      read.innerHTML = `${clock} · <i>${alt < 10 ? alt.toFixed(2) : fmtInt(alt)} km</i> up · <i>${v >= 1 ? v.toFixed(2) + " km/s" : (v * 1000).toFixed(v < 0.02 ? 1 : 0) + " m/s"}</i>${s < 0 ? ` · <i>${H.g.toFixed(1)} g</i>` : ""}${chuteName}${fast}`;
+    } else if (H.shot === "probe") read.innerHTML = `${clock} · On Titan's surface · <i>${fmtDur(s - EV.landing)}</i>${fast}`;
+    else {
+      const d = len(sub(pos.CASSINI, pos.TITAN, v3())), link = s < EV.link_end ? (s < EV.data ? "waiting" : "receiving") : s < N.send - T0 - 60 ? "ended" : "sending to Earth";
+      read.innerHTML = `${clock} · Cassini <i>${fmtInt(d)} km</i> from Titan · Huygens link <i>${link}</i>${s > EV.link_end ? ` · Earth <i>${(N.lt / 60).toFixed(0)} light-minutes</i> away` : ""}${fast}`;
+    }
+  }
+
+  // ---------- the camera ----------
+  const sunH = new THREE.Vector3(), side = new THREE.Vector3(), cam = new THREE.Vector3(), tgt = new THREE.Vector3(), dirV = new THREE.Vector3();
+  function cameraAt() {
+    if (H.phase !== "run" || !H.vS) return;
+    const T = H.T, s = H.s;
+    if (H.shot === "probe") {
+      const P0 = probeObj.position, u = H.uS, v = H.vS;
+      // the Sun's side, level with the ground, so the probe is lit
+      sunH.copy(uSun.value).addScaledVector(u, -uSun.value.dot(u));
+      if (sunH.lengthSq() < 1e-6) sunH.set(1, 0, 0).addScaledVector(u, -u.x);
+      sunH.normalize(); side.crossVectors(u, sunH).normalize();
+      const a = 0.85 + 0.012 * T + look.yaw, around = sunH.clone().multiplyScalar(Math.cos(a)).addScaledVector(side, Math.sin(a));
+      let D, elev, lookAt;
+      if (s < EV.main_deploy) {
+        // entry: behind and beside the shell, looking down its path at Titan
+        D = 13; dirV.copy(around).multiplyScalar(0.8).addScaledVector(v, -0.55).addScaledVector(u, 0.15);
+        lookAt = tgt.copy(P0).addScaledVector(v, 5e-6);
+      } else if (s < EV.landing - 30) {
+        // under the parachutes: wide enough for the canopy, then lower and closer as the ground comes up
+        const chuteK = s < EV.drogue + 20 ? 1 : 0, alt = altitude(state.et);
+        const low = ease(1 - (alt - 0.3) / 6);
+        D = (chuteK ? 48 : 30) * (1 - 0.55 * low); elev = (chuteK ? 0.05 : 0.35) - 0.25 * low;
+        dirV.copy(around).addScaledVector(u, elev);
+        lookAt = tgt.copy(P0).addScaledVector(u, (chuteK ? 9 : 2) * 1e-6 * (1 - low)).addScaledVector(u, -low * 4e-6);
+      } else {
+        // the touchdown and after: low beside it, on the ground
+        D = 11; dirV.copy(around).addScaledVector(u, 0.12);
+        lookAt = tgt.copy(P0).addScaledVector(u, 0.6e-6);
+      }
+      dirV.addScaledVector(u, look.pitch).normalize();
+      cam.copy(P0).addScaledVector(dirV, D * look.zoom * 1e-6);
+      camera.position.copy(cam); camera.up.copy(u); camera.lookAt(lookAt);
+    } else {
+      // Cassini at its true size, Titan beyond it
+      const C = cassini.position, tW = relScene("TITAN", new THREE.Vector3()).sub(C).normalize(), up = new THREE.Vector3(0, 1, 0);
+      side.crossVectors(tW, up).normalize();
+      // from behind and a little beside it, Titan beyond and Cassini off to one side
+      const a = (T > 72 ? 0.3 : -0.3) + 0.004 * (T - (T > 72 ? 72.5 : 34.5)) + look.yaw;
+      dirV.copy(tW).multiplyScalar(-Math.cos(a)).addScaledVector(side, Math.sin(a)).addScaledVector(up, 0.18 + look.pitch).normalize();
+      cam.copy(C).addScaledVector(dirV, 30 * look.zoom * 1e-6);
+      camera.position.copy(cam); camera.up.copy(up);
+      camera.lookAt(tgt.copy(C).addScaledVector(tW, 60e-6));
+    }
+    // the tags
+    camera.updateMatrixWorld();
+    const place = (el, w, html, on) => {
+      const p = w.clone().project(camera), vis = on && p.z < 1 && Math.abs(p.x) < 1.05 && Math.abs(p.y) < 1.05;
+      el.classList.toggle("on", vis);
+      if (vis) el.style.transform = `translate(${(p.x + 1) / 2 * innerWidth + 8}px, ${(1 - p.y) / 2 * innerHeight - 5}px)`;
+      if (html !== undefined && vis) el.innerHTML = html;
+    };
+    const C = H.shot === "cassini", N = numbers();
+    place(tags.cassini, cassini.position, undefined, C && T - (T > 72 ? 72.5 : 34.5) > 1.5);
+    const pW = relScene("HUYGENS", new THREE.Vector3());
+    place(tags.probe, pW, `Huygens <small>on Titan · ${s < EV.landing ? "descending" : "landed"}</small>`, C);
+    const eW = relScene("EARTH", new THREE.Vector3()).sub(camera.position).normalize().add(camera.position);
+    place(tags.earth, eW, `Earth <small>${(N.earthKm / 1e9).toFixed(2)} billion km</small>`, C && s > EV.link_end);
+  }
+
+  CS.register("huygens-landing", { root, frame, attitude, camera: cameraAt, onEnd: cleanUp });
+  // playback crossing the probe's entry into Titan's air plays it; so does ?huygens-landing, and the Huygens Moments
+  CS.at(() => ok() ? probe.events.entry_interface : null, play, ok);
+  CS.fromUrl("huygens-landing", () => probe.events.entry_interface - 5, play, ok);
+  const jump0 = window.jump;
+  if (typeof jump0 === "function") window.jump = e => {
+    if (e && e.kind === "milestone" && /^Huygens (enters|lands)/.test(e.label || "") && ok() && !CS.active) return play();
+    return jump0(e);
+  };
+  window.cassiniHuygensLanding = { play, skip: () => finish("back"), get running() { return !!H; }, get T() { return H ? H.T : null; },
+    get numbers() { return ok() ? numbers() : null; }, get facts() { return DATA.facts; } };
 })();
 </script>

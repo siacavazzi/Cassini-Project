@@ -103,6 +103,17 @@ orbit: the screen fades to black, then up on Cassini on its own with Earth falli
 its real distance and speed from Earth, and the captions name the plan ahead (borrow speed from Venus twice, Earth and
 Jupiter, then Saturn). Then the interface comes back and the mission plays on from there.
 
+## Huygens landing
+
+Playback crossing Huygens's entry into Titan's air (2005-01-14 09:05 UTC), the "Huygens enters Titan's atmosphere" or
+"Huygens lands on Titan" Moment, the release cutscene's "Watch the landing", or `?huygens-landing` plays the landing
+(`src/huygens-landing.html`, under two minutes): the entry glow at up to 12 g, the parachutes and the heat shield falling
+away, Cassini listening from 69,000 km, the drogue descent over the probe's own landing-site map, touchdown at 4.5 m/s
+on the DISR mosaic, then Cassini as the site sets at 12:50 UTC and its turn to Earth, ending on the first data at ESOC
+(16:19 UTC). The probe's speed, altitude and deceleration come from its track (needs `--huygens` in the data build);
+the event times and facts are in `src/huygens-landing-data.json` with their sources. The last card stays at the landing
+site or goes back to Cassini. `bench/huygens-landing.cjs` records it on a hand-stepped clock.
+
 ## Run it
 
 The page reads the replay data through the `data` link (`data -> ../replay/data`), and the camera frames
