@@ -500,6 +500,18 @@ body.phone .savemenu a { padding: 11px 14px; }
 .crumbs .heldbadge { margin-left: auto; padding: 2px 7px; border-radius: 9px; border: 1px solid rgba(227,179,65,.7); color: #e3b341; font-size: 9.5px; }
 .crumbs .heldbadge:hover { text-decoration: none; background: rgba(227,179,65,.14); }
 .win[data-held] .well { border-color: rgba(227,179,65,.35); }
+/* a mosaic's frames: the one under the pointer outlined, the rest dimmed, the others as faint lines */
+.tilemap { position: absolute; display: none; pointer-events: none; overflow: visible; z-index: 2; }
+.tilemap.on { display: block; }
+.tilemap .dim { fill: rgba(0,0,0,.42); }
+.tilemap polygon { fill: none; stroke-linejoin: round; }
+.tilemap .other { stroke: rgba(232,236,242,.28); stroke-width: 1; }
+.tilemap .hot { stroke: #fff; stroke-width: 1.6; filter: drop-shadow(0 0 2px rgba(0,0,0,.9)); }
+.well.tilehover, .win.full .well.tilehover { cursor: pointer; }
+.tiletip { position: absolute; z-index: 3; pointer-events: none; padding: 5px 8px; border-radius: 5px; max-width: 220px; font-size: 10.5px; line-height: 1.35;
+  color: var(--q-text); background: rgba(16,17,21,.92); border: 1px solid var(--q-line); white-space: nowrap; }
+.tiletip[hidden] { display: none; }
+.tiletip b { color: #fff; font-weight: 600; } .tiletip span { color: var(--q-dim); }
 .chans.drill figure:not(.waiting) { cursor: pointer; }
 .chans.drill figure:not(.waiting):hover .tile { border-color: rgba(255,255,255,.6); }
 .chans figure.sel .tile { border-color: var(--q-accent); box-shadow: 0 0 0 1px var(--q-accent); }
@@ -2187,6 +2199,7 @@ body.phone.has-dock { --appdockh: 50px; }
       // shot.dataset.src / .report: what the picture on screen was made from, for flagging (flag.html)
       if (!keep) {
         shot.src = im.src; shot.dataset.src = v.key; shot.dataset.report = ""; obsShown = null; obsK = -1; well.classList.remove("mosaic"); saving(v.key);
+        mosaicId = null; draw(null);
         if (!steady() || shapeOf !== passOf(v.k)) { well.style.aspectRatio = ""; shapeOf = null; }
       }
       well.classList.add("has-frame"); well.classList.remove("kept"); well.classList.toggle("composite", v.set >= 0);
@@ -2319,6 +2332,7 @@ body.phone.has-dock { --appdockh: 50px; }
         shot.dataset.src = r.url; shot.dataset.report = r.headers.get("X-Reel") || "";
         saving(r.url);
         well.classList.add("mosaic"); drillable();
+        mosaicId = rep && rep.observation ? id : null; draw(null);
         if (rep && rep.observation) {
           mosaicPasses.add(passOf(k));
           if (window.cassiniPicture && rep.mosaic > (obsShown === catalog.obs[k] ? obsTiles : 0)) window.cassiniPicture({ cam, body, win, k, nm: nmOf(k), set, use: set >= 0 ? catalog.sets[set].use.map(nmOf) : null, tile: rep.mosaic, of: rep.of });
@@ -2401,12 +2415,17 @@ body.phone.has-dock { --appdockh: 50px; }
       }
     }
     // ---- drill-down: the window held on a part of its picture ----
-    // Clicking a channel under a color composite opens that channel in the same window: the composite's own channel
-    // at full size (color.webp &channel=, cut from the composite, so on its scale and aligned as in it). The window
-    // is then held: it stops following the clock (other windows play on), keeps the levels it went down as a
-    // breadcrumb, is silent, is never closed by linger nor counted by crowding (bodywin.html), shows a dot in the
-    // dock, and a flag records the path (shot.dataset.path). Esc, the badge or the camera's level bring it back to live.
-    let hold = null;   // { s: the set, levels: [{ kind: "composite" | "channel", label, url(size), ch }] }
+    // A picture opens its parts in the same window: a pass's mosaic its frames (hover outlines the frame under the
+    // pointer, a click opens it), a color composite its channels (the strip under it). A frame of a mosaic opens as
+    // its color set's composite (color.webp) or, in a one-filter mosaic, the frame alone on the pipeline's scale
+    // (/frames/processed); a channel is the composite's own (color.webp &channel=, cut from the composite, so on
+    // its scale and aligned as in it). The window is then held: it stops following the clock (other windows play
+    // on), keeps the levels it went down as a breadcrumb, is silent, is never closed by linger nor counted by
+    // crowding (bodywin.html), shows a dot in the dock, and a flag records the path (shot.dataset.path). Esc, the
+    // badge or "Live" bring it back to live.
+    // levels: [{ kind: "mosaic" | "composite" | "frame" | "channel", label, url(size), tag, shot, s (a catalog set
+    // whose channels the strip opens), mid (a mosaic's frame id, for its tile map) }]
+    let hold = null;
     const crumbs = document.createElement("div");
     crumbs.className = "crumbs"; crumbs.hidden = true; crumbs.setAttribute("aria-label", "Where this window is");
     well.parentNode.insertBefore(crumbs, well);
@@ -2417,65 +2436,179 @@ body.phone.has-dock { --appdockh: 50px; }
       hold.levels.length = +b.dataset.lv + 1; showLevel();
     });
     const drillOn = () => S.get("cameras.drill") !== false;
+    const top = () => hold && hold.levels[hold.levels.length - 1];
+    // the set whose channels the strip opens: the held composite's, or the live composite's
+    const heldSet = () => { if (!hold) return null; for (let i = hold.levels.length - 1; i >= 0; i--) if (hold.levels[i].s) return hold.levels[i].s; return null; };
+    function hold1(levels) {
+      if (!hold) { want = null; mosaicStop(); win.dataset.held = "1"; holding.add(feedApi); }
+      hold = { levels };
+      showLevel();
+    }
     // the strip opens channels while the set's composite is up, or the window is held on that set
     function drillable() {
-      const s = hold ? hold.s : shown && shown.set >= 0 && !well.classList.contains("mosaic") && well.classList.contains("has-frame") ? catalog.sets[shown.set] : null;
+      const s = hold ? (top().s || (top().kind === "channel" ? heldSet() : null))
+        : shown && shown.set >= 0 && !well.classList.contains("mosaic") && well.classList.contains("has-frame") ? catalog.sets[shown.set] : null;
       const on = !!s && s === stripSet && drillOn();
       chans.classList.toggle("drill", on);
-      const top = hold && hold.levels[hold.levels.length - 1];
+      const t = top();
       chans.querySelectorAll("figure").forEach(fig => {
-        fig.classList.toggle("sel", !!top && top.kind === "channel" && +fig.dataset.ch === top.ch);
+        fig.classList.toggle("sel", !!t && t.kind === "channel" && +fig.dataset.ch === t.ch);
         if (on) { fig.tabIndex = 0; fig.setAttribute("role", "button"); fig.title = `Open the ${fig.querySelector("b").textContent} channel`; }
         else { fig.removeAttribute("tabindex"); fig.removeAttribute("role"); fig.title = ""; }
       });
       return on ? s : null;
     }
+    const setLevel = s => ({ kind: "composite", s, label: `${KIND[s.kind]} · ${s.use.map(fname).join(" ")}`, url: sz => colorUrl(s, sz),
+      tag: KIND[s.kind].toUpperCase(), shot: s.use.map(k => catalog.id[k]).join(" ") });
     function openChannel(fig) {
       const s = drillable(); if (!s || fig.classList.contains("waiting")) return;
       const ch = +fig.dataset.ch, j = [...chans.querySelectorAll("figure")].indexOf(fig), q = s.use[j];
-      const top = hold && hold.levels[hold.levels.length - 1];
-      if (top && top.kind === "channel" && top.ch === ch) { hold.levels.length = 1; return showLevel(); }   // the open channel again: back up
-      if (!hold) {
-        hold = { s, levels: [{ kind: "composite", label: `${KIND[s.kind]} · ${s.use.map(fname).join(" ")}`, url: sz => colorUrl(s, sz), ids: s.use.map(k => catalog.id[k]) }] };
-        want = null; mosaicStop(); win.dataset.held = "1"; holding.add(feedApi);
-      }
-      hold.levels.length = 1;
-      hold.levels.push({ kind: "channel", ch, label: `${fname(q)} ${Math.round(nmOf(q))} nm · ${catalog.id[q]}`, name: fname(q), id: catalog.id[q], url: sz => `${colorUrl(s, sz)}&channel=${ch}` });
-      showLevel();
+      const t = top();
+      let levels = hold ? hold.levels.slice() : [setLevel(s)];
+      while (levels.length && levels[levels.length - 1].kind === "channel") levels.pop();
+      if (t && t.kind === "channel" && t.ch === ch) { hold.levels = levels; return showLevel(); }   // the open channel again: back up
+      levels.push({ kind: "channel", ch, label: `${fname(q)} ${Math.round(nmOf(q))} nm · ${catalog.id[q]}`, url: sz => `${colorUrl(s, sz)}&channel=${ch}`,
+        tag: `CHANNEL · ${fname(q)} · AS IN THE COMPOSITE`, shot: catalog.id[q] });
+      hold1(levels);
     }
     // a click leaves no focus behind, so Space still plays and pauses (index.html takes it only from the page itself)
     const unfocus = e => { if (e.detail && document.activeElement && document.activeElement !== document.body) document.activeElement.blur(); };
     chans.addEventListener("click", e => { const fig = e.target.closest("figure"); if (fig && chans.classList.contains("drill")) { e.stopPropagation(); unfocus(e); openChannel(fig); } });
     chans.addEventListener("keydown", e => { const fig = e.target.closest("figure"); if (fig && e.key === "Enter" && chans.classList.contains("drill")) { e.preventDefault(); openChannel(fig); } });
+
+    // ---- a mosaic's frames: hover outlines the frame under the pointer, a click opens it ----
+    // The tile map (/frames/mosaic/<ID>.json, obs_mosaic.tile_map) is the mosaic builder's own placement of each
+    // tile, outlines as fractions of the picture, so it fits every size the mosaic is sent at. Asked for once per
+    // mosaic picture, on the first hover. While the clock runs the outline waits until the pointer rests a quarter
+    // second. On a phone (full view) the first tap outlines a frame and a second tap on it opens it.
+    let mosaicId = null, tmap = null, hot = null, rest = 0, clickT = 0;
+    const NS = "http://www.w3.org/2000/svg";
+    const overlay = document.createElementNS(NS, "svg");
+    overlay.setAttribute("class", "tilemap"); overlay.setAttribute("viewBox", "0 0 1 1"); overlay.setAttribute("preserveAspectRatio", "none");
+    const tip = document.createElement("div"); tip.className = "tiletip"; tip.hidden = true;
+    well.append(overlay, tip);
+    const look = () => (window.cassiniLook ? window.cassiniLook() : "");
+    function mapFor() {
+      if (!mosaicId || !drillOn()) return null;
+      const key = `${mosaicId}|${shot.dataset.src}`;
+      if (tmap && tmap.key === key) return tmap.data;
+      tmap = { key, data: null };
+      fetch(`${FRAMES}/frames/mosaic/${mosaicId}.json?x=1${look()}`).then(r => r.ok ? r.json() : null, () => null).then(d => { if (tmap && tmap.key === key) tmap.data = d || { pointings: [] }; });
+      return null;
+    }
+    // the picture's box inside the well (object-fit: contain)
+    function picBox() {
+      const r = shot.getBoundingClientRect(), nw = shot.naturalWidth, nh = shot.naturalHeight;
+      if (!nw || !r.width) return null;
+      const s = Math.min(r.width / nw, r.height / nh), w = nw * s, h = nh * s;
+      return { x: r.left + (r.width - w) / 2, y: r.top + (r.height - h) / 2, w, h, well: well.getBoundingClientRect() };
+    }
+    const inside = (pt, poly) => { let c = false; for (let i = 0, j = poly.length - 1; i < poly.length; j = i++) { const [xi, yi] = poly[i], [xj, yj] = poly[j]; if ((yi > pt[1]) !== (yj > pt[1]) && pt[0] < (xj - xi) * (pt[1] - yi) / (yj - yi) + xi) c = !c; } return c; };
+    function hitAt(e) {
+      const m = mapFor(), b = picBox(); if (!m || !b || !m.pointings.length) return null;
+      const pt = [(e.clientX - b.x) / b.w, (e.clientY - b.y) / b.h];
+      let best = null, bd = Infinity;
+      // neighbors overlap: of the frames under the pointer, the one whose middle is nearest wins
+      for (const q of m.pointings) if (inside(pt, q.poly)) { const d = Math.hypot(pt[0] - q.center[0], pt[1] - q.center[1]); if (d < bd) { bd = d; best = q; } }
+      return best;
+    }
+    const polyStr = q => q.poly.map(c => c.join(",")).join(" ");
+    const hhmm = t => new Date(t * 1000).toISOString().slice(11, 19);
+    function draw(q) {
+      hot = q;
+      const m = tmap && tmap.data, b = picBox();
+      if (!q || !m || !b) { overlay.classList.remove("on"); tip.hidden = true; well.classList.remove("tilehover"); return; }
+      Object.assign(overlay.style, { left: b.x - b.well.left + "px", top: b.y - b.well.top + "px", width: b.w + "px", height: b.h + "px" });
+      overlay.innerHTML = `<path class="dim" fill-rule="evenodd" d="M0 0H1V1H0Z M${q.poly.map(c => c.join(" ")).join("L")}Z"/>`
+        + m.pointings.map(p => `<polygon class="${p === q ? "hot" : "other"}" points="${polyStr(p)}" vector-effect="non-scaling-stroke"/>`).join("");
+      overlay.classList.add("on"); well.classList.add("tilehover");
+      const fs = m.filters.filter(f => q.ids[f]);
+      tip.innerHTML = `<b>Frame ${q.n} of ${m.pointings.length}</b> · ${fs.join(" ")} · ${hhmm(q.t)} UTC<br><span>${phoneNow() ? "Tap again" : "Click"} to open it</span>`;
+      tip.hidden = false;
+      const cx = (Math.max(...q.poly.map(c => c[0])) + Math.min(...q.poly.map(c => c[0]))) / 2, top0 = Math.min(...q.poly.map(c => c[1]));
+      tip.style.left = Math.max(4, Math.min(b.well.width - 220, b.x - b.well.left + cx * b.w - 100)) + "px";
+      tip.style.top = Math.max(4, b.y - b.well.top + top0 * b.h - 40) + "px";
+    }
+    const phoneNow = () => document.body.classList.contains("phone");
+    well.addEventListener("pointermove", e => {
+      if (e.pointerType === "touch") return;
+      const q = hitAt(e);
+      if (q === hot) return;
+      clearTimeout(rest);
+      if (state.playing && q) { draw(null); rest = setTimeout(() => draw(hitAt(e)), 250); } else draw(q);
+    });
+    well.addEventListener("pointerleave", () => { clearTimeout(rest); draw(null); });
+    function openPointing(q) {
+      const m = tmap.data, fs = m.filters.filter(f => q.ids[f]), ids = fs.map(f => q.ids[f]);
+      const base = hold ? hold.levels.slice() : [{ kind: "mosaic", mid: mosaicId, label: `Mosaic · ${m.observation}`, src: shot.dataset.src,
+        url(sz) { return this.src.replace(/size=[^&]*/, `size=${sz}`); }, tag: card.querySelector(".kindtag").textContent, shot: m.observation }];
+      while (base.length && base[base.length - 1].kind !== "mosaic") base.pop();
+      let lv;
+      if (ids.length === 3) {
+        const k = kOf(ids[0]), si = k >= 0 ? catalog.setOf[k] : -1, cs = si >= 0 ? catalog.sets[si] : null;
+        const s = cs && cs.use.length === 3 && cs.use.every((u, j) => catalog.id[u] === ids[j]) ? cs : null;
+        const kind = s ? KIND[s.kind] : (fs.includes("GRN") ? "Color" : "False color");
+        lv = { kind: "composite", s, label: `Frame ${q.n} · ${kind} · ${fs.join(" ")}`, url: sz => `${FRAMES}/frames/color.webp?ids=${ids.join(",")}&size=${sz}${look()}`,
+          tag: `FRAME ${q.n} OF THE MOSAIC · ${kind.toUpperCase()} · ON ITS OWN`, shot: ids.join(" ") };
+      } else {
+        const id = ids[ids.length - 1];
+        lv = { kind: "frame", label: `Frame ${q.n} · ${nameOf(id)} · ${id}`, url: sz => `${FRAMES}/frames/processed/${id}.webp?size=${sz}${look()}`,
+          tag: `FRAME ${q.n} OF THE MOSAIC · ON ITS OWN`, shot: id };
+      }
+      draw(null);
+      hold1(base.concat([lv]));
+    }
+    well.addEventListener("click", e => {
+      if (!mosaicId) return;
+      const q = hitAt(e); if (!q) return;
+      if (phoneNow()) {
+        if (!win.classList.contains("full")) return;   // a tap on a small window opens full view, as before
+        e.stopPropagation();
+        if (hot !== q) return draw(q);
+        return openPointing(q);
+      }
+      // a double-click (full view) is not two clicks into the mosaic
+      clearTimeout(clickT);
+      if (e.detail > 1) return;
+      clickT = setTimeout(() => openPointing(q), 260);
+    });
+    well.addEventListener("dblclick", () => clearTimeout(clickT));
+
     let levelKey = "";
     // the held window's picture: its top level, at the size the window wants (full view: full)
     function showLevel() {
-      const top = hold.levels[hold.levels.length - 1], url = top.url(size());
+      const t = top(), url = t.url(size());
       crumbs.hidden = false;
       crumbs.innerHTML = '<button data-lv="live" title="Back to the live camera">Live</button><span class="sep">›</span>' + hold.levels.map((l, i) => i < hold.levels.length - 1
         ? `<button data-lv="${i}">${l.label}</button><span class="sep">›</span>` : `<span class="here" title="${l.label}">${l.label}</span>`).join("")
         + '<button class="heldbadge" title="Back to live (Esc)">held · Esc back to live</button>';
       // flags (flag.html) record where the window is
       shot.dataset.path = JSON.stringify(hold.levels.map(l => ({ kind: l.kind, label: l.label, src: l.url(capped()) })));
-      card.querySelector(".kindtag").textContent = top.kind === "channel" ? `CHANNEL · ${top.name} · AS IN THE COMPOSITE` : KIND[hold.s.kind].toUpperCase();
-      card.querySelector(".shottag").textContent = top.kind === "channel" ? top.id : hold.levels[0].ids.join(" ");
+      card.querySelector(".kindtag").textContent = t.tag;
+      card.querySelector(".shottag").textContent = t.shot;
+      // a held composite's channels in the strip (a frame opened from a mosaic is a set of its own)
+      const s = t.s || (t.kind === "channel" ? heldSet() : null);
+      if (s && s !== stripSet) strip(s, Infinity, -1);
       drillable();
+      draw(null);
       if (url === levelKey) return;
       const im = new Image(); im.crossOrigin = "anonymous";
       im.onload = () => {
-        if (!hold || hold.levels[hold.levels.length - 1] !== top || top.url(size()) !== url) return;
+        if (!hold || top() !== t || t.url(size()) !== url) return;
         levelKey = url;
         shot.src = im.src; shot.dataset.src = url; shot.dataset.report = "";
-        well.classList.add("has-frame", "composite"); well.classList.remove("mosaic", "kept");
-        if (top.kind === "composite") channelsFrom(im, hold.s);
+        mosaicId = t.kind === "mosaic" ? t.mid : null;
+        well.classList.add("has-frame"); well.classList.remove("kept");
+        well.classList.toggle("composite", t.kind !== "mosaic"); well.classList.toggle("mosaic", t.kind === "mosaic");
+        if (t.kind === "composite" && t.s) channelsFrom(im, t.s);
         saving();
       };
       im.src = url;
     }
     function release() {
       if (!hold) return;
-      hold = null; levelKey = ""; crumbs.hidden = true; crumbs.innerHTML = ""; delete win.dataset.held; holding.delete(feedApi);
-      delete shot.dataset.path; saveOpen(false);
+      hold = null; levelKey = ""; mosaicId = null; crumbs.hidden = true; crumbs.innerHTML = ""; delete win.dataset.held; holding.delete(feedApi);
+      delete shot.dataset.path; saveOpen(false); draw(null);
       // back to live: the clock's picture again, from the top
       lastK = -2; shownKey = null; shown = null; obsShown = null; obsK = -1; stripKey = "";
       for (const L of Object.values(mLane)) { L.last = ""; L.next = null; }

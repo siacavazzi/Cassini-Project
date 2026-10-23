@@ -553,6 +553,68 @@ def so_far(u, n, cache, made=None, out=OUT):
                 "fixed": p["fixed"], "width": im.width, "height": im.height}
 
 
+def outline(u, t, cache):
+    """Tile t's outline: the four corners of its frame (the smallest rotated rectangle around the tile's
+    picture, so a frame turned north up keeps its slant) in reference pixels from the body's centre; measured
+    once from tiles/<n>.png and kept beside it."""
+    base = os.path.join(folder(u, cache), "tiles", str(t["n"]))
+    def make():
+        import cv2
+        alpha = np.asarray(Image.open(base + ".png"))[..., 3]
+        pts = cv2.findNonZero((alpha > 0).astype(np.uint8))
+        corners = cv2.boxPoints(cv2.minAreaRect(pts)) if pts is not None else np.zeros((4, 2))
+        bx, by = t["box"][:2]
+        return json.dumps([[float(t["offset"][0] + bx + x), float(t["offset"][1] + by + y)] for x, y in corners]).encode()
+    return json.loads(reel._cached(base + ".outline.json", make))
+
+
+def tile_map(frame_id, cache):
+    """Where each frame sits in the mosaic shown for frame_id (the same layout as mosaic_webp, so the same
+    tiles and view), for the camera windows' drill-down: {observation, filters, pointings: [{n, t, ids
+    {filter: id}, tiles, poly [[x, y] x4], center [x, y]}]} with x, y as fractions (0-1) of the picture.
+    A pointing is the drawn tiles of different filters at one place (within SAME_PLACE of a frame) taken one
+    after another; its outline is its newest tile's, which is the one on top. None when frame_id is not in a
+    mosaic pass or nothing is placed yet."""
+    found = unit_of(frame_id)
+    if not found or not found[0]["mosaic"] or found[1] < 0:
+        return None
+    u, n = found
+    made = layout(u, n, cache)
+    if not made:
+        return None
+    p, tiles, rect, count, used, _ = made
+    x0, y0, w, h = rect
+    frac = lambda x, y: [round((x - x0) / w, 5), round((y - y0) / h, 5)]
+    pointings = []
+    for t in tiles:
+        if "offset" not in t or t["filter"] not in used or not os.path.exists(os.path.join(folder(u, cache), "tiles", f"{t['n']}.png")):
+            continue
+        last = pointings[-1] if pointings else None
+        if last and t["filter"] not in last["ids"] and t["t"] - last["t1"] <= REPEAT_POINTING and \
+                math.hypot(t["offset"][0] - last["at"][0], t["offset"][1] - last["at"][1]) <= SAME_PLACE * FRAME:
+            pass
+        else:
+            last = {"ids": {}, "tiles": []}
+            pointings.append(last)
+        last["ids"][t["filter"]] = t["id"]
+        last["tiles"].append(t["n"])
+        last["t1"], last["at"] = t["t"], t["offset"]
+        last.setdefault("t", t["t"])
+        last["poly"] = [frac(x, y) for x, y in outline(u, t, cache)]
+        last["center"] = frac(*t["offset"])
+    out = []
+    for i, q in enumerate(pointings):
+        q.pop("t1"); q.pop("at")
+        if not (max(c[0] for c in q["poly"]) <= 0 or min(c[0] for c in q["poly"]) >= 1 or
+                max(c[1] for c in q["poly"]) <= 0 or min(c[1] for c in q["poly"]) >= 1):   # in the view
+            out.append(dict(q, n=i + 1))
+    return {"observation": u["key"][1], "target": u["key"][0], "pass": u["key"][3], "filters": used,
+            "fixed": p["fixed"], "pointings": out}
+
+
+REPEAT_POINTING = 600   # s: a filter's tiles at one place are one pointing when taken within this of each other
+
+
 def mosaic_webp(frame_id, size, cache, slots=None, ahead=3, fmt="webp", out=OUT):
     """(WebP, report) of the mosaic so far at frame_id when its pass is a mosaic; otherwise None. Then makes the
     next few tiles and the mosaics with them in the background, so the next frames' mosaics are ready when the

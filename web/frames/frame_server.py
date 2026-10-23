@@ -48,6 +48,8 @@ Routes:
                                stacked, calibrated, aligned, centred on the body with north up by SPICE)
                                and drawn into the rolling mosaic with the pictures before it; made on
                                first request and cached. X-Reel says how it was made
+  /frames/mosaic/<ID>.json     where each frame sits in that mosaic (obs_mosaic.tile_map): its pointings, each with
+                               its frames by filter and its outline and centre as fractions of the picture
   /frames/mosaic/<ID>.webp?size=512   (&warm=1: only start making the pass ahead of time, empty answer)
                                the mosaic frame <ID> is a new tile of, made like a reel picture: 404 when
                                the frame is not a mosaic tile (mosaic.panels: same camera, observation and
@@ -722,6 +724,14 @@ def make_handler(site, cache, flags=None):
                     return self.send_bytes(data, "image/webp", headers={"X-Reel": json.dumps(report, default=str)})
                 except FileNotFoundError:
                     return self.send_error(404, "Frame not in the archive")
+            m = re.match(r"^/frames/mosaic/([^/]+)\.json$", url.path)
+            if m:
+                # where each frame sits in the mosaic shown for that frame (obs_mosaic.tile_map), for hover and
+                # click-to-open in the camera windows; 404 when the frame is not in a mosaic pass
+                if not FRAME_ID.match(m.group(1)):
+                    return self.send_error(400, "Not a frame id")
+                found = obs_mosaic.tile_map(m.group(1), cache) if reel._index is not None else None
+                return self.send_json(found) if found else self.send_json({"error": "not a mosaic pass"}, 404)
             m = re.match(r"^/frames/mosaic/([^/]+)\.webp$", url.path)
             if m:
                 # the camera windows ask this for each frame: the mosaic when the frame is a new tile of a
