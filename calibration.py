@@ -453,6 +453,18 @@ its noise, so the body is left a little tinted instead (apply_mix holds what sti
 """
 FALSE_BALANCE = 0.9
 FALSE_OWN = 0.75
+OWN_NEAR = 0.3       # ... measured where every band's share is within this (log) of the picture's typical
+
+# the most one band's gain may be over another's: MT3 is so dark on Saturn (gains of 8 to 11) that whatever is less
+# methane-absorbed (the rings, the equatorial haze, the limb) would come out a vivid pink and its structure stand out
+# like scan lines
+GAIN_SPREAD = 4.0
+
+
+def spread_capped(gains):
+    low = min(gains)
+    return [min(g, low * GAIN_SPREAD) for g in gains]
+
 
 # the target of the balance for bodies with a color of their own, instead of gray: their natural color (sRGB, the color
 # investigation's references, /mnt/project-files/color-investigation/filter_to_srgb_matrices.json), so a false color
@@ -472,7 +484,7 @@ def tint_of(target):
 def balance(levels, tint=None):
     mean = sum(levels) / len(levels)
     tint = tint or [1.0] * len(levels)
-    gains = [(mean * t / v) ** FALSE_BALANCE for v, t in zip(levels, tint)]
+    gains = spread_capped([(mean * t / v) ** FALSE_BALANCE for v, t in zip(levels, tint)])
     k = sum(levels) / sum(g * v for g, v in zip(gains, levels))
     return [g * k for g in gains]
 
@@ -617,9 +629,19 @@ def load_linear(labels, images=None, iofs=None):
         # movie of one scene, whose frames are alike, still keeps one color
         lum = np.mean(channels, axis=0)
         lit = lum > 0.2 * np.percentile(lum, 99)
-        own = [float(np.median(c[lit])) * g for c, g in zip(channels, np.diagonal(mix))] if lit.sum() > 100 else []
-        if own and min(own) > 0:
-            mix = mix * np.diag([g ** FALSE_OWN for g in balance(own, tint_of(_value(infos[0], "TARGET_NAME", "")))]).astype(np.float32)
+        if lit.sum() > 100:
+            # over the pixels near the picture's typical band ratios, so rings or a bright equatorial band don't steer it
+            logs = [np.log(np.maximum(c[lit], 1e-6) / np.maximum(lum[lit], 1e-6)) for c in channels]
+            typical = np.logical_and.reduce([np.abs(v - np.median(v)) < OWN_NEAR for v in logs])
+            if typical.sum() > 100:
+                lit = np.where(lit)
+                lit = tuple(i[typical] for i in lit)
+            own = [float(np.median(c[lit])) * g for c, g in zip(channels, np.diagonal(mix))]
+            if min(own) > 0:
+                tint = tint_of(_value(infos[0], "TARGET_NAME", ""))
+                gains = spread_capped([g * o ** FALSE_OWN for g, o in zip(np.diagonal(mix), balance(own, tint))])
+                mix = np.diag(np.asarray(gains, np.float32)).view(FalseMix)
+                mix.tint = tint
     margin /= white
     sky = _sky(iofs) if measured else np.ones(iofs[0].shape, dtype=bool)
     if measured:
