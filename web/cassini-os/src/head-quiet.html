@@ -446,6 +446,42 @@ body.s-steady .info dd[data-f="colour"] { white-space: normal; display: -webkit-
 #dock.zoomed { width: min(1420px, calc(100% - 20px)); }
 #dock.zoomed #tl { height: 76px; }
 
+/* the replay window's head: the controls in one small cluster on the left, the clock in the middle, the timeline's
+   zoom and "back to now" on the right, so the timeline under them gets the whole width */
+.lcdhead { display: grid; grid-template-columns: auto minmax(0, 1fr) auto; align-items: center; gap: 10px; }
+.lcdhead .clockbox { min-width: 0; display: grid; gap: 1px; }
+.lcdhead .transport { flex: none; justify-self: start; gap: 1px; padding: 2px; border: 1px solid var(--q-line); border-radius: 16px; }
+.lcdhead .transport .round { border: 0; background: none; }
+.lcdhead .transport .round:hover { background: rgba(255,255,255,.1); }
+.lcdhead .transport .round[aria-pressed="true"] { background: rgba(138,182,255,.24); color: #fff; }
+.lcdhead #play { width: 30px; height: 30px; font-size: 11px; background: rgba(255,255,255,.08); }
+.lcdhead .skip { width: 26px; height: 26px; font-size: 8px; }
+.lcdhead .skip svg { width: 13px !important; height: 13px !important; }
+.tltools { justify-self: end; display: flex; align-items: center; gap: 4px; color: var(--q-dim); font-size: 10px; }
+.tltools input[type=range] { -webkit-appearance: none; appearance: none; width: 110px; height: 18px; margin: 0; background: none; cursor: default; }
+.tltools input[type=range]::-webkit-slider-runnable-track { height: 3px; border-radius: 2px; background: rgba(255,255,255,.18); }
+.tltools input[type=range]::-moz-range-track { height: 3px; border-radius: 2px; background: rgba(255,255,255,.18); }
+.tltools input[type=range]::-webkit-slider-thumb { -webkit-appearance: none; width: 11px; height: 11px; margin-top: -4px; border-radius: 50%; background: #d9dee6; border: 0; }
+.tltools input[type=range]::-moz-range-thumb { width: 11px; height: 11px; border-radius: 50%; background: #d9dee6; border: 0; }
+.tltools input[type=range]:hover::-webkit-slider-thumb { background: #fff; }
+.tltools input[type=range]:focus-visible { outline: 1px solid var(--q-accent); outline-offset: 2px; border-radius: 3px; }
+.tlstep { all: unset; width: 16px; height: 18px; display: grid; place-items: center; border-radius: 4px; color: var(--q-dim); font-size: 13px; cursor: default; }
+.tlstep:hover { color: #fff; background: rgba(255,255,255,.08); }
+#tlspan { min-width: 46px; text-align: left; font-variant-numeric: tabular-nums; white-space: nowrap; }
+#tlnow { margin-left: 2px; }
+#tlnow svg { width: 14px; height: 14px; display: block; }
+#tlnow svg * { fill: none; stroke: currentColor; stroke-width: 1.3; }
+#tlnow svg .dot { fill: currentColor; stroke: none; }
+/* following the clock it rests; scrolled away it lights up to bring you back */
+#tlnow[aria-pressed="true"] { background: none; color: var(--q-dim); }
+#tlnow[aria-pressed="false"] { background: rgba(138,182,255,.24); color: #fff; border-color: rgba(138,182,255,.5); }
+#tl { height: 84px; }
+#dock.zoomed #tl { height: 110px; }
+/* the zoom slider replaces the fixed spans */
+#zooms { display: none !important; }
+#dock:not(.zoomed) .toolbar { grid-template-columns: minmax(0, 1fr); }
+#dock:not(.zoomed) .toolbar > .col:first-child { display: none; }
+
 /* the HUD in space stays, a little softer */
 #hudline { opacity: .7; }
 .lbl:not(.focus):not(.cassini) { opacity: .75; }
@@ -579,6 +615,7 @@ body.idle .win.full .titlebar { opacity: 0; }
       <ul id="gomenu">
         <li><button data-act="prev">Previous Moment<span class="kbd">⌘[</span></button></li>
         <li><button data-act="next">Next Moment<span class="kbd">⌘]</span></button></li>
+        <li><button data-act="copylink">Copy Link to This Moment<span class="kbd">⇧⌘C</span></button></li>
         <li class="sep"></li>
       </ul></div>
     <div class="menu"><button aria-haspopup="true">Window</button>
@@ -635,20 +672,31 @@ body.idle .win.full .titlebar { opacity: 0; }
     <div class="titlebar"><span class="lights"><button class="close" aria-label="Close">×</button><button class="min" aria-label="Minimize">–</button><button class="zoom" aria-label="Zoom">+</button></span>Cassini Replay</div>
     <div class="toolbar">
       <div class="col">
-        <div class="transport">
-          <button class="btn round skip" id="prev" aria-label="Previous moment">◀◀</button>
-          <button class="btn round" id="play" aria-label="Play or pause">❚❚</button>
-          <button class="btn round skip" id="next" aria-label="Next moment">▶▶</button>
-          <button class="btn round skip" id="phmom" aria-pressed="false" aria-label="Moments" title="Moments"><svg viewBox="0 0 16 16" aria-hidden="true"><path d="M3 4h10M3 8h10M3 12h10"/></svg></button>
-        </div>
         <div class="seg" id="speeds" aria-label="Playback speed"></div>
         <div class="seg" id="zooms" aria-label="Timeline span"></div>
       </div>
       <div class="lcd">
-        <div class="clock" id="clock">—</div>
-        <div class="sub"><span id="rel">—</span> · <span id="mday">—</span></div>
+        <div class="lcdhead">
+          <div class="transport">
+            <button class="btn round skip" id="prev" aria-label="Previous moment">◀◀</button>
+            <button class="btn round" id="play" aria-label="Play or pause">❚❚</button>
+            <button class="btn round skip" id="next" aria-label="Next moment">▶▶</button>
+            <button class="btn round skip" id="phmom" aria-pressed="false" aria-label="Moments" title="Moments"><svg viewBox="0 0 16 16" aria-hidden="true"><path d="M3 4h10M3 8h10M3 12h10"/></svg></button>
+          </div>
+          <div class="clockbox">
+            <div class="clock" id="clock">—</div>
+            <div class="sub"><span id="rel">—</span> · <span id="mday">—</span></div>
+          </div>
+          <div class="tltools">
+            <button class="tlstep" id="tlout" aria-label="Zoom the timeline out" title="Zoom out">−</button>
+            <input type="range" id="tlzoom" min="0" max="1000" step="1" value="500" aria-label="Timeline zoom" title="Timeline zoom: how much time the timeline shows">
+            <button class="tlstep" id="tlin" aria-label="Zoom the timeline in" title="Zoom in">+</button>
+            <span id="tlspan">—</span>
+            <button class="btn round skip" id="tlnow" aria-pressed="true" aria-label="Back to now" title="Back to now: center the timeline on the current moment and follow it"><svg viewBox="0 0 16 16" aria-hidden="true"><circle cx="8" cy="8" r="4.2"/><path d="M8 1v3M8 12v3M1 8h3M12 8h3"/><circle class="dot" cx="8" cy="8" r="1.2"/></svg></button>
+          </div>
+        </div>
         <div class="sub probe" id="probe" hidden></div>
-        <canvas id="tl" aria-label="Timeline: drag to scrub, scroll to zoom"></canvas>
+        <canvas id="tl" aria-label="Timeline: drag to scrub, drag the top edge or scroll to move through time, pinch or use the slider to zoom"></canvas>
         <div class="legend"><span class="keys" id="lkeys"></span><span id="l24">—</span></div>
       </div>
       <div class="col right">
@@ -898,6 +946,36 @@ body.idle .win.full .titlebar { opacity: 0; }
     if (e.key.toLowerCase() === "m") { e.preventDefault(); act(document.querySelector('[data-act="orbits"]')); }
   });
 
+  // ---------- the timeline's zoom slider and "back to now" ----------
+  // The slider is logarithmic, from the whole mission at the left to ten minutes at the right (like a video editor's
+  // zoom); while the timeline follows the clock it zooms around now, otherwise around the middle of the view.
+  const tlSpanMax = () => Math.max(TL_MIN_SPAN * 2, coverage[1] - coverage[0]);
+  const tlSpanAt = v => tlSpanMax() * Math.pow(TL_MIN_SPAN / tlSpanMax(), v / 1000);
+  const tlValueOf = span => 1000 * Math.log(tlSpanMax() / span) / Math.log(tlSpanMax() / TL_MIN_SPAN);
+  const fmtTlSpan = sec => {
+    const r = (v, u) => `${v < 10 ? +v.toFixed(1) : Math.round(v)} ${u}${Math.round(v * 10) === 10 ? "" : "s"}`;
+    return sec < 5400 ? r(sec / 60, "min") : sec < 2 * 86400 ? r(sec / 3600, "hour") : sec < 60 * 86400 ? r(sec / 86400, "day")
+      : sec < 2 * 365.25 * 86400 ? r(sec / (30.44 * 86400), "month") : r(sec / (365.25 * 86400), "year");
+  };
+  let tlShown = { span: 0, follow: null };
+  window.syncTimelineTools = () => {
+    const span = state.view[1] - state.view[0];
+    if (span !== tlShown.span) {
+      tlShown.span = span;
+      if (document.activeElement !== $("tlzoom")) $("tlzoom").value = Math.round(tlValueOf(span));
+      $("tlspan").textContent = fmtTlSpan(span);
+    }
+    if (state.tlFollow !== tlShown.follow) {
+      tlShown.follow = state.tlFollow;
+      $("tlnow").setAttribute("aria-pressed", String(state.tlFollow));
+      $("tlnow").title = state.tlFollow ? "Following the current moment (click to center it)" : "Back to now: center the timeline on the current moment and follow it";
+    }
+  };
+  $("tlzoom").addEventListener("input", e => zoomTimeline(tlSpanAt(+e.target.value)));
+  $("tlout").addEventListener("click", () => zoomTimeline((state.view[1] - state.view[0]) * 2));
+  $("tlin").addEventListener("click", () => zoomTimeline((state.view[1] - state.view[0]) / 2));
+  $("tlnow").addEventListener("click", () => recenterTimeline());
+
   // previous / next moment
   const items = () => [...document.querySelectorAll("#mlist li")];
   $("next").addEventListener("click", () => { const li = items().find(li => +li.dataset.et > state.et + 3.5 * 3600); if (li) li.querySelector("button").click(); });
@@ -1050,6 +1128,7 @@ body.idle .win.full .titlebar { opacity: 0; }
   };
   // the scrubber knob: a small diamond on the "now" line, as on an old LCD progress bar
   window.studyTimeline = (g, w, h, xn) => {
+    window.syncTimelineTools();
     const y = h * LANES.nBase;
     g.fillStyle = "#1d2016"; g.beginPath(); g.moveTo(xn, y - 6); g.lineTo(xn + 6, y); g.lineTo(xn, y + 6); g.lineTo(xn - 6, y); g.fill();
   };
@@ -2199,10 +2278,12 @@ body.idle .win.full .titlebar { opacity: 0; }
   // ---------- burst limit: in normal playback each camera window gets at most maxRate new pictures a second ----------
   // The clock runs at the chosen speed except inside an imaging burst, where it slows so that crossing the gap
   // between two of a camera's frames takes at least 1/maxRate s; it is back to full speed once the burst is over.
+  // A faster speed is always faster: a burst never slows the clock below a share of the chosen speed
+  // (playback.burstFloor), so 1 day/s skips pictures in a long burst instead of crawling like 10 min/s does.
   // Movie mode has its own clock. 0 = no limit. The setting lives in the Settings window when the page has one
   // (playback.maxImageRate), otherwise in the View menu.
-  const RATE_DEFAULT = 5, RATE_KEY = "cassini-os-max-image-rate", SETTINGS = window.cassiniSettings;
-  let maxRate = RATE_DEFAULT, slowedTo = 0;
+  const RATE_DEFAULT = 5, FLOOR_DEFAULT = 0.25, RATE_KEY = "cassini-os-max-image-rate", SETTINGS = window.cassiniSettings;
+  let maxRate = RATE_DEFAULT, burstFloor = FLOOR_DEFAULT, slowedTo = 0;
   function syncRateMenu() {
     const r = $("maxrate"); if (!r) return;
     r.value = maxRate; $("maxratev").textContent = maxRate ? `${maxRate} image${maxRate === 1 ? "" : "s"}/s` : "no limit";
@@ -2218,6 +2299,10 @@ body.idle .win.full .titlebar { opacity: 0; }
       hint: "When Cassini takes a burst of pictures, the timeline slows down so each camera window shows at most this many new images a second. 0 = no limit.",
       type: "range", value: RATE_DEFAULT, min: 0, max: 24, step: 1, unit: "images/s" }) || 0;
     SETTINGS.on("playback.maxImageRate", v => { maxRate = +v || 0; });
+    SETTINGS.define({ key: "playback.burstFloor", section: "Playback", label: "Bursts slow playback to no less than",
+      hint: "However many pictures a burst has, the timeline keeps at least this share of the chosen speed, so a faster speed always plays faster (skipping pictures in long bursts). 100 % = never slow down.",
+      type: "range", value: FLOOR_DEFAULT * 100, min: 5, max: 100, step: 5, unit: "%" });
+    SETTINGS.on("playback.burstFloor", v => { burstFloor = (+v || 0) / 100; });
   } else {
     try { const v = localStorage.getItem(RATE_KEY); if (v !== null && +v >= 0) maxRate = +v; } catch (e) {}
     syncRateMenu();
@@ -2259,6 +2344,7 @@ body.idle .win.full .titlebar { opacity: 0; }
     for (let n = 0; n < 200; n++) {
       let s = speed, stop = Infinity;
       for (const cam in catalog.byCam) { const [cap, nx] = capOf(cam, et); s = Math.min(s, cap); stop = Math.min(stop, nx); }
+      s = Math.max(s, speed * burstFloor);
       if (s < speed) slowedTo = slowedTo ? Math.min(slowedTo, s) : s;
       if (et + dt * s <= stop) return et + dt * s;
       dt -= (stop - et) / s; et = stop;   // the next frame changes the gap, so carry on from there

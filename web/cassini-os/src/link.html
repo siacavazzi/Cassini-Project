@@ -1,0 +1,104 @@
+<!-- Shareable links for Cassini OS. build.py splices the style into the head, the toast into #app and the script
+     before the chrome script (after the settings script), so the settings have set the viewer up before a link's
+     own view is applied on top.
+
+     The address bar always holds the moment on screen, so a copied link opens on it again:
+       t       mission time, UTC to the second (2006-09-15T14:28:05); kept in step with playback
+       view    follow (Cassini, looking where its camera points), cassini (Cassini, free camera) or a body (enceladus)
+       cam     where the free camera sits around what it looks at (x,y,z, 4 digits each); not for view=follow
+       speed   mission seconds per second of playback
+       play=0  paused
+       movie=1 movie mode on
+     Every other query parameter (?frames=, ?tex=, ?finale) is left as it is. The URL is rewritten with
+     history.replaceState at most twice a second and only when it changed, so the history stays one entry.
+     A link's view applies to this visit only: it never changes the Follow camera setting. Go > Copy Link copies it. -->
+<style>
+#linktoast { position: fixed; left: 50%; bottom: 22px; transform: translateX(-50%); z-index: 3001; padding: 7px 12px; border-radius: 8px;
+  background: rgba(20,22,27,.96); border: 1px solid var(--q-line, #444); color: var(--q-text, #ddd); font-size: 12px; box-shadow: 0 8px 30px rgba(0,0,0,.5); }
+#linktoast[hidden] { display: none; }
+body.idle #linktoast { opacity: 1; }
+body.phone #linktoast { bottom: calc(env(safe-area-inset-bottom, 0px) + 12px); }
+</style>
+
+<div id="linktoast" role="status" hidden></div>
+
+<script>
+// ---------- shareable links: the address bar follows the moment on screen ----------
+(function () {
+  const KEYS = ["t", "view", "speed", "play", "movie", "cam"];
+  const S = window.cassiniSettings, $ = id => document.getElementById(id);
+  const num = v => (+(+v).toPrecision(4)).toString().replace("e+", "e");   // short, and no "+" (a space in a query)
+  const utc = et => new Date(etToMs(et)).toISOString().slice(0, 19);
+  // the link for the moment on screen; other pages (flagging) use it too
+  function params() {
+    const p = [["t", utc(state.et)]];
+    const view = state.focus !== "CASSINI" ? state.focus.toLowerCase() : state.follow ? "follow" : "cassini";
+    p.push(["view", view]);
+    p.push(["speed", num(state.speed)]);
+    if (!state.playing) p.push(["play", "0"]);
+    if (window.cassiniMovie && window.cassiniMovie.on) p.push(["movie", "1"]);
+    if (view !== "follow") p.push(["cam", [camera.position.x, camera.position.y, camera.position.z].map(num).join(",")]);
+    return p;
+  }
+  function href(extra) {
+    const u = new URL(location.href), keep = [...u.searchParams].filter(([k]) => !KEYS.includes(k));
+    const enc = s => encodeURIComponent(s).replace(/%3A/gi, ":").replace(/%2C/gi, ",");
+    const q = [...params(), ...(extra || []), ...keep].map(([k, v]) => v === "" ? enc(k) : `${enc(k)}=${enc(v)}`).join("&");
+    return u.origin + u.pathname + (q ? "?" + q : "") + u.hash;
+  }
+
+  // a link's view, speed and play state, once the viewer and the settings have set themselves up
+  function apply() {
+    const q = new URLSearchParams(location.search), view = (q.get("view") || "").toUpperCase();
+    // the follow button is mirrored into Settings; a link's view is for this visit only
+    const quietly = fn => (S && S.transient ? S.transient(fn) : fn());
+    if (view === "FOLLOW") { if (!state.follow) quietly(() => setFollow(true)); }
+    else if (view === "CASSINI") { if (state.follow) quietly(() => setFollow(false)); }
+    else if (view) quietly(() => setFocus(view));
+    const cam = (q.get("cam") || "").split(",").map(Number);
+    if (cam.length === 3 && cam.every(isFinite) && !state.follow && cam.some(Boolean)) {
+      const r = Math.hypot(...cam), lo = controls.minDistance, hi = controls.maxDistance;
+      camera.position.set(...cam).multiplyScalar(Math.min(hi, Math.max(lo, r)) / r);
+      controls.update();
+    }
+    const sp = +q.get("speed");
+    if (q.has("speed") && isFinite(sp) && sp > 0 && sp <= 1e7) setSpeed(sp);
+    if (q.get("play") === "0") setPlaying(false);
+    else if (q.has("play")) setPlaying(true);
+    if (q.get("movie") === "1" && window.cassiniMovie && !window.cassiniMovie.on) window.cassiniMovie.start();
+  }
+  let last = "";
+  function write() {
+    if (typeof state === "undefined" || !$("loading").hidden) return;
+    const h = href();
+    if (h === last) return;
+    last = h;
+    try { history.replaceState(history.state, "", h); } catch (e) {}
+  }
+
+  function toast(text) {
+    const t = $("linktoast"); t.textContent = text; t.hidden = false;
+    clearTimeout(toast.t); toast.t = setTimeout(() => { t.hidden = true; }, 2200);
+  }
+  async function copy() {
+    write();
+    const h = href();
+    try { await navigator.clipboard.writeText(h); toast("Link to this moment copied"); }
+    catch (e) { if (navigator.share) navigator.share({ url: h }).catch(() => {}); else toast(h); }
+  }
+  document.addEventListener("click", e => {
+    if (!e.target.closest('[data-act="copylink"]')) return;
+    e.stopPropagation(); document.querySelectorAll(".menu.open").forEach(m => m.classList.remove("open"));
+    copy();
+  }, true);
+  window.addEventListener("keydown", e => {
+    if ((e.metaKey || e.ctrlKey) && e.shiftKey && e.key.toLowerCase() === "c") { e.preventDefault(); copy(); }
+  }, true);
+
+  window.cassiniLink = { href, params, copy };
+  const ready = () => typeof state !== "undefined" && typeof setSpeed === "function" && $("loading").hidden;
+  const start = () => { apply(); write(); setInterval(write, 500); addEventListener("pagehide", write); };
+  if (ready()) start();
+  else { const mo = new MutationObserver(() => { if (ready()) { mo.disconnect(); start(); } }); mo.observe($("loading"), { attributes: true, attributeFilter: ["hidden"] }); }
+})();
+</script>

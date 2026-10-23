@@ -127,7 +127,7 @@ body { background: var(--void); color: var(--text); font-family: var(--font-body
       <button class="btn" id="enlarge" aria-pressed="false">Enlarge moons ×10</button>
       <button class="btn" id="mtoggle" aria-pressed="false">Moments</button>
     </div>
-    <canvas id="tl" aria-label="Timeline: drag to scrub, scroll to zoom"></canvas>
+    <canvas id="tl" aria-label="Timeline: drag to scrub, drag the top edge or scroll to move through time, pinch to zoom"></canvas>
     <div class="note">Positions from Cassini's SPICE kernels (J2000, sub-pixel accurate). Timeline bars are camera frames per time slice. <span id="pnote">Spacecraft attitude and the camera cone come from the CK pointing kernels (exact at each frame, interpolated every 10 min between frames). The photos are not loaded yet.</span></div>
   </div>
 
@@ -709,7 +709,7 @@ function makeCassini() {
 }
 
 // ---------- state ----------
-const state = { et: 0, playing: true, speed: 600, focus: "TITAN", enlarge: false, allOrbits: false, follow: false, view: [0, 0], dragging: false, context: "SATURN" };
+const state = { et: 0, playing: true, speed: 600, focus: "TITAN", enlarge: false, allOrbits: false, follow: false, view: [0, 0], tlFollow: true, dragging: false, context: "SATURN" };
 let bodies = {}, tracks = {}, encounters = [], catalog = null, order = null, coverage = [0, 0];
 // whole-mission data (data/mission.json): years load as the clock reaches them, the year on screen plus its neighbours
 let mission = null, activeYears = [], keepYears = [], loadedSpan = [-Infinity, Infinity], yearsJob = null, yearsWanted = null, lastWantedYear = null;
@@ -1415,7 +1415,7 @@ function updateHud() {
 // ---------- timeline ----------
 const tl = $("tl"), tctx = tl.getContext("2d");
 const YEAR = 365.25 * 86400;
-const TICKS = [3600, 3 * 3600, 6 * 3600, 12 * 3600, 86400, 2 * 86400, 7 * 86400, 14 * 86400, 30.44 * 86400, 3 * 30.44 * 86400, YEAR, 2 * YEAR, 5 * YEAR];
+const TICKS = [60, 5 * 60, 15 * 60, 30 * 60, 3600, 3 * 3600, 6 * 3600, 12 * 3600, 86400, 2 * 86400, 7 * 86400, 14 * 86400, 30.44 * 86400, 3 * 30.44 * 86400, YEAR, 2 * YEAR, 5 * YEAR];
 const MONTHS = ["Jan", "Feb", "Mar", "Apr", "May", "Jun", "Jul", "Aug", "Sep", "Oct", "Nov", "Dec"];
 function etToX(et, w) { return (et - state.view[0]) / (state.view[1] - state.view[0]) * w; }
 function xToEt(x, w) { return state.view[0] + x / w * (state.view[1] - state.view[0]); }
@@ -1502,23 +1502,63 @@ function drawTimeline() {
   const xn = etToX(state.et, w);
   g.fillStyle = "#e6bb68"; g.fillRect(Math.round(xn) - 1, 0, 2, h);
 }
-function setView(span, center = state.et) { span = Math.min(span, coverage[1] - coverage[0]); state.view = [center - span / 2, center + span / 2]; clampView(); }
+// The view follows the clock (state.tlFollow) until the user scrolls or zooms it away; then it stays where they left
+// it, as far from now as they like, until a jump, a scrub or recenterTimeline() brings it back.
+const TL_MIN_SPAN = 600;   // closest zoom: ten minutes across the timeline
+function setView(span, center = state.et) { span = Math.max(TL_MIN_SPAN, Math.min(span, coverage[1] - coverage[0])); state.view = [center - span / 2, center + span / 2]; clampView(); state.tlFollow = true; }
+// while following, a clock that runs off the right edge turns the page: now goes back near the left
+function keepNowInView() {
+  if (!state.tlFollow) return;
+  const span = state.view[1] - state.view[0];
+  if (state.et > state.view[1] - span * 0.05 || state.et < state.view[0]) setView(span, state.et + span * 0.4);
+}
+function recenterTimeline() { setView(state.view[1] - state.view[0], state.et); }
+// zoom to span keeping the time at fraction f of the width where it is; following, that time is now
+function zoomTimeline(span, at, f) {
+  const old = state.view[1] - state.view[0];
+  span = Math.max(TL_MIN_SPAN, Math.min(coverage[1] - coverage[0], span));
+  if (at === undefined) {
+    const fn = (state.et - state.view[0]) / old;
+    if (state.tlFollow && fn >= 0 && fn <= 1) { at = state.et; f = fn; } else { at = state.view[0] + old / 2; f = 0.5; }
+  }
+  state.view = [at - f * span, at + (1 - f) * span]; clampView();
+}
+function panTimeline(dt) { state.view = [state.view[0] + dt, state.view[1] + dt]; clampView(); state.tlFollow = false; }
 function scrubTo(clientX) { const r = tl.getBoundingClientRect(); setTime(xToEt(clientX - r.left, r.width)); }
-tl.addEventListener("pointerdown", e => { state.dragging = true; tl.setPointerCapture(e.pointerId); scrubTo(e.clientX); });
-tl.addEventListener("pointermove", e => { if (state.dragging) scrubTo(e.clientX); });
-tl.addEventListener("pointerup", () => { state.dragging = false; });
-tl.addEventListener("pointercancel", () => { state.dragging = false; });
+// dragging in the ruler along the top moves the view; anywhere else it moves the clock
+const TL_RULER = 18;
+let tlPan = null;
+const inRuler = e => e.offsetY < (e.pointerType === "touch" ? 26 : TL_RULER);
+tl.addEventListener("pointerdown", e => {
+  tl.setPointerCapture(e.pointerId);
+  if (inRuler(e)) { tlPan = { x: e.clientX, view: state.view.slice() }; tl.style.cursor = "grabbing"; return; }
+  state.dragging = true; state.tlFollow = true; scrubTo(e.clientX);
+});
+tl.addEventListener("pointermove", e => {
+  if (tlPan) {
+    const span = tlPan.view[1] - tlPan.view[0], dt = -(e.clientX - tlPan.x) / tl.clientWidth * span;
+    state.view = [tlPan.view[0] + dt, tlPan.view[1] + dt]; clampView(); state.tlFollow = false;
+  } else if (state.dragging) scrubTo(e.clientX);
+  else tl.style.cursor = inRuler(e) ? "grab" : "ew-resize";
+});
+const tlUp = () => { state.dragging = false; if (tlPan) { tlPan = null; tl.style.cursor = "grab"; } };
+tl.addEventListener("pointerup", tlUp);
+tl.addEventListener("pointercancel", tlUp);
+// the wheel or a two-finger swipe scrolls through time; a pinch (or ⌘/Ctrl + wheel) zooms at the pointer
 tl.addEventListener("wheel", e => {
   e.preventDefault();
   const r = tl.getBoundingClientRect(), w = r.width, x = e.clientX - r.left;
   const span = state.view[1] - state.view[0];
-  if (Math.abs(e.deltaX) > Math.abs(e.deltaY)) { const dt = e.deltaX / w * span; state.view = [state.view[0] + dt, state.view[1] + dt]; }
-  else {
-    const at = xToEt(x, w), f = Math.exp(e.deltaY * 0.0015);
-    const ns = Math.max(3 * 3600, Math.min(coverage[1] - coverage[0], span * f));
-    state.view = [at - (x / w) * ns, at + (1 - x / w) * ns];
+  const unit = e.deltaMode === 1 ? 16 : e.deltaMode === 2 ? w : 1;
+  if (e.ctrlKey || e.metaKey) {
+    const ns = span * Math.exp(e.deltaY * unit * 0.01);
+    zoomTimeline(ns, xToEt(x, w), x / w);
+    const fn = (state.et - state.view[0]) / (state.view[1] - state.view[0]);
+    if (fn < 0 || fn > 1) state.tlFollow = false;
+  } else {
+    const d = Math.abs(e.deltaX) > Math.abs(e.deltaY) ? e.deltaX : e.deltaY;
+    panTimeline(d * unit / w * span);
   }
-  clampView();
 }, { passive: false });
 
 function setTime(et) { state.et = Math.min(coverage[1], Math.max(coverage[0], et)); }
@@ -1757,8 +1797,7 @@ function frame(now) {
   if (state.playing && !state.dragging && ready) {
     setTime(state.et + dt * state.speed);
     if (state.et >= coverage[1]) setPlaying(false);
-    const span = state.view[1] - state.view[0];
-    if (state.et > state.view[1] - span * 0.05 || state.et < state.view[0]) setView(span, state.et + span * 0.4);
+    keepNowInView();
   }
   updateBodies();
   if (ready && state.focus !== "HUYGENS" && !present(state.focus)) setFocus("CASSINI");
