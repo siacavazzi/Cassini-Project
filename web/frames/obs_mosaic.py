@@ -1124,21 +1124,55 @@ def rolling_webp(frame_id, size, cache, laps=1, slots=None, fmt="webp", out=OUT,
 def mosaic_webp(frame_id, size, cache, slots=None, ahead=3, fmt="webp", out=OUT, force=False):
     """(WebP, report) of the mosaic so far at frame_id when its pass is a mosaic (or force: the person asked for
     the pass as a mosaic, whatever _judge says); otherwise None. Then makes the next few tiles and the mosaics
-    with them in the background, so the next frames' mosaics are ready when the window asks for them. size
+    with them in the background, so the next frames' mosaics are ready when the window asks for them. Never
+    waits for tiles beyond the first: past the tiles made so far it answers with their mosaic (report "behind":
+    how many frames short of frame_id it is). size
     "full" = out px on the longest side (the full view's picture, never warmed ahead); fmt "png" for a PNG
     instead."""
     found = unit_of(frame_id)
     if not found or not (found[0]["mosaic"] or force) or found[1] < 0:
         return None
     u, n = found
+    # the mosaic of the tiles made so far, when the clock has run past them (playing faster than a frame is
+    # processed): the window gets a picture at once, a little behind, and catches up as the tiles behind it
+    # (tiles_ahead) are made, instead of waiting for every tile up to n
+    m = _made_through(u, n, cache)
+    tiles_ahead(u, m + 1, cache)
+    if m < n:
+        if m < 0:
+            return None
+        n, ahead = m, 0
     with _asking():
         if size == "full":
-            return _mosaic_at(u, n, size, cache, slots, fmt, out)
-        made = _mosaic_at(u, n, size, cache, slots)
-    tiles_ahead(u, n + 1, cache)
-    if made and ahead:
+            made = _mosaic_at(u, n, size, cache, slots, fmt, out)
+        else:
+            made = _mosaic_at(u, n, size, cache, slots)
+    if made:
+        made = made[0], {**made[1], "behind": found[1] - n}
+    if made and ahead and size != "full":
         warm(u, n + ahead, cache, size, slots, start=n + 1, force=force)
     return made
+
+
+_made = {}   # (pass, look) -> the last tile of the pass up to which every tile is made (or -1)
+
+
+def _made_through(u, n, cache):
+    """The last tile j <= n of the pass with tiles 0..j all made (their reports in the cache), -1 for none.
+    Tile 0 is made here when nothing is (with the plan, seconds), so a pass's first mosaic does not wait for
+    the background."""
+    key = (u["key"], calibration.look())
+    base = os.path.join(folder(u, cache), "tiles")
+    with _lock:
+        j = _made.get(key, -1)
+    if j < 0 and not os.path.exists(os.path.join(base, "0.json")):
+        with _asking():
+            tile(u, 0, cache)
+    while j < n and os.path.exists(os.path.join(base, f"{j + 1}.json")):
+        j += 1
+    with _lock:
+        _made[key] = max(_made.get(key, -1), j)
+    return min(j, n)
 
 
 _asked = [0]   # mosaics a window is waiting for right now: work made ahead waits while there are any
@@ -1266,7 +1300,8 @@ _ahead_running = set()
 
 
 def tiles_ahead(u, n, cache):
-    """Makes the pass's tiles from n to its end in the background, one thread per pass, so a playing window's
+    """Makes the pass's tiles from the first one not made to its end in the background (n: the frame the window
+    is at, kept for the callers), one thread per pass, so a playing window's
     mosaic finds its tiles made (processing a frame is the slow part of a cold mosaic) instead of waiting for
     each. Stops once windows have moved on to two other passes. Waits between tiles while a window waits for a
     mosaic (_yield), so the pass's lock goes to the request first instead of to the next tile ahead."""
@@ -1283,7 +1318,10 @@ def tiles_ahead(u, n, cache):
         try:
             with calibration.looking(look):
                 p = plan(u, cache)
-                for j in range(max(n, 0), len(u["frames"])):
+                # from the first tile not made: a window's mosaic is the tiles made so far in a row (mosaic_webp)
+                with _lock:
+                    first = _made.get((u["key"], look), -1) + 1
+                for j in range(first, len(u["frames"])):
                     _yield()
                     if u["key"] not in _ahead_passes:
                         return
