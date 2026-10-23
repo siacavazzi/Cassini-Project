@@ -1265,9 +1265,13 @@ body.phone.has-dock { --appdockh: 50px; }
   D({ key: "interface.hudline", section: "Interface", label: "Flight data strip", type: "toggle", value: true,
       hint: "Target, altitude, speed, camera and pointing along the top of the view." });
   cls("interface.hudline", "s-nohudline", false);
-  // Cameras (the camera windows read cameras.composites, cameras.steady, cameras.mosaics, cameras.fullRes, cameras.fullDelay, cameras.drill and cameras.stale)
+  // Cameras (the camera windows read cameras.composites, cameras.steady, cameras.mosaics, cameras.fullRes, cameras.drill and cameras.stale)
   D({ key: "cameras.composites", section: "Cameras", label: "Color composites", type: "toggle", value: true,
       hint: "Once a filter set is complete, show its color picture. Off shows every frame on its own." });
+  D({ key: "cameras.balancedColor", section: "Cameras", label: "Balanced color", type: "toggle", value: true,
+      hint: "A gentler color stretch: black sits just above the sky's noise so grain and scan lines stay dark, white sits at the bright part of the body but never stretches dim pictures far, bright edges roll off instead of clipping, and mosaic tiles are evened out without changing the mosaic's overall level. Off shows the earlier stretch." });
+  // what the frame server's picture routes are asked to add for it: nothing, or the earlier stretch
+  window.cassiniLook = () => S.get("cameras.balancedColor") === false ? "&look=classic" : "";
   D({ key: "cameras.channels", section: "Cameras", label: "Filter channels", type: "toggle", value: true,
       hint: "The frames that make up a color picture, in a strip under it." });
   cls("cameras.channels", "s-nochans", false);
@@ -1280,9 +1284,7 @@ body.phone.has-dock { --appdockh: 50px; }
   D({ key: "cameras.mosaics", section: "Cameras", label: "Mosaics in camera windows", type: "toggle", value: true,
       hint: "When Cassini steps a camera across a body, the window builds the mosaic tile by tile. Off shows every frame on its own." });
   D({ key: "cameras.fullRes", section: "Cameras", label: "Full resolution in full view", type: "toggle", value: true,
-      hint: "A picture in full view (double-click it, F or the title bar button) loads at the camera's full resolution, with a button to save it. Live playback, bursts and movies stay at the smaller size." });
-  D({ key: "cameras.fullDelay", section: "Cameras", label: "Full resolution while playing after", type: "range", value: 1.5, min: 0.5, max: 10, step: 0.5, unit: "s",
-      hint: "While the timeline plays, a picture in full view loads in full once it has stayed up this long; paused, it loads at once." });
+      hint: "A picture in full view (double-click it, F or the title bar button) always loads at the camera's full resolution, playing or paused, with a button to save it. Other windows show each picture at its true resolution, or smaller only when the window or screen is too small to show more." });
   D({ key: "cameras.drill", section: "Cameras", label: "Open channels in place", type: "toggle", value: true,
       hint: "Click a channel under a color picture to open it in that window on the picture's own scale. The window holds still until you press Esc or its held badge; other windows play on." });
   D({ key: "cameras.stale", section: "Cameras", label: "Clear a quiet camera after", type: "range", value: 6, min: 1, max: 48, step: 1, unit: "h",
@@ -1654,9 +1656,16 @@ body.phone.has-dock { --appdockh: 50px; }
     const fb = w.querySelector(".fullbtn"); if (fb) fb.setAttribute("aria-label", on ? "Leave full view" : "Full view");
     document.body.classList.toggle("hasfull", !!document.querySelector(".win.full"));
   }
-  // is a picture window showing its pictures big enough to want the 1024 px ones: zoomed, in full view, or resized
-  // so its picture is wider than px (CSS pixels, so the standard sizes keep asking for the smaller pictures)
-  const big = (w, well, px = 600) => w.classList.contains("zoomed") || w.classList.contains("full") || (well || w).clientWidth > px;
+  // the picture size a window asks for: the picture's true resolution (1024, the cameras' full frame; smaller frames
+  // come at their own size), or small (512) on a phone or when the picture fills no more than that many screen
+  // pixels (CSS pixels times the screen's density, so a retina window counts what it really shows)
+  const sized = (w, well, small = 512) => {
+    if (w.classList.contains("zoomed") || w.classList.contains("full")) return 1024;
+    // a camera window still waiting for its first picture is only a sliver tall: it asks as if the picture were up
+    if (well && well.classList.contains("well") && !well.matches(".has-frame, .kept")) return phone() ? small : 1024;
+    const el = well || w, px = Math.max(el.clientWidth, el.clientHeight) * Math.min(window.devicePixelRatio || 1, 2);
+    return phone() || px <= small ? small : 1024;
+  };
   window.addEventListener("keydown", e => {
     if (e.metaKey || e.ctrlKey || e.altKey || /^(INPUT|SELECT|TEXTAREA)$/.test(e.target.tagName)) return;
     const f = document.querySelector(".win.full");
@@ -1665,7 +1674,7 @@ body.phone.has-dock { --appdockh: 50px; }
   });
   document.querySelectorAll(".win").forEach(wire);
   front($("dock"));
-  window.cassiniWM = { wire, front, minimize, restore, zoom, full, big, syncMenu: () => syncMenu() };
+  window.cassiniWM = { wire, front, minimize, restore, zoom, full, sized, syncMenu: () => syncMenu() };
   // the WAC window starts where the NAC window ends, however wide that is
   new ResizeObserver(() => { const n = $("imgcard"); if (n.offsetWidth && (n.style.width || n.querySelector(".well.has-frame"))) $("app").style.setProperty("--nacw", n.offsetWidth + "px"); }).observe($("imgcard"));
 
@@ -2067,14 +2076,12 @@ body.phone.has-dock { --appdockh: 50px; }
     let shapeOf = null;
     const failed = new Set();   // composites the server could not make: those sets show their frames instead
     const missing = new Set();  // frames the server does not have
-    // full view asks for the full resolution picture ("full") once the picture is held: a quarter second while
-    // paused, cameras.fullDelay s while playing, so scrubbing, bursts and playback keep the 1024 px ones
-    let shownAt = 0;
-    const held = () => !state.dragging && performance.now() - shownAt > (state.playing ? S.get("cameras.fullDelay") * 1000 : 250);
-    const size = () => win.classList.contains("full") && S.get("cameras.fullRes") && held() ? "full" : window.cassiniWM.big(win, well) ? 1024 : 512;
+    // full view always asks for the full resolution picture ("full"), playing or not; every other window for the
+    // picture's true resolution (1024, the cameras' full frame), or 512 when it is shown that small (cassiniWM.sized)
+    const size = () => win.classList.contains("full") && S.get("cameras.fullRes") ? "full" : window.cassiniWM.sized(win, well);
     const capped = () => { const s = size(); return s === "full" ? 1024 : s; };
     const frameUrl = (id, sz) => `${FRAMES}/frames/${id}.webp?size=${sz || size()}`;
-    const colorUrl = (s, sz) => `${FRAMES}/frames/color.webp?ids=${s.use.map(k => catalog.id[k]).join(",")}&size=${sz || size()}`;
+    const colorUrl = (s, sz) => `${FRAMES}/frames/color.webp?ids=${s.use.map(k => catalog.id[k]).join(",")}&size=${sz || size()}${window.cassiniLook()}`;
     // a picture at full resolution as a PNG to save (the frame server names the file)
     const saveUrl = url => (/size=/.test(url) ? url.replace(/size=[^&]*/, "size=full") : url + (url.includes("?") ? "&" : "?") + "size=full") + "&format=png&download=1";
     // the save menu: the picture shown and the levels under and around it (savesFor below), each at full resolution
@@ -2106,7 +2113,7 @@ body.phone.has-dock { --appdockh: 50px; }
       if (!url) return [];
       const u = new URL(url, location.href), q = u.searchParams, rows = [];
       const frame = id => [
-        { label: "This frame on its own scale", note: "PNG · calibrated", href: saveUrl(`${FRAMES}/frames/processed/${id}.webp`) },
+        { label: "This frame on its own scale", note: "PNG · calibrated", href: saveUrl(`${FRAMES}/frames/processed/${id}.webp?size=full${window.cassiniLook()}`) },
         { label: "Archive frame, unprocessed", note: "PNG · raw", href: `${FRAMES}/frames/${id}.png?download=1` }];
       if (u.pathname.endsWith("/frames/color.webp")) {
         const ids = (q.get("ids") || "").split(","), ch = q.get("channel"), slots = ids.length === 2 ? [0, 2] : [0, 1, 2];
@@ -2176,7 +2183,6 @@ body.phone.has-dock { --appdockh: 50px; }
       const keep = obsShown && catalog.obs[v.k] === obsShown;
       // the same picture again at another size (full view's full resolution one) is not a new picture
       const again = shown && shown.k === v.k && shown.set === v.set;
-      if (!again) shownAt = performance.now();
       shownKey = v.key; shown = v;
       // shot.dataset.src / .report: what the picture on screen was made from, for flagging (flag.html)
       if (!keep) {
@@ -2290,7 +2296,7 @@ body.phone.has-dock { --appdockh: 50px; }
         if (q && catalog === q[2] && lastK >= 0 && catalog.et[q[0].k] <= catalog.et[lastK]) mosaicOf(q[0], q[1]);
       };
       if (!pass) setTimeout(() => { if (!over) { ctl.abort(); done(); } }, 4000);
-      fetch(`${FRAMES}/frames/mosaic/${id}.webp?size=${sz}`, { signal: ctl.signal }).then(async r => {
+      fetch(`${FRAMES}/frames/mosaic/${id}.webp?size=${sz}${window.cassiniLook()}`, { signal: ctl.signal }).then(async r => {
         if (!r.ok) return;
         const rep = JSON.parse(r.headers.get("X-Reel") || "null");
         // the frame in the catalog loaded now (another catalog object once the months around have loaded; a
@@ -2442,10 +2448,9 @@ body.phone.has-dock { --appdockh: 50px; }
     chans.addEventListener("click", e => { const fig = e.target.closest("figure"); if (fig && chans.classList.contains("drill")) { e.stopPropagation(); unfocus(e); openChannel(fig); } });
     chans.addEventListener("keydown", e => { const fig = e.target.closest("figure"); if (fig && e.key === "Enter" && chans.classList.contains("drill")) { e.preventDefault(); openChannel(fig); } });
     let levelKey = "";
-    // the held window's picture: its top level, at the size the window wants (full view: full, once held long enough)
-    function showLevel(again) {
+    // the held window's picture: its top level, at the size the window wants (full view: full)
+    function showLevel() {
       const top = hold.levels[hold.levels.length - 1], url = top.url(size());
-      if (!again) shownAt = performance.now();
       crumbs.hidden = false;
       crumbs.innerHTML = '<button data-lv="live" title="Back to the live camera">Live</button><span class="sep">›</span>' + hold.levels.map((l, i) => i < hold.levels.length - 1
         ? `<button data-lv="${i}">${l.label}</button><span class="sep">›</span>` : `<span class="here" title="${l.label}">${l.label}</span>`).join("")
@@ -2487,7 +2492,7 @@ body.phone.has-dock { --appdockh: 50px; }
         if (obsK < 0) { obsShown = null; shapeOf = null; }
       }
       if (win.hidden && !force) { mosaicStop(); return; }   // a closed or tucked-away window fetches nothing; it catches up when shown
-      if (hold) { if (force) showLevel(true); return; }   // held: the clock moves on without it (a bigger window asks for the bigger picture)
+      if (hold) { if (force) showLevel(); return; }   // held: the clock moves on without it (a bigger window asks for the bigger picture)
       if (window.cassiniMovie && window.cassiniMovie.on) { mosaicStop(); return; }   // movie mode has the frame server to itself (its requests are capped)
       const p = lastOfCam(cam, state.et, body), k = p < 0 ? -1 : framesOf(cam, body).ks[p];
       const live = k >= 0 && state.et - catalog.et[k] < 180;
@@ -2535,8 +2540,8 @@ body.phone.has-dock { --appdockh: 50px; }
       const ks = framesOf(cam, body).ks;
       // look ahead: the next 6 frames, or up to 12 when they come within 4 s of playback (a burst), nearest first
       const ahead = []; for (let d = 1; d <= 12 && ks[p + d] !== undefined && (d <= 6 || catalog.et[ks[p + d]] - state.et <= 4 * state.speed); d++) ahead.push(ks[p + d]);
-      // looked ahead at the capped size: only the picture on screen is ever fetched in full
-      next = ahead.map(q => view(q, catalog.et[q], capped()).key);
+      // looked ahead at the size shown, so full view plays in full resolution too
+      next = ahead.map(q => view(q, catalog.et[q], size()).key);
       // further ahead: each observation coming up is named to the server once, so a mosaic pass in it is worked
       // out (seconds for its plan) before the clock gets there
       if (window.cassiniMosaics !== false && S.get("cameras.mosaics"))
@@ -2545,7 +2550,7 @@ body.phone.has-dock { --appdockh: 50px; }
           if (warnedObs.has(o)) continue;
           warnedObs.add(o);
           const c0 = catalog;
-          fetch(`${FRAMES}/frames/mosaic/${catalog.id[q]}.webp?warm=1`, { priority: "low" }).then(r => r.ok ? r.json() : null).then(a => {
+          fetch(`${FRAMES}/frames/mosaic/${catalog.id[q]}.webp?warm=1${window.cassiniLook()}`, { priority: "low" }).then(r => r.ok ? r.json() : null).then(a => {
             if (!a || !a.mosaic) return;
             mosaicPasses.add(o);
             if (catalog !== c0) return;
@@ -2555,8 +2560,7 @@ body.phone.has-dock { --appdockh: 50px; }
         }
       pump();
     }
-    // a window made bigger (zoom, resize, full view) asks for the bigger picture, and a held picture in full view
-    // for the full one (checked on every frame, see studyHud below)
+    // a window made bigger or smaller (zoom, resize, full view) asks for the picture of its new size
     let tier = size();
     function retier() {
       if (tier === size()) return;
@@ -2571,7 +2575,7 @@ body.phone.has-dock { --appdockh: 50px; }
   const feeds = [...document.querySelectorAll(".camwin")].map(cameraFeed);
   window.cassiniFeeds = { cameraFeed, framesOf, lastOfCam, prep, stale: () => S.get("cameras.stale") * 3600 };
   // a change to what the windows show takes effect straight away
-  for (const key of ["cameras.composites", "cameras.stale", "cameras.steady"]) S.on(key, () => { if (typeof catalog !== "undefined" && catalog && catalog.byCam) feeds.forEach(f => f(true)); });
+  for (const key of ["cameras.composites", "cameras.stale", "cameras.steady", "cameras.balancedColor"]) S.on(key, () => { if (typeof catalog !== "undefined" && catalog && catalog.byCam) feeds.forEach(f => f(true)); });
 
   // ---------- burst limit: in normal playback each camera window gets at most maxRate new pictures a second ----------
   // The clock runs at the chosen speed except inside an imaging burst, where it slows so that crossing the gap
@@ -2628,7 +2632,7 @@ body.phone.has-dock { --appdockh: 50px; }
     prep();
     for (const f of feeds) { f(); f.retier(); }
   };
-  for (const key of ["cameras.fullRes", "cameras.fullDelay"]) S.on(key, () => feeds.forEach(f => f.retier()));
+  for (const key of ["cameras.fullRes"]) S.on(key, () => feeds.forEach(f => f.retier()));
   syncMenu();
 })();
 </script>
@@ -2693,7 +2697,7 @@ body.phone.has-dock { --appdockh: 50px; }
       const R = window.cassiniReel && window.cassiniReel.state, s = R && R.shots[R.i];
       if (!s) return null;
       canvas = $("rlcanvas" + s.cam); ids = s.ids.slice(); what = "body reel picture";
-      src = `${FRAMES}/frames/reel/${R.target}/${R.i}.webp?mosaic=${R.mosaic ? 1 : 0}`;
+      src = `${FRAMES}/frames/reel/${R.target}/${R.i}.webp?mosaic=${R.mosaic ? 1 : 0}${window.cassiniLook()}`;
       const b = R.buf.get(R.i); report = b && b.how;
     } else {
       const well = w.querySelector(".well"), shot = w.querySelector(".shot");
@@ -2881,7 +2885,8 @@ body.phone.has-dock { --appdockh: 50px; }
   const S = window.cassiniSettings, GRACE = 1200;
   const opt = (key, dflt) => (S && S.get(key) !== undefined ? S.get(key) : dflt);
   const KIND = { true: "true color", false: "false color", two: "two-filter color" };
-  const size = () => (window.cassiniWM && window.cassiniWM.big ? window.cassiniWM.big(card, card.querySelector(".mvwell")) : card.classList.contains("zoomed")) ? 1024 : 512;
+  // true resolution (1024) unless the card shows its pictures small (cassiniWM.sized)
+  const size = () => window.cassiniWM && window.cassiniWM.sized ? window.cassiniWM.sized(card, card.querySelector(".mvwell")) : 1024;
   // the pictures frame f can be shown as, each { url, kind }: best (mosaic, then composite) and base (processed, then raw)
   function choices(f) {
     const id = f.id, sz = size(), raw = { url: `${FRAMES}/frames/${id}.webp?size=${sz}`, kind: "" };
@@ -2894,9 +2899,9 @@ body.phone.has-dock { --appdockh: 50px; }
     let prev = -1;
     for (let j = f.i - 1; j >= Math.max(0, f.i - 64); j--) if (catalog.cam[order[j]] === catalog.cam[k]) { prev = order[j]; break; }
     const tile = prev >= 0 && catalog.target[prev] === catalog.target[k] && catalog.obs[prev] === catalog.obs[k] && (!s || comp);
-    if (tile && opt("movie.mosaics", true) && window.cassiniMosaics !== false) best.push({ url: `${FRAMES}/frames/mosaic/${comp ? catalog.id[s.use[0]] : id}.webp?size=${sz}`, kind: "mosaic" });
-    if (comp) best.push({ url: `${FRAMES}/frames/color.webp?ids=${s.use.map(q => catalog.id[q]).join(",")}&size=${sz}`, kind: KIND[s.kind] || "color" });
-    return { best, base: [{ url: `${FRAMES}/frames/processed/${id}.webp?size=${sz}`, kind: "processed" }, raw] };
+    if (tile && opt("movie.mosaics", true) && window.cassiniMosaics !== false) best.push({ url: `${FRAMES}/frames/mosaic/${comp ? catalog.id[s.use[0]] : id}.webp?size=${sz}${window.cassiniLook()}`, kind: "mosaic" });
+    if (comp) best.push({ url: `${FRAMES}/frames/color.webp?ids=${s.use.map(q => catalog.id[q]).join(",")}&size=${sz}${window.cassiniLook()}`, kind: KIND[s.kind] || "color" });
+    return { best, base: [{ url: `${FRAMES}/frames/processed/${id}.webp?size=${sz}${window.cassiniLook()}`, kind: "processed" }, raw] };
   }
   // one chain of choices: tried in turn until one loads (ok true) or none does (ok false); a deferred one waits for
   // c.start() (fill starts composites and mosaics a few at a time)
@@ -3286,13 +3291,14 @@ body.phone.has-dock { --appdockh: 50px; }
   }
 
   // ---- pictures: fetched ahead of the play head; the server makes each one the first time it is asked ----
-  const size = () => (window.cassiniWM && window.cassiniWM.big ? window.cassiniWM.big(card, $("rlwellN"), 800) : card.classList.contains("zoomed")) ? 1024 : 768;
+  // the reel's full size (1024) unless the card shows its pictures small (cassiniWM.sized)
+  const size = () => window.cassiniWM && window.cassiniWM.sized ? window.cassiniWM.sized(card, $("rlwellN"), 768) : 1024;
   function want(i) {
     let b = R.buf.get(i);
     if (b && b.size === size() && b.mosaic === R.mosaic) return b;
     b = { ok: null, img: null, how: null, size: size(), mosaic: R.mosaic };
     R.buf.set(i, b);
-    fetch(`${FRAMES}/frames/reel/${R.target}/${i}.webp?size=${b.size}&mosaic=${R.mosaic ? 1 : 0}`).then(async r => {
+    fetch(`${FRAMES}/frames/reel/${R.target}/${i}.webp?size=${b.size}&mosaic=${R.mosaic ? 1 : 0}${window.cassiniLook()}`).then(async r => {
       if (!r.ok) throw new Error(r.status);
       try { b.how = JSON.parse(r.headers.get("X-Reel") || "null"); } catch (e) {}
       b.img = await createImageBitmap(await r.blob()); b.ok = true;
@@ -3457,7 +3463,7 @@ body.phone.has-dock { --appdockh: 50px; }
     }
     if (t.mosaic) {
       try {
-        const r = await fetch(`${FRAMES}/frames/mosaic/${t.mosaic}.webp?size=256`);
+        const r = await fetch(`${FRAMES}/frames/mosaic/${t.mosaic}.webp?size=256${window.cassiniLook()}`);
         const how = r.ok ? JSON.parse(r.headers.get("X-Reel") || "{}") : null;
         const tiles = how && Math.max(+how.of || 0, +how.mosaic || 0, (how.tiles || []).length || 0);
         const filters = how && (Array.isArray(how.filters) ? how.filters.length : +how.filters || 0);
@@ -3465,7 +3471,7 @@ body.phone.has-dock { --appdockh: 50px; }
         if (tiles >= 3 && (filters >= 3 || !t.color)) return URL.createObjectURL(await r.blob());
       } catch (err) {}
     }
-    if (t.color) return `${FRAMES}/frames/color.webp?ids=${t.color.join(",")}&size=256`;
+    if (t.color) return `${FRAMES}/frames/color.webp?ids=${t.color.join(",")}&size=256${window.cassiniLook()}`;
     if (t.frame) return `${FRAMES}/frames/${t.frame}.webp?size=256`;
     return null;
   }
@@ -3983,7 +3989,7 @@ body.phone.has-dock { --appdockh: 50px; }
   const params = () => {
     const q = new URLSearchParams({ from: iso(X.a), until: iso(X.b), cams: X.cams || "NW", fps: opt("export.adaptive", true) ? "auto" : String(opt("export.fps", 12)),
       size: String(opt("export.size", 1024)), sound: opt("export.sound", true) ? "1" : "0", caption: opt("export.caption", true) ? "1" : "0" });
-    return q.toString();
+    return q.toString() + window.cassiniLook();
   };
   let timer = 0;
   function estimate() {
