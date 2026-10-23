@@ -82,9 +82,7 @@
     if (!ready()) return;
     const F = window.cassiniFeeds, t = dir > 0 ? F.nextPicture(state.et) : F.prevPicture(state.et);
     if (!isFinite(t)) return;
-    setPlaying(false); setTime(t);
-    const span = state.view[1] - state.view[0];
-    if (state.et < state.view[0] || state.et > state.view[1] - span * 0.05) setView(span, state.et + span * 0.4);
+    setPlaying(false); setTime(t); keepNowInView();
   }
   // M turns movie mode on and off; while it is on, the arrow keys step a picture and Escape leaves
   window.addEventListener("keydown", e => {
