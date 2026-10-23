@@ -4374,7 +4374,9 @@ body.phone #finale .fx-data { width: min(220px, calc(100vw - 32px)); top: 10px; 
     const el = id && $("cr-" + id);
     if (el) { el.scrollIntoView({ block: "start" }); el.classList.add("lit"); setTimeout(() => el.classList.remove("lit"), 1400); }
   }
-  window.cassiniAbout = { open, close: () => show(false), credits: CREDITS };
+  // other parts of the page add their own tabs: cassiniAbout.addTab("Mission team", () => "<h2>…</h2>…") (html, escaped by the caller)
+  function addTab(name, html) { TABS[name] = html; if (!card.hidden) render(); }
+  window.cassiniAbout = { open, addTab, esc, close: () => show(false), credits: CREDITS };
   // closing or minimizing the window just closes it (it never goes to the menu-bar tray)
   card.addEventListener("click", e => { if (e.target.closest(".close, .min")) { e.stopImmediatePropagation(); show(false); } }, true);
   card.addEventListener("dblclick", e => { if (e.target.closest(".titlebar")) { e.stopImmediatePropagation(); show(false); } }, true);
