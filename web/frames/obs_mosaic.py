@@ -61,7 +61,7 @@ import stacking  # noqa: E402
 # bumped whenever the way observation mosaics are made changes, so older ones are not served again; one per
 # display model (calibration.style), classic being the mosaics made before the balanced display model, raw the
 # balanced ones before natural color
-VERSIONS = {"balanced": "obs-v39", "raw": "obs-v22", "classic": "obs-v13-classic"}
+VERSIONS = {"balanced": "obs-v42", "raw": "obs-v25", "classic": "obs-v13-classic"}
 CANVAS = 2048        # longest side of the canvas the view is drawn on
 OUT = 1024           # longest side of the picture sent
 FRAME = 1024         # full resolution frame
@@ -450,7 +450,7 @@ SKY_MIN = 0.05   # balanced: the share of a pass's pixels that must be dark sky 
 # picture's is the 98th; lower here, since a long-exposure pass's whole sky can glow faintly, Saturn's Shadow's E ring)
 SKY_FLOOR_PCT = 90
 SKY_TOP_PCT = 99     # ... and each band's black at least this percentile of that dark sky (a single picture's SKY_DARK)
-SKY_BLACK_MAX = 0.004   # ... and no more than this share of the pass's white over its sky
+SKY_SMOOTH = 9      # ... on the sky less its mean over this many pixels (of the quarter-size frames, 36 full size)
 SKY_TOE = 1.0    # ... and the soft toe above those blacks, this many times the black's height over the sky wide
                  # (calibration.display): the sky's scan lines, not its pixel noise, set how far grain reaches
 
@@ -510,28 +510,28 @@ def pass_scale(frames, u, drawn=None, true_colour=False, sky_tops=None):
         masks = {f: [i < 0.05 * np.percentile(i, 99.9) for i in iofs] for f, iofs in by.items()}
         if all(sum(int(m.sum()) for m in ms) > SKY_MIN * sum(m.size for m in ms) for ms in masks.values()):
             levels, margin = calibration.sky_levels(list(by.values()), list(masks.values()))
-            # The darker half of each band's sky (by its mean over 5 pixels): faint diffuse light in the sky (the
-            # E and G rings, a haze limb, the body's glow) is not sky noise and must not raise the black
-            darks = {}
+            # How far each band's black sits over its sky is measured on the sky's fine structure only: the sky
+            # less its own mean over SKY_SMOOTH pixels (its row and column stray-light stripes, compression
+            # blocks and noise), on the darker half of the sky. Smooth faint light (Saturn's Shadow's haze and E
+            # ring, a haze limb, the body's glow) is not in it, so it stays above black
+            fine = {}
             for (f, iofs), level in zip(by.items(), levels):
                 local = [cv2.blur(i, (5, 5)) for i in iofs]
                 sky = np.concatenate([l[m] for l, m in zip(local, masks[f])])
-                darks[f] = np.concatenate([i[m & (l <= np.median(sky))] for i, l, m in zip(iofs, local, masks[f])])
-            # with a single picture's noise floor (the 98th percentile above the median, the noisiest band's) on that
-            # dark sky: the pixel-difference noise is about 0 on frames stored in 8 bits
-            margin = max(margin, calibration.noise_floor(list(darks.values()), SKY_FLOOR_PCT))
-            # and, as a single picture's toe, above SKY_DARK of that dark sky's own brightness: the frames' sky carries
-            # stray-light stripes far broader than its pixel noise. Each band on its own: the false color gains
-            # (MT3's up to 5x) lift whatever of a dim band's sky is left above its black far more than the others'
+                fine[f] = np.concatenate([(i - cv2.blur(i, (SKY_SMOOTH, SKY_SMOOTH)))[m & (l <= np.median(sky))]
+                                          for i, l, m in zip(iofs, local, masks[f])])
+            # with a noise floor (the noisiest band's SKY_FLOOR_PCT percentile above the median): the pixel-difference
+            # noise is about 0 on frames stored in 8 bits
+            margin = max(margin, calibration.noise_floor(list(fine.values()), SKY_FLOOR_PCT))
+            # and each band on its own over SKY_TOP_PCT of that fine structure: the false color gains (MT3's up to
+            # 5x) lift whatever of a dim band's sky is left above its black far more than the others'
             tops = {}
-            for (f, dark), level in zip(darks.items(), levels):
+            for f, v in fine.items():
                 if sky_tops and f in sky_tops:
                     tops[f] = float(sky_tops[f])
                 else:
-                    # at most SKY_BLACK_MAX of the pass's white: on a long exposure whose whole sky glows (Saturn's
-                    # Shadow's E and G rings) the dark sky's spread is the faint light itself, at gamma 3 a visible share
-                    top = float(np.percentile(dark, SKY_TOP_PCT)) - level if dark.size > 100 else 0
-                    tops[f] = min(max(margin, top), SKY_BLACK_MAX * white)
+                    top = float(np.percentile(v, SKY_TOP_PCT) - np.median(v)) if v.size > 100 else 0.0
+                    tops[f] = max(margin, top)
             toe = SKY_TOE * max(tops.values())
             blacks = {f: max(blacks[f], level + tops[f]) for f, level in zip(by, levels)}
     out = {"blacks": blacks, "white": white, "gamma": gamma, "filled": filled, "floor": round(floor, 3)}
