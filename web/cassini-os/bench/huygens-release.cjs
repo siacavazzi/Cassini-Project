@@ -38,7 +38,7 @@ const env = process.env, T0 = Date.now(), t = () => +((Date.now() - T0) / 1000).
     const el = (Date.now() - start) / 1000;
     if (shots.length && el >= shots[0]) {
       const k = shots.shift();
-      const info = await page.evaluate(() => [document.querySelector("#hrel .hr-read").textContent, [...document.querySelectorAll("#hrel .cs-cap")].map(e => e.textContent).join(" | ")]);
+      const info = await page.evaluate(() => [document.querySelector("#hrel .cs-read").textContent, [...document.querySelectorAll("#hrel .cs-cap")].map(e => e.textContent).join(" | ")]);
       console.log(t(), "shot", k, info.join(" || "));
       await page.screenshot({ path: `${out}_${String(k).padStart(2, "0")}.png` });
     }
