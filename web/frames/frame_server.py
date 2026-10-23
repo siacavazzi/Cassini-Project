@@ -104,8 +104,10 @@ import data_source  # noqa: E402
 # for composites: the pipeline's calibration, alignment and label reading. Loaded here, in the main
 # thread, with matplotlib (pulled in by label_handler) kept off the screen
 os.environ.setdefault("MPLBACKEND", "Agg")
+import contextvars  # noqa: E402
 import json  # noqa: E402
 import numpy as np  # noqa: E402
+import calibration  # noqa: E402
 import color_image  # noqa: E402
 sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
 import reel  # noqa: E402
@@ -231,6 +233,17 @@ def webp(frame_id, size, cache, fmt="webp"):
     return cached(os.path.join(cache, size_dir(size, fmt), f"{frame_id}.{fmt}"), make)
 
 
+# the caches of the pictures drawn from I/F, one per look (calibration.LOOKS), so the classic look keeps the
+# pictures made before the balanced display model
+COLOR_VERSIONS = {"balanced": "color-v10", "classic": "color-v4"}
+PROC_VERSIONS = {"balanced": "proc-v7", "classic": "proc-v1"}
+
+
+def in_background(target, *args):
+    """Runs target(*args) on a thread of its own, in the request's look."""
+    threading.Thread(target=contextvars.copy_context().run, args=(target, *args), daemon=True).start()
+
+
 def composite(ids):
     """RGBA composite of the frames ids (R,G,B, or longer and shorter wavelength), 1024 px, made by the
     pipeline's color path (color_image.load_aligned: repeat exposures stacked, calibrated, aligned),
@@ -249,7 +262,7 @@ def composite(ids):
 def color_webp(ids, size, cache, fmt="webp"):
     """The composite as WebP (or PNG), and its report (also kept in the cache, next to the image)."""
     # bumped whenever the way composites are made changes, so older ones are not served again
-    base = os.path.join(cache, "color-v4", size_dir(size, fmt), "_".join(ids))
+    base = os.path.join(cache, COLOR_VERSIONS[calibration.look()], size_dir(size, fmt), "_".join(ids))
     report = {}
     def make():
         with _color_slots:
@@ -269,7 +282,7 @@ def processed_webp(frame_id, size, cache):
     """One frame made like a composite's channel (composite with one id: repeat exposures stacked, lost pixels
     filled, calibrated to I/F and put on the pipeline's display scale), for movie mode; and its report. Cached
     like the composites."""
-    base = os.path.join(cache, "proc-v1", str(size), frame_id)
+    base = os.path.join(cache, PROC_VERSIONS[calibration.look()], str(size), frame_id)
     report = {}
     def make():
         with _movie_slots:
@@ -586,6 +599,11 @@ def make_handler(site, cache, flags=None):
                     left -= len(chunk)
 
         def do_GET(self):
+            # look=classic: pictures drawn from I/F the way they were before the balanced display model
+            with calibration.looking(parse_qs(urlparse(self.path).query).get("look", [calibration.LOOKS[0]])[0]):
+                return self.get()
+
+        def get(self):
             self.started = time.monotonic()
             url = urlparse(self.path)
             # a kept-alive connection reuses this handler, so the last request's choice must not stick
@@ -665,7 +683,7 @@ def make_handler(site, cache, flags=None):
                     # ({"mosaic": true}), so the window asks for that pass's mosaic in its pass lane from the start
                     found = None
                     if reel._index is not None:
-                        threading.Thread(target=obs_mosaic.warm_frame, args=(m.group(1), cache), daemon=True).start()
+                        in_background(obs_mosaic.warm_frame, m.group(1), cache)
                         try:
                             found = obs_mosaic.unit_of(m.group(1))
                         except Exception:
@@ -704,7 +722,7 @@ def make_handler(site, cache, flags=None):
                     size, fmt = size_of(query, 512), picture_format(query)
                     if reel._index is not None and size != FULL:
                         # a frame of a mosaic pass (the window asks for frames a few ahead): start its tiles
-                        threading.Thread(target=obs_mosaic.warm_frame, args=(frame_id, cache), daemon=True).start()
+                        in_background(obs_mosaic.warm_frame, frame_id, cache)
                     return self.send_picture(webp(frame_id, size, cache, fmt), fmt, query, f"Cassini_{frame_id}")
                 except FileNotFoundError:
                     return self.send_error(404, "Frame not in the archive")

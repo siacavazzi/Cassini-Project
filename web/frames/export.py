@@ -27,6 +27,7 @@ picture list, and handed to the job as a WAV, which ffmpeg adds as AAC.
 import argparse
 import calendar
 import hashlib
+import contextvars
 import io
 import json
 import os
@@ -45,6 +46,7 @@ from PIL import Image, ImageDraw, ImageFont
 HERE = os.path.dirname(os.path.abspath(__file__))
 sys.path.insert(0, HERE)
 import reel  # noqa: E402  (puts the repo on the path)
+import calibration  # noqa: E402
 
 # bumped whenever the way films are made changes, so older ones are not served again
 VERSION = "export-v2"
@@ -85,13 +87,17 @@ def options(q):
     fps = get("fps", "auto")
     fps = "auto" if fps == "auto" else max(1, min(FPS, int(float(fps))))
     size = min(SIZES, key=lambda s: abs(s - int(get("size", "1024"))))
+    look = get("look", calibration.LOOKS[0])
     return {"from": t0, "until": t1, "cams": cams, "fps": fps, "size": size,
-            "sound": get("sound", "1") != "0", "caption": get("caption", "1") != "0"}
+            "sound": get("sound", "1") != "0", "caption": get("caption", "1") != "0",
+            "look": look if look in calibration.LOOKS else calibration.LOOKS[0]}
 
 
 def job_id(opt):
     """Films are named by what they show, so the same stretch and options give the same file and link."""
     key = {k: opt[k] for k in ("from", "until", "cams", "fps", "size", "sound", "caption")}
+    if opt.get("look", "balanced") != "balanced":
+        key["look"] = opt["look"]
     return hashlib.sha1(json.dumps([VERSION, key], sort_keys=True).encode()).hexdigest()[:16]
 
 
@@ -318,7 +324,8 @@ def render(opt, p, pictures, path, progress=lambda done, total: None, workers=3)
             nxt = 0
             for n, e in enumerate(pics):
                 while nxt < len(pics) and nxt < n + ahead:
-                    todo.append(pool.submit(pictures.picture, pics[nxt], opt["size"]))
+                    # in the film's look (the pool's threads don't share the caller's)
+                    todo.append(pool.submit(contextvars.copy_context().run, pictures.picture, pics[nxt], opt["size"]))
                     nxt += 1
                 im, what = todo.popleft().result()
                 kinds[what or "none"] += 1
@@ -459,7 +466,8 @@ def _work(pictures):
         try:
             job["state"] = "making"
             video = os.path.join(d, "video.mp4")
-            job["made_as"] = render(opt, job["plan"], pictures, video + ".part.mp4", progress)
+            with calibration.looking(opt.get("look", "balanced")):
+                job["made_as"] = render(opt, job["plan"], pictures, video + ".part.mp4", progress)
             os.replace(video + ".part.mp4", video)
             wav = os.path.join(d, "sound.wav")
             if opt["sound"]:

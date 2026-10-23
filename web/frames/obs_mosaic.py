@@ -50,8 +50,9 @@ import mosaic  # noqa: E402
 import mosaic_benchmark  # noqa: E402
 import stacking  # noqa: E402
 
-# bumped whenever the way observation mosaics are made changes, so older ones are not served again
-VERSION = "obs-v9"
+# bumped whenever the way observation mosaics are made changes, so older ones are not served again; one per
+# look (calibration.LOOKS), classic being the mosaics made before the balanced display model
+VERSIONS = {"balanced": "obs-v12", "classic": "obs-v9"}
 CANVAS = 2048        # longest side of the canvas the view is drawn on
 OUT = 1024           # longest side of the picture sent
 FRAME = 1024         # full resolution frame
@@ -156,7 +157,7 @@ def unit_of(frame_id):
 
 
 def folder(u, cache):
-    return os.path.join(cache, VERSION, "_".join(map(str, u["key"])))
+    return os.path.join(cache, VERSIONS[calibration.look()], "_".join(map(str, u["key"])))
 
 
 def _ulock(u):
@@ -172,7 +173,13 @@ def plan(u, cache):
             with open(path) as fh:
                 return json.load(fh)
         frames = u["frames"]
-        scale = pass_scale(frames, u)
+        count, nms = {}, {}
+        for fr in frames:
+            count[fr[2]] = count.get(fr[2], 0) + 1
+            nms[fr[2]] = fr[4]
+        colour = colour_of(count, nms)
+        scale = pass_scale(frames, u, colour or [max(count, key=count.get)],
+                           bool(colour and colour[1] == "GRN" and colour[2] in reel.TRUE_BLUES))
         # the rotation from the camera's frame to north up: the angle between where the geometry cache puts
         # the body and where processed_frame does, from the first tile placed well off the body's centre
         angle = 0.0
@@ -198,28 +205,36 @@ def plan(u, cache):
         y1 = max(p[1] + HALF * k for p, k in zip(pts, ks))
         fixed = u["whole"] or max(x1 - x0, y1 - y0) <= FIT * FRAME
         view = [x1 - x0, y1 - y0] if fixed else [min(x1 - x0, FOLLOW * FRAME), min(y1 - y0, FOLLOW * FRAME)]
-        count, nms = {}, {}
-        for fr in frames:
-            count[fr[2]] = count.get(fr[2], 0) + 1
-            nms[fr[2]] = fr[4]
-        # colour: (near) true colour when the pass takes GRN and a blue at a good share of its tiles, with RED or
-        # else the continuum filter nearest red (not a methane band); otherwise false colour from the filters taken
-        # at most tiles (longest wavelength red). Polarizers are left out (they are not a colour)
-        most = max(count.values())
-        good = [f for f in count if count[f] >= most / 4 and not _polarizer(f)]
-        blue = next((b for b in reel.TRUE_BLUES if b in good), None)
-        reds = [f for f in good if "/" not in f and not f.startswith("MT") and nms[f] > 600]
-        red = "RED" if "RED" in good else min(reds, key=lambda f: abs(nms[f] - 650)) if reds else None
-        common = sorted([f for f in count if count[f] >= most / 2 and not _polarizer(f)], key=lambda f: -nms[f])
-        if blue and red and "GRN" in good:
-            colour = [red, "GRN", blue]
-        else:
-            colour = [common[0], common[len(common) // 2], common[-1]] if len(common) >= 3 else None
         p = {"key": list(u["key"]), "display_scale": scale, "angle": angle, "footprint": [x0, y0, x1, y1],
              "fixed": bool(fixed), "view": view, "k": CANVAS / max(view), "colour": colour,
              "grey": max(count, key=count.get), "whole": u["whole"]}
         reel._cached(path, lambda: json.dumps(p).encode())
         return p
+
+
+# filter sets with a colour mapping of their own, looked up before the general rule in colour_of: frozenset of the
+# pass's filters (as units() names them, e.g. "MT3", "CB2", "BL1") -> [red, green, blue] filters. Empty for now;
+# the per-filter-set rules for false colour (color plan phase 2b) go here
+COLOUR_SETS = {}
+
+
+def colour_of(count, nms):
+    """The pass's colour filters, [red, green, blue], or None for grey. count = tiles per filter, nms = each
+    filter's wavelength. (Near) true colour when the pass takes GRN and a blue at a good share of its tiles, with
+    RED or else the continuum filter nearest red (not a methane band); otherwise false colour from the filters
+    taken at most tiles (longest wavelength red). Polarizers are left out (they are not a colour)."""
+    most = max(count.values())
+    good = [f for f in count if count[f] >= most / 4 and not _polarizer(f)]
+    for filters, rgb in COLOUR_SETS.items():
+        if filters <= set(good):
+            return list(rgb)
+    blue = next((b for b in reel.TRUE_BLUES if b in good), None)
+    reds = [f for f in good if "/" not in f and not f.startswith("MT") and nms[f] > 600]
+    red = "RED" if "RED" in good else min(reds, key=lambda f: abs(nms[f] - 650)) if reds else None
+    common = sorted([f for f in count if count[f] >= most / 2 and not _polarizer(f)], key=lambda f: -nms[f])
+    if blue and red and "GRN" in good:
+        return [red, "GRN", blue]
+    return [common[0], common[len(common) // 2], common[-1]] if len(common) >= 3 else None
 
 
 def _polarizer(f):
@@ -231,12 +246,14 @@ DETAIL = 2.0       # filled passes: how much the local contrast is raised (detai
 DETAIL_SIGMA = 0.05  # ... over this much of a frame
 
 
-def pass_scale(frames, u):
+def pass_scale(frames, u, drawn=None, true_colour=False):
     """The display scale of every tile of the pass (calibration.shared_scale over its frames merged in I/F, as
     mosaic_benchmark.display_scale): {"blacks": {filter: I/F}, "white": I/F, "gamma"}. Where the body fills
     the frames (the middle of most frames on its disk, as in Titan's maps), black goes to the darkest of the body, white to
     the 99.5th percentile and the gamma is eased, and the mosaic's local contrast is raised (detail), so
-    the surface's few per cent of contrast shows; passes with dark sky keep the benchmark's scale."""
+    the surface's few per cent of contrast shows; passes with dark sky keep the benchmark's scale.
+    drawn = the filters the mosaic is drawn from (plan's colour, or its grey filter); true_colour = they are a
+    true colour set."""
     by = {}
     for path, _, f, *_ in frames:
         _, iof, _ = stacking.load_hdr(path, mosaic_benchmark.REPEAT_GAP)
@@ -252,11 +269,30 @@ def pass_scale(frames, u):
     inside = [math.hypot(x, y) < radius / z for *_, x, y, z in frames if z]
     floor = float(np.mean(inside)) if inside else 0.0
     filled = floor > FILLED
-    if filled:
+    gamma = 3.0
+    if filled and calibration.look() == "balanced":
+        # The classic gamma 1.5 (a steeper curve lifts the dark end's noise and steps into view). True colour: one black and white for the filters drawn, so the colour is what they saw
+        # rather than how differently each was stretched (black the darkest one's 1st percentile, at most half the
+        # brightest's 99.5th, which is white: a black above the white would stretch noise into colour). False
+        # colour (methane bands, UV, IR: no natural colour to keep) and grey: each filter's black its own 1st
+        # percentile, so every band shows its own contrast, under one white (the widest band's): a white per band
+        # would stretch a dim band's (MT2's) tile-to-tile errors several times over into coloured tiles
+        lows = {f: float(np.percentile(np.concatenate([i.ravel() for i in iofs]), 1)) for f, iofs in by.items()}
+        tops = {f: float(np.percentile(np.concatenate([i.ravel() for i in iofs]), 99.5)) for f, iofs in by.items()}
+        mine = [f for f in (drawn or by) if f in by] or list(by)
+        gamma = 1.5
+        if true_colour:
+            top = max(tops[f] for f in mine)
+            black = min(min(lows[f] for f in mine), top / 2)
+            blacks, white = {f: black for f in by}, top - black
+        else:
+            blacks, white = dict(lows), max(tops[f] - lows[f] for f in by)
+    elif filled:
         blacks = {f: float(np.percentile(np.concatenate([i.ravel() for i in iofs]), 1)) for f, iofs in by.items()}
         white = max(float(np.percentile(np.concatenate([i.ravel() for i in iofs]) - blacks[f], 99.5))
                     for f, iofs in by.items())
-    return {"blacks": blacks, "white": white, "gamma": 1.5 if filled else 3.0, "filled": filled, "floor": round(floor, 3)}
+        gamma = 1.5
+    return {"blacks": blacks, "white": white, "gamma": gamma, "filled": filled, "floor": round(floor, 3)}
 
 
 def tile(u, n, cache, scale=None):
@@ -308,28 +344,94 @@ def view_rect(p, tiles):
     return min(max(vx, x0), x1 - w), min(max(vy, y0), y1 - h), w, h
 
 
-def filter_mosaic(u, p, f, tiles, rect, cache):
-    """The filter f's mosaic of these tiles in the view rect, RGBA on the view's canvas (kept in the cache)."""
+def _window(u, p, mine, rect, cache):
+    """The tiles mine drawn on the view rect's canvas, one RGBA frame each, as mosaic.compose takes them:
+    ([(frame, None, None, None)], the tiles that are in the view)."""
+    k = p["k"]
+    W, H = math.ceil(rect[2] * k), math.ceil(rect[3] * k)
+    window, shown = [], []
+    for t in mine:
+        bx, by, bw, bh = t["box"]
+        left = round((t["offset"][0] + bx - rect[0]) * k)
+        top = round((t["offset"][1] + by - rect[1]) * k)
+        sw, sh = max(1, round(bw * k)), max(1, round(bh * k))
+        if left >= W or top >= H or left + sw <= 0 or top + sh <= 0:
+            continue
+        part = _part(os.path.join(folder(u, cache), "tiles", f"{t['n']}.png"), sw, sh)
+        frame = np.zeros((H, W, 4), np.uint8)
+        x0, y0, x1, y1 = max(left, 0), max(top, 0), min(left + sw, W), min(top + sh, H)
+        frame[y0:y1, x0:x1] = part[y0 - top:y1 - top, x0 - left:x1 - left]
+        window.append((frame, None, None, None))
+        shown.append(t)
+    return window, shown
+
+
+SAME_PLACE = 0.25   # of a frame: tiles of different filters this close are the same pointing (seams)
+# balanced look: solve the seams once per pointing on linear values (seams) instead of each filter on its own, as
+# the classic look does. Off: on real passes it changed the faint sky's tile colours (Saturn's Shadow, the Jupiter
+# approach mosaic's stray light) more often than it helped, and the gains it kept from collapsing to 0.909
+# collapse evenly, which only dims a mosaic a little
+SHARED_SEAMS = False
+
+
+def seams(u, p, tiles, rect, ref, cache):
+    """Balanced look: the seam correction of every pointing, solved once on the filter ref (the best covered of
+    the filters drawn) on linear values, with the gains anchored (mosaic.seams, none pinned), for every filter's
+    tile at that pointing, so the filters at one spot start from the same correction and keep their colour.
+    {tile n: (gain, offset)}; a tile with no tile of ref at its pointing gets none. Kept in the cache."""
+    mine = [t for t in tiles if t["filter"] == ref and "offset" in t]
+    name = f"{ref.replace('/', '_')}-{len(mine)}-{'_'.join(str(round(v)) for v in rect)}.json"
+    path = os.path.join(folder(u, cache), "seams", name)
+
+    def make():
+        window, shown = _window(u, p, mine, rect, cache)
+        if len(window) < 2:
+            return b"{}"
+        with reel._mosaic_lock:
+            gains, offsets = mosaic.seams([w[0] for w in window], None, p["display_scale"]["gamma"])
+        return json.dumps({t["n"]: [float(g[0]), float(o[0])] for t, g, o in zip(shown, gains, offsets)}).encode()
+
+    solved = {int(n): v for n, v in json.loads(reel._cached(path, make)).items()}
+    by_n = {t["n"]: t for t in mine}
+    out = {}
+    for t in tiles:
+        if "offset" not in t:
+            continue
+        if t["n"] in solved:
+            out[t["n"]] = solved[t["n"]]
+            continue
+        # the tile of ref nearest this one's pointing, then nearest in time
+        near = [(math.hypot(by_n[n]["offset"][0] - t["offset"][0], by_n[n]["offset"][1] - t["offset"][1]),
+                 abs(by_n[n]["t"] - t["t"]), n) for n in solved]
+        near = [x for x in near if x[0] <= SAME_PLACE * FRAME]
+        if near:
+            out[t["n"]] = solved[min(near)[2]]
+    return out
+
+
+def filter_mosaic(u, p, f, tiles, rect, cache, ref=None):
+    """The filter f's mosaic of these tiles in the view rect, RGBA on the view's canvas (kept in the cache).
+    ref = the filter the seams are solved on (balanced look, seams)."""
     mine = [t for t in tiles if t["filter"] == f and "offset" in t]
-    name = f"{f.replace('/', '_')}-{len(mine)}-{'_'.join(str(round(v)) for v in rect)}.png"
+    balanced = calibration.look() == "balanced" and SHARED_SEAMS
+    ref = ref or f
+    solved_on = f"-{ref.replace('/', '_')}{sum(1 for t in tiles if t['filter'] == ref and 'offset' in t)}" if balanced else ""
+    name = f"{f.replace('/', '_')}-{len(mine)}{solved_on}-{'_'.join(str(round(v)) for v in rect)}.png"
     path = os.path.join(folder(u, cache), "filters", name)
     k = p["k"]
     W, H = math.ceil(rect[2] * k), math.ceil(rect[3] * k)
 
     def make():
-        window = []
-        for t in mine:
-            bx, by, bw, bh = t["box"]
-            left = round((t["offset"][0] + bx - rect[0]) * k)
-            top = round((t["offset"][1] + by - rect[1]) * k)
-            sw, sh = max(1, round(bw * k)), max(1, round(bh * k))
-            if left >= W or top >= H or left + sw <= 0 or top + sh <= 0:
-                continue
-            part = _part(os.path.join(folder(u, cache), "tiles", f"{t['n']}.png"), sw, sh)
-            frame = np.zeros((H, W, 4), np.uint8)
-            x0, y0, x1, y1 = max(left, 0), max(top, 0), min(left + sw, W), min(top + sh, H)
-            frame[y0:y1, x0:x1] = part[y0 - top:y1 - top, x0 - left:x1 - left]
-            window.append((frame, None, None, None))
+        window, shown = _window(u, p, mine, rect, cache)
+        corrections = None
+        if balanced and window:
+            # ref's seams at each pointing; another filter's own overlaps then adjust them where they clearly
+            # differ (a frame's own exposure error), pulled toward them, so the filter keeps their overall level
+            solved = seams(u, p, tiles, rect, ref, cache)
+            pick = [solved.get(t["n"], (1.0, 0.0)) for t in shown]
+            corrections = (np.array([[g] * 3 for g, _ in pick]), np.array([[o] * 3 for _, o in pick]))
+            if f != ref:
+                corrections = mosaic.seams([w[0] for w in window], None, p["display_scale"]["gamma"], corrections)
         if not window:
             rgba = np.zeros((H, W, 4), np.uint8)
         else:
@@ -339,7 +441,11 @@ def filter_mosaic(u, p, f, tiles, rect, cache):
                     # the benchmark's soft edge on its 0.5 scale canvas, at this canvas's scale
                     mosaic.feather_px = max(8, round(64 * k / 0.5))
                     mosaic.reset()
-                    rgba = mosaic.compose(window, False, calibrated=True, pin=None)
+                    if corrections:
+                        rgba = mosaic.compose(window, False, calibrated=True, pin=None,
+                                              gamma=p["display_scale"]["gamma"], corrections=corrections)
+                    else:
+                        rgba = mosaic.compose(window, False, calibrated=True, pin=None)
                     mosaic.reset()
                 finally:
                     mosaic.feather_px = feather
@@ -378,11 +484,18 @@ def detail(rgba, sigma):
     """Raises the local contrast of a mosaic of a body that fills the frames (Titan's surface is a few per cent
     against its haze): each pixel moved away from its neighbourhood's mean (a Gaussian of sigma canvas pixels,
     over the mosaic's own pixels only, so the empty canvas does not darken its edges) by DETAIL times the
-    difference. Local, so a new tile only changes the mosaic next to it."""
+    difference. Local, so a new tile only changes the mosaic next to it. Balanced look: on the luminance only
+    (the mean of the channels), the same change added to every channel, so the small misregistration between
+    filters does not turn into rainbow texture."""
     import cv2
     a = rgba[..., 3].astype(np.float32) / 255
     rgb = rgba[..., :3].astype(np.float32)
     weight = cv2.GaussianBlur(a, (0, 0), sigma)
+    if calibration.look() == "balanced":
+        lum = rgb.mean(axis=2)
+        mean = cv2.GaussianBlur(lum * a, (0, 0), sigma) / np.maximum(weight, 1e-3)
+        out = np.clip(rgb + (DETAIL * (lum - mean))[..., None], 0, 255)
+        return np.dstack([out.round().astype(np.uint8), rgba[..., 3]])
     mean = cv2.GaussianBlur(rgb * a[..., None], (0, 0), sigma) / np.maximum(weight, 1e-3)[..., None]
     out = np.clip(rgb + DETAIL * (rgb - mean), 0, 255)
     return np.dstack([out.round().astype(np.uint8), rgba[..., 3]])
@@ -418,16 +531,18 @@ def so_far(u, n, cache, made=None, out=OUT):
     if not made:
         return None, None
     p, tiles, rect, count, used, _ = made
+    # the seams are solved on the best covered filter drawn and shared by all (balanced look)
+    ref = max(used, key=lambda f: count[f])
     if len(used) == 3:
         colour = used
-        acc = [filter_mosaic(u, p, f, tiles, rect, cache) for f in colour]
+        acc = [filter_mosaic(u, p, f, tiles, rect, cache, ref) for f in colour]
         rgb = np.dstack([a[..., 0] for a in acc])
         # only where every filter has the picture: past one filter's edge the others alone are a coloured rim
         alpha = np.min([a[..., 3] for a in acc], axis=0)
         rgb = (rgb * (alpha[..., None] / np.float32(255)) + 0.5).astype(np.uint8)
         rgba, used = np.dstack([rgb, alpha]), colour
     else:
-        rgba = filter_mosaic(u, p, used[0], tiles, rect, cache)
+        rgba = filter_mosaic(u, p, used[0], tiles, rect, cache, ref)
     if p["display_scale"].get("filled"):
         rgba = detail(rgba, DETAIL_SIGMA * FRAME * p["k"])
     im = Image.fromarray(rgba, "RGBA")
@@ -534,7 +649,8 @@ def warm(u, upto, cache, size=None, slots=None, start=0):
     runs one pass at a time (_background)."""
     if not u["mosaic"]:
         return
-    key = (u["key"], size)
+    look = calibration.look()
+    key = (u["key"], size, look)
     with _lock:
         _upto[key] = max(_upto.get(key, -1), min(upto, len(u["frames"]) - 1))
         _from[key] = max(_from.get(key, 0), start)
@@ -544,7 +660,7 @@ def warm(u, upto, cache, size=None, slots=None, start=0):
 
     def run():
         try:
-            with _background:
+            with _background, calibration.looking(look):
                 p = plan(u, cache)
                 done = -1
                 while True:
