@@ -587,7 +587,7 @@ function makeMoon(name, b) {
 // haze (so light reddens and fades past the terminator) and scattered mostly forward (Henyey-Greenstein), which gives
 // the bright ring of a backlit Titan. Lengths are in body radii; the globe is 1, the shell's top is `top`.
 //   tau: vertical optical depth from the top to the globe; ext: extinction per color; albedo: share scattered
-//   detached: [height, width, column, r, g, b] of a thin layer, its column as a share of the main haze's vertical one
+//   detached: [height, width, column, r, g, b] of a thin soft layer, its column as a share of the main haze's vertical one
 const atmospheres = [];
 const atmosphereLevel = () => window.cassiniSettings ? cassiniSettings.get("view.atmospheres") || "full" : "full";
 function applyAtmospheres() {
@@ -598,7 +598,7 @@ function applyAtmospheres() {
 const ATMOSPHERES = {
   // haze up to ~770 km, scale height ~90 km, the detached layer near 500 km (Cassini ISS/UVIS)
   TITAN: { top: 1.3, H: 0.034, tau: 0.68, ext: [0.9, 1.0, 1.15], albedo: [1.0, 0.68, 0.36], g: 0.7, strength: 1.5,
-           detached: [0.19, 0.008, 0.006, 0.7, 0.76, 0.92] },
+           detached: [0.19, 0.024, 0.007, 0.95, 0.8, 0.62] },
   // a thin haze over the cloud tops: scale height ~60 km, top ~700 km, warm like the clouds under it
   SATURN: { top: 1.012, H: 0.0011, tau: 0.12, ext: [0.9, 0.97, 1.08], albedo: [1.0, 0.92, 0.78], g: 0.6, strength: 1.0, steps: 12 }
 };
@@ -640,7 +640,7 @@ function makeAtmosphere(a, sunDir) {
         if (disc > 0.0) { float t0 = -b - sqrt(disc); if (t0 > 0.0 && t0 < L) L = t0; }
         float mu = dot(d, sunDir);
         float ph = 0.8 + 0.5 * hg(mu, g);                                  // some light from every side (multiple scattering), most of it forward
-        float k = tau / H, fade = top - 1.0;
+        float k = tau / H, fade = top - 1.0, dk = det.z * tau / (det.y * 1.7725);   // the layer's vertical column is det.z of the haze's
         // samples bunch up toward the ray's lowest point (or where it meets the globe), where nearly all the haze is
         float tm = clamp(-b, 0.0, L);
         vec3 T = vec3(1.0), I = vec3(0.0);
@@ -654,28 +654,15 @@ function makeAtmosphere(a, sunDir) {
           vec3 x = o + d * (0.5 * (t1 + t2));
           t1 = t2;
           float r = max(length(x), 1.0), h = r - 1.0;
-          float n = k * exp(-h / H) * smoothstep(fade, fade * 0.8, h);
+          // the main haze, thinning out smoothly toward the shell's top, plus the detached layer as a soft gaussian band
+          float n0 = k * exp(-h / H) * smoothstep(fade, fade * 0.5, h);
+          float nd = dk * exp(-(h - det.x) * (h - det.x) / (det.y * det.y)) * smoothstep(fade, fade * 0.8, h);
+          float n = n0 + nd;
           vec3 dT = exp(-n * ds * ext);
-          I += T * sunlight(x, r) * albedo * (1.0 - dT);
+          I += T * sunlight(x, r) * mix(albedo, detCol, nd / max(n, 1e-6)) * (1.0 - dT);
           T *= dT;
         }
         I *= ph;
-        // the detached layer: a thin shell at 1 + det.x, its column through each crossing in closed form
-        if (det.z > 0.0) {
-          float rd = 1.0 + det.x, cd = dot(o, o) - rd * rd, dd = b * b - cd;
-          if (dd > 0.0) {
-            float s = sqrt(dd);
-            for (int j = 0; j < 2; j++) {
-              float t = j == 0 ? -b - s : -b + s;
-              if (t <= 0.0 || t >= L) continue;
-              vec3 x = o + d * t;
-              float m = abs(dot(x / rd, d));
-              float col = det.z * tau / sqrt(m * m + 2.0 * det.y / rd);   // vertical column over the slant through the shell
-              vec3 dT = exp(-col * ext);
-              I += (j == 0 ? vec3(1.0) : T) * sunlight(x, rd) * detCol * (1.0 - dT) * ph;   // the near crossing is above nearly all the haze
-            }
-          }
-        }
         float a = 1.0 - dot(T, vec3(0.3, 0.45, 0.25));
         gl_FragColor = vec4(1.0 - exp(-1.25 * strength * I), a);          // soft shoulder: a bright backlit ring keeps its color
       }`,
