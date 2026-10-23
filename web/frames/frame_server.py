@@ -249,11 +249,12 @@ def size_dir(size, fmt):
     return str(size) + ("-png" if fmt == "png" else "")
 
 
-# plain frames at quality 90: at 80 WebP drops the faintest stars and specks of sparse frames (lit PSNR 29-30 dB on
-# star fields, 38+ at 90; planets and rings look the same at both), for about 1.8x the bytes (6.6 KB a 512 px frame).
-# The folder is named after the quality, so frames made at 80 are not served again
-FRAME_QUALITY = 90
-FRAME_VERSION = "frames-q90"
+# plain frames at quality 95: at 80 WebP drops the faintest stars and specks of sparse frames (lit PSNR 29-30 dB on
+# star fields), 90 keeps most of them (38+) and 95 is hard to tell from lossless (43+; Sam saw 90 vs 95), for 21 KB a
+# 1024 px frame (p90 47 KB; 2.2 MB/s at the reel's worst, 24 fps from both cameras). The folder is named after the
+# quality, so frames made at another quality are not served again
+FRAME_QUALITY = 95
+FRAME_VERSION = "frames-q95"
 
 
 def webp(frame_id, size, cache, fmt="webp"):
