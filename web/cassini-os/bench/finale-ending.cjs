@@ -2,7 +2,7 @@
 // after it (the credits roll, or the return to the mission), as an MP4 made from the page's own screencast, with
 // stills at each moment. For before/after evidence of the ending.
 //   npm i playwright-core
-//   node finale-ending.js URL OUT [WIDTH HEIGHT]      (URL with ?finale; OUT is a prefix: OUT.mp4, OUT_*.png, OUT.json)
+//   node finale-ending.cjs URL OUT [WIDTH HEIGHT]      (URL with ?finale; OUT is a prefix: OUT.mp4, OUT_*.png, OUT.json)
 //   CHANNEL=chrome  use the installed Google Chrome; default is Playwright's Chromium (EXE=path for another one)
 //   SOFTWARE=1      SwiftShader (cloud containers); THREE_DIR=.../three/package serves three.js locally
 //   HAND=1          partway into the credits, scroll them by hand with the wheel, then jump near the end

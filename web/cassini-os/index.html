@@ -946,8 +946,9 @@ body.finale-out #app * { pointer-events: none !important; }
 #finale .fx-roll dd { text-align: left; margin: 0; }
 #finale .fx-roll dd small { display: block; font-size: 11.5px; color: var(--q-dim); }
 #finale .fx-roll .names { margin: 14px auto 0; max-width: 36em; line-height: 1.9; }
+/* the dot rides at the end of the name before it, so a wrapped line never starts with one */
 #finale .fx-roll .names span { white-space: nowrap; }
-#finale .fx-roll .names span + span::before { content: "·"; margin: 0 .55em; color: rgba(232,236,242,.3); }
+#finale .fx-roll .names span:not(:last-child)::after { content: "·"; margin: 0 .3em 0 .55em; color: rgba(232,236,242,.3); }
 #finale .fx-roll .text { color: var(--q-dim); max-width: 32em; margin: 10px auto 0; }
 #finale .fx-roll .end { margin-top: 160px; }
 #finale .fx-roll .end p { font-size: 21px; line-height: 1.5; margin: 0 0 26px; }
@@ -6294,7 +6295,7 @@ function frame(now) {
   ];
   const RECAP_END = 62;
   const ROLL_IN = 1.4;         // s of darkness between "Thank you, Cassini" and the credits
-  const ROLL_SPEED = 40;       // px/s the credits move up (32 on a phone)
+  const ROLL_SPEED = 60;       // px/s the credits move up (48 on a phone)
   const ROLL_HOLD = 3.5;       // s after a hand scroll before the roll moves on its own again
   const ROLL_REST = 9;         // s the last card stays before it all fades back to the mission
 
