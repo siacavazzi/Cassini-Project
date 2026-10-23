@@ -30,6 +30,7 @@ Frames that can't be unstretched return None and the caller keeps the old behavi
 import contextlib
 import contextvars
 import datetime
+import json
 import math
 import os
 
@@ -332,6 +333,38 @@ def look():
     return _look.get()
 
 
+"""
+How a balanced color picture maps its filters to color (color plan phase 2b): "natural" (the default) turns a
+true color set into the colors an eye would see (natural_mix) and balances a false color set so the body comes
+out gray (false_mix); "raw" draws each filter straight as a channel, as before. The classic look is always raw.
+"""
+COLORS = ("natural", "raw")
+_colors = contextvars.ContextVar("colors", default="natural")
+
+
+def colors():
+    return _colors.get()
+
+
+@contextlib.contextmanager
+def coloring(name):
+    token = _colors.set(name if name in COLORS else COLORS[0])
+    try:
+        yield
+    finally:
+        _colors.reset(token)
+
+
+"""
+The display model in use, for cache names: "classic", "balanced" (natural color) or "raw" (balanced, filters drawn
+straight)
+"""
+def style():
+    if look() == "classic":
+        return "classic"
+    return "raw" if colors() == "raw" else "balanced"
+
+
 @contextlib.contextmanager
 def looking(name):
     token = _look.set(name if name in LOOKS else LOOKS[0])
@@ -339,6 +372,241 @@ def looking(name):
         yield
     finally:
         _look.reset(token)
+
+
+"""
+The channel mix of a color set, a 3x3 matrix on linear values ([red, green, blue] out of the set's channels in
+order), or None to draw each filter straight: natural color only, in the balanced look.
+camera = "N" or "W"; bands = the set's color filters in channel order ("RED", "GRN", "BL1", "CB2", "MT3"...)
+target = the body the set is of (TARGET_NAME), for false color
+gains = false color: per band, the gain that brings the body's typical brightness to the set's mean
+(false_gains), when the caller has measured it itself (a mosaic's pass); otherwise the table's
+"""
+def color_mix(camera, bands, target=None, gains=None, own=False):
+    if style() != "balanced" or len(bands) != 3:
+        return None
+    m = natural_mix(camera, bands)
+    if m is not None:
+        return m
+    gains = gains or false_gains(target, bands, camera)
+    if not gains and own:
+        # no mission measure of the body in these bands (a clear frame, a rare filter or body): the picture's own
+        # balance alone (load_linear's FALSE_OWN), so no band outshines the others
+        gains = [1.0] * len(bands)
+    if not gains:
+        return None
+    m = np.diag(np.asarray(gains, np.float32)).view(FalseMix)
+    m.tint = tint_of(target)
+    return m
+
+
+class FalseMix(np.ndarray):
+    """A false color mix (a gain per band, diagonal), the tint its balance aims at (tint_of) and, for a mosaic, its
+    pass's typical color (each band's log share of the brightness, so the color doesn't shift as tiles arrive), kept
+    through arithmetic."""
+    tint = None
+    typical = None
+
+    def __array_finalize__(self, obj):
+        self.tint = getattr(obj, "tint", None)
+        self.typical = getattr(obj, "typical", None)
+
+
+_matrices = None
+
+
+"""
+True color sets (RED, GRN and BL1, BL2 or VIO): the fitted filter-to-sRGB matrix of the camera
+(color_matrices.json), which turns what the three filters saw into the color an eye would see; a gray body
+stays gray. None for other sets, and for a NAC set with VIO (no fit).
+"""
+def natural_mix(camera, bands):
+    global _matrices
+    if list(bands[:2]) != ["RED", "GRN"] or bands[2] not in ("BL1", "BL2", "VIO"):
+        return None
+    if _matrices is None:
+        with open(os.path.join(os.path.dirname(os.path.abspath(__file__)), "color_matrices.json")) as f:
+            _matrices = json.load(f)
+    key = ("NAC" if camera.startswith("N") or camera == "ISSNA" else "WAC") + {"VIO": "vio", "BL2": "bl2"}.get(bands[2], "")
+    m = _matrices.get(key)
+    return None if m is None else np.asarray(m, np.float32)
+
+
+_bodies = None
+
+
+"""
+False color: per band, the gain that brings the body's typical lit brightness in that band (false_color_bodies.json,
+the median over the mission's frames of the body, per camera) to the mean of the set's bands, so the body as a
+whole comes out gray and only its differences between bands show as color: a methane band (MT2, MT3) is far darker
+than its neighbors and otherwise turns the whole planet teal or magenta. One table for the mission, not a balance per
+picture, so a movie of the set doesn't change color from frame to frame. None (filters drawn straight) when the
+table lacks the body or a band, or its measure is unsure (BODY_MIN frames, a spread past BODY_SPREAD: a two-toned
+or phase-dependent body, like Iapetus).
+camera = "N" or "W"; target = TARGET_NAME
+"""
+BODY_MIN = 10
+BODY_SPREAD = 3.0    # the upper quartile over the lower
+
+
+def false_gains(target, bands, camera=None):
+    global _bodies
+    if _bodies is None:
+        path = os.path.join(os.path.dirname(os.path.abspath(__file__)), "false_color_bodies.json")
+        _bodies = {}
+        if os.path.exists(path):
+            with open(path) as f:
+                _bodies = json.load(f)
+    body = _bodies.get(str(target or "").upper(), {})
+    cam = "N" if str(camera or "").startswith("N") or camera == "ISSNA" else "W"
+    meds = []
+    for b in bands:
+        m = body.get(cam, {}).get(b) or body.get(b)
+        if not m or m.get("n", 0) < BODY_MIN or m["median"] <= 0 or m["iqr"][1] > BODY_SPREAD * max(m["iqr"][0], 1e-9):
+            return None
+        meds.append(m["median"])
+    return balance(meds, tint_of(target))
+
+
+"""
+False color gains that bring levels (the body's brightness per band) toward their mean (times the body's natural
+tint, BODY_TINTS, where it has one), FALSE_BALANCE of the way
+in log terms, keeping their total: all the way would give a dim band like MT3 over four times its brightness and lift
+its noise, so the body is left a little tinted instead (apply_mix holds what still stands out)
+"""
+FALSE_BALANCE = 0.9
+FALSE_OWN = 0.75
+OWN_NEAR = 0.3       # ... measured where every band's share is within this (log) of the picture's typical
+
+# the most one band's gain may be over another's: MT3 is so dark on Saturn (gains of 8 to 11) that whatever is less
+# methane-absorbed (the rings, the equatorial haze, the limb) would come out a vivid pink and its structure stand out
+# like scan lines
+GAIN_SPREAD = 12.0
+
+
+def spread_capped(gains):
+    low = min(gains)
+    return [min(g, low * GAIN_SPREAD) for g in gains]
+
+
+# the target of the balance for bodies with a color of their own, instead of gray: their natural color (sRGB, the color
+# investigation's references, /mnt/project-files/color-investigation/filter_to_srgb_matrices.json), so a false color
+# Jupiter comes out cream and tan rather than blue-gray
+BODY_TINTS = {"JUPITER": (255, 237, 206), "SATURN": (255, 242, 214), "TITAN": (255, 217, 162)}
+
+
+def tint_of(target):
+    """The body's natural color as linear red, green, blue of mean 1, or None (gray)."""
+    t = BODY_TINTS.get(str(target or "").upper())
+    if t is None:
+        return None
+    lin = [float(decode(np.float64(v / 255), "srgb")) for v in t]
+    return [v * 3 / sum(lin) for v in lin]
+
+
+def balance(levels, tint=None):
+    mean = sum(levels) / len(levels)
+    tint = tint or [1.0] * len(levels)
+    gains = spread_capped([(mean * t / v) ** FALSE_BALANCE for v, t in zip(levels, tint)])
+    k = sum(levels) / sum(g * v for g, v in zip(gains, levels))
+    return [g * k for g in gains]
+
+
+"""
+A channel mix (color_mix) on linear channels (3 x H x W). A false color mix (a gain per band, diagonal) is meant to
+take the body's tint away; where it makes a pixel more colorful than drawn straight instead (Saturn's rings, which
+methane doesn't darken, or Jupiter's limb haze, bright in MT3), the pixel goes to the body's tint (gray where it has
+none) at the balanced brightness,
+fully once the balance adds FALSE_REVERT of saturation (its straight color, teal on Jupiter, would stand out too). Then saturation past FALSE_CHROMA[0]
+rolls off through a soft knee to at most FALSE_CHROMA[1] (on linear values, against the tint).
+"""
+FALSE_CHROMA = (0.15, 0.25)
+FALSE_REVERT = 0.1
+FALSE_DETAIL = 5.0    # ... and fine detail below this blur (pixels) taken from the bands at gentler gains:
+DETAIL_SPREAD = 4.0   # none over this times another's (4x keeps the scan lines down; the full gains lift them)
+REVERT_FLOOR = 0.02   # ... where the bands' mean is at least this share of white
+# broad color differences across the body (a dusty-rose band under the ring shadow, one half of a disk pink and the
+# other sage, a lavender side, one mosaic tile olive and the next mauve) are what a dim band's full gain makes of small
+# real changes in its share; FALSE_FLAT of the picture's color variation broader than FALSE_BROAD (a share of the
+# picture's size) is taken out, toward its typical color, while finer color (belts, clouds, storms) stays
+FALSE_BROAD = 0.10
+FALSE_FLAT = 0.6
+
+
+def _saturation(x):
+    top, low = x.max(axis=0), x.min(axis=0)
+    return np.where(top > 0, (top - low) / np.maximum(top, 1e-12), 0)
+
+
+def _flatten_broad(x, lit, typical=None):
+    if lit.sum() < 100:
+        return x
+    lum = x.mean(axis=0)
+    share = np.log(np.maximum(x, 1e-6) / np.maximum(lum, 1e-6))
+    if typical is None:
+        typical = [np.median(c[lit]) for c in share]
+    typical = np.asarray(typical, np.float32).reshape(3, 1, 1)
+    sigma = FALSE_BROAD * max(x.shape[1:])
+    weight = np.where(lit, lum, 0).astype(np.float32)
+    soft = lambda v: cv2.GaussianBlur(v, (0, 0), sigma)
+    norm = np.maximum(soft(weight), 1e-12)
+    broad = np.stack([soft(c * weight) / norm for c in (share - typical)])
+    flat = np.exp(share - FALSE_FLAT * broad)
+    flat *= 3 / np.maximum(flat.sum(axis=0), 1e-12)
+    return np.where(lit & (x.min(axis=0) > 0), lum * flat, x)
+
+
+def apply_mix(mix, x):
+    false = isinstance(mix, FalseMix)
+    tint = np.asarray(mix.tint if false and mix.tint else [1.0, 1.0, 1.0], np.float32).reshape(3, 1, 1)
+    raw = x
+    x = np.tensordot(np.asarray(mix, np.float32), x, axes=1)
+    if false:
+        # judged against the tint the balance aims at, not gray, so a body's own color (Titan's orange) is no outlier
+        lum = x.mean(axis=0)
+        mean = raw.mean(axis=0)
+        straight = raw * (lum / np.maximum(mean, 1e-12))
+        w = np.clip((_saturation(x / tint) - _saturation(straight / tint)) / FALSE_REVERT, 0, 1)
+        # only where every band has signal: the sky's noise has no band ratio to compare
+        w = np.where((raw.min(axis=0) > 0) & (mean > REVERT_FLOOR), w, 0)
+        x = x + (lum * tint - x) * w
+        knee, cap = FALSE_CHROMA
+        sat = _saturation(x / tint)
+        held = knee + (cap - knee) * np.tanh((sat - knee) / (cap - knee))
+        k = np.where(sat > knee, held / np.maximum(sat, 1e-12), 1)
+        x = lum * tint + (x - lum * tint) * k
+        x = _flatten_broad(x, mean > REVERT_FLOOR, mix.typical)
+        # the balance's color and broad brightness, the fine detail of the bands at gains no more than DETAIL_SPREAD
+        # apart: a dim band's full gain (MT3 on Saturn, 8 to 10) would lift its ring, limb and haze structure and noise
+        # far above the others', while equal weights (the straight picture) lose the detail only that band shows
+        gains = np.diagonal(np.asarray(mix, np.float32))
+        gentle = np.minimum(gains, gains.min() * DETAIL_SPREAD)
+        sharp = np.tensordot(gentle / gentle.mean(), raw, axes=([0], [0])) / len(gains)
+        soft = lambda v: cv2.GaussianBlur(v, (0, 0), FALSE_DETAIL)
+        base, flat = soft(x.mean(axis=0)), soft(sharp)
+        ok = (flat > REVERT_FLOOR) & (soft(mean) > REVERT_FLOOR)
+        detail = np.where(ok, sharp * base / np.maximum(flat, 1e-12), x.mean(axis=0))
+        x = np.stack([np.where(ok, detail * soft(c) / np.maximum(base, 1e-12), c) for c in x])
+    return x
+
+
+"""
+A color picture already drawn (H x W x 3 uint8, gamma encoded, its channels on one white) with its channel mix
+(color_mix) applied on the linear values, the brightest channel rolling off past the shoulder as in tone
+"""
+def mix_display(rgb, mix, gamma=2.2, shoulder=SHOULDER):
+    x = decode(np.moveaxis(rgb[..., :3].astype(np.float32) / 255, -1, 0), gamma).astype(np.float32)
+    x = apply_mix(mix, x)
+    top = x.max(axis=0)
+    x *= np.where(top > shoulder, roll_off(top, shoulder) / np.maximum(top, 1e-12), 1)
+    return np.moveaxis((encode(np.clip(x, 0, 1), gamma) * 255 + 0.5).astype(np.uint8), 0, -1)
+
+
+"""
+A frame's color filter ("RED", "CB2", "BL1/GRN"...), the filters other than the clear ones, as reel.colour_filter
+"""
+def band_of(info):
+    return "/".join(f for f in _filters_of(info) if not f.startswith("CL")) or "CL1/CL2"
 
 
 """
@@ -365,7 +633,7 @@ def load_channels(labels, images=None, sky_fraction=0.1, sky_percentile=98, gamm
     if scale is not None:
         # every picture of a mosaic on the same scale, so tiles and filters keep what the camera saw
         gamma = scale.get("gamma", gamma)
-        return [display(iof, black, scale["white"], gamma, scale.get("shoulder"))
+        return [display(iof, black, scale["white"], gamma, scale.get("shoulder"), scale.get("toe"))
                 for iof, black in zip(iofs, scale["blacks"])]
     blacks, white, _ = picture_scale(iofs, sky_fraction, sky_percentile)
     if white <= 0:
@@ -401,7 +669,7 @@ everything only a little brighter than the sky, a shadowed ring or a night side:
 dimmest there loses the largest share of itself. tone takes it off the picture's brightness instead, so
 dim parts keep the color the camera measured and only get darker.
 labels, images, iofs = as load_channels
-returns (channels, margin), or None when a frame can't be calibrated or there is nothing to draw
+returns (channels, margin, the channel mix (color_mix) or None), or None when a frame can't be calibrated or there is nothing to draw
 """
 def load_linear(labels, images=None, iofs=None):
     if images is None:
@@ -413,40 +681,65 @@ def load_linear(labels, images=None, iofs=None):
     if white <= 0:
         return None
     channels = [(iof - np.float32(level)) / np.float32(white) for iof, level in zip(iofs, levels)]
+    infos = [lbl.get_info() for lbl in labels]
+    mix = color_mix(_value(infos[0], "INSTRUMENT_ID", ""), [band_of(i) for i in infos], _value(infos[0], "TARGET_NAME", ""),
+                    own=True)
+    false = isinstance(mix, FalseMix)
+    if false:
+        # false color: the mission's typical balance of the body (the table) misses a frame unlike it (Saturn's
+        # high latitudes); FALSE_OWN of what is left between the picture's own lit bands is taken off as well. A
+        # movie of one scene, whose frames are alike, still keeps one color
+        lum = np.mean(channels, axis=0)
+        lit = lum > 0.2 * np.percentile(lum, 99)
+        if lit.sum() > 100:
+            # over the pixels near the picture's typical band ratios, so rings or a bright equatorial band don't steer it
+            logs = [np.log(np.maximum(c[lit], 1e-6) / np.maximum(lum[lit], 1e-6)) for c in channels]
+            typical = np.logical_and.reduce([np.abs(v - np.median(v)) < OWN_NEAR for v in logs])
+            if typical.sum() > 100:
+                lit = np.where(lit)
+                lit = tuple(i[typical] for i in lit)
+            own = [float(np.median(c[lit])) * g for c, g in zip(channels, np.diagonal(mix))]
+            if min(own) > 0:
+                tint = tint_of(_value(infos[0], "TARGET_NAME", ""))
+                gains = spread_capped([g * o ** FALSE_OWN for g, o in zip(np.diagonal(mix), balance(own, tint))])
+                mix = np.diag(np.asarray(gains, np.float32)).view(FalseMix)
+                mix.tint = tint
     margin /= white
+    sky = _sky(iofs) if measured else np.ones(iofs[0].shape, dtype=bool)
     if measured:
         # the toe starts no lower than the darker half of the sky's own brightness (SKY_DARK of it stays black),
         # since the gamma lifts even a tiny remainder into visible grain. Only the darker half, by its mean over
         # 15 pixels, so faint ring glow or a night side in the sky doesn't count as sky
-        sky = _sky(iofs)
         lum = np.mean(channels, axis=0)
         local = cv2.blur(lum, (15, 15))
         dark = sky & (local <= np.median(local[sky]))
         if dark.sum() > 100:
             margin = max(margin, float(np.percentile(lum[dark], SKY_DARK)))
-        if len(channels) > 1:
-            channels = _clean_spikes(channels, sky)
-    return channels, margin
+    if len(channels) > 1 and (measured or false):
+        # without sky (a body filling the frame) the grain is measured on the whole picture
+        channels = _clean_spikes(channels, sky, false)
+    return channels, margin, mix
 
 
 """
 Hot pixels and cosmic ray hits in one channel of a composite: a pixel far above its 3x3 median in its own
 channel (SPIKE times that channel's sky grain, and above twice the median) where no other channel has a
-peak within 2 pixels, is set to its median. Drawn together (tone), such a pixel would be a pastel dot; a
+peak within 2 pixels, is set to its median. False color (natural), whose balance would make them salmon or cyan dots:
+against a 5x5 median, so 2x2 clusters go too, and where not every other channel peaks, so two-channel hits go. Drawn together (tone), such a pixel would be a pastel dot; a
 star or a small bright feature is in every channel, so it stays.
 channels = linear channels, not yet aligned; sky = the sky mask
 """
-def _clean_spikes(channels, sky):
-    meds = [cv2.medianBlur(c, 3) for c in channels]
+def _clean_spikes(channels, sky, natural=False):
+    meds = [cv2.medianBlur(c, 5 if natural else 3) for c in channels]
     res = [c - m for c, m in zip(channels, meds)]
     noises = [float(np.percentile(np.abs(r[sky]), 99)) / 2.6 for r in res]
     peaks = [cv2.dilate(r, np.ones((5, 5), np.uint8)) > SPIKE * n for r, n in zip(res, noises)]
     out = []
     for i, (c, m, r, n) in enumerate(zip(channels, meds, res, noises)):
         spike = (r > SPIKE * n) & (r > m) & (r > 0)
-        for j, p in enumerate(peaks):
-            if j != i:
-                spike &= ~p
+        others = [p for j, p in enumerate(peaks) if j != i]
+        # natural color: not where every other channel peaks too (a star or a moon); raw: where none does
+        spike &= ~np.logical_and.reduce(others) if natural else ~np.logical_or.reduce(others)
         out.append(np.where(spike, m, c))
     return out
 
@@ -455,10 +748,13 @@ def _clean_spikes(channels, sky):
 Balanced composites' channels (load_linear, aligned) as BGR uint8 images: the noise margin comes off the
 brightness (the channels' mean) through a toe, black up to the margin (the sky at or below its own level is
 black), then turning within an eighth of the margin into the brightness less the margin, and every channel is scaled by the same factor, so a pixel keeps its color.
-Past the shoulder the brightest channel rolls off softly (roll_off), the others by the same factor.
+Past the shoulder the brightest channel rolls off softly (roll_off), the others by the same factor. mix = the
+set's channel mix (color_mix), applied first, on the linear values.
 """
-def tone(channels, margin, shoulder=SHOULDER, gamma=2.2):
+def tone(channels, margin, mix=None, shoulder=SHOULDER, gamma=2.2):
     x = np.stack(channels).astype(np.float32)
+    if mix is not None:
+        x = apply_mix(mix, x)
     lum = x.mean(axis=0)
     w = margin / 8
     if w > 0:
@@ -515,15 +811,23 @@ light), which differs between channels, so the sky stays neutral; the margin abo
 channel, keeps the sky's noise from coming out as colored speckle (a margin per channel, the 98th
 percentile, takes more off the noisiest channel and tints dim limbs and terminators).
 """
+"""
+The noise floor of a balanced black: the noisiest channel's classic margin (its sky's 98th percentile above its
+median), so no channel shows more of its sky noise, scan lines or compression blocks than before. The margin from
+neighboring pixels' differences alone is about 0 on frames stored in 8 bits (most neighbors are equal).
+skies = per channel, its sky pixels (I/F)
+"""
+def noise_floor(skies, sky_percentile=98):
+    return max(float(np.percentile(v, sky_percentile) - np.median(v)) for v in skies if v.size) if skies else 0.0
+
+
 def _balanced_scale(iofs, sky_fraction=0.1, sky_percentile=98):
     sky = _sky(iofs)
     measured = bool(sky.mean() > sky_fraction)
     levels, margin = [0.0] * len(iofs), 0.0
     if measured:
         levels, margin = sky_levels([[iof] for iof in iofs], [[sky]] * len(iofs))
-        # noise floor: the margin is at least the noisiest channel's classic one (its 98th percentile above its
-        # median), so no channel shows more of its sky noise, scan lines or compression blocks than before
-        margin = max(margin, max(float(np.percentile(iof[sky], sky_percentile) - np.median(iof[sky])) for iof in iofs))
+        margin = max(margin, noise_floor([iof[sky] for iof in iofs], sky_percentile))
     blacks = [level + margin for level in levels]
     # One white for all channels: the WHITE_PCT percentile of the brightest channel over the lit pixels (the
     # body, not the sky), so a few bright limb or ring pixels don't leave the body dim and gray; the shoulder
@@ -629,8 +933,13 @@ def roll_off(x, knee):
 An I/F image as a BGR uint8 image: black -> 0, black + white -> 255, gamma encoded (or the sRGB curve,
 gamma "srgb"); with a shoulder, brightness past it rolls off softly (roll_off) instead of clipping
 """
-def display(iof, black, white, gamma=2.2, shoulder=None):
-    x = (iof - black) / white
+def display(iof, black, white, gamma=2.2, shoulder=None, toe=None):
+    x = iof - black
+    if toe:
+        # a soft toe instead of a hard clip at black: values just above it fade in quadratically over toe (I/F),
+        # so noise sitting at the black point is a smooth dark fade, not black salt among gray grain
+        x = np.where(x <= 0, 0, np.where(x <= toe, x * x / (2 * toe), x - toe / 2))
+    x = x / white
     x = np.clip(roll_off(x, shoulder) if shoulder else x, 0, 1)
     gray = (encode(x, gamma) * 255 + 0.5).astype(np.uint8)
     return cv2.cvtColor(gray, cv2.COLOR_GRAY2BGR)

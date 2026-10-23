@@ -257,14 +257,14 @@ def webp(frame_id, size, cache, fmt="webp"):
     return cached(os.path.join(cache, size_dir(size, fmt), f"{frame_id}.{fmt}"), make)
 
 
-# the caches of the pictures drawn from I/F, one per look (calibration.LOOKS), so the classic look keeps the
-# pictures made before the balanced display model
-COLOR_VERSIONS = {"balanced": "color-v10", "classic": "color-v4"}
-PROC_VERSIONS = {"balanced": "proc-v7", "classic": "proc-v1"}
+# the caches of the pictures drawn from I/F, one per display model (calibration.style), so the classic look keeps the
+# pictures made before the balanced display model and raw colors the balanced ones made before natural color
+COLOR_VERSIONS = {"balanced": "color-v27", "raw": "color-v10", "classic": "color-v4"}
+PROC_VERSIONS = {"balanced": "proc-v7", "raw": "proc-v7", "classic": "proc-v1"}   # one frame: no colors to mix
 
 
 def in_background(target, *args):
-    """Runs target(*args) on a thread of its own, in the request's look."""
+    """Runs target(*args) on a thread of its own, in the request's look and colors."""
     threading.Thread(target=contextvars.copy_context().run, args=(target, *args), daemon=True).start()
 
 
@@ -293,7 +293,7 @@ _recent, _recent_lock, RECENT = {}, threading.Lock(), 4
 
 
 def _recent_composite(ids):
-    key = (calibration.look(), tuple(ids))
+    key = (calibration.style(), tuple(ids))
     with _recent_lock:
         hit = _recent.pop(key, None)
         if hit:
@@ -311,7 +311,7 @@ def color_webp(ids, size, cache, fmt="webp", channel=None):
     """The composite (or one of its channels) as WebP (or PNG), and its report (also kept in the cache, next to
     the image)."""
     # bumped whenever the way composites are made changes, so older ones are not served again
-    folder = os.path.join(cache, COLOR_VERSIONS[calibration.look()])
+    folder = os.path.join(cache, COLOR_VERSIONS[calibration.style()])
     base = os.path.join(folder, size_dir(size, fmt), "_".join(ids) + ("" if channel is None else f"_c{channel}"))
     report = {}
     def make():
@@ -341,7 +341,7 @@ def processed_webp(frame_id, size, cache, fmt="webp"):
     """One frame made like a composite's channel (composite with one id: repeat exposures stacked, lost pixels
     filled, calibrated to I/F and put on the pipeline's display scale), for movie mode; and its report. Cached
     like the composites."""
-    base = os.path.join(cache, PROC_VERSIONS[calibration.look()], size_dir(size, fmt), frame_id)
+    base = os.path.join(cache, PROC_VERSIONS[calibration.style()], size_dir(size, fmt), frame_id)
     report = {}
     def make():
         with _movie_slots:
@@ -694,8 +694,11 @@ def make_handler(site, cache, flags=None):
                     left -= len(chunk)
 
         def do_GET(self):
-            # look=classic: pictures drawn from I/F the way they were before the balanced display model
-            with calibration.looking(parse_qs(urlparse(self.path).query).get("look", [calibration.LOOKS[0]])[0]):
+            # look=classic: pictures drawn from I/F the way they were before the balanced display model;
+            # colors=raw: each filter drawn straight as a channel, without natural color (calibration.colors)
+            query = parse_qs(urlparse(self.path).query)
+            with calibration.looking(query.get("look", [calibration.LOOKS[0]])[0]), \
+                    calibration.coloring(query.get("colors", [calibration.COLORS[0]])[0]):
                 return self.get()
 
         def get(self):
