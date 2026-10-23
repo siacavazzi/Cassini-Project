@@ -1412,8 +1412,14 @@ body.idle .win.full .titlebar { opacity: 0; }
     const centreOn = () => opts.get("autoCenter") ?? S.get("cameras.autoCenter") ?? true;
     const uncentred = new Set(), centreFailed = new Set();   // passes the server does not centre / frames it could not
     const centres = k => centreOn() && !uncentred.has(passOf(k)) && !centreFailed.has(catalog.id[k]);
+    // Settings > Cameras > Processed single frames: a frame on its own comes calibrated through the pipeline
+    // (/frames/processed: stacked, calibrated, on the display scale) rather than as archived; a frame the server
+    // cannot make that way shows as archived
+    const processedFailed = new Set();
+    const processes = k => S.get("cameras.processedFrames") !== false && !processedFailed.has(catalog.id[k]);
     const shownFrameUrl = (k, sz) => centres(k)
-      ? `${FRAMES}/frames/processed/${catalog.id[k]}.webp?size=${sz || size()}${window.cassiniLook({ center: true })}` : frameUrl(catalog.id[k], sz);
+      ? `${FRAMES}/frames/processed/${catalog.id[k]}.webp?size=${sz || size()}${window.cassiniLook({ center: true })}`
+      : processes(k) ? `${FRAMES}/frames/processed/${catalog.id[k]}.webp?size=${sz || size()}${window.cassiniLook()}` : frameUrl(catalog.id[k], sz);
     // a picture at full resolution as a PNG to save (the frame server names the file)
     const saveUrl = url => (/size=/.test(url) ? url.replace(/size=[^&]*/, "size=full") : url + (url.includes("?") ? "&" : "?") + "size=full") + "&format=png&download=1";
     // the save menu: the picture shown and the levels under and around it (savesFor below), each at full resolution
@@ -1600,6 +1606,9 @@ body.idle .win.full .titlebar { opacity: 0; }
             uncentred.add(o); centreFailed.delete(id);
             if (lastK >= 0 && passOf(lastK) === o) update(true);
           }).catch(() => {});
+          if (want && want.key === v.key) want = view(v.k, catalog.et[v.k]);
+        } else if (v.key.includes("/frames/processed/")) {   // not made by the pipeline: the archive frame
+          processedFailed.add(catalog.id[v.k]);
           if (want && want.key === v.key) want = view(v.k, catalog.et[v.k]);
         } else if (v.movie) {   // not steadied (the server is still working the pass out, or SPICE could not place it): the frame itself
           // the whole pass plays its frames as they are for a while, so the clock never waits on a pass being
@@ -2394,7 +2403,7 @@ body.idle .win.full .titlebar { opacity: 0; }
   const behind = () => { let b = 0; for (const f of allFeeds) b = Math.max(b, f.behind()); return b; };
   window.cassiniFeeds = { cameraFeed, framesOf, lastOfCam, prep, weight, nextPicture, prevPicture, behind, stale: () => S.get("cameras.stale") * 3600 };
   // a change to what the windows show takes effect straight away
-  for (const key of ["cameras.composites", "cameras.stale", "cameras.steady", "cameras.passes", "cameras.balancedColor", "cameras.colors", "cameras.lingerColor", "cameras.lingerMosaic", "movies.steady", "cameras.autoCenter", "movies.trail", "movies.filmstrip", "movies.laps"]) S.on(key, () => { if (typeof catalog !== "undefined" && catalog && catalog.byCam) feeds.forEach(f => f(true)); });
+  for (const key of ["cameras.composites", "cameras.stale", "cameras.steady", "cameras.passes", "cameras.balancedColor", "cameras.colors", "cameras.lingerColor", "cameras.lingerMosaic", "movies.steady", "cameras.autoCenter", "cameras.processedFrames", "movies.trail", "movies.filmstrip", "movies.laps"]) S.on(key, () => { if (typeof catalog !== "undefined" && catalog && catalog.byCam) feeds.forEach(f => f(true)); });
 
   // ---------- burst limit: in normal playback each camera window gets at most maxRate new pictures a second ----------
   // The clock runs at the chosen speed except inside an imaging burst, where it slows so that crossing the gap

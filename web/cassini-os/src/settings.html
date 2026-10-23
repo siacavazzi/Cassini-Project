@@ -225,6 +225,8 @@ body.phone .srow input[type=range] { width: 96px; }
   cls("cameras.steady", "s-steady", true);
   D({ key: "cameras.mosaics", section: "Cameras", label: "Mosaics in camera windows", type: "toggle", value: true,
       hint: "When Cassini steps a camera across a body, the window builds the mosaic tile by tile. Off shows every frame on its own." });
+  D({ key: "cameras.processedFrames", section: "Cameras", label: "Processed single frames", type: "toggle", value: true,
+      hint: "A frame shown on its own goes through the pipeline like a color picture's channels: repeat exposures stacked, calibrated, lost lines filled, on the same display stretch. Off shows the frame as it is in the archive." });
   D({ key: "cameras.autoCenter", section: "Cameras", label: "Auto center", type: "toggle", value: true,
       hint: "Every picture of a moon or a planet whose whole disk fits is turned north up with the body in the middle, by SPICE, at one size for the whole pass, so the body holds still from picture to picture. Ring, spoke and sky pictures, and a body too big for the picture, stay as the camera took them. Each camera window's settings button (the slider icon in its title bar) can turn it on or off for that window." });
   D({ key: "cameras.passes", section: "Cameras", label: "Mosaic passes", type: "choice", value: "auto",
