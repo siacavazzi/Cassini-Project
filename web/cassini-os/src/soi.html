@@ -288,7 +288,10 @@ body.phone #soi .sx-note { bottom: 40px; }
     const t = S.tau, T = (performance.now() - S.t0) / 1000;
     frame(t);
     const prog = clamp01((t - START) / (T_OFF - START));
-    const az = (62 + 70 * prog) * Math.PI / 180 + look.yaw, el = 0.62 - 0.3 * prog + look.pitch;
+    // high above it at first, where Saturn (22 degrees across from the ring plane) fills the lower part of the view,
+    // coming down toward its level as Saturn grows during the burn
+    const pre = clamp01((t - START) / (T_IGN - START)), el = (t < T_IGN ? 1.0 - 0.5 * pre : 0.5 - 0.2 * clamp01((t - T_IGN) / BURN)) + look.pitch;
+    const az = (62 + 70 * prog) * Math.PI / 180 + look.yaw;
     const dir = vS.clone().negate().multiplyScalar(Math.cos(az)).addScaledVector(nS, Math.sin(az)).normalize();
     dir.multiplyScalar(Math.cos(el)).addScaledVector(uS, Math.sin(el)).normalize();
     const d = (t < T_IGN ? 3.4e-5 : 4.2e-5) * look.zoom;
@@ -297,17 +300,18 @@ body.phone #soi .sx-note { bottom: 40px; }
     if (t >= T_IGN) aim.addScaledVector(vS, 6e-6 * clamp01((t - T_IGN) / 3) * (S.offAt ? clamp01(1 - (T - S.offAt) / 3) : 1));
     camera.position.copy(aim).addScaledVector(dir, d);
     if (S.offAt) {
-      // pull back over Saturn's pole side to 300,000 km, the view swinging from Cassini to Saturn
+      // pull back over Saturn's pole side to 300,000 km
       const k = clamp01((T - S.offAt - 1) / 9), e = k * k * (3 - 2 * k);
       const sat = relScene("SATURN", new THREE.Vector3()), pole = toScene(iauMatrix(bodies.SATURN, t)[2], new THREE.Vector3()).normalize();
       const far = sat.clone().add(pole.clone().multiplyScalar(0.55).add(uS).normalize().multiplyScalar(300 * look.zoom));
-      const p = camera.position.clone(), lg = Math.log(Math.max(1e-9, p.distanceTo(aim))), lf = Math.log(far.distanceTo(sat));
-      // the distance grows evenly in its logarithm, so the move reads the same from metres to hundreds of thousands of km
-      const dist = Math.exp(lg + (lf - lg) * e), from = aim.clone().lerp(sat, e);
-      const way = dir.clone().lerp(far.clone().sub(sat).normalize(), e).normalize();
-      camera.position.copy(from).addScaledVector(way, dist);
+      // the distance from Cassini grows evenly in its logarithm (the move reads the same from metres to hundreds of
+      // thousands of km) and the camera swings round to the far point, staying outside Saturn; the view turns from
+      // Cassini to Saturn's centre
+      const toFar = far.clone().sub(aim), lg = Math.log(d), lf = Math.log(toFar.length());
+      const way = dir.clone().lerp(toFar.normalize(), e).normalize();
+      camera.position.copy(aim).addScaledVector(way, Math.exp(lg + (lf - lg) * e));
       camera.up.copy(uS).lerp(pole, e).normalize();
-      camera.lookAt(from);
+      camera.lookAt(aim.clone().lerp(sat, e));
       return;
     }
     camera.up.copy(uS);

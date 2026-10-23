@@ -7,6 +7,7 @@
 //   STILLS_ONLY=1   no video, stills only
 //   VIRTUAL=30      a smooth video however slowly the page renders (software GL): the page's clock and animation frames
 //                   are stepped by hand, 30 a second, and each frame is a screenshot (slow, but every frame is there)
+//   STRIDE=n        with VIRTUAL, keep only every nth frame (a quick contact sheet instead of a video)
 // Needs ffmpeg on the PATH.
 const { chromium } = require("playwright-core");
 const fs = require("fs"), path = require("path"), { execFileSync } = require("child_process");
@@ -47,7 +48,8 @@ const env = process.env, T0 = Date.now(), t = () => +((Date.now() - T0) / 1000).
     let n = 0, endAt = 0;
     for (;;) {
       await page.evaluate(ms => window.__step(ms), 1000 / VIRT);
-      await page.screenshot({ path: path.join(dir, `${String(n++).padStart(6, "0")}.jpg`), type: "jpeg", quality: 88 });
+      if (n % (+env.STRIDE || 1) === 0) await page.screenshot({ path: path.join(dir, `${String(n / (+env.STRIDE || 1)).padStart(6, "0")}.jpg`), type: "jpeg", quality: 88 });
+      n++;
       if (n % VIRT === 0) {
         const s = await page.evaluate(() => ({ running: cassiniSOI.running, caps: [...document.querySelectorAll("#soi .cs-cap")].map(e => e.textContent).join(" | "), read: document.querySelector("#soi .sx-read").textContent }));
         if (n % (VIRT * 5) === 0) console.log(t(), "frame", n, s.read, "|", s.caps.slice(0, 60));
@@ -55,6 +57,7 @@ const env = process.env, T0 = Date.now(), t = () => +((Date.now() - T0) / 1000).
       }
       if (endAt && n >= endAt) break;
     }
+    if (env.STRIDE) { console.log("frames in", dir); await br.close(); return; }
     execFileSync("ffmpeg", ["-y", "-loglevel", "error", "-framerate", String(VIRT), "-i", path.join(dir, "%06d.jpg"), "-vf", "scale=trunc(iw/2)*2:trunc(ih/2)*2",
       "-c:v", "libx264", "-pix_fmt", "yuv420p", "-crf", "21", `${out}.mp4`]);
     fs.rmSync(dir, { recursive: true });
