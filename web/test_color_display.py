@@ -129,11 +129,13 @@ assert max(b / old["white"] for b in old["blacks"].values()) > 1      # the clas
 assert len(set(false["blacks"].values())) == 3 and np.isclose(false["white"], max(np.percentile(v[0][::4, ::4], 99.5) - np.percentile(v[0][::4, ::4], 1) for v in by.values()), rtol=1e-3)
 # natural false colour: a balance toward gray
 assert "balance" in natural_false and "balance" not in false
-# a pass of mostly sky around a small body: each band's black sits above its sky (level plus noise margin), so the
-# sky between the tiles comes out black, not a gray veil
+# a pass of mostly sky around a small body, its sky scan-lined: each band's black sits above its sky (level plus noise
+# margin, and the darker half of the sky's own brightness), so the sky between the tiles comes out black, not a
+# gray scan-lined veil
 yy, xx = np.mgrid[:256, :256]
 disk = np.hypot(yy - 128, xx - 128) < 40
-by_sky = {f: [np.where(disk, 0.5, off) + 0.002 * rng.standard_normal((256, 256))] for f, off in
+stripes = 0.006 * rng.random((256, 1)) * np.ones((1, 256))   # scan lines: whole rows brighter, above the pixel noise
+by_sky = {f: [np.where(disk, 0.5, off + stripes) + 0.002 * rng.standard_normal((256, 256))] for f, off in
           (("MT3", 0.004), ("MT2", 0.010), ("UV1", 0.007))}
 obs_mosaic.stacking.load_hdr = lambda path, gap=None: (None, by_sky[path][0], 1)
 fr_sky = [(f, f"N{i}", f, i, 600, 0.0, 0.0, 1e5) for i, f in enumerate(by_sky)]
