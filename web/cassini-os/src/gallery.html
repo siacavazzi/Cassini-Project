@@ -26,6 +26,7 @@
 #galcard[style*="left"] { transform: none; }
 #galcard .galhead { flex: none; display: flex; gap: 8px; align-items: center; flex-wrap: wrap; padding: 4px 10px 8px; font-size: 11px; color: var(--q-dim, #888); }
 #galcard .galhead .sp { flex: 1; }
+#galcard #galsum { flex: 1 1 0; min-width: 60px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }   /* gives way before the buttons wrap */
 .galseg { display: flex; border: 1px solid var(--q-line, #555); border-radius: 5px; overflow: hidden; }
 .galseg button { all: unset; padding: 3px 9px; color: var(--q-text, #ddd); cursor: pointer; font-size: 11px; }
 .galseg button[aria-pressed="true"] { background: rgba(138,182,255,.25); color: #fff; }
@@ -34,6 +35,8 @@
 .galchk input { margin: 0; accent-color: var(--q-accent, #8ab6ff); }
 .galbtn:hover { background: rgba(255,255,255,.16); color: #fff; }
 .galbtn:disabled { opacity: .45; cursor: default; }
+.galopt { font-size: 11px; display: inline-flex; align-items: center; gap: 4px; color: var(--q-dim, #aaa); cursor: pointer; white-space: nowrap; }
+.galopt input { margin: 0; accent-color: var(--q-accent, #8ab6ff); }
 .galbtn.go { background: var(--q-accent, #8ab6ff); border-color: transparent; color: #0b1019; font-weight: 600; }
 .galbtn svg { width: 11px; height: 11px; } .galbtn svg * { fill: none; stroke: currentColor; stroke-width: 1.4; stroke-linecap: round; stroke-linejoin: round; }
 #galgrid { flex: 1 1 auto; min-height: 0; overflow-y: auto; list-style: none; margin: 0; padding: 0 8px 8px; display: grid; grid-template-columns: repeat(auto-fill, minmax(150px, 1fr)); gap: 6px; align-content: start; }
@@ -381,6 +384,18 @@ body.phone #galtoast { bottom: calc(env(safe-area-inset-bottom, 0px) + var(--app
   const esc = s => String(s == null ? "" : s).replace(/[&<>"]/g, c => ({ "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;" })[c]);
   function revoke() { G.urls.forEach(u => URL.revokeObjectURL(u)); G.urls = []; }
   const objUrl = b => { const u = URL.createObjectURL(b); G.urls.push(u); return u; };
+  // pictures leave the gallery as JPEG (Download, Share, Export Library): most apps and sites still refuse WebP. Drawn on
+  // black (space; JPEG has no transparency) at quality 0.92; the WebP stays in the gallery as the server sent it
+  async function asJpeg(blob) {
+    if (!blob || /jpeg/.test(blob.type)) return blob;
+    try {
+      const bm = await createImageBitmap(blob), c = document.createElement("canvas");
+      c.width = bm.width; c.height = bm.height;
+      const g = c.getContext("2d"); g.fillStyle = "#000"; g.fillRect(0, 0, c.width, c.height); g.drawImage(bm, 0, 0); bm.close();
+      return await new Promise(res => c.toBlob(b => res(b || blob), "image/jpeg", 0.92));
+    } catch (e) { return blob; }
+  }
+  const extOf = b => /jpeg/.test(b.type) ? "jpg" : /png/.test(b.type) ? "png" : "webp";
   async function refresh() {
     try { G.items = await allItems(); } catch (e) { G.items = []; $("galsum").textContent = "This browser keeps no storage for the gallery here"; }
     if (G.cur || G.shared) return;
@@ -448,6 +463,9 @@ body.phone #galtoast { bottom: calc(env(safe-area-inset-bottom, 0px) + var(--app
         im.onload = () => wait.remove(); im.onerror = () => { wait.textContent = "The frame server could not make this picture (is it running?)"; };
         im.src = sized(item.src, "full");
         dl.href = sized(item.src, "full") + "&format=png&download=1"; dl.setAttribute("download", base + ".png");
+        fetch(sized(item.src, "full")).then(r => r.ok ? r.blob() : null).then(asJpeg).then(j => {
+          if (j && /jpeg/.test(j.type) && (G.cur === item || G.shared === item)) { dl.href = objUrl(j); dl.setAttribute("download", base + ".jpg"); }
+        }).catch(() => {});
       }
     }
   }
