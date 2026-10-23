@@ -474,6 +474,7 @@ rolls off through a soft knee to at most FALSE_CHROMA[1] (on linear values).
 """
 FALSE_CHROMA = (0.3, 0.4)
 FALSE_REVERT = 0.1
+REVERT_FLOOR = 0.02   # ... where the bands' mean is at least this share of white
 
 
 def _saturation(x):
@@ -487,8 +488,11 @@ def apply_mix(mix, x):
     x = np.tensordot(mix, x, axes=1)
     if np.count_nonzero(mix - np.diag(np.diagonal(mix))) == 0:
         lum = x.mean(axis=0)
-        straight = raw * (lum / np.maximum(raw.mean(axis=0), 1e-12))
+        mean = raw.mean(axis=0)
+        straight = raw * (lum / np.maximum(mean, 1e-12))
         w = np.clip((_saturation(x) - _saturation(straight)) / FALSE_REVERT, 0, 1)
+        # only where every band has signal: the sky's noise has no band ratio worth keeping
+        w = np.where((raw.min(axis=0) > 0) & (mean > REVERT_FLOOR), w, 0)
         x = x + (straight - x) * w
         knee, cap = FALSE_CHROMA
         sat = _saturation(x)

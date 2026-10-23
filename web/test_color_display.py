@@ -160,6 +160,9 @@ assert np.abs(cal.mix_display(rgb, m, 3.0).astype(int) - rgb).max() <= 2
 ring = cal.apply_mix(np.diag([3.0, 1.0, 1.0]), np.array([0.3, 0.3, 0.3], np.float32).reshape(3, 1, 1)).ravel()
 body = cal.apply_mix(np.diag([3.0, 1.0, 1.0]), np.array([0.1, 0.3, 0.3], np.float32).reshape(3, 1, 1)).ravel()
 assert np.ptp(ring) < 0.01 and np.ptp(body) < 0.01
+# the sky's noise (a band near zero or below) is not taken for a ratio to keep
+sky_px = cal.apply_mix(np.diag([3.0, 1.0, 1.0]), np.array([0.002, -0.001, 0.003], np.float32).reshape(3, 1, 1)).ravel()
+assert np.abs(sky_px).max() < 0.02
 # a false color mix holds a hot pink line (a ring bright in a dim band) to a pastel, and leaves a near-gray body be
 pink = cal.apply_mix(np.eye(3), np.array([1.0, 0.2, 0.9], np.float32).reshape(3, 1, 1)).ravel()
 near = cal.apply_mix(np.eye(3), np.array([0.5, 0.48, 0.46], np.float32).reshape(3, 1, 1)).ravel()
