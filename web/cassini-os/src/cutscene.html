@@ -1,0 +1,187 @@
+<!-- What every cutscene shares (the Grand Finale in finale.html, and the ones after it). build.py splices the style into
+     the head and the script after the viewer's and the loading screen's, before any cutscene's.
+
+     A cutscene is its own <section> with its own effects; this file gives it the rest, so they all behave alike:
+       - the viewer's four cutscene hooks (studyFrame before the bodies are placed, studyPositions, studyAttitude after
+         Cassini's pointing, studyCamera after the orbit controls), shared: each cutscene registers its own and only the
+         one playing is called
+       - begin and end: the interface fades away (body.cutscene), playback stops, the orbit controls let go, and Escape
+         or the section's .cs-skip button ends it; at the end everything comes back as it was
+       - fades and captions on the viewer's frame clock (performance.now), so a recording keeps their pace
+       - looking around: a drag turns the view and the wheel zooms (cassiniCutscene.look, for the cutscene's camera to
+         use); it eases back a few seconds after
+       - a trigger when playback crosses a moment going forward, and ?<name> in the address to play one at once
+       - sound through sound.html (cassiniSound), when it is there
+     Shared classes for a cutscene's section: .cs-black (a black cover), .cs-caps with .cs-cap lines (centered, low),
+     .cs-hint (a quiet line at the top), .cs-skip (the Skip button). -->
+<style>
+.cs-root { position: fixed; inset: 0; z-index: 2002; pointer-events: none; }
+.cs-root[hidden] { display: none; }
+.cs-root .cs-black { position: absolute; inset: 0; background: #000; opacity: 0; }
+.cs-root .cs-caps { position: absolute; left: 50%; bottom: 15vh; transform: translateX(-50%); width: min(640px, calc(100vw - 32px)); display: grid; }
+.cs-root .cs-cap { grid-area: 1 / 1; align-self: end; text-align: center; color: var(--q-text); font: 300 19px/1.5 -apple-system, "Helvetica Neue", var(--ui);
+  letter-spacing: .01em; text-shadow: 0 1px 12px rgba(0,0,0,.9), 0 0 2px rgba(0,0,0,.8); opacity: 0; }
+.cs-root .cs-cap b { display: block; margin-bottom: 8px; font-weight: normal; font-size: 10.5px; letter-spacing: .22em; text-transform: uppercase; color: var(--q-dim); }
+.cs-root .cs-cap.big { font-size: 26px; }
+.cs-root .cs-cap ul { list-style: none; margin: 0; padding: 0; }
+.cs-root .cs-cap li { margin: 3px 0; }
+.cs-root .cs-cap small { display: block; margin-top: 10px; font-size: 12px; color: var(--q-dim); }
+.cs-root .cs-skip { all: unset; position: absolute; right: 16px; bottom: 12px; padding: 4px 11px; border-radius: 11px; border: 1px solid var(--q-line);
+  background: rgba(16,17,20,.5); color: rgba(232,236,242,.55); font-size: 11px; cursor: pointer; pointer-events: auto; }
+.cs-root .cs-skip:hover { color: var(--q-text); }
+.cs-root .cs-hint { position: absolute; left: 50%; top: 18px; transform: translateX(-50%); font-size: 11px; color: rgba(232,236,242,.45); opacity: 0; transition: opacity 1.5s ease; }
+.cs-root .cs-hint.on { opacity: 1; }
+body.cutscene #gl { cursor: grab; }
+body.cutscene.cs-drag #gl { cursor: grabbing; }
+body.cutscene #app > :not(#gl):not(.cs-root) { opacity: 0 !important; pointer-events: none !important; transition: opacity 1.2s ease !important; }
+body.cutscene-out #app * { pointer-events: none !important; }
+body.phone .cs-root .cs-cap { font-size: 16px; } body.phone .cs-root .cs-cap.big { font-size: 21px; }
+</style>
+
+<script>
+// ---------- what every cutscene shares: hooks, begin and end, fades, captions, looking around, triggers ----------
+(function () {
+  const scenes = {};   // name -> { frame, positions, attitude, camera, root, onEnd }
+  let active = null, saved = null;
+
+  // ---------- fades and captions, on the viewer's frame clock ----------
+  const fades = new Map(), slow = matchMedia("(prefers-reduced-motion: reduce)").matches;
+  function fadeTo(el, to, secs, then) { fades.set(el, { from: +el.style.opacity || 0, to, t0: performance.now(), secs, then }); }
+  function stepFades() {
+    for (const [el, f] of fades) {
+      const k = Math.min(1, (performance.now() - f.t0) / 1000 / f.secs), e = k * k * (3 - 2 * k), o = f.from + (f.to - f.from) * e;
+      el.style.opacity = o;
+      if (el.classList.contains("cs-cap") && !slow) el.style.transform = `translateY(${(1 - o) * 6}px)`;
+      if (k >= 1) { fades.delete(el); if (f.then) f.then(); }
+    }
+  }
+  function caption(caps, html, cls) {
+    const el = document.createElement("div");
+    el.className = "cs-cap" + (cls ? " " + cls : ""); el.innerHTML = html; caps.appendChild(el);
+    fadeTo(el, 1, 1.2);
+    return el;
+  }
+  function drop(el) { fadeTo(el, 0, 1.1, () => el.remove()); }
+  // run each line of a list ([at, dur, html, cls, chord]) whose time has come, and take it down when its time is up
+  function runCaptions(caps, list, t, shown) {
+    list.forEach(([at, dur, html, cls, chord], i) => {
+      if (!shown[i] && t >= at && t < at + dur) { shown[i] = caption(caps, html, cls); if (chord) sound("chord", chord); }
+      if (shown[i] && shown[i] !== true && t >= at + dur) { drop(shown[i]); shown[i] = true; }
+    });
+  }
+  // take down every line still up
+  function dropAll(shown) { shown.forEach((el, i) => { if (el && el !== true) { drop(el); shown[i] = true; } }); }
+  const sound = (what, ...a) => { if (window.cassiniSound && cassiniSound[what]) cassiniSound[what](...a); };
+
+  // ---------- looking around: a drag turns the view, the wheel zooms; it eases back a few seconds after ----------
+  const look = { yaw: 0, pitch: 0, zoom: 1, drag: null, last: 0, wheel: true };
+  const resetLook = () => Object.assign(look, { yaw: 0, pitch: 0, zoom: 1, drag: null, last: 0 });
+  function onDown(e) {
+    if (!active || e.target !== document.getElementById("gl")) return;
+    look.drag = [e.clientX, e.clientY]; look.last = performance.now(); document.body.classList.add("cs-drag");
+    e.stopImmediatePropagation();
+  }
+  function onMove(e) {
+    if (!active || !look.drag) return;
+    look.yaw -= (e.clientX - look.drag[0]) * 0.006; look.pitch = Math.max(-1.2, Math.min(1.2, look.pitch + (e.clientY - look.drag[1]) * 0.005));
+    look.drag = [e.clientX, e.clientY]; look.last = performance.now();
+    e.stopImmediatePropagation();
+  }
+  function onUp() { look.drag = null; look.last = performance.now(); document.body.classList.remove("cs-drag"); }
+  function onWheel(e) {
+    if (!active || !look.wheel) return;
+    look.zoom = Math.max(0.35, Math.min(4, look.zoom * Math.exp(e.deltaY * 0.0012))); look.last = performance.now();
+    e.preventDefault(); e.stopImmediatePropagation();
+  }
+  function easeLook(dt) {
+    if (look.drag || performance.now() - look.last < 4000) return;
+    const k = 1 - Math.exp(-dt / 1.6);
+    look.yaw -= look.yaw * k; look.pitch -= look.pitch * k; look.zoom += (1 - look.zoom) * k;
+  }
+
+  // ---------- begin and end ----------
+  // a cutscene's hooks and its section (root, with the .cs-root class); onEnd tidies up its own effects
+  function register(name, s) { scenes[name] = s; const b = s.root && s.root.querySelector(".cs-skip"); if (b) b.addEventListener("click", e => { e.stopPropagation(); end(name); }); }
+  function begin(name) {
+    const s = scenes[name];
+    if (active || !s) return false;
+    active = name; saved = { follow: state.follow };
+    resetLook(); look.wheel = true;
+    if (state.follow) setFollow(false);
+    setPlaying(false);
+    controls.enabled = false;
+    s.root.hidden = false;
+    document.body.classList.add("cutscene");
+    return true;
+  }
+  // ends the one playing (or `name`, if it is the one): its own tidying first, then the interface comes back as it was.
+  // then(root) runs after the interface is back, before the cover fades
+  function end(name) {
+    if (!active || (name && name !== active)) return;
+    const s = scenes[active], was = saved; active = null; saved = null;
+    if (s.onEnd) s.onEnd();
+    cassini.visible = true; markerPts.visible = true; cassini.up.set(0, 1, 0);
+    camera.up.set(0, 1, 0);
+    controls.enabled = true;
+    const black = s.root.querySelector(".cs-black");
+    fades.forEach((v, el) => { if (el !== black) fades.delete(el); });
+    if (was.follow) setFollow(true);
+    document.body.classList.add("cutscene-out");
+    document.body.classList.remove("cutscene", "cs-drag");
+    const done = () => { document.body.classList.remove("cutscene-out"); if (!active) s.root.hidden = true; };
+    if (black) fadeTo(black, 0, 1.5, done); else done();
+    if (window.cassiniPerf) cassiniPerf.invalidate();
+  }
+
+  // ---------- the viewer's hooks, for the one playing ----------
+  window.studyFrame = dt => {
+    stepFades();
+    if (!active) return;
+    if (window.cassiniPerf) cassiniPerf.invalidate();
+    state.playing = false;
+    easeLook(dt);
+    const s = scenes[active];
+    if (s.frame) s.frame(dt);
+  };
+  const hook = k => (...a) => { if (active && scenes[active][k]) scenes[active][k](...a); };
+  window.studyPositions = hook("positions");
+  window.studyAttitude = hook("attitude");
+  window.studyCamera = hook("camera");
+
+  // ---------- triggers ----------
+  // playback crossing a moment going forward plays a cutscene (when(et) can say no: not this time)
+  const triggers = [];
+  function at(et, play, when) { triggers.push({ et, play, when }); }
+  const advance = window.studyAdvance;
+  window.studyAdvance = (et, dt, speed) => {
+    const next = advance ? advance(et, dt, speed) : et + dt * speed;
+    if (!active) for (const g of triggers) {
+      const t = typeof g.et === "function" ? g.et() : g.et;
+      if (t != null && et < t && next >= t && (!g.when || g.when(t))) { setTimeout(g.play, 0); break; }
+    }
+    return next;
+  };
+  // ?<name> in the address plays it at once: the clock goes to et() (once the data is loaded) and play() runs when
+  // that part of the mission is ready. ok() can say the data has no such moment
+  function fromUrl(name, et, play, ok) {
+    if (!new URLSearchParams(location.search).has(name)) return;
+    const wait = setInterval(() => {
+      if (!coverage[1] || !tracks.CASSINI || $("loading") && !$("loading").hidden) return;
+      if (ok && !ok()) { clearInterval(wait); return; }
+      const t = et();
+      if (Math.abs(state.et - t) > 7200) { setTime(t); return; }
+      if (typeof yearReady === "function" && !yearReady()) return;
+      clearInterval(wait); play();
+    }, 250);
+  }
+
+  window.addEventListener("keydown", e => { if (active && e.key === "Escape") { e.preventDefault(); e.stopImmediatePropagation(); end(); } }, true);
+  window.addEventListener("pointerdown", onDown, true);
+  window.addEventListener("pointermove", onMove, true);
+  window.addEventListener("pointerup", onUp, true);
+  window.addEventListener("pointercancel", onUp, true);
+  window.addEventListener("wheel", onWheel, { capture: true, passive: false });
+  window.cassiniCutscene = { register, begin, end, at, fromUrl, fadeTo, caption, drop, dropAll, runCaptions, sound, look, resetLook,
+    get active() { return active; } };
+})();
+</script>

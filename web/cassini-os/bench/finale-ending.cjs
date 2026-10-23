@@ -31,7 +31,7 @@ const T0 = Date.now(), t = () => +((Date.now() - T0) / 1000).toFixed(1);
   mark("finale running");
   const state = () => page.evaluate(() => {
     const r = document.querySelector("#finale .fx-roll");
-    return { running: cassiniFinale.running, caps: [...document.querySelectorAll("#finale .fx-cap")].map(e => e.textContent).join(" | "),
+    return { running: cassiniFinale.running, caps: [...document.querySelectorAll("#finale .fx-cap, #finale .cs-cap")].map(e => e.textContent).join(" | "),
       roll: !!r && r.classList.contains("on"), top: r ? r.scrollTop : 0, max: r ? r.scrollHeight - r.clientHeight : 0 };
   });
   for (let s = await state(); s.running && !s.caps.includes(FROM); s = await state()) await page.waitForTimeout(250);

@@ -441,8 +441,15 @@ for old, new in [
 lscript = lpart("script")
 assert lscript.count("/*FACTS*/[]") == 1
 script += lscript.replace("/*FACTS*/[]", json.dumps(facts, ensure_ascii=False)) + "\n"
+# what every cutscene shares (cutscene.html): its style joins the head's and its script runs before any cutscene's (it
+# fills the viewer's cutscene hooks patched in below and wraps the clock's studyAdvance hook for their triggers)
+cs = open(os.path.join(os.path.dirname(os.path.abspath(sys.argv[2])), "cutscene.html")).read()
+cpart = lambda tag: cs[cs.index(f"<{tag}"):cs.index(f"</{tag}>") + len(tag) + 3]
+assert study.count("</style>\n</head>") == 1
+study = study.replace("</style>\n</head>", cpart("style")[len("<style>"):] + "\n</head>")
+script += cpart("script") + "\n"
 # the Grand Finale (finale.html): its style joins the head's, its overlay goes into #app, and its script runs last (it
-# wraps the clock's studyAdvance hook and fills the finale hooks patched into the viewer below)
+# registers its hooks and its trigger with cutscene.html)
 fin = open(os.path.join(os.path.dirname(os.path.abspath(sys.argv[2])), "finale.html")).read()
 npart = lambda tag: fin[fin.index(f"<{tag}"):fin.index(f"</{tag}>") + len(tag) + 3]
 for old, new in [
