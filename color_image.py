@@ -176,11 +176,23 @@ def load_aligned(paths, hdr=False, scale=None, repeat_window=120):
     imgs = [ic.fill_invalid(img, mask) for img, mask in zip(imgs, masks)]
     iofs = [None if iof is None else ic.fill_invalid(iof, mask) for iof, mask in zip(iofs, masks)]
     calibrated = False
+    guide = linear = None
     if calibrate:
-        # puts every filter on the same brightness scale (see calibration.py)
-        before = imgs
-        imgs = cal.load_channels(lbls, imgs, iofs=iofs, scale=scale)
-        calibrated = imgs is not before
+        if scale is None and cal.look() != "classic":
+            # balanced: the channels stay linear until they are aligned, then are drawn together (calibration.tone)
+            linear = cal.load_linear(lbls, imgs, iofs)
+        if linear is not None:
+            calibrated = True
+        if linear is not None and len(lbls) > 1:
+            # the channels are aligned on their classic display whatever the look, so a look changes only how
+            # the picture is drawn, never where its channels land
+            with cal.looking("classic"):
+                guide = cal.load_channels(lbls, imgs, iofs=iofs)
+        elif linear is None:
+            # puts every filter on the same brightness scale (see calibration.py)
+            before = imgs
+            imgs = cal.load_channels(lbls, imgs, iofs=iofs, scale=scale)
+            calibrated = imgs is not before
 
     # align to the middle frame in time so the largest offset is as small as possible
     order = sorted(range(len(lbls)), key=lambda j: lbls[j].info["IMAGE_TIME"])
@@ -189,10 +201,20 @@ def load_aligned(paths, hdr=False, scale=None, repeat_window=120):
     # masks move with the frames, so pixels alignment leaves uncovered become invalid too
     aligned = []
     try:
-        imgs, masks = ic.align_with_masks(imgs, masks, ref, aligned)
+        if guide is not None:
+            shifts = []
+            ic.align_with_masks(guide, [m.copy() for m in masks], ref, aligned, found=shifts)
+            channels, masks = ic.align_with_masks(linear[0], masks, ref, use=shifts)
+            imgs = cal.tone(channels, linear[1])
+        else:
+            imgs, masks = ic.align_with_masks(imgs, masks, ref, aligned)
     except Exception:
         print("Image alignment failure")
         aligned = ["failed"] * len(imgs)
+        if linear is not None:
+            guide = None
+    if linear is not None and guide is None:
+        imgs = cal.tone(linear[0], linear[1])
     report = {"calibrated": calibrated, "stacked": stacked, "aligned": aligned}
     return imgs, np.logical_and.reduce(masks), lbls[ref], report
 

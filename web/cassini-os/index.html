@@ -1258,6 +1258,10 @@ body.phone.has-dock { --appdockh: 50px; }
   // Cameras (the camera windows read cameras.composites, cameras.steady, cameras.mosaics, cameras.passes, cameras.fullRes, cameras.fullDelay and cameras.stale)
   D({ key: "cameras.composites", section: "Cameras", label: "Color composites", type: "toggle", value: true,
       hint: "Once a filter set is complete, show its color picture. Off shows every frame on its own." });
+  D({ key: "cameras.balancedColor", section: "Cameras", label: "Balanced color", type: "toggle", value: true,
+      hint: "A gentler color stretch: black sits just above the sky's noise so grain and scan lines stay dark, white sits at the bright part of the body but never stretches dim pictures far, bright edges roll off instead of clipping, and mosaic tiles are evened out without changing the mosaic's overall level. Off shows the earlier stretch." });
+  // what the frame server's picture routes are asked to add for it: nothing, or the earlier stretch
+  window.cassiniLook = () => S.get("cameras.balancedColor") === false ? "&look=classic" : "";
   D({ key: "cameras.channels", section: "Cameras", label: "Filter channels", type: "toggle", value: true,
       hint: "The frames that make up a color picture, in a strip under it." });
   cls("cameras.channels", "s-nochans", false);
@@ -2062,7 +2066,7 @@ body.phone.has-dock { --appdockh: 50px; }
     const size = () => win.classList.contains("full") && S.get("cameras.fullRes") && held() ? "full" : window.cassiniWM.big(win, well) ? 1024 : 512;
     const capped = () => { const s = size(); return s === "full" ? 1024 : s; };
     const frameUrl = (id, sz) => `${FRAMES}/frames/${id}.webp?size=${sz || size()}`;
-    const colorUrl = (s, sz) => `${FRAMES}/frames/color.webp?ids=${s.use.map(k => catalog.id[k]).join(",")}&size=${sz || size()}`;
+    const colorUrl = (s, sz) => `${FRAMES}/frames/color.webp?ids=${s.use.map(k => catalog.id[k]).join(",")}&size=${sz || size()}${window.cassiniLook()}`;
     // the shown picture at full resolution as a PNG to save (the frame server names the file)
     const saveUrl = url => url.replace(/size=[^&]*/, "size=full") + "&format=png&download=1";
     let save = well.querySelector(".savepic");
@@ -2309,7 +2313,7 @@ body.phone.has-dock { --appdockh: 50px; }
     // a pass played as a movie (the Mosaic / Movie switch, with Settings > Movie > Steady movie passes on): its
     // frames come from /frames/movie
     const playsMovie = k => S.get("movies.steady") && playsAs(k) === "movie";
-    const movieUrl = (id, sz) => `${FRAMES}/frames/movie/${id}.webp?size=${sz || size()}&trail=${S.get("movies.trail")}&color=${S.get("cameras.composites") ? 1 : 0}`;
+    const movieUrl = (id, sz) => `${FRAMES}/frames/movie/${id}.webp?size=${sz || size()}&trail=${S.get("movies.trail")}&color=${S.get("cameras.composites") ? 1 : 0}${window.cassiniLook()}`;
     const movieFailed = new Set();    // frames the server did not steady: they show as they are
     // passes the server is still working out (a movie request failed): their frames show as they are, with the
     // steadying note, and the steady frame is asked for again every COLD_RETRY ms
@@ -2319,7 +2323,7 @@ body.phone.has-dock { --appdockh: 50px; }
     // which never empties when the camera starts its raster again (Settings > Movie > Mosaic movies keep)
     const playsRolling = k => playsAs(k) === "mosaic_movie";
     window.cassiniRolling = true;   // so the pass mosaic lane leaves mosaic movies to this route (mosaicOf)
-    const rollingUrl = (id, sz) => `${FRAMES}/frames/movie/${id}.webp?mode=rolling&laps=${S.get("movies.laps")}&size=${sz || size()}`;
+    const rollingUrl = (id, sz) => `${FRAMES}/frames/movie/${id}.webp?mode=rolling&laps=${S.get("movies.laps")}&size=${sz || size()}${window.cassiniLook()}`;
     // the filmstrip: the pass the frame on screen is in (/frames/movie/<ID>.json: its frames, in time order), its
     // frames drawn along a strip by time, colored by filter, with the frame shown marked and the frames around it
     const passInfos = new Map(), filmAsked = new Set();
@@ -2437,7 +2441,7 @@ body.phone.has-dock { --appdockh: 50px; }
         if (q && catalog === q[2] && lastK >= 0 && catalog.et[q[0].k] <= catalog.et[lastK]) mosaicOf(q[0], q[1]);
       };
       if (!pass) setTimeout(() => { if (!over) { ctl.abort(); done(); } }, 4000);
-      fetch(`${FRAMES}/frames/mosaic/${id}.webp?size=${sz}${mode === "mosaic" || mode === "mosaic_movie" ? "&force=1" : ""}`, { signal: ctl.signal }).then(async r => {
+      fetch(`${FRAMES}/frames/mosaic/${id}.webp?size=${sz}${mode === "mosaic" || mode === "mosaic_movie" ? "&force=1" : ""}${window.cassiniLook()}`, { signal: ctl.signal }).then(async r => {
         if (!r.ok) return;
         const rep = JSON.parse(r.headers.get("X-Reel") || "null");
         // the frame in the catalog loaded now (another catalog object once the months around have loaded; a
@@ -2613,7 +2617,7 @@ body.phone.has-dock { --appdockh: 50px; }
           if (warnedObs.has(o)) continue;
           warnedObs.add(o);
           const c0 = catalog;
-          fetch(`${FRAMES}/frames/mosaic/${catalog.id[q]}.webp?warm=1`, { priority: "low" }).then(r => r.ok ? r.json() : null).then(a => {
+          fetch(`${FRAMES}/frames/mosaic/${catalog.id[q]}.webp?warm=1${window.cassiniLook()}`, { priority: "low" }).then(r => r.ok ? r.json() : null).then(a => {
             if (a && a.movie) { moviePasses.add(o); chipText(); }
             if (a && a.kind === "mosaic_movie") { lapPasses.add(o); chipText(); }
             // the window is in that pass already: its frame is steadied (or rolls) from now on
@@ -2643,7 +2647,7 @@ body.phone.has-dock { --appdockh: 50px; }
   const feeds = [...document.querySelectorAll(".camwin")].map(cameraFeed);
   window.cassiniFeeds = { cameraFeed, framesOf, lastOfCam, prep, stale: () => S.get("cameras.stale") * 3600 };
   // a change to what the windows show takes effect straight away
-  for (const key of ["cameras.composites", "cameras.stale", "cameras.steady", "cameras.passes", "movies.steady", "movies.trail", "movies.filmstrip", "movies.laps"]) S.on(key, () => { if (typeof catalog !== "undefined" && catalog && catalog.byCam) feeds.forEach(f => f(true)); });
+  for (const key of ["cameras.composites", "cameras.stale", "cameras.steady", "cameras.passes", "cameras.balancedColor", "movies.steady", "movies.trail", "movies.filmstrip", "movies.laps"]) S.on(key, () => { if (typeof catalog !== "undefined" && catalog && catalog.byCam) feeds.forEach(f => f(true)); });
 
   // ---------- burst limit: in normal playback each camera window gets at most maxRate new pictures a second ----------
   // The clock runs at the chosen speed except inside an imaging burst, where it slows so that crossing the gap
@@ -2765,7 +2769,7 @@ body.phone.has-dock { --appdockh: 50px; }
       const R = window.cassiniReel && window.cassiniReel.state, s = R && R.shots[R.i];
       if (!s) return null;
       canvas = $("rlcanvas" + s.cam); ids = s.ids.slice(); what = "body reel picture";
-      src = `${FRAMES}/frames/reel/${R.target}/${R.i}.webp?mosaic=${R.mosaic ? 1 : 0}`;
+      src = `${FRAMES}/frames/reel/${R.target}/${R.i}.webp?mosaic=${R.mosaic ? 1 : 0}${window.cassiniLook()}`;
       const b = R.buf.get(R.i); report = b && b.how;
     } else {
       const well = w.querySelector(".well"), shot = w.querySelector(".shot");
@@ -2963,9 +2967,9 @@ body.phone.has-dock { --appdockh: 50px; }
     let prev = -1;
     for (let j = f.i - 1; j >= Math.max(0, f.i - 64); j--) if (catalog.cam[order[j]] === catalog.cam[k]) { prev = order[j]; break; }
     const tile = prev >= 0 && catalog.target[prev] === catalog.target[k] && catalog.obs[prev] === catalog.obs[k] && (!s || comp);
-    if (tile && opt("movie.mosaics", true) && window.cassiniMosaics !== false) best.push({ url: `${FRAMES}/frames/mosaic/${comp ? catalog.id[s.use[0]] : id}.webp?size=${sz}`, kind: "mosaic" });
-    if (comp) best.push({ url: `${FRAMES}/frames/color.webp?ids=${s.use.map(q => catalog.id[q]).join(",")}&size=${sz}`, kind: KIND[s.kind] || "color" });
-    return { best, base: [{ url: `${FRAMES}/frames/processed/${id}.webp?size=${sz}`, kind: "processed" }, raw] };
+    if (tile && opt("movie.mosaics", true) && window.cassiniMosaics !== false) best.push({ url: `${FRAMES}/frames/mosaic/${comp ? catalog.id[s.use[0]] : id}.webp?size=${sz}${window.cassiniLook()}`, kind: "mosaic" });
+    if (comp) best.push({ url: `${FRAMES}/frames/color.webp?ids=${s.use.map(q => catalog.id[q]).join(",")}&size=${sz}${window.cassiniLook()}`, kind: KIND[s.kind] || "color" });
+    return { best, base: [{ url: `${FRAMES}/frames/processed/${id}.webp?size=${sz}${window.cassiniLook()}`, kind: "processed" }, raw] };
   }
   // one chain of choices: tried in turn until one loads (ok true) or none does (ok false); a deferred one waits for
   // c.start() (fill starts composites and mosaics a few at a time)
@@ -3359,7 +3363,7 @@ body.phone.has-dock { --appdockh: 50px; }
     if (b && b.size === size() && b.mosaic === R.mosaic) return b;
     b = { ok: null, img: null, how: null, size: size(), mosaic: R.mosaic };
     R.buf.set(i, b);
-    fetch(`${FRAMES}/frames/reel/${R.target}/${i}.webp?size=${b.size}&mosaic=${R.mosaic ? 1 : 0}`).then(async r => {
+    fetch(`${FRAMES}/frames/reel/${R.target}/${i}.webp?size=${b.size}&mosaic=${R.mosaic ? 1 : 0}${window.cassiniLook()}`).then(async r => {
       if (!r.ok) throw new Error(r.status);
       try { b.how = JSON.parse(r.headers.get("X-Reel") || "null"); } catch (e) {}
       b.img = await createImageBitmap(await r.blob()); b.ok = true;
@@ -3524,7 +3528,7 @@ body.phone.has-dock { --appdockh: 50px; }
     }
     if (t.mosaic) {
       try {
-        const r = await fetch(`${FRAMES}/frames/mosaic/${t.mosaic}.webp?size=256`);
+        const r = await fetch(`${FRAMES}/frames/mosaic/${t.mosaic}.webp?size=256${window.cassiniLook()}`);
         const how = r.ok ? JSON.parse(r.headers.get("X-Reel") || "{}") : null;
         const tiles = how && Math.max(+how.of || 0, +how.mosaic || 0, (how.tiles || []).length || 0);
         const filters = how && (Array.isArray(how.filters) ? how.filters.length : +how.filters || 0);
@@ -3532,7 +3536,7 @@ body.phone.has-dock { --appdockh: 50px; }
         if (tiles >= 3 && (filters >= 3 || !t.color)) return URL.createObjectURL(await r.blob());
       } catch (err) {}
     }
-    if (t.color) return `${FRAMES}/frames/color.webp?ids=${t.color.join(",")}&size=256`;
+    if (t.color) return `${FRAMES}/frames/color.webp?ids=${t.color.join(",")}&size=256${window.cassiniLook()}`;
     if (t.frame) return `${FRAMES}/frames/${t.frame}.webp?size=256`;
     return null;
   }
@@ -4050,7 +4054,7 @@ body.phone.has-dock { --appdockh: 50px; }
   const params = () => {
     const q = new URLSearchParams({ from: iso(X.a), until: iso(X.b), cams: X.cams || "NW", fps: opt("export.adaptive", true) ? "auto" : String(opt("export.fps", 12)),
       size: String(opt("export.size", 1024)), sound: opt("export.sound", true) ? "1" : "0", caption: opt("export.caption", true) ? "1" : "0" });
-    return q.toString();
+    return q.toString() + window.cassiniLook();
   };
   let timer = 0;
   function estimate() {

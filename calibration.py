@@ -27,6 +27,8 @@ flat fields and dust rings, 2 Hz noise, nonlinearity and anti-blooming pixel pai
 
 Frames that can't be unstretched return None and the caller keeps the old behavior.
 """
+import contextlib
+import contextvars
 import datetime
 import math
 import os
@@ -289,6 +291,42 @@ def saturated(codes, info, image=None):
 
 
 """
+How pictures are drawn from I/F, set per request (looking): "balanced", the one display model of the
+color plan (steps C1-C5: black per channel at the sky's median plus one noise margin shared by every
+channel, white at the WHITE_PCT percentile of the lit pixels with a soft shoulder, filled mosaic passes on
+one black and white for every filter, mosaic seams solved once per tile on linear values), or "classic",
+the stretch before it (black at the 98th percentile of the sky, white at the brightest pixel, each mosaic
+filter stretched and matched on its own). The frame server keeps the two in separate caches.
+"""
+LOOKS = ("balanced", "classic")
+_look = contextvars.ContextVar("look", default="balanced")
+
+NOISE_MARGIN = 2.0   # balanced: the black sits this many times the sky's noise (pooled over the channels)
+                     # above each channel's sky level
+WHITE_PCT = 99.5     # balanced: the percentile of the lit pixels of the brightest channel that is white
+MAX_STRETCH = 1.4    # balanced: white at most this many times darker than the classic white (the brightest
+                     # pixel), so a picture is never stretched far enough to show its scan lines, compression
+                     # blocks and 8-bit steps
+SPIKE = 6.0          # balanced composites: a one-channel spike this many times the sky's grain is cleaned (_clean_spikes)
+SKY_DARK = 99        # balanced composites: this percentile of the dark sky's brightness is below the toe (tone)
+SHOULDER = 0.8       # balanced composites: above this share of white, brightness rolls off softly instead
+                     # of clipping (limbs and ring highlights past the white keep their shape)
+
+
+def look():
+    return _look.get()
+
+
+@contextlib.contextmanager
+def looking(name):
+    token = _look.set(name if name in LOOKS else LOOKS[0])
+    try:
+        yield
+    finally:
+        _look.reset(token)
+
+
+"""
 Loads the frames of one color image and puts them on the same brightness scale.
 
 labels = label objects, one per channel
@@ -298,7 +336,7 @@ iofs = optional list, one per label: an I/F image already calibrated (stacking.l
 instead of calibrating that channel's image, or None
 scale = optional fixed display scale shared by every picture of a mosaic, a dict with "white"
 (the I/F that becomes full brightness), "blacks" (one I/F per channel that becomes black) and
-optionally "gamma"; without it each picture is stretched on its own as below
+optionally "gamma" and "shoulder"; without it each picture is stretched on its own as below
 Returns one BGR uint8 image per label. If every frame calibrates, all channels share one
 stretch so their relative brightness is what the camera measured. Otherwise the images
 are returned unchanged, each with its own stretch as before.
@@ -306,6 +344,25 @@ are returned unchanged, each with its own stretch as before.
 def load_channels(labels, images=None, sky_fraction=0.1, sky_percentile=98, gamma=2.2, iofs=None, scale=None):
     if images is None:
         images = [lbl.resize_image() for lbl in labels]
+    iofs = _calibrated(labels, images, iofs)
+    if iofs is None:
+        return images
+    if scale is not None:
+        # every picture of a mosaic on the same scale, so tiles and filters keep what the camera saw
+        gamma = scale.get("gamma", gamma)
+        return [display(iof, black, scale["white"], gamma, scale.get("shoulder"))
+                for iof, black in zip(iofs, scale["blacks"])]
+    blacks, white, _ = picture_scale(iofs, sky_fraction, sky_percentile)
+    if white <= 0:
+        return images
+    shoulder = SHOULDER if look() == "balanced" else None
+    return [display(iof, black, white, gamma, shoulder) for iof, black in zip(iofs, blacks)]
+
+
+"""
+The channels' I/F images (float32), calibrating those not given; None if any frame can't be calibrated
+"""
+def _calibrated(labels, images, iofs=None):
     given = iofs or [None] * len(labels)
     iofs = []
     for lbl, image, iof in zip(labels, images, given):
@@ -317,17 +374,87 @@ def load_channels(labels, images=None, sky_fraction=0.1, sky_percentile=98, gamm
     if any(iof is None for iof in iofs):
         failed = [lbl.get_info().get("path") for lbl, iof in zip(labels, iofs) if iof is None]
         print(f"Can't calibrate {failed}, using the stretched frames")
-        return images
+        return None
+    return [iof.astype(np.float32) for iof in iofs]
 
-    iofs = [iof.astype(np.float32) for iof in iofs]
-    if scale is not None:
-        # every picture of a mosaic on the same scale, so tiles and filters keep what the camera saw
-        gamma = scale.get("gamma", gamma)
-        return [display(iof, black, scale["white"], gamma) for iof, black in zip(iofs, scale["blacks"])]
-    blacks, white, _ = picture_scale(iofs, sky_fraction, sky_percentile)
+
+"""
+Balanced composites, drawn after their channels are aligned (color_image.load_aligned): each channel's
+linear brightness above its sky level (white = 1), and the noise margin in the same units, for tone.
+Taking the margin off each channel on its own (a black above the sky per channel) changes the color of
+everything only a little brighter than the sky, a shadowed ring or a night side: the channel that is
+dimmest there loses the largest share of itself. tone takes it off the picture's brightness instead, so
+dim parts keep the color the camera measured and only get darker.
+labels, images, iofs = as load_channels
+returns (channels, margin), or None when a frame can't be calibrated or there is nothing to draw
+"""
+def load_linear(labels, images=None, iofs=None):
+    if images is None:
+        images = [lbl.resize_image() for lbl in labels]
+    iofs = _calibrated(labels, images, iofs)
+    if iofs is None:
+        return None
+    levels, margin, white, measured = _balanced_scale(iofs)
     if white <= 0:
-        return images
-    return [display(iof, black, white, gamma) for iof, black in zip(iofs, blacks)]
+        return None
+    channels = [(iof - np.float32(level)) / np.float32(white) for iof, level in zip(iofs, levels)]
+    margin /= white
+    if measured:
+        # the toe starts no lower than the darker half of the sky's own brightness (SKY_DARK of it stays black),
+        # since the gamma lifts even a tiny remainder into visible grain. Only the darker half, by its mean over
+        # 15 pixels, so faint ring glow or a night side in the sky doesn't count as sky
+        sky = _sky(iofs)
+        lum = np.mean(channels, axis=0)
+        local = cv2.blur(lum, (15, 15))
+        dark = sky & (local <= np.median(local[sky]))
+        if dark.sum() > 100:
+            margin = max(margin, float(np.percentile(lum[dark], SKY_DARK)))
+        if len(channels) > 1:
+            channels = _clean_spikes(channels, sky)
+    return channels, margin
+
+
+"""
+Hot pixels and cosmic ray hits in one channel of a composite: a pixel far above its 3x3 median in its own
+channel (SPIKE times that channel's sky grain, and above twice the median) where no other channel has a
+peak within 2 pixels, is set to its median. Drawn together (tone), such a pixel would be a pastel dot; a
+star or a small bright feature is in every channel, so it stays.
+channels = linear channels, not yet aligned; sky = the sky mask
+"""
+def _clean_spikes(channels, sky):
+    meds = [cv2.medianBlur(c, 3) for c in channels]
+    res = [c - m for c, m in zip(channels, meds)]
+    noises = [float(np.percentile(np.abs(r[sky]), 99)) / 2.6 for r in res]
+    peaks = [cv2.dilate(r, np.ones((5, 5), np.uint8)) > SPIKE * n for r, n in zip(res, noises)]
+    out = []
+    for i, (c, m, r, n) in enumerate(zip(channels, meds, res, noises)):
+        spike = (r > SPIKE * n) & (r > m) & (r > 0)
+        for j, p in enumerate(peaks):
+            if j != i:
+                spike &= ~p
+        out.append(np.where(spike, m, c))
+    return out
+
+
+"""
+Balanced composites' channels (load_linear, aligned) as BGR uint8 images: the noise margin comes off the
+brightness (the channels' mean) through a toe, black up to the margin (the sky at or below its own level is
+black), then turning within an eighth of the margin into the brightness less the margin, and every channel is scaled by the same factor, so a pixel keeps its color.
+Past the shoulder the brightest channel rolls off softly (roll_off), the others by the same factor.
+"""
+def tone(channels, margin, shoulder=SHOULDER, gamma=2.2):
+    x = np.stack(channels).astype(np.float32)
+    lum = x.mean(axis=0)
+    w = margin / 8
+    if w > 0:
+        toed = np.where(lum <= margin, 0, np.where(lum <= margin + w, (lum - margin) ** 2 / (2 * w),
+                                                  lum - margin - w / 2))
+        x *= np.where(lum > 0, toed / np.maximum(lum, 1e-12), 0)
+    if shoulder:
+        top = x.max(axis=0)
+        x *= np.where(top > shoulder, roll_off(top, shoulder) / np.maximum(top, 1e-12), 1)
+    x = np.clip(x, 0, 1)
+    return [cv2.cvtColor((encode(c, gamma) * 255 + 0.5).astype(np.uint8), cv2.COLOR_GRAY2BGR) for c in x]
 
 
 """
@@ -336,21 +463,91 @@ blacks were measured on the sky or left at zero for want of sky), in I/F.
 iofs = the picture's channels, float32 I/F
 """
 def picture_scale(iofs, sky_fraction=0.1, sky_percentile=98):
-    # Black point per channel: just above the sky left after the bias (dark current,
-    # stray light, noise), so the sky's noise, DN steps and lossy compression blocks
-    # don't come out as colored speckle. Sky is where every channel is dark; without
-    # enough sky the black point stays at zero.
+    # Sky is where every channel is dark; without enough sky the black point stays at zero.
     sky = np.ones(iofs[0].shape, dtype=bool)
     for iof in iofs:
         sky &= iof < 0.05 * np.percentile(iof, 99.9)
     blacks = [0.0] * len(iofs)
     measured = bool(sky.mean() > sky_fraction)
+    if look() == "classic":
+        # Black point per channel: just above the sky left after the bias (dark current,
+        # stray light, noise), so the sky's noise, DN steps and lossy compression blocks
+        # don't come out as colored speckle
+        if measured:
+            blacks = [np.percentile(iof[sky], sky_percentile) for iof in iofs]
+        # One white point for all channels: the brightest channel's brightest pixel, after a
+        # 3x3 median so a single cosmic ray hit or hot pixel can't set it
+        white = max(cv2.medianBlur(iof - black, 3).max() for iof, black in zip(iofs, blacks))
+        return blacks, white, measured
+    levels, margin, white, measured = _balanced_scale(iofs, sky_fraction, sky_percentile)
+    return [level + margin for level in levels], white, measured
+
+
+"""
+Sky is where every channel is dark
+"""
+def _sky(iofs):
+    sky = np.ones(iofs[0].shape, dtype=bool)
+    for iof in iofs:
+        sky &= iof < 0.05 * np.percentile(iof, 99.9)
+    return sky
+
+
+"""
+The balanced scale of one picture: (sky level per channel, one noise margin, white, whether the sky was
+measured), in I/F. The sky level (sky_levels) is the real offset left after the bias (dark current, stray
+light), which differs between channels, so the sky stays neutral; the margin above it, the same for every
+channel, keeps the sky's noise from coming out as colored speckle (a margin per channel, the 98th
+percentile, takes more off the noisiest channel and tints dim limbs and terminators).
+"""
+def _balanced_scale(iofs, sky_fraction=0.1, sky_percentile=98):
+    sky = _sky(iofs)
+    measured = bool(sky.mean() > sky_fraction)
+    levels, margin = [0.0] * len(iofs), 0.0
     if measured:
-        blacks = [np.percentile(iof[sky], sky_percentile) for iof in iofs]
-    # One white point for all channels: the brightest channel's brightest pixel, after a
-    # 3x3 median so a single cosmic ray hit or hot pixel can't set it
-    white = max(cv2.medianBlur(iof - black, 3).max() for iof, black in zip(iofs, blacks))
-    return blacks, white, measured
+        levels, margin = sky_levels([[iof] for iof in iofs], [[sky]] * len(iofs))
+        # noise floor: the margin is at least the noisiest channel's classic one (its 98th percentile above its
+        # median), so no channel shows more of its sky noise, scan lines or compression blocks than before
+        margin = max(margin, max(float(np.percentile(iof[sky], sky_percentile) - np.median(iof[sky])) for iof in iofs))
+    blacks = [level + margin for level in levels]
+    # One white for all channels: the WHITE_PCT percentile of the brightest channel over the lit pixels (the
+    # body, not the sky), so a few bright limb or ring pixels don't leave the body dim and gray; the shoulder
+    # (display) keeps what is brighter
+    lit = ~sky if measured else np.ones(sky.shape, dtype=bool)
+    if lit.sum() < 100:
+        lit = np.ones(sky.shape, dtype=bool)
+    blurred = [cv2.medianBlur(iof - np.float32(black), 3) for iof, black in zip(iofs, blacks)]
+    white = max(float(np.percentile(b[lit], WHITE_PCT)) for b in blurred)
+    white = max(white, max(float(b.max()) for b in blurred) / MAX_STRETCH)
+    return levels, margin, white, measured
+
+
+"""
+Balanced blacks: per channel its sky level plus one margin for every channel, NOISE_MARGIN times the sky's
+noise pooled over the channels. The sky level is its median, or, where the sky holds faint diffuse light (a
+ring's glow, a night side lit by the rings), the 20th percentile plus 0.84 noise, whichever is lower: the
+same for a sky of pure noise, and below the glow otherwise. The noise is measured from neighboring sky
+pixels' differences, so a glow's slow change across the picture does not count as noise.
+images = per channel, its pictures (2-D I/F); masks = per channel, the sky of each picture
+"""
+def sky_blacks(images, masks):
+    levels, margin = sky_levels(images, masks)
+    return [level + margin for level in levels]
+
+
+"""
+sky_blacks' parts: (the sky level per channel, the margin)
+"""
+def sky_levels(images, masks):
+    levels, noises = [], []
+    for ims, ms in zip(images, masks):
+        sky = np.concatenate([im[m] for im, m in zip(ims, ms)])
+        steps = np.concatenate([np.abs(np.diff(im, axis=1))[m[:, 1:] & m[:, :-1]] for im, m in zip(ims, ms)])
+        noise = 1.4826 * float(np.median(steps)) / math.sqrt(2) if steps.size else 0.0
+        levels.append(min(float(np.median(sky)), float(np.percentile(sky, 20)) + 0.84 * noise))
+        noises.append(noise)
+    margin = NOISE_MARGIN * math.sqrt(sum(n * n for n in noises) / len(noises))
+    return levels, margin
 
 
 """
@@ -366,14 +563,19 @@ def tiles_scale(pictures, gamma=2.2):
     measured = [s for s in scales if s[2]]
     blacks = [float(np.median([s[0][c] for s in measured])) if measured else 0.0 for c in range(len(pictures[0]))]
     white = max(float(s[1]) for s in scales)
-    return {"blacks": blacks, "white": white, "gamma": gamma}
+    scale = {"blacks": blacks, "white": white, "gamma": gamma}
+    if look() == "balanced":
+        scale["shoulder"] = SHOULDER
+    return scale
 
 
 """
-The display scale shared by all the pictures of a mosaic, for load_channels: per channel, the
-sky's floor (the median over the pictures of each one's floor_pct percentile I/F) as its black;
-one white for all channels, the white_pct percentile of every pixel above its channel's black
-(every channel on one white keeps the colour the camera measured).
+The display scale shared by all the pictures of a mosaic, for load_channels: per channel a black, and
+one white for all channels, the white_pct percentile of every pixel above its channel's black (every
+channel on one white keeps the colour the camera measured).
+the black is the sky's floor, the median over the pictures of each one's floor_pct percentile I/F, in both
+looks: a mosaic's faint sky changes from tile to tile, and any black other than its floor (a sky level plus a
+noise margin was tried) raised one filter's black more than another's and tinted that sky.
 channels = one list per channel of the pictures' I/F images (stacking.load_hdr)
 """
 def shared_scale(channels, white_pct=99.9, floor_pct=5, gamma=2.2):
@@ -384,9 +586,36 @@ def shared_scale(channels, white_pct=99.9, floor_pct=5, gamma=2.2):
 
 
 """
-An I/F image as a BGR uint8 image: black -> 0, black + white -> 255, gamma encoded
+Display brightness (0-1) from linear brightness (0-1, white = 1) and back: a power of 1 / gamma, or the
+standard sRGB curve when gamma is "srgb".
 """
-def display(iof, black, white, gamma=2.2):
-    scaled = np.clip((iof - black) / white, 0, 1) ** (1 / gamma)
-    gray = (scaled * 255 + 0.5).astype(np.uint8)
+def encode(x, gamma=2.2):
+    if gamma == "srgb":
+        return np.where(x <= 0.0031308, 12.92 * x, 1.055 * np.power(np.maximum(x, 0.0031308), 1 / 2.4) - 0.055)
+    return np.power(x, 1 / float(gamma))
+
+
+def decode(v, gamma=2.2):
+    if gamma == "srgb":
+        return np.where(v <= 0.04045, v / 12.92, np.power((np.maximum(v, 0.04045) + 0.055) / 1.055, 2.4))
+    return np.power(v, float(gamma))
+
+
+"""
+A soft shoulder on linear brightness (white = 1): unchanged up to knee, then rolling off toward 1 with no
+step in slope, so what is brighter than white keeps its shape instead of clipping flat.
+"""
+def roll_off(x, knee):
+    room = 1 - knee
+    return np.where(x <= knee, x, knee + room * np.tanh((x - knee) / room))
+
+
+"""
+An I/F image as a BGR uint8 image: black -> 0, black + white -> 255, gamma encoded (or the sRGB curve,
+gamma "srgb"); with a shoulder, brightness past it rolls off softly (roll_off) instead of clipping
+"""
+def display(iof, black, white, gamma=2.2, shoulder=None):
+    x = (iof - black) / white
+    x = np.clip(roll_off(x, shoulder) if shoulder else x, 0, 1)
+    gray = (encode(x, gamma) * 255 + 0.5).astype(np.uint8)
     return cv2.cvtColor(gray, cv2.COLOR_GRAY2BGR)
