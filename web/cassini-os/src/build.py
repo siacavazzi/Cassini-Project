@@ -24,8 +24,8 @@ study = open(sys.argv[2]).read()          # study: everything up to (not incl.) 
 out = sys.argv[3]
 script = src[src.index('<script src="https://cdn.jsdelivr.net/npm/three@0.128.0/build/three.min.js">'):]
 
-# movie mode (movie.html): its style joins the head's, its window goes into #app next to the others, a Movie
-# button joins the transport, and its script runs after the chrome script
+# movie mode (movie.html): its style joins the head's, a Movie button joins the transport, and its script runs after
+# the chrome script (it wraps the clock's studyAdvance hook)
 # flagging pictures (flag.html): its style joins the head's, its panel and toast go into #app, and its script runs right
 # after the chrome script, ahead of movie mode's and the body reels' (its key handler must see keys typed into a note first)
 flag = open(os.path.join(os.path.dirname(os.path.abspath(sys.argv[2])), "flag.html")).read()
@@ -42,10 +42,9 @@ movie = open(os.path.join(os.path.dirname(os.path.abspath(sys.argv[2])), "movie.
 part = lambda tag: movie[movie.index(f"<{tag}"):movie.index(f"</{tag}>") + len(tag) + 3]
 for old, new in [
     ("</style>\n</head>", part("style")[len("<style>"):] + "\n</head>"),
-    ('  <div id="loading">', "  " + part("section") + "\n\n" + '  <div id="loading">'),
     ('<button class="btn round skip" id="next" aria-label="Next moment">▶▶</button>',
      '<button class="btn round skip" id="next" aria-label="Next moment">▶▶</button>\n'
-     '          <button class="btn round skip" id="movie" aria-pressed="false" aria-label="Movie mode" title="Movie mode: play one body\'s frames as a film (M)">'
+     '          <button class="btn round skip" id="movie" aria-pressed="false" aria-label="Movie mode" title="Movie mode: skip the time between pictures and play them at a set frame rate (M)">'
      '<svg viewBox="0 0 16 16" aria-hidden="true"><rect x="2" y="3" width="12" height="10" rx="1.5"/><path d="M5 3v10M11 3v10M2 6.3h3M2 9.7h3M11 6.3h3M11 9.7h3"/></svg></button>'),
 ]:
     assert study.count(old) == 1, old
@@ -158,6 +157,18 @@ study += part("script") + "\n"
 # chrome script (it draws the marked stretch through window.studyTimeline and adds "Export Movie…" to the Go menu)
 ex = open(os.path.join(os.path.dirname(os.path.abspath(sys.argv[2])), "export.html")).read()
 part = lambda tag: ex[ex.index(f"<{tag}"):ex.index(f"</{tag}>") + len(tag) + 3]
+for old, new in [
+    ("</style>\n</head>", part("style")[len("<style>"):] + "\n</head>"),
+    ('  <div id="loading">', "  " + part("section") + "\n\n" + '  <div id="loading">'),
+]:
+    assert study.count(old) == 1, old
+    study = study.replace(old, new)
+study += part("script") + "\n"
+
+# the body view (bodymode.html): its style joins the head's, its window goes into #app, and its script runs after the
+# chrome script (it reads the camera feeds and the window manager) and before the dock's, which opens it
+bm = open(os.path.join(os.path.dirname(os.path.abspath(sys.argv[2])), "bodymode.html")).read()
+part = lambda tag: bm[bm.index(f"<{tag}"):bm.index(f"</{tag}>") + len(tag) + 3]
 for old, new in [
     ("</style>\n</head>", part("style")[len("<style>"):] + "\n</head>"),
     ('  <div id="loading">', "  " + part("section") + "\n\n" + '  <div id="loading">'),
@@ -472,8 +483,15 @@ for old, new in [
 lscript = lpart("script")
 assert lscript.count("/*FACTS*/[]") == 1
 script += lscript.replace("/*FACTS*/[]", json.dumps(facts, ensure_ascii=False)) + "\n"
+# what every cutscene shares (cutscene.html): its style joins the head's and its script runs before any cutscene's (it
+# fills the viewer's cutscene hooks patched in below and wraps the clock's studyAdvance hook for their triggers)
+cs = open(os.path.join(os.path.dirname(os.path.abspath(sys.argv[2])), "cutscene.html")).read()
+cpart = lambda tag: cs[cs.index(f"<{tag}"):cs.index(f"</{tag}>") + len(tag) + 3]
+assert study.count("</style>\n</head>") == 1
+study = study.replace("</style>\n</head>", cpart("style")[len("<style>"):] + "\n</head>")
+script += cpart("script") + "\n"
 # the Grand Finale (finale.html): its style joins the head's, its overlay goes into #app, and its script runs last (it
-# wraps the clock's studyAdvance hook and fills the finale hooks patched into the viewer below)
+# registers its hooks and its trigger with cutscene.html)
 fin = open(os.path.join(os.path.dirname(os.path.abspath(sys.argv[2])), "finale.html")).read()
 npart = lambda tag: fin[fin.index(f"<{tag}"):fin.index(f"</{tag}>") + len(tag) + 3]
 for old, new in [
@@ -495,5 +513,28 @@ assert all(s.get("title") and (s.get("people") or s.get("names") or s.get("text"
 assert fscript.count("/*MISSION_TEAM*/null") == 1
 fscript = fscript.replace("/*MISSION_TEAM*/null", json.dumps({k: team[k] for k in ("intro", "sections", "closing", "sources")}, ensure_ascii=False, separators=(",", ":")))
 script += fscript + "\n"
+# more cutscenes, each its own file spliced like the finale (style into the head, section into #app, script after the
+# finale's; each chains the study* hooks): skipped while a file is not there yet
+CUTSCENES = ["soi.html", "launch.html", "huygens-release.html"]
+for name in CUTSCENES:
+    cpath = os.path.join(os.path.dirname(os.path.abspath(sys.argv[2])), name)
+    if not os.path.exists(cpath):
+        continue
+    cut = open(cpath).read()
+    cpart = lambda tag: cut[cut.index(f"<{tag}"):cut.index(f"</{tag}>") + len(tag) + 3]
+    for old, new in [
+        ("</style>\n</head>", cpart("style")[len("<style>"):] + "\n</head>"),
+        ('  <div id="loading">', "  " + cpart("section") + "\n\n" + '  <div id="loading">'),
+    ]:
+        assert study.count(old) == 1, old
+        study = study.replace(old, new)
+    cscript = cpart("script")
+    # a cutscene's published numbers (<name>-data.json), written in where its script asks for them
+    cdata = cpath[:-len(".html")] + "-data.json"
+    marker = "/*" + name[:-len(".html")].upper().replace("-", "_") + "_DATA*/null"
+    if marker in cscript:
+        assert os.path.exists(cdata), cdata
+        cscript = cscript.replace(marker, json.dumps(json.load(open(cdata)), ensure_ascii=False, separators=(",", ":")))
+    script += cscript + "\n"
 open(out, 'w').write(study + script)
 print("ok", out, len(study + script))

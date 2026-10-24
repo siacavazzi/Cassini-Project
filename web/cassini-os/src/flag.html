@@ -64,7 +64,7 @@ body.phone #flagtoast { bottom: calc(env(safe-area-inset-bottom, 0px) + 12px); }
     return "http://localhost:8765";
   })();
   const S = window.cassiniSettings, WM = window.cassiniWM;
-  const PICTURES = ".camwin, .bodywin, #reelcard, #moviecard";
+  const PICTURES = ".camwin, .bodywin, #reelcard";
   const TAGS = ["Too dark", "Too bright", "Wrong color", "Channels misaligned", "Stripes or noise", "Blurry", "Blank or missing", "Off-center", "Mosaic wrong", "Out of sync"];
   const pop = $("flagpop"), toast = $("flagtoast"), FLAG_ICON = '<svg viewBox="0 0 10 10" aria-hidden="true"><path d="M2 9.5V1h6l-1.4 2.2L8 5.4H2"/></svg>';
   const ID = /[NW]\d{10}_\d+/g;
@@ -106,11 +106,7 @@ body.phone #flagtoast { bottom: calc(env(safe-area-inset-bottom, 0px) + 12px); }
   }
   async function capture(w) {
     let canvas = null, src = null, report = null, ids = [], what = null, path = null;
-    if (w.id === "moviecard") {
-      const M = window.cassiniMovie && window.cassiniMovie.state, b = M && M.cur && M.buf.get(M.cur.id);
-      if (!M || !M.cur) return null;
-      canvas = $("mvcanvas"); ids = [M.cur.id]; src = b && b.img ? b.img.src : null; what = b && b.kind ? `movie (${b.kind})` : "movie frame";
-    } else if (w.id === "reelcard") {
+    if (w.id === "reelcard") {
       const R = window.cassiniReel && window.cassiniReel.state, s = R && R.shots[R.i];
       if (!s) return null;
       canvas = $("rlcanvas" + s.cam); ids = s.ids.slice(); what = "body reel picture";
@@ -193,7 +189,7 @@ body.phone #flagtoast { bottom: calc(env(safe-area-inset-bottom, 0px) + 12px); }
     const flag = {
       flagged: p.at.toISOString(), mission_utc: utc(p.et), mission_et: p.et, link: link.href,
       note, tags: [...p.tags],
-      window: { id: w.id, title: p.title, kind: w.id === "moviecard" ? "movie" : w.id === "reelcard" ? "reel" : w.classList.contains("bodywin") ? "body window" : "camera window",
+      window: { id: w.id, title: p.title, kind: w.id === "reelcard" ? "reel" : w.classList.contains("bodywin") ? "body window" : "camera window",
         full: w.classList.contains("full"), zoomed: w.classList.contains("zoomed"), width: Math.round(w.getBoundingClientRect().width), height: Math.round(w.getBoundingClientRect().height) },
       shown: { what: got.what, src: got.src ? new URL(got.src, location.href).href : null, report: got.report || null, labels: got.labels, info: got.info, observation_frames: got.tiles,
         path: got.path ? got.path.map(l => Object.assign({}, l, { src: new URL(l.src, location.href).href })) : null,

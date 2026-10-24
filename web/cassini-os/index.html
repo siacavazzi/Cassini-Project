@@ -372,14 +372,6 @@ body { color: var(--q-text); }
 .camwin .shottag { right: 5px; text-align: left; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
 .kindtag { position: absolute; right: 5px; top: 4px; font: 9px/1 var(--hudf); color: var(--q-text); text-shadow: 0 0 3px #000, 0 0 6px #000; display: none; letter-spacing: .04em; }
 .well.has-frame.composite .kindtag, .well.has-frame.mosaic .kindtag { display: block; }
-/* Mosaic / Movie: how the window plays the pass it is in (Auto follows the server's call); a click goes round
-   Auto, Mosaic, Movie for that pass */
-.passmode { position: absolute; left: 5px; top: 3px; display: none; padding: 2px 5px; border-radius: 3px; cursor: pointer;
-  font: 9px/1 var(--hudf); letter-spacing: .04em; color: var(--q-dim); background: rgba(0,0,0,.5); border: 1px solid var(--q-line); }
-.passmode:hover { color: #fff; border-color: var(--q-accent); }
-.passmode.chosen { color: var(--q-accent); }
-.well.has-frame.inpass .passmode { display: block; }
-body.idle .passmode { opacity: .35; }
 body.idle .camwin .chans { opacity: .8; }
 /* a movie pass (Settings > Movie): every frame of the pass along a strip under the picture, the frames around the
    one shown above it; click or drag to move through the pass */
@@ -523,9 +515,33 @@ body.idle .camwin .well.has-frame { border-color: transparent; box-shadow: 0 6px
 .bodywin.full .pane { width: auto; flex: 1 1 0; min-width: 0; grid-template-rows: minmax(0, 1fr) auto auto; align-content: stretch; }
 .bodywin[style*="width"]:not(.full) .pane { width: auto; flex: 1 1 0; min-width: 0; }
 .win.full :is(.rlwells) { flex: 1; min-height: 0; height: calc(100dvh - 160px); align-items: stretch; }
-.win.full :is(.rlwell, .mvwell) { aspect-ratio: auto; min-height: 0; height: 100%; }
-#moviecard.full .mvwell { height: calc(100dvh - 150px); }
-.win.full :is(.rlwell, .mvwell) canvas { object-fit: contain; }
+.win.full .rlwell { aspect-ratio: auto; min-height: 0; height: 100%; }
+.win.full .rlwell canvas { object-fit: contain; }
+/* a camera window's settings: the slider button left of the flag and full view buttons in its title bar, and its menu under it */
+.winopt { all: unset; position: absolute; right: 45px; top: 3px; width: 14px; height: 14px; display: grid; place-items: center; border-radius: 3px; color: var(--q-dim); cursor: default; }
+.winopt:hover, .winopt.open { color: #fff; background: rgba(255,255,255,.12); }
+.winopt.chosen { color: var(--q-accent); }
+.winopt:focus-visible { outline: 1px solid var(--q-accent); }
+.winopt svg { width: 10px; height: 10px; } .winopt svg * { fill: none; stroke: currentColor; stroke-width: 1.2; } .winopt svg circle { fill: var(--q-panel); }
+.winmenu { position: absolute; right: 6px; top: 24px; z-index: 4; width: 236px; padding: 4px 0; border-radius: 6px; box-sizing: border-box;
+  background: rgba(16,17,21,.97); border: 1px solid var(--q-line); box-shadow: 0 10px 30px rgba(0,0,0,.6); font: 11px/1.25 var(--ui); color: var(--q-text); text-align: left; cursor: default; }
+.winmenu[hidden], .winmenu .wmpass[hidden] { display: none; }
+.wmrow { display: flex; align-items: center; justify-content: space-between; gap: 12px; padding: 7px 12px; }
+.wml { display: grid; gap: 2px; } .wml small { font-size: 10px; color: var(--q-dim); }
+.wmpass { border-top: 1px solid var(--q-line); margin-top: 4px; padding-top: 4px; }
+.wmh { padding: 4px 12px 3px; font-size: 9.5px; letter-spacing: .08em; text-transform: uppercase; color: var(--q-dim); }
+.wmopt, .wmset { all: unset; box-sizing: border-box; display: grid; grid-template-columns: 14px auto 1fr; align-items: baseline; gap: 6px; width: 100%; padding: 5px 12px; cursor: default; }
+.wmopt span { color: var(--q-dim); font-size: 10px; text-align: right; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+.wmopt i { font-style: normal; color: var(--q-accent); } .wmopt[aria-checked="true"] i::before { content: "✓"; }
+.wmopt[aria-checked="true"] { color: #fff; }
+.wmopt:hover, .wmset:hover, .wmopt:focus-visible, .wmset:focus-visible { background: rgba(138,182,255,.16); color: #fff; outline: none; }
+.wmfoot { border-top: 1px solid var(--q-line); margin-top: 4px; padding-top: 4px; }
+.wmset { display: block; color: var(--q-dim); }
+body.idle .win:not(.menuup) .winopt { opacity: .35; }
+body.noflags .winopt { right: 26px; }
+body.phone .winopt { width: 26px; height: 20px; top: 0; right: 66px; } body.phone.noflags .winopt { right: 36px; }
+body.phone .winmenu { position: fixed; left: 8px; right: 8px; top: auto; bottom: calc(env(safe-area-inset-bottom, 0px) + 8px); width: auto; z-index: 2000; font-size: 13px; }
+body.phone .wmopt, body.phone .wmset { padding: 10px 14px; }
 /* the save menu (full view, or a held window): the picture shown and every level under and around it, at full
    resolution as PNG (frame_server.py size=full, format=png, download=1) */
 .savewrap { position: absolute; right: 6px; bottom: 5px; display: none; z-index: 3; cursor: default; }
@@ -581,7 +597,7 @@ body.phone .savemenu a { padding: 11px 14px; }
 .bodywin.full .pane:has(> .crumbs:not([hidden])) { grid-template-rows: auto minmax(0, 1fr) auto auto; }
 body.idle .camwin:has(.well.has-frame) .crumbs { opacity: 0; }
 body.idle #app .win.full .crumbs { opacity: 1; }
-.well, .rlwell, .mvwell { cursor: zoom-in; } .win.full :is(.well, .rlwell, .mvwell) { cursor: zoom-out; }
+.well, .rlwell { cursor: zoom-in; } .win.full :is(.well, .rlwell) { cursor: zoom-out; }
 /* resting: a window in full view keeps its dark backdrop and its picture; only the title bar fades (!important: the
    rules that fade every window and clear the camera windows' frames are id-strength) */
 body.idle #app .win.full { opacity: 1 !important; pointer-events: auto !important; background: rgba(8,9,11,.9) !important; }
@@ -624,30 +640,7 @@ body.phone #flagtoast { bottom: calc(env(safe-area-inset-bottom, 0px) + 12px); }
 
 #movie svg { width: 15px; height: 15px; display: block; }
 #movie svg * { fill: none; stroke: currentColor; stroke-width: 1.4; }
-#moviecard { top: calc(env(safe-area-inset-top, 0px) + 36px); left: max(14px, env(safe-area-inset-left, 0px)); width: clamp(320px, 38vw, 600px); }
-#moviecard.zoomed { width: clamp(420px, 60vw, 980px); }
-#moviecard .body { padding: 2px 8px 8px; display: grid; gap: 7px; }
-.mvwell { position: relative; aspect-ratio: 1; background: rgba(0,0,0,.55); border: 1px solid var(--q-line, #555); border-radius: 4px; overflow: hidden; }
-.mvwell canvas { position: absolute; inset: 0; width: 100%; height: 100%; display: block; }
-#mvtag, #mvskip { position: absolute; font: 10px/1.3 var(--hudf, monospace); color: rgba(232,236,242,.8); text-shadow: 0 0 3px #000, 0 0 6px #000; pointer-events: none; }
-#mvtag { left: 7px; bottom: 6px; right: 7px; }
-#mvskip { right: 7px; top: 6px; color: var(--q-accent, #8ab6ff); transition: opacity .6s ease; opacity: 0; }
-#mvskip.on { opacity: 1; transition: none; }
-#mvmsg { position: absolute; inset: 0; display: grid; place-items: center; text-align: center; padding: 0 20px; font-size: 12px; color: var(--q-dim, #888); }
-#mvmsg:empty { display: none; }
-.mvbar { display: flex; gap: 10px; align-items: center; font-size: 10.5px; color: var(--q-dim, #888); }
-#mvplay { width: 28px; height: 28px; font-size: 11px; flex: none; }
-.mvbar input[type=range] { width: 110px; accent-color: var(--q-accent, #8ab6ff); }
-#mvfpsv { min-width: 38px; color: var(--q-text, #ddd); font-variant-numeric: tabular-nums; }
-#mvproc { height: 22px; padding: 0 8px; font-size: 10.5px; flex: none; opacity: .55; }
-#mvproc[aria-pressed="true"] { opacity: 1; color: var(--q-accent, #8ab6ff); }
-#mvcount { margin-left: auto; font: 10.5px/1 var(--hudf, monospace); white-space: nowrap; font-variant-numeric: tabular-nums; }
-/* resting: like the camera window, the picture stays and its frame and controls fade */
-#moviecard, #moviecard .titlebar, .mvbar, .mvwell { transition: opacity .7s ease, background-color .7s ease, border-color .7s ease, box-shadow .7s ease; }
-body.idle #moviecard { opacity: 1; pointer-events: auto; background: transparent; border-color: transparent; box-shadow: none; -webkit-backdrop-filter: none; backdrop-filter: none; }
-body.idle #moviecard :is(.titlebar, .mvbar) { opacity: 0; }
-body.idle .mvwell { border-color: transparent; box-shadow: 0 6px 30px rgba(0,0,0,.6); }
-body.phone #moviecard:not(.full) { width: calc(100% - 16px) !important; left: 8px !important; top: calc(env(safe-area-inset-top, 0px) + 30px) !important; }
+#movie[aria-pressed="true"] { color: var(--q-accent, #8ab6ff); border-color: var(--q-accent, #8ab6ff); }
 
 #settings { width: min(620px, calc(100% - 20px)); height: min(460px, calc(100% - 80px)); z-index: 900; }
 #settings .sbody { flex: 1; min-height: 0; display: grid; grid-template-columns: 138px minmax(0, 1fr); border-top: 1px solid var(--q-line); }
@@ -933,6 +926,67 @@ body.phone #ssound { width: 30px; height: 30px; }
 #exdone[hidden], #exvid[hidden] { display: none; }
 body.phone #excard:not(.full) { width: calc(100% - 16px) !important; left: 8px !important; right: auto !important; top: calc(env(safe-area-inset-top, 0px) + 30px) !important; }
 
+#bodymenu { top: calc(env(safe-area-inset-top, 0px) + 36px); right: max(14px, env(safe-area-inset-right, 0px)); width: 340px; height: min(360px, calc(100% - 330px)); min-height: 220px; display: flex; flex-direction: column; }
+#bodymenu.zoomed { width: 440px; height: calc(100% - 290px); }
+#bodymenu.shaded { height: auto; min-height: 0; }
+/* the moments of the body sit under its window */
+body.bodymode:not(.phone) #moments:not([style*="top"]) { top: calc(env(safe-area-inset-top, 0px) + 36px + var(--bmh, 360px) + 10px); height: min(300px, calc(100% - var(--bmh, 360px) - 330px)); min-height: 150px; }
+#bodymenu .bmhead { flex: none; display: grid; grid-template-columns: 44px 1fr auto; gap: 2px 10px; align-items: center; padding: 8px 10px 6px; }
+#bodymenu .bmorb { grid-row: span 2; width: 40px; height: 40px; border-radius: 50%; background-color: var(--c, #888); background-size: 200% 100%; background-position: 30% 50%;
+  box-shadow: inset -5px -4px 8px rgba(0,0,0,.75), 0 0 0 1px rgba(255,255,255,.06); }
+#bodymenu .bmname { font-size: 15px; color: var(--q-text); letter-spacing: .02em; }
+#bodymenu .bmname small { font: 10px var(--hudf); color: var(--q-dim); margin-left: 6px; letter-spacing: 0; }
+#bodymenu .bmstats { grid-column: 2 / span 2; white-space: pre-line; font: 10px/1.4 var(--hudf); color: var(--q-dim); font-variant-numeric: tabular-nums; }
+#bmall { font: 10px/1 var(--ui); padding: 4px 8px; border-radius: 4px; border: 1px solid var(--q-line); background: rgba(255,255,255,.05); color: var(--q-text); cursor: pointer; white-space: nowrap; }
+#bmall:hover { background: rgba(255,255,255,.1); }
+#bodymenu .bmnav { flex: none; display: grid; grid-template-columns: auto 1fr auto; gap: 8px; align-items: center; padding: 0 10px 6px; }
+#bodymenu .bmnav button { font: 11px/1 var(--ui); padding: 5px 9px; border-radius: 4px; border: 1px solid var(--q-line); background: rgba(138,182,255,.14); color: var(--q-text); cursor: pointer; white-space: nowrap; }
+#bodymenu .bmnav button:hover { background: rgba(138,182,255,.26); }
+#bmnow { font: 10px/1.3 var(--hudf); color: var(--q-dim); text-align: center; min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+#bodymenu .bmopts { flex: none; display: flex; gap: 10px; align-items: center; justify-content: space-between; padding: 0 10px 6px; font-size: 11px; color: var(--q-text); }
+#bodymenu .bmopts label { display: flex; gap: 6px; align-items: center; cursor: pointer; }
+#bodymenu .bmopts input { accent-color: var(--q-accent); margin: 0; }
+#bmpick { font: 11px var(--ui); max-width: 150px; background: rgba(255,255,255,.05); color: var(--q-text); border: 1px solid var(--q-line); border-radius: 4px; padding: 2px 4px; }
+#bmpick option, #bmpick optgroup { background: #1b1c20; color: #e8ecf2; }
+#bmlist { flex: 1; min-height: 0; overflow-y: auto; list-style: none; margin: 0; padding: 0; border-top: 1px solid var(--q-line); }
+#bmlist li.yr { padding: 9px 10px 3px; font-weight: bold; font-size: 11px; letter-spacing: .12em; color: rgba(232,236,242,.55); }
+#bmlist li:not(.yr):nth-child(even) { background: rgba(255,255,255,.025); }
+#bmlist button { all: unset; box-sizing: border-box; width: 100%; display: grid; grid-template-columns: 52px 1fr auto; gap: 0 6px; padding: 4px 10px; cursor: default; }
+#bmlist button:hover { background: rgba(255,255,255,.05); }
+#bmlist button:focus-visible { outline: 1px solid var(--q-accent); outline-offset: -1px; }
+#bmlist .d { color: var(--q-dim); font-size: 11px; grid-row: span 2; align-self: center; }
+#bmlist .o { color: var(--q-text); font-size: 11px; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+#bmlist .n { grid-column: 2; font: 10px/1.3 var(--hudf); color: var(--q-dim); white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+#bmlist .c { grid-column: 3; grid-row: 1 / span 2; align-self: center; font: 10px/1 var(--hudf); color: var(--q-dim); }
+#bmlist .c i { display: inline-block; width: 4px; height: 9px; margin-left: 1px; vertical-align: -1px; }
+#bmlist li.past .o, #bmlist li.past .d { color: rgba(232,236,242,.32); }
+#bmlist li.on { background: rgba(138,182,255,.16) !important; }
+#bmlist li.on span { color: #fff; }
+#bodymenu footer { flex: none; height: 20px; display: grid; place-items: center; font-size: 10px; color: var(--q-dim); border-top: 1px solid var(--q-line); }
+/* a jump to another session: the picture before dissolves into the new one */
+.well .bmfade { position: absolute; inset: 0; width: 100%; height: 100%; object-fit: contain; background: #000; pointer-events: none; animation: bmfade .7s ease forwards; }
+@keyframes bmfade { to { opacity: 0; } }
+@media (prefers-reduced-motion: reduce) { .well .bmfade { display: none; } }
+/* in a body's view the camera pictures keep a square, a mosaic letterboxed in it, so the windows hold their size */
+body.bodymode .camwin:not(.full) .well.has-frame { aspect-ratio: 1 !important; }
+#mlist li.bmnone { padding: 14px 12px; font-size: 11px; line-height: 1.4; color: var(--q-dim); background: none !important; }
+/* the main window says whose timeline it shows */
+#dock .titlebar .bmtag { color: var(--q-accent); }
+/* the body in view in the dock: a ring round its icon */
+.dk.inview .orb, .dk.inview .gl { box-shadow: 0 0 0 1.5px var(--q-accent), inset calc(var(--ds) * -.12) calc(var(--ds) * -.1) calc(var(--ds) * .2) rgba(0,0,0,.75); }
+/* phone: a bar on top of the replay controls; the sessions open from it as a sheet */
+body.phone #bodymenu { left: var(--side) !important; right: var(--sider) !important; top: auto !important; width: auto !important; height: auto !important; min-height: 0;
+  bottom: calc(env(safe-area-inset-bottom, 0px) + var(--dockh, 150px) + var(--appdockh, 0px) + 2 * var(--gap)) !important; z-index: 1390 !important; }
+body.phone #bodymenu .bmhead { grid-template-columns: 30px 1fr auto; padding: 5px 8px 3px; }
+body.phone #bodymenu .bmorb { width: 28px; height: 28px; }
+body.phone #bodymenu .bmname { font-size: 13px; }
+body.phone #bodymenu .bmnav { padding: 0 8px 5px; }
+body.phone #bodymenu .bmnav button { padding: 7px 10px; }
+body.phone #bodymenu:not(.open) :is(#bmlist, footer, .bmopts) { display: none; }
+body.phone #bodymenu.open #bmlist { max-height: 34dvh; }
+body.phone #bodymenu #bmlist button { padding: 7px 10px; }
+body.phone.phone-land #bodymenu { left: auto !important; width: min(380px, 46vw) !important; top: calc(var(--menu) + var(--gap)) !important; bottom: auto !important; }
+
 #appdock { position: fixed; z-index: 1350; display: flex; align-items: flex-end; gap: 4px; padding: 5px 6px; --ds: 40px;
   left: 50%; bottom: calc(env(safe-area-inset-bottom, 0px) + 6px); transform: translateX(-50%); max-width: calc(100% - 20px);
   background: var(--q-panel); -webkit-backdrop-filter: blur(16px) saturate(1.2); backdrop-filter: blur(16px) saturate(1.2);
@@ -956,10 +1010,10 @@ body.phone #excard:not(.full) { width: calc(100% - 16px) !important; left: 8px !
 .dk .gl svg { width: 58%; height: 58%; } .dk .gl svg * { fill: none; stroke: currentColor; stroke-width: 1.3; stroke-linecap: round; stroke-linejoin: round; }
 .dk:hover .gl { background: rgba(255,255,255,.12); color: #fff; }
 /* bodies: the body itself, from its surface map, lit from the upper left */
-.dk .orb { width: 78%; height: 78%; border-radius: 50%; position: relative; background-color: var(--c, #888); background-size: 200% 100%; background-position: 30% 50%;
+:is(.dk, #dkfolder) .orb { width: 78%; height: 78%; border-radius: 50%; position: relative; background-color: var(--c, #888); background-size: 200% 100%; background-position: 30% 50%;
   box-shadow: inset calc(var(--ds) * -.12) calc(var(--ds) * -.1) calc(var(--ds) * .2) rgba(0,0,0,.75), 0 0 0 1px rgba(255,255,255,.06); }
-.dk .orb.ringed::after { content: ""; position: absolute; left: -30%; right: -30%; top: 38%; bottom: 38%; border-radius: 50%; border: calc(var(--ds) * .05) solid rgba(222,204,170,.7); border-top-color: transparent; transform: rotate(-14deg); }
-.dk .orb.sun { background: radial-gradient(circle at 40% 40%, #fff6d8, #ffc95a 55%, #e08a1e); box-shadow: 0 0 calc(var(--ds) * .2) rgba(255,190,90,.45); }
+:is(.dk, #dkfolder) .orb.ringed::after { content: ""; position: absolute; left: -30%; right: -30%; top: 38%; bottom: 38%; border-radius: 50%; border: calc(var(--ds) * .05) solid rgba(222,204,170,.7); border-top-color: transparent; transform: rotate(-14deg); }
+:is(.dk, #dkfolder) .orb.sun { background: radial-gradient(circle at 40% 40%, #fff6d8, #ffc95a 55%, #e08a1e); box-shadow: 0 0 calc(var(--ds) * .2) rgba(255,190,90,.45); }
 /* running dot: a window of that app is open; blue: the body in view */
 .dk::before { content: ""; position: absolute; left: 50%; bottom: -4px; width: 4px; height: 4px; margin-left: -2px; border-radius: 50%; background: transparent; }
 .dk.open::before { background: rgba(232,236,242,.7); }
@@ -974,6 +1028,23 @@ body.phone #excard:not(.full) { width: calc(100% - 16px) !important; left: 8px !
 .dk:hover::after { opacity: 1; }
 #appdock.side-left .dk::after { bottom: auto; top: 50%; left: calc(100% + 8px); transform: translateY(-50%); }
 #appdock.side-right .dk::after { bottom: auto; top: 50%; left: auto; right: calc(100% + 8px); transform: translateY(-50%); }
+/* All bodies: a folder that opens above its icon, as a stack does on the Mac */
+#dkfolder { position: fixed; z-index: 1360; width: min(560px, calc(100vw - 20px)); max-height: min(520px, calc(100dvh - 140px)); overflow-y: auto; box-sizing: border-box; padding: 10px 12px 12px;
+  background: var(--q-panel); -webkit-backdrop-filter: blur(18px) saturate(1.2); backdrop-filter: blur(18px) saturate(1.2); border: 1px solid var(--q-line); border-radius: 12px; box-shadow: 0 12px 36px rgba(0,0,0,.55); font: 11px var(--ui); color: var(--q-text); }
+#dkfolder[hidden] { display: none; }
+#dkfolder h3 { margin: 8px 2px 6px; font: bold 10px/1 var(--ui); letter-spacing: .12em; text-transform: uppercase; color: var(--q-dim); }
+#dkfolder h3:first-child { margin-top: 2px; }
+#dkfolder .fgrid { display: grid; grid-template-columns: repeat(auto-fill, minmax(84px, 1fr)); gap: 4px; }
+#dkfolder button { all: unset; display: grid; justify-items: center; gap: 4px; padding: 6px 2px; border-radius: 8px; cursor: default; text-align: center; }
+#dkfolder button:hover, #dkfolder button:focus-visible { background: rgba(255,255,255,.08); }
+#dkfolder button.inview { background: rgba(138,182,255,.18); }
+#dkfolder .fic { width: 44px; height: 44px; display: grid; place-items: center; --ds: 50px; }
+#dkfolder .fic .orb { width: 40px; height: 40px; }
+#dkfolder .fic .orb.ringed { width: 34px; height: 34px; }
+#dkfolder .pic { width: 44px; height: 44px; border-radius: 50%; background: #000 center / 150% no-repeat; box-shadow: inset 0 0 0 1px rgba(255,255,255,.1); }
+#dkfolder .fn { max-width: 84px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+#dkfolder .fc { font: 9.5px/1 var(--hudf); color: var(--q-dim); }
+body.idle #dkfolder { opacity: 0; pointer-events: none; }
 /* minimized windows: a tile of the window's last picture, or its glyph */
 .dk.mini .gl { background: rgba(0,0,0,.55) center / cover no-repeat; }
 .dk.mini .gl.pic svg { display: none; }
@@ -1054,20 +1125,31 @@ body.phone #about nav { flex-direction: row; border-right: 0; border-bottom: 1px
 #loading > div { visibility: hidden; }
 @media (prefers-reduced-motion: reduce) { #loadscreen, #loadscreen .ls-tip { transition: none; } #loadscreen .ls-status::after { animation: none; content: "..."; } }
 
-#finale { position: fixed; inset: 0; z-index: 2002; pointer-events: none; }
-#finale[hidden] { display: none; }
-#finale .fx-black { position: absolute; inset: 0; background: #000; opacity: 0; }
+.cs-root { position: fixed; inset: 0; z-index: 2002; pointer-events: none; }
+.cs-root[hidden] { display: none; }
+.cs-root .cs-black { position: absolute; inset: 0; background: #000; opacity: 0; }
+.cs-root .cs-caps { position: absolute; left: 50%; bottom: 15vh; transform: translateX(-50%); width: min(640px, calc(100vw - 32px)); display: grid; }
+.cs-root .cs-cap { grid-area: 1 / 1; align-self: end; text-align: center; color: var(--q-text); font: 300 19px/1.5 -apple-system, "Helvetica Neue", var(--ui);
+  letter-spacing: .01em; text-shadow: 0 1px 12px rgba(0,0,0,.9), 0 0 2px rgba(0,0,0,.8); opacity: 0; }
+.cs-root .cs-cap b { display: block; margin-bottom: 8px; font-weight: normal; font-size: 10.5px; letter-spacing: .22em; text-transform: uppercase; color: var(--q-dim); }
+.cs-root .cs-cap.big { font-size: 26px; }
+.cs-root .cs-cap ul { list-style: none; margin: 0; padding: 0; }
+.cs-root .cs-cap li { margin: 3px 0; }
+.cs-root .cs-cap small { display: block; margin-top: 10px; font-size: 12px; color: var(--q-dim); }
+.cs-root .cs-skip { all: unset; position: absolute; right: 16px; bottom: 12px; padding: 4px 11px; border-radius: 11px; border: 1px solid var(--q-line);
+  background: rgba(16,17,20,.5); color: rgba(232,236,242,.55); font-size: 11px; cursor: pointer; pointer-events: auto; }
+.cs-root .cs-skip:hover { color: var(--q-text); }
+.cs-root .cs-hint { position: absolute; left: 50%; top: 18px; transform: translateX(-50%); font-size: 11px; color: rgba(232,236,242,.45); opacity: 0; transition: opacity 1.5s ease; }
+.cs-root .cs-hint.on { opacity: 1; }
+body.cutscene #gl { cursor: grab; }
+body.cutscene.cs-drag #gl { cursor: grabbing; }
+body.cutscene #app > :not(#gl):not(.cs-root) { opacity: 0 !important; pointer-events: none !important; transition: opacity 1.2s ease !important; }
+body.cutscene-out #app * { pointer-events: none !important; }
+body.phone .cs-root .cs-cap { font-size: 16px; } body.phone .cs-root .cs-cap.big { font-size: 21px; }
+
 /* the air's glow from below as it heats, and a shade under the captions so they read over Saturn's bright clouds */
 #finale .fx-air { position: absolute; inset: 0; opacity: 0; background: radial-gradient(ellipse 90% 70% at 50% 100%, rgba(255,120,40,.55), rgba(255,80,20,.18) 55%, transparent 80%); mix-blend-mode: screen; }
 #finale .fx-shade { position: absolute; inset: 0; background: linear-gradient(to top, rgba(0,0,0,.78) 0, rgba(0,0,0,.55) 22%, rgba(0,0,0,0) 48%); }
-#finale .fx-caps { position: absolute; left: 50%; bottom: 15vh; transform: translateX(-50%); width: min(640px, calc(100vw - 32px)); display: grid; }
-#finale .fx-cap { grid-area: 1 / 1; align-self: end; text-align: center; color: var(--q-text); font: 300 19px/1.5 -apple-system, "Helvetica Neue", var(--ui);
-  letter-spacing: .01em; text-shadow: 0 1px 12px rgba(0,0,0,.9), 0 0 2px rgba(0,0,0,.8); opacity: 0; }
-#finale .fx-cap b { display: block; margin-bottom: 8px; font-weight: normal; font-size: 10.5px; letter-spacing: .22em; text-transform: uppercase; color: var(--q-dim); }
-#finale .fx-cap.big { font-size: 26px; }
-#finale .fx-cap ul { list-style: none; margin: 0; padding: 0; }
-#finale .fx-cap li { margin: 3px 0; }
-#finale .fx-cap small { display: block; margin-top: 10px; font-size: 12px; color: var(--q-dim); }
 #finale .fx-read { position: absolute; left: 50%; bottom: 7vh; transform: translateX(-50%); white-space: nowrap; font: 11px/1 var(--hudf); letter-spacing: .08em;
   color: var(--q-dim); opacity: 0; transition: opacity 1.2s ease; }
 #finale .fx-read.on { opacity: 1; }
@@ -1081,15 +1163,6 @@ body.phone #about nav { flex-direction: row; border-right: 0; border-bottom: 1px
 #finale .fx-data small { display: block; margin-top: 5px; font-size: 9.5px; line-height: 1.35; color: rgba(232,236,242,.38); }
 #finale .fx-note { position: absolute; left: 16px; bottom: 14px; max-width: min(460px, calc(100vw - 140px)); font-size: 10.5px; line-height: 1.4; color: rgba(232,236,242,.34); opacity: 0; transition: opacity 1.5s ease; }
 #finale .fx-note.on { opacity: 1; }
-#finale .fx-skip { all: unset; position: absolute; right: 16px; bottom: 12px; padding: 4px 11px; border-radius: 11px; border: 1px solid var(--q-line);
-  background: rgba(16,17,20,.5); color: rgba(232,236,242,.55); font-size: 11px; cursor: pointer; pointer-events: auto; }
-#finale .fx-skip:hover { color: var(--q-text); }
-#finale .fx-hint { position: absolute; left: 50%; top: 18px; transform: translateX(-50%); font-size: 11px; color: rgba(232,236,242,.45); opacity: 0; transition: opacity 1.5s ease; }
-#finale .fx-hint.on { opacity: 1; }
-body.finale #gl { cursor: grab; }
-body.finale.fx-drag #gl { cursor: grabbing; }
-body.finale #app > :not(#gl):not(#finale) { opacity: 0 !important; pointer-events: none !important; transition: opacity 1.2s ease !important; }
-body.finale-out #app * { pointer-events: none !important; }
 /* the credits roll: a column that scrolls up over the darkened sky, fading in and out at its top and bottom edges */
 #finale .fx-roll { position: absolute; inset: 0; overflow-y: auto; overscroll-behavior: contain; scrollbar-width: none; opacity: 0; pointer-events: none;
   -webkit-mask-image: linear-gradient(to bottom, transparent 0, #000 16%, #000 84%, transparent 100%); mask-image: linear-gradient(to bottom, transparent 0, #000 16%, #000 84%, transparent 100%); }
@@ -1123,10 +1196,29 @@ body.phone #finale .fx-roll .in { font-size: 14px; }
 body.phone #finale .fx-roll dl { grid-template-columns: 1fr; row-gap: 2px; }
 body.phone #finale .fx-roll dt, body.phone #finale .fx-roll dd { text-align: center; }
 body.phone #finale .fx-roll dd { margin-bottom: 10px; }
-body.phone #finale .fx-cap { font-size: 16px; } body.phone #finale .fx-cap.big { font-size: 21px; }
 body.phone #finale .fx-read { font-size: 9.5px; bottom: 9vh; }
 body.phone #finale .fx-note { bottom: 40px; }
 body.phone #finale .fx-data { width: min(220px, calc(100vw - 32px)); top: 10px; right: 10px; }
+
+/* a shade under the captions so they read over Earth */
+#launch .lx-shade { position: absolute; inset: 0; background: linear-gradient(to top, rgba(0,0,0,.8) 0, rgba(0,0,0,.5) 24%, rgba(0,0,0,0) 50%); }
+#launch .cs-cap.big { font-size: 30px; letter-spacing: .03em; }
+/* the road to Saturn: five stops on a line, each lighting up in turn */
+#launch .lx-road { display: flex; justify-content: space-between; position: relative; margin: 16px 4px 2px; }
+#launch .lx-road::before { content: ""; position: absolute; left: 6px; right: 6px; top: 5px; height: 1px; background: rgba(232,236,242,.25); }
+#launch .lx-road span { position: relative; display: flex; flex-direction: column; align-items: center; gap: 4px; font-size: 12.5px; line-height: 1.3; opacity: .35; transition: opacity .8s ease; }
+#launch .lx-road span::before { content: ""; width: 9px; height: 9px; border-radius: 50%; background: var(--q-dim); box-shadow: 0 0 0 2px rgba(0,0,0,.6); margin-bottom: 4px; }
+#launch .lx-road span.on { opacity: 1; }
+#launch .lx-road span.on::before { background: var(--q-accent); }
+#launch .lx-road span:last-child::before { background: #e6bb68; }
+#launch .lx-road small { margin: 0; font-size: 10.5px; }
+#launch .lx-clock { position: absolute; left: 50%; bottom: 7vh; transform: translateX(-50%); white-space: nowrap; font: 11px/1 var(--hudf); letter-spacing: .08em;
+  color: var(--q-dim); opacity: 0; transition: opacity 1.2s ease; }
+#launch .lx-clock.on { opacity: 1; }
+#launch .lx-clock i { font-style: normal; color: var(--q-accent); }
+body.phone #launch .cs-cap.big { font-size: 23px; }
+body.phone #launch .lx-road span { font-size: 11px; } body.phone #launch .lx-road small { font-size: 9.5px; }
+body.phone #launch .lx-clock { font-size: 9.5px; bottom: 9vh; }
 </style>
 </head>
 <body>
@@ -1224,7 +1316,7 @@ body.phone #finale .fx-data { width: min(220px, calc(100vw - 32px)); top: 10px; 
             <button class="btn round skip" id="prev" aria-label="Previous moment">◀◀</button>
             <button class="btn round" id="play" aria-label="Play or pause">❚❚</button>
             <button class="btn round skip" id="next" aria-label="Next moment">▶▶</button>
-          <button class="btn round skip" id="movie" aria-pressed="false" aria-label="Movie mode" title="Movie mode: play one body's frames as a film (M)"><svg viewBox="0 0 16 16" aria-hidden="true"><rect x="2" y="3" width="12" height="10" rx="1.5"/><path d="M5 3v10M11 3v10M2 6.3h3M2 9.7h3M11 6.3h3M11 9.7h3"/></svg></button>
+          <button class="btn round skip" id="movie" aria-pressed="false" aria-label="Movie mode" title="Movie mode: skip the time between pictures and play them at a set frame rate (M)"><svg viewBox="0 0 16 16" aria-hidden="true"><rect x="2" y="3" width="12" height="10" rx="1.5"/><path d="M5 3v10M11 3v10M2 6.3h3M2 9.7h3M11 6.3h3M11 9.7h3"/></svg></button>
             <button class="btn round skip" id="phmom" aria-pressed="false" aria-label="Moments" title="Moments"><svg viewBox="0 0 16 16" aria-hidden="true"><path d="M3 4h10M3 8h10M3 12h10"/></svg></button>
           </div>
           <div class="clockbox">
@@ -1269,19 +1361,6 @@ body.phone #finale .fx-data { width: min(220px, calc(100vw - 32px)); top: 10px; 
   <div class="fpbtns"><button class="no">Cancel</button><button class="go">Flag</button></div>
 </section>
 <div id="flagtoast" role="status" hidden><span></span><button class="undo">Undo</button><a target="_blank" rel="noopener">See all</a></div>
-
-  <section class="win" id="moviecard" aria-label="Movie" hidden>
-  <div class="titlebar"><span class="lights"><button class="close" aria-label="Leave movie mode">×</button><button class="min" aria-label="Leave movie mode">–</button><button class="zoom" aria-label="Zoom">+</button></span>Movie</div>
-  <div class="body">
-    <div class="mvwell"><canvas id="mvcanvas" width="1024" height="1024"></canvas><span id="mvtag"></span><span id="mvskip"></span><div id="mvmsg"></div></div>
-    <div class="mvbar">
-      <button class="btn round" id="mvplay" aria-label="Play or pause the movie">❚❚</button>
-      <label for="mvfps">Speed</label><input type="range" id="mvfps" min="2" max="24" step="1" value="8" aria-label="Frames per second"><span id="mvfpsv">8 fps</span>
-      <button class="btn" id="mvproc" aria-pressed="true" title="Processed: frames calibrated, color composites and mosaics, as in the camera windows. Off plays the archive frames as they are (P)">Processed</button>
-      <span id="mvcount"></span>
-    </div>
-  </div>
-</section>
 
   <section class="win" id="settings" aria-label="Settings" hidden>
   <div class="titlebar"><span class="lights"><button class="close" aria-label="Close settings">×</button><button class="min" aria-label="Close settings">–</button><button class="zoom" aria-label="Zoom">+</button></span>Settings</div>
@@ -1340,6 +1419,27 @@ body.phone #finale .fx-data { width: min(220px, calc(100vw - 32px)); top: 10px; 
   </div>
 </section>
 
+  <section class="win" id="bodymenu" data-name="Body view" aria-label="Body view" hidden>
+  <div class="titlebar"><span class="lights"><button class="close" aria-label="Back to Cassini" title="Back to Cassini's mission">×</button><button class="min" aria-label="Minimize">–</button><button class="zoom" aria-label="Zoom">+</button></span><span id="bmtitle">Body</span></div>
+  <div class="bmhead">
+    <span class="bmorb" id="bmorb"></span>
+    <span class="bmname" id="bmname">—</span>
+    <button id="bmall" title="Show the body's whole history on the timeline">Whole history</button>
+    <span class="bmstats" id="bmstats">—</span>
+  </div>
+  <div class="bmnav">
+    <button id="bmprev" aria-label="Previous session" title="Previous imaging session of this body">◀ Prev</button>
+    <span id="bmnow">—</span>
+    <button id="bmnext" aria-label="Next session" title="Next imaging session of this body">Next ▶</button>
+  </div>
+  <div class="bmopts">
+    <label title="Playback jumps from one of this body's sessions to the next instead of playing through the time between"><input type="checkbox" id="bmskip"> Skip the gaps</label>
+    <select id="bmpick" aria-label="Another body"></select>
+  </div>
+  <ul id="bmlist" aria-label="Imaging sessions"></ul>
+  <footer id="bmfoot">—</footer>
+</section>
+
   <nav id="appdock" aria-label="Dock" hidden></nav>
 
   <section class="win" id="about" aria-label="About Cassini OS" hidden>
@@ -1359,17 +1459,25 @@ body.phone #finale .fx-data { width: min(220px, calc(100vw - 32px)); top: 10px; 
   </div>
 </section>
 
-  <section id="finale" hidden aria-live="polite">
+  <section id="finale" class="cs-root" hidden aria-live="polite">
   <div class="fx-air"></div>
   <div class="fx-shade"></div>
-  <div class="fx-black"></div>
-  <div class="fx-caps"></div>
+  <div class="cs-black"></div>
+  <div class="cs-caps"></div>
   <div class="fx-roll" tabindex="-1" aria-label="Credits"><div class="in"></div></div>
   <div class="fx-read" aria-hidden="true"></div>
   <div class="fx-data" aria-hidden="true"><b>Its last readings · real data</b><canvas width="556" height="290"></canvas><small></small></div>
   <div class="fx-note">An interpretation. Cassini's path is its real trajectory and the readings are what it sent; the way it fights to hold its antenna on Earth follows a rule pinned to NASA's numbers, not telemetry.</div>
-  <div class="fx-hint">Drag to look around</div>
-  <button class="fx-skip" type="button">Skip ▸</button>
+  <div class="cs-hint">Drag to look around</div>
+  <button class="cs-skip" type="button">Skip ▸</button>
+</section>
+
+  <section id="launch" class="cs-root" hidden aria-live="polite">
+  <div class="lx-shade"></div>
+  <div class="cs-black"></div>
+  <div class="cs-caps"></div>
+  <div class="lx-clock" aria-hidden="true"></div>
+  <button class="cs-skip" type="button">Skip ▸</button>
 </section>
 
   <div id="loading"><div>Starting Cassini OS<br>Loading trajectories<div class="bar"></div></div></div>
@@ -1513,11 +1621,13 @@ body.phone #finale .fx-data { width: min(220px, calc(100vw - 32px)); top: 10px; 
   D({ key: "cameras.colors", section: "Cameras", label: "Filter colors", type: "choice", value: "natural",
       options: [["natural", "Natural color"], ["raw", "Raw filters"]],
       hint: "Natural color turns red, green and blue filter sets into the colors an eye would see, and balances false color sets (methane, ultraviolet, infrared) so the planet comes out gray and only its differences between filters show as color. Raw filters draws each filter straight as a channel. Needs Balanced color." });
-  // what the frame server's picture routes are asked to add for them: nothing, the earlier stretch, or raw filters
-  window.cassiniLook = () => S.get("cameras.balancedColor") === false ? "&look=classic"
-    : S.get("cameras.colors") === "raw" ? "&colors=raw" : "";
-  // how a movie pass looks (Settings > Movie), for the camera windows' movie pictures and the film export alike
-  window.cassiniMovieStyle = () => `${S.get("movies.center") === false ? "&center=0" : ""}&trail=${S.get("movies.trail") || 0}&laps=${S.get("movies.laps") || 1}`;
+  // what the frame server's picture routes are asked to add for them: nothing, the earlier stretch, or raw filters;
+  // o.center: the picture centred on its body (a camera window's Auto center, decided by the window for each pass)
+  window.cassiniLook = (o = {}) => (S.get("cameras.balancedColor") === false ? "&look=classic"
+    : S.get("cameras.colors") === "raw" ? "&colors=raw" : "") + (o.center ? "&center=1" : "");
+  // how a movie pass looks (Settings > Movie), for the camera windows' movie pictures and the film export alike;
+  // o.center: the window's Auto center (else the Settings default)
+  window.cassiniMovieStyle = (o = {}) => `${(o.center ?? S.get("cameras.autoCenter")) === false ? "&center=0" : ""}&trail=${S.get("movies.trail") || 0}&laps=${S.get("movies.laps") || 1}`;
   D({ key: "cameras.channels", section: "Cameras", label: "Filter channels", type: "toggle", value: true,
       hint: "The frames that make up a color picture, in a strip under it." });
   cls("cameras.channels", "s-nochans", false);
@@ -1529,9 +1639,11 @@ body.phone #finale .fx-data { width: min(220px, calc(100vw - 32px)); top: 10px; 
   cls("cameras.steady", "s-steady", true);
   D({ key: "cameras.mosaics", section: "Cameras", label: "Mosaics in camera windows", type: "toggle", value: true,
       hint: "When Cassini steps a camera across a body, the window builds the mosaic tile by tile. Off shows every frame on its own." });
+  D({ key: "cameras.autoCenter", section: "Cameras", label: "Auto center", type: "toggle", value: true,
+      hint: "Every picture of a moon or a planet whose whole disk fits is turned north up with the body in the middle, by SPICE, at one size for the whole pass, so the body holds still from picture to picture. Ring, spoke and sky pictures, and a body too big for the picture, stay as the camera took them. Each camera window's settings button (the slider icon in its title bar) can turn it on or off for that window." });
   D({ key: "cameras.passes", section: "Cameras", label: "Mosaic passes", type: "choice", value: "auto",
       options: [["auto", "Auto"], ["mosaic", "Always mosaic"], ["movie", "Always movie"], ["mosaic_movie", "Always mosaic movie"]],
-      hint: "How a pass of pictures plays: Auto builds the passes that step across a body as mosaics, rolls the ones that go round the same places again and again as mosaic movies, and plays movies and stares as frames. The others force one way for every pass. The chip on a picture changes it for one pass." });
+      hint: "How a pass of pictures plays: Auto builds the passes that step across a body as mosaics, rolls the ones that go round the same places again and again as mosaic movies, and plays movies and stares as frames. The others force one way for every pass. A camera window's settings button changes it for the pass it is showing." });
   D({ key: "cameras.fullRes", section: "Cameras", label: "Full resolution in full view", type: "toggle", value: true,
       hint: "A picture in full view (double-click it, F or the title bar button) always loads at the camera's full resolution, playing or paused, with a button to save it. Other windows show each picture at its true resolution, or smaller only when the window or screen is too small to show more." });
   D({ key: "cameras.drill", section: "Cameras", label: "Open channels in place", type: "toggle", value: true,
@@ -1607,18 +1719,12 @@ body.phone #finale .fx-data { width: min(220px, calc(100vw - 32px)); top: 10px; 
   D({ key: "view.atmospheres", section: "View", label: "Atmospheres", type: "choice", value: "full",
       options: [["off", "Off"], ["light", "Light"], ["full", "Full"]],
       hint: "Titan's orange haze, with its high detached layer, and Saturn's thin haze at the limb, lit by the Sun: soft twilight past the terminator and a bright ring when Titan is backlit. Light is quicker on weak graphics; Off draws the bare globes." });
-  // Movie
-  D({ key: "movie.fps", section: "Movie", label: "Movie speed", type: "range", value: 8, min: 2, max: 24, step: 1, unit: "fps",
-      hint: "Frames per second in movie mode (M). The slider in the Movie window changes this too." });
-  D({ key: "movie.processed", section: "Movie", label: "Processed pictures", type: "toggle", value: true,
-      hint: "Movie frames made by the pipeline like the camera windows' pictures: calibrated, color composites and mosaics. Off plays the archive frames as they are, with no processing. The Processed button in the Movie window (or P) switches it too." });
-  D({ key: "movie.mosaics", section: "Movie", label: "Mosaics in movies", type: "toggle", value: true,
-      hint: "With processed pictures on, a mosaic pass builds its mosaic in the film. Off shows each tile on its own." });
+  // movie mode (movie.html) is a rule for the clock, so its speed sits with the playback settings
+  D({ key: "movie.fps", section: "Playback", label: "Movie mode speed", type: "range", value: 8, min: 2, max: 24, step: 1, unit: "fps",
+      hint: "Movie mode (M) skips the time between pictures and steps from one picture to the next this many times a second. The camera windows show every picture as they always do." });
   // movie passes in the camera and body windows (head-quiet.html cameraFeed reads these)
   D({ key: "movies.steady", section: "Movie", label: "Steady movie passes", type: "toggle", value: true,
       hint: "When a pass plays as a movie in a camera or body window (a stare, a ring or storm movie), every frame is centered by SPICE, north up, on one brightness scale and one size for the whole pass, so the body holds still and the picture does not pump. Off shows each frame as it is." });
-  D({ key: "movies.center", section: "Movie", label: "Center the body", type: "toggle", value: true,
-      hint: "In a steady movie pass, the body sits in the middle of every frame, north up, when its whole disk fits the picture (a moon, a planet from far off). A ring or spoke movie close to Saturn keeps its own view. Off keeps the view the frames cover, with the body where the camera put it." });
   D({ key: "movies.filmstrip", section: "Movie", label: "Filmstrip", type: "toggle", value: true,
       hint: "Under a window playing a movie pass: every frame of the pass along a strip, with the frames around the one shown. Click or drag along it to move through the pass." });
   cls("movies.filmstrip", "s-nofilmstrip", false);
@@ -1626,12 +1732,6 @@ body.phone #finale .fx-data { width: min(220px, calc(100vw - 32px)); top: 10px; 
       hint: "In a steady movie pass, this many earlier frames of the same filter stay under the newest one, fading with age, so a moving moon or a ring's shadow leaves a short trail. 0 shows each frame alone." });
   D({ key: "movies.laps", section: "Movie", label: "Mosaic movies keep", type: "range", value: 1, min: 1, max: 6, step: 1, unit: "laps",
       hint: "A mosaic movie (the camera going over the same mosaic again and again, as on the approach to Jupiter) plays as a mosaic that never empties: each new tile replaces its own earlier copy. 1 is a time-lapse; more keeps that many copies of each tile, older ones under the newest." });
-  window.addEventListener("DOMContentLoaded", () => {
-    const r = $("mvfps"); if (!r) return;
-    try { const f = +localStorage.getItem("cassini-os-movie-fps"); if (f >= 2 && f <= 24 && !("movie.fps" in saved)) S.set("movie.fps", f); } catch (e) {}
-    S.on("movie.fps", v => { if (+r.value !== v) { r.value = v; r.dispatchEvent(new Event("input")); } });
-    r.addEventListener("input", () => S.set("movie.fps", +r.value));
-  });
   // Data
   D({ key: "data.layout", section: "Data", label: "Window layout", type: "action", button: "Reset",
       hint: "Put every window back where it starts and bring back the ones tucked into the menu bar.",
@@ -2038,11 +2138,11 @@ body.phone #finale .fx-data { width: min(220px, calc(100vw - 32px)); top: 10px; 
       fb.innerHTML = '<svg class="out" viewBox="0 0 10 10" aria-hidden="true"><path d="M1 4V1h3M6 1h3v3M9 6v3H6M4 9H1V6"/></svg><svg class="in" viewBox="0 0 10 10" aria-hidden="true"><path d="M4 1v3H1M9 4H6V1M6 9V6h3M1 6h3v3"/></svg>';
       fb.addEventListener("click", e => { e.stopPropagation(); full(w); });
       bar.appendChild(fb);
-      w.addEventListener("dblclick", e => { if (!phone() && e.target.closest(".well, .rlwell, .mvwell")) full(w); });
-      w.addEventListener("click", e => { if (phone() && e.target.closest(".well, .rlwell, .mvwell")) full(w); });
+      w.addEventListener("dblclick", e => { if (!phone() && e.target.closest(".well, .rlwell")) full(w); });
+      w.addEventListener("click", e => { if (phone() && e.target.closest(".well, .rlwell")) full(w); });
     }
   }
-  const TALL = "#moments, #settings, #about", PICTURES = ".camwin, .bodywin, #reelcard, #moviecard", MIN_W = 180;
+  const TALL = "#moments, #settings, #about", PICTURES = ".camwin, .bodywin, #reelcard", MIN_W = 180;
   const phone = () => document.body.classList.contains("phone");
   // zoom: the bigger standard size, and back to the size the viewer gave the window
   function zoom(w) {
@@ -2181,7 +2281,7 @@ body.phone #finale .fx-data { width: min(220px, calc(100vw - 32px)); top: 10px; 
   $("tlnow").addEventListener("click", () => recenterTimeline());
 
   // previous / next moment
-  const items = () => [...document.querySelectorAll("#mlist li")];
+  const items = () => [...document.querySelectorAll("#mlist li:not([hidden])")];
   $("next").addEventListener("click", () => { const li = items().find(li => +li.dataset.et > state.et + 3.5 * 3600); if (li) li.querySelector("button").click(); });
   $("prev").addEventListener("click", () => { const li = items().filter(li => +li.dataset.et < state.et - 60).pop(); if (li) li.querySelector("button").click(); });
 
@@ -2310,7 +2410,7 @@ body.phone #finale .fx-data { width: min(220px, calc(100vw - 32px)); top: 10px; 
   // per-frame read-outs: menu-bar clock, mission progress, HUD strip, status bar
   window.studyHud = ms => {
     let marked = false;
-    document.querySelectorAll("#mlist li").forEach(li => {
+    document.querySelectorAll("#mlist li:not([hidden])").forEach(li => {
       const next = !marked && +li.dataset.et >= (state.et - 3600);
       if (next) marked = true;
       li.classList.toggle("next", next);
@@ -2434,8 +2534,12 @@ body.phone #finale .fx-data { width: min(220px, calc(100vw - 32px)); top: 10px; 
     if (!by[key]) { const ks = catalog.byCam[cam].ks.filter(k => catalog.target[k] === body); by[key] = { ks, et: Float64Array.from(ks, k => catalog.et[k]) }; }
     return by[key];
   }
+  // the body in view in the body view (bodymode.html), whose pictures alone the timeline and camera windows show
+  const viewBody = () => (window.cassiniBodyMode && cassiniBodyMode.name) || null;
   window.studyBars = (g, w, h) => {
     prep();
+    const vb = viewBody();
+    if (vb) return bodyBars(g, w, h, vb);
     const bw = 2, nT = h * LANES.nTop, nB = h * LANES.nBase, wT = h * LANES.wTop, wB = h * LANES.wBase, rT = h * LANES.rTop, rH = Math.max(4, h * LANES.rH);
     const sc = v => Math.min(1, Math.log1p(v) / Math.log1p(18));
     const cN = new Array(6), cW = new Array(6);
@@ -2451,6 +2555,32 @@ body.phone #finale .fx-data { width: min(220px, calc(100vw - 32px)); top: 10px; 
       }
       if (set) { const s = rH / 3; g.fillStyle = CLS[1][1]; g.fillRect(x, rT, bw, s); g.fillStyle = CLS[2][1]; g.fillRect(x, rT + s, bw, s); g.fillStyle = CLS[3][1]; g.fillRect(x, rT + 2 * s, bw, s); }
     }
+    laneNames(g, w, h);
+  };
+  // the same lanes with one body's pictures only (each camera's frames of it, walked once from left to right)
+  function bodyBars(g, w, h, body) {
+    const bw = 2, nT = h * LANES.nTop, nB = h * LANES.nBase, wT = h * LANES.wTop, wB = h * LANES.wBase, rT = h * LANES.rTop, rH = Math.max(4, h * LANES.rH);
+    const sc = v => Math.min(1, Math.log1p(v) / Math.log1p(18));
+    const cnt = new Array(6), sets = new Uint8Array(Math.ceil(w / bw) + 1);
+    for (const [cam, top, base] of [["N", nT, nB], ["W", wT, wB]]) {
+      const F = framesOf(cam, body), a = F.et;
+      let j = 0, lo = 0, hi = a.length; const t0 = xToEt(0, w);
+      while (lo < hi) { const m = (lo + hi) >> 1; if (a[m] < t0) lo = m + 1; else hi = m; }
+      j = lo;
+      for (let x = 0, s = 0; x < w && j < a.length; x += bw, s++) {
+        const t1 = xToEt(x + bw, w);
+        if (a[j] >= t1) continue;
+        cnt.fill(0); let tot = 0;
+        for (; j < a.length && a[j] < t1; j++) { const k = F.ks[j]; cnt[catalog.cls[k]]++; tot++; if (catalog.rgb[k]) sets[s] = 1; }
+        let y = base; const H = sc(tot) * (base - top);
+        for (let c = 0; c < 6; c++) { if (!cnt[c]) continue; const hh = H * cnt[c] / tot; g.fillStyle = CLS[c][1]; g.fillRect(x, y - hh, bw - 0.5, hh); y -= hh; }
+      }
+    }
+    for (let s = 0; s < sets.length; s++) if (sets[s]) { const x = s * bw, q = rH / 3; g.fillStyle = CLS[1][1]; g.fillRect(x, rT, bw, q); g.fillStyle = CLS[2][1]; g.fillRect(x, rT + q, bw, q); g.fillStyle = CLS[3][1]; g.fillRect(x, rT + 2 * q, bw, q); }
+    laneNames(g, w, h);
+  }
+  function laneNames(g, w, h) {
+    const nB = h * LANES.nBase, wB = h * LANES.wBase, nT = h * LANES.nTop, wT = h * LANES.wTop, rT = h * LANES.rTop, rH = Math.max(4, h * LANES.rH);
     g.fillStyle = "rgba(255,255,255,0.12)"; g.fillRect(0, nB, w, 1); g.fillRect(0, wB, w, 1);
     // lane names, on a patch of LCD so they stay readable over the bars
     g.font = "400 9px 'Lucida Grande', Verdana, sans-serif"; g.textBaseline = "middle";
@@ -2458,7 +2588,7 @@ body.phone #finale .fx-data { width: min(220px, calc(100vw - 32px)); top: 10px; 
       g.fillStyle = "rgba(16,17,20,0.85)"; g.fillRect(0, y - 6, 26, 12); g.fillStyle = "rgba(232,236,242,0.5)"; g.fillText(t, 2, y);
     }
     g.textBaseline = "top";
-  };
+  }
   const FNAME = ["Clear", "Red", "Green", "Blue", "IR / methane", "UV"];
   let lastI = -2;
   const baseHud = window.studyHud;
@@ -2492,7 +2622,7 @@ body.phone #finale .fx-data { width: min(220px, calc(100vw - 32px)); top: 10px; 
   window.cassiniHeld = holding;
   window.addEventListener("keydown", e => {
     if (e.key !== "Escape" || !holding.size || e.metaKey || e.ctrlKey || e.altKey || /^(INPUT|SELECT|TEXTAREA)$/.test(e.target.tagName)) return;
-    if (document.querySelector(".menu.open") || (window.cassiniMovie && window.cassiniMovie.on)) return;
+    if (document.querySelector(".menu.open")) return;
     const panel = document.querySelector("#settings.front, #hlcard.front, #reelcard.front, #excard.front");
     if (panel && !panel.hidden) return;
     const list = [...holding], h = list.find(x => x.win.classList.contains("full")) || list.find(x => x.win.classList.contains("front")) || list[list.length - 1];
@@ -2503,12 +2633,83 @@ body.phone #finale .fx-data { width: min(220px, calc(100vw - 32px)); top: 10px; 
   // (made by the frame server) with the channels that went into it underneath.
   // A feed can also be one camera's frames of one target only (card.dataset.body), for the per-body windows;
   // win is the window it sits in, whose zoom asks for the bigger picture.
+  // ---------- a camera window's own settings (the slider button in its title bar) ----------
+  // Overrides of the Settings defaults for one window, kept on this device with the layout: the NAC and WAC windows
+  // by their ids, a body window by its body and camera, so "Titan · NAC" keeps its choice when it opens again
+  const WINOPTS = "cassini-os-window-options-v1";
+  function winOpts(win, card) {
+    const key = win.id || `body:${card.dataset.body}|${card.dataset.cam}`;
+    const all = () => { try { return JSON.parse(localStorage.getItem(WINOPTS)) || {}; } catch (e) { return {}; } };
+    return {
+      get: name => { const v = (all()[key] || {})[name]; return v === null ? undefined : v; },
+      set(name, v) {
+        const a = all(), mine = a[key] || {};
+        if (v === null || v === undefined) delete mine[name]; else mine[name] = v;
+        if (Object.keys(mine).length) a[key] = mine; else delete a[key];
+        try { localStorage.setItem(WINOPTS, JSON.stringify(a)); } catch (e) {}
+      },
+    };
+  }
+  // the menu: Auto center for this window, and while the window is in a pass, how that pass plays (Auto follows the
+  // server's call; Mosaic, Movie and Mosaic movie hold for that pass). The feed fills it in (sync) and acts on it
+  // (onCenter, onMode)
+  const PASS_MODES = [["auto", "Auto", "the server's call"], ["mosaic", "Mosaic", "build it tile by tile"],
+    ["movie", "Movie", "its frames in place"], ["mosaic_movie", "Mosaic movie", "each place's newest tile, lap after lap"]];
+  function winMenu(win, card) {
+    const bar = win.querySelector(".titlebar");
+    let btn = bar.querySelector(".winopt");
+    if (!btn) {
+      btn = document.createElement("button"); btn.type = "button"; btn.className = "winopt";
+      btn.setAttribute("aria-label", "Window settings"); btn.setAttribute("aria-haspopup", "true"); btn.setAttribute("aria-expanded", "false");
+      btn.title = "Window settings";
+      btn.innerHTML = '<svg viewBox="0 0 10 10" aria-hidden="true"><path d="M1 2.5h8M1 7.5h8"/><circle cx="3.5" cy="2.5" r="1.2"/><circle cx="6.5" cy="7.5" r="1.2"/></svg>';
+      bar.appendChild(btn);
+    }
+    const el = document.createElement("div"); el.className = "winmenu"; el.setAttribute("role", "menu"); el.hidden = true;
+    el.innerHTML = `<div class="wmrow"><span class="wml">Auto center<small></small></span><button class="sw" role="menuitemcheckbox" aria-checked="true" aria-label="Auto center"></button></div>
+      <div class="wmpass"><div class="wmh">This pass plays as</div>${PASS_MODES.map(([m, l, n]) => `<button class="wmopt" role="menuitemradio" data-mode="${m}" aria-checked="false"><i></i>${l}<span>${n}</span></button>`).join("")}</div>
+      <div class="wmfoot"><button class="wmset">All settings…</button></div>`;
+    win.appendChild(el);
+    const sw = el.querySelector(".sw"), note = el.querySelector(".wml small"), pass = el.querySelector(".wmpass");
+    const api = { onCenter: () => {}, onMode: () => {}, state: {} };
+    function open(on) {
+      el.hidden = !on; btn.setAttribute("aria-expanded", String(on)); btn.classList.toggle("open", on);
+      if (on) { win.classList.add("menuup"); api.sync(api.state); } else win.classList.remove("menuup");
+    }
+    for (const t of ["click", "dblclick", "pointerdown"]) { btn.addEventListener(t, e => e.stopPropagation()); el.addEventListener(t, e => e.stopPropagation()); }
+    btn.addEventListener("click", e => { open(el.hidden); if (e.detail) btn.blur(); });
+    document.addEventListener("click", () => { if (!el.hidden) open(false); });
+    window.addEventListener("keydown", e => { if (e.key === "Escape" && !el.hidden) { e.stopImmediatePropagation(); open(false); } }, true);
+    sw.addEventListener("click", () => api.onCenter(sw.getAttribute("aria-checked") !== "true"));
+    pass.addEventListener("click", e => { const b = e.target.closest(".wmopt"); if (b) api.onMode(b.dataset.mode); });
+    el.querySelector(".wmset").addEventListener("click", () => { open(false); if (window.cassiniSettings && window.cassiniSettings.open) window.cassiniSettings.open(); });
+    api.sync = st => {
+      api.state = st;
+      const def = (window.cassiniSettings && window.cassiniSettings.get("cameras.autoCenter")) ?? true;
+      sw.setAttribute("aria-checked", String(!!st.centre));
+      note.textContent = !st.centre ? (def ? "Off for this window" : "Off (the Settings default)")
+        : st.centred ? "Body in the middle, north up" : "Moons and planets that fit go north up in the middle";
+      pass.hidden = !st.inPass;
+      for (const b of pass.querySelectorAll(".wmopt")) {
+        const m = b.dataset.mode, on = m === st.mode;
+        b.setAttribute("aria-checked", String(on));
+        b.querySelector("span").textContent = m === "auto" && st.playing ? `now ${st.playing}${st.building ? ", building" : ""}`
+          : PASS_MODES.find(x => x[0] === m)[2];
+      }
+      // the button says when this window differs from the Settings defaults
+      btn.classList.toggle("chosen", st.centre !== def || (st.inPass && st.mode !== "auto"));
+      win.classList.toggle("wm-centred", !!st.centred);
+    };
+    return api;
+  }
   const STUCK = 8000;
   const allFeeds = new Set();   // every camera window's feed, the body windows' too (playback.maxBehind)
   function cameraFeed(card) {
-    const cam = card.dataset.cam, body = card.dataset.body || null, win = card.closest(".win") || card, well = card.querySelector(".well"), shot = card.querySelector(".shot"), chans = card.querySelector(".chans");
+    // body: a body window's own target; the two camera windows show the body in view in the body view, else every target
+    const own = card.dataset.body || null, cam = card.dataset.cam, win = card.closest(".win") || card, well = card.querySelector(".well"), shot = card.querySelector(".shot"), chans = card.querySelector(".chans");
     const field = f => card.querySelector(`[data-f="${f}"]`) || { set textContent(v) {}, set innerHTML(v) {} };
     let shownAt = 0, mosaicAt = 0;   // when the last picture and the last pass mosaic went up (behind)
+    let body = own || viewBody(), heldBody = null;   // heldBody: the body the picture up is of
     let want = null, shownKey = null, shown = null, next = [], lastK = -2, lastReady = null, stripKey = "", stripSet = null;
     // steady size: shapeOf is the target and observation whose pass mosaic gave the picture its shape, which it
     // keeps for every picture of that observation
@@ -2523,7 +2724,16 @@ body.phone #finale .fx-data { width: min(220px, calc(100vw - 32px)); top: 10px; 
     const size = () => win.classList.contains("full") && S.get("cameras.fullRes") ? "full" : window.cassiniWM.sized(win, well);
     const capped = () => { const s = size(); return s === "full" ? 1024 : s; };
     const frameUrl = (id, sz) => `${FRAMES}/frames/${id}.webp?size=${sz || size()}`;
-    const colorUrl = (s, sz) => `${FRAMES}/frames/color.webp?ids=${s.use.map(k => catalog.id[k]).join(",")}&size=${sz || size()}${window.cassiniLook()}`;
+    const colorUrl = (s, sz) => `${FRAMES}/frames/color.webp?ids=${s.use.map(k => catalog.id[k]).join(",")}&size=${sz || size()}${window.cassiniLook({ center: centres(s.use[s.use.length - 1]) })}`;
+    // Auto center (this window's settings menu, else Settings > Cameras > Auto center): a frame on its own comes
+    // centred on its body by the frame server (the pipeline's processed frame, placed north up by SPICE) unless the
+    // server said its pass is not centred (rings, sky, a body too big) or could not place the frame: then as it is
+    const opts = winOpts(win, card);
+    const centreOn = () => opts.get("autoCenter") ?? S.get("cameras.autoCenter") ?? true;
+    const uncentred = new Set(), centreFailed = new Set();   // passes the server does not centre / frames it could not
+    const centres = k => centreOn() && !uncentred.has(passOf(k)) && !centreFailed.has(catalog.id[k]);
+    const shownFrameUrl = (k, sz) => centres(k)
+      ? `${FRAMES}/frames/processed/${catalog.id[k]}.webp?size=${sz || size()}${window.cassiniLook({ center: true })}` : frameUrl(catalog.id[k], sz);
     // a picture at full resolution as a PNG to save (the frame server names the file)
     const saveUrl = url => (/size=/.test(url) ? url.replace(/size=[^&]*/, "size=full") : url + (url.includes("?") ? "&" : "?") + "size=full") + "&format=png&download=1";
     // the save menu: the picture shown and the levels under and around it (savesFor below), each at full resolution
@@ -2620,7 +2830,7 @@ body.phone #finale .fx-data { width: min(220px, calc(100vw - 32px)); top: 10px; 
           break;
         }
       }
-      return { key: frameUrl(catalog.id[k], sz), set: -1, k };
+      return { key: shownFrameUrl(k, sz), set: -1, k };
     }
     // kept: a frame that cannot be shown keeps the picture's space (steady size) instead of shrinking the window
     function noFrame(msg, kept) {
@@ -2651,7 +2861,7 @@ body.phone #finale .fx-data { width: min(220px, calc(100vw - 32px)); top: 10px; 
         kind = { color: v.set >= 0, mosaic: false };
         if (!steady() || shapeOf !== passOf(v.k)) { well.style.aspectRatio = ""; shapeOf = null; }
       }
-      well.classList.add("has-frame"); well.classList.remove("kept"); well.classList.toggle("composite", v.set >= 0); well.classList.toggle("movie", !!v.movie);
+      well.classList.add("has-frame"); well.classList.remove("kept"); heldBody = body; well.classList.toggle("composite", v.set >= 0); well.classList.toggle("movie", !!v.movie);
       // a frame of a movie pass shown as it is: the server is still working the pass out (a pass nobody has
       // watched takes seconds), so the window shows today's frame and says the steady one is coming
       const steadying = !v.movie && v.set < 0 && (playsMovie(v.k) || playsRolling(v.k));
@@ -2699,7 +2909,19 @@ body.phone #finale .fx-data { width: min(220px, calc(100vw - 32px)); top: 10px; 
       im.onerror = () => {
         lane[which] = null;
         if (v.warm || v.cat !== catalog) warmed.add(v.key);
-        else if (v.movie) {   // not steadied (the server is still working the pass out, or SPICE could not place it): the frame itself
+        else if (/[?&]center=1/.test(v.key)) {
+          // not centred: the server's X-Center says whether the pass is never centred (it shows as it is from now
+          // on) or only this frame could not be placed; meanwhile the picture as it is
+          const o = passOf(v.k), id = catalog.id[v.k], c0 = catalog;
+          centreFailed.add(id);
+          if (v.set >= 0) for (const q of catalog.sets[v.set].use) centreFailed.add(catalog.id[q]);
+          fetch(v.key, { priority: "low" }).then(r => JSON.parse(r.headers.get("X-Center") || "null"), () => null).then(c => {
+            if (catalog !== c0 || !c || c.frame) return;
+            uncentred.add(o); centreFailed.delete(id);
+            if (lastK >= 0 && passOf(lastK) === o) update(true);
+          }).catch(() => {});
+          if (want && want.key === v.key) want = view(v.k, catalog.et[v.k]);
+        } else if (v.movie) {   // not steadied (the server is still working the pass out, or SPICE could not place it): the frame itself
           // the whole pass plays its frames as they are for a while, so the clock never waits on a pass being
           // worked out (the server answers 503), and its steady frame is asked for again, paused or playing; any
           // other answer (SPICE could not place the frame) shows that frame as it is from then on
@@ -2711,10 +2933,10 @@ body.phone #finale .fx-data { width: min(220px, calc(100vw - 32px)); top: 10px; 
             if (status === 200) coldAt.delete(o);
             setTimeout(() => { if (catalog === c0 && lastK >= 0 && passOf(lastK) === o) update(true); }, status === 200 ? 0 : COLD_RETRY + 50);
           });
-          if (want && want.key === v.key) want = { key: frameUrl(catalog.id[v.k]), set: -1, k: v.k };
+          if (want && want.key === v.key) want = { key: shownFrameUrl(v.k), set: -1, k: v.k };
         } else if (v.set >= 0) {   // no composite: the set shows its frames instead
           failed.add(v.set);
-          if (want && want.key === v.key) want = { key: frameUrl(catalog.id[v.k]), set: -1, k: v.k };
+          if (want && want.key === v.key) want = { key: shownFrameUrl(v.k), set: -1, k: v.k };
         } else if (obsShown && catalog.obs[v.k] === obsShown) {
           // a frame of the pass whose mosaic is up was only ever going behind it (display keeps the mosaic): the
           // mosaic stays, as when the frame loads, and it is not marked missing (a busy or full server fails one
@@ -2735,7 +2957,7 @@ body.phone #finale .fx-data { width: min(220px, calc(100vw - 32px)); top: 10px; 
     }
     function pump() {
       if (!want) return;
-      const plain = want.set >= 0 ? { key: frameUrl(catalog.id[want.k]), set: -1, k: want.k } : want;
+      const plain = want.set >= 0 ? { key: shownFrameUrl(want.k), set: -1, k: want.k } : want;
       if (shownKey !== want.key) {
         if (want.set >= 0 && !lane.comp) request("comp", want);
         // the frame itself; for a composite, as the stand-in unless this frame is already up
@@ -2788,29 +3010,23 @@ body.phone #finale .fx-data { width: min(220px, calc(100vw - 32px)); top: 10px; 
     const modeOf = k => passChoice.get(passOf(k)) || S.get("cameras.passes") || "auto";
     const playsAs = k => { const m = modeOf(k), o = passOf(k); return m !== "auto" ? m : lapPasses.has(o) ? "mosaic_movie" : mosaicPass(k) ? "mosaic" : moviePasses.has(o) ? "movie" : ""; };
     const NAMES = { auto: "AUTO", mosaic: "MOSAIC", movie: "MOVIE", mosaic_movie: "MOSAIC MOVIE" };
-    let chip = well.querySelector(".passmode");
-    if (!chip) {
-      chip = document.createElement("button"); chip.type = "button"; chip.className = "passmode";
-      chip.title = "How this pass plays: Auto (the server's call), Mosaic (build it tile by tile), Movie (its frames in place) or Mosaic movie (each place shows its newest tile, lap after lap)";
-      chip.addEventListener("dblclick", e => e.stopPropagation());
-      well.appendChild(chip);
-    }
+    // the window's settings menu (winMenu: the slider button in its title bar) holds Auto center and, while the
+    // window is in a pass, how that pass plays; chipText keeps it in step with the pass on screen
+    const menu = winMenu(win, card);
     function chipText() {
       const k = lastK >= 0 ? lastK : -1, on = k >= 0 && want && (want.tile || want.held || obsShown === catalog.obs[k]);
       well.classList.toggle("inpass", !!on);
-      if (!on) return;
-      const m = modeOf(k), p = playsAs(k);
+      const m = on ? modeOf(k) : "auto", p = on ? playsAs(k) : "";
       // a pass asked for as a mosaic whose mosaic is not up yet is being built (a long movie's first mosaic deep in
       // the pass makes every tile before it: minutes when nothing of it is in the cache)
-      const building = p === "mosaic" && obsShown !== catalog.obs[k] && mLane.pass.busy;
-      chip.textContent = (m === "auto" ? `AUTO${p ? " · " + NAMES[p] : ""}` : NAMES[m]) + (building ? " · BUILDING" : "");
-      chip.classList.toggle("chosen", m !== "auto");
+      const building = on && p === "mosaic" && obsShown !== catalog.obs[k] && mLane.pass.busy;
+      menu.sync({ inPass: !!on, mode: m, playing: p ? NAMES[p].toLowerCase() : "", building, centre: centreOn(),
+                  centred: k >= 0 && centreOn() && /[?&]center=1/.test(shownKey || "") });
     }
-    chip.addEventListener("click", e => {
-      e.stopPropagation();
+    menu.onMode = mode => {
       if (lastK < 0) return;
-      const o = passOf(lastK), order = ["auto", "mosaic", "movie", "mosaic_movie"], m = modeOf(lastK);
-      passChoice.set(o, order[(order.indexOf(m) + 1) % order.length]);
+      const o = passOf(lastK);
+      passChoice.set(o, mode);
       const now = playsAs(lastK);
       if ((now === "movie" || (now === "mosaic_movie" && rolls())) && obsShown === catalog.obs[lastK]) {
         // back to the frames: the one taken last goes up in place of the mosaic
@@ -2819,11 +3035,18 @@ body.phone #finale .fx-data { width: min(220px, calc(100vw - 32px)); top: 10px; 
       for (const L of Object.values(mLane)) { L.last = ""; L.next = null; if (L.ctl) L.ctl.abort(); }
       shownKey = null; shown = null; lastK = -2;
       update(true);
-    });
+    };
+    menu.onCenter = on => {
+      opts.set("autoCenter", on === S.get("cameras.autoCenter") ? null : on);
+      // the picture on screen is asked for again, centred or as it is; the steady size starts again with it
+      if (!obsShown) { shapeOf = null; well.style.aspectRatio = ""; }
+      shownKey = null; shown = null; lastK = -2;
+      update(true);
+    };
     // a pass played as a movie (the Mosaic / Movie switch, with Settings > Movie > Steady movie passes on): its
     // frames come from /frames/movie
     const playsMovie = k => S.get("movies.steady") && playsAs(k) === "movie";
-    const movieUrl = (id, sz) => `${FRAMES}/frames/movie/${id}.webp?size=${sz || size()}&color=${S.get("cameras.composites") ? 1 : 0}${window.cassiniMovieStyle()}${window.cassiniLook()}`;
+    const movieUrl = (id, sz) => `${FRAMES}/frames/movie/${id}.webp?size=${sz || size()}&color=${S.get("cameras.composites") ? 1 : 0}${window.cassiniMovieStyle({ center: centreOn() })}${window.cassiniLook()}`;
     const movieFailed = new Set();    // frames the server did not steady: they show as they are
     // passes the server is still working out (a movie request failed): their frames show as they are, with the
     // steadying note, and the steady frame is asked for again every COLD_RETRY ms
@@ -2833,7 +3056,7 @@ body.phone #finale .fx-data { width: min(220px, calc(100vw - 32px)); top: 10px; 
     // which never empties when the camera starts its raster again (Settings > Movie > Mosaic movies keep)
     const playsRolling = k => playsAs(k) === "mosaic_movie";
     window.cassiniRolling = true;   // so the pass mosaic lane leaves mosaic movies to this route (mosaicOf)
-    const rollingUrl = (id, sz) => `${FRAMES}/frames/movie/${id}.webp?mode=rolling&size=${sz || size()}${window.cassiniMovieStyle()}${window.cassiniLook()}`;
+    const rollingUrl = (id, sz) => `${FRAMES}/frames/movie/${id}.webp?mode=rolling&size=${sz || size()}${window.cassiniMovieStyle({ center: centreOn() })}${window.cassiniLook()}`;
     // the filmstrip: the pass the frame on screen is in (/frames/movie/<ID>.json: its frames, in time order), its
     // frames drawn along a strip by time, colored by filter, with the frame shown marked and the frames around it
     const passInfos = new Map(), filmAsked = new Set();
@@ -3039,7 +3262,7 @@ body.phone #finale .fx-data { width: min(220px, calc(100vw - 32px)); top: 10px; 
       chans.querySelectorAll("figure").forEach((fig, j) => {
         const q = s.use[j], taken = catalog.et[q] <= et, tile = fig.querySelector(".tile");
         fig.classList.toggle("now", q === k); fig.classList.toggle("waiting", !taken);
-        if (taken && !tile.firstChild) tile.innerHTML = `<img alt="" src="${frameUrl(catalog.id[q], 256)}" onerror="this.style.visibility='hidden'">`;
+        if (taken && !tile.firstChild) tile.innerHTML = `<img alt="" src="${shownFrameUrl(q, 256)}" data-raw="${frameUrl(catalog.id[q], 256)}" onerror="if (this.src !== this.dataset.raw) this.src = this.dataset.raw; else this.style.visibility='hidden'">`;
         if (!taken && tile.firstChild) tile.replaceChildren();   // scrubbed back before this channel
       });
     }
@@ -3358,6 +3581,7 @@ body.phone #finale .fx-data { width: min(220px, calc(100vw - 32px)); top: 10px; 
     function update(force) {
       if (dataWait()) { if (!letGone) { letGone = true; letGo(window.cassiniAway && cassiniAway.on); } return; }
       letGone = false;
+      if (!own && viewBody() !== body) { body = viewBody(); letGo(); shapeOf = null; force = true; }
       if (catalog !== cat) {   // another mission year (or the months around this one) loaded
         // a pass mosaic that is up stays up: its observation is a name, its frame found again by id
         const obsId = cat && obsK >= 0 ? cat.id[obsK] : null;
@@ -3367,26 +3591,33 @@ body.phone #finale .fx-data { width: min(220px, calc(100vw - 32px)); top: 10px; 
       }
       if (win.hidden && !force) { mosaicStop(); return; }   // a closed or tucked-away window fetches nothing; it catches up when shown
       if (hold) { if (force) showLevel(); return; }   // held: the clock moves on without it (a bigger window asks for the bigger picture)
-      if (window.cassiniMovie && window.cassiniMovie.on) { mosaicStop(); return; }   // movie mode has the frame server to itself (its requests are capped)
-      const p = lastOfCam(cam, state.et, body), k = p < 0 ? -1 : framesOf(cam, body).ks[p];
+      let p = lastOfCam(cam, state.et, body), k = p < 0 ? -1 : framesOf(cam, body).ks[p];
+      // holding: a body window, or a camera window in a body's view (bodymode.html), never goes blank: its picture stays
+      // up however long the camera is quiet and across a jump to another month, until the body's next picture; a
+      // window with nothing up yet shows the body's next picture rather than "no signal"
+      const holdUp = update.hold || (!own && !!body), up = well.classList.contains("has-frame") && heldBody === body;
+      const coming = k < 0 && holdUp && !up && framesOf(cam, body).ks.length > 0;
+      if (coming) { p = 0; k = framesOf(cam, body).ks[0]; }
       const live = k >= 0 && state.et - catalog.et[k] < 180;
       card.classList.toggle("live", live);
       // a camera that has been quiet for longer than the stale setting shows nothing rather than an old picture; an
       // important picture (color, mosaic) stays that many times longer, and a window that holds (a body window,
       // which closes by itself) keeps its picture
       const stale = S.get("cameras.stale") * (lastK >= 0 ? importance() : 1);
-      if (k < 0 || (!update.hold && state.et - catalog.et[k] > stale * 3600)) {
+      if (k < 0 && holdUp && up) { field("status").textContent = "Waiting for the next picture"; return; }
+      if (k < 0 || (!holdUp && state.et - catalog.et[k] > stale * 3600)) {
         field("status").textContent = k < 0 ? "Camera" : `Last frame ${fmtDur(state.et - catalog.et[k])} ago`;
         strip(null); filmstrip(-1);
         if (lastK !== -1) {
           lastK = -1; want = null; shownKey = null; shown = null; well.classList.remove("inpass");
-          noFrame(k < 0 ? "<b>No signal</b>No frames from this camera yet this year" : `<b>Idle</b>No frames from this camera in the last ${+stale.toFixed(1)} h`);
+          noFrame(k < 0 && holdUp ? `<b>${titleCase(body)}</b>No ${cam === "N" ? "narrow" : "wide"}-angle pictures of it near this time`
+            : k < 0 ? "<b>No signal</b>No frames from this camera yet this year" : `<b>Idle</b>No frames from this camera in the last ${+stale.toFixed(1)} h`, holdUp);
           for (const f of ["frame", "filter", "colour", "details"]) field(f).textContent = "—";
         }
         return;
       }
       const ago = state.et - catalog.et[k];
-      field("status").textContent = live ? "Imaging now" : `Last frame ${fmtDur(ago)} ago`;
+      field("status").textContent = coming ? `Next picture in ${fmtDur(-ago)}` : live ? "Imaging now" : `Last frame ${fmtDur(ago)} ago`;
       const si = catalog.setOf[k], s = si >= 0 ? catalog.sets[si] : null, ready = !!s && s.ready <= state.et;
       const held = !s && steady() ? nearSet(k) : null;
       strip(s || held, state.et, k);
@@ -3475,16 +3706,32 @@ body.phone #finale .fx-data { width: min(220px, calc(100vw - 32px)); top: 10px; 
     return (kind.color ? c : 1) * (kind.mosaic ? m : 1);
   }
   const feeds = [...document.querySelectorAll(".camwin")].map(cameraFeed);
-  window.cassiniFeeds = { cameraFeed, framesOf, lastOfCam, prep, weight, stale: () => S.get("cameras.stale") * 3600 };
+  // the time of the first picture after et (any camera; one body's only when body is given), or Infinity when none
+  // is in the months loaded now; before: the last picture before et. Movie mode steps the clock from one to the next
+  function nextPicture(et, body) {
+    if (!body) { const a = catalog.sorted, i = lastImageIndex(et) + 1; return i < a.length ? a[i] : Infinity; }
+    let t = Infinity;
+    for (const cam in catalog.byCam) { const a = framesOf(cam, body).et, p = lastOfCam(cam, et, body) + 1; if (p < a.length) t = Math.min(t, a[p]); }
+    return t;
+  }
+  function prevPicture(et, body) {
+    let t = -Infinity;
+    for (const cam in catalog.byCam) { const a = framesOf(cam, body).et, p = lastOfCam(cam, et - 1e-3, body); if (p >= 0) t = Math.max(t, a[p]); }
+    return t;
+  }
+  // how many frames the furthest-behind camera window's picture is behind the clock (update.behind, below)
+  const behind = () => { let b = 0; for (const f of allFeeds) b = Math.max(b, f.behind()); return b; };
+  window.cassiniFeeds = { frames: FRAMES, cameraFeed, framesOf, lastOfCam, prep, weight, nextPicture, prevPicture, behind, stale: () => S.get("cameras.stale") * 3600 };
+  document.addEventListener("cassini:bodymode", () => { if (typeof catalog !== "undefined" && catalog && catalog.byCam) feeds.forEach(f => f(true)); });
   // a change to what the windows show takes effect straight away
-  for (const key of ["cameras.composites", "cameras.stale", "cameras.steady", "cameras.passes", "cameras.balancedColor", "cameras.colors", "cameras.lingerColor", "cameras.lingerMosaic", "movies.steady", "movies.center", "movies.trail", "movies.filmstrip", "movies.laps"]) S.on(key, () => { if (typeof catalog !== "undefined" && catalog && catalog.byCam) feeds.forEach(f => f(true)); });
+  for (const key of ["cameras.composites", "cameras.stale", "cameras.steady", "cameras.passes", "cameras.balancedColor", "cameras.colors", "cameras.lingerColor", "cameras.lingerMosaic", "movies.steady", "cameras.autoCenter", "movies.trail", "movies.filmstrip", "movies.laps"]) S.on(key, () => { if (typeof catalog !== "undefined" && catalog && catalog.byCam) feeds.forEach(f => f(true)); });
 
   // ---------- burst limit: in normal playback each camera window gets at most maxRate new pictures a second ----------
   // The clock runs at the chosen speed except inside an imaging burst, where it slows so that crossing the gap
   // between two of a camera's frames takes at least 1/maxRate s; it is back to full speed once the burst is over.
   // A faster speed is always faster: a burst never slows the clock below a share of the chosen speed
   // (playback.burstFloor), so 1 day/s skips pictures in a long burst instead of crawling like 10 min/s does.
-  // Movie mode has its own clock. 0 = no limit. The setting lives in the Settings window when the page has one
+  // Movie mode steps the clock itself (movie.html). 0 = no limit. The setting lives in the Settings window when the page has one
   // (playback.maxImageRate), otherwise in the View menu.
   const RATE_DEFAULT = 5, FLOOR_DEFAULT = 0.25, RATE_KEY = "cassini-os-max-image-rate", SETTINGS = window.cassiniSettings;
   let maxRate = RATE_DEFAULT, burstFloor = FLOOR_DEFAULT, slowedTo = 0;
@@ -3530,13 +3777,12 @@ body.phone #finale .fx-data { width: min(220px, calc(100vw - 32px)); top: 10px; 
   }
   function pace() {
     if (!maxBehind) return 1;
-    let b = 0;
-    for (const f of allFeeds) b = Math.max(b, f.behind());
+    const b = behind();
     return b > maxBehind ? maxBehind / b : 1;
   }
   // for one camera at et: the fastest the clock may run (Infinity outside a burst) and when its next frame is
   function capOf(cam, et) {
-    const a = catalog.byCam[cam].et, p = lastOfCam(cam, et), nx = p + 1 < a.length ? a[p + 1] : Infinity;
+    const b = viewBody(), a = framesOf(cam, b).et, p = lastOfCam(cam, et, b), nx = p + 1 < a.length ? a[p + 1] : Infinity;
     return [p < 0 || nx === Infinity ? Infinity : Math.max(1, nx - a[p]) * maxRate, nx];
   }
   // called by the viewer's frame loop while playing: where the clock should be after dt seconds at this speed
@@ -3560,8 +3806,9 @@ body.phone #finale .fx-data { width: min(220px, calc(100vw - 32px)); top: 10px; 
   const frameHud = window.studyHud;
   window.studyHud = ms => {
     frameHud(ms);
-    if (slowedTo && state.playing && !state.dragging) $("mday").textContent += ` · imaging burst, slowed to ${fmtRate(slowedTo)}`;
-    if (paced < 1 && state.playing && !state.dragging) $("mday").textContent += ` · catching up on pictures, ${Math.round(paced * 100)}% speed`;
+    const movie = window.cassiniMovie && window.cassiniMovie.on;
+    if (slowedTo && state.playing && !state.dragging && !movie) $("mday").textContent += ` · imaging burst, slowed to ${fmtRate(slowedTo)}`;
+    if (paced < 1 && state.playing && !state.dragging && !movie) $("mday").textContent += ` · catching up on pictures, ${Math.round(paced * 100)}% speed`;
     prep();
     for (const f of feeds) { f(); f.retier(); }
   };
@@ -3583,7 +3830,7 @@ body.phone #finale .fx-data { width: min(220px, calc(100vw - 32px)); top: 10px; 
     return "http://localhost:8765";
   })();
   const S = window.cassiniSettings, WM = window.cassiniWM;
-  const PICTURES = ".camwin, .bodywin, #reelcard, #moviecard";
+  const PICTURES = ".camwin, .bodywin, #reelcard";
   const TAGS = ["Too dark", "Too bright", "Wrong color", "Channels misaligned", "Stripes or noise", "Blurry", "Blank or missing", "Off-center", "Mosaic wrong", "Out of sync"];
   const pop = $("flagpop"), toast = $("flagtoast"), FLAG_ICON = '<svg viewBox="0 0 10 10" aria-hidden="true"><path d="M2 9.5V1h6l-1.4 2.2L8 5.4H2"/></svg>';
   const ID = /[NW]\d{10}_\d+/g;
@@ -3625,11 +3872,7 @@ body.phone #finale .fx-data { width: min(220px, calc(100vw - 32px)); top: 10px; 
   }
   async function capture(w) {
     let canvas = null, src = null, report = null, ids = [], what = null, path = null;
-    if (w.id === "moviecard") {
-      const M = window.cassiniMovie && window.cassiniMovie.state, b = M && M.cur && M.buf.get(M.cur.id);
-      if (!M || !M.cur) return null;
-      canvas = $("mvcanvas"); ids = [M.cur.id]; src = b && b.img ? b.img.src : null; what = b && b.kind ? `movie (${b.kind})` : "movie frame";
-    } else if (w.id === "reelcard") {
+    if (w.id === "reelcard") {
       const R = window.cassiniReel && window.cassiniReel.state, s = R && R.shots[R.i];
       if (!s) return null;
       canvas = $("rlcanvas" + s.cam); ids = s.ids.slice(); what = "body reel picture";
@@ -3712,7 +3955,7 @@ body.phone #finale .fx-data { width: min(220px, calc(100vw - 32px)); top: 10px; 
     const flag = {
       flagged: p.at.toISOString(), mission_utc: utc(p.et), mission_et: p.et, link: link.href,
       note, tags: [...p.tags],
-      window: { id: w.id, title: p.title, kind: w.id === "moviecard" ? "movie" : w.id === "reelcard" ? "reel" : w.classList.contains("bodywin") ? "body window" : "camera window",
+      window: { id: w.id, title: p.title, kind: w.id === "reelcard" ? "reel" : w.classList.contains("bodywin") ? "body window" : "camera window",
         full: w.classList.contains("full"), zoomed: w.classList.contains("zoomed"), width: Math.round(w.getBoundingClientRect().width), height: Math.round(w.getBoundingClientRect().height) },
       shown: { what: got.what, src: got.src ? new URL(got.src, location.href).href : null, report: got.report || null, labels: got.labels, info: got.info, observation_frames: got.tiles,
         path: got.path ? got.path.map(l => Object.assign({}, l, { src: new URL(l.src, location.href).href })) : null,
@@ -3784,245 +4027,105 @@ body.phone #finale .fx-data { width: min(220px, calc(100vw - 32px)); top: 10px; 
 // ---------- movie mode ----------
 (function () {
   const $ = id => document.getElementById(id);
-  const FRAMES = (() => {                       // the frame server, chosen as the camera window chooses it
-    const q = new URLSearchParams(location.search).get("frames");
-    if (q) return q.replace(/\/$/, "");
-    if (/^https?:$/.test(location.protocol) && !/claude\.ai$|claudeusercontent\.com$|claude\.site$/.test(location.hostname)) return location.origin;
-    return "http://localhost:8765";
-  })();
-  const card = $("moviecard"), cv = $("mvcanvas"), g = cv.getContext("2d");
-  // cur: the frame on screen as { id, et }, or null to carry on from the clock; cat/i: where it sits in the loaded
-  // catalog, which the viewer rebuilds as the clock reaches new years
-  const M = { on: false, looping: false, playing: true, fps: 8, cur: null, cat: null, i: -1, due: 0, buf: new Map(), hidden: [], waitSince: 0 };
-  try { const f = +localStorage.getItem("cassini-os-movie-fps"); if (f >= 2 && f <= 24) M.fps = f; } catch (e) {}
-  $("mvfps").value = M.fps; $("mvfpsv").textContent = M.fps + " fps";
-
-  // ---- the frame on screen and the ones after it, in time order ----
-  function here() {
-    if (!M.cur) return lastImageIndex(state.et);
-    if (M.cat === catalog) return M.i;
-    // the catalog was rebuilt: find the same frame again (frames taken in the same second sort together)
-    let i = lastImageIndex(M.cur.et);
-    for (let j = i; j >= 0 && catalog.sorted[j] >= M.cur.et - 1; j--) if (catalog.id[order[j]] === M.cur.id) { i = j; break; }
-    M.cat = catalog; M.i = i;
-    return i;
-  }
-  const at = i => { const k = i >= 0 ? order[i] : undefined; return k === undefined ? null : { id: catalog.id[k], et: catalog.et[k], k, i }; };
-
-  // ---- frames: loaded ahead of the play head so 24 fps does not stutter ----
-  // Each frame goes through the pipeline like the camera windows' pictures (movie.processed, on by default): the
-  // frame that completes a filter set shows the set's colour composite, a new tile of a mosaic pass the mosaic so far,
-  // and every other frame is processed on its own (/frames/processed: stacked, calibrated, on the pipeline's display
-  // scale). The processed frame is always loaded; a composite or mosaic is loaded beside it and shown when it is ready in
-  // time. The film never waits more than GRACE ms (from when the frame was first asked for) for a composite or mosaic:
-  // the server makes a new mosaic tile in seconds the first time, so on a pass nobody has watched yet the film plays the
-  // processed frames and the mosaic comes up where it is ready (a frame still on screen when it arrives swaps to it).
-  // A server that has none (404) or cannot make one moves on to the next choice; the archive frame is the last resort.
-  const S = window.cassiniSettings, GRACE = 1200;
+  const S = window.cassiniSettings;
   const opt = (key, dflt) => (S && S.get(key) !== undefined ? S.get(key) : dflt);
-  const KIND = { true: "true color", false: "false color", two: "two-filter color" };
-  // true resolution (1024) unless the card shows its pictures small (cassiniWM.sized)
-  const size = () => window.cassiniWM && window.cassiniWM.sized ? window.cassiniWM.sized(card, card.querySelector(".mvwell")) : 1024;
-  // the pictures frame f can be shown as, each { url, kind }: best (mosaic, then composite) and base (processed, then raw)
-  function choices(f) {
-    const id = f.id, sz = size(), raw = { url: `${FRAMES}/frames/${id}.webp?size=${sz}`, kind: "" };
-    if (M.raw || !opt("movie.processed", true)) return { best: [], base: [raw] };
-    if (!catalog.setOf && window.cassiniFeeds) window.cassiniFeeds.prep();
-    const best = [], k = f.k, si = catalog.setOf ? catalog.setOf[k] : -1, s = si >= 0 ? catalog.sets[si] : null;
-    const comp = s && s.use.includes(k) && s.ready === catalog.et[k] && opt("cameras.composites", true);
-    // a possible mosaic tile: the camera's frame before this one is of the same body and observation (and a frame of
-    // a colour set only once its composite is up, as in the camera windows)
-    let prev = -1;
-    for (let j = f.i - 1; j >= Math.max(0, f.i - 64); j--) if (catalog.cam[order[j]] === catalog.cam[k]) { prev = order[j]; break; }
-    const tile = prev >= 0 && catalog.target[prev] === catalog.target[k] && catalog.obs[prev] === catalog.obs[k] && (!s || comp);
-    if (tile && opt("movie.mosaics", true) && window.cassiniMosaics !== false) best.push({ url: `${FRAMES}/frames/mosaic/${comp ? catalog.id[s.use[0]] : id}.webp?size=${sz}${window.cassiniLook()}`, kind: "mosaic" });
-    if (comp) best.push({ url: `${FRAMES}/frames/color.webp?ids=${s.use.map(q => catalog.id[q]).join(",")}&size=${sz}${window.cassiniLook()}`, kind: KIND[s.kind] || "color" });
-    return { best, base: [{ url: `${FRAMES}/frames/processed/${id}.webp?size=${sz}${window.cassiniLook()}`, kind: "processed" }, raw] };
-  }
-  // one chain of choices: tried in turn until one loads (ok true) or none does (ok false); a deferred one waits for
-  // c.start() (fill starts composites and mosaics a few at a time)
-  function chain(list, onload, deferred) {
-    const c = { list, n: 0, img: null, ok: list.length ? null : false, kind: "", started: false };
-    const load = () => {
-      const im = new Image(), it = list[c.n];
-      c.img = im; im.decoding = "async"; im.crossOrigin = "anonymous";
-      im.onload = () => { c.ok = true; c.kind = it.kind; onload(); };
-      im.onerror = () => { if (++c.n < list.length) load(); else c.ok = false; };
-      im.src = it.url;
-    };
-    c.start = () => { if (!c.started && list.length) { c.started = true; load(); } };
-    c.stop = () => { if (c.img && c.ok === null) { c.img.onload = c.img.onerror = null; c.img.src = ""; } };
-    if (!deferred) c.start();
-    return c;
-  }
-  // b.ok: null while the film should wait for frame b, then true (b.img, b.kind are what to show) or false (no frame)
-  function settle(b) {
-    const best = b.best.ok, base = b.base.ok;
-    if (best) Object.assign(b, { ok: true, img: b.best.img, kind: b.best.kind });
-    else if (base && (best === false || performance.now() - b.since > GRACE)) Object.assign(b, { ok: true, img: b.base.img, kind: b.base.kind });
-    else if (base === false && best === false) b.ok = false;
-    return b;
-  }
-  function want(f) {
-    let b = M.buf.get(f.id);
-    if (!b || b.size !== size()) {
-      if (b) { b.best.stop(); b.base.stop(); }
-      const c = choices(f);
-      b = { ok: null, img: null, kind: "", size: size(), since: performance.now() };
-      // a composite or mosaic that arrives while its frame is on screen replaces the processed frame there
-      b.best = chain(c.best, () => { if (M.on && M.cur && M.cur.id === f.id && b.kind !== b.best.kind) { settle(b); draw(b.img); tag(f, b); } }, true);
-      b.base = chain(c.base, () => {});
-      M.buf.set(f.id, b);
-    }
-    return settle(b);
-  }
-  // A browser opens only six connections to the frame server, and a mosaic tile nobody has asked for before takes the
-  // server seconds: so at most BEST_FLYING composites and mosaics are asked for at once, nearest the play head first,
-  // and the processed frames, quick to make, always have connections left.
-  const BEST_FLYING = 2;
-  function fill(i) {
-    // processed frames take the server a fraction of a second each the first time, so the film asks well ahead
-    const ahead = Math.max(12, Math.min(72, Math.round(M.fps * 3))), keep = new Set();
-    let flying = 0, best = 0;
-    for (const b of M.buf.values()) if (b.best.started && b.best.ok === null) best++;
-    for (let j = Math.max(0, i); j <= i + ahead; j++) {
-      const f = at(j); if (!f) break;
-      keep.add(f.id);
-      let b = M.buf.get(f.id);
-      if (b && b.base.ok === null) flying++;
-      else if (!b && flying < 8) { b = want(f); flying++; }
-      if (b && !b.best.started && b.best.ok === null && best < BEST_FLYING) { b.best.start(); best++; }
-    }
-    // pictures the film has passed or skipped: dropped, and their requests called off so they free their connections
-    for (const [id, b] of M.buf) if (!keep.has(id)) { b.best.stop(); b.base.stop(); M.buf.delete(id); }
-  }
-  function drop() { for (const b of M.buf.values()) { b.best.stop(); b.base.stop(); } M.buf.clear(); }
-  function blank() { g.fillStyle = "#000"; g.fillRect(0, 0, cv.width, cv.height); }
-  function draw(img) {
-    const s = cv.width, r = Math.min(s / img.naturalWidth, s / img.naturalHeight), w = img.naturalWidth * r, h = img.naturalHeight * r;
-    blank(); g.drawImage(img, (s - w) / 2, (s - h) / 2, w, h);
-  }
-  const fmtDate = et => { const s = new Date(etToMs(et)).toISOString(); return `${s.slice(0, 10)} ${s.slice(11, 19)} UTC`; };
-  const tag = (f, b) => { const k = f.k; $("mvtag").textContent = `${fmtDate(f.et)} · ${titleCase(catalog.target[k] || "Unknown")} · ${catalog.cam[k] === "N" ? "NAC" : "WAC"} ${catalog.f1[k]}/${catalog.f2[k]}${b.ok && b.kind && b.kind !== "processed" ? ` · ${b.kind}` : ""}`; };
-  let skipTimer = 0;
-  // put frame i on screen and move the mission clock to it
-  function show(i) {
-    const f = at(i), b = want(f), prev = M.cur;
-    M.cur = { id: f.id, et: f.et }; M.cat = catalog; M.i = i;
-    M.late = b.ok ? null : f;   // stepped to a picture still being made: it goes up when it arrives (tick)
-    if (b.ok) { draw(b.img); $("mvmsg").textContent = ""; }
-    else if (b.ok === false) { blank(); $("mvmsg").innerHTML = "<b>No frame</b>" + f.id; }
-    setTime(f.et);
-    keepNowInView();
-    tag(f, b);
-    $("mvcount").textContent = f.id;
-    if (prev && f.et - prev.et > 3 * 3600) {   // a stretch without frames: say how much time the cut left out
-      $("mvskip").textContent = `skipped ${fmtDur(f.et - prev.et)}`; $("mvskip").classList.add("on");
-      clearTimeout(skipTimer); skipTimer = setTimeout(() => $("mvskip").classList.remove("on"), 900);
-    }
-  }
-  // the movie's own clock: a frame every 1/fps seconds, holding on a frame until the next one has arrived;
-  // when the page draws slower than the movie runs, frames are dropped to keep time
-  function tick(now) {
-    if (!M.on) { M.looping = false; return; }
-    if (yearReady() && !state.dragging) {
-      const i = here();
-      fill(i);
-      if (M.late && M.cur && M.late.id === M.cur.id && M.cat === catalog) { const b = want(M.late); if (b.ok !== null) show(M.late.i); }
-      if (M.playing && now >= M.due) {
-        let shown = -1, j = i;
-        while (now >= M.due) {
-          j++;
-          while (at(j) && M.buf.get(at(j).id) && M.buf.get(at(j).id).ok === false) j++;   // frames the server lacks are cut too
-          const f = at(j);
-          if (!f) { if (shown < 0 && !(mission && yearOf(state.et) < mission.years[mission.years.length - 1])) setMoviePlaying(false); break; }
-          const b = want(f);
-          if (!b.ok) break;
-          shown = j; M.due += 1000 / M.fps;
-        }
-        if (shown >= 0) { show(shown); M.due = Math.max(M.due, now - 250); M.waitSince = 0; }
-        else if (M.playing && at(j)) {
-          if (!M.waitSince) M.waitSince = now;
-          else if (now - M.waitSince > 600) $("mvcount").textContent = "processing…";
-        }
-      }
-    }
-    requestAnimationFrame(tick);
-  }
-  // paused in the background (away.html): the pictures still loading are called off (the film asks again when it
-  // carries on), and the film's clock moves on by the time away, so it picks up on the frame it was on
-  document.addEventListener("cassini:away", e => {
-    if (e.detail.away) { for (const [id, b] of M.buf) if (b.base.ok === null || (b.best.started && b.best.ok === null)) { b.best.stop(); b.base.stop(); M.buf.delete(id); } }
-    else { M.due += e.detail.ms; if (M.waitSince) M.waitSince += e.detail.ms; for (const b of M.buf.values()) b.since += e.detail.ms; }
-  });
-  function setMoviePlaying(p) { M.playing = p; $("mvplay").textContent = p ? "❚❚" : "▶"; M.due = performance.now(); }
+  const fps = () => Math.min(24, Math.max(1, +opt("movie.fps", 8) || 8));
+  // A step waits for the camera windows (Sam: movie mode slows, it never skips a picture): while a window has not
+  // yet put up the picture the clock is at (the frame server is still making it: a cold composite, a mosaic's new
+  // tile), the next step waits. cassiniFeeds.behind stops counting a picture that has been stuck for seconds, so a
+  // server that stops answering never stalls the film.
+  // Slow: when the film has spent more than SLOW_SHARE of the last SLOW_SPAN ms waiting, the page hears
+  // "cassini:movie-slow" (once, until it has caught up again), so it can offer to make a stretch ahead of time.
+  const CUT = 3 * 3600, SLOW_SPAN = 20000, SLOW_SHARE = 0.5;
+  const M = { on: false, stepAt: 0, waiting: false, cut: 0, cutAt: -1e9, until: Infinity, waits: [], slow: false, lastAt: 0 };
+  const ready = () => typeof catalog !== "undefined" && catalog && catalog.byCam && window.cassiniFeeds;
 
-  // ---- entering and leaving ----
-  // the film starts on the frame the camera last took and carries on from there
-  function start() {
-    if (!catalog || M.on) return;
-    M.on = true; drop(); blank();
-    setPlaying(false);
-    // the movie takes the camera's place; the camera windows come back when it ends
-    M.hidden = ["imgcard", "wacard"].map($).filter(w => w && !w.hidden);
-    const cam = M.hidden[0];
-    if (cam && cam.style.left && !card.style.left) Object.assign(card.style, { left: cam.style.left, top: cam.style.top, right: "auto", bottom: "auto" });
-    M.hidden.forEach(w => { w.hidden = true; });
-    card.hidden = false; card.dispatchEvent(new Event("pointerdown"));
+  const base = window.studyAdvance;
+  // called by the viewer's frame loop while playing: where the clock goes now
+  window.studyAdvance = (et, dt, speed) => {
+    if (!M.on || !ready()) return base ? base(et, dt, speed) : et + dt * speed;
+    const F = window.cassiniFeeds, now = performance.now(), due = M.stepAt + 1000 / fps();
+    M.waiting = false;
+    if (now < due) { track(now, false); return et; }
+    if (F.behind() > 0) { M.waiting = now > due + 300; track(now, true); return et; }
+    track(now, false);
+    const next = F.nextPicture(et);
+    // a stretch played as a movie (start's until) ends on its last picture
+    if (next > M.until) { setPlaying(false); stop(); return et; }
+    // no picture after this one in the months loaded now: the clock runs a day a frame until the next ones are in
+    // (the viewer holds it while a month is loading) or the mission ends
+    if (next === Infinity) return et + 86400;
+    M.stepAt = now;
+    if (next - et > CUT) { M.cut = next - et; M.cutAt = now; }
+    return next;
+  };
+
+  // the waiting kept for the last SLOW_SPAN ms, as [from, to] spans
+  function track(now, waiting) {
+    const dt = Math.min(250, now - (M.lastAt || now)); M.lastAt = now;
+    if (waiting && dt > 0) M.waits.push([now - dt, now]);
+    while (M.waits.length && M.waits[0][1] < now - SLOW_SPAN) M.waits.shift();
+    const share = M.waits.reduce((a, w) => a + w[1] - Math.max(w[0], now - SLOW_SPAN), 0) / SLOW_SPAN;
+    if (!M.slow && share > SLOW_SHARE) { M.slow = true; document.dispatchEvent(new CustomEvent("cassini:movie-slow", { detail: { slow: true, share, et: state.et } })); }
+    else if (M.slow && share < SLOW_SHARE / 4) { M.slow = false; document.dispatchEvent(new CustomEvent("cassini:movie-slow", { detail: { slow: false, share, et: state.et } })); }
+  }
+
+  // paused in the background (away.html): the step carries on where it was, by the time away
+  document.addEventListener("cassini:away", e => { if (!e.detail.away) { M.stepAt += e.detail.ms; M.cutAt += e.detail.ms; } });
+
+  // the status line under the timeline says movie mode is on, how fast, and how much time a cut left out
+  const hud = window.studyHud;
+  window.studyHud = ms => {
+    if (hud) hud(ms);
+    if (!M.on) return;
+    const el = $("mday"); if (!el) return;
+    let t = ` · movie, ${fps()} fps`;
+    if (M.waiting && state.playing) t += ", waiting for pictures";
+    if (performance.now() - M.cutAt < 1500) t += ` · skipped ${fmtDur(M.cut)}`;
+    el.textContent += t;
+  };
+
+  // ---- on and off ----
+  // play: also start the clock (the Movie button, M); a shared link (link.html) leaves play as the link says.
+  // range { from, until } (mission times): play one stretch, from its first picture, and leave movie mode after
+  // its last (a stretch made ahead of time plays at movie.fps, its pictures all waiting in the server's cache)
+  function start(play, range) {
+    if (M.on && !range) return;
+    M.on = true; M.stepAt = 0; M.cutAt = -1e9; M.waits = []; M.slow = false; M.lastAt = 0;
+    M.until = range && range.until !== undefined ? range.until : Infinity;
+    if (range && range.from !== undefined) { setTime(range.from - 1e-3); keepNowInView(); }
     $("movie").setAttribute("aria-pressed", "true");
-    const i = lastImageIndex(state.et), f = at(i - 1);
-    M.cur = f ? { id: f.id, et: f.et } : null; M.cat = catalog; M.i = i - 1;
-    $("mvmsg").textContent = at(Math.max(0, i)) ? "" : "No frames to play";
-    setMoviePlaying(true);
-    if (!M.looping) { M.looping = true; requestAnimationFrame(tick); }
+    if (play) setPlaying(true);
   }
   function stop() {
     if (!M.on) return;
-    M.on = false; drop();
-    card.hidden = true;
-    M.hidden.forEach(w => { w.hidden = false; }); M.hidden = [];
+    M.on = false; M.until = Infinity;
+    if (M.slow) { M.slow = false; document.dispatchEvent(new CustomEvent("cassini:movie-slow", { detail: { slow: false, share: 0, et: state.et } })); }
     $("movie").setAttribute("aria-pressed", "false");
-    setPlaying(false);   // the clock stays on the last frame shown; play carries on from there
   }
-  window.cassiniMovie = { start, stop, get on() { return M.on; }, state: M };
+  const toggle = () => (M.on ? stop() : start(true));
+  // fps: the frame rate (the movie.fps setting, Settings > Playback; set it with cassiniSettings.set("movie.fps", n))
+  window.cassiniMovie = { start, stop, get on() { return M.on; }, get slow() { return M.slow; }, fps, state: M };
 
   // ---- controls ----
-  $("movie").addEventListener("click", () => (M.on ? stop() : start()));
-  $("mvplay").addEventListener("click", () => setMoviePlaying(!M.playing));
-  // processing on or off (movie.processed; the mosaics alone: movie.mosaics): the pictures ahead are asked for again
-  const proc = $("mvproc");
-  proc.addEventListener("click", () => { const v = !opt("movie.processed", true); if (S) S.set("movie.processed", v); else { M.raw = !v; refresh(); } });
-  function refresh() {
-    proc.setAttribute("aria-pressed", String(!M.raw && opt("movie.processed", true)));
-    if (!M.on) return;
-    drop();
-    if (M.cur && M.cat === catalog) show(M.i);
+  $("movie").addEventListener("click", toggle);
+  // step one picture forward or back (paused), keeping the timeline on the clock
+  function step(dir) {
+    if (!ready()) return;
+    const F = window.cassiniFeeds, t = dir > 0 ? F.nextPicture(state.et) : F.prevPicture(state.et);
+    if (!isFinite(t)) return;
+    setPlaying(false); setTime(t); keepNowInView();
   }
-  if (S) for (const key of ["movie.processed", "movie.mosaics"]) S.on(key, refresh);
-  $("mvfps").addEventListener("input", e => {
-    M.fps = +e.target.value; $("mvfpsv").textContent = M.fps + " fps";
-    try { localStorage.setItem("cassini-os-movie-fps", M.fps); } catch (err) {}
-  });
-  // the window's close and minimize buttons (and a title-bar double-click) leave movie mode rather than tucking it away
-  card.addEventListener("click", e => { if (e.target.closest(".close, .min")) { e.stopPropagation(); stop(); } }, true);
-  card.querySelector(".titlebar").addEventListener("dblclick", e => { e.stopPropagation(); stop(); }, true);
-  new MutationObserver(() => { const b = M.on && M.cur && M.buf.get(M.cur.id); if (b && b.ok) draw(b.img); }).observe(card, { attributes: true, attributeFilter: ["class"] });
-  // while a movie runs: space plays and pauses it, the arrow keys step a frame, Escape leaves; the main play button leaves and plays on
+  // M turns movie mode on and off; while it is on, the arrow keys step a picture and Escape leaves
   window.addEventListener("keydown", e => {
-    if (!M.on || e.metaKey || e.ctrlKey || (/INPUT|SELECT|TEXTAREA/.test(e.target.tagName) && e.code === "Space")) return;
-    if (e.code === "Space") { e.preventDefault(); e.stopImmediatePropagation(); setMoviePlaying(!M.playing); }
-    else if (e.key === "ArrowRight" || e.key === "ArrowLeft") {
-      e.preventDefault(); setMoviePlaying(false);
-      const j = here() + (e.key === "ArrowRight" ? 1 : -1); if (at(j)) show(j);
-    } else if (e.key === "p" || e.key === "P") proc.click();
-    else if (e.key === "Escape") stop();
-  }, true);
-  window.addEventListener("keydown", e => { if (!M.on && (e.key === "m" || e.key === "M") && !e.metaKey && !e.ctrlKey && e.target === document.body) start(); });
-  $("play").addEventListener("click", () => { if (M.on) stop(); }, true);
-  // scrubbing the timeline moves the film: it carries on from the frame at the new time
-  $("tl").addEventListener("pointerdown", () => { if (M.on) M.cur = null; }, true);
+    if (e.metaKey || e.ctrlKey || e.altKey || /^(INPUT|SELECT|TEXTAREA)$/.test(e.target.tagName)) return;
+    if ((e.key === "m" || e.key === "M") && e.target === document.body) toggle();
+    else if (!M.on) return;
+    else if (e.key === "ArrowRight" || e.key === "ArrowLeft") { e.preventDefault(); step(e.key === "ArrowRight" ? 1 : -1); }
+    else if (e.key === "Escape" && !document.querySelector(".menu.open, .win.full")) stop();
+  });
   const go = $("gomenu");
-  if (go) { const li = document.createElement("li"); li.innerHTML = '<button id="gomovie">Movie mode<span class="kbd">M</span></button>'; go.prepend(li); li.querySelector("button").addEventListener("click", () => (M.on ? stop() : start())); }
+  if (go) { const li = document.createElement("li"); li.innerHTML = '<button id="gomovie">Movie mode<span class="kbd">M</span></button>'; go.prepend(li); li.querySelector("button").addEventListener("click", toggle); }
 })();
 </script>
 <script>
@@ -4151,17 +4254,16 @@ body.phone #finale .fx-data { width: min(220px, calc(100vw - 32px)); top: 10px; 
     if (!B.started) setOn(B.on);
     if (!B.on || !catalog || !catalog.byCam) return;
     const now = performance.now(), movie = window.cassiniMovie && window.cassiniMovie.on;
-    // the linger clock runs only while the mission clock moves forward, so pausing keeps every window up
-    if (B.lastEt !== null && state.et > B.lastEt && !movie) B.clock += Math.min(now - B.lastNow, 250);
-    const jumped = B.lastEt !== null && Math.abs(state.et - B.lastEt) > 6 * 3600;
+    // the linger clock runs only while the mission clock moves forward (or movie mode plays, holding the clock on
+    // each picture between its steps), so pausing keeps every window up
+    if (B.lastEt !== null && (state.et > B.lastEt || (movie && state.playing))) B.clock += Math.min(now - B.lastNow, 250);
+    // (movie mode's cuts over the time without pictures are not jumps)
+    const jumped = B.lastEt !== null && Math.abs(state.et - B.lastEt) > 6 * 3600 && !(movie && state.et > B.lastEt);
     B.lastNow = now; B.lastEt = state.et;
     // records hold mission times, so they carry over when the months around this one load; a jump starts afresh
     const reset = jumped;
     if (catalog !== B.cat) { B.cat = catalog; targets = [...new Set(catalog.target)].filter(Boolean); }
     if (reset) B.rec.clear();
-    // movie mode takes the camera's place: the body windows step aside until it ends
-    for (const w of B.wins.values()) if (!w.el.dataset.min) w.el.hidden = !!movie;
-    if (movie) return;
     const stale = F.stale(), keepKeys = [];
     let newest = null;
     // one record per target and camera: when that camera last imaged the target, and on the linger clock when that
@@ -4354,7 +4456,7 @@ body.phone #finale .fx-data { width: min(220px, calc(100vw - 32px)); top: 10px; 
   function open() {
     if (R.open) return;
     R.open = true; card.hidden = false; card.dispatchEvent(new Event("pointerdown"));
-    R.hidden = ["imgcard", "wacard", "moviecard"].map($).filter(w => w && !w.hidden);
+    R.hidden = ["imgcard", "wacard"].map($).filter(w => w && !w.hidden);
     R.hidden.forEach(w => { w.hidden = true; });
     if (window.cassiniMovie && window.cassiniMovie.on) window.cassiniMovie.stop();
     loadBodies();
@@ -4792,6 +4894,21 @@ body.phone #finale .fx-data { width: min(220px, calc(100vw - 32px)); top: 10px; 
     const t = ctx.currentTime + 0.05;
     steps.forEach((d, i) => bell(t + i * 0.16, hz(noteOf(ROOT.W, d)), 0.085, (i / Math.max(1, steps.length - 1) - 0.5) * 0.8, 5.5, 0.45, 1));
   };
+  // Saturn arrival (soi.html): the main engine as a low rumble, brown noise under a lowpass that wavers a little
+  let rumbleG = null;
+  window.cassiniSound.rumble = level => {
+    if (!ctx || ctx.state !== "running") return;
+    if (!rumbleG) {
+      const n = ctx.createBuffer(1, ctx.sampleRate * 4, ctx.sampleRate), d = n.getChannelData(0);
+      for (let i = 0, b = 0; i < d.length; i++) { b = (b + 0.02 * (Math.random() * 2 - 1)) / 1.02; d[i] = b * 3.5; }
+      const src = ctx.createBufferSource(); src.buffer = n; src.loop = true;
+      const f = ctx.createBiquadFilter(); f.type = "lowpass"; f.frequency.value = 170; f.Q.value = 0.7;
+      const lfo = ctx.createOscillator(), depth = ctx.createGain(); lfo.frequency.value = 0.37; depth.gain.value = 40; lfo.connect(depth); depth.connect(f.frequency); lfo.start();
+      rumbleG = ctx.createGain(); rumbleG.gain.value = 0;
+      src.connect(f); f.connect(rumbleG); rumbleG.connect(bus); src.start();
+    }
+    rumbleG.gain.setTargetAtTime(level * 0.22, ctx.currentTime, level ? 0.4 : 0.12);
+  };
   // a soft low drum: a sine falling from 110 to 45 Hz
   let nextBeat = 0;
   function thump(t, g) {
@@ -5138,6 +5255,329 @@ body.phone #finale .fx-data { width: min(220px, calc(100vw - 32px)); top: 10px; 
 })();
 </script>
 <script>
+// ---------- the body view ----------
+(function () {
+  const $ = id => document.getElementById(id);
+  const S = window.cassiniSettings, WM = window.cassiniWM, win = $("bodymenu");
+  if (!WM || !win) return;
+  const D = d => S ? S.define(d) : d.value;
+  D({ key: "bodies.skipGaps", section: "Body view", label: "Skip the gaps", type: "toggle", value: true,
+    hint: "In a body's view, playback jumps from one of the body's imaging sessions to the next instead of playing through the days or months between." });
+  D({ key: "bodies.gapSeconds", section: "Body view", label: "Skip a gap longer than", type: "range", value: 3, min: 1, max: 30, step: 1, unit: "s",
+    hint: "A stretch without pictures of the body is skipped when it would take longer than this to play at the chosen speed." });
+  const opt = (k, v) => S ? S.get(k) : v;
+
+  const M = { name: null, index: null, data: null, perDay: null, sessions: [], cur: -1, saved: null, pending: null, rows: [] };
+  const fmt = n => Math.round(n).toLocaleString("en-US");
+  const tc = n => typeof titleCase === "function" ? titleCase(n) : n.charAt(0) + n.slice(1).toLowerCase();
+  const MON = ["Jan", "Feb", "Mar", "Apr", "May", "Jun", "Jul", "Aug", "Sep", "Oct", "Nov", "Dec"];
+  const dateOf = et => new Date(etToMs(et));
+  const fmtDate = et => { const d = dateOf(et); return `${MON[d.getUTCMonth()]} ${d.getUTCDate()}`; };
+  const fmtLong = et => { const d = dateOf(et); return `${MON[d.getUTCMonth()]} ${d.getUTCDate()}, ${d.getUTCFullYear()}`; };
+  const fmtDur = s => s < 90 ? `${Math.max(1, Math.round(s))} s` : s < 5400 ? `${Math.round(s / 60)} min` : s < 2 * 86400 ? `${+(s / 3600).toFixed(1)} h` : `${Math.round(s / 86400)} days`;
+  // an observation's name without the instrument and the mission phase around it: ISS_028RI_HIPHWAC001_PRIME -> 028RI HIPHWAC001
+  const obsName = o => o.replace(/^ISS_/, "").replace(/_(PRIME|PIE|VIMS|UVIS|CIRS|RADAR|INMS|RSS|MAG|SCI)$/, "").replace(/_/g, " ");
+
+  // ---- data: the bodies Cassini photographed, and one body's days and sessions ----
+  let indexJob = null;
+  function loadIndex() {
+    return indexJob = indexJob || fetch("data/targets.json").then(r => r.ok ? r.json() : null).catch(() => null).then(j => { M.index = j; fillPick(); return j; });
+  }
+  const bodyJobs = new Map();
+  function loadBody(n) {
+    if (!bodyJobs.has(n)) bodyJobs.set(n, loadIndex().then(ix => {
+      const b = ix && ix.bodies[n];
+      return b ? fetch(b.file).then(r => r.ok ? r.json() : null).catch(() => null) : null;
+    }));
+    return bodyJobs.get(n);
+  }
+  // the body's pictures per day as the timeline reads the whole mission's (drawUnloadedBars)
+  function perDay(d) {
+    if (!d || typeof mission === "undefined" || !mission) return null;
+    const F = mission.frames_per_day, n = F.N.length, N = new Float32Array(n), W = new Float32Array(n);
+    const shift = Math.round(((M.index && M.index.start_et) - F.start_et) / 86400) || 0;
+    for (const [day, a, b] of d.days) { const k = day + shift; if (k >= 0 && k < n) { N[k] = a; W[k] = b; } }
+    return { start_et: F.start_et, N, W };
+  }
+  window.studyFramesPerDay = () => M.name ? (M.perDay || { start_et: 0, N: [], W: [] }) : null;
+  window.studyEncounterShown = e => !M.name || momentBody(e) === M.name;
+
+  // ---- the bodies in the dock: every planet Cassini photographed a lot (PLANET_PICTURES or more; the rest are in the
+  // dock's All bodies folder), wherever the mission is, and the body in view ----
+  const PLANET_PICTURES = 1000;
+  function planets() {
+    const ix = M.index && M.index.bodies;
+    const out = ix && typeof PLANETS !== "undefined" ? PLANETS.filter(n => ix[n] && ix[n].frames >= PLANET_PICTURES && typeof bodies !== "undefined" && bodies[n]) : [];
+    if (M.name && !out.includes(M.name)) out.push(M.name);
+    return out;
+  }
+
+  // ---- the session at a time: the one under way, else the next (-1 after the last) ----
+  function sessionAt(et) {
+    const s = M.sessions; let lo = 0, hi = s.length;
+    while (lo < hi) { const m = (lo + hi) >> 1; if (s[m][1] <= et) lo = m + 1; else hi = m; }
+    // lo: first session starting after et; the one before may still be under way
+    if (lo > 0 && s[lo - 1][2] >= et) return lo - 1;
+    return lo < s.length ? lo : -1;
+  }
+  // when the body's next picture after et is: the loaded months from the catalog, the rest from its sessions
+  function nextPicture(et) {
+    let best = Infinity;
+    const loaded = t => t >= loadedSpan[0] && t < loadedSpan[1];
+    if (loaded(et) && catalog && catalog.byCam) {
+      for (const cam of ["N", "W"]) {
+        const a = cassiniFeeds.framesOf(cam, M.name).et; let lo = 0, hi = a.length;
+        while (lo < hi) { const m = (lo + hi) >> 1; if (a[m] <= et) lo = m + 1; else hi = m; }
+        if (lo < a.length && loaded(a[lo])) best = Math.min(best, a[lo]);
+      }
+    }
+    // sessions in the loaded months are the catalog's to answer; the first one beyond them counts
+    const fromCatalog = loaded(et) && catalog && catalog.byCam;
+    for (let i = Math.max(0, sessionAt(et)); i >= 0 && i < M.sessions.length; i++) {
+      const s = M.sessions[i]; if (s[2] < et) continue;
+      const t = Math.max(et, s[1]);
+      if (fromCatalog && loaded(t)) continue;
+      best = Math.min(best, t); break;
+    }
+    return best;
+  }
+
+  // ---- skip the gaps: in a body's view the clock leaps over the stretches without its pictures ----
+  const baseAdvance = window.studyAdvance;
+  window.studyAdvance = (et, dt, speed) => {
+    const n = baseAdvance ? baseAdvance(et, dt, speed) : et + dt * speed;
+    if (!M.name || !M.sessions.length || !opt("bodies.skipGaps", true) || (window.cassiniMovie && cassiniMovie.on)) return n;
+    const nx = nextPicture(et);
+    if (nx === Infinity || nx - n <= speed * opt("bodies.gapSeconds", 3)) return n;
+    return Math.max(n, nx - speed * 0.5);   // half a second ahead of the picture
+  };
+
+  // ---- the window ----
+  function bodyLook(n) {
+    const look = typeof MOON_LOOK !== "undefined" && MOON_LOOK[n], c = look ? `rgb(${look.map(v => Math.round(v * 255)).join(",")})` : "#888";
+    const has = typeof bodies !== "undefined" && bodies[n] && n !== "SUN";
+    return `--c:${c};${has ? `background-image:url(data/textures/1k/${n.toLowerCase()}.webp);` : ""}`;
+  }
+  function fillPick() {
+    const sel = $("bmpick"), ix = M.index && M.index.bodies;
+    if (!ix) { sel.hidden = true; return; }
+    const names = Object.keys(ix), big = names.filter(n => ix[n].naif), small = names.filter(n => !ix[n].naif);
+    const opt = n => `<option value="${n}">${tc(n)} · ${fmt(ix[n].frames)}</option>`;
+    sel.innerHTML = `<option value="">Other bodies (${names.length})…</option><optgroup label="Planets and major moons">${big.map(opt).join("")}</optgroup><optgroup label="Small moons and others">${small.map(opt).join("")}</optgroup>`;
+  }
+  $("bmpick").addEventListener("change", e => { const n = e.target.value; e.target.value = ""; if (n) enter(n); });
+  const years = b => { const a = dateOf(b.first).getUTCFullYear(), z = dateOf(b.last).getUTCFullYear(); return a === z ? String(a) : `${a}–${z}`; };
+  function fillHead() {
+    const n = M.name, b = M.index && M.index.bodies[n];
+    $("bmname").innerHTML = `${tc(n)}${b ? ` <small>${years(b)}</small>` : ""}`; $("bmtitle").textContent = `${tc(n)}`;
+    $("bmorb").setAttribute("style", bodyLook(n));
+    $("bmstats").textContent = !b ? (M.index ? "No pictures of it in the archive" : "Loading…")
+      : `${fmt(b.frames)} pictures · ${fmt(b.sessions)} sessions\n${fmt(b.N)} NAC · ${fmt(b.W)} WAC${b.rgb_sets ? ` · ${fmt(b.rgb_sets)} in color` : ""}`;
+    $("bmskip").checked = !!opt("bodies.skipGaps", true);
+  }
+  function fillList() {
+    const ul = $("bmlist"), out = [];
+    M.rows = [];
+    let year = null;
+    M.sessions.forEach((s, i) => {
+      const y = dateOf(s[1]).getUTCFullYear();
+      if (y !== year) { year = y; out.push(`<li class="yr">${y}</li>`); }
+      const cams = [s[3] ? `${fmt(s[3])} NAC` : "", s[4] ? `${fmt(s[4])} WAC` : ""].filter(Boolean).join(" · ");
+      out.push(`<li data-i="${i}"><button title="${s[0]}"><span class="d">${fmtDate(s[1])}</span><span class="o">${obsName(s[0])}</span><span class="n">${cams} · ${fmtDur(s[2] - s[1])}</span>`
+        + `<span class="c">${s[5] ? `${s[5]}<i style="background:#cc3a2e"></i><i style="background:#3e9b33"></i><i style="background:#2f63cc"></i>` : ""}</span></button></li>`);
+    });
+    ul.innerHTML = out.join("");
+    ul.querySelectorAll("li[data-i]").forEach(li => { M.rows[+li.dataset.i] = li; });
+    $("bmfoot").textContent = M.sessions.length ? `${fmt(M.sessions.length)} imaging sessions` : "No imaging sessions";
+    M.cur = -2;
+  }
+  $("bmlist").addEventListener("click", e => { const li = e.target.closest("li[data-i]"); if (li) goSession(+li.dataset.i); });
+  let listTouched = 0;
+  $("bmlist").addEventListener("wheel", () => { listTouched = performance.now(); }, { passive: true });
+  $("bmlist").addEventListener("touchstart", () => { listTouched = performance.now(); }, { passive: true });
+  $("bmskip").addEventListener("change", e => { if (S) S.set("bodies.skipGaps", e.target.checked); });
+  if (S) S.on("bodies.skipGaps", v => { $("bmskip").checked = !!v; });
+  $("bmall").addEventListener("click", () => overview());
+  $("bmprev").addEventListener("click", () => { const i = M.sessions.findLastIndex(s => s[1] < state.et - 60); if (i >= 0) goSession(i); });
+  $("bmnext").addEventListener("click", () => { const i = M.sessions.findIndex(s => s[1] > state.et + 60); if (i >= 0) goSession(i); });
+  // on a phone the bar opens into a sheet of sessions
+  win.querySelector(".bmhead").addEventListener("click", e => { if (document.body.classList.contains("phone") && !e.target.closest("button")) { win.classList.toggle("open"); showCur(); } });
+  // the close button goes back to Cassini's mission (it would otherwise tuck the window away)
+  win.addEventListener("click", e => { if (e.target.closest(".titlebar .close")) { e.stopPropagation(); exit(); } }, true);
+  new ResizeObserver(() => document.body.style.setProperty("--bmh", win.offsetHeight + "px")).observe(win);
+
+  // the session under way (or next) is marked and kept in view; the line under the buttons says where playback is
+  function mark() {
+    if (!M.name || !M.sessions.length) { $("bmnow").textContent = M.name && M.data ? "No pictures" : "Loading…"; return; }
+    const i = sessionAt(state.et);
+    const s = i >= 0 ? M.sessions[i] : null, now = !!s && s[1] <= state.et;
+    $("bmnow").textContent = !s ? "After the last session" : now ? `Session ${fmt(i + 1)} of ${fmt(M.sessions.length)}` : `Next: ${fmtLong(s[1])}, in ${fmtDur(s[1] - state.et)}`;
+    if (i === M.cur) { if (!M.placed && performance.now() - listTouched > 4000) showCur(); return; }
+    if (M.rows[M.cur]) M.rows[M.cur].classList.remove("on");
+    M.rows.forEach((li, k) => li && li.classList.toggle("past", i < 0 || k < i));
+    M.cur = i; M.placed = false;
+    if (M.rows[i]) M.rows[i].classList.add("on");
+    if (performance.now() - listTouched > 4000) showCur();
+  }
+  // the marked session in view in the list (not while the viewer is scrolling it)
+  function showCur() {
+    const li = M.rows[M.cur], ul = $("bmlist");
+    if (li && !win.hidden && ul.offsetParent && li.offsetTop) { ul.scrollTop = Math.max(0, li.offsetTop - ul.offsetTop - 50); M.placed = true; }
+  }
+
+  // ---- the camera windows stay steady in a body's view ----
+  // a window never shrinks while the view is open (its biggest size so far is its least), and a picture that comes
+  // after a jump (more than JUMP_FADE of mission time since the last one) dissolves in over the one before
+  const JUMP_FADE = 1800, cams = ["imgcard", "wacard"].map($).filter(Boolean);
+  const grown = new Map();
+  const ro = new ResizeObserver(es => {
+    if (!M.name) return;
+    for (const e of es) {
+      const w = e.target, h = w.offsetHeight, wd = w.offsetWidth, g = grown.get(w) || [0, 0];
+      if (w.classList.contains("full") || w.hidden) continue;
+      if (h > g[0] || wd > g[1]) { grown.set(w, [Math.max(h, g[0]), Math.max(wd, g[1])]); w.style.minHeight = Math.max(h, g[0]) + "px"; w.style.minWidth = Math.max(wd, g[1]) + "px"; }
+    }
+  });
+  cams.forEach(w => ro.observe(w));
+  function unsteady() { for (const w of cams) { w.style.minHeight = ""; w.style.minWidth = ""; } grown.clear(); }
+  for (const w of cams) {
+    const shot = w.querySelector(".shot"), well = w.querySelector(".well");
+    let lastEt = null;
+    new MutationObserver(ms => {
+      if (!M.name || typeof state === "undefined") return;
+      const old = ms[0].oldValue, jumped = lastEt !== null && Math.abs(state.et - lastEt) > JUMP_FADE;
+      lastEt = state.et;
+      if (!jumped || !old || old === shot.src) return;
+      well.querySelector(".bmfade")?.remove();
+      const im = document.createElement("img"); im.className = "bmfade"; im.alt = ""; im.src = old;
+      im.addEventListener("animationend", () => im.remove());
+      well.appendChild(im);
+    }).observe(shot, { attributes: true, attributeFilter: ["src"], attributeOldValue: true });
+  }
+
+  // ---- moving through the body's history ----
+  // the timeline shows the body's whole history (from its first picture to its last), the view held there
+  function overview() {
+    const b = M.index && M.index.bodies[M.name];
+    if (!b) return;
+    const span = Math.max(2 * 86400, b.last - b.first), pad = span * 0.04;
+    state.view = [b.first - pad, b.last + pad]; clampView(); state.tlFollow = false;
+  }
+  // a session: from a minute before its first picture, at a speed that plays it in about a minute
+  async function goSession(i) {
+    const s = M.sessions[i]; if (!s) return;
+    const dur = s[2] - s[1];
+    setTime(s[1] - 60);
+    if (mission) { setPlaying(false); lastWantedYear = partOf(state.et); await requestYears(lastWantedYear); }
+    setView(Math.max(3 * 3600, 2 * dur), s[1] + dur / 2);
+    setSpeed(SPEEDS.map(v => v[0]).filter(v => v >= 60).find(v => dur / v <= 90) || 3600);
+    setPlaying(true);
+    look();
+  }
+
+  // ---- in and out ----
+  function retitle() {
+    const name = M.name ? tc(M.name) : null;
+    // as the per-body windows name theirs: "Titan · NAC"
+    for (const [id, base, short] of [["imgcard", "Narrow-angle Camera", "NAC"], ["wacard", "Wide-angle Camera", "WAC"]]) {
+      const bar = $(id) && $(id).querySelector(".titlebar"); if (!bar) continue;
+      const t = [...bar.childNodes].find(n => n.nodeType === 3 && n.textContent.trim());
+      if (t) t.textContent = name ? `${name} · ${short}` : base;
+    }
+    const bar = $("dock").querySelector(".titlebar");
+    let tag = bar.querySelector(".bmtag");
+    if (name) { if (!tag) { tag = document.createElement("span"); tag.className = "bmtag"; bar.appendChild(tag); } tag.textContent = ` · ${name}'s timeline`; }
+    else if (tag) tag.remove();
+  }
+  // Moments: only the body's; a body with none says so
+  function filterMoments() {
+    const list = $("mlist"); list.querySelector(".bmnone")?.remove();
+    let yr = null, any = false, shown = 0;
+    for (const li of list.children) {
+      if (li.classList.contains("yr")) { if (yr) yr.hidden = !any; yr = li; any = false; continue; }
+      const on = !M.name || li.dataset.body === M.name;
+      li.hidden = !on; if (on) { any = true; shown++; }
+    }
+    if (yr) yr.hidden = !any;
+    if (typeof scrollMoments === "function") scrollMoments();
+    if (M.name && !shown) { const li = document.createElement("li"); li.className = "bmnone"; li.textContent = `No moments of ${tc(M.name)} in the list yet. Its imaging sessions are in the ${tc(M.name)} window.`; list.appendChild(li); }
+    const foot = $("mfoot");
+    if (M.name) { if (!foot.dataset.all) foot.dataset.all = foot.textContent; foot.textContent = `${shown} moment${shown === 1 ? "" : "s"} of ${tc(M.name)}`; }
+    else if (foot.dataset.all) { foot.textContent = foot.dataset.all; delete foot.dataset.all; }
+  }
+  function setUrl() {
+    try {
+      const u = new URL(location.href);
+      if (M.name) u.searchParams.set("body", M.name); else u.searchParams.delete("body");
+      history.replaceState(history.state, "", u);
+    } catch (e) {}
+  }
+  const onStage = n => typeof focusChoices === "function" && focusChoices().includes(n);
+  // the 3D view centers on the body in view (a jump puts it back on Cassini); setFocus skips a body with no position now
+  const look = () => { if (M.name && state.focus !== M.name && typeof setFocus === "function") setFocus(M.name); };
+  // jump: when the body is not on stage now, go to its moment nearest to now, else its busiest session
+  async function enter(n, how = {}) {
+    n = String(n).toUpperCase();
+    const first = !M.name;
+    if (first) M.saved = { span: state.view[1] - state.view[0] };
+    M.name = n; M.data = null; M.perDay = null; M.sessions = []; M.cur = -2; M.rows = [];
+    document.body.classList.add("bodymode");
+    if (win.hidden || win.dataset.min) WM.restore(win); else WM.front(win);
+    win.classList.remove("closed");
+    fillHead(); $("bmlist").innerHTML = ""; $("bmfoot").textContent = "Loading…";
+    retitle(); filterMoments(); setUrl();
+    document.dispatchEvent(new CustomEvent("cassini:bodymode", { detail: { name: n } }));
+    if (window.cassiniDock) cassiniDock.sync();
+    look();
+    const d = await loadBody(n);
+    if (M.name !== n) return;
+    M.data = d; M.sessions = d ? d.sessions : []; M.perDay = perDay(d);
+    fillHead(); fillList();
+    if (how.jump !== false && !onStage(n) && M.sessions.length) {
+      // the moments the Moments list shows for it
+      const listed = new Set([...document.querySelectorAll("#mlist li[data-et]")].filter(li => li.dataset.body === n).map(li => +li.dataset.et));
+      const near = encounters.filter(e => listed.has(e.et)).sort((a, b) => Math.abs(a.et - state.et) - Math.abs(b.et - state.et))[0];
+      if (near) await jump(near);
+      else { let k = 0; M.sessions.forEach((s, i) => { if (s[3] + s[4] > M.sessions[k][3] + M.sessions[k][4]) k = i; }); await goSession(k); }
+      if (M.name !== n) return;
+    }
+    look();
+    if (how.overview !== false) overview();
+    mark();
+  }
+  function exit() {
+    if (!M.name) return;
+    M.name = null; M.data = null; M.perDay = null; M.sessions = []; M.rows = [];
+    unsteady();
+    document.body.classList.remove("bodymode");
+    win.hidden = true; delete win.dataset.min; WM.syncMenu();
+    retitle(); filterMoments(); setUrl();
+    document.dispatchEvent(new CustomEvent("cassini:bodymode", { detail: { name: null } }));
+    if (window.cassiniDock) cassiniDock.sync();
+    setView(M.saved ? M.saved.span : 30 * 86400, state.et);
+    M.saved = null;
+  }
+  window.cassiniBodyMode = {
+    get name() { return M.name; }, get index() { return M.index; }, get sessions() { return M.sessions; },
+    enter, exit, planets, sessionAt, loadIndex
+  };
+
+  // ---- every frame: a link's ?body= once the mission is in, and the session marks ----
+  const want = new URLSearchParams(location.search).get("body");
+  const base = window.studyHud;
+  let lastMark = 0;
+  window.studyHud = ms => {
+    if (base) base(ms);
+    // a moment's jump keeps the view on the body too
+    if (typeof jump === "function" && !jump.bodyLook) { const j = jump; jump = async e => { const r = await j(e); look(); return r; }; jump.bodyLook = true; }
+    if (want && !M.pending && typeof catalog !== "undefined" && catalog) { M.pending = true; enter(want, { jump: false }); }
+    const now = performance.now();
+    if (M.name && now - lastMark > 250) { lastMark = now; mark(); }
+  };
+  loadIndex();
+})();
+</script>
+<script>
 // ---------- the dock ----------
 (function () {
   const $ = id => document.getElementById(id);
@@ -5165,6 +5605,7 @@ body.phone #finale .fx-data { width: min(220px, calc(100vw - 32px)); top: 10px; 
     highlights: svg('<rect x="3.5" y="5.5" width="17" height="13" rx="1.6"/><path d="M10 9.3v5.4l4.6-2.7z"/>'),
     settings: svg('<circle cx="12" cy="12" r="3.2"/><path d="M12 3v2.6M12 18.4V21M3 12h2.6M18.4 12H21M5.6 5.6l1.9 1.9M16.5 16.5l1.9 1.9M5.6 18.4l1.9-1.9M16.5 7.5l1.9-1.9"/>'),
     window: svg('<rect x="3.5" y="5" width="17" height="14" rx="1.6"/><path d="M3.5 8.5h17"/><circle cx="6" cy="6.8" r=".5"/><circle cx="7.8" cy="6.8" r=".5"/>'),
+    folder: svg('<path d="M3.5 7.5v10a1.5 1.5 0 0 0 1.5 1.5h14a1.5 1.5 0 0 0 1.5-1.5v-8.5a1.5 1.5 0 0 0-1.5-1.5h-7l-2-2h-5a1.5 1.5 0 0 0-1.5 1.5z"/><circle cx="9" cy="13.5" r="2"/><circle cx="15" cy="13.5" r="1.3"/>'),
     replay: svg('<path d="M3.5 16.5h17"/><path d="M6 16.5v-3M9 16.5v-6M12 16.5v-4M15 16.5v-8M18 16.5v-2"/><path d="M8 5.5l3 2-3 2z"/>')
   };
   const MAP = { SATURN: "saturn", TITAN: "titan", ENCELADUS: "enceladus", MIMAS: "mimas", TETHYS: "tethys", DIONE: "dione", RHEA: "rhea", HYPERION: "hyperion",
@@ -5186,7 +5627,7 @@ body.phone #finale .fx-data { width: min(220px, calc(100vw - 32px)); top: 10px; 
     b.addEventListener("click", e => { e.stopPropagation(); onclick(b); });
     return b;
   }
-  const seps = [0, 1].map(() => { const s = document.createElement("span"); s.className = "dsep"; s.setAttribute("aria-hidden", "true"); return s; });
+  const seps = [0, 1, 2].map(() => { const s = document.createElement("span"); s.className = "dsep"; s.setAttribute("aria-hidden", "true"); return s; });
 
   // ---- apps ----
   // a window app: hidden or minimized, it comes back; in front, it tucks away; behind others, it comes forward
@@ -5210,20 +5651,77 @@ body.phone #finale .fx-data { width: min(220px, calc(100vw - 32px)); top: 10px; 
   // ---- bodies: the viewer's focus list (Cassini, the Sun, Huygens near its descent, the bodies on stage) ----
   const bodyWins = n => [...document.querySelectorAll(".bodywin")].filter(w => w.dataset.body === n);
   function goBody(n) {
-    if (typeof setFocus === "function") setFocus(n);
+    const BM = window.cassiniBodyMode;
+    if (n === "CASSINI" && BM && BM.name) BM.exit();
+    if (n !== "CASSINI" && n !== "SUN" && BM) BM.enter(n);
+    else if (typeof setFocus === "function") setFocus(n);
     // its windows come back from the dock and forward
     for (const w of bodyWins(n)) { if (w.dataset.min) WM.restore(w); else WM.front(w); }
   }
-  let bodies = [], bodyKey = "";
+  let bodies = [], away = [], bodyKey = "";
   function bodyList() { try { return typeof focusChoices === "function" ? focusChoices() : []; } catch (e) { return []; } }
+  // the planets (and the body in view) that are not on stage now
+  function awayList(list) { try { return window.cassiniBodyMode ? cassiniBodyMode.planets().filter(n => !list.includes(n)) : []; } catch (e) { return []; } }
+
+  // ---- All bodies: every body Cassini photographed, in groups ----
+  // the group: a planet (or the Sun) by its NAIF id, a moon by its planet's; a body with no track by where Cassini was
+  // when it took most of its pictures (at Saturn from mid-2004, at Jupiter for the flyby months)
+  const AT_SATURN = typeof utcToEt === "function" ? utcToEt("2004-06-01T00:00:00") : 139320000;
+  const GROUPS = [["planets", "Planets and the Sun"], ["saturn", "Saturn's moons"], ["jupiter", "Jupiter's moons"], ["earth", "Earth's Moon"], ["other", "Other bodies"]];
+  function groupOf(n, b) {
+    const id = b.naif;
+    if (n === "SUN" || (id && id % 100 === 99)) return "planets";
+    if (id) return ({ 3: "earth", 5: "jupiter", 6: "saturn" })[Math.floor(id / 100)] || "other";
+    const mid = (b.first + b.last) / 2;
+    if (b.first >= AT_SATURN) return "saturn";
+    if (typeof utcToEt === "function" && mid > utcToEt("2000-10-01T00:00:00") && mid < utcToEt("2001-04-01T00:00:00")) return "jupiter";
+    return "other";
+  }
+  // a body's icon in the folder: its surface map, or else its sharpest real picture from the frame server
+  function folderIcon(n, b) {
+    if (MAP[n] || n === "SUN" || !b.best || !window.cassiniFeeds) return `<span class="fic">${bodyIcon(n)}</span>`;
+    return `<span class="fic"><span class="pic" style="background-image:url('${cassiniFeeds.frames}/frames/${b.best}.webp?size=256')"></span></span>`;
+  }
+  const folder = document.createElement("div");
+  folder.id = "dkfolder"; folder.hidden = true; folder.setAttribute("role", "dialog"); folder.setAttribute("aria-label", "All bodies");
+  document.body.appendChild(folder);
+  let folderMade = false;
+  async function fillFolder() {
+    const BM = window.cassiniBodyMode, ix = BM && (BM.index || await BM.loadIndex());
+    if (!ix) { folder.textContent = "The list of bodies could not be loaded."; return; }
+    const by = {};
+    for (const [n, b] of Object.entries(ix.bodies)) (by[groupOf(n, b)] = by[groupOf(n, b)] || []).push([n, b]);
+    folder.innerHTML = GROUPS.filter(([g]) => by[g]).map(([g, label]) => `<h3>${label}</h3><div class="fgrid">${by[g].sort((a, c) => c[1].frames - a[1].frames)
+      .map(([n, b]) => `<button data-body="${n}" title="${name(n)}: ${b.frames.toLocaleString("en-US")} pictures">${folderIcon(n, b)}<span class="fn">${name(n)}</span><span class="fc">${b.frames.toLocaleString("en-US")}</span></button>`).join("")}</div>`).join("");
+    folderMade = true;
+  }
+  folder.addEventListener("click", e => { e.stopPropagation(); const b = e.target.closest("button[data-body]"); if (b) { closeFolder(); goBody(b.dataset.body); } });
+  function placeFolder(anchor) {
+    const r = anchor.getBoundingClientRect(), fw = folder.offsetWidth, fh = folder.offsetHeight;
+    const side = dock.classList.contains("side-left") ? "left" : dock.classList.contains("side-right") ? "right" : "bottom";
+    let x = side === "left" ? r.right + 12 : side === "right" ? r.left - 12 - fw : r.left + r.width / 2 - fw / 2;
+    let y = side === "bottom" ? r.top - 12 - fh : r.top + r.height / 2 - fh / 2;
+    x = Math.max(10, Math.min(innerWidth - fw - 10, x)); y = Math.max(34, Math.min(innerHeight - fh - 10, y));
+    Object.assign(folder.style, { left: x + "px", top: y + "px" });
+  }
+  async function toggleFolder(anchor) {
+    if (!folder.hidden) { closeFolder(); return; }
+    if (!folderMade) await fillFolder();
+    const now = window.cassiniBodyMode && cassiniBodyMode.name;
+    folder.querySelectorAll("button[data-body]").forEach(b => b.classList.toggle("inview", b.dataset.body === now));
+    folder.hidden = false; anchor.classList.add("open"); placeFolder(anchor);
+  }
+  function closeFolder() { folder.hidden = true; const a = made.get("app:bodies"); if (a) a.classList.remove("open"); }
+  document.addEventListener("click", () => { if (!folder.hidden) closeFolder(); });
+  addEventListener("keydown", e => { if (e.key === "Escape" && !folder.hidden) closeFolder(); });
 
   // ---- minimized windows ----
   const winLabel = w => w.dataset.name || ({ dock: "Cassini Replay", imgcard: "Narrow-angle Camera", wacard: "Wide-angle Camera" })[w.id] || w.getAttribute("aria-label") || "Window";
   const winGlyph = w => w.id === "dock" ? GLYPH.replay : w.id === "moments" ? GLYPH.moments : GLYPH.window;
   function snapshot(w) {
-    const img = w.querySelector(".well.has-frame .shot, .rlwell img, .mvwell img");
+    const img = w.querySelector(".well.has-frame .shot, .rlwell img");
     if (img && img.src && img.naturalWidth) return img.src;
-    const cv = w.querySelector(".rlwell canvas, .mvwell canvas");
+    const cv = w.querySelector(".rlwell canvas");
     if (cv && cv.width) { try { return cv.toDataURL("image/jpeg", 0.7); } catch (e) {} }
     return "";
   }
@@ -5259,6 +5757,8 @@ body.phone #finale .fx-data { width: min(220px, calc(100vw - 32px)); top: 10px; 
     for (const w of [...tiles.keys()]) if (!mins.includes(w) || !w.isConnected) { made.delete(tiles.get(w).dataset.key); tiles.delete(w); }
     const kids = [
       ...bodies.map(n => item("body:" + n, name(n), bodyIcon(n), () => goBody(n))),
+      ...(away.length ? [seps[2], ...away.map(n => item("body:" + n, name(n), bodyIcon(n), () => goBody(n)))] : []),
+      item("app:bodies", "All bodies", `<span class="gl">${GLYPH.folder}</span>`, b => toggleFolder(b)),
       seps[0],
       ...APPS.map(a => item("app:" + a.key, a.label, `<span class="gl">${GLYPH[a.key]}</span>`, () => a.run())),
       seps[1],
@@ -5275,6 +5775,7 @@ body.phone #finale .fx-data { width: min(220px, calc(100vw - 32px)); top: 10px; 
       if (k.startsWith("body:")) {
         const n = k.slice(5);
         b.classList.toggle("here", typeof state !== "undefined" && state.focus === n);
+        b.classList.toggle("inview", !!window.cassiniBodyMode && cassiniBodyMode.name === n);
         b.classList.toggle("open", bodyWins(n).length > 0);
         b.classList.toggle("held", bodyWins(n).some(w => w.dataset.held));
       } else if (k.startsWith("app:")) {
@@ -5324,8 +5825,8 @@ body.phone #finale .fx-data { width: min(220px, calc(100vw - 32px)); top: 10px; 
   let lastMarks = 0;
   window.studyHud = ms => {
     if (base) base(ms);
-    const list = bodyList(), key = list.join();
-    if (key !== bodyKey) { bodyKey = key; bodies = list; render(); }
+    const list = bodyList(), aw = awayList(list), key = list.join() + "|" + aw.join();
+    if (key !== bodyKey) { bodyKey = key; bodies = list; away = aw; render(); }
     const now = performance.now();
     if (now - lastMarks > 250) { lastMarks = now; marks(); }
   };
@@ -5336,7 +5837,7 @@ body.phone #finale .fx-data { width: min(220px, calc(100vw - 32px)); top: 10px; 
 // ---------- About: what Cassini OS is, and every credit in one list (credits.json) ----------
 (function () {
   const $ = id => document.getElementById(id);
-  const CREDITS = {"groups":[{"title":"Cassini mission data","entries":[{"id":"iss","title":"Cassini camera pictures","credit":"NASA/JPL-Caltech/Space Science Institute","short":"NASA/JPL-Caltech/SSI","detail":"Every picture in the camera windows, mosaics, color sets, movies and highlights is a frame from Cassini's Imaging Science Subsystem (the narrow-angle and wide-angle cameras), archived by NASA's Planetary Data System, Cartography and Imaging Sciences Node. Cassini OS calibrates, stacks, aligns and centers them with SPICE; the colors are its own reconstruction, not NASA's.","license":"NASA material, not copyrighted in the US (NASA media usage guidelines)","url":"https://pds-imaging.jpl.nasa.gov/"},{"id":"spice","title":"Trajectory, pointing and planet positions","credit":"NASA/JPL Navigation and Ancillary Information Facility (NAIF), Cassini SPICE archive co-s_j_e_v-spice-6-v1.0","short":"NASA/JPL NAIF SPICE","detail":"Where Cassini, the planets and the moons were, which way Cassini pointed (its reconstructed attitude kernels), and the camera frames. Read with SpiceyPy.","license":"NASA material, not copyrighted in the US","url":"https://naif.jpl.nasa.gov/naif/"},{"id":"calibration","title":"Camera calibration","credit":"Cassini ISS team: CISSCAL and the Cassini ISS Data User's Guide (Porco et al. 2004; West et al. 2010; Knowles et al. 2020)","detail":"The steps and constants Cassini OS uses to turn raw frames into brightness (I/F): the bias, exposure, gain and per-filter sensitivity, and each filter's effective wavelength.","license":"Published by NASA's Planetary Data System","url":"https://pds-imaging.jpl.nasa.gov/documentation/iss_data_user_guide_180916.pdf"},{"id":"finale-data","title":"Grand Finale readings","credit":"NASA Planetary Data System, Planetary Plasma Interactions Node; Cassini INMS (Southwest Research Institute), MAG (Imperial College London) and RPWS (University of Iowa) teams","short":"NASA PDS · INMS, MAG, RPWS","detail":"The real readings from Cassini's last hour shown in the Grand Finale: INMS raw count rates (counts, not densities), the magnetometer at full resolution, and RPWS 60 s key parameters, from 15 September 2017.","license":"NASA material, not copyrighted in the US","url":"https://pds-ppi.igpp.ucla.edu/"},{"id":"facts","title":"Mission facts and numbers","credit":"NASA, NASA/JPL and ESA mission pages","detail":"The facts on the loading screen (each one names its source as it shows), and the numbers and timings the Grand Finale is pinned to (JPL, \"Cassini Spacecraft Makes Its Final Approach to Saturn\", 13 September 2017; \"Cassini by the Numbers\").","license":"Facts, with their sources named","url":"https://science.nasa.gov/mission/cassini/"}]},{"title":"Huygens probe","entries":[{"id":"disr","title":"Huygens descent pictures","credit":"ESA/NASA/JPL/University of Arizona; mosaics by Erich Karkoschka (DISR team)","short":"ESA/NASA/JPL/UA","detail":"The probe's own pictures of Titan from its Descent Imager/Spectral Radiometer (DISR), and the nested mosaics of the landing site (60 m down to 1 m per pixel) Erich Karkoschka assembled from them, from ESA's Planetary Science Archive (HP-SSA-DISR-2-3-EDR-RDR-V1.3).","license":"ESA Planetary Science Archive data","url":"https://archives.esac.esa.int/psa/"},{"id":"huygens-track","title":"Huygens trajectory","credit":"ESA Huygens Descent Trajectory Working Group (B. Kazeminejad, ESTEC), HP-SSA-DTWG-6-TRAJECTORY-V2.0; NASA/JPL NAIF","detail":"The probe's path through Titan's atmosphere to the ground; its coast from Cassini to Titan comes from NAIF's reconstructed trajectory.","license":"ESA Planetary Science Archive data","url":"https://archives.esac.esa.int/psa/"}]},{"title":"Surface maps and shapes","note":"Maps come from the Celestia project's CelestiaContent collection, resized into the 1k, 2k and 4k sizes; credit lines follow Celestia's license files. Maps marked \"No license stated\" are reworks of NASA/JPL and other material without a license file and will be rebuilt from public-domain originals before a public launch.","entries":[{"id":"map-saturn","title":"Saturn","credit":"Cassini imagery, Björn Jónsson; recolored by Askaniy Anpilogov (via Celestia)","license":"CC BY 3.0","url":"https://github.com/CelestiaProject/CelestiaContent","files":["saturn.webp"]},{"id":"map-rings","title":"Saturn's rings","credit":"Björn Jónsson ring data (Celestia composite)","license":"No license stated","url":"https://bjj.mmedia.is/","files":["rings/saturn_rings.png"]},{"id":"map-icy","title":"Mimas, Enceladus, Tethys, Dione, Iapetus","credit":"Paul Schenk's Cassini color maps (NASA/JPL/LPI), via Celestia","license":"No license stated","files":["mimas.webp","enceladus.webp","tethys.webp","dione.webp","iapetus.webp"]},{"id":"map-rhea","title":"Rhea","credit":"Paul Schenk's map and Björn Jónsson's albedo, via Celestia","license":"No license stated","files":["rhea.webp"]},{"id":"map-titan","title":"Titan","credit":"Cassini haze images, Gordan Ugarković, Kevin M. Gill, ShadowDragon777, AstroChara (via Celestia)","license":"CC BY 4.0","files":["titan.webp"]},{"id":"map-titan-surface","title":"Titan's surface","credit":"Cassini VIMS and ISS map (Seignovert et al. 2019) with radar lakes, via Celestia","license":"CC BY 3.0","files":["titan_surface.webp"]},{"id":"map-hyperion","title":"Hyperion","credit":"Map: reprojected Cassini imagery (ItzImcool), via Celestia. Shape: P. C. Thomas et al., NASA Planetary Data System","license":"Map CC BY 4.0; shape CC0","files":["hyperion.webp","models/hyperion.mesh.b64.txt"]},{"id":"map-phoebe","title":"Phoebe","credit":"Map: John van Vliet, via Celestia. Shape: R. W. Gaskell, NASA Planetary Data System","license":"No license stated","files":["phoebe.webp","models/phoebe.mesh.b64.txt"]},{"id":"map-jupiter","title":"Jupiter","credit":"Cassini 2000 flyby and Juno data, recolored by Askaniy Anpilogov (via Celestia)","license":"CC BY 3.0","files":["jupiter.webp"]},{"id":"map-venus","title":"Venus","credit":"Cloud tops by Björn Jónsson, recolored by FarGetaNik (via Celestia)","license":"No license stated","files":["venus.webp"]},{"id":"map-earth","title":"Earth","credit":"\"Mappamondo\" (earthstartsbeating.com), Natural Earth II (Tom Patterson), NASA Blue Marble Next Generation (via Celestia)","license":"No license stated","files":["earth.webp"]},{"id":"map-moon","title":"The Moon","credit":"Celestia's lunar map (NASA data)","license":"No license stated","files":["moon.webp"]},{"id":"map-io","title":"Io","credit":"ItzImcool, AstroChara; NASA/JPL-Caltech/ASI/USGS; NASA/JPL/SwRI/MSSS/Gerald Eichstädt/Jason Perry/John Rogers (via Celestia)","license":"CC BY 4.0","files":["io.webp"]},{"id":"map-europa","title":"Europa","credit":"John van Vliet (via Celestia)","license":"No license stated","files":["europa.webp"]},{"id":"map-ganymede","title":"Ganymede","credit":"Askaniy Anpilogov; NASA/JPL-Caltech/ASI/USGS; Björn Jónsson; NASA/JPL-Caltech/SwRI/MSSS/Brian Swift (via Celestia)","license":"CC BY 3.0","files":["ganymede.webp"]},{"id":"map-callisto","title":"Callisto","credit":"Askaniy Anpilogov, from John van Vliet's map (via Celestia)","license":"No license stated","files":["callisto.webp"]}]},{"title":"Sky","entries":[{"id":"star-sky","title":"Stars and the Milky Way","credit":"NASA/Goddard Space Flight Center Scientific Visualization Studio. Gaia DR2: ESA/Gaia/DPAC","short":"NASA SVS Deep Star Maps","detail":"The background sky, from NASA's \"Deep Star Maps 2020\": Hipparcos, Tycho-2 and Gaia DR2 stars plus the Milky Way, placed in J2000 where Cassini saw them.","license":"NASA material, public domain","url":"https://svs.gsfc.nasa.gov/4851","files":["sky/sky_2k.webp","sky/sky_4k.webp","sky/sky_8k.webp"]}]},{"title":"Spacecraft","entries":[{"id":"model","title":"Cassini-Huygens 3D model","credit":"NASA/JPL-Caltech, NASA 3D Resources \"Cassini-Huygens\"","detail":"The spacecraft in the 3D view and the wireframe on the loading screen (decoded from Draco compression for the page).","license":"NASA material, not copyrighted in the US","url":"https://github.com/nasa/NASA-3D-Resources"}]},{"title":"Sound","entries":[{"id":"sound","title":"Sonification","credit":"Made for Cassini OS, after Erich Karkoschka's \"Titan Descent Data Movie with Bells and Whistles\" (DISR team, University of Arizona)","detail":"Every sound is synthesized in the browser from what Cassini is doing (no recordings); the idea of a chime for each instrument part follows Karkoschka's Huygens descent movie.","license":"Part of Cassini OS"}]},{"title":"Software and fonts","entries":[{"id":"threejs","title":"three.js","credit":"three.js authors, r128, with OrbitControls and GLTFLoader","license":"MIT","url":"https://threejs.org/"},{"id":"draco","title":"Draco","credit":"Google, used to decode the spacecraft model ahead of time","license":"Apache 2.0","url":"https://google.github.io/draco/"},{"id":"pipeline-libs","title":"Picture pipeline","credit":"SpiceyPy (Andrew Annex et al.), NumPy, pandas, OpenCV, Pillow, scikit-image, Matplotlib","detail":"The Python libraries the frame server and the image pipeline run on.","license":"MIT, BSD and Apache 2.0 (each project's own)"},{"id":"font-silkscreen","title":"Silkscreen","credit":"Jason Kottke, via Google Fonts","license":"SIL Open Font License 1.1","url":"https://fonts.google.com/specimen/Silkscreen"},{"id":"font-sharetech","title":"Share Tech Mono","credit":"Carrois Apostrophe, via Google Fonts","license":"SIL Open Font License 1.1","url":"https://fonts.google.com/specimen/Share+Tech+Mono"}]}]};
+  const CREDITS = {"groups":[{"title":"Cassini mission data","entries":[{"id":"iss","title":"Cassini camera pictures","credit":"NASA/JPL-Caltech/Space Science Institute","short":"NASA/JPL-Caltech/SSI","detail":"Every picture in the camera windows, mosaics, color sets, movies and highlights is a frame from Cassini's Imaging Science Subsystem (the narrow-angle and wide-angle cameras), archived by NASA's Planetary Data System, Cartography and Imaging Sciences Node. Cassini OS calibrates, stacks, aligns and centers them with SPICE; the colors are its own reconstruction, not NASA's.","license":"NASA material, not copyrighted in the US (NASA media usage guidelines)","url":"https://pds-imaging.jpl.nasa.gov/"},{"id":"spice","title":"Trajectory, pointing and planet positions","credit":"NASA/JPL Navigation and Ancillary Information Facility (NAIF), Cassini SPICE archive co-s_j_e_v-spice-6-v1.0","short":"NASA/JPL NAIF SPICE","detail":"Where Cassini, the planets and the moons were, which way Cassini pointed (its reconstructed attitude kernels), and the camera frames. Read with SpiceyPy.","license":"NASA material, not copyrighted in the US","url":"https://naif.jpl.nasa.gov/naif/"},{"id":"calibration","title":"Camera calibration","credit":"Cassini ISS team: CISSCAL and the Cassini ISS Data User's Guide (Porco et al. 2004; West et al. 2010; Knowles et al. 2020)","detail":"The steps and constants Cassini OS uses to turn raw frames into brightness (I/F): the bias, exposure, gain and per-filter sensitivity, and each filter's effective wavelength.","license":"Published by NASA's Planetary Data System","url":"https://pds-imaging.jpl.nasa.gov/documentation/iss_data_user_guide_180916.pdf"},{"id":"finale-data","title":"Grand Finale readings","credit":"NASA Planetary Data System, Planetary Plasma Interactions Node; Cassini INMS (Southwest Research Institute), MAG (Imperial College London) and RPWS (University of Iowa) teams","short":"NASA PDS · INMS, MAG, RPWS","detail":"The real readings from Cassini's last hour shown in the Grand Finale: INMS raw count rates (counts, not densities), the magnetometer at full resolution, and RPWS 60 s key parameters, from 15 September 2017.","license":"NASA material, not copyrighted in the US","url":"https://pds-ppi.igpp.ucla.edu/"},{"id":"facts","title":"Mission facts and numbers","credit":"NASA, NASA/JPL and ESA mission pages","detail":"The facts on the loading screen (each one names its source as it shows), and the numbers and timings the Grand Finale is pinned to (JPL, \"Cassini Spacecraft Makes Its Final Approach to Saturn\", 13 September 2017; \"Cassini by the Numbers\"), and the opening at the start of the mission (ESA, \"Cassini-Huygens: Launch information\"; NASA, \"Cassini Quick Facts\").","license":"Facts, with their sources named","url":"https://science.nasa.gov/mission/cassini/"}]},{"title":"Huygens probe","entries":[{"id":"disr","title":"Huygens descent pictures","credit":"ESA/NASA/JPL/University of Arizona; mosaics by Erich Karkoschka (DISR team)","short":"ESA/NASA/JPL/UA","detail":"The probe's own pictures of Titan from its Descent Imager/Spectral Radiometer (DISR), and the nested mosaics of the landing site (60 m down to 1 m per pixel) Erich Karkoschka assembled from them, from ESA's Planetary Science Archive (HP-SSA-DISR-2-3-EDR-RDR-V1.3).","license":"ESA Planetary Science Archive data","url":"https://archives.esac.esa.int/psa/"},{"id":"huygens-track","title":"Huygens trajectory","credit":"ESA Huygens Descent Trajectory Working Group (B. Kazeminejad, ESTEC), HP-SSA-DTWG-6-TRAJECTORY-V2.0; NASA/JPL NAIF","detail":"The probe's path through Titan's atmosphere to the ground; its coast from Cassini to Titan comes from NAIF's reconstructed trajectory.","license":"ESA Planetary Science Archive data","url":"https://archives.esac.esa.int/psa/"}]},{"title":"Surface maps and shapes","note":"Maps come from the Celestia project's CelestiaContent collection, resized into the 1k, 2k and 4k sizes; credit lines follow Celestia's license files. Maps marked \"No license stated\" are reworks of NASA/JPL and other material without a license file and will be rebuilt from public-domain originals before a public launch.","entries":[{"id":"map-saturn","title":"Saturn","credit":"Cassini imagery, Björn Jónsson; recolored by Askaniy Anpilogov (via Celestia)","license":"CC BY 3.0","url":"https://github.com/CelestiaProject/CelestiaContent","files":["saturn.webp"]},{"id":"map-rings","title":"Saturn's rings","credit":"Björn Jónsson ring data (Celestia composite)","license":"No license stated","url":"https://bjj.mmedia.is/","files":["rings/saturn_rings.png"]},{"id":"map-icy","title":"Mimas, Enceladus, Tethys, Dione, Iapetus","credit":"Paul Schenk's Cassini color maps (NASA/JPL/LPI), via Celestia","license":"No license stated","files":["mimas.webp","enceladus.webp","tethys.webp","dione.webp","iapetus.webp"]},{"id":"map-rhea","title":"Rhea","credit":"Paul Schenk's map and Björn Jónsson's albedo, via Celestia","license":"No license stated","files":["rhea.webp"]},{"id":"map-titan","title":"Titan","credit":"Cassini haze images, Gordan Ugarković, Kevin M. Gill, ShadowDragon777, AstroChara (via Celestia)","license":"CC BY 4.0","files":["titan.webp"]},{"id":"map-titan-surface","title":"Titan's surface","credit":"Cassini VIMS and ISS map (Seignovert et al. 2019) with radar lakes, via Celestia","license":"CC BY 3.0","files":["titan_surface.webp"]},{"id":"map-hyperion","title":"Hyperion","credit":"Map: reprojected Cassini imagery (ItzImcool), via Celestia. Shape: P. C. Thomas et al., NASA Planetary Data System","license":"Map CC BY 4.0; shape CC0","files":["hyperion.webp","models/hyperion.mesh.b64.txt"]},{"id":"map-phoebe","title":"Phoebe","credit":"Map: John van Vliet, via Celestia. Shape: R. W. Gaskell, NASA Planetary Data System","license":"No license stated","files":["phoebe.webp","models/phoebe.mesh.b64.txt"]},{"id":"map-jupiter","title":"Jupiter","credit":"Cassini 2000 flyby and Juno data, recolored by Askaniy Anpilogov (via Celestia)","license":"CC BY 3.0","files":["jupiter.webp"]},{"id":"map-venus","title":"Venus","credit":"Cloud tops by Björn Jónsson, recolored by FarGetaNik (via Celestia)","license":"No license stated","files":["venus.webp"]},{"id":"map-earth","title":"Earth","credit":"\"Mappamondo\" (earthstartsbeating.com), Natural Earth II (Tom Patterson), NASA Blue Marble Next Generation (via Celestia)","license":"No license stated","files":["earth.webp"]},{"id":"map-moon","title":"The Moon","credit":"Celestia's lunar map (NASA data)","license":"No license stated","files":["moon.webp"]},{"id":"map-io","title":"Io","credit":"ItzImcool, AstroChara; NASA/JPL-Caltech/ASI/USGS; NASA/JPL/SwRI/MSSS/Gerald Eichstädt/Jason Perry/John Rogers (via Celestia)","license":"CC BY 4.0","files":["io.webp"]},{"id":"map-europa","title":"Europa","credit":"John van Vliet (via Celestia)","license":"No license stated","files":["europa.webp"]},{"id":"map-ganymede","title":"Ganymede","credit":"Askaniy Anpilogov; NASA/JPL-Caltech/ASI/USGS; Björn Jónsson; NASA/JPL-Caltech/SwRI/MSSS/Brian Swift (via Celestia)","license":"CC BY 3.0","files":["ganymede.webp"]},{"id":"map-callisto","title":"Callisto","credit":"Askaniy Anpilogov, from John van Vliet's map (via Celestia)","license":"No license stated","files":["callisto.webp"]}]},{"title":"Sky","entries":[{"id":"star-sky","title":"Stars and the Milky Way","credit":"NASA/Goddard Space Flight Center Scientific Visualization Studio. Gaia DR2: ESA/Gaia/DPAC","short":"NASA SVS Deep Star Maps","detail":"The background sky, from NASA's \"Deep Star Maps 2020\": Hipparcos, Tycho-2 and Gaia DR2 stars plus the Milky Way, placed in J2000 where Cassini saw them.","license":"NASA material, public domain","url":"https://svs.gsfc.nasa.gov/4851","files":["sky/sky_2k.webp","sky/sky_4k.webp","sky/sky_8k.webp"]}]},{"title":"Spacecraft","entries":[{"id":"model","title":"Cassini-Huygens 3D model","credit":"NASA/JPL-Caltech, NASA 3D Resources \"Cassini-Huygens\"","detail":"The spacecraft in the 3D view and the wireframe on the loading screen (decoded from Draco compression for the page).","license":"NASA material, not copyrighted in the US","url":"https://github.com/nasa/NASA-3D-Resources"}]},{"title":"Sound","entries":[{"id":"sound","title":"Sonification","credit":"Made for Cassini OS, after Erich Karkoschka's \"Titan Descent Data Movie with Bells and Whistles\" (DISR team, University of Arizona)","detail":"Every sound is synthesized in the browser from what Cassini is doing (no recordings); the idea of a chime for each instrument part follows Karkoschka's Huygens descent movie.","license":"Part of Cassini OS"}]},{"title":"Software and fonts","entries":[{"id":"threejs","title":"three.js","credit":"three.js authors, r128, with OrbitControls and GLTFLoader","license":"MIT","url":"https://threejs.org/"},{"id":"draco","title":"Draco","credit":"Google, used to decode the spacecraft model ahead of time","license":"Apache 2.0","url":"https://google.github.io/draco/"},{"id":"pipeline-libs","title":"Picture pipeline","credit":"SpiceyPy (Andrew Annex et al.), NumPy, pandas, OpenCV, Pillow, scikit-image, Matplotlib","detail":"The Python libraries the frame server and the image pipeline run on.","license":"MIT, BSD and Apache 2.0 (each project's own)"},{"id":"font-silkscreen","title":"Silkscreen","credit":"Jason Kottke, via Google Fonts","license":"SIL Open Font License 1.1","url":"https://fonts.google.com/specimen/Silkscreen"},{"id":"font-sharetech","title":"Share Tech Mono","credit":"Carrois Apostrophe, via Google Fonts","license":"SIL Open Font License 1.1","url":"https://fonts.google.com/specimen/Share+Tech+Mono"}]}]};
   const card = $("about"), nav = $("anav"), pane = $("apane");
   const esc = s => String(s).replace(/[&<>"]/g, c => ({ "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;" })[c]);
   const TABS = {
@@ -6139,6 +6640,9 @@ function requestYears(y) {
   yearsWanted = y;
   if (yearsWake) yearsWake();
   if (!yearsJob) yearsJob = (async () => {
+    // after this assignment: with the part already in, the loop below ends at once, and its finally
+    // must not run before yearsJob is set (that left a finished job in yearsJob, so no later jump loaded)
+    await null;
     try {
       while (yearsWanted !== null) {
         const y = yearsWanted, ys = partsAround(y);
@@ -6746,9 +7250,10 @@ function clampView() {
   state.view = [a, b];
 }
 // years that are not loaded: frames per day from mission.json, drawn muted
+// (a page can show another count, such as one body's pictures, through window.studyFramesPerDay)
 function drawUnloadedBars(g, w, h) {
   if (!mission) return;
-  const F = mission.frames_per_day, base = h * 0.62, bw = 2, n = F.N.length;
+  const F = (window.studyFramesPerDay && window.studyFramesPerDay()) || mission.frames_per_day, base = h * 0.62, bw = 2, n = F.N.length;
   for (let x = 0; x < w; x += bw) {
     const t0 = xToEt(x, w), t1 = xToEt(x + bw, w);
     if (t1 > loadedSpan[0] && t0 < loadedSpan[1]) continue;
@@ -6812,6 +7317,7 @@ function drawTimeline() {
   let lastLabel = -1e9;
   for (const e of encounters) {
     const x = etToX(e.et, w); if (x < -10 || x > w + 10) continue;
+    if (window.studyEncounterShown && !window.studyEncounterShown(e)) continue;   // a page can show some only
     const ms = e.kind === "milestone" || e.kind === "observation";
     g.fillStyle = ms ? THEME.ms : e.body === "SATURN" ? THEME.sat : e.body === "TITAN" ? THEME.titan : THEME.other;
     if (e.kind === "observation") g.fillStyle = "#8ab6ff";   // imaging sessions in the camera blue
@@ -6935,7 +7441,7 @@ function updateFocusRow() {
   }
 }
 function scrollMoments() {
-  const list = $("mlist"), next = [...list.querySelectorAll("li[data-et]")].find(li => +li.dataset.et >= state.et - 3600);
+  const list = $("mlist"), next = [...list.querySelectorAll("li[data-et]:not([hidden])")].find(li => +li.dataset.et >= state.et - 3600);
   if (next) list.scrollTop = Math.max(0, next.offsetTop - list.offsetTop - 60);
 }
 function buildUi() {
@@ -6967,7 +7473,7 @@ function buildUi() {
       year = e.utc.slice(0, 4);
       const h = document.createElement("li"); h.className = "yr"; h.textContent = year; list.appendChild(h);
     }
-    const li = document.createElement("li"); li.className = e.kind === "milestone" ? "ms" : e.kind === "observation" ? "ob" : ""; li.dataset.et = e.et;
+    const li = document.createElement("li"); li.className = e.kind === "milestone" ? "ms" : e.kind === "observation" ? "ob" : ""; li.dataset.et = e.et; li.dataset.body = momentBody(e);
     const d = new Date(etToMs(e.et));
     const title = e.kind === "flyby" ? `${titleCase(e.body)} flyby` : e.label;
     const s = e.kind === "milestone" ? d.toISOString().slice(11, 16) + " UTC"
@@ -7077,6 +7583,12 @@ function aimFollow() {
 function fmtSpan(sec) { const m = Math.round(sec / 60), h = Math.floor(m / 60); return h ? `${h} h${m % 60 ? ` ${m % 60} min` : ""}` : `${Math.max(1, m)} min`; }
 function setSpeed(v) { state.speed = v; document.querySelectorAll("#speeds .btn").forEach(b => b.setAttribute("aria-pressed", String(+b.dataset.v === v))); }
 function setPlaying(p) { state.playing = p; $("play").textContent = p ? "❚❚" : "▶"; $("play").classList.toggle("playing", p); }
+// the body a moment is about: a flyby's or imaging session's own, the planet or moon a milestone names, or none
+function momentBody(e) {
+  if (e.body) return e.body;
+  const t = (e.label || "").toUpperCase();
+  return [...PLANETS, ...CRUISE_FOCUS, ...FOCUS_LIST, "HUYGENS"].find(n => n !== "CASSINI" && t.includes(n)) || "";
+}
 // the body a milestone is about: Earth for the launch, a named planet or moon, otherwise Titan
 function milestoneBody(e) {
   if (/^Launch/.test(e.label)) return "EARTH";
@@ -7357,10 +7869,165 @@ function frame(now) {
 })();
 </script>
 <script>
+// ---------- what every cutscene shares: hooks, begin and end, fades, captions, looking around, triggers ----------
+(function () {
+  const scenes = {};   // name -> { frame, positions, attitude, camera, root, onEnd }
+  let active = null, saved = null;
+
+  // ---------- fades and captions, on the viewer's frame clock ----------
+  const fades = new Map(), slow = matchMedia("(prefers-reduced-motion: reduce)").matches;
+  function fadeTo(el, to, secs, then) { fades.set(el, { from: +el.style.opacity || 0, to, t0: performance.now(), secs, then }); }
+  function stepFades() {
+    for (const [el, f] of fades) {
+      const k = Math.min(1, (performance.now() - f.t0) / 1000 / f.secs), e = k * k * (3 - 2 * k), o = f.from + (f.to - f.from) * e;
+      el.style.opacity = o;
+      if (el.classList.contains("cs-cap") && !slow) el.style.transform = `translateY(${(1 - o) * 6}px)`;
+      if (k >= 1) { fades.delete(el); if (f.then) f.then(); }
+    }
+  }
+  // paused in the background (away.html): the fades and the look-around's ease carry on where they stopped
+  document.addEventListener("cassini:away", e => {
+    if (e.detail.away) return;
+    for (const f of fades.values()) f.t0 += e.detail.ms;
+    look.last += e.detail.ms;
+  });
+  function caption(caps, html, cls) {
+    const el = document.createElement("div");
+    el.className = "cs-cap" + (cls ? " " + cls : ""); el.innerHTML = html; caps.appendChild(el);
+    fadeTo(el, 1, 1.2);
+    return el;
+  }
+  function drop(el) { fadeTo(el, 0, 1.1, () => el.remove()); }
+  // run each line of a list ([at, dur, html, cls, chord]) whose time has come, and take it down when its time is up
+  function runCaptions(caps, list, t, shown) {
+    list.forEach(([at, dur, html, cls, chord], i) => {
+      if (!shown[i] && t >= at && t < at + dur) { shown[i] = caption(caps, html, cls); if (chord) sound("chord", chord); }
+      if (shown[i] && shown[i] !== true && t >= at + dur) { drop(shown[i]); shown[i] = true; }
+    });
+  }
+  // take down every line still up
+  function dropAll(shown) { shown.forEach((el, i) => { if (el && el !== true) { drop(el); shown[i] = true; } }); }
+  const sound = (what, ...a) => { if (window.cassiniSound && cassiniSound[what]) cassiniSound[what](...a); };
+
+  // ---------- looking around: a drag turns the view, the wheel zooms; it eases back a few seconds after ----------
+  const look = { yaw: 0, pitch: 0, zoom: 1, drag: null, last: 0, wheel: true };
+  const resetLook = () => Object.assign(look, { yaw: 0, pitch: 0, zoom: 1, drag: null, last: 0 });
+  function onDown(e) {
+    if (!active || e.target !== document.getElementById("gl")) return;
+    look.drag = [e.clientX, e.clientY]; look.last = performance.now(); document.body.classList.add("cs-drag");
+    e.stopImmediatePropagation();
+  }
+  function onMove(e) {
+    if (!active || !look.drag) return;
+    look.yaw -= (e.clientX - look.drag[0]) * 0.006; look.pitch = Math.max(-1.2, Math.min(1.2, look.pitch + (e.clientY - look.drag[1]) * 0.005));
+    look.drag = [e.clientX, e.clientY]; look.last = performance.now();
+    e.stopImmediatePropagation();
+  }
+  function onUp() { look.drag = null; look.last = performance.now(); document.body.classList.remove("cs-drag"); }
+  function onWheel(e) {
+    if (!active || !look.wheel) return;
+    look.zoom = Math.max(0.35, Math.min(4, look.zoom * Math.exp(e.deltaY * 0.0012))); look.last = performance.now();
+    e.preventDefault(); e.stopImmediatePropagation();
+  }
+  function easeLook(dt) {
+    if (look.drag || performance.now() - look.last < 4000) return;
+    const k = 1 - Math.exp(-dt / 1.6);
+    look.yaw -= look.yaw * k; look.pitch -= look.pitch * k; look.zoom += (1 - look.zoom) * k;
+  }
+
+  // ---------- begin and end ----------
+  // a cutscene's hooks and its section (root, with the .cs-root class); onEnd tidies up its own effects
+  function register(name, s) { scenes[name] = s; const b = s.root && s.root.querySelector(".cs-skip"); if (b) b.addEventListener("click", e => { e.stopPropagation(); end(name); }); }
+  function begin(name) {
+    const s = scenes[name];
+    if (active || !s) return false;
+    active = name; saved = { follow: state.follow };
+    resetLook(); look.wheel = true;
+    if (state.follow) setFollow(false);
+    setPlaying(false);
+    controls.enabled = false;
+    s.root.hidden = false;
+    document.body.classList.add("cutscene");
+    return true;
+  }
+  // ends the one playing (or `name`, if it is the one): its own tidying first, then the interface comes back as it was.
+  // then(root) runs after the interface is back, before the cover fades
+  function end(name) {
+    if (!active || (name && name !== active)) return;
+    const s = scenes[active], was = saved; active = null; saved = null;
+    if (s.onEnd) s.onEnd();
+    cassini.visible = true; markerPts.visible = true; cassini.up.set(0, 1, 0);
+    camera.up.set(0, 1, 0);
+    controls.enabled = true;
+    const black = s.root.querySelector(".cs-black");
+    fades.forEach((v, el) => { if (el !== black) fades.delete(el); });
+    if (was.follow) setFollow(true);
+    document.body.classList.add("cutscene-out");
+    document.body.classList.remove("cutscene", "cs-drag");
+    const done = () => { document.body.classList.remove("cutscene-out"); if (!active) s.root.hidden = true; };
+    if (black) fadeTo(black, 0, 1.5, done); else done();
+    if (window.cassiniPerf) cassiniPerf.invalidate();
+  }
+
+  // ---------- the viewer's hooks, for the one playing ----------
+  window.studyFrame = dt => {
+    stepFades();
+    if (!active) return;
+    if (window.cassiniPerf) cassiniPerf.invalidate();
+    state.playing = false;
+    easeLook(dt);
+    const s = scenes[active];
+    if (s.frame) s.frame(dt);
+  };
+  const hook = k => (...a) => { if (active && scenes[active][k]) scenes[active][k](...a); };
+  window.studyPositions = hook("positions");
+  window.studyAttitude = hook("attitude");
+  window.studyCamera = hook("camera");
+
+  // ---------- triggers ----------
+  // playback crossing a moment going forward plays a cutscene (when(et) can say no: not this time)
+  const triggers = [];
+  function at(et, play, when) { triggers.push({ et, play, when }); }
+  const advance = window.studyAdvance;
+  window.studyAdvance = (et, dt, speed) => {
+    const next = advance ? advance(et, dt, speed) : et + dt * speed;
+    if (!active) for (const g of triggers) {
+      const t = typeof g.et === "function" ? g.et() : g.et;
+      if (t != null && et < t && next >= t && (!g.when || g.when(t))) { setTimeout(g.play, 0); break; }
+    }
+    return next;
+  };
+  // ?<name> in the address plays it at once: the clock goes to et() (once the data is loaded) and play() runs when
+  // that part of the mission is ready. ok() can say the data has no such moment
+  function fromUrl(name, et, play, ok) {
+    if (!new URLSearchParams(location.search).has(name)) return;
+    const wait = setInterval(() => {
+      if (!coverage[1] || !tracks.CASSINI || $("loading") && !$("loading").hidden) return;
+      if (ok && !ok()) { clearInterval(wait); return; }
+      const t = et();
+      if (Math.abs(state.et - t) > 7200) { setTime(t); return; }
+      if (typeof yearReady === "function" && !yearReady()) return;
+      clearInterval(wait); play();
+    }, 250);
+  }
+
+  window.addEventListener("keydown", e => { if (active && e.key === "Escape") { e.preventDefault(); e.stopImmediatePropagation(); end(); } }, true);
+  window.addEventListener("pointerdown", onDown, true);
+  window.addEventListener("pointermove", onMove, true);
+  window.addEventListener("pointerup", onUp, true);
+  window.addEventListener("pointercancel", onUp, true);
+  window.addEventListener("wheel", onWheel, { capture: true, passive: false });
+  window.cassiniCutscene = { register, begin, end, at, fromUrl, fadeTo, caption, drop, dropAll, runCaptions, sound, look, resetLook,
+    get active() { return active; } };
+})();
+</script>
+<script>
 // ---------- the Grand Finale: Cassini's last minute and a mission recap, at the end of the data ----------
 (function () {
-  const root = document.getElementById("finale"), black = root.querySelector(".fx-black"), caps = root.querySelector(".fx-caps"), air = root.querySelector(".fx-air");
-  const read = root.querySelector(".fx-read"), note = root.querySelector(".fx-note"), hint = root.querySelector(".fx-hint"), skipBtn = root.querySelector(".fx-skip");
+  const root = document.getElementById("finale"), black = root.querySelector(".cs-black"), caps = root.querySelector(".cs-caps"), air = root.querySelector(".fx-air");
+  const read = root.querySelector(".fx-read"), note = root.querySelector(".fx-note"), hint = root.querySelector(".cs-hint");
+  // what every cutscene shares (cutscene.html)
+  const CS = cassiniCutscene, { fadeTo, drop, sound, look } = CS, runCaptions = (list, t, shown) => CS.runCaptions(caps, list, t, shown);
   const roll = root.querySelector(".fx-roll"), rollIn = roll.querySelector(".in");
   const dataBox = root.querySelector(".fx-data"), dataCv = dataBox.querySelector("canvas"), dataNote = dataBox.querySelector("small");
   // the real readings from the last hour, written in by build.py from finale-data.json (null when there are none):
@@ -7640,60 +8307,6 @@ function frame(now) {
     dataNote.textContent = FINALE_DATA.credit || "";
   }
 
-  // ---------- captions and fades, on the viewer's frame clock (performance.now), so a recording keeps their pace ----------
-  const fades = new Map(), slow = matchMedia("(prefers-reduced-motion: reduce)").matches;
-  function fadeTo(el, to, secs, then) { fades.set(el, { from: +el.style.opacity || 0, to, t0: performance.now(), secs, then }); }
-  function stepFades() {
-    for (const [el, f] of fades) {
-      const k = Math.min(1, (performance.now() - f.t0) / 1000 / f.secs), e = k * k * (3 - 2 * k), o = f.from + (f.to - f.from) * e;
-      el.style.opacity = o;
-      if (el.classList.contains("fx-cap") && !slow) el.style.transform = `translateY(${(1 - o) * 6}px)`;
-      if (k >= 1) { fades.delete(el); if (f.then) f.then(); }
-    }
-  }
-  // paused in the background (away.html): the fades carry on where they stopped
-  document.addEventListener("cassini:away", e => { if (!e.detail.away) for (const f of fades.values()) f.t0 += e.detail.ms; });
-  function caption(html, cls) {
-    const el = document.createElement("div");
-    el.className = "fx-cap" + (cls ? " " + cls : ""); el.innerHTML = html; caps.appendChild(el);
-    fadeTo(el, 1, 1.2);
-    return el;
-  }
-  function drop(el) { fadeTo(el, 0, 1.1, () => el.remove()); }
-  // run each line of a list whose time has come, and take it down when its time is up
-  function runCaptions(list, t, shown) {
-    list.forEach(([at, dur, html, cls, chord], i) => {
-      if (!shown[i] && t >= at && t < at + dur) { shown[i] = caption(html, cls); if (chord) sound("chord", chord); }
-      if (shown[i] && shown[i] !== true && t >= at + dur) { drop(shown[i]); shown[i] = true; }
-    });
-  }
-  const sound = (what, ...a) => { if (window.cassiniSound && cassiniSound[what]) cassiniSound[what](...a); };
-
-  // ---------- looking around: a drag turns the view, the wheel zooms; it eases back a few seconds after ----------
-  const look = { yaw: 0, pitch: 0, zoom: 1, drag: null, last: 0 };
-  function onDown(e) {
-    if (!F || e.target !== document.getElementById("gl")) return;
-    look.drag = [e.clientX, e.clientY]; look.last = performance.now(); document.body.classList.add("fx-drag");
-    e.stopImmediatePropagation();
-  }
-  function onMove(e) {
-    if (!F || !look.drag) return;
-    look.yaw -= (e.clientX - look.drag[0]) * 0.006; look.pitch = Math.max(-1.2, Math.min(1.2, look.pitch + (e.clientY - look.drag[1]) * 0.005));
-    look.drag = [e.clientX, e.clientY]; look.last = performance.now();
-    e.stopImmediatePropagation();
-  }
-  function onUp() { look.drag = null; look.last = performance.now(); document.body.classList.remove("fx-drag"); }
-  function onWheel(e) {
-    if (!F || F.phase === "credits") return;
-    look.zoom = Math.max(0.35, Math.min(4, look.zoom * Math.exp(e.deltaY * 0.0012))); look.last = performance.now();
-    e.preventDefault(); e.stopImmediatePropagation();
-  }
-  function easeLook(dt) {
-    if (look.drag || performance.now() - look.last < 4000) return;
-    const k = 1 - Math.exp(-dt / 1.6);
-    look.yaw -= look.yaw * k; look.pitch -= look.pitch * k; look.zoom += (1 - look.zoom) * k;
-  }
-
   // ---------- the credits roll ----------
   const esc = t => String(t).replace(/[&<>"]/g, c => ({ "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;" })[c]);
   function block(b, h) {
@@ -7751,54 +8364,36 @@ function frame(now) {
   }
 
   function play() {
-    if (F || !tracks.CASSINI || !tracks.SATURN || !bodies.SATURN) return;
+    if (F || CS.active || !tracks.CASSINI || !tracks.SATURN || !bodies.SATURN) return;
     const cal = calibrate();
     if (!cal) return;
     F = Object.assign(cal, { t0: performance.now(), phase: "out", tau: null, lost: false, tumbleAxis: new THREE.Vector3(1, 0.45, 0.2).normalize(),
-      shownD: [], shownR: [], follow: state.follow, fx: null, recapAt: 0, lastFrame: performance.now() });
-    Object.assign(look, { yaw: 0, pitch: 0, zoom: 1, drag: null, last: 0 });
-    if (state.follow) setFollow(false);
-    setPlaying(false);
-    controls.enabled = false;
-    root.hidden = false;
-    document.body.classList.add("finale");
+      shownD: [], shownR: [], fx: null, recapAt: 0, lastFrame: performance.now() });
+    CS.begin("finale");
     fadeTo(black, 1, 1.5);
   }
-  function finish() {
-    if (!F) return;
-    const f = F; F = null;
-    sound("carrier", 0, 0); sound("drone", 0);
-    removeEffects(f.fx); removeFlare(f.flare);
-    cassini.visible = true; markerPts.visible = true; cassini.up.set(0, 1, 0);
-    camera.up.set(0, 1, 0);
-    controls.enabled = true;
-    caps.textContent = ""; [read, note, hint, dataBox, roll].forEach(e => e.classList.remove("on"));
-    roll.style.opacity = 0; rollIn.textContent = "";
-    air.style.opacity = 0;
-    fades.forEach((v, el) => { if (el !== black) fades.delete(el); });
-    setTime(coverage[1]);
-    if (state.focus !== "CASSINI") setFocus("CASSINI");
-    setFocus("CASSINI", 6e-5);
-    if (f.follow) setFollow(true);
-    document.body.classList.add("finale-out");
-    document.body.classList.remove("finale", "fx-drag");
-    fadeTo(black, 0, 1.5, () => { document.body.classList.remove("finale-out"); if (!F) root.hidden = true; });
-    if (window.cassiniPerf) cassiniPerf.invalidate();
-  }
-
-  // the viewer's frame loop, before it places the bodies: the finale runs its own clock
+  const finish = () => CS.end("finale");
   // paused in the background (away.html): the cutscene's clock moves on by the time away, so it carries on where it stopped
   document.addEventListener("cassini:away", e => {
     if (e.detail.away || !F) return;
-    const ms = e.detail.ms; F.t0 += ms; F.lastFrame += ms; look.last += ms;
+    const ms = e.detail.ms; F.t0 += ms; F.lastFrame += ms;
     for (const k of ["recapAt", "rollAt", "rollHeld", "rollEnd", "rollClose"]) if (F[k]) F[k] += ms;
   });
-  window.studyFrame = dt => {
-    stepFades();
-    if (!F) return;
-    if (window.cassiniPerf) cassiniPerf.invalidate();
-    state.playing = false;
-    easeLook(dt);
+  // its own tidying when it ends (cutscene.html brings the interface back)
+  function cleanUp() {
+    const f = F; F = null;
+    sound("carrier", 0, 0); sound("drone", 0);
+    removeEffects(f.fx); removeFlare(f.flare);
+    caps.textContent = ""; [read, note, hint, dataBox, roll].forEach(e => e.classList.remove("on"));
+    roll.style.opacity = 0; rollIn.textContent = "";
+    air.style.opacity = 0;
+    setTime(coverage[1]);
+    if (state.focus !== "CASSINI") setFocus("CASSINI");
+    setFocus("CASSINI", 6e-5);
+  }
+
+  // before the bodies are placed: the finale runs its own clock
+  function frame(dt) {
     const T = (performance.now() - F.t0) / 1000;
     if (F.phase === "out" && T >= 1.7) {
       // behind the black: back to a minute before loss of signal, on Cassini
@@ -7819,11 +8414,11 @@ function frame(now) {
       if (s > AFTER) {
         // the recap: the view cuts to Saturn from far away, where Cassini burns up as a flare
         F.phase = "recap"; F.recapAt = performance.now();
-        DESCENT.forEach((d, i) => { if (F.shownD[i] && F.shownD[i] !== true) drop(F.shownD[i]); });
+        CS.dropAll(F.shownD);
         sound("carrier", 0, 0); sound("drone", 0);
         removeEffects(F.fx); F.fx = null;
         cassini.visible = false; air.style.opacity = 0; setFocus("SATURN");
-        Object.assign(look, { yaw: 0, pitch: 0, zoom: 1 });
+        CS.resetLook();
         F.flare = addFlare();
         fadeTo(black, 0, 1.5);
       }
@@ -7838,22 +8433,23 @@ function frame(now) {
       if (R > RECAP_END - 2.5 && !F.closing) { F.closing = true; fadeTo(black, 1, 2.5); }
       if (R > RECAP_END) {
         // after a moment of darkness, the credits roll
-        F.recap.forEach((d, i) => { if (F.shownR[i] && F.shownR[i] !== true) drop(F.shownR[i]); });
-        if (!TEAM) finish(); else { F.phase = "credits"; F.rollAt = performance.now(); }
+        CS.dropAll(F.shownR);
+        if (!TEAM) { finish(); return; }
+        F.phase = "credits"; F.rollAt = performance.now(); look.wheel = false;
       }
     }
-    if (F && F.phase === "credits") stepRoll(dt);
+    if (F.phase === "credits") stepRoll(dt);
     if (F && F.tau !== null) state.et = Math.min(F.tau, coverage[1]);
-  };
+  }
   // past the end of the data, Cassini carries on along its last velocity
-  window.studyPositions = () => {
-    if (!F || F.tau === null || F.tau <= coverage[1]) return;
+  function positions() {
+    if (F.tau === null || F.tau <= coverage[1]) return;
     rel(F.tau, tmpE);
     for (let k = 0; k < 3; k++) pos.CASSINI[k] = pos.SATURN[k] + tmpE[k];
-  };
+  }
   // the dish held on Earth by the rule above, then lost; and the effects that go with it
-  window.studyAttitude = () => {
-    if (!F || F.phase !== "descent") return;
+  function attitude() {
+    if (F.phase !== "descent") return;
     const now = performance.now(), dt = Math.min(0.1, (now - F.lastFrame) / 1000); F.lastFrame = now;
     const h = altitude(F.tau), L = load(h), t = F.tau, s = F.tau - F.tLos;
     // the local vertical (away from Saturn), the direction to Earth and the direction of motion, in the scene
@@ -7900,11 +8496,11 @@ function frame(now) {
     if (!F.lost) { sound("carrier", signal, Math.min(1, L)); sound("drone", Math.min(1, 0.15 + L)); }
     read.innerHTML = `Altitude ${fmtInt(h)} km · Thrusters <i>${Math.round(Math.min(100, L * 100))}%</i> · Antenna <i>${err < 10 ? err.toFixed(2) : fmtInt(err)}°</i> off Earth · Signal <i>${F.lost ? "lost" : Math.round(signal * 100) + "%"}</i>`;
     drawData(F.tau);
-  };
+  }
   // the camera: beside Cassini with Saturn's clouds below and the horizon level, drifting round toward the rings;
   // then far back from Saturn. A drag turns it, the wheel zooms
-  window.studyCamera = () => {
-    if (!F || F.phase === "out") return;
+  function cameraAt() {
+    if (F.phase === "out") return;
     if (F.phase === "descent") {
       const s = F.tau - F.tLos, k = clamp01((s + LEAD) / (LEAD + 10));
       relScene("SATURN", vT).sub(cassini.position);   // Cassini -> Saturn's centre
@@ -7940,33 +8536,120 @@ function frame(now) {
       camera.up.copy(pole);
       camera.lookAt(new THREE.Vector3().addScaledVector(pole, -22));
     }
-  };
+  }
 
-  // playback reaching the end of the data starts it
+  CS.register("finale", { root, frame, positions, attitude, camera: cameraAt, onEnd: cleanUp });
+  // playback reaching the end of the data starts it, when the data ends with the mission; ?finale plays it at once
+  CS.at(() => coverage[1] ? coverage[1] - 0.5 : null, play, endsMission);
+  CS.fromUrl("finale", () => coverage[1], play, endsMission);
+  window.cassiniFinale = { play, skip: finish, get running() { return !!F; } };
+})();
+</script>
+<script>
+// ---------- the start of the mission: Cassini on its own in low Earth orbit, and the road to Saturn ahead ----------
+(function () {
+  const CS = window.cassiniCutscene, { fadeTo } = CS;
+  const root = document.getElementById("launch"), black = root.querySelector(".cs-black");
+  const caps = root.querySelector(".cs-caps"), clock = root.querySelector(".lx-clock");
+  const UP = 1.4;             // s into the cutscene the black lifts off Cassini
+  const SPEED = 40;           // mission seconds per second, so Earth visibly falls away
+  const END = 24;             // s into the cutscene the interface comes back
+  // the captions: screen seconds in, how long, the line, a class, a chord under it (steps on the scale, see sound.html)
+  const CAPS = [
+    [3, 6.6, `<b>October 15, 1997 · 42 minutes after launch</b>The Centaur upper stage lets go. Cassini is on its own, and ten minutes later a dish near Canberra, Australia, hears its first signal.`, "", [0, 2, 4]],
+    [10.2, 7.4, `<b>The road to Saturn</b>Too heavy to fly straight there, it plans to borrow speed from the planets on the way.`
+      + `<div class="lx-road"><span>Venus<small>Apr 1998</small></span><span>Venus<small>Jun 1999</small></span><span>Earth<small>Aug 1999</small></span><span>Jupiter<small>Dec 2000</small></span><span>Saturn<small>Jul 2004</small></span></div>`, "road", [1, 3, 5]],
+    [18.2, 4.4, `<b>3.4 billion kilometers · 6 years, 8 months</b>Next stop: Venus.`, "big", [0, 2, 4, 7]],
+  ];
+
+  let L = null;   // the running opening
+  const tmpA = v3(), tmpB = v3(), tmpC = v3(), vE = new THREE.Vector3(), vS = new THREE.Vector3();
+
+  // ---------- captions (cutscene.html runs them); the stops on the road light up one by one ----------
+  function runCaptions(T) {
+    CS.runCaptions(caps, CAPS, T, L.shown);
+    CAPS.forEach(([at], i) => {
+      const el = L.shown[i];
+      if (el && el !== true) el.querySelectorAll(".lx-road span").forEach((s, j) => s.classList.toggle("on", T > at + 1 + j * 0.9));
+    });
+  }
+  // the mission clock from liftoff, with Cassini's distance and speed from Earth
+  const pad = n => String(n).padStart(2, "0");
+  const hms = s => `${pad(Math.floor(s / 3600))}:${pad(Math.floor(s / 60) % 60)}:${pad(Math.floor(s) % 60)}`;
+  function stepClock(T) {
+    clock.classList.toggle("on", T >= UP + 0.6 && T < END - 1.5);
+    const s = L.tau - LAUNCH_MS / 1000 + etToMs(0) / 1000;
+    const d = len(sub(positionAt(tracks.CASSINI, L.tau, tmpA), positionAt(tracks.EARTH, L.tau, tmpB), tmpA));
+    const rate = len(sub(positionAt(tracks.CASSINI, L.tau + 1, tmpB), positionAt(tracks.EARTH, L.tau + 1, tmpC), tmpB)) - d;
+    clock.innerHTML = `T+<i>${hms(s)}</i> · ${fmtInt(d)} km from Earth · ${document.body.classList.contains("phone") ? "" : "moving away at "}<i>${rate.toFixed(1)}</i> km/s`;
+  }
+
+  function play() {
+    if (L || !tracks.CASSINI || !tracks.EARTH) return;
+    const was = { speed: state.speed };
+    if (!CS.begin("launch")) return;
+    L = Object.assign(was, { t0: performance.now(), up: false, tau: coverage[0], shown: [] });
+    fadeTo(black, 1, 0.8);
+  }
+  // cutscene.html ends it (Escape, Skip, or the end below); the mission carries on from where the opening left it
+  function onEnd() {
+    const l = L; L = null;
+    caps.textContent = ""; clock.classList.remove("on");
+    setTime(l.tau);
+    spent = true;
+    if (state.focus !== "CASSINI") setFocus("CASSINI");
+    setFocus("CASSINI", 6e-5);
+    setSpeed(l.speed); setPlaying(true);
+    black.style.opacity = Math.max(+black.style.opacity || 0, 0.6);
+  }
+
+  // the viewer's frame loop, before it places the bodies: the opening runs its own clock
+  function frame() {
+    if (!L) return;
+    const T = (performance.now() - L.t0) / 1000;
+    if (!L.up && T >= UP) {
+      // behind the black: close to Cassini with Earth beyond it, then the black lifts
+      L.up = true; L.upAt = T;
+      setFocus("CASSINI", 5e-5); markerPts.visible = false;
+      fadeTo(black, 0, 2.6);
+    }
+    if (L.up) L.tau = Math.min(coverage[1], coverage[0] + (T - L.upAt) * SPEED);
+    if (T > END - 1.5 && !L.closing) { L.closing = true; fadeTo(black, 0.6, 1.4); }
+    runCaptions(T);
+    stepClock(T);
+    state.et = L.tau;
+    if (T >= END) CS.end("launch");
+  }
+  // beside Cassini, looking past it at Earth falling away behind
+  function camera_() {
+    if (!L || !L.up) return;
+    const k = (performance.now() - L.t0) / 1000 - L.upAt;
+    relScene("EARTH", vE).sub(cassini.position);   // Cassini -> Earth
+    const toEarth = vE.clone().normalize();
+    toScene([0, 0, 1], vS).normalize();             // the celestial north pole, for an up
+    const side = new THREE.Vector3().crossVectors(toEarth, vS).normalize();
+    // behind Cassini as seen from Earth, swung off to one side so Earth sits beside it, drifting slowly round
+    const yaw = (62 - 0.6 * k) * Math.PI / 180, pitch = 0.3;
+    const dir = toEarth.clone().applyAxisAngle(vS, yaw).addScaledVector(vS, pitch).normalize();
+    // a tall screen (a phone held upright) keeps Cassini in the middle and stands back further
+    const tall = camera.aspect < 1, d = (2.6e-5 + 1.2e-6 * k) * (tall ? 1.7 : 1);
+    camera.position.copy(cassini.position).addScaledVector(dir, -d);
+    camera.up.copy(vS).addScaledVector(side, 0.08).normalize();
+    camera.lookAt(cassini.position.clone().addScaledVector(toEarth, tall ? 0 : d * 0.35));
+  }
+  CS.register("launch", { root, frame, camera: camera_, onEnd });
+  // playback running forward from the very start of the data starts it (the Launch moment does that); the data starts
+  // at separation, so the clock never crosses a moment before it and cutscene.html's crossing trigger cannot catch it
+  let spent = false;
   const advance = window.studyAdvance;
   window.studyAdvance = (et, dt, speed) => {
     const next = advance ? advance(et, dt, speed) : et + dt * speed;
-    if (!F && et < coverage[1] - 0.5 && next >= coverage[1] - 0.5 && endsMission()) setTimeout(play, 0);
+    if (et > coverage[0] + 30) spent = false;
+    if (!L && !spent && !CS.active && speed > 0 && et <= coverage[0] + 1 && next > et) { spent = true; setTimeout(play, 0); return et; }
     return next;
   };
-  // Escape or Skip ends it; dragging and the wheel look around
-  window.addEventListener("keydown", e => { if (F && e.key === "Escape") { e.preventDefault(); e.stopImmediatePropagation(); finish(); } }, true);
-  skipBtn.addEventListener("click", e => { e.stopPropagation(); finish(); });
-  window.addEventListener("pointerdown", onDown, true);
-  window.addEventListener("pointermove", onMove, true);
-  window.addEventListener("pointerup", onUp, true);
-  window.addEventListener("pointercancel", onUp, true);
-  window.addEventListener("wheel", onWheel, { capture: true, passive: false });
-  window.cassiniFinale = { play, skip: finish, get running() { return !!F; } };
-  // ?finale plays it as soon as the end of the mission is loaded
-  if (new URLSearchParams(location.search).has("finale")) {
-    const wait = setInterval(() => {
-      if (!coverage[1] || !tracks.CASSINI || $("loading") && !$("loading").hidden) return;
-      if (!endsMission()) { clearInterval(wait); return; }
-      if (Math.abs(state.et - coverage[1]) > 7200) { setTime(coverage[1]); return; }
-      if (typeof yearReady === "function" && !yearReady()) return;
-      clearInterval(wait); play();
-    }, 250);
-  }
+  window.cassiniLaunch = { play, skip: () => CS.end("launch"), get running() { return !!L; } };
+  // ?launch plays it as soon as the start of the mission is loaded
+  CS.fromUrl("launch", () => coverage[0], () => { spent = true; play(); });
 })();
 </script>

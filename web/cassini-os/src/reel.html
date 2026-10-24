@@ -197,7 +197,7 @@ body.phone #reelcard:not(.full) { width: calc(100% - 16px) !important; left: 8px
   function open() {
     if (R.open) return;
     R.open = true; card.hidden = false; card.dispatchEvent(new Event("pointerdown"));
-    R.hidden = ["imgcard", "wacard", "moviecard"].map($).filter(w => w && !w.hidden);
+    R.hidden = ["imgcard", "wacard"].map($).filter(w => w && !w.hidden);
     R.hidden.forEach(w => { w.hidden = true; });
     if (window.cassiniMovie && window.cassiniMovie.on) window.cassiniMovie.stop();
     loadBodies();
