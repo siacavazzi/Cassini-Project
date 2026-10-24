@@ -219,7 +219,7 @@ body.phone #galtoast { bottom: calc(env(safe-area-inset-bottom, 0px) + var(--app
       const u = new URL(src, location.href);
       if (!/^\/frames\//.test(u.pathname) || u.pathname.includes("..")) return null;
       ["size", "format", "download"].forEach(k => u.searchParams.delete(k));
-      const q = u.searchParams.toString().replace(/%2C/gi, ",");
+      const q = u.searchParams.toString().replace(/%2C/gi, ",").replace(/%3A/gi, ":");
       return u.pathname + (q ? "?" + q : "");
     } catch (e) { return null; }
   }

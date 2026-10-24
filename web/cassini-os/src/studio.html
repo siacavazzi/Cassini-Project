@@ -17,6 +17,12 @@
      recipe too (&edit=…): the page that opens it makes the picture again from the archive and applies the edit.
      Share… is the gallery's share menu (the phone's share sheet with the file, Copy link, Reddit, X, text, email).
 
+     Mosaic (a mosaic picture, when the frame server has its tile map, /frames/mosaic/<ID>.json): each pointing's
+     outline over the picture; drag one (or nudge it with the arrows) to move its tiles, or hide it. Every change is
+     made by the frame server through the mosaic pipeline (obs_mosaic.tuned_layout: the tiles' SPICE placement with
+     the moves laid over it, composed by mosaic.compose), never moved in the page: the picture's address carries the
+     change (&tune=n:dx:dy,…&hide=n,…), so saving, links and Reset all keep working the same way.
+
      window.cassiniStudio = { open({ kind, blob, url, item, edit, target }), close, apply(blob, edit) -> JPEG blob,
      encode(params), decode(string), get state }. -->
 <style>
@@ -83,6 +89,15 @@
 #stufilters button:hover { background: rgba(255,255,255,.06); }
 #stufilters button[aria-pressed="true"] { border-color: var(--q-accent); background: rgba(138,182,255,.12); color: #fff; }
 #stufilters canvas { width: 62px; height: 62px; border-radius: 3px; background: #000; display: block; }
+#stumos { position: absolute; z-index: 2; overflow: visible; touch-action: none; }
+#stumos[hidden] { display: none; }
+#stumos polygon { fill: rgba(138,182,255,0); stroke: rgba(232,236,242,.55); stroke-width: 1; vector-effect: non-scaling-stroke; cursor: grab; }
+#stumos polygon:hover { fill: rgba(138,182,255,.10); stroke: #fff; }
+#stumos polygon.moved { stroke: var(--q-accent); }
+#stumos polygon.sel { fill: rgba(138,182,255,.16); stroke: var(--q-accent); stroke-width: 2; }
+#stumos polygon.off { stroke-dasharray: 4 3; stroke: rgba(255,140,120,.7); }
+#stumos text { font: 10px var(--hudf); fill: rgba(232,236,242,.8); paint-order: stroke; stroke: #000; stroke-width: 2px; pointer-events: none; }
+#stumossel { font-size: 11.5px; color: var(--q-text); margin-top: 8px; min-height: 16px; }
 .stunote { margin-top: 10px; font-size: 10.5px; line-height: 1.45; color: var(--q-dim); }
 .stufoot { flex: none; display: flex; gap: 6px; flex-wrap: wrap; align-items: center; padding: 8px 10px; border-top: 1px solid var(--q-line); }
 .stufoot .sp { flex: 1; }
@@ -107,6 +122,7 @@ body.phone .stufoot .galbtn { padding: 6px 10px; }
       <div id="stustage">
         <canvas id="stucanvas"></canvas>
         <span class="stutag" id="stutag" hidden>Original</span>
+        <svg id="stumos" viewBox="0 0 1 1" preserveAspectRatio="none" hidden></svg>
         <div id="stucrop" hidden><i data-h="nw"></i><i data-h="n"></i><i data-h="ne"></i><i data-h="e"></i><i data-h="se"></i><i data-h="s"></i><i data-h="sw"></i><i data-h="w"></i></div>
         <div id="stuempty">Open a picture or a film to edit it.<br><button class="galbtn" id="stufromwin">Edit the picture on screen</button><button class="galbtn" id="stofromgal">Open the Gallery</button></div>
         <div id="stuwait" hidden><div><span></span><div class="bar"><i></i></div><button class="galbtn" id="stucancel" hidden>Cancel</button></div></div>
@@ -118,7 +134,7 @@ body.phone .stufoot .galbtn { padding: 6px 10px; }
       </div>
     </div>
     <div class="stupanel">
-      <div class="galseg" id="stutabs"><button data-v="adjust" aria-pressed="true">Adjust</button><button data-v="crop" aria-pressed="false">Crop</button><button data-v="filters" aria-pressed="false">Filters</button></div>
+      <div class="galseg" id="stutabs"><button data-v="adjust" aria-pressed="true">Adjust</button><button data-v="crop" aria-pressed="false">Crop</button><button data-v="filters" aria-pressed="false">Filters</button><button data-v="mosaic" aria-pressed="false" hidden>Mosaic</button></div>
       <div class="stupane" data-pane="adjust">
         <canvas id="stuhist" width="236" height="64" aria-label="Histogram"></canvas>
         <div id="stuadjust"></div>
@@ -135,6 +151,16 @@ body.phone .stufoot .galbtn { padding: 6px 10px; }
         </div>
         <div id="stustraight"></div>
         <div class="stunote">Drag the corners or edges of the frame on the picture, or drag inside it to move it.</div>
+      </div>
+      <div class="stupane" data-pane="mosaic" hidden>
+        <div class="stunote" style="margin-top:8px">Drag a pointing's outline to move its tiles, or pick one and nudge it with the arrow keys. The frame server puts the mosaic together again through the pipeline after each change.</div>
+        <div id="stumossel">No pointing picked</div>
+        <div class="stuchips">
+          <button class="galbtn" id="stumoshide" disabled>Hide</button>
+          <button class="galbtn" id="stumosback" disabled>Back to where SPICE put it</button>
+          <button class="galbtn" id="stumosall" disabled>Reset the mosaic</button>
+        </div>
+        <div class="stunote" id="stumosnote"></div>
       </div>
       <div class="stupane" data-pane="filters" hidden>
         <div id="stufilters"></div>
@@ -334,12 +360,14 @@ void main() {
   function paint() {
     if (!R || !source() || card.hidden) return;
     const crop = st.tab === "crop", box = stage.getBoundingClientRect(), dpr = Math.min(2, devicePixelRatio || 1);
-    const [ow, oh] = outSize(st.p, st.W, st.H, crop), k = Math.min((box.width - 16) / ow, (box.height - 16) / oh);
+    const p = st.tab === "mosaic" ? Object.assign(clone(st.p), { quarter: 0, flipH: 0, flipV: 0, angle: 0, crop: [0, 0, 1, 1] }) : st.p;
+    const [ow, oh] = outSize(p, st.W, st.H, crop), k = Math.min((box.width - 16) / ow, (box.height - 16) / oh);
     if (!(k > 0)) return;
     const cw = ow * k, ch = oh * k, px = Math.min(1, Math.min(R.max, 2048) / Math.max(cw * dpr, ch * dpr));
     Object.assign(cv.style, { width: cw + "px", height: ch + "px", left: (box.width - cw) / 2 + "px", top: (box.height - ch) / 2 + "px" });
-    R.draw(st.p, Math.max(1, Math.round(cw * dpr * px)), Math.max(1, Math.round(ch * dpr * px)), { whole: crop, raw: st.compare });
+    R.draw(p, Math.max(1, Math.round(cw * dpr * px)), Math.max(1, Math.round(ch * dpr * px)), { whole: crop, raw: st.compare });
     if (crop) placeCrop();
+    if (st.tab === "mosaic") mosDraw();
     histSoon();
   }
   new ResizeObserver(draw).observe(stage);
@@ -449,6 +477,8 @@ void main() {
     $("stufilters").querySelectorAll("button").forEach(b => b.setAttribute("aria-pressed", String(b.dataset.v === st.p.filter)));
     $("stuundo").disabled = !st.undo.length; $("sturedo").disabled = !st.redo.length;
     $("stucrop").hidden = st.tab !== "crop" || !source();
+    $("stutabs").querySelector('[data-v="mosaic"]').hidden = !st.mos;
+    $("stumos").toggleAttribute("hidden", st.tab !== "mosaic" || !st.mos);   // an svg has no hidden property
     trimShow();
   }
   // undo: a snapshot before each finished change
@@ -531,6 +561,96 @@ void main() {
   $("stufliph").addEventListener("click", () => commit(() => { const c = st.p.crop; st.p.flipH ^= 1; st.p.crop = [1 - c[0] - c[2], c[1], c[2], c[3]]; }));
   $("stuflipv").addEventListener("click", () => commit(() => { const c = st.p.crop; st.p.flipV ^= 1; st.p.crop = [c[0], 1 - c[1] - c[3], c[2], c[3]]; }));
 
+  // ---------- a mosaic: moving and hiding its pointings, made again by the frame server ----------
+  const MOSAIC = /^\/frames\/mosaic\/([NW]\d{10}_\d+)\.webp/;
+  // the picture's address without the tuning, and the tuning it carries
+  function mosParts(src) {
+    const u = new URL(src, location.href), moves = {}, hide = new Set();
+    (u.searchParams.get("tune") || "").split(",").filter(Boolean).forEach(x => { const [n, dx, dy] = x.split(":").map(Number); if (isFinite(n + dx + dy)) moves[n] = [dx, dy]; });
+    (u.searchParams.get("hide") || "").split(",").filter(Boolean).forEach(n => { if (isFinite(+n)) hide.add(+n); });
+    u.searchParams.delete("tune"); u.searchParams.delete("hide");
+    return { base: u.pathname + (u.search ? u.search.replace(/%2C/gi, ",") : ""), moves, hide };
+  }
+  function mosSrc() {
+    const m = st.mos, tune = Object.entries(m.moves).filter(([, v]) => v[0] || v[1]).map(([n, v]) => `${n}:${r4(v[0])}:${r4(v[1])}`).join(","), hide = [...m.hide].sort((a, b) => a - b).join(",");
+    return m.base + (tune ? `${m.base.includes("?") ? "&" : "?"}tune=${tune}` : "") + (hide ? `${m.base.includes("?") || tune ? "&" : "?"}hide=${hide}` : "");
+  }
+  async function mosOpen(item) {
+    st.mos = null;
+    const src = item && item.src, m = src && new URL(src, location.href).pathname.match(MOSAIC);
+    if (!m || !GAL() || !GAL().fullUrl) return;
+    try {
+      const url = new URL(GAL().fullUrl(`/frames/mosaic/${m[1]}.json`)); url.searchParams.delete("size");
+      const r = await fetch(url.href); if (!r.ok) return;
+      const map = await r.json(); if (!map.pointings || !map.pointings.length) return;
+      st.mos = Object.assign(mosParts(src), { id: m[1], map, sel: null, busy: 0 });
+    } catch (e) { st.mos = null; }
+    sync();
+  }
+  function mosDraw() {
+    const m = st.mos, svg = $("stumos"); if (!m) return;
+    Object.assign(svg.style, { left: cv.style.left, top: cv.style.top, width: cv.style.width, height: cv.style.height });
+    const NS = "http://www.w3.org/2000/svg";
+    svg.replaceChildren(...m.map.pointings.map(q => {
+      const [dx, dy] = m.moves[q.n] || [0, 0], g = document.createElementNS(NS, "g"), pg = document.createElementNS(NS, "polygon");
+      pg.setAttribute("points", q.poly.map(([x, y]) => `${x + dx},${y + dy}`).join(" "));
+      pg.dataset.n = q.n;
+      pg.classList.toggle("sel", m.sel === q.n); pg.classList.toggle("moved", !!(dx || dy)); pg.classList.toggle("off", m.hide.has(q.n));
+      g.appendChild(pg);
+      return g;
+    }));
+    const q = m.map.pointings.find(q => q.n === m.sel);
+    $("stumossel").textContent = q ? `Pointing ${q.n} of ${m.map.pointings.length} · ${Object.values(q.ids || {}).join(", ")}` : `${m.map.pointings.length} pointings · pick one to move it`;
+    $("stumoshide").disabled = !q; $("stumoshide").textContent = q && m.hide.has(q.n) ? "Show" : "Hide";
+    $("stumosback").disabled = !q || !(m.moves[q.n] && (m.moves[q.n][0] || m.moves[q.n][1]));
+    $("stumosall").disabled = !Object.keys(m.moves).length && !m.hide.size;
+    $("stumosnote").textContent = m.busy ? "The frame server is putting the mosaic together…" : Object.keys(m.moves).length || m.hide.size ? `${Object.keys(m.moves).length} moved, ${m.hide.size} hidden. Reset the mosaic brings back the frame server's own.` : "";
+  }
+  // made again by the frame server, then the edit goes on as before
+  let mosT = 0, mosAsk = 0;
+  function mosApply() {
+    clearTimeout(mosT);
+    mosT = setTimeout(async () => {
+      const m = st.mos; if (!m) return;
+      const ask = ++mosAsk, src = mosSrc(); m.busy++; mosDraw();
+      try {
+        const r = await fetch(GAL().fullUrl(src)); if (!r.ok) throw new Error(`the frame server said ${r.status}`);
+        const blob = await r.blob(), bmp = await createImageBitmap(blob);
+        if (ask !== mosAsk || st.mos !== m) { if (bmp.close) bmp.close(); return; }
+        if (st.bmp && st.bmp.close) st.bmp.close();
+        st.bmp = bmp; st.src = blob; st.W = bmp.width; st.H = bmp.height; R.upload(bmp, st.W, st.H);
+        st.item = Object.assign({}, st.item, { src });
+        changed(); draw();
+      } catch (e) { toast(`Could not make the mosaic again: ${e.message || e}`); }
+      finally { m.busy--; mosDraw(); }
+    }, 250);
+  }
+  let mdrag = null;
+  $("stumos").addEventListener("pointerdown", e => {
+    const pg = e.target.closest("polygon"), m = st.mos; if (!pg || !m) return;
+    e.preventDefault(); const n = +pg.dataset.n; m.sel = n;
+    const r = $("stumos").getBoundingClientRect();
+    mdrag = { n, x: e.clientX, y: e.clientY, w: r.width, h: r.height, from: (m.moves[n] || [0, 0]).slice(), moved: false };
+    $("stumos").setPointerCapture(e.pointerId); mosDraw();
+  });
+  $("stumos").addEventListener("pointermove", e => {
+    if (!mdrag) return;
+    const dx = (e.clientX - mdrag.x) / mdrag.w, dy = (e.clientY - mdrag.y) / mdrag.h;
+    if (!mdrag.moved && Math.hypot(e.clientX - mdrag.x, e.clientY - mdrag.y) < 3) return;
+    mdrag.moved = true; st.mos.moves[mdrag.n] = [clamp(mdrag.from[0] + dx, -0.5, 0.5), clamp(mdrag.from[1] + dy, -0.5, 0.5)]; mosDraw();
+  });
+  const mEnd = () => { if (mdrag && mdrag.moved) mosApply(); mdrag = null; };
+  $("stumos").addEventListener("pointerup", mEnd); $("stumos").addEventListener("pointercancel", mEnd);
+  function mosNudge(dx, dy) {
+    const m = st.mos; if (!m || m.sel == null) return;
+    const v = m.moves[m.sel] || [0, 0];   // a picture pixel a press
+    m.moves[m.sel] = [clamp(v[0] + dx / st.W, -0.5, 0.5), clamp(v[1] + dy / st.H, -0.5, 0.5)];
+    mosDraw(); mosApply();
+  }
+  $("stumoshide").addEventListener("click", () => { const m = st.mos; if (!m || m.sel == null) return; if (m.hide.has(m.sel)) m.hide.delete(m.sel); else m.hide.add(m.sel); mosDraw(); mosApply(); });
+  $("stumosback").addEventListener("click", () => { const m = st.mos; if (!m || m.sel == null) return; delete m.moves[m.sel]; mosDraw(); mosApply(); });
+  $("stumosall").addEventListener("click", () => { const m = st.mos; if (!m) return; m.moves = {}; m.hide = new Set(); mosDraw(); mosApply(); });
+
   // ---------- a film: playing it, and its start and end ----------
   const fmtT = s => { s = Math.max(0, s || 0); return `${Math.floor(s / 60)}:${(s % 60).toFixed(1).padStart(4, "0")}`; };
   const trimOf = () => { const d = st.video && isFinite(st.video.duration) ? st.video.duration : 0; return st.p.trim ? [clamp(st.p.trim[0], 0, d), clamp(st.p.trim[1], 0, d)] : [0, d]; };
@@ -595,7 +715,7 @@ void main() {
     if (st.video) { st.video.pause(); st.video.removeAttribute("src"); st.video.load(); st.video.remove(); }
     if (st.url) URL.revokeObjectURL(st.url);
     if (st.bmp && st.bmp.close) st.bmp.close();
-    Object.assign(st, { kind: null, src: null, bmp: null, video: null, url: null, W: 0, H: 0 });
+    Object.assign(st, { kind: null, src: null, bmp: null, video: null, url: null, W: 0, H: 0, mos: null });
   }
   function show() { card.hidden = false; delete card.dataset.min; if (WM) { WM.front(card); WM.syncMenu(); } }
   // opts: kind ("picture" | "movie"); blob (the file) or url; item (the gallery item it is, or a description
@@ -626,7 +746,9 @@ void main() {
         if (Math.max(st.W, st.H) > R.max) throw new Error(`the picture is larger than this browser draws (${R.max} px)`);
         R.upload(st.bmp, st.W, st.H);
       }
-      wait(null); sync(); draw(); if (st.tab === "filters") filterTiles();
+      wait(null); if (st.tab === "mosaic") st.tab = "adjust";
+      sync(); draw(); if (st.tab === "filters") filterTiles();
+      if (!isMovie()) mosOpen(st.item);
     } catch (e) {
       console.warn("studio open", e); wait(null); unload();
       $("stuempty").textContent = `Could not open that ${opts.kind === "movie" ? "film" : "picture"}: ${e.message || e}`; $("stuempty").hidden = false;
@@ -786,6 +908,10 @@ void main() {
         else if (document.querySelector(".camwin .well.has-frame, .bodywin .well.has-frame, .win.full")) { e.preventDefault(); fromScreen(); }
       }
       return;
+    }
+    if (st.tab === "mosaic" && st.mos && st.mos.sel != null && /^Arrow/.test(e.key) && e.target.type !== "range") {
+      e.preventDefault(); e.stopImmediatePropagation();
+      const k = e.shiftKey ? 10 : 1; mosNudge(e.key === "ArrowLeft" ? -k : e.key === "ArrowRight" ? k : 0, e.key === "ArrowUp" ? -k : e.key === "ArrowDown" ? k : 0); return;
     }
     if (e.key === "\\") { e.preventDefault(); cmp(true); }
     else if (e.key === " " && isMovie()) { e.preventDefault(); e.stopImmediatePropagation(); playPause(); }
