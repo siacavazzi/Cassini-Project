@@ -57,12 +57,37 @@ bar: the window fills the screen under the menu bar, its picture as big as it fi
 ## Dock
 
 Along the bottom of the screen, as on the Mac (`src/dock.html`): Cassini and each body on stage now (the same list as
-the main window's body picker; a click flies the view there and brings that body's windows forward, a blue dot marks
-the body in view, a grey dot one with windows open), then Moments, Highlights and Settings (a click opens the window,
+the main window's body picker; a click on a body opens its body view, below, flies the view there and brings that
+body's windows forward; a blue dot marks the body in view, a grey dot one with windows open, a ring the body whose view
+is open), then every planet Cassini photographed that is not on stage, then Moments, Highlights and Settings (a click opens the window,
 brings it forward, or tucks it away). A minimized window shrinks into the dock as a tile showing its last picture,
 including the main window, and a click brings it back. Settings > Interface: Dock on or off (off brings back the
 menu-bar tray), Dock position (bottom, left, right), icon size and magnification. On a phone the dock is a strip under
 the replay controls that scrolls sideways.
+
+## Body view
+
+A click on a body in the dock switches from Cassini's mission to that body's (`src/bodymode.html`). The timeline then
+shows only that body's pictures, over its whole history from its first picture to its last (the months not loaded
+from `data/targets/<body>.json`, the loaded ones from the catalog itself), with only its moments marked; Moments lists
+only the moments about it; and the narrow-angle and wide-angle windows show only its pictures ("Titan · NAC"). A window
+in the top right corner holds the body's picture counts, previous and next session, "Skip the gaps" (playback jumps
+from one of the body's imaging sessions to the next instead of playing through the days or months between; Settings >
+Body view sets how long a gap has to be), the list of its sessions (one per observation, with its NAC and WAC counts
+and color sets) to jump to, "Whole history" to show it all on the timeline again, and every other body Cassini
+photographed. The camera windows never go blank or shrink in a body's view: each keeps its last picture of the body
+across jumps to other months until the next one arrives (a window with nothing yet shows the body's next picture),
+pictures keep a square (a mosaic is letterboxed), and the picture after a jump dissolves in over the one before.
+Every planet Cassini photographed a lot (1,000 pictures or more) stays in the dock wherever the mission is (Jupiter
+while at Saturn, Saturn in the cruise); the dock's All bodies folder holds every body photographed, in groups
+(planets and the Sun, Saturn's moons, Jupiter's moons, Earth's Moon, others), each with its surface map or else its
+sharpest real picture. Picking a body that is not on stage now goes to its Moment nearest to now, or its busiest
+session. Click Cassini in the dock, or close the body window, to go back. `?body=TITAN` opens a link in Titan's view.
+On a phone the body window is a bar over the replay controls; tap its name for the sessions.
+
+The list of bodies and their sessions comes from `web/replay/build_data.py` (`data/targets.json` and
+`data/targets/<body>.json`, made with the rest of the whole-mission data). `window.cassiniBodyMode` (name, enter, exit,
+index, sessions) is the way in for other parts of the page.
 
 ## Shareable links
 
