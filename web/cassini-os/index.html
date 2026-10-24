@@ -1171,12 +1171,6 @@ body.phone #launch .lx-clock { font-size: 9.5px; bottom: 9vh; }
 body.phone #hrel .cs-read { font-size: 9.5px; bottom: 9vh; white-space: normal; width: calc(100vw - 32px); text-align: center; line-height: 1.6; }
 body.phone #hrel .cs-note { bottom: auto; top: 40px; max-width: calc(100vw - 32px); }
 
-#hland .hl-read { position: absolute; left: 50%; bottom: 7vh; transform: translateX(-50%); white-space: nowrap; font: 11px/1 var(--hudf); letter-spacing: .08em;
-  color: var(--q-dim); opacity: 0; transition: opacity 1.2s ease; }
-#hland .hl-read.on { opacity: 1; }
-#hland .hl-read i { font-style: normal; color: var(--q-accent); }
-#hland .hl-note { position: absolute; left: 16px; bottom: 14px; max-width: min(460px, calc(100vw - 140px)); font-size: 10.5px; line-height: 1.4; color: rgba(232,236,242,.34); opacity: 0; transition: opacity 1.5s ease; }
-#hland .hl-note.on { opacity: 1; }
 #hland .hl-shade { position: absolute; inset: 0; background: linear-gradient(to top, rgba(0,0,0,.72) 0, rgba(0,0,0,.45) 22%, rgba(0,0,0,0) 46%); }
 #hland .hl-tag { position: absolute; left: 0; top: 0; font: 10.5px/1 var(--hudf); letter-spacing: .1em; text-transform: uppercase; color: rgba(232,236,242,.7);
   white-space: nowrap; opacity: 0; transition: opacity 1s ease; text-shadow: 0 1px 6px rgba(0,0,0,.9); }
@@ -1189,8 +1183,7 @@ body.phone #hrel .cs-note { bottom: auto; top: 40px; max-width: calc(100vw - 32p
 #hland .cs-cap button:hover { color: var(--q-text); border-color: rgba(232,236,242,.35); }
 #hland .cs-cap small { font-size: 10.5px; color: rgba(232,236,242,.4); }
 #hland .cs-cap small a { color: inherit; pointer-events: auto; }
-body.phone #hland .hl-read { font-size: 9.5px; bottom: 9vh; white-space: normal; width: calc(100vw - 32px); text-align: center; line-height: 1.5; }
-body.phone #hland .hl-note { bottom: 40px; }
+body.phone #hland .cs-read { font-size: 9.5px; bottom: 9vh; white-space: normal; width: calc(100vw - 32px); text-align: center; line-height: 1.5; }
 </style>
 </head>
 <body>
@@ -1485,8 +1478,8 @@ body.phone #hland .hl-note { bottom: 40px; }
   <div class="hl-tag" data-tag="cassini">Cassini</div>
   <div class="hl-tag" data-tag="earth">Earth</div>
   <div class="cs-caps"></div>
-  <div class="hl-read" aria-hidden="true"></div>
-  <div class="hl-note">The probe's path, speed and altitude are its reconstructed track; Cassini's are its real trajectory. The clock runs faster than real time, shown below. Parachute lines are drawn to a guessed length.</div>
+  <div class="cs-read" aria-hidden="true"></div>
+  <div class="cs-note">The probe's path, speed and altitude are its reconstructed track; Cassini's are its real trajectory. The clock runs faster than real time, shown below. Parachute lines are drawn to a guessed length.</div>
   <div class="cs-hint">Drag to look around</div>
   <button class="cs-skip" type="button">Skip ▸</button>
 </section>
@@ -8509,7 +8502,7 @@ function frame(now) {
 // ---------- Huygens lands on Titan: January 14, 2005, from entry to the first data on Earth ----------
 (function () {
   const root = document.getElementById("hland"), black = root.querySelector(".cs-black"), caps = root.querySelector(".cs-caps");
-  const read = root.querySelector(".hl-read"), note = root.querySelector(".hl-note"), hint = root.querySelector(".cs-hint");
+  const read = root.querySelector(".cs-read"), note = root.querySelector(".cs-note"), hint = root.querySelector(".cs-hint");
   const tags = {}; root.querySelectorAll("[data-tag]").forEach(el => { tags[el.dataset.tag] = el; });
   const CS = cassiniCutscene, { fadeTo, sound, look } = CS, runCaptions = (list, t, shown) => CS.runCaptions(caps, list, t, shown);
   // the descent team's reconstructed times and ESA's facts, written in by build.py from huygens-landing-data.json:
@@ -8620,16 +8613,7 @@ function frame(now) {
   }
 
   // ---------- the probe: the release cutscene's model in its shell, the descent module, the parachutes ----------
-  const sprite = (color, size) => {
-    if (CS.sprite) return CS.sprite(color, size);
-    const c = document.createElement("canvas"); c.width = c.height = 64;
-    const g = c.getContext("2d"), gr = g.createRadialGradient(32, 32, 0, 32, 32, 32);
-    gr.addColorStop(0, "rgba(255,255,255,1)"); gr.addColorStop(0.25, "rgba(255,255,255,.5)"); gr.addColorStop(1, "rgba(255,255,255,0)");
-    g.fillStyle = gr; g.fillRect(0, 0, 64, 64);
-    const s = new THREE.Sprite(new THREE.SpriteMaterial({ map: new THREE.CanvasTexture(c), color, transparent: true, opacity: 0, blending: THREE.AdditiveBlending, depthWrite: false }));
-    s.scale.setScalar(size);
-    return s;
-  };
+  const sprite = CS.fx.sprite;
   // a canopy of diameter d (m): a shallow dome opening toward -Y, with lines down to the origin `riser` m below its rim
   function chute(d, riser, color) {
     const g = new THREE.Group(), a = 1.05, r = d / 2 / Math.sin(a);
@@ -8747,8 +8731,8 @@ function frame(now) {
     Object.values(tags).forEach(e => e.classList.remove("on"));
     if (h.how === "stay") {
       setTime(T0 + EV.landing + 120); setPlaying(false);
-      // once cutscene.html has put the interface back (it may turn follow on again)
-      setTimeout(() => { if (state.follow) setFollow(false); setFocus("HUYGENS", 4e-5); }, 0);
+      setTimeout(() => setFocus("HUYGENS", 4e-5), 0);
+      return { follow: false };
     } else {
       setTime(T0 + Math.max(h.s, 60)); setFocus("CASSINI");
       if (h.playing) { setSpeed(h.speed); setPlaying(true); }

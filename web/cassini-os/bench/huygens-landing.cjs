@@ -47,7 +47,7 @@ const env = process.env, FPS = +env.FPS || 30, STRIDE = +env.STRIDE || 1, FROM =
     }
     if (Math.floor(T) !== lastLog && T >= 0) {
       lastLog = Math.floor(T);
-      const r = await page.evaluate(() => ({ et: state.et, focus: state.focus, read: document.querySelector("#hland .hl-read").textContent,
+      const r = await page.evaluate(() => ({ et: state.et, focus: state.focus, read: document.querySelector("#hland .cs-read").textContent,
         caps: [...document.querySelectorAll("#hland .cs-cap")].map(e => e.textContent).join(" | ") }));
       log.push({ T: lastLog, ...r });
       if (lastLog % 4 === 0) console.log(lastLog, r.focus, r.read, "|", r.caps.slice(0, 90));
