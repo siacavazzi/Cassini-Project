@@ -45,7 +45,7 @@ bar: the window fills the screen under the menu bar, its picture as big as it fi
 Along the bottom of the screen, as on the Mac (`src/dock.html`): Cassini and each body on stage now (the same list as
 the main window's body picker; a click on a body opens its body view, below, flies the view there and brings that
 body's windows forward; a blue dot marks the body in view, a grey dot one with windows open, a ring the body whose view
-is open), then every planet Cassini photographed that is not on stage, then Moments, Highlights and Settings (a click opens the window,
+is open), then every planet Cassini photographed that is not on stage, then Moments, Highlights, Gallery and Settings (a click opens the window,
 brings it forward, or tucks it away). A minimized window shrinks into the dock as a tile showing its last picture,
 including the main window, and a click brings it back. Settings > Interface: Dock on or off (off brings back the
 menu-bar tray), Dock position (bottom, left, right), icon size and magnification. On a phone the dock is a strip under
@@ -85,6 +85,24 @@ second; `play=0` opens paused and `movie=1` in movie mode. Other parameters (`?f
 The page rewrites the URL with `history.replaceState` at most twice a second, so the back button is unaffected, and
 a link's view is for that visit only (it does not change the Follow camera setting). Go > Copy Link to This Moment
 (⇧⌘C) copies it.
+
+## Gallery
+
+The viewer's own library of saved pictures and films (`src/gallery.html`, Gallery in the dock or Go > Gallery…). The ＋ in
+a picture window's title bar (or G) adds the picture on screen, full view has Add to Gallery beside its save button, and a
+finished movie export has Add to Gallery beside Download. Everything stays on this device, in the browser's IndexedDB
+(database `cassini-gallery`); no server keeps anything. Each item is its recipe (the moment, as share-link parameters
+`t`, `view`, `cam`, `play=0`, plus the `/frames/...` address or the export options that make it through the pipeline)
+and, unless Settings > Gallery > Keep a copy of each file is off, the file itself (full-resolution JPEG, or the MP4).
+An item without its file (the browser cleared storage, or the setting is off) is made again by the server when opened.
+Export Library writes one `.zip` of the pictures (JPEG) and films (MP4); with Include metadata
+(Settings > Gallery > Export with metadata) it adds gallery.json and thumbs/, and Import reads that back.
+
+Open an item to see it large, go to its moment, download it, remove it (with Undo) or share it. A shared link carries
+the recipe, never the picture: `?t=…&view=…&play=0&pic=/frames/color.webp?ids=…` (or `film=from=…&until=…`) opens the
+moment and shows the picture over it, made by the frame server. Share also offers the device's share sheet with the
+file itself (phones), Copy picture, Reddit, X, Bluesky, Facebook, a text message and email. Link previews on social sites
+need the frame server reachable from the internet.
 
 ## Phone layout
 

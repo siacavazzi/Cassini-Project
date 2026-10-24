@@ -12,7 +12,8 @@
        All bodies                            a folder of every body Cassini photographed (data/targets.json), in
                                              groups, each with its surface map or else its sharpest real picture;
                                              a click opens that body's view
-       Moments, Highlights, Settings         a click opens the window, brings it forward, or tucks it away
+       Moments, Highlights, Gallery,
+       Settings                              a click opens the window, brings it forward, or tucks it away
        minimized windows                     a minimized window shrinks into the dock (instead of the menu-bar tray)
                                              as a tile showing its last picture; a click brings it back
      The dock fades with the rest of the interface when the pointer rests. On a phone it is a scrolling strip under the
@@ -114,7 +115,7 @@ body.phone.has-dock { --appdockh: 50px; }
   const D = d => S ? S.define(d) : d.value;
   const pref = {
     on: D({ key: "interface.dock", section: "Interface", label: "Dock", type: "toggle", value: true,
-      hint: "A strip of apps at the edge of the screen: Cassini and each body (click to fly there), Moments, Highlights and Settings. Minimized windows shrink into it." }),
+      hint: "A strip of apps at the edge of the screen: Cassini and each body (click to fly there), Moments, Highlights, Gallery and Settings. Minimized windows shrink into it." }),
     side: D({ key: "interface.dockPosition", section: "Interface", label: "Dock position", type: "choice", value: "bottom",
       options: [["bottom", "Bottom"], ["left", "Left"], ["right", "Right"]], hint: "On a phone the dock always sits under the replay controls." }),
     size: D({ key: "interface.dockSize", section: "Interface", label: "Dock icon size", type: "range", value: 40, min: 28, max: 72, step: 2, unit: "px" }),
@@ -131,6 +132,8 @@ body.phone.has-dock { --appdockh: 50px; }
     HUYGENS: svg('<path d="M4.5 13.5a7.5 4 0 0 0 15 0z"/><path d="M7 13.5a5 5.5 0 0 1 10 0"/><path d="M12 8V5"/>'),
     moments: svg('<path d="M5 7h14M5 12h14M5 17h9"/><path d="M18 15.5l1 2 2.2.3-1.6 1.5.4 2.2-2-1-2 1 .4-2.2-1.6-1.5 2.2-.3z"/>'),
     highlights: svg('<rect x="3.5" y="5.5" width="17" height="13" rx="1.6"/><path d="M10 9.3v5.4l4.6-2.7z"/>'),
+    // a stack of saved pictures, the front one a landscape
+    gallery: svg('<path d="M6.5 5.5V4.5a1 1 0 0 1 1-1h12a1 1 0 0 1 1 1v10a1 1 0 0 1-1 1h-1"/><rect x="3.5" y="7.5" width="14" height="12" rx="1.2"/><circle cx="8" cy="11.5" r="1.3"/><path d="M3.8 18l4.4-4 3 2.6 2.3-1.8 3.8 3.2"/>'),
     settings: svg('<circle cx="12" cy="12" r="3.2"/><path d="M12 3v2.6M12 18.4V21M3 12h2.6M18.4 12H21M5.6 5.6l1.9 1.9M16.5 16.5l1.9 1.9M5.6 18.4l1.9-1.9M16.5 7.5l1.9-1.9"/>'),
     window: svg('<rect x="3.5" y="5" width="17" height="14" rx="1.6"/><path d="M3.5 8.5h17"/><circle cx="6" cy="6.8" r=".5"/><circle cx="7.8" cy="6.8" r=".5"/>'),
     folder: svg('<path d="M3.5 7.5v10a1.5 1.5 0 0 0 1.5 1.5h14a1.5 1.5 0 0 0 1.5-1.5v-8.5a1.5 1.5 0 0 0-1.5-1.5h-7l-2-2h-5a1.5 1.5 0 0 0-1.5 1.5z"/><circle cx="9" cy="13.5" r="2"/><circle cx="15" cy="13.5" r="1.3"/>'),
@@ -172,6 +175,8 @@ body.phone.has-dock { --appdockh: 50px; }
       run() { if (phone() && $("phmom")) $("phmom").click(); else toggleWin($("moments")); } },
     { key: "highlights", label: "Highlights", open: () => !!$("hlcard") && !$("hlcard").hidden,
       run() { const H = window.cassiniHighlights, c = $("hlcard"); if (!H || !c) return; if (c.hidden) H.open(); else if (inFront(c)) H.close(); else WM.front(c); } },
+    { key: "gallery", label: "Gallery", open: () => !!$("galcard") && !$("galcard").hidden,
+      run() { const G = window.cassiniGallery, c = $("galcard"); if (!G || !c) return; if (c.hidden) G.open(); else if (inFront(c)) G.close(); else WM.front(c); } },
     { key: "settings", label: "Settings", open: () => !!$("settings") && !$("settings").hidden,
       run() { const c = $("settings"); if (c && !c.hidden && !inFront(c)) WM.front(c); else $("sgear").click(); } }
   ];
