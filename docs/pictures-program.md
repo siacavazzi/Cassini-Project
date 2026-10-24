@@ -171,6 +171,12 @@ today's framing. Owns cameraFeed's per-window menu; MM owns movie.html and the c
 - **Done when.** The mosaic never shrinks when color begins (19 cases) or when the gray filter changes (Titan ISS_181TI_TEA001_CIRS); the manifest validates for the benchmark passes.
 - **Depends on.** Phases 1 and 2a merged into `pictures`. Shown to Sam with phase 4.
 
+### Phase T · Tile tuning for Cassini Studio (Sam, 2026-10-24 20:13Z: "mosaic tuning, move parts") · thread "Build Cassini studio photo and movie editor"
+- **Owner.** The Cassini Studio thread; takes over the "placed tiles are data" part of phase 3 for user edits. Phase 3's gray-base drawing goal stays with the mosaic thread.
+- **What.** A person's changes to a mosaic's tiles are data laid over SPICE's placement, never a second compose: `obs_mosaic.parse_tune` reads `tune=n:dx:dy,...` (pointing n as `/frames/mosaic/<ID>.json` numbers it, moved by fractions of the picture) and `hide=n,...`; `tuned_layout` offsets every filter's tile of a moved pointing (so its colors stay together) and leaves hidden ones out; `so_far` / `mosaic.compose` draw it as always under a name of its own (`-tune<hash>`), cached per edit like a style. The untouched mosaic is the same address without `tune`/`hide`, one click away (Reset the mosaic).
+- **Page.** Cassini Studio's Mosaic tab (`web/cassini-os/src/studio.html`, PR #98) shows the tile map's outlines, drag or arrow keys to move, Hide, Back to where SPICE put it, Reset; the edited picture's address carries the change, so gallery items and shared links make it again.
+- **Test.** `python web/test_mosaic_tune.py` (synthetic 2 x 2 pass: the moved pointing moves by what was asked and nothing else, a hidden one is left out, the plain mosaic is unchanged).
+
 ### Phase 4 · Explore mosaics (D3, D5) · ~2.5 days
 - **Goal.** Hover a mosaic to outline the full frame under the mouse (quarter-second rest while playing), nearest-center hit test, tooltip, arrow keys, phone tap-tap; click opens the pointing in the held window, then its channels. `/frames/mosaic/<ID>/p/<n>.webp` draws a pointing from the pass's own tiles on its shared scale through `mosaic.compose`, with a toggle to "on its own".
 - **Done when.** An opened pointing matches its spot in the mosaic; works in full view, body windows and on a phone.

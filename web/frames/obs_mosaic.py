@@ -967,6 +967,60 @@ def layout(u, n, cache):
     return p, tiles, rect, count, used, name
 
 
+TUNE_MAX = 0.5   # furthest a pointing can be moved, as a fraction of the picture
+
+
+def parse_tune(tune, hide):
+    """The person's changes to a mosaic's tiles (Cassini Studio) from the request: tune "3:0.012:-0.004,7:0:0.02"
+    (pointing n as tile_map numbers them, moved by dx, dy fractions of the picture) and hide "2,9" (pointings left
+    out). ({n: (dx, dy)}, {n}); ValueError when it does not read."""
+    moves, gone = {}, set()
+    for part in filter(None, (tune or "").split(",")):
+        n, dx, dy = part.split(":")
+        dx, dy = float(dx), float(dy)
+        if not (math.isfinite(dx) and math.isfinite(dy)):
+            raise ValueError(part)
+        moves[int(n)] = (max(-TUNE_MAX, min(TUNE_MAX, dx)), max(-TUNE_MAX, min(TUNE_MAX, dy)))
+    for n in filter(None, (hide or "").split(",")):
+        gone.add(int(n))
+    if len(moves) + len(gone) > 400:
+        raise ValueError("too many")
+    return moves, gone
+
+
+def tuned_layout(made, mapped, moves, gone):
+    """A layout (layout()) with the person's changes laid over SPICE's placement: each moved pointing's tiles (every
+    filter of it, so its colours stay together) offset by its move, hidden pointings' tiles left out. The tiles'
+    own pictures, the plan and the view are untouched: the mosaic is composed from them by mosaic.compose as
+    always, under a name of its own (-tune<hash>), so the untouched mosaic stays as it is, one request away.
+    mapped: tile_map() of the same frame (its pointing numbers). made unchanged when there is nothing to change."""
+    if not made or not mapped or not (moves or gone):
+        return made
+    p, tiles, rect, count, used, name = made
+    by = {q["n"]: q["tiles"] for q in mapped["pointings"]}
+    shift, out = {}, set()
+    for q, (dx, dy) in moves.items():
+        for n in by.get(q, []):
+            shift[n] = (dx * rect[2], dy * rect[3])
+    for q in gone:
+        out.update(by.get(q, []))
+    shift = {n: v for n, v in shift.items() if v != (0.0, 0.0)}
+    if not shift and not out:
+        return made
+    tiles = [dict(t, offset=[t["offset"][0] + shift[t["n"]][0], t["offset"][1] + shift[t["n"]][1]]) if t["n"] in shift and "offset" in t else t
+             for t in tiles if t["n"] not in out]
+    count = {}
+    for t in tiles:
+        if "offset" in t:
+            count[t["filter"]] = count.get(t["filter"], 0) + 1
+    if not any(count.get(f) for f in used):
+        return None
+    for f in used:
+        count.setdefault(f, 0)
+    key = json.dumps([sorted((n, round(v[0], 2), round(v[1], 2)) for n, v in shift.items()), sorted(out)])
+    return p, tiles, rect, count, used, f"{name}-tune{hashlib.sha1(key.encode()).hexdigest()[:12]}"
+
+
 def colour_picture(u, p, colour, planes):
     """The colour picture of a pass's three colour filters' planes (RGBA, each on the pass's display scale), RGBA:
     the pass's mosaic and its movie frames mixed alike. Natural color: a true color pass turned into what an eye
@@ -995,7 +1049,9 @@ def so_far(u, n, cache, made=None, out=OUT):
     if not made:
         return None, None
     p, tiles, rect, count, used, name = made
-    tag = "-" + name.rsplit("-", 1)[1] if name.startswith("lap-") else ""
+    # a set of tiles other than every tile up to n has a name of its own (tag): a mosaic movie's lap, a tuned layout
+    plain, _, tuned = name.partition("-tune")
+    tag = ("-" + plain.rsplit("-", 1)[1] if plain.startswith("lap-") else "") + ("-tune" + tuned if tuned else "")
     # the seams are solved on the best covered filter drawn and shared by all (balanced look)
     ref = max(used, key=lambda f: count[f])
     if len(used) == 3:
@@ -1697,18 +1753,24 @@ def _seam_of(u, p, tiles, rect, ref, t, cache):
 REPEAT_POINTING = 600   # s: a filter's tiles at one place are one pointing when taken within this of each other
 
 
-def mosaic_webp(frame_id, size, cache, slots=None, ahead=3, fmt="webp", out=OUT, force=False):
+def mosaic_webp(frame_id, size, cache, slots=None, ahead=3, fmt="webp", out=OUT, force=False, tune=None):
     """(WebP, report) of the mosaic so far at frame_id when its pass is a mosaic (or force: the person asked for
     the pass as a mosaic, whatever _judge says); otherwise None. Then makes the next few tiles and the mosaics
     with them in the background, so the next frames' mosaics are ready when the window asks for them. Never
     waits for tiles beyond the first: past the tiles made so far it answers with their mosaic (report "behind":
     how many frames short of frame_id it is). size
     "full" = out px on the longest side (the full view's picture, never warmed ahead); fmt "png" for a PNG
-    instead."""
+    instead. tune: the person's changes to its tiles (parse_tune), the tuned mosaic (tuned_layout) instead of
+    the pass's own; never made ahead."""
     found = unit_of(frame_id)
     if not found or not (found[0]["mosaic"] or force) or found[1] < 0:
         return None
     u, n = found
+    if tune and (tune[0] or tune[1]):
+        with _asking():
+            made = layout(u, n, cache)
+            made = tuned_layout(made, tile_map(frame_id, cache), *tune) if made else None
+            return _mosaic_at(u, n, size, cache, slots, fmt, out, made=made) if made else None
     # the mosaic of the tiles made so far, when the clock has run past them (playing faster than a frame is
     # processed): the window gets a picture at once, a little behind, and catches up as the tiles behind it
     # (tiles_ahead) are made, instead of waiting for every tile up to n
@@ -1784,11 +1846,11 @@ def _yield():
         time.sleep(0.02)
 
 
-def _mosaic_at(u, n, size, cache, slots=None, fmt="webp", out=OUT):
+def _mosaic_at(u, n, size, cache, slots=None, fmt="webp", out=OUT, made=None):
     """(WebP, report) of the pass's mosaic with tiles 0..n at size, made once (kept in the cache under the name
     of what it is made of, so frames that add nothing to it share it; a request that comes while it is being
-    made waits for it); None before any tile is placed."""
-    made = layout(u, n, cache)
+    made waits for it); None before any tile is placed. made: its layout when already worked out (a tuned one)."""
+    made = made or layout(u, n, cache)
     if not made:
         return None
     full = size == "full"
