@@ -166,6 +166,32 @@ for old, new in [
     study = study.replace(old, new)
 study += part("script") + "\n"
 
+# the gallery (gallery.html): its style joins the head's, its window, share menu and toast go into #app, and its script
+# runs after the chrome script and movie export's (it adds Add to Gallery to the picture windows and asks the export for
+# a film's sound) and before the dock's, which opens it
+gal = open(os.path.join(os.path.dirname(os.path.abspath(sys.argv[2])), "gallery.html")).read()
+part = lambda tag: gal[gal.index(f"<{tag}"):gal.index(f"</{tag}>") + len(tag) + 3]
+gextra = gal[gal.index('<ul id="galshare"'):gal.index("</div>", gal.index('<div id="galtoast"')) + 6]
+for old, new in [
+    ("</style>\n</head>", part("style")[len("<style>"):] + "\n</head>"),
+    ('  <div id="loading">', "  " + part("section") + "\n" + gextra + "\n\n" + '  <div id="loading">'),
+]:
+    assert study.count(old) == 1, old
+    study = study.replace(old, new)
+study += part("script") + "\n"
+
+# Cassini Studio (studio.html): its style joins the head's, its window goes into #app, and its script runs after the
+# gallery's (it saves and shares through window.cassiniGallery) and before the dock's, which opens it
+stu = open(os.path.join(os.path.dirname(os.path.abspath(sys.argv[2])), "studio.html")).read()
+part = lambda tag: stu[stu.index(f"<{tag}"):stu.index(f"</{tag}>") + len(tag) + 3]
+for old, new in [
+    ("</style>\n</head>", part("style")[len("<style>"):] + "\n</head>"),
+    ('  <div id="loading">', "  " + part("section") + "\n\n" + '  <div id="loading">'),
+]:
+    assert study.count(old) == 1, old
+    study = study.replace(old, new)
+study += part("script") + "\n"
+
 # the body view (bodymode.html): its style joins the head's, its window goes into #app, and its script runs after the
 # chrome script (it reads the camera feeds and the window manager) and before the dock's, which opens it
 bm = open(os.path.join(os.path.dirname(os.path.abspath(sys.argv[2])), "bodymode.html")).read()
