@@ -59,7 +59,9 @@ Routes:
                                its frames by filter and its outline and centre as fractions of the picture
   /frames/mosaic/<ID>/frame.webp?ids=A,B,C&size=full   one frame of that mosaic on its own, on the mosaic's levels
                                and colours (obs_mosaic.pointing_picture; format=png, download=1 as below)
-  /frames/mosaic/<ID>.webp?size=512   (&warm=1: only start making the pass ahead of time, empty answer)
+  /frames/mosaic/<ID>.webp?size=512   (&warm=1: only start making the pass ahead of time, empty answer;
+                               &tune=n:dx:dy,...&hide=n,...: the person's changes to its tiles from Cassini Studio,
+                               pointings as /frames/mosaic/<ID>.json numbers them, moves as fractions of the picture)
                                the mosaic frame <ID> is a new tile of, made like a reel picture: 404 when
                                the frame is not a mosaic tile (mosaic.panels: same camera, observation and
                                filter, the pointing stepped across the body, panels overlap)
@@ -946,11 +948,19 @@ def make_handler(site, cache, flags=None):
                 # a whole-body mosaic (obs_mosaic): the observation's mosaic so far, every filter; at full
                 # resolution, its canvas (obs_mosaic.CANVAS) up to FULL_MAX
                 if reel._index is not None:
+                    # tune= / hide=: the person's changes to the mosaic's tiles (Cassini Studio), laid over SPICE's
+                    # placement (obs_mosaic.tuned_layout); the mosaic without them is the same address without them
+                    try:
+                        tune = obs_mosaic.parse_tune(query.get("tune", [""])[0], query.get("hide", [""])[0])
+                    except ValueError:
+                        return self.send_error(400, "tune= is n:dx:dy,... and hide= is n,...")
+                    if tune[0] or tune[1]:
+                        name += "_tuned"
                     try:
                         # force=1: the window's Mosaic switch, the pass's mosaic whatever obs_mosaic calls it
                         made = obs_mosaic.mosaic_webp(m.group(1), size, cache, _mosaic_slots, fmt=fmt,
                                                       out=min(obs_mosaic.CANVAS, FULL_MAX) if size == FULL else obs_mosaic.OUT,
-                                                      force=bool(query.get("force")))
+                                                      force=bool(query.get("force")), tune=tune)
                     except FileNotFoundError:
                         made = None
                     if made:
