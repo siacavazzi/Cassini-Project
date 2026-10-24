@@ -61,7 +61,7 @@ import stacking  # noqa: E402
 # bumped whenever the way observation mosaics are made changes, so older ones are not served again; one per
 # display model (calibration.style), classic being the mosaics made before the balanced display model, raw the
 # balanced ones before natural color
-VERSIONS = {"balanced": "obs-v39", "raw": "obs-v22", "classic": "obs-v13-classic"}
+VERSIONS = {"balanced": "obs-v43", "raw": "obs-v26", "classic": "obs-v13-classic"}
 CANVAS = 2048        # longest side of the canvas the view is drawn on
 OUT = 1024           # longest side of the picture sent
 FRAME = 1024         # full resolution frame
@@ -450,9 +450,39 @@ SKY_MIN = 0.05   # balanced: the share of a pass's pixels that must be dark sky 
 # picture's is the 98th; lower here, since a long-exposure pass's whole sky can glow faintly, Saturn's Shadow's E ring)
 SKY_FLOOR_PCT = 90
 SKY_TOP_PCT = 99     # ... and each band's black at least this percentile of that dark sky (a single picture's SKY_DARK)
-SKY_BLACK_MAX = 0.004   # ... and no more than this share of the pass's white over its sky
+SKY_SMOOTH = 9      # ... on the sky less its mean over this many pixels (of the quarter-size frames, 36 full size)
 SKY_TOE = 1.0    # ... and the soft toe above those blacks, this many times the black's height over the sky wide
                  # (calibration.display): the sky's scan lines, not its pixel noise, set how far grain reaches
+
+
+def tile_scale(scale, f, own_sky=False, seen=None):
+    """The display scale of one tile of filter f: the pass's, and with own_sky (a movie's frames, each shown
+    alone) a black raised to the frame's own sky level plus the band's height over it (sky_tops) where that sky
+    sits above the pass's: in the Jupiter approach movie one color set's stray light lifts its sky over the
+    pass's level, and its frame showed as an olive square that the next set's didn't. Never lowered (the sky's
+    stripes would come back as a veil), and never in a mosaic, whose tiles meet (one tile's black of its own
+    shows as a step). seen: a dict the raised black is put in."""
+    out = {**scale, "blacks": [scale["blacks"].get(f, 0.0)]}
+    top = scale.get("sky_tops", {}).get(f)
+    if not own_sky or top is None:
+        return out
+    black = out["blacks"][0]
+
+    def black_of(iof):
+        # the frame's sky as pass_scale finds it, at the size it measures on
+        q = iof[::4, ::4].astype(np.float32)
+        m = q < 0.05 * np.percentile(q, 99.9)
+        if m.mean() <= SKY_MIN:
+            return None
+        (level,), _ = calibration.sky_levels([[q]], [[m]])
+        if level + top <= black:
+            return None
+        if seen is not None:
+            seen["black"] = level + top
+        return {"black": level + top, "toe": scale.get("toe")}
+
+    out["black_of"] = black_of
+    return out
 
 
 def pass_scale(frames, u, drawn=None, true_colour=False, sky_tops=None):
@@ -510,28 +540,28 @@ def pass_scale(frames, u, drawn=None, true_colour=False, sky_tops=None):
         masks = {f: [i < 0.05 * np.percentile(i, 99.9) for i in iofs] for f, iofs in by.items()}
         if all(sum(int(m.sum()) for m in ms) > SKY_MIN * sum(m.size for m in ms) for ms in masks.values()):
             levels, margin = calibration.sky_levels(list(by.values()), list(masks.values()))
-            # The darker half of each band's sky (by its mean over 5 pixels): faint diffuse light in the sky (the
-            # E and G rings, a haze limb, the body's glow) is not sky noise and must not raise the black
-            darks = {}
+            # How far each band's black sits over its sky is measured on the sky's fine structure only: the sky
+            # less its own mean over SKY_SMOOTH pixels (its row and column stray-light stripes, compression
+            # blocks and noise), on the darker half of the sky. Smooth faint light (Saturn's Shadow's haze and E
+            # ring, a haze limb, the body's glow) is not in it, so it stays above black
+            fine = {}
             for (f, iofs), level in zip(by.items(), levels):
                 local = [cv2.blur(i, (5, 5)) for i in iofs]
                 sky = np.concatenate([l[m] for l, m in zip(local, masks[f])])
-                darks[f] = np.concatenate([i[m & (l <= np.median(sky))] for i, l, m in zip(iofs, local, masks[f])])
-            # with a single picture's noise floor (the 98th percentile above the median, the noisiest band's) on that
-            # dark sky: the pixel-difference noise is about 0 on frames stored in 8 bits
-            margin = max(margin, calibration.noise_floor(list(darks.values()), SKY_FLOOR_PCT))
-            # and, as a single picture's toe, above SKY_DARK of that dark sky's own brightness: the frames' sky carries
-            # stray-light stripes far broader than its pixel noise. Each band on its own: the false color gains
-            # (MT3's up to 5x) lift whatever of a dim band's sky is left above its black far more than the others'
+                fine[f] = np.concatenate([(i - cv2.blur(i, (SKY_SMOOTH, SKY_SMOOTH)))[m & (l <= np.median(sky))]
+                                          for i, l, m in zip(iofs, local, masks[f])])
+            # with a noise floor (the noisiest band's SKY_FLOOR_PCT percentile above the median): the pixel-difference
+            # noise is about 0 on frames stored in 8 bits
+            margin = max(margin, calibration.noise_floor(list(fine.values()), SKY_FLOOR_PCT))
+            # and each band on its own over SKY_TOP_PCT of that fine structure: the false color gains (MT3's up to
+            # 5x) lift whatever of a dim band's sky is left above its black far more than the others'
             tops = {}
-            for (f, dark), level in zip(darks.items(), levels):
+            for f, v in fine.items():
                 if sky_tops and f in sky_tops:
                     tops[f] = float(sky_tops[f])
                 else:
-                    # at most SKY_BLACK_MAX of the pass's white: on a long exposure whose whole sky glows (Saturn's
-                    # Shadow's E and G rings) the dark sky's spread is the faint light itself, at gamma 3 a visible share
-                    top = float(np.percentile(dark, SKY_TOP_PCT)) - level if dark.size > 100 else 0
-                    tops[f] = min(max(margin, top), SKY_BLACK_MAX * white)
+                    top = float(np.percentile(v, SKY_TOP_PCT) - np.median(v)) if v.size > 100 else 0.0
+                    tops[f] = max(margin, top)
             toe = SKY_TOE * max(tops.values())
             blacks = {f: max(blacks[f], level + tops[f]) for f, level in zip(by, levels)}
     out = {"blacks": blacks, "white": white, "gamma": gamma, "filled": filled, "floor": round(floor, 3)}
@@ -571,13 +601,13 @@ def tile(u, n, cache, scale=None):
                 return json.load(fh)
         path, fid, f, t, nm, x, y, z = u["frames"][n]
         k = z / u["z"] if z else 1.0
+        seen = {}
         try:
-            image, _, rep = color_image.processed_frame([path], hdr=True,
-                                                        scale={**scale, "blacks": [scale["blacks"].get(f, 0.0)]},
+            image, _, rep = color_image.processed_frame([path], hdr=True, scale=tile_scale(scale, f, bool(u.get("movie")), seen),
                                                         repeat_window=u.get("repeat_gap", mosaic_benchmark.REPEAT_GAP))
         except Exception as e:
             image, rep = None, {"why": f"{type(e).__name__}: {e}"[:200]}
-        out = {"n": n, "id": fid, "filter": f, "t": t, "stacked": rep.get("stacked"), "calibrated": rep.get("calibrated")}
+        out = {"n": n, "id": fid, "filter": f, "t": t, "stacked": rep.get("stacked"), "calibrated": rep.get("calibrated"), **seen}
         os.makedirs(os.path.dirname(base), exist_ok=True)
         if image is not None and "frame_offset" in rep:
             side = round(image.shape[0] * k)
@@ -1775,14 +1805,33 @@ def _mosaic_at(u, n, size, cache, slots=None, fmt="webp", out=OUT):
     return _make_mosaic(u, n, size, path, cache, slots, made, fmt, out)
 
 
+BLANK_LEVEL = 2   # a mosaic whose 99th percentile over its tiles is at most this many levels holds nothing yet
+_blank = set()    # mosaics found blank (paths): asked again, they are blank again
+
+
+def blank(im):
+    """Whether a mosaic picture (RGBA) shows nothing above black over the tiles placed: a pass's first tiles of
+    sky at its own noise level (Saturn's Shadow's outer E ring), drawn black. The window keeps showing its frame
+    (the single picture, processed on its own scale) until a tile with something in it is placed."""
+    a = np.asarray(im)
+    covered = a[..., 3] > 0
+    return not covered.any() or float(np.percentile(a[..., :3].max(axis=2)[covered], 99)) <= BLANK_LEVEL
+
+
 def _make_mosaic(u, n, size, path, cache, slots, made, fmt="webp", out=OUT):
     report, full, meta = {}, size == "full", path[:-len(fmt)] + "json"
+    if path in _blank:
+        return None
 
     def make():
         with slots or contextlib.nullcontext():
             im, rep = so_far(u, n, cache, made, out if full else OUT)
         if im is None:
             raise LookupError("no tile placed yet")
+        if blank(im):
+            with _lock:
+                _blank.add(path)
+            raise LookupError("nothing above black yet")
         report.update(rep)
         if not full and max(im.size) > size:
             im.thumbnail((size, size), Image.LANCZOS)
