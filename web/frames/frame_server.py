@@ -89,6 +89,15 @@ Routes:
   /export/<JOB>.json           does: state queued/making/sound/done/failed, pictures done of total, seconds left
   PUT /export/<JOB>/sound.wav  the page's soundtrack for the film (made by the live sound's synth), added as AAC
   /export/<JOB>.mp4            the film (Range requests work, so it plays as it downloads); ?download=1 saves it
+  POST /prebuild?from=2006-09-15T14:32:00&until=2006-09-15T17:12:00&cams=NW&sizes=512,1024&look=...
+                               makes every picture the camera windows ask for in that stretch of the timeline ahead
+                               of time (web/frames/prebuild.py segment_items: frames, composites, mosaic and movie
+                               passes, with the page's look and movie style: mosaics, steady, color, trail, laps,
+                               center), so it plays as a movie at any frame rate from the cache; one stretch at a
+                               time, behind the server's own requests. Answers the job's status, as
+  /prebuild/<JOB>.json         does: state queued/planning/making/waiting/done/failed/stopped, pictures done of
+                               total, made through (UTC), seconds left
+  POST /prebuild/<JOB>/stop    stops it (what is made stays made)
   /health                      "ok" plus where the frames come from
   POST /flags                  a picture flagged in Cassini OS (the ⚑ button or R in a picture window): JSON with
                                the picture as shown (a data: URL), what the window showed and an optional note.
@@ -256,12 +265,20 @@ def size_dir(size, fmt):
     return str(size) + ("-png" if fmt == "png" else "")
 
 
+# plain frames at quality 95: at 80 WebP drops the faintest stars and specks of sparse frames (lit PSNR 29-30 dB on
+# star fields), 90 keeps most of them (38+) and 95 is hard to tell from lossless (43+; Sam saw 90 vs 95), for 21 KB a
+# 1024 px frame (p90 47 KB; 2.2 MB/s at the reel's worst, 24 fps from both cameras). The folder is named after the
+# quality, so frames made at another quality are not served again
+FRAME_QUALITY = 95
+FRAME_VERSION = "frames-q95"
+
+
 def webp(frame_id, size, cache, fmt="webp"):
     def make():
         im = Image.open(io.BytesIO(archive_png(frame_id)))
         im = im.convert("L") if im.mode in ("L", "I", "I;16", "P", "1") else im.convert("RGB")
-        return encode(im, size, fmt)
-    return cached(os.path.join(cache, size_dir(size, fmt), f"{frame_id}.{fmt}"), make)
+        return encode(im, size, fmt, FRAME_QUALITY)
+    return cached(os.path.join(cache, FRAME_VERSION, size_dir(size, fmt), f"{frame_id}.{fmt}"), make)
 
 
 # the caches of the pictures drawn from I/F, one per display model (calibration.style), so the classic look keeps the
@@ -579,6 +596,16 @@ class Server(ThreadingHTTPServer):
 
 
 def make_handler(site, cache, flags=None):
+    segments = []   # the stretches made ahead (prebuild.Segments), started on the first POST /prebuild
+
+    def prebuilds():
+        if not segments:
+            # prebuild imports this module by name: the running server's own makers and caches, not a second copy
+            sys.modules.setdefault("frame_server", sys.modules[__name__])
+            import prebuild
+            segments.append(prebuild.Segments(cache))
+        return segments[0]
+
     class Handler(SimpleHTTPRequestHandler):
         # keep-alive: a viewer loads frames one after another, and a new connection for each
         # costs a round trip (more through a tunnel); every reply says its Content-Length
@@ -677,6 +704,18 @@ def make_handler(site, cache, flags=None):
                     return self.send_json({"error": str(e)}, 400)
                 except OverflowError as e:
                     return self.send_json({"error": str(e)}, 413)
+            if url.path == "/prebuild" or re.match(r"^/prebuild/[0-9a-f]{16}/stop$", url.path):
+                self.rfile.read(int(self.headers.get("Content-Length") or 0))
+                if reel._index is None and url.path == "/prebuild":
+                    return self.send_json({"error": "no index of the frames"}, 404)
+                if url.path != "/prebuild":
+                    job = prebuilds().stop(url.path.split("/")[2])
+                    return self.send_json(job) if job else self.send_json({"error": "no such stretch"}, 404)
+                import prebuild
+                try:
+                    return self.send_json(prebuilds().submit(prebuild.segment_options(parse_qs(url.query))))
+                except ValueError as e:
+                    return self.send_json({"error": str(e)}, 400)
             n = int(self.headers.get("Content-Length") or 0)
             if url.path == "/jumplog":
                 if not 0 < n <= JUMPLOG_MAX:
@@ -787,6 +826,10 @@ def make_handler(site, cache, flags=None):
                 if not path:
                     return self.send_error(404, "That film is not made (yet)")
                 return self.send_film(path, job, parse_qs(url.query).get("download", ["0"])[0] != "0")
+            m = re.match(r"^/prebuild/([0-9a-f]{16})\.json$", url.path)
+            if m:
+                job = prebuilds().status(m.group(1)) if segments else None
+                return self.send_json(job) if job else self.send_json({"error": "no such stretch"}, 404)
             if flags and (url.path == "/flags" or url.path.startswith("/flags/")):
                 return self.send_flags(url.path)
             if url.path == "/jumplog":
