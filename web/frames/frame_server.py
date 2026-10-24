@@ -269,7 +269,7 @@ def webp(frame_id, size, cache, fmt="webp"):
 COLOR_VERSIONS = {"balanced": "color-v27", "raw": "color-v10", "classic": "color-v4"}
 PROC_VERSIONS = {"balanced": "proc-v7", "raw": "proc-v7", "classic": "proc-v1"}   # one frame: no colors to mix
 # Auto center (center=1): the same pictures centred on the body by SPICE, cached beside them in folders of their own
-CENTRE_VERSION = "ctr1"
+CENTRE_VERSION = "ctr2"   # ctr2: the shift stops at the frame's data edge
 
 
 def in_background(target, *args):
@@ -314,6 +314,16 @@ def centred(ids, view):
     cx = (w - 1) / 2 - report["frame_offset"][0]
     cy = (h - 1) / 2 - report["frame_offset"][1]
     left, top = round(cx - side / 2), round(cy - side / 2)
+    # the shift stops where the frame's data does: the view never takes in black beyond the frame's edge on a side
+    # where the frame could fill it, so a body the camera caught at its edge stays at that edge instead of half the
+    # picture going black (where the frame is narrower than the view, the view sits on the frame's middle)
+    rows, cols = np.flatnonzero(image[..., 3].any(1)), np.flatnonzero(image[..., 3].any(0))
+    if len(rows):
+        def fit(start, lo, hi):
+            return min(max(start, lo), hi - side) if hi - lo >= side else round((lo + hi) / 2 - side / 2)
+        wanted = (left, top)
+        left, top = fit(left, cols[0], cols[-1] + 1), fit(top, rows[0], rows[-1] + 1)
+        report["centre_shift_capped"] = [int(left - wanted[0]), int(top - wanted[1])]
     out = np.zeros((side, side, 4), np.uint8)
     x0, y0, x1, y1 = max(left, 0), max(top, 0), min(left + side, w), min(top + side, h)
     if x0 < x1 and y0 < y1:
