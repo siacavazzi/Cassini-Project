@@ -21,12 +21,6 @@
      After the release the probe is its own model at any time, not only after the cutscene (window.studyCoast, which
      the viewer calls): see "Huygens on its own" below. -->
 <style>
-#hrel .hr-read { position: absolute; left: 50%; bottom: 7vh; transform: translateX(-50%); white-space: nowrap; font: 11px/1 var(--hudf); letter-spacing: .08em;
-  color: var(--q-dim); opacity: 0; transition: opacity 1.2s ease; }
-#hrel .hr-read.on { opacity: 1; }
-#hrel .hr-read i { font-style: normal; color: var(--q-accent); }
-#hrel .hr-note { position: absolute; left: 16px; bottom: 14px; max-width: min(460px, calc(100vw - 140px)); font-size: 10.5px; line-height: 1.4; color: rgba(232,236,242,.34); opacity: 0; transition: opacity 1.5s ease; }
-#hrel .hr-note.on { opacity: 1; }
 #hrel .hr-shade { position: absolute; inset: 0; background: linear-gradient(to top, rgba(0,0,0,.72) 0, rgba(0,0,0,.45) 22%, rgba(0,0,0,0) 46%); }
 /* tags on Cassini, the probe and Titan once the view pulls back */
 #hrel .hr-tag { position: absolute; left: 0; top: 0; font: 10.5px/1 var(--hudf); letter-spacing: .1em; text-transform: uppercase; color: rgba(232,236,242,.7);
@@ -41,8 +35,8 @@
 #hrel .cs-cap button:hover { color: var(--q-text); border-color: rgba(232,236,242,.35); }
 #hrel .cs-cap small { font-size: 10.5px; color: rgba(232,236,242,.4); }
 #hrel .cs-cap small a { color: inherit; pointer-events: auto; }
-body.phone #hrel .hr-read { font-size: 9.5px; bottom: 9vh; white-space: normal; width: calc(100vw - 32px); text-align: center; line-height: 1.6; }
-body.phone #hrel .hr-note { bottom: auto; top: 40px; max-width: calc(100vw - 32px); }
+body.phone #hrel .cs-read { font-size: 9.5px; bottom: 9vh; white-space: normal; width: calc(100vw - 32px); text-align: center; line-height: 1.6; }
+body.phone #hrel .cs-note { bottom: auto; top: 40px; max-width: calc(100vw - 32px); }
 </style>
 
 <section id="hrel" class="cs-root" hidden aria-live="polite">
@@ -52,8 +46,8 @@ body.phone #hrel .hr-note { bottom: auto; top: 40px; max-width: calc(100vw - 32p
   <div class="hr-tag" data-tag="cassini">Cassini</div>
   <div class="hr-tag" data-tag="titan">Titan</div>
   <div class="cs-caps"></div>
-  <div class="hr-read" aria-hidden="true"></div>
-  <div class="hr-note">Cassini's path and pointing are its real trajectory and attitude. The release follows ESA's numbers; after the first seconds the clock runs faster.</div>
+  <div class="cs-read" aria-hidden="true"></div>
+  <div class="cs-note">Cassini's path and pointing are its real trajectory and attitude. The release follows ESA's numbers; after the first seconds the clock runs faster.</div>
   <div class="cs-hint">Drag to look around</div>
   <button class="cs-skip" type="button">Skip ▸</button>
 </section>
@@ -62,7 +56,7 @@ body.phone #hrel .hr-note { bottom: auto; top: 40px; max-width: calc(100vw - 32p
 // ---------- Huygens lets go: the probe's release from Cassini, 2004-12-25 02:00 UTC, and the probe on its own after ----------
 (function () {
   const root = document.getElementById("hrel"), black = root.querySelector(".cs-black"), caps = root.querySelector(".cs-caps");
-  const read = root.querySelector(".hr-read"), note = root.querySelector(".hr-note"), hint = root.querySelector(".cs-hint");
+  const read = root.querySelector(".cs-read"), note = root.querySelector(".cs-note"), hint = root.querySelector(".cs-hint");
   const tags = {}; root.querySelectorAll("[data-tag]").forEach(el => { tags[el.dataset.tag] = el; });
   // what every cutscene shares (cutscene.html)
   const CS = cassiniCutscene, { fadeTo, sound, look } = CS, runCaptions = (list, t, shown) => CS.runCaptions(caps, list, t, shown);
@@ -72,52 +66,36 @@ body.phone #hrel .hr-note { bottom: auto; top: 40px; max-width: calc(100vw - 32p
   if (!DATA) return;
   const RELEASE = utcToEt(DATA.release_utc);
   const SPEED = DATA.speed_m_s, SPIN = DATA.spin_rpm * 2 * Math.PI / 60;   // m/s, rad/s
-  const LEAD = 12;             // s of mission time shown before the release
-  const REAL = 22;             // screen s that run in real time
+  const LEAD = 8;              // s of mission time shown before the release
+  const REAL = 16;             // screen s that run in real time
   const WARP = 30;             // how much faster the clock runs after that
-  const RAMP = 8;              // screen s to reach it
-  const PULL = 38;             // screen s when the camera starts to pull back
-  const END = 78;              // screen s when it closes by itself
+  const RAMP = 6;              // screen s to reach it
+  const PULL = 26;             // screen s when the camera starts to pull back
+  const END = 59;              // screen s when it closes by itself
   const SPIN_MAX = 2.4;        // rad/s, the most the drawn spin turns, so the sped-up clock does not strobe it
   const FAR_M = 11;            // m from the probe the camera ends
   const esc = t => String(t).replace(/[&<>"]/g, c => ({ "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;" })[c]);
   const SOURCES = [...new Set(DATA.facts.map(f => f.source))].map(u => `<a href="${esc(u)}" target="_blank" rel="noopener">${esc(new URL(u).hostname.replace(/^www\./, ""))}</a>`).join(" · ");
   // the near part, in mission seconds from the release: when, how long, the line, a class, the chord under it
   const NEAR = [
-    [-11.5, 6, `<b>December 25, 2004 · 02:00 UTC</b>Seven years after leaving Earth together, Cassini lets go of Huygens.`, "", [0, 2, 4]],
-    [-5.5, 5.5, `Ten seconds before, Cassini's thrusters are switched off, so nothing nudges the probe on its way out.`, "", null],
-    [0.2, 6, `Pyrotechnic devices fire, and springs push the probe out on rollers. The whole release takes 0.15 seconds.`, "", [0, 2, 4, 7]],
-    [6.5, 7, `It leaves at ${Math.round(SPEED * 100)} centimeters a second, spinning ${DATA.spin_rpm} times a minute so it holds steady all the way to Titan.`, "", null],
+    [-7.8, 4.2, `<b>December 25, 2004 · 02:00 UTC</b>Seven years after leaving Earth together, Cassini lets go of Huygens.`, "", [0, 2, 4]],
+    [-3.6, 3.8, `Ten seconds before, Cassini's thrusters are switched off, so nothing nudges the probe on its way out.`, "", null],
+    [0.2, 4.5, `Pyrotechnic devices fire, and springs push the probe out on rollers. The whole release takes 0.15 seconds.`, "", [0, 2, 4, 7]],
+    [4.8, 7, `It leaves at ${Math.round(SPEED * 100)} centimeters a second, spinning ${DATA.spin_rpm} times a minute so it holds steady all the way to Titan.`, "", null],
     [60, 999, `A minute later Cassini's thrusters wake again.`, "", null],
   ];
   // the far part, in screen seconds: when, how long, the line, a class, the chord
   const FAR_CAPS = [
-    [PULL + 1, 8, `<b>${DATA.mass_kg} kg · 20 days to Titan</b>Huygens sleeps now. A timer wakes it about five hours before it reaches Titan's air.`, "", [1, 3, 5]],
-    [PULL + 10, 8, `Three days later Cassini fires its engine to swerve aside, so it can pass Titan 60,000 km away and listen.`, "", [0, 3, 5]],
-    [PULL + 19, 8, `No one saw it live. Cassini recorded the release, then turned to Earth: the news took 1 hour 8 minutes to arrive.`, "", [2, 4, 7]],
-    [PULL + 28, 99, `<b>Next · January 14, 2005</b>Huygens falls through Titan's haze and lands.<div class="btns"><button type="button" data-hr="stay">Stay with Huygens</button><button type="button" data-hr="landing">Watch the landing</button><button type="button" data-hr="back">Back to Cassini</button></div><small>Sources: ${SOURCES}</small>`, "big", [0, 2, 4, 7, 9]],
+    [PULL + 1, 7, `<b>${DATA.mass_kg} kg · 20 days to Titan</b>Huygens sleeps now. A timer wakes it about five hours before it reaches Titan's air.`, "", [1, 3, 5]],
+    [PULL + 8, 7, `Three days later Cassini fires its engine to swerve aside, so it can pass Titan 60,000 km away and listen.`, "", [0, 3, 5]],
+    [PULL + 15, 7, `No one saw it live. Cassini recorded the release, then turned to Earth: the news took 1 hour 8 minutes to arrive.`, "", [2, 4, 7]],
+    [PULL + 22, 99, `<b>Next · January 14, 2005</b>Huygens falls through Titan's haze and lands.<div class="btns"><button type="button" data-hr="stay">Stay with Huygens</button><button type="button" data-hr="landing">Watch the landing</button><button type="button" data-hr="back">Back to Cassini</button></div><small>Sources: ${SOURCES}</small>`, "big", [0, 2, 4, 7, 9]],
   ];
 
   let H = null;   // the running cutscene
   const clamp01 = x => Math.max(0, Math.min(1, x));
   const ease = x => { x = clamp01(x); return x * x * (3 - 2 * x); };
-  // a soft glow sprite (the shared one, when cutscene.html has it)
-  let glowTex = null;
-  function glowTexture() {
-    if (CS.glowTexture) return CS.glowTexture();
-    if (glowTex) return glowTex;
-    const c = document.createElement("canvas"); c.width = c.height = 64;
-    const g = c.getContext("2d"), gr = g.createRadialGradient(32, 32, 0, 32, 32, 32);
-    gr.addColorStop(0, "rgba(255,255,255,1)"); gr.addColorStop(0.25, "rgba(255,255,255,.5)"); gr.addColorStop(1, "rgba(255,255,255,0)");
-    g.fillStyle = gr; g.fillRect(0, 0, 64, 64);
-    return glowTex = new THREE.CanvasTexture(c);
-  }
-  function sprite(color, size) {
-    if (CS.sprite) return CS.sprite(color, size);
-    const s = new THREE.Sprite(new THREE.SpriteMaterial({ map: glowTexture(), color, transparent: true, opacity: 0, blending: THREE.AdditiveBlending, depthWrite: false }));
-    s.scale.setScalar(size); s.layers.set(1);
-    return s;
-  }
+  const sprite = CS.sprite;   // a soft additive glow (cutscene.html)
 
   // ---------- Huygens on its own, from the release until it reaches Titan's air ----------
   // After the release the probe is a craft of its own: the Huygens part of NASA's model, cloned, with Cassini's
@@ -172,8 +150,8 @@ body.phone #hrel .hr-note { bottom: auto; top: 40px; max-width: calc(100vw - 32p
     const axis = p0.clone().sub(hub); axis.addScaledVector(up, -axis.dot(up)).normalize();
     cassini.position.copy(saved[0]); cassini.quaternion.copy(saved[1]); cassini.scale.copy(saved[2]); cassini.updateMatrixWorld(true);
     const group = new THREE.Group(), model = probeClone(m);
-    const beacon = new THREE.Sprite(new THREE.SpriteMaterial({ map: glowTexture(), color: 0xffd7a0, transparent: true, opacity: 0, blending: THREE.AdditiveBlending, depthWrite: false }));
-    beacon.layers.set(1); beacon.position.copy(p0);
+    const beacon = sprite(0xffd7a0, 1);
+    beacon.position.copy(p0);
     group.add(model, beacon); group.visible = false;
     scene.add(group);
     co = { group, beacon, p0, axis, up, spin: null };
@@ -286,9 +264,8 @@ body.phone #hrel .hr-note { bottom: auto; top: 40px; max-width: calc(100vw - 32p
     if (h.how === "landing" && window.cassiniHuygensLanding) setTimeout(() => cassiniHuygensLanding.play(), 0);
     else if (h.how === "landing" && entry && typeof jump === "function") jump(entry);
     else if (h.how === "stay" && studyCoast.modelShown(state.et)) {
-      setPlaying(false);
-      // once cutscene.html has put the interface back (it may turn follow on again)
-      setTimeout(() => { if (state.follow) setFollow(false); setFocus("HUYGENS"); }, 0);
+      // paused on the probe, once cutscene.html has put the interface back (it picks playback up again if it was on)
+      setTimeout(() => { setPlaying(false); setFocus("HUYGENS"); }, 0);
       return { follow: false };
     } else { setFocus("CASSINI"); if (h.playing) { setSpeed(h.speed); setPlaying(true); } }
   }
@@ -354,8 +331,10 @@ body.phone #hrel .hr-note { bottom: auto; top: 40px; max-width: calc(100vw - 32p
     read.innerHTML = s < 0 ? `Release in <i>${Math.ceil(-s)} s</i> · Thrusters <i>${s > -10 ? "off" : "on"}</i>`
       : `${fmtClock(s)} · Huygens <i>${out < 10 ? out.toFixed(1) : Math.round(out)} m</i> away · ${SPEED} m/s · Spin <i>${DATA.spin_rpm} rpm</i>${rate > 1.05 ? ` · Time <i>×${Math.round(rate)}</i>` : ""}`;
   }
-  // the camera: beside Cassini with its dish up, widening as the probe drifts off; then beside the probe, looking
-  // toward Titan. A drag turns it, the wheel zooms
+  // the camera, through cutscene.html's orbit() and frameOn(), so its subject stays in the middle of the view and a drag
+  // turns round it: first the middle of the two craft, from beside Cassini with its dish up, widening as the probe
+  // drifts off; then the subject slides over to the probe and the camera swings round behind it, looking on toward
+  // Titan, and closes in
   const vB2 = new THREE.Vector3(), pW = new THREE.Vector3();
   function cameraAt() {
     if (H.phase !== "run") return;
@@ -364,32 +343,25 @@ body.phone #hrel .hr-note { bottom: auto; top: 40px; max-width: calc(100vw - 32p
     const up = co ? co.up : new THREE.Vector3(0, 0, 1), upW = up.clone().applyQuaternion(cassini.quaternion).normalize();
     const axisW = co ? co.axisS.clone() : new THREE.Vector3(-1, 0, 0).applyQuaternion(cassini.quaternion);
     const gap = pW.distanceTo(cassini.position) / 1e-6;   // metres between the two
-    // near: aim at the middle of the two; stand off to the side of the probe's path, a little ahead of it and above
+    // near: off to the side of the probe's path, a little ahead of it and above, drifting slowly round
     const side = new THREE.Vector3().crossVectors(upW, axisW).normalize();
-    const yaw = -0.35 + 0.01 * T + look.yaw;
-    const dirN = side.clone().multiplyScalar(Math.cos(yaw)).addScaledVector(axisW, Math.sin(yaw) + 0.25).addScaledVector(upW, 0.28 + look.pitch).normalize();
-    const tgtNear = cassini.position.clone().lerp(pW, 0.5);
-    // an upright phone sees less across, so the camera stands further back and looks less far off to the side
-    const fit = Math.max(1, 0.9 / camera.aspect), aside = 0.5 * Math.min(1, camera.aspect);
-    const dN = (15 + 1.1 * gap) * look.zoom * fit;
-    const camNear = tgtNear.clone().addScaledVector(dirN, dN * 1e-6);
-    let cam = camNear, lookDir = tgtNear.clone().sub(camNear).normalize();
-    // then over to the probe: close beside it, a little behind and above, looking past it toward Titan, as it heads off
-    const k = ease((T - PULL) / 12);
+    const yaw = -0.35 + 0.01 * T;
+    const fromN = side.clone().multiplyScalar(Math.cos(yaw)).addScaledVector(axisW, Math.sin(yaw) + 0.25).addScaledVector(upW, 0.28).normalize();
+    // an upright phone sees less across, so the camera stands further back
+    const fit = Math.max(1, 0.9 / camera.aspect);
+    const dN = (15 + 1.1 * gap) * fit;
     const tW = relScene("TITAN", vB2).sub(cassini.position).normalize();
-    if (k > 0) {
-      const sideW = new THREE.Vector3().crossVectors(upW, tW).normalize();
-      const dirF = sideW.clone().multiplyScalar(0.85).addScaledVector(tW, -0.45).addScaledVector(upW, 0.25 + look.pitch).normalize().applyAxisAngle(upW, look.yaw);
-      const camFar = pW.clone().addScaledVector(dirF, FAR_M * look.zoom * fit * 1e-6);
-      const lookFar = pW.clone().sub(camFar).normalize().addScaledVector(tW, aside).normalize();
-      cam = camNear.clone().lerp(camFar, k);
-      lookDir = lookDir.clone().lerp(lookFar, k).normalize();
-    }
-    camera.position.copy(cam);
-    camera.up.copy(upW);
-    camera.lookAt(cam.clone().add(lookDir));
+    // far: behind the probe and to one side, so it is seen heading on toward Titan
+    const sideW = new THREE.Vector3().crossVectors(upW, tW).normalize();
+    const fromF = sideW.clone().multiplyScalar(0.85).addScaledVector(tW, -0.45).addScaledVector(upW, 0.25).normalize();
+    const k = ease((T - PULL) / 10);
+    const subject = cassini.position.clone().lerp(pW, 0.5 + 0.5 * ease((T - PULL) / 3));
+    const from = fromN.clone().applyQuaternion(new THREE.Quaternion().slerp(new THREE.Quaternion().setFromUnitVectors(fromN, fromF), k));
+    const dist = Math.exp(Math.log(dN) * (1 - k) + Math.log(FAR_M * fit) * k) * 1e-6;
+    const o = CS.orbit(from.negate(), upW);
+    CS.frameOn(subject, o.dir, dist, o.up);
     // the tags, once the view has pulled back
-    const showTags = T > PULL + 4;
+    const showTags = T > PULL;
     const place = (el, w, extra) => {
       const v = w.clone().project(camera), on = showTags && v.z < 1 && Math.abs(v.x) < 1.05 && Math.abs(v.y) < 1.05;
       el.classList.toggle("on", on);
