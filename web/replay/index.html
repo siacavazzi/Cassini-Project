@@ -825,6 +825,9 @@ function requestYears(y) {
   yearsWanted = y;
   if (yearsWake) yearsWake();
   if (!yearsJob) yearsJob = (async () => {
+    // after this assignment: with the part already in, the loop below ends at once, and its finally
+    // must not run before yearsJob is set (that left a finished job in yearsJob, so no later jump loaded)
+    await null;
     try {
       while (yearsWanted !== null) {
         const y = yearsWanted, ys = partsAround(y);
@@ -1426,9 +1429,10 @@ function clampView() {
   state.view = [a, b];
 }
 // years that are not loaded: frames per day from mission.json, drawn muted
+// (a page can show another count, such as one body's pictures, through window.studyFramesPerDay)
 function drawUnloadedBars(g, w, h) {
   if (!mission) return;
-  const F = mission.frames_per_day, base = h * 0.62, bw = 2, n = F.N.length;
+  const F = (window.studyFramesPerDay && window.studyFramesPerDay()) || mission.frames_per_day, base = h * 0.62, bw = 2, n = F.N.length;
   for (let x = 0; x < w; x += bw) {
     const t0 = xToEt(x, w), t1 = xToEt(x + bw, w);
     if (t1 > loadedSpan[0] && t0 < loadedSpan[1]) continue;
@@ -1486,6 +1490,7 @@ function drawTimeline() {
   let lastLabel = -1e9;
   for (const e of encounters) {
     const x = etToX(e.et, w); if (x < -10 || x > w + 10) continue;
+    if (window.studyEncounterShown && !window.studyEncounterShown(e)) continue;   // a page can show some only
     const ms = e.kind === "milestone" || e.kind === "observation";
     g.fillStyle = ms ? "#e6bb68" : e.body === "SATURN" ? "rgba(230,187,104,0.45)" : e.body === "TITAN" ? "#e0994a" : "#c7d0dc";
     if (e.kind === "observation") g.fillStyle = "#8ab6ff";   // imaging sessions in the camera blue
@@ -1607,7 +1612,7 @@ function updateFocusRow() {
   }
 }
 function scrollMoments() {
-  const list = $("mlist"), next = [...list.querySelectorAll("li[data-et]")].find(li => +li.dataset.et >= state.et - 3600);
+  const list = $("mlist"), next = [...list.querySelectorAll("li[data-et]:not([hidden])")].find(li => +li.dataset.et >= state.et - 3600);
   if (next) list.scrollTop = Math.max(0, next.offsetTop - list.offsetTop - 60);
 }
 function buildUi() {
@@ -1639,7 +1644,7 @@ function buildUi() {
       year = e.utc.slice(0, 4);
       const h = document.createElement("li"); h.className = "yr"; h.textContent = year; list.appendChild(h);
     }
-    const li = document.createElement("li"); li.className = e.kind === "milestone" ? "ms" : e.kind === "observation" ? "ob" : ""; li.dataset.et = e.et;
+    const li = document.createElement("li"); li.className = e.kind === "milestone" ? "ms" : e.kind === "observation" ? "ob" : ""; li.dataset.et = e.et; li.dataset.body = momentBody(e);
     const d = new Date(etToMs(e.et));
     const title = e.kind === "flyby" ? `${titleCase(e.body)} flyby` : e.label;
     const s = e.kind === "milestone" ? d.toISOString().slice(11, 16) + " UTC"
@@ -1748,6 +1753,12 @@ function aimFollow() {
 function fmtSpan(sec) { const m = Math.round(sec / 60), h = Math.floor(m / 60); return h ? `${h} h${m % 60 ? ` ${m % 60} min` : ""}` : `${Math.max(1, m)} min`; }
 function setSpeed(v) { state.speed = v; document.querySelectorAll("#speeds .btn").forEach(b => b.setAttribute("aria-pressed", String(+b.dataset.v === v))); }
 function setPlaying(p) { state.playing = p; $("play").textContent = p ? "❚❚" : "▶"; }
+// the body a moment is about: a flyby's or imaging session's own, the planet or moon a milestone names, or none
+function momentBody(e) {
+  if (e.body) return e.body;
+  const t = (e.label || "").toUpperCase();
+  return [...PLANETS, ...CRUISE_FOCUS, ...FOCUS_LIST, "HUYGENS"].find(n => n !== "CASSINI" && t.includes(n)) || "";
+}
 // the body a milestone is about: Earth for the launch, a named planet or moon, otherwise Titan
 function milestoneBody(e) {
   if (/^Launch/.test(e.label)) return "EARTH";
