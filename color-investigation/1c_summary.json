@@ -1,0 +1,135 @@
+{
+ "n": 3000,
+ "fail": 14,
+ "frac_fail": 0.004666666666666667,
+ "by_year": {
+  "1999": {
+   "n": 3,
+   "fail": 1,
+   "frac_fail": 0.333
+  },
+  "2000": {
+   "n": 194,
+   "fail": 0,
+   "frac_fail": 0.0
+  },
+  "2001": {
+   "n": 156,
+   "fail": 0,
+   "frac_fail": 0.0
+  },
+  "2002": {
+   "n": 8,
+   "fail": 0,
+   "frac_fail": 0.0
+  },
+  "2003": {
+   "n": 35,
+   "fail": 1,
+   "frac_fail": 0.029
+  },
+  "2004": {
+   "n": 325,
+   "fail": 0,
+   "frac_fail": 0.0
+  },
+  "2005": {
+   "n": 238,
+   "fail": 1,
+   "frac_fail": 0.004
+  },
+  "2006": {
+   "n": 268,
+   "fail": 6,
+   "frac_fail": 0.022
+  },
+  "2007": {
+   "n": 397,
+   "fail": 5,
+   "frac_fail": 0.013
+  },
+  "2008": {
+   "n": 138,
+   "fail": 0,
+   "frac_fail": 0.0
+  },
+  "2009": {
+   "n": 127,
+   "fail": 0,
+   "frac_fail": 0.0
+  },
+  "2010": {
+   "n": 129,
+   "fail": 0,
+   "frac_fail": 0.0
+  },
+  "2011": {
+   "n": 143,
+   "fail": 0,
+   "frac_fail": 0.0
+  },
+  "2012": {
+   "n": 136,
+   "fail": 0,
+   "frac_fail": 0.0
+  },
+  "2013": {
+   "n": 115,
+   "fail": 0,
+   "frac_fail": 0.0
+  },
+  "2014": {
+   "n": 133,
+   "fail": 0,
+   "frac_fail": 0.0
+  },
+  "2015": {
+   "n": 149,
+   "fail": 0,
+   "frac_fail": 0.0
+  },
+  "2016": {
+   "n": 137,
+   "fail": 0,
+   "frac_fail": 0.0
+  },
+  "2017": {
+   "n": 169,
+   "fail": 0,
+   "frac_fail": 0.0
+  }
+ },
+ "by_camera": {
+  "ISSNA": {
+   "n": 1918,
+   "fail": 8,
+   "frac_fail": 0.004
+  },
+  "ISSWA": {
+   "n": 1082,
+   "fail": 6,
+   "frac_fail": 0.006
+  }
+ },
+ "by_conversion": {
+  "12BIT": {
+   "n": 1333,
+   "fail": 0,
+   "frac_fail": 0.0
+  },
+  "8LSB": {
+   "n": 14,
+   "fail": 14,
+   "frac_fail": 1.0
+  },
+  "TABLE": {
+   "n": 1653,
+   "fail": 0,
+   "frac_fail": 0.0
+  }
+ },
+ "fail_reasons": {
+  "conversion 8LSB": 14
+ },
+ "missing_pairs": {}
+}

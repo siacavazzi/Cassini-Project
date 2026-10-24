@@ -1,0 +1,157 @@
+{
+ "phoebe_2004_nac_alt": {
+  "ids": [
+   "N1465662622_4",
+   "N1465662422_2",
+   "N1465662326_2"
+  ],
+  "report": {
+   "calibrated": false,
+   "stacked": [
+    1,
+    1,
+    1
+   ],
+   "aligned": [
+    "phase +4.2,+7.8",
+    "reference",
+    "phase -3.2,-2.9"
+   ],
+   "ids": [
+    "N1465662622_4",
+    "N1465662422_2",
+    "N1465662326_2"
+   ]
+  },
+  "note": "pipeline did not calibrate (stretched fallback); no variants"
+ },
+ "phoebe_2004_wac": {
+  "ids": [
+   "W1465673464_2",
+   "W1465673341_2",
+   "W1465673272_2"
+  ],
+  "report": {
+   "calibrated": true,
+   "stacked": [
+    1,
+    1,
+    1
+   ],
+   "aligned": [
+    "centroid +84.4,-67.6",
+    "reference",
+    "centroid -81.9,-19.0"
+   ],
+   "ids": [
+    "W1465673464_2",
+    "W1465673341_2",
+    "W1465673272_2"
+   ]
+  },
+  "blacks": [
+   6.335062789730728e-05,
+   4.5321296056499705e-05,
+   7.309575448743999e-05
+  ],
+  "white": 0.017925383523106575,
+  "sky_measured": true,
+  "black_over_white": [
+   0.003534129566357431,
+   0.002528330621103791,
+   0.004077779111014081
+  ],
+  "max_black_diff_over_white": 0.0015494484899102904,
+  "V1_black": 6.058922614708232e-05,
+  "V1_white": 0.017984576523303986,
+  "V2_white": 0.018018976114690305,
+  "matrix": "WAC_BL1",
+  "body_pixels": 45452,
+  "body_median_iof_RGB": [
+   0.012181035242974758,
+   0.012882508337497711,
+   0.011925001628696918
+  ],
+  "ratio_R_G_raw_iof": 0.945548415184021,
+  "ratio_B_G_raw_iof": 0.9256739020347595,
+  "ratio_R_G_after_per_channel_black": 0.9439517407918674,
+  "ratio_B_G_after_per_channel_black": 0.9232479254115238,
+  "ratio_R_G_after_one_black": 0.9452911615371704,
+  "ratio_B_G_after_one_black": 0.9253227114677429,
+  "displayed_CURRENT": {
+   "median_rgb": [
+    213,
+    219,
+    211
+   ],
+   "mean_rgb": [
+    194.3,
+    190.2,
+    184.8
+   ],
+   "hue_deg": 34.5,
+   "sat": 0.072,
+   "light": 0.743
+  },
+  "displayed_V1": {
+   "median_rgb": [
+    213,
+    219,
+    211
+   ],
+   "mean_rgb": [
+    194.1,
+    189.9,
+    184.9
+   ],
+   "hue_deg": 32.4,
+   "sat": 0.07,
+   "light": 0.743
+  },
+  "displayed_V2": {
+   "median_rgb": [
+    213,
+    218,
+    211
+   ],
+   "mean_rgb": [
+    194.0,
+    189.8,
+    184.7
+   ],
+   "hue_deg": 32.9,
+   "sat": 0.071,
+   "light": 0.743
+  },
+  "displayed_V3": {
+   "median_rgb": [
+    209,
+    223,
+    210
+   ],
+   "mean_rgb": [
+    194.6,
+    188.7,
+    184.9
+   ],
+   "hue_deg": 23.5,
+   "sat": 0.074,
+   "light": 0.744
+  },
+  "displayed_V4": {
+   "median_rgb": [
+    210,
+    224,
+    211
+   ],
+   "mean_rgb": [
+    195.7,
+    189.4,
+    185.2
+   ],
+   "hue_deg": 24.2,
+   "sat": 0.081,
+   "light": 0.747
+  }
+ }
+}

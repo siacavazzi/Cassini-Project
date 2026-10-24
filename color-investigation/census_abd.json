@@ -1,0 +1,868 @@
+{
+ "1a": {
+  "composites_unique": 6091,
+  "calibrated_true": 6091,
+  "calibrated_false": 0,
+  "by_channel_count": {
+   "3": 1857,
+   "2": 4234
+  },
+  "by_channel_count_and_calibrated": {
+   "3ch_True": 1857,
+   "2ch_True": 4234
+  },
+  "alignment_failed_composites": 0,
+  "alignment_failed_ids": [],
+  "alignment_method_counts": {
+   "phase": 4370,
+   "reference": 6091,
+   "edges": 257,
+   "not": 3240,
+   "centroid": 81
+  },
+  "uncalibrated_multichannel": 0,
+  "uncalibrated_reason_counts": {},
+  "uncalibrated_examples": []
+ },
+ "1b": {
+  "plans": 558,
+  "filled": {
+   "n": 123,
+   "median": 0.009017136687115993,
+   "p90": 0.2513367538489657,
+   "max": 1.3998113985541105
+  },
+  "not_filled": {
+   "n": 39,
+   "median": 0.001654918042873581,
+   "p90": 0.03595381657743442,
+   "max": 0.4517067418037152
+  },
+  "gamma_counts": {
+   "1.5": 473,
+   "3.0": 85
+  },
+  "colour_triplets": {
+   "none (grey)": 396,
+   "RED/GRN/BL1": 44,
+   "CB3/MT2/MT1": 32,
+   "CB3/MT2/GRN": 31,
+   "IR1/GRN/UV3": 20,
+   "IR3/GRN/UV3": 10,
+   "CB2/CB1/BL1": 5,
+   "CB2/GRN/BL1": 3,
+   "CB3/CB2/MT2": 3,
+   "CB2/MT2/BL1": 2,
+   "IR3/CL1/CL2/UV3": 2,
+   "CB1/GRN/BL1": 2,
+   "MT3/MT2/BL1": 1,
+   "MT3/CB2/MT2": 1,
+   "IR3/CL1/CL2/VIO": 1,
+   "CB3/MT1/UV3": 1,
+   "CB3/IR1/CL1/CL2": 1,
+   "CB3/CL1/CL2/UV3": 1,
+   "CB2/MT2/VIO": 1,
+   "IR1/GRN/BL1": 1
+  },
+  "true_colour_RED_or_red_GRN_blue": 80,
+  "colour_black_spread_over_white_all": {
+   "n": 162,
+   "median": 0.007400561152527995,
+   "p90": 0.22920198952377432,
+   "max": 1.3998113985541105
+  },
+  "worst_spread": [
+   {
+    "key": [
+     "SATURN",
+     "ISS_003SA_WINDS006_PRIME",
+     "N",
+     0
+    ],
+    "filled": true,
+    "gamma": 1.5,
+    "colour": [
+     "CB2",
+     "MT2",
+     "BL1"
+    ],
+    "white": 0.26204984337091447,
+    "black_over_white": {
+     "MT2": 0.4536016543238672,
+     "CB2": 1.8534130528779778,
+     "BL1": 0.9509095977313555
+    },
+    "colour_black_spread_over_white": 1.3998113985541105,
+    "all_black_spread_over_white": 1.3998113985541105
+   },
+   {
+    "key": [
+     "SATURN",
+     "ISS_003SA_WINDS005_PRIME",
+     "N",
+     0
+    ],
+    "filled": true,
+    "gamma": 1.5,
+    "colour": [
+     "CB2",
+     "CB1",
+     "BL1"
+    ],
+    "white": 0.3132874375581741,
+    "black_over_white": {
+     "MT2": 0.3790979353685126,
+     "CB2": 1.5381729472755077,
+     "BL1": 0.8246391646860012,
+     "MT1": 1.001811039797806,
+     "CB1": 1.419091952709548
+    },
+    "colour_black_spread_over_white": 0.7135337825895065,
+    "all_black_spread_over_white": 1.159075011906995
+   },
+   {
+    "key": [
+     "SATURN",
+     "ISS_003SA_WINDS004_PRIME",
+     "N",
+     0
+    ],
+    "filled": true,
+    "gamma": 1.5,
+    "colour": [
+     "CB2",
+     "CB1",
+     "BL1"
+    ],
+    "white": 0.3105646398663521,
+    "black_over_white": {
+     "MT2": 0.3785234478604265,
+     "CB2": 1.5204197810884574,
+     "BL1": 0.8155121119646928,
+     "MT1": 1.0032577963832787,
+     "CB1": 1.4166720922633258
+    },
+    "colour_black_spread_over_white": 0.7049076691237647,
+    "all_black_spread_over_white": 1.141896333228031
+   },
+   {
+    "key": [
+     "RHEA",
+     "ISS_049RH_HIGHRES001_PRIME",
+     "N",
+     1
+    ],
+    "filled": true,
+    "gamma": 1.5,
+    "colour": [
+     "IR1",
+     "GRN",
+     "UV3"
+    ],
+    "white": 0.5305581432580948,
+    "black_over_white": {
+     "IR1": 1.512349351909619,
+     "CL1/CL2": 1.4610609910830021,
+     "UV3": 0.908125035654248,
+     "GRN": 1.4400925033711158
+    },
+    "colour_black_spread_over_white": 0.604224316255371,
+    "all_black_spread_over_white": 0.604224316255371
+   },
+   {
+    "key": [
+     "RHEA",
+     "ISS_049RH_HIGHRES001_PRIME",
+     "N",
+     2
+    ],
+    "filled": true,
+    "gamma": 1.5,
+    "colour": [
+     "IR1",
+     "GRN",
+     "UV3"
+    ],
+    "white": 0.6263548856973649,
+    "black_over_white": {
+     "CL1/CL2": 1.0827377377613088,
+     "UV3": 0.6483268495782468,
+     "GRN": 1.049462992318571,
+     "IR1": 1.1281451126607545,
+     "IR3": 1.289218673667235,
+     "BL1": 1.1034731597781866,
+     "RED": 1.2448695762862039,
+     "IR2": 1.2932272319995592,
+     "IR4": 1.2219500919199988,
+     "P0/GRN": 0.4466526550960497,
+     "P60/GRN": 0.4112475914608487
+    },
+    "colour_black_spread_over_white": 0.47981826308250763,
+    "all_black_spread_over_white": 0.8819796405387106
+   },
+   {
+    "key": [
+     "SATURN",
+     "ISS_045RG_GPHOT5DEG001_PRIME",
+     "N",
+     0
+    ],
+    "filled": false,
+    "gamma": 3.0,
+    "colour": [
+     "RED",
+     "GRN",
+     "BL1"
+    ],
+    "white": 0.00012722545245924785,
+    "black_over_white": {
+     "CL1/CL2": 0.11441983131669146,
+     "RED": 0.20768380092986757,
+     "BL1": 0.6593905427335828,
+     "GRN": 0.23635520400027085,
+     "IR1": 0.2102631430366151,
+     "IR2": 0.4313350479682468
+    },
+    "colour_black_spread_over_white": 0.4517067418037152,
+    "all_black_spread_over_white": 0.5449707114168914
+   },
+   {
+    "key": [
+     "RHEA",
+     "ISS_049RH_HIGHRES001_PRIME",
+     "N",
+     0
+    ],
+    "filled": true,
+    "gamma": 1.5,
+    "colour": [
+     "IR1",
+     "GRN",
+     "UV3"
+    ],
+    "white": 0.6464270883798595,
+    "black_over_white": {
+     "CL1/CL2": 1.019834413377749,
+     "UV3": 0.6410554384345606,
+     "GRN": 1.0332093048367668,
+     "IR1": 1.0791604947962607
+    },
+    "colour_black_spread_over_white": 0.43810505636170016,
+    "all_black_spread_over_white": 0.43810505636170016
+   },
+   {
+    "key": [
+     "SATURN",
+     "ISS_048SA_STRMOVIEC001_PRIME",
+     "N",
+     0
+    ],
+    "filled": true,
+    "gamma": 1.5,
+    "colour": [
+     "CB3",
+     "MT2",
+     "MT1"
+    ],
+    "white": 0.5313990265130997,
+    "black_over_white": {
+     "CB1": 0.44897269709128185,
+     "MT1": 0.3320862210695346,
+     "MT3": 0.01735942541533137,
+     "CB3": 0.4380161173430738,
+     "CB2": 0.47213016471365477,
+     "MT2": 0.1308671845348433
+    },
+    "colour_black_spread_over_white": 0.30714893280823047,
+    "all_black_spread_over_white": 0.4547707392983234
+   },
+   {
+    "key": [
+     "SATURN",
+     "ISS_048SA_STRMOVIEC001_PRIME",
+     "N",
+     1
+    ],
+    "filled": true,
+    "gamma": 1.5,
+    "colour": [
+     "CB3",
+     "MT2",
+     "MT1"
+    ],
+    "white": 0.5364375114440918,
+    "black_over_white": {
+     "CB1": 0.43410910065058295,
+     "MT1": 0.32257302502864466,
+     "MT3": 0.016042411325401715,
+     "CB3": 0.4292151212209698,
+     "CB2": 0.4580047751493123,
+     "MT2": 0.12332178449094258
+    },
+    "colour_black_spread_over_white": 0.30589333673002717,
+    "all_black_spread_over_white": 0.4419623638239106
+   },
+   {
+    "key": [
+     "SATURN",
+     "ISS_045RG_GPHOT5DEG001_PRIME",
+     "N",
+     1
+    ],
+    "filled": false,
+    "gamma": 3.0,
+    "colour": [
+     "RED",
+     "GRN",
+     "BL1"
+    ],
+    "white": 0.00017551277414895594,
+    "black_over_white": {
+     "CL1/CL2": 0.0907297179720733,
+     "RED": 0.16093815836405595,
+     "BL1": 0.4479973544802459,
+     "GRN": 0.15592157453363056,
+     "IR1": 0.16127156366401668
+    },
+    "colour_black_spread_over_white": 0.2920757799466154,
+    "all_black_spread_over_white": 0.3572676365081726
+   },
+   {
+    "key": [
+     "SATURN",
+     "ISS_048SA_STRMOVIEC001_PRIME",
+     "N",
+     2
+    ],
+    "filled": true,
+    "gamma": 1.5,
+    "colour": [
+     "CB3",
+     "MT2",
+     "MT1"
+    ],
+    "white": 0.5652045011520386,
+    "black_over_white": {
+     "CB1": 0.39887631849971283,
+     "MT1": 0.2987880485413324,
+     "MT3": 0.014527681046084822,
+     "CB3": 0.38618084381872486,
+     "CB2": 0.41984697061700016,
+     "MT2": 0.11189112948215028
+    },
+    "colour_black_spread_over_white": 0.27428971433657456,
+    "all_black_spread_over_white": 0.40531928957091534
+   },
+   {
+    "key": [
+     "SATURN",
+     "ISS_048SA_STRMOVIEC001_PRIME",
+     "N",
+     3
+    ],
+    "filled": true,
+    "gamma": 1.5,
+    "colour": [
+     "CB3",
+     "MT2",
+     "MT1"
+    ],
+    "white": 0.5644911527633667,
+    "black_over_white": {
+     "CB1": 0.3892220548033438,
+     "MT1": 0.2875083812096184,
+     "MT3": 0.014061934103366315,
+     "CB3": 0.3790759340231179,
+     "CB2": 0.4116234970577335,
+     "MT2": 0.10621478506090962
+    },
+    "colour_black_spread_over_white": 0.27286114896220826,
+    "all_black_spread_over_white": 0.3975615629543672
+   },
+   {
+    "key": [
+     "SATURN",
+     "ISS_293SA_IMPACTOBS001_VIMS",
+     "N",
+     0
+    ],
+    "filled": true,
+    "gamma": 1.5,
+    "colour": [
+     "RED",
+     "GRN",
+     "BL1"
+    ],
+    "white": 0.008871005848050117,
+    "black_over_white": {
+     "CL1/CL2": 0.3727112636834828,
+     "BL1": 0.174359709590485,
+     "RED": 0.4437758591185249,
+     "GRN": 0.3741337162486339,
+     "UV3": 0.10305388250288447,
+     "MT2": 0.24264661418116423,
+     "CB2": 0.5421694310967679,
+     "MT3": 0.09595517717794014,
+     "CB3": 0.59333230115578
+    },
+    "colour_black_spread_over_white": 0.26941614952803994,
+    "all_black_spread_over_white": 0.49737712397783984
+   },
+   {
+    "key": [
+     "SATURN",
+     "ISS_048SA_STRMOVIEC001_PRIME",
+     "N",
+     4
+    ],
+    "filled": true,
+    "gamma": 1.5,
+    "colour": [
+     "CB3",
+     "MT2",
+     "MT1"
+    ],
+    "white": 0.5666468143463135,
+    "black_over_white": {
+     "CB1": 0.3747532281253458,
+     "MT1": 0.2795883277639607,
+     "MT3": 0.013123501123503644,
+     "CB3": 0.36743737821818506,
+     "CB2": 0.3930158720808654,
+     "MT2": 0.10086323084341284
+    },
+    "colour_black_spread_over_white": 0.26657414737477225,
+    "all_black_spread_over_white": 0.3798923709573618
+   },
+   {
+    "key": [
+     "SATURN",
+     "ISS_048SA_STRMOVIEC001_PRIME",
+     "N",
+     5
+    ],
+    "filled": true,
+    "gamma": 1.5,
+    "colour": [
+     "CB3",
+     "MT2",
+     "MT1"
+    ],
+    "white": 0.5752377510070801,
+    "black_over_white": {
+     "CB1": 0.35432503724009645,
+     "MT1": 0.2632595842475843,
+     "MT3": 0.012260286145430349,
+     "CB3": 0.3472340058241273,
+     "CB2": 0.37200496990536,
+     "MT2": 0.0942921894208077
+    },
+    "colour_black_spread_over_white": 0.2529418164033196,
+    "all_black_spread_over_white": 0.35974468375992963
+   }
+  ],
+  "filled_count": 473
+ },
+ "1d": {
+  "matches": 2,
+  "flags": [
+   {
+    "name": "20261022-110608_N1575364115_1",
+    "flagged": "2026-10-22T15:05:03.135Z",
+    "mission_utc": "2007-12-03T08:28:56Z",
+    "mission_et": 249942601.4904962,
+    "link": "http://192.168.68.52:8783/?t=2007-12-03T08%3A28%3A56",
+    "note": "color frames misaligned",
+    "tags": [],
+    "window": {
+     "id": "imgcard",
+     "title": "Narrow-angle Camera",
+     "kind": "camera window",
+     "full": false,
+     "zoomed": false,
+     "width": 480,
+     "height": 584
+    },
+    "shown": {
+     "what": "color composite",
+     "src": "http://192.168.68.52:8783/frames/color.webp?ids=N1575363266_1,N1575363169_1,N1575363109_1&size=512",
+     "report": {
+      "calibrated": true,
+      "stacked": [
+       1,
+       1,
+       1
+      ],
+      "aligned": [
+       "phase -3.9,+3.9",
+       "reference",
+       "phase +7.8,+0.1"
+      ],
+      "ids": [
+       "N1575363266_1",
+       "N1575363169_1",
+       "N1575363109_1"
+      ]
+     },
+     "labels": [
+      "N1575364115_1 N1575363687_1 N1575363804_1",
+      "FALSE COLOR"
+     ],
+     "info": {
+      "Status": "Imaging now",
+      "Frame": "Epimetheus \u00b7 N1575363874_1",
+      "Filter": "UV2/CL2 \u00b7 307 nm",
+      "Color": "False color set, 2 of 3 channels taken",
+      "Details": "0.25 km/px \u00b7 73 frames in the last 24 h"
+     },
+     "observation_frames": null,
+     "width": 512,
+     "height": 512
+    },
+    "ids": [
+     "N1575364115_1",
+     "N1575363687_1",
+     "N1575363804_1",
+     "N1575363266_1",
+     "N1575363169_1",
+     "N1575363109_1"
+    ],
+    "frames": [
+     {
+      "id": "N1575364115_1",
+      "camera": "NAC",
+      "filters": "CL1/CB3",
+      "target": "EPIMETHEUS",
+      "observation": "ISS_053EP_GEOLOG001_PRIME",
+      "utc": "2007-12-03T08:32:41Z",
+      "km_per_px": 0.2602
+     },
+     {
+      "id": "N1575363687_1",
+      "camera": "NAC",
+      "filters": "RED/CL2",
+      "target": "EPIMETHEUS",
+      "observation": "ISS_053EP_GEOLOG001_PRIME",
+      "utc": "2007-12-03T08:25:36Z",
+      "km_per_px": 0.245
+     },
+     {
+      "id": "N1575363804_1",
+      "camera": "NAC",
+      "filters": "UV1/CL2",
+      "target": "EPIMETHEUS",
+      "observation": "ISS_053EP_GEOLOG001_PRIME",
+      "utc": "2007-12-03T08:27:00Z",
+      "km_per_px": 0.248
+     },
+     {
+      "id": "N1575363266_1",
+      "camera": "NAC",
+      "filters": "IR4/CL2",
+      "target": "EPIMETHEUS",
+      "observation": "ISS_053EP_GEOLOG001_PRIME",
+      "utc": "2007-12-03T08:18:34Z",
+      "km_per_px": 0.2296
+     },
+     {
+      "id": "N1575363169_1",
+      "camera": "NAC",
+      "filters": "CL1/IR1",
+      "target": "EPIMETHEUS",
+      "observation": "ISS_053EP_GEOLOG001_PRIME",
+      "utc": "2007-12-03T08:16:58Z",
+      "km_per_px": 0.226
+     },
+     {
+      "id": "N1575363109_1",
+      "camera": "NAC",
+      "filters": "CL1/UV3",
+      "target": "EPIMETHEUS",
+      "observation": "ISS_053EP_GEOLOG001_PRIME",
+      "utc": "2007-12-03T08:15:58Z",
+      "km_per_px": 0.2238
+     }
+    ],
+    "movie": false,
+    "playing": true,
+    "speed": 600,
+    "settings": {
+     "interface.autohide": true,
+     "interface.idleDelay": 3.5,
+     "interface.hud": true,
+     "interface.labels": true,
+     "interface.hudline": true,
+     "cameras.composites": true,
+     "cameras.channels": true,
+     "cameras.details": true,
+     "cameras.mosaics": true,
+     "cameras.fullRes": true,
+     "cameras.fullDelay": 1.5,
+     "cameras.stale": 6,
+     "playback.start": "2006-09-15T14:28:00",
+     "playback.autoplay": true,
+     "playback.speed": 600,
+     "playback.span": 432000,
+     "view.allOrbits": false,
+     "view.enlarge": false,
+     "view.followcam": true,
+     "view.textures": "2k",
+     "movie.fps": 8,
+     "movie.processed": true,
+     "movie.mosaics": true,
+     "interface.phoneLayout": "auto",
+     "interface.phoneCameraSize": 100,
+     "perf.auto": true,
+     "perf.target": 55,
+     "perf.resolution": 100,
+     "perf.glass": true,
+     "perf.rest": true,
+     "perf.meter": false,
+     "playback.maxImageRate": 5,
+     "interface.flags": true,
+     "cameras.bodyWindows": false,
+     "cameras.bodyWindowLinger": 20,
+     "cameras.bodyWindowMax": 4,
+     "sound.on": true,
+     "sound.volume": 70,
+     "sound.chimes": 80,
+     "sound.chords": 60,
+     "sound.mosaic": 50,
+     "sound.hum": 25,
+     "sound.crescendo": 85,
+     "sound.length": 1.4,
+     "sound.reverb": 15,
+     "sound.stereo": true,
+     "export.adaptive": true,
+     "export.fps": 12,
+     "export.size": 1024,
+     "export.sound": true,
+     "export.caption": true
+    },
+    "client": {
+     "agent": "Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/155.0.0.0 Safari/537.36",
+     "dpr": 2,
+     "viewport": [
+      1713,
+      921
+     ],
+     "phone": false
+    },
+    "received": "2026-10-22T15:06:08+00:00",
+    "files": [
+     "shown.png",
+     "raw/N1575364115_1.png",
+     "raw/N1575363687_1.png",
+     "raw/N1575363804_1.png",
+     "raw/N1575363266_1.png",
+     "raw/N1575363169_1.png",
+     "raw/N1575363109_1.png"
+    ]
+   },
+   {
+    "name": "20261022-111109_W1760119558_1",
+    "flagged": "2026-10-22T15:10:17.618Z",
+    "mission_utc": "2013-10-10T17:16:20Z",
+    "mission_et": 434697447.9699313,
+    "link": "http://192.168.68.52:8783/?t=2013-10-10T17%3A16%3A20",
+    "note": "not too bad, but some off colors and slightly misaligned frame stacks",
+    "tags": [],
+    "window": {
+     "id": "wacard",
+     "title": "Wide-angle Camera",
+     "kind": "camera window",
+     "full": true,
+     "zoomed": false,
+     "width": 1697,
+     "height": 883
+    },
+    "shown": {
+     "what": "pass mosaic",
+     "src": "http://192.168.68.52:8783/frames/mosaic/W1760119678_1.webp?size=full",
+     "report": {
+      "mosaic": 36,
+      "filters": 3,
+      "filter_names": [
+       "RED",
+       "GRN",
+       "BL1"
+      ],
+      "observation": "ISS_198SA_SATURN001_PRIME",
+      "pass": 0,
+      "of": 36,
+      "fixed": true,
+      "width": 2048,
+      "height": 1756
+     },
+     "labels": [
+      "W1760119558_1 W1760119618_1 W1760119678_1",
+      "COLOR MOSAIC \u00b7 36 OF 36 TILES \u00b7 3 FILTERS"
+     ],
+     "info": {
+      "Status": "Last frame 5 min ago",
+      "Filter": "CL1/BL1 \u00b7 462 nm",
+      "Color": "True color: RED \u00b7 GRN \u00b7 BL1 \u00b7 calibrated, aligned"
+     },
+     "observation_frames": [
+      "W1760115713_1",
+      "W1760115769_1",
+      "W1760115829_3",
+      "W1760115889_1",
+      "W1760116062_1",
+      "W1760116122_1",
+      "W1760116182_1",
+      "W1760116242_1",
+      "W1760116416_1",
+      "W1760116476_1",
+      "W1760116536_1",
+      "W1760116596_1",
+      "W1760116770_1",
+      "W1760116830_1",
+      "W1760116890_1",
+      "W1760116950_1",
+      "W1760117071_1",
+      "W1760117131_1",
+      "W1760117191_1",
+      "W1760117251_1",
+      "W1760117425_1",
+      "W1760117485_1",
+      "W1760117545_1",
+      "W1760117605_1",
+      "W1760117779_1",
+      "W1760117839_1",
+      "W1760117899_1",
+      "W1760117959_1",
+      "W1760118133_1",
+      "W1760118193_1",
+      "W1760118253_1",
+      "W1760118313_1",
+      "W1760118436_1",
+      "W1760118496_1",
+      "W1760118556_1",
+      "W1760118616_1",
+      "W1760118790_1",
+      "W1760118850_1",
+      "W1760118910_1",
+      "W1760118970_1",
+      "W1760119144_1",
+      "W1760119204_1",
+      "W1760119264_1",
+      "W1760119324_1",
+      "W1760119498_1",
+      "W1760119558_1",
+      "W1760119618_1",
+      "W1760119678_1"
+     ],
+     "width": 2048,
+     "height": 1756
+    },
+    "ids": [
+     "W1760119558_1",
+     "W1760119618_1",
+     "W1760119678_1"
+    ],
+    "frames": [
+     {
+      "id": "W1760119558_1",
+      "camera": "WAC",
+      "filters": "CL1/RED",
+      "target": "SATURN",
+      "observation": "ISS_198SA_SATURN001_PRIME",
+      "utc": "2013-10-10T17:09:24Z",
+      "km_per_px": 86.823
+     },
+     {
+      "id": "W1760119618_1",
+      "camera": "WAC",
+      "filters": "CL1/GRN",
+      "target": "SATURN",
+      "observation": "ISS_198SA_SATURN001_PRIME",
+      "utc": "2013-10-10T17:10:24Z",
+      "km_per_px": 86.8168
+     },
+     {
+      "id": "W1760119678_1",
+      "camera": "WAC",
+      "filters": "CL1/BL1",
+      "target": "SATURN",
+      "observation": "ISS_198SA_SATURN001_PRIME",
+      "utc": "2013-10-10T17:11:24Z",
+      "km_per_px": 86.8107
+     }
+    ],
+    "movie": false,
+    "playing": false,
+    "speed": 60,
+    "settings": {
+     "interface.autohide": true,
+     "interface.idleDelay": 3.5,
+     "interface.hud": true,
+     "interface.labels": true,
+     "interface.hudline": true,
+     "cameras.composites": true,
+     "cameras.channels": true,
+     "cameras.details": true,
+     "cameras.mosaics": true,
+     "cameras.fullRes": true,
+     "cameras.fullDelay": 1.5,
+     "cameras.stale": 6,
+     "playback.start": "2006-09-15T14:28:00",
+     "playback.autoplay": true,
+     "playback.speed": 600,
+     "playback.span": 432000,
+     "view.allOrbits": false,
+     "view.enlarge": false,
+     "view.followcam": true,
+     "view.textures": "2k",
+     "movie.fps": 8,
+     "movie.processed": true,
+     "movie.mosaics": true,
+     "interface.phoneLayout": "auto",
+     "interface.phoneCameraSize": 100,
+     "perf.auto": true,
+     "perf.target": 55,
+     "perf.resolution": 100,
+     "perf.glass": true,
+     "perf.rest": true,
+     "perf.meter": false,
+     "playback.maxImageRate": 5,
+     "interface.flags": true,
+     "cameras.bodyWindows": false,
+     "cameras.bodyWindowLinger": 20,
+     "cameras.bodyWindowMax": 4,
+     "sound.on": true,
+     "sound.volume": 70,
+     "sound.chimes": 80,
+     "sound.chords": 60,
+     "sound.mosaic": 50,
+     "sound.hum": 25,
+     "sound.crescendo": 85,
+     "sound.length": 1.4,
+     "sound.reverb": 15,
+     "sound.stereo": true,
+     "export.adaptive": true,
+     "export.fps": 12,
+     "export.size": 1024,
+     "export.sound": true,
+     "export.caption": true
+    },
+    "client": {
+     "agent": "Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/155.0.0.0 Safari/537.36",
+     "dpr": 2,
+     "viewport": [
+      1713,
+      921
+     ],
+     "phone": false
+    },
+    "received": "2026-10-22T15:11:09+00:00",
+    "files": [
+     "shown.png",
+     "raw/W1760119558_1.png",
+     "raw/W1760119618_1.png",
+     "raw/W1760119678_1.png"
+    ]
+   }
+  ]
+ }
+}
