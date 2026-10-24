@@ -104,6 +104,22 @@ moment and shows the picture over it, made by the frame server. Share also offer
 file itself (phones), Copy picture, Reddit, X, Bluesky, Facebook, a text message and email. Link previews on social sites
 need the frame server reachable from the internet.
 
+
+## Cassini Studio
+
+Editing saved pictures and films (`src/studio.html`): Edit on a gallery item, E for the picture in front, Studio in the
+dock, or Go > Cassini Studio…. It works on the finished picture the pipeline made (or the export's film), like a photo
+app: Adjust (exposure, contrast, black and white levels, midtones, saturation, warmth and tint for color balance,
+sharpness, Auto levels, a histogram), Crop (Free, Original, Square, 4:5, 3:2, 16:9, 9:16; turn left/right, flip,
+straighten), Filters (Vivid, Mono, Noir, Warm, Cool, Sepia, at a strength), and for a film its start and end. One WebGL
+pass draws the edit for the preview, the saved JPEG and every frame of a film (recorded in the browser at its own
+speed: MP4 where the browser records MP4, WebM in Firefox). Compare (hold, or \) shows the original; undo and redo.
+Save to Gallery keeps the original and adds the edit beside it with its recipe (`edit`, a short string such as
+`ct:30,sa:60,cr:0_0_0.7_0.7`) and the original's id, so editing it again starts from the original with every slider
+where it was; Share… is the gallery's share menu, and a shared link to an edited picture carries `&edit=` so the page
+that opens it applies the same edit to the picture the frame server makes. Settings > Studio: picture quality, film
+quality (Mbit/s) and largest film size.
+
 ## Phone layout
 
 On a screen under 600 px wide, or a touch screen under 500 px tall (Settings > Interface > Phone layout: Automatic,
