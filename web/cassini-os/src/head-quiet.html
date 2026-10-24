@@ -993,7 +993,7 @@ body.idle .win.full .titlebar { opacity: 0; }
   $("tlnow").addEventListener("click", () => recenterTimeline());
 
   // previous / next moment
-  const items = () => [...document.querySelectorAll("#mlist li")];
+  const items = () => [...document.querySelectorAll("#mlist li:not([hidden])")];
   $("next").addEventListener("click", () => { const li = items().find(li => +li.dataset.et > state.et + 3.5 * 3600); if (li) li.querySelector("button").click(); });
   $("prev").addEventListener("click", () => { const li = items().filter(li => +li.dataset.et < state.et - 60).pop(); if (li) li.querySelector("button").click(); });
 
@@ -1122,7 +1122,7 @@ body.idle .win.full .titlebar { opacity: 0; }
   // per-frame read-outs: menu-bar clock, mission progress, HUD strip, status bar
   window.studyHud = ms => {
     let marked = false;
-    document.querySelectorAll("#mlist li").forEach(li => {
+    document.querySelectorAll("#mlist li:not([hidden])").forEach(li => {
       const next = !marked && +li.dataset.et >= (state.et - 3600);
       if (next) marked = true;
       li.classList.toggle("next", next);
@@ -1246,8 +1246,12 @@ body.idle .win.full .titlebar { opacity: 0; }
     if (!by[key]) { const ks = catalog.byCam[cam].ks.filter(k => catalog.target[k] === body); by[key] = { ks, et: Float64Array.from(ks, k => catalog.et[k]) }; }
     return by[key];
   }
+  // the body in view in the body view (bodymode.html), whose pictures alone the timeline and camera windows show
+  const viewBody = () => (window.cassiniBodyMode && cassiniBodyMode.name) || null;
   window.studyBars = (g, w, h) => {
     prep();
+    const vb = viewBody();
+    if (vb) return bodyBars(g, w, h, vb);
     const bw = 2, nT = h * LANES.nTop, nB = h * LANES.nBase, wT = h * LANES.wTop, wB = h * LANES.wBase, rT = h * LANES.rTop, rH = Math.max(4, h * LANES.rH);
     const sc = v => Math.min(1, Math.log1p(v) / Math.log1p(18));
     const cN = new Array(6), cW = new Array(6);
@@ -1263,6 +1267,32 @@ body.idle .win.full .titlebar { opacity: 0; }
       }
       if (set) { const s = rH / 3; g.fillStyle = CLS[1][1]; g.fillRect(x, rT, bw, s); g.fillStyle = CLS[2][1]; g.fillRect(x, rT + s, bw, s); g.fillStyle = CLS[3][1]; g.fillRect(x, rT + 2 * s, bw, s); }
     }
+    laneNames(g, w, h);
+  };
+  // the same lanes with one body's pictures only (each camera's frames of it, walked once from left to right)
+  function bodyBars(g, w, h, body) {
+    const bw = 2, nT = h * LANES.nTop, nB = h * LANES.nBase, wT = h * LANES.wTop, wB = h * LANES.wBase, rT = h * LANES.rTop, rH = Math.max(4, h * LANES.rH);
+    const sc = v => Math.min(1, Math.log1p(v) / Math.log1p(18));
+    const cnt = new Array(6), sets = new Uint8Array(Math.ceil(w / bw) + 1);
+    for (const [cam, top, base] of [["N", nT, nB], ["W", wT, wB]]) {
+      const F = framesOf(cam, body), a = F.et;
+      let j = 0, lo = 0, hi = a.length; const t0 = xToEt(0, w);
+      while (lo < hi) { const m = (lo + hi) >> 1; if (a[m] < t0) lo = m + 1; else hi = m; }
+      j = lo;
+      for (let x = 0, s = 0; x < w && j < a.length; x += bw, s++) {
+        const t1 = xToEt(x + bw, w);
+        if (a[j] >= t1) continue;
+        cnt.fill(0); let tot = 0;
+        for (; j < a.length && a[j] < t1; j++) { const k = F.ks[j]; cnt[catalog.cls[k]]++; tot++; if (catalog.rgb[k]) sets[s] = 1; }
+        let y = base; const H = sc(tot) * (base - top);
+        for (let c = 0; c < 6; c++) { if (!cnt[c]) continue; const hh = H * cnt[c] / tot; g.fillStyle = CLS[c][1]; g.fillRect(x, y - hh, bw - 0.5, hh); y -= hh; }
+      }
+    }
+    for (let s = 0; s < sets.length; s++) if (sets[s]) { const x = s * bw, q = rH / 3; g.fillStyle = CLS[1][1]; g.fillRect(x, rT, bw, q); g.fillStyle = CLS[2][1]; g.fillRect(x, rT + q, bw, q); g.fillStyle = CLS[3][1]; g.fillRect(x, rT + 2 * q, bw, q); }
+    laneNames(g, w, h);
+  }
+  function laneNames(g, w, h) {
+    const nB = h * LANES.nBase, wB = h * LANES.wBase, nT = h * LANES.nTop, wT = h * LANES.wTop, rT = h * LANES.rTop, rH = Math.max(4, h * LANES.rH);
     g.fillStyle = "rgba(255,255,255,0.12)"; g.fillRect(0, nB, w, 1); g.fillRect(0, wB, w, 1);
     // lane names, on a patch of LCD so they stay readable over the bars
     g.font = "400 9px 'Lucida Grande', Verdana, sans-serif"; g.textBaseline = "middle";
@@ -1270,7 +1300,7 @@ body.idle .win.full .titlebar { opacity: 0; }
       g.fillStyle = "rgba(16,17,20,0.85)"; g.fillRect(0, y - 6, 26, 12); g.fillStyle = "rgba(232,236,242,0.5)"; g.fillText(t, 2, y);
     }
     g.textBaseline = "top";
-  };
+  }
   const FNAME = ["Clear", "Red", "Green", "Blue", "IR / methane", "UV"];
   let lastI = -2;
   const baseHud = window.studyHud;
@@ -1387,9 +1417,11 @@ body.idle .win.full .titlebar { opacity: 0; }
   const STUCK = 8000;
   const allFeeds = new Set();   // every camera window's feed, the body windows' too (playback.maxBehind)
   function cameraFeed(card) {
-    const cam = card.dataset.cam, body = card.dataset.body || null, win = card.closest(".win") || card, well = card.querySelector(".well"), shot = card.querySelector(".shot"), chans = card.querySelector(".chans");
+    // body: a body window's own target; the two camera windows show the body in view in the body view, else every target
+    const own = card.dataset.body || null, cam = card.dataset.cam, win = card.closest(".win") || card, well = card.querySelector(".well"), shot = card.querySelector(".shot"), chans = card.querySelector(".chans");
     const field = f => card.querySelector(`[data-f="${f}"]`) || { set textContent(v) {}, set innerHTML(v) {} };
     let shownAt = 0, mosaicAt = 0;   // when the last picture and the last pass mosaic went up (behind)
+    let body = own || viewBody(), heldBody = null;   // heldBody: the body the picture up is of
     let want = null, shownKey = null, shown = null, next = [], lastK = -2, lastReady = null, stripKey = "", stripSet = null;
     // steady size: shapeOf is the target and observation whose pass mosaic gave the picture its shape, which it
     // keeps for every picture of that observation
@@ -1547,7 +1579,7 @@ body.idle .win.full .titlebar { opacity: 0; }
         kind = { color: v.set >= 0, mosaic: false };
         if (!steady() || shapeOf !== passOf(v.k)) { well.style.aspectRatio = ""; shapeOf = null; }
       }
-      well.classList.add("has-frame"); well.classList.remove("kept"); well.classList.toggle("composite", v.set >= 0); well.classList.toggle("movie", !!v.movie);
+      well.classList.add("has-frame"); well.classList.remove("kept"); heldBody = body; well.classList.toggle("composite", v.set >= 0); well.classList.toggle("movie", !!v.movie);
       // a frame of a movie pass shown as it is: the server is still working the pass out (a pass nobody has
       // watched takes seconds), so the window shows today's frame and says the steady one is coming
       const steadying = !v.movie && v.set < 0 && (playsMovie(v.k) || playsRolling(v.k));
@@ -2270,6 +2302,7 @@ body.idle .win.full .titlebar { opacity: 0; }
     function update(force) {
       if (dataWait()) { if (!letGone) { letGone = true; letGo(window.cassiniAway && cassiniAway.on); } return; }
       letGone = false;
+      if (!own && viewBody() !== body) { body = viewBody(); letGo(); shapeOf = null; force = true; }
       if (catalog !== cat) {   // another mission year (or the months around this one) loaded
         // a pass mosaic that is up stays up: its observation is a name, its frame found again by id
         const obsId = cat && obsK >= 0 ? cat.id[obsK] : null;
@@ -2279,25 +2312,33 @@ body.idle .win.full .titlebar { opacity: 0; }
       }
       if (win.hidden && !force) { mosaicStop(); return; }   // a closed or tucked-away window fetches nothing; it catches up when shown
       if (hold) { if (force) showLevel(); return; }   // held: the clock moves on without it (a bigger window asks for the bigger picture)
-      const p = lastOfCam(cam, state.et, body), k = p < 0 ? -1 : framesOf(cam, body).ks[p];
+      let p = lastOfCam(cam, state.et, body), k = p < 0 ? -1 : framesOf(cam, body).ks[p];
+      // holding: a body window, or a camera window in a body's view (bodymode.html), never goes blank: its picture stays
+      // up however long the camera is quiet and across a jump to another month, until the body's next picture; a
+      // window with nothing up yet shows the body's next picture rather than "no signal"
+      const holdUp = update.hold || (!own && !!body), up = well.classList.contains("has-frame") && heldBody === body;
+      const coming = k < 0 && holdUp && !up && framesOf(cam, body).ks.length > 0;
+      if (coming) { p = 0; k = framesOf(cam, body).ks[0]; }
       const live = k >= 0 && state.et - catalog.et[k] < 180;
       card.classList.toggle("live", live);
       // a camera that has been quiet for longer than the stale setting shows nothing rather than an old picture; an
       // important picture (color, mosaic) stays that many times longer, and a window that holds (a body window,
       // which closes by itself) keeps its picture
       const stale = S.get("cameras.stale") * (lastK >= 0 ? importance() : 1);
-      if (k < 0 || (!update.hold && state.et - catalog.et[k] > stale * 3600)) {
+      if (k < 0 && holdUp && up) { field("status").textContent = "Waiting for the next picture"; return; }
+      if (k < 0 || (!holdUp && state.et - catalog.et[k] > stale * 3600)) {
         field("status").textContent = k < 0 ? "Camera" : `Last frame ${fmtDur(state.et - catalog.et[k])} ago`;
         strip(null); filmstrip(-1);
         if (lastK !== -1) {
           lastK = -1; want = null; shownKey = null; shown = null; well.classList.remove("inpass");
-          noFrame(k < 0 ? "<b>No signal</b>No frames from this camera yet this year" : `<b>Idle</b>No frames from this camera in the last ${+stale.toFixed(1)} h`);
+          noFrame(k < 0 && holdUp ? `<b>${titleCase(body)}</b>No ${cam === "N" ? "narrow" : "wide"}-angle pictures of it near this time`
+            : k < 0 ? "<b>No signal</b>No frames from this camera yet this year" : `<b>Idle</b>No frames from this camera in the last ${+stale.toFixed(1)} h`, holdUp);
           for (const f of ["frame", "filter", "colour", "details"]) field(f).textContent = "—";
         }
         return;
       }
       const ago = state.et - catalog.et[k];
-      field("status").textContent = live ? "Imaging now" : `Last frame ${fmtDur(ago)} ago`;
+      field("status").textContent = coming ? `Next picture in ${fmtDur(-ago)}` : live ? "Imaging now" : `Last frame ${fmtDur(ago)} ago`;
       const si = catalog.setOf[k], s = si >= 0 ? catalog.sets[si] : null, ready = !!s && s.ready <= state.et;
       const held = !s && steady() ? nearSet(k) : null;
       strip(s || held, state.et, k);
@@ -2401,7 +2442,8 @@ body.idle .win.full .titlebar { opacity: 0; }
   }
   // how many frames the furthest-behind camera window's picture is behind the clock (update.behind, below)
   const behind = () => { let b = 0; for (const f of allFeeds) b = Math.max(b, f.behind()); return b; };
-  window.cassiniFeeds = { cameraFeed, framesOf, lastOfCam, prep, weight, nextPicture, prevPicture, behind, stale: () => S.get("cameras.stale") * 3600 };
+  window.cassiniFeeds = { frames: FRAMES, cameraFeed, framesOf, lastOfCam, prep, weight, nextPicture, prevPicture, behind, stale: () => S.get("cameras.stale") * 3600 };
+  document.addEventListener("cassini:bodymode", () => { if (typeof catalog !== "undefined" && catalog && catalog.byCam) feeds.forEach(f => f(true)); });
   // a change to what the windows show takes effect straight away
   for (const key of ["cameras.composites", "cameras.stale", "cameras.steady", "cameras.passes", "cameras.balancedColor", "cameras.colors", "cameras.lingerColor", "cameras.lingerMosaic", "movies.steady", "cameras.autoCenter", "cameras.processedFrames", "movies.trail", "movies.filmstrip", "movies.laps"]) S.on(key, () => { if (typeof catalog !== "undefined" && catalog && catalog.byCam) feeds.forEach(f => f(true)); });
 
@@ -2461,7 +2503,7 @@ body.idle .win.full .titlebar { opacity: 0; }
   }
   // for one camera at et: the fastest the clock may run (Infinity outside a burst) and when its next frame is
   function capOf(cam, et) {
-    const a = catalog.byCam[cam].et, p = lastOfCam(cam, et), nx = p + 1 < a.length ? a[p + 1] : Infinity;
+    const b = viewBody(), a = framesOf(cam, b).et, p = lastOfCam(cam, et, b), nx = p + 1 < a.length ? a[p + 1] : Infinity;
     return [p < 0 || nx === Infinity ? Infinity : Math.max(1, nx - a[p]) * maxRate, nx];
   }
   // called by the viewer's frame loop while playing: where the clock should be after dt seconds at this speed

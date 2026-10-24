@@ -165,6 +165,18 @@ for old, new in [
     study = study.replace(old, new)
 study += part("script") + "\n"
 
+# the body view (bodymode.html): its style joins the head's, its window goes into #app, and its script runs after the
+# chrome script (it reads the camera feeds and the window manager) and before the dock's, which opens it
+bm = open(os.path.join(os.path.dirname(os.path.abspath(sys.argv[2])), "bodymode.html")).read()
+part = lambda tag: bm[bm.index(f"<{tag}"):bm.index(f"</{tag}>") + len(tag) + 3]
+for old, new in [
+    ("</style>\n</head>", part("style")[len("<style>"):] + "\n</head>"),
+    ('  <div id="loading">', "  " + part("section") + "\n\n" + '  <div id="loading">'),
+]:
+    assert study.count(old) == 1, old
+    study = study.replace(old, new)
+study += part("script") + "\n"
+
 # the dock (dock.html): its style joins the head's, the dock goes into #app, and its script runs after the chrome
 # script (the window manager minimizes into it through window.cassiniDock) and after the body windows' and the
 # highlight reel's, whose windows it opens
