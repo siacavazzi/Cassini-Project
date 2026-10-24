@@ -454,6 +454,48 @@ rep('  for (const name in tracks) positionAt(tracks[name], state.et, pos[name]);
     '  for (const name in tracks) positionAt(tracks[name], state.et, pos[name]);\n  if (window.studyPositions) window.studyPositions();\n')
 rep('  } else { relScene("EARTH", vA); cassini.lookAt(vA); }\n', '  } else { relScene("EARTH", vA); cassini.lookAt(vA); }\n  if (window.studyAttitude) window.studyAttitude();\n')
 rep('  aimFollow();\n', '  aimFollow();\n  if (window.studyCamera) window.studyCamera();\n')
+# Huygens after the release (huygens-release.html): window.studyCoast places the probe for its first hour from ESA's
+# separation numbers and gives it a model of its own until it reaches Titan's air; it works without the probe's own
+# track (data/huygens.json) too, for the days before Cassini's getaway burn. Not a cutscene hook: it runs whenever the
+# probe is on its own
+rep('function probeActive() { return !!probe && state.et >= probe.track.start && state.et <= probe.track.end; }',
+    'function probeActive() { return !!probe && state.et >= probe.track.start && state.et <= probe.track.end || !probe && !!window.studyCoast && studyCoast.active(state.et); }')
+rep('  if (probe) {\n    pos.HUYGENS = v3(); probeObj = new THREE.Object3D(); names.push("HUYGENS");',
+    '  if (probe || window.studyCoast) {\n    pos.HUYGENS = v3(); probeObj = new THREE.Object3D(); names.push("HUYGENS");')
+rep('  if (probe) { positionAt(probe.track, state.et, pos.HUYGENS); relScene("HUYGENS", probeObj.position); }',
+    '  if (pos.HUYGENS) {\n    if (probe) positionAt(probe.track, state.et, pos.HUYGENS);\n    if (window.studyCoast) studyCoast.place(state.et, pos.HUYGENS);\n    relScene("HUYGENS", probeObj.position);\n    if (window.studyCoast) studyCoast.draw();\n  }')
+rep('  probeTrail.visible = probeActive() && state.et < probe.events.landing + 6 * 3600;',
+    '  probeTrail.visible = !!probe && probeActive() && state.et < probe.events.landing + 6 * 3600;')
+rep('  pe.hidden = !probeActive();', '  pe.hidden = !probe || !probeActive();')
+rep('  const near = probe && state.et > probe.track.start - 30 * 86400 && state.et < probe.track.end + 30 * 86400;',
+    '  const near = probeActive() || probe && state.et > probe.track.start - 30 * 86400 && state.et < probe.track.end + 30 * 86400;')
+# while it coasts, the probe is a spacecraft to look at up close, not a point above Titan
+rep('name === "HUYGENS" ? 4 :', 'name === "HUYGENS" ? (window.studyCoast && studyCoast.modelShown(state.et) ? 1.6e-5 : 4) :')
+rep('  if (name === "HUYGENS") {\n    // from the side', '  if (name === "HUYGENS" && !(window.studyCoast && studyCoast.modelShown(state.et))) {\n    // from the side')
+# the close-up pass takes in every small craft near the camera (Cassini, and Huygens on its own): the nearest sets the
+# range, and all of them are blown up about it together
+rep("""  const cd = camera.position.distanceTo(cassini.position);
+  if (!draw) {}""", """  const closeObjs = [cassini].concat(window.studyCloseObjects ? studyCloseObjects() : []);
+  let cRef = cassini, cd = camera.position.distanceTo(cassini.position);
+  for (const o of closeObjs) { const d = camera.position.distanceTo(o.position); if (o.visible && d < cd) { cd = d; cRef = o; } }
+  if (!draw) {}""")
+rep("""    const K = 1e6, cs = cassini.scale.x;
+    closeCam.position.copy(camera.position).sub(cassini.position).multiplyScalar(K).add(cassini.position); closeCam.quaternion.copy(camera.quaternion);
+    closeCam.fov = camera.fov; closeCam.aspect = camera.aspect; closeCam.near = cd * 0.02 * K; closeCam.far = cd * 60 * K;
+    closeCam.updateProjectionMatrix();
+    cassini.scale.setScalar(cs * K);
+    renderer.clearDepth();
+    renderer.render(scene, closeCam);
+    cassini.scale.setScalar(cs);""", """    const K = 1e6, O = cRef.position.clone(), keep = closeObjs.map(o => [o.position.clone(), o.scale.clone()]);
+    let far = cd * 60;
+    for (const o of closeObjs) if (o.visible) far = Math.max(far, Math.min(camera.position.distanceTo(o.position) * 1.5, 0.02));
+    closeCam.position.copy(camera.position).sub(O).multiplyScalar(K).add(O); closeCam.quaternion.copy(camera.quaternion);
+    closeCam.fov = camera.fov; closeCam.aspect = camera.aspect; closeCam.near = cd * 0.02 * K; closeCam.far = far * K;
+    closeCam.updateProjectionMatrix();
+    for (const o of closeObjs) { o.position.sub(O).multiplyScalar(K).add(O); o.scale.multiplyScalar(K); }
+    renderer.clearDepth();
+    renderer.render(scene, closeCam);
+    closeObjs.forEach((o, i) => { o.position.copy(keep[i][0]); o.scale.copy(keep[i][1]); });""")
 # effective wavelength of every filter pair, for placing colour channels: "N:CL1/RED" -> nm
 nm = {}
 for line in open(os.path.join(HERE, "..", "..", "..", "filter_calibration.csv")).read().splitlines()[1:]:
