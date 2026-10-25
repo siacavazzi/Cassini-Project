@@ -8117,14 +8117,14 @@ function frame(now) {
   const { fadeTo, sound } = CS;
   const T_CROSS = utcToEt(D.ring_crossing.utc), T_IGN = utcToEt(D.burn_start.utc), BURN = D.burn_minutes.value * 60, T_OFF = T_IGN + BURN;
   const T_CA = utcToEt(D.closest_approach.utc), FADE = [D.signal_fade.from_min * 60, (D.signal_fade.from_min + D.signal_fade.for_min) * 60];
-  const START = T_CROSS - 300;   // mission time the cutscene opens on, five minutes before the ring plane
+  const START = T_CROSS - 60;    // mission time the cutscene opens on, a minute before the ring plane
   // the counters: constant thrust and flow, the flow and starting mass fitted so the totals are the published ones
   const MDOT = D.propellant_kg.value / BURN, VE = D.thrust_n.value / MDOT, M0 = D.propellant_kg.value / (1 - Math.exp(-D.delta_v_ms.value / VE));
   const dvAt = s => VE * Math.log(M0 / (M0 - MDOT * s));
   // the clock: fast between the moments that matter, slowing toward each of them. Each moment is [mission time, rate
   // there, how much the rate grows per mission second away from it]; the rate is capped at 700 times real time before
   // the burn, 270 during it (which makes it about 27 seconds) and 90 after. The whole cutscene is about a minute
-  const MOMENTS = [[T_CROSS, 6, 0.6], [T_IGN, 1, 1.6], [T_OFF, 1, 1.6]];
+  const MOMENTS = [[T_CROSS, 3, 0.3], [T_IGN, 1, 1.6], [T_OFF, 1, 1.6]];
   const rateAt = t => Math.min(t < T_IGN ? 700 : t < T_OFF ? 270 : 90, ...MOMENTS.map(([m, r, k]) => r + Math.abs(t - m) * k));
   const hhmm = et => new Date(etToMs(et)).toISOString().slice(11, 19);
   // the lines, at mission seconds from ignition (spaced about six screen seconds apart on the clock above), each up
@@ -8260,7 +8260,7 @@ function frame(now) {
       LINES.forEach(([at, html], i) => { if (!S.shown[i] && s >= at) { S.shown[i] = true; line(html); } });
       if (S.tau >= T_IGN && S.tau < T_OFF) sound("rumble", Math.min(1, s / 1.5));
       if (was < T_OFF && S.tau >= T_OFF) { sound("rumble", 0); sound("bell"); S.offAt = T; }
-      if (S.offAt && T > S.offAt + CUT && !S.cut) { S.cut = T; setFocus("SATURN"); markerPts.visible = true; read.classList.remove("on"); CS.resetLook(); }
+      if (S.offAt && T > S.offAt + CUT && !S.cut) { S.cut = T; setFocus("SATURN"); markerPts.visible = true; cassini.visible = false; read.classList.remove("on"); CS.resetLook(); }
       if (S.offAt && T > S.offAt + LAST_AT && !S.last) { S.last = true; line(LAST, "big"); sound("chord", [0, 2, 4, 7]); }
       if (S.last && T > S.offAt + LAST_AT + LAST_FOR && !S.closing) { S.closing = T; line(null); fadeTo(black, 1, 0.8); }
       if (S.closing && T > S.closing + 0.85) { CS.end("soi"); return; }
@@ -8293,12 +8293,27 @@ function frame(now) {
         + (s > FADE[0] && s < FADE[1] ? ` · Signal <i>behind the A ring</i>` : "") + (s >= BURN ? ` · <i>Engine off</i>` : "");
     }
   }
-  // the camera: Cassini in front of Saturn's near limb, so Saturn and the rings fill the lower part of the view behind it.
-  // It looks down past Cassini at an angle a little beyond Saturn's edge (Saturn grows as Cassini closes in, so the view
-  // tips with it) and swings slowly round Cassini's vertical, so the plume, which points along the path, is seen from
-  // the side. A drag turns it round Cassini's vertical (the local horizon stays put however the path curves) and tips
-  // it, the wheel zooms (cutscene.html's orbit and frameOn). A few seconds after the burn it cuts to Saturn from afar, with
-  // Cassini on its first orbit
+  // the camera: a short shot list, keyed to the mission clock and eased between, each shot an angle round Cassini's
+  // vertical (az: 0 looks back along the path at Cassini's front, 90 from the side, 180 forward past it) and a tilt
+  // above Saturn's near edge (off, radians; the view tips with Saturn as it grows):
+  //   - looking up past Cassini a minute before the ring plane, dish toward the camera; tipping down as it crosses,
+  //     so the rings come up into the frame
+  //   - from the side as it turns end for end, and for the ignition, the plume across the frame with Saturn below
+  //   - round toward forward through the burn, looking down the plume over the rings
+  //   - low over Saturn's clouds at closest approach, its horizon close under Cassini
+  // A drag turns and tips it (cutscene.html's orbit, Cassini kept in the middle), the wheel zooms. A few seconds after
+  // the burn it cuts to Saturn from afar; Cassini is then only its marker, since the model drawn big enough to see from
+  // there would dwarf the planet
+  const SHOTS = [
+    [START, 25, 1.5], [T_CROSS - 15, 30, 1.15], [T_CROSS + 45, 40, 0.3], [T_IGN - 600, 90, 0.22], [T_IGN + 240, 95, 0.18],
+    [T_IGN + 2400, 150, 0.32], [T_CA - 600, 115, 0.04], [T_CA + 120, 100, 0.05], [T_OFF, 80, 0.14],
+  ];
+  function shot(t) {
+    let i = 0;
+    while (i < SHOTS.length - 2 && t > SHOTS[i + 1][0]) i++;
+    const [t0, a0, o0] = SHOTS[i], [t1, a1, o1] = SHOTS[i + 1], k = clamp01((t - t0) / (t1 - t0)), e = k * k * (3 - 2 * k);
+    return { az: (a0 + (a1 - a0) * e) * Math.PI / 180, off: o0 + (o1 - o0) * e };
+  }
   const hA = new THREE.Vector3(), hB = new THREE.Vector3();
   function camera_() {
     if (!S || S.phase !== "run") return;
@@ -8306,9 +8321,8 @@ function frame(now) {
     const f = frame(t);
     // a level frame: hA backward along the path laid on the horizon, hB beside it
     hA.copy(vS).negate().addScaledVector(uS, vS.dot(uS)).normalize(); hB.crossVectors(uS, hA);
-    const prog = clamp01((t - START) / (T_OFF - START));
     const limb = Math.asin(Math.min(1, bodies.SATURN.radii[0] / f.r));          // Saturn's edge, angle from straight down
-    const tilt = limb + 0.18, az = (55 + 40 * prog) * Math.PI / 180;   // the view's angle from straight down, and round
+    const sh = shot(t), tilt = Math.min(Math.PI - 0.4, limb + sh.off), az = sh.az;   // the view's angle from straight down, and round
     // the direction the camera looks in (turned by a drag, cutscene.html), and the camera behind Cassini along it
     const view = hA.clone().multiplyScalar(Math.cos(az)).addScaledVector(hB, Math.sin(az)).multiplyScalar(Math.sin(tilt)).addScaledVector(uS, -Math.cos(tilt));
     if (S.cut) {
