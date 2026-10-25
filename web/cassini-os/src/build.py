@@ -165,6 +165,18 @@ for old, new in [
     study = study.replace(old, new)
 study += part("script") + "\n"
 
+# pre-processing a stretch (segment.html): its style joins the head's, its bar and note go into #app, and its script runs
+# after the export script, whose marks it follows ("cassini:marks") and whose timeline drawing it wraps
+sg = open(os.path.join(os.path.dirname(os.path.abspath(sys.argv[2])), "segment.html")).read()
+part = lambda tag: sg[sg.index(f"<{tag}"):sg.index(f"</{tag}>") + len(tag) + 3]
+for old, new in [
+    ("</style>\n</head>", part("style")[len("<style>"):] + "\n</head>"),
+    ('  <div id="loading">', "  " + part("aside") + "\n\n" + '  <div id="loading">'),
+]:
+    assert study.count(old) == 1, old
+    study = study.replace(old, new)
+study += part("script") + "\n"
+
 # the body view (bodymode.html): its style joins the head's, its window goes into #app, and its script runs after the
 # chrome script (it reads the camera feeds and the window manager) and before the dock's, which opens it
 bm = open(os.path.join(os.path.dirname(os.path.abspath(sys.argv[2])), "bodymode.html")).read()

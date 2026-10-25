@@ -18,6 +18,20 @@ step, scrubbing the timeline carries the film on from the new time, and Escape (
 main play button) leaves. Frames are fetched ahead of the play head; a frame that has not arrived holds the film
 rather than being skipped.
 
+## Pre-processing a stretch
+
+Highlight a stretch of the timeline: shift-drag across it, or press and hold on it and then drag (on a phone too),
+or press `I` and `O` at its ends. A small bar comes up over it with the stretch's times and frames. **Pre-process**
+asks the frame server to make every picture the camera windows will show in the stretch ahead of time (`POST
+/prebuild`, made by the pre-build tool's own makers in `web/frames/prebuild.py`: frames, color composites, mosaic and
+movie passes, at the windows' sizes and in the page's look and movie style). The bar and a line along the foot of
+the timeline show how far it is; when it is done the stretch plays in movie mode at the frame rate on the bar's
+slider (`movie.fps`, the same as Settings > Playback), every picture waiting in the cache. **Play** works before
+pre-processing too (movie mode then waits for each picture), **Export…** opens the film export for the stretch, and
+× or Escape clears the highlight. When movie mode spends most of its time waiting, a quiet note suggests
+pre-processing, with a button that highlights the next 300 frames. Settings > Playback: `segment.autoplay`,
+`segment.hint`. One stretch is made at a time; it waits while `~/prebuild.pause` exists.
+
 ## Timeline
 
 The Cassini Replay window is mostly timeline. Its head holds the controls in one small cluster on the left (previous

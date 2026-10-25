@@ -33,7 +33,7 @@ body.phone #excard:not(.full) { width: calc(100% - 16px) !important; left: 8px !
 <section class="win" id="excard" aria-label="Export Movie" hidden>
   <div class="titlebar"><span class="lights"><button class="close" aria-label="Close">×</button><button class="min" aria-label="Minimize">–</button><button class="zoom" aria-label="Zoom">+</button></span>Export Movie</div>
   <div class="body">
-    <div id="exhint">Shift-drag across the timeline to mark a stretch, or press I at its start and O at its end.</div>
+    <div id="exhint">Shift-drag across the timeline to mark a stretch (or press and hold on it, then drag), or press I at its start and O at its end.</div>
     <div class="exrow"><span>From</span><input type="text" id="exfrom" placeholder="YYYY-MM-DD hh:mm:ss" spellcheck="false" aria-label="Start, UTC"><button class="exbtn" id="exin" title="Start at the mission clock (I)">Here</button></div>
     <div class="exrow"><span>Until</span><input type="text" id="exuntil" placeholder="YYYY-MM-DD hh:mm:ss" spellcheck="false" aria-label="End, UTC"><button class="exbtn" id="exout" title="End at the mission clock (O)">Here</button></div>
     <div id="exsum"></div>
@@ -91,7 +91,11 @@ body.phone #excard:not(.full) { width: calc(100% - 16px) !important; left: 8px !
     $("exuntil").value = X.b != null ? show(X.b) : "";
     $("exhint").hidden = X.a != null && X.b != null;
     redraw(); estimate();
+    // the highlighted stretch's bar (segment.html: pre-process it, play it) follows the marks
+    document.dispatchEvent(new CustomEvent("cassini:marks", { detail: { a: X.a, b: X.b } }));
   }
+  // a stretch just highlighted: the bar over it comes up (segment.html), or this window where there is no bar
+  const marked = () => { if (!window.cassiniSegment) open(); };
   function clear() { X.a = X.b = null; mark(); }
 
   // drawn over the timeline: the stretch lit in the camera blue, a handle at each end
@@ -110,9 +114,10 @@ body.phone #excard:not(.full) { width: calc(100% - 16px) !important; left: 8px !
     if (prevTimeline) prevTimeline(g, w, h, xn);
   };
 
-  // shift-drag marks a stretch; dragging a marked edge moves it; anything else scrubs as before
-  const tl = $("tl");
-  let drag = null;
+  // shift-drag marks a stretch, and so does pressing and holding on the timeline and then dragging (no keyboard
+  // needed, on a phone too); dragging a marked edge moves it; anything else scrubs as before
+  const tl = $("tl"), HOLD = 450;
+  let drag = null, held = null;
   const etAt = e => { const r = tl.getBoundingClientRect(); return xToEt(e.clientX - r.left, r.width); };
   window.addEventListener("pointerdown", e => {
     if (e.target !== tl || !catalog) return;
@@ -120,11 +125,26 @@ body.phone #excard:not(.full) { width: calc(100% - 16px) !important; left: 8px !
     if (e.shiftKey) drag = { from: etAt(e), edge: null };
     else if (near(X.a)) drag = { edge: "a" };
     else if (near(X.b)) drag = { edge: "b" };
-    else return;
+    else {
+      // a press that stays put for HOLD ms turns the scrub it started into a highlight from where it was pressed
+      if (e.offsetY >= (e.pointerType === "touch" ? 26 : 18)) {
+        const from = etAt(e), x0 = e.clientX, y0 = e.clientY, id = e.pointerId;
+        held = { x0, y0, id, timer: setTimeout(() => {
+          held = null;
+          state.dragging = false;
+          drag = { from, edge: null };
+          X.a = X.b = from; tl.style.cursor = "crosshair";
+          try { tl.setPointerCapture(id); } catch (err) {}
+          if (navigator.vibrate) navigator.vibrate(10);
+        }, HOLD) };
+      }
+      return;
+    }
     e.stopImmediatePropagation(); e.preventDefault();
     tl.setPointerCapture(e.pointerId);
   }, true);
   window.addEventListener("pointermove", e => {
+    if (held && Math.hypot(e.clientX - held.x0, e.clientY - held.y0) > 6) { clearTimeout(held.timer); held = null; }
     if (!drag) return;
     e.stopImmediatePropagation();
     const t = etAt(e);
@@ -132,12 +152,15 @@ body.phone #excard:not(.full) { width: calc(100% - 16px) !important; left: 8px !
     else { X.a = Math.min(drag.from, t); X.b = Math.max(drag.from, t); mark(); }
   }, true);
   window.addEventListener("pointerup", e => {
+    if (held) { clearTimeout(held.timer); held = null; }
     if (!drag) return;
     e.stopImmediatePropagation();
     const made = !drag.edge;
-    drag = null;
-    if (made && X.a != null && X.b - X.a > 1) open();
+    drag = null; tl.style.cursor = "";
+    if (made && X.a != null && X.b - X.a > 1) marked();
+    else if (made) clear();
   }, true);
+  window.addEventListener("pointercancel", () => { if (held) { clearTimeout(held.timer); held = null; } }, true);
   // the cursor says when an edge can be dragged
   tl.addEventListener("pointermove", e => {
     if (drag || !catalog) return;
@@ -293,8 +316,8 @@ body.phone #excard:not(.full) { width: calc(100% - 16px) !important; left: 8px !
   window.addEventListener("keydown", e => {
     if (e.metaKey || e.ctrlKey || e.altKey || /INPUT|SELECT|TEXTAREA/.test(e.target.tagName) || !catalog) return;
     const k = e.key.toLowerCase();
-    if (k === "i") { mark(state.et, null); if (X.b != null) open(); }
-    else if (k === "o") { mark(null, state.et); open(); }
+    if (k === "i") { mark(state.et, null); if (X.b != null) marked(); }
+    else if (k === "o") { mark(null, state.et); marked(); }
     else if (k === "e") { card.hidden ? open() : close(); }
     else if (e.key === "Escape" && !card.hidden) close();
   });
