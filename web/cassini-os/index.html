@@ -1091,7 +1091,6 @@ body.phone .cs-root .cs-cap { font-size: 16px; } body.phone .cs-root .cs-cap.big
 
 /* the air's glow from below as it heats, and a shade under the captions so they read over Saturn's bright clouds */
 #finale .fx-air { position: absolute; inset: 0; opacity: 0; background: radial-gradient(ellipse 90% 70% at 50% 100%, rgba(255,120,40,.55), rgba(255,80,20,.18) 55%, transparent 80%); mix-blend-mode: screen; }
-#finale .fx-lens { position: absolute; inset: 0; width: 100%; height: 100%; mix-blend-mode: screen; }
 #finale .fx-shade { position: absolute; inset: 0; background: linear-gradient(to top, rgba(0,0,0,.78) 0, rgba(0,0,0,.55) 22%, rgba(0,0,0,0) 48%); }
 /* the real readings: a quiet strip chart, top right */
 #finale .fx-data { position: absolute; right: 16px; top: 16px; width: min(300px, calc(100vw - 32px)); box-sizing: border-box; padding: 9px 11px 8px; background: var(--q-panel); border: 1px solid var(--q-line); border-radius: 9px;
@@ -7694,14 +7693,14 @@ function frame(now) {
     stepCloud(fx.fine, dt); stepCloud(fx.big, dt);
   }
 
-  // ---------- seen from afar: Cassini burns up as a small flare on Saturn, with a meteor's trail and a lens flare ----------
+  // ---------- seen from above Saturn: Cassini burns up as a fireball, with a meteor's trail ----------
   // The flare and its trail are in the main scene, sized in km so they read from hundreds of thousands of km away. The
   // trail lies along Cassini's real path in (its last TRAIL_S seconds), drawn longer than the glowing stretch was, as the
   // wobble is drawn larger, or it would be a speck: white-hot at the head, cooling to orange, then the faint red-pink
   // glow of hydrogen (Saturn's air is mostly hydrogen, whose plasma shines in H-alpha) that lingers after the head is
-  // gone and slowly spreads. The lens flare is drawn on the screen over it: a bloom, a thin horizontal streak and a few
-  // faint ghosts along the line through the middle of the view, as a camera lens would make of a bright point
-  const TRAIL_S = 420, TRAIL_N = 48;
+  // gone and slowly spreads. Its sizes follow the camera's distance (F.flareK), so it stays a fireball, not a blob, while
+  // the view is close in and still shows once it has pulled out
+  const TRAIL_S = 150, TRAIL_N = 48;
   function addFlare() {
     const head = new THREE.Sprite(new THREE.SpriteMaterial({ map: glowTexture(), color: 0xfff0d8, transparent: true, opacity: 0, blending: THREE.AdditiveBlending, depthWrite: false, depthTest: false }));
     const geo = new THREE.BufferGeometry(), uv = new Float32Array(TRAIL_N * 4);
@@ -7727,9 +7726,7 @@ function frame(now) {
     trail.frustumCulled = false;
     const halo = new THREE.Sprite(new THREE.SpriteMaterial({ map: glowTexture(), color: 0xff9a50, transparent: true, opacity: 0, blending: THREE.AdditiveBlending, depthWrite: false, depthTest: false }));
     scene.add(trail, halo, head);
-    const lens = document.createElement("canvas");
-    lens.className = "fx-lens"; root.insertBefore(lens, black);
-    return { head, halo, trail, lens, pts: Array.from({ length: TRAIL_N }, () => new THREE.Vector3()) };
+    return { head, halo, trail, pts: Array.from({ length: TRAIL_N }, () => new THREE.Vector3()) };
   }
   function stepFlare(R) {
     const f = F.flare; if (!f) return;
@@ -7741,8 +7738,8 @@ function frame(now) {
     const flick = 0.75 + 0.25 * Math.random();
     // seen only on the side of Saturn facing the camera
     const n = vT.clone().divide(new THREE.Vector3(1, 0.82, 1)).normalize(), front = clamp01(n.dot(camera.position.clone().sub(vT).normalize()) * 8 + 0.5);
-    f.head.position.copy(vT); f.head.material.opacity = k * flick * front; f.head.scale.setScalar((4 + 11 * k) * (R > FLARE ? 1 + 0.3 * Math.random() : 1));
-    f.halo.position.copy(vT); f.halo.material.opacity = 0.45 * k * front; f.halo.scale.setScalar(14 + 26 * k);
+    f.head.position.copy(vT); f.head.material.opacity = k * flick * front; f.head.scale.setScalar(F.flareK * (4 + 11 * k) * (R > FLARE ? 1 + 0.3 * Math.random() : 1));
+    f.halo.position.copy(vT); f.halo.material.opacity = 0.45 * k * front; f.halo.scale.setScalar(F.flareK * (14 + 26 * k));
     // the trail: it grows from the head as the burn starts, its hot part goes with the head, its glow lingers and spreads
     const grow = clamp01((R - 0.6) / 2), linger = clamp01(1 - (R - FLARE - 2) / 9), spread = 1 + 1.2 * clamp01((R - FLARE) / 10);
     f.trail.material.uniforms.hot.value = k * flick * front;
@@ -7753,42 +7750,13 @@ function frame(now) {
       const p = f.pts[i], u = i / (TRAIL_N - 1);
       tan.subVectors(f.pts[Math.max(0, i - 1)], f.pts[Math.min(TRAIL_N - 1, i + 1)]);
       camDir.subVectors(camera.position, p);
-      side.crossVectors(tan, camDir).normalize().multiplyScalar((0.8 + 1.5 * u) * spread * (1 + 0.6 * k));
+      side.crossVectors(tan, camDir).normalize().multiplyScalar(F.flareK * (0.8 + 1.5 * u) * spread * (1 + 0.6 * k));
       pa.set([p.x - side.x, p.y - side.y, p.z - side.z, p.x + side.x, p.y + side.y, p.z + side.z], 6 * i);
     }
     f.trail.geometry.attributes.position.needsUpdate = true;
-    drawLens(f, vT, k * flick * front);
     if (R > FLARE && !F.belled) { F.belled = true; sound("bell"); }
   }
-  function drawLens(f, at, k) {
-    const c = f.lens, dpr = Math.min(2, devicePixelRatio || 1), W = Math.round(c.clientWidth * dpr), H = Math.round(c.clientHeight * dpr);
-    if (c.width !== W || c.height !== H) { c.width = W; c.height = H; }
-    const g = c.getContext("2d");
-    g.clearRect(0, 0, W, H);
-    const p = at.clone().project(camera);
-    if (k < 0.004 || p.z > 1 || Math.abs(p.x) > 1.3 || Math.abs(p.y) > 1.3) return;
-    const x = (p.x + 1) / 2 * W, y = (1 - p.y) / 2 * H, S = Math.min(W, H);
-    const blob = (cx, cy, r, rgb, a, ring) => {
-      const gr = g.createRadialGradient(cx, cy, 0, cx, cy, r);
-      if (ring) { gr.addColorStop(0, `rgba(${rgb},0)`); gr.addColorStop(0.75, `rgba(${rgb},${a * 0.4})`); gr.addColorStop(0.9, `rgba(${rgb},${a})`); gr.addColorStop(1, `rgba(${rgb},0)`); }
-      else { gr.addColorStop(0, `rgba(${rgb},${a})`); gr.addColorStop(0.35, `rgba(${rgb},${a * 0.35})`); gr.addColorStop(1, `rgba(${rgb},0)`); }
-      g.fillStyle = gr; g.beginPath(); g.arc(cx, cy, r, 0, 7); g.fill();
-    };
-    g.globalCompositeOperation = "lighter";
-    // the bloom round the point
-    blob(x, y, S * (0.07 + 0.16 * k), "255,214,170", 0.85 * k);
-    blob(x, y, S * 0.02 * (0.5 + k), "255,250,240", k);
-    // the streak: a thin horizontal line of light, warm in the middle
-    g.save(); g.translate(x, y); g.scale(1, 0.018);
-    blob(0, 0, S * (0.3 + 0.5 * k), "255,190,140", 0.75 * k);
-    g.restore();
-    // ghosts: faint discs and a ring along the line from the point through the middle of the view
-    const cx = W / 2, cy = H / 2;
-    for (const [t, r, rgb, a, ring] of [[0.45, 0.018, "150,220,200", 0.10], [1.25, 0.035, "255,180,110", 0.07], [1.6, 0.012, "190,170,255", 0.12], [2.1, 0.06, "160,200,255", 0.06, true]])
-      blob(x + (cx - x) * t, y + (cy - y) * t, S * r, rgb, a * k, ring);
-    g.globalCompositeOperation = "source-over";
-  }
-  function removeFlare(f) { if (f) { scene.remove(f.head, f.halo, f.trail); f.trail.geometry.dispose(); f.trail.material.dispose(); f.lens.remove(); } }
+  function removeFlare(f) { if (f) { scene.remove(f.head, f.halo, f.trail); f.trail.geometry.dispose(); f.trail.material.dispose(); } }
 
   // ---------- the real readings: a strip chart drawn up to the moment on screen ----------
   function drawData(et) {
@@ -7936,7 +7904,7 @@ function frame(now) {
       if (s > AFTER - 1.6 && !F.dark) { F.dark = true; fadeTo(black, 1, 1.5); read.classList.remove("on"); dataBox.classList.remove("on"); }
       if (s > AFTER) {
         // the recap: the view cuts to Saturn from far away, where Cassini burns up as a flare
-        F.phase = "recap"; F.recapAt = performance.now();
+        F.phase = "recap"; F.recapAt = performance.now(); F.flareK = 0.18;
         CS.dropAll(F.shownD);
         sound("carrier", 0, 0); sound("drone", 0);
         removeEffects(F.fx); F.fx = null;
@@ -8079,9 +8047,11 @@ function frame(now) {
       rel(F.tau, tmpC); const spot = toScene(tmpC, new THREE.Vector3()).multiplyScalar(1 / KM), entry = spot.clone().normalize(), m = clamp01(k / 25);
       const dir = entry.multiplyScalar(0.9 * (1 - m)).addScaledVector(vScene, 0.25 + 0.5 * m).addScaledVector(side, 0.25 + 0.3 * m).normalize();
       dir.addScaledVector(pole, 0.3 + look.pitch).normalize().applyAxisAngle(pole, -0.003 * k + look.yaw);
-      const out = clamp01((k - 5) / 9), e = out * out * (3 - 2 * out);
-      const aim = new THREE.Vector3().addScaledVector(pole, -22).lerp(spot, 0.8 * (1 - e));
-      camera.position.copy(aim).addScaledVector(dir, (130 + 310 * e) * look.zoom);
+      // close in on the burn-up (a few thousand km), held while it flares and its trail glows, then out to the planet
+      const out = clamp01((k - 6.5) / 10), e = out * out * (3 - 2 * out);
+      const aim = new THREE.Vector3().addScaledVector(pole, -22).lerp(spot, 1 - e), dist = 9 + 431 * e;
+      F.flareK = Math.min(1, 0.12 + dist / 160);
+      camera.position.copy(aim).addScaledVector(dir, dist * look.zoom);
       camera.up.copy(pole);
       camera.lookAt(aim);
     }
