@@ -127,6 +127,7 @@ Access-Control-Allow-Origin: * so a page hosted elsewhere can show them.
 """
 import argparse
 import base64
+import collections
 import datetime
 import email.utils
 import html
@@ -258,6 +259,9 @@ def encode(im, size, fmt="webp", quality=80):
     grey one is sent losslessly (an 8-bit frame is a few hundred KB that way)"""
     cap = FULL_MAX if size == FULL else size
     if max(im.size) > cap:
+        # shrunk on a copy: thumbnail works in place, and im may be a picture kept for its other sizes
+        # (_recent_composite), which a 512 view would otherwise leave at 512 for the 1024, full or PNG asked next
+        im = im.copy()
         im.thumbnail((cap, cap), Image.LANCZOS)
     out = io.BytesIO()
     if fmt == "png":
@@ -285,11 +289,32 @@ FRAME_QUALITY = 95
 FRAME_VERSION = "frames-q95"
 
 
+# a frame's picture, decoded once for the sizes asked for one after another (the pre-build makes its 1024, 512 and
+# 128 in turn): decoding the PNG three times was a seventh of making the three. Each use gets a copy, since encode
+# shrinks the picture it is given
+FRAMES_KEEP = 16
+_frames, _frames_lock = collections.OrderedDict(), threading.Lock()
+
+
+def _frame_image(frame_id):
+    with _frames_lock:
+        im = _frames.get(frame_id)
+        if im is not None:
+            _frames.move_to_end(frame_id)
+            return im.copy()
+    im = Image.open(io.BytesIO(archive_png(frame_id)))
+    im = im.convert("L") if im.mode in ("L", "I", "I;16", "P", "1") else im.convert("RGB")
+    with _frames_lock:
+        _frames[frame_id] = im
+        _frames.move_to_end(frame_id)
+        while len(_frames) > FRAMES_KEEP:
+            _frames.popitem(last=False)
+    return im.copy()
+
+
 def webp(frame_id, size, cache, fmt="webp"):
     def make():
-        im = Image.open(io.BytesIO(archive_png(frame_id)))
-        im = im.convert("L") if im.mode in ("L", "I", "I;16", "P", "1") else im.convert("RGB")
-        return encode(im, size, fmt, FRAME_QUALITY)
+        return encode(_frame_image(frame_id), size, fmt, FRAME_QUALITY)
     return cached(os.path.join(cache, FRAME_VERSION, size_dir(size, fmt), f"{frame_id}.{fmt}"), make)
 
 
@@ -444,7 +469,9 @@ def processed_webp(frame_id, size, cache, fmt="webp", centre=None):
     report = {}
     def make():
         with _movie_slots:
-            im, made = composite([frame_id], centre=centre)
+            # kept for its other sizes, as a composite is (the segment pre-render asks for 512, then 1024): one frame
+            # made once, not once a size
+            im, made = _recent_composite([frame_id], centre)
         report.update(made)
         cached(base + ".json", lambda: json.dumps(made).encode())
         return encode(im, size, fmt)
@@ -1327,8 +1354,9 @@ def main():
     # every year's kernels stay extracted once used, so a reel going back and forth in time is not slowed
     data_source.KEEP_SPICE_CACHE = True
     data_source._zip_index() if data_source.using_zip() else None  # build or load the zip index up front
-    # the camera windows' mosaic route needs the index; read it now rather than on the first request
-    threading.Thread(target=reel.target_of, daemon=True).start()
+    # the camera windows' mosaic route and centred pictures need the index, its observations (obs_mosaic.units) and
+    # its frames' rows (obs_mosaic._row_of); made now rather than on the first request
+    threading.Thread(target=lambda: (reel.target_of(), obs_mosaic._observations(), obs_mosaic._row_of()), daemon=True).start()
     # the first composite would otherwise wait while stacking reads the whole image index (all ~443k rows)
     threading.Thread(target=color_image.stacking.load_index, daemon=True).start()
     if site:
