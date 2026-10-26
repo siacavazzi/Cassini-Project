@@ -443,9 +443,13 @@ body.s-steady .info dd[data-f="colour"] { white-space: normal; display: -webkit-
 .lcdhead { display: grid; grid-template-columns: auto minmax(0, 1fr) auto; align-items: center; gap: 10px; }
 .lcdhead .clockbox { min-width: 0; display: grid; gap: 1px; }
 /* one camera on: a quiet line under the clock says which, and why (camOff, below) */
-.lcd .sub.camoff { font-size: 10px; color: var(--q-dim, var(--lcd-ink-2)); }
-.lcd .sub.camoff button { all: unset; cursor: pointer; color: var(--q-accent, #8ab6ff); margin-left: 4px; }
-.lcd .sub.camoff button:hover { text-decoration: underline; }
+.lcd .sub.camoff { justify-self: center; max-width: 100%; box-sizing: border-box; font-size: 10.5px; color: #f2c27a; padding: 1px 4px 1px 8px; margin-top: 2px;
+  border: 1px solid rgba(242,176,76,.45); border-radius: 9px; background: rgba(242,176,76,.08); display: flex; align-items: center; gap: 6px; }
+.lcd .sub.camoff[hidden] { display: none; }
+.lcd .sub.camoff::before { content: ""; flex: none; width: 6px; height: 6px; border-radius: 50%; background: #f2b04c; box-shadow: 0 0 4px rgba(242,176,76,.6); }
+.lcd .sub.camoff span { min-width: 0; overflow: hidden; text-overflow: ellipsis; }
+.lcd .sub.camoff button { all: unset; flex: none; cursor: pointer; color: #1a1408; background: #f2b04c; border-radius: 7px; padding: 0 7px; font-weight: 600; font-size: 10px; line-height: 15px; }
+.lcd .sub.camoff button:hover { background: #f7c46f; }
 .lcd .sub.camoff button:focus-visible { outline: 1px solid var(--q-accent, #8ab6ff); outline-offset: 1px; }
 .lcdhead .transport { flex: none; justify-self: start; gap: 1px; padding: 2px; border: 1px solid var(--q-line); border-radius: 16px; }
 .lcdhead .transport .round { border: 0; background: none; }
@@ -1378,7 +1382,7 @@ body.phone #launch .lx-clock { font-size: 9.5px; bottom: 9vh; }
           <div class="clockbox">
             <div class="clock" id="clock">—</div>
             <div class="sub"><span id="rel">—</span> · <span id="mday">—</span></div>
-            <div class="sub camoff" id="camoff" hidden><span></span> <button type="button">Open both</button></div>
+            <div class="sub camoff" id="camoff" hidden role="status"><span></span><button type="button">Turn on</button></div>
           </div>
           <div class="tltools">
             <button class="tlstep" id="tlout" aria-label="Zoom the timeline out" title="Zoom out">−</button>
@@ -2550,6 +2554,11 @@ body.phone #launch .lx-clock { font-size: 9.5px; bottom: 9vh; }
   // ---------- imaging lanes in the LCD: filters, cameras, RGB sets ----------
   const CLS = [["Clear", "#3a3f33"], ["Red", "#cc3a2e"], ["Green", "#3e9b33"], ["Blue", "#2f63cc"], ["IR / methane", "#8f2f6c"], ["UV", "#7a50d8"]];
   const LANES = { nTop: .36, nBase: .62, wTop: .66, wBase: .85, rTop: .89, rH: .08 };
+  // each camera's lane as [top, base] in pixels; with one camera off (lc: the one on), the camera on takes both lanes' room
+  function laneBox(h, lc) {
+    const both = { N: [h * LANES.nTop, h * LANES.nBase], W: [h * LANES.wTop, h * LANES.wBase] }, all = [h * LANES.nTop, h * LANES.wBase];
+    return lc ? { N: lc === "N" ? all : null, W: lc === "W" ? all : null } : both;
+  }
   function classify(a, b) {
     const f = [a, b].filter(x => x && !/^CL|^P\d|^IRP/.test(x));
     if (f.some(x => x === "RED")) return 1;
@@ -2668,7 +2677,8 @@ body.phone #launch .lx-clock { font-size: 9.5px; bottom: 9vh; }
   $("camoff").querySelector("button").addEventListener("click", e => { e.stopPropagation(); reopenCams(); });
   let camOffText = "";
   function camOff() {
-    const lc = liveCams(), t = lc ? `${CAMWORD[lc][0].toUpperCase() + CAMWORD[lc].slice(1)} only: the ${CAMWORD[lc === "N" ? "W" : "N"]} window is closed, so its pictures are not loaded` : "";
+    const lc = liveCams(), off = lc === "N" ? "W" : "N";
+    const t = lc ? `${off}AC off: showing ${CAMWORD[lc]} pictures only (the ${CAMWORD[off]} window is closed)` : "";
     if (t === camOffText) return;
     camOffText = t; $("camoff").hidden = !t; $("camoff").firstChild.textContent = t; $("camoff").title = t;
   }
@@ -2680,7 +2690,7 @@ body.phone #launch .lx-clock { font-size: 9.5px; bottom: 9vh; }
     prep();
     const vb = viewBody(), lc = liveCams();
     if (vb) return bodyBars(g, w, h, vb, lc);
-    const bw = 2, nT = h * LANES.nTop, nB = h * LANES.nBase, wT = h * LANES.wTop, wB = h * LANES.wBase, rT = h * LANES.rTop, rH = Math.max(4, h * LANES.rH);
+    const bw = 2, L = laneBox(h, lc), rT = h * LANES.rTop, rH = Math.max(4, h * LANES.rH);
     const sc = v => Math.min(1, Math.log1p(v) / Math.log1p(18));
     const cN = new Array(6), cW = new Array(6);
     for (let x = 0; x < w; x += bw) {
@@ -2688,8 +2698,9 @@ body.phone #launch .lx-clock { font-size: 9.5px; bottom: 9vh; }
       if (i1 <= i0) continue;
       cN.fill(0); cW.fill(0); let nN = 0, nW = 0, set = false;
       for (let i = i0; i < i1; i++) { const k = order[i], c = catalog.cls[k], cam = catalog.cam[k]; if (!camOn(cam, lc)) continue; if (cam === "N") { cN[c]++; nN++; } else { cW[c]++; nW++; } if (catalog.rgb[k]) set = true; }
-      for (const [cnt, tot, top, base] of [[cN, nN, nT, nB], [cW, nW, wT, wB]]) {
-        if (!tot) continue;
+      for (const [cnt, tot, lane] of [[cN, nN, L.N], [cW, nW, L.W]]) {
+        if (!tot || !lane) continue;
+        const [top, base] = lane;
         let y = base; const H = sc(tot) * (base - top);
         for (let c = 0; c < 6; c++) { if (!cnt[c]) continue; const hh = H * cnt[c] / tot; g.fillStyle = CLS[c][1]; g.fillRect(x, y - hh, bw - 0.5, hh); y -= hh; }
       }
@@ -2699,11 +2710,12 @@ body.phone #launch .lx-clock { font-size: 9.5px; bottom: 9vh; }
   };
   // the same lanes with one body's pictures only (each camera's frames of it, walked once from left to right)
   function bodyBars(g, w, h, body, lc) {
-    const bw = 2, nT = h * LANES.nTop, nB = h * LANES.nBase, wT = h * LANES.wTop, wB = h * LANES.wBase, rT = h * LANES.rTop, rH = Math.max(4, h * LANES.rH);
+    const bw = 2, L = laneBox(h, lc), rT = h * LANES.rTop, rH = Math.max(4, h * LANES.rH);
     const sc = v => Math.min(1, Math.log1p(v) / Math.log1p(18));
     const cnt = new Array(6), sets = new Uint8Array(Math.ceil(w / bw) + 1);
-    for (const [cam, top, base] of [["N", nT, nB], ["W", wT, wB]]) {
-      if (!camOn(cam, lc)) continue;
+    for (const cam of ["N", "W"]) {
+      if (!L[cam]) continue;
+      const [top, base] = L[cam];
       const F = framesOf(cam, body), a = F.et;
       let j = 0, lo = 0, hi = a.length; const t0 = xToEt(0, w);
       while (lo < hi) { const m = (lo + hi) >> 1; if (a[m] < t0) lo = m + 1; else hi = m; }
@@ -2720,15 +2732,26 @@ body.phone #launch .lx-clock { font-size: 9.5px; bottom: 9vh; }
     for (let s = 0; s < sets.length; s++) if (sets[s]) { const x = s * bw, q = rH / 3; g.fillStyle = CLS[1][1]; g.fillRect(x, rT, bw, q); g.fillStyle = CLS[2][1]; g.fillRect(x, rT + q, bw, q); g.fillStyle = CLS[3][1]; g.fillRect(x, rT + 2 * q, bw, q); }
     laneNames(g, w, h, lc);
   }
-  // (lc: the camera that is on alone; the other lane's name says it is off)
+  // (lc: the camera that is on alone: its lane is named, and an amber tag at its top says the other camera is off)
+  const OFF_INK = "#f2b04c";
   function laneNames(g, w, h, lc) {
-    const nB = h * LANES.nBase, wB = h * LANES.wBase, nT = h * LANES.nTop, wT = h * LANES.wTop, rT = h * LANES.rTop, rH = Math.max(4, h * LANES.rH);
-    g.fillStyle = "rgba(255,255,255,0.12)"; g.fillRect(0, nB, w, 1); g.fillRect(0, wB, w, 1);
+    const L = laneBox(h, lc), rT = h * LANES.rTop, rH = Math.max(4, h * LANES.rH);
+    g.fillStyle = "rgba(255,255,255,0.12)";
+    for (const cam of ["N", "W"]) if (L[cam]) g.fillRect(0, L[cam][1], w, 1);
     // lane names, on a patch of LCD so they stay readable over the bars
     g.font = "400 9px 'Lucida Grande', Verdana, sans-serif"; g.textBaseline = "middle";
-    for (const [t, y, cam] of [["NAC", (nT + nB) / 2, "N"], ["WAC", (wT + wB) / 2, "W"], ["RGB", rT + rH / 2]]) {
-      const off = cam && !camOn(cam, lc), label = off ? `${t} off` : t, lw = off ? 44 : 26;
-      g.fillStyle = "rgba(16,17,20,0.85)"; g.fillRect(0, y - 6, lw, 12); g.fillStyle = off ? "rgba(232,236,242,0.28)" : "rgba(232,236,242,0.5)"; g.fillText(label, 2, y);
+    for (const [t, lane] of [["NAC", L.N], ["WAC", L.W], ["RGB", [rT, rT + rH]]]) {
+      if (!lane) continue;
+      const y = (lane[0] + lane[1]) / 2;
+      g.fillStyle = "rgba(16,17,20,0.85)"; g.fillRect(0, y - 6, 26, 12); g.fillStyle = "rgba(232,236,242,0.5)"; g.fillText(t, 2, y);
+    }
+    if (lc) {
+      const t = `${lc === "N" ? "WAC" : "NAC"} OFF`, y = L[lc][0] + 7;
+      g.font = "600 9px 'Lucida Grande', Verdana, sans-serif";
+      const tw = g.measureText(t).width + 18;
+      g.fillStyle = "rgba(16,17,20,0.9)"; g.fillRect(0, y - 7, tw, 14);
+      g.strokeStyle = "rgba(242,176,76,0.7)"; g.lineWidth = 1; g.strokeRect(0.5, y - 6.5, tw - 1, 13);
+      g.fillStyle = OFF_INK; g.beginPath(); g.arc(7, y, 2.5, 0, 2 * Math.PI); g.fill(); g.fillText(t, 13, y + 0.5);
     }
     g.textBaseline = "top";
   }
