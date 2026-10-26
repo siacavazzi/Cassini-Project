@@ -24,3 +24,22 @@ models/huyprobe.cmod, models/huygens.3ds, models/coast/huygens.3DS, models/coast
 No .mtl files exist on the server.
 Dataset page: https://spiftp.esac.esa.int/data/SPICE/HUYGENS/misc/HUYGENS.html
 License notes: LICENSE-NOTES.txt
+
+bin/ (added 2026-10-26): the binary files above, base64-encoded (base64 -D -i X.b64.txt -o X to restore), fetched from
+https://spiftp.esac.esa.int/data/SPICE/HUYGENS/misc/cosmo/models/ :
+  bin/huygens.cmod.b64.txt         huygens.cmod        829464 bytes, sha256 fd05c9741dd31f74...  descent module (Cosmographia mesh)
+  bin/huygensprobe.cmod.b64.txt    huygensprobe.cmod   319776 bytes, sha256 d7fe94a807d865e6...
+  bin/huyprobe.cmod.b64.txt        huyprobe.cmod       205840 bytes, sha256 fb45c6f98dc3f4d5...  entry shell
+  bin/huygens.3ds.b64.txt          huygens.3ds         132808 bytes, sha256 4bc2602558f1d2d6...  entry shell
+  bin/coast/huy_D.png.b64.txt      coast/huy_D.png     363188 bytes, sha256 552eac03f175b5c6...  texture for coast/huygens.obj
+  bin/coast/huygens.3DS.b64.txt    coast/huygens.3DS    28491 bytes, sha256 261955315de285ab...
+
+Parachute search (2026-10-26): no real or freely licensed model of Huygens' parachutes was found.
+  - ESA SPICE: HUYGENS/misc/cosmo/models (above) and HUYGENS/misc/cassini/misc/cosmo/models/cassini/
+    (Cassini_no_Huygens_03.3ds + textures) have no parachute. There is no CASSINI folder on spiftp.
+  - nasa/NASA-3D-Resources: nothing matching parachute/chute; only "Cassini-Huygens (A)" (with a
+    "without Cassini" glb = the probe in its entry shell), "Cassini-Huygens (B)", "Cassini Assembly".
+  - Celestia Motherlode: "Cassini_Huygens descent and landing" by Jestr (2004, pre-landing, fan-made;
+    http://celestiamotherlode.net/creators/jestr/Cassini_Huygens_Landed_CMOD.zip) has stage models
+    huygens2..6.cmod with a CHUTE1.JPG texture; no license stated, so not included.
+    Jack Higgins' huygensmodel.zip is the same huygens.3ds entry shell ESA ships.
