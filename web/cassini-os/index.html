@@ -4041,7 +4041,7 @@ body.phone #launch .lx-clock { font-size: 9.5px; bottom: 9vh; }
   for (const [k] of INSTRUMENTS) SETS[k] = Object.assign({ N: k, W: k, chord: k, tile: k, done: k }, SUSTAINED.includes(k) ? { tone: k, pad: k } : {});
   D({ key: "sound.instrument", label: "Instrument", type: "choice", menu: true, value: "synth",
       options: [["synth", "Default (synthesized)"], ["picks", "Mixed: glockenspiel, vibraphone, harp, kalimba"], ...INSTRUMENTS],
-      hint: "What plays the notes for arriving pictures, color sets and mosaics. Mixed gives each part its own instrument (glockenspiel narrow-angle, vibraphone wide-angle, harp color sets, kalimba and tubular bells mosaics, bowed vibraphone spacecraft tones, violins and marimba the flyby crescendo). The same pitches and rules as the default; recordings from Versilian Studios (CC0), loaded when picked." });
+      hint: "What plays the notes for arriving pictures, color sets and mosaics, on the default's pitches and rules. Mixed also gives the spacecraft tones a bowed vibraphone and the flyby crescendo violins and marimba. Recordings load when picked." });
   D({ key: "sound.tones", label: "Spacecraft tones instrument", type: "choice", menu: true, value: "set",
       options: [["set", "As the instrument above"], ["synth", "Synthesized"], ...INSTRUMENTS.filter(i => SUSTAINED.includes(i[0]))],
       hint: "The two long tones for Cassini's turning and its range to the target. As the instrument above: recorded when that instrument can hold a note, synthesized otherwise." });

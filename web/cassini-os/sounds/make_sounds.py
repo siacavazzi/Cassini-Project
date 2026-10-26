@@ -57,6 +57,8 @@ ODD = {
     "tubular-bells": {"C4": "1", "D4": "1", "E4": "1", "F4": "2", "G4": "1", "A4": "1", "B4": "1", "C5": "1", "D5": "2", "E5": "1", "F5": "2"},
     "wine-glasses": {"D#4": "glass1_D#4_Slow_1", "F#4": "glass2_F#4_Slow_1", "A#4": "glass3_A#4_Slow_1", "D5": "glass4_D5_Slow_2"},
 }
+# instruments that hold a note: level by a steadier tone's rms, as they do not die away like a bell
+SUSTAINED = {"vibraphone-bowed", "wine-glasses", "organ", "violins", "cellos"}
 # the unpitched Nepalese bells: three bells, given notes a fifth and a fourth apart so they still follow the scale
 BELLS = {"HB_1.wav": 76, "HB_2.wav": 83, "HB_3.wav": 88}
 
@@ -74,12 +76,26 @@ def decode(data):
     return np.frombuffer(p.stdout, dtype=np.float32).copy()
 
 
+def level(inst, clips, peak=1.0):
+    """The gain that puts an instrument beside the FM bell: a bell's first second has an rms about a third of its
+    peak; a held note is set lower, as it does not die away."""
+    part = slice(22050, 3 * 44100) if inst in SUSTAINED else slice(0, 44100)   # a held note after its swell
+    rms = float(np.median([np.sqrt(np.mean((x[part] / peak * 0.89) ** 2)) for x in clips]))
+    return round(max(0.3, min(4.0, (0.12 if inst in SUSTAINED else 0.3) / max(1e-3, rms))), 3)
+
+
 def main():
     ap = argparse.ArgumentParser()
     ap.add_argument("--only", default="")
+    ap.add_argument("--levels", action="store_true", help="only work out the levels again, from the mp3s already made")
     a = ap.parse_args()
     out_index = os.path.join(HERE, "index.json")
     index = json.load(open(out_index)) if os.path.exists(out_index) else {}
+    if a.levels:
+        for inst, e in index.items():
+            e["gain"] = level(inst, [decode(open(os.path.join(HERE, inst, f"{m}.mp3"), "rb").read()) for m in e["notes"]])
+        json.dump(dict(sorted(index.items())), open(out_index, "w"), indent=1)
+        return
     for inst, (repo, folder, pat, notes, secs) in SETS.items():
         if a.only and inst not in a.only.split(","): continue
         files = [(f, m) for f, m in BELLS.items()] if inst == "nepalese-bells" else [(name_of(inst, n), midi(n)) for n in notes.split()]
@@ -95,15 +111,13 @@ def main():
             print(inst, f, m, f"{len(x) / 44100:.2f}s", file=sys.stderr)
         # one level for the whole instrument, so its notes keep their own balance
         peak = max(float(np.abs(x).max()) for x in clips.values())
-        rms = float(np.median([np.sqrt(np.mean((x[:44100] / peak) ** 2)) for x in clips.values()]))
         d = os.path.join(HERE, inst); os.makedirs(d, exist_ok=True)
         for old in os.listdir(d): os.remove(os.path.join(d, old))
         for m, x in clips.items():
             y = (x / peak * 0.89).astype(np.float32)
             subprocess.run(["ffmpeg", "-v", "error", "-y", "-f", "f32le", "-ar", "44100", "-ac", "1", "-i", "pipe:0",
                             "-c:a", "libmp3lame", "-b:a", "64k", os.path.join(d, f"{m}.mp3")], input=y.tobytes(), check=True)
-        # level beside the FM bell: its first second rms is about a third of its peak
-        index[inst] = {"notes": sorted(clips), "gain": round(max(0.4, min(4.0, 0.3 / max(1e-3, rms * 0.89))), 3)}
+        index[inst] = {"notes": sorted(clips), "gain": level(inst, clips.values(), peak)}
     json.dump(dict(sorted(index.items())), open(out_index, "w"), indent=1)
 
 
