@@ -55,7 +55,6 @@ import obs_mosaic  # noqa: E402
 import reel  # noqa: E402
 
 PHASES = ("frames", "composites", "mosaics", "movies", "processed", "strips")
-SET_GAP = 300   # head-quiet.html findSets
 
 
 @functools.lru_cache(None)
@@ -68,42 +67,11 @@ def frame_ids():
 @functools.lru_cache(None)
 def page_sets():
     """The filter sets the camera windows ask composites of, with their ids in the order the page puts in the URL:
-    head-quiet.html findSets and pickChannels, on the same index (reel.load_index's own sets differ: the page also
-    takes CB1 as red)."""
-    idx, _ = reel.load_index()
-    cams = ["N" if c == "ISSNA" else "W" for c in idx["INSTRUMENT_ID"]]
-    inst, ids, targets, obs = idx["INSTRUMENT_ID"].tolist(), idx["id"].tolist(), idx["TARGET_NAME"].tolist(), idx["OBSERVATION_ID"].tolist()
-    f1s, f2s, t = idx["filter1"].astype(str).tolist(), idx["filter2"].astype(str).tolist(), idx["seconds_1970"].tolist()
-    sets, run = [], {}
-
-    def close(cam):
-        r = run.pop(cam, None)
-        if not r or len(r["rows"]) < 2:
-            return
-        by = dict(zip(r["filters"], r["rows"]))
-        blue = next((f for f in ("BL1", "BL2", "VIO") if f in by), None)
-        red = next((f for f in ("RED", "CB1") if f in by), None)
-        if red and "GRN" in by and blue:
-            use = [by[red], by["GRN"], by[blue]]
-        else:
-            w = sorted(r["rows"], key=lambda q: -reel.wavelength(inst[q], f1s[q] + f2s[q]))
-            use = [w[0], w[len(w) // 2], w[-1]] if len(w) >= 3 else w
-        sets.append([ids[q] for q in use])
-
-    for q in range(len(ids)):
-        cam, f = cams[q], reel.colour_filter(f1s[q], f2s[q])
-        r = run.get(cam)
-        if not f:
-            close(cam)
-            continue
-        if r and targets[q] == r["target"] and obs[q] == r["obs"] and t[q] - r["last"] <= SET_GAP and f not in r["filters"]:
-            r["rows"].append(q); r["filters"].append(f); r["last"] = t[q]
-        else:
-            close(cam)
-            run[cam] = {"target": targets[q], "obs": obs[q], "rows": [q], "filters": [f], "last": t[q]}
-    for cam in list(run):
-        close(cam)
-    return sets
+    reel.load_index's sets, which are the page's (one rule, sets_passes; the page reads them from the data, or
+    works them out the same way in head-quiet.html findSets)."""
+    idx, sets = reel.load_index()
+    ids = idx["id"].tolist()
+    return [[ids[q] for q in s["use"]] for s in sets]
 
 
 @functools.lru_cache(None)

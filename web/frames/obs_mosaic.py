@@ -52,6 +52,7 @@ from PIL import Image
 HERE = os.path.dirname(os.path.abspath(__file__))
 sys.path.insert(0, HERE)
 import reel  # noqa: E402  (puts the repo on the path)
+import sets_passes  # noqa: E402
 import color_image  # noqa: E402
 import calibration  # noqa: E402
 import mosaic  # noqa: E402
@@ -1756,23 +1757,30 @@ def _place(u, t, rect, k, W, H, cache, scale):
 
 
 def colour_sets(frames):
-    """The pass's frames grouped into filter sets as the camera windows find them (head-quiet's findSets,
-    reel.load_index): a run of frames, each taken within reel.SET_GAP of the one before, through different
-    filters; a clear or polarizer frame ends it, and a filter coming round again starts a new one (the next
-    pointing of a mosaic, the next colour cycle). Each set is a list of (filter, frame index), in time order."""
-    sets, run, last = [], None, None
-    for j, fr in enumerate(frames):
-        f = fr[2]
-        if f == "CL1/CL2" or _polarizer(f):
-            run = None
-            continue
-        if run is not None and fr[3] - last <= reel.SET_GAP and all(f != g for g, _ in run):
-            run.append((f, j))
-        else:
-            run = [(f, j)]
-            sets.append(run)
-        last = fr[3]
-    return sets
+    """The pass's frames grouped into filter sets, the camera windows' own (sets_passes, the one rule: reel.load_index's
+    sets, which the page reads from the data): a run of frames, each taken within SET_GAP of the one before, through
+    different filters; a clear or polarizer frame ends it, and a filter coming round again starts a new one (the next
+    pointing of a mosaic, the next colour cycle). Each set is a list of (filter, frame index), in time order, with the
+    set's frames that are tiles of the pass (a repeat exposure units leaves out is stacked into its tile). Frames
+    the index does not have are grouped by the same rule among themselves."""
+    try:
+        idx, row = _row_of()
+    except FileNotFoundError:   # no index (a synthetic pass)
+        idx, row = None, {}
+    qs = [row.get(fr[1]) for fr in frames]
+    if not frames or any(q is None for q in qs):
+        return _own_sets(frames)
+    set_of, by = idx["set"].to_numpy(), {}
+    for j, (fr, q) in enumerate(zip(frames, qs)):
+        if set_of[q] >= 0:
+            by.setdefault(int(set_of[q]), []).append((fr[2], j))
+    return [run for _, run in sorted(by.items(), key=lambda kv: kv[1][0][1]) if len(run) >= 2]
+
+
+def _own_sets(frames):
+    """colour_sets' rule applied to frames on their own (one camera, target and observation)."""
+    at = sets_passes.runs([("", "", "", None if fr[2] == "CL1/CL2" or _polarizer(fr[2]) else fr[2], fr[3]) for fr in frames])
+    return [[(frames[j][2], j) for j in run] for run in sorted(at, key=lambda r: r[0])]
 
 
 def movie_frame(u, n, cache, trail=0, colour=True, out=OUT, centre=True):
