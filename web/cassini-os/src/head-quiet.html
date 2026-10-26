@@ -2173,6 +2173,8 @@ body.idle .win.full .titlebar { opacity: 0; }
     const idOf = (q, f) => q.ids[f] || (q.luminance || {})[f];
     const hhmm = t => new Date(t * 1000).toISOString().slice(11, 19);
     function draw(q) {
+      // another frame under the pointer: the lens (loupe.html) goes away and waits for a rest on this one
+      if (q && q !== hot && window.cassiniLoupe && window.cassiniLoupe.isOpen()) window.cassiniLoupe.close();
       hot = q;
       const m = tmap && (tmap.data || tmap.prev), b = picBox();
       if (q && m && !b) return;   // decoding: drawn again once it is up (shot load)
