@@ -125,6 +125,7 @@ Access-Control-Allow-Origin: * so a page hosted elsewhere can show them.
 """
 import argparse
 import base64
+import collections
 import datetime
 import email.utils
 import html
@@ -283,11 +284,32 @@ FRAME_QUALITY = 95
 FRAME_VERSION = "frames-q95"
 
 
+# a frame's picture, decoded once for the sizes asked for one after another (the pre-build makes its 1024, 512 and
+# 128 in turn): decoding the PNG three times was a seventh of making the three. Each use gets a copy, since encode
+# shrinks the picture it is given
+FRAMES_KEEP = 16
+_frames, _frames_lock = collections.OrderedDict(), threading.Lock()
+
+
+def _frame_image(frame_id):
+    with _frames_lock:
+        im = _frames.get(frame_id)
+        if im is not None:
+            _frames.move_to_end(frame_id)
+            return im.copy()
+    im = Image.open(io.BytesIO(archive_png(frame_id)))
+    im = im.convert("L") if im.mode in ("L", "I", "I;16", "P", "1") else im.convert("RGB")
+    with _frames_lock:
+        _frames[frame_id] = im
+        _frames.move_to_end(frame_id)
+        while len(_frames) > FRAMES_KEEP:
+            _frames.popitem(last=False)
+    return im.copy()
+
+
 def webp(frame_id, size, cache, fmt="webp"):
     def make():
-        im = Image.open(io.BytesIO(archive_png(frame_id)))
-        im = im.convert("L") if im.mode in ("L", "I", "I;16", "P", "1") else im.convert("RGB")
-        return encode(im, size, fmt, FRAME_QUALITY)
+        return encode(_frame_image(frame_id), size, fmt, FRAME_QUALITY)
     return cached(os.path.join(cache, FRAME_VERSION, size_dir(size, fmt), f"{frame_id}.{fmt}"), make)
 
 
