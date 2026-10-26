@@ -3572,6 +3572,7 @@ body.phone #launch .lx-clock { font-size: 9.5px; bottom: 9vh; }
       // another frame under the pointer: the lens (loupe.html) goes away and waits for a rest on this one
       if (q && q !== hot && window.cassiniLoupe && window.cassiniLoupe.isOpen()) window.cassiniLoupe.close();
       hot = q;
+      if (q) pointingKeys = feedApi;   // (also when the outline comes with a tile map that arrived after the pointer)
       const m = tmap && (tmap.data || tmap.prev), b = picBox();
       if (q && m && !b) return;   // decoding: drawn again once it is up (shot load)
       if (!q || !m || !b) { overlay.classList.remove("on"); tip.hidden = true; well.classList.remove("tilehover"); return; }
@@ -3588,7 +3589,7 @@ body.phone #launch .lx-clock { font-size: 9.5px; bottom: 9vh; }
     }
     const phoneNow = () => document.body.classList.contains("phone");
     let rested = true;   // the pointer has rested (or the clock is stopped): a new picture of the mosaic outlines under it at once
-    const outlineHere = () => { rested = true; if (!pointer) return; const q = hitAt(pointer); if (q !== hot) draw(q); if (hot) pointingKeys = feedApi; };
+    const outlineHere = () => { rested = true; if (!pointer) return; const q = hitAt(pointer); if (q !== hot) draw(q); };
     well.addEventListener("pointermove", e => {
       if (e.pointerType === "touch") return;
       pointer = { clientX: e.clientX, clientY: e.clientY };
