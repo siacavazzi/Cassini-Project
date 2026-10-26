@@ -59,7 +59,7 @@ VERSIONS = {"balanced": "reel-v28", "raw": "reel-v11", "classic": "reel-v5"}   #
 
 
 def version():
-    return VERSIONS[calibration.style()] + "-q95"   # WebP quality 95 (frame_server.QUALITY)
+    return VERSIONS[calibration.style()] + calibration.variant() + "-q95"   # WebP quality 95 (frame_server.QUALITY)
 SET_GAP = 300          # seconds between frames of one filter set
 REPEAT_GAP = 120       # stacking.find_repeats' window
 VIEW = 1536            # full resolution pixels a picture shows (a north-up frame fits in 1448)

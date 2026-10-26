@@ -80,6 +80,8 @@ plus how many frames went in when count is True
 def load_stacked(path, window=120, max_frames=5, count=False):
     lbl = lh.label(path, as_png=True)
     frames = [lbl.resize_image()]
+    if not cal.step("stack"):   # Settings > Processing: the frame alone
+        max_frames = 1
     if max_frames <= 1:
         return (lbl, frames[0], 1) if count else (lbl, frames[0])
     for repeat in find_repeats(path, window, 4 * max_frames)[1:]:
@@ -112,15 +114,20 @@ and the few around them (charge bleeds out of a full pixel), so where a long exp
 short one is used. A repeat that can't be matched (a faint frame of mostly empty sky, where phase
 correlation finds nothing) is taken as it is: repeats are seconds apart at the same pointing.
 returns (label of the frame at path, float32 I/F image sized like label.resize_image, how many
-frames went in), or the label, None and 1 when the frame at path can't be calibrated
+frames went in), or the label, None and 1 when the frame at path can't be calibrated.
+Settings > Processing (calibration.step): with "hdr" off only the exposures identical to the frame at path are merged
+(a plain stack, in I/F), with "stack" off the frame at path alone.
 """
 def load_hdr(path, window=120, max_frames=8):
     lbl = lh.label(path, as_png=True)
     ref = first = None
     total, weight, n = None, None, 0
-    for p in find_repeats(path, window, max_frames):
+    plain = not cal.step("hdr")
+    for p in find_repeats(path, window, max_frames if cal.step("stack") else 1):
         try:
             l = lbl if p == path else lh.label(p, as_png=True)
+            if plain and l is not lbl and any(l.info.get(k) != lbl.info.get(k) for k in same_settings):
+                continue
             info = l.get_info()
             image = l.resize_image()
             gray = cv2.cvtColor(image, cv2.COLOR_BGR2GRAY) if image.ndim == 3 else image

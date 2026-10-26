@@ -504,7 +504,7 @@ def segment_options(q):
     """The stretch and the page's choices from a POST /prebuild query (parse_qs): from/until (UTC, ISO), cams (N,
     W or NW), sizes (the windows' picture sizes), look/colors (as on every picture route), mosaics/steady/color
     (Settings > Cameras and Movie), processed (processed single frames), center (Auto center: center=1 as the
-    windows ask) and trail/laps/fade/persist (the movie style). ValueError for anything else."""
+    windows ask), off (the pipeline steps turned off, calibration.STEPS) and trail/laps/fade/persist (the movie style). ValueError for anything else."""
     get = lambda k, d=None: q.get(k, [d])[0]
     when = lambda s: datetime.datetime.fromisoformat(s.replace("Z", "")).replace(tzinfo=datetime.timezone.utc).timestamp()
     try:
@@ -523,8 +523,11 @@ def segment_options(q):
     if not cams or not sizes:
         raise ValueError("cams= takes N, W or NW")
     on = lambda k: get(k, "1") != "0"
+    off = [s for s in calibration.STEPS if s in (get("off") or "").split(",")]
     return {"from": t0, "until": t1, "cams": cams, "sizes": sizes,
             "look": get("look", calibration.LOOKS[0]), "colors": get("colors", calibration.COLORS[0]),
+            # the pipeline steps turned off (Settings > Processing), only when any are, so a stretch's id is as before
+            **({"off": off} if off else {}),
             "mosaics": on("mosaics"), "steady": on("steady"), "processed": on("processed"), "center": on("center"),
             "style": {"trail": max(0, min(obs_mosaic.TRAIL, trail)), "laps": max(1, min(obs_mosaic.TRAIL, laps)),
                       "fade": fade[0], "persist": fade[1],
@@ -696,7 +699,7 @@ class Segments:
         # each thread may hold a mosaic movie for all its frames, and the windows play theirs in the same process:
         # room for all of them to keep their last pictures (obs_mosaic._rolled)
         obs_mosaic.rolled_room(SEGMENT_THREADS + 2)
-        with calibration.looking(o["look"]), calibration.coloring(o["colors"]), \
+        with calibration.looking(o["look"]), calibration.coloring(o["colors"]), calibration.stepping(o.get("off", ())), \
                 concurrent.futures.ThreadPoolExecutor(SEGMENT_THREADS) as pool:
             pending, i = set(), 0
             while i < len(items) or pending:
@@ -731,7 +734,7 @@ class Segments:
         until = time.monotonic() + 120
         while keys and not job["stop"] and time.monotonic() < until:
             with obs_mosaic._lock:
-                busy_keys = {k for k in keys if k in obs_mosaic._ahead_running or any(r[0] == k for r in obs_mosaic._roll_ahead)}
+                busy_keys = {k for k in keys if any(r[0] == k for r in obs_mosaic._ahead_running) or any(r[0] == k for r in obs_mosaic._roll_ahead)}
             if not busy_keys:
                 break
             job["state"] = "finishing"

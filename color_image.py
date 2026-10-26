@@ -159,10 +159,12 @@ where report says how each frame was calibrated and aligned, and report["dropped
 left out because they can't be calibrated (then there is one image fewer than paths: a two-filter picture)
 """
 def load_aligned(paths, hdr=False, scale=None, repeat_window=120):
+    # Settings > Processing turns steps off per request (calibration.step); stacking checks its own
+    calibrating, fill, align = calibrate and cal.step("calibrate"), cal.step("fill"), cal.step("align")
     lbls, imgs, stacked, iofs = [], [], [], []
     for path in paths:
         iof = None
-        if hdr and calibrate:
+        if hdr and calibrating:
             lbl, iof, n = stacking.load_hdr(path, repeat_window)
         if iof is None:
             lbl, img, n = stacking.load_stacked(path, repeat_window, max_frames = 5 if stack_repeats else 1, count=True)
@@ -174,10 +176,11 @@ def load_aligned(paths, hdr=False, scale=None, repeat_window=120):
         stacked.append(n)
     # pixels each frame lost in downlink (truncated lines); filled so they don't skew the rest
     masks = [l.valid_mask() for l in lbls]
-    imgs = [ic.fill_invalid(img, mask) for img, mask in zip(imgs, masks)]
-    iofs = [None if iof is None else ic.fill_invalid(iof, mask) for iof, mask in zip(iofs, masks)]
+    if fill:
+        imgs = [ic.fill_invalid(img, mask) for img, mask in zip(imgs, masks)]
+        iofs = [None if iof is None else ic.fill_invalid(iof, mask) for iof, mask in zip(iofs, masks)]
     dropped = []
-    if calibrate and len(lbls) > 1:
+    if calibrating and len(lbls) > 1:
         # each frame calibrated once, here, for the display models below to share
         iofs = cal.calibrated_each(lbls, imgs, iofs)
         keep = [j for j, iof in enumerate(iofs) if iof is not None]
@@ -192,7 +195,7 @@ def load_aligned(paths, hdr=False, scale=None, repeat_window=120):
                 scale = dict(scale, blacks=[scale["blacks"][j] for j in keep])
     calibrated = False
     guide = linear = None
-    if calibrate:
+    if calibrating:
         if scale is None and cal.look() != "classic":
             # balanced: the channels stay linear until they are aligned, then are drawn together (calibration.tone)
             linear = cal.load_linear(lbls, imgs, iofs)
@@ -216,7 +219,12 @@ def load_aligned(paths, hdr=False, scale=None, repeat_window=120):
     # masks move with the frames, so pixels alignment leaves uncovered become invalid too
     aligned = []
     try:
-        if guide is not None:
+        if not align:
+            # Settings > Processing: the channels as the camera took them, one over the other
+            aligned = ["off"] * len(imgs)
+            if linear is not None:
+                guide = None
+        elif guide is not None:
             shifts = []
             ic.align_with_masks(guide, [m.copy() for m in masks], ref, aligned, found=shifts)
             channels, masks = ic.align_with_masks(linear[0], masks, ref, use=shifts)
@@ -231,6 +239,8 @@ def load_aligned(paths, hdr=False, scale=None, repeat_window=120):
     if linear is not None and guide is None:
         imgs = cal.tone(linear[0], linear[1], linear[2])
     report = {"calibrated": calibrated, "stacked": stacked, "aligned": aligned}
+    if not fill:
+        report["filled"] = False
     if dropped:
         report["dropped"] = dropped
     return imgs, np.logical_and.reduce(masks), lbls[ref], report
