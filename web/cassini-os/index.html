@@ -1559,9 +1559,10 @@ body.phone #launch .lx-clock { font-size: 9.5px; bottom: 9vh; }
 (function () {
   const $ = id => document.getElementById(id);
   const KEY = "cassini-os-settings-v1";
-  const SECTIONS = ["Interface", "Cameras", "Playback", "View", "Movie", "Data"];   // sections other code adds go after these
+  const SECTIONS = ["Interface", "Cameras", "Processing", "Playback", "View", "Movie", "Data"];   // sections other code adds go after these
   const NOTES = {
-    Cameras: "Every picture still goes through the full pipeline (calibration, repeat-exposure stacking, alignment, SPICE centering); these settings only choose what the camera windows show.",
+    Cameras: "These settings choose what the camera windows show and how long. How each picture is made is under Processing.",
+    Processing: "Each step the pictures go through, in the order they run. With everything on you see the mission's pictures processed; turn a step off to see what it does. A picture with a step off is made the first time it is asked for (a few seconds); with everything on it comes from the cache at once.",
     Data: "Window positions and these settings are kept in this browser only."
   };
   let saved = {};
@@ -1684,22 +1685,46 @@ body.phone #launch .lx-clock { font-size: 9.5px; bottom: 9vh; }
   D({ key: "interface.hudline", section: "Interface", label: "Flight data strip", type: "toggle", value: true,
       hint: "Target, altitude, speed, camera and pointing along the top of the view." });
   cls("interface.hudline", "s-nohudline", false);
-  // Cameras (the camera windows read cameras.composites, cameras.steady, cameras.mosaics, cameras.passes, cameras.fullRes, cameras.fullDelay, cameras.drill, cameras.stale and cameras.lingerColor / lingerMosaic)
-  D({ key: "cameras.composites", section: "Cameras", label: "Color composites", type: "toggle", value: true,
+  // Processing: every step the picture pipeline takes, in the order it takes them, each on by default and each
+  // switched off on its own to see what it does (the camera windows read cameras.*; processing.* go to the frame
+  // server as off=, calibration.STEPS, which keeps pictures made with a step off in caches of their own)
+  D({ key: "cameras.processedFrames", section: "Processing", label: "Processed single frames", type: "toggle", value: true,
+      hint: "A frame shown on its own goes through the pipeline like a color picture's channels: repeat exposures stacked, calibrated, lost lines filled, on the same display stretch. Off shows the frame as it is in the archive." });
+  window.cassiniSteps = [
+    { key: "processing.stack", step: "stack", label: "Stack repeat exposures",
+      hint: "Frames Cassini took again of the same thing, with the same filter and exposure, are averaged into one picture, which cuts the noise (a plain stack). Off shows each frame alone." },
+    { key: "processing.hdr", step: "hdr", label: "HDR merge",
+      hint: "In mosaics, mosaic movies and the body reels, an exposure bracket (short exposures for the bright parts, long ones for the faint) is merged into one picture that has the range of both. Off merges only identical exposures, like the plain stack. Needs Stack repeat exposures." },
+    { key: "processing.fill", step: "fill", label: "Fill lost lines",
+      hint: "Lines a frame lost on its way to Earth are filled from the lines round them, so they don't show as black stripes or throw off the stretch. Off leaves them black." },
+    { key: "processing.calibrate", step: "calibrate", label: "Calibrate",
+      hint: "Every frame is turned into reflectance (I/F: bias, exposure, gain, filter and distance from the Sun taken out) and drawn on one display scale, so filters and mosaic tiles match and colors are true. Off shows each frame on the archive's own stretch, as it came down." },
+    { key: "processing.align", step: "align", label: "Align",
+      hint: "A color set's channels, taken seconds or minutes apart, are moved onto one another, and a mosaic's filters onto each other's tiles. Off lays them over one another as the camera pointed, so moving bodies show colored fringes." }
+  ];
+  for (const st of window.cassiniSteps) D({ key: st.key, section: "Processing", label: st.label, type: "toggle", value: true, hint: st.hint });
+  D({ key: "cameras.composites", section: "Processing", label: "Color composites", type: "toggle", value: true,
       hint: "Once a filter set is complete, show its color picture. Off shows every frame on its own." });
-  D({ key: "cameras.balancedColor", section: "Cameras", label: "Balanced color", type: "toggle", value: true,
+  D({ key: "cameras.balancedColor", section: "Processing", label: "Balanced color", type: "toggle", value: true,
       hint: "A gentler color stretch: black sits just above the sky's noise so grain and scan lines stay dark, white sits at the bright part of the body but never stretches dim pictures far, bright edges roll off instead of clipping, and mosaic tiles are evened out without changing the mosaic's overall level. Off shows the earlier stretch." });
-  D({ key: "cameras.colors", section: "Cameras", label: "Filter colors", type: "choice", value: "natural",
+  D({ key: "cameras.colors", section: "Processing", label: "Filter colors", type: "choice", value: "natural",
       options: [["natural", "Natural color"], ["raw", "Raw filters"]],
       hint: "Natural color turns red, green and blue filter sets into the colors an eye would see, and balances false color sets (methane, ultraviolet, infrared) so the planet comes out gray and only its differences between filters show as color. Raw filters draws each filter straight as a channel. Needs Balanced color." });
+  D({ key: "cameras.autoCenter", section: "Processing", label: "Auto center", type: "toggle", value: true,
+      hint: "Every picture of a moon or a planet whose whole disk fits is turned north up with the body in the middle, by SPICE, at one size for the whole pass, so the body holds still from picture to picture. Ring, spoke and sky pictures, and a body too big for the picture, stay as the camera took them. Each camera window's settings button (the slider icon in its title bar) can turn it on or off for that window." });
+  D({ key: "cameras.mosaics", section: "Processing", label: "Mosaics in camera windows", type: "toggle", value: true,
+      hint: "When Cassini steps a camera across a body, the window builds the mosaic tile by tile. Off shows every frame on its own, at face value. How a pass plays (mosaic, movie, mosaic movie) is under Cameras > Mosaic passes." });
   // what the frame server's picture routes are asked to add for them: nothing, the earlier stretch, or raw filters;
   // o.center: the picture centred on its body (a camera window's Auto center, decided by the window for each pass)
+  // the pipeline steps turned off (Settings > Processing): nothing while every step is on, so the usual pictures keep their addresses
+  window.cassiniOff = () => { const off = window.cassiniSteps.filter(st => S.get(st.key) === false).map(st => st.step); return off.length ? `&off=${off.join(",")}` : ""; };
   window.cassiniLook = (o = {}) => (S.get("cameras.balancedColor") === false ? "&look=classic"
-    : S.get("cameras.colors") === "raw" ? "&colors=raw" : "") + (o.center ? "&center=1" : "");
+    : S.get("cameras.colors") === "raw" ? "&colors=raw" : "") + window.cassiniOff() + (o.center ? "&center=1" : "");
   // how a movie pass looks (Settings > Movie), for the camera windows' movie pictures and the film export alike;
   // o.center: the window's Auto center (else the Settings default)
   window.cassiniMovieStyle = (o = {}) => `${(o.center ?? S.get("cameras.autoCenter")) === false ? "&center=0" : ""}&trail=${S.get("movies.trail") || 0}&laps=${S.get("movies.laps") || 1}` +
     (S.get("movies.fade") ? `&fade=${S.get("movies.fade")}&persist=${S.get("movies.persist") ?? 35}` : "");
+  // Cameras (the camera windows read cameras.steady, cameras.passes, cameras.fullRes, cameras.fullDelay, cameras.drill, cameras.stale and cameras.lingerColor / lingerMosaic)
   D({ key: "cameras.channels", section: "Cameras", label: "Filter channels", type: "toggle", value: true,
       hint: "The frames that make up a color picture, in a strip under it." });
   cls("cameras.channels", "s-nochans", false);
@@ -1709,12 +1734,6 @@ body.phone #launch .lx-clock { font-size: 9.5px; bottom: 9vh; }
   D({ key: "cameras.steady", section: "Cameras", label: "Steady picture size", type: "toggle", value: true,
       hint: "While a color set or a mosaic builds, the picture keeps its size: the filter strip stays in place for the whole observation and a mosaic's shape holds until the observation ends. Off lets the window fit each picture." });
   cls("cameras.steady", "s-steady", true);
-  D({ key: "cameras.mosaics", section: "Cameras", label: "Mosaics in camera windows", type: "toggle", value: true,
-      hint: "When Cassini steps a camera across a body, the window builds the mosaic tile by tile. Off shows every frame on its own." });
-  D({ key: "cameras.processedFrames", section: "Cameras", label: "Processed single frames", type: "toggle", value: true,
-      hint: "A frame shown on its own goes through the pipeline like a color picture's channels: repeat exposures stacked, calibrated, lost lines filled, on the same display stretch. Off shows the frame as it is in the archive." });
-  D({ key: "cameras.autoCenter", section: "Cameras", label: "Auto center", type: "toggle", value: true,
-      hint: "Every picture of a moon or a planet whose whole disk fits is turned north up with the body in the middle, by SPICE, at one size for the whole pass, so the body holds still from picture to picture. Ring, spoke and sky pictures, and a body too big for the picture, stay as the camera took them. Each camera window's settings button (the slider icon in its title bar) can turn it on or off for that window." });
   D({ key: "cameras.passes", section: "Cameras", label: "Mosaic passes", type: "choice", value: "auto",
       options: [["auto", "Auto"], ["mosaic", "Always mosaic"], ["movie", "Always movie"], ["mosaic_movie", "Always mosaic movie"]],
       hint: "How a pass of pictures plays: Auto builds the passes that step across a body as mosaics, rolls the ones that go round the same places again and again as mosaic movies, and plays movies and stares as frames. The others force one way for every pass. A camera window's settings button changes it for the pass it is showing." });
@@ -3350,7 +3369,9 @@ body.phone #launch .lx-clock { font-size: 9.5px; bottom: 9vh; }
         const n = rep.aligned.filter(a => a === "not aligned" || a === "failed").length, stacked = rep.stacked.reduce((a, b) => a + b, 0) - rep.stacked.length;
         const notes = [rep.calibrated ? "calibrated" : "not calibrated (each frame stretched on its own)",
           stacked ? `${stacked} repeat exposure${stacked > 1 ? "s" : ""} stacked` : "",
-          n ? `${n} channel${n > 1 ? "s" : ""} could not be aligned` : rep.aligned.some(a => a.startsWith("centroid")) ? "aligned by centroid" : "aligned"].filter(Boolean);
+          rep.aligned.length && rep.aligned.every(a => a === "off") ? "not aligned (turned off)" :
+          n ? `${n} channel${n > 1 ? "s" : ""} could not be aligned` : rep.aligned.some(a => a.startsWith("centroid")) ? "aligned by centroid" : "aligned",
+          rep.filled === false ? "lost lines not filled" : ""].filter(Boolean);
         made.set(w.set, notes.join(", "));
         if (catalog.setOf[lastK] === w.set) field("colour").textContent = field("colour").title = colourText(catalog.sets[w.set], w.set);
       });
@@ -3880,7 +3901,7 @@ body.phone #launch .lx-clock { font-size: 9.5px; bottom: 9vh; }
   window.cassiniFeeds = { frames: FRAMES, cameraFeed, framesOf, lastOfCam, prep, weight, nextPicture, prevPicture, behind, stale: () => S.get("cameras.stale") * 3600 };
   document.addEventListener("cassini:bodymode", () => { if (typeof catalog !== "undefined" && catalog && catalog.byCam) feeds.forEach(f => f(true)); });
   // a change to what the windows show takes effect straight away
-  for (const key of ["cameras.composites", "cameras.stale", "cameras.steady", "cameras.passes", "cameras.balancedColor", "cameras.colors", "cameras.lingerColor", "cameras.lingerMosaic", "movies.steady", "cameras.autoCenter", "cameras.processedFrames", "movies.trail", "movies.filmstrip", "movies.laps", "movies.fade", "movies.persist", "playback.completeMosaics"]) S.on(key, () => { if (typeof catalog !== "undefined" && catalog && catalog.byCam) feeds.forEach(f => f(true)); });
+  for (const key of ["cameras.composites", "cameras.stale", "cameras.steady", "cameras.passes", "cameras.balancedColor", "cameras.colors", "cameras.lingerColor", "cameras.lingerMosaic", "movies.steady", "cameras.autoCenter", "cameras.processedFrames", "movies.trail", "movies.filmstrip", "movies.laps", "movies.fade", "movies.persist", "playback.completeMosaics", ...(window.cassiniSteps || []).map(st => st.key)]) S.on(key, () => { if (typeof catalog !== "undefined" && catalog && catalog.byCam) feeds.forEach(f => f(true)); });
 
   // ---------- burst limit: in normal playback each camera window gets at most maxRate new pictures a second ----------
   // The clock runs at the chosen speed except inside an imaging burst, where it slows so that crossing the gap
@@ -5619,7 +5640,7 @@ body.phone #launch .lx-clock { font-size: 9.5px; bottom: 9vh; }
   $("segx").addEventListener("click", () => { EX.clear(); hide(); });
   $("segfps").addEventListener("input", e => { if (S) S.set("movie.fps", +e.target.value); fpsUi(); });
   if (S) S.on("movie.fps", fpsUi);
-  for (const k of ["cameras.composites", "cameras.mosaics", "movies.steady", "movies.trail", "movies.laps", "movies.fade", "movies.persist", "cameras.autoCenter", "cameras.processedFrames", "cameras.balancedColor", "cameras.colors"])
+  for (const k of ["cameras.composites", "cameras.mosaics", "movies.steady", "movies.trail", "movies.laps", "movies.fade", "movies.persist", "cameras.autoCenter", "cameras.processedFrames", "cameras.balancedColor", "cameras.colors", ...(window.cassiniSteps || []).map(st => st.key)])
     if (S && S.get(k) !== undefined) S.on(k, () => { if (!bar.hidden) { if (P.job && P.key !== params()) { stopPoll(); P.job = null; progress(null); say(""); } buttons(); } });
   window.addEventListener("keydown", e => {
     if (bar.hidden || e.key !== "Escape" || document.querySelector(".menu.open, .win.full") || (window.cassiniMovie && window.cassiniMovie.on)) return;

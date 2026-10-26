@@ -418,7 +418,7 @@ _recent, _recent_lock, RECENT = {}, threading.Lock(), 4
 
 
 def _recent_composite(ids, centre=None):
-    key = (calibration.style(), tuple(ids), centre and centre["side"])
+    key = (calibration.mode(), tuple(ids), centre and centre["side"])
     with _recent_lock:
         hit = _recent.pop(key, None)
         if hit:
@@ -441,7 +441,7 @@ def color_webp(ids, size, cache, fmt="webp", channel=None, centre=None):
     """The composite (or one of its channels) as WebP (or PNG), and its report (also kept in the cache, next to
     the image). centre: centred on the body (composite)."""
     # bumped whenever the way composites are made changes, so older ones are not served again
-    folder = centre_folder(os.path.join(cache, COLOR_VERSIONS[calibration.style()] + QSUFFIX), centre)
+    folder = centre_folder(os.path.join(cache, COLOR_VERSIONS[calibration.style()] + calibration.variant() + QSUFFIX), centre)
     base = os.path.join(folder, size_dir(size, fmt), "_".join(ids) + ("" if channel is None else f"_c{channel}"))
     report = {}
     def make():
@@ -471,7 +471,7 @@ def processed_webp(frame_id, size, cache, fmt="webp", centre=None):
     """One frame made like a composite's channel (composite with one id: repeat exposures stacked, lost pixels
     filled, calibrated to I/F and put on the pipeline's display scale), for movie mode; and its report. Cached
     like the composites. centre: centred on the body (composite)."""
-    base = os.path.join(centre_folder(os.path.join(cache, PROC_VERSIONS[calibration.style()] + QSUFFIX), centre), size_dir(size, fmt), frame_id)
+    base = os.path.join(centre_folder(os.path.join(cache, PROC_VERSIONS[calibration.style()] + calibration.variant() + QSUFFIX), centre), size_dir(size, fmt), frame_id)
     report = {}
     def make():
         with _movie_slots:
@@ -559,7 +559,8 @@ def pick_thumb(hint, size, cache):
 def thumb_versions():
     """the versions of the makers a thumbnail may come from: a bump of any of them makes the thumbnails again"""
     style = calibration.style()   # the request's look and colors (look=, colors=), as the page asks for them
-    return [style, obs_mosaic.VERSIONS[style], reel.VERSIONS[style], COLOR_VERSIONS[style], FRAME_VERSION, QSUFFIX]
+    return [style, obs_mosaic.VERSIONS[style], reel.VERSIONS[style], COLOR_VERSIONS[style], FRAME_VERSION, QSUFFIX] + \
+        ([calibration.variant()] if calibration.variant() else [])
 
 
 def thumb_key(hint, size):
@@ -1015,7 +1016,8 @@ def make_handler(site, cache, flags=None):
 
         def do_GET(self):
             # look=classic: pictures drawn from I/F the way they were before the balanced display model;
-            # colors=raw: each filter drawn straight as a channel, without natural color (calibration.colors)
+            # colors=raw: each filter drawn straight as a channel, without natural color (calibration.colors);
+            # off=stack,hdr,...: the pipeline steps turned off (Settings > Processing, calibration.STEPS)
             query = parse_qs(urlparse(self.path).query)
             picture, me = self.path.startswith(("/frames/", "/reel/")), object()
             if picture:
@@ -1023,7 +1025,8 @@ def make_handler(site, cache, flags=None):
                     _live[me] = time.monotonic()
             try:
                 with calibration.looking(query.get("look", [calibration.LOOKS[0]])[0]), \
-                        calibration.coloring(query.get("colors", [calibration.COLORS[0]])[0]):
+                        calibration.coloring(query.get("colors", [calibration.COLORS[0]])[0]), \
+                        calibration.stepping(query.get("off", [""])[0]):
                     return self.get()
             finally:
                 if picture:

@@ -352,7 +352,7 @@ def folder(u, cache):
     # a movie's frames stacked with a shorter repeat window are other pictures than the ones made before it
     gap = u.get("repeat_gap", mosaic_benchmark.REPEAT_GAP)
     suffix = "" if gap >= mosaic_benchmark.REPEAT_GAP else f"_r{gap:g}"
-    return os.path.join(cache, f"{VERSIONS[calibration.style()]}-q{QUALITY}", "_".join(map(str, u["key"])) + suffix)
+    return os.path.join(cache, f"{VERSIONS[calibration.style()]}{calibration.variant()}-q{QUALITY}", "_".join(map(str, u["key"])) + suffix)
 
 
 def _ulock(u):
@@ -1019,7 +1019,7 @@ def _register(u, n, out, crop, cache, scale):
     is changed by the shift found (out["spice_offset"] keeps SPICE's), out["registered"] says to what and how. A
     shift past REGISTER_MAX of a frame, or none found, leaves SPICE's place."""
     j = _register_to(u, n)
-    if j is None:
+    if j is None or not calibration.step("align"):   # Settings > Processing: SPICE's places as they are
         return
     q = tile(u, j, cache, scale)
     path = os.path.join(_tiles(u, cache, scale), f"{j}.png")
@@ -1287,7 +1287,7 @@ def filter_mosaic(u, p, f, tiles, rect, cache, ref=None, tag=""):
     k = p["k"]
     W, H = math.ceil(rect[2] * k), math.ceil(rect[3] * k)
 
-    roll = (u["key"], calibration.look(), f, tuple(round(v) for v in rect)) if tag and _rolling.get() and not balanced else None
+    roll = (u["key"], calibration.mode(), f, tuple(round(v) for v in rect)) if tag and _rolling.get() and not balanced else None
     drew = {}
 
     def make():
@@ -1564,10 +1564,10 @@ def movie_footprint(u, cache, p=None):
     picks = sorted({round(i * (n - 1) / max(1, MOVIE_SAMPLES - 1)) for i in range(MOVIE_SAMPLES)}) if n else []
     boxes = []
     # the samples made side by side (MOVIE_WORKERS at once): a cold pass's first steady frame waits on them
-    look = calibration.look()
+    mode = calibration.mode()
 
     def one(j):
-        with calibration.looking(look):
+        with calibration.in_mode(mode):
             return tile(u, j, cache, p["display_scale"])
     with concurrent.futures.ThreadPoolExecutor(MOVIE_WORKERS) as pool:
         made = list(pool.map(one, picks))
@@ -1859,8 +1859,8 @@ def warm_movie(u, n, ahead, cache):
     """A movie is at frame n of the pass: work out its plan and make tiles n .. n+ahead in the background, from
     where the movie is rather than from the pass's start, MOVIE_WORKERS at once (a fast movie at high playback
     speed needs several frames a second)."""
-    look = calibration.look()
-    key, last = (u["key"], look), min(n + ahead, len(u["frames"]) - 1)
+    mode = calibration.mode()
+    key, last = (u["key"], mode), min(n + ahead, len(u["frames"]) - 1)
     # nothing to make (the plan, footprint and those tiles are in memory): no workers
     rec = _record(u, cache)
     if rec is not None and (rec["footprint"] is not None or u.get("kind", "movie" if u.get("movie") else None) == "mosaic_movie") \
@@ -1876,7 +1876,7 @@ def warm_movie(u, n, ahead, cache):
 
     def run():
         try:
-            with _movie_background, calibration.looking(look):
+            with _movie_background, calibration.in_mode(mode):
                 p = plan(u, cache)
                 if u.get("kind", "movie" if u.get("movie") else None) != "mosaic_movie":
                     movie_footprint(u, cache, p)
@@ -2098,8 +2098,8 @@ def rolling_ahead(u, n, size, cache, slots=None, out=OUT, fade=(0, 0)):
     are answered from the cache. ROLL_WORKERS threads per pass, each taking the next frame not taken (a picture
     waits for the tiles before it, which the other thread may be making); a later call moves them on. Waits
     while a window waits for a mosaic (_yield). fade: the window's (fade_style), so they are its pictures."""
-    look = calibration.look()
-    key = (u["key"], look, fade)
+    mode = calibration.mode()
+    key = (u["key"], mode, fade)
     rec = _record(u, cache)
     with _lock:
         # every picture ahead made already (the pass's record keeps which are): no workers
@@ -2114,7 +2114,7 @@ def rolling_ahead(u, n, size, cache, slots=None, out=OUT, fade=(0, 0)):
 
     def run():
         try:
-            with calibration.looking(look):
+            with calibration.in_mode(mode):
                 p = plan(u, cache)
                 kept = _kept_tiles(u, cache, p["display_scale"])
                 while True:
@@ -2480,7 +2480,7 @@ def _made_through(u, n, cache):
     """The last tile j <= n of the pass with tiles 0..j all made (their reports in the cache), -1 for none.
     Tile 0 is made here when nothing is (with the plan, seconds), so a pass's first mosaic does not wait for
     the background."""
-    key = (u["key"], calibration.look())
+    key = (u["key"], calibration.mode())
     with _lock:
         j = _made.get(key, -1)
     if j < 0:
@@ -2608,8 +2608,8 @@ def warm(u, upto, cache, size=None, slots=None, start=0, force=False):
     runs one pass at a time (_background). force: a pass _judge does not call a mosaic, asked for as one."""
     if not (u["mosaic"] or force):
         return
-    look, colors = calibration.look(), calibration.colors()
-    key = (u["key"], size, look, colors)
+    mode = calibration.mode()
+    key = (u["key"], size, mode)
     upto = min(upto, len(u["frames"]) - 1)
     with _lock:
         running = key in _warming
@@ -2628,7 +2628,7 @@ def warm(u, upto, cache, size=None, slots=None, start=0, force=False):
 
     def run():
         try:
-            with _background, calibration.looking(look), calibration.coloring(colors):
+            with _background, calibration.in_mode(mode):
                 p = plan(u, cache)
                 done = -1
                 while True:
@@ -2684,15 +2684,15 @@ def tiles_ahead(u, n, cache):
         if u["key"] in _ahead_running:
             return
         _ahead_running.add(u["key"])
-    look = calibration.look()
+    mode = calibration.mode()
 
     def run():
         try:
-            with calibration.looking(look):
+            with calibration.in_mode(mode):
                 p = plan(u, cache)
                 # from the first tile not made: a window's mosaic is the tiles made so far in a row (mosaic_webp)
                 with _lock:
-                    first = _made.get((u["key"], look), -1) + 1
+                    first = _made.get((u["key"], mode), -1) + 1
                 for j in range(first, len(u["frames"])):
                     _yield()
                     if u["key"] not in _ahead_passes:
