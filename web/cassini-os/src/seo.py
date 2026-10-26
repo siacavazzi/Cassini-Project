@@ -114,7 +114,7 @@ def write_files(site):
     os.makedirs(os.path.join(ROOT, "about"), exist_ok=True)
     open(os.path.join(ROOT, "about", "index.html"), "w").write(
         page.replace("<!--HEAD-->", head(site, "about/", title, desc, depth=1, kind="about")))
-    robots = "User-agent: *\nAllow: /\nDisallow: /flags/\nDisallow: /export/\nDisallow: /replay/\n"
+    robots = "User-agent: *\nAllow: /\nDisallow: /flags/\nDisallow: /export/\nDisallow: /replay/\nDisallow: /stats/\n"
     sitemap = os.path.join(ROOT, "sitemap.xml")
     if site["url"]:
         robots += f"\nSitemap: {site['url']}sitemap.xml\n"

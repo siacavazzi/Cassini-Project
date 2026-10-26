@@ -208,7 +208,7 @@ page title and description, the share card (Open Graph and Twitter tags with `sh
 (`favicon.svg`, `favicon-48.png`, `apple-touch-icon.png`), JSON-LD structured data (a `WebApplication`), a few lines
 for browsers without JavaScript, and the About page, `about/index.html` (from `src/landing.html`): Cassini OS in plain
 words with links into the app at a few moments. The About window's "More about the project" opens it. `robots.txt`
-keeps `/flags/`, `/export/` and `/replay/` out of search.
+keeps `/flags/`, `/export/`, `/replay/` and `/stats/` out of search.
 
 `site.json` `"url"` is the public address, empty while the site is only on the Mini. Set it (or build with
 `CASSINI_SITE_URL=https://.../`) once the site has its public address: the build then writes the canonical links,
