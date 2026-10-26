@@ -133,7 +133,10 @@ def load_index():
     for cam in list(run):
         close(cam)
     idx["set"] = set_of
-    _index = (idx, sets)
+    # copied whole once, which puts the columns added above into the frame's blocks (consolidates it): otherwise the
+    # first selection from it (a body's reel, an observation's frames) did that, a tenth of a second on a request
+    # thread, and two requests at once could both set about it
+    _index = (idx.copy(), sets)
     return _index
 
 
