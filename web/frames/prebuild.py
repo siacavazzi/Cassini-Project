@@ -125,23 +125,64 @@ def all_passes():
     return out
 
 
+def centred(frame_id):
+    """Auto center (on by default in a camera window, center=1): the view the server's centre_of gives the frame's
+    pass (centred on the body, or north up where it is), which names the cache folder the window's picture is
+    in; None where Auto center leaves the pass as it is (the window then asks for the picture as it is)."""
+    try:
+        view = obs_mosaic.centre_view(frame_id)
+    except Exception:   # noqa: BLE001  (not centred: the window shows the picture as it is)
+        return None
+    return view if view.get("centre") or view.get("north") else None
+
+
 def items(phase):
-    """(name, work) of every item of the phase, in time order; work() makes it (a made file is found, not made)."""
+    """(name, work) of every item of the phase, in time order; work() makes it (a made file is found, not made).
+    Composites and processed frames are made as a camera window asks for them, with Auto center (center=1, the
+    default): built without it, the windows found none of them in the cache (2026-10-26)."""
     if phase == "frames":
         # 128: a pass's filmstrip
         return [(i, lambda c, i=i: [frame_server.webp(i, s, c) for s in (1024, 512, 128)]) for i in frame_ids()]
     if phase == "composites":
         # 1024 first: it also writes full, and keeps the composite in memory for the 512 one
-        return [("_".join(s), lambda c, s=s: [frame_server.color_webp(s, z, c) for z in (1024, 512)]) for s in page_sets()]
+        return [("_".join(s), lambda c, s=s: [frame_server.color_webp(s, z, c, centre=centred(s[-1])) for z in (1024, 512)])
+                for s in page_sets()]
     if phase == "processed":
-        in_sets = {i for s in page_sets() for i in s}
-        return [(i, lambda c, i=i: frame_server.processed_webp(i, 1024, c)) for i in frame_ids() if i not in in_sets]
+        # every frame: a window shows a frame processed on its own until its filter set is complete
+        return [(i, lambda c, i=i: [frame_server.processed_webp(i, z, c, centre=centred(i)) for z in (1024, 512)])
+                for i in frame_ids()]
     if phase == "mosaics":
         return [("_".join(map(str, u["key"])), lambda c, u=u: make_pass(u, c)) for u in mosaic_passes()]
     if phase == "movies":
         return [("_".join(map(str, u["key"])), lambda c, u=u: make_pass(u, c))
                 for u in all_passes() if u.get("kind") == "movie" or (u.get("movie") and not u["mosaic"])]
     raise ValueError(phase)
+
+
+def watched_first(todo):
+    """todo with the items of the most watched observations first (the Moments strip, web/replay/moments.csv, and
+    Highlights, web/replay/highlights.csv), each group in time order, then the rest in time order. An item's
+    observation is its frame's (a set's last frame's); pass items are named after their key, which holds it."""
+    import csv
+    here = os.path.join(os.path.dirname(os.path.dirname(os.path.abspath(__file__))), "replay")
+    watched = set()
+    for name in ("moments.csv", "highlights.csv"):
+        try:
+            with open(os.path.join(here, name)) as fh:
+                for row in csv.DictReader(fh):
+                    watched.update((row.get("obs") or "").split())
+        except OSError:
+            pass
+    idx, _ = reel.load_index()
+    obs_of = dict(zip(idx["id"].tolist(), idx["OBSERVATION_ID"].tolist()))
+
+    def hit(name):
+        last = "_".join(name.split("_")[-2:])   # a frame id (N1352055787_2), or a set's last one
+        if last in obs_of:
+            return obs_of[last] in watched
+        return any(f"_{o}_" in name for o in watched)   # a pass: TARGET_OBSERVATION_CAMERA_PASS
+    first = [t for t in todo if hit(t[0])]
+    return first + [t for t in todo if not hit(t[0])], len(first)
 
 
 def make_pass(u, cache, sizes=(1024, 512), within=None, style=None):
@@ -279,6 +320,9 @@ class Status:
 
 def run(args):
     todo = items(args.phase)
+    if getattr(args, "watched_first", False):
+        todo, n = watched_first(todo)
+        print(f"{n} items of watched observations first", flush=True)
     if args.first:
         todo = todo[args.first:]
     if args.shard:
@@ -658,6 +702,7 @@ def main():
     ap.add_argument("--max-tps", type=float, default=100)
     ap.add_argument("--pause", default="~/prebuild.pause", help="while this file exists the job waits")
     ap.add_argument("--min-free", type=float, default=0, help="GB: the job waits while the cache's disk has less free")
+    ap.add_argument("--watched-first", action="store_true", help="the Moments and Highlights observations' items first")
     ap.add_argument("--procs", type=int, default=0, help="run the phase as this many processes of one thread each")
     ap.add_argument("--shard", help=argparse.SUPPRESS)   # k/n: one process's stretch (--procs)
     args = ap.parse_args()
