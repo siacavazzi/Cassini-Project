@@ -560,5 +560,16 @@ for name in CUTSCENES:
         assert os.path.exists(cdata), cdata
         cscript = cscript.replace(marker, json.dumps(json.load(open(cdata)), ensure_ascii=False, separators=(",", ":")))
     script += cscript + "\n"
+# ambient mode (ambient.html): its style joins the head's, its overlay goes into #app, and its script runs last (it
+# chains the cutscenes' studyFrame hook and restyles the camera windows as its picture panels)
+amb = open(os.path.join(os.path.dirname(os.path.abspath(sys.argv[2])), "ambient.html")).read()
+mpart = lambda tag: amb[amb.index(f"<{tag}"):amb.index(f"</{tag}>") + len(tag) + 3]
+for old, new in [
+    ("</style>\n</head>", mpart("style")[len("<style>"):] + "\n</head>"),
+    ('  <div id="loading">', "  " + amb[amb.index('<div id="ambient"'):amb.index("</div>\n\n<script>") + 6] + "\n\n" + '  <div id="loading">'),
+]:
+    assert study.count(old) == 1, old
+    study = study.replace(old, new)
+script += mpart("script") + "\n"
 open(out, 'w').write(study + script)
 print("ok", out, len(study + script))

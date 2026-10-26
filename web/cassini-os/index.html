@@ -1296,6 +1296,56 @@ body.phone #finale .fx-data { width: min(220px, calc(100vw - 32px)); top: 10px; 
 body.phone #launch .cs-cap.big { font-size: 23px; }
 body.phone #launch .lx-road span { font-size: 11px; } body.phone #launch .lx-road small { font-size: 9.5px; }
 body.phone #launch .lx-clock { font-size: 9.5px; bottom: 9vh; }
+
+#ambient { position: fixed; inset: 0; z-index: 40; pointer-events: none; }
+#ambient[hidden] { display: none; }
+#ambient .amb-cover { position: absolute; inset: 0; background: #000; opacity: 0; transition: opacity .9s ease; }
+#ambient .amb-cover.on { opacity: 1; }
+#ambient .amb-cap { position: absolute; left: 50%; top: calc(env(safe-area-inset-top, 0px) + 5vh); transform: translateX(-50%); translate: var(--amb-dx, 0) var(--amb-dy, 0);
+  width: min(720px, calc(100vw - 32px)); text-align: center; color: var(--q-text); text-shadow: 0 1px 12px rgba(0,0,0,.9), 0 0 2px rgba(0,0,0,.8);
+  transition: opacity 1.6s ease, translate 20s linear; }
+#ambient .amb-mode { display: block; margin-bottom: 8px; font: 10.5px/1.2 var(--ui); letter-spacing: .22em; text-transform: uppercase; color: var(--q-dim); }
+#ambient .amb-mode i { display: inline-block; width: 6px; height: 6px; margin-right: 8px; border-radius: 50%; vertical-align: 1px; background: #e0524a; box-shadow: 0 0 6px rgba(224,82,74,.8); }
+#ambient .amb-mode i[hidden] { display: none; }
+#ambient .amb-where { display: block; font: 300 22px/1.35 -apple-system, "Helvetica Neue", var(--ui); letter-spacing: .01em; }
+#ambient .amb-when { display: block; margin-top: 4px; font: 300 13px/1.4 var(--ui); color: var(--q-dim); font-variant-numeric: tabular-nums; }
+#ambient .amb-next { display: block; margin-top: 10px; font: 12px/1.4 var(--ui); color: var(--q-dim); opacity: 0; transition: opacity 1.6s ease; font-variant-numeric: tabular-nums; }
+#ambient .amb-next.on { opacity: 1; }
+#ambient .amb-credit { position: absolute; right: 3vw; top: calc(env(safe-area-inset-top, 0px) + 2.4vh); translate: var(--amb-dx, 0) var(--amb-dy, 0); font: 10px/1 var(--ui);
+  letter-spacing: .08em; color: rgba(232,236,242,.38); transition: translate 20s linear; }
+#ambient .amb-leave { all: unset; position: absolute; left: 16px; top: calc(env(safe-area-inset-top, 0px) + 14px); padding: 5px 12px; border-radius: 12px; border: 1px solid var(--q-line);
+  background: rgba(16,17,20,.55); color: rgba(232,236,242,.75); font: 11px/1.2 var(--ui); cursor: pointer; pointer-events: auto; opacity: 0; transition: opacity .6s ease; }
+#ambient .amb-leave:hover { color: var(--q-text); }
+body.ambient.amb-woke #ambient .amb-leave { opacity: 1; }
+body.ambient:not(.amb-woke) { cursor: none; }
+body.ambient.cutscene #ambient { display: none; }
+
+/* everything that makes it Cassini OS goes; the 3D view, the two camera panels and the cutscenes stay */
+body.ambient #app > :not(#gl):not(#imgcard):not(#wacard):not(#ambient):not(.cs-root):not(#loading) { display: none !important; }
+body.ambient > :not(#app):not(script) { display: none !important; }
+/* the camera windows, as two frameless picture panels at the bottom corners; their size follows the mode (--amb-size) */
+body.ambient :is(#imgcard, #wacard) { position: fixed !important; top: auto !important; bottom: calc(env(safe-area-inset-bottom, 0px) + 4vh) !important; right: auto !important;
+  width: min(var(--amb-size, 40vh), 45vw) !important; height: auto !important; transform: none !important; translate: var(--amb-dx, 0) var(--amb-dy, 0);
+  display: block !important; opacity: 1 !important; pointer-events: none !important; z-index: 20 !important; resize: none !important;
+  background: transparent !important; border: 0 !important; border-radius: 0 !important; box-shadow: none !important; -webkit-backdrop-filter: none !important; backdrop-filter: none !important;
+  transition: width 2s ease, opacity 1.5s ease, translate 20s linear !important; }
+/* a camera the highlight reel tucks away (it took no pictures of this highlight) stays away */
+body.ambient :is(#imgcard, #wacard)[hidden] { display: none !important; }
+body.ambient #imgcard { left: calc(env(safe-area-inset-left, 0px) + 3vw) !important; }
+body.ambient #wacard { left: auto !important; right: calc(env(safe-area-inset-right, 0px) + 3vw) !important; }
+body.ambient .camwin > :not(.body) { display: none !important; }
+body.ambient .camwin > .body { display: block !important; padding: 0 !important; background: none !important; }
+body.ambient .camwin .body > :not(.well):not(.ambtag) { display: none !important; }
+body.ambient .camwin .well { height: auto !important; aspect-ratio: 1 !important; border: 0 !important; border-radius: 3px !important; background: transparent !important; box-shadow: 0 12px 48px rgba(0,0,0,.7) !important; }
+body.ambient .camwin .well > :not(.shot) { display: none !important; }
+body.ambient .camwin .well .shot { opacity: 1 !important; transition: opacity 1s ease; }
+body.ambient .camwin:not(:has(.well.has-frame)) { opacity: 0 !important; }
+.ambtag { display: none; }
+body.ambient .ambtag { display: block; margin-top: 9px; font: 10px/1.3 var(--ui); letter-spacing: .14em; text-transform: uppercase; color: rgba(232,236,242,.55);
+  text-shadow: 0 0 6px #000; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+body.ambient #wacard .ambtag { text-align: right; }
+body.ambient.phone .amb-where { font-size: 18px; }
+@media (prefers-reduced-motion: reduce) { #ambient .amb-cap, #ambient .amb-credit, body.ambient :is(#imgcard, #wacard) { transition: none !important; } }
 </style>
 </head>
 <body>
@@ -1581,6 +1631,13 @@ body.phone #launch .lx-clock { font-size: 9.5px; bottom: 9vh; }
   <div class="lx-clock" aria-hidden="true"></div>
   <button class="cs-skip" type="button">Skip ▸</button>
 </section>
+
+  <div id="ambient" hidden aria-live="off">
+  <div class="amb-cover"></div>
+  <div class="amb-cap"><span class="amb-mode"><i hidden></i><span></span></span><span class="amb-where"></span><span class="amb-when"></span><span class="amb-next"></span></div>
+  <div class="amb-credit">Pictures NASA/JPL-Caltech/SSI</div>
+  <button class="amb-leave" aria-label="Leave ambient mode">Leave ambient mode · Esc</button>
+</div>
 
   <div id="loading"><div>Starting Cassini OS<br>Loading trajectories<div class="bar"></div></div></div>
 </div>
@@ -1902,7 +1959,7 @@ body.phone #launch .lx-clock { font-size: 9.5px; bottom: 9vh; }
   S.define({ key: "playback.pauseBlur", section: "Playback", label: "Also when the window loses focus", type: "toggle", value: true,
     hint: "Pause while you work in another window too, even if Cassini OS is still on screen. Off keeps it playing on a second screen." });
 
-  const A = window.cassiniAway = { on: false, since: 0, total: 0 };
+  const A = window.cassiniAway = { on: false, since: 0, total: 0, keepRunning: false, check: () => check() };
   let focused = true;   // until the window says otherwise (a page opened in front has focus)
   // every animation frame loop asks again each frame, so holding the requests stops them all; ids for held ones are
   // negative (never 0, which loops use for "none"), and map to the real request once it is made
@@ -1919,7 +1976,7 @@ body.phone #launch .lx-clock { font-size: 9.5px; bottom: 9vh; }
   };
   const note = document.getElementById("awaynote");
   function check() {
-    const away = S.get("playback.pauseHidden") && (document.hidden || (S.get("playback.pauseBlur") && !focused));
+    const away = !A.keepRunning && S.get("playback.pauseHidden") && (document.hidden || (S.get("playback.pauseBlur") && !focused));
     if (away === A.on) return;
     A.on = away;
     note.classList.toggle("on", away && !document.hidden);
@@ -2104,8 +2161,10 @@ body.phone #launch .lx-clock { font-size: 9.5px; bottom: 9vh; }
     status: () => ({ fps: +fps.toFixed(1), scale: +(P.pixelRatio() / dpr()).toFixed(2), pixelRatio: +P.pixelRatio().toFixed(2), auto: S.get("perf.auto"), target: S.get("perf.target") }),
     // the 3D view needs drawing when the camera, the clock or the canvas changed, for a moment after any input or
     // load, and once a second regardless
+    cap: 0,
     draw(now) {
-      if (!S.get("perf.rest")) return true;
+      if (P.cap > 0 && now - lastDraw < 1000 / P.cap - 4) return false;
+      if (!S.get("perf.rest")) { lastDraw = now; return true; }
       const m = camera.matrixWorld.elements, p = camera.projectionMatrix.elements, c = renderer.domElement;
       const key = [state.et, c.width, c.height, p[0], p[5], ...m];
       let same = !!lastKey && lastKey.length === key.length;
@@ -4000,7 +4059,9 @@ body.phone #launch .lx-clock { font-size: 9.5px; bottom: 9vh; }
   // how many frames the furthest-behind camera window's picture is behind the clock (update.behind, below)
   // cams ("N", "W"): only that camera's windows
   const behind = cams => { let b = 0; for (const f of allFeeds) if (!cams || cams.includes(f.cam)) b = Math.max(b, f.behind()); return b; };
-  window.cassiniFeeds = { frames: FRAMES, cameraFeed, framesOf, lastOfCam, prep, weight, nextPicture, prevPicture, behind, stale: () => S.get("cameras.stale") * 3600 };
+  // windows: the camera windows' own feeds (feed.hold = true keeps a picture up through a quiet stretch, as a body
+  // window does; ambient mode)
+  window.cassiniFeeds = { frames: FRAMES, cameraFeed, framesOf, lastOfCam, prep, weight, nextPicture, prevPicture, behind, stale: () => S.get("cameras.stale") * 3600, windows: feeds };
   document.addEventListener("cassini:bodymode", () => { if (typeof catalog !== "undefined" && catalog && catalog.byCam) feeds.forEach(f => f(true)); });
   // a change to what the windows show takes effect straight away
   for (const key of ["cameras.composites", "cameras.stale", "cameras.steady", "cameras.passes", "cameras.balancedColor", "cameras.colors", "cameras.lingerColor", "cameras.lingerMosaic", "movies.steady", "cameras.autoCenter", "cameras.processedFrames", "movies.trail", "movies.filmstrip", "movies.laps", "movies.fade", "movies.persist", "playback.completeMosaics", ...(window.cassiniSteps || []).map(st => st.key)]) S.on(key, () => { if (typeof catalog !== "undefined" && catalog && catalog.byCam) feeds.forEach(f => f(true)); });
@@ -4341,7 +4402,8 @@ body.phone #launch .lx-clock { font-size: 9.5px; bottom: 9vh; }
   const $ = id => document.getElementById(id);
   const S = window.cassiniSettings;
   const opt = (key, dflt) => (S && S.get(key) !== undefined ? S.get(key) : dflt);
-  const fps = () => Math.min(30, Math.max(1, +opt("movie.fps", 8) || 8));
+  // range.fps (start, below) plays a stretch at its own rate, under one picture a second if it likes (ambient mode)
+  const fps = () => M.fps ? Math.min(30, Math.max(0.05, M.fps)) : Math.min(30, Math.max(1, +opt("movie.fps", 8) || 8));
   // A step waits for the camera windows (Sam: movie mode slows, it never skips a picture): while a window has not
   // yet put up the picture the clock is at (the frame server is still making it: a cold composite, a mosaic's new
   // tile), the next step waits. cassiniFeeds.behind stops counting a picture that has been stuck for seconds, so a
@@ -4349,7 +4411,7 @@ body.phone #launch .lx-clock { font-size: 9.5px; bottom: 9vh; }
   // Slow: when the film has spent more than SLOW_SHARE of the last SLOW_SPAN ms waiting, the page hears
   // "cassini:movie-slow" (once, until it has caught up again), so it can offer to make a stretch ahead of time.
   const CUT = 3 * 3600, SLOW_SPAN = 20000, SLOW_SHARE = 0.5;
-  const M = { on: false, stepAt: 0, waiting: false, cut: 0, cutAt: -1e9, until: Infinity, cams: null, waits: [], slow: false, lastAt: 0 };
+  const M = { on: false, fps: 0, stepAt: 0, waiting: false, cut: 0, cutAt: -1e9, until: Infinity, cams: null, waits: [], slow: false, lastAt: 0 };
   const ready = () => typeof catalog !== "undefined" && catalog && catalog.byCam && window.cassiniFeeds;
 
   const base = window.studyAdvance;
@@ -4404,19 +4466,21 @@ body.phone #launch .lx-clock { font-size: 9.5px; bottom: 9vh; }
   // play: also start the clock (the Movie button, M); a shared link (link.html) leaves play as the link says.
   // range { from, until } (mission times): play one stretch, from its first picture, and leave movie mode after
   // its last (a stretch made ahead of time plays at movie.fps, its pictures all waiting in the server's cache);
-  // range.cams ("N" or "W"): step through that camera's pictures only, waiting on its windows alone
+  // range.cams ("N" or "W"): step through that camera's pictures only, waiting on its windows alone;
+  // range.fps: this stretch's own rate (pictures a second), instead of movie.fps
   function start(play, range) {
     if (M.on && !range) return;
     M.on = true; M.stepAt = 0; M.cutAt = -1e9; M.waits = []; M.slow = false; M.lastAt = 0;
     M.until = range && range.until !== undefined ? range.until : Infinity;
     M.cams = range && /^[NW]$/.test(range.cams || "") ? range.cams : null;
+    M.fps = range && +range.fps > 0 ? +range.fps : 0;
     if (range && range.from !== undefined) { setTime(range.from - 1e-3); keepNowInView(); }
     $("movie").setAttribute("aria-pressed", "true");
     if (play) setPlaying(true);
   }
   function stop() {
     if (!M.on) return;
-    M.on = false; M.until = Infinity; M.cams = null;
+    M.on = false; M.until = Infinity; M.cams = null; M.fps = 0;
     if (M.slow) { M.slow = false; document.dispatchEvent(new CustomEvent("cassini:movie-slow", { detail: { slow: false, share: 0, et: state.et } })); }
     $("movie").setAttribute("aria-pressed", "false");
   }
@@ -5043,7 +5107,8 @@ body.phone #launch .lx-clock { font-size: 9.5px; bottom: 9vh; }
   }
   // browsers let a page make sound only after the person clicks or presses a key on it
   ["pointerdown", "keydown", "touchend"].forEach(t => window.addEventListener(t, () => { gestured = true; if (S.get("sound.on") && (!ctx || ctx.state !== "running")) start(); }, { passive: true, capture: true }));
-  document.addEventListener("visibilitychange", () => { if (!ctx) return; if (document.hidden) ctx.suspend(); else if (S.get("sound.on") && !(window.cassiniAway && cassiniAway.on)) ctx.resume(); });
+  // a page that keeps running in the background (ambient mode, cassiniAway.keepRunning) keeps its sound too
+  document.addEventListener("visibilitychange", () => { if (!ctx) return; if (document.hidden && !(window.cassiniAway && cassiniAway.keepRunning)) ctx.suspend(); else if (S.get("sound.on") && !(window.cassiniAway && cassiniAway.on)) ctx.resume(); });
   // paused in the background (away.html), also when the tab is still on screen but the window lost focus
   document.addEventListener("cassini:away", e => { if (!ctx) return; if (e.detail.away) ctx.suspend(); else if (S.get("sound.on") && !document.hidden) ctx.resume(); });
 
@@ -5173,7 +5238,9 @@ body.phone #launch .lx-clock { font-size: 9.5px; bottom: 9vh; }
     }
     return off.startRendering();
   }
-  window.cassiniSound = { render, get intensity() { return intensity; } };
+  // unlock(): start the sound without waiting for a click, where the browser allows it (ambient mode on a screen
+  // nobody touches: a kiosk or stream browser started with autoplay allowed); elsewhere the first click still does
+  window.cassiniSound = { render, get intensity() { return intensity; }, unlock() { gestured = true; start(); } };
   // the Grand Finale (finale.html): Cassini's radio carrier as a pure tone that wavers as the antenna wobbles off Earth
   // and stops at loss of signal; a low B minor drone that grows with the struggle; one low bell at the break-up; and a
   // slow chord under each line of the recap (steps on the scale, so the recap can open from minor to major)
@@ -9445,5 +9512,297 @@ function frame(now) {
   window.cassiniLaunch = { play, skip: () => CS.end("launch"), get running() { return !!L; } };
   // ?launch plays it as soon as the start of the mission is loaded
   CS.fromUrl("launch", () => coverage[0], () => { spent = true; play(); });
+})();
+</script>
+<script>
+// ---------- ambient mode: the non-interactive Cassini OS ----------
+(function () {
+  const $ = id => document.getElementById(id);
+  const S = window.cassiniSettings, root = $("ambient");
+  const MODES = [["live", "Live, 10 years ago"], ["60", "1 min/s"], ["600", "10 min/s"], ["3600", "1 h/s"], ["pictures", "Every picture"], ["highlights", "Highlights"]];
+  const D = d => S.define(Object.assign({ section: "Ambient" }, d));
+  D({ key: "ambient.mode", label: "Mode", type: "choice", value: "live", options: MODES,
+    hint: "Live runs in real time, ten years behind today. The faster modes catch more pictures; Every picture skips the quiet hours; Highlights plays the highlight reel over and over." });
+  D({ key: "ambient.sizeLive", label: "Picture size, live", type: "range", value: 46, min: 20, max: 90, step: 1, unit: "%",
+    hint: "Height of each camera panel as a share of the screen in real time, when pictures are rare." });
+  D({ key: "ambient.sizeFast", label: "Picture size, fast", type: "range", value: 32, min: 15, max: 90, step: 1, unit: "%",
+    hint: "The same when pictures come fast (1 h/s, every picture, highlights); the speeds between are in between." });
+  D({ key: "ambient.pace", label: "Every picture: seconds each", type: "range", value: 4, min: 1, max: 30, step: 1, unit: "s",
+    hint: "How long each picture stays up in Every picture mode." });
+  D({ key: "ambient.drift", label: "Camera drift", type: "range", value: 6, min: 0, max: 30, step: 1, unit: "°/min",
+    hint: "How fast the view turns around what Cassini is photographing. 0 holds it still." });
+  D({ key: "ambient.captions", label: "Caption", type: "toggle", value: true, hint: "What Cassini is looking at, the date and the time to the next picture, at the top of the screen." });
+  D({ key: "ambient.fps", label: "Frame rate", type: "range", value: 30, min: 10, max: 60, step: 5, unit: "fps",
+    hint: "The 3D view is drawn at most this often. A slow drift looks the same at 30 as at 60, for half the work." });
+  D({ key: "ambient.start", label: "Ambient mode", type: "action", button: "Start", run: () => { S.close(); start(); } });
+
+  const A = { on: false, mode: "live", subject: null, saved: null, since: 0, woke: 0, nextSwitch: 0, cand: null, candAt: 0, dx: 0, dy: 0, shiftAt: 0,
+    lastCap: "", liveAt: 0, wrapAt: 0, stallAt: 0, hlAt: 0 };
+  const cover = root.querySelector(".amb-cover"), capEl = root.querySelector(".amb-cap");
+  const field = cls => root.querySelector(cls);
+  const YEARS_BEHIND = 10;
+  const SOI = "2004-07-01T02:48:00";   // after the end of the mission, the faster modes start over at Saturn arrival
+
+  // ---- the clock ----
+  // today, ten years ago: the same date and time of day in UTC (29 Feb falls on 28 Feb)
+  function liveEt() {
+    const d = new Date(), y = d.getUTCFullYear() - YEARS_BEHIND;
+    const t = new Date(Date.UTC(y, d.getUTCMonth(), Math.min(d.getUTCDate(), new Date(Date.UTC(y, d.getUTCMonth() + 1, 0)).getUTCDate()), d.getUTCHours(), d.getUTCMinutes(), d.getUTCSeconds()));
+    return utcToEt(t.toISOString().slice(0, 19));
+  }
+  const speedOf = m => m === "live" ? 1 : m === "pictures" || m === "highlights" ? 3600 : +m;
+  function applyMode() {
+    const m = A.mode;
+    if (window.cassiniHighlights && m !== "highlights" && cassiniHighlights.state.auto) cassiniHighlights.stop();
+    if (m === "pictures") {
+      if (window.cassiniMovie) { cassiniMovie.stop(); cassiniMovie.start(true, { fps: 1 / Math.max(1, S.get("ambient.pace")) }); }
+    } else if (window.cassiniMovie && cassiniMovie.on) cassiniMovie.stop();
+    if (m === "live") { setTime(liveEt()); keepNowInView(); setSpeed(1); }
+    else if (m === "highlights") { if (window.cassiniHighlights && cassiniHighlights.state.list.length) cassiniHighlights.play(0, true); }
+    else if (m !== "pictures") setSpeed(+m);
+    setPlaying(true);
+    size();
+    A.lastCap = "";
+  }
+  // the panels' size: large when pictures are rare, smaller as they come faster (on a log scale of the speed)
+  function size() {
+    const lo = S.get("ambient.sizeLive"), hi = S.get("ambient.sizeFast");
+    const k = Math.min(1, Math.max(0, Math.log10(speedOf(A.mode)) / Math.log10(3600)));
+    document.body.style.setProperty("--amb-size", (lo + (hi - lo) * k).toFixed(1) + "vh");
+  }
+  ["ambient.sizeLive", "ambient.sizeFast"].forEach(k => S.on(k, () => { if (A.on) size(); }));
+  S.on("ambient.mode", v => { if (A.on && v !== A.mode) { A.mode = v; applyMode(); } });
+  S.on("ambient.pace", v => { if (A.on && A.mode === "pictures" && window.cassiniMovie) cassiniMovie.state.fps = 1 / Math.max(1, v); });
+  S.on("ambient.fps", v => { if (A.on && window.cassiniPerf) cassiniPerf.cap = v; });
+  S.on("ambient.captions", v => { capEl.style.opacity = v ? "" : "0"; });
+
+  // ---- what the camera drifts around: the body Cassini photographed last (rings: Saturn), else the planet it is
+  // at, else Cassini itself; a new subject has to stay the subject a few seconds, and holds at least a minute ----
+  const ok = n => !!n && n !== "HUYGENS" && !!pos[n] && present(n) && (n === "CASSINI" || !!meshes[n]);
+  function wanted() {
+    const i = lastImageIndex(state.et);
+    if (i >= 0) {
+      const k = order[i];
+      if (state.et - catalog.et[k] < 6 * 3600) {
+        const t = String(catalog.target[k] || "").toUpperCase();
+        if (ok(t)) return t;
+        if (/RING/.test(t) && ok("SATURN")) return "SATURN";
+      }
+    }
+    if (state.context !== "SUN" && ok(state.context)) return state.context;
+    return "CASSINI";
+  }
+  // how far from the subject the view sits: Saturn whole with its rings, a moon a few times its size (a tiny moon
+  // close enough to see), Cassini's model filling the middle of the screen
+  const distOf = n => n === "CASSINI" ? 4e-5 : n === "SATURN" ? 420 : Math.max(bodyRadius(n) * 6, 0.04);
+  let switching = false;
+  function switchTo(n, now) {
+    A.subject = n; A.nextSwitch = now + 60000;
+    if (state.focus === n) return;
+    switching = true; cover.classList.add("on");
+    setTimeout(() => {
+      if (A.on && ok(n)) { setFocus(n, distOf(n)); tilt(); }
+      cover.classList.remove("on"); switching = false;
+      if (window.cassiniPerf) cassiniPerf.invalidate();
+    }, 950);
+  }
+  // a little above the subject's equator, so Saturn's rings read as rings
+  function tilt() {
+    const p = camera.position, r = p.length(), h = Math.hypot(p.x, p.z) || 1, el = 0.32;
+    p.set(p.x / h * Math.cos(el) * r, Math.sin(el) * r, p.z / h * Math.cos(el) * r);
+  }
+  // ---- the drift: around the subject's pole (the scene's y axis is Saturn's), the height and distance breathing slowly ----
+  const v = new THREE.Vector3();
+  function drift(dt) {
+    if (switching || !(dt > 0)) return;
+    const t = (performance.now() - A.since) / 1000, p = camera.position, r = p.length();
+    if (!(r > 0)) return;
+    const az = Math.atan2(p.z, p.x) + (S.get("ambient.drift") * Math.PI / 180 / 60) * dt;
+    let el = Math.asin(Math.max(-1, Math.min(1, p.y / r)));
+    const elWant = 0.3 + 0.12 * Math.sin(2 * Math.PI * t / 300), rWant = distOf(state.focus) * (1 + 0.1 * Math.sin(2 * Math.PI * t / 210));
+    const k = 1 - Math.exp(-dt / 8);
+    el += (elWant - el) * k;
+    const rr = state.focus === A.subject ? r + (rWant - r) * k : r;
+    v.set(Math.cos(el) * Math.cos(az), Math.sin(el), Math.cos(el) * Math.sin(az)).multiplyScalar(rr);
+    p.copy(v);
+  }
+
+  // ---- each frame: the subject, the drift, the clock's rules, the caption ----
+  const studyFrame = window.studyFrame;
+  window.studyFrame = dt => {
+    if (studyFrame) studyFrame(dt);
+    if (!A.on || (window.cassiniCutscene && cassiniCutscene.active)) return;
+    const now = performance.now();
+    controls.enabled = false;
+    if (state.follow) S.transient(() => setFollow(false));
+    // the subject
+    const w = wanted();
+    if (w !== A.cand) { A.cand = w; A.candAt = now; }
+    if (!switching && w !== A.subject && now - A.candAt > 4000 && now > A.nextSwitch) switchTo(w, now);
+    // a jump (the highlight reel's) moved the view: straight to what to look at now, before the frame is drawn (the
+    // jump is a cut anyway, so no fade)
+    if (!switching && A.subject && state.focus !== A.subject) { A.subject = A.cand = wanted(); A.nextSwitch = now + 60000; if (ok(A.subject)) { setFocus(A.subject, distOf(A.subject)); tilt(); } }
+    drift(dt);
+    // live: the clock stays on today ten years ago (it slows for pictures and stops while a month loads)
+    if (A.mode === "live" && now - A.liveAt > 5000) {
+      A.liveAt = now;
+      const t = liveEt();
+      if (Math.abs(state.et - t) > 5) { setTime(t); keepNowInView(); }
+      if (state.speed !== 1) setSpeed(1);
+    }
+    // nothing stops it: a cutscene's end, the end of a highlight reel or the end of the mission
+    if (!state.playing && !state.dragging) {
+      if (!A.stallAt) A.stallAt = now;
+      else if (now - A.stallAt > 3000) {
+        A.stallAt = 0;
+        if (A.mode !== "live" && state.et >= coverage[1] - 60) { setTime(utcToEt(SOI)); keepNowInView(); }
+        applyMode();
+      }
+    } else A.stallAt = 0;
+    if (A.mode === "highlights" && window.cassiniHighlights && !cassiniHighlights.state.auto && now - A.hlAt > 5000) { A.hlAt = now; cassiniHighlights.play(0, true); }
+    // burn-in: the caption and the panels move a few pixels every minute
+    if (now - A.shiftAt > 60000) {
+      A.shiftAt = now;
+      document.body.style.setProperty("--amb-dx", Math.round(Math.random() * 16 - 8) + "px");
+      document.body.style.setProperty("--amb-dy", Math.round(Math.random() * 12 - 6) + "px");
+    }
+    caption(now);
+  };
+
+  // ---- the caption: mode, subject, date and time, distance, the next picture ----
+  const DATE = { timeZone: "UTC", day: "numeric", month: "long", year: "numeric" };
+  function caption(now) {
+    if (now - (caption.at || 0) < 400) return;
+    caption.at = now;
+    const hl = A.mode === "highlights" && window.cassiniHighlights ? cassiniHighlights.state.list[cassiniHighlights.state.i] : null;
+    const mode = A.mode === "live" ? "Live · ten years ago today" : hl ? `Highlight ${cassiniHighlights.state.i + 1} of ${cassiniHighlights.state.list.length}` : A.mode === "pictures" ? "Every picture" : cassiniSpeed.label(state.speed);
+    const d = new Date(etToMs(state.et));
+    const when = `${d.toLocaleDateString("en-US", DATE)} · ${d.toISOString().slice(11, 16)} UTC`;
+    const n = A.subject;
+    let where = hl ? hl.label : n === "CASSINI" ? (state.context === "SUN" ? "Cassini, on its way to Saturn" : `Cassini near ${titleCase(state.context)}`) : n ? titleCase(n) : "";
+    if (!hl && n && n !== "CASSINI" && pos[n] && pos.CASSINI) {
+      const km = len(sub(pos.CASSINI, pos[n], v3())) - (bodies[n] && bodies[n].radii ? bodies[n].radii[0] : 0);
+      if (km > 0) where += ` · ${fmtInt(Math.round(km / (km > 1e5 ? 1000 : 1)) * (km > 1e5 ? 1000 : 1))} km away`;
+    }
+    // the next picture, when it is a while off: in mission time live, as the wait it means at a faster speed
+    let next = "";
+    const t = window.cassiniFeeds ? cassiniFeeds.nextPicture(state.et) : Infinity, gap = t - state.et;
+    if (isFinite(gap) && gap > 0 && A.mode !== "pictures" && gap / Math.max(1, state.speed) > 20) next = `Next picture in ${span(A.mode === "live" ? gap : gap / state.speed)}`;
+    const key = [mode, where, when, next].join("|");
+    if (key === A.lastCap) return;
+    A.lastCap = key;
+    root.querySelector(".amb-mode span").textContent = mode;
+    root.querySelector(".amb-mode i").hidden = A.mode !== "live";
+    field(".amb-where").textContent = where;
+    field(".amb-when").textContent = when;
+    if (next) field(".amb-next").textContent = next;
+    field(".amb-next").classList.toggle("on", !!next);
+    // each panel's own line: the camera, and how long ago its picture was taken
+    for (const id of ["imgcard", "wacard"]) {
+      const c = $(id), tag = c.querySelector(".ambtag"), st = c.querySelector('[data-f="status"]'), f = c.querySelector('[data-f="filter"]');
+      const bits = [id === "imgcard" ? "Narrow angle" : "Wide angle"];
+      if (st && /ago|now/i.test(st.textContent)) bits.push(st.textContent.replace(/^Last frame /, ""));
+      if (f && f.textContent && f.textContent !== "—") bits.push(f.textContent);
+      if (tag && tag.textContent !== bits.join(" · ")) tag.textContent = bits.join(" · ");
+    }
+  }
+  function span(s) {
+    if (s < 90) return `${Math.max(1, Math.round(s))} s`;
+    if (s < 2 * 86400) return fmtSpan(s);
+    return `${Math.round(s / 86400)} days`;
+  }
+
+  // ---- on and off ----
+  function start(mode) {
+    if (A.on || typeof state === "undefined") return;
+    A.on = true; A.mode = mode && MODES.some(m => m[0] === mode) ? mode : S.get("ambient.mode");
+    const F = window.cassiniFeeds;
+    // what to put back: the view, the windows, the pace, the pause rule
+    A.saved = { follow: state.follow, focus: state.focus, cam: camera.position.clone(), speed: state.speed, playing: state.playing, hud: !document.body.classList.contains("nohud"),
+      wins: ["imgcard", "wacard"].map(id => { const w = $(id); return [w, w.hidden, w.dataset.min, w.classList.contains("full")]; }) };
+    if (window.cassiniHeld) [...cassiniHeld].forEach(f => f.release && f.release());
+    for (const [w] of A.saved.wins) {
+      w.classList.remove("full", "shaded"); delete w.dataset.min; w.hidden = false;
+      if (!w.querySelector(".ambtag")) { const t = document.createElement("div"); t.className = "ambtag"; w.querySelector(".body").appendChild(t); }
+    }
+    if (F && F.windows) F.windows.forEach(f => { f.hold = true; });
+    if (window.cassiniAway) { cassiniAway.keepRunning = true; cassiniAway.check(); }
+    if (window.cassiniPerf) cassiniPerf.cap = S.get("ambient.fps");
+    if (window.cassiniReel) cassiniReel.close();
+    if (window.cassiniSound && cassiniSound.unlock) cassiniSound.unlock();
+    S.transient(() => setFollow(false));
+    document.querySelectorAll(".menu.open").forEach(m => m.classList.remove("open"));
+    document.body.classList.add("ambient", "nohud");
+    root.hidden = false;
+    A.since = performance.now(); A.subject = null; A.cand = null; A.nextSwitch = 0; A.shiftAt = 0; A.liveAt = performance.now();
+    switchTo(wanted(), performance.now());
+    applyMode();
+    if (F && F.windows) F.windows.forEach(f => f(true));
+    const u = new URL(location.href);
+    if (u.searchParams.get("ambient") !== (mode || "1")) { u.searchParams.set("ambient", mode || "1"); try { history.replaceState(history.state, "", u); } catch (e) {} }
+    document.dispatchEvent(new CustomEvent("cassini:ambient", { detail: { on: true, mode: A.mode } }));
+  }
+  function stop() {
+    if (!A.on) return;
+    A.on = false;
+    const s = A.saved, F = window.cassiniFeeds;
+    if (window.cassiniMovie && cassiniMovie.on) cassiniMovie.stop();
+    if (window.cassiniHighlights && cassiniHighlights.state.auto) cassiniHighlights.stop();
+    if (F && F.windows) F.windows.forEach(f => { f.hold = false; });
+    if (window.cassiniAway) { cassiniAway.keepRunning = false; cassiniAway.check(); }
+    if (window.cassiniPerf) cassiniPerf.cap = 0;
+    document.body.classList.remove("ambient", "amb-woke");
+    if (s.hud) document.body.classList.remove("nohud");
+    root.hidden = true; cover.classList.remove("on"); switching = false;
+    controls.enabled = true;
+    for (const [w, hidden, min, full] of s.wins) { w.hidden = hidden; if (min) w.dataset.min = min; if (full) w.classList.add("full"); }
+    if (ok(s.focus) && s.focus !== state.focus) setFocus(s.focus);
+    if (s.follow) S.transient(() => setFollow(true));
+    setSpeed(s.speed); setPlaying(s.playing);
+    if (F && F.windows) F.windows.forEach(f => f(true));
+    const u = new URL(location.href);
+    if (u.searchParams.has("ambient")) { u.searchParams.delete("ambient"); try { history.replaceState(history.state, "", u); } catch (e) {} }
+    if (window.cassiniPerf) cassiniPerf.invalidate();
+    document.dispatchEvent(new CustomEvent("cassini:ambient", { detail: { on: false } }));
+  }
+  window.cassiniAmbient = { start, stop, get on() { return A.on; }, get mode() { return A.mode; }, get subject() { return A.subject; }, state: A };
+
+  // ---- the only controls: Escape or the Leave button (shown while the pointer moves) ----
+  let wokeTimer = 0;
+  function wake() {
+    if (!A.on) return;
+    document.body.classList.add("amb-woke"); clearTimeout(wokeTimer);
+    wokeTimer = setTimeout(() => document.body.classList.remove("amb-woke"), 2500);
+  }
+  window.addEventListener("pointermove", wake, { passive: true });
+  window.addEventListener("pointerdown", e => { if (A.on && !e.target.closest(".amb-leave, .cs-root")) { wake(); e.stopPropagation(); } }, true);
+  window.addEventListener("wheel", e => { if (A.on && !(window.cassiniCutscene && cassiniCutscene.active)) e.stopPropagation(); }, { capture: true, passive: true });
+  root.querySelector(".amb-leave").addEventListener("click", e => { e.stopPropagation(); stop(); });
+  window.addEventListener("keydown", e => {
+    if (A.on) {
+      if (window.cassiniCutscene && cassiniCutscene.active) return;   // Escape skips the cutscene first
+      if (e.key === "Escape") { e.preventDefault(); stop(); }
+      else wake();
+      e.stopImmediatePropagation();   // nothing else on the page answers keys while it runs
+      return;
+    }
+    if (e.metaKey || e.ctrlKey || e.altKey || /^(INPUT|SELECT|TEXTAREA)$/.test(e.target.tagName)) return;
+    if ((e.key === "a" || e.key === "A") && e.target === document.body) { e.preventDefault(); start(); }
+  }, true);
+  const go = $("gomenu");
+  if (go) {
+    const li = document.createElement("li");
+    li.innerHTML = '<button id="goambient">Ambient Mode<span class="kbd">A</span></button>';
+    const movie = $("gomovie"); if (movie && movie.parentNode.parentNode === go) movie.parentNode.after(li); else go.prepend(li);
+    li.querySelector("button").addEventListener("click", e => { e.stopPropagation(); document.querySelectorAll(".menu.open").forEach(m => m.classList.remove("open")); start(); });
+  }
+
+  // ?ambient=1 (the Settings mode) or ?ambient=<mode> opens in ambient mode, once the page and a shared link's view are set up
+  const q = new URLSearchParams(location.search);
+  if (q.has("ambient") && q.get("ambient") !== "0") {
+    const mode = q.get("ambient"), go2 = () => start(MODES.some(m => m[0] === mode) ? mode : undefined);
+    if ($("loading").hidden) go2();
+    else { const mo = new MutationObserver(() => { if ($("loading").hidden) { mo.disconnect(); go2(); } }); mo.observe($("loading"), { attributes: true, attributeFilter: ["hidden"] }); }
+  }
 })();
 </script>

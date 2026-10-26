@@ -2587,7 +2587,9 @@ body.idle .win.full .titlebar { opacity: 0; }
   // how many frames the furthest-behind camera window's picture is behind the clock (update.behind, below)
   // cams ("N", "W"): only that camera's windows
   const behind = cams => { let b = 0; for (const f of allFeeds) if (!cams || cams.includes(f.cam)) b = Math.max(b, f.behind()); return b; };
-  window.cassiniFeeds = { frames: FRAMES, cameraFeed, framesOf, lastOfCam, prep, weight, nextPicture, prevPicture, behind, stale: () => S.get("cameras.stale") * 3600 };
+  // windows: the camera windows' own feeds (feed.hold = true keeps a picture up through a quiet stretch, as a body
+  // window does; ambient mode)
+  window.cassiniFeeds = { frames: FRAMES, cameraFeed, framesOf, lastOfCam, prep, weight, nextPicture, prevPicture, behind, stale: () => S.get("cameras.stale") * 3600, windows: feeds };
   document.addEventListener("cassini:bodymode", () => { if (typeof catalog !== "undefined" && catalog && catalog.byCam) feeds.forEach(f => f(true)); });
   // a change to what the windows show takes effect straight away
   for (const key of ["cameras.composites", "cameras.stale", "cameras.steady", "cameras.passes", "cameras.balancedColor", "cameras.colors", "cameras.lingerColor", "cameras.lingerMosaic", "movies.steady", "cameras.autoCenter", "cameras.processedFrames", "movies.trail", "movies.filmstrip", "movies.laps", "movies.fade", "movies.persist", "playback.completeMosaics", ...(window.cassiniSteps || []).map(st => st.key)]) S.on(key, () => { if (typeof catalog !== "undefined" && catalog && catalog.byCam) feeds.forEach(f => f(true)); });

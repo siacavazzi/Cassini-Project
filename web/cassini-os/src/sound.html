@@ -122,7 +122,8 @@ body.phone #ssound { width: 30px; height: 30px; }
   }
   // browsers let a page make sound only after the person clicks or presses a key on it
   ["pointerdown", "keydown", "touchend"].forEach(t => window.addEventListener(t, () => { gestured = true; if (S.get("sound.on") && (!ctx || ctx.state !== "running")) start(); }, { passive: true, capture: true }));
-  document.addEventListener("visibilitychange", () => { if (!ctx) return; if (document.hidden) ctx.suspend(); else if (S.get("sound.on") && !(window.cassiniAway && cassiniAway.on)) ctx.resume(); });
+  // a page that keeps running in the background (ambient mode, cassiniAway.keepRunning) keeps its sound too
+  document.addEventListener("visibilitychange", () => { if (!ctx) return; if (document.hidden && !(window.cassiniAway && cassiniAway.keepRunning)) ctx.suspend(); else if (S.get("sound.on") && !(window.cassiniAway && cassiniAway.on)) ctx.resume(); });
   // paused in the background (away.html), also when the tab is still on screen but the window lost focus
   document.addEventListener("cassini:away", e => { if (!ctx) return; if (e.detail.away) ctx.suspend(); else if (S.get("sound.on") && !document.hidden) ctx.resume(); });
 
@@ -252,7 +253,9 @@ body.phone #ssound { width: 30px; height: 30px; }
     }
     return off.startRendering();
   }
-  window.cassiniSound = { render, get intensity() { return intensity; } };
+  // unlock(): start the sound without waiting for a click, where the browser allows it (ambient mode on a screen
+  // nobody touches: a kiosk or stream browser started with autoplay allowed); elsewhere the first click still does
+  window.cassiniSound = { render, get intensity() { return intensity; }, unlock() { gestured = true; start(); } };
   // the Grand Finale (finale.html): Cassini's radio carrier as a pure tone that wavers as the antenna wobbles off Earth
   // and stops at loss of signal; a low B minor drone that grows with the struggle; one low bell at the break-up; and a
   // slow chord under each line of the recap (steps on the scale, so the recap can open from minor to major)

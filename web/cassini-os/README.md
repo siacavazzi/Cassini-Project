@@ -18,6 +18,28 @@ step, scrubbing the timeline carries the film on from the new time, and Escape (
 main play button) leaves. Frames are fetched ahead of the play head; a frame that has not arrived holds the film
 rather than being skipped.
 
+## Ambient mode
+
+The non-interactive Cassini OS, for a screen nobody touches: a wallpaper, a screen saver, a TV, a 24/7 stream
+(`src/ambient.html`). `?ambient=1` opens in it, Go > Ambient Mode (A) starts it, Escape or the Leave button that shows
+when the pointer moves ends it. No menus, windows or dock: the 3D view fills the screen and drifts slowly around the
+body Cassini photographed last (Saturn for the rings, Cassini itself on the way there; a new subject has to last a few
+seconds and holds at least a minute, with a short fade between). The narrow-angle and wide-angle pictures stay on as two
+frameless panels in the bottom corners. They are the camera windows themselves, restyled, so every picture comes
+through the same pipeline as in Cassini OS, with every processing switch; through a quiet stretch each panel keeps its
+last picture, and the caption counts down to the next one.
+
+Modes (Settings > Ambient, or `?ambient=<mode>`): `live`, real time ten years behind today (the clock is today's date
+and time minus ten years, checked every few seconds, so a stream started now reaches the Grand Finale on its 10th
+anniversary, 15 Sep 2027); `60`, `600` and `3600`, a minute, ten minutes or an hour a second; `pictures`, every
+picture (movie mode, a few seconds each, the quiet hours skipped); `highlights`, the highlight reel over and over.
+Pictures are large when they are rare and smaller when they come fast (Picture size, live and fast; the speeds between
+are in between). While it runs the page never pauses in the background, sound starts without a click where the browser
+allows it (a kiosk or stream browser started with `--autoplay-policy=no-user-gesture-required`), the 3D view is drawn
+at most 30 times a second (Frame rate), and the caption and panels move a few pixels every minute against screen
+burn-in. Cutscenes still play when the clock crosses them; after one, or at the end of the reel or the mission, it
+carries on by itself.
+
 ## Pre-processing a stretch
 
 Drag across the timeline's lanes to highlight a stretch (a click still moves the clock there, and dragging the row
@@ -108,7 +130,8 @@ The address bar always holds the moment on screen (`src/link.html`), so a copied
 `?t=2005-02-16T23:27:00&view=enceladus&speed=3600&play=0&cam=1.836,0.4572,-0.6478`. `t` is the mission time
 (UTC, to the second) and follows playback; `view` is `follow` (Cassini, looking where its camera points), `cassini`
 (Cassini, free camera) or a body; `cam` is where the free camera sits around it; `speed` is mission seconds per
-second; `play=0` opens paused and `movie=1` in movie mode. Other parameters (`?frames=`, `?tex=`, `?finale`) are kept.
+second; `play=0` opens paused and `movie=1` in movie mode. `ambient=1` (or a mode) opens in ambient mode. Other
+parameters (`?frames=`, `?tex=`, `?finale`) are kept.
 The page rewrites the URL with `history.replaceState` at most twice a second, so the back button is unaffected, and
 a link's view is for that visit only (it does not change the Follow camera setting). Go > Copy Link to This Moment
 (⇧⌘C) copies it.
