@@ -81,7 +81,7 @@ def level(inst, clips, peak=1.0):
     peak; a held note is set lower, as it does not die away."""
     part = slice(22050, 3 * 44100) if inst in SUSTAINED else slice(0, 44100)   # a held note after its swell
     rms = float(np.median([np.sqrt(np.mean((x[part] / peak * 0.89) ** 2)) for x in clips]))
-    return round(max(0.3, min(4.0, (0.12 if inst in SUSTAINED else 0.3) / max(1e-3, rms))), 3)
+    return round(max(0.3, min(4.0, (0.18 if inst in SUSTAINED else 0.3) / max(1e-3, rms))), 3)
 
 
 def main():
