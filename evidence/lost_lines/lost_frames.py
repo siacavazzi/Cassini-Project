@@ -1,10 +1,12 @@
-# The frames whose pictures change with the lost-lines fill: every frame whose label counts MISSING_LINES, and every
-# frame stacked or merged with one (stacking.find_repeats within the 120 s window load_stacked, load_hdr and the
+# The frames whose pictures change with the lost-lines fill: every frame that lost pixels (label.valid_mask: its line
+# prefix says a line is short, or without a prefix its label counts MISSING_LINES; some frames' labels say 0 while
+# the prefix has short lines), and every frame stacked or merged with one (stacking.find_repeats within the 120 s window load_stacked, load_hdr and the
 # mosaics use). Everything else comes out byte for byte as before. Also picks test frames for render.py.
 # Run from the repo root with CASSINI_DATA set: python evidence/lost_lines/lost_frames.py OUTDIR
-import os, sys
+import gzip, os, sys, time
 import numpy as np, pandas as pd
 sys.path.insert(0, os.getcwd())
+import data_source as ds
 import stacking
 
 out = sys.argv[1]
@@ -12,7 +14,29 @@ os.makedirs(out, exist_ok=True)
 idx = pd.read_csv("Image_index.csv", low_memory=False)
 idx["ml"] = pd.to_numeric(idx["MISSING_LINES"], errors="coerce").fillna(0).astype(int)
 idx["id"] = idx["path"].str.split("/").str[-1].str.split(".").str[0]
-lost = idx[idx.ml > 0]
+# the line prefix of every frame (a few hundred bytes): short lines are lost pixels, as label.valid_mask reads them
+short = np.zeros(len(idx), bool)
+has_prefix = np.zeros(len(idx), bool)
+t0 = time.time()
+for k, p in enumerate(idx.path):
+    base = p.split(".")[0]
+    try:
+        raw = ds.read_bytes(base + ".prefix.gz")
+    except Exception:
+        continue
+    prefix = np.frombuffer(gzip.decompress(raw), np.uint8)
+    if len(prefix) % 24:   # not the ISS 24 byte line prefix: go by the label
+        continue
+    has_prefix[k] = True
+    prefix = prefix.reshape(-1, 24)
+    valid = prefix[:, 2].astype(int) * 256 + prefix[:, 3]
+    short[k] = valid.min() < valid.max()
+    if k % 20000 == 0:
+        print(f"{k} frames, {time.time() - t0:.0f} s", flush=True)
+idx["lost"] = np.where(has_prefix, short, idx.ml > 0)
+lost = idx[idx.lost]
+print(f"prefixes read: {has_prefix.sum()}; short lines by prefix: {short.sum()}; MISSING_LINES > 0: {(idx.ml > 0).sum()}; "
+      f"both: {(short & (idx.ml > 0).to_numpy()).sum()}")
 stacking.load_index()
 own = set(lost.id)
 affected = {}
@@ -27,7 +51,7 @@ with open(os.path.join(out, "lost_lines_frames.txt"), "w") as f:
     f.write("# id, own = its label counts lost lines, repeat = stacked/merged with such a frame\n")
     for rid in sorted(affected):
         f.write(f"{rid},{affected[rid]}\n")
-summary = (f"frames in the index: {len(idx)}\nframes with MISSING_LINES > 0: {len(own)}\n"
+summary = (f"frames in the index: {len(idx)}\nframes that lost pixels: {len(own)}\n"
            f"frames stacked with one of them (120 s): {sum(v == 'repeat' for v in affected.values())}\n"
            f"frames whose pictures change: {len(affected)} ({100 * len(affected) / len(idx):.2f}%)\n"
            f"of the lost frames, with at least one repeat: {sum(v > 0 for v in repeats_of.values())}\n")

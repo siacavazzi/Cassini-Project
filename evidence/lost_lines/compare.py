@@ -8,7 +8,7 @@ from PIL import Image, ImageDraw
 old, new, out = sys.argv[1:4]
 os.makedirs(out, exist_ok=True)
 rows, clean_same, clean_diff = [], 0, []
-for name in sorted(f[:-5] for f in os.listdir(new) if f.endswith(".json")):
+for name in sorted(f[:-5] for f in os.listdir(new) if f.endswith(".json") and not f.startswith("._")):
     rn, ro = json.load(open(os.path.join(new, name + ".json"))), json.load(open(os.path.join(old, name + ".json")))
     pn, po = os.path.join(new, name + ".png"), os.path.join(old, name + ".png")
     a = np.asarray(Image.open(po)) if os.path.exists(po) else None
