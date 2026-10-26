@@ -251,7 +251,14 @@ def size_of(query, default):
         return default
 
 
-def encode(im, size, fmt="webp", quality=80):
+# every picture drawn from I/F is sent at WebP quality 95 (Sam 2026-10-23: q95 everywhere; the heaviest playback, the
+# reel at 24 fps from both cameras, needs ~19 Mbit/s). Its cache folders carry the quality (QSUFFIX after the maker's
+# version), so pictures made at the old qualities are never served next to new ones
+QUALITY = 95
+QSUFFIX = f"-q{QUALITY}"
+
+
+def encode(im, size, fmt="webp", quality=QUALITY):
     """im as WebP (or PNG), longest side at most size; a FULL picture keeps its size up to FULL_MAX, and a
     grey one is sent losslessly (an 8-bit frame is a few hundred KB that way)"""
     cap = FULL_MAX if size == FULL else size
@@ -263,7 +270,7 @@ def encode(im, size, fmt="webp", quality=80):
     elif size == FULL and im.mode == "L":
         im.save(out, "WEBP", lossless=True, quality=80, method=4)
     else:
-        im.save(out, "WEBP", quality=94 if size == FULL else quality, method=4)
+        im.save(out, "WEBP", quality=max(94, quality) if size == FULL else quality, method=4)
     return out.getvalue()
 
 
@@ -389,7 +396,7 @@ def color_webp(ids, size, cache, fmt="webp", channel=None, centre=None):
     """The composite (or one of its channels) as WebP (or PNG), and its report (also kept in the cache, next to
     the image). centre: centred on the body (composite)."""
     # bumped whenever the way composites are made changes, so older ones are not served again
-    folder = centre_folder(os.path.join(cache, COLOR_VERSIONS[calibration.style()]), centre)
+    folder = centre_folder(os.path.join(cache, COLOR_VERSIONS[calibration.style()] + QSUFFIX), centre)
     base = os.path.join(folder, size_dir(size, fmt), "_".join(ids) + ("" if channel is None else f"_c{channel}"))
     report = {}
     def make():
@@ -419,7 +426,7 @@ def processed_webp(frame_id, size, cache, fmt="webp", centre=None):
     """One frame made like a composite's channel (composite with one id: repeat exposures stacked, lost pixels
     filled, calibrated to I/F and put on the pipeline's display scale), for movie mode; and its report. Cached
     like the composites. centre: centred on the body (composite)."""
-    base = os.path.join(centre_folder(os.path.join(cache, PROC_VERSIONS[calibration.style()]), centre), size_dir(size, fmt), frame_id)
+    base = os.path.join(centre_folder(os.path.join(cache, PROC_VERSIONS[calibration.style()] + QSUFFIX), centre), size_dir(size, fmt), frame_id)
     report = {}
     def make():
         with _movie_slots:
@@ -507,7 +514,7 @@ def pick_thumb(hint, size, cache):
 def thumb_versions():
     """the versions of the makers a thumbnail may come from: a bump of any of them makes the thumbnails again"""
     style = calibration.style()   # the request's look and colors (look=, colors=), as the page asks for them
-    return [style, obs_mosaic.VERSIONS[style], reel.VERSIONS[style], COLOR_VERSIONS[style], FRAME_VERSION]
+    return [style, obs_mosaic.VERSIONS[style], reel.VERSIONS[style], COLOR_VERSIONS[style], FRAME_VERSION, QSUFFIX]
 
 
 def thumb_key(hint, size):

@@ -58,7 +58,7 @@ VERSIONS = {"balanced": "reel-v28", "raw": "reel-v11", "classic": "reel-v5"}   #
 
 
 def version():
-    return VERSIONS[calibration.style()]
+    return VERSIONS[calibration.style()] + "-q95"   # WebP quality 95 (frame_server.QUALITY)
 SET_GAP = 300          # seconds between frames of one filter set
 REPEAT_GAP = 120       # stacking.find_repeats' window
 VIEW = 1536            # full resolution pixels a picture shows (a north-up frame fits in 1448)
@@ -413,7 +413,7 @@ def shot_webp(target, n, size, cache, use_mosaic=True, slots=None):
         if size < OUT:
             im = im.resize((size, size), Image.LANCZOS)
         out = io.BytesIO()
-        im.save(out, "WEBP", quality=82, method=4)
+        im.save(out, "WEBP", quality=95, method=4)
         return out.getvalue()
 
     data = _cached(path, make)
