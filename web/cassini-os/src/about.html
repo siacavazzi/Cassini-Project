@@ -61,7 +61,9 @@ body.phone #about nav { flex-direction: row; border-right: 0; border-bottom: 1px
       <p>Made by Sam Iacavazzi · <a href="https://github.com/siacavazzi" target="_blank" rel="noopener">github.com/siacavazzi</a></p>
       <p class="note">More about the project is coming here.</p>
       <h3>Credits</h3>
-      <p>The pictures are NASA/JPL-Caltech/Space Science Institute, the probe's are ESA/NASA/JPL/University of Arizona, and the flight data is from NASA/JPL's SPICE archive. The maps, models, sound, software and fonts have their own authors. <a href="#" data-tab="Credits">See all credits</a>.</p>`,
+      <p>The pictures are NASA/JPL-Caltech/Space Science Institute, the probe's are ESA/NASA/JPL/University of Arizona, and the flight data is from NASA/JPL's SPICE archive. The maps, models, sound, software and fonts have their own authors. <a href="#" data-tab="Credits">See all credits</a>.</p>
+      <h3>Privacy</h3>
+      <p>Cassini OS uses no cookies and no outside trackers. Its server keeps daily totals only: how many people visited and from which country, and which pictures were looked at and saved. Nothing is kept that could tell one visitor from another.</p>`,
     Credits: () => CREDITS.groups.map(g => `<h3>${esc(g.title)}</h3>` + (g.note ? `<p class="note">${esc(g.note)}</p>` : "")
       + g.entries.map(e => `<div class="cr" id="cr-${esc(e.id)}"><b>${esc(e.title)}</b><div class="by">${esc(e.credit)}</div>`
         + (e.detail ? `<div class="what">${esc(e.detail)}</div>` : "")
