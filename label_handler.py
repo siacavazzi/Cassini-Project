@@ -30,7 +30,13 @@ wd = os.getcwd()
 canvas_border = 1024
 #tot_lbl = len(data)/2
 def rotation_matrix(image, angle):
-    image_center = tuple((np.array(image.shape[1::-1]) - 1) / 2)
+    return middle_rotation(image.shape, angle)
+
+"""
+The rotation by angle about the middle of a picture of shape (rows, cols, ...): rotation_matrix without the picture
+"""
+def middle_rotation(shape, angle):
+    image_center = tuple((np.array(shape[1::-1]) - 1) / 2)
     return cv2.getRotationMatrix2D(image_center, angle, 1.0)
 
 def rotate_image(image, angle):
@@ -188,8 +194,10 @@ class label:
     y = y pixels to move image by
     angle = angle to rotate image in degrees
     border = T/F add border or not
+    draw = False: only where the image goes (self.placement) and the shape of the canvas it goes on, returned
+    instead of the picture (processed_frame wants where SPICE puts the frame, then draws it north up)
     """
-    def translate(self,format, x,y,angle,border):
+    def translate(self,format, x,y,angle,border, draw=True):
         
         if self.color:
             
@@ -215,36 +223,40 @@ class label:
         rows, cols = h + 2 * pad, w + 2 * pad
         shape = (rows, cols) + img.shape[2:]
 
-        # the frame shifted into the middle of the canvas, the same as warping the whole
-        # bordered canvas but only where the frame lands (a few blank pixels around it, so its
-        # edge blends with the border the same way). BORDER_TRANSPARENT leaves pixels the
-        # shifted image doesn't cover blank
-        edge = 2
-        src = cv2.copyMakeBorder(img, edge, edge, edge, edge, cv2.BORDER_CONSTANT, value=[0, 0, 0, 0])
-        M = np.float32([[1, 0, x + pad - edge], [0, 1, y + pad - edge]])
-        frame_box = moved_box(M, 0, 0, w + 2 * edge, h + 2 * edge, rows, cols, 0)
-        img = warp_into(src, M, shape, frame_box, borderMode=cv2.BORDER_TRANSPARENT)
-  
+        if draw:
+            # the frame shifted into the middle of the canvas, the same as warping the whole
+            # bordered canvas but only where the frame lands (a few blank pixels around it, so its
+            # edge blends with the border the same way). BORDER_TRANSPARENT leaves pixels the
+            # shifted image doesn't cover blank
+            edge = 2
+            src = cv2.copyMakeBorder(img, edge, edge, edge, edge, cv2.BORDER_CONSTANT, value=[0, 0, 0, 0])
+            M = np.float32([[1, 0, x + pad - edge], [0, 1, y + pad - edge]])
+            frame_box = moved_box(M, 0, 0, w + 2 * edge, h + 2 * edge, rows, cols, 0)
+            img = warp_into(src, M, shape, frame_box, borderMode=cv2.BORDER_TRANSPARENT)
+
         name = self.info["SPACECRAFT_CLOCK_START_COUNT".split('.')[0]]
         print(name)
-        # rotate_image, again only where the frame is
-        R = rotation_matrix(img, angle)
-        top, bottom, left, right = frame_box
-        img = warp_into(img, R, shape, moved_box(R, left, top, right, bottom, rows, cols), flags=cv2.INTER_LINEAR)
+        # the turn about the canvas's middle (of shape, as the canvas drawn on is)
+        R = middle_rotation(shape, angle)
+        if draw:
+            # rotate_image, again only where the frame is
+            top, bottom, left, right = frame_box
+            img = warp_into(img, R, shape, moved_box(R, left, top, right, bottom, rows, cols), flags=cv2.INTER_LINEAR)
 
         # where each pixel of the original image ended up: shift (after the border) then
         # rotation, as a 3x3 matrix for reproject.py
         shift = np.array([[1, 0, x + pad], [0, 1, y + pad], [0, 0, 1]])
-        self.placement = np.vstack([rotation_matrix(img, angle), [0, 0, 1]]) @ shift
+        self.placement = np.vstack([R, [0, 0, 1]]) @ shift
 
-        return img
+        return img if draw else shape
         
     
     """
     Automagically centers and rotates the image to align with its target
     border = True/False - should a border be added around the image (default is true since the border is pretty essential)
+    draw = False: only where it goes and the canvas's shape (translate)
     """
-    def auto_center(self, border=True):
+    def auto_center(self, border=True, draw=True):
         im_year = int(self.info["IMAGE_TIME"].split('-')[0])
 
         def load_year():
@@ -258,7 +270,7 @@ class label:
         # from the geometry cache when it is on (the frame server), so no kernels have to be loaded
         target_loc = ba.find_target_cached(self, load_year)
         print(target_loc)
-        return self.translate("png", target_loc[0],target_loc[1],target_loc[3],border)
+        return self.translate("png", target_loc[0],target_loc[1],target_loc[3],border, draw)
     
     def is_mosaic(self):
         panels = self.info["OBSERVATION_ID"].split("X")

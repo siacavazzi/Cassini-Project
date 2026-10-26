@@ -247,10 +247,12 @@ def processed_frame(paths, max_offset=600, hdr=False, scale=None, repeat_window=
     image = np.dstack([chans[2], chans[1], chans[0], alpha])
     try:
         with spice_lock:
-            centred = lbl.set_color(image).auto_center(border)
+            # where SPICE puts the frame (lbl.placement) and the canvas it goes on, not drawn: the
+            # picture is the one drawn north up below
+            shape = lbl.set_color(image).auto_center(border, draw=False)
         # the frame's middle goes to placement @ (511.5, 511.5), the target's centre to the
         # middle of the canvas
-        middle = np.array([(centred.shape[1] - 1) / 2, (centred.shape[0] - 1) / 2])
+        middle = np.array([(shape[1] - 1) / 2, (shape[0] - 1) / 2])
         moved = (lbl.placement @ np.array([ba.CCD_CENTER, ba.CCD_CENTER, 1.0]))[:2]
         offset = moved - middle
         report["frame_offset"] = [round(float(v), 1) for v in offset]
