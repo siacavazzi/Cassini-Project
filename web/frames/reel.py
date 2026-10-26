@@ -94,9 +94,13 @@ def load_index():
     cols = ["path", "INSTRUMENT_ID", "TARGET_NAME", "OBSERVATION_ID", "FILTER_NAME", "filter1", "filter2", "seconds_1970"]
     idx = pd.read_csv(os.path.join(REPO, "Image_index.csv"), usecols=cols, low_memory=False)
     idx = idx[idx["path"].notna()].sort_values("seconds_1970", kind="stable").reset_index(drop=True)
-    idx["id"] = idx["path"].str.rsplit("/", n=1).str[-1].str.replace(".png", "", regex=False)
+    # the string steps of .str.rsplit("/", n=1).str[-1].str.replace(".png", "") on each path, without pandas' per
+    # element machinery (a sixth of the time; the paths are all strings)
+    idx["id"] = [p.rsplit("/", 1)[-1].replace(".png", "") for p in idx["path"].tolist()]
     cams, targets, obs = idx["INSTRUMENT_ID"].tolist(), idx["TARGET_NAME"].tolist(), idx["OBSERVATION_ID"].tolist()
     f1s, f2s, t = idx["filter1"].astype(str).tolist(), idx["filter2"].astype(str).tolist(), idx["seconds_1970"].to_numpy()
+    # colour_filter of each filter pair once: a few hundred pairs among the 440,000 frames
+    colour = {pair: colour_filter(*pair) for pair in set(zip(f1s, f2s))}
     set_of = np.full(len(idx), -1)
     sets, run = [], {}
 
@@ -116,7 +120,7 @@ def load_index():
         sets.append({"kind": kind, "use": use, "ready": max(t[q] for q in use)})
 
     for q in range(len(idx)):
-        cam, f = cams[q], colour_filter(f1s[q], f2s[q])
+        cam, f = cams[q], colour[f1s[q], f2s[q]]
         r = run.get(cam)
         if not f:
             close(cam)
