@@ -62,7 +62,7 @@ import stacking  # noqa: E402
 # bumped whenever the way observation mosaics are made changes, so older ones are not served again; one per
 # display model (calibration.style), classic being the mosaics made before the balanced display model, raw the
 # balanced ones before natural color
-VERSIONS = {"balanced": "obs-v45", "raw": "obs-v28", "classic": "obs-v15-classic"}
+VERSIONS = {"balanced": "obs-v46", "raw": "obs-v29", "classic": "obs-v16-classic"}
 CANVAS = 2048        # longest side of the canvas the view is drawn on
 OUT = 1024           # longest side of the picture sent
 FRAME = 1024         # full resolution frame
