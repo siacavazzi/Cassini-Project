@@ -18,6 +18,8 @@ const browser = await chromium.launch({ executablePath: process.env.CHROME || un
 const ctx = await browser.newContext({ viewport: vp, ...(process.env.VIDEO ? { recordVideo: { dir: out, size: vp } } : {}) });
 const page = await ctx.newPage();
 page.on("pageerror", e => console.log("PAGEERROR", e.message));
+// THREE=folder of an unpacked three@0.128.0 npm package, for a machine that cannot reach the CDN
+if (process.env.THREE) await page.route("https://cdn.jsdelivr.net/npm/three@0.128.0/**", r => r.fulfill({ path: `${process.env.THREE}/${r.request().url().split("three@0.128.0/")[1]}`, headers: { "Content-Type": "application/javascript" } }));
 await page.goto(`${base}/?t=${t}&speed=600&play=0`, { waitUntil: "domcontentloaded", timeout: 120000 });
 await page.waitForFunction(() => typeof catalog !== "undefined" && catalog && catalog.byCam, null, { timeout: 240000 });
 await page.evaluate(() => { if (state.playing) setPlaying(false); });
