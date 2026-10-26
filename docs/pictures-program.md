@@ -244,8 +244,28 @@ First batch: phases 1, 2a and A at once. Second batch: 2b once checkpoint 2 is a
 | PR | What | Waits on |
 |---|---|---|
 | #100 | summed-frame edge line; Auto center centers every whole disk (ctr3) | Sam's "merge" |
-| #102 | timeline movie row fixes, full-speed pre-process, NAC/WAC | review, then Sam |
-| (thread) | cached playback chugging: tile records re-read per picture | fix in progress, preview 8812 |
+| #102 | timeline movie row fixes, full-speed pre-process, NAC/WAC, complete pictures only | Sam's "merge" (reviewed) |
+| #105 | cached playback: one in-memory record per pass (6a) | Sam's "merge" |
+
+### Merged 2026-10-26 18:06Z (`pictures` a26a2e6, Sam 17:56Z)
+#100, #102, #105, #108, #106, #107, #115, #117, #123. #121 held (numpy dtype in test_sky_stats). Still open: #113, #121, #122. The lost-lines remake (47,118 frames and what uses them) runs on the Mini with the pre-build.
+
+### Who works where (Sam 2026-10-26 02:44Z: complete 3, 4, 5, 6a, 7, 8; 6b frames run at 01:00)
+All phase branches start from `pictures-next` = `pictures` + #100 + #102 + #105 (the three PRs waiting on Sam), so nobody
+redoes them; PRs target `pictures`.
+
+| Phase | Thread | Port | Owns | Must not touch |
+|---|---|---|---|---|
+| 3 Placed tiles | cmsg_01VihZrurbK5NUCdmG37hHXs741SaveijgSJYmswGAavRq | 8821 | so_far, colour_picture, plan, _judge, mosaic .json manifest | rolling_*, tile_scale, centre code, segments |
+| 7 Movie polish | cmsg_01VihZrurbK5NUCdmG37hHXsDdakNZX1zDtPzzoacYPHhG | 8818 | rolling_layout/rolling_webp, laps fade, Time-lapse, movie speed, burst limit | compose/so_far (passes a per-tile age/alpha field agreed with 3) |
+| 8 Finishing | cmsg_01VihZrurbK5NUCdmG37hHXsU9bP1P9p2bA11HS2iqK6L7 | 8819 | C8 registration (color_image), C9 8LSB (label_handler), D9 TIFF route, red cast in tile_scale | so_far/colour_picture, centre code; D8 dropped |
+| 4 Explore mosaics | starts 2026-10-26 18:10Z from `pictures` a26a2e6 | 8829 | hover/click hit test, `/frames/mosaic/<ID>/p/<n>` pointing route through `mosaic.compose`, "on its own" toggle | build_data.py, set/pass grouping rule (phase 5), prebuild, cache version names |
+| 5 One rule for sets and passes | starts with 4 (code); data rebuild only after the 6b pre-build and remake finish | 8830 | one Python set/pass rule shared by build_data.py and obs_mosaic, ids in the month chunks, page uses them, "open its mosaic" | hover/pointing UI (phase 4), compose internals, cache version names |
+| 6a | #105 (chugging thread) | 8812 | the in-memory pass record everyone reuses | |
+| 6b | pre-build thread | — | full overnight build from `pictures-build` (all look-changing PRs + q95, built ~06:00Z 2026-10-26); was planned at 69cd5fc from 01:00 Mini local into ~/server/cache/cassini-prebuild (SSD, stops under 60 GB free); 8790 stays pinned to it in the morning, the moving head goes on 8822 | a second pass remakes only bumped makers after Sam's look |
+| Full-res mosaics | cmsg_01VihZrurbK5NUCdmG37hHXsEFnBdf7VYGk9G3Ukm8EKHJ | 8825 | native size + crop through mosaic_webp/_mosaic_at, loupe hi-res crop hook, one "Full resolution mosaic" save row, own capped LRU cache (never pre-built) | compose internals, phase 3/7/8 areas above; save menu rows only after #107 |
+| Processing toggles | cmsg_01VihZrurbK5NUCdmG37hHXsMSpEYw4bxkzFDdPfED5HkR | 8826 | Settings > Processing (mosaics, centering, color, repeat stack, HDR, calibration, alignment, stretch) reusing cassiniSettings entries; new server flags that change a cache key only when off-default | default URLs and cache paths (tonight's pre-build keys); the makers' internals owned above |
+| Streaked lines | cmsg_01VihZrurbK5NUCdmG37hHXs4ez2WGNEdHP7ZLRWyaxgww | 8827 | masks through stacking (repeats fill lost pixels), short vertical gaps filled, "Fill lost lines" toggle inside #117's Processing section | no global cache bump: only frames with lost lines (listed) are remade; #107 load_aligned, #112/#114 byte-identical paths |
 
 ### Still to do
 | Phase | One line | Depends on |

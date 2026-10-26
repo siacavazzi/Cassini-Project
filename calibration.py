@@ -169,10 +169,9 @@ def unstretch(png, info, image=None):
         return None  # 8LSB frames only kept the low 8 bits
     if ds.lut8():
         # the lean archive keeps the camera's codes, so nothing has to be guessed
-        stored = stored_values(png, info)
         if image is None:
-            return stored
-        low, high = stored.min(), stored.max()
+            return stored_values(png, info)
+        low, high = stored_range(png, info)
         return np.asarray(image, dtype=np.float64) * (high - low) / 254.0 + low
     png = np.asarray(png, dtype=np.float64)
     span = recover_span(png)
@@ -198,6 +197,18 @@ def unstretch(png, info, image=None):
 
 
 """
+unstretch of each of the 256 codes (CODES) of a lean archive frame's 8-bit image, or of its PNG when image is None:
+what unstretch gives a pixel of that code, to look the pixels up in (_lookup)
+"""
+def _unstretch_codes(png, info, image=None):
+    if image is not None:
+        return unstretch(png, info, CODES)
+    if _value(info, "DATA_CONVERSION_TYPE", "") not in ("TABLE", "12BIT"):
+        return None
+    return stored_values(CODES, info)
+
+
+"""
 Lean archive (helper programs/convert_archive.py) only: what the camera sent for each
 pixel, from the 8-bit codes in the PNG. TABLE frames were sent as the codes themselves,
 12BIT frames as DN, which the archive squeezed into the same codes.
@@ -209,6 +220,33 @@ def stored_values(codes, info):
     return codes.astype(np.float64)
 
 
+# every 8-bit code, for working a per pixel step out once per code instead of once per pixel (_lookup)
+CODES = np.arange(256, dtype=np.uint8)
+
+
+"""
+Lean archive only: the smallest and largest of stored_values(codes, info), from the codes' own smallest and largest
+(both conversions keep the codes' order), so a frame's million pixels are not turned into floats just for two numbers
+"""
+def stored_range(codes, info):
+    codes = np.asarray(codes)
+    if codes.dtype != np.uint8 or not codes.size:
+        stored = stored_values(codes, info)
+        return stored.min(), stored.max()
+    values = stored_values(CODES, info)
+    return values[codes.min()], values[codes.max()]
+
+
+"""
+table[codes] for 8-bit codes: what a per pixel step gives each of the 256 codes (table, worked out on CODES with the
+step's own arithmetic, so the same numbers), looked up for every pixel; cv2.LUT does that ten times quicker than numpy
+"""
+def _lookup(codes, table):
+    if codes.ndim == 2 or (codes.ndim == 3 and codes.shape[2] in (3, 4)):
+        return cv2.LUT(np.ascontiguousarray(codes), np.ascontiguousarray(table))
+    return table[codes]
+
+
 """
 Lean archive only: stretches a frame of codes min..max -> 0..254 the way the old
 dataset PNGs were, so code written for those still sees the same images.
@@ -217,11 +255,20 @@ dataset PNGs were, so code written for those still sees the same images.
 def display_stretch(codes, info):
     if _value(info, "DATA_CONVERSION_TYPE", "") not in ("TABLE", "12BIT"):
         return codes
-    stored = stored_values(codes, info)
-    low, span = stored.min(), stored.max() - stored.min()
+    codes = np.asarray(codes)
+    if codes.dtype != np.uint8 or not codes.size:
+        stored = stored_values(codes, info)
+        low, span = stored.min(), stored.max() - stored.min()
+        if span <= 0:
+            return np.zeros_like(codes)
+        return np.floor((stored - low) * 254.0 / span + 0.5).astype(np.uint8)
+    low, high = stored_range(codes, info)
+    span = high - low
     if span <= 0:
         return np.zeros_like(codes)
-    return np.floor((stored - low) * 254.0 / span + 0.5).astype(np.uint8)
+    # the stretch of each code (the codes outside the frame's range are held to it: they are never looked up)
+    stored = np.clip(stored_values(CODES, info), low, high)
+    return _lookup(codes, np.floor((stored - low) * 254.0 / span + 0.5).astype(np.uint8))
 
 
 """
@@ -262,7 +309,11 @@ def calibrate(png, info, image=None):
     if k is None or gain not in GAIN_STATES or mode not in SUM_FACTORS or exposure <= 0 or distance is None:
         return None
 
-    dn = unstretch(png, info, image)
+    # lean archive: every pixel of the 8-bit image (or PNG) is one of 256 codes, so the steps up to the shutter's
+    # per column exposure are worked out for the 256 codes and looked up (_lookup): the same numbers, a third of the time
+    pixels = np.asarray(png if image is None else image)
+    codes = ds.lut8() and pixels.dtype == np.uint8 and pixels.ndim == 2 and np.asarray(png).size > 0
+    dn = _unstretch_codes(png, info, image) if codes else unstretch(png, info, image)
     if dn is None:
         return None
 
@@ -274,9 +325,10 @@ def calibrate(png, info, image=None):
 
     if _value(info, "SHUTTER_STATE_ID", "ENABLED") != "DISABLED":
         first, last = SHUTTER_SLOPE[camera]
-        exposure = exposure - np.linspace(first, last, dn.shape[1]) - SHUTTER_OFFSET[camera]
+        exposure = exposure - np.linspace(first, last, pixels.shape[1] if codes else dn.shape[1]) - SHUTTER_OFFSET[camera]
         exposure = np.maximum(exposure, 0.1)
-    per_second = dn * 1000.0 / exposure
+    dn = dn * 1000.0
+    per_second = (_lookup(pixels, dn) if codes else dn) / exposure
 
     gain_ratio = GAIN_RATIOS[camera][GAIN_STATES[gain]]
     slope, start = SENSITIVITY[camera]
@@ -286,7 +338,14 @@ def calibrate(png, info, image=None):
         image_number = 0
     sensitivity = 1 + slope * (image_number - start) if image_number > start else 1.0
 
-    return per_second * k / gain_ratio * SUM_FACTORS[mode] * sensitivity * distance ** 2
+    # per_second * k / gain_ratio * SUM_FACTORS[mode] * sensitivity * distance ** 2, in place (the same steps in the
+    # same order) so a frame's worth of float64 is not made five more times
+    per_second *= k
+    per_second /= gain_ratio
+    per_second *= SUM_FACTORS[mode]
+    per_second *= sensitivity
+    per_second *= distance ** 2
+    return per_second
 
 
 """
@@ -299,7 +358,7 @@ def saturated(codes, info, image=None):
     image = np.asarray(codes if image is None else image)
     if ds.lut8() and conversion in ("TABLE", "12BIT"):
         top = 4095 if conversion == "12BIT" else 255
-        if stored_values(codes, info).max() < top:
+        if stored_range(codes, info)[1] < top:
             return np.zeros(image.shape, bool)
         # the display stretch puts the top at 254; a resized frame's partly full pixels count too
         return image >= 250
@@ -372,6 +431,54 @@ def looking(name):
         yield
     finally:
         _look.reset(token)
+
+
+"""
+The pipeline's steps a request turns off (Settings > Processing; the picture routes' off=, a comma list), to see what
+each one does: "stack" (repeat exposures of the same filter merged, stacking.load_stacked and load_hdr), "hdr" (an
+exposure bracket merged into one picture in mosaics and movies, stacking.load_hdr; off merges only identical
+exposures, a plain stack), "fill" (pixels lost in downlink filled from round them), "calibrate" (every frame put on
+I/F and one display scale; off shows each frame on the archive's own stretch) and "align" (a color set's channels
+moved onto one another). Every step is on by default; off steps go into the cache names (variant), so the pictures
+made with every step on keep their names.
+"""
+STEPS = ("stack", "hdr", "fill", "calibrate", "align")
+_off = contextvars.ContextVar("off", default=frozenset())
+
+
+def step(name):
+    """True when the pipeline step name is on for this request (STEPS)."""
+    return name not in _off.get()
+
+
+def variant():
+    """What a cache name gets for the steps turned off: "" with every step on, else "-off-" and their names."""
+    off = _off.get()
+    return "-off-" + "-".join(s for s in STEPS if s in off) if off else ""
+
+
+@contextlib.contextmanager
+def stepping(names):
+    """The pipeline steps names (a comma list or an iterable of STEPS names; others are ignored) turned off."""
+    if isinstance(names, str):
+        names = names.split(",")
+    token = _off.set(frozenset(n for n in names if n in STEPS))
+    try:
+        yield
+    finally:
+        _off.reset(token)
+
+
+def mode():
+    """The request's whole display model (look, colors and the steps turned off), to carry to another thread (in_mode)
+    and to key what is kept in memory."""
+    return look(), colors(), _off.get()
+
+
+@contextlib.contextmanager
+def in_mode(m):
+    with looking(m[0]), coloring(m[1]), stepping(m[2]):
+        yield
 
 
 """
@@ -661,9 +768,9 @@ def load_channels(labels, images=None, sky_fraction=0.1, sky_percentile=98, gamm
 
 
 """
-The channels' I/F images (float32), calibrating those not given; None if any frame can't be calibrated
+Each channel's I/F image, calibrating those not given; None for a frame that can't be calibrated
 """
-def _calibrated(labels, images, iofs=None):
+def calibrated_each(labels, images, iofs=None):
     given = iofs or [None] * len(labels)
     iofs = []
     for lbl, image, iof in zip(labels, images, given):
@@ -672,6 +779,14 @@ def _calibrated(labels, images, iofs=None):
             gray = cv2.cvtColor(image, cv2.COLOR_BGR2GRAY) if image.ndim == 3 else image
             iof = calibrate(png, lbl.get_info(), gray)
         iofs.append(iof)
+    return iofs
+
+
+"""
+The channels' I/F images (float32), calibrating those not given; None if any frame can't be calibrated
+"""
+def _calibrated(labels, images, iofs=None):
+    iofs = calibrated_each(labels, images, iofs)
     if any(iof is None for iof in iofs):
         failed = [lbl.get_info().get("path") for lbl, iof in zip(labels, iofs) if iof is None]
         print(f"Can't calibrate {failed}, using the stretched frames")
@@ -695,7 +810,9 @@ def load_linear(labels, images=None, iofs=None):
     iofs = _calibrated(labels, images, iofs)
     if iofs is None:
         return None
-    levels, margin, white, measured = _balanced_scale(iofs)
+    # the sky is measured once, for the scale and the toe below
+    sky = _sky(iofs)
+    levels, margin, white, measured = _balanced_scale(iofs, sky=sky)
     if white <= 0:
         return None
     channels = [(iof - np.float32(level)) / np.float32(white) for iof, level in zip(iofs, levels)]
@@ -703,6 +820,7 @@ def load_linear(labels, images=None, iofs=None):
     mix = color_mix(_value(infos[0], "INSTRUMENT_ID", ""), [band_of(i) for i in infos], _value(infos[0], "TARGET_NAME", ""),
                     own=True)
     false = isinstance(mix, FalseMix)
+    lum = None
     if false:
         # false color: the mission's typical balance of the body (the table) misses a frame unlike it (Saturn's
         # high latitudes); FALSE_OWN of what is left between the picture's own lit bands is taken off as well. A
@@ -723,12 +841,12 @@ def load_linear(labels, images=None, iofs=None):
                 mix = np.diag(np.asarray(gains, np.float32)).view(FalseMix)
                 mix.tint = tint
     margin /= white
-    sky = _sky(iofs) if measured else np.ones(iofs[0].shape, dtype=bool)
+    sky = sky if measured else np.ones(iofs[0].shape, dtype=bool)
     if measured:
         # the toe starts no lower than the darker half of the sky's own brightness (SKY_DARK of it stays black),
         # since the gamma lifts even a tiny remainder into visible grain. Only the darker half, by its mean over
         # 15 pixels, so faint ring glow or a night side in the sky doesn't count as sky
-        lum = np.mean(channels, axis=0)
+        lum = np.mean(channels, axis=0) if lum is None else lum
         local = cv2.blur(lum, (15, 15))
         dark = sky & (local <= np.median(local[sky]))
         if dark.sum() > 100:
@@ -839,8 +957,8 @@ def noise_floor(skies, sky_percentile=98):
     return max(float(np.percentile(v, sky_percentile) - np.median(v)) for v in skies if v.size) if skies else 0.0
 
 
-def _balanced_scale(iofs, sky_fraction=0.1, sky_percentile=98):
-    sky = _sky(iofs)
+def _balanced_scale(iofs, sky_fraction=0.1, sky_percentile=98, sky=None):
+    sky = _sky(iofs) if sky is None else sky
     measured = bool(sky.mean() > sky_fraction)
     levels, margin = [0.0] * len(iofs), 0.0
     if measured:

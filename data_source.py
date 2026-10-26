@@ -16,6 +16,7 @@ The lean archive (cassini_lut8.zip) has no SPICE kernels. CASSINI_KERNELS (a dat
 or .zip that has cosp_1000, e.g. the original archive) is where cosp_1000/... is read
 from then; everything else still comes from CASSINI_DATA.
 """
+import collections
 import os
 import re
 import shutil
@@ -235,6 +236,9 @@ def _read_at(f, size, offset):
 """
 Yields the uncompressed data of member i in chunks
 """
+LOCAL_EXTRA = 64   # bytes of a local header's extra field read ahead with it (zip64 and timestamp fields are 9 to 28)
+
+
 def _member_chunks(i, chunk_size=16 * 1024 * 1024, source=None):
     source = source or get_source()
     index = _zip_index(source)
@@ -249,22 +253,29 @@ def _member_chunks(i, chunk_size=16 * 1024 * 1024, source=None):
                     return
                 yield data
     f = _zip_file(source)
-    # the local header before the data has its own name and extra field lengths
+    # the local header before the data has its own name and extra field lengths. It is read together with the start
+    # of the data (its name is the directory's, its extra field seldom more than LOCAL_EXTRA bytes), so a member is
+    # one read instead of two: on the Mini's spinning disk, shared with other servers, the second was often a seek
     position = int(index["offsets"][i])
-    header = _read_at(f, 30, position)
+    remaining = int(index["compressed"][i])
+    data = _read_at(f, 30 + len(index["names"][i]) + LOCAL_EXTRA + min(chunk_size, remaining), position)
+    header = data[:30]
     if header[:4] != b"PK\x03\x04":
         raise zipfile.BadZipFile(f"Bad local header for {index['names'][i]}")
     name_length, extra_length = struct.unpack("<HH", header[26:30])
-    position += 30 + name_length + extra_length
-    remaining = int(index["compressed"][i])
+    start = 30 + name_length + extra_length
+    position += start
+    data = data[start:start + remaining]   # empty when the header was longer than LOCAL_EXTRA allowed for
     inflate = zlib.decompressobj(-15) if method == zipfile.ZIP_DEFLATED else None
     while remaining > 0:
-        data = _read_at(f, min(chunk_size, remaining), position)
         if not data:
-            raise zipfile.BadZipFile(f"{index['names'][i]} is cut short")
+            data = _read_at(f, min(chunk_size, remaining), position)
+            if not data:
+                raise zipfile.BadZipFile(f"{index['names'][i]} is cut short")
         remaining -= len(data)
         position += len(data)
         yield inflate.decompress(data) if inflate else data
+        data = b""
     if inflate:
         yield inflate.flush()
 
@@ -327,13 +338,61 @@ def lut8():
 
 
 """
-Same as cv2.imread but works for images inside the zip
+Same as cv2.imread but works for images inside the zip.
+The last DECODED_KEEP plain 8-bit gray PNGs read are kept decoded, so a frame asked for again soon (a composite reads
+each of its frames three times: label.resize_image in color, then its calibration and the classic guide's in gray) is
+read from the zip and decoded once. Only PNGs whose gray decode is the picture as stored and whose color decode is
+that gray in all three channels (8-bit gray with nothing but image data and text: the archive's), so the pixels are
+what cv2.imdecode would give
 """
+DECODED_KEEP = 16
+_decoded = collections.OrderedDict()
+_decoded_lock = threading.Lock()
+# the chunks that leave a gray PNG's pixels as stored; any other (transparency, gamma, color profile, orientation)
+# and the PNG is decoded as it always was
+_PLAIN_CHUNKS = {b"IHDR", b"IDAT", b"IEND", b"tEXt", b"zTXt", b"iTXt", b"tIME", b"pHYs"}
+
+
+def _plain_gray_png(data):
+    if data[:8] != b"\x89PNG\r\n\x1a\n" or data[12:16] != b"IHDR" or len(data) < 26 or data[24] != 8 or data[25] != 0:
+        return False
+    at = 8
+    while at + 8 <= len(data):
+        kind = data[at + 4:at + 8]
+        if kind not in _PLAIN_CHUNKS:
+            return False
+        if kind == b"IEND":
+            return True
+        at += 12 + int.from_bytes(data[at:at + 4], "big")
+    return False
+
+
 def imread(path, flags=cv2.IMREAD_COLOR):
     if not using_zip(source_of(path)):
         return cv2.imread(_folder_path(path), flags)
-    data = np.frombuffer(read_bytes(path), dtype=np.uint8)
-    return cv2.imdecode(data, flags)
+    if flags not in (cv2.IMREAD_COLOR, cv2.IMREAD_GRAYSCALE):
+        return cv2.imdecode(np.frombuffer(read_bytes(path), dtype=np.uint8), flags)
+    key = (source_of(path), relative(path).lower())
+    with _decoded_lock:
+        gray = _decoded.get(key)
+        if gray is not None:
+            _decoded.move_to_end(key)
+    if gray is None:
+        data = read_bytes(path)
+        if not _plain_gray_png(data):
+            return cv2.imdecode(np.frombuffer(data, dtype=np.uint8), flags)
+        gray = cv2.imdecode(np.frombuffer(data, dtype=np.uint8), cv2.IMREAD_GRAYSCALE)
+        if gray is None:
+            return None
+        # the kept picture is never handed out, only copies of it
+        gray.flags.writeable = False
+        with _decoded_lock:
+            _decoded[key] = gray
+            while len(_decoded) > DECODED_KEEP:
+                _decoded.popitem(last=False)
+    if flags == cv2.IMREAD_GRAYSCALE:
+        return gray.copy()
+    return cv2.cvtColor(gray, cv2.COLOR_GRAY2BGR)
 
 
 """
