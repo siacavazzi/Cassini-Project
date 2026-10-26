@@ -19,15 +19,17 @@ import numpy as np
 from PIL import Image, ImageDraw
 
 
-def get(url):
+def get(url, headers=None):
     t = time.time()
     with urllib.request.urlopen(url, timeout=900) as r:
+        if headers is not None:
+            headers.update(r.headers)
         return r.read(), time.time() - t
 
 
-def picture(url):
+def picture(url, headers=None):
     try:
-        data, took = get(url)
+        data, took = get(url, headers)
     except Exception as e:
         return None, str(e)[:120]
     return Image.open(io.BytesIO(data)).convert("RGBA"), round(took, 2)
@@ -49,12 +51,16 @@ def choose(pointings, n):
     return sorted({q["n"]: q for q in pick}.values(), key=lambda q: q["n"])
 
 
-def spot(mos, q):
-    """The mosaic's box round pointing q's outline (px) and a mask of its outline shrunk toward its middle."""
+def spot(mos, q, box=None):
+    """The mosaic's box for pointing q (px): where the opened picture says it lies (box, fractions, its X-Reel), else round
+    its outline; and a mask of its outline shrunk toward its middle."""
     W, H = mos.size
     poly = [(x * W, y * H) for x, y in q["poly"]]
-    x0, y0 = max(0, int(min(p[0] for p in poly))), max(0, int(min(p[1] for p in poly)))
-    x1, y1 = min(W, int(max(p[0] for p in poly)) + 1), min(H, int(max(p[1] for p in poly)) + 1)
+    if box:
+        x0, y0, x1, y1 = round(box[0] * W), round(box[1] * H), round((box[0] + box[2]) * W), round((box[1] + box[3]) * H)
+    else:
+        x0, y0 = int(min(p[0] for p in poly)), int(min(p[1] for p in poly))
+        x1, y1 = int(max(p[0] for p in poly)) + 1, int(max(p[1] for p in poly)) + 1
     cx, cy = q["center"][0] * W, q["center"][1] * H
     inner = [(cx + 0.7 * (x - cx) - x0, cy + 0.7 * (y - cy) - y0) for x, y in poly]
     m = Image.new("L", (x1 - x0, y1 - y0), 0)
@@ -97,9 +103,11 @@ def main():
         for q in choose(m["pointings"], a.pointings):
             fs = [f for f in m["filters"] if f in q["ids"]] or list(q.get("luminance", {}))[-1:]
             ids = [q["ids"].get(f) or q["luminance"][f] for f in fs]
-            box, mask = spot(mos, q)
+            h = {}
+            after, at = picture(f"{a.after}/frames/mosaic/{fid}/p/{q['n']}.webp?size=full&format=png", h)
+            box, mask = spot(mos, q, json.loads(h.get("X-Reel", "{}")).get("box"))
+            # (crop past the mosaic's edge is transparent, and left out of the comparison)
             crop = mos.crop(box)
-            after, at = picture(f"{a.after}/frames/mosaic/{fid}/p/{q['n']}.webp?size=full&format=png")
             # (the page before opened a set's three frames, or else the newest drawn one alone)
             old = ids if len(ids) == 3 else ids[-1:]
             before, bt = picture(f"{a.before}/frames/mosaic/{fid}/frame.webp?ids={','.join(old)}&size=full&format=png")

@@ -2381,7 +2381,7 @@ MAPS_KEEP = 512   # a few passes' every mosaic (a map is ~100 bytes a pointing),
 
 
 POINT_MAX = 2048   # longest side of a pointing opened from its mosaic (its tiles are at the pass's reference distance)
-POINTINGS_DIR = "pointings-2"   # the kept pictures of opened pointings (under the pass's versioned folder), renamed
+POINTINGS_DIR = "pointings-3"   # the kept pictures of opened pointings (under the pass's versioned folder), renamed
 #                                 whenever pointing_picture's answer changes
 
 
@@ -2402,7 +2402,8 @@ def pointing_picture(frame_id, n, cache, size="full", fmt="webp", slots=None, ch
     mosaic's own picture of that spot, larger. A pointing the colour set covers is in colour; elsewhere it is the gray
     the mosaic draws there (the luminance base, or the one filter drawn), before the gray's tint toward the colour it
     borders (match_grey). channel 0-2: one colour filter's plane, gray, as in that filter's mosaic (before the mix).
-    None when the frame is not in a mosaic pass or there is no pointing n. Kept in the cache."""
+    None when the frame is not in a mosaic pass or there is no pointing n. Kept in the cache. The report's box is where
+    the picture lies in the mosaic's picture (x, y, w, h as fractions of it), so the two can be laid on one another."""
     found = unit_of(frame_id)
     if not found or not found[0]["mosaic"] or found[1] < 0:
         return None
@@ -2456,8 +2457,19 @@ def pointing_picture(frame_id, n, cache, size="full", fmt="webp", slots=None, ch
             im.save(buf, "WEBP", quality=QUALITY, method=4)
         return buf.getvalue()
 
+    bx, by, bw, bh = pointing_box(layers)
+    box = [round((bx - rect[0]) / rect[2], 5), round((by - rect[1]) / rect[3], 5), round(bw / rect[2], 5), round(bh / rect[3], 5)]
     return reel._cached(path, make), {"observation": u["key"][1], "pointing": n, "of": len(mapped["pointings"]), "ids": ids,
-                                      "filters": [t["filter"] for t, _ in layers], "color": colour}
+                                      "filters": [t["filter"] for t, _ in layers], "color": colour, "box": box}
+
+
+def pointing_box(layers):
+    """The canvas of an opened pointing: its tiles' boxes together (x0, y0, w, h, reference pixels from the body's centre)."""
+    x0 = min(t["offset"][0] + t["box"][0] for t, _ in layers)
+    y0 = min(t["offset"][1] + t["box"][1] for t, _ in layers)
+    x1 = max(t["offset"][0] + t["box"][0] + t["box"][2] for t, _ in layers)
+    y1 = max(t["offset"][1] + t["box"][1] + t["box"][3] for t, _ in layers)
+    return x0, y0, x1 - x0, y1 - y0
 
 
 def _pointing(u, p, tiles, rect, count, used, layers, cache, channel=None, tint=None):
@@ -2465,11 +2477,8 @@ def _pointing(u, p, tiles, rect, count, used, layers, cache, channel=None, tint=
     one gray (tint: grey_tint's gain for it); x, y where its top left corner sits (reference pixels from the body's
     centre), k its pixels per them."""
     ref = max(used, key=lambda f: count[f])
-    x0 = min(t["offset"][0] + t["box"][0] for t, _ in layers)
-    y0 = min(t["offset"][1] + t["box"][1] for t, _ in layers)
-    x1 = max(t["offset"][0] + t["box"][0] + t["box"][2] for t, _ in layers)
-    y1 = max(t["offset"][1] + t["box"][1] + t["box"][3] for t, _ in layers)
-    own = (x0, y0, x1 - x0, y1 - y0)
+    own = pointing_box(layers)
+    x0, y0 = own[:2]
     k = min(1.0, POINT_MAX / max(own[2], own[3]))
     planes = []
     for t, f in layers:
@@ -2487,10 +2496,8 @@ def _pointing(u, p, tiles, rect, count, used, layers, cache, channel=None, tint=
         rgba = planes[0]
     if p["display_scale"].get("filled"):
         rgba = detail(rgba, DETAIL_SIGMA * FRAME * k)
-    rows, cols = np.flatnonzero(rgba[..., 3].any(1)), np.flatnonzero(rgba[..., 3].any(0))
-    if not len(rows):
-        return rgba, (x0, y0, k)
-    return np.ascontiguousarray(rgba[rows[0]:rows[-1] + 1, cols[0]:cols[-1] + 1]), (x0 + cols[0] / k, y0 + rows[0] / k, k)
+    # (not cut to its picture: the tiles are cut to theirs, and the canvas is where pointing_box says it is)
+    return np.ascontiguousarray(rgba), (x0, y0, k)
 
 
 def _seam_of(u, p, tiles, rect, ref, t, cache, f=None):

@@ -96,6 +96,8 @@ for q in mapped["pointings"]:
                                             om.filter_mosaic(u, p, om.LUM, tiles, rect, cache), p["k"], SCALE["gamma"])
     rgba, at = om._pointing(u, p, tiles, rect, count, used, layers, cache, None, tint)
     assert np.array_equal(rgba, pic), "the route's picture is _pointing's"
+    bx, by, bw, bh = info["box"]   # where the report says it lies in the mosaic, as _pointing placed it
+    assert abs(bx * rect[2] + rect[0] - at[0]) < 1 and abs(by * rect[3] + rect[1] - at[1]) < 1 and abs(bw * rect[2] - rgba.shape[1] / at[2]) < 2
     assert at[2] == 1.0 and max(pic.shape[:2]) == 1024, (at, pic.shape)   # the tiles' full size, not the mosaic's
     placed = on_mosaic(rgba, at, p, rect)
     mask = top_of(place[q["n"]], rect, p, mos.shape[:2], [place[r["n"]] for r in mapped["pointings"] if r["n"] > q["n"]])
