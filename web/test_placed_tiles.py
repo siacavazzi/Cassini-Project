@@ -56,9 +56,16 @@ print("covered pixels tile by tile:", cover)
 assert all(b >= a for a, b in zip(cover, cover[1:])), "the mosaic shrank"
 assert rep["luminance"] and rep["filter_names"] == ["RED", "GRN", "BL1"]
 last = at(im, 3)
-assert last[3] == 255 and last[0] == last[1] == last[2] > 0, f"pointing 3 should show in gray: {last}"
 first = at(im, 0)
 assert first[3] == 255 and not (first[0] == first[1] == first[2]), f"pointing 0 should show in colour: {first}"
+# the gray base, matched to the colour it borders (match_grey): these tiles are flat, so the gray-only pointing
+# comes out the colour's own brightness and hue, with no step at the join
+assert last[3] == 255 and np.abs(last[:3].astype(int) - first[:3].astype(int)).max() <= 10, f"pointing 3 should match: {last} vs {first}"
+# unmatched (too little lit picture to measure) it stays plain gray
+g = np.zeros((64, 64, 4), np.uint8); g[...] = 100; g[..., 3] = 255
+c = np.zeros((64, 64, 4), np.uint8); c[:, :4] = (150, 100, 90, 255)
+plain = om.over_grey(c, g, 0.5, 3)
+assert tuple(plain[32, 60, :3]) == (100, 100, 100)
 # before: the colour picture alone left pointing 3 out
 alone = om.colour_picture(u, om.plan(u, cache), ["RED", "GRN", "BL1"],
                           [om.filter_mosaic(u, om.plan(u, cache), f, made[1], made[2], cache) for f in ("RED", "GRN", "BL1")])

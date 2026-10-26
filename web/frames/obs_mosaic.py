@@ -681,21 +681,61 @@ def lum_base(u, p, tiles, used):
     return any(not all(near(t["offset"], by[f]) for f in used) for t in base)
 
 
-def over_grey(colour, grey, k):
+LUM_MATCH = (0.25, 4.0)   # the furthest the gray's match to the colour it borders goes, per channel
+LUM_MATCH_MIN = 500       # lit pixels each side needs for the match; fewer, and the gray stays as it is
+
+
+def match_grey(colour, grey, ca, only, feather, gamma):
+    """The gain per channel (linear brightness) that brings the gray base to the colour it borders: the colour's
+    median over the gray's where both lie under the picture, or, where the gray only goes on past the colour (a
+    colour tile beside gray ones), the colour's within two feathers of that edge over the gray's within two feathers
+    on its side. So the gray continues the colour's brightness and its average hue (Titan's gray reads orange beside
+    its orange disk, a dim clear-filter gray is lifted to the colour beside it), and the detail stays the gray's.
+    None when either side has too little lit picture to measure."""
+    lin = lambda v: calibration.decode(v.astype(np.float32) / 255, gamma)
+    ga = grey[..., 3] > 250
+    both = (ca > 0.99) & ga
+    if both.sum() >= LUM_MATCH_MIN:
+        cside, gside = both, both
+    else:
+        near = 2 * feather
+        to_only = cv2.distanceTransform((~only).astype(np.uint8), cv2.DIST_L2, 5)
+        to_colour = cv2.distanceTransform((ca < 0.99).astype(np.uint8), cv2.DIST_L2, 5)
+        cside, gside = (ca > 0.99) & (to_only <= near), only & ga & (to_colour <= near)
+    g = lin(grey[..., 0])
+    rgb = lin(colour[..., :3] / np.maximum(ca, 1 / 255)[..., None])
+    gl = g[gside]
+    cl = rgb[cside]
+    # lit: above a tenth of each side's bright end, so sky and the night side do not set the match
+    gl = gl[gl > 0.1 * np.percentile(gl, 99)] if gl.size else gl
+    cl = cl[cl.mean(axis=1) > 0.1 * np.percentile(cl.mean(axis=1), 99)] if len(cl) else cl
+    if gl.size < LUM_MATCH_MIN or len(cl) < LUM_MATCH_MIN or np.median(gl) <= 0:
+        return None
+    return np.clip(np.median(cl, axis=0) / np.median(gl), *LUM_MATCH).astype(np.float32)
+
+
+def over_grey(colour, grey, k, gamma=2.2):
     """The colour picture (colour_picture: its colour times where all three filters cover) laid over the luminance
     base (grey, RGBA on the same canvas): colour where all three filters cover, the gray elsewhere, the colour fading
-    into the gray over LUM_FEATHER (at this canvas's scale) inward from where the gray goes on past it. Where nothing
-    lies beyond it (the mosaic's own edge) the colour keeps its edge as colour_picture drew it."""
+    into the gray over LUM_FEATHER (at this canvas's scale) inward from where the gray goes on past it. The gray is
+    first matched to the colour it borders (match_grey), so the join shows no step in brightness or hue. Where
+    nothing lies beyond the colour (the mosaic's own edge) it keeps its edge as colour_picture drew it."""
     ca = colour[..., 3].astype(np.float32) / 255
     ga = grey[..., 3].astype(np.float32) / 255
     only = (ga > 0.5) & (ca < 0.5)   # the gray goes on past the colour
     if not only.any():
         return colour
     feather = max(8, round(LUM_FEATHER * k / 0.5))
+    gain = match_grey(colour, grey, ca, only, feather, gamma)
+    if gain is None:
+        under = grey[..., :3].astype(np.float32)
+    else:
+        lin = calibration.decode(grey[..., :1].astype(np.float32) / 255, gamma) * gain
+        under = calibration.encode(np.clip(lin, 0, 1), gamma) * 255
     dist = cv2.distanceTransform((~only).astype(np.uint8), cv2.DIST_L2, 5)
     w = ca * np.clip(dist / feather, 0, 1)
     rgb = colour[..., :3].astype(np.float32) / np.maximum(ca, 1 / 255)[..., None]
-    out = rgb * w[..., None] + grey[..., :3].astype(np.float32) * (ga * (1 - w))[..., None]
+    out = rgb * w[..., None] + under * (ga * (1 - w))[..., None]
     alpha = w + ga * (1 - w)
     return np.dstack([np.clip(out + 0.5, 0, 255).astype(np.uint8), np.clip(alpha * 255 + 0.5, 0, 255).astype(np.uint8)])
 
@@ -1368,7 +1408,8 @@ def so_far(u, n, cache, made=None, out=OUT):
         acc = [filter_mosaic(u, p, f, tiles, rect, cache, ref, tag) for f in colour]
         rgba, used = colour_picture(u, p, colour, acc), colour
         if base:
-            rgba = over_grey(rgba, filter_mosaic(u, p, LUM, tiles, rect, cache, None, tag), p["k"])
+            rgba = over_grey(rgba, filter_mosaic(u, p, LUM, tiles, rect, cache, None, tag), p["k"],
+                             p["display_scale"]["gamma"])
     elif base:
         rgba = filter_mosaic(u, p, LUM, tiles, rect, cache, None, tag)
     else:
