@@ -189,17 +189,17 @@ def main():
         moved["movie_passes"] = changed
         print(f"movie passes whose colour sets changed: {len(changed)}", flush=True)
         # tracks (obs_mosaic._judge): passes following a moving feature play as movies; what they were before
-        tracks, keep = [], obs_mosaic.TRACK_PAIRS
+        tracks, keep = [], obs_mosaic.TRACK_VISITS
         for p in passes:
             u = next(v for v in obs_mosaic.units(*p["key"][:3]) if v["key"] == p["key"])
             if not u.get("track"):
                 continue
             old = dict(u)
-            obs_mosaic.TRACK_PAIRS = 10 ** 9
+            obs_mosaic.TRACK_VISITS = 10 ** 9
             try:
                 obs_mosaic._judge(old)
             finally:
-                obs_mosaic.TRACK_PAIRS = keep
+                obs_mosaic.TRACK_VISITS = keep
             tracks.append({"key": list(p["key"]), "was": old["kind"], "first": ids[p["rows"][0]], "last": ids[p["rows"][1]], "frames": p["frames"]})
         moved["track_passes"] = tracks
         was = {}

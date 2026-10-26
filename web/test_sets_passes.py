@@ -162,20 +162,29 @@ with tempfile.TemporaryDirectory() as d:
         print(f"{len(pass_table)} passes: every frame in its own, repeat exposures too")
 print("reel's sets, prebuild's and the movies' are the rule's")
 
-# a feature track (the camera follows a cloud: each filter of a pointing lands 80-700 px from the one before) plays as
-# a movie; a colour mosaic (filters of a pointing on one another, a frame's step between pointings), a raster that
-# steps a pointing every frame through its filters, and a stare cycling filters stay what they were
+# a feature track (the camera follows a cloud: the filters of a pointing land apart) plays as a movie: a 10-filter
+# visit every 900 s that creeps ~135 px over the visit (ISS_191SA_FEATRAK001), or a steady drift all the way through
+# (ISS_222SA_FEATRAK001); a colour mosaic (filters of a pointing on one another), a raster that steps a pointing every
+# frame through its filters, and a stare cycling filters stay what they were
 if om:
-    def judged(points, filters, dt=30):
-        fr = [("", f"N{1700000000 + i}_1", filters[i % len(filters)], 1000.0 + dt * i, 600, -x, -y, 1e6) for i, (x, y) in enumerate(points)]
+    def judged(points, filters, times=None):
+        times = times or [1000.0 + 30 * i for i in range(len(points))]
+        fr = [("", f"N{1700000000 + i}_1", filters[i % len(filters)], t, 600, -x, -y, 1e6) for i, ((x, y), t) in enumerate(zip(points, times))]
         u = {"key": ("SATURN", "OBS", "N", 0), "frames": fr, "taken": [(f, x, y, z) for _, _, f, _, _, x, y, z in fr], "z": 1e6}
         om._judge(u)
         return u
-    ten = ["CL1/CL2", "RED", "GRN", "BL1", "MT1", "CB1", "MT2", "CB2", "MT3", "CB3"]
-    track = [(40 * i + 300 * (i // 10), 15 * i) for i in range(60)]   # 40 px between filters, a new pointing each lap
-    t = judged(track, ten)
+    ten = ["CB3", "MT3", "CB2", "MT2", "CB1", "MT1", "UV3", "UV1", "UV2", "BL1"]
+    visits = [(1500 * (i // 10) + 5 * (i % 10), -2000 * (i // 10) % 7000 + 15 * (i % 10)) for i in range(80)]
+    vt = [900.0 * (i // 10) + 62 * (i % 10) for i in range(80)]
+    keep = om.TRACK_VISITS; om.TRACK_VISITS = 10 ** 9
+    assert judged(visits, ten, vt)["kind"] == "mosaic"   # what it was before the track rule
+    om.TRACK_VISITS = keep
+    t = judged(visits, ten, vt)
     assert t["track"] and t["kind"] == "movie", (t["kind"], t["track"])
-    grid = [(900 * (j % 3), 900 * (j // 3)) for j in range(9) for _ in range(3)]
+    drift = [(70 * i, -85 * i) for i in range(45)]
+    d = judged(drift, ten[:9], [41.0 * i + 900 * (i // 9) for i in range(45)])
+    assert d["track"] and d["kind"] == "movie", (d["kind"], d["track"])
+    grid = [(900 * (j % 3) + 3 * k, 900 * (j // 3)) for j in range(9) for k in range(3)]
     m = judged(grid, ["RED", "GRN", "BL1"])
     assert not m["track"] and m["kind"] == "mosaic", (m["kind"], m["track"])
     raster = [(900 * (j % 4), 900 * (j // 4)) for j in range(16)]   # one filter per pointing, filters cycling
@@ -184,5 +193,5 @@ if om:
     stare = [(3 * i, 2 * i) for i in range(30)]
     st = judged(stare, ["RED", "GRN", "BL1"])
     assert not st["track"] and st["kind"] == "movie", (st["kind"], st["track"])
-    print("track: movie; colour mosaic, filter raster: mosaic; stare: movie")
+    print("tracks (visits that creep, a steady drift): movie; colour mosaic, filter raster: mosaic; stare: movie")
 print("ok")

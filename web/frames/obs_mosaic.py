@@ -84,8 +84,8 @@ LAP_GAP = 7200       # a mosaic taken again over the same ground within this man
 LAP_OVERLAP = 0.6    # ... when the two footprints share at least this much (area both cover / either covers)
 MOVIE_LAPS = 2       # a mosaic whose places are taken again (median, per filter) this many times is a mosaic movie
 MOVIE_DWELL = 8      # ... or whose camera stays this many frames of one filter (median) at each place it goes
-TRACK_PAIRS = 8      # ... or that follows a moving feature (_judge's track): at least this many filter changes measured,
-TRACK_STEP = 0.75    # ... and their median move under this much of a frame (a raster stepping a pointing a frame steps more)
+TRACK_VISITS = 2     # ... or that follows a moving feature (_judge's track): at least this many visits of 3+ filters,
+TRACK_SPAN = 0.08    # ... whose frames spread (median) over more than this much of a frame (twice REGISTER_MAX)
 RADIUS = {"SATURN": 60268, "JUPITER": 69911, "TITAN": 2575, "RHEA": 764, "IAPETUS": 735, "DIONE": 561,
           "TETHYS": 531, "ENCELADUS": 252, "MIMAS": 198, "HYPERION": 135, "PHOEBE": 107}
 IFOV = {"N": 6.0e-6, "W": 60e-6}   # radians per full resolution pixel
@@ -273,22 +273,26 @@ def _judge(u):
     runs += [n for _, n in last.values()]
     u["dwell"] = float(np.median(runs)) if runs else None
     # track: the camera follows something that moves across the body (a cloud feature, FEATRAK), so the filters of
-    # one pointing land apart (80-700 px in ISS_191SA_FEATRAK001) instead of on one another; drawn as a mosaic they make
-    # narrow colour strips and doubled limbs, so it plays as a movie. Measured over consecutive frames of different
-    # filters taken within REGISTER_GAP, in a pass that comes back to its filters: in a mosaic most of them share a
-    # pointing (within REGISTER_MAX, what registration believes of SPICE) and only the step to the next pointing moves,
-    # so their lower quartile stays put; in a track nearly every one has moved. A raster that steps a pointing every
-    # frame steps most of a frame (its median at least TRACK_STEP), a track drifts less.
-    prev, cross = None, []
+    # one pointing do not land on one another: ISS_191SA_FEATRAK001 creeps 0.13 of a frame over each 10-filter visit
+    # (and one CB3 frame sits 585 px off), ISS_222SA_FEATRAK001 drifts all the way through. Drawn as a mosaic that
+    # makes narrow colour strips and doubled limbs, so it plays as a movie. A visit is a run of frames through
+    # different filters, each within REGISTER_GAP and SAME_PLACE of the one before; in a mosaic a visit holds still
+    # (SPICE within REGISTER_MAX, what registration believes), in a track its frames spread over more than TRACK_SPAN
+    # (median over the pass's visits of three or more frames). A raster stepping a pointing every frame has no visits.
+    spans, visit = [], []
     for _, _, f, t, _, x, y, z in u["frames"]:
         if not z:
             continue
-        p = (-x * z / u["z"], -y * z / u["z"])
-        if prev and prev[0] != f and t - prev[1] <= REGISTER_GAP:
-            cross.append(math.hypot(p[0] - prev[2][0], p[1] - prev[2][1]) / FRAME)
-        prev = (f, t, p)
-    u["track"] = bool(last and len(last) >= 2 and steps and len(cross) >= TRACK_PAIRS
-                      and np.percentile(cross, 25) > REGISTER_MAX and np.median(cross) < TRACK_STEP)
+        p = (-x * z / u["z"], -y * z / u["z"], t, f)
+        if visit and (t - visit[-1][2] > REGISTER_GAP or f in {q[3] for q in visit}
+                      or math.hypot(p[0] - visit[-1][0], p[1] - visit[-1][1]) > SAME_PLACE * FRAME):
+            if len(visit) >= 3:
+                spans.append(max(math.hypot(a[0] - c[0], a[1] - c[1]) for a in visit for c in visit) / FRAME)
+            visit = []
+        visit.append(p)
+    if len(visit) >= 3:
+        spans.append(max(math.hypot(a[0] - c[0], a[1] - c[1]) for a in visit for c in visit) / FRAME)
+    u["track"] = bool(len(spans) >= TRACK_VISITS and np.median(spans) > TRACK_SPAN)
     u["movie"] = u["jump_frac"] is not None and (u["jump_frac"] < MOVIE_JUMPS or (u["dwell"] or 0) >= MOVIE_DWELL or u["track"])
     places = []
     for p in pts:
