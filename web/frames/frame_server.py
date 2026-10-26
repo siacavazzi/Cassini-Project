@@ -24,6 +24,10 @@ Routes:
                                attachment (Cassini_<ID>.png), so the picture can be saved and shared
   /frames/<ID>.png             the archive PNG as it is
   /frames/<ID>.png?download=1  the archive PNG as a named attachment (Cassini_<ID>_archive.png)
+  /frames/<ID>.tif?download=1  science data: the frame's I/F at the camera's resolution as a 32-bit float TIFF
+                               (color_image.science_frame: calibrated, nothing else done; lost pixels NaN), its PDS
+                               label in the TIFF's ImageDescription; Cassini_<ID>_IOF.tif. 404 when the frame can't
+                               be calibrated (8LSB). /frames/<ID>.lbl is the label on its own
   /frames/color.webp?ids=R,G,B&size=512
                                colour composite of two or three frames of one filter set, made on
                                first request and cached like the frames: R,G,B in that order, or
@@ -285,6 +289,20 @@ def size_dir(size, fmt):
 # quality, so frames made at another quality are not served again
 FRAME_QUALITY = 95
 FRAME_VERSION = "frames-q95"
+
+
+def science_tiff(frame_id):
+    """The frame's science TIFF (color_image.science_frame) and label, or None when it can't be calibrated. Not
+    cached: one frame's calibration is a few tens of ms."""
+    made = color_image.science_frame(f"{FOLDERS[frame_id[0]]}/{frame_id}.png")
+    if made is None:
+        return None
+    iof, label, note = made
+    out = io.BytesIO()
+    # 270 ImageDescription: the PDS label, so the numbers keep what they are; 305 Software
+    Image.fromarray(iof, "F").save(out, "TIFF", compression="tiff_deflate",
+                                   tiffinfo={270: label.strip() + "\n\n/* " + note + " */\n", 305: "Cassini OS (calibration.calibrate)"})
+    return out.getvalue()
 
 
 def webp(frame_id, size, cache, fmt="webp"):
@@ -1251,13 +1269,24 @@ def make_handler(site, cache, flags=None):
                     return self.send_picture(data, fmt, query, name, {"X-Reel": json.dumps(report, default=str)})
                 except FileNotFoundError:
                     return self.send_error(404, "Frame not in the archive")
-            m = re.match(r"^/frames/([^/]+)\.(webp|png)$", url.path)
+            m = re.match(r"^/frames/([^/]+)\.(webp|png|tif|lbl)$", url.path)
             if m:
                 frame_id, kind = m.groups()
                 if not FRAME_ID.match(frame_id):
                     return self.send_error(400, "Not a frame id")
                 try:
                     query = parse_qs(url.query)
+                    if kind in ("tif", "lbl"):
+                        if kind == "lbl":
+                            data, mime = data_source.read_bytes(f"{FOLDERS[frame_id[0]]}/{frame_id}.lbl"), "text/plain; charset=latin-1"
+                        else:
+                            data, mime = science_tiff(frame_id), "image/tiff"
+                            if data is None:
+                                return self.send_error(404, "This frame can't be calibrated (8LSB or an unknown filter)")
+                        headers = {}
+                        if query.get("download", ["0"])[0] == "1":
+                            headers["Content-Disposition"] = f'attachment; filename="Cassini_{frame_id}' + ('_IOF.tif"' if kind == "tif" else '.lbl"')
+                        return self.send_bytes(data, mime, False, headers)   # the calibration may still improve
                     if kind == "png":
                         return self.send_picture(archive_png(frame_id), "png", query, f"Cassini_{frame_id}_archive")
                     size, fmt = size_of(query, 512), picture_format(query)

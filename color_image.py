@@ -285,6 +285,33 @@ def processed_frame(paths, max_offset=600, hdr=False, scale=None, repeat_window=
         return cv2.cvtColor(image, cv2.COLOR_BGR2RGBA), lbl, report
 
 
+"""
+One frame as science data: its I/F (reflectance relative to sunlight, calibration.calibrate) at the camera's own
+resolution, float32, with no stacking, alignment, stretch or placement; pixels lost in downlink (label.valid_mask)
+are NaN. path = the frame's path in the archive (nac_data/<ID>.png)
+returns (I/F image, the frame's PDS label as text, a note on how it was made), or None when the frame can't be
+calibrated (an 8LSB frame, an unknown filter or gain)
+"""
+def science_frame(path):
+    lbl = lh.label(path, as_png=True)
+    info = lbl.get_info()
+    codes = ds.imread(lbl.export(), cv2.IMREAD_GRAYSCALE)
+    iof = cal.calibrate(codes, info)
+    if iof is None:
+        return None
+    iof = np.asarray(iof, np.float32)
+    valid = lbl.valid_mask()
+    if valid.shape != iof.shape:
+        valid = cv2.resize(valid.astype(np.uint8), iof.shape[::-1], interpolation=cv2.INTER_NEAREST).astype(bool)
+    iof[~valid] = np.nan
+    saturated = cal.saturated(codes, info)
+    note = (f"I/F of {info.get('PRODUCT_ID', path)} (Cassini ISS), float32, {iof.shape[1]} x {iof.shape[0]} px, made by the "
+            f"Cassini Project's calibration.calibrate: bias, shutter offset, exposure, gain, filter and sensitivity "
+            f"corrections and the Sun's distance. Not dark-current or flat-field corrected (CISSCAL does both). "
+            f"Lost pixels (downlink): NaN, {int((~valid).sum())}. Saturated pixels: {int(saturated.sum())}.")
+    return iof, ds.read_text(lbl.path), note
+
+
 # auto_center loads a year of SPICE kernels into the one SPICE pool when the year changes;
 # a server centring frames on several threads takes turns
 spice_lock = threading.Lock()
