@@ -53,3 +53,18 @@ obs_mosaic._register(u, 2, out, disk(460, 450, 150), cache, scale)
 assert "registered" not in out and out["offset"] == [0.0, 0.0]
 assert obs_mosaic._register_to(u, 0) is None and obs_mosaic._register_to(u, 1) == 0
 print("ok")
+
+# a registered pass still moves by exactly what tune= asks (Cassini Studio, tuned_layout): the move is laid over the
+# registered place, and the filters of the pointing keep the registration between them
+reg = {"n": 1, "id": "N1500000020_1", "filter": "GRN", "offset": [97.0, 52.0], "spice_offset": [100.25, 50.6],
+       "registered": {"to": "N1500000000_1", "shift": [3.25, -1.4]}, "box": [-S / 2, -S / 2, S, S]}
+rect = [-1000.0, -800.0, 2000.0, 1600.0]
+made = (None, [q, reg], rect, {"RED": 1, "GRN": 1}, ["RED", "GRN"], "name")
+mapped = {"pointings": [{"n": 0, "tiles": [0, 1]}]}
+_, moved, _, _, _, name = obs_mosaic.tuned_layout(made, mapped, {0: (0.01, -0.02)}, set())
+for before, after in zip([q, reg], moved):
+    d = np.subtract(after["offset"], before["offset"])
+    assert np.allclose(d, (0.01 * rect[2], -0.02 * rect[3])), d
+assert np.allclose(np.subtract(moved[1]["offset"], moved[0]["offset"]), np.subtract(reg["offset"], q["offset"]))
+assert name.startswith("name-tune")
+print("tuned: moved by exactly the tune; ok")
