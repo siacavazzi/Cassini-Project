@@ -24,6 +24,9 @@ Rigs in the project files, `opt-audit/rigs/` (cloud, 34 real lean-archive frames
   old against new for every reel (keys, values and value types, `_shot_of`).
 - `units_rows_equiv.py`: `obs_mosaic.units`' rows, old selection against new, for all 20,681 observations.
 - `frame_memo_equiv.py`: `frame_server.webp` against the old per-size decode (sizes, formats, orders, threads).
+- `pass_memo_equiv.py`: the sample's passes through `make_pass`, drawn as mosaics and as mosaic movies, at 1024 then 512
+  in the three looks and 512 then 1024: a hash of every file and report. `corners_equiv.py`: a tile's outline from
+  each row's ends against every pixel, on edge cases, synthetic frames and real tiles.
 - `proc_memo_equiv.py`: `processed_webp` at 512 then 1024 (the segment pre-render's order), plain and centred, in the
   three looks: a hash of every picture, report and file written.
 - For the overnight build, the same checks on the integration branch with and without the change (`git apply -R`
@@ -109,6 +112,8 @@ On the busy Mini a cold picture spends a quarter to a half of its time reading t
 | O19 | frames (pre-build) | each plain frame's PNG read from the archive and decoded again for each of the sizes the pre-build makes in turn (1024, 512, 128); now decoded once, the last 16 kept, each size encoded from a copy | 10% less time per frame (median 159.6 to 143.1 ms, cloud) | this audit | #116 |
 | O20 | encode | `thumbnail` shrinks the picture it is given, and on `pictures` (since #62) that can be a composite kept for its other sizes (`_recent_composite`): after a 512 view, the full PNG save and the channel views came out 512 px (`pictures` only; main has no kept composites) | a bug, found by the audit: no pre-built file changed (the pre-build makes 512 last) | this audit | #119 |
 | O21 | processed_webp | the segment pre-render (#102's `single()`) asks for each single frame at 512, then 1024, and each size made the frame again (`load_stacked`, calibration, tone; for Auto center `processed_frame` and SPICE); now kept like a composite (`_recent_composite`), the second size only an encode | 30% less per single frame (cloud medians: plain 325 to 213 ms, centred 706 to 486 ms); 4 segment threads made 34 frames for 34, not 68 | this audit | #120 |
+| O22 | pass pictures (pre-build) | `make_pass` (the pre-build's mosaic and movie passes, and the segment pre-render) asks each frame's mosaic so far, mosaic movie picture or movie frame at 1024 and 512, and both sizes were made at OUT and shrunk after: the colour mix, the luminance base, detail's blur and the movie frame's placing done twice; now `so_far` and `movie_frame` keep their last picture on the thread (named as the cache names it, up to OUT, a copy per call) | the sample's passes as mosaics: `so_far` 8 times for 4 pictures (37 of 61 s); as movies: `movie_frame` 48 times for 24 (17 of 47 s): about 31% of a mosaic pass, 18% of a movie pass (cloud) | this audit | #120 |
+| O23 | tile outline | `_corners` handed `minAreaRect` every set pixel of a tile (about a million) to hull; each row's first and last set pixel have the same hull | 190 ms to 8 ms a tile (a tile ~0.9 s), same to the bit on 3,995 masks | this audit | #120 |
 
 ## For the owners
 Ideas in another thread's area, sent to that thread; this audit does not make them.
