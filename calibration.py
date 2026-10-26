@@ -661,9 +661,9 @@ def load_channels(labels, images=None, sky_fraction=0.1, sky_percentile=98, gamm
 
 
 """
-The channels' I/F images (float32), calibrating those not given; None if any frame can't be calibrated
+Each channel's I/F image, calibrating those not given; None for a frame that can't be calibrated
 """
-def _calibrated(labels, images, iofs=None):
+def calibrated_each(labels, images, iofs=None):
     given = iofs or [None] * len(labels)
     iofs = []
     for lbl, image, iof in zip(labels, images, given):
@@ -672,6 +672,14 @@ def _calibrated(labels, images, iofs=None):
             gray = cv2.cvtColor(image, cv2.COLOR_BGR2GRAY) if image.ndim == 3 else image
             iof = calibrate(png, lbl.get_info(), gray)
         iofs.append(iof)
+    return iofs
+
+
+"""
+The channels' I/F images (float32), calibrating those not given; None if any frame can't be calibrated
+"""
+def _calibrated(labels, images, iofs=None):
+    iofs = calibrated_each(labels, images, iofs)
     if any(iof is None for iof in iofs):
         failed = [lbl.get_info().get("path") for lbl, iof in zip(labels, iofs) if iof is None]
         print(f"Can't calibrate {failed}, using the stretched frames")

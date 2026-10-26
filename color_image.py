@@ -123,7 +123,7 @@ def make_frame(row, filters):
     for j in range(0, len(imgs)):
         imgs[j] = Image.fromarray(imgs[j]).convert('L')
 
-    if num_channels == 3:
+    if len(imgs) == 3:
         # transparent where any channel has no data, instead of a colored streak
         alpha = Image.fromarray(np.where(valid, np.asarray(get_mask()), 0).astype(np.uint8))
         image = Image.merge("RGBA",(imgs[2],imgs[1],imgs[0], alpha))
@@ -155,7 +155,8 @@ scale = a fixed display scale shared by all the pictures of a mosaic (calibratio
 repeat_window = how close (seconds) a frame of the same filter must be to be stacked in as a repeat exposure;
 a movie taking frames faster than that passes less, so its frames are not stacked into one another
 returns (images, mask of pixels valid in every channel, the reference frame's label, report)
-where report says how each frame was calibrated and aligned
+where report says how each frame was calibrated and aligned, and report["dropped"] which frames were
+left out because they can't be calibrated (then there is one image fewer than paths: a two-filter picture)
 """
 def load_aligned(paths, hdr=False, scale=None, repeat_window=120):
     lbls, imgs, stacked, iofs = [], [], [], []
@@ -175,6 +176,19 @@ def load_aligned(paths, hdr=False, scale=None, repeat_window=120):
     masks = [l.valid_mask() for l in lbls]
     imgs = [ic.fill_invalid(img, mask) for img, mask in zip(imgs, masks)]
     iofs = [None if iof is None else ic.fill_invalid(iof, mask) for iof, mask in zip(iofs, masks)]
+    dropped = []
+    if calibrate and len(lbls) > 2:
+        # a channel that can't be calibrated (an 8LSB frame: only its low 8 bits were sent) is left out
+        # when two others calibrate, so the set is a calibrated two-filter picture instead of every
+        # channel falling back to its own stretch (Phoebe day, 2004-06-11: every NAC BL1 frame is 8LSB)
+        iofs = cal.calibrated_each(lbls, imgs, iofs)
+        keep = [j for j, iof in enumerate(iofs) if iof is not None]
+        if 2 <= len(keep) < len(lbls):
+            dropped = [lbls[j].info.get("PRODUCT_ID", paths[j]) for j in range(len(lbls)) if j not in keep]
+            print(f"Can't calibrate {dropped}, making a two-filter picture of the others")
+            lbls, imgs, iofs, masks, stacked = ([v[j] for j in keep] for v in (lbls, imgs, iofs, masks, stacked))
+            if scale is not None:
+                scale = dict(scale, blacks=[scale["blacks"][j] for j in keep])
     calibrated = False
     guide = linear = None
     if calibrate:
@@ -216,6 +230,8 @@ def load_aligned(paths, hdr=False, scale=None, repeat_window=120):
     if linear is not None and guide is None:
         imgs = cal.tone(linear[0], linear[1], linear[2])
     report = {"calibrated": calibrated, "stacked": stacked, "aligned": aligned}
+    if dropped:
+        report["dropped"] = dropped
     return imgs, np.logical_and.reduce(masks), lbls[ref], report
 
 

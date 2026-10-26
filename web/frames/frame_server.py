@@ -297,7 +297,7 @@ def webp(frame_id, size, cache, fmt="webp"):
 
 # the caches of the pictures drawn from I/F, one per display model (calibration.style), so the classic look keeps the
 # pictures made before the balanced display model and raw colors the balanced ones made before natural color
-COLOR_VERSIONS = {"balanced": "color-v28", "raw": "color-v11", "classic": "color-v5"}
+COLOR_VERSIONS = {"balanced": "color-v29", "raw": "color-v12", "classic": "color-v6"}
 PROC_VERSIONS = {"balanced": "proc-v8", "raw": "proc-v8", "classic": "proc-v2"}   # one frame: no colors to mix
 # Auto center (center=1): the same pictures centred on the body by SPICE, cached beside them in folders of their own
 CENTRE_VERSION = "ctr4"   # ctr2: the shift stops at the frame's data edge; ctr3: only when the body's disk is cut by it;
