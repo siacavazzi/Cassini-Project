@@ -295,7 +295,7 @@
       const flick = 0.93 + 0.07 * Math.sin(E.time * 37) * Math.sin(E.time * 23.7);
       // the shock layer's own temperature reads white-hot well before the skin glows
       const shockT = 3200 + 9000 * h;
-      [[mIn, 1.25], [mOut, 0.42]].forEach(([m, k]) => {
+      [[mIn, 1.5], [mOut, 0.55]].forEach(([m, k]) => {
         const u = m.material.uniforms;
         u.glow.value = k * Math.pow(h, 1.3) * flick; u.time.value = E.time; u.stretch.value = 0.55 + 0.75 * h;
         u.flow.value = stream / R * 0.35; blackbody(shockT, u.hot.value);
@@ -409,13 +409,13 @@
         const g = sp.geometry, a = g.userData;
         let n = 0;
         for (const b of bits) {
-          const life = clamp01(1 - br * (1.1 - 0.6 * b.b)), on = br > 0 ? front * life * Math.min(1, br * 4) : 0;
+          const life = clamp01(1 - br * (1.3 - 0.5 * b.b)), on = br > 0 ? front * life * Math.min(1, br * 4) * clamp01(hot * 3) : 0;
           at.copy(o.head).addScaledVector(side, b.off.x * k * 9 * br).addScaledVector(up, b.off.y * k * 6 * br).addScaledVector(back, b.lag * k * 40 * br);
           b.s.position.copy(at); b.s.material.opacity = on * b.b * (0.75 + 0.25 * Math.sin(time * 23 + b.seed)); b.s.scale.setScalar(k * (2 + 2.5 * b.b));
           if (on > 0.01) {
-            a.to.set([at.x, at.y, at.z], 3 * n); a.from.set([at.x + back.x * k * 9, at.y + back.y * k * 9, at.z + back.z * k * 9], 3 * n);
+            a.to.set([at.x, at.y, at.z], 3 * n); a.from.set([at.x + back.x * k * 5, at.y + back.y * k * 5, at.z + back.z * k * 5], 3 * n);
             blackbody(2600 - 900 * br * (1 - b.b), tmpCol).multiplyScalar(on * 0.8);
-            a.col.set([tmpCol.r, tmpCol.g, tmpCol.b, k * 0.4], 4 * n); n++;
+            a.col.set([tmpCol.r, tmpCol.g, tmpCol.b, k * 0.3], 4 * n); n++;
           }
         }
         g.instanceCount = n;
