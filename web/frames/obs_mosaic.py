@@ -1214,11 +1214,13 @@ def _over(u, p, rgba, t, rect, cache, match=True):
     sw, sh = max(1, round(bw * k)), max(1, round(bh * k))
     x0, y0 = max(left - pad, 0), max(top - pad, 0)
     x1, y1 = min(left + sw + pad, W), min(top + sh + pad, H)
-    if x1 > x0 and y1 > y0:
+    a0, b0 = max(left, 0), max(top, 0)
+    a1, b1 = min(left + sw, W), min(top + sh, H)
+    # (a tile wholly past the canvas's edge, only its soft edge's margin on it, has nothing to draw: SPICE, filter
+    # registration or a person's tuning can put a tile outside the pass's footprint)
+    if x1 > x0 and y1 > y0 and a1 > a0 and b1 > b0:
         part = _shade(_part(os.path.join(_tiles(u, cache, p["display_scale"]), f"{t['n']}.png"), sw, sh), t)
         frame = np.zeros((y1 - y0, x1 - x0, 4), np.uint8)
-        a0, b0 = max(left, 0), max(top, 0)
-        a1, b1 = min(left + sw, W), min(top + sh, H)
         frame[b0 - y0:b1 - y0, a0 - x0:a1 - x0] = part[b0 - top:b1 - top, a0 - left:a1 - left]
         below = np.ascontiguousarray(rgba[y0:y1, x0:x1])
         same = (np.ones((2, 3)), np.zeros((2, 3)))
