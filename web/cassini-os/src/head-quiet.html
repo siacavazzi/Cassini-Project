@@ -2152,6 +2152,10 @@ body.idle .win.full .titlebar { opacity: 0; }
       return best;
     }
     const polyStr = q => q.poly.map(c => c.join(",")).join(" ");
+    // the filters of a pointing the picture draws: its colour set or gray filter, or, at a place only the gray
+    // base reaches (obs_mosaic.tile_map's luminance), the newest frame of that base there
+    const drawnFs = (m, q) => { const fs = m.filters.filter(f => q.ids[f]); return fs.length ? fs : Object.keys(q.luminance || {}).slice(-1); };
+    const idOf = (q, f) => q.ids[f] || (q.luminance || {})[f];
     const hhmm = t => new Date(t * 1000).toISOString().slice(11, 19);
     function draw(q) {
       hot = q;
@@ -2162,7 +2166,7 @@ body.idle .win.full .titlebar { opacity: 0; }
       overlay.innerHTML = `<path class="dim" fill-rule="evenodd" d="M0 0H1V1H0Z M${q.poly.map(c => c.join(" ")).join("L")}Z"/>`
         + m.pointings.map(p => `<polygon class="${p === q ? "hot" : "other"}" points="${polyStr(p)}" vector-effect="non-scaling-stroke"/>`).join("");
       overlay.classList.add("on"); well.classList.add("tilehover");
-      const fs = m.filters.filter(f => q.ids[f]);
+      const fs = drawnFs(m, q);
       tip.innerHTML = `<b>Frame ${q.n} of ${m.pointings.length}</b><br>${fs.join(" ")} · ${hhmm(q.t)} UTC<br><span>${phoneNow() ? "Tap again" : "Click"} to open it</span>`;
       tip.hidden = false;
       const cx = (Math.max(...q.poly.map(c => c[0])) + Math.min(...q.poly.map(c => c[0]))) / 2, top0 = Math.min(...q.poly.map(c => c[1]));
@@ -2181,7 +2185,7 @@ body.idle .win.full .titlebar { opacity: 0; }
     const redraw = () => (pointer && mosaicId ? draw(hitAt(pointer)) : draw(null));
     shot.addEventListener("load", () => { if (pointer && mosaicId) draw(hitAt(pointer)); });
     function openPointing(q) {
-      const m = tmap.data || tmap.prev, fs = m.filters.filter(f => q.ids[f]), ids = fs.map(f => q.ids[f]);
+      const m = tmap.data || tmap.prev, fs = drawnFs(m, q), ids = fs.map(f => idOf(q, f));
       const base = hold ? hold.levels.slice() : [{ kind: "mosaic", live: true, mid: mosaicId, label: `Mosaic · ${m.observation}`, src: shot.dataset.src,
         url(sz) { return this.src.replace(/size=[^&]*/, `size=${sz}`); }, tag: card.querySelector(".kindtag").textContent, shot: m.observation,
         lines: { ...liveLines(), filter: m.filters.join(" "), colour: `Mosaic of ${m.pointings.length} frames` } }];
