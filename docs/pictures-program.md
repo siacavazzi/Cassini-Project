@@ -222,14 +222,40 @@ Lane 3 (window):  Phase A ──────────────────
 
 First batch: phases 1, 2a and A at once. Second batch: 2b once checkpoint 2 is answered, and 3 once phases 1 and 2a are in `pictures`.
 
-## Status
+## Status (2026-10-26 02:40Z, `pictures` at 7ffcf90, 0 behind main)
 
-| Phase | PR | Preview | State |
-|---|---|---|---|
-| 1 Mosaic or movie | #61 | 8791 | reworked (three kinds, switch); waiting on Sam |
-| M Movies worth watching | #64 | 8794 | ready with #61; waiting on Sam |
-| 2a Color display | #63 | 8792 | **merged into `pictures`** 2026-10-23 after Sam's "big improvement" |
-| 2b Natural color + false-color rules | | 8792 | starting |
-| A Composite drill-down | #62 | 8793 | waiting on Sam |
-| R Sharper previews | | | proposed, waiting on Sam |
-| 3-8 | | | waiting |
+### Merged into `pictures`
+| Phase | PRs | What |
+|---|---|---|
+| 1 Mosaic, movie or mosaic movie | #61, #72, #73 | three kinds per pass, per-window switch, whole-footprint view |
+| M Movies worth watching | #64, #74, #89 | steady movie passes, filmstrip, mosaic movies that never reset, color frames as color.webp's |
+| 2a Color display | #63 | balanced color (C1-C5), classic option |
+| 2b Natural color, false-color rules | #66, #94, #95, #96 | natural color; sky black from the sky's fine structure; movie sky; blank-start mosaics keep the frame |
+| A Composite drill-down | #62 | held windows, channels in place, save menu |
+| R Sharper previews | #65 | true-resolution pictures, full view always full res |
+| MR Mosaic movie rate | #78 | grown pictures, made ahead, playback bound (playback.maxBehind) |
+| MM Movie mode redefined | #85 | clock rule only, skips gaps, 8 fps, normal windows |
+| AC Window settings, auto center | #83, #90 | settings button per window, Auto center, processed single frames |
+| T Tile tuning (Studio) | #99 | tune=/hide= over SPICE's placement |
+| 6b tool | #80, #92 | q95 frames, pre-build tool; pre-process a highlighted timeline stretch |
+| Extras | #103, #104 | zoom lens; Highlights thumbnails (port of #101) |
+
+### Open against `pictures`
+| PR | What | Waits on |
+|---|---|---|
+| #100 | summed-frame edge line; Auto center centers every whole disk (ctr3) | Sam's "merge" |
+| #102 | timeline movie row fixes, full-speed pre-process, NAC/WAC | review, then Sam |
+| (thread) | cached playback chugging: tile records re-read per picture | fix in progress, preview 8812 |
+
+### Still to do
+| Phase | One line | Depends on |
+|---|---|---|
+| 3 Placed tiles | gray luminance base from every tile, color only where three filters cover; mosaic manifest | — (can start now) |
+| 4 Explore mosaics | hover outlines a frame, click opens its pointing | 3 |
+| 5 One rule for sets and passes | one Python rule in build_data and obs_mosaic; data rebuild | 4 |
+| 7 Movie polish | Build / Rolling / Time-lapse speed polish | MR, MM (done) |
+| 8 Finishing | C8 filter registration (Dione fringes), C9 Phoebe 8LSB, D9 science TIFF download, D8 | 2 (done); separate PRs |
+| Follow-ups | burst limit counts only picture-changing frames; faint red cast in Jupiter WAC movie frames 4-13 | — |
+| Look freeze | composites and mosaics to q95 (q95-at-freeze patch) | 3-5 accepted |
+| 6b Pre-build run | the whole mission's pictures on the LaCie (~25 GB, ~11 h frames first) | look freeze; Sam's word in the pre-build thread |
+| Final | `pictures` into main | Sam's "merge to main" |
