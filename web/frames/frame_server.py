@@ -594,6 +594,10 @@ def gzipped(path, st):
     return data
 
 
+# the usage counts (usage.Usage), set by main(); None counts nothing
+counts = None
+
+
 class Server(ThreadingHTTPServer):
     # the default backlog of 5 resets connections when several viewers open theirs at once
     # (a browser opens six per page); the OS caps it at its own limit anyway
@@ -601,7 +605,7 @@ class Server(ThreadingHTTPServer):
     daemon_threads = True
 
 
-def make_handler(site, cache, flags=None, counts=None):
+def make_handler(site, cache, flags=None):
     class Handler(SimpleHTTPRequestHandler):
         # keep-alive: a viewer loads frames one after another, and a new connection for each
         # costs a round trip (more through a tunnel); every reply says its Content-Length
@@ -1046,9 +1050,10 @@ def main():
         threading.Thread(target=warm_thumbs, args=(site, args.cache), daemon=True).start()
     flags = os.path.abspath(os.path.expanduser(args.flags))
     print(f"Flagged pictures go to {flags}")
+    global counts
     counts = None if args.usage == "off" else usage.Usage(os.path.abspath(os.path.expanduser(args.usage)))
     print(f"Usage counts in {counts.folder}" if counts else "Usage counting off")
-    server = Server((args.host, args.port), make_handler(site, args.cache, flags, counts))
+    server = Server((args.host, args.port), make_handler(site, args.cache, flags))
     print(f"Serving on http://{args.host}:{args.port}/" + (f" (site: {site})" if site else ""))
     server.serve_forever()
 

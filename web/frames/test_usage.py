@@ -25,8 +25,8 @@ frame_server.color_webp = lambda ids, size, cache, fmt="webp": (PIC, {})
 frame_server.archive_png = lambda frame_id: PIC
 
 tmp = tempfile.mkdtemp()
-counts = usage.Usage(os.path.join(tmp, "usage"))
-server = frame_server.Server(("127.0.0.1", 0), frame_server.make_handler(os.path.join(HERE, "..", "cassini-os"), tmp, None, counts))
+counts = frame_server.counts = usage.Usage(os.path.join(tmp, "usage"))
+server = frame_server.Server(("127.0.0.1", 0), frame_server.make_handler(os.path.join(HERE, "..", "cassini-os"), tmp, None))
 threading.Thread(target=server.serve_forever, daemon=True).start()
 BASE = f"http://127.0.0.1:{server.server_address[1]}"
 FIREFOX = "Mozilla/5.0 (Macintosh; Intel Mac OS X 14.5; rv:131.0) Gecko/20100101 Firefox/131.0"
