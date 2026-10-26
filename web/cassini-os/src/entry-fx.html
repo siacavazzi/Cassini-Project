@@ -1,0 +1,441 @@
+<!-- Atmospheric entry, shared by every cutscene that has a craft hitting air (the Grand Finale's plunge into Saturn,
+     Huygens into Titan). build.py splices its script right after cutscene.html's; it adds to cassiniCutscene.fx:
+       entry(parent, opts)  close up, in the parent's own metres (the close-up pass, layer 1): the glowing gas around the
+                            craft, its windward side heating, sparks off it and the glow they all throw
+       meteor(opts)         far off, in scene units: a fireball with its trail, breaking up into pieces
+       shake(amount, t)     a smooth shake to add to a camera (not a random jitter)
+     What it is meant to look like, from real entries rather than films:
+       - the light is the shock layer, gas squeezed and heated to thousands of degrees just ahead of the craft, not
+         the craft itself: a thin bright cap standing off the front, wrapping round the shoulders and trailing back
+         into a long, turbulent wake that cools as it goes (Hayabusa 2010, Stardust 2006, Genesis 2004 and the ATV
+         re-entries filmed from aircraft; Orion EFT-1's window camera for the view from beside it)
+       - its color is the air's own: each gas glows in its own lines. Titan's nitrogen and methane give the violet of
+         CN (388 nm), which carried most of Huygens' radiative heating, over nitrogen's pink-red bands; Saturn's
+         hydrogen glows in H-alpha (656 nm) with H-beta, a red-pink; Earth's air pink-violet with an orange,
+         sodium-rich wake. The haze around (the viewer's ATMOSPHERES table) tints the outer glow
+       - the craft's skin glows only where the flow hits it, by its temperature (a blackbody color: dull red near
+         800 K, orange, yellow, white), and a radiating surface's temperature goes as the fourth root of the heating
+       - ablation and break-up throw sparks and pieces back along the flow; they cool from yellow-white to red as
+         they go, and pieces leave their own small trails (Hayabusa's spacecraft beside its capsule)
+       - no lens flares, no rays: the glow a bright source throws in a camera is a soft core and a long faint skirt,
+         drawn as a halo (there is no full-screen bloom pass, so nothing is read back from the GPU)
+     Everything is a few small meshes, one instanced draw for the sparks and two sprites, so it costs next to
+     nothing per frame. -->
+<script>
+// ---------- atmospheric entry: the glowing gas, the heating skin, sparks and pieces, a fireball from afar ----------
+(function () {
+  const CS = window.cassiniCutscene;
+  if (!CS) return;
+  const clamp01 = x => Math.max(0, Math.min(1, x));
+
+  // the color of a glowing body at temperature T (K), brightest channel 1 (after Tanner Helland's fit to the CIE
+  // blackbody curve)
+  function blackbody(T, out) {
+    const t = T / 100;
+    const r = t <= 66 ? 255 : 329.7 * Math.pow(t - 60, -0.1332);
+    const g = t <= 66 ? 99.47 * Math.log(t) - 161.12 : 288.12 * Math.pow(t - 60, -0.0755);
+    const b = t >= 66 ? 255 : t <= 19 ? 0 : 138.52 * Math.log(t - 10) - 305.04;
+    const c = (out || new THREE.Color()).setRGB(Math.max(0, r) / 255, Math.max(0, g) / 255, Math.max(0, b) / 255);
+    const m = Math.max(c.r, c.g, c.b) || 1;
+    return c.multiplyScalar(1 / m);
+  }
+  // how bright that glow looks, 0 below a dull red (~800 K) to 1 at `hot`: a soft curve over T^4, so a skin that is
+  // barely glowing reads as barely glowing
+  const glowOf = (T, hot) => clamp01((T - 780) / 500) * Math.pow(clamp01(T / hot), 2.2);
+
+  // what each air glows with: line = the shock layer, wake = the cooling gas behind it
+  const GAS = {
+    TITAN: { line: [0.66, 0.5, 1.0], wake: [1.0, 0.48, 0.66] },    // CN violet over nitrogen's first positive bands
+    SATURN: { line: [1.0, 0.42, 0.58], wake: [0.95, 0.3, 0.42] },  // hydrogen: H-alpha with a little H-beta
+    EARTH: { line: [0.82, 0.62, 1.0], wake: [1.0, 0.6, 0.32] },    // nitrogen and oxygen, sodium in the wake
+  };
+  function gasOf(name) {
+    const g = GAS[name] || GAS.EARTH, a = typeof ATMOSPHERES === "object" && ATMOSPHERES[name];
+    const line = new THREE.Color(...g.line), wake = new THREE.Color(...g.wake);
+    // the haze around lights up with the glow, in its own color
+    const haze = a ? new THREE.Color(...a.albedo) : wake.clone();
+    return { line, wake, haze: haze.lerp(line, 0.35) };
+  }
+
+  // ---------- glow textures: a bright source as a camera sees it, a soft core and a long faint skirt ----------
+  let haloTex = null;
+  function haloTexture() {
+    if (haloTex) return haloTex;
+    const N = 256, c = document.createElement("canvas"); c.width = c.height = N;
+    const g = c.getContext("2d"), img = g.createImageData(N, N);
+    for (let y = 0; y < N; y++) for (let x = 0; x < N; x++) {
+      const r = Math.hypot(x + 0.5 - N / 2, y + 0.5 - N / 2) / (N / 2);
+      // three falloffs, as a lens and a sensor spread a point: the core, the near glow, the faint wide skirt
+      let v = 0.62 * Math.exp(-r * r / 0.004) + 0.3 * Math.exp(-r * r / 0.03) + 0.14 * Math.exp(-r / 0.2);
+      v *= clamp01((1 - r) / 0.25);
+      const i = 4 * (y * N + x), k = Math.min(255, Math.round(255 * Math.pow(v, 0.9)));
+      img.data[i] = img.data[i + 1] = img.data[i + 2] = 255; img.data[i + 3] = k;
+    }
+    g.putImageData(img, 0, 0);
+    return haloTex = new THREE.CanvasTexture(c);
+  }
+  function halo(color, layer, depthTest) {
+    const s = new THREE.Sprite(new THREE.SpriteMaterial({ map: haloTexture(), color, transparent: true, opacity: 0, blending: THREE.AdditiveBlending, depthWrite: false, depthTest }));
+    s.layers.set(layer); s.frustumCulled = false;
+    return s;
+  }
+
+  // a little value noise for the shaders: fbm over three octaves, 0..1
+  const NOISE = `
+    float hash3(vec3 p) { p = fract(p * 0.3183099 + 0.1); p *= 17.0; return fract(p.x * p.y * p.z * (p.x + p.y + p.z)); }
+    float vnoise(vec3 x) {
+      vec3 i = floor(x), f = fract(x); f = f * f * (3.0 - 2.0 * f);
+      return mix(mix(mix(hash3(i), hash3(i + vec3(1,0,0)), f.x), mix(hash3(i + vec3(0,1,0)), hash3(i + vec3(1,1,0)), f.x), f.y),
+                 mix(mix(hash3(i + vec3(0,0,1)), hash3(i + vec3(1,0,1)), f.x), mix(hash3(i + vec3(0,1,1)), hash3(i + vec3(1,1,1)), f.x), f.y), f.z);
+    }
+    float fbm(vec3 p) { return 0.55 * vnoise(p) + 0.3 * vnoise(p * 2.07 + 3.1) + 0.15 * vnoise(p * 4.13 + 7.7); }`;
+
+  // ---------- the shock layer and its wake: a glowing shell shaped like the flow round a blunt body ----------
+  // Its axis is +Y, the way the craft is moving; 1 = the body's radius, 0 = its front face. The bow shock stands a
+  // little off the front, curves back round the shoulders, and opens into a wake that narrows far behind. Seen
+  // through, the cap is a thin bright sheet (brightest edge-on) and the wake a filled glow (brightest through its
+  // middle, soft at its edges), which is what makes it read as gas rather than a surface
+  function sheathGeometry(standoff, flare, wake) {
+    const pts = [];
+    for (let i = 0; i <= 14; i++) { const r = 1.3 * flare * i / 14; pts.push(new THREE.Vector2(r, standoff - r * r / (2 * 1.25 * flare))); }
+    const y0 = pts[pts.length - 1].y, r0 = pts[pts.length - 1].x;
+    for (let i = 1; i <= 24; i++) {
+      const k = i / 24, r = r0 * (1 + 0.28 * Math.sin(Math.PI * Math.min(1, k * 1.6)) * (1 - k)) * (1 - 0.72 * k * k);
+      pts.push(new THREE.Vector2(Math.max(0.02, r), y0 - wake * k));
+    }
+    pts.reverse();   // LatheGeometry wants the profile from bottom to top for outward normals
+    const geo = new THREE.LatheGeometry(pts, 48);
+    geo.computeVertexNormals();
+    return { geo, front: standoff, tail: y0 - wake };
+  }
+  function sheathMaterial(gas, front, tail, cap) {
+    return new THREE.ShaderMaterial({
+      uniforms: { glow: { value: 0 }, time: { value: 0 }, stretch: { value: 1 }, hot: { value: new THREE.Color(1, 1, 1) }, line: { value: gas.line }, wake: { value: gas.wake },
+        front: { value: front }, tail: { value: tail }, cap: { value: cap }, flow: { value: 3 } },
+      vertexShader: `uniform float stretch, front, tail; varying float vAlong; varying vec3 vN; varying vec3 vV; varying vec3 vP;
+        #include <common>
+        #include <logdepthbuf_pars_vertex>
+        void main() {
+          vec3 p = position; if (p.y < 0.0) p.y *= stretch;
+          vAlong = clamp((front - position.y) / (front - tail), 0.0, 1.0); vP = p;
+          vec4 mv = modelViewMatrix * vec4(p, 1.0); vN = normalize(normalMatrix * normal); vV = normalize(-mv.xyz);
+          gl_Position = projectionMatrix * mv;
+          #include <logdepthbuf_vertex>
+        }`,
+      fragmentShader: `uniform float glow, time, cap, flow; uniform vec3 hot, line, wake; varying float vAlong; varying vec3 vN; varying vec3 vV; varying vec3 vP;
+        ${NOISE}
+        #include <logdepthbuf_pars_fragment>
+        void main() {
+          #include <logdepthbuf_fragment>
+          float a = vAlong, ndv = abs(dot(normalize(vN), normalize(vV)));
+          float c = 1.0 - smoothstep(0.0, cap, a);                   // on the cap
+          // a thin sheet: bright edge-on, but never a hard line at its very edge
+          float thin = (0.9 / (ndv + 0.3)) * 0.45 * smoothstep(0.0, 0.35, ndv) + 0.2;
+          float filled = pow(ndv, 2.2);                               // a filled glow: bright through the middle, soft edges
+          float shape = mix(filled, thin, c);
+          // turbulence streaming back along the wake, calm on the cap
+          float n = fbm(vec3(vP.x * 2.2, vP.y * 0.7 + time * flow, vP.z * 2.2));
+          float n2 = fbm(vec3(vP.x * 5.0 + 9.0, vP.y * 1.6 + time * flow * 1.7, vP.z * 5.0));
+          float turb = mix(1.0, 0.25 + 1.5 * n * (0.7 + 0.6 * n2), smoothstep(0.02, 0.3, a));
+          float fall = exp(-3.2 * a) * smoothstep(1.0, 0.55, a);
+          vec3 col = mix(hot, line, smoothstep(0.0, cap * 1.6, a));
+          col = mix(col, wake, smoothstep(cap, 0.75, a));
+          gl_FragColor = vec4(col * glow * shape * turb * fall, 1.0);
+        }`,
+      transparent: true, blending: THREE.AdditiveBlending, depthWrite: false });
+  }
+
+  // ---------- sparks and pieces: camera-facing streaks, one instanced draw ----------
+  // each streak runs from its tail to its head (in the parent's frame), with a width and a color, soft at its edges
+  function streaks(max, layer, depthTest) {
+    const geo = new THREE.InstancedBufferGeometry();
+    geo.setAttribute("position", new THREE.BufferAttribute(new Float32Array([0, -1, 0, 1, -1, 0, 1, 1, 0, 0, 1, 0]), 3));
+    geo.setIndex([0, 1, 2, 0, 2, 3]);
+    const a = geo.userData = { from: new Float32Array(max * 3), to: new Float32Array(max * 3), col: new Float32Array(max * 4) };
+    geo.setAttribute("iFrom", new THREE.InstancedBufferAttribute(a.from, 3).setUsage(THREE.DynamicDrawUsage));
+    geo.setAttribute("iTo", new THREE.InstancedBufferAttribute(a.to, 3).setUsage(THREE.DynamicDrawUsage));
+    geo.setAttribute("iCol", new THREE.InstancedBufferAttribute(a.col, 4).setUsage(THREE.DynamicDrawUsage));
+    geo.instanceCount = 0;
+    const mat = new THREE.ShaderMaterial({
+      vertexShader: `attribute vec3 iFrom; attribute vec3 iTo; attribute vec4 iCol; varying vec2 vUv; varying vec3 vCol; varying float vLen;
+        #include <common>
+        #include <logdepthbuf_pars_vertex>
+        void main() {
+          vec4 a = modelViewMatrix * vec4(iFrom, 1.0), b = modelViewMatrix * vec4(iTo, 1.0);
+          vec3 d = b.xyz - a.xyz; vec2 dir = d.xy; float l = length(dir);
+          dir = l > 1e-6 * abs(a.z) ? dir / l : vec2(1.0, 0.0);
+          vec2 side = vec2(-dir.y, dir.x); float w = iCol.w;
+          vec4 p = mix(a, b, position.x);
+          p.xy += side * position.y * w + dir * (position.x * 2.0 - 1.0) * w;
+          vUv = vec2(position.x, position.y); vCol = iCol.rgb; vLen = l / (l + 2.0 * w);
+          gl_Position = projectionMatrix * p;
+          #include <logdepthbuf_vertex>
+        }`,
+      fragmentShader: `varying vec2 vUv; varying vec3 vCol; varying float vLen;
+        #include <logdepthbuf_pars_fragment>
+        void main() {
+          #include <logdepthbuf_fragment>
+          float across = exp(-vUv.y * vUv.y * 3.5);
+          float along = mix(1.0, pow(vUv.x, 1.6), vLen);   // the head bright, the tail fading
+          float cap = (1.0 - vLen) + 0.02;                  // round, soft ends
+          float ends = smoothstep(0.0, cap, vUv.x) * smoothstep(1.0, 1.0 - cap, vUv.x);
+          gl_FragColor = vec4(vCol * across * along * ends, 1.0);
+        }`,
+      transparent: true, blending: THREE.AdditiveBlending, depthWrite: false, depthTest });
+    const m = new THREE.Mesh(geo, mat);
+    m.layers.set(layer); m.frustumCulled = false;
+    m.userData = { max, list: [] };
+    return m;
+  }
+  // add one: at p, moving at v, width w, life in s, starting at temperature T (K), drag (1/s)
+  function emit(s, p, v, w, life, T, drag) {
+    const l = s.userData.list;
+    if (l.length < s.userData.max) l.push({ p, v, w, life, age: 0, T, drag });
+  }
+  const tmpCol = new THREE.Color();
+  // move them on and write them out; toLocal turns a stored point into the parent's frame (in place); len = how many
+  // seconds of motion a streak shows; hot = the temperature of full brightness
+  function stepStreaks(s, dt, toLocal, len, hot) {
+    const l = s.userData.list, g = s.geometry, a = g.userData;
+    let n = 0;
+    for (let i = l.length - 1; i >= 0; i--) {
+      const q = l[i]; q.age += dt;
+      if (q.age > q.life) { l.splice(i, 1); continue; }
+      q.v.multiplyScalar(Math.exp(-q.drag * dt)); q.p.addScaledVector(q.v, dt);
+      const k = q.age / q.life, T = q.T * (1 - 0.6 * k);   // cooling as it goes
+      blackbody(T, tmpCol).multiplyScalar(glowOf(T, hot) * (1 - k * k) * 1.6);
+      const h = toLocal(vA.copy(q.p)), t = toLocal(vB.copy(q.p).addScaledVector(q.v, -len));
+      a.from.set([t.x, t.y, t.z], 3 * n); a.to.set([h.x, h.y, h.z], 3 * n);
+      a.col.set([tmpCol.r, tmpCol.g, tmpCol.b, q.w], 4 * n); n++;
+    }
+    g.instanceCount = n;
+    ["iFrom", "iTo", "iCol"].forEach(k => { g.attributes[k].needsUpdate = true; });
+  }
+  const vA = new THREE.Vector3(), vB = new THREE.Vector3();
+  const rnd = (a, b) => a + (b - a) * Math.random();
+
+  // ---------- the windward skin, glowing by its temperature ----------
+  // each mesh under `skin` gets a copy of its material that adds, where the surface faces into the flow, the glow of a
+  // blackbody at the skin's temperature (the originals go back on dispose). Shared uniforms: the flow direction in view
+  // space and the glow's color
+  function heatSkin(skin) {
+    const u = { heatDir: { value: new THREE.Vector3(0, 0, 1) }, heatCol: { value: new THREE.Color(0, 0, 0) }, heatWrap: { value: 0.15 } };
+    const swaps = [], copies = new Map();
+    skin.traverse(o => {
+      if (!o.isMesh || !o.material) return;
+      const one = m => {
+        if (!m || !("emissive" in m)) return m;
+        if (copies.has(m)) return copies.get(m);
+        const c = m.clone();
+        c.onBeforeCompile = sh => {
+          Object.assign(sh.uniforms, u);
+          sh.fragmentShader = "uniform vec3 heatDir; uniform vec3 heatCol; uniform float heatWrap;\n" + sh.fragmentShader.replace("#include <emissivemap_fragment>",
+            `#include <emissivemap_fragment>
+            { float f = clamp((dot(normal, heatDir) + heatWrap) / (1.0 + heatWrap), 0.0, 1.0); totalEmissiveRadiance += heatCol * f * f; }`);
+        };
+        c.customProgramCacheKey = () => "entry-heat";
+        copies.set(m, c);
+        return c;
+      };
+      swaps.push([o, o.material]);
+      o.material = Array.isArray(o.material) ? o.material.map(one) : one(o.material);
+    });
+    return { u, dispose() { swaps.forEach(([o, m]) => { o.material = m; }); copies.forEach(c => c.dispose()); } };
+  }
+
+  // ---------- close up: the whole entry around one craft ----------
+  // parent: the craft's group, in metres (the close-up pass). opts:
+  //   radius   the body's radius across the flow, m (Huygens' heat shield 1.35; Cassini, dish and all, ~3.5)
+  //   nose     how far ahead of the parent's origin its front is, m (default radius / 2)
+  //   gas      the atmosphere, a key of the viewer's ATMOSPHERES table ("TITAN", "SATURN", ...)
+  //   skin     an object whose meshes heat up on their windward side (optional)
+  //   skinHot  the skin's temperature at full heating, K (default 1900)
+  //   sparks   how many sparks the ablating skin throws, 1 = a heat shield's few (default 1)
+  //   stream   how fast the air seems to stream past, in body radii per second (default 9; the real flow is km/s,
+  //            far too fast to see)
+  // update(dt, motion, heat, more): motion = the direction the craft moves, in scene axes; heat 0..1 (the cutscene's
+  // own heating curve: deceleration, or the load the air puts on it); more.debris 0..1 throws pieces off as it breaks
+  // up. level is the smoothed heat, for sound and shake
+  function entry(parent, opts = {}) {
+    const R = opts.radius || 1.5, nose = opts.nose != null ? opts.nose : R / 2, gas = gasOf(opts.gas), layer = opts.layer != null ? opts.layer : 1;
+    const skinHot = opts.skinHot || 1900, sparkRate = opts.sparks != null ? opts.sparks : 1, stream = (opts.stream || 9) * R;
+    const root = new THREE.Group();
+    // two shells: the bright shock layer hugging the body with a short wake, and a wider, fainter one trailing far back
+    const inner = sheathGeometry(0.16, 1.0, 3.2), outer = sheathGeometry(0.3, 1.35, 7.5);
+    const mIn = new THREE.Mesh(inner.geo, sheathMaterial(gas, inner.front, inner.tail, 0.14));
+    const mOut = new THREE.Mesh(outer.geo, sheathMaterial(gas, outer.front, outer.tail, 0.08));
+    [mIn, mOut].forEach(m => { m.position.y = nose / R; m.renderOrder = 2; m.frustumCulled = false; });
+    const shells = new THREE.Group(); shells.add(mOut, mIn); shells.scale.setScalar(R); root.add(shells);
+    // the glow it all throws: a white-hot core at the cap (hidden behind the craft when seen from behind) and a wide,
+    // faint halo in the air's color
+    const core = halo(0xffffff, layer, true), glow = halo(gas.haze, layer, false);
+    root.add(core, glow);
+    const sp = streaks(opts.maxSparks || 420, layer, true);
+    root.add(sp);
+    root.traverse(o => o.layers.set(layer));
+    parent.add(root);
+    const skin = opts.skin ? heatSkin(opts.skin) : null;
+    // sparks are kept in scene axes about the craft (so they stream behind it however it turns) and turned into its
+    // frame when drawn
+    const qW = new THREE.Quaternion(), qInv = new THREE.Quaternion(), sW = new THREE.Vector3(), dir = new THREE.Vector3(), dirL = new THREE.Vector3();
+    const side = new THREE.Vector3(), up = new THREE.Vector3(), Y = new THREE.Vector3(0, 1, 0), tmp = new THREE.Vector3(), pW = new THREE.Vector3();
+    const E = { level: 0, time: 0, root };
+    const toLocal = v => v.applyQuaternion(qInv);
+    E.update = (dt, motion, heat, more = {}) => {
+      dt = Math.min(dt, 0.1); E.time += dt;
+      heat = clamp01(heat);
+      E.level += (heat - E.level) * (1 - Math.exp(-dt / 0.15));
+      const h = E.level;
+      parent.updateMatrixWorld();
+      parent.matrixWorld.decompose(pW, qW, sW);
+      qInv.copy(qW).invert();
+      dir.copy(motion).normalize(); dirL.copy(dir).applyQuaternion(qInv);
+      // the shells along the flow, the wake longer and the whole glow stronger as the heating grows
+      shells.quaternion.setFromUnitVectors(Y, dirL);
+      const flick = 0.93 + 0.07 * Math.sin(E.time * 37) * Math.sin(E.time * 23.7);
+      // the shock layer's own temperature reads white-hot well before the skin glows
+      const shockT = 3200 + 9000 * h;
+      [[mIn, 1.25], [mOut, 0.42]].forEach(([m, k]) => {
+        const u = m.material.uniforms;
+        u.glow.value = k * Math.pow(h, 1.3) * flick; u.time.value = E.time; u.stretch.value = 0.55 + 0.75 * h;
+        u.flow.value = stream / R * 0.35; blackbody(shockT, u.hot.value);
+      });
+      core.position.copy(dirL).multiplyScalar(nose + 0.3 * R);
+      core.material.opacity = 0.8 * h * h * flick; core.scale.setScalar(R * (1.6 + 2.4 * h));
+      glow.position.copy(dirL).multiplyScalar(nose - 0.5 * R);
+      glow.material.opacity = 0.3 * h * flick; glow.scale.setScalar(R * (4 + 7 * h));
+      // the skin: a radiating surface's temperature goes as the fourth root of its heating
+      if (skin) {
+        const T = skinHot * Math.pow(h, 0.25);
+        blackbody(T, skin.u.heatCol.value).multiplyScalar(2.2 * glowOf(T, skinHot) * (0.96 + 0.04 * flick));
+        skin.u.heatDir.value.copy(dir).transformDirection(camera.matrixWorldInverse);
+      }
+      // sparks off the shoulders, where the flow scrubs the edge of the skin, swept back and cooling
+      side.crossVectors(dir, Math.abs(dir.y) < 0.9 ? Y : tmp.set(1, 0, 0)).normalize(); up.crossVectors(side, dir);
+      const nS = Math.floor(sparkRate * 90 * Math.pow(h, 2) * dt + Math.random());
+      for (let i = 0; i < nS; i++) {
+        const a = Math.random() * Math.PI * 2, at = new THREE.Vector3().addScaledVector(side, Math.cos(a) * R * 0.95).addScaledVector(up, Math.sin(a) * R * 0.95).addScaledVector(dir, nose * 0.4);
+        const v = dir.clone().multiplyScalar(-stream * rnd(0.5, 1.2)).addScaledVector(at.clone().addScaledVector(dir, -at.dot(dir)).normalize(), stream * rnd(0.03, 0.12));
+        emit(sp, at, v, R * rnd(0.005, 0.012), rnd(0.25, 0.8), skinHot * rnd(1.1, 1.4), 1.2);
+      }
+      // pieces as it breaks up: bigger, slower, longer-lived, from anywhere on the body
+      const nD = Math.floor(70 * (more.debris || 0) * dt + Math.random() * Math.min(1, more.debris || 0));
+      for (let i = 0; i < nD; i++) {
+        const at = new THREE.Vector3(rnd(-1, 1), rnd(-1, 1), rnd(-1, 1)).multiplyScalar(R * 0.8);
+        const v = dir.clone().multiplyScalar(-stream * rnd(0.15, 0.6)).add(new THREE.Vector3(rnd(-1, 1), rnd(-1, 1), rnd(-1, 1)).multiplyScalar(stream * 0.08));
+        emit(sp, at, v, R * rnd(0.012, 0.035), rnd(0.8, 2.2), rnd(2500, 3000), 0.6);
+      }
+      stepStreaks(sp, dt, toLocal, 0.09, 2600);
+    };
+    E.dispose = () => {
+      parent.remove(root);
+      [mIn, mOut].forEach(m => { m.geometry.dispose(); m.material.dispose(); });
+      [core, glow].forEach(s => s.material.dispose());
+      sp.geometry.dispose(); sp.material.dispose();
+      if (skin) skin.dispose();
+    };
+    return E;
+  }
+
+  // ---------- far off: a fireball and its trail, breaking up ----------
+  // In the main scene (scene units, layer 0), drawn over everything near it like a bright light. opts.gas as above,
+  // opts.pieces how many pieces it breaks into (default 7). update(o) each frame:
+  //   head    where it is (scene)
+  //   path    points back along its real path, head first (scene); the trail is drawn along them
+  //   size    scene units per unit of drawn size (the cutscene's scale for its camera distance)
+  //   hot     0..1 how bright the head burns; train 0..1 how strong the glowing trail is; spread 1.. how far it has
+  //           spread; breakup 0..1 how far it has come apart; front 0..1 whether it is in view (behind a planet: 0)
+  function meteor(opts = {}) {
+    const gas = gasOf(opts.gas), N = opts.points || 48, P = opts.pieces != null ? opts.pieces : 7;
+    const head = halo(0xfff4e6, 0, false), glow = halo(gas.haze, 0, false);
+    const geo = new THREE.BufferGeometry(), uv = new Float32Array(N * 4);
+    for (let i = 0; i < N; i++) uv.set([i / (N - 1), -1, i / (N - 1), 1], 4 * i);
+    geo.setAttribute("position", new THREE.BufferAttribute(new Float32Array(N * 6), 3));
+    geo.setAttribute("uv", new THREE.BufferAttribute(uv, 2));
+    const idx = [];
+    for (let i = 0; i < N - 1; i++) idx.push(2 * i, 2 * i + 1, 2 * i + 2, 2 * i + 1, 2 * i + 3, 2 * i + 2);
+    geo.setIndex(idx);
+    // the trail: white-hot at the head, cooling through yellow and orange, then the air's own glow lingering behind
+    // and breaking into knots and billows as it spreads
+    const trail = new THREE.Mesh(geo, new THREE.ShaderMaterial({
+      uniforms: { hot: { value: 0 }, train: { value: 0 }, time: { value: 0 }, spread: { value: 1 }, line: { value: gas.line }, wake: { value: gas.wake } },
+      vertexShader: `varying vec2 vUv; void main() { vUv = uv; gl_Position = projectionMatrix * modelViewMatrix * vec4(position, 1.0); }`,
+      fragmentShader: `uniform float hot, train, time, spread; uniform vec3 line, wake; varying vec2 vUv;
+        ${NOISE}
+        void main() {
+          float u = vUv.x, w = vUv.y;
+          float n = fbm(vec3(u * 26.0, w * 1.7, time * 0.35)), n2 = fbm(vec3(u * 70.0 + 4.0, w * 3.0, time * 0.8));
+          float wob = w + 0.35 * (n - 0.5) * smoothstep(0.02, 0.4, u);
+          float core = exp(-wob * wob * 9.0 * (1.0 + 2.0 * u)), soft = exp(-wob * wob * 2.2);
+          vec3 c = mix(vec3(1.0, 0.97, 0.9), vec3(1.0, 0.78, 0.45), smoothstep(0.0, 0.08, u));
+          c = mix(c, vec3(1.0, 0.5, 0.2), smoothstep(0.06, 0.22, u));
+          c = mix(c, mix(line, wake, smoothstep(0.2, 0.7, u)), smoothstep(0.14, 0.45, u));
+          float headPart = hot * pow(1.0 - u, 5.0) * (0.7 * core + 0.3 * soft);
+          float glowPart = train * pow(1.0 - u, 1.2) * smoothstep(0.0, 0.03, u) * (0.3 * core + 0.7 * soft) * (0.45 + 1.1 * n * (0.6 + 0.8 * n2));
+          gl_FragColor = vec4(c * (2.4 * headPart + 1.2 * glowPart / spread), 1.0);
+        }`,
+      transparent: true, blending: THREE.AdditiveBlending, depthWrite: false, depthTest: false, side: THREE.DoubleSide }));
+    trail.frustumCulled = false;
+    // the pieces: each a small fireball with its own short trail, drifting apart and falling behind
+    const bits = Array.from({ length: P }, (_, i) => ({ s: halo(0xffe0b0, 0, false), off: new THREE.Vector2(rnd(-1, 1), rnd(-1, 1)).normalize().multiplyScalar(rnd(0.3, 1)), lag: rnd(0.2, 1), b: rnd(0.4, 1), seed: i * 1.7 }));
+    const sp = streaks(P, 0, false);
+    scene.add(trail, glow, head, sp, ...bits.map(b => b.s));
+    const pts = Array.from({ length: N }, () => new THREE.Vector3());
+    const tan = new THREE.Vector3(), cam = new THREE.Vector3(), side = new THREE.Vector3(), up = new THREE.Vector3(), back = new THREE.Vector3(), at = new THREE.Vector3();
+    let time = 0, last = performance.now();
+    return {
+      update(o) {
+        const now = performance.now(); time += Math.min(0.1, (now - last) / 1000); last = now;
+        const k = o.size || 1, front = o.front != null ? o.front : 1, hot = clamp01(o.hot) * front, br = clamp01(o.breakup || 0);
+        const flick = 0.85 + 0.15 * Math.sin(time * 31) * Math.sin(time * 17.3);
+        head.position.copy(o.head); head.material.opacity = Math.min(1, hot * 1.2) * flick; head.scale.setScalar(k * (5 + 12 * hot));
+        glow.position.copy(o.head); glow.material.opacity = 0.5 * hot; glow.scale.setScalar(k * (22 + 40 * hot));
+        const pa = trail.geometry.attributes.position.array, path = o.path, M = Math.min(N, path.length);
+        for (let i = 0; i < N; i++) pts[i].copy(path[Math.min(M - 1, Math.round(i * (M - 1) / (N - 1)))]);
+        for (let i = 0; i < N; i++) {
+          const p = pts[i], u = i / (N - 1);
+          tan.subVectors(pts[Math.max(0, i - 1)], pts[Math.min(N - 1, i + 1)]);
+          cam.subVectors(camera.position, p);
+          side.crossVectors(tan, cam).normalize().multiplyScalar(k * (0.9 + 2.2 * u) * (o.spread || 1) * (1 + 0.5 * hot));
+          pa.set([p.x - side.x, p.y - side.y, p.z - side.z, p.x + side.x, p.y + side.y, p.z + side.z], 6 * i);
+        }
+        trail.geometry.attributes.position.needsUpdate = true;
+        const u = trail.material.uniforms;
+        u.hot.value = hot * flick; u.train.value = clamp01(o.train) * front; u.time.value = time; u.spread.value = o.spread || 1;
+        // the pieces come apart across the path and fall behind it, each burning out at its own pace
+        back.subVectors(pts[Math.min(2, N - 1)], pts[0]).normalize();
+        cam.subVectors(camera.position, o.head).normalize();
+        side.crossVectors(back, cam).normalize(); up.crossVectors(side, back).normalize();
+        const g = sp.geometry, a = g.userData;
+        let n = 0;
+        for (const b of bits) {
+          const life = clamp01(1 - br * (1.1 - 0.6 * b.b)), on = br > 0 ? front * life * Math.min(1, br * 4) : 0;
+          at.copy(o.head).addScaledVector(side, b.off.x * k * 9 * br).addScaledVector(up, b.off.y * k * 6 * br).addScaledVector(back, b.lag * k * 40 * br);
+          b.s.position.copy(at); b.s.material.opacity = on * b.b * (0.75 + 0.25 * Math.sin(time * 23 + b.seed)); b.s.scale.setScalar(k * (2 + 2.5 * b.b));
+          if (on > 0.01) {
+            a.to.set([at.x, at.y, at.z], 3 * n); a.from.set([at.x + back.x * k * 9, at.y + back.y * k * 9, at.z + back.z * k * 9], 3 * n);
+            blackbody(2600 - 900 * br * (1 - b.b), tmpCol).multiplyScalar(on * 0.8);
+            a.col.set([tmpCol.r, tmpCol.g, tmpCol.b, k * 0.4], 4 * n); n++;
+          }
+        }
+        g.instanceCount = n;
+        ["iFrom", "iTo", "iCol"].forEach(key => { g.attributes[key].needsUpdate = true; });
+      },
+      dispose() {
+        scene.remove(trail, glow, head, sp, ...bits.map(b => b.s));
+        trail.geometry.dispose(); trail.material.dispose(); sp.geometry.dispose(); sp.material.dispose();
+        [head, glow, ...bits.map(b => b.s)].forEach(s => s.material.dispose());
+      },
+    };
+  }
+
+  // a smooth shake (sums of incommensurate sines, so it never repeats or jumps), amount in whatever units the camera
+  // moves in; t in seconds
+  function shake(amount, t, out) {
+    const f = (a, b, c) => (Math.sin(a * t + b) + 0.6 * Math.sin(2.3 * a * t + c) + 0.35 * Math.sin(5.1 * a * t + b + c)) / 1.95;
+    return (out || new THREE.Vector3()).set(f(13, 0, 1.3), f(11.7, 2.1, 0.4), f(12.9, 4.2, 2.7)).multiplyScalar(amount);
+  }
+
+  Object.assign(CS.fx, { entry, meteor, shake, blackbody, haloTexture });
+})();
+</script>
