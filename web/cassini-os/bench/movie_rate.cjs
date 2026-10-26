@@ -12,14 +12,18 @@
 //   CHANNEL=chrome  the installed Google Chrome (the Mac Mini); SOFTWARE=1 SwiftShader and THREE_DIR=.../three/package
 //               for a cloud container; HEADED=1 shows the window; MAXSECS (default 600) caps each run
 //   PRE='js'    runs in the page before each run (e.g. cassiniSettings.set("cameras.autoCenter", false))
+//   VIDEO=OUT.webm  records the timed run's page (W x H) to that file; OUT.json's videoStartS is where in it the
+//               run starts (ffmpeg -ss), so two servers' clips can be laid side by side from the same moment
 let chromium;
 try { ({ chromium } = require("playwright-core")); } catch (e) { ({ chromium } = require("playwright")); }
 const fs = require("fs");
 const [url, FROM, UNTIL, out, FPS = 24, W = 1440, H = 900, DPR = 2] = process.argv.slice(2);
 const env = process.env, MAXSECS = +(env.MAXSECS || 600);
 
-async function open(br) {
-  const ctx = await br.newContext({ viewport: { width: +W, height: +H }, deviceScaleFactor: +DPR });
+async function open(br, video) {
+  const ctx = await br.newContext({ viewport: { width: +W, height: +H }, deviceScaleFactor: +DPR,
+    ...(video ? { recordVideo: { dir: require("os").tmpdir(), size: { width: +W, height: +H } } } : {}) });
+  ctx.openedAt = Date.now();
   const page = await ctx.newPage();
   page.on("pageerror", e => console.log("PAGEERROR", e.message));
   if (env.THREE_DIR) {
@@ -58,7 +62,7 @@ async function run(page, label, profile) {
     cassiniMovie.start(true, { from: R.from, until: R.until });
   }, [FROM, UNTIL]);
   if (cdp) { await cdp.send("Profiler.enable"); await cdp.send("Profiler.setSamplingInterval", { interval: 1000 }); await cdp.send("Profiler.start"); }
-  const t0 = Date.now();
+  const t0 = Date.now(), videoStartS = (t0 - page.context().openedAt) / 1000;
   while (Date.now() - t0 < MAXSECS * 1000) {
     await page.waitForTimeout(500);
     if (!(await page.evaluate(() => cassiniMovie.on))) break;
@@ -119,6 +123,7 @@ async function run(page, label, profile) {
       .map(([k, v]) => [k, +(v / Math.max(1, r.seconds)).toFixed(1)]);
     r.idleShare = +((self["(idle):0"] || 0) / Math.max(1, total)).toFixed(3);
   }
+  r.videoStartS = +videoStartS.toFixed(2);
   const k = r.kinds, line = Object.entries(k).filter(([n]) => n !== "data").map(([n, b]) => `${n} ${b.n}${b.fromBrowserCache ? ` (${b.fromBrowserCache} cached)` : ""} server p50/p95 ${b.serverP50}/${b.serverP95} ms queue p95 ${b.queueP95}`).join("; ");
   console.log(`${label}: ${r.steps}/${r.picturesDue} steps in ${r.seconds} s = ${r.stepsPerSecond}/s at ${r.fps} fps asked; step p50/p90/max ${r.stepMsP50}/${r.stepMsP90}/${r.stepMsMax} ms; waiting ${Math.round(r.waitShare * 100)}%; 3D ${r.rafFps} fps (p95 ${r.rafMsP95} ms); long tasks ${r.longTaskMsPerSecond} ms/s; requests ${r.requests}, in flight peak ${r.inFlightPeak}\n   ${line}`);
   return r;
@@ -134,9 +139,9 @@ async function run(page, label, profile) {
     result.runs.push(await run(w.page, "warm-up (makes what is missing)", false));
     await w.ctx.close();
   }
-  const m = await open(br);
+  const m = await open(br, env.VIDEO);
   result.loadMs = m.loadMs;
-  result.runs.push(await run(m.page, "timed (server cache, empty browser cache)", true));
+  result.runs.push(await run(m.page, "timed (server cache, empty browser cache)", !env.VIDEO));
   if (env.REPLAY) {
     await m.page.evaluate(from => { setPlaying(false); setTime(utcToEt(from)); }, FROM);
     await m.page.waitForTimeout(3000);
@@ -144,5 +149,6 @@ async function run(page, label, profile) {
   }
   await m.page.screenshot({ path: `${out}.png` });
   fs.writeFileSync(`${out}.json`, JSON.stringify(result, null, 1));
+  if (env.VIDEO) { await m.ctx.close(); await m.page.video().saveAs(env.VIDEO); }
   await br.close();
 })();
