@@ -1196,7 +1196,12 @@ def centre_view(frame_id):
             # north up where it is only when the frames are on the body's disk (a close-up): the body's surface
             # then holds still. Off the disk (rings, sky) Cassini rolled to keep the scene upright in the camera,
             # so the camera's own orientation is the steady one and north up would turn it frame to frame
-            hit["north"] = bool(fp and radius and _on_disk(fp, radius))
+            boxes = [(-x * fz / z - HALF, -y * fz / z - HALF, -x * fz / z + HALF, -y * fz / z + HALF)
+                     for *_, x, y, fz in u["frames"] if fz] if found else [fp]
+            # most of the pass's frames, each on its own (an arcing ring scan's footprint can clip the disk though
+            # none of its frames is on it)
+            on = sum(_on_disk(b, radius) for b in boxes) if radius else 0
+            hit["north"] = bool(boxes) and on * 2 > len(boxes)
         with _lock:
             _centre_views[key] = hit
     # the frame's own disk of the body (full resolution pixels), so centred knows whether the frame cuts it
@@ -1206,7 +1211,8 @@ def centre_view(frame_id):
 
 
 def _on_disk(fp, radius):
-    """True when the footprint fp (reference pixels round the body's centre) takes in part of the body's disk."""
+    """True when the box fp (a frame's footprint, reference pixels round the body's centre) takes in part of the
+    body's disk."""
     x0, y0, x1, y1 = fp
     dx, dy = max(x0, 0, -x1), max(y0, 0, -y1)
     return dx * dx + dy * dy < radius * radius
