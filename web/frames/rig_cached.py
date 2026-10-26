@@ -157,6 +157,8 @@ def main():
     CACHE[0] = os.path.abspath(args.cache)
     os.stat, builtins.open, threading.Thread.start = _counted_stat, _counted_open, _counted_start
     profiling = os.environ.get("RIG_PROFILE") == "1"
+    if os.environ.get("FRAME_SERVER_SAMPLE") == "1":
+        threading.Thread(target=fs.sample_stacks, daemon=True).start()
     handler = fs.make_handler(os.path.abspath(args.site), CACHE[0], os.path.join(CACHE[0], "flags"))
     base_get = handler.get
 
