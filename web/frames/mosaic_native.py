@@ -49,7 +49,7 @@ CROP_MAX = int(os.environ.get("CASSINI_NATIVE_CROP", "2048"))       # longest si
 BLOCK = int(os.environ.get("CASSINI_NATIVE_BLOCK", "1024"))        # canvas px drawn at a time
 KEEP_MB = int(os.environ.get("CASSINI_FULLRES_MB", "5120"))         # most the native pictures' cache holds
 JPEG_QUALITY = 92
-VERSION = "native-v1"   # bumped whenever the way native mosaics are made changes (with obs_mosaic.VERSIONS)
+VERSION = "native-v2"   # bumped whenever the way native mosaics are made changes (with obs_mosaic.VERSIONS)
 # bytes per pixel, roughly, of a saved native mosaic (sky is most of a mosaic's canvas and costs almost nothing)
 EST_BYTES = {"jpg": 0.35, "png": 1.6}
 
@@ -125,20 +125,36 @@ def _path(u, made, cache, crop, fmt, k):
 
 
 # ---------- the windows' seam corrections, tile by tile ----------
+def drawn(u, made):
+    """What so_far draws for layout made: (the filters composed, the colour filters or None, whether the luminance
+    base goes under the picture, the tag of a set of tiles with a name of its own, the filter the seams are solved on)."""
+    p, tiles, rect, count, used, name = made
+    plain, _, tuned = name.partition("-tune")
+    tag = ("-" + plain.rsplit("-", 1)[1] if plain.startswith("lap-") else "") + ("-tune" + tuned if tuned else "")
+    base = not plain.startswith("lap-") and om.lum_base(u, p, tiles, used)
+    colour = used if len(used) == 3 else None
+    filters = (list(colour) if colour else []) + ([om.LUM] if base else [] if colour else [used[0]])
+    return filters, colour, base, tag, max(used, key=lambda f: count[f])
+
+
 def corrections(u, made, cache):
     """{filter: {tile n: (gains [3], offsets [3])}}: the corrections the windows' mosaic of layout made gave each
     tile, worked out again on its canvas the way obs_mosaic.filter_mosaic draws it: a filter of up to GROW_FROM tiles
     (or a set of tiles with a name of its own, a tuned layout) solved together, none pinned (held_level); past
     that, the first GROW_FROM solved together and each tile after found as _grown finds it, matched (pin 0)
-    against the mosaic of the tiles before it, as _over cuts it. Kept beside the native pictures."""
+    against the mosaic of the tiles before it, as _over cuts it. The luminance base (obs_mosaic.LUM, its tiles with
+    their gains, _mine / _shade) is one more filter; "_grey" is over_grey's match of it to the colour, measured on the
+    window's whole canvas (grey_gain), so every block lays the gray under the colour alike. Kept beside the native
+    pictures."""
     p, tiles, rect, count, used, name = made
     path = os.path.join(cache_dir(cache), VERSION, calibration.style(), "_".join(map(str, u["key"])), f"{name}-seams.json")
 
     def make():
         out = {}
-        tagged = "-tune" in name or name.startswith("lap-")
-        for f in used:
-            mine = [t for t in tiles if t["filter"] == f and "offset" in t]
+        filters, colour, base, tag, ref = drawn(u, made)
+        tagged = bool(tag)
+        for f in filters:
+            mine = om._mine(u, p, tiles, f)
             first = mine if tagged or len(mine) <= om.GROW_FROM else mine[:om.GROW_FROM]
             got = out[f] = {}
             window, shown = om._window(u, p, first, rect, cache)
@@ -160,6 +176,10 @@ def corrections(u, made, cache):
                     got[t["n"]] = [list(map(float, gains[1])), list(map(float, offsets[1]))]
                 om._over(u, p, rgba, t, rect, cache)
                 om._yield()
+        if colour and base:
+            picture = om.colour_picture(u, p, colour, [om.filter_mosaic(u, p, f, tiles, rect, cache, ref, tag) for f in colour])
+            g = om.grey_gain(picture, om.filter_mosaic(u, p, om.LUM, tiles, rect, cache, None, tag), p["k"], p["display_scale"]["gamma"])
+            out["_grey"] = None if g is None else list(map(float, g))
         return json.dumps(out).encode()
 
     # one at a time (the lens's first crop and the warm-up ask together)
@@ -167,7 +187,10 @@ def corrections(u, made, cache):
         lock = _making.setdefault(path, threading.Lock())
     with lock:
         solved = json.loads(reel._cached(path, make))
-    return {f: {int(n): (np.array(v[0]), np.array(v[1])) for n, v in by.items()} for f, by in solved.items()}
+    grey = solved.pop("_grey", None)
+    out = {f: {int(n): (np.array(v[0]), np.array(v[1])) for n, v in by.items()} for f, by in solved.items()}
+    out["_grey"] = None if grey is None else np.array(grey, np.float32)
+    return out
 
 
 def _pair(u, p, rgba, t, rect, cache):
@@ -182,12 +205,12 @@ def _pair(u, p, rgba, t, rect, cache):
     sw, sh = max(1, round(bw * k)), max(1, round(bh * k))
     x0, y0 = max(left - pad, 0), max(top - pad, 0)
     x1, y1 = min(left + sw + pad, W), min(top + sh + pad, H)
-    if x1 <= x0 or y1 <= y0:
-        return None
-    part = om._part(os.path.join(om._tiles(u, cache, p["display_scale"]), f"{t['n']}.png"), sw, sh)
-    frame = np.zeros((y1 - y0, x1 - x0, 4), np.uint8)
     a0, b0 = max(left, 0), max(top, 0)
     a1, b1 = min(left + sw, W), min(top + sh, H)
+    if not (x1 > x0 and y1 > y0 and a1 > a0 and b1 > b0):
+        return None
+    part = om._shade(om._part(os.path.join(om._tiles(u, cache, p["display_scale"]), f"{t['n']}.png"), sw, sh), t)
+    frame = np.zeros((y1 - y0, x1 - x0, 4), np.uint8)
     frame[b0 - y0:b1 - y0, a0 - x0:a1 - x0] = part[b0 - top:b1 - top, a0 - left:a1 - left]
     return [np.ascontiguousarray(rgba[y0:y1, x0:x1]), frame]
 
@@ -199,25 +222,29 @@ def block(u, made, corr, k, x0, y0, w, h, cache):
     contrast, as obs_mosaic.so_far does, on a margin wide enough for the soft edge and the contrast's blur that is
     cut off again, so blocks side by side join without a seam."""
     p, tiles, rect, count, used, name = made
+    filters, colour, base, _, _ = drawn(u, made)
     filled = p["display_scale"].get("filled")
     sigma = om.DETAIL_SIGMA * om.FRAME * k
     pad = max(8, round(64 * k / 0.5)) + 2 + (math.ceil(4 * sigma) + 2 if filled else 0)
     sub = (rect[0] + (x0 - pad) / k, rect[1] + (y0 - pad) / k, (w + 2 * pad) / k, (h + 2 * pad) / k)
     pk = dict(p, k=k)
-    planes = []
-    for f in used:
-        mine = [t for t in tiles if t["filter"] == f and "offset" in t]
+    planes = {}
+    for f in filters:
+        mine = om._mine(u, pk, tiles, f)
         window, shown = om._window(u, pk, mine, sub, cache)
         if not window:
-            planes.append(np.zeros((math.ceil(sub[3] * k), math.ceil(sub[2] * k), 4), np.uint8))
+            planes[f] = np.zeros((math.ceil(sub[3] * k), math.ceil(sub[2] * k), 4), np.uint8)
             continue
         one = (np.ones(3), np.zeros(3))
         got = [corr.get(f, {}).get(t["n"], one) for t in shown]
-        planes.append(om._compose(window, k, corrections=(np.array([g for g, _ in got]), np.array([o for _, o in got]))))
-    if len(used) == 3:
-        rgba = om.colour_picture(u, p, used, planes)
+        planes[f] = om._compose(window, k, corrections=(np.array([g for g, _ in got]), np.array([o for _, o in got])))
+    # as so_far: the colour picture over the luminance base where it has one, the base alone, or the one filter
+    if colour:
+        rgba = om.colour_picture(u, p, colour, [planes[f] for f in colour])
+        if base:
+            rgba = om.over_grey(rgba, planes[om.LUM], k, p["display_scale"]["gamma"], gain=corr.get("_grey"))
     else:
-        rgba = planes[0]
+        rgba = planes[filters[0]]
     if filled:
         rgba = om.detail(rgba, sigma)
     return np.ascontiguousarray(rgba[pad:pad + h, pad:pad + w])

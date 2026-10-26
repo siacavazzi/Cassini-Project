@@ -2,7 +2,7 @@
 past GROW_FROM the windows' mosaic grows a tile at a time) with fine detail and a small exposure error per tile.
 The native mosaic, shrunk to the windows' canvas, is the windows' mosaic (same levels and colours, seam
 corrections found again tile by tile); it holds the detail the canvas loses; a crop is the same pixels as that part
-of the whole; blocks join without a seam (any block size gives the same picture); the streamed PNG reads back; and
+of the whole; blocks join without a seam (any block size gives the same picture); the streamed PNG reads back; the last row, in the grey filter only, lies on the luminance base as in the window; and
 the pictures go to their own cache, not the frame server's. Run: python web/test_mosaic_native.py"""
 import os, sys, json, tempfile, time
 sys.path.insert(0, os.path.join(os.path.dirname(os.path.abspath(__file__)), "frames"))
@@ -22,7 +22,8 @@ filters = ["RED", "GRN", "BL1"]
 frames, offs = [], []
 for j in range(COLS * ROWS):
     x, y = (j % COLS - (COLS - 1) / 2) * STEP, (j // COLS - (ROWS - 1) / 2) * STEP
-    for f in filters:
+    # the last row in the grey filter only: the colour picture is laid over the luminance base there (over_grey)
+    for f in (filters if j < (ROWS - 1) * COLS else filters[:1]):
         n = len(frames)
         frames.append((f"p{n}", f"N{1500000000 + n}_1", f, 1000.0 + 20 * n, 600, -x, -y, 1e6))
         offs.append((x, y))
@@ -63,9 +64,10 @@ last = frames[-1][1]
 
 with calibration.looking("balanced"):
     made = om.layout(u, len(frames) - 1, cache)
-    assert made[4] == filters and made[3]["RED"] == 24 > om.GROW_FROM
+    assert made[4] == filters and made[3]["RED"] == 24 > made[3]["GRN"] == 18 > om.GROW_FROM
     # the windows' mosaic, on its whole canvas (the window is sent this shrunk to OUT)
-    shown, _ = om.so_far(u, len(frames) - 1, cache, made, out=om.CANVAS)
+    shown, rep = om.so_far(u, len(frames) - 1, cache, made, out=om.CANVAS)
+    assert rep["luminance"], rep
     shown = np.asarray(shown)
     about = mn.info(last, cache)
     print("native", about["width"], "x", about["height"], "shown", about["shown"], "estimate", about["estimate_mb"])

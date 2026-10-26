@@ -733,19 +733,31 @@ def match_grey(colour, grey, ca, only, feather, gamma):
     return np.clip(np.median(cl, axis=0) / np.median(gl), *LUM_MATCH).astype(np.float32)
 
 
-def over_grey(colour, grey, k, gamma=2.2):
+def grey_gain(colour, grey, k, gamma=2.2):
+    """The match over_grey gives the gray base under this colour picture (match_grey), or None (no match, or no
+    gray past the colour)."""
+    ca = colour[..., 3].astype(np.float32) / 255
+    only = (grey[..., 3].astype(np.float32) / 255 > 0.5) & (ca < 0.5)
+    if not only.any():
+        return None
+    return match_grey(colour, grey, ca, only, max(8, round(LUM_FEATHER * k / 0.5)), gamma)
+
+
+def over_grey(colour, grey, k, gamma=2.2, gain=...):
     """The colour picture (colour_picture: its colour times where all three filters cover) laid over the luminance
     base (grey, RGBA on the same canvas): colour where all three filters cover, the gray elsewhere, the colour fading
     into the gray over LUM_FEATHER (at this canvas's scale) inward from where the gray goes on past it. The gray is
     first matched to the colour it borders (match_grey), so the join shows no step in brightness or hue. Where
-    nothing lies beyond the colour (the mosaic's own edge) it keeps its edge as colour_picture drew it."""
+    nothing lies beyond the colour (the mosaic's own edge) it keeps its edge as colour_picture drew it. gain: the
+    match worked out already (grey_gain, on the whole mosaic: a native mosaic's blocks, mosaic_native)."""
     ca = colour[..., 3].astype(np.float32) / 255
     ga = grey[..., 3].astype(np.float32) / 255
     only = (ga > 0.5) & (ca < 0.5)   # the gray goes on past the colour
     if not only.any():
         return colour
     feather = max(8, round(LUM_FEATHER * k / 0.5))
-    gain = match_grey(colour, grey, ca, only, feather, gamma)
+    if gain is ...:
+        gain = match_grey(colour, grey, ca, only, feather, gamma)
     if gain is None:
         under = grey[..., :3].astype(np.float32)
     else:
