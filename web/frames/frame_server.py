@@ -361,9 +361,14 @@ def pick_thumb(hint, size, cache):
     return None
 
 
+def thumb_versions():
+    """the versions of the makers a thumbnail may come from: a bump of any of them makes the thumbnails again"""
+    return [obs_mosaic.VERSION, reel.VERSION, COLOR_VERSION]
+
+
 def thumb_key(hint, size):
     """the thumbnail's name in the cache: what it may be made of and the versions of the makers it comes from"""
-    what = json.dumps([hint, size, obs_mosaic.VERSION, reel.VERSION, COLOR_VERSION], sort_keys=True)
+    what = json.dumps([hint, size, thumb_versions()], sort_keys=True)
     return hashlib.sha1(what.encode()).hexdigest()[:20]
 
 
