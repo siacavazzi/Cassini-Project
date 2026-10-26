@@ -8,7 +8,8 @@
 <script>
 const SIZE = 256;
 const R = new THREE.WebGLRenderer({ antialias: true, alpha: true, preserveDrawingBuffer: true });
-R.setPixelRatio(1); R.setSize(SIZE * 2, SIZE * 2, false); R.outputEncoding = THREE.sRGBEncoding; R.localClippingEnabled = true;
+const SS = 4;   // rendered at 4x and brought down in halves, for clean edges
+R.setPixelRatio(1); R.setSize(SIZE * SS, SIZE * SS, false); R.outputEncoding = THREE.sRGBEncoding; R.localClippingEnabled = true;
 R.toneMapping = THREE.ACESFilmicToneMapping; R.toneMappingExposure = 0.9;
 document.body.appendChild(R.domElement);
 const tex = url => new Promise(res => new THREE.TextureLoader().load(url, t => { t.encoding = THREE.sRGBEncoding; t.anisotropy = 8; res(t); }));
@@ -38,14 +39,19 @@ function stage(fov = 30) {
 function shot({ scene, cam }, fill = 0.9) {
   R.setClearColor(0, 0); R.render(scene, cam);
   // every icon fills the same share of its square: crop to what was drawn, centered, then down to SIZE
-  const N = SIZE * 2, gl = R.getContext(), px = new Uint8Array(N * N * 4);
+  const N = SIZE * SS, gl = R.getContext(), px = new Uint8Array(N * N * 4);
   gl.readPixels(0, 0, N, N, gl.RGBA, gl.UNSIGNED_BYTE, px);
   let x0 = N, y0 = N, x1 = -1, y1 = -1;
   for (let y = 0; y < N; y++) for (let x = 0; x < N; x++) if (px[(y * N + x) * 4 + 3] > 8) { x0 = Math.min(x0, x); x1 = Math.max(x1, x); y0 = Math.min(y0, y); y1 = Math.max(y1, y); }
   const side = Math.max(x1 - x0, y1 - y0) + 1, cx = (x0 + x1 + 1) / 2, cy = N - (y0 + y1 + 1) / 2, k = SIZE * fill / side;
-  const c = document.createElement("canvas"); c.width = c.height = SIZE; const g = c.getContext("2d");
-  g.imageSmoothingQuality = "high";
-  g.drawImage(R.domElement, SIZE / 2 - cx * k, SIZE / 2 - cy * k, N * k, N * k);
+  // crop at full size, then halve until SIZE
+  let c = document.createElement("canvas"), M = SIZE * SS; c.width = c.height = M;
+  let g = c.getContext("2d"); g.imageSmoothingQuality = "high";
+  g.drawImage(R.domElement, M / 2 - cx * k * SS, M / 2 - cy * k * SS, N * k * SS, N * k * SS);
+  while (M > SIZE) {
+    const h = document.createElement("canvas"); M /= 2; h.width = h.height = M;
+    const hg = h.getContext("2d"); hg.imageSmoothingQuality = "high"; hg.drawImage(c, 0, 0, M, M); c = h;
+  }
   return c.toDataURL("image/png");
 }
 // fit an object to the frame: its bounding sphere fills `fill` of the picture
@@ -71,12 +77,14 @@ async function body(name, r = 1) {
   if (name !== "saturn") return m;
   const g = new THREE.Group(); g.add(m);
   ringTex = ringTex || await tex("../data/textures/rings/saturn_rings.png");
-  const IN = 66900 / 60268, OUT = 140600 / 60268, rg = new THREE.RingGeometry(IN * r, OUT * r, 256, 1);
+  const IN = 66900 / 60268, OUT = 140600 / 60268, rg = new THREE.RingGeometry(IN * r, OUT * r, 512, 1);
   const p = rg.attributes.position, uv = rg.attributes.uv, v = new THREE.Vector3();
   for (let i = 0; i < p.count; i++) { v.fromBufferAttribute(p, i); uv.setXY(i, (v.length() / r - IN) / (OUT - IN), 0.5); }
-  const ring = new THREE.Mesh(rg, new THREE.MeshStandardMaterial({ map: ringTex, transparent: true, side: THREE.DoubleSide, roughness: 1, depthWrite: false }));
-  ring.rotation.x = -Math.PI / 2; g.add(ring);
-  g.rotation.set(0.42, 0, 0.32);
+  // the rings take the sunlight flat on: unlit, a touch under full brightness so they stay behind the planet's light
+  const rm = new THREE.MeshBasicMaterial({ map: ringTex, color: 0xf2ece0, transparent: true, side: THREE.DoubleSide, depthWrite: false });
+  const ring = new THREE.Mesh(rg, rm);
+  ring.rotation.x = -Math.PI / 2; ring.renderOrder = 1; g.add(ring);
+  g.rotation.set(0.38, 0, 0.26);
   return g;
 }
 
@@ -112,11 +120,19 @@ const ICONS = {
     st.cam.position.set(0, 0, d); st.cam.near = d / 50; st.cam.far = d * 50; st.cam.updateProjectionMatrix();
     return shot(st);
   },
+  // Saturn for the dock (its own icon: a CSS ring can't pass in front of the planet)
+  async saturn() {
+    const st = stage(26), b = await body("saturn", 1);
+    st.scene.add(b); fit(st, b, 0.95);
+    return shot(st, 0.96);
+  },
+  // All bodies: a loose handful of Saturn's moons, each from its own map (not Saturn: Saturn has its own icon)
   async bodies() {
     const st = stage(26), g = new THREE.Group();
-    const sat = await body("saturn", 1); sat.position.set(0.35, 0.45, -0.6); g.add(sat);
-    const ti = await body("titan", 0.5); ti.position.set(-1.15, -0.95, 1.2); g.add(ti);
-    const en = await body("enceladus", 0.3); en.position.set(0.75, -1.25, 1.4); g.add(en);
+    for (const [n, r, x, y, z] of [["rhea", 0.62, 0.15, 0.2, 0], ["dione", 0.46, -0.95, 0.75, -0.3], ["tethys", 0.44, 1.05, 0.85, -0.4],
+      ["iapetus", 0.4, -0.95, -0.7, 0.3], ["enceladus", 0.3, 0.95, -0.55, 0.4], ["mimas", 0.24, 0.0, -1.05, 0.5], ["hyperion", 0.18, -0.15, 1.15, 0.2]]) {
+      const m = await body(n, r); m.position.set(x, y, z); g.add(m);
+    }
     st.scene.add(g); fit(st, g, 0.94);
     return shot(st);
   },
@@ -175,10 +191,10 @@ const ICONS = {
       prints.push(rt.texture);
     }
     const st = stage(26), g = new THREE.Group();
-    const edge = new THREE.MeshStandardMaterial({ color: 0x2a2c31, metalness: 0.3, roughness: 0.5, envMap: ENV });
+    const edge = new THREE.MeshStandardMaterial({ color: 0x9aa0a8, metalness: 0.2, roughness: 0.6, envMap: ENV, envMapIntensity: 0.6 });
     prints.forEach((t, i) => {
       const card = new THREE.Group(), W = 1.5;
-      const back = new THREE.Mesh(new THREE.BoxGeometry(W + 0.12, W + 0.12, 0.05), edge);
+      const back = new THREE.Mesh(new THREE.BoxGeometry(W + 0.07, W + 0.07, 0.03), edge);
       const pic = new THREE.Mesh(new THREE.PlaneGeometry(W, W), new THREE.MeshBasicMaterial({ map: t, toneMapped: false }));
       pic.position.z = 0.03; card.add(back, pic);
       card.rotation.z = [0.3, 0.1, -0.1][i]; card.position.set([-0.55, -0.2, 0.3][i], [0.32, 0.14, -0.16][i], i * 0.12);
@@ -188,23 +204,26 @@ const ICONS = {
     st.scene.add(g); fit(st, g, 0.95);
     return shot(st);
   },
-  // the two cameras of the Imaging Science Subsystem: the narrow-angle's long white barrel and the wide-angle's short one
-  nac() { return this._camera(2.5); },
-  wac() { return this._camera(1.15); },
-  _camera(len) {
-    const st = stage(26), g = new THREE.Group(), r = 0.42;
+  // the two cameras of the Imaging Science Subsystem: the narrow-angle is a long, slim telescope (2 m focal length)
+  // behind a deep black sunshade; the wide-angle a short, wide barrel with a big domed lens (20 cm)
+  nac() { return this._camera({ r: 0.3, len: 2.9, shade: 0.75, lens: 0.55, dome: 0.35 }); },
+  wac() { return this._camera({ r: 0.55, len: 0.75, shade: 0.12, lens: 0.92, dome: 0.95 }); },
+  _camera({ r, len, shade, lens, dome }) {
+    const st = stage(26), g = new THREE.Group();
     const white = new THREE.MeshStandardMaterial({ color: 0xf4f5f7, metalness: 0.0, roughness: 0.55, envMap: ENV, envMapIntensity: 1.2 });
     const black = new THREE.MeshStandardMaterial({ color: 0x15161a, metalness: 0.5, roughness: 0.4, envMap: ENV, envMapIntensity: 0.7 });
-    const glass = new THREE.MeshStandardMaterial({ color: 0x5a6fa8, metalness: 1, roughness: 0.08, envMap: ENV, envMapIntensity: 2.2 });
-    const body = new THREE.Mesh(new THREE.CylinderGeometry(r, r, len, 64, 1, true), white); body.position.y = -len / 2; g.add(body);
-    // sunshade, lens ring and glass at the front (+Y)
-    const shade = new THREE.Mesh(new THREE.CylinderGeometry(r * 1.12, r * 1.02, 0.34, 64, 1, true), black); shade.position.y = 0.17; g.add(shade);
-    const lip = new THREE.Mesh(new THREE.TorusGeometry(r * 1.12, 0.035, 16, 64), black); lip.rotation.x = Math.PI / 2; lip.position.y = 0.34; g.add(lip);
-    const lens = new THREE.Mesh(new THREE.SphereGeometry(r * 1.4, 48, 16, 0, Math.PI * 2, 0, 0.72), glass); lens.position.y = -r * 1.4 * Math.cos(0.72) + 0.12; g.add(lens);
-    const inner = new THREE.Mesh(new THREE.CircleGeometry(r * 1.02, 64), black); inner.rotation.x = -Math.PI / 2; inner.position.y = 0.0; g.add(inner);
-    // the electronics box at the back
-    const box = new THREE.Mesh(new THREE.BoxGeometry(r * 2.1, 0.5, r * 2.1), new THREE.MeshStandardMaterial({ color: 0x9a7a3a, metalness: 0.85, roughness: 0.38, envMap: ENV })); box.position.y = -len - 0.25; g.add(box);
-    const cap = new THREE.Mesh(new THREE.CircleGeometry(r, 64), white); cap.rotation.x = Math.PI / 2; cap.position.y = -len; g.add(cap);
+    const glass = new THREE.MeshStandardMaterial({ color: 0x5a6fa8, metalness: 1, roughness: 0.06, envMap: ENV, envMapIntensity: 2.4 });
+    const tube = new THREE.Mesh(new THREE.CylinderGeometry(r, r, len, 96, 1, true), white); tube.position.y = -len / 2; g.add(tube);
+    // the black sunshade at the front (+Y), a lip on its rim, the lens inside it
+    const sh = new THREE.Mesh(new THREE.CylinderGeometry(r * 1.08, r * 1.02, shade, 96, 1, true), black); sh.position.y = shade / 2; g.add(sh);
+    const shIn = new THREE.Mesh(new THREE.CylinderGeometry(r * 1.0, r * 0.98, shade, 96, 1, true), new THREE.MeshStandardMaterial({ color: 0x0a0b0d, roughness: 0.9, side: THREE.BackSide })); shIn.position.y = shade / 2; g.add(shIn);
+    const lip = new THREE.Mesh(new THREE.TorusGeometry(r * 1.08, 0.03, 16, 96), black); lip.rotation.x = Math.PI / 2; lip.position.y = shade; g.add(lip);
+    const floor = new THREE.Mesh(new THREE.CircleGeometry(r, 96), black); floor.rotation.x = -Math.PI / 2; g.add(floor);
+    // the lens: a cap of a sphere, flatter for the narrow-angle, a full dome for the wide-angle
+    const lr = r * lens, theta = 0.35 + dome * 0.75, R0 = lr / Math.sin(theta);
+    const L = new THREE.Mesh(new THREE.SphereGeometry(R0, 64, 24, 0, Math.PI * 2, 0, theta), glass); L.position.y = -R0 * Math.cos(theta) + 0.005; g.add(L);
+    // the electronics box at the back, in gold foil
+    const box = new THREE.Mesh(new THREE.BoxGeometry(r * 2.2, 0.42, r * 2.2), new THREE.MeshStandardMaterial({ color: 0xb08a40, metalness: 0.85, roughness: 0.35, envMap: ENV })); box.position.y = -len - 0.21; g.add(box);
     // pointing out of the screen towards the upper left, so the lens catches the light
     g.rotation.set(0.8, 0.3, 0.85);
     st.scene.add(g); fit(st, g, 0.92);

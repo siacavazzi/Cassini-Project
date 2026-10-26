@@ -52,8 +52,9 @@ menu-bar tray), Dock position (bottom, left, right), icon size and magnification
 the replay controls that scrolls sideways.
 
 The icons that are not a body's surface map are rendered pictures in `icons/` (256 px WebP): Cassini and Huygens from
-NASA's model, All bodies from Saturn's, Titan's and Enceladus's maps, and Moments, Highlights, Settings and the two
-cameras lit as the planets are. A minimized camera window shows its camera's icon in the corner of its picture.
+NASA's model, Saturn from its map with its rings passing in front of the globe (it takes a wider place in the dock),
+All bodies as seven of Saturn's moons from their maps, and Moments, Highlights, Settings and the two cameras lit as the
+planets are. A minimized camera window shows its camera's icon in the corner of its picture.
 `node web/cassini-os/icons/make_icons.cjs [name ...]` renders them again from `icons/make_icons.html` (Playwright; set
 `THREE_DIR` to an unpacked three@0.128.0 where jsDelivr is out of reach; Saturn's icon needs
 `data/textures/rings/saturn_rings.png`).
