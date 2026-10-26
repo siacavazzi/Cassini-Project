@@ -435,12 +435,13 @@ body.s-steady .info dd[data-f="colour"] { white-space: normal; display: -webkit-
 #dock { left: 50%; right: auto; transform: translateX(-50%); width: min(980px, calc(100% - 20px)); }
 #dock:not(.zoomed) .toolbar { grid-template-columns: auto minmax(0, 1fr); padding-bottom: 6px; }
 #dock:not(.zoomed) :is(#speeds, #zooms, .col.right, #focusrow, .statusbar, .legend) { display: none; }
+#dock #speeds { display: none; }   /* the speed slider (.speedtool) took over from the speed buttons */
 #dock.zoomed { width: min(1420px, calc(100% - 20px)); }
 #dock.zoomed #tl { height: 76px; }
 
 /* the replay window's head: the controls in one small cluster on the left, the clock in the middle, the timeline's
    zoom and "back to now" on the right, so the timeline under them gets the whole width */
-.lcdhead { display: grid; grid-template-columns: auto minmax(0, 1fr) auto; align-items: center; gap: 10px; }
+.lcdhead { display: grid; grid-template-columns: auto auto minmax(0, 1fr) auto; align-items: center; gap: 10px; }
 .lcdhead .clockbox { min-width: 0; display: grid; gap: 1px; }
 .lcdhead .transport { flex: none; justify-self: start; gap: 1px; padding: 2px; border: 1px solid var(--q-line); border-radius: 16px; }
 .lcdhead .transport .round { border: 0; background: none; }
@@ -459,6 +460,28 @@ body.s-steady .info dd[data-f="colour"] { white-space: normal; display: -webkit-
 .tltools input[type=range]:focus-visible { outline: 1px solid var(--q-accent); outline-offset: 2px; border-radius: 3px; }
 .tlstep { all: unset; width: 16px; height: 18px; display: grid; place-items: center; border-radius: 4px; color: var(--q-dim); font-size: 13px; cursor: default; }
 .tlstep:hover { color: #fff; background: rgba(255,255,255,.08); }
+/* the speed slider: next to play, a log scale from real time to a month a second; past the speed where pictures
+   stop loading (playback.picturesUpTo, --cut) the track is dimmer, and under the speed the rate the clock really runs
+   at when pictures slow it */
+.speedtool { display: flex; align-items: center; gap: 7px; height: 36px; box-sizing: border-box; padding: 0 12px 0 10px; border: 1px solid var(--q-line); border-radius: 18px; color: var(--q-dim); }
+.speedtool svg { width: 15px; height: 15px; flex: none; }
+.speedtool svg * { fill: none; stroke: currentColor; stroke-width: 1.4; stroke-linecap: round; }
+.speedtool input[type=range] { -webkit-appearance: none; appearance: none; width: 128px; height: 20px; margin: 0; background: none; cursor: default; --cut: 100%; }
+.speedtool input[type=range]::-webkit-slider-runnable-track { height: 3px; border-radius: 2px; background: linear-gradient(90deg, rgba(255,255,255,.34) var(--cut), rgba(255,255,255,.09) var(--cut)); }
+.speedtool input[type=range]::-moz-range-track { height: 3px; border-radius: 2px; background: linear-gradient(90deg, rgba(255,255,255,.34) var(--cut), rgba(255,255,255,.09) var(--cut)); }
+.speedtool input[type=range]::-webkit-slider-thumb { -webkit-appearance: none; width: 13px; height: 13px; margin-top: -5px; border-radius: 50%; background: #e3e7ee; border: 0; box-shadow: 0 0 0 3px rgba(0,0,0,.25); }
+.speedtool input[type=range]::-moz-range-thumb { width: 13px; height: 13px; border-radius: 50%; background: #e3e7ee; border: 0; }
+.speedtool input[type=range]:hover::-webkit-slider-thumb { background: #fff; }
+.speedtool input[type=range]:focus-visible { outline: 1px solid var(--q-accent); outline-offset: 2px; border-radius: 3px; }
+.speedval { display: grid; min-width: 70px; line-height: 1.2; }
+#speedv { font-size: 12.5px; color: var(--q-text); font-variant-numeric: tabular-nums; white-space: nowrap; }
+#speedeff { font-size: 9.5px; color: var(--q-dim); white-space: nowrap; font-variant-numeric: tabular-nums; }
+.speedtool.nopics #speedv { color: var(--q-dim); }
+/* too fast for pictures: a camera window keeps its last picture, dimmed, and says why */
+.well.toofast .shot { opacity: .3; }
+.well.toofast:not(.has-frame)::before { display: none; }
+.well.toofast::before { content: attr(data-fast); position: absolute; z-index: 3; left: 50%; top: 50%; transform: translate(-50%, -50%); padding: 3px 10px; border-radius: 10px;
+  background: rgba(10,12,16,.72); color: rgba(232,236,242,.75); font: 10.5px/1.3 var(--q-font, inherit); white-space: nowrap; pointer-events: none; }
 #tlspan { min-width: 46px; text-align: left; font-variant-numeric: tabular-nums; white-space: nowrap; }
 #tlnow { margin-left: 2px; }
 #tlnow svg { width: 14px; height: 14px; display: block; }
@@ -739,7 +762,10 @@ body.phone.phone-land #dock { left: calc(var(--side) + var(--col) + var(--gap)) 
 body.phone #dock .titlebar { height: 18px; }
 body.phone #dock .toolbar, body.phone #dock:not(.zoomed) .toolbar { grid-template-columns: 1fr; gap: 4px; padding: 0 8px 6px; }
 body.phone .col, body.phone .col.right { width: auto; flex-direction: row; flex-wrap: wrap; justify-content: center; }
-body.phone .lcdhead { grid-template-columns: auto minmax(0, 1fr); grid-template-areas: "clock clock" "tr tools"; row-gap: 4px; column-gap: 12px; }
+body.phone .lcdhead { grid-template-columns: auto minmax(0, 1fr); grid-template-areas: "clock clock" "tr tools" "speed speed"; row-gap: 4px; column-gap: 12px; }
+body.phone .lcdhead .speedtool { grid-area: speed; height: 40px; }
+body.phone .lcdhead .speedtool input[type=range] { width: auto; flex: 1 1 auto; min-width: 0; height: 28px; }
+body.phone .lcdhead .speedtool input[type=range]::-webkit-slider-thumb { width: 18px; height: 18px; margin-top: -7.5px; }
 body.phone .lcdhead .clockbox { grid-area: clock; }
 body.phone .lcdhead .transport { grid-area: tr; }
 body.phone .lcdhead .tltools { grid-area: tools; min-width: 0; width: 100%; }
@@ -1370,6 +1396,11 @@ body.phone #launch .lx-clock { font-size: 9.5px; bottom: 9vh; }
           <button class="btn round skip" id="movie" aria-pressed="false" aria-label="Movie mode" title="Movie mode: skip the time between pictures and play them at a set frame rate (M)"><svg viewBox="0 0 16 16" aria-hidden="true"><rect x="2" y="3" width="12" height="10" rx="1.5"/><path d="M5 3v10M11 3v10M2 6.3h3M2 9.7h3M11 6.3h3M11 9.7h3"/></svg></button>
             <button class="btn round skip" id="phmom" aria-pressed="false" aria-label="Moments" title="Moments"><svg viewBox="0 0 16 16" aria-hidden="true"><path d="M3 4h10M3 8h10M3 12h10"/></svg></button>
           </div>
+          <div class="speedtool" id="speedtool" title="Playback speed: how much mission time passes each second">
+            <svg viewBox="0 0 16 16" aria-hidden="true"><path d="M2.6 12a6 6 0 1 1 10.8 0"/><path d="M8 10l3.2-3.6"/></svg>
+            <input type="range" id="speed" min="0" max="1000" step="1" value="500" aria-label="Playback speed">
+            <div class="speedval"><span id="speedv">—</span><span id="speedeff" hidden></span></div>
+          </div>
           <div class="clockbox">
             <div class="clock" id="clock">—</div>
             <div class="sub"><span id="rel">—</span> · <span id="mday">—</span></div>
@@ -1606,6 +1637,12 @@ body.phone #launch .lx-clock { font-size: 9.5px; bottom: 9vh; }
   let section = "Interface";
   try { section = sessionStorage.getItem("cassini-os-settings-tab") || section; } catch (e) {}
   const fmtVal = (d, v) => d.format ? d.format(v) : `${v}${d.unit ? " " + d.unit : ""}`;
+  // a log range: the slider runs 0..1000 and the value between min and max, on the nearest of its stops
+  const logPos = (d, v) => Math.round(1000 * Math.log(v / d.min) / Math.log(d.max / d.min));
+  const logVal = (d, p) => {
+    const v = d.min * Math.pow(d.max / d.min, p / 1000);
+    return d.stops ? d.stops.reduce((a, b) => Math.abs(Math.log(b / v)) < Math.abs(Math.log(a / v)) ? b : a) : Math.round(v);
+  };
   function render() {
     const used = SECTIONS.filter(s => S.defined.some(d => d.section === s));
     if (!used.includes(section)) section = used[0];
@@ -1617,13 +1654,14 @@ body.phone #launch .lx-clock { font-size: 9.5px; bottom: 9vh; }
       const tag = d.reload ? '<span class="tag">after reload</span>' : "";
       let ctl = "";
       if (d.type === "toggle") ctl = `<button class="sw" id="${id}" role="switch" aria-checked="false"></button>`;
-      if (d.type === "range") ctl = `<input type="range" id="${id}" min="${d.min}" max="${d.max}" step="${d.step || 1}"><span class="val"></span>`;
+      if (d.type === "range") ctl = d.log ? `<input type="range" id="${id}" min="0" max="1000" step="1"><span class="val"></span>`
+        : `<input type="range" id="${id}" min="${d.min}" max="${d.max}" step="${d.step || 1}"><span class="val"></span>`;
       if (d.type === "choice") ctl = `<div class="seg" role="radiogroup" aria-labelledby="${id}">${d.options.map((o, i) => `<button class="btn" role="radio" data-i="${i}">${o[1]}</button>`).join("")}</div>`;
       if (d.type === "action") ctl = `<button class="btn act" id="${id}">${d.button || "Run"}</button>`;
       row.innerHTML = `<${d.type === "choice" ? "span" : "label"} class="lab" id="${d.type === "choice" ? id : ""}"${d.type === "choice" ? "" : ` for="${id}"`}>${d.label}${tag}</${d.type === "choice" ? "span" : "label"}>`
         + `<div class="ctl">${ctl}</div>` + (d.hint ? `<div class="hint">${d.hint}</div>` : "");
       if (d.type === "toggle") row.querySelector(".sw").addEventListener("click", () => S.set(d.key, !values[d.key]));
-      if (d.type === "range") row.querySelector("input").addEventListener("input", e => S.set(d.key, +e.target.value));
+      if (d.type === "range") row.querySelector("input").addEventListener("input", e => S.set(d.key, d.log ? logVal(d, +e.target.value) : +e.target.value));
       if (d.type === "choice") row.querySelectorAll(".seg .btn").forEach(b => b.addEventListener("click", () => S.set(d.key, d.options[+b.dataset.i][0])));
       if (d.type === "action") row.querySelector(".act").addEventListener("click", () => d.run());
       pane.appendChild(row);
@@ -1634,7 +1672,7 @@ body.phone #launch .lx-clock { font-size: 9.5px; bottom: 9vh; }
     const row = pane.querySelector(`.srow[data-key="${CSS.escape(key)}"]`), d = defs.get(key), v = values[key];
     if (!row) return;
     if (d.type === "toggle") row.querySelector(".sw").setAttribute("aria-checked", String(v));
-    if (d.type === "range") { row.querySelector("input").value = v; row.querySelector(".val").textContent = fmtVal(d, v); }
+    if (d.type === "range") { row.querySelector("input").value = d.log ? logPos(d, v) : v; row.querySelector(".val").textContent = fmtVal(d, v); }
     if (d.type === "choice") row.querySelectorAll(".seg .btn").forEach(b => { const on = d.options[+b.dataset.i][0] === v; b.setAttribute("aria-pressed", String(on)); b.setAttribute("aria-checked", String(on)); });
   }
   nav.addEventListener("click", e => {
@@ -1752,9 +1790,19 @@ body.phone #launch .lx-clock { font-size: 9.5px; bottom: 9vh; }
       hint: "The moment Cassini OS opens on. A shared link still opens on its own moment." });
   D({ key: "playback.autoplay", section: "Playback", label: "Play when Cassini OS opens", type: "toggle", value: true,
       hint: "Off opens paused at the starting moment." });
-  D({ key: "playback.speed", section: "Playback", label: "Starting speed", type: "choice", value: 600,
-      options: [[60, "1 min/s"], [600, "10 min/s"], [3600, "1 h/s"], [21600, "6 h/s"], [86400, "1 day/s"]],
-      hint: "Mission time per second of playback when the page opens. Jumping to a moment still picks its own speed." });
+  // the playback speed scale, shared by the dock's speed slider, this setting and the clock's read-out: mission
+  // seconds per second, from real time to a month a second, on a log scale that lands on round values
+  const SP = window.cassiniSpeed = {
+    min: 1, max: 2592000,
+    stops: [1, 2, 5, 10, 20, 30, 60, 120, 300, 600, 1200, 1800, 3600, 7200, 10800, 21600, 43200, 86400, 172800, 345600, 604800, 1209600, 2592000],
+    label(v) {
+      const r = x => +x.toFixed(x < 10 && x % 1 ? 1 : 0), u = (x, one, many) => `${r(x)} ${r(x) === 1 ? one : many}/s`;
+      return v <= 1 ? "real time" : v < 60 ? `${r(v)}×` : v < 3600 ? u(v / 60, "min", "min") : v < 86400 ? u(v / 3600, "h", "h")
+        : v < 604800 ? u(v / 86400, "day", "days") : v < 2592000 ? u(v / 604800, "wk", "wk") : u(v / 2592000, "month", "months");
+    }
+  };
+  D({ key: "playback.speed", section: "Playback", label: "Starting speed", type: "range", log: true, value: 600, min: SP.min, max: SP.max, stops: SP.stops, format: SP.label,
+      hint: "Mission time per second of playback when the page opens; the speed slider in the replay window changes it while you watch. Jumping to a moment still picks its own speed." });
   D({ key: "playback.span", section: "Playback", label: "Timeline shows", type: "choice", value: 432000,
       options: [[86400, "Day"], [432000, "5 days"], [604800, "Week"], [2592000, "Month"]],
       hint: "How much of the mission the timeline covers when the page opens." });
@@ -2355,6 +2403,7 @@ body.phone #launch .lx-clock { font-size: 9.5px; bottom: 9vh; }
       if (document.activeElement !== $("tlzoom")) $("tlzoom").value = Math.round(tlValueOf(span));
       $("tlspan").textContent = fmtTlSpan(span);
     }
+    syncSpeedTool();
     if (state.tlFollow !== tlShown.follow) {
       tlShown.follow = state.tlFollow;
       $("tlnow").setAttribute("aria-pressed", String(state.tlFollow));
@@ -2362,6 +2411,48 @@ body.phone #launch .lx-clock { font-size: 9.5px; bottom: 9vh; }
     }
   };
   $("tlzoom").addEventListener("input", e => zoomTimeline(tlSpanAt(+e.target.value)));
+
+  // ---------- the speed slider ----------
+  // A log scale from real time to a month a second (window.cassiniSpeed, settings.html) that lands on round speeds.
+  // It drives the clock through setSpeed, as a ?speed= link and the Starting speed setting do, and follows whatever
+  // set the speed last (a moment's jump, a link, the setting). Past playback.picturesUpTo its track is dimmer: the
+  // camera windows stop loading pictures there (tooFast, below). Under the speed: the rate the clock really runs at
+  // while a burst or a picture still being made slows it, so a new speed always shows that it took.
+  const SP = window.cassiniSpeed;
+  const spPos = v => Math.round(1000 * Math.log(Math.min(SP.max, Math.max(SP.min, v)) / SP.min) / Math.log(SP.max / SP.min));
+  const spAt = p => { const v = SP.min * Math.pow(SP.max / SP.min, p / 1000); return SP.stops.reduce((a, b) => Math.abs(Math.log(b / v)) < Math.abs(Math.log(a / v)) ? b : a); };
+  let spShown = "", spHeld = false;
+  function syncSpeedTool() {
+    const v = state.speed, cap = picturesCap(), movie = window.cassiniMovie && cassiniMovie.on, fast = tooFast();
+    const rate = window.cassiniPlayRate ? cassiniPlayRate() : v, slowed = state.playing && !movie && !fast && rate < v * 0.9;
+    const eff = movie ? "movie mode" : fast ? "pictures paused" : slowed ? `now ${SP.label(+rate.toPrecision(2))}` : "";
+    const key = `${v}|${cap}|${eff}`;
+    if (key === spShown) return;
+    spShown = key;
+    const el = $("speed");
+    if (!spHeld) el.value = spPos(v);
+    el.style.setProperty("--cut", cap >= SP.max ? "100%" : (spPos(cap) / 10).toFixed(1) + "%");
+    el.setAttribute("aria-valuetext", SP.label(v));
+    $("speedv").textContent = SP.label(v);
+    $("speedeff").hidden = !eff; $("speedeff").textContent = eff;
+    $("speedtool").classList.toggle("nopics", fast);
+    $("speedtool").title = `Playback speed: ${SP.label(v)} of mission time each second`
+      + (cap < SP.max ? `. Pictures load up to ${SP.label(cap)} (Settings › Playback)` : "")
+      + (slowed ? `. Slowed to ${SP.label(+rate.toPrecision(2))} while the camera windows catch up on pictures` : "");
+  }
+  $("speed").addEventListener("input", e => { const v = spAt(+e.target.value); if (v !== state.speed) setSpeed(v); });
+  // while it is dragged the thumb follows the pointer; let go, it settles on the speed it landed on
+  $("speed").addEventListener("pointerdown", () => { spHeld = true; });
+  window.addEventListener("pointerup", () => { if (spHeld) { spHeld = false; spShown = ""; } });
+  // the arrow keys step from one round speed to the next, Home and End go to either end
+  $("speed").addEventListener("keydown", e => {
+    const n = { ArrowLeft: -1, ArrowDown: -1, ArrowRight: 1, ArrowUp: 1, PageDown: -3, PageUp: 3, Home: -99, End: 99 }[e.key];
+    if (!n) return;
+    const down = SP.stops.filter(v => v < state.speed), up = SP.stops.filter(v => v > state.speed);
+    const v = n < 0 ? down[Math.max(0, down.length + n)] : up[Math.min(up.length, n) - 1];
+    e.preventDefault();
+    if (v !== undefined) setSpeed(v);
+  });
   $("tlout").addEventListener("click", () => zoomTimeline((state.view[1] - state.view[0]) * 2));
   $("tlin").addEventListener("click", () => zoomTimeline((state.view[1] - state.view[0]) / 2));
   $("tlnow").addEventListener("click", () => recenterTimeline());
@@ -3706,6 +3797,17 @@ body.phone #launch .lx-clock { font-size: 9.5px; bottom: 9vh; }
         if (obsK < 0) { obsShown = null; shapeOf = null; }
       }
       if (win.hidden && !force) { mosaicStop(); return; }   // a closed or tucked-away window fetches nothing; it catches up when shown
+      // too fast for pictures (tooFast, below): the window keeps what it shows, dimmed, and asks for nothing until the
+      // clock slows, pauses or is scrubbed; then it catches up on the picture of that moment
+      if (tooFast()) {
+        if (!well.classList.contains("toofast")) {
+          well.classList.add("toofast"); well.dataset.fast = `No pictures above ${cassiniSpeed.label(picturesCap())}`;
+          field("status").textContent = "Too fast for pictures"; next = []; mosaicStop();
+          if (!well.classList.contains("has-frame")) { lastK = -2; noFrame(`<b>Too fast for pictures</b>They load at ${cassiniSpeed.label(picturesCap())} and slower`); }
+        }
+        return;
+      }
+      if (well.classList.contains("toofast")) { well.classList.remove("toofast"); force = true; lastK = -2; }
       if (hold) { if (force) showLevel(); return; }   // held: the clock moves on without it (a bigger window asks for the bigger picture)
       let p = lastOfCam(cam, state.et, body), k = p < 0 ? -1 : framesOf(cam, body).ks[p];
       // holding: a body window, or a camera window in a body's view (bodymode.html), never goes blank: its picture stays
@@ -3949,8 +4051,25 @@ body.phone #launch .lx-clock { font-size: 9.5px; bottom: 9vh; }
     const next = nx < a.length ? a[nx] : Infinity;
     return [q < 0 || next === Infinity ? Infinity : Math.max(1, next - a[q]) * maxRate, next];
   }
-  // called by the viewer's frame loop while playing: where the clock should be after dt seconds at this speed
-  window.studyAdvance = (et, dt, speed) => {
+  // ---------- too fast for pictures: above playback.picturesUpTo the camera windows stop loading pictures ----------
+  // No frame server keeps up with days of mission a second, so past this speed each camera window keeps its last
+  // picture (dimmed, with a note) and asks for nothing, and the clock runs at the full chosen speed: no burst limit or
+  // catching up, there are no pictures to wait for. Pausing, scrubbing, movie mode or a slower speed bring the
+  // pictures straight back. All the way right = always load.
+  if (SETTINGS) SETTINGS.define({ key: "playback.picturesUpTo", section: "Playback", label: "Load pictures up to", type: "range", log: true,
+      value: 86400, min: 60, max: cassiniSpeed.max, stops: cassiniSpeed.stops.filter(v => v >= 60), format: v => v >= cassiniSpeed.max ? "any speed" : cassiniSpeed.label(v),
+      hint: "Faster than this, the camera windows stop loading pictures (no frame server keeps up) and the timeline plays at the full speed; they show the picture of the moment again as soon as you slow down, pause or scrub. The speed slider's track is dimmer past this point. All the way right = always load." });
+  function picturesCap() { return +S.get("playback.picturesUpTo") || 86400; }
+  function tooFast() {
+    const cap = picturesCap();
+    return cap < cassiniSpeed.max && state.speed > cap && state.playing && !state.dragging && !(window.cassiniMovie && cassiniMovie.on);
+  }
+  S.on("playback.picturesUpTo", () => { if (typeof catalog !== "undefined" && catalog && catalog.byCam) allFeeds.forEach(f => f(true)); });
+  // the rate the clock really runs at, eased over about half a second (the speed slider shows it when it is slowed)
+  let playRate = 0, rateOf = 0;
+  window.cassiniPlayRate = () => playRate || state.speed;
+  const advance = (et, dt, speed) => {
+    if (tooFast()) { slowedTo = 0; paced = 1; return et + dt * speed; }
     slowedTo = 0;
     paced = catalog && catalog.byCam ? pace() : 1;
     dt *= paced;
@@ -3965,6 +4084,13 @@ body.phone #launch .lx-clock { font-size: 9.5px; bottom: 9vh; }
     }
     return et;
   };
+  // called by the viewer's frame loop while playing: where the clock should be after dt seconds at this speed
+  window.studyAdvance = (et, dt, speed) => {
+    const to = advance(et, dt, speed);
+    if (speed !== rateOf) { rateOf = speed; playRate = 0; }   // a new speed reads straight away, not eased in from the old one
+    if (dt > 0) { const a = Math.min(1, dt / 0.5), inst = (to - et) / dt; playRate = playRate ? playRate + (inst - playRate) * a : inst; }
+    return to;
+  };
   const fmtRate = s => s < 60 ? `${Math.round(s)} s/s` : s < 3600 ? `${+(s / 60).toFixed(1)} min/s` : `${+(s / 3600).toFixed(1)} h/s`;
 
   const frameHud = window.studyHud;
@@ -3973,6 +4099,7 @@ body.phone #launch .lx-clock { font-size: 9.5px; bottom: 9vh; }
     const movie = window.cassiniMovie && window.cassiniMovie.on;
     if (slowedTo && state.playing && !state.dragging && !movie) $("mday").textContent += ` · imaging burst, slowed to ${fmtRate(slowedTo)}`;
     if (paced < 1 && state.playing && !state.dragging && !movie) $("mday").textContent += ` · catching up on pictures, ${Math.round(paced * 100)}% speed`;
+    if (tooFast()) $("mday").textContent += ` · no pictures above ${cassiniSpeed.label(picturesCap())}`;
     prep();
     for (const f of feeds) { f(); f.retier(); }
   };
@@ -7800,7 +7927,7 @@ function updateHud() {
   const ms = etToMs(state.et);
   const iso = new Date(ms).toISOString();
   $("clock").innerHTML = `${iso.slice(0, 10)} ${iso.slice(11, 19)}<small>UTC</small>`;
-  $("mday").textContent = `Mission day ${fmtInt(Math.floor((ms - LAUNCH_MS) / 86400000))} · ${SPEEDS.find(s => s[0] === state.speed)[1]}${state.playing ? "" : " · paused"}`;
+  $("mday").textContent = `Mission day ${fmtInt(Math.floor((ms - LAUNCH_MS) / 86400000))} · ${cassiniSpeed.label(state.speed)}${state.playing ? "" : " · paused"}`;
   if (window.studyHud) window.studyHud(ms);
 
   // Cassini relative to the focus body, or to the nearest large body when the view is on Cassini
