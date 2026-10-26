@@ -941,15 +941,31 @@ def sky_levels(images, masks, floor_pct=None):
         sky = np.concatenate([im[m] for im, m in zip(ims, ms)])
         steps = np.concatenate([np.abs(np.diff(im, axis=1))[m[:, 1:] & m[:, :-1]] for im, m in zip(ims, ms)])
         noise = 1.4826 * float(np.median(steps)) / math.sqrt(2) if steps.size else 0.0
-        median = np.median(sky)
-        levels.append(min(float(median), float(np.percentile(sky, 20)) + 0.84 * noise))
+        # sky is this loop's own array (concatenate's), so it can be reordered
+        median, pcts = _median_percentiles(sky, (20,) if floor_pct is None else (20, floor_pct))
+        levels.append(min(float(median), float(pcts[0]) + 0.84 * noise))
         noises.append(noise)
         if floor_pct is not None:
-            floors.append(float(np.percentile(sky, floor_pct) - median))
+            floors.append(float(pcts[1] - median))
     margin = NOISE_MARGIN * math.sqrt(sum(n * n for n in noises) / len(noises))
     if floor_pct is not None:
         margin = max(margin, max(floors))
     return levels, margin
+
+
+"""
+np.median(v) and np.percentile(v, p) for each p of pcts, the same values as each call on its own, from two
+partitions of v in place (a working array of the caller's, which this reorders) instead of a copy and a partition for
+each call. A value at a rank is the same whichever partition finds it unless v holds a NaN or both signs of zero,
+which partitions can order differently, so then each is taken on its own as before.
+"""
+def _median_percentiles(v, pcts):
+    if v.size and not np.isnan(v).any():
+        zero = np.signbit(v[v == 0])
+        if zero.all() or not zero.any():
+            got = np.percentile(v, pcts, overwrite_input=True)
+            return np.median(v, overwrite_input=True), list(got)
+    return np.median(v), [np.percentile(v, p) for p in pcts]
 
 
 """
