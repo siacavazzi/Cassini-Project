@@ -1008,7 +1008,9 @@ def detail(rgba, sigma):
     rgb = rgba[..., :3].astype(np.float32)
     weight = cv2.GaussianBlur(a, (0, 0), sigma)
     if calibration.look() == "balanced":
-        lum = rgb.mean(axis=2)
+        # the channels' mean: 8-bit values, so the sum is exact and this is numpy's mean(axis=2) to the bit (all
+        # 2^24 colours), without its slow reduce over three
+        lum = (rgb[..., 0] + rgb[..., 1] + rgb[..., 2]) / 3
         mean = cv2.GaussianBlur(lum * a, (0, 0), sigma) / np.maximum(weight, 1e-3)
         out = np.clip(rgb + (DETAIL * (lum - mean))[..., None], 0, 255)
         return np.dstack([out.round().astype(np.uint8), rgba[..., 3]])
