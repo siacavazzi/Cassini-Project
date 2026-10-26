@@ -379,7 +379,7 @@ def _tiles(u, cache, scale):
 # tile not in memory is looked for in the cache (a server sharing the cache may have made it).
 PASSES_KEEP = 64   # passes kept in memory, the most recently used (a pass's tile reports are ~1 KB each)
 # plan file -> {"stamp", "plan", "scale", "tiles_dir", "tiles": {n: report}, "made": tiles seen in the cache (not read),
-# "footprint", "rolled": {(size, out): frames whose mosaic movie picture is made, rolling_ahead}}
+# "footprint", "rolled": {(size, out, fade): frames whose mosaic movie picture is made, rolling_ahead}}
 _passes = collections.OrderedDict()
 
 
@@ -1850,7 +1850,25 @@ def places(u):
     return out
 
 
-def rolling_layout(u, n, cache, laps=1, made_only=False, skipped=None):
+FADE_MAX = 120       # most frames a mosaic movie's older tiles fade over (Settings > Movie > Older tiles fade over)
+FADE_PERSIST = 35    # how bright a faded tile stays, per cent (Settings > Movie > Faded tiles keep)
+
+
+def fade_style(fade=0, persist=FADE_PERSIST):
+    """A mosaic movie's fade as (frames, per cent), clamped; (0, 0) when off, so every name made without one stays
+    as it was."""
+    fade = max(0, min(FADE_MAX, int(fade or 0)))
+    return (fade, max(0, min(100, int(persist)))) if fade else (0, 0)
+
+
+def _fade_weight(age, fade):
+    """How bright a tile age frames older than the newest drawn stays when older tiles fade over fade[0] frames
+    down to fade[1] per cent: 1 for the newest, falling evenly to that floor and staying there."""
+    floor = fade[1] / 100
+    return 1.0 if age <= 0 else max(floor, 1 - (1 - floor) * age / fade[0])
+
+
+def rolling_layout(u, n, cache, laps=1, made_only=False, skipped=None, fade=(0, 0)):
     """What a mosaic movie (a raster repeated over the same places: kind "mosaic_movie") shows at frame n, in the
     form of layout(): every place's newest tile of each filter taken by then, so the mosaic never empties when a
     new lap begins and each tile replaces its own earlier copy (laps=1, a time-lapse); laps=N keeps the N newest
@@ -1858,7 +1876,9 @@ def rolling_layout(u, n, cache, laps=1, made_only=False, skipped=None):
     mosaic.compose like the pass's mosaic, on its scale and in its view. made_only: only tile n is made here, the
     other places show the tiles already made (a window playing fast never waits on the tiles it missed;
     tiles_ahead makes them); skipped (a list) gets the tiles left out for that, so the caller knows the picture
-    is not yet the frame's own."""
+    is not yet the frame's own. fade (fade_style): older tiles fade (Rolling) rather than stay as bright as the
+    newest (Time-lapse): each drawn tile gets a "fade" field (0-1, _fade_weight of its age in frames behind the
+    newest drawn), which _faded applies to the composed picture, and the picture's name says so."""
     p = plan(u, cache)
     where = places(u)
     rec = _kept_tiles(u, cache, p["display_scale"])
@@ -1896,27 +1916,72 @@ def rolling_layout(u, n, cache, laps=1, made_only=False, skipped=None):
     colour = p["colour"]
     used = colour if colour and all(count.get(f) for f in colour) else [p["grey"] if count.get(p["grey"]) else max(count, key=count.get)]
     ids = hashlib.sha1(",".join(str(t["n"]) for t in tiles if t["filter"] in used).encode()).hexdigest()[:12]
-    return p, tiles, rect, count, used, f"lap-{laps}-{ids}"
+    if not fade[0]:
+        return p, tiles, rect, count, used, f"lap-{laps}-{ids}"
+    # ages from the newest tile drawn, so frames of a filter the picture does not draw share its picture; copies
+    # of the tile dicts, since the pass's record keeps the originals
+    newest = max(t["n"] for t in tiles if t["filter"] in used)
+    tiles = [dict(t, fade=_fade_weight(newest - t["n"], fade)) for t in tiles]
+    return p, tiles, rect, count, used, f"lap-{laps}-f{fade[0]}p{fade[1]}-{ids}"
 
 
-def _rolling_picture(u, n, size, cache, laps, slots, fmt, out, made_only, read=True, skipped=None):
+FADE_SCALE = 4   # the fade's brightness map is worked out at this fraction of the picture's size (it is smooth)
+
+
+def _faded(u, made, cache):
+    """The post step (_make_mosaic) of a mosaic movie whose older tiles fade: the composed picture's colour
+    multiplied by each place's fade, a map drawn from the tiles' own alpha oldest first (newer over older, as
+    compose draws them, soft at their feathered edges) at 1/FADE_SCALE of the picture's size. Done after compose,
+    so the filter mosaics stay the time-lapse's own (grown a tile a frame, _roll, and shared with it) and the
+    seams are solved on the tiles as they are."""
+    import cv2
+    p, tiles, rect, _, used, _ = made
+    there = _tiles(u, cache, p["display_scale"])
+
+    def post(im):
+        W, H = im.size
+        w, h = max(1, W // FADE_SCALE), max(1, H // FADE_SCALE)
+        k = w / rect[2]
+        light = np.ones((h, w), np.float32)
+        for t in tiles:
+            if t["filter"] not in used or "offset" not in t:
+                continue
+            bx, by, bw, bh = t["box"]
+            left = round((t["offset"][0] + bx - rect[0]) * k)
+            top = round((t["offset"][1] + by - rect[1]) * k)
+            sw, sh = max(1, round(bw * k)), max(1, round(bh * k))
+            a0, b0, a1, b1 = max(left, 0), max(top, 0), min(left + sw, w), min(top + sh, h)
+            if a1 <= a0 or b1 <= b0:
+                continue
+            a = _part(os.path.join(there, f"{t['n']}.png"), sw, sh)[b0 - top:b1 - top, a0 - left:a1 - left, 3]
+            a = a.astype(np.float32) / 255
+            light[b0:b1, a0:a1] = light[b0:b1, a0:a1] * (1 - a) + t.get("fade", 1.0) * a
+        light = cv2.resize(light, (W, H), interpolation=cv2.INTER_LINEAR)
+        rgba = np.asarray(im.convert("RGBA")).astype(np.float32)
+        rgba[..., :3] *= light[..., None]
+        return Image.fromarray((rgba + 0.5).clip(0, 255).astype(np.uint8), "RGBA")
+    return post
+
+
+def _rolling_picture(u, n, size, cache, laps, slots, fmt, out, made_only, read=True, skipped=None, fade=(0, 0)):
     """(WebP, report) of the pass's mosaic movie at frame n, made once and kept; None before any tile is placed.
     One frame's picture is made once at a time (a window's request and the one made ahead wait for each other).
     read=False (made ahead): True when the picture is in the cache already, without reading it. skipped: as
-    rolling_layout's."""
-    made = rolling_layout(u, n, cache, laps, made_only=made_only, skipped=skipped)
+    rolling_layout's. fade: older tiles fade (fade_style), applied after compose (_faded)."""
+    made = rolling_layout(u, n, cache, laps, made_only=made_only, skipped=skipped, fade=fade)
     if not made:
         return None
+    post = _faded(u, made, cache) if fade[0] else None
     full = size == "full"
     path = os.path.join(folder(u, cache), "rolling-level", f"full{out}" if full else str(size), f"{made[5]}.{fmt}")
     if os.path.exists(path):
-        return _make_mosaic(u, n, size, path, cache, slots, made, fmt, out) if read else True
+        return _make_mosaic(u, n, size, path, cache, slots, made, fmt, out, post) if read else True
     with _lock:
         lock = _making.setdefault(path, threading.Lock())
     token = _rolling.set(laps == 1)
     try:
         with lock:
-            return _make_mosaic(u, n, size, path, cache, slots, made, fmt, out)
+            return _make_mosaic(u, n, size, path, cache, slots, made, fmt, out, post)
     finally:
         _rolling.reset(token)
         with _lock:
@@ -1928,26 +1993,26 @@ ROLL_AHEAD = 10    # frames of a mosaic movie made ahead of the window playing i
 ROLL_WORKERS = int(os.environ.get("CASSINI_ROLL_WORKERS", "2"))   # ... this many at once (a color picture's mix is ~1 s)
 
 
-def _picture_made(rec, size, out, n, skipped):
+def _picture_made(rec, size, out, n, skipped, fade=(0, 0)):
     """Frame n's mosaic movie picture is made: drawn with every tile it shows (none skipped as not made yet), it is
     the frame's picture for good, and the pass's record keeps that it is made (rolling_ahead)."""
     if rec is not None and not skipped:
         with _lock:
-            rec["rolled"].setdefault((size, out), set()).add(n)
+            rec["rolled"].setdefault((size, out, fade), set()).add(n)
 
 
-def rolling_ahead(u, n, size, cache, slots=None, out=OUT):
+def rolling_ahead(u, n, size, cache, slots=None, out=OUT, fade=(0, 0)):
     """A window plays the mosaic movie at frame n: make the pictures of frames n+1 .. n+ROLL_AHEAD (their tiles
     first) in the background, in order, each grown from one before it (_roll), so the window's next requests
     are answered from the cache. ROLL_WORKERS threads per pass, each taking the next frame not taken (a picture
     waits for the tiles before it, which the other thread may be making); a later call moves them on. Waits
-    while a window waits for a mosaic (_yield)."""
+    while a window waits for a mosaic (_yield). fade: the window's (fade_style), so they are its pictures."""
     look = calibration.look()
-    key = (u["key"], look)
+    key = (u["key"], look, fade)
     rec = _record(u, cache)
     with _lock:
         # every picture ahead made already (the pass's record keeps which are): no workers
-        known = rec["rolled"].get((size, out), ()) if rec is not None else ()
+        known = rec["rolled"].get((size, out, fade), ()) if rec is not None else ()
         if known and all(j in known for j in range(n + 1, min(n + ROLL_AHEAD, len(u["frames"]) - 1) + 1)):
             return
         running = key in _roll_ahead
@@ -1964,7 +2029,7 @@ def rolling_ahead(u, n, size, cache, slots=None, out=OUT):
                 while True:
                     with _lock:
                         at, sz, o, taken = _roll_ahead[key][:4]
-                        made = kept["rolled"].get((sz, o), ()) if kept is not None else ()
+                        made = kept["rolled"].get((sz, o, fade), ()) if kept is not None else ()
                         j = max(at, taken[0]) + 1
                         while j in made:   # (made already: nothing to do)
                             j += 1
@@ -1977,8 +2042,9 @@ def rolling_ahead(u, n, size, cache, slots=None, out=OUT):
                     _yield()
                     # one made already is not read again
                     skipped = []
-                    if _rolling_picture(u, j, sz, cache, 1, slots, "webp", o, made_only=True, read=False, skipped=skipped):
-                        _picture_made(kept, sz, o, j, skipped)
+                    if _rolling_picture(u, j, sz, cache, 1, slots, "webp", o, made_only=True, read=False, skipped=skipped,
+                                        fade=fade):
+                        _picture_made(kept, sz, o, j, skipped, fade)
         except Exception as e:
             print(f"mosaic movie ahead {u['key']} failed: {type(e).__name__}: {e}", flush=True)
         finally:
@@ -1991,9 +2057,11 @@ def rolling_ahead(u, n, size, cache, slots=None, out=OUT):
         threading.Thread(target=contextvars.copy_context().run, args=(run,), daemon=True).start()
 
 
-def rolling_webp(frame_id, size, cache, laps=1, slots=None, fmt="webp", out=OUT, wait=False):
+def rolling_webp(frame_id, size, cache, laps=1, slots=None, fmt="webp", out=OUT, wait=False, fade=(0, 0)):
     """(WebP, report) of frame_id's pass played as a mosaic movie (rolling_layout), made once and kept; None when
-    the frame is in no pass, (None, report) while the pass is being worked out (unless wait)."""
+    the frame is in no pass, (None, report) while the pass is being worked out (unless wait). fade: older tiles
+    fade (fade_style: frames, per cent; Rolling) instead of staying as bright as the newest (Time-lapse)."""
+    fade = fade_style(*fade)
     found = unit_of(frame_id)
     if not found or found[1] < 0:
         return None
@@ -2003,18 +2071,18 @@ def rolling_webp(frame_id, size, cache, laps=1, slots=None, fmt="webp", out=OUT,
         return None, {"why": "working out the pass", "observation": u["key"][1], "pass": u["key"][3]}
     skipped = []
     with _asking():
-        res = _rolling_picture(u, n, size, cache, laps, slots, fmt, out, made_only=not wait, skipped=skipped)
+        res = _rolling_picture(u, n, size, cache, laps, slots, fmt, out, made_only=not wait, skipped=skipped, fade=fade)
         if res is None:
             return None, {"why": "no tile placed yet"}
     if laps == 1 and fmt == "webp":
-        _picture_made(_record(u, cache), size, out, n, skipped)
+        _picture_made(_record(u, cache), size, out, n, skipped, fade)
     # the tiles ahead, by the pass's one background thread (tiles_ahead, as a pass mosaic's), and the pictures of
     # the next frames, so a playing window finds them made (rolling_ahead)
     tiles_ahead(u, n + 1, cache)
     if laps == 1 and size != "full" and fmt == "webp":
-        rolling_ahead(u, n, size, cache, slots, out)
+        rolling_ahead(u, n, size, cache, slots, out, fade)
     if res:
-        res[1].update({"rolling": True, "keep": laps, "n": n})   # laps: the pass's own, from _make_mosaic
+        res[1].update({"rolling": True, "keep": laps, "n": n, "fade": list(fade)})   # laps: the pass's own, from _make_mosaic
         if skipped:
             # drawn without tiles not made yet: the frame's picture for now, not for good (the server says so)
             res[1]["partial"] = len(skipped)
@@ -2404,7 +2472,9 @@ def blank(im):
     return not covered.any() or float(np.percentile(a[..., :3].max(axis=2)[covered], 99)) <= BLANK_LEVEL
 
 
-def _make_mosaic(u, n, size, path, cache, slots, made, fmt="webp", out=OUT):
+def _make_mosaic(u, n, size, path, cache, slots, made, fmt="webp", out=OUT, post=None):
+    """(picture, report) of the mosaic so_far draws from made, kept at path; None before anything is above black.
+    post: a step applied to so_far's picture before it is kept (a mosaic movie's fade, _faded)."""
     report, full, meta = {}, size == "full", path[:-len(fmt)] + "json"
     if path in _blank:
         return None
@@ -2419,6 +2489,8 @@ def _make_mosaic(u, n, size, path, cache, slots, made, fmt="webp", out=OUT):
                 _blank.add(path)
             raise LookupError("nothing above black yet")
         report.update(rep)
+        if post:
+            im = post(im)
         if not full and max(im.size) > size:
             im.thumbnail((size, size), Image.LANCZOS)
         buf = io.BytesIO()

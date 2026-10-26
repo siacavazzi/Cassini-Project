@@ -54,7 +54,7 @@ body.phone #segfps { flex: 1; }
       <button id="segprep" title="Make every picture of this stretch ahead of time, so it plays smoothly at any frame rate">Pre-process</button>
       <button id="segstop" hidden>Stop</button>
       <button id="segplay" title="Play this stretch as a movie">▶ Play</button>
-      <label for="segfps">Frame rate</label><input type="range" id="segfps" min="2" max="24" step="1" aria-label="Movie frame rate"><span id="segfpsv"></span>
+      <label for="segfps">Frame rate</label><input type="range" id="segfps" min="2" max="30" step="1" aria-label="Movie frame rate"><span id="segfpsv"></span>
       <span class="grow"></span>
       <button id="segexport" title="Make a video file of this stretch to download (E)">Save movie…</button>
     </div>
@@ -110,7 +110,8 @@ body.phone #segfps { flex: 1; }
     const q = new URLSearchParams({ from: isoOf(P.a), until: isoOf(P.b), cams: w.cams, sizes: w.sizes,
       mosaics: opt("cameras.mosaics", true) && window.cassiniMosaics !== false ? "1" : "0", steady: opt("movies.steady", true) ? "1" : "0",
       color: opt("cameras.composites", true) ? "1" : "0", processed: opt("cameras.processedFrames", true) === false ? "0" : "1",
-      center: opt("cameras.autoCenter", true) === false ? "0" : "1", trail: String(opt("movies.trail", 0) || 0), laps: String(opt("movies.laps", 1) || 1) });
+      center: opt("cameras.autoCenter", true) === false ? "0" : "1", trail: String(opt("movies.trail", 0) || 0), laps: String(opt("movies.laps", 1) || 1),
+      fade: String(opt("movies.fade", 0) || 0), persist: String(opt("movies.persist", 35) ?? 35) });
     return q.toString() + (window.cassiniLook ? window.cassiniLook() : "");
   }
   // frames of the windows' cameras in the stretch (in the months loaded now)
@@ -148,7 +149,7 @@ body.phone #segfps { flex: 1; }
     if (moved && P.job && P.key !== params()) { stopPoll(); P.job = null; progress(null); say(""); }
     bar.hidden = false; summary(); fpsUi(); camsUi(); buttons(); place();
   }
-  function hide() { bar.hidden = true; untuck(); stopPoll(); P.job = null; P.a = P.b = null; P.playing = false; progress(null); say(""); }
+  function hide() { bar.hidden = true; untuck(); stopPoll(); P.playBack = false; titled(null); P.job = null; P.a = P.b = null; P.playing = false; progress(null); say(""); }
   document.addEventListener("cassini:marks", e => marked(e.detail.a, e.detail.b));
 
   // ---- making it ahead: the frame server's job, followed every second ----
@@ -162,15 +163,23 @@ body.phone #segfps { flex: 1; }
     } catch (err) { P.job = null; progress(null); say(`No frame server at ${FRAMES} that pre-processes.`, true); buttons(); }
   }
   function stopPoll() { clearTimeout(P.poll); P.poll = 0; }
+  // The stretch is made on the frame server, so it carries on while the page is in the background (the tab hidden,
+  // another window in front: away.html pauses everything else); the tab's title shows how far it is, the polling
+  // here runs on timers rather than animation frames, and a stretch finished while away plays on the way back
+  const TITLE = document.title;
+  function titled(j) {
+    const busy = j && /^(queued|planning|making|waiting|finishing)$/.test(j.state);
+    document.title = busy && j.total ? `${Math.floor(100 * j.done / j.total)}% pre-processed · ${TITLE}` : j && j.state === "done" && P.job === j && document.hidden ? `Ready · ${TITLE}` : TITLE;
+  }
   function follow(j) {
     stopPoll();
     const was = P.job && P.job.state;
-    P.job = j; buttons(); redraw();
+    P.job = j; buttons(); redraw(); titled(j);
     const frac = j.total ? j.done / j.total : 0;
     if (j.state === "done") {
       progress(1);
       say(`Ready: ${j.total.toLocaleString()} pictures made ahead${j.took ? ` in ${fmtDur(j.took)}` : ""}${j.errors ? ` (${j.errors} could not be made)` : ""}`);
-      if (was && was !== "done" && opt("segment.autoplay", true)) play();
+      if (was && was !== "done" && opt("segment.autoplay", true)) { if (window.cassiniAway && cassiniAway.on) P.playBack = true; else play(); }
       return;
     }
     if (j.state === "failed") { progress(null); say(j.error || "Pre-processing failed; see the frame server's log.", true); return; }
@@ -240,11 +249,19 @@ body.phone #segfps { flex: 1; }
   $("segx").addEventListener("click", () => { EX.clear(); hide(); });
   $("segfps").addEventListener("input", e => { if (S) S.set("movie.fps", +e.target.value); fpsUi(); });
   if (S) S.on("movie.fps", fpsUi);
-  for (const k of ["cameras.composites", "cameras.mosaics", "movies.steady", "movies.trail", "movies.laps", "cameras.autoCenter", "cameras.processedFrames", "cameras.balancedColor", "cameras.colors"])
+  for (const k of ["cameras.composites", "cameras.mosaics", "movies.steady", "movies.trail", "movies.laps", "movies.fade", "movies.persist", "cameras.autoCenter", "cameras.processedFrames", "cameras.balancedColor", "cameras.colors"])
     if (S && S.get(k) !== undefined) S.on(k, () => { if (!bar.hidden) { if (P.job && P.key !== params()) { stopPoll(); P.job = null; progress(null); say(""); } buttons(); } });
   window.addEventListener("keydown", e => {
     if (bar.hidden || e.key !== "Escape" || document.querySelector(".menu.open, .win.full") || (window.cassiniMovie && window.cassiniMovie.on)) return;
     if (!$("excard") || $("excard").hidden) { EX.clear(); hide(); }
+  });
+
+  // in the background: the pause note says the stretch is still being made; back, a stretch finished meanwhile plays
+  const away = $("awaynote"), awayText = away && away.textContent;
+  document.addEventListener("cassini:away", e => {
+    const busy = P.job && /^(queued|planning|making|waiting|finishing)$/.test(P.job.state);
+    if (away) away.textContent = e.detail.away && busy ? `${awayText} · the highlighted stretch keeps pre-processing` : awayText;
+    if (!e.detail.away) { titled(P.job); if (P.playBack) { P.playBack = false; if (!bar.hidden) play(); } }
   });
 
   // ---- the note when movie mode keeps waiting ----

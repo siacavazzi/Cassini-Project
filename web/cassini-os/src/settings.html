@@ -213,7 +213,8 @@ body.phone .srow input[type=range] { width: 96px; }
     : S.get("cameras.colors") === "raw" ? "&colors=raw" : "") + (o.center ? "&center=1" : "");
   // how a movie pass looks (Settings > Movie), for the camera windows' movie pictures and the film export alike;
   // o.center: the window's Auto center (else the Settings default)
-  window.cassiniMovieStyle = (o = {}) => `${(o.center ?? S.get("cameras.autoCenter")) === false ? "&center=0" : ""}&trail=${S.get("movies.trail") || 0}&laps=${S.get("movies.laps") || 1}`;
+  window.cassiniMovieStyle = (o = {}) => `${(o.center ?? S.get("cameras.autoCenter")) === false ? "&center=0" : ""}&trail=${S.get("movies.trail") || 0}&laps=${S.get("movies.laps") || 1}` +
+    (S.get("movies.fade") ? `&fade=${S.get("movies.fade")}&persist=${S.get("movies.persist") ?? 35}` : "");
   D({ key: "cameras.channels", section: "Cameras", label: "Filter channels", type: "toggle", value: true,
       hint: "The frames that make up a color picture, in a strip under it." });
   cls("cameras.channels", "s-nochans", false);
@@ -308,7 +309,7 @@ body.phone .srow input[type=range] { width: 96px; }
       options: [["off", "Off"], ["light", "Light"], ["full", "Full"]],
       hint: "Titan's orange haze with its high detached layer, Earth's thin blue limb, Venus's pale yellow haze, and the thin hazes at Saturn's and Jupiter's limbs, all lit by the Sun: soft twilight past the terminator and a bright ring when a body is backlit. Light is quicker on weak graphics; Off draws the bare globes." });
   // movie mode (movie.html) is a rule for the clock, so its speed sits with the playback settings
-  D({ key: "movie.fps", section: "Playback", label: "Movie mode speed", type: "range", value: 8, min: 2, max: 24, step: 1, unit: "fps",
+  D({ key: "movie.fps", section: "Playback", label: "Movie mode speed", type: "range", value: 8, min: 2, max: 30, step: 1, unit: "fps",
       hint: "Movie mode (M) skips the time between pictures and steps from one picture to the next this many times a second. The camera windows show every picture as they always do." });
   // what counts as a picture (head-quiet.html complete, cameraFeed)
   D({ key: "movie.completeFrames", section: "Playback", label: "Complete color pictures only", type: "toggle", value: true,
@@ -321,10 +322,17 @@ body.phone .srow input[type=range] { width: 96px; }
   D({ key: "movies.filmstrip", section: "Movie", label: "Filmstrip", type: "toggle", value: true,
       hint: "Under a window playing a movie pass: every frame of the pass along a strip, with the frames around the one shown. Click or drag along it to move through the pass." });
   cls("movies.filmstrip", "s-nofilmstrip", false);
-  D({ key: "movies.trail", section: "Movie", label: "Rolling trail", type: "range", value: 0, min: 0, max: 12, step: 1, unit: "frames",
+  D({ key: "movies.trail", section: "Movie", label: "Movie trail", type: "range", value: 0, min: 0, max: 12, step: 1, unit: "frames",
       hint: "In a steady movie pass, this many earlier frames of the same filter stay under the newest one, fading with age, so a moving moon or a ring's shadow leaves a short trail. 0 shows each frame alone." });
   D({ key: "movies.laps", section: "Movie", label: "Mosaic movies keep", type: "range", value: 1, min: 1, max: 6, step: 1, unit: "laps",
       hint: "A mosaic movie (the camera going over the same mosaic again and again, as on the approach to Jupiter) plays as a mosaic that never empties: each new tile replaces its own earlier copy. 1 is a time-lapse; more keeps that many copies of each tile, older ones under the newest." });
+  // a mosaic movie's older tiles fade (obs_mosaic.rolling_layout fade=, persist=): Rolling rather than Time-lapse
+  D({ key: "movies.fade", section: "Movie", label: "Older tiles fade over", type: "range", value: 0, min: 0, max: 120, step: 4,
+      format: v => v ? `${v} frames` : "Off",
+      hint: "In a mosaic movie, each tile dims as the camera moves on, so the mosaic shows where the camera is now and where it was a moment ago: the newest tile is full brightness and a tile this many frames older has faded down to the level below. Off is a time-lapse: every place's newest tile stays at full brightness until the camera comes back to it." });
+  D({ key: "movies.persist", section: "Movie", label: "Faded tiles keep", type: "range", value: 35, min: 0, max: 100, step: 5,
+      format: v => `${v}%`,
+      hint: "How bright an old tile stays once it has faded (with Older tiles fade over on). 0% leaves only the tiles taken in the last frames; 100% is no fade at all." });
   // Data
   D({ key: "data.layout", section: "Data", label: "Window layout", type: "action", button: "Reset",
       hint: "Put every window back where it starts and bring back the ones tucked into the menu bar.",

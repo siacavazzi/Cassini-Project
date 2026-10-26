@@ -77,7 +77,7 @@ def utc(t, seconds=True):
     return time.strftime("%Y-%m-%d %H:%M:%S" if seconds else "%Y-%m-%d-%H%M", time.gmtime(t))
 
 
-MOVIE = {"center": True, "trail": 0, "laps": 1}   # the movie style by default (a film named as before)
+MOVIE = {"center": True, "trail": 0, "laps": 1, "fade": 0, "persist": 0}   # the movie style by default (a film named as before)
 
 
 def options(q):
@@ -94,6 +94,9 @@ def options(q):
     # how movie passes look, as the camera windows play them (Settings > Movie; the page's cassiniMovieStyle)
     movie = {"center": get("center", "1") != "0", "trail": max(0, min(12, int(get("trail", "0") or 0))),
              "laps": max(1, min(12, int(get("laps", "1") or 1)))}
+    # a mosaic movie's fade (Rolling), only when on, so a film made without it keeps its name
+    fade = max(0, min(120, int(get("fade", "0") or 0)))
+    movie.update({"fade": fade, "persist": max(0, min(100, int(get("persist", "35") or 0))) if fade else 0})
     return {"from": t0, "until": t1, "cams": cams, "fps": fps, "size": size,
             "sound": get("sound", "1") != "0", "caption": get("caption", "1") != "0",
             "look": look if look in calibration.LOOKS else calibration.LOOKS[0],
@@ -232,7 +235,8 @@ class Pictures:
                                          centre=self.movie["center"])
             return (made[0], "movie") if made and made[0] else None
         if kind == "rolling":
-            made = obs_mosaic.rolling_webp(arg, size, self.cache, self.movie["laps"], slots=self.slots, wait=True)
+            made = obs_mosaic.rolling_webp(arg, size, self.cache, self.movie["laps"], slots=self.slots, wait=True,
+                                           fade=(self.movie.get("fade", 0), self.movie.get("persist", 0)))
             return (made[0], "mosaic movie") if made and made[0] else None
         if kind == "color":
             if self._color:
