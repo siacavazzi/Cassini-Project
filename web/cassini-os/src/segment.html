@@ -1,7 +1,8 @@
 <!-- Pre-processing a stretch of the timeline for Cassini OS. build.py splices the parts below into the page: the style
-     into the head, the aside into #app and the script after the export script (whose marks it uses).
-     Highlight a stretch (shift-drag across the timeline, or press and hold on it, then drag; I and O mark its ends at
-     the clock) and a small bar comes up over it: Pre-process asks the frame server to make every picture the camera
+     into the head, the aside into #app and the script after the export script (whose marks it uses); the script moves
+     the bar into the Cassini Replay window, as a row right above the timeline.
+     Highlight a stretch (drag across the timeline; a click still moves the clock; I and O mark its ends at the clock)
+     and the bar comes up: Pre-process asks the frame server to make every picture the camera
      windows will show in the stretch, ahead of time (POST /prebuild: web/frames/prebuild.py, the pre-build tool's own
      makers, at the windows' sizes and in the page's look). The bar and the timeline show how far it is; when it is
      done the stretch plays in movie mode (movie.html, cassiniMovie.start with the stretch) at the frame rate on the
@@ -9,10 +10,9 @@
      While movie mode keeps waiting on pictures being made ("cassini:movie-slow"), a quiet note says a stretch can
      be pre-processed, with a button that highlights what is coming up. -->
 <style>
-#segbar { position: fixed; z-index: 60; display: grid; gap: 6px; padding: 7px 9px 8px; width: max-content; max-width: calc(100vw - 16px); box-sizing: border-box;
-  border-radius: 8px; background: var(--q-panel, rgba(16,17,20,.72)); border: 1px solid var(--q-line, rgba(255,255,255,.1)); color: var(--q-text, #ddd);
-  -webkit-backdrop-filter: blur(16px) saturate(1.2); backdrop-filter: blur(16px) saturate(1.2); box-shadow: 0 8px 30px rgba(0,0,0,.45);
-  font: 11px/1.25 var(--ui); transition: opacity .7s ease; }
+/* a row of the Cassini Replay window, right above the timeline: it comes and goes with the window, never behind it */
+#segbar { display: grid; gap: 5px; margin: 4px 0 2px; padding: 6px 8px 7px; box-sizing: border-box; border-radius: 6px;
+  background: rgba(138,182,255,.07); border: 1px solid rgba(138,182,255,.28); color: var(--q-text, #ddd); font: 11px/1.25 var(--ui); }
 #segbar[hidden], #seghint[hidden], #segbar [hidden] { display: none !important; }
 #segbar .segrow { display: flex; gap: 8px; align-items: center; flex-wrap: wrap; }
 #segwhen { color: var(--q-text, #ddd); font-variant-numeric: tabular-nums; white-space: nowrap; }
@@ -29,15 +29,13 @@
 #segstate.warn { color: #e6bb68; }
 #segprog { height: 3px; border-radius: 2px; background: rgba(255,255,255,.1); overflow: hidden; }
 #segprog i { display: block; height: 100%; width: 0; background: var(--q-accent, #8ab6ff); transition: width .4s ease; }
-/* resting: the bar rests with the windows, except while a stretch is being made */
-body.idle #segbar:not(.busy) { opacity: 0; pointer-events: none; }
-#seghint { position: fixed; left: 50%; transform: translateX(-50%); z-index: 61; display: flex; gap: 12px; align-items: center; max-width: min(560px, calc(100vw - 16px)); box-sizing: border-box;
+#segbar .segrow > .grow { flex: 1; }
+#seghint { position: fixed; left: 50%; transform: translateX(-50%); z-index: 1100; display: flex; gap: 12px; align-items: center; max-width: min(560px, calc(100vw - 16px)); box-sizing: border-box;
   padding: 7px 12px; border-radius: 8px; background: var(--q-panel, rgba(16,17,20,.72)); border: 1px solid var(--q-line, rgba(255,255,255,.1)); color: var(--q-text, #ddd);
   -webkit-backdrop-filter: blur(16px); backdrop-filter: blur(16px); font: 11.5px/1.35 var(--ui); box-shadow: 0 8px 30px rgba(0,0,0,.45); opacity: 0; transition: opacity .4s ease; }
 #seghint.on { opacity: 1; }
 #seghint button { font: inherit; background: none; border: 0; padding: 0; color: var(--q-accent, #8ab6ff); cursor: pointer; white-space: nowrap; }
 #seghint button.x { color: var(--q-dim, #888); font-size: 14px; line-height: 1; }
-body.phone #segbar { left: 8px !important; right: 8px; width: auto; }
 body.phone #segbar button { padding: 6px 11px; }
 body.phone #segfps { flex: 1; }
 </style>
@@ -49,8 +47,9 @@ body.phone #segfps { flex: 1; }
       <button id="segprep" title="Make every picture of this stretch ahead of time, so it plays smoothly at any frame rate">Pre-process</button>
       <button id="segstop" hidden>Stop</button>
       <button id="segplay" title="Play this stretch as a movie">▶ Play</button>
-      <input type="range" id="segfps" min="2" max="24" step="1" aria-label="Movie frame rate"><span id="segfpsv"></span>
-      <button id="segexport" title="Make a film of this stretch to download (E)">Export…</button>
+      <label for="segfps">Frame rate</label><input type="range" id="segfps" min="2" max="24" step="1" aria-label="Movie frame rate"><span id="segfpsv"></span>
+      <span class="grow"></span>
+      <button id="segexport" title="Make a video file of this stretch to download (E)">Save movie…</button>
     </div>
     <div id="segprog" hidden><i></i></div>
     <div class="segrow" id="segstaterow" hidden><span id="segstate" role="status" aria-live="polite"></span></div>
@@ -78,6 +77,7 @@ body.phone #segfps { flex: 1; }
       hint: "A quiet note when movie mode spends most of its time waiting for pictures to be made." });
   }
   const bar = $("segbar"), hint = $("seghint");
+  $("tl").parentNode.insertBefore(bar, $("tl"));
   // P: the stretch's job on the frame server (null until Pre-process), the key of the choices it was made with,
   // and whether the stretch is playing as a movie now
   const P = { job: null, key: "", poll: 0, playing: false, a: null, b: null, hintAt: -1e9 };
@@ -97,8 +97,9 @@ body.phone #segfps { flex: 1; }
     const w = windows();
     const q = new URLSearchParams({ from: isoOf(P.a), until: isoOf(P.b), cams: w.cams, sizes: w.sizes,
       mosaics: opt("cameras.mosaics", true) && window.cassiniMosaics !== false ? "1" : "0", steady: opt("movies.steady", true) ? "1" : "0",
-      color: opt("cameras.composites", true) ? "1" : "0" });
-    return q.toString() + (window.cassiniMovieStyle ? window.cassiniMovieStyle() : "") + (window.cassiniLook ? window.cassiniLook() : "");
+      color: opt("cameras.composites", true) ? "1" : "0", processed: opt("cameras.processedFrames", true) === false ? "0" : "1",
+      center: opt("cameras.autoCenter", true) === false ? "0" : "1", trail: String(opt("movies.trail", 0) || 0), laps: String(opt("movies.laps", 1) || 1) });
+    return q.toString() + (window.cassiniLook ? window.cassiniLook() : "");
   }
   // frames of the windows' cameras in the stretch (in the months loaded now)
   function frames() {
@@ -109,15 +110,7 @@ body.phone #segfps { flex: 1; }
   }
 
   // ---- the bar, over the stretch on the timeline ----
-  function place() {
-    if (bar.hidden) return;
-    const tl = $("tl"), r = tl.getBoundingClientRect(), w = bar.offsetWidth;
-    bar.style.bottom = `${Math.max(8, innerHeight - r.top + 8)}px`;
-    if (document.body.classList.contains("phone")) return;
-    const xa = Math.max(0, etToX(P.a, r.width)), xb = Math.min(r.width, etToX(P.b, r.width));
-    const mid = r.left + (xb > xa ? (xa + xb) / 2 : etToX((P.a + P.b) / 2, r.width));
-    bar.style.left = `${Math.round(Math.max(8, Math.min(innerWidth - w - 8, mid - w / 2)))}px`;
-  }
+  const place = () => {};   // the bar is a row of the Cassini Replay window, laid out with it
   function say(text, warn) { $("segstate").textContent = text || ""; $("segstate").classList.toggle("warn", !!warn); $("segstaterow").hidden = !text; }
   function progress(frac) { $("segprog").hidden = frac == null; if (frac != null) $("segprog").firstElementChild.style.width = `${(frac * 100).toFixed(1)}%`; }
   function fpsUi() { const f = Math.round(window.cassiniMovie && window.cassiniMovie.fps ? window.cassiniMovie.fps() : opt("movie.fps", 8)); $("segfps").value = f; $("segfpsv").textContent = `${f} fps`; }
@@ -223,7 +216,7 @@ body.phone #segfps { flex: 1; }
   $("segx").addEventListener("click", () => { EX.clear(); hide(); });
   $("segfps").addEventListener("input", e => { if (S) S.set("movie.fps", +e.target.value); fpsUi(); });
   if (S) S.on("movie.fps", fpsUi);
-  for (const k of ["cameras.composites", "cameras.mosaics", "movies.steady", "movies.trail", "movies.laps", "movies.center", "cameras.balancedColor", "cameras.colors"])
+  for (const k of ["cameras.composites", "cameras.mosaics", "movies.steady", "movies.trail", "movies.laps", "cameras.autoCenter", "cameras.processedFrames", "cameras.balancedColor", "cameras.colors"])
     if (S && S.get(k) !== undefined) S.on(k, () => { if (!bar.hidden) { if (P.job && P.key !== params()) { stopPoll(); P.job = null; progress(null); say(""); } buttons(); } });
   window.addEventListener("keydown", e => {
     if (bar.hidden || e.key !== "Escape" || document.querySelector(".menu.open, .win.full") || (window.cassiniMovie && window.cassiniMovie.on)) return;
@@ -236,7 +229,7 @@ body.phone #segfps { flex: 1; }
     if (!opt("segment.hint", true) || performance.now() - P.hintAt < 10 * 60e3 || (P.job && /^(queued|planning|making|waiting|finishing)$/.test(P.job.state))) return;
     if (!bar.hidden && P.playing) return;   // playing a highlighted stretch already
     P.hintAt = performance.now();
-    const r = $("tl").getBoundingClientRect();
+    const r = ($("dock") || $("tl")).getBoundingClientRect();
     hint.style.bottom = `${Math.max(8, innerHeight - r.top + 8)}px`;
     hint.hidden = false; requestAnimationFrame(() => hint.classList.add("on"));
     clearTimeout(hintTimer); hintTimer = setTimeout(hideHint, 15000);

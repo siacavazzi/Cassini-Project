@@ -1,6 +1,6 @@
 <!-- Movie export for Cassini OS. build.py splices the three parts below into the page: the style into the head,
      the window into #app (so the window manager picks it up) and the script after the chrome script.
-     Mark a stretch of the timeline (shift-drag across it, or I at the start and O at the end; drag a marked edge to
+     Mark a stretch of the timeline (drag across it, or I at the start and O at the end; drag a marked edge to
      move it) and press Export: the frame server makes the film from the pipeline's pictures, the same ones the camera
      windows show (web/frames/export.py), and the page adds the sound, made by the live sound's own synth
      (cassiniSound.render, sound.html) from the film's picture list. The film downloads, plays here, and has a link. -->
@@ -33,7 +33,7 @@ body.phone #excard:not(.full) { width: calc(100% - 16px) !important; left: 8px !
 <section class="win" id="excard" aria-label="Export Movie" hidden>
   <div class="titlebar"><span class="lights"><button class="close" aria-label="Close">×</button><button class="min" aria-label="Minimize">–</button><button class="zoom" aria-label="Zoom">+</button></span>Export Movie</div>
   <div class="body">
-    <div id="exhint">Shift-drag across the timeline to mark a stretch (or press and hold on it, then drag), or press I at its start and O at its end.</div>
+    <div id="exhint">Drag across the timeline to mark a stretch, or press I at its start and O at its end.</div>
     <div class="exrow"><span>From</span><input type="text" id="exfrom" placeholder="YYYY-MM-DD hh:mm:ss" spellcheck="false" aria-label="Start, UTC"><button class="exbtn" id="exin" title="Start at the mission clock (I)">Here</button></div>
     <div class="exrow"><span>Until</span><input type="text" id="exuntil" placeholder="YYYY-MM-DD hh:mm:ss" spellcheck="false" aria-label="End, UTC"><button class="exbtn" id="exout" title="End at the mission clock (O)">Here</button></div>
     <div id="exsum"></div>
@@ -114,37 +114,32 @@ body.phone #excard:not(.full) { width: calc(100% - 16px) !important; left: 8px !
     if (prevTimeline) prevTimeline(g, w, h, xn);
   };
 
-  // shift-drag marks a stretch, and so does pressing and holding on the timeline and then dragging (no keyboard
-  // needed, on a phone too); dragging a marked edge moves it; anything else scrubs as before
-  const tl = $("tl"), HOLD = 450;
-  let drag = null, held = null;
+  // dragging across the timeline's lanes marks a stretch (a click still moves the clock there; the row of dates along
+  // the top still pans); dragging a marked edge moves it; shift-drag marks one anywhere, the date row included
+  const tl = $("tl"), MOVE = 5;
+  let drag = null, press = null;
   const etAt = e => { const r = tl.getBoundingClientRect(); return xToEt(e.clientX - r.left, r.width); };
   window.addEventListener("pointerdown", e => {
-    if (e.target !== tl || !catalog) return;
+    if (e.target !== tl || !catalog || e.button > 0) return;
     const r = tl.getBoundingClientRect(), x = e.clientX - r.left, near = v => v != null && Math.abs(etToX(v, r.width) - x) < 7;
     if (e.shiftKey) drag = { from: etAt(e), edge: null };
     else if (near(X.a)) drag = { edge: "a" };
     else if (near(X.b)) drag = { edge: "b" };
     else {
-      // a press that stays put for HOLD ms turns the scrub it started into a highlight from where it was pressed
-      if (e.offsetY >= (e.pointerType === "touch" ? 26 : 18)) {
-        const from = etAt(e), x0 = e.clientX, y0 = e.clientY, id = e.pointerId;
-        held = { x0, y0, id, timer: setTimeout(() => {
-          held = null;
-          state.dragging = false;
-          drag = { from, edge: null };
-          X.a = X.b = from; tl.style.cursor = "crosshair";
-          try { tl.setPointerCapture(id); } catch (err) {}
-          if (navigator.vibrate) navigator.vibrate(10);
-        }, HOLD) };
-      }
+      // a press in the lanes scrubs as a click does (index.html); once it moves MOVE px it becomes a highlight from
+      // where it was pressed, and the clock goes back to where it was
+      if (e.offsetY >= (e.pointerType === "touch" ? 26 : 18)) press = { x0: e.clientX, from: etAt(e), et: state.et, id: e.pointerId };
       return;
     }
     e.stopImmediatePropagation(); e.preventDefault();
     tl.setPointerCapture(e.pointerId);
   }, true);
   window.addEventListener("pointermove", e => {
-    if (held && Math.hypot(e.clientX - held.x0, e.clientY - held.y0) > 6) { clearTimeout(held.timer); held = null; }
+    if (press && !drag && Math.abs(e.clientX - press.x0) > MOVE) {
+      state.dragging = false; setTime(press.et);
+      drag = { from: press.from, edge: null }; press = null;
+      tl.style.cursor = "col-resize";
+    }
     if (!drag) return;
     e.stopImmediatePropagation();
     const t = etAt(e);
@@ -152,7 +147,7 @@ body.phone #excard:not(.full) { width: calc(100% - 16px) !important; left: 8px !
     else { X.a = Math.min(drag.from, t); X.b = Math.max(drag.from, t); mark(); }
   }, true);
   window.addEventListener("pointerup", e => {
-    if (held) { clearTimeout(held.timer); held = null; }
+    press = null;
     if (!drag) return;
     e.stopImmediatePropagation();
     const made = !drag.edge;
@@ -160,7 +155,7 @@ body.phone #excard:not(.full) { width: calc(100% - 16px) !important; left: 8px !
     if (made && X.a != null && X.b - X.a > 1) marked();
     else if (made) clear();
   }, true);
-  window.addEventListener("pointercancel", () => { if (held) { clearTimeout(held.timer); held = null; } }, true);
+  window.addEventListener("pointercancel", () => { press = null; }, true);
   // the cursor says when an edge can be dragged
   tl.addEventListener("pointermove", e => {
     if (drag || !catalog) return;

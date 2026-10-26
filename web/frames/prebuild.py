@@ -347,7 +347,8 @@ SEGMENT_SIZES = (512, 768, 1024)
 def segment_options(q):
     """The stretch and the page's choices from a POST /prebuild query (parse_qs): from/until (UTC, ISO), cams (N,
     W or NW), sizes (the windows' picture sizes), look/colors (as on every picture route), mosaics/steady/color
-    (Settings > Cameras and Movie) and trail/laps/center (the movie style). ValueError for anything else."""
+    (Settings > Cameras and Movie), processed (processed single frames), center (Auto center: center=1 as the
+    windows ask) and trail/laps (the movie style). ValueError for anything else."""
     get = lambda k, d=None: q.get(k, [d])[0]
     when = lambda s: datetime.datetime.fromisoformat(s.replace("Z", "")).replace(tzinfo=datetime.timezone.utc).timestamp()
     try:
@@ -367,7 +368,7 @@ def segment_options(q):
     on = lambda k: get(k, "1") != "0"
     return {"from": t0, "until": t1, "cams": cams, "sizes": sizes,
             "look": get("look", calibration.LOOKS[0]), "colors": get("colors", calibration.COLORS[0]),
-            "mosaics": on("mosaics"), "steady": on("steady"),
+            "mosaics": on("mosaics"), "steady": on("steady"), "processed": on("processed"), "center": get("center", "0") == "1",
             "style": {"trail": max(0, min(obs_mosaic.TRAIL, trail)), "laps": max(1, min(obs_mosaic.TRAIL, laps)),
                       "center": on("center"), "color": on("color")}}
 
@@ -387,6 +388,26 @@ def segment_items(o):
     import frame_server
     idx, _ = reel.load_index()
     t0, t1, cams, sizes = o["from"], o["until"], o["cams"], o["sizes"]
+
+    def centre(frame_id):
+        """Auto center (o["center"]): the pass's centred view, as the server's centre_of works it out, or None (the
+        window then asks for the picture as it is)."""
+        if not o.get("center"):
+            return None
+        try:
+            view = obs_mosaic.centre_view(frame_id)
+        except Exception:   # noqa: BLE001  (not centred: the window shows the picture as it is)
+            return None
+        return view if view.get("centre") else None
+
+    def single(i, c):
+        """A frame on its own as the window shows it: processed (Settings > Cameras > Processed single frames),
+        centred when Auto center centres its pass, at the windows' sizes; and the archive frame (the stand-in
+        under a composite, the filmstrip's 128)."""
+        if o.get("processed", True):
+            for z in sizes:
+                frame_server.processed_webp(i, z, c, centre=centre(i))
+        return [frame_server.webp(i, z, c) for z in (*sizes, 128)]
     t = idx["seconds_1970"].to_numpy()
     lo, hi = t.searchsorted(t0, "left"), t.searchsorted(t1, "right")
     rows = idx.iloc[lo:hi]
@@ -395,14 +416,14 @@ def segment_items(o):
         cam = "N" if r.INSTRUMENT_ID == "ISSNA" else "W"
         if cam not in cams:
             continue
-        out.append((r.id, float(r.seconds_1970), 1, lambda c, i=r.id: [frame_server.webp(i, z, c) for z in (*sizes, 128)]))
+        out.append((r.id, float(r.seconds_1970), 1, lambda c, i=r.id: single(i, c)))
         if isinstance(r.OBSERVATION_ID, str):
             keys.setdefault((r.TARGET_NAME, r.OBSERVATION_ID, cam), None)
     times = frame_times()
     for s in page_sets():
         ready = max(times[i] for i in s)
         if t0 <= ready <= t1 and s[0][0] in cams:
-            out.append(("_".join(s), ready, 1, lambda c, s=s: [frame_server.color_webp(s, z, c) for z in sizes]))
+            out.append(("_".join(s), ready, 1, lambda c, s=s: [frame_server.color_webp(s, z, c, centre=centre(s[-1])) for z in sizes]))
     for key in keys:
         for u in obs_mosaic.units(*key):
             n = sum(t0 <= f[3] <= t1 for f in u["frames"])

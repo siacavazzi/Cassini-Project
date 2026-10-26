@@ -926,10 +926,9 @@ body.phone #ssound { width: 30px; height: 30px; }
 #exdone[hidden], #exvid[hidden] { display: none; }
 body.phone #excard:not(.full) { width: calc(100% - 16px) !important; left: 8px !important; right: auto !important; top: calc(env(safe-area-inset-top, 0px) + 30px) !important; }
 
-#segbar { position: fixed; z-index: 60; display: grid; gap: 6px; padding: 7px 9px 8px; width: max-content; max-width: calc(100vw - 16px); box-sizing: border-box;
-  border-radius: 8px; background: var(--q-panel, rgba(16,17,20,.72)); border: 1px solid var(--q-line, rgba(255,255,255,.1)); color: var(--q-text, #ddd);
-  -webkit-backdrop-filter: blur(16px) saturate(1.2); backdrop-filter: blur(16px) saturate(1.2); box-shadow: 0 8px 30px rgba(0,0,0,.45);
-  font: 11px/1.25 var(--ui); transition: opacity .7s ease; }
+/* a row of the Cassini Replay window, right above the timeline: it comes and goes with the window, never behind it */
+#segbar { display: grid; gap: 5px; margin: 4px 0 2px; padding: 6px 8px 7px; box-sizing: border-box; border-radius: 6px;
+  background: rgba(138,182,255,.07); border: 1px solid rgba(138,182,255,.28); color: var(--q-text, #ddd); font: 11px/1.25 var(--ui); }
 #segbar[hidden], #seghint[hidden], #segbar [hidden] { display: none !important; }
 #segbar .segrow { display: flex; gap: 8px; align-items: center; flex-wrap: wrap; }
 #segwhen { color: var(--q-text, #ddd); font-variant-numeric: tabular-nums; white-space: nowrap; }
@@ -946,15 +945,13 @@ body.phone #excard:not(.full) { width: calc(100% - 16px) !important; left: 8px !
 #segstate.warn { color: #e6bb68; }
 #segprog { height: 3px; border-radius: 2px; background: rgba(255,255,255,.1); overflow: hidden; }
 #segprog i { display: block; height: 100%; width: 0; background: var(--q-accent, #8ab6ff); transition: width .4s ease; }
-/* resting: the bar rests with the windows, except while a stretch is being made */
-body.idle #segbar:not(.busy) { opacity: 0; pointer-events: none; }
-#seghint { position: fixed; left: 50%; transform: translateX(-50%); z-index: 61; display: flex; gap: 12px; align-items: center; max-width: min(560px, calc(100vw - 16px)); box-sizing: border-box;
+#segbar .segrow > .grow { flex: 1; }
+#seghint { position: fixed; left: 50%; transform: translateX(-50%); z-index: 1100; display: flex; gap: 12px; align-items: center; max-width: min(560px, calc(100vw - 16px)); box-sizing: border-box;
   padding: 7px 12px; border-radius: 8px; background: var(--q-panel, rgba(16,17,20,.72)); border: 1px solid var(--q-line, rgba(255,255,255,.1)); color: var(--q-text, #ddd);
   -webkit-backdrop-filter: blur(16px); backdrop-filter: blur(16px); font: 11.5px/1.35 var(--ui); box-shadow: 0 8px 30px rgba(0,0,0,.45); opacity: 0; transition: opacity .4s ease; }
 #seghint.on { opacity: 1; }
 #seghint button { font: inherit; background: none; border: 0; padding: 0; color: var(--q-accent, #8ab6ff); cursor: pointer; white-space: nowrap; }
 #seghint button.x { color: var(--q-dim, #888); font-size: 14px; line-height: 1; }
-body.phone #segbar { left: 8px !important; right: 8px; width: auto; }
 body.phone #segbar button { padding: 6px 11px; }
 body.phone #segfps { flex: 1; }
 
@@ -1434,7 +1431,7 @@ body.phone #launch .lx-clock { font-size: 9.5px; bottom: 9vh; }
   <section class="win" id="excard" aria-label="Export Movie" hidden>
   <div class="titlebar"><span class="lights"><button class="close" aria-label="Close">×</button><button class="min" aria-label="Minimize">–</button><button class="zoom" aria-label="Zoom">+</button></span>Export Movie</div>
   <div class="body">
-    <div id="exhint">Shift-drag across the timeline to mark a stretch (or press and hold on it, then drag), or press I at its start and O at its end.</div>
+    <div id="exhint">Drag across the timeline to mark a stretch, or press I at its start and O at its end.</div>
     <div class="exrow"><span>From</span><input type="text" id="exfrom" placeholder="YYYY-MM-DD hh:mm:ss" spellcheck="false" aria-label="Start, UTC"><button class="exbtn" id="exin" title="Start at the mission clock (I)">Here</button></div>
     <div class="exrow"><span>Until</span><input type="text" id="exuntil" placeholder="YYYY-MM-DD hh:mm:ss" spellcheck="false" aria-label="End, UTC"><button class="exbtn" id="exout" title="End at the mission clock (O)">Here</button></div>
     <div id="exsum"></div>
@@ -1458,8 +1455,9 @@ body.phone #launch .lx-clock { font-size: 9.5px; bottom: 9vh; }
       <button id="segprep" title="Make every picture of this stretch ahead of time, so it plays smoothly at any frame rate">Pre-process</button>
       <button id="segstop" hidden>Stop</button>
       <button id="segplay" title="Play this stretch as a movie">▶ Play</button>
-      <input type="range" id="segfps" min="2" max="24" step="1" aria-label="Movie frame rate"><span id="segfpsv"></span>
-      <button id="segexport" title="Make a film of this stretch to download (E)">Export…</button>
+      <label for="segfps">Frame rate</label><input type="range" id="segfps" min="2" max="24" step="1" aria-label="Movie frame rate"><span id="segfpsv"></span>
+      <span class="grow"></span>
+      <button id="segexport" title="Make a video file of this stretch to download (E)">Save movie…</button>
     </div>
     <div id="segprog" hidden><i></i></div>
     <div class="segrow" id="segstaterow" hidden><span id="segstate" role="status" aria-live="polite"></span></div>
@@ -5125,37 +5123,32 @@ body.phone #launch .lx-clock { font-size: 9.5px; bottom: 9vh; }
     if (prevTimeline) prevTimeline(g, w, h, xn);
   };
 
-  // shift-drag marks a stretch, and so does pressing and holding on the timeline and then dragging (no keyboard
-  // needed, on a phone too); dragging a marked edge moves it; anything else scrubs as before
-  const tl = $("tl"), HOLD = 450;
-  let drag = null, held = null;
+  // dragging across the timeline's lanes marks a stretch (a click still moves the clock there; the row of dates along
+  // the top still pans); dragging a marked edge moves it; shift-drag marks one anywhere, the date row included
+  const tl = $("tl"), MOVE = 5;
+  let drag = null, press = null;
   const etAt = e => { const r = tl.getBoundingClientRect(); return xToEt(e.clientX - r.left, r.width); };
   window.addEventListener("pointerdown", e => {
-    if (e.target !== tl || !catalog) return;
+    if (e.target !== tl || !catalog || e.button > 0) return;
     const r = tl.getBoundingClientRect(), x = e.clientX - r.left, near = v => v != null && Math.abs(etToX(v, r.width) - x) < 7;
     if (e.shiftKey) drag = { from: etAt(e), edge: null };
     else if (near(X.a)) drag = { edge: "a" };
     else if (near(X.b)) drag = { edge: "b" };
     else {
-      // a press that stays put for HOLD ms turns the scrub it started into a highlight from where it was pressed
-      if (e.offsetY >= (e.pointerType === "touch" ? 26 : 18)) {
-        const from = etAt(e), x0 = e.clientX, y0 = e.clientY, id = e.pointerId;
-        held = { x0, y0, id, timer: setTimeout(() => {
-          held = null;
-          state.dragging = false;
-          drag = { from, edge: null };
-          X.a = X.b = from; tl.style.cursor = "crosshair";
-          try { tl.setPointerCapture(id); } catch (err) {}
-          if (navigator.vibrate) navigator.vibrate(10);
-        }, HOLD) };
-      }
+      // a press in the lanes scrubs as a click does (index.html); once it moves MOVE px it becomes a highlight from
+      // where it was pressed, and the clock goes back to where it was
+      if (e.offsetY >= (e.pointerType === "touch" ? 26 : 18)) press = { x0: e.clientX, from: etAt(e), et: state.et, id: e.pointerId };
       return;
     }
     e.stopImmediatePropagation(); e.preventDefault();
     tl.setPointerCapture(e.pointerId);
   }, true);
   window.addEventListener("pointermove", e => {
-    if (held && Math.hypot(e.clientX - held.x0, e.clientY - held.y0) > 6) { clearTimeout(held.timer); held = null; }
+    if (press && !drag && Math.abs(e.clientX - press.x0) > MOVE) {
+      state.dragging = false; setTime(press.et);
+      drag = { from: press.from, edge: null }; press = null;
+      tl.style.cursor = "col-resize";
+    }
     if (!drag) return;
     e.stopImmediatePropagation();
     const t = etAt(e);
@@ -5163,7 +5156,7 @@ body.phone #launch .lx-clock { font-size: 9.5px; bottom: 9vh; }
     else { X.a = Math.min(drag.from, t); X.b = Math.max(drag.from, t); mark(); }
   }, true);
   window.addEventListener("pointerup", e => {
-    if (held) { clearTimeout(held.timer); held = null; }
+    press = null;
     if (!drag) return;
     e.stopImmediatePropagation();
     const made = !drag.edge;
@@ -5171,7 +5164,7 @@ body.phone #launch .lx-clock { font-size: 9.5px; bottom: 9vh; }
     if (made && X.a != null && X.b - X.a > 1) marked();
     else if (made) clear();
   }, true);
-  window.addEventListener("pointercancel", () => { if (held) { clearTimeout(held.timer); held = null; } }, true);
+  window.addEventListener("pointercancel", () => { press = null; }, true);
   // the cursor says when an edge can be dragged
   tl.addEventListener("pointermove", e => {
     if (drag || !catalog) return;
@@ -5356,6 +5349,7 @@ body.phone #launch .lx-clock { font-size: 9.5px; bottom: 9vh; }
       hint: "A quiet note when movie mode spends most of its time waiting for pictures to be made." });
   }
   const bar = $("segbar"), hint = $("seghint");
+  $("tl").parentNode.insertBefore(bar, $("tl"));
   // P: the stretch's job on the frame server (null until Pre-process), the key of the choices it was made with,
   // and whether the stretch is playing as a movie now
   const P = { job: null, key: "", poll: 0, playing: false, a: null, b: null, hintAt: -1e9 };
@@ -5375,8 +5369,9 @@ body.phone #launch .lx-clock { font-size: 9.5px; bottom: 9vh; }
     const w = windows();
     const q = new URLSearchParams({ from: isoOf(P.a), until: isoOf(P.b), cams: w.cams, sizes: w.sizes,
       mosaics: opt("cameras.mosaics", true) && window.cassiniMosaics !== false ? "1" : "0", steady: opt("movies.steady", true) ? "1" : "0",
-      color: opt("cameras.composites", true) ? "1" : "0" });
-    return q.toString() + (window.cassiniMovieStyle ? window.cassiniMovieStyle() : "") + (window.cassiniLook ? window.cassiniLook() : "");
+      color: opt("cameras.composites", true) ? "1" : "0", processed: opt("cameras.processedFrames", true) === false ? "0" : "1",
+      center: opt("cameras.autoCenter", true) === false ? "0" : "1", trail: String(opt("movies.trail", 0) || 0), laps: String(opt("movies.laps", 1) || 1) });
+    return q.toString() + (window.cassiniLook ? window.cassiniLook() : "");
   }
   // frames of the windows' cameras in the stretch (in the months loaded now)
   function frames() {
@@ -5387,15 +5382,7 @@ body.phone #launch .lx-clock { font-size: 9.5px; bottom: 9vh; }
   }
 
   // ---- the bar, over the stretch on the timeline ----
-  function place() {
-    if (bar.hidden) return;
-    const tl = $("tl"), r = tl.getBoundingClientRect(), w = bar.offsetWidth;
-    bar.style.bottom = `${Math.max(8, innerHeight - r.top + 8)}px`;
-    if (document.body.classList.contains("phone")) return;
-    const xa = Math.max(0, etToX(P.a, r.width)), xb = Math.min(r.width, etToX(P.b, r.width));
-    const mid = r.left + (xb > xa ? (xa + xb) / 2 : etToX((P.a + P.b) / 2, r.width));
-    bar.style.left = `${Math.round(Math.max(8, Math.min(innerWidth - w - 8, mid - w / 2)))}px`;
-  }
+  const place = () => {};   // the bar is a row of the Cassini Replay window, laid out with it
   function say(text, warn) { $("segstate").textContent = text || ""; $("segstate").classList.toggle("warn", !!warn); $("segstaterow").hidden = !text; }
   function progress(frac) { $("segprog").hidden = frac == null; if (frac != null) $("segprog").firstElementChild.style.width = `${(frac * 100).toFixed(1)}%`; }
   function fpsUi() { const f = Math.round(window.cassiniMovie && window.cassiniMovie.fps ? window.cassiniMovie.fps() : opt("movie.fps", 8)); $("segfps").value = f; $("segfpsv").textContent = `${f} fps`; }
@@ -5501,7 +5488,7 @@ body.phone #launch .lx-clock { font-size: 9.5px; bottom: 9vh; }
   $("segx").addEventListener("click", () => { EX.clear(); hide(); });
   $("segfps").addEventListener("input", e => { if (S) S.set("movie.fps", +e.target.value); fpsUi(); });
   if (S) S.on("movie.fps", fpsUi);
-  for (const k of ["cameras.composites", "cameras.mosaics", "movies.steady", "movies.trail", "movies.laps", "movies.center", "cameras.balancedColor", "cameras.colors"])
+  for (const k of ["cameras.composites", "cameras.mosaics", "movies.steady", "movies.trail", "movies.laps", "cameras.autoCenter", "cameras.processedFrames", "cameras.balancedColor", "cameras.colors"])
     if (S && S.get(k) !== undefined) S.on(k, () => { if (!bar.hidden) { if (P.job && P.key !== params()) { stopPoll(); P.job = null; progress(null); say(""); } buttons(); } });
   window.addEventListener("keydown", e => {
     if (bar.hidden || e.key !== "Escape" || document.querySelector(".menu.open, .win.full") || (window.cassiniMovie && window.cassiniMovie.on)) return;
@@ -5514,7 +5501,7 @@ body.phone #launch .lx-clock { font-size: 9.5px; bottom: 9vh; }
     if (!opt("segment.hint", true) || performance.now() - P.hintAt < 10 * 60e3 || (P.job && /^(queued|planning|making|waiting|finishing)$/.test(P.job.state))) return;
     if (!bar.hidden && P.playing) return;   // playing a highlighted stretch already
     P.hintAt = performance.now();
-    const r = $("tl").getBoundingClientRect();
+    const r = ($("dock") || $("tl")).getBoundingClientRect();
     hint.style.bottom = `${Math.max(8, innerHeight - r.top + 8)}px`;
     hint.hidden = false; requestAnimationFrame(() => hint.classList.add("on"));
     clearTimeout(hintTimer); hintTimer = setTimeout(hideHint, 15000);
