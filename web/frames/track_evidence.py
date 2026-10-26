@@ -13,6 +13,7 @@ import os
 import sys
 
 sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
+import reel  # noqa: E402,F401  (puts the repo on the path)
 
 
 def main():
@@ -22,7 +23,6 @@ def main():
     ap.add_argument("--frames", type=int, default=3, help="movie frames shown per pass")
     ap.add_argument("passes", nargs="+")
     args = ap.parse_args()
-    from PIL import Image
     import calibration
     import obs_mosaic as om
     os.makedirs(args.out, exist_ok=True)
@@ -38,13 +38,13 @@ def main():
             shots = []
             im, _ = om.so_far(u, n - 1, args.cache)
             if im is not None:
-                Image.fromarray(im).convert("RGB").save(os.path.join(args.out, f"{name}_before.jpg"), quality=90)
+                im.convert("RGB").save(os.path.join(args.out, f"{name}_before.jpg"), quality=90)
                 shots.append((f"{name}_before.jpg", f"Before: the whole pass as a mosaic ({n} tiles)"))
             for j in sorted({round(i * (n - 1) / max(1, args.frames - 1)) for i in range(args.frames)}):
                 im, rep = om.movie_frame(u, j, args.cache)
                 if im is None:
                     continue
-                Image.fromarray(im).convert("RGB").save(os.path.join(args.out, f"{name}_after_{j}.jpg"), quality=90)
+                im.convert("RGB").save(os.path.join(args.out, f"{name}_after_{j}.jpg"), quality=90)
                 shots.append((f"{name}_after_{j}.jpg", f"After: frame {j + 1} of {n} played as a movie, {rep.get('id', '')}"
                               + (f", color {' '.join(rep['color'])}" if rep.get("color") else "")))
                 print(" ", j, "done", flush=True)

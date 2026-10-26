@@ -1870,10 +1870,15 @@ def movie_frame(u, n, cache, trail=0, colour=True, out=OUT, centre=True):
             break
     if used:
         planes = [_place(u, newest[f], rect, k, W, H, cache, p["display_scale"]) for f in used]
-        rgba = colour_picture(u, p, used, planes)
-        rep["color"] = used
-        rep["ids"] = [newest[f]["id"] for f in used]
-    else:
+        # a colour set held from an earlier pointing that is out of this frame's view (a track's last visit, a
+        # thousand px away) leaves the picture empty: the frame is drawn on its own instead
+        if any(a[..., 3].any() for a in planes):
+            rgba = colour_picture(u, p, used, planes)
+            rep["color"] = used
+            rep["ids"] = [newest[f]["id"] for f in used]
+        else:
+            used = None
+    if not used:
         rgba = _place(u, t, rect, k, W, H, cache, p["display_scale"])
         # the rolling trail: earlier frames of this filter under it, older ones fainter
         if trail:
