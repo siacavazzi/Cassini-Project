@@ -155,7 +155,7 @@ body.phone #hland .cs-read { font-size: 9.5px; bottom: 9vh; white-space: normal;
       [30, 4, `At 111 km the main chute lets go. A ${CH.drogue.toFixed(0)} m drogue carries it the rest of the way, for more than two hours.`, "", null],
       [35.5, 4.5, `Cassini, ${fmtInt(Math.round(N.cassiniKm / 1000) * 1000)} km away, has its dish on Titan, recording everything Huygens sends.`, "", [0, 3, 5]],
       [40, 4.5, `Earth heard it too. At 10:25 UTC the Green Bank telescope caught Huygens's faint carrier, ${lt} minutes after it left.`, "", null],
-      [46, 5.5, `Under the haze its camera maps the ground it falls toward. Each outline is where one picture fell.`, "", [1, 3, 5]],
+      [51, 5.5, `Under the haze its camera maps the ground it falls toward. Each outline is where one picture fell.`, "", [1, 3, 5]],
       [57, 5, `${utc(T0 + EV.lamp).slice(0, 5)} UTC · A lamp switches on, to light the ground for the last pictures.`, "", null],
       [65, 6.5, `<b>${utc(N.L)} UTC · Touchdown</b>At ${N.vLand.toFixed(1)} m/s, about walking pace. The first landing in the outer solar system.`, "big", [0, 2, 4, 7, 9]],
       [73, 5.5, `Huygens keeps talking from the ground: ${DATA.surface_k} K, ice pebbles all around. Cassini listens for another ${surfaceMin} minutes.`, "", null],
@@ -261,11 +261,11 @@ body.phone #hland .cs-read { font-size: 9.5px; bottom: 9vh; white-space: normal;
   // that sky: it closes in as the probe sinks into the haze and opens below as the air under it clears
   function hazeSky() {
     const mat = new THREE.ShaderMaterial({
-      uniforms: { up: { value: new THREE.Vector3(0, 1, 0) }, sun: { value: new THREE.Vector3(1, 0, 0) }, uOp: { value: 0 }, uSee: { value: 0 } },
+      uniforms: { up: { value: new THREE.Vector3(0, 1, 0) }, sun: { value: new THREE.Vector3(1, 0, 0) }, uOp: { value: 0 }, uSee: { value: 0 }, uWin: { value: 0 } },
       vertexShader: VHEAD + `varying vec3 vDir; void main(){ vDir = position; gl_Position = projectionMatrix * modelViewMatrix * vec4(position, 1.0);
         #include <logdepthbuf_vertex>
       }`,
-      fragmentShader: FHEAD + `uniform vec3 up, sun; uniform float uOp, uSee; varying vec3 vDir;
+      fragmentShader: FHEAD + `uniform vec3 up, sun; uniform float uOp, uSee, uWin; varying vec3 vDir;
         void main(){
           #include <logdepthbuf_fragment>
           vec3 d = normalize(vDir); float e = dot(d, up), mu = dot(d, sun), se = dot(sun, up);
@@ -274,8 +274,9 @@ body.phone #hland .cs-read { font-size: 9.5px; bottom: 9vh; white-space: normal;
           c += vec3(0.30, 0.19, 0.08) * pow(max(mu, 0.0), 5.0) * smoothstep(-0.3, 0.2, e);   // forward scattering: brighter around the Sun
           c *= 0.3 + 0.75 * smoothstep(-0.2, 0.35, se);                                       // dimmer as the Sun sets
           // below the horizon: haze over the ground, thinning toward the nadir as the air under the probe clears; never
-          // toward the horizon, where the line of sight runs through tens of kilometres of it
-          float a = e >= 0.0 ? 1.0 : 1.0 - uSee * smoothstep(0.06, 0.5, -e);
+          // toward the horizon, where the line of sight runs through tens of kilometres of it (higher up, only the
+          // ground nearly straight below shows: uWin narrows the window)
+          float a = e >= 0.0 ? 1.0 : 1.0 - uSee * smoothstep(0.06 + 0.55 * uWin, 0.5 + 0.6 * uWin, -e);
           gl_FragColor = vec4(c * mix(1.0, 0.8, smoothstep(0.0, -0.6, e)), a * uOp);
         }`,
       transparent: true, depthWrite: false, depthTest: false, side: THREE.BackSide });
@@ -289,6 +290,7 @@ body.phone #hland .cs-read { font-size: 9.5px; bottom: 9vh; white-space: normal;
     // the ground shows through below 55 km, clearly below 10 km; in the last few hundred metres the landing ground (the
     // close-up pass's patch) takes over from Titan's globe, which is too coarse that close
     u.uSee.value = 0.92 * ease((55 - alt) / 45) * (1 - ease((0.45 - alt) / 0.25));
+    u.uWin.value = clamp01(alt / 40);
     u.up.value.copy(up); u.sun.value.copy(uSun.value);
     m.position.copy(camera.position); m.scale.setScalar(1e-3); m.updateMatrixWorld();
     m.visible = H.shot === "probe" && u.uOp.value > 0.003;
