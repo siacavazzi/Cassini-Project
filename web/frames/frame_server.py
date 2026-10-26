@@ -106,7 +106,7 @@ Routes:
                                passes, with the page's look and movie style: mosaics, steady, color, trail, laps,
                                center), so it plays as a movie at any frame rate from the cache; one stretch at a
                                time, behind the server's own requests. Answers the job's status, as
-  /prebuild/<JOB>.json         does: state queued/planning/making/waiting/done/failed/stopped, pictures done of
+  /prebuild/<JOB>.json         does: state queued/planning/making/waiting/finishing/done/failed/stopped, pictures done of
                                total, made through (UTC), seconds left
   POST /prebuild/<JOB>/stop    stops it (what is made stays made)
   /health                      "ok" plus where the frames come from
@@ -781,6 +781,20 @@ def gzipped(path, st):
     return data
 
 
+# picture requests being answered now (GET /frames/..., /reel/...), by when each came in: a stretch being made ahead
+# gives way to the fresh ones (prebuild.Segments). One that has taken longer than LIVE_FRESH s (a pass's mosaic being
+# built) no longer counts, so a slow mosaic never holds the stretch up.
+_live = {}
+_live_lock = threading.Lock()
+LIVE_FRESH = 1.5
+
+
+def live_requests():
+    now = time.monotonic()
+    with _live_lock:
+        return sum(now - t < LIVE_FRESH for t in _live.values())
+
+
 class Server(ThreadingHTTPServer):
     # the default backlog of 5 resets connections when several viewers open theirs at once
     # (a browser opens six per page); the OS caps it at its own limit anyway
@@ -796,7 +810,7 @@ def make_handler(site, cache, flags=None):
             # prebuild imports this module by name: the running server's own makers and caches, not a second copy
             sys.modules.setdefault("frame_server", sys.modules[__name__])
             import prebuild
-            segments.append(prebuild.Segments(cache))
+            segments.append(prebuild.Segments(cache, live=live_requests))
         return segments[0]
 
     class Handler(SimpleHTTPRequestHandler):
@@ -995,9 +1009,18 @@ def make_handler(site, cache, flags=None):
             # look=classic: pictures drawn from I/F the way they were before the balanced display model;
             # colors=raw: each filter drawn straight as a channel, without natural color (calibration.colors)
             query = parse_qs(urlparse(self.path).query)
-            with calibration.looking(query.get("look", [calibration.LOOKS[0]])[0]), \
-                    calibration.coloring(query.get("colors", [calibration.COLORS[0]])[0]):
-                return self.get()
+            picture, me = self.path.startswith(("/frames/", "/reel/")), object()
+            if picture:
+                with _live_lock:
+                    _live[me] = time.monotonic()
+            try:
+                with calibration.looking(query.get("look", [calibration.LOOKS[0]])[0]), \
+                        calibration.coloring(query.get("colors", [calibration.COLORS[0]])[0]):
+                    return self.get()
+            finally:
+                if picture:
+                    with _live_lock:
+                        _live.pop(me, None)
 
         def get(self):
             self.started = time.monotonic()

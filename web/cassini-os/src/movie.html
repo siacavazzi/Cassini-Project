@@ -25,7 +25,7 @@
   // Slow: when the film has spent more than SLOW_SHARE of the last SLOW_SPAN ms waiting, the page hears
   // "cassini:movie-slow" (once, until it has caught up again), so it can offer to make a stretch ahead of time.
   const CUT = 3 * 3600, SLOW_SPAN = 20000, SLOW_SHARE = 0.5;
-  const M = { on: false, stepAt: 0, waiting: false, cut: 0, cutAt: -1e9, until: Infinity, waits: [], slow: false, lastAt: 0 };
+  const M = { on: false, stepAt: 0, waiting: false, cut: 0, cutAt: -1e9, until: Infinity, cams: null, waits: [], slow: false, lastAt: 0 };
   const ready = () => typeof catalog !== "undefined" && catalog && catalog.byCam && window.cassiniFeeds;
 
   const base = window.studyAdvance;
@@ -35,9 +35,9 @@
     const F = window.cassiniFeeds, now = performance.now(), due = M.stepAt + 1000 / fps();
     M.waiting = false;
     if (now < due) { track(now, false); return et; }
-    if (F.behind() > 0) { M.waiting = now > due + 300; track(now, true); return et; }
+    if (F.behind(M.cams) > 0) { M.waiting = now > due + 300; track(now, true); return et; }
     track(now, false);
-    const next = F.nextPicture(et);
+    const next = F.nextPicture(et, undefined, M.cams);
     // a stretch played as a movie (start's until) ends on its last picture
     if (next > M.until) { setPlaying(false); stop(); return et; }
     // no picture after this one in the months loaded now: the clock runs a day a frame until the next ones are in
@@ -76,18 +76,20 @@
   // ---- on and off ----
   // play: also start the clock (the Movie button, M); a shared link (link.html) leaves play as the link says.
   // range { from, until } (mission times): play one stretch, from its first picture, and leave movie mode after
-  // its last (a stretch made ahead of time plays at movie.fps, its pictures all waiting in the server's cache)
+  // its last (a stretch made ahead of time plays at movie.fps, its pictures all waiting in the server's cache);
+  // range.cams ("N" or "W"): step through that camera's pictures only, waiting on its windows alone
   function start(play, range) {
     if (M.on && !range) return;
     M.on = true; M.stepAt = 0; M.cutAt = -1e9; M.waits = []; M.slow = false; M.lastAt = 0;
     M.until = range && range.until !== undefined ? range.until : Infinity;
+    M.cams = range && /^[NW]$/.test(range.cams || "") ? range.cams : null;
     if (range && range.from !== undefined) { setTime(range.from - 1e-3); keepNowInView(); }
     $("movie").setAttribute("aria-pressed", "true");
     if (play) setPlaying(true);
   }
   function stop() {
     if (!M.on) return;
-    M.on = false; M.until = Infinity;
+    M.on = false; M.until = Infinity; M.cams = null;
     if (M.slow) { M.slow = false; document.dispatchEvent(new CustomEvent("cassini:movie-slow", { detail: { slow: false, share: 0, et: state.et } })); }
     $("movie").setAttribute("aria-pressed", "false");
   }
@@ -100,7 +102,7 @@
   // step one picture forward or back (paused), keeping the timeline on the clock
   function step(dir) {
     if (!ready()) return;
-    const F = window.cassiniFeeds, t = dir > 0 ? F.nextPicture(state.et) : F.prevPicture(state.et);
+    const F = window.cassiniFeeds, t = dir > 0 ? F.nextPicture(state.et, undefined, M.cams) : F.prevPicture(state.et, undefined, M.cams);
     if (!isFinite(t)) return;
     setPlaying(false); setTime(t); keepNowInView();
   }

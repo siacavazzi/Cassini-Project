@@ -926,11 +926,15 @@ body.phone #ssound { width: 30px; height: 30px; }
 #exdone[hidden], #exvid[hidden] { display: none; }
 body.phone #excard:not(.full) { width: calc(100% - 16px) !important; left: 8px !important; right: auto !important; top: calc(env(safe-area-inset-top, 0px) + 30px) !important; }
 
-#segbar { position: fixed; z-index: 60; display: grid; gap: 6px; padding: 7px 9px 8px; width: max-content; max-width: calc(100vw - 16px); box-sizing: border-box;
-  border-radius: 8px; background: var(--q-panel, rgba(16,17,20,.72)); border: 1px solid var(--q-line, rgba(255,255,255,.1)); color: var(--q-text, #ddd);
-  -webkit-backdrop-filter: blur(16px) saturate(1.2); backdrop-filter: blur(16px) saturate(1.2); box-shadow: 0 8px 30px rgba(0,0,0,.45);
-  font: 11px/1.25 var(--ui); transition: opacity .7s ease; }
+/* a row of the Cassini Replay window, right above the timeline: it comes and goes with the window, never behind it */
+#segbar { display: grid; gap: 5px; margin: 4px 0 2px; padding: 6px 8px 7px; box-sizing: border-box; border-radius: 6px;
+  background: rgba(138,182,255,.07); border: 1px solid rgba(138,182,255,.28); color: var(--q-text, #ddd); font: 11px/1.25 var(--ui); }
 #segbar[hidden], #seghint[hidden], #segbar [hidden] { display: none !important; }
+/* while a stretch is being made, its window stays up when the rest of the interface fades */
+body.idle #dock:has(#segbar.busy) { opacity: 1; pointer-events: auto; }
+#segbar #segcams button { padding: 3px 9px; border: 0; border-radius: 0; background: none; }
+#segbar #segcams button + button { border-left: 1px solid var(--q-line, #555); }
+#segbar #segcams button[aria-pressed="true"] { background: rgba(138,182,255,.3); color: #fff; }
 #segbar .segrow { display: flex; gap: 8px; align-items: center; flex-wrap: wrap; }
 #segwhen { color: var(--q-text, #ddd); font-variant-numeric: tabular-nums; white-space: nowrap; }
 #segwhat { color: var(--q-dim, #888); font-variant-numeric: tabular-nums; white-space: nowrap; }
@@ -946,15 +950,13 @@ body.phone #excard:not(.full) { width: calc(100% - 16px) !important; left: 8px !
 #segstate.warn { color: #e6bb68; }
 #segprog { height: 3px; border-radius: 2px; background: rgba(255,255,255,.1); overflow: hidden; }
 #segprog i { display: block; height: 100%; width: 0; background: var(--q-accent, #8ab6ff); transition: width .4s ease; }
-/* resting: the bar rests with the windows, except while a stretch is being made */
-body.idle #segbar:not(.busy) { opacity: 0; pointer-events: none; }
-#seghint { position: fixed; left: 50%; transform: translateX(-50%); z-index: 61; display: flex; gap: 12px; align-items: center; max-width: min(560px, calc(100vw - 16px)); box-sizing: border-box;
+#segbar .segrow > .grow { flex: 1; }
+#seghint { position: fixed; left: 50%; transform: translateX(-50%); z-index: 1100; display: flex; gap: 12px; align-items: center; max-width: min(560px, calc(100vw - 16px)); box-sizing: border-box;
   padding: 7px 12px; border-radius: 8px; background: var(--q-panel, rgba(16,17,20,.72)); border: 1px solid var(--q-line, rgba(255,255,255,.1)); color: var(--q-text, #ddd);
   -webkit-backdrop-filter: blur(16px); backdrop-filter: blur(16px); font: 11.5px/1.35 var(--ui); box-shadow: 0 8px 30px rgba(0,0,0,.45); opacity: 0; transition: opacity .4s ease; }
 #seghint.on { opacity: 1; }
 #seghint button { font: inherit; background: none; border: 0; padding: 0; color: var(--q-accent, #8ab6ff); cursor: pointer; white-space: nowrap; }
 #seghint button.x { color: var(--q-dim, #888); font-size: 14px; line-height: 1; }
-body.phone #segbar { left: 8px !important; right: 8px; width: auto; }
 body.phone #segbar button { padding: 6px 11px; }
 body.phone #segfps { flex: 1; }
 
@@ -1451,7 +1453,7 @@ body.phone #launch .lx-clock { font-size: 9.5px; bottom: 9vh; }
   <section class="win" id="excard" aria-label="Export Movie" hidden>
   <div class="titlebar"><span class="lights"><button class="close" aria-label="Close">×</button><button class="min" aria-label="Minimize">–</button><button class="zoom" aria-label="Zoom">+</button></span>Export Movie</div>
   <div class="body">
-    <div id="exhint">Shift-drag across the timeline to mark a stretch (or press and hold on it, then drag), or press I at its start and O at its end.</div>
+    <div id="exhint">Drag across the timeline to mark a stretch, or press I at its start and O at its end.</div>
     <div class="exrow"><span>From</span><input type="text" id="exfrom" placeholder="YYYY-MM-DD hh:mm:ss" spellcheck="false" aria-label="Start, UTC"><button class="exbtn" id="exin" title="Start at the mission clock (I)">Here</button></div>
     <div class="exrow"><span>Until</span><input type="text" id="exuntil" placeholder="YYYY-MM-DD hh:mm:ss" spellcheck="false" aria-label="End, UTC"><button class="exbtn" id="exout" title="End at the mission clock (O)">Here</button></div>
     <div id="exsum"></div>
@@ -1472,11 +1474,13 @@ body.phone #launch .lx-clock { font-size: 9.5px; bottom: 9vh; }
   <div id="segbar" role="group" aria-label="Highlighted stretch" hidden>
     <div class="segrow"><span id="segwhen"></span><span id="segwhat"></span><button id="segx" aria-label="Clear the highlight" title="Clear the highlight (Esc)">×</button></div>
     <div class="segrow">
+      <div class="exseg" id="segcams" role="group" aria-label="Cameras"><button data-v="NW">Both</button><button data-v="N">NAC</button><button data-v="W">WAC</button></div>
       <button id="segprep" title="Make every picture of this stretch ahead of time, so it plays smoothly at any frame rate">Pre-process</button>
       <button id="segstop" hidden>Stop</button>
       <button id="segplay" title="Play this stretch as a movie">▶ Play</button>
-      <input type="range" id="segfps" min="2" max="24" step="1" aria-label="Movie frame rate"><span id="segfpsv"></span>
-      <button id="segexport" title="Make a film of this stretch to download (E)">Export…</button>
+      <label for="segfps">Frame rate</label><input type="range" id="segfps" min="2" max="24" step="1" aria-label="Movie frame rate"><span id="segfpsv"></span>
+      <span class="grow"></span>
+      <button id="segexport" title="Make a video file of this stretch to download (E)">Save movie…</button>
     </div>
     <div id="segprog" hidden><i></i></div>
     <div class="segrow" id="segstaterow" hidden><span id="segstate" role="status" aria-live="polite"></span></div>
@@ -1791,6 +1795,11 @@ body.phone #launch .lx-clock { font-size: 9.5px; bottom: 9vh; }
   // movie mode (movie.html) is a rule for the clock, so its speed sits with the playback settings
   D({ key: "movie.fps", section: "Playback", label: "Movie mode speed", type: "range", value: 8, min: 2, max: 24, step: 1, unit: "fps",
       hint: "Movie mode (M) skips the time between pictures and steps from one picture to the next this many times a second. The camera windows show every picture as they always do." });
+  // what counts as a picture (head-quiet.html complete, cameraFeed)
+  D({ key: "movie.completeFrames", section: "Playback", label: "Complete color pictures only", type: "toggle", value: true,
+      hint: "Movie mode steps from one finished picture to the next: a color set shows once, as its color picture when its last filter is taken, never the black-and-white frames on the way. Off steps through every frame." });
+  D({ key: "playback.completeMosaics", section: "Playback", label: "Complete mosaics only", type: "toggle", value: false,
+      hint: "A mosaic pass shows once it is finished: the camera window keeps the picture from before the pass and puts up the whole mosaic at its last frame, and movie mode steps straight to it. Off shows the mosaic building tile by tile." });
   // movie passes in the camera and body windows (head-quiet.html cameraFeed reads these)
   D({ key: "movies.steady", section: "Movie", label: "Steady movie passes", type: "toggle", value: true,
       hint: "When a pass plays as a movie in a camera or body window (a stare, a ring or storm movie), every frame is centered by SPICE, north up, on one brightness scale and one size for the whole pass, so the body holds still and the picture does not pump. Off shows each frame as it is." });
@@ -2772,6 +2781,20 @@ body.phone #launch .lx-clock { font-size: 9.5px; bottom: 9vh; }
     return api;
   }
   const STUCK = 8000;
+  // Complete mosaics only (Settings > Playback): a mosaic pass shows once, finished, at its last frame
+  const completeMosaics = () => !!S.get("playback.completeMosaics") && !!S.get("cameras.mosaics") && window.cassiniMosaics !== false;
+  // the pass (target and observation) of a camera's p-th frame, as the first and last index of its frames in a row
+  function passSpan(cam, body, p) {
+    const ks = framesOf(cam, body).ks, spans = catalog.passSpans = catalog.passSpans || new Map(), key = `${cam}|${body || ""}|${p}`;
+    if (spans.has(key)) return spans.get(key);
+    const o = k => `${catalog.target[k]}|${catalog.obs[k]}`, me = o(ks[p]);
+    let first = p, last = p;
+    while (first > 0 && o(ks[first - 1]) === me) first--;
+    while (last + 1 < ks.length && o(ks[last + 1]) === me) last++;
+    const span = [first, last];
+    for (let q = first; q <= last; q++) spans.set(`${cam}|${body || ""}|${q}`, span);
+    return span;
+  }
   const allFeeds = new Set();   // every camera window's feed, the body windows' too (playback.maxBehind)
   function cameraFeed(card) {
     // body: a body window's own target; the two camera windows show the body in view in the body view, else every target
@@ -3676,6 +3699,12 @@ body.phone #launch .lx-clock { font-size: 9.5px; bottom: 9vh; }
       const holdUp = update.hold || (!own && !!body), up = well.classList.contains("has-frame") && heldBody === body;
       const coming = k < 0 && holdUp && !up && framesOf(cam, body).ks.length > 0;
       if (coming) { p = 0; k = framesOf(cam, body).ks[0]; }
+      // Complete mosaics only: inside a mosaic pass the window keeps the picture from before it, until the pass's
+      // last frame brings up the finished mosaic
+      if (k >= 0 && !coming && completeMosaics() && playsAs(k) === "mosaic") {
+        const [first, last] = passSpan(cam, body, p);
+        if (p < last) { p = first - 1; k = p < 0 ? -1 : framesOf(cam, body).ks[p]; }
+      }
       const live = k >= 0 && state.et - catalog.et[k] < 180;
       card.classList.toggle("live", live);
       // a camera that has been quiet for longer than the stale setting shows nothing rather than an old picture; an
@@ -3774,6 +3803,8 @@ body.phone #launch .lx-clock { font-size: 9.5px; bottom: 9vh; }
       return Math.max(0, b);
     };
     allFeeds.add(update);
+    update.cam = cam;
+    update.playsAs = playsAs;
     update.kind = () => kind;
     return update;
   }
@@ -3786,23 +3817,55 @@ body.phone #launch .lx-clock { font-size: 9.5px; bottom: 9vh; }
   const feeds = [...document.querySelectorAll(".camwin")].map(cameraFeed);
   // the time of the first picture after et (any camera; one body's only when body is given), or Infinity when none
   // is in the months loaded now; before: the last picture before et. Movie mode steps the clock from one to the next
-  function nextPicture(et, body) {
-    if (!body) { const a = catalog.sorted, i = lastImageIndex(et) + 1; return i < a.length ? a[i] : Infinity; }
+  // cams ("N", "W"): only that camera's pictures (a stretch played for one camera). Only complete pictures count
+  // (complete, below), so movie mode and the body view's skip over the gaps step from one finished picture to the next
+  function nextPicture(et, body, cams) {
+    if (!body && !cams) {
+      const a = catalog.sorted;
+      for (let i = lastImageIndex(et) + 1; i < a.length; i++) if (complete(order[i], body)) return a[i];
+      return Infinity;
+    }
     let t = Infinity;
-    for (const cam in catalog.byCam) { const a = framesOf(cam, body).et, p = lastOfCam(cam, et, body) + 1; if (p < a.length) t = Math.min(t, a[p]); }
+    for (const cam in catalog.byCam) {
+      if (cams && !cams.includes(cam)) continue;
+      const f = framesOf(cam, body);
+      for (let p = lastOfCam(cam, et, body) + 1; p < f.et.length && f.et[p] < t; p++) if (complete(f.ks[p], body)) { t = f.et[p]; break; }
+    }
     return t;
   }
-  function prevPicture(et, body) {
+  function prevPicture(et, body, cams) {
     let t = -Infinity;
-    for (const cam in catalog.byCam) { const a = framesOf(cam, body).et, p = lastOfCam(cam, et - 1e-3, body); if (p >= 0) t = Math.max(t, a[p]); }
+    for (const cam in catalog.byCam) {
+      if (cams && !cams.includes(cam)) continue;
+      const f = framesOf(cam, body);
+      for (let p = lastOfCam(cam, et - 1e-3, body); p >= 0 && f.et[p] > t; p--) if (complete(f.ks[p], body)) { t = f.et[p]; break; }
+    }
     return t;
+  }
+  // a finished picture, the kind movie mode stops on. Complete frames only (movie.completeFrames, with color
+  // composites on): of a color set, only the frame that completes it (its composite), never the black-and-white
+  // channels on the way. Complete mosaics only (playback.completeMosaics): of a pass a camera window plays as a
+  // mosaic, only its last frame (the finished mosaic; body: among that body's pictures, as its windows show them).
+  // Every other frame is a picture of its own.
+  function complete(k, body) {
+    const si = catalog.setOf ? catalog.setOf[k] : -1;
+    if (si >= 0 && S.get("movie.completeFrames") !== false && S.get("cameras.composites") && catalog.et[k] !== catalog.sets[si].ready) return false;
+    if (completeMosaics()) {
+      const cam = catalog.cam[k];
+      for (const f of allFeeds) if (f.cam === cam && f.playsAs && f.playsAs(k) === "mosaic") {
+        const [, last] = passSpan(cam, body, lastOfCam(cam, catalog.et[k], body));
+        return framesOf(cam, body).ks[last] === k;
+      }
+    }
+    return true;
   }
   // how many frames the furthest-behind camera window's picture is behind the clock (update.behind, below)
-  const behind = () => { let b = 0; for (const f of allFeeds) b = Math.max(b, f.behind()); return b; };
+  // cams ("N", "W"): only that camera's windows
+  const behind = cams => { let b = 0; for (const f of allFeeds) if (!cams || cams.includes(f.cam)) b = Math.max(b, f.behind()); return b; };
   window.cassiniFeeds = { frames: FRAMES, cameraFeed, framesOf, lastOfCam, prep, weight, nextPicture, prevPicture, behind, stale: () => S.get("cameras.stale") * 3600 };
   document.addEventListener("cassini:bodymode", () => { if (typeof catalog !== "undefined" && catalog && catalog.byCam) feeds.forEach(f => f(true)); });
   // a change to what the windows show takes effect straight away
-  for (const key of ["cameras.composites", "cameras.stale", "cameras.steady", "cameras.passes", "cameras.balancedColor", "cameras.colors", "cameras.lingerColor", "cameras.lingerMosaic", "movies.steady", "cameras.autoCenter", "cameras.processedFrames", "movies.trail", "movies.filmstrip", "movies.laps"]) S.on(key, () => { if (typeof catalog !== "undefined" && catalog && catalog.byCam) feeds.forEach(f => f(true)); });
+  for (const key of ["cameras.composites", "cameras.stale", "cameras.steady", "cameras.passes", "cameras.balancedColor", "cameras.colors", "cameras.lingerColor", "cameras.lingerMosaic", "movies.steady", "cameras.autoCenter", "cameras.processedFrames", "movies.trail", "movies.filmstrip", "movies.laps", "playback.completeMosaics"]) S.on(key, () => { if (typeof catalog !== "undefined" && catalog && catalog.byCam) feeds.forEach(f => f(true)); });
 
   // ---------- burst limit: in normal playback each camera window gets at most maxRate new pictures a second ----------
   // The clock runs at the chosen speed except inside an imaging burst, where it slows so that crossing the gap
@@ -4115,7 +4178,7 @@ body.phone #launch .lx-clock { font-size: 9.5px; bottom: 9vh; }
   // Slow: when the film has spent more than SLOW_SHARE of the last SLOW_SPAN ms waiting, the page hears
   // "cassini:movie-slow" (once, until it has caught up again), so it can offer to make a stretch ahead of time.
   const CUT = 3 * 3600, SLOW_SPAN = 20000, SLOW_SHARE = 0.5;
-  const M = { on: false, stepAt: 0, waiting: false, cut: 0, cutAt: -1e9, until: Infinity, waits: [], slow: false, lastAt: 0 };
+  const M = { on: false, stepAt: 0, waiting: false, cut: 0, cutAt: -1e9, until: Infinity, cams: null, waits: [], slow: false, lastAt: 0 };
   const ready = () => typeof catalog !== "undefined" && catalog && catalog.byCam && window.cassiniFeeds;
 
   const base = window.studyAdvance;
@@ -4125,9 +4188,9 @@ body.phone #launch .lx-clock { font-size: 9.5px; bottom: 9vh; }
     const F = window.cassiniFeeds, now = performance.now(), due = M.stepAt + 1000 / fps();
     M.waiting = false;
     if (now < due) { track(now, false); return et; }
-    if (F.behind() > 0) { M.waiting = now > due + 300; track(now, true); return et; }
+    if (F.behind(M.cams) > 0) { M.waiting = now > due + 300; track(now, true); return et; }
     track(now, false);
-    const next = F.nextPicture(et);
+    const next = F.nextPicture(et, undefined, M.cams);
     // a stretch played as a movie (start's until) ends on its last picture
     if (next > M.until) { setPlaying(false); stop(); return et; }
     // no picture after this one in the months loaded now: the clock runs a day a frame until the next ones are in
@@ -4166,18 +4229,20 @@ body.phone #launch .lx-clock { font-size: 9.5px; bottom: 9vh; }
   // ---- on and off ----
   // play: also start the clock (the Movie button, M); a shared link (link.html) leaves play as the link says.
   // range { from, until } (mission times): play one stretch, from its first picture, and leave movie mode after
-  // its last (a stretch made ahead of time plays at movie.fps, its pictures all waiting in the server's cache)
+  // its last (a stretch made ahead of time plays at movie.fps, its pictures all waiting in the server's cache);
+  // range.cams ("N" or "W"): step through that camera's pictures only, waiting on its windows alone
   function start(play, range) {
     if (M.on && !range) return;
     M.on = true; M.stepAt = 0; M.cutAt = -1e9; M.waits = []; M.slow = false; M.lastAt = 0;
     M.until = range && range.until !== undefined ? range.until : Infinity;
+    M.cams = range && /^[NW]$/.test(range.cams || "") ? range.cams : null;
     if (range && range.from !== undefined) { setTime(range.from - 1e-3); keepNowInView(); }
     $("movie").setAttribute("aria-pressed", "true");
     if (play) setPlaying(true);
   }
   function stop() {
     if (!M.on) return;
-    M.on = false; M.until = Infinity;
+    M.on = false; M.until = Infinity; M.cams = null;
     if (M.slow) { M.slow = false; document.dispatchEvent(new CustomEvent("cassini:movie-slow", { detail: { slow: false, share: 0, et: state.et } })); }
     $("movie").setAttribute("aria-pressed", "false");
   }
@@ -4190,7 +4255,7 @@ body.phone #launch .lx-clock { font-size: 9.5px; bottom: 9vh; }
   // step one picture forward or back (paused), keeping the timeline on the clock
   function step(dir) {
     if (!ready()) return;
-    const F = window.cassiniFeeds, t = dir > 0 ? F.nextPicture(state.et) : F.prevPicture(state.et);
+    const F = window.cassiniFeeds, t = dir > 0 ? F.nextPicture(state.et, undefined, M.cams) : F.prevPicture(state.et, undefined, M.cams);
     if (!isFinite(t)) return;
     setPlaying(false); setTime(t); keepNowInView();
   }
@@ -5106,10 +5171,15 @@ body.phone #launch .lx-clock { font-size: 9.5px; bottom: 9vh; }
   const show = et => iso(et).replace("T", " ");
   const parse = s => { const t = s.trim().replace(" ", "T"); return /^\d{4}-\d\d-\d\d(T\d\d:\d\d(:\d\d)?)?$/.test(t) ? utcToEt(t.length === 10 ? t + "T00:00:00" : t) : null; };
   const redraw = () => { if (typeof drawTimeline === "function" && catalog) drawTimeline(); };
-  function mark(a, b) {
-    if (a != null) X.a = a;
-    if (b != null) X.b = b;
-    if (X.a != null && X.b != null && X.b < X.a) [X.a, X.b] = [X.b, X.a];
+  // X.guard (segment.html, while a stretch is being made or is made ahead): guard(a, b, how) answers the stretch a
+  // change may make, [a, b], or null when it may not change at all; how is "edge" (an end dragged or typed), "new" (a
+  // fresh highlight) or "clear"
+  const guarded = (a, b, how) => (X.guard && X.a != null && X.b != null ? X.guard(a, b, how) : [a, b]);
+  function mark(a, b, how) {
+    let na = a != null ? a : X.a, nb = b != null ? b : X.b;
+    if (na != null && nb != null && nb < na) [na, nb] = [nb, na];
+    if (na != null && nb != null && (a != null || b != null)) { const g = guarded(na, nb, how || "edge"); if (!g) return; [na, nb] = g; }
+    X.a = na; X.b = nb;
     $("exfrom").value = X.a != null ? show(X.a) : "";
     $("exuntil").value = X.b != null ? show(X.b) : "";
     $("exhint").hidden = X.a != null && X.b != null;
@@ -5119,7 +5189,8 @@ body.phone #launch .lx-clock { font-size: 9.5px; bottom: 9vh; }
   }
   // a stretch just highlighted: the bar over it comes up (segment.html), or this window where there is no bar
   const marked = () => { if (!window.cassiniSegment) open(); };
-  function clear() { X.a = X.b = null; mark(); }
+  // force: the person's own × or Escape (a stretch kept by X.guard otherwise stays)
+  function clear(force) { if (!force && X.guard && X.a != null && !X.guard(null, null, "clear")) return; X.a = X.b = null; mark(); }
 
   // drawn over the timeline: the stretch lit in the camera blue, a handle at each end
   const prevTimeline = window.studyTimeline;
@@ -5137,45 +5208,40 @@ body.phone #launch .lx-clock { font-size: 9.5px; bottom: 9vh; }
     if (prevTimeline) prevTimeline(g, w, h, xn);
   };
 
-  // shift-drag marks a stretch, and so does pressing and holding on the timeline and then dragging (no keyboard
-  // needed, on a phone too); dragging a marked edge moves it; anything else scrubs as before
-  const tl = $("tl"), HOLD = 450;
-  let drag = null, held = null;
+  // dragging across the timeline's lanes marks a stretch (a click still moves the clock there; the row of dates along
+  // the top still pans); dragging a marked edge moves it; shift-drag marks one anywhere, the date row included
+  const tl = $("tl"), MOVE = 5;
+  let drag = null, press = null;
   const etAt = e => { const r = tl.getBoundingClientRect(); return xToEt(e.clientX - r.left, r.width); };
   window.addEventListener("pointerdown", e => {
-    if (e.target !== tl || !catalog) return;
+    if (e.target !== tl || !catalog || e.button > 0) return;
     const r = tl.getBoundingClientRect(), x = e.clientX - r.left, near = v => v != null && Math.abs(etToX(v, r.width) - x) < 7;
     if (e.shiftKey) drag = { from: etAt(e), edge: null };
     else if (near(X.a)) drag = { edge: "a" };
     else if (near(X.b)) drag = { edge: "b" };
     else {
-      // a press that stays put for HOLD ms turns the scrub it started into a highlight from where it was pressed
-      if (e.offsetY >= (e.pointerType === "touch" ? 26 : 18)) {
-        const from = etAt(e), x0 = e.clientX, y0 = e.clientY, id = e.pointerId;
-        held = { x0, y0, id, timer: setTimeout(() => {
-          held = null;
-          state.dragging = false;
-          drag = { from, edge: null };
-          X.a = X.b = from; tl.style.cursor = "crosshair";
-          try { tl.setPointerCapture(id); } catch (err) {}
-          if (navigator.vibrate) navigator.vibrate(10);
-        }, HOLD) };
-      }
+      // a press in the lanes scrubs as a click does (index.html); once it moves MOVE px it becomes a highlight from
+      // where it was pressed, and the clock goes back to where it was
+      if (e.offsetY >= (e.pointerType === "touch" ? 26 : 18)) press = { x0: e.clientX, from: etAt(e), et: state.et, id: e.pointerId };
       return;
     }
     e.stopImmediatePropagation(); e.preventDefault();
     tl.setPointerCapture(e.pointerId);
   }, true);
   window.addEventListener("pointermove", e => {
-    if (held && Math.hypot(e.clientX - held.x0, e.clientY - held.y0) > 6) { clearTimeout(held.timer); held = null; }
+    if (press && !drag && Math.abs(e.clientX - press.x0) > MOVE) {
+      state.dragging = false; setTime(press.et);
+      drag = { from: press.from, edge: null }; press = null;
+      tl.style.cursor = "col-resize";
+    }
     if (!drag) return;
     e.stopImmediatePropagation();
     const t = etAt(e);
     if (drag.edge) mark(drag.edge === "a" ? t : null, drag.edge === "b" ? t : null);
-    else { X.a = Math.min(drag.from, t); X.b = Math.max(drag.from, t); mark(); }
+    else if (!drag.held) { const g = guarded(Math.min(drag.from, t), Math.max(drag.from, t), "new"); if (g) { X.a = g[0]; X.b = g[1]; mark(); } else drag.held = true; }
   }, true);
   window.addEventListener("pointerup", e => {
-    if (held) { clearTimeout(held.timer); held = null; }
+    press = null;
     if (!drag) return;
     e.stopImmediatePropagation();
     const made = !drag.edge;
@@ -5183,7 +5249,7 @@ body.phone #launch .lx-clock { font-size: 9.5px; bottom: 9vh; }
     if (made && X.a != null && X.b - X.a > 1) marked();
     else if (made) clear();
   }, true);
-  window.addEventListener("pointercancel", () => { if (held) { clearTimeout(held.timer); held = null; } }, true);
+  window.addEventListener("pointercancel", () => { press = null; }, true);
   // the cursor says when an edge can be dragged
   tl.addEventListener("pointermove", e => {
     if (drag || !catalog) return;
@@ -5368,27 +5434,34 @@ body.phone #launch .lx-clock { font-size: 9.5px; bottom: 9vh; }
       hint: "A quiet note when movie mode spends most of its time waiting for pictures to be made." });
   }
   const bar = $("segbar"), hint = $("seghint");
+  $("tl").parentNode.insertBefore(bar, $("tl"));
   // P: the stretch's job on the frame server (null until Pre-process), the key of the choices it was made with,
   // and whether the stretch is playing as a movie now
-  const P = { job: null, key: "", poll: 0, playing: false, a: null, b: null, hintAt: -1e9 };
+  const P = { job: null, key: "", poll: 0, playing: false, a: null, b: null, hintAt: -1e9, tucked: null };
   const isoOf = et => new Date(etToMs(et)).toISOString().slice(0, 19);
   const short = et => { const d = new Date(etToMs(et)).toISOString(); return `${d.slice(0, 10)} ${d.slice(11, 16)}`; };
 
   // ---- what the camera windows will ask for: their cameras and sizes, and the page's look ----
   // A window's size changes with the picture in it (cassiniWM.sized: 1024, or 512 when it shows the picture that small,
   // which a window often does once its first picture is up), so both are made, except on a phone, which asks for 512
+  // The cameras: the row's NAC / WAC / Both (shared with the Export window's Cameras), else the camera windows open
   function windows() {
-    const cams = new Set();
-    for (const card of document.querySelectorAll(".win:not([hidden]) [data-cam]")) if (/^[NW]$/.test(card.dataset.cam)) cams.add(card.dataset.cam);
-    if (!cams.size) { cams.add("N"); cams.add("W"); }
-    return { cams: ["N", "W"].filter(c => cams.has(c)).join(""), sizes: document.body.classList.contains("phone") ? "512" : "512,1024" };
+    let cams = EX.state.cams;
+    if (!/^(N|W|NW)$/.test(cams || "")) {
+      const open = new Set();
+      for (const card of document.querySelectorAll(".win:not([hidden]) [data-cam]")) if (/^[NW]$/.test(card.dataset.cam)) open.add(card.dataset.cam);
+      cams = open.size ? ["N", "W"].filter(c => open.has(c)).join("") : "NW";
+    }
+    return { cams, sizes: document.body.classList.contains("phone") ? "512" : "512,1024" };
   }
+  function camsUi() { const c = windows().cams; document.querySelectorAll("#segcams button").forEach(b => b.setAttribute("aria-pressed", String(b.dataset.v === c))); }
   function params() {
     const w = windows();
     const q = new URLSearchParams({ from: isoOf(P.a), until: isoOf(P.b), cams: w.cams, sizes: w.sizes,
       mosaics: opt("cameras.mosaics", true) && window.cassiniMosaics !== false ? "1" : "0", steady: opt("movies.steady", true) ? "1" : "0",
-      color: opt("cameras.composites", true) ? "1" : "0" });
-    return q.toString() + (window.cassiniMovieStyle ? window.cassiniMovieStyle() : "") + (window.cassiniLook ? window.cassiniLook() : "");
+      color: opt("cameras.composites", true) ? "1" : "0", processed: opt("cameras.processedFrames", true) === false ? "0" : "1",
+      center: opt("cameras.autoCenter", true) === false ? "0" : "1", trail: String(opt("movies.trail", 0) || 0), laps: String(opt("movies.laps", 1) || 1) });
+    return q.toString() + (window.cassiniLook ? window.cassiniLook() : "");
   }
   // frames of the windows' cameras in the stretch (in the months loaded now)
   function frames() {
@@ -5399,24 +5472,20 @@ body.phone #launch .lx-clock { font-size: 9.5px; bottom: 9vh; }
   }
 
   // ---- the bar, over the stretch on the timeline ----
-  function place() {
-    if (bar.hidden) return;
-    const tl = $("tl"), r = tl.getBoundingClientRect(), w = bar.offsetWidth;
-    bar.style.bottom = `${Math.max(8, innerHeight - r.top + 8)}px`;
-    if (document.body.classList.contains("phone")) return;
-    const xa = Math.max(0, etToX(P.a, r.width)), xb = Math.min(r.width, etToX(P.b, r.width));
-    const mid = r.left + (xb > xa ? (xa + xb) / 2 : etToX((P.a + P.b) / 2, r.width));
-    bar.style.left = `${Math.round(Math.max(8, Math.min(innerWidth - w - 8, mid - w / 2)))}px`;
-  }
+  const place = () => {};   // the bar is a row of the Cassini Replay window, laid out with it
   function say(text, warn) { $("segstate").textContent = text || ""; $("segstate").classList.toggle("warn", !!warn); $("segstaterow").hidden = !text; }
   function progress(frac) { $("segprog").hidden = frac == null; if (frac != null) $("segprog").firstElementChild.style.width = `${(frac * 100).toFixed(1)}%`; }
   function fpsUi() { const f = Math.round(window.cassiniMovie && window.cassiniMovie.fps ? window.cassiniMovie.fps() : opt("movie.fps", 8)); $("segfps").value = f; $("segfpsv").textContent = `${f} fps`; }
+  // the choices a stretch is made with, apart from its times (P.key; P.span: the times it was made for)
+  function optKey() { const q = new URLSearchParams(params()); q.delete("from"); q.delete("until"); return q.toString(); }
+  const inside = () => P.span && P.a >= P.span[0] && P.b <= P.span[1];
   function buttons() {
-    const j = P.job, busy = j && /^(queued|planning|making|waiting|finishing)$/.test(j.state), done = j && j.state === "done" && P.key === params();
+    const j = P.job, busy = j && /^(queued|planning|making|waiting|finishing)$/.test(j.state), done = j && j.state === "done" && P.key === optKey() && inside();
     $("segprep").hidden = busy || done; $("segstop").hidden = !busy;
     $("segplay").classList.toggle("go", !!done);
     $("segplay").textContent = P.playing && state.playing ? "❚❚ Pause" : "▶ Play";
     bar.classList.toggle("busy", !!busy);
+    camsUi();
   }
   function summary() {
     $("segwhen").textContent = `${short(P.a)} → ${short(P.b)} UTC`;
@@ -5425,20 +5494,44 @@ body.phone #launch .lx-clock { font-size: 9.5px; bottom: 9vh; }
     $("segprep").disabled = $("segplay").disabled = !n;
   }
   // a stretch marked (export.html's marks, also its window's From and Until): the bar comes up for it
+  // A stretch being made, or made, is kept (EX guard, below): its ends drag outward and the new ends are made too (a
+  // new job over the whole stretch, which finds what is made already in the cache), never inward while it is being
+  // made; a new highlight elsewhere waits for × (the made pictures stay in the frame server's cache either way)
+  let grow = 0;
   function marked(a, b) {
     if (a == null || b == null || b - a < 1) { hide(); return; }
     const moved = a !== P.a || b !== P.b;
     P.a = a; P.b = b;
-    if (moved && P.job && P.key !== params()) { stopPoll(); P.job = null; progress(null); say(""); }
-    bar.hidden = false; summary(); fpsUi(); buttons(); place();
+    if (moved && P.job && P.key !== optKey()) { stopPoll(); P.job = null; P.span = null; progress(null); say(""); }
+    if (moved && kept() && !inside()) { clearTimeout(grow); grow = setTimeout(() => { if (kept() && !inside()) prep(); }, 600); }
+    bar.hidden = false; summary(); fpsUi(); camsUi(); buttons(); place();
   }
-  function hide() { bar.hidden = true; stopPoll(); P.job = null; P.a = P.b = null; P.playing = false; progress(null); say(""); }
+  const kept = () => !!(P.job && P.span && P.key === optKey() && !/^(failed|stopped)$/.test(P.job.state));
+  let noteAt = 0;
+  function locked(text) {
+    if (performance.now() - noteAt < 1500) return;
+    const at = noteAt = performance.now(); say(text, true);
+    setTimeout(() => { if (noteAt === at && P.job && P.job.state === "done") follow(P.job); }, 6000);
+  }
+  EX.state.guard = (a, b, how) => {
+    if (!kept()) return [a, b];
+    const [A, B] = P.span, busy = P.job.state !== "done";
+    if (how === "clear" || (how === "new" && !(a <= A && b >= B))) {
+      locked(busy ? "This stretch is being pre-processed: drag its ends outward to add to it, or × to let it go." : "This stretch is made ahead: drag its ends to change it, or × to highlight another.");
+      return null;
+    }
+    if (busy && (a > A || b < B)) { locked("Its ends move outward while it is being pre-processed: the part made stays made."); return [Math.min(a, A), Math.max(b, B)]; }
+    return [a, b];
+  };
+  function hide() { bar.hidden = true; untuck(); stopPoll(); clearTimeout(grow); P.playBack = false; titled(null); P.job = null; P.span = null; P.a = P.b = null; P.playing = false; progress(null); say(""); }
   document.addEventListener("cassini:marks", e => marked(e.detail.a, e.detail.b));
 
   // ---- making it ahead: the frame server's job, followed every second ----
   async function prep() {
-    const key = params();
-    P.key = key; say("Asking the frame server…"); progress(0);
+    const key = params(), old = P.job && /^(queued|planning|making|waiting|finishing)$/.test(P.job.state) ? P.job.id : null;
+    // a stretch grown while it is being made: the old job gives way to the whole stretch's (its pictures are made)
+    if (old) fetch(`${FRAMES}/prebuild/${old}/stop`, { method: "POST" }).catch(() => {});
+    P.key = optKey(); P.span = [P.a, P.b]; say("Asking the frame server…"); progress(P.job && P.job.total ? P.job.done / P.job.total : 0);
     try {
       const r = await fetch(`${FRAMES}/prebuild?${key}`, { method: "POST" }), j = await r.json();
       if (!r.ok) { P.job = null; progress(null); say(j.error || "The frame server cannot pre-process that.", true); buttons(); return; }
@@ -5446,28 +5539,37 @@ body.phone #launch .lx-clock { font-size: 9.5px; bottom: 9vh; }
     } catch (err) { P.job = null; progress(null); say(`No frame server at ${FRAMES} that pre-processes.`, true); buttons(); }
   }
   function stopPoll() { clearTimeout(P.poll); P.poll = 0; }
+  // The stretch is made on the frame server, so it carries on while the page is in the background (the tab hidden,
+  // another window in front: away.html pauses everything else); the tab's title shows how far it is, the polling
+  // here runs on timers rather than animation frames, and a stretch finished while away plays on the way back
+  const TITLE = document.title;
+  function titled(j) {
+    const busy = j && /^(queued|planning|making|waiting|finishing)$/.test(j.state);
+    document.title = busy && j.total ? `${Math.floor(100 * j.done / j.total)}% pre-processed · ${TITLE}` : j && j.state === "done" && P.job === j && document.hidden ? `Ready · ${TITLE}` : TITLE;
+  }
   function follow(j) {
     stopPoll();
     const was = P.job && P.job.state;
-    P.job = j; buttons(); redraw();
+    P.job = j; buttons(); redraw(); titled(j);
     const frac = j.total ? j.done / j.total : 0;
     if (j.state === "done") {
       progress(1);
       say(`Ready: ${j.total.toLocaleString()} pictures made ahead${j.took ? ` in ${fmtDur(j.took)}` : ""}${j.errors ? ` (${j.errors} could not be made)` : ""}`);
-      if (was && was !== "done" && opt("segment.autoplay", true)) play();
+      if (was && was !== "done" && opt("segment.autoplay", true)) { if (window.cassiniAway && cassiniAway.on) P.playBack = true; else play(); }
       return;
     }
     if (j.state === "failed") { progress(null); say(j.error || "Pre-processing failed; see the frame server's log.", true); return; }
     if (j.state === "stopped") { progress(frac); say(`Stopped at ${j.done.toLocaleString()} of ${j.total.toLocaleString()}; what is made stays made.`); return; }
     progress(frac);
-    say(j.state === "queued" ? (j.ahead ? `Waiting for ${j.ahead} stretch${j.ahead > 1 ? "es" : ""} before it…` : "Starting…")
+    if (performance.now() - noteAt > 6000) say(j.state === "queued" ? (j.ahead ? `Waiting for ${j.ahead} stretch${j.ahead > 1 ? "es" : ""} before it…` : "Starting…")
       : j.state === "planning" ? "Finding every picture in the stretch…"
       : j.state === "finishing" ? "Finishing the last mosaic tiles…"
-      : j.state === "waiting" ? `Waiting while the frame server is busy · ${j.done.toLocaleString()} of ${j.total.toLocaleString()}`
+      : j.state === "waiting" ? `On hold: the frame server's machine is reserved for another job · ${j.done.toLocaleString()} of ${j.total.toLocaleString()}`
       : `Pre-processing ${j.done.toLocaleString()} of ${j.total.toLocaleString()} pictures${j.eta != null ? ` · ${fmtDur(j.eta)} left` : ""}`);
     P.poll = setTimeout(async () => {
-      try { const r = await fetch(`${FRAMES}/prebuild/${j.id}.json`, { cache: "no-store" }); if (r.ok) follow(await r.json()); else follow(j); }
-      catch (err) { follow(j); }
+      if (!P.job || P.job.id !== j.id) return;   // another job took over (the stretch grew)
+      try { const r = await fetch(`${FRAMES}/prebuild/${j.id}.json`, { cache: "no-store" }); const n = r.ok ? await r.json() : j; if (P.job && P.job.id === j.id) follow(n); }
+      catch (err) { if (P.job && P.job.id === j.id) follow(j); }
     }, 1000);
   }
   async function stop() {
@@ -5481,12 +5583,17 @@ body.phone #launch .lx-clock { font-size: 9.5px; bottom: 9vh; }
     const M = window.cassiniMovie;
     if (P.playing && M.on) { setPlaying(!state.playing); buttons(); return; }
     P.playing = true;
-    M.start(true, { from: P.a, until: P.b });
+    const cams = windows().cams;
+    // one camera: the other camera's window steps aside while the stretch plays, and comes back after
+    const other = cams === "N" ? $("wacard") : cams === "W" ? $("imgcard") : null;
+    if (other && !other.hidden && window.cassiniWM) { P.tucked = other; cassiniWM.minimize(other); }
+    M.start(true, { from: P.a, until: P.b, cams: cams.length === 1 ? cams : undefined });
     buttons();
   }
+  function untuck() { if (P.tucked && window.cassiniWM) cassiniWM.restore(P.tucked); P.tucked = null; }
   // movie mode left (the stretch's last picture, Escape, the Movie button): the bar says Play again
   setInterval(() => {
-    if (P.playing && !(window.cassiniMovie && window.cassiniMovie.on)) { P.playing = false; buttons(); }
+    if (P.playing && !(window.cassiniMovie && window.cassiniMovie.on)) { P.playing = false; untuck(); buttons(); }
     else if (P.playing) buttons();
   }, 400);
 
@@ -5510,14 +5617,28 @@ body.phone #launch .lx-clock { font-size: 9.5px; bottom: 9vh; }
   $("segstop").addEventListener("click", stop);
   $("segplay").addEventListener("click", play);
   $("segexport").addEventListener("click", () => EX.open());
-  $("segx").addEventListener("click", () => { EX.clear(); hide(); });
+  $("segcams").addEventListener("click", e => {
+    const b = e.target.closest("button"); if (!b) return;
+    EX.state.cams = b.dataset.v; camsUi(); summary();
+    if (P.job && P.key !== optKey()) { stopPoll(); P.job = null; progress(null); say(""); }
+    buttons();
+  });
+  $("segx").addEventListener("click", () => { EX.clear(true); hide(); });
   $("segfps").addEventListener("input", e => { if (S) S.set("movie.fps", +e.target.value); fpsUi(); });
   if (S) S.on("movie.fps", fpsUi);
-  for (const k of ["cameras.composites", "cameras.mosaics", "movies.steady", "movies.trail", "movies.laps", "movies.center", "cameras.balancedColor", "cameras.colors"])
-    if (S && S.get(k) !== undefined) S.on(k, () => { if (!bar.hidden) { if (P.job && P.key !== params()) { stopPoll(); P.job = null; progress(null); say(""); } buttons(); } });
+  for (const k of ["cameras.composites", "cameras.mosaics", "movies.steady", "movies.trail", "movies.laps", "cameras.autoCenter", "cameras.processedFrames", "cameras.balancedColor", "cameras.colors"])
+    if (S && S.get(k) !== undefined) S.on(k, () => { if (!bar.hidden) { if (P.job && P.key !== optKey()) { stopPoll(); P.job = null; progress(null); say(""); } buttons(); } });
   window.addEventListener("keydown", e => {
     if (bar.hidden || e.key !== "Escape" || document.querySelector(".menu.open, .win.full") || (window.cassiniMovie && window.cassiniMovie.on)) return;
-    if (!$("excard") || $("excard").hidden) { EX.clear(); hide(); }
+    if (!$("excard") || $("excard").hidden) { EX.clear(true); hide(); }
+  });
+
+  // in the background: the pause note says the stretch is still being made; back, a stretch finished meanwhile plays
+  const away = $("awaynote"), awayText = away && away.textContent;
+  document.addEventListener("cassini:away", e => {
+    const busy = P.job && /^(queued|planning|making|waiting|finishing)$/.test(P.job.state);
+    if (away) away.textContent = e.detail.away && busy ? `${awayText} · the highlighted stretch keeps pre-processing` : awayText;
+    if (!e.detail.away) { titled(P.job); if (P.playBack) { P.playBack = false; if (!bar.hidden) play(); } }
   });
 
   // ---- the note when movie mode keeps waiting ----
@@ -5526,7 +5647,7 @@ body.phone #launch .lx-clock { font-size: 9.5px; bottom: 9vh; }
     if (!opt("segment.hint", true) || performance.now() - P.hintAt < 10 * 60e3 || (P.job && /^(queued|planning|making|waiting|finishing)$/.test(P.job.state))) return;
     if (!bar.hidden && P.playing) return;   // playing a highlighted stretch already
     P.hintAt = performance.now();
-    const r = $("tl").getBoundingClientRect();
+    const r = ($("dock") || $("tl")).getBoundingClientRect();
     hint.style.bottom = `${Math.max(8, innerHeight - r.top + 8)}px`;
     hint.hidden = false; requestAnimationFrame(() => hint.classList.add("on"));
     clearTimeout(hintTimer); hintTimer = setTimeout(hideHint, 15000);

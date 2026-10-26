@@ -20,17 +20,22 @@ rather than being skipped.
 
 ## Pre-processing a stretch
 
-Highlight a stretch of the timeline: shift-drag across it, or press and hold on it and then drag (on a phone too),
-or press `I` and `O` at its ends. A small bar comes up over it with the stretch's times and frames. **Pre-process**
-asks the frame server to make every picture the camera windows will show in the stretch ahead of time (`POST
-/prebuild`, made by the pre-build tool's own makers in `web/frames/prebuild.py`: frames, color composites, mosaic and
-movie passes, at the windows' sizes and in the page's look and movie style). The bar and a line along the foot of
-the timeline show how far it is; when it is done the stretch plays in movie mode at the frame rate on the bar's
-slider (`movie.fps`, the same as Settings > Playback), every picture waiting in the cache. **Play** works before
-pre-processing too (movie mode then waits for each picture), **Export…** opens the film export for the stretch, and
-× or Escape clears the highlight. When movie mode spends most of its time waiting, a quiet note suggests
-pre-processing, with a button that highlights the next 300 frames. Settings > Playback: `segment.autoplay`,
-`segment.hint`. One stretch is made at a time; it waits while `~/prebuild.pause` exists.
+Drag across the timeline's lanes to highlight a stretch (a click still moves the clock there, and dragging the row
+of dates still pans), or press `I` and `O` at its ends; drag a highlighted edge to move it. A row comes up in the
+Cassini Replay window, right above the timeline, with the stretch's times and frames and **NAC / WAC / Both** (the
+same choice as Export Movie's Cameras; with one camera the stretch is made and played for it alone, the other
+camera's window stepping aside while it plays). **Pre-process** asks the frame
+server to make every picture the camera windows will show in the stretch ahead of time (`POST /prebuild`, made by the
+pre-build tool's own makers in `web/frames/prebuild.py`: processed and centered single frames, color composites,
+mosaic and movie passes, at the windows' sizes and in the page's look and movie style). The row and a line along the
+foot of the timeline show how far it is; when it is done the stretch plays in movie mode at the row's **Frame rate**
+(`movie.fps`, the same as Settings > Playback), every picture waiting in the cache. **Play** works before
+pre-processing too (movie mode then waits for each picture), **Save movie…** opens Export Movie for the stretch (a
+video file to download), and × or Escape clears the highlight. When movie mode spends most of its time waiting, a
+quiet note suggests pre-processing, with a button that highlights the next 300 frames. Settings > Playback:
+`segment.autoplay`, `segment.hint`, and `movie.completeFrames` (Complete color pictures only, on: a color set is one step, its finished color picture) and `playback.completeMosaics` (Complete mosaics only, off: a mosaic pass shows once finished, at its last frame, in every playback). One stretch is made at a time, at full speed: it gives way only to the
+server's own picture requests (the camera windows' pictures go first), never to other jobs on the machine, and the
+row stays up while it is made, even when the rest of the interface fades. While it is being made, and once it is made, the highlight is kept: a drag elsewhere leaves it be (× lets it go), its ends drag outward to add to it (the part already made stays made and only the new ends are made), and they drag inward only once it is done. It also carries on with the tab in the background or another window in front (the rest of the page pauses, Settings > Playback > Pause in the background): the tab title shows how far it is, and a stretch finished meanwhile plays when you come back.
 
 ## Timeline
 

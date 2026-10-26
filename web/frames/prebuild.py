@@ -122,6 +122,17 @@ def all_passes():
     return out
 
 
+def centred(frame_id):
+    """Auto center (on by default in a camera window, center=1): the view the server's centre_of gives the frame's
+    pass (centred on the body, or north up where it is), which names the cache folder the window's picture is
+    in; None where Auto center leaves the pass as it is (the window then asks for the picture as it is)."""
+    try:
+        view = obs_mosaic.centre_view(frame_id)
+    except Exception:   # noqa: BLE001  (not centred: the window shows the picture as it is)
+        return None
+    return view if view.get("centre") or view.get("north") else None
+
+
 def items(phase):
     """(name, work) of every item of the phase, in time order; work() makes it (a made file is found, not made)."""
     if phase == "frames":
@@ -337,9 +348,14 @@ def sample(args):
 # Cassini OS: highlight a stretch of the timeline and press Pre-process; the frame server makes every picture the
 # camera windows will ask for in that stretch, with the makers above (the same files the windows' requests find),
 # and the stretch then plays as a movie at the frame rate the person picks, from the cache. One stretch is made at
-# a time, behind the server's own requests (SEGMENT_THREADS), and it waits while the Mini is busy, like run().
+# a time at full speed (SEGMENT_THREADS): someone asked for it and is waiting, so it gives way only to the server's
+# own picture requests (frame_server.live_requests: the camera windows' pictures go first), never to the machine's
+# load, which other jobs and previews on the Mini set off. It holds while the pause file exists (SEGMENT_PAUSE: the
+# Mini held for one heavy job at a time), and says so.
 
-SEGMENT_THREADS = 2
+SEGMENT_THREADS = max(2, min(4, (os.cpu_count() or 4) // 2))
+SEGMENT_PAUSE = "~/prebuild.pause"
+SEGMENT_YIELD = 1.0     # seconds at most a picture of the stretch waits for the server's own requests to clear
 SEGMENT_MAX = 6000      # pictures in one stretch (a busy day near Saturn has ~1,500)
 SEGMENT_SIZES = (512, 768, 1024)
 
@@ -347,7 +363,8 @@ SEGMENT_SIZES = (512, 768, 1024)
 def segment_options(q):
     """The stretch and the page's choices from a POST /prebuild query (parse_qs): from/until (UTC, ISO), cams (N,
     W or NW), sizes (the windows' picture sizes), look/colors (as on every picture route), mosaics/steady/color
-    (Settings > Cameras and Movie) and trail/laps/center (the movie style). ValueError for anything else."""
+    (Settings > Cameras and Movie), processed (processed single frames), center (Auto center: center=1 as the
+    windows ask) and trail/laps (the movie style). ValueError for anything else."""
     get = lambda k, d=None: q.get(k, [d])[0]
     when = lambda s: datetime.datetime.fromisoformat(s.replace("Z", "")).replace(tzinfo=datetime.timezone.utc).timestamp()
     try:
@@ -367,7 +384,7 @@ def segment_options(q):
     on = lambda k: get(k, "1") != "0"
     return {"from": t0, "until": t1, "cams": cams, "sizes": sizes,
             "look": get("look", calibration.LOOKS[0]), "colors": get("colors", calibration.COLORS[0]),
-            "mosaics": on("mosaics"), "steady": on("steady"),
+            "mosaics": on("mosaics"), "steady": on("steady"), "processed": on("processed"), "center": on("center"),
             "style": {"trail": max(0, min(obs_mosaic.TRAIL, trail)), "laps": max(1, min(obs_mosaic.TRAIL, laps)),
                       "center": on("center"), "color": on("color")}}
 
@@ -387,6 +404,19 @@ def segment_items(o):
     import frame_server
     idx, _ = reel.load_index()
     t0, t1, cams, sizes = o["from"], o["until"], o["cams"], o["sizes"]
+
+    def centre(frame_id):
+        """Auto center (o["center"]): the pass's view as the server's centre_of gives it (centred), or None."""
+        return centred(frame_id) if o.get("center") else None
+
+    def single(i, c):
+        """A frame on its own as the window shows it: processed (Settings > Cameras > Processed single frames),
+        centred when Auto center centres its pass, at the windows' sizes; and the archive frame (the stand-in
+        under a composite, the filmstrip's 128)."""
+        if o.get("processed", True):
+            for z in sizes:
+                frame_server.processed_webp(i, z, c, centre=centre(i))
+        return [frame_server.webp(i, z, c) for z in (*sizes, 128)]
     t = idx["seconds_1970"].to_numpy()
     lo, hi = t.searchsorted(t0, "left"), t.searchsorted(t1, "right")
     rows = idx.iloc[lo:hi]
@@ -395,14 +425,14 @@ def segment_items(o):
         cam = "N" if r.INSTRUMENT_ID == "ISSNA" else "W"
         if cam not in cams:
             continue
-        out.append((r.id, float(r.seconds_1970), 1, lambda c, i=r.id: [frame_server.webp(i, z, c) for z in (*sizes, 128)]))
+        out.append((r.id, float(r.seconds_1970), 1, lambda c, i=r.id: single(i, c)))
         if isinstance(r.OBSERVATION_ID, str):
             keys.setdefault((r.TARGET_NAME, r.OBSERVATION_ID, cam), None)
     times = frame_times()
     for s in page_sets():
         ready = max(times[i] for i in s)
         if t0 <= ready <= t1 and s[0][0] in cams:
-            out.append(("_".join(s), ready, 1, lambda c, s=s: [frame_server.color_webp(s, z, c) for z in sizes]))
+            out.append(("_".join(s), ready, 1, lambda c, s=s: [frame_server.color_webp(s, z, c, centre=centre(s[-1])) for z in sizes]))
     for key in keys:
         for u in obs_mosaic.units(*key):
             n = sum(t0 <= f[3] <= t1 for f in u["frames"])
@@ -422,11 +452,10 @@ class Segments:
     """The stretches asked for, made one at a time in the order asked. A stretch asked for again (the same
     options) is the same job: its status, or a new run when it failed or was stopped."""
 
-    def __init__(self, cache, pause="~/prebuild.pause"):
+    def __init__(self, cache, live=None):
         self.cache, self.lock, self.jobs, self.queue = cache, threading.Lock(), {}, []
-        # someone is waiting on this one: it holds back only for the pause file (the pictures lead's hold on the Mini)
-        # and a machine far busier than a full pre-build run would put up with
-        self.args = argparse.Namespace(pause=pause, max_load=float(os.cpu_count() or 8) * 1.5, live="", watch="", disk=None)
+        # live(): how many picture requests the server is answering now (frame_server.live_requests)
+        self.live = live or (lambda: 0)
         self.wake = threading.Event()
         threading.Thread(target=self._worker, daemon=True).start()
 
@@ -466,7 +495,7 @@ class Segments:
             return self._public(job)
 
     def _public(self, job):
-        """What the page reads: state (queued, planning, making, waiting, finishing, done, failed, stopped), pictures done of total, how
+        """What the page reads: state (queued, planning, making, waiting (held by the pause file), finishing, done, failed, stopped), pictures done of total, how
         far in time every picture is made (through, UTC), seconds left and the place in line."""
         out = {k: job[k] for k in ("id", "state", "total", "done", "errors", "took", "why_waiting", "error")}
         through = job["options"]["from"]
@@ -527,12 +556,14 @@ class Segments:
             pending, i = set(), 0
             while i < len(items) or pending:
                 while i < len(items) and len(pending) < SEGMENT_THREADS * 2 and not job["stop"]:
-                    why = busy(self.args) if i % 20 == 0 else None
-                    while why and not job["stop"]:
-                        job["state"], job["why_waiting"] = "waiting", why
+                    while os.path.exists(os.path.expanduser(SEGMENT_PAUSE)) and not job["stop"]:
+                        job["state"], job["why_waiting"] = "waiting", "held"
                         time.sleep(3)
-                        why = busy(self.args)
                     job["state"], job["why_waiting"] = "making", None
+                    # the camera windows' own pictures first: a moment's pause while the server answers them
+                    until = time.monotonic() + SEGMENT_YIELD
+                    while self.live() > 0 and time.monotonic() < until and not job["stop"]:
+                        time.sleep(0.05)
                     pending.add(pool.submit(contextvars.copy_context().run, one, i))
                     i += 1
                 if not pending:
