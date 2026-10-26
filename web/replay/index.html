@@ -276,7 +276,14 @@ const MOON_LOOK = {
   MIMAS: [0.80, 0.80, 0.80], ENCELADUS: [0.98, 0.98, 1.0], TETHYS: [0.88, 0.87, 0.85], DIONE: [0.84, 0.84, 0.86],
   RHEA: [0.82, 0.80, 0.78], TITAN: [0.86, 0.58, 0.28], HYPERION: [0.62, 0.55, 0.47], IAPETUS: [0.78, 0.76, 0.72], PHOEBE: [0.30, 0.29, 0.28],
   VENUS: [0.93, 0.86, 0.66], EARTH: [0.36, 0.52, 0.78], MOON: [0.62, 0.60, 0.57], JUPITER: [0.86, 0.76, 0.62],
-  IO: [0.92, 0.84, 0.46], EUROPA: [0.90, 0.85, 0.76], GANYMEDE: [0.62, 0.58, 0.52], CALLISTO: [0.42, 0.38, 0.34]
+  IO: [0.92, 0.84, 0.46], EUROPA: [0.90, 0.85, 0.76], GANYMEDE: [0.62, 0.58, 0.52], CALLISTO: [0.42, 0.38, 0.34],
+  // the small moons, near enough from Cassini's color pictures (Buratti et al. 2019, Thomas et al. 2013): the ring
+  // moons inside the F ring dusty and reddish, the co-orbitals grey, the Lagrangian moons and the Alkyonides bright
+  // with E-ring ice
+  PAN: [0.78, 0.72, 0.62], DAPHNIS: [0.78, 0.73, 0.64], ATLAS: [0.76, 0.70, 0.60], PROMETHEUS: [0.80, 0.77, 0.72],
+  PANDORA: [0.80, 0.78, 0.74], JANUS: [0.82, 0.80, 0.77], EPIMETHEUS: [0.82, 0.80, 0.77], TELESTO: [0.93, 0.93, 0.94],
+  CALYPSO: [0.95, 0.95, 0.96], HELENE: [0.94, 0.94, 0.95], METHONE: [0.84, 0.82, 0.79], PALLENE: [0.86, 0.85, 0.83],
+  POLYDEUCES: [0.88, 0.88, 0.88]
 };
 const SMOOTH = ["VENUS", "EARTH", "JUPITER"];   // cloud-covered: no procedural craters
 const FOV_HALF = { N: 0.3516 / 2, W: 3.4884 / 2 };   // ISS fields of view, degrees (half width)
@@ -377,7 +384,9 @@ const TEX_DIR = "data/textures/" + (/^[124]k$/.test(TEX_TIER) ? TEX_TIER : "2k")
 const TEX_FILES = { SATURN: "saturn", MIMAS: "mimas", ENCELADUS: "enceladus", TETHYS: "tethys", DIONE: "dione", RHEA: "rhea",
                     TITAN: "titan", HYPERION: "hyperion", IAPETUS: "iapetus", PHOEBE: "phoebe", JUPITER: "jupiter",
                     VENUS: "venus", EARTH: "earth", MOON: "moon", IO: "io", EUROPA: "europa", GANYMEDE: "ganymede", CALLISTO: "callisto" };
-const SHAPES = { HYPERION: "data/textures/models/hyperion.mesh.b64.txt", PHOEBE: "data/textures/models/phoebe.mesh.b64.txt" };
+// real shape models (Thomas et al. 2018 and Gaskell, PDS; web/replay/make_shapes.py for the small moons)
+const SHAPES = Object.fromEntries(["HYPERION", "PHOEBE", "PAN", "DAPHNIS", "ATLAS", "PROMETHEUS", "PANDORA", "EPIMETHEUS", "JANUS", "TELESTO", "CALYPSO", "HELENE"]
+  .map(n => [n, `data/textures/models/${n.toLowerCase()}.mesh.b64.txt`]));
 const shapeGeom = {};
 const texLoader = new THREE.TextureLoader();
 function loadMap(name, uniforms) {
@@ -410,6 +419,7 @@ async function loadShapes() {
     } catch (err) { console.warn("shape model not loaded for " + name, err); }
   }));
 }
+const shapesLoading = loadShapes();
 const RING_IN = 66900, RING_OUT = 140600;
 function ringTexture() {
   const N = 2048, c = document.createElement("canvas"); c.width = N; c.height = 1;
@@ -538,7 +548,8 @@ function makeSaturn(radii) {
 
 function makeMoon(name, b) {
   const look = MOON_LOOK[name] || [0.7, 0.68, 0.65];
-  const kind = name === "IAPETUS" ? 1 : name === "TITAN" ? 2 : SMOOTH.includes(name) ? 3 : 0;
+  // kind 4: a small moon, shown plain (its shape model carries its relief; no painted craters)
+  const kind = name === "IAPETUS" ? 1 : name === "TITAN" ? 2 : SMOOTH.includes(name) ? 3 : TEX_FILES[name] ? 0 : 4;
   const mat = new THREE.ShaderMaterial({
     uniforms: { sunDir: { value: new THREE.Vector3(1, 0, 0) }, toScene: { value: new THREE.Matrix3() }, radii: { value: new THREE.Vector3(1, 1, 1) },
                 color: { value: new THREE.Vector3(...look) }, kind: { value: kind },
@@ -554,8 +565,8 @@ function makeMoon(name, b) {
         #include <logdepthbuf_fragment>
         vec3 nb = normalize(vBody / radii);
         vec3 n = normalize(toScene * (shape > 0.5 ? normalize(vNrm) : nb));
-        float m = fbm(nb * 5.0) - 0.5;
-        float craters = smoothstep(0.62, 0.7, vnoise(nb * 22.0)) * 0.12;
+        float m = 0.0, craters = 0.0;
+        if (kind < 3.5) { m = fbm(nb * 5.0) - 0.5; craters = smoothstep(0.62, 0.7, vnoise(nb * 22.0)) * 0.12; }
         vec3 alb = color * (1.0 + 0.32 * m - craters);
         float mu0 = dot(n, sunDir);
         float L = max(mu0, 0.0);
@@ -563,10 +574,10 @@ function makeMoon(name, b) {
           float lead = dot(nb, vec3(0.0, -1.0, 0.0)) + 0.18 * m;
           alb = mix(alb, vec3(0.07, 0.055, 0.045), smoothstep(-0.05, 0.25, lead));
         }
-        if (kind > 2.5) { // cloud-covered planets: soft banding, no craters
+        if (kind > 2.5 && kind < 3.5) { // cloud-covered planets: soft banding, no craters
           alb = color * (1.0 + 0.06 * sin(asin(nb.z) * 9.0) + 0.05 * m);
           L = smoothstep(-0.08, 0.6, mu0);
-        } else if (kind > 1.5) { // Titan: featureless haze, soft terminator
+        } else if (kind > 1.5 && kind < 2.5) { // Titan: featureless haze, soft terminator
           alb = color * (1.0 + 0.05 * sin(asin(nb.z) * 6.0) + 0.04 * m);
           L = smoothstep(-0.18, 0.75, mu0) * 0.95;
         }
@@ -893,7 +904,7 @@ async function load(startEt) {
       probe = { ...h, track: parseTrack(await fetchBuf(h.file)) };
     }
   } catch (err) { console.warn("Huygens data not loaded", err); probe = null; }
-  await loadShapes();
+  await shapesLoading;
 }
 // the one-year layout (the artifact build): every file at once
 async function loadYearFiles() {
