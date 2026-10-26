@@ -261,6 +261,7 @@ redoes them; PRs target `pictures`.
 | 6b | pre-build thread | — | full overnight build from `pictures-build` (all look-changing PRs + q95, built ~06:00Z 2026-10-26); was planned at 69cd5fc from 01:00 Mini local into ~/server/cache/cassini-prebuild (SSD, stops under 60 GB free); 8790 stays pinned to it in the morning, the moving head goes on 8822 | a second pass remakes only bumped makers after Sam's look |
 | Full-res mosaics | cmsg_01VihZrurbK5NUCdmG37hHXsEFnBdf7VYGk9G3Ukm8EKHJ | 8825 | native size + crop through mosaic_webp/_mosaic_at, loupe hi-res crop hook, one "Full resolution mosaic" save row, own capped LRU cache (never pre-built) | compose internals, phase 3/7/8 areas above; save menu rows only after #107 |
 | Processing toggles | cmsg_01VihZrurbK5NUCdmG37hHXsMSpEYw4bxkzFDdPfED5HkR | 8826 | Settings > Processing (mosaics, centering, color, repeat stack, HDR, calibration, alignment, stretch) reusing cassiniSettings entries; new server flags that change a cache key only when off-default | default URLs and cache paths (tonight's pre-build keys); the makers' internals owned above |
+| Streaked lines | cmsg_01VihZrurbK5NUCdmG37hHXs4ez2WGNEdHP7ZLRWyaxgww | 8827 | masks through stacking (repeats fill lost pixels), short vertical gaps filled, "Fill lost lines" toggle inside #117's Processing section | no global cache bump: only frames with lost lines (listed) are remade; #107 load_aligned, #112/#114 byte-identical paths |
 
 ### Still to do
 | Phase | One line | Depends on |
