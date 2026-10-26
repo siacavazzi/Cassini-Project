@@ -24,6 +24,8 @@ Rigs in the project files, `opt-audit/rigs/` (cloud, 34 real lean-archive frames
   old against new for every reel (keys, values and value types, `_shot_of`).
 - `units_rows_equiv.py`: `obs_mosaic.units`' rows, old selection against new, for all 20,681 observations.
 - `frame_memo_equiv.py`: `frame_server.webp` against the old per-size decode (sizes, formats, orders, threads).
+- `proc_memo_equiv.py`: `processed_webp` at 512 then 1024 (the segment pre-render's order), plain and centred, in the
+  three looks: a hash of every picture, report and file written.
 - For the overnight build, the same checks on the integration branch with and without the change (`git apply -R`
   of its code diff). How to run them: `opt-audit/rigs/README.md`.
 - `zip_equiv_env.py`: every member of the sample zip and of synthetic zips (stored, deflated, empty, long local extra
@@ -104,7 +106,9 @@ On the busy Mini a cold picture spends a quarter to a half of its time reading t
 | O16 | obs_mosaic.units | three string comparisons over the whole index for each observation, the first time a server meets it, on request threads (centre_view, kind_of, warm_frame; several at once on a first visit) | 55 ms to 0.2 ms per observation; the pre-build's `all_passes` (20,681 observations) about 19 minutes less (cloud) | this audit (handed over by #105) | #114 |
 | O17 | first request | the reel index was consolidated by the first selection from it (a tenth of a second on a request thread, and two at once could both start it) and `_row_of`'s map (0.16 s) was made by the first centred picture | the first centred picture after a start 282 ms to 5 ms; the two maps hold 17 MB per server, made as it starts instead of on its first centred picture | this audit | #114 |
 | O18 | rolling mosaic movies | cold, they make only 2-3 pictures a second: NPOLMOV cold runs the clock at 14-29%; a rolling picture's median 1.3 s, p90 3.9 s (phase 7's measurement) | to profile: a color rolling picture, cold, in a morning Mini slot | phase 7 with this audit | finding |
-| O19 | frames (pre-build) | each plain frame's PNG read from the archive and decoded again for each of the sizes the pre-build makes in turn (1024, 512, 128); now decoded once, the last 16 kept, each size encoded from a copy | 10% less time per frame (median 159.6 to 143.1 ms, cloud) | this audit | third PR |
+| O19 | frames (pre-build) | each plain frame's PNG read from the archive and decoded again for each of the sizes the pre-build makes in turn (1024, 512, 128); now decoded once, the last 16 kept, each size encoded from a copy | 10% less time per frame (median 159.6 to 143.1 ms, cloud) | this audit | #116 |
+| O20 | encode | `thumbnail` shrinks the picture it is given, and on `pictures` (since #62) that can be a composite kept for its other sizes (`_recent_composite`): after a 512 view, the full PNG save and the channel views came out 512 px (`pictures` only; main has no kept composites) | a bug, found by the audit: no pre-built file changed (the pre-build makes 512 last) | this audit | #119 |
+| O21 | processed_webp | the segment pre-render (#102's `single()`) asks for each single frame at 512, then 1024, and each size made the frame again (`load_stacked`, calibration, tone; for Auto center `processed_frame` and SPICE); now kept like a composite (`_recent_composite`), the second size only an encode | 30% less per single frame (cloud medians: plain 325 to 213 ms, centred 706 to 486 ms); 4 segment threads made 34 frames for 34, not 68 | this audit | #120 |
 
 ## For the owners
 Ideas in another thread's area, sent to that thread; this audit does not make them.
@@ -122,5 +126,7 @@ Ideas in another thread's area, sent to that thread; this audit does not make th
   layout first).
 - Color tone steps (`tone`, `apply_mix`, `_flatten_broad`, `picture_scale`): ~30 percentile/median partitions of whole
   pictures per composite (~146 ms on the Mini); several are of the same array and can share one partition exactly.
-- Label parsing CPU, the page's render loop and fetches, `build_data.py` (phase 5 rebuilds the data: coordinate first).
+- The page's render loop and fetches (the frame-rate thread's seven rounds came first: project files `frame-rate/results.md`), `build_data.py` (phase 5 rebuilds the data: coordinate first). Label parsing was checked: 0.08 ms of CPU a label (cloud), so the label time on the Mini is its disk.
+- Once #115 (quality 95) is in: a composite up to 1024 px comes out the same at 1024 and full (no shrink, the same quality), so `color_webp` encodes the same bytes twice. A plan for each size (the side it is shrunk to and the save arguments), with one encode per plan, would take one of the pre-build's three encodes per set (a 1024 WebP is ~70-90 ms, cloud) and one of a cold window composite's two.
+- The pre-build's `all_passes` (72 s on the build head, cloud) spends 28 s in `units`' `itertuples` (a namedtuple class made per observation, 4.5 s of it) and 25 s in `_judge`, mostly matching each frame to its nearest place (6.2 million lambda calls); column arrays and a vectorised nearest place would about halve it (phase 3/4's code: for the owners).
 - A summed frame (512 or 256 px) is not shrunk for 1024 or 512, so its two WebPs are the same bytes, encoded twice by the pre-build; one encode could serve both (count the summed frames in the Mini's archive first).
