@@ -20,9 +20,13 @@ Rigs in the project files, `opt-audit/rigs/` (cloud, 34 real lean-archive frames
   mosaics, movies, rolling) in the three display styles. References: `golden_pictures_17ca6fd.json` (pictures before
   #112) and `golden_pictures-next_fde48ed.json`.
 - `web/test_per_code.py` (in the repo): the per-code calibration steps against the per-pixel arithmetic.
-- `reel_equiv.py`: `reel.load_index`, `bodies()` and `reel.shots` old against new for every body (keys, values and
-  value types, `_shot_of`).
-- `zip_equiv.py`: every member of the sample zip and of synthetic zips (stored, deflated, empty, long local extra
+- `reel_equiv_env.py`: `reel.load_index` (the type of every value too), the color sets, `bodies()` and `reel.shots`
+  old against new for every reel (keys, values and value types, `_shot_of`).
+- `units_rows_equiv.py`: `obs_mosaic.units`' rows, old selection against new, for all 20,681 observations.
+- `frame_memo_equiv.py`: `frame_server.webp` against the old per-size decode (sizes, formats, orders, threads).
+- For the overnight build, the same checks on the integration branch with and without the change (`git apply -R`
+  of its code diff). How to run them: `opt-audit/rigs/README.md`.
+- `zip_equiv_env.py`: every member of the sample zip and of synthetic zips (stored, deflated, empty, long local extra
   fields) read by the old and new zip reader, at several chunk sizes.
 
 ## Baseline
@@ -67,7 +71,7 @@ On the busy Mini a cold picture spends a quarter to a half of its time reading t
 | stack_frames of a lone frame, 34 | 283 ms | 0 |
 | import frame_server | 0.93 s, 133 MB | 0.49 s, 91 MB |
 
-| | Before (pictures 759c260) | After (second PR) |
+| | Before (pictures 759c260) | After (#114) |
 |---|---|---|
 | reel.load_index (every server start) | 3.13 s | 1.85 s |
 | reel.shots("SATURN") | 29.0 s | 2.8 s |
@@ -90,16 +94,17 @@ On the busy Mini a cold picture spends a quarter to a half of its time reading t
 | O6 | find_repeats | a DataFrame built and sorted per call | 40x | this audit | #112 |
 | O7 | imports | scikit-image and matplotlib loaded by every server, never used there | -0.44 s, -42 MB per process | this audit | #112 |
 | O8 | stack_frames | the reference work done for a lone frame | 8 ms a frame | this audit | #112 |
-| O9 | reel.shots | Saturn's reel is 25 of its 26-29 s in per-row `idx.loc`; `mosaic_of(wait=False)` answers None (no mosaics for that body) until it is done after each server start | Saturn 29.0 s to 2.8 s; every body 51 s to 6.4 s | this audit | second PR |
+| O9 | reel.shots | Saturn's reel is 25 of its 26-29 s in per-row `idx.loc`; `mosaic_of(wait=False)` answers None (no mosaics for that body) until it is done after each server start | Saturn 29.0 s to 2.8 s; every body 51 s to 6.4 s | this audit | #114 |
 | O10 | load_aligned | a two-filter set calibrated each frame twice | one calibration per frame | phase 8 | **adopted in #107 (ff55095)** |
 | O11 | memory | every server process holds ~760 MB before serving: the reel index ~370 MB, the stacking index ~236 MB, imports ~110 MB (after O7). At 04:00Z the Mini had 23 of 24 GB in use, 8.4 GB in the compressor and 226 MB free, with ~20 frame servers (8765 and 8790 among them) squeezed to ~25 MB resident; a squeezed server answers slowly for its first seconds back (#105's thread) | a shared or lazily loaded index, and fewer idle previews, would let more previews run and keep 8765 resident | pictures lead | finding, lead to schedule |
 | O12 | Mini disk | the archive, the preview worktrees (wt-*), and their caches share the LaCie (USB spinning disk): on the busy Mini, importing two modules took ~1.8 s (0.003 s in the cloud) and each zip read ~9 ms a seek | worktrees and their caches on the SSD would take seeks off the archive's disk | ops (lead) | finding |
 | O13 | Mini CPU | Spotlight (spotlightknowledged) at ~100% CPU through the whole run | one core back | ops (lead) | finding: check what it indexes and keep it off the LaCie and the caches |
-| O14 | reel.load_index | the frame ids made with pandas' per-element string methods, `colour_filter` called for each of 443,000 frames | 3.13 s to 1.85 s per server start | this audit | second PR |
-| O15 | zip reader | each member read as its 30-byte local header, then its data: two reads, on the busy Mini often two seeks | one read per member | this audit | second PR |
-| O16 | obs_mosaic.units | three string comparisons over the whole index for each observation, the first time a server meets it, on request threads (centre_view, kind_of, warm_frame; several at once on a first visit) | 55 ms to 0.2 ms per observation; the pre-build's `all_passes` (~20,000 observations) about 18 minutes less | this audit (handed over by #105) | second PR |
-| O17 | first request | the reel index was consolidated by the first selection from it (a tenth of a second on a request thread, and two at once could both start it) and `_row_of`'s map (0.16 s) was made by the first centred picture | the first centred picture after a start 282 ms to 5 ms; the two maps hold 17 MB per server, made as it starts instead of on its first centred picture | this audit | second PR |
+| O14 | reel.load_index | the frame ids made with pandas' per-element string methods, `colour_filter` called for each of 443,000 frames | 3.13 s to 1.85 s per server start | this audit | #114 |
+| O15 | zip reader | each member read as its 30-byte local header, then its data: two reads, on the busy Mini often two seeks | one read per member | this audit | #114 |
+| O16 | obs_mosaic.units | three string comparisons over the whole index for each observation, the first time a server meets it, on request threads (centre_view, kind_of, warm_frame; several at once on a first visit) | 55 ms to 0.2 ms per observation; the pre-build's `all_passes` (20,681 observations) about 19 minutes less (cloud) | this audit (handed over by #105) | #114 |
+| O17 | first request | the reel index was consolidated by the first selection from it (a tenth of a second on a request thread, and two at once could both start it) and `_row_of`'s map (0.16 s) was made by the first centred picture | the first centred picture after a start 282 ms to 5 ms; the two maps hold 17 MB per server, made as it starts instead of on its first centred picture | this audit | #114 |
 | O18 | rolling mosaic movies | cold, they make only 2-3 pictures a second: NPOLMOV cold runs the clock at 14-29%; a rolling picture's median 1.3 s, p90 3.9 s (phase 7's measurement) | to profile: a color rolling picture, cold, in a morning Mini slot | phase 7 with this audit | finding |
+| O19 | frames (pre-build) | each plain frame's PNG read from the archive and decoded again for each of the sizes the pre-build makes in turn (1024, 512, 128); now decoded once, the last 16 kept, each size encoded from a copy | 10% less time per frame (median 159.6 to 143.1 ms, cloud) | this audit | third PR |
 
 ## For the owners
 Ideas in another thread's area, sent to that thread; this audit does not make them.
@@ -118,3 +123,4 @@ Ideas in another thread's area, sent to that thread; this audit does not make th
 - Color tone steps (`tone`, `apply_mix`, `_flatten_broad`, `picture_scale`): ~30 percentile/median partitions of whole
   pictures per composite (~146 ms on the Mini); several are of the same array and can share one partition exactly.
 - Label parsing CPU, the page's render loop and fetches, `build_data.py` (phase 5 rebuilds the data: coordinate first).
+- A summed frame (512 or 256 px) is not shrunk for 1024 or 512, so its two WebPs are the same bytes, encoded twice by the pre-build; one encode could serve both (count the summed frames in the Mini's archive first).
