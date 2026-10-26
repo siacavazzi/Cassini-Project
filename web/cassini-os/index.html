@@ -2872,7 +2872,10 @@ body.phone #launch .lx-clock { font-size: 9.5px; bottom: 9vh; }
       const u = new URL(url, location.href), q = u.searchParams, rows = [];
       const frame = id => [
         { label: "This frame on its own scale", note: "PNG · calibrated", href: saveUrl(`${FRAMES}/frames/processed/${id}.webp?size=full${window.cassiniLook()}`) },
-        { label: "Archive frame, unprocessed", note: "PNG · raw", href: `${FRAMES}/frames/${id}.png?download=1` }];
+        { label: "Archive frame, unprocessed", note: "PNG · raw", href: `${FRAMES}/frames/${id}.png?download=1` },
+        // science data: the frame's I/F, nothing else done, its PDS label inside the TIFF (frame_server science_tiff)
+        { label: "Science data, I/F", note: "TIFF · 32-bit float", href: `${FRAMES}/frames/${id}.tif?download=1` },
+        { label: "PDS label", note: "text", href: `${FRAMES}/frames/${id}.lbl?download=1` }];
       if (u.pathname.endsWith("/frames/color.webp")) {
         const ids = (q.get("ids") || "").split(","), ch = q.get("channel"), slots = ids.length === 2 ? [0, 2] : [0, 1, 2];
         const whole = { label: `Whole ${kindOf(ids)} picture`, note: "PNG", href: saveUrl(url.replace(/&channel=\d/, "")) };
