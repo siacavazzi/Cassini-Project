@@ -184,7 +184,7 @@ def load_aligned(paths, hdr=False, scale=None, repeat_window=120):
         iofs = cal.calibrated_each(lbls, imgs, iofs)
         keep = [j for j, iof in enumerate(iofs) if iof is not None]
         if 2 <= len(keep) < len(lbls):
-            dropped = [lbls[j].info.get("PRODUCT_ID", paths[j]) for j in range(len(lbls)) if j not in keep]
+            dropped = [os.path.basename(paths[j]).split(".")[0] for j in range(len(lbls)) if j not in keep]
             print(f"Can't calibrate {dropped}, making a two-filter picture of the others")
             lbls, imgs, iofs, masks, stacked = ([v[j] for j in keep] for v in (lbls, imgs, iofs, masks, stacked))
             if scale is not None:

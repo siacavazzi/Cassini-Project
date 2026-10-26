@@ -63,7 +63,7 @@ for look in ("balanced", "classic"):
         assert len(imgs) == 3 and report["calibrated"] and "dropped" not in report, report
         imgs, valid, lbl, report = run(["TABLE", "TABLE", "8LSB"])
         print(look, "report", {k: report[k] for k in ("calibrated", "dropped")})
-        assert report["calibrated"] and report["dropped"] == ["N2_1"] and len(imgs) == 2
+        assert report["calibrated"] and report["dropped"] == ["N2_1"], report and len(imgs) == 2
         # the two kept channels are on one scale: red stays brighter than green, as the camera measured
         r, g = (float(np.mean(im[disk][..., 0] if im.ndim == 3 else im[disk])) for im in imgs)
         print(look, "body red", round(r, 1), "green", round(g, 1))
