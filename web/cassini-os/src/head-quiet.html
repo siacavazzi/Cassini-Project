@@ -597,7 +597,7 @@ body.phone .savemenu a { padding: 11px 14px; }
 .bodywin.full .pane:has(> .crumbs:not([hidden])) { grid-template-rows: auto minmax(0, 1fr) auto auto; }
 body.idle .camwin:has(.well.has-frame) .crumbs { opacity: 0; }
 body.idle #app .win.full .crumbs { opacity: 1; }
-.well, .rlwell { cursor: zoom-in; } .win.full :is(.well, .rlwell) { cursor: zoom-out; }
+.well, .rlwell, .win.full :is(.well, .rlwell) { cursor: default; }
 /* resting: a window in full view keeps its dark backdrop and its picture; only the title bar fades (!important: the
    rules that fade every window and clear the camera windows' frames are id-strength) */
 body.idle #app .win.full { opacity: 1 !important; pointer-events: auto !important; background: rgba(8,9,11,.9) !important; }
