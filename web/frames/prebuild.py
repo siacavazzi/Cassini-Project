@@ -339,9 +339,11 @@ def sample(args):
 # and the stretch then plays as a movie at the frame rate the person picks, from the cache. One stretch is made at
 # a time at full speed (SEGMENT_THREADS): someone asked for it and is waiting, so it gives way only to the server's
 # own picture requests (frame_server.live_requests: the camera windows' pictures go first), never to the machine's
-# load or the pre-build run's pause file, which other jobs and previews on the Mini set off.
+# load, which other jobs and previews on the Mini set off. It holds while the pause file exists (SEGMENT_PAUSE: the
+# Mini held for one heavy job at a time), and says so.
 
 SEGMENT_THREADS = max(2, min(4, (os.cpu_count() or 4) // 2))
+SEGMENT_PAUSE = "~/prebuild.pause"
 SEGMENT_YIELD = 1.0     # seconds at most a picture of the stretch waits for the server's own requests to clear
 SEGMENT_MAX = 6000      # pictures in one stretch (a busy day near Saturn has ~1,500)
 SEGMENT_SIZES = (512, 768, 1024)
@@ -371,7 +373,7 @@ def segment_options(q):
     on = lambda k: get(k, "1") != "0"
     return {"from": t0, "until": t1, "cams": cams, "sizes": sizes,
             "look": get("look", calibration.LOOKS[0]), "colors": get("colors", calibration.COLORS[0]),
-            "mosaics": on("mosaics"), "steady": on("steady"), "processed": on("processed"), "center": get("center", "0") == "1",
+            "mosaics": on("mosaics"), "steady": on("steady"), "processed": on("processed"), "center": on("center"),
             "style": {"trail": max(0, min(obs_mosaic.TRAIL, trail)), "laps": max(1, min(obs_mosaic.TRAIL, laps)),
                       "center": on("center"), "color": on("color")}}
 
@@ -489,7 +491,7 @@ class Segments:
             return self._public(job)
 
     def _public(self, job):
-        """What the page reads: state (queued, planning, making, finishing, done, failed, stopped), pictures done of total, how
+        """What the page reads: state (queued, planning, making, waiting (held by the pause file), finishing, done, failed, stopped), pictures done of total, how
         far in time every picture is made (through, UTC), seconds left and the place in line."""
         out = {k: job[k] for k in ("id", "state", "total", "done", "errors", "took", "why_waiting", "error")}
         through = job["options"]["from"]
@@ -550,6 +552,10 @@ class Segments:
             pending, i = set(), 0
             while i < len(items) or pending:
                 while i < len(items) and len(pending) < SEGMENT_THREADS * 2 and not job["stop"]:
+                    while os.path.exists(os.path.expanduser(SEGMENT_PAUSE)) and not job["stop"]:
+                        job["state"], job["why_waiting"] = "waiting", "held"
+                        time.sleep(3)
+                    job["state"], job["why_waiting"] = "making", None
                     # the camera windows' own pictures first: a moment's pause while the server answers them
                     until = time.monotonic() + SEGMENT_YIELD
                     while self.live() > 0 and time.monotonic() < until and not job["stop"]:

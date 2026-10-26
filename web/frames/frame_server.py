@@ -104,7 +104,7 @@ Routes:
                                passes, with the page's look and movie style: mosaics, steady, color, trail, laps,
                                center), so it plays as a movie at any frame rate from the cache; one stretch at a
                                time, behind the server's own requests. Answers the job's status, as
-  /prebuild/<JOB>.json         does: state queued/planning/making/finishing/done/failed/stopped, pictures done of
+  /prebuild/<JOB>.json         does: state queued/planning/making/waiting/finishing/done/failed/stopped, pictures done of
                                total, made through (UTC), seconds left
   POST /prebuild/<JOB>/stop    stops it (what is made stays made)
   /health                      "ok" plus where the frames come from

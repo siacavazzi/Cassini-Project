@@ -3822,14 +3822,14 @@ body.phone #launch .lx-clock { font-size: 9.5px; bottom: 9vh; }
   function nextPicture(et, body, cams) {
     if (!body && !cams) {
       const a = catalog.sorted;
-      for (let i = lastImageIndex(et) + 1; i < a.length; i++) if (complete(order[i])) return a[i];
+      for (let i = lastImageIndex(et) + 1; i < a.length; i++) if (complete(order[i], body)) return a[i];
       return Infinity;
     }
     let t = Infinity;
     for (const cam in catalog.byCam) {
       if (cams && !cams.includes(cam)) continue;
       const f = framesOf(cam, body);
-      for (let p = lastOfCam(cam, et, body) + 1; p < f.et.length && f.et[p] < t; p++) if (complete(f.ks[p])) { t = f.et[p]; break; }
+      for (let p = lastOfCam(cam, et, body) + 1; p < f.et.length && f.et[p] < t; p++) if (complete(f.ks[p], body)) { t = f.et[p]; break; }
     }
     return t;
   }
@@ -3838,22 +3838,23 @@ body.phone #launch .lx-clock { font-size: 9.5px; bottom: 9vh; }
     for (const cam in catalog.byCam) {
       if (cams && !cams.includes(cam)) continue;
       const f = framesOf(cam, body);
-      for (let p = lastOfCam(cam, et - 1e-3, body); p >= 0 && f.et[p] > t; p--) if (complete(f.ks[p])) { t = f.et[p]; break; }
+      for (let p = lastOfCam(cam, et - 1e-3, body); p >= 0 && f.et[p] > t; p--) if (complete(f.ks[p], body)) { t = f.et[p]; break; }
     }
     return t;
   }
   // a finished picture, the kind movie mode stops on. Complete frames only (movie.completeFrames, with color
   // composites on): of a color set, only the frame that completes it (its composite), never the black-and-white
   // channels on the way. Complete mosaics only (playback.completeMosaics): of a pass a camera window plays as a
-  // mosaic, only its last frame (the finished mosaic). Every other frame is a picture of its own.
-  function complete(k) {
+  // mosaic, only its last frame (the finished mosaic; body: among that body's pictures, as its windows show them).
+  // Every other frame is a picture of its own.
+  function complete(k, body) {
     const si = catalog.setOf ? catalog.setOf[k] : -1;
     if (si >= 0 && S.get("movie.completeFrames") !== false && S.get("cameras.composites") && catalog.et[k] !== catalog.sets[si].ready) return false;
     if (completeMosaics()) {
       const cam = catalog.cam[k];
       for (const f of allFeeds) if (f.cam === cam && f.playsAs && f.playsAs(k) === "mosaic") {
-        const [, last] = passSpan(cam, null, lastOfCam(cam, catalog.et[k]));
-        return catalog.byCam[cam].ks[last] === k;
+        const [, last] = passSpan(cam, body, lastOfCam(cam, catalog.et[k], body));
+        return framesOf(cam, body).ks[last] === k;
       }
     }
     return true;
@@ -5522,6 +5523,7 @@ body.phone #launch .lx-clock { font-size: 9.5px; bottom: 9vh; }
     say(j.state === "queued" ? (j.ahead ? `Waiting for ${j.ahead} stretch${j.ahead > 1 ? "es" : ""} before it…` : "Starting…")
       : j.state === "planning" ? "Finding every picture in the stretch…"
       : j.state === "finishing" ? "Finishing the last mosaic tiles…"
+      : j.state === "waiting" ? `On hold: the frame server's machine is reserved for another job · ${j.done.toLocaleString()} of ${j.total.toLocaleString()}`
       : `Pre-processing ${j.done.toLocaleString()} of ${j.total.toLocaleString()} pictures${j.eta != null ? ` · ${fmtDur(j.eta)} left` : ""}`);
     P.poll = setTimeout(async () => {
       try { const r = await fetch(`${FRAMES}/prebuild/${j.id}.json`, { cache: "no-store" }); if (r.ok) follow(await r.json()); else follow(j); }
