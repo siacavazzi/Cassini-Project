@@ -258,8 +258,9 @@ redoes them; PRs target `pictures`.
 | 8 Finishing | cmsg_01VihZrurbK5NUCdmG37hHXsU9bP1P9p2bA11HS2iqK6L7 | 8819 | C8 registration (color_image), C9 8LSB (label_handler), D9 TIFF route, red cast in tile_scale | so_far/colour_picture, centre code; D8 dropped |
 | 4, 5 | start when 3 merges | | tile_map API from 3 | |
 | 6a | #105 (chugging thread) | 8812 | the in-memory pass record everyone reuses | |
-| 6b | pre-build thread | — | full overnight build at 69cd5fc from 01:00 Mini local into ~/server/cache/cassini-prebuild (SSD, stops under 60 GB free); 8790 stays pinned to it in the morning, the moving head goes on 8822 | a second pass remakes only bumped makers after Sam's look |
+| 6b | pre-build thread | — | full overnight build from `pictures-build` (all look-changing PRs + q95, built ~06:00Z 2026-10-26); was planned at 69cd5fc from 01:00 Mini local into ~/server/cache/cassini-prebuild (SSD, stops under 60 GB free); 8790 stays pinned to it in the morning, the moving head goes on 8822 | a second pass remakes only bumped makers after Sam's look |
 | Full-res mosaics | cmsg_01VihZrurbK5NUCdmG37hHXsEFnBdf7VYGk9G3Ukm8EKHJ | 8825 | native size + crop through mosaic_webp/_mosaic_at, loupe hi-res crop hook, one "Full resolution mosaic" save row, own capped LRU cache (never pre-built) | compose internals, phase 3/7/8 areas above; save menu rows only after #107 |
+| Processing toggles | cmsg_01VihZrurbK5NUCdmG37hHXsMSpEYw4bxkzFDdPfED5HkR | 8826 | Settings > Processing (mosaics, centering, color, repeat stack, HDR, calibration, alignment, stretch) reusing cassiniSettings entries; new server flags that change a cache key only when off-default | default URLs and cache paths (tonight's pre-build keys); the makers' internals owned above |
 
 ### Still to do
 | Phase | One line | Depends on |

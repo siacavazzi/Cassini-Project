@@ -236,6 +236,9 @@ def _read_at(f, size, offset):
 """
 Yields the uncompressed data of member i in chunks
 """
+LOCAL_EXTRA = 64   # bytes of a local header's extra field read ahead with it (zip64 and timestamp fields are 9 to 28)
+
+
 def _member_chunks(i, chunk_size=16 * 1024 * 1024, source=None):
     source = source or get_source()
     index = _zip_index(source)
@@ -250,22 +253,29 @@ def _member_chunks(i, chunk_size=16 * 1024 * 1024, source=None):
                     return
                 yield data
     f = _zip_file(source)
-    # the local header before the data has its own name and extra field lengths
+    # the local header before the data has its own name and extra field lengths. It is read together with the start
+    # of the data (its name is the directory's, its extra field seldom more than LOCAL_EXTRA bytes), so a member is
+    # one read instead of two: on the Mini's spinning disk, shared with other servers, the second was often a seek
     position = int(index["offsets"][i])
-    header = _read_at(f, 30, position)
+    remaining = int(index["compressed"][i])
+    data = _read_at(f, 30 + len(index["names"][i]) + LOCAL_EXTRA + min(chunk_size, remaining), position)
+    header = data[:30]
     if header[:4] != b"PK\x03\x04":
         raise zipfile.BadZipFile(f"Bad local header for {index['names'][i]}")
     name_length, extra_length = struct.unpack("<HH", header[26:30])
-    position += 30 + name_length + extra_length
-    remaining = int(index["compressed"][i])
+    start = 30 + name_length + extra_length
+    position += start
+    data = data[start:start + remaining]   # empty when the header was longer than LOCAL_EXTRA allowed for
     inflate = zlib.decompressobj(-15) if method == zipfile.ZIP_DEFLATED else None
     while remaining > 0:
-        data = _read_at(f, min(chunk_size, remaining), position)
         if not data:
-            raise zipfile.BadZipFile(f"{index['names'][i]} is cut short")
+            data = _read_at(f, min(chunk_size, remaining), position)
+            if not data:
+                raise zipfile.BadZipFile(f"{index['names'][i]} is cut short")
         remaining -= len(data)
         position += len(data)
         yield inflate.decompress(data) if inflate else data
+        data = b""
     if inflate:
         yield inflate.flush()
 
