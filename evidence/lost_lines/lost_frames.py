@@ -6,7 +6,6 @@
 import gzip, os, sys, time
 import numpy as np, pandas as pd
 sys.path.insert(0, os.getcwd())
-import data_source as ds
 import stacking
 
 out = sys.argv[1]
@@ -14,26 +13,29 @@ os.makedirs(out, exist_ok=True)
 idx = pd.read_csv("Image_index.csv", low_memory=False)
 idx["ml"] = pd.to_numeric(idx["MISSING_LINES"], errors="coerce").fillna(0).astype(int)
 idx["id"] = idx["path"].str.split("/").str[-1].str.split(".").str[0]
-# the line prefix of every frame (a few hundred bytes): short lines are lost pixels, as label.valid_mask reads them
-short = np.zeros(len(idx), bool)
-has_prefix = np.zeros(len(idx), bool)
+# the line prefix of every frame (a few hundred bytes): short lines are lost pixels, as label.valid_mask reads them.
+# Read straight from the archive in the order the members sit in it, so the disk doesn't seek for every frame
+import zipfile
+archive = sys.argv[2] if len(sys.argv) > 2 else os.environ["CASSINI_DATA"]
+signature = {}   # id: (some lines shorter than others, a hash of the line lengths)
 t0 = time.time()
-for k, p in enumerate(idx.path):
-    base = p.split(".")[0]
-    try:
-        raw = ds.read_bytes(base + ".prefix.gz")
-    except Exception:
-        continue
-    prefix = np.frombuffer(gzip.decompress(raw), np.uint8)
-    if len(prefix) % 24:   # not the ISS 24 byte line prefix: go by the label
-        continue
-    has_prefix[k] = True
-    prefix = prefix.reshape(-1, 24)
-    valid = prefix[:, 2].astype(int) * 256 + prefix[:, 3]
-    short[k] = valid.min() < valid.max()
-    if k % 20000 == 0:
-        print(f"{k} frames, {time.time() - t0:.0f} s", flush=True)
+with zipfile.ZipFile(archive) as z:
+    members = sorted((i for i in z.infolist() if i.filename.endswith(".prefix.gz")), key=lambda i: i.header_offset)
+    print(f"{len(members)} prefixes in the archive", flush=True)
+    for k, info in enumerate(members):
+        prefix = np.frombuffer(gzip.decompress(z.read(info)), np.uint8)
+        if len(prefix) % 24 == 0:   # the ISS 24 byte line prefix
+            prefix = prefix.reshape(-1, 24)
+            valid = prefix[:, 2].astype(np.uint16) * 256 + prefix[:, 3]
+            signature[os.path.basename(info.filename).split(".")[0]] = (bool(valid.min() < valid.max()), hash(valid.tobytes()))
+        if k % 20000 == 0:
+            print(f"{k} prefixes, {time.time() - t0:.0f} s", flush=True)
+has_prefix = idx.id.isin(signature).to_numpy()
+# lost lines: some lines shorter than others; without a prefix, the label's MISSING_LINES (valid_mask's fallback)
+short = np.array([has and signature[i][0] for i, has in zip(idx.id, has_prefix)])
 idx["lost"] = np.where(has_prefix, short, idx.ml > 0)
+print(f"prefixes read: {has_prefix.sum()}; short lines by prefix: {short.sum()}; MISSING_LINES > 0: {(idx.ml > 0).sum()}; "
+      f"both: {(short & (idx.ml > 0).to_numpy()).sum()}")
 lost = idx[idx.lost]
 print(f"prefixes read: {has_prefix.sum()}; short lines by prefix: {short.sum()}; MISSING_LINES > 0: {(idx.ml > 0).sum()}; "
       f"both: {(short & (idx.ml > 0).to_numpy()).sum()}")
@@ -47,6 +49,14 @@ for p, i in zip(lost.path, lost.id):
     for r in reps:
         rid = r.split("/")[-1].split(".")[0]
         affected[rid] = affected.get(rid) or ("own" if rid in own else "repeat")
+uneven = 0
+for p, i in zip(idx.path[has_prefix & ~idx.lost.to_numpy()], idx.id[has_prefix & ~idx.lost.to_numpy()]):
+    reps = [r.split("/")[-1].split(".")[0] for r in stacking.find_repeats(p, 120, 50)]
+    if any(signature.get(r, signature[i]) != signature[i] for r in reps[1:]):
+        uneven += 1
+        for rid in reps:
+            affected[rid] = affected.get(rid) or "repeat"
+print(f"stacks of whole frames whose line lengths differ: {uneven}")
 with open(os.path.join(out, "lost_lines_frames.txt"), "w") as f:
     f.write("# id, own = its label counts lost lines, repeat = stacked/merged with such a frame\n")
     for rid in sorted(affected):

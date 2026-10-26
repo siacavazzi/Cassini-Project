@@ -132,7 +132,7 @@ def load_hdr(path, window=120, max_frames=8, valid=False):
     lbl = lh.label(path, as_png=True)
     ref = first = None
     total, weight, n = None, None, 0
-    seen = None
+    merging, own, differ = [], None, False
     plain = not cal.step("hdr")
     for p in find_repeats(path, window, max_frames if cal.step("stack") else 1):
         try:
@@ -152,6 +152,11 @@ def load_hdr(path, window=120, max_frames=8, valid=False):
                 return (lbl, None, 1, None) if valid else (lbl, None, 1)
             continue
         mask = l.valid_mask() if valid else None
+        if valid:
+            own = mask if own is None else own
+            # a frame that lost other pixels than the frame at path: then every frame's lost ones are left out, so
+            # they fill one another (the same ones, as a summed frame's edge column: nothing to fill, merged as before)
+            differ = differ or not np.array_equal(mask, own)
         if ref is None:
             ref, first = image, iof
         else:
@@ -162,11 +167,11 @@ def load_hdr(path, window=120, max_frames=8, valid=False):
                 if valid:
                     mask = ic.shift_image(mask.astype(np.float32), *shift) > 0.99
         good = ~cv2.dilate(cal.saturated(codes, info, gray).astype(np.uint8), np.ones((7, 7), np.uint8)).astype(bool)
-        if valid and not mask.all():
-            good &= mask
-        if valid and seen is None:
-            seen = mask   # the frame at path's own
-        w = good * np.float32(float(info.get("EXPOSURE_DURATION", 1)) or 1)
+        merging.append((iof, good, mask, np.float32(float(info.get("EXPOSURE_DURATION", 1)) or 1)))
+    for iof, good, mask, exposure in merging:
+        if differ:
+            good = good & mask
+        w = good * exposure
         total = iof * w if total is None else total + iof * w
         weight = w if weight is None else weight + w
         n += 1
@@ -179,5 +184,5 @@ def load_hdr(path, window=120, max_frames=8, valid=False):
         print(f"Merged {n} exposures for {path}")
     if valid:
         # valid where some exposure went in, or where every one saturated but the frame at path has its (clipped) pixel
-        return lbl, merged, n, seen | (weight > 0)
+        return lbl, merged, n, own | (weight > 0) if differ else own
     return lbl, merged, n

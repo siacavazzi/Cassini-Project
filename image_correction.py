@@ -232,8 +232,9 @@ def agreeing_median(stack, agrees, count):
 
 
 def stack_frames(frames, sigma=3.0, max_shift=20, masks=None):
-    if masks is not None and all(m.all() for m in masks):
-        # nothing lost: the plain stack below, byte for byte
+    if masks is not None and all(np.array_equal(m, masks[0]) for m in masks[1:]):
+        # nothing lost, or every frame lost the same pixels (a summed frame's edge column): no frame can fill another,
+        # so the plain stack below, byte for byte
         return stack_frames(frames, sigma, max_shift), masks[0]
     lost = masks is not None
     if len(frames) == 1:

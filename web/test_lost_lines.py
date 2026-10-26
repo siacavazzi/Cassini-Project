@@ -46,6 +46,10 @@ same, valid = ic.stack_frames(frames, masks=clean)
 assert np.array_equal(plain, same) and valid.all()
 one, valid = ic.stack_frames(frames[:1], masks=clean[:1])
 assert one is frames[0] and valid.all()
+edge = np.ones((H, H), bool)
+edge[:, -4:] = False   # every frame lost the same pixels (a summed frame's last column): nothing to fill, as before
+same, valid = ic.stack_frames(frames, masks=[edge] * 3)
+assert np.array_equal(plain, same) and np.array_equal(valid, edge)
 print("clean frames: byte-identical ok")
 
 # ---------- the reference lost a wedge, a repeat has it: the stack fills it ----------
@@ -132,5 +136,9 @@ pngs["a.png"] = frames[0]
 _, a, _ = stacking.load_hdr("a.png")
 _, b, _, valid = stacking.load_hdr("a.png", valid=True)
 assert np.array_equal(a, b) and valid.all()
+labels["a.png"].mask = labels["b.png"].mask = edge
+_, a, _ = stacking.load_hdr("a.png")
+_, b, _, valid = stacking.load_hdr("a.png", valid=True)
+assert np.array_equal(a, b) and np.array_equal(valid, edge)
 print("load_hdr ok")
 print("ok")
