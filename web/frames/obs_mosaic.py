@@ -1163,9 +1163,10 @@ def centre_view(frame_id):
     cache's footprint of the pass (_box), so a pass is centred all through or not at all. A frame in no pass is its
     own pass. Each picture keeps its frame's own scale: the view is one frame (FRAME full resolution pixels) square
     round the body, so the picture is the size it is today, only moved so the body is in the middle (a movie's view
-    is the pass's, movie_rect). Answers {"centre": True, "side": FRAME, "pass": [...]} or {"centre": False,
-    "why": ...}: a ring, spoke or sky frame, a body too big for the view, or a frame SPICE has no place for keep the
-    picture as it is."""
+    is the pass's, movie_rect). Answers {"centre": True, "side": FRAME, "radius": ..., "pass": [...]}, or
+    {"centre": False, "north": True, "side": FRAME, "why": ...} for a pass that is not centred (a ring, spoke or sky
+    frame, a body too big for the view): turned north up where it is; {"centre": False, "why": ...} for a frame SPICE
+    has no place for, which keeps the picture as it is."""
     idx, row = _row_of()
     q = row.get(frame_id)
     if q is None:
@@ -1194,7 +1195,11 @@ def centre_view(frame_id):
         with _lock:
             _centre_views[key] = hit
     # the frame's own disk of the body (full resolution pixels), so centred knows whether the frame cuts it
-    return dict(hit, side=FRAME, radius=RADIUS.get(target, 0) / (g[2] * IFOV[cam])) if hit["centre"] else dict(hit)
+    if hit["centre"]:
+        return dict(hit, side=FRAME, radius=RADIUS.get(target, 0) / (g[2] * IFOV[cam]))
+    # a pass that is not centred is still turned north up where it is, so every picture Auto center shows has the
+    # same orientation and a window playing through passes does not turn with Cassini's roll
+    return dict(hit, side=FRAME, north=True)
 
 
 def _place(u, t, rect, k, W, H, cache, scale):
