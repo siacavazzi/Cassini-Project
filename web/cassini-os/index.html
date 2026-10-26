@@ -5606,6 +5606,8 @@ body.phone #launch .lx-clock { font-size: 9.5px; bottom: 9vh; }
   function fullFor(url) {
     let im = fulls.get(url);
     if (im) { fulls.delete(url); fulls.set(url, im); return im; }
+    // one full picture on its way at a time: a newer one (a mosaic gaining tiles while it plays) drops the one before
+    for (const [u, o] of fulls) if (!o.complete) { o.src = ""; fulls.delete(u); }
     im = new Image(); im.crossOrigin = "anonymous"; im.decoding = "async";
     im.onload = () => { if (cur && cur.url === url) paint(); };
     im.onerror = () => { im.failed = true; if (cur && cur.url === url) paint(); };
