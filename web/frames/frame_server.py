@@ -40,8 +40,10 @@ Routes:
                                by SPICE (color_image.processed_frame), at the frame's own scale (one frame square
                                round the body); whether to centre is decided once for the pass (obs_mosaic.centre_view,
                                the rule of a movie centred on its body).
-                               404 with X-Center {"centre": false, "why"} when the pass is not centred (rings, sky,
-                               a body too big for the view), and the window shows the picture as it is. Also on
+                               A close-up pass (frames on a body too big for the view) is turned north up where it
+                               is, so the surface holds still. 404 with X-Center {"centre": false, "why"} for a ring,
+                               spoke or sky pass (Cassini kept those upright in the camera, the steady view) or a
+                               frame SPICE has no place for, and the window shows the picture as it is. Also on
                                /frames/processed below
   /frames/processed/<ID>.webp?size=512
                                the frame alone made like a composite's channel (color_image.load_aligned with
@@ -293,10 +295,11 @@ def webp(frame_id, size, cache, fmt="webp"):
 
 # the caches of the pictures drawn from I/F, one per display model (calibration.style), so the classic look keeps the
 # pictures made before the balanced display model and raw colors the balanced ones made before natural color
-COLOR_VERSIONS = {"balanced": "color-v27", "raw": "color-v10", "classic": "color-v4"}
-PROC_VERSIONS = {"balanced": "proc-v7", "raw": "proc-v7", "classic": "proc-v1"}   # one frame: no colors to mix
+COLOR_VERSIONS = {"balanced": "color-v28", "raw": "color-v11", "classic": "color-v5"}
+PROC_VERSIONS = {"balanced": "proc-v8", "raw": "proc-v8", "classic": "proc-v2"}   # one frame: no colors to mix
 # Auto center (center=1): the same pictures centred on the body by SPICE, cached beside them in folders of their own
-CENTRE_VERSION = "ctr2"   # ctr2: the shift stops at the frame's data edge
+CENTRE_VERSION = "ctr4"   # ctr2: the shift stops at the frame's data edge; ctr3: only when the body's disk is cut by it;
+                          # ctr4: a close-up pass is turned north up where it is
 
 
 def in_background(target, *args):
@@ -327,6 +330,19 @@ def composite(ids, channel=None, centre=None):
     return Image.fromarray(np.dstack(chans + [alpha]), "RGBA"), report
 
 
+def disk_in_frame(alpha, cx, cy, r):
+    """True when the body's disk (centre cx, cy, radius r canvas pixels) lies on the frame's data: its centre and
+    the four ends of its axes are inside the frame (alpha, the frame's coverage on the canvas)."""
+    if not r or r <= 0:
+        return False
+    h, w = alpha.shape
+    for x, y in ((cx, cy), (cx - r, cy), (cx + r, cy), (cx, cy - r), (cx, cy + r)):
+        i, j = int(round(y)), int(round(x))
+        if not (0 <= i < h and 0 <= j < w and alpha[i, j]):
+            return False
+    return True
+
+
 def centred(ids, view):
     """The composite of ids (or one frame) centred on the body, north up: the pipeline's color path and SPICE
     placement (color_image.processed_frame: load_aligned as composite, then auto_center), cut to the square of
@@ -340,12 +356,16 @@ def centred(ids, view):
     side = int(view["side"])
     cx = (w - 1) / 2 - report["frame_offset"][0]
     cy = (h - 1) / 2 - report["frame_offset"][1]
+    if not view.get("centre"):
+        # north up only (a pass Auto center does not centre): the view stays on the frame's middle
+        cx, cy = (w - 1) / 2, (h - 1) / 2
     left, top = round(cx - side / 2), round(cy - side / 2)
-    # the shift stops where the frame's data does: the view never takes in black beyond the frame's edge on a side
-    # where the frame could fill it, so a body the camera caught at its edge stays at that edge instead of half the
-    # picture going black (where the frame is narrower than the view, the view sits on the frame's middle)
+    # a body whose whole disk is in the frame goes to the middle, the sky round it black where the frame ends; a
+    # body the frame cuts (caught at its edge, or bigger than it) is moved only as far as the frame's data goes,
+    # so the view never takes in black beyond the frame's edge on a side where the frame could fill it and half the
+    # picture does not go black (where the frame is narrower than the view, the view sits on the frame's middle)
     rows, cols = np.flatnonzero(image[..., 3].any(1)), np.flatnonzero(image[..., 3].any(0))
-    if len(rows):
+    if len(rows) and not disk_in_frame(image[..., 3], cx, cy, view.get("radius", 0)):
         def fit(start, lo, hi):
             return min(max(start, lo), hi - side) if hi - lo >= side else round((lo + hi) / 2 - side / 2)
         wanted = (left, top)
@@ -355,7 +375,8 @@ def centred(ids, view):
     x0, y0, x1, y1 = max(left, 0), max(top, 0), min(left + side, w), min(top + side, h)
     if x0 < x1 and y0 < y1:
         out[y0 - top:y1 - top, x0 - left:x1 - left] = image[y0:y1, x0:x1]
-    report = dict(report, ids=list(ids), centred_view={"side": side, "pass": view.get("pass")})
+    report = dict(report, ids=list(ids), centred_view={"side": side, "pass": view.get("pass"),
+                                                          "centre": bool(view.get("centre"))})
     if len(ids) == 1:
         return Image.fromarray(np.ascontiguousarray(out[..., [0, 3]]), "LA"), report
     return Image.fromarray(out, "RGBA"), report
@@ -814,16 +835,17 @@ def make_handler(site, cache, flags=None):
             return self.send_bytes(data, "image/png" if fmt == "png" else "image/webp", headers=headers)
 
         def centre_of(self, query, frame_id):
-            """center=1 (Auto center in a camera window): the pass's centred view (obs_mosaic.centre_view), or None
-            for the picture as it is. False when the pass is not centred: the answer (404, X-Center says why)
-            is sent, so the window shows the picture as it is for the whole pass."""
+            """center=1 (Auto center in a camera window): the pass's view (obs_mosaic.centre_view: centred on the body,
+            or north up where it is for a close-up), or None for the picture as it is. False for a ring, spoke or
+            sky pass or a frame SPICE has no place for: the answer (404, X-Center says why) is sent, so the window
+            shows the picture as it is for the whole pass."""
             if query.get("center", ["0"])[0] != "1" or reel._index is None:
                 return None
             try:
                 view = obs_mosaic.centre_view(frame_id)
             except Exception as e:
                 view = {"centre": False, "why": f"{type(e).__name__}: {e}"[:200]}
-            if view.get("centre"):
+            if view.get("centre") or view.get("north"):
                 return view
             self.not_centred(view)
             return False
