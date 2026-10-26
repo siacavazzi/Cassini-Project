@@ -40,7 +40,7 @@
       hint: "Move the pointer onto a picture and a lens shows the area under it magnified, from the picture's full resolution version. It follows the pointer; the scroll wheel over it changes the magnification. On a phone, press and hold on a picture." });
     S.define({ key: "loupe.zoom", section: "Zoom lens", label: "Magnification", type: "range", value: 3, min: 1.5, max: 12, step: 0.5, format: v => `${v}×`,
       hint: "How much bigger the lens shows the picture than the window does." });
-    S.define({ key: "loupe.size", section: "Zoom lens", label: "Lens size", type: "range", value: 240, min: 120, max: 480, step: 20, unit: "px",
+    S.define({ key: "loupe.size", section: "Zoom lens", label: "Lens size", type: "range", value: 380, min: 160, max: 720, step: 20, unit: "px",
       hint: "How wide the lens is on the screen (on a phone, at most two thirds of the screen)." });
     S.define({ key: "loupe.delay", section: "Zoom lens", label: "Open after", type: "range", value: 0, min: 0, max: 3, step: 0.1, unit: "s",
       hint: "How long the pointer rests on a picture before the lens comes up (0: at once)." });
@@ -130,7 +130,7 @@
     const b = box(img);
     if (!b) return close();
     const dpr = window.devicePixelRatio || 1, vw = innerWidth, vh = innerHeight;
-    let L = opt("loupe.size", 240);
+    let L = opt("loupe.size", 380);
     if (cur.touch || phone()) L = Math.min(L, Math.round(Math.min(vw, vh) * 0.66));
     const z = opt("loupe.zoom", 3);
     // where the lens goes: on the pointer, beside it, or (a finger) above it, kept on the screen
