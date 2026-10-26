@@ -276,6 +276,9 @@ def encode(im, size, fmt="webp", quality=QUALITY):
     grey one is sent losslessly (an 8-bit frame is a few hundred KB that way)"""
     cap = FULL_MAX if size == FULL else size
     if max(im.size) > cap:
+        # shrunk on a copy: thumbnail works in place, and im may be a picture kept for its other sizes
+        # (_recent_composite), which a 512 view would otherwise leave at 512 for the 1024, full or PNG asked next
+        im = im.copy()
         im.thumbnail((cap, cap), Image.LANCZOS)
     out = io.BytesIO()
     if fmt == "png":
