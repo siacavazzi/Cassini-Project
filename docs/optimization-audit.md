@@ -46,9 +46,12 @@ Rigs in the project files, `opt-audit/rigs/` (cloud, 34 real lean-archive frames
   sample's frames and sets and on 1,200 made-up skies (ties, signed zeros, NaN, inf, constant). `shoulder_equiv.py`
   (O32): `roll_off`, `tone`, `mix_display` and `display`, old against new, on made-up pictures (NaN, inf, signed
   zeros, values at the knee; float32 and float64; views) and `tone` on the sample's frames and sets.
-  `pct_equiv.py` and `pct_nan2.py` show why order statistics shared between numpy calls must stay the same call on
-  the same array: with both signs of zero in it the zero found can change with the partition, and with a NaN even
-  the result's type.
+  `sky_stats_equiv.py` (O33): `sky_levels` and `sky_blacks`, old against new, the way each caller asks (each frame
+  and set on the sky `_sky` finds, with the floor; `black_of`'s quarter-size frame; the sample's frames grouped as
+  passes) and on 600 made-up skies; `web/test_sky_stats.py` (in the repo): the shared partition against the separate
+  numpy calls. `pct_equiv.py` and `pct_nan2.py` show why order statistics shared between numpy calls must stay the
+  same call on the same array unless the pixels are checked first (O33): with both signs of zero in it the zero
+  found can change with the partition, and with a NaN even the result's type.
 - Timings: `time_make_pass.py` (a pass maker run on the sample's passes, fresh cache and geometry, no profiler, no
   tiles made ahead as the pre-build runs), `time_composites.py` (the composites item, with its encodes counted and
   timed), `time_proc.py` (`processed_frame` alone, with the time it holds `spice_lock`), `time_processed.py` (the
@@ -149,6 +152,7 @@ On the busy Mini a cold picture spends a quarter to a half of its time reading t
 | O30 | balanced scale | a balanced scale picked each channel's sky pixels and took their median twice, in `sky_levels` and again in `noise_floor` (a boolean pick and a median of every sky pixel). `sky_levels(floor_pct=)` takes the floor from the same pixels and median: each percentile and median the same numpy call on the same pixels in the same order, so the same values, signed zeros and NaN included | ~7 ms a 1024 px channel of every balanced composite and processed frame (cloud); 1,317 scales the same (`sky_share_equiv.py`) | this audit | #121 |
 | O31 | picture_scale | in the balanced look `picture_scale` measured each picture's sky (`_sky`, a 99.9th percentile of every pixel of each channel), then `_balanced_scale` measured it again; it now passes it on, as `load_linear` already did | ~8 ms a channel of each tile's own scale in the reel's mosaics (`tiles_scale`; cloud); the same scales (`sky_share_equiv.py`) | this audit | #121 |
 | O32 | tone shoulder | `tone` and `mix_display` multiplied every pixel by a factor that is 1 below the shoulder, and `roll_off` worked `tanh` out over the whole picture before choosing; both now work only on the pixels past the knee (~5% of the sample's pictures), each value the same elementwise expression on the same input | `display`'s roll-off 3.8 to 1.3 ms a channel (each channel `load_channels` draws in the balanced look: every tile); the shoulder step of `tone` 8.0 to 6.8 ms (one channel), 10.8 to 10.6 ms (three; cloud, `shoulder_time.py`); 3,985 outputs the same (`shoulder_equiv.py`) | this audit | #121 |
+| O33 | sky statistics | a sky's median, 20th percentile and (in a balanced scale) 98th percentile were three numpy calls, each copying the sky's pixels (~836 k of a 1024 px frame) and partitioning the copy. `_median_percentiles` takes both percentiles in one call and then the median, in place on the array `sky_levels` has already made. A value at a rank does not depend on which partition finds it unless the pixels hold a NaN or both signs of zero, so a sky with either (checked first) goes to the separate calls as before | 15.2 to 9.6 ms a channel, the check included (the sample's 34 skies, cloud, `sky_stats_time.py`): every channel of a balanced composite or processed frame, each tile's own scale, a pass's sky levels; the pre-build's processed phase 199 to 190 ms a frame; 4,528 results the same (`sky_stats_equiv.py`, `sky_share_equiv.py`), `web/test_sky_stats.py` 1,570 checks | this audit | #121 |
 
 O27 to O32 together, the sample's passes on the build tree (016249b without and with them), medians of three
 alternating runs on a quiet cloud machine, fresh caches, no tiles made ahead (as the pre-build runs): a movie pass
@@ -158,6 +162,11 @@ tile also saves its read-back. On `pictures` (ef8a5c3 without, 8ab6e04 with): th
 195 ms a frame (3% less, 5-6 ms in each round); the composites item the same within its noise (runs vary by ~140 ms a
 set, more than the ~20 ms O30 should take off a three-filter set). With both rounds of #121, a movie pass takes about
 31% less and a mosaic pass about 24% less than before it (36.8 and 43.0 s, timed the same way: O25, O26).
+
+O33 on its own, timed the same way (8ab6e04 without and f5db4e8 with on `pictures`; the build tree without and with
+it): the pre-build's processed phase 199 to 190 ms a frame (6 to 9 ms less in each round). The composites item and the
+movie and mosaic passes are the same within their noise: O33 takes ~17 ms off a three-filter set, and the passes' runs
+vary by ~3 s.
 
 ## For the owners
 Ideas in another thread's area, sent to that thread; this audit does not make them.
@@ -177,13 +186,12 @@ Ideas in another thread's area, sent to that thread; this audit does not make th
 - A frame's .lbl, .png and .prefix.gz sit next to each other in the sample zip; if the Mini's archive is laid out the
   same, reading the label and the PNG after it in one read would save a seek per frame of a composite (check the
   layout first).
-- Color tone steps (`tone`, `apply_mix`, `_flatten_broad`, `picture_scale`): ~30 percentile/median partitions of whole
-  pictures per composite (~146 ms on the Mini). O30 and O31 took out the repeated ones (the same call on the same
-  pixels). What is left: a channel's sky median and its 20th and 98th percentiles are three partitions of the same
-  pixels (15.2 ms on the sample's skies, 836 k pixels at the median, cloud). One partition at all their ranks gives
-  the same values unless the pixels hold both signs of zero or a NaN (`pct_nan2.py`), so checking for those first
-  (0.7 ms) and falling back to the separate calls otherwise would take 8.6 ms: ~6 ms less a channel, the same on all
-  34 skies (`sky_stats_time.py`).
+- Color tone steps (`tone`, `apply_mix`, `_flatten_broad`, `picture_scale`): O30, O31 and O33 took out the repeated
+  partitions and shared the sky's. What is left in a balanced composite of three channels is 31 partitions of 100 k
+  pixels or more (`prof_partition.py` on f5db4e8), each of its own pixels (a channel, its sky, its residuals, its lit
+  part), except the classic guide's sky (for the owners, above). One partition for a sky's median and percentiles
+  (the percentiles' call also placing the median's two middle values) would take ~1 ms more off a channel, but it
+  would redo `np.median`'s last step outside numpy, so it is not done.
 - The page's render loop and fetches (the frame-rate thread's seven rounds came first: project files `frame-rate/results.md`), `build_data.py` (phase 5 rebuilds the data: coordinate first). Label parsing was checked: 0.08 ms of CPU a label (cloud), so the label time on the Mini is its disk.
 - What is left of a movie frame (cloud, with O22 to O32): the frame's processing (`processed_frame`: stacking,
   calibration, the north-up warp onto its canvas, ~200 ms), registering it to its pointing's first frame on the
