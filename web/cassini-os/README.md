@@ -56,7 +56,7 @@ bar: the window fills the screen under the menu bar, its picture as big as it fi
 
 ## Zoom lens
 
-Rest the pointer on any picture (camera windows, body windows, full view) for a moment and a lens comes up showing
+Move the pointer onto any picture (camera windows, body windows, full view) and a lens comes up showing
 the area under the pointer magnified; it follows the pointer and the scroll wheel over it changes the magnification.
 It draws from the frame server's full resolution picture (`size=full`, asked for once the lens is up), so it shows
 detail the window's 512 or 1024 px picture does not have. On a phone, press and hold on a picture. Settings > Zoom

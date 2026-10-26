@@ -1,6 +1,6 @@
 <!-- The zoom lens for Cassini OS. build.py splices the parts below into the page: the style into the head, the lens into
      #app and the script after the chrome script (camera windows, body windows and full view are up by then).
-     Rest the pointer on a picture for a moment (Settings > Zoom lens, "Open after") and a lens comes up over it,
+     Move the pointer onto a picture (after a rest, if Settings > Zoom lens > "Open after" asks for one) and a lens comes up over it,
      showing the area under the pointer magnified, and follows the pointer until it leaves the picture. The lens
      draws from the picture's full resolution version (the frame server's size=full, the one full view and the save
      menu use), asked for only once the lens is up; until it comes, it magnifies the picture as shown. The scroll
@@ -22,6 +22,7 @@
 #loupe .lzx::after { top: 7px; left: 0; height: 1px; width: 15px; }
 #loupe .lzt { position: absolute; left: 7px; bottom: 6px; font: 9.5px/1 var(--ui); color: rgba(232,236,242,.8); text-shadow: 0 0 3px #000, 0 0 6px #000;
   font-variant-numeric: tabular-nums; letter-spacing: .02em; }
+#loupe.on-pointer .lzx { display: none; }
 #loupe.round .lzt { left: 50%; transform: translateX(-50%); bottom: 12px; white-space: nowrap; }
 .well .shot, img[data-loupe] { -webkit-touch-callout: none; }
 </style>
@@ -36,13 +37,13 @@
   const cv = lens.querySelector("canvas"), ctx = cv.getContext("2d"), tag = lens.querySelector(".lzt");
   if (S) {
     S.define({ key: "loupe.on", section: "Zoom lens", label: "Zoom lens", type: "toggle", value: true,
-      hint: "Rest the pointer on a picture for a moment and a lens shows the area under it magnified, from the picture's full resolution version. It follows the pointer; the scroll wheel over it changes the magnification. On a phone, press and hold on a picture." });
+      hint: "Move the pointer onto a picture and a lens shows the area under it magnified, from the picture's full resolution version. It follows the pointer; the scroll wheel over it changes the magnification. On a phone, press and hold on a picture." });
     S.define({ key: "loupe.zoom", section: "Zoom lens", label: "Magnification", type: "range", value: 3, min: 1.5, max: 12, step: 0.5, format: v => `${v}×`,
       hint: "How much bigger the lens shows the picture than the window does." });
     S.define({ key: "loupe.size", section: "Zoom lens", label: "Lens size", type: "range", value: 240, min: 120, max: 480, step: 20, unit: "px",
       hint: "How wide the lens is on the screen (on a phone, at most two thirds of the screen)." });
-    S.define({ key: "loupe.delay", section: "Zoom lens", label: "Open after", type: "range", value: 0.6, min: 0, max: 3, step: 0.1, unit: "s",
-      hint: "How long the pointer rests on a picture before the lens comes up." });
+    S.define({ key: "loupe.delay", section: "Zoom lens", label: "Open after", type: "range", value: 0, min: 0, max: 3, step: 0.1, unit: "s",
+      hint: "How long the pointer rests on a picture before the lens comes up (0: at once)." });
     S.define({ key: "loupe.shape", section: "Zoom lens", label: "Lens shape", type: "choice", value: "square",
       options: [["square", "Rounded square"], ["round", "Round"]], hint: "The lens's outline." });
     S.define({ key: "loupe.where", section: "Zoom lens", label: "Lens position", type: "choice", value: "on",
@@ -98,6 +99,7 @@
   function open(img, x, y, touch) {
     cur = { img, x, y, touch, url: null, srcSeen: null };
     lens.classList.add("on"); lens.classList.toggle("round", opt("loupe.shape", "square") === "round");
+    lens.classList.toggle("on-pointer", !touch && opt("loupe.where", "on") === "on");
     requestAnimationFrame(() => lens.classList.add("shown"));
     paint();
   }
@@ -171,7 +173,7 @@
     if (arm && arm.img === img && Math.hypot(e.clientX - arm.x0, e.clientY - arm.y0) < 8) { arm.x = e.clientX; arm.y = e.clientY; return; }
     clearTimeout(arm && arm.t);
     arm = { img, x0: e.clientX, y0: e.clientY, x: e.clientX, y: e.clientY };
-    arm.t = setTimeout(() => { const a = arm; arm = null; if (a) open(a.img, a.x, a.y, false); }, opt("loupe.delay", 0.6) * 1000);
+    arm.t = setTimeout(() => { const a = arm; arm = null; if (a) open(a.img, a.x, a.y, false); }, opt("loupe.delay", 0) * 1000);
   }, { passive: true });
   // a press (a click, a drag, a double-click into full view) puts the lens away; resting again brings it back
   document.addEventListener("pointerdown", e => { if (e.pointerType !== "touch") close(); }, true);
