@@ -11,6 +11,8 @@
      server's /frames/mosaic/<ID>/full.webp?crop=, mosaic_native) and draws it over, a little after the pointer
      settles (Settings > Zoom lens > "Native resolution in mosaics"). Any image can offer the same with
      data-loupe-native = the address of such a route (its .json says the native size, ?crop= gives a part).
+     In full view, a mosaic's picture is for looking at its seams: there the lens stays away until the magnifying glass
+     in the picture's top right corner turns it on (Settings > Zoom lens > "On mosaics in full view").
      Pictures it works on: every camera and body window's picture (.well .shot) and any <img data-loupe> (the value,
      when given, is the full resolution picture's URL), so a gallery or an editor gets it by marking its images. -->
 <style>
@@ -30,6 +32,15 @@
 #loupe.on-pointer .lzx { display: none; }
 #loupe.round .lzt { left: 50%; transform: translateX(-50%); bottom: 12px; white-space: nowrap; }
 .well .shot, img[data-loupe] { -webkit-touch-callout: none; }
+/* the magnifying glass in a mosaic's corner in full view, under its kind tag: the lens on or off there */
+.lensbtn { all: unset; position: absolute; right: 5px; top: 18px; z-index: 3; display: none; width: 22px; height: 22px; border-radius: 4px; box-sizing: border-box;
+  align-items: center; justify-content: center; cursor: pointer; color: var(--q-text, #cfd5de); background: rgba(0,0,0,.55); border: 1px solid var(--q-line, rgba(255,255,255,.18)); }
+.lensbtn svg { width: 12px; height: 12px; } .lensbtn svg * { fill: none; stroke: currentColor; stroke-width: 1.4; stroke-linecap: round; }
+.lensbtn:hover { color: #fff; border-color: var(--q-accent, #8ab4ff); }
+.lensbtn:focus-visible { outline: 1px solid var(--q-accent, #8ab4ff); }
+.lensbtn[aria-pressed="true"] { color: var(--q-accent, #8ab4ff); border-color: var(--q-accent, #8ab4ff); }
+.win.full .well.mosaic.has-frame .lensbtn { display: flex; }
+body.idle .win.full .lensbtn { opacity: .35; } body.idle .win.full .lensbtn:hover { opacity: 1; }
 </style>
 
 <div id="loupe" aria-hidden="true"><canvas></canvas><span class="lzx"></span><span class="lzt"></span></div>
@@ -56,6 +67,8 @@
       hint: "On the pointer, the lens is centered where the pointer is; beside it, the lens sits up and to the right, so the picture under the pointer stays in sight. On a phone it always sits above the finger." });
     S.define({ key: "loupe.native", section: "Zoom lens", label: "Native resolution in mosaics", type: "toggle", value: true,
       hint: "A mosaic is shown smaller than its frames were taken. When the lens magnifies past the picture's pixels, it loads the part under it at the frames' own resolution, a moment after the pointer stops." });
+    S.define({ key: "loupe.mosaicFull", section: "Zoom lens", label: "On mosaics in full view", type: "toggle", value: false,
+      hint: "In full view a mosaic is shown big enough to look at its seams, so the lens stays away there. The magnifying glass in the picture's top right corner turns it on and off, the same as this switch." });
   }
   const opt = (k, d) => (S && S.get(k) !== undefined ? S.get(k) : d);
   const HOLD = 450, MOVE = 10;   // a press and hold on a phone: how long, and how far the finger may wander
@@ -67,8 +80,28 @@
     if (!img || !img.naturalWidth) return null;
     const well = img.closest(".well");
     if (well && !well.classList.contains("has-frame")) return null;
+    if (well && well.classList.contains("mosaic") && well.closest(".win.full") && !opt("loupe.mosaicFull", false)) return null;
     return img;
   };
+  // the magnifying glass in each picture window's corner (shown on a mosaic in full view): the lens on or off there
+  const GLASS = '<svg viewBox="0 0 12 12" aria-hidden="true"><circle cx="5" cy="5" r="3.6"/><path d="M7.7 7.7 11 11"/></svg>';
+  function glass(well) {
+    if (well.querySelector(":scope > .lensbtn")) return;
+    const b = document.createElement("button");
+    b.type = "button"; b.className = "lensbtn"; b.innerHTML = GLASS;
+    b.addEventListener("click", e => { e.stopPropagation(); if (S) S.set("loupe.mosaicFull", !opt("loupe.mosaicFull", false)); });
+    b.addEventListener("dblclick", e => e.stopPropagation());
+    well.appendChild(b); mark(b);
+  }
+  function mark(b) {
+    const on = !!opt("loupe.mosaicFull", false);
+    b.setAttribute("aria-pressed", on); b.title = on ? "Zoom lens on (click to look at the seams without it)" : "Zoom lens off (click to turn it on)";
+    b.setAttribute("aria-label", on ? "Turn the zoom lens off" : "Turn the zoom lens on");
+  }
+  let glassQ = 0;
+  const glasses = () => { glassQ = 0; document.querySelectorAll(".well").forEach(glass); };
+  glasses();
+  new MutationObserver(() => { if (!glassQ) glassQ = requestAnimationFrame(glasses); }).observe(document.getElementById("app") || document.body, { childList: true, subtree: true });
   // where the picture is drawn inside its element (object-fit: contain, as the windows show it; else filling it)
   function box(img) {
     const r = img.getBoundingClientRect(), nw = img.naturalWidth, nh = img.naturalHeight;
@@ -277,6 +310,7 @@
   }, { passive: false, capture: true });
   if (S) for (const k of ["loupe.zoom", "loupe.size", "loupe.shape", "loupe.where"]) S.on(k, () => { if (cur) { lens.classList.toggle("round", opt("loupe.shape", "square") === "round"); paint(); } });
   if (S) S.on("loupe.on", v => { if (!v) close(); });
+  if (S) S.on("loupe.mosaicFull", v => { document.querySelectorAll(".lensbtn").forEach(mark); if (!v && cur && !pictureAt(cur.img)) close(); });
 
   // a finger: press and hold on a picture, the lens comes up above it and follows it until it lifts. The tap that
   // would have followed (opening full view, opening a mosaic's frame) does not happen.
