@@ -1415,6 +1415,20 @@ body.idle .win.full .titlebar { opacity: 0; }
     return api;
   }
   const STUCK = 8000;
+  // Complete mosaics only (Settings > Playback): a mosaic pass shows once, finished, at its last frame
+  const completeMosaics = () => !!S.get("playback.completeMosaics") && !!S.get("cameras.mosaics") && window.cassiniMosaics !== false;
+  // the pass (target and observation) of a camera's p-th frame, as the first and last index of its frames in a row
+  function passSpan(cam, body, p) {
+    const ks = framesOf(cam, body).ks, spans = catalog.passSpans = catalog.passSpans || new Map(), key = `${cam}|${body || ""}|${p}`;
+    if (spans.has(key)) return spans.get(key);
+    const o = k => `${catalog.target[k]}|${catalog.obs[k]}`, me = o(ks[p]);
+    let first = p, last = p;
+    while (first > 0 && o(ks[first - 1]) === me) first--;
+    while (last + 1 < ks.length && o(ks[last + 1]) === me) last++;
+    const span = [first, last];
+    for (let q = first; q <= last; q++) spans.set(`${cam}|${body || ""}|${q}`, span);
+    return span;
+  }
   const allFeeds = new Set();   // every camera window's feed, the body windows' too (playback.maxBehind)
   function cameraFeed(card) {
     // body: a body window's own target; the two camera windows show the body in view in the body view, else every target
@@ -2319,6 +2333,12 @@ body.idle .win.full .titlebar { opacity: 0; }
       const holdUp = update.hold || (!own && !!body), up = well.classList.contains("has-frame") && heldBody === body;
       const coming = k < 0 && holdUp && !up && framesOf(cam, body).ks.length > 0;
       if (coming) { p = 0; k = framesOf(cam, body).ks[0]; }
+      // Complete mosaics only: inside a mosaic pass the window keeps the picture from before it, until the pass's
+      // last frame brings up the finished mosaic
+      if (k >= 0 && !coming && completeMosaics() && playsAs(k) === "mosaic") {
+        const [first, last] = passSpan(cam, body, p);
+        if (p < last) { p = first - 1; k = p < 0 ? -1 : framesOf(cam, body).ks[p]; }
+      }
       const live = k >= 0 && state.et - catalog.et[k] < 180;
       card.classList.toggle("live", live);
       // a camera that has been quiet for longer than the stale setting shows nothing rather than an old picture; an
@@ -2418,6 +2438,7 @@ body.idle .win.full .titlebar { opacity: 0; }
     };
     allFeeds.add(update);
     update.cam = cam;
+    update.playsAs = playsAs;
     update.kind = () => kind;
     return update;
   }
@@ -2430,13 +2451,19 @@ body.idle .win.full .titlebar { opacity: 0; }
   const feeds = [...document.querySelectorAll(".camwin")].map(cameraFeed);
   // the time of the first picture after et (any camera; one body's only when body is given), or Infinity when none
   // is in the months loaded now; before: the last picture before et. Movie mode steps the clock from one to the next
-  // cams ("N", "W"): only that camera's pictures (a stretch played for one camera)
+  // cams ("N", "W"): only that camera's pictures (a stretch played for one camera). Only complete pictures count
+  // (complete, below), so movie mode and the body view's skip over the gaps step from one finished picture to the next
   function nextPicture(et, body, cams) {
-    if (!body && !cams) { const a = catalog.sorted, i = lastImageIndex(et) + 1; return i < a.length ? a[i] : Infinity; }
+    if (!body && !cams) {
+      const a = catalog.sorted;
+      for (let i = lastImageIndex(et) + 1; i < a.length; i++) if (complete(order[i])) return a[i];
+      return Infinity;
+    }
     let t = Infinity;
     for (const cam in catalog.byCam) {
       if (cams && !cams.includes(cam)) continue;
-      const a = framesOf(cam, body).et, p = lastOfCam(cam, et, body) + 1; if (p < a.length) t = Math.min(t, a[p]);
+      const f = framesOf(cam, body);
+      for (let p = lastOfCam(cam, et, body) + 1; p < f.et.length && f.et[p] < t; p++) if (complete(f.ks[p])) { t = f.et[p]; break; }
     }
     return t;
   }
@@ -2444,9 +2471,26 @@ body.idle .win.full .titlebar { opacity: 0; }
     let t = -Infinity;
     for (const cam in catalog.byCam) {
       if (cams && !cams.includes(cam)) continue;
-      const a = framesOf(cam, body).et, p = lastOfCam(cam, et - 1e-3, body); if (p >= 0) t = Math.max(t, a[p]);
+      const f = framesOf(cam, body);
+      for (let p = lastOfCam(cam, et - 1e-3, body); p >= 0 && f.et[p] > t; p--) if (complete(f.ks[p])) { t = f.et[p]; break; }
     }
     return t;
+  }
+  // a finished picture, the kind movie mode stops on. Complete frames only (movie.completeFrames, with color
+  // composites on): of a color set, only the frame that completes it (its composite), never the black-and-white
+  // channels on the way. Complete mosaics only (playback.completeMosaics): of a pass a camera window plays as a
+  // mosaic, only its last frame (the finished mosaic). Every other frame is a picture of its own.
+  function complete(k) {
+    const si = catalog.setOf ? catalog.setOf[k] : -1;
+    if (si >= 0 && S.get("movie.completeFrames") !== false && S.get("cameras.composites") && catalog.et[k] !== catalog.sets[si].ready) return false;
+    if (completeMosaics()) {
+      const cam = catalog.cam[k];
+      for (const f of allFeeds) if (f.cam === cam && f.playsAs && f.playsAs(k) === "mosaic") {
+        const [, last] = passSpan(cam, null, lastOfCam(cam, catalog.et[k]));
+        return catalog.byCam[cam].ks[last] === k;
+      }
+    }
+    return true;
   }
   // how many frames the furthest-behind camera window's picture is behind the clock (update.behind, below)
   // cams ("N", "W"): only that camera's windows
@@ -2454,7 +2498,7 @@ body.idle .win.full .titlebar { opacity: 0; }
   window.cassiniFeeds = { frames: FRAMES, cameraFeed, framesOf, lastOfCam, prep, weight, nextPicture, prevPicture, behind, stale: () => S.get("cameras.stale") * 3600 };
   document.addEventListener("cassini:bodymode", () => { if (typeof catalog !== "undefined" && catalog && catalog.byCam) feeds.forEach(f => f(true)); });
   // a change to what the windows show takes effect straight away
-  for (const key of ["cameras.composites", "cameras.stale", "cameras.steady", "cameras.passes", "cameras.balancedColor", "cameras.colors", "cameras.lingerColor", "cameras.lingerMosaic", "movies.steady", "cameras.autoCenter", "cameras.processedFrames", "movies.trail", "movies.filmstrip", "movies.laps"]) S.on(key, () => { if (typeof catalog !== "undefined" && catalog && catalog.byCam) feeds.forEach(f => f(true)); });
+  for (const key of ["cameras.composites", "cameras.stale", "cameras.steady", "cameras.passes", "cameras.balancedColor", "cameras.colors", "cameras.lingerColor", "cameras.lingerMosaic", "movies.steady", "cameras.autoCenter", "cameras.processedFrames", "movies.trail", "movies.filmstrip", "movies.laps", "playback.completeMosaics"]) S.on(key, () => { if (typeof catalog !== "undefined" && catalog && catalog.byCam) feeds.forEach(f => f(true)); });
 
   // ---------- burst limit: in normal playback each camera window gets at most maxRate new pictures a second ----------
   // The clock runs at the chosen speed except inside an imaging burst, where it slows so that crossing the gap
