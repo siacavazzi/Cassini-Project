@@ -337,9 +337,12 @@ def sample(args):
 # Cassini OS: highlight a stretch of the timeline and press Pre-process; the frame server makes every picture the
 # camera windows will ask for in that stretch, with the makers above (the same files the windows' requests find),
 # and the stretch then plays as a movie at the frame rate the person picks, from the cache. One stretch is made at
-# a time, behind the server's own requests (SEGMENT_THREADS), and it waits while the Mini is busy, like run().
+# a time at full speed (SEGMENT_THREADS): someone asked for it and is waiting, so it gives way only to the server's
+# own picture requests (frame_server.live_requests: the camera windows' pictures go first), never to the machine's
+# load or the pre-build run's pause file, which other jobs and previews on the Mini set off.
 
-SEGMENT_THREADS = 2
+SEGMENT_THREADS = max(2, min(4, (os.cpu_count() or 4) // 2))
+SEGMENT_YIELD = 1.0     # seconds at most a picture of the stretch waits for the server's own requests to clear
 SEGMENT_MAX = 6000      # pictures in one stretch (a busy day near Saturn has ~1,500)
 SEGMENT_SIZES = (512, 768, 1024)
 
@@ -443,11 +446,10 @@ class Segments:
     """The stretches asked for, made one at a time in the order asked. A stretch asked for again (the same
     options) is the same job: its status, or a new run when it failed or was stopped."""
 
-    def __init__(self, cache, pause="~/prebuild.pause"):
+    def __init__(self, cache, live=None):
         self.cache, self.lock, self.jobs, self.queue = cache, threading.Lock(), {}, []
-        # someone is waiting on this one: it holds back only for the pause file (the pictures lead's hold on the Mini)
-        # and a machine far busier than a full pre-build run would put up with
-        self.args = argparse.Namespace(pause=pause, max_load=float(os.cpu_count() or 8) * 1.5, live="", watch="", disk=None)
+        # live(): how many picture requests the server is answering now (frame_server.live_requests)
+        self.live = live or (lambda: 0)
         self.wake = threading.Event()
         threading.Thread(target=self._worker, daemon=True).start()
 
@@ -487,7 +489,7 @@ class Segments:
             return self._public(job)
 
     def _public(self, job):
-        """What the page reads: state (queued, planning, making, waiting, finishing, done, failed, stopped), pictures done of total, how
+        """What the page reads: state (queued, planning, making, finishing, done, failed, stopped), pictures done of total, how
         far in time every picture is made (through, UTC), seconds left and the place in line."""
         out = {k: job[k] for k in ("id", "state", "total", "done", "errors", "took", "why_waiting", "error")}
         through = job["options"]["from"]
@@ -548,12 +550,10 @@ class Segments:
             pending, i = set(), 0
             while i < len(items) or pending:
                 while i < len(items) and len(pending) < SEGMENT_THREADS * 2 and not job["stop"]:
-                    why = busy(self.args) if i % 20 == 0 else None
-                    while why and not job["stop"]:
-                        job["state"], job["why_waiting"] = "waiting", why
-                        time.sleep(3)
-                        why = busy(self.args)
-                    job["state"], job["why_waiting"] = "making", None
+                    # the camera windows' own pictures first: a moment's pause while the server answers them
+                    until = time.monotonic() + SEGMENT_YIELD
+                    while self.live() > 0 and time.monotonic() < until and not job["stop"]:
+                        time.sleep(0.05)
                     pending.add(pool.submit(contextvars.copy_context().run, one, i))
                     i += 1
                 if not pending:

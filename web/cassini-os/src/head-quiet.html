@@ -2417,6 +2417,7 @@ body.idle .win.full .titlebar { opacity: 0; }
       return Math.max(0, b);
     };
     allFeeds.add(update);
+    update.cam = cam;
     update.kind = () => kind;
     return update;
   }
@@ -2429,19 +2430,27 @@ body.idle .win.full .titlebar { opacity: 0; }
   const feeds = [...document.querySelectorAll(".camwin")].map(cameraFeed);
   // the time of the first picture after et (any camera; one body's only when body is given), or Infinity when none
   // is in the months loaded now; before: the last picture before et. Movie mode steps the clock from one to the next
-  function nextPicture(et, body) {
-    if (!body) { const a = catalog.sorted, i = lastImageIndex(et) + 1; return i < a.length ? a[i] : Infinity; }
+  // cams ("N", "W"): only that camera's pictures (a stretch played for one camera)
+  function nextPicture(et, body, cams) {
+    if (!body && !cams) { const a = catalog.sorted, i = lastImageIndex(et) + 1; return i < a.length ? a[i] : Infinity; }
     let t = Infinity;
-    for (const cam in catalog.byCam) { const a = framesOf(cam, body).et, p = lastOfCam(cam, et, body) + 1; if (p < a.length) t = Math.min(t, a[p]); }
+    for (const cam in catalog.byCam) {
+      if (cams && !cams.includes(cam)) continue;
+      const a = framesOf(cam, body).et, p = lastOfCam(cam, et, body) + 1; if (p < a.length) t = Math.min(t, a[p]);
+    }
     return t;
   }
-  function prevPicture(et, body) {
+  function prevPicture(et, body, cams) {
     let t = -Infinity;
-    for (const cam in catalog.byCam) { const a = framesOf(cam, body).et, p = lastOfCam(cam, et - 1e-3, body); if (p >= 0) t = Math.max(t, a[p]); }
+    for (const cam in catalog.byCam) {
+      if (cams && !cams.includes(cam)) continue;
+      const a = framesOf(cam, body).et, p = lastOfCam(cam, et - 1e-3, body); if (p >= 0) t = Math.max(t, a[p]);
+    }
     return t;
   }
   // how many frames the furthest-behind camera window's picture is behind the clock (update.behind, below)
-  const behind = () => { let b = 0; for (const f of allFeeds) b = Math.max(b, f.behind()); return b; };
+  // cams ("N", "W"): only that camera's windows
+  const behind = cams => { let b = 0; for (const f of allFeeds) if (!cams || cams.includes(f.cam)) b = Math.max(b, f.behind()); return b; };
   window.cassiniFeeds = { frames: FRAMES, cameraFeed, framesOf, lastOfCam, prep, weight, nextPicture, prevPicture, behind, stale: () => S.get("cameras.stale") * 3600 };
   document.addEventListener("cassini:bodymode", () => { if (typeof catalog !== "undefined" && catalog && catalog.byCam) feeds.forEach(f => f(true)); });
   // a change to what the windows show takes effect straight away
