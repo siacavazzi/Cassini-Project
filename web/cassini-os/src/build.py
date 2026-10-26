@@ -366,9 +366,9 @@ function loadTexture(url, onLoad, onError) {
 rep('  texLoader.load(dir + f + ".webp", t => {', '  loadTexture(dir + f + ".webp", t => {')
 rep('  }, undefined, () => console.warn("texture missing for " + name));', '  }, () => console.warn("texture missing for " + name));')
 
-# HUD hook: studies can add their own read-outs
+# HUD hook: studies can add their own read-outs (and the speed reads from the shared scale, any speed the slider sets)
 rep('''  $("mday").textContent = `Mission day ${fmtInt(Math.floor((ms - LAUNCH_MS) / 86400000))} · ${SPEEDS.find(s => s[0] === state.speed)[1]}${state.playing ? "" : " · paused"}`;''',
-    '''  $("mday").textContent = `Mission day ${fmtInt(Math.floor((ms - LAUNCH_MS) / 86400000))} · ${SPEEDS.find(s => s[0] === state.speed)[1]}${state.playing ? "" : " · paused"}`;
+    '''  $("mday").textContent = `Mission day ${fmtInt(Math.floor((ms - LAUNCH_MS) / 86400000))} · ${cassiniSpeed.label(state.speed)}${state.playing ? "" : " · paused"}`;
   if (window.studyHud) window.studyHud(ms);''')
 rep('''<span class="sc" title="Photo score">''', '''<span class="sc" title="Photo score" style="--s:${Math.round(e.photo_score)}">''')
 rep('''    list.appendChild(li);

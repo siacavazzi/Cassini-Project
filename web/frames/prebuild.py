@@ -137,7 +137,8 @@ def only(phase, todo, path):
     to some frames: the items' made files are found, not made, so the fix's version bump (or removing the old files)
     comes first."""
     with open(path) as fh:
-        ids = {line.split()[0] for line in fh if line.strip() and not line.startswith("#")}
+        # one frame id a line, maybe followed by more columns (lost_lines_frames.txt: "id,own|repeat")
+        ids = {line.replace(",", " ").split()[0] for line in fh if line.strip() and not line.startswith("#")}
     if phase in ("frames", "processed"):
         return [t for t in todo if t[0] in ids]
     if phase == "composites":

@@ -971,6 +971,39 @@ def pass_scale(frames, u, drawn=None, true_colour=False, sky_tops=None, lit_leve
     return out
 
 
+def _lit_crop(image, side):
+    """A tile's picture: image (an RGBA canvas, unlit outside the frame on it) at side x side px, the bytes PIL's
+    LANCZOS resize of the whole canvas gives (the canvas itself when side is its size), cut to its lit pixels: (the
+    cut, its top row, its left column), or None when no pixel is lit. Made from the lit part: PIL resizes RGBA
+    premultiplied (RGBa), across and then down, each row and then each column on its own, and an unlit pixel is 0
+    premultiplied, so only the rows with a lit pixel are resized across, and only the columns those leave lit are
+    resized down (a movie tile's 3072 px canvas is ~1400 px lit, and the whole canvas's resize was half of making
+    the tile). The lit boxes are PIL's getbbox, one pass over the pixels in C, and the resized canvas is never made
+    whole (both cost more than the lit part's resize)."""
+    h, w = image.shape[:2]
+    box = Image.fromarray(image).getbbox(alpha_only=True)
+    if box is None:
+        return None
+    c0, r0, c1, r1 = box
+    if side == h:
+        return image[r0:r1, c0:c1].copy(), r0, c0
+    strip = Image.new("RGBa", (w, r1 - r0))
+    strip.paste(Image.fromarray(np.ascontiguousarray(image[r0:r1, c0:c1])).convert("RGBa"), (c0, 0))
+    across = strip.resize((side, r1 - r0), Image.LANCZOS)
+    # the columns with anything in them, colour or alpha
+    used = across.getbbox(alpha_only=False)
+    if used is None:
+        return None
+    x0, x1 = used[0], used[2]
+    tall = Image.new("RGBa", (x1 - x0, h))
+    tall.paste(across.crop((x0, 0, x1, r1 - r0)), (0, r0))
+    down = tall.resize((x1 - x0, side), Image.LANCZOS)
+    box = down.getbbox(alpha_only=True)
+    if box is None:
+        return None
+    return np.asarray(down.crop(box).convert("RGBA")), box[1], x0 + box[0]
+
+
 def tile(u, n, cache, scale=None):
     """Tile n of the pass, made once: its picture north up, scaled to the pass's reference distance and cropped
     (_tiles/<n>.png), and its report: offset = where the frame's middle sits from the body's centre and box = the
@@ -1023,12 +1056,12 @@ def _tile_made(u, n, cache, scale, base):
     os.makedirs(os.path.dirname(base), exist_ok=True)
     if image is not None and "frame_offset" in rep:
         side = round(image.shape[0] * k)
-        small = np.asarray(Image.fromarray(image).resize((side, side), Image.LANCZOS)) if side != image.shape[0] else image
-        rows, cols = np.flatnonzero(small[..., 3].any(1)), np.flatnonzero(small[..., 3].any(0))
-        if len(rows):
-            a, b, c, d = rows[0], rows[-1] + 1, cols[0], cols[-1] + 1
-            crop = np.ascontiguousarray(small[a:b, c:d])
+        lit = _lit_crop(image, side)
+        if lit is not None:
+            crop, a, c = lit
+            b, d = a + crop.shape[0], c + crop.shape[1]
             Image.fromarray(crop).save(base + ".png", compress_level=1)
+            _keep_made(base + ".png", crop)
             out.update({"native_offset": rep["frame_offset"], "offset": [v * k for v in rep["frame_offset"]],
                         "box": [int(c) - side / 2, int(a) - side / 2, int(d - c), int(b - a)]})
             _register(u, n, out, crop, cache, scale)
@@ -1075,7 +1108,10 @@ def _register(u, n, out, crop, cache, scale):
     path = os.path.join(_tiles(u, cache, scale), f"{j}.png")
     if "offset" not in q or not os.path.exists(path):
         return
-    ref = np.asarray(Image.open(path).convert("RGBA"))
+    with _lock:
+        ref = _made_pictures.get(path)
+    if ref is None:
+        ref = np.asarray(Image.open(path).convert("RGBA"))
     shift, how = _shift_onto(q, ref, q["offset"], out, crop, out["offset"])
     if shift is None and how is not None and how.startswith("failed"):
         out["registered"] = {"to": q["id"], "why": how[7:]}
@@ -1421,6 +1457,25 @@ def filter_mosaic(u, p, f, tiles, rect, cache, ref=None, tag=""):
 _parts = collections.OrderedDict()   # (tile file, width, height) -> the tile at that size, most recently used last
 _parts_bytes = [0]
 PARTS_KEEP = int(os.environ.get("CASSINI_MOSAIC_PARTS_MB", "256")) << 20
+_made_pictures = collections.OrderedDict()   # tile file -> its picture (RGBA) as it was made and written, the newest last
+_made_pictures_bytes = [0]
+MADE_KEEP = int(os.environ.get("CASSINI_MOSAIC_MADE_MB", "64")) << 20
+
+
+def _keep_made(path, picture):
+    """A tile's picture as made and written to path, kept in memory (the newest, up to MADE_KEEP bytes): a movie
+    frame or a mosaic draws its new tile right after making it (_part), the next filter's tile at its pointing is
+    registered to it (_register), and reading the PNG back cost ~35 ms each time."""
+    picture = picture.view()
+    picture.flags.writeable = False
+    with _lock:
+        old = _made_pictures.pop(path, None)
+        if old is not None:
+            _made_pictures_bytes[0] -= old.nbytes
+        _made_pictures[path] = picture
+        _made_pictures_bytes[0] += picture.nbytes
+        while _made_pictures and _made_pictures_bytes[0] > MADE_KEEP:
+            _made_pictures_bytes[0] -= _made_pictures.popitem(last=False)[1].nbytes
 
 
 def _part(path, w, h):
@@ -1432,7 +1487,10 @@ def _part(path, w, h):
         if part is not None:
             _parts.move_to_end(key)
             return part
-    part = np.asarray(Image.open(path).convert("RGBA").resize((w, h), Image.LANCZOS))
+        made = _made_pictures.get(path)
+    # a tile just made is resized from its picture in memory, the pixels its PNG holds
+    im = Image.fromarray(made) if made is not None else Image.open(path).convert("RGBA")
+    part = np.asarray(im.resize((w, h), Image.LANCZOS))
     with _lock:
         if key not in _parts:
             _parts[key] = part
@@ -1454,7 +1512,9 @@ def detail(rgba, sigma):
     rgb = rgba[..., :3].astype(np.float32)
     weight = cv2.GaussianBlur(a, (0, 0), sigma)
     if calibration.look() == "balanced":
-        lum = rgb.mean(axis=2)
+        # the channels' mean: 8-bit values, so the sum is exact and this is numpy's mean(axis=2) to the bit (all
+        # 2^24 colours), without its slow reduce over three
+        lum = (rgb[..., 0] + rgb[..., 1] + rgb[..., 2]) / 3
         mean = cv2.GaussianBlur(lum * a, (0, 0), sigma) / np.maximum(weight, 1e-3)
         out = np.clip(rgb + (DETAIL * (lum - mean))[..., None], 0, 255)
         return np.dstack([out.round().astype(np.uint8), rgba[..., 3]])
@@ -1747,7 +1807,11 @@ def track_places(u, cache, p=None):
 
             def pic(j):
                 if j not in pics:
-                    pics[j] = np.asarray(Image.open(os.path.join(there, f"{j}.png")).convert("RGBA"))
+                    path = os.path.join(there, f"{j}.png")
+                    with _lock:
+                        pics[j] = _made_pictures.get(path)
+                    if pics[j] is None:
+                        pics[j] = np.asarray(Image.open(path).convert("RGBA"))
                     while len(pics) > 16:
                         pics.popitem(last=False)
                 return pics[j]
