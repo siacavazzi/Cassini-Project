@@ -6,9 +6,6 @@ Created on Sat Apr  9 13:09:54 2022
 """
 
 import numpy as np
-from skimage.io import imread, imsave
-from skimage import img_as_ubyte, img_as_uint, img_as_float
-from skimage.exposure import match_histograms
 import warnings
 
 #from color_transfer import color_transfer
@@ -264,6 +261,9 @@ def seqAlign(im):
     
     
 def match_hist(im1, im2):
+    # scikit-image is only needed here and in scale_brightness, which the frame server never calls, so it is loaded
+    # when they are (45 MB and half a second less for every server, with matplotlib in bootleg_autonav)
+    from skimage.exposure import match_histograms
     return match_histograms(im2, im1)
 
 
@@ -351,7 +351,8 @@ def calc_brightness(image, sigma=4):
         return np.mean(image[mask])
     
 def scale_brightness(image, scale):
-    
+        from skimage import img_as_ubyte, img_as_uint, img_as_float
+
         adjusted_image = scale * img_as_float(image)
         adjusted_image[adjusted_image >= 1.0] = 1.0
     
