@@ -64,7 +64,7 @@ const vf = `fps=${opt.fps},scale=${opt.width}:${opt.height}:in_range=full:out_ra
 const enc = opt.encoder === "h264_videotoolbox"
   ? ["-c:v", "h264_videotoolbox", "-realtime", "1", "-prio_speed", "1", "-allow_sw", "0", "-profile:v", "high"]
   : ["-c:v", opt.encoder, "-preset", "veryfast", "-tune", "zerolatency", "-profile:v", "high"];
-const audioIn = opt.audio === "silence" ? ["-re", "-f", "lavfi", "-i", "anullsrc=r=48000:cl=stereo"] : ["-stream_loop", "-1", "-re", "-i", opt.audio];
+const audioIn = opt.audio === "silence" ? ["-f", "lavfi", "-i", "anullsrc=r=48000:cl=stereo"] : ["-stream_loop", "-1", "-re", "-i", opt.audio];
 const ff = ["-hide_banner", "-loglevel", "warning", "-nostdin", "-stats_period", "5", "-progress", "pipe:3",
   "-thread_queue_size", "64", "-use_wallclock_as_timestamps", "1", "-f", "image2pipe", "-c:v", "mjpeg", "-i", "pipe:0",
   ...audioIn, "-map", "0:v", "-map", "1:a", "-threads", String(opt.threads), "-filter_threads", "1", "-vf", vf,
@@ -91,7 +91,7 @@ const cdp = (method, params = {}, sessionId) => new Promise((ok, no) => {
   const id = nextId++; pending.set(id, { ok, no, method });
   ws.send(JSON.stringify(sessionId ? { id, method, params, sessionId } : { id, method, params }));
 });
-let latest = null, framesIn = 0, framesOut = 0, skipped = 0, lastFrameAt = Date.now(), session = "";
+let latest = null, fresh = false, lastWrite = 0, framesIn = 0, framesOut = 0, skipped = 0, lastFrameAt = Date.now(), session = "";
 
 (async () => {
   const port = await waitFor(() => readIf(path.join(profile, "DevToolsActivePort"))?.split("\n")[0], 30000, "Chrome's DevTools port");
@@ -117,7 +117,7 @@ let latest = null, framesIn = 0, framesOut = 0, skipped = 0, lastFrameAt = Date.
   handlers["Inspector.targetCrashed"] = () => quit(5, "page crashed");
   handlers["Page.screencastFrame"] = (p, sid) => {
     cdp("Page.screencastFrameAck", { sessionId: p.sessionId }, sid).catch(() => {});
-    latest = Buffer.from(p.data, "base64"); framesIn++; lastFrameAt = Date.now();
+    latest = Buffer.from(p.data, "base64"); fresh = true; framesIn++; lastFrameAt = Date.now();
   };
   log("opening", opt.url, "in", chromeBin);
   await s("Page.navigate", { url: opt.url });
@@ -127,13 +127,15 @@ let latest = null, framesIn = 0, framesOut = 0, skipped = 0, lastFrameAt = Date.
   log("loaded; WebGL renderer:", gl, /swiftshader|llvmpipe|software/i.test(gl) ? "(software, this will be slow)" : "");
   await s("Page.startScreencast", { format: "jpeg", quality: opt.quality, maxWidth: opt.width, maxHeight: opt.height, everyNthFrame: 1 });
   lastFrameAt = Date.now();
-  // the pump: one JPEG every 1/fps s, the newest one, repeated when the page has not changed
+  // the pump, at most --fps times a second: the newest JPEG when the page drew a new one (ffmpeg's fps filter repeats
+  // it until the next, by wall-clock stamps), and the same one again after a second without change; so ffmpeg only
+  // decodes what the page actually drew
   const frameMs = 1000 / opt.fps;
   let due = Date.now();
   const pump = () => {
-    if (latest) {
-      if (ffmpeg.stdin.writableLength > 3 * latest.length) skipped++; // ffmpeg is behind: let it catch up
-      else { ffmpeg.stdin.write(latest); framesOut++; }
+    if (latest && (fresh || Date.now() - lastWrite > 1000)) {
+      if (ffmpeg.stdin.writableLength > 2 * latest.length) skipped++; // ffmpeg is behind: let it catch up
+      else { ffmpeg.stdin.write(latest); framesOut++; fresh = false; lastWrite = Date.now(); }
     }
     due += frameMs; const wait = due - Date.now();
     if (wait < -1000) due = Date.now();
@@ -149,6 +151,7 @@ let latest = null, framesIn = 0, framesOut = 0, skipped = 0, lastFrameAt = Date.
 })().catch(e => quit(2, e.message));
 
 // ---- stats -------------------------------------------------------------------------------------------------------
+let slowFor = 0;
 let last = { at: Date.now(), cpu: {}, framesIn: 0, framesOut: 0 };
 async function stats() {
   const now = Date.now(), dt = (now - last.at) / 1000;
@@ -177,9 +180,11 @@ async function stats() {
   fs.appendFileSync(path.join(STATE, "stats.jsonl"), JSON.stringify(line) + "\n");
   log(`page ${line.pageFps} fps, out ${line.outFps} fps, ffmpeg ${line.ffFps} fps x${line.speed}, cpu chrome ${cpu.chrome} ffmpeg ${cpu.ffmpeg} cores, rss chrome ${rss.chrome} ffmpeg ${rss.ffmpeg} MB, heap ${heap} MB, ${page?.t || ""}`);
   last = { at: now, cpu: last.cpu, framesIn, framesOut };
-  // ffmpeg more than a minute behind real time means the stream is falling apart; start over
+  // a slow patch (the Mini busy) is ridden out: a restart would not make it faster. Only ten minutes in a row under
+  // half of real time stops it, and run.sh then waits ten minutes before starting again
   const sp = parseFloat(prog.speed);
-  if (line.up > 300 && sp > 0 && sp < 0.8) quit(7, `ffmpeg running at ${prog.speed} of real time`);
+  slowFor = sp > 0 && sp < 0.5 ? slowFor + opt["stats-every"] : 0;
+  if (slowFor >= 600) quit(7, `ffmpeg under half of real time (${prog.speed}) for ten minutes`);
 }
 
 // ps reports cumulative CPU time; differences over the interval give cores in use
@@ -248,9 +253,10 @@ function quit(code, why) {
   try { ffmpeg?.stdin.end(); } catch (e) {}
   try { chrome.kill("SIGTERM"); } catch (e) {}
   // give ffmpeg a moment to close the file or stream cleanly
-  setTimeout(() => { try { ffmpeg.kill("SIGKILL"); chrome.kill("SIGKILL"); } catch (e) {} process.exit(code); }, code ? 3000 : 8000).unref();
+  setTimeout(() => { try { ffmpeg.kill("SIGKILL"); chrome.kill("SIGKILL"); } catch (e) {} process.exit(code); }, code ? 5000 : 30000).unref();
   if (!code) { if (ffmpeg.exitCode !== null) process.exit(0); ffmpeg.once("exit", () => process.exit(0)); }
 }
 function die(m) { console.error(m); process.exit(1); }
 process.on("SIGTERM", () => quit(0, "SIGTERM"));
 process.on("SIGINT", () => quit(0, "SIGINT"));
+process.on("SIGHUP", () => quit(0, "SIGHUP"));

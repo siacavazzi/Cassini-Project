@@ -32,11 +32,16 @@ the stream privately before anything is public.
 ### Priority ("reserve a core")
 
 macOS has no way to pin a program to a core. Instead `run.sh` runs the whole rig (Chrome, ffmpeg, the script) at
-background QoS (`taskpolicy -b`, which keeps it mostly on the efficiency cores and throttles its disk use) and nice 20,
-so the pre-build and the servers always come first and the stream gets what is left. `STREAM_PRIORITY=utility` is a
-step up if the stream stutters while the Mini has room; `normal` removes the clamp. ffmpeg is held to 2 threads and
-Chrome to one renderer process. Below 3 GB of available memory (`--min-free-gb`) the stream stops and tries again ten
-minutes later.
+utility QoS and nice 10: below the pre-build's and the servers' interactive work, but not starved. The rig itself is
+cheap (about 0.3 of a core on the M4: Chrome draws on the GPU and the hardware encoder does the encoding), so this
+costs the rest of the Mini little. `STREAM_PRIORITY=background` (`taskpolicy -b`, nice 20) clamps it harder; under a
+full pre-build (load 30 and up) that starved it to 3 to 8 frames a second, so it is only for when the stream may
+stutter. `normal` removes the clamp. ffmpeg is held to 2 threads and Chrome to one renderer process. Below 3 GB of
+available memory (`--min-free-gb`) the stream stops and tries again ten minutes later; so does ten minutes in a row
+at under half of real time.
+
+Note that the pre-build pauses itself while the load average is over 30, and every running program adds to the load,
+so while the pre-build runs flat out, the stream slows it a little.
 
 ### Options (`stream.mjs`, passed through `run.sh`)
 
