@@ -95,9 +95,13 @@ def load_index():
     cols = ["path", "INSTRUMENT_ID", "TARGET_NAME", "OBSERVATION_ID", "FILTER_NAME", "filter1", "filter2", "seconds_1970"]
     idx = pd.read_csv(os.path.join(REPO, "Image_index.csv"), usecols=cols, low_memory=False)
     idx = idx[idx["path"].notna()].sort_values("seconds_1970", kind="stable").reset_index(drop=True)
-    idx["id"] = idx["path"].str.rsplit("/", n=1).str[-1].str.replace(".png", "", regex=False)
+    # the string steps of .str.rsplit("/", n=1).str[-1].str.replace(".png", "") on each path, without pandas' per
+    # element machinery (a sixth of the time; the paths are all strings)
+    idx["id"] = [p.rsplit("/", 1)[-1].replace(".png", "") for p in idx["path"].tolist()]
     cams, targets, obs = idx["INSTRUMENT_ID"].tolist(), idx["TARGET_NAME"].tolist(), idx["OBSERVATION_ID"].tolist()
     f1s, f2s, t = idx["filter1"].astype(str).tolist(), idx["filter2"].astype(str).tolist(), idx["seconds_1970"].to_numpy()
+    # colour_filter of each filter pair once: a few hundred pairs among the 440,000 frames
+    colour = {pair: colour_filter(*pair) for pair in set(zip(f1s, f2s))}
     set_of = np.full(len(idx), -1)
     sets, run = [], {}
 
@@ -117,7 +121,7 @@ def load_index():
         sets.append({"kind": kind, "use": use, "ready": max(t[q] for q in use)})
 
     for q in range(len(idx)):
-        cam, f = cams[q], colour_filter(f1s[q], f2s[q])
+        cam, f = cams[q], colour[f1s[q], f2s[q]]
         r = run.get(cam)
         if not f:
             close(cam)
@@ -130,7 +134,10 @@ def load_index():
     for cam in list(run):
         close(cam)
     idx["set"] = set_of
-    _index = (idx, sets)
+    # copied whole once, which puts the columns added above into the frame's blocks (consolidates it): otherwise the
+    # first selection from it (a body's reel, an observation's frames) did that, a tenth of a second on a request
+    # thread, and two requests at once could both set about it
+    _index = (idx.copy(), sets)
     return _index
 
 
@@ -180,27 +187,30 @@ def shots(target):
         rows = idx.index[idx["TARGET_NAME"] == target].tolist()
         out, done, last_single, last_shot = [], set(), {}, {}
         members = idx.loc[rows].query("set >= 0").groupby("set")["id"].agg(list).to_dict()
+        # the columns as arrays, read by row number (the index is 0..n-1), with the values idx.loc[q] gave (the
+        # strings themselves, numpy numbers): a row at a time through idx.loc took 25 s of Saturn's 26
+        ids, set_of, cams, obs, filters, f1s, f2s, times = (idx[k].to_numpy() for k in (
+            "id", "set", "INSTRUMENT_ID", "OBSERVATION_ID", "FILTER_NAME", "filter1", "filter2", "seconds_1970"))
         for q in rows:
-            r = idx.loc[q]
-            s = int(r["set"])
-            cam = "N" if r["INSTRUMENT_ID"] == "ISSNA" else "W"
+            s = int(set_of[q])
+            cam = "N" if cams[q] == "ISSNA" else "W"
             if s >= 0:
                 if s in done:
                     continue
                 done.add(s)
                 st = sets[s]
-                use = [idx.loc[u] for u in st["use"]]
-                out.append({"ids": [u["id"] for u in use], "t": float(st["ready"]), "cam": cam, "kind": st["kind"],
-                            "filters": [colour_filter(str(u["filter1"]), str(u["filter2"])) for u in use], "obs": r["OBSERVATION_ID"],
-                            "also": [i for i in members.get(s, []) if i not in {u["id"] for u in use}]})
+                use = st["use"]
+                out.append({"ids": [ids[u] for u in use], "t": float(st["ready"]), "cam": cam, "kind": st["kind"],
+                            "filters": [colour_filter(str(f1s[u]), str(f2s[u])) for u in use], "obs": obs[q],
+                            "also": [i for i in members.get(s, []) if i not in {ids[u] for u in use}]})
                 continue
-            key = (cam, r["OBSERVATION_ID"], r["FILTER_NAME"])
-            if key in last_single and r["seconds_1970"] - last_single[key] <= REPEAT_GAP:
-                last_shot[key].setdefault("also", []).append(r["id"])
+            key = (cam, obs[q], filters[q])
+            if key in last_single and times[q] - last_single[key] <= REPEAT_GAP:
+                last_shot[key].setdefault("also", []).append(ids[q])
                 continue   # a repeat exposure, stacked into the picture before
-            last_single[key] = r["seconds_1970"]
-            last_shot[key] = {"ids": [r["id"]], "t": float(r["seconds_1970"]), "cam": cam, "kind": "bw",
-                             "filters": [f"{r['filter1']}/{r['filter2']}"], "obs": r["OBSERVATION_ID"]}
+            last_single[key] = times[q]
+            last_shot[key] = {"ids": [ids[q]], "t": float(times[q]), "cam": cam, "kind": "bw",
+                             "filters": [f"{f1s[q]}/{f2s[q]}"], "obs": obs[q]}
             out.append(last_shot[key])
         out.sort(key=lambda s: s["t"])
         # the mosaic: the earlier pictures of the same filter this one is a new tile next to, by the rule in

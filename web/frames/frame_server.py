@@ -1358,8 +1358,9 @@ def main():
     # every year's kernels stay extracted once used, so a reel going back and forth in time is not slowed
     data_source.KEEP_SPICE_CACHE = True
     data_source._zip_index() if data_source.using_zip() else None  # build or load the zip index up front
-    # the camera windows' mosaic route needs the index; read it now rather than on the first request
-    threading.Thread(target=reel.target_of, daemon=True).start()
+    # the camera windows' mosaic route and centred pictures need the index, its observations (obs_mosaic.units) and
+    # its frames' rows (obs_mosaic._row_of); made now rather than on the first request
+    threading.Thread(target=lambda: (reel.target_of(), obs_mosaic._observations(), obs_mosaic._row_of()), daemon=True).start()
     # the first composite would otherwise wait while stacking reads the whole image index (all ~443k rows)
     threading.Thread(target=color_image.stacking.load_index, daemon=True).start()
     if site:
