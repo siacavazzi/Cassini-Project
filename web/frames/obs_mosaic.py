@@ -2046,7 +2046,7 @@ def tile_map(frame_id, cache):
     there that the picture does not draw), tiles, poly [[x, y] x4], center [x, y]}]} with x, y as fractions (0-1)
     of the picture. A pointing is the drawn tiles of different filters at one place (within SAME_PLACE of a frame)
     taken one after another; its outline is its newest tile's, which is the one on top. Kept beside the pass's
-    mosaics (maps/<layout name>.json) once every tile in it is made. None when frame_id is not in a mosaic pass or
+    mosaics (MAPS_DIR/<layout name>.json) once every tile in it is made. None when frame_id is not in a mosaic pass or
     nothing is placed yet."""
     found = unit_of(frame_id)
     if not found or not found[0]["mosaic"] or found[1] < 0:
@@ -2059,7 +2059,7 @@ def tile_map(frame_id, cache):
     with _lock:
         if key in _maps:
             return _maps[key]
-    kept = os.path.join(key[0], "maps", f"{made[5]}.json")
+    kept = os.path.join(key[0], MAPS_DIR, f"{made[5]}.json")
     if os.path.exists(kept):
         with open(kept) as fh:
             found = json.load(fh)
@@ -2126,6 +2126,7 @@ def tile_map(frame_id, cache):
     return found
 
 
+MAPS_DIR = "maps-1"   # the kept manifests (under the pass's versioned folder), renamed whenever tile_map's answer changes
 _maps = {}   # (pass folder, layout name) -> its tile map: a mosaic's map is asked for on every hover of a new picture
 MAPS_KEEP = 512   # a few passes' every mosaic (a map is ~100 bytes a pointing), so a pass played again maps none again
 

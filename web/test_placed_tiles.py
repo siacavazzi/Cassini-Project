@@ -89,7 +89,7 @@ m = om.tile_map(u["frames"][-1][1], cache)
 assert m["layers"] == {"color": ["RED", "GRN", "BL1"], "luminance": ["RED"]}, m["layers"]
 assert [q["set"] for q in m["pointings"]] == [True, True, True, False], [q["set"] for q in m["pointings"]]
 assert m["pointings"][3]["ids"] == {"RED": u["frames"][-1][1]} and m["pointings"][3]["luminance"] == {}
-assert os.path.exists(os.path.join(om.folder(u, cache), "maps", om.layout(u, len(seq) - 1, cache)[5] + ".json"))
+assert os.path.exists(os.path.join(om.folder(u, cache), om.MAPS_DIR, om.layout(u, len(seq) - 1, cache)[5] + ".json"))
 print("tile map: sets", [q["set"] for q in m["pointings"]])
 
 # 2. every pointing in colour: the picture is the colour picture, byte for byte, with no gray base
