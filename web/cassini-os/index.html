@@ -603,6 +603,9 @@ body.phone #moviecard:not(.full) { width: calc(100% - 16px) !important; left: 8p
 .srow input[type=range] { width: 130px; accent-color: var(--q-accent); }
 .srow .val { min-width: 54px; text-align: right; font-size: 11px; color: var(--q-text); font-variant-numeric: tabular-nums; }
 .srow .seg { flex-wrap: wrap; }
+.srow select { font: inherit; font-size: 11.5px; color: var(--q-text); background: rgba(255,255,255,.07); border: 1px solid var(--q-line); border-radius: 5px; padding: 3px 6px; max-width: 220px; }
+.srow select:focus-visible { outline: 1px solid var(--q-accent); }
+.srow select option { background: #1b1e24; color: #e8ecf2; }
 .srow .seg .btn { padding: 4px 8px; flex: none; }
 .srow .act { border: 1px solid var(--q-line); border-radius: 6px; padding: 4px 10px; }
 #settings footer { flex: none; display: flex; align-items: center; justify-content: space-between; gap: 10px; padding: 6px 12px; border-top: 1px solid var(--q-line); font-size: 10.5px; color: var(--q-dim); }
@@ -1493,13 +1496,15 @@ body.phone #launch .lx-clock { font-size: 9.5px; bottom: 9vh; }
       let ctl = "";
       if (d.type === "toggle") ctl = `<button class="sw" id="${id}" role="switch" aria-checked="false"></button>`;
       if (d.type === "range") ctl = `<input type="range" id="${id}" min="${d.min}" max="${d.max}" step="${d.step || 1}"><span class="val"></span>`;
-      if (d.type === "choice") ctl = `<div class="seg" role="radiogroup" aria-labelledby="${id}">${d.options.map((o, i) => `<button class="btn" role="radio" data-i="${i}">${o[1]}</button>`).join("")}</div>`;
+      if (d.type === "choice" && d.menu) ctl = `<select id="${id}-m" aria-labelledby="${id}">${d.options.map((o, i) => `<option value="${i}">${o[1]}</option>`).join("")}</select>`;
+      else if (d.type === "choice") ctl = `<div class="seg" role="radiogroup" aria-labelledby="${id}">${d.options.map((o, i) => `<button class="btn" role="radio" data-i="${i}">${o[1]}</button>`).join("")}</div>`;
       if (d.type === "action") ctl = `<button class="btn act" id="${id}">${d.button || "Run"}</button>`;
       row.innerHTML = `<${d.type === "choice" ? "span" : "label"} class="lab" id="${d.type === "choice" ? id : ""}"${d.type === "choice" ? "" : ` for="${id}"`}>${d.label}${tag}</${d.type === "choice" ? "span" : "label"}>`
         + `<div class="ctl">${ctl}</div>` + (d.hint ? `<div class="hint">${d.hint}</div>` : "");
       if (d.type === "toggle") row.querySelector(".sw").addEventListener("click", () => S.set(d.key, !values[d.key]));
       if (d.type === "range") row.querySelector("input").addEventListener("input", e => S.set(d.key, +e.target.value));
       if (d.type === "choice") row.querySelectorAll(".seg .btn").forEach(b => b.addEventListener("click", () => S.set(d.key, d.options[+b.dataset.i][0])));
+      if (d.type === "choice" && d.menu) row.querySelector("select").addEventListener("change", e => S.set(d.key, d.options[+e.target.value][0]));
       if (d.type === "action") row.querySelector(".act").addEventListener("click", () => d.run());
       pane.appendChild(row);
       sync(d.key);
@@ -1510,6 +1515,7 @@ body.phone #launch .lx-clock { font-size: 9.5px; bottom: 9vh; }
     if (!row) return;
     if (d.type === "toggle") row.querySelector(".sw").setAttribute("aria-checked", String(v));
     if (d.type === "range") { row.querySelector("input").value = v; row.querySelector(".val").textContent = fmtVal(d, v); }
+    if (d.type === "choice" && d.menu) row.querySelector("select").value = String(d.options.findIndex(o => o[0] === v));
     if (d.type === "choice") row.querySelectorAll(".seg .btn").forEach(b => { const on = d.options[+b.dataset.i][0] === v; b.setAttribute("aria-pressed", String(on)); b.setAttribute("aria-checked", String(on)); });
   }
   nav.addEventListener("click", e => {
@@ -4018,6 +4024,27 @@ body.phone #launch .lx-clock { font-size: 9.5px; bottom: 9vh; }
   const D = d => S.define(Object.assign({ section: "Sound" }, d));
   D({ key: "sound.on", label: "Sound", type: "toggle", value: true,
       hint: "A chime for each picture that arrives, after the Huygens descent movie. Browsers start it at your first click or key press. The speaker by the play button, the one in the menu bar, or S mutes it." });
+  // recorded instruments for the notes, by the part of the music they play: N and W the two cameras' chimes, chord a
+  // color set, tile and done a mosaic's climbing note and final chord, tone the spacecraft tones, pad and pulse the
+  // flyby crescendo's chord and beat. A part with no instrument stays synthesized.
+  const INSTRUMENTS = [
+    ["piano", "Piano (Steinway B)"], ["hand-chimes", "Hand chimes"], ["glockenspiel", "Glockenspiel"],
+    ["vibraphone", "Vibraphone, soft mallets"], ["vibraphone-bowed", "Vibraphone, bowed"], ["marimba", "Marimba"],
+    ["kalimba", "Kalimba"], ["harp", "Concert harp"], ["tubular-bells", "Tubular bells"], ["wine-glasses", "Wine glasses, rubbed"],
+    ["organ", "Pipe organ, quiet"], ["violins", "Violin section"], ["cellos", "Cello section"], ["nepalese-bells", "Nepalese hand bells (unpitched)"]
+  ];
+  const SUSTAINED = ["vibraphone-bowed", "wine-glasses", "organ", "violins", "cellos"];   // can hold a long tone
+  const SETS = {
+    synth: {},
+    picks: { N: "glockenspiel", W: "vibraphone", chord: "harp", tile: "kalimba", done: "tubular-bells", tone: "vibraphone-bowed", pad: "violins", pulse: "marimba" }
+  };
+  for (const [k] of INSTRUMENTS) SETS[k] = Object.assign({ N: k, W: k, chord: k, tile: k, done: k }, SUSTAINED.includes(k) ? { tone: k, pad: k } : {});
+  D({ key: "sound.instrument", label: "Instrument", type: "choice", menu: true, value: "synth",
+      options: [["synth", "Default (synthesized)"], ["picks", "Mixed: glockenspiel, vibraphone, harp, kalimba"], ...INSTRUMENTS],
+      hint: "What plays the notes for arriving pictures, color sets and mosaics. Mixed gives each part its own instrument (glockenspiel narrow-angle, vibraphone wide-angle, harp color sets, kalimba and tubular bells mosaics, bowed vibraphone spacecraft tones, violins and marimba the flyby crescendo). The same pitches and rules as the default; recordings from Versilian Studios (CC0), loaded when picked." });
+  D({ key: "sound.tones", label: "Spacecraft tones instrument", type: "choice", menu: true, value: "set",
+      options: [["set", "As the instrument above"], ["synth", "Synthesized"], ...INSTRUMENTS.filter(i => SUSTAINED.includes(i[0]))],
+      hint: "The two long tones for Cassini's turning and its range to the target. As the instrument above: recorded when that instrument can hold a note, synthesized otherwise." });
   D({ key: "sound.volume", label: "Volume", type: "range", value: 70, min: 0, max: 100, step: 1, unit: "%" });
   D({ key: "sound.chimes", label: "Picture chimes", type: "range", value: 80, min: 0, max: 100, step: 1, unit: "%",
       hint: "Pitch from the filter (blue high, red and infrared low) and the target's size; the narrow-angle camera rings an octave above the wide-angle one." });
@@ -4040,7 +4067,7 @@ body.phone #launch .lx-clock { font-size: 9.5px; bottom: 9vh; }
       hint: "One chime from each camera, to check the volume.", run: () => { gestured = true; S.set("sound.on", true); start(); test(); } });
 
   // ---------- the audio graph, made on the first click or key press after sound is switched on ----------
-  let ctx = null, bus, master, echoSend, echoFb, humS = null, humD = null, padF, padG;
+  let ctx = null, bus, master, echoSend, echoFb, humS = null, humD = null, padF, padG, padO, heldP;
   let intensity = 0;   // 0 far from the target .. 1 skimming it (the flyby crescendo), kept by the 4 Hz timer
   function build(off) {
     ctx = off || new AC({ latencyHint: "playback" });
@@ -4061,7 +4088,9 @@ body.phone #launch .lx-clock { font-size: 9.5px; bottom: 9vh; }
     // the crescendo: a chord on the scale's root that swells and opens as Cassini closes in
     padF = ctx.createBiquadFilter(); padF.type = "lowpass"; padF.frequency.value = 300; padF.Q.value = 0.7;
     padG = ctx.createGain(); padG.gain.value = 0; padF.connect(padG); padG.connect(bus);
-    [38, 45, 50, 54, 57].forEach((m, i) => { const o = ctx.createOscillator(); o.type = i ? "sine" : "triangle"; o.frequency.value = hz(m); o.detune.value = (i % 2 ? 1 : -1) * 4; o.connect(padF); o.start(); });
+    padO = ctx.createGain(); padO.connect(padF);   // the synthesized chord (silent while an instrument holds it)
+    PAD.forEach((m, i) => { const o = ctx.createOscillator(); o.type = i ? "sine" : "triangle"; o.frequency.value = hz(m); o.detune.value = (i % 2 ? 1 : -1) * 4; o.connect(padO); o.start(); });
+    heldP = held(padF);
     if (off) { const r = S.get("sound.reverb") / 100; master.gain.value = (S.get("sound.volume") / 100) ** 1.5; echoSend.gain.value = r * 0.5; echoFb.gain.value = 0.15 + 0.35 * r; }
     else levels();
   }
@@ -4071,9 +4100,10 @@ body.phone #launch .lx-clock { font-size: 9.5px; bottom: 9vh; }
     const lfo = ctx.createOscillator(), depth = ctx.createGain();
     o1.type = o2.type = type; o2.detune.value = 7; f.type = "lowpass"; f.frequency.value = 700; f.Q.value = 0.4; g.gain.value = 0;
     lfo.frequency.value = 4.5; depth.gain.value = 0; lfo.connect(depth); depth.connect(o1.detune); depth.connect(o2.detune);
-    o1.connect(f); o2.connect(f); f.connect(g); g.connect(p); p.connect(bus);
+    const og = ctx.createGain();   // the oscillators' own level: 0 while an instrument plays the tone
+    o1.connect(og); o2.connect(og); og.connect(f); f.connect(g); g.connect(p); p.connect(bus);
     o1.start(); o2.start(); lfo.start();
-    return { o: [o1, o2], f, g, lfo, depth };
+    return { o: [o1, o2], og, f, g, lfo, depth, held: held(g) };
   }
   const panner = v => { if (!ctx.createStereoPanner) return ctx.createGain(); const p = ctx.createStereoPanner(); p.pan.value = v; return p; };
   function levels() {
@@ -4097,7 +4127,7 @@ body.phone #launch .lx-clock { font-size: 9.5px; bottom: 9vh; }
   document.addEventListener("cassini:away", e => { if (!ctx) return; if (e.detail.away) ctx.suspend(); else if (S.get("sound.on") && !document.hidden) ctx.resume(); });
 
   // ---------- pitch: a pentatonic scale, so any notes that sound together agree ----------
-  const SCALE = [0, 2, 4, 7, 9], ROOT = { N: 62, W: 50 };   // D major pentatonic: narrow-angle from D4, wide-angle from D3
+  const SCALE = [0, 2, 4, 7, 9], ROOT = { N: 62, W: 50 }, PAD = [38, 45, 50, 54, 57];   // D major pentatonic: narrow-angle from D4, wide-angle from D3
   const hz = m => 440 * 2 ** ((m - 69) / 12);
   const noteOf = (root, deg) => root + 12 * Math.floor(deg / 5) + SCALE[((deg % 5) + 5) % 5];
   // the filter's wavelength as a step up the scale: 1050 nm (infrared) the bottom, 240 nm (ultraviolet) seven steps up,
@@ -4118,6 +4148,77 @@ body.phone #launch .lx-clock { font-size: 9.5px; bottom: 9vh; }
       // sharper pictures ring brighter: 0.1 km/px and better is the brightest, 100 km/px and worse the softest
       bright: kp ? Math.max(0.6, Math.min(4, 4 - 1.1 * Math.log10(Math.max(0.1, kp) / 0.1))) : 1.5,
       ratio: cam === "W" ? 1 : 3.5 };   // the wide-angle camera a warm tone, the narrow-angle one a bell
+  }
+
+  // ---------- recorded instruments: sounds/<instrument>/<MIDI note>.mp3, listed in sounds/index.json ----------
+  const banks = {};   // instrument -> { notes: [MIDI], buf: Map(MIDI -> AudioBuffer), gain } once loaded
+  let index = null;
+  function load(name) {
+    if (!name || banks[name]) return;
+    banks[name] = {};
+    // decoded with their own context, so the buffers play in the live page and in an offline film render alike
+    const dec = new (window.OfflineAudioContext || window.webkitOfflineAudioContext)(1, 1, 44100);
+    banks[name].p = (index || (index = fetch("sounds/index.json").then(r => r.json()))).then(ix => {
+      const e = ix[name];
+      if (!e) throw new Error("no instrument " + name);
+      return Promise.all(e.notes.map(m => fetch(`sounds/${name}/${m}.mp3`).then(r => r.arrayBuffer()).then(a => new Promise((ok, no) => dec.decodeAudioData(a, ok, no))).then(b => [m, b])))
+        .then(list => { banks[name] = { notes: e.notes, buf: new Map(list), gain: e.gain }; });
+    }).catch(err => { console.warn("sound: instrument", name, err); index = null; delete banks[name]; });
+  }
+  const setOf = () => SETS[S.get("sound.instrument")] || SETS.synth;
+  function instrumentOf(part) {
+    if (part === "tone") { const t = S.get("sound.tones"); if (t !== "set") return t === "synth" ? null : t; }
+    return setOf()[part] || null;
+  }
+  const ready = name => name && banks[name] && banks[name].buf ? banks[name] : null;
+  const PARTS = ["N", "W", "chord", "tile", "done", "tone", "pad", "pulse"];
+  function loadPicked() { for (const part of PARTS) load(instrumentOf(part)); }
+  // the recording for MIDI note m: the note folded by octaves into what the instrument has, and the nearest recording
+  function sampleFor(b, m) {
+    const lo = b.notes[0] - 4, hi = Math.max(b.notes[b.notes.length - 1] + 4, lo + 12);
+    while (m > hi) m -= 12;
+    while (m < lo) m += 12;
+    let s = b.notes[0];
+    for (const n of b.notes) if (Math.abs(n - m) < Math.abs(s - m)) s = n;
+    return { buf: b.buf.get(s), rate: 2 ** ((m - s) / 12), m, s };
+  }
+  // one recorded note: brightness opens a lowpass above the note, the Note length setting fades it out
+  function sampled(b, t, m, gain, pan, decay, bright) {
+    const { buf, rate, m: m2 } = sampleFor(b, m);
+    const src = ctx.createBufferSource(), f = ctx.createBiquadFilter(), amp = ctx.createGain(), p = panner(pan);
+    src.buffer = buf; src.playbackRate.value = rate;
+    f.type = "lowpass"; f.frequency.value = Math.min(16000, hz(m2) * (4 + 6 * bright)); f.Q.value = 0.5;
+    const g = gain * b.gain, end = Math.min(buf.duration / rate, decay * 1.6);
+    amp.gain.setValueAtTime(g, t); amp.gain.setTargetAtTime(0, t + decay * 0.55, decay * 0.22);
+    src.connect(f); f.connect(amp); amp.connect(p); p.connect(bus);
+    src.start(t); src.stop(t + end);
+    voices++; src.onended = () => { voices--; p.disconnect(); };
+  }
+  // a note for one part of the music: its instrument's recording when it is loaded, the synthesized bell otherwise
+  function play(part, t, m, gain, pan, decay, bright, ratio) {
+    if ((voices > 28 && !offline) || gain < 0.002) return;
+    const b = ready(instrumentOf(part));
+    if (b) sampled(b, t, m, gain, pan, decay, bright); else bell(t, hz(m), gain, pan, decay, bright, ratio);
+  }
+  // a long tone held by an instrument: overlapping 2.4 s stretches of its recordings, each fading in and out, so
+  // it can last as long as needed and follow a changing pitch. out: where it goes (a tone's or the chord's gain)
+  function held(out) { return { out, live: [], next: 0 }; }
+  function hold(h, b, notes, t, detune) {
+    h.live = h.live.filter(x => x.end > t);
+    // a stretch already playing follows the new pitch on its own recording
+    for (const x of h.live) x.src.playbackRate.setTargetAtTime(2 ** ((sampleFor(b, notes[x.i]).m - x.s) / 12), t, 0.3);
+    if (h.next > t + 0.3) return;
+    const st = Math.max(t + 0.02, h.next);
+    notes.forEach((m, i) => {
+      const { buf, rate, s } = sampleFor(b, m), src = ctx.createBufferSource(), a = ctx.createGain();
+      src.buffer = buf; src.playbackRate.value = rate;
+      if (detune) detune.connect(src.detune);
+      const len = 2.4, off = Math.min(0.4, Math.max(0, buf.duration / rate - len) * 0.5);
+      a.gain.setValueAtTime(0, st); a.gain.linearRampToValueAtTime(b.gain, st + 0.8); a.gain.setValueAtTime(b.gain, st + len - 0.8); a.gain.linearRampToValueAtTime(0, st + len);
+      src.connect(a); a.connect(h.out); src.start(st, off); src.stop(st + len + 0.05);
+      h.live.push({ src, i, s, end: st + len });
+    });
+    h.next = st + 1.6;
   }
 
   // ---------- notes ----------
@@ -4165,8 +4266,8 @@ body.phone #launch .lx-clock { font-size: 9.5px; bottom: 9vh; }
     v.bright *= lift;
     if (p.tile) {   // a mosaic grew: a high note climbing with each tile, moving across the pass, and a chord at the end
       const g = S.get("sound.mosaic") / 100 * 0.24 * quiet, across = p.of > 1 ? (p.tile - 1) / (p.of - 1) * 1.4 - 0.7 : 0;
-      bell(t + 0.05, hz(noteOf(v.root + 12, bodyStep(catalog.target[p.k]) + (p.tile - 1) % 10)), g, S.get("sound.stereo") ? across : 0, len * 0.8, 0.4, 2);
-      if (p.of && p.tile >= p.of) [0, 2, 4, 5].forEach((d, i) => bell(t + 0.12 + i * 0.09, hz(noteOf(v.root, bodyStep(catalog.target[p.k]) + d)), g * 1.2, pan, len * 2.2, 0.6, 1));
+      play("tile", t + 0.05, noteOf(v.root + 12, bodyStep(catalog.target[p.k]) + (p.tile - 1) % 10), g, S.get("sound.stereo") ? across : 0, len * 0.8, 0.4, 2);
+      if (p.of && p.tile >= p.of) [0, 2, 4, 5].forEach((d, i) => play("done", t + 0.12 + i * 0.09, noteOf(v.root, bodyStep(catalog.target[p.k]) + d), g * 1.2, pan, len * 2.2, 0.6, 1));
       // the tile's own picture rings now, when it shows, unless it already rang going up on its own
       const own = p.set >= 0 ? `s:${p.set}:${catalog.id[p.k]}` : `f:${catalog.id[p.k]}`;
       if (heard.has(own) && now - heard.get(own) < 4000) return;
@@ -4174,18 +4275,19 @@ body.phone #launch .lx-clock { font-size: 9.5px; bottom: 9vh; }
     }
     if (p.set >= 0 && p.use) {   // a colour set is complete: strum its channels, red to blue
       const g = S.get("sound.chords") / 100 * 0.22 * quiet, base = bodyStep(catalog.target[p.k]);
-      p.use.slice().sort((a, b) => b - a).forEach((nm, i) => bell(t + i * 0.07, hz(noteOf(v.root, base + wlStep(nm))), g, pan + (i - 1) * 0.15, len * 1.8, v.bright * 0.5, 1));
+      p.use.slice().sort((a, b) => b - a).forEach((nm, i) => play("chord", t + i * 0.07, noteOf(v.root, base + wlStep(nm)), g, pan + (i - 1) * 0.15, len * 1.8, v.bright * 0.5, 1));
       return;
     }
-    bell(t, hz(noteOf(v.root, v.step)), S.get("sound.chimes") / 100 * 0.34 * quiet, pan, len, v.bright, v.ratio);
+    const cam = p.cam === "W" ? "W" : "N";
+    play(cam, t, noteOf(v.root, v.step), S.get("sound.chimes") / 100 * 0.34 * quiet, pan, len, v.bright, v.ratio);
     // close in, the chime gets its octave too
-    if (intensity > 0.55) bell(t + 0.02, hz(noteOf(v.root + 12, v.step)), S.get("sound.chimes") / 100 * 0.2 * quiet * (intensity - 0.5), -pan, len * 0.7, v.bright * 0.6, 2);
+    if (intensity > 0.55) play(cam, t + 0.02, noteOf(v.root + 12, v.step), S.get("sound.chimes") / 100 * 0.2 * quiet * (intensity - 0.5), -pan, len * 0.7, v.bright * 0.6, 2);
   }
   function test() {
     if (!ctx) return;
     const t = ctx.currentTime + 0.05;
-    bell(t, hz(noteOf(ROOT.N, 4)), 0.2, -0.4, 1.4, 2.5, 3.5);
-    bell(t + 0.35, hz(noteOf(ROOT.W, 4)), 0.2, 0.4, 1.4, 1.5, 1);
+    play("N", t, noteOf(ROOT.N, 4), 0.2, -0.4, 1.4, 2.5, 3.5);
+    play("W", t + 0.35, noteOf(ROOT.W, 4), 0.2, 0.4, 1.4, 1.5, 1);
   }
 
   // a film's sound, for movie exports: the same notes and tones, rendered offline from the film's own pictures.
@@ -4194,7 +4296,10 @@ body.phone #launch .lx-clock { font-size: 9.5px; bottom: 9vh; }
   // Uses the Sound settings' levels whether or not sound is on in the page.
   async function render(events, seconds, sampleRate = 48000, opts = {}) {
     const off = new OfflineAudioContext(2, Math.max(1, Math.ceil(seconds * sampleRate)), sampleRate), speed = opts.speed || 600;
-    const live = [ctx, bus, master, echoSend, echoFb, humS, humD, padF, padG, voices, intensity, nextBeat], liveRecent = recent.splice(0), liveHeard = new Map(heard);
+    // the picked instruments' recordings first (a few seconds at most), so the film has them from its first note
+    loadPicked();
+    await Promise.race([Promise.all(PARTS.map(part => banks[instrumentOf(part)] && banks[instrumentOf(part)].p)), new Promise(ok => setTimeout(ok, 8000))]);
+    const live = [ctx, bus, master, echoSend, echoFb, humS, humD, padF, padG, padO, heldP, voices, intensity, nextBeat], liveRecent = recent.splice(0), liveHeard = new Map(heard);
     heard.clear();
     try {
       build(off); offline = true; voices = 0; intensity = 0; nextBeat = 0;
@@ -4217,7 +4322,7 @@ body.phone #launch .lx-clock { font-size: 9.5px; bottom: 9vh; }
       }
     } finally {
       offline = false;
-      [ctx, bus, master, echoSend, echoFb, humS, humD, padF, padG, voices, intensity, nextBeat] = live;
+      [ctx, bus, master, echoSend, echoFb, humS, humD, padF, padG, padO, heldP, voices, intensity, nextBeat] = live;
       recent.push(...liveRecent); heard.clear(); liveHeard.forEach((v, k) => heard.set(k, v));
     }
     return off.startRendering();
@@ -4271,6 +4376,8 @@ body.phone #launch .lx-clock { font-size: 9.5px; bottom: 9vh; }
   // a soft low drum: a sine falling from 110 to 45 Hz
   let nextBeat = 0;
   function thump(t, g) {
+    const b = ready(instrumentOf("pulse"));
+    if (b) { sampled(b, t, 38, g * 0.9, 0, 0.45, 0.6); return; }   // D2, the scale's root
     const o = ctx.createOscillator(), a = ctx.createGain();
     o.frequency.setValueAtTime(110, t); o.frequency.exponentialRampToValueAtTime(45, t + 0.18);
     a.gain.setValueAtTime(0, t); a.gain.linearRampToValueAtTime(g, t + 0.008); a.gain.exponentialRampToValueAtTime(0.0001, t + 0.35);
@@ -4297,8 +4404,10 @@ body.phone #launch .lx-clock { font-size: 9.5px; bottom: 9vh; }
   // level the tones' loudness, dist(body) the distance from Cassini to a body's centre in km (or null)
   function tones(t, et, target, speed, turn, level, dist, quiet) {
     // turning: from D2 up to two octaves higher at 90 deg/s or more, with a vibrato that deepens as it turns faster
-    const tu = Math.min(1, Math.log1p(turn) / Math.log1p(90));
+    const tu = Math.min(1, Math.log1p(turn) / Math.log1p(90)), tb = ready(instrumentOf("tone"));
+    humS.og.gain.setTargetAtTime(tb ? 0 : 1, t, 0.3); humD.og.gain.setTargetAtTime(tb ? 0 : 1, t, 0.3);
     humS.o.forEach(o => o.frequency.setTargetAtTime(hz(38 + 24 * tu), t, 0.3));
+    if (tb && level > 0.001) hold(humS.held, tb, [38 + 24 * tu], t, humS.depth);
     humS.depth.gain.setTargetAtTime(tu * 35, t, 0.3); humS.lfo.frequency.setTargetAtTime(3 + 5 * tu, t, 0.3);
     humS.g.gain.setTargetAtTime(level * 0.05 * (0.25 + tu), t, 0.4);
     // range to the target (Saturn when there is none): 100 km is the top note, a million km the bottom, on the scale
@@ -4309,6 +4418,7 @@ body.phone #launch .lx-clock { font-size: 9.5px; bottom: 9vh; }
       const b = bodies[tg], r = b && b.radii ? b.radii[0] : 0, range = Math.max(1, d - r);
       const step = Math.round(Math.max(0, Math.min(1, (6 - Math.log10(Math.max(100, range))) / 4)) * 10);
       humD.o.forEach(o => o.frequency.setTargetAtTime(hz(noteOf(38, step)), t, 0.8));
+      if (tb && level > 0.001) hold(humD.held, tb, [noteOf(38, step)], t);
       // how close for the body's size: 20 radii away and further is nothing, a tenth of a radius (a skimming
       // flyby: Titan at 260 km, Enceladus at 25 km, Saturn in the Grand Finale) is everything
       if (r) close = Math.max(0, Math.min(1, Math.log10(20 / Math.max(1e-3, range / r)) / Math.log10(20 / 0.1)));
@@ -4328,6 +4438,9 @@ body.phone #launch .lx-clock { font-size: 9.5px; bottom: 9vh; }
     const loud = S.get("sound.hum") / 100 * 2 + 0.4;   // the chord follows the spacecraft tones' level, a little above it
     padG.gain.setTargetAtTime(0.06 * loud * intensity * intensity, t, 0.5);
     padF.frequency.setTargetAtTime(250 + 3200 * intensity * intensity, t, 0.5);
+    const pb = ready(instrumentOf("pad"));
+    padO.gain.setTargetAtTime(pb ? 0 : 1, t, 0.3);
+    if (pb && intensity > 0.02) hold(heldP, pb, PAD, t);
     // a pulse that comes in past a third of the way and quickens to 132 beats a minute at the closest
     if (intensity > 0.33) {
       const bpm = 60 + 72 * (intensity - 0.33) / 0.67, gap = 60 / bpm;
@@ -4358,6 +4471,7 @@ body.phone #launch .lx-clock { font-size: 9.5px; bottom: 9vh; }
     if ((e.key === "s" || e.key === "S") && !e.metaKey && !e.ctrlKey && !e.altKey && !/^(INPUT|SELECT|TEXTAREA)$/.test(e.target.tagName)) S.set("sound.on", !S.get("sound.on"));
   });
   S.on("sound.on", v => { if (v) start(); levels(); button(); });
+  for (const k of ["sound.instrument", "sound.tones"]) S.on(k, loadPicked);
   for (const k of ["sound.volume", "sound.reverb"]) S.on(k, levels);
 })();
 </script>
@@ -5194,7 +5308,7 @@ body.phone #launch .lx-clock { font-size: 9.5px; bottom: 9vh; }
 // ---------- About: what Cassini OS is, and every credit in one list (credits.json) ----------
 (function () {
   const $ = id => document.getElementById(id);
-  const CREDITS = {"groups":[{"title":"Cassini mission data","entries":[{"id":"iss","title":"Cassini camera pictures","credit":"NASA/JPL-Caltech/Space Science Institute","short":"NASA/JPL-Caltech/SSI","detail":"Every picture in the camera windows, mosaics, color sets, movies and highlights is a frame from Cassini's Imaging Science Subsystem (the narrow-angle and wide-angle cameras), archived by NASA's Planetary Data System, Cartography and Imaging Sciences Node. Cassini OS calibrates, stacks, aligns and centers them with SPICE; the colors are its own reconstruction, not NASA's.","license":"NASA material, not copyrighted in the US (NASA media usage guidelines)","url":"https://pds-imaging.jpl.nasa.gov/"},{"id":"spice","title":"Trajectory, pointing and planet positions","credit":"NASA/JPL Navigation and Ancillary Information Facility (NAIF), Cassini SPICE archive co-s_j_e_v-spice-6-v1.0","short":"NASA/JPL NAIF SPICE","detail":"Where Cassini, the planets and the moons were, which way Cassini pointed (its reconstructed attitude kernels), and the camera frames. Read with SpiceyPy.","license":"NASA material, not copyrighted in the US","url":"https://naif.jpl.nasa.gov/naif/"},{"id":"calibration","title":"Camera calibration","credit":"Cassini ISS team: CISSCAL and the Cassini ISS Data User's Guide (Porco et al. 2004; West et al. 2010; Knowles et al. 2020)","detail":"The steps and constants Cassini OS uses to turn raw frames into brightness (I/F): the bias, exposure, gain and per-filter sensitivity, and each filter's effective wavelength.","license":"Published by NASA's Planetary Data System","url":"https://pds-imaging.jpl.nasa.gov/documentation/iss_data_user_guide_180916.pdf"},{"id":"finale-data","title":"Grand Finale readings","credit":"NASA Planetary Data System, Planetary Plasma Interactions Node; Cassini INMS (Southwest Research Institute), MAG (Imperial College London) and RPWS (University of Iowa) teams","short":"NASA PDS · INMS, MAG, RPWS","detail":"The real readings from Cassini's last hour shown in the Grand Finale: INMS raw count rates (counts, not densities), the magnetometer at full resolution, and RPWS 60 s key parameters, from 15 September 2017.","license":"NASA material, not copyrighted in the US","url":"https://pds-ppi.igpp.ucla.edu/"},{"id":"facts","title":"Mission facts and numbers","credit":"NASA, NASA/JPL and ESA mission pages","detail":"The facts on the loading screen (each one names its source as it shows), and the numbers and timings the Grand Finale is pinned to (JPL, \"Cassini Spacecraft Makes Its Final Approach to Saturn\", 13 September 2017; \"Cassini by the Numbers\"), and the opening at the start of the mission (ESA, \"Cassini-Huygens: Launch information\"; NASA, \"Cassini Quick Facts\").","license":"Facts, with their sources named","url":"https://science.nasa.gov/mission/cassini/"}]},{"title":"Huygens probe","entries":[{"id":"disr","title":"Huygens descent pictures","credit":"ESA/NASA/JPL/University of Arizona; mosaics by Erich Karkoschka (DISR team)","short":"ESA/NASA/JPL/UA","detail":"The probe's own pictures of Titan from its Descent Imager/Spectral Radiometer (DISR), and the nested mosaics of the landing site (60 m down to 1 m per pixel) Erich Karkoschka assembled from them, from ESA's Planetary Science Archive (HP-SSA-DISR-2-3-EDR-RDR-V1.3).","license":"ESA Planetary Science Archive data","url":"https://archives.esac.esa.int/psa/"},{"id":"huygens-track","title":"Huygens trajectory","credit":"ESA Huygens Descent Trajectory Working Group (B. Kazeminejad, ESTEC), HP-SSA-DTWG-6-TRAJECTORY-V2.0; NASA/JPL NAIF","detail":"The probe's path through Titan's atmosphere to the ground; its coast from Cassini to Titan comes from NAIF's reconstructed trajectory.","license":"ESA Planetary Science Archive data","url":"https://archives.esac.esa.int/psa/"}]},{"title":"Surface maps and shapes","note":"Maps come from the Celestia project's CelestiaContent collection, resized into the 1k, 2k and 4k sizes; credit lines follow Celestia's license files. Maps marked \"No license stated\" are reworks of NASA/JPL and other material without a license file and will be rebuilt from public-domain originals before a public launch.","entries":[{"id":"map-saturn","title":"Saturn","credit":"Cassini imagery, Björn Jónsson; recolored by Askaniy Anpilogov (via Celestia)","license":"CC BY 3.0","url":"https://github.com/CelestiaProject/CelestiaContent","files":["saturn.webp"]},{"id":"map-rings","title":"Saturn's rings","credit":"Björn Jónsson ring data (Celestia composite)","license":"No license stated","url":"https://bjj.mmedia.is/","files":["rings/saturn_rings.png"]},{"id":"map-icy","title":"Mimas, Enceladus, Tethys, Dione, Iapetus","credit":"Paul Schenk's Cassini color maps (NASA/JPL/LPI), via Celestia","license":"No license stated","files":["mimas.webp","enceladus.webp","tethys.webp","dione.webp","iapetus.webp"]},{"id":"map-rhea","title":"Rhea","credit":"Paul Schenk's map and Björn Jónsson's albedo, via Celestia","license":"No license stated","files":["rhea.webp"]},{"id":"map-titan","title":"Titan","credit":"Cassini haze images, Gordan Ugarković, Kevin M. Gill, ShadowDragon777, AstroChara (via Celestia)","license":"CC BY 4.0","files":["titan.webp"]},{"id":"map-titan-surface","title":"Titan's surface","credit":"Cassini VIMS and ISS map (Seignovert et al. 2019) with radar lakes, via Celestia","license":"CC BY 3.0","files":["titan_surface.webp"]},{"id":"map-hyperion","title":"Hyperion","credit":"Map: reprojected Cassini imagery (ItzImcool), via Celestia. Shape: P. C. Thomas et al., NASA Planetary Data System","license":"Map CC BY 4.0; shape CC0","files":["hyperion.webp","models/hyperion.mesh.b64.txt"]},{"id":"map-phoebe","title":"Phoebe","credit":"Map: John van Vliet, via Celestia. Shape: R. W. Gaskell, NASA Planetary Data System","license":"No license stated","files":["phoebe.webp","models/phoebe.mesh.b64.txt"]},{"id":"map-jupiter","title":"Jupiter","credit":"Cassini 2000 flyby and Juno data, recolored by Askaniy Anpilogov (via Celestia)","license":"CC BY 3.0","files":["jupiter.webp"]},{"id":"map-venus","title":"Venus","credit":"Cloud tops by Björn Jónsson, recolored by FarGetaNik (via Celestia)","license":"No license stated","files":["venus.webp"]},{"id":"map-earth","title":"Earth","credit":"\"Mappamondo\" (earthstartsbeating.com), Natural Earth II (Tom Patterson), NASA Blue Marble Next Generation (via Celestia)","license":"No license stated","files":["earth.webp"]},{"id":"map-moon","title":"The Moon","credit":"Celestia's lunar map (NASA data)","license":"No license stated","files":["moon.webp"]},{"id":"map-io","title":"Io","credit":"ItzImcool, AstroChara; NASA/JPL-Caltech/ASI/USGS; NASA/JPL/SwRI/MSSS/Gerald Eichstädt/Jason Perry/John Rogers (via Celestia)","license":"CC BY 4.0","files":["io.webp"]},{"id":"map-europa","title":"Europa","credit":"John van Vliet (via Celestia)","license":"No license stated","files":["europa.webp"]},{"id":"map-ganymede","title":"Ganymede","credit":"Askaniy Anpilogov; NASA/JPL-Caltech/ASI/USGS; Björn Jónsson; NASA/JPL-Caltech/SwRI/MSSS/Brian Swift (via Celestia)","license":"CC BY 3.0","files":["ganymede.webp"]},{"id":"map-callisto","title":"Callisto","credit":"Askaniy Anpilogov, from John van Vliet's map (via Celestia)","license":"No license stated","files":["callisto.webp"]}]},{"title":"Sky","entries":[{"id":"star-sky","title":"Stars and the Milky Way","credit":"NASA/Goddard Space Flight Center Scientific Visualization Studio. Gaia DR2: ESA/Gaia/DPAC","short":"NASA SVS Deep Star Maps","detail":"The background sky, from NASA's \"Deep Star Maps 2020\": Hipparcos, Tycho-2 and Gaia DR2 stars plus the Milky Way, placed in J2000 where Cassini saw them.","license":"NASA material, public domain","url":"https://svs.gsfc.nasa.gov/4851","files":["sky/sky_2k.webp","sky/sky_4k.webp","sky/sky_8k.webp"]}]},{"title":"Spacecraft","entries":[{"id":"model","title":"Cassini-Huygens 3D model","credit":"NASA/JPL-Caltech, NASA 3D Resources \"Cassini-Huygens\"","detail":"The spacecraft in the 3D view and the wireframe on the loading screen (decoded from Draco compression for the page).","license":"NASA material, not copyrighted in the US","url":"https://github.com/nasa/NASA-3D-Resources"}]},{"title":"Sound","entries":[{"id":"sound","title":"Sonification","credit":"Made for Cassini OS, after Erich Karkoschka's \"Titan Descent Data Movie with Bells and Whistles\" (DISR team, University of Arizona)","detail":"Every sound is synthesized in the browser from what Cassini is doing (no recordings); the idea of a chime for each instrument part follows Karkoschka's Huygens descent movie.","license":"Part of Cassini OS"}]},{"title":"Software and fonts","entries":[{"id":"threejs","title":"three.js","credit":"three.js authors, r128, with OrbitControls and GLTFLoader","license":"MIT","url":"https://threejs.org/"},{"id":"draco","title":"Draco","credit":"Google, used to decode the spacecraft model ahead of time","license":"Apache 2.0","url":"https://google.github.io/draco/"},{"id":"pipeline-libs","title":"Picture pipeline","credit":"SpiceyPy (Andrew Annex et al.), NumPy, pandas, OpenCV, Pillow, scikit-image, Matplotlib","detail":"The Python libraries the frame server and the image pipeline run on.","license":"MIT, BSD and Apache 2.0 (each project's own)"},{"id":"font-silkscreen","title":"Silkscreen","credit":"Jason Kottke, via Google Fonts","license":"SIL Open Font License 1.1","url":"https://fonts.google.com/specimen/Silkscreen"},{"id":"font-sharetech","title":"Share Tech Mono","credit":"Carrois Apostrophe, via Google Fonts","license":"SIL Open Font License 1.1","url":"https://fonts.google.com/specimen/Share+Tech+Mono"}]}]};
+  const CREDITS = {"groups":[{"title":"Cassini mission data","entries":[{"id":"iss","title":"Cassini camera pictures","credit":"NASA/JPL-Caltech/Space Science Institute","short":"NASA/JPL-Caltech/SSI","detail":"Every picture in the camera windows, mosaics, color sets, movies and highlights is a frame from Cassini's Imaging Science Subsystem (the narrow-angle and wide-angle cameras), archived by NASA's Planetary Data System, Cartography and Imaging Sciences Node. Cassini OS calibrates, stacks, aligns and centers them with SPICE; the colors are its own reconstruction, not NASA's.","license":"NASA material, not copyrighted in the US (NASA media usage guidelines)","url":"https://pds-imaging.jpl.nasa.gov/"},{"id":"spice","title":"Trajectory, pointing and planet positions","credit":"NASA/JPL Navigation and Ancillary Information Facility (NAIF), Cassini SPICE archive co-s_j_e_v-spice-6-v1.0","short":"NASA/JPL NAIF SPICE","detail":"Where Cassini, the planets and the moons were, which way Cassini pointed (its reconstructed attitude kernels), and the camera frames. Read with SpiceyPy.","license":"NASA material, not copyrighted in the US","url":"https://naif.jpl.nasa.gov/naif/"},{"id":"calibration","title":"Camera calibration","credit":"Cassini ISS team: CISSCAL and the Cassini ISS Data User's Guide (Porco et al. 2004; West et al. 2010; Knowles et al. 2020)","detail":"The steps and constants Cassini OS uses to turn raw frames into brightness (I/F): the bias, exposure, gain and per-filter sensitivity, and each filter's effective wavelength.","license":"Published by NASA's Planetary Data System","url":"https://pds-imaging.jpl.nasa.gov/documentation/iss_data_user_guide_180916.pdf"},{"id":"finale-data","title":"Grand Finale readings","credit":"NASA Planetary Data System, Planetary Plasma Interactions Node; Cassini INMS (Southwest Research Institute), MAG (Imperial College London) and RPWS (University of Iowa) teams","short":"NASA PDS · INMS, MAG, RPWS","detail":"The real readings from Cassini's last hour shown in the Grand Finale: INMS raw count rates (counts, not densities), the magnetometer at full resolution, and RPWS 60 s key parameters, from 15 September 2017.","license":"NASA material, not copyrighted in the US","url":"https://pds-ppi.igpp.ucla.edu/"},{"id":"facts","title":"Mission facts and numbers","credit":"NASA, NASA/JPL and ESA mission pages","detail":"The facts on the loading screen (each one names its source as it shows), and the numbers and timings the Grand Finale is pinned to (JPL, \"Cassini Spacecraft Makes Its Final Approach to Saturn\", 13 September 2017; \"Cassini by the Numbers\"), and the opening at the start of the mission (ESA, \"Cassini-Huygens: Launch information\"; NASA, \"Cassini Quick Facts\").","license":"Facts, with their sources named","url":"https://science.nasa.gov/mission/cassini/"}]},{"title":"Huygens probe","entries":[{"id":"disr","title":"Huygens descent pictures","credit":"ESA/NASA/JPL/University of Arizona; mosaics by Erich Karkoschka (DISR team)","short":"ESA/NASA/JPL/UA","detail":"The probe's own pictures of Titan from its Descent Imager/Spectral Radiometer (DISR), and the nested mosaics of the landing site (60 m down to 1 m per pixel) Erich Karkoschka assembled from them, from ESA's Planetary Science Archive (HP-SSA-DISR-2-3-EDR-RDR-V1.3).","license":"ESA Planetary Science Archive data","url":"https://archives.esac.esa.int/psa/"},{"id":"huygens-track","title":"Huygens trajectory","credit":"ESA Huygens Descent Trajectory Working Group (B. Kazeminejad, ESTEC), HP-SSA-DTWG-6-TRAJECTORY-V2.0; NASA/JPL NAIF","detail":"The probe's path through Titan's atmosphere to the ground; its coast from Cassini to Titan comes from NAIF's reconstructed trajectory.","license":"ESA Planetary Science Archive data","url":"https://archives.esac.esa.int/psa/"}]},{"title":"Surface maps and shapes","note":"Maps come from the Celestia project's CelestiaContent collection, resized into the 1k, 2k and 4k sizes; credit lines follow Celestia's license files. Maps marked \"No license stated\" are reworks of NASA/JPL and other material without a license file and will be rebuilt from public-domain originals before a public launch.","entries":[{"id":"map-saturn","title":"Saturn","credit":"Cassini imagery, Björn Jónsson; recolored by Askaniy Anpilogov (via Celestia)","license":"CC BY 3.0","url":"https://github.com/CelestiaProject/CelestiaContent","files":["saturn.webp"]},{"id":"map-rings","title":"Saturn's rings","credit":"Björn Jónsson ring data (Celestia composite)","license":"No license stated","url":"https://bjj.mmedia.is/","files":["rings/saturn_rings.png"]},{"id":"map-icy","title":"Mimas, Enceladus, Tethys, Dione, Iapetus","credit":"Paul Schenk's Cassini color maps (NASA/JPL/LPI), via Celestia","license":"No license stated","files":["mimas.webp","enceladus.webp","tethys.webp","dione.webp","iapetus.webp"]},{"id":"map-rhea","title":"Rhea","credit":"Paul Schenk's map and Björn Jónsson's albedo, via Celestia","license":"No license stated","files":["rhea.webp"]},{"id":"map-titan","title":"Titan","credit":"Cassini haze images, Gordan Ugarković, Kevin M. Gill, ShadowDragon777, AstroChara (via Celestia)","license":"CC BY 4.0","files":["titan.webp"]},{"id":"map-titan-surface","title":"Titan's surface","credit":"Cassini VIMS and ISS map (Seignovert et al. 2019) with radar lakes, via Celestia","license":"CC BY 3.0","files":["titan_surface.webp"]},{"id":"map-hyperion","title":"Hyperion","credit":"Map: reprojected Cassini imagery (ItzImcool), via Celestia. Shape: P. C. Thomas et al., NASA Planetary Data System","license":"Map CC BY 4.0; shape CC0","files":["hyperion.webp","models/hyperion.mesh.b64.txt"]},{"id":"map-phoebe","title":"Phoebe","credit":"Map: John van Vliet, via Celestia. Shape: R. W. Gaskell, NASA Planetary Data System","license":"No license stated","files":["phoebe.webp","models/phoebe.mesh.b64.txt"]},{"id":"map-jupiter","title":"Jupiter","credit":"Cassini 2000 flyby and Juno data, recolored by Askaniy Anpilogov (via Celestia)","license":"CC BY 3.0","files":["jupiter.webp"]},{"id":"map-venus","title":"Venus","credit":"Cloud tops by Björn Jónsson, recolored by FarGetaNik (via Celestia)","license":"No license stated","files":["venus.webp"]},{"id":"map-earth","title":"Earth","credit":"\"Mappamondo\" (earthstartsbeating.com), Natural Earth II (Tom Patterson), NASA Blue Marble Next Generation (via Celestia)","license":"No license stated","files":["earth.webp"]},{"id":"map-moon","title":"The Moon","credit":"Celestia's lunar map (NASA data)","license":"No license stated","files":["moon.webp"]},{"id":"map-io","title":"Io","credit":"ItzImcool, AstroChara; NASA/JPL-Caltech/ASI/USGS; NASA/JPL/SwRI/MSSS/Gerald Eichstädt/Jason Perry/John Rogers (via Celestia)","license":"CC BY 4.0","files":["io.webp"]},{"id":"map-europa","title":"Europa","credit":"John van Vliet (via Celestia)","license":"No license stated","files":["europa.webp"]},{"id":"map-ganymede","title":"Ganymede","credit":"Askaniy Anpilogov; NASA/JPL-Caltech/ASI/USGS; Björn Jónsson; NASA/JPL-Caltech/SwRI/MSSS/Brian Swift (via Celestia)","license":"CC BY 3.0","files":["ganymede.webp"]},{"id":"map-callisto","title":"Callisto","credit":"Askaniy Anpilogov, from John van Vliet's map (via Celestia)","license":"No license stated","files":["callisto.webp"]}]},{"title":"Sky","entries":[{"id":"star-sky","title":"Stars and the Milky Way","credit":"NASA/Goddard Space Flight Center Scientific Visualization Studio. Gaia DR2: ESA/Gaia/DPAC","short":"NASA SVS Deep Star Maps","detail":"The background sky, from NASA's \"Deep Star Maps 2020\": Hipparcos, Tycho-2 and Gaia DR2 stars plus the Milky Way, placed in J2000 where Cassini saw them.","license":"NASA material, public domain","url":"https://svs.gsfc.nasa.gov/4851","files":["sky/sky_2k.webp","sky/sky_4k.webp","sky/sky_8k.webp"]}]},{"title":"Spacecraft","entries":[{"id":"model","title":"Cassini-Huygens 3D model","credit":"NASA/JPL-Caltech, NASA 3D Resources \"Cassini-Huygens\"","detail":"The spacecraft in the 3D view and the wireframe on the loading screen (decoded from Draco compression for the page).","license":"NASA material, not copyrighted in the US","url":"https://github.com/nasa/NASA-3D-Resources"}]},{"title":"Sound","entries":[{"id":"sound","title":"Sonification","credit":"Made for Cassini OS, after Erich Karkoschka's \"Titan Descent Data Movie with Bells and Whistles\" (DISR team, University of Arizona)","detail":"The default sounds are synthesized in the browser from what Cassini is doing; the idea of a chime for each instrument part follows Karkoschka's Huygens descent movie.","license":"Part of Cassini OS"},{"id":"instrument-samples","title":"Instrument notes","credit":"Instrument samples: Versilian Community Sample Library and VSCO 2 Community Edition, Versilian Studios (CC0)","short":"Versilian Studios (CC0)","detail":"The recorded notes that Settings > Sound > Instrument can play instead of the synthesized chimes: Steinway B grand piano, hand chimes, glockenspiel, vibraphone (soft mallets and bowed), marimba, Tanzanian kalimba, concert harp, tubular bells, rubbed wine glasses, quiet pipe organ and Nepalese hand bells from VCSL; the violin and cello sections from VSCO 2 CE. One recording per note, trimmed and pitched to the scale (web/cassini-os/sounds/make_sounds.py).","license":"CC0 1.0 (public domain dedication)","url":"https://github.com/sgossner/VCSL"}]},{"title":"Software and fonts","entries":[{"id":"threejs","title":"three.js","credit":"three.js authors, r128, with OrbitControls and GLTFLoader","license":"MIT","url":"https://threejs.org/"},{"id":"draco","title":"Draco","credit":"Google, used to decode the spacecraft model ahead of time","license":"Apache 2.0","url":"https://google.github.io/draco/"},{"id":"pipeline-libs","title":"Picture pipeline","credit":"SpiceyPy (Andrew Annex et al.), NumPy, pandas, OpenCV, Pillow, scikit-image, Matplotlib","detail":"The Python libraries the frame server and the image pipeline run on.","license":"MIT, BSD and Apache 2.0 (each project's own)"},{"id":"font-silkscreen","title":"Silkscreen","credit":"Jason Kottke, via Google Fonts","license":"SIL Open Font License 1.1","url":"https://fonts.google.com/specimen/Silkscreen"},{"id":"font-sharetech","title":"Share Tech Mono","credit":"Carrois Apostrophe, via Google Fonts","license":"SIL Open Font License 1.1","url":"https://fonts.google.com/specimen/Share+Tech+Mono"}]}]};
   const card = $("about"), nav = $("anav"), pane = $("apane");
   const esc = s => String(s).replace(/[&<>"]/g, c => ({ "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;" })[c]);
   const TABS = {

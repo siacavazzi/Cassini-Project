@@ -10,7 +10,8 @@
        cassiniSettings.on("cameras.composites", v => { … });   // runs now and on every change
        cassiniSettings.set("cameras.composites", false);
 
-     Types: "toggle"; "range" (min, max, step, unit); "choice" (options: [[value, "Label"], …]); "action" (run, a
+     Types: "toggle"; "range" (min, max, step, unit); "choice" (options: [[value, "Label"], …]; menu: true shows a
+     drop-down menu instead of buttons, for a long list); "action" (run, a
      button). reload: true marks a setting that takes effect when the page is opened again. -->
 <style>
 #settings { width: min(620px, calc(100% - 20px)); height: min(460px, calc(100% - 80px)); z-index: 900; }
@@ -38,6 +39,9 @@
 .srow input[type=range] { width: 130px; accent-color: var(--q-accent); }
 .srow .val { min-width: 54px; text-align: right; font-size: 11px; color: var(--q-text); font-variant-numeric: tabular-nums; }
 .srow .seg { flex-wrap: wrap; }
+.srow select { font: inherit; font-size: 11.5px; color: var(--q-text); background: rgba(255,255,255,.07); border: 1px solid var(--q-line); border-radius: 5px; padding: 3px 6px; max-width: 220px; }
+.srow select:focus-visible { outline: 1px solid var(--q-accent); }
+.srow select option { background: #1b1e24; color: #e8ecf2; }
 .srow .seg .btn { padding: 4px 8px; flex: none; }
 .srow .act { border: 1px solid var(--q-line); border-radius: 6px; padding: 4px 10px; }
 #settings footer { flex: none; display: flex; align-items: center; justify-content: space-between; gap: 10px; padding: 6px 12px; border-top: 1px solid var(--q-line); font-size: 10.5px; color: var(--q-dim); }
@@ -132,13 +136,15 @@ body.phone .srow input[type=range] { width: 96px; }
       let ctl = "";
       if (d.type === "toggle") ctl = `<button class="sw" id="${id}" role="switch" aria-checked="false"></button>`;
       if (d.type === "range") ctl = `<input type="range" id="${id}" min="${d.min}" max="${d.max}" step="${d.step || 1}"><span class="val"></span>`;
-      if (d.type === "choice") ctl = `<div class="seg" role="radiogroup" aria-labelledby="${id}">${d.options.map((o, i) => `<button class="btn" role="radio" data-i="${i}">${o[1]}</button>`).join("")}</div>`;
+      if (d.type === "choice" && d.menu) ctl = `<select id="${id}-m" aria-labelledby="${id}">${d.options.map((o, i) => `<option value="${i}">${o[1]}</option>`).join("")}</select>`;
+      else if (d.type === "choice") ctl = `<div class="seg" role="radiogroup" aria-labelledby="${id}">${d.options.map((o, i) => `<button class="btn" role="radio" data-i="${i}">${o[1]}</button>`).join("")}</div>`;
       if (d.type === "action") ctl = `<button class="btn act" id="${id}">${d.button || "Run"}</button>`;
       row.innerHTML = `<${d.type === "choice" ? "span" : "label"} class="lab" id="${d.type === "choice" ? id : ""}"${d.type === "choice" ? "" : ` for="${id}"`}>${d.label}${tag}</${d.type === "choice" ? "span" : "label"}>`
         + `<div class="ctl">${ctl}</div>` + (d.hint ? `<div class="hint">${d.hint}</div>` : "");
       if (d.type === "toggle") row.querySelector(".sw").addEventListener("click", () => S.set(d.key, !values[d.key]));
       if (d.type === "range") row.querySelector("input").addEventListener("input", e => S.set(d.key, +e.target.value));
       if (d.type === "choice") row.querySelectorAll(".seg .btn").forEach(b => b.addEventListener("click", () => S.set(d.key, d.options[+b.dataset.i][0])));
+      if (d.type === "choice" && d.menu) row.querySelector("select").addEventListener("change", e => S.set(d.key, d.options[+e.target.value][0]));
       if (d.type === "action") row.querySelector(".act").addEventListener("click", () => d.run());
       pane.appendChild(row);
       sync(d.key);
@@ -149,6 +155,7 @@ body.phone .srow input[type=range] { width: 96px; }
     if (!row) return;
     if (d.type === "toggle") row.querySelector(".sw").setAttribute("aria-checked", String(v));
     if (d.type === "range") { row.querySelector("input").value = v; row.querySelector(".val").textContent = fmtVal(d, v); }
+    if (d.type === "choice" && d.menu) row.querySelector("select").value = String(d.options.findIndex(o => o[0] === v));
     if (d.type === "choice") row.querySelectorAll(".seg .btn").forEach(b => { const on = d.options[+b.dataset.i][0] === v; b.setAttribute("aria-pressed", String(on)); b.setAttribute("aria-checked", String(on)); });
   }
   nav.addEventListener("click", e => {

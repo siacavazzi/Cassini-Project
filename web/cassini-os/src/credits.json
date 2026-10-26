@@ -128,8 +128,17 @@
           "id": "sound",
           "title": "Sonification",
           "credit": "Made for Cassini OS, after Erich Karkoschka's \"Titan Descent Data Movie with Bells and Whistles\" (DISR team, University of Arizona)",
-          "detail": "Every sound is synthesized in the browser from what Cassini is doing (no recordings); the idea of a chime for each instrument part follows Karkoschka's Huygens descent movie.",
+          "detail": "The default sounds are synthesized in the browser from what Cassini is doing; the idea of a chime for each instrument part follows Karkoschka's Huygens descent movie.",
           "license": "Part of Cassini OS"
+        },
+        {
+          "id": "instrument-samples",
+          "title": "Instrument notes",
+          "credit": "Instrument samples: Versilian Community Sample Library and VSCO 2 Community Edition, Versilian Studios (CC0)",
+          "short": "Versilian Studios (CC0)",
+          "detail": "The recorded notes that Settings > Sound > Instrument can play instead of the synthesized chimes: Steinway B grand piano, hand chimes, glockenspiel, vibraphone (soft mallets and bowed), marimba, Tanzanian kalimba, concert harp, tubular bells, rubbed wine glasses, quiet pipe organ and Nepalese hand bells from VCSL; the violin and cello sections from VSCO 2 CE. One recording per note, trimmed and pitched to the scale (web/cassini-os/sounds/make_sounds.py).",
+          "license": "CC0 1.0 (public domain dedication)",
+          "url": "https://github.com/sgossner/VCSL"
         }
       ]
     },
