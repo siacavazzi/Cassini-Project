@@ -1057,6 +1057,26 @@ def colour_picture(u, p, colour, planes):
     return np.dstack([rgb, alpha])
 
 
+# the last picture so_far or movie_frame made on this thread, kept for the next size asked: the pre-build and the
+# segment pre-render ask for each frame's mosaic, mosaic movie picture or movie frame at 1024 and 512 in turn
+# (make_pass), and both sizes are made at OUT and shrunk after, so the second was the same picture made again. Kept
+# up to OUT only (a full view's larger picture is not); each call gets a copy, as the callers shrink theirs in place
+_last_made = threading.local()
+
+
+def _kept_for_next_size(make, key_of):
+    def kept(*args, **kwargs):
+        key = key_of(*args, **kwargs)
+        last = getattr(_last_made, "picture", None)
+        if key is not None and last is not None and last[0] == key:
+            return last[1].copy(), dict(last[2])
+        im, rep = make(*args, **kwargs)
+        _last_made.picture = (key, im.copy(), dict(rep)) if key is not None and im is not None else None
+        return im, rep
+    kept.__doc__ = make.__doc__
+    return kept
+
+
 def so_far(u, n, cache, made=None, out=OUT):
     """The pass's mosaic with tiles 0..n, RGBA out px (OUT unless asked for more, up to CANVAS) on its longest
     side, and its report; (None, None) before any tile is placed. made: layout(u, n, cache), when already
@@ -1097,6 +1117,11 @@ def so_far(u, n, cache, made=None, out=OUT):
     return im, {**laps, "mosaic": sum(count.get(f, 0) for f in drawn), "filters": len(used), "filter_names": used,
                 "observation": u["key"][1], "pass": u["key"][3], "of": sum(1 for fr in u["frames"] if fr[2] in drawn),
                 "fixed": p["fixed"], "width": im.width, "height": im.height}
+
+
+# the same layout, tile and size: named in the cache by folder and layout name (_mosaic_path)
+so_far = _kept_for_next_size(so_far, lambda u, n, cache, made=None, out=OUT:
+                             (folder(u, cache), made[5], n, out) if made and out <= OUT else None)
 
 
 def movie_footprint(u, cache, p=None):
@@ -1314,6 +1339,11 @@ def movie_frame(u, n, cache, trail=0, colour=True, out=OUT, centre=True):
         rgba = detail(rgba, DETAIL_SIGMA * FRAME * k)
     rep.update({"view": [round(v, 1) for v in rect], "width": W, "height": H})
     return Image.fromarray(rgba, "RGBA"), rep
+
+
+# the same frame drawn the same way: named in the cache by folder, frame, trail, colour and centring (movie_webp)
+movie_frame = _kept_for_next_size(movie_frame, lambda u, n, cache, trail=0, colour=True, out=OUT, centre=True:
+                                  (folder(u, cache), n, trail, colour, out, centre) if out <= OUT else None)
 
 
 # a pass's movie frames, renamed whenever the way they are drawn changes (movie-2: colour frames mixed as the mosaic is)
