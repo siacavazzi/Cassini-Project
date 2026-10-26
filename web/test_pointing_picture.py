@@ -92,7 +92,7 @@ for q in mapped["pointings"]:
     pic = np.asarray(Image.open(__import__("io").BytesIO(data)).convert("RGBA"))
     colour = info["color"]
     layers = [(by_id[q["ids"][f]], f) for f in used] if colour else [(by_id[list(q["ids"].values())[-1]], om.LUM)]
-    tint = None if colour else om.grey_tint(om.colour_picture(u, p, used, [om.filter_mosaic(u, p, g, tiles, rect, cache, "RED") for g in used]),
+    tint = None if colour else om.grey_gain(om.colour_picture(u, p, used, [om.filter_mosaic(u, p, g, tiles, rect, cache, "RED") for g in used]),
                                             om.filter_mosaic(u, p, om.LUM, tiles, rect, cache), p["k"], SCALE["gamma"])
     rgba, at = om._pointing(u, p, tiles, rect, count, used, layers, cache, None, tint)
     assert np.array_equal(rgba, pic), "the route's picture is _pointing's"
