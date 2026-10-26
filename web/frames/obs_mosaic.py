@@ -666,6 +666,7 @@ def tile(u, n, cache, scale=None):
                 crop, a, c = lit
                 b, d = a + crop.shape[0], c + crop.shape[1]
                 Image.fromarray(crop).save(base + ".png", compress_level=1)
+                _keep_made(base + ".png", crop)
                 out.update({"native_offset": rep["frame_offset"], "offset": [v * k for v in rep["frame_offset"]],
                             "box": [int(c) - side / 2, int(a) - side / 2, int(d - c), int(b - a)]})
                 out["outline"] = _corners(out, crop[..., 3])
@@ -953,6 +954,24 @@ def filter_mosaic(u, p, f, tiles, rect, cache, ref=None, tag=""):
 _parts = collections.OrderedDict()   # (tile file, width, height) -> the tile at that size, most recently used last
 _parts_bytes = [0]
 PARTS_KEEP = int(os.environ.get("CASSINI_MOSAIC_PARTS_MB", "256")) << 20
+_made_pictures = collections.OrderedDict()   # tile file -> its picture (RGBA) as it was made and written, the newest last
+_made_pictures_bytes = [0]
+MADE_KEEP = int(os.environ.get("CASSINI_MOSAIC_MADE_MB", "64")) << 20
+
+
+def _keep_made(path, picture):
+    """A tile's picture as made and written to path, kept in memory (the newest, up to MADE_KEEP bytes): a movie
+    frame or a mosaic draws its new tile right after making it (_part), and reading the PNG back cost ~35 ms."""
+    picture = picture.view()
+    picture.flags.writeable = False
+    with _lock:
+        old = _made_pictures.pop(path, None)
+        if old is not None:
+            _made_pictures_bytes[0] -= old.nbytes
+        _made_pictures[path] = picture
+        _made_pictures_bytes[0] += picture.nbytes
+        while _made_pictures and _made_pictures_bytes[0] > MADE_KEEP:
+            _made_pictures_bytes[0] -= _made_pictures.popitem(last=False)[1].nbytes
 
 
 def _part(path, w, h):
@@ -964,7 +983,10 @@ def _part(path, w, h):
         if part is not None:
             _parts.move_to_end(key)
             return part
-    part = np.asarray(Image.open(path).convert("RGBA").resize((w, h), Image.LANCZOS))
+        made = _made_pictures.get(path)
+    # a tile just made is resized from its picture in memory, the pixels its PNG holds
+    im = Image.fromarray(made) if made is not None else Image.open(path).convert("RGBA")
+    part = np.asarray(im.resize((w, h), Image.LANCZOS))
     with _lock:
         if key not in _parts:
             _parts[key] = part
