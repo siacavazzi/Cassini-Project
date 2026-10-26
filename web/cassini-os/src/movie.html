@@ -17,7 +17,7 @@
   const $ = id => document.getElementById(id);
   const S = window.cassiniSettings;
   const opt = (key, dflt) => (S && S.get(key) !== undefined ? S.get(key) : dflt);
-  const fps = () => Math.min(24, Math.max(1, +opt("movie.fps", 8) || 8));
+  const fps = () => Math.min(30, Math.max(1, +opt("movie.fps", 8) || 8));
   // A step waits for the camera windows (Sam: movie mode slows, it never skips a picture): while a window has not
   // yet put up the picture the clock is at (the frame server is still making it: a cold composite, a mosaic's new
   // tile), the next step waits. cassiniFeeds.behind stops counting a picture that has been stuck for seconds, so a
@@ -43,7 +43,10 @@
     // no picture after this one in the months loaded now: the clock runs a day a frame until the next ones are in
     // (the viewer holds it while a month is loading) or the mission ends
     if (next === Infinity) return et + 86400;
-    M.stepAt = now;
+    // keep the cadence: a step checked on the next animation frame does not move the next one later (at 60 Hz,
+    // 24 fps would otherwise wait three frames a step and play 20); a step that came a whole interval late (after
+    // a wait for pictures) starts the cadence again, so there is no burst to catch up
+    M.stepAt = now - due < 1000 / fps() ? due : now;
     if (next - et > CUT) { M.cut = next - et; M.cutAt = now; }
     return next;
   };
