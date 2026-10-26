@@ -22,9 +22,12 @@ rather than being skipped.
 
 The non-interactive Cassini OS, for a screen nobody touches: a wallpaper, a screen saver, a TV, a 24/7 stream
 (`src/ambient.html`). `?ambient=1` opens in it, Go > Ambient Mode (A) starts it, Escape or the Leave button that shows
-when the pointer moves ends it. No menus, windows or dock: the 3D view fills the screen and drifts slowly around the
-body Cassini photographed last (Saturn for the rings, Cassini itself on the way there; a new subject has to last a few
-seconds and holds at least a minute, with a short fade between). The narrow-angle and wide-angle pictures stay on as two
+when the pointer moves ends it. No menus, windows or dock: the 3D view fills the screen, centered on Cassini, and
+slowly turns to look past it at the most interesting thing around it. One rule picks it: each body scores by how big
+it looks from Cassini, plus a bonus when Cassini photographs it next (more the sooner; the look-ahead grows with the
+speed) and a smaller one when it was just photographed. So a Saturn filling the sky wins, and a picture of Enceladus
+coming up turns the view to Enceladus as Cassini closes in. A new subject has to win for a few seconds and each one
+holds at least half a minute; the view eases between them and swings gently from side to side (Camera drift). The narrow-angle and wide-angle pictures stay on as two
 frameless panels in the bottom corners. They are the camera windows themselves, restyled, so every picture comes
 through the same pipeline as in Cassini OS, with every processing switch; through a quiet stretch each panel keeps its
 last picture, and the caption counts down to the next one.
