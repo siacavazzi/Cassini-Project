@@ -51,6 +51,13 @@ including the main window, and a click brings it back. Settings > Interface: Doc
 menu-bar tray), Dock position (bottom, left, right), icon size and magnification. On a phone the dock is a strip under
 the replay controls that scrolls sideways.
 
+The icons that are not a body's surface map are rendered pictures in `icons/` (256 px WebP): Cassini and Huygens from
+NASA's model, All bodies from Saturn's, Titan's and Enceladus's maps, and Moments, Highlights, Settings and the two
+cameras lit as the planets are. A minimized camera window shows its camera's icon in the corner of its picture.
+`node web/cassini-os/icons/make_icons.cjs [name ...]` renders them again from `icons/make_icons.html` (Playwright; set
+`THREE_DIR` to an unpacked three@0.128.0 where jsDelivr is out of reach; Saturn's icon needs
+`data/textures/rings/saturn_rings.png`).
+
 ## Body view
 
 A click on a body in the dock switches from Cassini's mission to that body's (`src/bodymode.html`). The timeline then

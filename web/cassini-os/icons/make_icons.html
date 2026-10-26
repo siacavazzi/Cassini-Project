@@ -1,0 +1,215 @@
+<!doctype html>
+<!-- The dock's app icons, rendered with three.js in the same light as the dock's planets (from the upper left, dark
+     lower right). make_icons.js opens this page and saves each icon as a 256 px WebP next to it. Cassini is NASA's
+     model (data/models/cassini.glb.b64.txt); the bodies are their surface maps (data/textures). -->
+<html><head><meta charset="utf-8"><style>body { margin: 0; background: transparent; }</style></head><body>
+<script src="https://cdn.jsdelivr.net/npm/three@0.128.0/build/three.min.js"></script>
+<script src="https://cdn.jsdelivr.net/npm/three@0.128.0/examples/js/loaders/GLTFLoader.js"></script>
+<script>
+const SIZE = 256;
+const R = new THREE.WebGLRenderer({ antialias: true, alpha: true, preserveDrawingBuffer: true });
+R.setPixelRatio(1); R.setSize(SIZE * 2, SIZE * 2, false); R.outputEncoding = THREE.sRGBEncoding; R.localClippingEnabled = true;
+R.toneMapping = THREE.ACESFilmicToneMapping; R.toneMappingExposure = 0.9;
+document.body.appendChild(R.domElement);
+const tex = url => new Promise(res => new THREE.TextureLoader().load(url, t => { t.encoding = THREE.sRGBEncoding; t.anisotropy = 8; res(t); }));
+
+// a soft studio for the metal parts to reflect: bright above and to the left, dark below
+const pmrem = new THREE.PMREMGenerator(R);
+const ENV = (() => {
+  const s = new THREE.Scene(), g = new THREE.SphereGeometry(10, 32, 16);
+  const c = document.createElement("canvas"); c.width = 256; c.height = 128; const x = c.getContext("2d");
+  const gr = x.createLinearGradient(0, 0, 0, 128); gr.addColorStop(0, "#c9d3e2"); gr.addColorStop(0.45, "#4a505c"); gr.addColorStop(1, "#050608");
+  x.fillStyle = gr; x.fillRect(0, 0, 256, 128);
+  x.fillStyle = "rgba(255,255,255,.9)"; x.beginPath(); x.ellipse(70, 26, 34, 14, 0, 0, 7); x.fill();
+  const t = new THREE.CanvasTexture(c); t.encoding = THREE.sRGBEncoding;
+  s.add(new THREE.Mesh(g, new THREE.MeshBasicMaterial({ map: t, side: THREE.BackSide })));
+  return pmrem.fromScene(s, 0.02).texture;
+})();
+
+// the camera looks along -Z; the light comes from the viewer's upper left, as the dock's planets are shaded
+function stage(fov = 30) {
+  const scene = new THREE.Scene(), cam = new THREE.PerspectiveCamera(fov, 1, 0.01, 1000);
+  cam.position.set(0, 0, 10); cam.lookAt(0, 0, 0);
+  const key = new THREE.DirectionalLight(0xffffff, 2.4); key.position.set(-7, 6, 4.5); scene.add(key);
+  const rim = new THREE.DirectionalLight(0x9fb8e8, 0.5); rim.position.set(6, -2, -4); scene.add(rim);
+  scene.add(new THREE.HemisphereLight(0x8090a8, 0x050506, 0.25));
+  return { scene, cam, key };
+}
+function shot({ scene, cam }, fill = 0.9) {
+  R.setClearColor(0, 0); R.render(scene, cam);
+  // every icon fills the same share of its square: crop to what was drawn, centered, then down to SIZE
+  const N = SIZE * 2, gl = R.getContext(), px = new Uint8Array(N * N * 4);
+  gl.readPixels(0, 0, N, N, gl.RGBA, gl.UNSIGNED_BYTE, px);
+  let x0 = N, y0 = N, x1 = -1, y1 = -1;
+  for (let y = 0; y < N; y++) for (let x = 0; x < N; x++) if (px[(y * N + x) * 4 + 3] > 8) { x0 = Math.min(x0, x); x1 = Math.max(x1, x); y0 = Math.min(y0, y); y1 = Math.max(y1, y); }
+  const side = Math.max(x1 - x0, y1 - y0) + 1, cx = (x0 + x1 + 1) / 2, cy = N - (y0 + y1 + 1) / 2, k = SIZE * fill / side;
+  const c = document.createElement("canvas"); c.width = c.height = SIZE; const g = c.getContext("2d");
+  g.imageSmoothingQuality = "high";
+  g.drawImage(R.domElement, SIZE / 2 - cx * k, SIZE / 2 - cy * k, N * k, N * k);
+  return c.toDataURL("image/png");
+}
+// fit an object to the frame: its bounding sphere fills `fill` of the picture
+function fit(st, obj, fill = 0.86) {
+  const s = new THREE.Box3().setFromObject(obj).getBoundingSphere(new THREE.Sphere());
+  obj.position.sub(s.center);
+  const d = s.radius / Math.tan(st.cam.fov * Math.PI / 360) / fill;
+  st.cam.position.set(0, 0, d); st.cam.near = d / 50; st.cam.far = d * 50; st.cam.updateProjectionMatrix();
+}
+
+// NASA's Cassini-Huygens model, as the viewer loads it
+async function cassiniModel() {
+  const s = atob((await (await fetch("../data/models/cassini.glb.b64.txt")).text()).trim()), u = new Uint8Array(s.length);
+  for (let i = 0; i < s.length; i++) u[i] = s.charCodeAt(i);
+  return (await new Promise((res, rej) => new THREE.GLTFLoader().parse(u.buffer, "", res, rej))).scene;
+}
+
+// ---- bodies: a sphere with its surface map; Saturn with its rings ----
+let ringTex;
+async function body(name, r = 1) {
+  const m = new THREE.Mesh(new THREE.SphereGeometry(r, 96, 64), new THREE.MeshStandardMaterial({ map: await tex(`../data/textures/2k/${name}.webp`), roughness: 1, metalness: 0 }));
+  m.rotation.y = -1.2;
+  if (name !== "saturn") return m;
+  const g = new THREE.Group(); g.add(m);
+  ringTex = ringTex || await tex("../data/textures/rings/saturn_rings.png");
+  const IN = 66900 / 60268, OUT = 140600 / 60268, rg = new THREE.RingGeometry(IN * r, OUT * r, 256, 1);
+  const p = rg.attributes.position, uv = rg.attributes.uv, v = new THREE.Vector3();
+  for (let i = 0; i < p.count; i++) { v.fromBufferAttribute(p, i); uv.setXY(i, (v.length() / r - IN) / (OUT - IN), 0.5); }
+  const ring = new THREE.Mesh(rg, new THREE.MeshStandardMaterial({ map: ringTex, transparent: true, side: THREE.DoubleSide, roughness: 1, depthWrite: false }));
+  ring.rotation.x = -Math.PI / 2; g.add(ring);
+  g.rotation.set(0.42, 0, 0.32);
+  return g;
+}
+
+const ICONS = {
+  // Cassini: NASA's model, three-quarter view with the dish up, the long booms and antennas cut away at the body
+  async cassini() {
+    const st = stage(24), m = await cassiniModel(), g = new THREE.Group(); g.add(m);
+    // looking at the instrument side from a little above, the Huygens probe to the right
+    m.rotation.y = -0.62; g.rotation.x = 0.3; g.rotation.z = 0.1; g.updateMatrixWorld(true);
+    // the body only: the magnetometer boom and the radio antennas run far out, so cut them at the body (planes in the
+    // model's frame, carried to the world)
+    const KEEP = new THREE.Box3(new THREE.Vector3(-2.3, -3.4, -4.4), new THREE.Vector3(2.3, 2.4, 2.1));
+    const clip = [[1, 0, 0, 2.3], [-1, 0, 0, 2.3], [0, 1, 0, 3.4], [0, 0, 1, 4.4]].map(([x, y, z, c]) => new THREE.Plane(new THREE.Vector3(x, y, z), c).applyMatrix4(m.matrixWorld));
+    m.traverse(o => { if (o.isMesh) { o.material = o.material.clone(); o.material.clippingPlanes = clip; o.material.envMap = ENV; o.material.envMapIntensity = 0.5;
+      if (/dish|plastic_white/.test(o.material.name)) o.material.color.multiplyScalar(0.8); } });
+    st.scene.add(g);
+    const box = KEEP.clone().applyMatrix4(m.matrixWorld), sp = box.getBoundingSphere(new THREE.Sphere());
+    g.position.sub(sp.center); const d = sp.radius / Math.tan(st.cam.fov * Math.PI / 360) / 1.12;
+    st.cam.position.set(0, 0, d); st.cam.near = d / 50; st.cam.far = d * 50; st.cam.updateProjectionMatrix();
+    return shot(st);
+  },
+  // Huygens: the probe from the same model, its heat shield towards the viewer
+  async huygens() {
+    const st = stage(24), m = await cassiniModel(), g = new THREE.Group(); g.add(m);
+    // (the parts hang under _root, which has a mesh of its own: hide the others by their material, not the object)
+    m.traverse(o => { if (o.isMesh) { o.material = o.material.clone(); o.material.visible = /_h$/.test(o.name); o.material.envMap = ENV; o.material.envMapIntensity = 0.5; } });
+    // the probe sits on the +X side of the spacecraft: look at it from outside, a little above
+    const box = new THREE.Box3(); m.traverse(o => { if (o.isMesh && o.material.visible) box.expandByObject(o); });
+    m.position.sub(box.getCenter(new THREE.Vector3()));
+    g.rotation.set(0.35, -1.0, 0.1);
+    st.scene.add(g);
+    const d = box.getBoundingSphere(new THREE.Sphere()).radius / Math.tan(st.cam.fov * Math.PI / 360);
+    st.cam.position.set(0, 0, d); st.cam.near = d / 50; st.cam.far = d * 50; st.cam.updateProjectionMatrix();
+    return shot(st);
+  },
+  async bodies() {
+    const st = stage(26), g = new THREE.Group();
+    const sat = await body("saturn", 1); sat.position.set(0.35, 0.45, -0.6); g.add(sat);
+    const ti = await body("titan", 0.5); ti.position.set(-1.15, -0.95, 1.2); g.add(ti);
+    const en = await body("enceladus", 0.3); en.position.set(0.75, -1.25, 1.4); g.add(en);
+    st.scene.add(g); fit(st, g, 0.94);
+    return shot(st);
+  },
+  // Settings: a machined graphite gear
+  async settings() {
+    const st = stage(26), N = 9, ro = 1, ri = 0.8, hole = 0.36, sh = new THREE.Shape();
+    for (let i = 0; i < N; i++) {
+      const a = i / N * Math.PI * 2, w = Math.PI / N;
+      const pts = [[ri, a - w * 0.62], [ro, a - w * 0.36], [ro, a + w * 0.36], [ri, a + w * 0.62]];
+      pts.forEach(([r, t], k) => (i === 0 && k === 0 ? sh.moveTo : sh.lineTo).call(sh, r * Math.cos(t), r * Math.sin(t)));
+    }
+    sh.closePath();
+    const h = new THREE.Path(); h.absarc(0, 0, hole, 0, Math.PI * 2, true); sh.holes.push(h);
+    const geo = new THREE.ExtrudeGeometry(sh, { depth: 0.32, bevelEnabled: true, bevelThickness: 0.06, bevelSize: 0.045, bevelSegments: 4, curveSegments: 48 });
+    geo.center();
+    const metal = new THREE.MeshStandardMaterial({ color: 0x7c828d, metalness: 0.92, roughness: 0.32, envMap: ENV, envMapIntensity: 1.1 });
+    const gear = new THREE.Mesh(geo, metal);
+    // a recessed hub ring
+    const hub = new THREE.Mesh(new THREE.TorusGeometry(0.55, 0.05, 16, 96), new THREE.MeshStandardMaterial({ color: 0x5a5f69, metalness: 0.9, roughness: 0.4, envMap: ENV }));
+    hub.position.z = 0.2;
+    const g = new THREE.Group(); g.add(gear, hub); g.rotation.set(-0.45, 0.42, 0.18);
+    st.scene.add(g); fit(st, g, 0.92);
+    return shot(st);
+  },
+  // Moments: the mission clock, a graphite dial with an accent hand
+  async moments() {
+    const st = stage(26), g = new THREE.Group();
+    const face = new THREE.Mesh(new THREE.CylinderGeometry(1, 1, 0.16, 96), new THREE.MeshStandardMaterial({ color: 0x1b1d22, metalness: 0.4, roughness: 0.45, envMap: ENV, envMapIntensity: 0.6 }));
+    face.rotation.x = Math.PI / 2; g.add(face);
+    const rim = new THREE.Mesh(new THREE.TorusGeometry(1, 0.075, 24, 128), new THREE.MeshStandardMaterial({ color: 0x9aa1ac, metalness: 0.95, roughness: 0.28, envMap: ENV, envMapIntensity: 1.2 }));
+    rim.position.z = 0.06; g.add(rim);
+    const tick = new THREE.MeshStandardMaterial({ color: 0xc9ced6, metalness: 0.3, roughness: 0.5, envMap: ENV });
+    for (let i = 0; i < 12; i++) {
+      const a = i / 12 * Math.PI * 2, big = i % 3 === 0, t = new THREE.Mesh(new THREE.BoxGeometry(big ? 0.06 : 0.035, big ? 0.2 : 0.11, 0.03), tick);
+      t.position.set(Math.sin(a) * (big ? 0.76 : 0.8), Math.cos(a) * (big ? 0.76 : 0.8), 0.1); t.rotation.z = -a; g.add(t);
+    }
+    const hand = (len, w, mat, a, z) => { const m = new THREE.Mesh(new THREE.BoxGeometry(w, len, 0.03), mat); m.geometry.translate(0, len / 2 - 0.08, 0); m.rotation.z = -a; m.position.z = z; g.add(m); };
+    hand(0.5, 0.075, tick, -0.95, 0.12);
+    hand(0.74, 0.05, new THREE.MeshStandardMaterial({ color: 0x8ab6ff, emissive: 0x2c4c8a, metalness: 0.2, roughness: 0.4 }), 2.0, 0.145);
+    const pin = new THREE.Mesh(new THREE.CylinderGeometry(0.06, 0.06, 0.06, 24), tick); pin.rotation.x = Math.PI / 2; pin.position.z = 0.17; g.add(pin);
+    g.rotation.set(-0.38, 0.4, 0.06);
+    st.scene.add(g); fit(st, g, 0.9);
+    return shot(st);
+  },
+  // Highlights: a fan of prints of Saturn and its moons
+  async highlights() {
+    const prints = [];
+    for (const name of ["titan", "enceladus", "saturn"]) {
+      const ps = stage(30), b = await body(name);
+      ps.key.position.set(-5, 4, 5);
+      ps.scene.add(b); fit(ps, b, name === "saturn" ? 0.98 : 0.8);
+      const rt = new THREE.WebGLRenderTarget(512, 512, { encoding: THREE.sRGBEncoding });
+      R.setRenderTarget(rt); R.setClearColor(0x000000, 1); R.render(ps.scene, ps.cam); R.setRenderTarget(null);
+      // the prints behind show only their upper left corner: the moons sit there, at half size
+      if (name !== "saturn") { rt.texture.repeat.set(2, 2); rt.texture.offset.set(0.06, -1.04); }
+      prints.push(rt.texture);
+    }
+    const st = stage(26), g = new THREE.Group();
+    const edge = new THREE.MeshStandardMaterial({ color: 0x2a2c31, metalness: 0.3, roughness: 0.5, envMap: ENV });
+    prints.forEach((t, i) => {
+      const card = new THREE.Group(), W = 1.5;
+      const back = new THREE.Mesh(new THREE.BoxGeometry(W + 0.12, W + 0.12, 0.05), edge);
+      const pic = new THREE.Mesh(new THREE.PlaneGeometry(W, W), new THREE.MeshBasicMaterial({ map: t, toneMapped: false }));
+      pic.position.z = 0.03; card.add(back, pic);
+      card.rotation.z = [0.3, 0.1, -0.1][i]; card.position.set([-0.55, -0.2, 0.3][i], [0.32, 0.14, -0.16][i], i * 0.12);
+      g.add(card);
+    });
+    g.rotation.set(-0.22, 0.3, 0);
+    st.scene.add(g); fit(st, g, 0.95);
+    return shot(st);
+  },
+  // the two cameras of the Imaging Science Subsystem: the narrow-angle's long white barrel and the wide-angle's short one
+  nac() { return this._camera(2.5); },
+  wac() { return this._camera(1.15); },
+  _camera(len) {
+    const st = stage(26), g = new THREE.Group(), r = 0.42;
+    const white = new THREE.MeshStandardMaterial({ color: 0xf4f5f7, metalness: 0.0, roughness: 0.55, envMap: ENV, envMapIntensity: 1.2 });
+    const black = new THREE.MeshStandardMaterial({ color: 0x15161a, metalness: 0.5, roughness: 0.4, envMap: ENV, envMapIntensity: 0.7 });
+    const glass = new THREE.MeshStandardMaterial({ color: 0x5a6fa8, metalness: 1, roughness: 0.08, envMap: ENV, envMapIntensity: 2.2 });
+    const body = new THREE.Mesh(new THREE.CylinderGeometry(r, r, len, 64, 1, true), white); body.position.y = -len / 2; g.add(body);
+    // sunshade, lens ring and glass at the front (+Y)
+    const shade = new THREE.Mesh(new THREE.CylinderGeometry(r * 1.12, r * 1.02, 0.34, 64, 1, true), black); shade.position.y = 0.17; g.add(shade);
+    const lip = new THREE.Mesh(new THREE.TorusGeometry(r * 1.12, 0.035, 16, 64), black); lip.rotation.x = Math.PI / 2; lip.position.y = 0.34; g.add(lip);
+    const lens = new THREE.Mesh(new THREE.SphereGeometry(r * 1.4, 48, 16, 0, Math.PI * 2, 0, 0.72), glass); lens.position.y = -r * 1.4 * Math.cos(0.72) + 0.12; g.add(lens);
+    const inner = new THREE.Mesh(new THREE.CircleGeometry(r * 1.02, 64), black); inner.rotation.x = -Math.PI / 2; inner.position.y = 0.0; g.add(inner);
+    // the electronics box at the back
+    const box = new THREE.Mesh(new THREE.BoxGeometry(r * 2.1, 0.5, r * 2.1), new THREE.MeshStandardMaterial({ color: 0x9a7a3a, metalness: 0.85, roughness: 0.38, envMap: ENV })); box.position.y = -len - 0.25; g.add(box);
+    const cap = new THREE.Mesh(new THREE.CircleGeometry(r, 64), white); cap.rotation.x = Math.PI / 2; cap.position.y = -len; g.add(cap);
+    // pointing out of the screen towards the upper left, so the lens catches the light
+    g.rotation.set(0.8, 0.3, 0.85);
+    st.scene.add(g); fit(st, g, 0.92);
+    return shot(st);
+  }
+};
+window.ICONS = ICONS;
+</script></body></html>
