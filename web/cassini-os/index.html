@@ -803,7 +803,7 @@ body.phone #reelcard:not(.full) { width: calc(100% - 16px) !important; left: 8px
 #hllist li button:hover, #hllist li button:focus-visible { background: rgba(255,255,255,.06); border-color: var(--q-line, #555); }
 #hllist li.on button { background: rgba(138,182,255,.14); border-color: rgba(138,182,255,.55); }
 .hlthumb { grid-row: 1 / span 3; width: 76px; height: 76px; border-radius: 3px; background: #000; overflow: hidden; position: relative; }
-.hlthumb img { width: 100%; height: 100%; object-fit: cover; display: block; opacity: 0; transition: opacity .5s ease; }
+.hlthumb img { width: 100%; height: 100%; object-fit: cover; display: block; opacity: 0; transition: opacity .2s ease; }
 .hlthumb img.ok { opacity: 1; }
 .hlthumb b { position: absolute; left: 4px; top: 3px; font: 600 10px/1 var(--hudf, monospace); color: rgba(232,236,242,.85); text-shadow: 0 0 3px #000, 0 0 6px #000; }
 .hlthumb i { position: absolute; inset: auto 0 0 0; height: 2px; background: var(--q-accent, #8ab6ff); transform-origin: left; transform: scaleX(var(--p, 0)); }
@@ -3915,42 +3915,35 @@ body.phone #hrel .cs-note { bottom: auto; top: 40px; max-width: calc(100vw - 32p
     return `${fmtInt(e.frames)} pictures · ${cams}${e.rgb_sets ? " · color" : ""} · ${fmtSpan(e.end_et - e.et)}`;
   }
 
-  // ---- thumbnails: made by the frame server through the pipeline, by the rule in build_data.thumb_hint ----
-  // the whole pass when it is a mosaic of three or more tiles (in colour, when the highlight has a colour set), else
-  // the colour set, else the single frame
-  async function thumbUrl(e) {
-    const t = e.thumb || {};
-    if (e.kind === "milestone") {   // the Huygens descent: the probe's own pictures (the coarsest DISR mosaic)
-      for (let k = 0; k < 40 && !(typeof probe !== "undefined" && probe && probe.map); k++) await new Promise(r => setTimeout(r, 500));
-      return typeof probe !== "undefined" && probe && probe.map ? probe.map.levels[0].file : null;
-    }
-    if (t.mosaic) {
-      try {
-        const r = await fetch(`${FRAMES}/frames/mosaic/${t.mosaic}.webp?size=256`);
-        const how = r.ok ? JSON.parse(r.headers.get("X-Reel") || "{}") : null;
-        const tiles = how && Math.max(+how.of || 0, +how.mosaic || 0, (how.tiles || []).length || 0);
-        const filters = how && (Array.isArray(how.filters) ? how.filters.length : +how.filters || 0);
-        // a grey mosaic gives way to a colour set when the highlight has one
-        if (tiles >= 3 && (filters >= 3 || !t.color)) return URL.createObjectURL(await r.blob());
-      } catch (err) {}
-    }
-    if (t.color) return `${FRAMES}/frames/color.webp?ids=${t.color.join(",")}&size=256`;
-    if (t.frame) return `${FRAMES}/frames/${t.frame}.webp?size=256`;
-    return null;
+  // ---- thumbnails: one small picture each, made by the frame server through the pipeline (/frames/thumb.webp: the
+  // whole pass when it is a mosaic of three or more tiles, in colour when the highlight has a colour set, else the
+  // colour set, else the single frame, by the rule in build_data.thumb_hint), made as the server starts and kept
+  function thumbUrl(e) {
+    const t = e.thumb || {}, q = [];
+    if (t.mosaic) q.push(`mosaic=${t.mosaic}`);
+    if (t.color) q.push(`color=${t.color.join(",")}`);
+    if (t.frame) q.push(`frame=${t.frame}`);
+    return q.length ? `${FRAMES}/frames/thumb.webp?${q.join("&")}&size=256` : null;
+  }
+  async function probeThumb() {   // the Huygens descent: the probe's own pictures (the coarsest DISR mosaic)
+    for (let k = 0; k < 40 && !(typeof probe !== "undefined" && probe && probe.map); k++) await new Promise(r => setTimeout(r, 500));
+    return typeof probe !== "undefined" && probe && probe.map ? probe.map.levels[0].file : null;
   }
   let thumbsAsked = false;
-  async function loadThumbs() {
+  function loadThumbs() {
     if (thumbsAsked) return;
     thumbsAsked = true;
-    // two at a time: a mosaic nobody has opened yet takes the server a while the first time
-    const show = async i => {
-      const img = list.children[i].querySelector("img"), url = await thumbUrl(H.list[i]);
-      if (url) await new Promise(res => { img.onload = () => { img.classList.add("ok"); res(); }; img.onerror = res; img.src = url; });
-    };
-    const queue = [];
-    H.list.forEach((e, i) => { if (e.kind === "milestone") show(i); else queue.push(i); });   // the probe's waits on its data, not the server
-    const one = async () => { while (queue.length) await show(queue.shift()); };
-    one(); one();
+    // all at once, the ones scrolled out of sight when they come into view: each is one small file the server
+    // already has, so none waits behind another
+    H.list.forEach(async (e, i) => {
+      const img = list.children[i].querySelector("img");
+      const url = e.kind === "milestone" ? await probeThumb() : thumbUrl(e);
+      if (!url) return;
+      img.loading = "lazy";
+      img.decoding = "async";
+      img.onload = () => img.classList.add("ok");
+      img.src = url;
+    });
   }
 
   // ---- playing a highlight ----
