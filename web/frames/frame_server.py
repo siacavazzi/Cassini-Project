@@ -82,10 +82,12 @@ Routes:
                                of the pass's color filters together, trail=N the N earlier frames of its filter
                                fading under it; center=1 (the default) the body in the middle of every frame, when
                                its disk fits the view. 503 while the pass is being worked out (the window shows the frame)
-  /frames/movie/<ID>.webp?mode=rolling&laps=1
+  /frames/movie/<ID>.webp?mode=rolling&laps=1&fade=0&persist=35
                                a mosaic movie (a raster repeated over the same places): every place's newest tile
                                by this frame (laps=N: its N newest copies, older under newer), composed like the
-                               pass's mosaic (obs_mosaic.rolling_webp), so it never empties when a lap begins
+                               pass's mosaic (obs_mosaic.rolling_webp), so it never empties when a lap begins;
+                               fade=N: older tiles fade over N frames down to persist per cent (Rolling), 0 keeps
+                               every tile as bright as the newest (Time-lapse)
   /frames/movie/<ID>.json      the pass the frame is in: its frames [id, time, filter], cadence, movie/mosaic call
   /frames/thumb.webp?mosaic=<ID>&color=R,G,B&frame=<ID>&size=256
                                a highlight's thumbnail (any of the three, as data/highlights.json's "thumb" gives them):
@@ -1233,9 +1235,11 @@ def make_handler(site, cache, flags=None):
                     if query.get("mode", [""])[0] == "rolling":
                         # a mosaic movie: every place's newest tile (laps= newest copies of each), never emptied
                         laps = max(1, min(obs_mosaic.TRAIL, int(query.get("laps", ["1"])[0] or 1)))
+                        fade = (int(query.get("fade", ["0"])[0] or 0), int(query.get("persist", [str(obs_mosaic.FADE_PERSIST)])[0] or 0))
                         full = size_of(query, 512) == FULL
                         made = obs_mosaic.rolling_webp(m.group(1), FULL if full else size, cache, laps, _mosaic_slots, fmt,
-                                                       out=min(obs_mosaic.CANVAS, FULL_MAX) if full else obs_mosaic.OUT)
+                                                       out=min(obs_mosaic.CANVAS, FULL_MAX) if full else obs_mosaic.OUT,
+                                                       fade=fade)
                         if made and made[0] is not None:
                             return self.send_picture(made[0], fmt, query, f"Cassini_{m.group(1)}_mosaic_movie", {"X-Movie": json.dumps(made[1])},
                                                      forever=not made[1].get("partial"))
