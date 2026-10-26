@@ -118,7 +118,7 @@ a link's view is for that visit only (it does not change the Follow camera setti
 On a screen under 600 px wide, or a touch screen under 500 px tall (Settings > Interface > Phone layout: Automatic,
 Always or Never; `?phone=1` forces it), the windows dock instead of floating (`src/phone.html`). Upright: the NAC
 and WAC pictures side by side under the menu bar, the 3D view in the middle, the replay controls along the bottom
-(zoom shows speeds and the body picker), and Moments as a sheet over the view, opened from the list
+(the speed slider on its own row; zoom shows the body picker), and Moments as a sheet over the view, opened from the list
 button next to the moment arrows. Sideways: the two pictures down the left edge and the controls beside them. Tap a
 picture for full screen, tap again to come back. Settings > Interface > Camera pictures on a phone (50 to 100 %) sets
 how big the docked pictures are.
@@ -134,6 +134,20 @@ glow is drawn on the GPU in the HUD's own canvas, and surface maps are decoded o
 
 To measure: `node bench/fps.js URL OUT [WIDTH HEIGHT DPR SECS]` (needs `npm i playwright-core`; `CHANNEL=chrome`
 on a Mac for the real GPU) reports the uncapped frame rate, the CPU time of each step of the render loop and the GPU.
+
+## Playback speed
+
+The speed slider sits next to play in the replay window (`src/head-quiet.html`): a log scale from real time to a
+month of mission a second that lands on round speeds (`window.cassiniSpeed` in `src/settings.html`, shared with
+Settings > Playback > Starting speed, 10 min/s by default, and the clock read-out). The arrow keys step from one round
+speed to the next. It sets the clock through `setSpeed`, as a `?speed=` link does, and follows whatever set the speed
+last. When a burst or a picture still being made slows the clock, the rate it really runs at shows under the speed
+("now 3.2 min/s").
+
+Past Settings > Playback > Load pictures up to (`playback.picturesUpTo`, 1 day/s by default, all the way right =
+any speed), no frame server keeps up, so while playing faster than that the camera windows hold their last picture,
+dimmed, and ask for nothing, and the clock runs at the full speed (no burst slowdown). The slider's track is dimmer
+past that point. Pausing, scrubbing, movie mode or a slower speed bring the pictures back at once.
 
 ## Imaging bursts
 
