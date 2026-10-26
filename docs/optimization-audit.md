@@ -29,10 +29,47 @@ Rigs in the project files, `opt-audit/rigs/` (cloud, 34 real lean-archive frames
   each row's ends against every pixel, on edge cases, synthetic frames and real tiles.
 - `proc_memo_equiv.py`: `processed_webp` at 512 then 1024 (the segment pre-render's order), plain and centred, in the
   three looks: a hash of every picture, report and file written.
+- `encode_equiv.py`: `encode` on a grid of pictures (4 modes, 6 sides, 7 sizes, WebP and PNG, 3 qualities) and on the
+  sample's frames and composites at every size. `prebuild_composites_equiv.py`: the pre-build's composites item
+  (`color_webp` at 1024 then 512, which writes full too) in the three looks: a hash of every file written.
+- `resize_equiv.py`: `_lit_resize` (O25) against PIL's resize of the whole canvas on random canvases (lit nowhere, at
+  a pixel, everywhere, in a box, a disk, a turned frame, with holes, at an edge; down and up) and 3072 px movie-tile
+  canvases. For `_lit_crop` (O28), `web/test_lit_resize.py` in the repo does the same against the whole canvas's
+  resize cut to its lit rows and columns, and `crop_equiv.py` checks the sample's movie-tile canvases (saved by
+  `capture_canvases.py`) against the old resize and cut. `proc_place_equiv.py`: `processed_frame` on the sample's
+  frames and sets, plain and hdr, and the reel pictures made of them, in the three looks: a hash of every picture,
+  report and file, and of the label's placement.
+- `made_equiv.py` (O27): every part drawn from a tile kept in memory against the same tile read from its PNG, over
+  the sample's passes as movies, mosaics and mosaic movies. `web/test_detail_mean.py` (O29, in the repo): the
+  channels' sum over 3 against numpy's mean for every 8-bit colour.
+- `sky_share_equiv.py` (O30, O31): `_balanced_scale` and `picture_scale` in both looks, old against new, on the
+  sample's frames and sets and on 1,200 made-up skies (ties, signed zeros, NaN, inf, constant). `shoulder_equiv.py`
+  (O32): `roll_off`, `tone`, `mix_display` and `display`, old against new, on made-up pictures (NaN, inf, signed
+  zeros, values at the knee; float32 and float64; views) and `tone` on the sample's frames and sets.
+  `sky_stats_equiv.py` (O33): `sky_levels` and `sky_blacks`, old against new, the way each caller asks (each frame and
+  set on the sky `_sky` finds, with the floor; `black_of`'s quarter-size frame; the sample's frames grouped as passes)
+  and on 600 made-up skies; `web/test_sky_stats.py` (in the repo): numpy's own calls in place on one working array
+  against each on its own copy. `mix_layout_equiv.py` (O34): `mix_display` and `apply_mix`, old against new, on the
+  sample's colour pictures as the passes draw them, on made-up pictures and mixes, and on made-up float pictures in
+  both layouts (`mix_lprof.py` is the line profile it came from). `pct_equiv.py` and `pct_nan2.py` show why order
+  statistics shared between numpy calls must stay the same call on the same array unless the pixels are checked first
+  (O33): with both signs of zero in it the zero found can change with the partition, and with a NaN even the result's
+  type. And on numpy 2 a list of percentiles has another type than a single one (O33's fix).
+- Timings: `time_make_pass.py` (a pass maker run on the sample's passes, fresh cache and geometry, no profiler, no
+  tiles made ahead as the pre-build runs), `time_composites.py` (the composites item, with its encodes counted and
+  timed), `time_proc.py` (`processed_frame` alone, with the time it holds `spice_lock`), `time_processed.py` (the
+  pre-build's processed phase, `processed_webp` at 1024) and `time_live_movie.py` (a movie played cold on the
+  live server with no tiles made ahead: each frame's tile made just before it is drawn), alternating with and
+  without.
 - For the overnight build, the same checks on the integration branch with and without the change (`git apply -R`
   of its code diff). How to run them: `opt-audit/rigs/README.md`.
 - `zip_equiv_env.py`: every member of the sample zip and of synthetic zips (stored, deflated, empty, long local extra
   fields) read by the old and new zip reader, at several chunk sizes.
+- numpy versions: the rigs run in a venv matching the Mini (numpy 1.26.4, pandas 1.5.3, cv2 4.11.0, Pillow 13.0.0).
+  Since 2026-10-26 18:30Z the function rigs (`sky_stats_equiv.py`, `sky_share_equiv.py`, `shoulder_equiv.py`,
+  `mix_layout_equiv.py`), every `web/test_*.py` and the route hashes also run on numpy 2.5.3 (Python 3.12, pandas 3.1,
+  cv2 5.0), what the unpinned `requirements.txt` installs today: numpy 2 types some results otherwise (NEP 50), and
+  O33 as first written was the same only on numpy 1 (O38).
 
 ## Baseline
 ### Mini, real archive (2026-10-26 03:40Z, wt-pictures at 7ffcf90)
@@ -112,8 +149,40 @@ On the busy Mini a cold picture spends a quarter to a half of its time reading t
 | O19 | frames (pre-build) | each plain frame's PNG read from the archive and decoded again for each of the sizes the pre-build makes in turn (1024, 512, 128); now decoded once, the last 16 kept, each size encoded from a copy | 10% less time per frame (median 159.6 to 143.1 ms, cloud) | this audit | #116 |
 | O20 | encode | `thumbnail` shrinks the picture it is given, and on `pictures` (since #62) that can be a composite kept for its other sizes (`_recent_composite`): after a 512 view, the full PNG save and the channel views came out 512 px (`pictures` only; main has no kept composites) | a bug, found by the audit: no pre-built file changed (the pre-build makes 512 last) | this audit | #119 |
 | O21 | processed_webp | the segment pre-render (#102's `single()`) asks for each single frame at 512, then 1024, and each size made the frame again (`load_stacked`, calibration, tone; for Auto center `processed_frame` and SPICE); now kept like a composite (`_recent_composite`), the second size only an encode | 30% less per single frame (cloud medians: plain 325 to 213 ms, centred 706 to 486 ms); 4 segment threads made 34 frames for 34, not 68 | this audit | #120 |
-| O22 | pass pictures (pre-build) | `make_pass` (the pre-build's mosaic and movie passes, and the segment pre-render) asks each frame's mosaic so far, mosaic movie picture or movie frame at 1024 and 512, and both sizes were made at OUT and shrunk after: the colour mix, the luminance base, detail's blur and the movie frame's placing done twice; now `so_far` and `movie_frame` keep their last picture on the thread (named as the cache names it, up to OUT, a copy per call) | the sample's passes as mosaics: `so_far` 8 times for 4 pictures (37 of 61 s); as movies: `movie_frame` 48 times for 24 (17 of 47 s): about 31% of a mosaic pass, 18% of a movie pass (cloud) | this audit | #120 |
-| O23 | tile outline | `_corners` handed `minAreaRect` every set pixel of a tile (about a million) to hull; each row's first and last set pixel have the same hull | 190 ms to 8 ms a tile (a tile ~0.9 s), same to the bit on 3,995 masks | this audit | #120 |
+| O22 | pass pictures (pre-build) | `make_pass` (the pre-build's mosaic and movie passes, and the segment pre-render) asks each frame's mosaic so far, mosaic movie picture or movie frame at 1024 and 512, and both sizes were made at OUT and shrunk after: the colour mix, the luminance base, detail's blur and the movie frame's placing done twice; now `so_far` and `movie_frame` keep their last picture on the thread (named as the cache names it, up to OUT, a copy per call) | the sample's passes as mosaics: `so_far` 8 times for 4 pictures (37 of 61 s); as movies: `movie_frame` 48 times for 24 (17 of 47 s). Timed on a quiet cloud machine with O23 (medians of three alternating runs, fresh caches): a mosaic pass 66.7 to 45.1 s (32% less), a movie pass 50.1 to 38.8 s (22% less) | this audit | #120 (follow-up merged as 7754fda) |
+| O23 | tile outline | `_corners` handed `minAreaRect` every set pixel of a tile (about a million) to hull; each row's first and last set pixel have the same hull | 190 ms to 8 ms a tile (a tile ~0.9 s), same to the bit on 3,995 masks | this audit | #120 (follow-up merged as 7754fda) |
+| O24 | encode | encode's plan for a size (the side the picture is shrunk to, the saver's format and arguments) is now worked out on its own (`_encoding`), and a picture asked for at sizes with the same plan is encoded once. At quality 95 (#115) a composite up to 1024 px is saved the same way at 1024 and full, so `color_webp`'s 1024 and full were the same bytes encoded twice (the pre-build's composites item, and every cold window composite); a summed frame (512 or 256 px) is not shrunk for 1024 or 512, so `webp`'s 1024 and 512 (asked in turn by the pre-build) were too | the pre-build's composites item (`color_webp` at 1024, then 512): 3 encodes a set to 2, its encodes 229-255 to 133-137 ms a set, the item ~15% less (cloud; a 1024 q95 composite encode is ~100 ms here, 31 ms on the Mini per #115); a cold window composite waits one encode less; a summed frame's three sizes 3 encodes to 2 | this audit | #121 |
+| O25 | tile resize | a tile's frame sits on a canvas three frames wide (3072 px for a movie tile, ~1400 px of it lit), and the whole canvas was resized to the pass's reference distance (LANCZOS): half of making a tile. PIL resizes RGBA premultiplied, across then down, each row and then each column on its own, and an unlit pixel is 0 premultiplied: `_lit_resize` resizes only the lit rows across and the columns they leave lit down, through PIL's own resize | a movie tile's resize ~430 to ~250 ms (cloud). The sample's passes on the build tree (medians of three alternating runs, no tiles made ahead, with O24): a movie pass 36.8 to 32.8 s (11% less), a mosaic pass 43.0 to 38.9 s (10% less). The same bytes on 9,300 random canvases and on every tile of the sample's passes | this audit | #121 |
+| O26 | processed_frame | every frame was drawn twice onto its 3072 px canvas: shifted and turned (`auto_center`) only to learn where SPICE puts it (the label's placement and the canvas's shape), then north up at the canvas's middle, the picture returned. Now the first is not drawn (`translate(draw=False)`): the same placement, worked out from the canvas's shape. Every tile, reel picture and Auto center view goes through it | a frame's `processed_frame` as a tile is made 233 to 197 ms (cloud medians), `spice_lock` held 41 to 0.8 ms of it: the drawing skipped was inside the lock, which every thread of the pre-build takes in turn (6-9 threads tonight). A movie pass 32.8 to 31.0 s more (16% less with O25); a mosaic pass the same within its noise (~3 s) | this audit | #121 |
+| O27 | tile read-back | a tile's PNG was read back right after it was written: by `_part` when its movie frame or mosaic draws it (~35 ms a 1400 px movie tile), and on the build branch by `_register` when the other filters' tiles at that pointing are registered to it. The newest tiles' pictures, as written, are now kept in memory (`_keep_made`, up to `CASSINI_MOSAIC_MADE_MB`, 64 MB, about 8 movie tiles) and used instead: the PNG is lossless, so the same pixels | ~35 ms each time. The pre-build's `make_pass` makes all of a pass's tiles before drawing its frames, so there `_part` gains only on a pass's last tiles, and `_register` whenever the tile it registers to is still kept (it was made a few tiles before); on the live server a tile made for the frame being drawn gains both. 26 of the sample's parts drawn from kept pictures, each the same bytes as from its PNG (`made_equiv.py`) | this audit | #121 |
+| O28 | tile cut | `_lit_resize` (O25) still made the whole resized canvas (~3000 px square, mostly empty), and the tile code scanned it with numpy for the crop, after scanning the 3072 px canvas twice (`any` over rows and over columns). `_lit_crop` returns the cut and its place: the lit boxes from PIL's `getbbox` (one pass in C), and only the lit part of the resized canvas is made | a movie tile's resize and cut 261 to 182 ms (30% less), and 17 to 6 ms for a tile at the reference distance, which is only cut (cloud medians over the sample's 21 movie-tile canvases, `crop_time.py`); the same bytes and place (`crop_equiv.py`); `web/test_lit_resize.py` 323 checks | this audit | #121 |
+| O29 | detail | the luminance `detail` sharpens with was numpy's `mean(axis=2)` over the three channels (its reduce over a short axis is slow); the channels are 8-bit values as float32, so their sum over 3 is exact and the same to the bit (`web/test_detail_mean.py` checks all 2^24 colours) | ~19 to ~4 ms a 1024 px picture: each size of each movie frame and mosaic of a filled pass | this audit | #121 |
+| O30 | balanced scale | a balanced scale picked each channel's sky pixels and took their median twice, in `sky_levels` and again in `noise_floor` (a boolean pick and a median of every sky pixel). `sky_levels(floor_pct=)` takes the floor from the same pixels and median: each percentile and median the same numpy call on the same pixels in the same order, so the same values, signed zeros and NaN included | ~7 ms a 1024 px channel of every balanced composite and processed frame (cloud); 1,317 scales the same (`sky_share_equiv.py`) | this audit | #121 |
+| O31 | picture_scale | in the balanced look `picture_scale` measured each picture's sky (`_sky`, a 99.9th percentile of every pixel of each channel), then `_balanced_scale` measured it again; it now passes it on, as `load_linear` already did | ~8 ms a channel of each tile's own scale in the reel's mosaics (`tiles_scale`; cloud); the same scales (`sky_share_equiv.py`) | this audit | #121 |
+| O32 | tone shoulder | `tone` and `mix_display` multiplied every pixel by a factor that is 1 below the shoulder, and `roll_off` worked `tanh` out over the whole picture before choosing; both now work only on the pixels past the knee (~5% of the sample's pictures), each value the same elementwise expression on the same input | `display`'s roll-off 3.8 to 1.3 ms a channel (each channel `load_channels` draws in the balanced look: every tile); the shoulder step of `tone` 8.0 to 6.8 ms (one channel), 10.8 to 10.6 ms (three; cloud, `shoulder_time.py`); 3,985 outputs the same (`shoulder_equiv.py`) | this audit | #121 |
+| O33 | sky statistics | a sky's median, 20th percentile and (in a balanced scale) 98th percentile were three numpy calls, each copying the sky's pixels (~836 k of a 1024 px frame) and partitioning the copy. `_median_percentiles` makes the same calls in place on the array `sky_levels` has already made (`overwrite_input`): no copies, and each partition starts from the order the one before left. A value at a rank does not depend on that order unless the pixels hold a NaN or both signs of zero, so a sky with either (checked first) goes to the separate calls as before. First written as one call for both percentiles: numpy 2 works that out in float64 where a single percentile of float32 pixels stays float32, so it was the same only on numpy 1 (found by the pictures lead running `web/test_sky_stats.py` on numpy 2.5.3; 758 of 3,211 sky results differ there). Fixed in 2a6ad72: each value numpy's own call, with the arguments it had | 15.0 to 12.3 ms a channel, the check included (9.4 ms as first written; the sample's 34 skies, medians of three runs, cloud, `sky_stats_time2.py`): every channel of a balanced composite or processed frame, each tile's own scale, a pass's sky levels; the pre-build's processed phase 177 to 174 ms a frame, within its noise (168 ms as first written); 4,528 results the same on numpy 1.26.4 and 2.5.3 (`sky_stats_equiv.py`, `sky_share_equiv.py`), `web/test_sky_stats.py` 1,570 checks on both | this audit | #121 |
+| O34 | colour mix layout | `mix_display` hands `apply_mix` its picture channels first in shape but channels last in memory (a moveaxis of the RGB picture), where numpy's mean, min and max over the three bands run one tiny loop per pixel, 10 to 45 times as long as on a channels-first copy. A false-colour mix's band mean, band minimum and the straight picture's saturation now work on such a copy: numpy's sum starts from 0 and adds the bands in order in either layout, and max and min pick the same values, so the same results; the weighted sums (`tensordot`) keep the layout they had, for BLAS. `tone`'s channels were already channels first. The picture's brightness for the detail step is taken once instead of twice | a colour pass's colour picture 510 to 409 ms a 1024 px movie frame, 3.1 to 2.6 s a 2048 px mosaic picture (cloud, `mix_layout_equiv.py`); 4,103 outputs the same (the sample's colour pictures, 1,100 made-up pictures through `mix_display`, 3,000 `apply_mix` calls with NaN, inf, negative values and signed zeros in both layouts) | this audit | #121 |
+| O35 | mosaic movies made at once | a mosaic movie's picture grows from its last one (`_roll`, kept in `_rolled`) or, when that is gone, is drawn whole (every place's newest tile composed with its seam gains): different pictures by design. `_rolled` keeps 6 mosaic movie filters for the whole process ("two passes of three"), and the pre-build's `--threads` and the segment pre-render's 4 threads outrun it with three or more colour mosaic movies at once (section "filters-level", below) | not a speedup: a threaded build's mosaic movies differ from a one-at-a-time build's and from run to run (120 of 272 pictures with four colour movies at once, 0 with room for 12 filters; a disk up to 16% brighter where a picture is drawn whole); at 6 threads about 149 of the 347 mosaic movies are in stretches at risk. Drawn whole is also slower | pictures lead, phase 7, pre-build | **fixed in 11c01ad** (phase 7: `_rolled` evicts whole passes, least recently used, keeping at least `ROLLED_PASSES`, env, default 4, and `prebuild.run` raises it to threads + 1; `web/test_rolling_threads.py`), in `pictures` with #106 (a26a2e6) and in `pictures-build` as 60a7513; checked: six at once with the pre-build's room match one at a time (0 of 264 files differ). The segment pre-render's 4 threads had the default 4 too: phase 7 raised it in 1507f78 (`rolled_room(SEGMENT_THREADS + 2)`, in `pictures` with #106). Movies built before it: `fl_rolled_check.py` lists the ones with pictures drawn whole |
+| O36 | a pass's first gray | until a pass's grey filter and all of its colour filters have a tile, `layout` draws the luminance base's filter taken most so far, `max(set(base), key=base.count)`: a tie goes by the set's order, which changes from process to process (string hashing is randomized unless `PYTHONHASHSEED` is set) | 28 frames at the start of 8 of the 2,352 mosaic passes can be drawn in another filter, under another name, on the live server than in the pre-build (a miss of the pre-built picture) | pictures lead | **fixed in #108 (3cad10f)**, in `pictures` (a26a2e6) and `pictures-build` 6dcf062; the 8 passes to make again are in project files `opt-audit/results/filters-level/o36_passes.txt` |
+| O37 | grown mosaics made at once | `_grown_last` keeps the 6 filter mosaics grown last (`GROWN_KEEP`) for the whole process, the same shape as `_rolled` (O35): a pass past 16 tiles of a filter grows each frame's mosaic from the one before, and at 6 threads of colour passes (four filters each, with the luminance base) the others push it out. Time only: every count is written to filters-level before the next is grown, and a PNG reads back the same pixels | 6 passes at once against one at a time: the 904 served files the same, filter mosaics read back 65 times instead of 52 (~80 ms each here). In the catalog 20,960 of the mosaic passes' 59,125 filter steps are grown ones; at most one read back per filter and frame, up to ~5% of a big colour frame (cloud). With filters-level written only at checkpoints (its option 4b) a mosaic pushed out would be grown again instead, so that option needs this first | pictures lead | finding: 11c01ad's whole-pass eviction would fit it too |
+| O38 | library versions | `requirements.txt` names pandas, numpy, spiceypy, opencv-python, pillow, matplotlib and scikit-image without versions, so a machine set up from it today gets numpy 2.5.3, pandas 3.1 and opencv 5.0, where the Mini runs numpy 1.26.4, pandas 1.5.3, cv2 4.11.0 and Pillow 13.0.0 (its `.venv`, read 2026-10-26 18:20Z). numpy 2 types some steps otherwise (NEP 50: a percentile of float32 pixels is a float32 there, a float64 on 1.26) | not a speedup: `pictures` 58162a8 on today's versions (Python 3.12) against the Mini's makes 288 of the 671 route hashes differently: every composite, centred picture, colour WebP, aligned load and processed frame, most channels, and 72 of the 108 mosaic, movie and rolling routes; singles, processed WebPs, `load_hdr` and the 512 WebPs are the same. 0.3 to 0.7% of a composite's pixels differ, by 1 level (at most 4): invisible, but pictures made elsewhere, or after the Mini's venv is set up again, are not the cache's to the bit, and a byte-identical check on today's versions is not one on the Mini's (#121 is checked on both) | pictures lead | finding: pin the Mini's versions in `requirements.txt` (its `pip freeze`) |
+
+O27 to O32 together, the sample's passes on the build tree (016249b without and with them), medians of three
+alternating runs on a quiet cloud machine, fresh caches, no tiles made ahead (as the pre-build runs): a movie pass
+30.7 to 25.4 s (17% less), a mosaic pass 37.2 to 32.6 s (12% less). A movie played cold on the live server, each
+frame's tile made just before it is drawn (`time_live_movie.py`): 22.3 to 17.3 s (23% less), since there the kept
+tile also saves its read-back. On `pictures` (ef8a5c3 without, 8ab6e04 with): the pre-build's processed phase 201 to
+195 ms a frame (3% less, 5-6 ms in each round); the composites item the same within its noise (runs vary by ~140 ms a
+set, more than the ~20 ms O30 should take off a three-filter set). With both rounds of #121, a movie pass takes about
+31% less and a mosaic pass about 24% less than before it (36.8 and 43.0 s, timed the same way: O25, O26).
+
+O33 on its own, timed the same way (8ab6e04 without and f5db4e8 with on `pictures`; the build tree without and with
+it), as first written: the pre-build's processed phase 199 to 190 ms a frame (6 to 9 ms less in each round). As fixed
+(2a6ad72), timed again on a quieter machine, the three alternating (without, as first written, fixed): 177.4, 167.9
+and 174.4 ms a frame, the fixed one inside the noise of the one without (its rounds 170 to 178 ms against 173 to 178).
+The composites item and the movie and mosaic passes are the same within their noise: O33 as fixed takes ~8 ms off a
+three-filter set (~17 ms as first written), and the passes' runs vary by ~3 s. O34 is timed on the colour pictures
+alone: the sample's passes hold two colour movie frames and one colour mosaic picture, inside the passes' noise.
 
 ## For the owners
 Ideas in another thread's area, sent to that thread; this audit does not make them.
@@ -121,17 +190,201 @@ Ideas in another thread's area, sent to that thread; this audit does not make th
 | Owner | Idea | Why |
 |---|---|---|
 | phase 8 (#107) | calibrate a set's frames once in load_aligned | adopted (ff55095) |
+| processing toggles (#117) | on `pictures` the background threads (`tiles_ahead`, `warm_movie`, `movie_footprint`'s pool) re-set only the look, so a raw-colors request also made natural-look tiles behind it; and `tiles_ahead` kept one thread per pass whatever the mode, so after a toggle it went on making the old mode's tiles to the end of the pass | fixed in #117 (`calibration.in_mode` in those threads; 29808de keys the tiles ahead by mode) |
+| phase 4 (explore mosaics) | the pre-build's `all_passes` (72 s on the build head, cloud) spends 28 s in `units`' `itertuples` (a namedtuple class made per observation, 4.5 s of it) and 25 s in `_judge`, mostly matching each frame to its nearest place (6.2 million lambda calls); column arrays and a vectorised nearest place would about halve it | sent through the lead for when phase 4 starts |
+| #115 (WebP quality 95) and the pictures lead | WebP's encoder effort (`method`, Pillow's default 4) for the pictures the pipeline sends. On the sample (`webp_method.py`, cloud): method 3 gives the same size and fidelity (PSNR within 0.02 dB) in 79-86% of the encode time for 1024 px RGBA pictures (colour composites, movie frames, mosaics) and 95-100% for gray frames and singles; method 1 takes 39-62% of the time for 5-10% more bytes; 6 takes 2 to 23 times as long for 3-7% fewer (all at 1024 px). Not the same bytes, so a cache version bump and a look by eye | a movie frame's two encodes are ~240 ms of it (cloud); method 3 would take ~27 ms off a 1024 px movie frame and ~45 ms off a mosaic picture. Results: project files `opt-audit/results/webp_method.txt`. For after tonight's build |
+| phase 8 (#107) and processing toggles (#117) | in `load_aligned` the classic guide's `load_channels` (`picture_scale`) measures the sky again on the channels `load_linear` has just measured it on (`_sky`: a 99.9th percentile of every pixel of each channel); `load_linear`'s sky passed on to the guide is the same sky, so the same guide and alignment | ~27 ms a balanced colour composite (cloud) |
+| pictures lead | a picture several frames share (a frame whose tile is of a filter not drawn yet makes the same picture) keeps the report of the frame that made it first, and the window's label shows its count ("MOSAIC · n OF m TILES"): in the build's frame order a colour pass's frame 1 (its first GRN tile, still drawn in UV3) says 1 where it has taken 2 of the colour filters' tiles, and made in the other order both frames say 2 | labels only; seen when served pictures were made again in another order (filters-level proof) |
+
+## filters-level: what a mosaic pass keeps of each filter's mosaic (asked by the pre-build)
+
+The pre-build thread, for the lead (2026-10-26 11:27Z): on obs-v46-q95 a pass's served files come to ~2.1 MB and its
+`filters-level/` to ~131 MB (20 passes measured on the Mini), ~270-440 GB over the 2,352 mosaic passes. Can it keep
+only each filter's last mosaic, or none once the pass's pictures are made, without changing pixels?
+
+**Answer: yes, any of it, at any time.** Every picture made from a pass is the same to the bit whether its
+filters-level holds every count, each filter's last, a few counts or nothing, and whether it is thinned after the
+build or while the build runs. What deleting costs is time later on the Mini's live server, the first time a full view,
+a pointing, a PNG export or a remade picture needs a count that is gone (Costs). None of it is served, so none of it
+goes to Cloudflare either way. The tile PNGs (`tiles-*/`, the other ~57 MB a pass) are what all of it is drawn from,
+and stay.
+
+**What it holds.** Each filter's mosaic of the pass's first c tiles, for every c the pass reaches, one file a count
+(`_filter_path`: `{filter}-{c}-{view}.png`, PNG level 1, ~0.8 MB on the 2048 px canvas). Up to 16 tiles (`GROW_FROM`)
+a filter's mosaic is composed whole from its first c tiles (the gains solved over all of them); past 16 it is the
+mosaic of c - 1 tiles with tile c drawn over it (`_grown`, `_over`).
+
+**What reads it.**
+- The build, only each filter's newest: the next frame draws its tile over it, and a frame that adds nothing to a
+  filter draws it again. It is found in memory (`_grown_last`, the 6 grown mosaics made last, shared by the process's
+  threads) or on disk. An older count is never read.
+- After the build, whatever needs a filter's mosaic at a frame's counts and finds no picture made: the full view
+  (`size=full`), a pointing opened from the mosaic (`pointing_picture` fits each tile's seam against its filter's
+  mosaic, `_seam_of`), a PNG or another size (the film export), and a served picture made again after its file is
+  gone. A mosaic movie's pictures do not: they draw their own tiles' mosaics, under names of their own (`-{ids}`),
+  which every rule below keeps.
+
+**Why no pixel changes.** A missing count is made again when it is asked for (`reel._cached`) the way the build made
+it: up to 16 tiles composed whole from the same tiles; past 16 grown from the nearest count kept below it, the same
+chain of steps from the 16-tile mosaic on, each tile resized from its PNG (lossless). Each count made on the way is
+written back.
+
+**Proof** (`filters_level_equiv.py` on the build tree 24ff217, the same files as 016249b; cloud). The sample's passes
+have one tile of each filter, so the test passes are made of its frames: GRAY (its 24 frames as one filter), COLOUR
+(COLR003's four frames taken 18 times: 18 tiles of each of three colour filters, every tile covering the whole view),
+RASTER (GRAY's tiles moved onto a 5 by 5 grid 0.85 of a frame apart and the view made to hold them, each tile about a
+quarter of the canvas across) and the sample's three passes as mosaics, with `GROW_FROM` 16 and 4.
+- Built as the pre-build builds them (`make_pass`), once keeping everything and once deleting each filter's older
+  mosaics as soon as a newer one was written: every other file the same (569 files at 16 and at 4, 145 for RASTER).
+- Read back after the build in a shuffled order, with all of filters-level kept, each filter's last only, every 4th
+  (at 4) or 16th (at 16) count and the last, counts 1-16 with every 4th and the last (RASTER), and none: every filter
+  mosaic `so_far` draws at every frame, the full view and a PNG at 1024 (every frame; COLOUR's every 8th and its
+  last), the served 1024 and 512, and the seam fit of each frame's newest pointing. 740 answers for each rule at 16
+  and at 4, and 145 on RASTER: 0 differ, and every count made again is the same bytes as the file deleted (166 and 48
+  files compared).
+- With the served pictures deleted as well and made again in the shuffled order, the pixels are again the same; two
+  reports differ in their tile count (the label row under "For the owners").
+- Six passes made at once (6 threads, as `--threads 6` runs them) and one at a time: the 904 served files the same.
+  The filter mosaics were read back from disk 65 times instead of 52 (`_grown_last` outrun, ~80 ms each). Mosaic movies
+  are another matter: O35, below.
+
+**Costs** (cloud; the Mini is faster).
+- In the build: a count's PNG encode 140-160 ms, reading one back ~80 ms, one or two encodes a frame: ~8% of a gray
+  frame of RASTER (1.8 s here), ~3% of a colour frame (~7 s). Deleting as the build goes saves none of that time (the
+  newest is still written); only writing fewer counts would (option 4b).
+- What deleting costs later, when a full view, pointing, PNG or remake needs a count that is gone: up to 16 tiles, a
+  whole compose of the first c tiles (~30 ms a tile on RASTER, ~600 ms when every tile covers the whole view); past
+  16, a step a tile from the nearest count kept (~70 ms on RASTER, ~1 s on the whole view), and in a fresh process
+  each tile it draws is first resized from its PNG. A cold full view of RASTER at tile 22 (medians of three): 2.0 s
+  with all kept, 2.6 s with every 4th count and the last, 5.5 s with only the last or none (the 16 whole, then 6
+  steps). It grows with the count: at tile 100 with none kept it is ~84 steps more. Cold full views with every tile
+  covering the view (`GROW_FROM` 16, medians of three, nothing else running): GRAY at tile 22 3.8 s with all kept,
+  5.3-5.6 s with every 4th count (2 steps), 9.3 s with every 16th (6 steps) and 20 s with only the last or none (16
+  composed whole, then 6 steps); COLOUR at its 17th tile of each colour filter 7.6 s with all kept, 10.3-10.5 s with
+  any of the checkpoint rules (a step a filter) and 43 s with only the last or none. The worst case here, COLOUR's
+  last frame at `GROW_FROM` 4 with none kept: 65 s (6.8 s with all kept).
+
+**Options** (none changes a picture).
+1. Keep it all, out of the way: tonight's sweeper moves idle passes' intermediates to the LaCie image (1.8 TB free).
+   Nothing gets slower than a read from the LaCie.
+2. Thin it after the build to count 16, every 16th count and each filter's last: a later full view, pointing or
+   export is at most a whole compose of 16 tiles or 15 steps away (~1-2 s on a raster pass here, ~15 s when every tile
+   covers the view). Counts 1-16, every 4th and the last keeps more (at most 3 steps). `fl_keep_plan.py` (read-only)
+   prints what each rule keeps and frees on the Mini's cache, from its own counts.
+3. Delete it all: everything freed. A full view, pointing or export deep in a big pass then remakes the filter's chain
+   from its 16-tile mosaic (seconds on a raster pass, a minute when every tile covers the view) and writes the counts
+   back, so filters-level grows again where people look.
+4. For the next full build (code, the lead's call): (a) delete each filter's previous count as the next one is
+   written, unless it is a checkpoint (option 2's rule): the same pictures (proved above, deleting as it went), the
+   same time, and filters-level a small part of its size; (b) write only the checkpoints: this also saves the encodes
+   (3-8% of a mosaic frame), but only if each pass's newest filter mosaics stay in memory while it is made (~70 MB a
+   thread, ~0.6 GB at 9 threads, against ~100 MB for `_grown_last` now). Without that, threads outrun the 6 kept and
+   a frame regrows up to 15 steps, more than the encode saved.
+
+**Recommendation.** Nothing needs to change tonight: the sweeper's moves are safe, and deleting would be too.
+Cloudflare's size is the served set (~5 GB), filters-level and tiles left out. After the build, option 2 if the
+LaCie's space is wanted, and 4a in the code before the next full build, so filters-level never grows to hundreds of
+GB.
+
+### O35: mosaic movies made at once (found while checking the threaded build)
+
+A mosaic movie's picture is grown from its last one (`_roll`: the new tiles drawn over it, match=False) when that
+picture is still in `_rolled`, and drawn whole otherwise (every place's newest tile composed with its seam gains):
+two different pictures by design. `_rolled` keeps the last pictures of 6 mosaic movie filters (`ROLLED_KEEP`, "two
+passes of three", a NAC and a WAC window), shared by every thread of the process. The pre-build's mosaics phase makes
+`--threads` passes at once in one process, mosaic movies among them, and the segment pre-render makes up to 4 at once
+on the live server (`SEGMENT_THREADS`). With more than 6 mosaic movie filters in flight, a movie's last picture is
+gone from `_rolled` by the time its next frame is drawn, and the next is drawn whole.
+- Four copies of a colour mosaic movie (COLOUR's frames at one place, six tiles of each filter), made one after another
+  and four at once (`fl_threads.py`, `BASE=movies`): one at a time 12 pictures drawn whole (each movie's first of each
+  filter) and 60 grown; four at once 186 drawn whole and 4 grown, and 120 of the 272 served files differ (all of them
+  mosaic movie pictures, 30 a movie). With `_rolled` sized for 12 filters (`ROLLED_KEEP=12`) the four at once came out
+  as one at a time: 12 drawn whole, 60 grown, 0 of 272 differ.
+- With real pointings (LAPS: GRAY's 24 frames as three laps of three places, gray), two at once with `_rolled` holding
+  one filter (`ROLLED_KEEP=1`, the same outrun with fewer movies): 82 of 144 pictures drawn whole instead of 2, and 282
+  of the 576 files differ. Where a picture differs, a median of 37% of its covered pixels differ, mostly by less than a
+  level (median PSNR 47 dB); in the worst, ~10% of its pixels by more than 8 levels (PSNR 30 dB): the disk 16%
+  brighter (144 to 168 levels on average) where it was drawn whole with its seam gains, and the limb and a few pixels
+  where an older lap's tile lies under the newest in one picture and not the other
+  (project files `opt-audit/results/rolled/worst_lap_picture.jpg`). Among grown pictures, ones drawn whole would show
+  as a flicker of the disk's brightness.
+- In the catalog (`fl_rolled_scan.py`, frames and geometry only): 347 mosaic movies, 187 of them in colour (3 filters
+  each) and 160 gray (1). At 6 threads in time order, 18 stretches have more than 6 mosaic movie filters among the 6
+  passes in flight, about 149 movies in all: the Jupiter approach (ISS_C23JU_6ATM2X2A...), Saturn's approach
+  (ISS_C44SA_APPRMOV...), 2004's 2X2 and 3X3 movies, the 048 and 052 storm movies, NPOLMOV (192-195), WIND5HR
+  (159-160) and others. An estimate: how long each pass holds its thread decides what is really in flight.
+- Fixed in 11c01ad (phase 7), in `pictures-build` as 60a7513 (head 6dcf062): `_rolled` lets go of whole passes, the
+  least recently drawn first, keeping at least `ROLLED_PASSES` (4), and `prebuild.run` raises that to its threads + 1
+  (`rolled_room`; `web/test_rolling_threads.py`). Checked with `fl_threads.py` on 6dcf062: six colour mosaic movies at
+  once with `rolled_room(7)`, as `prebuild.run` asks for 6 threads, came out as one at a time (18 pictures drawn
+  whole, each movie's first of each filter, and 54 grown; all 264 served files the same). Five at once with the
+  default 4 did not (83 drawn whole against 15; 86 of 220 files differ). The segment pre-render (Pre-process) did not
+  raise it, with `SEGMENT_THREADS` 4 on the Mini: each mosaic movie in a stretch holds a thread for all its frames
+  there, so a stretch with four of them and a camera window playing a fifth (the same process) outran the 4 kept.
+  Phase 7 added `rolled_room(SEGMENT_THREADS + 2)` where the segment runner opens its pool (1507f78); at most it holds
+  ~0.2 GB more (a colour movie keeps 3 filters, 2 pictures each, up to 16 MB a canvas).
+- A movie built before the fix with pictures drawn whole keeps them (a made file is not made again). A picture drawn
+  whole writes its filter mosaics to filters-level under the picture's tag and a grown one does not, so
+  `fl_rolled_check.py` (read-only) lists the movie folders with more such files than a one-at-a-time build makes (it
+  draws whole only each filter's first picture: at most ~4). Remove their `rolling-level/` and those tagged files (a
+  tagged file left would be read instead of grown), then make the pass again. Before the fix, `--procs` (#115: one
+  thread a process) avoided it: each process made one pass at a time.
+
+### O36: a tie at a pass's start, broken at random
+
+Until a pass's grey filter has a tile, and before every colour filter has one, `layout` draws the luminance base's
+filter taken most so far: `max(set(base), key=base.count)`. When two are taken equally often the set's order picks
+one, and that order changes from process to process (Python randomizes string hashing unless `PYTHONHASHSEED` is set;
+eight seeds picked GRN six times and RED twice). In the catalog (`fl_tie_scan.py`, frames and geometry only, every
+tile taken as placed) that is 28 frames at the start of 8 of the 2,352 mosaic passes: ISS_082SA_NPOLECAM002_UVIS and
+ISS_165TI_LRMONITOR001_PRIME frames 1-6, ISS_143RH_RHEA001_PIE frames 1-7, and five more passes' first one to three.
+The pre-build and the live server can draw those frames in different filters, under different names, so the server
+misses the pre-built picture and makes its own. `max(dict.fromkeys(base), key=base.count)` gives a tie to the filter
+taken first, the same in every process; it changes those frames' pictures wherever the hash picked the other filter.
+Fixed in #108 (3cad10f), in `pictures-build` 6dcf062; the 8 passes and their frames: project files
+`opt-audit/results/filters-level/o36_passes.txt` (made again, a pass's frames whose name changes are made, the rest
+are found).
 
 ## Next (second pass)
-- `color_webp` encodes the other window sizes before replying; encoding them after the reply would take one WebP
-  encode (~40 ms on the Mini) off every composite's wait, but prebuild.py relies on those side files being written
-  when color_webp returns, so it needs a request-only switch and a word with the pre-build thread.
+- `color_webp` encodes the other window sizes before replying. Since O24 a composite up to 1024 px gets its full for
+  free, so encoding the rest after the reply would only help a composite larger than 1024 px (and prebuild.py relies
+  on those side files being written when color_webp returns).
 - A frame's .lbl, .png and .prefix.gz sit next to each other in the sample zip; if the Mini's archive is laid out the
   same, reading the label and the PNG after it in one read would save a seek per frame of a composite (check the
   layout first).
-- Color tone steps (`tone`, `apply_mix`, `_flatten_broad`, `picture_scale`): ~30 percentile/median partitions of whole
-  pictures per composite (~146 ms on the Mini); several are of the same array and can share one partition exactly.
+- Color tone steps (`tone`, `apply_mix`, `_flatten_broad`, `picture_scale`): O30 and O31 took out the repeated
+  partitions and shared the sky's, and O33 the sky's copies. What is left in a balanced composite of three channels is
+  31 partitions of 100 k pixels or more (`prof_partition.py` on f5db4e8; since O33's fix a sky's two percentiles
+  partition on their own again, one more for a sky with the floor), each of its own pixels (a channel, its sky, its
+  residuals, its lit part), except the classic guide's sky (for the owners, above). Sharing partitions between a sky's
+  median and percentiles (O33 as first written: one call for both percentiles, then the median) took ~3 ms more off a
+  channel, but numpy 2 types a list of percentiles otherwise than a single one; only numpy's own call for each value,
+  with its own arguments, is the same on every numpy, so it is not done.
 - The page's render loop and fetches (the frame-rate thread's seven rounds came first: project files `frame-rate/results.md`), `build_data.py` (phase 5 rebuilds the data: coordinate first). Label parsing was checked: 0.08 ms of CPU a label (cloud), so the label time on the Mini is its disk.
-- Once #115 (quality 95) is in: a composite up to 1024 px comes out the same at 1024 and full (no shrink, the same quality), so `color_webp` encodes the same bytes twice. A plan for each size (the side it is shrunk to and the save arguments), with one encode per plan, would take one of the pre-build's three encodes per set (a 1024 WebP is ~70-90 ms, cloud) and one of a cold window composite's two.
-- The pre-build's `all_passes` (72 s on the build head, cloud) spends 28 s in `units`' `itertuples` (a namedtuple class made per observation, 4.5 s of it) and 25 s in `_judge`, mostly matching each frame to its nearest place (6.2 million lambda calls); column arrays and a vectorised nearest place would about halve it (phase 3/4's code: for the owners).
-- A summed frame (512 or 256 px) is not shrunk for 1024 or 512, so its two WebPs are the same bytes, encoded twice by the pre-build; one encode could serve both (count the summed frames in the Mini's archive first).
+- What is left of a movie frame (cloud, with O22 to O32): the frame's processing (`processed_frame`: stacking,
+  calibration, the north-up warp onto its canvas, ~200 ms), registering it to its pointing's first frame on the
+  build branch (~150 ms, nearly all the pipeline's alignment), writing the tile's PNG (~90 ms), `detail`'s blur
+  (~190 ms) and the two WebP encodes (~240 ms; see the WebP row under "For the owners"). The canvas warps are
+  already only where the frame lands (`warp_into`); OpenCV's fixed-point coordinates depend on where the part
+  warped starts, so cutting that part any smaller would not be the same to the bit. Blurring only the lit part for
+  `detail` is not provably the same either (OpenCV's vector code and its scalar tails meet at different columns).
+- A colour pass's colour picture (`colour_picture`: `mix_display` and `apply_mix`'s false-colour path), each movie
+  frame and mosaic picture of a colour pass: ~0.5 s a 1024 px movie frame timed alone in the cloud before O34,
+  ~0.4 s with it. Line by line (`mix_lprof.py`, the build tree, before O34), the two saturations and the reverting
+  weight took ~40% of `apply_mix` (O34 took most of that out), `_flatten_broad` a quarter (its logs, exps and broad
+  blurs), and the detail step's six 5 px blurs and the full-size temporaries most of the rest. Decoding the 8-bit
+  picture (`decode`, a power of every value, ~50 ms a 1024 px picture) could look its 256 values up in a table
+  instead, exact only if the table is worked out on the numpy path used now (a channels-last array; check on the
+  Mini that both give the same 256 values). Changes to the steps themselves belong with the colour sets' rule
+  (phase 5).
+- Whole composes of a filter's first 16 tiles (`GROW_FROM`): each frame of a filter's first 16 composes all of its
+  tiles so far again, so in the catalog (`fl_whole_scan.py`) the 2,005 mosaic passes' 4,686 filter mosaics (the
+  luminance base counted as one) compose 245,678 tiles whole for their 59,125 tiles, besides 20,960 grown steps. In the
+  filters-level test builds at 16 they took 360 of the 887 s (every tile covering the view; ~30 ms a tile on RASTER).
+  In a 16-tile compose (`fl_prof_whole.py`, 14.5 s) `prepare` (each frame's box, float colours, alpha and feathered
+  alpha) took 37% and `_window` (each tile put on a full canvas) 28%. Both depend only on the tile, so keeping them
+  from one count to the next would take about half of the whole composes' time with the same arrays, so the same
+  pixels; the gains and the drawing depend on all the tiles. The cost is memory (a 2048 px canvas is 16.8 MB a tile,
+  its prepared floats up to 84 MB), so only under a cap like `_parts`'. First measure their share of the mosaics phase
+  on the Mini, where a tile is a part of the view.
+- Count the summed frames in the Mini's archive, for O24's share of the frames phase.
