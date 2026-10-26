@@ -178,6 +178,10 @@ class label:
                 tail = np.where(tail >= 16, tail, 0)
                 mask &= np.arange(samples) < (samples - tail)[:, None]
         if lines < 1024:
+            # a summed frame (512 or 256 lines) has a first and last column brighter than their neighbours in the
+            # archive (3-7 levels in the 256 px ring frames of ISS_034RI_SPKDKFORM001), which the display stretch
+            # turns into a bright line down each side: those columns count as lost, so they are filled and left out
+            mask[:, [0, -1]] = False
             mask = cv2.resize(mask.astype(np.uint8), (1024, 1024), interpolation=cv2.INTER_NEAREST) > 0
         return mask
 

@@ -61,7 +61,7 @@ import stacking  # noqa: E402
 # bumped whenever the way observation mosaics are made changes, so older ones are not served again; one per
 # display model (calibration.style), classic being the mosaics made before the balanced display model, raw the
 # balanced ones before natural color
-VERSIONS = {"balanced": "obs-v43", "raw": "obs-v26", "classic": "obs-v13-classic"}
+VERSIONS = {"balanced": "obs-v44", "raw": "obs-v27", "classic": "obs-v14-classic"}
 CANVAS = 2048        # longest side of the canvas the view is drawn on
 OUT = 1024           # longest side of the picture sent
 FRAME = 1024         # full resolution frame
@@ -1204,8 +1204,10 @@ def centre_view(frame_id):
     cache's footprint of the pass (_box), so a pass is centred all through or not at all. A frame in no pass is its
     own pass. Each picture keeps its frame's own scale: the view is one frame (FRAME full resolution pixels) square
     round the body, so the picture is the size it is today, only moved so the body is in the middle (a movie's view
-    is the pass's, movie_rect). Answers {"centre": True, "side": FRAME, "pass": [...]} or {"centre": False,
-    "why": ...}: a ring, spoke or sky frame, a body too big for the view, or a frame SPICE has no place for keep the
+    is the pass's, movie_rect). Answers {"centre": True, "side": FRAME, "radius": ..., "pass": [...]}, or
+    {"centre": False, "north": True, "side": FRAME, "why": ...} for a close-up (frames on a body too big for the
+    view): turned north up where it is, so the surface holds still; {"centre": False, "why": ...} for a ring, spoke
+    or sky pass (Cassini kept those upright in the camera) or a frame SPICE has no place for, which keep the
     picture as it is."""
     idx, row = _row_of()
     q = row.get(frame_id)
@@ -1232,9 +1234,29 @@ def centre_view(frame_id):
         if not half:
             hit["why"] = "no disk of a known body that fits the view" if not radius else \
                 "the body is too big for the view or the frames do not look at it"
+            # north up where it is only when the frames are on the body's disk (a close-up): the body's surface
+            # then holds still. Off the disk (rings, sky) Cassini rolled to keep the scene upright in the camera,
+            # so the camera's own orientation is the steady one and north up would turn it frame to frame
+            boxes = [(-x * fz / z - HALF, -y * fz / z - HALF, -x * fz / z + HALF, -y * fz / z + HALF)
+                     for *_, x, y, fz in u["frames"] if fz] if found else [fp]
+            # most of the pass's frames, each on its own (an arcing ring scan's footprint can clip the disk though
+            # none of its frames is on it)
+            on = sum(_on_disk(b, radius) for b in boxes) if radius else 0
+            hit["north"] = bool(boxes) and on * 2 > len(boxes)
         with _lock:
             _centre_views[key] = hit
-    return dict(hit, side=FRAME) if hit["centre"] else dict(hit)
+    # the frame's own disk of the body (full resolution pixels), so centred knows whether the frame cuts it
+    if hit["centre"]:
+        return dict(hit, side=FRAME, radius=RADIUS.get(target, 0) / (g[2] * IFOV[cam]))
+    return dict(hit, side=FRAME) if hit["north"] else dict(hit)
+
+
+def _on_disk(fp, radius):
+    """True when the box fp (a frame's footprint, reference pixels round the body's centre) takes in part of the
+    body's disk."""
+    x0, y0, x1, y1 = fp
+    dx, dy = max(x0, 0, -x1), max(y0, 0, -y1)
+    return dx * dx + dy * dy < radius * radius
 
 
 def _place(u, t, rect, k, W, H, cache, scale):
