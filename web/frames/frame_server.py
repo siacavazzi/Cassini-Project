@@ -288,7 +288,7 @@ def webp(frame_id, size, cache, fmt="webp"):
 COLOR_VERSIONS = {"balanced": "color-v28", "raw": "color-v11", "classic": "color-v5"}
 PROC_VERSIONS = {"balanced": "proc-v8", "raw": "proc-v8", "classic": "proc-v2"}   # one frame: no colors to mix
 # Auto center (center=1): the same pictures centred on the body by SPICE, cached beside them in folders of their own
-CENTRE_VERSION = "ctr2"   # ctr2: the shift stops at the frame's data edge
+CENTRE_VERSION = "ctr3"   # ctr2: the shift stops at the frame's data edge; ctr3: only when the body's disk is cut by it
 
 
 def in_background(target, *args):
@@ -319,6 +319,19 @@ def composite(ids, channel=None, centre=None):
     return Image.fromarray(np.dstack(chans + [alpha]), "RGBA"), report
 
 
+def disk_in_frame(alpha, cx, cy, r):
+    """True when the body's disk (centre cx, cy, radius r canvas pixels) lies on the frame's data: its centre and
+    the four ends of its axes are inside the frame (alpha, the frame's coverage on the canvas)."""
+    if not r or r <= 0:
+        return False
+    h, w = alpha.shape
+    for x, y in ((cx, cy), (cx - r, cy), (cx + r, cy), (cx, cy - r), (cx, cy + r)):
+        i, j = int(round(y)), int(round(x))
+        if not (0 <= i < h and 0 <= j < w and alpha[i, j]):
+            return False
+    return True
+
+
 def centred(ids, view):
     """The composite of ids (or one frame) centred on the body, north up: the pipeline's color path and SPICE
     placement (color_image.processed_frame: load_aligned as composite, then auto_center), cut to the square of
@@ -333,11 +346,12 @@ def centred(ids, view):
     cx = (w - 1) / 2 - report["frame_offset"][0]
     cy = (h - 1) / 2 - report["frame_offset"][1]
     left, top = round(cx - side / 2), round(cy - side / 2)
-    # the shift stops where the frame's data does: the view never takes in black beyond the frame's edge on a side
-    # where the frame could fill it, so a body the camera caught at its edge stays at that edge instead of half the
-    # picture going black (where the frame is narrower than the view, the view sits on the frame's middle)
+    # a body whose whole disk is in the frame goes to the middle, the sky round it black where the frame ends; a
+    # body the frame cuts (caught at its edge, or bigger than it) is moved only as far as the frame's data goes,
+    # so the view never takes in black beyond the frame's edge on a side where the frame could fill it and half the
+    # picture does not go black (where the frame is narrower than the view, the view sits on the frame's middle)
     rows, cols = np.flatnonzero(image[..., 3].any(1)), np.flatnonzero(image[..., 3].any(0))
-    if len(rows):
+    if len(rows) and not disk_in_frame(image[..., 3], cx, cy, view.get("radius", 0)):
         def fit(start, lo, hi):
             return min(max(start, lo), hi - side) if hi - lo >= side else round((lo + hi) / 2 - side / 2)
         wanted = (left, top)

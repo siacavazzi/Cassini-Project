@@ -1193,7 +1193,8 @@ def centre_view(frame_id):
                 "the body is too big for the view or the frames do not look at it"
         with _lock:
             _centre_views[key] = hit
-    return dict(hit, side=FRAME) if hit["centre"] else dict(hit)
+    # the frame's own disk of the body (full resolution pixels), so centred knows whether the frame cuts it
+    return dict(hit, side=FRAME, radius=RADIUS.get(target, 0) / (g[2] * IFOV[cam])) if hit["centre"] else dict(hit)
 
 
 def _place(u, t, rect, k, W, H, cache, scale):
