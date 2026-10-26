@@ -9173,7 +9173,7 @@ function frame(now) {
           c *= 0.3 + 0.75 * smoothstep(-0.2, 0.35, se);                                       // dimmer as the Sun sets
           // below the horizon: haze over the ground, thinning toward the nadir as the air under the probe clears; never
           // toward the horizon, where the line of sight runs through tens of kilometres of it
-          float a = e >= 0.0 ? 1.0 : 1.0 - uSee * smoothstep(0.02, 0.45, -e);
+          float a = e >= 0.0 ? 1.0 : 1.0 - uSee * smoothstep(0.06, 0.5, -e);
           gl_FragColor = vec4(c * mix(1.0, 0.8, smoothstep(0.0, -0.6, e)), a * uOp);
         }`,
       transparent: true, depthWrite: false, depthTest: false, side: THREE.BackSide });
@@ -9184,7 +9184,9 @@ function frame(now) {
   function placeSky(alt, up) {
     const m = P.sky, u = m.material.uniforms;
     u.uOp.value = ease((520 - alt) / 320);           // from 520 km down to 200 km it closes in
-    u.uSee.value = 0.92 * ease((55 - alt) / 45);     // the ground shows through below 55 km, clearly below 10 km
+    // the ground shows through below 55 km, clearly below 10 km; in the last few hundred metres the landing ground (the
+    // close-up pass's patch) takes over from Titan's globe, which is too coarse that close
+    u.uSee.value = 0.92 * ease((55 - alt) / 45) * (1 - ease((0.45 - alt) / 0.25));
     u.up.value.copy(up); u.sun.value.copy(uSun.value);
     m.position.copy(camera.position); m.scale.setScalar(1e-3); m.updateMatrixWorld();
     m.visible = H.shot === "probe" && u.uOp.value > 0.003;
@@ -9192,7 +9194,7 @@ function frame(now) {
   // the ground the probe lands on, for the last few hundred metres: the finest level of the viewer's landing-site map
   // (Karkoschka's DISR mosaic, 1 m a pixel, north up), on a flat patch 400 m across centered on the landing point, in
   // metres like the probe so the close-up pass draws them together (Titan's globe is too coarse that close). The
-  // mosaic's dark plain, clipped to black, is lifted to a dark tan as the viewer does
+  // mosaic is grey; the shader gives it the orange of the skylight and fades it into the haze with distance
   const PATCH = 400;
   function ground() {
     const M = probe.map, g = new THREE.Group();
@@ -9208,12 +9210,15 @@ function frame(now) {
       fragmentShader: FHEAD + `uniform sampler2D map; uniform float uLight; uniform float uOp; uniform vec3 uHaze; varying vec2 vUv; varying vec2 vP;
         void main(){
           #include <logdepthbuf_fragment>
-          vec3 c = max(texture2D(map, vUv).rgb * 1.3, vec3(0.14, 0.085, 0.04)) * uLight;
+          // the mosaic is grey: the ground under Titan's orange skylight, the brighter pebbles paler (as in the
+          // probe's own color picture from the surface)
+          float k = dot(texture2D(map, vUv).rgb, vec3(0.333));
+          vec3 c = (0.38 + 0.9 * k) * vec3(0.86, 0.56, 0.31) * uLight;
           // the probe's shade on the ground under it (it stands at the patch's centre), then the haze between it and
           // the ground farther off: by the patch's edge the ground is lost in it
           float d = length(vP);
           c *= 1.0 - 0.55 * exp(-d * d / 0.7);
-          c = mix(c, uHaze, 0.9 * smoothstep(6.0, ${(PATCH / 2).toFixed(1)}, d));
+          c = mix(c, uHaze, 0.9 * (1.0 - exp(-max(d - 3.0, 0.0) / 45.0)));
           vec2 e = abs(vUv - 0.5) * 2.0; vec2 q = vec2(${(PATCH / 2 / lv.m_per_px / M.width).toFixed(5)}, ${(PATCH / 2 / lv.m_per_px / M.height).toFixed(5)});
           float a = 1.0 - smoothstep(0.55, 1.0, length((vUv - vec2(${(lx / M.width).toFixed(5)}, ${(1 - ly / M.height).toFixed(5)})) / q));
           gl_FragColor = vec4(c, a * uOp);
