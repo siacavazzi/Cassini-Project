@@ -354,7 +354,8 @@ def _tiles(u, cache, scale):
 # tile not in memory is looked for in the cache (a server sharing the cache may have made it).
 PASSES_KEEP = 64   # passes kept in memory, the most recently used (a pass's tile reports are ~1 KB each)
 # plan file -> {"stamp", "plan", "scale", "tiles_dir", "tiles": {n: report}, "made": tiles seen in the cache (not read),
-# "footprint", "rolled": {(size, out): frames whose mosaic movie picture is made, rolling_ahead}}
+# "footprint", "rolled": {(size, out): frames whose mosaic movie picture is made, rolling_ahead}, "mapped": the last
+# tile whose mosaic's tile map is worked out, _map_later}
 _passes = collections.OrderedDict()
 
 
@@ -2018,22 +2019,58 @@ def mosaic_webp(frame_id, size, cache, slots=None, ahead=3, fmt="webp", out=OUT,
     if made:
         made = made[0], {**made[1], "behind": found[1] - n}
         # its tile map too, once the mosaic is made, so the window's first hover finds it ready (tiles made before
-        # outlines were kept in their reports are measured once here); a map worked out already needs no thread
+        # outlines were kept in their reports are measured once here); a map worked out already needs no work
         with _lock:
             mapped = (folder(u, cache), laid[5]) in _maps
         if not mapped:
-            threading.Thread(target=contextvars.copy_context().run, args=(_map_quietly, frame_id, cache), daemon=True).start()
+            _map_later(u, n, cache)
     if made and ahead and size != "full":
         warm(u, n + ahead, cache, size, slots, start=n + 1, force=force)
     return made
 
 
-def _map_quietly(frame_id, cache):
-    try:
-        _yield()
-        tile_map(frame_id, cache)
-    except Exception:   # a tile not made yet: the window's own request works it out
-        pass
+_map_wanted, _map_running = {}, set()   # pass folder -> the last tile whose mosaic's map is wanted; passes mapping
+
+
+def _map_later(u, n, cache):
+    """Works out the tile maps of the pass's mosaics up to tile n in the background, in order and once each (the
+    pass's record keeps how far it has got), one worker per pass, so the window's first hover finds its map ready
+    and a pass played fast starts one thread, not one per mosaic waiting its turn."""
+    rec, key = _record(u, cache), folder(u, cache)
+    with _lock:
+        if rec is not None and rec.get("mapped", -1) >= n:
+            return   # (mapped already, then dropped from _maps: a hover works it out)
+        _map_wanted[key] = max(n, _map_wanted.get(key, -1))
+        if key in _map_running:
+            return
+        _map_running.add(key)
+
+    def run():
+        try:
+            while True:
+                _yield()
+                rec = _record(u, cache)
+                with _lock:
+                    upto = _map_wanted.pop(key, None)
+                    if upto is None:   # (under the lock that a later ask takes: it starts a worker of its own)
+                        _map_running.discard(key)
+                        return
+                    first = rec.get("mapped", -1) + 1 if rec is not None else upto
+                for j in range(first, upto + 1):
+                    _yield()
+                    try:
+                        tile_map(u["frames"][j][1], cache)
+                    except Exception:   # a tile not made yet: the window's own request works it out
+                        pass
+                    if rec is not None:
+                        with _lock:
+                            rec["mapped"] = max(rec.get("mapped", -1), j)
+        except BaseException:
+            with _lock:
+                _map_running.discard(key)
+            raise
+
+    threading.Thread(target=contextvars.copy_context().run, args=(run,), daemon=True).start()
 
 
 _made = {}   # (pass, look) -> the last tile of the pass up to which every tile is made (or -1)

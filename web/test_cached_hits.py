@@ -128,7 +128,7 @@ settle()
 check("mosaic movie", play(frm, lambda fid: om.rolling_webp(fid, 512, cache, 1)))
 
 # a server started on a cache made earlier (another server, or the pre-built cache): the first time through it reads
-# each tile report and the plan once, and then plays the pass as above
+# each tile report and the plan once, with a few background workers at a time, and then plays the pass as above
 def forget():
     for d in (om._passes, om._grown_last, om._rolled, om._parts, om._centre_views, om._centre_of, om._outlines, om._maps,
               om._made, om._blank, om._upto, om._from, om.reel._reports):
@@ -144,7 +144,28 @@ for name, fr_, ask in (("pass mosaic", fr, lambda fid: om.mosaic_webp(fid, 512, 
     for _, c in first:
         read.update(c)
     assert read["open tile"] <= N and read["open plan"] <= 2, (name, dict(read))
-    print(f"{name}, restarted: the first time through reads {read['open tile']} tile reports and the plan {read['open plan']} time(s)")
+    # and asked by six connections at once (a browser), it works ahead with a few workers at a time (tiles,
+    # pictures and tile maps, one each per pass), not one per picture waiting its turn
+    forget()
+    todo, alive = list(fr_), []
+
+    def connection():
+        while todo:
+            try:
+                f = todo.pop(0)
+            except IndexError:
+                return
+            ask(f[1])
+            alive.append(threading.active_count() - 7)
+    conns = [threading.Thread(target=connection) for _ in range(6)]
+    for c in conns:
+        c.start()
+    for c in conns:
+        c.join()
+    settle()
+    assert max(alive) <= 6, (name, max(alive))
+    print(f"{name}, restarted: the first time through reads {read['open tile']} tile reports and the plan "
+          f"{read['open plan']} time(s); six connections at once, at most {max(alive)} background thread(s) at a time")
     check(name + ", restarted", play(fr_, ask))
 
 # a plan made again (its folder cleared and the pass worked out anew, here with another footprint) is read afresh
