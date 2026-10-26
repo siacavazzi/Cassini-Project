@@ -192,6 +192,39 @@ _mosaic_slots = threading.Semaphore(2)
 _movie_slots = threading.Semaphore(int(os.environ.get("FRAME_SERVER_MOVIE_SLOTS", 4)))
 # requests that take longer than this many seconds are logged
 SLOW = float(os.environ.get("FRAME_SERVER_SLOW", "2"))
+# FRAME_SERVER_SAMPLE=1: every thread's stack is sampled every few ms and GET /debug/samples answers the stacks seen
+# most since it was last asked, so a server that answers slowly shows what its threads were doing meanwhile
+_samples, _samples_lock = collections.Counter(), threading.Lock()
+
+
+def sample_stacks(interval=0.005, top=6):
+    me = threading.get_ident()
+    while True:
+        time.sleep(interval)
+        seen = []
+        for ident, frame in sys._current_frames().items():
+            if ident == me:
+                continue
+            stack, f = [], frame
+            while f is not None:
+                stack.append(f"{os.path.basename(f.f_code.co_filename)}:{f.f_code.co_name}:{f.f_lineno}")
+                f = f.f_back
+            # the innermost frames, and the thread's own function (what started it)
+            seen.append(" < ".join(stack[:top]) + ("" if len(stack) <= top else f" ... {stack[-1]}"))
+        with _samples_lock:
+            _samples["(samples)"] += 1
+            _samples.update(seen)
+
+
+def samples_text(n=40):
+    with _samples_lock:
+        got = dict(_samples)
+        _samples.clear()
+    total = got.pop("(samples)", 0)
+    lines = [f"{total} samples, {threading.active_count()} threads now; share of samples each stack was seen in:"]
+    for stack, count in sorted(got.items(), key=lambda kv: -kv[1])[:n]:
+        lines.append(f"{count / max(1, total):6.2f}  {stack}")
+    return "\n".join(lines) + "\n"
 
 
 def archive_png(frame_id):
@@ -1104,6 +1137,8 @@ def make_handler(site, cache, flags=None):
             url = urlparse(self.path)
             # a kept-alive connection reuses this handler, so the last request's choice must not stick
             self.revalidate = False
+            if url.path == "/debug/samples" and os.environ.get("FRAME_SERVER_SAMPLE") == "1":
+                return self.send_bytes(samples_text().encode(), "text/plain", False)
             if url.path == "/export/plan.json":
                 try:
                     return self.send_json(export.public_plan(export.plan(export.options(parse_qs(url.query)))))
@@ -1472,6 +1507,8 @@ def main():
     # the camera windows' mosaic route and centred pictures need the index, its observations (obs_mosaic.units) and
     # its frames' rows (obs_mosaic._row_of); made now rather than on the first request
     threading.Thread(target=lambda: (reel.target_of(), obs_mosaic._observations(), obs_mosaic._row_of()), daemon=True).start()
+    if os.environ.get("FRAME_SERVER_SAMPLE") == "1":
+        threading.Thread(target=sample_stacks, daemon=True).start()
     # the first composite would otherwise wait while stacking reads the whole image index (all ~443k rows)
     threading.Thread(target=color_image.stacking.load_index, daemon=True).start()
     if site:
