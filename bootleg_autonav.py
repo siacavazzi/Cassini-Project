@@ -7,7 +7,6 @@ https://naif.jpl.nasa.gov/pub/naif/toolkit_docs/C/cspice/inrypl_c.html
 import spiceypy as sp
 import numpy as np
 import math
-import matplotlib.pyplot as plt
 import os
 import threading
 import data_source as ds
@@ -159,6 +158,8 @@ def find_target(label,plot,output):
     print(f"Twist: {angle}")
 
     if plot:
+        # only for these plots: loaded here so the frame server never pays for matplotlib
+        import matplotlib.pyplot as plt
         date = label.info["IMAGE_TIME"]
         targ = label.info["TARGET_NAME"]
         f = plt.figure(figsize = (10,10))
