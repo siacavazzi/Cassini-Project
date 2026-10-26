@@ -55,7 +55,10 @@ body.phone.phone-land #dock { left: calc(var(--side) + var(--col) + var(--gap)) 
 body.phone #dock .titlebar { height: 18px; }
 body.phone #dock .toolbar, body.phone #dock:not(.zoomed) .toolbar { grid-template-columns: 1fr; gap: 4px; padding: 0 8px 6px; }
 body.phone .col, body.phone .col.right { width: auto; flex-direction: row; flex-wrap: wrap; justify-content: center; }
-body.phone .lcdhead { grid-template-columns: auto minmax(0, 1fr); grid-template-areas: "clock clock" "tr tools"; row-gap: 4px; column-gap: 12px; }
+body.phone .lcdhead { grid-template-columns: auto minmax(0, 1fr); grid-template-areas: "clock clock" "tr tools" "speed speed"; row-gap: 4px; column-gap: 12px; }
+body.phone .lcdhead .speedtool { grid-area: speed; height: 40px; }
+body.phone .lcdhead .speedtool input[type=range] { width: auto; flex: 1 1 auto; min-width: 0; height: 28px; }
+body.phone .lcdhead .speedtool input[type=range]::-webkit-slider-thumb { width: 18px; height: 18px; margin-top: -7.5px; }
 body.phone .lcdhead .clockbox { grid-area: clock; }
 body.phone .lcdhead .transport { grid-area: tr; }
 body.phone .lcdhead .tltools { grid-area: tools; min-width: 0; width: 100%; }
