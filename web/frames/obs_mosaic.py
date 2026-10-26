@@ -1452,7 +1452,7 @@ def layout(u, n, cache):
     elif count.get(p["grey"]):
         used = [p["grey"]]
     elif base:
-        used = [max(set(base), key=base.count)]
+        used = [max(dict.fromkeys(base), key=base.count)]   # (ties: the filter taken first)
     else:
         return None
     name = "_".join(f"{f.replace('/', '-')}{count[f]}" for f in used)

@@ -126,6 +126,17 @@ assert om._shade(part, {}) is part
 assert om.lum_frames(u, om.plan(u, cache)) == frozenset({1, 2, 4, 5})
 print("gray pass keeps CB3, MT1 only where CB3 never goes")
 
+# 3b. before the grey filter's first tile, the gray is named by the base's filter most taken so far, ties going to the
+# filter taken first: the same in every process (not set order, which hash randomization changes per process)
+seq = [("MT1", 1), ("CB2", 2), ("CB3", 0)]
+LEVEL["CB2"] = 110
+u, cache = make_pass("TIE", seq, None, "CB3")
+assert om.layout(u, 1, cache)[4] == ["MT1"], om.layout(u, 1, cache)[4]
+seq = [("CB2", 2), ("MT1", 1), ("CB3", 0)]
+u, cache = make_pass("TIE2", seq, None, "CB3")
+assert om.layout(u, 1, cache)[4] == ["CB2"]
+print("ties go to the filter taken first")
+
 # 4. a scan stepping one filter a pointing is a mosaic; a stare cycling filters in one place is a movie
 scan = {"key": ("SATURN", "SCAN", "N", 0), "z": 1e6,
         "frames": [("p", f"N{i}", f, 1000.0 + i, 600, 400.0 * i, 0.0, 1e6) for i, f in enumerate(["MT1", "CB2", "MT2", "CB3", "MT3"])]}
