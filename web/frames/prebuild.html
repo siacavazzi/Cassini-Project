@@ -31,7 +31,7 @@
 <script>
 // every phase in run order: one not started yet says so, so the page never reads as finished early
 const PHASES = { frames: "Frames (128, 512 and 1024 px)", composites: "Color composites", mosaics: "Mosaic passes",
-  movies: "Movie passes", processed: "Movie-mode frames" };
+  movies: "Movie passes", processed: "Processed frames (centered)", strips: "Movie strips (128 px)" };
 const fmt = n => n == null ? "–" : n.toLocaleString("en-US");
 const dur = s => s == null || !isFinite(s) ? "–" : s < 3600 ? `${Math.round(s / 60)} min` : `${(s / 3600).toFixed(1)} h`;
 const ago = t => { const s = Date.now() / 1000 - t; return s < 90 ? `${Math.round(s)} s ago` : s < 5400 ? `${Math.round(s / 60)} min ago` : `${(s / 3600).toFixed(1)} h ago`; };

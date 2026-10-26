@@ -13,7 +13,8 @@ Phases (each its own run; a run picks up where the last one stopped, since a mad
   mosaics     every mosaic pass's plan and tiles (obs_mosaic), then what the window shows at each of its frames,
               1024 and 512: its mosaic so far, or a mosaic movie's rolling picture
   movies      the same for every movie pass: its steadied frames (movie_webp)
-  processed   /frames/processed/<ID>.webp at 1024 for movie mode, every frame not in a filter set
+  processed   /frames/processed/<ID>.webp at 1024, 512 and 256, every frame, centred as Auto center asks
+  strips      a movie pass's steadied frames at 128 (the movie strip)
 
 Made to share the Mac Mini with the live and preview servers: run it under `nice -n 19 taskpolicy -b` (low CPU and
 disk priority), one process with a few threads. It waits while the 1-minute load is over --max-load, while the
@@ -53,7 +54,7 @@ import calibration  # noqa: E402
 import obs_mosaic  # noqa: E402
 import reel  # noqa: E402
 
-PHASES = ("frames", "composites", "mosaics", "movies", "processed")
+PHASES = ("frames", "composites", "mosaics", "movies", "processed", "strips")
 SET_GAP = 300   # head-quiet.html findSets
 
 
@@ -148,13 +149,16 @@ def items(phase):
         return [("_".join(s), lambda c, s=s: [frame_server.color_webp(s, z, c, centre=centred(s[-1])) for z in (1024, 512)])
                 for s in page_sets()]
     if phase == "processed":
-        # every frame: a window shows a frame processed on its own until its filter set is complete
-        return [(i, lambda c, i=i: [frame_server.processed_webp(i, z, c, centre=centred(i)) for z in (1024, 512)])
+        # every frame: a window shows a frame processed on its own until its filter set is complete; 256 is the
+        # pass strip's (the windows asked it about as often as 1024 on 8790, 2026-10-26), cheap from the frame in memory
+        return [(i, lambda c, i=i: [frame_server.processed_webp(i, z, c, centre=centred(i)) for z in (1024, 512, 256)])
                 for i in frame_ids()]
     if phase == "mosaics":
         return [("_".join(map(str, u["key"])), lambda c, u=u: make_pass(u, c)) for u in mosaic_passes()]
-    if phase == "movies":
-        return [("_".join(map(str, u["key"])), lambda c, u=u: make_pass(u, c))
+    if phase in ("movies", "strips"):
+        # strips: a movie pass's steadied frames at 128, the movie strip under a window
+        sizes = (1024, 512) if phase == "movies" else (128,)
+        return [("_".join(map(str, u["key"])), lambda c, u=u: make_pass(u, c, sizes))
                 for u in all_passes() if u.get("kind") == "movie" or (u.get("movie") and not u["mosaic"])]
     raise ValueError(phase)
 
