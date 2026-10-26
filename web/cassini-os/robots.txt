@@ -1,0 +1,5 @@
+User-agent: *
+Allow: /
+Disallow: /flags/
+Disallow: /export/
+Disallow: /replay/

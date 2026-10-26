@@ -200,3 +200,22 @@ calibrates the frames onto one brightness scale, aligns them and caches the resu
 
 Design rule (Sam, 2026-10-19): the interface should be as unobtrusive as possible; the OS stays because
 there is a lot to configure, and the camera feed is the main feature.
+
+## Search and link previews
+
+What Google and link previews read comes from `src/site.json` through `src/seo.py`, which `src/build.py` runs: the
+page title and description, the share card (Open Graph and Twitter tags with `share.jpg`, 1200 × 630), the icons
+(`favicon.svg`, `favicon-48.png`, `apple-touch-icon.png`), JSON-LD structured data (a `WebApplication`), a few lines
+for browsers without JavaScript, and the About page, `about/index.html` (from `src/landing.html`): Cassini OS in plain
+words with links into the app at a few moments. The About window's "More about the project" opens it. `robots.txt`
+keeps `/flags/`, `/export/` and `/replay/` out of search.
+
+`site.json` `"url"` is the public address, empty while the site is only on the Mini. Set it (or build with
+`CASSINI_SITE_URL=https://.../`) once the site has its public address: the build then writes the canonical links,
+`og:url`, absolute share-image addresses, `sitemap.xml` and the robots.txt sitemap line. At launch:
+
+1. Set the address in `site.json`, rebuild, commit `index.html`, `about/`, `robots.txt` and `sitemap.xml`.
+2. Make `share.jpg` again from the live site with real pictures in the camera windows (a 1200 × 630 screenshot).
+3. Verify the domain in Google Search Console (a DNS TXT record at Cloudflare is the easiest) and submit
+   `sitemap.xml`; Bing Webmaster Tools can import it from Search Console.
+4. Check the share card with a link preview checker and the structured data with Google's Rich Results Test.
