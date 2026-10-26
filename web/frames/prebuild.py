@@ -552,6 +552,9 @@ class Segments:
             except Exception as e:   # noqa: BLE001  (counted and logged; the stretch goes on)
                 return k, f"{type(e).__name__}: {e}"
 
+        # each thread may hold a mosaic movie for all its frames, and the windows play theirs in the same process:
+        # room for all of them to keep their last pictures (obs_mosaic._rolled)
+        obs_mosaic.rolled_room(SEGMENT_THREADS + 2)
         with calibration.looking(o["look"]), calibration.coloring(o["colors"]), \
                 concurrent.futures.ThreadPoolExecutor(SEGMENT_THREADS) as pool:
             pending, i = set(), 0
