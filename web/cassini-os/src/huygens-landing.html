@@ -103,8 +103,10 @@ body.phone #hland .cs-read { font-size: 9.5px; bottom: 9vh; white-space: normal;
   function numbers() {
     if (NUM) return NUM;
     const E = probe.events.entry_interface, L = T0 + EV.landing;
-    let peak = 0, peakEt = E;
-    for (let t = E; t < T0; t += 2) { const g = gLoad(t); if (g > peak) { peak = g; peakEt = t; } }
+    // the heating goes as the air's density times the speed cubed, which is the deceleration times the speed: it peaks
+    // a little before the deceleration does and lasts longer
+    let peak = 0, peakEt = E, qPeak = 0;
+    for (let t = E; t < T0; t += 2) { const g = gLoad(t); if (g > peak) { peak = g; peakEt = t; } qPeak = Math.max(qPeak, g * len(velocity(t))); }
     const de = probe.descent, n = de.et.length - 1;
     // the last minute of the descent table, for the touchdown speed
     let j = n; while (j > 0 && de.et[n] - de.et[j] < 60) j--;
@@ -112,7 +114,7 @@ body.phone #hland .cs-read { font-size: 9.5px; bottom: 9vh; white-space: normal;
     const light = et => len(sub(positionAt(tracks.EARTH, et, v3()), positionAt(tracks.CASSINI, et, v3()), v3())) / C_KM_S;
     const esoc = utcToEt(DATA.esoc_first_data_utc), lt = light(esoc);
     const cassiniKm = len(sub(positionAt(tracks.CASSINI, T0 + 1800, v3()), positionAt(tracks.TITAN, T0 + 1800, v3()), v3()));
-    return NUM = { E, L, peak, peakEt, vEntry: len(velocity(E + 1)), vT0: len(velocity(T0)) * 1000, vLand, lt, send: esoc - lt, cassiniKm,
+    return NUM = { E, L, peak, peakEt, qPeak, vEntry: len(velocity(E + 1)), vT0: len(velocity(T0)) * 1000, vLand, lt, send: esoc - lt, cassiniKm,
       earthKm: len(sub(positionAt(tracks.EARTH, esoc, v3()), positionAt(tracks.CASSINI, esoc, v3()), v3())) };
   }
 
@@ -165,7 +167,6 @@ body.phone #hland .cs-read { font-size: 9.5px; bottom: 9vh; white-space: normal;
   }
 
   // ---------- the probe: ESA's models of it (entry shell in two parts, descent module), the parachutes ----------
-  const sprite = CS.fx.sprite;
   // ESA's models (the ESA SPICE Service's Huygens dataset, the ones its Cosmographia "Huygens descent" uses), made into
   // small GLBs by models/make_huygens_dm.py and make_huygens_shell.py, in metres in one frame: spin axis +Y, the heat
   // shield facing -Y, the base of the descent module's fore dome at y = 0 (where it touches the ground)
@@ -244,8 +245,7 @@ body.phone #hland .cs-read { font-size: 9.5px; bottom: 9vh; white-space: normal;
     P.pilot = chute(CH.pilot, 16, 1.7, 22, 0xece8de);
     P.main = chute(CH.main, 32, 1.7, 8, 0xf1ede4);
     P.drogue = chute(CH.drogue, 20, 1.7, 10, 0xe9e4d8);
-    P.glow = sprite(0xffb070, 8); P.core = sprite(0xffe2c0, 3);
-    P.root.add(P.mod, P.front, P.back, P.pilot, P.main, P.drogue, P.glow, P.core);
+    P.root.add(P.mod, P.front, P.back, P.pilot, P.main, P.drogue);
     P.ground = ground();
     P.sky = hazeSky();
     [P.root, P.ground].forEach(o => o.traverse(c => c.layers.set(1)));
@@ -387,7 +387,7 @@ body.phone #hland .cs-read { font-size: 9.5px; bottom: 9vh; white-space: normal;
     if (!CS.begin("huygens-landing")) return;
     KEYS = keys();
     H = { t0: performance.now(), phase: "out", T: 0, s: KEYS[0][1], shown: [], playing: state.playing, speed: state.speed, how: "back",
-      shot: null, cuts: {}, spin: 0, lastFrame: performance.now(), caps: captions() };
+      shot: null, cuts: {}, spin: 0, heat: 0, hv: 0, lastFrame: performance.now(), caps: captions() };
     fadeTo(black, 1, 1.4);
   }
   // "stay": paused just after the landing, the view on the probe; "back": the mission carries on from where the
@@ -396,7 +396,7 @@ body.phone #hland .cs-read { font-size: 9.5px; bottom: 9vh; white-space: normal;
   function cleanUp() {
     const h = H; H = null;
     if (!h) return;
-    if (P) { P.root.visible = P.ground.visible = P.sky.visible = false; }
+    if (P) { P.root.visible = P.ground.visible = P.sky.visible = false; if (P.entry) { P.entry.dispose(); P.entry = null; } }
     sound("rumble", 0);
     caps.textContent = ""; [read, note, hint].forEach(e => e.classList.remove("on"));
     Object.values(tags).forEach(e => e.classList.remove("on"));
@@ -506,10 +506,13 @@ body.phone #hland .cs-read { font-size: 9.5px; bottom: 9vh; white-space: normal;
       const br = landed ? 0 : 0.015 * Math.sin(now / 1000 * 2.3);
       P.main.userData.canopy.scale.set(1 + br, 1, 1 + br);
       P.drogue.userData.canopy.scale.set(1 - 0.75 * fall + br, 1, 1 - 0.2 * fall + br);
-      // the entry glow ahead of the heat shield, as hot as the deceleration is hard
-      const heat = clamp01(g / N.peak) * clamp01(len(velocity(et)) / 1.2);
-      [P.glow, P.core].forEach((o, i) => { o.position.copy(vS).applyQuaternion(P.root.quaternion.clone().invert()).multiplyScalar(i ? 1.6 : 2.4); o.material.opacity = heat * (i ? 0.9 : 0.6) * (0.9 + 0.1 * Math.random()); });
-      P.glow.scale.setScalar(6 + 10 * heat);
+      // the entry (entry-fx.html), as hot as the heating (deceleration times speed) is strong: Titan's nitrogen and
+      // methane glowing violet in the shock layer ahead of the 2.7 m heat shield, the shield's face heating toward
+      // 1,700 K, a few sparks off its rim (made once ESA's heat shield has loaded, which is the skin it heats)
+      const heat = H.heat = s < 0 ? Math.sqrt(clamp01(g * len(velocity(et)) / N.qPeak)) : 0;
+      H.hv += (heat - H.hv) * Math.min(1, dt * 1.5);
+      if (!P.entry && P.front.children.length) P.entry = CS.fx.entry(P.root, { radius: 1.35, nose: 0.9, gas: "TITAN", skin: P.front, skinHot: 1750 });
+      if (P.entry) P.entry.update(dt, vS, heat);
       sound("rumble", s < 6 ? 0.35 + 0.65 * heat : 0);
       placeGround(et, landed ? 0 : altitude(et));
     }
@@ -552,8 +555,12 @@ body.phone #hland .cs-read { font-size: 9.5px; bottom: 9vh; white-space: normal;
         // entry: behind and beside the shell, looking down its path at Titan; in its last seconds pulling back and
         // round to beside it, wide enough for the parachutes to come
         const w = ease((s + 2.5) / 2.5);
-        D = 13 + 47 * w; dirV.copy(around).multiplyScalar(0.8).addScaledVector(v, -0.55 * (1 - w)).addScaledVector(u, 0.15 * (1 - w) + 0.08 * w);
-        lookAt = tgt.copy(P0).addScaledVector(v, 5e-6 * (1 - w)).addScaledVector(u, 8e-6 * w);
+        // around the hottest minute, round to the shield's side to see the shock layer ahead of it
+        const hv = ease(H.hv * 1.4 - 0.2) * (1 - w);
+        D = 13 + 51 * w + 5 * hv; dirV.copy(around).multiplyScalar(0.8).addScaledVector(v, -0.55 * (1 - w) * (1 - hv) + 0.35 * hv).addScaledVector(u, 0.15 * (1 - w) + 0.08 * w);
+        lookAt = tgt.copy(P0).addScaledVector(v, 5e-6 * (1 - w) * (1 - hv)).addScaledVector(u, 6e-6 * w);
+        // the shaking of the deceleration
+        if (P && P.entry) lookAt.add(CS.fx.shake(P.entry.level * 0.12e-6, T));
       } else if (s < EV.landing - 30) {
         // under the parachutes: wide enough for the canopy, then lower and closer as the ground comes up
         const chuteK = s < EV.drogue + 20 ? 1 : 0, alt = altitude(state.et);
@@ -563,7 +570,7 @@ body.phone #hland .cs-read { font-size: 9.5px; bottom: 9vh; white-space: normal;
         // while the shell comes off: wide, for the pilot pulling the back cover away and the main paying out; closer
         // as the main opens and the heat shield drops away below; then out to the whole canopy
         const wA = 1 - ease((s - 5) / 4), wB = (1 - wA) * (1 - ease((s - EV.shield - 8) / 12)), wN = 1 - wA - wB;
-        D = D * wN + 60 * wA + 22 * wB; elev = elev * wN + 0.08 * wA + 0.22 * wB; up = up * wN + 8 * wA + 0.5 * wB;
+        D = D * wN + 64 * wA + 22 * wB; elev = elev * wN + 0.08 * wA + 0.22 * wB; up = up * wN + 6 * wA + 0.5 * wB;
         dirV.copy(around).addScaledVector(u, elev);
         lookAt = tgt.copy(P0).addScaledVector(u, up * 1e-6);
       } else {
