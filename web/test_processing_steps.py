@@ -114,4 +114,23 @@ with cal.stepping("stack"):
     _, _, n = stacking.load_hdr("a.png")
     assert n == 1 and asked[-1] == 1, (n, asked)   # the frame alone
 print("load_hdr: hdr, stack ok")
+
+# ---------- tiles made ahead follow the mode a pass is asked in ----------
+import time  # noqa: E402
+made_ahead = []
+obs_mosaic.plan = lambda u, cache: {"display_scale": None}
+obs_mosaic._record = lambda u, cache: None
+obs_mosaic._yield = lambda: None
+obs_mosaic.tile = lambda u, j, cache, scale=None: (made_ahead.append((cal.variant(), j)), time.sleep(0.05))
+pass_u = {"key": ("ENCELADUS", "ISS_AHEAD", "N"), "frames": [None] * 40}
+obs_mosaic.tiles_ahead(pass_u, 0, "/c")
+time.sleep(0.2)
+with cal.stepping("align"):
+    obs_mosaic.tiles_ahead(pass_u, 0, "/c")   # Settings > Processing switched while the pass plays
+time.sleep(0.4)
+n_old = sum(1 for v, _ in made_ahead if v == "")
+time.sleep(0.4)
+assert sum(1 for v, _ in made_ahead if v == "") == n_old, "the old mode's thread goes on"
+assert any(v == "-off-align" for v, _ in made_ahead), made_ahead
+print("tiles_ahead: switches mode ok")
 print("ok")

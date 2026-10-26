@@ -588,7 +588,7 @@ class Segments:
         until = time.monotonic() + 120
         while keys and not job["stop"] and time.monotonic() < until:
             with obs_mosaic._lock:
-                busy_keys = {k for k in keys if k in obs_mosaic._ahead_running or any(r[0] == k for r in obs_mosaic._roll_ahead)}
+                busy_keys = {k for k in keys if any(r[0] == k for r in obs_mosaic._ahead_running) or any(r[0] == k for r in obs_mosaic._roll_ahead)}
             if not busy_keys:
                 break
             job["state"] = "finishing"

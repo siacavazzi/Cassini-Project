@@ -95,7 +95,7 @@ _warming = set()
 _background = threading.Semaphore(1)   # background work (passes made ahead) runs one at a time, so it never
                                        # crowds out what a window is waiting for
 _upto, _from = {}, {}   # a pass being made ahead: the last tile to make, the first mosaic to make
-_tile_locks = {}      # (pass key, tile) -> its lock
+_tile_locks = {}      # (pass key, mode, tile) -> its lock (calibration.mode: another look or step set is another tile)
 _making = {}          # path of a mosaic being made -> its lock, so two requests for it make it once
 
 
@@ -942,7 +942,7 @@ def _tile(u, n, cache, scale, there, rec=None):
     base = os.path.join(there, str(n))
     # one lock per tile, so a movie's frames made ahead can be made side by side
     with _lock:
-        lock = _tile_locks.setdefault((u["key"], n), threading.RLock())
+        lock = _tile_locks.setdefault((u["key"], calibration.mode(), n), threading.RLock())
     with lock:
         if rec is not None:
             with _lock:
@@ -2660,8 +2660,8 @@ def warm(u, upto, cache, size=None, slots=None, start=0, force=False):
     threading.Thread(target=run, daemon=True).start()
 
 
-_ahead_passes = collections.deque(maxlen=2)   # the passes windows were in last (a NAC and a WAC window)
-_ahead_running = set()
+_ahead_passes = collections.deque(maxlen=2)   # (pass, mode) windows were in last (a NAC and a WAC window)
+_ahead_running = set()   # (pass, mode) a thread is making tiles ahead for
 
 
 def tiles_ahead(u, n, cache):
@@ -2670,21 +2670,23 @@ def tiles_ahead(u, n, cache):
     mosaic finds its tiles made (processing a frame is the slow part of a cold mosaic) instead of waiting for
     each. Stops once windows have moved on to two other passes. Waits between tiles while a window waits for a
     mosaic (_yield), so the pass's lock goes to the request first instead of to the next tile ahead."""
+    mode = calibration.mode()
+    me = (u["key"], mode)
     with _lock:
-        if u["key"] in _ahead_passes:
-            _ahead_passes.remove(u["key"])
-        _ahead_passes.append(u["key"])
-        if u["key"] in _ahead_running:
+        # the pass asked for in one mode only (Settings > Processing switched): the thread of its mode before stops
+        for was in [a for a in _ahead_passes if a[0] == u["key"]]:
+            _ahead_passes.remove(was)
+        _ahead_passes.append(me)
+        if me in _ahead_running:
             return
     # every tile of the pass made and in memory: nothing to make, no thread
     rec = _record(u, cache)
     if rec is not None and _all_made(u, cache, rec["plan"], 0, len(u["frames"]) - 1):
         return
     with _lock:
-        if u["key"] in _ahead_running:
+        if me in _ahead_running:
             return
-        _ahead_running.add(u["key"])
-    mode = calibration.mode()
+        _ahead_running.add(me)
 
     def run():
         try:
@@ -2695,14 +2697,14 @@ def tiles_ahead(u, n, cache):
                     first = _made.get((u["key"], mode), -1) + 1
                 for j in range(first, len(u["frames"])):
                     _yield()
-                    if u["key"] not in _ahead_passes:
+                    if me not in _ahead_passes:
                         return
                     tile(u, j, cache, p["display_scale"])
         except Exception as e:
             print(f"observation tiles {u['key']} failed: {type(e).__name__}: {e}", flush=True)
         finally:
             with _lock:
-                _ahead_running.discard(u["key"])
+                _ahead_running.discard(me)
 
     threading.Thread(target=run, daemon=True).start()
 
