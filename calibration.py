@@ -754,7 +754,9 @@ def load_linear(labels, images=None, iofs=None):
     iofs = _calibrated(labels, images, iofs)
     if iofs is None:
         return None
-    levels, margin, white, measured = _balanced_scale(iofs)
+    # the sky is measured once, for the scale and the toe below
+    sky = _sky(iofs)
+    levels, margin, white, measured = _balanced_scale(iofs, sky=sky)
     if white <= 0:
         return None
     channels = [(iof - np.float32(level)) / np.float32(white) for iof, level in zip(iofs, levels)]
@@ -762,6 +764,7 @@ def load_linear(labels, images=None, iofs=None):
     mix = color_mix(_value(infos[0], "INSTRUMENT_ID", ""), [band_of(i) for i in infos], _value(infos[0], "TARGET_NAME", ""),
                     own=True)
     false = isinstance(mix, FalseMix)
+    lum = None
     if false:
         # false color: the mission's typical balance of the body (the table) misses a frame unlike it (Saturn's
         # high latitudes); FALSE_OWN of what is left between the picture's own lit bands is taken off as well. A
@@ -782,12 +785,12 @@ def load_linear(labels, images=None, iofs=None):
                 mix = np.diag(np.asarray(gains, np.float32)).view(FalseMix)
                 mix.tint = tint
     margin /= white
-    sky = _sky(iofs) if measured else np.ones(iofs[0].shape, dtype=bool)
+    sky = sky if measured else np.ones(iofs[0].shape, dtype=bool)
     if measured:
         # the toe starts no lower than the darker half of the sky's own brightness (SKY_DARK of it stays black),
         # since the gamma lifts even a tiny remainder into visible grain. Only the darker half, by its mean over
         # 15 pixels, so faint ring glow or a night side in the sky doesn't count as sky
-        lum = np.mean(channels, axis=0)
+        lum = np.mean(channels, axis=0) if lum is None else lum
         local = cv2.blur(lum, (15, 15))
         dark = sky & (local <= np.median(local[sky]))
         if dark.sum() > 100:
@@ -898,8 +901,8 @@ def noise_floor(skies, sky_percentile=98):
     return max(float(np.percentile(v, sky_percentile) - np.median(v)) for v in skies if v.size) if skies else 0.0
 
 
-def _balanced_scale(iofs, sky_fraction=0.1, sky_percentile=98):
-    sky = _sky(iofs)
+def _balanced_scale(iofs, sky_fraction=0.1, sky_percentile=98, sky=None):
+    sky = _sky(iofs) if sky is None else sky
     measured = bool(sky.mean() > sky_fraction)
     levels, margin = [0.0] * len(iofs), 0.0
     if measured:
