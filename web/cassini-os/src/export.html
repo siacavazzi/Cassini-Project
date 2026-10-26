@@ -83,10 +83,15 @@ body.phone #excard:not(.full) { width: calc(100% - 16px) !important; left: 8px !
   const show = et => iso(et).replace("T", " ");
   const parse = s => { const t = s.trim().replace(" ", "T"); return /^\d{4}-\d\d-\d\d(T\d\d:\d\d(:\d\d)?)?$/.test(t) ? utcToEt(t.length === 10 ? t + "T00:00:00" : t) : null; };
   const redraw = () => { if (typeof drawTimeline === "function" && catalog) drawTimeline(); };
-  function mark(a, b) {
-    if (a != null) X.a = a;
-    if (b != null) X.b = b;
-    if (X.a != null && X.b != null && X.b < X.a) [X.a, X.b] = [X.b, X.a];
+  // X.guard (segment.html, while a stretch is being made or is made ahead): guard(a, b, how) answers the stretch a
+  // change may make, [a, b], or null when it may not change at all; how is "edge" (an end dragged or typed), "new" (a
+  // fresh highlight) or "clear"
+  const guarded = (a, b, how) => (X.guard && X.a != null && X.b != null ? X.guard(a, b, how) : [a, b]);
+  function mark(a, b, how) {
+    let na = a != null ? a : X.a, nb = b != null ? b : X.b;
+    if (na != null && nb != null && nb < na) [na, nb] = [nb, na];
+    if (na != null && nb != null && (a != null || b != null)) { const g = guarded(na, nb, how || "edge"); if (!g) return; [na, nb] = g; }
+    X.a = na; X.b = nb;
     $("exfrom").value = X.a != null ? show(X.a) : "";
     $("exuntil").value = X.b != null ? show(X.b) : "";
     $("exhint").hidden = X.a != null && X.b != null;
@@ -96,7 +101,8 @@ body.phone #excard:not(.full) { width: calc(100% - 16px) !important; left: 8px !
   }
   // a stretch just highlighted: the bar over it comes up (segment.html), or this window where there is no bar
   const marked = () => { if (!window.cassiniSegment) open(); };
-  function clear() { X.a = X.b = null; mark(); }
+  // force: the person's own × or Escape (a stretch kept by X.guard otherwise stays)
+  function clear(force) { if (!force && X.guard && X.a != null && !X.guard(null, null, "clear")) return; X.a = X.b = null; mark(); }
 
   // drawn over the timeline: the stretch lit in the camera blue, a handle at each end
   const prevTimeline = window.studyTimeline;
@@ -144,7 +150,7 @@ body.phone #excard:not(.full) { width: calc(100% - 16px) !important; left: 8px !
     e.stopImmediatePropagation();
     const t = etAt(e);
     if (drag.edge) mark(drag.edge === "a" ? t : null, drag.edge === "b" ? t : null);
-    else { X.a = Math.min(drag.from, t); X.b = Math.max(drag.from, t); mark(); }
+    else if (!drag.held) { const g = guarded(Math.min(drag.from, t), Math.max(drag.from, t), "new"); if (g) { X.a = g[0]; X.b = g[1]; mark(); } else drag.held = true; }
   }, true);
   window.addEventListener("pointerup", e => {
     press = null;

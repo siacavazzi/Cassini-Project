@@ -29,17 +29,6 @@ Rigs in the project files, `opt-audit/rigs/` (cloud, 34 real lean-archive frames
   each row's ends against every pixel, on edge cases, synthetic frames and real tiles.
 - `proc_memo_equiv.py`: `processed_webp` at 512 then 1024 (the segment pre-render's order), plain and centred, in the
   three looks: a hash of every picture, report and file written.
-- `encode_equiv.py`: `encode` on a grid of pictures (4 modes, 6 sides, 7 sizes, WebP and PNG, 3 qualities) and on the
-  sample's frames and composites at every size. `prebuild_composites_equiv.py`: the pre-build's composites item
-  (`color_webp` at 1024 then 512, which writes full too) in the three looks: a hash of every file written.
-- `resize_equiv.py`: `_lit_resize` against PIL's resize of the whole canvas on random canvases (lit nowhere, at a
-  pixel, everywhere, in a box, a disk, a turned frame, with holes, at an edge; down and up) and 3072 px movie-tile
-  canvases. `proc_place_equiv.py`: `processed_frame` on the sample's frames and sets, plain and hdr, and the reel
-  pictures made of them, in the three looks: a hash of every picture, report and file, and of the label's placement.
-- Timings: `time_make_pass.py` (a pass maker run on the sample's passes, fresh cache and geometry, no profiler, no
-  tiles made ahead as the pre-build runs), `time_composites.py` (the composites item, with its encodes counted and
-  timed) and `time_proc.py` (`processed_frame` alone, with the time it holds `spice_lock`), alternating with and
-  without.
 - For the overnight build, the same checks on the integration branch with and without the change (`git apply -R`
   of its code diff). How to run them: `opt-audit/rigs/README.md`.
 - `zip_equiv_env.py`: every member of the sample zip and of synthetic zips (stored, deflated, empty, long local extra
@@ -123,11 +112,8 @@ On the busy Mini a cold picture spends a quarter to a half of its time reading t
 | O19 | frames (pre-build) | each plain frame's PNG read from the archive and decoded again for each of the sizes the pre-build makes in turn (1024, 512, 128); now decoded once, the last 16 kept, each size encoded from a copy | 10% less time per frame (median 159.6 to 143.1 ms, cloud) | this audit | #116 |
 | O20 | encode | `thumbnail` shrinks the picture it is given, and on `pictures` (since #62) that can be a composite kept for its other sizes (`_recent_composite`): after a 512 view, the full PNG save and the channel views came out 512 px (`pictures` only; main has no kept composites) | a bug, found by the audit: no pre-built file changed (the pre-build makes 512 last) | this audit | #119 |
 | O21 | processed_webp | the segment pre-render (#102's `single()`) asks for each single frame at 512, then 1024, and each size made the frame again (`load_stacked`, calibration, tone; for Auto center `processed_frame` and SPICE); now kept like a composite (`_recent_composite`), the second size only an encode | 30% less per single frame (cloud medians: plain 325 to 213 ms, centred 706 to 486 ms); 4 segment threads made 34 frames for 34, not 68 | this audit | #120 |
-| O22 | pass pictures (pre-build) | `make_pass` (the pre-build's mosaic and movie passes, and the segment pre-render) asks each frame's mosaic so far, mosaic movie picture or movie frame at 1024 and 512, and both sizes were made at OUT and shrunk after: the colour mix, the luminance base, detail's blur and the movie frame's placing done twice; now `so_far` and `movie_frame` keep their last picture on the thread (named as the cache names it, up to OUT, a copy per call) | the sample's passes as mosaics: `so_far` 8 times for 4 pictures (37 of 61 s); as movies: `movie_frame` 48 times for 24 (17 of 47 s). Timed on a quiet cloud machine with O23 (medians of three alternating runs, fresh caches): a mosaic pass 66.7 to 45.1 s (32% less), a movie pass 50.1 to 38.8 s (22% less) | this audit | #120 (follow-up merged as 7754fda) |
-| O23 | tile outline | `_corners` handed `minAreaRect` every set pixel of a tile (about a million) to hull; each row's first and last set pixel have the same hull | 190 ms to 8 ms a tile (a tile ~0.9 s), same to the bit on 3,995 masks | this audit | #120 (follow-up merged as 7754fda) |
-| O24 | encode | encode's plan for a size (the side the picture is shrunk to, the saver's format and arguments) is now worked out on its own (`_encoding`), and a picture asked for at sizes with the same plan is encoded once. At quality 95 (#115) a composite up to 1024 px is saved the same way at 1024 and full, so `color_webp`'s 1024 and full were the same bytes encoded twice (the pre-build's composites item, and every cold window composite); a summed frame (512 or 256 px) is not shrunk for 1024 or 512, so `webp`'s 1024 and 512 (asked in turn by the pre-build) were too | the pre-build's composites item (`color_webp` at 1024, then 512): 3 encodes a set to 2, its encodes 229-255 to 133-137 ms a set, the item ~15% less (cloud; a 1024 q95 composite encode is ~100 ms here, 31 ms on the Mini per #115); a cold window composite waits one encode less; a summed frame's three sizes 3 encodes to 2 | this audit | #121 |
-| O25 | tile resize | a tile's frame sits on a canvas three frames wide (3072 px for a movie tile, ~1400 px of it lit), and the whole canvas was resized to the pass's reference distance (LANCZOS): half of making a tile. PIL resizes RGBA premultiplied, across then down, each row and then each column on its own, and an unlit pixel is 0 premultiplied: `_lit_resize` resizes only the lit rows across and the columns they leave lit down, through PIL's own resize | a movie tile's resize ~430 to ~250 ms (cloud). The sample's passes on the build tree (medians of three alternating runs, no tiles made ahead, with O24): a movie pass 36.8 to 32.8 s (11% less), a mosaic pass 43.0 to 38.9 s (10% less). The same bytes on 9,300 random canvases and on every tile of the sample's passes | this audit | #121 |
-| O26 | processed_frame | every frame was drawn twice onto its 3072 px canvas: shifted and turned (`auto_center`) only to learn where SPICE puts it (the label's placement and the canvas's shape), then north up at the canvas's middle, the picture returned. Now the first is not drawn (`translate(draw=False)`): the same placement, worked out from the canvas's shape. Every tile, reel picture and Auto center view goes through it | a frame's `processed_frame` as a tile is made 233 to 197 ms (cloud medians), `spice_lock` held 41 to 0.8 ms of it: the drawing skipped was inside the lock, which every thread of the pre-build takes in turn (6-9 threads tonight). A movie pass 32.8 to 31.0 s more (16% less with O25); a mosaic pass the same within its noise (~3 s) | this audit | #121 |
+| O22 | pass pictures (pre-build) | `make_pass` (the pre-build's mosaic and movie passes, and the segment pre-render) asks each frame's mosaic so far, mosaic movie picture or movie frame at 1024 and 512, and both sizes were made at OUT and shrunk after: the colour mix, the luminance base, detail's blur and the movie frame's placing done twice; now `so_far` and `movie_frame` keep their last picture on the thread (named as the cache names it, up to OUT, a copy per call) | the sample's passes as mosaics: `so_far` 8 times for 4 pictures (37 of 61 s); as movies: `movie_frame` 48 times for 24 (17 of 47 s): about 31% of a mosaic pass, 18% of a movie pass (cloud) | this audit | #120 |
+| O23 | tile outline | `_corners` handed `minAreaRect` every set pixel of a tile (about a million) to hull; each row's first and last set pixel have the same hull | 190 ms to 8 ms a tile (a tile ~0.9 s), same to the bit on 3,995 masks | this audit | #120 |
 
 ## For the owners
 Ideas in another thread's area, sent to that thread; this audit does not make them.
@@ -135,23 +121,17 @@ Ideas in another thread's area, sent to that thread; this audit does not make th
 | Owner | Idea | Why |
 |---|---|---|
 | phase 8 (#107) | calibrate a set's frames once in load_aligned | adopted (ff55095) |
-| processing toggles (#117) | on `pictures` the background threads (`tiles_ahead`, `warm_movie`, `movie_footprint`'s pool) re-set only the look, so a raw-colors request also made natural-look tiles behind it; and `tiles_ahead` kept one thread per pass whatever the mode, so after a toggle it went on making the old mode's tiles to the end of the pass | fixed in #117 (`calibration.in_mode` in those threads; 29808de keys the tiles ahead by mode) |
-| phase 4 (explore mosaics) | the pre-build's `all_passes` (72 s on the build head, cloud) spends 28 s in `units`' `itertuples` (a namedtuple class made per observation, 4.5 s of it) and 25 s in `_judge`, mostly matching each frame to its nearest place (6.2 million lambda calls); column arrays and a vectorised nearest place would about halve it | sent through the lead for when phase 4 starts |
 
 ## Next (second pass)
-- `color_webp` encodes the other window sizes before replying. Since O24 a composite up to 1024 px gets its full for
-  free, so encoding the rest after the reply would only help a composite larger than 1024 px (and prebuild.py relies
-  on those side files being written when color_webp returns).
+- `color_webp` encodes the other window sizes before replying; encoding them after the reply would take one WebP
+  encode (~40 ms on the Mini) off every composite's wait, but prebuild.py relies on those side files being written
+  when color_webp returns, so it needs a request-only switch and a word with the pre-build thread.
 - A frame's .lbl, .png and .prefix.gz sit next to each other in the sample zip; if the Mini's archive is laid out the
   same, reading the label and the PNG after it in one read would save a seek per frame of a composite (check the
   layout first).
 - Color tone steps (`tone`, `apply_mix`, `_flatten_broad`, `picture_scale`): ~30 percentile/median partitions of whole
   pictures per composite (~146 ms on the Mini); several are of the same array and can share one partition exactly.
 - The page's render loop and fetches (the frame-rate thread's seven rounds came first: project files `frame-rate/results.md`), `build_data.py` (phase 5 rebuilds the data: coordinate first). Label parsing was checked: 0.08 ms of CPU a label (cloud), so the label time on the Mini is its disk.
-- What is left of a movie frame (cloud, with O22 to O26): the frame's processing (`processed_frame`: stacking,
-  calibration, the north-up warp onto its canvas, ~200 ms), registering it to the frame before (~150 ms), the
-  tile's PNG (~90 ms) and reading it back (~30 ms, twice: its movie frame and the next filter's registration; the
-  last few tiles kept in memory would save both), `detail`'s blur (~190 ms) and the two WebP encodes (~240 ms).
-  The canvas warps are already only where the frame lands (`warp_into`); OpenCV's fixed-point coordinates depend
-  on where the part warped starts, so cutting that part any smaller would not be the same to the bit.
-- Count the summed frames in the Mini's archive, for O24's share of the frames phase.
+- Once #115 (quality 95) is in: a composite up to 1024 px comes out the same at 1024 and full (no shrink, the same quality), so `color_webp` encodes the same bytes twice. A plan for each size (the side it is shrunk to and the save arguments), with one encode per plan, would take one of the pre-build's three encodes per set (a 1024 WebP is ~70-90 ms, cloud) and one of a cold window composite's two.
+- The pre-build's `all_passes` (72 s on the build head, cloud) spends 28 s in `units`' `itertuples` (a namedtuple class made per observation, 4.5 s of it) and 25 s in `_judge`, mostly matching each frame to its nearest place (6.2 million lambda calls); column arrays and a vectorised nearest place would about halve it (phase 3/4's code: for the owners).
+- A summed frame (512 or 256 px) is not shrunk for 1024 or 512, so its two WebPs are the same bytes, encoded twice by the pre-build; one encode could serve both (count the summed frames in the Mini's archive first).

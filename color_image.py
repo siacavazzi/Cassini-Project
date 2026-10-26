@@ -159,25 +159,37 @@ where report says how each frame was calibrated and aligned, and report["dropped
 left out because they can't be calibrated (then there is one image fewer than paths: a two-filter picture)
 """
 def load_aligned(paths, hdr=False, scale=None, repeat_window=120):
-    lbls, imgs, stacked, iofs = [], [], [], []
+    # Settings > Processing turns steps off per request (calibration.step); stacking checks its own
+    calibrating, fill, align = calibrate and cal.step("calibrate"), cal.step("fill"), cal.step("align")
+    lbls, imgs, stacked, iofs, masks = [], [], [], [], []
     for path in paths:
         iof = None
-        if hdr and calibrate:
-            lbl, iof, n = stacking.load_hdr(path, repeat_window)
+        if hdr and calibrating:
+            lbl, iof, n, mask = stacking.load_hdr(path, repeat_window, valid=True)
         if iof is None:
-            lbl, img, n = stacking.load_stacked(path, repeat_window, max_frames = 5 if stack_repeats else 1, count=True)
+            lbl, img, n, mask = stacking.load_stacked(path, repeat_window, max_frames = 5 if stack_repeats else 1,
+                                                      count=True, valid=True)
         else:
             img = lbl.resize_image()
         lbls.append(lbl)
         imgs.append(img)
         iofs.append(iof)
         stacked.append(n)
-    # pixels each frame lost in downlink (truncated lines); filled so they don't skew the rest
-    masks = [l.valid_mask() for l in lbls]
-    imgs = [ic.fill_invalid(img, mask) for img, mask in zip(imgs, masks)]
-    iofs = [None if iof is None else ic.fill_invalid(iof, mask) for iof, mask in zip(iofs, masks)]
+        # pixels each frame lost in downlink (truncated lines) that no repeat exposure stacked with it had
+        masks.append(mask)
+    lost = sum(int((~m).sum()) for m in masks)
+    if fill and lost:
+        # short runs of lost lines from the rows above and below (now valid); the rest from round them, only so
+        # they don't skew the brightness scale or bleed when shifted: those stay invalid
+        lined = [ic.fill_lines(img, mask) for img, mask in zip(imgs, masks)]
+        iofs = [None if iof is None else ic.fill_lines(iof, mask)[0] for iof, mask in zip(iofs, masks)]
+        imgs, masks = [l[0] for l in lined], [l[1] for l in lined]
+    left = sum(int((~m).sum()) for m in masks)
+    if fill:
+        imgs = [ic.fill_invalid(img, mask) for img, mask in zip(imgs, masks)]
+        iofs = [None if iof is None else ic.fill_invalid(iof, mask) for iof, mask in zip(iofs, masks)]
     dropped = []
-    if calibrate and len(lbls) > 1:
+    if calibrating and len(lbls) > 1:
         # each frame calibrated once, here, for the display models below to share
         iofs = cal.calibrated_each(lbls, imgs, iofs)
         keep = [j for j, iof in enumerate(iofs) if iof is not None]
@@ -192,7 +204,7 @@ def load_aligned(paths, hdr=False, scale=None, repeat_window=120):
                 scale = dict(scale, blacks=[scale["blacks"][j] for j in keep])
     calibrated = False
     guide = linear = None
-    if calibrate:
+    if calibrating:
         if scale is None and cal.look() != "classic":
             # balanced: the channels stay linear until they are aligned, then are drawn together (calibration.tone)
             linear = cal.load_linear(lbls, imgs, iofs)
@@ -216,7 +228,12 @@ def load_aligned(paths, hdr=False, scale=None, repeat_window=120):
     # masks move with the frames, so pixels alignment leaves uncovered become invalid too
     aligned = []
     try:
-        if guide is not None:
+        if not align:
+            # Settings > Processing: the channels as the camera took them, one over the other
+            aligned = ["off"] * len(imgs)
+            if linear is not None:
+                guide = None
+        elif guide is not None:
             shifts = []
             ic.align_with_masks(guide, [m.copy() for m in masks], ref, aligned, found=shifts)
             channels, masks = ic.align_with_masks(linear[0], masks, ref, use=shifts)
@@ -231,6 +248,11 @@ def load_aligned(paths, hdr=False, scale=None, repeat_window=120):
     if linear is not None and guide is None:
         imgs = cal.tone(linear[0], linear[1], linear[2])
     report = {"calibrated": calibrated, "stacked": stacked, "aligned": aligned}
+    if not fill:
+        report["filled"] = False
+    if lost:
+        # lost pixels (1024 px grid) after stacking, and how many of them are still missing after the fill
+        report["lost_px"] = [lost, left]
     if dropped:
         report["dropped"] = dropped
     return imgs, np.logical_and.reduce(masks), lbls[ref], report
@@ -264,12 +286,10 @@ def processed_frame(paths, max_offset=600, hdr=False, scale=None, repeat_window=
     image = np.dstack([chans[2], chans[1], chans[0], alpha])
     try:
         with spice_lock:
-            # where SPICE puts the frame (lbl.placement) and the canvas it goes on, not drawn: the
-            # picture is the one drawn north up below
-            shape = lbl.set_color(image).auto_center(border, draw=False)
+            centred = lbl.set_color(image).auto_center(border)
         # the frame's middle goes to placement @ (511.5, 511.5), the target's centre to the
         # middle of the canvas
-        middle = np.array([(shape[1] - 1) / 2, (shape[0] - 1) / 2])
+        middle = np.array([(centred.shape[1] - 1) / 2, (centred.shape[0] - 1) / 2])
         moved = (lbl.placement @ np.array([ba.CCD_CENTER, ba.CCD_CENTER, 1.0]))[:2]
         offset = moved - middle
         report["frame_offset"] = [round(float(v), 1) for v in offset]

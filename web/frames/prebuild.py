@@ -13,13 +13,17 @@ Phases (each its own run; a run picks up where the last one stopped, since a mad
   mosaics     every mosaic pass's plan and tiles (obs_mosaic), then what the window shows at each of its frames,
               1024 and 512: its mosaic so far, or a mosaic movie's rolling picture
   movies      the same for every movie pass: its steadied frames (movie_webp)
-  processed   /frames/processed/<ID>.webp at 1024 for movie mode, every frame not in a filter set
+  processed   /frames/processed/<ID>.webp at 1024, 512 and 256, every frame, centred as Auto center asks
+  strips      a movie pass's steadied frames at 128 (the movie strip)
 
 Made to share the Mac Mini with the live and preview servers: run it under `nice -n 19 taskpolicy -b` (low CPU and
 disk priority), one process with a few threads. It waits while the 1-minute load is over --max-load, while the
 live server's (or a --watch preview's) /health answers slower than a
 second, while the LaCie (--disk) moves more than --max-tps transfers a second, or while the pause file exists (touch it to hold the job,
-remove it to go on). status.json (and a page reading it, index.html) in --status says how far it is.
+remove it to go on), or while the cache's disk has less than --min-free GB free. The holds are asked on a thread of
+their own, so a slow check never holds the workers back. --procs N runs the phase as N processes of one thread
+each (the makers are mostly Python: threads take turns on one core), each its own stretch of the items.
+status.json (and a page reading it, index.html) in --status says how far it is.
 
   CASSINI_DATA=/Volumes/LaCie/cassini_lut8.zip CASSINI_KERNELS=... CASSINI_GEOMETRY_CACHE=... \\
     nice -n 19 taskpolicy -b python web/frames/prebuild.py frames --cache /Volumes/cassini-cache \\
@@ -50,7 +54,7 @@ import calibration  # noqa: E402
 import obs_mosaic  # noqa: E402
 import reel  # noqa: E402
 
-PHASES = ("frames", "composites", "mosaics", "movies", "processed")
+PHASES = ("frames", "composites", "mosaics", "movies", "processed", "strips")
 SET_GAP = 300   # head-quiet.html findSets
 
 
@@ -122,23 +126,85 @@ def all_passes():
     return out
 
 
+def centred(frame_id):
+    """Auto center (on by default in a camera window, center=1): the view the server's centre_of gives the frame's
+    pass (centred on the body, or north up where it is), which names the cache folder the window's picture is
+    in; None where Auto center leaves the pass as it is (the window then asks for the picture as it is)."""
+    try:
+        view = obs_mosaic.centre_view(frame_id)
+    except Exception:   # noqa: BLE001  (not centred: the window shows the picture as it is)
+        return None
+    return view if view.get("centre") or view.get("north") else None
+
+
 def items(phase):
-    """(name, work) of every item of the phase, in time order; work() makes it (a made file is found, not made)."""
+    """(name, work) of every item of the phase, in time order; work() makes it (a made file is found, not made).
+    Composites and processed frames are made as a camera window asks for them, with Auto center (center=1, the
+    default): built without it, the windows found none of them in the cache (2026-10-26)."""
     if phase == "frames":
         # 128: a pass's filmstrip
         return [(i, lambda c, i=i: [frame_server.webp(i, s, c) for s in (1024, 512, 128)]) for i in frame_ids()]
     if phase == "composites":
         # 1024 first: it also writes full, and keeps the composite in memory for the 512 one
-        return [("_".join(s), lambda c, s=s: [frame_server.color_webp(s, z, c) for z in (1024, 512)]) for s in page_sets()]
+        return [("_".join(s), lambda c, s=s: [frame_server.color_webp(s, z, c, centre=centred(s[-1])) for z in (1024, 512)])
+                for s in page_sets()]
     if phase == "processed":
-        in_sets = {i for s in page_sets() for i in s}
-        return [(i, lambda c, i=i: frame_server.processed_webp(i, 1024, c)) for i in frame_ids() if i not in in_sets]
+        # every frame: a window shows a frame processed on its own until its filter set is complete; 256 is the
+        # pass strip's (the windows asked it about as often as 1024 on 8790, 2026-10-26), cheap from the frame in memory
+        return [(i, lambda c, i=i: [frame_server.processed_webp(i, z, c, centre=centred(i)) for z in (1024, 512, 256)])
+                for i in frame_ids()]
     if phase == "mosaics":
         return [("_".join(map(str, u["key"])), lambda c, u=u: make_pass(u, c)) for u in mosaic_passes()]
-    if phase == "movies":
-        return [("_".join(map(str, u["key"])), lambda c, u=u: make_pass(u, c))
+    if phase in ("movies", "strips"):
+        # strips: a movie pass's steadied frames at 128, the movie strip under a window
+        sizes = (1024, 512) if phase == "movies" else (128,)
+        return [("_".join(map(str, u["key"])), lambda c, u=u: make_pass(u, c, sizes))
                 for u in all_passes() if u.get("kind") == "movie" or (u.get("movie") and not u["mosaic"])]
     raise ValueError(phase)
+
+
+def only(phase, todo, path):
+    """todo cut to the items that use a frame listed in path (one frame id a line): the frame itself (frames,
+    processed), a filter set holding it (composites), a pass taking it (mosaics, movies, strips). A remake after a fix
+    to some frames: the items' made files are found, not made, so the fix's version bump (or removing the old files)
+    comes first."""
+    with open(path) as fh:
+        ids = {line.split()[0] for line in fh if line.strip() and not line.startswith("#")}
+    if phase in ("frames", "processed"):
+        return [t for t in todo if t[0] in ids]
+    if phase == "composites":
+        def set_ids(name):   # N1352055787_2_N1352055720_2 -> its frame ids (each one underscore)
+            parts = name.split("_")
+            return ["_".join(parts[k:k + 2]) for k in range(0, len(parts), 2)]
+        return [t for t in todo if any(i in ids for i in set_ids(t[0]))]
+    names = {"_".join(map(str, u["key"])) for u in all_passes() if any(f[1] in ids for f in u["frames"])}
+    return [t for t in todo if t[0] in names]
+
+
+def watched_first(todo):
+    """todo with the items of the most watched observations first (the Moments strip, web/replay/moments.csv, and
+    Highlights, web/replay/highlights.csv), each group in time order, then the rest in time order. An item's
+    observation is its frame's (a set's last frame's); pass items are named after their key, which holds it."""
+    import csv
+    here = os.path.join(os.path.dirname(os.path.dirname(os.path.abspath(__file__))), "replay")
+    watched = set()
+    for name in ("moments.csv", "highlights.csv"):
+        try:
+            with open(os.path.join(here, name)) as fh:
+                for row in csv.DictReader(fh):
+                    watched.update((row.get("obs") or "").split())
+        except OSError:
+            pass
+    idx, _ = reel.load_index()
+    obs_of = dict(zip(idx["id"].tolist(), idx["OBSERVATION_ID"].tolist()))
+
+    def hit(name):
+        last = "_".join(name.split("_")[-2:])   # a frame id (N1352055787_2), or a set's last one
+        if last in obs_of:
+            return obs_of[last] in watched
+        return any(f"_{o}_" in name for o in watched)   # a pass: TARGET_OBSERVATION_CAMERA_PASS
+    first = [t for t in todo if hit(t[0])]
+    return first + [t for t in todo if not hit(t[0])], len(first)
 
 
 def make_pass(u, cache, sizes=(1024, 512), within=None, style=None):
@@ -184,6 +250,10 @@ def busy(args):
     """Why the job should wait now, or None."""
     if args.pause and os.path.exists(os.path.expanduser(args.pause)):
         return "paused (pause file)"
+    if getattr(args, "min_free", 0):
+        free = shutil.disk_usage(args.cache).free / 1e9
+        if free < args.min_free:
+            return f"disk {free:.0f} GB free < {args.min_free:.0f}"
     load = os.getloadavg()[0]
     if load > args.max_load:
         return f"load {load:.1f} > {args.max_load}"
@@ -208,6 +278,28 @@ def busy(args):
     return None
 
 
+class Holds:
+    """busy(args), asked on a thread of its own every few seconds: its checks take a while (a /health round trip,
+    the 2 s iostat sample), and asked on the thread that hands out the work they held every worker back (the
+    LaCie's iostat every 20 frames held the frames phase to 9.3 a second, 2026-10-26). why() is the last answer."""
+    EVERY = 5
+
+    def __init__(self, args):
+        self.args, self.last = args, busy(args)
+        threading.Thread(target=self._loop, daemon=True).start()
+
+    def _loop(self):
+        while True:
+            time.sleep(self.EVERY)
+            try:
+                self.last = busy(self.args)
+            except Exception:
+                self.last = None
+
+    def why(self):
+        return self.last
+
+
 class Status:
     def __init__(self, args, total):
         self.args, self.lock = args, threading.Lock()
@@ -219,7 +311,7 @@ class Status:
             os.makedirs(args.status, exist_ok=True)
             page = os.path.join(os.path.dirname(os.path.abspath(__file__)), "prebuild.html")
             shutil.copyfile(page, os.path.join(args.status, "index.html"))
-            prev = os.path.join(args.status, f"status-{args.phase}.json")
+            prev = os.path.join(args.status, f"status-{args.phase}{_shard_tag(args)}.json")
             if os.path.exists(prev):
                 with open(prev) as fh:
                     old = json.load(fh)
@@ -241,7 +333,8 @@ class Status:
         self.last_write = time.time()
         if not self.args.status:
             return
-        for name in (f"status-{self.args.phase}.json", "status.json"):
+        tag = _shard_tag(self.args)
+        for name in (f"status-{self.args.phase}{tag}.json",) + (() if tag else ("status.json",)):
             part = os.path.join(self.args.status, name + ".part")
             with open(part, "w") as fh:
                 json.dump(self.s, fh)
@@ -250,11 +343,23 @@ class Status:
 
 def run(args):
     todo = items(args.phase)
+    if getattr(args, "only", None):
+        todo = only(args.phase, todo, args.only)
+        print(f"{len(todo)} items use the listed frames", flush=True)
+    if getattr(args, "watched_first", False):
+        todo, n = watched_first(todo)
+        print(f"{n} items of watched observations first", flush=True)
     if args.first:
         todo = todo[args.first:]
+    if args.shard:
+        # one stretch of the items (k of n, from 0), for a process of its own (procs below)
+        k, n = map(int, args.shard.split("/"))
+        todo = todo[len(todo) * k // n:len(todo) * (k + 1) // n]
+        args.first = 0
     status = Status(args, len(todo) + args.first)
     status.update(done=args.first, state="running")
-    errors = open(os.path.join(args.status or args.cache, f"errors-{args.phase}.jsonl"), "a")
+    errors = open(os.path.join(args.status or args.cache, f"errors-{args.phase}{_shard_tag(args)}.jsonl"), "a")
+    holds = Holds(args)
     pending, i = set(), 0
     # every thread may be drawing its own mosaic movie: each keeps its last pictures to grow the next from
     obs_mosaic.rolled_room(args.threads + 1)
@@ -269,11 +374,11 @@ def run(args):
                 return name, time.monotonic() - t0, f"{type(e).__name__}: {e}"[:300]
         while i < len(todo) or pending:
             while i < len(todo) and len(pending) < args.threads * 2:
-                why = busy(args) if i % 20 == 0 else None
+                why = holds.why()
                 while why:
                     status.update(state="waiting", why_waiting=why)
-                    time.sleep(30)
-                    why = busy(args)
+                    time.sleep(Holds.EVERY)
+                    why = holds.why()
                 status.update(state="running", why_waiting=None)
                 pending.add(pool.submit(contextvars.copy_context().run, one, *todo[i]))
                 i += 1
@@ -289,6 +394,49 @@ def run(args):
                     status.s["errors"] += bool(err)
                 status.update(last=name)
     status.update(state="done")
+
+
+def _shard_tag(args):
+    return "-" + args.shard.replace("/", "of") if getattr(args, "shard", None) else ""
+
+
+def procs(args):
+    """The phase as args.procs processes of one thread each, each making its own stretch of the items (--shard),
+    and their status files added up into the phase's own. The pictures' makers are mostly Python, so threads of one
+    process take turns on one core: composites ran 1.2 a second on 9 threads, ~8 on 9 processes (2026-10-26)."""
+    n = args.procs
+    argv = [a for a in sys.argv[1:]]
+    for flag in ("--procs", "--threads", "--first"):
+        while flag in argv:
+            j = argv.index(flag)
+            del argv[j:j + 2]
+    env = {**os.environ, "OPENBLAS_NUM_THREADS": "1", "OMP_NUM_THREADS": "1"}
+    kids = [subprocess.Popen([sys.executable, sys.argv[0]] + argv + ["--threads", "1", "--shard", f"{k}/{n}"],
+                             env=env) for k in range(n)]
+    status = Status(args, 0) if args.status else None
+    while True:
+        alive = [p for p in kids if p.poll() is None]
+        if status:
+            parts = []
+            for k in range(n):
+                try:
+                    with open(os.path.join(args.status, f"status-{args.phase}-{k}of{n}.json")) as fh:
+                        parts.append(json.load(fh))
+                except (OSError, ValueError):
+                    pass
+            if parts:
+                waiting = [p.get("why_waiting") for p in parts if p.get("state") == "waiting"]
+                status.s.update(total=sum(p["total"] for p in parts), errors=sum(p["errors"] for p in parts),
+                                made_s=sum(p["made_s"] for p in parts), procs=n,
+                                state="waiting" if waiting and len(waiting) == len(parts) else "running",
+                                why_waiting=waiting[0] if waiting else None)
+                status.update(done=sum(p["done"] for p in parts))
+        if not alive:
+            break
+        time.sleep(5)
+    if status:
+        status.update(state="done" if all(p.returncode == 0 for p in kids) else "stopped")
+    sys.exit(max(p.returncode for p in kids))
 
 
 def sample(args):
@@ -356,7 +504,7 @@ def segment_options(q):
     """The stretch and the page's choices from a POST /prebuild query (parse_qs): from/until (UTC, ISO), cams (N,
     W or NW), sizes (the windows' picture sizes), look/colors (as on every picture route), mosaics/steady/color
     (Settings > Cameras and Movie), processed (processed single frames), center (Auto center: center=1 as the
-    windows ask) and trail/laps/fade/persist (the movie style). ValueError for anything else."""
+    windows ask), off (the pipeline steps turned off, calibration.STEPS) and trail/laps/fade/persist (the movie style). ValueError for anything else."""
     get = lambda k, d=None: q.get(k, [d])[0]
     when = lambda s: datetime.datetime.fromisoformat(s.replace("Z", "")).replace(tzinfo=datetime.timezone.utc).timestamp()
     try:
@@ -375,8 +523,11 @@ def segment_options(q):
     if not cams or not sizes:
         raise ValueError("cams= takes N, W or NW")
     on = lambda k: get(k, "1") != "0"
+    off = [s for s in calibration.STEPS if s in (get("off") or "").split(",")]
     return {"from": t0, "until": t1, "cams": cams, "sizes": sizes,
             "look": get("look", calibration.LOOKS[0]), "colors": get("colors", calibration.COLORS[0]),
+            # the pipeline steps turned off (Settings > Processing), only when any are, so a stretch's id is as before
+            **({"off": off} if off else {}),
             "mosaics": on("mosaics"), "steady": on("steady"), "processed": on("processed"), "center": on("center"),
             "style": {"trail": max(0, min(obs_mosaic.TRAIL, trail)), "laps": max(1, min(obs_mosaic.TRAIL, laps)),
                       "fade": fade[0], "persist": fade[1],
@@ -400,15 +551,8 @@ def segment_items(o):
     t0, t1, cams, sizes = o["from"], o["until"], o["cams"], o["sizes"]
 
     def centre(frame_id):
-        """Auto center (o["center"]): the pass's centred view, as the server's centre_of works it out, or None (the
-        window then asks for the picture as it is)."""
-        if not o.get("center"):
-            return None
-        try:
-            view = obs_mosaic.centre_view(frame_id)
-        except Exception:   # noqa: BLE001  (not centred: the window shows the picture as it is)
-            return None
-        return view if view.get("centre") else None
+        """Auto center (o["center"]): the pass's view as the server's centre_of gives it (centred), or None."""
+        return centred(frame_id) if o.get("center") else None
 
     def single(i, c):
         """A frame on its own as the window shows it: processed (Settings > Cameras > Processed single frames),
@@ -555,7 +699,7 @@ class Segments:
         # each thread may hold a mosaic movie for all its frames, and the windows play theirs in the same process:
         # room for all of them to keep their last pictures (obs_mosaic._rolled)
         obs_mosaic.rolled_room(SEGMENT_THREADS + 2)
-        with calibration.looking(o["look"]), calibration.coloring(o["colors"]), \
+        with calibration.looking(o["look"]), calibration.coloring(o["colors"]), calibration.stepping(o.get("off", ())), \
                 concurrent.futures.ThreadPoolExecutor(SEGMENT_THREADS) as pool:
             pending, i = set(), 0
             while i < len(items) or pending:
@@ -590,7 +734,7 @@ class Segments:
         until = time.monotonic() + 120
         while keys and not job["stop"] and time.monotonic() < until:
             with obs_mosaic._lock:
-                busy_keys = {k for k in keys if k in obs_mosaic._ahead_running or any(r[0] == k for r in obs_mosaic._roll_ahead)}
+                busy_keys = {k for k in keys if any(r[0] == k for r in obs_mosaic._ahead_running) or any(r[0] == k for r in obs_mosaic._roll_ahead)}
             if not busy_keys:
                 break
             job["state"] = "finishing"
@@ -613,6 +757,11 @@ def main():
     ap.add_argument("--disk", help="BSD name of the LaCie (diskutil list), waited for while busier than --max-tps")
     ap.add_argument("--max-tps", type=float, default=100)
     ap.add_argument("--pause", default="~/prebuild.pause", help="while this file exists the job waits")
+    ap.add_argument("--min-free", type=float, default=0, help="GB: the job waits while the cache's disk has less free")
+    ap.add_argument("--only", help="file of frame ids: only the items using them (a remake after a fix)")
+    ap.add_argument("--watched-first", action="store_true", help="the Moments and Highlights observations' items first")
+    ap.add_argument("--procs", type=int, default=0, help="run the phase as this many processes of one thread each")
+    ap.add_argument("--shard", help=argparse.SUPPRESS)   # k/n: one process's stretch (--procs)
     args = ap.parse_args()
     if args.phase == "count":
         sets, passes = page_sets(), mosaic_passes()
@@ -624,7 +773,7 @@ def main():
     data_source = frame_server.data_source
     data_source.KEEP_SPICE_CACHE = True
     data_source._zip_index() if data_source.using_zip() else None
-    (sample if args.sample else run)(args)
+    (sample if args.sample else procs if args.procs > 1 else run)(args)
 
 
 if __name__ == "__main__":
