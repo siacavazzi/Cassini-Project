@@ -669,8 +669,7 @@ A color picture already drawn (H x W x 3 uint8, gamma encoded, its channels on o
 def mix_display(rgb, mix, gamma=2.2, shoulder=SHOULDER):
     x = decode(np.moveaxis(rgb[..., :3].astype(np.float32) / 255, -1, 0), gamma).astype(np.float32)
     x = apply_mix(mix, x)
-    top = x.max(axis=0)
-    x *= np.where(top > shoulder, roll_off(top, shoulder) / np.maximum(top, 1e-12), 1)
+    _shoulder(x, shoulder)
     return np.moveaxis((encode(np.clip(x, 0, 1), gamma) * 255 + 0.5).astype(np.uint8), 0, -1)
 
 
@@ -842,8 +841,7 @@ def tone(channels, margin, mix=None, shoulder=SHOULDER, gamma=2.2):
                                                   lum - margin - w / 2))
         x *= np.where(lum > 0, toed / np.maximum(lum, 1e-12), 0)
     if shoulder:
-        top = x.max(axis=0)
-        x *= np.where(top > shoulder, roll_off(top, shoulder) / np.maximum(top, 1e-12), 1)
+        _shoulder(x, shoulder)
     x = np.clip(x, 0, 1)
     return [cv2.cvtColor((encode(c, gamma) * 255 + 0.5).astype(np.uint8), cv2.COLOR_GRAY2BGR) for c in x]
 
@@ -1007,11 +1005,27 @@ def decode(v, gamma=2.2):
 
 """
 A soft shoulder on linear brightness (white = 1): unchanged up to knee, then rolling off toward 1 with no
-step in slope, so what is brighter than white keeps its shape instead of clipping flat.
+step in slope, so what is brighter than white keeps its shape instead of clipping flat. Worked out only past the
+knee (a few bright pixels of most pictures), each the same value as over the whole picture.
 """
 def roll_off(x, knee):
     room = 1 - knee
-    return np.where(x <= knee, x, knee + room * np.tanh((x - knee) / room))
+    out = x.copy()
+    past = ~(x <= knee)
+    out[past] = knee + room * np.tanh((x[past] - knee) / room)
+    return out
+
+
+"""
+x (channels first, linear) with its brightest channel rolled off past shoulder (roll_off) and the other channels by
+the same factor, so a pixel keeps its color; in place, and only the pixels past the shoulder (the rest were multiplied
+by 1)
+"""
+def _shoulder(x, shoulder):
+    top = x.max(axis=0)
+    past = top > shoulder
+    top = top[past]
+    x[:, past] *= roll_off(top, shoulder) / np.maximum(top, 1e-12)
 
 
 """
