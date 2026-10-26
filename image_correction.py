@@ -193,6 +193,9 @@ def agreeing_median(stack, agrees, count):
 
 
 def stack_frames(frames, sigma=3.0, max_shift=20):
+    if len(frames) == 1:
+        # nothing to stack it with (most frames have no repeat): the frame as it is, as below
+        return frames[0]
     ref = frames[0]
     ref_gray = cv2.cvtColor(ref,cv2.COLOR_BGR2GRAY).astype(np.float32)
     blurred = cv2.GaussianBlur(ref_gray, (0,0), 3)
