@@ -70,6 +70,15 @@ def main():
         a.min_free = 0.001
         assert real(a) is None
         ok += 1
+        # --only: the items using a listed frame
+        listed = os.path.join(d, "only.txt")
+        with open(listed, "w") as fh:
+            fh.write("# lost lines\nN2_1\nW5_1 extra\n")
+        todo = [("N1_1", None), ("N2_1", None), ("W5_1", None)]
+        assert [t[0] for t in prebuild.only("frames", todo, listed)] == ["N2_1", "W5_1"]
+        sets = [("N1_1_N3_1", None), ("N3_1_N2_1", None), ("W4_1_W5_1_W6_1", None), ("N2_11_N7_1", None)]
+        assert [t[0] for t in prebuild.only("composites", sets, listed)] == ["N3_1_N2_1", "W4_1_W5_1_W6_1"]
+        ok += 1
     print(f"{ok} checks ok")
 
 

@@ -163,6 +163,24 @@ def items(phase):
     raise ValueError(phase)
 
 
+def only(phase, todo, path):
+    """todo cut to the items that use a frame listed in path (one frame id a line): the frame itself (frames,
+    processed), a filter set holding it (composites), a pass taking it (mosaics, movies, strips). A remake after a fix
+    to some frames: the items' made files are found, not made, so the fix's version bump (or removing the old files)
+    comes first."""
+    with open(path) as fh:
+        ids = {line.split()[0] for line in fh if line.strip() and not line.startswith("#")}
+    if phase in ("frames", "processed"):
+        return [t for t in todo if t[0] in ids]
+    if phase == "composites":
+        def set_ids(name):   # N1352055787_2_N1352055720_2 -> its frame ids (each one underscore)
+            parts = name.split("_")
+            return ["_".join(parts[k:k + 2]) for k in range(0, len(parts), 2)]
+        return [t for t in todo if any(i in ids for i in set_ids(t[0]))]
+    names = {"_".join(map(str, u["key"])) for u in all_passes() if any(f[1] in ids for f in u["frames"])}
+    return [t for t in todo if t[0] in names]
+
+
 def watched_first(todo):
     """todo with the items of the most watched observations first (the Moments strip, web/replay/moments.csv, and
     Highlights, web/replay/highlights.csv), each group in time order, then the rest in time order. An item's
@@ -324,6 +342,9 @@ class Status:
 
 def run(args):
     todo = items(args.phase)
+    if getattr(args, "only", None):
+        todo = only(args.phase, todo, args.only)
+        print(f"{len(todo)} items use the listed frames", flush=True)
     if getattr(args, "watched_first", False):
         todo, n = watched_first(todo)
         print(f"{n} items of watched observations first", flush=True)
@@ -706,6 +727,7 @@ def main():
     ap.add_argument("--max-tps", type=float, default=100)
     ap.add_argument("--pause", default="~/prebuild.pause", help="while this file exists the job waits")
     ap.add_argument("--min-free", type=float, default=0, help="GB: the job waits while the cache's disk has less free")
+    ap.add_argument("--only", help="file of frame ids: only the items using them (a remake after a fix)")
     ap.add_argument("--watched-first", action="store_true", help="the Moments and Highlights observations' items first")
     ap.add_argument("--procs", type=int, default=0, help="run the phase as this many processes of one thread each")
     ap.add_argument("--shard", help=argparse.SUPPRESS)   # k/n: one process's stretch (--procs)
