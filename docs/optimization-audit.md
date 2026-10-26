@@ -49,9 +49,11 @@ Rigs in the project files, `opt-audit/rigs/` (cloud, 34 real lean-archive frames
   `sky_stats_equiv.py` (O33): `sky_levels` and `sky_blacks`, old against new, the way each caller asks (each frame
   and set on the sky `_sky` finds, with the floor; `black_of`'s quarter-size frame; the sample's frames grouped as
   passes) and on 600 made-up skies; `web/test_sky_stats.py` (in the repo): the shared partition against the separate
-  numpy calls. `pct_equiv.py` and `pct_nan2.py` show why order statistics shared between numpy calls must stay the
-  same call on the same array unless the pixels are checked first (O33): with both signs of zero in it the zero
-  found can change with the partition, and with a NaN even the result's type.
+  numpy calls. `mix_layout_equiv.py` (O34): `mix_display` and `apply_mix`, old against new, on the sample's colour
+  pictures as the passes draw them, on made-up pictures and mixes, and on made-up float pictures in both layouts
+  (`mix_lprof.py` is the line profile it came from). `pct_equiv.py` and `pct_nan2.py` show why order statistics
+  shared between numpy calls must stay the same call on the same array unless the pixels are checked first (O33):
+  with both signs of zero in it the zero found can change with the partition, and with a NaN even the result's type.
 - Timings: `time_make_pass.py` (a pass maker run on the sample's passes, fresh cache and geometry, no profiler, no
   tiles made ahead as the pre-build runs), `time_composites.py` (the composites item, with its encodes counted and
   timed), `time_proc.py` (`processed_frame` alone, with the time it holds `spice_lock`), `time_processed.py` (the
@@ -153,6 +155,7 @@ On the busy Mini a cold picture spends a quarter to a half of its time reading t
 | O31 | picture_scale | in the balanced look `picture_scale` measured each picture's sky (`_sky`, a 99.9th percentile of every pixel of each channel), then `_balanced_scale` measured it again; it now passes it on, as `load_linear` already did | ~8 ms a channel of each tile's own scale in the reel's mosaics (`tiles_scale`; cloud); the same scales (`sky_share_equiv.py`) | this audit | #121 |
 | O32 | tone shoulder | `tone` and `mix_display` multiplied every pixel by a factor that is 1 below the shoulder, and `roll_off` worked `tanh` out over the whole picture before choosing; both now work only on the pixels past the knee (~5% of the sample's pictures), each value the same elementwise expression on the same input | `display`'s roll-off 3.8 to 1.3 ms a channel (each channel `load_channels` draws in the balanced look: every tile); the shoulder step of `tone` 8.0 to 6.8 ms (one channel), 10.8 to 10.6 ms (three; cloud, `shoulder_time.py`); 3,985 outputs the same (`shoulder_equiv.py`) | this audit | #121 |
 | O33 | sky statistics | a sky's median, 20th percentile and (in a balanced scale) 98th percentile were three numpy calls, each copying the sky's pixels (~836 k of a 1024 px frame) and partitioning the copy. `_median_percentiles` takes both percentiles in one call and then the median, in place on the array `sky_levels` has already made. A value at a rank does not depend on which partition finds it unless the pixels hold a NaN or both signs of zero, so a sky with either (checked first) goes to the separate calls as before | 15.2 to 9.6 ms a channel, the check included (the sample's 34 skies, cloud, `sky_stats_time.py`): every channel of a balanced composite or processed frame, each tile's own scale, a pass's sky levels; the pre-build's processed phase 199 to 190 ms a frame; 4,528 results the same (`sky_stats_equiv.py`, `sky_share_equiv.py`), `web/test_sky_stats.py` 1,570 checks | this audit | #121 |
+| O34 | colour mix layout | `mix_display` hands `apply_mix` its picture channels first in shape but channels last in memory (a moveaxis of the RGB picture), where numpy's mean, min and max over the three bands run one tiny loop per pixel, 10 to 45 times as long as on a channels-first copy. A false-colour mix's band mean, band minimum and the straight picture's saturation now work on such a copy: numpy's sum starts from 0 and adds the bands in order in either layout, and max and min pick the same values, so the same results; the weighted sums (`tensordot`) keep the layout they had, for BLAS. `tone`'s channels were already channels first. The picture's brightness for the detail step is taken once instead of twice | a colour pass's colour picture 510 to 409 ms a 1024 px movie frame, 3.1 to 2.6 s a 2048 px mosaic picture (cloud, `mix_layout_equiv.py`); 4,103 outputs the same (the sample's colour pictures, 1,100 made-up pictures through `mix_display`, 3,000 `apply_mix` calls with NaN, inf, negative values and signed zeros in both layouts) | this audit | #121 |
 
 O27 to O32 together, the sample's passes on the build tree (016249b without and with them), medians of three
 alternating runs on a quiet cloud machine, fresh caches, no tiles made ahead (as the pre-build runs): a movie pass
@@ -166,7 +169,8 @@ set, more than the ~20 ms O30 should take off a three-filter set). With both rou
 O33 on its own, timed the same way (8ab6e04 without and f5db4e8 with on `pictures`; the build tree without and with
 it): the pre-build's processed phase 199 to 190 ms a frame (6 to 9 ms less in each round). The composites item and the
 movie and mosaic passes are the same within their noise: O33 takes ~17 ms off a three-filter set, and the passes' runs
-vary by ~3 s.
+vary by ~3 s. O34 is timed on the colour pictures alone: the sample's passes hold two colour movie frames
+and one colour mosaic picture, inside the passes' noise.
 
 ## For the owners
 Ideas in another thread's area, sent to that thread; this audit does not make them.
@@ -200,9 +204,13 @@ Ideas in another thread's area, sent to that thread; this audit does not make th
   already only where the frame lands (`warp_into`); OpenCV's fixed-point coordinates depend on where the part
   warped starts, so cutting that part any smaller would not be the same to the bit. Blurring only the lit part for
   `detail` is not provably the same either (OpenCV's vector code and its scalar tails meet at different columns).
-- A colour pass's movie frames each take the pass's colour picture (`colour_picture`, `mix_display`, `apply_mix`): in
-  false colour ~0.8 s a 1024 px frame (cloud profile of the build tree, the sample's two colour frames), about as
-  much as the rest of the frame. Most of it is `apply_mix`'s false-colour path (~100 whole-picture numpy steps,
-  logs and exps of every channel, six full-size blurs). Profile it line by line before changing anything; the colour
-  sets' rule (phase 5) is where it belongs.
+- A colour pass's colour picture (`colour_picture`: `mix_display` and `apply_mix`'s false-colour path), each movie
+  frame and mosaic picture of a colour pass: ~0.5 s a 1024 px movie frame timed alone in the cloud before O34,
+  ~0.4 s with it. Line by line (`mix_lprof.py`, the build tree, before O34), the two saturations and the reverting
+  weight took ~40% of `apply_mix` (O34 took most of that out), `_flatten_broad` a quarter (its logs, exps and broad
+  blurs), and the detail step's six 5 px blurs and the full-size temporaries most of the rest. Decoding the 8-bit
+  picture (`decode`, a power of every value, ~50 ms a 1024 px picture) could look its 256 values up in a table
+  instead, exact only if the table is worked out on the numpy path used now (a channels-last array; check on the
+  Mini that both give the same 256 values). Changes to the steps themselves belong with the colour sets' rule
+  (phase 5).
 - Count the summed frames in the Mini's archive, for O24's share of the frames phase.
