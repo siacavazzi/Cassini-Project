@@ -165,7 +165,8 @@ def make_pass(u, cache, sizes=(1024, 512), within=None, style=None):
         n += f[3] >= t0
         for size in sizes:
             if kind == "mosaic_movie":
-                obs_mosaic.rolling_webp(f[1], size, cache, style.get("laps", 1), wait=True)
+                obs_mosaic.rolling_webp(f[1], size, cache, style.get("laps", 1), wait=True,
+                                        fade=(style.get("fade", 0), style.get("persist", 0)))
                 # a window asks a mosaic movie's frames of /frames/mosaic too (its pass lane, the Mosaic switch)
                 if within:
                     obs_mosaic._mosaic_at(u, j, size, cache)
@@ -353,7 +354,7 @@ def segment_options(q):
     """The stretch and the page's choices from a POST /prebuild query (parse_qs): from/until (UTC, ISO), cams (N,
     W or NW), sizes (the windows' picture sizes), look/colors (as on every picture route), mosaics/steady/color
     (Settings > Cameras and Movie), processed (processed single frames), center (Auto center: center=1 as the
-    windows ask) and trail/laps (the movie style). ValueError for anything else."""
+    windows ask) and trail/laps/fade/persist (the movie style). ValueError for anything else."""
     get = lambda k, d=None: q.get(k, [d])[0]
     when = lambda s: datetime.datetime.fromisoformat(s.replace("Z", "")).replace(tzinfo=datetime.timezone.utc).timestamp()
     try:
@@ -366,8 +367,9 @@ def segment_options(q):
     try:
         sizes = sorted({min(SEGMENT_SIZES, key=lambda z: abs(z - int(x))) for x in (get("sizes") or "1024").split(",") if x})
         trail, laps = int(get("trail", "0") or 0), int(get("laps", "1") or 1)
+        fade = obs_mosaic.fade_style(int(get("fade", "0") or 0), int(get("persist", str(obs_mosaic.FADE_PERSIST)) or 0))
     except ValueError:
-        raise ValueError("sizes=, trail= and laps= take numbers")
+        raise ValueError("sizes=, trail=, laps=, fade= and persist= take numbers")
     if not cams or not sizes:
         raise ValueError("cams= takes N, W or NW")
     on = lambda k: get(k, "1") != "0"
@@ -375,6 +377,7 @@ def segment_options(q):
             "look": get("look", calibration.LOOKS[0]), "colors": get("colors", calibration.COLORS[0]),
             "mosaics": on("mosaics"), "steady": on("steady"), "processed": on("processed"), "center": on("center"),
             "style": {"trail": max(0, min(obs_mosaic.TRAIL, trail)), "laps": max(1, min(obs_mosaic.TRAIL, laps)),
+                      "fade": fade[0], "persist": fade[1],
                       "center": on("center"), "color": on("color")}}
 
 
