@@ -126,8 +126,11 @@ body.phone #segfps { flex: 1; }
   function say(text, warn) { $("segstate").textContent = text || ""; $("segstate").classList.toggle("warn", !!warn); $("segstaterow").hidden = !text; }
   function progress(frac) { $("segprog").hidden = frac == null; if (frac != null) $("segprog").firstElementChild.style.width = `${(frac * 100).toFixed(1)}%`; }
   function fpsUi() { const f = Math.round(window.cassiniMovie && window.cassiniMovie.fps ? window.cassiniMovie.fps() : opt("movie.fps", 8)); $("segfps").value = f; $("segfpsv").textContent = `${f} fps`; }
+  // the choices a stretch is made with, apart from its times (P.key; P.span: the times it was made for)
+  function optKey() { const q = new URLSearchParams(params()); q.delete("from"); q.delete("until"); return q.toString(); }
+  const inside = () => P.span && P.a >= P.span[0] && P.b <= P.span[1];
   function buttons() {
-    const j = P.job, busy = j && /^(queued|planning|making|waiting|finishing)$/.test(j.state), done = j && j.state === "done" && P.key === params();
+    const j = P.job, busy = j && /^(queued|planning|making|waiting|finishing)$/.test(j.state), done = j && j.state === "done" && P.key === optKey() && inside();
     $("segprep").hidden = busy || done; $("segstop").hidden = !busy;
     $("segplay").classList.toggle("go", !!done);
     $("segplay").textContent = P.playing && state.playing ? "❚❚ Pause" : "▶ Play";
@@ -141,20 +144,44 @@ body.phone #segfps { flex: 1; }
     $("segprep").disabled = $("segplay").disabled = !n;
   }
   // a stretch marked (export.html's marks, also its window's From and Until): the bar comes up for it
+  // A stretch being made, or made, is kept (EX guard, below): its ends drag outward and the new ends are made too (a
+  // new job over the whole stretch, which finds what is made already in the cache), never inward while it is being
+  // made; a new highlight elsewhere waits for × (the made pictures stay in the frame server's cache either way)
+  let grow = 0;
   function marked(a, b) {
     if (a == null || b == null || b - a < 1) { hide(); return; }
     const moved = a !== P.a || b !== P.b;
     P.a = a; P.b = b;
-    if (moved && P.job && P.key !== params()) { stopPoll(); P.job = null; progress(null); say(""); }
+    if (moved && P.job && P.key !== optKey()) { stopPoll(); P.job = null; P.span = null; progress(null); say(""); }
+    if (moved && kept() && !inside()) { clearTimeout(grow); grow = setTimeout(() => { if (kept() && !inside()) prep(); }, 600); }
     bar.hidden = false; summary(); fpsUi(); camsUi(); buttons(); place();
   }
-  function hide() { bar.hidden = true; untuck(); stopPoll(); P.playBack = false; titled(null); P.job = null; P.a = P.b = null; P.playing = false; progress(null); say(""); }
+  const kept = () => !!(P.job && P.span && P.key === optKey() && !/^(failed|stopped)$/.test(P.job.state));
+  let noteAt = 0;
+  function locked(text) {
+    if (performance.now() - noteAt < 1500) return;
+    const at = noteAt = performance.now(); say(text, true);
+    setTimeout(() => { if (noteAt === at && P.job && P.job.state === "done") follow(P.job); }, 6000);
+  }
+  EX.state.guard = (a, b, how) => {
+    if (!kept()) return [a, b];
+    const [A, B] = P.span, busy = P.job.state !== "done";
+    if (how === "clear" || (how === "new" && !(a <= A && b >= B))) {
+      locked(busy ? "This stretch is being pre-processed: drag its ends outward to add to it, or × to let it go." : "This stretch is made ahead: drag its ends to change it, or × to highlight another.");
+      return null;
+    }
+    if (busy && (a > A || b < B)) { locked("Its ends move outward while it is being pre-processed: the part made stays made."); return [Math.min(a, A), Math.max(b, B)]; }
+    return [a, b];
+  };
+  function hide() { bar.hidden = true; untuck(); stopPoll(); clearTimeout(grow); P.playBack = false; titled(null); P.job = null; P.span = null; P.a = P.b = null; P.playing = false; progress(null); say(""); }
   document.addEventListener("cassini:marks", e => marked(e.detail.a, e.detail.b));
 
   // ---- making it ahead: the frame server's job, followed every second ----
   async function prep() {
-    const key = params();
-    P.key = key; say("Asking the frame server…"); progress(0);
+    const key = params(), old = P.job && /^(queued|planning|making|waiting|finishing)$/.test(P.job.state) ? P.job.id : null;
+    // a stretch grown while it is being made: the old job gives way to the whole stretch's (its pictures are made)
+    if (old) fetch(`${FRAMES}/prebuild/${old}/stop`, { method: "POST" }).catch(() => {});
+    P.key = optKey(); P.span = [P.a, P.b]; say("Asking the frame server…"); progress(P.job && P.job.total ? P.job.done / P.job.total : 0);
     try {
       const r = await fetch(`${FRAMES}/prebuild?${key}`, { method: "POST" }), j = await r.json();
       if (!r.ok) { P.job = null; progress(null); say(j.error || "The frame server cannot pre-process that.", true); buttons(); return; }
@@ -184,14 +211,15 @@ body.phone #segfps { flex: 1; }
     if (j.state === "failed") { progress(null); say(j.error || "Pre-processing failed; see the frame server's log.", true); return; }
     if (j.state === "stopped") { progress(frac); say(`Stopped at ${j.done.toLocaleString()} of ${j.total.toLocaleString()}; what is made stays made.`); return; }
     progress(frac);
-    say(j.state === "queued" ? (j.ahead ? `Waiting for ${j.ahead} stretch${j.ahead > 1 ? "es" : ""} before it…` : "Starting…")
+    if (performance.now() - noteAt > 6000) say(j.state === "queued" ? (j.ahead ? `Waiting for ${j.ahead} stretch${j.ahead > 1 ? "es" : ""} before it…` : "Starting…")
       : j.state === "planning" ? "Finding every picture in the stretch…"
       : j.state === "finishing" ? "Finishing the last mosaic tiles…"
       : j.state === "waiting" ? `On hold: the frame server's machine is reserved for another job · ${j.done.toLocaleString()} of ${j.total.toLocaleString()}`
       : `Pre-processing ${j.done.toLocaleString()} of ${j.total.toLocaleString()} pictures${j.eta != null ? ` · ${fmtDur(j.eta)} left` : ""}`);
     P.poll = setTimeout(async () => {
-      try { const r = await fetch(`${FRAMES}/prebuild/${j.id}.json`, { cache: "no-store" }); if (r.ok) follow(await r.json()); else follow(j); }
-      catch (err) { follow(j); }
+      if (!P.job || P.job.id !== j.id) return;   // another job took over (the stretch grew)
+      try { const r = await fetch(`${FRAMES}/prebuild/${j.id}.json`, { cache: "no-store" }); const n = r.ok ? await r.json() : j; if (P.job && P.job.id === j.id) follow(n); }
+      catch (err) { if (P.job && P.job.id === j.id) follow(j); }
     }, 1000);
   }
   async function stop() {
@@ -242,17 +270,17 @@ body.phone #segfps { flex: 1; }
   $("segcams").addEventListener("click", e => {
     const b = e.target.closest("button"); if (!b) return;
     EX.state.cams = b.dataset.v; camsUi(); summary();
-    if (P.job && P.key !== params()) { stopPoll(); P.job = null; progress(null); say(""); }
+    if (P.job && P.key !== optKey()) { stopPoll(); P.job = null; progress(null); say(""); }
     buttons();
   });
-  $("segx").addEventListener("click", () => { EX.clear(); hide(); });
+  $("segx").addEventListener("click", () => { EX.clear(true); hide(); });
   $("segfps").addEventListener("input", e => { if (S) S.set("movie.fps", +e.target.value); fpsUi(); });
   if (S) S.on("movie.fps", fpsUi);
   for (const k of ["cameras.composites", "cameras.mosaics", "movies.steady", "movies.trail", "movies.laps", "cameras.autoCenter", "cameras.processedFrames", "cameras.balancedColor", "cameras.colors"])
-    if (S && S.get(k) !== undefined) S.on(k, () => { if (!bar.hidden) { if (P.job && P.key !== params()) { stopPoll(); P.job = null; progress(null); say(""); } buttons(); } });
+    if (S && S.get(k) !== undefined) S.on(k, () => { if (!bar.hidden) { if (P.job && P.key !== optKey()) { stopPoll(); P.job = null; progress(null); say(""); } buttons(); } });
   window.addEventListener("keydown", e => {
     if (bar.hidden || e.key !== "Escape" || document.querySelector(".menu.open, .win.full") || (window.cassiniMovie && window.cassiniMovie.on)) return;
-    if (!$("excard") || $("excard").hidden) { EX.clear(); hide(); }
+    if (!$("excard") || $("excard").hidden) { EX.clear(true); hide(); }
   });
 
   // in the background: the pause note says the stretch is still being made; back, a stretch finished meanwhile plays
