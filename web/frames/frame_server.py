@@ -40,10 +40,10 @@ Routes:
                                by SPICE (color_image.processed_frame), at the frame's own scale (one frame square
                                round the body); whether to centre is decided once for the pass (obs_mosaic.centre_view,
                                the rule of a movie centred on its body).
-                               A pass that is not centred (rings, sky, a body too big for the view) is turned north
-                               up where it is, so every picture has one orientation; 404 with X-Center
-                               {"centre": false, "why"} only when SPICE has no place for the frame, and the window
-                               shows the picture as it is. Also on
+                               A close-up pass (frames on a body too big for the view) is turned north up where it
+                               is, so the surface holds still. 404 with X-Center {"centre": false, "why"} for a ring,
+                               spoke or sky pass (Cassini kept those upright in the camera, the steady view) or a
+                               frame SPICE has no place for, and the window shows the picture as it is. Also on
                                /frames/processed below
   /frames/processed/<ID>.webp?size=512
                                the frame alone made like a composite's channel (color_image.load_aligned with
@@ -299,7 +299,7 @@ COLOR_VERSIONS = {"balanced": "color-v28", "raw": "color-v11", "classic": "color
 PROC_VERSIONS = {"balanced": "proc-v8", "raw": "proc-v8", "classic": "proc-v2"}   # one frame: no colors to mix
 # Auto center (center=1): the same pictures centred on the body by SPICE, cached beside them in folders of their own
 CENTRE_VERSION = "ctr4"   # ctr2: the shift stops at the frame's data edge; ctr3: only when the body's disk is cut by it;
-                          # ctr4: a pass not centred is turned north up where it is
+                          # ctr4: a close-up pass is turned north up where it is
 
 
 def in_background(target, *args):
@@ -836,9 +836,9 @@ def make_handler(site, cache, flags=None):
 
         def centre_of(self, query, frame_id):
             """center=1 (Auto center in a camera window): the pass's view (obs_mosaic.centre_view: centred on the body,
-            or north up where it is when the pass is not centred), or None for the picture as it is. False when SPICE
-            has no place for the frame: the answer (404, X-Center says why) is sent, so the window shows the picture
-            as it is for the whole pass."""
+            or north up where it is for a close-up), or None for the picture as it is. False for a ring, spoke or
+            sky pass or a frame SPICE has no place for: the answer (404, X-Center says why) is sent, so the window
+            shows the picture as it is for the whole pass."""
             if query.get("center", ["0"])[0] != "1" or reel._index is None:
                 return None
             try:

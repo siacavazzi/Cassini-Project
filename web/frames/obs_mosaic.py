@@ -1164,9 +1164,10 @@ def centre_view(frame_id):
     own pass. Each picture keeps its frame's own scale: the view is one frame (FRAME full resolution pixels) square
     round the body, so the picture is the size it is today, only moved so the body is in the middle (a movie's view
     is the pass's, movie_rect). Answers {"centre": True, "side": FRAME, "radius": ..., "pass": [...]}, or
-    {"centre": False, "north": True, "side": FRAME, "why": ...} for a pass that is not centred (a ring, spoke or sky
-    frame, a body too big for the view): turned north up where it is; {"centre": False, "why": ...} for a frame SPICE
-    has no place for, which keeps the picture as it is."""
+    {"centre": False, "north": True, "side": FRAME, "why": ...} for a close-up (frames on a body too big for the
+    view): turned north up where it is, so the surface holds still; {"centre": False, "why": ...} for a ring, spoke
+    or sky pass (Cassini kept those upright in the camera) or a frame SPICE has no place for, which keep the
+    picture as it is."""
     idx, row = _row_of()
     q = row.get(frame_id)
     if q is None:
@@ -1192,14 +1193,23 @@ def centre_view(frame_id):
         if not half:
             hit["why"] = "no disk of a known body that fits the view" if not radius else \
                 "the body is too big for the view or the frames do not look at it"
+            # north up where it is only when the frames are on the body's disk (a close-up): the body's surface
+            # then holds still. Off the disk (rings, sky) Cassini rolled to keep the scene upright in the camera,
+            # so the camera's own orientation is the steady one and north up would turn it frame to frame
+            hit["north"] = bool(fp and radius and _on_disk(fp, radius))
         with _lock:
             _centre_views[key] = hit
     # the frame's own disk of the body (full resolution pixels), so centred knows whether the frame cuts it
     if hit["centre"]:
         return dict(hit, side=FRAME, radius=RADIUS.get(target, 0) / (g[2] * IFOV[cam]))
-    # a pass that is not centred is still turned north up where it is, so every picture Auto center shows has the
-    # same orientation and a window playing through passes does not turn with Cassini's roll
-    return dict(hit, side=FRAME, north=True)
+    return dict(hit, side=FRAME) if hit["north"] else dict(hit)
+
+
+def _on_disk(fp, radius):
+    """True when the footprint fp (reference pixels round the body's centre) takes in part of the body's disk."""
+    x0, y0, x1, y1 = fp
+    dx, dy = max(x0, 0, -x1), max(y0, 0, -y1)
+    return dx * dx + dy * dy < radius * radius
 
 
 def _place(u, t, rect, k, W, H, cache, scale):
