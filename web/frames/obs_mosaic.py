@@ -1610,11 +1610,26 @@ def rolling_webp(frame_id, size, cache, laps=1, slots=None, fmt="webp", out=OUT,
     return res
 
 
+def _rims(mask):
+    """The first and last set pixel of each row of mask (once when they are one pixel), as cv2.findNonZero gives
+    points, or None when nothing is set. Every set pixel's convex hull is these points' hull, so minAreaRect finds
+    the same rectangle from them, without sorting the million points of a tile (190 ms to 8 ms)."""
+    rows = np.flatnonzero(mask.any(1))
+    if not len(rows):
+        return None
+    sub = mask[rows]
+    left, right = sub.argmax(1), mask.shape[1] - 1 - sub[:, ::-1].argmax(1)
+    xs, ys = np.stack([left, right], 1).ravel(), np.repeat(rows, 2)
+    keep = np.ones(len(xs), bool)
+    keep[1::2] = right != left
+    return np.stack([xs[keep], ys[keep]], 1).astype(np.int32).reshape(-1, 1, 2)
+
+
 def _corners(t, alpha):
     """The four corners of the frame in a tile's picture (its alpha): the smallest rotated rectangle around it, so
     a frame turned north up keeps its slant, in reference pixels from the body's centre."""
     import cv2
-    pts = cv2.findNonZero((alpha > 0).astype(np.uint8))
+    pts = _rims(alpha > 0)
     corners = cv2.boxPoints(cv2.minAreaRect(pts)) if pts is not None else np.zeros((4, 2))
     bx, by = t["box"][:2]
     return [[float(t["offset"][0] + bx + x), float(t["offset"][1] + by + y)] for x, y in corners]
