@@ -56,6 +56,7 @@ import color_image  # noqa: E402
 import calibration  # noqa: E402
 import mosaic  # noqa: E402
 import mosaic_benchmark  # noqa: E402
+import image_correction  # noqa: E402
 import stacking  # noqa: E402
 
 # bumped whenever the way observation mosaics are made changes, so older ones are not served again; one per
@@ -772,6 +773,16 @@ SKY_TOE = 1.0    # ... and the soft toe above those blacks, this many times the 
                  # (calibration.display): the sky's scan lines, not its pixel noise, set how far grain reaches
 
 
+def _sky_fine(iofs, masks):
+    """The sky's fine structure in the pictures iofs (sky masks): the sky less its own mean over SKY_SMOOTH pixels
+    (row and column stray-light stripes, compression blocks, noise), on the darker half of the sky by its 5 pixel
+    mean, as one array. Smooth faint light (haze, a ring, the body's glow) is not in it."""
+    local = [cv2.blur(i, (5, 5)) for i in iofs]
+    sky = np.concatenate([l[m] for l, m in zip(local, masks)])
+    return np.concatenate([(i - cv2.blur(i, (SKY_SMOOTH, SKY_SMOOTH)))[m & (l <= np.median(sky))]
+                           for i, l, m in zip(iofs, local, masks)])
+
+
 def tile_scale(scale, f, own_sky=False, seen=None):
     """The display scale of one tile of filter f: the pass's, and with own_sky (a movie's frames, each shown
     alone) a black raised to the frame's own sky level plus the band's height over it (sky_tops) where that sky
@@ -792,11 +803,17 @@ def tile_scale(scale, f, own_sky=False, seen=None):
         if m.mean() <= SKY_MIN:
             return None
         (level,), _ = calibration.sky_levels([[q]], [[m]])
-        if level + top <= black:
+        # the band's height over the sky at least this frame's own (its sky's fine structure, as pass_scale measures
+        # the pass's): a frame lit by stray light has a grainier sky than the pass's typical one, and in the Jupiter
+        # approach movie its red and green grain rose over a black set by the pass's height, a faint red cast
+        fine = _sky_fine([q], [m])
+        own = float(np.percentile(fine, SKY_TOP_PCT) - np.median(fine)) if fine.size > 100 else 0.0
+        raised = level + max(top, own)
+        if raised <= black:
             return None
         if seen is not None:
-            seen["black"] = level + top
-        return {"black": level + top, "toe": scale.get("toe")}
+            seen["black"] = raised
+        return {"black": raised, "toe": scale.get("toe")}
 
     out["black_of"] = black_of
     return out
@@ -863,12 +880,7 @@ def pass_scale(frames, u, drawn=None, true_colour=False, sky_tops=None, lit_leve
             # less its own mean over SKY_SMOOTH pixels (its row and column stray-light stripes, compression
             # blocks and noise), on the darker half of the sky. Smooth faint light (Saturn's Shadow's haze and E
             # ring, a haze limb, the body's glow) is not in it, so it stays above black
-            fine = {}
-            for (f, iofs), level in zip(by.items(), levels):
-                local = [cv2.blur(i, (5, 5)) for i in iofs]
-                sky = np.concatenate([l[m] for l, m in zip(local, masks[f])])
-                fine[f] = np.concatenate([(i - cv2.blur(i, (SKY_SMOOTH, SKY_SMOOTH)))[m & (l <= np.median(sky))]
-                                          for i, l, m in zip(iofs, local, masks[f])])
+            fine = {f: _sky_fine(iofs, masks[f]) for f, iofs in by.items()}
             # with a noise floor (the noisiest band's SKY_FLOOR_PCT percentile above the median): the pixel-difference
             # noise is about 0 on frames stored in 8 bits
             margin = max(margin, calibration.noise_floor(list(fine.values()), SKY_FLOOR_PCT))
@@ -965,15 +977,93 @@ def _tile_made(u, n, cache, scale, base):
         rows, cols = np.flatnonzero(small[..., 3].any(1)), np.flatnonzero(small[..., 3].any(0))
         if len(rows):
             a, b, c, d = rows[0], rows[-1] + 1, cols[0], cols[-1] + 1
-            Image.fromarray(np.ascontiguousarray(small[a:b, c:d])).save(base + ".png", compress_level=1)
+            crop = np.ascontiguousarray(small[a:b, c:d])
+            Image.fromarray(crop).save(base + ".png", compress_level=1)
             out.update({"native_offset": rep["frame_offset"], "offset": [v * k for v in rep["frame_offset"]],
                         "box": [int(c) - side / 2, int(a) - side / 2, int(d - c), int(b - a)]})
-            out["outline"] = _corners(out, small[a:b, c:d, 3])
+            _register(u, n, out, crop, cache, scale)
+            out["outline"] = _corners(out, crop[..., 3])
     else:
         out["why"] = rep.get("why", "not placed by SPICE")
     data = json.dumps(out, default=str)
     reel._cached(base + ".json", data.encode)
     return json.loads(data)
+
+
+REGISTER_GAP = 180   # s: a tile of another filter taken this soon before, at the same pointing, is what it is registered to
+REGISTER_MAX = 0.04  # of a frame: the largest correction to SPICE's placement that is believed
+
+
+def _register_to(u, n):
+    """The tile tile n is registered to (_register): the first frame of the pass in another filter at its pointing
+    (SAME_PLACE, by the geometry cache) taken at most REGISTER_GAP before it, so every filter of a pointing lands on
+    that pointing's first frame; None for a pointing's first frame, or one SPICE (the geometry cache) has no place for."""
+    frames = u["frames"]
+    _, _, f, t, _, x, y, z = frames[n]
+    if not z:
+        return None
+    k = z / u["z"] if u["z"] else 1.0
+    for j in range(n):
+        _, _, fj, tj, _, xj, yj, zj = frames[j]
+        if fj != f and zj and 0 <= t - tj <= REGISTER_GAP and math.hypot(x - xj, y - yj) * k <= SAME_PLACE * FRAME:
+            return j
+    return None
+
+
+def _register(u, n, out, crop, cache, scale):
+    """C8, the filters registered to each other: SPICE places each frame on its own, and the few pixels its pointing
+    is off differ from frame to frame, so the filters of one pointing landed a little apart and every limb had a red
+    and a cyan rim (Dione). Tile n (its report out, crop its picture as made) is moved onto the tile it is registered
+    to (_register_to) by the pipeline's own alignment of a set's channels (image_correction.align_with_masks: phase
+    correlation, then on edges, then by the lit area's centroid) over the part of the view both cover; out["offset"]
+    is changed by the shift found (out["spice_offset"] keeps SPICE's), out["registered"] says to what and how. A
+    shift past REGISTER_MAX of a frame, or none found, leaves SPICE's place."""
+    j = _register_to(u, n)
+    if j is None:
+        return
+    q = tile(u, j, cache, scale)
+    path = os.path.join(_tiles(u, cache, scale), f"{j}.png")
+    if "offset" not in q or not os.path.exists(path):
+        return
+    ref = np.asarray(Image.open(path).convert("RGBA"))
+    # both tiles in the reference pixels of the view: where each crop's corner lands, the part both cover
+    corners = []
+    for t, im in ((q, ref), (out, crop)):
+        corners.append((t["offset"][0] + t["box"][0], t["offset"][1] + t["box"][1], im))
+    x0 = max(c[0] for c in corners)
+    y0 = max(c[1] for c in corners)
+    x1 = min(c[0] + c[2].shape[1] for c in corners)
+    y1 = min(c[1] + c[2].shape[0] for c in corners)
+    if x1 - x0 < 64 or y1 - y0 < 64:
+        return
+    imgs, masks = [], []
+    for cx, cy, im in corners:
+        left, top = int(round(x0 - cx)), int(round(y0 - cy))
+        part = im[top:top + int(y1 - y0), left:left + int(x1 - x0)]
+        gray = cv2.cvtColor(np.ascontiguousarray(part[..., :3]), cv2.COLOR_RGB2GRAY)
+        imgs.append(cv2.cvtColor(np.where(part[..., 3] > 0, gray, 0).astype(np.uint8), cv2.COLOR_GRAY2BGR))
+        masks.append(part[..., 3] > 0)
+    h = min(i.shape[0] for i in imgs)
+    w = min(i.shape[1] for i in imgs)
+    imgs, masks = [i[:h, :w] for i in imgs], [m[:h, :w] for m in masks]
+    # the rounding of each crop's corner to whole pixels, put back on the shift found
+    rest = [(cx - x0) - round(cx - x0) for cx, _, _ in corners], [(cy - y0) - round(cy - y0) for _, cy, _ in corners]
+    shifts, how = [], []
+    try:
+        image_correction.align_with_masks(imgs, masks, 0, how, found=shifts)
+    except Exception as e:
+        out["registered"] = {"to": q["id"], "why": f"{type(e).__name__}: {e}"[:200]}
+        return
+    shift = shifts[1]
+    if shift is None or math.hypot(*shift) > REGISTER_MAX * FRAME:
+        out["registered"] = {"to": q["id"], "how": how[1], "kept": "SPICE's place"}
+        return
+    # align_with_masks moves the picture by -shift to land on the reference: its place moves the same way
+    dx = shift[0] + rest[0][1] - rest[0][0]
+    dy = shift[1] + rest[1][1] - rest[1][0]
+    out["spice_offset"] = out["offset"]
+    out["offset"] = [out["offset"][0] - dx, out["offset"][1] - dy]
+    out["registered"] = {"to": q["id"], "how": how[1], "shift": [round(dx, 2), round(dy, 2)]}
 
 
 def view_rect(p, tiles=None):

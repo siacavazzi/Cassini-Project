@@ -123,7 +123,7 @@ def make_frame(row, filters):
     for j in range(0, len(imgs)):
         imgs[j] = Image.fromarray(imgs[j]).convert('L')
 
-    if num_channels == 3:
+    if len(imgs) == 3:
         # transparent where any channel has no data, instead of a colored streak
         alpha = Image.fromarray(np.where(valid, np.asarray(get_mask()), 0).astype(np.uint8))
         image = Image.merge("RGBA",(imgs[2],imgs[1],imgs[0], alpha))
@@ -155,7 +155,8 @@ scale = a fixed display scale shared by all the pictures of a mosaic (calibratio
 repeat_window = how close (seconds) a frame of the same filter must be to be stacked in as a repeat exposure;
 a movie taking frames faster than that passes less, so its frames are not stacked into one another
 returns (images, mask of pixels valid in every channel, the reference frame's label, report)
-where report says how each frame was calibrated and aligned
+where report says how each frame was calibrated and aligned, and report["dropped"] which frames were
+left out because they can't be calibrated (then there is one image fewer than paths: a two-filter picture)
 """
 def load_aligned(paths, hdr=False, scale=None, repeat_window=120):
     lbls, imgs, stacked, iofs = [], [], [], []
@@ -175,6 +176,20 @@ def load_aligned(paths, hdr=False, scale=None, repeat_window=120):
     masks = [l.valid_mask() for l in lbls]
     imgs = [ic.fill_invalid(img, mask) for img, mask in zip(imgs, masks)]
     iofs = [None if iof is None else ic.fill_invalid(iof, mask) for iof, mask in zip(iofs, masks)]
+    dropped = []
+    if calibrate and len(lbls) > 1:
+        # each frame calibrated once, here, for the display models below to share
+        iofs = cal.calibrated_each(lbls, imgs, iofs)
+        keep = [j for j, iof in enumerate(iofs) if iof is not None]
+        # a channel that can't be calibrated (an 8LSB frame: only its low 8 bits were sent) is left out
+        # when two others calibrate, so the set is a calibrated two-filter picture instead of every
+        # channel falling back to its own stretch (Phoebe day, 2004-06-11: every NAC BL1 frame is 8LSB)
+        if 2 <= len(keep) < len(lbls):
+            dropped = [os.path.basename(paths[j]).split(".")[0] for j in range(len(lbls)) if j not in keep]
+            print(f"Can't calibrate {dropped}, making a two-filter picture of the others")
+            lbls, imgs, iofs, masks, stacked = ([v[j] for j in keep] for v in (lbls, imgs, iofs, masks, stacked))
+            if scale is not None:
+                scale = dict(scale, blacks=[scale["blacks"][j] for j in keep])
     calibrated = False
     guide = linear = None
     if calibrate:
@@ -216,6 +231,8 @@ def load_aligned(paths, hdr=False, scale=None, repeat_window=120):
     if linear is not None and guide is None:
         imgs = cal.tone(linear[0], linear[1], linear[2])
     report = {"calibrated": calibrated, "stacked": stacked, "aligned": aligned}
+    if dropped:
+        report["dropped"] = dropped
     return imgs, np.logical_and.reduce(masks), lbls[ref], report
 
 
@@ -267,6 +284,33 @@ def processed_frame(paths, max_offset=600, hdr=False, scale=None, repeat_window=
         report["centred"] = False
         report["why"] = str(e)[:200]
         return cv2.cvtColor(image, cv2.COLOR_BGR2RGBA), lbl, report
+
+
+"""
+One frame as science data: its I/F (reflectance relative to sunlight, calibration.calibrate) at the camera's own
+resolution, float32, with no stacking, alignment, stretch or placement; pixels lost in downlink (label.valid_mask)
+are NaN. path = the frame's path in the archive (nac_data/<ID>.png)
+returns (I/F image, the frame's PDS label as text, a note on how it was made), or None when the frame can't be
+calibrated (an 8LSB frame, an unknown filter or gain)
+"""
+def science_frame(path):
+    lbl = lh.label(path, as_png=True)
+    info = lbl.get_info()
+    codes = ds.imread(lbl.export(), cv2.IMREAD_GRAYSCALE)
+    iof = cal.calibrate(codes, info)
+    if iof is None:
+        return None
+    iof = np.asarray(iof, np.float32)
+    valid = lbl.valid_mask()
+    if valid.shape != iof.shape:
+        valid = cv2.resize(valid.astype(np.uint8), iof.shape[::-1], interpolation=cv2.INTER_NEAREST).astype(bool)
+    iof[~valid] = np.nan
+    saturated = cal.saturated(codes, info)
+    note = (f"I/F of {info.get('PRODUCT_ID', path)} (Cassini ISS), float32, {iof.shape[1]} x {iof.shape[0]} px, made by the "
+            f"Cassini Project's calibration.calibrate: bias, shutter offset, exposure, gain, filter and sensitivity "
+            f"corrections and the Sun's distance. Not dark-current or flat-field corrected (CISSCAL does both). "
+            f"Lost pixels (downlink): NaN, {int((~valid).sum())}. Saturated pixels: {int(saturated.sum())}.")
+    return iof, ds.read_text(lbl.path), note
 
 
 # auto_center loads a year of SPICE kernels into the one SPICE pool when the year changes;
