@@ -20,9 +20,9 @@ from PIL import Image  # noqa: E402
 buf = io.BytesIO()
 Image.new("L", (8, 8)).save(buf, "WEBP")
 PIC = buf.getvalue()
-frame_server.webp = lambda frame_id, size, cache, fmt="webp": PIC
-frame_server.color_webp = lambda ids, size, cache, fmt="webp": (PIC, {})
-frame_server.archive_png = lambda frame_id: PIC
+frame_server.webp = lambda *a, **k: PIC
+frame_server.color_webp = lambda *a, **k: (PIC, {})
+frame_server.archive_png = lambda *a, **k: PIC
 
 tmp = tempfile.mkdtemp()
 counts = frame_server.counts = usage.Usage(os.path.join(tmp, "usage"))
