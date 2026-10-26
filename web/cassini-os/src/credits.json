@@ -118,6 +118,14 @@
           "detail": "The spacecraft in the 3D view and the wireframe on the loading screen (decoded from Draco compression for the page).",
           "license": "NASA material, not copyrighted in the US",
           "url": "https://github.com/nasa/NASA-3D-Resources"
+        },
+        {
+          "id": "huygens-dm",
+          "title": "Huygens descent module 3D model",
+          "credit": "ESA SPICE Service (Huygens SPICE dataset, doi:10.5270/esa-ssem3np)",
+          "detail": "Huygens under its parachutes and on Titan's surface in the landing cutscene, after the heat shield falls away: ESA's mesh of the descent module from its Cosmographia \"Huygens descent\" set, scaled to the 1.3 m drum and colored for Cassini OS.",
+          "license": "CC BY-NC 3.0 IGO",
+          "url": "https://spiftp.esac.esa.int/data/SPICE/HUYGENS/misc/cosmo/models/"
         }
       ]
     },

@@ -10,8 +10,8 @@
      viewer's own (the real trajectory, and the real attitude where it is recorded; without one, the dish is drawn on
      the probe until the link ends, then turned to Earth). The probe is the release cutscene's model of it
      (studyCoast.probeModel(), the Huygens part of NASA's model) in its entry shell; the descent module under the
-     parachutes is built here (descentModule below) from ESA's engineering description, as no model of it is free to
-     use: NASA's has only the entry shell, and the one detailed model of it online carries no license.
+     parachutes is ESA's own model of it (the ESA SPICE Service's Huygens dataset, CC BY-NC 3.0 IGO), as NASA's model
+     has only the entry shell.
 
      The clock runs a few times faster than real time through the entry and the parachutes, a few hundred times faster
      down the long drogue descent, then slows again for the touchdown; the readout shows the mission time throughout.
@@ -177,63 +177,21 @@ body.phone #hland .cs-read { font-size: 9.5px; bottom: 9vh; white-space: normal;
     g.add(dome, lines); g.userData = { dome, lines };
     return g;
   }
-  // the descent module, as ESA describes it (sci.esa.int, Cassini-Huygens "Engineering"): an aluminium shell 1.3 m
-  // across, the flat Top Platform carrying the parachute canister and the two black cone antennas (the Probe
-  // Transmitting Antennas), the After Cone down to the central ring, and the Fore Dome underneath with 36 spin vanes
-  // round its edge; outside it, the two HASI booms, the DISR sensor head looking out and down from the side, and the
-  // Surface Science Package's cup under the dome. Gold and silver foil, crinkled. Metres, base on y = 0 (where it
-  // touches the ground), the parachute lines meeting at DM_TOP
-  const DM_TOP = 1.02;
-  let foilTex = null;
-  function foilBump() {
-    if (foilTex) return foilTex;
-    const c = document.createElement("canvas"); c.width = c.height = 256;
-    const g = c.getContext("2d"); g.fillStyle = "#808080"; g.fillRect(0, 0, 256, 256);
-    // crinkles: many small pale and dark facets
-    for (let i = 0; i < 2600; i++) {
-      const x = Math.random() * 256, y = Math.random() * 256, r = 2 + Math.random() * 9, v = 90 + Math.random() * 80 | 0;
-      g.fillStyle = `rgb(${v},${v},${v})`; g.beginPath();
-      g.moveTo(x, y); g.lineTo(x + r, y + Math.random() * r); g.lineTo(x + Math.random() * r, y + r); g.fill();
-    }
-    foilTex = new THREE.CanvasTexture(c); foilTex.wrapS = foilTex.wrapT = THREE.RepeatWrapping; foilTex.repeat.set(3, 2);
-    return foilTex;
-  }
+  // the descent module: ESA's own mesh of it (the ESA SPICE Service's Huygens dataset, the model its Cosmographia
+  // "Huygens descent" uses; made into models/huygens_dm.glb.b64.txt by models/make_huygens_dm.py, which scales it to
+  // the 1.3 m drum and colors it: gold foil shell, silver top platform, aluminium spin vanes). Metres, spin axis +Y,
+  // base on y = 0 (where it touches the ground), the parachute lines meeting at DM_TOP above the platform
+  const DM_TOP = 0.84;
   function descentModule() {
     const dm = new THREE.Group();
-    const mat = (color, rough, metal, bump) => new THREE.MeshStandardMaterial({ color, roughness: rough, metalness: metal, bumpMap: bump ? foilBump() : null, bumpScale: 0.004 });
-    const gold = mat(0xc8a050, 0.42, 0.35, true), silver = mat(0xc4c8cc, 0.4, 0.3, true), alu = mat(0x9a9ea3, 0.5, 0.4), dark = mat(0x26282b, 0.7, 0.2);
-    const lathe = (pts, m) => new THREE.Mesh(new THREE.LatheGeometry(pts.map(([r, y]) => new THREE.Vector2(r, y)), 64), m);
-    // the shell, from the top platform's edge down to the fore dome's center (y from the dome's bottom)
-    const Y = 0.27;
-    dm.add(lathe([[0.001, Y + 0.475], [0.47, Y + 0.475], [0.475, Y + 0.45]], silver));            // Top Platform
-    dm.add(lathe([[0.475, Y + 0.45], [0.645, Y + 0.13]], gold));                                     // After Cone
-    dm.add(lathe([[0.645, Y + 0.13], [0.655, Y + 0.1], [0.655, Y + 0.05], [0.64, Y + 0.02]], alu)); // central ring
-    dm.add(lathe([[0.64, Y + 0.02], [0.58, Y - 0.08], [0.45, Y - 0.17], [0.25, Y - 0.24], [0.001, Y - 0.26]], gold)); // Fore Dome
-    // 36 spin vanes round the fore dome's edge, each canted a few degrees to spin the probe as it falls
-    const vane = new THREE.BoxGeometry(0.006, 0.07, 0.11);
-    for (let i = 0; i < 36; i++) {
-      const f = i / 36 * Math.PI * 2, v = new THREE.Mesh(vane, alu);
-      v.position.set(Math.cos(f) * 0.6, Y - 0.04, Math.sin(f) * 0.6); v.rotation.set(0, -f - Math.PI / 2, 0); v.rotateZ(0.05);
-      dm.add(v);
-    }
-    // on the top platform: the parachute canister, its mortar, and the two antennas
-    const can = new THREE.Mesh(new THREE.CylinderGeometry(0.2, 0.2, 0.24, 32), silver); can.position.y = Y + 0.6; dm.add(can);
-    const lid = new THREE.Mesh(new THREE.CylinderGeometry(0.21, 0.21, 0.025, 32), alu); lid.position.y = Y + 0.73; dm.add(lid);
-    const box = new THREE.Mesh(new THREE.BoxGeometry(0.22, 0.12, 0.16), silver); box.position.set(0.3, Y + 0.54, -0.18); dm.add(box);
-    for (const sx of [1, -1]) {
-      const a = new THREE.Mesh(new THREE.ConeGeometry(0.065, 0.13, 24), dark); a.position.set(sx * 0.32, Y + 0.54, 0.2); dm.add(a);
-    }
-    // the HASI booms, out to either side at the ring
-    for (const sx of [1, -1]) {
-      const b = new THREE.Mesh(new THREE.CylinderGeometry(0.012, 0.012, 0.5, 8), alu); b.rotation.z = Math.PI / 2; b.position.set(sx * 0.9, Y + 0.08, 0); dm.add(b);
-      const t = new THREE.Mesh(new THREE.BoxGeometry(0.05, 0.03, 0.03), dark); t.position.set(sx * 1.15, Y + 0.08, 0); dm.add(t);
-    }
-    // the DISR sensor head, looking out and down from the side, and the SSP cup under the dome
-    const disr = new THREE.Mesh(new THREE.BoxGeometry(0.16, 0.14, 0.12), dark); disr.position.set(0, Y + 0.06, 0.7); dm.add(disr);
-    const lens = new THREE.Mesh(new THREE.CylinderGeometry(0.025, 0.025, 0.03, 16), mat(0x101418, 0.15, 0.6)); lens.rotation.x = 0.9; lens.position.set(0, Y + 0.0, 0.76); dm.add(lens);
-    const ssp = new THREE.Mesh(new THREE.CylinderGeometry(0.09, 0.07, 0.1, 24), alu); ssp.position.set(0.18, Y - 0.24, 0.05); dm.add(ssp);
-    // so the lowest point (the SSP's rim) sits on y = 0
-    dm.position.y = -(Y - 0.29);
+    if (THREE.GLTFLoader) fetch("models/huygens_dm.glb.b64.txt").then(r => { if (!r.ok) throw new Error(r.status); return r.text(); }).then(t => {
+      const b = atob(t.trim()), u = new Uint8Array(b.length);
+      for (let i = 0; i < b.length; i++) u[i] = b.charCodeAt(i);
+      new THREE.GLTFLoader().parse(u.buffer, "", gltf => {
+        gltf.scene.traverse(o => { o.layers.set(1); if (o.isMesh) o.material.vertexColors = true; });
+        dm.add(gltf.scene);
+      });
+    }).catch(err => console.warn("Huygens descent module not loaded", err));
     return dm;
   }
   function chuteOpacity(c, o) { c.visible = o > 0.01; c.userData.dome.material.opacity = o; c.userData.lines.material.opacity = 0.55 * o; }
