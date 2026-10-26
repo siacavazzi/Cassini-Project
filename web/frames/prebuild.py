@@ -19,7 +19,10 @@ Made to share the Mac Mini with the live and preview servers: run it under `nice
 disk priority), one process with a few threads. It waits while the 1-minute load is over --max-load, while the
 live server's (or a --watch preview's) /health answers slower than a
 second, while the LaCie (--disk) moves more than --max-tps transfers a second, or while the pause file exists (touch it to hold the job,
-remove it to go on). status.json (and a page reading it, index.html) in --status says how far it is.
+remove it to go on), or while the cache's disk has less than --min-free GB free. The holds are asked on a thread of
+their own, so a slow check never holds the workers back. --procs N runs the phase as N processes of one thread
+each (the makers are mostly Python: threads take turns on one core), each its own stretch of the items.
+status.json (and a page reading it, index.html) in --status says how far it is.
 
   CASSINI_DATA=/Volumes/LaCie/cassini_lut8.zip CASSINI_KERNELS=... CASSINI_GEOMETRY_CACHE=... \\
     nice -n 19 taskpolicy -b python web/frames/prebuild.py frames --cache /Volumes/cassini-cache \\
@@ -183,6 +186,10 @@ def busy(args):
     """Why the job should wait now, or None."""
     if args.pause and os.path.exists(os.path.expanduser(args.pause)):
         return "paused (pause file)"
+    if getattr(args, "min_free", 0):
+        free = shutil.disk_usage(args.cache).free / 1e9
+        if free < args.min_free:
+            return f"disk {free:.0f} GB free < {args.min_free:.0f}"
     load = os.getloadavg()[0]
     if load > args.max_load:
         return f"load {load:.1f} > {args.max_load}"
@@ -207,6 +214,28 @@ def busy(args):
     return None
 
 
+class Holds:
+    """busy(args), asked on a thread of its own every few seconds: its checks take a while (a /health round trip,
+    the 2 s iostat sample), and asked on the thread that hands out the work they held every worker back (the
+    LaCie's iostat every 20 frames held the frames phase to 9.3 a second, 2026-10-26). why() is the last answer."""
+    EVERY = 5
+
+    def __init__(self, args):
+        self.args, self.last = args, busy(args)
+        threading.Thread(target=self._loop, daemon=True).start()
+
+    def _loop(self):
+        while True:
+            time.sleep(self.EVERY)
+            try:
+                self.last = busy(self.args)
+            except Exception:
+                self.last = None
+
+    def why(self):
+        return self.last
+
+
 class Status:
     def __init__(self, args, total):
         self.args, self.lock = args, threading.Lock()
@@ -218,7 +247,7 @@ class Status:
             os.makedirs(args.status, exist_ok=True)
             page = os.path.join(os.path.dirname(os.path.abspath(__file__)), "prebuild.html")
             shutil.copyfile(page, os.path.join(args.status, "index.html"))
-            prev = os.path.join(args.status, f"status-{args.phase}.json")
+            prev = os.path.join(args.status, f"status-{args.phase}{_shard_tag(args)}.json")
             if os.path.exists(prev):
                 with open(prev) as fh:
                     old = json.load(fh)
@@ -240,7 +269,8 @@ class Status:
         self.last_write = time.time()
         if not self.args.status:
             return
-        for name in (f"status-{self.args.phase}.json", "status.json"):
+        tag = _shard_tag(self.args)
+        for name in (f"status-{self.args.phase}{tag}.json",) + (() if tag else ("status.json",)):
             part = os.path.join(self.args.status, name + ".part")
             with open(part, "w") as fh:
                 json.dump(self.s, fh)
@@ -251,9 +281,15 @@ def run(args):
     todo = items(args.phase)
     if args.first:
         todo = todo[args.first:]
+    if args.shard:
+        # one stretch of the items (k of n, from 0), for a process of its own (procs below)
+        k, n = map(int, args.shard.split("/"))
+        todo = todo[len(todo) * k // n:len(todo) * (k + 1) // n]
+        args.first = 0
     status = Status(args, len(todo) + args.first)
     status.update(done=args.first, state="running")
-    errors = open(os.path.join(args.status or args.cache, f"errors-{args.phase}.jsonl"), "a")
+    errors = open(os.path.join(args.status or args.cache, f"errors-{args.phase}{_shard_tag(args)}.jsonl"), "a")
+    holds = Holds(args)
     pending, i = set(), 0
     with calibration.looking(calibration.LOOKS[0]), calibration.coloring(calibration.COLORS[0]), \
             concurrent.futures.ThreadPoolExecutor(args.threads) as pool:
@@ -266,11 +302,11 @@ def run(args):
                 return name, time.monotonic() - t0, f"{type(e).__name__}: {e}"[:300]
         while i < len(todo) or pending:
             while i < len(todo) and len(pending) < args.threads * 2:
-                why = busy(args) if i % 20 == 0 else None
+                why = holds.why()
                 while why:
                     status.update(state="waiting", why_waiting=why)
-                    time.sleep(30)
-                    why = busy(args)
+                    time.sleep(Holds.EVERY)
+                    why = holds.why()
                 status.update(state="running", why_waiting=None)
                 pending.add(pool.submit(contextvars.copy_context().run, one, *todo[i]))
                 i += 1
@@ -286,6 +322,49 @@ def run(args):
                     status.s["errors"] += bool(err)
                 status.update(last=name)
     status.update(state="done")
+
+
+def _shard_tag(args):
+    return "-" + args.shard.replace("/", "of") if getattr(args, "shard", None) else ""
+
+
+def procs(args):
+    """The phase as args.procs processes of one thread each, each making its own stretch of the items (--shard),
+    and their status files added up into the phase's own. The pictures' makers are mostly Python, so threads of one
+    process take turns on one core: composites ran 1.2 a second on 9 threads, ~8 on 9 processes (2026-10-26)."""
+    n = args.procs
+    argv = [a for a in sys.argv[1:]]
+    for flag in ("--procs", "--threads", "--first"):
+        while flag in argv:
+            j = argv.index(flag)
+            del argv[j:j + 2]
+    env = {**os.environ, "OPENBLAS_NUM_THREADS": "1", "OMP_NUM_THREADS": "1"}
+    kids = [subprocess.Popen([sys.executable, sys.argv[0]] + argv + ["--threads", "1", "--shard", f"{k}/{n}"],
+                             env=env) for k in range(n)]
+    status = Status(args, 0) if args.status else None
+    while True:
+        alive = [p for p in kids if p.poll() is None]
+        if status:
+            parts = []
+            for k in range(n):
+                try:
+                    with open(os.path.join(args.status, f"status-{args.phase}-{k}of{n}.json")) as fh:
+                        parts.append(json.load(fh))
+                except (OSError, ValueError):
+                    pass
+            if parts:
+                waiting = [p.get("why_waiting") for p in parts if p.get("state") == "waiting"]
+                status.s.update(total=sum(p["total"] for p in parts), errors=sum(p["errors"] for p in parts),
+                                made_s=sum(p["made_s"] for p in parts), procs=n,
+                                state="waiting" if waiting and len(waiting) == len(parts) else "running",
+                                why_waiting=waiting[0] if waiting else None)
+                status.update(done=sum(p["done"] for p in parts))
+        if not alive:
+            break
+        time.sleep(5)
+    if status:
+        status.update(state="done" if all(p.returncode == 0 for p in kids) else "stopped")
+    sys.exit(max(p.returncode for p in kids))
 
 
 def sample(args):
@@ -578,6 +657,9 @@ def main():
     ap.add_argument("--disk", help="BSD name of the LaCie (diskutil list), waited for while busier than --max-tps")
     ap.add_argument("--max-tps", type=float, default=100)
     ap.add_argument("--pause", default="~/prebuild.pause", help="while this file exists the job waits")
+    ap.add_argument("--min-free", type=float, default=0, help="GB: the job waits while the cache's disk has less free")
+    ap.add_argument("--procs", type=int, default=0, help="run the phase as this many processes of one thread each")
+    ap.add_argument("--shard", help=argparse.SUPPRESS)   # k/n: one process's stretch (--procs)
     args = ap.parse_args()
     if args.phase == "count":
         sets, passes = page_sets(), mosaic_passes()
@@ -589,7 +671,7 @@ def main():
     data_source = frame_server.data_source
     data_source.KEEP_SPICE_CACHE = True
     data_source._zip_index() if data_source.using_zip() else None
-    (sample if args.sample else run)(args)
+    (sample if args.sample else procs if args.procs > 1 else run)(args)
 
 
 if __name__ == "__main__":
