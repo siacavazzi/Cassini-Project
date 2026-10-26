@@ -83,6 +83,13 @@ Routes:
                                by this frame (laps=N: its N newest copies, older under newer), composed like the
                                pass's mosaic (obs_mosaic.rolling_webp), so it never empties when a lap begins
   /frames/movie/<ID>.json      the pass the frame is in: its frames [id, time, filter], cadence, movie/mosaic call
+  /frames/thumb.webp?mosaic=<ID>&color=R,G,B&frame=<ID>&size=256
+                               a highlight's thumbnail (any of the three, as data/highlights.json's "thumb" gives them):
+                               the pass's mosaic when it has three or more tiles (in three or more filters when a
+                               colour set is given too), else the colour composite, else the frame, each from its
+                               route's maker above. The answer is kept under thumb-v1/, named by the hint and the
+                               makers' versions, so a version bump makes it again; the server makes every highlight's
+                               thumbnail as it starts, so the Highlights window finds them made. X-Thumb says which
   /export/plan.json?from=2006-09-15T14:32&until=2006-09-15T17:12&cams=NW&fps=auto&size=1024
                                a movie export's plan (web/frames/export.py): its pictures, when each shows in the
                                film, the film's length and size; nothing is made
@@ -122,6 +129,7 @@ import datetime
 import email.utils
 import html
 import gzip
+import hashlib
 import io
 import os
 import re
@@ -426,6 +434,131 @@ def processed_webp(frame_id, size, cache, fmt="webp", centre=None):
     return data, report
 
 
+# ---------- highlight thumbnails: one small picture per highlight, picked by the page's old rule and kept ----------
+THUMB_VERSION = "thumb-v1"
+THUMB_SIZE = 256
+
+
+def thumb_hint(query):
+    """The thumbnail hint in a /frames/thumb.webp query ({"mosaic", "color", "frame"}, as highlights.json has it);
+    ValueError when an id is not a frame id."""
+    hint = {}
+    for k in ("mosaic", "frame"):
+        v = query.get(k, [""])[0]
+        if v:
+            if not FRAME_ID.match(v):
+                raise ValueError(f"{k}= takes a frame id")
+            hint[k] = v
+    ids = [i for i in query.get("color", [""])[0].split(",") if i]
+    if ids:
+        if not 2 <= len(ids) <= 3 or not all(FRAME_ID.match(i) for i in ids) or len({i[0] for i in ids}) > 1:
+            raise ValueError("color= takes two or three frame ids from one camera")
+        hint["color"] = ids
+    return hint
+
+
+def _count(v):
+    try:
+        return len(v) if isinstance(v, (list, tuple)) else int(float(v or 0))
+    except (TypeError, ValueError):
+        return 0
+
+
+def _thumb_mosaic(frame_id, size, cache):
+    """(WebP, report) of the mosaic the camera windows' route answers for frame_id, or None; nothing made ahead"""
+    reel.target_of()   # the mosaic route's index, so the answer never depends on how long the server has been up
+    made = obs_mosaic.mosaic_webp(frame_id, size, cache, _mosaic_slots, ahead=0)
+    if made:
+        return made
+    # a movie plays as frames: no rolling mosaic either, as on the mosaic route
+    found = obs_mosaic.unit_of(frame_id)
+    if found and found[0]["movie"]:
+        return None
+    found = reel.mosaic_of(frame_id)
+    return reel.shot_webp(*found, size, cache, True, _mosaic_slots) if found else None
+
+
+def pick_thumb(hint, size, cache):
+    """(WebP, what) of a highlight's thumbnail: the pass's mosaic when it has three or more tiles (and three or more
+    filters when there is a colour set), else the colour set, else the frame; None when none can be made."""
+    if hint.get("mosaic"):
+        try:
+            made = _thumb_mosaic(hint["mosaic"], size, cache)
+        except (FileNotFoundError, LookupError):
+            made = None
+        if made:
+            how = made[1]
+            tiles = max(_count(how.get("of")), _count(how.get("mosaic")), _count(how.get("tiles")))
+            if tiles >= 3 and (_count(how.get("filters")) >= 3 or not hint.get("color")):
+                return made[0], {"picked": "mosaic", "id": hint["mosaic"], "tiles": tiles}
+    if hint.get("color"):
+        try:
+            return color_webp(hint["color"], size, cache)[0], {"picked": "color", "ids": hint["color"]}
+        except FileNotFoundError:
+            pass
+    if hint.get("frame"):
+        try:
+            return webp(hint["frame"], size, cache), {"picked": "frame", "id": hint["frame"]}
+        except FileNotFoundError:
+            pass
+    return None
+
+
+def thumb_versions():
+    """the versions of the makers a thumbnail may come from: a bump of any of them makes the thumbnails again"""
+    style = calibration.style()   # the request's look and colors (look=, colors=), as the page asks for them
+    return [style, obs_mosaic.VERSIONS[style], reel.VERSIONS[style], COLOR_VERSIONS[style], FRAME_VERSION]
+
+
+def thumb_key(hint, size):
+    """the thumbnail's name in the cache: what it may be made of and the versions of the makers it comes from"""
+    what = json.dumps([hint, size, thumb_versions()], sort_keys=True)
+    return hashlib.sha1(what.encode()).hexdigest()[:20]
+
+
+def thumb_webp(hint, size, cache):
+    """(WebP, what) of the thumbnail, made once and kept under THUMB_VERSION; FileNotFoundError when none of its
+    pictures can be made"""
+    base = os.path.join(cache, THUMB_VERSION, thumb_key(hint, size))
+    what = {}
+
+    def make():
+        made = pick_thumb(hint, size, cache)
+        if not made:
+            raise FileNotFoundError("no picture for this thumbnail")
+        what.update(made[1])
+        cached(base + ".json", lambda: json.dumps(made[1]).encode())
+        return made[0]
+    data = cached(base + ".webp", make)
+    if not what and os.path.exists(base + ".json"):
+        with open(base + ".json") as fh:
+            what = json.load(fh)
+    return data, what
+
+
+def warm_thumbs(site, cache):
+    """Makes every highlight's thumbnail (site/data/highlights.json) that is not in the cache yet, one at a time, so
+    the Highlights window finds them made; after a maker's version bump this is where they are made again. In the
+    default look; the others are made when a page asks for them."""
+    try:
+        with open(os.path.join(site, "data", "highlights.json")) as fh:
+            hints = [e["thumb"] for e in json.load(fh) if e.get("kind") != "milestone" and e.get("thumb")]
+    except (OSError, ValueError, KeyError, TypeError, AttributeError):
+        return
+    started, made, failed = time.monotonic(), 0, 0
+    for hint in hints:
+        hint = {k: hint[k] for k in ("mosaic", "color", "frame") if hint.get(k)}
+        if os.path.exists(os.path.join(cache, THUMB_VERSION, thumb_key(hint, THUMB_SIZE) + ".webp")):
+            continue
+        try:
+            thumb_webp(hint, THUMB_SIZE, cache)
+            made += 1
+        except Exception as e:   # one thumbnail that cannot be made must not stop the others
+            failed += 1
+            print(f"highlight thumbnail {hint}: {e}", flush=True)
+    print(f"highlight thumbnails: {len(hints)} ({made} made, {failed} failed) in {time.monotonic() - started:.0f} s", flush=True)
+
+
 # ---------- slow loads: the page reports a wait for data on the loading screen, kept to find out what held it ----------
 # POST /jumplog takes the page's report (what loaded, each data file's timings, the picture requests under way, the
 # page's long tasks); the server adds when, who and how busy it was, and appends it to <cache>/jump-log.jsonl.
@@ -633,7 +766,7 @@ def make_handler(site, cache, flags=None):
 
         def end_headers(self):
             self.send_header("Access-Control-Allow-Origin", "*")
-            self.send_header("Access-Control-Expose-Headers", "X-Composite, X-Reel, X-Movie, X-Center")
+            self.send_header("Access-Control-Expose-Headers", "X-Composite, X-Reel, X-Movie, X-Center, X-Thumb")
             if self.revalidate:
                 self.send_header("Cache-Control", "no-cache")
             super().end_headers()
@@ -875,6 +1008,32 @@ def make_handler(site, cache, flags=None):
                     return self.send_error(404, "Frame not in the archive")
                 except LookupError as e:
                     return self.not_centred({"centre": False, "frame": True, "why": str(e)[:200]})
+            if url.path == "/frames/thumb.webp":
+                query = parse_qs(url.query)
+                try:
+                    hint = thumb_hint(query)
+                except ValueError as e:
+                    return self.send_error(400, str(e))
+                if not hint:
+                    return self.send_error(400, "mosaic=, color= or frame= is needed")
+                size = size_of(query, THUMB_SIZE)
+                if size == FULL:
+                    return self.send_error(400, "a thumbnail is small: size= up to 1024")
+                # the page asks without a version and a version bump changes the picture, so the browser keeps it a
+                # day, not a year, and then checks (a 304 is a few bytes)
+                tag = f'"{thumb_key(hint, size)}"'
+                if self.headers.get("If-None-Match") == tag:
+                    self.send_response(304)
+                    self.send_header("ETag", tag)
+                    self.send_header("Cache-Control", "public, max-age=86400")
+                    self.send_header("Content-Length", "0")
+                    return self.end_headers()
+                try:
+                    data, what = thumb_webp(hint, size, cache)
+                except FileNotFoundError:
+                    return self.send_error(404, "Frame not in the archive")
+                return self.send_bytes(data, "image/webp", False,
+                                       {"ETag": tag, "Cache-Control": "public, max-age=86400", "X-Thumb": json.dumps(what)})
             m = re.match(r"^/frames/processed/([^/]+)\.webp$", url.path)
             if m:
                 if not FRAME_ID.match(m.group(1)):
@@ -1150,6 +1309,9 @@ def main():
     threading.Thread(target=reel.target_of, daemon=True).start()
     # the first composite would otherwise wait while stacking reads the whole image index (all ~443k rows)
     threading.Thread(target=color_image.stacking.load_index, daemon=True).start()
+    if site:
+        # the Highlights window's thumbnails, made now (and after any version bump) rather than when it opens
+        threading.Thread(target=warm_thumbs, args=(site, args.cache), daemon=True).start()
     flags = os.path.abspath(os.path.expanduser(args.flags))
     print(f"Flagged pictures go to {flags}")
     server = Server((args.host, args.port), make_handler(site, args.cache, flags))
