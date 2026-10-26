@@ -184,6 +184,39 @@ _mosaic_slots = threading.Semaphore(2)
 _movie_slots = threading.Semaphore(int(os.environ.get("FRAME_SERVER_MOVIE_SLOTS", 4)))
 # requests that take longer than this many seconds are logged
 SLOW = float(os.environ.get("FRAME_SERVER_SLOW", "2"))
+# FRAME_SERVER_SAMPLE=1: every thread's stack is sampled every few ms and GET /debug/samples answers the stacks seen
+# most since it was last asked, so a server that answers slowly shows what its threads were doing meanwhile
+_samples, _samples_lock = collections.Counter(), threading.Lock()
+
+
+def sample_stacks(interval=0.005, top=6):
+    me = threading.get_ident()
+    while True:
+        time.sleep(interval)
+        seen = []
+        for ident, frame in sys._current_frames().items():
+            if ident == me:
+                continue
+            stack, f = [], frame
+            while f is not None:
+                stack.append(f"{os.path.basename(f.f_code.co_filename)}:{f.f_code.co_name}:{f.f_lineno}")
+                f = f.f_back
+            # the innermost frames, and the thread's own function (what started it)
+            seen.append(" < ".join(stack[:top]) + ("" if len(stack) <= top else f" ... {stack[-1]}"))
+        with _samples_lock:
+            _samples["(samples)"] += 1
+            _samples.update(seen)
+
+
+def samples_text(n=40):
+    with _samples_lock:
+        got = dict(_samples)
+        _samples.clear()
+    total = got.pop("(samples)", 0)
+    lines = [f"{total} samples, {threading.active_count()} threads now; share of samples each stack was seen in:"]
+    for stack, count in sorted(got.items(), key=lambda kv: -kv[1])[:n]:
+        lines.append(f"{count / max(1, total):6.2f}  {stack}")
+    return "\n".join(lines) + "\n"
 
 
 def archive_png(frame_id):
@@ -197,9 +230,11 @@ _making_lock = threading.Lock()
 
 
 def cached(path, make):
-    if os.path.exists(path):
+    try:
         with open(path, "rb") as fh:
             return fh.read()
+    except FileNotFoundError:
+        pass
     with _making_lock:
         lock = _making.setdefault(path, threading.Lock())
     try:
@@ -443,6 +478,7 @@ def color_webp(ids, size, cache, fmt="webp", channel=None, centre=None):
             im, made = composite(ids, channel, centre) if channel is not None else _recent_composite(ids, centre)
         report.update(made)
         cached(base + ".json", lambda: json.dumps(made).encode())
+        reel.keep_report(base + ".json", made)
         print("composite", json.dumps(made))
         # the camera windows' other sizes are encoded now too (a few tens of ms each), so a window that grows or
         # goes to full view gets the composite at once instead of making it again
@@ -455,9 +491,8 @@ def color_webp(ids, size, cache, fmt="webp", channel=None, centre=None):
                         _make_file(path + ".json", lambda: json.dumps(made).encode())
         return encode(im, size, fmt)
     data = cached(f"{base}.{fmt}", make)
-    if not report and os.path.exists(base + ".json"):
-        with open(base + ".json") as fh:
-            report = json.load(fh)
+    if not report:
+        report = reel.report_of(base + ".json", {})
     return data, report
 
 
@@ -474,11 +509,11 @@ def processed_webp(frame_id, size, cache, fmt="webp", centre=None):
             im, made = _recent_composite([frame_id], centre)
         report.update(made)
         cached(base + ".json", lambda: json.dumps(made).encode())
+        reel.keep_report(base + ".json", made)
         return encode(im, size, fmt)
     data = cached(f"{base}.{fmt}", make)
-    if not report and os.path.exists(base + ".json"):
-        with open(base + ".json") as fh:
-            report = json.load(fh)
+    if not report:
+        report = reel.report_of(base + ".json", {})
     return data, report
 
 
@@ -868,12 +903,16 @@ def make_handler(site, cache, flags=None):
             # the film's pictures come from the same makers (and cache) as the camera windows'
             return export.Pictures(cache, color=color_webp, processed=globals().get("processed_webp"), frame=webp, slots=_color_slots)
 
-        def send_picture(self, data, fmt, query, name, headers=None):
-            """A picture route's answer: WebP or PNG, as a named attachment when download=1 asks for one."""
+        def send_picture(self, data, fmt, query, name, headers=None, forever=True):
+            """A picture route's answer: WebP or PNG, as a named attachment when download=1 asks for one. forever:
+            the browser may keep it for good (the address's picture never changes); False for a stand-in (a
+            mosaic of the tiles made so far), which must be asked for again."""
             headers = dict(headers or {})
             if query.get("download", ["0"])[0] == "1":
                 headers["Content-Disposition"] = f'attachment; filename="{name}.{fmt}"'
-            return self.send_bytes(data, "image/png" if fmt == "png" else "image/webp", headers=headers)
+            if not forever:
+                headers["Cache-Control"] = "no-store"
+            return self.send_bytes(data, "image/png" if fmt == "png" else "image/webp", forever, headers)
 
         def centre_of(self, query, frame_id):
             """center=1 (Auto center in a camera window): the pass's view (obs_mosaic.centre_view: centred on the body,
@@ -1027,6 +1066,8 @@ def make_handler(site, cache, flags=None):
             url = urlparse(self.path)
             # a kept-alive connection reuses this handler, so the last request's choice must not stick
             self.revalidate = False
+            if url.path == "/debug/samples" and os.environ.get("FRAME_SERVER_SAMPLE") == "1":
+                return self.send_bytes(samples_text().encode(), "text/plain", False)
             if url.path == "/export/plan.json":
                 try:
                     return self.send_json(export.public_plan(export.plan(export.options(parse_qs(url.query)))))
@@ -1194,7 +1235,8 @@ def make_handler(site, cache, flags=None):
                         made = obs_mosaic.rolling_webp(m.group(1), FULL if full else size, cache, laps, _mosaic_slots, fmt,
                                                        out=min(obs_mosaic.CANVAS, FULL_MAX) if full else obs_mosaic.OUT)
                         if made and made[0] is not None:
-                            return self.send_picture(made[0], fmt, query, f"Cassini_{m.group(1)}_mosaic_movie", {"X-Movie": json.dumps(made[1])})
+                            return self.send_picture(made[0], fmt, query, f"Cassini_{m.group(1)}_mosaic_movie", {"X-Movie": json.dumps(made[1])},
+                                                     forever=not made[1].get("partial"))
                     else:
                         with _movie_slots:
                             made = obs_mosaic.movie_webp(m.group(1), size, cache, trail, query.get("color", ["1"])[0] != "0",
@@ -1248,7 +1290,8 @@ def make_handler(site, cache, flags=None):
                     except FileNotFoundError:
                         made = None
                     if made:
-                        return self.send_picture(made[0], fmt, query, name, {"X-Reel": json.dumps(made[1])})
+                        # behind: the mosaic of the tiles made so far, not yet this frame's (asked for again later)
+                        return self.send_picture(made[0], fmt, query, name, {"X-Reel": json.dumps(made[1])}, forever=not made[1].get("behind"))
                     # a movie plays as frames: no rolling mosaic either (its drift would paste frames together)
                     found = obs_mosaic.unit_of(m.group(1))
                     if query.get("force"):
@@ -1380,6 +1423,8 @@ def main():
     # the camera windows' mosaic route and centred pictures need the index, its observations (obs_mosaic.units) and
     # its frames' rows (obs_mosaic._row_of); made now rather than on the first request
     threading.Thread(target=lambda: (reel.target_of(), obs_mosaic._observations(), obs_mosaic._row_of()), daemon=True).start()
+    if os.environ.get("FRAME_SERVER_SAMPLE") == "1":
+        threading.Thread(target=sample_stacks, daemon=True).start()
     # the first composite would otherwise wait while stacking reads the whole image index (all ~443k rows)
     threading.Thread(target=color_image.stacking.load_index, daemon=True).start()
     if site:

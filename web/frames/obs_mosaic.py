@@ -294,8 +294,15 @@ def _judge(u):
     u["whole"] = bool(radius and (lo < -radius).all() and (hi > radius).all())
 
 
+_unit_of = {}   # frame id -> unit_of's answer (the passes of an observation are worked out once, units)
+UNIT_OF_KEEP = 200000
+
+
 def unit_of(frame_id):
     """(unit, index of the newest tile at that frame) for the pass frame_id is in, or None."""
+    with _lock:
+        if frame_id in _unit_of:
+            return _unit_of[frame_id]
     idx, row = _row_of()
     q = row.get(frame_id)
     if q is None:
@@ -303,11 +310,17 @@ def unit_of(frame_id):
     r = idx.iloc[q]
     cam = "N" if r["INSTRUMENT_ID"] == "ISSNA" else "W"
     t = float(r["seconds_1970"])
+    found = None
     for u in units(r["TARGET_NAME"], r["OBSERVATION_ID"], cam):
         ts = [fr[3] for fr in u["frames"]]
         if ts and ts[0] <= t <= u["last"]:
-            return u, sum(1 for x in ts if x <= t + 1) - 1
-    return None
+            found = u, sum(1 for x in ts if x <= t + 1) - 1
+            break
+    with _lock:
+        if len(_unit_of) >= UNIT_OF_KEEP:
+            _unit_of.clear()
+        _unit_of[frame_id] = found
+    return found
 
 
 def kind_of(frame_id):
@@ -347,13 +360,119 @@ def _tiles(u, cache, scale):
     return os.path.join(folder(u, cache), "tiles-" + hashlib.md5(json.dumps(scale, sort_keys=True).encode()).hexdigest()[:8])
 
 
+# ---------- what the cache holds of a pass, kept in memory ----------
+# A pass's plan, its movie footprint and its tiles' reports are each written once and never change (the plan file is
+# renamed when its rules change, the tiles' folder is named after the plan's display scale): each is read from the
+# cache once and kept here, so the layout of the pass's mosaic at tile n (the reports of tiles 0..n), which every
+# mosaic, mosaic movie picture, tile map and look-ahead works out, comes from memory instead of a file per tile per
+# request. A pass's record is kept with its plan file's identity (inode and mtime), which every plan() looks at: a
+# pass whose cache folder was cleared or made again is read from the cache afresh. Only what is made is kept, so a
+# tile not in memory is looked for in the cache (a server sharing the cache may have made it).
+PASSES_KEEP = 64   # passes kept in memory, the most recently used (a pass's tile reports are ~1 KB each)
+# plan file -> {"stamp", "plan", "scale", "tiles_dir", "tiles": {n: report}, "made": tiles seen in the cache (not read),
+# "footprint", "rolled": {(size, out): frames whose mosaic movie picture is made, rolling_ahead}, "mapped": the last
+# tile whose mosaic's tile map is worked out, _map_later}
+_passes = collections.OrderedDict()
+
+
+def _stamp(path):
+    try:
+        st = os.stat(path)
+    except OSError:
+        return None
+    return st.st_ino, st.st_mtime_ns
+
+
+def _plan_path(u, cache):
+    return os.path.join(folder(u, cache), PLAN_FILE)
+
+
+def _record(u, cache):
+    """The pass's record in memory, while its plan file is the one it was read from (one stat); else None."""
+    path = _plan_path(u, cache)
+    with _lock:
+        rec = _passes.get(path)
+    if rec is None:
+        return None
+    if _stamp(path) != rec["stamp"]:
+        with _lock:
+            if _passes.get(path) is rec:
+                del _passes[path]
+        return None
+    with _lock:
+        if path in _passes:
+            _passes.move_to_end(path)
+    return rec
+
+
+def _keep_plan(u, cache, p, stamp):
+    rec = {"stamp": stamp, "plan": p, "scale": p["display_scale"], "tiles_dir": _tiles(u, cache, p["display_scale"]),
+           "tiles": {}, "made": set(), "footprint": None, "rolled": {}}
+    path = _plan_path(u, cache)
+    with _lock:
+        _passes[path] = rec
+        _passes.move_to_end(path)
+        while len(_passes) > PASSES_KEEP:
+            _passes.popitem(last=False)
+    return rec
+
+
+def _kept_tiles(u, cache, scale):
+    """The pass's record when scale is its kept plan's display scale (no stat: plan() looked at it); else None."""
+    with _lock:
+        rec = _passes.get(_plan_path(u, cache))
+    return rec if rec is not None and rec["scale"] is scale else None
+
+
+def _reports(u, cache, p, js):
+    """The reports of tiles js of the pass (on its plan p's scale), in that order: from memory, the others from the
+    cache (or made, as tile() does)."""
+    rec = _kept_tiles(u, cache, p["display_scale"])
+    with _lock:
+        kept = dict(rec["tiles"]) if rec is not None else {}
+    return [kept.get(j) or tile(u, j, cache, p["display_scale"]) for j in js]
+
+
+def _has_tile(u, j, cache, p):
+    """Whether tile j of the pass is made: known in memory, or its report file in the cache (then remembered: a
+    pass's tiles stay while its plan file does)."""
+    rec = _kept_tiles(u, cache, p["display_scale"])
+    if rec is not None and (j in rec["tiles"] or j in rec["made"]):
+        return True
+    there = os.path.exists(os.path.join(rec["tiles_dir"] if rec is not None else _tiles(u, cache, p["display_scale"]), f"{j}.json"))
+    if there and rec is not None:
+        with _lock:
+            rec["made"].add(j)
+    return there
+
+
+def _all_made(u, cache, p, first, last, look=False):
+    """Whether tiles first..last of the pass are all made, as far as memory knows (read once, or seen in the
+    cache); look: those memory does not know are looked for in the cache (a server started on a made cache)."""
+    rec = _kept_tiles(u, cache, p["display_scale"])
+    if rec is None:
+        return False
+    with _lock:
+        unknown = [j for j in range(first, last + 1) if j not in rec["tiles"] and j not in rec["made"]]
+    return not unknown or (look and all(_has_tile(u, j, cache, p) for j in unknown))
+
+
 def plan(u, cache):
     """The pass's display scale, rotation, footprint, view mode and colour filters, worked out once and kept."""
-    path = os.path.join(folder(u, cache), PLAN_FILE)
+    path = _plan_path(u, cache)
+    rec = _record(u, cache)
+    if rec is not None:
+        return rec["plan"]
     with _ulock(u):
+        rec = _record(u, cache)
+        if rec is not None:
+            return rec["plan"]
         if os.path.exists(path):
+            stamp = _stamp(path)
             with open(path) as fh:
-                return json.load(fh)
+                p = json.load(fh)
+            _keep_plan(u, cache, p, stamp)
+            return p
         frames = u["frames"]
         count, nms = {}, {}
         for fr in frames:
@@ -402,6 +521,11 @@ def plan(u, cache):
              "fixed": True, "view": view, "k": CANVAS / max(view), "colour": colour,
              "grey": max(count, key=count.get), "whole": u["whole"]}
         reel._cached(path, lambda: json.dumps(p).encode())
+        stamp = _stamp(path)
+        if stamp is not None:
+            # kept as it reads back from its file (lists, not tuples): the plan every later request gets
+            p = json.loads(json.dumps(p))
+            _keep_plan(u, cache, p, stamp)
         return p
 
 
@@ -607,38 +731,65 @@ def tile(u, n, cache, scale=None):
     crop around it (reference pixels); no offset when SPICE could not place it."""
     if scale is None:
         scale = plan(u, cache)["display_scale"]
-    base = os.path.join(_tiles(u, cache, scale), str(n))
+    rec = _kept_tiles(u, cache, scale)
+    if rec is not None:
+        with _lock:
+            kept = rec["tiles"].get(n)
+        if kept is not None:
+            return kept
+    return _tile(u, n, cache, scale, rec["tiles_dir"] if rec is not None else _tiles(u, cache, scale), rec)
+
+
+def _tile(u, n, cache, scale, there, rec=None):
+    """Tile n's report from the cache, or the tile made (tile) and its report, as it reads back from the cache;
+    kept in the pass's record rec, so it is read once."""
+    base = os.path.join(there, str(n))
     # one lock per tile, so a movie's frames made ahead can be made side by side
     with _lock:
         lock = _tile_locks.setdefault((u["key"], n), threading.RLock())
     with lock:
-        if os.path.exists(base + ".json"):
-            with open(base + ".json") as fh:
-                return json.load(fh)
-        path, fid, f, t, nm, x, y, z = u["frames"][n]
-        k = z / u["z"] if z else 1.0
-        seen = {}
-        try:
-            image, _, rep = color_image.processed_frame([path], hdr=True, scale=tile_scale(scale, f, bool(u.get("movie")), seen),
-                                                        repeat_window=u.get("repeat_gap", mosaic_benchmark.REPEAT_GAP))
-        except Exception as e:
-            image, rep = None, {"why": f"{type(e).__name__}: {e}"[:200]}
-        out = {"n": n, "id": fid, "filter": f, "t": t, "stacked": rep.get("stacked"), "calibrated": rep.get("calibrated"), **seen}
-        os.makedirs(os.path.dirname(base), exist_ok=True)
-        if image is not None and "frame_offset" in rep:
-            side = round(image.shape[0] * k)
-            small = np.asarray(Image.fromarray(image).resize((side, side), Image.LANCZOS)) if side != image.shape[0] else image
-            rows, cols = np.flatnonzero(small[..., 3].any(1)), np.flatnonzero(small[..., 3].any(0))
-            if len(rows):
-                a, b, c, d = rows[0], rows[-1] + 1, cols[0], cols[-1] + 1
-                Image.fromarray(np.ascontiguousarray(small[a:b, c:d])).save(base + ".png", compress_level=1)
-                out.update({"native_offset": rep["frame_offset"], "offset": [v * k for v in rep["frame_offset"]],
-                            "box": [int(c) - side / 2, int(a) - side / 2, int(d - c), int(b - a)]})
-                out["outline"] = _corners(out, small[a:b, c:d, 3])
-        else:
-            out["why"] = rep.get("why", "not placed by SPICE")
-        reel._cached(base + ".json", lambda: json.dumps(out, default=str).encode())
+        if rec is not None:
+            with _lock:
+                kept = rec["tiles"].get(n)
+            if kept is not None:
+                return kept
+        out = _tile_made(u, n, cache, scale, base)
+        if rec is not None:
+            with _lock:
+                out = rec["tiles"].setdefault(n, out)
         return out
+
+
+def _tile_made(u, n, cache, scale, base):
+    """(_tile, holding the tile's lock) the report in base.json, or the tile made and its report."""
+    if os.path.exists(base + ".json"):
+        with open(base + ".json") as fh:
+            return json.load(fh)
+    path, fid, f, t, nm, x, y, z = u["frames"][n]
+    k = z / u["z"] if z else 1.0
+    seen = {}
+    try:
+        image, _, rep = color_image.processed_frame([path], hdr=True, scale=tile_scale(scale, f, bool(u.get("movie")), seen),
+                                                    repeat_window=u.get("repeat_gap", mosaic_benchmark.REPEAT_GAP))
+    except Exception as e:
+        image, rep = None, {"why": f"{type(e).__name__}: {e}"[:200]}
+    out = {"n": n, "id": fid, "filter": f, "t": t, "stacked": rep.get("stacked"), "calibrated": rep.get("calibrated"), **seen}
+    os.makedirs(os.path.dirname(base), exist_ok=True)
+    if image is not None and "frame_offset" in rep:
+        side = round(image.shape[0] * k)
+        small = np.asarray(Image.fromarray(image).resize((side, side), Image.LANCZOS)) if side != image.shape[0] else image
+        rows, cols = np.flatnonzero(small[..., 3].any(1)), np.flatnonzero(small[..., 3].any(0))
+        if len(rows):
+            a, b, c, d = rows[0], rows[-1] + 1, cols[0], cols[-1] + 1
+            Image.fromarray(np.ascontiguousarray(small[a:b, c:d])).save(base + ".png", compress_level=1)
+            out.update({"native_offset": rep["frame_offset"], "offset": [v * k for v in rep["frame_offset"]],
+                        "box": [int(c) - side / 2, int(a) - side / 2, int(d - c), int(b - a)]})
+            out["outline"] = _corners(out, small[a:b, c:d, 3])
+    else:
+        out["why"] = rep.get("why", "not placed by SPICE")
+    data = json.dumps(out, default=str)
+    reel._cached(base + ".json", data.encode)
+    return json.loads(data)
 
 
 def view_rect(p, tiles=None):
@@ -966,7 +1117,7 @@ def layout(u, n, cache):
     filters drawn, a name for that picture); None before any tile is placed. Frames whose tile is not one of
     the filters drawn (a moon's 30 filter colour pass draws 3) give the same picture and the same name."""
     p = plan(u, cache)
-    tiles = [tile(u, j, cache, p["display_scale"]) for j in range(n + 1)]
+    tiles = _reports(u, cache, p, range(n + 1))
     rect = view_rect(p, tiles)
     count = {}
     for t in tiles:
@@ -1129,11 +1280,17 @@ def movie_footprint(u, cache, p=None):
     put the tiles themselves rather than the geometry cache (which can be a third of a frame off by the end of a
     movie tracking a propeller): MOVIE_SAMPLES tiles spread over the pass, with MOVIE_MARGIN round them for the
     frames between. Worked out once and kept with the pass."""
+    p = p or plan(u, cache)
+    rec = _kept_tiles(u, cache, p["display_scale"])
+    if rec is not None and rec["footprint"] is not None:
+        return rec["footprint"]
     path = os.path.join(folder(u, cache), FOOTPRINT_FILE)
     if os.path.exists(path):
         with open(path) as fh:
-            return json.load(fh)
-    p = p or plan(u, cache)
+            fp = json.load(fh)
+        if rec is not None:
+            rec["footprint"] = fp
+        return fp
     n = len(u["frames"])
     picks = sorted({round(i * (n - 1) / max(1, MOVIE_SAMPLES - 1)) for i in range(MOVIE_SAMPLES)}) if n else []
     boxes = []
@@ -1158,6 +1315,8 @@ def movie_footprint(u, cache, p=None):
     else:
         fp = list(p["footprint"])
     reel._cached(path, lambda: json.dumps(fp).encode())
+    if rec is not None:
+        rec["footprint"] = fp
     return fp
 
 
@@ -1196,6 +1355,7 @@ def centre_half(fp, radius):
 
 
 _centre_views = {}   # pass key -> centre_view's decision for it
+_centre_of = {}      # frame id -> centre_view's answer, for a frame SPICE places (a request per picture asks)
 
 
 def centre_view(frame_id):
@@ -1209,12 +1369,17 @@ def centre_view(frame_id):
     view): turned north up where it is, so the surface holds still; {"centre": False, "why": ...} for a ring, spoke
     or sky pass (Cassini kept those upright in the camera) or a frame SPICE has no place for, which keep the
     picture as it is."""
+    with _lock:
+        hit = _centre_of.get(frame_id)
+    if hit is not None:
+        return dict(hit)
     idx, row = _row_of()
     q = row.get(frame_id)
     if q is None:
         return {"centre": False, "why": "not in the index"}
     g = reel.geometry([frame_id]).get(frame_id)
     if not g or not g[2]:
+        # (not kept: the geometry cache may place the frame later)
         return {"centre": False, "why": "SPICE has no place for the frame"}
     found = unit_of(frame_id)
     if found:
@@ -1247,8 +1412,14 @@ def centre_view(frame_id):
             _centre_views[key] = hit
     # the frame's own disk of the body (full resolution pixels), so centred knows whether the frame cuts it
     if hit["centre"]:
-        return dict(hit, side=FRAME, radius=RADIUS.get(target, 0) / (g[2] * IFOV[cam]))
-    return dict(hit, side=FRAME) if hit["north"] else dict(hit)
+        hit = dict(hit, side=FRAME, radius=RADIUS.get(target, 0) / (g[2] * IFOV[cam]))
+    else:
+        hit = dict(hit, side=FRAME) if hit.get("north") else dict(hit)
+    with _lock:
+        if len(_centre_of) >= UNIT_OF_KEEP:
+            _centre_of.clear()
+        _centre_of[frame_id] = hit
+    return dict(hit)
 
 
 def _on_disk(fp, radius):
@@ -1381,7 +1552,9 @@ def movie_webp(frame_id, size, cache, trail=0, colour=True, wait=False, ahead=6,
     if not found or found[1] < 0:
         return None
     u, n = found
-    if not wait and not all(os.path.exists(os.path.join(folder(u, cache), f)) for f in (PLAN_FILE, FOOTPRINT_FILE)):
+    rec = _record(u, cache)
+    if not wait and not (rec is not None and rec["footprint"] is not None) and \
+            not all(os.path.exists(os.path.join(folder(u, cache), f)) for f in (PLAN_FILE, FOOTPRINT_FILE)):
         warm_movie(u, n, ahead, cache)
         return None, {"why": "working out the pass", "observation": u["key"][1], "pass": u["key"][3]}
     path = os.path.join(folder(u, cache), MOVIE_DIR, str(size), f"{n}_{trail}_{int(bool(colour))}{'_c2' if centre else ''}.webp")
@@ -1392,6 +1565,7 @@ def movie_webp(frame_id, size, cache, trail=0, colour=True, wait=False, ahead=6,
             im, rep = movie_frame(u, n, cache, trail, colour, centre=centre)
         report.update(rep)
         reel._cached(meta, lambda: json.dumps(rep).encode())
+        reel.keep_report(meta, rep)
         if im is None:
             raise LookupError(rep.get("why"))
         if max(im.size) > size:
@@ -1408,8 +1582,7 @@ def movie_webp(frame_id, size, cache, trail=0, colour=True, wait=False, ahead=6,
         if ahead:
             warm_movie(u, n + 1, ahead, cache)
     if not report:
-        with open(meta) as fh:
-            report = json.load(fh)
+        report = reel.report_of(meta)
     return data, report
 
 
@@ -1424,6 +1597,11 @@ def warm_movie(u, n, ahead, cache):
     speed needs several frames a second)."""
     look = calibration.look()
     key, last = (u["key"], look), min(n + ahead, len(u["frames"]) - 1)
+    # nothing to make (the plan, footprint and those tiles are in memory): no workers
+    rec = _record(u, cache)
+    if rec is not None and (rec["footprint"] is not None or u.get("kind", "movie" if u.get("movie") else None) == "mosaic_movie") \
+            and _all_made(u, cache, rec["plan"], n, last, look=True):
+        return
     with _lock:
         running = key in _movie_ahead
         _movie_ahead[key] = (n, last)
@@ -1441,8 +1619,9 @@ def warm_movie(u, n, ahead, cache):
                 while True:
                     with _lock:
                         first, last = _movie_ahead.get(key, (0, -1))
-                        todo = [j for j in range(first, last + 1) if j not in taking
-                                and not os.path.exists(os.path.join(_tiles(u, cache, p["display_scale"]), f"{j}.json"))]
+                    todo = [j for j in range(first, last + 1) if j not in taking and not _has_tile(u, j, cache, p)]
+                    with _lock:
+                        todo = [j for j in todo if j not in taking]
                         if not todo:
                             break
                         taking.add(todo[0])
@@ -1498,17 +1677,21 @@ def places(u):
     return out
 
 
-def rolling_layout(u, n, cache, laps=1, made_only=False):
+def rolling_layout(u, n, cache, laps=1, made_only=False, skipped=None):
     """What a mosaic movie (a raster repeated over the same places: kind "mosaic_movie") shows at frame n, in the
     form of layout(): every place's newest tile of each filter taken by then, so the mosaic never empties when a
     new lap begins and each tile replaces its own earlier copy (laps=1, a time-lapse); laps=N keeps the N newest
     copies of each place, older under newer (a rolling mosaic). Drawn by so_far through filter_mosaic and
     mosaic.compose like the pass's mosaic, on its scale and in its view. made_only: only tile n is made here, the
     other places show the tiles already made (a window playing fast never waits on the tiles it missed;
-    tiles_ahead makes them)."""
+    tiles_ahead makes them); skipped (a list) gets the tiles left out for that, so the caller knows the picture
+    is not yet the frame's own."""
     p = plan(u, cache)
     where = places(u)
-    there = _tiles(u, cache, p["display_scale"])
+    rec = _kept_tiles(u, cache, p["display_scale"])
+    with _lock:
+        kept = dict(rec["tiles"]) if rec is not None else {}
+    there = rec["tiles_dir"] if rec is not None else _tiles(u, cache, p["display_scale"])
     # each place's newest copies that are there to draw: a copy not made yet (made_only) or one SPICE could not
     # place leaves the copy before it up, so a place never drops out of the mosaic and comes back
     keep, seen = [], {}
@@ -1518,9 +1701,13 @@ def rolling_layout(u, n, cache, laps=1, made_only=False):
         key = (where[j] if where[j] is not None else ("frame", j), u["frames"][j][2])
         if seen.get(key, 0) >= laps:
             continue
-        if made_only and j != n and not os.path.exists(os.path.join(there, f"{j}.json")):
-            continue
-        t = tile(u, j, cache, p["display_scale"])
+        t = kept.get(j)
+        if t is None:
+            if made_only and j != n and not os.path.exists(os.path.join(there, f"{j}.json")):
+                if skipped is not None:
+                    skipped.append(j)
+                continue
+            t = tile(u, j, cache, p["display_scale"])
         if "offset" not in t:
             continue
         seen[key] = seen.get(key, 0) + 1
@@ -1539,16 +1726,18 @@ def rolling_layout(u, n, cache, laps=1, made_only=False):
     return p, tiles, rect, count, used, f"lap-{laps}-{ids}"
 
 
-def _rolling_picture(u, n, size, cache, laps, slots, fmt, out, made_only):
+def _rolling_picture(u, n, size, cache, laps, slots, fmt, out, made_only, read=True, skipped=None):
     """(WebP, report) of the pass's mosaic movie at frame n, made once and kept; None before any tile is placed.
-    One frame's picture is made once at a time (a window's request and the one made ahead wait for each other)."""
-    made = rolling_layout(u, n, cache, laps, made_only=made_only)
+    One frame's picture is made once at a time (a window's request and the one made ahead wait for each other).
+    read=False (made ahead): True when the picture is in the cache already, without reading it. skipped: as
+    rolling_layout's."""
+    made = rolling_layout(u, n, cache, laps, made_only=made_only, skipped=skipped)
     if not made:
         return None
     full = size == "full"
     path = os.path.join(folder(u, cache), "rolling-level", f"full{out}" if full else str(size), f"{made[5]}.{fmt}")
     if os.path.exists(path):
-        return _make_mosaic(u, n, size, path, cache, slots, made, fmt, out)
+        return _make_mosaic(u, n, size, path, cache, slots, made, fmt, out) if read else True
     with _lock:
         lock = _making.setdefault(path, threading.Lock())
     token = _rolling.set(laps == 1)
@@ -1566,6 +1755,14 @@ ROLL_AHEAD = 10    # frames of a mosaic movie made ahead of the window playing i
 ROLL_WORKERS = int(os.environ.get("CASSINI_ROLL_WORKERS", "2"))   # ... this many at once (a color picture's mix is ~1 s)
 
 
+def _picture_made(rec, size, out, n, skipped):
+    """Frame n's mosaic movie picture is made: drawn with every tile it shows (none skipped as not made yet), it is
+    the frame's picture for good, and the pass's record keeps that it is made (rolling_ahead)."""
+    if rec is not None and not skipped:
+        with _lock:
+            rec["rolled"].setdefault((size, out), set()).add(n)
+
+
 def rolling_ahead(u, n, size, cache, slots=None, out=OUT):
     """A window plays the mosaic movie at frame n: make the pictures of frames n+1 .. n+ROLL_AHEAD (their tiles
     first) in the background, in order, each grown from one before it (_roll), so the window's next requests
@@ -1574,7 +1771,12 @@ def rolling_ahead(u, n, size, cache, slots=None, out=OUT):
     while a window waits for a mosaic (_yield)."""
     look = calibration.look()
     key = (u["key"], look)
+    rec = _record(u, cache)
     with _lock:
+        # every picture ahead made already (the pass's record keeps which are): no workers
+        known = rec["rolled"].get((size, out), ()) if rec is not None else ()
+        if known and all(j in known for j in range(n + 1, min(n + ROLL_AHEAD, len(u["frames"]) - 1) + 1)):
+            return
         running = key in _roll_ahead
         taken = _roll_ahead[key][3] if running else [-1]
         _roll_ahead[key] = [n, size, out, taken, ROLL_WORKERS if not running else _roll_ahead[key][4]]
@@ -1585,17 +1787,25 @@ def rolling_ahead(u, n, size, cache, slots=None, out=OUT):
         try:
             with calibration.looking(look):
                 p = plan(u, cache)
+                kept = _kept_tiles(u, cache, p["display_scale"])
                 while True:
                     with _lock:
                         at, sz, o, taken = _roll_ahead[key][:4]
-                        j = taken[0] = max(at, taken[0]) + 1
+                        made = kept["rolled"].get((sz, o), ()) if kept is not None else ()
+                        j = max(at, taken[0]) + 1
+                        while j in made:   # (made already: nothing to do)
+                            j += 1
+                        taken[0] = j
                     if j > min(at + ROLL_AHEAD, len(u["frames"]) - 1):
                         return
                     for i in range(at + 1, j + 1):
                         _yield()
                         tile(u, i, cache, p["display_scale"])
                     _yield()
-                    _rolling_picture(u, j, sz, cache, 1, slots, "webp", o, made_only=True)
+                    # one made already is not read again
+                    skipped = []
+                    if _rolling_picture(u, j, sz, cache, 1, slots, "webp", o, made_only=True, read=False, skipped=skipped):
+                        _picture_made(kept, sz, o, j, skipped)
         except Exception as e:
             print(f"mosaic movie ahead {u['key']} failed: {type(e).__name__}: {e}", flush=True)
         finally:
@@ -1618,10 +1828,13 @@ def rolling_webp(frame_id, size, cache, laps=1, slots=None, fmt="webp", out=OUT,
     if not wait and not os.path.exists(os.path.join(folder(u, cache), PLAN_FILE)):
         warm_movie(u, n, 6, cache)
         return None, {"why": "working out the pass", "observation": u["key"][1], "pass": u["key"][3]}
+    skipped = []
     with _asking():
-        res = _rolling_picture(u, n, size, cache, laps, slots, fmt, out, made_only=not wait)
+        res = _rolling_picture(u, n, size, cache, laps, slots, fmt, out, made_only=not wait, skipped=skipped)
         if res is None:
             return None, {"why": "no tile placed yet"}
+    if laps == 1 and fmt == "webp":
+        _picture_made(_record(u, cache), size, out, n, skipped)
     # the tiles ahead, by the pass's one background thread (tiles_ahead, as a pass mosaic's), and the pictures of
     # the next frames, so a playing window finds them made (rolling_ahead)
     tiles_ahead(u, n + 1, cache)
@@ -1629,6 +1842,9 @@ def rolling_webp(frame_id, size, cache, laps=1, slots=None, fmt="webp", out=OUT,
         rolling_ahead(u, n, size, cache, slots, out)
     if res:
         res[1].update({"rolling": True, "keep": laps, "n": n})   # laps: the pass's own, from _make_mosaic
+        if skipped:
+            # drawn without tiles not made yet: the frame's picture for now, not for good (the server says so)
+            res[1]["partial"] = len(skipped)
     return res
 
 
@@ -1663,8 +1879,19 @@ def outline(u, t, cache):
     if "outline" in t:
         return t["outline"]
     base = os.path.join(_tiles(u, cache, plan(u, cache)["display_scale"]), str(t["n"]))
-    make = lambda: json.dumps(_corners(t, np.asarray(Image.open(base + ".png"))[..., 3])).encode()
-    return json.loads(reel._cached(base + ".outline.json", make))
+    with _lock:
+        kept = _outlines.get(base)
+    if kept is None:
+        make = lambda: json.dumps(_corners(t, np.asarray(Image.open(base + ".png"))[..., 3])).encode()
+        kept = json.loads(reel._cached(base + ".outline.json", make))
+        with _lock:
+            if len(_outlines) >= UNIT_OF_KEEP:
+                _outlines.clear()
+            _outlines[base] = kept
+    return kept
+
+
+_outlines = {}   # tile (its path, less .png) -> its outline, for tiles made before outlines were in their reports
 
 
 def tile_map(frame_id, cache):
@@ -1689,10 +1916,13 @@ def tile_map(frame_id, cache):
     x0, y0, w, h = rect
     frac = lambda x, y: [round((x - x0) / w, 5), round((y - y0) / h, 5)]
     pointings, complete = [], True
+    rec = _kept_tiles(u, cache, p["display_scale"])
+    there = rec["tiles_dir"] if rec is not None else _tiles(u, cache, p["display_scale"])
     for t in tiles:
         if "offset" not in t or t["filter"] not in used:
             continue
-        if not os.path.exists(os.path.join(_tiles(u, cache, plan(u, cache)["display_scale"]), f"{t['n']}.png")):
+        # (a tile's report is written after its picture: a tile whose report is kept in memory has its picture)
+        if not (rec is not None and t["n"] in rec["tiles"]) and not os.path.exists(os.path.join(there, f"{t['n']}.png")):
             complete = False   # still being written: this map is not kept
             continue
         last = pointings[-1] if pointings else None
@@ -1719,12 +1949,13 @@ def tile_map(frame_id, cache):
     with _lock:
         if complete:
             _maps[key] = found
-        while len(_maps) > 64:
+        while len(_maps) > MAPS_KEEP:
             _maps.pop(next(iter(_maps)))
     return found
 
 
 _maps = {}   # (pass folder, layout name) -> its tile map: a mosaic's map is asked for on every hover of a new picture
+MAPS_KEEP = 512   # a few passes' every mosaic (a map is ~100 bytes a pointing), so a pass played again maps none again
 
 
 def pointing_picture(frame_id, ids, cache, size="full", fmt="webp", slots=None, channel=None):
@@ -1864,26 +2095,66 @@ def mosaic_webp(frame_id, size, cache, slots=None, ahead=3, fmt="webp", out=OUT,
             return None
         n, ahead = m, 0
     with _asking():
+        laid = layout(u, n, cache)
         if size == "full":
-            made = _mosaic_at(u, n, size, cache, slots, fmt, out)
+            made = _mosaic_at(u, n, size, cache, slots, fmt, out, made=laid)
         else:
-            made = _mosaic_at(u, n, size, cache, slots)
+            made = _mosaic_at(u, n, size, cache, slots, made=laid)
     if made:
         made = made[0], {**made[1], "behind": found[1] - n}
         # its tile map too, once the mosaic is made, so the window's first hover finds it ready (tiles made before
-        # outlines were kept in their reports are measured once here)
-        threading.Thread(target=contextvars.copy_context().run, args=(_map_quietly, frame_id, cache), daemon=True).start()
+        # outlines were kept in their reports are measured once here); a map worked out already needs no work
+        with _lock:
+            mapped = (folder(u, cache), laid[5]) in _maps
+        if not mapped:
+            _map_later(u, n, cache)
     if made and ahead and size != "full":
         warm(u, n + ahead, cache, size, slots, start=n + 1, force=force)
     return made
 
 
-def _map_quietly(frame_id, cache):
-    try:
-        _yield()
-        tile_map(frame_id, cache)
-    except Exception:   # a tile not made yet: the window's own request works it out
-        pass
+_map_wanted, _map_running = {}, set()   # pass folder -> the last tile whose mosaic's map is wanted; passes mapping
+
+
+def _map_later(u, n, cache):
+    """Works out the tile maps of the pass's mosaics up to tile n in the background, in order and once each (the
+    pass's record keeps how far it has got), one worker per pass, so the window's first hover finds its map ready
+    and a pass played fast starts one thread, not one per mosaic waiting its turn."""
+    rec, key = _record(u, cache), folder(u, cache)
+    with _lock:
+        if rec is not None and rec.get("mapped", -1) >= n:
+            return   # (mapped already, then dropped from _maps: a hover works it out)
+        _map_wanted[key] = max(n, _map_wanted.get(key, -1))
+        if key in _map_running:
+            return
+        _map_running.add(key)
+
+    def run():
+        try:
+            while True:
+                _yield()
+                rec = _record(u, cache)
+                with _lock:
+                    upto = _map_wanted.pop(key, None)
+                    if upto is None:   # (under the lock that a later ask takes: it starts a worker of its own)
+                        _map_running.discard(key)
+                        return
+                    first = rec.get("mapped", -1) + 1 if rec is not None else upto
+                for j in range(first, upto + 1):
+                    _yield()
+                    try:
+                        tile_map(u["frames"][j][1], cache)
+                    except Exception:   # a tile not made yet: the window's own request works it out
+                        pass
+                    if rec is not None:
+                        with _lock:
+                            rec["mapped"] = max(rec.get("mapped", -1), j)
+        except BaseException:
+            with _lock:
+                _map_running.discard(key)
+            raise
+
+    threading.Thread(target=contextvars.copy_context().run, args=(run,), daemon=True).start()
 
 
 _made = {}   # (pass, look) -> the last tile of the pass up to which every tile is made (or -1)
@@ -1899,8 +2170,8 @@ def _made_through(u, n, cache):
     if j < 0:
         with _asking():
             tile(u, 0, cache)
-    base = _tiles(u, cache, plan(u, cache)["display_scale"])
-    while j < n and os.path.exists(os.path.join(base, f"{j + 1}.json")):
+    p = plan(u, cache)
+    while j < n and _has_tile(u, j + 1, cache, p):
         j += 1
     with _lock:
         _made[key] = max(_made.get(key, -1), j)
@@ -1929,6 +2200,20 @@ def _yield():
         time.sleep(0.02)
 
 
+def _mosaic_path(u, made, size, cache, fmt="webp", out=OUT):
+    """Where the mosaic of layout made is kept in the cache (named after what it is made of)."""
+    return os.path.join(folder(u, cache), f"full{out}" if size == "full" else str(size), f"{made[5]}.{fmt}")
+
+
+def _mosaic_made(u, n, size, cache):
+    """Whether the pass's mosaic at tile n is made at size (or holds nothing yet): nothing for warm to make."""
+    made = layout(u, n, cache)
+    if not made:
+        return True
+    path = _mosaic_path(u, made, size, cache)
+    return path in _blank or os.path.exists(path)
+
+
 def _mosaic_at(u, n, size, cache, slots=None, fmt="webp", out=OUT, made=None):
     """(WebP, report) of the pass's mosaic with tiles 0..n at size, made once (kept in the cache under the name
     of what it is made of, so frames that add nothing to it share it; a request that comes while it is being
@@ -1936,8 +2221,7 @@ def _mosaic_at(u, n, size, cache, slots=None, fmt="webp", out=OUT, made=None):
     made = made or layout(u, n, cache)
     if not made:
         return None
-    full = size == "full"
-    path = os.path.join(folder(u, cache), f"full{out}" if full else str(size), f"{made[5]}.{fmt}")
+    path = _mosaic_path(u, made, size, cache, fmt, out)
     if not os.path.exists(path):
         with _lock:
             lock = _making.setdefault(path, threading.Lock())
@@ -1986,6 +2270,7 @@ def _make_mosaic(u, n, size, path, cache, slots, made, fmt="webp", out=OUT):
         else:
             im.save(buf, "WEBP", quality=92 if full else 85, method=4)
         reel._cached(meta, lambda: json.dumps(rep).encode())
+        reel.keep_report(meta, rep)
         return buf.getvalue()
 
     try:
@@ -1993,8 +2278,7 @@ def _make_mosaic(u, n, size, path, cache, slots, made, fmt="webp", out=OUT):
     except LookupError:
         return None
     if not report:
-        with open(meta) as fh:
-            report = json.load(fh)
+        report = reel.report_of(meta)
     return data, report
 
 
@@ -2006,8 +2290,17 @@ def warm(u, upto, cache, size=None, slots=None, start=0, force=False):
         return
     look, colors = calibration.look(), calibration.colors()
     key = (u["key"], size, look, colors)
+    upto = min(upto, len(u["frames"]) - 1)
     with _lock:
-        _upto[key] = max(_upto.get(key, -1), min(upto, len(u["frames"]) - 1))
+        running = key in _warming
+    # nothing to make (the tiles up to upto in memory, and their mosaics in the cache): no thread
+    if not running:
+        rec = _record(u, cache)
+        if rec is not None and _all_made(u, cache, rec["plan"], 0, upto) and \
+                (not size or all(_mosaic_made(u, j, size, cache) for j in range(start, upto + 1))):
+            return
+    with _lock:
+        _upto[key] = max(_upto.get(key, -1), upto)
         _from[key] = max(_from.get(key, 0), start)
         if key in _warming:
             return
@@ -2032,8 +2325,9 @@ def warm(u, upto, cache, size=None, slots=None, start=0, force=False):
                     if size:
                         for j in range(max(first, done + 1), last + 1):
                             _yield()
-                            # a window that has asked for a later frame meanwhile (a burst) has passed this one
-                            if j >= _from[key]:
+                            # a window that has asked for a later frame meanwhile (a burst) has passed this one;
+                            # one made already is not read again
+                            if j >= _from[key] and not _mosaic_made(u, j, size, cache):
                                 _mosaic_at(u, j, size, cache, slots)
                     done = last
         except Exception as e:
@@ -2060,6 +2354,13 @@ def tiles_ahead(u, n, cache):
         if u["key"] in _ahead_passes:
             _ahead_passes.remove(u["key"])
         _ahead_passes.append(u["key"])
+        if u["key"] in _ahead_running:
+            return
+    # every tile of the pass made and in memory: nothing to make, no thread
+    rec = _record(u, cache)
+    if rec is not None and _all_made(u, cache, rec["plan"], 0, len(u["frames"]) - 1):
+        return
+    with _lock:
         if u["key"] in _ahead_running:
             return
         _ahead_running.add(u["key"])
