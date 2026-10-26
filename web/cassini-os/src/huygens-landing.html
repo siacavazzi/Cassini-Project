@@ -8,10 +8,12 @@
      reconstruction); the events (parachutes, heat shield, lamp, touchdown, end of the link) are the descent team's
      reconstructed times (huygens-landing-data.json, each with its source); Cassini's place and pointing are the
      viewer's own (the real trajectory, and the real attitude where it is recorded; without one, the dish is drawn on
-     the probe until the link ends, then turned to Earth). The probe is the release cutscene's model of it
-     (studyCoast.probeModel(), the Huygens part of NASA's model) in its entry shell; the descent module under the
-     parachutes is ESA's own model of it (the ESA SPICE Service's Huygens dataset, CC BY-NC 3.0 IGO), as NASA's model
-     has only the entry shell.
+     the probe until the link ends, then turned to Earth). The probe is ESA's own models of it (the ESA SPICE Service's
+     Huygens dataset, CC BY-NC 3.0 IGO): the entry shell in its two parts, which come off in the real order (the pilot
+     chute pulls the back cover away and the back cover pulls out the main chute; half a minute later the heat shield
+     drops away), and the descent module under the parachutes. The parachutes are disk-gap-band canopies at their real
+     sizes (no model of them has been published). Inside Titan's haze the sky closes in around the probe, and near the
+     ground the probe is held to the landing point on Titan's globe at the descent table's altitude.
 
      The clock runs a few times faster than real time through the entry and the parachutes, a few hundred times faster
      down the long drogue descent, then slows again for the touchdown; the readout shows the mission time throughout.
@@ -43,7 +45,7 @@ body.phone #hland .cs-read { font-size: 9.5px; bottom: 9vh; white-space: normal;
   <div class="hl-tag" data-tag="earth">Earth</div>
   <div class="cs-caps"></div>
   <div class="cs-read" aria-hidden="true"></div>
-  <div class="cs-note">The probe's path, speed and altitude are its reconstructed track; Cassini's are its real trajectory. The clock runs faster than real time, shown below. Parachute lines are drawn to a guessed length.</div>
+  <div class="cs-note">The probe's path, speed and altitude are its reconstructed track; Cassini's are its real trajectory. The clock runs faster than real time, shown below. The parachutes' line lengths are the usual ones for their type; ESA has not published them.</div>
   <div class="cs-hint">Drag to look around</div>
   <button class="cs-skip" type="button">Skip ▸</button>
 </section>
@@ -118,7 +120,7 @@ body.phone #hland .cs-read { font-size: 9.5px; bottom: 9vh; white-space: normal;
   let KEYS = null;
   function keys() {
     const N = numbers(), E = N.E - T0, L = EV.landing, K = EV.link_end, S = N.send - T0;
-    return [[0, E + 1], [10, -35], [13.5, -3], [18, 5], [24, 38], [29, 150], [33.5, EV.drogue + 5], [34.5, EV.drogue + 250],
+    return [[0, E + 1], [10, -35], [13.5, -3], [19.5, 6], [22, 29], [25.5, 40], [29, 150], [33.5, EV.drogue + 5], [34.5, EV.drogue + 250],
       [44.5, 2600], [57, L - 150], [64, L - 6], [66.5, L + 3], [71.5, L + 40], [72.5, L + 70], [80, K - 90], [84, K + 30], [93, S], [END, S + 600]];
   }
   // a monotone cubic through the points, so the clock speeds up and slows down without jolts
@@ -145,9 +147,9 @@ body.phone #hland .cs-read { font-size: 9.5px; bottom: 9vh; white-space: normal;
     return [
       [1.5, 6.5, `<b>January 14, 2005 · ${utc(N.E).slice(0, 5)} UTC</b>After twenty days asleep, Huygens hits Titan's air 1,270 km up, at ${N.vEntry.toFixed(1)} km/s.`, "", [0, 2, 4]],
       [8.5, 5, `Its heat shield takes the blow. Titan's air slows it to ${Math.round(N.vT0 / 10) * 10} m/s in under five minutes, at up to ${N.peak.toFixed(0)} g.`, "", null],
-      [14, 5, `${utc(T0).slice(0, 5)} UTC · A ${CH.pilot.toFixed(1)} m pilot chute pulls out the ${CH.main} m main parachute.`, "", [0, 4, 7]],
-      [19.5, 4.5, `Half a minute later the heat shield falls away, and the instruments meet Titan's air.`, "", null],
-      [25, 4.5, `${utc(T0 + EV.data).slice(0, 5)} UTC · Huygens starts talking to Cassini. Its camera takes pictures as it turns.`, "", [2, 4, 7]],
+      [14, 6.5, `${utc(T0).slice(0, 5)} UTC · A ${CH.pilot.toFixed(1)} m pilot chute fires out and pulls the back cover away. The back cover pulls out the ${CH.main} m main parachute.`, "", [0, 4, 7]],
+      [21.5, 4.5, `Half a minute later the heat shield drops away, and the instruments meet Titan's air.`, "", null],
+      [26.5, 3.5, `${utc(T0 + EV.data).slice(0, 5)} UTC · Huygens starts talking to Cassini. Its camera takes pictures as it turns.`, "", [2, 4, 7]],
       [30, 4, `At 111 km the main chute lets go. A ${CH.drogue.toFixed(0)} m drogue carries it the rest of the way, for more than two hours.`, "", null],
       [35.5, 4.5, `Cassini, ${fmtInt(Math.round(N.cassiniKm / 1000) * 1000)} km away, has its dish on Titan, recording everything Huygens sends.`, "", [0, 3, 5]],
       [40, 4.5, `Earth heard it too. At 10:25 UTC the Green Bank telescope caught Huygens's faint carrier, ${lt} minutes after it left.`, "", null],
@@ -162,53 +164,132 @@ body.phone #hland .cs-read { font-size: 9.5px; bottom: 9vh; white-space: normal;
     ];
   }
 
-  // ---------- the probe: the release cutscene's model in its shell, the descent module, the parachutes ----------
+  // ---------- the probe: ESA's models of it (entry shell in two parts, descent module), the parachutes ----------
   const sprite = CS.fx.sprite;
-  // a canopy of diameter d (m): a shallow dome opening toward -Y, with lines down to the origin `riser` m below its rim
-  function chute(d, riser, color) {
-    const g = new THREE.Group(), a = 1.05, r = d / 2 / Math.sin(a);
-    const dome = new THREE.Mesh(new THREE.SphereGeometry(r, 36, 10, 0, Math.PI * 2, 0, a),
-      new THREE.MeshStandardMaterial({ color, roughness: 0.9, metalness: 0, side: THREE.DoubleSide, transparent: true, opacity: 1 }));
-    dome.position.y = riser - r * Math.cos(a);
-    const pts = [];
-    for (let i = 0; i < 16; i++) { const f = i / 16 * Math.PI * 2; pts.push(0, DM_TOP, 0, Math.cos(f) * d / 2, riser, Math.sin(f) * d / 2); }
-    const lg = new THREE.BufferGeometry(); lg.setAttribute("position", new THREE.Float32BufferAttribute(pts, 3));
-    const lines = new THREE.LineSegments(lg, new THREE.LineBasicMaterial({ color: 0xcfd3d8, transparent: true, opacity: 0.55 }));
-    g.add(dome, lines); g.userData = { dome, lines };
-    return g;
-  }
-  // the descent module: ESA's own mesh of it (the ESA SPICE Service's Huygens dataset, the model its Cosmographia
-  // "Huygens descent" uses; made into models/huygens_dm.glb.b64.txt by models/make_huygens_dm.py, which scales it to
-  // the 1.3 m drum and colors it: gold foil shell, silver top platform, aluminium spin vanes). Metres, spin axis +Y,
-  // base on y = 0 (where it touches the ground), the parachute lines meeting at DM_TOP above the platform
-  const DM_TOP = 0.84;
-  function descentModule() {
-    const dm = new THREE.Group();
-    if (THREE.GLTFLoader) fetch("models/huygens_dm.glb.b64.txt").then(r => { if (!r.ok) throw new Error(r.status); return r.text(); }).then(t => {
+  // ESA's models (the ESA SPICE Service's Huygens dataset, the ones its Cosmographia "Huygens descent" uses), made into
+  // small GLBs by models/make_huygens_dm.py and make_huygens_shell.py, in metres in one frame: spin axis +Y, the heat
+  // shield facing -Y, the base of the descent module's fore dome at y = 0 (where it touches the ground)
+  function loadModel(file, then) {
+    if (!THREE.GLTFLoader) return;
+    fetch(file).then(r => { if (!r.ok) throw new Error(r.status); return r.text(); }).then(t => {
       const b = atob(t.trim()), u = new Uint8Array(b.length);
       for (let i = 0; i < b.length; i++) u[i] = b.charCodeAt(i);
-      new THREE.GLTFLoader().parse(u.buffer, "", gltf => {
-        gltf.scene.traverse(o => { o.layers.set(1); if (o.isMesh) o.material.vertexColors = true; });
-        dm.add(gltf.scene);
-      });
-    }).catch(err => console.warn("Huygens descent module not loaded", err));
-    return dm;
+      new THREE.GLTFLoader().parse(u.buffer, "", gltf => { gltf.scene.traverse(o => o.layers.set(1)); then(gltf.scene); });
+    }).catch(err => console.warn(`${file} not loaded`, err));
   }
-  function chuteOpacity(c, o) { c.visible = o > 0.01; c.userData.dome.material.opacity = o; c.userData.lines.material.opacity = 0.55 * o; }
+  // the parachutes hang from the swivel above the descent module's top platform; the pilot chute from the top of the
+  // back cover
+  const DM_TOP = 0.84, BC_TOP = 0.94;
+  // a disk-gap-band parachute, the kind all three of Huygens' were: nominal diameter D0 (m), `gores` panels, `lines`
+  // suspension lines `lineK` x D0 long meeting at a confluence `riser` m above the attachment point (the origin), +Y up
+  // the lines. Proportions of the type (Viking's): disk 0.726 D0 across, gap 0.042 D0, band 0.121 D0 deep; inflated,
+  // the canopy pulls in to about two thirds of D0 and bulges out between its radial tapes. Kevlar lines, nylon cloth
+  function chute(D0, gores, lineK, riser, color) {
+    const g = new THREE.Group(), base = new THREE.Color(color), tape = base.clone().multiplyScalar(0.78);
+    const R = 0.33 * D0, vent = 0.045 * D0, crown = 0.4 * R, gap = 0.042 * D0, bandH = 0.121 * D0, Rb = 0.95 * R, L = lineK * D0;
+    const yb = Math.sqrt(L * L - Rb * Rb), yd = yb + bandH + gap;   // the band's skirt, the disk's rim (above the confluence)
+    const pos = [], col = [], idx = [];
+    // a surface of revolution with scalloped gores: prof(v) = [radius, height] from v = 0 to 1, `rows` rings
+    function surface(rows, prof, bulge) {
+      const seg = gores * 6, s0 = pos.length / 3;
+      for (let i = 0; i <= rows; i++) {
+        const [r, y] = prof(i / rows);
+        for (let j = 0; j <= seg; j++) {
+          const f = (j % 6) / 6, b = Math.sin(Math.PI * f), a = j / seg * Math.PI * 2, rr = r * (1 + bulge * b);
+          pos.push(Math.cos(a) * rr, y + bulge * 0.4 * r * b, Math.sin(a) * rr);
+          const c = j % 6 === 0 || i === 0 || i === rows ? tape : base;
+          col.push(c.r, c.g, c.b);
+        }
+      }
+      for (let i = 0; i < rows; i++) for (let j = 0; j < seg; j++) {
+        const a = s0 + i * (seg + 1) + j, b = a + seg + 1;
+        idx.push(a, b, a + 1, a + 1, b, b + 1);
+      }
+    }
+    const th = Math.acos(vent / R);
+    surface(10, v => [R * Math.cos(th * v), yd + crown * Math.sin(th * v)], 0.05);   // the disk, rim to vent
+    surface(3, v => [Rb * (0.95 + 0.05 * v), yb + bandH * v], 0.035);                  // the band, skirt to top
+    const geo = new THREE.BufferGeometry();
+    geo.setAttribute("position", new THREE.Float32BufferAttribute(pos, 3));
+    geo.setAttribute("color", new THREE.Float32BufferAttribute(col, 3));
+    geo.setIndex(idx); geo.computeVertexNormals();
+    const canopy = new THREE.Mesh(geo, new THREE.MeshStandardMaterial({ vertexColors: true, roughness: 0.92, metalness: 0,
+      side: THREE.DoubleSide, transparent: true, opacity: 1 }));
+    canopy.position.y = riser;
+    // the lines: one per gore, from the band's skirt (and on up its tapes to the disk) down to the confluence; the riser
+    // down to the attachment
+    const lp = [0, 0, 0, 0, riser, 0];
+    for (let j = 0; j < gores; j++) {
+      const a = j / gores * Math.PI * 2, c = Math.cos(a), s = Math.sin(a);
+      lp.push(0, riser, 0, c * Rb * 0.95, riser + yb, s * Rb * 0.95);
+      lp.push(c * Rb * 0.95, riser + yb, s * Rb * 0.95, c * Rb, riser + yb + bandH, s * Rb);
+      lp.push(c * R, riser + yd, s * R, c * R, riser + yb + bandH, s * R);
+    }
+    const lg = new THREE.BufferGeometry(); lg.setAttribute("position", new THREE.Float32BufferAttribute(lp, 3));
+    const lines = new THREE.LineSegments(lg, new THREE.LineBasicMaterial({ color: 0xd8c9a0, transparent: true, opacity: 0.6 }));
+    g.add(canopy, lines); g.userData = { canopy, lines, top: riser + yd + crown };
+    return g;
+  }
+  function chuteOpacity(c, o) { c.visible = o > 0.01; c.userData.canopy.material.opacity = o; c.userData.lines.material.opacity = 0.6 * o; }
   function build() {
-    const m = window.studyCoast && studyCoast.probeModel && studyCoast.probeModel();
-    if (!m) return null;
-    const P = { root: new THREE.Group(), shell: m.group, p0: m.p0, axis: m.axis.clone().normalize() };
-    const mod = descentModule();
-    P.mod = mod;
-    P.pilot = chute(CH.pilot, 9, 0xd9d4c8); P.main = chute(CH.main, 22, 0xe8e2d6); P.drogue = chute(CH.drogue, 12, 0xd8cdb8);
+    const P = { root: new THREE.Group(), mod: new THREE.Group(), front: new THREE.Group(), back: new THREE.Group() };
+    loadModel("models/huygens_dm.glb.b64.txt", s => { s.traverse(o => { if (o.isMesh) o.material.vertexColors = true; }); P.mod.add(s); });
+    loadModel("models/huygens_shell.glb.b64.txt", s => {
+      const f = s.getObjectByName("front_shield"), b = s.getObjectByName("back_cover");
+      s.traverse(o => { if (o.isMesh) o.material.vertexColors = true; });
+      if (f) P.front.add(f); if (b) P.back.add(b);
+    });
+    // the pilot chute inflated about 27 m behind the probe (ESA); the main and the drogue hang from the swivel above the
+    // top platform. Line lengths are not published: the type's usual 1.7 x D0 for the main and drogue
+    P.pilot = chute(CH.pilot, 16, 1.7, 22, 0xece8de);
+    P.main = chute(CH.main, 32, 1.7, 8, 0xf1ede4);
+    P.drogue = chute(CH.drogue, 20, 1.7, 10, 0xe9e4d8);
     P.glow = sprite(0xffb070, 8); P.core = sprite(0xffe2c0, 3);
-    P.root.add(mod, P.pilot, P.main, P.drogue, P.glow, P.core);
+    P.root.add(P.mod, P.front, P.back, P.pilot, P.main, P.drogue, P.glow, P.core);
     P.ground = ground();
-    [P.root, P.shell, P.ground].forEach(o => o.traverse(c => c.layers.set(1)));
-    P.root.visible = P.shell.visible = P.ground.visible = false;
-    scene.add(P.root, P.shell, P.ground);
+    P.sky = hazeSky();
+    [P.root, P.ground].forEach(o => o.traverse(c => c.layers.set(1)));
+    P.root.visible = P.ground.visible = false;
+    scene.add(P.root, P.ground, P.sky);
     return P;
+  }
+  // ---------- inside Titan's haze: the sky around the probe ----------
+  // The viewer's haze is tuned to be seen from space (thin enough that the globe's map shows through), so from inside
+  // it, at 150 km, the stars would shine through it. Huygens' camera saw an opaque orange sky all the way down, brighter
+  // toward the horizon and the Sun, and no ground until it was some 50 km up. This sphere around the camera, drawn over
+  // the globe and the stars (the probe, the parachutes and the landing ground come after it, in the close-up pass), is
+  // that sky: it closes in as the probe sinks into the haze and opens below as the air under it clears
+  function hazeSky() {
+    const mat = new THREE.ShaderMaterial({
+      uniforms: { up: { value: new THREE.Vector3(0, 1, 0) }, sun: { value: new THREE.Vector3(1, 0, 0) }, uOp: { value: 0 }, uSee: { value: 0 } },
+      vertexShader: VHEAD + `varying vec3 vDir; void main(){ vDir = position; gl_Position = projectionMatrix * modelViewMatrix * vec4(position, 1.0);
+        #include <logdepthbuf_vertex>
+      }`,
+      fragmentShader: FHEAD + `uniform vec3 up, sun; uniform float uOp, uSee; varying vec3 vDir;
+        void main(){
+          #include <logdepthbuf_fragment>
+          vec3 d = normalize(vDir); float e = dot(d, up), mu = dot(d, sun), se = dot(sun, up);
+          vec3 hor = vec3(0.80, 0.53, 0.27), zen = vec3(0.47, 0.28, 0.12);
+          vec3 c = mix(hor, zen, smoothstep(0.0, 0.85, e));
+          c += vec3(0.30, 0.19, 0.08) * pow(max(mu, 0.0), 5.0) * smoothstep(-0.3, 0.2, e);   // forward scattering: brighter around the Sun
+          c *= 0.3 + 0.75 * smoothstep(-0.2, 0.35, se);                                       // dimmer as the Sun sets
+          // below the horizon: haze over the ground, thinning toward the nadir as the air under the probe clears; never
+          // toward the horizon, where the line of sight runs through tens of kilometres of it
+          float a = e >= 0.0 ? 1.0 : 1.0 - uSee * smoothstep(0.02, 0.45, -e);
+          gl_FragColor = vec4(c * mix(1.0, 0.8, smoothstep(0.0, -0.6, e)), a * uOp);
+        }`,
+      transparent: true, depthWrite: false, depthTest: false, side: THREE.BackSide });
+    const m = new THREE.Mesh(new THREE.SphereGeometry(1, 48, 24), mat);
+    m.renderOrder = 5; m.frustumCulled = false; m.visible = false;
+    return m;
+  }
+  function placeSky(alt, up) {
+    const m = P.sky, u = m.material.uniforms;
+    u.uOp.value = ease((520 - alt) / 320);           // from 520 km down to 200 km it closes in
+    u.uSee.value = 0.92 * ease((55 - alt) / 45);     // the ground shows through below 55 km, clearly below 10 km
+    u.up.value.copy(up); u.sun.value.copy(uSun.value);
+    m.position.copy(camera.position); m.scale.setScalar(1e-3); m.updateMatrixWorld();
+    m.visible = H.shot === "probe" && u.uOp.value > 0.003;
   }
   // the ground the probe lands on, for the last few hundred metres: the finest level of the viewer's landing-site map
   // (Karkoschka's DISR mosaic, 1 m a pixel, north up), on a flat patch 400 m across centered on the landing point, in
@@ -222,43 +303,72 @@ body.phone #hland .cs-read { font-size: 9.5px; bottom: 9vh; white-space: normal;
     const geo = new THREE.PlaneGeometry(PATCH, PATCH, 1, 1), uv = geo.attributes.uv;
     for (let i = 0; i < uv.count; i++) uv.setXY(i, (lx + (uv.getX(i) * 2 - 1) * half) / M.width, 1 - (ly - (uv.getY(i) * 2 - 1) * half) / M.height);
     const mat = new THREE.ShaderMaterial({
-      uniforms: { map: { value: new THREE.TextureLoader().load(lv.file) }, uLight: { value: 1 }, uOp: { value: 0 } },
-      vertexShader: VHEAD + `varying vec2 vUv; void main(){ vUv = uv; gl_Position = projectionMatrix * modelViewMatrix * vec4(position, 1.0);
+      uniforms: { map: { value: new THREE.TextureLoader().load(lv.file) }, uLight: { value: 1 }, uOp: { value: 0 }, uHaze: { value: new THREE.Vector3(0.8, 0.53, 0.27) } },
+      vertexShader: VHEAD + `varying vec2 vUv; varying vec2 vP; void main(){ vUv = uv; vP = position.xy; gl_Position = projectionMatrix * modelViewMatrix * vec4(position, 1.0);
         #include <logdepthbuf_vertex>
       }`,
-      fragmentShader: FHEAD + `uniform sampler2D map; uniform float uLight; uniform float uOp; varying vec2 vUv;
+      fragmentShader: FHEAD + `uniform sampler2D map; uniform float uLight; uniform float uOp; uniform vec3 uHaze; varying vec2 vUv; varying vec2 vP;
         void main(){
           #include <logdepthbuf_fragment>
-          vec3 c = max(texture2D(map, vUv).rgb * 1.3, vec3(0.14, 0.085, 0.04));
+          vec3 c = max(texture2D(map, vUv).rgb * 1.3, vec3(0.14, 0.085, 0.04)) * uLight;
+          // the probe's shade on the ground under it (it stands at the patch's centre), then the haze between it and
+          // the ground farther off: by the patch's edge the ground is lost in it
+          float d = length(vP);
+          c *= 1.0 - 0.55 * exp(-d * d / 0.7);
+          c = mix(c, uHaze, 0.9 * smoothstep(6.0, ${(PATCH / 2).toFixed(1)}, d));
           vec2 e = abs(vUv - 0.5) * 2.0; vec2 q = vec2(${(PATCH / 2 / lv.m_per_px / M.width).toFixed(5)}, ${(PATCH / 2 / lv.m_per_px / M.height).toFixed(5)});
           float a = 1.0 - smoothstep(0.55, 1.0, length((vUv - vec2(${(lx / M.width).toFixed(5)}, ${(1 - ly / M.height).toFixed(5)})) / q));
-          gl_FragColor = vec4(c * uLight, a * uOp);
+          gl_FragColor = vec4(c, a * uOp);
         }`,
       transparent: true, depthWrite: false });
     g.add(new THREE.Mesh(geo, mat)); g.userData.mat = mat;
     return g;
   }
-  // the ground patch where the probe lands: the landing point on the 2,575 km sphere, east and north across it
+  // where the probe came down: the track's touchdown point, on Titan's globe as the viewer draws it (the ellipsoid of
+  // its radii), in Titan's body frame (km). For the last few kilometres the probe is drawn at the descent table's
+  // altitude above it, and on it once landed: the track's samples are 14 s apart and smoothed, tens of metres off that
+  // close to the ground
+  let SITE = null;
+  function site() {
+    if (SITE) return SITE;
+    const b = bodyFixed(T0 + EV.landing, rel(T0 + EV.landing, v3())), n = Math.hypot(b[0], b[1], b[2]), d = b.map(x => x / n), r = bodies.TITAN.radii;
+    const R = r ? 1 / Math.hypot(d[0] / r[0], d[1] / r[1], d[2] / r[2]) : n;
+    return SITE = d.map(x => x * R);
+  }
+  const toJ = (et, b) => { const R = iauMatrix(bodies.TITAN, et); return [0, 1, 2].map(i => R[0][i] * b[0] + R[1][i] * b[1] + R[2][i] * b[2]); };
+  // the probe relative to Titan as drawn (km, J2000): the track; near the ground, the landing point plus the track's
+  // drift across it plus the descent table's altitude
+  function drawnRel(et, out) {
+    rel(et, out);
+    const landed = et >= T0 + EV.landing, alt = landed ? 0 : altitude(et), w = landed ? 1 : ease((4 - alt) / 3);
+    if (w <= 0) return out;
+    const S = toJ(et, site()), n = Math.hypot(S[0], S[1], S[2]), up = S.map(x => x / n);
+    const d = [0, 1, 2].map(i => out[i] - S[i]), h = dot(d, up);
+    for (let i = 0; i < 3; i++) out[i] = out[i] * (1 - w) + (S[i] + (landed ? 0 : d[i] - h * up[i]) + up[i] * alt) * w;
+    return out;
+  }
+  // the ground patch where the probe lands: on the landing point, east and north across it
   function placeGround(et, alt) {
     const G = P.ground, mat = G.userData.mat;
     if (!mat || !probe.landing_site) { G.visible = false; return; }
-    const ls = probe.landing_site, lat = rad(ls.lat_deg), lon = rad(-ls.lon_w_deg), R = iauMatrix(bodies.TITAN, et);
-    const bodyUp = [Math.cos(lat) * Math.cos(lon), Math.cos(lat) * Math.sin(lon), Math.sin(lat)], bodyE = [-Math.sin(lon), Math.cos(lon), 0];
-    const bodyN = cross(bodyUp, bodyE);
-    const j = b => [0, 1, 2].map(i => R[0][i] * b[0] + R[1][i] * b[1] + R[2][i] * b[2]);
-    const up = toScene(j(bodyUp), new THREE.Vector3()), east = toScene(j(bodyE), new THREE.Vector3()), north = toScene(j(bodyN), new THREE.Vector3());
-    const site = j(bodyUp).map((x, i) => pos.TITAN[i] + x * ls.radius_km - pos[state.focus][i]);
-    G.position.copy(toScene(site, new THREE.Vector3()).multiplyScalar(1 / KM));
+    const S = site(), n = Math.hypot(S[0], S[1], S[2]), bodyUp = S.map(x => x / n);
+    const e = Math.hypot(bodyUp[0], bodyUp[1]), bodyE = [-bodyUp[1] / e, bodyUp[0] / e, 0], bodyN = cross(bodyUp, bodyE);
+    const up = toScene(toJ(et, bodyUp), new THREE.Vector3()), east = toScene(toJ(et, bodyE), new THREE.Vector3()), north = toScene(toJ(et, bodyN), new THREE.Vector3());
+    const at = toJ(et, S).map((x, i) => pos.TITAN[i] + x - pos[state.focus][i]);
+    G.position.copy(toScene(at, new THREE.Vector3()).multiplyScalar(1 / KM));
     G.quaternion.setFromRotationMatrix(new THREE.Matrix4().makeBasis(east, north, up));
     G.scale.setScalar(1e-6);
     mat.uniforms.uOp.value = ease((0.45 - alt) / 0.25);
-    mat.uniforms.uLight.value = 0.35 + 0.9 * Math.max(0, uSun.value.dot(up));
+    // the light on Titan's ground is mostly the sky's (the haze scatters nearly all of the sunlight), a little the Sun's
+    const day = ease((uSun.value.dot(up) + 0.2) / 0.55);
+    mat.uniforms.uLight.value = (0.3 + 0.75 * day) * (0.8 + 0.4 * Math.max(0, uSun.value.dot(up)));
+    mat.uniforms.uHaze.value.set(0.8, 0.53, 0.27).multiplyScalar(0.3 + 0.75 * day);
     G.visible = H.shot === "probe" && mat.uniforms.uOp.value > 0.01;
   }
   let P = null;
   // the close-up pass blows up these too (the viewer's studyCloseObjects, the release cutscene's model besides)
   const prevClose = window.studyCloseObjects;
-  window.studyCloseObjects = () => (prevClose ? prevClose() : []).concat(H && P ? [P.root, P.shell, P.ground].filter(o => o.visible) : []);
+  window.studyCloseObjects = () => (prevClose ? prevClose() : []).concat(H && P ? [P.root, P.ground].filter(o => o.visible) : []);
 
   let H = null;   // the running cutscene
   let waiting = null;
@@ -286,7 +396,7 @@ body.phone #hland .cs-read { font-size: 9.5px; bottom: 9vh; white-space: normal;
   function cleanUp() {
     const h = H; H = null;
     if (!h) return;
-    if (P) { P.root.visible = P.shell.visible = P.ground.visible = false; }
+    if (P) { P.root.visible = P.ground.visible = P.sky.visible = false; }
     sound("rumble", 0);
     caps.textContent = ""; [read, note, hint].forEach(e => e.classList.remove("on"));
     Object.values(tags).forEach(e => e.classList.remove("on"));
@@ -336,7 +446,6 @@ body.phone #hland .cs-read { font-size: 9.5px; bottom: 9vh; white-space: normal;
 
   // ---------- after the viewer has turned Cassini: the probe's parts, sizes, glow, Cassini's dish, the readout ----------
   const qA = new THREE.Quaternion(), qS = new THREE.Quaternion(), vS = new THREE.Vector3(), uS = new THREE.Vector3(), tmpV = new THREE.Vector3();
-  const qShell = new THREE.Quaternion(), shellOff = new THREE.Vector3(), qTurn = new THREE.Quaternion();
   function attitude() {
     if (H.phase !== "run") return;
     const now = performance.now(), dt = Math.min(0.1, (now - H.lastFrame) / 1000); H.lastFrame = now;
@@ -347,39 +456,56 @@ body.phone #hland .cs-read { font-size: 9.5px; bottom: 9vh; white-space: normal;
     const landed = s >= EV.landing, g = H.g = s < 0 ? gLoad(et) : 0;
     if (!P) P = build();
     if (P) {
-      P.root.visible = true; P.root.scale.setScalar(1e-6); P.root.position.copy(probeObj.position);
+      // where it is drawn: the track, pinned to the ground near the end (drawnRel), as an offset from the viewer's marker
+      const dr = sub(drawnRel(et, pb), rel(et, pc), v3());
+      P.root.visible = true; P.root.scale.setScalar(1e-6);
+      P.root.position.copy(probeObj.position).add(toScene(dr, tmpV).multiplyScalar(1 / KM));
       // the chutes hang straight up the air flow; on the ground, up
       const upChute = landed ? uS : vS.clone().negate();
       P.root.quaternion.setFromUnitVectors(new THREE.Vector3(0, 1, 0), upChute);
       // the drawn spin, slow enough to read
       H.spin += dt * 0.8 * (landed ? 0 : 1);
       P.root.quaternion.multiply(qS.setFromAxisAngle(new THREE.Vector3(0, 1, 0), H.spin));
-      // the entry shell (NASA's model): heat shield first, until it falls away and drops below
-      const shellOn = s < EV.shield + 30;
-      P.shell.visible = shellOn;
-      if (shellOn) {
-        qShell.setFromUnitVectors(P.axis, landed ? uS.clone().negate() : vS);
-        P.shell.quaternion.copy(qShell);
-        const k = Math.max(0, s - EV.shield);
-        shellOff.copy(vS).multiplyScalar((0.5 * 2.2 * k * k + 0.6) * 1e-6);
-        if (k > 0) P.shell.quaternion.premultiply(qTurn.setFromAxisAngle(tmpV.crossVectors(vS, uS).normalize(), k * 0.25));
-        P.shell.scale.setScalar(1e-6);
-        P.shell.position.copy(P.p0).applyQuaternion(P.shell.quaternion).multiplyScalar(-1e-6).add(probeObj.position).add(shellOff);
-      }
-      P.mod.visible = s >= EV.main_deploy;
-      // the parachutes: the pilot pulls the main out; the main gives way to the drogue at 111 km; on the ground the
-      // drogue settles and fades
+      // the sequence (ESA, the descent team's times), in the probe's frame (+Y up the air flow, metres):
+      //   t0: the mortar fires the pilot chute out through the back cover; it inflates about 27 m behind (+1.4 s)
+      //   +2.5 s: the back cover is let go; the pilot pulls it away, and it pulls the main chute out of its canister
+      //   +4.9 s: the main chute is open; the back cover and pilot fly off up and aside
+      //   +32.5 s: the front shield is let go and falls away below
+      //   +900 s: the main chute is let go and flies off; the drogue opens
+      //   landing: the drogue collapses and falls over onto the ground beside the probe
       const grow = (t0, t1) => ease((s - t0) / (t1 - t0));
-      const pilotO = s >= EV.pilot - 0.6 && s < EV.main_open + 6 ? 1 : 0;
-      P.pilot.scale.setScalar(0.15 + 0.85 * grow(EV.pilot - 0.6, EV.pilot));
-      P.pilot.position.set(0, Math.max(0, s - EV.main_deploy) * 6, 0);
-      chuteOpacity(P.pilot, pilotO * (1 - clamp01((s - EV.main_open) / 6)));
-      P.main.scale.set(0.2 + 0.8 * grow(EV.main_deploy, EV.main_open), 0.4 + 0.6 * grow(EV.main_deploy, EV.main_open), 0.2 + 0.8 * grow(EV.main_deploy, EV.main_open));
-      P.main.position.set(0, Math.max(0, s - EV.drogue) * 9, 0);
-      chuteOpacity(P.main, s >= EV.main_deploy ? 1 - clamp01((s - EV.drogue) / 25) : 0);
-      P.drogue.scale.setScalar(0.2 + 0.8 * grow(EV.drogue, EV.drogue + 3));
-      chuteOpacity(P.drogue, s >= EV.drogue ? 1 - clamp01((s - EV.landing) / 12) : 0);
-      if (landed) P.drogue.rotation.z = Math.min(1.4, (s - EV.landing) * 0.12); else P.drogue.rotation.z = 0;
+      const kb = Math.max(0, s - EV.main_deploy), bcUp = 0.5 * 22 * kb * kb, bcSide = 0.5 * 5 * kb * kb;
+      const bcFade = 1 - clamp01((s - 9) / 8);
+      P.back.visible = bcFade > 0.01;
+      P.back.position.set(bcSide, bcUp, 0);
+      P.back.rotation.set(0, 0, -Math.min(1.2, kb * 0.35));
+      const pilotOut = grow(-0.05, 1.0), pilotOpen = grow(0.5, EV.pilot);
+      P.pilot.visible = s >= 0 && bcFade > 0.01;
+      P.pilot.position.set(bcSide, BC_TOP + bcUp, 0);
+      P.pilot.scale.set(0.12 + 0.88 * pilotOpen, Math.max(0.02, pilotOut), 0.12 + 0.88 * pilotOpen);
+      chuteOpacity(P.pilot, s >= 0 ? bcFade : 0);
+      P.front.visible = s < EV.shield + 30;
+      const kf = Math.max(0, s - EV.shield);
+      P.front.position.set(0, -0.5 * 2.5 * kf * kf, 0.4 * kf);
+      P.front.rotation.set(kf * 0.12, 0, 0);
+      P.mod.visible = s >= EV.main_deploy;
+      // the main: lines paid out as the back cover pulls it (about 30 m of riser, lines and canopy), then open
+      const mainTop = P.main.userData.top, out = clamp01(bcUp / mainTop), open = grow(EV.main_open - 1.2, EV.main_open);
+      const km = Math.max(0, s - EV.drogue);
+      P.main.position.set(0.5 * 1.5 * km * km, DM_TOP + 0.5 * 6 * km * km, 0);
+      P.main.scale.set(0.08 + 0.92 * open, Math.max(0.02, out), 0.08 + 0.92 * open);
+      chuteOpacity(P.main, s >= EV.main_deploy ? 1 - clamp01((s - EV.drogue) / 20) : 0);
+      // the drogue; on the ground it falls over and lies flat
+      const kl = Math.max(0, s - EV.landing), fall = ease(kl / 9);
+      P.drogue.position.set(0, DM_TOP, 0);
+      P.drogue.rotation.set(0, 0, 1.5 * fall);
+      const dOpen = grow(EV.drogue, EV.drogue + 3);
+      P.drogue.scale.set(0.1 + 0.9 * dOpen, Math.max(0.02, grow(EV.drogue - 0.5, EV.drogue + 1.5)), 0.1 + 0.9 * dOpen);
+      chuteOpacity(P.drogue, s >= EV.drogue ? 1 : 0);
+      // a canopy breathes a little as it flies
+      const br = landed ? 0 : 0.015 * Math.sin(now / 1000 * 2.3);
+      P.main.userData.canopy.scale.set(1 + br, 1, 1 + br);
+      P.drogue.userData.canopy.scale.set(1 - 0.75 * fall + br, 1, 1 - 0.2 * fall + br);
       // the entry glow ahead of the heat shield, as hot as the deceleration is hard
       const heat = clamp01(g / N.peak) * clamp01(len(velocity(et)) / 1.2);
       [P.glow, P.core].forEach((o, i) => { o.position.copy(vS).applyQuaternion(P.root.quaternion.clone().invert()).multiplyScalar(i ? 1.6 : 2.4); o.material.opacity = heat * (i ? 0.9 : 0.6) * (0.9 + 0.1 * Math.random()); });
@@ -415,24 +541,31 @@ body.phone #hland .cs-read { font-size: 9.5px; bottom: 9vh; white-space: normal;
     if (H.phase !== "run" || !H.vS) return;
     const T = H.T, s = H.s;
     if (H.shot === "probe") {
-      const P0 = probeObj.position, u = H.uS, v = H.vS;
+      const P0 = P ? P.root.position : probeObj.position, u = H.uS, v = H.vS;
       // the Sun's side, level with the ground, so the probe is lit
       sunH.copy(uSun.value).addScaledVector(u, -uSun.value.dot(u));
       if (sunH.lengthSq() < 1e-6) sunH.set(1, 0, 0).addScaledVector(u, -u.x);
       sunH.normalize(); side.crossVectors(u, sunH).normalize();
       const a = 0.85 + 0.012 * T + look.yaw, around = sunH.clone().multiplyScalar(Math.cos(a)).addScaledVector(side, Math.sin(a));
       let D, elev, lookAt;
-      if (s < EV.main_deploy) {
-        // entry: behind and beside the shell, looking down its path at Titan
-        D = 13; dirV.copy(around).multiplyScalar(0.8).addScaledVector(v, -0.55).addScaledVector(u, 0.15);
-        lookAt = tgt.copy(P0).addScaledVector(v, 5e-6);
+      if (s < 0) {
+        // entry: behind and beside the shell, looking down its path at Titan; in its last seconds pulling back and
+        // round to beside it, wide enough for the parachutes to come
+        const w = ease((s + 2.5) / 2.5);
+        D = 13 + 47 * w; dirV.copy(around).multiplyScalar(0.8).addScaledVector(v, -0.55 * (1 - w)).addScaledVector(u, 0.15 * (1 - w) + 0.08 * w);
+        lookAt = tgt.copy(P0).addScaledVector(v, 5e-6 * (1 - w)).addScaledVector(u, 8e-6 * w);
       } else if (s < EV.landing - 30) {
         // under the parachutes: wide enough for the canopy, then lower and closer as the ground comes up
         const chuteK = s < EV.drogue + 20 ? 1 : 0, alt = altitude(state.et);
         const low = ease(1 - (alt - 0.3) / 6);
         D = (chuteK ? 48 : 30) * (1 - 0.55 * low); elev = (chuteK ? 0.05 : 0.35) - 0.25 * low;
+        let up = (chuteK ? 9 : 2) * (1 - low) - 4 * low;
+        // while the shell comes off: wide, for the pilot pulling the back cover away and the main paying out; closer
+        // as the main opens and the heat shield drops away below; then out to the whole canopy
+        const wA = 1 - ease((s - 5) / 4), wB = (1 - wA) * (1 - ease((s - EV.shield - 8) / 12)), wN = 1 - wA - wB;
+        D = D * wN + 60 * wA + 22 * wB; elev = elev * wN + 0.08 * wA + 0.22 * wB; up = up * wN + 8 * wA + 0.5 * wB;
         dirV.copy(around).addScaledVector(u, elev);
-        lookAt = tgt.copy(P0).addScaledVector(u, (chuteK ? 9 : 2) * 1e-6 * (1 - low)).addScaledVector(u, -low * 4e-6);
+        lookAt = tgt.copy(P0).addScaledVector(u, up * 1e-6);
       } else {
         // the touchdown and after: low beside it, on the ground
         D = 11; dirV.copy(around).addScaledVector(u, 0.12);
@@ -441,8 +574,10 @@ body.phone #hland .cs-read { font-size: 9.5px; bottom: 9vh; white-space: normal;
       dirV.addScaledVector(u, look.pitch).normalize();
       cam.copy(P0).addScaledVector(dirV, D * look.zoom * 1e-6);
       camera.position.copy(cam); camera.up.copy(u); camera.lookAt(lookAt);
+      if (P) placeSky(s >= EV.landing ? 0 : altitude(state.et), u);
     } else {
       // Cassini at its true size, Titan beyond it
+      if (P) P.sky.visible = false;
       const C = cassini.position, tW = relScene("TITAN", new THREE.Vector3()).sub(C).normalize(), up = new THREE.Vector3(0, 1, 0);
       side.crossVectors(tW, up).normalize();
       // from behind and a little beside it, Titan beyond and Cassini off to one side

@@ -136,8 +136,12 @@ Playback crossing Huygens's entry into Titan's air (2005-01-14 09:05 UTC), the "
 away, Cassini listening from 69,000 km, the drogue descent over the probe's own landing-site map, touchdown at 4.5 m/s
 on the DISR mosaic, then Cassini as the site sets at 12:50 UTC and its turn to Earth, ending on the first data at ESOC
 (16:19 UTC). The probe's speed, altitude and deceleration come from its track (needs `--huygens` in the data build);
-the event times and facts are in `src/huygens-landing-data.json` with their sources. The last card stays at the landing
-site or goes back to Cassini. `bench/huygens-landing.cjs` records it on a hand-stepped clock.
+the event times and facts are in `src/huygens-landing-data.json` with their sources. The probe is ESA's own models
+(`models/make_huygens_shell.py` and `models/make_huygens_dm.py` turn the ESA SPICE Service's Cosmographia meshes into
+`models/*.glb.b64.txt`; sources on branch `assets/huygens-models`): the entry shell comes off in two parts in the real
+order, and the parachutes are disk-gap-band canopies at their real sizes. Inside Titan's haze the sky closes in around the
+probe; near the ground the probe is held to the landing point on the globe at the descent table's altitude. The last card
+stays at the landing site or goes back to Cassini. `bench/huygens-landing.cjs` records it on a hand-stepped clock.
 
 ## Run it
 
