@@ -54,6 +54,14 @@ one. The zoom button switches between the standard large size and the size you c
 bar: the window fills the screen under the menu bar, its picture as big as it fits. Double-click a picture or press
 `F` for the same, `Esc` to come back. Sizes are remembered with the rest of the layout.
 
+## Zoom lens
+
+Move the pointer onto any picture (camera windows, body windows, full view) and a lens comes up showing
+the area under the pointer magnified; it follows the pointer and the scroll wheel over it changes the magnification.
+It draws from the frame server's full resolution picture (`size=full`, asked for once the lens is up), so it shows
+detail the window's 512 or 1024 px picture does not have. On a phone, press and hold on a picture. Settings > Zoom
+lens holds the magnification, size, delay, shape and position (`src/loupe.html`; any `<img data-loupe>` gets it too).
+
 ## Dock
 
 Along the bottom of the screen, as on the Mac (`src/dock.html`): Cassini and each body on stage now (the same list as
