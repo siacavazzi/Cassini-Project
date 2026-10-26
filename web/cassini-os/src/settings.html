@@ -310,6 +310,11 @@ body.phone .srow input[type=range] { width: 96px; }
   // movie mode (movie.html) is a rule for the clock, so its speed sits with the playback settings
   D({ key: "movie.fps", section: "Playback", label: "Movie mode speed", type: "range", value: 8, min: 2, max: 24, step: 1, unit: "fps",
       hint: "Movie mode (M) skips the time between pictures and steps from one picture to the next this many times a second. The camera windows show every picture as they always do." });
+  // what counts as a picture (head-quiet.html complete, cameraFeed)
+  D({ key: "movie.completeFrames", section: "Playback", label: "Complete color pictures only", type: "toggle", value: true,
+      hint: "Movie mode steps from one finished picture to the next: a color set shows once, as its color picture when its last filter is taken, never the black-and-white frames on the way. Off steps through every frame." });
+  D({ key: "playback.completeMosaics", section: "Playback", label: "Complete mosaics only", type: "toggle", value: false,
+      hint: "A mosaic pass shows once it is finished: the camera window keeps the picture from before the pass and puts up the whole mosaic at its last frame, and movie mode steps straight to it. Off shows the mosaic building tile by tile." });
   // movie passes in the camera and body windows (head-quiet.html cameraFeed reads these)
   D({ key: "movies.steady", section: "Movie", label: "Steady movie passes", type: "toggle", value: true,
       hint: "When a pass plays as a movie in a camera or body window (a stare, a ring or storm movie), every frame is centered by SPICE, north up, on one brightness scale and one size for the whole pass, so the body holds still and the picture does not pump. Off shows each frame as it is." });
