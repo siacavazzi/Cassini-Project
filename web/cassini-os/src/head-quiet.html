@@ -2189,19 +2189,20 @@ body.idle .win.full .titlebar { opacity: 0; }
       tip.style.top = Math.max(4, b.y - b.well.top + top0 * b.h - 40) + "px";
     }
     const phoneNow = () => document.body.classList.contains("phone");
-    const outlineHere = () => { if (!pointer) return; const q = hitAt(pointer); if (q !== hot) draw(q); if (hot) pointingKeys = feedApi; };
+    let rested = true;   // the pointer has rested (or the clock is stopped): a new picture of the mosaic outlines under it at once
+    const outlineHere = () => { rested = true; if (!pointer) return; const q = hitAt(pointer); if (q !== hot) draw(q); if (hot) pointingKeys = feedApi; };
     well.addEventListener("pointermove", e => {
       if (e.pointerType === "touch") return;
       pointer = { clientX: e.clientX, clientY: e.clientY };
       clearTimeout(restT);
       // playing, the picture changes under the pointer: outline only once it rests
-      if (state.playing && mosaicId) restT = setTimeout(outlineHere, 250);
+      if (state.playing && mosaicId) { rested = false; restT = setTimeout(outlineHere, 250); }
       else outlineHere();
     });
     well.addEventListener("pointerleave", () => { pointer = null; clearTimeout(restT); draw(null); });
     // a new picture of the mosaic (another tile came): the outline under the pointer is drawn again on it
-    const redraw = () => (pointer && mosaicId ? draw(hitAt(pointer)) : draw(null));
-    shot.addEventListener("load", () => { if (pointer && mosaicId) draw(hitAt(pointer)); });
+    const redraw = () => (pointer && mosaicId ? (rested && draw(hitAt(pointer))) : draw(null));
+    shot.addEventListener("load", () => { if (pointer && mosaicId && rested) draw(hitAt(pointer)); });
     function openPointing(q, m = tmap && (tmap.data || tmap.prev), own = S.get("cameras.pointingLook") === "own") {
       const fs = drawnFs(m, q), ids = fs.map(f => idOf(q, f));
       const base = hold ? hold.levels.slice() : [{ kind: "mosaic", live: true, mid: mosaicId, label: `Mosaic · ${m.observation}`, src: shot.dataset.src,
@@ -2280,7 +2281,7 @@ body.idle .win.full .titlebar { opacity: 0; }
     }
     window.addEventListener("keydown", e => {
       if (pointingKeys !== feedApi || e.metaKey || e.ctrlKey || e.altKey || e.shiftKey || !/^(Arrow(Left|Right|Up|Down)|Enter)$/.test(e.key)) return;
-      if (e.target !== document.body && !well.contains(e.target)) return;
+      if (e.target !== document.body && !win.contains(e.target) || /^(INPUT|SELECT|TEXTAREA)$/.test(e.target.tagName)) return;
       if (document.querySelector(".menu.open") || !(hold ? top().pointing : hot && mosaicId)) return;
       if (arrowKey(e)) { e.preventDefault(); e.stopImmediatePropagation(); }
     }, true);
@@ -2335,6 +2336,8 @@ body.idle .win.full .titlebar { opacity: 0; }
         if (t.kind === "composite" && t.s) channelsFrom(im, t.s);
         saving();
       };
+      // a frame the server cannot draw as in the mosaic: on its own instead, and the switch says so
+      im.onerror = () => { if (hold && top() === t && t.pointing && !t.own && t.ownUrl) { lookOf(t, true); showLevel(); } };
       im.src = url;
     }
     function release() {

@@ -2419,11 +2419,13 @@ def pointing_picture(frame_id, n, cache, size="full", fmt="webp", slots=None, ch
     else:
         # the gray the mosaic draws at a place its colour set does not cover: the luminance base's newest tile there
         # (so_far draws the base when lum_base says so), else the filter drawn
+        mine = []
         if lum_base(u, p, tiles, used):
             frames, f = lum_frames(u, p), LUM
             mine = [by_id[v] for v in list(q["ids"].values()) + list(q.get("luminance", {}).values()) if v in by_id]
             mine = sorted((t for t in mine if t["n"] in frames), key=lambda t: t["n"])
-        else:
+        if not mine:
+            # no base, or a place whose frames the base leaves to the grey filter's nearby: its own drawn filter, gray
             f, mine = None, [by_id[q["ids"][g]] for g in used if g in q["ids"]]
         if not mine:
             return None
