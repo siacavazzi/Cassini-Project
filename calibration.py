@@ -906,8 +906,8 @@ def _balanced_scale(iofs, sky_fraction=0.1, sky_percentile=98, sky=None):
     measured = bool(sky.mean() > sky_fraction)
     levels, margin = [0.0] * len(iofs), 0.0
     if measured:
-        levels, margin = sky_levels([[iof] for iof in iofs], [[sky]] * len(iofs))
-        margin = max(margin, noise_floor([iof[sky] for iof in iofs], sky_percentile))
+        # the noise floor (noise_floor) taken with the sky levels, on the same sky pixels and medians
+        levels, margin = sky_levels([[iof] for iof in iofs], [[sky]] * len(iofs), floor_pct=sky_percentile)
     blacks = [level + margin for level in levels]
     # One white for all channels: the WHITE_PCT percentile of the brightest channel over the lit pixels (the
     # body, not the sky), so a few bright limb or ring pixels don't leave the body dim and gray; the shoulder
@@ -935,17 +935,23 @@ def sky_blacks(images, masks):
 
 
 """
-sky_blacks' parts: (the sky level per channel, the margin)
+sky_blacks' parts: (the sky level per channel, the margin). floor_pct: the margin no less than the skies' noise floor
+at that percentile (noise_floor), from the same sky pixels and medians
 """
-def sky_levels(images, masks):
-    levels, noises = [], []
+def sky_levels(images, masks, floor_pct=None):
+    levels, noises, floors = [], [], []
     for ims, ms in zip(images, masks):
         sky = np.concatenate([im[m] for im, m in zip(ims, ms)])
         steps = np.concatenate([np.abs(np.diff(im, axis=1))[m[:, 1:] & m[:, :-1]] for im, m in zip(ims, ms)])
         noise = 1.4826 * float(np.median(steps)) / math.sqrt(2) if steps.size else 0.0
-        levels.append(min(float(np.median(sky)), float(np.percentile(sky, 20)) + 0.84 * noise))
+        median = np.median(sky)
+        levels.append(min(float(median), float(np.percentile(sky, 20)) + 0.84 * noise))
         noises.append(noise)
+        if floor_pct is not None:
+            floors.append(float(np.percentile(sky, floor_pct) - median))
     margin = NOISE_MARGIN * math.sqrt(sum(n * n for n in noises) / len(noises))
+    if floor_pct is not None:
+        margin = max(margin, max(floors))
     return levels, margin
 
 
