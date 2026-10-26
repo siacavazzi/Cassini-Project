@@ -958,6 +958,22 @@ body.phone #segbar { left: 8px !important; right: 8px; width: auto; }
 body.phone #segbar button { padding: 6px 11px; }
 body.phone #segfps { flex: 1; }
 
+#loupe { position: fixed; left: 0; top: 0; z-index: 3000; pointer-events: none; display: none; border-radius: 10px; overflow: hidden;
+  background: #000; border: 1px solid rgba(255,255,255,.22); box-shadow: 0 10px 34px rgba(0,0,0,.6), 0 0 0 1px rgba(0,0,0,.5);
+  opacity: 0; transition: opacity .14s ease; }
+#loupe.on { display: block; }
+#loupe.shown { opacity: 1; }
+#loupe.round { border-radius: 50%; }
+#loupe canvas { display: block; width: 100%; height: 100%; }
+#loupe .lzx { position: absolute; left: 50%; top: 50%; width: 15px; height: 15px; margin: -8px 0 0 -8px; opacity: .55; }
+#loupe .lzx::before, #loupe .lzx::after { content: ""; position: absolute; background: rgba(255,255,255,.9); box-shadow: 0 0 2px #000; }
+#loupe .lzx::before { left: 7px; top: 0; width: 1px; height: 15px; }
+#loupe .lzx::after { top: 7px; left: 0; height: 1px; width: 15px; }
+#loupe .lzt { position: absolute; left: 7px; bottom: 6px; font: 9.5px/1 var(--ui); color: rgba(232,236,242,.8); text-shadow: 0 0 3px #000, 0 0 6px #000;
+  font-variant-numeric: tabular-nums; letter-spacing: .02em; }
+#loupe.round .lzt { left: 50%; transform: translateX(-50%); bottom: 12px; white-space: nowrap; }
+.well .shot, img[data-loupe] { -webkit-touch-callout: none; }
+
 #bodymenu { top: calc(env(safe-area-inset-top, 0px) + 36px); right: max(14px, env(safe-area-inset-right, 0px)); width: 340px; height: min(360px, calc(100% - 330px)); min-height: 220px; display: flex; flex-direction: column; }
 #bodymenu.zoomed { width: 440px; height: calc(100% - 290px); }
 #bodymenu.shaded { height: auto; min-height: 0; }
@@ -1466,6 +1482,8 @@ body.phone #launch .lx-clock { font-size: 9.5px; bottom: 9vh; }
   </div>
   <div id="seghint" role="status" aria-live="polite" hidden><span>Movie mode is waiting for pictures to be made. Highlight a stretch of the timeline and pre-process it to watch it smoothly.</span><button id="seghintgo">Highlight what’s next</button><button class="x" id="seghintx" aria-label="Dismiss">×</button></div>
 </aside>
+
+  <div id="loupe" aria-hidden="true"><canvas></canvas><span class="lzx"></span><span class="lzt"></span></div>
 
   <section class="win" id="bodymenu" data-name="Body view" aria-label="Body view" hidden>
   <div class="titlebar"><span class="lights"><button class="close" aria-label="Back to Cassini" title="Back to Cassini's mission">×</button><button class="min" aria-label="Minimize">–</button><button class="zoom" aria-label="Zoom">+</button></span><span id="bmtitle">Body</span></div>
@@ -5532,6 +5550,194 @@ body.phone #launch .lx-clock { font-size: 9.5px; bottom: 9vh; }
     EX.mark(state.et, catalog.sorted[j] + 1);
   });
   window.cassiniSegment = { prep, play, stop, hide, get state() { return P; } };
+})();
+</script>
+<script>
+// ---------- the zoom lens ----------
+(function () {
+  const S = window.cassiniSettings, lens = document.getElementById("loupe");
+  if (!lens) return;
+  const cv = lens.querySelector("canvas"), ctx = cv.getContext("2d"), tag = lens.querySelector(".lzt");
+  if (S) {
+    S.define({ key: "loupe.on", section: "Zoom lens", label: "Zoom lens", type: "toggle", value: true,
+      hint: "Rest the pointer on a picture for a moment and a lens shows the area under it magnified, from the picture's full resolution version. It follows the pointer; the scroll wheel over it changes the magnification. On a phone, press and hold on a picture." });
+    S.define({ key: "loupe.zoom", section: "Zoom lens", label: "Magnification", type: "range", value: 3, min: 1.5, max: 12, step: 0.5, format: v => `${v}×`,
+      hint: "How much bigger the lens shows the picture than the window does." });
+    S.define({ key: "loupe.size", section: "Zoom lens", label: "Lens size", type: "range", value: 240, min: 120, max: 480, step: 20, unit: "px",
+      hint: "How wide the lens is on the screen (on a phone, at most two thirds of the screen)." });
+    S.define({ key: "loupe.delay", section: "Zoom lens", label: "Open after", type: "range", value: 0.6, min: 0, max: 3, step: 0.1, unit: "s",
+      hint: "How long the pointer rests on a picture before the lens comes up." });
+    S.define({ key: "loupe.shape", section: "Zoom lens", label: "Lens shape", type: "choice", value: "square",
+      options: [["square", "Rounded square"], ["round", "Round"]], hint: "The lens's outline." });
+    S.define({ key: "loupe.where", section: "Zoom lens", label: "Lens position", type: "choice", value: "on",
+      options: [["on", "On the pointer"], ["beside", "Beside the pointer"]],
+      hint: "On the pointer, the lens is centered where the pointer is; beside it, the lens sits up and to the right, so the picture under the pointer stays in sight. On a phone it always sits above the finger." });
+  }
+  const opt = (k, d) => (S && S.get(k) !== undefined ? S.get(k) : d);
+  const HOLD = 450, MOVE = 10;   // a press and hold on a phone: how long, and how far the finger may wander
+
+  // the picture under a point: a window's picture once one is up, or an image marked data-loupe
+  const pictureAt = el => {
+    if (!el || !el.closest || el.closest("button, a, input, select, .savewrap, .tiletip")) return null;
+    const img = el && el.closest && (el.closest("img[data-loupe]") || (el.closest(".well") && el.closest(".well").querySelector(".shot")));
+    if (!img || !img.naturalWidth) return null;
+    const well = img.closest(".well");
+    if (well && !well.classList.contains("has-frame")) return null;
+    return img;
+  };
+  // where the picture is drawn inside its element (object-fit: contain, as the windows show it; else filling it)
+  function box(img) {
+    const r = img.getBoundingClientRect(), nw = img.naturalWidth, nh = img.naturalHeight;
+    if (!nw || !r.width) return null;
+    const fit = getComputedStyle(img).objectFit;
+    if (fit !== "contain") return { x: r.left, y: r.top, w: r.width, h: r.height };
+    const s = Math.min(r.width / nw, r.height / nh), w = nw * s, h = nh * s;
+    return { x: r.left + (r.width - w) / 2, y: r.top + (r.height - h) / 2, w, h };
+  }
+  // the full resolution version of what an image shows: the frame server's size=full of the same picture
+  function fullUrl(img) {
+    if (img.dataset.loupe) return img.dataset.loupe;
+    const src = img.dataset.src || img.currentSrc || img.src;
+    if (!src || /^(data|blob):/.test(src)) return null;
+    if (!/\/frames\//.test(src)) return null;
+    return /size=/.test(src) ? src.replace(/size=[^&]*/, "size=full") : src + (src.includes("?") ? "&" : "?") + "size=full";
+  }
+  const fulls = new Map();   // url -> Image (a few, newest last)
+  function fullFor(url) {
+    let im = fulls.get(url);
+    if (im) { fulls.delete(url); fulls.set(url, im); return im; }
+    im = new Image(); im.crossOrigin = "anonymous"; im.decoding = "async";
+    im.onload = () => { if (cur && cur.url === url) paint(); };
+    im.onerror = () => { im.failed = true; if (cur && cur.url === url) paint(); };
+    im.src = url; fulls.set(url, im);
+    while (fulls.size > 6) fulls.delete(fulls.keys().next().value);
+    return im;
+  }
+
+  // cur: the lens up now ({ img, x, y, touch, url, src }); arm: waiting out the delay
+  let cur = null, arm = null, fullT = 0;
+  const phone = () => document.body.classList.contains("phone");
+  function open(img, x, y, touch) {
+    cur = { img, x, y, touch, url: null, srcSeen: null };
+    lens.classList.add("on"); lens.classList.toggle("round", opt("loupe.shape", "square") === "round");
+    requestAnimationFrame(() => lens.classList.add("shown"));
+    paint();
+  }
+  function close() {
+    clearTimeout(arm && arm.t); arm = null; clearTimeout(fullT);
+    if (!cur) return;
+    cur = null; lens.classList.remove("shown", "on");
+  }
+  // the picture changed under the lens (the clock runs on, a mosaic gains a tile): its full version is asked for
+  // once it has stayed up a quarter of a second, so playing never asks for every picture going by
+  function source() {
+    const img = cur.img, src = img.dataset.src || img.currentSrc || img.src;
+    if (src !== cur.srcSeen) {
+      cur.srcSeen = src; cur.url = null; clearTimeout(fullT);
+      const u = fullUrl(img);
+      if (u && u !== src) {
+        if (fulls.has(u)) cur.url = u;
+        else fullT = setTimeout(() => { if (cur && cur.srcSeen === src) { cur.url = u; fullFor(u); paint(); } }, 250);
+      }
+    }
+    const f = cur.url && fullFor(cur.url);
+    return f && f.complete && f.naturalWidth && !f.failed ? { im: f, full: true } : { im: img, full: /size=full/.test(src || ""), loading: !!cur.url && !(f && f.failed) };
+  }
+  function paint() {
+    if (!cur) return;
+    const img = cur.img;
+    if (!img.isConnected || !img.naturalWidth) return close();
+    const b = box(img);
+    if (!b) return close();
+    const dpr = window.devicePixelRatio || 1, vw = innerWidth, vh = innerHeight;
+    let L = opt("loupe.size", 240);
+    if (cur.touch || phone()) L = Math.min(L, Math.round(Math.min(vw, vh) * 0.66));
+    const z = opt("loupe.zoom", 3);
+    // where the lens goes: on the pointer, beside it, or (a finger) above it, kept on the screen
+    let lx, ly;
+    if (cur.touch) { lx = cur.x - L / 2; ly = cur.y - L - 36; if (ly < 4) ly = cur.y + 48; }
+    else if (opt("loupe.where", "on") === "beside") { lx = cur.x + 26; ly = cur.y - L - 26; if (lx + L > vw - 4) lx = cur.x - L - 26; if (ly < 4) ly = cur.y + 26; }
+    else { lx = cur.x - L / 2; ly = cur.y - L / 2; }
+    lx = Math.max(4, Math.min(vw - L - 4, lx)); ly = Math.max(4, Math.min(vh - L - 4, ly));
+    Object.assign(lens.style, { width: L + "px", height: L + "px", transform: `translate(${Math.round(lx)}px, ${Math.round(ly)}px)` });
+    const W = Math.round(L * dpr);
+    if (cv.width !== W) cv.width = cv.height = W;
+    const { im, full, loading } = source();
+    const sw = im.naturalWidth, sh = im.naturalHeight;
+    // the point under the pointer as a fraction of the picture, and the lens's span of the source in its pixels
+    const u = (cur.x - b.x) / b.w, v = (cur.y - b.y) / b.h;
+    const spanX = (L / z) * (sw / b.w), spanY = (L / z) * (sh / b.h), sx = u * sw - spanX / 2, sy = v * sh - spanY / 2;
+    const fx = W / spanX, fy = W / spanY;
+    ctx.fillStyle = "#000"; ctx.fillRect(0, 0, W, W);
+    // past two screen pixels to a source pixel, the pixels are drawn as pixels, not smoothed into a blur
+    ctx.imageSmoothingEnabled = fx < 2 * dpr; ctx.imageSmoothingQuality = "high";
+    // only the part of the source inside the picture (a source rectangle off its edge draws nothing in some browsers)
+    const x0 = Math.max(0, sx), y0 = Math.max(0, sy), x1 = Math.min(sw, sx + spanX), y1 = Math.min(sh, sy + spanY);
+    if (x1 > x0 && y1 > y0) ctx.drawImage(im, x0, y0, x1 - x0, y1 - y0, (x0 - sx) * fx, (y0 - sy) * fy, (x1 - x0) * fx, (y1 - y0) * fy);
+    tag.textContent = `${z}×` + (full ? ` · full resolution ${sw} × ${sh}` : loading ? " · loading full resolution…" : "");
+  }
+  // the picture under the lens can change on its own: drawn again on each new picture
+  document.addEventListener("load", e => { if (cur && e.target === cur.img) paint(); }, true);
+
+  // the mouse (and a pen): rest on a picture, then the lens follows
+  document.addEventListener("pointermove", e => {
+    if (e.pointerType === "touch") return;
+    if (!opt("loupe.on", true) || e.buttons) { if (cur || arm) close(); return; }
+    const img = pictureAt(document.elementFromPoint(e.clientX, e.clientY));
+    const b = img && box(img), over = b && e.clientX >= b.x && e.clientX <= b.x + b.w && e.clientY >= b.y && e.clientY <= b.y + b.h;
+    if (!over) { if (cur || arm) close(); return; }
+    if (cur) {
+      if (cur.img !== img) { close(); } else { cur.x = e.clientX; cur.y = e.clientY; return paint(); }
+    }
+    // resting: the delay starts again when the pointer moves on by more than a few pixels
+    if (arm && arm.img === img && Math.hypot(e.clientX - arm.x0, e.clientY - arm.y0) < 8) { arm.x = e.clientX; arm.y = e.clientY; return; }
+    clearTimeout(arm && arm.t);
+    arm = { img, x0: e.clientX, y0: e.clientY, x: e.clientX, y: e.clientY };
+    arm.t = setTimeout(() => { const a = arm; arm = null; if (a) open(a.img, a.x, a.y, false); }, opt("loupe.delay", 0.6) * 1000);
+  }, { passive: true });
+  // a press (a click, a drag, a double-click into full view) puts the lens away; resting again brings it back
+  document.addEventListener("pointerdown", e => { if (e.pointerType !== "touch") close(); }, true);
+  document.addEventListener("pointerleave", close);
+  window.addEventListener("blur", close);
+  document.addEventListener("keydown", e => { if (e.key === "Escape" && cur) close(); }, true);
+  // the scroll wheel over the lens changes its magnification
+  window.addEventListener("wheel", e => {
+    if (!cur || cur.touch || !S) return;
+    e.preventDefault(); e.stopPropagation();
+    const z = opt("loupe.zoom", 3), step = z >= 4 ? 1 : 0.5;
+    S.set("loupe.zoom", Math.max(1.5, Math.min(12, Math.round((z + (e.deltaY < 0 ? step : -step)) * 2) / 2)));
+  }, { passive: false, capture: true });
+  if (S) for (const k of ["loupe.zoom", "loupe.size", "loupe.shape", "loupe.where"]) S.on(k, () => { if (cur) { lens.classList.toggle("round", opt("loupe.shape", "square") === "round"); paint(); } });
+  if (S) S.on("loupe.on", v => { if (!v) close(); });
+
+  // a finger: press and hold on a picture, the lens comes up above it and follows it until it lifts. The tap that
+  // would have followed (opening full view, opening a mosaic's frame) does not happen.
+  let press = null, swallow = false;
+  document.addEventListener("pointerdown", e => {
+    if (e.pointerType !== "touch" || !opt("loupe.on", true)) return;
+    const img = pictureAt(e.target), b = img && box(img);
+    if (!b || e.clientX < b.x || e.clientX > b.x + b.w || e.clientY < b.y || e.clientY > b.y + b.h) return;
+    press = { id: e.pointerId, img, x0: e.clientX, y0: e.clientY };
+    press.t = setTimeout(() => { if (press) { open(press.img, press.x0, press.y0, true); swallow = true; } }, HOLD);
+  }, true);
+  document.addEventListener("pointermove", e => {
+    if (!press || e.pointerId !== press.id) return;
+    if (cur && cur.touch) { cur.x = e.clientX; cur.y = e.clientY; const b = box(cur.img);
+      if (b) { cur.x = Math.max(b.x, Math.min(b.x + b.w, cur.x)); cur.y = Math.max(b.y, Math.min(b.y + b.h, cur.y)); } paint(); return; }
+    if (Math.hypot(e.clientX - press.x0, e.clientY - press.y0) > MOVE) { clearTimeout(press.t); press = null; }
+  }, true);
+  const lift = e => {
+    if (!press || e.pointerId !== press.id) return;
+    clearTimeout(press.t); press = null;
+    if (cur && cur.touch) { close(); setTimeout(() => { swallow = false; }, 400); }
+  };
+  document.addEventListener("pointerup", lift, true);
+  document.addEventListener("pointercancel", lift, true);
+  // while the lens is up, the finger moves the lens, not the page or a window
+  document.addEventListener("touchmove", e => { if (cur && cur.touch) e.preventDefault(); }, { passive: false, capture: true });
+  for (const t of ["click", "dblclick", "contextmenu"]) document.addEventListener(t, e => { if (swallow || (cur && cur.touch)) { e.preventDefault(); e.stopPropagation(); } }, true);
+
+  window.cassiniLoupe = { open: (img, x, y) => open(img, x, y, false), close, isOpen: () => !!cur };
 })();
 </script>
 <script>
