@@ -161,4 +161,28 @@ with tempfile.TemporaryDirectory() as d:
         assert all(set_table[n][1] == [ids[q] for q in s["use"]] for n, s in enumerate(sets))
         print(f"{len(pass_table)} passes: every frame in its own, repeat exposures too")
 print("reel's sets, prebuild's and the movies' are the rule's")
+
+# a feature track (the camera follows a cloud: each filter of a pointing lands 80-700 px from the one before) plays as
+# a movie; a colour mosaic (filters of a pointing on one another, a frame's step between pointings), a raster that
+# steps a pointing every frame through its filters, and a stare cycling filters stay what they were
+if om:
+    def judged(points, filters, dt=30):
+        fr = [("", f"N{1700000000 + i}_1", filters[i % len(filters)], 1000.0 + dt * i, 600, -x, -y, 1e6) for i, (x, y) in enumerate(points)]
+        u = {"key": ("SATURN", "OBS", "N", 0), "frames": fr, "taken": [(f, x, y, z) for _, _, f, _, _, x, y, z in fr], "z": 1e6}
+        om._judge(u)
+        return u
+    ten = ["CL1/CL2", "RED", "GRN", "BL1", "MT1", "CB1", "MT2", "CB2", "MT3", "CB3"]
+    track = [(40 * i + 300 * (i // 10), 15 * i) for i in range(60)]   # 40 px between filters, a new pointing each lap
+    t = judged(track, ten)
+    assert t["track"] and t["kind"] == "movie", (t["kind"], t["track"])
+    grid = [(900 * (j % 3), 900 * (j // 3)) for j in range(9) for _ in range(3)]
+    m = judged(grid, ["RED", "GRN", "BL1"])
+    assert not m["track"] and m["kind"] == "mosaic", (m["kind"], m["track"])
+    raster = [(900 * (j % 4), 900 * (j // 4)) for j in range(16)]   # one filter per pointing, filters cycling
+    r = judged(raster, ["MT1", "CB1", "MT2", "CB2"])
+    assert not r["track"] and r["kind"] == "mosaic", (r["kind"], r["track"])
+    stare = [(3 * i, 2 * i) for i in range(30)]
+    st = judged(stare, ["RED", "GRN", "BL1"])
+    assert not st["track"] and st["kind"] == "movie", (st["kind"], st["track"])
+    print("track: movie; colour mosaic, filter raster: mosaic; stare: movie")
 print("ok")

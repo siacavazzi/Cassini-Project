@@ -19,7 +19,7 @@ the repeat exposures units leaves out of a pass's tiles too.
 
   CASSINI_GEOMETRY_CACHE=... python web/frames/sets_passes.py [--moved OUT.json]
   (counts the sets and passes; --moved lists what moved from the rules each piece of code used before, for a
-  targeted remake of the pictures made from them)
+  targeted remake of the pictures made from them: reel sets, movies' colour sets, passes now played as tracks)
 """
 import os
 import sys
@@ -188,6 +188,30 @@ def main():
                 changed.append({"key": list(p["key"]), "first": ids[p["rows"][0]], "last": ids[p["rows"][1]], "frames": p["frames"]})
         moved["movie_passes"] = changed
         print(f"movie passes whose colour sets changed: {len(changed)}", flush=True)
+        # tracks (obs_mosaic._judge): passes following a moving feature play as movies; what they were before
+        tracks, keep = [], obs_mosaic.TRACK_PAIRS
+        for p in passes:
+            u = next(v for v in obs_mosaic.units(*p["key"][:3]) if v["key"] == p["key"])
+            if not u.get("track"):
+                continue
+            old = dict(u)
+            obs_mosaic.TRACK_PAIRS = 10 ** 9
+            try:
+                obs_mosaic._judge(old)
+            finally:
+                obs_mosaic.TRACK_PAIRS = keep
+            tracks.append({"key": list(p["key"]), "was": old["kind"], "first": ids[p["rows"][0]], "last": ids[p["rows"][1]], "frames": p["frames"]})
+        moved["track_passes"] = tracks
+        was = {}
+        for x in tracks:
+            was[x["was"]] = was.get(x["was"], 0) + 1
+        print(f"passes now played as tracks (movies): {len(tracks)}, before {was}", flush=True)
+        # the passes pass_benchmarks.json names: what Auto calls them now against what they should be
+        bench = json.load(open(os.path.join(os.path.dirname(os.path.abspath(__file__)), "pass_benchmarks.json")))["passes"]
+        for b in bench:
+            us = obs_mosaic.units(b["target"], b["obs"], b["cam"])
+            print(f"benchmark {b['obs']} {b['cam']}: expect {b['expect']}, now {[v['kind'] for v in us]}"
+                  f"{' (track)' if any(v.get('track') for v in us) else ''}", flush=True)
     if args.moved:
         json.dump(moved, open(args.moved, "w"), indent=1)
 

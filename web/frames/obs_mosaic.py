@@ -84,6 +84,8 @@ LAP_GAP = 7200       # a mosaic taken again over the same ground within this man
 LAP_OVERLAP = 0.6    # ... when the two footprints share at least this much (area both cover / either covers)
 MOVIE_LAPS = 2       # a mosaic whose places are taken again (median, per filter) this many times is a mosaic movie
 MOVIE_DWELL = 8      # ... or whose camera stays this many frames of one filter (median) at each place it goes
+TRACK_PAIRS = 8      # ... or that follows a moving feature (_judge's track): at least this many filter changes measured,
+TRACK_STEP = 0.75    # ... and their median move under this much of a frame (a raster stepping a pointing a frame steps more)
 RADIUS = {"SATURN": 60268, "JUPITER": 69911, "TITAN": 2575, "RHEA": 764, "IAPETUS": 735, "DIONE": 561,
           "TETHYS": 531, "ENCELADUS": 252, "MIMAS": 198, "HYPERION": 135, "PHOEBE": 107}
 IFOV = {"N": 6.0e-6, "W": 60e-6}   # radians per full resolution pixel
@@ -230,7 +232,8 @@ def repeat_window(u):
 def _judge(u):
     """Sets u["movie"] (the camera creeps or stares), u["jump_frac"], u["dwell"], u["mosaic"] (enough places,
     footprint not too big, not a movie), u["whole"] (the body's disk inside it), u["place"], u["repeats"] and
-    u["kind"]: "movie", "mosaic", "mosaic_movie" (a mosaic whose places are taken lap after lap) or None."""
+    u["kind"]: "movie", "mosaic", "mosaic_movie" (a mosaic whose places are taken lap after lap) or None, and
+    u["track"] (the camera follows a moving feature: a movie)."""
     pts = [(-x * z / u["z"], -y * z / u["z"]) for _, _, _, _, _, x, y, z in u["frames"] if z]
     # the steps between consecutive frames of one filter, in frames: a mosaic jumps, a movie creeps
     last, steps = {}, []
@@ -269,7 +272,24 @@ def _judge(u):
             last[f] = [p, 1]
     runs += [n for _, n in last.values()]
     u["dwell"] = float(np.median(runs)) if runs else None
-    u["movie"] = u["jump_frac"] is not None and (u["jump_frac"] < MOVIE_JUMPS or (u["dwell"] or 0) >= MOVIE_DWELL)
+    # track: the camera follows something that moves across the body (a cloud feature, FEATRAK), so the filters of
+    # one pointing land apart (80-700 px in ISS_191SA_FEATRAK001) instead of on one another; drawn as a mosaic they make
+    # narrow colour strips and doubled limbs, so it plays as a movie. Measured over consecutive frames of different
+    # filters taken within REGISTER_GAP, in a pass that comes back to its filters: in a mosaic most of them share a
+    # pointing (within REGISTER_MAX, what registration believes of SPICE) and only the step to the next pointing moves,
+    # so their lower quartile stays put; in a track nearly every one has moved. A raster that steps a pointing every
+    # frame steps most of a frame (its median at least TRACK_STEP), a track drifts less.
+    prev, cross = None, []
+    for _, _, f, t, _, x, y, z in u["frames"]:
+        if not z:
+            continue
+        p = (-x * z / u["z"], -y * z / u["z"])
+        if prev and prev[0] != f and t - prev[1] <= REGISTER_GAP:
+            cross.append(math.hypot(p[0] - prev[2][0], p[1] - prev[2][1]) / FRAME)
+        prev = (f, t, p)
+    u["track"] = bool(last and len(last) >= 2 and steps and len(cross) >= TRACK_PAIRS
+                      and np.percentile(cross, 25) > REGISTER_MAX and np.median(cross) < TRACK_STEP)
+    u["movie"] = u["jump_frac"] is not None and (u["jump_frac"] < MOVIE_JUMPS or (u["dwell"] or 0) >= MOVIE_DWELL or u["track"])
     places = []
     for p in pts:
         if all(max(abs(p[0] - q[0]), abs(p[1] - q[1])) >= mosaic.min_step * FRAME for q in places):
