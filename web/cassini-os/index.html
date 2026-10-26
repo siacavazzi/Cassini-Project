@@ -7753,6 +7753,7 @@ function frame(now) {
     // sparks are kept in scene axes about the craft (so they stream behind it however it turns) and turned into its
     // frame when drawn
     const qW = new THREE.Quaternion(), qInv = new THREE.Quaternion(), sW = new THREE.Vector3(), dir = new THREE.Vector3(), dirL = new THREE.Vector3();
+    const negY = new THREE.Vector3(0, -1, 0), flipX = new THREE.Quaternion().setFromAxisAngle(new THREE.Vector3(1, 0, 0), Math.PI);
     const side = new THREE.Vector3(), up = new THREE.Vector3(), Y = new THREE.Vector3(0, 1, 0), tmp = new THREE.Vector3(), pW = new THREE.Vector3();
     const E = { level: 0, time: 0, root };
     const toLocal = v => v.applyQuaternion(qInv);
@@ -7766,7 +7767,11 @@ function frame(now) {
       qInv.copy(qW).invert();
       dir.copy(motion).normalize(); dirL.copy(dir).applyQuaternion(qInv);
       // the shells along the flow, the wake longer and the whole glow stronger as the heating grows
-      shells.quaternion.setFromUnitVectors(Y, dirL);
+      // (turned from straight back when the flow is nearer that way: setFromUnitVectors picks its turning axis afresh
+      // every frame for nearly opposite directions, which is always the case for a probe flying shield first, and the
+      // glow flashed in and out)
+      if (dirL.y >= 0) shells.quaternion.setFromUnitVectors(Y, dirL);
+      else shells.quaternion.setFromUnitVectors(negY, dirL).multiply(flipX);
       const flick = 0.93 + 0.07 * Math.sin(E.time * 37) * Math.sin(E.time * 23.7);
       // the shock layer's own temperature reads white-hot well before the skin glows
       const shockT = 3200 + 9000 * h;
