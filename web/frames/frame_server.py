@@ -500,7 +500,9 @@ def processed_webp(frame_id, size, cache, fmt="webp", centre=None):
     report = {}
     def make():
         with _movie_slots:
-            im, made = composite([frame_id], centre=centre)
+            # kept for its other sizes, as a composite is (the segment pre-render asks for 512, then 1024): one frame
+            # made once, not once a size
+            im, made = _recent_composite([frame_id], centre)
         report.update(made)
         cached(base + ".json", lambda: json.dumps(made).encode())
         reel.keep_report(base + ".json", made)
