@@ -125,6 +125,7 @@ import reel  # noqa: E402
 import obs_mosaic  # noqa: E402
 import export  # noqa: E402
 import usage  # noqa: E402
+counts = None   # the usage counts (usage.Usage), set by main(); None counts nothing
 
 FRAME_ID = re.compile(r"^([NW])\d{10}_\d+$")
 SIZES = (128, 256, 384, 512, 768, 1024)
@@ -592,10 +593,6 @@ def gzipped(path, st):
                 del _gzipped[next(iter(_gzipped))]
             _gzipped[key] = data
     return data
-
-
-# the usage counts (usage.Usage), set by main(); None counts nothing
-counts = None
 
 
 class Server(ThreadingHTTPServer):
