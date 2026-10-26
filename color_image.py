@@ -177,12 +177,13 @@ def load_aligned(paths, hdr=False, scale=None, repeat_window=120):
     imgs = [ic.fill_invalid(img, mask) for img, mask in zip(imgs, masks)]
     iofs = [None if iof is None else ic.fill_invalid(iof, mask) for iof, mask in zip(iofs, masks)]
     dropped = []
-    if calibrate and len(lbls) > 2:
+    if calibrate and len(lbls) > 1:
+        # each frame calibrated once, here, for the display models below to share
+        iofs = cal.calibrated_each(lbls, imgs, iofs)
+        keep = [j for j, iof in enumerate(iofs) if iof is not None]
         # a channel that can't be calibrated (an 8LSB frame: only its low 8 bits were sent) is left out
         # when two others calibrate, so the set is a calibrated two-filter picture instead of every
         # channel falling back to its own stretch (Phoebe day, 2004-06-11: every NAC BL1 frame is 8LSB)
-        iofs = cal.calibrated_each(lbls, imgs, iofs)
-        keep = [j for j, iof in enumerate(iofs) if iof is not None]
         if 2 <= len(keep) < len(lbls):
             dropped = [os.path.basename(paths[j]).split(".")[0] for j in range(len(lbls)) if j not in keep]
             print(f"Can't calibrate {dropped}, making a two-filter picture of the others")
