@@ -855,9 +855,7 @@ iofs = the picture's channels, float32 I/F
 """
 def picture_scale(iofs, sky_fraction=0.1, sky_percentile=98):
     # Sky is where every channel is dark; without enough sky the black point stays at zero.
-    sky = np.ones(iofs[0].shape, dtype=bool)
-    for iof in iofs:
-        sky &= iof < 0.05 * np.percentile(iof, 99.9)
+    sky = _sky(iofs)
     blacks = [0.0] * len(iofs)
     measured = bool(sky.mean() > sky_fraction)
     if look() == "classic":
@@ -870,7 +868,8 @@ def picture_scale(iofs, sky_fraction=0.1, sky_percentile=98):
         # 3x3 median so a single cosmic ray hit or hot pixel can't set it
         white = max(cv2.medianBlur(iof - black, 3).max() for iof, black in zip(iofs, blacks))
         return blacks, white, measured
-    levels, margin, white, measured = _balanced_scale(iofs, sky_fraction, sky_percentile)
+    # the sky just measured, not measured again (a percentile of every pixel of each channel)
+    levels, margin, white, measured = _balanced_scale(iofs, sky_fraction, sky_percentile, sky=sky)
     return [level + margin for level in levels], white, measured
 
 
