@@ -5392,7 +5392,7 @@ const MAJOR = ["MIMAS", "ENCELADUS", "TETHYS", "DIONE", "RHEA", "TITAN", "HYPERI
 // the cruise to Saturn: two Venus flybys, Earth and the Moon, Jupiter and its four large moons
 const PLANETS = ["VENUS", "EARTH", "JUPITER", "SATURN"];
 const GALILEAN = ["IO", "EUROPA", "GANYMEDE", "CALLISTO"];
-const PARENT = { MOON: "EARTH", IO: "JUPITER", EUROPA: "JUPITER", GANYMEDE: "JUPITER", CALLISTO: "JUPITER" };
+const PARENT = { MOON: "EARTH", IO: "JUPITER", EUROPA: "JUPITER", GANYMEDE: "JUPITER", CALLISTO: "JUPITER", HIMALIA: "JUPITER" };
 const parentOf = n => PARENT[n] || (PLANETS.includes(n) ? "SUN" : "SATURN");
 const MOONS_OF = { SATURN: MAJOR, JUPITER: GALILEAN, EARTH: ["MOON"], VENUS: [] };
 const GM = { SUN: 1.32712440018e11, SATURN: 37931207.7, JUPITER: 126686534.9, EARTH: 398600.4 };   // km^3/s^2
@@ -5687,8 +5687,10 @@ function makeSaturn(radii) {
   return { group: g, ring: rmat, radius: radii[0] };
 }
 
+// the moons Cassini only saw from afar: the irregular moons and Himalia are dark captured bodies, Anthe and Aegaeon icy
+const FAR_LOOK = n => ["ANTHE", "AEGAEON"].includes(n) ? [0.86, 0.85, 0.83] : [0.30, 0.28, 0.26];
 function makeMoon(name, b) {
-  const look = MOON_LOOK[name] || [0.7, 0.68, 0.65];
+  const look = MOON_LOOK[name] || (b.naif === 506 || (b.naif >= 619 && b.naif <= 653) ? FAR_LOOK(name) : [0.7, 0.68, 0.65]);
   // kind 4: a small moon, shown plain (its shape model carries its relief; no painted craters)
   const kind = name === "IAPETUS" ? 1 : name === "TITAN" ? 2 : SMOOTH.includes(name) ? 3 : TEX_FILES[name] ? 0 : 4;
   const mat = new THREE.ShaderMaterial({
@@ -6788,7 +6790,7 @@ function setFocus(name, dist) {
   if (!pos[name] || (name !== "HUYGENS" && !present(name))) return;
   if (name !== "CASSINI" && state.follow) setFollow(false);
   const old = camera.position.clone();
-  const d = dist || (name === "CASSINI" ? 3.5e-5 : name === "HUYGENS" ? 4 : name === "SUN" ? 6e5 : name === "SATURN" ? 420 : Math.max(bodyRadius(name) / KM * 7, 2));
+  const d = dist || (name === "CASSINI" ? 3.5e-5 : name === "HUYGENS" ? 4 : name === "SUN" ? 6e5 : name === "SATURN" ? 420 : Math.max(bodyRadius(name) / KM * 7, 0.004));
   state.focus = name;
   let dir = old.lengthSq() > 0 ? old.normalize() : new THREE.Vector3(0, 0.3, 1).normalize();
   if (name === "HUYGENS") {
