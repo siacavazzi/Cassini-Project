@@ -634,13 +634,17 @@ def apply_mix(mix, x):
     raw = x
     x = np.tensordot(np.asarray(mix, np.float32), x, axes=1)
     if false:
+        # the bands channels first in memory for the mean, min and max over them (mix_display's picture is channels
+        # last, where those take 10 to 45 times as long): the same operations in the same order, so the same values.
+        # The weighted sums (tensordot) keep raw, so BLAS gets the layout it had
+        bands = np.ascontiguousarray(raw)
         # judged against the tint the balance aims at, not gray, so a body's own color (Titan's orange) is no outlier
         lum = x.mean(axis=0)
-        mean = raw.mean(axis=0)
-        straight = raw * (lum / np.maximum(mean, 1e-12))
+        mean = bands.mean(axis=0)
+        straight = bands * (lum / np.maximum(mean, 1e-12))
         w = np.clip((_saturation(x / tint) - _saturation(straight / tint)) / FALSE_REVERT, 0, 1)
         # only where every band has signal: the sky's noise has no band ratio to compare
-        w = np.where((raw.min(axis=0) > 0) & (mean > REVERT_FLOOR), w, 0)
+        w = np.where((bands.min(axis=0) > 0) & (mean > REVERT_FLOOR), w, 0)
         x = x + (lum * tint - x) * w
         knee, cap = FALSE_CHROMA
         sat = _saturation(x / tint)
@@ -655,9 +659,10 @@ def apply_mix(mix, x):
         gentle = np.minimum(gains, gains.min() * DETAIL_SPREAD)
         sharp = np.tensordot(gentle / gentle.mean(), raw, axes=([0], [0])) / len(gains)
         soft = lambda v: cv2.GaussianBlur(v, (0, 0), FALSE_DETAIL)
-        base, flat = soft(x.mean(axis=0)), soft(sharp)
+        bright = x.mean(axis=0)
+        base, flat = soft(bright), soft(sharp)
         ok = (flat > REVERT_FLOOR) & (soft(mean) > REVERT_FLOOR)
-        detail = np.where(ok, sharp * base / np.maximum(flat, 1e-12), x.mean(axis=0))
+        detail = np.where(ok, sharp * base / np.maximum(flat, 1e-12), bright)
         x = np.stack([np.where(ok, detail * soft(c) / np.maximum(base, 1e-12), c) for c in x])
     return x
 
