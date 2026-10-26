@@ -1,5 +1,6 @@
-"""Check that calibration._median_percentiles (a sky's median and percentiles from two partitions of one working array)
-gives the values np.median and np.percentile give each on its own, to the bit and of the same type: on made-up skies of
+"""Check that calibration._median_percentiles (a sky's median and percentiles, numpy's own calls in place on one working
+array) gives the values np.median and np.percentile give each on its own, to the bit and of the same type (a percentile
+of float32 pixels is a float64 on numpy 1; on numpy 2 a float32, but a list of them float64): on made-up skies of
 1 pixel to a million, float32 and float64, with ties, a constant, infinities, only +0 or only -0 zeros, and the cases
 it hands back to numpy (a NaN, both signs of zero, empty); that it only reorders the working array; and that
 sky_levels, with and without the floor, gives what the separate calls give. Run: python web/test_sky_stats.py"""

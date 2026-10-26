@@ -959,17 +959,18 @@ def sky_levels(images, masks, floor_pct=None):
 
 
 """
-np.median(v) and np.percentile(v, p) for each p of pcts, the same values as each call on its own, from two
-partitions of v in place (a working array of the caller's, which this reorders) instead of a copy and a partition for
-each call. A value at a rank is the same whichever partition finds it unless v holds a NaN or both signs of zero,
-which partitions can order differently, so then each is taken on its own as before.
+np.median(v) and np.percentile(v, p) for each p of pcts, the same values as each call on its own: the same calls, in
+place on v (a working array of the caller's, which this reorders) instead of each on a copy of its own. A value at a
+rank is the same whichever order a partition starts from unless v holds a NaN or both signs of zero, which partitions
+can order differently, so then each is taken on its own as before. Each percentile is its own call, with p as given:
+numpy 2 works out a list of percentiles of float32 pixels in float64 and a single one (a Python number) in float32.
 """
 def _median_percentiles(v, pcts):
     if v.size and not np.isnan(v).any():
         zero = np.signbit(v[v == 0])
         if zero.all() or not zero.any():
-            got = np.percentile(v, pcts, overwrite_input=True)
-            return np.median(v, overwrite_input=True), list(got)
+            got = [np.percentile(v, p, overwrite_input=True) for p in pcts]
+            return np.median(v, overwrite_input=True), got
     return np.median(v), [np.percentile(v, p) for p in pcts]
 
 
