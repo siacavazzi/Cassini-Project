@@ -1616,7 +1616,7 @@ body.idle .win.full .titlebar { opacity: 0; }
         // request is answered from the browser cache), which a color pass holds over its clear and other frames
         fetch(v.key).then(r => JSON.parse(r.headers.get("X-Movie") || "null"), () => null).then(rep => {
           if (!rep || shown !== v) return;
-          if (rep.rolling && rep.lap) card.querySelector(".kindtag").textContent = `${rep.filters >= 3 ? ((rep.filter_names || []).includes("GRN") ? "COLOR " : "FALSE COLOR ") : ""}MOSAIC MOVIE · LAP ${rep.lap} OF ${rep.laps} · ${rep.places} PLACES`;
+          if (rep.rolling && rep.lap) card.querySelector(".kindtag").textContent = `${rep.filters >= 3 ? ((rep.filter_names || []).includes("GRN") ? "COLOR " : "FALSE COLOR ") : ""}MOSAIC MOVIE · LAP ${rep.lap} OF ${Math.max(rep.lap, rep.laps || 0)} · ${rep.places} PLACES`;
           if (rep.color) field("colour").textContent = field("colour").title = `${rep.ids && rep.ids.includes(catalog.id[v.k]) ? "Color" : "Color held"}: ${rep.color.join(" · ")}`;
           else if (rep.filter_names && rep.filter_names.length === 3) field("colour").textContent = field("colour").title = `Mosaic movie: ${rep.filter_names.join(" · ")}`;
         }).catch(() => {});
@@ -1952,7 +1952,7 @@ body.idle .win.full .titlebar { opacity: 0; }
           const col = rep.filters >= 3 ? ((rep.filter_names || []).includes("GRN") ? "COLOR " : "FALSE COLOR ") : "";
           // behind: the server answered with the tiles made so far (playing faster than frames are processed)
           card.querySelector(".kindtag").textContent = (rep.kind === "mosaic_movie"
-            ? `${col}MOSAIC MOVIE · LAP ${rep.lap} OF ${rep.laps} · ${rep.places} PLACES`
+            ? `${col}MOSAIC MOVIE · LAP ${rep.lap} OF ${Math.max(rep.lap, rep.laps || 0)} · ${rep.places} PLACES`
             : `${col}MOSAIC · ${rep.mosaic} OF ${rep.of} TILES${rep.filters > 1 ? ` · ${rep.filters} FILTERS` : ""}`)
             + (rep.behind > 2 ? " · CATCHING UP" : "");
           return;
