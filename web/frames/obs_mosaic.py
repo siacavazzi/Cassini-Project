@@ -861,6 +861,16 @@ def _png(rgba):
     return out.getvalue()
 
 
+def held_level(frames):
+    """The seams' (gains, offsets) of frames on one calibrated scale, none pinned (mosaic.seams' pin None), for
+    mosaic.compose's corrections. Pinned to none, the gains all sink together toward their limit as overlaps come
+    in (the data asks only that they agree), so a mosaic dimmed about 9% while it filled: their mean log is held
+    at 0 instead, so the pass keeps the level its scale gave it from the first tile to the last."""
+    gains = mosaic.match_gains(frames, mosaic.calibrated_gain, None, mosaic.calibrated_overlap)
+    gains = gains / np.exp(np.log(gains).mean(axis=0))
+    return gains, mosaic.match_offsets(frames, gains, None, mosaic.calibrated_overlap)
+
+
 def _compose(window, k, **kw):
     """mosaic.compose on the view's canvas, with the benchmark's soft edge on its 0.5 scale canvas at this
     canvas's scale."""
@@ -870,13 +880,7 @@ def _compose(window, k, **kw):
             mosaic.feather_px = max(8, round(64 * k / 0.5))
             mosaic.reset()
             if kw.get("pin", -1) is None and "corrections" not in kw and "gamma" not in kw and len(window) > 1:
-                # pinned to none, the seams' gains all sink together toward their limit as overlaps come in (the
-                # data asks only that they agree), so a mosaic dimmed about 9% while it filled: their mean log is
-                # held at 0 instead, so the pass keeps the level its scale gave it from the first tile to the last
-                frames = [np.asarray(w[0]) for w in window]
-                gains = mosaic.match_gains(frames, mosaic.calibrated_gain, None, mosaic.calibrated_overlap)
-                gains = gains / np.exp(np.log(gains).mean(axis=0))
-                kw = {**kw, "corrections": (gains, mosaic.match_offsets(frames, gains, None, mosaic.calibrated_overlap))}
+                kw = {**kw, "corrections": held_level([np.asarray(w[0]) for w in window])}
             rgba = mosaic.compose(window, False, calibrated=True, **kw)
             mosaic.reset()
         finally:

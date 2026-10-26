@@ -61,6 +61,10 @@ Routes:
                                its frames by filter and its outline and centre as fractions of the picture
   /frames/mosaic/<ID>/frame.webp?ids=A,B,C&size=full   one frame of that mosaic on its own, on the mosaic's levels
                                and colours (obs_mosaic.pointing_picture; format=png, download=1 as below)
+  /frames/mosaic/<ID>/full.json      that mosaic at native resolution (mosaic_native): its size, estimated MB, made yet
+                               (&make=jpg|png: make it now); full.webp?crop=x0,y0,x1,y1 a part of it for the zoom lens
+                               (fractions of the picture, at most CASSINI_NATIVE_CROP px); full.jpg / full.png all of it
+                               (download=1), at most CASSINI_NATIVE_MAX px, kept in CASSINI_FULLRES_CACHE (not the cache)
   /frames/mosaic/<ID>.webp?size=512   (&warm=1: only start making the pass ahead of time, empty answer;
                                &tune=n:dx:dy,...&hide=n,...: the person's changes to its tiles from Cassini Studio,
                                pointings as /frames/mosaic/<ID>.json numbers them, moves as fractions of the picture)
@@ -162,6 +166,7 @@ import color_image  # noqa: E402
 sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
 import reel  # noqa: E402
 import obs_mosaic  # noqa: E402
+import mosaic_native  # noqa: E402
 import export  # noqa: E402
 
 FRAME_ID = re.compile(r"^([NW])\d{10}_\d+$")
@@ -854,6 +859,25 @@ def make_handler(site, cache, flags=None):
                 headers["Cache-Control"] = "no-store"
             return self.send_bytes(data, "image/png" if fmt == "png" else "image/webp", forever, headers)
 
+        def send_file(self, path, mime, query, name, headers=None, forever=True):
+            """A picture kept in a file, sent a megabyte at a time (a native mosaic can be hundreds of MB)."""
+            size = os.path.getsize(path)
+            self.send_response(200)
+            self.send_header("Content-Type", mime)
+            self.send_header("Content-Length", str(size))
+            for key, value in (headers or {}).items():
+                self.send_header(key, value)
+            if query.get("download", ["0"])[0] == "1":
+                self.send_header("Content-Disposition", f'attachment; filename="{name}"')
+            self.send_header("Cache-Control", "public, max-age=31536000, immutable" if forever else "no-store")
+            self.end_headers()
+            with open(path, "rb") as fh:
+                while True:
+                    chunk = fh.read(1 << 20)
+                    if not chunk:
+                        break
+                    self.wfile.write(chunk)
+
         def centre_of(self, query, frame_id):
             """center=1 (Auto center in a camera window): the pass's view (obs_mosaic.centre_view: centred on the body,
             or north up where it is for a close-up), or None for the picture as it is. False for a ring, spoke or
@@ -1146,6 +1170,47 @@ def make_handler(site, cache, flags=None):
                 if not made:
                     return self.send_error(404, "Not frames of that mosaic")
                 return self.send_picture(made[0], fmt, query, f"Cassini_{'_'.join(ids)}_in_mosaic" + ("" if ch is None else f"_channel{ch}"), {"X-Reel": json.dumps(made[1])})
+            m = re.match(r"^/frames/mosaic/([^/]+)/full\.(json|webp|jpg|png)$", url.path)
+            if m:
+                # the mosaic shown for that frame at native resolution (mosaic_native): .json its size, estimates and
+                # whether it is made (make=jpg|png starts making it, for the save menu); .webp?crop=x0,y0,x1,y1 a part
+                # of it (fractions of the picture) for the zoom lens; .jpg / .png all of it (download=1 to save).
+                # force=, tune=, hide=, look= and colors= as the mosaic route's
+                if not FRAME_ID.match(m.group(1)):
+                    return self.send_error(400, "Not a frame id")
+                if reel._index is None:
+                    return self.send_error(404, "Not a mosaic pass")
+                query = parse_qs(url.query)
+                try:
+                    tune = obs_mosaic.parse_tune(query.get("tune", [""])[0], query.get("hide", [""])[0])
+                    crop = [float(v) for v in query["crop"][0].split(",")] if query.get("crop") else None
+                except ValueError:
+                    return self.send_error(400, "tune= is n:dx:dy,..., hide= is n,... and crop= is x0,y0,x1,y1")
+                if crop is not None:
+                    crop = [max(0.0, min(1.0, v)) for v in crop]
+                    if len(crop) != 4 or crop[2] - crop[0] < 1e-4 or crop[3] - crop[1] < 1e-4:
+                        return self.send_error(400, "crop= is x0,y0,x1,y1, fractions of the picture")
+                force, kind = bool(query.get("force")), m.group(2)
+                try:
+                    if kind == "json":
+                        made = mosaic_native.info(m.group(1), cache, force, tune)
+                        if made and query.get("make", [""])[0] in ("jpg", "png"):
+                            fmt = query["make"][0]
+                            if not made["ready"][fmt] and fmt not in made["making"]:
+                                in_background(mosaic_native.start(m.group(1), cache, fmt, force, tune, _mosaic_slots))
+                                made["making"][fmt] = 0.0
+                        return self.send_json(made) if made else self.send_json({"error": "not a mosaic pass"}, 404)
+                    if kind == "webp" and crop is None:
+                        return self.send_error(400, "a crop= of the native mosaic, or .jpg / .png for all of it")
+                    made = mosaic_native.picture(m.group(1), cache, crop, kind, _mosaic_slots, force, tune)
+                except FileNotFoundError:
+                    made = None
+                if not made:
+                    return self.send_error(404, "No mosaic for this frame")
+                path, report = made
+                name = f"Cassini_{m.group(1)}_mosaic_full_resolution_{report['width']}x{report['height']}"
+                return self.send_file(path, {"jpg": "image/jpeg", "png": "image/png", "webp": "image/webp"}[kind],
+                                      query, name + "." + kind, {"X-Native": json.dumps(report)}, forever=not report["behind"])
             m = re.match(r"^/frames/movie/([^/]+)\.(webp|json)$", url.path)
             if m:
                 # a frame played as a movie of its pass (obs_mosaic.movie_webp): centred by SPICE, on the pass's one

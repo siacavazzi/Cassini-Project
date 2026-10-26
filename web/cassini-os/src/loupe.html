@@ -6,6 +6,11 @@
      menu use), asked for only once the lens is up; until it comes, it magnifies the picture as shown. The scroll
      wheel over the lens changes the magnification (loupe.zoom, also the Settings slider). On a phone, press and
      hold on a picture: the lens comes up above the finger and follows it until the finger lifts.
+     A mosaic's full resolution version is its canvas (2048 px) and keeps only a part of its tiles' pixels: once the
+     lens magnifies past that picture's own pixels, it asks for the part under it at native resolution (the frame
+     server's /frames/mosaic/<ID>/full.webp?crop=, mosaic_native) and draws it over, a little after the pointer
+     settles (Settings > Zoom lens > "Native resolution in mosaics"). Any image can offer the same with
+     data-loupe-native = the address of such a route (its .json says the native size, ?crop= gives a part).
      Pictures it works on: every camera and body window's picture (.well .shot) and any <img data-loupe> (the value,
      when given, is the full resolution picture's URL), so a gallery or an editor gets it by marking its images. -->
 <style>
@@ -49,6 +54,8 @@
     S.define({ key: "loupe.where", section: "Zoom lens", label: "Lens position", type: "choice", value: "on",
       options: [["on", "On the pointer"], ["beside", "Beside the pointer"]],
       hint: "On the pointer, the lens is centered where the pointer is; beside it, the lens sits up and to the right, so the picture under the pointer stays in sight. On a phone it always sits above the finger." });
+    S.define({ key: "loupe.native", section: "Zoom lens", label: "Native resolution in mosaics", type: "toggle", value: true,
+      hint: "A mosaic is shown smaller than its frames were taken. When the lens magnifies past the picture's pixels, it loads the part under it at the frames' own resolution, a moment after the pointer stops." });
   }
   const opt = (k, d) => (S && S.get(k) !== undefined ? S.get(k) : d);
   const HOLD = 450, MOVE = 10;   // a press and hold on a phone: how long, and how far the finger may wander
@@ -93,8 +100,77 @@
     return im;
   }
 
+  // native resolution (a mosaic's tiles at their own scale): the route's address for an image (its data-loupe-native,
+  // or a mosaic window picture's /frames/mosaic/<ID>/full.webp with the same look and changes), its size once asked
+  // (.json), and the parts of it fetched so far (crops: fractions of the picture, newest last)
+  const NATIVE_WAIT = 160, NATIVE_SIDE = 2048, NATIVE_MARGIN = 2.2;
+  function nativeUrl(img, src) {
+    if (img.dataset.loupeNative) return new URL(img.dataset.loupeNative, location.href);
+    if (!src || !/\/frames\/mosaic\/[NW]\d{10}_\d+\.webp(\?|$)/.test(src)) return null;
+    const u = new URL(src, location.href);
+    u.pathname = u.pathname.replace(/\.webp$/, "/full.webp");
+    for (const k of ["size", "format", "download", "warm"]) u.searchParams.delete(k);
+    return u;
+  }
+  const natives = new Map();   // route address -> { info, crops: [{ u0, v0, u1, v1, bmp }], ask, timer }
+  function nativeFor(img, src) {
+    if (!opt("loupe.native", true)) return null;
+    const u = nativeUrl(img, src);
+    if (!u) return null;
+    const key = u.href;
+    let n = natives.get(key);
+    if (!n) {
+      n = { key, url: u, info: undefined, crops: [], ask: null, timer: 0 };
+      natives.set(key, n);
+      while (natives.size > 12) { const old = natives.values().next().value; if (old.ask) old.ask.ctrl.abort(); natives.delete(old.key); }
+      const j = new URL(u); j.pathname = j.pathname.replace(/\.webp$/, ".json");
+      fetch(j).then(r => r.ok ? r.json() : null).catch(() => null).then(v => { n.info = v && v.width ? v : null; if (cur) paint(); });
+    }
+    return n;
+  }
+  // the part of the picture around (u, v) the lens shows (span: fractions wide and high), asked for once the pointer
+  // has rested; a newer ask drops the one before it
+  function nativeAsk(n, u, v, su, sv) {
+    clearTimeout(n.timer);
+    n.timer = setTimeout(() => {
+      const side = Math.max(su * n.info.width, sv * n.info.height);
+      const m = Math.max(1, Math.min(NATIVE_MARGIN, NATIVE_SIDE / side));
+      const r = [u - su * m / 2, v - sv * m / 2, u + su * m / 2, v + sv * m / 2].map(x => Math.max(0, Math.min(1, x)));
+      if (n.ask) n.ask.ctrl.abort();
+      const ctrl = new AbortController(), q = new URL(n.url);
+      q.searchParams.set("crop", r.map(x => x.toFixed(4)).join(","));
+      n.ask = { ctrl, r };
+      fetch(q, { signal: ctrl.signal }).then(res => res.ok ? res.blob() : Promise.reject(res.status)).then(b => createImageBitmap(b)).then(bmp => {
+        n.crops.push({ u0: r[0], v0: r[1], u1: r[2], v1: r[3], bmp });
+        while (n.crops.length > 6) n.crops.shift().bmp.close();
+        if (n.ask && n.ask.ctrl === ctrl) n.ask = null;
+        if (cur) paint();
+      }).catch(() => { if (n.ask && n.ask.ctrl === ctrl) { n.ask = null; if (cur) paint(); } });
+    }, NATIVE_WAIT);
+  }
+  // draws the native parts that reach the lens's span (fu0..fu1, fv0..fv1 of the picture) over it, oldest first;
+  // asks for one when none covers it at the resolution the lens shows. What the label says: "native", "loading" or ""
+  function nativeDraw(n, fu0, fv0, fu1, fv1, W, dpr) {
+    const want = Math.min(n.info.width, W / (fu1 - fu0)), a0 = Math.max(0, fu0), b0 = Math.max(0, fv0), a1 = Math.min(1, fu1), b1 = Math.min(1, fv1);
+    let covered = false;
+    for (const c of n.crops) {
+      const cw = c.bmp.width / (c.u1 - c.u0), ch = c.bmp.height / (c.v1 - c.v0);
+      const x0 = Math.max(a0, c.u0), y0 = Math.max(b0, c.v0), x1 = Math.min(a1, c.u1), y1 = Math.min(b1, c.v1);
+      if (x1 <= x0 || y1 <= y0) continue;
+      const fx = W / (fu1 - fu0) / cw;
+      ctx.imageSmoothingEnabled = fx < 2 * dpr;
+      ctx.drawImage(c.bmp, (x0 - c.u0) * cw, (y0 - c.v0) * ch, (x1 - x0) * cw, (y1 - y0) * ch,
+        (x0 - fu0) / (fu1 - fu0) * W, (y0 - fv0) / (fv1 - fv0) * W, (x1 - x0) / (fu1 - fu0) * W, (y1 - y0) / (fv1 - fv0) * W);
+      if (c.u0 <= a0 + 1e-4 && c.v0 <= b0 + 1e-4 && c.u1 >= a1 - 1e-4 && c.v1 >= b1 - 1e-4 && cw >= want * 0.9) covered = true;
+    }
+    if (covered) { clearTimeout(n.timer); return "native"; }
+    const r = n.ask && n.ask.r;
+    if (!(r && r[0] <= a0 && r[1] <= b0 && r[2] >= a1 && r[3] >= b1)) nativeAsk(n, (fu0 + fu1) / 2, (fv0 + fv1) / 2, fu1 - fu0, fv1 - fv0);
+    return "loading";
+  }
+
   // cur: the lens up now ({ img, x, y, touch, url, src }); arm: waiting out the delay
-  let cur = null, arm = null, fullT = 0;
+  let cur = null, arm = null, fullT = 0, stableT = 0;
   const phone = () => document.body.classList.contains("phone");
   function open(img, x, y, touch) {
     cur = { img, x, y, touch, url: null, srcSeen: null };
@@ -104,7 +180,8 @@
     paint();
   }
   function close() {
-    clearTimeout(arm && arm.t); arm = null; clearTimeout(fullT);
+    clearTimeout(arm && arm.t); arm = null; clearTimeout(fullT); clearTimeout(stableT);
+    for (const n of natives.values()) clearTimeout(n.timer);
     if (!cur) return;
     cur = null; lens.classList.remove("shown", "on");
   }
@@ -113,7 +190,8 @@
   function source() {
     const img = cur.img, src = img.dataset.src || img.currentSrc || img.src;
     if (src !== cur.srcSeen) {
-      cur.srcSeen = src; cur.url = null; clearTimeout(fullT);
+      cur.srcSeen = src; cur.url = null; cur.stable = false; clearTimeout(fullT); clearTimeout(stableT);
+      stableT = setTimeout(() => { if (cur && cur.srcSeen === src) { cur.stable = true; paint(); } }, 250);
       const u = fullUrl(img);
       if (u && u !== src) {
         if (fulls.has(u)) cur.url = u;
@@ -154,7 +232,13 @@
     // only the part of the source inside the picture (a source rectangle off its edge draws nothing in some browsers)
     const x0 = Math.max(0, sx), y0 = Math.max(0, sy), x1 = Math.min(sw, sx + spanX), y1 = Math.min(sh, sy + spanY);
     if (x1 > x0 && y1 > y0) ctx.drawImage(im, x0, y0, x1 - x0, y1 - y0, (x0 - sx) * fx, (y0 - sy) * fy, (x1 - x0) * fx, (y1 - y0) * fy);
-    tag.textContent = `${z}×` + (full ? ` · full resolution ${sw} × ${sh}` : loading ? " · loading full resolution…" : "");
+    // past the full picture's own pixels, the part under the lens at native resolution (a mosaic), once the picture
+    // has stayed up (its full version asked for)
+    const n = cur.stable && fx > 1.1 && nativeFor(img, cur.srcSeen);
+    const nat = n && n.info && n.info.width > sw * 1.15 ? nativeDraw(n, sx / sw, sy / sh, (sx + spanX) / sw, (sy + spanY) / sh, W, dpr) : "";
+    tag.textContent = `${z}×` + (nat === "native" ? ` · native resolution ${n.info.width} × ${n.info.height}`
+      : nat === "loading" ? " · loading native resolution…"
+      : full ? ` · full resolution ${sw} × ${sh}` : loading ? " · loading full resolution…" : "");
   }
   // the picture under the lens can change on its own: drawn again on each new picture
   document.addEventListener("load", e => { if (cur && e.target === cur.img) paint(); }, true);
