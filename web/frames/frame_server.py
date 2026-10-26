@@ -1194,6 +1194,8 @@ def make_handler(site, cache, flags=None):
                 try:
                     if kind == "json":
                         made = mosaic_native.info(m.group(1), cache, force, tune)
+                        if made and not any(made["ready"].values()):
+                            in_background(mosaic_native.warm(m.group(1), cache, force, tune))
                         if made and query.get("make", [""])[0] in ("jpg", "png"):
                             fmt = query["make"][0]
                             if not made["ready"][fmt] and fmt not in made["making"]:

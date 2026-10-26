@@ -162,7 +162,11 @@ def corrections(u, made, cache):
                 om._yield()
         return json.dumps(out).encode()
 
-    solved = json.loads(reel._cached(path, make))
+    # one at a time (the lens's first crop and the warm-up ask together)
+    with _lock:
+        lock = _making.setdefault(path, threading.Lock())
+    with lock:
+        solved = json.loads(reel._cached(path, make))
     return {f: {int(n): (np.array(v[0]), np.array(v[1])) for n, v in by.items()} for f, by in solved.items()}
 
 
@@ -339,6 +343,19 @@ def picture(frame_id, cache, crop=None, fmt="jpg", slots=None, force=False, tune
             _progress.pop(path, None)
             _making.pop(path, None)
     return path, report
+
+
+def warm(frame_id, cache, force=False, tune=None):
+    """Works out frame_id's mosaic's seam corrections ahead (the slow part of its first native picture: the window's
+    mosaic grown again tile by tile), when the lens or the save menu first asks about it."""
+    def run():
+        try:
+            found = layout_of(frame_id, cache, force, tune)
+            if found:
+                corrections(*found[::2], cache)
+        except Exception as e:
+            print(f"native mosaic {frame_id} seams: {type(e).__name__}: {e}", flush=True)
+    return run
 
 
 def start(frame_id, cache, fmt, force=False, tune=None, slots=None):
