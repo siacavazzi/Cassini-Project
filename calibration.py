@@ -682,13 +682,17 @@ def apply_mix(mix, x):
     raw = x
     x = np.tensordot(np.asarray(mix, np.float32), x, axes=1)
     if false:
+        # the bands channels first in memory for the mean, min and max over them (mix_display's picture is channels
+        # last, where those take 10 to 45 times as long): the same operations in the same order, so the same values.
+        # The weighted sums (tensordot) keep raw, so BLAS gets the layout it had
+        bands = np.ascontiguousarray(raw)
         # judged against the tint the balance aims at, not gray, so a body's own color (Titan's orange) is no outlier
         lum = x.mean(axis=0)
-        mean = raw.mean(axis=0)
-        straight = raw * (lum / np.maximum(mean, 1e-12))
+        mean = bands.mean(axis=0)
+        straight = bands * (lum / np.maximum(mean, 1e-12))
         w = np.clip((_saturation(x / tint) - _saturation(straight / tint)) / FALSE_REVERT, 0, 1)
         # only where every band has signal: the sky's noise has no band ratio to compare
-        w = np.where((raw.min(axis=0) > 0) & (mean > REVERT_FLOOR), w, 0)
+        w = np.where((bands.min(axis=0) > 0) & (mean > REVERT_FLOOR), w, 0)
         x = x + (lum * tint - x) * w
         knee, cap = FALSE_CHROMA
         sat = _saturation(x / tint)
@@ -703,9 +707,10 @@ def apply_mix(mix, x):
         gentle = np.minimum(gains, gains.min() * DETAIL_SPREAD)
         sharp = np.tensordot(gentle / gentle.mean(), raw, axes=([0], [0])) / len(gains)
         soft = lambda v: cv2.GaussianBlur(v, (0, 0), FALSE_DETAIL)
-        base, flat = soft(x.mean(axis=0)), soft(sharp)
+        bright = x.mean(axis=0)
+        base, flat = soft(bright), soft(sharp)
         ok = (flat > REVERT_FLOOR) & (soft(mean) > REVERT_FLOOR)
-        detail = np.where(ok, sharp * base / np.maximum(flat, 1e-12), x.mean(axis=0))
+        detail = np.where(ok, sharp * base / np.maximum(flat, 1e-12), bright)
         x = np.stack([np.where(ok, detail * soft(c) / np.maximum(base, 1e-12), c) for c in x])
     return x
 
@@ -717,8 +722,7 @@ A color picture already drawn (H x W x 3 uint8, gamma encoded, its channels on o
 def mix_display(rgb, mix, gamma=2.2, shoulder=SHOULDER):
     x = decode(np.moveaxis(rgb[..., :3].astype(np.float32) / 255, -1, 0), gamma).astype(np.float32)
     x = apply_mix(mix, x)
-    top = x.max(axis=0)
-    x *= np.where(top > shoulder, roll_off(top, shoulder) / np.maximum(top, 1e-12), 1)
+    _shoulder(x, shoulder)
     return np.moveaxis((encode(np.clip(x, 0, 1), gamma) * 255 + 0.5).astype(np.uint8), 0, -1)
 
 
@@ -898,8 +902,7 @@ def tone(channels, margin, mix=None, shoulder=SHOULDER, gamma=2.2):
                                                   lum - margin - w / 2))
         x *= np.where(lum > 0, toed / np.maximum(lum, 1e-12), 0)
     if shoulder:
-        top = x.max(axis=0)
-        x *= np.where(top > shoulder, roll_off(top, shoulder) / np.maximum(top, 1e-12), 1)
+        _shoulder(x, shoulder)
     x = np.clip(x, 0, 1)
     return [cv2.cvtColor((encode(c, gamma) * 255 + 0.5).astype(np.uint8), cv2.COLOR_GRAY2BGR) for c in x]
 
@@ -911,9 +914,7 @@ iofs = the picture's channels, float32 I/F
 """
 def picture_scale(iofs, sky_fraction=0.1, sky_percentile=98):
     # Sky is where every channel is dark; without enough sky the black point stays at zero.
-    sky = np.ones(iofs[0].shape, dtype=bool)
-    for iof in iofs:
-        sky &= iof < 0.05 * np.percentile(iof, 99.9)
+    sky = _sky(iofs)
     blacks = [0.0] * len(iofs)
     measured = bool(sky.mean() > sky_fraction)
     if look() == "classic":
@@ -926,7 +927,8 @@ def picture_scale(iofs, sky_fraction=0.1, sky_percentile=98):
         # 3x3 median so a single cosmic ray hit or hot pixel can't set it
         white = max(cv2.medianBlur(iof - black, 3).max() for iof, black in zip(iofs, blacks))
         return blacks, white, measured
-    levels, margin, white, measured = _balanced_scale(iofs, sky_fraction, sky_percentile)
+    # the sky just measured, not measured again (a percentile of every pixel of each channel)
+    levels, margin, white, measured = _balanced_scale(iofs, sky_fraction, sky_percentile, sky=sky)
     return [level + margin for level in levels], white, measured
 
 
@@ -962,8 +964,8 @@ def _balanced_scale(iofs, sky_fraction=0.1, sky_percentile=98, sky=None):
     measured = bool(sky.mean() > sky_fraction)
     levels, margin = [0.0] * len(iofs), 0.0
     if measured:
-        levels, margin = sky_levels([[iof] for iof in iofs], [[sky]] * len(iofs))
-        margin = max(margin, noise_floor([iof[sky] for iof in iofs], sky_percentile))
+        # the noise floor (noise_floor) taken with the sky levels, on the same sky pixels and medians
+        levels, margin = sky_levels([[iof] for iof in iofs], [[sky]] * len(iofs), floor_pct=sky_percentile)
     blacks = [level + margin for level in levels]
     # One white for all channels: the WHITE_PCT percentile of the brightest channel over the lit pixels (the
     # body, not the sky), so a few bright limb or ring pixels don't leave the body dim and gray; the shoulder
@@ -991,18 +993,41 @@ def sky_blacks(images, masks):
 
 
 """
-sky_blacks' parts: (the sky level per channel, the margin)
+sky_blacks' parts: (the sky level per channel, the margin). floor_pct: the margin no less than the skies' noise floor
+at that percentile (noise_floor), from the same sky pixels and medians
 """
-def sky_levels(images, masks):
-    levels, noises = [], []
+def sky_levels(images, masks, floor_pct=None):
+    levels, noises, floors = [], [], []
     for ims, ms in zip(images, masks):
         sky = np.concatenate([im[m] for im, m in zip(ims, ms)])
         steps = np.concatenate([np.abs(np.diff(im, axis=1))[m[:, 1:] & m[:, :-1]] for im, m in zip(ims, ms)])
         noise = 1.4826 * float(np.median(steps)) / math.sqrt(2) if steps.size else 0.0
-        levels.append(min(float(np.median(sky)), float(np.percentile(sky, 20)) + 0.84 * noise))
+        # sky is this loop's own array (concatenate's), so it can be reordered
+        median, pcts = _median_percentiles(sky, (20,) if floor_pct is None else (20, floor_pct))
+        levels.append(min(float(median), float(pcts[0]) + 0.84 * noise))
         noises.append(noise)
+        if floor_pct is not None:
+            floors.append(float(pcts[1] - median))
     margin = NOISE_MARGIN * math.sqrt(sum(n * n for n in noises) / len(noises))
+    if floor_pct is not None:
+        margin = max(margin, max(floors))
     return levels, margin
+
+
+"""
+np.median(v) and np.percentile(v, p) for each p of pcts, the same values as each call on its own: the same calls, in
+place on v (a working array of the caller's, which this reorders) instead of each on a copy of its own. A value at a
+rank is the same whichever order a partition starts from unless v holds a NaN or both signs of zero, which partitions
+can order differently, so then each is taken on its own as before. Each percentile is its own call, with p as given:
+numpy 2 works out a list of percentiles of float32 pixels in float64 and a single one (a Python number) in float32.
+"""
+def _median_percentiles(v, pcts):
+    if v.size and not np.isnan(v).any():
+        zero = np.signbit(v[v == 0])
+        if zero.all() or not zero.any():
+            got = [np.percentile(v, p, overwrite_input=True) for p in pcts]
+            return np.median(v, overwrite_input=True), got
+    return np.median(v), [np.percentile(v, p) for p in pcts]
 
 
 """
@@ -1058,11 +1083,27 @@ def decode(v, gamma=2.2):
 
 """
 A soft shoulder on linear brightness (white = 1): unchanged up to knee, then rolling off toward 1 with no
-step in slope, so what is brighter than white keeps its shape instead of clipping flat.
+step in slope, so what is brighter than white keeps its shape instead of clipping flat. Worked out only past the
+knee (a few bright pixels of most pictures), each the same value as over the whole picture.
 """
 def roll_off(x, knee):
     room = 1 - knee
-    return np.where(x <= knee, x, knee + room * np.tanh((x - knee) / room))
+    out = x.copy()
+    past = ~(x <= knee)
+    out[past] = knee + room * np.tanh((x[past] - knee) / room)
+    return out
+
+
+"""
+x (channels first, linear) with its brightest channel rolled off past shoulder (roll_off) and the other channels by
+the same factor, so a pixel keeps its color; in place, and only the pixels past the shoulder (the rest were multiplied
+by 1)
+"""
+def _shoulder(x, shoulder):
+    top = x.max(axis=0)
+    past = top > shoulder
+    top = top[past]
+    x[:, past] *= roll_off(top, shoulder) / np.maximum(top, 1e-12)
 
 
 """
