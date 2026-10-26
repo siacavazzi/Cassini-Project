@@ -122,6 +122,17 @@ def all_passes():
     return out
 
 
+def centred(frame_id):
+    """Auto center (on by default in a camera window, center=1): the view the server's centre_of gives the frame's
+    pass (centred on the body, or north up where it is), which names the cache folder the window's picture is
+    in; None where Auto center leaves the pass as it is (the window then asks for the picture as it is)."""
+    try:
+        view = obs_mosaic.centre_view(frame_id)
+    except Exception:   # noqa: BLE001  (not centred: the window shows the picture as it is)
+        return None
+    return view if view.get("centre") or view.get("north") else None
+
+
 def items(phase):
     """(name, work) of every item of the phase, in time order; work() makes it (a made file is found, not made)."""
     if phase == "frames":
@@ -395,15 +406,8 @@ def segment_items(o):
     t0, t1, cams, sizes = o["from"], o["until"], o["cams"], o["sizes"]
 
     def centre(frame_id):
-        """Auto center (o["center"]): the pass's centred view, as the server's centre_of works it out, or None (the
-        window then asks for the picture as it is)."""
-        if not o.get("center"):
-            return None
-        try:
-            view = obs_mosaic.centre_view(frame_id)
-        except Exception:   # noqa: BLE001  (not centred: the window shows the picture as it is)
-            return None
-        return view if view.get("centre") else None
+        """Auto center (o["center"]): the pass's view as the server's centre_of gives it (centred), or None."""
+        return centred(frame_id) if o.get("center") else None
 
     def single(i, c):
         """A frame on its own as the window shows it: processed (Settings > Cameras > Processed single frames),
