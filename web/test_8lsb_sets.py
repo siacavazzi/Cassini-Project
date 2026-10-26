@@ -49,7 +49,8 @@ def frames(conversions):
 
 def run(conversions):
     made = frames(conversions)
-    stacking.load_stacked = lambda path, window=120, max_frames=5, count=False: (made[path][0], made[path][1], 1)
+    stacking.load_stacked = lambda path, window=120, max_frames=5, count=False, valid=False: \
+    (made[path][0], made[path][1], 1) + ((made[path][0].valid_mask(),) if valid else ())
     # 8LSB frames can't be unstretched (calibration.unstretch); the others come back as their I/F
     cal.calibrate = lambda png, info, image=None: None if info["DATA_CONVERSION_TYPE"] == "8LSB" else \
         next(v[2] for v in made.values() if v[0].info is info)

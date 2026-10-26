@@ -75,15 +75,17 @@ def find_repeats(path, window=120, max_frames=5):
 """
 Loads the frame at path and stacks it with its repeat exposures.
 returns (label of the frame at path, stacked image resized like label.resize_image),
-plus how many frames went in when count is True
+plus how many frames went in when count is True, and with valid True last the mask of pixels
+valid in any frame stacked (label.valid_mask): a repeat fills what the frame lost in downlink
 """
-def load_stacked(path, window=120, max_frames=5, count=False):
+def load_stacked(path, window=120, max_frames=5, count=False, valid=False):
     lbl = lh.label(path, as_png=True)
     frames = [lbl.resize_image()]
+    masks = [lbl.valid_mask()] if valid else None
     if not cal.step("stack"):   # Settings > Processing: the frame alone
         max_frames = 1
     if max_frames <= 1:
-        return (lbl, frames[0], 1) if count else (lbl, frames[0])
+        return (lbl, frames[0]) + ((1,) if count else ()) + ((masks[0],) if valid else ())
     for repeat in find_repeats(path, window, 4 * max_frames)[1:]:
         if len(frames) >= max_frames:
             break
@@ -93,13 +95,19 @@ def load_stacked(path, window=120, max_frames=5, count=False):
             if any(repeat_lbl.info.get(k) != lbl.info.get(k) for k in same_settings):
                 continue
             frame = repeat_lbl.resize_image()
+            mask = repeat_lbl.valid_mask() if valid and frame is not None else None
         except Exception as e:
             print(f"Skipping repeat {repeat}: {e}")
             continue
         if frame is not None:
             frames.append(frame)
+            if valid:
+                masks.append(mask)
     if len(frames) > 1:
         print(f"Stacking {len(frames)} frames for {path}")
+    if valid:
+        stacked, mask = ic.stack_frames(frames, masks=masks)
+        return (lbl, stacked) + ((len(frames),) if count else ()) + (mask,)
     stacked = ic.stack_frames(frames)
     return (lbl, stacked, len(frames)) if count else (lbl, stacked)
 
@@ -115,13 +123,16 @@ short one is used. A repeat that can't be matched (a faint frame of mostly empty
 correlation finds nothing) is taken as it is: repeats are seconds apart at the same pointing.
 returns (label of the frame at path, float32 I/F image sized like label.resize_image, how many
 frames went in), or the label, None and 1 when the frame at path can't be calibrated.
+valid = also return, last, the mask of pixels valid in any frame merged (label.valid_mask): what a frame lost in
+downlink is left out of the merge, so a repeat fills it (None with the None image)
 Settings > Processing (calibration.step): with "hdr" off only the exposures identical to the frame at path are merged
 (a plain stack, in I/F), with "stack" off the frame at path alone.
 """
-def load_hdr(path, window=120, max_frames=8):
+def load_hdr(path, window=120, max_frames=8, valid=False):
     lbl = lh.label(path, as_png=True)
     ref = first = None
     total, weight, n = None, None, 0
+    seen = None
     plain = not cal.step("hdr")
     for p in find_repeats(path, window, max_frames if cal.step("stack") else 1):
         try:
@@ -138,8 +149,9 @@ def load_hdr(path, window=120, max_frames=8):
             continue
         if iof is None:
             if p == path:
-                return lbl, None, 1
+                return (lbl, None, 1, None) if valid else (lbl, None, 1)
             continue
+        mask = l.valid_mask() if valid else None
         if ref is None:
             ref, first = image, iof
         else:
@@ -147,16 +159,25 @@ def load_hdr(path, window=120, max_frames=8):
             if shift is not None:
                 iof = ic.shift_image(iof.astype(np.float32), *shift)
                 gray = ic.shift_image(gray, *shift)
+                if valid:
+                    mask = ic.shift_image(mask.astype(np.float32), *shift) > 0.99
         good = ~cv2.dilate(cal.saturated(codes, info, gray).astype(np.uint8), np.ones((7, 7), np.uint8)).astype(bool)
+        if valid and not mask.all():
+            good &= mask
+        if valid and seen is None:
+            seen = mask   # the frame at path's own
         w = good * np.float32(float(info.get("EXPOSURE_DURATION", 1)) or 1)
         total = iof * w if total is None else total + iof * w
         weight = w if weight is None else weight + w
         n += 1
     if total is None:
-        return lbl, None, 1
+        return (lbl, None, 1, None) if valid else (lbl, None, 1)
     # pixels saturated in every exposure keep the reference's (clipped) value
     merged = total / np.maximum(weight, 1e-9)
     merged = np.where(weight > 0, merged, first).astype(np.float32)
     if n > 1:
         print(f"Merged {n} exposures for {path}")
+    if valid:
+        # valid where some exposure went in, or where every one saturated but the frame at path has its (clipped) pixel
+        return lbl, merged, n, seen | (weight > 0)
     return lbl, merged, n

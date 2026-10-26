@@ -36,6 +36,41 @@ def fill_invalid(img, mask):
     return cv2.inpaint(img, (~mask).astype(np.uint8), 3, cv2.INPAINT_TELEA)
 
 
+# the tallest gap (rows, at the 1024 line size) fill_lines bridges: four lines of a summed 512 line frame. Lost
+# segments that short are a line or a few here and there, which the rows above and below show well; a taller
+# block is a stretch of the picture that never arrived and stays marked lost rather than painted over
+LINE_GAP = 8
+
+
+"""
+Fills the short runs of lost pixels (mask False) down each column from the valid rows above and
+below, straight between the two, and returns (image, mask with those pixels now valid). Lost
+pixels are the ends of lines that never arrived, so a lost run down a column is a stack of
+those lines; where it is at most max_gap rows tall its two valid neighbours bound it closely.
+Taller runs, and runs at the top or bottom edge, are left as they are (still invalid).
+"""
+def fill_lines(img, mask, max_gap=LINE_GAP):
+    if mask.all():
+        return img, mask
+    h = mask.shape[0]
+    rows = np.arange(h)[:, None]
+    above = np.maximum.accumulate(np.where(mask, rows, -1), axis=0)
+    below = np.minimum.accumulate(np.where(mask, rows, h)[::-1], axis=0)[::-1]
+    fillable = ~mask & (above >= 0) & (below < h) & (below - above - 1 <= max_gap)
+    if not fillable.any():
+        return img, mask
+    ys, xs = np.nonzero(fillable)
+    a, b = above[ys, xs], below[ys, xs]
+    t = ((ys - a) / (b - a)).astype(np.float32)
+    if img.ndim == 3:
+        t = t[:, None]
+    va, vb = img[a, xs].astype(np.float32), img[b, xs].astype(np.float32)
+    v = va + (vb - va) * t
+    out = img.copy()
+    out[ys, xs] = np.clip(v + 0.5, 0, 255).astype(img.dtype) if img.dtype == np.uint8 else v.astype(img.dtype)
+    return out, mask | fillable
+
+
 """
 Like align_images, but also moves each frame's valid-pixel mask (label.valid_mask) with it,
 so pixels a shift leaves uncovered count as invalid too.
@@ -178,7 +213,11 @@ Each frame is aligned to the reference and brightness-matched to it. Where the s
 itself changed between exposures (a moon moved), a frame is only used where it agrees
 with the reference, so moving objects come from the reference alone instead of
 leaving ghosts. Frames that cannot be aligned are left out.
-returns the stacked frame in the same format as the input (8-bit, 3 channel gray)
+masks = optional valid-pixel mask per frame (label.valid_mask): pixels a frame lost in downlink
+        (truncated lines, zeros in the file) don't go into the stack, so a repeat that has them
+        fills the reference's gap and a damaged repeat leaves no streak in a clean reference
+returns the stacked frame in the same format as the input (8-bit, 3 channel gray), and with
+masks also the mask of pixels valid in any frame that went in
 """
 """
 Per pixel median of the frames in stack where agrees is True (count = how many per pixel, at
@@ -192,32 +231,52 @@ def agreeing_median(stack, agrees, count):
     return (low + high) / 2
 
 
-def stack_frames(frames, sigma=3.0, max_shift=20):
+def stack_frames(frames, sigma=3.0, max_shift=20, masks=None):
+    if masks is not None and all(m.all() for m in masks):
+        # nothing lost: the plain stack below, byte for byte
+        return stack_frames(frames, sigma, max_shift), masks[0]
+    lost = masks is not None
     if len(frames) == 1:
         # nothing to stack it with (most frames have no repeat): the frame as it is, as below
-        return frames[0]
+        return (frames[0], masks[0]) if lost else frames[0]
     ref = frames[0]
+    ref_valid = masks[0] if lost else None
+    # shifts are found on the frames with their lost pixels filled, so a gap's edge doesn't pull the match
+    ref_match = fill_invalid(ref, ref_valid) if lost else ref
     ref_gray = cv2.cvtColor(ref,cv2.COLOR_BGR2GRAY).astype(np.float32)
     blurred = cv2.GaussianBlur(ref_gray, (0,0), 3)
     target = blurred > 0.1 * blurred.max()
     unclipped = target & (ref_gray < 250)
 
     stack = [ref_gray]
-    agrees = [np.ones(ref_gray.shape, bool)]
-    for frame in frames[1:]:
+    agrees = [ref_valid if lost else np.ones(ref_gray.shape, bool)]
+    for i, frame in enumerate(frames[1:], 1):
         if frame.shape != ref.shape:
             continue
-        shift = find_shift(ref, frame, max_shift)
+        if lost:
+            # shifted with its lost pixels filled, so their zeros don't bleed into the valid ones beside them
+            frame = fill_invalid(frame, masks[i])
+        shift = find_shift(ref_match, frame, max_shift)
         if shift is None:
             continue
         gray = cv2.cvtColor(shift_image(frame, *shift),cv2.COLOR_BGR2GRAY).astype(np.float32)
-        if unclipped.sum() > 100:
+        if lost:
+            valid = shift_image(masks[i].astype(np.float32), *shift) > 0.99
+            both = ref_valid & valid
+            matched = unclipped & both
+        else:
+            matched = unclipped
+        if matched.sum() > 100:
             # match brightness to the reference; a gain alone keeps black sky black
-            gain = (gray[unclipped] * ref_gray[unclipped]).sum() / max((gray[unclipped] ** 2).sum(), 1)
+            gain = (gray[matched] * ref_gray[matched]).sum() / max((gray[matched] ** 2).sum(), 1)
             gray = gain * gray
         # mark where the scene changed: differences that survive smoothing are structure, not noise
         # (noise is measured over the whole frame, since a moving moon can fill much of the target)
-        smooth_diff = cv2.GaussianBlur(gray - ref_gray, (0,0), 2)
+        diff = gray - ref_gray
+        if lost:
+            # where either frame lost the pixel there is nothing to compare: not a change
+            diff[~both] = 0
+        smooth_diff = cv2.GaussianBlur(diff, (0,0), 2)
         smooth_diff = np.abs(smooth_diff - np.median(smooth_diff))
         noise = 1.4826 * np.median(smooth_diff)
         changed = (smooth_diff > max(5 * noise, 3)).astype(np.uint8)
@@ -225,15 +284,18 @@ def stack_frames(frames, sigma=3.0, max_shift=20):
         changed = cv2.morphologyEx(changed, cv2.MORPH_OPEN, np.ones((7,7), np.uint8))
         changed = cv2.dilate(changed, np.ones((15,15), np.uint8)) > 0
         stack.append(gray)
-        agrees.append(~changed)
+        agrees.append(~changed & valid if lost else ~changed)
 
     if len(stack) == 1:
-        return ref
+        return (ref, ref_valid) if lost else ref
     stack = np.array(stack)
     agrees = np.array(agrees)
 
     # reject single-pixel outliers among the frames that agree with the reference
     count = agrees.sum(axis=0)
+    if lost:
+        # a pixel no frame has: any value, so the sort below has one; it stays the reference's and invalid
+        count = np.maximum(count, 1)
     median = agreeing_median(stack, agrees, count)
     resid = np.abs(stack - median)
     noise = 1.4826 * np.median(resid[:, target][agrees[:, target]] if target.any() else resid) + 1
@@ -246,7 +308,8 @@ def stack_frames(frames, sigma=3.0, max_shift=20):
     out = np.where(keep.any(axis=0) | pair, out, ref_gray)
 
     out = np.clip(out + 0.5, 0, 255).astype(np.uint8)
-    return cv2.cvtColor(out, cv2.COLOR_GRAY2BGR)
+    out = cv2.cvtColor(out, cv2.COLOR_GRAY2BGR)
+    return (out, agrees.any(axis=0)) if lost else out
         
         
 def seqAlign(im):

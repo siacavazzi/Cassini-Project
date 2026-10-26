@@ -161,21 +161,30 @@ left out because they can't be calibrated (then there is one image fewer than pa
 def load_aligned(paths, hdr=False, scale=None, repeat_window=120):
     # Settings > Processing turns steps off per request (calibration.step); stacking checks its own
     calibrating, fill, align = calibrate and cal.step("calibrate"), cal.step("fill"), cal.step("align")
-    lbls, imgs, stacked, iofs = [], [], [], []
+    lbls, imgs, stacked, iofs, masks = [], [], [], [], []
     for path in paths:
         iof = None
         if hdr and calibrating:
-            lbl, iof, n = stacking.load_hdr(path, repeat_window)
+            lbl, iof, n, mask = stacking.load_hdr(path, repeat_window, valid=True)
         if iof is None:
-            lbl, img, n = stacking.load_stacked(path, repeat_window, max_frames = 5 if stack_repeats else 1, count=True)
+            lbl, img, n, mask = stacking.load_stacked(path, repeat_window, max_frames = 5 if stack_repeats else 1,
+                                                      count=True, valid=True)
         else:
             img = lbl.resize_image()
         lbls.append(lbl)
         imgs.append(img)
         iofs.append(iof)
         stacked.append(n)
-    # pixels each frame lost in downlink (truncated lines); filled so they don't skew the rest
-    masks = [l.valid_mask() for l in lbls]
+        # pixels each frame lost in downlink (truncated lines) that no repeat exposure stacked with it had
+        masks.append(mask)
+    lost = sum(int((~m).sum()) for m in masks)
+    if fill and lost:
+        # short runs of lost lines from the rows above and below (now valid); the rest from round them, only so
+        # they don't skew the brightness scale or bleed when shifted: those stay invalid
+        lined = [ic.fill_lines(img, mask) for img, mask in zip(imgs, masks)]
+        iofs = [None if iof is None else ic.fill_lines(iof, mask)[0] for iof, mask in zip(iofs, masks)]
+        imgs, masks = [l[0] for l in lined], [l[1] for l in lined]
+    left = sum(int((~m).sum()) for m in masks)
     if fill:
         imgs = [ic.fill_invalid(img, mask) for img, mask in zip(imgs, masks)]
         iofs = [None if iof is None else ic.fill_invalid(iof, mask) for iof, mask in zip(iofs, masks)]
@@ -241,6 +250,9 @@ def load_aligned(paths, hdr=False, scale=None, repeat_window=120):
     report = {"calibrated": calibrated, "stacked": stacked, "aligned": aligned}
     if not fill:
         report["filled"] = False
+    if lost:
+        # lost pixels (1024 px grid) after stacking, and how many of them are still missing after the fill
+        report["lost_px"] = [lost, left]
     if dropped:
         report["dropped"] = dropped
     return imgs, np.logical_and.reduce(masks), lbls[ref], report
