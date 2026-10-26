@@ -579,6 +579,16 @@ SKY_TOE = 1.0    # ... and the soft toe above those blacks, this many times the 
                  # (calibration.display): the sky's scan lines, not its pixel noise, set how far grain reaches
 
 
+def _sky_fine(iofs, masks):
+    """The sky's fine structure in the pictures iofs (sky masks): the sky less its own mean over SKY_SMOOTH pixels
+    (row and column stray-light stripes, compression blocks, noise), on the darker half of the sky by its 5 pixel
+    mean, as one array. Smooth faint light (haze, a ring, the body's glow) is not in it."""
+    local = [cv2.blur(i, (5, 5)) for i in iofs]
+    sky = np.concatenate([l[m] for l, m in zip(local, masks)])
+    return np.concatenate([(i - cv2.blur(i, (SKY_SMOOTH, SKY_SMOOTH)))[m & (l <= np.median(sky))]
+                           for i, l, m in zip(iofs, local, masks)])
+
+
 def tile_scale(scale, f, own_sky=False, seen=None):
     """The display scale of one tile of filter f: the pass's, and with own_sky (a movie's frames, each shown
     alone) a black raised to the frame's own sky level plus the band's height over it (sky_tops) where that sky
@@ -599,11 +609,17 @@ def tile_scale(scale, f, own_sky=False, seen=None):
         if m.mean() <= SKY_MIN:
             return None
         (level,), _ = calibration.sky_levels([[q]], [[m]])
-        if level + top <= black:
+        # the band's height over the sky at least this frame's own (its sky's fine structure, as pass_scale measures
+        # the pass's): a frame lit by stray light has a grainier sky than the pass's typical one, and in the Jupiter
+        # approach movie its red and green grain rose over a black set by the pass's height, a faint red cast
+        fine = _sky_fine([q], [m])
+        own = float(np.percentile(fine, SKY_TOP_PCT) - np.median(fine)) if fine.size > 100 else 0.0
+        raised = level + max(top, own)
+        if raised <= black:
             return None
         if seen is not None:
-            seen["black"] = level + top
-        return {"black": level + top, "toe": scale.get("toe")}
+            seen["black"] = raised
+        return {"black": raised, "toe": scale.get("toe")}
 
     out["black_of"] = black_of
     return out
@@ -668,12 +684,7 @@ def pass_scale(frames, u, drawn=None, true_colour=False, sky_tops=None):
             # less its own mean over SKY_SMOOTH pixels (its row and column stray-light stripes, compression
             # blocks and noise), on the darker half of the sky. Smooth faint light (Saturn's Shadow's haze and E
             # ring, a haze limb, the body's glow) is not in it, so it stays above black
-            fine = {}
-            for (f, iofs), level in zip(by.items(), levels):
-                local = [cv2.blur(i, (5, 5)) for i in iofs]
-                sky = np.concatenate([l[m] for l, m in zip(local, masks[f])])
-                fine[f] = np.concatenate([(i - cv2.blur(i, (SKY_SMOOTH, SKY_SMOOTH)))[m & (l <= np.median(sky))]
-                                          for i, l, m in zip(iofs, local, masks[f])])
+            fine = {f: _sky_fine(iofs, masks[f]) for f, iofs in by.items()}
             # with a noise floor (the noisiest band's SKY_FLOOR_PCT percentile above the median): the pixel-difference
             # noise is about 0 on frames stored in 8 bits
             margin = max(margin, calibration.noise_floor(list(fine.values()), SKY_FLOOR_PCT))
