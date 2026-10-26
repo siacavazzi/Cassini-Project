@@ -1,6 +1,7 @@
-"""Synthetic check that obs_mosaic._lit_resize (a tile's canvas resized from its lit part) gives the bytes PIL's resize
-of the whole canvas gives: canvases lit nowhere, at one pixel, everywhere, in a box, a disk, a turned frame, with holes,
-at an edge, resized down and up.
+"""Synthetic check that obs_mosaic._lit_crop (a tile's picture resized from its canvas's lit part and cut to its lit
+pixels) gives the bytes and the place the tile had from PIL's resize of the whole canvas, cut to the lit rows and columns
+of its alpha: canvases lit nowhere, at one pixel, everywhere, in a box, a disk, a turned frame, with holes, at an edge,
+resized down, up and not at all.
 Run: python web/test_lit_resize.py"""
 import os
 import sys
@@ -48,21 +49,37 @@ def canvas(n, kind):
     return im
 
 
+def whole(im, side):
+    """The tile as it was made: PIL's resize of the whole canvas (none at its own size), cut to the rows and columns
+    where its alpha is lit; (cut, top, left) or None"""
+    small = np.asarray(Image.fromarray(im).resize((side, side), Image.LANCZOS)) if side != im.shape[0] else im
+    rows, cols = np.flatnonzero(small[..., 3].any(1)), np.flatnonzero(small[..., 3].any(0))
+    if not len(rows):
+        return None
+    a, b, c, d = rows[0], rows[-1] + 1, cols[0], cols[-1] + 1
+    return np.ascontiguousarray(small[a:b, c:d]), a, c
+
+
+def same(im, side):
+    want, got = whole(im, side), om._lit_crop(im, side)
+    if want is None or got is None:
+        return want is None and got is None
+    return (got[0].dtype == want[0].dtype and got[0].shape == want[0].shape and np.array_equal(got[0], want[0])
+            and (got[1], got[2]) == (want[1], want[2]))
+
+
 checks = 0
-for trial in range(240):
+for trial in range(320):
     n = int(rng.choice([5, 16, 37, 100, 211, 300]))
     kind = ("nothing", "pixel", "everywhere", "box", "disk", "holes", "turned", "edge")[trial % 8]
     im = canvas(n, kind)
-    side = max(1, round(n * rng.uniform(0.4, 1.6)))
-    side += side == n
-    whole = np.asarray(Image.fromarray(im).resize((side, side), Image.LANCZOS))
-    lit = om._lit_resize(im, side)
-    assert lit.dtype == whole.dtype and lit.shape == whole.shape and np.array_equal(lit, whole), (n, kind, side)
+    side = n if trial % 4 == 3 else max(1, round(n * rng.uniform(0.4, 1.6)))
+    assert same(im, side), (n, kind, side)
     checks += 1
 # a movie tile's canvas: 3072 px, the frame turned in its middle
 im = np.zeros((3072, 3072, 4), np.uint8)
 im[843:2228, 843:2228] = canvas(1385, "turned")[:, :, :]
-for side in (3027, 3101):
-    assert np.array_equal(om._lit_resize(im, side), np.asarray(Image.fromarray(im).resize((side, side), Image.LANCZOS))), side
+for side in (3027, 3072, 3101):
+    assert same(im, side), side
     checks += 1
 print(f"{checks} checks ok")

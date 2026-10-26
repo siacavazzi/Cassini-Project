@@ -602,29 +602,37 @@ def pass_scale(frames, u, drawn=None, true_colour=False, sky_tops=None):
     return out
 
 
-def _lit_resize(image, side):
-    """image (an RGBA canvas, unlit outside the frame on it) resized to side x side px with LANCZOS: the same bytes as
-    PIL's resize of the whole canvas, made from its lit part. PIL resizes RGBA premultiplied (RGBa), across and then
-    down, each row and then each column on its own, and an unlit pixel is 0 premultiplied: so only the rows with a lit
-    pixel are resized across, and only the columns those leave lit are resized down (a movie tile's 3072 px canvas is
-    ~1400 px lit, and the whole canvas's resize was half of making the tile)."""
+def _lit_crop(image, side):
+    """A tile's picture: image (an RGBA canvas, unlit outside the frame on it) at side x side px, the bytes PIL's
+    LANCZOS resize of the whole canvas gives (the canvas itself when side is its size), cut to its lit pixels: (the
+    cut, its top row, its left column), or None when no pixel is lit. Made from the lit part: PIL resizes RGBA
+    premultiplied (RGBa), across and then down, each row and then each column on its own, and an unlit pixel is 0
+    premultiplied, so only the rows with a lit pixel are resized across, and only the columns those leave lit are
+    resized down (a movie tile's 3072 px canvas is ~1400 px lit, and the whole canvas's resize was half of making
+    the tile). The lit boxes are PIL's getbbox, one pass over the pixels in C, and the resized canvas is never made
+    whole (both cost more than the lit part's resize)."""
     h, w = image.shape[:2]
-    rows, cols = np.flatnonzero(image[..., 3].any(1)), np.flatnonzero(image[..., 3].any(0))
-    out = np.zeros((side, side, 4), np.uint8)
-    if not len(rows):
-        return out
-    r0, r1, c0, c1 = rows[0], rows[-1] + 1, cols[0], cols[-1] + 1
+    box = Image.fromarray(image).getbbox(alpha_only=True)
+    if box is None:
+        return None
+    c0, r0, c1, r1 = box
+    if side == h:
+        return image[r0:r1, c0:c1].copy(), r0, c0
     strip = Image.new("RGBa", (w, r1 - r0))
     strip.paste(Image.fromarray(np.ascontiguousarray(image[r0:r1, c0:c1])).convert("RGBa"), (c0, 0))
     across = strip.resize((side, r1 - r0), Image.LANCZOS)
-    used = np.flatnonzero(np.asarray(across).view(np.uint32)[..., 0].any(0))
-    if not len(used):
-        return out
-    x0, x1 = used[0], used[-1] + 1
+    # the columns with anything in them, colour or alpha
+    used = across.getbbox(alpha_only=False)
+    if used is None:
+        return None
+    x0, x1 = used[0], used[2]
     tall = Image.new("RGBa", (x1 - x0, h))
     tall.paste(across.crop((x0, 0, x1, r1 - r0)), (0, r0))
-    out[:, x0:x1] = np.asarray(tall.resize((x1 - x0, side), Image.LANCZOS).convert("RGBA"))
-    return out
+    down = tall.resize((x1 - x0, side), Image.LANCZOS)
+    box = down.getbbox(alpha_only=True)
+    if box is None:
+        return None
+    return np.asarray(down.crop(box).convert("RGBA")), box[1], x0 + box[0]
 
 
 def tile(u, n, cache, scale=None):
@@ -653,14 +661,14 @@ def tile(u, n, cache, scale=None):
         os.makedirs(os.path.dirname(base), exist_ok=True)
         if image is not None and "frame_offset" in rep:
             side = round(image.shape[0] * k)
-            small = _lit_resize(image, side) if side != image.shape[0] else image
-            rows, cols = np.flatnonzero(small[..., 3].any(1)), np.flatnonzero(small[..., 3].any(0))
-            if len(rows):
-                a, b, c, d = rows[0], rows[-1] + 1, cols[0], cols[-1] + 1
-                Image.fromarray(np.ascontiguousarray(small[a:b, c:d])).save(base + ".png", compress_level=1)
+            lit = _lit_crop(image, side)
+            if lit is not None:
+                crop, a, c = lit
+                b, d = a + crop.shape[0], c + crop.shape[1]
+                Image.fromarray(crop).save(base + ".png", compress_level=1)
                 out.update({"native_offset": rep["frame_offset"], "offset": [v * k for v in rep["frame_offset"]],
                             "box": [int(c) - side / 2, int(a) - side / 2, int(d - c), int(b - a)]})
-                out["outline"] = _corners(out, small[a:b, c:d, 3])
+                out["outline"] = _corners(out, crop[..., 3])
         else:
             out["why"] = rep.get("why", "not placed by SPICE")
         reel._cached(base + ".json", lambda: json.dumps(out, default=str).encode())
