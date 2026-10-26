@@ -167,7 +167,9 @@ body.phone.phone-land #bodymenu { left: auto !important; width: min(380px, 46vw)
     let best = Infinity;
     const loaded = t => t >= loadedSpan[0] && t < loadedSpan[1];
     if (loaded(et) && catalog && catalog.byCam) {
+      const lc = cassiniFeeds.liveCams ? cassiniFeeds.liveCams() : null;   // a closed camera's pictures are not waited for
       for (const cam of ["N", "W"]) {
+        if (lc && !lc.includes(cam)) continue;
         const a = cassiniFeeds.framesOf(cam, M.name).et; let lo = 0, hi = a.length;
         while (lo < hi) { const m = (lo + hi) >> 1; if (a[m] <= et) lo = m + 1; else hi = m; }
         if (lo < a.length && loaded(a[lo])) best = Math.min(best, a[lo]);
