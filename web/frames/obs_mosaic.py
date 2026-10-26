@@ -408,8 +408,9 @@ def _ulock(u):
 PLAN_FILE = "plan4.json"   # renamed when the plan's rules change, so cached plans are worked out again
 # a movie's footprint (movie_footprint), worked out with the plan and named after it, so a new plan redoes it
 FOOTPRINT_FILE = "movie_footprint-" + PLAN_FILE
-# a feature track's steady places (track_places), and its footprint drawn from them
-TRACK_FILE = "track-" + PLAN_FILE
+# a feature track's steady places (track_places), and its footprint drawn from them; renamed (with the track's movie
+# frames, movie_webp) whenever the rule changes
+TRACK_FILE = "track2-" + PLAN_FILE
 TRACK_FOOTPRINT_FILE = "movie_footprint-" + TRACK_FILE
 
 
@@ -1718,9 +1719,11 @@ def track_places(u, cache, p=None):
     (_shift_onto: the pipeline's own alignment of a set's channels), with the two frames' middles on one another:
     the shift found is how far the feature moved in the frame, and the tile's steady place is the earlier tile's
     moved by it. A tile that does not match the one before (another filter can look too different: a methane band
-    after a continuum) is tried on the newest earlier tile of its own filter; one that matches neither (the camera
-    moved to another feature) keeps the step SPICE gives from the tile before. So a colour set's filters land on one
-    another too (they are taken one after another), and the first tile keeps SPICE's place. Worked out once over
+    after a continuum) is tried on the newest earlier tile of its own filter; one that matches neither is held where
+    the tile before it is: the camera follows the feature, so SPICE's step between two frames is that following, the
+    very motion a track takes out (taking it added up to 11,000 px over ISS_191SA_FEATRAK001's 360 frames, and
+    WIND5HR003's filters jumped 60 to 160 px back and forth). So a colour set's filters land on one another too (they
+    are taken one after another), and the first tile keeps SPICE's place. Worked out once over
     every tile of the pass and kept with it; {} with Settings > Processing's alignment off (SPICE's places)."""
     p = p or plan(u, cache)
     if not calibration.step("align"):
@@ -1763,10 +1766,7 @@ def track_places(u, cache, p=None):
                             hows[n] = f"{how} to {j}"
                             break
                     else:
-                        q = made[prev]
-                        places[n] = [places[prev][0] + t["offset"][0] - q["offset"][0],
-                                     places[prev][1] + t["offset"][1] - q["offset"][1]]
-                        hows[n] = f"SPICE from {prev}"
+                        places[n], hows[n] = list(places[prev]), f"held from {prev}"
                 prev = n
                 newest[t["filter"]] = n
             data = json.dumps({"places": {str(n): [round(v, 2) for v in xy] for n, xy in places.items()}, "how": hows})
@@ -2038,7 +2038,7 @@ def movie_webp(frame_id, size, cache, trail=0, colour=True, wait=False, ahead=6,
         return None, {"why": "working out the pass", "observation": u["key"][1], "pass": u["key"][3]}
     # (a feature track's frames, at their steady places, are named apart from the frames it played before)
     path = os.path.join(folder(u, cache), MOVIE_DIR, str(size),
-                        f"{n}_{trail}_{int(bool(colour))}{'_c2' if centre else ''}{'_k' if u.get('track') else ''}.webp")
+                        f"{n}_{trail}_{int(bool(colour))}{'_c2' if centre else ''}{'_k2' if u.get('track') else ''}.webp")
     report, meta = {}, path[:-4] + "json"
 
     def make():

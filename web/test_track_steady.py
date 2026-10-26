@@ -2,7 +2,7 @@
 SPICE puts its frames 150 px apart one after another (and a few px off each time), while the cloud hardly moves in
 the frame itself. Each tile is registered to the one before it with C8's alignment (_shift_onto), so in the movie
 (movie_frame) the cloud holds still and a colour set's filters land on one another. Synthetic tiles: one cloud field,
-filters RED, GRN, BL1 at three brightnesses, a methane-like frame that matches nothing (it keeps SPICE's step).
+filters RED, GRN, BL1 at three brightnesses, a methane-like frame that matches nothing (it is held where the frame before is).
 Run: python web/test_track_steady.py"""
 import sys; import os; HERE = os.path.dirname(os.path.abspath(__file__)); sys.path[:0] = [os.path.join(HERE, "frames"), os.path.dirname(HERE)]
 import json, tempfile  # noqa: E402
@@ -55,11 +55,11 @@ with calibration.looking("balanced"):
     print("cloud's place, first tile = 0:", np.round(err, 2).tolist())
     # (phase correlation's sub-pixel peak is good to a px or so, across filters too)
     assert max(np.abs(e).max() for e in err) < 2.5, err
-    # the methane frame keeps SPICE's step from the frame before
+    # the methane frame is held where the frame before is, not moved by SPICE's step
     for n in places:
         if filters[n] == "MT2":
-            assert how[str(n)] == f"SPICE from {n - 1}", how[str(n)]
-            assert np.allclose(np.subtract(places[n], places[n - 1]), np.subtract(spice[n], spice[n - 1]), atol=0.02)
+            assert how[str(n)] == f"held from {n - 1}", how[str(n)]
+            assert places[n] == places[n - 1]
     # and the frame after it lands on the newest RED, the methane frame being no help
     assert how["4"].endswith("to 0"), how["4"]
     # the movie: one view for the pass, the cloud still in it from frame to frame
