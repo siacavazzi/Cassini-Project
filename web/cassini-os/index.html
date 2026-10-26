@@ -9737,7 +9737,7 @@ function frame(now) {
     A.since = performance.now(); A.subject = null; A.cand = null; A.nextSwitch = 0; A.shiftAt = 0; A.liveAt = performance.now();
     switchTo(wanted(), performance.now());
     applyMode();
-    if (F && F.windows) F.windows.forEach(f => f(true));
+    if (F && F.windows && catalog && catalog.byCam) F.windows.forEach(f => f(true));   // (the catalog may still be loading)
     const u = new URL(location.href);
     if (u.searchParams.get("ambient") !== (mode || "1")) { u.searchParams.set("ambient", mode || "1"); try { history.replaceState(history.state, "", u); } catch (e) {} }
     document.dispatchEvent(new CustomEvent("cassini:ambient", { detail: { on: true, mode: A.mode } }));
@@ -9759,7 +9759,7 @@ function frame(now) {
     if (ok(s.focus) && s.focus !== state.focus) setFocus(s.focus);
     if (s.follow) S.transient(() => setFollow(true));
     setSpeed(s.speed); setPlaying(s.playing);
-    if (F && F.windows) F.windows.forEach(f => f(true));
+    if (F && F.windows && catalog && catalog.byCam) F.windows.forEach(f => f(true));   // (the catalog may still be loading)
     const u = new URL(location.href);
     if (u.searchParams.has("ambient")) { u.searchParams.delete("ambient"); try { history.replaceState(history.state, "", u); } catch (e) {} }
     if (window.cassiniPerf) cassiniPerf.invalidate();
