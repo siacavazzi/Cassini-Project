@@ -244,8 +244,21 @@ First batch: phases 1, 2a and A at once. Second batch: 2b once checkpoint 2 is a
 | PR | What | Waits on |
 |---|---|---|
 | #100 | summed-frame edge line; Auto center centers every whole disk (ctr3) | Sam's "merge" |
-| #102 | timeline movie row fixes, full-speed pre-process, NAC/WAC | review, then Sam |
-| (thread) | cached playback chugging: tile records re-read per picture | fix in progress, preview 8812 |
+| #102 | timeline movie row fixes, full-speed pre-process, NAC/WAC, complete pictures only | Sam's "merge" (reviewed) |
+| #105 | cached playback: one in-memory record per pass (6a) | Sam's "merge" |
+
+### Who works where (Sam 2026-10-26 02:44Z: complete 3, 4, 5, 6a, 7, 8; 6b frames run at 01:00)
+All phase branches start from `pictures-next` = `pictures` + #100 + #102 + #105 (the three PRs waiting on Sam), so nobody
+redoes them; PRs target `pictures`.
+
+| Phase | Thread | Port | Owns | Must not touch |
+|---|---|---|---|---|
+| 3 Placed tiles | cmsg_01VihZrurbK5NUCdmG37hHXs741SaveijgSJYmswGAavRq | 8817 | so_far, colour_picture, plan, _judge, mosaic .json manifest | rolling_*, tile_scale, centre code, segments |
+| 7 Movie polish | cmsg_01VihZrurbK5NUCdmG37hHXsDdakNZX1zDtPzzoacYPHhG | 8818 | rolling_layout/rolling_webp, laps fade, Time-lapse, movie speed, burst limit | compose/so_far (passes a per-tile age/alpha field agreed with 3) |
+| 8 Finishing | cmsg_01VihZrurbK5NUCdmG37hHXsU9bP1P9p2bA11HS2iqK6L7 | 8819 | C8 registration (color_image), C9 8LSB (label_handler), D9 TIFF route, red cast in tile_scale | so_far/colour_picture, centre code; D8 dropped |
+| 4, 5 | start when 3 merges | | tile_map API from 3 | |
+| 6a | #105 (chugging thread) | 8812 | the in-memory pass record everyone reuses | |
+| 6b | pre-build thread | — | frames run from 01:00 Mini local, sparsebundle, pauses on ~/prebuild.pause | composites/mosaics wait for the look freeze |
 
 ### Still to do
 | Phase | One line | Depends on |
