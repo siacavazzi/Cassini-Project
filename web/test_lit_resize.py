@@ -1,0 +1,68 @@
+"""Synthetic check that obs_mosaic._lit_resize (a tile's canvas resized from its lit part) gives the bytes PIL's resize
+of the whole canvas gives: canvases lit nowhere, at one pixel, everywhere, in a box, a disk, a turned frame, with holes,
+at an edge, resized down and up.
+Run: python web/test_lit_resize.py"""
+import os
+import sys
+sys.path.insert(0, os.path.join(os.path.dirname(os.path.abspath(__file__)), "frames"))
+import numpy as np
+from PIL import Image
+import obs_mosaic as om  # noqa: E402
+
+rng = np.random.default_rng(8)
+
+
+def canvas(n, kind):
+    im = np.zeros((n, n, 4), np.uint8)
+    if kind == "nothing":
+        return im
+    if kind == "pixel":
+        y, x = rng.integers(0, n, 2)
+        im[y, x] = rng.integers(1, 256, 4)
+        return im
+    if kind == "everywhere":
+        im[:] = rng.integers(0, 256, (n, n, 4))
+        im[..., 3] |= 1
+        return im
+    y0, x0 = rng.integers(0, n - 1, 2)
+    if kind == "edge":
+        y0 = 0 if rng.random() < .5 else y0
+        x0 = 0 if rng.random() < .5 else x0
+    hh, ww = rng.integers(1, n - y0 + 1), rng.integers(1, n - x0 + 1)
+    if kind == "edge":
+        hh, ww = n - y0, n - x0
+    block = rng.integers(0, 256, (hh, ww, 4)).astype(np.uint8)
+    yy, xx = np.mgrid[:hh, :ww]
+    if kind == "disk":
+        inside = (yy - hh / 2) ** 2 / max(hh / 2, 1) ** 2 + (xx - ww / 2) ** 2 / max(ww / 2, 1) ** 2 < 1
+    elif kind == "holes":
+        inside = rng.random((hh, ww)) < .7
+    elif kind == "turned":
+        u, v = (xx - ww / 2) * .88 - (yy - hh / 2) * .48, (xx - ww / 2) * .48 + (yy - hh / 2) * .88
+        inside = (abs(u) < ww / 3) & (abs(v) < hh / 3)
+    else:
+        inside = np.ones((hh, ww), bool)
+    # an unlit pixel of a canvas can still hold colour: premultiplied, it is 0 all the same
+    block[..., 3] = np.where(inside, np.maximum(block[..., 3], 1), 0)
+    im[y0:y0 + hh, x0:x0 + ww] = block
+    return im
+
+
+checks = 0
+for trial in range(240):
+    n = int(rng.choice([5, 16, 37, 100, 211, 300]))
+    kind = ("nothing", "pixel", "everywhere", "box", "disk", "holes", "turned", "edge")[trial % 8]
+    im = canvas(n, kind)
+    side = max(1, round(n * rng.uniform(0.4, 1.6)))
+    side += side == n
+    whole = np.asarray(Image.fromarray(im).resize((side, side), Image.LANCZOS))
+    lit = om._lit_resize(im, side)
+    assert lit.dtype == whole.dtype and lit.shape == whole.shape and np.array_equal(lit, whole), (n, kind, side)
+    checks += 1
+# a movie tile's canvas: 3072 px, the frame turned in its middle
+im = np.zeros((3072, 3072, 4), np.uint8)
+im[843:2228, 843:2228] = canvas(1385, "turned")[:, :, :]
+for side in (3027, 3101):
+    assert np.array_equal(om._lit_resize(im, side), np.asarray(Image.fromarray(im).resize((side, side), Image.LANCZOS))), side
+    checks += 1
+print(f"{checks} checks ok")

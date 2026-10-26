@@ -271,23 +271,44 @@ QUALITY = 95
 QSUFFIX = f"-q{QUALITY}"
 
 
+def _encoding(im, size, fmt="webp", quality=QUALITY):
+    """How encode makes im at size: the side it is shrunk to (None when it fits) and the saver's format and arguments.
+    Two sizes encoded the same way are the same bytes: a picture no larger than either is not shrunk for them (a 512 px
+    summed frame's 1024 and 512; a 1024 px composite's 1024 and full, both at quality 95)"""
+    cap = FULL_MAX if size == FULL else size
+    shrink = cap if max(im.size) > cap else None
+    if fmt == "png":
+        return shrink, "PNG", (("compress_level", 6),)
+    if size == FULL and im.mode == "L":
+        return shrink, "WEBP", (("lossless", True), ("quality", 80), ("method", 4))
+    return shrink, "WEBP", (("quality", max(94, quality) if size == FULL else quality), ("method", 4))
+
+
 def encode(im, size, fmt="webp", quality=QUALITY):
     """im as WebP (or PNG), longest side at most size; a FULL picture keeps its size up to FULL_MAX, and a
     grey one is sent losslessly (an 8-bit frame is a few hundred KB that way)"""
-    cap = FULL_MAX if size == FULL else size
-    if max(im.size) > cap:
+    shrink, kind, args = _encoding(im, size, fmt, quality)
+    if shrink is not None:
         # shrunk on a copy: thumbnail works in place, and im may be a picture kept for its other sizes
         # (_recent_composite), which a 512 view would otherwise leave at 512 for the 1024, full or PNG asked next
         im = im.copy()
-        im.thumbnail((cap, cap), Image.LANCZOS)
+        im.thumbnail((shrink, shrink), Image.LANCZOS)
     out = io.BytesIO()
-    if fmt == "png":
-        im.save(out, "PNG", compress_level=6)
-    elif size == FULL and im.mode == "L":
-        im.save(out, "WEBP", lossless=True, quality=80, method=4)
-    else:
-        im.save(out, "WEBP", quality=max(94, quality) if size == FULL else quality, method=4)
+    im.save(out, kind, **dict(args))
     return out.getvalue()
+
+
+def encoder(im, quality=QUALITY):
+    """encode for one picture asked for at several sizes: each way of encoding it (_encoding) is made once, so a
+    composite's 1024 and full (the same bytes at quality 95) cost one encode"""
+    made = {}
+
+    def at(size, fmt="webp"):
+        key = _encoding(im, size, fmt, quality)
+        if key not in made:
+            made[key] = encode(im, size, fmt, quality)
+        return made[key]
+    return at
 
 
 def picture_format(query):
@@ -343,9 +364,28 @@ def _frame_image(frame_id):
     return im.copy()
 
 
+# the last frames encoded at their own size, by how (_encoding): the pre-build asks each frame for 1024, 512 and 128 in
+# turn, and a summed frame (512 or 256 px) is not shrunk for its 1024 or its 512, so those are the same bytes
+_frame_bytes = collections.OrderedDict()
+
+
 def webp(frame_id, size, cache, fmt="webp"):
     def make():
-        return encode(_frame_image(frame_id), size, fmt, FRAME_QUALITY)
+        im = _frame_image(frame_id)
+        way = _encoding(im, size, fmt, FRAME_QUALITY)
+        if way[0] is not None:   # shrunk to the size asked: no other size is encoded this way
+            return encode(im, size, fmt, FRAME_QUALITY)
+        with _frames_lock:
+            data = _frame_bytes.get((frame_id, way))
+            if data is not None:
+                _frame_bytes.move_to_end((frame_id, way))
+                return data
+        data = encode(im, size, fmt, FRAME_QUALITY)
+        with _frames_lock:
+            _frame_bytes[frame_id, way] = data
+            while len(_frame_bytes) > FRAMES_KEEP:
+                _frame_bytes.popitem(last=False)
+        return data
     return cached(os.path.join(cache, FRAME_VERSION, size_dir(size, fmt), f"{frame_id}.{fmt}"), make)
 
 
@@ -477,15 +517,17 @@ def color_webp(ids, size, cache, fmt="webp", channel=None, centre=None):
         reel.keep_report(base + ".json", made)
         print("composite", json.dumps(made))
         # the camera windows' other sizes are encoded now too (a few tens of ms each), so a window that grows or
-        # goes to full view gets the composite at once instead of making it again
+        # goes to full view gets the composite at once instead of making it again; a size encoded like another (a
+        # 1024 px composite's 1024 and full) is the same bytes, made once
+        enc = encoder(im)
         for other in WINDOW_SIZES if channel is None else ():   # a channel is asked for at the size it is shown
             if other != size:
                 path = os.path.join(folder, size_dir(other, "webp"), "_".join(ids))
                 if not os.path.exists(path + ".webp"):
-                    _make_file(path + ".webp", lambda: encode(im, other))
+                    _make_file(path + ".webp", lambda: enc(other))
                     if not os.path.exists(path + ".json"):
                         _make_file(path + ".json", lambda: json.dumps(made).encode())
-        return encode(im, size, fmt)
+        return enc(size, fmt)
     data = cached(f"{base}.{fmt}", make)
     if not report:
         report = reel.report_of(base + ".json", {})
