@@ -57,8 +57,10 @@ Routes:
                                stacked, calibrated, aligned, centred on the body with north up by SPICE)
                                and drawn into the rolling mosaic with the pictures before it; made on
                                first request and cached. X-Reel says how it was made
-  /frames/mosaic/<ID>.json     where each frame sits in that mosaic (obs_mosaic.tile_map): its pointings, each with
-                               its frames by filter and its outline and centre as fractions of the picture
+  /frames/mosaic/<ID>.json     where each frame sits in that mosaic (obs_mosaic.tile_map, the picture's manifest): its
+                               layers (colour set, gray luminance base) and pointings, each with its frames by filter
+                               (drawn in colour, in the gray base only, or not drawn), whether it shows in colour, and
+                               its outline and centre as fractions of the picture
   /frames/mosaic/<ID>/frame.webp?ids=A,B,C&size=full   one frame of that mosaic on its own, on the mosaic's levels
                                and colours (obs_mosaic.pointing_picture; format=png, download=1 as below)
   /frames/mosaic/<ID>.webp?size=512   (&warm=1: only start making the pass ahead of time, empty answer;
