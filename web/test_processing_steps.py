@@ -72,7 +72,8 @@ for t, (band, dx) in enumerate((("RED", 0), ("GRN", 6), ("BL1", 12))):
     png = np.clip(iof / 0.5 * 254, 0, 254).astype(np.uint8)
     png[40:44] = 0
     made[f"nac_data/N{t}_1.png"] = (Label(band, t), png, iof)
-stacking.load_stacked = lambda path, window=120, max_frames=5, count=False: (made[path][0], made[path][1].copy(), 1)
+stacking.load_stacked = lambda path, window=120, max_frames=5, count=False, valid=False: \
+    (made[path][0], made[path][1].copy(), 1) + ((made[path][0].valid_mask(),) if valid else ())
 cal.calibrate = lambda png, info, image=None: next(v[2] for v in made.values() if v[0].info is info)
 cal.ds.imread = lambda path, flags=None: made[path][1]
 
@@ -84,13 +85,15 @@ def run(off=""):
 
 imgs, valid, _, rep = run()
 assert rep["calibrated"] and "off" not in rep["aligned"] and "filled" not in rep, rep
-assert not valid[40:44].any()   # lost lines stay out of the picture's coverage either way
+# four lost lines are a short gap: filled from the rows above and below, so the picture covers them
+assert rep["lost_px"][1] == 0 and valid[40:44, 60:100].all(), rep
 imgs, valid, _, rep = run("calibrate")
 assert not rep["calibrated"], rep
 imgs, valid, _, rep = run("align")
 assert rep["aligned"] == ["off"] * 3, rep
 imgs, valid, _, rep = run("fill")
 assert rep.get("filled") is False
+assert not valid[40:44].any()   # lost lines not filled stay out of the picture's coverage
 print("load_aligned: calibrate, align, fill ok")
 
 # ---------- stacking: plain stack and HDR ----------
