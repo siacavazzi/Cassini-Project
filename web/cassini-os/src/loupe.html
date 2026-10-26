@@ -238,7 +238,7 @@
     const n = cur.stable && nativeFor(img, cur.srcSeen);
     const nat = n && fx > 1.1 && n.info && n.info.width > sw * 1.15 ? nativeDraw(n, sx / sw, sy / sh, (sx + spanX) / sw, (sy + spanY) / sh, W, dpr) : "";
     tag.textContent = `${z}×` + (nat === "native" ? ` · native resolution ${n.info.width} × ${n.info.height}`
-      : nat === "loading" ? " · loading native resolution…"
+      : nat === "loading" ? (n.info.prepared || n.crops.length ? " · loading native resolution…" : " · preparing native resolution (first look at this mosaic)…")
       : full ? ` · full resolution ${sw} × ${sh}` : loading ? " · loading full resolution…" : "");
   }
   // the picture under the lens can change on its own: drawn again on each new picture

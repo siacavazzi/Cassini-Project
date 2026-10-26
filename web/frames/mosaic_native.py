@@ -51,7 +51,7 @@ KEEP_MB = int(os.environ.get("CASSINI_FULLRES_MB", "5120"))         # most the n
 JPEG_QUALITY = 92
 VERSION = "native-v2"   # bumped whenever the way native mosaics are made changes (with obs_mosaic.VERSIONS)
 # bytes per pixel, roughly, of a saved native mosaic (sky is most of a mosaic's canvas and costs almost nothing)
-EST_BYTES = {"jpg": 0.35, "png": 1.6}
+EST_BYTES = {"jpg": (0.08, 0.005), "png": (2.0, 0.02)}   # (per pixel of picture, per pixel of empty canvas)
 
 _lock = threading.Lock()
 _making = {}     # path -> threading.Lock while it is made
@@ -105,9 +105,13 @@ def info(frame_id, cache, force=False, tune=None, fmts=("jpg", "png")):
     out = {"width": w, "height": h, "scale": k, "shown": [math.ceil(made[2][2] * shown), math.ceil(made[2][3] * shown)],
            "tiles": sum(made[3].get(f, 0) for f in made[4]), "filters": made[4], "observation": u["key"][1],
            "behind": om.unit_of(frame_id)[1] - n, "estimate_mb": {}, "ready": {}, "making": {}}
+    cover = coverage(made)
+    # prepared: its seams are worked out (the first native picture of a mosaic waits for them, tens of seconds)
+    out["coverage"], out["prepared"] = round(cover, 3), os.path.exists(_seams_path(u, made, cache))
     for fmt in fmts:
         path = _path(u, made, cache, None, fmt, k)
-        out["estimate_mb"][fmt] = round(w * h * EST_BYTES[fmt] / 1e6, 1)
+        lit, sky = EST_BYTES[fmt]
+        out["estimate_mb"][fmt] = round(w * h * (cover * lit + (1 - cover) * sky) / 1e6, 1)
         out["ready"][fmt] = os.path.exists(path)
         if out["ready"][fmt]:
             out["estimate_mb"][fmt] = round(os.path.getsize(path) / 1e6, 1)
@@ -115,6 +119,25 @@ def info(frame_id, cache, force=False, tune=None, fmts=("jpg", "png")):
             if path in _progress:
                 out["making"][fmt] = round(_progress[path], 3)
     return out
+
+
+def coverage(made, side=256):
+    """The share of the mosaic's canvas its placed tiles cover (their boxes drawn on a side-px grid of the view):
+    what a saved mosaic's size goes by, the empty canvas around and between its tiles costing almost nothing."""
+    p, tiles, rect = made[:3]
+    s = side / max(rect[2], rect[3])
+    grid = np.zeros((max(1, math.ceil(rect[3] * s)), max(1, math.ceil(rect[2] * s))), bool)
+    for t in tiles:
+        if "offset" not in t or "box" not in t:
+            continue
+        bx, by, bw, bh = t["box"]
+        x0, y0 = (t["offset"][0] + bx - rect[0]) * s, (t["offset"][1] + by - rect[1]) * s
+        grid[max(0, int(y0)):max(0, math.ceil(y0 + bh * s)), max(0, int(x0)):max(0, math.ceil(x0 + bw * s))] = True
+    return float(grid.mean())
+
+
+def _seams_path(u, made, cache):
+    return os.path.join(cache_dir(cache), VERSION, calibration.style(), "_".join(map(str, u["key"])), f"{made[5]}-seams.json")
 
 
 def _path(u, made, cache, crop, fmt, k):
@@ -147,7 +170,7 @@ def corrections(u, made, cache):
     window's whole canvas (grey_gain), so every block lays the gray under the colour alike. Kept beside the native
     pictures."""
     p, tiles, rect, count, used, name = made
-    path = os.path.join(cache_dir(cache), VERSION, calibration.style(), "_".join(map(str, u["key"])), f"{name}-seams.json")
+    path = _seams_path(u, made, cache)
 
     def make():
         out = {}
@@ -376,13 +399,22 @@ def warm(frame_id, cache, force=False, tune=None):
     """Works out frame_id's mosaic's seam corrections ahead (the slow part of its first native picture: the window's
     mosaic grown again tile by tile), when the lens or the save menu first asks about it."""
     def run():
+        # one at a time, and only for a mosaic whose tiles are all made up to frame_id: a pass still building
+        # changes its layout with every tile, so its seams would be worked out again and again for nothing
+        if not _warming.acquire(blocking=False):
+            return
         try:
             found = layout_of(frame_id, cache, force, tune)
-            if found:
+            if found and om.unit_of(frame_id)[1] == found[1]:
                 corrections(*found[::2], cache)
         except Exception as e:
             print(f"native mosaic {frame_id} seams: {type(e).__name__}: {e}", flush=True)
+        finally:
+            _warming.release()
     return run
+
+
+_warming = threading.Semaphore(1)
 
 
 def start(frame_id, cache, fmt, force=False, tune=None, slots=None):
