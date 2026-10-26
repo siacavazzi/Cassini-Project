@@ -256,6 +256,8 @@ def run(args):
     status.update(done=args.first, state="running")
     errors = open(os.path.join(args.status or args.cache, f"errors-{args.phase}.jsonl"), "a")
     pending, i = set(), 0
+    # every thread may be drawing its own mosaic movie: each keeps its last pictures to grow the next from
+    obs_mosaic.rolled_room(args.threads + 1)
     with calibration.looking(calibration.LOOKS[0]), calibration.coloring(calibration.COLORS[0]), \
             concurrent.futures.ThreadPoolExecutor(args.threads) as pool:
         def one(name, work):

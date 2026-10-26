@@ -1260,8 +1260,18 @@ def _grown(u, p, f, mine, rect, cache):
 
 _rolling = contextvars.ContextVar("rolling", default=False)   # drawing a laps=1 mosaic movie (rolling_webp)
 _rolled = collections.OrderedDict()   # (pass, look, filter, view) -> [(tiles drawn, RGBA)]: each mosaic movie's last pictures
-ROLLED_KEEP = 6    # mosaic movie filters kept (two passes of three; a canvas is up to 16 MB)
-ROLLED_EACH = 2    # pictures kept of each
+# mosaic movies whose last pictures are kept, whole passes (every filter of each), the least recently drawn let go
+# first: one per thread drawing them at once and a window or two, so threads making different passes side by side
+# (the pre-build) do not throw out each other's pictures and draw every frame whole (a canvas is up to 16 MB)
+ROLLED_PASSES = int(os.environ.get("CASSINI_ROLLED_PASSES", "4"))
+ROLLED_EACH = 2    # pictures kept of each filter
+
+
+def rolled_room(passes):
+    """Keep the last pictures of at least this many mosaic movies (a caller drawing that many at once)."""
+    global ROLLED_PASSES
+    with _lock:
+        ROLLED_PASSES = max(ROLLED_PASSES, int(passes))
 
 
 def _rolled_put(key, drawn, rgba):
@@ -1269,8 +1279,11 @@ def _rolled_put(key, drawn, rgba):
         kept = [x for x in _rolled.get(key, []) if x[0] != drawn][-(ROLLED_EACH - 1):] + [(drawn, rgba)]
         _rolled[key] = kept
         _rolled.move_to_end(key)
-        while len(_rolled) > ROLLED_KEEP:
-            _rolled.popitem(last=False)
+        # the pass (and look) is let go as a whole, the one drawn longest ago
+        passes = list(dict.fromkeys(k[:2] for k in _rolled))
+        for old in passes[:max(0, len(passes) - ROLLED_PASSES)]:
+            for k in [k for k in _rolled if k[:2] == old]:
+                del _rolled[k]
 ROLL_STEPS = 8   # most new tiles a mosaic movie's picture grows by from its last one; further than that, it is drawn anew
 
 
