@@ -86,9 +86,17 @@ MOVIE_LAPS = 2       # a mosaic whose places are taken again (median, per filter
 MOVIE_DWELL = 8      # ... or whose camera stays this many frames of one filter (median) at each place it goes
 TRACK_VISITS = 2     # ... or that follows a moving feature (_judge's track): at least this many visits of 3+ filters,
 TRACK_SPAN = 0.08    # ... whose frames spread (median) over more than this much of a frame (twice REGISTER_MAX)
+TRACK_CARRY = 0.5    # ... and, on a turning body (SPIN), whose turning carries a feature at least this share of that spread
 RADIUS = {"SATURN": 60268, "JUPITER": 69911, "TITAN": 2575, "RHEA": 764, "IAPETUS": 735, "DIONE": 561,
           "TETHYS": 531, "ENCELADUS": 252, "MIMAS": 198, "HYPERION": 135, "PHOEBE": 107}
 IFOV = {"N": 6.0e-6, "W": 60e-6}   # radians per full resolution pixel
+# radius (km) and rotation period (hours) of the bodies a camera can follow a feature on (_judge's track): a feature
+# the body's turning carries along. The moons turn with their orbits (Phoebe and Hyperion on their own)
+SPIN = {"SATURN": (60268, 10.66), "JUPITER": (71492, 9.925), "EARTH": (6378, 23.93), "VENUS": (6052, 5832.5),
+        "MOON": (1737, 655.7), "IO": (1822, 42.46), "EUROPA": (1561, 85.23), "GANYMEDE": (2634, 171.7),
+        "CALLISTO": (2410, 400.5), "TITAN": (2575, 382.7), "RHEA": (764, 108.4), "IAPETUS": (735, 1903.9),
+        "DIONE": (561, 65.69), "TETHYS": (531, 45.31), "ENCELADUS": (252, 32.89), "MIMAS": (198, 22.62),
+        "HYPERION": (135, 312.0), "PHOEBE": (107, 9.27)}
 QUALITY = 95         # WebP quality of every picture sent; its folders carry it (frame_server.QUALITY)
 
 _units = {}           # (target, obs, cam) -> [unit dicts]
@@ -279,7 +287,13 @@ def _judge(u):
     # different filters, each within REGISTER_GAP and SAME_PLACE of the one before; in a mosaic a visit holds still
     # (SPICE within REGISTER_MAX, what registration believes), in a track its frames spread over more than TRACK_SPAN
     # (median over the pass's visits of three or more frames). A raster stepping a pointing every frame has no visits.
-    spans, visit = [], []
+    # The spread is where SPICE puts each frame on the pass's canvas (body centred, at its reference distance), which
+    # already follows the spacecraft; what is left in a close flyby is the view turning as Cassini passes (parallax).
+    # So on a body whose turning is known (SPIN) a pass is a track only where that turning can carry a surface feature
+    # across at least TRACK_CARRY of the spread in a visit's time: Saturn's clouds 10 km/s, a moon's surface centimetres
+    # to metres a second, so a moon's regional map stays a mosaic. A target with no body (rings named by themselves,
+    # the sky) keeps the spread alone.
+    spans, visit, took = [], [], []
     for _, _, f, t, _, x, y, z in u["frames"]:
         if not z:
             continue
@@ -288,11 +302,17 @@ def _judge(u):
                       or math.hypot(p[0] - visit[-1][0], p[1] - visit[-1][1]) > SAME_PLACE * FRAME):
             if len(visit) >= 3:
                 spans.append(max(math.hypot(a[0] - c[0], a[1] - c[1]) for a in visit for c in visit) / FRAME)
+                took.append(visit[-1][2] - visit[0][2])
             visit = []
         visit.append(p)
     if len(visit) >= 3:
         spans.append(max(math.hypot(a[0] - c[0], a[1] - c[1]) for a in visit for c in visit) / FRAME)
+        took.append(visit[-1][2] - visit[0][2])
     u["track"] = bool(len(spans) >= TRACK_VISITS and np.median(spans) > TRACK_SPAN)
+    spin = SPIN.get(u["key"][0])
+    if u["track"] and spin and u["z"]:
+        carried = 2 * math.pi * spin[0] / (spin[1] * 3600) * float(np.median(took)) / (u["z"] * IFOV[u["key"][2]]) / FRAME
+        u["track"] = carried >= TRACK_CARRY * float(np.median(spans))
     u["movie"] = u["jump_frac"] is not None and (u["jump_frac"] < MOVIE_JUMPS or (u["dwell"] or 0) >= MOVIE_DWELL or u["track"])
     places = []
     for p in pts:

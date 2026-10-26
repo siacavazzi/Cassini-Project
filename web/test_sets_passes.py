@@ -167,10 +167,10 @@ print("reel's sets, prebuild's and the movies' are the rule's")
 # (ISS_222SA_FEATRAK001); a colour mosaic (filters of a pointing on one another), a raster that steps a pointing every
 # frame through its filters, and a stare cycling filters stay what they were
 if om:
-    def judged(points, filters, times=None):
+    def judged(points, filters, times=None, target="SATURN", z=1e6):
         times = times or [1000.0 + 30 * i for i in range(len(points))]
-        fr = [("", f"N{1700000000 + i}_1", filters[i % len(filters)], t, 600, -x, -y, 1e6) for i, ((x, y), t) in enumerate(zip(points, times))]
-        u = {"key": ("SATURN", "OBS", "N", 0), "frames": fr, "taken": [(f, x, y, z) for _, _, f, _, _, x, y, z in fr], "z": 1e6}
+        fr = [("", f"N{1700000000 + i}_1", filters[i % len(filters)], t, 600, -x, -y, z) for i, ((x, y), t) in enumerate(zip(points, times))]
+        u = {"key": (target, "OBS", "N", 0), "frames": fr, "taken": [(f, x, y, z) for _, _, f, _, _, x, y, z in fr], "z": z}
         om._judge(u)
         return u
     ten = ["CB3", "MT3", "CB2", "MT2", "CB1", "MT1", "UV3", "UV1", "UV2", "BL1"]
@@ -181,6 +181,11 @@ if om:
     om.TRACK_VISITS = keep
     t = judged(visits, ten, vt)
     assert t["track"] and t["kind"] == "movie", (t["kind"], t["track"])
+    # the same creep on a moon in a close flyby (Dione at 50,000 km) is the view turning as Cassini passes, not a
+    # feature carried along: its regional map stays a mosaic (and with no body to turn, the creep alone decides)
+    moon = judged(visits, ten, vt, "DIONE", 5e4)
+    assert not moon["track"] and moon["kind"] == "mosaic", (moon["kind"], moon["track"])
+    assert judged(visits, ten, vt, "S_RINGS")["track"]
     drift = [(70 * i, -85 * i) for i in range(45)]
     d = judged(drift, ten[:9], [41.0 * i + 900 * (i // 9) for i in range(45)])
     assert d["track"] and d["kind"] == "movie", (d["kind"], d["track"])
@@ -193,5 +198,5 @@ if om:
     stare = [(3 * i, 2 * i) for i in range(30)]
     st = judged(stare, ["RED", "GRN", "BL1"])
     assert not st["track"] and st["kind"] == "movie", (st["kind"], st["track"])
-    print("tracks (visits that creep, a steady drift): movie; colour mosaic, filter raster: mosaic; stare: movie")
+    print("tracks (visits that creep on Saturn, a steady drift): movie; moon flyby creep, colour mosaic, filter raster: mosaic; stare: movie")
 print("ok")
