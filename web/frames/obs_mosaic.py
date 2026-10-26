@@ -602,6 +602,31 @@ def pass_scale(frames, u, drawn=None, true_colour=False, sky_tops=None):
     return out
 
 
+def _lit_resize(image, side):
+    """image (an RGBA canvas, unlit outside the frame on it) resized to side x side px with LANCZOS: the same bytes as
+    PIL's resize of the whole canvas, made from its lit part. PIL resizes RGBA premultiplied (RGBa), across and then
+    down, each row and then each column on its own, and an unlit pixel is 0 premultiplied: so only the rows with a lit
+    pixel are resized across, and only the columns those leave lit are resized down (a movie tile's 3072 px canvas is
+    ~1400 px lit, and the whole canvas's resize was half of making the tile)."""
+    h, w = image.shape[:2]
+    rows, cols = np.flatnonzero(image[..., 3].any(1)), np.flatnonzero(image[..., 3].any(0))
+    out = np.zeros((side, side, 4), np.uint8)
+    if not len(rows):
+        return out
+    r0, r1, c0, c1 = rows[0], rows[-1] + 1, cols[0], cols[-1] + 1
+    strip = Image.new("RGBa", (w, r1 - r0))
+    strip.paste(Image.fromarray(np.ascontiguousarray(image[r0:r1, c0:c1])).convert("RGBa"), (c0, 0))
+    across = strip.resize((side, r1 - r0), Image.LANCZOS)
+    used = np.flatnonzero(np.asarray(across).view(np.uint32)[..., 0].any(0))
+    if not len(used):
+        return out
+    x0, x1 = used[0], used[-1] + 1
+    tall = Image.new("RGBa", (x1 - x0, h))
+    tall.paste(across.crop((x0, 0, x1, r1 - r0)), (0, r0))
+    out[:, x0:x1] = np.asarray(tall.resize((x1 - x0, side), Image.LANCZOS).convert("RGBA"))
+    return out
+
+
 def tile(u, n, cache, scale=None):
     """Tile n of the pass, made once: its picture north up, scaled to the pass's reference distance and cropped
     (_tiles/<n>.png), and its report: offset = where the frame's middle sits from the body's centre and box = the
@@ -628,7 +653,7 @@ def tile(u, n, cache, scale=None):
         os.makedirs(os.path.dirname(base), exist_ok=True)
         if image is not None and "frame_offset" in rep:
             side = round(image.shape[0] * k)
-            small = np.asarray(Image.fromarray(image).resize((side, side), Image.LANCZOS)) if side != image.shape[0] else image
+            small = _lit_resize(image, side) if side != image.shape[0] else image
             rows, cols = np.flatnonzero(small[..., 3].any(1)), np.flatnonzero(small[..., 3].any(0))
             if len(rows):
                 a, b, c, d = rows[0], rows[-1] + 1, cols[0], cols[-1] + 1
