@@ -1,0 +1,8 @@
+{
+   "version": "1.0",
+   "name": "Cosmographia HUYGENS DESCENT",
+   "require": [
+      "spice_HUYGENS.json",
+      "spacecraft_HUYGENS.json"
+   ]
+}

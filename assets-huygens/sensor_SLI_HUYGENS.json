@@ -1,0 +1,34 @@
+{
+   "version": "1.0",
+   "name": "Huygens descent",
+   "items": [
+      {
+         "class": "sensor",
+         "name": "DISR-SLI",
+         "parent": "Huygens",
+         "startTime": "2005-01-14 09:13:39.616 UTC",
+         "center": "Huygens",
+         "trajectoryFrame": {
+            "type": "BodyFixed",
+            "body": "Huygens"
+         },
+         "geometry": {
+            "type": "Spice",
+            "instrName": "-150101",
+            "target": "Titan",
+            "range": 2000,
+            "rangeTracking": true,
+            "frustumColor": [
+               0,
+               1,
+               1
+            ],
+            "frustumOpacity": 0.3,
+            "gridOpacity": 1,
+            "footprintOpacity": 0.8,
+            "sideDivisions": 300,
+            "onlyVisibleDuringObs": false 
+         }
+      }
+   ]
+}

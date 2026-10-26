@@ -1,0 +1,25 @@
+License / usage notes for the ESA SPICE Huygens files in this folder
+(checked 2026-10-26)
+
+1. The dataset itself (https://spiftp.esac.esa.int/data/SPICE/HUYGENS/) has
+   no aareadme.txt or license file (aareadme.txt and kernels/aareadme.txt
+   return 404). misc/HUYGENS.html describes misc/cosmo/models as "3D models
+   for the spacecraft(s)" and only gives contact details for the ESA SPICE
+   Service; it states no license.
+
+2. The ESA SPICE Service "Operational SPICE Kernels" page
+   (https://www.cosmos.esa.int/web/spice/operational-kernels/) says the
+   SPICE kernels it distributes are licensed under Creative Commons
+   Attribution-NonCommercial 3.0 IGO (CC BY-NC 3.0 IGO): give appropriate
+   credit to the ESA SPICE Service and the mission team; no commercial use.
+   That page lists Huygens as "Legacy" with DOI 10.5270/esa-ssem3np
+   (https://doi.org/10.5270/esa-ssem3np).
+   It speaks of "SPICE kernels"; whether it also covers the Cosmographia
+   models under misc/cosmo is not stated. Treat them the same way:
+   non-commercial, with credit.
+
+Suggested credit line:
+  Huygens model: ESA SPICE Service (Huygens SPICE kernel dataset,
+  doi:10.5270/esa-ssem3np), CC BY-NC 3.0 IGO.
+
+Contact for questions: ESA SPICE Service, esa_spice@sciops.esa.int

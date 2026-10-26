@@ -1,0 +1,34 @@
+Listing of https://spiftp.esac.esa.int/data/SPICE/HUYGENS/misc/cosmo/models/ fetched 2026-10-26T01:27:09Z
+   Index of /data/SPICE/HUYGENS/misc/cosmo/models 
+ Index of /data/SPICE/HUYGENS/misc/cosmo/models 
+         Name    Last modified    Size    Description   
+      Parent Directory   &nbsp;    -   &nbsp;  
+      Asm2.stl   2020-05-05 13:10    482K  &nbsp;  
+      coast/   2020-05-05 13:10      -   &nbsp;  
+      huygens.3ds   2020-05-05 13:10    130K  &nbsp;  
+      huygens.cmod   2020-05-05 13:10    810K  &nbsp;  
+      huygens.obj   2020-05-05 13:10    309K  &nbsp;  
+      huygensprobe.cmod   2020-05-05 13:10    312K  &nbsp;  
+      huyprobe.cmod   2020-05-05 13:10    201K  &nbsp;  
+
+== coast/
+   Index of /data/SPICE/HUYGENS/misc/cosmo/models/coast 
+ Index of /data/SPICE/HUYGENS/misc/cosmo/models/coast 
+         Name    Last modified    Size    Description   
+      Parent Directory   &nbsp;    -   &nbsp;  
+      huy_D.png   2020-05-05 13:10    355K  &nbsp;  
+      huygens.3DS   2020-05-05 13:10     28K  &nbsp;  
+      huygens.obj   2020-05-05 13:10     60K  &nbsp;  
+
+== ../ (misc/cosmo/)
+   Index of /data/SPICE/HUYGENS/misc/cosmo 
+ Index of /data/SPICE/HUYGENS/misc/cosmo 
+         Name    Last modified    Size    Description   
+      Parent Directory   &nbsp;    -   &nbsp;  
+      load_HUYGENS.json   2020-05-05 13:10    149   &nbsp;  
+      models/   2020-05-05 13:10      -   &nbsp;  
+      sensor_HRI_HUYGENS.json   2020-05-05 13:10    834   &nbsp;  
+      sensor_MRI_HUYGENS.json   2020-05-05 13:10    834   &nbsp;  
+      sensor_SLI_HUYGENS.json   2020-05-05 13:10    834   &nbsp;  
+      spacecraft_HUYGENS.json   2020-05-05 13:10    1.0K  &nbsp;  
+      spice_HUYGENS.json   2020-05-05 13:10    165   &nbsp;  

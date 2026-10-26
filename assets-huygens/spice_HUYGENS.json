@@ -1,0 +1,7 @@
+{
+   "version": "1.0",
+   "name": "Huygens Descent",
+   "spiceKernels": [
+      "/Users/mcosta/SPICE/HUYGENS/kernels/mk/HUYGENS_V02_LOCAL.TM"
+                   ]
+}

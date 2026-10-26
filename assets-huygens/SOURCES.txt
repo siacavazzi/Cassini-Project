@@ -1,0 +1,26 @@
+All files fetched 2026-10-26 from the ESA SPICE Service HTTP server.
+
+huygens.obj                 https://spiftp.esac.esa.int/data/SPICE/HUYGENS/misc/cosmo/models/huygens.obj
+                            Descent module, "Exported from 3D Builder", 4840 v / 9874 tris, no materials.
+                            Same geometry as models/Asm2.stl and models/huygens.cmod (the mesh
+                            spacecraft_HUYGENS.json loads; binary cmod not committed).
+coast/huygens.obj           https://spiftp.esac.esa.int/data/SPICE/HUYGENS/misc/cosmo/models/coast/huygens.obj
+                            Coast/entry configuration. References huygens.mtl, which is not on the
+                            server (404); texture huy_D.png (PNG, not committed) is at
+                            https://spiftp.esac.esa.int/data/SPICE/HUYGENS/misc/cosmo/models/coast/huy_D.png
+huygens-entry-shell.obj     converted from https://spiftp.esac.esa.int/data/SPICE/HUYGENS/misc/cosmo/models/huygens.3ds
+                            Entry shell (heat shield + back cover), 8 objects, 3263 v / 6098 tris.
+                            Converted with a small 3DS chunk reader (vertices + faces only, original axes/units).
+spacecraft_HUYGENS.json     https://spiftp.esac.esa.int/data/SPICE/HUYGENS/misc/cosmo/spacecraft_HUYGENS.json  (meshRotation quat [0,0.7071068,0,0.7071068], meshOffset [0,0,-3], size 0.0008 km, source models/huygens.cmod, frame HUYGENS_PROBE, centre Titan)
+load_HUYGENS.json           https://spiftp.esac.esa.int/data/SPICE/HUYGENS/misc/cosmo/load_HUYGENS.json
+spice_HUYGENS.json          https://spiftp.esac.esa.int/data/SPICE/HUYGENS/misc/cosmo/spice_HUYGENS.json
+sensor_HRI_HUYGENS.json     https://spiftp.esac.esa.int/data/SPICE/HUYGENS/misc/cosmo/sensor_HRI_HUYGENS.json
+sensor_MRI_HUYGENS.json     https://spiftp.esac.esa.int/data/SPICE/HUYGENS/misc/cosmo/sensor_MRI_HUYGENS.json
+sensor_SLI_HUYGENS.json     https://spiftp.esac.esa.int/data/SPICE/HUYGENS/misc/cosmo/sensor_SLI_HUYGENS.json
+listing.txt                 directory listings of https://spiftp.esac.esa.int/data/SPICE/HUYGENS/misc/cosmo/models/, models/coast/ and https://spiftp.esac.esa.int/data/SPICE/HUYGENS/misc/cosmo/
+
+Not committed (binary): models/Asm2.stl, models/huygens.cmod, models/huygensprobe.cmod,
+models/huyprobe.cmod, models/huygens.3ds, models/coast/huygens.3DS, models/coast/huy_D.png.
+No .mtl files exist on the server.
+Dataset page: https://spiftp.esac.esa.int/data/SPICE/HUYGENS/misc/HUYGENS.html
+License notes: LICENSE-NOTES.txt

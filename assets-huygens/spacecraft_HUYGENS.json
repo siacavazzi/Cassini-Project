@@ -1,0 +1,49 @@
+{
+   "version": "1.0",
+   "name": "Cosmographia Huygens descent",
+   "items": [
+      {
+         "class": "spacecraft",
+         "name": "Huygens",
+         "startTime": "2004-12-25 01:58:00 UTC",
+         "center": "Titan",
+         "trajectory": {
+            "type": "Spice",
+            "target": "HUYGENS",
+            "center": "Titan"
+         },
+         "bodyFrame": {
+            "type": "Spice",
+            "name": "HUYGENS_PROBE"
+         },
+         "geometry": {
+            "type": "Mesh",
+			"meshRotation": [
+               0,
+               0.7071068,
+               0,
+               0.7071068
+            ],
+			"meshOffset": [
+			0,
+			0,
+			-3
+			],
+            "size": 0.0008,
+            "source": "models/huygens.cmod"
+         },
+         "trajectoryPlot": {
+            "color": [
+               0.6,
+               1,
+               1
+            ],
+            "sampleCount": 5000,
+            "duration": "20 d",
+            "lead": "5 d",
+            "fade": 0.5
+         }
+      }
+   ]
+}
+
