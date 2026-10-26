@@ -182,10 +182,16 @@ def only(phase, todo, path):
     return [t for t in todo if t[0] in names]
 
 
+WATCH_PAD = 3 * 3600   # s around a watched observation: what a window plays around a Moment, its neighbours too
+
+
 def watched_first(todo):
-    """todo with the items of the most watched observations first (the Moments strip, web/replay/moments.csv, and
-    Highlights, web/replay/highlights.csv), each group in time order, then the rest in time order. An item's
-    observation is its frame's (a set's last frame's); pass items are named after their key, which holds it."""
+    """todo with the items of the most watched stretches first (the Moments strip, web/replay/moments.csv, and
+    Highlights, web/replay/highlights.csv: each observation's frames, WATCH_PAD either side), in time order, then
+    the rest in time order. A Moment plays every frame of its stretch, its neighbours' too: by observation alone,
+    most of what played on 8790 was still made on demand (2026-10-26). An item's time is its frame's (a set's last
+    frame's, a pass's first frame's)."""
+    import bisect
     import csv
     here = os.path.join(os.path.dirname(os.path.dirname(os.path.abspath(__file__))), "replay")
     watched = set()
@@ -197,15 +203,36 @@ def watched_first(todo):
         except OSError:
             pass
     idx, _ = reel.load_index()
-    obs_of = dict(zip(idx["id"].tolist(), idx["OBSERVATION_ID"].tolist()))
+    time_of = dict(zip(idx["id"].tolist(), idx["seconds_1970"].astype(float).tolist()))
+    spans = {}
+    for o, t in zip(idx["OBSERVATION_ID"].tolist(), idx["seconds_1970"].astype(float).tolist()):
+        if o in watched:
+            a, b = spans.get(o, (t, t))
+            spans[o] = (min(a, t), max(b, t))
+    windows = []
+    for a, b in sorted((a - WATCH_PAD, b + WATCH_PAD) for a, b in spans.values()):
+        if windows and a <= windows[-1][1]:
+            windows[-1][1] = max(windows[-1][1], b)
+        else:
+            windows.append([a, b])
+    starts = [w[0] for w in windows]
+    pass_time = {}
+
+    def when(name):
+        last = "_".join(name.split("_")[-2:])   # a frame id (N1352055787_2), or a set's last one
+        if last in time_of:
+            return time_of[last]
+        if not pass_time:   # a pass: TARGET_OBSERVATION_CAMERA_PASS
+            pass_time.update({"_".join(map(str, u["key"])): u["frames"][0][3] for u in all_passes()})
+        return pass_time.get(name)
 
     def hit(name):
-        last = "_".join(name.split("_")[-2:])   # a frame id (N1352055787_2), or a set's last one
-        if last in obs_of:
-            return obs_of[last] in watched
-        return any(f"_{o}_" in name for o in watched)   # a pass: TARGET_OBSERVATION_CAMERA_PASS
-    first = [t for t in todo if hit(t[0])]
-    return first + [t for t in todo if not hit(t[0])], len(first)
+        t = when(name)
+        k = bisect.bisect_right(starts, t) - 1 if t is not None else -1
+        return k >= 0 and t <= windows[k][1]
+    marks = [hit(t[0]) for t in todo]
+    first = [t for t, m in zip(todo, marks) if m]
+    return first + [t for t, m in zip(todo, marks) if not m], len(first)
 
 
 def make_pass(u, cache, sizes=(1024, 512), within=None, style=None):
