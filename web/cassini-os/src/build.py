@@ -458,20 +458,23 @@ rep('  aimFollow();\n', '  aimFollow();\n  if (window.studyCamera) window.studyC
 # separation numbers and gives it a model of its own until it reaches Titan's air; it works without the probe's own
 # track (data/huygens.json) too, for the days before Cassini's getaway burn. Not a cutscene hook: it runs whenever the
 # probe is on its own
+# From the landing on, window.studyLanded (huygens-landing.html) keeps the probe on its landing point for good, marked
+# while the camera is near Titan, and draws it there up close
 rep('function probeActive() { return !!probe && state.et >= probe.track.start && state.et <= probe.track.end; }',
-    'function probeActive() { return !!probe && state.et >= probe.track.start && state.et <= probe.track.end || !probe && !!window.studyCoast && studyCoast.active(state.et); }')
+    'function probeActive() { return !!probe && state.et >= probe.track.start && state.et <= probe.track.end || !probe && !!window.studyCoast && studyCoast.active(state.et) || !!window.studyLanded && studyLanded.active(state.et); }')
+rep('  if (name === "HUYGENS") return probeActive();\n', '  if (name === "HUYGENS") return probeActive() && (!window.studyLanded || studyLanded.marked(state.et));\n')
 rep('  if (probe) {\n    pos.HUYGENS = v3(); probeObj = new THREE.Object3D(); names.push("HUYGENS");',
     '  if (probe || window.studyCoast) {\n    pos.HUYGENS = v3(); probeObj = new THREE.Object3D(); names.push("HUYGENS");')
 rep('  if (probe) { positionAt(probe.track, state.et, pos.HUYGENS); relScene("HUYGENS", probeObj.position); }',
-    '  if (pos.HUYGENS) {\n    if (probe) positionAt(probe.track, state.et, pos.HUYGENS);\n    if (window.studyCoast) studyCoast.place(state.et, pos.HUYGENS);\n    relScene("HUYGENS", probeObj.position);\n    if (window.studyCoast) studyCoast.draw();\n  }')
+    '  if (pos.HUYGENS) {\n    if (probe) positionAt(probe.track, state.et, pos.HUYGENS);\n    if (window.studyCoast) studyCoast.place(state.et, pos.HUYGENS);\n    if (window.studyLanded) studyLanded.place(state.et, pos.HUYGENS);\n    relScene("HUYGENS", probeObj.position);\n    if (window.studyCoast) studyCoast.draw();\n    if (window.studyLanded) studyLanded.draw();\n  }')
 rep('  probeTrail.visible = probeActive() && state.et < probe.events.landing + 6 * 3600;',
     '  probeTrail.visible = !!probe && probeActive() && state.et < probe.events.landing + 6 * 3600;')
-rep('  pe.hidden = !probeActive();', '  pe.hidden = !probe || !probeActive();')
+rep('  pe.hidden = !probeActive();', '  pe.hidden = !probe || !shown("HUYGENS");')
 rep('  const near = probe && state.et > probe.track.start - 30 * 86400 && state.et < probe.track.end + 30 * 86400;',
-    '  const near = probeActive() || probe && state.et > probe.track.start - 30 * 86400 && state.et < probe.track.end + 30 * 86400;')
-# while it coasts, the probe is a spacecraft to look at up close, not a point above Titan
-rep('name === "HUYGENS" ? 4 :', 'name === "HUYGENS" ? (window.studyCoast && studyCoast.modelShown(state.et) ? 1.6e-5 : 4) :')
-rep('  if (name === "HUYGENS") {\n    // from the side', '  if (name === "HUYGENS" && !(window.studyCoast && studyCoast.modelShown(state.et))) {\n    // from the side')
+    '  const near = shown("HUYGENS") || probe && state.et > probe.track.start - 30 * 86400 && state.et < probe.track.end + 30 * 86400;')
+# while it coasts, the probe is a spacecraft to look at up close, not a point above Titan; landed, it is 10 m off
+rep('name === "HUYGENS" ? 4 :', 'name === "HUYGENS" ? (window.studyCoast && studyCoast.modelShown(state.et) ? 1.6e-5 : window.studyLanded && studyLanded.active(state.et) ? 1e-5 : 4) :')
+rep('  if (name === "HUYGENS") {\n    // from the side', '  if (name === "HUYGENS" && !(window.studyCoast && studyCoast.modelShown(state.et)) && !(window.studyLanded && studyLanded.active(state.et))) {\n    // from the side')
 # the close-up pass takes in every small craft near the camera (Cassini, and Huygens on its own): the nearest sets the
 # range, and all of them are blown up about it together
 rep("""  const cd = camera.position.distanceTo(cassini.position);

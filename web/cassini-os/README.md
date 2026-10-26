@@ -141,7 +141,13 @@ the event times and facts are in `src/huygens-landing-data.json` with their sour
 `models/*.glb.b64.txt`; sources on branch `assets/huygens-models`): the entry shell comes off in two parts in the real
 order, and the parachutes are disk-gap-band canopies at their real sizes. Inside Titan's haze the sky closes in around the
 probe; near the ground the probe is held to the landing point on the globe at the descent table's altitude. The last card
-stays at the landing site or goes back to Cassini. `bench/huygens-landing.cjs` records it on a hand-stepped clock.
+stays with Huygens or goes back to Cassini. `bench/huygens-landing.cjs` records it on a hand-stepped clock.
+
+Huygens stays on Titan after the landing, at any time to the end of the mission: its marker and label sit on the landing
+point while the camera is near Titan (within a dozen Titan radii, the site on the near side) or the view is on Huygens,
+and the Huygens chip is there too. Clicking either goes down to it: ESA's model on the landing-site map, the drogue
+lying beside it, under Titan's sky, with the ground kept level while you drag around it. For example
+`?t=2005-01-31T12:00:00&view=huygens&play=0`.
 
 ## Run it
 
