@@ -27,6 +27,7 @@ ahead of time (the server serves what this makes):
   CASSINI_DATA=... CASSINI_KERNELS=... python web/frames/reel.py ENCELADUS [--workers 2]
 """
 import argparse
+import collections
 import contextlib
 import hashlib
 import io
@@ -58,7 +59,7 @@ VERSIONS = {"balanced": "reel-v28", "raw": "reel-v11", "classic": "reel-v5"}   #
 
 
 def version():
-    return VERSIONS[calibration.style()] + "-q95"   # WebP quality 95 (frame_server.QUALITY)
+    return VERSIONS[calibration.style()] + calibration.variant() + "-q95"   # WebP quality 95 (frame_server.QUALITY)
 SET_GAP = 300          # seconds between frames of one filter set
 REPEAT_GAP = 120       # stacking.find_repeats' window
 VIEW = 1536            # full resolution pixels a picture shows (a north-up frame fits in 1448)
@@ -298,9 +299,11 @@ def mosaic_of(frame_id, wait=True):
 
 
 def _cached(path, make):
-    if os.path.exists(path):
+    try:
         with open(path, "rb") as fh:
             return fh.read()
+    except FileNotFoundError:
+        pass
     data = make()
     part = f"{path}.{os.getpid()}.{threading.get_ident()}.part"
     try:
@@ -316,6 +319,41 @@ def _cached(path, make):
             pass
         print(f"cannot keep {path} in the cache ({e})", flush=True)
     return data
+
+
+# a made picture's report (the .json kept beside it in the cache): written once with the picture, so it is read from
+# the cache once and then kept here, and a picture asked for again costs one file (the picture), not two
+REPORTS_KEEP = 8192
+_reports, _reports_lock, _MISSING = collections.OrderedDict(), threading.Lock(), object()
+
+
+def keep_report(path, report):
+    """Keeps the report just written to path (as it reads back from the file)."""
+    rep = json.loads(json.dumps(report))
+    with _reports_lock:
+        _reports[path] = rep
+        _reports.move_to_end(path)
+        while len(_reports) > REPORTS_KEEP:
+            _reports.popitem(last=False)
+
+
+def report_of(path, default=_MISSING):
+    """The report kept in path, read from the cache once: a copy, for the caller to add to. default: answered when
+    there is no such file (otherwise FileNotFoundError)."""
+    with _reports_lock:
+        rep = _reports.get(path)
+        if rep is not None:
+            _reports.move_to_end(path)
+            return dict(rep)
+    try:
+        with open(path) as fh:
+            rep = json.load(fh)
+    except FileNotFoundError:
+        if default is _MISSING:
+            raise
+        return default
+    keep_report(path, rep)
+    return dict(rep)
 
 
 FOLDERS = {"N": "nac_data", "W": "wac_data"}

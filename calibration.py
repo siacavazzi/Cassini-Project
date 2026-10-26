@@ -434,6 +434,54 @@ def looking(name):
 
 
 """
+The pipeline's steps a request turns off (Settings > Processing; the picture routes' off=, a comma list), to see what
+each one does: "stack" (repeat exposures of the same filter merged, stacking.load_stacked and load_hdr), "hdr" (an
+exposure bracket merged into one picture in mosaics and movies, stacking.load_hdr; off merges only identical
+exposures, a plain stack), "fill" (pixels lost in downlink filled from round them), "calibrate" (every frame put on
+I/F and one display scale; off shows each frame on the archive's own stretch) and "align" (a color set's channels
+moved onto one another). Every step is on by default; off steps go into the cache names (variant), so the pictures
+made with every step on keep their names.
+"""
+STEPS = ("stack", "hdr", "fill", "calibrate", "align")
+_off = contextvars.ContextVar("off", default=frozenset())
+
+
+def step(name):
+    """True when the pipeline step name is on for this request (STEPS)."""
+    return name not in _off.get()
+
+
+def variant():
+    """What a cache name gets for the steps turned off: "" with every step on, else "-off-" and their names."""
+    off = _off.get()
+    return "-off-" + "-".join(s for s in STEPS if s in off) if off else ""
+
+
+@contextlib.contextmanager
+def stepping(names):
+    """The pipeline steps names (a comma list or an iterable of STEPS names; others are ignored) turned off."""
+    if isinstance(names, str):
+        names = names.split(",")
+    token = _off.set(frozenset(n for n in names if n in STEPS))
+    try:
+        yield
+    finally:
+        _off.reset(token)
+
+
+def mode():
+    """The request's whole display model (look, colors and the steps turned off), to carry to another thread (in_mode)
+    and to key what is kept in memory."""
+    return look(), colors(), _off.get()
+
+
+@contextlib.contextmanager
+def in_mode(m):
+    with looking(m[0]), coloring(m[1]), stepping(m[2]):
+        yield
+
+
+"""
 The channel mix of a color set, a 3x3 matrix on linear values ([red, green, blue] out of the set's channels in
 order), or None to draw each filter straight: natural color only, in the balanced look.
 camera = "N" or "W"; bands = the set's color filters in channel order ("RED", "GRN", "BL1", "CB2", "MT3"...)
@@ -724,9 +772,9 @@ def load_channels(labels, images=None, sky_fraction=0.1, sky_percentile=98, gamm
 
 
 """
-The channels' I/F images (float32), calibrating those not given; None if any frame can't be calibrated
+Each channel's I/F image, calibrating those not given; None for a frame that can't be calibrated
 """
-def _calibrated(labels, images, iofs=None):
+def calibrated_each(labels, images, iofs=None):
     given = iofs or [None] * len(labels)
     iofs = []
     for lbl, image, iof in zip(labels, images, given):
@@ -735,6 +783,14 @@ def _calibrated(labels, images, iofs=None):
             gray = cv2.cvtColor(image, cv2.COLOR_BGR2GRAY) if image.ndim == 3 else image
             iof = calibrate(png, lbl.get_info(), gray)
         iofs.append(iof)
+    return iofs
+
+
+"""
+The channels' I/F images (float32), calibrating those not given; None if any frame can't be calibrated
+"""
+def _calibrated(labels, images, iofs=None):
+    iofs = calibrated_each(labels, images, iofs)
     if any(iof is None for iof in iofs):
         failed = [lbl.get_info().get("path") for lbl, iof in zip(labels, iofs) if iof is None]
         print(f"Can't calibrate {failed}, using the stretched frames")

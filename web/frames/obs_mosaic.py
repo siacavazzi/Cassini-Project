@@ -56,12 +56,13 @@ import color_image  # noqa: E402
 import calibration  # noqa: E402
 import mosaic  # noqa: E402
 import mosaic_benchmark  # noqa: E402
+import image_correction  # noqa: E402
 import stacking  # noqa: E402
 
 # bumped whenever the way observation mosaics are made changes, so older ones are not served again; one per
 # display model (calibration.style), classic being the mosaics made before the balanced display model, raw the
 # balanced ones before natural color
-VERSIONS = {"balanced": "obs-v43", "raw": "obs-v26", "classic": "obs-v13-classic"}
+VERSIONS = {"balanced": "obs-v46", "raw": "obs-v29", "classic": "obs-v16-classic"}
 CANVAS = 2048        # longest side of the canvas the view is drawn on
 OUT = 1024           # longest side of the picture sent
 FRAME = 1024         # full resolution frame
@@ -94,7 +95,7 @@ _warming = set()
 _background = threading.Semaphore(1)   # background work (passes made ahead) runs one at a time, so it never
                                        # crowds out what a window is waiting for
 _upto, _from = {}, {}   # a pass being made ahead: the last tile to make, the first mosaic to make
-_tile_locks = {}      # (pass key, tile) -> its lock
+_tile_locks = {}      # (pass key, mode, tile) -> its lock (calibration.mode: another look or step set is another tile)
 _making = {}          # path of a mosaic being made -> its lock, so two requests for it make it once
 
 
@@ -238,9 +239,18 @@ def _judge(u):
             if f in last:
                 steps.append(max(abs(p[0] - last[f][0]), abs(p[1] - last[f][1])) / FRAME)
             last[f] = p
-    # no filter taken twice (a stare cycling its filters): every filter's mosaic would be one frame, so it plays
-    # as frames too
-    u["jump_frac"] = float(np.mean([s >= mosaic.min_step for s in steps])) if steps else 0.0 if len(pts) > 1 else None
+    # no filter taken twice: the luminance base draws every filter's tiles in one gray mosaic, so the steps are
+    # counted between consecutive frames whatever their filter. A scan that steps one filter a pointing (a limb
+    # scan, a methane band map) jumps every frame and is a mosaic; a stare cycling its filters stays put and is a movie
+    if not steps:
+        prev = None
+        for _, _, f, _, _, x, y, z in u["frames"]:
+            if z:
+                p = (-x * z / u["z"], -y * z / u["z"])
+                if prev is not None:
+                    steps.append(max(abs(p[0] - prev[0]), abs(p[1] - prev[1])) / FRAME)
+                prev = p
+    u["jump_frac"] = float(np.mean([s >= mosaic.min_step for s in steps])) if steps else None
     # dwell: over every frame taken (repeat exposures too, which the tiles merge), how many frames of one filter
     # the camera takes at a place before it jumps. A raster takes one to a few per pointing; a movie films the
     # same field for minutes (a spoke movie going back and forth between two patches of ring, one frame every
@@ -295,8 +305,15 @@ def _judge(u):
     u["whole"] = bool(radius and (lo < -radius).all() and (hi > radius).all())
 
 
+_unit_of = {}   # frame id -> unit_of's answer (the passes of an observation are worked out once, units)
+UNIT_OF_KEEP = 200000
+
+
 def unit_of(frame_id):
     """(unit, index of the newest tile at that frame) for the pass frame_id is in, or None."""
+    with _lock:
+        if frame_id in _unit_of:
+            return _unit_of[frame_id]
     idx, row = _row_of()
     q = row.get(frame_id)
     if q is None:
@@ -304,11 +321,17 @@ def unit_of(frame_id):
     r = idx.iloc[q]
     cam = "N" if r["INSTRUMENT_ID"] == "ISSNA" else "W"
     t = float(r["seconds_1970"])
+    found = None
     for u in units(r["TARGET_NAME"], r["OBSERVATION_ID"], cam):
         ts = [fr[3] for fr in u["frames"]]
         if ts and ts[0] <= t <= u["last"]:
-            return u, sum(1 for x in ts if x <= t + 1) - 1
-    return None
+            found = u, sum(1 for x in ts if x <= t + 1) - 1
+            break
+    with _lock:
+        if len(_unit_of) >= UNIT_OF_KEEP:
+            _unit_of.clear()
+        _unit_of[frame_id] = found
+    return found
 
 
 def kind_of(frame_id):
@@ -329,7 +352,7 @@ def folder(u, cache):
     # a movie's frames stacked with a shorter repeat window are other pictures than the ones made before it
     gap = u.get("repeat_gap", mosaic_benchmark.REPEAT_GAP)
     suffix = "" if gap >= mosaic_benchmark.REPEAT_GAP else f"_r{gap:g}"
-    return os.path.join(cache, f"{VERSIONS[calibration.style()]}-q{QUALITY}", "_".join(map(str, u["key"])) + suffix)
+    return os.path.join(cache, f"{VERSIONS[calibration.style()]}{calibration.variant()}-q{QUALITY}", "_".join(map(str, u["key"])) + suffix)
 
 
 def _ulock(u):
@@ -348,13 +371,119 @@ def _tiles(u, cache, scale):
     return os.path.join(folder(u, cache), "tiles-" + hashlib.md5(json.dumps(scale, sort_keys=True).encode()).hexdigest()[:8])
 
 
+# ---------- what the cache holds of a pass, kept in memory ----------
+# A pass's plan, its movie footprint and its tiles' reports are each written once and never change (the plan file is
+# renamed when its rules change, the tiles' folder is named after the plan's display scale): each is read from the
+# cache once and kept here, so the layout of the pass's mosaic at tile n (the reports of tiles 0..n), which every
+# mosaic, mosaic movie picture, tile map and look-ahead works out, comes from memory instead of a file per tile per
+# request. A pass's record is kept with its plan file's identity (inode and mtime), which every plan() looks at: a
+# pass whose cache folder was cleared or made again is read from the cache afresh. Only what is made is kept, so a
+# tile not in memory is looked for in the cache (a server sharing the cache may have made it).
+PASSES_KEEP = 64   # passes kept in memory, the most recently used (a pass's tile reports are ~1 KB each)
+# plan file -> {"stamp", "plan", "scale", "tiles_dir", "tiles": {n: report}, "made": tiles seen in the cache (not read),
+# "footprint", "rolled": {(size, out, fade): frames whose mosaic movie picture is made, rolling_ahead}, "mapped": the last
+# tile whose mosaic's tile map is worked out, _map_later}
+_passes = collections.OrderedDict()
+
+
+def _stamp(path):
+    try:
+        st = os.stat(path)
+    except OSError:
+        return None
+    return st.st_ino, st.st_mtime_ns
+
+
+def _plan_path(u, cache):
+    return os.path.join(folder(u, cache), PLAN_FILE)
+
+
+def _record(u, cache):
+    """The pass's record in memory, while its plan file is the one it was read from (one stat); else None."""
+    path = _plan_path(u, cache)
+    with _lock:
+        rec = _passes.get(path)
+    if rec is None:
+        return None
+    if _stamp(path) != rec["stamp"]:
+        with _lock:
+            if _passes.get(path) is rec:
+                del _passes[path]
+        return None
+    with _lock:
+        if path in _passes:
+            _passes.move_to_end(path)
+    return rec
+
+
+def _keep_plan(u, cache, p, stamp):
+    rec = {"stamp": stamp, "plan": p, "scale": p["display_scale"], "tiles_dir": _tiles(u, cache, p["display_scale"]),
+           "tiles": {}, "made": set(), "footprint": None, "rolled": {}}
+    path = _plan_path(u, cache)
+    with _lock:
+        _passes[path] = rec
+        _passes.move_to_end(path)
+        while len(_passes) > PASSES_KEEP:
+            _passes.popitem(last=False)
+    return rec
+
+
+def _kept_tiles(u, cache, scale):
+    """The pass's record when scale is its kept plan's display scale (no stat: plan() looked at it); else None."""
+    with _lock:
+        rec = _passes.get(_plan_path(u, cache))
+    return rec if rec is not None and rec["scale"] is scale else None
+
+
+def _reports(u, cache, p, js):
+    """The reports of tiles js of the pass (on its plan p's scale), in that order: from memory, the others from the
+    cache (or made, as tile() does)."""
+    rec = _kept_tiles(u, cache, p["display_scale"])
+    with _lock:
+        kept = dict(rec["tiles"]) if rec is not None else {}
+    return [kept.get(j) or tile(u, j, cache, p["display_scale"]) for j in js]
+
+
+def _has_tile(u, j, cache, p):
+    """Whether tile j of the pass is made: known in memory, or its report file in the cache (then remembered: a
+    pass's tiles stay while its plan file does)."""
+    rec = _kept_tiles(u, cache, p["display_scale"])
+    if rec is not None and (j in rec["tiles"] or j in rec["made"]):
+        return True
+    there = os.path.exists(os.path.join(rec["tiles_dir"] if rec is not None else _tiles(u, cache, p["display_scale"]), f"{j}.json"))
+    if there and rec is not None:
+        with _lock:
+            rec["made"].add(j)
+    return there
+
+
+def _all_made(u, cache, p, first, last, look=False):
+    """Whether tiles first..last of the pass are all made, as far as memory knows (read once, or seen in the
+    cache); look: those memory does not know are looked for in the cache (a server started on a made cache)."""
+    rec = _kept_tiles(u, cache, p["display_scale"])
+    if rec is None:
+        return False
+    with _lock:
+        unknown = [j for j in range(first, last + 1) if j not in rec["tiles"] and j not in rec["made"]]
+    return not unknown or (look and all(_has_tile(u, j, cache, p) for j in unknown))
+
+
 def plan(u, cache):
     """The pass's display scale, rotation, footprint, view mode and colour filters, worked out once and kept."""
-    path = os.path.join(folder(u, cache), PLAN_FILE)
+    path = _plan_path(u, cache)
+    rec = _record(u, cache)
+    if rec is not None:
+        return rec["plan"]
     with _ulock(u):
+        rec = _record(u, cache)
+        if rec is not None:
+            return rec["plan"]
         if os.path.exists(path):
+            stamp = _stamp(path)
             with open(path) as fh:
-                return json.load(fh)
+                p = json.load(fh)
+            _keep_plan(u, cache, p, stamp)
+            return p
         frames = u["frames"]
         count, nms = {}, {}
         for fr in frames:
@@ -372,8 +501,9 @@ def plan(u, cache):
         for f in count:
             mine = [fr for fr in frames if fr[2] == f]
             picks += mine[::max(1, math.ceil(len(mine) / SCALE_FRAMES))]
+        levels = {}
         scale = pass_scale(sorted(picks, key=frames.index), u, colour or [max(count, key=count.get)],
-                           bool(colour and colour[1] == "GRN" and colour[2] in reel.TRUE_BLUES))
+                           bool(colour and colour[1] == "GRN" and colour[2] in reel.TRUE_BLUES), lit_levels=levels)
         # the rotation from the camera's frame to north up: the angle between where the geometry cache puts
         # the body and where processed_frame does, from the first tile placed well off the body's centre
         angle = 0.0
@@ -402,7 +532,13 @@ def plan(u, cache):
         p = {"key": list(u["key"]), "display_scale": scale, "angle": angle, "footprint": [x0, y0, x1, y1],
              "fixed": True, "view": view, "k": CANVAS / max(view), "colour": colour,
              "grey": max(count, key=count.get), "whole": u["whole"]}
+        p["luminance"] = luminance_of(count, p["grey"], levels)
         reel._cached(path, lambda: json.dumps(p).encode())
+        stamp = _stamp(path)
+        if stamp is not None:
+            # kept as it reads back from its file (lists, not tuples): the plan every later request gets
+            p = json.loads(json.dumps(p))
+            _keep_plan(u, cache, p, stamp)
         return p
 
 
@@ -457,6 +593,172 @@ def _polarizer(f):
     return any(p.startswith("IRP") or (p.startswith("P") and p[1:2].isdigit()) for p in f.split("/"))
 
 
+# ---------- the luminance base (placed tiles) ----------
+# A pass's mosaic is drawn on a gray base made from every tile it has placed so far, each where SPICE puts it, and its
+# colour is laid over that base only where all three colour filters have the picture, fading into the gray at that
+# edge. So the mosaic never shrinks when its colour begins (the colour picture alone is only the ground all three
+# filters cover), and its gray never changes filter part way through a pass. The gray is the plan's grey filter
+# wherever the pass takes it; the pass's other filters fill in only the places that filter never covers (a scan
+# that steps one filter a pointing, a colour pointing without a clear frame), each brought to the grey filter's
+# brightness by its gain.
+LUM = "L"                # the luminance base, where a filter's name goes (filter_mosaic, its cache files)
+LUM_GAIN = (0.25, 4.0)   # the furthest a band's gain to the grey filter's level goes
+LUM_FEATHER = 64         # px on the benchmark's 0.5 scale canvas (as mosaic.feather_px): colour fades into gray over this
+
+
+def luminance_of(count, grey, levels):
+    """The plan's luminance base: {"filters": the filters it may draw (the pass's less polarizers, the grey filter
+    first), "gains": {filter: linear gain bringing its lit median (pass_scale's levels) to the grey filter's}}."""
+    filters = [grey] + sorted(f for f in count if f != grey and not _polarizer(f))
+    ref = levels.get(grey) or 0.0
+    gains = {}
+    for f in filters[1:]:
+        if ref > 0 and levels.get(f, 0) > 0:
+            gains[f] = round(float(np.clip(ref / levels[f], *LUM_GAIN)), 4)
+    return {"filters": filters, "gains": gains}
+
+
+def _luminance(p):
+    # (a plan made before the luminance base: its grey filter alone)
+    return p.get("luminance") or {"filters": [p["grey"]], "gains": {}}
+
+
+def lum_frames(u, p):
+    """The frames the pass's luminance base draws (indices into u["frames"], as tiles are numbered): every frame of
+    the grey filter, and a frame of another of its filters where no frame of the grey filter is at that place
+    (within SAME_PLACE of a frame) anywhere in the pass, from the geometry cache, so the set only grows as the pass
+    goes on and each mosaic grows from the one before. Kept with the pass."""
+    lum = _luminance(p)
+    key = tuple(lum["filters"])
+    hit = u.get("_lum")
+    if hit and hit[0] == key:
+        return hit[1]
+    grey, allowed = lum["filters"][0], set(lum["filters"])
+
+    def at(fr):
+        return (-fr[5] * fr[7] / u["z"], -fr[6] * fr[7] / u["z"]) if fr[7] and u["z"] else None
+    greys = [q for q in (at(fr) for fr in u["frames"] if fr[2] == grey) if q]
+    out = set()
+    for j, fr in enumerate(u["frames"]):
+        if fr[2] == grey:
+            out.add(j)
+        elif fr[2] in allowed:
+            q = at(fr)
+            if q is None or not any(math.hypot(q[0] - g[0], q[1] - g[1]) <= SAME_PLACE * FRAME for g in greys):
+                out.add(j)
+    out = frozenset(out)
+    u["_lum"] = (key, out)
+    return out
+
+
+def _mine(u, p, tiles, f):
+    """The placed tiles filter_mosaic draws for f: the filter's own, or for LUM the luminance base's (lum_frames),
+    a band other than the grey filter carrying its gain (applied by _shade)."""
+    if f != LUM:
+        return [t for t in tiles if t["filter"] == f and "offset" in t]
+    lum, frames = _luminance(p), lum_frames(u, p)
+    gamma = p["display_scale"].get("gamma", 2.2)
+    out = []
+    for t in tiles:
+        if "offset" in t and t["n"] in frames:
+            g = lum["gains"].get(t["filter"], 1.0)
+            out.append(dict(t, gain=g, gamma=gamma) if g != 1.0 else t)
+    return out
+
+
+_luts = {}
+
+
+def _shade(part, t):
+    """A tile's picture (RGBA at its canvas size) with its tile dict's "gain" applied: the luminance base's gain of
+    a band other than the grey filter, on linear brightness (the pass's display gamma, t["gamma"]), alpha as it
+    is. The same array when the tile has none."""
+    g = t.get("gain")
+    if not g or g == 1.0:
+        return part
+    key = (g, t.get("gamma", 2.2))
+    lut = _luts.get(key)
+    if lut is None:
+        v = np.arange(256, dtype=np.float64) / 255
+        lut = _luts[key] = (calibration.encode(np.clip(calibration.decode(v, key[1]) * g, 0, 1), key[1]) * 255
+                            + 0.5).astype(np.uint8)
+    out = part.copy()
+    out[..., :3] = lut[part[..., :3]]
+    return out
+
+
+def lum_base(u, p, tiles, used):
+    """Whether the mosaic of these tiles, drawn in the filters used, needs its luminance base under it: a tile of
+    the base sits where the picture would otherwise have nothing (no tile of every colour filter at its place, or,
+    drawn in gray, a tile of a filter other than the one drawn)."""
+    frames = lum_frames(u, p)
+    base = [t for t in tiles if "offset" in t and t["n"] in frames]
+    if len(used) != 3:
+        return any(t["filter"] != used[0] for t in base)
+    by = {f: [t["offset"] for t in tiles if t["filter"] == f and "offset" in t] for f in used}
+    near = lambda o, os_: any(math.hypot(o[0] - q[0], o[1] - q[1]) <= SAME_PLACE * FRAME for q in os_)
+    return any(not all(near(t["offset"], by[f]) for f in used) for t in base)
+
+
+LUM_MATCH = (0.25, 4.0)   # the furthest the gray's match to the colour it borders goes, per channel
+LUM_MATCH_MIN = 500       # lit pixels each side needs for the match; fewer, and the gray stays as it is
+
+
+def match_grey(colour, grey, ca, only, feather, gamma):
+    """The gain per channel (linear brightness) that brings the gray base to the colour it borders: the colour's
+    median over the gray's where both lie under the picture, or, where the gray only goes on past the colour (a
+    colour tile beside gray ones), the colour's within two feathers of that edge over the gray's within two feathers
+    on its side. So the gray continues the colour's brightness and its average hue (Titan's gray reads orange beside
+    its orange disk, a dim clear-filter gray is lifted to the colour beside it), and the detail stays the gray's.
+    None when either side has too little lit picture to measure."""
+    lin = lambda v: calibration.decode(v.astype(np.float32) / 255, gamma)
+    ga = grey[..., 3] > 250
+    both = (ca > 0.99) & ga
+    if both.sum() >= LUM_MATCH_MIN:
+        cside, gside = both, both
+    else:
+        near = 2 * feather
+        to_only = cv2.distanceTransform((~only).astype(np.uint8), cv2.DIST_L2, 5)
+        to_colour = cv2.distanceTransform((ca < 0.99).astype(np.uint8), cv2.DIST_L2, 5)
+        cside, gside = (ca > 0.99) & (to_only <= near), only & ga & (to_colour <= near)
+    g = lin(grey[..., 0])
+    rgb = lin(colour[..., :3] / np.maximum(ca, 1 / 255)[..., None])
+    gl = g[gside]
+    cl = rgb[cside]
+    # lit: above a tenth of each side's bright end, so sky and the night side do not set the match
+    gl = gl[gl > 0.1 * np.percentile(gl, 99)] if gl.size else gl
+    cl = cl[cl.mean(axis=1) > 0.1 * np.percentile(cl.mean(axis=1), 99)] if len(cl) else cl
+    if gl.size < LUM_MATCH_MIN or len(cl) < LUM_MATCH_MIN or np.median(gl) <= 0:
+        return None
+    return np.clip(np.median(cl, axis=0) / np.median(gl), *LUM_MATCH).astype(np.float32)
+
+
+def over_grey(colour, grey, k, gamma=2.2):
+    """The colour picture (colour_picture: its colour times where all three filters cover) laid over the luminance
+    base (grey, RGBA on the same canvas): colour where all three filters cover, the gray elsewhere, the colour fading
+    into the gray over LUM_FEATHER (at this canvas's scale) inward from where the gray goes on past it. The gray is
+    first matched to the colour it borders (match_grey), so the join shows no step in brightness or hue. Where
+    nothing lies beyond the colour (the mosaic's own edge) it keeps its edge as colour_picture drew it."""
+    ca = colour[..., 3].astype(np.float32) / 255
+    ga = grey[..., 3].astype(np.float32) / 255
+    only = (ga > 0.5) & (ca < 0.5)   # the gray goes on past the colour
+    if not only.any():
+        return colour
+    feather = max(8, round(LUM_FEATHER * k / 0.5))
+    gain = match_grey(colour, grey, ca, only, feather, gamma)
+    if gain is None:
+        under = grey[..., :3].astype(np.float32)
+    else:
+        lin = calibration.decode(grey[..., :1].astype(np.float32) / 255, gamma) * gain
+        under = calibration.encode(np.clip(lin, 0, 1), gamma) * 255
+    dist = cv2.distanceTransform((~only).astype(np.uint8), cv2.DIST_L2, 5)
+    w = ca * np.clip(dist / feather, 0, 1)
+    rgb = colour[..., :3].astype(np.float32) / np.maximum(ca, 1 / 255)[..., None]
+    out = rgb * w[..., None] + under * (ga * (1 - w))[..., None]
+    alpha = w + ga * (1 - w)
+    return np.dstack([np.clip(out + 0.5, 0, 255).astype(np.uint8), np.clip(alpha * 255 + 0.5, 0, 255).astype(np.uint8)])
+
+
 FILLED = 0.5       # a pass is all body when the body's disk covers the middle of more than this share of its frames
 DETAIL = 2.0       # filled passes: how much the local contrast is raised (detail())
 DETAIL_SIGMA = 0.05  # ... over this much of a frame
@@ -470,6 +772,16 @@ SKY_TOP_PCT = 99     # ... and each band's black at least this percentile of tha
 SKY_SMOOTH = 9      # ... on the sky less its mean over this many pixels (of the quarter-size frames, 36 full size)
 SKY_TOE = 1.0    # ... and the soft toe above those blacks, this many times the black's height over the sky wide
                  # (calibration.display): the sky's scan lines, not its pixel noise, set how far grain reaches
+
+
+def _sky_fine(iofs, masks):
+    """The sky's fine structure in the pictures iofs (sky masks): the sky less its own mean over SKY_SMOOTH pixels
+    (row and column stray-light stripes, compression blocks, noise), on the darker half of the sky by its 5 pixel
+    mean, as one array. Smooth faint light (haze, a ring, the body's glow) is not in it."""
+    local = [cv2.blur(i, (5, 5)) for i in iofs]
+    sky = np.concatenate([l[m] for l, m in zip(local, masks)])
+    return np.concatenate([(i - cv2.blur(i, (SKY_SMOOTH, SKY_SMOOTH)))[m & (l <= np.median(sky))]
+                           for i, l, m in zip(iofs, local, masks)])
 
 
 def tile_scale(scale, f, own_sky=False, seen=None):
@@ -492,17 +804,23 @@ def tile_scale(scale, f, own_sky=False, seen=None):
         if m.mean() <= SKY_MIN:
             return None
         (level,), _ = calibration.sky_levels([[q]], [[m]])
-        if level + top <= black:
+        # the band's height over the sky at least this frame's own (its sky's fine structure, as pass_scale measures
+        # the pass's): a frame lit by stray light has a grainier sky than the pass's typical one, and in the Jupiter
+        # approach movie its red and green grain rose over a black set by the pass's height, a faint red cast
+        fine = _sky_fine([q], [m])
+        own = float(np.percentile(fine, SKY_TOP_PCT) - np.median(fine)) if fine.size > 100 else 0.0
+        raised = level + max(top, own)
+        if raised <= black:
             return None
         if seen is not None:
-            seen["black"] = level + top
-        return {"black": level + top, "toe": scale.get("toe")}
+            seen["black"] = raised
+        return {"black": raised, "toe": scale.get("toe")}
 
     out["black_of"] = black_of
     return out
 
 
-def pass_scale(frames, u, drawn=None, true_colour=False, sky_tops=None):
+def pass_scale(frames, u, drawn=None, true_colour=False, sky_tops=None, lit_levels=None):
     """The display scale of every tile of the pass (calibration.shared_scale over its frames merged in I/F, as
     mosaic_benchmark.display_scale): {"blacks": {filter: I/F}, "white": I/F, "gamma"}. Where the body fills
     the frames (the middle of most frames on its disk, as in Titan's maps), black goes to the darkest of the body, white to
@@ -510,7 +828,9 @@ def pass_scale(frames, u, drawn=None, true_colour=False, sky_tops=None):
     the surface's few per cent of contrast shows; passes with dark sky keep the benchmark's scale.
     drawn = the filters the mosaic is drawn from (plan's colour, or its grey filter); true_colour = they are a
     true colour set; sky_tops = optional {filter: I/F} overriding how far above its sky each filter's black sits
-    (the measured values come back as "sky_tops", with the soft "toe" above black)."""
+    (the measured values come back as "sky_tops", with the soft "toe" above black). lit_levels: a dict given here gets
+    each filter's lit median on the scale (linear, white = 1), which the luminance base's gains come from; the
+    scale itself is the same with or without it."""
     by = {}
     for path, _, f, *_ in frames:
         _, iof, _ = stacking.load_hdr(path, u.get("repeat_gap", mosaic_benchmark.REPEAT_GAP))
@@ -561,12 +881,7 @@ def pass_scale(frames, u, drawn=None, true_colour=False, sky_tops=None):
             # less its own mean over SKY_SMOOTH pixels (its row and column stray-light stripes, compression
             # blocks and noise), on the darker half of the sky. Smooth faint light (Saturn's Shadow's haze and E
             # ring, a haze limb, the body's glow) is not in it, so it stays above black
-            fine = {}
-            for (f, iofs), level in zip(by.items(), levels):
-                local = [cv2.blur(i, (5, 5)) for i in iofs]
-                sky = np.concatenate([l[m] for l, m in zip(local, masks[f])])
-                fine[f] = np.concatenate([(i - cv2.blur(i, (SKY_SMOOTH, SKY_SMOOTH)))[m & (l <= np.median(sky))]
-                                          for i, l, m in zip(iofs, local, masks[f])])
+            fine = {f: _sky_fine(iofs, masks[f]) for f, iofs in by.items()}
             # with a noise floor (the noisiest band's SKY_FLOOR_PCT percentile above the median): the pixel-difference
             # noise is about 0 on frames stored in 8 bits
             margin = max(margin, calibration.noise_floor(list(fine.values()), SKY_FLOOR_PCT))
@@ -599,6 +914,11 @@ def pass_scale(frames, u, drawn=None, true_colour=False, sky_tops=None):
             # and the body's typical color after it, so the broad-color flattening holds one color as tiles arrive
             shown = [out["balance"][f] * v for f, v in zip(mine, levels)]
             out["typical"] = {f: float(np.log(v * len(shown) / sum(shown))) for f, v in zip(mine, shown)}
+    if lit_levels is not None:
+        for f, iofs in by.items():
+            v = (np.concatenate([i.ravel() for i in iofs]) - blacks[f]) / white
+            lit = v[v > 0.2 * np.percentile(v, 99)]
+            lit_levels[f] = float(np.median(lit)) if lit.size else 0.0
     return out
 
 
@@ -641,39 +961,146 @@ def tile(u, n, cache, scale=None):
     crop around it (reference pixels); no offset when SPICE could not place it."""
     if scale is None:
         scale = plan(u, cache)["display_scale"]
-    base = os.path.join(_tiles(u, cache, scale), str(n))
+    rec = _kept_tiles(u, cache, scale)
+    if rec is not None:
+        with _lock:
+            kept = rec["tiles"].get(n)
+        if kept is not None:
+            return kept
+    return _tile(u, n, cache, scale, rec["tiles_dir"] if rec is not None else _tiles(u, cache, scale), rec)
+
+
+def _tile(u, n, cache, scale, there, rec=None):
+    """Tile n's report from the cache, or the tile made (tile) and its report, as it reads back from the cache;
+    kept in the pass's record rec, so it is read once."""
+    base = os.path.join(there, str(n))
     # one lock per tile, so a movie's frames made ahead can be made side by side
     with _lock:
-        lock = _tile_locks.setdefault((u["key"], n), threading.RLock())
+        lock = _tile_locks.setdefault((u["key"], calibration.mode(), n), threading.RLock())
     with lock:
-        if os.path.exists(base + ".json"):
-            with open(base + ".json") as fh:
-                return json.load(fh)
-        path, fid, f, t, nm, x, y, z = u["frames"][n]
-        k = z / u["z"] if z else 1.0
-        seen = {}
-        try:
-            image, _, rep = color_image.processed_frame([path], hdr=True, scale=tile_scale(scale, f, bool(u.get("movie")), seen),
-                                                        repeat_window=u.get("repeat_gap", mosaic_benchmark.REPEAT_GAP))
-        except Exception as e:
-            image, rep = None, {"why": f"{type(e).__name__}: {e}"[:200]}
-        out = {"n": n, "id": fid, "filter": f, "t": t, "stacked": rep.get("stacked"), "calibrated": rep.get("calibrated"), **seen}
-        os.makedirs(os.path.dirname(base), exist_ok=True)
-        if image is not None and "frame_offset" in rep:
-            side = round(image.shape[0] * k)
-            lit = _lit_crop(image, side)
-            if lit is not None:
-                crop, a, c = lit
-                b, d = a + crop.shape[0], c + crop.shape[1]
-                Image.fromarray(crop).save(base + ".png", compress_level=1)
-                _keep_made(base + ".png", crop)
-                out.update({"native_offset": rep["frame_offset"], "offset": [v * k for v in rep["frame_offset"]],
-                            "box": [int(c) - side / 2, int(a) - side / 2, int(d - c), int(b - a)]})
-                out["outline"] = _corners(out, crop[..., 3])
-        else:
-            out["why"] = rep.get("why", "not placed by SPICE")
-        reel._cached(base + ".json", lambda: json.dumps(out, default=str).encode())
+        if rec is not None:
+            with _lock:
+                kept = rec["tiles"].get(n)
+            if kept is not None:
+                return kept
+        out = _tile_made(u, n, cache, scale, base)
+        if rec is not None:
+            with _lock:
+                out = rec["tiles"].setdefault(n, out)
         return out
+
+
+def _tile_made(u, n, cache, scale, base):
+    """(_tile, holding the tile's lock) the report in base.json, or the tile made and its report."""
+    if os.path.exists(base + ".json"):
+        with open(base + ".json") as fh:
+            return json.load(fh)
+    path, fid, f, t, nm, x, y, z = u["frames"][n]
+    k = z / u["z"] if z else 1.0
+    seen = {}
+    try:
+        image, _, rep = color_image.processed_frame([path], hdr=True, scale=tile_scale(scale, f, bool(u.get("movie")), seen),
+                                                    repeat_window=u.get("repeat_gap", mosaic_benchmark.REPEAT_GAP))
+    except Exception as e:
+        image, rep = None, {"why": f"{type(e).__name__}: {e}"[:200]}
+    out = {"n": n, "id": fid, "filter": f, "t": t, "stacked": rep.get("stacked"), "calibrated": rep.get("calibrated"), **seen}
+    os.makedirs(os.path.dirname(base), exist_ok=True)
+    if image is not None and "frame_offset" in rep:
+        side = round(image.shape[0] * k)
+        lit = _lit_crop(image, side)
+        if lit is not None:
+            crop, a, c = lit
+            b, d = a + crop.shape[0], c + crop.shape[1]
+            Image.fromarray(crop).save(base + ".png", compress_level=1)
+            _keep_made(base + ".png", crop)
+            out.update({"native_offset": rep["frame_offset"], "offset": [v * k for v in rep["frame_offset"]],
+                        "box": [int(c) - side / 2, int(a) - side / 2, int(d - c), int(b - a)]})
+            _register(u, n, out, crop, cache, scale)
+            out["outline"] = _corners(out, crop[..., 3])
+    else:
+        out["why"] = rep.get("why", "not placed by SPICE")
+    data = json.dumps(out, default=str)
+    reel._cached(base + ".json", data.encode)
+    return json.loads(data)
+
+
+REGISTER_GAP = 180   # s: a tile of another filter taken this soon before, at the same pointing, is what it is registered to
+REGISTER_MAX = 0.04  # of a frame: the largest correction to SPICE's placement that is believed
+
+
+def _register_to(u, n):
+    """The tile tile n is registered to (_register): the first frame of the pass in another filter at its pointing
+    (SAME_PLACE, by the geometry cache) taken at most REGISTER_GAP before it, so every filter of a pointing lands on
+    that pointing's first frame; None for a pointing's first frame, or one SPICE (the geometry cache) has no place for."""
+    frames = u["frames"]
+    _, _, f, t, _, x, y, z = frames[n]
+    if not z:
+        return None
+    k = z / u["z"] if u["z"] else 1.0
+    for j in range(n):
+        _, _, fj, tj, _, xj, yj, zj = frames[j]
+        if fj != f and zj and 0 <= t - tj <= REGISTER_GAP and math.hypot(x - xj, y - yj) * k <= SAME_PLACE * FRAME:
+            return j
+    return None
+
+
+def _register(u, n, out, crop, cache, scale):
+    """C8, the filters registered to each other: SPICE places each frame on its own, and the few pixels its pointing
+    is off differ from frame to frame, so the filters of one pointing landed a little apart and every limb had a red
+    and a cyan rim (Dione). Tile n (its report out, crop its picture as made) is moved onto the tile it is registered
+    to (_register_to) by the pipeline's own alignment of a set's channels (image_correction.align_with_masks: phase
+    correlation, then on edges, then by the lit area's centroid) over the part of the view both cover; out["offset"]
+    is changed by the shift found (out["spice_offset"] keeps SPICE's), out["registered"] says to what and how. A
+    shift past REGISTER_MAX of a frame, or none found, leaves SPICE's place."""
+    j = _register_to(u, n)
+    if j is None or not calibration.step("align"):   # Settings > Processing: SPICE's places as they are
+        return
+    q = tile(u, j, cache, scale)
+    path = os.path.join(_tiles(u, cache, scale), f"{j}.png")
+    if "offset" not in q or not os.path.exists(path):
+        return
+    with _lock:
+        ref = _made_pictures.get(path)
+    if ref is None:
+        ref = np.asarray(Image.open(path).convert("RGBA"))
+    # both tiles in the reference pixels of the view: where each crop's corner lands, the part both cover
+    corners = []
+    for t, im in ((q, ref), (out, crop)):
+        corners.append((t["offset"][0] + t["box"][0], t["offset"][1] + t["box"][1], im))
+    x0 = max(c[0] for c in corners)
+    y0 = max(c[1] for c in corners)
+    x1 = min(c[0] + c[2].shape[1] for c in corners)
+    y1 = min(c[1] + c[2].shape[0] for c in corners)
+    if x1 - x0 < 64 or y1 - y0 < 64:
+        return
+    imgs, masks = [], []
+    for cx, cy, im in corners:
+        left, top = int(round(x0 - cx)), int(round(y0 - cy))
+        part = im[top:top + int(y1 - y0), left:left + int(x1 - x0)]
+        gray = cv2.cvtColor(np.ascontiguousarray(part[..., :3]), cv2.COLOR_RGB2GRAY)
+        imgs.append(cv2.cvtColor(np.where(part[..., 3] > 0, gray, 0).astype(np.uint8), cv2.COLOR_GRAY2BGR))
+        masks.append(part[..., 3] > 0)
+    h = min(i.shape[0] for i in imgs)
+    w = min(i.shape[1] for i in imgs)
+    imgs, masks = [i[:h, :w] for i in imgs], [m[:h, :w] for m in masks]
+    # the rounding of each crop's corner to whole pixels, put back on the shift found
+    rest = [(cx - x0) - round(cx - x0) for cx, _, _ in corners], [(cy - y0) - round(cy - y0) for _, cy, _ in corners]
+    shifts, how = [], []
+    try:
+        image_correction.align_with_masks(imgs, masks, 0, how, found=shifts)
+    except Exception as e:
+        out["registered"] = {"to": q["id"], "why": f"{type(e).__name__}: {e}"[:200]}
+        return
+    shift = shifts[1]
+    if shift is None or math.hypot(*shift) > REGISTER_MAX * FRAME:
+        out["registered"] = {"to": q["id"], "how": how[1], "kept": "SPICE's place"}
+        return
+    # align_with_masks moves the picture by -shift to land on the reference: its place moves the same way
+    dx = shift[0] + rest[0][1] - rest[0][0]
+    dy = shift[1] + rest[1][1] - rest[1][0]
+    out["spice_offset"] = out["offset"]
+    out["offset"] = [out["offset"][0] - dx, out["offset"][1] - dy]
+    out["registered"] = {"to": q["id"], "how": how[1], "shift": [round(dx, 2), round(dy, 2)]}
 
 
 def view_rect(p, tiles=None):
@@ -696,7 +1123,7 @@ def _window(u, p, mine, rect, cache):
         sw, sh = max(1, round(bw * k)), max(1, round(bh * k))
         if left >= W or top >= H or left + sw <= 0 or top + sh <= 0:
             continue
-        part = _part(os.path.join(_tiles(u, cache, p["display_scale"]), f"{t['n']}.png"), sw, sh)
+        part = _shade(_part(os.path.join(_tiles(u, cache, p["display_scale"]), f"{t['n']}.png"), sw, sh), t)
         frame = np.zeros((H, W, 4), np.uint8)
         x0, y0, x1, y1 = max(left, 0), max(top, 0), min(left + sw, W), min(top + sh, H)
         frame[y0:y1, x0:x1] = part[y0 - top:y1 - top, x0 - left:x1 - left]
@@ -799,11 +1226,13 @@ def _over(u, p, rgba, t, rect, cache, match=True):
     sw, sh = max(1, round(bw * k)), max(1, round(bh * k))
     x0, y0 = max(left - pad, 0), max(top - pad, 0)
     x1, y1 = min(left + sw + pad, W), min(top + sh + pad, H)
-    if x1 > x0 and y1 > y0:
-        part = _part(os.path.join(_tiles(u, cache, p["display_scale"]), f"{t['n']}.png"), sw, sh)
+    a0, b0 = max(left, 0), max(top, 0)
+    a1, b1 = min(left + sw, W), min(top + sh, H)
+    # (a tile wholly past the canvas's edge, only its soft edge's margin on it, has nothing to draw: SPICE, filter
+    # registration or a person's tuning can put a tile outside the pass's footprint)
+    if x1 > x0 and y1 > y0 and a1 > a0 and b1 > b0:
+        part = _shade(_part(os.path.join(_tiles(u, cache, p["display_scale"]), f"{t['n']}.png"), sw, sh), t)
         frame = np.zeros((y1 - y0, x1 - x0, 4), np.uint8)
-        a0, b0 = max(left, 0), max(top, 0)
-        a1, b1 = min(left + sw, W), min(top + sh, H)
         frame[b0 - y0:b1 - y0, a0 - x0:a1 - x0] = part[b0 - top:b1 - top, a0 - left:a1 - left]
         below = np.ascontiguousarray(rgba[y0:y1, x0:x1])
         same = (np.ones((2, 3)), np.zeros((2, 3)))
@@ -842,8 +1271,18 @@ def _grown(u, p, f, mine, rect, cache):
 
 _rolling = contextvars.ContextVar("rolling", default=False)   # drawing a laps=1 mosaic movie (rolling_webp)
 _rolled = collections.OrderedDict()   # (pass, look, filter, view) -> [(tiles drawn, RGBA)]: each mosaic movie's last pictures
-ROLLED_KEEP = 6    # mosaic movie filters kept (two passes of three; a canvas is up to 16 MB)
-ROLLED_EACH = 2    # pictures kept of each
+# mosaic movies whose last pictures are kept, whole passes (every filter of each), the least recently drawn let go
+# first: one per thread drawing them at once and a window or two, so threads making different passes side by side
+# (the pre-build) do not throw out each other's pictures and draw every frame whole (a canvas is up to 16 MB)
+ROLLED_PASSES = int(os.environ.get("CASSINI_ROLLED_PASSES", "4"))
+ROLLED_EACH = 2    # pictures kept of each filter
+
+
+def rolled_room(passes):
+    """Keep the last pictures of at least this many mosaic movies (a caller drawing that many at once)."""
+    global ROLLED_PASSES
+    with _lock:
+        ROLLED_PASSES = max(ROLLED_PASSES, int(passes))
 
 
 def _rolled_put(key, drawn, rgba):
@@ -851,8 +1290,11 @@ def _rolled_put(key, drawn, rgba):
         kept = [x for x in _rolled.get(key, []) if x[0] != drawn][-(ROLLED_EACH - 1):] + [(drawn, rgba)]
         _rolled[key] = kept
         _rolled.move_to_end(key)
-        while len(_rolled) > ROLLED_KEEP:
-            _rolled.popitem(last=False)
+        # the pass (and look) is let go as a whole, the one drawn longest ago
+        passes = list(dict.fromkeys(k[:2] for k in _rolled))
+        for old in passes[:max(0, len(passes) - ROLLED_PASSES)]:
+            for k in [k for k in _rolled if k[:2] == old]:
+                del _rolled[k]
 ROLL_STEPS = 8   # most new tiles a mosaic movie's picture grows by from its last one; further than that, it is drawn anew
 
 
@@ -887,9 +1329,9 @@ def filter_mosaic(u, p, f, tiles, rect, cache, ref=None, tag=""):
     ref = the filter the seams are solved on (balanced look, seams). Past GROW_FROM tiles it grows from the
     one before (_grown) instead of composing every tile again. tag names a set of tiles that is not every tile
     up to the newest (a mosaic movie's lap, rolling_layout): it has a name of its own and is not grown, since
-    growing takes the tiles as the pass's first ones in time order."""
-    mine = [t for t in tiles if t["filter"] == f and "offset" in t]
-    balanced = calibration.look() == "balanced" and SHARED_SEAMS
+    growing takes the tiles as the pass's first ones in time order. f = LUM: the pass's luminance base (_mine)."""
+    mine = _mine(u, p, tiles, f)
+    balanced = calibration.look() == "balanced" and SHARED_SEAMS and f != LUM
     ref = ref or f
     solved_on = f"-{ref.replace('/', '_')}{sum(1 for t in tiles if t['filter'] == ref and 'offset' in t)}" if balanced else ""
     path = _filter_path(u, f, len(mine), rect, cache, solved_on)
@@ -897,7 +1339,7 @@ def filter_mosaic(u, p, f, tiles, rect, cache, ref=None, tag=""):
     k = p["k"]
     W, H = math.ceil(rect[2] * k), math.ceil(rect[3] * k)
 
-    roll = (u["key"], calibration.look(), f, tuple(round(v) for v in rect)) if tag and _rolling.get() and not balanced else None
+    roll = (u["key"], calibration.mode(), f, tuple(round(v) for v in rect)) if tag and _rolling.get() and not balanced else None
     drew = {}
 
     def make():
@@ -961,7 +1403,8 @@ MADE_KEEP = int(os.environ.get("CASSINI_MOSAIC_MADE_MB", "64")) << 20
 
 def _keep_made(path, picture):
     """A tile's picture as made and written to path, kept in memory (the newest, up to MADE_KEEP bytes): a movie
-    frame or a mosaic draws its new tile right after making it (_part), and reading the PNG back cost ~35 ms."""
+    frame or a mosaic draws its new tile right after making it (_part), the next filter's tile at its pointing is
+    registered to it (_register), and reading the PNG back cost ~35 ms each time."""
     picture = picture.view()
     picture.flags.writeable = False
     with _lock:
@@ -1022,9 +1465,13 @@ def detail(rgba, sigma):
 def layout(u, n, cache):
     """What the pass's mosaic with tiles 0..n is made of: (plan, tiles, view rect, placed tiles per filter, the
     filters drawn, a name for that picture); None before any tile is placed. Frames whose tile is not one of
-    the filters drawn (a moon's 30 filter colour pass draws 3) give the same picture and the same name."""
+    the filters drawn (a moon's 30 filter colour pass draws 3) give the same picture and the same name.
+    The filters used are the plan's colour filters once each has a tile, before that its grey filter (or, until
+    the grey filter's first tile, the luminance base's filter most taken so far); the picture is drawn on the
+    luminance base (so_far), whose tiles the name counts (L<n>) when it holds more than the filters used. None
+    before a tile of the base is placed: the gray never starts in a filter it then leaves."""
     p = plan(u, cache)
-    tiles = [tile(u, j, cache, p["display_scale"]) for j in range(n + 1)]
+    tiles = _reports(u, cache, p, range(n + 1))
     rect = view_rect(p, tiles)
     count = {}
     for t in tiles:
@@ -1033,12 +1480,20 @@ def layout(u, n, cache):
     if not count:
         return None
     colour = p["colour"]
+    frames = lum_frames(u, p)
+    base = [t["filter"] for t in tiles if "offset" in t and t["n"] in frames]
     if colour and all(count.get(f) for f in colour):
         used = colour
+    elif count.get(p["grey"]):
+        used = [p["grey"]]
+    elif base:
+        used = [max(dict.fromkeys(base), key=base.count)]   # (ties: the filter taken first)
     else:
-        used = [p["grey"] if count.get(p["grey"]) else max(count, key=count.get)]
-    name = "_".join(f"{f.replace('/', '-')}{count[f]}" for f in used) + "_" + "_".join(str(round(v)) for v in rect)
-    return p, tiles, rect, count, used, name
+        return None
+    name = "_".join(f"{f.replace('/', '-')}{count[f]}" for f in used)
+    if any(f not in used for f in base):
+        name += f"_L{len(base)}"
+    return p, tiles, rect, count, used, name + "_" + "_".join(str(round(v)) for v in rect)
 
 
 TUNE_MAX = 0.5   # furthest a pointing can be moved, as a fraction of the picture
@@ -1148,10 +1603,18 @@ def so_far(u, n, cache, made=None, out=OUT):
     tag = ("-" + plain.rsplit("-", 1)[1] if plain.startswith("lap-") else "") + ("-tune" + tuned if tuned else "")
     # the seams are solved on the best covered filter drawn and shared by all (balanced look)
     ref = max(used, key=lambda f: count[f])
+    # the luminance base under the picture, where it holds tiles the picture would not show (a mosaic movie's
+    # picture, rolling_layout, keeps its own drawing: its name does not count the base's tiles)
+    base = not plain.startswith("lap-") and lum_base(u, p, tiles, used)
     if len(used) == 3:
         colour = used
         acc = [filter_mosaic(u, p, f, tiles, rect, cache, ref, tag) for f in colour]
         rgba, used = colour_picture(u, p, colour, acc), colour
+        if base:
+            rgba = over_grey(rgba, filter_mosaic(u, p, LUM, tiles, rect, cache, None, tag), p["k"],
+                             p["display_scale"]["gamma"])
+    elif base:
+        rgba = filter_mosaic(u, p, LUM, tiles, rect, cache, None, tag)
     else:
         rgba = filter_mosaic(u, p, used[0], tiles, rect, cache, ref, tag)
     if p["display_scale"].get("filled"):
@@ -1174,7 +1637,7 @@ def so_far(u, n, cache, made=None, out=OUT):
     laps = {"kind": u.get("kind"), "lap": lap, "laps": u.get("repeats"), "places": len(set(x for x in u.get("place", []) if x is not None))}
     return im, {**laps, "mosaic": sum(count.get(f, 0) for f in drawn), "filters": len(used), "filter_names": used,
                 "observation": u["key"][1], "pass": u["key"][3], "of": sum(1 for fr in u["frames"] if fr[2] in drawn),
-                "fixed": p["fixed"], "width": im.width, "height": im.height}
+                "fixed": p["fixed"], "luminance": bool(base), "width": im.width, "height": im.height}
 
 
 # the same layout, tile and size: named in the cache by folder and layout name (_mosaic_path)
@@ -1187,19 +1650,25 @@ def movie_footprint(u, cache, p=None):
     put the tiles themselves rather than the geometry cache (which can be a third of a frame off by the end of a
     movie tracking a propeller): MOVIE_SAMPLES tiles spread over the pass, with MOVIE_MARGIN round them for the
     frames between. Worked out once and kept with the pass."""
+    p = p or plan(u, cache)
+    rec = _kept_tiles(u, cache, p["display_scale"])
+    if rec is not None and rec["footprint"] is not None:
+        return rec["footprint"]
     path = os.path.join(folder(u, cache), FOOTPRINT_FILE)
     if os.path.exists(path):
         with open(path) as fh:
-            return json.load(fh)
-    p = p or plan(u, cache)
+            fp = json.load(fh)
+        if rec is not None:
+            rec["footprint"] = fp
+        return fp
     n = len(u["frames"])
     picks = sorted({round(i * (n - 1) / max(1, MOVIE_SAMPLES - 1)) for i in range(MOVIE_SAMPLES)}) if n else []
     boxes = []
     # the samples made side by side (MOVIE_WORKERS at once): a cold pass's first steady frame waits on them
-    look = calibration.look()
+    mode = calibration.mode()
 
     def one(j):
-        with calibration.looking(look):
+        with calibration.in_mode(mode):
             return tile(u, j, cache, p["display_scale"])
     with concurrent.futures.ThreadPoolExecutor(MOVIE_WORKERS) as pool:
         made = list(pool.map(one, picks))
@@ -1216,6 +1685,8 @@ def movie_footprint(u, cache, p=None):
     else:
         fp = list(p["footprint"])
     reel._cached(path, lambda: json.dumps(fp).encode())
+    if rec is not None:
+        rec["footprint"] = fp
     return fp
 
 
@@ -1254,6 +1725,7 @@ def centre_half(fp, radius):
 
 
 _centre_views = {}   # pass key -> centre_view's decision for it
+_centre_of = {}      # frame id -> centre_view's answer, for a frame SPICE places (a request per picture asks)
 
 
 def centre_view(frame_id):
@@ -1262,15 +1734,22 @@ def centre_view(frame_id):
     cache's footprint of the pass (_box), so a pass is centred all through or not at all. A frame in no pass is its
     own pass. Each picture keeps its frame's own scale: the view is one frame (FRAME full resolution pixels) square
     round the body, so the picture is the size it is today, only moved so the body is in the middle (a movie's view
-    is the pass's, movie_rect). Answers {"centre": True, "side": FRAME, "pass": [...]} or {"centre": False,
-    "why": ...}: a ring, spoke or sky frame, a body too big for the view, or a frame SPICE has no place for keep the
+    is the pass's, movie_rect). Answers {"centre": True, "side": FRAME, "radius": ..., "pass": [...]}, or
+    {"centre": False, "north": True, "side": FRAME, "why": ...} for a close-up (frames on a body too big for the
+    view): turned north up where it is, so the surface holds still; {"centre": False, "why": ...} for a ring, spoke
+    or sky pass (Cassini kept those upright in the camera) or a frame SPICE has no place for, which keep the
     picture as it is."""
+    with _lock:
+        hit = _centre_of.get(frame_id)
+    if hit is not None:
+        return dict(hit)
     idx, row = _row_of()
     q = row.get(frame_id)
     if q is None:
         return {"centre": False, "why": "not in the index"}
     g = reel.geometry([frame_id]).get(frame_id)
     if not g or not g[2]:
+        # (not kept: the geometry cache may place the frame later)
         return {"centre": False, "why": "SPICE has no place for the frame"}
     found = unit_of(frame_id)
     if found:
@@ -1290,9 +1769,35 @@ def centre_view(frame_id):
         if not half:
             hit["why"] = "no disk of a known body that fits the view" if not radius else \
                 "the body is too big for the view or the frames do not look at it"
+            # north up where it is only when the frames are on the body's disk (a close-up): the body's surface
+            # then holds still. Off the disk (rings, sky) Cassini rolled to keep the scene upright in the camera,
+            # so the camera's own orientation is the steady one and north up would turn it frame to frame
+            boxes = [(-x * fz / z - HALF, -y * fz / z - HALF, -x * fz / z + HALF, -y * fz / z + HALF)
+                     for *_, x, y, fz in u["frames"] if fz] if found else [fp]
+            # most of the pass's frames, each on its own (an arcing ring scan's footprint can clip the disk though
+            # none of its frames is on it)
+            on = sum(_on_disk(b, radius) for b in boxes) if radius else 0
+            hit["north"] = bool(boxes) and on * 2 > len(boxes)
         with _lock:
             _centre_views[key] = hit
-    return dict(hit, side=FRAME) if hit["centre"] else dict(hit)
+    # the frame's own disk of the body (full resolution pixels), so centred knows whether the frame cuts it
+    if hit["centre"]:
+        hit = dict(hit, side=FRAME, radius=RADIUS.get(target, 0) / (g[2] * IFOV[cam]))
+    else:
+        hit = dict(hit, side=FRAME) if hit.get("north") else dict(hit)
+    with _lock:
+        if len(_centre_of) >= UNIT_OF_KEEP:
+            _centre_of.clear()
+        _centre_of[frame_id] = hit
+    return dict(hit)
+
+
+def _on_disk(fp, radius):
+    """True when the box fp (a frame's footprint, reference pixels round the body's centre) takes in part of the
+    body's disk."""
+    x0, y0, x1, y1 = fp
+    dx, dy = max(x0, 0, -x1), max(y0, 0, -y1)
+    return dx * dx + dy * dy < radius * radius
 
 
 def _place(u, t, rect, k, W, H, cache, scale):
@@ -1305,7 +1810,7 @@ def _place(u, t, rect, k, W, H, cache, scale):
     frame = np.zeros((H, W, 4), np.uint8)
     x0, y0, x1, y1 = max(left, 0), max(top, 0), min(left + sw, W), min(top + sh, H)
     if x0 < x1 and y0 < y1:
-        part = _part(os.path.join(_tiles(u, cache, scale), f"{t['n']}.png"), sw, sh)
+        part = _shade(_part(os.path.join(_tiles(u, cache, scale), f"{t['n']}.png"), sw, sh), t)
         frame[y0:y1, x0:x1] = part[y0 - top:y1 - top, x0 - left:x1 - left]
     return frame
 
@@ -1417,7 +1922,9 @@ def movie_webp(frame_id, size, cache, trail=0, colour=True, wait=False, ahead=6,
     if not found or found[1] < 0:
         return None
     u, n = found
-    if not wait and not all(os.path.exists(os.path.join(folder(u, cache), f)) for f in (PLAN_FILE, FOOTPRINT_FILE)):
+    rec = _record(u, cache)
+    if not wait and not (rec is not None and rec["footprint"] is not None) and \
+            not all(os.path.exists(os.path.join(folder(u, cache), f)) for f in (PLAN_FILE, FOOTPRINT_FILE)):
         warm_movie(u, n, ahead, cache)
         return None, {"why": "working out the pass", "observation": u["key"][1], "pass": u["key"][3]}
     path = os.path.join(folder(u, cache), MOVIE_DIR, str(size), f"{n}_{trail}_{int(bool(colour))}{'_c2' if centre else ''}.webp")
@@ -1428,6 +1935,7 @@ def movie_webp(frame_id, size, cache, trail=0, colour=True, wait=False, ahead=6,
             im, rep = movie_frame(u, n, cache, trail, colour, centre=centre)
         report.update(rep)
         reel._cached(meta, lambda: json.dumps(rep).encode())
+        reel.keep_report(meta, rep)
         if im is None:
             raise LookupError(rep.get("why"))
         if max(im.size) > size:
@@ -1444,8 +1952,7 @@ def movie_webp(frame_id, size, cache, trail=0, colour=True, wait=False, ahead=6,
         if ahead:
             warm_movie(u, n + 1, ahead, cache)
     if not report:
-        with open(meta) as fh:
-            report = json.load(fh)
+        report = reel.report_of(meta)
     return data, report
 
 
@@ -1458,8 +1965,13 @@ def warm_movie(u, n, ahead, cache):
     """A movie is at frame n of the pass: work out its plan and make tiles n .. n+ahead in the background, from
     where the movie is rather than from the pass's start, MOVIE_WORKERS at once (a fast movie at high playback
     speed needs several frames a second)."""
-    look = calibration.look()
-    key, last = (u["key"], look), min(n + ahead, len(u["frames"]) - 1)
+    mode = calibration.mode()
+    key, last = (u["key"], mode), min(n + ahead, len(u["frames"]) - 1)
+    # nothing to make (the plan, footprint and those tiles are in memory): no workers
+    rec = _record(u, cache)
+    if rec is not None and (rec["footprint"] is not None or u.get("kind", "movie" if u.get("movie") else None) == "mosaic_movie") \
+            and _all_made(u, cache, rec["plan"], n, last, look=True):
+        return
     with _lock:
         running = key in _movie_ahead
         _movie_ahead[key] = (n, last)
@@ -1470,15 +1982,16 @@ def warm_movie(u, n, ahead, cache):
 
     def run():
         try:
-            with _movie_background, calibration.looking(look):
+            with _movie_background, calibration.in_mode(mode):
                 p = plan(u, cache)
                 if u.get("kind", "movie" if u.get("movie") else None) != "mosaic_movie":
                     movie_footprint(u, cache, p)
                 while True:
                     with _lock:
                         first, last = _movie_ahead.get(key, (0, -1))
-                        todo = [j for j in range(first, last + 1) if j not in taking
-                                and not os.path.exists(os.path.join(_tiles(u, cache, p["display_scale"]), f"{j}.json"))]
+                    todo = [j for j in range(first, last + 1) if j not in taking and not _has_tile(u, j, cache, p)]
+                    with _lock:
+                        todo = [j for j in todo if j not in taking]
                         if not todo:
                             break
                         taking.add(todo[0])
@@ -1534,17 +2047,41 @@ def places(u):
     return out
 
 
-def rolling_layout(u, n, cache, laps=1, made_only=False):
+FADE_MAX = 120       # most frames a mosaic movie's older tiles fade over (Settings > Movie > Older tiles fade over)
+FADE_PERSIST = 35    # how bright a faded tile stays, per cent (Settings > Movie > Faded tiles keep)
+
+
+def fade_style(fade=0, persist=FADE_PERSIST):
+    """A mosaic movie's fade as (frames, per cent), clamped; (0, 0) when off, so every name made without one stays
+    as it was."""
+    fade = max(0, min(FADE_MAX, int(fade or 0)))
+    return (fade, max(0, min(100, int(persist)))) if fade else (0, 0)
+
+
+def _fade_weight(age, fade):
+    """How bright a tile age frames older than the newest drawn stays when older tiles fade over fade[0] frames
+    down to fade[1] per cent: 1 for the newest, falling evenly to that floor and staying there."""
+    floor = fade[1] / 100
+    return 1.0 if age <= 0 else max(floor, 1 - (1 - floor) * age / fade[0])
+
+
+def rolling_layout(u, n, cache, laps=1, made_only=False, skipped=None, fade=(0, 0)):
     """What a mosaic movie (a raster repeated over the same places: kind "mosaic_movie") shows at frame n, in the
     form of layout(): every place's newest tile of each filter taken by then, so the mosaic never empties when a
     new lap begins and each tile replaces its own earlier copy (laps=1, a time-lapse); laps=N keeps the N newest
     copies of each place, older under newer (a rolling mosaic). Drawn by so_far through filter_mosaic and
     mosaic.compose like the pass's mosaic, on its scale and in its view. made_only: only tile n is made here, the
     other places show the tiles already made (a window playing fast never waits on the tiles it missed;
-    tiles_ahead makes them)."""
+    tiles_ahead makes them); skipped (a list) gets the tiles left out for that, so the caller knows the picture
+    is not yet the frame's own. fade (fade_style): older tiles fade (Rolling) rather than stay as bright as the
+    newest (Time-lapse): each drawn tile gets a "fade" field (0-1, _fade_weight of its age in frames behind the
+    newest drawn), which _faded applies to the composed picture, and the picture's name says so."""
     p = plan(u, cache)
     where = places(u)
-    there = _tiles(u, cache, p["display_scale"])
+    rec = _kept_tiles(u, cache, p["display_scale"])
+    with _lock:
+        kept = dict(rec["tiles"]) if rec is not None else {}
+    there = rec["tiles_dir"] if rec is not None else _tiles(u, cache, p["display_scale"])
     # each place's newest copies that are there to draw: a copy not made yet (made_only) or one SPICE could not
     # place leaves the copy before it up, so a place never drops out of the mosaic and comes back
     keep, seen = [], {}
@@ -1554,9 +2091,13 @@ def rolling_layout(u, n, cache, laps=1, made_only=False):
         key = (where[j] if where[j] is not None else ("frame", j), u["frames"][j][2])
         if seen.get(key, 0) >= laps:
             continue
-        if made_only and j != n and not os.path.exists(os.path.join(there, f"{j}.json")):
-            continue
-        t = tile(u, j, cache, p["display_scale"])
+        t = kept.get(j)
+        if t is None:
+            if made_only and j != n and not os.path.exists(os.path.join(there, f"{j}.json")):
+                if skipped is not None:
+                    skipped.append(j)
+                continue
+            t = tile(u, j, cache, p["display_scale"])
         if "offset" not in t:
             continue
         seen[key] = seen.get(key, 0) + 1
@@ -1572,25 +2113,72 @@ def rolling_layout(u, n, cache, laps=1, made_only=False):
     colour = p["colour"]
     used = colour if colour and all(count.get(f) for f in colour) else [p["grey"] if count.get(p["grey"]) else max(count, key=count.get)]
     ids = hashlib.sha1(",".join(str(t["n"]) for t in tiles if t["filter"] in used).encode()).hexdigest()[:12]
-    return p, tiles, rect, count, used, f"lap-{laps}-{ids}"
+    if not fade[0]:
+        return p, tiles, rect, count, used, f"lap-{laps}-{ids}"
+    # ages from the newest tile drawn, so frames of a filter the picture does not draw share its picture; copies
+    # of the tile dicts, since the pass's record keeps the originals
+    newest = max(t["n"] for t in tiles if t["filter"] in used)
+    tiles = [dict(t, fade=_fade_weight(newest - t["n"], fade)) for t in tiles]
+    return p, tiles, rect, count, used, f"lap-{laps}-f{fade[0]}p{fade[1]}-{ids}"
 
 
-def _rolling_picture(u, n, size, cache, laps, slots, fmt, out, made_only):
+FADE_SCALE = 4   # the fade's brightness map is worked out at this fraction of the picture's size (it is smooth)
+
+
+def _faded(u, made, cache):
+    """The post step (_make_mosaic) of a mosaic movie whose older tiles fade: the composed picture's colour
+    multiplied by each place's fade, a map drawn from the tiles' own alpha oldest first (newer over older, as
+    compose draws them, soft at their feathered edges) at 1/FADE_SCALE of the picture's size. Done after compose,
+    so the filter mosaics stay the time-lapse's own (grown a tile a frame, _roll, and shared with it) and the
+    seams are solved on the tiles as they are."""
+    import cv2
+    p, tiles, rect, _, used, _ = made
+    there = _tiles(u, cache, p["display_scale"])
+
+    def post(im):
+        W, H = im.size
+        w, h = max(1, W // FADE_SCALE), max(1, H // FADE_SCALE)
+        k = w / rect[2]
+        light = np.ones((h, w), np.float32)
+        for t in tiles:
+            if t["filter"] not in used or "offset" not in t:
+                continue
+            bx, by, bw, bh = t["box"]
+            left = round((t["offset"][0] + bx - rect[0]) * k)
+            top = round((t["offset"][1] + by - rect[1]) * k)
+            sw, sh = max(1, round(bw * k)), max(1, round(bh * k))
+            a0, b0, a1, b1 = max(left, 0), max(top, 0), min(left + sw, w), min(top + sh, h)
+            if a1 <= a0 or b1 <= b0:
+                continue
+            a = _part(os.path.join(there, f"{t['n']}.png"), sw, sh)[b0 - top:b1 - top, a0 - left:a1 - left, 3]
+            a = a.astype(np.float32) / 255
+            light[b0:b1, a0:a1] = light[b0:b1, a0:a1] * (1 - a) + t.get("fade", 1.0) * a
+        light = cv2.resize(light, (W, H), interpolation=cv2.INTER_LINEAR)
+        rgba = np.asarray(im.convert("RGBA")).astype(np.float32)
+        rgba[..., :3] *= light[..., None]
+        return Image.fromarray((rgba + 0.5).clip(0, 255).astype(np.uint8), "RGBA")
+    return post
+
+
+def _rolling_picture(u, n, size, cache, laps, slots, fmt, out, made_only, read=True, skipped=None, fade=(0, 0)):
     """(WebP, report) of the pass's mosaic movie at frame n, made once and kept; None before any tile is placed.
-    One frame's picture is made once at a time (a window's request and the one made ahead wait for each other)."""
-    made = rolling_layout(u, n, cache, laps, made_only=made_only)
+    One frame's picture is made once at a time (a window's request and the one made ahead wait for each other).
+    read=False (made ahead): True when the picture is in the cache already, without reading it. skipped: as
+    rolling_layout's. fade: older tiles fade (fade_style), applied after compose (_faded)."""
+    made = rolling_layout(u, n, cache, laps, made_only=made_only, skipped=skipped, fade=fade)
     if not made:
         return None
+    post = _faded(u, made, cache) if fade[0] else None
     full = size == "full"
     path = os.path.join(folder(u, cache), "rolling-level", f"full{out}" if full else str(size), f"{made[5]}.{fmt}")
     if os.path.exists(path):
-        return _make_mosaic(u, n, size, path, cache, slots, made, fmt, out)
+        return _make_mosaic(u, n, size, path, cache, slots, made, fmt, out, post) if read else True
     with _lock:
         lock = _making.setdefault(path, threading.Lock())
     token = _rolling.set(laps == 1)
     try:
         with lock:
-            return _make_mosaic(u, n, size, path, cache, slots, made, fmt, out)
+            return _make_mosaic(u, n, size, path, cache, slots, made, fmt, out, post)
     finally:
         _rolling.reset(token)
         with _lock:
@@ -1602,15 +2190,28 @@ ROLL_AHEAD = 10    # frames of a mosaic movie made ahead of the window playing i
 ROLL_WORKERS = int(os.environ.get("CASSINI_ROLL_WORKERS", "2"))   # ... this many at once (a color picture's mix is ~1 s)
 
 
-def rolling_ahead(u, n, size, cache, slots=None, out=OUT):
+def _picture_made(rec, size, out, n, skipped, fade=(0, 0)):
+    """Frame n's mosaic movie picture is made: drawn with every tile it shows (none skipped as not made yet), it is
+    the frame's picture for good, and the pass's record keeps that it is made (rolling_ahead)."""
+    if rec is not None and not skipped:
+        with _lock:
+            rec["rolled"].setdefault((size, out, fade), set()).add(n)
+
+
+def rolling_ahead(u, n, size, cache, slots=None, out=OUT, fade=(0, 0)):
     """A window plays the mosaic movie at frame n: make the pictures of frames n+1 .. n+ROLL_AHEAD (their tiles
     first) in the background, in order, each grown from one before it (_roll), so the window's next requests
     are answered from the cache. ROLL_WORKERS threads per pass, each taking the next frame not taken (a picture
     waits for the tiles before it, which the other thread may be making); a later call moves them on. Waits
-    while a window waits for a mosaic (_yield)."""
-    look = calibration.look()
-    key = (u["key"], look)
+    while a window waits for a mosaic (_yield). fade: the window's (fade_style), so they are its pictures."""
+    mode = calibration.mode()
+    key = (u["key"], mode, fade)
+    rec = _record(u, cache)
     with _lock:
+        # every picture ahead made already (the pass's record keeps which are): no workers
+        known = rec["rolled"].get((size, out, fade), ()) if rec is not None else ()
+        if known and all(j in known for j in range(n + 1, min(n + ROLL_AHEAD, len(u["frames"]) - 1) + 1)):
+            return
         running = key in _roll_ahead
         taken = _roll_ahead[key][3] if running else [-1]
         _roll_ahead[key] = [n, size, out, taken, ROLL_WORKERS if not running else _roll_ahead[key][4]]
@@ -1619,19 +2220,28 @@ def rolling_ahead(u, n, size, cache, slots=None, out=OUT):
 
     def run():
         try:
-            with calibration.looking(look):
+            with calibration.in_mode(mode):
                 p = plan(u, cache)
+                kept = _kept_tiles(u, cache, p["display_scale"])
                 while True:
                     with _lock:
                         at, sz, o, taken = _roll_ahead[key][:4]
-                        j = taken[0] = max(at, taken[0]) + 1
+                        made = kept["rolled"].get((sz, o, fade), ()) if kept is not None else ()
+                        j = max(at, taken[0]) + 1
+                        while j in made:   # (made already: nothing to do)
+                            j += 1
+                        taken[0] = j
                     if j > min(at + ROLL_AHEAD, len(u["frames"]) - 1):
                         return
                     for i in range(at + 1, j + 1):
                         _yield()
                         tile(u, i, cache, p["display_scale"])
                     _yield()
-                    _rolling_picture(u, j, sz, cache, 1, slots, "webp", o, made_only=True)
+                    # one made already is not read again
+                    skipped = []
+                    if _rolling_picture(u, j, sz, cache, 1, slots, "webp", o, made_only=True, read=False, skipped=skipped,
+                                        fade=fade):
+                        _picture_made(kept, sz, o, j, skipped, fade)
         except Exception as e:
             print(f"mosaic movie ahead {u['key']} failed: {type(e).__name__}: {e}", flush=True)
         finally:
@@ -1644,9 +2254,11 @@ def rolling_ahead(u, n, size, cache, slots=None, out=OUT):
         threading.Thread(target=contextvars.copy_context().run, args=(run,), daemon=True).start()
 
 
-def rolling_webp(frame_id, size, cache, laps=1, slots=None, fmt="webp", out=OUT, wait=False):
+def rolling_webp(frame_id, size, cache, laps=1, slots=None, fmt="webp", out=OUT, wait=False, fade=(0, 0)):
     """(WebP, report) of frame_id's pass played as a mosaic movie (rolling_layout), made once and kept; None when
-    the frame is in no pass, (None, report) while the pass is being worked out (unless wait)."""
+    the frame is in no pass, (None, report) while the pass is being worked out (unless wait). fade: older tiles
+    fade (fade_style: frames, per cent; Rolling) instead of staying as bright as the newest (Time-lapse)."""
+    fade = fade_style(*fade)
     found = unit_of(frame_id)
     if not found or found[1] < 0:
         return None
@@ -1654,17 +2266,23 @@ def rolling_webp(frame_id, size, cache, laps=1, slots=None, fmt="webp", out=OUT,
     if not wait and not os.path.exists(os.path.join(folder(u, cache), PLAN_FILE)):
         warm_movie(u, n, 6, cache)
         return None, {"why": "working out the pass", "observation": u["key"][1], "pass": u["key"][3]}
+    skipped = []
     with _asking():
-        res = _rolling_picture(u, n, size, cache, laps, slots, fmt, out, made_only=not wait)
+        res = _rolling_picture(u, n, size, cache, laps, slots, fmt, out, made_only=not wait, skipped=skipped, fade=fade)
         if res is None:
             return None, {"why": "no tile placed yet"}
+    if laps == 1 and fmt == "webp":
+        _picture_made(_record(u, cache), size, out, n, skipped, fade)
     # the tiles ahead, by the pass's one background thread (tiles_ahead, as a pass mosaic's), and the pictures of
     # the next frames, so a playing window finds them made (rolling_ahead)
     tiles_ahead(u, n + 1, cache)
     if laps == 1 and size != "full" and fmt == "webp":
-        rolling_ahead(u, n, size, cache, slots, out)
+        rolling_ahead(u, n, size, cache, slots, out, fade)
     if res:
-        res[1].update({"rolling": True, "keep": laps, "n": n})   # laps: the pass's own, from _make_mosaic
+        res[1].update({"rolling": True, "keep": laps, "n": n, "fade": list(fade)})   # laps: the pass's own, from _make_mosaic
+        if skipped:
+            # drawn without tiles not made yet: the frame's picture for now, not for good (the server says so)
+            res[1]["partial"] = len(skipped)
     return res
 
 
@@ -1699,17 +2317,33 @@ def outline(u, t, cache):
     if "outline" in t:
         return t["outline"]
     base = os.path.join(_tiles(u, cache, plan(u, cache)["display_scale"]), str(t["n"]))
-    make = lambda: json.dumps(_corners(t, np.asarray(Image.open(base + ".png"))[..., 3])).encode()
-    return json.loads(reel._cached(base + ".outline.json", make))
+    with _lock:
+        kept = _outlines.get(base)
+    if kept is None:
+        make = lambda: json.dumps(_corners(t, np.asarray(Image.open(base + ".png"))[..., 3])).encode()
+        kept = json.loads(reel._cached(base + ".outline.json", make))
+        with _lock:
+            if len(_outlines) >= UNIT_OF_KEEP:
+                _outlines.clear()
+            _outlines[base] = kept
+    return kept
+
+
+_outlines = {}   # tile (its path, less .png) -> its outline, for tiles made before outlines were in their reports
 
 
 def tile_map(frame_id, cache):
     """Where each frame sits in the mosaic shown for frame_id (the same layout as mosaic_webp, so the same
-    tiles and view), for the camera windows' drill-down: {observation, filters, pointings: [{n, t, ids
-    {filter: id}, tiles, poly [[x, y] x4], center [x, y]}]} with x, y as fractions (0-1) of the picture.
-    A pointing is the drawn tiles of different filters at one place (within SAME_PLACE of a frame) taken one
-    after another; its outline is its newest tile's, which is the one on top. None when frame_id is not in a
-    mosaic pass or nothing is placed yet."""
+    tiles and view), for the camera windows' drill-down and Cassini Studio's tile tuning, the picture's manifest:
+    {observation, target, pass, filters (the colour set or the gray filter drawn), layers {color: the colour
+    filters when the picture has colour, else null; luminance: the luminance base's filters with a tile so far},
+    pointings: [{n, t, ids {filter: id} (the filters drawn), luminance {filter: id} (frames drawn in the gray base
+    only), set (every colour filter is there, so the pointing shows in colour), also {filter: id} (frames taken
+    there that the picture does not draw), tiles, poly [[x, y] x4], center [x, y]}]} with x, y as fractions (0-1)
+    of the picture. A pointing is the drawn tiles of different filters at one place (within SAME_PLACE of a frame)
+    taken one after another; its outline is its newest tile's, which is the one on top. Kept beside the pass's
+    mosaics (MAPS_DIR/<layout name>.json) once every tile in it is made. None when frame_id is not in a mosaic pass or
+    nothing is placed yet."""
     found = unit_of(frame_id)
     if not found or not found[0]["mosaic"] or found[1] < 0:
         return None
@@ -1721,46 +2355,76 @@ def tile_map(frame_id, cache):
     with _lock:
         if key in _maps:
             return _maps[key]
+    kept = os.path.join(key[0], MAPS_DIR, f"{made[5]}.json")
+    if os.path.exists(kept):
+        with open(kept) as fh:
+            found = json.load(fh)
+        with _lock:
+            _maps[key] = found
+        return found
     p, tiles, rect, count, used, _ = made
+    frames = lum_frames(u, p)
+    colour = used if len(used) == 3 else None
     x0, y0, w, h = rect
     frac = lambda x, y: [round((x - x0) / w, 5), round((y - y0) / h, 5)]
     pointings, complete = [], True
+    rec = _kept_tiles(u, cache, p["display_scale"])
+    there = rec["tiles_dir"] if rec is not None else _tiles(u, cache, p["display_scale"])
+    also = []
     for t in tiles:
-        if "offset" not in t or t["filter"] not in used:
+        if "offset" not in t:
             continue
-        if not os.path.exists(os.path.join(_tiles(u, cache, plan(u, cache)["display_scale"]), f"{t['n']}.png")):
+        if t["filter"] not in used and t["n"] not in frames:
+            also.append(t)
+            continue
+        # (a tile's report is written after its picture: a tile whose report is kept in memory has its picture)
+        if not (rec is not None and t["n"] in rec["tiles"]) and not os.path.exists(os.path.join(there, f"{t['n']}.png")):
             complete = False   # still being written: this map is not kept
             continue
         last = pointings[-1] if pointings else None
-        if last and t["filter"] not in last["ids"] and t["t"] - last["t1"] <= REPEAT_POINTING and \
+        if last and t["filter"] not in last["ids"] and t["filter"] not in last["luminance"] and \
+                t["t"] - last["t1"] <= REPEAT_POINTING and \
                 math.hypot(t["offset"][0] - last["at"][0], t["offset"][1] - last["at"][1]) <= SAME_PLACE * FRAME:
             pass
         else:
-            last = {"ids": {}, "tiles": []}
+            last = {"ids": {}, "luminance": {}, "also": {}, "tiles": []}
             pointings.append(last)
-        last["ids"][t["filter"]] = t["id"]
+        last["ids" if t["filter"] in used else "luminance"][t["filter"]] = t["id"]
         last["tiles"].append(t["n"])
         last["t1"], last["at"] = t["t"], t["offset"]
         last.setdefault("t", t["t"])
         last["poly"] = [frac(x, y) for x, y in outline(u, t, cache)]
         last["center"] = frac(*t["offset"])
+    # the frames not drawn, each with the pointing at its place nearest in time
+    for t in also:
+        near = [(abs(q["t1"] - t["t"]), i) for i, q in enumerate(pointings)
+                if math.hypot(t["offset"][0] - q["at"][0], t["offset"][1] - q["at"][1]) <= SAME_PLACE * FRAME]
+        if near:
+            pointings[min(near)[1]]["also"].setdefault(t["filter"], t["id"])
     out = []
     for q in pointings:
         q.pop("t1"); q.pop("at")
+        q["set"] = bool(colour) and all(f in q["ids"] for f in colour)
         if not (max(c[0] for c in q["poly"]) <= 0 or min(c[0] for c in q["poly"]) >= 1 or
                 max(c[1] for c in q["poly"]) <= 0 or min(c[1] for c in q["poly"]) >= 1):   # in the view
             out.append(dict(q, n=len(out) + 1))   # numbered as shown, so "n of N" holds
     found = {"observation": u["key"][1], "target": u["key"][0], "pass": u["key"][3], "filters": used,
+             "layers": {"color": colour, "luminance": sorted({t["filter"] for t in tiles if "offset" in t and t["n"] in frames},
+                                                              key=_luminance(p)["filters"].index)},
              "fixed": p["fixed"], "pointings": out}
+    if complete:
+        reel._cached(kept, lambda: json.dumps(found).encode())
     with _lock:
         if complete:
             _maps[key] = found
-        while len(_maps) > 64:
+        while len(_maps) > MAPS_KEEP:
             _maps.pop(next(iter(_maps)))
     return found
 
 
+MAPS_DIR = "maps-1"   # the kept manifests (under the pass's versioned folder), renamed whenever tile_map's answer changes
 _maps = {}   # (pass folder, layout name) -> its tile map: a mosaic's map is asked for on every hover of a new picture
+MAPS_KEEP = 512   # a few passes' every mosaic (a map is ~100 bytes a pointing), so a pass played again maps none again
 
 
 def pointing_picture(frame_id, ids, cache, size="full", fmt="webp", slots=None, channel=None):
@@ -1780,9 +2444,13 @@ def pointing_picture(frame_id, ids, cache, size="full", fmt="webp", slots=None, 
         return None
     p, tiles, rect, count, used, name = made
     drawn = {t["id"]: t for t in tiles if "offset" in t and t["filter"] in used}
+    if len(ids) == 1 and ids[0] not in drawn:
+        # a frame of the luminance base alone (a pointing the colour filters do not reach: tile_map's luminance)
+        frames = lum_frames(u, p)
+        drawn.update({t["id"]: t for t in tiles if "offset" in t and t["n"] in frames})
     if any(i not in drawn for i in ids) or len(set(ids)) != len(ids) or len(ids) not in (1, len(used)):
         return None
-    mine = sorted((drawn[i] for i in ids), key=lambda t: used.index(t["filter"]))
+    mine = sorted((drawn[i] for i in ids), key=lambda t: used.index(t["filter"]) if t["filter"] in used else 0)
     if len(mine) > 1 and [t["filter"] for t in mine] != used:
         return None
     ids = [t["id"] for t in mine]
@@ -1818,7 +2486,7 @@ def _pointing(u, p, tiles, rect, count, used, mine, cache):
         image, _, rep = color_image.processed_frame([fpath], hdr=True, scale={**scale, "blacks": [scale["blacks"].get(f, 0.0)]},
                                                     repeat_window=u.get("repeat_gap", mosaic_benchmark.REPEAT_GAP))
         grey = image[..., 0].astype(np.float32)
-        gain, offset = _seam_of(u, p, tiles, rect, ref, t, cache)
+        gain, offset = _seam_of(u, p, tiles, rect, ref, t, cache, None if f in used else LUM)
         layers.append((np.clip(grey * gain + offset, 0, 255), image[..., 3], rep.get("frame_offset", [0.0, 0.0])))
     # the filters on one canvas, each shifted by where its frame's middle sits from the first's
     o0 = layers[0][2]
@@ -1846,14 +2514,14 @@ def _pointing(u, p, tiles, rect, count, used, mine, cache):
     return Image.fromarray(np.ascontiguousarray(rgba), "RGBA")
 
 
-def _seam_of(u, p, tiles, rect, ref, t, cache):
-    """(gain, offset) the mosaic's compose gave tile t, as it shows in its filter's mosaic: fitted between the
-    tile and that mosaic where the tile is whole (neighbours blend in near its edges, so the fit is trimmed);
-    (1, 0) when too little of it is in the view."""
+def _seam_of(u, p, tiles, rect, ref, t, cache, f=None):
+    """(gain, offset) the mosaic's compose gave tile t, as it shows in its filter's mosaic (f = LUM: in the
+    luminance base, its band's gain included): fitted between the tile and that mosaic where the tile is whole
+    (neighbours blend in near its edges, so the fit is trimmed); (1, 0) when too little of it is in the view."""
     window, shown = _window(u, p, [t], rect, cache)
     if not shown:
         return 1.0, 0.0
-    mos = filter_mosaic(u, p, t["filter"], tiles, rect, cache, ref)
+    mos = filter_mosaic(u, p, f or t["filter"], tiles, rect, cache, None if f else ref)
     tile_px = window[0][0]
     keep = (tile_px[..., 3] == 255) & (mos[..., 3] == 255)
     a, b = tile_px[..., 0][keep].astype(np.float32), mos[..., 0][keep].astype(np.float32)
@@ -1900,26 +2568,66 @@ def mosaic_webp(frame_id, size, cache, slots=None, ahead=3, fmt="webp", out=OUT,
             return None
         n, ahead = m, 0
     with _asking():
+        laid = layout(u, n, cache)
         if size == "full":
-            made = _mosaic_at(u, n, size, cache, slots, fmt, out)
+            made = _mosaic_at(u, n, size, cache, slots, fmt, out, made=laid)
         else:
-            made = _mosaic_at(u, n, size, cache, slots)
+            made = _mosaic_at(u, n, size, cache, slots, made=laid)
     if made:
         made = made[0], {**made[1], "behind": found[1] - n}
         # its tile map too, once the mosaic is made, so the window's first hover finds it ready (tiles made before
-        # outlines were kept in their reports are measured once here)
-        threading.Thread(target=contextvars.copy_context().run, args=(_map_quietly, frame_id, cache), daemon=True).start()
+        # outlines were kept in their reports are measured once here); a map worked out already needs no work
+        with _lock:
+            mapped = (folder(u, cache), laid[5]) in _maps
+        if not mapped:
+            _map_later(u, n, cache)
     if made and ahead and size != "full":
         warm(u, n + ahead, cache, size, slots, start=n + 1, force=force)
     return made
 
 
-def _map_quietly(frame_id, cache):
-    try:
-        _yield()
-        tile_map(frame_id, cache)
-    except Exception:   # a tile not made yet: the window's own request works it out
-        pass
+_map_wanted, _map_running = {}, set()   # pass folder -> the last tile whose mosaic's map is wanted; passes mapping
+
+
+def _map_later(u, n, cache):
+    """Works out the tile maps of the pass's mosaics up to tile n in the background, in order and once each (the
+    pass's record keeps how far it has got), one worker per pass, so the window's first hover finds its map ready
+    and a pass played fast starts one thread, not one per mosaic waiting its turn."""
+    rec, key = _record(u, cache), folder(u, cache)
+    with _lock:
+        if rec is not None and rec.get("mapped", -1) >= n:
+            return   # (mapped already, then dropped from _maps: a hover works it out)
+        _map_wanted[key] = max(n, _map_wanted.get(key, -1))
+        if key in _map_running:
+            return
+        _map_running.add(key)
+
+    def run():
+        try:
+            while True:
+                _yield()
+                rec = _record(u, cache)
+                with _lock:
+                    upto = _map_wanted.pop(key, None)
+                    if upto is None:   # (under the lock that a later ask takes: it starts a worker of its own)
+                        _map_running.discard(key)
+                        return
+                    first = rec.get("mapped", -1) + 1 if rec is not None else upto
+                for j in range(first, upto + 1):
+                    _yield()
+                    try:
+                        tile_map(u["frames"][j][1], cache)
+                    except Exception:   # a tile not made yet: the window's own request works it out
+                        pass
+                    if rec is not None:
+                        with _lock:
+                            rec["mapped"] = max(rec.get("mapped", -1), j)
+        except BaseException:
+            with _lock:
+                _map_running.discard(key)
+            raise
+
+    threading.Thread(target=contextvars.copy_context().run, args=(run,), daemon=True).start()
 
 
 _made = {}   # (pass, look) -> the last tile of the pass up to which every tile is made (or -1)
@@ -1929,14 +2637,14 @@ def _made_through(u, n, cache):
     """The last tile j <= n of the pass with tiles 0..j all made (their reports in the cache), -1 for none.
     Tile 0 is made here when nothing is (with the plan, seconds), so a pass's first mosaic does not wait for
     the background."""
-    key = (u["key"], calibration.look())
+    key = (u["key"], calibration.mode())
     with _lock:
         j = _made.get(key, -1)
     if j < 0:
         with _asking():
             tile(u, 0, cache)
-    base = _tiles(u, cache, plan(u, cache)["display_scale"])
-    while j < n and os.path.exists(os.path.join(base, f"{j + 1}.json")):
+    p = plan(u, cache)
+    while j < n and _has_tile(u, j + 1, cache, p):
         j += 1
     with _lock:
         _made[key] = max(_made.get(key, -1), j)
@@ -1965,6 +2673,20 @@ def _yield():
         time.sleep(0.02)
 
 
+def _mosaic_path(u, made, size, cache, fmt="webp", out=OUT):
+    """Where the mosaic of layout made is kept in the cache (named after what it is made of)."""
+    return os.path.join(folder(u, cache), f"full{out}" if size == "full" else str(size), f"{made[5]}.{fmt}")
+
+
+def _mosaic_made(u, n, size, cache):
+    """Whether the pass's mosaic at tile n is made at size (or holds nothing yet): nothing for warm to make."""
+    made = layout(u, n, cache)
+    if not made:
+        return True
+    path = _mosaic_path(u, made, size, cache)
+    return path in _blank or os.path.exists(path)
+
+
 def _mosaic_at(u, n, size, cache, slots=None, fmt="webp", out=OUT, made=None):
     """(WebP, report) of the pass's mosaic with tiles 0..n at size, made once (kept in the cache under the name
     of what it is made of, so frames that add nothing to it share it; a request that comes while it is being
@@ -1972,8 +2694,7 @@ def _mosaic_at(u, n, size, cache, slots=None, fmt="webp", out=OUT, made=None):
     made = made or layout(u, n, cache)
     if not made:
         return None
-    full = size == "full"
-    path = os.path.join(folder(u, cache), f"full{out}" if full else str(size), f"{made[5]}.{fmt}")
+    path = _mosaic_path(u, made, size, cache, fmt, out)
     if not os.path.exists(path):
         with _lock:
             lock = _making.setdefault(path, threading.Lock())
@@ -1999,7 +2720,9 @@ def blank(im):
     return not covered.any() or float(np.percentile(a[..., :3].max(axis=2)[covered], 99)) <= BLANK_LEVEL
 
 
-def _make_mosaic(u, n, size, path, cache, slots, made, fmt="webp", out=OUT):
+def _make_mosaic(u, n, size, path, cache, slots, made, fmt="webp", out=OUT, post=None):
+    """(picture, report) of the mosaic so_far draws from made, kept at path; None before anything is above black.
+    post: a step applied to so_far's picture before it is kept (a mosaic movie's fade, _faded)."""
     report, full, meta = {}, size == "full", path[:-len(fmt)] + "json"
     if path in _blank:
         return None
@@ -2014,6 +2737,8 @@ def _make_mosaic(u, n, size, path, cache, slots, made, fmt="webp", out=OUT):
                 _blank.add(path)
             raise LookupError("nothing above black yet")
         report.update(rep)
+        if post:
+            im = post(im)
         if not full and max(im.size) > size:
             im.thumbnail((size, size), Image.LANCZOS)
         buf = io.BytesIO()
@@ -2022,6 +2747,7 @@ def _make_mosaic(u, n, size, path, cache, slots, made, fmt="webp", out=OUT):
         else:
             im.save(buf, "WEBP", quality=QUALITY, method=4)
         reel._cached(meta, lambda: json.dumps(rep).encode())
+        reel.keep_report(meta, rep)
         return buf.getvalue()
 
     try:
@@ -2029,8 +2755,7 @@ def _make_mosaic(u, n, size, path, cache, slots, made, fmt="webp", out=OUT):
     except LookupError:
         return None
     if not report:
-        with open(meta) as fh:
-            report = json.load(fh)
+        report = reel.report_of(meta)
     return data, report
 
 
@@ -2040,10 +2765,19 @@ def warm(u, upto, cache, size=None, slots=None, start=0, force=False):
     runs one pass at a time (_background). force: a pass _judge does not call a mosaic, asked for as one."""
     if not (u["mosaic"] or force):
         return
-    look, colors = calibration.look(), calibration.colors()
-    key = (u["key"], size, look, colors)
+    mode = calibration.mode()
+    key = (u["key"], size, mode)
+    upto = min(upto, len(u["frames"]) - 1)
     with _lock:
-        _upto[key] = max(_upto.get(key, -1), min(upto, len(u["frames"]) - 1))
+        running = key in _warming
+    # nothing to make (the tiles up to upto in memory, and their mosaics in the cache): no thread
+    if not running:
+        rec = _record(u, cache)
+        if rec is not None and _all_made(u, cache, rec["plan"], 0, upto) and \
+                (not size or all(_mosaic_made(u, j, size, cache) for j in range(start, upto + 1))):
+            return
+    with _lock:
+        _upto[key] = max(_upto.get(key, -1), upto)
         _from[key] = max(_from.get(key, 0), start)
         if key in _warming:
             return
@@ -2051,7 +2785,7 @@ def warm(u, upto, cache, size=None, slots=None, start=0, force=False):
 
     def run():
         try:
-            with _background, calibration.looking(look), calibration.coloring(colors):
+            with _background, calibration.in_mode(mode):
                 p = plan(u, cache)
                 done = -1
                 while True:
@@ -2068,8 +2802,9 @@ def warm(u, upto, cache, size=None, slots=None, start=0, force=False):
                     if size:
                         for j in range(max(first, done + 1), last + 1):
                             _yield()
-                            # a window that has asked for a later frame meanwhile (a burst) has passed this one
-                            if j >= _from[key]:
+                            # a window that has asked for a later frame meanwhile (a burst) has passed this one;
+                            # one made already is not read again
+                            if j >= _from[key] and not _mosaic_made(u, j, size, cache):
                                 _mosaic_at(u, j, size, cache, slots)
                     done = last
         except Exception as e:
@@ -2082,8 +2817,8 @@ def warm(u, upto, cache, size=None, slots=None, start=0, force=False):
     threading.Thread(target=run, daemon=True).start()
 
 
-_ahead_passes = collections.deque(maxlen=2)   # the passes windows were in last (a NAC and a WAC window)
-_ahead_running = set()
+_ahead_passes = collections.deque(maxlen=2)   # (pass, mode) windows were in last (a NAC and a WAC window)
+_ahead_running = set()   # (pass, mode) a thread is making tiles ahead for
 
 
 def tiles_ahead(u, n, cache):
@@ -2092,32 +2827,41 @@ def tiles_ahead(u, n, cache):
     mosaic finds its tiles made (processing a frame is the slow part of a cold mosaic) instead of waiting for
     each. Stops once windows have moved on to two other passes. Waits between tiles while a window waits for a
     mosaic (_yield), so the pass's lock goes to the request first instead of to the next tile ahead."""
+    mode = calibration.mode()
+    me = (u["key"], mode)
     with _lock:
-        if u["key"] in _ahead_passes:
-            _ahead_passes.remove(u["key"])
-        _ahead_passes.append(u["key"])
-        if u["key"] in _ahead_running:
+        # the pass asked for in one mode only (Settings > Processing switched): the thread of its mode before stops
+        for was in [a for a in _ahead_passes if a[0] == u["key"]]:
+            _ahead_passes.remove(was)
+        _ahead_passes.append(me)
+        if me in _ahead_running:
             return
-        _ahead_running.add(u["key"])
-    look = calibration.look()
+    # every tile of the pass made and in memory: nothing to make, no thread
+    rec = _record(u, cache)
+    if rec is not None and _all_made(u, cache, rec["plan"], 0, len(u["frames"]) - 1):
+        return
+    with _lock:
+        if me in _ahead_running:
+            return
+        _ahead_running.add(me)
 
     def run():
         try:
-            with calibration.looking(look):
+            with calibration.in_mode(mode):
                 p = plan(u, cache)
                 # from the first tile not made: a window's mosaic is the tiles made so far in a row (mosaic_webp)
                 with _lock:
-                    first = _made.get((u["key"], look), -1) + 1
+                    first = _made.get((u["key"], mode), -1) + 1
                 for j in range(first, len(u["frames"])):
                     _yield()
-                    if u["key"] not in _ahead_passes:
+                    if me not in _ahead_passes:
                         return
                     tile(u, j, cache, p["display_scale"])
         except Exception as e:
             print(f"observation tiles {u['key']} failed: {type(e).__name__}: {e}", flush=True)
         finally:
             with _lock:
-                _ahead_running.discard(u["key"])
+                _ahead_running.discard(me)
 
     threading.Thread(target=run, daemon=True).start()
 

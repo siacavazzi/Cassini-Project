@@ -24,6 +24,10 @@ Routes:
                                attachment (Cassini_<ID>.png), so the picture can be saved and shared
   /frames/<ID>.png             the archive PNG as it is
   /frames/<ID>.png?download=1  the archive PNG as a named attachment (Cassini_<ID>_archive.png)
+  /frames/<ID>.tif?download=1  science data: the frame's I/F at the camera's resolution as a 32-bit float TIFF
+                               (color_image.science_frame: calibrated, nothing else done; lost pixels NaN), its PDS
+                               label in the TIFF's ImageDescription; Cassini_<ID>_IOF.tif. 404 when the frame can't
+                               be calibrated (8LSB). /frames/<ID>.lbl is the label on its own
   /frames/color.webp?ids=R,G,B&size=512
                                colour composite of two or three frames of one filter set, made on
                                first request and cached like the frames: R,G,B in that order, or
@@ -40,8 +44,10 @@ Routes:
                                by SPICE (color_image.processed_frame), at the frame's own scale (one frame square
                                round the body); whether to centre is decided once for the pass (obs_mosaic.centre_view,
                                the rule of a movie centred on its body).
-                               404 with X-Center {"centre": false, "why"} when the pass is not centred (rings, sky,
-                               a body too big for the view), and the window shows the picture as it is. Also on
+                               A close-up pass (frames on a body too big for the view) is turned north up where it
+                               is, so the surface holds still. 404 with X-Center {"centre": false, "why"} for a ring,
+                               spoke or sky pass (Cassini kept those upright in the camera, the steady view) or a
+                               frame SPICE has no place for, and the window shows the picture as it is. Also on
                                /frames/processed below
   /frames/processed/<ID>.webp?size=512
                                the frame alone made like a composite's channel (color_image.load_aligned with
@@ -55,8 +61,10 @@ Routes:
                                stacked, calibrated, aligned, centred on the body with north up by SPICE)
                                and drawn into the rolling mosaic with the pictures before it; made on
                                first request and cached. X-Reel says how it was made
-  /frames/mosaic/<ID>.json     where each frame sits in that mosaic (obs_mosaic.tile_map): its pointings, each with
-                               its frames by filter and its outline and centre as fractions of the picture
+  /frames/mosaic/<ID>.json     where each frame sits in that mosaic (obs_mosaic.tile_map, the picture's manifest): its
+                               layers (colour set, gray luminance base) and pointings, each with its frames by filter
+                               (drawn in colour, in the gray base only, or not drawn), whether it shows in colour, and
+                               its outline and centre as fractions of the picture
   /frames/mosaic/<ID>/frame.webp?ids=A,B,C&size=full   one frame of that mosaic on its own, on the mosaic's levels
                                and colours (obs_mosaic.pointing_picture; format=png, download=1 as below)
   /frames/mosaic/<ID>.webp?size=512   (&warm=1: only start making the pass ahead of time, empty answer;
@@ -78,10 +86,12 @@ Routes:
                                of the pass's color filters together, trail=N the N earlier frames of its filter
                                fading under it; center=1 (the default) the body in the middle of every frame, when
                                its disk fits the view. 503 while the pass is being worked out (the window shows the frame)
-  /frames/movie/<ID>.webp?mode=rolling&laps=1
+  /frames/movie/<ID>.webp?mode=rolling&laps=1&fade=0&persist=35
                                a mosaic movie (a raster repeated over the same places): every place's newest tile
                                by this frame (laps=N: its N newest copies, older under newer), composed like the
-                               pass's mosaic (obs_mosaic.rolling_webp), so it never empties when a lap begins
+                               pass's mosaic (obs_mosaic.rolling_webp), so it never empties when a lap begins;
+                               fade=N: older tiles fade over N frames down to persist per cent (Rolling), 0 keeps
+                               every tile as bright as the newest (Time-lapse)
   /frames/movie/<ID>.json      the pass the frame is in: its frames [id, time, filter], cadence, movie/mosaic call
   /frames/thumb.webp?mosaic=<ID>&color=R,G,B&frame=<ID>&size=256
                                a highlight's thumbnail (any of the three, as data/highlights.json's "thumb" gives them):
@@ -104,7 +114,7 @@ Routes:
                                passes, with the page's look and movie style: mosaics, steady, color, trail, laps,
                                center), so it plays as a movie at any frame rate from the cache; one stretch at a
                                time, behind the server's own requests. Answers the job's status, as
-  /prebuild/<JOB>.json         does: state queued/planning/making/waiting/done/failed/stopped, pictures done of
+  /prebuild/<JOB>.json         does: state queued/planning/making/waiting/finishing/done/failed/stopped, pictures done of
                                total, made through (UTC), seconds left
   POST /prebuild/<JOB>/stop    stops it (what is made stays made)
   /health                      "ok" plus where the frames come from
@@ -182,6 +192,39 @@ _mosaic_slots = threading.Semaphore(2)
 _movie_slots = threading.Semaphore(int(os.environ.get("FRAME_SERVER_MOVIE_SLOTS", 4)))
 # requests that take longer than this many seconds are logged
 SLOW = float(os.environ.get("FRAME_SERVER_SLOW", "2"))
+# FRAME_SERVER_SAMPLE=1: every thread's stack is sampled every few ms and GET /debug/samples answers the stacks seen
+# most since it was last asked, so a server that answers slowly shows what its threads were doing meanwhile
+_samples, _samples_lock = collections.Counter(), threading.Lock()
+
+
+def sample_stacks(interval=0.005, top=6):
+    me = threading.get_ident()
+    while True:
+        time.sleep(interval)
+        seen = []
+        for ident, frame in sys._current_frames().items():
+            if ident == me:
+                continue
+            stack, f = [], frame
+            while f is not None:
+                stack.append(f"{os.path.basename(f.f_code.co_filename)}:{f.f_code.co_name}:{f.f_lineno}")
+                f = f.f_back
+            # the innermost frames, and the thread's own function (what started it)
+            seen.append(" < ".join(stack[:top]) + ("" if len(stack) <= top else f" ... {stack[-1]}"))
+        with _samples_lock:
+            _samples["(samples)"] += 1
+            _samples.update(seen)
+
+
+def samples_text(n=40):
+    with _samples_lock:
+        got = dict(_samples)
+        _samples.clear()
+    total = got.pop("(samples)", 0)
+    lines = [f"{total} samples, {threading.active_count()} threads now; share of samples each stack was seen in:"]
+    for stack, count in sorted(got.items(), key=lambda kv: -kv[1])[:n]:
+        lines.append(f"{count / max(1, total):6.2f}  {stack}")
+    return "\n".join(lines) + "\n"
 
 
 def archive_png(frame_id):
@@ -195,9 +238,11 @@ _making_lock = threading.Lock()
 
 
 def cached(path, make):
-    if os.path.exists(path):
+    try:
         with open(path, "rb") as fh:
             return fh.read()
+    except FileNotFoundError:
+        pass
     with _making_lock:
         lock = _making.setdefault(path, threading.Lock())
     try:
@@ -315,6 +360,20 @@ FRAME_QUALITY = 95
 FRAME_VERSION = "frames-q95"
 
 
+def science_tiff(frame_id):
+    """The frame's science TIFF (color_image.science_frame) and label, or None when it can't be calibrated. Not
+    cached: one frame's calibration is a few tens of ms."""
+    made = color_image.science_frame(f"{FOLDERS[frame_id[0]]}/{frame_id}.png")
+    if made is None:
+        return None
+    iof, label, note = made
+    out = io.BytesIO()
+    # 270 ImageDescription: the PDS label, so the numbers keep what they are; 305 Software
+    Image.fromarray(iof, "F").save(out, "TIFF", compression="tiff_deflate",
+                                   tiffinfo={270: label.strip() + "\n\n/* " + note + " */\n", 305: "Cassini OS (calibration.calibrate)"})
+    return out.getvalue()
+
+
 # a frame's picture, decoded once for the sizes asked for one after another (the pre-build makes its 1024, 512 and
 # 128 in turn): decoding the PNG three times was a seventh of making the three. Each use gets a copy, since encode
 # shrinks the picture it is given
@@ -365,10 +424,11 @@ def webp(frame_id, size, cache, fmt="webp"):
 
 # the caches of the pictures drawn from I/F, one per display model (calibration.style), so the classic look keeps the
 # pictures made before the balanced display model and raw colors the balanced ones made before natural color
-COLOR_VERSIONS = {"balanced": "color-v27", "raw": "color-v10", "classic": "color-v4"}
-PROC_VERSIONS = {"balanced": "proc-v7", "raw": "proc-v7", "classic": "proc-v1"}   # one frame: no colors to mix
+COLOR_VERSIONS = {"balanced": "color-v29", "raw": "color-v12", "classic": "color-v6"}
+PROC_VERSIONS = {"balanced": "proc-v8", "raw": "proc-v8", "classic": "proc-v2"}   # one frame: no colors to mix
 # Auto center (center=1): the same pictures centred on the body by SPICE, cached beside them in folders of their own
-CENTRE_VERSION = "ctr2"   # ctr2: the shift stops at the frame's data edge
+CENTRE_VERSION = "ctr4"   # ctr2: the shift stops at the frame's data edge; ctr3: only when the body's disk is cut by it;
+                          # ctr4: a close-up pass is turned north up where it is
 
 
 def in_background(target, *args):
@@ -399,6 +459,19 @@ def composite(ids, channel=None, centre=None):
     return Image.fromarray(np.dstack(chans + [alpha]), "RGBA"), report
 
 
+def disk_in_frame(alpha, cx, cy, r):
+    """True when the body's disk (centre cx, cy, radius r canvas pixels) lies on the frame's data: its centre and
+    the four ends of its axes are inside the frame (alpha, the frame's coverage on the canvas)."""
+    if not r or r <= 0:
+        return False
+    h, w = alpha.shape
+    for x, y in ((cx, cy), (cx - r, cy), (cx + r, cy), (cx, cy - r), (cx, cy + r)):
+        i, j = int(round(y)), int(round(x))
+        if not (0 <= i < h and 0 <= j < w and alpha[i, j]):
+            return False
+    return True
+
+
 def centred(ids, view):
     """The composite of ids (or one frame) centred on the body, north up: the pipeline's color path and SPICE
     placement (color_image.processed_frame: load_aligned as composite, then auto_center), cut to the square of
@@ -412,12 +485,16 @@ def centred(ids, view):
     side = int(view["side"])
     cx = (w - 1) / 2 - report["frame_offset"][0]
     cy = (h - 1) / 2 - report["frame_offset"][1]
+    if not view.get("centre"):
+        # north up only (a pass Auto center does not centre): the view stays on the frame's middle
+        cx, cy = (w - 1) / 2, (h - 1) / 2
     left, top = round(cx - side / 2), round(cy - side / 2)
-    # the shift stops where the frame's data does: the view never takes in black beyond the frame's edge on a side
-    # where the frame could fill it, so a body the camera caught at its edge stays at that edge instead of half the
-    # picture going black (where the frame is narrower than the view, the view sits on the frame's middle)
+    # a body whose whole disk is in the frame goes to the middle, the sky round it black where the frame ends; a
+    # body the frame cuts (caught at its edge, or bigger than it) is moved only as far as the frame's data goes,
+    # so the view never takes in black beyond the frame's edge on a side where the frame could fill it and half the
+    # picture does not go black (where the frame is narrower than the view, the view sits on the frame's middle)
     rows, cols = np.flatnonzero(image[..., 3].any(1)), np.flatnonzero(image[..., 3].any(0))
-    if len(rows):
+    if len(rows) and not disk_in_frame(image[..., 3], cx, cy, view.get("radius", 0)):
         def fit(start, lo, hi):
             return min(max(start, lo), hi - side) if hi - lo >= side else round((lo + hi) / 2 - side / 2)
         wanted = (left, top)
@@ -427,7 +504,8 @@ def centred(ids, view):
     x0, y0, x1, y1 = max(left, 0), max(top, 0), min(left + side, w), min(top + side, h)
     if x0 < x1 and y0 < y1:
         out[y0 - top:y1 - top, x0 - left:x1 - left] = image[y0:y1, x0:x1]
-    report = dict(report, ids=list(ids), centred_view={"side": side, "pass": view.get("pass")})
+    report = dict(report, ids=list(ids), centred_view={"side": side, "pass": view.get("pass"),
+                                                          "centre": bool(view.get("centre"))})
     if len(ids) == 1:
         return Image.fromarray(np.ascontiguousarray(out[..., [0, 3]]), "LA"), report
     return Image.fromarray(out, "RGBA"), report
@@ -438,7 +516,7 @@ _recent, _recent_lock, RECENT = {}, threading.Lock(), 4
 
 
 def _recent_composite(ids, centre=None):
-    key = (calibration.style(), tuple(ids), centre and centre["side"])
+    key = (calibration.mode(), tuple(ids), centre and centre["side"])
     with _recent_lock:
         hit = _recent.pop(key, None)
         if hit:
@@ -461,7 +539,7 @@ def color_webp(ids, size, cache, fmt="webp", channel=None, centre=None):
     """The composite (or one of its channels) as WebP (or PNG), and its report (also kept in the cache, next to
     the image). centre: centred on the body (composite)."""
     # bumped whenever the way composites are made changes, so older ones are not served again
-    folder = centre_folder(os.path.join(cache, COLOR_VERSIONS[calibration.style()] + QSUFFIX), centre)
+    folder = centre_folder(os.path.join(cache, COLOR_VERSIONS[calibration.style()] + calibration.variant() + QSUFFIX), centre)
     base = os.path.join(folder, size_dir(size, fmt), "_".join(ids) + ("" if channel is None else f"_c{channel}"))
     report = {}
     def make():
@@ -469,6 +547,7 @@ def color_webp(ids, size, cache, fmt="webp", channel=None, centre=None):
             im, made = composite(ids, channel, centre) if channel is not None else _recent_composite(ids, centre)
         report.update(made)
         cached(base + ".json", lambda: json.dumps(made).encode())
+        reel.keep_report(base + ".json", made)
         print("composite", json.dumps(made))
         # the camera windows' other sizes are encoded now too (a few tens of ms each), so a window that grows or
         # goes to full view gets the composite at once instead of making it again; a size encoded like another (a
@@ -483,9 +562,8 @@ def color_webp(ids, size, cache, fmt="webp", channel=None, centre=None):
                         _make_file(path + ".json", lambda: json.dumps(made).encode())
         return enc(size, fmt)
     data = cached(f"{base}.{fmt}", make)
-    if not report and os.path.exists(base + ".json"):
-        with open(base + ".json") as fh:
-            report = json.load(fh)
+    if not report:
+        report = reel.report_of(base + ".json", {})
     return data, report
 
 
@@ -493,7 +571,7 @@ def processed_webp(frame_id, size, cache, fmt="webp", centre=None):
     """One frame made like a composite's channel (composite with one id: repeat exposures stacked, lost pixels
     filled, calibrated to I/F and put on the pipeline's display scale), for movie mode; and its report. Cached
     like the composites. centre: centred on the body (composite)."""
-    base = os.path.join(centre_folder(os.path.join(cache, PROC_VERSIONS[calibration.style()] + QSUFFIX), centre), size_dir(size, fmt), frame_id)
+    base = os.path.join(centre_folder(os.path.join(cache, PROC_VERSIONS[calibration.style()] + calibration.variant() + QSUFFIX), centre), size_dir(size, fmt), frame_id)
     report = {}
     def make():
         with _movie_slots:
@@ -502,11 +580,11 @@ def processed_webp(frame_id, size, cache, fmt="webp", centre=None):
             im, made = _recent_composite([frame_id], centre)
         report.update(made)
         cached(base + ".json", lambda: json.dumps(made).encode())
+        reel.keep_report(base + ".json", made)
         return encode(im, size, fmt)
     data = cached(f"{base}.{fmt}", make)
-    if not report and os.path.exists(base + ".json"):
-        with open(base + ".json") as fh:
-            report = json.load(fh)
+    if not report:
+        report = reel.report_of(base + ".json", {})
     return data, report
 
 
@@ -583,7 +661,8 @@ def pick_thumb(hint, size, cache):
 def thumb_versions():
     """the versions of the makers a thumbnail may come from: a bump of any of them makes the thumbnails again"""
     style = calibration.style()   # the request's look and colors (look=, colors=), as the page asks for them
-    return [style, obs_mosaic.VERSIONS[style], reel.VERSIONS[style], COLOR_VERSIONS[style], FRAME_VERSION, QSUFFIX]
+    return [style, obs_mosaic.VERSIONS[style], reel.VERSIONS[style], COLOR_VERSIONS[style], FRAME_VERSION, QSUFFIX] + \
+        ([calibration.variant()] if calibration.variant() else [])
 
 
 def thumb_key(hint, size):
@@ -809,6 +888,20 @@ def gzipped(path, st):
     return data
 
 
+# picture requests being answered now (GET /frames/..., /reel/...), by when each came in: a stretch being made ahead
+# gives way to the fresh ones (prebuild.Segments). One that has taken longer than LIVE_FRESH s (a pass's mosaic being
+# built) no longer counts, so a slow mosaic never holds the stretch up.
+_live = {}
+_live_lock = threading.Lock()
+LIVE_FRESH = 1.5
+
+
+def live_requests():
+    now = time.monotonic()
+    with _live_lock:
+        return sum(now - t < LIVE_FRESH for t in _live.values())
+
+
 class Server(ThreadingHTTPServer):
     # the default backlog of 5 resets connections when several viewers open theirs at once
     # (a browser opens six per page); the OS caps it at its own limit anyway
@@ -824,7 +917,7 @@ def make_handler(site, cache, flags=None):
             # prebuild imports this module by name: the running server's own makers and caches, not a second copy
             sys.modules.setdefault("frame_server", sys.modules[__name__])
             import prebuild
-            segments.append(prebuild.Segments(cache))
+            segments.append(prebuild.Segments(cache, live=live_requests))
         return segments[0]
 
     class Handler(SimpleHTTPRequestHandler):
@@ -882,24 +975,29 @@ def make_handler(site, cache, flags=None):
             # the film's pictures come from the same makers (and cache) as the camera windows'
             return export.Pictures(cache, color=color_webp, processed=globals().get("processed_webp"), frame=webp, slots=_color_slots)
 
-        def send_picture(self, data, fmt, query, name, headers=None):
-            """A picture route's answer: WebP or PNG, as a named attachment when download=1 asks for one."""
+        def send_picture(self, data, fmt, query, name, headers=None, forever=True):
+            """A picture route's answer: WebP or PNG, as a named attachment when download=1 asks for one. forever:
+            the browser may keep it for good (the address's picture never changes); False for a stand-in (a
+            mosaic of the tiles made so far), which must be asked for again."""
             headers = dict(headers or {})
             if query.get("download", ["0"])[0] == "1":
                 headers["Content-Disposition"] = f'attachment; filename="{name}.{fmt}"'
-            return self.send_bytes(data, "image/png" if fmt == "png" else "image/webp", headers=headers)
+            if not forever:
+                headers["Cache-Control"] = "no-store"
+            return self.send_bytes(data, "image/png" if fmt == "png" else "image/webp", forever, headers)
 
         def centre_of(self, query, frame_id):
-            """center=1 (Auto center in a camera window): the pass's centred view (obs_mosaic.centre_view), or None
-            for the picture as it is. False when the pass is not centred: the answer (404, X-Center says why)
-            is sent, so the window shows the picture as it is for the whole pass."""
+            """center=1 (Auto center in a camera window): the pass's view (obs_mosaic.centre_view: centred on the body,
+            or north up where it is for a close-up), or None for the picture as it is. False for a ring, spoke or
+            sky pass or a frame SPICE has no place for: the answer (404, X-Center says why) is sent, so the window
+            shows the picture as it is for the whole pass."""
             if query.get("center", ["0"])[0] != "1" or reel._index is None:
                 return None
             try:
                 view = obs_mosaic.centre_view(frame_id)
             except Exception as e:
                 view = {"centre": False, "why": f"{type(e).__name__}: {e}"[:200]}
-            if view.get("centre"):
+            if view.get("centre") or view.get("north"):
                 return view
             self.not_centred(view)
             return False
@@ -1020,17 +1118,30 @@ def make_handler(site, cache, flags=None):
 
         def do_GET(self):
             # look=classic: pictures drawn from I/F the way they were before the balanced display model;
-            # colors=raw: each filter drawn straight as a channel, without natural color (calibration.colors)
+            # colors=raw: each filter drawn straight as a channel, without natural color (calibration.colors);
+            # off=stack,hdr,...: the pipeline steps turned off (Settings > Processing, calibration.STEPS)
             query = parse_qs(urlparse(self.path).query)
-            with calibration.looking(query.get("look", [calibration.LOOKS[0]])[0]), \
-                    calibration.coloring(query.get("colors", [calibration.COLORS[0]])[0]):
-                return self.get()
+            picture, me = self.path.startswith(("/frames/", "/reel/")), object()
+            if picture:
+                with _live_lock:
+                    _live[me] = time.monotonic()
+            try:
+                with calibration.looking(query.get("look", [calibration.LOOKS[0]])[0]), \
+                        calibration.coloring(query.get("colors", [calibration.COLORS[0]])[0]), \
+                        calibration.stepping(query.get("off", [""])[0]):
+                    return self.get()
+            finally:
+                if picture:
+                    with _live_lock:
+                        _live.pop(me, None)
 
         def get(self):
             self.started = time.monotonic()
             url = urlparse(self.path)
             # a kept-alive connection reuses this handler, so the last request's choice must not stick
             self.revalidate = False
+            if url.path == "/debug/samples" and os.environ.get("FRAME_SERVER_SAMPLE") == "1":
+                return self.send_bytes(samples_text().encode(), "text/plain", False)
             if url.path == "/export/plan.json":
                 try:
                     return self.send_json(export.public_plan(export.plan(export.options(parse_qs(url.query)))))
@@ -1194,11 +1305,14 @@ def make_handler(site, cache, flags=None):
                     if query.get("mode", [""])[0] == "rolling":
                         # a mosaic movie: every place's newest tile (laps= newest copies of each), never emptied
                         laps = max(1, min(obs_mosaic.TRAIL, int(query.get("laps", ["1"])[0] or 1)))
+                        fade = (int(query.get("fade", ["0"])[0] or 0), int(query.get("persist", [str(obs_mosaic.FADE_PERSIST)])[0] or 0))
                         full = size_of(query, 512) == FULL
                         made = obs_mosaic.rolling_webp(m.group(1), FULL if full else size, cache, laps, _mosaic_slots, fmt,
-                                                       out=min(obs_mosaic.CANVAS, FULL_MAX) if full else obs_mosaic.OUT)
+                                                       out=min(obs_mosaic.CANVAS, FULL_MAX) if full else obs_mosaic.OUT,
+                                                       fade=fade)
                         if made and made[0] is not None:
-                            return self.send_picture(made[0], fmt, query, f"Cassini_{m.group(1)}_mosaic_movie", {"X-Movie": json.dumps(made[1])})
+                            return self.send_picture(made[0], fmt, query, f"Cassini_{m.group(1)}_mosaic_movie", {"X-Movie": json.dumps(made[1])},
+                                                     forever=not made[1].get("partial"))
                     else:
                         with _movie_slots:
                             made = obs_mosaic.movie_webp(m.group(1), size, cache, trail, query.get("color", ["1"])[0] != "0",
@@ -1252,7 +1366,8 @@ def make_handler(site, cache, flags=None):
                     except FileNotFoundError:
                         made = None
                     if made:
-                        return self.send_picture(made[0], fmt, query, name, {"X-Reel": json.dumps(made[1])})
+                        # behind: the mosaic of the tiles made so far, not yet this frame's (asked for again later)
+                        return self.send_picture(made[0], fmt, query, name, {"X-Reel": json.dumps(made[1])}, forever=not made[1].get("behind"))
                     # a movie plays as frames: no rolling mosaic either (its drift would paste frames together)
                     found = obs_mosaic.unit_of(m.group(1))
                     if query.get("force"):
@@ -1274,13 +1389,24 @@ def make_handler(site, cache, flags=None):
                     return self.send_picture(data, fmt, query, name, {"X-Reel": json.dumps(report, default=str)})
                 except FileNotFoundError:
                     return self.send_error(404, "Frame not in the archive")
-            m = re.match(r"^/frames/([^/]+)\.(webp|png)$", url.path)
+            m = re.match(r"^/frames/([^/]+)\.(webp|png|tif|lbl)$", url.path)
             if m:
                 frame_id, kind = m.groups()
                 if not FRAME_ID.match(frame_id):
                     return self.send_error(400, "Not a frame id")
                 try:
                     query = parse_qs(url.query)
+                    if kind in ("tif", "lbl"):
+                        if kind == "lbl":
+                            data, mime = data_source.read_bytes(f"{FOLDERS[frame_id[0]]}/{frame_id}.lbl"), "text/plain; charset=latin-1"
+                        else:
+                            data, mime = science_tiff(frame_id), "image/tiff"
+                            if data is None:
+                                return self.send_error(404, "This frame can't be calibrated (8LSB or an unknown filter)")
+                        headers = {}
+                        if query.get("download", ["0"])[0] == "1":
+                            headers["Content-Disposition"] = f'attachment; filename="Cassini_{frame_id}' + ('_IOF.tif"' if kind == "tif" else '.lbl"')
+                        return self.send_bytes(data, mime, False, headers)   # the calibration may still improve
                     if kind == "png":
                         return self.send_picture(archive_png(frame_id), "png", query, f"Cassini_{frame_id}_archive")
                     size, fmt = size_of(query, 512), picture_format(query)
@@ -1384,6 +1510,8 @@ def main():
     # the camera windows' mosaic route and centred pictures need the index, its observations (obs_mosaic.units) and
     # its frames' rows (obs_mosaic._row_of); made now rather than on the first request
     threading.Thread(target=lambda: (reel.target_of(), obs_mosaic._observations(), obs_mosaic._row_of()), daemon=True).start()
+    if os.environ.get("FRAME_SERVER_SAMPLE") == "1":
+        threading.Thread(target=sample_stacks, daemon=True).start()
     # the first composite would otherwise wait while stacking reads the whole image index (all ~443k rows)
     threading.Thread(target=color_image.stacking.load_index, daemon=True).start()
     if site:
