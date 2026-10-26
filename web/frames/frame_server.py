@@ -70,6 +70,10 @@ Routes:
                                corrections the mosaic gave them, through mosaic.compose, mixed and given detail as the
                                mosaic is (obs_mosaic.pointing_picture; &channel=0-2 one filter's plane; format=png,
                                download=1 as below). frame.webp?ids=A,B,C is the same for the pointing of those frames
+  /frames/mosaic/<ID>/full.json      that mosaic at native resolution (mosaic_native): its size, estimated MB, made yet
+                               (&make=jpg|png: make it now); full.webp?crop=x0,y0,x1,y1 a part of it for the zoom lens
+                               (fractions of the picture, at most CASSINI_NATIVE_CROP px); full.jpg / full.png all of it
+                               (download=1), at most CASSINI_NATIVE_MAX px, kept in CASSINI_FULLRES_CACHE (not the cache)
   /frames/mosaic/<ID>.webp?size=512   (&warm=1: only start making the pass ahead of time, empty answer;
                                &tune=n:dx:dy,...&hide=n,...: the person's changes to its tiles from Cassini Studio,
                                pointings as /frames/mosaic/<ID>.json numbers them, moves as fractions of the picture)
@@ -174,6 +178,7 @@ import color_image  # noqa: E402
 sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
 import reel  # noqa: E402
 import obs_mosaic  # noqa: E402
+import mosaic_native  # noqa: E402
 import export  # noqa: E402
 
 FRAME_ID = re.compile(r"^([NW])\d{10}_\d+$")
@@ -307,23 +312,44 @@ QUALITY = 95
 QSUFFIX = f"-q{QUALITY}"
 
 
+def _encoding(im, size, fmt="webp", quality=QUALITY):
+    """How encode makes im at size: the side it is shrunk to (None when it fits) and the saver's format and arguments.
+    Two sizes encoded the same way are the same bytes: a picture no larger than either is not shrunk for them (a 512 px
+    summed frame's 1024 and 512; a 1024 px composite's 1024 and full, both at quality 95)"""
+    cap = FULL_MAX if size == FULL else size
+    shrink = cap if max(im.size) > cap else None
+    if fmt == "png":
+        return shrink, "PNG", (("compress_level", 6),)
+    if size == FULL and im.mode == "L":
+        return shrink, "WEBP", (("lossless", True), ("quality", 80), ("method", 4))
+    return shrink, "WEBP", (("quality", max(94, quality) if size == FULL else quality), ("method", 4))
+
+
 def encode(im, size, fmt="webp", quality=QUALITY):
     """im as WebP (or PNG), longest side at most size; a FULL picture keeps its size up to FULL_MAX, and a
     grey one is sent losslessly (an 8-bit frame is a few hundred KB that way)"""
-    cap = FULL_MAX if size == FULL else size
-    if max(im.size) > cap:
+    shrink, kind, args = _encoding(im, size, fmt, quality)
+    if shrink is not None:
         # shrunk on a copy: thumbnail works in place, and im may be a picture kept for its other sizes
         # (_recent_composite), which a 512 view would otherwise leave at 512 for the 1024, full or PNG asked next
         im = im.copy()
-        im.thumbnail((cap, cap), Image.LANCZOS)
+        im.thumbnail((shrink, shrink), Image.LANCZOS)
     out = io.BytesIO()
-    if fmt == "png":
-        im.save(out, "PNG", compress_level=6)
-    elif size == FULL and im.mode == "L":
-        im.save(out, "WEBP", lossless=True, quality=80, method=4)
-    else:
-        im.save(out, "WEBP", quality=max(94, quality) if size == FULL else quality, method=4)
+    im.save(out, kind, **dict(args))
     return out.getvalue()
+
+
+def encoder(im, quality=QUALITY):
+    """encode for one picture asked for at several sizes: each way of encoding it (_encoding) is made once, so a
+    composite's 1024 and full (the same bytes at quality 95) cost one encode"""
+    made = {}
+
+    def at(size, fmt="webp"):
+        key = _encoding(im, size, fmt, quality)
+        if key not in made:
+            made[key] = encode(im, size, fmt, quality)
+        return made[key]
+    return at
 
 
 def picture_format(query):
@@ -379,9 +405,28 @@ def _frame_image(frame_id):
     return im.copy()
 
 
+# the last frames encoded at their own size, by how (_encoding): the pre-build asks each frame for 1024, 512 and 128 in
+# turn, and a summed frame (512 or 256 px) is not shrunk for its 1024 or its 512, so those are the same bytes
+_frame_bytes = collections.OrderedDict()
+
+
 def webp(frame_id, size, cache, fmt="webp"):
     def make():
-        return encode(_frame_image(frame_id), size, fmt, FRAME_QUALITY)
+        im = _frame_image(frame_id)
+        way = _encoding(im, size, fmt, FRAME_QUALITY)
+        if way[0] is not None:   # shrunk to the size asked: no other size is encoded this way
+            return encode(im, size, fmt, FRAME_QUALITY)
+        with _frames_lock:
+            data = _frame_bytes.get((frame_id, way))
+            if data is not None:
+                _frame_bytes.move_to_end((frame_id, way))
+                return data
+        data = encode(im, size, fmt, FRAME_QUALITY)
+        with _frames_lock:
+            _frame_bytes[frame_id, way] = data
+            while len(_frame_bytes) > FRAMES_KEEP:
+                _frame_bytes.popitem(last=False)
+        return data
     return cached(os.path.join(cache, FRAME_VERSION, size_dir(size, fmt), f"{frame_id}.{fmt}"), make)
 
 
@@ -513,15 +558,17 @@ def color_webp(ids, size, cache, fmt="webp", channel=None, centre=None):
         reel.keep_report(base + ".json", made)
         print("composite", json.dumps(made))
         # the camera windows' other sizes are encoded now too (a few tens of ms each), so a window that grows or
-        # goes to full view gets the composite at once instead of making it again
+        # goes to full view gets the composite at once instead of making it again; a size encoded like another (a
+        # 1024 px composite's 1024 and full) is the same bytes, made once
+        enc = encoder(im)
         for other in WINDOW_SIZES if channel is None else ():   # a channel is asked for at the size it is shown
             if other != size:
                 path = os.path.join(folder, size_dir(other, "webp"), "_".join(ids))
                 if not os.path.exists(path + ".webp"):
-                    _make_file(path + ".webp", lambda: encode(im, other))
+                    _make_file(path + ".webp", lambda: enc(other))
                     if not os.path.exists(path + ".json"):
                         _make_file(path + ".json", lambda: json.dumps(made).encode())
-        return encode(im, size, fmt)
+        return enc(size, fmt)
     data = cached(f"{base}.{fmt}", make)
     if not report:
         report = reel.report_of(base + ".json", {})
@@ -947,6 +994,25 @@ def make_handler(site, cache, flags=None):
                 headers["Cache-Control"] = "no-store"
             return self.send_bytes(data, "image/png" if fmt == "png" else "image/webp", forever, headers)
 
+        def send_file(self, path, mime, query, name, headers=None, forever=True):
+            """A picture kept in a file, sent a megabyte at a time (a native mosaic can be hundreds of MB)."""
+            size = os.path.getsize(path)
+            self.send_response(200)
+            self.send_header("Content-Type", mime)
+            self.send_header("Content-Length", str(size))
+            for key, value in (headers or {}).items():
+                self.send_header(key, value)
+            if query.get("download", ["0"])[0] == "1":
+                self.send_header("Content-Disposition", f'attachment; filename="{name}"')
+            self.send_header("Cache-Control", "public, max-age=31536000, immutable" if forever else "no-store")
+            self.end_headers()
+            with open(path, "rb") as fh:
+                while True:
+                    chunk = fh.read(1 << 20)
+                    if not chunk:
+                        break
+                    self.wfile.write(chunk)
+
         def centre_of(self, query, frame_id):
             """center=1 (Auto center in a camera window): the pass's view (obs_mosaic.centre_view: centred on the body,
             or north up where it is for a close-up), or None for the picture as it is. False for a ring, spoke or
@@ -1259,6 +1325,49 @@ def make_handler(site, cache, flags=None):
                     return self.send_error(404, "No such pointing in that mosaic")
                 name = f"Cassini_{made[1]['observation']}_frame{n}_in_mosaic" + ("" if ch is None else f"_channel{ch}")
                 return self.send_picture(made[0], fmt, query, name, {"X-Reel": json.dumps(made[1])})
+            m = re.match(r"^/frames/mosaic/([^/]+)/full\.(json|webp|jpg|png)$", url.path)
+            if m:
+                # the mosaic shown for that frame at native resolution (mosaic_native): .json its size, estimates and
+                # whether it is made (make=jpg|png starts making it, for the save menu); .webp?crop=x0,y0,x1,y1 a part
+                # of it (fractions of the picture) for the zoom lens; .jpg / .png all of it (download=1 to save).
+                # force=, tune=, hide=, look= and colors= as the mosaic route's
+                if not FRAME_ID.match(m.group(1)):
+                    return self.send_error(400, "Not a frame id")
+                if reel._index is None:
+                    return self.send_error(404, "Not a mosaic pass")
+                query = parse_qs(url.query)
+                try:
+                    tune = obs_mosaic.parse_tune(query.get("tune", [""])[0], query.get("hide", [""])[0])
+                    crop = [float(v) for v in query["crop"][0].split(",")] if query.get("crop") else None
+                except ValueError:
+                    return self.send_error(400, "tune= is n:dx:dy,..., hide= is n,... and crop= is x0,y0,x1,y1")
+                if crop is not None:
+                    crop = [max(0.0, min(1.0, v)) for v in crop]
+                    if len(crop) != 4 or crop[2] - crop[0] < 1e-4 or crop[3] - crop[1] < 1e-4:
+                        return self.send_error(400, "crop= is x0,y0,x1,y1, fractions of the picture")
+                force, kind = bool(query.get("force")), m.group(2)
+                try:
+                    if kind == "json":
+                        made = mosaic_native.info(m.group(1), cache, force, tune)
+                        if made and not any(made["ready"].values()):
+                            in_background(mosaic_native.warm(m.group(1), cache, force, tune))
+                        if made and query.get("make", [""])[0] in ("jpg", "png"):
+                            fmt = query["make"][0]
+                            if not made["ready"][fmt] and fmt not in made["making"]:
+                                in_background(mosaic_native.start(m.group(1), cache, fmt, force, tune, _mosaic_slots))
+                                made["making"][fmt] = 0.0
+                        return self.send_json(made) if made else self.send_json({"error": "not a mosaic pass"}, 404)
+                    if kind == "webp" and crop is None:
+                        return self.send_error(400, "a crop= of the native mosaic, or .jpg / .png for all of it")
+                    made = mosaic_native.picture(m.group(1), cache, crop, kind, _mosaic_slots, force, tune)
+                except FileNotFoundError:
+                    made = None
+                if not made:
+                    return self.send_error(404, "No mosaic for this frame")
+                path, report = made
+                name = f"Cassini_{m.group(1)}_mosaic_full_resolution_{report['width']}x{report['height']}"
+                return self.send_file(path, {"jpg": "image/jpeg", "png": "image/png", "webp": "image/webp"}[kind],
+                                      query, name + "." + kind, {"X-Native": json.dumps(report)}, forever=not report["behind"])
             m = re.match(r"^/frames/movie/([^/]+)\.(webp|json)$", url.path)
             if m:
                 # a frame played as a movie of its pass (obs_mosaic.movie_webp): centred by SPICE, on the pass's one
