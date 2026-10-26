@@ -106,6 +106,20 @@ def _row_of():
     return idx, _row_of.row
 
 
+_observations_lock = threading.Lock()
+
+
+def _observations():
+    """{(target, observation, instrument): the index's row numbers of its frames, in index order}, made once (a third of
+    a second, as the server starts), so units finds an observation's frames in a lookup instead of comparing three
+    fields of every frame in the index (70 ms the first time a server met each observation, on the request threads)"""
+    idx, _ = reel.load_index()
+    with _observations_lock:
+        if not hasattr(_observations, "rows"):
+            _observations.rows = idx.groupby(["TARGET_NAME", "OBSERVATION_ID", "INSTRUMENT_ID"], sort=False).indices
+    return idx, _observations.rows
+
+
 def units(target, obs, cam):
     """The passes of one camera's frames of one observation: [{key, frames: [(path, id, filter, t, nm, x, y, z)],
     mosaic, whole, z, last, repeat_gap}] in time order, from the index and the geometry cache. Repeat exposures
@@ -116,9 +130,11 @@ def units(target, obs, cam):
     with _lock:
         if (target, obs, cam) in _units:
             return _units[(target, obs, cam)]
-    idx, _ = reel.load_index()
+    idx, observations = _observations()
     inst = "ISSNA" if cam == "N" else "ISSWA"
-    rows = idx[(idx["OBSERVATION_ID"] == obs) & (idx["TARGET_NAME"] == target) & (idx["INSTRUMENT_ID"] == inst)]
+    at = observations.get((target, obs, inst))
+    # the rows of idx[(idx["OBSERVATION_ID"] == obs) & (idx["TARGET_NAME"] == target) & (idx["INSTRUMENT_ID"] == inst)]
+    rows = idx.iloc[at] if at is not None else idx.iloc[:0]
     where = reel.geometry(rows["id"].tolist())
     out, cur, last = [], None, {}
     for r in rows.itertuples(index=False):
