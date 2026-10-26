@@ -196,9 +196,11 @@ _making_lock = threading.Lock()
 
 
 def cached(path, make):
-    if os.path.exists(path):
+    try:
         with open(path, "rb") as fh:
             return fh.read()
+    except FileNotFoundError:
+        pass
     with _making_lock:
         lock = _making.setdefault(path, threading.Lock())
     try:
@@ -418,6 +420,7 @@ def color_webp(ids, size, cache, fmt="webp", channel=None, centre=None):
             im, made = composite(ids, channel, centre) if channel is not None else _recent_composite(ids, centre)
         report.update(made)
         cached(base + ".json", lambda: json.dumps(made).encode())
+        reel.keep_report(base + ".json", made)
         print("composite", json.dumps(made))
         # the camera windows' other sizes are encoded now too (a few tens of ms each), so a window that grows or
         # goes to full view gets the composite at once instead of making it again
@@ -430,9 +433,8 @@ def color_webp(ids, size, cache, fmt="webp", channel=None, centre=None):
                         _make_file(path + ".json", lambda: json.dumps(made).encode())
         return encode(im, size, fmt)
     data = cached(f"{base}.{fmt}", make)
-    if not report and os.path.exists(base + ".json"):
-        with open(base + ".json") as fh:
-            report = json.load(fh)
+    if not report:
+        report = reel.report_of(base + ".json", {})
     return data, report
 
 
@@ -447,11 +449,11 @@ def processed_webp(frame_id, size, cache, fmt="webp", centre=None):
             im, made = composite([frame_id], centre=centre)
         report.update(made)
         cached(base + ".json", lambda: json.dumps(made).encode())
+        reel.keep_report(base + ".json", made)
         return encode(im, size, fmt)
     data = cached(f"{base}.{fmt}", make)
-    if not report and os.path.exists(base + ".json"):
-        with open(base + ".json") as fh:
-            report = json.load(fh)
+    if not report:
+        report = reel.report_of(base + ".json", {})
     return data, report
 
 
@@ -841,12 +843,16 @@ def make_handler(site, cache, flags=None):
             # the film's pictures come from the same makers (and cache) as the camera windows'
             return export.Pictures(cache, color=color_webp, processed=globals().get("processed_webp"), frame=webp, slots=_color_slots)
 
-        def send_picture(self, data, fmt, query, name, headers=None):
-            """A picture route's answer: WebP or PNG, as a named attachment when download=1 asks for one."""
+        def send_picture(self, data, fmt, query, name, headers=None, forever=True):
+            """A picture route's answer: WebP or PNG, as a named attachment when download=1 asks for one. forever:
+            the browser may keep it for good (the address's picture never changes); False for a stand-in (a
+            mosaic of the tiles made so far), which must be asked for again."""
             headers = dict(headers or {})
             if query.get("download", ["0"])[0] == "1":
                 headers["Content-Disposition"] = f'attachment; filename="{name}.{fmt}"'
-            return self.send_bytes(data, "image/png" if fmt == "png" else "image/webp", headers=headers)
+            if not forever:
+                headers["Cache-Control"] = "no-store"
+            return self.send_bytes(data, "image/png" if fmt == "png" else "image/webp", forever, headers)
 
         def centre_of(self, query, frame_id):
             """center=1 (Auto center in a camera window): the pass's view (obs_mosaic.centre_view: centred on the body,
@@ -1167,7 +1173,8 @@ def make_handler(site, cache, flags=None):
                         made = obs_mosaic.rolling_webp(m.group(1), FULL if full else size, cache, laps, _mosaic_slots, fmt,
                                                        out=min(obs_mosaic.CANVAS, FULL_MAX) if full else obs_mosaic.OUT)
                         if made and made[0] is not None:
-                            return self.send_picture(made[0], fmt, query, f"Cassini_{m.group(1)}_mosaic_movie", {"X-Movie": json.dumps(made[1])})
+                            return self.send_picture(made[0], fmt, query, f"Cassini_{m.group(1)}_mosaic_movie", {"X-Movie": json.dumps(made[1])},
+                                                     forever=not made[1].get("partial"))
                     else:
                         with _movie_slots:
                             made = obs_mosaic.movie_webp(m.group(1), size, cache, trail, query.get("color", ["1"])[0] != "0",
@@ -1221,7 +1228,8 @@ def make_handler(site, cache, flags=None):
                     except FileNotFoundError:
                         made = None
                     if made:
-                        return self.send_picture(made[0], fmt, query, name, {"X-Reel": json.dumps(made[1])})
+                        # behind: the mosaic of the tiles made so far, not yet this frame's (asked for again later)
+                        return self.send_picture(made[0], fmt, query, name, {"X-Reel": json.dumps(made[1])}, forever=not made[1].get("behind"))
                     # a movie plays as frames: no rolling mosaic either (its drift would paste frames together)
                     found = obs_mosaic.unit_of(m.group(1))
                     if query.get("force"):
