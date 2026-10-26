@@ -5509,7 +5509,7 @@ body.phone #launch .lx-clock { font-size: 9.5px; bottom: 9vh; }
     if (moved && P.job && P.key !== params()) { stopPoll(); P.job = null; progress(null); say(""); }
     bar.hidden = false; summary(); fpsUi(); camsUi(); buttons(); place();
   }
-  function hide() { bar.hidden = true; untuck(); stopPoll(); P.job = null; P.a = P.b = null; P.playing = false; progress(null); say(""); }
+  function hide() { bar.hidden = true; untuck(); stopPoll(); P.playBack = false; titled(null); P.job = null; P.a = P.b = null; P.playing = false; progress(null); say(""); }
   document.addEventListener("cassini:marks", e => marked(e.detail.a, e.detail.b));
 
   // ---- making it ahead: the frame server's job, followed every second ----
@@ -5523,15 +5523,23 @@ body.phone #launch .lx-clock { font-size: 9.5px; bottom: 9vh; }
     } catch (err) { P.job = null; progress(null); say(`No frame server at ${FRAMES} that pre-processes.`, true); buttons(); }
   }
   function stopPoll() { clearTimeout(P.poll); P.poll = 0; }
+  // The stretch is made on the frame server, so it carries on while the page is in the background (the tab hidden,
+  // another window in front: away.html pauses everything else); the tab's title shows how far it is, the polling
+  // here runs on timers rather than animation frames, and a stretch finished while away plays on the way back
+  const TITLE = document.title;
+  function titled(j) {
+    const busy = j && /^(queued|planning|making|waiting|finishing)$/.test(j.state);
+    document.title = busy && j.total ? `${Math.floor(100 * j.done / j.total)}% pre-processed · ${TITLE}` : j && j.state === "done" && P.job === j && document.hidden ? `Ready · ${TITLE}` : TITLE;
+  }
   function follow(j) {
     stopPoll();
     const was = P.job && P.job.state;
-    P.job = j; buttons(); redraw();
+    P.job = j; buttons(); redraw(); titled(j);
     const frac = j.total ? j.done / j.total : 0;
     if (j.state === "done") {
       progress(1);
       say(`Ready: ${j.total.toLocaleString()} pictures made ahead${j.took ? ` in ${fmtDur(j.took)}` : ""}${j.errors ? ` (${j.errors} could not be made)` : ""}`);
-      if (was && was !== "done" && opt("segment.autoplay", true)) play();
+      if (was && was !== "done" && opt("segment.autoplay", true)) { if (window.cassiniAway && cassiniAway.on) P.playBack = true; else play(); }
       return;
     }
     if (j.state === "failed") { progress(null); say(j.error || "Pre-processing failed; see the frame server's log.", true); return; }
@@ -5606,6 +5614,14 @@ body.phone #launch .lx-clock { font-size: 9.5px; bottom: 9vh; }
   window.addEventListener("keydown", e => {
     if (bar.hidden || e.key !== "Escape" || document.querySelector(".menu.open, .win.full") || (window.cassiniMovie && window.cassiniMovie.on)) return;
     if (!$("excard") || $("excard").hidden) { EX.clear(); hide(); }
+  });
+
+  // in the background: the pause note says the stretch is still being made; back, a stretch finished meanwhile plays
+  const away = $("awaynote"), awayText = away && away.textContent;
+  document.addEventListener("cassini:away", e => {
+    const busy = P.job && /^(queued|planning|making|waiting|finishing)$/.test(P.job.state);
+    if (away) away.textContent = e.detail.away && busy ? `${awayText} · the highlighted stretch keeps pre-processing` : awayText;
+    if (!e.detail.away) { titled(P.job); if (P.playBack) { P.playBack = false; if (!bar.hidden) play(); } }
   });
 
   // ---- the note when movie mode keeps waiting ----

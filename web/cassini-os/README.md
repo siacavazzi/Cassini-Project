@@ -35,7 +35,7 @@ video file to download), and × or Escape clears the highlight. When movie mode 
 quiet note suggests pre-processing, with a button that highlights the next 300 frames. Settings > Playback:
 `segment.autoplay`, `segment.hint`, and `movie.completeFrames` (Complete color pictures only, on: a color set is one step, its finished color picture) and `playback.completeMosaics` (Complete mosaics only, off: a mosaic pass shows once finished, at its last frame, in every playback). One stretch is made at a time, at full speed: it gives way only to the
 server's own picture requests (the camera windows' pictures go first), never to other jobs on the machine, and the
-row stays up while it is made, even when the rest of the interface fades.
+row stays up while it is made, even when the rest of the interface fades. It also carries on with the tab in the background or another window in front (the rest of the page pauses, Settings > Playback > Pause in the background): the tab title shows how far it is, and a stretch finished meanwhile plays when you come back.
 
 ## Timeline
 
