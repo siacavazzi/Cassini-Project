@@ -85,6 +85,7 @@ MOVIE_DWELL = 8      # ... or whose camera stays this many frames of one filter 
 RADIUS = {"SATURN": 60268, "JUPITER": 69911, "TITAN": 2575, "RHEA": 764, "IAPETUS": 735, "DIONE": 561,
           "TETHYS": 531, "ENCELADUS": 252, "MIMAS": 198, "HYPERION": 135, "PHOEBE": 107}
 IFOV = {"N": 6.0e-6, "W": 60e-6}   # radians per full resolution pixel
+QUALITY = 95         # WebP quality of every picture sent; its folders carry it (frame_server.QUALITY)
 
 _units = {}           # (target, obs, cam) -> [unit dicts]
 _lock = threading.Lock()
@@ -328,7 +329,7 @@ def folder(u, cache):
     # a movie's frames stacked with a shorter repeat window are other pictures than the ones made before it
     gap = u.get("repeat_gap", mosaic_benchmark.REPEAT_GAP)
     suffix = "" if gap >= mosaic_benchmark.REPEAT_GAP else f"_r{gap:g}"
-    return os.path.join(cache, VERSIONS[calibration.style()], "_".join(map(str, u["key"])) + suffix)
+    return os.path.join(cache, f"{VERSIONS[calibration.style()]}-q{QUALITY}", "_".join(map(str, u["key"])) + suffix)
 
 
 def _ulock(u):
@@ -1375,7 +1376,7 @@ def movie_webp(frame_id, size, cache, trail=0, colour=True, wait=False, ahead=6,
         if max(im.size) > size:
             im.thumbnail((size, size), Image.LANCZOS)
         buf = io.BytesIO()
-        im.save(buf, "WEBP", quality=88, method=4)
+        im.save(buf, "WEBP", quality=QUALITY, method=4)
         return buf.getvalue()
 
     try:
@@ -1745,7 +1746,7 @@ def pointing_picture(frame_id, ids, cache, size="full", fmt="webp", slots=None, 
         if fmt == "png":
             im.save(buf, "PNG", compress_level=6)
         else:
-            im.save(buf, "WEBP", quality=94 if size == "full" else 85, method=4)
+            im.save(buf, "WEBP", quality=QUALITY, method=4)
         return buf.getvalue()
 
     return reel._cached(path, make), {"observation": u["key"][1], "ids": ids, "filters": [t["filter"] for t in mine]}
@@ -1962,7 +1963,7 @@ def _make_mosaic(u, n, size, path, cache, slots, made, fmt="webp", out=OUT):
         if fmt == "png":
             im.save(buf, "PNG", compress_level=6)
         else:
-            im.save(buf, "WEBP", quality=92 if full else 85, method=4)
+            im.save(buf, "WEBP", quality=QUALITY, method=4)
         reel._cached(meta, lambda: json.dumps(rep).encode())
         return buf.getvalue()
 
