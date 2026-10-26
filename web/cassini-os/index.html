@@ -2769,9 +2769,10 @@ body.phone #launch .lx-clock { font-size: 9.5px; bottom: 9vh; }
   let camOffText = "";
   function camOff() {
     const lc = liveCams(), off = lc === "N" ? "W" : "N";
-    const t = lc ? `${off}AC off: showing ${CAMWORD[lc]} pictures only (the ${CAMWORD[off]} window is closed)` : "";
+    const t = lc ? `${off}AC off · ${CAMWORD[lc]} only` : "";
     if (t === camOffText) return;
-    camOffText = t; $("camoff").hidden = !t; $("camoff").firstChild.textContent = t; $("camoff").title = t;
+    camOffText = t; $("camoff").hidden = !t; $("camoff").firstChild.textContent = t;
+    $("camoff").title = lc ? `The ${CAMWORD[off]} window is closed, so its pictures are not loaded and the timeline shows ${CAMWORD[lc]} pictures only` : "";
   }
   // a Moment (the list, or the next / previous moment buttons, which click its row) brings both camera windows back
   $("mlist").addEventListener("click", e => { if (e.target.closest("button") && S.get("cameras.momentsReopen") !== false) reopenCams(); }, true);
