@@ -53,6 +53,7 @@ import color_image  # noqa: E402
 import data_source  # noqa: E402
 import mosaic  # noqa: E402
 import stacking  # noqa: E402
+import sets_passes  # noqa: E402
 
 # bumped whenever the way reel pictures are made changes, so older ones are not served again
 VERSIONS = {"balanced": "reel-v29", "raw": "reel-v12", "classic": "reel-v6"}   # one per calibration.style(); v29/v12/v6: flat field
@@ -60,13 +61,13 @@ VERSIONS = {"balanced": "reel-v29", "raw": "reel-v12", "classic": "reel-v6"}   #
 
 def version():
     return VERSIONS[calibration.style()] + calibration.variant() + "-q95"   # WebP quality 95 (frame_server.QUALITY)
-SET_GAP = 300          # seconds between frames of one filter set
+SET_GAP = sets_passes.SET_GAP   # seconds between frames of one filter set
 REPEAT_GAP = 120       # stacking.find_repeats' window
 VIEW = 1536            # full resolution pixels a picture shows (a north-up frame fits in 1448)
 OUT = 1024             # ...kept at two thirds of full resolution
 SCALE = OUT / VIEW
 FOLLOW = 300           # full resolution pixels a close-up's newest panel may sit from the middle of the view
-TRUE_BLUES = ("BL1", "BL2", "VIO")
+TRUE_BLUES = sets_passes.TRUE_BLUES
 
 _index = None
 _shots = {}
@@ -76,15 +77,8 @@ _lock = threading.Lock()
 _mosaic_lock = threading.Lock()   # mosaic keeps per frame work in a module level dict
 
 
-def _is_polarizer(f1, f2):
-    return f1.startswith("P") and f1[1:2].isdigit() or f1.startswith("IRP") or f2.startswith("IRP")
-
-
-def colour_filter(f1, f2):
-    """The frame's colour filter ("RED", "CB2", "BL1/GRN"...), or None for clear and polarizer frames."""
-    if _is_polarizer(f1, f2):
-        return None
-    return "/".join(f for f in (f1, f2) if not f.startswith("CL")) or None
+_is_polarizer = sets_passes.is_polarizer
+colour_filter = sets_passes.colour_filter   # the frame's colour filter, or None for clear and polarizer frames
 
 
 def load_index():
@@ -100,39 +94,9 @@ def load_index():
     idx["id"] = [p.rsplit("/", 1)[-1].replace(".png", "") for p in idx["path"].tolist()]
     cams, targets, obs = idx["INSTRUMENT_ID"].tolist(), idx["TARGET_NAME"].tolist(), idx["OBSERVATION_ID"].tolist()
     f1s, f2s, t = idx["filter1"].astype(str).tolist(), idx["filter2"].astype(str).tolist(), idx["seconds_1970"].to_numpy()
-    # colour_filter of each filter pair once: a few hundred pairs among the 440,000 frames
-    colour = {pair: colour_filter(*pair) for pair in set(zip(f1s, f2s))}
-    set_of = np.full(len(idx), -1)
-    sets, run = [], {}
-
-    def close(cam):
-        r = run.pop(cam, None)
-        if not r or len(r["rows"]) < 2:
-            return
-        by = dict(zip(r["filters"], r["rows"]))
-        blue = next((f for f in TRUE_BLUES if f in by), None)
-        if "RED" in by and "GRN" in by and blue:
-            kind, use = "true", [by["RED"], by["GRN"], by[blue]]
-        else:
-            w = sorted(r["rows"], key=lambda q: -wavelength(cams[q], f1s[q] + f2s[q]))
-            kind, use = ("false", [w[0], w[len(w) // 2], w[-1]]) if len(w) >= 3 else ("two", w)
-        for q in r["rows"]:
-            set_of[q] = len(sets)
-        sets.append({"kind": kind, "use": use, "ready": max(t[q] for q in use)})
-
-    for q in range(len(idx)):
-        cam, f = cams[q], colour[f1s[q], f2s[q]]
-        r = run.get(cam)
-        if not f:
-            close(cam)
-            continue
-        if r and targets[q] == r["target"] and obs[q] == r["obs"] and t[q] - r["last"] <= SET_GAP and f not in r["filters"]:
-            r["rows"].append(q); r["filters"].append(f); r["last"] = t[q]
-        else:
-            close(cam)
-            run[cam] = {"target": targets[q], "obs": obs[q], "rows": [q], "filters": [f], "last": t[q]}
-    for cam in list(run):
-        close(cam)
+    # the filter sets, by the one rule (sets_passes: the camera windows', the pre-build's and the data's)
+    set_of, sets = sets_passes.filter_sets(cams, targets, obs, f1s, f2s, t, lambda q: wavelength(cams[q], f1s[q] + f2s[q]))
+    set_of = np.array(set_of)
     idx["set"] = set_of
     # copied whole once, which puts the columns added above into the frame's blocks (consolidates it): otherwise the
     # first selection from it (a body's reel, an observation's frames) did that, a tenth of a second on a request

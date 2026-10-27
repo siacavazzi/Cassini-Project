@@ -888,6 +888,7 @@ async function fetchBuf(u) {
 }
 const yearOf = et => new Date(etToMs(et)).getUTCFullYear();
 const CAT_KEYS = ["id", "et", "cam", "f1", "f2", "target", "obs", "range_km", "km_per_px"];
+const GROUP_KEYS = ["set", "pass"];   // optional: each frame's filter set and pass ids (build_data.py --groups)
 function sortCatalog() {
   order = Array.from(catalog.et.keys()).sort((a, b) => catalog.et[a] - catalog.et[b]);
   catalog.sorted = Float64Array.from(order, i => catalog.et[i]);
@@ -964,6 +965,11 @@ function assemble(parts) {
   // a new catalog object, so pages that cache per-catalog work (Cassini OS) redo it
   const cat = {};
   for (const k of CAT_KEYS) cat[k] = [].concat(...parts.map(p => p.cat[k]));
+  // each frame's filter set and pass, with their tables, when the data has them (build_data.py --groups) in every part
+  if (parts.every(p => p.cat.set && p.cat.pass && p.cat.groups)) {
+    for (const k of GROUP_KEYS) cat[k] = [].concat(...parts.map(p => p.cat[k]));
+    cat.groups = { sets: Object.assign({}, ...parts.map(p => p.cat.groups.sets)), passes: Object.assign({}, ...parts.map(p => p.cat.groups.passes)) };
+  }
   catalog = cat; sortCatalog();
   const withAtt = parts.filter(p => p.att);
   att = withAtt.length ? buildAttitude(withAtt.map(p => ({ file: p.att, et: p.cat.et, cam: p.cat.cam }))) : null;

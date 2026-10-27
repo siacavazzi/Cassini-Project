@@ -29,6 +29,10 @@ For the body views it writes data/targets.json, every body Cassini photographed 
 data/targets/<body>.json for each: its pictures per day (the timeline's bars for the months not loaded) and its
 imaging sessions (one per observation), see write_targets.
 
+With --groups, every catalog row also carries its filter set and pass ids, and each catalog the tables of its
+sets and passes (add_groups), by the frame server's one rule (web/frames/sets_passes.py); the page then uses them
+instead of working sets and passes out itself.
+
 It also writes the same data cut into months, data/months/<YYYY-MM>.json (that month's catalog)
 and data/months/<YYYY-MM>.bin (every body's track and the pointing for that month, see
 write_months), listed in mission.json under "months". A viewer that knows them loads the month
@@ -79,6 +83,9 @@ def main():
     ap.add_argument("--moments", default=MOMENTS, help="curated imaging sessions for the Moments list (default: %(default)s)")
     ap.add_argument("--scores", help="observations_scored.csv from the highlight scoring, for each moment's photo score")
     ap.add_argument("--highlights", default=HIGHLIGHTS, help="the highlight reel, whole mission only (default: %(default)s)")
+    ap.add_argument("--groups", action="store_true", help="add each frame's filter set and pass (web/frames/sets_passes.py) "
+                    "to the catalogs, for the page to use instead of its own rule; needs the repo's Image_index.csv and "
+                    "the geometry cache (CASSINI_GEOMETRY_CACHE), as the frame server does")
     args = ap.parse_args()
     if args.years:
         return build_mission(args)
@@ -103,7 +110,7 @@ def main():
     enc = sorted(enc + moments(args, [args.year]), key=lambda e: e["et"])
     json.dump(enc, open(os.path.join(args.out, "encounters.json"), "w"))
 
-    slim = slim_catalog(args.data, args.year)
+    slim = slim_catalog(args.data, args.year, load_groups() if args.groups else None)
     json.dump(slim, open(os.path.join(args.out, "catalog.json"), "w"), separators=(",", ":"))
     if args.attitude:
         raw = attitude_for(args.attitude, args.year, len(slim["et"]))
@@ -115,15 +122,41 @@ def main():
     print(f"{len(bodies)} bodies, {len(enc)} encounters, {len(slim['et'])} images")
 
 
-def slim_catalog(data, year):
+def slim_catalog(data, year, groups=None):
     path = os.path.join(data, "catalog", f"{year}.json")
     if not os.path.exists(path):   # no camera frames before 1999
-        return {k: [] for k in CATALOG_KEYS}
-    cat = json.load(open(path))
-    slim = {k: cat[k] for k in CATALOG_KEYS}
-    slim["et"] = [round(t, 1) for t in slim["et"]]
-    slim["target"] = [TARGET_ALIASES.get(t, t) for t in slim["target"]]
+        slim = {k: [] for k in CATALOG_KEYS}
+    else:
+        cat = json.load(open(path))
+        slim = {k: cat[k] for k in CATALOG_KEYS}
+        slim["et"] = [round(t, 1) for t in slim["et"]]
+        slim["target"] = [TARGET_ALIASES.get(t, t) for t in slim["target"]]
+    if groups:
+        add_groups(slim, groups)
     return slim
+
+
+def load_groups():
+    """Each frame's filter set and pass by the frame server's one rule (web/frames/sets_passes.py): ({id: (set,
+    pass)}, sets {set: [kind, [channel ids]]}, passes {pass: [kind, observation, pass number, last frame id, frames]})."""
+    import sys
+    sys.path.insert(0, os.path.join(os.path.dirname(os.path.abspath(__file__)), "..", "frames"))
+    import sets_passes
+    return sets_passes.groups()
+
+
+def add_groups(cat, groups, rows=None):
+    """Adds to a catalog (or the rows of it given) each frame's set and pass ids ("set", "pass": -1 for none) and the
+    tables of the sets and passes it has ("groups": {"sets", "passes"}, keyed by id): the page's camera windows use them in place
+    of their own rule (head-quiet.html findSets, passSpan). The sets and passes are the whole ones, also where they
+    run on into the next month."""
+    by_id, sets, passes = groups
+    got = [by_id.get(i, (-1, -1)) for i in cat["id"]]
+    cat["set"] = [int(s) for s, _ in got]
+    cat["pass"] = [int(p) for _, p in got]
+    cat["groups"] = {"sets": {str(s): sets[s] for s in sorted({s for s in cat["set"] if s >= 0})},
+                     "passes": {str(p): passes[p] for p in sorted({p for p in cat["pass"] if p >= 0})}}
+    return cat
 
 
 def pictures(data, years, obs):
@@ -346,8 +379,9 @@ def build_mission(args):
     per_day = {"N": [0] * ndays, "W": [0] * ndays}
     catalogs, attitude, slims = {}, {}, []
     os.makedirs(os.path.join(out, "catalog"), exist_ok=True)
+    groups = load_groups() if args.groups else None
     for y in years:
-        slim = slim_catalog(args.data, y)
+        slim = slim_catalog(args.data, y, groups)
         slims.append(slim)
         json.dump(slim, open(os.path.join(out, "catalog", f"{y}.json"), "w"), separators=(",", ":"))
         catalogs[str(y)] = {"file": f"data/catalog/{y}.json", "images": len(slim["et"])}
@@ -361,7 +395,7 @@ def build_mission(args):
             shutil.copy(os.path.join(args.attitude, f"{y}.bin"), os.path.join(out, "attitude", f"{y}.bin"))
             attitude[str(y)] = f"data/attitude/{y}.bin"
     mission = {"years": years, "coverage": [start, end], "bodies": bodies, "catalog": catalogs, "attitude": attitude,
-               "frames_per_day": {"start_et": day0, **per_day}, "months": write_months(out, years, bodies, attitude)}
+               "frames_per_day": {"start_et": day0, **per_day}, "months": write_months(out, years, bodies, attitude, groups)}
     json.dump(mission, open(os.path.join(out, "mission.json"), "w"), separators=(",", ":"))
     n_targets = write_targets(out, slims, day0, bodies)
     if args.huygens:
@@ -434,10 +468,11 @@ def _blob(parts, data):
     return [offset, len(data)]
 
 
-def write_months(out, years, bodies, attitude):
+def write_months(out, years, bodies, attitude, groups=None):
     """
     Cuts the year files just written into months. For each month with any data:
-      data/months/<YYYY-MM>.json  the catalog rows taken that month, in the year file's order
+      data/months/<YYYY-MM>.json  the catalog rows taken that month, in the year file's order (with groups, each
+                                  row's set and pass and their tables, add_groups)
       data/months/<YYYY-MM>.bin   "CMON", version, length of a JSON directory, 0 (4 x uint32), the
                                   directory {"tracks": {body: [offset, length]}, "attitude": [offset,
                                   length] or null} and the parts it points at (offsets from the start
@@ -482,8 +517,10 @@ def write_months(out, years, bodies, attitude):
                 continue
             rows = np.flatnonzero((et >= t0) & (et < t1))
             key = f"{y}-{m:02d}"
-            json.dump({k: [cat[k][i] for i in rows] for k in CATALOG_KEYS}, open(os.path.join(out, "months", key + ".json"), "w"),
-                      separators=(",", ":"))
+            part = {k: [cat[k][i] for i in rows] for k in CATALOG_KEYS}
+            if groups:
+                add_groups(part, groups)
+            json.dump(part, open(os.path.join(out, "months", key + ".json"), "w"), separators=(",", ":"))
             if att is not None:
                 head, img_q, bg_t, bg_q = att
                 j0 = max(int(np.searchsorted(bg_t, t0, "right")) - 1, 0)

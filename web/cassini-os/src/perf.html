@@ -12,7 +12,8 @@
        cassiniPerf.draw(now)       true when this frame has to be drawn (the render loop asks once per frame)
        cassiniPerf.frame(now, drew) after each frame: measures the frame rate and adapts the resolution
        cassiniPerf.invalidate()    draw the next frames even if nothing seems to have moved
-       cassiniPerf.status()        { fps, scale, pixelRatio, auto, target } -->
+       cassiniPerf.status()        { fps, scale, pixelRatio, auto, target }
+       cassiniPerf.cap             at most this many 3D frames a second (0: as many as the screen shows; ambient mode sets it) -->
 <style>
 /* frosted glass off: plain dark panels, no blur of the view behind them (the blur is redone every frame) */
 body.s-noglass :is(#menubar, .menu ul, .win, #dock) { -webkit-backdrop-filter: none !important; backdrop-filter: none !important; }
@@ -55,8 +56,10 @@ body.s-noglass .menu ul { background: rgba(22, 23, 27, .97); }
     status: () => ({ fps: +fps.toFixed(1), scale: +(P.pixelRatio() / dpr()).toFixed(2), pixelRatio: +P.pixelRatio().toFixed(2), auto: S.get("perf.auto"), target: S.get("perf.target") }),
     // the 3D view needs drawing when the camera, the clock or the canvas changed, for a moment after any input or
     // load, and once a second regardless
+    cap: 0,
     draw(now) {
-      if (!S.get("perf.rest")) return true;
+      if (P.cap > 0 && now - lastDraw < 1000 / P.cap - 4) return false;
+      if (!S.get("perf.rest")) { lastDraw = now; return true; }
       const m = camera.matrixWorld.elements, p = camera.projectionMatrix.elements, c = renderer.domElement;
       const key = [state.et, c.width, c.height, p[0], p[5], ...m];
       let same = !!lastKey && lastKey.length === key.length;
