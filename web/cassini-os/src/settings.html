@@ -279,7 +279,7 @@ body.phone .srow input[type=range] { width: 96px; }
   // exposure normalization of a movie pass (obs_mosaic.exposure_gains): its smoothing in frames, 0 when off
   window.cassiniExposure = () => !S.get("movies.exposure") ? 0 : (S.get("movies.exposureSmooth") ?? 8);
   window.cassiniMovieStyle = (o = {}) => `${(o.center ?? S.get("cameras.autoCenter")) === false ? "&center=0" : ""}&trail=${o.trail ?? (S.get("movies.trail") || 0)}&laps=${S.get("movies.laps") || 1}` +
-    (S.get("movies.fade") && S.get("movies.mosaicFrames") !== "whole" ? `&fade=${S.get("movies.fade")}&persist=${S.get("movies.persist") ?? 35}` : "") +
+    ((o.fade ?? S.get("movies.fade")) && S.get("movies.mosaicFrames") !== "whole" ? `&fade=${o.fade ?? S.get("movies.fade")}&persist=${S.get("movies.persist") ?? 35}` : "") +
     ((o.steady ?? window.cassiniStabilize()) ? `&steady=${o.steady ?? window.cassiniStabilize()}` : "") +
     ((o.exposure ?? window.cassiniExposure()) ? `&exposure=${o.exposure ?? window.cassiniExposure()}` : "");
   // Cameras (the camera windows read cameras.steady, cameras.passes, cameras.fullRes, cameras.fullDelay, cameras.drill, cameras.pointingLook, cameras.stale and cameras.lingerColor / lingerMosaic)

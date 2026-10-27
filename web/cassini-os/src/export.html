@@ -403,10 +403,23 @@ body.phone #excard:not(.full) { width: calc(100% - 16px) !important; left: 8px !
     URL.revokeObjectURL(u);
     return out ? createImageBitmap(out) : null;
   }
+  // a mosaic movie frame whose fade this computer works out (steady-local.html): the time-lapse picture, dimmed
+  async function rollingHere(id, size, stop) {
+    const FL = window.cassiniFadeLocal, fh = FL && size === 1024 ? FL.want(FRAMES, id) : null;
+    if (!fh) return null;
+    const center = S.get("cameras.autoCenter") !== false;
+    const r = await fetch(`${FRAMES}/frames/movie/${id}.webp?mode=rolling&size=1024${window.cassiniMovieStyle({ center, fade: 0 })}${window.cassiniLook()}`).catch(() => null);
+    if (!r || !r.ok) return null;
+    const im = new Image(), u = URL.createObjectURL(await r.blob());
+    try { im.src = u; await im.decode(); } catch (e) { URL.revokeObjectURL(u); return null; }
+    const out = await FL.apply(FRAMES, id, im, fh).catch(() => null);
+    URL.revokeObjectURL(u);
+    return out ? createImageBitmap(out) : null;
+  }
   // Pictures.picture: the first of the entry's tries the server has, and what it is
   async function pictureOf(e, size, stop) {
     for (const [kind, src] of e.tries) {
-      const bmp = (kind === "movie" ? await movieHere(e.id, size, stop) : null) || await fetchPicture(pictureUrl(kind, src, size), stop);
+      const bmp = (kind === "movie" ? await movieHere(e.id, size, stop) : kind === "rolling" ? await rollingHere(e.id, size, stop) : null) || await fetchPicture(pictureUrl(kind, src, size), stop);
       if (bmp) return { bmp, what: WHAT[kind] };
     }
     return { bmp: null, what: "" };

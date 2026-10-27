@@ -1854,7 +1854,13 @@ body.idle .win.full .titlebar { opacity: 0; }
         return { key: movieUrl(catalog.id[k], sz), set: -1, k, movie: true };
       }
       // a mosaic movie (a raster repeated over the same places): its rolling mosaic, every place's newest tile
-      if (playsRolling(k) && !movieFailed.has(catalog.id[k]) && !passCold(k)) return { key: rollingUrl(catalog.id[k], sz), set: -1, k, movie: true, rolling: true };
+      if (playsRolling(k) && !movieFailed.has(catalog.id[k]) && !passCold(k)) {
+        // its older tiles faded on this computer (steady-local.html): the time-lapse picture the server has, at the
+        // 1024 px it is made at, dimmed here; the server's faded picture when the page cannot
+        const fh = window.cassiniFadeLocal ? window.cassiniFadeLocal.want(FRAMES, catalog.id[k]) : null;
+        if (fh) return { key: rollingUrl(catalog.id[k], 1024, 0) + `#fade=${fh.fade}p${fh.persist}l${fh.laps}`, set: -1, k, movie: true, rolling: true, fadeHere: fh, server: rollingUrl(catalog.id[k], sz) };
+        return { key: rollingUrl(catalog.id[k], sz), set: -1, k, movie: true, rolling: true };
+      }
       const si = catalog.setOf[k], s = si >= 0 ? catalog.sets[si] : null;
       if (s && S.get("cameras.composites")) {
         // any frame of a set whose channels are all taken shows the set's composite
@@ -1950,6 +1956,11 @@ body.idle .win.full .titlebar { opacity: 0; }
         const show = pic => { if (want && !hold && !v.warm && v.cat === catalog && fits(v)) { prep(); display(v, pic); } };   // no want: the camera went idle (or was held) while this loaded
         if (v.here && !v.warm) window.cassiniSteadyLocal.apply(FRAMES, catalog.id[v.k], im, { center: centreOn() !== false, color: !!S.get("cameras.composites"), planeUrl: id => movieUrl(id, 1024, 0, 0, 0, 0), ...v.here })
           .then(pic => show(pic || im), () => show(im)).then(pump);
+        else if (v.fadeHere && !v.warm) {
+          // faded here, or the server's faded picture when this pass's table is not here
+          const server = () => new Promise(res => { const s = new Image(); s.crossOrigin = "anonymous"; s.onload = () => { show(s); res(); }; s.onerror = res; s.src = v.server; });
+          window.cassiniFadeLocal.apply(FRAMES, catalog.id[v.k], im, v.fadeHere).then(pic => (pic ? show(pic) : server()), server).then(pump);
+        }
         else { show(im); pump(); }
       };
       im.onerror = () => {
@@ -2113,7 +2124,7 @@ body.idle .win.full .titlebar { opacity: 0; }
     const playsRolling = k => playsAs(k) === "mosaic_movie";
     window.cassiniRolling = true;   // so the pass mosaic lane leaves mosaic movies to this route (mosaicOf)
     // (Whole mosaics: the server makes every tile of the lap before it answers, whole=1)
-    const rollingUrl = (id, sz) => `${FRAMES}/frames/movie/${id}.webp?mode=rolling&size=${sz || size()}${window.cassiniMovieStyle({ center: centreOn() })}${window.cassiniLook()}${wholeLaps() ? "&whole=1" : ""}`;
+    const rollingUrl = (id, sz, fade) => `${FRAMES}/frames/movie/${id}.webp?mode=rolling&size=${sz || size()}${window.cassiniMovieStyle({ center: centreOn(), fade })}${window.cassiniLook()}${wholeLaps() ? "&whole=1" : ""}`;
     // the filmstrip: the pass the frame on screen is in (/frames/movie/<ID>.json: its frames, in time order), its
     // frames drawn along a strip by time, colored by filter, with the frame shown marked and the frames around it
     const passInfos = new Map(), filmAsked = new Set();

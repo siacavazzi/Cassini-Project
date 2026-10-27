@@ -2766,19 +2766,14 @@ def _faded(u, made, cache):
     def post(im):
         W, H = im.size
         w, h = max(1, W // FADE_SCALE), max(1, H // FADE_SCALE)
-        k = w / rect[2]
         light = np.ones((h, w), np.float32)
         for t in tiles:
             if t["filter"] not in used or "offset" not in t:
                 continue
-            bx, by, bw, bh = t["box"]
-            left = round((t["offset"][0] + bx - rect[0]) * k)
-            top = round((t["offset"][1] + by - rect[1]) * k)
-            sw, sh = max(1, round(bw * k)), max(1, round(bh * k))
-            a0, b0, a1, b1 = max(left, 0), max(top, 0), min(left + sw, w), min(top + sh, h)
-            if a1 <= a0 or b1 <= b0:
+            part = _fade_part(t, rect, w, h, there)
+            if part is None:
                 continue
-            a = _part(os.path.join(there, f"{t['n']}.png"), sw, sh)[b0 - top:b1 - top, a0 - left:a1 - left, 3]
+            (a0, b0, a1, b1), a = part
             a = a.astype(np.float32) / 255
             light[b0:b1, a0:a1] = light[b0:b1, a0:a1] * (1 - a) + t.get("fade", 1.0) * a
         light = cv2.resize(light, (W, H), interpolation=cv2.INTER_LINEAR)
@@ -2786,6 +2781,60 @@ def _faded(u, made, cache):
         rgba[..., :3] *= light[..., None]
         return Image.fromarray((rgba + 0.5).clip(0, 255).astype(np.uint8), "RGBA")
     return post
+
+
+def _fade_part(t, rect, w, h, there):
+    """Where tile t lies on a fade's brightness map (w x h, the view rect) and its alpha there (uint8), or None
+    when it is off the map: ((a0, b0, a1, b1), alpha)."""
+    k = w / rect[2]
+    bx, by, bw, bh = t["box"]
+    left = round((t["offset"][0] + bx - rect[0]) * k)
+    top = round((t["offset"][1] + by - rect[1]) * k)
+    sw, sh = max(1, round(bw * k)), max(1, round(bh * k))
+    a0, b0, a1, b1 = max(left, 0), max(top, 0), min(left + sw, w), min(top + sh, h)
+    if a1 <= a0 or b1 <= b0:
+        return None
+    return (a0, b0, a1, b1), _part(os.path.join(there, f"{t['n']}.png"), sw, sh)[b0 - top:b1 - top, a0 - left:a1 - left, 3]
+
+
+def fade_table(frame_id, cache, laps=1, W=0, H=0):
+    """What a browser needs to fade a mosaic movie's older tiles by itself (steady-local.html, cassiniFadeLocal),
+    on the time-lapse picture the server already has (fade 0, W x H px as made at OUT), for any fade and persistence:
+    every frame's drawn tiles and the filters it draws (rolling_layout at laps), and each tile's place and alpha on
+    the fade's brightness map (_fade_part, the map 1/FADE_SCALE of the picture; zlib, base64), so _faded's post step is worked out
+    in the page. None when the frame is in no mosaic movie; {"working": true} while some of its tiles are not made
+    (the page asks the server for the faded pictures meanwhile)."""
+    import base64
+    import zlib
+    found = unit_of(frame_id)
+    if not found or found[1] < 0 or found[0].get("kind") != "mosaic_movie":
+        return None
+    u = found[0]
+    if not W or not H:
+        return {"local": False}
+    p = plan(u, cache)
+    there = _tiles(u, cache, p["display_scale"])
+    w, h = max(1, W // FADE_SCALE), max(1, H // FADE_SCALE)
+    frames, parts, rect = [], {}, None
+    for j in range(len(u["frames"])):
+        skipped = []
+        made = rolling_layout(u, j, cache, laps, made_only=True, skipped=skipped)
+        if skipped:
+            tiles_ahead(u, j, cache)
+            return {"working": True}
+        if not made:
+            frames.append(None)
+            continue
+        _, tiles, rect, _, used, _ = made
+        drawn = [t for t in tiles if t["filter"] in used and "offset" in t]
+        frames.append({"n": [t["n"] for t in drawn], "newest": max([t["n"] for t in drawn] or [j])})
+        for t in drawn:
+            if str(t["n"]) not in parts:
+                part = _fade_part(t, rect, w, h, there)
+                parts[str(t["n"])] = None if part is None else {
+                    "at": list(part[0]), "alpha": base64.b64encode(zlib.compress(np.ascontiguousarray(part[1]).tobytes(), 6)).decode()}
+    return {"local": True, "laps": laps, "W": W, "H": H, "w": w, "h": h, "frames": frames, "parts": parts,
+            "ids": [fr[1] for fr in u["frames"]], "fade_max": FADE_MAX}
 
 
 def _rolling_picture(u, n, size, cache, laps, slots, fmt, out, made_only, read=True, skipped=None, fade=(0, 0)):

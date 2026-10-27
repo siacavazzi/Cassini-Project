@@ -165,7 +165,56 @@
       }
       return out;
     }
-    return { pyRound, pyRound2, places, shift, evenedGains, gains, lut, mix, trailOf, blendTrail };
+    // ---- a mosaic movie's fade (obs_mosaic._faded's post step, on the time-lapse picture) ----
+    // obs_mosaic._fade_weight: 1 for the newest, falling evenly to the floor (persist per cent) over fade frames
+    const fadeWeight = (age, fade, persist) => { const floor = persist / 100; return age <= 0 ? 1.0 : Math.max(floor, 1 - (1 - floor) * age / fade); };
+    // the brightness map (w x h) of frame n: each drawn tile's alpha laid over it oldest first, at its fade (float32)
+    function fadeLight(t, n, fade, persist, alphas) {
+      const f = Math.fround, fr = t.frames[n], light = new Float32Array(t.w * t.h).fill(1);
+      if (!fr) return light;
+      for (const j of fr.n) {
+        const part = t.parts[j];
+        if (!part) continue;
+        const [a0, b0, a1, b1] = part.at, aw = a1 - a0, A = alphas(j), wt = fadeWeight(fr.newest - j, fade, persist);
+        for (let y = b0; y < b1; y++) for (let x = a0; x < a1; x++) {
+          const a = f(A[(y - b0) * aw + (x - a0)] / 255), i = y * t.w + x;
+          light[i] = f(f(light[i] * f(1 - a)) + f(wt * a));
+        }
+      }
+      return light;
+    }
+    // cv2.resize(src, (W, H), interpolation=INTER_LINEAR) of a float32 map: each axis's source place
+    // (d + 0.5) * scale - 0.5, clamped at the edges, the rows first and then the columns, in float32
+    function resizeLinear(src, w, h, W, H) {
+      const f = Math.fround, axis = (n, N) => {
+        const scale = n / N, at = new Int32Array(N), wt = new Float32Array(N);
+        for (let d = 0; d < N; d++) {
+          let fx = f((d + 0.5) * scale - 0.5), sx = Math.floor(fx);
+          fx = f(fx - sx);
+          if (sx < 0) { fx = 0; sx = 0; }
+          if (sx >= n - 1) { fx = 0; sx = n - 1; }
+          at[d] = sx; wt[d] = fx;
+        }
+        return [at, wt];
+      };
+      const [xs, xw] = axis(w, W), [ys, yw] = axis(h, H), rows = new Float32Array(h * W), out = new Float32Array(W * H);
+      for (let y = 0; y < h; y++) for (let x = 0; x < W; x++) {
+        const s0 = src[y * w + xs[x]], s1 = xs[x] + 1 < w ? src[y * w + xs[x] + 1] : s0;
+        rows[y * W + x] = f(f(s0 * f(1 - xw[x])) + f(s1 * xw[x]));
+      }
+      for (let y = 0; y < H; y++) {
+        const r0 = ys[y] * W, r1 = Math.min(ys[y] + 1, h - 1) * W, b1 = yw[y], b0 = f(1 - b1);
+        for (let x = 0; x < W; x++) out[y * W + x] = f(f(rows[r0 + x] * b0) + f(rows[r1 + x] * b1));
+      }
+      return out;
+    }
+    // the picture's colour times the map, + 0.5, cut to a byte (alpha as it is)
+    function applyLight(px, L) {
+      const f = Math.fround;
+      for (let i = 0, p = 0; p < L.length; p++, i += 4) for (let c = 0; c < 3; c++) px[i + c] = Math.min(255, Math.max(0, Math.trunc(f(f(px[i + c] * L[p]) + 0.5))));
+      return px;
+    }
+    return { pyRound, pyRound2, places, shift, evenedGains, gains, lut, mix, trailOf, blendTrail, fadeWeight, fadeLight, resizeLinear, applyLight };
   };
   window.cassiniSteadyMath = STEADY_MATH;
   if (typeof document === "undefined") return;
@@ -301,6 +350,59 @@ onmessage = async e => {
       if (urls.length > 8) URL.revokeObjectURL(urls.shift());
       await new Promise((res, rej) => { out.onload = res; out.onerror = rej; out.src = url; });
       out.dataset.steadyLocal = `${r.moves.map(m => m.join(",")).join(" ")} ×${r.gain}`;
+      return out;
+    },
+  };
+
+  // ---------- a mosaic movie's fade on this computer: the time-lapse picture the server has, its older tiles dimmed ----------
+  const fades = new Map();     // `${laps}:${frame id}` -> {table, n, alphas} | null (the server fades it)
+  const fadeAsked = new Map();
+  async function fadeTable(frames, id, laps, W, H) {
+    const k = `${laps}:${id}`;
+    if (fades.has(k)) return fades.get(k);
+    if (!fadeAsked.has(k)) {
+      fadeAsked.set(k, fetch(`${frames}/frames/movie/${id}.fade.json?laps=${laps}&w=${W}&h=${H}`).then(r => r.ok ? r.json() : { local: false }).then(t => {
+        if (!t || t.working) { setTimeout(() => fadeAsked.delete(k), 15000); return; }
+        if (!t.local) { fades.set(k, null); return; }
+        // each tile's alpha (zlib), unpacked once when a frame first draws it
+        const decoded = new Map(), alphas = j => decoded.get(j);
+        const unpack = js => Promise.all(js.filter(j => t.parts[j] && !decoded.has(j)).map(async j => {
+          const b = atob(t.parts[j].alpha), z = new Uint8Array(b.length); for (let i = 0; i < b.length; i++) z[i] = b.charCodeAt(i);
+          decoded.set(j, new Uint8Array(await new Response(new Blob([z]).stream().pipeThrough(new DecompressionStream("deflate"))).arrayBuffer()));
+        }));
+        t.ids.forEach((fid, n) => fades.set(`${laps}:${fid}`, { table: t, n, alphas, unpack }));
+      }).catch(() => { fadeAsked.delete(k); }));
+    }
+    await fadeAsked.get(k);
+    return fades.get(k) || null;
+  }
+  window.cassiniFadeLocal = {
+    // the fade this computer puts on a mosaic movie's frame ({fade, persist, laps}), or null when the server draws it
+    want(frames, id) {
+      const s = S();
+      if (!s || !s.get("movies.stabilizeLocal") || !s.get("movies.fade") || s.get("movies.mosaicFrames") === "whole") return null;
+      if (window.cassiniLook && window.cassiniLook()) return null;
+      const laps = s.get("movies.laps") || 1;
+      if (fades.has(`${laps}:${id}`) && !fades.get(`${laps}:${id}`)) return null;
+      return { fade: s.get("movies.fade"), persist: s.get("movies.persist") ?? 35, laps };
+    },
+    // im: the frame's time-lapse picture (fade 0, as made at 1024): a new Image with the fade on it, or null
+    // (the pass's table is not here yet, or the server fades this pass)
+    async apply(frames, id, im, o) {
+      const W = im.naturalWidth, H = im.naturalHeight, e = await fadeTable(frames, id, o.laps || 1, W, H);
+      if (!e || e.table.W !== W || e.table.H !== H) return null;
+      const M = window.cassiniSteadyMath(), t = e.table, t0 = performance.now();
+      if (t.frames[e.n]) await e.unpack(t.frames[e.n].n);
+      const L = M.resizeLinear(M.fadeLight(t, e.n, Math.min(o.fade, t.fade_max), Math.max(0, Math.min(100, o.persist)), e.alphas), t.w, t.h, W, H);
+      const c = document.createElement("canvas"); c.width = W; c.height = H;
+      const g = c.getContext("2d", { willReadFrequently: true }); g.drawImage(im, 0, 0);
+      const d = g.getImageData(0, 0, W, H); M.applyLight(d.data, L); g.putImageData(d, 0, 0);
+      const out = new Image(), blob = await new Promise(r => c.toBlob(r, "image/png")), url = URL.createObjectURL(blob);
+      urls.push(url);
+      if (urls.length > 8) URL.revokeObjectURL(urls.shift());
+      await new Promise((res, rej) => { out.onload = res; out.onerror = rej; out.src = url; });
+      stats.fades = (stats.fades || 0) + 1; stats.fadeMs = (stats.fadeMs || 0) + performance.now() - t0;
+      out.dataset.fadeLocal = `${o.fade}/${o.persist}`;
       return out;
     },
   };

@@ -2379,7 +2379,7 @@ body.ambient.phone .amb-where { font-size: 18px; }
   // exposure normalization of a movie pass (obs_mosaic.exposure_gains): its smoothing in frames, 0 when off
   window.cassiniExposure = () => !S.get("movies.exposure") ? 0 : (S.get("movies.exposureSmooth") ?? 8);
   window.cassiniMovieStyle = (o = {}) => `${(o.center ?? S.get("cameras.autoCenter")) === false ? "&center=0" : ""}&trail=${o.trail ?? (S.get("movies.trail") || 0)}&laps=${S.get("movies.laps") || 1}` +
-    (S.get("movies.fade") && S.get("movies.mosaicFrames") !== "whole" ? `&fade=${S.get("movies.fade")}&persist=${S.get("movies.persist") ?? 35}` : "") +
+    ((o.fade ?? S.get("movies.fade")) && S.get("movies.mosaicFrames") !== "whole" ? `&fade=${o.fade ?? S.get("movies.fade")}&persist=${S.get("movies.persist") ?? 35}` : "") +
     ((o.steady ?? window.cassiniStabilize()) ? `&steady=${o.steady ?? window.cassiniStabilize()}` : "") +
     ((o.exposure ?? window.cassiniExposure()) ? `&exposure=${o.exposure ?? window.cassiniExposure()}` : "");
   // Cameras (the camera windows read cameras.steady, cameras.passes, cameras.fullRes, cameras.fullDelay, cameras.drill, cameras.pointingLook, cameras.stale and cameras.lingerColor / lingerMosaic)
@@ -2989,7 +2989,56 @@ body.ambient.phone .amb-where { font-size: 18px; }
       }
       return out;
     }
-    return { pyRound, pyRound2, places, shift, evenedGains, gains, lut, mix, trailOf, blendTrail };
+    // ---- a mosaic movie's fade (obs_mosaic._faded's post step, on the time-lapse picture) ----
+    // obs_mosaic._fade_weight: 1 for the newest, falling evenly to the floor (persist per cent) over fade frames
+    const fadeWeight = (age, fade, persist) => { const floor = persist / 100; return age <= 0 ? 1.0 : Math.max(floor, 1 - (1 - floor) * age / fade); };
+    // the brightness map (w x h) of frame n: each drawn tile's alpha laid over it oldest first, at its fade (float32)
+    function fadeLight(t, n, fade, persist, alphas) {
+      const f = Math.fround, fr = t.frames[n], light = new Float32Array(t.w * t.h).fill(1);
+      if (!fr) return light;
+      for (const j of fr.n) {
+        const part = t.parts[j];
+        if (!part) continue;
+        const [a0, b0, a1, b1] = part.at, aw = a1 - a0, A = alphas(j), wt = fadeWeight(fr.newest - j, fade, persist);
+        for (let y = b0; y < b1; y++) for (let x = a0; x < a1; x++) {
+          const a = f(A[(y - b0) * aw + (x - a0)] / 255), i = y * t.w + x;
+          light[i] = f(f(light[i] * f(1 - a)) + f(wt * a));
+        }
+      }
+      return light;
+    }
+    // cv2.resize(src, (W, H), interpolation=INTER_LINEAR) of a float32 map: each axis's source place
+    // (d + 0.5) * scale - 0.5, clamped at the edges, the rows first and then the columns, in float32
+    function resizeLinear(src, w, h, W, H) {
+      const f = Math.fround, axis = (n, N) => {
+        const scale = n / N, at = new Int32Array(N), wt = new Float32Array(N);
+        for (let d = 0; d < N; d++) {
+          let fx = f((d + 0.5) * scale - 0.5), sx = Math.floor(fx);
+          fx = f(fx - sx);
+          if (sx < 0) { fx = 0; sx = 0; }
+          if (sx >= n - 1) { fx = 0; sx = n - 1; }
+          at[d] = sx; wt[d] = fx;
+        }
+        return [at, wt];
+      };
+      const [xs, xw] = axis(w, W), [ys, yw] = axis(h, H), rows = new Float32Array(h * W), out = new Float32Array(W * H);
+      for (let y = 0; y < h; y++) for (let x = 0; x < W; x++) {
+        const s0 = src[y * w + xs[x]], s1 = xs[x] + 1 < w ? src[y * w + xs[x] + 1] : s0;
+        rows[y * W + x] = f(f(s0 * f(1 - xw[x])) + f(s1 * xw[x]));
+      }
+      for (let y = 0; y < H; y++) {
+        const r0 = ys[y] * W, r1 = Math.min(ys[y] + 1, h - 1) * W, b1 = yw[y], b0 = f(1 - b1);
+        for (let x = 0; x < W; x++) out[y * W + x] = f(f(rows[r0 + x] * b0) + f(rows[r1 + x] * b1));
+      }
+      return out;
+    }
+    // the picture's colour times the map, + 0.5, cut to a byte (alpha as it is)
+    function applyLight(px, L) {
+      const f = Math.fround;
+      for (let i = 0, p = 0; p < L.length; p++, i += 4) for (let c = 0; c < 3; c++) px[i + c] = Math.min(255, Math.max(0, Math.trunc(f(f(px[i + c] * L[p]) + 0.5))));
+      return px;
+    }
+    return { pyRound, pyRound2, places, shift, evenedGains, gains, lut, mix, trailOf, blendTrail, fadeWeight, fadeLight, resizeLinear, applyLight };
   };
   window.cassiniSteadyMath = STEADY_MATH;
   if (typeof document === "undefined") return;
@@ -3125,6 +3174,59 @@ onmessage = async e => {
       if (urls.length > 8) URL.revokeObjectURL(urls.shift());
       await new Promise((res, rej) => { out.onload = res; out.onerror = rej; out.src = url; });
       out.dataset.steadyLocal = `${r.moves.map(m => m.join(",")).join(" ")} ×${r.gain}`;
+      return out;
+    },
+  };
+
+  // ---------- a mosaic movie's fade on this computer: the time-lapse picture the server has, its older tiles dimmed ----------
+  const fades = new Map();     // `${laps}:${frame id}` -> {table, n, alphas} | null (the server fades it)
+  const fadeAsked = new Map();
+  async function fadeTable(frames, id, laps, W, H) {
+    const k = `${laps}:${id}`;
+    if (fades.has(k)) return fades.get(k);
+    if (!fadeAsked.has(k)) {
+      fadeAsked.set(k, fetch(`${frames}/frames/movie/${id}.fade.json?laps=${laps}&w=${W}&h=${H}`).then(r => r.ok ? r.json() : { local: false }).then(t => {
+        if (!t || t.working) { setTimeout(() => fadeAsked.delete(k), 15000); return; }
+        if (!t.local) { fades.set(k, null); return; }
+        // each tile's alpha (zlib), unpacked once when a frame first draws it
+        const decoded = new Map(), alphas = j => decoded.get(j);
+        const unpack = js => Promise.all(js.filter(j => t.parts[j] && !decoded.has(j)).map(async j => {
+          const b = atob(t.parts[j].alpha), z = new Uint8Array(b.length); for (let i = 0; i < b.length; i++) z[i] = b.charCodeAt(i);
+          decoded.set(j, new Uint8Array(await new Response(new Blob([z]).stream().pipeThrough(new DecompressionStream("deflate"))).arrayBuffer()));
+        }));
+        t.ids.forEach((fid, n) => fades.set(`${laps}:${fid}`, { table: t, n, alphas, unpack }));
+      }).catch(() => { fadeAsked.delete(k); }));
+    }
+    await fadeAsked.get(k);
+    return fades.get(k) || null;
+  }
+  window.cassiniFadeLocal = {
+    // the fade this computer puts on a mosaic movie's frame ({fade, persist, laps}), or null when the server draws it
+    want(frames, id) {
+      const s = S();
+      if (!s || !s.get("movies.stabilizeLocal") || !s.get("movies.fade") || s.get("movies.mosaicFrames") === "whole") return null;
+      if (window.cassiniLook && window.cassiniLook()) return null;
+      const laps = s.get("movies.laps") || 1;
+      if (fades.has(`${laps}:${id}`) && !fades.get(`${laps}:${id}`)) return null;
+      return { fade: s.get("movies.fade"), persist: s.get("movies.persist") ?? 35, laps };
+    },
+    // im: the frame's time-lapse picture (fade 0, as made at 1024): a new Image with the fade on it, or null
+    // (the pass's table is not here yet, or the server fades this pass)
+    async apply(frames, id, im, o) {
+      const W = im.naturalWidth, H = im.naturalHeight, e = await fadeTable(frames, id, o.laps || 1, W, H);
+      if (!e || e.table.W !== W || e.table.H !== H) return null;
+      const M = window.cassiniSteadyMath(), t = e.table, t0 = performance.now();
+      if (t.frames[e.n]) await e.unpack(t.frames[e.n].n);
+      const L = M.resizeLinear(M.fadeLight(t, e.n, Math.min(o.fade, t.fade_max), Math.max(0, Math.min(100, o.persist)), e.alphas), t.w, t.h, W, H);
+      const c = document.createElement("canvas"); c.width = W; c.height = H;
+      const g = c.getContext("2d", { willReadFrequently: true }); g.drawImage(im, 0, 0);
+      const d = g.getImageData(0, 0, W, H); M.applyLight(d.data, L); g.putImageData(d, 0, 0);
+      const out = new Image(), blob = await new Promise(r => c.toBlob(r, "image/png")), url = URL.createObjectURL(blob);
+      urls.push(url);
+      if (urls.length > 8) URL.revokeObjectURL(urls.shift());
+      await new Promise((res, rej) => { out.onload = res; out.onerror = rej; out.src = url; });
+      stats.fades = (stats.fades || 0) + 1; stats.fadeMs = (stats.fadeMs || 0) + performance.now() - t0;
+      out.dataset.fadeLocal = `${o.fade}/${o.persist}`;
       return out;
     },
   };
@@ -4186,7 +4288,13 @@ onmessage = async e => {
         return { key: movieUrl(catalog.id[k], sz), set: -1, k, movie: true };
       }
       // a mosaic movie (a raster repeated over the same places): its rolling mosaic, every place's newest tile
-      if (playsRolling(k) && !movieFailed.has(catalog.id[k]) && !passCold(k)) return { key: rollingUrl(catalog.id[k], sz), set: -1, k, movie: true, rolling: true };
+      if (playsRolling(k) && !movieFailed.has(catalog.id[k]) && !passCold(k)) {
+        // its older tiles faded on this computer (steady-local.html): the time-lapse picture the server has, at the
+        // 1024 px it is made at, dimmed here; the server's faded picture when the page cannot
+        const fh = window.cassiniFadeLocal ? window.cassiniFadeLocal.want(FRAMES, catalog.id[k]) : null;
+        if (fh) return { key: rollingUrl(catalog.id[k], 1024, 0) + `#fade=${fh.fade}p${fh.persist}l${fh.laps}`, set: -1, k, movie: true, rolling: true, fadeHere: fh, server: rollingUrl(catalog.id[k], sz) };
+        return { key: rollingUrl(catalog.id[k], sz), set: -1, k, movie: true, rolling: true };
+      }
       const si = catalog.setOf[k], s = si >= 0 ? catalog.sets[si] : null;
       if (s && S.get("cameras.composites")) {
         // any frame of a set whose channels are all taken shows the set's composite
@@ -4282,6 +4390,11 @@ onmessage = async e => {
         const show = pic => { if (want && !hold && !v.warm && v.cat === catalog && fits(v)) { prep(); display(v, pic); } };   // no want: the camera went idle (or was held) while this loaded
         if (v.here && !v.warm) window.cassiniSteadyLocal.apply(FRAMES, catalog.id[v.k], im, { center: centreOn() !== false, color: !!S.get("cameras.composites"), planeUrl: id => movieUrl(id, 1024, 0, 0, 0, 0), ...v.here })
           .then(pic => show(pic || im), () => show(im)).then(pump);
+        else if (v.fadeHere && !v.warm) {
+          // faded here, or the server's faded picture when this pass's table is not here
+          const server = () => new Promise(res => { const s = new Image(); s.crossOrigin = "anonymous"; s.onload = () => { show(s); res(); }; s.onerror = res; s.src = v.server; });
+          window.cassiniFadeLocal.apply(FRAMES, catalog.id[v.k], im, v.fadeHere).then(pic => (pic ? show(pic) : server()), server).then(pump);
+        }
         else { show(im); pump(); }
       };
       im.onerror = () => {
@@ -4445,7 +4558,7 @@ onmessage = async e => {
     const playsRolling = k => playsAs(k) === "mosaic_movie";
     window.cassiniRolling = true;   // so the pass mosaic lane leaves mosaic movies to this route (mosaicOf)
     // (Whole mosaics: the server makes every tile of the lap before it answers, whole=1)
-    const rollingUrl = (id, sz) => `${FRAMES}/frames/movie/${id}.webp?mode=rolling&size=${sz || size()}${window.cassiniMovieStyle({ center: centreOn() })}${window.cassiniLook()}${wholeLaps() ? "&whole=1" : ""}`;
+    const rollingUrl = (id, sz, fade) => `${FRAMES}/frames/movie/${id}.webp?mode=rolling&size=${sz || size()}${window.cassiniMovieStyle({ center: centreOn(), fade })}${window.cassiniLook()}${wholeLaps() ? "&whole=1" : ""}`;
     // the filmstrip: the pass the frame on screen is in (/frames/movie/<ID>.json: its frames, in time order), its
     // frames drawn along a strip by time, colored by filter, with the frame shown marked and the frames around it
     const passInfos = new Map(), filmAsked = new Set();
@@ -7142,10 +7255,23 @@ onmessage = async e => {
     URL.revokeObjectURL(u);
     return out ? createImageBitmap(out) : null;
   }
+  // a mosaic movie frame whose fade this computer works out (steady-local.html): the time-lapse picture, dimmed
+  async function rollingHere(id, size, stop) {
+    const FL = window.cassiniFadeLocal, fh = FL && size === 1024 ? FL.want(FRAMES, id) : null;
+    if (!fh) return null;
+    const center = S.get("cameras.autoCenter") !== false;
+    const r = await fetch(`${FRAMES}/frames/movie/${id}.webp?mode=rolling&size=1024${window.cassiniMovieStyle({ center, fade: 0 })}${window.cassiniLook()}`).catch(() => null);
+    if (!r || !r.ok) return null;
+    const im = new Image(), u = URL.createObjectURL(await r.blob());
+    try { im.src = u; await im.decode(); } catch (e) { URL.revokeObjectURL(u); return null; }
+    const out = await FL.apply(FRAMES, id, im, fh).catch(() => null);
+    URL.revokeObjectURL(u);
+    return out ? createImageBitmap(out) : null;
+  }
   // Pictures.picture: the first of the entry's tries the server has, and what it is
   async function pictureOf(e, size, stop) {
     for (const [kind, src] of e.tries) {
-      const bmp = (kind === "movie" ? await movieHere(e.id, size, stop) : null) || await fetchPicture(pictureUrl(kind, src, size), stop);
+      const bmp = (kind === "movie" ? await movieHere(e.id, size, stop) : kind === "rolling" ? await rollingHere(e.id, size, stop) : null) || await fetchPicture(pictureUrl(kind, src, size), stop);
       if (bmp) return { bmp, what: WHAT[kind] };
     }
     return { bmp: null, what: "" };
@@ -10403,7 +10529,7 @@ void main() {
   window.cassiniAbout = { open, addTab, esc, close: () => show(false), credits: CREDITS };
 
   // ---- which version this is: this page's build id (build.py writes it), and what the frame server says it serves ----
-  const BUILD = /*BUILD*/"dc467824d2a7";
+  const BUILD = /*BUILD*/"d621fef7ad55";
   const FRAMES = (() => {                       // the frame server, chosen as the camera window chooses it
     const q = new URLSearchParams(location.search).get("frames");
     if (q) return q.replace(/\/$/, "");
