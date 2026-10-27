@@ -4,7 +4,11 @@
      The window is where every credit lives: the Credits tab lists credits.json (every data source, map, model, sound,
      library and font, in one file), which build.py writes into the script. Everywhere else the page only shows a short
      callout, such as "NASA/JPL-Caltech/SSI" under a picture; give it data-about="<entry id>" and a click opens this
-     window at that entry. Other code opens it with cassiniAbout.open("Credits", "iss") and adds a tab with cassiniAbout.addTab(name, html). -->
+     window at that entry. Other code opens it with cassiniAbout.open("Credits", "iss") and adds a tab with cassiniAbout.addTab(name, html).
+
+     The footer says which version this is (the frame server's /version.json: the commit the site is checked out at, its
+     date and the PR it merged), and that a reload brings a newer one when the page is older than the one served.
+     window.cassiniVersion keeps it for the rest of the page (flags record it). -->
 <style>
 #about { width: min(600px, calc(100% - 20px)); height: min(500px, calc(100% - 80px)); z-index: 900; }
 #about .abody { flex: 1; min-height: 0; display: grid; grid-template-columns: 120px minmax(0, 1fr); border-top: 1px solid var(--q-line); }
@@ -28,7 +32,8 @@
 #about .cr .what { margin-top: 2px; font-size: 10.5px; line-height: 1.45; color: var(--q-dim); }
 #about .cr .lic { margin-top: 2px; font-size: 10px; color: var(--q-dim); }
 #about .cr .lic a { margin-left: 8px; }
-#about footer { flex: none; padding: 6px 12px; border-top: 1px solid var(--q-line); font-size: 10.5px; color: var(--q-dim); }
+#about footer { flex: none; display: flex; flex-wrap: wrap; justify-content: space-between; gap: 2px 12px; padding: 6px 12px; border-top: 1px solid var(--q-line); font-size: 10.5px; color: var(--q-dim); }
+#about footer .ver { margin-left: auto; text-align: right; font-family: var(--hudf, monospace); font-size: 10px; opacity: .8; user-select: text; }
 /* a short credit on the page that opens the full one here */
 .credit { all: unset; cursor: default; color: inherit; opacity: .8; }
 .credit:hover { opacity: 1; text-decoration: underline; text-underline-offset: 2px; }
@@ -45,7 +50,7 @@ body.phone #about nav { flex-direction: row; border-right: 0; border-bottom: 1px
     <nav id="anav" role="tablist" aria-label="About sections"></nav>
     <div class="pane" id="apane" role="tabpanel"></div>
   </div>
-  <footer>An independent project, not affiliated with NASA, JPL, ESA or the Space Science Institute.</footer>
+  <footer><span>An independent project, not affiliated with NASA, JPL, ESA or the Space Science Institute.</span><span class="ver" id="aver"></span></footer>
 </section>
 
 <script>
@@ -61,7 +66,9 @@ body.phone #about nav { flex-direction: row; border-right: 0; border-bottom: 1px
       <p>Made by Sam Iacavazzi · <a href="https://github.com/siacavazzi" target="_blank" rel="noopener">github.com/siacavazzi</a></p>
       <p class="note">More about the project is coming here.</p>
       <h3>Credits</h3>
-      <p>The pictures are NASA/JPL-Caltech/Space Science Institute, the probe's are ESA/NASA/JPL/University of Arizona, and the flight data is from NASA/JPL's SPICE archive. The maps, models, sound, software and fonts have their own authors. <a href="#" data-tab="Credits">See all credits</a>.</p>`,
+      <p>The pictures are NASA/JPL-Caltech/Space Science Institute, the probe's are ESA/NASA/JPL/University of Arizona, and the flight data is from NASA/JPL's SPICE archive. The maps, models, sound, software and fonts have their own authors. <a href="#" data-tab="Credits">See all credits</a>.</p>
+      <h3>Privacy</h3>
+      <p>Cassini OS uses no cookies and no outside trackers. Its server keeps daily totals only: how many people visited and from which country, and which pictures were looked at and saved. Nothing is kept that could tell one visitor from another.</p>`,
     Credits: () => CREDITS.groups.map(g => `<h3>${esc(g.title)}</h3>` + (g.note ? `<p class="note">${esc(g.note)}</p>` : "")
       + g.entries.map(e => `<div class="cr" id="cr-${esc(e.id)}"><b>${esc(e.title)}</b><div class="by">${esc(e.credit)}</div>`
         + (e.detail ? `<div class="what">${esc(e.detail)}</div>` : "")
@@ -94,6 +101,26 @@ body.phone #about nav { flex-direction: row; border-right: 0; border-bottom: 1px
   // other parts of the page add their own tabs: cassiniAbout.addTab("Mission team", () => "<h2>…</h2>…") (html, escaped by the caller)
   function addTab(name, html) { TABS[name] = html; if (!card.hidden) render(); }
   window.cassiniAbout = { open, addTab, esc, close: () => show(false), credits: CREDITS };
+
+  // ---- which version this is: this page's build id (build.py writes it), and what the frame server says it serves ----
+  const BUILD = /*BUILD*/"";
+  const FRAMES = (() => {                       // the frame server, chosen as the camera window chooses it
+    const q = new URLSearchParams(location.search).get("frames");
+    if (q) return q.replace(/\/$/, "");
+    if (/^https?:$/.test(location.protocol) && !/claude\.ai$|claudeusercontent\.com$|claude\.site$/.test(location.hostname)) return location.origin;
+    return "http://localhost:8765";
+  })();
+  const ver = window.cassiniVersion = { page: BUILD || null, server: null };
+  function showVersion() {
+    const v = ver.server, el = $("aver");
+    const old = v && v.page && BUILD && v.page !== BUILD;
+    el.textContent = v ? `Version ${v.version}${old ? " · reload for the newest" : ""}` : BUILD ? `Build ${BUILD}` : "";
+    el.title = v ? [`Site ${v.site ? v.site.commit + " " + v.site.subject : "unknown"}`,
+      `Frame server ${v.server_version}${v.server_current ? "" : " (restart pending)"}`, `Page build ${BUILD || "none"}`].join("\n") : "";
+  }
+  ver.ready = fetch(`${FRAMES}/version.json`, { cache: "no-store" }).then(r => r.ok ? r.json() : null, () => null)
+    .then(v => { ver.server = v; showVersion(); return ver; });
+  showVersion();
   // closing or minimizing the window just closes it (it never goes to the menu-bar tray)
   card.addEventListener("click", e => { if (e.target.closest(".close, .min")) { e.stopImmediatePropagation(); show(false); } }, true);
   card.addEventListener("dblclick", e => { if (e.target.closest(".titlebar")) { e.stopImmediatePropagation(); show(false); } }, true);
