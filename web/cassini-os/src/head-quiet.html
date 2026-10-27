@@ -1505,7 +1505,7 @@ body.idle .win.full .titlebar { opacity: 0; }
     pass.addEventListener("click", e => { const b = e.target.closest(".wmopt"); if (b) api.onMode(b.dataset.mode); });
     for (const row of el.querySelectorAll(".wmsub")) {
       const key = row.dataset.key, range = row.querySelector("input");
-      row.querySelector(".sw").addEventListener("click", () => { S.set(key, S.get(key) === false); api.sync(api.state); });
+      row.querySelector(".sw").addEventListener("click", () => { S.set(key, !S.get(key)); api.sync(api.state); });
       range.addEventListener("change", () => { S.set(range.dataset.smooth, +range.value); api.sync(api.state); });
       range.addEventListener("input", () => { row.querySelector("small").textContent = `smoothed over ${range.value} frames`; });
     }
@@ -1517,7 +1517,7 @@ body.idle .win.full .titlebar { opacity: 0; }
       note.textContent = !st.centre ? (def ? "Off for this window" : "Off (the Settings default)")
         : st.centred ? "Body in the middle, north up" : "Moons and planets that fit go north up in the middle";
       for (const row of el.querySelectorAll(".wmsub")) {
-        const on = S.get(row.dataset.key) !== false, range = row.querySelector("input"), v = S.get(range.dataset.smooth);
+        const on = !!S.get(row.dataset.key), range = row.querySelector("input"), v = S.get(range.dataset.smooth);
         row.querySelector(".sw").setAttribute("aria-checked", String(on));
         if (v != null) range.value = v;
         range.disabled = !on;
