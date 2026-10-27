@@ -5349,7 +5349,7 @@ body.phone #hland .cs-read { font-size: 9.5px; bottom: 9vh; white-space: normal;
   window.cassiniAbout = { open, addTab, esc, close: () => show(false), credits: CREDITS };
 
   // ---- which version this is: this page's build id (build.py writes it), and what the frame server says it serves ----
-  const BUILD = /*BUILD*/"a31a66081ef7";
+  const BUILD = /*BUILD*/"5f81a9bbff60";
   const FRAMES = (() => {                       // the frame server, chosen as the camera window chooses it
     const q = new URLSearchParams(location.search).get("frames");
     if (q) return q.replace(/\/$/, "");
