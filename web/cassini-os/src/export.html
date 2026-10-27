@@ -41,7 +41,7 @@ body.phone #excard:not(.full) { width: calc(100% - 16px) !important; left: 8px !
     <div class="exrow"><span>Frame rate</span><label class="chk"><input type="checkbox" id="exauto"> Adaptive</label><input type="range" id="exfps" min="2" max="30" step="1" aria-label="Pictures per second"><span class="val" id="exfpsv"></span></div>
     <div class="exrow"><span>Picture size</span><input type="range" id="exsize" min="0" max="5" step="1" aria-label="Picture size per camera"><span class="val" id="exsizev"></span></div>
     <div class="exrow"><span></span><label class="chk"><input type="checkbox" id="exsound"> Sound</label><label class="chk"><input type="checkbox" id="excap"> Captions</label></div>
-    <div class="exrow"><button class="exbtn go" id="exgo" disabled>Export</button><button class="exbtn" id="exclear">Clear marks</button><span id="exstate"></span></div>
+    <div class="exrow"><button class="exbtn go" id="exgo" disabled>Export</button><button class="exbtn" id="exclear">Clear marks</button><button class="exbtn" id="exedit" title="Pick the frames and the look of this movie (Movie Editor)">Edit frames…</button><span id="exstate"></span></div>
     <div id="exbar"><i></i></div>
     <div id="exdone" hidden>
       <video id="exvid" controls playsinline preload="metadata" hidden></video>
@@ -182,7 +182,8 @@ body.phone #excard:not(.full) { width: calc(100% - 16px) !important; left: 8px !
   const params = () => {
     const q = new URLSearchParams({ from: iso(X.a), until: iso(X.b), cams: X.cams || "NW", fps: opt("export.adaptive", true) ? "auto" : String(opt("export.fps", 12)),
       size: opt("export.full", false) ? "full" : String(opt("export.size", 1024)), sound: opt("export.sound", true) ? "1" : "0", caption: opt("export.caption", true) ? "1" : "0" });
-    return q.toString() + window.cassiniLook() + (window.cassiniMovieStyle ? window.cassiniMovieStyle() : "");
+    // the Movie Editor's cut and look for this stretch (movieedit.html): frames left out, and the look on every picture
+    return q.toString() + window.cassiniLook() + (window.cassiniMovieStyle ? window.cassiniMovieStyle() : "") + (window.cassiniMovieCut ? window.cassiniMovieCut() : "");
   };
   let timer = 0;
   function estimate() {
@@ -207,7 +208,8 @@ body.phone #excard:not(.full) { width: calc(100% - 16px) !important; left: 8px !
         // measured on the Mac Mini: about 0.065 MB a second of film at 1024 x 1072, 0.11 at 2048 x 1072, sound included
         // (a Full film, mostly a mosaic's dark sky, about half that a pixel: 3.6 MB for 19 s at 3078 x 3222)
         const mb = p.frames ? Math.max(0.1, p.seconds * (0.03 + (p.full ? 0.017 : 0.035) * p.width * p.height / (1024 * 1072))) : 0;
-        $("exsum").innerHTML = p.count ? `${p.count.toLocaleString()} pictures (NAC ${n.N.toLocaleString()}, WAC ${n.W.toLocaleString()}) · film ${fmtDur(p.seconds)} at ${p.width}×${p.height} · about ${mb.toFixed(mb < 10 ? 1 : 0)} MB${fullNote(p.full)}` : `<span class="warn">No pictures in this stretch.</span>`;
+        const edited = window.cassiniMovieCut && window.cassiniMovieCut() ? " · edited in the Movie Editor" : "";
+        $("exsum").innerHTML = p.count ? `${p.count.toLocaleString()} pictures (NAC ${n.N.toLocaleString()}, WAC ${n.W.toLocaleString()}) · film ${fmtDur(p.seconds)} at ${p.width}×${p.height} · about ${mb.toFixed(mb < 10 ? 1 : 0)} MB${edited}${fullNote(p.full)}` : `<span class="warn">No pictures in this stretch.</span>`;
         $("exgo").disabled = !p.count;
       } catch (err) { $("exsum").innerHTML = `<span class="warn">No frame server at ${FRAMES}.</span>`; }
     }, 250);
