@@ -62,6 +62,7 @@ r = dc.readout(INFO)
 assert r is not None and r[-1] == "NAC_hotpix2006.9_140219.tab"                   # the nearest epoch
 assert dc.readout({**INFO, "IMAGE_TIME": "2013-300T00:00:00"})[-1] == "NAC_hotpix2014.3_171204.tab"
 assert dc.readout({**INFO, "READOUT_CYCLE_INDEX": "UNKNOWN"}) is None
+assert dc.readout({**INFO, "GAIN_MODE_ID": "95ELECTRONSPERDN"}) == r                    # as label_handler gives it
 assert dc.readout({**INFO, "INSTRUMENT_DATA_RATE": "-999.0"}) is None
 t = np.array([dc.line_time(r, i + 1) for i in range(L)])
 assert abs(t[0] - (46.020 + 0.68 * 255 / 256)) < 1e-9 and 46.7 < t[-1] < 50 and (np.diff(t) > 0).all()  # exposure, erase, readout

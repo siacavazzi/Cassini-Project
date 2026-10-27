@@ -76,7 +76,8 @@ fails on those: unknown readout cycle or delayed readout flag, an odd data rate 
 def readout(info):
     camera = _value(info, "INSTRUMENT_ID")
     lines = {"FULL": 1024, "SUM2": 512, "SUM4": 256}.get(_value(info, "INSTRUMENT_MODE_ID", "FULL").upper())
-    gain = _value(info, "GAIN_MODE_ID").split()[0] if _value(info, "GAIN_MODE_ID") else ""
+    # "95 ELECTRONS PER DN" (the label handler drops the spaces: "95ELECTRONSPERDN"), as calibration.calibrate reads it
+    gain = _value(info, "GAIN_MODE_ID").upper().split("ELECTRONS")[0].strip()
     if camera not in GAIN2 or lines is None or not gain.isdigit() or int(gain) not in GAIN_RATIOS[camera]:
         return None
     comp = {"NOTCOMP": "NotCompressed", "LOSSLESS": "Lossless", "LOSSY": "Lossy"}.get(
