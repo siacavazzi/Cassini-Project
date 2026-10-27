@@ -215,6 +215,19 @@ for old, new in [
     study = study.replace(old, new)
 study += part("script") + "\n"
 
+# the Movie Editor (movieedit.html): its style joins the head's, its window goes into #app, and its script runs after
+# Cassini Studio's (it draws with the studio's renderer and edits the look there) and the export's and pre-processing's,
+# whose stretch it edits
+me = open(os.path.join(os.path.dirname(os.path.abspath(sys.argv[2])), "movieedit.html")).read()
+part = lambda tag: me[me.index(f"<{tag}"):me.index(f"</{tag}>") + len(tag) + 3]
+for old, new in [
+    ("</style>\n</head>", part("style")[len("<style>"):] + "\n</head>"),
+    ('  <div id="loading">', "  " + part("section") + "\n\n" + '  <div id="loading">'),
+]:
+    assert study.count(old) == 1, old
+    study = study.replace(old, new)
+study += part("script") + "\n"
+
 # the body view (bodymode.html): its style joins the head's, its window goes into #app, and its script runs after the
 # chrome script (it reads the camera feeds and the window manager) and before the dock's, which opens it
 bm = open(os.path.join(os.path.dirname(os.path.abspath(sys.argv[2])), "bodymode.html")).read()
