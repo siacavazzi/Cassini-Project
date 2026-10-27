@@ -443,15 +443,16 @@ body.s-steady .info dd[data-f="colour"] { white-space: normal; display: -webkit-
    zoom and "back to now" on the right, so the timeline under them gets the whole width */
 .lcdhead { display: grid; grid-template-columns: auto auto minmax(0, 1fr) auto; align-items: center; gap: 10px; }
 .lcdhead .clockbox { min-width: 0; display: grid; gap: 1px; }
-/* one camera on: a quiet line under the clock says which, and why (camOff, below) */
-.lcd .sub.camoff { justify-self: center; max-width: 100%; box-sizing: border-box; font-size: 10.5px; color: #f2c27a; padding: 1px 4px 1px 8px; margin-top: 2px;
-  border: 1px solid rgba(242,176,76,.45); border-radius: 9px; background: rgba(242,176,76,.08); display: flex; align-items: center; gap: 6px; }
-.lcd .sub.camoff[hidden] { display: none; }
-.lcd .sub.camoff::before { content: ""; flex: none; width: 6px; height: 6px; border-radius: 50%; background: #f2b04c; box-shadow: 0 0 4px rgba(242,176,76,.6); }
-.lcd .sub.camoff span { min-width: 0; overflow: hidden; text-overflow: ellipsis; }
-.lcd .sub.camoff button { all: unset; flex: none; cursor: pointer; color: #1a1408; background: #f2b04c; border-radius: 7px; padding: 0 7px; font-weight: 600; font-size: 10px; line-height: 15px; }
-.lcd .sub.camoff button:hover { background: #f7c46f; }
-.lcd .sub.camoff button:focus-visible { outline: 1px solid var(--q-accent, #8ab6ff); outline-offset: 1px; }
+/* one camera off: a small pill on the timeline, at the top of the lane the camera that is on now fills (camOff, below) */
+.camchip { position: absolute; z-index: 2; display: flex; align-items: center; gap: 7px; height: 18px; box-sizing: border-box; padding: 0 2px 0 7px;
+  border: 1px solid rgba(242,176,76,.5); border-radius: 9px; background: rgba(18,19,23,.9); box-shadow: 0 1px 6px rgba(0,0,0,.45);
+  font: 600 9.5px/1 var(--ui); letter-spacing: .04em; color: #f2c27a; white-space: nowrap; pointer-events: auto; }
+.camchip[hidden] { display: none; }
+.camchip i { width: 5px; height: 5px; border-radius: 50%; border: 1.5px solid #f2b04c; flex: none; }
+.camchip button { all: unset; cursor: pointer; height: 14px; padding: 0 8px; border-radius: 7px; background: rgba(242,176,76,.16); color: #ffd79a;
+  font: 600 9.5px/14px var(--ui); letter-spacing: .02em; transition: background .15s, color .15s; }
+.camchip button:hover { background: #f2b04c; color: #17120a; }
+.camchip button:focus-visible { outline: 1px solid #f2b04c; outline-offset: 1px; }
 .lcdhead .transport { flex: none; justify-self: start; gap: 1px; padding: 2px; border: 1px solid var(--q-line); border-radius: 16px; }
 .lcdhead .transport .round { border: 0; background: none; }
 .lcdhead .transport .round:hover { background: rgba(255,255,255,.1); }
@@ -739,7 +740,6 @@ body.idle .win.full .titlebar { opacity: 0; }
           <div class="clockbox">
             <div class="clock" id="clock">—</div>
             <div class="sub"><span id="rel">—</span> · <span id="mday">—</span></div>
-            <div class="sub camoff" id="camoff" hidden role="status"><span></span><button type="button">Turn on</button></div>
           </div>
           <div class="tltools">
             <button class="tlstep" id="tlout" aria-label="Zoom the timeline out" title="Zoom out">−</button>
@@ -750,6 +750,7 @@ body.idle .win.full .titlebar { opacity: 0; }
           </div>
         </div>
         <div class="sub probe" id="probe" hidden></div>
+        <div class="camchip" id="camoff" hidden role="status"><i aria-hidden="true"></i><span></span><button type="button">Turn on</button></div>
         <canvas id="tl" aria-label="Timeline: drag to scrub, drag the top edge or scroll to move through time, pinch or use the slider to zoom"></canvas>
         <div class="legend"><span class="keys" id="lkeys"></span><span id="l24">—</span></div>
       </div>
@@ -1276,7 +1277,7 @@ body.idle .win.full .titlebar { opacity: 0; }
     s.ready = Math.max(...s.use.map(k => catalog.et[k]));   // the picture exists once its last channel is taken
   }
   function findSets() {
-    const n = catalog.et.length, setOf = new Int32Array(n).fill(-1), sets = [], run = {};
+    const n = catalog.et.length, setOf = new Int32Array(n).fill(-1), sets = [], run = {}, all = catalog.allOrder || order;
     const close = cam => {
       const r = run[cam]; run[cam] = null;
       if (!r || r.frames.length < 2) return;
@@ -1285,7 +1286,7 @@ body.idle .win.full .titlebar { opacity: 0; }
       sets.push(r);
     };
     for (let i = 0; i < n; i++) {
-      const k = order[i], cam = catalog.cam[k], f = colourFilter(k), r = run[cam];
+      const k = all[i], cam = catalog.cam[k], f = colourFilter(k), r = run[cam];
       if (!f) { close(cam); continue; }
       if (r && catalog.target[k] === r.target && catalog.obs[k] === r.obs && catalog.et[k] - r.last <= SET_GAP && !r.filters.includes(f)) {
         r.frames.push(k); r.filters.push(f); r.last = catalog.et[k];
@@ -1306,7 +1307,7 @@ body.idle .win.full .titlebar { opacity: 0; }
     // each camera's frames in time order, so each window finds its own latest frame
     catalog.byCam = {};
     for (const cam of ["N", "W"]) {
-      const ks = Array.from(order).filter(k => catalog.cam[k] === cam);
+      const ks = Array.from(catalog.allOrder || order).filter(k => catalog.cam[k] === cam);
       catalog.byCam[cam] = { ks, et: Float64Array.from(ks, k => catalog.et[k]) };
     }
     catalog.cls = cls; catalog.rgb = rgb; catalog.setOf = setOf; catalog.sets = sets;
@@ -1352,21 +1353,38 @@ body.idle .win.full .titlebar { opacity: 0; }
   }
   const camOn = (cam, lc) => !lc || lc.includes(cam);
   function reopenCams() { for (const c of ["N", "W"]) { const w = $(CAMWIN[c]); if (w && (w.hidden || w.dataset.min || w.classList.contains("shaded"))) restore(w); } }
+  $("camoff").addEventListener("pointerdown", e => e.stopPropagation());
   $("camoff").querySelector("button").addEventListener("click", e => { e.stopPropagation(); reopenCams(); });
   let camOffText = "";
   function camOff() {
-    const lc = liveCams(), off = lc === "N" ? "W" : "N";
-    const t = lc ? `${off}AC off · ${CAMWORD[lc]} only` : "";
-    if (t === camOffText) return;
-    camOffText = t; $("camoff").hidden = !t; $("camoff").firstChild.textContent = t;
-    $("camoff").title = lc ? `The ${CAMWORD[off]} window is closed, so its pictures are not loaded and the timeline shows ${CAMWORD[lc]} pictures only` : "";
+    const lc = liveCams(), off = lc === "N" ? "W" : "N", el = $("camoff"), tl = $("tl");
+    const t = lc ? `${off}AC OFF` : "";
+    if (t !== camOffText) {
+      camOffText = t; el.hidden = !t; el.querySelector("span").textContent = t;
+      el.title = lc ? `The ${CAMWORD[off]} camera is off because its window is closed: its pictures are not loaded, shown or heard, and the timeline shows ${CAMWORD[lc]} pictures only` : "";
+    }
+    // on the timeline (it shares the canvas's positioned parent), at the top of the lane, clear of the lane names
+    if (lc) { el.style.left = tl.offsetLeft + 30 + "px"; el.style.top = tl.offsetTop + Math.max(0, tl.clientHeight * LANES.nTop - 1) + "px"; }
+  }
+  // The viewer sees only the cameras that are on: with one off, its frames leave the viewer's time order (order,
+  // catalog.sorted), so the camera's field-of-view cone, the HUD's CAM line, the imaging target, "Camera now", the
+  // timeline, movie mode and everything else that reads the frames treat that camera as taking no pictures at all.
+  // The whole order stays in catalog.allOrder (the camera windows' own lists, catalog.byCam, are made from it).
+  function applyCams() {
+    if (typeof catalog === "undefined" || !catalog || !order) return;
+    const lc = liveCams() || "";
+    if (catalog.allOrder && catalog.camsKey === lc) return;
+    if (!catalog.allOrder) { catalog.allOrder = order; catalog.allSorted = catalog.sorted; }
+    order = lc ? catalog.allOrder.filter(k => catalog.cam[k] === lc) : catalog.allOrder;
+    catalog.sorted = lc ? Float64Array.from(order, k => catalog.et[k]) : catalog.allSorted;
+    catalog.camsKey = lc;
   }
   // a Moment (the list, or the next / previous moment buttons, which click its row) brings both camera windows back
   $("mlist").addEventListener("click", e => { if (e.target.closest("button") && S.get("cameras.momentsReopen") !== false) reopenCams(); }, true);
   // the body in view in the body view (bodymode.html), whose pictures alone the timeline and camera windows show
   const viewBody = () => (window.cassiniBodyMode && cassiniBodyMode.name) || null;
   window.studyBars = (g, w, h) => {
-    prep();
+    prep(); applyCams();
     const vb = viewBody(), lc = liveCams();
     if (vb) return bodyBars(g, w, h, vb, lc);
     const bw = 2, L = laneBox(h, lc), rT = h * LANES.rTop, rH = Math.max(4, h * LANES.rH);
@@ -1411,8 +1429,7 @@ body.idle .win.full .titlebar { opacity: 0; }
     for (let s = 0; s < sets.length; s++) if (sets[s]) { const x = s * bw, q = rH / 3; g.fillStyle = CLS[1][1]; g.fillRect(x, rT, bw, q); g.fillStyle = CLS[2][1]; g.fillRect(x, rT + q, bw, q); g.fillStyle = CLS[3][1]; g.fillRect(x, rT + 2 * q, bw, q); }
     laneNames(g, w, h, lc);
   }
-  // (lc: the camera that is on alone: its lane is named, and an amber tag at its top says the other camera is off)
-  const OFF_INK = "#f2b04c";
+  // (lc: the camera that is on alone, whose lane is the only one named; the pill on the timeline says the other is off)
   function laneNames(g, w, h, lc) {
     const L = laneBox(h, lc), rT = h * LANES.rTop, rH = Math.max(4, h * LANES.rH);
     g.fillStyle = "rgba(255,255,255,0.12)";
@@ -1424,20 +1441,13 @@ body.idle .win.full .titlebar { opacity: 0; }
       const y = (lane[0] + lane[1]) / 2;
       g.fillStyle = "rgba(16,17,20,0.85)"; g.fillRect(0, y - 6, 26, 12); g.fillStyle = "rgba(232,236,242,0.5)"; g.fillText(t, 2, y);
     }
-    if (lc) {
-      const t = `${lc === "N" ? "WAC" : "NAC"} OFF`, y = L[lc][0] + 7;
-      g.font = "600 9px 'Lucida Grande', Verdana, sans-serif";
-      const tw = g.measureText(t).width + 18;
-      g.fillStyle = "rgba(16,17,20,0.9)"; g.fillRect(0, y - 7, tw, 14);
-      g.strokeStyle = "rgba(242,176,76,0.7)"; g.lineWidth = 1; g.strokeRect(0.5, y - 6.5, tw - 1, 13);
-      g.fillStyle = OFF_INK; g.beginPath(); g.arc(7, y, 2.5, 0, 2 * Math.PI); g.fill(); g.fillText(t, 13, y + 0.5);
-    }
     g.textBaseline = "top";
   }
   const FNAME = ["Clear", "Red", "Green", "Blue", "IR / methane", "UV"];
   let lastI = "";
   const baseHud = window.studyHud;
   window.studyHud = ms => {
+    applyCams();
     baseHud(ms);
     if (!catalog.cls) return;
     camOff();
@@ -2748,6 +2758,7 @@ body.idle .win.full .titlebar { opacity: 0; }
   let playRate = 0, rateOf = 0;
   window.cassiniPlayRate = () => playRate || state.speed;
   const advance = (et, dt, speed) => {
+    applyCams();   // (a new catalog, months loaded around the clock, gets the camera rule before the viewer draws it)
     if (tooFast()) { slowedTo = 0; paced = 1; return et + dt * speed; }
     slowedTo = 0;
     paced = catalog && catalog.byCam ? pace() : 1;
