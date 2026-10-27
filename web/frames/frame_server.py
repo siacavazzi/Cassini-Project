@@ -107,6 +107,9 @@ Routes:
                                whole=1 (Whole mosaics: the page asks only a lap's last frame): every tile of the
                                picture is made before it answers, never a partial picture or a 503, so the
                                window shows the whole new lap
+  /frames/movie/<ID>.steady.json?center=1&color=0
+                               what the page needs to stabilize the frame's movie pass itself, for any smoothing
+                               (obs_mosaic.steady_table, Settings > Movie > Stabilize in: This computer)
   /frames/movie/<ID>.json      the pass the frame is in: its frames [id, time, filter], cadence, movie/mosaic call
   /frames/thumb.webp?mosaic=<ID>&color=R,G,B&frame=<ID>&size=256
                                a highlight's thumbnail (any of the three, as data/highlights.json's "thumb" gives them):
@@ -1565,6 +1568,16 @@ def make_handler(site, cache, flags=None):
                 name = f"Cassini_{m.group(1)}_mosaic_full_resolution_{report['width']}x{report['height']}"
                 return self.send_file(path, {"jpg": "image/jpeg", "png": "image/png", "webp": "image/webp"}[kind],
                                       query, name + "." + kind, {"X-Native": json.dumps(report)}, forever=not report["behind"])
+            m = re.match(r"^/frames/movie/([^/]+)\.steady\.json$", url.path)
+            if m:
+                # what the page needs to stabilize a movie pass itself (obs_mosaic.steady_table, steady-local.js)
+                if not FRAME_ID.match(m.group(1)):
+                    return self.send_error(400, "Not a frame id")
+                if reel._index is None:
+                    return self.send_error(404, "No index of the frames")
+                q = parse_qs(url.query)
+                info = obs_mosaic.steady_table(m.group(1), cache, q.get("center", ["1"])[0] != "0", q.get("color", ["0"])[0] != "0")
+                return self.send_json(info) if info else self.send_error(404, "Not in a pass")
             m = re.match(r"^/frames/movie/([^/]+)\.(webp|json)$", url.path)
             if m:
                 # a frame played as a movie of its pass (obs_mosaic.movie_webp): centred by SPICE, on the pass's one

@@ -2109,6 +2109,85 @@ def evened_gains(logs, smooth):
             for own, want in zip(L, target)]
 
 
+def steady_table(frame_id, cache, centre=True, colour=False):
+    """What a browser needs to stabilize the pass frame_id is in by itself (web/cassini-os/src/steady-local.js): the
+    pass's stabilization chain (steady_chain), each tile's SPICE place and box, and the movie's view (movie_rect)
+    with its scale at OUT, so steady_places and the integer place _place draws a tile at are worked out in the page
+    for any smoothing, and a movie frame drawn at SPICE's places (steady 0, the pre-built frames) is moved by the
+    difference. "fixed": the view is the pass's whole (it does not follow the tile), the case where a single
+    tile's frame moved by that difference is the frame drawn at its steady place; a pass whose view follows its
+    frames, a feature track and a pass with Settings > Processing's alignment off answer {"local": false} (the
+    server draws them). None when the frame is in no pass; {"working": true} while the chain is not worked out
+    (the page asks the server for the stabilized frames meanwhile)."""
+    found = unit_of(frame_id)
+    if not found or found[1] < 0:
+        return None
+    return _steady_table(*found, cache, centre, colour)
+
+
+def _steady_table(u, n, cache, centre=True, colour=False):
+    """steady_table for frame n of pass u. "exposure": the pass's brightness chain as the movie is drawn (colour,
+    centre; the steady-0 chain exposure_gains evens for every smoothing) and what exposure_gains needs besides, so the page evens it for
+    any smoothing; "local" false where the gain cannot be put on the drawn frame (a tile with a gain of its own, or
+    the detail filter, which runs after the gain); null while the chain is worked out (in the background)."""
+    if u.get("track") or not calibration.step("align"):
+        return {"local": False}
+    rec = _record(u, cache)
+    if not _steady_ready(u, cache, rec):
+        warm_movie(u, n, 6, cache, steady=True)
+        return {"working": True}
+    p = plan(u, cache)
+    chain = steady_chain(u, cache, p)
+    radius = RADIUS.get(u["key"][0], 0) / (u["z"] * IFOV[u["key"][2]])
+    fp = movie_footprint(u, cache, p)
+    x0, y0, x1, y1 = fp
+    fixed = bool((centre and centre_half(fp, radius)) or max(x1 - x0, y1 - y0) <= MOVIE_FIT * FRAME)
+    if not fixed:
+        return {"local": False}
+    ns = sorted(chain)
+    tiles = {n: tile(u, n, cache, p["display_scale"]) for n in ns}
+    rect = movie_rect(fp, tiles[ns[0]], radius, centre)
+    how = (bool(colour), bool(centre), 0)
+    exposure = None
+    if _exposure_ready(u, cache, rec, how):
+        logs = exposure_chain(u, cache, p, *how)
+        exposure = {"local": not p["display_scale"].get("filled") and all(tiles[m].get("gain", 1.0) == 1.0 for m in ns),
+                    "logs": {str(m): v for m, v in logs.items()}, "gamma": p["display_scale"].get("gamma", 2.2),
+                    "flash": EXPOSURE_FLASH, "gain": EXPOSURE_GAIN, "greyRun": EXPOSURE_GREY_RUN, "most": EXPOSURE_MOST}
+    else:
+        warm_movie(u, n, 6, cache, exposure=how)
+    return {"local": True, "fixed": True, "ids": [fr[1] for fr in u["frames"]], "n": ns, "exposure": exposure,
+            "sets": _colour_recipes(u, p, cache, ns, tiles) if colour and p.get("colour") else None,
+            "filters": [fr[2] for fr in u["frames"]], "trail_most": TRAIL,
+            "chain": [chain[n] for n in ns], "spice": [tiles[n]["offset"] for n in ns],
+            "box": [tiles[n]["box"] for n in ns], "view": list(rect), "out": OUT, "k": OUT / max(rect[2], rect[3]),
+            "colour": bool(p.get("colour")), "most": STEADY_MOST, "detail": bool(p["display_scale"].get("filled"))}
+
+
+def _colour_recipes(u, p, cache, ns, tiles):
+    """How movie_frame draws each frame of a colour pass, for the page: {"filters", "mix" (colour_picture's 3x3
+    natural mix, or None to draw the filters straight), "gamma", "shoulder", "by": {frame n: the tiles of its colour
+    set in the filters' order, or absent when the frame is drawn alone}}; None for a false colour pass (its mix
+    blurs and balances the picture: drawn by the server). The set is the one movie_frame picks at SPICE's places."""
+    want = p["colour"]
+    scale = p["display_scale"]
+    bal = scale.get("balance")
+    mix = calibration.color_mix(u["key"][2], want, u["key"][0], [bal[f] for f in want] if bal else None)
+    if isinstance(mix, calibration.FalseMix):
+        return None
+    by, placed = {}, set(ns)
+    for n in ns:
+        for run in reversed(colour_sets(u["frames"][:n + 1])):
+            got = {f: j for f, j in run if f in want}
+            if len(got) < len(want):
+                continue
+            if all(got[f] in placed for f in want):
+                by[str(n)] = [got[f] for f in want]
+            break
+    return {"filters": list(want), "mix": None if mix is None else np.asarray(mix, float).tolist(),
+            "gamma": scale.get("gamma", 2.2), "shoulder": calibration.SHOULDER, "by": by}
+
+
 def movie_rect(fp, t, radius=0.0, centre=False):
     """The view of a pass played as a movie (x0, y0, w, h in reference pixels from the body's centre): its whole
     footprint fp (movie_footprint) when that is at most MOVIE_FIT frames across, so the body holds still while the

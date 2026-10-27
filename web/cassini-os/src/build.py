@@ -121,6 +121,13 @@ for old, new in [
     assert study.count(old) == 1, old
     study = study.replace(old, new)
 
+# image stabilization on this computer (steady-local.html): its script runs before the chrome script, whose camera
+# feed asks window.cassiniSteadyLocal for a movie frame's smoothing
+steadylocal = open(os.path.join(os.path.dirname(os.path.abspath(sys.argv[2])), "steady-local.html")).read()
+assert study.count("<script>\n// ---------- Cassini OS chrome") == 1
+study = study.replace("<script>\n// ---------- Cassini OS chrome", steadylocal[steadylocal.index("<script>"):steadylocal.index("</script>") + 9]
+                      + "\n<script>\n// ---------- Cassini OS chrome")
+
 # per-body camera windows (bodywin.html, a setting): its style joins the head's and its script runs after the chrome
 # script, whose camera feed and window manager it reuses
 bodywin = open(os.path.join(os.path.dirname(os.path.abspath(sys.argv[2])), "bodywin.html")).read()
