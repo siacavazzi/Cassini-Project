@@ -167,7 +167,11 @@ stretch as a filmstrip (the export's own plan, `/export/plan.json`), with the fr
 movie (its mosaic, color picture, movie pass or processed frame) or as the raw frame; double-click it to fill the
 window. Click a frame and press Delete to take it out (shift-click for a run, Delete again puts it back); Cameras,
 Targets and Filters chips leave out whole groups (click to leave one out, double-click to keep only it, so "only the
-Jupiter frames" is one double-click). Left-out frames stay in the strip, dimmed. Taking a frame out never changes how
+Jupiter frames" is one double-click). **Pictures** picks what each frame shows: As in the movie (the camera windows'
+mosaics, color pictures and movie passes), Full color only (each three-filter set once, as its color picture), Every
+frame processed (every filter on its own, stacked and calibrated, never put together) or Every frame raw (as Cassini
+took it). The list holds every frame of the stretch however long it is; a film holds up to 20,000 pictures
+(`CASSINI_EXPORT_MAX`). Left-out frames stay in the strip, dimmed. Taking a frame out never changes how
 the others are made (a mosaic keeps all its tiles, a composite all its channels); its picture is only not shown.
 **Edit the look in Studio…** opens the frame in front in Cassini Studio (Adjust and Filters); **Use for the movie**
 makes that the look of every frame: the preview, **Play** (the kept frames at the movie frame rate), **Download

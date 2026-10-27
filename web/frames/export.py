@@ -55,7 +55,7 @@ FPS = 30                     # frames a second in the file
 HOLD_MIN, HOLD_MAX = 1 / FPS, 0.5
 TYPICAL = 1 / 8              # adaptive: how long the stretch's median gap lasts on screen
 LAST = 1.5                   # seconds the last picture stays
-MAX_PICTURES = int(os.environ.get("CASSINI_EXPORT_MAX", 3000))
+MAX_PICTURES = int(os.environ.get("CASSINI_EXPORT_MAX", 20000))   # a film; the Movie Editor's list (list=1) has no cap
 SIZES = (512, 768, 1024)
 CAPTION = 48                 # caption strip height at 1024 px panes (scaled with the pane)
 SKIP_NOTE = 3 * 3600         # gaps longer than this are named in the caption
@@ -78,6 +78,7 @@ def utc(t, seconds=True):
     return time.strftime("%Y-%m-%d %H:%M:%S" if seconds else "%Y-%m-%d-%H%M", time.gmtime(t))
 
 
+PICTURES = ("movie", "color", "processed", "raw")
 MOVIE = {"center": True, "trail": 0, "laps": 1, "fade": 0, "persist": 0}   # the movie style by default (a film named as before)
 
 
@@ -104,7 +105,13 @@ def options(q):
     kept = {"drop": words("drop"), "targets": sorted(w.upper() for w in words("targets")), "filters": words("filters")}
     # and its look on every picture: the color part of a Cassini Studio recipe
     look_edit = studio_look.parse(get("edit", ""))
+    # which picture each frame shows (the Movie Editor's Pictures): as the camera windows show it (movie), only the
+    # full color pictures (color: the frames completing a three-filter set, each its composite), every frame on its
+    # own made by the pipeline (processed: stacked and calibrated, never composited) or every frame as Cassini took it
+    # (raw: the archive frame, nothing stacked)
+    pictures = get("pictures", "movie") if get("pictures", "movie") in PICTURES else "movie"
     return {"off": off, "cut": {k: v for k, v in kept.items() if v}, "edit": studio_look.encode(look_edit),
+            "pictures": pictures, "list": get("list", "0") == "1",
             "from": t0, "until": t1, "cams": cams, "fps": fps, "size": size,
             "sound": get("sound", "1") != "0", "caption": get("caption", "1") != "0",
             "look": look if look in calibration.LOOKS else calibration.LOOKS[0],
@@ -126,6 +133,8 @@ def job_id(opt):
         key["cut"] = opt["cut"]
     if opt.get("edit"):
         key["edit"] = opt["edit"]
+    if opt.get("pictures", "movie") != "movie":
+        key["pictures"] = opt["pictures"]
     return hashlib.sha1(json.dumps([VERSION, key], sort_keys=True).encode()).hexdigest()[:16]
 
 
@@ -170,7 +179,7 @@ def plan(opt):
         tries = []
         # a pass the server calls a movie plays as steady movie frames, a mosaic movie as its rolling mosaic, as
         # the camera windows play them on Auto (obs_mosaic.movie_webp, rolling_webp)
-        kind = pass_kind(ids[q])
+        kind = pass_kind(ids[q]) if opt.get("pictures", "movie") == "movie" else None
         if kind == "movie":
             tries.append(("movie", ids[q]))
         elif kind == "mosaic_movie":
@@ -180,6 +189,15 @@ def plan(opt):
         if comp:
             tries.append(("color", [ids[u] for u in st["use"]]))
         tries += [("processed", ids[q]), ("frame", ids[q])]
+        how = opt.get("pictures", "movie")
+        if how == "color":
+            if not comp or len(st["use"]) < 3:
+                continue
+            tries = [("color", [ids[u] for u in st["use"]]), ("processed", ids[q]), ("frame", ids[q])]
+        elif how == "processed":
+            tries = [("processed", ids[q]), ("frame", ids[q])]
+        elif how == "raw":
+            tries = [("frame", ids[q])]
         e = {"id": ids[q], "cam": cam, "t": float(t[q]), "target": targets[q] if isinstance(targets[q], str) else "",
              "filters": f"{f1s[q]}/{f2s[q]}", "obs": obs[q] if isinstance(obs[q], str) else "", "try": tries,
              "nm": reel.wavelength(insts[q], f1s[q] + f2s[q])}
@@ -188,7 +206,7 @@ def plan(opt):
             e["set_nm"] = [reel.wavelength(insts[u], f1s[u] + f2s[u]) for u in st["use"]]
         out.append(e)
     out = cut(out, opt)
-    if len(out) > MAX_PICTURES:
+    if len(out) > MAX_PICTURES and not opt.get("list"):
         raise OverflowError(f"{len(out):,} pictures: an export holds at most {MAX_PICTURES:,}; pick a shorter stretch")
     timing(out, opt["fps"])
     return {"pictures": out, "count": len(out), "seconds": round(sum(e["frames"] for e in out) / FPS, 2),

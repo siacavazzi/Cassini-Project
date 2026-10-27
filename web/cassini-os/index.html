@@ -1218,7 +1218,7 @@ body.phone .stufoot .galbtn { padding: 6px 10px; }
 .mechips .galbtn { padding: 2px 7px; font-size: 10.5px; }
 .mechips .galbtn i { font-style: normal; color: var(--q-dim); font-size: 9.5px; }
 .mechips .galbtn[aria-pressed="true"] { background: rgba(138,182,255,.22); border-color: rgba(138,182,255,.7); color: #fff; }
-.mechips .galbtn[aria-pressed="false"] { opacity: .6; text-decoration: line-through; text-decoration-color: rgba(255,255,255,.35); }
+#mecard .mechips:not(#mepics) .galbtn[aria-pressed="false"] { opacity: .6; text-decoration: line-through; text-decoration-color: rgba(255,255,255,.35); }
 #mecard .menote { margin-top: 6px; font-size: 10.5px; line-height: 1.45; color: var(--q-dim); }
 #mecard .mecheck { display: flex; gap: 6px; align-items: center; margin-top: 10px; font-size: 11px; color: var(--q-text); cursor: pointer; }
 #mecard .mefoot { flex: none; display: flex; gap: 6px; flex-wrap: wrap; align-items: center; padding: 8px 10px; border-top: 1px solid var(--q-line); font-size: 11px; color: var(--q-text); }
@@ -1888,6 +1888,13 @@ body.phone #launch .lx-clock { font-size: 9.5px; bottom: 9vh; }
       <div id="mestrip" role="listbox" aria-label="Frames of the movie" aria-multiselectable="true"></div>
     </div>
     <div class="meside" hidden>
+      <h4><span>Pictures</span></h4>
+      <div class="mechips" id="mepics" role="group" aria-label="Pictures in the movie">
+        <button class="galbtn" data-v="movie" title="As the camera windows show them: mosaics, color pictures, movie passes, processed frames">As in the movie</button>
+        <button class="galbtn" data-v="color" title="Only the full color pictures: each three-filter set once, as its color composite">Full color only</button>
+        <button class="galbtn" data-v="processed" title="Every frame in every filter on its own, made by the pipeline (stacked, calibrated), never put together">Every frame, processed</button>
+        <button class="galbtn" data-v="raw" title="Every frame in every filter as Cassini took it: nothing stacked, calibrated or put together">Every frame, raw</button>
+      </div>
       <h4><span>Cameras</span></h4>
       <div class="mechips" id="mecams"></div>
       <h4><span>Targets</span><span class="sp"></span><button id="metgall">All</button></h4>
@@ -7974,7 +7981,7 @@ void main() {
 
   // ME: the stretch (a, b), its plan's frames, and the edit: drop (ids taken out by hand), keep (null = every target /
   // filter pair, else the ones kept), cams (the export's Cameras), edit (the studio look's recipe)
-  const ME = { a: null, b: null, frames: [], loading: false, error: "", drop: new Set(), targets: null, filters: null, edit: "",
+  const ME = { a: null, b: null, frames: [], pictures: "movie", loading: false, error: "", drop: new Set(), targets: null, filters: null, edit: "",
     sel: -1, anchor: -1, picked: new Set(), showOut: true, src: "movie", undo: [], playing: false, pending: null };
   const camsOf = () => (/^(N|W|NW)$/.test(EX.state.cams || "") ? EX.state.cams : "NW");
   const why = e => !camsOf().includes(e.cam) ? "camera" : ME.drop.has(e.id) ? "removed" : ME.targets && !ME.targets.has(e.target || "UNKNOWN") ? "target"
@@ -7987,6 +7994,7 @@ void main() {
   function recipe() {
     if (ME.a == null) return "";
     const q = new URLSearchParams({ from: isoOf(ME.a), until: isoOf(ME.b), cams: camsOf() });
+    if (ME.pictures !== "movie") q.set("pictures", ME.pictures);
     if (ME.drop.size) q.set("drop", listOf(ME.drop));
     if (ME.targets) q.set("targets", listOf(ME.targets));
     if (ME.filters) q.set("filters", listOf(ME.filters));
@@ -8004,7 +8012,7 @@ void main() {
   function remember() {
     try {
       const all = JSON.parse(localStorage.getItem(STORE) || "{}"), key = `${isoOf(ME.a)}|${isoOf(ME.b)}`, r = recipe();
-      const empty = !ME.drop.size && !ME.targets && !ME.filters && !ME.edit;
+      const empty = !ME.drop.size && !ME.targets && !ME.filters && !ME.edit && ME.pictures === "movie";
       if (empty) delete all[key]; else all[key] = { r, at: Date.now() };
       const keys = Object.keys(all).sort((x, y) => all[y].at - all[x].at); keys.slice(30).forEach(k => delete all[k]);
       localStorage.setItem(STORE, JSON.stringify(all));
@@ -8019,9 +8027,10 @@ void main() {
     ME.drop = new Set((q.get("drop") || "").split(",").filter(Boolean));
     const set = k => q.get(k) ? new Set(q.get(k).split(",").filter(Boolean)) : null;
     ME.targets = set("targets"); ME.filters = set("filters"); ME.edit = q.get("edit") || "";
+    ME.pictures = /^(movie|color|processed|raw)$/.test(q.get("pictures") || "") ? q.get("pictures") : "movie";
     if (/^(N|W|NW)$/.test(q.get("cams") || "")) EX.state.cams = q.get("cams");
   }
-  const snapshot = () => ({ drop: new Set(ME.drop), targets: ME.targets && new Set(ME.targets), filters: ME.filters && new Set(ME.filters), edit: ME.edit, cams: camsOf() });
+  const snapshot = () => ({ pictures: ME.pictures, drop: new Set(ME.drop), targets: ME.targets && new Set(ME.targets), filters: ME.filters && new Set(ME.filters), edit: ME.edit, cams: camsOf() });
   function change(fn) {
     ME.undo.push(snapshot()); if (ME.undo.length > 200) ME.undo.shift();
     fn(); changed();
@@ -8034,8 +8043,9 @@ void main() {
   }
   function undo() {
     const s = ME.undo.pop(); if (!s) return;
-    ME.drop = s.drop; ME.targets = s.targets; ME.filters = s.filters; ME.edit = s.edit; EX.state.cams = s.cams;
-    changed(); show();
+    const reload = s.pictures !== ME.pictures;
+    ME.drop = s.drop; ME.targets = s.targets; ME.filters = s.filters; ME.edit = s.edit; EX.state.cams = s.cams; ME.pictures = s.pictures;
+    changed(); if (reload) load(); else show();
   }
 
   // ---------- the plan: every frame of the stretch, from the frame server ----------
@@ -8043,8 +8053,9 @@ void main() {
   async function load() {
     const n = ++ask;
     ME.loading = true; ME.error = ""; ME.frames = []; render();
+    // every frame of the stretch, however many (list=1: the plan's cap is the film's, not the list's)
     const q = new URLSearchParams({ from: isoOf(ME.a), until: isoOf(ME.b), cams: "NW", fps: opt("export.adaptive", true) ? "auto" : String(opt("export.fps", 12)),
-      size: "512", sound: "0", caption: "0" });
+      size: "512", sound: "0", caption: "0", pictures: ME.pictures, list: "1" });
     try {
       const r = await fetch(`${FRAMES}/export/plan.json?${q}${window.cassiniLook ? window.cassiniLook() : ""}${window.cassiniMovieStyle ? window.cassiniMovieStyle() : ""}`), p = await r.json();
       if (n !== ask) return;
@@ -8058,7 +8069,9 @@ void main() {
     if (ME.targets && !has(ME.targets, "target")) ME.targets = null;
     if (ME.filters && !has(ME.filters, "filters")) ME.filters = null;
     strip(); render();
-    const first = ME.frames.findIndex(kept); select(first >= 0 ? first : 0);
+    const keep = ME.frames[ME.sel] && ME.frames[ME.sel].id, at = keep ? ME.frames.findIndex(e => e.id === keep) : -1;
+    ME.sel = -1; ME.picked = new Set();
+    const first = at >= 0 ? at : ME.frames.findIndex(kept); select(first >= 0 ? first : 0);
   }
 
   // ---------- the strip ----------
@@ -8138,6 +8151,7 @@ void main() {
     $("mesum").textContent = ME.frames.length ? `${n.toLocaleString()} of ${ME.frames.length.toLocaleString()} frames in the movie` : "";
     $("meundo").disabled = !ME.undo.length;
     $("meexport").disabled = $("mecopy").disabled = ME.a == null;
+    $("mepics").querySelectorAll("button").forEach(b => b.setAttribute("aria-pressed", String(b.dataset.v === ME.pictures)));
     $("mesrc").querySelectorAll("button").forEach(b => b.setAttribute("aria-pressed", String(b.dataset.v === ME.src)));
     if (ME.frames.length) { side(); stripState(); }
     pos();
@@ -8205,7 +8219,7 @@ void main() {
   function select(i, how = {}) {
     if (!ME.frames.length) { ME.sel = -1; show(); return; }
     i = Math.max(0, Math.min(ME.frames.length - 1, i));
-    if (how.range && ME.anchor >= 0) { ME.picked = new Set(); const [a, b] = [Math.min(ME.anchor, i), Math.max(ME.anchor, i)]; for (let k = a; k <= b; k++) if (visible().includes(k)) ME.picked.add(k); }
+    if (how.range && ME.anchor >= 0) { ME.picked = new Set(); const vis = new Set(visible()), [a, b] = [Math.min(ME.anchor, i), Math.max(ME.anchor, i)]; for (let k = a; k <= b; k++) if (vis.has(k)) ME.picked.add(k); }
     else if (how.toggle) { if (ME.picked.has(i)) ME.picked.delete(i); else ME.picked.add(i); if (ME.sel >= 0 && !ME.picked.size) ME.picked.add(ME.sel); ME.anchor = i; }
     else { ME.picked = new Set(); ME.anchor = i; }
     ME.sel = i; stripState(); show();
@@ -8324,6 +8338,8 @@ void main() {
   $("meplay").addEventListener("click", play);
   $("mesrc").addEventListener("click", e => { const b = e.target.closest("button"); if (!b) return; ME.src = b.dataset.v; render(); show(); });
   $("metoggle").addEventListener("click", toggleRemoved);
+  // another kind of picture: the frame server plans the stretch again (what is removed by hand stays removed)
+  $("mepics").addEventListener("click", e => { const b = e.target.closest("button"); if (!b || b.dataset.v === ME.pictures) return; stopPlay(); change(() => { ME.pictures = b.dataset.v; }); load(); });
   $("medl").addEventListener("click", download);
   $("metgall").addEventListener("click", () => change(() => { ME.targets = null; }));
   $("meflall").addEventListener("click", () => change(() => { ME.filters = null; }));

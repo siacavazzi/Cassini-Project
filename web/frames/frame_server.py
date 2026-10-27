@@ -108,7 +108,10 @@ Routes:
                                the picture the film shows for it (the Movie Editor shows and downloads it).
                                &drop=ID,ID&targets=JUPITER,IO&filters=CL1/GRN,...: the Movie Editor's cut (frames taken
                                out, only these targets and filter pairs kept); &edit=ex:0.3,sa:20,...: its look on every
-                               picture (a Cassini Studio recipe's color part, web/frames/studio_look.py)
+                               picture (a Cassini Studio recipe's color part, web/frames/studio_look.py);
+                               &pictures=movie|color|processed|raw: what each frame shows (as the windows show it, full
+                               color sets only, each frame processed alone, each frame raw); &list=1: every frame however
+                               many (the editor's list; a film holds at most CASSINI_EXPORT_MAX, default 20,000)
   POST /export?...             (same options, plus sound=1 caption=1) starts making that film, or finds it made
                                or on its way; one film is made at a time. Answers the job's status, as
   /export/<JOB>.json           does: state queued/making/sound/done/failed, pictures done of total, seconds left
