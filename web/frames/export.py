@@ -742,9 +742,11 @@ def film_path(cache, jid):
 
 def public_plan(p):
     """The plan as the page gets it: what shows when, and the best picture each may be (mosaic, color or
-    processed), without the make-orders."""
+    processed); tries: every picture to make, best first, as [kind, address], which the page follows when it makes
+    the film itself (export.html: a film made on this computer)."""
     keep = ("id", "cam", "t", "target", "filters", "obs", "nm", "set", "set_nm", "at", "hold", "frames", "skipped")
-    pics = [dict({k: e[k] for k in keep if k in e}, first=e["try"][0][0], src=source(*e["try"][0])) for e in p["pictures"]]
+    pics = [dict({k: e[k] for k in keep if k in e}, first=e["try"][0][0], src=source(*e["try"][0]),
+                 tries=[[k, source(k, a)] for k, a in e["try"]]) for e in p["pictures"]]
     return dict(p, pictures=pics)
 
 

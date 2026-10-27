@@ -6825,6 +6825,8 @@ onmessage = async e => {
         hint: "Picture size Full: a mosaic or mosaic movie keeps every pixel its frames took (up to 4096 px a side) instead of fitting 1024. Extra work on the frame server, made only when asked for: pre-process the stretch first." });
     D({ key: "export.sound", label: "Sound", type: "toggle", value: true, hint: "Exported films carry the picture sounds, set as in Settings > Sound." });
     D({ key: "export.caption", label: "Captions", type: "toggle", value: true, hint: "A strip under each camera with the time, target, filters and kind of picture." });
+    D({ key: "export.local", label: "Make films on this computer", type: "toggle", value: true,
+        hint: "The film is put together and encoded by this browser from the pictures the frame server already has (and the movie steps worked out here), so making it costs the server nothing but the pictures. Off, or at sizes above 1024, Mosaics at full resolution or in a browser that cannot encode video, the frame server makes it." });
   }
   const opt = (k, d) => (S && S.get(k) !== undefined ? S.get(k) : d);
   const setOpt = (k, v) => { if (S) S.set(k, v); };
@@ -6981,6 +6983,7 @@ onmessage = async e => {
     if (!X.plan || X.planKey !== params()) return;
     $("exgo").disabled = true; setState("Starting…", 0); $("exdone").hidden = true;
     const plan = X.plan;
+    if (await canMakeHere(plan)) return makeHere(plan, X.planKey);
     try {
       const r = await fetch(`${FRAMES}/export?${params()}`, { method: "POST" }), job = await r.json();
       if (!r.ok) return setState(job.error || "The server refused the export.", 0);
@@ -7028,6 +7031,15 @@ onmessage = async e => {
     const snd = window.cassiniSound;
     if (!snd || !snd.render || X.sent.has(id)) return;
     X.sent.add(id);
+    const events = soundEvents(plan);
+    try {
+      const span = plan.pictures.length > 1 ? plan.pictures[plan.pictures.length - 1].t - plan.pictures[0].t : 600;
+      const buf = await snd.render(events.filter(ev => ev.k !== undefined), plan.seconds, 48000, { speed: Math.max(1, span / Math.max(1, plan.seconds)) });
+      await fetch(`${FRAMES}/export/${id}/sound.wav`, { method: "PUT", body: wav(buf), headers: { "Content-Type": "audio/wav" } });
+    } catch (err) { console.warn("export sound", err); }
+  }
+  // the film's pictures as the synth's events: when each shows, its camera, wavelength and place in a mosaic run
+  function soundEvents(plan) {
     const byId = new Map(); for (let k = 0; k < catalog.id.length; k++) byId.set(catalog.id[k], k);
     const both = new Set(plan.pictures.map(e => e.cam)).size > 1, run = {}, events = [];
     for (const e of plan.pictures) {
@@ -7037,11 +7049,7 @@ onmessage = async e => {
       events.push(ev);
     }
     markEnds(events);
-    try {
-      const span = plan.pictures.length > 1 ? plan.pictures[plan.pictures.length - 1].t - plan.pictures[0].t : 600;
-      const buf = await snd.render(events.filter(ev => ev.k !== undefined), plan.seconds, 48000, { speed: Math.max(1, span / Math.max(1, plan.seconds)) });
-      await fetch(`${FRAMES}/export/${id}/sound.wav`, { method: "PUT", body: wav(buf), headers: { "Content-Type": "audio/wav" } });
-    } catch (err) { console.warn("export sound", err); }
+    return events;
   }
   // each run of mosaic tiles on one camera: every tile learns how many the run has
   function markEnds(events) {
@@ -7063,6 +7071,247 @@ onmessage = async e => {
     const data = Array.from({ length: ch }, (_, c) => buf.getChannelData(c));
     for (let i = 0, o = 44; i < n; i++) for (let c = 0; c < ch; c++, o += 2) out.setInt16(o, Math.max(-1, Math.min(1, data[c][i])) * 32767, true);
     return new Blob([out], { type: "audio/wav" });
+  }
+
+  // ---------- the film made on this computer: export.py's render and Film, line for line, encoded by WebCodecs ----------
+  const FPS = 30, CAPTION = 48, KIND = { true: "true color", false: "false color", two: "two-filter color" };
+  const MUXER = "https://cdn.jsdelivr.net/npm/mp4-muxer@5.1.5/build/mp4-muxer.mjs";
+  const WHAT = { movie: "movie", rolling: "mosaic movie", mosaic: "mosaic", color: "colour", processed: "processed", frame: "frame" };
+  const editOf = key => new URLSearchParams(key).get("edit") || "";
+  // the film's own video codec: H.264 where the browser encodes it, else VP9 (both in MP4)
+  async function videoCodec(w, h) {
+    if (!window.VideoEncoder) return null;
+    for (const [codec, mux] of [["avc1.640033", "avc"], ["avc1.4d0033", "avc"], ["vp09.00.41.08", "vp9"]]) {
+      try { if ((await VideoEncoder.isConfigSupported({ codec, width: w, height: h, bitrate: 4e6, framerate: FPS })).supported) return { codec, mux }; } catch (e) {}
+    }
+    return null;
+  }
+  async function audioCodec(rate, ch) {
+    if (!window.AudioEncoder) return null;
+    for (const [codec, mux] of [["mp4a.40.2", "aac"], ["opus", "opus"]]) {
+      try { if ((await AudioEncoder.isConfigSupported({ codec, sampleRate: rate, numberOfChannels: ch, bitrate: 160000 })).supported) return { codec, mux }; } catch (e) {}
+    }
+    return null;
+  }
+  // the pane's side: the film is a pane per camera wide (export.py width)
+  const paneOf = plan => plan.width / (X.cams || "NW").length;
+  // export.py caption_h
+  const capH = plan => (opt("export.caption", true) ? 2 * Math.round(CAPTION * paneOf(plan) / 1024 / 2) : 0);
+  // whether this film is made here: the setting, a size the windows' pictures already come in (not Full, not "up
+  // to"), a plan that lists its tries, a look the studio's renderer can draw, and a browser that encodes video
+  async function canMakeHere(plan) {
+    if (!opt("export.local", true) || plan.full || !plan.pictures.length || !plan.pictures[0].tries) return false;
+    if (paneOf(plan) > 1024 || plan.height !== paneOf(plan) + capH(plan)) return false;
+    if (editOf(X.planKey) && !(window.cassiniStudio && window.cassiniStudio.renderer)) return false;
+    return !!(await videoCodec(plan.width, plan.height));
+  }
+  // a picture's address at the pane's size, with the look and movie style the plan was made with (the makers
+  // export.py's Pictures.make calls)
+  function pictureUrl(kind, src, size) {
+    const sep = src.includes("?") ? "&" : "?", look = window.cassiniLook(), style = window.cassiniMovieStyle ? window.cassiniMovieStyle() : "";
+    if (kind === "movie") return `${FRAMES}${src}${sep}size=${size}&color=1${style}${look}`;
+    if (kind === "rolling") return `${FRAMES}${src}${sep}size=${size}${style}${look}${opt("movies.mosaicFrames", "rolling") === "whole" ? "&whole=1" : ""}`;
+    if (kind === "frame") return `${FRAMES}${src}${sep}size=${size}`;
+    return `${FRAMES}${src}${sep}size=${size}${look}`;
+  }
+  const sleep = ms => new Promise(r => setTimeout(r, ms));
+  // a picture, waited for while the server makes it (503), as the server's own export waits; null when there is none
+  async function fetchPicture(url, stop) {
+    for (let wait = 500; !stop.done; wait = Math.min(4000, wait * 1.5)) {
+      let r;
+      try { r = await fetch(url); } catch (e) { await sleep(wait); continue; }
+      if (r.status === 503 || r.status === 429) { await sleep(wait); continue; }
+      if (!r.ok) return null;
+      try { return await createImageBitmap(await r.blob()); } catch (e) { return null; }
+    }
+    return null;
+  }
+  // a movie frame whose steps this computer works out (steady-local.html): the base frame moved, gained and mixed
+  async function movieHere(id, size, stop) {
+    const SL = window.cassiniSteadyLocal, center = S.get("cameras.autoCenter") !== false;
+    if (!SL || size !== 1024 || !S.get("movies.stabilizeLocal")) return null;
+    if (!SL.want(FRAMES, id, { center, color: true })) await SL.ready(FRAMES, id, center, true);
+    const w = SL.want(FRAMES, id, { center, color: true });
+    if (!w) return null;
+    const base = j => `${FRAMES}/frames/movie/${j}.webp?size=1024&color=0${window.cassiniMovieStyle({ center, steady: 0, exposure: 0, trail: 0 })}${window.cassiniLook()}`;
+    const r = await fetch(base(id)).catch(() => null);
+    if (!r || !r.ok) return null;
+    const im = new Image(), u = URL.createObjectURL(await r.blob());
+    try { im.src = u; await im.decode(); } catch (e) { URL.revokeObjectURL(u); return null; }
+    const out = await SL.apply(FRAMES, id, im, Object.assign({ center, color: true, planeUrl: base }, w)).catch(() => null);
+    URL.revokeObjectURL(u);
+    return out ? createImageBitmap(out) : null;
+  }
+  // Pictures.picture: the first of the entry's tries the server has, and what it is
+  async function pictureOf(e, size, stop) {
+    for (const [kind, src] of e.tries) {
+      const bmp = (kind === "movie" ? await movieHere(e.id, size, stop) : null) || await fetchPicture(pictureUrl(kind, src, size), stop);
+      if (bmp) return { bmp, what: WHAT[kind] };
+    }
+    return { bmp: null, what: "" };
+  }
+  const utcOf = t => new Date(t * 1000).toISOString().slice(0, 19).replace("T", " ");
+  const durOf = s => (s >= 2 * 86400 ? `${(s / 86400).toFixed(0)} d` : s >= 3600 ? `${(s / 3600).toFixed(0)} h` : `${(s / 60).toFixed(0)} min`);
+  // export.py label
+  function label(e, what) {
+    const kind = what === "colour" ? KIND[e.set] || "color" : ["mosaic", "movie", "mosaic movie"].includes(what) ? what : "";
+    const target = (e.target || "Unknown").replace(/_/g, " ").toLowerCase().replace(/(^|[^a-z])([a-z])/g, (m, a, b) => a + b.toUpperCase());   // str.title()
+    return [`${utcOf(e.t)} UTC`, target, `${e.cam === "N" ? "NAC" : "WAC"} ${e.filters}`, kind].filter(Boolean).join(" · ");
+  }
+  async function makeHere(plan, key) {
+    const stop = { done: false }, cams = X.cams || "NW", size = paneOf(plan), ch = capH(plan), W = plan.width, H = plan.height;
+    const job = X.job = { id: "here:" + key, here: true }, t0 = performance.now();
+    setState("Making the film here…", 0);
+    let look = null;
+    if (editOf(key)) {
+      const STU = window.cassiniStudio, lc = document.createElement("canvas"), r = STU.renderer(lc);
+      if (r) look = { p: STU.decode(editOf(key)), r, lc };
+    }
+    const vc = await videoCodec(W, H), { Muxer, ArrayBufferTarget } = await import(MUXER);
+    // the soundtrack first (the live sound's synth, offline, as soundtrack makes it), so the film is written in one go
+    let sound = null;
+    if (opt("export.sound", true) && window.cassiniSound && window.cassiniSound.render) {
+      try { sound = await soundOf(plan); } catch (err) { console.warn("export sound", err); }
+    }
+    const ac = sound ? await audioCodec(sound.sampleRate, sound.numberOfChannels) : null;
+    const target = new ArrayBufferTarget();
+    const muxer = new Muxer({ target, fastStart: "in-memory", firstTimestampBehavior: "offset",
+      video: { codec: vc.mux, width: W, height: H, frameRate: FPS },
+      ...(ac ? { audio: { codec: ac.mux, numberOfChannels: sound.numberOfChannels, sampleRate: sound.sampleRate } } : {}) });
+    let failed = null;
+    // each frame's hold given to the muxer as is (an encoder may not hand a frame's duration on, and the film's last
+    // picture would lose its LAST seconds)
+    const holds = new Map();
+    const venc = new VideoEncoder({ error: err => { failed = err; }, output: (c, m) => {
+      const data = new Uint8Array(c.byteLength); c.copyTo(data);
+      muxer.addVideoChunkRaw(data, c.type, c.timestamp, holds.get(c.timestamp) ?? c.duration ?? 0, m); holds.delete(c.timestamp);
+    } });
+    // every frame of the film is a new picture, so it gets about the bits the server's crf 20 gives one
+    venc.configure({ codec: vc.codec, width: W, height: H, framerate: FPS, bitrate: Math.round(Math.min(20e6, 6e6 * W * H / (1024 * 1072))), latencyMode: "quality",
+      ...(vc.mux === "avc" ? { avc: { format: "avc" } } : {}) });
+    const film = document.createElement("canvas"); film.width = W; film.height = H;
+    const g = film.getContext("2d", { alpha: false }); g.fillStyle = "#000"; g.fillRect(0, 0, W, H);
+    const font = Math.max(10, Math.round(ch * 0.36)), small = Math.max(9, Math.round(ch * 0.3)), mono = `Menlo, "DejaVu Sans Mono", monospace`;
+    const pics = plan.pictures, ahead = 6, todo = [], building = {}, kinds = {};
+    let nxt = 0, at = 0, lastKey = -Infinity;
+    try {
+      for (let n = 0; n < pics.length; n++) {
+        if (X.job !== job) { stop.done = true; venc.close(); return; }
+        if (failed) throw failed;
+        while (nxt < pics.length && nxt < n + ahead) todo.push(pictureOf(pics[nxt++], size, stop));
+        const e = pics[n], { bmp, what } = await todo.shift();
+        kinds[what || "none"] = (kinds[what || "none"] || 0) + 1;
+        // a mosaic stays up while its observation goes on (render's building)
+        let held = false;
+        if (what === "mosaic" || what === "mosaic movie") building[e.cam] = e.obs;
+        else if (building[e.cam] === e.obs && e.obs) held = true;
+        else delete building[e.cam];
+        if (held) kinds["held behind mosaic"] = (kinds["held behind mosaic"] || 0) + 1;
+        else {
+          // Film.put: the pane black, the picture in its middle, the caption under it
+          const x0 = cams.indexOf(e.cam) * size;
+          g.fillStyle = "#000"; g.fillRect(x0, 0, size, size);
+          if (bmp) {
+            const k = size / Math.max(bmp.width, bmp.height), w = Math.max(1, Math.round(bmp.width * k)), h = Math.max(1, Math.round(bmp.height * k));
+            let src = bmp;
+            if (look) {
+              // the movie editor's look on the picture over black (render: studio_look.apply)
+              const c = document.createElement("canvas"); c.width = w; c.height = h;
+              const cg = c.getContext("2d", { alpha: false }); cg.fillStyle = "#000"; cg.fillRect(0, 0, w, h); cg.imageSmoothingQuality = "high"; cg.drawImage(bmp, 0, 0, w, h);
+              look.r.upload(c, w, h); look.r.draw(look.p, w, h); src = look.lc;
+            }
+            g.imageSmoothingQuality = "high";
+            g.drawImage(src, x0 + Math.floor((size - w) / 2), Math.floor((size - h) / 2), w, h);
+            if (bmp.close) bmp.close();
+          }
+          if (ch) {
+            g.fillStyle = "rgb(8,10,14)"; g.fillRect(x0, size, size, ch);
+            g.textBaseline = "middle"; g.textAlign = "left"; g.fillStyle = "rgb(222,228,236)"; g.font = `${font}px ${mono}`;
+            g.fillText(label(e, what), x0 + ch * 0.35, size + ch / 2);
+            if (e.skipped) { g.textAlign = "right"; g.fillStyle = "rgb(138,182,255)"; g.font = `${small}px ${mono}`; g.fillText(`skipped ${durOf(e.skipped)}`, x0 + size - ch * 0.35, size + ch / 2); }
+          }
+        }
+        // the picture is one frame of the film, held for its whole frames (Film.hold), a key frame at least every 2 s
+        const keyFrame = at - lastKey >= 2 * FPS;
+        if (keyFrame) lastKey = at;
+        const ts = Math.round(at * 1e6 / FPS), vf = new VideoFrame(film, { timestamp: ts, duration: Math.round(e.frames * 1e6 / FPS) });
+        holds.set(ts, vf.duration);
+        venc.encode(vf, { keyFrame }); vf.close();
+        at += e.frames;
+        while (venc.encodeQueueSize > 4) await sleep(5);
+        if (n % 5 === 0 || n === pics.length - 1) {
+          const left = (performance.now() - t0) / 1000 / (n + 1) * (pics.length - n - 1);
+          setState(`${(n + 1).toLocaleString()} of ${pics.length.toLocaleString()} pictures · here · ${fmtDur(Math.round(left))} left`, (n + 1) / pics.length * 0.97);
+        }
+      }
+      // an MP4's time-to-sample table gives its last frame the step before it, not the frame's own hold: two
+      // one-frame copies of the last picture end the film where the server's does
+      if (pics.length && pics[pics.length - 1].frames >= 3) {
+        for (const back of [2, 1]) {
+          const ts = Math.round((at - back) * 1e6 / FPS), vf = new VideoFrame(film, { timestamp: ts, duration: Math.round(1e6 / FPS) });
+          holds.set(ts, vf.duration); venc.encode(vf, { keyFrame: false }); vf.close();
+        }
+      }
+      await venc.flush();
+      if (failed) throw failed;
+      venc.close();
+      if (ac) await encodeSound(sound, ac, muxer);
+      muxer.finalize();
+    } catch (err) {
+      stop.done = true;
+      try { venc.close(); } catch (e) {}
+      console.warn("export here", err);
+      return setState(`Failed here: ${err.message || err}`, 0);
+    }
+    const blob = new Blob([target.buffer], { type: "video/mp4" }), took = (performance.now() - t0) / 1000;
+    X.made = { kinds, codec: vc.codec, audio: ac ? ac.codec : null, seconds: took, bytes: blob.size, frames: at };
+    doneHere(blob, plan, took, !!ac);
+  }
+  // the soundtrack's AudioBuffer (soundtrack's, kept here instead of sent)
+  async function soundOf(plan) {
+    const events = soundEvents(plan);
+    const span = plan.pictures.length > 1 ? plan.pictures[plan.pictures.length - 1].t - plan.pictures[0].t : 600;
+    return window.cassiniSound.render(events.filter(ev => ev.k !== undefined), plan.seconds, 48000, { speed: Math.max(1, span / Math.max(1, plan.seconds)) });
+  }
+  async function encodeSound(buf, ac, muxer) {
+    let failed = null;
+    const enc = new AudioEncoder({ output: (c, m) => muxer.addAudioChunk(c, m), error: err => { failed = err; } });
+    enc.configure({ codec: ac.codec, sampleRate: buf.sampleRate, numberOfChannels: buf.numberOfChannels, bitrate: 160000 });
+    const STEP = 4800, ch = buf.numberOfChannels, planes = Array.from({ length: ch }, (_, c) => buf.getChannelData(c));
+    for (let i = 0; i < buf.length; i += STEP) {
+      const n = Math.min(STEP, buf.length - i), data = new Float32Array(n * ch);
+      for (let c = 0; c < ch; c++) data.set(planes[c].subarray(i, i + n), c * n);
+      const ad = new AudioData({ format: "f32-planar", sampleRate: buf.sampleRate, numberOfFrames: n, numberOfChannels: ch, timestamp: Math.round(i * 1e6 / buf.sampleRate), data });
+      enc.encode(ad); ad.close();
+      if (failed) throw failed;
+      while (enc.encodeQueueSize > 8) await sleep(2);
+    }
+    await enc.flush(); enc.close();
+    if (failed) throw failed;
+  }
+  function doneHere(blob, plan, took, audio) {
+    const url = URL.createObjectURL(blob), count = {};
+    for (const e of plan.pictures) if (e.target) count[e.target] = (count[e.target] || 0) + 1;
+    const top = Object.keys(count).sort((a, b) => count[b] - count[a])[0];
+    // export.py name
+    const name = `cassini-${iso(X.a).slice(0, 16).replace("T", "-").replace(":", "")}-${(top || "mission").toLowerCase().replace(/_/g, "-")}.mp4`;
+    setState(`Done here in ${fmtDur(Math.max(1, Math.round(took)))}${audio ? " · with sound" : ""}`, 1);
+    $("exdone").hidden = false;
+    const v = $("exvid"); v.hidden = false; v.src = url; v.dataset.src = url;
+    $("exdl").href = url; $("exdl").setAttribute("download", name);
+    $("exsize2").textContent = `${(blob.size / 1048576).toFixed(1)} MB · ${name}`;
+    const film = X.planKey, from = X.a;
+    $("exgal").hidden = !window.cassiniGallery;
+    $("exgal").textContent = "Add to Gallery";
+    $("exgal").onclick = async () => {
+      const G = window.cassiniGallery; if (!G) return;
+      $("exgal").disabled = true;
+      const moment = [["t", iso(from)], ["view", state.focus !== "CASSINI" ? state.focus.toLowerCase() : state.follow ? "follow" : "cassini"], ["play", "0"]];
+      const item = await G.add({ kind: "movie", blob, film, title: `Film · ${show(from)} UTC`, sub: `${name} · ${(blob.size / 1048576).toFixed(1)} MB`, moment });
+      $("exgal").disabled = false; if (item) $("exgal").textContent = "In Gallery";
+    };
+    // a film made here has no address on the server: the link is the moment it starts at
+    $("excopy").onclick = async () => { const link = window.cassiniLink ? window.cassiniLink.href() : location.href; try { await navigator.clipboard.writeText(link); $("excopy").textContent = "Copied"; setTimeout(() => { $("excopy").textContent = "Copy link"; }, 1500); } catch (e) { prompt("Link", link); } };
   }
 
   // ---------- the window ----------
@@ -10154,7 +10403,7 @@ void main() {
   window.cassiniAbout = { open, addTab, esc, close: () => show(false), credits: CREDITS };
 
   // ---- which version this is: this page's build id (build.py writes it), and what the frame server says it serves ----
-  const BUILD = /*BUILD*/"643d7fa07390";
+  const BUILD = /*BUILD*/"dc467824d2a7";
   const FRAMES = (() => {                       // the frame server, chosen as the camera window chooses it
     const q = new URLSearchParams(location.search).get("frames");
     if (q) return q.replace(/\/$/, "");
