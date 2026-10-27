@@ -552,6 +552,10 @@ body.idle .camwin .well.has-frame { border-color: transparent; box-shadow: 0 6px
 .wmrow { display: flex; align-items: center; justify-content: space-between; gap: 12px; padding: 7px 12px; }
 .wml { display: grid; gap: 2px; } .wml small { font-size: 10px; color: var(--q-dim); }
 .wmpass { border-top: 1px solid var(--q-line); margin-top: 4px; padding-top: 4px; }
+/* under Auto center: a movie pass's image stabilization and exposure evening (Settings > Movie), each with its smoothing */
+.wmsub { padding: 3px 12px 5px 22px; display: grid; grid-template-columns: 1fr auto; align-items: center; gap: 2px 10px; }
+.wmsub input[type=range] { grid-column: 1 / -1; width: 100%; margin: 2px 0 0; accent-color: var(--q-accent); }
+.wmsub input[type=range]:disabled { opacity: .35; }
 .wmh { padding: 4px 12px 3px; font-size: 9.5px; letter-spacing: .08em; text-transform: uppercase; color: var(--q-dim); }
 .wmopt, .wmset { all: unset; box-sizing: border-box; display: grid; grid-template-columns: 14px auto 1fr; align-items: baseline; gap: 6px; width: 100%; padding: 5px 12px; cursor: default; }
 .wmopt span { color: var(--q-dim); font-size: 10px; text-align: right; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
@@ -1468,6 +1472,9 @@ body.idle .win.full .titlebar { opacity: 0; }
   // (onCenter, onMode)
   const PASS_MODES = [["auto", "Auto", "the server's call"], ["mosaic", "Mosaic", "build it tile by tile"],
     ["movie", "Movie", "its frames in place"], ["mosaic_movie", "Mosaic movie", "each place's newest tile, lap after lap"]];
+  // the movie's steadying under Auto center (Settings > Movie, for every window): [setting, its smoothing, label, slider min, max, step]
+  const MOVIE_STEADY = [["movies.stabilize", "movies.stabilizeSmooth", "Stabilize movies", 4, 60, 4],
+    ["movies.exposure", "movies.exposureSmooth", "Even exposure", 2, 30, 2]];
   function winMenu(win, card) {
     const bar = win.querySelector(".titlebar");
     let btn = bar.querySelector(".winopt");
@@ -1480,6 +1487,7 @@ body.idle .win.full .titlebar { opacity: 0; }
     }
     const el = document.createElement("div"); el.className = "winmenu"; el.setAttribute("role", "menu"); el.hidden = true;
     el.innerHTML = `<div class="wmrow"><span class="wml">Auto center<small></small></span><button class="sw" role="menuitemcheckbox" aria-checked="true" aria-label="Auto center"></button></div>
+      ${MOVIE_STEADY.map(([key, smooth, label, min, max, step]) => `<div class="wmsub" data-key="${key}"><span class="wml">${label}<small></small></span><button class="sw" role="menuitemcheckbox" aria-checked="true" aria-label="${label}"></button><input type="range" min="${min}" max="${max}" step="${step}" data-smooth="${smooth}" aria-label="${label} smoothing"></div>`).join("")}
       <div class="wmpass"><div class="wmh">This pass plays as</div>${PASS_MODES.map(([m, l, n]) => `<button class="wmopt" role="menuitemradio" data-mode="${m}" aria-checked="false"><i></i>${l}<span>${n}</span></button>`).join("")}</div>
       <div class="wmfoot"><button class="wmset">All settings…</button></div>`;
     win.appendChild(el);
@@ -1495,6 +1503,12 @@ body.idle .win.full .titlebar { opacity: 0; }
     window.addEventListener("keydown", e => { if (e.key === "Escape" && !el.hidden) { e.stopImmediatePropagation(); open(false); } }, true);
     sw.addEventListener("click", () => api.onCenter(sw.getAttribute("aria-checked") !== "true"));
     pass.addEventListener("click", e => { const b = e.target.closest(".wmopt"); if (b) api.onMode(b.dataset.mode); });
+    for (const row of el.querySelectorAll(".wmsub")) {
+      const key = row.dataset.key, range = row.querySelector("input");
+      row.querySelector(".sw").addEventListener("click", () => { S.set(key, S.get(key) === false); api.sync(api.state); });
+      range.addEventListener("change", () => { S.set(range.dataset.smooth, +range.value); api.sync(api.state); });
+      range.addEventListener("input", () => { row.querySelector("small").textContent = `smoothed over ${range.value} frames`; });
+    }
     el.querySelector(".wmset").addEventListener("click", () => { open(false); if (window.cassiniSettings && window.cassiniSettings.open) window.cassiniSettings.open(); });
     api.sync = st => {
       api.state = st;
@@ -1502,6 +1516,13 @@ body.idle .win.full .titlebar { opacity: 0; }
       sw.setAttribute("aria-checked", String(!!st.centre));
       note.textContent = !st.centre ? (def ? "Off for this window" : "Off (the Settings default)")
         : st.centred ? "Body in the middle, north up" : "Moons and planets that fit go north up in the middle";
+      for (const row of el.querySelectorAll(".wmsub")) {
+        const on = S.get(row.dataset.key) !== false, range = row.querySelector("input"), v = S.get(range.dataset.smooth);
+        row.querySelector(".sw").setAttribute("aria-checked", String(on));
+        if (v != null) range.value = v;
+        range.disabled = !on;
+        row.querySelector("small").textContent = on ? `smoothed over ${range.value} frames` : "Off (every window)";
+      }
       pass.hidden = !st.inPass;
       for (const b of pass.querySelectorAll(".wmopt")) {
         const m = b.dataset.mode, on = m === st.mode;
