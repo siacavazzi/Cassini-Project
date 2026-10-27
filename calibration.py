@@ -18,12 +18,18 @@ the label allows:
   2. undo the camera's 12 -> 8 bit square root table
   3. subtract the bias (BIAS_STRIP_MEAN)
   4. divide by the exposure time, corrected for the shutter offset
-  5. scale by the gain state, the pixel summation and the sensor's decline over time
-  6. divide by the filter's sensitivity to sunlight (filter_calibration.csv) and the
+  4. correct the camera's nonlinearity (CISSCAL's linearize tables, by gain state)
+  5. take the flat field out: dust rings, mottle and the ground calibration's flat
+     (flat_field.py, CISSCAL's own maps; the "flat" step, Settings > Processing)
+  6. divide by the exposure time, corrected for the shutter offset
+  7. scale by the gain state, the pixel summation and the sensor's decline over time
+  8. divide by the filter's sensitivity to sunlight (filter_calibration.csv) and the
      distance from the sun, giving I/F
 
-Not done (needs CISSCAL's per pixel calibration files or the raw images): dark current,
-flat fields and dust rings, 2 Hz noise, nonlinearity and anti-blooming pixel pairs.
+Not done: dark current (CISSCAL's model needs each line's readout timing; a few DN on
+long exposures only), the overclocked pixels' bias fit (the bias strip mean is used, as
+CISSCAL does for lossy frames), 2 Hz noise and anti-blooming pixel pair filters (which
+CISSCAL itself counts as filters rather than calibration).
 
 Frames that can't be unstretched return None and the caller keeps the old behavior.
 """
@@ -38,6 +44,7 @@ import cv2
 import numpy as np
 
 import data_source as ds
+import flat_field as ff
 
 
 # Inverse of the camera's 12 -> 8 bit table, from CISSCAL calib/lut/lut.tab
@@ -69,6 +76,48 @@ GAIN_RATIOS = {
     "ISSNA": [0.135386, 0.309569, 1.0, 2.357285],
     "ISSWA": [0.125446, 0.290637, 1.0, 2.360374],
 }
+
+# Nonlinearity (CISSCAL calib/linearize/<camera><gain state>.lut, cassimg_linearise.pro): at each tabulated DN
+# (bias taken out) the factor the DN is multiplied by; between them linear, for every whole DN 0-4095
+LINEARITY_TABLES = {
+    "ISSNA": [
+        [(0.0, 0.958), (75.0, 0.958), (221.7, 0.972), (294.2, 0.977), (366.6, 0.98), (440.4, 0.979),
+         (855.1, 1.008), (1351.2, 0.957), (1522.0, 0.944), (1766.9, 0.976), (2012.0, 1.071), (2288.3, 1.13),
+         (2819.3, 1.121), (3496.7, 1.068), (4096.0, 1.08)],
+        [(0.0, 0.987), (121.4, 0.987), (200.3, 0.997), (281.1, 0.995), (401.4, 0.995), (801.9, 0.996),
+         (1201.5, 0.997), (1439.5, 0.999), (1755.4, 1.001), (2068.9, 1.004), (2534.9, 1.008), (2997.4, 1.013),
+         (3603.9, 1.02), (4096.0, 1.024)],
+        [(0.0, 0.974), (34.8, 0.974), (102.7, 0.99), (203.3, 1.0), (272.0, 0.997), (407.8, 0.997), (815.1, 0.998),
+         (1221.9, 0.998), (1493.0, 0.999), (1757.1, 1.003), (2165.0, 1.002), (2565.4, 1.004), (3092.6, 1.008),
+         (3741.8, 1.014), (4096.0, 1.017)],
+        [(0.0, 0.986), (71.6, 0.986), (212.7, 0.997), (282.8, 0.999), (354.0, 0.998), (423.4, 1.001),
+         (849.8, 0.998), (1273.8, 0.998), (1415.4, 0.998), (1697.5, 0.999), (2118.3, 1.001), (2537.5, 1.002),
+         (3091.9, 1.005), (3640.4, 1.009), (4096.0, 1.011)]],
+    "ISSWA": [
+        [(0.0, 0.885), (55.3, 0.885), (153.5, 0.957), (250.7, 0.976), (300.5, 0.977), (694.9, 0.986),
+         (1167.7, 1.006), (1472.7, 0.997), (1805.8, 0.976), (2430.6, 1.047), (2844.5, 1.101), (3405.9, 1.092),
+         (4096.0, 1.168)],
+        [(0.0, 0.839), (30.3, 0.839), (182.4, 0.977), (257.6, 0.988), (359.6, 0.991), (765.0, 0.998),
+         (1118.5, 1.001), (1619.2, 1.006), (1917.9, 1.009), (2312.8, 1.012), (2803.6, 1.017), (3384.3, 1.023),
+         (4096.0, 1.029)],
+        [(0.0, 0.915), (21.8, 0.915), (121.2, 0.985), (240.3, 0.994), (320.1, 0.995), (598.8, 0.997),
+         (1034.9, 1.0), (1509.9, 1.002), (1827.8, 1.002), (2219.6, 1.004), (2687.7, 1.007), (3231.7, 1.01),
+         (3902.4, 1.02), (4096.0, 1.02)],
+        [(0.0, 0.895), (47.2, 0.895), (131.4, 0.965), (256.5, 0.989), (340.8, 0.992), (760.7, 1.0),
+         (1012.1, 1.002), (1514.2, 1.005), (1848.6, 1.006), (2183.0, 1.007), (2681.0, 1.009), (3177.4, 1.011),
+         (3830.6, 1.015), (4096.0, 1.016)]],
+}
+LINEARITY = {}
+
+
+def linearity(camera, state):
+    """Factor for every whole DN 0-4095 (index), for the camera and gain state (CISSCAL's Linearize)."""
+    key = (camera, state)
+    if key not in LINEARITY:
+        dn, c = zip(*LINEARITY_TABLES[camera][state])
+        LINEARITY[key] = np.interp(np.arange(4096), dn, c)
+    return LINEARITY[key]
+
 
 # Light collected by a summed pixel compared to a full resolution one
 SUM_FACTORS = {"FULL": 1.0, "SUM2": 0.25, "SUM4": 0.0625}
@@ -322,6 +371,8 @@ def calibrate(png, info, image=None):
         dn = np.interp(dn, np.arange(256), LUT)
         bias = LUT[int(min(max(bias, 0), 255))]
     dn = dn - bias
+    # CISSCAL's linearize: the factor for the whole DN below (a negative DN takes DN 0's)
+    dn = dn * linearity(camera, GAIN_STATES[gain])[np.clip(dn, 0, 4095).astype(np.int64)]
 
     if _value(info, "SHUTTER_STATE_ID", "ENABLED") != "DISABLED":
         first, last = SHUTTER_SLOPE[camera]
@@ -329,6 +380,11 @@ def calibrate(png, info, image=None):
         exposure = np.maximum(exposure, 0.1)
     dn = dn * 1000.0
     per_second = (_lookup(pixels, dn) if codes else dn) / exposure
+    if step("flat"):
+        # dust rings, mottle and the flat field (flat_field.correction), at the image's own size
+        flat = ff.correction_for(info, per_second.shape)
+        if flat is not None:
+            per_second *= flat
 
     gain_ratio = GAIN_RATIOS[camera][GAIN_STATES[gain]]
     slope, start = SENSITIVITY[camera]
@@ -438,11 +494,12 @@ The pipeline's steps a request turns off (Settings > Processing; the picture rou
 each one does: "stack" (repeat exposures of the same filter merged, stacking.load_stacked and load_hdr), "hdr" (an
 exposure bracket merged into one picture in mosaics and movies, stacking.load_hdr; off merges only identical
 exposures, a plain stack), "fill" (pixels lost in downlink filled from round them), "calibrate" (every frame put on
-I/F and one display scale; off shows each frame on the archive's own stretch) and "align" (a color set's channels
-moved onto one another). Every step is on by default; off steps go into the cache names (variant), so the pictures
+I/F and one display scale; off shows each frame on the archive's own stretch), "flat" (calibrate's flat field: dust
+rings, mottle and the detector's flat taken out, flat_field.py) and "align" (a color set's channels moved onto one
+another). Every step is on by default; off steps go into the cache names (variant), so the pictures
 made with every step on keep their names.
 """
-STEPS = ("stack", "hdr", "fill", "calibrate", "align")
+STEPS = ("stack", "hdr", "fill", "calibrate", "flat", "align")
 _off = contextvars.ContextVar("off", default=frozenset())
 
 
