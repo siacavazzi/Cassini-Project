@@ -19,6 +19,10 @@ observation goes on, so the pass builds without its other frames flashing in bet
             spells linger, and longer gaps are cut (the caption says what was skipped)
 The video is always FPS frames a second; holds are rounded to whole frames with the rounding carried forward.
 
+Picture sizes 1536 and 2048 ("up to"): each mosaic and mosaic movie picture is drawn on the windows' own canvas
+(obs_mosaic, CANVAS px) at the biggest of BUCKETS its pass has detail for (its native size, never more: a pass 1,400
+px across stays at 1024), and the panes are the stretch's biggest such bucket; about the same work as 1024.
+
 Picture size Full: the mosaics keep their own pixels. The panes are as big as the stretch's biggest mosaic pass at
 native resolution (mosaic_native: one reference pixel a pixel, the save menu's "Full resolution mosaic"), at most
 FULL_MAX px, and every mosaic and mosaic movie picture is drawn at that size from its tiles by the same layout,
@@ -66,6 +70,7 @@ LAST = 1.5                   # seconds the last picture stays
 MAX_PICTURES = int(os.environ.get("CASSINI_EXPORT_MAX", 3000))
 SIZES = (512, 768, 1024)
 FULL = "full"               # Picture size Full: mosaics at native resolution (module notes)
+BUCKETS = (1024, 1536, 2048)   # mosaic sizes up to the canvas: a pass is drawn at the biggest its native size fills
 FULL_MAX = int(os.environ.get("CASSINI_EXPORT_FULL_MAX", 4096))   # largest pane at Full, px (H.264 plays it)
 FULL_WORKERS = 2            # pictures made at once at Full (each is a native mosaic, hundreds of MB while drawn)
 CAPTION = 48                 # caption strip height at 1024 px panes (scaled with the pane)
@@ -102,7 +107,7 @@ def options(q):
     fps = get("fps", "auto")
     fps = "auto" if fps == "auto" else max(1, min(FPS, int(float(fps))))
     size = get("size", "1024")
-    size = FULL if size == FULL else min(SIZES, key=lambda s: abs(s - int(size)))
+    size = FULL if size == FULL else min(SIZES + BUCKETS[1:], key=lambda s: abs(s - int(size)))
     look, colors = get("look", calibration.LOOKS[0]), get("colors", calibration.COLORS[0])
     # how movie passes look, as the camera windows play them (Settings > Movie; the page's cassiniMovieStyle)
     movie = {"center": get("center", "1") != "0", "trail": max(0, min(12, int(get("trail", "0") or 0))),
@@ -194,7 +199,7 @@ def plan(opt, cache=None, work=False):
     if len(out) > MAX_PICTURES:
         raise OverflowError(f"{len(out):,} pictures: an export holds at most {MAX_PICTURES:,}; pick a shorter stretch")
     timing(out, opt["fps"])
-    full = full_size(opt, out, cache, work) if opt["size"] == FULL else None
+    full = full_size(opt, out, cache, work) if big(opt) else None
     return dict({"pictures": out, "count": len(out), "seconds": round(sum(e["frames"] for e in out) / FPS, 2),
                  "frames": sum(e["frames"] for e in out), "width": width(opt), "height": height(opt)},
                 **({"full": full} if full else {}))
@@ -203,11 +208,22 @@ def plan(opt, cache=None, work=False):
 NATIVE_KINDS = ("mosaic", "rolling")   # the tries drawn at native resolution at Full (Pictures.picture)
 
 
+def big(opt):
+    """Whether the film's mosaics are drawn bigger than 1024: Full, or an "up to" size (1536, 2048)."""
+    return opt["size"] == FULL or opt["size"] > max(SIZES)
+
+
+def bucket(native, cap):
+    """The size a pass native px across is drawn at for an "up to cap" film: the biggest of BUCKETS it fills."""
+    return max([b for b in BUCKETS if b <= max(native, BUCKETS[0]) and b <= cap] or [BUCKETS[0]])
+
+
 def full_size(opt, pics, cache, work=False):
-    """Picture size Full: the panes' side (opt["pane"]: the stretch's biggest mosaic pass at native resolution, at
-    least 1024, at most FULL_MAX, even for the video's colour planes) and what it is made of: {pane, native (the
-    biggest pass's own side, px, before FULL_MAX), passes [{obs, cam, side}], mosaic_pictures (pictures drawn at
-    native resolution), pending (passes whose size is not known yet: not pre-processed, work False)}."""
+    """Picture size Full or up to 1536 / 2048: the panes' side (opt["pane"]) and what it is made of: {pane, native
+    (the biggest pass's own side, px), passes [{obs, cam, side, drawn}], mosaic_pictures (pictures drawn bigger than
+    1024 can hold), pending (passes whose size is not known yet: not pre-processed, work False)}. At Full the pane
+    is the biggest pass at native resolution (at least 1024, at most FULL_MAX, even for the video's colour planes);
+    up to a size, it is the biggest pass's bucket, each pass drawn at its own (bucket)."""
     import mosaic_native
     passes, seen, pending, count = [], set(), 0, 0
     for e in pics:
@@ -226,15 +242,16 @@ def full_size(opt, pics, cache, work=False):
         if side is None:
             pending += 1
             continue
-        passes.append({"obs": e["obs"], "cam": e["cam"], "side": side})
+        drawn = min(FULL_MAX, max(1024, side)) if opt["size"] == FULL else bucket(side, opt["size"])
+        passes.append({"obs": e["obs"], "cam": e["cam"], "side": side, "drawn": drawn})
     native = max([p["side"] for p in passes] or [1024])
-    opt["pane"] = 2 * (min(FULL_MAX, max(1024, native)) // 2)
+    opt["pane"] = 2 * (max([p["drawn"] for p in passes] or [1024]) // 2)
     return {"pane": opt["pane"], "native": native, "passes": passes, "mosaic_pictures": count, "pending": pending}
 
 
 def pane(opt):
-    """A camera's pane in the film, px: the size asked for, or at Full the one full_size worked out."""
-    return opt.get("pane", 1024) if opt["size"] == FULL else opt["size"]
+    """A camera's pane in the film, px: the size asked for, or the one full_size worked out (Full, up to a size)."""
+    return opt.get("pane", 1024) if big(opt) else opt["size"]
 
 
 def timing(pics, fps):
@@ -330,15 +347,29 @@ class Pictures:
                                          fade=(self.movie.get("fade", 0), self.movie.get("persist", 0)), slots=self.slots)
         return (im, "mosaic movie" if kind == "rolling" else "mosaic") if im is not None else None
 
-    def picture(self, e, size, full=False):
+    def canvas(self, kind, arg, cap):
+        """Up to a size: the mosaic or mosaic movie picture of arg on the windows' canvas, at the bucket its pass has
+        detail for (at most cap), WebP bytes, as the full view's route makes it (size "full", out px)."""
+        import mosaic_native
+        import obs_mosaic
+        out = bucket(mosaic_native.native_side(arg, self.cache) or BUCKETS[0], cap)
+        if kind == "mosaic":
+            made = obs_mosaic.mosaic_webp(arg, "full", self.cache, self.slots, ahead=0, out=out)
+            return (made[0], "mosaic") if made and made[0] else None
+        made = obs_mosaic.rolling_webp(arg, "full", self.cache, self.movie["laps"], slots=self.slots, wait=True, out=out,
+                                       fade=(self.movie.get("fade", 0), self.movie.get("persist", 0)))
+        return (made[0], "mosaic movie") if made and made[0] else None
+
+    def picture(self, e, size, full=False, cap=None):
         """The picture for plan entry e as RGB over black, size px on its longest side, and what it is. full: a
-        mosaic is drawn at native resolution (native), any other picture made at 1024 and enlarged."""
+        mosaic is drawn at native resolution (native); cap: up to that size, at its pass's bucket (canvas); any
+        other picture made at 1024 and enlarged."""
         for kind, arg in e["try"]:
             try:
-                if full and kind in NATIVE_KINDS:
-                    made = self.native(kind, arg, size)
+                if (full or cap) and kind in NATIVE_KINDS:
+                    made = self.native(kind, arg, size) if full else self.canvas(kind, arg, cap)
                     if made:
-                        return self._on_black(made[0], size), made[1]
+                        return self._on_black(made[0] if full else Image.open(io.BytesIO(made[0])), size), made[1]
                     continue
                 made = self.make(kind, arg, min(size, max(SIZES)))
             except FileNotFoundError:
@@ -446,7 +477,8 @@ def render(opt, p, pictures, path, progress=lambda done, total: None, workers=3)
             for n, e in enumerate(pics):
                 while nxt < len(pics) and nxt < n + ahead:
                     # in the film's look (the pool's threads don't share the caller's)
-                    todo.append(pool.submit(contextvars.copy_context().run, pictures.picture, pics[nxt], film.size, full))
+                    todo.append(pool.submit(contextvars.copy_context().run, pictures.picture, pics[nxt], film.size, full,
+                                            opt["size"] if big(opt) and not full else None))
                     nxt += 1
                 im, what = todo.popleft().result()
                 kinds[what or "none"] += 1
@@ -498,7 +530,7 @@ def folder(cache, jid, full=None):
 def name(opt, p):
     """The file name a download gets: cassini-2006-09-15-1432-saturn.mp4."""
     main = Counter(e["target"] for e in p["pictures"] if e["target"]).most_common(1)
-    full = f"-full{pane(opt)}" if opt["size"] == FULL else ""
+    full = f"-full{pane(opt)}" if opt["size"] == FULL else f"-{pane(opt)}" if big(opt) else ""
     return f"cassini-{utc(opt['from'], False)}-{(main[0][0] if main else 'mission').lower().replace('_', '-')}{full}.mp4"
 
 

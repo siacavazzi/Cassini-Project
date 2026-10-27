@@ -1416,8 +1416,17 @@ def make_handler(site, cache, flags=None):
                         laps = max(1, min(obs_mosaic.TRAIL, int(query.get("laps", ["1"])[0] or 1)))
                         fade = (int(query.get("fade", ["0"])[0] or 0), int(query.get("persist", [str(obs_mosaic.FADE_PERSIST)])[0] or 0))
                         full = size_of(query, 512) == FULL
+                        # full: the biggest size the pass has detail for (export.bucket of its native size), never
+                        # the canvas enlarged past it
+                        out = obs_mosaic.OUT
+                        if full:
+                            try:
+                                out = export.bucket(mosaic_native.native_side(m.group(1), cache) or obs_mosaic.OUT,
+                                                    min(obs_mosaic.CANVAS, FULL_MAX))
+                            except (FileNotFoundError, ValueError, KeyError):
+                                out = min(obs_mosaic.CANVAS, FULL_MAX)
                         made = obs_mosaic.rolling_webp(m.group(1), FULL if full else size, cache, laps, _mosaic_slots, fmt,
-                                                       out=min(obs_mosaic.CANVAS, FULL_MAX) if full else obs_mosaic.OUT,
+                                                       out=out,
                                                        fade=fade)
                         if made and made[0] is not None:
                             return self.send_picture(made[0], fmt, query, f"Cassini_{m.group(1)}_mosaic_movie", {"X-Movie": json.dumps(made[1])},
