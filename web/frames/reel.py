@@ -27,6 +27,7 @@ ahead of time (the server serves what this makes):
   CASSINI_DATA=... CASSINI_KERNELS=... python web/frames/reel.py ENCELADUS [--workers 2]
 """
 import argparse
+import collections
 import contextlib
 import hashlib
 import io
@@ -54,7 +55,11 @@ import mosaic  # noqa: E402
 import stacking  # noqa: E402
 
 # bumped whenever the way reel pictures are made changes, so older ones are not served again
-VERSION = "reel-v5"
+VERSIONS = {"balanced": "reel-v28", "raw": "reel-v11", "classic": "reel-v5"}   # one per calibration.style()
+
+
+def version():
+    return VERSIONS[calibration.style()] + calibration.variant() + "-q95"   # WebP quality 95 (frame_server.QUALITY)
 SET_GAP = 300          # seconds between frames of one filter set
 REPEAT_GAP = 120       # stacking.find_repeats' window
 VIEW = 1536            # full resolution pixels a picture shows (a north-up frame fits in 1448)
@@ -90,9 +95,13 @@ def load_index():
     cols = ["path", "INSTRUMENT_ID", "TARGET_NAME", "OBSERVATION_ID", "FILTER_NAME", "filter1", "filter2", "seconds_1970"]
     idx = pd.read_csv(os.path.join(REPO, "Image_index.csv"), usecols=cols, low_memory=False)
     idx = idx[idx["path"].notna()].sort_values("seconds_1970", kind="stable").reset_index(drop=True)
-    idx["id"] = idx["path"].str.rsplit("/", n=1).str[-1].str.replace(".png", "", regex=False)
+    # the string steps of .str.rsplit("/", n=1).str[-1].str.replace(".png", "") on each path, without pandas' per
+    # element machinery (a sixth of the time; the paths are all strings)
+    idx["id"] = [p.rsplit("/", 1)[-1].replace(".png", "") for p in idx["path"].tolist()]
     cams, targets, obs = idx["INSTRUMENT_ID"].tolist(), idx["TARGET_NAME"].tolist(), idx["OBSERVATION_ID"].tolist()
     f1s, f2s, t = idx["filter1"].astype(str).tolist(), idx["filter2"].astype(str).tolist(), idx["seconds_1970"].to_numpy()
+    # colour_filter of each filter pair once: a few hundred pairs among the 440,000 frames
+    colour = {pair: colour_filter(*pair) for pair in set(zip(f1s, f2s))}
     set_of = np.full(len(idx), -1)
     sets, run = [], {}
 
@@ -112,7 +121,7 @@ def load_index():
         sets.append({"kind": kind, "use": use, "ready": max(t[q] for q in use)})
 
     for q in range(len(idx)):
-        cam, f = cams[q], colour_filter(f1s[q], f2s[q])
+        cam, f = cams[q], colour[f1s[q], f2s[q]]
         r = run.get(cam)
         if not f:
             close(cam)
@@ -125,7 +134,10 @@ def load_index():
     for cam in list(run):
         close(cam)
     idx["set"] = set_of
-    _index = (idx, sets)
+    # copied whole once, which puts the columns added above into the frame's blocks (consolidates it): otherwise the
+    # first selection from it (a body's reel, an observation's frames) did that, a tenth of a second on a request
+    # thread, and two requests at once could both set about it
+    _index = (idx.copy(), sets)
     return _index
 
 
@@ -175,27 +187,30 @@ def shots(target):
         rows = idx.index[idx["TARGET_NAME"] == target].tolist()
         out, done, last_single, last_shot = [], set(), {}, {}
         members = idx.loc[rows].query("set >= 0").groupby("set")["id"].agg(list).to_dict()
+        # the columns as arrays, read by row number (the index is 0..n-1), with the values idx.loc[q] gave (the
+        # strings themselves, numpy numbers): a row at a time through idx.loc took 25 s of Saturn's 26
+        ids, set_of, cams, obs, filters, f1s, f2s, times = (idx[k].to_numpy() for k in (
+            "id", "set", "INSTRUMENT_ID", "OBSERVATION_ID", "FILTER_NAME", "filter1", "filter2", "seconds_1970"))
         for q in rows:
-            r = idx.loc[q]
-            s = int(r["set"])
-            cam = "N" if r["INSTRUMENT_ID"] == "ISSNA" else "W"
+            s = int(set_of[q])
+            cam = "N" if cams[q] == "ISSNA" else "W"
             if s >= 0:
                 if s in done:
                     continue
                 done.add(s)
                 st = sets[s]
-                use = [idx.loc[u] for u in st["use"]]
-                out.append({"ids": [u["id"] for u in use], "t": float(st["ready"]), "cam": cam, "kind": st["kind"],
-                            "filters": [colour_filter(str(u["filter1"]), str(u["filter2"])) for u in use], "obs": r["OBSERVATION_ID"],
-                            "also": [i for i in members.get(s, []) if i not in {u["id"] for u in use}]})
+                use = st["use"]
+                out.append({"ids": [ids[u] for u in use], "t": float(st["ready"]), "cam": cam, "kind": st["kind"],
+                            "filters": [colour_filter(str(f1s[u]), str(f2s[u])) for u in use], "obs": obs[q],
+                            "also": [i for i in members.get(s, []) if i not in {ids[u] for u in use}]})
                 continue
-            key = (cam, r["OBSERVATION_ID"], r["FILTER_NAME"])
-            if key in last_single and r["seconds_1970"] - last_single[key] <= REPEAT_GAP:
-                last_shot[key].setdefault("also", []).append(r["id"])
+            key = (cam, obs[q], filters[q])
+            if key in last_single and times[q] - last_single[key] <= REPEAT_GAP:
+                last_shot[key].setdefault("also", []).append(ids[q])
                 continue   # a repeat exposure, stacked into the picture before
-            last_single[key] = r["seconds_1970"]
-            last_shot[key] = {"ids": [r["id"]], "t": float(r["seconds_1970"]), "cam": cam, "kind": "bw",
-                             "filters": [f"{r['filter1']}/{r['filter2']}"], "obs": r["OBSERVATION_ID"]}
+            last_single[key] = times[q]
+            last_shot[key] = {"ids": [ids[q]], "t": float(times[q]), "cam": cam, "kind": "bw",
+                             "filters": [f"{f1s[q]}/{f2s[q]}"], "obs": obs[q]}
             out.append(last_shot[key])
         out.sort(key=lambda s: s["t"])
         # the mosaic: the earlier pictures of the same filter this one is a new tile next to, by the rule in
@@ -284,9 +299,11 @@ def mosaic_of(frame_id, wait=True):
 
 
 def _cached(path, make):
-    if os.path.exists(path):
+    try:
         with open(path, "rb") as fh:
             return fh.read()
+    except FileNotFoundError:
+        pass
     data = make()
     part = f"{path}.{os.getpid()}.{threading.get_ident()}.part"
     try:
@@ -302,6 +319,41 @@ def _cached(path, make):
             pass
         print(f"cannot keep {path} in the cache ({e})", flush=True)
     return data
+
+
+# a made picture's report (the .json kept beside it in the cache): written once with the picture, so it is read from
+# the cache once and then kept here, and a picture asked for again costs one file (the picture), not two
+REPORTS_KEEP = 8192
+_reports, _reports_lock, _MISSING = collections.OrderedDict(), threading.Lock(), object()
+
+
+def keep_report(path, report):
+    """Keeps the report just written to path (as it reads back from the file)."""
+    rep = json.loads(json.dumps(report))
+    with _reports_lock:
+        _reports[path] = rep
+        _reports.move_to_end(path)
+        while len(_reports) > REPORTS_KEEP:
+            _reports.popitem(last=False)
+
+
+def report_of(path, default=_MISSING):
+    """The report kept in path, read from the cache once: a copy, for the caller to add to. default: answered when
+    there is no such file (otherwise FileNotFoundError)."""
+    with _reports_lock:
+        rep = _reports.get(path)
+        if rep is not None:
+            _reports.move_to_end(path)
+            return dict(rep)
+    try:
+        with open(path) as fh:
+            rep = json.load(fh)
+    except FileNotFoundError:
+        if default is _MISSING:
+            raise
+        return default
+    keep_report(path, rep)
+    return dict(rep)
 
 
 FOLDERS = {"N": "nac_data", "W": "wac_data"}
@@ -322,7 +374,7 @@ def mosaic_scale(group, cache):
     in I/F (calibration.tiles_scale: each tile's own scale, combined), worked out once and kept in the
     cache. None when no tile calibrates."""
     key = hashlib.sha1(",".join("_".join(ids) for ids in group).encode()).hexdigest()[:16]
-    path = os.path.join(cache, VERSION, "scales", key + ".json")
+    path = os.path.join(cache, version(), "scales", key + ".json")
 
     def make():
         tiles = []
@@ -345,7 +397,7 @@ def picture(ids, cache, group=None):
     middle, north up, and its report (frame_offset: where that middle sits relative to the body's centre).
     group = the ids of every tile of the mosaic it is a tile of (group_of): then its frames' exposures are
     merged in I/F and it is drawn on the mosaic's shared display scale (report["shared_scale"])."""
-    base = os.path.join(cache, VERSION, "pictures", "_".join(ids))
+    base = os.path.join(cache, version(), "pictures", "_".join(ids))
     made = {}
 
     def make():
@@ -387,7 +439,7 @@ def shot_webp(target, n, size, cache, use_mosaic=True, slots=None):
     window = window + [s]
     key = "_".join(s["ids"]) + ("" if len(window) == 1 else "-" + hashlib.sha1(
         ",".join("_".join(w["ids"]) for w in window).encode()).hexdigest()[:12])
-    path = os.path.join(cache, VERSION, str(size), key + ".webp")
+    path = os.path.join(cache, version(), str(size), key + ".webp")
     report = {}
 
     def make():
@@ -409,14 +461,14 @@ def shot_webp(target, n, size, cache, use_mosaic=True, slots=None):
         if size < OUT:
             im = im.resize((size, size), Image.LANCZOS)
         out = io.BytesIO()
-        im.save(out, "WEBP", quality=82, method=4)
+        im.save(out, "WEBP", quality=95, method=4)
         return out.getvalue()
 
     data = _cached(path, make)
     if not report:
         # served from the cache: the picture's report is kept next to it, no need to open the picture
         try:
-            with open(os.path.join(cache, VERSION, "pictures", "_".join(s["ids"]) + ".json")) as fh:
+            with open(os.path.join(cache, version(), "pictures", "_".join(s["ids"]) + ".json")) as fh:
                 report = json.load(fh)
         except (OSError, ValueError):
             report = picture(s["ids"], cache, group_of(target, n))[1]
@@ -455,7 +507,7 @@ def build(target, cache, workers=1, first=0, count=None):
     count of them from number first on, or all."""
     reel = shots(target)[first:None if count is None else first + count]
     todo = [(s["ids"], group_of(target, first + k)) for k, s in enumerate(reel)
-            if not os.path.exists(os.path.join(cache, VERSION, "pictures", "_".join(s["ids"]) + ".png"))]
+            if not os.path.exists(os.path.join(cache, version(), "pictures", "_".join(s["ids"]) + ".png"))]
     print(f"{target}: {len(reel)} pictures, {len(reel) - len(todo)} already made, {len(todo)} to make", flush=True)
     start, done = time.time(), 0
 

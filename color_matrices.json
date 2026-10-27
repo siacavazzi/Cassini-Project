@@ -1,0 +1,71 @@
+{
+ "_about": "3x3 matrices from the camera's (RED, GRN, blue) I/F to linear sRGB, fitted on the filters' transmission curves and the solar spectrum (color plan C6, /mnt/project-files/color-investigation/fit_matrix.py). NAC and WAC: blue BL1; NACbl2: NAC with blue BL2; WACvio: blue VIO. A gray body maps to gray (rows sum to 1).",
+ "NAC": [
+  [
+   0.8214,
+   0.4134,
+   -0.235
+  ],
+  [
+   -0.3459,
+   1.2904,
+   0.0556
+  ],
+  [
+   0.0364,
+   -0.2006,
+   1.1642
+  ]
+ ],
+ "WAC": [
+  [
+   0.8353,
+   0.4135,
+   -0.2489
+  ],
+  [
+   -0.3295,
+   1.2702,
+   0.0594
+  ],
+  [
+   0.084,
+   -0.3162,
+   1.2322
+  ]
+ ],
+ "WACvio": [
+  [
+   0.9025,
+   0.2537,
+   -0.1564
+  ],
+  [
+   -0.3491,
+   1.3164,
+   0.0328
+  ],
+  [
+   -0.1796,
+   0.3172,
+   0.8625
+  ]
+ ],
+ "NACbl2": [
+  [
+   0.8479,
+   0.3466,
+   -0.1946
+  ],
+  [
+   -0.3537,
+   1.3097,
+   0.0441
+  ],
+  [
+   -0.0644,
+   0.0628,
+   1.0017
+  ]
+ ]
+}

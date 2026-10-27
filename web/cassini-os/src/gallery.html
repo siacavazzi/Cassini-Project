@@ -19,7 +19,12 @@
      Sharing: a link carries the recipe, never the picture: ?t=…&view=…&play=0 opens the moment (the share-link
      pattern) and pic=/frames/… (or film=from=…&until=…) shows the picture over it, made by the frame server through
      the pipeline. Share also offers the file itself (the phone's share sheet), copying it, and Reddit, X, Bluesky,
-     Facebook, a text message and email. Link previews on social sites need the server reachable from the internet. -->
+     Facebook, a text message and email. Link previews on social sites need the server reachable from the internet.
+
+     Editing: Edit opens the item in Cassini Studio (studio.html). An edited item keeps the original's recipe (src or
+     film), the edit's own recipe (edit, studio.html's short string) and the original's id (editOf); its file is the
+     edited one. A shared link to an edited picture carries &edit=…, and the page that opens it applies the edit to
+     the picture the frame server makes. -->
 <style>
 #galcard { top: calc(env(safe-area-inset-top, 0px) + 36px); left: 50%; transform: translateX(-50%); width: clamp(360px, 56vw, 860px); max-height: calc(100% - 200px); display: flex; flex-direction: column; }
 #galcard.zoomed { width: clamp(460px, 80vw, 1280px); max-height: calc(100% - 60px); }
@@ -118,6 +123,7 @@ body.phone #galtoast { bottom: calc(env(safe-area-inset-bottom, 0px) + var(--app
     <div class="galtitle" id="galtitle"></div>
     <div class="galinfo" id="galinfo"></div>
     <div class="galacts">
+      <button class="galbtn" id="galedit" title="Edit in Cassini Studio (E)" hidden>Edit</button>
       <button class="galbtn go" id="galgo" title="Set the mission clock and the view to when this was saved">Go to this moment</button>
       <button class="galbtn" id="galsharebtn" aria-haspopup="true">Share…</button>
       <a class="galbtn" id="galdl" download>Download</a>
@@ -213,7 +219,7 @@ body.phone #galtoast { bottom: calc(env(safe-area-inset-bottom, 0px) + var(--app
       const u = new URL(src, location.href);
       if (!/^\/frames\//.test(u.pathname) || u.pathname.includes("..")) return null;
       ["size", "format", "download"].forEach(k => u.searchParams.delete(k));
-      const q = u.searchParams.toString().replace(/%2C/gi, ",");
+      const q = u.searchParams.toString().replace(/%2C/gi, ",").replace(/%3A/gi, ":");
       return u.pathname + (q ? "?" + q : "");
     } catch (e) { return null; }
   }
@@ -221,9 +227,9 @@ body.phone #galtoast { bottom: calc(env(safe-area-inset-bottom, 0px) + var(--app
   const filmUrl = film => `${FRAMES}/export?${film}`;
   const filmKey = film => { try { const f = new URLSearchParams(film); return f.get("from") && f.get("until") ? f.toString().replace(/%3A/gi, ":") : null; } catch (e) { return null; } };
   function link(item) {
-    const u = new URL(location.href), keep = [...u.searchParams].filter(([k]) => !["t", "view", "cam", "speed", "play", "movie", "pic", "film"].includes(k));
+    const u = new URL(location.href), keep = [...u.searchParams].filter(([k]) => !["t", "view", "cam", "speed", "play", "movie", "pic", "film", "edit"].includes(k));
     const enc = s => encodeURIComponent(s).replace(/%3A/gi, ":").replace(/%2C/gi, ",").replace(/%2F/gi, "/");
-    const p = [...item.moment, ...(item.src ? [["pic", item.src]] : []), ...(item.film ? [["film", item.film]] : []), ...keep];
+    const p = [...item.moment, ...(item.src ? [["pic", item.src]] : []), ...(item.film ? [["film", item.film]] : []), ...(item.edit && item.kind === "picture" && item.src ? [["edit", item.edit]] : []), ...keep];
     return u.origin + u.pathname + "?" + p.map(([k, v]) => v === "" ? enc(k) : `${enc(k)}=${enc(v)}`).join("&");
   }
   const cap = s => s ? s.charAt(0) + s.slice(1).toLowerCase() : "";
@@ -284,17 +290,23 @@ body.phone #galtoast { bottom: calc(env(safe-area-inset-bottom, 0px) + var(--app
     } catch (e) { return { thumb: null, w: 0, h: 0 }; }
   }
   // opts: kind ("picture" | "movie"), src (a frame-server address) or film (export options), blob (the file, when the
-  // caller has it), title, sub, moment (share-link parameters; the moment on screen when left out)
+  // caller has it), title, sub, moment (share-link parameters; the moment on screen when left out); from the studio
+  // also edit (the edit's recipe), editOf (the original item's id) and replace (the id of the edited item it replaces)
   async function add(opts) {
     const kind = opts.kind === "movie" ? "movie" : "picture";
-    const rec = kind === "picture" ? recipe(opts.src) : null, film = kind === "movie" && opts.film ? filmKey(opts.film) : null, key = rec || film || opts.src;
+    const rec = kind === "picture" ? recipe(opts.src) : null, film = kind === "movie" && opts.film ? filmKey(opts.film) : null;
+    const key = (opts.edit != null ? "edit:" : "") + (rec || film || opts.src || (opts.blob ? "blob:" + Date.now() : ""));
     if (!key || busy.has(key)) return null;
     busy.add(key);
     try {
       const ids = [...new Set(((rec || "") + " " + (opts.ids || []).join(" ")).match(ID) || [])];
       const d = opts.title ? { title: opts.title, sub: opts.sub || "" } : describe(ids, opts.what);
+      if (opts.edit != null && !opts.title) d.title += " · edited";
       const item = { id: Date.now().toString(36) + Math.random().toString(36).slice(2, 7), kind, added: Date.now(), title: d.title, sub: d.sub,
         moment: opts.moment || moment(), src: rec, film, ids, bytes: 0, type: "", w: 0, h: 0, thumb: null, hasFile: false };
+      if (opts.edit != null) Object.assign(item, { edit: opts.edit, editOf: opts.editOf || null });
+      const old = opts.replace ? (await allItems().catch(() => [])).find(i => i.id === opts.replace) : null;
+      if (old) Object.assign(item, { id: old.id, added: old.added });
       let blob = opts.blob || null;
       if (!blob) {
         const url = rec ? sized(rec, "full") : kind === "movie" ? opts.src : opts.src;
@@ -302,6 +314,7 @@ body.phone #galtoast { bottom: calc(env(safe-area-inset-bottom, 0px) + var(--app
       }
       if (!blob && opts.canvas) blob = await new Promise(res => { try { opts.canvas.toBlob(res, "image/jpeg", 0.92); } catch (e) { res(null); } });
       if (!blob && !rec && !film) { toast("Could not get that picture from the frame server"); return null; }
+      if (!blob && item.edit && rec) blob = await edited(item, null);
       if (blob && kind === "picture") blob = await jpeg(blob);
       if (blob) {
         Object.assign(item, await thumbOf(blob, kind));
@@ -310,7 +323,7 @@ body.phone #galtoast { bottom: calc(env(safe-area-inset-bottom, 0px) + var(--app
       item.hasFile = !!blob && keepFiles();
       await putItem(item, item.hasFile ? blob : null);
       if (navigator.storage && navigator.storage.persist) navigator.storage.persist().catch(() => {});
-      toast(`Added to Gallery · ${item.title}`, "Show", () => { open(); view(item.id); });
+      toast(`${old ? "Saved" : "Added to Gallery"} · ${item.title}`, "Show", () => { open(); view(item.id); });
       if (!card.hidden) refresh();
       return item;
     } catch (e) {
@@ -376,6 +389,13 @@ body.phone #galtoast { bottom: calc(env(safe-area-inset-bottom, 0px) + var(--app
   new MutationObserver(ms => ms.forEach(m => m.addedNodes.forEach(n => { if (n.nodeType === 1) addButtons(n); }))).observe($("dock").parentNode, { childList: true });
   new MutationObserver(() => document.querySelectorAll(".win.full .well").forEach(place)).observe($("dock").parentNode, { subtree: true, attributes: true, attributeFilter: ["class"] });
 
+  // an edited picture without its file: the frame server's picture with the edit applied (studio.html)
+  async function edited(item, blob) {
+    if (!blob && item.src) { try { const r = await fetch(sized(item.src, "full")); if (r.ok) blob = await r.blob(); } catch (e) {} }
+    if (blob && item.edit && window.cassiniStudio) { try { blob = await window.cassiniStudio.apply(blob, item.edit); } catch (e) { console.warn("gallery edit", e); } }
+    return blob;
+  }
+
   // ---------- the window ----------
   const G = { items: [], filter: "all", cur: null, shared: null, urls: [] };
   const fmtBytes = b => b >= 1073741824 ? (b / 1073741824).toFixed(1) + " GB" : b >= 1048576 ? (b / 1048576).toFixed(b < 10485760 ? 1 : 0) + " MB" : Math.max(1, Math.round(b / 1024)) + " KB";
@@ -431,7 +451,7 @@ body.phone #galtoast { bottom: calc(env(safe-area-inset-bottom, 0px) + var(--app
     $("galinfo").textContent = [item.sub, when && `saved at ${when} UTC`, item.hasFile ? `${fmtBytes(item.bytes)} on this device` : shared ? "shared link" : "kept as a recipe"].filter(Boolean).join(" · ");
     const pos = G.items.indexOf(item);
     $("galpos").textContent = shared ? "Shared with you" : `${pos + 1} of ${G.items.length}`;
-    $("galdel").hidden = !!shared; $("galkeep").hidden = !shared;
+    $("galdel").hidden = !!shared; $("galkeep").hidden = !shared; $("galedit").hidden = !window.cassiniStudio;
     $("galnote").textContent = shared ? "Made just now by the frame server from the archive, the same way it was made for whoever shared it." : "";
     let file = item.hasFile && !shared ? await getFile(item.id).catch(() => null) : null;
     if (file && item.kind === "picture") file = await jpeg(file);   // items saved as WebP before pictures were kept as JPEG
@@ -444,6 +464,14 @@ body.phone #galtoast { bottom: calc(env(safe-area-inset-bottom, 0px) + var(--app
     } else {
       const im = new Image(); im.alt = item.title; im.crossOrigin = "anonymous"; st.appendChild(im);
       if (file) { im.src = objUrl(file); dl.href = im.src; dl.setAttribute("download", base + "." + ext(file.type)); }
+      else if (item.src && item.edit && window.cassiniStudio) {
+        const wait = document.createElement("div"); wait.className = "galwait"; wait.textContent = "The frame server is making this picture, then the edit goes on…"; st.appendChild(wait);
+        edited(item, null).then(b => {
+          if (G.cur !== item && G.shared !== item) return;
+          if (!b) { wait.textContent = "The frame server could not make this picture (is it running?)"; return; }
+          wait.remove(); im.src = objUrl(b); dl.href = im.src; dl.setAttribute("download", base + ".jpg");
+        });
+      }
       else if (item.src) {
         const wait = document.createElement("div"); wait.className = "galwait"; wait.textContent = "The frame server is making this picture…"; st.appendChild(wait);
         im.onload = () => wait.remove(); im.onerror = () => { wait.textContent = "The frame server could not make this picture (is it running?)"; };
@@ -506,7 +534,7 @@ body.phone #galtoast { bottom: calc(env(safe-area-inset-bottom, 0px) + var(--app
   function closeShare() { shareMenu.hidden = true; }
   async function fileFor(item) {
     let b = item.hasFile ? await getFile(item.id).catch(() => null) : null;
-    if (!b && item.src) { try { const r = await fetch(sized(item.src, "full")); if (r.ok) b = await r.blob(); } catch (e) {} }
+    if (!b && item.src) b = item.edit ? await edited(item, null) : await edited({ src: item.src }, null);
     if (!b) return null;
     if (item.kind === "picture") b = await jpeg(b);
     const type = b.type || (item.kind === "movie" ? "video/mp4" : "image/jpeg");
@@ -570,15 +598,16 @@ body.phone #galtoast { bottom: calc(env(safe-area-inset-bottom, 0px) + var(--app
     if (!m.some(([k]) => k === "t")) m.unshift(["t", filmOk ? new URLSearchParams(filmOk).get("from") : ""]);
     m.push(["play", "0"]);
     const ids = [...new Set(((pic || filmOk) || "").match(ID) || [])];
-    return { id: "shared", kind: filmOk ? "movie" : "picture", added: Date.now(), moment: m, src: pic, film: filmOk, ids, hasFile: false, bytes: 0,
-      title: filmOk ? `Film · ${new URLSearchParams(filmOk).get("from").replace("T", " ")} UTC` : cap(whatOf(pic)), sub: ids.slice(0, 3).join(" ") };
+    const edit = !filmOk && /^[\w.:,_-]{1,400}$/.test(q.get("edit") || "") ? q.get("edit") : null;
+    return { id: "shared", kind: filmOk ? "movie" : "picture", added: Date.now(), moment: m, src: pic, film: filmOk, ids, hasFile: false, bytes: 0, edit,
+      title: (filmOk ? `Film · ${new URLSearchParams(filmOk).get("from").replace("T", " ")} UTC` : cap(whatOf(pic))) + (edit ? " · edited" : ""), sub: ids.slice(0, 3).join(" ") };
   }
   function dropShared() {
-    try { const u = new URL(location.href); u.searchParams.delete("pic"); u.searchParams.delete("film"); history.replaceState(history.state, "", u.href); } catch (e) {}
+    try { const u = new URL(location.href); u.searchParams.delete("pic"); u.searchParams.delete("film"); u.searchParams.delete("edit"); history.replaceState(history.state, "", u.href); } catch (e) {}
   }
   function showShared() {
     const it = sharedFromUrl(); if (!it) return;
-    const named = () => { if (it.ids.length && !it.film) { const d = describe(it.ids, whatOf(it.src)); it.title = d.title; it.sub = d.sub; if (G.shared === it) { $("galtitle").textContent = it.title; $("galinfo").textContent = `${it.sub} · shared link`; } } };
+    const named = () => { if (it.ids.length && !it.film) { const d = describe(it.ids, whatOf(it.src)); it.title = d.title + (it.edit ? " · edited" : ""); it.sub = d.sub; if (G.shared === it) { $("galtitle").textContent = it.title; $("galinfo").textContent = `${it.sub} · shared link`; } } };
     card.hidden = false; delete card.dataset.min; if (WM) { WM.front(card); WM.syncMenu(); }
     view(null, it);
     goTo(it, true);   // the moment it was saved at, paused, the view as it was
@@ -640,7 +669,7 @@ body.phone #galtoast { bottom: calc(env(safe-area-inset-bottom, 0px) + var(--app
       for (const i of items) {
         const m = Object.assign({}, i); delete m.thumb;
         let f = i.hasFile ? await getFile(i.id).catch(() => null) : null;
-        if (!f && i.kind === "picture" && i.src) { try { const r = await fetch(sized(i.src, "full")); if (r.ok) f = await r.blob(); } catch (e) {} }
+        if (!f && i.kind === "picture" && i.src) f = await edited(i, null);
         if (f && i.kind === "picture") { f = await jpeg(f); m.type = f.type; }
         if (f) { m.file = `${meta ? "files/" : ""}${nice(i)}.${ext(f.type || m.type)}`; entries.push([m.file, f]); } else missing++;
         if (meta && i.thumb) { m.thumbFile = `thumbs/${i.id}.${ext(i.thumb.type)}`; entries.push([m.thumbFile, i.thumb]); }
@@ -683,12 +712,30 @@ body.phone #galtoast { bottom: calc(env(safe-area-inset-bottom, 0px) + var(--app
   // ---------- wiring ----------
   $("galfilter").addEventListener("click", e => { const b = e.target.closest("button"); if (!b) return; G.filter = b.dataset.v; $("galfilter").querySelectorAll("button").forEach(x => x.setAttribute("aria-pressed", String(x === b))); refresh(); });
   $("galback").addEventListener("click", back);
+  // Edit: the studio opens the original with the edit's sliders where they were (an edited item), or the item itself
+  $("galedit").addEventListener("click", async () => {
+    const it = G.cur || G.shared, S2 = window.cassiniStudio; if (!it || !S2) return;
+    const orig = it.editOf ? G.items.find(i => i.id === it.editOf) : null;
+    let blob = null, from = it, edit = null;
+    if (it.edit != null) {
+      // the original's file, else the original made again by the frame server; only then the edit can start over
+      if (orig && orig.hasFile) blob = await getFile(orig.id).catch(() => null);
+      if (!blob && it.kind === "picture" && it.src) { try { const r = await fetch(sized(it.src, "full")); if (r.ok) blob = await r.blob(); } catch (e) {} }
+      if (blob) { from = orig || Object.assign({}, it, { title: it.title.replace(/ · edited$/, ""), id: it.editOf, edit: undefined }); edit = it.edit; }
+    }
+    if (!blob && it.hasFile && !G.shared) blob = await getFile(it.id).catch(() => null);
+    if (!blob) { const el = $("galstage").querySelector("img, video"); if (el && el.src) blob = await fetch(el.src).then(r => r.ok ? r.blob() : null, () => null); }
+    if (!blob) { toast("The picture is not ready yet"); return; }
+    if (it.kind === "picture") blob = await jpeg(blob);
+    S2.open({ kind: it.kind, blob, item: from, edit, from: it.edit != null ? it.editOf : null, target: it.edit != null && !G.shared && edit != null ? it : null });
+  });
   $("galgo").addEventListener("click", () => { const it = G.cur || G.shared; if (it) goTo(it); });
   $("galsharebtn").addEventListener("click", e => { e.stopPropagation(); const it = G.cur || G.shared; if (!it) return; if (!shareMenu.hidden) closeShare(); else share(it, e.currentTarget); });
   $("galkeep").addEventListener("click", async () => {
     const it = G.shared; if (!it) return;
-    const saved = await add({ kind: it.kind, src: it.src ? sized(it.src, "full") : null, film: it.film, title: it.title, sub: it.sub, moment: it.moment,
-      blob: it.kind === "movie" && $("galstage").querySelector("video") && $("galstage").querySelector("video").src ? await fetch($("galstage").querySelector("video").src).then(r => r.ok ? r.blob() : null, () => null) : null });
+    const shown = $("galstage").querySelector(it.kind === "movie" ? "video" : "img");
+    const saved = await add({ kind: it.kind, src: it.src ? sized(it.src, "full") : null, film: it.film, title: it.title, sub: it.sub, moment: it.moment, ...(it.edit ? { edit: it.edit } : {}),
+      blob: (it.kind === "movie" || it.edit) && shown && shown.src ? await fetch(shown.src).then(r => r.ok ? r.blob() : null, () => null) : null });
     if (saved) { dropShared(); G.shared = null; await refresh(); view(saved.id); }
   });
   // removing: gone at once, with a moment to take it back
@@ -723,7 +770,8 @@ body.phone #galtoast { bottom: calc(env(safe-area-inset-bottom, 0px) + var(--app
   const go = $("gomenu");
   if (go) { const li = document.createElement("li"); li.innerHTML = '<button id="gogallery">Gallery…</button>'; go.appendChild(li); li.querySelector("button").addEventListener("click", open); }
 
-  window.cassiniGallery = { open, close, add, addWindow, view, link, get state() { return G; }, _zip: zip, _unzip: unzip };
+  window.cassiniGallery = { open, close, add, addWindow, view, link, share, fromWindow, moment, fullUrl: src => { const r = recipe(src); return r ? sized(r, "full") : src; },
+    get state() { return G; }, _zip: zip, _unzip: unzip };
   // a shared link opens once the viewer has loaded the moment
   const ready = () => typeof state !== "undefined" && $("loading") && $("loading").hidden;
   if (sharedFromUrl()) {

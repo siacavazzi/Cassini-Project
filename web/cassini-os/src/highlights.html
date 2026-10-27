@@ -74,7 +74,7 @@ body.phone #hllist { grid-template-columns: 1fr; }
     if (t.mosaic) q.push(`mosaic=${t.mosaic}`);
     if (t.color) q.push(`color=${t.color.join(",")}`);
     if (t.frame) q.push(`frame=${t.frame}`);
-    return q.length ? `${FRAMES}/frames/thumb.webp?${q.join("&")}&size=256` : null;
+    return q.length ? `${FRAMES}/frames/thumb.webp?${q.join("&")}&size=256${window.cassiniLook()}` : null;
   }
   async function probeThumb() {   // the Huygens descent: the probe's own pictures (the coarsest DISR mosaic)
     for (let k = 0; k < 40 && !(typeof probe !== "undefined" && probe && probe.map); k++) await new Promise(r => setTimeout(r, 500));

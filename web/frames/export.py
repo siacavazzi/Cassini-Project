@@ -27,6 +27,7 @@ picture list, and handed to the job as a WAV, which ffmpeg adds as AAC.
 import argparse
 import calendar
 import hashlib
+import contextvars
 import io
 import json
 import os
@@ -45,9 +46,10 @@ from PIL import Image, ImageDraw, ImageFont
 HERE = os.path.dirname(os.path.abspath(__file__))
 sys.path.insert(0, HERE)
 import reel  # noqa: E402  (puts the repo on the path)
+import calibration  # noqa: E402
 
 # bumped whenever the way films are made changes, so older ones are not served again
-VERSION = "export-v2"
+VERSION = "export-v20"
 FPS = 30                     # frames a second in the file
 HOLD_MIN, HOLD_MAX = 1 / FPS, 0.5
 TYPICAL = 1 / 8              # adaptive: how long the stretch's median gap lasts on screen
@@ -75,6 +77,9 @@ def utc(t, seconds=True):
     return time.strftime("%Y-%m-%d %H:%M:%S" if seconds else "%Y-%m-%d-%H%M", time.gmtime(t))
 
 
+MOVIE = {"center": True, "trail": 0, "laps": 1, "fade": 0, "persist": 0}   # the movie style by default (a film named as before)
+
+
 def options(q):
     """The export's options from a query (dict of lists, as parse_qs gives), checked, with defaults."""
     get = lambda k, d: (q.get(k) or [d])[0]
@@ -85,17 +90,48 @@ def options(q):
     fps = get("fps", "auto")
     fps = "auto" if fps == "auto" else max(1, min(FPS, int(float(fps))))
     size = min(SIZES, key=lambda s: abs(s - int(get("size", "1024"))))
-    return {"from": t0, "until": t1, "cams": cams, "fps": fps, "size": size,
-            "sound": get("sound", "1") != "0", "caption": get("caption", "1") != "0"}
+    look, colors = get("look", calibration.LOOKS[0]), get("colors", calibration.COLORS[0])
+    # how movie passes look, as the camera windows play them (Settings > Movie; the page's cassiniMovieStyle)
+    movie = {"center": get("center", "1") != "0", "trail": max(0, min(12, int(get("trail", "0") or 0))),
+             "laps": max(1, min(12, int(get("laps", "1") or 1)))}
+    # a mosaic movie's fade (Rolling), only when on, so a film made without it keeps its name
+    fade = max(0, min(120, int(get("fade", "0") or 0)))
+    movie.update({"fade": fade, "persist": max(0, min(100, int(get("persist", "35") or 0))) if fade else 0})
+    off = ",".join(s for s in calibration.STEPS if s in get("off", "").split(","))   # Settings > Processing
+    return {"off": off, "from": t0, "until": t1, "cams": cams, "fps": fps, "size": size,
+            "sound": get("sound", "1") != "0", "caption": get("caption", "1") != "0",
+            "look": look if look in calibration.LOOKS else calibration.LOOKS[0],
+            "colors": colors if colors in calibration.COLORS else calibration.COLORS[0], "movie": movie}
 
 
 def job_id(opt):
     """Films are named by what they show, so the same stretch and options give the same file and link."""
     key = {k: opt[k] for k in ("from", "until", "cams", "fps", "size", "sound", "caption")}
+    if opt.get("look", "balanced") != "balanced":
+        key["look"] = opt["look"]
+    if opt.get("colors", "natural") != "natural":
+        key["colors"] = opt["colors"]
+    if opt.get("movie", MOVIE) != MOVIE:
+        key["movie"] = opt["movie"]
+    if opt.get("off"):
+        key["off"] = opt["off"]
     return hashlib.sha1(json.dumps([VERSION, key], sort_keys=True).encode()).hexdigest()[:16]
 
 
 # ---------- the plan: which picture shows when ----------
+
+def pass_kind(frame_id):
+    """How the server plays frame_id's pass: "mosaic", "movie", "mosaic_movie" or None (obs_mosaic's call)."""
+    import obs_mosaic
+    try:
+        found = obs_mosaic.unit_of(frame_id)
+    except Exception:
+        return None
+    if not found:
+        return None
+    u = found[0]
+    return u.get("kind") or ("movie" if u.get("movie") else "mosaic" if u.get("mosaic") else None)
+
 
 def plan(opt):
     """The film's pictures in time order, each {id, cam, t, target, filters, try, kind, at (film seconds), hold,
@@ -121,7 +157,14 @@ def plan(opt):
         comp = st is not None and q in st["use"] and q == max(st["use"], key=lambda u: t[u])
         tile = prev is not None and targets[prev] == targets[q] and obs[prev] == obs[q] and (st is None or comp)
         tries = []
-        if tile:
+        # a pass the server calls a movie plays as steady movie frames, a mosaic movie as its rolling mosaic, as
+        # the camera windows play them on Auto (obs_mosaic.movie_webp, rolling_webp)
+        kind = pass_kind(ids[q])
+        if kind == "movie":
+            tries.append(("movie", ids[q]))
+        elif kind == "mosaic_movie":
+            tries.append(("rolling", ids[q]))
+        elif tile:
             tries.append(("mosaic", ids[st["use"][0]] if comp else ids[q]))
         if comp:
             tries.append(("color", [ids[u] for u in st["use"]]))
@@ -179,7 +222,7 @@ class Pictures:
     called here. Each make(...) returns WebP or PNG bytes, or None when it has no such picture."""
 
     def __init__(self, cache, color=None, processed=None, frame=None, slots=None):
-        self.cache, self.slots = cache, slots
+        self.cache, self.slots, self.movie = cache, slots, dict(MOVIE)
         self._color, self._processed, self._frame = color, processed, frame
 
     def make(self, kind, arg, size):
@@ -190,6 +233,14 @@ class Pictures:
                 return made[0], "mosaic"
             found = reel.mosaic_of(arg, wait=True)
             return (reel.shot_webp(*found, size, self.cache, True, self.slots)[0], "mosaic") if found else None
+        if kind == "movie":
+            made = obs_mosaic.movie_webp(arg, size, self.cache, self.movie["trail"], wait=True, ahead=0,
+                                         centre=self.movie["center"])
+            return (made[0], "movie") if made and made[0] else None
+        if kind == "rolling":
+            made = obs_mosaic.rolling_webp(arg, size, self.cache, self.movie["laps"], slots=self.slots, wait=True,
+                                           fade=(self.movie.get("fade", 0), self.movie.get("persist", 0)))
+            return (made[0], "mosaic movie") if made and made[0] else None
         if kind == "color":
             if self._color:
                 return self._color(arg, size, self.cache)[0], "colour"
@@ -255,7 +306,7 @@ def _font(px):
 
 def label(e, what):
     """The caption under a pane: when, what, which camera and filters, and how the picture was made."""
-    kind = KIND.get(e.get("set"), "color") if what == "colour" else what if what in ("mosaic",) else ""
+    kind = KIND.get(e.get("set"), "color") if what == "colour" else what if what in ("mosaic", "movie", "mosaic movie") else ""
     target = (e["target"] or "Unknown").replace("_", " ").title()
     return " · ".join(x for x in (f"{utc(e['t'])} UTC", target, f"{'NAC' if e['cam'] == 'N' else 'WAC'} {e['filters']}", kind) if x)
 
@@ -310,6 +361,7 @@ def dur(s):
 def render(opt, p, pictures, path, progress=lambda done, total: None, workers=3):
     """Makes the film of plan p at path: pictures made a few ahead on worker threads, drawn and encoded in order."""
     film = Film(opt, path)
+    pictures.movie = {**MOVIE, **opt.get("movie", {})}   # movie passes as the windows showed them
     pics, ahead = p["pictures"], max(2, workers * 3)
     kinds, building = Counter(), {}
     try:
@@ -318,13 +370,14 @@ def render(opt, p, pictures, path, progress=lambda done, total: None, workers=3)
             nxt = 0
             for n, e in enumerate(pics):
                 while nxt < len(pics) and nxt < n + ahead:
-                    todo.append(pool.submit(pictures.picture, pics[nxt], opt["size"]))
+                    # in the film's look (the pool's threads don't share the caller's)
+                    todo.append(pool.submit(contextvars.copy_context().run, pictures.picture, pics[nxt], opt["size"]))
                     nxt += 1
                 im, what = todo.popleft().result()
                 kinds[what or "none"] += 1
                 # a mosaic stays up while its observation goes on: the pass's other frames (another filter, a frame
                 # that is not a tile) would otherwise flash in and out between its tiles
-                if what == "mosaic":
+                if what in ("mosaic", "mosaic movie"):
                     building[e["cam"]] = e["obs"]
                 elif building.get(e["cam"]) == e["obs"] and e["obs"]:
                     kinds["held behind mosaic"] += 1
@@ -459,7 +512,9 @@ def _work(pictures):
         try:
             job["state"] = "making"
             video = os.path.join(d, "video.mp4")
-            job["made_as"] = render(opt, job["plan"], pictures, video + ".part.mp4", progress)
+            with calibration.looking(opt.get("look", "balanced")), calibration.coloring(opt.get("colors", "natural")), \
+                    calibration.stepping(opt.get("off", "")):
+                job["made_as"] = render(opt, job["plan"], pictures, video + ".part.mp4", progress)
             os.replace(video + ".part.mp4", video)
             wav = os.path.join(d, "sound.wav")
             if opt["sound"]:
