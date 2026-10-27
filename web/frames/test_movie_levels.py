@@ -27,9 +27,9 @@ def disk(level, side=200, r=60):
 
 
 def test_options():
-    o = opts("levels=N1_1:0.5,W2_1:-9,bad,N3_1:x&even=12&zoom=9&nudge=N1_1:0.1:-0.2,N2_1:0:0,N4_1:2:1&ctr=0")
+    o = opts("levels=N1_1:0.5,W2_1:-9,bad,N3_1:x&even=12&crop=0.1_0.2_0.6_0.7&crop2=x&nudge=N1_1:0.1:-0.2,N2_1:0:0,N4_1:2:1&ctr=0")
     assert o["levels"] == {"N1_1": 0.5, "W2_1": -2.0}
-    assert o["even"] == 12 and o["frame"]["zoom"] == 4.0
+    assert o["even"] == 12 and o["frame"]["crop"] == [0.1, 0.2, 0.6, 0.7] and o["frame"]["crop2"] is None
     assert o["frame"]["nudge"] == {"N1_1": [0.1, -0.2], "N4_1": [0.5, 0.5]}
     assert o["movie"]["center"] is False
     # nothing asked: the film named as before the editor had levels and framing
@@ -93,16 +93,27 @@ def test_look_ev():
 
 def test_framed():
     im = disk(0.5, 100, 10)
-    assert export.framed(im, 1, (0, 0)) is im
+    assert export.framed(im, None, (0, 0)) is im
     # moved right by a tenth: the disk's middle 10 px right
-    a = np.asarray(export.framed(im, 1, (0.1, 0)))[..., 0]
+    a = np.asarray(export.framed(im, None, (0.1, 0)))[..., 0]
     cols = np.flatnonzero(a.any(0))
     assert abs((cols[0] + cols[-1]) / 2 - 59.5) <= 1
-    # zoomed 2x round the middle: the disk twice as wide
-    z = np.asarray(export.framed(im, 2, (0, 0)))[..., 0]
-    cols = np.flatnonzero(z.any(0))
-    assert abs((cols[-1] - cols[0] + 1) - 40) <= 2 and abs((cols[0] + cols[-1]) / 2 - 49.5) <= 1
+    # cut to its middle half: the disk twice as wide, the picture as big as before
+    z = export.framed(im, [0.25, 0.25, 0.75, 0.75], (0, 0))
+    cols = np.flatnonzero(np.asarray(z)[..., 0].any(0))
+    assert z.size == im.size and abs((cols[-1] - cols[0] + 1) - 40) <= 2 and abs((cols[0] + cols[-1]) / 2 - 49.5) <= 1
+    # a wide crop keeps its shape, as wide as the picture
+    assert export.framed(im, [0, 0.25, 1, 0.75], (0, 0)).size == (100, 50)
 
+
+def test_glide():
+    fr = {"crop": [0, 0, 1, 1], "crop2": [0.5, 0.5, 1, 1], "nudge": {}}
+    assert export.crop_at(fr, 0, 5) == [0, 0, 1, 1] and export.crop_at(fr, 4, 5) == [0.5, 0.5, 1, 1]
+    mid = export.crop_at(fr, 2, 5)
+    assert abs(mid[0] - 0.25) < 1e-9 and export.crop_at(fr, 1, 5)[0] < 0.125   # eased: slow at the start
+    assert export.crop_at({"crop": [0.1, 0.1, 0.9, 0.9], "crop2": None}, 3, 5) == [0.1, 0.1, 0.9, 0.9]
+    o = opts("crop2=0.5_0.5_1_1")
+    assert o["frame"]["crop"] == [0, 0, 1, 1] and o["frame"]["crop2"] == [0.5, 0.5, 1, 1]
 
 if __name__ == "__main__":
     for name, fn in list(globals().items()):

@@ -104,10 +104,11 @@ EVEN_MOST = 30               # pictures: the most Even out smooths over
 LEVELS_SIDE = 160            # px: the pictures' brightness is measured on them this big (as movie mode's, obs_mosaic)
 LEVELS_LIT = 0.04            # of the brightest: the pixels a brightness is measured on (the body, not the sky's noise)
 LEVELS_VERSION = "levels-v1"
-# and its framing: a zoom on every picture, and a nudge of a single frame (a part of the picture either way)
-ZOOM_MOST = 4.0
+# and its framing: a crop of every picture (or a start and an end crop the film glides between), and a nudge of a
+# single frame (parts of the picture)
+CROP_LEAST = 0.05            # of the picture: the smallest crop's side
 NUDGE_MOST = 0.5
-FRAME = {"zoom": 1.0, "nudge": {}}
+FRAME = {"crop": None, "crop2": None, "nudge": {}}
 MOVIE = {"center": True, "trail": 0, "laps": 1, "fade": 0, "persist": 0}   # the movie style by default (a film named as before)
 
 
@@ -154,9 +155,20 @@ def options(q):
         except ValueError:
             continue
     even = max(0, min(EVEN_MOST, int(float(get("even", "0") or 0))))
-    # its framing: Auto center for the whole film (ctr, over the windows' setting), a zoom on every picture, and a
-    # nudge (frame id: x, y, as parts of the picture) on single frames (framed)
-    zoom = round(max(1.0, min(ZOOM_MOST, float(get("zoom", "1") or 1))), 2)
+    # its framing: Auto center for the whole film (ctr, over the windows' setting), a crop of every picture (crop:
+    # x0_y0_x1_y1, parts of the picture; crop2: the end crop the film glides to from crop), and a nudge (frame id: x, y,
+    # parts of the picture) on single frames (framed)
+    def box(k):
+        try:
+            x0, y0, x1, y1 = (max(0.0, min(1.0, round(float(v), 4))) for v in get(k, "").split("_"))
+        except ValueError:
+            return None
+        if x1 - x0 < CROP_LEAST or y1 - y0 < CROP_LEAST or [x0, y0, x1, y1] == [0, 0, 1, 1]:
+            return None
+        return [x0, y0, x1, y1]
+    crop, crop2 = box("crop"), box("crop2")
+    if crop2 and not crop:
+        crop = [0.0, 0.0, 1.0, 1.0]
     nudge = {}
     for w in words("nudge"):
         k, *xy = w.split(":")
@@ -174,7 +186,7 @@ def options(q):
     # (raw: the archive frame, nothing stacked)
     pictures = get("pictures", "movie") if get("pictures", "movie") in PICTURES else "movie"
     return {"off": off, "cut": {k: v for k, v in kept.items() if v}, "edit": studio_look.encode(look_edit),
-            "levels": levels, "even": even, "frame": {"zoom": zoom, "nudge": nudge},
+            "levels": levels, "even": even, "frame": {"crop": crop, "crop2": crop2, "nudge": nudge},
             "pictures": pictures, "list": get("list", "0") == "1",
             "from": t0, "until": t1, "cams": cams, "fps": fps, "size": size,
             "sound": get("sound", "1") != "0", "caption": get("caption", "1") != "0",
@@ -512,17 +524,31 @@ def levels(opt, cache, pictures):
     return out
 
 
-def framed(im, zoom, nudge):
-    """Picture im zoomed by zoom round its middle and moved by nudge (x, y, parts of the picture), the same size,
-    black where it has nothing: the Movie Editor's framing (movieedit.html draws it the same way)."""
+def crop_at(fr, n, count):
+    """The crop of the film's picture n of count (x0, y0, x1, y1, parts of the picture), or None: the film's crop, or
+    with an end crop the way from the start crop to it, eased in and out over the film (movieedit.html cropAt)."""
+    a, b = fr.get("crop"), fr.get("crop2")
+    if not b or count < 2:
+        return a
+    t = n / (count - 1)
+    t = t * t * (3 - 2 * t)
+    return [u + (v - u) * t for u, v in zip(a, b)]
+
+
+def framed(im, crop, nudge):
+    """Picture im moved by nudge (x, y, parts of the picture) and cut to crop (x0, y0, x1, y1, parts of the picture;
+    None the whole), drawn as big as the picture was on its longer side, black where it has nothing: the Movie Editor's
+    framing (movieedit.html framedOf draws it the same way)."""
     dx, dy = nudge
-    if zoom == 1 and not dx and not dy:
+    if not crop and not dx and not dy:
         return im
+    x0, y0, x1, y1 = crop or (0, 0, 1, 1)
     W, H = im.size
-    cx, cy, a = W / 2, H / 2, 1 / zoom
-    # a film pixel at (x, y) shows the picture's ((x - c - d) / zoom + c)
-    return im.transform(im.size, Image.AFFINE, (a, 0, cx - (cx + dx * W) * a, 0, a, cy - (cy + dy * H) * a),
-                        Image.BICUBIC, fillcolor=(0, 0, 0))
+    cw, ch = (x1 - x0) * W, (y1 - y0) * H
+    k = max(W, H) / max(cw, ch)
+    # a film pixel at (x, y) shows the picture's (x / k + x0 - d)
+    return im.transform((max(1, round(cw * k)), max(1, round(ch * k))), Image.AFFINE,
+                        (1 / k, 0, (x0 - dx) * W, 0, 1 / k, (y0 - dy) * H), Image.BICUBIC, fillcolor=(0, 0, 0))
 
 
 def width(opt):
@@ -757,7 +783,7 @@ def render(opt, p, pictures, path, progress=lambda done, total: None, workers=3)
                 im, what = todo.popleft().result()
                 kinds[what or "none"] += 1
                 if im is not None:
-                    im = framed(im, fr["zoom"], fr["nudge"].get(e["id"], (0, 0)))
+                    im = framed(im, crop_at(fr, n, len(pics)), fr["nudge"].get(e["id"], (0, 0)))
                 if im is not None and (look or evs[n]):
                     # the movie editor's look, as Cassini Studio draws it, at this picture's exposure level
                     im = studio_look.apply(im, look, evs[n])

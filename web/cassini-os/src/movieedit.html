@@ -32,14 +32,16 @@
      look's (the studio's exposure, within its range), on the preview, Play, downloads and the film alike.
 
      Framing: Auto center for the whole movie (as the windows have it, on or off; on centers the pictures shown on their
-     own too, as the windows do), a zoom on every picture, and a nudge: drag the picture to move the frame in front, or
+     own too, as the windows do), a crop of every picture (Crop…: drag the box's corners or move it, at an aspect or free;
+     Start and end crop: the movie glides from one crop to the other, eased in and out), and a nudge: drag the picture to
+     move the frame in front, or
      the picked frames, when SPICE's centering is a little off. Drawn the same way here and in the film (export.framed).
 
      A frame on its own: the big picture over the strip is the frame in front, as in the movie or as the raw frame;
      double-click it to fill the window. Download frame saves it at full size with the look, as a JPEG.
 
      The edit is one short recipe (from, until, cams, drop, targets, filters, edit, URL-encoded), kept on this device
-     for the stretch (and levels, even, ctr, zoom, nudge), put in links as &cut=…, and sent to the export with its plan (cassiniMovieCut), so Save movie… makes
+     for the stretch (and levels, even, ctr, crop, crop2, nudge), put in links as &cut=…, and sent to the export with its plan (cassiniMovieCut), so Save movie… makes
      the film edited. window.cassiniMovieEdit = { open(recipe?), close, recipe(), cut(), get state }. -->
 <style>
 #mecard { top: calc(env(safe-area-inset-top, 0px) + 34px); left: 50%; transform: translateX(-50%); width: clamp(600px, 76vw, 1240px); height: min(780px, calc(100% - 110px)); display: flex; flex-direction: column; }
@@ -66,6 +68,18 @@
 #melevels .lvtag { position: absolute; left: 8px; top: 4px; font: 9px/1.3 var(--hudf); letter-spacing: .06em; color: rgba(232,236,242,.5); pointer-events: none; text-transform: uppercase; }
 #melevels .lvtag b { font-weight: normal; color: rgba(232,236,242,.8); }
 #mecanvas.nudging { cursor: grabbing; }
+#mecropbox { position: absolute; z-index: 3; box-shadow: 0 0 0 9999px rgba(0,0,0,.6); outline: 1px solid rgba(255,255,255,.85); cursor: move; touch-action: none;
+  background-image: linear-gradient(rgba(255,255,255,.18), rgba(255,255,255,.18)), linear-gradient(rgba(255,255,255,.18), rgba(255,255,255,.18)), linear-gradient(90deg, rgba(255,255,255,.18), rgba(255,255,255,.18)), linear-gradient(90deg, rgba(255,255,255,.18), rgba(255,255,255,.18));
+  background-size: 100% 1px, 100% 1px, 1px 100%, 1px 100%; background-position: 0 33.33%, 0 66.67%, 33.33% 0, 66.67% 0; background-repeat: no-repeat; }
+#mecropbox[hidden] { display: none; }
+#mecropbox i { position: absolute; width: 14px; height: 14px; border: 2px solid #fff; }
+#mecropbox i[data-h="nw"] { left: -3px; top: -3px; border-width: 2px 0 0 2px; cursor: nwse-resize; }
+#mecropbox i[data-h="ne"] { right: -3px; top: -3px; border-width: 2px 2px 0 0; cursor: nesw-resize; }
+#mecropbox i[data-h="sw"] { left: -3px; bottom: -3px; border-width: 0 0 2px 2px; cursor: nesw-resize; }
+#mecropbox i[data-h="se"] { right: -3px; bottom: -3px; border-width: 0 2px 2px 0; cursor: nwse-resize; }
+#mecropbox span { position: absolute; left: 0; top: -18px; font: 9.5px var(--hudf); letter-spacing: .06em; text-transform: uppercase; color: #fff; text-shadow: 0 0 3px #000; white-space: nowrap; }
+#mecard .mecropctl { display: flex; flex-wrap: wrap; gap: 6px; align-items: center; margin-top: 7px; }
+#mecard .mecropctl[hidden] { display: none; }
 #mecard .merow { display: flex; gap: 8px; align-items: center; margin-top: 7px; font-size: 11px; color: var(--q-text); }
 #mecard .merow > span:first-child { flex: none; width: 66px; color: var(--q-dim); }
 #mecard .merow input[type=range] { flex: 1; min-width: 60px; accent-color: var(--q-accent, #8ab6ff); }
@@ -116,6 +130,7 @@ body.phone #mestrip { grid-template-columns: repeat(auto-fill, 72px); grid-auto-
   <div class="mebody">
     <div class="memain">
       <div id="mestage">
+        <div id="mecropbox" hidden><span id="mecroplabel"></span><i data-h="nw"></i><i data-h="ne"></i><i data-h="sw"></i><i data-h="se"></i></div>
         <canvas id="mecanvas" title="Drag to move this frame (or the picked frames) · double-click to fill the window"></canvas>
         <span class="metag" id="metag"></span>
         <span id="meoff" hidden>Left out</span>
@@ -162,9 +177,15 @@ body.phone #mestrip { grid-template-columns: repeat(auto-fill, 72px); grid-auto-
       <div class="merow"><span>Level here</span><input type="range" id="melvhere" min="-2" max="2" step="0.05" aria-label="Exposure level at the frame in front"><span class="val" id="melvherev"></span></div>
       <div class="merow"><span>Even out</span><input type="range" id="meeven" min="0" max="30" step="1" aria-label="Even out the brightness over this many pictures"><span class="val" id="meevenv"></span></div>
       <div class="menote" id="melvnote"></div>
-      <h4><span>Framing</span><span class="sp"></span><button id="mefrclear" title="Zoom back to 100% and put every nudged frame back">Reset</button></h4>
+      <h4><span>Framing</span><span class="sp"></span><button id="mefrclear" title="Take the crop off and put every nudged frame back">Reset</button></h4>
       <div class="galseg" id="mectr" role="group" aria-label="Auto center for the movie"><button data-v="" title="Each camera window's Auto center setting">As the windows</button><button data-v="1" title="Every picture centered on its body (north up), movie passes and single pictures alike">On</button><button data-v="0" title="Every picture as Cassini pointed">Off</button></div>
-      <div class="merow"><span>Zoom</span><input type="range" id="mezoom" min="1" max="4" step="0.05" aria-label="Zoom on every picture"><span class="val" id="mezoomv"></span></div>
+      <div class="mechips" style="margin-top:7px"><button class="galbtn" id="mecrop" aria-pressed="false" title="Draw the crop on the picture">Crop…</button></div>
+      <div class="mecropctl" id="mecropctl" hidden>
+        <div class="galseg" id="measpect" role="group" aria-label="Crop shape"><button data-v="free">Free</button><button data-v="1">Square</button><button data-v="1.7778">16:9</button><button data-v="1.3333">4:3</button><button data-v="pic">Picture</button></div>
+        <label class="mecheck" style="margin-top:2px"><input type="checkbox" id="meglide"> Start and end crop</label>
+        <div class="galseg" id="mecropend" role="group" aria-label="Which crop" hidden><button data-v="start" title="The crop at the movie's first picture">Start</button><button data-v="end" title="The crop at the movie's last picture">End</button></div>
+        <button class="galbtn" id="mecropdone">Done</button>
+      </div>
       <div class="menote" id="menudged"></div>
     </div>
   </div>
@@ -196,12 +217,14 @@ body.phone #mestrip { grid-template-columns: repeat(auto-fill, 72px); grid-auto-
   // ME: the stretch (a, b), its plan's frames, and the edit: drop (ids taken out by hand), keep (null = every target /
   // filter pair, else the ones kept), cams (the export's Cameras), edit (the studio look's recipe)
   // levels (frame id -> EV: the exposure level points), even (Even out over that many pictures, 0 off), ctr (Auto center
-  // for the movie: null as the windows have it, true, false), zoom, nudge (frame id -> [x, y], parts of the picture);
+  // for the movie: null as the windows have it, true, false), crop (x0, y0, x1, y1, parts of the picture, or null), crop2 (the end crop the
+  // movie glides to, or null), nudge (frame id -> [x, y], parts of the picture);
   // lv: the frame server's measured brightness of each frame (EV) and Even out's change for each picture
   const ME = { a: null, b: null, frames: [], pictures: "movie", loading: false, error: "", drop: new Set(), targets: null, filters: null, edit: "",
-    levels: new Map(), even: 0, ctr: null, zoom: 1, nudge: new Map(), lv: { level: {}, even: {}, done: 0, total: null, ready: false, error: "" },
+    levels: new Map(), even: 0, ctr: null, crop: null, crop2: null, nudge: new Map(), lv: { level: {}, even: {}, done: 0, total: null, ready: false, error: "" },
     sel: -1, anchor: -1, picked: new Set(), showOut: true, src: "movie", undo: [], playing: false, pending: null };
-  const EV = 2, NUDGE = 0.5, ZOOM = 4, EVEN = 30;   // as export.py's LEVEL_EV, NUDGE_MOST, ZOOM_MOST, EVEN_MOST
+  const EV = 2, NUDGE = 0.5, CROP = 0.05, EVEN = 30;   // as export.py's LEVEL_EV, NUDGE_MOST, CROP_LEAST, EVEN_MOST
+  const WHOLE = [0, 0, 1, 1], boxStr = b => b.map(v => +v.toFixed(4)).join("_");
   const clamp = (v, a, b) => Math.max(a, Math.min(b, v));
   const camsOf = () => (/^(N|W|NW)$/.test(EX.state.cams || "") ? EX.state.cams : "NW");
   const why = e => !camsOf().includes(e.cam) ? "camera" : ME.drop.has(e.id) ? "removed" : ME.targets && !ME.targets.has(e.target || "UNKNOWN") ? "target"
@@ -223,7 +246,8 @@ body.phone #mestrip { grid-template-columns: repeat(auto-fill, 72px); grid-auto-
     if (ME.levels.size) q.set("levels", byId(ME.levels).map(([k, v]) => `${k}:${+v.toFixed(2)}`).join(","));
     if (ME.even) q.set("even", String(ME.even));
     if (ME.ctr != null) q.set("ctr", ME.ctr ? "1" : "0");
-    if (ME.zoom !== 1) q.set("zoom", String(+ME.zoom.toFixed(2)));
+    if (ME.crop) q.set("crop", boxStr(ME.crop));
+    if (ME.crop2) q.set("crop2", boxStr(ME.crop2));
     if (ME.nudge.size) q.set("nudge", byId(ME.nudge).map(([k, [x, y]]) => `${k}:${+x.toFixed(3)}:${+y.toFixed(3)}`).join(","));
     return q.toString();
   }
@@ -238,7 +262,7 @@ body.phone #mestrip { grid-template-columns: repeat(auto-fill, 72px); grid-auto-
   function remember() {
     try {
       const all = JSON.parse(localStorage.getItem(STORE) || "{}"), key = `${isoOf(ME.a)}|${isoOf(ME.b)}`, r = recipe();
-      const empty = !ME.drop.size && !ME.targets && !ME.filters && !ME.edit && ME.pictures === "movie" && !ME.levels.size && !ME.even && ME.ctr == null && ME.zoom === 1 && !ME.nudge.size;
+      const empty = !ME.drop.size && !ME.targets && !ME.filters && !ME.edit && ME.pictures === "movie" && !ME.levels.size && !ME.even && ME.ctr == null && !ME.crop && !ME.crop2 && !ME.nudge.size;
       if (empty) delete all[key]; else all[key] = { r, at: Date.now() };
       const keys = Object.keys(all).sort((x, y) => all[y].at - all[x].at); keys.slice(30).forEach(k => delete all[k]);
       localStorage.setItem(STORE, JSON.stringify(all));
@@ -259,12 +283,13 @@ body.phone #mestrip { grid-template-columns: repeat(auto-fill, 72px); grid-auto-
     ME.levels = new Map(words("levels").map(w => { const i = w.lastIndexOf(":"); return [w.slice(0, i), clamp(+w.slice(i + 1), -EV, EV)]; }).filter(([k, v]) => k && isFinite(v)));
     ME.even = clamp(Math.round(+q.get("even") || 0), 0, EVEN);
     ME.ctr = q.get("ctr") === "1" ? true : q.get("ctr") === "0" ? false : null;
-    ME.zoom = clamp(+q.get("zoom") || 1, 1, ZOOM);
+    const box = k => { const b = (q.get(k) || "").split("_").map(Number); return b.length === 4 && b.every(isFinite) && b[2] - b[0] >= CROP && b[3] - b[1] >= CROP ? b.map(v => clamp(v, 0, 1)) : null; };
+    ME.crop = box("crop"); ME.crop2 = box("crop2"); if (ME.crop2 && !ME.crop) ME.crop = WHOLE.slice();
     ME.nudge = new Map(words("nudge").map(w => w.split(":")).filter(a => a.length === 3 && a[0] && isFinite(+a[1]) && isFinite(+a[2]))
       .map(([k, x, y]) => [k, [clamp(+x, -NUDGE, NUDGE), clamp(+y, -NUDGE, NUDGE)]]));
   }
   const snapshot = () => ({ pictures: ME.pictures, drop: new Set(ME.drop), targets: ME.targets && new Set(ME.targets), filters: ME.filters && new Set(ME.filters), edit: ME.edit, cams: camsOf(),
-    levels: new Map(ME.levels), even: ME.even, ctr: ME.ctr, zoom: ME.zoom, nudge: new Map(ME.nudge) });
+    levels: new Map(ME.levels), even: ME.even, ctr: ME.ctr, crop: ME.crop && ME.crop.slice(), crop2: ME.crop2 && ME.crop2.slice(), nudge: new Map(ME.nudge) });
   function change(fn) {
     ME.undo.push(snapshot()); if (ME.undo.length > 200) ME.undo.shift();
     fn(); changed();
@@ -279,7 +304,7 @@ body.phone #mestrip { grid-template-columns: repeat(auto-fill, 72px); grid-auto-
     const s = ME.undo.pop(); if (!s) return;
     const reload = s.pictures !== ME.pictures;
     ME.drop = s.drop; ME.targets = s.targets; ME.filters = s.filters; ME.edit = s.edit; EX.state.cams = s.cams; ME.pictures = s.pictures;
-    ME.levels = s.levels; ME.even = s.even; ME.ctr = s.ctr; ME.zoom = s.zoom; ME.nudge = s.nudge;
+    ME.levels = s.levels; ME.even = s.even; ME.ctr = s.ctr; ME.crop = s.crop; ME.crop2 = s.crop2; ME.nudge = s.nudge;
     changed(); if (reload) load(); else show();
   }
 
@@ -448,26 +473,39 @@ body.phone #mestrip { grid-template-columns: repeat(auto-fill, 72px); grid-auto-
   }
   // the look drawn on frame e: the movie's look at e's exposure level
   const lookFor = e => { const p = STU().decode(ME.edit); if (e) p.exposure += evOf(e); return p; };
-  // picture b (a bitmap) with e's framing (the zoom, e's nudge), as export.framed draws it; b itself when it has none
-  function framedOf(b, e) {
-    const nd = (e && ME.nudge.get(e.id)) || [0, 0], z = ME.zoom;
-    if (z === 1 && !nd[0] && !nd[1]) return b;
-    const W = b.width, H = b.height, c = document.createElement("canvas"); c.width = W; c.height = H;
-    const g = c.getContext("2d"); g.fillStyle = "#000"; g.fillRect(0, 0, W, H);
+  // frame e's crop: the movie's, or with an end crop the way there from the start crop, eased in and out over the
+  // movie's pictures (export.crop_at); while a crop is drawn, the one being drawn
+  function cropAt(e) {
+    if (cropping) return null;
+    const a = ME.crop, b = ME.crop2, at = e && evs().at.get(e.id), n = evs().film.length;
+    if (!b || at == null || n < 2) return a;
+    let t = at / (n - 1); t = t * t * (3 - 2 * t);
+    return a.map((u, i) => u + (b[i] - u) * t);
+  }
+  // picture b (a bitmap) with e's framing (moved by e's nudge, cut to the crop), as export.framed draws it; b itself
+  // when it has none
+  function framedOf(b, e, crop = cropAt(e)) {
+    const nd = (e && ME.nudge.get(e.id)) || [0, 0];
+    if (!crop && !nd[0] && !nd[1]) return b;
+    const [x0, y0, x1, y1] = crop || WHOLE, W = b.width, H = b.height, cw = (x1 - x0) * W, ch = (y1 - y0) * H, k = Math.max(W, H) / Math.max(cw, ch);
+    const c = document.createElement("canvas"); c.width = Math.max(1, Math.round(cw * k)); c.height = Math.max(1, Math.round(ch * k));
+    const g = c.getContext("2d"); g.fillStyle = "#000"; g.fillRect(0, 0, c.width, c.height);
     g.imageSmoothingQuality = "high";
-    g.setTransform(z, 0, 0, z, W / 2 + nd[0] * W - z * W / 2, H / 2 + nd[1] * H - z * H / 2);
+    g.setTransform(k, 0, 0, k, -k * (x0 - nd[0]) * W, -k * (y0 - nd[1]) * H);
     g.drawImage(b, 0, 0);
     return c;
   }
   function paint() {
     const r = ren();
     if (!r || !shown || card.hidden) { cv.style.width = "0px"; return; }
-    const box = stage.getBoundingClientRect(), dpr = Math.min(2, devicePixelRatio || 1), W = shown.width, H = shown.height;
-    const k = Math.min((box.width - 12) / W, (box.height - 12) / H); if (!(k > 0)) return;
+    const src = framedOf(shown, shownE), box = stage.getBoundingClientRect(), dpr = Math.min(2, devicePixelRatio || 1), W = src.width, H = src.height;
+    // room round the picture for the crop box's handles while a crop is drawn
+    const m = cropping ? 40 : 12, k = Math.min((box.width - m) / W, (box.height - m) / H); if (!(k > 0)) return;
     const cw = W * k, ch = H * k;
     Object.assign(cv.style, { width: cw + "px", height: ch + "px", left: (box.width - cw) / 2 + "px", top: (box.height - ch) / 2 + "px" });
-    r.upload(framedOf(shown, shownE), W, H);
+    r.upload(src, W, H);
     r.draw(lookFor(shownE), Math.max(1, Math.round(cw * dpr)), Math.max(1, Math.round(ch * dpr)));
+    cropBox();
   }
   new ResizeObserver(() => paint()).observe(stage);
 
@@ -540,7 +578,7 @@ body.phone #mestrip { grid-template-columns: repeat(auto-fill, 72px); grid-auto-
   // and with e's framing
   async function fullFramed(e) {
     const blob = await full(e), nd = ME.nudge.get(e.id);
-    if (ME.zoom === 1 && !nd) return blob;
+    if (!cropAt(e) && !nd) return blob;
     const b = await createImageBitmap(blob), c = framedOf(b, e);
     if (b.close) b.close();
     return await new Promise(res => c.toBlob(res, "image/png")) || blob;
@@ -551,7 +589,7 @@ body.phone #mestrip { grid-template-columns: repeat(auto-fill, 72px); grid-auto-
     try {
       const jpg = await STU().apply(await fullFramed(e), lookFor(e));
       const a = document.createElement("a"); a.href = URL.createObjectURL(jpg);
-      a.download = `Cassini_${e.id}_${new Date(e.t * 1000).toISOString().slice(0, 19).replace(/[:T]/g, "-")}${ME.edit || evOf(e) || ME.zoom !== 1 || ME.nudge.has(e.id) ? "_edited" : ""}.jpg`;
+      a.download = `Cassini_${e.id}_${new Date(e.t * 1000).toISOString().slice(0, 19).replace(/[:T]/g, "-")}${ME.edit || evOf(e) || cropAt(e) || ME.nudge.has(e.id) ? "_edited" : ""}.jpg`;
       document.body.appendChild(a); a.click(); a.remove(); setTimeout(() => URL.revokeObjectURL(a.href), 60000);
     } catch (err) { toast(`Could not save the frame: ${err.message || err}`); }
     finally { b.disabled = false; b.textContent = "Download frame"; }
@@ -705,8 +743,13 @@ body.phone #mestrip { grid-template-columns: repeat(auto-fill, 72px); grid-auto-
       : ME.lv.error || (ME.levels.size ? "Drag a point on the graph to brighten or dim the movie there. Double-click a point to take it out."
         : "Double-click the graph to add a level point, then drag it up or down. Even out smooths flashes and jumps in brightness.");
     $("mectr").querySelectorAll("button").forEach(b => b.setAttribute("aria-pressed", String(b.dataset.v === (ME.ctr == null ? "" : ME.ctr ? "1" : "0"))));
-    $("mezoom").value = ME.zoom; $("mezoomv").textContent = `${Math.round(ME.zoom * 100)}%`;
-    $("mefrclear").disabled = ME.zoom === 1 && !ME.nudge.size;
+    $("mecrop").setAttribute("aria-pressed", String(!!cropping));
+    $("mecrop").textContent = cropping ? "Cropping…" : ME.crop2 ? "Crop… · start and end" : ME.crop ? "Crop…  · on" : "Crop…";
+    $("mecropctl").hidden = !cropping;
+    $("meglide").checked = !!ME.crop2; $("mecropend").hidden = !ME.crop2;
+    $("mecropend").querySelectorAll("button").forEach(b => b.setAttribute("aria-pressed", String(b.dataset.v === cropping)));
+    $("measpect").querySelectorAll("button").forEach(b => b.setAttribute("aria-pressed", String(b.dataset.v === aspect)));
+    $("mefrclear").disabled = !ME.crop && !ME.crop2 && !ME.nudge.size;
     $("menudged").textContent = (ME.nudge.size ? `${ME.nudge.size.toLocaleString()} frame${ME.nudge.size === 1 ? "" : "s"} nudged. ` : "") +
       "Drag the picture to move the frame in front (or the picked frames) when its centering is off.";
   }
@@ -718,9 +761,9 @@ body.phone #mestrip { grid-template-columns: repeat(auto-fill, 72px); grid-auto-
   }
   slide($("melvhere"), v => { const e = ME.frames[ME.sel]; if (e && kept(e)) ME.levels.set(e.id, clamp(v, -EV, EV)); }, () => { graph(); sideLevels(); paint(); });
   slide($("meeven"), v => { ME.even = clamp(Math.round(v), 0, EVEN); }, () => { $("meevenv").textContent = ME.even ? `${ME.even} pictures` : "Off"; });
-  slide($("mezoom"), v => { ME.zoom = clamp(v, 1, ZOOM); }, () => { sideLevels(); paint(); });
+
   $("melvclear").addEventListener("click", () => { change(() => { ME.levels = new Map(); }); show(); });
-  $("mefrclear").addEventListener("click", () => { change(() => { ME.zoom = 1; ME.nudge = new Map(); }); show(); });
+  $("mefrclear").addEventListener("click", () => { change(() => { ME.crop = ME.crop2 = null; ME.nudge = new Map(); }); cropping = null; show(); });
   $("mectr").addEventListener("click", ev => {
     const b = ev.target.closest("button"); if (!b) return;
     const v = b.dataset.v === "" ? null : b.dataset.v === "1";
@@ -731,7 +774,7 @@ body.phone #mestrip { grid-template-columns: repeat(auto-fill, 72px); grid-auto-
   // nudging: drag the picture to move the frame in front, or the picked frames (parts of the picture, as export.framed)
   let ndrag = null;
   cv.addEventListener("pointerdown", ev => {
-    if (ev.button !== 0 || !shownE) return;
+    if (ev.button !== 0 || !shownE || cropping) return;
     const ids = (ME.picked.size ? [...ME.picked].map(i => ME.frames[i]) : [ME.frames[ME.sel]]).filter(Boolean).map(e => e.id);
     ndrag = { x0: ev.clientX, y0: ev.clientY, ids, base: new Map(ids.map(id => [id, ME.nudge.get(id) || [0, 0]])), on: false, pid: ev.pointerId };
   });
@@ -739,7 +782,8 @@ body.phone #mestrip { grid-template-columns: repeat(auto-fill, 72px); grid-auto-
     if (!ndrag) return;
     const dx = ev.clientX - ndrag.x0, dy = ev.clientY - ndrag.y0;
     if (!ndrag.on) { if (Math.hypot(dx, dy) < 4) return; ndrag.on = true; stopPlay(); ME.undo.push(snapshot()); cv.setPointerCapture(ndrag.pid); cv.classList.add("nudging"); }
-    const w = cv.clientWidth || 1, h = cv.clientHeight || 1;
+    // the picture shown is the crop: a drag across it is that part of the picture
+    const [x0, y0, x1, y1] = cropAt(ME.frames[ME.sel]) || WHOLE, w = (cv.clientWidth || 1) / (x1 - x0), h = (cv.clientHeight || 1) / (y1 - y0);
     ndrag.ids.forEach(id => {
       const [bx, by] = ndrag.base.get(id), x = clamp(Math.round((bx + dx / w) * 1000) / 1000, -NUDGE, NUDGE), y = clamp(Math.round((by + dy / h) * 1000) / 1000, -NUDGE, NUDGE);
       if (x || y) ME.nudge.set(id, [x, y]); else ME.nudge.delete(id);
@@ -748,6 +792,92 @@ body.phone #mestrip { grid-template-columns: repeat(auto-fill, 72px); grid-auto-
   });
   const nend = () => { if (ndrag && ndrag.on) { cv.classList.remove("nudging"); changed(); } ndrag = null; };
   cv.addEventListener("pointerup", nend); cv.addEventListener("pointercancel", nend);
+
+
+  // ---------- the crop, drawn on the picture ----------
+  // cropping: which crop is being drawn ("start": the crop, "end": the end crop), null when none is; aspect: the
+  // crop's shape while it is drawn ("free", width over height, or "pic" the picture's own)
+  let cropping = null, aspect = "free";
+  const cbox = $("mecropbox");
+  const editing = () => (cropping === "end" ? ME.crop2 : ME.crop) || WHOLE;
+  function cropBox() {
+    cbox.hidden = !cropping || !shown || card.hidden;
+    if (cbox.hidden) return;
+    const [x0, y0, x1, y1] = editing(), L = parseFloat(cv.style.left), T = parseFloat(cv.style.top), w = cv.clientWidth, h = cv.clientHeight;
+    Object.assign(cbox.style, { left: L + x0 * w + "px", top: T + y0 * h + "px", width: (x1 - x0) * w + "px", height: (y1 - y0) * h + "px" });
+    $("mecroplabel").textContent = ME.crop2 ? (cropping === "end" ? "End crop" : "Start crop") : "Crop";
+  }
+  // the crop's shape as parts of the picture: width over height in parts, from an aspect of the picture's pixels
+  const ratio = () => aspect === "free" ? null : (aspect === "pic" ? 1 : +aspect * (shown ? shown.height / shown.width : 1));
+  // box b fitted to the shape round its middle, inside the picture
+  function shaped(b) {
+    const r = ratio(); if (!r) return b;
+    let [x0, y0, x1, y1] = b, w = x1 - x0, h = y1 - y0;
+    if (w / h > r) w = h * r; else h = w / r;
+    if (w > 1) { w = 1; h = w / r; } if (h > 1) { h = 1; w = h * r; }
+    const cx = clamp((x0 + x1) / 2, w / 2, 1 - w / 2), cy = clamp((y0 + y1) / 2, h / 2, 1 - h / 2);
+    return [cx - w / 2, cy - h / 2, cx + w / 2, cy + h / 2];
+  }
+  function setEditing(b) { b = b.map(v => Math.round(v * 10000) / 10000); if (cropping === "end") ME.crop2 = b; else ME.crop = b; }
+  // the frame shown while a crop is drawn: the movie's first picture for the start crop (when it has an end), its last for the end
+  function cropFrame() {
+    if (!ME.crop2) return;
+    const film = evs().film, e = cropping === "end" ? film[film.length - 1] : film[0];
+    if (e) select(ME.frames.indexOf(e));
+  }
+  function crop(which) {
+    stopPlay();
+    cropping = which;
+    if (which && !ME.crop) { ME.undo.push(snapshot()); ME.crop = WHOLE.slice(); }
+    if (which) cropFrame();
+    EVS = null; sideLevels(); paint();
+    if (!which) { if (ME.crop && boxStr(ME.crop) === boxStr(WHOLE) && !ME.crop2) ME.crop = null; changed(); show(); }
+  }
+  $("mecrop").addEventListener("click", () => crop(cropping ? null : "start"));
+  $("mecropdone").addEventListener("click", () => crop(null));
+  $("mecropend").addEventListener("click", ev => { const b = ev.target.closest("button"); if (b && cropping) crop(b.dataset.v); });
+  $("measpect").addEventListener("click", ev => {
+    const b = ev.target.closest("button"); if (!b) return;
+    aspect = b.dataset.v;
+    if (cropping) { ME.undo.push(snapshot()); setEditing(shaped(editing())); EVS = null; changed(); paint(); } else sideLevels();
+  });
+  $("meglide").addEventListener("change", ev => {
+    change(() => { if (ev.target.checked) { ME.crop = ME.crop || WHOLE.slice(); ME.crop2 = ME.crop.slice(); } else ME.crop2 = null; });
+    if (cropping) crop(ev.target.checked ? "end" : "start");
+  });
+  // dragging the box (moves it) or a corner (sizes it, the opposite corner held, at the shape when it has one)
+  let cdrag = null;
+  cbox.addEventListener("pointerdown", ev => {
+    if (ev.button !== 0) return;
+    ev.preventDefault(); ev.stopPropagation();
+    cbox.setPointerCapture(ev.pointerId);
+    ME.undo.push(snapshot());
+    cdrag = { h: ev.target.dataset.h || "", x0: ev.clientX, y0: ev.clientY, b: editing().slice(), moved: false };
+  });
+  cbox.addEventListener("pointermove", ev => {
+    if (!cdrag) return;
+    cdrag.moved = true;
+    const w = cv.clientWidth || 1, h = cv.clientHeight || 1, dx = (ev.clientX - cdrag.x0) / w, dy = (ev.clientY - cdrag.y0) / h;
+    let [x0, y0, x1, y1] = cdrag.b;
+    if (!cdrag.h) {
+      const bw = x1 - x0, bh = y1 - y0, nx = clamp(x0 + dx, 0, 1 - bw), ny = clamp(y0 + dy, 0, 1 - bh);
+      setEditing([nx, ny, nx + bw, ny + bh]);
+    } else {
+      const west = cdrag.h.includes("w"), north = cdrag.h.includes("n");
+      let ax = west ? x1 : x0, ay = north ? y1 : y0;               // the corner held
+      let px = clamp((west ? x0 : x1) + dx, 0, 1), py = clamp((north ? y0 : y1) + dy, 0, 1);
+      let bw = Math.max(CROP, Math.abs(px - ax)), bh = Math.max(CROP, Math.abs(py - ay));
+      const r = ratio();
+      if (r) { if (bw / bh > r) bh = bw / r; else bw = bh * r; }
+      bw = Math.min(bw, west ? ax : 1 - ax); bh = Math.min(bh, north ? ay : 1 - ay);
+      if (r) { if (bw / bh > r) bw = bh * r; else bh = bw / r; }
+      setEditing([west ? ax - bw : ax, north ? ay - bh : ay, west ? ax : ax + bw, north ? ay : ay + bh]);
+    }
+    cropBox();
+  });
+  const cend = () => { if (cdrag) { if (cdrag.moved) { EVS = null; changed(); } else ME.undo.pop(); } cdrag = null; };
+  cbox.addEventListener("pointerup", cend); cbox.addEventListener("pointercancel", cend);
+  cbox.addEventListener("dblclick", ev => { ev.stopPropagation(); crop(null); });
 
   // ---------- the look, edited in Cassini Studio on the frame in front ----------
   async function editLook() {
@@ -815,6 +945,7 @@ body.phone #mestrip { grid-template-columns: repeat(auto-fill, 72px); grid-auto-
     if (k === "ArrowRight" || k === "ArrowLeft") { stopPlay(); step(k === "ArrowRight" ? 1 : -1, { range: e.shiftKey }); }
     else if (k === "Delete" || k === "Backspace") toggleRemoved();
     else if (k === " ") play();
+    else if ((k === "Escape" || k === "Enter") && cropping) crop(null);
     else if (k === "Escape") { if (card.classList.contains("big")) { card.classList.remove("big"); setTimeout(paint); } else close(); }
     else return;
     e.preventDefault(); e.stopImmediatePropagation();

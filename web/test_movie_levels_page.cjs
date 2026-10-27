@@ -1,5 +1,5 @@
 // The Movie Editor's exposure graph and framing, driven in a browser: the stretch's brightness measured, level points
-// added and dragged, Even out (when the server has it), Auto center for the movie, zoom, a frame nudged and undone,
+// added and dragged, Even out (when the server has it), Auto center for the movie, a crop with a start and an end, a frame nudged and undone,
 // the export taking the edit, and a frame downloaded with it. Screenshots and a screen recording go to OUT.
 // Run: node web/test_movie_levels_page.cjs http://127.0.0.1:PORT OUT [FROM UNTIL] [THREE_DIR] [--film]
 // (a frame server with replay data; THREE_DIR an `npm pack three@0.128.0` unpacked, for when the CDN is blocked;
@@ -56,7 +56,8 @@ const check = (ok, what) => { console.log(ok ? "ok" : "FAIL", what); if (!ok) pr
   // Even out, when the frame server has movie mode's normalization
   if (lv.ready) {
     await page.evaluate(() => { const z = document.getElementById("meeven"); z.value = 8; z.dispatchEvent(new Event("input")); z.dispatchEvent(new Event("change")); });
-    await page.waitForFunction(() => cassiniMovieEdit.state.lv.even && Object.keys(cassiniMovieEdit.state.lv.even).length >= 0, null, { timeout: 120000 });
+    // (a stretch whose brightness is already even may change none)
+    await page.waitForFunction(() => Object.keys(cassiniMovieEdit.state.lv.even || {}).length > 0, null, { timeout: 60000 }).catch(() => {});
     await page.waitForTimeout(3000);
     console.log("even", JSON.stringify(await page.evaluate(() => Object.keys(cassiniMovieEdit.state.lv.even).length)), "pictures changed");
     await page.screenshot({ path: `${out}/3_even.png` });
@@ -64,16 +65,30 @@ const check = (ok, what) => { console.log(ok ? "ok" : "FAIL", what); if (!ok) pr
 
   // framing: Auto center off then on, zoom, a nudge, undone
   for (const v of ["0", "1"]) { await page.click(`#mectr button[data-v="${v}"]`); await page.waitForTimeout(2500); await page.screenshot({ path: `${out}/4_center_${v === "1" ? "on" : "off"}.png` }); }
-  await page.evaluate(() => { const z = document.getElementById("mezoom"); z.value = 1.5; z.dispatchEvent(new Event("input")); z.dispatchEvent(new Event("change")); });
-  await page.waitForTimeout(1000);
+  // a square crop: the bottom-right corner dragged in, then a start and end crop, the end moved
+  await page.click("#mecrop"); await page.waitForTimeout(800);
+  await page.click('#measpect button[data-v="1"]'); await page.waitForTimeout(400);
+  let se = await page.locator('#mecropbox i[data-h="se"]').boundingBox();
+  await page.mouse.move(se.x + 7, se.y + 7); await page.mouse.down(); await page.mouse.move(se.x - 120, se.y - 120, { steps: 8 }); await page.mouse.up();
+  await page.waitForTimeout(800);
+  await page.screenshot({ path: `${out}/5_crop_drawing.png` });
+  await page.check("#meglide"); await page.waitForTimeout(800);
+  const bx = await page.locator("#mecropbox").boundingBox();
+  await page.mouse.move(bx.x + bx.width / 2, bx.y + bx.height / 2); await page.mouse.down(); await page.mouse.move(bx.x + bx.width / 2 + 90, bx.y + bx.height / 2 + 70, { steps: 8 }); await page.mouse.up();
+  await page.waitForTimeout(800);
+  await page.screenshot({ path: `${out}/6_end_crop.png` });
+  await page.click("#mecropdone"); await page.waitForTimeout(1500);
+  const crops = await page.evaluate(() => [cassiniMovieEdit.state.crop, cassiniMovieEdit.state.crop2]);
+  console.log("crops", JSON.stringify(crops));
+  check(crops[0] && crops[1] && Math.abs((crops[0][2] - crops[0][0]) - (crops[1][2] - crops[1][0])) < 1e-3 && crops[1][0] > crops[0][0], "a start crop and a moved end crop of the same size");
   const c = await page.locator("#mecanvas").boundingBox();
   await page.mouse.move(c.x + c.width / 2, c.y + c.height / 2); await page.mouse.down();
   await page.mouse.move(c.x + c.width / 2 + 50, c.y + c.height / 2 - 25, { steps: 8 }); await page.mouse.up();
   await page.waitForTimeout(1500);
-  await page.screenshot({ path: `${out}/5_framing.png` });
+  await page.screenshot({ path: `${out}/7_cropped_nudged.png` });
   const rec = await page.evaluate(() => cassiniMovieEdit.recipe());
   console.log("recipe", decodeURIComponent(rec));
-  check(/levels=/.test(rec) && /ctr=1/.test(rec) && /zoom=1\.5/.test(rec) && /nudge=/.test(rec), "the recipe carries levels, Auto center, zoom and the nudge");
+  check(/levels=/.test(rec) && /ctr=1/.test(rec) && /crop=/.test(rec) && /crop2=/.test(rec) && /nudge=/.test(rec), "the recipe carries levels, Auto center, the crops and the nudge");
   await page.keyboard.press("Control+z"); await page.waitForTimeout(500);
   check(await page.evaluate(() => cassiniMovieEdit.state.nudge.size) === 0, "undo takes the nudge back");
 
