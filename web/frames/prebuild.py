@@ -182,10 +182,16 @@ def only(phase, todo, path):
     return [t for t in todo if t[0] in names]
 
 
+WATCH_PAD = 3 * 3600   # s around a watched observation: what a window plays around a Moment, its neighbours too
+
+
 def watched_first(todo):
-    """todo with the items of the most watched observations first (the Moments strip, web/replay/moments.csv, and
-    Highlights, web/replay/highlights.csv), each group in time order, then the rest in time order. An item's
-    observation is its frame's (a set's last frame's); pass items are named after their key, which holds it."""
+    """todo with the items of the most watched stretches first (the Moments strip, web/replay/moments.csv, and
+    Highlights, web/replay/highlights.csv: each observation's frames, WATCH_PAD either side), in time order, then
+    the rest in time order. A Moment plays every frame of its stretch, its neighbours' too: by observation alone,
+    most of what played on 8790 was still made on demand (2026-10-26). An item's time is its frame's (a set's last
+    frame's, a pass's first frame's)."""
+    import bisect
     import csv
     here = os.path.join(os.path.dirname(os.path.dirname(os.path.abspath(__file__))), "replay")
     watched = set()
@@ -197,18 +203,39 @@ def watched_first(todo):
         except OSError:
             pass
     idx, _ = reel.load_index()
-    obs_of = dict(zip(idx["id"].tolist(), idx["OBSERVATION_ID"].tolist()))
+    time_of = dict(zip(idx["id"].tolist(), idx["seconds_1970"].astype(float).tolist()))
+    spans = {}
+    for o, t in zip(idx["OBSERVATION_ID"].tolist(), idx["seconds_1970"].astype(float).tolist()):
+        if o in watched:
+            a, b = spans.get(o, (t, t))
+            spans[o] = (min(a, t), max(b, t))
+    windows = []
+    for a, b in sorted((a - WATCH_PAD, b + WATCH_PAD) for a, b in spans.values()):
+        if windows and a <= windows[-1][1]:
+            windows[-1][1] = max(windows[-1][1], b)
+        else:
+            windows.append([a, b])
+    starts = [w[0] for w in windows]
+    pass_time = {}
+
+    def when(name):
+        last = "_".join(name.split("_")[-2:])   # a frame id (N1352055787_2), or a set's last one
+        if last in time_of:
+            return time_of[last]
+        if not pass_time:   # a pass: TARGET_OBSERVATION_CAMERA_PASS
+            pass_time.update({"_".join(map(str, u["key"])): u["frames"][0][3] for u in all_passes()})
+        return pass_time.get(name)
 
     def hit(name):
-        last = "_".join(name.split("_")[-2:])   # a frame id (N1352055787_2), or a set's last one
-        if last in obs_of:
-            return obs_of[last] in watched
-        return any(f"_{o}_" in name for o in watched)   # a pass: TARGET_OBSERVATION_CAMERA_PASS
-    first = [t for t in todo if hit(t[0])]
-    return first + [t for t in todo if not hit(t[0])], len(first)
+        t = when(name)
+        k = bisect.bisect_right(starts, t) - 1 if t is not None else -1
+        return k >= 0 and t <= windows[k][1]
+    marks = [hit(t[0]) for t in todo]
+    first = [t for t, m in zip(todo, marks) if m]
+    return first + [t for t, m in zip(todo, marks) if not m], len(first)
 
 
-def make_pass(u, cache, sizes=(1024, 512), within=None, style=None):
+def make_pass(u, cache, sizes=(1024, 512), within=None, style=None, made=None):
     """What a window shows as it plays through the pass, at every frame at 1024 and 512, after the pass's plan and
     every tile (as web/frames/warm_pass.py does for one observation): a mosaic movie's rolling picture
     (rolling_webp, wait=True, in frame order, so each grows from the one before and is named after every tile
@@ -216,7 +243,8 @@ def make_pass(u, cache, sizes=(1024, 512), within=None, style=None):
     within (t0, t1), seconds since 1970: only the pictures of frames taken then (a stretch of the timeline, segment
     below), after every tile up to the last of them (and every rolling picture before them, each grown from the
     last). style: the page's Settings > Movie choices, as the window puts them in its request ({trail, laps,
-    center, color}; the defaults when None)."""
+    center, color}; the defaults when None). made(t): called as each frame of the stretch has its pictures, with
+    the frame's time (a stretch's progress, Segments), so a long pass counts up frame by frame."""
     style = style or {}
     t0, t1 = within or (-float("inf"), float("inf"))
     last = max((j for j, f in enumerate(u["frames"]) if f[3] <= t1), default=-1)
@@ -229,19 +257,21 @@ def make_pass(u, cache, sizes=(1024, 512), within=None, style=None):
     for j, f in enumerate(u["frames"][:last + 1]):
         if f[3] < t0 and kind != "mosaic_movie":
             continue
-        n += f[3] >= t0
         for size in sizes:
             if kind == "mosaic_movie":
+                # (only the rolling picture: a window plays a mosaic movie rolling and never asks for its pass's mosaic
+                # so far, which made for every frame took a Jupiter stretch's Pre-process 107 s on the Mini, 2026-10-27)
                 obs_mosaic.rolling_webp(f[1], size, cache, style.get("laps", 1), wait=True,
                                         fade=(style.get("fade", 0), style.get("persist", 0)))
-                # a window asks a mosaic movie's frames of /frames/mosaic too (its pass lane, the Mosaic switch)
-                if within:
-                    obs_mosaic._mosaic_at(u, j, size, cache)
             elif u["mosaic"]:
                 obs_mosaic._mosaic_at(u, j, size, cache)
             else:
                 obs_mosaic.movie_webp(f[1], size, cache, style.get("trail", 0), style.get("color", True), wait=True, ahead=0,
                                       centre=style.get("center", True))
+        if f[3] >= t0:
+            n += 1
+            if made:
+                made(f[3])
     return n
 
 
@@ -587,7 +617,7 @@ def segment_items(o):
             movie = u.get("kind") != "mosaic_movie" and not u["mosaic"]
             if (o["mosaics"] if not movie else o["steady"] and (u.get("kind") == "movie" or u.get("movie"))):
                 first = next(f[3] for f in u["frames"] if f[3] >= t0)
-                work = lambda c, u=u: make_pass(u, c, sizes, (t0, t1), o["style"])
+                work = lambda c, made=None, u=u: make_pass(u, c, sizes, (t0, t1), o["style"], made)
                 work.pass_key = u["key"]
                 out.append(("_".join(map(str, u["key"])), first, n, work))
     out.sort(key=lambda x: x[1])
@@ -617,7 +647,7 @@ class Segments:
             if job and job["state"] not in ("failed", "stopped"):
                 return self._public(job)
             job = {"id": jid, "state": "queued", "options": o, "items": [], "total": 0, "done": 0, "errors": 0,
-                   "finished": [], "asked": time.time(), "took": None, "why_waiting": None, "error": None,
+                   "finished": [], "partial": {}, "asked": time.time(), "took": None, "why_waiting": None, "error": None,
                    "stop": False, "recent": collections.deque(maxlen=60)}
             self.jobs[jid] = job
             self.queue.append(jid)
@@ -645,12 +675,18 @@ class Segments:
         far in time every picture is made (through, UTC), seconds left and the place in line."""
         out = {k: job[k] for k in ("id", "state", "total", "done", "errors", "took", "why_waiting", "error")}
         through = job["options"]["from"]
-        for item, ok in zip(job["items"], job["finished"]):
-            if not ok:
-                break
-            through = item[1]
         if job["finished"] and all(job["finished"]):
             through = job["options"]["until"]
+        elif job["items"]:
+            # up to the first picture not made yet: an item not finished holds it at its time, a pass being made at
+            # its last frame made (make_pass's made), so the line moves through a long pass with its frames
+            limit = job["options"]["until"]
+            for k, (item, ok) in enumerate(zip(job["items"], job["finished"])):
+                if item[1] >= limit:
+                    break
+                if not ok:
+                    limit = min(limit, job["partial"].get(k, item[1]))
+            through = max(through, limit)
         out["through"] = datetime.datetime.fromtimestamp(through, datetime.timezone.utc).strftime("%Y-%m-%dT%H:%M:%S")
         r = job["recent"]
         if job["state"] == "making" and len(r) > 1 and r[-1][0] > r[0][0] and r[-1][1] > r[0][1]:
@@ -690,12 +726,25 @@ class Segments:
 
         def one(k):
             if job["stop"]:
-                return k, "stopped"
+                return k, "stopped", 0
+            work, told = job["items"][k][3], [0]
+
+            def made(t):
+                # a pass counts its frames as they are made (a mosaic movie's can take minutes when its tiles are
+                # not made yet), so the bar never sits still through it
+                with self.lock:
+                    told[0] += 1
+                    job["done"] += 1
+                    job["partial"][k] = t
+                    job["recent"].append((time.monotonic(), job["done"]))
             try:
-                job["items"][k][3](self.cache)
-                return k, None
+                if getattr(work, "pass_key", None):
+                    work(self.cache, made)
+                else:
+                    work(self.cache)
+                return k, None, told[0]
             except Exception as e:   # noqa: BLE001  (counted and logged; the stretch goes on)
-                return k, f"{type(e).__name__}: {e}"
+                return k, f"{type(e).__name__}: {e}", told[0]
 
         # each thread may hold a mosaic movie for all its frames, and the windows play theirs in the same process:
         # room for all of them to keep their last pictures (obs_mosaic._rolled)
@@ -719,14 +768,14 @@ class Segments:
                     break
                 done, pending = concurrent.futures.wait(pending, return_when=concurrent.futures.FIRST_COMPLETED)
                 for f in done:
-                    k, err = f.result()
+                    k, err, told = f.result()
                     if err == "stopped":
                         continue
                     if err:
                         print(f"prebuild segment {job['id']} {items[k][0]}: {err}", flush=True)
                     with self.lock:
                         job["finished"][k] = True
-                        job["done"] += items[k][2]
+                        job["done"] += max(0, items[k][2] - told)
                         job["errors"] += bool(err)
                         job["recent"].append((time.monotonic(), job["done"]))
         # the makers start the next tiles and mosaic-movie pictures of a pass in the background (obs_mosaic

@@ -41,11 +41,11 @@ body.phone #excard:not(.full) { width: calc(100% - 16px) !important; left: 8px !
     <div class="exrow"><span>Frame rate</span><label class="chk"><input type="checkbox" id="exauto"> Adaptive</label><input type="range" id="exfps" min="2" max="30" step="1" aria-label="Pictures per second"><span class="val" id="exfpsv"></span></div>
     <div class="exrow"><span>Picture size</span><input type="range" id="exsize" min="0" max="2" step="1" aria-label="Picture size per camera"><span class="val" id="exsizev"></span></div>
     <div class="exrow"><span></span><label class="chk"><input type="checkbox" id="exsound"> Sound</label><label class="chk"><input type="checkbox" id="excap"> Captions</label></div>
-    <div class="exrow"><button class="exbtn go" id="exgo" disabled>Export</button><button class="exbtn" id="exclear">Clear marks</button><span id="exstate"></span></div>
+    <div class="exrow"><button class="exbtn go" id="exgo" disabled>Export</button><button class="exbtn" id="exclear">Clear marks</button><button class="exbtn" id="exedit" title="Pick the frames and the look of this movie (Movie Editor)">Edit frames…</button><span id="exstate"></span></div>
     <div id="exbar"><i></i></div>
     <div id="exdone" hidden>
       <video id="exvid" controls playsinline preload="metadata" hidden></video>
-      <div class="exrow" style="margin-top:7px"><a class="exbtn go" id="exdl" download>Download</a><button class="exbtn" id="excopy">Copy link</button><span id="exsize2"></span></div>
+      <div class="exrow" style="margin-top:7px"><a class="exbtn go" id="exdl" download>Download</a><button class="exbtn" id="exgal" title="Keep this film in your Gallery">Add to Gallery</button><button class="exbtn" id="excopy">Copy link</button><span id="exsize2"></span></div>
     </div>
   </div>
 </section>
@@ -174,7 +174,8 @@ body.phone #excard:not(.full) { width: calc(100% - 16px) !important; left: 8px !
   const params = () => {
     const q = new URLSearchParams({ from: iso(X.a), until: iso(X.b), cams: X.cams || "NW", fps: opt("export.adaptive", true) ? "auto" : String(opt("export.fps", 12)),
       size: String(opt("export.size", 1024)), sound: opt("export.sound", true) ? "1" : "0", caption: opt("export.caption", true) ? "1" : "0" });
-    return q.toString() + window.cassiniLook() + (window.cassiniMovieStyle ? window.cassiniMovieStyle() : "");
+    // the Movie Editor's cut and look for this stretch (movieedit.html): frames left out, and the look on every picture
+    return q.toString() + window.cassiniLook() + (window.cassiniMovieStyle ? window.cassiniMovieStyle() : "") + (window.cassiniMovieCut ? window.cassiniMovieCut() : "");
   };
   let timer = 0;
   function estimate() {
@@ -198,7 +199,8 @@ body.phone #excard:not(.full) { width: calc(100% - 16px) !important; left: 8px !
         const n = { N: 0, W: 0 }; p.pictures.forEach(e => n[e.cam]++);
         // measured on the Mac Mini: about 0.065 MB a second of film at 1024 x 1072, 0.11 at 2048 x 1072, sound included
         const mb = p.frames ? Math.max(0.1, p.seconds * (0.03 + 0.035 * p.width * p.height / (1024 * 1072))) : 0;
-        $("exsum").innerHTML = p.count ? `${p.count.toLocaleString()} pictures (NAC ${n.N.toLocaleString()}, WAC ${n.W.toLocaleString()}) · film ${fmtDur(p.seconds)} at ${p.width}×${p.height} · about ${mb.toFixed(mb < 10 ? 1 : 0)} MB` : `<span class="warn">No pictures in this stretch.</span>`;
+        const edited = window.cassiniMovieCut && window.cassiniMovieCut() ? " · edited in the Movie Editor" : "";
+        $("exsum").innerHTML = p.count ? `${p.count.toLocaleString()} pictures (NAC ${n.N.toLocaleString()}, WAC ${n.W.toLocaleString()}) · film ${fmtDur(p.seconds)} at ${p.width}×${p.height} · about ${mb.toFixed(mb < 10 ? 1 : 0)} MB${edited}` : `<span class="warn">No pictures in this stretch.</span>`;
         $("exgo").disabled = !p.count;
       } catch (err) { $("exsum").innerHTML = `<span class="warn">No frame server at ${FRAMES}.</span>`; }
     }, 250);
@@ -238,6 +240,16 @@ body.phone #excard:not(.full) { width: calc(100% - 16px) !important; left: 8px !
     const v = $("exvid"); v.hidden = false; if (v.dataset.src !== url) { v.src = url; v.dataset.src = url; }
     $("exdl").href = `${url}?download=1`; $("exdl").setAttribute("download", job.name || "cassini.mp4");
     $("exsize2").textContent = job.bytes ? `${(job.bytes / 1048576).toFixed(1)} MB · ${job.name}` : job.name || "";
+    const film = X.planKey || params(), from = X.a;
+    $("exgal").hidden = !window.cassiniGallery;
+    $("exgal").onclick = async () => {
+      const G = window.cassiniGallery; if (!G) return;
+      $("exgal").disabled = true;
+      const moment = [["t", iso(from)], ["view", state.focus !== "CASSINI" ? state.focus.toLowerCase() : state.follow ? "follow" : "cassini"], ["play", "0"]];
+      const item = await G.add({ kind: "movie", src: url, film, title: `Film · ${show(from)} UTC`, sub: `${job.name || ""}${job.bytes ? ` · ${(job.bytes / 1048576).toFixed(1)} MB` : ""}`, moment });
+      $("exgal").disabled = false; if (item) $("exgal").textContent = "In Gallery";
+    };
+    $("exgal").textContent = "Add to Gallery";
     $("excopy").onclick = async () => { try { await navigator.clipboard.writeText(url); $("excopy").textContent = "Copied"; setTimeout(() => { $("excopy").textContent = "Copy link"; }, 1500); } catch (e) { prompt("Film link", url); } };
   }
 
@@ -299,7 +311,7 @@ body.phone #excard:not(.full) { width: calc(100% - 16px) !important; left: 8px !
     mark();
   }
   function close() { card.hidden = true; }
-  window.cassiniExport = { open, close, mark, clear, get state() { return X; } };
+  window.cassiniExport = { open, close, mark, clear, soundtrack, get state() { return X; } };
 
   $("exin").addEventListener("click", () => mark(state.et, null));
   $("exout").addEventListener("click", () => mark(null, state.et));
