@@ -797,7 +797,7 @@ def leveling():
     return calibration.step("blend") and calibration.step("level")
 
 
-DRAWING = 5   # bumped when the blend or level steps change how a mosaic is drawn
+DRAWING = 6   # bumped when the blend or level steps change how a mosaic is drawn
 
 
 def drawing():
