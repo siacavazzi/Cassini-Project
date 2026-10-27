@@ -2025,7 +2025,9 @@ body.phone #launch .lx-clock { font-size: 9.5px; bottom: 9vh; }
     { key: "processing.calibrate", step: "calibrate", label: "Calibrate",
       hint: "Every frame is turned into reflectance (I/F: bias, exposure, gain, filter and distance from the Sun taken out) and drawn on one display scale, so filters and mosaic tiles match and colors are true. Off shows each frame on the archive's own stretch, as it came down." },
     { key: "processing.align", step: "align", label: "Align",
-      hint: "A color set's channels, taken seconds or minutes apart, are moved onto one another, and a mosaic's filters onto each other's tiles. Off lays them over one another as the camera pointed, so moving bodies show colored fringes." }
+      hint: "A color set's channels, taken seconds or minutes apart, are moved onto one another, and a mosaic's filters onto each other's tiles. Off lays them over one another as the camera pointed, so moving bodies show colored fringes." },
+    { key: "processing.blend", step: "blend", label: "Blend mosaic seams",
+      hint: "Where two mosaic tiles meet, their pictures fade into each other and the mosaic stays solid, with its soft edge only along its outside. Off draws each tile with its own soft edge, as before, which leaves a faint dark line along the seams and a notch where a seam meets the mosaic's edge." }
   ];
   for (const st of window.cassiniSteps) D({ key: st.key, section: "Processing", label: st.label, type: "toggle", value: true, hint: st.hint });
   D({ key: "cameras.composites", section: "Processing", label: "Color composites", type: "toggle", value: true,

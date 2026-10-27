@@ -7,6 +7,7 @@ video. Before drawing, the older frames are brightness matched to the newest fra
 (using the pixels where they overlap) and each frame's edge is feathered into whatever
 is already underneath, so panel seams don't show.
 """
+import math
 import numpy as np
 import cv2
 import reproject as rp
@@ -345,6 +346,59 @@ def feather_alpha(alpha):
 
 
 """
+The soft edge every frame is made with (mask.png, color_image.get_mask): its alpha from a straight edge inward,
+one value a pixel of a 1024 px frame, and where it reaches 250 of 255 (EDGE_AT), which _edge_width looks for.
+"""
+_edge = None
+EDGE_AT = 250
+
+
+def edge_profile():
+    global _edge
+    if _edge is None:
+        import os
+        from PIL import Image
+        mask = np.asarray(Image.open(os.path.join(os.path.dirname(os.path.abspath(__file__)), "mask.png")).convert("L"))
+        row = mask[mask.shape[0] // 2].astype(np.float32) / 255
+        _edge = (row[:np.argmax(row >= 1) + 1], int(np.argmax(row >= EDGE_AT / 255)))
+    return _edge
+
+
+"""
+How wide a frame's own soft edge is on this canvas, in pixels from its edge to where its alpha reaches EDGE_AT:
+the farthest distance from the edge at which still at least half as many pixels are under EDGE_AT as right at the
+edge (along a straight edge every distance up to the width has the same number; the corners, where two soft edges
+cross, add a few farther in). A frame drawn at another size than 1024 px has its soft edge at that size. 0 for a
+frame with a hard edge.
+"""
+def _edge_width(alpha, dist):
+    soft = (alpha > 0) & (alpha < EDGE_AT)
+    if not soft.any():
+        return 0.0
+    counts = np.bincount(np.rint(dist[soft]).astype(np.int64))
+    if len(counts) < 2 or counts[1] == 0:
+        return 0.0
+    return float(np.flatnonzero(counts >= counts[1] / 2).max())
+
+
+"""
+The blend step's per frame parts (prepare): (where the frame has picture, its weight in the blend, the width of its
+own soft edge). The weight ramps from 0 at the edge of the frame's picture to 1 at feather_px inside, on where it
+has picture only: the soft edge it was made with (mask.png) is the mosaic's outer edge, not a weight, so where two
+frames meet their colours blend and nothing between them is left part transparent.
+"""
+def _blend_parts(alpha):
+    valid = (alpha > 0).astype(np.uint8)
+    dist = _inside(valid)
+    return valid.astype(np.float32), np.minimum(dist * (1.0 / feather_px), 1.0), _edge_width(alpha, dist)
+
+
+def _inside(valid):
+    """How far each pixel of valid (uint8, 1 inside) lies from its edge, the array's border counting as an edge."""
+    return cv2.distanceTransform(np.pad(valid, 1), cv2.DIST_L2, 5)[1:-1, 1:-1]
+
+
+"""
 Per frame work that doesn't change while the frame sits in the buffer: the box around its
 pixels, its colors as floats, its alpha and its feathered alpha. Kept for the frames in
 the buffer so each frame is only prepared once.
@@ -363,7 +417,10 @@ def prepare(frame):
         box = (max(ys.min() * 8 - 8, 0), min(ys.max() * 8 + 9, h),
                max(xs.min() * 8 - 8, 0), min(xs.max() * 8 + 9, w))
         f = frame[box[0]:box[1], box[2]:box[3]]
-        info = (box, f[..., :3].astype(np.float32), f[..., 3] * np.float32(1 / 255), feather_alpha(f[..., 3]))
+        if calibration.step("blend"):
+            info = (box, f[..., :3].astype(np.float32), f[..., 3] * np.float32(1 / 255)) + _blend_parts(f[..., 3])
+        else:
+            info = (box, f[..., :3].astype(np.float32), f[..., 3] * np.float32(1 / 255), feather_alpha(f[..., 3]))
     _prepared[id(frame)] = (frame, info)
     return info
 
@@ -394,6 +451,10 @@ def composite(frames, gains, offsets=None, gamma=None):
     y0, y1 = min(b[0] for b in used), max(b[1] for b in used)
     x0, x1 = min(b[2] for b in used), max(b[3] for b in used)
 
+    if len(infos[0]) == 6:
+        _blended(out, frames, infos, gains, offsets, gamma, (y0, y1, x0, x1))
+        return out
+
     rgb = np.zeros((y1 - y0, x1 - x0, 3), np.float32)
     acc_alpha = np.zeros((y1 - y0, x1 - x0), np.float32)
     for info, gain, offset in zip(infos, gains, offsets):
@@ -422,6 +483,79 @@ def composite(frames, gains, offsets=None, gamma=None):
     out[y0:y1, x0:x1, :3] = np.clip(rgb, 0, 255).round()
     out[y0:y1, x0:x1, 3] = (acc_alpha * 255).round()
     return out
+
+
+_normal = None
+
+
+def _outer_edge(cover, width):
+    """The soft edge of the mosaic of frames covering cover (1 where a frame has picture), frames whose own soft edge
+    is width canvas pixels wide (_edge_width): along a straight stretch of its edge, the frames' own profile
+    (edge_profile) at that width, from the edge of what all the frames cover, so it runs on unbroken where two frames
+    meet; at a corner a little softer, as a frame's own corners are. How far inside the edge a pixel lies is read
+    off cover blurred (a Gaussian of half the width): along a straight edge the blur is the normal curve of that
+    distance, and at a corner, where the blur sees less picture round it, it reads as nearer the edge."""
+    global _normal
+    if _normal is None:
+        z = np.linspace(-6, 6, 4801)
+        _normal = (z, (0.5 * (1 + np.vectorize(math.erf)(z / math.sqrt(2)))).astype(np.float32))
+    profile, at = edge_profile()
+    sigma = width / 2
+    blur = cv2.GaussianBlur(cover, (0, 0), sigma, borderType=cv2.BORDER_CONSTANT)
+    # the blur at a pixel d pixels inside a straight edge is the normal curve at (d - 0.5) / sigma
+    d = np.interp(blur, _normal[1], _normal[0]) * sigma + 0.5
+    soft = np.interp(d * (at / width), np.arange(1, len(profile) + 1), profile, left=0, right=1)
+    return soft.astype(np.float32) * cover
+
+
+def _toned(color, gain, offset, gamma):
+    """A frame's colours with its gain and offset applied, as composite does."""
+    if gamma is not None:
+        color = _corrected(color, gain, gamma)
+    else:
+        color = color * gain.astype(np.float32)
+    if offset.any():
+        color += offset.astype(np.float32) * np.minimum(color * np.float32(1 / offset_ramp), 1)
+    return color
+
+
+def _blended(out, frames, infos, gains, offsets, gamma, area):
+    """composite with the blend step on (calibration.step("blend"), Settings > Processing > Blend mosaic seams).
+    The frames' soft edges (mask.png) no longer go into one another: drawn over each other they left the join part
+    transparent wherever two frames overlap by less than their two soft edges, a darker line along every seam and a
+    notch where a seam meets the mosaic's edge. Instead each frame is drawn over the frames below with a weight that
+    ramps in from its own edge over feather_px (_blend_parts), and the weight of what is below ramps in from its
+    edges the same way, so a frame fades in over feather_px past the edge of what is below and what is below fades
+    out over feather_px before its own edge: the colours meet smoothly from both sides whatever the overlap, and
+    a newer frame still covers an older one where both are whole. Where any frame has picture the mosaic is opaque;
+    the soft edge is kept along the mosaic's outer edge only, the same profile as each frame's (edge_profile) at
+    the frames' width (_edge_width), from the edge of what all of them cover. Without overlaps (a lone frame) the
+    picture is the frame as it is, its alpha included."""
+    y0, y1, x0, x1 = area
+    rgb = np.zeros((y1 - y0, x1 - x0, 3), np.float32)
+    cover = np.zeros((y1 - y0, x1 - x0), np.float32)   # 1 where a frame drawn so far has picture
+    weight = np.zeros((y1 - y0, x1 - x0), np.float32)  # what is drawn so far's own ramp, drawn over each other
+    alpha = np.zeros((y1 - y0, x1 - x0), np.float32)   # the frames' own alphas drawn over each other, as before
+    width = 0.0
+    for info, gain, offset in zip(infos, gains, offsets):
+        if info is None:
+            continue
+        box, color, own, has, ramp, w = info
+        width = max(width, w)
+        sl = (slice(box[0] - y0, box[1] - y0), slice(box[2] - x0, box[3] - x0))
+        below, wb = cover[sl], weight[sl]
+        a = np.where(below > 0, ramp / np.maximum(ramp + (1 - ramp) * wb, 1e-6), has)
+        color = _toned(color, gain, offset, gamma)
+        color -= rgb[sl]
+        color *= a[..., None]
+        rgb[sl] += color
+        weight[sl] = ramp + wb * (1 - ramp)
+        cover[sl] = np.maximum(below, has)
+        alpha[sl] = own + alpha[sl] * (1 - own)
+    if width > 0:
+        alpha = np.maximum(alpha, _outer_edge(cover, width))
+    out[y0:y1, x0:x1, :3] = np.clip(rgb, 0, 255).round()
+    out[y0:y1, x0:x1, 3] = (alpha * 255).round()
 
 
 def _corrected(color, gain, gamma):

@@ -355,6 +355,16 @@ def folder(u, cache):
     return os.path.join(cache, f"{VERSIONS[calibration.style()]}{calibration.variant()}-q{QUALITY}", "_".join(map(str, u["key"])) + suffix)
 
 
+BLEND = "blend1"   # the mosaics drawn with the blend step (mosaic.composite) are kept in this folder of the pass's
+
+
+def drawn(u, cache):
+    """The folder of the pass's mosaics as drawn (its filter mosaics and pictures, its mosaic movie's): the pass's own
+    folder with the blend step off, as they were drawn before it, else its BLEND folder. The tiles, the plan and the
+    seams do not depend on it and stay in the pass's folder for both."""
+    return folder(u, cache) if not calibration.step("blend") else os.path.join(folder(u, cache), BLEND)
+
+
 def _ulock(u):
     with _lock:
         return _unit_locks.setdefault(u["key"], threading.RLock())
@@ -1180,7 +1190,7 @@ GROW_FROM = 16   # tiles of one filter: a mosaic with more is the one before it 
 
 def _filter_path(u, f, count, rect, cache, solved_on=""):
     name = f"{f.replace('/', '_')}-{count}{solved_on}-{'_'.join(str(round(v)) for v in rect)}.png"
-    return os.path.join(folder(u, cache), "filters-level", name)
+    return os.path.join(drawn(u, cache), "filters-level", name)
 
 
 def _png(rgba):
@@ -1642,7 +1652,7 @@ def so_far(u, n, cache, made=None, out=OUT):
 
 # the same layout, tile and size: named in the cache by folder and layout name (_mosaic_path)
 so_far = _kept_for_next_size(so_far, lambda u, n, cache, made=None, out=OUT:
-                             (folder(u, cache), made[5], n, out) if made and out <= OUT else None)
+                             (drawn(u, cache), made[5], n, out) if made and out <= OUT else None)
 
 
 def movie_footprint(u, cache, p=None):
@@ -2170,7 +2180,7 @@ def _rolling_picture(u, n, size, cache, laps, slots, fmt, out, made_only, read=T
         return None
     post = _faded(u, made, cache) if fade[0] else None
     full = size == "full"
-    path = os.path.join(folder(u, cache), "rolling-level", f"full{out}" if full else str(size), f"{made[5]}.{fmt}")
+    path = os.path.join(drawn(u, cache), "rolling-level", f"full{out}" if full else str(size), f"{made[5]}.{fmt}")
     if os.path.exists(path):
         return _make_mosaic(u, n, size, path, cache, slots, made, fmt, out, post) if read else True
     with _lock:
@@ -2675,7 +2685,7 @@ def _yield():
 
 def _mosaic_path(u, made, size, cache, fmt="webp", out=OUT):
     """Where the mosaic of layout made is kept in the cache (named after what it is made of)."""
-    return os.path.join(folder(u, cache), f"full{out}" if size == "full" else str(size), f"{made[5]}.{fmt}")
+    return os.path.join(drawn(u, cache), f"full{out}" if size == "full" else str(size), f"{made[5]}.{fmt}")
 
 
 def _mosaic_made(u, n, size, cache):
