@@ -1,0 +1,36 @@
+{
+  "t0_utc": "2005-01-14T09:10:20.828",
+  "t0_note": "t0, the start of the descent sequence (the pilot parachute's firing), from the Huygens key events table (PDS Atmospheres Node); every offset below is in seconds from it. Entry interface, the descent altitudes and the landing come from the probe's own track (data/huygens.json: DTWG reconstruction), not from this file.",
+  "events": {
+    "pilot": 1.4,
+    "main_deploy": 2.5,
+    "main_open": 4.9,
+    "shield": 32.5,
+    "transmitter": 45,
+    "data": 143.6,
+    "drogue": 900,
+    "lamp": 8745,
+    "landing": 8870,
+    "link_end": 13203,
+    "last_earth": 20559
+  },
+  "chutes_m": { "pilot": 2.59, "main": 8.3, "drogue": 3.03 },
+  "green_bank_earth_utc": "2005-01-14T10:25:00",
+  "esoc_first_data_utc": "2005-01-14T16:19:00",
+  "pictures": { "received": 350, "planned": 700 },
+  "surface_k": 93.8,
+  "facts": [
+    { "id": "timeline", "text": "Reconstructed times of the descent from t0 = 2005-014T09:10:20.828 UTC: pilot chute inflates +1.4 s, back cover released and main chute deployed +2.5 s, main chute inflated +4.9 s, heat shield separation +32.5 s, data transmission begins +143.6 s, main chute released and stabilizer deployed +900 s (111 km), surface lamp on +8745 s, surface impact +8870 s (11:38:10.8 UTC), end of the Cassini-probe link +13203 s (12:50:23.8 UTC), last signal detected by Earth-based radio telescopes +20559 s.",
+      "source": "https://atmos.nmsu.edu/data_and_services/atmospheres_data/Huygens/Key%20Events.htm" },
+    { "id": "chutes", "text": "The pilot parachute is 2.6 m across, the main parachute 8.3 m; after about 15 minutes the main chute is released and a 3 m drogue carries the probe the rest of the way. Huygens reaches Titan's air at 1,270 km.",
+      "source": "https://www.esa.int/Science_Exploration/Space_Science/Cassini-Huygens/Huygens_descent_timeline" },
+    { "id": "cassini", "text": "Cassini stops collecting data once the landing site drops below Titan's horizon, then turns its high-gain antenna to Earth and sends the data, several copies of it.",
+      "source": "https://www.esa.int/Science_Exploration/Space_Science/Cassini-Huygens/Huygens_descent_timeline" },
+    { "id": "earth", "text": "Huygens was known to be alive at 11:25 CET (10:25 UTC) when the Green Bank radio telescope picked up its faint carrier directly; the first science data reached ESOC in Darmstadt at 17:19 CET (16:19 UTC).",
+      "source": "https://www.esa.int/export/esaCP/Pr_3_2005_p_EN.html" },
+    { "id": "channel_a", "text": "Cassini never listened to the probe's channel A because of a missing command, so only about 350 of the 700 planned pictures came back, and the Doppler wind measurement was lost.",
+      "source": "https://en.wikipedia.org/wiki/Huygens_(spacecraft)" },
+    { "id": "surface", "text": "The temperature at the landing site was 93.8 K (-179 C); the probe landed among rounded pebbles of water ice.",
+      "source": "https://en.wikipedia.org/wiki/Huygens_(spacecraft)" }
+  ]
+}

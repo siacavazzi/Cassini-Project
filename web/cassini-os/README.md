@@ -242,6 +242,32 @@ orbit: the screen fades to black, then up on Cassini on its own with Earth falli
 its real distance and speed from Earth, and the captions name the plan ahead (borrow speed from Venus twice, Earth and
 Jupiter, then Saturn). Then the interface comes back and the mission plays on from there.
 
+## Huygens landing
+
+Playback crossing Huygens's entry into Titan's air (2005-01-14 09:05 UTC), the "Huygens enters Titan's atmosphere" or
+"Huygens lands on Titan" Moment, the release cutscene's "Watch the landing", or `?huygens-landing` plays the landing
+(`src/huygens-landing.html`, under two minutes): the entry glow at up to 12 g, the parachutes and the heat shield falling
+away, Cassini listening from 69,000 km, the drogue descent over the probe's own landing-site map, touchdown at 4.5 m/s
+on the DISR mosaic, then Cassini as the site sets at 12:50 UTC and its turn to Earth, ending on the first data at ESOC
+(16:19 UTC). The probe's speed, altitude and deceleration come from its track (needs `--huygens` in the data build);
+the event times and facts are in `src/huygens-landing-data.json` with their sources. The probe is ESA's own models
+(`models/make_huygens_shell.py` and `models/make_huygens_dm.py` turn the ESA SPICE Service's Cosmographia meshes into
+`models/*.glb.b64.txt`; sources on branch `assets/huygens-models`): the entry shell comes off in two parts in the real
+order, and the parachutes are disk-gap-band canopies at their real sizes. Inside Titan's haze the sky closes in around the
+probe; near the ground the probe is held to the landing point on the globe at the descent table's altitude. The last card
+stays with Huygens or goes back to Cassini. `bench/huygens-landing.cjs` records it on a hand-stepped clock.
+
+Huygens stays on Titan after the landing, at any time to the end of the mission: its marker and label sit on the landing
+point while the camera is near Titan (within a dozen Titan radii, the site on the near side) or the view is on Huygens,
+and the Huygens chip is there too. Clicking either goes down to it: ESA's model on the landing-site map, the drogue
+lying downwind of it, under Titan's sky, with the ground kept level while you drag around it. The ground there is from what the
+probe measured and saw: it stands with DISR toward azimuth 193 degrees, the pebbles in front of it are where and as large as its
+own surface picture (PIA07232) shows them, the rest of the ground has the same mix of pebbles, and the 12 cm hole it made on
+impact is 70 cm north of it. The drogue drifted on a few seconds after the landing toward the south-south-east (the
+probe's camera saw it cross the Sun's glow, Schröder et al. 2017) and lies there collapsed, about 12 m off, its lines
+slack across the ground and its riser draped over the probe's top. For example
+`?t=2005-01-31T12:00:00&view=huygens&play=0`.
+
 ## Run it
 
 The page reads the replay data through the `data` link (`data -> ../replay/data`), and the camera frames
