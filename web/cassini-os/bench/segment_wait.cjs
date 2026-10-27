@@ -12,7 +12,8 @@
 //   between the highlight and the press, RUNS=3, SHIFT=60 s, MODE=drag|mark, PLAY=1 (the clock playing when it is
 //   pressed), MAXSECS=120 for each stretch, W=1440 H=900 DPR=2, PRE='js' run in the page before the first highlight
 //   (PRE='cassiniMovie.start(true)': movie mode playing), NET=ms,down,up the link as Chrome emulates it (NET=20,100,50
-//   a home Wi-Fi, NET=80,30,10 Tailscale away from home; play_rate.cjs)
+//   a home Wi-Fi, NET=80,30,10 Tailscale away from home; play_rate.cjs), PLAYSECS=8 the most it waits, once ready,
+//   for the stretch's movie (Settings > Playback > play when ready) to start and step five pictures
 let chromium;
 try { ({ chromium } = require("playwright-core")); } catch (e) { ({ chromium } = require("playwright")); }
 const fs = require("fs");
@@ -67,6 +68,11 @@ const now = () => performance.now();
     const A = iso(secs(FROM) + k * SHIFT), B = iso(secs(UNTIL) + k * SHIFT);
     // the last stretch let go (its ×), as a person does before highlighting another
     await page.evaluate(() => { if (!document.getElementById("segbar").hidden) document.getElementById("segx").click(); });
+    // and the last stretch's movie stopped: the clock as the run asks for it (PLAY, PRE) for each stretch
+    if (k) {
+      await page.evaluate(play => { if (cassiniMovie.on && isFinite(cassiniMovie.state.until)) cassiniMovie.stop(); setPlaying(play); }, !!env.PLAY);
+      if (env.PRE) await page.evaluate(env.PRE);
+    }
     await page.waitForTimeout(300);
     const marked = now();
     if (MODE === "drag") {
@@ -95,11 +101,23 @@ const now = () => performance.now();
     postSamples = null;
     await page.evaluate(() => {
       const el = document.getElementById("segstate");
-      window.__seg = { t0: null, log: [] };
+      // (the browser keeps 250 timings by default: a full buffer would leave the POST's out)
+      performance.clearResourceTimings(); performance.setResourceTimingBufferSize(5000);
+      window.__seg = { t0: null, log: [], mov: [] };
       const note = () => { const t = el.textContent; const L = window.__seg.log; if (!L.length || L[L.length - 1][1] !== t) L.push([performance.now(), t]); };
       if (window.__segObs) window.__segObs.disconnect();
       window.__segObs = new MutationObserver(note); window.__segObs.observe(el, { childList: true, characterData: true, subtree: true });
       document.getElementById("segprep").addEventListener("click", () => { window.__seg.t0 = performance.now(); }, { capture: true, once: true });
+      // the movie the stretch plays as when it is ready (segment.autoplay): when movie mode is on and playing, and
+      // each step of its clock, every animation frame
+      const me = window.__seg;
+      (function tick() {
+        if (window.__seg !== me) return;
+        const M = window.cassiniMovie, P = cassiniSegment.state, L = me.mov, last = L[L.length - 1];
+        const on = !!(M && M.on && state.playing && P.b != null && M.state.until === P.b);   // (this stretch's movie)
+        if (on && (!last || last[1] !== state.et)) L.push([performance.now(), state.et, !!M.state.waiting]);
+        requestAnimationFrame(tick);
+      })();
     });
     const box = await page.evaluate(() => { const r = document.getElementById("segprep").getBoundingClientRect(); return r.width ? { x: r.left + r.width / 2, y: r.top + r.height / 2 } : null; });
     const pressed = now();
@@ -110,11 +128,16 @@ const now = () => performance.now();
       job = await page.evaluate(() => { const j = cassiniSegment.state.job; return j && { id: j.id, state: j.state, done: j.done, total: j.total, took: j.took, errors: j.errors }; });
       if (job && /^(done|failed|stopped)$/.test(job.state)) break;
     }
+    // the movie: up to PLAYSECS (default 8) for it to start and step 5 pictures
+    const playUntil = now() + 1000 * +(env.PLAYSECS || 8);
+    while (now() < playUntil && job && job.state === "done" && (await page.evaluate(() => window.__seg.mov.length)) < 6) await page.waitForTimeout(100);
     await page.waitForTimeout(200);
     const got = await page.evaluate(() => {
-      const t0 = window.__seg.t0, rel = t => +(t - t0).toFixed(1);
+      const t0 = window.__seg.t0, rel = t => +(t - t0).toFixed(1), mov = window.__seg.mov;
+      // on: movie mode on and playing (the clock set to the stretch's start); steps: the clock's first moves from there
+      const movie = mov.length ? { on: rel(mov[0][0]), steps: mov.slice(1, 6).map(m => rel(m[0])) } : null;
       const post = performance.getEntriesByType("resource").filter(e => /\/prebuild\?/.test(e.name) && e.startTime >= t0 - 5).pop();
-      return { t0, log: window.__seg.log.map(([t, s]) => [rel(t), s]),
+      return { t0, movie, log: window.__seg.log.map(([t, s]) => [rel(t), s]),
         post: post && { start: rel(post.startTime), queued: +(post.requestStart - post.startTime).toFixed(1), connect: +(post.connectEnd - post.connectStart).toFixed(1),
           server: +(post.responseStart - post.requestStart).toFixed(1), total: +(post.responseEnd - post.startTime).toFixed(1) } };
     });
@@ -126,7 +149,7 @@ const now = () => performance.now();
     const out1 = (e, t) => ({ m: e.m, u: e.u.slice(0, 140), age: +(t - e.t0).toFixed(0), left: e.t1 == null ? null : +(e.t1 - t).toFixed(0), s: e.s });
     const outAtPress = reqs.filter(e => e.t0 < pressed && (e.t1 == null || e.t1 > pressed)).map(e => out1(e, pressed));
     const sinceMark = reqs.filter(e => e.t0 >= marked && e.t0 < pressed).map(e => ({ m: e.m, u: e.u.slice(0, 140), at: +(e.t0 - pressed).toFixed(0), took: e.t1 == null ? null : +(e.t1 - e.t0).toFixed(0), s: e.s }));
-    const r = { stretch: ends, job, post: got.post, asking: asking ? asking.for : null, first: first ? first.at : null, ready: ready ? ready.at : null,
+    const r = { stretch: ends, job, post: got.post, asking: asking ? asking.for : null, first: first ? first.at : null, ready: ready ? ready.at : null, movie: got.movie,
       lines, outAtPress, sinceMark, postSamples, samplesAfter: await samples() };
     runs.push(r);
     // the requests out at the press, by route (a picture, a pass's mosaic, a look-ahead note, ...) and how much longer each took
@@ -135,7 +158,8 @@ const now = () => performance.now();
     for (const e of outAtPress) { const k2 = `${e.m} ${route(e)}`; (routes[k2] = routes[k2] || []).push(e.left); }
     r.outByRoute = routes;
     console.log(`run ${k + 1} ${ends[0]}..${ends[1]}: asking ${r.asking} ms (POST queued ${got.post ? got.post.queued : "?"} + server ${got.post ? got.post.server : "?"} ms, ${outAtPress.length} requests out at the press), ` +
-      `first picture shown done ${r.first} ms, ready ${r.ready} ms; ${job ? `${job.state} ${job.done}/${job.total}, server took ${job.took != null ? job.took.toFixed(2) : "?"} s` : "no job"}\n` +
+      `first picture shown done ${r.first} ms, ready ${r.ready} ms; ${job ? `${job.state} ${job.done}/${job.total}, server took ${job.took != null ? job.took.toFixed(2) : "?"} s` : "no job"}; ` +
+      `movie ${got.movie ? `on at ${got.movie.on} ms, its first steps at ${got.movie.steps.join(", ")} ms` : "never on"}\n` +
       lines.map(l => `     ${String(l.at).padStart(8)} ms  ${String(l.for).padStart(8)} ms  ${l.says}`).join("\n") +
       Object.entries(routes).map(([k2, v]) => `\n     out at the press: ${v.length} x ${k2}, done ${v.map(x => x == null ? "never" : `${x} ms`).join(", ")} after it`).join(""));
   }
