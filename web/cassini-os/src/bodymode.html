@@ -167,7 +167,9 @@ body.phone.phone-land #bodymenu { left: auto !important; width: min(380px, 46vw)
     let best = Infinity;
     const loaded = t => t >= loadedSpan[0] && t < loadedSpan[1];
     if (loaded(et) && catalog && catalog.byCam) {
+      const lc = cassiniFeeds.liveCams ? cassiniFeeds.liveCams() : null;   // a closed camera's pictures are not waited for
       for (const cam of ["N", "W"]) {
+        if (lc && !lc.includes(cam)) continue;
         const a = cassiniFeeds.framesOf(cam, M.name).et; let lo = 0, hi = a.length;
         while (lo < hi) { const m = (lo + hi) >> 1; if (a[m] <= et) lo = m + 1; else hi = m; }
         if (lo < a.length && loaded(a[lo])) best = Math.min(best, a[lo]);
@@ -197,8 +199,11 @@ body.phone.phone-land #bodymenu { left: auto !important; width: min(380px, 46vw)
   // ---- the window ----
   function bodyLook(n) {
     const look = typeof MOON_LOOK !== "undefined" && MOON_LOOK[n], c = look ? `rgb(${look.map(v => Math.round(v * 255)).join(",")})` : "#888";
-    const has = typeof bodies !== "undefined" && bodies[n] && n !== "SUN";
-    return `--c:${c};${has ? `background-image:url(data/textures/1k/${n.toLowerCase()}.webp);` : ""}`;
+    // its surface map, or else (as in the dock's All bodies folder) its sharpest real picture
+    const map = typeof TEX_FILES !== "undefined" && TEX_ON && TEX_FILES[n], b = M.index && M.index.bodies[n];
+    if (map) return `--c:${c};background-image:url(data/textures/1k/${map}.webp);`;
+    if (b && b.best && window.cassiniFeeds && n !== "SUN") return `--c:${c};background-image:url('${cassiniFeeds.frames}/frames/${b.best}.webp?size=256');background-size:cover;background-position:50% 50%;`;
+    return `--c:${c};`;
   }
   function fillPick() {
     const sel = $("bmpick"), ix = M.index && M.index.bodies;
@@ -410,8 +415,13 @@ body.phone.phone-land #bodymenu { left: auto !important; width: min(380px, 46vw)
   let lastMark = 0;
   window.studyHud = ms => {
     if (base) base(ms);
-    // a moment's jump keeps the view on the body too
-    if (typeof jump === "function" && !jump.bodyLook) { const j = jump; jump = async e => { const r = await j(e); look(); return r; }; jump.bodyLook = true; }
+    // a moment's jump keeps the view on the body too; a jump to another body's moment (a highlight, a cutscene) leaves
+    // the body's view first, or its skip-the-gaps clock and its camera windows would pull the jump back to the body
+    if (typeof jump === "function" && !jump.bodyLook) {
+      const j = jump;
+      jump = async e => { if (M.name && momentBody(e) !== M.name) exit(); const r = await j(e); look(); return r; };
+      jump.bodyLook = true;
+    }
     if (want && !M.pending && typeof catalog !== "undefined" && catalog) { M.pending = true; enter(want, { jump: false }); }
     const now = performance.now();
     if (M.name && now - lastMark > 250) { lastMark = now; mark(); }
