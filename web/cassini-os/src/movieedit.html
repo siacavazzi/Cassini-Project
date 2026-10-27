@@ -1,0 +1,531 @@
+<!-- The Movie Editor for Cassini OS: choosing which frames go into a film and how they all look, the way movies were
+     made by hand before (export every frame, throw out the ones that don't belong, put the rest together). build.py
+     splices the style into the head, the window into #app, and the script after Cassini Studio's (it draws with the
+     studio's renderer and edits the look in the studio) and before the dock's.
+
+     Opening: Edit… on the highlighted stretch's bar (segment.html), Edit frames… in the Export window, Go > Movie
+     Editor…, or a link that carries an edit (&cut=…). The editor asks the frame server for the stretch's film plan
+     (/export/plan.json, web/frames/export.py), every raw frame in time order with the picture the film shows for it
+     (mosaic, color composite, movie pass or processed frame: plan entry src), and lists them as a filmstrip.
+
+     What it keeps: frames removed by hand (click a frame, Delete; shift-click for a run), and only the cameras, targets
+     and filter pairs left on (click a chip to leave it out, double-click it to keep only it). Left-out frames stay in
+     the strip, dimmed, so they can be put back. Removing a frame never changes how the others are made: a mosaic keeps
+     every tile, a composite every channel; that frame's picture is only not shown, and the film closes over the gap.
+
+     The look: Edit the look… opens the frame in front in Cassini Studio (Adjust and Filters), and Use for the movie
+     makes it the look of every frame: the preview, Play, each downloaded frame and the exported film (the frame
+     server draws it the same way, web/frames/studio_look.py).
+
+     A frame on its own: the big picture over the strip is the frame in front, as in the movie or as the raw frame;
+     double-click it to fill the window. Download frame saves it at full size with the look, as a JPEG.
+
+     The edit is one short recipe (from, until, cams, drop, targets, filters, edit, URL-encoded), kept on this device
+     for the stretch, put in links as &cut=…, and sent to the export with its plan (cassiniMovieCut), so Save movie… makes
+     the film edited. window.cassiniMovieEdit = { open(recipe?), close, recipe(), cut(), get state }. -->
+<style>
+#mecard { top: calc(env(safe-area-inset-top, 0px) + 34px); left: 50%; transform: translateX(-50%); width: clamp(600px, 76vw, 1240px); height: min(780px, calc(100% - 110px)); display: flex; flex-direction: column; }
+#mecard[style*="left"] { transform: none; }
+#mecard.zoomed { width: calc(100% - 20px); height: calc(100% - 50px); }
+#mecard .mebody { flex: 1 1 auto; min-height: 0; display: grid; grid-template-columns: minmax(0, 1fr) 250px; border-top: 1px solid var(--q-line); }
+#mecard .memain { min-width: 0; min-height: 0; display: grid; grid-template-rows: minmax(140px, 1fr) auto minmax(110px, 38%); background: #000; }
+#mecard.big .memain { grid-template-rows: minmax(140px, 1fr) auto 0; }
+#mecard.big #mestrip { display: none; }
+#mestage { position: relative; min-height: 0; overflow: hidden; }
+#mecanvas { position: absolute; display: block; cursor: zoom-in; }
+#mecard.big #mecanvas { cursor: zoom-out; }
+#mestage .metag { position: absolute; left: 8px; top: 7px; right: 8px; z-index: 2; font: 9.5px/1.4 var(--hudf); letter-spacing: .04em; color: rgba(232,236,242,.78); text-shadow: 0 0 3px #000; pointer-events: none; }
+#meoff { position: absolute; right: 8px; bottom: 8px; z-index: 2; font: 10px var(--hudf); letter-spacing: .08em; text-transform: uppercase; padding: 2px 6px; border-radius: 3px; background: rgba(255,120,100,.25); color: #ffb2a6; }
+#meempty { position: absolute; inset: 0; display: grid; place-items: center; text-align: center; padding: 20px; font-size: 12px; line-height: 1.55; color: var(--q-dim); }
+:is(#meempty, #meoff, #mecard .meside, #mecard [data-hide])[hidden] { display: none !important; }
+#mecard .mebar { display: flex; gap: 8px; align-items: center; flex-wrap: wrap; padding: 6px 10px; border-top: 1px solid var(--q-line); background: var(--q-panel); font: 10.5px var(--hudf); color: var(--q-dim); }
+#mecard .mebar .sp { flex: 1; }
+#mecard .mebar .rnd { all: unset; width: 24px; height: 24px; display: grid; place-items: center; border-radius: 50%; color: var(--q-text); background: rgba(255,255,255,.08); cursor: pointer; flex: none; font-size: 12px; }
+#mecard .mebar .rnd:hover { background: rgba(255,255,255,.16); color: #fff; }
+#mepos { min-width: 120px; font-variant-numeric: tabular-nums; }
+#mestrip { min-height: 0; overflow-y: auto; padding: 6px; display: grid; grid-template-columns: repeat(auto-fill, minmax(92px, 1fr)); gap: 5px; align-content: start; border-top: 1px solid var(--q-line); background: rgba(0,0,0,.55); }
+.meth { all: unset; position: relative; display: block; border-radius: 4px; overflow: hidden; background: #0b0d11; outline: 1px solid rgba(255,255,255,.06); cursor: pointer; }
+.meth img { display: block; width: 100%; aspect-ratio: 1; object-fit: cover; }
+.meth span { position: absolute; left: 0; right: 0; bottom: 0; padding: 2px 4px; font: 8.5px/1.25 var(--hudf); color: rgba(232,236,242,.9); background: linear-gradient(transparent, rgba(0,0,0,.85)); white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+.meth b { position: absolute; left: 3px; top: 3px; font: 8px/1 var(--hudf); padding: 2px 3px; border-radius: 2px; background: rgba(0,0,0,.6); color: rgba(232,236,242,.85); font-weight: normal; }
+.meth.out img { opacity: .22; filter: grayscale(1); }
+.meth.out span { color: rgba(232,236,242,.45); }
+.meth.dropped::after { content: ""; position: absolute; inset: 0; background: linear-gradient(to top right, transparent calc(50% - 1px), rgba(255,120,100,.75) 50%, transparent calc(50% + 1px)); pointer-events: none; }
+.meth.picked { outline: 2px solid rgba(138,182,255,.55); }
+.meth.sel { outline: 2px solid var(--q-accent); }
+#mecard .meside { min-height: 0; overflow-y: auto; padding: 2px 12px 12px; border-left: 1px solid var(--q-line); }
+#mecard .meside h4 { margin: 12px 0 4px; font: 10px/1 var(--ui); letter-spacing: .12em; text-transform: uppercase; color: var(--q-dim); font-weight: normal; display: flex; align-items: center; gap: 6px; }
+#mecard .meside h4 .sp { flex: 1; }
+#mecard .meside h4 button { all: unset; font-size: 10px; letter-spacing: 0; text-transform: none; color: var(--q-accent); cursor: pointer; }
+#mecard .meside h4 button:hover { color: #fff; }
+#mecard .meside h4 button:disabled { color: var(--q-dim); cursor: default; }
+.mechips { display: flex; flex-wrap: wrap; gap: 4px; }
+.mechips .galbtn { padding: 2px 7px; font-size: 10.5px; }
+.mechips .galbtn i { font-style: normal; color: var(--q-dim); font-size: 9.5px; }
+.mechips .galbtn[aria-pressed="true"] { background: rgba(138,182,255,.22); border-color: rgba(138,182,255,.7); color: #fff; }
+.mechips .galbtn[aria-pressed="false"] { opacity: .6; text-decoration: line-through; text-decoration-color: rgba(255,255,255,.35); }
+#mecard .menote { margin-top: 6px; font-size: 10.5px; line-height: 1.45; color: var(--q-dim); }
+#mecard .mecheck { display: flex; gap: 6px; align-items: center; margin-top: 10px; font-size: 11px; color: var(--q-text); cursor: pointer; }
+#mecard .mefoot { flex: none; display: flex; gap: 6px; flex-wrap: wrap; align-items: center; padding: 8px 10px; border-top: 1px solid var(--q-line); font-size: 11px; color: var(--q-text); }
+#mecard .mefoot .sp { flex: 1; }
+@media (max-width: 760px) {
+  #mecard, #mecard.zoomed { width: calc(100% - 12px); left: 6px !important; transform: none; height: calc(100dvh - 60px); }
+  #mecard .mebody { grid-template-columns: minmax(0, 1fr); grid-template-rows: minmax(0, 1fr) auto; }
+  #mecard .meside { border-left: 0; border-top: 1px solid var(--q-line); max-height: 34vh; }
+}
+body.phone #mecard { left: var(--side, 6px) !important; right: var(--sider, 6px) !important; width: auto !important; transform: none; top: calc(var(--menu, 30px) + var(--gap, 6px)) !important;
+  height: calc(100dvh - var(--menu, 30px) - var(--appdockh, 0px) - 3 * var(--gap, 6px)) !important; z-index: 1460 !important; }
+body.phone #mecard .mebody { grid-template-columns: minmax(0, 1fr); grid-template-rows: minmax(0, 1fr) auto; }
+body.phone #mecard .meside { border-left: 0; border-top: 1px solid var(--q-line); max-height: 30vh; }
+body.phone #mestrip { grid-template-columns: repeat(auto-fill, minmax(72px, 1fr)); }
+</style>
+
+<section class="win" id="mecard" aria-label="Movie Editor" hidden>
+  <div class="titlebar"><span class="lights"><button class="close" aria-label="Close the movie editor">×</button><button class="min" aria-label="Close the movie editor">–</button><button class="zoom" aria-label="Zoom">+</button></span>Movie Editor</div>
+  <div class="mebody">
+    <div class="memain">
+      <div id="mestage">
+        <canvas id="mecanvas" title="Double-click to fill the window"></canvas>
+        <span class="metag" id="metag"></span>
+        <span id="meoff" hidden>Left out</span>
+        <div id="meempty">Highlight a stretch of the timeline (drag across it), then Edit… on its bar.</div>
+      </div>
+      <div class="mebar">
+        <button class="rnd" id="meprev" aria-label="Previous frame (←)" title="Previous frame (←)">‹</button>
+        <button class="rnd" id="meplay" aria-label="Play the kept frames (Space)" title="Play the kept frames (Space)">▶</button>
+        <button class="rnd" id="menext" aria-label="Next frame (→)" title="Next frame (→)">›</button>
+        <span id="mepos"></span>
+        <div class="galseg" id="mesrc" role="group" aria-label="Picture shown"><button data-v="movie" title="The picture the film shows for this frame (mosaic, color, movie pass or processed)">As in the movie</button><button data-v="raw" title="The frame as Cassini took it">Raw frame</button></div>
+        <span class="sp"></span>
+        <button class="galbtn" id="metoggle" title="Take the picked frames out of the movie, or put them back (Delete)">Remove</button>
+        <button class="galbtn" id="medl" title="Save this frame at full size, with the look, as a JPEG">Download frame</button>
+      </div>
+      <div id="mestrip" role="listbox" aria-label="Frames of the movie" aria-multiselectable="true"></div>
+    </div>
+    <div class="meside" hidden>
+      <h4><span>Cameras</span></h4>
+      <div class="mechips" id="mecams"></div>
+      <h4><span>Targets</span><span class="sp"></span><button id="metgall">All</button></h4>
+      <div class="mechips" id="metargets"></div>
+      <h4><span>Filters</span><span class="sp"></span><button id="meflall">All</button></h4>
+      <div class="mechips" id="mefilters"></div>
+      <div class="menote">Click to leave out, double-click to keep only that one.</div>
+      <h4><span>Removed by hand</span><span class="sp"></span><button id="merestore">Put all back</button></h4>
+      <div class="menote" id="medropped" style="margin-top:0"></div>
+      <label class="mecheck"><input type="checkbox" id="meshowout"> Show left-out frames</label>
+      <h4><span>Look</span><span class="sp"></span><button id="melookclear">Clear</button></h4>
+      <div class="menote" id="melook" style="margin-top:0"></div>
+      <div class="mechips" style="margin-top:6px"><button class="galbtn" id="melookedit">Edit the look in Studio…</button></div>
+      <div class="menote">The look goes on every frame: the preview, Play, each downloaded frame and the saved movie.</div>
+    </div>
+  </div>
+  <div class="mefoot">
+    <span id="mesum"></span>
+    <span class="sp"></span>
+    <button class="galbtn" id="meundo" title="Undo (Ctrl+Z / ⌘Z)" disabled>Undo</button>
+    <button class="galbtn" id="mecopy" title="A link that opens this stretch with these frames and this look">Copy link</button>
+    <button class="galbtn go" id="meexport" title="Make the edited movie (the Export window)">Save movie…</button>
+  </div>
+</section>
+
+<script>
+// ---------- the Movie Editor ----------
+(function () {
+  const $ = id => document.getElementById(id);
+  const EX = window.cassiniExport, STU = () => window.cassiniStudio, WM = window.cassiniWM, S = window.cassiniSettings, card = $("mecard");
+  if (!EX) return;
+  const FRAMES = (() => {                       // the frame server, chosen as the camera window chooses it
+    const q = new URLSearchParams(location.search).get("frames");
+    if (q) return q.replace(/\/$/, "");
+    if (/^https?:$/.test(location.protocol) && !/claude\.ai$|claudeusercontent\.com$|claude\.site$/.test(location.hostname)) return location.origin;
+    return "http://localhost:8765";
+  })();
+  const opt = (k, d) => (S && S.get(k) !== undefined ? S.get(k) : d);
+  const isoOf = et => new Date(etToMs(et)).toISOString().slice(0, 19);
+  const STORE = "cassini-movie-edits";
+
+  // ME: the stretch (a, b), its plan's frames, and the edit: drop (ids taken out by hand), keep (null = every target /
+  // filter pair, else the ones kept), cams (the export's Cameras), edit (the studio look's recipe)
+  const ME = { a: null, b: null, frames: [], loading: false, error: "", drop: new Set(), targets: null, filters: null, edit: "",
+    sel: -1, anchor: -1, picked: new Set(), showOut: true, src: "movie", undo: [], playing: false, pending: null };
+  const camsOf = () => (/^(N|W|NW)$/.test(EX.state.cams || "") ? EX.state.cams : "NW");
+  const why = e => !camsOf().includes(e.cam) ? "camera" : ME.drop.has(e.id) ? "removed" : ME.targets && !ME.targets.has(e.target || "UNKNOWN") ? "target"
+    : ME.filters && !ME.filters.has(e.filters) ? "filter" : "";
+  const kept = e => !why(e);
+  const visible = () => ME.frames.map((e, i) => i).filter(i => ME.showOut || kept(ME.frames[i]));
+
+  // ---------- the recipe ----------
+  const listOf = s => [...s].sort().join(",");
+  function recipe() {
+    if (ME.a == null) return "";
+    const q = new URLSearchParams({ from: isoOf(ME.a), until: isoOf(ME.b), cams: camsOf() });
+    if (ME.drop.size) q.set("drop", listOf(ME.drop));
+    if (ME.targets) q.set("targets", listOf(ME.targets));
+    if (ME.filters) q.set("filters", listOf(ME.filters));
+    if (ME.edit) q.set("edit", ME.edit);
+    return q.toString();
+  }
+  // what the export adds to its plan and film for the stretch marked now: the cut, when the editor has one for it
+  const same = () => ME.a != null && EX.state.a != null && Math.abs(EX.state.a - ME.a) < 1 && Math.abs(EX.state.b - ME.b) < 1;
+  function cut() {
+    if (!same()) return "";
+    const q = new URLSearchParams(recipe()); ["from", "until", "cams"].forEach(k => q.delete(k));
+    const s = q.toString(); return s ? "&" + s : "";
+  }
+  window.cassiniMovieCut = cut;
+  function remember() {
+    try {
+      const all = JSON.parse(localStorage.getItem(STORE) || "{}"), key = `${isoOf(ME.a)}|${isoOf(ME.b)}`, r = recipe();
+      const empty = !ME.drop.size && !ME.targets && !ME.filters && !ME.edit;
+      if (empty) delete all[key]; else all[key] = { r, at: Date.now() };
+      const keys = Object.keys(all).sort((x, y) => all[y].at - all[x].at); keys.slice(30).forEach(k => delete all[k]);
+      localStorage.setItem(STORE, JSON.stringify(all));
+    } catch (e) {}
+  }
+  function recalled(a, b) {
+    try { const got = JSON.parse(localStorage.getItem(STORE) || "{}")[`${isoOf(a)}|${isoOf(b)}`]; return got ? got.r : null; } catch (e) { return null; }
+  }
+  // a recipe's edit over the editor (its times are the stretch's; the keep lists wait for the plan to check them)
+  function take(r) {
+    const q = new URLSearchParams(r || "");
+    ME.drop = new Set((q.get("drop") || "").split(",").filter(Boolean));
+    const set = k => q.get(k) ? new Set(q.get(k).split(",").filter(Boolean)) : null;
+    ME.targets = set("targets"); ME.filters = set("filters"); ME.edit = q.get("edit") || "";
+    if (/^(N|W|NW)$/.test(q.get("cams") || "")) EX.state.cams = q.get("cams");
+  }
+  const snapshot = () => ({ drop: new Set(ME.drop), targets: ME.targets && new Set(ME.targets), filters: ME.filters && new Set(ME.filters), edit: ME.edit, cams: camsOf() });
+  function change(fn) {
+    ME.undo.push(snapshot()); if (ME.undo.length > 200) ME.undo.shift();
+    fn(); changed();
+  }
+  let exT = 0;
+  function changed() {
+    remember(); render();
+    // the export's plan follows (EX.mark re-plans the marked stretch, cut included)
+    clearTimeout(exT); exT = setTimeout(() => { if (same()) EX.mark(); }, 300);
+  }
+  function undo() {
+    const s = ME.undo.pop(); if (!s) return;
+    ME.drop = s.drop; ME.targets = s.targets; ME.filters = s.filters; ME.edit = s.edit; EX.state.cams = s.cams;
+    changed(); show();
+  }
+
+  // ---------- the plan: every frame of the stretch, from the frame server ----------
+  let ask = 0;
+  async function load() {
+    const n = ++ask;
+    ME.loading = true; ME.error = ""; ME.frames = []; render();
+    const q = new URLSearchParams({ from: isoOf(ME.a), until: isoOf(ME.b), cams: "NW", fps: opt("export.adaptive", true) ? "auto" : String(opt("export.fps", 12)),
+      size: "512", sound: "0", caption: "0" });
+    try {
+      const r = await fetch(`${FRAMES}/export/plan.json?${q}${window.cassiniLook ? window.cassiniLook() : ""}${window.cassiniMovieStyle ? window.cassiniMovieStyle() : ""}`), p = await r.json();
+      if (n !== ask) return;
+      if (!r.ok) throw new Error(p.error || `the frame server said ${r.status}`);
+      ME.frames = p.pictures;
+    } catch (e) { if (n === ask) ME.error = /fetch|network/i.test(String(e.message)) ? `No frame server at ${FRAMES}.` : `Could not list the frames: ${e.message || e}`; }
+    if (n !== ask) return;
+    ME.loading = false;
+    // keep lists that name nothing in the stretch mean nothing
+    const has = (s, k) => s && [...s].some(v => ME.frames.some(e => (k === "target" ? e.target || "UNKNOWN" : e.filters) === v));
+    if (ME.targets && !has(ME.targets, "target")) ME.targets = null;
+    if (ME.filters && !has(ME.filters, "filters")) ME.filters = null;
+    strip(); render();
+    const first = ME.frames.findIndex(kept); select(first >= 0 ? first : 0);
+  }
+
+  // ---------- the strip ----------
+  const name = t => (t || "Unknown").replace(/_/g, " ").toLowerCase().replace(/\b\w/g, c => c.toUpperCase());
+  const hms = e => new Date(e.t * 1000).toISOString().slice(11, 19);
+  const KIND = { mosaic: "MOS", rolling: "MOS", movie: "MOV", color: "COL", processed: "", frame: "" };
+  const thumbUrl = e => `${FRAMES}/frames/${e.id}.webp?size=256`;
+  function strip() {
+    const host = $("mestrip");
+    host.replaceChildren(...ME.frames.map((e, i) => {
+      const b = document.createElement("button"); b.className = "meth"; b.dataset.i = i; b.setAttribute("role", "option");
+      b.title = `${hms(e)} UTC · ${name(e.target)} · ${e.cam === "N" ? "NAC" : "WAC"} ${e.filters} · ${e.id}`;
+      b.innerHTML = `<img loading="lazy" decoding="async" alt=""><b></b><span></span>`;
+      b.querySelector("img").src = thumbUrl(e);
+      b.querySelector("b").textContent = `${e.cam === "N" ? "N" : "W"}${KIND[e.first] ? " · " + KIND[e.first] : ""}`;
+      b.querySelector("span").textContent = `${hms(e)} ${name(e.target)}`;
+      return b;
+    }));
+  }
+  function stripState() {
+    const vis = new Set(visible());
+    $("mestrip").querySelectorAll(".meth").forEach(b => {
+      const i = +b.dataset.i, e = ME.frames[i], w = why(e);
+      b.hidden = !vis.has(i);
+      b.classList.toggle("out", !!w); b.classList.toggle("dropped", w === "removed");
+      b.classList.toggle("sel", i === ME.sel); b.classList.toggle("picked", ME.picked.has(i));
+      b.setAttribute("aria-selected", String(ME.picked.has(i) || i === ME.sel));
+    });
+  }
+
+  // ---------- chips: cameras, targets, filter pairs ----------
+  function chips(host, items, on, click, dbl) {
+    host.replaceChildren(...items.map(([k, label, n]) => {
+      const b = document.createElement("button"); b.className = "galbtn"; b.dataset.v = k;
+      b.innerHTML = `<span></span><i></i>`; b.firstChild.textContent = label; b.lastChild.textContent = n.toLocaleString();
+      b.setAttribute("aria-pressed", String(on(k)));
+      b.addEventListener("click", () => click(k));
+      if (dbl) b.addEventListener("dblclick", e => { e.preventDefault(); dbl(k); });
+      return b;
+    }));
+  }
+  const count = f => { const m = new Map(); ME.frames.forEach(e => { const k = f(e); m.set(k, (m.get(k) || 0) + 1); }); return [...m].sort((x, y) => y[1] - x[1]); };
+  // a keep list toggled: null keeps all; leaving every one in again goes back to null
+  function toggleKeep(field, all, k) {
+    change(() => {
+      const s = ME[field] ? new Set(ME[field]) : new Set(all);
+      if (s.has(k)) s.delete(k); else s.add(k);
+      ME[field] = s.size === all.length ? null : s.size ? s : new Set([k]);
+    });
+  }
+  function side() {
+    const tg = count(e => e.target || "UNKNOWN"), fl = count(e => e.filters), cm = count(e => e.cam);
+    chips($("mecams"), cm.map(([k, n]) => [k, k === "N" ? "NAC" : "WAC", n]), k => camsOf().includes(k),
+      k => change(() => { const c = camsOf(), next = c.includes(k) ? c.replace(k, "") : "NW".split("").filter(x => x === k || c.includes(x)).join(""); if (next) EX.state.cams = next; }));
+    chips($("metargets"), tg.map(([k, n]) => [k, name(k), n]), k => !ME.targets || ME.targets.has(k), k => toggleKeep("targets", tg.map(x => x[0]), k),
+      k => change(() => { ME.targets = tg.length > 1 ? new Set([k]) : null; }));
+    chips($("mefilters"), fl.map(([k, n]) => [k, k, n]), k => !ME.filters || ME.filters.has(k), k => toggleKeep("filters", fl.map(x => x[0]), k),
+      k => change(() => { ME.filters = fl.length > 1 ? new Set([k]) : null; }));
+    $("metgall").disabled = !ME.targets; $("meflall").disabled = !ME.filters; $("merestore").disabled = !ME.drop.size;
+    $("medropped").textContent = ME.drop.size ? `${ME.drop.size.toLocaleString()} frame${ME.drop.size === 1 ? "" : "s"}` : "None. Pick a frame and press Delete.";
+    $("melook").textContent = ME.edit ? lookText(ME.edit) : "As the pipeline made the pictures.";
+    $("melookclear").disabled = !ME.edit;
+    $("meshowout").checked = ME.showOut;
+  }
+  const LOOKNAMES = { ex: "exposure", ct: "contrast", bk: "black", wt: "white", md: "midtones", sa: "saturation", wa: "warmth", ti: "tint", sh: "sharpness", to: "tone", fi: "filter", st: "strength" };
+  const lookText = r => r.split(",").map(kv => { const [k, v] = kv.split(":"); return `${LOOKNAMES[k] || k} ${/^-?[\d.]+$/.test(v) && +v > 0 && k !== "st" && k !== "wt" ? "+" : ""}${v}`; }).join(", ");
+
+  function render() {
+    $("meempty").hidden = !(ME.a == null || ME.loading || ME.error || !ME.frames.length);
+    $("meempty").textContent = ME.a == null ? "Highlight a stretch of the timeline (drag across it), then Edit… on its bar." : ME.loading ? "Listing the frames of this stretch…"
+      : ME.error || "No frames in this stretch.";
+    $("mecard").querySelector(".meside").hidden = !ME.frames.length;
+    const n = ME.frames.filter(kept).length;
+    $("mesum").textContent = ME.frames.length ? `${n.toLocaleString()} of ${ME.frames.length.toLocaleString()} frames in the movie` : "";
+    $("meundo").disabled = !ME.undo.length;
+    $("meexport").disabled = $("mecopy").disabled = ME.a == null;
+    $("mesrc").querySelectorAll("button").forEach(b => b.setAttribute("aria-pressed", String(b.dataset.v === ME.src)));
+    if (ME.frames.length) { side(); stripState(); }
+    pos();
+  }
+  function pos() {
+    const e = ME.frames[ME.sel], vis = ME.frames.filter(kept);
+    const at = e ? vis.indexOf(e) : -1;
+    $("mepos").textContent = e ? (at >= 0 ? `${at + 1} of ${vis.length}` : "left out") + ` · ${hms(e)} UTC` : "";
+    const sel = ME.picked.size ? [...ME.picked].map(i => ME.frames[i]) : e ? [e] : [];
+    $("metoggle").disabled = !sel.length;
+    $("metoggle").textContent = sel.length && sel.every(x => ME.drop.has(x.id)) ? `Put back${sel.length > 1 ? ` ${sel.length}` : ""}` : `Remove${sel.length > 1 ? ` ${sel.length}` : ""}`;
+    $("medl").disabled = !e;
+    $("meoff").hidden = !e || kept(e);
+    if (e && !kept(e)) $("meoff").textContent = { removed: "Removed", camera: "Camera left out", target: "Target left out", filter: "Filter left out" }[why(e)];
+  }
+
+  // ---------- the frame in front, drawn with the look ----------
+  const cv = $("mecanvas"), stage = $("mestage");
+  let R = null;
+  const ren = () => { if (!R && STU() && STU().renderer) { try { R = STU().renderer(cv); } catch (e) { R = null; } } return R; };
+  const picUrl = (e, size) => ME.src === "raw" || !e.src ? `${FRAMES}/frames/${e.id}.webp?size=${size}`
+    : `${FRAMES}${e.src}${e.src.includes("?") ? "&" : "?"}size=${size}${window.cassiniLook ? window.cassiniLook() : ""}${/^\/frames\/movie\//.test(e.src) && window.cassiniMovieStyle ? window.cassiniMovieStyle() : ""}`;
+  // pictures kept as bitmaps for a while (Play steps through them), the oldest let go
+  const bitmaps = new Map();
+  function bitmap(url) {
+    if (bitmaps.has(url)) { const b = bitmaps.get(url); bitmaps.delete(url); bitmaps.set(url, b); return b; }
+    const p = fetch(url).then(r => { if (!r.ok) throw new Error(r.status); return r.blob(); }).then(b => createImageBitmap(b));
+    p.catch(() => bitmaps.delete(url));
+    bitmaps.set(url, p);
+    while (bitmaps.size > 24) { const [k, old] = bitmaps.entries().next().value; bitmaps.delete(k); old.then(b => b.close && b.close(), () => {}); }
+    return p;
+  }
+  let shown = null, drawn = 0;
+  async function show() {
+    const e = ME.frames[ME.sel], n = ++drawn;
+    pos();
+    if (!e) { shown = null; paint(); return; }
+    $("metag").textContent = `${hms(e)} UTC · ${name(e.target)} · ${e.cam === "N" ? "NAC" : "WAC"} ${e.filters} · ${ME.src === "raw" ? "raw frame" : { mosaic: "mosaic", rolling: "mosaic movie", movie: "movie pass", color: "color", processed: "processed", frame: "frame" }[e.first] || ""} · ${e.id}`;
+    try {
+      const b = await bitmap(picUrl(e, 1024));
+      if (n !== drawn) return;
+      shown = b;
+    } catch (err) {
+      if (n !== drawn) return;
+      // the picture the film shows cannot be made: the raw frame stands in, as in the film
+      try { shown = await bitmap(`${FRAMES}/frames/${e.id}.webp?size=1024`); } catch (e2) { shown = null; }
+      if (n !== drawn) return;
+    }
+    paint();
+    return shown;
+  }
+  function paint() {
+    const r = ren();
+    if (!r || !shown || card.hidden) { cv.style.width = "0px"; return; }
+    const box = stage.getBoundingClientRect(), dpr = Math.min(2, devicePixelRatio || 1), W = shown.width, H = shown.height;
+    const k = Math.min((box.width - 12) / W, (box.height - 12) / H); if (!(k > 0)) return;
+    const cw = W * k, ch = H * k;
+    Object.assign(cv.style, { width: cw + "px", height: ch + "px", left: (box.width - cw) / 2 + "px", top: (box.height - ch) / 2 + "px" });
+    r.upload(shown, W, H);
+    r.draw(STU().decode(ME.edit), Math.max(1, Math.round(cw * dpr)), Math.max(1, Math.round(ch * dpr)));
+  }
+  new ResizeObserver(() => paint()).observe(stage);
+
+  // ---------- picking frames ----------
+  function select(i, how = {}) {
+    if (!ME.frames.length) { ME.sel = -1; show(); return; }
+    i = Math.max(0, Math.min(ME.frames.length - 1, i));
+    if (how.range && ME.anchor >= 0) { ME.picked = new Set(); const [a, b] = [Math.min(ME.anchor, i), Math.max(ME.anchor, i)]; for (let k = a; k <= b; k++) if (visible().includes(k)) ME.picked.add(k); }
+    else if (how.toggle) { if (ME.picked.has(i)) ME.picked.delete(i); else ME.picked.add(i); if (ME.sel >= 0 && !ME.picked.size) ME.picked.add(ME.sel); ME.anchor = i; }
+    else { ME.picked = new Set(); ME.anchor = i; }
+    ME.sel = i; stripState(); show();
+    const el = $("mestrip").querySelector(`.meth[data-i="${i}"]`); if (el && !how.noScroll) el.scrollIntoView({ block: "nearest" });
+  }
+  // the next frame shown in the strip (every frame with Show left-out frames, else the kept ones)
+  function step(d, how) {
+    const vis = visible(); if (!vis.length) return;
+    let at = vis.indexOf(ME.sel);
+    if (at < 0) { at = d > 0 ? vis.findIndex(i => i > ME.sel) - 1 : vis.findIndex(i => i >= ME.sel); if (at < -1) at = d > 0 ? vis.length - 1 : 0; }
+    select(vis[Math.max(0, Math.min(vis.length - 1, at + d))], how);
+  }
+  function toggleRemoved() {
+    const sel = (ME.picked.size ? [...ME.picked] : [ME.sel]).filter(i => ME.frames[i]).map(i => ME.frames[i]);
+    if (!sel.length) return;
+    const back = sel.every(e => ME.drop.has(e.id));
+    change(() => sel.forEach(e => back ? ME.drop.delete(e.id) : ME.drop.add(e.id)));
+    // one frame removed: on to the next, so a run of bad frames goes with Delete, Delete, Delete
+    if (!back && sel.length === 1) { if (!ME.showOut) { const nx = ME.frames.findIndex((e, i) => i > ME.sel && kept(e)); select(nx >= 0 ? nx : ME.sel); } else step(1); }
+    else { ME.picked = new Set(); stripState(); pos(); }
+  }
+  $("mestrip").addEventListener("click", e => {
+    const b = e.target.closest(".meth"); if (!b) return;
+    stopPlay(); select(+b.dataset.i, { range: e.shiftKey, toggle: e.metaKey || e.ctrlKey, noScroll: true });
+  });
+  $("mestrip").addEventListener("dblclick", e => { if (e.target.closest(".meth")) { card.classList.add("big"); paint(); } });
+  cv.addEventListener("dblclick", () => { card.classList.toggle("big"); setTimeout(paint); const el = $("mestrip").querySelector(".meth.sel"); if (el && !card.classList.contains("big")) el.scrollIntoView({ block: "nearest" }); });
+
+  // ---------- Play: the kept frames at the movie frame rate, each waiting for its picture ----------
+  let playT = 0;
+  function play() {
+    if (ME.playing) return stopPlay();
+    const k = ME.frames.filter(kept); if (!k.length) return;
+    ME.playing = true; $("meplay").textContent = "❚❚";
+    // from the frame in front, or from the start when it is the last kept one
+    if (ME.frames.findIndex((e, i) => i > ME.sel && kept(e)) < 0) ME.sel = -1;
+    else if (kept(ME.frames[ME.sel])) ME.sel--;
+    tick();
+  }
+  async function tick() {
+    if (!ME.playing) return;
+    const fps = Math.min(30, Math.max(1, window.cassiniMovie && window.cassiniMovie.fps ? window.cassiniMovie.fps() : +opt("movie.fps", 8) || 8));
+    const at = performance.now(), next = ME.frames.findIndex((e, i) => i > ME.sel && kept(e));
+    if (next < 0) return stopPlay();
+    ME.sel = next; ME.picked = new Set(); stripState();
+    const el = $("mestrip").querySelector(`.meth[data-i="${next}"]`); if (el) el.scrollIntoView({ block: "nearest" });
+    // the next few, asked for ahead
+    let ahead = next; for (let n = 0; n < 4; n++) { ahead = ME.frames.findIndex((e, i) => i > ahead && kept(e)); if (ahead < 0) break; bitmap(picUrl(ME.frames[ahead], 1024)); }
+    await show();
+    playT = setTimeout(tick, Math.max(0, 1000 / fps - (performance.now() - at)));
+  }
+  function stopPlay() { ME.playing = false; clearTimeout(playT); $("meplay").textContent = "▶"; }
+
+  // ---------- one frame, downloaded at full size with the look ----------
+  async function download() {
+    const e = ME.frames[ME.sel]; if (!e || !STU()) return;
+    const b = $("medl"); b.disabled = true; b.textContent = "Making…";
+    try {
+      let r = await fetch(picUrl(e, "full"));
+      if (!r.ok) r = await fetch(`${FRAMES}/frames/${e.id}.webp?size=full`);
+      if (!r.ok) throw new Error(`the frame server said ${r.status}`);
+      const jpg = await STU().apply(await r.blob(), ME.edit);
+      const a = document.createElement("a"); a.href = URL.createObjectURL(jpg);
+      a.download = `Cassini_${e.id}_${new Date(e.t * 1000).toISOString().slice(0, 19).replace(/[:T]/g, "-")}${ME.edit ? "_edited" : ""}.jpg`;
+      document.body.appendChild(a); a.click(); a.remove(); setTimeout(() => URL.revokeObjectURL(a.href), 60000);
+    } catch (err) { toast(`Could not save the frame: ${err.message || err}`); }
+    finally { b.disabled = false; b.textContent = "Download frame"; }
+  }
+  function toast(t) {
+    const g = $("galtoast");
+    if (g) { g.firstElementChild.textContent = t; const o = g.querySelector("button"); if (o) o.remove(); g.hidden = false; clearTimeout(toast.t); toast.t = setTimeout(() => { g.hidden = true; }, 3200); }
+  }
+
+  // ---------- the look, edited in Cassini Studio on the frame in front ----------
+  function editLook() {
+    const e = ME.frames[ME.sel]; if (!e || !STU()) return;
+    stopPlay();
+    STU().open({ kind: "picture", url: picUrl(e, "full"), edit: ME.edit || undefined, item: { title: `Movie look · ${hms(e)} UTC`, src: e.src, ids: [e.id] },
+      look: r => { change(() => { ME.edit = r; }); show(); if (WM) WM.front(card); } });
+  }
+
+  // ---------- opening ----------
+  function front() { card.hidden = false; delete card.dataset.min; if (WM) { WM.front(card); WM.syncMenu(); } }
+  // r: a recipe to open (a link's), else the stretch highlighted now and what was kept for it on this device
+  function open(r) {
+    front();
+    let a = EX.state.a, b = EX.state.b;
+    if (r) {
+      const q = new URLSearchParams(r), f = q.get("from"), u = q.get("until");
+      if (f && u) { a = utcToEt(f); b = utcToEt(u); EX.mark(a, b, "new"); a = EX.state.a; b = EX.state.b; }
+    }
+    if (a == null || b == null || b - a < 1) { ME.a = ME.b = null; ME.frames = []; strip(); render(); return; }
+    if (ME.a !== a || ME.b !== b || r) {
+      stopPlay(); ME.a = a; ME.b = b; ME.undo = []; ME.sel = -1; ME.picked = new Set();
+      take(r || recalled(a, b) || ""); remember();
+      load();
+    } else render();
+    setTimeout(paint);
+  }
+  function close() { stopPlay(); card.hidden = true; card.classList.remove("big"); if (WM) WM.syncMenu(); }
+  // a new stretch highlighted while the editor is open: it edits that one
+  document.addEventListener("cassini:marks", e => {
+    if (card.hidden) return;
+    const { a, b } = e.detail;
+    if (a != null && b != null && (ME.a == null || Math.abs(a - ME.a) >= 1 || Math.abs(b - ME.b) >= 1)) { clearTimeout(open.t); open.t = setTimeout(() => open(), 400); }
+  });
+
+  // ---------- wiring ----------
+  $("meprev").addEventListener("click", () => { stopPlay(); step(-1); });
+  $("menext").addEventListener("click", () => { stopPlay(); step(1); });
+  $("meplay").addEventListener("click", play);
+  $("mesrc").addEventListener("click", e => { const b = e.target.closest("button"); if (!b) return; ME.src = b.dataset.v; render(); show(); });
+  $("metoggle").addEventListener("click", toggleRemoved);
+  $("medl").addEventListener("click", download);
+  $("metgall").addEventListener("click", () => change(() => { ME.targets = null; }));
+  $("meflall").addEventListener("click", () => change(() => { ME.filters = null; }));
+  $("merestore").addEventListener("click", () => change(() => { ME.drop = new Set(); }));
+  $("meshowout").addEventListener("change", e => { ME.showOut = e.target.checked; render(); });
+  $("melookedit").addEventListener("click", editLook);
+  $("melookclear").addEventListener("click", () => { change(() => { ME.edit = ""; }); paint(); });
+  $("meundo").addEventListener("click", () => { undo(); paint(); });
+  $("meexport").addEventListener("click", () => { stopPlay(); if (same()) EX.mark(); EX.open(); });
+  $("mecopy").addEventListener("click", async () => {
+    const base = window.cassiniLink && window.cassiniLink.href ? window.cassiniLink.href() : location.href.replace(/[?&]cut=[^&]*/, "");
+    const url = `${base}${base.includes("?") ? "&" : "?"}cut=${encodeURIComponent(recipe())}`;
+    try { await navigator.clipboard.writeText(url); $("mecopy").textContent = "Copied"; setTimeout(() => { $("mecopy").textContent = "Copy link"; }, 1500); } catch (e) { prompt("Link to this movie edit", url); }
+  });
+  card.addEventListener("click", e => { if (e.target.closest(".close, .min")) { e.stopPropagation(); close(); } }, true);
+  window.addEventListener("keydown", e => {
+    if (card.hidden || !card.classList.contains("front") || /INPUT|SELECT|TEXTAREA/.test(e.target.tagName) && e.target.type !== "checkbox") return;
+    if ((e.metaKey || e.ctrlKey) && e.key.toLowerCase() === "z") { e.preventDefault(); e.stopImmediatePropagation(); undo(); paint(); return; }
+    if (e.metaKey || e.ctrlKey || e.altKey) return;
+    const k = e.key;
+    if (k === "ArrowRight" || k === "ArrowLeft") { stopPlay(); step(k === "ArrowRight" ? 1 : -1, { range: e.shiftKey }); }
+    else if (k === "Delete" || k === "Backspace") toggleRemoved();
+    else if (k === " ") play();
+    else if (k === "Escape") { if (card.classList.contains("big")) { card.classList.remove("big"); setTimeout(paint); } else close(); }
+    else return;
+    e.preventDefault(); e.stopImmediatePropagation();
+  }, true);
+  // the bar of a highlighted stretch and the Export window open it; so do the Go menu and a link with &cut=
+  if ($("segedit")) $("segedit").addEventListener("click", () => open());
+  if ($("exedit")) $("exedit").addEventListener("click", () => open());
+  const go = $("gomenu");
+  if (go) { const li = document.createElement("li"); li.innerHTML = '<button id="gomovieedit">Movie Editor…</button>'; go.appendChild(li); li.querySelector("button").addEventListener("click", () => open()); }
+  const shared = new URLSearchParams(location.search).get("cut");
+  if (shared) {
+    const ready = () => typeof catalog !== "undefined" && catalog && $("loading") && $("loading").hidden;
+    const go2 = () => open(shared);
+    if (ready()) go2(); else { const mo = new MutationObserver(() => { if (ready()) { mo.disconnect(); setTimeout(go2, 300); } }); mo.observe($("loading"), { attributes: true, attributeFilter: ["hidden"] }); }
+  }
+  window.cassiniMovieEdit = { open, close, recipe, cut, get state() { return ME; } };
+})();
+</script>

@@ -47,6 +47,7 @@ HERE = os.path.dirname(os.path.abspath(__file__))
 sys.path.insert(0, HERE)
 import reel  # noqa: E402  (puts the repo on the path)
 import calibration  # noqa: E402
+import studio_look  # noqa: E402
 
 # bumped whenever the way films are made changes, so older ones are not served again
 VERSION = "export-v20"
@@ -98,7 +99,13 @@ def options(q):
     fade = max(0, min(120, int(get("fade", "0") or 0)))
     movie.update({"fade": fade, "persist": max(0, min(100, int(get("persist", "35") or 0))) if fade else 0})
     off = ",".join(s for s in calibration.STEPS if s in get("off", "").split(","))   # Settings > Processing
-    return {"off": off, "from": t0, "until": t1, "cams": cams, "fps": fps, "size": size,
+    # the movie editor's cut (movieedit.html): frames taken out by hand, and only these targets and filter pairs kept
+    words = lambda k: sorted({w.strip() for w in get(k, "").split(",") if w.strip()})
+    kept = {"drop": words("drop"), "targets": sorted(w.upper() for w in words("targets")), "filters": words("filters")}
+    # and its look on every picture: the color part of a Cassini Studio recipe
+    look_edit = studio_look.parse(get("edit", ""))
+    return {"off": off, "cut": {k: v for k, v in kept.items() if v}, "edit": studio_look.encode(look_edit),
+            "from": t0, "until": t1, "cams": cams, "fps": fps, "size": size,
             "sound": get("sound", "1") != "0", "caption": get("caption", "1") != "0",
             "look": look if look in calibration.LOOKS else calibration.LOOKS[0],
             "colors": colors if colors in calibration.COLORS else calibration.COLORS[0], "movie": movie}
@@ -115,6 +122,10 @@ def job_id(opt):
         key["movie"] = opt["movie"]
     if opt.get("off"):
         key["off"] = opt["off"]
+    if opt.get("cut"):
+        key["cut"] = opt["cut"]
+    if opt.get("edit"):
+        key["edit"] = opt["edit"]
     return hashlib.sha1(json.dumps([VERSION, key], sort_keys=True).encode()).hexdigest()[:16]
 
 
@@ -176,11 +187,24 @@ def plan(opt):
             e["set"] = st["kind"]
             e["set_nm"] = [reel.wavelength(insts[u], f1s[u] + f2s[u]) for u in st["use"]]
         out.append(e)
+    out = cut(out, opt)
     if len(out) > MAX_PICTURES:
         raise OverflowError(f"{len(out):,} pictures: an export holds at most {MAX_PICTURES:,}; pick a shorter stretch")
     timing(out, opt["fps"])
     return {"pictures": out, "count": len(out), "seconds": round(sum(e["frames"] for e in out) / FPS, 2),
             "frames": sum(e["frames"] for e in out), "width": width(opt), "height": height(opt)}
+
+
+def cut(pics, opt):
+    """The plan's pictures the movie editor keeps: not dropped by hand, of a kept target and filter pair. Taking a
+    frame out never changes how the others are made (a mosaic still has every tile, a composite every channel); its
+    picture is only not shown, and the film's timing closes over the gap."""
+    c = opt.get("cut") or {}
+    drop, targets, filters = set(c.get("drop", ())), set(c.get("targets", ())), set(c.get("filters", ()))
+    if not (drop or targets or filters):
+        return pics
+    return [e for e in pics if e["id"] not in drop and (not targets or (e["target"] or "UNKNOWN") in targets)
+            and (not filters or e["filters"] in filters)]
 
 
 def timing(pics, fps):
@@ -363,6 +387,7 @@ def render(opt, p, pictures, path, progress=lambda done, total: None, workers=3)
     film = Film(opt, path)
     pictures.movie = {**MOVIE, **opt.get("movie", {})}   # movie passes as the windows showed them
     pics, ahead = p["pictures"], max(2, workers * 3)
+    look = studio_look.parse(opt.get("edit", ""))
     kinds, building = Counter(), {}
     try:
         with ThreadPoolExecutor(workers) as pool:
@@ -375,6 +400,8 @@ def render(opt, p, pictures, path, progress=lambda done, total: None, workers=3)
                     nxt += 1
                 im, what = todo.popleft().result()
                 kinds[what or "none"] += 1
+                if im is not None and look:
+                    im = studio_look.apply(im, look)   # the movie editor's look, as Cassini Studio draws it
                 # a mosaic stays up while its observation goes on: the pass's other frames (another filter, a frame
                 # that is not a tile) would otherwise flash in and out between its tiles
                 if what in ("mosaic", "mosaic movie"):
@@ -551,9 +578,25 @@ def film_path(cache, jid):
 def public_plan(p):
     """The plan as the page gets it: what shows when, and the best picture each may be (mosaic, color or
     processed), without the make-orders."""
-    keep = ("id", "cam", "t", "target", "filters", "nm", "set", "set_nm", "at", "hold", "frames", "skipped")
-    pics = [dict({k: e[k] for k in keep if k in e}, first=e["try"][0][0]) for e in p["pictures"]]
+    keep = ("id", "cam", "t", "target", "filters", "obs", "nm", "set", "set_nm", "at", "hold", "frames", "skipped")
+    pics = [dict({k: e[k] for k in keep if k in e}, first=e["try"][0][0], src=source(*e["try"][0])) for e in p["pictures"]]
     return dict(p, pictures=pics)
+
+
+def source(kind, arg):
+    """The frame server's address of a plan entry's best picture (its first try), without size or look: what the
+    movie editor shows and downloads for that frame."""
+    if kind == "movie":
+        return f"/frames/movie/{arg}.webp"
+    if kind == "rolling":
+        return f"/frames/movie/{arg}.webp?mode=rolling"
+    if kind == "mosaic":
+        return f"/frames/mosaic/{arg}.webp"
+    if kind == "color":
+        return f"/frames/color.webp?ids={','.join(arg)}"
+    if kind == "processed":
+        return f"/frames/processed/{arg}.webp"
+    return f"/frames/{arg}.webp"
 
 
 def main():

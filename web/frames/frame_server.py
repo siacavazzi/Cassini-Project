@@ -104,7 +104,11 @@ Routes:
                                thumbnail as it starts, so the Highlights window finds them made. X-Thumb says which
   /export/plan.json?from=2006-09-15T14:32&until=2006-09-15T17:12&cams=NW&fps=auto&size=1024
                                a movie export's plan (web/frames/export.py): its pictures, when each shows in the
-                               film, the film's length and size; nothing is made
+                               film, the film's length and size; nothing is made. Each picture's src is the address of
+                               the picture the film shows for it (the Movie Editor shows and downloads it).
+                               &drop=ID,ID&targets=JUPITER,IO&filters=CL1/GRN,...: the Movie Editor's cut (frames taken
+                               out, only these targets and filter pairs kept); &edit=ex:0.3,sa:20,...: its look on every
+                               picture (a Cassini Studio recipe's color part, web/frames/studio_look.py)
   POST /export?...             (same options, plus sound=1 caption=1) starts making that film, or finds it made
                                or on its way; one film is made at a time. Answers the job's status, as
   /export/<JOB>.json           does: state queued/making/sound/done/failed, pictures done of total, seconds left
