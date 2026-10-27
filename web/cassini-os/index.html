@@ -944,13 +944,14 @@ body.phone.phone-land #bodymenu { left: auto !important; width: min(380px, 46vw)
 .dk .gl { width: 100%; height: 100%; border-radius: 22%; display: grid; place-items: center; background: rgba(255,255,255,.07); border: 1px solid var(--q-line); box-sizing: border-box; color: var(--q-text); }
 .dk .gl svg { width: 58%; height: 58%; } .dk .gl svg * { fill: none; stroke: currentColor; stroke-width: 1.3; stroke-linecap: round; stroke-linejoin: round; }
 .dk:hover .gl { background: rgba(255,255,255,.12); color: #fff; }
-/* rendered icons (icons/make_icons.html): Cassini and Huygens from NASA's model, the apps in the planets' light */
+/* rendered icons (icons/make_icons.html): Cassini from NASA's model, Huygens from ESA's, the apps in the planets' light */
 .dk .ic { width: 94%; height: 94%; object-fit: contain; pointer-events: none; -webkit-user-drag: none; filter: drop-shadow(0 1px 2px rgba(0,0,0,.55)); transition: filter .12s; }
 /* Saturn takes a wider place, so its rings fit beside its neighbours and the globe stays near the others' size */
 #appdock:not(.side-left):not(.side-right) .dk:has(.ic.ringed) { width: calc(var(--ds) * var(--k) * 1.7); }
 .dk .ic.ringed { position: absolute; left: 50%; top: 50%; width: calc(var(--ds) * var(--k) * 1.7); height: calc(var(--ds) * var(--k) * 1.7); max-width: none; transform: translate(-50%, -50%); }
 #dkfolder .fic .ic { width: 44px; height: 44px; object-fit: contain; }
 #dkfolder .fic { position: relative; }
+#dkfolder .fcraft[hidden] { display: none; }
 #dkfolder .fic .ic.ringed { position: absolute; left: 50%; top: 50%; width: 74px; height: 74px; max-width: none; transform: translate(-50%, -50%); }
 .dk:hover .ic { filter: drop-shadow(0 1px 2px rgba(0,0,0,.55)) brightness(1.12); }
 /* bodies: the body itself, from its surface map, lit from the upper left */
@@ -4971,8 +4972,9 @@ body.phone #launch .lx-clock { font-size: 9.5px; bottom: 9vh; }
     window: svg('<rect x="3.5" y="5" width="17" height="14" rx="1.6"/><path d="M3.5 8.5h17"/><circle cx="6" cy="6.8" r=".5"/><circle cx="7.8" cy="6.8" r=".5"/>'),
     replay: svg('<path d="M3.5 16.5h17"/><path d="M6 16.5v-3M9 16.5v-6M12 16.5v-4M15 16.5v-8M18 16.5v-2"/><path d="M8 5.5l3 2-3 2z"/>')
   };
-  // rendered icons, 256 px (icons/make_icons.html renders them again): Cassini and Huygens are NASA's model, All bodies
-  // is Saturn, Titan and Enceladus from their maps, and the apps and cameras are lit as the planets are
+  // rendered icons, 256 px (icons/make_icons.html renders them again): Cassini is NASA's model, Huygens ESA's descent
+  // module as it stood on Titan, Saturn and All bodies (seven of its moons) from their maps, and the apps and cameras
+  // are lit as the planets are
   const ICON = { CASSINI: "cassini", HUYGENS: "huygens", SATURN: "saturn", moments: "moments", highlights: "highlights", settings: "settings", folder: "bodies", N: "nac", W: "wac" };
   const icon = k => `<img class="ic${k === "SATURN" ? " ringed" : ""}" src="icons/${ICON[k]}.webp" alt="" draggable="false">`;
   const MAP = { SATURN: "saturn", TITAN: "titan", ENCELADUS: "enceladus", MIMAS: "mimas", TETHYS: "tethys", DIONE: "dione", RHEA: "rhea", HYPERION: "hyperion",
@@ -5015,18 +5017,22 @@ body.phone #launch .lx-clock { font-size: 9.5px; bottom: 9vh; }
       run() { const c = $("settings"); if (c && !c.hidden && !inFront(c)) WM.front(c); else $("sgear").click(); } }
   ];
 
-  // ---- bodies: the viewer's focus list (Cassini, the Sun, Huygens near its descent, the bodies on stage) ----
+  // ---- bodies: the viewer's focus list (Cassini, the Sun, the bodies on stage) ----
   const bodyWins = n => [...document.querySelectorAll(".bodywin")].filter(w => w.dataset.body === n);
   function goBody(n) {
     const BM = window.cassiniBodyMode;
-    if (n === "CASSINI" && BM && BM.name) BM.exit();
-    if (n !== "CASSINI" && n !== "SUN" && BM) BM.enter(n);
+    if ((n === "CASSINI" || n === "HUYGENS") && BM && BM.name) BM.exit();
+    if (n !== "CASSINI" && n !== "SUN" && n !== "HUYGENS" && BM) BM.enter(n);
     else if (typeof setFocus === "function") setFocus(n);
     // its windows come back from the dock and forward
     for (const w of bodyWins(n)) { if (w.dataset.min) WM.restore(w); else WM.front(w); }
   }
   let bodies = [], away = [], bodyKey = "";
-  function bodyList() { try { return typeof focusChoices === "function" ? focusChoices() : []; } catch (e) { return []; } }
+  function focusList() { try { return typeof focusChoices === "function" ? focusChoices() : []; } catch (e) { return []; } }
+  // Huygens is not a body to come back to often: it waits in All bodies (below), not in the row
+  const bodyList = () => focusList().filter(n => n !== "HUYGENS");
+  // ...and only once it has left Cassini (until then it is part of Cassini's model)
+  const huygensOut = () => typeof HUYGENS_RELEASE_ET !== "undefined" && typeof state !== "undefined" && state.et >= HUYGENS_RELEASE_ET && focusList().includes("HUYGENS");
   // the planets (and the body in view) that are not on stage now
   function awayList(list) { try { return window.cassiniBodyMode ? cassiniBodyMode.planets().filter(n => !list.includes(n)) : []; } catch (e) { return []; } }
 
@@ -5059,7 +5065,8 @@ body.phone #launch .lx-clock { font-size: 9.5px; bottom: 9vh; }
     const by = {};
     for (const [n, b] of Object.entries(ix.bodies)) (by[groupOf(n, b)] = by[groupOf(n, b)] || []).push([n, b]);
     folder.innerHTML = GROUPS.filter(([g]) => by[g]).map(([g, label]) => `<h3>${label}</h3><div class="fgrid">${by[g].sort((a, c) => c[1].frames - a[1].frames)
-      .map(([n, b]) => `<button data-body="${n}" title="${name(n)}: ${b.frames.toLocaleString("en-US")} pictures">${folderIcon(n, b)}<span class="fn">${name(n)}</span><span class="fc">${b.frames.toLocaleString("en-US")}</span></button>`).join("")}</div>`).join("");
+      .map(([n, b]) => `<button data-body="${n}" title="${name(n)}: ${b.frames.toLocaleString("en-US")} pictures">${folderIcon(n, b)}<span class="fn">${name(n)}</span><span class="fc">${b.frames.toLocaleString("en-US")}</span></button>`).join("")}</div>`).join("")
+      + `<div class="fcraft" hidden><h3>Spacecraft</h3><div class="fgrid"><button data-body="HUYGENS" title="Huygens, ESA's probe to Titan"><span class="fic">${icon("HUYGENS")}</span><span class="fn">Huygens</span><span class="fc">probe</span></button></div></div>`;
     folderMade = true;
   }
   folder.addEventListener("click", e => { e.stopPropagation(); const b = e.target.closest("button[data-body]"); if (b) { closeFolder(); goBody(b.dataset.body); } });
@@ -5076,6 +5083,7 @@ body.phone #launch .lx-clock { font-size: 9.5px; bottom: 9vh; }
     if (!folderMade) await fillFolder();
     const now = window.cassiniBodyMode && cassiniBodyMode.name;
     folder.querySelectorAll("button[data-body]").forEach(b => b.classList.toggle("inview", b.dataset.body === now));
+    const craft = folder.querySelector(".fcraft"); if (craft) craft.hidden = !huygensOut();
     folder.hidden = false; anchor.classList.add("open"); placeFolder(anchor);
   }
   function closeFolder() { folder.hidden = true; const a = made.get("app:bodies"); if (a) a.classList.remove("open"); }

@@ -1,7 +1,8 @@
 <!doctype html>
 <!-- The dock's app icons, rendered with three.js in the same light as the dock's planets (from the upper left, dark
-     lower right). make_icons.js opens this page and saves each icon as a 256 px WebP next to it. Cassini is NASA's
-     model (data/models/cassini.glb.b64.txt); the bodies are their surface maps (data/textures). -->
+     lower right). make_icons.cjs opens this page and saves each icon as a 256 px WebP next to it. Cassini is NASA's
+     model (data/models/cassini.glb.b64.txt), Huygens ESA's descent module (models/huygens_dm.glb.b64.txt); the bodies
+     are their surface maps (data/textures). -->
 <html><head><meta charset="utf-8"><style>body { margin: 0; background: transparent; }</style></head><body>
 <script src="https://cdn.jsdelivr.net/npm/three@0.128.0/build/three.min.js"></script>
 <script src="https://cdn.jsdelivr.net/npm/three@0.128.0/examples/js/loaders/GLTFLoader.js"></script>
@@ -106,18 +107,15 @@ const ICONS = {
     st.cam.position.set(0, 0, d); st.cam.near = d / 50; st.cam.far = d * 50; st.cam.updateProjectionMatrix();
     return shot(st);
   },
-  // Huygens: the probe from the same model, its heat shield towards the viewer
+  // Huygens as it stood on Titan: ESA's descent module (models/huygens_dm.glb.b64.txt, ESA SPICE Service, CC BY-NC 3.0
+  // IGO), its shell and parachutes gone, seen from a little above
   async huygens() {
-    const st = stage(24), m = await cassiniModel(), g = new THREE.Group(); g.add(m);
-    // (the parts hang under _root, which has a mesh of its own: hide the others by their material, not the object)
-    m.traverse(o => { if (o.isMesh) { o.material = o.material.clone(); o.material.visible = /_h$/.test(o.name); o.material.envMap = ENV; o.material.envMapIntensity = 0.5; } });
-    // the probe sits on the +X side of the spacecraft: look at it from outside, a little above
-    const box = new THREE.Box3(); m.traverse(o => { if (o.isMesh && o.material.visible) box.expandByObject(o); });
-    m.position.sub(box.getCenter(new THREE.Vector3()));
-    g.rotation.set(0.35, -1.0, 0.1);
-    st.scene.add(g);
-    const d = box.getBoundingSphere(new THREE.Sphere()).radius / Math.tan(st.cam.fov * Math.PI / 360);
-    st.cam.position.set(0, 0, d); st.cam.near = d / 50; st.cam.far = d * 50; st.cam.updateProjectionMatrix();
+    const st = stage(26), t = (await (await fetch("../models/huygens_dm.glb.b64.txt")).text()).trim(), s = atob(t), u = new Uint8Array(s.length);
+    for (let i = 0; i < s.length; i++) u[i] = s.charCodeAt(i);
+    const m = (await new Promise((res, rej) => new THREE.GLTFLoader().parse(u.buffer, "", res, rej))).scene;
+    m.traverse(o => { if (o.isMesh) { o.material.vertexColors = true; o.material.color.multiplyScalar(0.82); o.material.envMap = ENV; o.material.envMapIntensity = 0.5; } });
+    const g = new THREE.Group(); g.add(m); g.rotation.set(0.5, -0.5, 0);
+    st.scene.add(g); fit(st, g, 0.9);
     return shot(st);
   },
   // Saturn for the dock (its own icon: a CSS ring can't pass in front of the planet)
