@@ -236,7 +236,9 @@ body.phone .srow input[type=range] { width: 96px; }
     { key: "processing.align", step: "align", label: "Align",
       hint: "A color set's channels, taken seconds or minutes apart, are moved onto one another, and a mosaic's filters onto each other's tiles. Off lays them over one another as the camera pointed, so moving bodies show colored fringes." },
     { key: "processing.blend", step: "blend", label: "Blend mosaic seams",
-      hint: "Where two mosaic tiles meet, their pictures fade into each other and the mosaic stays solid, with its soft edge only along its outside. Off draws each tile with its own soft edge, as before, which leaves a faint dark line along the seams and a notch where a seam meets the mosaic's edge." }
+      hint: "Where two mosaic tiles meet, their pictures fade into each other and the mosaic stays solid, with its soft edge only along its outside. Off draws each tile with its own soft edge, as before, which leaves a faint dark line along the seams and a notch where a seam meets the mosaic's edge." },
+    { key: "processing.level", step: "level", label: "Level mosaic seams",
+      hint: "Evens out the brightness where mosaic tiles overlap, smoothly across each tile, as the planetary mosaic tools do (a gentle brightness field per tile, solved together so no tile's step shows at a seam). Works with Blend mosaic seams on; off blends the tiles as they are." }
   ];
   for (const st of window.cassiniSteps) D({ key: st.key, section: "Processing", label: st.label, type: "toggle", value: true, hint: st.hint });
   D({ key: "cameras.composites", section: "Processing", label: "Color composites", type: "toggle", value: true,

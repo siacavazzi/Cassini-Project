@@ -355,14 +355,12 @@ def folder(u, cache):
     return os.path.join(cache, f"{VERSIONS[calibration.style()]}{calibration.variant()}-q{QUALITY}", "_".join(map(str, u["key"])) + suffix)
 
 
-BLEND = "blend1"   # the mosaics drawn with the blend step (mosaic.composite) are kept in this folder of the pass's
-
-
 def drawn(u, cache):
     """The folder of the pass's mosaics as drawn (its filter mosaics and pictures, its mosaic movie's): the pass's own
-    folder with the blend step off, as they were drawn before it, else its BLEND folder. The tiles, the plan and the
-    seams do not depend on it and stay in the pass's folder for both."""
-    return folder(u, cache) if not calibration.step("blend") else os.path.join(folder(u, cache), BLEND)
+    folder with the blend step off, as they were drawn before it, else a folder of it named for the blend and level
+    steps (mosaic.drawing). The tiles, the plan and the seams do not depend on them and stay in the pass's folder."""
+    name = mosaic.drawing()
+    return os.path.join(folder(u, cache), name) if name else folder(u, cache)
 
 
 def _ulock(u):
@@ -1228,12 +1226,19 @@ def _over(u, p, rgba, t, rect, cache, match=True):
     over it with its soft edge as it is, on the pass's one scale (a mosaic movie's new lap is not pulled toward
     the older picture of its place under it)."""
     k = p["k"]
-    H, W = rgba.shape[:2]
-    pad = max(8, round(64 * k / 0.5)) + 1
     bx, by, bw, bh = t["box"]
     left = round((t["offset"][0] + bx - rect[0]) * k)
     top = round((t["offset"][1] + by - rect[1]) * k)
     sw, sh = max(1, round(bw * k)), max(1, round(bh * k))
+    draw_over(rgba, lambda: _shade(_part(os.path.join(_tiles(u, cache, p["display_scale"]), f"{t['n']}.png"), sw, sh), t),
+              left, top, sw, sh, k, match)
+
+
+def draw_over(rgba, part, left, top, sw, sh, k, match=True):
+    """_over's drawing: the tile part() (RGBA, sw x sh canvas pixels, its top left corner at left, top) composed over
+    the mosaic rgba in place, on the tile's part of the canvas and a margin for its soft edge."""
+    H, W = rgba.shape[:2]
+    pad = max(8, round(64 * k / 0.5)) + 1
     x0, y0 = max(left - pad, 0), max(top - pad, 0)
     x1, y1 = min(left + sw + pad, W), min(top + sh + pad, H)
     a0, b0 = max(left, 0), max(top, 0)
@@ -1241,13 +1246,21 @@ def _over(u, p, rgba, t, rect, cache, match=True):
     # (a tile wholly past the canvas's edge, only its soft edge's margin on it, has nothing to draw: SPICE, filter
     # registration or a person's tuning can put a tile outside the pass's footprint)
     if x1 > x0 and y1 > y0 and a1 > a0 and b1 > b0:
-        part = _shade(_part(os.path.join(_tiles(u, cache, p["display_scale"]), f"{t['n']}.png"), sw, sh), t)
+        part = part()
         frame = np.zeros((y1 - y0, x1 - x0, 4), np.uint8)
         frame[b0 - y0:b1 - y0, a0 - x0:a1 - x0] = part[b0 - top:b1 - top, a0 - left:a1 - left]
         below = np.ascontiguousarray(rgba[y0:y1, x0:x1])
         same = (np.ones((2, 3)), np.zeros((2, 3)))
-        rgba[y0:y1, x0:x1] = _compose([(below, None, None, None), (frame, None, None, None)], k,
-                                      **({"pin": 0} if match else {"corrections": same}))
+        if not match:
+            kw = {"corrections": same, "level": False}
+        elif mosaic.leveling():
+            # leveled to the picture so far along its seams (mosaic._levels, pinned to it), on the pass's one scale
+            # away from them: a gain matched to the picture so far would carry each tile's error on to the next, and
+            # over a long pass the mosaic's brightness would wander
+            kw = {"corrections": same, "pin": 0}
+        else:
+            kw = {"pin": 0}
+        rgba[y0:y1, x0:x1] = _compose([(below, None, None, None), (frame, None, None, None)], k, **kw)
 
 
 _grown_last = collections.OrderedDict()   # path of a grown filter mosaic -> its RGBA, the few made last

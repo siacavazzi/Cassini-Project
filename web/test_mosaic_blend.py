@@ -67,24 +67,40 @@ for overlap in (40, 100, 200):
     # a tile's own edges and corners are as they were, less the tile's outermost RIM pixels
     R = mosaic.RIM
     assert np.array_equal(on[TOP + R:TOP + 60, 500, 3], off[TOP + R:TOP + 60, 500, 3]), overlap
-    assert not on[TOP:TOP + R, :, 3].any() and not on[:, :R, 3].any(), overlap
+    assert not on[TOP:TOP + R, :, 3].any(), overlap
+    # the first tile's own soft edge lies on the canvas's border: it ends there, less its rim
+    assert not on[TOP + 300, :R, 3].any() and on[TOP + 300, R, 3] == off[TOP + 300, R, 3], overlap
     assert abs(int(on[TOP + R, R, 3]) - int(off[TOP + R, R, 3])) <= 2, overlap
     # the lost line's gap in the first tile, where the second does not cover, stays a gap
     assert on[601, 400, 3] == 0 and on[596, 400, 3] == 255, overlap
     print(f"overlap {overlap}: seam opaque (was down to {255 - old_dip}/255), outer edge unbroken")
 
-# tiles of different brightness: no step anywhere along a row across the seam
-on = draw(tiles(40, 1.1))
+# a tile the canvas's border cuts (its picture whole there) goes on past it: no edge, no rim there
+cut = tiles(40)[0]
+cut[:, :-100] = cut[:, 100:].copy()
+on = draw([cut])
+assert on[TOP + 300, 0, 3] == 255 and on[TOP + 300, 0, 0] == 230, on[TOP + 300, :4]
+print("a tile the canvas cuts keeps its picture to the canvas's border; ok")
+
+# tiles of different brightness: no step anywhere along a row across the seam (level off: each tile its own
+# brightness away from the seam; level on: leveled to each other, both meeting halfway, the difference spread
+# smoothly over the tiles and each back near its own brightness far from the seam)
+on = draw(tiles(40, 1.1), "level")
 row = on[560, 900:1100, 0].astype(int)
 assert np.abs(np.diff(row)).max() <= 3 and row[0] == 230 and row[-1] == 253, row
-print("tiles of different brightness meet without a step; ok")
+on = draw(tiles(40, 1.1))
+row = on[560, 100:1950, 0].astype(int)
+assert np.abs(np.diff(row)).max() <= 1, row
+assert abs(int(on[560, 1100, 0]) - int(on[560, 900, 0])) <= 6 and 238 <= on[560, 1000, 0] <= 244, row
+assert row[0] < 236 and row[-1] > 247, row
+print("tiles of different brightness meet without a step, and leveled to each other; ok")
 
 # tiles whose outermost pixels are dark (as resized, north-up tiles' are): no dark line where their rims fall inside
 # the mosaic, nor where a rim meets the next tile's
 frames = tiles(40)
 for f in frames:
     a = f[..., 3] > 0
-    rim = a & (mosaic._inside(a.astype(np.uint8)) <= 2)
+    rim = a & (mosaic._inside(a.astype(np.uint8), np.zeros_like(a)) <= 2)
     f[rim, :3] = 5
 on = draw(frames)
 inner = on[TOP + 100:TOP + 900, 100:1900]

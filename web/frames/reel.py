@@ -439,9 +439,9 @@ def shot_webp(target, n, size, cache, use_mosaic=True, slots=None):
     window = window + [s]
     key = "_".join(s["ids"]) + ("" if len(window) == 1 else "-" + hashlib.sha1(
         ",".join("_".join(w["ids"]) for w in window).encode()).hexdigest()[:12])
-    # a mosaic (more than one picture) drawn with the blend step (mosaic.composite) is another picture than before it;
-    # a lone picture is the same either way
-    drawn = "-blend1" if len(window) > 1 and calibration.step("blend") else ""
+    # a mosaic (more than one picture) drawn with the blend or level steps (mosaic.drawing) is another picture than
+    # before them; a lone picture is the same either way
+    drawn = "-" + mosaic.drawing() if len(window) > 1 and mosaic.drawing() else ""
     path = os.path.join(cache, version(), str(size), key + drawn + ".webp")
     report = {}
 

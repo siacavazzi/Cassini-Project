@@ -439,12 +439,13 @@ each one does: "stack" (repeat exposures of the same filter merged, stacking.loa
 exposure bracket merged into one picture in mosaics and movies, stacking.load_hdr; off merges only identical
 exposures, a plain stack), "fill" (pixels lost in downlink filled from round them), "calibrate" (every frame put on
 I/F and one display scale; off shows each frame on the archive's own stretch) and "align" (a color set's channels
-moved onto one another) and "blend" (a mosaic's tiles blended where they meet, mosaic.composite). Every step is on by
-default; off steps go into the cache names (variant), so the pictures made with every step on keep their names.
-"blend" is the exception: it changes only how tiles are drawn together, never a frame or a tile, so it is left out of
-variant (a mosaic with it off draws the same tiles) and the mosaics name it themselves (obs_mosaic.drawn, reel.version).
+moved onto one another), "blend" (a mosaic's tiles blended where they meet, mosaic.composite) and "level" (each tile
+leveled to the tiles round it along their seams, mosaic._level). Every step is on by default; off steps go into the
+cache names (variant), so the pictures made with every step on keep their names. "blend" and "level" are the exception:
+they change only how tiles are drawn together, never a frame or a tile, so they are left out of variant (a mosaic with
+them off draws the same tiles) and the mosaics name them themselves (mosaic.drawing).
 """
-STEPS = ("stack", "hdr", "fill", "calibrate", "align", "blend")
+STEPS = ("stack", "hdr", "fill", "calibrate", "align", "blend", "level")
 _off = contextvars.ContextVar("off", default=frozenset())
 
 
@@ -455,7 +456,7 @@ def step(name):
 
 def variant():
     """What a cache name gets for the steps turned off: "" with every step on, else "-off-" and their names."""
-    off = _off.get() - {"blend"}
+    off = _off.get() - {"blend", "level"}
     return "-off-" + "-".join(s for s in STEPS if s in off) if off else ""
 
 

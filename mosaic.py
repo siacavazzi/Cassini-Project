@@ -23,6 +23,7 @@ calibrated_overlap = 100  # min_overlap for those: a tight gain and a median off
 max_offset = 6.0    # 8 bit levels; a bigger step is light scattered across the frame (a gradient),
                     # which one offset can't take out, and chained over a mosaic shifts its colours
 offset_ramp = 16.0  # 8 bit levels over which an offset fades in from black (see composite)
+OFFSET_FAINT = 48   # leveling: the offsets are measured where both frames are under this (match_offsets)
 anchor_pull = 0.05  # anchored gains: how hard every log gain is pulled toward 0, against a tile's overlaps
                     # (weights scaled so the best measured overlap counts 1)
 reproject_surface = False  # line up the target's surface between frames (see compose)
@@ -64,8 +65,9 @@ corrections only pull the frames together and keep their overall level (a whole 
 mosaic in one window). gamma = how the frames' levels encode linear brightness (calibration.encode):
 the corrections are then solved and applied on linear values. corrections = (gains, offsets) worked
 out beforehand (seams), used instead of solving them here; offsets are always on the levels.
+level = seam leveling where the level step is on (composite); False draws the frames as the gains leave them.
 """
-def compose(window, reproject=None, calibrated=False, pin=-1, gamma=None, corrections=None):
+def compose(window, reproject=None, calibrated=False, pin=-1, gamma=None, corrections=None, level=True):
     if reproject is None:
         reproject = reproject_surface
     frames = [np.asarray(entry[0]) for entry in window]
@@ -77,10 +79,10 @@ def compose(window, reproject=None, calibrated=False, pin=-1, gamma=None, correc
                 frames[i] = rp.warp_to_newest((frames[i],) + tuple(entry[1:]), newest)
 
     if corrections is not None:
-        return composite(frames, *corrections, gamma=gamma)
+        return composite(frames, *corrections, gamma=gamma, level=level, pin=pin)
     if not calibrated:
-        return composite(frames, match_gains(frames, pin=pin))
-    return composite(frames, *seams(frames, pin, gamma), gamma=gamma)
+        return composite(frames, match_gains(frames, pin=pin), level=level, pin=pin)
+    return composite(frames, *seams(frames, pin, gamma), gamma=gamma, level=level, pin=pin)
 
 
 """
@@ -186,7 +188,12 @@ the same as over the whole frame.
 """
 def overlaps(frames, overlap=None):
     small = [f[::4, ::4] for f in frames]
-    inside = [s[..., 3] == 255 for s in small]
+    if leveling():
+        # all of each frame's picture but its rim (_blend_parts): only where its soft edge had reached 255 left most of
+        # an overlap out, and an overlap narrower than two soft edges (most of a pass's) out altogether, unmatched
+        inside = [cv2.erode((s[..., 3] > 0).astype(np.uint8), np.ones((3, 3), np.uint8)) > 0 for s in small]
+    else:
+        inside = [s[..., 3] == 255 for s in small]
     boxes = []
     for m in inside:
         rows, cols = np.flatnonzero(m.any(1)), np.flatnonzero(m.any(0))
@@ -235,6 +242,9 @@ def match_gains(frames, limit=None, pin=-1, overlap=None, gamma=None, anchored=F
     if gamma is not None:
         small = linear(small, gamma)
     limit = limit or max_gain
+    # leveling (the level step): with none pinned, always the anchored solve; the pull toward 1 below lets every gain
+    # sink to its limit together once the overlaps are measured whole (overlaps), as they then are
+    anchored = anchored or (pin is None and leveling())
     if anchored:
         return np.clip(_anchored_gains(small, pairs, n, toward), 1 / limit, limit)
 
@@ -316,6 +326,10 @@ def match_offsets(frames, gains, pin=-1, overlap=None, toward=None):
             si, sj = small[i][sl][..., c], small[j][sl][..., c]
             # only where both frames are above black: a sky clipped to 0 hides how far it is off
             lit = ov & (si > 2) & (sj > 2)
+            if leveling():
+                # and, leveling, only where both are faint: the offset is the sky's level (bias, scattered light); on
+                # the lit body a difference is the light's, which the gains and the leveling take out
+                lit &= (si < OFFSET_FAINT) & (sj < OFFSET_FAINT)
             N = int(lit.sum())
             if N < (overlap or min_overlap):
                 continue
@@ -393,15 +407,49 @@ RIM = 2
 
 
 def _blend_parts(alpha):
-    dist = _inside((alpha > 0).astype(np.uint8))
+    dist = _inside((alpha > 0).astype(np.uint8), alpha >= EDGE_AT)
     has = dist > RIM
     return (has.astype(np.float32), np.clip((dist - RIM) * (1.0 / feather_px), 0, 1).astype(np.float32),
-            _edge_width(alpha, dist))
+            np.clip((dist - RIM) * (1.0 / _fine_px()), 0, 1).astype(np.float32), _edge_width(alpha, dist))
 
 
-def _inside(valid):
-    """How far each pixel of valid (uint8, 1 inside) lies from its edge, the array's border counting as an edge."""
-    return cv2.distanceTransform(np.pad(valid, 1), cv2.DIST_L2, 5)[1:-1, 1:-1]
+"""
+Multi-band blending (Burt and Adelson, "A multiresolution spline", 1983; Brown and Lowe's panoramas, OpenCV's
+stitcher, Hugin's enblend): a frame's picture is split into its coarse part (a Gaussian of FINE_SIGMA times the fine
+width) and its fine detail, and the two are blended over different widths: the coarse part over feather_px, as
+before, so brightness changes slowly from one frame to the next, the detail over the fine width only (FINE of
+feather_px), so where two frames' detail is not quite in the same place (a pixel of pointing, a cloud that moved)
+it changes over a few pixels instead of the two showing through each other over the whole feather.
+"""
+FINE = 1 / 8
+FINE_SIGMA = 1.0
+
+
+def _fine_px():
+    return max(2.0, feather_px * FINE)
+
+
+def _coarse(color, has, sigma):
+    """color's coarse part where has (1 inside the picture): a Gaussian over the picture only (each pixel the
+    weighted mean of the picture round it), so the empty canvas past the edge does not darken it."""
+    w = cv2.GaussianBlur(has, (0, 0), sigma, borderType=cv2.BORDER_REPLICATE)
+    c = cv2.GaussianBlur(color * has[..., None], (0, 0), sigma, borderType=cv2.BORDER_REPLICATE)
+    return c / np.maximum(w, 1e-3)[..., None]
+
+
+def _inside(valid, on):
+    """How far each pixel of valid (uint8, 1 inside) lies from its edge. The array's border is an edge only where the
+    picture does not go on past it (on, bool: where it does): a frame the canvas cuts, or the mosaic a tile is grown
+    over (obs_mosaic._over draws on the part of it round the tile only), goes on, at its full alpha; a frame whose own
+    soft edge lies on the canvas's border ends there."""
+    return cv2.distanceTransform(_past(valid, on, 1), cv2.DIST_L2, 5)[1:-1, 1:-1]
+
+
+def _past(a, on, m):
+    """a with m pixels added round it: a again where it goes on past the border (on), else 0."""
+    out = np.pad(a * on.astype(a.dtype), m, mode="edge")
+    out[m:-m, m:-m] = a
+    return out
 
 
 """
@@ -439,8 +487,10 @@ Only the area the frames cover is worked on, then pasted into an empty canvas.
 offsets = optional levels added to each frame after its gain (match_offsets)
 gamma = the frames' levels encode linear brightness so (compose): gains are applied to linear values,
 then encoded again; offsets stay on the levels
+level = seam leveling (_levels) where the level step is on; False draws the frames as their gains leave them;
+pin = the frame whose leveling gain stays 1 (as compose's pin), None for none
 """
-def composite(frames, gains, offsets=None, gamma=None):
+def composite(frames, gains, offsets=None, gamma=None, level=True, pin=None):
     if offsets is None:
         offsets = np.zeros((len(frames), 3))
     h, w = frames[0].shape[:2]
@@ -457,8 +507,8 @@ def composite(frames, gains, offsets=None, gamma=None):
     y0, y1 = min(b[0] for b in used), max(b[1] for b in used)
     x0, x1 = min(b[2] for b in used), max(b[3] for b in used)
 
-    if len(next(info for info in infos if info is not None)) == 6:
-        _blended(out, frames, infos, gains, offsets, gamma, (y0, y1, x0, x1))
+    if len(next(info for info in infos if info is not None)) == 7:
+        _blended(out, infos, gains, offsets, gamma, (y0, y1, x0, x1), level and leveling(), pin)
         return out
 
     rgb = np.zeros((y1 - y0, x1 - x0, 3), np.float32)
@@ -494,9 +544,9 @@ def composite(frames, gains, offsets=None, gamma=None):
 _normal = None
 
 
-def _outer_edge(cover, width):
+def _outer_edge(cover, width, on):
     """The soft edge of the mosaic of frames covering cover (1 where a frame has picture), frames whose own soft edge
-    is width canvas pixels wide (_edge_width): along a straight stretch of its edge, the frames' own profile
+    is width canvas pixels wide (_edge_width), past the array's border where on (_inside): along a straight stretch of its edge, the frames' own profile
     (edge_profile) at that width, from the edge of what all the frames cover, so it runs on unbroken where two frames
     meet; at a corner a little softer, as a frame's own corners are. How far inside the edge a pixel lies is read
     off cover blurred (a Gaussian of half the width): along a straight edge the blur is the normal curve of that
@@ -507,15 +557,164 @@ def _outer_edge(cover, width):
         _normal = (z, (0.5 * (1 + np.vectorize(math.erf)(z / math.sqrt(2)))).astype(np.float32))
     profile, at = edge_profile()
     sigma = width / 2
-    blur = cv2.GaussianBlur(cover, (0, 0), sigma, borderType=cv2.BORDER_CONSTANT)
+    m = int(math.ceil(3 * sigma))
+    blur = cv2.GaussianBlur(_past(cover, on, m), (0, 0), sigma, borderType=cv2.BORDER_CONSTANT)[m:-m, m:-m]
     # the blur at a pixel d pixels inside a straight edge is the normal curve at (d - 0.5) / sigma
     d = np.interp(blur, _normal[1], _normal[0]) * sigma + 0.5
     # nor farther in than the pixel lies from the nearest edge: round a small gap inside the mosaic (where tiles do not
     # quite meet) the blur sees picture nearly everywhere, and the gap would get a hard edge
-    d = np.minimum(d, _inside((cover > 0).astype(np.uint8)))
+    d = np.minimum(d, _inside((cover > 0).astype(np.uint8), on))
     # (cover starts RIM pixels inside the frames' own edge, where their soft edge is RIM pixels along)
     soft = np.interp((d + RIM) * (at / width), np.arange(1, len(profile) + 1), profile, left=0, right=1)
     return soft.astype(np.float32) * cover
+
+
+"""
+Seam leveling, the level step (calibration.step("level"), Settings > Processing > Level mosaic seams; needs blend).
+One gain per frame (match_gains) cannot make two frames agree all along their seam: the brightness of the same ground
+changes across a frame with the light (the terminator, a hazy limb) and with the angle it was seen from, and frames
+taken minutes apart see it differently, so a gain right at one end of a seam is wrong at the other. Each frame gets a
+smooth gain over all of it instead, every frame's worked out together, the way ISIS's equalizer works out a mosaic's
+gains from all its overlaps at once and its noseam and the gradient-domain blending of Perez et al. ("Poisson image
+editing", 2003) and Microsoft's Image Composite Editor carry what is left smoothly across each picture. The gains are
+the log of the gain in cells (LEVEL_CELL of feather_px) of the canvas: where two frames overlap, the two frames'
+gains there are to bring them to the same brightness (from the pixels where both are lit and agree within LEVEL_MAX,
+in the cell); within a frame, every cell's gain is to be its neighbours' (so the gain changes smoothly, never in a
+step); and every gain is held to 1 so that a seam's correction fades over LEVEL_REACH into the frame (a screened
+membrane), which keeps each frame at its own matched level away from its seams and the mosaic at its overall level.
+Least squares over all of it. pin = a frame whose gain stays 1 (the mosaic a tile is grown over: what is drawn
+stays as drawn, and the new tile is leveled to it).
+"""
+LEVEL_CELL = 1 / 4    # of feather_px: the cells the gain is worked out in
+LEVEL_MAX = 1.5       # the most a frame is brightened or darkened anywhere (and 1 / LEVEL_MAX)
+LEVEL_LIT = 12        # levels: both pictures above this where their ratio is measured
+LEVEL_FILL = 0.2      # of a cell: the share of its pixels measured for it to count
+LEVEL_STIFF = 1.0     # how much a cell's gain is held to its neighbours' against what it measures
+LEVEL_REACH = 4       # of feather_px (half a frame): how far into a frame a seam's correction reaches before
+                      # it has faded to a third, the frame back at its own (matched) gain past that
+
+
+def leveling():
+    return calibration.step("blend") and calibration.step("level")
+
+
+DRAWING = 2   # bumped when the blend or level steps change how a mosaic is drawn
+
+
+def drawing():
+    """What a mosaic's cache name gets for how its tiles are drawn together: "" with the blend step off (drawn as
+    before it, so the pictures made then keep their names), else "seams<DRAWING>-blend" or "...-blend-level"."""
+    if not calibration.step("blend"):
+        return ""
+    return f"seams{DRAWING}-blend" + ("-level" if calibration.step("level") else "")
+
+
+def _cells(a, c, oy, ox):
+    """a (h, w[, channels]), whose first pixel lies at (oy, ox) of the area, summed over the area's c x c cells:
+    (the sums, the cell of its first row and column)."""
+    h, w = a.shape[:2]
+    ty, tx = oy % c, ox % c
+    H, W = -(-(h + ty) // c) * c, -(-(w + tx) // c) * c
+    a = np.pad(a, ((ty, H - h - ty), (tx, W - w - tx)) + ((0, 0),) * (a.ndim - 2))
+    return a.reshape(H // c, c, W // c, c, *a.shape[2:]).sum(axis=(1, 3)), (oy // c, ox // c)
+
+
+def _levels(boxes, colors, hases, pin=None):
+    """Seam leveling's gains (above) for the frames (boxes in the area, colours as toned, where each has picture):
+    a list of (h, w, 1 or 3) gains, or None for a frame that needs none."""
+    from scipy.sparse import coo_matrix
+    from scipy.sparse.linalg import spsolve
+    n = len(boxes)
+    c = max(2, int(round(feather_px * LEVEL_CELL)))
+    grey = all(np.array_equal(col[::7, ::7, 0], col[::7, ::7, 1]) and np.array_equal(col[::7, ::7, 0], col[::7, ::7, 2])
+               for col in colors if col is not None)
+    ch = 1 if grey else 3
+    # every frame's cells (its box's), numbered
+    grids, first = [], 0
+    for i, b in enumerate(boxes):
+        if b is None or i == pin:
+            grids.append(None)
+            continue
+        gy0, gx0 = b[0] // c, b[2] // c
+        gh, gw = (b[1] - 1) // c - gy0 + 1, (b[3] - 1) // c - gx0 + 1
+        grids.append((gy0, gx0, gh, gw, first))
+        first += gh * gw
+    if first == 0:
+        return [None] * n
+    rows, cols, vals = [], [], []
+    rhs = np.zeros((first, ch))
+
+    def add(r, k, v):
+        rows.append(r); cols.append(k); vals.append(v)
+
+    measured = 0.0
+    for i in range(n):
+        for j in range(i + 1, n):
+            a, b = boxes[i], boxes[j]
+            if a is None or b is None:
+                continue
+            y0, y1, x0, x1 = max(a[0], b[0]), min(a[1], b[1]), max(a[2], b[2]), min(a[3], b[3])
+            if y1 <= y0 or x1 <= x0:
+                continue
+            si = (slice(y0 - a[0], y1 - a[0]), slice(x0 - a[2], x1 - a[2]))
+            sj = (slice(y0 - b[0], y1 - b[0]), slice(x0 - b[2], x1 - b[2]))
+            fi, fj = colors[i][si][..., :ch], colors[j][sj][..., :ch]
+            lit = (hases[i][si] > 0) & (hases[j][sj] > 0) & (fi.min(axis=2) > LEVEL_LIT) & (fj.min(axis=2) > LEVEL_LIT)
+            if not lit.any():
+                continue
+            ratio = np.log(np.maximum(fj, 1)) - np.log(np.maximum(fi, 1))
+            # a pixel the two do not agree on within LEVEL_MAX is not the light: the limb a pixel off, a moved cloud, a star
+            ok = lit & (np.abs(ratio).max(axis=2) < math.log(LEVEL_MAX))
+            cnt, (cy, cx) = _cells(ok.astype(np.float32), c, y0, x0)
+            tot, _ = _cells(ratio * ok[..., None], c, y0, x0)
+            for gy, gx in zip(*np.nonzero(cnt >= LEVEL_FILL * c * c)):
+                w = float(cnt[gy, gx]) / (c * c)
+                d = tot[gy, gx] / cnt[gy, gx]   # f_i - f_j should be this: frame i times e^f_i meets j times e^f_j
+                Y, X = cy + gy, cx + gx
+                ki = None if grids[i] is None else grids[i][4] + (Y - grids[i][0]) * grids[i][3] + (X - grids[i][1])
+                kj = None if grids[j] is None else grids[j][4] + (Y - grids[j][0]) * grids[j][3] + (X - grids[j][1])
+                if ki is not None:
+                    add(ki, ki, w); rhs[ki] += w * d
+                if kj is not None:
+                    add(kj, kj, w); rhs[kj] -= w * d
+                if ki is not None and kj is not None:
+                    add(ki, kj, -w); add(kj, ki, -w)
+                measured += w
+    if measured == 0:
+        return [None] * n
+    # within each frame its neighbouring cells alike, and every cell held to 0 just so much that a correction fades
+    # over LEVEL_REACH (a screened membrane): each frame keeps its own level away from its seams, so corrections do not
+    # add up from frame to frame across a mosaic grown a tile at a time (and the whole mosaic keeps its level)
+    pull = LEVEL_STIFF * (LEVEL_CELL / LEVEL_REACH) ** 2
+    for g in grids:
+        if g is None:
+            continue
+        gy0, gx0, gh, gw, k0 = g
+        idx = k0 + np.arange(gh * gw).reshape(gh, gw)
+        for p, q in ((idx[:, :-1], idx[:, 1:]), (idx[:-1, :], idx[1:, :])):
+            p, q = p.ravel(), q.ravel()
+            rows.extend(p); cols.extend(p); vals.extend([LEVEL_STIFF] * len(p))
+            rows.extend(q); cols.extend(q); vals.extend([LEVEL_STIFF] * len(p))
+            rows.extend(p); cols.extend(q); vals.extend([-LEVEL_STIFF] * len(p))
+            rows.extend(q); cols.extend(p); vals.extend([-LEVEL_STIFF] * len(p))
+    rows.extend(range(first)); cols.extend(range(first)); vals.extend([pull] * first)
+    A = coo_matrix((vals, (rows, cols)), shape=(first, first)).tocsc()
+    f = np.asarray(spsolve(A, rhs)).reshape(first, ch)
+    out = []
+    for g, b in zip(grids, boxes):
+        if g is None:
+            out.append(None)
+            continue
+        gy0, gx0, gh, gw, k0 = g
+        grid = np.clip(f[k0:k0 + gh * gw].reshape(gh, gw, ch), -math.log(LEVEL_MAX), math.log(LEVEL_MAX))
+        if not np.abs(grid).max() > 1e-4:
+            out.append(None)
+            continue
+        # each cell's gain at its middle, linear in between, cut to the frame's box
+        up = cv2.resize(grid.astype(np.float32), (gw * c, gh * c), interpolation=cv2.INTER_LINEAR).reshape(gh * c, gw * c, ch)
+        ty, tx = b[0] - gy0 * c, b[2] - gx0 * c
+        out.append(np.exp(up[ty:ty + b[1] - b[0], tx:tx + b[3] - b[2]]))
+    return out
 
 
 def _toned(color, gain, offset, gamma):
@@ -529,15 +728,16 @@ def _toned(color, gain, offset, gamma):
     return color
 
 
-def _blended(out, frames, infos, gains, offsets, gamma, area):
+def _blended(out, infos, gains, offsets, gamma, area, level, pin=None):
     """composite with the blend step on (calibration.step("blend"), Settings > Processing > Blend mosaic seams).
     The frames' soft edges (mask.png) no longer go into one another: drawn over each other they left the join part
     transparent wherever two frames overlap by less than their two soft edges, a darker line along every seam and a
     notch where a seam meets the mosaic's edge. Instead each frame is drawn over the frames below with a weight that
-    ramps in from its own edge over feather_px (_blend_parts), and the weight of what is below ramps in from its
-    edges the same way, so a frame fades in over feather_px past the edge of what is below and what is below fades
-    out over feather_px before its own edge: the colours meet smoothly from both sides whatever the overlap, and
-    a newer frame still covers an older one where both are whole. Where any frame has picture the mosaic is opaque;
+    ramps in from its own edge (_blend_parts), and the weight of what is below ramps in from its edges the same way,
+    so a frame fades in past the edge of what is below and what is below fades out before its own edge: the colours
+    meet smoothly from both sides whatever the overlap, and a newer frame still covers an older one where both are
+    whole. Two bands (multi-band blending, FINE): the coarse part over feather_px, the detail over the fine width.
+    level: the frames leveled first (_levels; pin as there). Where any frame has picture the mosaic is opaque;
     the soft edge is kept along the mosaic's outer edge only, the same profile as each frame's (edge_profile) at
     the frames' width (_edge_width), from the edge of what all of them cover. Without overlaps (a lone frame) the
     picture is the frame as it is, its alpha included."""
@@ -545,27 +745,48 @@ def _blended(out, frames, infos, gains, offsets, gamma, area):
     rgb = np.zeros((y1 - y0, x1 - x0, 3), np.float32)
     cover = np.zeros((y1 - y0, x1 - x0), np.float32)   # 1 where a frame drawn so far has picture
     weight = np.zeros((y1 - y0, x1 - x0), np.float32)  # what is drawn so far's own ramp, drawn over each other
+    fine = np.zeros((y1 - y0, x1 - x0), np.float32)    # ... and its fine ramp
     alpha = np.zeros((y1 - y0, x1 - x0), np.float32)   # the most of the frames' own alphas
     width = 0.0
-    for info, gain, offset in zip(infos, gains, offsets):
+    sigma = _fine_px() * FINE_SIGMA
+    margin = int(math.ceil(3 * sigma))
+    toned = [None if info is None else _toned(info[1], gain, offset, gamma) for info, gain, offset in zip(infos, gains, offsets)]
+    if level and sum(info is not None for info in infos) > 1:
+        boxes = [None if info is None else (info[0][0] - y0, info[0][1] - y0, info[0][2] - x0, info[0][3] - x0) for info in infos]
+        fields = _levels(boxes, toned, [None if info is None else info[3] for info in infos],
+                         None if pin is None else range(len(infos))[pin])
+        toned = [t if fl is None else t * fl for t, fl in zip(toned, fields)]
+    for info, color in zip(infos, toned):
         if info is None:
             continue
-        box, color, own, has, ramp, w = info
+        box, _, own, has, ramp, ramp_f, w = info
         width = max(width, w)
         sl = (slice(box[0] - y0, box[1] - y0), slice(box[2] - x0, box[3] - x0))
-        below, wb = cover[sl], weight[sl]
+        below, wb, fb = cover[sl], weight[sl], fine[sl]
+        meets = bool((below * has).any())
         a = np.where(below > 0, ramp / np.maximum(ramp + (1 - ramp) * wb, 1e-6), has)
-        color = _toned(color, gain, offset, gamma)
-        color -= rgb[sl]
-        color *= a[..., None]
-        rgb[sl] += color
+        if meets:
+            af = np.where(below > 0, ramp_f / np.maximum(ramp_f + (1 - ramp_f) * fb, 1e-6), has)
+            # the coarse parts of the frame and of what is below it (worked out with a margin round the frame, so the
+            # Gaussian near its box's edge sees what lies past it)
+            ya, yb = max(sl[0].start - margin, 0), min(sl[0].stop + margin, y1 - y0)
+            xa, xb = max(sl[1].start - margin, 0), min(sl[1].stop + margin, x1 - x0)
+            inner = (slice(sl[0].start - ya, sl[0].stop - ya), slice(sl[1].start - xa, sl[1].stop - xa))
+            under = rgb[sl]
+            low_b = _coarse(rgb[ya:yb, xa:xb], cover[ya:yb, xa:xb], sigma)[inner]
+            low_f = _coarse(color, has, sigma)
+            rgb[sl] = under + a[..., None] * (low_f - low_b) + af[..., None] * ((color - low_f) - (under - low_b))
+            fine[sl] = ramp_f + fb * (1 - ramp_f)
+        else:
+            rgb[sl] += (color - rgb[sl]) * a[..., None]
+            fine[sl] = np.maximum(fb, ramp_f)
         weight[sl] = ramp + wb * (1 - ramp)
         cover[sl] = np.maximum(below, has)
         alpha[sl] = np.maximum(alpha[sl], own * has)
     if width > 0:
         # never more transparent than the most opaque frame there (inside its rim), so a frame's own corners and a lost
         # line's gap keep the edge they were made with
-        alpha = np.maximum(alpha, _outer_edge(cover, width))
+        alpha = np.maximum(alpha, _outer_edge(cover, width, alpha >= EDGE_AT / 255))
     out[y0:y1, x0:x1, :3] = np.clip(rgb, 0, 255).round()
     out[y0:y1, x0:x1, 3] = (alpha * 255).round()
 
