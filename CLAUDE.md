@@ -30,3 +30,12 @@ Other parameters keep working alongside them (`?finale`, `?frames=`, `?tex=`).
   is: it already holds the time, view, camera and speed. In page code, `window.cassiniLink.href()` returns the same
   link.
 - Put the link in the message next to the screenshot or video, so Sam can open the same moment and look around.
+
+## Compute on the viewer's computer
+
+Sam's rule (2026-10-27): the site must stay runnable on the one Mac Mini plus Cloudflare storage. So work that
+depends on a viewer's settings (slider values, looks, smoothing, gains, mixes) runs in the page, on pictures and
+small JSON the pre-build already holds. The server measures once per pass in the pre-build, draws only the one
+default variant, and handles cold passes and exports. A page-side step is a line-for-line port with a test against
+the Python (`web/test_steady_local.py`, `web/frames/test_studio_look.py`), never a second implementation. Read
+`docs/compute-on-viewer.md` before adding a setting that changes pictures.
