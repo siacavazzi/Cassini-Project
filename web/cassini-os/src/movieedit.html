@@ -244,7 +244,10 @@ body.phone #mestrip { grid-template-columns: repeat(auto-fill, 72px); grid-auto-
       const b = document.createElement("button"); b.className = "meth"; b.dataset.i = i; b.setAttribute("role", "option");
       b.title = `${hms(e)} UTC · ${name(e.target)} · ${e.cam === "N" ? "NAC" : "WAC"} ${e.filters} · ${e.id}`;
       b.innerHTML = `<img loading="lazy" decoding="async" alt=""><b></b><span></span>`;
-      b.querySelector("img").src = thumbUrl(e);
+      const img = b.querySelector("img");
+      // a frame the server has no raw picture of: the movie's own picture of it stands in
+      img.onerror = () => { img.onerror = null; if (e.src) img.src = `${FRAMES}${e.src}${e.src.includes("?") ? "&" : "?"}size=256`; };
+      img.src = thumbUrl(e);
       b.querySelector("b").textContent = `${e.cam === "N" ? "N" : "W"}${KIND[e.first] ? " · " + KIND[e.first] : ""}`;
       b.querySelector("span").textContent = `${hms(e)} ${name(e.target)}`;
       return b;
