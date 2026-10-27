@@ -1,0 +1,64 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Picture pre-build</title>
+<style>
+  :root { --bg: #f4f3ee; --fg: #1d2016; --dim: #6b6e62; --line: #d6d4cb; --bar: #3a3f33; --warn: #b5651d; --bad: #b3392f; }
+  @media (prefers-color-scheme: dark) { :root { --bg: #15170f; --fg: #e6e4d9; --dim: #8f927f; --line: #33362b; --bar: #c9c7b8; } }
+  body { margin: 0; background: var(--bg); color: var(--fg); font: 15px/1.5 -apple-system, "Helvetica Neue", sans-serif; }
+  main { max-width: 760px; margin: 0 auto; padding: 32px 16px; }
+  h1 { font-size: 20px; font-weight: 600; margin: 0 0 4px; }
+  p.sub { color: var(--dim); margin: 0 0 28px; }
+  section { border-top: 1px solid var(--line); padding: 18px 0; }
+  h2 { font-size: 15px; font-weight: 600; margin: 0 0 8px; display: flex; justify-content: space-between; }
+  h2 span { font-weight: 400; color: var(--dim); }
+  .track { height: 8px; background: var(--line); border-radius: 4px; overflow: hidden; }
+  .fill { height: 100%; background: var(--bar); }
+  .row { display: flex; flex-wrap: wrap; gap: 6px 22px; margin-top: 8px; color: var(--dim); font-variant-numeric: tabular-nums; }
+  .row b { color: var(--fg); font-weight: 500; }
+  .waiting { color: var(--warn); }
+  .err { color: var(--bad); }
+</style>
+</head>
+<body>
+<main>
+  <h1>Picture pre-build</h1>
+  <p class="sub">The mission's pictures made ahead of time on the Mac Mini, so viewers never wait for processing. Updates every 10 seconds.</p>
+  <div id="phases"></div>
+</main>
+<script>
+// every phase in run order: one not started yet says so, so the page never reads as finished early
+const PHASES = { frames: "Frames (128, 512 and 1024 px)", composites: "Color composites", mosaics: "Mosaic passes",
+  movies: "Movie passes", processed: "Processed frames (centered)", strips: "Movie strips (128 px)" };
+const fmt = n => n == null ? "–" : n.toLocaleString("en-US");
+const dur = s => s == null || !isFinite(s) ? "–" : s < 3600 ? `${Math.round(s / 60)} min` : `${(s / 3600).toFixed(1)} h`;
+const ago = t => { const s = Date.now() / 1000 - t; return s < 90 ? `${Math.round(s)} s ago` : s < 5400 ? `${Math.round(s / 60)} min ago` : `${(s / 3600).toFixed(1)} h ago`; };
+async function get(name) { try { const r = await fetch(name, { cache: "no-store" }); return r.ok ? r.json() : null; } catch { return null; } }
+function section(label, s) {
+  if (!s) return `<section><h2>${label}<span>not started</span></h2><div class="track"><div class="fill" style="width:0"></div></div>
+    <div class="row"><span>starts when the step before it ends</span></div></section>`;
+  const pct = s.total ? s.done / s.total * 100 : 0;
+  const state = s.state === "waiting" ? `<span class="waiting">waiting: ${s.why_waiting}</span>` : s.state;
+  // errors_fixed: items that failed in the run and were made again afterwards (a fix, rebuilt on its own)
+  const open = (s.errors || 0) - (s.errors_fixed || 0);
+  const errs = s.errors_fixed ? `<span class="${open ? "err" : ""}">${fmt(open)} errors (${fmt(s.errors_fixed)} fixed and rebuilt)</span>`
+    : `<span class="${s.errors ? "err" : ""}">${fmt(s.errors)} errors</span>`;
+  return `<section><h2>${label}<span>${pct.toFixed(1)}%</span></h2>
+    <div class="track"><div class="fill" style="width:${pct}%"></div></div>
+    <div class="row"><span><b>${fmt(s.done)}</b> of ${fmt(s.total)}</span><span>${state}</span>
+    <span>${s.rate_per_s && s.state !== "done" ? s.rate_per_s.toFixed(1) + " per s" : ""}</span><span>left ${s.state === "done" ? "0" : dur(s.eta_s)}</span>
+    ${errs}<span>updated ${ago(s.updated)}</span></div>${s.note ? `<p class="sub" style="margin:8px 0 0">${s.note}</p>` : ""}</section>`;
+}
+async function draw() {
+  const out = [];
+  for (const [p, label] of Object.entries(PHASES)) out.push(section(label, await get(`status-${p}.json`)));
+  // extra jobs beside the phases (rebuilds after a fix): status-extra.json, [{label, done, total, state, eta_s, ...}]
+  for (const s of (await get("status-extra.json")) || []) out.push(section(s.label, s));
+  document.getElementById("phases").innerHTML = out.join("");
+}
+draw(); setInterval(draw, 10000);
+</script>
+</body>
+</html>

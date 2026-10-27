@@ -24,7 +24,7 @@ Below is a diagram which demonstrates this.
 
 ## How to use
 
-1. Install required packages: `pip install -r requirements.txt`
+1. Install required packages, with Python 3.11: `pip install -r requirements.txt` (pinned to the versions the pictures are made with)
 ### Required python packages
 * Pandas
 * Numpy

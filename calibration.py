@@ -27,7 +27,10 @@ flat fields and dust rings, 2 Hz noise, nonlinearity and anti-blooming pixel pai
 
 Frames that can't be unstretched return None and the caller keeps the old behavior.
 """
+import contextlib
+import contextvars
 import datetime
+import json
 import math
 import os
 
@@ -166,10 +169,9 @@ def unstretch(png, info, image=None):
         return None  # 8LSB frames only kept the low 8 bits
     if ds.lut8():
         # the lean archive keeps the camera's codes, so nothing has to be guessed
-        stored = stored_values(png, info)
         if image is None:
-            return stored
-        low, high = stored.min(), stored.max()
+            return stored_values(png, info)
+        low, high = stored_range(png, info)
         return np.asarray(image, dtype=np.float64) * (high - low) / 254.0 + low
     png = np.asarray(png, dtype=np.float64)
     span = recover_span(png)
@@ -195,6 +197,18 @@ def unstretch(png, info, image=None):
 
 
 """
+unstretch of each of the 256 codes (CODES) of a lean archive frame's 8-bit image, or of its PNG when image is None:
+what unstretch gives a pixel of that code, to look the pixels up in (_lookup)
+"""
+def _unstretch_codes(png, info, image=None):
+    if image is not None:
+        return unstretch(png, info, CODES)
+    if _value(info, "DATA_CONVERSION_TYPE", "") not in ("TABLE", "12BIT"):
+        return None
+    return stored_values(CODES, info)
+
+
+"""
 Lean archive (helper programs/convert_archive.py) only: what the camera sent for each
 pixel, from the 8-bit codes in the PNG. TABLE frames were sent as the codes themselves,
 12BIT frames as DN, which the archive squeezed into the same codes.
@@ -206,6 +220,33 @@ def stored_values(codes, info):
     return codes.astype(np.float64)
 
 
+# every 8-bit code, for working a per pixel step out once per code instead of once per pixel (_lookup)
+CODES = np.arange(256, dtype=np.uint8)
+
+
+"""
+Lean archive only: the smallest and largest of stored_values(codes, info), from the codes' own smallest and largest
+(both conversions keep the codes' order), so a frame's million pixels are not turned into floats just for two numbers
+"""
+def stored_range(codes, info):
+    codes = np.asarray(codes)
+    if codes.dtype != np.uint8 or not codes.size:
+        stored = stored_values(codes, info)
+        return stored.min(), stored.max()
+    values = stored_values(CODES, info)
+    return values[codes.min()], values[codes.max()]
+
+
+"""
+table[codes] for 8-bit codes: what a per pixel step gives each of the 256 codes (table, worked out on CODES with the
+step's own arithmetic, so the same numbers), looked up for every pixel; cv2.LUT does that ten times quicker than numpy
+"""
+def _lookup(codes, table):
+    if codes.ndim == 2 or (codes.ndim == 3 and codes.shape[2] in (3, 4)):
+        return cv2.LUT(np.ascontiguousarray(codes), np.ascontiguousarray(table))
+    return table[codes]
+
+
 """
 Lean archive only: stretches a frame of codes min..max -> 0..254 the way the old
 dataset PNGs were, so code written for those still sees the same images.
@@ -214,11 +255,35 @@ dataset PNGs were, so code written for those still sees the same images.
 def display_stretch(codes, info):
     if _value(info, "DATA_CONVERSION_TYPE", "") not in ("TABLE", "12BIT"):
         return codes
-    stored = stored_values(codes, info)
-    low, span = stored.min(), stored.max() - stored.min()
+    codes = np.asarray(codes)
+    if codes.dtype != np.uint8 or not codes.size:
+        stored = stored_values(codes, info)
+        low, span = stored.min(), stored.max() - stored.min()
+        if span <= 0:
+            return np.zeros_like(codes)
+        return np.floor((stored - low) * 254.0 / span + 0.5).astype(np.uint8)
+    low, high = stored_range(codes, info)
+    span = high - low
     if span <= 0:
         return np.zeros_like(codes)
-    return np.floor((stored - low) * 254.0 / span + 0.5).astype(np.uint8)
+    # the stretch of each code (the codes outside the frame's range are held to it: they are never looked up)
+    stored = np.clip(stored_values(CODES, info), low, high)
+    return _lookup(codes, np.floor((stored - low) * 254.0 / span + 0.5).astype(np.uint8))
+
+
+"""
+The frame's bias level, in the units of its stored values (DN for 12BIT frames, codes for TABLE ones): its bias
+strip's mean. A frame that lost lines in transmission can lose its bias strip with them (a strip mean of 0 or
+below, as in the last frames of the 2006-12-04 spoke movie, -235): in the lean archive, dark sky sits at the bias
+level, so the darkest 0.1% of the frame is taken instead, leaving out the lost lines (code 0).
+"""
+def bias_of(png, info):
+    bias = float(_value(info, "BIAS_STRIP_MEAN", "0"))
+    if bias <= 0 and ds.lut8():
+        stored = stored_values(png, info)
+        kept = stored[np.asarray(png) > 0]
+        bias = float(np.percentile(kept, 0.1)) if kept.size else 0.0
+    return bias
 
 
 """
@@ -244,11 +309,15 @@ def calibrate(png, info, image=None):
     if k is None or gain not in GAIN_STATES or mode not in SUM_FACTORS or exposure <= 0 or distance is None:
         return None
 
-    dn = unstretch(png, info, image)
+    # lean archive: every pixel of the 8-bit image (or PNG) is one of 256 codes, so the steps up to the shutter's
+    # per column exposure are worked out for the 256 codes and looked up (_lookup): the same numbers, a third of the time
+    pixels = np.asarray(png if image is None else image)
+    codes = ds.lut8() and pixels.dtype == np.uint8 and pixels.ndim == 2 and np.asarray(png).size > 0
+    dn = _unstretch_codes(png, info, image) if codes else unstretch(png, info, image)
     if dn is None:
         return None
 
-    bias = float(_value(info, "BIAS_STRIP_MEAN", "0"))
+    bias = bias_of(png, info)
     if _value(info, "DATA_CONVERSION_TYPE") == "TABLE":
         dn = np.interp(dn, np.arange(256), LUT)
         bias = LUT[int(min(max(bias, 0), 255))]
@@ -256,9 +325,10 @@ def calibrate(png, info, image=None):
 
     if _value(info, "SHUTTER_STATE_ID", "ENABLED") != "DISABLED":
         first, last = SHUTTER_SLOPE[camera]
-        exposure = exposure - np.linspace(first, last, dn.shape[1]) - SHUTTER_OFFSET[camera]
+        exposure = exposure - np.linspace(first, last, pixels.shape[1] if codes else dn.shape[1]) - SHUTTER_OFFSET[camera]
         exposure = np.maximum(exposure, 0.1)
-    per_second = dn * 1000.0 / exposure
+    dn = dn * 1000.0
+    per_second = (_lookup(pixels, dn) if codes else dn) / exposure
 
     gain_ratio = GAIN_RATIOS[camera][GAIN_STATES[gain]]
     slope, start = SENSITIVITY[camera]
@@ -268,7 +338,14 @@ def calibrate(png, info, image=None):
         image_number = 0
     sensitivity = 1 + slope * (image_number - start) if image_number > start else 1.0
 
-    return per_second * k / gain_ratio * SUM_FACTORS[mode] * sensitivity * distance ** 2
+    # per_second * k / gain_ratio * SUM_FACTORS[mode] * sensitivity * distance ** 2, in place (the same steps in the
+    # same order) so a frame's worth of float64 is not made five more times
+    per_second *= k
+    per_second /= gain_ratio
+    per_second *= SUM_FACTORS[mode]
+    per_second *= sensitivity
+    per_second *= distance ** 2
+    return per_second
 
 
 """
@@ -281,11 +358,379 @@ def saturated(codes, info, image=None):
     image = np.asarray(codes if image is None else image)
     if ds.lut8() and conversion in ("TABLE", "12BIT"):
         top = 4095 if conversion == "12BIT" else 255
-        if stored_values(codes, info).max() < top:
+        if stored_range(codes, info)[1] < top:
             return np.zeros(image.shape, bool)
         # the display stretch puts the top at 254; a resized frame's partly full pixels count too
         return image >= 250
     return image >= 254
+
+
+"""
+How pictures are drawn from I/F, set per request (looking): "balanced", the one display model of the
+color plan (steps C1-C5: black per channel at the sky's median plus one noise margin shared by every
+channel, white at the WHITE_PCT percentile of the lit pixels with a soft shoulder, filled mosaic passes on
+one black and white for every filter, mosaic seams solved once per tile on linear values), or "classic",
+the stretch before it (black at the 98th percentile of the sky, white at the brightest pixel, each mosaic
+filter stretched and matched on its own). The frame server keeps the two in separate caches.
+"""
+LOOKS = ("balanced", "classic")
+_look = contextvars.ContextVar("look", default="balanced")
+
+NOISE_MARGIN = 2.0   # balanced: the black sits this many times the sky's noise (pooled over the channels)
+                     # above each channel's sky level
+WHITE_PCT = 99.5     # balanced: the percentile of the lit pixels of the brightest channel that is white
+MAX_STRETCH = 1.4    # balanced: white at most this many times darker than the classic white (the brightest
+                     # pixel), so a picture is never stretched far enough to show its scan lines, compression
+                     # blocks and 8-bit steps
+SPIKE = 6.0          # balanced composites: a one-channel spike this many times the sky's grain is cleaned (_clean_spikes)
+SKY_DARK = 99        # balanced composites: this percentile of the dark sky's brightness is below the toe (tone)
+SHOULDER = 0.8       # balanced composites: above this share of white, brightness rolls off softly instead
+                     # of clipping (limbs and ring highlights past the white keep their shape)
+
+
+def look():
+    return _look.get()
+
+
+"""
+How a balanced color picture maps its filters to color (color plan phase 2b): "natural" (the default) turns a
+true color set into the colors an eye would see (natural_mix) and balances a false color set so the body comes
+out gray (false_mix); "raw" draws each filter straight as a channel, as before. The classic look is always raw.
+"""
+COLORS = ("natural", "raw")
+_colors = contextvars.ContextVar("colors", default="natural")
+
+
+def colors():
+    return _colors.get()
+
+
+@contextlib.contextmanager
+def coloring(name):
+    token = _colors.set(name if name in COLORS else COLORS[0])
+    try:
+        yield
+    finally:
+        _colors.reset(token)
+
+
+"""
+The display model in use, for cache names: "classic", "balanced" (natural color) or "raw" (balanced, filters drawn
+straight)
+"""
+def style():
+    if look() == "classic":
+        return "classic"
+    return "raw" if colors() == "raw" else "balanced"
+
+
+@contextlib.contextmanager
+def looking(name):
+    token = _look.set(name if name in LOOKS else LOOKS[0])
+    try:
+        yield
+    finally:
+        _look.reset(token)
+
+
+"""
+The pipeline's steps a request turns off (Settings > Processing; the picture routes' off=, a comma list), to see what
+each one does: "stack" (repeat exposures of the same filter merged, stacking.load_stacked and load_hdr), "hdr" (an
+exposure bracket merged into one picture in mosaics and movies, stacking.load_hdr; off merges only identical
+exposures, a plain stack), "fill" (pixels lost in downlink filled from round them), "calibrate" (every frame put on
+I/F and one display scale; off shows each frame on the archive's own stretch) and "align" (a color set's channels
+moved onto one another). Every step is on by default; off steps go into the cache names (variant), so the pictures
+made with every step on keep their names.
+"""
+STEPS = ("stack", "hdr", "fill", "calibrate", "align")
+_off = contextvars.ContextVar("off", default=frozenset())
+
+
+def step(name):
+    """True when the pipeline step name is on for this request (STEPS)."""
+    return name not in _off.get()
+
+
+def variant():
+    """What a cache name gets for the steps turned off: "" with every step on, else "-off-" and their names."""
+    off = _off.get()
+    return "-off-" + "-".join(s for s in STEPS if s in off) if off else ""
+
+
+@contextlib.contextmanager
+def stepping(names):
+    """The pipeline steps names (a comma list or an iterable of STEPS names; others are ignored) turned off."""
+    if isinstance(names, str):
+        names = names.split(",")
+    token = _off.set(frozenset(n for n in names if n in STEPS))
+    try:
+        yield
+    finally:
+        _off.reset(token)
+
+
+def mode():
+    """The request's whole display model (look, colors and the steps turned off), to carry to another thread (in_mode)
+    and to key what is kept in memory."""
+    return look(), colors(), _off.get()
+
+
+@contextlib.contextmanager
+def in_mode(m):
+    with looking(m[0]), coloring(m[1]), stepping(m[2]):
+        yield
+
+
+"""
+The channel mix of a color set, a 3x3 matrix on linear values ([red, green, blue] out of the set's channels in
+order), or None to draw each filter straight: natural color only, in the balanced look.
+camera = "N" or "W"; bands = the set's color filters in channel order ("RED", "GRN", "BL1", "CB2", "MT3"...)
+target = the body the set is of (TARGET_NAME), for false color
+gains = false color: per band, the gain that brings the body's typical brightness to the set's mean
+(false_gains), when the caller has measured it itself (a mosaic's pass); otherwise the table's
+"""
+def color_mix(camera, bands, target=None, gains=None, own=False):
+    if style() != "balanced" or len(bands) != 3:
+        return None
+    m = natural_mix(camera, bands)
+    if m is not None:
+        return m
+    gains = gains or false_gains(target, bands, camera)
+    if not gains and own:
+        # no mission measure of the body in these bands (a clear frame, a rare filter or body): the picture's own
+        # balance alone (load_linear's FALSE_OWN), so no band outshines the others
+        gains = [1.0] * len(bands)
+    if not gains:
+        return None
+    m = np.diag(np.asarray(gains, np.float32)).view(FalseMix)
+    m.tint = tint_of(target)
+    return m
+
+
+class FalseMix(np.ndarray):
+    """A false color mix (a gain per band, diagonal), the tint its balance aims at (tint_of) and, for a mosaic, its
+    pass's typical color (each band's log share of the brightness, so the color doesn't shift as tiles arrive), kept
+    through arithmetic."""
+    tint = None
+    typical = None
+
+    def __array_finalize__(self, obj):
+        self.tint = getattr(obj, "tint", None)
+        self.typical = getattr(obj, "typical", None)
+
+
+_matrices = None
+
+
+"""
+True color sets (RED, GRN and BL1, BL2 or VIO): the fitted filter-to-sRGB matrix of the camera
+(color_matrices.json), which turns what the three filters saw into the color an eye would see; a gray body
+stays gray. None for other sets, and for a NAC set with VIO (no fit).
+"""
+def natural_mix(camera, bands):
+    global _matrices
+    if list(bands[:2]) != ["RED", "GRN"] or bands[2] not in ("BL1", "BL2", "VIO"):
+        return None
+    if _matrices is None:
+        with open(os.path.join(os.path.dirname(os.path.abspath(__file__)), "color_matrices.json")) as f:
+            _matrices = json.load(f)
+    key = ("NAC" if camera.startswith("N") or camera == "ISSNA" else "WAC") + {"VIO": "vio", "BL2": "bl2"}.get(bands[2], "")
+    m = _matrices.get(key)
+    return None if m is None else np.asarray(m, np.float32)
+
+
+_bodies = None
+
+
+"""
+False color: per band, the gain that brings the body's typical lit brightness in that band (false_color_bodies.json,
+the median over the mission's frames of the body, per camera) to the mean of the set's bands, so the body as a
+whole comes out gray and only its differences between bands show as color: a methane band (MT2, MT3) is far darker
+than its neighbors and otherwise turns the whole planet teal or magenta. One table for the mission, not a balance per
+picture, so a movie of the set doesn't change color from frame to frame. None (filters drawn straight) when the
+table lacks the body or a band, or its measure is unsure (BODY_MIN frames, a spread past BODY_SPREAD: a two-toned
+or phase-dependent body, like Iapetus).
+camera = "N" or "W"; target = TARGET_NAME
+"""
+BODY_MIN = 10
+BODY_SPREAD = 3.0    # the upper quartile over the lower
+
+
+def false_gains(target, bands, camera=None):
+    global _bodies
+    if _bodies is None:
+        path = os.path.join(os.path.dirname(os.path.abspath(__file__)), "false_color_bodies.json")
+        _bodies = {}
+        if os.path.exists(path):
+            with open(path) as f:
+                _bodies = json.load(f)
+    body = _bodies.get(str(target or "").upper(), {})
+    cam = "N" if str(camera or "").startswith("N") or camera == "ISSNA" else "W"
+    meds = []
+    for b in bands:
+        m = body.get(cam, {}).get(b) or body.get(b)
+        if not m or m.get("n", 0) < BODY_MIN or m["median"] <= 0 or m["iqr"][1] > BODY_SPREAD * max(m["iqr"][0], 1e-9):
+            return None
+        meds.append(m["median"])
+    return balance(meds, tint_of(target))
+
+
+"""
+False color gains that bring levels (the body's brightness per band) toward their mean (times the body's natural
+tint, BODY_TINTS, where it has one), FALSE_BALANCE of the way
+in log terms, keeping their total: all the way would give a dim band like MT3 over four times its brightness and lift
+its noise, so the body is left a little tinted instead (apply_mix holds what still stands out)
+"""
+FALSE_BALANCE = 0.9
+FALSE_OWN = 0.75
+OWN_NEAR = 0.3       # ... measured where every band's share is within this (log) of the picture's typical
+
+# the most one band's gain may be over another's: MT3 is so dark on Saturn (gains of 8 to 11) that whatever is less
+# methane-absorbed (the rings, the equatorial haze, the limb) would come out a vivid pink and its structure stand out
+# like scan lines
+GAIN_SPREAD = 12.0
+
+
+def spread_capped(gains):
+    low = min(gains)
+    return [min(g, low * GAIN_SPREAD) for g in gains]
+
+
+# the target of the balance for bodies with a color of their own, instead of gray: their natural color (sRGB, the color
+# investigation's references, /mnt/project-files/color-investigation/filter_to_srgb_matrices.json), so a false color
+# Jupiter comes out cream and tan rather than blue-gray
+BODY_TINTS = {"JUPITER": (255, 237, 206), "SATURN": (255, 242, 214), "TITAN": (255, 217, 162)}
+
+
+def tint_of(target):
+    """The body's natural color as linear red, green, blue of mean 1, or None (gray)."""
+    t = BODY_TINTS.get(str(target or "").upper())
+    if t is None:
+        return None
+    lin = [float(decode(np.float64(v / 255), "srgb")) for v in t]
+    return [v * 3 / sum(lin) for v in lin]
+
+
+def balance(levels, tint=None):
+    mean = sum(levels) / len(levels)
+    tint = tint or [1.0] * len(levels)
+    gains = spread_capped([(mean * t / v) ** FALSE_BALANCE for v, t in zip(levels, tint)])
+    k = sum(levels) / sum(g * v for g, v in zip(gains, levels))
+    return [g * k for g in gains]
+
+
+"""
+A channel mix (color_mix) on linear channels (3 x H x W). A false color mix (a gain per band, diagonal) is meant to
+take the body's tint away; where it makes a pixel more colorful than drawn straight instead (Saturn's rings, which
+methane doesn't darken, or Jupiter's limb haze, bright in MT3), the pixel goes to the body's tint (gray where it has
+none) at the balanced brightness,
+fully once the balance adds FALSE_REVERT of saturation (its straight color, teal on Jupiter, would stand out too). Then saturation past FALSE_CHROMA[0]
+rolls off through a soft knee to at most FALSE_CHROMA[1] (on linear values, against the tint).
+"""
+FALSE_CHROMA = (0.15, 0.25)
+FALSE_REVERT = 0.1
+FALSE_DETAIL = 5.0    # ... and fine detail below this blur (pixels) taken from the bands at gentler gains:
+DETAIL_SPREAD = 4.0   # none over this times another's (4x keeps the scan lines down; the full gains lift them)
+REVERT_FLOOR = 0.02   # ... where the bands' mean is at least this share of white
+# broad color differences across the body (a dusty-rose band under the ring shadow, one half of a disk pink and the
+# other sage, a lavender side, one mosaic tile olive and the next mauve) are what a dim band's full gain makes of small
+# real changes in its share; FALSE_FLAT of the picture's color variation broader than FALSE_BROAD (a share of the
+# picture's size) is taken out, toward its typical color, while finer color (belts, clouds, storms) stays
+FALSE_BROAD = 0.10
+FALSE_FLAT = 0.6
+
+
+def _saturation(x):
+    top, low = x.max(axis=0), x.min(axis=0)
+    return np.where(top > 0, (top - low) / np.maximum(top, 1e-12), 0)
+
+
+def _broad_blur(v, sigma):
+    """cv2.GaussianBlur(v, (0, 0), sigma) for a wide sigma (a tenth of a mosaic's canvas, hundreds of pixels):
+    blurred at 1/f of the size and scaled back up, which is the same picture to well under a level (the blur
+    leaves nothing finer than sigma) at a hundredth of the cost; a mosaic movie's color picture took seconds."""
+    f = int(sigma // 8)
+    h, w = v.shape[:2]
+    if f < 2 or min(h, w) < 8 * f:
+        return cv2.GaussianBlur(v, (0, 0), sigma)
+    small = cv2.resize(v, (max(1, round(w / f)), max(1, round(h / f))), interpolation=cv2.INTER_AREA)
+    small = cv2.GaussianBlur(small, (0, 0), sigma / f)
+    return cv2.resize(small, (w, h), interpolation=cv2.INTER_LINEAR)
+
+
+def _flatten_broad(x, lit, typical=None):
+    if lit.sum() < 100:
+        return x
+    lum = x.mean(axis=0)
+    share = np.log(np.maximum(x, 1e-6) / np.maximum(lum, 1e-6))
+    if typical is None:
+        typical = [np.median(c[lit]) for c in share]
+    typical = np.asarray(typical, np.float32).reshape(3, 1, 1)
+    sigma = FALSE_BROAD * max(x.shape[1:])
+    weight = np.where(lit, lum, 0).astype(np.float32)
+    soft = lambda v: _broad_blur(v, sigma)
+    norm = np.maximum(soft(weight), 1e-12)
+    broad = np.stack([soft(c * weight) / norm for c in (share - typical)])
+    flat = np.exp(share - FALSE_FLAT * broad)
+    flat *= 3 / np.maximum(flat.sum(axis=0), 1e-12)
+    return np.where(lit & (x.min(axis=0) > 0), lum * flat, x)
+
+
+def apply_mix(mix, x):
+    false = isinstance(mix, FalseMix)
+    tint = np.asarray(mix.tint if false and mix.tint else [1.0, 1.0, 1.0], np.float32).reshape(3, 1, 1)
+    raw = x
+    x = np.tensordot(np.asarray(mix, np.float32), x, axes=1)
+    if false:
+        # the bands channels first in memory for the mean, min and max over them (mix_display's picture is channels
+        # last, where those take 10 to 45 times as long): the same operations in the same order, so the same values.
+        # The weighted sums (tensordot) keep raw, so BLAS gets the layout it had
+        bands = np.ascontiguousarray(raw)
+        # judged against the tint the balance aims at, not gray, so a body's own color (Titan's orange) is no outlier
+        lum = x.mean(axis=0)
+        mean = bands.mean(axis=0)
+        straight = bands * (lum / np.maximum(mean, 1e-12))
+        w = np.clip((_saturation(x / tint) - _saturation(straight / tint)) / FALSE_REVERT, 0, 1)
+        # only where every band has signal: the sky's noise has no band ratio to compare
+        w = np.where((bands.min(axis=0) > 0) & (mean > REVERT_FLOOR), w, 0)
+        x = x + (lum * tint - x) * w
+        knee, cap = FALSE_CHROMA
+        sat = _saturation(x / tint)
+        held = knee + (cap - knee) * np.tanh((sat - knee) / (cap - knee))
+        k = np.where(sat > knee, held / np.maximum(sat, 1e-12), 1)
+        x = lum * tint + (x - lum * tint) * k
+        x = _flatten_broad(x, mean > REVERT_FLOOR, mix.typical)
+        # the balance's color and broad brightness, the fine detail of the bands at gains no more than DETAIL_SPREAD
+        # apart: a dim band's full gain (MT3 on Saturn, 8 to 10) would lift its ring, limb and haze structure and noise
+        # far above the others', while equal weights (the straight picture) lose the detail only that band shows
+        gains = np.diagonal(np.asarray(mix, np.float32))
+        gentle = np.minimum(gains, gains.min() * DETAIL_SPREAD)
+        sharp = np.tensordot(gentle / gentle.mean(), raw, axes=([0], [0])) / len(gains)
+        soft = lambda v: cv2.GaussianBlur(v, (0, 0), FALSE_DETAIL)
+        bright = x.mean(axis=0)
+        base, flat = soft(bright), soft(sharp)
+        ok = (flat > REVERT_FLOOR) & (soft(mean) > REVERT_FLOOR)
+        detail = np.where(ok, sharp * base / np.maximum(flat, 1e-12), bright)
+        x = np.stack([np.where(ok, detail * soft(c) / np.maximum(base, 1e-12), c) for c in x])
+    return x
+
+
+"""
+A color picture already drawn (H x W x 3 uint8, gamma encoded, its channels on one white) with its channel mix
+(color_mix) applied on the linear values, the brightest channel rolling off past the shoulder as in tone
+"""
+def mix_display(rgb, mix, gamma=2.2, shoulder=SHOULDER):
+    x = decode(np.moveaxis(rgb[..., :3].astype(np.float32) / 255, -1, 0), gamma).astype(np.float32)
+    x = apply_mix(mix, x)
+    _shoulder(x, shoulder)
+    return np.moveaxis((encode(np.clip(x, 0, 1), gamma) * 255 + 0.5).astype(np.uint8), 0, -1)
+
+
+"""
+A frame's color filter ("RED", "CB2", "BL1/GRN"...), the filters other than the clear ones, as reel.colour_filter
+"""
+def band_of(info):
+    return "/".join(f for f in _filters_of(info) if not f.startswith("CL")) or "CL1/CL2"
 
 
 """
@@ -298,7 +743,7 @@ iofs = optional list, one per label: an I/F image already calibrated (stacking.l
 instead of calibrating that channel's image, or None
 scale = optional fixed display scale shared by every picture of a mosaic, a dict with "white"
 (the I/F that becomes full brightness), "blacks" (one I/F per channel that becomes black) and
-optionally "gamma"; without it each picture is stretched on its own as below
+optionally "gamma" and "shoulder"; without it each picture is stretched on its own as below
 Returns one BGR uint8 image per label. If every frame calibrates, all channels share one
 stretch so their relative brightness is what the camera measured. Otherwise the images
 are returned unchanged, each with its own stretch as before.
@@ -306,6 +751,30 @@ are returned unchanged, each with its own stretch as before.
 def load_channels(labels, images=None, sky_fraction=0.1, sky_percentile=98, gamma=2.2, iofs=None, scale=None):
     if images is None:
         images = [lbl.resize_image() for lbl in labels]
+    iofs = _calibrated(labels, images, iofs)
+    if iofs is None:
+        return images
+    if scale is not None:
+        # every picture of a mosaic on the same scale, so tiles and filters keep what the camera saw
+        gamma = scale.get("gamma", gamma)
+        out = []
+        for iof, black in zip(iofs, scale["blacks"]):
+            # a picture's own black where the scale measures one on it (obs_mosaic.tile_scale)
+            own = scale["black_of"](iof) if scale.get("black_of") else None
+            black, toe = (own["black"], own["toe"]) if own else (black, scale.get("toe"))
+            out.append(display(iof, black, scale["white"], gamma, scale.get("shoulder"), toe))
+        return out
+    blacks, white, _ = picture_scale(iofs, sky_fraction, sky_percentile)
+    if white <= 0:
+        return images
+    shoulder = SHOULDER if look() == "balanced" else None
+    return [display(iof, black, white, gamma, shoulder) for iof, black in zip(iofs, blacks)]
+
+
+"""
+Each channel's I/F image, calibrating those not given; None for a frame that can't be calibrated
+"""
+def calibrated_each(labels, images, iofs=None):
     given = iofs or [None] * len(labels)
     iofs = []
     for lbl, image, iof in zip(labels, images, given):
@@ -314,20 +783,128 @@ def load_channels(labels, images=None, sky_fraction=0.1, sky_percentile=98, gamm
             gray = cv2.cvtColor(image, cv2.COLOR_BGR2GRAY) if image.ndim == 3 else image
             iof = calibrate(png, lbl.get_info(), gray)
         iofs.append(iof)
+    return iofs
+
+
+"""
+The channels' I/F images (float32), calibrating those not given; None if any frame can't be calibrated
+"""
+def _calibrated(labels, images, iofs=None):
+    iofs = calibrated_each(labels, images, iofs)
     if any(iof is None for iof in iofs):
         failed = [lbl.get_info().get("path") for lbl, iof in zip(labels, iofs) if iof is None]
         print(f"Can't calibrate {failed}, using the stretched frames")
-        return images
+        return None
+    return [iof.astype(np.float32) for iof in iofs]
 
-    iofs = [iof.astype(np.float32) for iof in iofs]
-    if scale is not None:
-        # every picture of a mosaic on the same scale, so tiles and filters keep what the camera saw
-        gamma = scale.get("gamma", gamma)
-        return [display(iof, black, scale["white"], gamma) for iof, black in zip(iofs, scale["blacks"])]
-    blacks, white, _ = picture_scale(iofs, sky_fraction, sky_percentile)
+
+"""
+Balanced composites, drawn after their channels are aligned (color_image.load_aligned): each channel's
+linear brightness above its sky level (white = 1), and the noise margin in the same units, for tone.
+Taking the margin off each channel on its own (a black above the sky per channel) changes the color of
+everything only a little brighter than the sky, a shadowed ring or a night side: the channel that is
+dimmest there loses the largest share of itself. tone takes it off the picture's brightness instead, so
+dim parts keep the color the camera measured and only get darker.
+labels, images, iofs = as load_channels
+returns (channels, margin, the channel mix (color_mix) or None), or None when a frame can't be calibrated or there is nothing to draw
+"""
+def load_linear(labels, images=None, iofs=None):
+    if images is None:
+        images = [lbl.resize_image() for lbl in labels]
+    iofs = _calibrated(labels, images, iofs)
+    if iofs is None:
+        return None
+    # the sky is measured once, for the scale and the toe below
+    sky = _sky(iofs)
+    levels, margin, white, measured = _balanced_scale(iofs, sky=sky)
     if white <= 0:
-        return images
-    return [display(iof, black, white, gamma) for iof, black in zip(iofs, blacks)]
+        return None
+    channels = [(iof - np.float32(level)) / np.float32(white) for iof, level in zip(iofs, levels)]
+    infos = [lbl.get_info() for lbl in labels]
+    mix = color_mix(_value(infos[0], "INSTRUMENT_ID", ""), [band_of(i) for i in infos], _value(infos[0], "TARGET_NAME", ""),
+                    own=True)
+    false = isinstance(mix, FalseMix)
+    lum = None
+    if false:
+        # false color: the mission's typical balance of the body (the table) misses a frame unlike it (Saturn's
+        # high latitudes); FALSE_OWN of what is left between the picture's own lit bands is taken off as well. A
+        # movie of one scene, whose frames are alike, still keeps one color
+        lum = np.mean(channels, axis=0)
+        lit = lum > 0.2 * np.percentile(lum, 99)
+        if lit.sum() > 100:
+            # over the pixels near the picture's typical band ratios, so rings or a bright equatorial band don't steer it
+            logs = [np.log(np.maximum(c[lit], 1e-6) / np.maximum(lum[lit], 1e-6)) for c in channels]
+            typical = np.logical_and.reduce([np.abs(v - np.median(v)) < OWN_NEAR for v in logs])
+            if typical.sum() > 100:
+                lit = np.where(lit)
+                lit = tuple(i[typical] for i in lit)
+            own = [float(np.median(c[lit])) * g for c, g in zip(channels, np.diagonal(mix))]
+            if min(own) > 0:
+                tint = tint_of(_value(infos[0], "TARGET_NAME", ""))
+                gains = spread_capped([g * o ** FALSE_OWN for g, o in zip(np.diagonal(mix), balance(own, tint))])
+                mix = np.diag(np.asarray(gains, np.float32)).view(FalseMix)
+                mix.tint = tint
+    margin /= white
+    sky = sky if measured else np.ones(iofs[0].shape, dtype=bool)
+    if measured:
+        # the toe starts no lower than the darker half of the sky's own brightness (SKY_DARK of it stays black),
+        # since the gamma lifts even a tiny remainder into visible grain. Only the darker half, by its mean over
+        # 15 pixels, so faint ring glow or a night side in the sky doesn't count as sky
+        lum = np.mean(channels, axis=0) if lum is None else lum
+        local = cv2.blur(lum, (15, 15))
+        dark = sky & (local <= np.median(local[sky]))
+        if dark.sum() > 100:
+            margin = max(margin, float(np.percentile(lum[dark], SKY_DARK)))
+    if len(channels) > 1 and (measured or false):
+        # without sky (a body filling the frame) the grain is measured on the whole picture
+        channels = _clean_spikes(channels, sky, false)
+    return channels, margin, mix
+
+
+"""
+Hot pixels and cosmic ray hits in one channel of a composite: a pixel far above its 3x3 median in its own
+channel (SPIKE times that channel's sky grain, and above twice the median) where no other channel has a
+peak within 2 pixels, is set to its median. False color (natural), whose balance would make them salmon or cyan dots:
+against a 5x5 median, so 2x2 clusters go too, and where not every other channel peaks, so two-channel hits go. Drawn together (tone), such a pixel would be a pastel dot; a
+star or a small bright feature is in every channel, so it stays.
+channels = linear channels, not yet aligned; sky = the sky mask
+"""
+def _clean_spikes(channels, sky, natural=False):
+    meds = [cv2.medianBlur(c, 5 if natural else 3) for c in channels]
+    res = [c - m for c, m in zip(channels, meds)]
+    noises = [float(np.percentile(np.abs(r[sky]), 99)) / 2.6 for r in res]
+    peaks = [cv2.dilate(r, np.ones((5, 5), np.uint8)) > SPIKE * n for r, n in zip(res, noises)]
+    out = []
+    for i, (c, m, r, n) in enumerate(zip(channels, meds, res, noises)):
+        spike = (r > SPIKE * n) & (r > m) & (r > 0)
+        others = [p for j, p in enumerate(peaks) if j != i]
+        # natural color: not where every other channel peaks too (a star or a moon); raw: where none does
+        spike &= ~np.logical_and.reduce(others) if natural else ~np.logical_or.reduce(others)
+        out.append(np.where(spike, m, c))
+    return out
+
+
+"""
+Balanced composites' channels (load_linear, aligned) as BGR uint8 images: the noise margin comes off the
+brightness (the channels' mean) through a toe, black up to the margin (the sky at or below its own level is
+black), then turning within an eighth of the margin into the brightness less the margin, and every channel is scaled by the same factor, so a pixel keeps its color.
+Past the shoulder the brightest channel rolls off softly (roll_off), the others by the same factor. mix = the
+set's channel mix (color_mix), applied first, on the linear values.
+"""
+def tone(channels, margin, mix=None, shoulder=SHOULDER, gamma=2.2):
+    x = np.stack(channels).astype(np.float32)
+    if mix is not None:
+        x = apply_mix(mix, x)
+    lum = x.mean(axis=0)
+    w = margin / 8
+    if w > 0:
+        toed = np.where(lum <= margin, 0, np.where(lum <= margin + w, (lum - margin) ** 2 / (2 * w),
+                                                  lum - margin - w / 2))
+        x *= np.where(lum > 0, toed / np.maximum(lum, 1e-12), 0)
+    if shoulder:
+        _shoulder(x, shoulder)
+    x = np.clip(x, 0, 1)
+    return [cv2.cvtColor((encode(c, gamma) * 255 + 0.5).astype(np.uint8), cv2.COLOR_GRAY2BGR) for c in x]
 
 
 """
@@ -336,21 +913,121 @@ blacks were measured on the sky or left at zero for want of sky), in I/F.
 iofs = the picture's channels, float32 I/F
 """
 def picture_scale(iofs, sky_fraction=0.1, sky_percentile=98):
-    # Black point per channel: just above the sky left after the bias (dark current,
-    # stray light, noise), so the sky's noise, DN steps and lossy compression blocks
-    # don't come out as colored speckle. Sky is where every channel is dark; without
-    # enough sky the black point stays at zero.
+    # Sky is where every channel is dark; without enough sky the black point stays at zero.
+    sky = _sky(iofs)
+    blacks = [0.0] * len(iofs)
+    measured = bool(sky.mean() > sky_fraction)
+    if look() == "classic":
+        # Black point per channel: just above the sky left after the bias (dark current,
+        # stray light, noise), so the sky's noise, DN steps and lossy compression blocks
+        # don't come out as colored speckle
+        if measured:
+            blacks = [np.percentile(iof[sky], sky_percentile) for iof in iofs]
+        # One white point for all channels: the brightest channel's brightest pixel, after a
+        # 3x3 median so a single cosmic ray hit or hot pixel can't set it
+        white = max(cv2.medianBlur(iof - black, 3).max() for iof, black in zip(iofs, blacks))
+        return blacks, white, measured
+    # the sky just measured, not measured again (a percentile of every pixel of each channel)
+    levels, margin, white, measured = _balanced_scale(iofs, sky_fraction, sky_percentile, sky=sky)
+    return [level + margin for level in levels], white, measured
+
+
+"""
+Sky is where every channel is dark
+"""
+def _sky(iofs):
     sky = np.ones(iofs[0].shape, dtype=bool)
     for iof in iofs:
         sky &= iof < 0.05 * np.percentile(iof, 99.9)
-    blacks = [0.0] * len(iofs)
+    return sky
+
+
+"""
+The balanced scale of one picture: (sky level per channel, one noise margin, white, whether the sky was
+measured), in I/F. The sky level (sky_levels) is the real offset left after the bias (dark current, stray
+light), which differs between channels, so the sky stays neutral; the margin above it, the same for every
+channel, keeps the sky's noise from coming out as colored speckle (a margin per channel, the 98th
+percentile, takes more off the noisiest channel and tints dim limbs and terminators).
+"""
+"""
+The noise floor of a balanced black: the noisiest channel's classic margin (its sky's 98th percentile above its
+median), so no channel shows more of its sky noise, scan lines or compression blocks than before. The margin from
+neighboring pixels' differences alone is about 0 on frames stored in 8 bits (most neighbors are equal).
+skies = per channel, its sky pixels (I/F)
+"""
+def noise_floor(skies, sky_percentile=98):
+    return max(float(np.percentile(v, sky_percentile) - np.median(v)) for v in skies if v.size) if skies else 0.0
+
+
+def _balanced_scale(iofs, sky_fraction=0.1, sky_percentile=98, sky=None):
+    sky = _sky(iofs) if sky is None else sky
     measured = bool(sky.mean() > sky_fraction)
+    levels, margin = [0.0] * len(iofs), 0.0
     if measured:
-        blacks = [np.percentile(iof[sky], sky_percentile) for iof in iofs]
-    # One white point for all channels: the brightest channel's brightest pixel, after a
-    # 3x3 median so a single cosmic ray hit or hot pixel can't set it
-    white = max(cv2.medianBlur(iof - black, 3).max() for iof, black in zip(iofs, blacks))
-    return blacks, white, measured
+        # the noise floor (noise_floor) taken with the sky levels, on the same sky pixels and medians
+        levels, margin = sky_levels([[iof] for iof in iofs], [[sky]] * len(iofs), floor_pct=sky_percentile)
+    blacks = [level + margin for level in levels]
+    # One white for all channels: the WHITE_PCT percentile of the brightest channel over the lit pixels (the
+    # body, not the sky), so a few bright limb or ring pixels don't leave the body dim and gray; the shoulder
+    # (display) keeps what is brighter
+    lit = ~sky if measured else np.ones(sky.shape, dtype=bool)
+    if lit.sum() < 100:
+        lit = np.ones(sky.shape, dtype=bool)
+    blurred = [cv2.medianBlur(iof - np.float32(black), 3) for iof, black in zip(iofs, blacks)]
+    white = max(float(np.percentile(b[lit], WHITE_PCT)) for b in blurred)
+    white = max(white, max(float(b.max()) for b in blurred) / MAX_STRETCH)
+    return levels, margin, white, measured
+
+
+"""
+Balanced blacks: per channel its sky level plus one margin for every channel, NOISE_MARGIN times the sky's
+noise pooled over the channels. The sky level is its median, or, where the sky holds faint diffuse light (a
+ring's glow, a night side lit by the rings), the 20th percentile plus 0.84 noise, whichever is lower: the
+same for a sky of pure noise, and below the glow otherwise. The noise is measured from neighboring sky
+pixels' differences, so a glow's slow change across the picture does not count as noise.
+images = per channel, its pictures (2-D I/F); masks = per channel, the sky of each picture
+"""
+def sky_blacks(images, masks):
+    levels, margin = sky_levels(images, masks)
+    return [level + margin for level in levels]
+
+
+"""
+sky_blacks' parts: (the sky level per channel, the margin). floor_pct: the margin no less than the skies' noise floor
+at that percentile (noise_floor), from the same sky pixels and medians
+"""
+def sky_levels(images, masks, floor_pct=None):
+    levels, noises, floors = [], [], []
+    for ims, ms in zip(images, masks):
+        sky = np.concatenate([im[m] for im, m in zip(ims, ms)])
+        steps = np.concatenate([np.abs(np.diff(im, axis=1))[m[:, 1:] & m[:, :-1]] for im, m in zip(ims, ms)])
+        noise = 1.4826 * float(np.median(steps)) / math.sqrt(2) if steps.size else 0.0
+        # sky is this loop's own array (concatenate's), so it can be reordered
+        median, pcts = _median_percentiles(sky, (20,) if floor_pct is None else (20, floor_pct))
+        levels.append(min(float(median), float(pcts[0]) + 0.84 * noise))
+        noises.append(noise)
+        if floor_pct is not None:
+            floors.append(float(pcts[1] - median))
+    margin = NOISE_MARGIN * math.sqrt(sum(n * n for n in noises) / len(noises))
+    if floor_pct is not None:
+        margin = max(margin, max(floors))
+    return levels, margin
+
+
+"""
+np.median(v) and np.percentile(v, p) for each p of pcts, the same values as each call on its own: the same calls, in
+place on v (a working array of the caller's, which this reorders) instead of each on a copy of its own. A value at a
+rank is the same whichever order a partition starts from unless v holds a NaN or both signs of zero, which partitions
+can order differently, so then each is taken on its own as before. Each percentile is its own call, with p as given:
+numpy 2 works out a list of percentiles of float32 pixels in float64 and a single one (a Python number) in float32.
+"""
+def _median_percentiles(v, pcts):
+    if v.size and not np.isnan(v).any():
+        zero = np.signbit(v[v == 0])
+        if zero.all() or not zero.any():
+            got = [np.percentile(v, p, overwrite_input=True) for p in pcts]
+            return np.median(v, overwrite_input=True), got
+    return np.median(v), [np.percentile(v, p) for p in pcts]
 
 
 """
@@ -366,14 +1043,19 @@ def tiles_scale(pictures, gamma=2.2):
     measured = [s for s in scales if s[2]]
     blacks = [float(np.median([s[0][c] for s in measured])) if measured else 0.0 for c in range(len(pictures[0]))]
     white = max(float(s[1]) for s in scales)
-    return {"blacks": blacks, "white": white, "gamma": gamma}
+    scale = {"blacks": blacks, "white": white, "gamma": gamma}
+    if look() == "balanced":
+        scale["shoulder"] = SHOULDER
+    return scale
 
 
 """
-The display scale shared by all the pictures of a mosaic, for load_channels: per channel, the
-sky's floor (the median over the pictures of each one's floor_pct percentile I/F) as its black;
-one white for all channels, the white_pct percentile of every pixel above its channel's black
-(every channel on one white keeps the colour the camera measured).
+The display scale shared by all the pictures of a mosaic, for load_channels: per channel a black, and
+one white for all channels, the white_pct percentile of every pixel above its channel's black (every
+channel on one white keeps the colour the camera measured).
+the black is the sky's floor, the median over the pictures of each one's floor_pct percentile I/F, in both
+looks: a mosaic's faint sky changes from tile to tile, and any black other than its floor (a sky level plus a
+noise margin was tried) raised one filter's black more than another's and tinted that sky.
 channels = one list per channel of the pictures' I/F images (stacking.load_hdr)
 """
 def shared_scale(channels, white_pct=99.9, floor_pct=5, gamma=2.2):
@@ -384,9 +1066,57 @@ def shared_scale(channels, white_pct=99.9, floor_pct=5, gamma=2.2):
 
 
 """
-An I/F image as a BGR uint8 image: black -> 0, black + white -> 255, gamma encoded
+Display brightness (0-1) from linear brightness (0-1, white = 1) and back: a power of 1 / gamma, or the
+standard sRGB curve when gamma is "srgb".
 """
-def display(iof, black, white, gamma=2.2):
-    scaled = np.clip((iof - black) / white, 0, 1) ** (1 / gamma)
-    gray = (scaled * 255 + 0.5).astype(np.uint8)
+def encode(x, gamma=2.2):
+    if gamma == "srgb":
+        return np.where(x <= 0.0031308, 12.92 * x, 1.055 * np.power(np.maximum(x, 0.0031308), 1 / 2.4) - 0.055)
+    return np.power(x, 1 / float(gamma))
+
+
+def decode(v, gamma=2.2):
+    if gamma == "srgb":
+        return np.where(v <= 0.04045, v / 12.92, np.power((np.maximum(v, 0.04045) + 0.055) / 1.055, 2.4))
+    return np.power(v, float(gamma))
+
+
+"""
+A soft shoulder on linear brightness (white = 1): unchanged up to knee, then rolling off toward 1 with no
+step in slope, so what is brighter than white keeps its shape instead of clipping flat. Worked out only past the
+knee (a few bright pixels of most pictures), each the same value as over the whole picture.
+"""
+def roll_off(x, knee):
+    room = 1 - knee
+    out = x.copy()
+    past = ~(x <= knee)
+    out[past] = knee + room * np.tanh((x[past] - knee) / room)
+    return out
+
+
+"""
+x (channels first, linear) with its brightest channel rolled off past shoulder (roll_off) and the other channels by
+the same factor, so a pixel keeps its color; in place, and only the pixels past the shoulder (the rest were multiplied
+by 1)
+"""
+def _shoulder(x, shoulder):
+    top = x.max(axis=0)
+    past = top > shoulder
+    top = top[past]
+    x[:, past] *= roll_off(top, shoulder) / np.maximum(top, 1e-12)
+
+
+"""
+An I/F image as a BGR uint8 image: black -> 0, black + white -> 255, gamma encoded (or the sRGB curve,
+gamma "srgb"); with a shoulder, brightness past it rolls off softly (roll_off) instead of clipping
+"""
+def display(iof, black, white, gamma=2.2, shoulder=None, toe=None):
+    x = iof - black
+    if toe:
+        # a soft toe instead of a hard clip at black: values just above it fade in quadratically over toe (I/F),
+        # so noise sitting at the black point is a smooth dark fade, not black salt among gray grain
+        x = np.where(x <= 0, 0, np.where(x <= toe, x * x / (2 * toe), x - toe / 2))
+    x = x / white
+    x = np.clip(roll_off(x, shoulder) if shoulder else x, 0, 1)
+    gray = (encode(x, gamma) * 255 + 0.5).astype(np.uint8)
     return cv2.cvtColor(gray, cv2.COLOR_GRAY2BGR)
