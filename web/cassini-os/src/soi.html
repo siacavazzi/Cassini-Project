@@ -1,0 +1,350 @@
+<!-- Saturn arrival: a short cutscene for Cassini's Saturn Orbit Insertion burn, July 1, 2004. build.py splices the style
+     into the head, the section into #app and the script after the finale's; it registers with cutscene.html, which
+     owns the viewer's cutscene hooks, the begin and end, Skip and Escape, and looking around.
+
+     When playback crosses the start of the burn (01:12 UTC at Saturn), the interface fades away onto a camera parked
+     by the ring plane, Saturn and the rings beyond it, as Cassini flies across the frame and through the plane. The
+     camera then follows it in over the rings, and stays with it through the burn. The clock runs slow for the
+     crossing, fast after it, and eases down for the ignition and the shutdown. Every time and number
+     comes from soi-data.json (NASA, ESA and Spaceflight Now, quoted there with their sources); Cassini's path is its real
+     trajectory. How it points is the real attitude (CK) when the data has it and that attitude has the engine facing
+     the way Cassini moves; otherwise it follows a rule built from the published numbers:
+       - through the ring plane the high-gain dish faces the way Cassini moves, as a shield against dust
+       - then it turns end for end, so its main engine faces forward
+       - during the burn the engine starts pointed straight along the path and steers at a steady rate through NASA's
+         46 degrees in the sense the path curves (0.008 degrees per second over the 96.4 minutes)
+     The counters during the burn (speed change, propellant) follow the rocket equation fitted to the published totals
+     (626.17 m/s, about 850 kg, 445 N), so they end on NASA's numbers. The plume is drawn, not photographed: a
+     bipropellant engine's exhaust in vacuum is faint and spreads wide, so it is a soft glow brightest at the nozzle, and
+     the radiation-cooled nozzle warms to a dull orange glow as the burn goes on and cools after it.
+     A few seconds after shutdown the view cuts to Saturn from afar, Cassini on its first orbit. A drag looks around, the wheel
+     zooms; Escape or the Skip button ends it, at the end of the burn, and playback carries on as it was; ?soi plays it
+     at once. Sound (sound.html): a low engine rumble while it burns, one low
+     bell at shutdown, a bright chord when Saturn has caught it. -->
+<style>
+#soi .sx-shade { position: absolute; inset: 0; background: linear-gradient(to top, rgba(0,0,0,.72) 0, rgba(0,0,0,.45) 22%, rgba(0,0,0,0) 46%); }
+/* the burn's readout is long: on a phone it wraps */
+body.phone #soi .cs-read { white-space: normal; text-align: center; width: calc(100vw - 32px); line-height: 1.5; }
+</style>
+
+<section id="soi" class="cs-root" hidden aria-live="polite">
+  <div class="sx-shade"></div>
+  <div class="cs-black"></div>
+  <div class="cs-caps"></div>
+  <div class="cs-read" aria-hidden="true"></div>
+  <div class="cs-note"></div>
+  <div class="cs-hint">Drag to look around</div>
+  <button class="cs-skip" type="button">Skip ▸</button>
+</section>
+
+<script>
+// ---------- Saturn arrival: the orbit insertion burn, when playback reaches it ----------
+(function () {
+  const root = document.getElementById("soi"), black = root.querySelector(".cs-black"), caps = root.querySelector(".cs-caps");
+  const read = root.querySelector(".cs-read"), note = root.querySelector(".cs-note"), hint = root.querySelector(".cs-hint");
+  const CS = window.cassiniCutscene;
+  // the published times and numbers, written in by build.py from soi-data.json
+  const D = /*SOI_DATA*/null;
+  if (!D || !CS) return;
+  const { fadeTo, sound } = CS;
+  const T_CROSS = utcToEt(D.ring_crossing.utc), T_IGN = utcToEt(D.burn_start.utc), BURN = D.burn_minutes.value * 60, T_OFF = T_IGN + BURN;
+  const T_CA = utcToEt(D.closest_approach.utc), FADE = [D.signal_fade.from_min * 60, (D.signal_fade.from_min + D.signal_fade.for_min) * 60];
+  // the counters: constant thrust and flow, the flow and starting mass fitted so the totals are the published ones
+  const MDOT = D.propellant_kg.value / BURN, VE = D.thrust_n.value / MDOT, M0 = D.propellant_kg.value / (1 - Math.exp(-D.delta_v_ms.value / VE));
+  const dvAt = s => VE * Math.log(M0 / (M0 - MDOT * s));
+  // the clock, one continuous shot: a steady 12 times real time while Cassini flies past the parked camera and through
+  // the ring plane, then faster and faster as the camera follows it in over the rings, easing down toward the ignition
+  // and the shutdown. Each moment is [mission time, rate there, how much the rate grows per mission second away from
+  // it]; the rate is capped at 500 times real time before the burn, 550 during it and 90 after. The terms are combined
+  // softly (as resistors in parallel), so the clock eases into its top speed instead of hitting it
+  const softMin = (...rs) => 1 / rs.reduce((a, r) => a + 1 / r, 0);
+  const START = T_CROSS - 75, FLY = 12;   // the published crossing minute is half a minute after ours (crossing())
+  const MOMENTS = [[T_IGN, 6, 2.5], [T_OFF, 1, 1.6]];
+  const rateAt = t => {
+    const away = t - crossing() - 45;     // the flyby holds its pace until Cassini is well past the plane
+    return softMin(t < T_IGN ? 500 : t < T_OFF ? 550 : 90, FLY + Math.max(0, away) * 0.5, ...MOMENTS.map(([m, r, k]) => r + Math.abs(t - m) * k));
+  };
+  const hhmm = et => new Date(etToMs(et)).toISOString().slice(11, 19);
+  // the lines, at mission seconds from ignition (spaced about six screen seconds apart on the clock above), each up
+  // until the next one takes its place
+  const steer = D.steering.total_deg;
+  const LINES = [
+    [-Infinity, `<b>July 1, 2004 · Saturn</b>After nearly seven years in space, Cassini arrives, ${Math.round((T_IGN - T_CROSS) / 60) + 1} minutes before the burn that has to catch it.`],
+    [T_CROSS - T_IGN - 15, `<b>${hhmm(T_CROSS).slice(0, 5)} UTC · The ring plane</b>It crosses through ${D.ring_crossing.where}, its dish turned forward as a shield against dust.`],
+    [T_CROSS - T_IGN + 200, `Then it turns end for end, to point its main engine the way it is going.`],
+    [0, `<b>${hhmm(T_IGN).slice(0, 5)} UTC · Main engine on</b>To be caught by Saturn's gravity it has to brake, for ${Math.round(D.burn_minutes.value)} minutes.`],
+    [600, `One engine, ${D.thrust_n.value} newtons (${D.thrust_n.pounds} pounds) of thrust: a gentle push, about a hundredth of Earth's gravity.`],
+    [1700, `Its signal takes ${D.light_time_min.value} minutes to reach Earth. By the time anyone hears the engine start, the burn is nearly over.`],
+    [3300, `It steers as it burns, turning its engine through ${steer} degrees to follow the curve of its path.`],
+    [T_CA - T_IGN - 60, `<b>Closest approach</b>${fmtInt(D.closest_approach.above_clouds_km)} km above Saturn's clouds, closer than it would come again until the Grand Finale.`],
+    [BURN, `<b>${hhmm(T_OFF).slice(0, 5)} UTC · Engine off</b>${Math.round(D.delta_v_ms.value)} meters per second slower, and about ${fmtInt(D.propellant_kg.value)} kg of propellant lighter.`],
+  ];
+  const LAST = `<b>In orbit</b>Saturn has caught it. Cassini is the first spacecraft ever to orbit Saturn, and this is the first of its 294 orbits.`;
+  const CUT = 3, LAST_AT = 3.6, LAST_FOR = 6;   // screen seconds after shutdown: the cut to Saturn, the last line, how long it stays
+
+  let S = null;   // the running cutscene
+  const tmpA = v3(), tmpB = v3(), tmpC = v3();
+  const uS = new THREE.Vector3(), vS = new THREE.Vector3(), nS = new THREE.Vector3();
+  const clamp01 = x => Math.max(0, Math.min(1, x));
+  const playable = () => !!(tracks.CASSINI && tracks.SATURN && bodies.SATURN && coverage[0] <= T_CROSS - 600 && coverage[1] >= T_OFF + 600);
+
+  // Cassini relative to Saturn: the local frame in the scene (uS away from Saturn, vS along the path, nS the orbit's
+  // normal) and its distance (km) and speed (km/s)
+  function frame(et) {
+    sub(positionAt(tracks.CASSINI, et, tmpA), positionAt(tracks.SATURN, et, tmpB), tmpA);
+    sub(positionAt(tracks.CASSINI, et + 1, tmpC), positionAt(tracks.SATURN, et + 1, tmpB), tmpC);
+    const r = tmpA, v = sub(tmpC, r, tmpB);
+    toScene(r, uS).normalize(); toScene(v, vS).normalize(); nS.crossVectors(uS, vS).normalize();
+    return { r: len(r), v: len(v) };
+  }
+  // height above the cloud tops as NASA and ESA give it: distance from the centre less the equatorial radius (their
+  // 80,230 km from the centre is their 19,980 km above the clouds)
+  const altitude = r => r - bodies.SATURN.radii[0];
+
+  // ---------- the main engine: nozzle glow and plume, children of the Cassini group (metres, close-up pass) ----------
+  const { shellMaterial, shell, sprite } = CS.fx;
+  function addEngine() {
+    // Cassini's two 445 N main engines hang side by side under the base, one the spare. On NASA's model each nozzle
+    // runs from its throat 2.92 m below the model's origin to an exit 3.26 m below, 0.28 m to either side of the axis,
+    // the exit 0.14 m in radius; it fires along body +Z, away from the dish. The model's axes become the group's as
+    // (-x, z, y), so the engine fires along the group's -Z
+    const e = new THREE.Group();
+    e.position.set(-0.036, 0.279, -3.26);
+    e.quaternion.setFromUnitVectors(new THREE.Vector3(0, -1, 0), new THREE.Vector3(0, 0, -1));
+    // the exhaust: a short bright core and a long faint plume spreading wide, as exhaust does in vacuum
+    const core = shell(0.12, 0.55, 3.2, shellMaterial(0xf2f6ff, 0x9fb4ff, 2.4, 0.08));
+    const plume = shell(0.135, 5.5, 26, shellMaterial(0xc9d6ff, 0x9a6fd0, 2.6, 0.18));
+    const mouth = sprite(0xffffff, 0.75); mouth.position.set(0, -0.08, 0);
+    const flash = sprite(0xdfe8ff, 6); flash.position.set(0, -1.5, 0);
+    // the nozzle itself warming: a shell over the bell, throat (0.065 m) to exit (0.142 m)
+    const bellGeo = new THREE.CylinderGeometry(0.068, 0.146, 0.34, 32, 6, true); bellGeo.translate(0, 0.17, 0);
+    const bell = new THREE.Mesh(bellGeo, shellMaterial(0xff6a1a, 0xffb04a, 0.0, 0.0));
+    bell.layers.set(1); bell.frustumCulled = false;
+    e.add(core, plume, mouth, flash, bell);
+    cassini.add(e);
+    return { e, core, plume, mouth, flash, bell };
+  }
+  // how hot the nozzle is (0..1): warming over a few minutes of burn, cooling over a few after it
+  function nozzleHeat(t) {
+    if (t < T_IGN) return 0;
+    const on = 1 - Math.exp(-(Math.min(t, T_OFF) - T_IGN) / 150);
+    return t <= T_OFF ? on : on * Math.exp(-(t - T_OFF) / 240);
+  }
+  function stepEngine(x, t) {
+    const now = performance.now() / 1000, burning = t >= T_IGN && t < T_OFF;
+    // full within a moment of ignition, with a faint flicker; out within a moment at shutdown
+    const sinceIgn = t - T_IGN, k = burning ? Math.min(1, sinceIgn / 0.6) * Math.min(1, (T_OFF - t) / 0.8) : 0;
+    const flick = 0.92 + 0.08 * Math.sin(now * 37) * Math.sin(now * 23.7) + 0.04 * Math.random();
+    [x.core, x.plume].forEach(m => { m.material.uniforms.glow.value = k * flick * (m === x.core ? 0.9 : 0.42); m.material.uniforms.time.value = now; });
+    x.core.scale.y = 3.2 * (0.95 + 0.1 * Math.random());
+    x.mouth.material.opacity = k * (0.85 + 0.15 * Math.random());
+    // the ignition flash, over the first second or so on screen
+    const fl = burning && S.ignAt ? Math.exp(-(now - S.ignAt / 1000) / 0.35) : 0;
+    x.flash.material.opacity = fl; x.flash.scale.setScalar(4 + 8 * (1 - fl));
+    const h = nozzleHeat(t);
+    x.bell.material.uniforms.glow.value = 0.85 * h * h;
+  }
+
+  // one line at a time: a new line takes the place of the one before
+  const line = (html, cls) => CS.line(caps, html, cls);
+
+  // is the real attitude (CK) there, with the engine facing the way Cassini moves? Checked once, at mid-burn
+  function realAttitude() {
+    if (!att) return false;
+    const q = attitudeAt(att, T_IGN + BURN / 2, new Float64Array(4));
+    if (!q) return false;
+    frame(T_IGN + BURN / 2);
+    const R = q2rows(q), bz = toScene(R[2], new THREE.Vector3()).normalize();   // body +Z: where the exhaust goes
+    return bz.dot(vS) > Math.cos(50 * Math.PI / 180);
+  }
+
+  function play() {
+    if (S || CS.active || !playable()) return;
+    if (!CS.begin("soi")) return;
+    S = { t0: performance.now(), phase: "out", tau: null, shown: [], eng: null, real: null };
+    fadeTo(black, 1, 1.2);
+  }
+  // the end of the burn, and the mission plays on from there as it was (cutscene.html restarts playback)
+  function cleanUp() {
+    const s = S; S = null;
+    sound("rumble", 0);
+    if (s && s.eng) cassini.remove(s.eng.e);
+    caps.textContent = ""; [read, note, hint].forEach(e => e.classList.remove("on"));
+    setTime(T_OFF + 1);
+    setFocus("CASSINI");
+  }
+
+  function frameStep(dt) {
+    if (!S) return;
+    const T = (performance.now() - S.t0) / 1000;
+    if (S.phase === "out" && T >= 1.4) {
+      // behind the black: a minute before the ring plane
+      S.phase = "run"; S.tau = START; S.eng = addEngine();
+      if (S.real === null) S.real = realAttitude();
+      note.innerHTML = S.real
+        ? `An interpretation. Cassini's path and its pointing are real, and the times and numbers are NASA's and ESA's; the engine's plume is drawn, not photographed.`
+        : `An interpretation. Cassini's path is real and the times and numbers are NASA's and ESA's; how it points follows the burn's published steering, and the engine's plume is drawn, not photographed.`;
+      setFocus("CASSINI", 4e-5); markerPts.visible = false;
+      fadeTo(black, 0, 2.5);
+      note.classList.add("on"); read.classList.add("on"); hint.classList.add("on");
+      S.hintOff = T + 7;
+    }
+    if (S.phase === "run") {
+      const was = S.tau;
+      S.rate = rateAt(S.tau);
+      S.tau += Math.min(dt, 0.1) * S.rate;
+      if (S.hold != null) S.tau = S.hold;   // a still for the bench (cassiniSOI.hold)
+      if (was < T_IGN && S.tau > T_IGN) S.tau = T_IGN;   // the ignition lands on its second
+      if (was < T_IGN && S.tau >= T_IGN) S.ignAt = performance.now();
+      if (T > S.hintOff) hint.classList.remove("on");
+      if (S.tau > T_IGN + 300) note.classList.remove("on");
+      const s = S.tau - T_IGN;
+      LINES.forEach(([at, html], i) => { if (!S.shown[i] && s >= at) { S.shown[i] = true; line(html); } });
+      if (S.tau >= T_IGN && S.tau < T_OFF) sound("rumble", Math.min(1, s / 1.5));
+      if (was < T_OFF && S.tau >= T_OFF) { sound("rumble", 0); sound("bell"); S.offAt = T; }
+      if (S.offAt && T > S.offAt + CUT && !S.cut) { S.cut = T; setFocus("SATURN"); markerPts.visible = true; cassini.visible = false; read.classList.remove("on"); CS.resetLook(); }
+      if (S.offAt && T > S.offAt + LAST_AT && !S.last) { S.last = true; line(LAST, "big"); sound("chord", [0, 2, 4, 7]); }
+      if (S.last && T > S.offAt + LAST_AT + LAST_FOR && !S.closing) { S.closing = T; line(null); fadeTo(black, 1, 0.8); }
+      if (S.closing && T > S.closing + 0.85) { CS.end("soi"); return; }
+    }
+    if (S && S.tau !== null) state.et = S.tau;
+  }
+  // how fast the clock runs, so a speed-up reads as one
+  const pace = () => !S || !S.rate ? "" : S.rate < 1.5 ? ` · Real time` : ` · Time <i>×${S.rate < 20 ? Math.round(S.rate) : Math.round(S.rate / 10) * 10}</i>`;
+  // how Cassini points: the real attitude when it is there and fits, otherwise the rule in the header
+  function attitude() {
+    if (!S || S.phase !== "run") return;
+    const t = S.tau;
+    if (!S.real) {
+      if (!S.d0) { frame(T_IGN); S.d0 = vS.clone(); S.axis = nS.clone(); }
+      frame(t);
+      // the exhaust (body +Z, the group's -Z): along the path at ignition, steering at a steady rate through the burn
+      const ex = S.d0.clone().applyAxisAngle(S.axis, steer * Math.PI / 180 * clamp01((t - T_IGN) / BURN));
+      // through the ring plane the dish leads (the exhaust points back); turning end for end in the orbit's plane
+      const w = clamp01((t - (T_CROSS + 120)) / (T_IGN - 60 - (T_CROSS + 120))), turn = w * w * (3 - 2 * w);
+      const back = vS.clone().negate(), ax = new THREE.Vector3().crossVectors(back, ex);
+      if (ax.lengthSq() < 1e-12) ax.copy(nS); else ax.normalize();
+      const exNow = back.applyAxisAngle(ax, back.angleTo(ex) * turn);
+      cassini.up.copy(uS);
+      cassini.lookAt(cassini.position.clone().sub(exNow));   // the group's +Z (the dish) points away from the exhaust
+    }
+    if (S.eng) stepEngine(S.eng, t);
+    const f = frame(t), h = altitude(f.r), s = t - T_IGN, clock = `${hhmm(t)} UTC`;
+    if (s < 0) read.innerHTML = `${clock} · ${fmtInt(h)} km above the clouds · <i>${f.v.toFixed(1)} km/s</i>` + (Math.abs(t - crossing()) < 60 ? ` · <i>Ring plane</i>` : "") + pace();
+    else {
+      const b = Math.min(s, BURN), mm = Math.floor(b / 60), ss = Math.floor(b % 60);
+      read.innerHTML = `${clock} · Burn <i>${mm}:${String(ss).padStart(2, "0")}</i> · Braked <i>${Math.round(dvAt(b))} m/s</i> · Propellant <i>${fmtInt(MDOT * b)} kg</i> · ${fmtInt(h)} km up`
+        + (s > FADE[0] && s < FADE[1] ? ` · Signal <i>behind the A ring</i>` : "") + (s >= BURN ? ` · <i>Engine off</i>` : "") + pace();
+    }
+  }
+  // the camera: a short shot list, keyed to the mission clock and eased between, each shot an angle round Cassini's
+  // vertical (az: 0 looks back along the path at Cassini's front, 90 from the side, 180 forward past it) and a tilt
+  // above Saturn's near edge (off, radians; the view tips with Saturn as it grows):
+  //   - looking up past Cassini a minute before the ring plane, dish toward the camera; tipping down as it crosses,
+  //     so the rings come up into the frame
+  //   - from the side as it turns end for end, and for the ignition, the plume across the frame with Saturn below
+  //   - round toward forward through the burn, looking down the plume over the rings
+  //   - low over Saturn's clouds at closest approach, its horizon close under Cassini
+  // A drag turns and tips it (cutscene.html's orbit, Cassini kept in the middle), the wheel zooms. A few seconds after
+  // the burn it cuts to Saturn from afar; Cassini is then only its marker, since the model drawn big enough to see from
+  // there would dwarf the planet
+  const SHOTS = [
+    [T_CROSS + 300, 40, 0.3], [T_IGN - 600, 90, 0.22], [T_IGN + 240, 95, 0.18],
+    [T_IGN + 2400, 150, 0.32], [T_CA - 600, 115, 0.04], [T_CA + 120, 100, 0.05], [T_OFF, 80, 0.14],
+  ];
+  function shot(t) {
+    let i = 0;
+    while (i < SHOTS.length - 2 && t > SHOTS[i + 1][0]) i++;
+    const [t0, a0, o0] = SHOTS[i], [t1, a1, o1] = SHOTS[i + 1], k = clamp01((t - t0) / (t1 - t0)), e = k * k * (3 - 2 * k);
+    return { az: (a0 + (a1 - a0) * e) * Math.PI / 180, off: o0 + (o1 - o0) * e };
+  }
+  const tune = () => window.__soiTune || {};
+  const hA = new THREE.Vector3(), hB = new THREE.Vector3(), POLE = new THREE.Vector3(0, 1, 0);   // the scene's y is Saturn's pole
+  // Cassini from Saturn (scene axes, km) at a mission time
+  const rel = (t, out = new THREE.Vector3()) => toScene(sub(positionAt(tracks.CASSINI, t, tmpA), positionAt(tracks.SATURN, t, tmpB), tmpA), out);
+  // when Cassini is in the ring plane on our trajectory (the published minute is 00:47; ours is half a minute earlier)
+  let T_X = null;
+  function crossing() {
+    if (T_X !== null) return T_X;
+    let a = T_CROSS - 600, b = T_CROSS + 600;
+    for (let i = 0; i < 40; i++) { const m = (a + b) / 2; if (rel(m).y < 0) a = m; else b = m; }
+    return (T_X = (a + b) / 2);
+  }
+  // the chase: the shot list round Cassini (see above)
+  function chaseView(t) {
+    const f = frame(t);
+    // a level frame: hA backward along the path laid on the horizon, hB beside it
+    hA.copy(vS).negate().addScaledVector(uS, vS.dot(uS)).normalize(); hB.crossVectors(uS, hA);
+    const limb = Math.asin(Math.min(1, bodies.SATURN.radii[0] / f.r));          // Saturn's edge, angle from straight down
+    const sh = shot(t), tilt = Math.min(Math.PI - 0.4, limb + sh.off), az = sh.az;   // the view's angle from straight down, and round
+    return hA.clone().multiplyScalar(Math.cos(az)).addScaledVector(hB, Math.sin(az)).multiplyScalar(Math.sin(tilt)).addScaledVector(uS, -Math.cos(tilt));
+  }
+  // the flyby: a camera parked beside Cassini's path, a little above the ring plane where Cassini will cross it, looking
+  // across the path toward Saturn's edge and the rings, held still while Cassini flies across the frame through the
+  // plane. Its place is fixed to Saturn (km from Saturn, scene axes)
+  function flybySpot() {
+    const g = tune(), tx = crossing(), X = rel(tx), v = rel(tx + 1).sub(X).normalize(), r = X.clone().normalize();
+    const n = r.clone().addScaledVector(v, -r.dot(v)).normalize();               // outward, square to the path
+    const P = X.clone().addScaledVector(n, g.d ?? 800).addScaledVector(POLE, g.h ?? 40);
+    // looking back across the path, turned part way toward Saturn so its edge is in the frame
+    const L = n.clone().negate().lerp(r.clone().negate(), g.toward ?? 0.5).normalize();
+    return { X, P, L };
+  }
+  // a direction turned part way (k, 0..1) toward another, at an even angular pace
+  const qTurn = new THREE.Quaternion(), qNone = new THREE.Quaternion();
+  const look = (dir, up) => new THREE.Quaternion().setFromRotationMatrix(new THREE.Matrix4().lookAt(new THREE.Vector3(), dir, up));
+  const turnTo = (a, b, k) => a.clone().applyQuaternion(qTurn.setFromUnitVectors(a.clone().normalize(), b.clone().normalize()).slerp(qNone, 1 - k)).normalize();
+  function camera_() {
+    if (!S || S.phase !== "run") return;
+    const t = S.tau, T = (performance.now() - S.t0) / 1000;
+    if (S.cut) {
+      // the cut: Saturn from above its sunlit side and a little over the rings, turning slowly, Cassini a point of light
+      // near it on its first orbit
+      const k = T - S.cut, pole = toScene(iauMatrix(bodies.SATURN, t)[2], new THREE.Vector3()).normalize();
+      const sun = toScene(norm(sub(pos.SUN, pos.SATURN, tmpA)), new THREE.Vector3()).normalize();
+      const side = new THREE.Vector3().crossVectors(pole, sun).normalize();
+      const from = sun.multiplyScalar(0.55).addScaledVector(side, 0.6).addScaledVector(pole, 0.45).normalize().applyAxisAngle(pole, -0.01 * k);
+      const o = CS.orbit(from.negate(), pole);
+      CS.frameOn(new THREE.Vector3(), o.dir, 330 - 25 * Math.min(1, k / 8), o.up);
+      return;
+    }
+    if (!S.fly) S.fly = flybySpot();
+    // after the flyby the camera turns to follow Cassini away, then closes in behind it, so it ends looking the way the
+    // parked camera looked (Saturn's edge and the rings) with Cassini in front; then it swings onto the shot list
+    // (chaseView) before the ignition
+    const g = tune(), since = t - crossing() - (g.go ?? 30), over = g.over ?? 640, sm = x => { x = clamp01(x); return x * x * (3 - 2 * x); };
+    const x = clamp01(since / over), e = 1 - (1 - x) ** 3, f = (g.follow ?? 0.15) + (1 - (g.follow ?? 0.15)) * sm(since / (over * 0.15));
+    frame(t);
+    // the way it looks: the parked camera's (level with the rings), swinging and rolling onto the shot list's (level
+    // with Saturn below) from late in the move in to two minutes before the ignition. The two orientations are blended
+    // whole, so the roll between them is smooth
+    const c = sm((since - 0.6 * over) / (T_IGN - 120 - crossing() - (g.go ?? 30) - 0.6 * over));
+    const oA = CS.orbit(S.fly.L, POLE), q = look(oA.dir, oA.up);
+    if (c > 0) { const oB = CS.orbit(chaseView(t), uS); q.slerp(look(oB.dir, oB.up), c); }
+    const aim = new THREE.Vector3(0, 0, -1).applyQuaternion(q);
+    if (e >= 1) {
+      camera.position.copy(cassini.position).addScaledVector(aim, -4e-5 * CS.look.zoom); camera.quaternion.copy(q);
+      cassini.scale.setScalar(1e-6);
+      return;
+    }
+    // the camera's place from Cassini (scene units): the spot, turning round behind Cassini and closing in from 800 km to
+    // 40 m evenly in scale
+    const spot = S.fly.P.clone().sub(rel(t)).divideScalar(KM), side = turnTo(spot.clone().normalize(), aim.clone().negate(), e);
+    const from = cassini.position.clone().addScaledVector(side, Math.exp(Math.log(spot.length()) * (1 - e) + Math.log(4e-5) * e));
+    // looking the parked way, turning onto Cassini as it goes by
+    const dir = turnTo(aim, cassini.position.clone().sub(from).normalize(), f);
+    camera.position.copy(from); camera.quaternion.copy(qTurn.setFromUnitVectors(aim, dir).multiply(q));
+    // drawn larger than life while the camera is far, so it reads from hundreds of km away; true size close up
+    cassini.scale.setScalar(Math.max(1e-6, from.distanceTo(cassini.position) * 0.002 * (g.boost ?? 5)));
+  }
+
+  CS.register("soi", { root, frame: frameStep, attitude, camera: camera_, onEnd: cleanUp });
+  // playback crossing the ignition plays it; ?soi plays it at once
+  CS.at(T_IGN, play, playable);
+  CS.fromUrl("soi", () => T_IGN - 1800, play, () => coverage[0] <= T_CROSS - 600 && coverage[1] >= T_OFF + 600);
+  window.cassiniSOI = { play,
+    // the bench (bench/soi.cjs) holds the clock on one mission time, for stills
+    hold(t) { if (S) S.hold = t; },
+    skip: () => CS.end("soi"), get running() { return !!S; }, data: D };
+})();
+</script>

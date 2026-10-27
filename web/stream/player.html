@@ -1,0 +1,22 @@
+<!doctype html>
+<!-- Plays the stream rig's local HLS output (stream.mjs copies this page next to the playlist). Private test viewer:
+     Safari plays HLS itself, other browsers use hls.js. -->
+<html lang="en"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Cassini stream monitor</title>
+<style>
+  html, body { margin: 0; height: 100%; background: #000; color: #9aa3ad; font: 12px/1.4 -apple-system, "Helvetica Neue", sans-serif; }
+  video { width: 100%; height: 100%; object-fit: contain; display: block; }
+  #s { position: fixed; left: 12px; bottom: 10px; opacity: .7; }
+</style></head>
+<body>
+<video id="v" controls autoplay muted playsinline></video>
+<div id="s">Private test stream from the Mac Mini. Loading…</div>
+<script src="https://cdn.jsdelivr.net/npm/hls.js@1.5.15/dist/hls.min.js"></script>
+<script>
+  const v = document.getElementById("v"), s = document.getElementById("s"), src = "STREAM.m3u8";
+  if (v.canPlayType("application/vnd.apple.mpegurl")) v.src = src;
+  else if (window.Hls && Hls.isSupported()) { const h = new Hls({ liveSyncDurationCount: 3 }); h.loadSource(src); h.attachMedia(v); h.on(Hls.Events.ERROR, (e, d) => { if (d.fatal) setTimeout(() => location.reload(), 5000); }); }
+  else s.textContent = "This browser cannot play HLS.";
+  v.addEventListener("playing", () => s.textContent = "Private test stream from the Mac Mini, about 15 s behind.");
+</script>
+</body></html>
