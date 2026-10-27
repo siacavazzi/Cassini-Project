@@ -61,13 +61,15 @@ same choice as Export Movie's Cameras; with one camera the stretch is made and p
 camera's window stepping aside while it plays). **Pre-process** asks the frame
 server to make every picture the camera windows will show in the stretch ahead of time (`POST /prebuild`, made by the
 pre-build tool's own makers in `web/frames/prebuild.py`: processed and centered single frames, color composites,
-mosaic and movie passes, at the windows' sizes and in the page's look and movie style). The row and a line along the
+mosaic and movie passes, at the windows' sizes and in the page's look and movie style). A stretch whose pictures are
+all made already is ready in a moment: the server answers once it is made when that takes under a third of a second
+(`prebuild.SEGMENT_ANSWER`), so the row says Ready and the stretch plays right away. The row and a line along the
 foot of the timeline show how far it is; when it is done the stretch plays in movie mode at the row's **Frame rate**
 (`movie.fps`, the same as Settings > Playback), every picture waiting in the cache. **Play** works before
 pre-processing too (movie mode then waits for each picture), **Save movie…** opens Export Movie for the stretch (a
 video file to download), and × or Escape clears the highlight. When movie mode spends most of its time waiting, a
 quiet note suggests pre-processing, with a button that highlights the next 300 frames. Settings > Playback:
-`segment.autoplay`, `segment.hint`, and `movie.completeFrames` (Complete color pictures only, on: a color set is one step, its finished color picture) and `playback.completeMosaics` (Complete mosaics only, off: a mosaic pass shows once finished, at its last frame, in every playback). One stretch is made at a time, at full speed: it gives way only to the
+`segment.autoplay`, `segment.hint`, and `movie.completeFrames` (Complete color pictures only, on: a color set is one step, its finished color picture) and `playback.completeMosaics` (Complete mosaics only, off: a mosaic pass shows once finished, at its last frame, in every playback). `movies.mosaicFrames` (Settings > Movie > Mosaic movie frames: Rolling, the default, puts each new tile of a mosaic movie in as it is taken; Whole mosaics shows a new picture only when a lap is finished, every place taken again, so each step is a whole new mosaic; the server lists the frames that finish a lap in its note on the observation, `lap_ends`, and a film export carries `whole=1`). Repeat exposures that the pipeline stacks into one picture are one step, at the first of the run, and the status line shows the pictures a second movie mode really shows when that is below the frame rate set. One stretch is made at a time, at full speed: it gives way only to the
 server's own picture requests (the camera windows' pictures go first), never to other jobs on the machine, and the
 row stays up while it is made, even when the rest of the interface fades. While it is being made, and once it is made, the highlight is kept: a drag elsewhere leaves it be (× lets it go), its ends drag outward to add to it (the part already made stays made and only the new ends are made), and they drag inward only once it is done. It also carries on with the tab in the background or another window in front (the rest of the page pauses, Settings > Playback > Pause in the background): the tab title shows how far it is, and a stretch finished meanwhile plays when you come back.
 

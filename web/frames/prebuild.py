@@ -15,6 +15,8 @@ Phases (each its own run; a run picks up where the last one stopped, since a mad
   movies      the same for every movie pass: its steadied frames (movie_webp)
   processed   /frames/processed/<ID>.webp at 1024, 512 and 256, every frame, centred as Auto center asks
   strips      a movie pass's steadied frames at 128 (the movie strip)
+  chains      every movie pass's stabilization and exposure chains (small JSON files; no pictures), which the page's
+              Stabilize and Even exposure read
 
 Made to share the Mac Mini with the live and preview servers: run it under `nice -n 19 taskpolicy -b` (low CPU and
 disk priority), one process with a few threads. It waits while the 1-minute load is over --max-load, while the
@@ -32,6 +34,7 @@ status.json (and a page reading it, index.html) in --status says how far it is.
                                                 seconds and bytes per item (and the totals they mean)
 """
 import argparse
+import bisect
 import collections
 import concurrent.futures
 import contextvars
@@ -54,7 +57,7 @@ import calibration  # noqa: E402
 import obs_mosaic  # noqa: E402
 import reel  # noqa: E402
 
-PHASES = ("frames", "composites", "mosaics", "movies", "processed", "strips")
+PHASES = ("frames", "composites", "mosaics", "movies", "processed", "strips", "chains")
 
 
 @functools.lru_cache(None)
@@ -94,6 +97,11 @@ def all_passes():
     return out
 
 
+def movie_passes():
+    """Every pass the windows play as a movie (its frames steadied one by one, not a mosaic), in time order."""
+    return [u for u in all_passes() if u.get("kind") == "movie" or (u.get("movie") and not u["mosaic"])]
+
+
 def centred(frame_id):
     """Auto center (on by default in a camera window, center=1): the view the server's centre_of gives the frame's
     pass (centred on the body, or north up where it is), which names the cache folder the window's picture is
@@ -123,11 +131,14 @@ def items(phase):
                 for i in frame_ids()]
     if phase == "mosaics":
         return [("_".join(map(str, u["key"])), lambda c, u=u: make_pass(u, c)) for u in mosaic_passes()]
+    if phase == "chains":
+        # a movie pass's stabilization and exposure chains (steady1-, exposure4-c11s0-plan4.json), which the page
+        # holds to SPICE and evens out itself (Settings > Processing, Stabilize / Even exposure): no frames are made
+        return [("_".join(map(str, u["key"])), lambda c, u=u: make_chains(u, c)) for u in movie_passes()]
     if phase in ("movies", "strips"):
         # strips: a movie pass's steadied frames at 128, the movie strip under a window
         sizes = (1024, 512) if phase == "movies" else (128,)
-        return [("_".join(map(str, u["key"])), lambda c, u=u: make_pass(u, c, sizes))
-                for u in all_passes() if u.get("kind") == "movie" or (u.get("movie") and not u["mosaic"])]
+        return [("_".join(map(str, u["key"])), lambda c, u=u: make_pass(u, c, sizes)) for u in movie_passes()]
     raise ValueError(phase)
 
 
@@ -242,6 +253,19 @@ def make_pass(u, cache, sizes=(1024, 512), within=None, style=None, made=None):
             if made:
                 made(f[3])
     return n
+
+
+def make_chains(u, cache):
+    """A movie pass's stabilization chain and exposure chain, as the window plays it by default (colour, Auto
+    center, not stabilized), after the pass's plan and every tile: the small files a window's Stabilize and Even
+    exposure read, worked out once over the whole pass (obs_mosaic.steady_chain, exposure_chain). A made chain is
+    found, not made. The pass's frames."""
+    p = obs_mosaic.plan(u, cache)
+    for j in range(len(u["frames"])):
+        obs_mosaic.tile(u, j, cache, p["display_scale"])
+    obs_mosaic.steady_chain(u, cache, p)
+    obs_mosaic.exposure_chain(u, cache, p, True, True, 0)
+    return len(u["frames"])
 
 
 # ---------- sharing the Mini ----------
@@ -456,7 +480,7 @@ def sample(args):
                 traceback.print_exc()
                 continue
             took = time.monotonic() - t0
-            times.append((took, out if args.phase == "mosaics" else 1))
+            times.append((took, out if args.phase in ("mosaics", "chains") else 1))
             print(f"{k + 1}/{len(picked)} {name} {took:.2f} s", flush=True)
     by_dir = collections.Counter()
     files = collections.Counter()
@@ -498,6 +522,7 @@ SEGMENT_PAUSE = "~/prebuild.pause"
 SEGMENT_YIELD = 1.0     # seconds at most a picture of the stretch waits for the server's own requests to clear
 SEGMENT_MAX = 6000      # pictures in one stretch (a busy day near Saturn has ~1,500)
 SEGMENT_SIZES = (512, 768, 1024)
+SEGMENT_ANSWER = 0.3    # seconds POST /prebuild waits for its stretch to be made before it answers how far it is
 
 
 def segment_options(q):
@@ -539,10 +564,15 @@ def segment_options(q):
 
 
 @functools.lru_cache(None)
-def frame_times():
-    """Each frame's time, seconds since 1970, by id."""
-    idx, _ = reel.load_index()
-    return dict(zip(idx["id"].tolist(), idx["seconds_1970"].astype(float).tolist()))
+def sets_ready():
+    """page_sets in the order they are ready (the time of a set's last frame, when its composite can be made; sets
+    ready at the same time in page_sets' order), and those times (seconds since 1970): a stretch finds its sets by
+    bisection instead of going through all ~45,000 of the mission (a tenth of a second on each Pre-process). Made as
+    the frame server starts (frame_server.warm_prebuild), from the rows of the frames it keeps for the mosaics."""
+    idx, row = obs_mosaic._row_of()
+    t = idx["seconds_1970"].to_numpy()
+    ready = sorted(((float(max(t[row[i]] for i in s)), s) for s in page_sets()), key=lambda x: x[0])
+    return [r for r, _ in ready], [s for _, s in ready]
 
 
 def segment_items(o):
@@ -577,10 +607,10 @@ def segment_items(o):
         out.append((r.id, float(r.seconds_1970), 1, lambda c, i=r.id: single(i, c)))
         if isinstance(r.OBSERVATION_ID, str):
             keys.setdefault((r.TARGET_NAME, r.OBSERVATION_ID, cam), None)
-    times = frame_times()
-    for s in page_sets():
-        ready = max(times[i] for i in s)
-        if t0 <= ready <= t1 and s[0][0] in cams:
+    readies, sets = sets_ready()
+    for k in range(bisect.bisect_left(readies, t0), bisect.bisect_right(readies, t1)):
+        ready, s = readies[k], sets[k]
+        if s[0][0] in cams:
             out.append(("_".join(s), ready, 1, lambda c, s=s: [frame_server.color_webp(s, z, c, centre=centre(s[-1])) for z in sizes]))
     for key in keys:
         for u in obs_mosaic.units(*key):
@@ -613,7 +643,11 @@ class Segments:
         import hashlib
         return hashlib.sha1(json.dumps(o, sort_keys=True).encode()).hexdigest()[:16]
 
-    def submit(self, o):
+    def submit(self, o, wait=0.0):
+        """The stretch o asked for: its job as the page reads it (_public). wait: seconds to wait for a new job to
+        be made before answering (SEGMENT_ANSWER from POST /prebuild): a stretch whose pictures are all in the cache is
+        made in a tenth of a second, and answered made, so the page says it is ready at once; a longer one is answered
+        as far as it got."""
         jid = self.key(o)
         with self.lock:
             job = self.jobs.get(jid)
@@ -625,7 +659,11 @@ class Segments:
             self.jobs[jid] = job
             self.queue.append(jid)
         self.wake.set()
-        return self._public(job)
+        until = time.monotonic() + wait
+        while job["state"] not in ("done", "failed", "stopped") and time.monotonic() < until:
+            time.sleep(0.01)
+        with self.lock:
+            return self._public(job)
 
     def status(self, jid):
         with self.lock:
