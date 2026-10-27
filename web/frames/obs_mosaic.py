@@ -408,6 +408,10 @@ def _ulock(u):
 PLAN_FILE = "plan4.json"   # renamed when the plan's rules change, so cached plans are worked out again
 # a movie's footprint (movie_footprint), worked out with the plan and named after it, so a new plan redoes it
 FOOTPRINT_FILE = "movie_footprint-" + PLAN_FILE
+# a feature track's steady places (track_places), and its footprint drawn from them; renamed (with the track's movie
+# frames, movie_webp) whenever the rule changes
+TRACK_FILE = "track2-" + PLAN_FILE
+TRACK_FOOTPRINT_FILE = "movie_footprint-" + TRACK_FILE
 
 
 def _tiles(u, cache, scale):
@@ -463,7 +467,7 @@ def _record(u, cache):
 
 def _keep_plan(u, cache, p, stamp):
     rec = {"stamp": stamp, "plan": p, "scale": p["display_scale"], "tiles_dir": _tiles(u, cache, p["display_scale"]),
-           "tiles": {}, "made": set(), "footprint": None, "rolled": {}}
+           "tiles": {}, "made": set(), "footprint": None, "track_footprint": None, "track": None, "rolled": {}}
     path = _plan_path(u, cache)
     with _lock:
         _passes[path] = rec
@@ -1123,16 +1127,36 @@ def _register(u, n, out, crop, cache, scale):
         ref = _made_pictures.get(path)
     if ref is None:
         ref = np.asarray(Image.open(path).convert("RGBA"))
-    # both tiles in the reference pixels of the view: where each crop's corner lands, the part both cover
+    shift, how = _shift_onto(q, ref, q["offset"], out, crop, out["offset"])
+    if shift is None and how is not None and how.startswith("failed"):
+        out["registered"] = {"to": q["id"], "why": how[7:]}
+        return
+    if shift is None or math.hypot(*shift) > REGISTER_MAX * FRAME:
+        if how is not None:
+            out["registered"] = {"to": q["id"], "how": how, "kept": "SPICE's place"}
+        return
+    # align_with_masks moves the picture by -shift to land on the reference: its place moves the same way
+    dx, dy = shift
+    out["spice_offset"] = out["offset"]
+    out["offset"] = [out["offset"][0] - dx, out["offset"][1] - dy]
+    out["registered"] = {"to": q["id"], "how": how, "shift": [round(dx, 2), round(dy, 2)]}
+
+
+def _shift_onto(q, ref, at_q, t, crop, at_t):
+    """How far tile t (its picture crop, its middle put at at_t) is from tile q (picture ref, middle at at_q) over
+    the part of the view both cover, by the pipeline's own alignment of a set's channels
+    (image_correction.align_with_masks: phase correlation, then on edges, then by the lit area's centroid): (dx, dy),
+    reference pixels, that t's place moves back by to land on q, and how it was found; (None, how) when nothing was
+    found, (None, None) when the two hardly overlap there, (None, "failed <why>") when the alignment broke."""
     corners = []
-    for t, im in ((q, ref), (out, crop)):
-        corners.append((t["offset"][0] + t["box"][0], t["offset"][1] + t["box"][1], im))
+    for s, at, im in ((q, at_q, ref), (t, at_t, crop)):
+        corners.append((at[0] + s["box"][0], at[1] + s["box"][1], im))
     x0 = max(c[0] for c in corners)
     y0 = max(c[1] for c in corners)
     x1 = min(c[0] + c[2].shape[1] for c in corners)
     y1 = min(c[1] + c[2].shape[0] for c in corners)
     if x1 - x0 < 64 or y1 - y0 < 64:
-        return
+        return None, None
     imgs, masks = [], []
     for cx, cy, im in corners:
         left, top = int(round(x0 - cx)), int(round(y0 - cy))
@@ -1149,18 +1173,10 @@ def _register(u, n, out, crop, cache, scale):
     try:
         image_correction.align_with_masks(imgs, masks, 0, how, found=shifts)
     except Exception as e:
-        out["registered"] = {"to": q["id"], "why": f"{type(e).__name__}: {e}"[:200]}
-        return
-    shift = shifts[1]
-    if shift is None or math.hypot(*shift) > REGISTER_MAX * FRAME:
-        out["registered"] = {"to": q["id"], "how": how[1], "kept": "SPICE's place"}
-        return
-    # align_with_masks moves the picture by -shift to land on the reference: its place moves the same way
-    dx = shift[0] + rest[0][1] - rest[0][0]
-    dy = shift[1] + rest[1][1] - rest[1][0]
-    out["spice_offset"] = out["offset"]
-    out["offset"] = [out["offset"][0] - dx, out["offset"][1] - dy]
-    out["registered"] = {"to": q["id"], "how": how[1], "shift": [round(dx, 2), round(dy, 2)]}
+        return None, f"failed {type(e).__name__}: {e}"[:200]
+    if shifts[1] is None:
+        return None, how[1]
+    return (shifts[1][0] + rest[0][1] - rest[0][0], shifts[1][1] + rest[1][1] - rest[1][0]), how[1]
 
 
 def view_rect(p, tiles=None):
@@ -1709,24 +1725,37 @@ so_far = _kept_for_next_size(so_far, lambda u, n, cache, made=None, out=OUT:
                              (folder(u, cache), made[5], n, out) if made and out <= OUT else None)
 
 
+def _footprint_file(u):
+    return TRACK_FOOTPRINT_FILE if u.get("track") else FOOTPRINT_FILE
+
+
+def _footprint_kept(u, rec):
+    """The pass's movie footprint kept in its record rec, or None (a track's is kept apart: track_footprint)."""
+    return None if rec is None else rec.get("track_footprint" if u.get("track") else "footprint")
+
+
 def movie_footprint(u, cache, p=None):
     """The ground a movie's frames cover (x0, y0, x1, y1, reference pixels from the body's centre), from where SPICE
     put the tiles themselves rather than the geometry cache (which can be a third of a frame off by the end of a
     movie tracking a propeller): MOVIE_SAMPLES tiles spread over the pass, with MOVIE_MARGIN round them for the
-    frames between. Worked out once and kept with the pass."""
+    frames between. A feature track's is every tile at its steady place (track_places). Worked out once and kept
+    with the pass."""
     p = p or plan(u, cache)
     rec = _kept_tiles(u, cache, p["display_scale"])
-    if rec is not None and rec["footprint"] is not None:
-        return rec["footprint"]
-    path = os.path.join(folder(u, cache), FOOTPRINT_FILE)
+    if _footprint_kept(u, rec) is not None:
+        return _footprint_kept(u, rec)
+    path = os.path.join(folder(u, cache), _footprint_file(u))
     if os.path.exists(path):
         with open(path) as fh:
             fp = json.load(fh)
         if rec is not None:
-            rec["footprint"] = fp
+            rec["track_footprint" if u.get("track") else "footprint"] = fp
         return fp
+    track = track_places(u, cache, p) if u.get("track") else None
     n = len(u["frames"])
     picks = sorted({round(i * (n - 1) / max(1, MOVIE_SAMPLES - 1)) for i in range(MOVIE_SAMPLES)}) if n else []
+    if track:
+        picks = sorted(track)
     boxes = []
     # the samples made side by side (MOVIE_WORKERS at once): a cold pass's first steady frame waits on them
     mode = calibration.mode()
@@ -1738,20 +1767,98 @@ def movie_footprint(u, cache, p=None):
         made = list(pool.map(one, picks))
     for t in made:
         if "offset" in t:
+            ox, oy = track[t["n"]] if track else t["offset"]
             bx, by, bw, bh = t["box"]
-            boxes.append((t["offset"][0] + bx, t["offset"][1] + by, t["offset"][0] + bx + bw, t["offset"][1] + by + bh))
+            boxes.append((ox + bx, oy + by, ox + bx + bw, oy + by + bh))
     if boxes:
         m = MOVIE_MARGIN * FRAME
         fp = [min(b[0] for b in boxes) - m, min(b[1] for b in boxes) - m, max(b[2] for b in boxes) + m, max(b[3] for b in boxes) + m]
-        # the geometry cache's footprint too, so no frame between the samples falls outside both
+        # the geometry cache's footprint too, so no frame between the samples falls outside both (a track's
+        # footprint has every frame, at places the geometry cache does not know)
         g = p["footprint"]
-        fp = [min(fp[0], g[0]), min(fp[1], g[1]), max(fp[2], g[2]), max(fp[3], g[3])]
+        if not track:
+            fp = [min(fp[0], g[0]), min(fp[1], g[1]), max(fp[2], g[2]), max(fp[3], g[3])]
     else:
         fp = list(p["footprint"])
     reel._cached(path, lambda: json.dumps(fp).encode())
     if rec is not None:
-        rec["footprint"] = fp
+        rec["track_footprint" if u.get("track") else "footprint"] = fp
     return fp
+
+
+TRACK_MAX = 0.1   # of a frame: the largest step between a track's frames that registration is believed for
+
+
+def track_places(u, cache, p=None):
+    """A feature track's steady places: {tile n: [x, y]}, where each placed tile's middle is drawn (reference pixels,
+    in the place of its offset), so the feature the camera follows holds still from frame to frame. The camera
+    follows a cloud the planet's turning carries along (FEATRAK, WIND5HR), so where SPICE puts each frame round the
+    body's centre moves 150 px a frame and more, while what the frames show hardly moves in the frame itself. Each
+    tile is registered to the tile before it (the previous one SPICE placed), as C8 registers a pointing's filters
+    (_shift_onto: the pipeline's own alignment of a set's channels), with the two frames' middles on one another:
+    the shift found is how far the feature moved in the frame, and the tile's steady place is the earlier tile's
+    moved by it. A tile that does not match the one before (another filter can look too different: a methane band
+    after a continuum) is tried on the newest earlier tile of its own filter; one that matches neither is held where
+    the tile before it is: the camera follows the feature, so SPICE's step between two frames is that following, the
+    very motion a track takes out (taking it added up to 11,000 px over ISS_191SA_FEATRAK001's 360 frames, and
+    WIND5HR003's filters jumped 60 to 160 px back and forth). So a colour set's filters land on one another too (they
+    are taken one after another), and the first tile keeps SPICE's place. Worked out once over
+    every tile of the pass and kept with it; {} with Settings > Processing's alignment off (SPICE's places)."""
+    p = p or plan(u, cache)
+    if not calibration.step("align"):
+        return {}
+    rec = _kept_tiles(u, cache, p["display_scale"])
+    if rec is not None and rec.get("track") is not None:
+        return rec["track"]
+    path = os.path.join(folder(u, cache), TRACK_FILE)
+    with _ulock(u):
+        if rec is not None and rec.get("track") is not None:
+            return rec["track"]
+        if not os.path.exists(path):
+            mode = calibration.mode()
+
+            def one(j):
+                with calibration.in_mode(mode):
+                    return tile(u, j, cache, p["display_scale"])
+            with concurrent.futures.ThreadPoolExecutor(MOVIE_WORKERS) as pool:
+                made = list(pool.map(one, range(len(u["frames"]))))
+            there, pics = _tiles(u, cache, p["display_scale"]), collections.OrderedDict()
+
+            def pic(j):
+                if j not in pics:
+                    path = os.path.join(there, f"{j}.png")
+                    with _lock:
+                        pics[j] = _made_pictures.get(path)
+                    if pics[j] is None:
+                        pics[j] = np.asarray(Image.open(path).convert("RGBA"))
+                    while len(pics) > 16:
+                        pics.popitem(last=False)
+                return pics[j]
+            places, hows, prev, newest = {}, {}, None, {}
+            for t in made:
+                n = t["n"]
+                if "offset" not in t or not os.path.exists(os.path.join(there, f"{n}.png")):
+                    continue
+                if prev is None:
+                    places[n], hows[n] = list(t["offset"]), "first"
+                else:
+                    for j in dict.fromkeys(j for j in (prev, newest.get(t["filter"])) if j is not None):
+                        shift, how = _shift_onto(made[j], pic(j), (0.0, 0.0), t, pic(n), (0.0, 0.0))
+                        if shift is not None and math.hypot(*shift) <= TRACK_MAX * FRAME:
+                            places[n] = [places[j][0] - shift[0], places[j][1] - shift[1]]
+                            hows[n] = f"{how} to {j}"
+                            break
+                    else:
+                        places[n], hows[n] = list(places[prev]), f"held from {prev}"
+                prev = n
+                newest[t["filter"]] = n
+            data = json.dumps({"places": {str(n): [round(v, 2) for v in xy] for n, xy in places.items()}, "how": hows})
+            reel._cached(path, data.encode)
+        with open(path) as fh:
+            track = {int(n): xy for n, xy in json.load(fh)["places"].items()}
+        if rec is not None:
+            rec["track"] = track
+        return track
 
 
 def movie_rect(fp, t, radius=0.0, centre=False):
@@ -1924,8 +2031,17 @@ def movie_frame(u, n, cache, trail=0, colour=True, out=OUT, centre=True):
     if "offset" not in t:
         rep["why"] = t.get("why", "not placed by SPICE")
         return None, rep
+    # a feature track: every tile drawn at its steady place (track_places), so the feature holds still; the body
+    # moves past it instead, so a track is not centred on the body
+    track = track_places(u, cache, p) if u.get("track") else None
+
+    def at(q):
+        return dict(q, offset=track[q["n"]]) if track and q.get("n") in track else q
+    t = at(t)
+    if track:
+        rep["steady"] = "track"
     radius = RADIUS.get(u["key"][0], 0) / (u["z"] * IFOV[u["key"][2]])
-    rect = movie_rect(movie_footprint(u, cache, p), t, radius, centre)
+    rect = movie_rect(movie_footprint(u, cache, p), t, radius, centre and not track)
     rep["centred"] = rect[0] == -rect[2] / 2 and rect[1] == -rect[3] / 2
     k = out / max(rect[2], rect[3])
     W, H = max(1, math.ceil(rect[2] * k)), max(1, math.ceil(rect[3] * k))
@@ -1943,7 +2059,7 @@ def movie_frame(u, n, cache, trail=0, colour=True, out=OUT, centre=True):
             for f, j in got.items():
                 q = t if j == n else tile(u, j, cache, p["display_scale"])
                 if "offset" in q:
-                    newest[f] = q
+                    newest[f] = at(q)
             if len(newest) == len(want):
                 used = want
             break
@@ -1962,7 +2078,7 @@ def movie_frame(u, n, cache, trail=0, colour=True, out=OUT, centre=True):
         # the rolling trail: earlier frames of this filter under it, older ones fainter
         if trail:
             js = [j for j in range(n - 1, max(-1, n - 8 * trail), -1) if frames[j][2] == t["filter"]][:trail]
-            older = [q for q in (tile(u, j, cache, p["display_scale"]) for j in reversed(js)) if "offset" in q]
+            older = [at(q) for q in (tile(u, j, cache, p["display_scale"]) for j in reversed(js)) if "offset" in q]
             acc = np.zeros((H, W, 4), np.float32)
             for age, q in zip(range(len(older), 0, -1), older):
                 a = _place(u, q, rect, k, W, H, cache, p["display_scale"]).astype(np.float32)
@@ -1982,7 +2098,7 @@ def movie_frame(u, n, cache, trail=0, colour=True, out=OUT, centre=True):
 
 # the same frame drawn the same way: named in the cache by folder, frame, trail, colour and centring (movie_webp)
 movie_frame = _kept_for_next_size(movie_frame, lambda u, n, cache, trail=0, colour=True, out=OUT, centre=True:
-                                  (folder(u, cache), n, trail, colour, out, centre) if out <= OUT else None)
+                                  (folder(u, cache), n, trail, colour, out, centre, bool(u.get("track"))) if out <= OUT else None)
 
 
 # a pass's movie frames, renamed whenever the way they are drawn changes (movie-2: colour frames mixed as the mosaic is)
@@ -1999,11 +2115,13 @@ def movie_webp(frame_id, size, cache, trail=0, colour=True, wait=False, ahead=6,
         return None
     u, n = found
     rec = _record(u, cache)
-    if not wait and not (rec is not None and rec["footprint"] is not None) and \
-            not all(os.path.exists(os.path.join(folder(u, cache), f)) for f in (PLAN_FILE, FOOTPRINT_FILE)):
+    if not wait and _footprint_kept(u, rec) is None and \
+            not all(os.path.exists(os.path.join(folder(u, cache), f)) for f in (PLAN_FILE, _footprint_file(u))):
         warm_movie(u, n, ahead, cache)
         return None, {"why": "working out the pass", "observation": u["key"][1], "pass": u["key"][3]}
-    path = os.path.join(folder(u, cache), MOVIE_DIR, str(size), f"{n}_{trail}_{int(bool(colour))}{'_c2' if centre else ''}.webp")
+    # (a feature track's frames, at their steady places, are named apart from the frames it played before)
+    path = os.path.join(folder(u, cache), MOVIE_DIR, str(size),
+                        f"{n}_{trail}_{int(bool(colour))}{'_c2' if centre else ''}{'_k2' if u.get('track') else ''}.webp")
     report, meta = {}, path[:-4] + "json"
 
     def make():
@@ -2045,7 +2163,7 @@ def warm_movie(u, n, ahead, cache):
     key, last = (u["key"], mode), min(n + ahead, len(u["frames"]) - 1)
     # nothing to make (the plan, footprint and those tiles are in memory): no workers
     rec = _record(u, cache)
-    if rec is not None and (rec["footprint"] is not None or u.get("kind", "movie" if u.get("movie") else None) == "mosaic_movie") \
+    if rec is not None and (_footprint_kept(u, rec) is not None or u.get("kind", "movie" if u.get("movie") else None) == "mosaic_movie") \
             and _all_made(u, cache, rec["plan"], n, last, look=True):
         return
     with _lock:
