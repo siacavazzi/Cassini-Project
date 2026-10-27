@@ -111,7 +111,13 @@ Routes:
                                picture (a Cassini Studio recipe's color part, web/frames/studio_look.py);
                                &pictures=movie|color|processed|raw: what each frame shows (as the windows show it, full
                                color sets only, each frame processed alone, each frame raw); &list=1: every frame however
-                               many (the editor's list; a film holds at most CASSINI_EXPORT_MAX, default 20,000)
+                               many (the editor's list; a film holds at most CASSINI_EXPORT_MAX, default 20,000);
+                               &levels=ID:EV,...&even=N: its exposure levels (points the film's exposure goes through,
+                               and Even out over N pictures, movie mode's math); &ctr=0|1&zoom=Z&nudge=ID:X:Y,...: its
+                               framing (Auto center for the whole film, stills too; a zoom; single frames moved)
+  /export/levels.json?...      (the plan's options) the Movie Editor's exposure graph: each frame's brightness in EV,
+                               measured on the film's own pictures on a thread of its own (done of total so far,
+                               kept in the cache), and once all are, each picture's Even out change for the edit
   POST /export?...             (same options, plus sound=1 caption=1) starts making that film, or finds it made
                                or on its way; one film is made at a time. Answers the job's status, as
   /export/<JOB>.json           does: state queued/making/sound/done/failed, pictures done of total, seconds left
@@ -1331,6 +1337,11 @@ def make_handler(site, cache, flags=None):
                     return self.send_json({"error": str(e)}, 400)
                 except OverflowError as e:
                     return self.send_json({"error": str(e)}, 413)
+            if url.path == "/export/levels.json":
+                try:
+                    return self.send_json(export.levels(export.options(parse_qs(url.query)), cache, self.pictures()))
+                except ValueError as e:
+                    return self.send_json({"error": str(e)}, 400)
             m = re.match(r"^/export/([0-9a-f]{16})\.(json|mp4)$", url.path)
             if m:
                 job = export.status(cache, m.group(1))
