@@ -18,7 +18,7 @@ if len(sys.argv) == 1:
         subprocess.run([sys.executable, __file__, os.path.join(root, "..", "replay", "index.html"),
                         os.path.join(HERE, head), os.path.join(root, out)], check=True)
     sys.exit(0)
-import sys, re, json
+import sys, re, json, hashlib
 src = open(sys.argv[1]).read()           # prototype source
 study = open(sys.argv[2]).read()          # study: everything up to (not incl.) the three.js script tags
 out = sys.argv[3]
@@ -207,6 +207,19 @@ study += part("script") + "\n"
 # gallery's (it saves and shares through window.cassiniGallery) and before the dock's, which opens it
 stu = open(os.path.join(os.path.dirname(os.path.abspath(sys.argv[2])), "studio.html")).read()
 part = lambda tag: stu[stu.index(f"<{tag}"):stu.index(f"</{tag}>") + len(tag) + 3]
+for old, new in [
+    ("</style>\n</head>", part("style")[len("<style>"):] + "\n</head>"),
+    ('  <div id="loading">', "  " + part("section") + "\n\n" + '  <div id="loading">'),
+]:
+    assert study.count(old) == 1, old
+    study = study.replace(old, new)
+study += part("script") + "\n"
+
+# the Movie Editor (movieedit.html): its style joins the head's, its window goes into #app, and its script runs after
+# Cassini Studio's (it draws with the studio's renderer and edits the look there) and the export's and pre-processing's,
+# whose stretch it edits
+me = open(os.path.join(os.path.dirname(os.path.abspath(sys.argv[2])), "movieedit.html")).read()
+part = lambda tag: me[me.index(f"<{tag}"):me.index(f"</{tag}>") + len(tag) + 3]
 for old, new in [
     ("</style>\n</head>", part("style")[len("<style>"):] + "\n</head>"),
     ('  <div id="loading">', "  " + part("section") + "\n\n" + '  <div id="loading">'),
@@ -594,5 +607,11 @@ for name in CUTSCENES:
         assert os.path.exists(cdata), cdata
         cscript = cscript.replace(marker, json.dumps(json.load(open(cdata)), ensure_ascii=False, separators=(",", ":")))
     script += cscript + "\n"
-open(out, 'w').write(study + script)
-print("ok", out, len(study + script))
+# the page's build id (about.html's /*BUILD*/""): a hash of everything else in it, so the same sources always build the
+# same page, and the frame server's /version.json (which reads it back from index.html) and each flag can tell an
+# older page, open since before the last merge, from the one being served
+page = study + script
+assert page.count('/*BUILD*/""') == 1
+page = page.replace('/*BUILD*/""', '/*BUILD*/"%s"' % hashlib.sha256(page.encode()).hexdigest()[:12])
+open(out, 'w').write(page)
+print("ok", out, len(page))

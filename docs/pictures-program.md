@@ -24,7 +24,7 @@ The mosaic, color science, and drill-down plans, built together on the `pictures
 - **American spelling** in all user-facing text.
 - **Rebuild `web/cassini-os/index.html`** (`python web/cassini-os/src/build.py`) and commit it whenever the viewer changes.
 - **Disk rule.** Anything over 1 GB (worktrees, caches, scratch renders) lives on `/Volumes/LaCie/claude_scratch_spk/`; the Mini keeps 50 GB free; never `~/dev/scratch`.
-- **Preview servers** run from a worktree on the LaCie with their own `--cache` on the LaCie, the same `CASSINI_DATA`, `CASSINI_KERNELS` and `CASSINI_GEOMETRY_CACHE` as live, in their own tmux session. Ports are listed per phase below.
+- **Preview servers** run from a worktree on the LaCie with their own `--cache` on the LaCie, the same `CASSINI_DATA`, `CASSINI_KERNELS` and `CASSINI_GEOMETRY_CACHE` as live, in their own tmux session. Ports are listed per phase below. Since #131, start every preview with `--usage off` (or `CASSINI_USAGE=off`): the default folder `~/Documents/cassini-usage` is the live site's, and a preview would add its own visits and pictures to Sam's /stats/ counts.
 
 ## Preview recipe (every port)
 
