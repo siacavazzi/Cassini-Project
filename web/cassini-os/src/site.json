@@ -1,0 +1,10 @@
+{
+  "url": "",
+  "name": "Cassini OS",
+  "title": "Cassini OS: replay the Cassini mission and every picture it took",
+  "description": "A 3D replay of NASA and ESA's Cassini-Huygens mission, 1997 to 2017, in your browser: the spacecraft's real path, and the 443,000 pictures it took of Saturn, its rings, Titan and Enceladus, each shown at the moment it was taken.",
+  "author": "Sam Iacavazzi",
+  "author_url": "https://github.com/siacavazzi",
+  "image": "share.jpg",
+  "image_alt": "Cassini OS in Titan's view: Titan backlit by the Sun in 3D, Titan's imaging sessions and moments, and its pictures across the mission timeline"
+}
