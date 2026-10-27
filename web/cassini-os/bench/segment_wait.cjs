@@ -13,7 +13,8 @@
 //   pressed), MAXSECS=120 for each stretch, W=1440 H=900 DPR=2, PRE='js' run in the page before the first highlight
 //   (PRE='cassiniMovie.start(true)': movie mode playing), NET=ms,down,up the link as Chrome emulates it (NET=20,100,50
 //   a home Wi-Fi, NET=80,30,10 Tailscale away from home; play_rate.cjs), PLAYSECS=8 the most it waits, once ready,
-//   for the stretch's movie (Settings > Playback > play when ready) to start and step five pictures
+//   for the stretch's movie (Settings > Playback > play when ready) to start and step five pictures; REQS=1 also
+//   prints each pass mosaic the windows asked for from the press to the movie's fifth step, and what came back
 let chromium;
 try { ({ chromium } = require("playwright-core")); } catch (e) { ({ chromium } = require("playwright")); }
 const fs = require("fs");
@@ -166,8 +167,12 @@ const now = () => performance.now();
       const next = got.movie.steps.find(x => x > st.from), a = pageToHere(st.from - 1500), b = pageToHere(next != null ? next : st.at);
       st.requests = reqs.filter(e => e.t0 >= a && e.t0 <= b).map(e => ({ m: e.m, u: e.u.slice(0, 160), at: +(e.t0 - pressed).toFixed(0), took: e.t1 == null ? null : +(e.t1 - e.t0).toFixed(0), s: e.s }));
     }
+    // REQS=1: the pass mosaics asked for from the press to the movie's last step seen (a 404 is a frame with none)
+    const until = got.movie && got.movie.steps.length ? pageToHere(got.movie.steps[got.movie.steps.length - 1]) : now();
+    const mosaics = env.REQS ? reqs.filter(e => e.t0 >= pressed && e.t0 <= until && /^\/frames\/mosaic\//.test(e.u))
+      .map(e => ({ u: e.u.slice(0, 160), at: +(e.t0 - pressed).toFixed(0), took: e.t1 == null ? null : +(e.t1 - e.t0).toFixed(0), s: e.s })) : [];
     const r = { stretch: ends, job, post: got.post, asking: asking ? asking.for : null, first: first ? first.at : null, ready: ready ? ready.at : null, movie: got.movie,
-      lines, outAtPress, sinceMark, postSamples, samplesAfter: await samples() };
+      lines, outAtPress, sinceMark, mosaics, postSamples, samplesAfter: await samples() };
     runs.push(r);
     // the requests out at the press, by route (a picture, a pass's mosaic, a look-ahead note, ...) and how much longer each took
     const route = e => e.u.replace(/\?.*/, "").replace(/[NW]\d{10}_\d+(_[NW]\d{10}_\d+)*/g, "ID").replace(/[0-9a-f]{16}/g, "JOB") + (/[?&]warm=1/.test(e.u) ? "?warm" : "");
@@ -180,7 +185,8 @@ const now = () => performance.now();
       lines.map(l => `     ${String(l.at).padStart(8)} ms  ${String(l.for).padStart(8)} ms  ${l.says}`).join("\n") +
       Object.entries(routes).map(([k2, v]) => `\n     out at the press: ${v.length} x ${k2}, done ${v.map(x => x == null ? "never" : `${x} ms`).join(", ")} after it`).join("") +
       (got.movie ? got.movie.stalls.map(st => `\n     movie held from ${st.from} ms (seen at ${st.at} ms): ` + st.wins.map(w => `${w.id} behind ${w.behind} [${w.tag}] ${w.classes} ${w.src}`).join(" | ") +
-        st.requests.map(q => `\n        ${String(q.at).padStart(7)} ms ${q.m} ${q.u} -> ${q.s} in ${q.took} ms`).join("")).join("") : ""));
+        st.requests.map(q => `\n        ${String(q.at).padStart(7)} ms ${q.m} ${q.u} -> ${q.s} in ${q.took} ms`).join("")).join("") : "") +
+      mosaics.map(q => `\n     mosaic asked at ${q.at} ms: ${q.u} -> ${q.s} in ${q.took} ms`).join(""));
   }
   fs.writeFileSync(`${out}.json`, JSON.stringify({ url, from: FROM, until: UNTIL, mode: MODE, hold: HOLD, wait: WAIT, play: !!env.PLAY, net: env.NET || null, pre: env.PRE || null, runs }, null, 1));
   await br.close();
