@@ -103,7 +103,7 @@ const now = () => performance.now();
       const el = document.getElementById("segstate");
       // (the browser keeps 250 timings by default: a full buffer would leave the POST's out)
       performance.clearResourceTimings(); performance.setResourceTimingBufferSize(5000);
-      window.__seg = { t0: null, log: [], mov: [] };
+      window.__seg = { t0: null, log: [], mov: [], stalls: [] };
       const note = () => { const t = el.textContent; const L = window.__seg.log; if (!L.length || L[L.length - 1][1] !== t) L.push([performance.now(), t]); };
       if (window.__segObs) window.__segObs.disconnect();
       window.__segObs = new MutationObserver(note); window.__segObs.observe(el, { childList: true, characterData: true, subtree: true });
@@ -115,7 +115,16 @@ const now = () => performance.now();
         if (window.__seg !== me) return;
         const M = window.cassiniMovie, P = cassiniSegment.state, L = me.mov, last = L[L.length - 1];
         const on = !!(M && M.on && state.playing && P.b != null && M.state.until === P.b);   // (this stretch's movie)
-        if (on && (!last || last[1] !== state.et)) L.push([performance.now(), state.et, !!M.state.waiting]);
+        const t = performance.now();
+        if (on && (!last || last[1] !== state.et)) L.push([t, state.et, !!M.state.waiting]);
+        // a step held more than 1.5 s: what each camera window shows then (its picture, its tag, how far behind)
+        else if (on && last && t - last[0] > 1500 && !(me.stalls.length && me.stalls[me.stalls.length - 1].from === last[0])) {
+          me.stalls.push({ from: last[0], at: t, et: state.et, wins: [...document.querySelectorAll(".camwin")].filter(w => !w.hidden).map(w => {
+            const well = w.querySelector(".well"), shot = w.querySelector(".shot");
+            return { id: w.id, cam: w.dataset.cam, behind: window.cassiniFeeds.behind(w.dataset.cam), tag: w.querySelector(".kindtag").textContent,
+              classes: well.className, src: (shot.dataset.src || "").replace(/^https?:\/\/[^/]+/, "").slice(0, 160) };
+          }) });
+        }
         requestAnimationFrame(tick);
       })();
     });
@@ -135,7 +144,8 @@ const now = () => performance.now();
     const got = await page.evaluate(() => {
       const t0 = window.__seg.t0, rel = t => +(t - t0).toFixed(1), mov = window.__seg.mov;
       // on: movie mode on and playing (the clock set to the stretch's start); steps: the clock's first moves from there
-      const movie = mov.length ? { on: rel(mov[0][0]), steps: mov.slice(1, 6).map(m => rel(m[0])) } : null;
+      const movie = mov.length ? { on: rel(mov[0][0]), steps: mov.slice(1, 6).map(m => rel(m[0])),
+        stalls: window.__seg.stalls.map(x => ({ from: rel(x.from), at: rel(x.at), wins: x.wins })) } : null;
       const post = performance.getEntriesByType("resource").filter(e => /\/prebuild\?/.test(e.name) && e.startTime >= t0 - 5).pop();
       return { t0, movie, log: window.__seg.log.map(([t, s]) => [rel(t), s]),
         post: post && { start: rel(post.startTime), queued: +(post.requestStart - post.startTime).toFixed(1), connect: +(post.connectEnd - post.connectStart).toFixed(1),
@@ -149,6 +159,13 @@ const now = () => performance.now();
     const out1 = (e, t) => ({ m: e.m, u: e.u.slice(0, 140), age: +(t - e.t0).toFixed(0), left: e.t1 == null ? null : +(e.t1 - t).toFixed(0), s: e.s });
     const outAtPress = reqs.filter(e => e.t0 < pressed && (e.t1 == null || e.t1 > pressed)).map(e => out1(e, pressed));
     const sinceMark = reqs.filter(e => e.t0 >= marked && e.t0 < pressed).map(e => ({ m: e.m, u: e.u.slice(0, 140), at: +(e.t0 - pressed).toFixed(0), took: e.t1 == null ? null : +(e.t1 - e.t0).toFixed(0), s: e.s }));
+    // the requests around each held step: those that went out from 1.5 s before it until it moved on (page times
+    // put on this script's clock by the press, which both saw within a few ms)
+    const pageToHere = t => pressed + t;
+    if (got.movie) for (const st of got.movie.stalls) {
+      const next = got.movie.steps.find(x => x > st.from), a = pageToHere(st.from - 1500), b = pageToHere(next != null ? next : st.at);
+      st.requests = reqs.filter(e => e.t0 >= a && e.t0 <= b).map(e => ({ m: e.m, u: e.u.slice(0, 160), at: +(e.t0 - pressed).toFixed(0), took: e.t1 == null ? null : +(e.t1 - e.t0).toFixed(0), s: e.s }));
+    }
     const r = { stretch: ends, job, post: got.post, asking: asking ? asking.for : null, first: first ? first.at : null, ready: ready ? ready.at : null, movie: got.movie,
       lines, outAtPress, sinceMark, postSamples, samplesAfter: await samples() };
     runs.push(r);
@@ -161,7 +178,9 @@ const now = () => performance.now();
       `first picture shown done ${r.first} ms, ready ${r.ready} ms; ${job ? `${job.state} ${job.done}/${job.total}, server took ${job.took != null ? job.took.toFixed(2) : "?"} s` : "no job"}; ` +
       `movie ${got.movie ? `on at ${got.movie.on} ms, its first steps at ${got.movie.steps.join(", ")} ms` : "never on"}\n` +
       lines.map(l => `     ${String(l.at).padStart(8)} ms  ${String(l.for).padStart(8)} ms  ${l.says}`).join("\n") +
-      Object.entries(routes).map(([k2, v]) => `\n     out at the press: ${v.length} x ${k2}, done ${v.map(x => x == null ? "never" : `${x} ms`).join(", ")} after it`).join(""));
+      Object.entries(routes).map(([k2, v]) => `\n     out at the press: ${v.length} x ${k2}, done ${v.map(x => x == null ? "never" : `${x} ms`).join(", ")} after it`).join("") +
+      (got.movie ? got.movie.stalls.map(st => `\n     movie held from ${st.from} ms (seen at ${st.at} ms): ` + st.wins.map(w => `${w.id} behind ${w.behind} [${w.tag}] ${w.classes} ${w.src}`).join(" | ") +
+        st.requests.map(q => `\n        ${String(q.at).padStart(7)} ms ${q.m} ${q.u} -> ${q.s} in ${q.took} ms`).join("")).join("") : ""));
   }
   fs.writeFileSync(`${out}.json`, JSON.stringify({ url, from: FROM, until: UNTIL, mode: MODE, hold: HOLD, wait: WAIT, play: !!env.PLAY, net: env.NET || null, pre: env.PRE || null, runs }, null, 1));
   await br.close();
