@@ -67,6 +67,17 @@ It draws from the frame server's full resolution picture (`size=full`, asked for
 detail the window's 512 or 1024 px picture does not have. On a phone, press and hold on a picture. Settings > Zoom
 lens holds the magnification, size, delay, shape and position (`src/loupe.html`; any `<img data-loupe>` gets it too).
 
+A mosaic's full resolution picture is still its 2048 px canvas, a fraction of its tiles' pixels. When the lens
+magnifies past it, a moment after the pointer stops it loads the part under it at native resolution (one pixel per
+frame pixel, `/frames/mosaic/<ID>/full.webp?crop=`, `web/frames/mosaic_native.py`: the same tiles, layout, seam
+corrections, compose and colour as the window's mosaic) and the label says "native resolution W × H". Settings >
+Zoom lens > "Native resolution in mosaics" turns it off. In full view a mosaic is shown big enough to look at its seams, so the
+lens stays away there until the magnifying glass in the picture's top right corner turns it on (Settings > Zoom
+lens > "On mosaics in full view", off by default). The save menu of a mosaic has "Full resolution mosaic":
+the whole mosaic at native resolution as a JPEG (up to 24,000 px on its longest side); the server makes it when
+it is first asked for (the row counts up) and keeps it in its own cache (`CASSINI_FULLRES_CACHE`, default
+`<cache>-fullres`, at most `CASSINI_FULLRES_MB` = 5 GB), never in the pre-built cache.
+
 ## Dock
 
 Along the bottom of the screen, as on the Mac (`src/dock.html`): Cassini and each body on stage now (the same list as

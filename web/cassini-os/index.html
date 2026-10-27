@@ -1080,6 +1080,15 @@ body.phone #galtoast { bottom: calc(env(safe-area-inset-bottom, 0px) + var(--app
 #loupe.on-pointer .lzx { display: none; }
 #loupe.round .lzt { left: 50%; transform: translateX(-50%); bottom: 12px; white-space: nowrap; }
 .well .shot, img[data-loupe] { -webkit-touch-callout: none; }
+/* the magnifying glass in a mosaic's corner in full view, under its kind tag: the lens on or off there */
+.lensbtn { all: unset; position: absolute; right: 5px; top: 18px; z-index: 3; display: none; width: 22px; height: 22px; border-radius: 4px; box-sizing: border-box;
+  align-items: center; justify-content: center; cursor: pointer; color: var(--q-text, #cfd5de); background: rgba(0,0,0,.55); border: 1px solid var(--q-line, rgba(255,255,255,.18)); }
+.lensbtn svg { width: 12px; height: 12px; } .lensbtn svg * { fill: none; stroke: currentColor; stroke-width: 1.4; stroke-linecap: round; }
+.lensbtn:hover { color: #fff; border-color: var(--q-accent, #8ab4ff); }
+.lensbtn:focus-visible { outline: 1px solid var(--q-accent, #8ab4ff); }
+.lensbtn[aria-pressed="true"] { color: var(--q-accent, #8ab4ff); border-color: var(--q-accent, #8ab4ff); }
+.win.full .well.mosaic.has-frame .lensbtn { display: flex; }
+body.idle .win.full .lensbtn { opacity: .35; } body.idle .win.full .lensbtn:hover { opacity: 1; }
 
 #stucard { top: calc(env(safe-area-inset-top, 0px) + 34px); left: 50%; transform: translateX(-50%); width: clamp(560px, 72vw, 1180px); height: min(720px, calc(100% - 120px)); display: flex; flex-direction: column; }
 #stucard[style*="left"] { transform: none; }
@@ -3243,14 +3252,19 @@ body.phone #launch .lx-clock { font-size: 9.5px; bottom: 9vh; }
     }
     const save = saveWrap.querySelector(".savepic"), saveMenu = saveWrap.querySelector(".savemenu");
     save.addEventListener("click", e => { saveOpen(!saveWrap.classList.contains("open")); if (e.detail) save.blur(); });
-    saveMenu.addEventListener("click", e => { if (e.target.closest("a")) setTimeout(() => { saveOpen(false); if (e.detail) document.activeElement.blur(); }, 0); });
+    saveMenu.addEventListener("click", e => {
+      const a = e.target.closest("a");
+      if (a && a.dataset.native && nativeSave(a, e)) return;
+      if (a) setTimeout(() => { saveOpen(false); if (e.detail) document.activeElement.blur(); }, 0);
+    });
     document.addEventListener("click", () => saveOpen(false));
     window.addEventListener("keydown", e => { if (e.key === "Escape" && saveWrap.classList.contains("open")) { e.stopImmediatePropagation(); saveOpen(false); } }, true);
     function saveOpen(on) {
       if (on) {
         const rows = savesFor(shot.dataset.src || "");
         saveMenu.innerHTML = rows.map(r => r === "-" ? '<li class="sep" role="separator"></li>'
-          : `<li class="${r.now ? "now" : ""}"><a role="menuitem" href="${r.href}" download>${r.label}<span>${r.note}</span></a></li>`).join("");
+          : `<li class="${r.now ? "now" : ""}"><a role="menuitem" href="${r.href}" download${r.native ? ` data-native="${r.native}"` : ""}>${r.label}<span>${r.note}</span></a></li>`).join("");
+        for (const a of saveMenu.querySelectorAll("a[data-native]")) nativeNote(a);
       }
       saveWrap.classList.toggle("open", !!on); save.setAttribute("aria-expanded", String(!!on));
     }
@@ -3287,12 +3301,65 @@ body.phone #launch .lx-clock { font-size: 9.5px; bottom: 9vh; }
         rows.push("-", ...frame(ch !== null ? ids[+ch] || ids[0] : ids[ids.length - 1]));
       } else if (/\/frames\/mosaic\//.test(u.pathname)) {
         rows.push({ label: "Whole mosaic, as shown", note: "PNG", href: saveUrl(url), now: true });
+        // the mosaic at its tiles' own resolution (mosaic_native), made when asked for: nativeNote and nativeSave below
+        if (/\/frames\/mosaic\/[NW]\d{10}_\d+\.webp$/.test(u.pathname)) {
+          const n = new URL(u); n.pathname = n.pathname.replace(/\.webp$/, "/full.jpg");
+          for (const k of ["size", "format", "download", "warm"]) n.searchParams.delete(k);
+          rows.push({ label: "Full resolution mosaic", note: "JPEG · native size", href: n.href + (n.search ? "&" : "?") + "download=1", native: n.href.replace(/\/full\.jpg/, "/full.json") });
+        }
       } else {
         const m = u.pathname.match(/\/frames\/(?:processed\/)?([NW]\d{10}_\d+)\.webp$/);
         rows.push({ label: "This frame as shown", note: "PNG", href: saveUrl(url), now: true });
         if (m) rows.push(...frame(m[1]).filter(r => !(u.pathname.includes("/processed/") && r.note.includes("calibrated"))));
       }
       return rows;
+    }
+    // the full resolution mosaic's row: its size and about how big the file is (asked of the frame server when the menu
+    // opens; gone when the server has no mosaic for the picture), or how far its making has got
+    const nativeJobs = new Map();   // its .json address -> { done 0-1 } while the server makes it
+    const mb = v => v >= 100 ? `${Math.round(v)} MB` : v >= 1 ? `${v.toFixed(1)} MB` : `${Math.max(0.1, v).toFixed(1)} MB`;
+    function nativeNote(a, about) {
+      const job = nativeJobs.get(a.dataset.native), span = a.querySelector("span");
+      if (job) { span.textContent = `JPEG · making it… ${Math.round(job.done * 100)}%`; return; }
+      if (about) { span.textContent = `JPEG · ${about.width.toLocaleString()} × ${about.height.toLocaleString()} px · ${about.ready.jpg ? "" : "about "}${mb(about.estimate_mb.jpg)}`; return; }
+      fetch(a.dataset.native).then(r => r.ok ? r.json() : null).catch(() => null).then(v => {
+        if (!a.isConnected) return;
+        if (!v || !v.width) { a.closest("li").remove(); return; }
+        a.dataset.ready = v.ready.jpg ? "1" : "";
+        if (!nativeJobs.has(a.dataset.native)) nativeNote(a, v);
+      });
+    }
+    // a click on it: saved at once when it is made; otherwise the server makes it (minutes for a big pass) while
+    // the row counts up, and it is saved when it is ready, whether the menu is still open or not
+    function nativeSave(a, e) {
+      if (a.dataset.ready) return false;
+      e.preventDefault();
+      const info = a.dataset.native, href = a.href;
+      if (nativeJobs.has(info)) return true;
+      const job = { done: 0 };
+      nativeJobs.set(info, job);
+      const look = () => {
+        const row = saveMenu.querySelector(`a[data-native="${CSS.escape(info)}"]`);
+        if (row) nativeNote(row);
+      };
+      look();
+      let misses = 0;
+      const poll = first => fetch(first ? info + (info.includes("?") ? "&" : "?") + "make=jpg" : info).then(r => r.ok ? r.json() : null).catch(() => null).then(v => {
+        // gone, or no longer being made and not made (the server says why in its log)
+        if (v && !v.ready.jpg && !("jpg" in v.making)) misses++;
+        if (!v || misses > 2) { nativeJobs.delete(info); const row = saveMenu.querySelector(`a[data-native="${CSS.escape(info)}"]`); if (row) row.querySelector("span").textContent = "JPEG · could not be made"; return; }
+        if (v.ready.jpg) {
+          nativeJobs.delete(info);
+          const row = saveMenu.querySelector(`a[data-native="${CSS.escape(info)}"]`);
+          if (row) { row.dataset.ready = "1"; nativeNote(row, v); }
+          const go = document.createElement("a"); go.href = href; go.download = ""; document.body.appendChild(go); go.click(); go.remove();
+          return;
+        }
+        job.done = v.making.jpg || job.done; look();
+        setTimeout(() => poll(false), 1000);
+      });
+      poll(true);
+      return true;
     }
     // the save button's label: the picture's size once the full one is up
     function saving() {
@@ -6814,8 +6881,8 @@ body.phone #launch .lx-clock { font-size: 9.5px; bottom: 9vh; }
   if (S) {
     S.define({ key: "loupe.on", section: "Zoom lens", label: "Zoom lens", type: "toggle", value: true,
       hint: "Move the pointer onto a picture and a lens shows the area under it magnified, from the picture's full resolution version. It follows the pointer; the scroll wheel over it changes the magnification. On a phone, press and hold on a picture." });
-    S.define({ key: "loupe.zoom", section: "Zoom lens", label: "Magnification", type: "range", value: 3, min: 1.5, max: 12, step: 0.5, format: v => `${v}×`,
-      hint: "How much bigger the lens shows the picture than the window does." });
+    S.define({ key: "loupe.zoom", section: "Zoom lens", label: "Magnification", type: "range", value: 3, min: 1.5, max: 32, step: 0.5, format: v => `${v}×`,
+      hint: "How much bigger the lens shows the picture than the window does. Past 12× is for mosaics, whose native pixels are many times smaller than the window shows them." });
     S.define({ key: "loupe.size", section: "Zoom lens", label: "Lens size", type: "range", value: 380, min: 160, max: 720, step: 20, unit: "px",
       hint: "How wide the lens is on the screen (on a phone, at most two thirds of the screen)." });
     S.define({ key: "loupe.delay", section: "Zoom lens", label: "Open after", type: "range", value: 0, min: 0, max: 3, step: 0.1, unit: "s",
@@ -6825,6 +6892,10 @@ body.phone #launch .lx-clock { font-size: 9.5px; bottom: 9vh; }
     S.define({ key: "loupe.where", section: "Zoom lens", label: "Lens position", type: "choice", value: "on",
       options: [["on", "On the pointer"], ["beside", "Beside the pointer"]],
       hint: "On the pointer, the lens is centered where the pointer is; beside it, the lens sits up and to the right, so the picture under the pointer stays in sight. On a phone it always sits above the finger." });
+    S.define({ key: "loupe.native", section: "Zoom lens", label: "Native resolution in mosaics", type: "toggle", value: true,
+      hint: "A mosaic is shown smaller than its frames were taken. When the lens magnifies past the picture's pixels, it loads the part under it at the frames' own resolution, a moment after the pointer stops." });
+    S.define({ key: "loupe.mosaicFull", section: "Zoom lens", label: "On mosaics in full view", type: "toggle", value: false,
+      hint: "In full view a mosaic is shown big enough to look at its seams, so the lens stays away there. The magnifying glass in the picture's top right corner turns it on and off, the same as this switch." });
   }
   const opt = (k, d) => (S && S.get(k) !== undefined ? S.get(k) : d);
   const HOLD = 450, MOVE = 10;   // a press and hold on a phone: how long, and how far the finger may wander
@@ -6836,8 +6907,28 @@ body.phone #launch .lx-clock { font-size: 9.5px; bottom: 9vh; }
     if (!img || !img.naturalWidth) return null;
     const well = img.closest(".well");
     if (well && !well.classList.contains("has-frame")) return null;
+    if (well && well.classList.contains("mosaic") && well.closest(".win.full") && !opt("loupe.mosaicFull", false)) return null;
     return img;
   };
+  // the magnifying glass in each picture window's corner (shown on a mosaic in full view): the lens on or off there
+  const GLASS = '<svg viewBox="0 0 12 12" aria-hidden="true"><circle cx="5" cy="5" r="3.6"/><path d="M7.7 7.7 11 11"/></svg>';
+  function glass(well) {
+    if (well.querySelector(":scope > .lensbtn")) return;
+    const b = document.createElement("button");
+    b.type = "button"; b.className = "lensbtn"; b.innerHTML = GLASS;
+    b.addEventListener("click", e => { e.stopPropagation(); if (S) S.set("loupe.mosaicFull", !opt("loupe.mosaicFull", false)); });
+    b.addEventListener("dblclick", e => e.stopPropagation());
+    well.appendChild(b); mark(b);
+  }
+  function mark(b) {
+    const on = !!opt("loupe.mosaicFull", false);
+    b.setAttribute("aria-pressed", on); b.title = on ? "Zoom lens on (click to look at the seams without it)" : "Zoom lens off (click to turn it on)";
+    b.setAttribute("aria-label", on ? "Turn the zoom lens off" : "Turn the zoom lens on");
+  }
+  let glassQ = 0;
+  const glasses = () => { glassQ = 0; document.querySelectorAll(".well").forEach(glass); };
+  glasses();
+  new MutationObserver(() => { if (!glassQ) glassQ = requestAnimationFrame(glasses); }).observe(document.getElementById("app") || document.body, { childList: true, subtree: true });
   // where the picture is drawn inside its element (object-fit: contain, as the windows show it; else filling it)
   function box(img) {
     const r = img.getBoundingClientRect(), nw = img.naturalWidth, nh = img.naturalHeight;
@@ -6869,8 +6960,77 @@ body.phone #launch .lx-clock { font-size: 9.5px; bottom: 9vh; }
     return im;
   }
 
+  // native resolution (a mosaic's tiles at their own scale): the route's address for an image (its data-loupe-native,
+  // or a mosaic window picture's /frames/mosaic/<ID>/full.webp with the same look and changes), its size once asked
+  // (.json), and the parts of it fetched so far (crops: fractions of the picture, newest last)
+  const NATIVE_WAIT = 160, NATIVE_SIDE = 2048, NATIVE_MARGIN = 2.2;
+  function nativeUrl(img, src) {
+    if (img.dataset.loupeNative) return new URL(img.dataset.loupeNative, location.href);
+    if (!src || !/\/frames\/mosaic\/[NW]\d{10}_\d+\.webp(\?|$)/.test(src)) return null;
+    const u = new URL(src, location.href);
+    u.pathname = u.pathname.replace(/\.webp$/, "/full.webp");
+    for (const k of ["size", "format", "download", "warm"]) u.searchParams.delete(k);
+    return u;
+  }
+  const natives = new Map();   // route address -> { info, crops: [{ u0, v0, u1, v1, bmp }], ask, timer }
+  function nativeFor(img, src) {
+    if (!opt("loupe.native", true)) return null;
+    const u = nativeUrl(img, src);
+    if (!u) return null;
+    const key = u.href;
+    let n = natives.get(key);
+    if (!n) {
+      n = { key, url: u, info: undefined, crops: [], ask: null, timer: 0 };
+      natives.set(key, n);
+      while (natives.size > 12) { const old = natives.values().next().value; if (old.ask) old.ask.ctrl.abort(); natives.delete(old.key); }
+      const j = new URL(u); j.pathname = j.pathname.replace(/\.webp$/, ".json");
+      fetch(j).then(r => r.ok ? r.json() : null).catch(() => null).then(v => { n.info = v && v.width ? v : null; if (cur) paint(); });
+    }
+    return n;
+  }
+  // the part of the picture around (u, v) the lens shows (span: fractions wide and high), asked for once the pointer
+  // has rested; a newer ask drops the one before it
+  function nativeAsk(n, u, v, su, sv) {
+    clearTimeout(n.timer);
+    n.timer = setTimeout(() => {
+      const side = Math.max(su * n.info.width, sv * n.info.height);
+      const m = Math.max(1, Math.min(NATIVE_MARGIN, NATIVE_SIDE / side));
+      const r = [u - su * m / 2, v - sv * m / 2, u + su * m / 2, v + sv * m / 2].map(x => Math.max(0, Math.min(1, x)));
+      if (n.ask) n.ask.ctrl.abort();
+      const ctrl = new AbortController(), q = new URL(n.url);
+      q.searchParams.set("crop", r.map(x => x.toFixed(4)).join(","));
+      n.ask = { ctrl, r };
+      fetch(q, { signal: ctrl.signal }).then(res => res.ok ? res.blob() : Promise.reject(res.status)).then(b => createImageBitmap(b)).then(bmp => {
+        n.crops.push({ u0: r[0], v0: r[1], u1: r[2], v1: r[3], bmp });
+        while (n.crops.length > 6) n.crops.shift().bmp.close();
+        if (n.ask && n.ask.ctrl === ctrl) n.ask = null;
+        if (cur) paint();
+      }).catch(() => { if (n.ask && n.ask.ctrl === ctrl) { n.ask = null; if (cur) paint(); } });
+    }, NATIVE_WAIT);
+  }
+  // draws the native parts that reach the lens's span (fu0..fu1, fv0..fv1 of the picture) over it, oldest first;
+  // asks for one when none covers it at the resolution the lens shows. What the label says: "native", "loading" or ""
+  function nativeDraw(n, fu0, fv0, fu1, fv1, W, dpr) {
+    const want = Math.min(n.info.width, W / (fu1 - fu0)), a0 = Math.max(0, fu0), b0 = Math.max(0, fv0), a1 = Math.min(1, fu1), b1 = Math.min(1, fv1);
+    let covered = false;
+    for (const c of n.crops) {
+      const cw = c.bmp.width / (c.u1 - c.u0), ch = c.bmp.height / (c.v1 - c.v0);
+      const x0 = Math.max(a0, c.u0), y0 = Math.max(b0, c.v0), x1 = Math.min(a1, c.u1), y1 = Math.min(b1, c.v1);
+      if (x1 <= x0 || y1 <= y0) continue;
+      const fx = W / (fu1 - fu0) / cw;
+      ctx.imageSmoothingEnabled = fx < 2 * dpr;
+      ctx.drawImage(c.bmp, (x0 - c.u0) * cw, (y0 - c.v0) * ch, (x1 - x0) * cw, (y1 - y0) * ch,
+        (x0 - fu0) / (fu1 - fu0) * W, (y0 - fv0) / (fv1 - fv0) * W, (x1 - x0) / (fu1 - fu0) * W, (y1 - y0) / (fv1 - fv0) * W);
+      if (c.u0 <= a0 + 1e-4 && c.v0 <= b0 + 1e-4 && c.u1 >= a1 - 1e-4 && c.v1 >= b1 - 1e-4 && cw >= want * 0.9) covered = true;
+    }
+    if (covered) { clearTimeout(n.timer); return "native"; }
+    const r = n.ask && n.ask.r;
+    if (!(r && r[0] <= a0 && r[1] <= b0 && r[2] >= a1 && r[3] >= b1)) nativeAsk(n, (fu0 + fu1) / 2, (fv0 + fv1) / 2, fu1 - fu0, fv1 - fv0);
+    return "loading";
+  }
+
   // cur: the lens up now ({ img, x, y, touch, url, src }); arm: waiting out the delay
-  let cur = null, arm = null, fullT = 0;
+  let cur = null, arm = null, fullT = 0, stableT = 0;
   const phone = () => document.body.classList.contains("phone");
   function open(img, x, y, touch) {
     cur = { img, x, y, touch, url: null, srcSeen: null };
@@ -6880,7 +7040,8 @@ body.phone #launch .lx-clock { font-size: 9.5px; bottom: 9vh; }
     paint();
   }
   function close() {
-    clearTimeout(arm && arm.t); arm = null; clearTimeout(fullT);
+    clearTimeout(arm && arm.t); arm = null; clearTimeout(fullT); clearTimeout(stableT);
+    for (const n of natives.values()) clearTimeout(n.timer);
     if (!cur) return;
     cur = null; lens.classList.remove("shown", "on");
   }
@@ -6889,7 +7050,8 @@ body.phone #launch .lx-clock { font-size: 9.5px; bottom: 9vh; }
   function source() {
     const img = cur.img, src = img.dataset.src || img.currentSrc || img.src;
     if (src !== cur.srcSeen) {
-      cur.srcSeen = src; cur.url = null; clearTimeout(fullT);
+      cur.srcSeen = src; cur.url = null; cur.stable = false; clearTimeout(fullT); clearTimeout(stableT);
+      stableT = setTimeout(() => { if (cur && cur.srcSeen === src) { cur.stable = true; paint(); } }, 250);
       const u = fullUrl(img);
       if (u && u !== src) {
         if (fulls.has(u)) cur.url = u;
@@ -6930,7 +7092,14 @@ body.phone #launch .lx-clock { font-size: 9.5px; bottom: 9vh; }
     // only the part of the source inside the picture (a source rectangle off its edge draws nothing in some browsers)
     const x0 = Math.max(0, sx), y0 = Math.max(0, sy), x1 = Math.min(sw, sx + spanX), y1 = Math.min(sh, sy + spanY);
     if (x1 > x0 && y1 > y0) ctx.drawImage(im, x0, y0, x1 - x0, y1 - y0, (x0 - sx) * fx, (y0 - sy) * fy, (x1 - x0) * fx, (y1 - y0) * fy);
-    tag.textContent = `${z}×` + (full ? ` · full resolution ${sw} × ${sh}` : loading ? " · loading full resolution…" : "");
+    // past the full picture's own pixels, the part under the lens at native resolution (a mosaic), once the picture
+    // has stayed up (its full version asked for)
+    // (its size is asked for as soon as the picture has stayed up, so the server starts working the mosaic out)
+    const n = cur.stable && nativeFor(img, cur.srcSeen);
+    const nat = n && fx > 1.1 && n.info && n.info.width > sw * 1.15 ? nativeDraw(n, sx / sw, sy / sh, (sx + spanX) / sw, (sy + spanY) / sh, W, dpr) : "";
+    tag.textContent = `${z}×` + (nat === "native" ? ` · native resolution ${n.info.width} × ${n.info.height}`
+      : nat === "loading" ? (n.info.prepared || n.crops.length ? " · loading native resolution…" : " · preparing native resolution (first look at this mosaic)…")
+      : full ? ` · full resolution ${sw} × ${sh}` : loading ? " · loading full resolution…" : "");
   }
   // the picture under the lens can change on its own: drawn again on each new picture
   document.addEventListener("load", e => { if (cur && e.target === cur.img) paint(); }, true);
@@ -6960,11 +7129,12 @@ body.phone #launch .lx-clock { font-size: 9.5px; bottom: 9vh; }
   window.addEventListener("wheel", e => {
     if (!cur || cur.touch || !S) return;
     e.preventDefault(); e.stopPropagation();
-    const z = opt("loupe.zoom", 3), step = z >= 4 ? 1 : 0.5;
-    S.set("loupe.zoom", Math.max(1.5, Math.min(12, Math.round((z + (e.deltaY < 0 ? step : -step)) * 2) / 2)));
+    const z = opt("loupe.zoom", 3), up = e.deltaY < 0, step = z > 12 || (z === 12 && up) ? 2 : z > 4 || (z === 4 && up) ? 1 : 0.5;
+    S.set("loupe.zoom", Math.max(1.5, Math.min(32, Math.round((z + (up ? step : -step)) * 2) / 2)));
   }, { passive: false, capture: true });
   if (S) for (const k of ["loupe.zoom", "loupe.size", "loupe.shape", "loupe.where"]) S.on(k, () => { if (cur) { lens.classList.toggle("round", opt("loupe.shape", "square") === "round"); paint(); } });
   if (S) S.on("loupe.on", v => { if (!v) close(); });
+  if (S) S.on("loupe.mosaicFull", v => { document.querySelectorAll(".lensbtn").forEach(mark); if (!v && cur && !pictureAt(cur.img)) close(); });
 
   // a finger: press and hold on a picture, the lens comes up above it and follows it until it lifts. The tap that
   // would have followed (opening full view, opening a mosaic's frame) does not happen.
