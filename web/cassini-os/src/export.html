@@ -241,7 +241,15 @@ body.phone #excard:not(.full) { width: calc(100% - 16px) !important; left: 8px !
 
   // ---------- making the film ----------
   async function go() {
-    if (!X.plan || X.planKey !== params()) return;
+    // a plan asked for other choices (the cameras chosen for the stretch as its plan came in): this one, now
+    if (!X.plan || X.planKey !== params()) {
+      clearTimeout(timer);
+      try {
+        const key = params(), r = await fetch(`${FRAMES}/export/plan.json?${key}`), p = await r.json();
+        if (!r.ok || !p.count || key !== params()) return estimate();
+        X.plan = p; X.planKey = key;
+      } catch (err) { return estimate(); }
+    }
     $("exgo").disabled = true; setState("Starting…", 0); $("exdone").hidden = true;
     const plan = X.plan;
     if (await canMakeHere(plan)) return makeHere(plan, X.planKey);

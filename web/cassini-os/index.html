@@ -7230,7 +7230,15 @@ onmessage = async e => {
 
   // ---------- making the film ----------
   async function go() {
-    if (!X.plan || X.planKey !== params()) return;
+    // a plan asked for other choices (the cameras chosen for the stretch as its plan came in): this one, now
+    if (!X.plan || X.planKey !== params()) {
+      clearTimeout(timer);
+      try {
+        const key = params(), r = await fetch(`${FRAMES}/export/plan.json?${key}`), p = await r.json();
+        if (!r.ok || !p.count || key !== params()) return estimate();
+        X.plan = p; X.planKey = key;
+      } catch (err) { return estimate(); }
+    }
     $("exgo").disabled = true; setState("Starting…", 0); $("exdone").hidden = true;
     const plan = X.plan;
     if (await canMakeHere(plan)) return makeHere(plan, X.planKey);
@@ -10666,7 +10674,7 @@ void main() {
   window.cassiniAbout = { open, addTab, esc, close: () => show(false), credits: CREDITS };
 
   // ---- which version this is: this page's build id (build.py writes it), and what the frame server says it serves ----
-  const BUILD = /*BUILD*/"194e1000b628";
+  const BUILD = /*BUILD*/"7d4193970410";
   const FRAMES = (() => {                       // the frame server, chosen as the camera window chooses it
     const q = new URLSearchParams(location.search).get("frames");
     if (q) return q.replace(/\/$/, "");
