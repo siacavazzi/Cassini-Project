@@ -3970,6 +3970,8 @@ body.phone #launch .lx-clock { font-size: 9.5px; bottom: 9vh; }
     H.i = i; H.auto = !!auto; H.jumping = true; mark();
     if (window.cassiniReel) window.cassiniReel.close();
     if (window.cassiniMovie && window.cassiniMovie.on) window.cassiniMovie.stop();
+    // a highlight is Cassini's moment: a body's view (its timeline, camera windows and skip-the-gaps clock) gives way to the mission
+    if (window.cassiniBodyMode && window.cassiniBodyMode.name) window.cassiniBodyMode.exit();
     // the camera windows that took the highlight's pictures come out; the other one is put away until the reel stops
     untuck();
     for (const [cam, id] of Object.entries(CAMS)) {
@@ -3984,6 +3986,8 @@ body.phone #launch .lx-clock { font-size: 9.5px; bottom: 9vh; }
     H.left = e.end_et + 60; H.jumping = false;
   }
   function stop() { H.auto = false; untuck(); mark(); }
+  // opening a body's view stops Play all, which would otherwise move on to the next highlight and leave the body's view
+  document.addEventListener("cassini:bodymode", e => { if (e.detail.name && H.auto) stop(); });
   function next() { if (H.i + 1 < H.list.length) play(H.i + 1, true); else { stop(); H.i = -1; mark(); } }
   // Play all moves on a minute after a highlight's last picture; moving the clock away by hand stops it
   function tick() {
@@ -4970,8 +4974,13 @@ body.phone #launch .lx-clock { font-size: 9.5px; bottom: 9vh; }
   let lastMark = 0;
   window.studyHud = ms => {
     if (base) base(ms);
-    // a moment's jump keeps the view on the body too
-    if (typeof jump === "function" && !jump.bodyLook) { const j = jump; jump = async e => { const r = await j(e); look(); return r; }; jump.bodyLook = true; }
+    // a moment's jump keeps the view on the body too; a jump to another body's moment (a highlight, a cutscene) leaves
+    // the body's view first, or its skip-the-gaps clock and its camera windows would pull the jump back to the body
+    if (typeof jump === "function" && !jump.bodyLook) {
+      const j = jump;
+      jump = async e => { if (M.name && momentBody(e) !== M.name) exit(); const r = await j(e); look(); return r; };
+      jump.bodyLook = true;
+    }
     if (want && !M.pending && typeof catalog !== "undefined" && catalog) { M.pending = true; enter(want, { jump: false }); }
     const now = performance.now();
     if (M.name && now - lastMark > 250) { lastMark = now; mark(); }
