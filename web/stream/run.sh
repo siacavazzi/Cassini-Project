@@ -24,7 +24,7 @@ fast=0
 while :; do
   started=$(date +%s)
   echo "$(date -u +%FT%TZ) starting (${STREAM_PRIORITY:-utility} priority) $url" | tee -a "$state/restarts.log"
-  "${wrap[@]}" node "$here/stream.mjs" --url "$url" --state "$state" "$@" >>"$state/stream.log" 2>&1 &
+  ${wrap[@]+"${wrap[@]}"} node "$here/stream.mjs" --url "$url" --state "$state" "$@" >>"$state/stream.log" 2>&1 &
   child=$!
   wait "$child"; code=$?
   echo "$(date -u +%FT%TZ) stopped with code $code after $(( $(date +%s) - started )) s" | tee -a "$state/restarts.log"
@@ -33,6 +33,8 @@ while :; do
   if [ "$code" -eq 8 ] || [ "$code" -eq 7 ]; then sleep 600; continue; fi
   # quick crashes back off up to five minutes; a stream that ran a while restarts at once
   if [ $(( $(date +%s) - started )) -lt 120 ]; then fast=$(( fast + 1 )); else fast=0; fi
+  # ten quick failures in a row is a setup problem, not a hiccup: stop rather than loop forever
+  if [ "$fast" -ge 10 ]; then echo "$(date -u +%FT%TZ) giving up after 10 quick failures; see $state/stream.log" | tee -a "$state/restarts.log"; exit 1; fi
   wait_s=$(( fast == 0 ? 5 : (fast > 6 ? 300 : 5 * 2 ** fast) ))
   sleep "$wait_s"
 done
