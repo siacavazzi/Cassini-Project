@@ -77,6 +77,9 @@ body.phone #ssound { width: 30px; height: 30px; }
   // ---------- the audio graph, made on the first click or key press after sound is switched on ----------
   let ctx = null, bus, master, echoSend, echoFb, humS = null, humD = null, padF, padG;
   let intensity = 0;   // 0 far from the target .. 1 skimming it (the flyby crescendo), kept by the 4 Hz timer
+  // calm (ambient mode, cassiniSound.setCalm): softer, slower bells with more echo, a quiet bed of the crescendo's
+  // chord under them, no pulse, the mosaic notes and the octave doubling turned well down
+  let calm = false;
   function build(off) {
     ctx = off || new AC({ latencyHint: "playback" });
     master = ctx.createGain(); master.gain.value = 0;
@@ -115,7 +118,7 @@ body.phone #ssound { width: 30px; height: 30px; }
     if (!ctx) return;
     const t = ctx.currentTime, on = S.get("sound.on");
     master.gain.setTargetAtTime(on ? (S.get("sound.volume") / 100) ** 1.5 : 0, t, 0.08);
-    const r = reverbOf();
+    const r = calm ? Math.max(0.6, reverbOf()) : reverbOf();
     echoSend.gain.setTargetAtTime(r * 0.5, t, 0.1); echoFb.gain.setTargetAtTime(0.15 + 0.35 * r, t, 0.1);
   }
   let waiting = false, gestured = false;
@@ -127,7 +130,8 @@ body.phone #ssound { width: 30px; height: 30px; }
   }
   // browsers let a page make sound only after the person clicks or presses a key on it
   ["pointerdown", "keydown", "touchend"].forEach(t => window.addEventListener(t, () => { gestured = true; if (S.get("sound.on") && (!ctx || ctx.state !== "running")) start(); }, { passive: true, capture: true }));
-  document.addEventListener("visibilitychange", () => { if (!ctx) return; if (document.hidden) ctx.suspend(); else if (S.get("sound.on") && !(window.cassiniAway && cassiniAway.on)) ctx.resume(); });
+  // a page that keeps running in the background (ambient mode, cassiniAway.keepRunning) keeps its sound too
+  document.addEventListener("visibilitychange", () => { if (!ctx) return; if (document.hidden && !(window.cassiniAway && cassiniAway.keepRunning)) ctx.suspend(); else if (S.get("sound.on") && !(window.cassiniAway && cassiniAway.on)) ctx.resume(); });
   // paused in the background (away.html), also when the tab is still on screen but the window lost focus
   document.addEventListener("cassini:away", e => { if (!ctx) return; if (e.detail.away) ctx.suspend(); else if (S.get("sound.on") && !document.hidden) ctx.resume(); });
 
@@ -233,11 +237,13 @@ body.phone #ssound { width: 30px; height: 30px; }
   let offline = false;   // rendering a film (render below): every note is kept, none is dropped for being one too many
   // a frequency-modulated bell: the modulator's ratio sets the timbre, its depth the brightness, falling as it rings
   function bell(t, f, gain, pan, decay, bright, ratio) {
+    if (calm && !offline) { gain *= 0.8; decay *= 1.8; bright *= 0.5; }
     if ((voices > 28 && !offline) || gain < 0.002) return;
+    const attack = calm && !offline ? Math.min(0.12, decay * 0.05) : 0.006;
     const car = ctx.createOscillator(), mod = ctx.createOscillator(), mg = ctx.createGain(), amp = ctx.createGain(), p = panner(pan);
     car.frequency.value = f; mod.frequency.value = f * ratio;
     mg.gain.setValueAtTime(f * bright, t); mg.gain.exponentialRampToValueAtTime(f * 0.02, t + decay * 0.5);
-    amp.gain.setValueAtTime(0, t); amp.gain.linearRampToValueAtTime(gain, t + 0.006); amp.gain.exponentialRampToValueAtTime(0.0001, t + decay);
+    amp.gain.setValueAtTime(0, t); amp.gain.linearRampToValueAtTime(gain, t + attack); amp.gain.exponentialRampToValueAtTime(0.0001, t + decay);
     mod.connect(mg); mg.connect(car.frequency); car.connect(amp); amp.connect(p); p.connect(bus);
     car.start(t); mod.start(t); car.stop(t + decay + 0.05); mod.stop(t + decay + 0.05);
     voices++; car.onended = () => { voices--; p.disconnect(); };
@@ -268,7 +274,7 @@ body.phone #ssound { width: 30px; height: 30px; }
     const v = voiceOf(p.cam, p.k, p.nm), len = ring(speed), lift = 1 + intensity, quiet = busy(t) * lift;
     v.bright *= lift;
     if (p.tile) {   // a mosaic grew: a high note climbing with each tile, moving across the pass, and a chord at the end
-      const g = S.get("sound.mosaic") / 100 * 0.24 * quiet, across = p.of > 1 ? (p.tile - 1) / (p.of - 1) * 1.4 - 0.7 : 0;
+      const g = S.get("sound.mosaic") / 100 * 0.24 * quiet * (calm ? 0.35 : 1), across = p.of > 1 ? (p.tile - 1) / (p.of - 1) * 1.4 - 0.7 : 0;
       chime(t + 0.05, hz(vnote(v.root + 12, bodyStep(catalog.target[p.k]) + (p.tile - 1) % 10)), g, S.get("sound.stereo") ? across : 0, len * 0.8, 0.4, 2);
       if (p.of && p.tile >= p.of) [0, 2, 4, 5].forEach((d, i) => chime(t + 0.12 + i * 0.09, hz(vnote(v.root, bodyStep(catalog.target[p.k]) + d)), g * 1.2, pan, len * 2.2, 0.6, 1));
       // the tile's own picture rings now, when it shows, unless it already rang going up on its own
@@ -278,12 +284,12 @@ body.phone #ssound { width: 30px; height: 30px; }
     }
     if (p.set >= 0 && p.use) {   // a colour set is complete: strum its channels, red to blue
       const g = S.get("sound.chords") / 100 * 0.22 * quiet, base = bodyStep(catalog.target[p.k]);
-      p.use.slice().sort((a, b) => b - a).forEach((nm, i) => chime(t + i * 0.07, hz(vnote(v.root, base + wlStep(nm))), g, pan + (i - 1) * 0.15, len * 1.8, v.bright * 0.5, 1));
+      p.use.slice().sort((a, b) => b - a).forEach((nm, i) => chime(t + i * (calm ? 0.24 : 0.07), hz(vnote(v.root, base + wlStep(nm))), g, pan + (i - 1) * 0.15, len * 1.8, v.bright * 0.5, 1));
       return;
     }
     chime(t, hz(vnote(v.root, v.step)), S.get("sound.chimes") / 100 * 0.34 * quiet, pan, len, v.bright, v.ratio);
     // close in, the chime gets its octave too
-    if (intensity > 0.55) chime(t + 0.02, hz(vnote(v.root + 12, v.step)), S.get("sound.chimes") / 100 * 0.2 * quiet * (intensity - 0.5), -pan, len * 0.7, v.bright * 0.6, 2);
+    if (intensity > 0.55 && !calm) chime(t + 0.02, hz(vnote(v.root + 12, v.step)), S.get("sound.chimes") / 100 * 0.2 * quiet * (intensity - 0.5), -pan, len * 0.7, v.bright * 0.6, 2);
   }
   function test() {
     if (!ctx) return;
@@ -326,7 +332,12 @@ body.phone #ssound { width: 30px; height: 30px; }
     }
     return off.startRendering();
   }
-  window.cassiniSound = { render, get intensity() { return intensity; } };
+  // unlock(): start the sound without waiting for a click, where the browser allows it (ambient mode on a screen
+  // nobody touches: a kiosk or stream browser started with autoplay allowed); elsewhere the first click still does
+  window.cassiniSound = { render, get intensity() { return intensity; }, unlock() { gestured = true; start(); },
+    setCalm(v) { calm = !!v; levels(); }, get calm() { return calm; },
+    // sound is on but the browser holds it until the first click (no audio yet, or the context still suspended)
+    get blocked() { return S.get("sound.on") && !(ctx && ctx.state === "running"); } };
   // the Grand Finale (finale.html): Cassini's radio carrier as a pure tone that wavers as the antenna wobbles off Earth
   // and stops at loss of signal; a low B minor drone that grows with the struggle; one low bell at the break-up; and a
   // slow chord under each line of the recap (steps on the scale, so the recap can open from minor to major)
@@ -403,8 +414,8 @@ body.phone #ssound { width: 30px; height: 30px; }
     // turning: from D2 up to two octaves higher at 90 deg/s or more, with a vibrato that deepens as it turns faster
     const tu = Math.min(1, Math.log1p(turn) / Math.log1p(90));
     humS.o.forEach(o => o.frequency.setTargetAtTime(hz(38 + 24 * tu), t, 0.3));
-    humS.depth.gain.setTargetAtTime(tu * 35, t, 0.3); humS.lfo.frequency.setTargetAtTime(3 + 5 * tu, t, 0.3);
-    humS.g.gain.setTargetAtTime(level * 0.05 * (0.25 + tu), t, 0.4);
+    humS.depth.gain.setTargetAtTime(tu * (calm ? 10 : 35), t, 0.3); humS.lfo.frequency.setTargetAtTime(3 + 5 * tu, t, 0.3);
+    humS.g.gain.setTargetAtTime(level * 0.05 * (0.25 + tu) * (calm ? 0.8 : 1), t, calm ? 1.5 : 0.4);
     // range to the target (Saturn when there is none): 100 km is the top note, a million km the bottom, on the scale
     let tg = target && bodies[target] ? target : "SATURN", d = dist(tg);
     if (d === null && tg !== "SATURN") { tg = "SATURN"; d = dist(tg); }
@@ -430,10 +441,11 @@ body.phone #ssound { width: 30px; height: 30px; }
     const want = quiet ? 0 : close * S.get("sound.crescendo") / 100;
     intensity += (want - intensity) * (want > intensity ? 0.35 : 0.1);   // builds in a second or two, fades over a few
     const loud = S.get("sound.hum") / 100 * 2 + 0.4;   // the chord follows the spacecraft tones' level, a little above it
-    padG.gain.setTargetAtTime(0.06 * loud * intensity * intensity, t, 0.5);
-    padF.frequency.setTargetAtTime(250 + 3200 * intensity * intensity, t, 0.5);
+    const bed = calm && !quiet ? 0.02 * loud : 0;
+    padG.gain.setTargetAtTime(bed + 0.06 * loud * intensity * intensity * (calm ? 0.5 : 1), t, calm ? 2 : 0.5);
+    padF.frequency.setTargetAtTime(250 + (calm ? 900 : 3200) * intensity * intensity, t, calm ? 2 : 0.5);
     // a pulse that comes in past a third of the way and quickens to 132 beats a minute at the closest
-    if (intensity > 0.33) {
+    if (intensity > 0.33 && !calm) {
       const bpm = 60 + 72 * (intensity - 0.33) / 0.67, gap = 60 / bpm;
       if (nextBeat < t) nextBeat = t + 0.05;
       while (nextBeat < t + 0.3) { thump(nextBeat, 0.12 * loud * (intensity - 0.25)); nextBeat += gap; }
