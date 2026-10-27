@@ -83,6 +83,11 @@ Routes:
   /version.json                which version this is: the commit the site is checked out at (its date, the PR it
                                merged), the commit the server itself runs, the page build in --site and every
                                picture-maker version (obs-v*, color-v*, reel-v*...); each flag keeps a copy
+  POST /usage                  one word from the page ("visit", "visit-link", "copy-link"), added to today's usage
+                               counts; every answer above is counted there too (usage.py: daily totals only, no
+                               cookies, nothing per person), kept in --usage (default ~/Documents/cassini-usage)
+  /stats/                      the usage counts on one page; /stats/usage.json?days=30 the same as JSON. Only for this
+                               machine, its network and Tailscale (not through the Cloudflare tunnel), or ?key=$CASSINI_STATS_KEY
   anything else                a file from --site, if given (the replay page and its data)
 
 <ID> is a frame id from the catalog, e.g. N1500060789_2. The camera page picks which frames
@@ -126,6 +131,8 @@ sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
 import reel  # noqa: E402
 import obs_mosaic  # noqa: E402
 import export  # noqa: E402
+import usage  # noqa: E402
+counts = None   # the usage counts (usage.Usage), set by main(); None counts nothing
 
 FRAME_ID = re.compile(r"^([NW])\d{10}_\d+$")
 SIZES = (128, 256, 384, 512, 768, 1024)
@@ -824,6 +831,14 @@ def make_handler(site, cache, flags=None):
                 except OverflowError as e:
                     return self.send_json({"error": str(e)}, 413)
             n = int(self.headers.get("Content-Length") or 0)
+            if url.path == "/usage":
+                # the page's one word (usage.BEACONS); nothing else is read or kept
+                body = self.rfile.read(n) if 0 < n <= 64 else b""
+                if counts and body:
+                    counts.beacon(self, body)
+                self.send_response(204)
+                self.send_header("Content-Length", "0")
+                return self.end_headers()
             if url.path == "/jumplog":
                 if not 0 < n <= JUMPLOG_MAX:
                     self.close_connection = True
@@ -931,6 +946,8 @@ def make_handler(site, cache, flags=None):
                 return self.send_json(site_version(site))
             if url.path == "/jumplog":
                 return self.send_json(jumplog(cache))
+            if url.path in ("/stats", "/stats/", "/stats/usage.json"):
+                return self.send_stats(url)
             if url.path == "/health":
                 return self.send_bytes(f"ok {data_source.get_source()}\n".encode(), "text/plain", False)
             if url.path == "/frames/color.webp":
@@ -1073,6 +1090,32 @@ def make_handler(site, cache, flags=None):
                 if took > 1 and "/data/" in url.path:
                     print(f"slow data {took:.1f} s {url.path} ({threading.active_count()} threads)", flush=True)
 
+        def send_stats(self, url):
+            """The usage counts (usage.py): the page and its JSON, for this machine's own network only."""
+            if not counts:
+                return self.send_error(404, "Usage counting is off (--usage off)")
+            if not usage.may_see(self):
+                return self.send_error(403, "The stats are private")
+            if url.path == "/stats":
+                self.send_response(301)
+                self.send_header("Location", "/stats/" + (f"?{url.query}" if url.query else ""))
+                self.send_header("Content-Length", "0")
+                return self.end_headers()
+            if url.path == "/stats/":
+                with open(os.path.join(os.path.dirname(os.path.abspath(__file__)), "stats.html"), "rb") as fh:
+                    return self.send_bytes(fh.read(), "text/html; charset=utf-8", False, {"Cache-Control": "no-store"})
+            days = max(1, min(366, int(parse_qs(url.query).get("days", ["30"])[0] or 30)))
+            return self.send_json(usage.summary(counts.days(days)))
+
+        def log_request(self, code="-", size="-"):
+            # every answer passes here once: the usage counts add it to today's totals (usage.Usage.request)
+            if counts:
+                try:
+                    counts.request(self, int(code))
+                except (TypeError, ValueError):
+                    pass
+            super().log_request(code, size)
+
         def send_flags(self, url_path, version=""):
             if url_path == "/flags":
                 self.send_response(301)
@@ -1143,6 +1186,8 @@ def main():
     ap.add_argument("--cache", default=os.path.join(os.getcwd(), "frame_cache"), help="where made WebP files are kept")
     ap.add_argument("--flags", default=os.environ.get("CASSINI_FLAGS", "~/Documents/flagged-pictures"),
                     help="where pictures flagged in Cassini OS are saved (POST /flags, page /flags/)")
+    ap.add_argument("--usage", default=os.environ.get("CASSINI_USAGE", "~/Documents/cassini-usage"),
+                    help="where the daily usage counts are kept (usage.py, page /stats/); off to count nothing")
     args = ap.parse_args()
     site = os.path.abspath(os.path.expanduser(args.site)) if args.site else None
     print(f"Frames from {data_source.get_source()}, kernels from {data_source.get_kernel_source()}, cache in {args.cache}")
@@ -1159,6 +1204,9 @@ def main():
         threading.Thread(target=warm_site, args=(site, args.cache), daemon=True).start()
     flags = os.path.abspath(os.path.expanduser(args.flags))
     print(f"Flagged pictures go to {flags}")
+    global counts
+    counts = None if args.usage == "off" else usage.Usage(os.path.abspath(os.path.expanduser(args.usage)))
+    print(f"Usage counts in {counts.folder}" if counts else "Usage counting off")
     server = Server((args.host, args.port), make_handler(site, args.cache, flags))
     print(f"Serving on http://{args.host}:{args.port}/" + (f" (site: {site})" if site else ""))
     server.serve_forever()

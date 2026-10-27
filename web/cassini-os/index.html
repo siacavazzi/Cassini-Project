@@ -1821,6 +1821,16 @@ body.phone #hrel .cs-note { bottom: auto; top: 40px; max-width: calc(100vw - 32p
 (function () {
   const KEYS = ["t", "view", "speed", "play", "movie", "cam"];
   const S = window.cassiniSettings, $ = id => document.getElementById(id);
+  // the frame server, chosen as the camera window chooses it; it keeps the usage counts
+  const FRAMES = (() => {
+    const q = new URLSearchParams(location.search).get("frames");
+    if (q) return q.replace(/\/$/, "");
+    if (/^https?:$/.test(location.protocol) && !/claude\.ai$|claudeusercontent\.com$|claude\.site$/.test(location.hostname)) return location.origin;
+    return "http://localhost:8765";
+  })();
+  const tell = word => { try { navigator.sendBeacon(`${FRAMES}/usage`, word); } catch (e) {} };
+  // opened on a shared moment: arrived with a time in the link, not a reload of a page that wrote its own
+  const opened = new URLSearchParams(location.search).has("t") && ((performance.getEntriesByType("navigation")[0] || {}).type || "navigate") === "navigate";
   const num = v => (+(+v).toPrecision(4)).toString().replace("e+", "e");   // short, and no "+" (a space in a query)
   const utc = et => new Date(etToMs(et)).toISOString().slice(0, 19);
   // the link for the moment on screen; other pages (flagging) use it too
@@ -1877,6 +1887,7 @@ body.phone #hrel .cs-note { bottom: auto; top: 40px; max-width: calc(100vw - 32p
   async function copy() {
     write();
     const h = href();
+    tell("copy-link");
     try { await navigator.clipboard.writeText(h); toast("Link to this moment copied"); }
     catch (e) { if (navigator.share) navigator.share({ url: h }).catch(() => {}); else toast(h); }
   }
@@ -1891,7 +1902,7 @@ body.phone #hrel .cs-note { bottom: auto; top: 40px; max-width: calc(100vw - 32p
 
   window.cassiniLink = { href, params, copy };
   const ready = () => typeof state !== "undefined" && typeof setSpeed === "function" && $("loading").hidden;
-  const start = () => { apply(); write(); setInterval(write, 500); addEventListener("pagehide", write); };
+  const start = () => { tell(opened ? "visit-link" : "visit"); apply(); write(); setInterval(write, 500); addEventListener("pagehide", write); };
   if (ready()) start();
   else { const mo = new MutationObserver(() => { if (ready()) { mo.disconnect(); start(); } }); mo.observe($("loading"), { attributes: true, attributeFilter: ["hidden"] }); }
 })();
@@ -5274,7 +5285,9 @@ body.phone #hrel .cs-note { bottom: auto; top: 40px; max-width: calc(100vw - 32p
       <p>Made by Sam Iacavazzi · <a href="https://github.com/siacavazzi" target="_blank" rel="noopener">github.com/siacavazzi</a></p>
       <p class="note">More about the project is coming here.</p>
       <h3>Credits</h3>
-      <p>The pictures are NASA/JPL-Caltech/Space Science Institute, the probe's are ESA/NASA/JPL/University of Arizona, and the flight data is from NASA/JPL's SPICE archive. The maps, models, sound, software and fonts have their own authors. <a href="#" data-tab="Credits">See all credits</a>.</p>`,
+      <p>The pictures are NASA/JPL-Caltech/Space Science Institute, the probe's are ESA/NASA/JPL/University of Arizona, and the flight data is from NASA/JPL's SPICE archive. The maps, models, sound, software and fonts have their own authors. <a href="#" data-tab="Credits">See all credits</a>.</p>
+      <h3>Privacy</h3>
+      <p>Cassini OS uses no cookies and no outside trackers. Its server keeps daily totals only: how many people visited and from which country, and which pictures were looked at and saved. Nothing is kept that could tell one visitor from another.</p>`,
     Credits: () => CREDITS.groups.map(g => `<h3>${esc(g.title)}</h3>` + (g.note ? `<p class="note">${esc(g.note)}</p>` : "")
       + g.entries.map(e => `<div class="cr" id="cr-${esc(e.id)}"><b>${esc(e.title)}</b><div class="by">${esc(e.credit)}</div>`
         + (e.detail ? `<div class="what">${esc(e.detail)}</div>` : "")
@@ -5309,7 +5322,7 @@ body.phone #hrel .cs-note { bottom: auto; top: 40px; max-width: calc(100vw - 32p
   window.cassiniAbout = { open, addTab, esc, close: () => show(false), credits: CREDITS };
 
   // ---- which version this is: this page's build id (build.py writes it), and what the frame server says it serves ----
-  const BUILD = /*BUILD*/"d1cd0e245304";
+  const BUILD = /*BUILD*/"9ed344d74a68";
   const FRAMES = (() => {                       // the frame server, chosen as the camera window chooses it
     const q = new URLSearchParams(location.search).get("frames");
     if (q) return q.replace(/\/$/, "");
