@@ -1483,6 +1483,43 @@ body.phone #about { left: 8px !important; top: calc(env(safe-area-inset-top, 0px
 body.phone #about .abody { grid-template-columns: 1fr; grid-template-rows: auto minmax(0, 1fr); }
 body.phone #about nav { flex-direction: row; border-right: 0; border-bottom: 1px solid var(--q-line); overflow-x: auto; }
 
+#tourhint { position: fixed; z-index: 1500; left: 0; top: 0; width: min(290px, calc(100vw - 24px)); box-sizing: border-box;
+  padding: 11px 13px 9px; border-radius: 9px; background: var(--q-panel, rgba(16,17,20,.82)); color: var(--q-text);
+  -webkit-backdrop-filter: blur(16px) saturate(1.2); backdrop-filter: blur(16px) saturate(1.2);
+  border: 1px solid var(--q-line); box-shadow: 0 10px 30px rgba(0,0,0,.5); font: 12px/1.5 var(--ui);
+  opacity: 0; transform: translateY(4px); transition: opacity .25s ease, transform .25s ease, left .3s ease, top .3s ease; }
+#tourhint.on { opacity: 1; transform: none; }
+#tourhint[hidden] { display: none; }
+#tourhint .th-title { margin: 0 18px 3px 0; font-size: 13px; color: #fff; }
+#tourhint .th-text { margin: 0; color: var(--q-text); }
+#tourhint .th-text b { font-weight: normal; color: #fff; }
+#tourhint .th-foot { display: flex; align-items: center; gap: 6px; margin-top: 9px; }
+#tourhint .th-count { flex: 1; font: 10px var(--hudf, monospace); color: var(--q-dim); letter-spacing: .04em; }
+#tourhint button { all: unset; cursor: default; padding: 3px 9px; border-radius: 5px; font-size: 11.5px; color: var(--q-dim); }
+#tourhint button:hover { color: var(--q-text); background: rgba(255,255,255,.06); }
+#tourhint button:focus-visible { outline: 1px solid var(--q-accent); }
+#tourhint .th-next { color: #fff; background: rgba(138,182,255,.22); }
+#tourhint .th-next:hover { color: #fff; background: rgba(138,182,255,.32); }
+#tourhint .th-x { position: absolute; top: 5px; right: 6px; padding: 1px 6px; font-size: 14px; line-height: 1.2; }
+/* the little arrow toward the control */
+#tourhint .th-arrow { position: absolute; width: 10px; height: 10px; background: inherit; border: 1px solid var(--q-line);
+  -webkit-backdrop-filter: none; backdrop-filter: none; transform: rotate(45deg); }
+#tourhint .th-arrow[hidden] { display: none; }
+#tourhint[data-side="below"] .th-arrow { top: -6px; border-right: 0; border-bottom: 0; }
+#tourhint[data-side="above"] .th-arrow { bottom: -6px; border-left: 0; border-top: 0; }
+#tourhint[data-side="right"] .th-arrow { left: -6px; border-top: 0; border-right: 0; }
+#tourhint[data-side="left"] .th-arrow { right: -6px; border-left: 0; border-bottom: 0; }
+/* a soft ring round the control the hint is about (nothing else is dimmed) */
+#tourring { position: fixed; z-index: 1499; left: 0; top: 0; pointer-events: none; border-radius: 8px;
+  border: 1px solid rgba(138,182,255,.85); box-shadow: 0 0 0 3px rgba(138,182,255,.16), 0 0 18px rgba(138,182,255,.25);
+  opacity: 0; transition: opacity .25s ease, left .3s ease, top .3s ease, width .3s ease, height .3s ease; animation: tourpulse 2.4s ease-in-out infinite; }
+#tourring.on { opacity: 1; }
+#tourring[hidden] { display: none; }
+@keyframes tourpulse { 50% { box-shadow: 0 0 0 5px rgba(138,182,255,.08), 0 0 24px rgba(138,182,255,.18); } }
+@media (prefers-reduced-motion: reduce) { #tourhint, #tourring { transition: opacity .2s ease; animation: none; } }
+body.phone #tourhint { font-size: 12.5px; }
+body.phone #tourhint button { padding: 6px 11px; }
+
 #loadscreen { position: fixed; inset: 0; z-index: 2001; display: grid; place-items: center; padding: 0 16px; pointer-events: none;
   background: rgba(0,0,0,.8); opacity: 0; transition: opacity .35s ease; }
 #loadscreen.on { opacity: 1; }
@@ -1700,7 +1737,7 @@ body.ambient.phone .amb-where { font-size: 18px; }
 
   <nav id="menubar" aria-label="Menu bar">
     <div class="menu app"><button aria-haspopup="true"><svg viewBox="0 0 40 28" aria-hidden="true"><circle cx="20" cy="14" r="8" fill="#222"/><ellipse cx="20" cy="14" rx="18" ry="5" fill="none" stroke="#222" stroke-width="2.4" transform="rotate(-16 20 14)"/></svg>Cassini OS</button>
-      <ul><li><button data-act="about">About Cassini OS</button></li><li class="sep"></li><li><button data-act="settings">Settings…<span class="kbd">⌘,</span></button></li><li class="sep"></li><li><button data-act="hud" role="menuitemcheckbox" aria-checked="true">Neon HUD</button></li><li><button data-act="autohide" role="menuitemcheckbox" aria-checked="true">Hide Interface When Idle</button></li></ul></div>
+      <ul><li><button data-act="about">About Cassini OS</button></li><li><button data-act="tour">Tour of Cassini OS</button></li><li class="sep"></li><li><button data-act="settings">Settings…<span class="kbd">⌘,</span></button></li><li class="sep"></li><li><button data-act="hud" role="menuitemcheckbox" aria-checked="true">Neon HUD</button></li><li><button data-act="autohide" role="menuitemcheckbox" aria-checked="true">Hide Interface When Idle</button></li></ul></div>
     <div class="menu"><button aria-haspopup="true">View</button>
       <ul>
         <li><button data-act="orbits" role="menuitemcheckbox" aria-checked="false">All Moons<span class="kbd">⌘M</span></button></li>
@@ -9831,7 +9868,7 @@ void main() {
   window.cassiniAbout = { open, addTab, esc, close: () => show(false), credits: CREDITS };
 
   // ---- which version this is: this page's build id (build.py writes it), and what the frame server says it serves ----
-  const BUILD = /*BUILD*/"b205d942f4f4";
+  const BUILD = /*BUILD*/"ea754f46b952";
   const FRAMES = (() => {                       // the frame server, chosen as the camera window chooses it
     const q = new URLSearchParams(location.search).get("frames");
     if (q) return q.replace(/\/$/, "");
@@ -9858,6 +9895,216 @@ void main() {
     e.preventDefault(); e.stopPropagation(); document.querySelectorAll(".menu.open").forEach(m => m.classList.remove("open"));
     b.dataset.about ? open("Credits", b.dataset.about) : open("Cassini OS");
   }, true);
+})();
+</script>
+<script>
+// ---------- the tour: quiet hints for a first visit, and one-time tips for new features ----------
+(function () {
+  const $ = id => document.getElementById(id);
+  const S = window.cassiniSettings;
+  const KEY = "cassini-os-tour-v1";
+  const q = new URLSearchParams(location.search).get("tour");
+  let saved = {};
+  try { saved = JSON.parse(localStorage.getItem(KEY)) || {}; } catch (e) {}
+  saved.tips = saved.tips || {};
+  const store = () => { try { localStorage.setItem(KEY, JSON.stringify(saved)); } catch (e) {} };
+  const phone = () => document.body.classList.contains("phone");
+  const mac = /Mac|iPhone|iPad/.test(navigator.platform || navigator.userAgent);
+  const key = k => mac ? "⌘" + k : "Ctrl+" + k;
+
+  const tipsOn = S ? S.define({ key: "interface.tips", section: "Interface", label: "Tips", type: "toggle", value: true,
+    hint: "The short tour on a first visit, and a one-time tip when a new feature arrives." }) : true;
+  if (S) S.define({ key: "interface.tour", section: "Interface", label: "Tour of Cassini OS", type: "action", button: "Take the tour",
+    hint: "A few hints about the main controls. Skip it at any step.", run: () => { S.close(); start(); } });
+  const tipsAllowed = () => q === "1" || (S ? S.get("interface.tips") : tipsOn);
+
+  // ---- the steps of the tour (other features add theirs with cassiniTutorial.add) ----
+  const STEPS = [
+    { id: "welcome", at: null, title: "Welcome aboard Cassini",
+      text: p => `This is NASA and ESA's Cassini mission, 1997 to 2017, replayed along its real path. ${p ? "Drag to look around and pinch to zoom." : "Drag the view to look around and scroll to zoom."} A few quick pointers follow; skip them whenever you like.` },
+    { id: "play", at: ["#speedtool", "#play"], title: "Play and speed",
+      text: "Play or pause the mission here. The speed slider sets how much mission time passes each second, from real time up to days a second." },
+    { id: "timeline", at: ["#tl"], title: "The timeline",
+      text: p => `Each mark is a picture Cassini took: narrow-angle camera on one lane, wide-angle on the other. ${p ? "Drag" : "Drag or scroll"} to move through time.` },
+    { id: "cameras", at: ["#imgcard", "#wacard"], title: "Cassini's cameras",
+      text: p => `These windows show the pictures Cassini took at this moment: the <b>narrow-angle</b> camera for close detail and the <b>wide-angle</b> for the wider scene. ${p ? "Tap" : "Double-click"} a picture to see it full size.` },
+    { id: "bodies", at: ["#appdock", "#focusrow"], title: "Moons and planets",
+      text: p => `${p ? "Tap" : "Click"} a moon or planet here to see the mission from its side: only its pictures, its moments and its imaging sessions. Cassini brings you back.` },
+    { id: "moments", at: ["#moments", "#phmom", '#appdock [data-key="app:moments"]'], title: "Moments",
+      text: p => `The mission's big moments, in order. ${p ? "Tap" : "Click"} one to jump there${p ? "" : `, or step through them from the Go menu (${key("[")} and ${key("]")})`}. <b>Highlights</b> in the dock plays the best pictures as a reel.` },
+    { id: "settings", at: ["#sgear"], title: "Make it yours",
+      text: p => `Settings holds every option, from the dock to how the pictures are processed.${p ? "" : " Windows can be moved, minimized into the dock and brought back from the Window menu."} This tour is in the Cassini OS menu whenever you want it again.` }
+  ];
+  function add(step) {
+    const i = step.after ? STEPS.findIndex(s => s.id === step.after) + 1 : STEPS.length - 1;
+    STEPS.splice(i > 0 ? i : STEPS.length - 1, 0, step);
+  }
+
+  // ---- what is on screen ----
+  function onScreen(el) {
+    if (!el || el.hidden || el.closest("[hidden]")) return false;
+    const r = el.getBoundingClientRect();
+    if (r.width < 4 || r.height < 4 || r.right < 0 || r.bottom < 0 || r.left > innerWidth || r.top > innerHeight) return false;
+    const cs = getComputedStyle(el);
+    return cs.visibility !== "hidden" && cs.display !== "none" && +cs.opacity > 0.05;
+  }
+  const anchorOf = st => st.at === null ? null : (st.at || []).map(s => document.querySelector(s)).find(onScreen) || undefined;
+  // a cutscene, ambient mode, a movie, the highlight reel or a loading screen: the hints wait
+  function busy() {
+    const b = document.body.classList;
+    return b.contains("cutscene") || b.contains("cutscene-out") || (window.cassiniAmbient && cassiniAmbient.on) || (window.cassiniMovie && cassiniMovie.on)
+      || ($("loading") && !$("loading").hidden) || ($("loadscreen") && $("loadscreen").classList.contains("on"))
+      || ["cassiniFinale", "cassiniLaunch", "cassiniSOI", "cassiniHuygensRelease", "cassiniHuygensLanding"].some(k => window[k] && window[k].running);
+  }
+
+  // ---- the hint and its ring ----
+  const hint = document.createElement("div");
+  hint.id = "tourhint"; hint.hidden = true; hint.setAttribute("role", "dialog"); hint.setAttribute("aria-live", "polite");
+  hint.innerHTML = `<span class="th-arrow" aria-hidden="true"></span><button class="th-x" aria-label="Close the tour" title="Close">×</button>
+    <p class="th-title"></p><p class="th-text"></p>
+    <div class="th-foot"><span class="th-count"></span><button class="th-skip">Skip tour</button><button class="th-back">Back</button><button class="th-next">Next</button></div>`;
+  const ring = document.createElement("div");
+  ring.id = "tourring"; ring.hidden = true; ring.setAttribute("aria-hidden", "true");
+  ($("app") || document.body).append(ring, hint);
+  // the hints are not part of the 3D view: clicks on them stay theirs
+  for (const t of ["pointerdown", "mousedown", "click", "dblclick", "wheel", "touchstart"]) hint.addEventListener(t, e => e.stopPropagation(), { passive: true });
+
+  const T = { active: false, mode: "", i: 0, steps: [], cur: null, el: null, timer: 0, tip: null };
+  function place() {
+    if (!T.cur) return;
+    if (busy()) { hint.classList.remove("on"); ring.classList.remove("on"); return; }
+    let el = T.el;
+    if (el !== null && !onScreen(el)) {           // the control went away (closed, minimized): find another, or move on
+      el = T.el = anchorOf(T.cur);
+      if (el === undefined) return T.mode === "tour" ? go(T.i + (T.back ? -1 : 1)) : close();
+    }
+    const W = innerWidth, H = innerHeight, m = 12, gap = 12, hr = hint.getBoundingClientRect();
+    const w = hr.width, h = hr.height;
+    let x, y, side = "";
+    if (el === null) {                            // no anchor: at the top of the view, under the menu bar
+      x = (W - w) / 2; y = Math.min(H * 0.16, 90);
+      ring.classList.remove("on");
+    } else {
+      const r = el.getBoundingClientRect(), pad = 4;
+      const R = { l: Math.max(2, r.left - pad), t: Math.max(2, r.top - pad), r: Math.min(W - 2, r.right + pad), b: Math.min(H - 2, r.bottom + pad) };
+      Object.assign(ring.style, { left: R.l + "px", top: R.t + "px", width: R.r - R.l + "px", height: R.b - R.t + "px" });
+      ring.hidden = false; ring.classList.add("on");
+      // the side with the most room that fits the hint: below, above, right, left
+      const room = { below: H - R.b, above: R.t, right: W - R.r, left: R.l };
+      const fits = ["below", "above", "right", "left"].filter(s => (s === "below" || s === "above") ? room[s] > h + gap + m : room[s] > w + gap + m);
+      side = fits.length ? fits.sort((a, b) => room[b] - room[a])[0] : "";
+      const cx = (R.l + R.r) / 2, cy = (R.t + R.b) / 2;
+      if (side === "below") { x = cx - w / 2; y = R.b + gap; }
+      else if (side === "above") { x = cx - w / 2; y = R.t - gap - h; }
+      else if (side === "right") { x = R.r + gap; y = cy - h / 2; }
+      else if (side === "left") { x = R.l - gap - w; y = cy - h / 2; }
+      else { x = (W - w) / 2; y = Math.max(m, (H - h) / 2); }   // a control as big as the screen: the hint in the middle of it
+      x = Math.max(m, Math.min(W - w - m, x)); y = Math.max(m, Math.min(H - h - m, y));
+      const arrow = hint.querySelector(".th-arrow");
+      arrow.hidden = !side;
+      if (side === "below" || side === "above") { arrow.style.left = Math.max(10, Math.min(w - 20, cx - x - 5)) + "px"; arrow.style.top = ""; }
+      else if (side) { arrow.style.top = Math.max(10, Math.min(h - 20, cy - y - 5)) + "px"; arrow.style.left = ""; }
+    }
+    hint.dataset.side = side;
+    hint.querySelector(".th-arrow").hidden = !side;
+    hint.style.left = Math.round(x) + "px"; hint.style.top = Math.round(y) + "px";
+    hint.classList.add("on");
+  }
+  function show(st, el) {
+    T.cur = st; T.el = el;
+    hint.querySelector(".th-title").textContent = st.title || "";
+    hint.querySelector(".th-text").innerHTML = typeof st.text === "function" ? st.text(phone()) : st.text;
+    const tour = T.mode === "tour", last = tour && T.i === T.steps.length - 1;
+    hint.querySelector(".th-count").textContent = tour ? `${T.i + 1} of ${T.steps.length}` : "Tip";
+    hint.querySelector(".th-skip").hidden = !tour || last;
+    hint.querySelector(".th-back").hidden = !tour || T.i === 0;
+    hint.querySelector(".th-next").textContent = last || !tour ? (tour ? "Done" : "Got it") : "Next";
+    hint.setAttribute("aria-label", st.title || "Tip");
+    const first = hint.hidden;
+    hint.hidden = false;
+    if (first) { hint.classList.remove("on"); hint.style.transition = "none"; place(); hint.offsetWidth; hint.style.transition = ""; }
+    place();
+    if (!T.timer) T.timer = setInterval(place, 250);
+  }
+  // the tour's steps that have something on screen to point at, worked out as the tour goes
+  function go(i) {
+    T.back = i < T.i;
+    while (i >= 0 && i < T.steps.length) {
+      const el = anchorOf(T.steps[i]);
+      if (el !== undefined) { T.i = i; return show(T.steps[i], el); }
+      i += T.back ? -1 : 1;
+    }
+    if (i < 0) return go(T.i);
+    stop();
+  }
+  function close() {
+    clearInterval(T.timer); T.timer = 0;
+    hint.classList.remove("on"); ring.classList.remove("on");
+    setTimeout(() => { if (!T.cur) { hint.hidden = true; ring.hidden = true; } }, 260);
+    if (T.mode === "tip" && T.tip) { saved.tips[T.tip] = 1; store(); }
+    if (T.mode === "tour") { saved.tour = 1; store(); }   // skipped, closed or finished: not shown on its own again
+    T.cur = null; T.el = null; T.active = false; T.mode = ""; T.tip = null;
+    document.removeEventListener("keydown", keys, true);
+    setTimeout(nextTip, 1500);
+  }
+  function start() {
+    if (T.active) close();
+    T.active = true; T.mode = "tour"; T.steps = STEPS.slice(); T.i = 0;
+    document.removeEventListener("keydown", keys, true);
+    document.addEventListener("keydown", keys, true);
+    go(0);
+  }
+  function stop() { if (T.active) close(); }
+  function keys(e) {
+    if (!T.active || e.target.closest("input, textarea, select, [contenteditable]")) return;
+    if (e.key === "Escape") { e.stopImmediatePropagation(); stop(); }
+  }
+  hint.addEventListener("click", e => {
+    const b = e.target.closest("button"); if (!b) return;
+    if (b.classList.contains("th-x") || b.classList.contains("th-skip")) return stop();
+    if (b.classList.contains("th-back")) return go(T.i - 1);
+    if (b.classList.contains("th-next")) return T.mode === "tour" ? go(T.i + 1) : close();
+  });
+
+  // while a hint is up the interface stays awake (the hint points at controls the idle fade would hide)
+  new MutationObserver(() => { if (T.cur && document.body.classList.contains("idle")) document.body.classList.remove("idle"); })
+    .observe(document.body, { attributes: true, attributeFilter: ["class"] });
+
+  // ---- one-time tips for new features ----
+  const tips = [];
+  function tip(t) { if (!saved.tips[t.id] && !tips.some(x => x.id === t.id)) { tips.push(t); setTimeout(nextTip, 0); } }
+  function nextTip() {
+    if (T.active || !tipsAllowed() || !saved.tour || busy()) return;
+    for (const t of tips) {
+      if (saved.tips[t.id]) continue;
+      const el = anchorOf(t); if (el === undefined) continue;
+      tips.splice(tips.indexOf(t), 1);
+      T.active = true; T.mode = "tip"; T.tip = t.id;
+      document.addEventListener("keydown", keys, true);
+      return show(t, el);
+    }
+  }
+  setInterval(() => { if (tips.length) nextTip(); }, 3000);
+
+  // ---- the first visit: once the page has loaded and is quiet, after a few seconds of the view on its own ----
+  if (q !== "0" && (q === "1" || (!saved.tour && tipsAllowed()))) {
+    let calm = 0;
+    const wait = setInterval(() => {
+      calm = busy() || document.querySelector(".menu.open") ? 0 : calm + 1;
+      if (calm >= 4) { clearInterval(wait); if (!T.active && (q === "1" || !saved.tour)) start(); }
+    }, 1000);
+  }
+
+  // the Cassini OS menu's "Tour of Cassini OS"
+  document.addEventListener("click", e => {
+    const b = e.target.closest('[data-act="tour"]'); if (!b) return;
+    e.preventDefault(); e.stopPropagation(); document.querySelectorAll(".menu.open").forEach(m => m.classList.remove("open"));
+    start();
+  }, true);
+  addEventListener("resize", place);
+
+  window.cassiniTutorial = { add, tip, start, stop, get active() { return T.active; }, get step() { return T.cur && T.cur.id; },
+    seen: id => id ? !!saved.tips[id] : !!saved.tour, steps: STEPS };
 })();
 </script>
 <script src="https://cdn.jsdelivr.net/npm/three@0.128.0/build/three.min.js"></script>
