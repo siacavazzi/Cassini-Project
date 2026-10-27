@@ -16,7 +16,7 @@ const restarts = rows.filter((r, i) => i && r.up < rows[i - 1].up).length;
 const hours = (Date.parse(rows.at(-1).at) - Date.parse(rows[0].at)) / 3600e3;
 console.log(`${rows[0].at} to ${rows.at(-1).at}: ${f(hours, 2)} h, ${rows.length} samples, ${restarts} restarts\n`);
 const table = [
-  ["page frames/s (screencast)", col("pageFps")], ["frames/s to ffmpeg", col("outFps")], ["ffmpeg encode frames/s", col("ffFps")],
+  ["page animation frames/s (rAF)", col("rafFps")], ["page frames/s (screencast)", col("pageFps")], ["frames/s to ffmpeg", col("outFps")], ["ffmpeg encode frames/s", col("ffFps")],
   ["ffmpeg speed (1 = real time)", col("speed").map(parseFloat)],
   ["Chrome CPU, cores", col("cpu", "chrome")], ["ffmpeg CPU, cores", col("cpu", "ffmpeg")], ["capture script CPU, cores", col("cpu", "node")],
   ["Chrome memory, MB", col("rssMb", "chrome")], ["ffmpeg memory, MB", col("rssMb", "ffmpeg")], ["page JS heap, MB", col("heapMb")],

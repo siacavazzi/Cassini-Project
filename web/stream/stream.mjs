@@ -111,6 +111,8 @@ let latest = null, fresh = false, lastWrite = 0, framesIn = 0, framesOut = 0, sk
   await s("Page.enable"); await s("Runtime.enable"); await s("Performance.enable");
   await s("Emulation.setDeviceMetricsOverride", { width: opt.width, height: opt.height, deviceScaleFactor: 1, mobile: false });
   await s("Emulation.setFocusEmulationEnabled", { enabled: true });
+  // counts the page's own animation frames, to tell a page that draws slowly from a screencast that drops frames
+  await s("Page.addScriptToEvaluateOnNewDocument", { source: "window.__streamRaf = 0; (function f() { window.__streamRaf++; requestAnimationFrame(f); })();" });
   if (opt.settings) await s("Page.addScriptToEvaluateOnNewDocument", { source:
     `try { const k = "cassini-os-settings-v1", o = JSON.parse(localStorage.getItem(k) || "{}"); localStorage.setItem(k, JSON.stringify(Object.assign(o, ${JSON.stringify(JSON.parse(opt.settings))}))); } catch (e) {}` });
   handlers["Runtime.exceptionThrown"] = p => log("page error:", (p.exceptionDetails.exception?.description || p.exceptionDetails.text || "").split("\n")[0]);
@@ -134,7 +136,7 @@ let latest = null, fresh = false, lastWrite = 0, framesIn = 0, framesOut = 0, sk
   let due = Date.now();
   const pump = () => {
     if (latest && (fresh || Date.now() - lastWrite > 1000)) {
-      if (ffmpeg.stdin.writableLength > 2 * latest.length) skipped++; // ffmpeg is behind: let it catch up
+      if (ffmpeg.stdin.writableLength > 4 * latest.length) skipped++; // ffmpeg is behind: let it catch up
       else { ffmpeg.stdin.write(latest); framesOut++; fresh = false; lastWrite = Date.now(); }
     }
     due += frameMs; const wait = due - Date.now();
@@ -171,15 +173,16 @@ async function stats() {
     page = (await cdp("Runtime.evaluate", { returnByValue: true, expression:
       `({ t: typeof state === "object" && typeof etToMs === "function" ? new Date(etToMs(state.et)).toISOString().slice(0, 19) : null,
           mode: window.cassiniAmbient ? cassiniAmbient.mode : null, subject: window.cassiniAmbient ? cassiniAmbient.subject : null,
-          shots: [...document.querySelectorAll("#imgcard .well.has-frame, #wacard .well.has-frame")].length })` }, session)).result.value;
+          shots: [...document.querySelectorAll("#imgcard .well.has-frame, #wacard .well.has-frame")].length, raf: window.__streamRaf || 0 })` }, session)).result.value;
   } catch (e) {}
   const line = { at: new Date(now).toISOString().slice(0, 19) + "Z", up: Math.round((now - t0) / 1000),
+    rafFps: page && last.raf != null ? +((page.raf - last.raf) / dt).toFixed(1) : null,
     pageFps: +((framesIn - last.framesIn) / dt).toFixed(1), outFps: +((framesOut - last.framesOut) / dt).toFixed(1), skipped,
     ffFps: +prog.fps || null, speed: prog.speed || null, bitrate: prog.bitrate || null, dup: +prog.dup_frames || 0, drop: +prog.drop_frames || 0,
     cpu, rssMb: rss, heapMb: heap, load: +os.loadavg()[0].toFixed(1), availGb: +(availableGb() ?? 0).toFixed(1), page };
   fs.appendFileSync(path.join(STATE, "stats.jsonl"), JSON.stringify(line) + "\n");
-  log(`page ${line.pageFps} fps, out ${line.outFps} fps, ffmpeg ${line.ffFps} fps x${line.speed}, cpu chrome ${cpu.chrome} ffmpeg ${cpu.ffmpeg} cores, rss chrome ${rss.chrome} ffmpeg ${rss.ffmpeg} MB, heap ${heap} MB, ${page?.t || ""}`);
-  last = { at: now, cpu: last.cpu, framesIn, framesOut };
+  log(`raf ${line.rafFps}, page ${line.pageFps} fps, out ${line.outFps} fps, ffmpeg ${line.ffFps} fps x${line.speed}, cpu chrome ${cpu.chrome} ffmpeg ${cpu.ffmpeg} cores, rss chrome ${rss.chrome} ffmpeg ${rss.ffmpeg} MB, heap ${heap} MB, ${page?.t || ""}`);
+  last = { at: now, cpu: last.cpu, framesIn, framesOut, raf: page?.raf };
   // a slow patch (the Mini busy) is ridden out: a restart would not make it faster. Only ten minutes in a row under
   // half of real time stops it, and run.sh then waits ten minutes before starting again
   const sp = parseFloat(prog.speed);
