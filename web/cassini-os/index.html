@@ -7683,10 +7683,14 @@ function updateBodies() {
   // markers
   const arr = markerPts.geometry.attributes.position.array;
   const mc = markerPts.geometry.attributes.color.array, base = markerPts.userData.base;
+  const pxPerRad = canvas.clientHeight / 2 / Math.tan(rad(camera.fov / 2));
   markerPts.userData.names.forEach((n, i) => {
     const p = objPos(n);
     arr[3 * i] = p.x; arr[3 * i + 1] = p.y; arr[3 * i + 2] = p.z;
-    const k = shown(n) ? 1 : 0;   // additive blending: black draws nothing
+    // the dot stands in for a body too small to see and fades out once its disc covers a pixel or two:
+    // the globe hides the dot's middle and leaves its glow as a colored ring around it
+    const pr = meshes[n] ? (bodyRadius(n) / KM) * (state.enlarge && n !== "SATURN" ? 10 : 1) / Math.max(camera.position.distanceTo(p), 1e-12) * pxPerRad : 0;
+    const k = shown(n) ? 1 - THREE.MathUtils.smoothstep(pr, 0.6, 1.6) : 0;   // additive blending: black draws nothing
     mc[3 * i] = base[3 * i] * k; mc[3 * i + 1] = base[3 * i + 1] * k; mc[3 * i + 2] = base[3 * i + 2] * k;
   });
   markerPts.geometry.attributes.position.needsUpdate = true;
