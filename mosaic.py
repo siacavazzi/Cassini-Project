@@ -385,39 +385,123 @@ def _edge_width(alpha, dist):
 
 """
 The blend step's per frame parts (prepare): (its colours, where the frame has picture, its weight in the blend, the
-width of its own soft edge); drawn = a picture drawn so far (composite's under), not a tile. Where its alpha is under PICTURE_AT, a little below its soft edge's first value
+width of its own soft edge, where it has picture with its outline's slant (_support)); drawn = a picture drawn so far
+(composite's under), not a tile. Where its alpha is under PICTURE_AT, a little below its soft edge's first value
 (mask.png's 46 of 255), a pixel's colour is not the frame's: turning it north up (linear, on its colour and alpha
 apart) mixes its edge with the black round it, and resizing it on alpha this low rounds its colour far off (a tile
 turned 20 degrees and drawn at twice its size had colours at 0 up to 5 px in from its first nonzero alpha, and
 specks in its faint corners; none where its alpha reaches 40). Those pixels take the colour of the nearest one that
-is the frame's, so a weight there draws the frame's colour; the frame's outermost RIM pixels are left out. The
+is the frame's, so a weight there draws the frame's colour. The
 weight ramps from 0 at the edge of the frame's picture to 1 at feather_px inside, on where it has picture only: the
 soft edge it was made with (mask.png) is the mosaic's outer edge, not a weight, so where two frames meet their
 colours blend and nothing between them is left part transparent.
 """
-RIM = 1
+RIM = 0
 PICTURE_AT = 40
+
+
+def _colors(frame):
+    """A frame's colours as floats for the blend step: (h, w, 1) when its three bands are the same (every tile of a
+    filter's mosaic, and the picture so far it is grown on, is grey), so the blend works on one band, not three."""
+    rgb = frame[..., :3]
+    if (rgb[..., 0] == rgb[..., 1]).all() and (rgb[..., 1] == rgb[..., 2]).all():
+        return rgb[..., :1].astype(np.float32)
+    return rgb.astype(np.float32)
 
 
 def _blend_parts(frame, drawn=False):
     alpha = frame[..., 3]
-    color = frame[..., :3].astype(np.float32)
+    color = _colors(frame)
     if drawn:
         # a picture drawn so far (composite's under): all of it is picture, its colours as drawn
+        if alpha.min() >= EDGE_AT:
+            # (opaque all over, inside the mosaic: picture everywhere at its full weight, no edge of its own here)
+            whole = np.ones(alpha.shape, np.float32)
+            return color, whole, whole, 0.0, whole
         dist = _inside((alpha > 0).astype(np.uint8), alpha >= EDGE_AT)
-        return (color, (alpha > 0).astype(np.float32), np.clip(dist * (1.0 / feather_px), 0, 1).astype(np.float32),
-                _edge_width(alpha, dist))
+        # its weight from TRUST_DEPTH in: along its outer edge it holds its tiles' rims (_rim) where they were alone
+        ramp = (dist - max(2.0, feather_px * TRUST_DEPTH)) * (1.0 / feather_px)
+        return (color, (alpha > 0).astype(np.float32), np.clip(ramp, 0, 1).astype(np.float32), _edge_width(alpha, dist),
+                _support(alpha, dist))
     off = (alpha > 0) & (alpha < PICTURE_AT)
     if off.any() and (alpha >= PICTURE_AT).any():
         # each such pixel's nearest that is the frame's (the labels number those in raster order)
         _, nearest = cv2.distanceTransformWithLabels((alpha < PICTURE_AT).astype(np.uint8), cv2.DIST_L2, 5,
                                                      labelType=cv2.DIST_LABEL_PIXEL)
         good = np.flatnonzero(alpha.ravel() >= PICTURE_AT)
-        color.reshape(-1, 3)[np.flatnonzero(off.ravel())] = color.reshape(-1, 3)[good[nearest[off] - 1]]
-    dist = _inside((alpha > 0).astype(np.uint8), alpha >= EDGE_AT)
+        flat = color.reshape(-1, color.shape[2])
+        flat[np.flatnonzero(off.ravel())] = flat[good[nearest[off] - 1]]
+    on = alpha >= EDGE_AT
+    dist = _inside((alpha > 0).astype(np.uint8), on)
     has = dist > RIM
-    return (color, has.astype(np.float32), np.clip((dist - RIM) * (1.0 / feather_px), 0, 1).astype(np.float32),
-            _edge_width(alpha, dist))
+    # the weight ramps in from the edge of what is the frame's own picture (not its rim, _rim), so a frame's dark rim
+    # never goes into what is below it
+    rim = _rim(color, has, dist)
+    inside = dist - (RIM + 1) if rim is None else _inside((has & ~rim).astype(np.uint8), on)
+    return (color, has.astype(np.float32), np.clip((inside - TRUST_INSET) * (1.0 / feather_px), 0, 1).astype(np.float32),
+            _edge_width(alpha, dist), _support(alpha, dist))
+
+
+def _support(alpha, dist):
+    """Where a frame has picture (alpha > 0), its outermost pixels each as much as their alpha is of what it would be
+    were they whole: of the most alpha next to them, as much less as the soft edge's first value is than its second
+    (edge_profile; mask.png's corners are fainter all along, so it is next to them that says): how much of the pixel
+    the frame covers where its edge is slanted, turned north up (linear: an edge pixel half covered has half its
+    alpha). The mosaic's outer edge is worked out from it (_outer_edge), so a slanted edge is as smooth as the frames'
+    own, not a stair (a slanted limb was dotted)."""
+    profile = edge_profile()[0]
+    out = (alpha > 0).astype(np.float32)
+    rim = dist <= 1.5
+    if rim.any():
+        whole = cv2.dilate(alpha, np.ones((3, 3), np.uint8))[rim].astype(np.float32) * np.float32(profile[0] / profile[1])
+        out[rim] = np.minimum(alpha[rim] / np.maximum(whole, 1), 1)
+    return out
+
+
+"""
+Where a frame's picture is not its own (_blend_parts): its rim. A real tile's outermost pixels are often not its
+picture though its alpha says they are: a stack of repeat exposures (color_image.load_aligned) moved into line leaves
+a strip only some of the frames cover, darker by their share (a WAC movie's tiles of Saturn's hexagon, 2013, had a
+pixel of black and four at half their brightness all along an edge), and turning and resizing a tile mixes its edge
+with the black round it. Drawn over another tile each such pixel weighs little, but where the same place is drawn
+again and again (a mosaic movie's laps, a pass's repeated pointings) the little adds up to a dark band, and the
+pyramids carry it farther in. So a pixel within TRUST_DEPTH of feather_px of the frame's edge that is under TRUST_DARK as
+bright as the frame just inside it (where that is brighter than TRUST_LIT, not the sky), and that reaches the edge
+through such pixels (a rim, not a dark crater just inside the edge), is not the frame's: the frame is drawn there
+only where nothing is below it, as it is, and its weight starts TRUST_INSET pixels inside the rest. The frame just
+inside: its mean round each pixel past TRUST_DEPTH, worked out at a quarter of the size. The frame's outermost
+pixel is its rim anyway. None for a frame without one.
+"""
+TRUST_DEPTH = 1 / 4
+TRUST_DARK = 0.9
+TRUST_LIT = 24
+TRUST_INSET = 1
+
+
+def _rim(color, has, dist):
+    depth = max(2.0, feather_px * TRUST_DEPTH)
+    band = has & (dist <= depth)
+    deep = has & (dist > depth)
+    if not band.any() or not deep.any():
+        return None
+    lum = color.min(axis=2)   # the darkest band, so a rim missing one colour is found too
+    h, w = lum.shape
+    q = 4
+    small = (max(1, -(-w // q)), max(1, -(-h // q)))
+    sigma = max(1.0, depth / q / 2)
+    wd = cv2.GaussianBlur(cv2.resize(deep.astype(np.float32), small, interpolation=cv2.INTER_AREA), (0, 0), sigma)
+    wl = cv2.GaussianBlur(cv2.resize(lum * deep, small, interpolation=cv2.INTER_AREA), (0, 0), sigma)
+    ref = cv2.resize(wl / np.maximum(wd, 1e-3), (w, h), interpolation=cv2.INTER_LINEAR)
+    bad = band & (lum < ref * TRUST_DARK) & (ref > TRUST_LIT)
+    if not bad.any():
+        return None
+    # what reaches the frame's edge through such pixels
+    edge = has & (dist <= RIM + 1)
+    _, lab = cv2.connectedComponents((bad | edge).astype(np.uint8), connectivity=8)
+    rim = np.zeros(lab.max() + 1, bool)
+    rim[lab[edge]] = True
+    rim[0] = False
+    return rim[lab]
 
 
 """
@@ -446,18 +530,26 @@ def _pyramid(x, n):
     return out
 
 
+def _per_pixel(color):
+    """How a weight (h, w) multiplies colours like color: as it is for one band (h, w), with an axis added for three."""
+    return (lambda w: w) if color.ndim == 2 else (lambda w: w[..., None])
+
+
 def _normed(color, has, n):
     """color's Gaussian pyramid over where has (1 inside the picture, 0 past it), n levels down: each level the
     weighted mean of the picture round each pixel, so the empty canvas past its edge does not darken it (the first
     level is color itself, as good as it inside the picture, the only place it is used)."""
-    cs, ws = _pyramid(color * has[..., None], n), _pyramid(has, n)
-    return [color] + [c / np.maximum(w, 1e-3)[..., None] for c, w in zip(cs[1:], ws[1:])]
+    px = _per_pixel(color)
+    cs, ws = _pyramid(color * px(has), n), _pyramid(has, n)
+    return [color] + [c / px(np.maximum(w, 1e-3)) for c, w in zip(cs[1:], ws[1:])]
 
 
 def _bands_blended(color, has, under, cover, seam, a, n):
     """color (has its picture) drawn over under (cover) in n bands: each band of detail with the seam (1 where color
-    comes in) taken down to its level, the coarse part with the weight a. The arrays are the area worked on. Only
-    the difference of the two goes through the bands: under + each band of it times its weight."""
+    comes in) taken down to its level, the coarse part with the weight a. The arrays are the area worked on, colours
+    (h, w) for one band or (h, w, 3). Only the difference of the two goes through the bands: under + each band of it
+    times its weight."""
+    px = _per_pixel(color)
     up = lambda x, like: cv2.pyrUp(x, dstsize=(like.shape[1], like.shape[0]))
     nf, nb = _normed(color, has, n), _normed(under, cover, n)
     diff = [f - b for f, b in zip(nf, nb)]
@@ -467,11 +559,17 @@ def _bands_blended(color, has, under, cover, seam, a, n):
     out, coarse = np.zeros_like(diff[n]), diff[n]
     for k in range(n - 1, -1, -1):
         m = np.clip(ms[k] / np.maximum(es[k], 1e-3), 0, 1)
-        out = up(out, diff[k]) + m[..., None] * (diff[k] - up(diff[k + 1], diff[k]))
+        band = diff[k] - up(diff[k + 1], diff[k])
+        band *= px(m)
+        band += up(out, diff[k])
+        out = band
         coarse = up(coarse, diff[k])
     # and the coarse part, brought up to the full size, with the weight there: exactly 0 at the frame's edge and 1 at
     # the edge of what is below, however narrow the overlap
-    return under + out + a[..., None] * coarse
+    coarse *= px(a)
+    out += coarse
+    out += under
+    return out
 
 
 def _inside(valid, on):
@@ -509,8 +607,8 @@ def prepare(frame, drawn=False):
                max(xs.min() * 8 - 8, 0), min(xs.max() * 8 + 9, w))
         f = frame[box[0]:box[1], box[2]:box[3]]
         if calibration.step("blend"):
-            color, has, ramp, width = _blend_parts(f, drawn)
-            info = (box, color, f[..., 3] * np.float32(1 / 255), has, ramp, width)
+            color, has, ramp, width, support = _blend_parts(f, drawn)
+            info = (box, color, f[..., 3] * np.float32(1 / 255), has, ramp, width, support)
         else:
             info = (box, f[..., :3].astype(np.float32), f[..., 3] * np.float32(1 / 255), feather_alpha(f[..., 3]))
     _prepared[id(frame)] = (frame, info, drawn)
@@ -549,7 +647,7 @@ def composite(frames, gains, offsets=None, gamma=None, level=True, pin=None, und
     y0, y1 = min(b[0] for b in used), max(b[1] for b in used)
     x0, x1 = min(b[2] for b in used), max(b[3] for b in used)
 
-    if len(next(info for info in infos if info is not None)) == 6:
+    if len(next(info for info in infos if info is not None)) == 7:
         _blended(out, infos, gains, offsets, gamma, (y0, y1, x0, x1), level and leveling(), pin)
         return out
 
@@ -586,29 +684,51 @@ def composite(frames, gains, offsets=None, gamma=None, level=True, pin=None, und
 _normal = None
 
 
-def _outer_edge(cover, width, on):
-    """The soft edge of the mosaic of frames covering cover (1 where a frame has picture), frames whose own soft edge
-    is width canvas pixels wide (_edge_width), past the array's border where on (_inside): along a straight stretch of its edge, the frames' own profile
-    (edge_profile) at that width, from the edge of what all the frames cover, so it runs on unbroken where two frames
-    meet; at a corner a little softer, as a frame's own corners are. How far inside the edge a pixel lies is read
-    off cover blurred (a Gaussian of half the width): along a straight edge the blur is the normal curve of that
-    distance, and at a corner, where the blur sees less picture round it, it reads as nearer the edge."""
+def _outer_edge(support, cover, width, on):
+    """The soft edge of the mosaic of frames covering cover (1 where a frame has picture; support: the same with their
+    slanted edges, _support), frames whose own soft edge is width canvas pixels wide (_edge_width), past the array's
+    border where on (_inside): along a straight stretch of its edge, the frames' own profile (edge_profile) at that
+    width, from the edge of what all the frames cover, so it runs on unbroken where two frames meet; at a corner a
+    little softer, as a frame's own corners are. How far inside the edge a pixel lies is read off support blurred (a
+    Gaussian of half the width, worked out at a quarter of that size or less, which changes it by under 1%): along a
+    straight edge the blur is the normal curve of that distance, and at a corner, where the blur sees less picture
+    round it, it reads as nearer the edge. 1 everywhere (cover as it is) when no edge is near."""
     global _normal
+    border = np.concatenate([on[0], on[-1], on[:, 0], on[:, -1]])
+    if cover.min() > 0 and border.all():
+        return cover.copy()
     if _normal is None:
         z = np.linspace(-6, 6, 4801)
         _normal = (z, (0.5 * (1 + np.vectorize(math.erf)(z / math.sqrt(2)))).astype(np.float32))
     profile, at = edge_profile()
     sigma = width / 2
     m = int(math.ceil(3 * sigma))
-    blur = cv2.GaussianBlur(_past(cover, on, m), (0, 0), sigma, borderType=cv2.BORDER_CONSTANT)[m:-m, m:-m]
-    # the blur at a pixel d pixels inside a straight edge is the normal curve at (d - 0.5) / sigma
-    d = np.interp(blur, _normal[1], _normal[0]) * sigma + 0.5
+    padded = _past(support, on, m)
+    q = max(1, int(sigma // 4))
+    if q > 1:
+        H, W = padded.shape
+        small = cv2.resize(padded, (-(-W // q), -(-H // q)), interpolation=cv2.INTER_AREA)
+        small = cv2.GaussianBlur(small, (0, 0), sigma / q, borderType=cv2.BORDER_CONSTANT)
+        blur = cv2.resize(small, (W, H), interpolation=cv2.INTER_LINEAR)[m:-m, m:-m]
+    else:
+        blur = cv2.GaussianBlur(padded, (0, 0), sigma, borderType=cv2.BORDER_CONSTANT)[m:-m, m:-m]
+    # the profile at x canvas pixels from the edge (a frame's first pixel, its middle half a pixel in, has the
+    # profile's first value; 0 at the edge itself), looked up in tables: by the blur (at a pixel whose middle lies x
+    # inside a straight edge the blur is the normal curve at x / sigma), and by the distance to the nearest pixel
+    # past the edge
+    xp = np.concatenate([[-0.5], np.arange(len(profile))])
+    fp = np.concatenate([[0.0], profile])
+    at_x = lambda x: np.interp(x * (at / width) - 0.5, xp, fp, left=0, right=1)
+    steps = 1 << 14
+    by_blur = at_x(np.interp(np.linspace(0, 1, steps + 1), _normal[1], _normal[0]) * sigma).astype(np.float32)
+    soft = by_blur[(np.clip(blur, 0, 1) * steps + 0.5).astype(np.int32)]
     # nor farther in than the pixel lies from the nearest edge: round a small gap inside the mosaic (where tiles do not
     # quite meet) the blur sees picture nearly everywhere, and the gap would get a hard edge
-    d = np.minimum(d, _inside((cover > 0).astype(np.uint8), on))
-    # (cover starts RIM pixels inside the frames' own edge, where their soft edge is RIM pixels along)
-    soft = np.interp((d + RIM) * (at / width), np.arange(1, len(profile) + 1), profile, left=0, right=1)
-    return soft.astype(np.float32) * cover
+    far = len(profile) * width / at + 1
+    by_dist = at_x(np.arange(int(far * 8) + 2) / 8 - 0.5).astype(np.float32)
+    d = _inside((cover > 0).astype(np.uint8), on)
+    soft = np.minimum(soft, by_dist[np.minimum(d * 8 + 0.5, len(by_dist) - 1).astype(np.int32)])
+    return soft * cover
 
 
 """
@@ -645,7 +765,7 @@ def leveling():
     return calibration.step("blend") and calibration.step("level")
 
 
-DRAWING = 3   # bumped when the blend or level steps change how a mosaic is drawn
+DRAWING = 4   # bumped when the blend or level steps change how a mosaic is drawn
 
 
 def drawing():
@@ -673,7 +793,8 @@ def _levels(boxes, colors, hases, ramps, pin=None):
     from scipy.sparse.linalg import spsolve
     n = len(boxes)
     c = max(2, int(round(feather_px * LEVEL_CELL)))
-    grey = all(np.array_equal(col[::7, ::7, 0], col[::7, ::7, 1]) and np.array_equal(col[::7, ::7, 0], col[::7, ::7, 2])
+    grey = all(col.shape[2] == 1 or (np.array_equal(col[::7, ::7, 0], col[::7, ::7, 1])
+                                     and np.array_equal(col[::7, ::7, 0], col[::7, ::7, 2]))
                for col in colors if col is not None)
     ch = 1 if grey else 3
     # every frame's cells (its box's), numbered
@@ -779,7 +900,12 @@ def _levels(boxes, colors, hases, ramps, pin=None):
 
 
 def _toned(color, gain, offset, gamma):
-    """A frame's colours with its gain and offset applied, as composite does."""
+    """A frame's colours with its gain and offset applied, as composite does (color itself when they change nothing;
+    one band when color is one band, its gain and offset the same in every band)."""
+    if np.all(gain == 1) and not offset.any():
+        return color
+    if color.shape[2] == 1:
+        gain, offset = gain[:1], offset[:1]
     if gamma is not None:
         color = _corrected(color, gain, gamma)
     else:
@@ -803,24 +929,33 @@ def _blended(out, infos, gains, offsets, gamma, area, level, pin=None):
     profile as each frame's (edge_profile) at the frames' width (_edge_width), from the edge of what all of them
     cover. Without overlaps (a lone frame) the picture is the frame as it is, its alpha included."""
     y0, y1, x0, x1 = area
-    rgb = np.zeros((y1 - y0, x1 - x0, 3), np.float32)
+    # one band when every frame is grey (each band the same, and so its gain and offset), else three
+    same = lambda v: v is None or np.all(np.asarray(v) == np.asarray(v).flat[0])
+    one = all(info is None or (info[1].shape[2] == 1 and same(gain) and same(offset))
+              for info, gain, offset in zip(infos, gains, offsets))
+    rgb = np.zeros((y1 - y0, x1 - x0) if one else (y1 - y0, x1 - x0, 3), np.float32)
+    px = _per_pixel(rgb)
     cover = np.zeros((y1 - y0, x1 - x0), np.float32)   # 1 where a frame drawn so far has picture
+    outline = np.zeros((y1 - y0, x1 - x0), np.float32) # the same with the frames' slanted edges (_support)
     weight = np.zeros((y1 - y0, x1 - x0), np.float32)  # what is drawn so far's own ramp, drawn over each other
     alpha = np.zeros((y1 - y0, x1 - x0), np.float32)   # the most of the frames' own alphas
     width = 0.0
     levels = _levels_of()
     margin = 4 << levels
-    toned = [None if info is None else _toned(info[1], gain, offset, gamma) for info, gain, offset in zip(infos, gains, offsets)]
+    toned = [None if info is None else _toned(info[1] if one or info[1].shape[2] == 3 else np.repeat(info[1], 3, axis=2),
+                                              gain, offset, gamma) for info, gain, offset in zip(infos, gains, offsets)]
     if level and sum(info is not None for info in infos) > 1:
         boxes = [None if info is None else (info[0][0] - y0, info[0][1] - y0, info[0][2] - x0, info[0][3] - x0) for info in infos]
-        fields = _levels(boxes, toned, [None if info is None else info[3] for info in infos],
+        fields = _levels(boxes, toned, [None if info is None else (info[4] > 0).astype(np.float32) for info in infos],
                          [None if info is None else info[4] for info in infos],
                          None if pin is None else range(len(infos))[pin])
         toned = [t if fl is None else t * fl for t, fl in zip(toned, fields)]
+    if one:
+        toned = [None if t is None else t[..., 0] for t in toned]
     for info, color in zip(infos, toned):
         if info is None:
             continue
-        box, _, own, has, ramp, w = info
+        box, _, own, has, ramp, w, support = info
         width = max(width, w)
         sl = (slice(box[0] - y0, box[1] - y0), slice(box[2] - x0, box[3] - x0))
         below, wb = cover[sl], weight[sl]
@@ -835,20 +970,23 @@ def _blended(out, infos, gains, offsets, gamma, area, level, pin=None):
             seam = _seam_cut(a, has, below, color, under)
             pad = lambda v: np.pad(v, ((inner[0].start, yb - ya - inner[0].stop), (inner[1].start, xb - xa - inner[1].stop))
                                    + ((0, 0),) * (v.ndim - 2))
-            mixed = _bands_blended(pad(color), pad(has), rgb[ya:yb, xa:xb], cover[ya:yb, xa:xb], pad(seam), pad(a),
+            mixed = _bands_blended(pad(color), pad((ramp > 0).astype(np.float32)), rgb[ya:yb, xa:xb], cover[ya:yb, xa:xb],
+                                   pad(seam), pad(a),
                                    levels)[inner]
             # where only one of them has picture, that one as it is
-            rgb[sl] = np.where((has > 0)[..., None], np.where((below > 0)[..., None], mixed, color), under)
+            rgb[sl] = np.where(px(has > 0), np.where(px(below > 0), mixed, color), under)
         else:
-            rgb[sl] += (color - rgb[sl]) * a[..., None]
+            rgb[sl] += (color - rgb[sl]) * px(a)
         weight[sl] = ramp + wb * (1 - ramp)
         cover[sl] = np.maximum(below, has)
         alpha[sl] = np.maximum(alpha[sl], own * has)
+        outline[sl] = np.maximum(outline[sl], support)
     if width > 0:
-        # never more transparent than the most opaque frame there (inside its rim), so a frame's own corners and a lost
-        # line's gap keep the edge they were made with
-        alpha = np.maximum(alpha, _outer_edge(cover, width, alpha >= EDGE_AT / 255))
-    out[y0:y1, x0:x1, :3] = np.clip(rgb, 0, 255).round()
+        # never more transparent than the most opaque frame there, so a frame's own corners and a lost line's gap keep
+        # the edge they were made with
+        alpha = np.maximum(alpha, _outer_edge(outline, cover, width, alpha >= EDGE_AT / 255))
+    rgb = np.clip(rgb, 0, 255).round()
+    out[y0:y1, x0:x1, :3] = rgb[..., None] if one else rgb
     out[y0:y1, x0:x1, 3] = (alpha * 255).round()
 
 
@@ -879,13 +1017,15 @@ def _seam_cut(a, has, below, color, under):
     f = min(1.0, SEAM_PX / feather_px)
     h, w = max(2, round((y1 - y0) * f)), max(2, round((x1 - x0) * f))
     shrink = lambda v, how=cv2.INTER_AREA: cv2.resize(np.ascontiguousarray(v[y0:y1, x0:x1]), (w, h), interpolation=how)
-    ar = shrink(a)
+    ar, hs, bs = shrink(a), shrink(has) > 0.5, shrink(below) > 0.5
     # the frame where it may come in (all but where it is too faint), what is below where it may stay
-    mine = (shrink(has) > 0.5) & ~((shrink(below) > 0.5) & (ar < SEAM_CORE))
-    theirs = (shrink(below) > 0.5) & ~((shrink(has) > 0.5) & (ar > 1 - SEAM_CORE))
+    mine = hs & ~(bs & (ar < SEAM_CORE))
+    theirs = bs & ~(hs & (ar > 1 - SEAM_CORE))
     if not (mine & theirs).any():
         return seam
-    found = finder("COST_COLOR").find([cv2.UMat(shrink(color).astype(np.float32)), cv2.UMat(shrink(under).astype(np.float32))],
+    # (the finder takes three bands)
+    three = lambda v: np.ascontiguousarray(np.broadcast_to(v[..., None], v.shape + (3,)) if v.ndim == 2 else v, np.float32)
+    found = finder("COST_COLOR").find([cv2.UMat(three(shrink(color))), cv2.UMat(three(shrink(under)))],
                                       [(0, 0), (0, 0)],
                                       [cv2.UMat(mine.astype(np.uint8) * 255), cv2.UMat(theirs.astype(np.uint8) * 255)])
     cut = found[0].get() if hasattr(found[0], "get") else np.asarray(found[0])

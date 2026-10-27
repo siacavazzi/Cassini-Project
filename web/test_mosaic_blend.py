@@ -134,7 +134,8 @@ print("a gap between tiles keeps a soft edge; ok")
 # a mosaic grown a tile at a time over the picture so far (obs_mosaic.draw_over: the part of the picture round the
 # tile, composed with the tile as a picture drawn so far, under=0), the same place drawn again and again as a mosaic
 # movie's is: the picture's outer edge round it, a neighbour's, stays as it was drawn, never eaten into a few pixels
-# with every tile drawn near it
+# with every tile drawn near it (its first pixels may settle by a level or three onto the soft edge's own profile,
+# then stay)
 sys.path.insert(0, os.path.join(os.path.dirname(os.path.abspath(__file__)), "frames"))
 import obs_mosaic  # noqa: E402
 pic = draw(tiles(40))
@@ -144,8 +145,10 @@ ys, xs = np.nonzero(t[..., 3])
 part = t[ys.min():ys.max() + 1, xs.min():xs.max() + 1]
 with calibration.stepping(""):
     for i in range(12):
+        last = pic.copy()
         obs_mosaic.draw_over(pic, lambda: part, int(xs.min()), int(ys.min()), part.shape[1], part.shape[0], 1.0,
                              match=False)
 grown = np.abs(pic[..., 3].astype(int) - first[..., 3])
-assert grown.max() <= 2, (grown.max(), np.argwhere(grown > 2)[:5])
+assert grown.max() <= 3, (grown.max(), np.argwhere(grown > 3)[:5])
+assert np.abs(pic[..., 3].astype(int) - last[..., 3]).max() <= 1
 print("a picture grown over and over keeps its outer edge; ok")
