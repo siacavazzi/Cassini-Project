@@ -5279,7 +5279,7 @@ body.phone #launch .lx-clock { font-size: 9.5px; bottom: 9vh; }
   window.cassiniAbout = { open, addTab, esc, close: () => show(false), credits: CREDITS };
 
   // ---- which version this is: this page's build id (build.py writes it), and what the frame server says it serves ----
-  const BUILD = /*BUILD*/"e8c219ac5334";
+  const BUILD = /*BUILD*/"4e2be28c08ce";
   const FRAMES = (() => {                       // the frame server, chosen as the camera window chooses it
     const q = new URLSearchParams(location.search).get("frames");
     if (q) return q.replace(/\/$/, "");
