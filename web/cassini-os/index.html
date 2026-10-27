@@ -586,6 +586,14 @@ body.phone .wmopt, body.phone .wmset { padding: 10px 14px; }
 .savepic .caret { font-size: 8px; opacity: .7; }
 :is(.win.full, .win[data-held]) .well.has-frame .savewrap { display: block; }
 .well.fullres .savepic { color: var(--q-accent); }
+/* "Finish mosaic" on a pass's mosaic part way through, while paused (cameraFeed finishSync) */
+.finishmosaic { all: unset; position: absolute; left: 6px; top: 5px; z-index: 3; padding: 3px 7px; border-radius: 4px; box-sizing: border-box;
+  font: 9px/1 var(--hudf); letter-spacing: .04em; color: var(--q-text); background: rgba(0,0,0,.55); border: 1px solid var(--q-line); cursor: pointer; }
+.finishmosaic:hover { color: #fff; border-color: var(--q-accent); }
+.finishmosaic:focus-visible { outline: 1px solid var(--q-accent); }
+.finishmosaic[hidden] { display: none; }
+.finishmosaic.busy { color: var(--q-dim); cursor: default; border-color: var(--q-line); }
+body.idle .finishmosaic { opacity: .35; } body.idle .finishmosaic:hover { opacity: 1; }
 .win.full .well.has-frame .shottag { right: 190px; }
 body.idle .win.full .savewrap { opacity: .35; } body.idle .win.full .savewrap:hover { opacity: 1; }
 .savemenu { display: none; position: absolute; right: 0; bottom: calc(100% + 4px); min-width: 250px; margin: 0; padding: 4px 0; list-style: none; border-radius: 6px;
@@ -3712,7 +3720,7 @@ body.phone #launch .lx-clock { font-size: 9.5px; bottom: 9vh; }
     // mosaic pass: the frames of one go to the pass lane from the first, so its first tiles are never dropped
     // after 4 s while the server works out the pass (seconds), and the mosaic comes back in the pass lane
     // after anything took it down.
-    let mosaicUrl = null, obsShown = null, obsTiles = 0, obsK = -1, obsSize = 0;
+    let mosaicUrl = null, obsShown = null, obsTiles = 0, obsK = -1, obsSize = 0, obsRep = null;
     const mosaicPasses = new Set();   // target|observation the server said is a mosaic pass
     const mosaicPass = k => mosaicPasses.has(passOf(k));
     const moviePasses = new Set();    // target|observation the server said is a movie or a stare: never a mosaic, never asked
@@ -3951,7 +3959,7 @@ body.phone #launch .lx-clock { font-size: 9.5px; bottom: 9vh; }
           if (mode !== "mosaic") mosaicPasses.add(passOf(k));   // the server's call, not one the person asked for
           chipText();
           if (window.cassiniPicture && rep.mosaic > (obsShown === catalog.obs[k] ? obsTiles : 0)) window.cassiniPicture({ cam, body, win, k, nm: nmOf(k), set, use: set >= 0 ? catalog.sets[set].use.map(nmOf) : null, tile: rep.mosaic, of: rep.of });
-          obsShown = catalog.obs[k]; obsTiles = rep.mosaic; obsK = k; mosaicAt = performance.now(); obsSize = rank(sz); shotTag(set, k); kind = { color: rep.filters >= 3, mosaic: true };
+          obsShown = catalog.obs[k]; obsTiles = rep.mosaic; obsRep = rep; obsK = k; mosaicAt = performance.now(); obsSize = rank(sz); shotTag(set, k); kind = { color: rep.filters >= 3, mosaic: true };
           // the window takes the mosaic's shape, within 1:2 to 3:1 (a whole long strip fits inside, letterboxed,
           // rather than running off the screen)
           well.style.aspectRatio = String(Math.min(3, Math.max(0.5, rep.width / rep.height))); shapeOf = passOf(k);
@@ -4127,6 +4135,60 @@ body.phone #launch .lx-clock { font-size: 9.5px; bottom: 9vh; }
     well.append(overlay, tip);
     const look = () => (window.cassiniLook ? window.cassiniLook() : "");
     const mosaicObs = () => { const k = mosaicId ? kOf(mosaicId) : -1; return k >= 0 ? `${catalog.cam[k]}|${catalog.obs[k]}` : null; };
+    // ---- a mosaic part way through, paused: finish it ----
+    // Paused on a pass's mosaic that is still being taken (fewer tiles than the pass takes), "Finish mosaic" moves the
+    // clock to the pass's last frame (/frames/movie/<ID>.json: the server's own pass, the one its mosaic is made of) and
+    // leaves it paused there: the window asks for the mosaic at that frame as at any other moment, which is the
+    // whole mosaic, and the clock stops before the camera's next picture.
+    const finishB = document.createElement("button");
+    finishB.className = "finishmosaic"; finishB.hidden = true; finishB.textContent = "Finish mosaic";
+    finishB.title = "Jump to the moment this pass's last tile is taken: the whole mosaic, before the next picture";
+    for (const t of ["dblclick", "pointerdown"]) finishB.addEventListener(t, e => e.stopPropagation());
+    finishB.addEventListener("click", e => { e.stopPropagation(); unfocus(e); finishMosaic(); });
+    well.appendChild(finishB);
+    let finishing = null;   // the pass the clock was moved to the end of, until its whole mosaic is up
+    function finishSync() {
+      const k = lastK, o = k >= 0 ? passOf(k) : null;
+      const on = !state.playing && !hold && !win.hidden && k >= 0 && !!obsRep && !!mosaicId && well.classList.contains("mosaic")
+        && obsShown === catalog.obs[k] && obsK >= 0 && passOf(obsK) === o && obsRep.mosaic < obsRep.of;
+      // (finishing: until the whole mosaic is up, or the clock is moved off the pass's end)
+      if (finishing && (finishing.o !== o || !on || (finishing.et !== undefined && state.et < finishing.et - 1))) finishing = null;
+      if (finishB.hidden !== !on) finishB.hidden = !on;
+      const busy = !!finishing, label = busy ? "Finishing mosaic…" : `Finish mosaic · ${obsRep ? obsRep.of : ""} tiles`;
+      if (finishB.classList.contains("busy") !== busy) finishB.classList.toggle("busy", busy);
+      if (finishB.textContent !== label) finishB.textContent = label;
+    }
+    // the pass's frames ([id, seconds since 1970, filter], time order), as the filmstrip has them
+    function passFrames(k) {
+      const o = `${cam}|${passOf(k)}`, t = unix(k);
+      const got = (passInfos.get(o) || []).find(i => t >= i.frames[0][1] - 1 && t <= i.frames[i.frames.length - 1][1] + 1);
+      if (got) return Promise.resolve(got);
+      return fetch(`${FRAMES}/frames/movie/${catalog.id[k]}.json`).then(r => r.ok ? r.json() : null).then(i => {
+        if (!i || !i.frames.length) return null;
+        i.key = o; passInfos.set(o, (passInfos.get(o) || []).concat([i]));
+        return i;
+      }, () => null);
+    }
+    function finishMosaic() {
+      const k = lastK, cat0 = catalog;
+      if (finishB.hidden || finishing || k < 0) return;
+      finishing = { o: passOf(k) };
+      finishSync();
+      passFrames(k).then(info => {
+        if (catalog !== cat0 || lastK !== k || !finishing) { finishing = null; return; }
+        // the pass's last frame: by its id in the months loaded, else by its time (a pass running into the next month);
+        // without the server's pass, the last frame of the observation the window has
+        const end = info && info.frames[info.frames.length - 1];
+        let et = end && kOf(end[0]) >= 0 ? catalog.et[kOf(end[0])] : end ? utcToEt(new Date(end[1] * 1000).toISOString()) : NaN;
+        if (!Number.isFinite(et)) {
+          const [, last] = passSpan(cam, body, lastOfCam(cam, catalog.et[k], body));
+          et = catalog.et[framesOf(cam, body).ks[last]];
+        }
+        if (state.playing) setPlaying(false);
+        if (et > state.et) { setTime(et); finishing.et = state.et; } else finishing = null;
+        finishSync();
+      });
+    }
     function mapFor() {
       if (!mosaicId || !drillOn()) return null;
       const key = `${mosaicId}|${shot.dataset.src}`;
@@ -4326,6 +4388,7 @@ body.phone #launch .lx-clock { font-size: 9.5px; bottom: 9vh; }
     }
     let cat = null, letGone = false, hiddenGone = false;
     function update(force) {
+      finishSync();
       if (dataWait()) { if (!letGone) { letGone = true; letGo(window.cassiniAway && cassiniAway.on); } return; }
       letGone = false;
       if (!own && viewBody() !== body) { body = viewBody(); letGo(); shapeOf = null; force = true; }
@@ -9048,7 +9111,7 @@ void main() {
   window.cassiniAbout = { open, addTab, esc, close: () => show(false), credits: CREDITS };
 
   // ---- which version this is: this page's build id (build.py writes it), and what the frame server says it serves ----
-  const BUILD = /*BUILD*/"b5905c812037";
+  const BUILD = /*BUILD*/"61a86c654832";
   const FRAMES = (() => {                       // the frame server, chosen as the camera window chooses it
     const q = new URLSearchParams(location.search).get("frames");
     if (q) return q.replace(/\/$/, "");
