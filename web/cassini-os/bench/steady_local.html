@@ -31,7 +31,9 @@
   const t0 = performance.now(), e = await L.ready(FR, id, center), tableMs = performance.now() - t0;
   if (!e) { out.textContent = "the server draws this pass (no table)"; window.result = { local: false }; return; }
   const T = e.table, url = (fid, s) => `${FR}/frames/movie/${fid}.webp?size=1024&color=0&center=${center ? 1 : 0}${s ? `&steady=${s}` : ""}${extra}`;
-  const load = src => new Promise((res, rej) => { const im = new Image(); im.crossOrigin = "anonymous"; const a = performance.now(); im.onload = () => res([im, performance.now() - a]); im.onerror = rej; im.src = src; });
+  const load1 = src => new Promise((res, rej) => { const im = new Image(); im.crossOrigin = "anonymous"; const a = performance.now(); im.onload = () => res([im, performance.now() - a]); im.onerror = rej; im.src = src; });
+  // the server answers 503 while it works out a pass's chains: asked again for up to two minutes
+  const load = async src => { const a = performance.now(); for (let i = 0; ; i++) { try { const [im] = await load1(src); return [im, performance.now() - a]; } catch (err) { if (i >= 60) throw err; await new Promise(r => setTimeout(r, 2000)); } } };
   const pixels = im => { const c = document.createElement("canvas"); c.width = im.naturalWidth; c.height = im.naturalHeight; const g = c.getContext("2d", { willReadFrequently: true }); g.drawImage(im, 0, 0); return g.getImageData(0, 0, c.width, c.height).data; };
   const rows = [], first = Math.max(0, T.n.indexOf(T.ids.indexOf(id)));
   for (let a = first; a < Math.min(T.n.length, first + count); a++) {

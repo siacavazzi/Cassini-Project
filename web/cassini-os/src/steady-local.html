@@ -89,6 +89,8 @@ onmessage = async e => {
         if (!t.local) { byId.set(k, null); return; }
         work().postMessage({ key, table: t });
         t.n.forEach((n, a) => byId.set(`${center ? 1 : 0}:${t.ids[n]}`, { key, table: t, a }));
+        // the camera windows ask again (a paused clock would keep the server's picture otherwise)
+        window.dispatchEvent(new Event("cassini-steady-local"));
       }).catch(() => asked.delete(k));
     }
     return null;
