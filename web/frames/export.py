@@ -117,6 +117,10 @@ def options(q):
     # a mosaic movie's fade (Rolling), only when on, so a film made without it keeps its name
     fade = max(0, min(120, int(get("fade", "0") or 0)))
     movie.update({"fade": fade, "persist": max(0, min(100, int(get("persist", "35") or 0))) if fade else 0})
+    # Whole mosaics (Settings > Movie > Mosaic movie frames): a mosaic movie shows a picture only at the end of each
+    # lap, every place new, and its older tiles do not fade; only when on, so a film made without it keeps its name
+    if get("whole", "0") == "1":
+        movie.update({"whole": True, "fade": 0, "persist": 0})
     # image stabilization of movie passes (obs_mosaic.steady_places), smoothed over this many frames, only when on,
     # so a film made without it keeps its name
     steady = max(0, min(60, int(get("steady", "0") or 0)))
@@ -180,6 +184,15 @@ def pass_kind(frame_id):
     return u.get("kind") or ("movie" if u.get("movie") else "mosaic" if u.get("mosaic") else None)
 
 
+def _lap_end(frame_id):
+    """Whether frame_id finishes a lap of its mosaic movie (obs_mosaic.lap_end); True when that cannot be told."""
+    import obs_mosaic
+    try:
+        return obs_mosaic.lap_end(frame_id) is not False
+    except Exception:
+        return True
+
+
 def plan(opt, cache=None, work=False):
     """The film's pictures in time order, each {id, cam, t, target, filters, try, kind, at (film seconds), hold,
     frames, nm, set_nm?, tile?, skipped?}, and the film's length. try = the pictures to make, best first. At Picture
@@ -212,6 +225,9 @@ def plan(opt, cache=None, work=False):
         if kind == "movie":
             tries.append(("movie", ids[q]))
         elif kind == "mosaic_movie":
+            # Whole mosaics: the frames inside a lap are left out, the lap's last frame shows the whole new mosaic
+            if opt["movie"].get("whole") and not _lap_end(ids[q]):
+                continue
             tries.append(("rolling", ids[q]))
         elif tile:
             tries.append(("mosaic", ids[st["use"][0]] if comp else ids[q]))
