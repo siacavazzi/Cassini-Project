@@ -220,7 +220,7 @@ past that point. Pausing, scrubbing, movie mode or a slower speed bring the pict
 
 ## Imaging bursts
 
-In normal playback each camera window shows at most a set number of new pictures a second (5 by default). When
+In normal playback each camera window shows at most a set number of new pictures a second (10 by default). When
 Cassini takes a burst of frames faster than that at the chosen speed, the clock slows down so every picture gets its
 turn, then returns to full speed once the burst is over; the status line reads "imaging burst, slowed to …" while
 it does. Change it with the slider under View > Bursts (0 to 24, 0 = no limit), or in the Settings window (Playback > Maximum images per second,
