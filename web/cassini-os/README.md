@@ -51,6 +51,17 @@ including the main window, and a click brings it back. Settings > Interface: Doc
 menu-bar tray), Dock position (bottom, left, right), icon size and magnification. On a phone the dock is a strip under
 the replay controls that scrolls sideways.
 
+Huygens is not in the row: once it has left Cassini (and while the viewer has it on stage) it waits in All bodies, under
+Spacecraft.
+
+The icons that are not a body's surface map are rendered pictures in `icons/` (256 px WebP): Cassini from NASA's model,
+Huygens from ESA's descent module as it stood on Titan (`models/huygens_dm.glb.b64.txt`, from the Huygens landing
+work), Saturn from its map with its rings passing in front of the globe (it takes a wider place in the dock), All bodies as seven of Saturn's moons from their maps, and Moments, Highlights, Settings and the two cameras lit as the
+planets are. A minimized camera window shows its camera's icon in the corner of its picture.
+`node web/cassini-os/icons/make_icons.cjs [name ...]` renders them again from `icons/make_icons.html` (Playwright; set
+`THREE_DIR` to an unpacked three@0.128.0 where jsDelivr is out of reach; Saturn's icon needs
+`data/textures/rings/saturn_rings.png`).
+
 ## Body view
 
 A click on a body in the dock switches from Cassini's mission to that body's (`src/bodymode.html`). The timeline then
