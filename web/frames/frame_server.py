@@ -515,6 +515,8 @@ def pipeline_versions():
     for name, mod in sorted(sys.modules.items()):
         if not os.path.abspath(getattr(mod, "__file__", None) or "/").startswith(REPO + os.sep):
             continue
+        if name == "__mp_main__":   # the server run as a script, loaded again under this name: the same constants
+            continue
         name = "frame_server" if name == "__main__" else name
         for key, value in vars(mod).items():
             if not re.match(r"^[A-Z0-9_]*(VERSION|VERSIONS|SUFFIX)$", key):
@@ -695,7 +697,7 @@ def flags_page(folder, version="", now=None):
   <div class=ids>{esc(detail)}</div>{tags}{f'<p>{esc(e.get("note"))}</p>' if e.get('note') else ''}
   <div class=links><a href="{esc(e.get('link') or '#')}">open this moment</a> · <a href="{esc(name)}/flag.json">details</a>{''.join(f' · <a href="{esc(name)}/{esc(f)}">{esc(f.split("/")[-1])}</a>' for f in e.get('files', []) if f.startswith('raw/'))}
   <div class=when>flagged {esc(e.get('received', ''))}</div>
-  <div class=when>{f'version <a href="?version={esc(flag_version(e)[0])}">{esc(flag_version(e)[1])}</a>' if flag_version(e)[0] else 'version not kept (flagged before versions)'}{'' if (e.get('version') or {}).get('page_current', True) else ' · flagged from an older page, not reloaded since'}</div></div></figcaption>
+  <div class="when ver">{f'version <a href="?version={esc(flag_version(e)[0])}">{esc(flag_version(e)[1])}</a>' if flag_version(e)[0] else 'version not kept (flagged before versions)'}{'' if (e.get('version') or {}).get('page_current', True) else ' · flagged from an older page, not reloaded since'}</div></div></figcaption>
 </figure>""")
     return f"""<!doctype html><html lang=en><head><meta charset=utf-8><meta name=viewport content="width=device-width,initial-scale=1">
 <title>Flagged pictures</title><style>
@@ -706,7 +708,7 @@ main {{ display: grid; grid-template-columns: repeat(auto-fill, minmax(240px, 1f
 figure {{ margin: 0; background: #14171d; border: 1px solid #262b34; border-radius: 6px; overflow: hidden; }}
 figure img, .none {{ display: block; width: 100%; aspect-ratio: 1; object-fit: contain; background: #000; }} .none {{ display: grid; place-items: center; color: #555; }}
 figcaption {{ padding: 8px 10px 10px; }} figcaption p {{ margin: 6px 0 0; white-space: pre-wrap; }}
-.ids, .when {{ font: 11px/1.4 ui-monospace, Menlo, monospace; color: #8a94a3; word-break: break-all; }}
+.ids, .when {{ font: 11px/1.4 ui-monospace, Menlo, monospace; color: #8a94a3; word-break: break-all; }} .when.ver {{ word-break: normal; overflow-wrap: anywhere; }}
 .tag {{ display: inline-block; margin: 5px 4px 0 0; padding: 1px 7px; border-radius: 9px; background: rgba(138,182,255,.16); color: #b9d0ff; font-size: 11px; }}
 .links {{ margin-top: 6px; font-size: 11.5px; }} a {{ color: #8ab6ff; text-decoration: none; }} a:hover {{ text-decoration: underline; }}
 </style></head><body><h1>Flagged pictures</h1><p class=sub>{len(cards)} flagged{' on version ' + esc(version) + ' · <a href=".">every version</a>' if version else ''} · saved in {esc(folder)} · <a href="index.json{'?version=' + esc(version) if version else ''}">index.json</a>
