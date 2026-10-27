@@ -202,7 +202,8 @@ body.phone #excard:not(.full) { width: calc(100% - 16px) !important; left: 8px !
         X.plan = p; X.planKey = key;
         const n = { N: 0, W: 0 }; p.pictures.forEach(e => n[e.cam]++);
         // measured on the Mac Mini: about 0.065 MB a second of film at 1024 x 1072, 0.11 at 2048 x 1072, sound included
-        const mb = p.frames ? Math.max(0.1, p.seconds * (0.03 + 0.035 * p.width * p.height / (1024 * 1072))) : 0;
+        // (a Full film, mostly a mosaic's dark sky, about half that a pixel: 3.6 MB for 19 s at 3078 x 3222)
+        const mb = p.frames ? Math.max(0.1, p.seconds * (0.03 + (p.full ? 0.017 : 0.035) * p.width * p.height / (1024 * 1072))) : 0;
         $("exsum").innerHTML = p.count ? `${p.count.toLocaleString()} pictures (NAC ${n.N.toLocaleString()}, WAC ${n.W.toLocaleString()}) · film ${fmtDur(p.seconds)} at ${p.width}×${p.height} · about ${mb.toFixed(mb < 10 ? 1 : 0)} MB${fullNote(p.full)}` : `<span class="warn">No pictures in this stretch.</span>`;
         $("exgo").disabled = !p.count;
       } catch (err) { $("exsum").innerHTML = `<span class="warn">No frame server at ${FRAMES}.</span>`; }
