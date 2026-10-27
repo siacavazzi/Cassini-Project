@@ -8,7 +8,8 @@ detector loses or gains compared with the middle of the frame, taken out of a ca
      hundred pixels across. Ground calibration (the slope files, below) caught the ones on the detector before
      launch; more settled on during the mission, so CISSCAL has a dust ring map for each epoch (named by the image
      number from which it holds, each one holding every ring found up to then) and uses the latest one before the
-     frame. Frames taken with anti-blooming off also get the ring at sample 887, line 388 corrected (aboff map)
+     frame. Frames taken with anti-blooming off also get the ring at sample 887, line 636 corrected (aboff map;
+     CISSCAL's notes say line 388, counting from the bottom as IDL draws)
   2. mottle (NAC only, from image number 1455892746, late 2003): a fine blotchy pattern that appeared after the
      2003 decontamination heating, stronger at short wavelengths (a strength factor from the filter's wavelength)
   3. divide by the flat field: the ground calibration's slope file for the camera, its optics temperature (NAC:

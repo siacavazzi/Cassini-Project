@@ -31,7 +31,7 @@ def write_cube(path, a, tile=128):
 
 
 yy, xx = np.mgrid[:1024, :1024]
-ring = np.abs(np.hypot(yy - 388, xx - 887) - 12) < 5            # where the dust ring is (sample 887, line 388)
+ring = np.abs(np.hypot(yy - 388, xx - 887) - 12) < 5            # a dust ring
 slope_flat = np.where(ring, 0.88, 1.0).astype(np.float32)        # a pixel in the ring sees 12% less light
 slope_flat[:, ::2] *= 1.01                                        # and a column pattern
 write_cube(f"{root}/slope/flat/flat113.full.cub", slope_flat)

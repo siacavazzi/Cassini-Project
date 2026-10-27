@@ -1,7 +1,8 @@
 # Before/after evidence for the flat field step: each frame calibrated by the pipeline (stacking.load_hdr, the path
 # mosaics, movies and reels take: repeats merged, calibration.calibrate) with the "flat" step off and on, drawn on one
 # stretch, beside its high-pass (the frame over its 20 px blur, +-4%) where rings and columns stand out, plus a 3x crop
-# round the ground-calibration dust ring (sample 887, line 388). Run from the repo root with CASSINI_DATA and
+# round the ground-calibration dust ring (sample 887, line 636 from the top; CISSCAL's
+# "line 388" counts from the bottom). Run from the repo root with CASSINI_DATA and
 # CASSINI_CISSCAL set.
 # usage: render_frames.py OUTDIR ID[:name] ...
 import os
@@ -50,7 +51,7 @@ for arg in sys.argv[2:]:
 
     size = 512
     scale = before.shape[0] / 1024
-    cx, cy = int(887 * scale), int(388 * scale)
+    cx, cy = int(887 * scale), int(636 * scale)
     r = int(64 * scale)
 
     def crop(x):
@@ -62,7 +63,7 @@ for arg in sys.argv[2:]:
         s, h = show(x), high(x)
         rows.append(np.hstack([label(cv2.resize(s, (size, size), interpolation=cv2.INTER_AREA), tag),
                                label(cv2.resize(h, (size, size), interpolation=cv2.INTER_AREA), "high-pass +-4%"),
-                               np.vstack([label(crop(s), "ring 887,388"), crop(h)])]))
+                               np.vstack([label(crop(s), "ring 887,636"), crop(h)])]))
     sheet = np.vstack(rows)
     title = (f"{fid}  {info.get('IMAGE_TIME', '')[:17]}  {info.get('FILTER_NAME', '')}  "
              f"{info.get('INSTRUMENT_MODE_ID', '')}  {n} frame(s)  flat {ff.flat_name(info)}  "
