@@ -507,6 +507,9 @@ cpart = lambda tag: cs[cs.index(f"<{tag}"):cs.index(f"</{tag}>") + len(tag) + 3]
 assert study.count("</style>\n</head>") == 1
 study = study.replace("</style>\n</head>", cpart("style")[len("<style>"):] + "\n</head>")
 script += cpart("script") + "\n"
+# atmospheric entry effects for the cutscenes (entry-fx.html, adds to cutscene.html's fx): script only
+efx = open(os.path.join(os.path.dirname(os.path.abspath(sys.argv[2])), "entry-fx.html")).read()
+script += efx[efx.index("<script"):efx.index("</script>") + len("</script>")] + "\n"
 # the Grand Finale (finale.html): its style joins the head's, its overlay goes into #app, and its script runs last (it
 # registers its hooks and its trigger with cutscene.html)
 fin = open(os.path.join(os.path.dirname(os.path.abspath(sys.argv[2])), "finale.html")).read()
