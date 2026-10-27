@@ -15,7 +15,7 @@ import obs_mosaic as om  # noqa: E402
 rng = np.random.default_rng(7)
 field = cv2.GaussianBlur(rng.random((500, 500)).astype(np.float32), (0, 0), 5)
 field = 0.05 + 0.25 * (field - field.min()) / (field.max() - field.min())   # linear brightness
-S, N, FLASH, STEP = 500, 80, 14, 34
+S, N, FLASH, STEP, SCENE = 500, 80, 14, 34, 60
 cache = tempfile.mkdtemp()
 scale = {"blacks": {}, "white": 1, "gamma": 2.2, "balance": {"RED": 1.0, "GRN": 1.0}}
 filters = ["RED", "GRN"] * (N // 2)
@@ -31,6 +31,9 @@ for n, f in enumerate(filters):
     im = np.zeros((S, S, 4), np.uint8)
     im[..., 3] = 255
     im[..., :3] = (calibration.encode(np.clip(field * bright[n], 0, 1), 2.2) * 255 + 0.5).astype(np.uint8)[..., None]
+    if n == SCENE:   # another scene: a narrow strip of the view, twice as bright (a ring arc between wide views)
+        im[:, :, :3] = np.minimum(255, im[:, :, :3].astype(int) * 2).astype(np.uint8)
+        im[:, 100:, 3] = 0
     Image.fromarray(im).save(f"{TD}/{n}.png")
     json.dump({"n": n, "id": fr[n][1], "filter": f, "t": fr[n][3], "offset": [0.0, 0.0], "box": [-S / 2, -S / 2, S, S]},
               open(f"{TD}/{n}.json", "w"))
@@ -39,23 +42,39 @@ json.dump({"key": list(u["key"]), "display_scale": scale, "angle": 0, "footprint
 
 with calibration.looking("balanced"):
     logs = om.exposure_chain(u, cache)
-    # the chain follows each filter's brightness (to the 8-bit picture's rounding)
-    for n, f in enumerate(filters):
-        first = filters.index(f)
-        assert abs(logs[n] - math.log(bright[n] / bright[first])) < 0.03, (n, logs[n], math.log(bright[n] / bright[first]))
+    # the chain follows the movie's brightness frame to frame, whichever filter (to the 8-bit picture's rounding)
+    # the narrow strip is a scene of its own, and the frame after it starts the next stretch: the strip left as it is
+    assert logs[SCENE][1] == 1 and logs[SCENE + 1][1] == 2, (logs[SCENE], logs[SCENE + 1])
+    for n in range(SCENE):
+        assert abs(logs[n][0] - math.log(bright[n] / bright[0])) < 0.03 and logs[n][1] == 0, (n, logs[n], math.log(bright[n] / bright[0]))
     gains = om.exposure_gains(u, cache, smooth=4)
+    assert gains[SCENE] == 1.0, gains[SCENE]
+    N = SCENE   # (the rest: the stretch before the other scene)
     shown = [bright[n] * gains[n] for n in range(N)]
     print("gains:", [gains[n] for n in range(N)])
-    # the flash is brought to its neighbours (of its filter)
-    assert abs(shown[FLASH] / shown[FLASH - 2] - 1) < 0.08 and abs(shown[FLASH] / shown[FLASH + 2] - 1) < 0.08, shown[FLASH - 2:FLASH + 3]
-    # the step is spread out: no frame of a filter more than 1.2x the one before it (it was 1.6x), the whole step kept
-    for f in level:
-        ns = [n for n in range(N) if filters[n] == f]
-        steps = [shown[b] / shown[a] for a, b in zip(ns, ns[1:])]
-        assert max(steps) < 1.2, (f, np.round(steps, 3).tolist())
-        # and far from the flash and the step the frames keep their brightness (the slow brightening stays)
-        assert abs(gains[ns[2]] - 1) < 0.03 and abs(gains[ns[-1]] - 1) < 0.03, (gains[ns[2]], gains[ns[-1]])
+    steps = [shown[n] / shown[n - 1] for n in range(1, N)]
+    print("brightness steps shown:", np.round(steps, 3).tolist())
+    # the flash is brought to its neighbours, and GRN's flicker against RED (0.8x every other frame) is evened out
+    assert abs(shown[FLASH] / shown[FLASH - 1] - 1) < 0.08 and abs(shown[FLASH] / shown[FLASH + 1] - 1) < 0.08, shown[FLASH - 2:FLASH + 3]
+    # the step is spread out: no frame more than 1.15x the one before it (it was 1.6x), and none flickers by more than 8%
+    assert max(steps) < 1.15 and min(steps) > 0.92, np.round(steps, 3).tolist()
+    # the whole step is kept, and the slow brightening (1% a frame) too
+    assert abs(shown[N - 2] / shown[2] / (bright[N - 2] / bright[2]) - 1) < 0.1, (shown[2], shown[-2])
     assert om.exposure_gains(u, cache, smooth=0) == {}
+    # a pass that plays in colour: a short run of grey frames before the set is complete (a filter each) keeps gain 1
+    real = om.exposure_chain
+    om.exposure_chain = lambda *a, **k: {0: [0.0, 0, False], 1: [0.8, 0, False], 2: [-0.5, 0, False], 3: [0.0, 1, True],
+                                         4: [0.0, 1, True], 5: [1.0, 1, True], 6: [0.0, 1, True], 7: [0.0, 1, True]}
+    g = om.exposure_gains(u, cache, smooth=4)
+    om.exposure_chain = real
+    assert g[0] == g[1] == g[2] == 1.0 and g[5] < 0.5, g
+    # and a long one (a filter each, flickering) is evened as its own stretch
+    om.exposure_chain = lambda *a, **k: {**{n: [0.4 * (n % 2), 0, False] for n in range(10)}, 10: [0.0, 1, True], 11: [0.0, 1, True], 12: [0.0, 1, True]}
+    g = om.exposure_gains(u, cache, smooth=4)
+    om.exposure_chain = real
+    shown = [0.4 * (n % 2) + math.log(g[n]) for n in range(10)]
+    # (the 0.4 flicker, 49%, down to a few % a frame)
+    assert max(abs(b - a) for a, b in zip(shown, shown[1:])) < 0.08, (g, shown)
     # the pure functions alone, as the viewer would run them
     assert om.evened_gains([0, 0, 1, 0, 0], 3)[2] == round(math.exp(-1) * 200) / 200
     assert om.held_to_spice([[0, 0], [10, 0]], [[0, 0], [10, 0]], 4) == [[0.0, 0.0], [10.0, 0.0]]

@@ -55,9 +55,10 @@ def main():
             for j in range(len(u["frames"])):
                 om.tile(u, j, args.cache, p["display_scale"])
             began = time.time()
-            om.exposure_chain(u, args.cache, p)
+            steady = om.steady_of(u, args.steady)
+            om.exposure_chain(u, args.cache, p, True, True, steady)
             took = time.time() - began
-            gains = om.exposure_gains(u, args.cache, p, args.smooth)
+            gains = om.exposure_gains(u, args.cache, p, args.smooth, True, True, steady)
             g = list(gains.values()) or [1.0]
             print(f"  chain {took:.1f} s over {len(gains)} tiles; gains {min(g):.2f}..{max(g):.2f}, "
                   f"{sum(abs(x - 1) > 0.05 for x in g)} frames changed by more than 5%", flush=True)
@@ -67,7 +68,7 @@ def main():
             for j in range(n):
                 sides = []
                 for side, exposure in (("before", 0), ("after", args.smooth)):
-                    im, rep = om.movie_frame(u, j, args.cache, steady=om.steady_of(u, args.steady), exposure=exposure)
+                    im, rep = om.movie_frame(u, j, args.cache, steady=steady, exposure=exposure)
                     pic = np.zeros((args.size, args.size, 4), np.uint8)
                     if im is not None:
                         im.thumbnail((args.size, args.size), Image.LANCZOS)
@@ -103,8 +104,8 @@ def main():
         fh.write("<!doctype html><meta charset=utf-8><meta name=viewport content='width=device-width'><title>Movie exposure</title>"
                  "<style>body{background:#0c0c0e;color:#ddd;font:14px -apple-system,sans-serif;margin:16px}video{max-width:100%}"
                  "</style><h1>Movie passes, exposure evened out</h1><p>Left: every frame on the pass's one brightness scale "
-                 "(before). Right: each frame's brightness measured against the frame of its filter before it, single flashes "
-                 "brought to their neighbours and jumps spread over the smoothing (after). Both stabilized the same way. "
+                 "(before). Right: each picture's brightness measured against the picture before it, a flash of a frame or two "
+                 "brought to its neighbours and jumps spread over the smoothing, one gain for the whole picture (after). Both stabilized the same way. "
                  "Jump is how much the picture's brightness changes from one frame to the next.</p>")
         for name, n, clip, st in rows:
             fh.write(f"<h2>{html.escape(name)} · first {n} frames</h2><video src='{clip}' controls loop muted playsinline></video>"

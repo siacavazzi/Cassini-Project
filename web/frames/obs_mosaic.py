@@ -1963,104 +1963,122 @@ EXPOSURE_MOST = 30       # frames: the most smoothing asked for
 EXPOSURE_FLASH = 3       # frames: a brightness change lasting fewer frames than this (one frame bright, then back) is taken out
 EXPOSURE_GAIN = 4.0      # the most a frame is brightened or dimmed by
 EXPOSURE_LIT = 0.04      # of the brightest: the pixels a brightness is measured on (the body, not the sky's noise)
-# a movie's brightness chain (exposure_chain), kept with the pass; renamed (with the movie frames drawn with it,
-# movie_webp) whenever the rule changes
-EXPOSURE_FILE = "exposure1-" + PLAN_FILE
+EXPOSURE_SIDE = 160      # px: the movie pictures a pass's brightness is measured on (exposure_chain) are this big
+# a movie's brightness chain (exposure_chain), kept with the pass for each way of drawing it; renamed (with the movie
+# frames drawn with it, movie_webp) whenever the rule changes
+EXPOSURE_FILE = "exposure4-{}-" + PLAN_FILE
+EXPOSURE_RULE = 5        # the way the gains are worked out from the chain: in the movie frames' names (movie_webp)
+EXPOSURE_GREY_RUN = 6    # frames: a colour pass's grey frames (its filters coming in) evened only in a run this long
+EXPOSURE_SAME = 0.5      # of the larger lit area: two pictures sharing less lit view than this show different scenes
 
 
 def _lit_level(a, gamma):
-    """The linear brightness of a part of a tile's picture (RGBA): the median of its lit pixels, None when few are lit."""
-    v = calibration.decode(a[..., :3].max(axis=2)[a[..., 3] > 0].astype(np.float64) / 255, gamma)
-    if v.size < 256:
+    """The linear brightness of a movie picture's part (RGBA): the median of its lit pixels, None when few are lit."""
+    v = calibration.decode(a[..., :3].astype(np.float64).mean(axis=2)[a[..., 3] > 0] / 255, gamma)
+    if v.size < 64:
         return None
     lit = v[v > EXPOSURE_LIT * max(float(np.percentile(v, 99.5)), 1e-6)]
-    return float(np.median(lit)) if lit.size >= 256 else None
+    return float(np.median(lit)) if lit.size >= 64 else None
 
 
-def exposure_chain(u, cache, p=None):
-    """How each frame's brightness steps from the one before it ({tile n: log brightness}, one chain per filter):
-    the pass is drawn on one display scale, so a frame whose exposure the calibration did not fully even out, a
-    frame lit by stray light or a short exposure's noise shows as a jump or a flash in the movie. Each placed tile
-    is measured against the newest earlier tile of its own filter over the part of the view both cover (where the
-    movie draws them: a feature track's steady places, otherwise SPICE's), as the ratio of the two medians of the
-    lit pixels in linear brightness; the chain adds up the logs of those ratios. A pair that hardly overlaps, or with
-    too little lit, adds nothing (the same brightness). Worked out once over every tile of the pass and kept with it."""
+def _exposure_name(colour, centre, steady):
+    return EXPOSURE_FILE.format(f"c{int(bool(colour))}{int(bool(centre))}s{steady}")
+
+
+def exposure_chain(u, cache, p=None, colour=True, centre=True, steady=0):
+    """How the movie's brightness steps from one picture to the next ({frame n: log brightness}): the pass is drawn on
+    one display scale, so a frame whose exposure the calibration did not fully even out, a frame lit by stray light,
+    a colour set after a grey frame or a filter brighter than the one before shows as a jump or a flash. What is
+    measured is the movie itself: each frame's picture as movie_frame draws it (colour, centre, steady as asked; no
+    trail, EXPOSURE_SIDE px), against the picture before it, over the part of the view both show (one view for the
+    pass), as the ratio of the medians of the lit pixels in linear brightness; the chain adds up the logs. A pair with
+    too little lit in common adds nothing (the same brightness); a held colour set is the same picture. The chain is
+    cut into stretches ({n: [log, stretch, in colour]}) where the picture changes kind (grey frames before the colour set is
+    complete, then colour; another set of filters) or scene (the two share less than EXPOSURE_SAME of their lit
+    view: a narrow ring arc between two wide views): a step there is the picture changing, not its exposure, and
+    exposure_gains evens each stretch on its own. Worked out once over every frame of the pass, for each way of
+    drawing it, and kept with it."""
     p = p or plan(u, cache)
     gamma = p["display_scale"].get("gamma", 2.2)
+    key = ("exposure", bool(colour), bool(centre), steady)
 
     def work():
-        made, pic, there = _every_tile(u, cache, p)
-        track = track_places(u, cache, p) if u.get("track") else {}
-        logs, hows, newest = {}, {}, {}
-        for t in made:
-            n = t["n"]
-            if "offset" not in t or not os.path.exists(os.path.join(there, f"{n}.png")):
+        logs, hows, last, stretch = {}, {}, None, 0
+
+        def lit(a):
+            v = calibration.decode(a[..., :3].astype(np.float64).mean(axis=2) / 255, gamma)
+            return (a[..., 3] > 0) & (v > EXPOSURE_LIT * max(float(np.percentile(v[a[..., 3] > 0], 99.5)) if (a[..., 3] > 0).any() else 0, 1e-6))
+        for n in range(len(u["frames"])):
+            im, rep = movie_frame(u, n, cache, 0, colour, out=EXPOSURE_SIDE, centre=centre, steady=steady)
+            if im is None:
                 continue
-            j = newest.get(t["filter"])
-            newest[t["filter"]] = n
-            if j is None:
-                logs[n], hows[n] = 0.0, "first of its filter"
-                continue
-            logs[n], hows[n] = logs[j], f"same as {j}"
-            # the two pictures where the movie draws them, and the part of the view both cover
-            at = [track.get(q["n"], q["offset"]) for q in (made[j], t)]
-            corners = [(o[0] + q["box"][0], o[1] + q["box"][1], pic(q["n"])) for o, q in zip(at, (made[j], t))]
-            x0, y0 = max(c[0] for c in corners), max(c[1] for c in corners)
-            x1 = min(c[0] + c[2].shape[1] for c in corners)
-            y1 = min(c[1] + c[2].shape[0] for c in corners)
-            if x1 - x0 < 64 or y1 - y0 < 64:
-                continue
-            levels = []
-            for cx, cy, im in corners:
-                left, top = int(round(x0 - cx)), int(round(y0 - cy))
-                levels.append(_lit_level(im[top:top + int(y1 - y0), left:left + int(x1 - x0)], gamma))
-            if None in levels or min(levels) <= 0:
-                continue
-            step = math.log(levels[1] / levels[0])
-            logs[n], hows[n] = logs[j] + step, f"{math.exp(step):.3f} x {j}"
+            a, kind = np.asarray(im), tuple(rep.get("color") or ())
+            if last is None:
+                logs[n], hows[n] = [0.0, stretch, bool(kind)], "first"
+            else:
+                j, b, was = last
+                la, lb = lit(a), lit(b)
+                shared = (la & lb).sum() / max(1, la.sum(), lb.sum()) if a.shape == b.shape else 0.0
+                if kind != was or shared < EXPOSURE_SAME:
+                    stretch += 1
+                    logs[n], hows[n] = [0.0, stretch, bool(kind)], "another kind of picture" if kind != was else f"another scene ({shared:.2f} shared)"
+                else:
+                    logs[n], hows[n] = [logs[j][0], stretch, bool(kind)], f"same as {j}"
+                    both = (a[..., 3] > 0) & (b[..., 3] > 0)
+                    levels = [_lit_level(np.where(both[..., None], q, 0), gamma) for q in (b, a)]
+                    if None not in levels and min(levels) > 0:
+                        step = math.log(levels[1] / levels[0])
+                        logs[n], hows[n] = [logs[j][0] + step, stretch, bool(kind)], f"{math.exp(step):.3f} x {j}"
+            last = (n, a, kind)
         return logs, hows
 
     rec = _kept_tiles(u, cache, p["display_scale"])
-    if rec is not None and rec.get("exposure") is not None:
-        return rec["exposure"]
-    path = os.path.join(folder(u, cache), EXPOSURE_FILE)
+    kept = (rec.get("exposure") or {}).get(key) if rec is not None else None
+    if kept is not None:
+        return kept
+    path = os.path.join(folder(u, cache), _exposure_name(colour, centre, steady))
     with _ulock(u):
-        if rec is not None and rec.get("exposure") is not None:
-            return rec["exposure"]
         if not os.path.exists(path):
             logs, hows = work()
-            data = json.dumps({"logs": {str(n): round(v, 5) for n, v in logs.items()}, "how": hows})
+            data = json.dumps({"logs": {str(n): [round(v[0], 5), v[1], v[2]] for n, v in logs.items()}, "how": hows})
             reel._cached(path, data.encode)
         with open(path) as fh:
             kept = {int(n): v for n, v in json.load(fh)["logs"].items()}
         if rec is not None:
-            rec["exposure"] = kept
+            with _lock:
+                rec["exposure"] = {**(rec.get("exposure") or {}), key: kept}
         return kept
 
 
-def exposure_gains(u, cache, p=None, smooth=EXPOSURE_SMOOTH):
-    """Each placed tile's exposure gain ({n: gain}, on linear brightness): its brightness (exposure_chain) moved to
-    the brightness of its filter's frames round it. Per filter, the chain is first rid of flashes (a running median
-    over EXPOSURE_FLASH frames: one frame far brighter or darker than both its neighbours is put at their level),
-    then smoothed with a Gaussian over smooth frames of that filter, so a jump in brightness is spread over several
-    frames instead of a step; the gain is the smoothed brightness over the frame's own, at most EXPOSURE_GAIN either
-    way. Slow changes (a body coming into sunlight over the pass) stay; the frame's data stays, only scaled.
-    smooth 0: no gains ({})."""
+def exposure_gains(u, cache, p=None, smooth=EXPOSURE_SMOOTH, colour=True, centre=True, steady=0):
+    """Each movie frame's exposure gain ({n: gain}, on linear brightness, one for the whole picture so a colour set
+    keeps its colour): the movie's brightness (exposure_chain) moved to the brightness of the frames round it
+    (evened_gains), each stretch of one kind of picture and one scene on its own: a flash of a frame or two brought
+    to its neighbours' level, a jump spread over smooth frames. A stretch shorter than EXPOSURE_FLASH frames is left
+    as it is (gain 1: too short to tell a flash from the picture), and so is a run of fewer than EXPOSURE_GREY_RUN grey
+    frames in a pass that plays in colour (each a filter of the set filling in, as bright as that filter is: in the
+    UV aurora stares' four, evening them out only moved their steps onto their neighbours; COMPHILIT001's ten flicker
+    filter to filter and are evened). Slow changes (a body coming into sunlight over the
+    pass) stay; the frames' data stays, only scaled. smooth 0: no gains ({})."""
     if smooth <= 0:
         return {}
-    p = p or plan(u, cache)
-    logs = exposure_chain(u, cache, p)
-    by_filter = collections.defaultdict(list)
-    for n in sorted(logs):
-        by_filter[u["frames"][n][2]].append(n)
+    logs = exposure_chain(u, cache, p, colour, centre, steady)
+    stretches = collections.defaultdict(list)
+    in_colour = any(v[2] for v in logs.values())
     gains = {}
-    for ns in by_filter.values():
-        gains.update(zip(ns, evened_gains([logs[n] for n in ns], smooth)))
+    for n in sorted(logs):
+        stretches[logs[n][1]].append(n)
+    for key, ns in list(stretches.items()):
+        if in_colour and not logs[ns[0]][2] and len(ns) < EXPOSURE_GREY_RUN:
+            gains.update((n, 1.0) for n in ns)
+            del stretches[key]
+    for ns in stretches.values():
+        gains.update(zip(ns, evened_gains([logs[n][0] for n in ns], smooth) if len(ns) >= EXPOSURE_FLASH else [1.0] * len(ns)))
     return gains
 
 
 def evened_gains(logs, smooth):
-    """exposure_gains' math on its own for one filter's frames in order (pure, so it can be ported to the viewer with a
+    """exposure_gains' math on its own for a movie's frames in order (pure, so it can be ported to the viewer with a
     conformance test): their log brightnesses (exposure_chain) in, each frame's gain out: flashes shorter than
     EXPOSURE_FLASH frames taken out by a running median, the rest smoothed with a Gaussian over smooth frames, the gain
     the smoothed brightness over the frame's own, within EXPOSURE_GAIN either way, to 1/200 (the movie frame's lookup
@@ -2280,8 +2298,8 @@ def movie_frame(u, n, cache, trail=0, colour=True, out=OUT, centre=True, steady=
     frame shows the newest complete colour set, held until the next one is complete. centre: the body in the
     middle of the view (movie_rect). steady: image stabilization (Settings > Movie), every tile drawn at its
     stabilized place (steady_places, smoothed over that many frames) instead of SPICE's; 0: SPICE's places.
-    exposure: exposure normalization (Settings > Movie), every tile drawn with its exposure gain (exposure_gains,
-    smoothed over that many frames of its filter); 0: as the pass's display scale draws it."""
+    exposure: exposure normalization (Settings > Movie), the whole picture drawn with frame n's exposure gain
+    (exposure_gains, smoothed over that many frames); 0: as the pass's display scale draws it."""
     p = plan(u, cache)
     t = tile(u, n, cache, p["display_scale"])
     rep = {"movie": True, "n": n, "of": len(u["frames"]), "filter": t["filter"], "observation": u["key"][1],
@@ -2295,14 +2313,15 @@ def movie_frame(u, n, cache, trail=0, colour=True, out=OUT, centre=True, steady=
     # any other movie: stabilized, each tile where the pictures put it from the tile before, held to SPICE
     places = track or (steady_places(u, cache, p, steady) if steady else None)
 
-    gains = exposure_gains(u, cache, p, exposure) if exposure else {}
+    # one gain for every tile of the picture (a colour set's filters, the trail), so its colour stays
+    gain = exposure_gains(u, cache, p, exposure, colour, centre, steady).get(n, 1.0) if exposure else 1.0
     gamma = p["display_scale"].get("gamma", 2.2)
 
     def at(q):
         if places and q.get("n") in places:
             q = dict(q, offset=places[q["n"]])
-        if gains.get(q.get("n"), 1.0) != 1.0:
-            q = dict(q, gain=round(q.get("gain", 1.0) * gains[q["n"]], 3), gamma=q.get("gamma", gamma))
+        if gain != 1.0:
+            q = dict(q, gain=round(q.get("gain", 1.0) * gain, 3), gamma=q.get("gamma", gamma))
         return q
     spice = t["offset"]
     t = at(t)
@@ -2312,7 +2331,7 @@ def movie_frame(u, n, cache, trail=0, colour=True, out=OUT, centre=True, steady=
         rep["steady"] = "stabilized"
         rep["stabilized"] = {"smooth": steady, "shift": [round(t["offset"][0] - spice[0], 2), round(t["offset"][1] - spice[1], 2)]}
     if exposure:
-        rep["exposure"] = {"smooth": exposure, "gain": gains.get(n, 1.0)}
+        rep["exposure"] = {"smooth": exposure, "gain": gain}
     radius = RADIUS.get(u["key"][0], 0) / (u["z"] * IFOV[u["key"][2]])
     rect = movie_rect(movie_footprint(u, cache, p), t, radius, centre and not track)
     rep["centred"] = rect[0] == -rect[2] / 2 and rect[1] == -rect[3] / 2
@@ -2393,9 +2412,11 @@ def exposure_of(exposure):
     return max(0, min(EXPOSURE_MOST, int(exposure or 0)))
 
 
-def _exposure_ready(u, cache, rec):
-    """True when the pass's brightness chain is in memory or in the cache."""
-    return (rec is not None and rec.get("exposure") is not None) or os.path.exists(os.path.join(folder(u, cache), EXPOSURE_FILE))
+def _exposure_ready(u, cache, rec, how):
+    """True when the pass's brightness chain for this way of drawing it (how: colour, centre, steady) is in memory
+    or in the cache."""
+    return (rec is not None and ("exposure",) + tuple(how) in (rec.get("exposure") or {})) or \
+        os.path.exists(os.path.join(folder(u, cache), _exposure_name(*how)))
 
 
 def _steady_ready(u, cache, rec):
@@ -2419,14 +2440,14 @@ def movie_webp(frame_id, size, cache, trail=0, colour=True, wait=False, ahead=6,
     rec = _record(u, cache)
     if not wait and ((_footprint_kept(u, rec) is None and
                       not all(os.path.exists(os.path.join(folder(u, cache), f)) for f in (PLAN_FILE, _footprint_file(u))))
-                     or (steady and not _steady_ready(u, cache, rec)) or (exposure and not _exposure_ready(u, cache, rec))):
-        warm_movie(u, n, ahead, cache, steady=bool(steady), exposure=bool(exposure))
+                     or (steady and not _steady_ready(u, cache, rec)) or (exposure and not _exposure_ready(u, cache, rec, (bool(colour), bool(centre), steady)))):
+        warm_movie(u, n, ahead, cache, steady=bool(steady), exposure=(bool(colour), bool(centre), steady) if exposure else None)
         return None, {"why": "working out the pass", "observation": u["key"][1], "pass": u["key"][3]}
     # (a feature track's frames, at their steady places, are named apart from the frames it played before, and so
     # are a stabilized movie's, by its smoothing)
     path = os.path.join(folder(u, cache), MOVIE_DIR, str(size),
                         f"{n}_{trail}_{int(bool(colour))}{'_c2' if centre else ''}{'_k2' if u.get('track') else ''}"
-                        f"{f'_s{steady}' if steady else ''}{f'_e{exposure}' if exposure else ''}.webp")
+                        f"{f'_s{steady}' if steady else ''}{f'_e{exposure}r{EXPOSURE_RULE}' if exposure else ''}.webp")
     report, meta = {}, path[:-4] + "json"
 
     def make():
@@ -2460,17 +2481,17 @@ MOVIE_WORKERS = int(os.environ.get("CASSINI_MOVIE_WORKERS", "2"))
 _movie_background = threading.Semaphore(MOVIE_WORKERS)   # movie frames made ahead, beside the mosaics' one at a time
 
 
-def warm_movie(u, n, ahead, cache, steady=False, exposure=False):
+def warm_movie(u, n, ahead, cache, steady=False, exposure=None):
     """A movie is at frame n of the pass: work out its plan and make tiles n .. n+ahead in the background, from
     where the movie is rather than from the pass's start, MOVIE_WORKERS at once (a fast movie at high playback
-    speed needs several frames a second). steady: the pass's stabilization chain too (steady_chain); exposure: its brightness chain (exposure_chain)."""
+    speed needs several frames a second). steady: the pass's stabilization chain too (steady_chain); exposure: (colour, centre, steady) of its brightness chain (exposure_chain) to work out too."""
     mode = calibration.mode()
     key, last = (u["key"], mode), min(n + ahead, len(u["frames"]) - 1)
     # nothing to make (the plan, footprint and those tiles are in memory): no workers
     rec = _record(u, cache)
     if rec is not None and (_footprint_kept(u, rec) is not None or u.get("kind", "movie" if u.get("movie") else None) == "mosaic_movie") \
             and _all_made(u, cache, rec["plan"], n, last, look=True) and not (steady and not _steady_ready(u, cache, rec)) \
-            and not (exposure and not _exposure_ready(u, cache, rec)):
+            and not (exposure and not _exposure_ready(u, cache, rec, exposure)):
         return
     with _lock:
         running = key in _movie_ahead
@@ -2489,7 +2510,7 @@ def warm_movie(u, n, ahead, cache, steady=False, exposure=False):
                     if steady:
                         steady_chain(u, cache, p)
                     if exposure:
-                        exposure_chain(u, cache, p)
+                        exposure_chain(u, cache, p, *exposure)
                 while True:
                     with _lock:
                         first, last = _movie_ahead.get(key, (0, -1))
