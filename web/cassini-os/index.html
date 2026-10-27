@@ -1188,9 +1188,9 @@ body.phone .stufoot .galbtn { padding: 6px 10px; }
 #mecard .mebar .rnd { all: unset; width: 24px; height: 24px; display: grid; place-items: center; border-radius: 50%; color: var(--q-text); background: rgba(255,255,255,.08); cursor: pointer; flex: none; font-size: 12px; }
 #mecard .mebar .rnd:hover { background: rgba(255,255,255,.16); color: #fff; }
 #mepos { min-width: 120px; font-variant-numeric: tabular-nums; }
-#mestrip { min-height: 0; overflow-y: auto; padding: 6px; display: grid; grid-template-columns: repeat(auto-fill, minmax(92px, 1fr)); gap: 5px; align-content: start; border-top: 1px solid var(--q-line); background: rgba(0,0,0,.55); }
+#mestrip { min-height: 0; overflow-y: auto; padding: 6px; display: grid; grid-template-columns: repeat(auto-fill, 96px); grid-auto-rows: 96px; justify-content: space-between; gap: 5px; align-content: start; border-top: 1px solid var(--q-line); background: rgba(0,0,0,.55); }
 .meth { all: unset; position: relative; display: block; border-radius: 4px; overflow: hidden; background: #0b0d11; outline: 1px solid rgba(255,255,255,.06); cursor: pointer; }
-.meth img { display: block; width: 100%; aspect-ratio: 1; object-fit: cover; }
+.meth img { position: absolute; inset: 0; display: block; width: 100%; height: 100%; object-fit: cover; }
 .meth span { position: absolute; left: 0; right: 0; bottom: 0; padding: 2px 4px; font: 8.5px/1.25 var(--hudf); color: rgba(232,236,242,.9); background: linear-gradient(transparent, rgba(0,0,0,.85)); white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
 .meth b { position: absolute; left: 3px; top: 3px; font: 8px/1 var(--hudf); padding: 2px 3px; border-radius: 2px; background: rgba(0,0,0,.6); color: rgba(232,236,242,.85); font-weight: normal; }
 .meth.out img { opacity: .22; filter: grayscale(1); }
@@ -1222,7 +1222,7 @@ body.phone #mecard { left: var(--side, 6px) !important; right: var(--sider, 6px)
   height: calc(100dvh - var(--menu, 30px) - var(--appdockh, 0px) - 3 * var(--gap, 6px)) !important; z-index: 1460 !important; }
 body.phone #mecard .mebody { grid-template-columns: minmax(0, 1fr); grid-template-rows: minmax(0, 1fr) auto; }
 body.phone #mecard .meside { border-left: 0; border-top: 1px solid var(--q-line); max-height: 30vh; }
-body.phone #mestrip { grid-template-columns: repeat(auto-fill, minmax(72px, 1fr)); }
+body.phone #mestrip { grid-template-columns: repeat(auto-fill, 72px); grid-auto-rows: 72px; }
 
 #bodymenu { top: calc(env(safe-area-inset-top, 0px) + 36px); right: max(14px, env(safe-area-inset-right, 0px)); width: 340px; height: min(360px, calc(100% - 330px)); min-height: 220px; display: flex; flex-direction: column; }
 #bodymenu.zoomed { width: 440px; height: calc(100% - 290px); }
@@ -8156,14 +8156,18 @@ void main() {
   function stopPlay() { ME.playing = false; clearTimeout(playT); $("meplay").textContent = "▶"; }
 
   // ---------- one frame, downloaded at full size with the look ----------
+  // the frame's picture at full size, as shown (the raw frame standing in when the movie's picture cannot be made)
+  async function full(e) {
+    let r = await fetch(picUrl(e, "full"));
+    if (!r.ok) r = await fetch(`${FRAMES}/frames/${e.id}.webp?size=full`);
+    if (!r.ok) throw new Error(`the frame server said ${r.status}`);
+    return r.blob();
+  }
   async function download() {
     const e = ME.frames[ME.sel]; if (!e || !STU()) return;
     const b = $("medl"); b.disabled = true; b.textContent = "Making…";
     try {
-      let r = await fetch(picUrl(e, "full"));
-      if (!r.ok) r = await fetch(`${FRAMES}/frames/${e.id}.webp?size=full`);
-      if (!r.ok) throw new Error(`the frame server said ${r.status}`);
-      const jpg = await STU().apply(await r.blob(), ME.edit);
+      const jpg = await STU().apply(await full(e), ME.edit);
       const a = document.createElement("a"); a.href = URL.createObjectURL(jpg);
       a.download = `Cassini_${e.id}_${new Date(e.t * 1000).toISOString().slice(0, 19).replace(/[:T]/g, "-")}${ME.edit ? "_edited" : ""}.jpg`;
       document.body.appendChild(a); a.click(); a.remove(); setTimeout(() => URL.revokeObjectURL(a.href), 60000);
@@ -8176,10 +8180,11 @@ void main() {
   }
 
   // ---------- the look, edited in Cassini Studio on the frame in front ----------
-  function editLook() {
+  async function editLook() {
     const e = ME.frames[ME.sel]; if (!e || !STU()) return;
     stopPlay();
-    STU().open({ kind: "picture", url: picUrl(e, "full"), edit: ME.edit || undefined, item: { title: `Movie look · ${hms(e)} UTC`, src: e.src, ids: [e.id] },
+    let blob; try { blob = await full(e); } catch (err) { toast(`Could not open the frame: ${err.message || err}`); return; }
+    STU().open({ kind: "picture", blob, edit: ME.edit || undefined, item: { title: `Movie look · ${hms(e)} UTC`, src: e.src, ids: [e.id] },
       look: r => { change(() => { ME.edit = r; }); show(); if (WM) WM.front(card); } });
   }
 
