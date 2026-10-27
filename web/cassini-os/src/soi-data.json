@@ -1,0 +1,22 @@
+{
+  "note": "Saturn Orbit Insertion, 2004-07-01. Times are UTC at the spacecraft (SCET), the clock the replay runs on. Every number here is quoted from the sources below; soi.html derives nothing else but the running counters (rocket equation fitted to these totals).",
+  "ring_crossing": { "utc": "2004-07-01T00:47:00", "from_center_km": 158500, "where": "the gap between the F and G rings", "source": "esa-arrival" },
+  "burn_start": { "utc": "2004-07-01T01:12:00", "source": "esa-arrival" },
+  "burn_minutes": { "value": 96.4, "source": "sfn-presoi" },
+  "closest_approach": { "utc": "2004-07-01T02:39:00", "above_clouds_km": 19980, "source": "esa-arrival" },
+  "delta_v_ms": { "value": 626.17, "source": "nasa-ser-0709" },
+  "steering": { "total_deg": 46, "rate_deg_s": 0.008, "source": "nasa-ser-0709" },
+  "propellant_kg": { "value": 850, "pounds": 1874, "source": "sfn-goforburn" },
+  "thrust_n": { "value": 445, "pounds": 100, "source": "sfn-goforburn" },
+  "light_time_min": { "value": 83, "source": "sfn-presoi" },
+  "earth_ignition": { "local": "10:35:42 p.m. EDT, June 30", "source": "sfn-presoi" },
+  "signal_fade": { "from_min": 30, "for_min": 25, "why": "passing behind the A ring", "source": "sfn-presoi" },
+  "sources": {
+    "esa-arrival": { "title": "ESA, Cassini-Huygens: approach and arrival at Saturn", "url": "https://sci.esa.int/web/cassini-huygens/-/approach-and-arrival-at-saturn" },
+    "nasa-ser-0702": { "title": "NASA, Cassini Significant Event Report for week ending 7/2/2004", "url": "https://science.nasa.gov/missions/cassini/significant-event-report-for-week-ending-722004/" },
+    "nasa-ser-0709": { "title": "NASA, Cassini Significant Event Report for week ending 7/9/2004", "url": "https://science.nasa.gov/missions/cassini/significant-event-report-for-week-ending-792004" },
+    "jpl-presskit": { "title": "NASA/JPL, Cassini-Huygens Saturn Arrival press kit (June 2004)", "url": "https://www.jpl.nasa.gov/news/press_kits/cassini-arrival.pdf" },
+    "sfn-presoi": { "title": "Spaceflight Now, Cassini orbit insertion timeline (June 29, 2004)", "url": "https://spaceflightnow.com/cassini/040629presoi.html" },
+    "sfn-goforburn": { "title": "Spaceflight Now, Cassini go for orbit insertion burn (June 30, 2004)", "url": "https://spaceflightnow.com/cassini/040630goforburn.html" }
+  }
+}

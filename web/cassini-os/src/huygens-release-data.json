@@ -1,0 +1,30 @@
+{
+  "release_utc": "2004-12-25T02:00:00",
+  "speed_m_s": 0.35,
+  "spin_rpm": 7.5,
+  "mass_kg": 320,
+  "getaway_utc": "2004-12-27T23:45:00",
+  "getaway_note": "Cassini's getaway burn (ESA: 28 December, about 24 m/s), timed from the reconstructed trajectory: a 23.8 m/s step between 23:30 and 00:00 UTC. Without the probe's own track, ESA's separation numbers place it until then.",
+  "facts": [
+    { "id": "time", "text": "Huygens separated from Cassini on 25 December 2004 at 02:00 UTC.",
+      "source": "https://sci.esa.int/web/cassini-huygens/34956-huygens-probe-separation" },
+    { "id": "coast_mode", "text": "Cassini switched to coast mode, with its RCS thrusters inhibited, 10 seconds before separation; they were re-enabled about 60 seconds after.",
+      "source": "https://sci.esa.int/web/cassini-huygens/34956-huygens-probe-separation" },
+    { "id": "sed", "text": "The Spin/Eject Device released Huygens at about 0.35 m/s relative speed and a spin of 7.5 rpm; the whole release took about 0.15 seconds.",
+      "source": "https://sci.esa.int/web/cassini-huygens/34956-huygens-probe-separation" },
+    { "id": "how", "text": "Pyrotechnic devices fired, then push-off springs, ramps and rollers moved the probe away from the orbiter.",
+      "source": "https://www.esa.int/Newsroom/Press_Releases/Huygens_begins_its_final_journey_into_the_unknown" },
+    { "id": "mass", "text": "The probe weighs 320 kg; the two spacecraft together weighed 5548 kg at launch.",
+      "source": "https://www.esa.int/Newsroom/Press_Releases/Huygens_begins_its_final_journey_into_the_unknown" },
+    { "id": "spin_confirmed", "text": "Cassini's magnetometer saw the probe's spin and confirmed 7.5 revolutions per minute, the rate predicted.",
+      "source": "https://innovations-report.com/physics-and-astronomy/report-38699" },
+    { "id": "news", "text": "There was no contact with Earth during the release; Cassini recorded it, then turned to Earth, and the signal took 1 hour 8 minutes to arrive from 1.2 billion km away.",
+      "source": "https://www.esa.int/Newsroom/Press_Releases/Huygens_begins_its_final_journey_into_the_unknown" },
+    { "id": "coast", "text": "The probe coasted, dormant, for 20 days; its timer started it up about 5 hours before it reached the entry altitude of 1270 km above Titan.",
+      "source": "https://sci.esa.int/web/cassini-huygens/34956-huygens-probe-separation" },
+    { "id": "odm", "text": "On 28 December 2004 Cassini made a deflection manoeuvre of about 24 m/s so it would fly past Titan at 60,000 km instead of following the probe.",
+      "source": "https://sci.esa.int/web/cassini-huygens/34956-huygens-probe-separation" },
+    { "id": "entry", "text": "Huygens entered Titan's atmosphere on 14 January 2005 at about 09:06 UTC, at about 6 km/s and a steep 65 degrees.",
+      "source": "https://www.esa.int/Newsroom/Press_Releases/Huygens_begins_its_final_journey_into_the_unknown" }
+  ]
+}

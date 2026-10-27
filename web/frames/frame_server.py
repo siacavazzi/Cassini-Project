@@ -67,8 +67,15 @@ Routes:
                                layers (colour set, gray luminance base) and pointings, each with its frames by filter
                                (drawn in colour, in the gray base only, or not drawn), whether it shows in colour, and
                                its outline and centre as fractions of the picture
-  /frames/mosaic/<ID>/frame.webp?ids=A,B,C&size=full   one frame of that mosaic on its own, on the mosaic's levels
-                               and colours (obs_mosaic.pointing_picture; format=png, download=1 as below)
+  /frames/mosaic/<ID>/p/<n>.webp?size=full   pointing n of that mosaic (as the .json numbers them) opened on its own,
+                               the mosaic's own picture of that spot at the tiles' full size: its tiles with the seam
+                               corrections the mosaic gave them, through mosaic.compose, mixed and given detail as the
+                               mosaic is (obs_mosaic.pointing_picture; &channel=0-2 one filter's plane; format=png,
+                               download=1 as below). frame.webp?ids=A,B,C is the same for the pointing of those frames
+  /frames/mosaic/<ID>/full.json      that mosaic at native resolution (mosaic_native): its size, estimated MB, made yet
+                               (&make=jpg|png: make it now); full.webp?crop=x0,y0,x1,y1 a part of it for the zoom lens
+                               (fractions of the picture, at most CASSINI_NATIVE_CROP px); full.jpg / full.png all of it
+                               (download=1), at most CASSINI_NATIVE_MAX px, kept in CASSINI_FULLRES_CACHE (not the cache)
   /frames/mosaic/<ID>.webp?size=512   (&warm=1: only start making the pass ahead of time, empty answer;
                                &tune=n:dx:dy,...&hide=n,...: the person's changes to its tiles from Cassini Studio,
                                pointings as /frames/mosaic/<ID>.json numbers them, moves as fractions of the picture)
@@ -81,19 +88,25 @@ Routes:
                                pass starts making its tiles. A movie pass (obs_mosaic: the camera creeps or
                                stares) is never a mosaic; warm=1 answers {"mosaic", "movie"} for the observation;
                                force=1 makes the pass's mosaic whatever obs_mosaic calls it (Mosaic switch)
-  /frames/movie/<ID>.webp?size=512&trail=0&color=1&center=1
+  /frames/movie/<ID>.webp?size=512&trail=0&color=1&center=1&steady=12&exposure=8
                                the frame played as a movie of its pass (obs_mosaic.movie_webp): the pass's tile
                                (processed_frame, centred north up by SPICE) on the pass's one display scale, drawn
                                where SPICE puts it in one view for the whole pass; color=1 draws the newest frames
                                of the pass's color filters together, trail=N the N earlier frames of its filter
                                fading under it; center=1 (the default) the body in the middle of every frame, when
-                               its disk fits the view. 503 while the pass is being worked out (the window shows the frame)
+                               its disk fits the view; steady=N image stabilization, each frame registered to the one
+                               before it and held to SPICE over N frames (obs_mosaic.steady_places; 0, the default:
+                               SPICE's places); exposure=N exposure normalization, flashes taken out and brightness
+                               jumps spread over N frames (obs_mosaic.exposure_gains; 0, the default: none). 503 while the pass is being worked out (the window shows the frame)
   /frames/movie/<ID>.webp?mode=rolling&laps=1&fade=0&persist=35
                                a mosaic movie (a raster repeated over the same places): every place's newest tile
                                by this frame (laps=N: its N newest copies, older under newer), composed like the
                                pass's mosaic (obs_mosaic.rolling_webp), so it never empties when a lap begins;
                                fade=N: older tiles fade over N frames down to persist per cent (Rolling), 0 keeps
                                every tile as bright as the newest (Time-lapse)
+                               whole=1 (Whole mosaics: the page asks only a lap's last frame): every tile of the
+                               picture is made before it answers, never a partial picture or a 503, so the
+                               window shows the whole new lap
   /frames/movie/<ID>.json      the pass the frame is in: its frames [id, time, filter], cadence, movie/mosaic call
   /frames/thumb.webp?mosaic=<ID>&color=R,G,B&frame=<ID>&size=256
                                a highlight's thumbnail (any of the three, as data/highlights.json's "thumb" gives them):
@@ -111,7 +124,11 @@ Routes:
                                picture (a Cassini Studio recipe's color part, web/frames/studio_look.py);
                                &pictures=movie|color|processed|raw: what each frame shows (as the windows show it, full
                                color sets only, each frame processed alone, each frame raw); &list=1: every frame however
-                               many (the editor's list; a film holds at most CASSINI_EXPORT_MAX, default 20,000)
+                               many (the editor's list; a film holds at most CASSINI_EXPORT_MAX, default 20,000).
+                               size=1536|2048: mosaics up to that size, each at the bucket its pass has detail for;
+                               size=full: mosaics at native resolution (export.full_size: "full" says the panes' side,
+                               the passes that set it and how many pictures are drawn that big; passes not
+                               pre-processed are counted as pending)
   POST /export?...             (same options, plus sound=1 caption=1) starts making that film, or finds it made
                                or on its way; one film is made at a time. Answers the job's status, as
   /export/<JOB>.json           does: state queued/making/sound/done/failed, pictures done of total, seconds left
@@ -142,7 +159,8 @@ Routes:
                                picture-maker version (obs-v*, color-v*, reel-v*...); each flag keeps a copy
   POST /usage                  one word from the page ("visit", "visit-link", "copy-link"), added to today's usage
                                counts; every answer above is counted there too (usage.py: daily totals only, no
-                               cookies, nothing per person), kept in --usage (default ~/Documents/cassini-usage)
+                               cookies, nothing per person), kept in --usage (default ~/Documents/cassini-usage
+                               on port 8765, the live site; any other port counts nothing unless --usage is given)
   /stats/                      the usage counts on one page; /stats/usage.json?days=30 the same as JSON. Only for this
                                machine, its network and Tailscale (not through the Cloudflare tunnel), or ?key=$CASSINI_STATS_KEY
   anything else                a file from --site, if given (the replay page and its data)
@@ -190,6 +208,7 @@ import color_image  # noqa: E402
 sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
 import reel  # noqa: E402
 import obs_mosaic  # noqa: E402
+import mosaic_native  # noqa: E402
 import export  # noqa: E402
 import usage  # noqa: E402
 counts = None   # the usage counts (usage.Usage), set by main(); None counts nothing
@@ -1170,6 +1189,25 @@ def make_handler(site, cache, flags=None):
                 headers["Cache-Control"] = "no-store"
             return self.send_bytes(data, "image/png" if fmt == "png" else "image/webp", forever, headers)
 
+        def send_file(self, path, mime, query, name, headers=None, forever=True):
+            """A picture kept in a file, sent a megabyte at a time (a native mosaic can be hundreds of MB)."""
+            size = os.path.getsize(path)
+            self.send_response(200)
+            self.send_header("Content-Type", mime)
+            self.send_header("Content-Length", str(size))
+            for key, value in (headers or {}).items():
+                self.send_header(key, value)
+            if query.get("download", ["0"])[0] == "1":
+                self.send_header("Content-Disposition", f'attachment; filename="{name}"')
+            self.send_header("Cache-Control", "public, max-age=31536000, immutable" if forever else "no-store")
+            self.end_headers()
+            with open(path, "rb") as fh:
+                while True:
+                    chunk = fh.read(1 << 20)
+                    if not chunk:
+                        break
+                    self.wfile.write(chunk)
+
         def centre_of(self, query, frame_id):
             """center=1 (Auto center in a camera window): the pass's view (obs_mosaic.centre_view: centred on the body,
             or north up where it is for a close-up), or None for the picture as it is. False for a ring, spoke or
@@ -1336,7 +1374,7 @@ def make_handler(site, cache, flags=None):
                 return self.send_bytes(samples_text().encode(), "text/plain", False)
             if url.path == "/export/plan.json":
                 try:
-                    return self.send_json(export.public_plan(export.plan(export.options(parse_qs(url.query)))))
+                    return self.send_json(export.public_plan(export.plan(export.options(parse_qs(url.query)), cache)))
                 except ValueError as e:
                     return self.send_json({"error": str(e)}, 400)
                 except OverflowError as e:
@@ -1461,23 +1499,82 @@ def make_handler(site, cache, flags=None):
                     return self.send_error(400, "Not a frame id")
                 found = obs_mosaic.tile_map(m.group(1), cache) if reel._index is not None else None
                 return self.send_json(found) if found else self.send_json({"error": "not a mosaic pass"}, 404)
-            m = re.match(r"^/frames/mosaic/([^/]+)/frame\.webp$", url.path)
+            m = re.match(r"^/frames/mosaic/([^/]+)/(?:p/(\d+)|frame)\.webp$", url.path)
             if m:
-                # one frame of that mosaic on its own at full resolution, with the mosaic's levels and colours
-                # (obs_mosaic.pointing_picture): ids = its frames, one per filter as the tile map gives them
-                # (&channel=0-2: one filter's channel of it)
+                # pointing n of that mosaic opened on its own at full resolution, the mosaic's own picture of that spot
+                # (obs_mosaic.pointing_picture: its tiles with the mosaic's seam corrections, through mosaic.compose,
+                # mixed and given detail as the mosaic is); &channel=0-2: one filter's plane of it. frame.webp?ids=A,B,C
+                # (the links before pointings were numbered) is the pointing those frames are
                 query = parse_qs(url.query)
-                ids = [i for i in query.get("ids", [""])[0].split(",") if i]
-                if not FRAME_ID.match(m.group(1)) or not ids or len(ids) > 3 or not all(FRAME_ID.match(i) for i in ids):
-                    return self.send_error(400, "Not frame ids")
+                if not FRAME_ID.match(m.group(1)):
+                    return self.send_error(400, "Not a frame id")
                 size, fmt, ch = size_of(query, FULL), picture_format(query), query.get("channel", [None])[0]
                 if ch is not None and ch not in ("0", "1", "2"):
                     return self.send_error(400, "channel is 0, 1 or 2")
-                made = obs_mosaic.pointing_picture(m.group(1), ids, cache, size, fmt, _mosaic_slots, None if ch is None else int(ch)) \
-                    if reel._index is not None else None
+                if reel._index is None:
+                    return self.send_error(404, "No index of the frames")
+                n = int(m.group(2)) if m.group(2) else None
+                if n is None:
+                    ids = [i for i in query.get("ids", [""])[0].split(",") if i]
+                    if not ids or len(ids) > 3 or not all(FRAME_ID.match(i) for i in ids):
+                        return self.send_error(400, "Not frame ids")
+                    mapped = obs_mosaic.tile_map(m.group(1), cache)
+                    q = obs_mosaic.pointing_of(mapped, ids) if mapped else None
+                    if q is None:
+                        return self.send_error(404, "Not frames of that mosaic")
+                    n = q["n"]
+                    if len(ids) == 1 and ch is None and q["set"]:
+                        # one filter of a colour pointing: its plane
+                        f = next((f for f, i in q["ids"].items() if i == ids[0]), None)
+                        ch = str(mapped["filters"].index(f)) if f in mapped["filters"] else None
+                made = obs_mosaic.pointing_picture(m.group(1), n, cache, size, fmt, _mosaic_slots, None if ch is None else int(ch))
                 if not made:
-                    return self.send_error(404, "Not frames of that mosaic")
-                return self.send_picture(made[0], fmt, query, f"Cassini_{'_'.join(ids)}_in_mosaic" + ("" if ch is None else f"_channel{ch}"), {"X-Reel": json.dumps(made[1])})
+                    return self.send_error(404, "No such pointing in that mosaic")
+                name = f"Cassini_{made[1]['observation']}_frame{n}_in_mosaic" + ("" if ch is None else f"_channel{ch}")
+                return self.send_picture(made[0], fmt, query, name, {"X-Reel": json.dumps(made[1])})
+            m = re.match(r"^/frames/mosaic/([^/]+)/full\.(json|webp|jpg|png)$", url.path)
+            if m:
+                # the mosaic shown for that frame at native resolution (mosaic_native): .json its size, estimates and
+                # whether it is made (make=jpg|png starts making it, for the save menu); .webp?crop=x0,y0,x1,y1 a part
+                # of it (fractions of the picture) for the zoom lens; .jpg / .png all of it (download=1 to save).
+                # force=, tune=, hide=, look= and colors= as the mosaic route's
+                if not FRAME_ID.match(m.group(1)):
+                    return self.send_error(400, "Not a frame id")
+                if reel._index is None:
+                    return self.send_error(404, "Not a mosaic pass")
+                query = parse_qs(url.query)
+                try:
+                    tune = obs_mosaic.parse_tune(query.get("tune", [""])[0], query.get("hide", [""])[0])
+                    crop = [float(v) for v in query["crop"][0].split(",")] if query.get("crop") else None
+                except ValueError:
+                    return self.send_error(400, "tune= is n:dx:dy,..., hide= is n,... and crop= is x0,y0,x1,y1")
+                if crop is not None:
+                    crop = [max(0.0, min(1.0, v)) for v in crop]
+                    if len(crop) != 4 or crop[2] - crop[0] < 1e-4 or crop[3] - crop[1] < 1e-4:
+                        return self.send_error(400, "crop= is x0,y0,x1,y1, fractions of the picture")
+                force, kind = bool(query.get("force")), m.group(2)
+                try:
+                    if kind == "json":
+                        made = mosaic_native.info(m.group(1), cache, force, tune)
+                        if made and not any(made["ready"].values()):
+                            in_background(mosaic_native.warm(m.group(1), cache, force, tune))
+                        if made and query.get("make", [""])[0] in ("jpg", "png"):
+                            fmt = query["make"][0]
+                            if not made["ready"][fmt] and fmt not in made["making"]:
+                                in_background(mosaic_native.start(m.group(1), cache, fmt, force, tune, _mosaic_slots))
+                                made["making"][fmt] = 0.0
+                        return self.send_json(made) if made else self.send_json({"error": "not a mosaic pass"}, 404)
+                    if kind == "webp" and crop is None:
+                        return self.send_error(400, "a crop= of the native mosaic, or .jpg / .png for all of it")
+                    made = mosaic_native.picture(m.group(1), cache, crop, kind, _mosaic_slots, force, tune)
+                except FileNotFoundError:
+                    made = None
+                if not made:
+                    return self.send_error(404, "No mosaic for this frame")
+                path, report = made
+                name = f"Cassini_{m.group(1)}_mosaic_full_resolution_{report['width']}x{report['height']}"
+                return self.send_file(path, {"jpg": "image/jpeg", "png": "image/png", "webp": "image/webp"}[kind],
+                                      query, name + "." + kind, {"X-Native": json.dumps(report)}, forever=not report["behind"])
             m = re.match(r"^/frames/movie/([^/]+)\.(webp|json)$", url.path)
             if m:
                 # a frame played as a movie of its pass (obs_mosaic.movie_webp): centred by SPICE, on the pass's one
@@ -1495,24 +1592,36 @@ def make_handler(site, cache, flags=None):
                 size = max(SIZES) if size == FULL else size
                 try:
                     trail = max(0, min(obs_mosaic.TRAIL, int(query.get("trail", ["0"])[0] or 0)))
+                    steady = max(0, min(obs_mosaic.STEADY_MOST, int(query.get("steady", ["0"])[0] or 0)))
+                    exposure = obs_mosaic.exposure_of(query.get("exposure", ["0"])[0])
                 except ValueError:
-                    return self.send_error(400, "trail= takes a number of frames")
+                    return self.send_error(400, "trail=, steady= and exposure= take a number of frames")
                 try:
                     if query.get("mode", [""])[0] == "rolling":
                         # a mosaic movie: every place's newest tile (laps= newest copies of each), never emptied
                         laps = max(1, min(obs_mosaic.TRAIL, int(query.get("laps", ["1"])[0] or 1)))
                         fade = (int(query.get("fade", ["0"])[0] or 0), int(query.get("persist", [str(obs_mosaic.FADE_PERSIST)])[0] or 0))
                         full = size_of(query, 512) == FULL
+                        # full: the biggest size the pass has detail for (export.bucket of its native size), never
+                        # the canvas enlarged past it
+                        out = obs_mosaic.OUT
+                        if full:
+                            try:
+                                out = export.bucket(mosaic_native.native_side(m.group(1), cache) or obs_mosaic.OUT,
+                                                    min(obs_mosaic.CANVAS, FULL_MAX))
+                            except (FileNotFoundError, ValueError, KeyError):
+                                out = min(obs_mosaic.CANVAS, FULL_MAX)
                         made = obs_mosaic.rolling_webp(m.group(1), FULL if full else size, cache, laps, _mosaic_slots, fmt,
-                                                       out=min(obs_mosaic.CANVAS, FULL_MAX) if full else obs_mosaic.OUT,
-                                                       fade=fade)
+                                                       out=out,
+                                                       fade=fade, wait=query.get("whole", ["0"])[0] == "1")
                         if made and made[0] is not None:
                             return self.send_picture(made[0], fmt, query, f"Cassini_{m.group(1)}_mosaic_movie", {"X-Movie": json.dumps(made[1])},
                                                      forever=not made[1].get("partial"))
                     else:
                         with _movie_slots:
                             made = obs_mosaic.movie_webp(m.group(1), size, cache, trail, query.get("color", ["1"])[0] != "0",
-                                                       centre=query.get("center", ["1"])[0] != "0")
+                                                       centre=query.get("center", ["1"])[0] != "0", steady=steady,
+                                                       exposure=exposure)
                 except (FileNotFoundError, ValueError):
                     made = None
                 if not made:
@@ -1724,8 +1833,10 @@ def main():
     ap.add_argument("--cache", default=os.path.join(os.getcwd(), "frame_cache"), help="where made WebP files are kept")
     ap.add_argument("--flags", default=os.environ.get("CASSINI_FLAGS", "~/Documents/flagged-pictures"),
                     help="where pictures flagged in Cassini OS are saved (POST /flags, page /flags/)")
-    ap.add_argument("--usage", default=os.environ.get("CASSINI_USAGE", "~/Documents/cassini-usage"),
-                    help="where the daily usage counts are kept (usage.py, page /stats/); off to count nothing")
+    ap.add_argument("--usage", default=os.environ.get("CASSINI_USAGE"),
+                    help="where the daily usage counts are kept (usage.py, page /stats/); off to count nothing. "
+                         "Left out, only the live site (port 8765) counts, into ~/Documents/cassini-usage, so previews "
+                         "never add their own visits to it")
     args = ap.parse_args()
     site = os.path.abspath(os.path.expanduser(args.site)) if args.site else None
     print(f"Frames from {data_source.get_source()}, kernels from {data_source.get_kernel_source()}, cache in {args.cache}")
@@ -1747,7 +1858,8 @@ def main():
     flags = os.path.abspath(os.path.expanduser(args.flags))
     print(f"Flagged pictures go to {flags}")
     global counts
-    counts = None if args.usage == "off" else usage.Usage(os.path.abspath(os.path.expanduser(args.usage)))
+    where = args.usage or ("~/Documents/cassini-usage" if args.port == 8765 else "off")
+    counts = None if where == "off" else usage.Usage(os.path.abspath(os.path.expanduser(where)))
     print(f"Usage counts in {counts.folder}" if counts else "Usage counting off")
     server = Server((args.host, args.port), make_handler(site, args.cache, flags))
     print(f"Serving on http://{args.host}:{args.port}/" + (f" (site: {site})" if site else ""))

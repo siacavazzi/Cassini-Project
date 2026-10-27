@@ -9,7 +9,9 @@
   look-ahead, and the sound goes quiet. Coming back, each loop gets its frame again, the clocks carry on from where
   they stopped (no catch-up), and the camera windows ask again for the picture they show and nothing else first.
 
-  window.cassiniAway: { on, since, total } (total: ms spent away so far). The page hears "cassini:away" on document,
+  window.cassiniAway: { on, since, total, keepRunning, check } (total: ms spent away so far). A mode that has to run
+  unattended on a screen nobody touches (ambient mode: a wallpaper, a screen saver or a stream often reports itself
+  hidden or unfocused) sets keepRunning and calls check(); the page then never pauses until it clears it. The page hears "cassini:away" on document,
   detail { away: true } when it stops and { away: false, ms } when it carries on (ms: how long it was away), so scripts
   that keep time on performance.now() move their clocks on by ms.
 -->
@@ -31,7 +33,7 @@
   S.define({ key: "playback.pauseBlur", section: "Playback", label: "Also when the window loses focus", type: "toggle", value: true,
     hint: "Pause while you work in another window too, even if Cassini OS is still on screen. Off keeps it playing on a second screen." });
 
-  const A = window.cassiniAway = { on: false, since: 0, total: 0 };
+  const A = window.cassiniAway = { on: false, since: 0, total: 0, keepRunning: false, check: () => check() };
   let focused = true;   // until the window says otherwise (a page opened in front has focus)
   // every animation frame loop asks again each frame, so holding the requests stops them all; ids for held ones are
   // negative (never 0, which loops use for "none"), and map to the real request once it is made
@@ -48,7 +50,7 @@
   };
   const note = document.getElementById("awaynote");
   function check() {
-    const away = S.get("playback.pauseHidden") && (document.hidden || (S.get("playback.pauseBlur") && !focused));
+    const away = !A.keepRunning && S.get("playback.pauseHidden") && (document.hidden || (S.get("playback.pauseBlur") && !focused));
     if (away === A.on) return;
     A.on = away;
     note.classList.toggle("on", away && !document.hidden);
