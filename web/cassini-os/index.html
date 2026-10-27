@@ -5270,6 +5270,173 @@ body.phone #launch .lx-clock { font-size: 9.5px; bottom: 9vh; }
 <script src="https://cdn.jsdelivr.net/npm/three@0.128.0/examples/js/controls/OrbitControls.js"></script>
 <script src="https://cdn.jsdelivr.net/npm/three@0.128.0/examples/js/loaders/GLTFLoader.js"></script>
 <script>
+// ---------- smooth lines: anti-aliased orbits, trails and outlines ----------
+(function () {
+  const S = window.cassiniSettings;
+  S.define({ key: "perf.smoothLines", section: "Performance", label: "Smooth lines", type: "toggle", value: true,
+             hint: "Anti-aliased orbits, trails and outlines. Off draws the plain one-pixel lines, which look jagged." });
+  S.define({ key: "view.lineWidth", section: "View", label: "Line width", type: "range", value: 1, min: 0.5, max: 3, step: 0.25, unit: "px",
+             hint: "Orbits, trails and outlines, in screen pixels (with smooth lines on). 1 is as thin as the plain lines." });
+  let on = S.get("perf.smoothLines"), half = S.get("view.lineWidth") / 2;
+  const redraw = () => { if (window.cassiniPerf) cassiniPerf.invalidate(); };
+  S.on("perf.smoothLines", v => { on = v; redraw(); });
+  S.on("view.lineWidth", v => { half = v / 2; redraw(); });
+
+  const VS = `
+    #include <common>
+    #include <color_pars_vertex>
+    #include <logdepthbuf_pars_vertex>
+    uniform vec4 viewport;
+    uniform float halfWidth;
+    attribute vec3 instanceStart, instanceEnd;
+    #ifdef USE_COLOR
+    attribute vec3 instanceColorStart, instanceColorEnd;
+    #endif
+    varying vec2 vA, vB;
+    // the end behind the camera moves along the segment to the near plane, so the projection stays on screen
+    void trim(const in vec4 a, inout vec4 b) {
+      float near = -0.5 * projectionMatrix[3][2] / projectionMatrix[2][2];
+      b.xyz = mix(a.xyz, b.xyz, (near - a.z) / (b.z - a.z));
+    }
+    void main() {
+      #ifdef USE_COLOR
+      vColor = position.y < 0.5 ? instanceColorStart : instanceColorEnd;
+      #endif
+      vec4 a = modelViewMatrix * vec4(instanceStart, 1.0), b = modelViewMatrix * vec4(instanceEnd, 1.0);
+      if (projectionMatrix[2][3] == -1.0) {
+        if (a.z >= 0.0 && b.z >= 0.0) { gl_Position = vec4(2.0, 2.0, 2.0, 1.0); return; }
+        if (a.z < 0.0 && b.z >= 0.0) trim(a, b); else if (b.z < 0.0 && a.z >= 0.0) trim(b, a);
+      }
+      vec4 ca = projectionMatrix * a, cb = projectionMatrix * b;
+      // the segment's ends in window pixels
+      vA = viewport.xy + (ca.xy / ca.w * 0.5 + 0.5) * viewport.zw;
+      vB = viewport.xy + (cb.xy / cb.w * 0.5 + 0.5) * viewport.zw;
+      vec2 d = vB - vA;
+      float l = length(d);
+      if (l < 1e-3) { gl_Position = vec4(2.0, 2.0, 2.0, 1.0); return; }
+      // a quad one pixel wider than the line on each side, for the partly covered pixels at its edges
+      vec2 n = vec2(-d.y, d.x) / l * position.x * (halfWidth + 1.0);
+      vec4 clip = position.y < 0.5 ? ca : cb;
+      clip.xy += n / viewport.zw * 2.0 * clip.w;
+      gl_Position = clip;
+      #include <logdepthbuf_vertex>
+    }`;
+  const FS = `
+    uniform vec3 diffuse;
+    uniform float opacity;
+    uniform float halfWidth;
+    varying vec2 vA, vB;
+    #include <common>
+    #include <color_pars_fragment>
+    #include <logdepthbuf_pars_fragment>
+    void main() {
+      vec2 d = vB - vA;
+      float r = abs(dot(gl_FragCoord.xy - vA, normalize(vec2(-d.y, d.x))));
+      // share of this pixel (one pixel across) the line covers: 1 inside, a ramp over its edges, the same total for
+      // a line thinner than a pixel, so it reads as bright as the plain line it replaces
+      float cover = clamp(min(r + 0.5, halfWidth) - max(r - 0.5, -halfWidth), 0.0, 1.0);
+      if (cover <= 0.0) discard;
+      vec4 diffuseColor = vec4(diffuse, opacity * cover);
+      #include <logdepthbuf_fragment>
+      #include <color_fragment>
+      gl_FragColor = diffuseColor;
+    }`;
+
+  const lines = new Set(), vp = new THREE.Vector4();
+  // the quad: x across the line (-1, 1), y along it (0 at the segment's start, 1 at its end)
+  const QUAD = new Float32Array([-1, 0, 0, 1, 0, 0, -1, 1, 0, 1, 1, 0]);
+
+  function adopt(L) {
+    const src = L.material;
+    if (L.userData.smooth || !src || src.type !== "LineBasicMaterial") return;
+    const g = new THREE.InstancedBufferGeometry();
+    g.setAttribute("position", new THREE.BufferAttribute(QUAD, 3));
+    g.setIndex([0, 2, 1, 2, 3, 1]);
+    const m = new THREE.ShaderMaterial({ vertexShader: VS, fragmentShader: FS, transparent: true, vertexColors: !!src.vertexColors,
+      uniforms: { diffuse: { value: new THREE.Color() }, opacity: { value: 1 }, halfWidth: { value: 0.5 }, viewport: { value: new THREE.Vector4() } } });
+    const M = new THREE.Mesh(g, m);
+    M.frustumCulled = false; M.cap = 0; M.key = "";
+    M.onBeforeRender = function (r) { r.getCurrentViewport(vp); m.uniforms.viewport.value.copy(vp); };
+    L.userData.smooth = M; M.layers.mask = L.layers.mask;
+    add0.call(L, M);
+    lines.add(L);
+  }
+
+  // copies the line's segments into the mesh's instances when its points, colors or draw range changed
+  function fill(L, M) {
+    const g = L.geometry, pa = g && g.attributes.position;
+    if (!pa) { M.visible = false; return; }
+    const ca = L.material.vertexColors ? g.attributes.color : null, ix = g.index;
+    const n = ix ? ix.count : pa.count, s0 = Math.max(0, g.drawRange.start), s1 = Math.min(n, s0 + g.drawRange.count);
+    const key = `${g.id} ${pa.version} ${ca ? ca.version : -1} ${ix ? ix.version : -1} ${s0} ${s1}`;
+    if (key === M.key) return;
+    M.key = key;
+    const segs = L.isLineSegments ? Math.max(0, (s1 - s0) >> 1) : Math.max(0, s1 - s0 - 1) + (L.isLineLoop && s1 - s0 > 2 ? 1 : 0);
+    const G = M.geometry;
+    if (segs > M.cap) {
+      M.cap = Math.max(segs, 2 * M.cap, 16);
+      for (const k of ["instanceStart", "instanceEnd", "instanceColorStart", "instanceColorEnd"])
+        G.setAttribute(k, new THREE.InstancedBufferAttribute(new Float32Array(3 * M.cap), 3));
+      G.dispose();   // new buffers: drop the old ones from the GPU
+    }
+    const A = G.attributes.instanceStart.array, B = G.attributes.instanceEnd.array, CA = G.attributes.instanceColorStart.array, CB = G.attributes.instanceColorEnd.array;
+    const p = pa.array, ps = pa.itemSize, c = ca && ca.array, cs = ca && ca.itemSize, at = k => ix ? ix.array[k] : k;
+    const put = (j, a, b) => {
+      a = at(a); b = at(b);
+      for (let q = 0; q < 3; q++) { A[3 * j + q] = p[ps * a + q]; B[3 * j + q] = p[ps * b + q]; }
+      if (c) for (let q = 0; q < 3; q++) { CA[3 * j + q] = c[cs * a + q]; CB[3 * j + q] = c[cs * b + q]; }
+    };
+    let j = 0;
+    if (L.isLineSegments) for (let k = s0; k + 1 < s1; k += 2) put(j++, k, k + 1);
+    else {
+      for (let k = s0; k + 1 < s1; k++) put(j++, k, k + 1);
+      if (L.isLineLoop && s1 - s0 > 2) put(j++, s1 - 1, s0);
+    }
+    for (const k of ["instanceStart", "instanceEnd", "instanceColorStart", "instanceColorEnd"]) G.attributes[k].needsUpdate = true;
+    G.instanceCount = j;
+  }
+
+  function sync() {
+    for (const L of lines) {
+      const M = L.userData.smooth, src = L.material;
+      if (!on || src.type !== "LineBasicMaterial") {
+        // plain lines: the line draws itself again
+        if (!L.layers.mask) L.layers.mask = M.layers.mask;
+        M.visible = false; continue;
+      }
+      // the line stays off every camera; a mask the viewer set on it meanwhile (layers.set) passes to the mesh
+      if (L.layers.mask) { M.layers.mask = L.layers.mask; L.layers.mask = 0; }
+      M.visible = true;
+      fill(L, M);
+      const m = M.material;
+      m.uniforms.diffuse.value.copy(src.color); m.uniforms.opacity.value = src.opacity; m.uniforms.halfWidth.value = half;
+      m.visible = src.visible; m.blending = src.blending; m.depthTest = src.depthTest; m.depthWrite = src.depthWrite;
+      M.renderOrder = L.renderOrder;
+    }
+  }
+
+  const P = THREE.Object3D.prototype, add0 = P.add, remove0 = P.remove;
+  P.add = function (...objs) {
+    const r = add0.apply(this, objs);
+    for (const o of objs) if (o && o.isLine) { adopt(o); if (o.userData.smooth) lines.add(o); }
+    return r;
+  };
+  P.remove = function (...objs) {
+    for (const o of objs) if (o && o.isLine) lines.delete(o);
+    return remove0.apply(this, objs);
+  };
+  // three.js r128 makes render() inside the renderer's constructor, so each new renderer's render is wrapped
+  const R0 = THREE.WebGLRenderer;
+  THREE.WebGLRenderer = function (params) {
+    R0.call(this, params);
+    const render0 = this.render;
+    this.render = function () { if (lines.size) sync(); return render0.apply(this, arguments); };
+  };
+  THREE.WebGLRenderer.prototype = R0.prototype;
+  window.cassiniSmoothLines = { count: () => lines.size };
+})();
+</script>
+<script>
 "use strict";
 // ---------- study theme: colours and fonts for the canvas/3D parts come from CSS custom properties ----------
 const cssVar = n => getComputedStyle(document.documentElement).getPropertyValue(n).trim();
