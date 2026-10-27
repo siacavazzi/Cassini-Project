@@ -142,7 +142,8 @@ Routes:
                                picture-maker version (obs-v*, color-v*, reel-v*...); each flag keeps a copy
   POST /usage                  one word from the page ("visit", "visit-link", "copy-link"), added to today's usage
                                counts; every answer above is counted there too (usage.py: daily totals only, no
-                               cookies, nothing per person), kept in --usage (default ~/Documents/cassini-usage)
+                               cookies, nothing per person), kept in --usage (default ~/Documents/cassini-usage
+                               on port 8765, the live site; any other port counts nothing unless --usage is given)
   /stats/                      the usage counts on one page; /stats/usage.json?days=30 the same as JSON. Only for this
                                machine, its network and Tailscale (not through the Cloudflare tunnel), or ?key=$CASSINI_STATS_KEY
   anything else                a file from --site, if given (the replay page and its data)
@@ -1714,8 +1715,10 @@ def main():
     ap.add_argument("--cache", default=os.path.join(os.getcwd(), "frame_cache"), help="where made WebP files are kept")
     ap.add_argument("--flags", default=os.environ.get("CASSINI_FLAGS", "~/Documents/flagged-pictures"),
                     help="where pictures flagged in Cassini OS are saved (POST /flags, page /flags/)")
-    ap.add_argument("--usage", default=os.environ.get("CASSINI_USAGE", "~/Documents/cassini-usage"),
-                    help="where the daily usage counts are kept (usage.py, page /stats/); off to count nothing")
+    ap.add_argument("--usage", default=os.environ.get("CASSINI_USAGE"),
+                    help="where the daily usage counts are kept (usage.py, page /stats/); off to count nothing. "
+                         "Left out, only the live site (port 8765) counts, into ~/Documents/cassini-usage, so previews "
+                         "never add their own visits to it")
     args = ap.parse_args()
     site = os.path.abspath(os.path.expanduser(args.site)) if args.site else None
     print(f"Frames from {data_source.get_source()}, kernels from {data_source.get_kernel_source()}, cache in {args.cache}")
@@ -1736,7 +1739,8 @@ def main():
     flags = os.path.abspath(os.path.expanduser(args.flags))
     print(f"Flagged pictures go to {flags}")
     global counts
-    counts = None if args.usage == "off" else usage.Usage(os.path.abspath(os.path.expanduser(args.usage)))
+    where = args.usage or ("~/Documents/cassini-usage" if args.port == 8765 else "off")
+    counts = None if where == "off" else usage.Usage(os.path.abspath(os.path.expanduser(where)))
     print(f"Usage counts in {counts.folder}" if counts else "Usage counting off")
     server = Server((args.host, args.port), make_handler(site, args.cache, flags))
     print(f"Serving on http://{args.host}:{args.port}/" + (f" (site: {site})" if site else ""))
