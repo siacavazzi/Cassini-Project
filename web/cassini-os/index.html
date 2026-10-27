@@ -443,6 +443,16 @@ body.s-steady .info dd[data-f="colour"] { white-space: normal; display: -webkit-
    zoom and "back to now" on the right, so the timeline under them gets the whole width */
 .lcdhead { display: grid; grid-template-columns: auto auto minmax(0, 1fr) auto; align-items: center; gap: 10px; }
 .lcdhead .clockbox { min-width: 0; display: grid; gap: 1px; }
+/* one camera off: a small pill on the timeline, at the top of the lane the camera that is on now fills (camOff, below) */
+.camchip { position: absolute; z-index: 2; display: flex; align-items: center; gap: 7px; height: 18px; box-sizing: border-box; padding: 0 2px 0 7px;
+  border: 1px solid rgba(242,176,76,.5); border-radius: 9px; background: rgba(18,19,23,.9); box-shadow: 0 1px 6px rgba(0,0,0,.45);
+  font: 600 9.5px/1 var(--ui); letter-spacing: .04em; color: #f2c27a; white-space: nowrap; pointer-events: auto; }
+.camchip[hidden] { display: none; }
+.camchip i { width: 5px; height: 5px; border-radius: 50%; border: 1.5px solid #f2b04c; flex: none; }
+.camchip button { all: unset; cursor: pointer; height: 14px; padding: 0 8px; border-radius: 7px; background: rgba(242,176,76,.16); color: #ffd79a;
+  font: 600 9.5px/14px var(--ui); letter-spacing: .02em; transition: background .15s, color .15s; }
+.camchip button:hover { background: #f2b04c; color: #17120a; }
+.camchip button:focus-visible { outline: 1px solid #f2b04c; outline-offset: 1px; }
 .lcdhead .transport { flex: none; justify-self: start; gap: 1px; padding: 2px; border: 1px solid var(--q-line); border-radius: 16px; }
 .lcdhead .transport .round { border: 0; background: none; }
 .lcdhead .transport .round:hover { background: rgba(255,255,255,.1); }
@@ -1169,6 +1179,61 @@ body.phone .stupanel { border-left: 0; border-top: 1px solid var(--q-line); }
 body.phone .sturow input { height: 26px; }
 body.phone .stufoot .galbtn { padding: 6px 10px; }
 
+#mecard { top: calc(env(safe-area-inset-top, 0px) + 34px); left: 50%; transform: translateX(-50%); width: clamp(600px, 76vw, 1240px); height: min(780px, calc(100% - 110px)); display: flex; flex-direction: column; }
+#mecard[style*="left"] { transform: none; }
+#mecard.zoomed { width: calc(100% - 20px); height: calc(100% - 50px); }
+#mecard .mebody { flex: 1 1 auto; min-height: 0; display: grid; grid-template-columns: minmax(0, 1fr) 250px; border-top: 1px solid var(--q-line); }
+#mecard .memain { min-width: 0; min-height: 0; display: grid; grid-template-rows: minmax(140px, 1fr) auto minmax(110px, 38%); background: #000; }
+#mecard.big .memain { grid-template-rows: minmax(140px, 1fr) auto 0; }
+#mecard.big #mestrip { display: none; }
+#mestage { position: relative; min-height: 0; overflow: hidden; }
+#mecanvas { position: absolute; display: block; cursor: zoom-in; }
+#mecard.big #mecanvas { cursor: zoom-out; }
+#mestage .metag { position: absolute; left: 8px; top: 7px; right: 8px; z-index: 2; font: 9.5px/1.4 var(--hudf); letter-spacing: .04em; color: rgba(232,236,242,.78); text-shadow: 0 0 3px #000; pointer-events: none; }
+#meoff { position: absolute; right: 8px; bottom: 8px; z-index: 2; font: 10px var(--hudf); letter-spacing: .08em; text-transform: uppercase; padding: 2px 6px; border-radius: 3px; background: rgba(255,120,100,.25); color: #ffb2a6; }
+#meempty { position: absolute; inset: 0; display: grid; place-items: center; text-align: center; padding: 20px; font-size: 12px; line-height: 1.55; color: var(--q-dim); }
+:is(#meempty, #meoff, #mecard .meside, #mecard [data-hide])[hidden] { display: none !important; }
+#mecard .mebar { display: flex; gap: 8px; align-items: center; flex-wrap: wrap; padding: 6px 10px; border-top: 1px solid var(--q-line); background: var(--q-panel); font: 10.5px var(--hudf); color: var(--q-dim); }
+#mecard .mebar .sp { flex: 1; }
+#mecard .mebar .rnd { all: unset; width: 24px; height: 24px; display: grid; place-items: center; border-radius: 50%; color: var(--q-text); background: rgba(255,255,255,.08); cursor: pointer; flex: none; font-size: 12px; }
+#mecard .mebar .rnd:hover { background: rgba(255,255,255,.16); color: #fff; }
+#mepos { min-width: 120px; font-variant-numeric: tabular-nums; }
+#mestrip { min-height: 0; overflow-y: auto; padding: 6px; display: grid; grid-template-columns: repeat(auto-fill, 96px); grid-auto-rows: 96px; justify-content: space-between; gap: 5px; align-content: start; border-top: 1px solid var(--q-line); background: rgba(0,0,0,.55); }
+.meth { all: unset; position: relative; display: block; border-radius: 4px; overflow: hidden; background: #0b0d11; outline: 1px solid rgba(255,255,255,.06); cursor: pointer; }
+.meth img { position: absolute; inset: 0; display: block; width: 100%; height: 100%; object-fit: cover; }
+.meth span { position: absolute; left: 0; right: 0; bottom: 0; padding: 2px 4px; font: 8.5px/1.25 var(--hudf); color: rgba(232,236,242,.9); background: linear-gradient(transparent, rgba(0,0,0,.85)); white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+.meth b { position: absolute; left: 3px; top: 3px; font: 8px/1 var(--hudf); padding: 2px 3px; border-radius: 2px; background: rgba(0,0,0,.6); color: rgba(232,236,242,.85); font-weight: normal; }
+.meth.out img { opacity: .22; filter: grayscale(1); }
+.meth.out span { color: rgba(232,236,242,.45); }
+.meth.dropped::after { content: ""; position: absolute; inset: 0; background: linear-gradient(to top right, transparent calc(50% - 1px), rgba(255,120,100,.75) 50%, transparent calc(50% + 1px)); pointer-events: none; }
+.meth.picked { outline: 2px solid rgba(138,182,255,.55); }
+.meth.sel { outline: 2px solid var(--q-accent); }
+#mecard .meside { min-height: 0; overflow-y: auto; padding: 2px 12px 12px; border-left: 1px solid var(--q-line); }
+#mecard .meside h4 { margin: 12px 0 4px; font: 10px/1 var(--ui); letter-spacing: .12em; text-transform: uppercase; color: var(--q-dim); font-weight: normal; display: flex; align-items: center; gap: 6px; }
+#mecard .meside h4 .sp { flex: 1; }
+#mecard .meside h4 button { all: unset; font-size: 10px; letter-spacing: 0; text-transform: none; color: var(--q-accent); cursor: pointer; }
+#mecard .meside h4 button:hover { color: #fff; }
+#mecard .meside h4 button:disabled { color: var(--q-dim); cursor: default; }
+.mechips { display: flex; flex-wrap: wrap; gap: 4px; }
+.mechips .galbtn { padding: 2px 7px; font-size: 10.5px; }
+.mechips .galbtn i { font-style: normal; color: var(--q-dim); font-size: 9.5px; }
+.mechips .galbtn[aria-pressed="true"] { background: rgba(138,182,255,.22); border-color: rgba(138,182,255,.7); color: #fff; }
+#mecard .mechips:not(#mepics) .galbtn[aria-pressed="false"] { opacity: .6; text-decoration: line-through; text-decoration-color: rgba(255,255,255,.35); }
+#mecard .menote { margin-top: 6px; font-size: 10.5px; line-height: 1.45; color: var(--q-dim); }
+#mecard .mecheck { display: flex; gap: 6px; align-items: center; margin-top: 10px; font-size: 11px; color: var(--q-text); cursor: pointer; }
+#mecard .mefoot { flex: none; display: flex; gap: 6px; flex-wrap: wrap; align-items: center; padding: 8px 10px; border-top: 1px solid var(--q-line); font-size: 11px; color: var(--q-text); }
+#mecard .mefoot .sp { flex: 1; }
+@media (max-width: 760px) {
+  #mecard, #mecard.zoomed { width: calc(100% - 12px); left: 6px !important; transform: none; height: calc(100dvh - 60px); }
+  #mecard .mebody { grid-template-columns: minmax(0, 1fr); grid-template-rows: minmax(0, 1fr) auto; }
+  #mecard .meside { border-left: 0; border-top: 1px solid var(--q-line); max-height: 34vh; }
+}
+body.phone #mecard { left: var(--side, 6px) !important; right: var(--sider, 6px) !important; width: auto !important; transform: none; top: calc(var(--menu, 30px) + var(--gap, 6px)) !important;
+  height: calc(100dvh - var(--menu, 30px) - var(--appdockh, 0px) - 3 * var(--gap, 6px)) !important; z-index: 1460 !important; }
+body.phone #mecard .mebody { grid-template-columns: minmax(0, 1fr); grid-template-rows: minmax(0, 1fr) auto; }
+body.phone #mecard .meside { border-left: 0; border-top: 1px solid var(--q-line); max-height: 30vh; }
+body.phone #mestrip { grid-template-columns: repeat(auto-fill, 72px); grid-auto-rows: 72px; }
+
 #bodymenu { top: calc(env(safe-area-inset-top, 0px) + 36px); right: max(14px, env(safe-area-inset-right, 0px)); width: 340px; height: min(360px, calc(100% - 330px)); min-height: 220px; display: flex; flex-direction: column; }
 #bodymenu.zoomed { width: 440px; height: calc(100% - 290px); }
 #bodymenu.shaded { height: auto; min-height: 0; }
@@ -1350,7 +1415,8 @@ body.phone.has-dock { --appdockh: 50px; }
 #about .cr .what { margin-top: 2px; font-size: 10.5px; line-height: 1.45; color: var(--q-dim); }
 #about .cr .lic { margin-top: 2px; font-size: 10px; color: var(--q-dim); }
 #about .cr .lic a { margin-left: 8px; }
-#about footer { flex: none; padding: 6px 12px; border-top: 1px solid var(--q-line); font-size: 10.5px; color: var(--q-dim); }
+#about footer { flex: none; display: flex; flex-wrap: wrap; justify-content: space-between; gap: 2px 12px; padding: 6px 12px; border-top: 1px solid var(--q-line); font-size: 10.5px; color: var(--q-dim); }
+#about footer .ver { margin-left: auto; text-align: right; font-family: var(--hudf, monospace); font-size: 10px; opacity: .8; user-select: text; }
 /* a short credit on the page that opens the full one here */
 .credit { all: unset; cursor: default; color: inherit; opacity: .8; }
 .credit:hover { opacity: 1; text-decoration: underline; text-underline-offset: 2px; }
@@ -1396,19 +1462,24 @@ body.phone #about nav { flex-direction: row; border-right: 0; border-bottom: 1px
 .cs-root .cs-skip:hover { color: var(--q-text); }
 .cs-root .cs-hint { position: absolute; left: 50%; top: 18px; transform: translateX(-50%); font-size: 11px; color: rgba(232,236,242,.45); opacity: 0; transition: opacity 1.5s ease; }
 .cs-root .cs-hint.on { opacity: 1; }
+/* a quiet mono readout line low in the middle, and a small dim note bottom left; .on shows them */
+.cs-root .cs-read { position: absolute; left: 50%; bottom: 7vh; transform: translateX(-50%); white-space: nowrap; font: 11px/1 var(--hudf); letter-spacing: .08em;
+  color: var(--q-dim); opacity: 0; transition: opacity 1.2s ease; }
+.cs-root .cs-read.on { opacity: 1; }
+.cs-root .cs-read i { font-style: normal; color: var(--q-accent); }
+.cs-root .cs-note { position: absolute; left: 16px; bottom: 14px; max-width: min(460px, calc(100vw - 140px)); font-size: 10.5px; line-height: 1.4; color: rgba(232,236,242,.34); opacity: 0; transition: opacity 1.5s ease; }
+.cs-root .cs-note.on { opacity: 1; }
 body.cutscene #gl { cursor: grab; }
 body.cutscene.cs-drag #gl { cursor: grabbing; }
 body.cutscene #app > :not(#gl):not(.cs-root) { opacity: 0 !important; pointer-events: none !important; transition: opacity 1.2s ease !important; }
 body.cutscene-out #app * { pointer-events: none !important; }
+body.phone .cs-root .cs-read { font-size: 9.5px; bottom: 9vh; }
+body.phone .cs-root .cs-note { bottom: 40px; }
 body.phone .cs-root .cs-cap { font-size: 16px; } body.phone .cs-root .cs-cap.big { font-size: 21px; }
 
 /* the air's glow from below as it heats, and a shade under the captions so they read over Saturn's bright clouds */
 #finale .fx-air { position: absolute; inset: 0; opacity: 0; background: radial-gradient(ellipse 90% 70% at 50% 100%, rgba(255,120,40,.55), rgba(255,80,20,.18) 55%, transparent 80%); mix-blend-mode: screen; }
 #finale .fx-shade { position: absolute; inset: 0; background: linear-gradient(to top, rgba(0,0,0,.78) 0, rgba(0,0,0,.55) 22%, rgba(0,0,0,0) 48%); }
-#finale .fx-read { position: absolute; left: 50%; bottom: 7vh; transform: translateX(-50%); white-space: nowrap; font: 11px/1 var(--hudf); letter-spacing: .08em;
-  color: var(--q-dim); opacity: 0; transition: opacity 1.2s ease; }
-#finale .fx-read.on { opacity: 1; }
-#finale .fx-read i { font-style: normal; color: var(--q-accent); }
 /* the real readings: a quiet strip chart, top right */
 #finale .fx-data { position: absolute; right: 16px; top: 16px; width: min(300px, calc(100vw - 32px)); box-sizing: border-box; padding: 9px 11px 8px; background: var(--q-panel); border: 1px solid var(--q-line); border-radius: 9px;
   -webkit-backdrop-filter: blur(14px); backdrop-filter: blur(14px); opacity: 0; transition: opacity 1.5s ease; }
@@ -1416,8 +1487,6 @@ body.phone .cs-root .cs-cap { font-size: 16px; } body.phone .cs-root .cs-cap.big
 #finale .fx-data b { display: block; font-weight: normal; font-size: 9.5px; letter-spacing: .14em; text-transform: uppercase; color: var(--q-dim); margin-bottom: 6px; }
 #finale .fx-data canvas { display: block; width: 100%; height: auto; }
 #finale .fx-data small { display: block; margin-top: 5px; font-size: 9.5px; line-height: 1.35; color: rgba(232,236,242,.38); }
-#finale .fx-note { position: absolute; left: 16px; bottom: 14px; max-width: min(460px, calc(100vw - 140px)); font-size: 10.5px; line-height: 1.4; color: rgba(232,236,242,.34); opacity: 0; transition: opacity 1.5s ease; }
-#finale .fx-note.on { opacity: 1; }
 /* the credits roll: a column that scrolls up over the darkened sky, fading in and out at its top and bottom edges */
 #finale .fx-roll { position: absolute; inset: 0; overflow-y: auto; overscroll-behavior: contain; scrollbar-width: none; opacity: 0; pointer-events: none;
   -webkit-mask-image: linear-gradient(to bottom, transparent 0, #000 16%, #000 84%, transparent 100%); mask-image: linear-gradient(to bottom, transparent 0, #000 16%, #000 84%, transparent 100%); }
@@ -1451,8 +1520,6 @@ body.phone #finale .fx-roll .in { font-size: 14px; }
 body.phone #finale .fx-roll dl { grid-template-columns: 1fr; row-gap: 2px; }
 body.phone #finale .fx-roll dt, body.phone #finale .fx-roll dd { text-align: center; }
 body.phone #finale .fx-roll dd { margin-bottom: 10px; }
-body.phone #finale .fx-read { font-size: 9.5px; bottom: 9vh; }
-body.phone #finale .fx-note { bottom: 40px; }
 body.phone #finale .fx-data { width: min(220px, calc(100vw - 32px)); top: 10px; right: 10px; }
 
 /* a shade under the captions so they read over Earth */
@@ -1496,8 +1563,8 @@ body.phone #launch .lx-clock { font-size: 9.5px; bottom: 9vh; }
         <li><button data-act="span" data-v="604800">Timeline: Week</button></li>
         <li><button data-act="span" data-v="2592000">Timeline: Month</button></li>
         <li class="sep" data-rate></li>
-        <li data-rate class="slider"><label for="maxrate">Bursts: at most <b id="maxratev">5 images/s</b></label>
-          <input type="range" id="maxrate" min="0" max="24" step="1" value="5" aria-label="Maximum new images per second during imaging bursts"></li>
+        <li data-rate class="slider"><label for="maxrate">Bursts: at most <b id="maxratev">10 images/s</b></label>
+          <input type="range" id="maxrate" min="0" max="24" step="1" value="10" aria-label="Maximum new images per second during imaging bursts"></li>
       </ul></div>
     <div class="menu"><button aria-haspopup="true">Go</button>
       <ul id="gomenu">
@@ -1592,6 +1659,7 @@ body.phone #launch .lx-clock { font-size: 9.5px; bottom: 9vh; }
           </div>
         </div>
         <div class="sub probe" id="probe" hidden></div>
+        <div class="camchip" id="camoff" hidden role="status"><i aria-hidden="true"></i><span></span><button type="button">Turn on</button></div>
         <canvas id="tl" aria-label="Timeline: drag to scrub, drag the top edge or scroll to move through time, pinch or use the slider to zoom"></canvas>
         <div class="legend"><span class="keys" id="lkeys"></span><span id="l24">—</span></div>
       </div>
@@ -1670,7 +1738,7 @@ body.phone #launch .lx-clock { font-size: 9.5px; bottom: 9vh; }
     <div class="exrow"><span>Frame rate</span><label class="chk"><input type="checkbox" id="exauto"> Adaptive</label><input type="range" id="exfps" min="2" max="30" step="1" aria-label="Pictures per second"><span class="val" id="exfpsv"></span></div>
     <div class="exrow"><span>Picture size</span><input type="range" id="exsize" min="0" max="2" step="1" aria-label="Picture size per camera"><span class="val" id="exsizev"></span></div>
     <div class="exrow"><span></span><label class="chk"><input type="checkbox" id="exsound"> Sound</label><label class="chk"><input type="checkbox" id="excap"> Captions</label></div>
-    <div class="exrow"><button class="exbtn go" id="exgo" disabled>Export</button><button class="exbtn" id="exclear">Clear marks</button><span id="exstate"></span></div>
+    <div class="exrow"><button class="exbtn go" id="exgo" disabled>Export</button><button class="exbtn" id="exclear">Clear marks</button><button class="exbtn" id="exedit" title="Pick the frames and the look of this movie (Movie Editor)">Edit frames…</button><span id="exstate"></span></div>
     <div id="exbar"><i></i></div>
     <div id="exdone" hidden>
       <video id="exvid" controls playsinline preload="metadata" hidden></video>
@@ -1689,6 +1757,7 @@ body.phone #launch .lx-clock { font-size: 9.5px; bottom: 9vh; }
       <button id="segplay" title="Play this stretch as a movie">▶ Play</button>
       <label for="segfps">Frame rate</label><input type="range" id="segfps" min="2" max="30" step="1" aria-label="Movie frame rate"><span id="segfpsv"></span>
       <span class="grow"></span>
+      <button id="segedit" title="Pick which frames go into this movie, and its look (Movie Editor)">Edit…</button>
       <button id="segexport" title="Make a video file of this stretch to download (E)">Save movie…</button>
     </div>
     <div id="segprog" hidden><i></i></div>
@@ -1797,6 +1866,61 @@ body.phone #launch .lx-clock { font-size: 9.5px; bottom: 9vh; }
   </div>
 </section>
 
+  <section class="win" id="mecard" aria-label="Movie Editor" hidden>
+  <div class="titlebar"><span class="lights"><button class="close" aria-label="Close the movie editor">×</button><button class="min" aria-label="Close the movie editor">–</button><button class="zoom" aria-label="Zoom">+</button></span>Movie Editor</div>
+  <div class="mebody">
+    <div class="memain">
+      <div id="mestage">
+        <canvas id="mecanvas" title="Double-click to fill the window"></canvas>
+        <span class="metag" id="metag"></span>
+        <span id="meoff" hidden>Left out</span>
+        <div id="meempty">Highlight a stretch of the timeline (drag across it), then Edit… on its bar.</div>
+      </div>
+      <div class="mebar">
+        <button class="rnd" id="meprev" aria-label="Previous frame (←)" title="Previous frame (←)">‹</button>
+        <button class="rnd" id="meplay" aria-label="Play the kept frames (Space)" title="Play the kept frames (Space)">▶</button>
+        <button class="rnd" id="menext" aria-label="Next frame (→)" title="Next frame (→)">›</button>
+        <span id="mepos"></span>
+        <div class="galseg" id="mesrc" role="group" aria-label="Picture shown"><button data-v="movie" title="The picture the film shows for this frame (mosaic, color, movie pass or processed)">As in the movie</button><button data-v="raw" title="The frame as Cassini took it">Raw frame</button></div>
+        <span class="sp"></span>
+        <button class="galbtn" id="metoggle" title="Take the picked frames out of the movie, or put them back (Delete)">Remove</button>
+        <button class="galbtn" id="medl" title="Save this frame at full size, with the look, as a JPEG">Download frame</button>
+      </div>
+      <div id="mestrip" role="listbox" aria-label="Frames of the movie" aria-multiselectable="true"></div>
+    </div>
+    <div class="meside" hidden>
+      <h4><span>Pictures</span></h4>
+      <div class="mechips" id="mepics" role="group" aria-label="Pictures in the movie">
+        <button class="galbtn" data-v="movie" title="As the camera windows show them: mosaics, color pictures, movie passes, processed frames">As in the movie</button>
+        <button class="galbtn" data-v="color" title="Only the full color pictures: each three-filter set once, as its color composite">Full color only</button>
+        <button class="galbtn" data-v="processed" title="Every frame in every filter on its own, made by the pipeline (stacked, calibrated), never put together">Every frame, processed</button>
+        <button class="galbtn" data-v="raw" title="Every frame in every filter as Cassini took it: nothing stacked, calibrated or put together">Every frame, raw</button>
+      </div>
+      <h4><span>Cameras</span></h4>
+      <div class="mechips" id="mecams"></div>
+      <h4><span>Targets</span><span class="sp"></span><button id="metgall">All</button></h4>
+      <div class="mechips" id="metargets"></div>
+      <h4><span>Filters</span><span class="sp"></span><button id="meflall">All</button></h4>
+      <div class="mechips" id="mefilters"></div>
+      <div class="menote">Click to leave out, double-click to keep only that one.</div>
+      <h4><span>Removed by hand</span><span class="sp"></span><button id="merestore">Put all back</button></h4>
+      <div class="menote" id="medropped" style="margin-top:0"></div>
+      <label class="mecheck"><input type="checkbox" id="meshowout"> Show left-out frames</label>
+      <h4><span>Look</span><span class="sp"></span><button id="melookclear">Clear</button></h4>
+      <div class="menote" id="melook" style="margin-top:0"></div>
+      <div class="mechips" style="margin-top:6px"><button class="galbtn" id="melookedit">Edit the look in Studio…</button></div>
+      <div class="menote">The look goes on every frame: the preview, Play, each downloaded frame and the saved movie.</div>
+    </div>
+  </div>
+  <div class="mefoot">
+    <span id="mesum"></span>
+    <span class="sp"></span>
+    <button class="galbtn" id="meundo" title="Undo (Ctrl+Z / ⌘Z)" disabled>Undo</button>
+    <button class="galbtn" id="mecopy" title="A link that opens this stretch with these frames and this look">Copy link</button>
+    <button class="galbtn go" id="meexport" title="Make the edited movie (the Export window)">Save movie…</button>
+  </div>
+</section>
+
   <section class="win" id="bodymenu" data-name="Body view" aria-label="Body view" hidden>
   <div class="titlebar"><span class="lights"><button class="close" aria-label="Back to Cassini" title="Back to Cassini's mission">×</button><button class="min" aria-label="Minimize">–</button><button class="zoom" aria-label="Zoom">+</button></span><span id="bmtitle">Body</span></div>
   <div class="bmhead">
@@ -1826,7 +1950,7 @@ body.phone #launch .lx-clock { font-size: 9.5px; bottom: 9vh; }
     <nav id="anav" role="tablist" aria-label="About sections"></nav>
     <div class="pane" id="apane" role="tabpanel"></div>
   </div>
-  <footer>An independent project, not affiliated with NASA, JPL, ESA or the Space Science Institute.</footer>
+  <footer><span>An independent project, not affiliated with NASA, JPL, ESA or the Space Science Institute.</span><span class="ver" id="aver"></span></footer>
 </section>
 
   <section id="loadscreen" hidden>
@@ -1843,9 +1967,9 @@ body.phone #launch .lx-clock { font-size: 9.5px; bottom: 9vh; }
   <div class="cs-black"></div>
   <div class="cs-caps"></div>
   <div class="fx-roll" tabindex="-1" aria-label="Credits"><div class="in"></div></div>
-  <div class="fx-read" aria-hidden="true"></div>
+  <div class="cs-read" aria-hidden="true"></div>
   <div class="fx-data" aria-hidden="true"><b>Its last readings · real data</b><canvas width="556" height="290"></canvas><small></small></div>
-  <div class="fx-note">An interpretation. Cassini's path is its real trajectory and the readings are what it sent; the way it fights to hold its antenna on Earth follows a rule pinned to NASA's numbers, not telemetry.</div>
+  <div class="cs-note">An interpretation. Cassini's path is its real trajectory and the readings are what it sent; the way it fights to hold its antenna on Earth follows a rule pinned to NASA's numbers, not telemetry.</div>
   <div class="cs-hint">Drag to look around</div>
   <button class="cs-skip" type="button">Skip ▸</button>
 </section>
@@ -1874,8 +1998,14 @@ body.phone #launch .lx-clock { font-size: 9.5px; bottom: 9vh; }
   };
   let saved = {};
   try { saved = JSON.parse(localStorage.getItem(KEY)) || {}; } catch (e) {}
+  // the defaults the values were saved with (DEFAULTS): a value saved at its default then follows the default now
+  const DEFAULTS = "~defaults", savedDefaults = saved[DEFAULTS] && typeof saved[DEFAULTS] === "object" ? saved[DEFAULTS] : {};
   const defs = new Map(), subs = new Map(), values = {};
-  const store = () => { try { localStorage.setItem(KEY, JSON.stringify(values)); } catch (e) {} };
+  const store = () => {
+    const defaults = {};
+    for (const [k, d] of defs) if (d.type !== "action") defaults[k] = d.value;
+    try { localStorage.setItem(KEY, JSON.stringify({ ...values, [DEFAULTS]: defaults })); } catch (e) {}
+  };
   const valid = (d, v) => {
     if (d.type === "toggle") return typeof v === "boolean";
     if (d.type === "range") return typeof v === "number" && isFinite(v) && v >= d.min && v <= d.max;
@@ -1886,7 +2016,10 @@ body.phone #launch .lx-clock { font-size: 9.5px; bottom: 9vh; }
     define(d) {
       d = Object.assign({ section: "Interface", hint: "" }, d);
       defs.set(d.key, d);
-      if (d.type !== "action" && !(d.key in values)) values[d.key] = valid(d, saved[d.key]) ? saved[d.key] : d.value;
+      if (d.type !== "action" && !(d.key in values)) {
+        const v = saved[d.key], atDefault = d.key in savedDefaults ? [savedDefaults[d.key]] : d.was || [];
+        values[d.key] = valid(d, v) && !atDefault.includes(v) ? v : d.value;
+      }
       if (!SECTIONS.includes(d.section)) SECTIONS.push(d.section);
       if (!card.hidden) render();
       return values[d.key];
@@ -2136,6 +2269,11 @@ body.phone #launch .lx-clock { font-size: 9.5px; bottom: 9vh; }
   D({ key: "view.atmospheres", section: "View", label: "Atmospheres", type: "choice", value: "full",
       options: [["off", "Off"], ["light", "Light"], ["full", "Full"]],
       hint: "Titan's orange haze with its high detached layer, Earth's thin blue limb, Venus's pale yellow haze, and the thin hazes at Saturn's and Jupiter's limbs, all lit by the Sun: soft twilight past the terminator and a bright ring when a body is backlit. Light is quicker on weak graphics; Off draws the bare globes." });
+  // the viewer reads view.plumes and view.plumeBrightness (makePlume)
+  D({ key: "view.plumes", section: "View", label: "Enceladus plumes", type: "toggle", value: true,
+      hint: "The jets of ice grains rising from the tiger stripes at Enceladus's south pole, lit by the Sun. Like the real ones they show mostly when Cassini looks back toward the Sun, against the dark sky, and stay faint otherwise." });
+  D({ key: "view.plumeBrightness", section: "View", label: "Plume brightness", type: "range", value: 1, min: 0.25, max: 4, step: 0.05,
+      format: v => `${Math.round(v * 100)}%`, hint: "How bright the plumes are drawn. 100% is subtle, as in an unstretched picture; higher shows the faint outer plume the way stretched pictures do." });
   // movie mode (movie.html) is a rule for the clock, so its speed sits with the playback settings
   D({ key: "movie.fps", section: "Playback", label: "Movie mode speed", type: "range", value: 8, min: 2, max: 30, step: 1, unit: "fps",
       hint: "Movie mode (M) skips the time between pictures and steps from one picture to the next this many times a second. The camera windows show every picture as they always do." });
@@ -2272,6 +2410,16 @@ body.phone #launch .lx-clock { font-size: 9.5px; bottom: 9vh; }
 (function () {
   const KEYS = ["t", "view", "speed", "play", "movie", "cam"];
   const S = window.cassiniSettings, $ = id => document.getElementById(id);
+  // the frame server, chosen as the camera window chooses it; it keeps the usage counts
+  const FRAMES = (() => {
+    const q = new URLSearchParams(location.search).get("frames");
+    if (q) return q.replace(/\/$/, "");
+    if (/^https?:$/.test(location.protocol) && !/claude\.ai$|claudeusercontent\.com$|claude\.site$/.test(location.hostname)) return location.origin;
+    return "http://localhost:8765";
+  })();
+  const tell = word => { try { navigator.sendBeacon(`${FRAMES}/usage`, word); } catch (e) {} };
+  // opened on a shared moment: arrived with a time in the link, not a reload of a page that wrote its own
+  const opened = new URLSearchParams(location.search).has("t") && ((performance.getEntriesByType("navigation")[0] || {}).type || "navigate") === "navigate";
   const num = v => (+(+v).toPrecision(4)).toString().replace("e+", "e");   // short, and no "+" (a space in a query)
   const utc = et => new Date(etToMs(et)).toISOString().slice(0, 19);
   // the link for the moment on screen; other pages (flagging) use it too
@@ -2328,6 +2476,7 @@ body.phone #launch .lx-clock { font-size: 9.5px; bottom: 9vh; }
   async function copy() {
     write();
     const h = href();
+    tell("copy-link");
     try { await navigator.clipboard.writeText(h); toast("Link to this moment copied"); }
     catch (e) { if (navigator.share) navigator.share({ url: h }).catch(() => {}); else toast(h); }
   }
@@ -2342,7 +2491,7 @@ body.phone #launch .lx-clock { font-size: 9.5px; bottom: 9vh; }
 
   window.cassiniLink = { href, params, copy };
   const ready = () => typeof state !== "undefined" && typeof setSpeed === "function" && $("loading").hidden;
-  const start = () => { apply(); write(); setInterval(write, 500); addEventListener("pagehide", write); };
+  const start = () => { tell(opened ? "visit-link" : "visit"); apply(); write(); setInterval(write, 500); addEventListener("pagehide", write); };
   if (ready()) start();
   else { const mo = new MutationObserver(() => { if (ready()) { mo.disconnect(); start(); } }); mo.observe($("loading"), { attributes: true, attributeFilter: ["hidden"] }); }
 })();
@@ -2911,6 +3060,11 @@ body.phone #launch .lx-clock { font-size: 9.5px; bottom: 9vh; }
   // ---------- imaging lanes in the LCD: filters, cameras, RGB sets ----------
   const CLS = [["Clear", "#3a3f33"], ["Red", "#cc3a2e"], ["Green", "#3e9b33"], ["Blue", "#2f63cc"], ["IR / methane", "#8f2f6c"], ["UV", "#7a50d8"]];
   const LANES = { nTop: .36, nBase: .62, wTop: .66, wBase: .85, rTop: .89, rH: .08 };
+  // each camera's lane as [top, base] in pixels; with one camera off (lc: the one on), the camera on takes both lanes' room
+  function laneBox(h, lc) {
+    const both = { N: [h * LANES.nTop, h * LANES.nBase], W: [h * LANES.wTop, h * LANES.wBase] }, all = [h * LANES.nTop, h * LANES.wBase];
+    return lc ? { N: lc === "N" ? all : null, W: lc === "W" ? all : null } : both;
+  }
   function classify(a, b) {
     const f = [a, b].filter(x => x && !/^CL|^P\d|^IRP/.test(x));
     if (f.some(x => x === "RED")) return 1;
@@ -2950,7 +3104,7 @@ body.phone #launch .lx-clock { font-size: 9.5px; bottom: 9vh; }
     s.ready = Math.max(...s.use.map(k => catalog.et[k]));   // the picture exists once its last channel is taken
   }
   function findSets() {
-    const n = catalog.et.length, setOf = new Int32Array(n).fill(-1), sets = [], run = {};
+    const n = catalog.et.length, setOf = new Int32Array(n).fill(-1), sets = [], run = {}, all = catalog.allOrder || order;
     const close = cam => {
       const r = run[cam]; run[cam] = null;
       if (!r || r.frames.length < 2) return;
@@ -2959,7 +3113,7 @@ body.phone #launch .lx-clock { font-size: 9.5px; bottom: 9vh; }
       sets.push(r);
     };
     for (let i = 0; i < n; i++) {
-      const k = order[i], cam = catalog.cam[k], f = colourFilter(k), r = run[cam];
+      const k = all[i], cam = catalog.cam[k], f = colourFilter(k), r = run[cam];
       if (!f) { close(cam); continue; }
       if (r && catalog.target[k] === r.target && catalog.obs[k] === r.obs && catalog.et[k] - r.last <= SET_GAP && !r.filters.includes(f)) {
         r.frames.push(k); r.filters.push(f); r.last = catalog.et[k];
@@ -2980,7 +3134,7 @@ body.phone #launch .lx-clock { font-size: 9.5px; bottom: 9vh; }
     // each camera's frames in time order, so each window finds its own latest frame
     catalog.byCam = {};
     for (const cam of ["N", "W"]) {
-      const ks = Array.from(order).filter(k => catalog.cam[k] === cam);
+      const ks = Array.from(catalog.allOrder || order).filter(k => catalog.cam[k] === cam);
       catalog.byCam[cam] = { ks, et: Float64Array.from(ks, k => catalog.et[k]) };
     }
     catalog.cls = cls; catalog.rgb = rgb; catalog.setOf = setOf; catalog.sets = sets;
@@ -3006,35 +3160,86 @@ body.phone #launch .lx-clock { font-size: 9.5px; bottom: 9vh; }
     if (!by[key]) { const ks = catalog.byCam[cam].ks.filter(k => catalog.target[k] === body); by[key] = { ks, et: Float64Array.from(ks, k => catalog.et[k]) }; }
     return by[key];
   }
+  // ---------- a closed camera is off ----------
+  // With one camera window closed (or minimized) and the other open, the page takes it that only the open camera
+  // matters (Sam, 2026-10-26): the closed window asks for nothing (cameraFeed), its camera's body windows close
+  // (bodywin.html), the timeline leaves its lane empty, and the burst limit and movie mode go by the open camera's
+  // pictures alone (capOf, nextPicture). Both open, or both closed: both cameras, as before. A Moment brings both
+  // windows back. Settings > Cameras: cameras.closedOff, cameras.momentsReopen.
+  const CAMWIN = { N: "imgcard", W: "wacard" }, CAMWORD = { N: "narrow-angle", W: "wide-angle" };
+  S.define({ key: "cameras.closedOff", section: "Cameras", label: "A closed camera window turns its camera off", type: "toggle", value: true,
+    hint: "With only one of the two camera windows open, the other camera's pictures are not loaded or processed, the timeline shows the open camera's frames only, and playback and movie mode go by its pictures alone." });
+  S.define({ key: "cameras.momentsReopen", section: "Cameras", label: "Moments open both camera windows", type: "toggle", value: true,
+    hint: "Jumping to a Moment brings back a camera window that is closed or minimized." });
+  const camOpen = c => { const w = $(CAMWIN[c]); return !!w && !w.hidden && !w.dataset.min; };
+  // "N" or "W" while only that camera is on, otherwise null (both)
+  function liveCams() {
+    if (!S.get("cameras.closedOff")) return null;
+    const on = ["N", "W"].filter(camOpen);
+    return on.length === 1 ? on[0] : null;
+  }
+  const camOn = (cam, lc) => !lc || lc.includes(cam);
+  function reopenCams() { for (const c of ["N", "W"]) { const w = $(CAMWIN[c]); if (w && (w.hidden || w.dataset.min || w.classList.contains("shaded"))) restore(w); } }
+  $("camoff").addEventListener("pointerdown", e => e.stopPropagation());
+  $("camoff").querySelector("button").addEventListener("click", e => { e.stopPropagation(); reopenCams(); });
+  let camOffText = "";
+  function camOff() {
+    const lc = liveCams(), off = lc === "N" ? "W" : "N", el = $("camoff"), tl = $("tl");
+    const t = lc ? `${off}AC OFF` : "";
+    if (t !== camOffText) {
+      camOffText = t; el.hidden = !t; el.querySelector("span").textContent = t;
+      el.title = lc ? `The ${CAMWORD[off]} camera is off because its window is closed: its pictures are not loaded, shown or heard, and the timeline shows ${CAMWORD[lc]} pictures only` : "";
+    }
+    // on the timeline (it shares the canvas's positioned parent), at the top of the lane, clear of the lane names
+    if (lc) { el.style.left = tl.offsetLeft + 30 + "px"; el.style.top = tl.offsetTop + Math.max(0, tl.clientHeight * LANES.nTop - 1) + "px"; }
+  }
+  // The viewer sees only the cameras that are on: with one off, its frames leave the viewer's time order (order,
+  // catalog.sorted), so the camera's field-of-view cone, the HUD's CAM line, the imaging target, "Camera now", the
+  // timeline, movie mode and everything else that reads the frames treat that camera as taking no pictures at all.
+  // The whole order stays in catalog.allOrder (the camera windows' own lists, catalog.byCam, are made from it).
+  function applyCams() {
+    if (typeof catalog === "undefined" || !catalog || !order) return;
+    const lc = liveCams() || "";
+    if (catalog.allOrder && catalog.camsKey === lc) return;
+    if (!catalog.allOrder) { catalog.allOrder = order; catalog.allSorted = catalog.sorted; }
+    order = lc ? catalog.allOrder.filter(k => catalog.cam[k] === lc) : catalog.allOrder;
+    catalog.sorted = lc ? Float64Array.from(order, k => catalog.et[k]) : catalog.allSorted;
+    catalog.camsKey = lc;
+  }
+  // a Moment (the list, or the next / previous moment buttons, which click its row) brings both camera windows back
+  $("mlist").addEventListener("click", e => { if (e.target.closest("button") && S.get("cameras.momentsReopen") !== false) reopenCams(); }, true);
   // the body in view in the body view (bodymode.html), whose pictures alone the timeline and camera windows show
   const viewBody = () => (window.cassiniBodyMode && cassiniBodyMode.name) || null;
   window.studyBars = (g, w, h) => {
-    prep();
-    const vb = viewBody();
-    if (vb) return bodyBars(g, w, h, vb);
-    const bw = 2, nT = h * LANES.nTop, nB = h * LANES.nBase, wT = h * LANES.wTop, wB = h * LANES.wBase, rT = h * LANES.rTop, rH = Math.max(4, h * LANES.rH);
+    prep(); applyCams();
+    const vb = viewBody(), lc = liveCams();
+    if (vb) return bodyBars(g, w, h, vb, lc);
+    const bw = 2, L = laneBox(h, lc), rT = h * LANES.rTop, rH = Math.max(4, h * LANES.rH);
     const sc = v => Math.min(1, Math.log1p(v) / Math.log1p(18));
     const cN = new Array(6), cW = new Array(6);
     for (let x = 0; x < w; x += bw) {
       const i0 = lastImageIndex(xToEt(x, w)) + 1, i1 = lastImageIndex(xToEt(x + bw, w)) + 1;
       if (i1 <= i0) continue;
       cN.fill(0); cW.fill(0); let nN = 0, nW = 0, set = false;
-      for (let i = i0; i < i1; i++) { const k = order[i], c = catalog.cls[k]; if (catalog.cam[k] === "N") { cN[c]++; nN++; } else { cW[c]++; nW++; } if (catalog.rgb[k]) set = true; }
-      for (const [cnt, tot, top, base] of [[cN, nN, nT, nB], [cW, nW, wT, wB]]) {
-        if (!tot) continue;
+      for (let i = i0; i < i1; i++) { const k = order[i], c = catalog.cls[k], cam = catalog.cam[k]; if (!camOn(cam, lc)) continue; if (cam === "N") { cN[c]++; nN++; } else { cW[c]++; nW++; } if (catalog.rgb[k]) set = true; }
+      for (const [cnt, tot, lane] of [[cN, nN, L.N], [cW, nW, L.W]]) {
+        if (!tot || !lane) continue;
+        const [top, base] = lane;
         let y = base; const H = sc(tot) * (base - top);
         for (let c = 0; c < 6; c++) { if (!cnt[c]) continue; const hh = H * cnt[c] / tot; g.fillStyle = CLS[c][1]; g.fillRect(x, y - hh, bw - 0.5, hh); y -= hh; }
       }
       if (set) { const s = rH / 3; g.fillStyle = CLS[1][1]; g.fillRect(x, rT, bw, s); g.fillStyle = CLS[2][1]; g.fillRect(x, rT + s, bw, s); g.fillStyle = CLS[3][1]; g.fillRect(x, rT + 2 * s, bw, s); }
     }
-    laneNames(g, w, h);
+    laneNames(g, w, h, lc);
   };
   // the same lanes with one body's pictures only (each camera's frames of it, walked once from left to right)
-  function bodyBars(g, w, h, body) {
-    const bw = 2, nT = h * LANES.nTop, nB = h * LANES.nBase, wT = h * LANES.wTop, wB = h * LANES.wBase, rT = h * LANES.rTop, rH = Math.max(4, h * LANES.rH);
+  function bodyBars(g, w, h, body, lc) {
+    const bw = 2, L = laneBox(h, lc), rT = h * LANES.rTop, rH = Math.max(4, h * LANES.rH);
     const sc = v => Math.min(1, Math.log1p(v) / Math.log1p(18));
     const cnt = new Array(6), sets = new Uint8Array(Math.ceil(w / bw) + 1);
-    for (const [cam, top, base] of [["N", nT, nB], ["W", wT, wB]]) {
+    for (const cam of ["N", "W"]) {
+      if (!L[cam]) continue;
+      const [top, base] = L[cam];
       const F = framesOf(cam, body), a = F.et;
       let j = 0, lo = 0, hi = a.length; const t0 = xToEt(0, w);
       while (lo < hi) { const m = (lo + hi) >> 1; if (a[m] < t0) lo = m + 1; else hi = m; }
@@ -3049,25 +3254,34 @@ body.phone #launch .lx-clock { font-size: 9.5px; bottom: 9vh; }
       }
     }
     for (let s = 0; s < sets.length; s++) if (sets[s]) { const x = s * bw, q = rH / 3; g.fillStyle = CLS[1][1]; g.fillRect(x, rT, bw, q); g.fillStyle = CLS[2][1]; g.fillRect(x, rT + q, bw, q); g.fillStyle = CLS[3][1]; g.fillRect(x, rT + 2 * q, bw, q); }
-    laneNames(g, w, h);
+    laneNames(g, w, h, lc);
   }
-  function laneNames(g, w, h) {
-    const nB = h * LANES.nBase, wB = h * LANES.wBase, nT = h * LANES.nTop, wT = h * LANES.wTop, rT = h * LANES.rTop, rH = Math.max(4, h * LANES.rH);
-    g.fillStyle = "rgba(255,255,255,0.12)"; g.fillRect(0, nB, w, 1); g.fillRect(0, wB, w, 1);
+  // (lc: the camera that is on alone, whose lane is the only one named; the pill on the timeline says the other is off)
+  function laneNames(g, w, h, lc) {
+    const L = laneBox(h, lc), rT = h * LANES.rTop, rH = Math.max(4, h * LANES.rH);
+    g.fillStyle = "rgba(255,255,255,0.12)";
+    for (const cam of ["N", "W"]) if (L[cam]) g.fillRect(0, L[cam][1], w, 1);
     // lane names, on a patch of LCD so they stay readable over the bars
     g.font = "400 9px 'Lucida Grande', Verdana, sans-serif"; g.textBaseline = "middle";
-    for (const [t, y] of [["NAC", (nT + nB) / 2], ["WAC", (wT + wB) / 2], ["RGB", rT + rH / 2]]) {
+    for (const [t, lane] of [["NAC", L.N], ["WAC", L.W], ["RGB", [rT, rT + rH]]]) {
+      if (!lane) continue;
+      const y = (lane[0] + lane[1]) / 2;
       g.fillStyle = "rgba(16,17,20,0.85)"; g.fillRect(0, y - 6, 26, 12); g.fillStyle = "rgba(232,236,242,0.5)"; g.fillText(t, 2, y);
     }
     g.textBaseline = "top";
   }
   const FNAME = ["Clear", "Red", "Green", "Blue", "IR / methane", "UV"];
-  let lastI = -2;
+  let lastI = "";
   const baseHud = window.studyHud;
   window.studyHud = ms => {
+    applyCams();
     baseHud(ms);
     if (!catalog.cls) return;
-    const i = lastImageIndex(state.et); if (i === lastI) return; lastI = i;
+    camOff();
+    const lc = liveCams();
+    let i = lastImageIndex(state.et);
+    for (let n = 0; lc && i >= 0 && n < 5000 && !camOn(catalog.cam[order[i]], lc); n++) i--;
+    if (i + (lc || "") === lastI) return; lastI = i + (lc || "");
     if (i < 0) { $("nowcam").textContent = "No frames yet"; $("l24").textContent = "No frames yet"; return; }
     const k = order[i], c = catalog.cls[k], pol = /^P\d|^IRP/.test(catalog.f1[k]) ? ` · polarizer ${catalog.f1[k]}` : "";
     const si = catalog.setOf[k];
@@ -3386,7 +3600,11 @@ body.phone #launch .lx-clock { font-size: 9.5px; bottom: 9vh; }
       }
       if (v.set >= 0) { channelsFrom(im, catalog.sets[v.set]); howMade(v); }
       drillable();
-      if (v.tile && !keep && !mosaicPass(v.k) && modeOf(v.k) !== "mosaic") mosaicOf(v);   // a frame kept behind its pass's mosaic, or of a pass known to be one, asked for it already (update)
+      // (a frame kept behind its pass's mosaic, or of a pass known to be one, asked for it already, update; one whose
+      // observation's note is still out asks once the note is in, heard)
+      if (v.tile && !keep && !mosaicPass(v.k) && modeOf(v.k) !== "mosaic") {
+        if (notePending.has(passOf(v.k))) heldTiles.set(passOf(v.k), v); else mosaicOf(v);
+      }
       // the sound (sound.html) hears every picture that goes up: its camera, filter wavelength, target and window
       // (keep: a pass mosaic stays up, so this frame rings when its tile shows, below in mosaicOf)
       if (window.cassiniPicture && !again) window.cassiniPicture({ cam, body, win, k: v.k, nm: nmOf(v.k), set: v.set, use: v.set >= 0 ? catalog.sets[v.set].use.map(nmOf) : null, keep });
@@ -3648,6 +3866,20 @@ body.phone #launch .lx-clock { font-size: 9.5px; bottom: 9vh; }
     const rank = sz => sz === "full" ? Infinity : +sz;
     const mLane = { pass: { busy: false, next: null, last: "" }, other: { busy: false, next: null, last: "" } };
     const warnedObs = new Set();   // observations already named to the server ahead of time (update)
+    // observations whose note is still out, and the frame each one put up meanwhile that may be a mosaic tile: it asks
+    // /frames/mosaic once the server has said what the pass is (heard), since a mosaic movie never asks there (it
+    // rolls) and a mosaic pass asks in its pass lane; asked before, a mosaic movie's frame had the server make its pass
+    // mosaic (seconds for a pass whose mosaics were never made) and held the window behind the clock (2026-10-27)
+    const notePending = new Map(), heldTiles = new Map();   // observation -> its note's signal / the frame waiting on it
+    function heard(o, sig) {
+      if (notePending.get(o) !== sig) return;   // (a newer note on it is out: the window's requests were let go)
+      notePending.delete(o);
+      const v = heldTiles.get(o);
+      heldTiles.delete(o);
+      // a note dropped with the window's requests (letGo) is sent again by the next update, which hears the answer
+      if (sig.aborted) { warnedObs.delete(o); return; }
+      if (v && shown === v && v.cat === catalog && !mosaicPass(v.k) && modeOf(v.k) !== "mosaic") mosaicOf(v);
+    }
     function mosaicOf(w, pass) {
       if (hold || window.cassiniMosaics === false || !S.get("cameras.mosaics")) return;
       const mode = modeOf(w.k), plays = playsAs(w.k);
@@ -3686,6 +3918,17 @@ body.phone #launch .lx-clock { font-size: 9.5px; bottom: 9vh; }
         // the frame in the catalog loaded now (another catalog object once the months around have loaded; a
         // pass's mosaic still goes up, found by its frame id)
         const kNow = () => catalog === cat0 ? w.k : rep && rep.observation ? kOf(wid) : -1;
+        // a mosaic movie's pass mosaic, asked for before anything said the pass is one: in Auto the pass rolls (the
+        // movie route), so this one never goes up (up, it held the window behind the clock, update.behind, and movie
+        // mode waited STUCK ms on it); the window moves to its rolling picture now if the note has not said so yet
+        if (rep && rep.kind === "mosaic_movie" && mode === "auto" && rolls()) {
+          const k = kNow(), o = k >= 0 ? passOf(k) : null;
+          if (o && !lapPasses.has(o)) {
+            lapPasses.add(o); mosaicPasses.add(o); chipText();
+            if (lastK >= 0 && passOf(lastK) === o) update(true);
+          }
+          return;
+        }
         // a pass's mosaic shows while the window is still in the pass and the clock is not before its frame,
         // unless the mosaic up already has a later frame (and is not ahead of the clock after a scrub back);
         // a rolling mosaic only while its frame is the one shown
@@ -4081,7 +4324,7 @@ body.phone #launch .lx-clock { font-size: 9.5px; bottom: 9vh; }
       mosaicStop();
       lastK = -2;   // asks again for what it shows, once the data is in
     }
-    let cat = null, letGone = false;
+    let cat = null, letGone = false, hiddenGone = false;
     function update(force) {
       if (dataWait()) { if (!letGone) { letGone = true; letGo(window.cassiniAway && cassiniAway.on); } return; }
       letGone = false;
@@ -4093,7 +4336,10 @@ body.phone #launch .lx-clock { font-size: 9.5px; bottom: 9vh; }
         obsK = obsId ? kOf(obsId) : -1;
         if (obsK < 0) { obsShown = null; shapeOf = null; }
       }
-      if (win.hidden && !force) { mosaicStop(); return; }   // a closed or tucked-away window fetches nothing; it catches up when shown
+      // a closed or tucked-away window fetches nothing, not even when a setting or a resize asks it to look again:
+      // it lets go of what it was fetching, and catches up when shown
+      if (win.hidden) { if (!hiddenGone) { hiddenGone = true; letGo(true); } return; }
+      hiddenGone = false;
       // too fast for pictures (tooFast, below): the window keeps what it shows, dimmed, and asks for nothing until the
       // clock slows, pauses or is scrubbed; then it catches up on the picture of that moment
       if (tooFast()) {
@@ -4176,9 +4422,9 @@ body.phone #launch .lx-clock { font-size: 9.5px; bottom: 9vh; }
         for (let d = 0; d <= 120 && ks[p + d] !== undefined; d++) {
           const q = ks[p + d], o = `${catalog.target[q]}|${catalog.obs[q]}`;
           if (warnedObs.has(o)) continue;
-          warnedObs.add(o);
-          const c0 = catalog;
-          fetch(`${FRAMES}/frames/mosaic/${catalog.id[q]}.webp?warm=1${window.cassiniLook()}`, { priority: "low", signal: warnCtl.signal }).then(r => r.ok ? r.json() : null).then(a => {
+          const c0 = catalog, sig = warnCtl.signal;
+          warnedObs.add(o); notePending.set(o, sig);
+          fetch(`${FRAMES}/frames/mosaic/${catalog.id[q]}.webp?warm=1${window.cassiniLook()}`, { priority: "low", signal: sig }).then(r => r.ok ? r.json() : null).then(a => {
             if (a && a.movie) { moviePasses.add(o); chipText(); }
             if (a && a.kind === "mosaic_movie") { lapPasses.add(o); chipText(); }
             // the window is in that pass already: its frame is steadied (or rolls) from now on
@@ -4188,7 +4434,7 @@ body.phone #launch .lx-clock { font-size: 9.5px; bottom: 9vh; }
             if (catalog !== c0) return;
             // the window is in that pass already: its frame asks now (the server is working the pass out)
             if (lastK >= 0 && passOf(lastK) === o && want && (want.tile || want.held)) mosaicOf(want.held ? { key: want.key, set: -1, k: lastK } : want, true);
-          }).catch(() => {});
+          }).catch(() => {}).finally(() => heard(o, sig));
         }
       chipText();
       pump();
@@ -4234,6 +4480,7 @@ body.phone #launch .lx-clock { font-size: 9.5px; bottom: 9vh; }
   // cams ("N", "W"): only that camera's pictures (a stretch played for one camera). Only complete pictures count
   // (complete, below), so movie mode and the body view's skip over the gaps step from one finished picture to the next
   function nextPicture(et, body, cams) {
+    cams = cams || liveCams();
     if (!body && !cams) {
       const a = catalog.sorted;
       for (let i = lastImageIndex(et) + 1; i < a.length; i++) if (complete(order[i], body)) return a[i];
@@ -4248,6 +4495,7 @@ body.phone #launch .lx-clock { font-size: 9.5px; bottom: 9vh; }
     return t;
   }
   function prevPicture(et, body, cams) {
+    cams = cams || liveCams();
     let t = -Infinity;
     for (const cam in catalog.byCam) {
       if (cams && !cams.includes(cam)) continue;
@@ -4276,7 +4524,7 @@ body.phone #launch .lx-clock { font-size: 9.5px; bottom: 9vh; }
   // how many frames the furthest-behind camera window's picture is behind the clock (update.behind, below)
   // cams ("N", "W"): only that camera's windows
   const behind = cams => { let b = 0; for (const f of allFeeds) if (!cams || cams.includes(f.cam)) b = Math.max(b, f.behind()); return b; };
-  window.cassiniFeeds = { frames: FRAMES, cameraFeed, framesOf, lastOfCam, prep, weight, nextPicture, prevPicture, behind, stale: () => S.get("cameras.stale") * 3600 };
+  window.cassiniFeeds = { frames: FRAMES, cameraFeed, framesOf, lastOfCam, prep, weight, nextPicture, prevPicture, behind, liveCams, reopenCams, stale: () => S.get("cameras.stale") * 3600 };
   document.addEventListener("cassini:bodymode", () => { if (typeof catalog !== "undefined" && catalog && catalog.byCam) feeds.forEach(f => f(true)); });
   // a change to what the windows show takes effect straight away
   for (const key of ["cameras.composites", "cameras.stale", "cameras.steady", "cameras.passes", "cameras.balancedColor", "cameras.colors", "cameras.lingerColor", "cameras.lingerMosaic", "movies.steady", "cameras.autoCenter", "cameras.processedFrames", "movies.trail", "movies.filmstrip", "movies.laps", "movies.fade", "movies.persist", "playback.completeMosaics", ...(window.cassiniSteps || []).map(st => st.key)]) S.on(key, () => { if (typeof catalog !== "undefined" && catalog && catalog.byCam) feeds.forEach(f => f(true)); });
@@ -4288,7 +4536,9 @@ body.phone #launch .lx-clock { font-size: 9.5px; bottom: 9vh; }
   // (playback.burstFloor), so 1 day/s skips pictures in a long burst instead of crawling like 10 min/s does.
   // Movie mode steps the clock itself (movie.html). 0 = no limit. The setting lives in the Settings window when the page has one
   // (playback.maxImageRate), otherwise in the View menu.
-  const RATE_DEFAULT = 5, FLOOR_DEFAULT = 0.25, RATE_KEY = "cassini-os-max-image-rate", SETTINGS = window.cassiniSettings;
+  // (10 since 2026-10-27, when the pictures came from the cache in milliseconds: 5 held 10 min/s to half its speed in a
+  // busy stretch, 10 to three quarters; a value saved at the old default moves up with it, was)
+  const RATE_DEFAULT = 10, FLOOR_DEFAULT = 0.25, RATE_KEY = "cassini-os-max-image-rate", SETTINGS = window.cassiniSettings;
   let maxRate = RATE_DEFAULT, burstFloor = FLOOR_DEFAULT, slowedTo = 0;
   function syncRateMenu() {
     const r = $("maxrate"); if (!r) return;
@@ -4303,7 +4553,7 @@ body.phone #launch .lx-clock { font-size: 9.5px; bottom: 9vh; }
     document.querySelectorAll("#menubar [data-rate]").forEach(li => li.remove());
     maxRate = +SETTINGS.define({ key: "playback.maxImageRate", section: "Playback", label: "Maximum images per second",
       hint: "When Cassini takes a burst of pictures, the timeline slows down so each camera window shows at most this many new pictures a second. Only frames that change the picture count: a color set counts once, at its last filter. 0 = no limit.",
-      type: "range", value: RATE_DEFAULT, min: 0, max: 24, step: 1, unit: "images/s" }) || 0;
+      type: "range", value: RATE_DEFAULT, was: [5], min: 0, max: 24, step: 1, unit: "images/s" }) || 0;
     SETTINGS.on("playback.maxImageRate", v => { maxRate = +v || 0; });
     SETTINGS.define({ key: "playback.burstFloor", section: "Playback", label: "Bursts slow playback to no less than",
       hint: "However many pictures a burst has, the timeline keeps at least this share of the chosen speed, so a faster speed always plays faster (skipping pictures in long bursts). 100 % = never slow down.",
@@ -4366,14 +4616,16 @@ body.phone #launch .lx-clock { font-size: 9.5px; bottom: 9vh; }
   let playRate = 0, rateOf = 0;
   window.cassiniPlayRate = () => playRate || state.speed;
   const advance = (et, dt, speed) => {
+    applyCams();   // (a new catalog, months loaded around the clock, gets the camera rule before the viewer draws it)
     if (tooFast()) { slowedTo = 0; paced = 1; return et + dt * speed; }
     slowedTo = 0;
     paced = catalog && catalog.byCam ? pace() : 1;
     dt *= paced;
     if (!maxRate || !catalog || !catalog.byCam) return et + dt * speed;
+    const lc = liveCams();   // a closed camera's bursts do not slow the clock
     for (let n = 0; n < 200; n++) {
       let s = speed, stop = Infinity;
-      for (const cam in catalog.byCam) { const [cap, nx] = capOf(cam, et); s = Math.min(s, cap); stop = Math.min(stop, nx); }
+      for (const cam in catalog.byCam) { if (!camOn(cam, lc)) continue; const [cap, nx] = capOf(cam, et); s = Math.min(s, cap); stop = Math.min(stop, nx); }
       s = Math.max(s, speed * burstFloor);
       if (s < speed) slowedTo = slowedTo ? Math.min(slowedTo, s) : s;
       if (et + dt * s <= stop) return et + dt * s;
@@ -4551,6 +4803,9 @@ body.phone #launch .lx-clock { font-size: 9.5px; bottom: 9vh; }
       ids: got.ids, frames: got.ids.map(frameInfo),
       movie: !!(window.cassiniMovie && window.cassiniMovie.on), playing: !!state.playing, speed: state.speed,
       settings: settings(),
+      // the version the page was built from and the one the server said it served when the page loaded; the server
+      // adds the version it serves now (site and server commits, picture makers' versions) as it saves the flag
+      build: window.cassiniVersion ? { page: cassiniVersion.page, version: cassiniVersion.server ? cassiniVersion.server.version : null } : null,
       client: { agent: navigator.userAgent, dpr: devicePixelRatio, viewport: [innerWidth, innerHeight], phone: document.body.classList.contains("phone") },
       image: await dataUrl(got.png)
     };
@@ -4863,7 +5118,9 @@ body.phone #launch .lx-clock { font-size: 9.5px; bottom: 9vh; }
     // was seen. A camera that imaged its target within the stale time wants a window; an open window stays however
     // long its camera then goes quiet (after a jump, only the recent ones do; one
     // whose frames are no longer in the loaded months closes)
+    const lc = F.liveCams ? F.liveCams() : null;   // a closed camera window turns its camera off: none of its body windows
     for (const name of targets) for (const cam of CAMS) {
+      if (lc && !lc.includes(cam)) continue;
       const k = key(name, cam), t = latestOf(name, cam), w = B.wins.get(k), up = w && !w.closing;
       if (!(t > -Infinity) || (!(state.et - t <= stale) && (!up || reset))) { B.rec.delete(k); B.dismissed.delete(k); continue; }
       let r = B.rec.get(k);
@@ -5157,6 +5414,8 @@ body.phone #launch .lx-clock { font-size: 9.5px; bottom: 9vh; }
     H.i = i; H.auto = !!auto; H.jumping = true; mark();
     if (window.cassiniReel) window.cassiniReel.close();
     if (window.cassiniMovie && window.cassiniMovie.on) window.cassiniMovie.stop();
+    // a highlight is Cassini's moment: a body's view (its timeline, camera windows and skip-the-gaps clock) gives way to the mission
+    if (window.cassiniBodyMode && window.cassiniBodyMode.name) window.cassiniBodyMode.exit();
     // the camera windows that took the highlight's pictures come out; the other one is put away until the reel stops
     untuck();
     for (const [cam, id] of Object.entries(CAMS)) {
@@ -5171,6 +5430,8 @@ body.phone #launch .lx-clock { font-size: 9.5px; bottom: 9vh; }
     H.left = e.end_et + 60; H.jumping = false;
   }
   function stop() { H.auto = false; untuck(); mark(); }
+  // opening a body's view stops Play all, which would otherwise move on to the next highlight and leave the body's view
+  document.addEventListener("cassini:bodymode", e => { if (e.detail.name && H.auto) stop(); });
   function next() { if (H.i + 1 < H.list.length) play(H.i + 1, true); else { stop(); H.i = -1; mark(); } }
   // Play all moves on a minute after a highlight's last picture; moving the clock away by hand stops it
   function tick() {
@@ -5712,7 +5973,8 @@ body.phone #launch .lx-clock { font-size: 9.5px; bottom: 9vh; }
   const params = () => {
     const q = new URLSearchParams({ from: iso(X.a), until: iso(X.b), cams: X.cams || "NW", fps: opt("export.adaptive", true) ? "auto" : String(opt("export.fps", 12)),
       size: String(opt("export.size", 1024)), sound: opt("export.sound", true) ? "1" : "0", caption: opt("export.caption", true) ? "1" : "0" });
-    return q.toString() + window.cassiniLook() + (window.cassiniMovieStyle ? window.cassiniMovieStyle() : "");
+    // the Movie Editor's cut and look for this stretch (movieedit.html): frames left out, and the look on every picture
+    return q.toString() + window.cassiniLook() + (window.cassiniMovieStyle ? window.cassiniMovieStyle() : "") + (window.cassiniMovieCut ? window.cassiniMovieCut() : "");
   };
   let timer = 0;
   function estimate() {
@@ -5736,7 +5998,8 @@ body.phone #launch .lx-clock { font-size: 9.5px; bottom: 9vh; }
         const n = { N: 0, W: 0 }; p.pictures.forEach(e => n[e.cam]++);
         // measured on the Mac Mini: about 0.065 MB a second of film at 1024 x 1072, 0.11 at 2048 x 1072, sound included
         const mb = p.frames ? Math.max(0.1, p.seconds * (0.03 + 0.035 * p.width * p.height / (1024 * 1072))) : 0;
-        $("exsum").innerHTML = p.count ? `${p.count.toLocaleString()} pictures (NAC ${n.N.toLocaleString()}, WAC ${n.W.toLocaleString()}) · film ${fmtDur(p.seconds)} at ${p.width}×${p.height} · about ${mb.toFixed(mb < 10 ? 1 : 0)} MB` : `<span class="warn">No pictures in this stretch.</span>`;
+        const edited = window.cassiniMovieCut && window.cassiniMovieCut() ? " · edited in the Movie Editor" : "";
+        $("exsum").innerHTML = p.count ? `${p.count.toLocaleString()} pictures (NAC ${n.N.toLocaleString()}, WAC ${n.W.toLocaleString()}) · film ${fmtDur(p.seconds)} at ${p.width}×${p.height} · about ${mb.toFixed(mb < 10 ? 1 : 0)} MB${edited}` : `<span class="warn">No pictures in this stretch.</span>`;
         $("exgo").disabled = !p.count;
       } catch (err) { $("exsum").innerHTML = `<span class="warn">No frame server at ${FRAMES}.</span>`; }
     }, 250);
@@ -7042,6 +7305,8 @@ body.phone #launch .lx-clock { font-size: 9.5px; bottom: 9vh; }
     });
     return p;
   }
+  // the color part of a recipe (a movie's look: what every picture of a film gets), the frame left at rest
+  const lookOf = p => { const q = clone(DEF); for (const a of [...ADJ, TONE]) q[a.k] = p[a.k]; q.filter = p.filter; q.strength = p.strength; return q; };
   const fitCrop = c => { const w = clamp(c[2], 0.02, 1), h = clamp(c[3], 0.02, 1); return [clamp(c[0], 0, 1 - w), clamp(c[1], 0, 1 - h), w, h]; };
 
   // ---------- the frame: output pixel -> source pixel, one affine map ----------
@@ -7258,7 +7523,10 @@ void main() {
     $("stufilters").querySelectorAll("button").forEach(b => b.setAttribute("aria-pressed", String(b.dataset.v === st.p.filter)));
     $("stuundo").disabled = !st.undo.length; $("sturedo").disabled = !st.redo.length;
     $("stucrop").hidden = st.tab !== "crop" || !source();
-    $("stutabs").querySelector('[data-v="mosaic"]').hidden = !st.mos;
+    $("stutabs").querySelector('[data-v="mosaic"]').hidden = !st.mos || !!st.look;
+    $("stutabs").querySelector('[data-v="crop"]').hidden = !!st.look;
+    $("stushare").hidden = !!st.look;
+    $("stusave").textContent = st.look ? "Use for the movie" : "Save to Gallery";
     $("stumos").toggleAttribute("hidden", st.tab !== "mosaic" || !st.mos);   // an svg has no hidden property
     trimShow();
   }
@@ -7507,7 +7775,7 @@ void main() {
     if (!opts.blob && !opts.url) { sync(); $("stuempty").hidden = !!source(); draw(); return; }
     if (!R) { $("stuempty").textContent = "This browser has no WebGL, which the studio draws with."; $("stuempty").hidden = false; return; }
     unload(); $("stuempty").hidden = true; wait("Opening…");
-    st.item = opts.item || null; st.target = opts.target || null; st.from = opts.from || null;
+    st.item = opts.item || null; st.target = opts.target || null; st.from = opts.from || null; st.look = typeof opts.look === "function" ? opts.look : null;
     st.p = opts.edit ? (typeof opts.edit === "string" ? decode(opts.edit) : clone(opts.edit)) : clone(DEF);
     st.undo = []; st.redo = []; st.changed = false; st.saved = null;
     st.kind = opts.kind === "movie" ? "movie" : "picture";
@@ -7527,9 +7795,9 @@ void main() {
         if (Math.max(st.W, st.H) > R.max) throw new Error(`the picture is larger than this browser draws (${R.max} px)`);
         R.upload(st.bmp, st.W, st.H);
       }
-      wait(null); if (st.tab === "mosaic") st.tab = "adjust";
+      wait(null); if (st.tab === "mosaic" || (st.look && st.tab === "crop")) st.tab = "adjust";
       sync(); draw(); if (st.tab === "filters") filterTiles();
-      if (!isMovie()) mosOpen(st.item);
+      if (!isMovie() && !st.look) mosOpen(st.item);
     } catch (e) {
       console.warn("studio open", e); wait(null); unload();
       $("stuempty").textContent = `Could not open that ${opts.kind === "movie" ? "film" : "picture"}: ${e.message || e}`; $("stuempty").hidden = false;
@@ -7667,7 +7935,10 @@ void main() {
   $("stuundo").addEventListener("click", () => undo(false));
   $("sturedo").addEventListener("click", () => undo(true));
   $("stureset").addEventListener("click", () => commit(() => { const t = st.p.trim; st.p = clone(DEF); st.p.trim = t; }));
-  $("stusave").addEventListener("click", async () => { const s = await save(); if (s) $("stusave").textContent = "Saved"; setTimeout(() => { $("stusave").textContent = "Save to Gallery"; }, 1600); });
+  $("stusave").addEventListener("click", async () => {
+    // a movie's look: the recipe goes back to the Movie Editor, nothing is saved
+    if (st.look) { const fn = st.look; st.look = null; fn(encode(lookOf(st.p))); close(); sync(); return; }
+    const s = await save(); if (s) $("stusave").textContent = "Saved"; setTimeout(() => { $("stusave").textContent = "Save to Gallery"; }, 1600); });
   $("studl").addEventListener("click", download);
   $("stushare").addEventListener("click", async e => {
     const btn = e.currentTarget, s = await save();
@@ -7696,7 +7967,7 @@ void main() {
     }
     if (e.key === "\\") { e.preventDefault(); cmp(true); }
     else if (e.key === " " && isMovie()) { e.preventDefault(); e.stopImmediatePropagation(); playPause(); }
-    else if (e.key === "r" || e.key === "R") { e.preventDefault(); turn(e.shiftKey ? -1 : 1); }
+    else if ((e.key === "r" || e.key === "R") && !st.look) { e.preventDefault(); turn(e.shiftKey ? -1 : 1); }
     else if (e.key === "Escape") { e.stopImmediatePropagation(); close(); }
   }, true);
   window.addEventListener("keyup", e => { if (e.key === "\\") cmp(false); });
@@ -7704,7 +7975,425 @@ void main() {
   if (go) { const li = document.createElement("li"); li.innerHTML = '<button id="gostudio">Cassini Studio…</button>'; go.appendChild(li); li.querySelector("button").addEventListener("click", () => open()); }
   sync();
 
-  window.cassiniStudio = { open, close, apply, encode, decode, fromScreen, save, get state() { return st; }, _map: mapOf, _effective: effective };
+  window.cassiniStudio = { open, close, apply, encode, decode, lookOf, renderer, fromScreen, save, get state() { return st; }, _map: mapOf, _effective: effective };
+})();
+</script>
+<script>
+// ---------- the Movie Editor ----------
+(function () {
+  const $ = id => document.getElementById(id);
+  const EX = window.cassiniExport, STU = () => window.cassiniStudio, WM = window.cassiniWM, S = window.cassiniSettings, card = $("mecard");
+  if (!EX) return;
+  const FRAMES = (() => {                       // the frame server, chosen as the camera window chooses it
+    const q = new URLSearchParams(location.search).get("frames");
+    if (q) return q.replace(/\/$/, "");
+    if (/^https?:$/.test(location.protocol) && !/claude\.ai$|claudeusercontent\.com$|claude\.site$/.test(location.hostname)) return location.origin;
+    return "http://localhost:8765";
+  })();
+  const opt = (k, d) => (S && S.get(k) !== undefined ? S.get(k) : d);
+  const isoOf = et => new Date(etToMs(et)).toISOString().slice(0, 19);
+  const STORE = "cassini-movie-edits";
+
+  // ME: the stretch (a, b), its plan's frames, and the edit: drop (ids taken out by hand), keep (null = every target /
+  // filter pair, else the ones kept), cams (the export's Cameras), edit (the studio look's recipe)
+  const ME = { a: null, b: null, frames: [], pictures: "movie", loading: false, error: "", drop: new Set(), targets: null, filters: null, edit: "",
+    sel: -1, anchor: -1, picked: new Set(), showOut: true, src: "movie", undo: [], playing: false, pending: null };
+  const camsOf = () => (/^(N|W|NW)$/.test(EX.state.cams || "") ? EX.state.cams : "NW");
+  const why = e => !camsOf().includes(e.cam) ? "camera" : ME.drop.has(e.id) ? "removed" : ME.targets && !ME.targets.has(e.target || "UNKNOWN") ? "target"
+    : ME.filters && !ME.filters.has(e.filters) ? "filter" : "";
+  const kept = e => !why(e);
+  const visible = () => ME.frames.map((e, i) => i).filter(i => ME.showOut || kept(ME.frames[i]));
+
+  // ---------- the recipe ----------
+  const listOf = s => [...s].sort().join(",");
+  function recipe() {
+    if (ME.a == null) return "";
+    const q = new URLSearchParams({ from: isoOf(ME.a), until: isoOf(ME.b), cams: camsOf() });
+    if (ME.pictures !== "movie") q.set("pictures", ME.pictures);
+    if (ME.drop.size) q.set("drop", listOf(ME.drop));
+    if (ME.targets) q.set("targets", listOf(ME.targets));
+    if (ME.filters) q.set("filters", listOf(ME.filters));
+    if (ME.edit) q.set("edit", ME.edit);
+    return q.toString();
+  }
+  // what the export adds to its plan and film for the stretch marked now: the cut, when the editor has one for it
+  const same = () => ME.a != null && EX.state.a != null && Math.abs(EX.state.a - ME.a) < 1 && Math.abs(EX.state.b - ME.b) < 1;
+  function cut() {
+    if (!same()) return "";
+    const q = new URLSearchParams(recipe()); ["from", "until", "cams"].forEach(k => q.delete(k));
+    const s = q.toString(); return s ? "&" + s : "";
+  }
+  window.cassiniMovieCut = cut;
+  function remember() {
+    try {
+      const all = JSON.parse(localStorage.getItem(STORE) || "{}"), key = `${isoOf(ME.a)}|${isoOf(ME.b)}`, r = recipe();
+      const empty = !ME.drop.size && !ME.targets && !ME.filters && !ME.edit && ME.pictures === "movie";
+      if (empty) delete all[key]; else all[key] = { r, at: Date.now() };
+      const keys = Object.keys(all).sort((x, y) => all[y].at - all[x].at); keys.slice(30).forEach(k => delete all[k]);
+      localStorage.setItem(STORE, JSON.stringify(all));
+    } catch (e) {}
+  }
+  function recalled(a, b) {
+    try { const got = JSON.parse(localStorage.getItem(STORE) || "{}")[`${isoOf(a)}|${isoOf(b)}`]; return got ? got.r : null; } catch (e) { return null; }
+  }
+  // a recipe's edit over the editor (its times are the stretch's; the keep lists wait for the plan to check them)
+  function take(r) {
+    const q = new URLSearchParams(r || "");
+    ME.drop = new Set((q.get("drop") || "").split(",").filter(Boolean));
+    const set = k => q.get(k) ? new Set(q.get(k).split(",").filter(Boolean)) : null;
+    ME.targets = set("targets"); ME.filters = set("filters"); ME.edit = q.get("edit") || "";
+    ME.pictures = /^(movie|color|processed|raw)$/.test(q.get("pictures") || "") ? q.get("pictures") : "movie";
+    if (/^(N|W|NW)$/.test(q.get("cams") || "")) EX.state.cams = q.get("cams");
+  }
+  const snapshot = () => ({ pictures: ME.pictures, drop: new Set(ME.drop), targets: ME.targets && new Set(ME.targets), filters: ME.filters && new Set(ME.filters), edit: ME.edit, cams: camsOf() });
+  function change(fn) {
+    ME.undo.push(snapshot()); if (ME.undo.length > 200) ME.undo.shift();
+    fn(); changed();
+  }
+  let exT = 0;
+  function changed() {
+    remember(); render();
+    // the export's plan follows (EX.mark re-plans the marked stretch, cut included)
+    clearTimeout(exT); exT = setTimeout(() => { if (same()) EX.mark(); }, 300);
+  }
+  function undo() {
+    const s = ME.undo.pop(); if (!s) return;
+    const reload = s.pictures !== ME.pictures;
+    ME.drop = s.drop; ME.targets = s.targets; ME.filters = s.filters; ME.edit = s.edit; EX.state.cams = s.cams; ME.pictures = s.pictures;
+    changed(); if (reload) load(); else show();
+  }
+
+  // ---------- the plan: every frame of the stretch, from the frame server ----------
+  let ask = 0;
+  async function load() {
+    const n = ++ask;
+    ME.loading = true; ME.error = ""; ME.frames = []; render();
+    // every frame of the stretch, however many (list=1: the plan's cap is the film's, not the list's)
+    const q = new URLSearchParams({ from: isoOf(ME.a), until: isoOf(ME.b), cams: "NW", fps: opt("export.adaptive", true) ? "auto" : String(opt("export.fps", 12)),
+      size: "512", sound: "0", caption: "0", pictures: ME.pictures, list: "1" });
+    try {
+      const r = await fetch(`${FRAMES}/export/plan.json?${q}${window.cassiniLook ? window.cassiniLook() : ""}${window.cassiniMovieStyle ? window.cassiniMovieStyle() : ""}`), p = await r.json();
+      if (n !== ask) return;
+      if (!r.ok) throw new Error(p.error || `the frame server said ${r.status}`);
+      ME.frames = p.pictures;
+    } catch (e) { if (n === ask) ME.error = /fetch|network/i.test(String(e.message)) ? `No frame server at ${FRAMES}.` : `Could not list the frames: ${e.message || e}`; }
+    if (n !== ask) return;
+    ME.loading = false;
+    // keep lists that name nothing in the stretch mean nothing
+    const has = (s, k) => s && [...s].some(v => ME.frames.some(e => (k === "target" ? e.target || "UNKNOWN" : e.filters) === v));
+    if (ME.targets && !has(ME.targets, "target")) ME.targets = null;
+    if (ME.filters && !has(ME.filters, "filters")) ME.filters = null;
+    strip(); render();
+    const keep = ME.frames[ME.sel] && ME.frames[ME.sel].id, at = keep ? ME.frames.findIndex(e => e.id === keep) : -1;
+    ME.sel = -1; ME.picked = new Set();
+    const first = at >= 0 ? at : ME.frames.findIndex(kept); select(first >= 0 ? first : 0);
+  }
+
+  // ---------- the strip ----------
+  const name = t => (t || "Unknown").replace(/_/g, " ").toLowerCase().replace(/\b\w/g, c => c.toUpperCase());
+  const hms = e => new Date(e.t * 1000).toISOString().slice(11, 19);
+  const KIND = { mosaic: "MOS", rolling: "MOS", movie: "MOV", color: "COL", processed: "", frame: "" };
+  const thumbUrl = e => `${FRAMES}/frames/${e.id}.webp?size=256`;
+  function strip() {
+    const host = $("mestrip");
+    host.replaceChildren(...ME.frames.map((e, i) => {
+      const b = document.createElement("button"); b.className = "meth"; b.dataset.i = i; b.setAttribute("role", "option");
+      b.title = `${hms(e)} UTC · ${name(e.target)} · ${e.cam === "N" ? "NAC" : "WAC"} ${e.filters} · ${e.id}`;
+      b.innerHTML = `<img loading="lazy" decoding="async" alt=""><b></b><span></span>`;
+      const img = b.querySelector("img");
+      // a frame the server has no raw picture of: the movie's own picture of it stands in
+      img.onerror = () => { img.onerror = null; if (e.src) img.src = `${FRAMES}${e.src}${e.src.includes("?") ? "&" : "?"}size=256`; };
+      img.src = thumbUrl(e);
+      b.querySelector("b").textContent = `${e.cam === "N" ? "N" : "W"}${KIND[e.first] ? " · " + KIND[e.first] : ""}`;
+      b.querySelector("span").textContent = `${hms(e)} ${name(e.target)}`;
+      return b;
+    }));
+  }
+  function stripState() {
+    const vis = new Set(visible());
+    $("mestrip").querySelectorAll(".meth").forEach(b => {
+      const i = +b.dataset.i, e = ME.frames[i], w = why(e);
+      b.hidden = !vis.has(i);
+      b.classList.toggle("out", !!w); b.classList.toggle("dropped", w === "removed");
+      b.classList.toggle("sel", i === ME.sel); b.classList.toggle("picked", ME.picked.has(i));
+      b.setAttribute("aria-selected", String(ME.picked.has(i) || i === ME.sel));
+    });
+  }
+
+  // ---------- chips: cameras, targets, filter pairs ----------
+  function chips(host, items, on, click, dbl) {
+    host.replaceChildren(...items.map(([k, label, n]) => {
+      const b = document.createElement("button"); b.className = "galbtn"; b.dataset.v = k;
+      b.innerHTML = `<span></span><i></i>`; b.firstChild.textContent = label; b.lastChild.textContent = n.toLocaleString();
+      b.setAttribute("aria-pressed", String(on(k)));
+      b.addEventListener("click", () => click(k));
+      if (dbl) b.addEventListener("dblclick", e => { e.preventDefault(); dbl(k); });
+      return b;
+    }));
+  }
+  const count = f => { const m = new Map(); ME.frames.forEach(e => { const k = f(e); m.set(k, (m.get(k) || 0) + 1); }); return [...m].sort((x, y) => y[1] - x[1]); };
+  // a keep list toggled: null keeps all; leaving every one in again goes back to null
+  function toggleKeep(field, all, k) {
+    change(() => {
+      const s = ME[field] ? new Set(ME[field]) : new Set(all);
+      if (s.has(k)) s.delete(k); else s.add(k);
+      ME[field] = s.size === all.length ? null : s.size ? s : new Set([k]);
+    });
+  }
+  function side() {
+    const tg = count(e => e.target || "UNKNOWN"), fl = count(e => e.filters), cm = count(e => e.cam);
+    chips($("mecams"), cm.map(([k, n]) => [k, k === "N" ? "NAC" : "WAC", n]), k => camsOf().includes(k),
+      k => change(() => { const c = camsOf(), next = c.includes(k) ? c.replace(k, "") : "NW".split("").filter(x => x === k || c.includes(x)).join(""); if (next) EX.state.cams = next; }));
+    chips($("metargets"), tg.map(([k, n]) => [k, name(k), n]), k => !ME.targets || ME.targets.has(k), k => toggleKeep("targets", tg.map(x => x[0]), k),
+      k => change(() => { ME.targets = tg.length > 1 ? new Set([k]) : null; }));
+    chips($("mefilters"), fl.map(([k, n]) => [k, k, n]), k => !ME.filters || ME.filters.has(k), k => toggleKeep("filters", fl.map(x => x[0]), k),
+      k => change(() => { ME.filters = fl.length > 1 ? new Set([k]) : null; }));
+    $("metgall").disabled = !ME.targets; $("meflall").disabled = !ME.filters; $("merestore").disabled = !ME.drop.size;
+    $("medropped").textContent = ME.drop.size ? `${ME.drop.size.toLocaleString()} frame${ME.drop.size === 1 ? "" : "s"}` : "None. Pick a frame and press Delete.";
+    $("melook").textContent = ME.edit ? lookText(ME.edit) : "As the pipeline made the pictures.";
+    $("melookclear").disabled = !ME.edit;
+    $("meshowout").checked = ME.showOut;
+  }
+  const LOOKNAMES = { ex: "exposure", ct: "contrast", bk: "black", wt: "white", md: "midtones", sa: "saturation", wa: "warmth", ti: "tint", sh: "sharpness", to: "tone", fi: "filter", st: "strength" };
+  const lookText = r => r.split(",").map(kv => { const [k, v] = kv.split(":"); return `${LOOKNAMES[k] || k} ${/^-?[\d.]+$/.test(v) && +v > 0 && k !== "st" && k !== "wt" ? "+" : ""}${v}`; }).join(", ");
+
+  function render() {
+    $("meempty").hidden = !(ME.a == null || ME.loading || ME.error || !ME.frames.length);
+    $("meempty").textContent = ME.a == null ? "Highlight a stretch of the timeline (drag across it), then Edit… on its bar." : ME.loading ? "Listing the frames of this stretch…"
+      : ME.error || "No frames in this stretch.";
+    $("mecard").querySelector(".meside").hidden = !ME.frames.length;
+    const n = ME.frames.filter(kept).length;
+    $("mesum").textContent = ME.frames.length ? `${n.toLocaleString()} of ${ME.frames.length.toLocaleString()} frames in the movie` : "";
+    $("meundo").disabled = !ME.undo.length;
+    $("meexport").disabled = $("mecopy").disabled = ME.a == null;
+    $("mepics").querySelectorAll("button").forEach(b => b.setAttribute("aria-pressed", String(b.dataset.v === ME.pictures)));
+    $("mesrc").querySelectorAll("button").forEach(b => b.setAttribute("aria-pressed", String(b.dataset.v === ME.src)));
+    if (ME.frames.length) { side(); stripState(); }
+    pos();
+  }
+  function pos() {
+    const e = ME.frames[ME.sel], vis = ME.frames.filter(kept);
+    const at = e ? vis.indexOf(e) : -1;
+    $("mepos").textContent = e ? (at >= 0 ? `${at + 1} of ${vis.length}` : "left out") + ` · ${hms(e)} UTC` : "";
+    const sel = ME.picked.size ? [...ME.picked].map(i => ME.frames[i]) : e ? [e] : [];
+    $("metoggle").disabled = !sel.length;
+    $("metoggle").textContent = sel.length && sel.every(x => ME.drop.has(x.id)) ? `Put back${sel.length > 1 ? ` ${sel.length}` : ""}` : `Remove${sel.length > 1 ? ` ${sel.length}` : ""}`;
+    $("medl").disabled = !e;
+    $("meoff").hidden = !e || kept(e);
+    if (e && !kept(e)) $("meoff").textContent = { removed: "Removed", camera: "Camera left out", target: "Target left out", filter: "Filter left out" }[why(e)];
+  }
+
+  // ---------- the frame in front, drawn with the look ----------
+  const cv = $("mecanvas"), stage = $("mestage");
+  let R = null;
+  const ren = () => { if (!R && STU() && STU().renderer) { try { R = STU().renderer(cv); } catch (e) { R = null; } } return R; };
+  const picUrl = (e, size) => ME.src === "raw" || !e.src ? `${FRAMES}/frames/${e.id}.webp?size=${size}`
+    : `${FRAMES}${e.src}${e.src.includes("?") ? "&" : "?"}size=${size}${window.cassiniLook ? window.cassiniLook() : ""}${/^\/frames\/movie\//.test(e.src) && window.cassiniMovieStyle ? window.cassiniMovieStyle() : ""}`;
+  // pictures kept as bitmaps for a while (Play steps through them), the oldest let go
+  const bitmaps = new Map();
+  function bitmap(url) {
+    if (bitmaps.has(url)) { const b = bitmaps.get(url); bitmaps.delete(url); bitmaps.set(url, b); return b; }
+    const p = fetch(url).then(r => { if (!r.ok) throw new Error(r.status); return r.blob(); }).then(b => createImageBitmap(b));
+    p.catch(() => bitmaps.delete(url));
+    bitmaps.set(url, p);
+    while (bitmaps.size > 24) { const [k, old] = bitmaps.entries().next().value; bitmaps.delete(k); old.then(b => b.close && b.close(), () => {}); }
+    return p;
+  }
+  let shown = null, drawn = 0;
+  async function show() {
+    const e = ME.frames[ME.sel], n = ++drawn;
+    pos();
+    if (!e) { shown = null; paint(); return; }
+    $("metag").textContent = `${hms(e)} UTC · ${name(e.target)} · ${e.cam === "N" ? "NAC" : "WAC"} ${e.filters} · ${ME.src === "raw" ? "raw frame" : { mosaic: "mosaic", rolling: "mosaic movie", movie: "movie pass", color: "color", processed: "processed", frame: "frame" }[e.first] || ""} · ${e.id}`;
+    try {
+      const b = await bitmap(picUrl(e, 1024));
+      if (n !== drawn) return;
+      shown = b;
+    } catch (err) {
+      if (n !== drawn) return;
+      // the picture the film shows cannot be made: the raw frame stands in, as in the film
+      try { shown = await bitmap(`${FRAMES}/frames/${e.id}.webp?size=1024`); } catch (e2) { shown = null; }
+      if (n !== drawn) return;
+    }
+    paint();
+    return shown;
+  }
+  function paint() {
+    const r = ren();
+    if (!r || !shown || card.hidden) { cv.style.width = "0px"; return; }
+    const box = stage.getBoundingClientRect(), dpr = Math.min(2, devicePixelRatio || 1), W = shown.width, H = shown.height;
+    const k = Math.min((box.width - 12) / W, (box.height - 12) / H); if (!(k > 0)) return;
+    const cw = W * k, ch = H * k;
+    Object.assign(cv.style, { width: cw + "px", height: ch + "px", left: (box.width - cw) / 2 + "px", top: (box.height - ch) / 2 + "px" });
+    r.upload(shown, W, H);
+    r.draw(STU().decode(ME.edit), Math.max(1, Math.round(cw * dpr)), Math.max(1, Math.round(ch * dpr)));
+  }
+  new ResizeObserver(() => paint()).observe(stage);
+
+  // ---------- picking frames ----------
+  function select(i, how = {}) {
+    if (!ME.frames.length) { ME.sel = -1; show(); return; }
+    i = Math.max(0, Math.min(ME.frames.length - 1, i));
+    if (how.range && ME.anchor >= 0) { ME.picked = new Set(); const vis = new Set(visible()), [a, b] = [Math.min(ME.anchor, i), Math.max(ME.anchor, i)]; for (let k = a; k <= b; k++) if (vis.has(k)) ME.picked.add(k); }
+    else if (how.toggle) { if (ME.picked.has(i)) ME.picked.delete(i); else ME.picked.add(i); if (ME.sel >= 0 && !ME.picked.size) ME.picked.add(ME.sel); ME.anchor = i; }
+    else { ME.picked = new Set(); ME.anchor = i; }
+    ME.sel = i; stripState(); show();
+    const el = $("mestrip").querySelector(`.meth[data-i="${i}"]`); if (el && !how.noScroll) el.scrollIntoView({ block: "nearest" });
+  }
+  // the next frame shown in the strip (every frame with Show left-out frames, else the kept ones)
+  function step(d, how) {
+    const vis = visible(); if (!vis.length) return;
+    let at = vis.indexOf(ME.sel);
+    if (at < 0) { at = d > 0 ? vis.findIndex(i => i > ME.sel) - 1 : vis.findIndex(i => i >= ME.sel); if (at < -1) at = d > 0 ? vis.length - 1 : 0; }
+    select(vis[Math.max(0, Math.min(vis.length - 1, at + d))], how);
+  }
+  function toggleRemoved() {
+    const sel = (ME.picked.size ? [...ME.picked] : [ME.sel]).filter(i => ME.frames[i]).map(i => ME.frames[i]);
+    if (!sel.length) return;
+    const back = sel.every(e => ME.drop.has(e.id));
+    change(() => sel.forEach(e => back ? ME.drop.delete(e.id) : ME.drop.add(e.id)));
+    // one frame removed: on to the next, so a run of bad frames goes with Delete, Delete, Delete
+    if (!back && sel.length === 1) { if (!ME.showOut) { const nx = ME.frames.findIndex((e, i) => i > ME.sel && kept(e)); select(nx >= 0 ? nx : ME.sel); } else step(1); }
+    else { ME.picked = new Set(); stripState(); pos(); }
+  }
+  $("mestrip").addEventListener("click", e => {
+    const b = e.target.closest(".meth"); if (!b) return;
+    stopPlay(); select(+b.dataset.i, { range: e.shiftKey, toggle: e.metaKey || e.ctrlKey, noScroll: true });
+  });
+  $("mestrip").addEventListener("dblclick", e => { if (e.target.closest(".meth")) { card.classList.add("big"); paint(); } });
+  cv.addEventListener("dblclick", () => { card.classList.toggle("big"); setTimeout(paint); const el = $("mestrip").querySelector(".meth.sel"); if (el && !card.classList.contains("big")) el.scrollIntoView({ block: "nearest" }); });
+
+  // ---------- Play: the kept frames at the movie frame rate, each waiting for its picture ----------
+  let playT = 0;
+  function play() {
+    if (ME.playing) return stopPlay();
+    const k = ME.frames.filter(kept); if (!k.length) return;
+    ME.playing = true; $("meplay").textContent = "❚❚";
+    // from the frame in front, or from the start when it is the last kept one
+    if (ME.frames.findIndex((e, i) => i > ME.sel && kept(e)) < 0) ME.sel = -1;
+    else if (kept(ME.frames[ME.sel])) ME.sel--;
+    tick();
+  }
+  async function tick() {
+    if (!ME.playing) return;
+    const fps = Math.min(30, Math.max(1, window.cassiniMovie && window.cassiniMovie.fps ? window.cassiniMovie.fps() : +opt("movie.fps", 8) || 8));
+    const at = performance.now(), next = ME.frames.findIndex((e, i) => i > ME.sel && kept(e));
+    if (next < 0) return stopPlay();
+    ME.sel = next; ME.picked = new Set(); stripState();
+    const el = $("mestrip").querySelector(`.meth[data-i="${next}"]`); if (el) el.scrollIntoView({ block: "nearest" });
+    // the next few, asked for ahead
+    let ahead = next; for (let n = 0; n < 4; n++) { ahead = ME.frames.findIndex((e, i) => i > ahead && kept(e)); if (ahead < 0) break; bitmap(picUrl(ME.frames[ahead], 1024)); }
+    await show();
+    playT = setTimeout(tick, Math.max(0, 1000 / fps - (performance.now() - at)));
+  }
+  function stopPlay() { ME.playing = false; clearTimeout(playT); $("meplay").textContent = "▶"; }
+
+  // ---------- one frame, downloaded at full size with the look ----------
+  // the frame's picture at full size, as shown (the raw frame standing in when the movie's picture cannot be made)
+  async function full(e) {
+    let r = await fetch(picUrl(e, "full"));
+    if (!r.ok) r = await fetch(`${FRAMES}/frames/${e.id}.webp?size=full`);
+    if (!r.ok) throw new Error(`the frame server said ${r.status}`);
+    return r.blob();
+  }
+  async function download() {
+    const e = ME.frames[ME.sel]; if (!e || !STU()) return;
+    const b = $("medl"); b.disabled = true; b.textContent = "Making…";
+    try {
+      const jpg = await STU().apply(await full(e), ME.edit);
+      const a = document.createElement("a"); a.href = URL.createObjectURL(jpg);
+      a.download = `Cassini_${e.id}_${new Date(e.t * 1000).toISOString().slice(0, 19).replace(/[:T]/g, "-")}${ME.edit ? "_edited" : ""}.jpg`;
+      document.body.appendChild(a); a.click(); a.remove(); setTimeout(() => URL.revokeObjectURL(a.href), 60000);
+    } catch (err) { toast(`Could not save the frame: ${err.message || err}`); }
+    finally { b.disabled = false; b.textContent = "Download frame"; }
+  }
+  function toast(t) {
+    const g = $("galtoast");
+    if (g) { g.firstElementChild.textContent = t; const o = g.querySelector("button"); if (o) o.remove(); g.hidden = false; clearTimeout(toast.t); toast.t = setTimeout(() => { g.hidden = true; }, 3200); }
+  }
+
+  // ---------- the look, edited in Cassini Studio on the frame in front ----------
+  async function editLook() {
+    const e = ME.frames[ME.sel]; if (!e || !STU()) return;
+    stopPlay();
+    let blob; try { blob = await full(e); } catch (err) { toast(`Could not open the frame: ${err.message || err}`); return; }
+    STU().open({ kind: "picture", blob, edit: ME.edit || undefined, item: { title: `Movie look · ${hms(e)} UTC`, src: e.src, ids: [e.id] },
+      look: r => { change(() => { ME.edit = r; }); show(); if (WM) WM.front(card); } });
+  }
+
+  // ---------- opening ----------
+  function front() { card.hidden = false; delete card.dataset.min; if (WM) { WM.front(card); WM.syncMenu(); } }
+  // r: a recipe to open (a link's), else the stretch highlighted now and what was kept for it on this device
+  function open(r) {
+    front();
+    let a = EX.state.a, b = EX.state.b;
+    if (r) {
+      const q = new URLSearchParams(r), f = q.get("from"), u = q.get("until");
+      if (f && u) { a = utcToEt(f); b = utcToEt(u); EX.mark(a, b, "new"); a = EX.state.a; b = EX.state.b; }
+    }
+    if (a == null || b == null || b - a < 1) { ME.a = ME.b = null; ME.frames = []; strip(); render(); return; }
+    if (ME.a !== a || ME.b !== b || r) {
+      stopPlay(); ME.a = a; ME.b = b; ME.undo = []; ME.sel = -1; ME.picked = new Set();
+      take(r || recalled(a, b) || ""); remember();
+      load();
+    } else render();
+    setTimeout(paint);
+  }
+  function close() { stopPlay(); card.hidden = true; card.classList.remove("big"); if (WM) WM.syncMenu(); }
+  // a new stretch highlighted while the editor is open: it edits that one
+  document.addEventListener("cassini:marks", e => {
+    if (card.hidden) return;
+    const { a, b } = e.detail;
+    if (a != null && b != null && (ME.a == null || Math.abs(a - ME.a) >= 1 || Math.abs(b - ME.b) >= 1)) { clearTimeout(open.t); open.t = setTimeout(() => open(), 400); }
+  });
+
+  // ---------- wiring ----------
+  $("meprev").addEventListener("click", () => { stopPlay(); step(-1); });
+  $("menext").addEventListener("click", () => { stopPlay(); step(1); });
+  $("meplay").addEventListener("click", play);
+  $("mesrc").addEventListener("click", e => { const b = e.target.closest("button"); if (!b) return; ME.src = b.dataset.v; render(); show(); });
+  $("metoggle").addEventListener("click", toggleRemoved);
+  // another kind of picture: the frame server plans the stretch again (what is removed by hand stays removed)
+  $("mepics").addEventListener("click", e => { const b = e.target.closest("button"); if (!b || b.dataset.v === ME.pictures) return; stopPlay(); change(() => { ME.pictures = b.dataset.v; }); load(); });
+  $("medl").addEventListener("click", download);
+  $("metgall").addEventListener("click", () => change(() => { ME.targets = null; }));
+  $("meflall").addEventListener("click", () => change(() => { ME.filters = null; }));
+  $("merestore").addEventListener("click", () => change(() => { ME.drop = new Set(); }));
+  $("meshowout").addEventListener("change", e => { ME.showOut = e.target.checked; render(); });
+  $("melookedit").addEventListener("click", editLook);
+  $("melookclear").addEventListener("click", () => { change(() => { ME.edit = ""; }); paint(); });
+  $("meundo").addEventListener("click", () => { undo(); paint(); });
+  $("meexport").addEventListener("click", () => { stopPlay(); if (same()) EX.mark(); EX.open(); });
+  $("mecopy").addEventListener("click", async () => {
+    const base = window.cassiniLink && window.cassiniLink.href ? window.cassiniLink.href() : location.href.replace(/[?&]cut=[^&]*/, "");
+    const url = `${base}${base.includes("?") ? "&" : "?"}cut=${encodeURIComponent(recipe())}`;
+    try { await navigator.clipboard.writeText(url); $("mecopy").textContent = "Copied"; setTimeout(() => { $("mecopy").textContent = "Copy link"; }, 1500); } catch (e) { prompt("Link to this movie edit", url); }
+  });
+  card.addEventListener("click", e => { if (e.target.closest(".close, .min")) { e.stopPropagation(); close(); } }, true);
+  window.addEventListener("keydown", e => {
+    if (card.hidden || !card.classList.contains("front") || /INPUT|SELECT|TEXTAREA/.test(e.target.tagName) && e.target.type !== "checkbox") return;
+    if ((e.metaKey || e.ctrlKey) && e.key.toLowerCase() === "z") { e.preventDefault(); e.stopImmediatePropagation(); undo(); paint(); return; }
+    if (e.metaKey || e.ctrlKey || e.altKey) return;
+    const k = e.key;
+    if (k === "ArrowRight" || k === "ArrowLeft") { stopPlay(); step(k === "ArrowRight" ? 1 : -1, { range: e.shiftKey }); }
+    else if (k === "Delete" || k === "Backspace") toggleRemoved();
+    else if (k === " ") play();
+    else if (k === "Escape") { if (card.classList.contains("big")) { card.classList.remove("big"); setTimeout(paint); } else close(); }
+    else return;
+    e.preventDefault(); e.stopImmediatePropagation();
+  }, true);
+  // the bar of a highlighted stretch and the Export window open it; so do the Go menu and a link with &cut=
+  if ($("segedit")) $("segedit").addEventListener("click", () => open());
+  if ($("exedit")) $("exedit").addEventListener("click", () => open());
+  const go = $("gomenu");
+  if (go) { const li = document.createElement("li"); li.innerHTML = '<button id="gomovieedit">Movie Editor…</button>'; go.appendChild(li); li.querySelector("button").addEventListener("click", () => open()); }
+  const shared = new URLSearchParams(location.search).get("cut");
+  if (shared) {
+    const ready = () => typeof catalog !== "undefined" && catalog && $("loading") && $("loading").hidden;
+    const go2 = () => open(shared);
+    if (ready()) go2(); else { const mo = new MutationObserver(() => { if (ready()) { mo.disconnect(); setTimeout(go2, 300); } }); mo.observe($("loading"), { attributes: true, attributeFilter: ["hidden"] }); }
+  }
+  window.cassiniMovieEdit = { open, close, recipe, cut, get state() { return ME; } };
 })();
 </script>
 <script>
@@ -7778,7 +8467,9 @@ void main() {
     let best = Infinity;
     const loaded = t => t >= loadedSpan[0] && t < loadedSpan[1];
     if (loaded(et) && catalog && catalog.byCam) {
+      const lc = cassiniFeeds.liveCams ? cassiniFeeds.liveCams() : null;   // a closed camera's pictures are not waited for
       for (const cam of ["N", "W"]) {
+        if (lc && !lc.includes(cam)) continue;
         const a = cassiniFeeds.framesOf(cam, M.name).et; let lo = 0, hi = a.length;
         while (lo < hi) { const m = (lo + hi) >> 1; if (a[m] <= et) lo = m + 1; else hi = m; }
         if (lo < a.length && loaded(a[lo])) best = Math.min(best, a[lo]);
@@ -7808,8 +8499,11 @@ void main() {
   // ---- the window ----
   function bodyLook(n) {
     const look = typeof MOON_LOOK !== "undefined" && MOON_LOOK[n], c = look ? `rgb(${look.map(v => Math.round(v * 255)).join(",")})` : "#888";
-    const has = typeof bodies !== "undefined" && bodies[n] && n !== "SUN";
-    return `--c:${c};${has ? `background-image:url(data/textures/1k/${n.toLowerCase()}.webp);` : ""}`;
+    // its surface map, or else (as in the dock's All bodies folder) its sharpest real picture
+    const map = typeof TEX_FILES !== "undefined" && TEX_ON && TEX_FILES[n], b = M.index && M.index.bodies[n];
+    if (map) return `--c:${c};background-image:url(data/textures/1k/${map}.webp);`;
+    if (b && b.best && window.cassiniFeeds && n !== "SUN") return `--c:${c};background-image:url('${cassiniFeeds.frames}/frames/${b.best}.webp?size=256');background-size:cover;background-position:50% 50%;`;
+    return `--c:${c};`;
   }
   function fillPick() {
     const sel = $("bmpick"), ix = M.index && M.index.bodies;
@@ -8021,8 +8715,13 @@ void main() {
   let lastMark = 0;
   window.studyHud = ms => {
     if (base) base(ms);
-    // a moment's jump keeps the view on the body too
-    if (typeof jump === "function" && !jump.bodyLook) { const j = jump; jump = async e => { const r = await j(e); look(); return r; }; jump.bodyLook = true; }
+    // a moment's jump keeps the view on the body too; a jump to another body's moment (a highlight, a cutscene) leaves
+    // the body's view first, or its skip-the-gaps clock and its camera windows would pull the jump back to the body
+    if (typeof jump === "function" && !jump.bodyLook) {
+      const j = jump;
+      jump = async e => { if (M.name && momentBody(e) !== M.name) exit(); const r = await j(e); look(); return r; };
+      jump.bodyLook = true;
+    }
     if (want && !M.pending && typeof catalog !== "undefined" && catalog) { M.pending = true; enter(want, { jump: false }); }
     const now = performance.now();
     if (M.name && now - lastMark > 250) { lastMark = now; mark(); }
@@ -8303,7 +9002,7 @@ void main() {
 // ---------- About: what Cassini OS is, and every credit in one list (credits.json) ----------
 (function () {
   const $ = id => document.getElementById(id);
-  const CREDITS = {"groups":[{"title":"Cassini mission data","entries":[{"id":"iss","title":"Cassini camera pictures","credit":"NASA/JPL-Caltech/Space Science Institute","short":"NASA/JPL-Caltech/SSI","detail":"Every picture in the camera windows, mosaics, color sets, movies and highlights is a frame from Cassini's Imaging Science Subsystem (the narrow-angle and wide-angle cameras), archived by NASA's Planetary Data System, Cartography and Imaging Sciences Node. Cassini OS calibrates, stacks, aligns and centers them with SPICE; the colors are its own reconstruction, not NASA's.","license":"NASA material, not copyrighted in the US (NASA media usage guidelines)","url":"https://pds-imaging.jpl.nasa.gov/"},{"id":"spice","title":"Trajectory, pointing and planet positions","credit":"NASA/JPL Navigation and Ancillary Information Facility (NAIF), Cassini SPICE archive co-s_j_e_v-spice-6-v1.0","short":"NASA/JPL NAIF SPICE","detail":"Where Cassini, the planets and the moons were, which way Cassini pointed (its reconstructed attitude kernels), and the camera frames. Read with SpiceyPy.","license":"NASA material, not copyrighted in the US","url":"https://naif.jpl.nasa.gov/naif/"},{"id":"calibration","title":"Camera calibration","credit":"Cassini ISS team: CISSCAL and the Cassini ISS Data User's Guide (Porco et al. 2004; West et al. 2010; Knowles et al. 2020)","detail":"The steps and constants Cassini OS uses to turn raw frames into brightness (I/F): the bias, exposure, gain and per-filter sensitivity, and each filter's effective wavelength.","license":"Published by NASA's Planetary Data System","url":"https://pds-imaging.jpl.nasa.gov/documentation/iss_data_user_guide_180916.pdf"},{"id":"finale-data","title":"Grand Finale readings","credit":"NASA Planetary Data System, Planetary Plasma Interactions Node; Cassini INMS (Southwest Research Institute), MAG (Imperial College London) and RPWS (University of Iowa) teams","short":"NASA PDS · INMS, MAG, RPWS","detail":"The real readings from Cassini's last hour shown in the Grand Finale: INMS raw count rates (counts, not densities), the magnetometer at full resolution, and RPWS 60 s key parameters, from 15 September 2017.","license":"NASA material, not copyrighted in the US","url":"https://pds-ppi.igpp.ucla.edu/"},{"id":"facts","title":"Mission facts and numbers","credit":"NASA, NASA/JPL and ESA mission pages","detail":"The facts on the loading screen (each one names its source as it shows), and the numbers and timings the Grand Finale is pinned to (JPL, \"Cassini Spacecraft Makes Its Final Approach to Saturn\", 13 September 2017; \"Cassini by the Numbers\"), and the opening at the start of the mission (ESA, \"Cassini-Huygens: Launch information\"; NASA, \"Cassini Quick Facts\").","license":"Facts, with their sources named","url":"https://science.nasa.gov/mission/cassini/"}]},{"title":"Huygens probe","entries":[{"id":"disr","title":"Huygens descent pictures","credit":"ESA/NASA/JPL/University of Arizona; mosaics by Erich Karkoschka (DISR team)","short":"ESA/NASA/JPL/UA","detail":"The probe's own pictures of Titan from its Descent Imager/Spectral Radiometer (DISR), and the nested mosaics of the landing site (60 m down to 1 m per pixel) Erich Karkoschka assembled from them, from ESA's Planetary Science Archive (HP-SSA-DISR-2-3-EDR-RDR-V1.3).","license":"ESA Planetary Science Archive data","url":"https://archives.esac.esa.int/psa/"},{"id":"huygens-track","title":"Huygens trajectory","credit":"ESA Huygens Descent Trajectory Working Group (B. Kazeminejad, ESTEC), HP-SSA-DTWG-6-TRAJECTORY-V2.0; NASA/JPL NAIF","detail":"The probe's path through Titan's atmosphere to the ground; its coast from Cassini to Titan comes from NAIF's reconstructed trajectory.","license":"ESA Planetary Science Archive data","url":"https://archives.esac.esa.int/psa/"}]},{"title":"Surface maps and shapes","note":"Maps come from the Celestia project's CelestiaContent collection, resized into the 1k, 2k and 4k sizes; credit lines follow Celestia's license files. Maps marked \"No license stated\" are reworks of NASA/JPL and other material without a license file and will be rebuilt from public-domain originals before a public launch.","entries":[{"id":"map-saturn","title":"Saturn","credit":"Cassini imagery, Björn Jónsson; recolored by Askaniy Anpilogov (via Celestia)","license":"CC BY 3.0","url":"https://github.com/CelestiaProject/CelestiaContent","files":["saturn.webp"]},{"id":"map-rings","title":"Saturn's rings","credit":"Björn Jónsson ring data (Celestia composite)","license":"No license stated","url":"https://bjj.mmedia.is/","files":["rings/saturn_rings.png"]},{"id":"map-icy","title":"Mimas, Enceladus, Tethys, Dione, Iapetus","credit":"Paul Schenk's Cassini color maps (NASA/JPL/LPI), via Celestia","license":"No license stated","files":["mimas.webp","enceladus.webp","tethys.webp","dione.webp","iapetus.webp"]},{"id":"map-rhea","title":"Rhea","credit":"Paul Schenk's map and Björn Jónsson's albedo, via Celestia","license":"No license stated","files":["rhea.webp"]},{"id":"map-titan","title":"Titan","credit":"Cassini haze images, Gordan Ugarković, Kevin M. Gill, ShadowDragon777, AstroChara (via Celestia)","license":"CC BY 4.0","files":["titan.webp"]},{"id":"map-titan-surface","title":"Titan's surface","credit":"Cassini VIMS and ISS map (Seignovert et al. 2019) with radar lakes, via Celestia","license":"CC BY 3.0","files":["titan_surface.webp"]},{"id":"map-hyperion","title":"Hyperion","credit":"Map: reprojected Cassini imagery (ItzImcool), via Celestia. Shape: P. C. Thomas et al., NASA Planetary Data System","license":"Map CC BY 4.0; shape CC0","files":["hyperion.webp","models/hyperion.mesh.b64.txt"]},{"id":"map-phoebe","title":"Phoebe","credit":"Map: John van Vliet, via Celestia. Shape: R. W. Gaskell, NASA Planetary Data System","license":"No license stated","files":["phoebe.webp","models/phoebe.mesh.b64.txt"]},{"id":"map-jupiter","title":"Jupiter","credit":"Cassini 2000 flyby and Juno data, recolored by Askaniy Anpilogov (via Celestia)","license":"CC BY 3.0","files":["jupiter.webp"]},{"id":"map-venus","title":"Venus","credit":"Cloud tops by Björn Jónsson, recolored by FarGetaNik (via Celestia)","license":"No license stated","files":["venus.webp"]},{"id":"map-earth","title":"Earth","credit":"\"Mappamondo\" (earthstartsbeating.com), Natural Earth II (Tom Patterson), NASA Blue Marble Next Generation (via Celestia)","license":"No license stated","files":["earth.webp"]},{"id":"map-moon","title":"The Moon","credit":"Celestia's lunar map (NASA data)","license":"No license stated","files":["moon.webp"]},{"id":"map-io","title":"Io","credit":"ItzImcool, AstroChara; NASA/JPL-Caltech/ASI/USGS; NASA/JPL/SwRI/MSSS/Gerald Eichstädt/Jason Perry/John Rogers (via Celestia)","license":"CC BY 4.0","files":["io.webp"]},{"id":"map-europa","title":"Europa","credit":"John van Vliet (via Celestia)","license":"No license stated","files":["europa.webp"]},{"id":"map-ganymede","title":"Ganymede","credit":"Askaniy Anpilogov; NASA/JPL-Caltech/ASI/USGS; Björn Jónsson; NASA/JPL-Caltech/SwRI/MSSS/Brian Swift (via Celestia)","license":"CC BY 3.0","files":["ganymede.webp"]},{"id":"map-callisto","title":"Callisto","credit":"Askaniy Anpilogov, from John van Vliet's map (via Celestia)","license":"No license stated","files":["callisto.webp"]}]},{"title":"Sky","entries":[{"id":"star-sky","title":"Stars and the Milky Way","credit":"NASA/Goddard Space Flight Center Scientific Visualization Studio. Gaia DR2: ESA/Gaia/DPAC","short":"NASA SVS Deep Star Maps","detail":"The background sky, from NASA's \"Deep Star Maps 2020\": Hipparcos, Tycho-2 and Gaia DR2 stars plus the Milky Way, placed in J2000 where Cassini saw them.","license":"NASA material, public domain","url":"https://svs.gsfc.nasa.gov/4851","files":["sky/sky_2k.webp","sky/sky_4k.webp","sky/sky_8k.webp"]}]},{"title":"Spacecraft","entries":[{"id":"model","title":"Cassini-Huygens 3D model","credit":"NASA/JPL-Caltech, NASA 3D Resources \"Cassini-Huygens\"","detail":"The spacecraft in the 3D view and the wireframe on the loading screen (decoded from Draco compression for the page).","license":"NASA material, not copyrighted in the US","url":"https://github.com/nasa/NASA-3D-Resources"}]},{"title":"Sound","entries":[{"id":"sound","title":"Sonification","credit":"Made for Cassini OS, after Erich Karkoschka's \"Titan Descent Data Movie with Bells and Whistles\" (DISR team, University of Arizona)","detail":"Every sound is synthesized in the browser from what Cassini is doing (no recordings); the idea of a chime for each instrument part follows Karkoschka's Huygens descent movie.","license":"Part of Cassini OS"}]},{"title":"Software and fonts","entries":[{"id":"threejs","title":"three.js","credit":"three.js authors, r128, with OrbitControls and GLTFLoader","license":"MIT","url":"https://threejs.org/"},{"id":"draco","title":"Draco","credit":"Google, used to decode the spacecraft model ahead of time","license":"Apache 2.0","url":"https://google.github.io/draco/"},{"id":"pipeline-libs","title":"Picture pipeline","credit":"SpiceyPy (Andrew Annex et al.), NumPy, pandas, OpenCV, Pillow, scikit-image, Matplotlib","detail":"The Python libraries the frame server and the image pipeline run on.","license":"MIT, BSD and Apache 2.0 (each project's own)"},{"id":"font-silkscreen","title":"Silkscreen","credit":"Jason Kottke, via Google Fonts","license":"SIL Open Font License 1.1","url":"https://fonts.google.com/specimen/Silkscreen"},{"id":"font-sharetech","title":"Share Tech Mono","credit":"Carrois Apostrophe, via Google Fonts","license":"SIL Open Font License 1.1","url":"https://fonts.google.com/specimen/Share+Tech+Mono"}]}]};
+  const CREDITS = {"groups":[{"title":"Cassini mission data","entries":[{"id":"iss","title":"Cassini camera pictures","credit":"NASA/JPL-Caltech/Space Science Institute","short":"NASA/JPL-Caltech/SSI","detail":"Every picture in the camera windows, mosaics, color sets, movies and highlights is a frame from Cassini's Imaging Science Subsystem (the narrow-angle and wide-angle cameras), archived by NASA's Planetary Data System, Cartography and Imaging Sciences Node. Cassini OS calibrates, stacks, aligns and centers them with SPICE; the colors are its own reconstruction, not NASA's.","license":"NASA material, not copyrighted in the US (NASA media usage guidelines)","url":"https://pds-imaging.jpl.nasa.gov/"},{"id":"spice","title":"Trajectory, pointing and planet positions","credit":"NASA/JPL Navigation and Ancillary Information Facility (NAIF), Cassini SPICE archive co-s_j_e_v-spice-6-v1.0","short":"NASA/JPL NAIF SPICE","detail":"Where Cassini, the planets and the moons were, which way Cassini pointed (its reconstructed attitude kernels), and the camera frames. Read with SpiceyPy.","license":"NASA material, not copyrighted in the US","url":"https://naif.jpl.nasa.gov/naif/"},{"id":"calibration","title":"Camera calibration","credit":"Cassini ISS team: CISSCAL and the Cassini ISS Data User's Guide (Porco et al. 2004; West et al. 2010; Knowles et al. 2020)","detail":"The steps and constants Cassini OS uses to turn raw frames into brightness (I/F): the bias, exposure, gain and per-filter sensitivity, and each filter's effective wavelength.","license":"Published by NASA's Planetary Data System","url":"https://pds-imaging.jpl.nasa.gov/documentation/iss_data_user_guide_180916.pdf"},{"id":"finale-data","title":"Grand Finale readings","credit":"NASA Planetary Data System, Planetary Plasma Interactions Node; Cassini INMS (Southwest Research Institute), MAG (Imperial College London) and RPWS (University of Iowa) teams","short":"NASA PDS · INMS, MAG, RPWS","detail":"The real readings from Cassini's last hour shown in the Grand Finale: INMS raw count rates (counts, not densities), the magnetometer at full resolution, and RPWS 60 s key parameters, from 15 September 2017.","license":"NASA material, not copyrighted in the US","url":"https://pds-ppi.igpp.ucla.edu/"},{"id":"facts","title":"Mission facts and numbers","credit":"NASA, NASA/JPL and ESA mission pages","detail":"The facts on the loading screen (each one names its source as it shows), and the numbers and timings the Grand Finale is pinned to (JPL, \"Cassini Spacecraft Makes Its Final Approach to Saturn\", 13 September 2017; \"Cassini by the Numbers\"), and the opening at the start of the mission (ESA, \"Cassini-Huygens: Launch information\"; NASA, \"Cassini Quick Facts\").","license":"Facts, with their sources named","url":"https://science.nasa.gov/mission/cassini/"}]},{"title":"Huygens probe","entries":[{"id":"disr","title":"Huygens descent pictures","credit":"ESA/NASA/JPL/University of Arizona; mosaics by Erich Karkoschka (DISR team)","short":"ESA/NASA/JPL/UA","detail":"The probe's own pictures of Titan from its Descent Imager/Spectral Radiometer (DISR), and the nested mosaics of the landing site (60 m down to 1 m per pixel) Erich Karkoschka assembled from them, from ESA's Planetary Science Archive (HP-SSA-DISR-2-3-EDR-RDR-V1.3).","license":"ESA Planetary Science Archive data","url":"https://archives.esac.esa.int/psa/"},{"id":"huygens-track","title":"Huygens trajectory","credit":"ESA Huygens Descent Trajectory Working Group (B. Kazeminejad, ESTEC), HP-SSA-DTWG-6-TRAJECTORY-V2.0; NASA/JPL NAIF","detail":"The probe's path through Titan's atmosphere to the ground; its coast from Cassini to Titan comes from NAIF's reconstructed trajectory.","license":"ESA Planetary Science Archive data","url":"https://archives.esac.esa.int/psa/"}]},{"title":"Surface maps and shapes","note":"Maps come from the Celestia project's CelestiaContent collection, resized into the 1k, 2k and 4k sizes; credit lines follow Celestia's license files. Maps marked \"No license stated\" are reworks of NASA/JPL and other material without a license file and will be rebuilt from public-domain originals before a public launch.","entries":[{"id":"map-saturn","title":"Saturn","credit":"Cassini imagery, Björn Jónsson; recolored by Askaniy Anpilogov (via Celestia)","license":"CC BY 3.0","url":"https://github.com/CelestiaProject/CelestiaContent","files":["saturn.webp"]},{"id":"map-rings","title":"Saturn's rings","credit":"Björn Jónsson ring data (Celestia composite)","license":"No license stated","url":"https://bjj.mmedia.is/","files":["rings/saturn_rings.png"]},{"id":"map-icy","title":"Mimas, Enceladus, Tethys, Dione, Iapetus","credit":"Paul Schenk's Cassini color maps (NASA/JPL/LPI), via Celestia","license":"No license stated","files":["mimas.webp","enceladus.webp","tethys.webp","dione.webp","iapetus.webp"]},{"id":"map-rhea","title":"Rhea","credit":"Paul Schenk's map and Björn Jónsson's albedo, via Celestia","license":"No license stated","files":["rhea.webp"]},{"id":"map-titan","title":"Titan","credit":"Cassini haze images, Gordan Ugarković, Kevin M. Gill, ShadowDragon777, AstroChara (via Celestia)","license":"CC BY 4.0","files":["titan.webp"]},{"id":"map-titan-surface","title":"Titan's surface","credit":"Cassini VIMS and ISS map (Seignovert et al. 2019) with radar lakes, via Celestia","license":"CC BY 3.0","files":["titan_surface.webp"]},{"id":"map-hyperion","title":"Hyperion","credit":"Map: reprojected Cassini imagery (ItzImcool), via Celestia. Shape: P. C. Thomas et al., NASA Planetary Data System","license":"Map CC BY 4.0; shape CC0","files":["hyperion.webp","models/hyperion.mesh.b64.txt"]},{"id":"map-phoebe","title":"Phoebe","credit":"Map: John van Vliet, via Celestia. Shape: R. W. Gaskell, NASA Planetary Data System","license":"No license stated","files":["phoebe.webp","models/phoebe.mesh.b64.txt"]},{"id":"shape-small-moons","title":"Saturn's small moons (shapes)","credit":"Pan, Daphnis, Atlas, Prometheus, Pandora, Epimetheus, Janus, Telesto, Calypso and Helene: P. Thomas, J. Joseph and T. Ansty, Saturn Small Moon Shape Models V1.0, NASA Planetary Data System, 2018 (doi:10.26033/ewy3-jy61), from Cassini ISS images; via Celestia","license":"CC0 1.0","files":["models/pan.mesh.b64.txt","models/daphnis.mesh.b64.txt","models/atlas.mesh.b64.txt","models/prometheus.mesh.b64.txt","models/pandora.mesh.b64.txt","models/epimetheus.mesh.b64.txt","models/janus.mesh.b64.txt","models/telesto.mesh.b64.txt","models/calypso.mesh.b64.txt","models/helene.mesh.b64.txt"]},{"id":"map-jupiter","title":"Jupiter","credit":"Cassini 2000 flyby and Juno data, recolored by Askaniy Anpilogov (via Celestia)","license":"CC BY 3.0","files":["jupiter.webp"]},{"id":"map-venus","title":"Venus","credit":"Cloud tops by Björn Jónsson, recolored by FarGetaNik (via Celestia)","license":"No license stated","files":["venus.webp"]},{"id":"map-earth","title":"Earth","credit":"\"Mappamondo\" (earthstartsbeating.com), Natural Earth II (Tom Patterson), NASA Blue Marble Next Generation (via Celestia)","license":"No license stated","files":["earth.webp"]},{"id":"map-moon","title":"The Moon","credit":"Celestia's lunar map (NASA data)","license":"No license stated","files":["moon.webp"]},{"id":"map-io","title":"Io","credit":"ItzImcool, AstroChara; NASA/JPL-Caltech/ASI/USGS; NASA/JPL/SwRI/MSSS/Gerald Eichstädt/Jason Perry/John Rogers (via Celestia)","license":"CC BY 4.0","files":["io.webp"]},{"id":"map-europa","title":"Europa","credit":"John van Vliet (via Celestia)","license":"No license stated","files":["europa.webp"]},{"id":"map-ganymede","title":"Ganymede","credit":"Askaniy Anpilogov; NASA/JPL-Caltech/ASI/USGS; Björn Jónsson; NASA/JPL-Caltech/SwRI/MSSS/Brian Swift (via Celestia)","license":"CC BY 3.0","files":["ganymede.webp"]},{"id":"map-callisto","title":"Callisto","credit":"Askaniy Anpilogov, from John van Vliet's map (via Celestia)","license":"No license stated","files":["callisto.webp"]}]},{"title":"Sky","entries":[{"id":"star-sky","title":"Stars and the Milky Way","credit":"NASA/Goddard Space Flight Center Scientific Visualization Studio. Gaia DR2: ESA/Gaia/DPAC","short":"NASA SVS Deep Star Maps","detail":"The background sky, from NASA's \"Deep Star Maps 2020\": Hipparcos, Tycho-2 and Gaia DR2 stars plus the Milky Way, placed in J2000 where Cassini saw them.","license":"NASA material, public domain","url":"https://svs.gsfc.nasa.gov/4851","files":["sky/sky_2k.webp","sky/sky_4k.webp","sky/sky_8k.webp"]}]},{"title":"Spacecraft","entries":[{"id":"model","title":"Cassini-Huygens 3D model","credit":"NASA/JPL-Caltech, NASA 3D Resources \"Cassini-Huygens\"","detail":"The spacecraft in the 3D view and the wireframe on the loading screen (decoded from Draco compression for the page).","license":"NASA material, not copyrighted in the US","url":"https://github.com/nasa/NASA-3D-Resources"}]},{"title":"Sound","entries":[{"id":"sound","title":"Sonification","credit":"Made for Cassini OS, after Erich Karkoschka's \"Titan Descent Data Movie with Bells and Whistles\" (DISR team, University of Arizona)","detail":"Every sound is synthesized in the browser from what Cassini is doing (no recordings); the idea of a chime for each instrument part follows Karkoschka's Huygens descent movie.","license":"Part of Cassini OS"}]},{"title":"Software and fonts","entries":[{"id":"threejs","title":"three.js","credit":"three.js authors, r128, with OrbitControls and GLTFLoader","license":"MIT","url":"https://threejs.org/"},{"id":"draco","title":"Draco","credit":"Google, used to decode the spacecraft model ahead of time","license":"Apache 2.0","url":"https://google.github.io/draco/"},{"id":"pipeline-libs","title":"Picture pipeline","credit":"SpiceyPy (Andrew Annex et al.), NumPy, pandas, OpenCV, Pillow, scikit-image, Matplotlib","detail":"The Python libraries the frame server and the image pipeline run on.","license":"MIT, BSD and Apache 2.0 (each project's own)"},{"id":"font-silkscreen","title":"Silkscreen","credit":"Jason Kottke, via Google Fonts","license":"SIL Open Font License 1.1","url":"https://fonts.google.com/specimen/Silkscreen"},{"id":"font-sharetech","title":"Share Tech Mono","credit":"Carrois Apostrophe, via Google Fonts","license":"SIL Open Font License 1.1","url":"https://fonts.google.com/specimen/Share+Tech+Mono"}]}]};
   const card = $("about"), nav = $("anav"), pane = $("apane");
   const esc = s => String(s).replace(/[&<>"]/g, c => ({ "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;" })[c]);
   const TABS = {
@@ -8312,7 +9011,9 @@ void main() {
       <p>Made by Sam Iacavazzi · <a href="https://github.com/siacavazzi" target="_blank" rel="noopener">github.com/siacavazzi</a></p>
       <p class="note">More about the project is coming here.</p>
       <h3>Credits</h3>
-      <p>The pictures are NASA/JPL-Caltech/Space Science Institute, the probe's are ESA/NASA/JPL/University of Arizona, and the flight data is from NASA/JPL's SPICE archive. The maps, models, sound, software and fonts have their own authors. <a href="#" data-tab="Credits">See all credits</a>.</p>`,
+      <p>The pictures are NASA/JPL-Caltech/Space Science Institute, the probe's are ESA/NASA/JPL/University of Arizona, and the flight data is from NASA/JPL's SPICE archive. The maps, models, sound, software and fonts have their own authors. <a href="#" data-tab="Credits">See all credits</a>.</p>
+      <h3>Privacy</h3>
+      <p>Cassini OS uses no cookies and no outside trackers. Its server keeps daily totals only: how many people visited and from which country, and which pictures were looked at and saved. Nothing is kept that could tell one visitor from another.</p>`,
     Credits: () => CREDITS.groups.map(g => `<h3>${esc(g.title)}</h3>` + (g.note ? `<p class="note">${esc(g.note)}</p>` : "")
       + g.entries.map(e => `<div class="cr" id="cr-${esc(e.id)}"><b>${esc(e.title)}</b><div class="by">${esc(e.credit)}</div>`
         + (e.detail ? `<div class="what">${esc(e.detail)}</div>` : "")
@@ -8345,6 +9046,26 @@ void main() {
   // other parts of the page add their own tabs: cassiniAbout.addTab("Mission team", () => "<h2>…</h2>…") (html, escaped by the caller)
   function addTab(name, html) { TABS[name] = html; if (!card.hidden) render(); }
   window.cassiniAbout = { open, addTab, esc, close: () => show(false), credits: CREDITS };
+
+  // ---- which version this is: this page's build id (build.py writes it), and what the frame server says it serves ----
+  const BUILD = /*BUILD*/"b5905c812037";
+  const FRAMES = (() => {                       // the frame server, chosen as the camera window chooses it
+    const q = new URLSearchParams(location.search).get("frames");
+    if (q) return q.replace(/\/$/, "");
+    if (/^https?:$/.test(location.protocol) && !/claude\.ai$|claudeusercontent\.com$|claude\.site$/.test(location.hostname)) return location.origin;
+    return "http://localhost:8765";
+  })();
+  const ver = window.cassiniVersion = { page: BUILD || null, server: null };
+  function showVersion() {
+    const v = ver.server, el = $("aver");
+    const old = v && v.page && BUILD && v.page !== BUILD;
+    el.textContent = v ? `Version ${v.version}${old ? " · reload for the newest" : ""}` : BUILD ? `Build ${BUILD}` : "";
+    el.title = v ? [`Site ${v.site ? v.site.commit + " " + v.site.subject : "unknown"}`,
+      `Frame server ${v.server_version}${v.server_current ? "" : " (restart pending)"}`, `Page build ${BUILD || "none"}`].join("\n") : "";
+  }
+  ver.ready = fetch(`${FRAMES}/version.json`, { cache: "no-store" }).then(r => r.ok ? r.json() : null, () => null)
+    .then(v => { ver.server = v; showVersion(); return ver; });
+  showVersion();
   // closing or minimizing the window just closes it (it never goes to the menu-bar tray)
   card.addEventListener("click", e => { if (e.target.closest(".close, .min")) { e.stopImmediatePropagation(); show(false); } }, true);
   card.addEventListener("dblclick", e => { if (e.target.closest(".titlebar")) { e.stopImmediatePropagation(); show(false); } }, true);
@@ -8665,7 +9386,7 @@ const MAJOR = ["MIMAS", "ENCELADUS", "TETHYS", "DIONE", "RHEA", "TITAN", "HYPERI
 // the cruise to Saturn: two Venus flybys, Earth and the Moon, Jupiter and its four large moons
 const PLANETS = ["VENUS", "EARTH", "JUPITER", "SATURN"];
 const GALILEAN = ["IO", "EUROPA", "GANYMEDE", "CALLISTO"];
-const PARENT = { MOON: "EARTH", IO: "JUPITER", EUROPA: "JUPITER", GANYMEDE: "JUPITER", CALLISTO: "JUPITER" };
+const PARENT = { MOON: "EARTH", IO: "JUPITER", EUROPA: "JUPITER", GANYMEDE: "JUPITER", CALLISTO: "JUPITER", HIMALIA: "JUPITER" };
 const parentOf = n => PARENT[n] || (PLANETS.includes(n) ? "SUN" : "SATURN");
 const MOONS_OF = { SATURN: MAJOR, JUPITER: GALILEAN, EARTH: ["MOON"], VENUS: [] };
 const GM = { SUN: 1.32712440018e11, SATURN: 37931207.7, JUPITER: 126686534.9, EARTH: 398600.4 };   // km^3/s^2
@@ -8678,7 +9399,14 @@ const MOON_LOOK = {
   MIMAS: [0.80, 0.80, 0.80], ENCELADUS: [0.98, 0.98, 1.0], TETHYS: [0.88, 0.87, 0.85], DIONE: [0.84, 0.84, 0.86],
   RHEA: [0.82, 0.80, 0.78], TITAN: [0.86, 0.58, 0.28], HYPERION: [0.62, 0.55, 0.47], IAPETUS: [0.78, 0.76, 0.72], PHOEBE: [0.30, 0.29, 0.28],
   VENUS: [0.93, 0.86, 0.66], EARTH: [0.36, 0.52, 0.78], MOON: [0.62, 0.60, 0.57], JUPITER: [0.86, 0.76, 0.62],
-  IO: [0.92, 0.84, 0.46], EUROPA: [0.90, 0.85, 0.76], GANYMEDE: [0.62, 0.58, 0.52], CALLISTO: [0.42, 0.38, 0.34]
+  IO: [0.92, 0.84, 0.46], EUROPA: [0.90, 0.85, 0.76], GANYMEDE: [0.62, 0.58, 0.52], CALLISTO: [0.42, 0.38, 0.34],
+  // the small moons, near enough from Cassini's color pictures (Buratti et al. 2019, Thomas et al. 2013): the ring
+  // moons inside the F ring dusty and reddish, the co-orbitals grey, the Lagrangian moons and the Alkyonides bright
+  // with E-ring ice
+  PAN: [0.78, 0.72, 0.62], DAPHNIS: [0.78, 0.73, 0.64], ATLAS: [0.76, 0.70, 0.60], PROMETHEUS: [0.80, 0.77, 0.72],
+  PANDORA: [0.80, 0.78, 0.74], JANUS: [0.82, 0.80, 0.77], EPIMETHEUS: [0.82, 0.80, 0.77], TELESTO: [0.93, 0.93, 0.94],
+  CALYPSO: [0.95, 0.95, 0.96], HELENE: [0.94, 0.94, 0.95], METHONE: [0.84, 0.82, 0.79], PALLENE: [0.86, 0.85, 0.83],
+  POLYDEUCES: [0.88, 0.88, 0.88]
 };
 const SMOOTH = ["VENUS", "EARTH", "JUPITER"];   // cloud-covered: no procedural craters
 const FOV_HALF = { N: 0.3516 / 2, W: 3.4884 / 2 };   // ISS fields of view, degrees (half width)
@@ -8785,7 +9513,9 @@ const TEX_DIR = "data/textures/" + (/^[124]k$/.test(TEX_TIER) ? TEX_TIER : "2k")
 const TEX_FILES = { SATURN: "saturn", MIMAS: "mimas", ENCELADUS: "enceladus", TETHYS: "tethys", DIONE: "dione", RHEA: "rhea",
                     TITAN: "titan", HYPERION: "hyperion", IAPETUS: "iapetus", PHOEBE: "phoebe", JUPITER: "jupiter",
                     VENUS: "venus", EARTH: "earth", MOON: "moon", IO: "io", EUROPA: "europa", GANYMEDE: "ganymede", CALLISTO: "callisto" };
-const SHAPES = { HYPERION: "data/textures/models/hyperion.mesh.b64.txt", PHOEBE: "data/textures/models/phoebe.mesh.b64.txt" };
+// real shape models (Thomas et al. 2018 and Gaskell, PDS; web/replay/make_shapes.py for the small moons)
+const SHAPES = Object.fromEntries(["HYPERION", "PHOEBE", "PAN", "DAPHNIS", "ATLAS", "PROMETHEUS", "PANDORA", "EPIMETHEUS", "JANUS", "TELESTO", "CALYPSO", "HELENE"]
+  .map(n => [n, `data/textures/models/${n.toLowerCase()}.mesh.b64.txt`]));
 const shapeGeom = {};
 const texLoader = new THREE.TextureLoader();
 const bitmapLoader = typeof createImageBitmap === "function" && THREE.ImageBitmapLoader ? new THREE.ImageBitmapLoader().setOptions({ imageOrientation: "flipY", premultiplyAlpha: "none" }) : null;
@@ -8824,6 +9554,7 @@ async function loadShapes() {
     } catch (err) { console.warn("shape model not loaded for " + name, err); }
   }));
 }
+const shapesLoading = loadShapes();
 const RING_IN = 66900, RING_OUT = 140600;
 function ringTexture() {
   const N = 2048, c = document.createElement("canvas"); c.width = N; c.height = 1;
@@ -8950,9 +9681,12 @@ function makeSaturn(radii) {
   return { group: g, ring: rmat, radius: radii[0] };
 }
 
+// the moons Cassini only saw from afar: the irregular moons and Himalia are dark captured bodies, Anthe and Aegaeon icy
+const FAR_LOOK = n => ["ANTHE", "AEGAEON"].includes(n) ? [0.86, 0.85, 0.83] : [0.30, 0.28, 0.26];
 function makeMoon(name, b) {
-  const look = MOON_LOOK[name] || [0.7, 0.68, 0.65];
-  const kind = name === "IAPETUS" ? 1 : name === "TITAN" ? 2 : SMOOTH.includes(name) ? 3 : 0;
+  const look = MOON_LOOK[name] || (b.naif === 506 || (b.naif >= 619 && b.naif <= 653) ? FAR_LOOK(name) : [0.7, 0.68, 0.65]);
+  // kind 4: a small moon, shown plain (its shape model carries its relief; no painted craters)
+  const kind = name === "IAPETUS" ? 1 : name === "TITAN" ? 2 : SMOOTH.includes(name) ? 3 : TEX_FILES[name] ? 0 : 4;
   const mat = new THREE.ShaderMaterial({
     uniforms: { sunDir: { value: new THREE.Vector3(1, 0, 0) }, toScene: { value: new THREE.Matrix3() }, radii: { value: new THREE.Vector3(1, 1, 1) },
                 color: { value: new THREE.Vector3(...look) }, kind: { value: kind },
@@ -8969,7 +9703,7 @@ function makeMoon(name, b) {
         vec3 nb = normalize(vBody / radii);
         vec3 n = normalize(toScene * (shape > 0.5 ? normalize(vNrm) : nb));
         float m = 0.0, craters = 0.0;
-        if (hasMap < 0.5) { m = fbm(nb * 5.0) - 0.5; craters = smoothstep(0.62, 0.7, vnoise(nb * 22.0)) * 0.12; }
+        if (hasMap < 0.5 && kind < 3.5) { m = fbm(nb * 5.0) - 0.5; craters = smoothstep(0.62, 0.7, vnoise(nb * 22.0)) * 0.12; }
         vec3 alb = color * (1.0 + 0.32 * m - craters);
         float mu0 = dot(n, sunDir);
         float L = max(mu0, 0.0);
@@ -8977,10 +9711,10 @@ function makeMoon(name, b) {
           float lead = dot(nb, vec3(0.0, -1.0, 0.0)) + 0.18 * m;
           alb = mix(alb, vec3(0.07, 0.055, 0.045), smoothstep(-0.05, 0.25, lead));
         }
-        if (kind > 2.5) { // cloud-covered planets: soft banding, no craters
+        if (kind > 2.5 && kind < 3.5) { // cloud-covered planets: soft banding, no craters
           alb = color * (1.0 + 0.06 * sin(asin(nb.z) * 9.0) + 0.05 * m);
           L = smoothstep(-0.08, 0.6, mu0);
-        } else if (kind > 1.5) { // Titan: featureless haze, soft terminator
+        } else if (kind > 1.5 && kind < 2.5) { // Titan: featureless haze, soft terminator
           alb = color * (1.0 + 0.05 * sin(asin(nb.z) * 6.0) + 0.04 * m);
           L = smoothstep(-0.18, 0.75, mu0) * 0.95;
         }
@@ -8994,7 +9728,9 @@ function makeMoon(name, b) {
   const g = new THREE.Group(); g.add(mesh);
   const atm = ATMOSPHERES[name] ? makeAtmosphere(ATMOSPHERES[name], mat.uniforms.sunDir) : null;
   if (atm) g.add(atm);
-  return { group: g, mesh, mat, atm, shape: !!shapeGeom[name], radius: b.radii ? (b.radii[0] + b.radii[1] + b.radii[2]) / 3 : 10 };
+  const plume = name === "ENCELADUS" ? makePlume(mat.uniforms.sunDir) : null;
+  if (plume) g.add(plume);
+  return { group: g, mesh, mat, atm, plume, shape: !!shapeGeom[name], radius: b.radii ? (b.radii[0] + b.radii[1] + b.radii[2]) / 3 : 10 };
 }
 
 // ---------- atmospheres: a haze shell around the globe, shaded by marching the view ray through it ----------
@@ -9108,6 +9844,135 @@ function makeAtmosphere(a, sunDir) {
     mat.uniforms.inside.value = inn ? 1 : 0;
     mat.side = inn ? THREE.BackSide : THREE.FrontSide; mat.depthTest = !inn;
     mat.uniforms.radii.value.copy(s);
+    mat.uniforms.rot.value.setFromMatrix4(mAtm.extractRotation(mesh.matrixWorld));
+  };
+  return mesh;
+}
+
+// ---------- Enceladus's plumes: sunlit ice grains over the south-polar tiger stripes, marched like the atmospheres ----------
+// Each stripe feeds a curtain of grains that rises straight up, thins with height (scale height H, plus a faint tall
+// tail) and spreads out until the four curtains merge into one broad plume. The grains are a few microns across, so
+// they scatter almost all their light forward (two-term Henyey-Greenstein): the plume shows against the dark sky when
+// Cassini looks back toward the Sun and is nearly invisible otherwise, as in the real pictures. It is optically thin,
+// so it only adds light, and grains in Enceladus's shadow stay dark. Lengths are in Enceladus radii; body frame z = north.
+//   stripes: [lat, east lon] of each end, traced on the surface map (the stripes drawn on the globe), and a share of
+//   the activity (Baghdad and Damascus strongest, Alexandria weakest; Spitale & Porco 2007, Porco et al. 2014)
+const PLUME = {
+  stripes: { DAMASCUS: [-77.5, 13.0, -70.4, 118.4, 1.0], BAGHDAD: [-79.7, 320.5, -70.5, 136.0, 1.0],
+             CAIRO: [-80.2, 275.4, -78.8, 184.8, 0.7], ALEXANDRIA: [-69.3, 263.5, -73.9, 202.1, 0.4] },
+  H: 0.25, tail: [0.15, 1.0], w0: 0.06, spread: 0.45, column: 0.011,
+  // jets: [spacing, width at the vent, widening per unit height, tilt], their share, and how high they stay distinct
+  jets: [0.02, 0.006, 0.18, 0.5], jetShare: 0.35, jetH: 0.2, g: [0.85, 0.2, 0.85], color: [0.9, 0.95, 1.0],
+  center: -2.0, reach: 1.9, steps: 48
+};
+const plumes = [];
+const plumeOn = () => window.cassiniSettings ? cassiniSettings.get("view.plumes") !== false : true;
+const plumeBrightness = () => window.cassiniSettings ? +cassiniSettings.get("view.plumeBrightness") || 1 : 1;
+function applyPlumes() {
+  const on = plumeOn(), lv = atmosphereLevel();
+  for (const m of plumes) {
+    m.visible = on;
+    m.material.uniforms.bright.value = plumeBrightness();
+    m.material.uniforms.steps.value = lv === "light" ? PLUME.steps / 2 : PLUME.steps;
+  }
+  if (window.cassiniPerf) cassiniPerf.invalidate();
+}
+function makePlume(sunDir) {
+  const p = PLUME, unit = (lat, lon) => { const a = lat * Math.PI / 180, o = lon * Math.PI / 180;
+    return new THREE.Vector3(Math.cos(a) * Math.cos(o), Math.cos(a) * Math.sin(o), Math.sin(a)); };
+  const S = Object.values(p.stripes);
+  const mat = new THREE.ShaderMaterial({
+    uniforms: { sunDir, sA: { value: S.map(s => unit(s[0], s[1])) }, sB: { value: S.map(s => unit(s[2], s[3])) },
+                sW: { value: new THREE.Vector4(...S.map(s => s[4])) }, H: { value: p.H }, tail: { value: new THREE.Vector2(...p.tail) },
+                w0: { value: p.w0 }, spread: { value: p.spread }, column: { value: p.column }, g: { value: new THREE.Vector3(...p.g) },
+                color: { value: new THREE.Vector3(...p.color) }, C: { value: new THREE.Vector3(0, 0, p.center) }, reach: { value: p.reach },
+                radii: { value: new THREE.Vector3(1, 1, 1) }, rot: { value: new THREE.Matrix3() }, inside: { value: 0 },
+                jet: { value: new THREE.Vector4(...p.jets) }, jetShare: { value: p.jetShare }, jetH: { value: p.jetH },
+                steps: { value: p.steps }, bright: { value: 1 } },
+    vertexShader: VHEAD + `varying vec3 vLocal; varying vec3 vView;
+      void main(){ vLocal = position; vec4 mv = modelViewMatrix * vec4(position, 1.0); vView = mv.xyz;
+        gl_Position = projectionMatrix * mv;
+        #include <logdepthbuf_vertex>
+      }`,
+    fragmentShader: FHEAD + `uniform vec3 sunDir, sA[4], sB[4], C, g, color, radii; uniform vec4 sW; uniform vec2 tail;
+      uniform float H, w0, spread, column, reach, inside, steps, bright, jetShare, jetH; uniform vec4 jet;
+      uniform mat3 rot;
+      varying vec3 vLocal; varying vec3 vView;
+      #define STEPS 48
+      float hg(float c, float k) { float q = 1.0 + k * k - 2.0 * k * c; return (1.0 - k * k) / (q * sqrt(q)); }
+      float hash(vec2 q) { return fract(sin(dot(q, vec2(127.1, 311.7))) * 43758.5453); }
+      // grains per unit length at x: over each stripe a curtain, a gaussian across it that widens with height, and near
+      // the surface the narrow jets it is made of (one every ~5 km, each tilted its own way) that blur into it higher up
+      float density(vec3 x, float r) {
+        float h = r - 1.0, w = w0 + spread * h, wj = jet.y + jet.z * h, n = 0.0, nj = 0.0;
+        vec3 s = x / r;
+        for (int k = 0; k < 4; k++) {
+          vec3 ab = sB[k] - sA[k];
+          float len = length(ab), t = dot(s - sA[k], ab) / (len * len);
+          vec3 q = normalize(sA[k] + ab * clamp(t, 0.0, 1.0));
+          float l = length(s - q) * r;
+          n += sW[k] * exp(-l * l / (w * w));
+          if (h < 0.6 && l < 2.5 * w) {   // jets only where the curtain is
+            float N = floor(len / jet.x), j0 = floor(t * N);
+            vec3 al = ab / len, ac = normalize(cross(s, al));
+            for (int i = -1; i <= 1; i++) {
+              float j = j0 + float(i);
+              if (j < 0.0 || j >= N) continue;
+              vec2 id = vec2(float(k), j);
+              vec3 b = normalize(sA[k] + ab * (j + 0.2 + 0.6 * hash(id)) / N);
+              vec3 axis = b * r + h * jet.w * ((hash(id + 7.1) - 0.5) * al + (hash(id + 3.3) - 0.5) * ac);
+              vec3 dj = x - axis;
+              nj += sW[k] * (0.3 + hash(id + 5.7)) * exp(-dot(dj, dj) / (wj * wj)) / wj;
+            }
+          }
+        }
+        float fade = smoothstep(reach, reach * 0.8, length(x - C));   // no hard edge where the volume ends
+        return (n / w * (exp(-h / H) + tail.x * exp(-h / tail.y)) + nj * jetShare * exp(-h / jetH)) * fade;
+      }
+      void main(){
+        #include <logdepthbuf_fragment>
+        vec3 dw = (normalize(vView) * mat3(viewMatrix)) * rot;
+        vec3 sd = normalize(sunDir * rot);
+        vec3 p = vLocal, d = normalize(dw / radii);
+        vec3 cam = p - dw * length(vView) / radii;
+        vec3 o = inside > 0.5 ? cam : p;
+        float L = inside > 0.5 ? length(p - cam) : max(-2.0 * dot(p - C, d), 0.0);   // to where the ray leaves the volume
+        float b = dot(o, d), c = dot(o, o) - 1.0, disc = b * b - c;
+        if (disc > 0.0) { float t0 = -b - sqrt(disc); if (t0 > 0.0 && t0 < L) L = t0; }       // the globe hides what is behind it
+        float mu = dot(d, sd);
+        float ph = g.z * hg(mu, g.x) + (1.0 - g.z) * hg(mu, g.y);
+        float tm = clamp(-b, 0.0, L);                       // samples bunch toward the surface, where the curtains are thin
+        float nh = floor(steps / 2.0), jit = fract(sin(dot(gl_FragCoord.xy, vec2(12.9898, 78.233))) * 43758.5453);
+        float I = 0.0, t1 = 0.0;
+        for (int i = 0; i < STEPS; i++) {
+          if (float(i) >= 2.0 * nh) break;
+          float u = (float(i) + 1.0) / nh;
+          float t2 = float(i) < nh ? tm - tm * (1.0 - u) * (1.0 - u) : tm + (L - tm) * (u - 1.0) * (u - 1.0);
+          vec3 x = o + d * mix(t1, t2, jit);
+          float r = length(x);
+          // lit unless the globe stands between the grain and the Sun (soft over the shadow's edge)
+          float sb = dot(x, sd), m = sqrt(max(dot(x, x) - sb * sb, 0.0));
+          float lit = sb > 0.0 ? 1.0 : smoothstep(0.97, 1.03, m);
+          if (r > 1.0) I += density(x, r) * lit * (t2 - t1);
+          t1 = t2;
+        }
+        I *= column * ph;
+        float top = 0.35 * bright;                          // a soft shoulder keeps even a backlit plume subtle
+        gl_FragColor = vec4(color * top * (1.0 - exp(-I / top)), 0.0);
+      }`,
+    transparent: true, depthWrite: false, blending: THREE.CustomBlending,
+    blendSrc: THREE.OneFactor, blendDst: THREE.OneMinusSrcAlphaFactor
+  });
+  const mesh = new THREE.Mesh(new THREE.SphereGeometry(p.reach, 64, 48).translate(0, 0, p.center), mat);
+  mesh.renderOrder = 1;
+  plumes.push(mesh);
+  const cl = new THREE.Vector3();
+  mesh.onBeforeRender = (r, sc, cam) => {
+    cl.copy(cam.getWorldPosition(new THREE.Vector3())); mesh.worldToLocal(cl);
+    const inn = cl.distanceTo(mat.uniforms.C.value) < p.reach * 1.001;
+    mat.uniforms.inside.value = inn ? 1 : 0;
+    mat.side = inn ? THREE.BackSide : THREE.FrontSide; mat.depthTest = !inn;
+    mat.uniforms.radii.value.copy(mesh.scale);
     mat.uniforms.rot.value.setFromMatrix4(mAtm.extractRotation(mesh.matrixWorld));
   };
   return mesh;
@@ -9341,7 +10206,7 @@ async function load(startEt) {
       probe = { ...h, track: parseTrack(await fetchBuf(h.file)) };
     }
   } catch (err) { console.warn("Huygens data not loaded", err); probe = null; }
-  await loadShapes();
+  await shapesLoading;
 }
 // the one-year layout (the artifact build): every file at once
 async function loadYearFiles() {
@@ -9374,6 +10239,7 @@ function build() {
   cassini = makeCassini(); scene.add(cassini);
   cassini.traverse(o => o.layers.set(1));
   if (window.cassiniSettings) cassiniSettings.on("view.atmospheres", applyAtmospheres); else applyAtmospheres();
+  if (window.cassiniSettings) { for (const k of ["view.plumes", "view.plumeBrightness", "view.atmospheres"]) cassiniSettings.on(k, applyPlumes); } else applyPlumes();
   buildFov();
   if (probe && probe.map) buildHuygensMap();
 
@@ -9514,6 +10380,7 @@ function updateBodies() {
       toScene(norm(sub(pos.SUN, pos[name], tmp2)), m.mat.uniforms.sunDir.value).normalize();
       // the haze shell turns with the body and keeps its shape, so an oblate Jupiter's limb has haze all the way round
       if (m.atm) { m.atm.quaternion.copy(m.mesh.quaternion); m.atm.scale.set(r[0], r[1], r[2]); }
+      if (m.plume) { m.plume.quaternion.copy(m.mesh.quaternion); m.plume.scale.set(r[0], r[1], r[2]); }
     }
   }
   saturnObj.ring.uniforms.camLocal.value.copy(camera.position).sub(saturnObj.group.position);
@@ -10054,7 +10921,7 @@ function setFocus(name, dist) {
   if (!pos[name] || (name !== "HUYGENS" && !present(name))) return;
   if (name !== "CASSINI" && state.follow) setFollow(false);
   const old = camera.position.clone();
-  const d = dist || (name === "CASSINI" ? 3.5e-5 : name === "HUYGENS" ? 4 : name === "SUN" ? 6e5 : name === "SATURN" ? 420 : Math.max(bodyRadius(name) / KM * 7, 2));
+  const d = dist || (name === "CASSINI" ? 3.5e-5 : name === "HUYGENS" ? 4 : name === "SUN" ? 6e5 : name === "SATURN" ? 420 : Math.max(bodyRadius(name) / KM * 7, 0.004));
   state.focus = name;
   let dir = old.lengthSq() > 0 ? old.normalize() : new THREE.Vector3(0, 0.3, 1).normalize();
   if (name === "HUYGENS") {
@@ -10550,6 +11417,21 @@ function frame(now) {
     return el;
   }
   function drop(el) { fadeTo(el, 0, 1.1, () => el.remove()); }
+  // one line at a time in a caption box: a new line takes the place of the one before, which goes quickly first so the
+  // two never sit on top of each other (null just takes it down)
+  const lines = new WeakMap();
+  function line(caps, html, cls) {
+    const was = lines.get(caps);
+    let el = null;
+    if (html != null) {
+      el = document.createElement("div");
+      el.className = "cs-cap" + (cls ? " " + cls : ""); el.innerHTML = html; el.style.opacity = 0; caps.appendChild(el);
+    }
+    const show = () => { if (el) fadeTo(el, 1, 1.2); };
+    if (was && was.isConnected) fadeTo(was, 0, 0.4, () => { was.remove(); show(); }); else show();
+    lines.set(caps, el);
+    return el;
+  }
   // run each line of a list ([at, dur, html, cls, chord]) whose time has come, and take it down when its time is up
   function runCaptions(caps, list, t, shown) {
     list.forEach(([at, dur, html, cls, chord], i) => {
@@ -10587,13 +11469,85 @@ function frame(now) {
     look.yaw -= look.yaw * k; look.pitch -= look.pitch * k; look.zoom += (1 - look.zoom) * k;
   }
 
+  // ---------- effects every cutscene can use, in the Cassini group's close-up pass (layer 1, metres) ----------
+  // a soft round glow, white so a material's colour tints it
+  let glowTex = null;
+  function glowTexture() {
+    if (glowTex) return glowTex;
+    const c = document.createElement("canvas"); c.width = c.height = 64;
+    const g = c.getContext("2d"), gr = g.createRadialGradient(32, 32, 0, 32, 32, 32);
+    gr.addColorStop(0, "rgba(255,255,255,1)"); gr.addColorStop(0.25, "rgba(255,255,255,.55)"); gr.addColorStop(1, "rgba(255,255,255,0)");
+    g.fillStyle = gr; g.fillRect(0, 0, 64, 64);
+    return glowTex = new THREE.CanvasTexture(c);
+  }
+  // an additive glow sprite (opacity starts at 0)
+  function sprite(color, size) {
+    const s = new THREE.Sprite(new THREE.SpriteMaterial({ map: glowTexture(), color, transparent: true, opacity: 0, blending: THREE.AdditiveBlending, depthWrite: false }));
+    s.scale.setScalar(size); s.layers.set(1);
+    return s;
+  }
+  // a soft additive shell for exhaust and glows: brightest where it is seen face-on and near its start, fading along its
+  // length (fall), colour going from near to far, with a shimmer running down it. Uniforms glow and time are set each
+  // frame. Keeps the viewer's logarithmic depth
+  function shellMaterial(near, far, fall, shimmer) {
+    return new THREE.ShaderMaterial({
+      uniforms: { glow: { value: 0 }, time: { value: 0 }, near: { value: new THREE.Color(near) }, far: { value: new THREE.Color(far) }, fall: { value: fall }, shimmer: { value: shimmer } },
+      vertexShader: `varying float vAlong; varying vec3 vN; varying vec3 vV;
+        #include <common>
+        #include <logdepthbuf_pars_vertex>
+        void main() { vAlong = -position.y; vec4 mv = modelViewMatrix * vec4(position, 1.0); vN = normalize(normalMatrix * normal); vV = normalize(-mv.xyz);
+          gl_Position = projectionMatrix * mv;
+          #include <logdepthbuf_vertex>
+        }`,
+      fragmentShader: `uniform float glow; uniform float time; uniform vec3 near; uniform vec3 far; uniform float fall; uniform float shimmer;
+        varying float vAlong; varying vec3 vN; varying vec3 vV;
+        #include <logdepthbuf_pars_fragment>
+        void main() {
+          #include <logdepthbuf_fragment>
+          float a = clamp(vAlong, 0.0, 1.0);
+          float along = exp(-fall * a) * smoothstep(1.0, 0.75, a);
+          float edge = pow(abs(dot(normalize(vN), normalize(vV))), 1.6);
+          float run = 1.0 + shimmer * (0.6 * sin(a * 31.0 - time * 23.0) + 0.4 * sin(a * 13.0 - time * 9.0 + 1.3));
+          gl_FragColor = vec4(mix(near, far, sqrt(a)) * glow * along * edge * run, 1.0);
+        }`,
+      transparent: true, blending: THREE.AdditiveBlending, depthWrite: false, side: THREE.DoubleSide });
+  }
+  // an open cylinder from a nozzle along -Y: radius r0 at the start to r1 at the end, `length` metres long
+  function shell(r0, r1, length, mat) {
+    const geo = new THREE.CylinderGeometry(r0, r1, 1, 32, 16, true);
+    geo.translate(0, -0.5, 0);
+    const m = new THREE.Mesh(geo, mat);
+    m.scale.set(1, length, 1); m.layers.set(1); m.frustumCulled = false;
+    return m;
+  }
+
+  // ---------- a camera that keeps its subject in frame ----------
+  // the view direction a drag gives: base (the cutscene's own direction from the subject to look along, scene frame)
+  // turned by look.yaw about up and tilted by look.pitch, never closer than 20 deg to straight up or down, so it cannot
+  // flip over the top. Returns the direction to look along and an up perpendicular to it
+  function orbit(base, up) {
+    const u = up.clone().normalize(), d = base.clone().normalize().applyAxisAngle(u, look.yaw);
+    const el = Math.acos(Math.max(-1, Math.min(1, d.dot(u)))), MIN = 0.35;
+    const to = Math.max(MIN, Math.min(Math.PI - MIN, el - look.pitch));
+    const side = new THREE.Vector3().crossVectors(d, u);
+    if (side.lengthSq() > 1e-12) d.applyAxisAngle(side.normalize(), el - to);
+    return { dir: d.normalize(), up: u.clone().addScaledVector(d, -u.dot(d)).normalize() };
+  }
+  // the camera `dist` back from the subject along dir (see orbit), the subject in the middle of the view, the wheel
+  // zooming. Every camera move a cutscene makes this way keeps the subject in frame
+  function frameOn(subject, dir, dist, up) {
+    camera.position.copy(subject).addScaledVector(dir, -dist * look.zoom);
+    camera.up.copy(up);
+    camera.lookAt(subject);
+  }
+
   // ---------- begin and end ----------
   // a cutscene's hooks and its section (root, with the .cs-root class); onEnd tidies up its own effects
   function register(name, s) { scenes[name] = s; const b = s.root && s.root.querySelector(".cs-skip"); if (b) b.addEventListener("click", e => { e.stopPropagation(); end(name); }); }
   function begin(name) {
     const s = scenes[name];
     if (active || !s) return false;
-    active = name; saved = { follow: state.follow };
+    active = name; saved = { follow: state.follow, playing: state.playing };
     resetLook(); look.wheel = true;
     if (state.follow) setFollow(false);
     setPlaying(false);
@@ -10607,13 +11561,15 @@ function frame(now) {
   function end(name) {
     if (!active || (name && name !== active)) return;
     const s = scenes[active], was = saved; active = null; saved = null;
-    if (s.onEnd) s.onEnd();
+    // onEnd may return { follow: false } to leave follow off (an ending that leaves the view on something else)
+    const keep = (s.onEnd && s.onEnd()) || {};
     cassini.visible = true; markerPts.visible = true; cassini.up.set(0, 1, 0);
     camera.up.set(0, 1, 0);
     controls.enabled = true;
     const black = s.root.querySelector(".cs-black");
     fades.forEach((v, el) => { if (el !== black) fades.delete(el); });
-    if (was.follow) setFollow(true);
+    if (was.follow && keep.follow !== false) setFollow(true);
+    if (was.playing && state.et < coverage[1] - 1) setPlaying(true);
     document.body.classList.add("cutscene-out");
     document.body.classList.remove("cutscene", "cs-drag");
     const done = () => { document.body.classList.remove("cutscene-out"); if (!active) s.root.hidden = true; };
@@ -10640,10 +11596,19 @@ function frame(now) {
   // playback crossing a moment going forward plays a cutscene (when(et) can say no: not this time)
   const triggers = [];
   function at(et, play, when) { triggers.push({ et, play, when }); }
+  // playback setting off forward from the very start of the data (where setTime clamps, so nothing is crossed) plays
+  // one: once per visit, armed again once playback is 30 s past the start. Returns { spend() } to count a play from
+  // elsewhere (?name) as this visit's
+  const starts = [];
+  function atStart(play, when) { const g = { play, when, spent: false, spend() { g.spent = true; } }; starts.push(g); return g; }
   const advance = window.studyAdvance;
   window.studyAdvance = (et, dt, speed) => {
     const next = advance ? advance(et, dt, speed) : et + dt * speed;
-    if (!active) for (const g of triggers) {
+    for (const g of starts) {
+      if (et > coverage[0] + 30) g.spent = false;
+      if (!active && !urlPending && !g.spent && speed > 0 && et <= coverage[0] + 1 && next > et && (!g.when || g.when())) { g.spent = true; setTimeout(g.play, 0); return et; }
+    }
+    if (!active && !urlPending) for (const g of triggers) {
       const t = typeof g.et === "function" ? g.et() : g.et;
       if (t != null && et < t && next >= t && (!g.when || g.when(t))) { setTimeout(g.play, 0); break; }
     }
@@ -10651,15 +11616,18 @@ function frame(now) {
   };
   // ?<name> in the address plays it at once: the clock goes to et() (once the data is loaded) and play() runs when
   // that part of the mission is ready. ok() can say the data has no such moment
+  // While it waits, the other cutscenes' triggers hold off, and it waits for one already playing to end
+  let urlPending = 0;
   function fromUrl(name, et, play, ok) {
     if (!new URLSearchParams(location.search).has(name)) return;
+    urlPending++;
     const wait = setInterval(() => {
-      if (!coverage[1] || !tracks.CASSINI || $("loading") && !$("loading").hidden) return;
-      if (ok && !ok()) { clearInterval(wait); return; }
+      if (!coverage[1] || !tracks.CASSINI || active || $("loading") && !$("loading").hidden) return;
+      if (ok && !ok()) { clearInterval(wait); urlPending--; return; }
       const t = et();
       if (Math.abs(state.et - t) > 7200) { setTime(t); return; }
       if (typeof yearReady === "function" && !yearReady()) return;
-      clearInterval(wait); play();
+      clearInterval(wait); urlPending--; play();
     }, 250);
   }
 
@@ -10669,15 +11637,439 @@ function frame(now) {
   window.addEventListener("pointerup", onUp, true);
   window.addEventListener("pointercancel", onUp, true);
   window.addEventListener("wheel", onWheel, { capture: true, passive: false });
-  window.cassiniCutscene = { register, begin, end, at, fromUrl, fadeTo, caption, drop, dropAll, runCaptions, sound, look, resetLook,
-    get active() { return active; } };
+  window.cassiniCutscene = { register, begin, end, at, atStart, fromUrl, orbit, frameOn, fadeTo, caption, drop, dropAll, line, runCaptions, sound, look, resetLook,
+    fx: { glowTexture, sprite, shellMaterial, shell }, glowTexture, sprite,
+    get active() { return active; }, get waiting() { return urlPending > 0; } };
+})();
+</script>
+<script>
+// ---------- atmospheric entry: the glowing gas, the heating skin, sparks and pieces, a fireball from afar ----------
+(function () {
+  const CS = window.cassiniCutscene;
+  if (!CS) return;
+  const clamp01 = x => Math.max(0, Math.min(1, x));
+
+  // the color of a glowing body at temperature T (K), brightest channel 1 (after Tanner Helland's fit to the CIE
+  // blackbody curve)
+  function blackbody(T, out) {
+    const t = T / 100;
+    const r = t <= 66 ? 255 : 329.7 * Math.pow(t - 60, -0.1332);
+    const g = t <= 66 ? 99.47 * Math.log(t) - 161.12 : 288.12 * Math.pow(t - 60, -0.0755);
+    const b = t >= 66 ? 255 : t <= 19 ? 0 : 138.52 * Math.log(t - 10) - 305.04;
+    const c = (out || new THREE.Color()).setRGB(Math.max(0, r) / 255, Math.max(0, g) / 255, Math.max(0, b) / 255);
+    const m = Math.max(c.r, c.g, c.b) || 1;
+    return c.multiplyScalar(1 / m);
+  }
+  // how bright that glow looks, 0 below a dull red (~800 K) to 1 at `hot`: a soft curve over T^4, so a skin that is
+  // barely glowing reads as barely glowing
+  const glowOf = (T, hot) => clamp01((T - 780) / 500) * Math.pow(clamp01(T / hot), 2.2);
+
+  // what each air glows with: line = the shock layer, wake = the cooling gas behind it
+  const GAS = {
+    TITAN: { line: [0.66, 0.5, 1.0], wake: [1.0, 0.48, 0.66] },    // CN violet over nitrogen's first positive bands
+    SATURN: { line: [1.0, 0.42, 0.58], wake: [0.95, 0.3, 0.42] },  // hydrogen: H-alpha with a little H-beta
+    EARTH: { line: [0.82, 0.62, 1.0], wake: [1.0, 0.6, 0.32] },    // nitrogen and oxygen, sodium in the wake
+  };
+  function gasOf(name) {
+    const g = GAS[name] || GAS.EARTH, a = typeof ATMOSPHERES === "object" && ATMOSPHERES[name];
+    const line = new THREE.Color(...g.line), wake = new THREE.Color(...g.wake);
+    // the haze around lights up with the glow, in its own color
+    const haze = a ? new THREE.Color(...a.albedo) : wake.clone();
+    return { line, wake, haze: haze.lerp(line, 0.35) };
+  }
+
+  // ---------- glow textures: a bright source as a camera sees it, a soft core and a long faint skirt ----------
+  let haloTex = null;
+  function haloTexture() {
+    if (haloTex) return haloTex;
+    const N = 256, c = document.createElement("canvas"); c.width = c.height = N;
+    const g = c.getContext("2d"), img = g.createImageData(N, N);
+    for (let y = 0; y < N; y++) for (let x = 0; x < N; x++) {
+      const r = Math.hypot(x + 0.5 - N / 2, y + 0.5 - N / 2) / (N / 2);
+      // three falloffs, as a lens and a sensor spread a point: the core, the near glow, the faint wide skirt
+      let v = 0.62 * Math.exp(-r * r / 0.004) + 0.3 * Math.exp(-r * r / 0.03) + 0.14 * Math.exp(-r / 0.2);
+      v *= clamp01((1 - r) / 0.25);
+      const i = 4 * (y * N + x), k = Math.min(255, Math.round(255 * Math.pow(v, 0.9)));
+      img.data[i] = img.data[i + 1] = img.data[i + 2] = 255; img.data[i + 3] = k;
+    }
+    g.putImageData(img, 0, 0);
+    return haloTex = new THREE.CanvasTexture(c);
+  }
+  function halo(color, layer, depthTest) {
+    const s = new THREE.Sprite(new THREE.SpriteMaterial({ map: haloTexture(), color, transparent: true, opacity: 0, blending: THREE.AdditiveBlending, depthWrite: false, depthTest }));
+    s.layers.set(layer); s.frustumCulled = false;
+    return s;
+  }
+
+  // a little value noise for the shaders: fbm over three octaves, 0..1
+  const NOISE = `
+    float hash3(vec3 p) { p = fract(p * 0.3183099 + 0.1); p *= 17.0; return fract(p.x * p.y * p.z * (p.x + p.y + p.z)); }
+    float vnoise(vec3 x) {
+      vec3 i = floor(x), f = fract(x); f = f * f * (3.0 - 2.0 * f);
+      return mix(mix(mix(hash3(i), hash3(i + vec3(1,0,0)), f.x), mix(hash3(i + vec3(0,1,0)), hash3(i + vec3(1,1,0)), f.x), f.y),
+                 mix(mix(hash3(i + vec3(0,0,1)), hash3(i + vec3(1,0,1)), f.x), mix(hash3(i + vec3(0,1,1)), hash3(i + vec3(1,1,1)), f.x), f.y), f.z);
+    }
+    float fbm(vec3 p) { return 0.55 * vnoise(p) + 0.3 * vnoise(p * 2.07 + 3.1) + 0.15 * vnoise(p * 4.13 + 7.7); }`;
+
+  // ---------- the shock layer and its wake: a glowing shell shaped like the flow round a blunt body ----------
+  // Its axis is +Y, the way the craft is moving; 1 = the body's radius, 0 = its front face. The bow shock stands a
+  // little off the front, curves back round the shoulders, and opens into a wake that narrows far behind. Seen
+  // through, the cap is a thin bright sheet (brightest edge-on) and the wake a filled glow (brightest through its
+  // middle, soft at its edges), which is what makes it read as gas rather than a surface
+  function sheathGeometry(standoff, flare, wake) {
+    const pts = [];
+    for (let i = 0; i <= 14; i++) { const r = 1.3 * flare * i / 14; pts.push(new THREE.Vector2(r, standoff - r * r / (2 * 1.25 * flare))); }
+    const y0 = pts[pts.length - 1].y, r0 = pts[pts.length - 1].x;
+    for (let i = 1; i <= 24; i++) {
+      const k = i / 24, r = r0 * (1 + 0.28 * Math.sin(Math.PI * Math.min(1, k * 1.6)) * (1 - k)) * (1 - 0.72 * k * k);
+      pts.push(new THREE.Vector2(Math.max(0.02, r), y0 - wake * k));
+    }
+    pts.reverse();   // LatheGeometry wants the profile from bottom to top for outward normals
+    const geo = new THREE.LatheGeometry(pts, 48);
+    geo.computeVertexNormals();
+    return { geo, front: standoff, tail: y0 - wake };
+  }
+  function sheathMaterial(gas, front, tail, cap) {
+    return new THREE.ShaderMaterial({
+      uniforms: { glow: { value: 0 }, time: { value: 0 }, stretch: { value: 1 }, hot: { value: new THREE.Color(1, 1, 1) }, line: { value: gas.line }, wake: { value: gas.wake },
+        front: { value: front }, tail: { value: tail }, cap: { value: cap }, flow: { value: 3 } },
+      vertexShader: `uniform float stretch, front, tail; varying float vAlong; varying vec3 vN; varying vec3 vV; varying vec3 vP;
+        #include <common>
+        #include <logdepthbuf_pars_vertex>
+        void main() {
+          vec3 p = position; if (p.y < 0.0) p.y *= stretch;
+          vAlong = clamp((front - position.y) / (front - tail), 0.0, 1.0); vP = p;
+          vec4 mv = modelViewMatrix * vec4(p, 1.0); vN = normalize(normalMatrix * normal); vV = normalize(-mv.xyz);
+          gl_Position = projectionMatrix * mv;
+          #include <logdepthbuf_vertex>
+        }`,
+      fragmentShader: `uniform float glow, time, cap, flow; uniform vec3 hot, line, wake; varying float vAlong; varying vec3 vN; varying vec3 vV; varying vec3 vP;
+        ${NOISE}
+        #include <logdepthbuf_pars_fragment>
+        void main() {
+          #include <logdepthbuf_fragment>
+          float a = vAlong, ndv = abs(dot(normalize(vN), normalize(vV)));
+          float c = 1.0 - smoothstep(0.0, cap, a);                   // on the cap
+          // a thin sheet: bright edge-on, but never a hard line at its very edge
+          float thin = (0.9 / (ndv + 0.3)) * 0.45 * smoothstep(0.0, 0.35, ndv) + 0.2;
+          float filled = pow(ndv, 2.2);                               // a filled glow: bright through the middle, soft edges
+          float shape = mix(filled, thin, c);
+          // turbulence streaming back along the wake, calm on the cap
+          float n = fbm(vec3(vP.x * 2.2, vP.y * 0.7 + time * flow, vP.z * 2.2));
+          float n2 = fbm(vec3(vP.x * 5.0 + 9.0, vP.y * 1.6 + time * flow * 1.7, vP.z * 5.0));
+          float turb = mix(1.0, 0.25 + 1.5 * n * (0.7 + 0.6 * n2), smoothstep(0.02, 0.3, a));
+          float fall = exp(-3.2 * a) * smoothstep(1.0, 0.55, a);
+          vec3 col = mix(hot, line, smoothstep(0.0, cap * 1.6, a));
+          col = mix(col, wake, smoothstep(cap, 0.75, a));
+          gl_FragColor = vec4(col * glow * shape * turb * fall, 1.0);
+        }`,
+      transparent: true, blending: THREE.AdditiveBlending, depthWrite: false });
+  }
+
+  // ---------- sparks and pieces: camera-facing streaks, one instanced draw ----------
+  // each streak runs from its tail to its head (in the parent's frame), with a width and a color, soft at its edges
+  function streaks(max, layer, depthTest) {
+    const geo = new THREE.InstancedBufferGeometry();
+    geo.setAttribute("position", new THREE.BufferAttribute(new Float32Array([0, -1, 0, 1, -1, 0, 1, 1, 0, 0, 1, 0]), 3));
+    geo.setIndex([0, 1, 2, 0, 2, 3]);
+    const a = geo.userData = { from: new Float32Array(max * 3), to: new Float32Array(max * 3), col: new Float32Array(max * 4) };
+    geo.setAttribute("iFrom", new THREE.InstancedBufferAttribute(a.from, 3).setUsage(THREE.DynamicDrawUsage));
+    geo.setAttribute("iTo", new THREE.InstancedBufferAttribute(a.to, 3).setUsage(THREE.DynamicDrawUsage));
+    geo.setAttribute("iCol", new THREE.InstancedBufferAttribute(a.col, 4).setUsage(THREE.DynamicDrawUsage));
+    geo.instanceCount = 0;
+    const mat = new THREE.ShaderMaterial({
+      vertexShader: `attribute vec3 iFrom; attribute vec3 iTo; attribute vec4 iCol; varying vec2 vUv; varying vec3 vCol; varying float vLen;
+        #include <common>
+        #include <logdepthbuf_pars_vertex>
+        void main() {
+          vec4 a = modelViewMatrix * vec4(iFrom, 1.0), b = modelViewMatrix * vec4(iTo, 1.0);
+          vec3 d = b.xyz - a.xyz; vec2 dir = d.xy; float l = length(dir);
+          dir = l > 1e-6 * abs(a.z) ? dir / l : vec2(1.0, 0.0);
+          vec2 side = vec2(-dir.y, dir.x); float w = iCol.w;
+          vec4 p = mix(a, b, position.x);
+          p.xy += side * position.y * w + dir * (position.x * 2.0 - 1.0) * w;
+          vUv = vec2(position.x, position.y); vCol = iCol.rgb; vLen = l / (l + 2.0 * w);
+          gl_Position = projectionMatrix * p;
+          #include <logdepthbuf_vertex>
+        }`,
+      fragmentShader: `varying vec2 vUv; varying vec3 vCol; varying float vLen;
+        #include <logdepthbuf_pars_fragment>
+        void main() {
+          #include <logdepthbuf_fragment>
+          float across = exp(-vUv.y * vUv.y * 3.5);
+          float along = mix(1.0, pow(vUv.x, 1.6), vLen);   // the head bright, the tail fading
+          float cap = (1.0 - vLen) + 0.02;                  // round, soft ends
+          float ends = smoothstep(0.0, cap, vUv.x) * smoothstep(1.0, 1.0 - cap, vUv.x);
+          gl_FragColor = vec4(vCol * across * along * ends, 1.0);
+        }`,
+      transparent: true, blending: THREE.AdditiveBlending, depthWrite: false, depthTest });
+    const m = new THREE.Mesh(geo, mat);
+    m.layers.set(layer); m.frustumCulled = false;
+    m.userData = { max, list: [] };
+    return m;
+  }
+  // add one: at p, moving at v, width w, life in s, starting at temperature T (K), drag (1/s)
+  function emit(s, p, v, w, life, T, drag) {
+    const l = s.userData.list;
+    if (l.length < s.userData.max) l.push({ p, v, w, life, age: 0, T, drag });
+  }
+  const tmpCol = new THREE.Color();
+  // move them on and write them out; toLocal turns a stored point into the parent's frame (in place); len = how many
+  // seconds of motion a streak shows; hot = the temperature of full brightness
+  function stepStreaks(s, dt, toLocal, len, hot) {
+    const l = s.userData.list, g = s.geometry, a = g.userData;
+    let n = 0;
+    for (let i = l.length - 1; i >= 0; i--) {
+      const q = l[i]; q.age += dt;
+      if (q.age > q.life) { l.splice(i, 1); continue; }
+      q.v.multiplyScalar(Math.exp(-q.drag * dt)); q.p.addScaledVector(q.v, dt);
+      const k = q.age / q.life, T = q.T * (1 - 0.6 * k);   // cooling as it goes
+      blackbody(T, tmpCol).multiplyScalar(glowOf(T, hot) * (1 - k * k) * 1.6);
+      const h = toLocal(vA.copy(q.p)), t = toLocal(vB.copy(q.p).addScaledVector(q.v, -len));
+      a.from.set([t.x, t.y, t.z], 3 * n); a.to.set([h.x, h.y, h.z], 3 * n);
+      a.col.set([tmpCol.r, tmpCol.g, tmpCol.b, q.w], 4 * n); n++;
+    }
+    g.instanceCount = n;
+    ["iFrom", "iTo", "iCol"].forEach(k => { g.attributes[k].needsUpdate = true; });
+  }
+  const vA = new THREE.Vector3(), vB = new THREE.Vector3();
+  const rnd = (a, b) => a + (b - a) * Math.random();
+
+  // ---------- the windward skin, glowing by its temperature ----------
+  // each mesh under `skin` gets a copy of its material that adds, where the surface faces into the flow, the glow of a
+  // blackbody at the skin's temperature (the originals go back on dispose). Shared uniforms: the flow direction in view
+  // space and the glow's color
+  function heatSkin(skin) {
+    const u = { heatDir: { value: new THREE.Vector3(0, 0, 1) }, heatCol: { value: new THREE.Color(0, 0, 0) }, heatWrap: { value: 0.15 } };
+    const swaps = [], copies = new Map();
+    skin.traverse(o => {
+      if (!o.isMesh || !o.material) return;
+      const one = m => {
+        if (!m || !("emissive" in m)) return m;
+        if (copies.has(m)) return copies.get(m);
+        const c = m.clone();
+        c.onBeforeCompile = sh => {
+          Object.assign(sh.uniforms, u);
+          sh.fragmentShader = "uniform vec3 heatDir; uniform vec3 heatCol; uniform float heatWrap;\n" + sh.fragmentShader.replace("#include <emissivemap_fragment>",
+            `#include <emissivemap_fragment>
+            { float f = clamp((dot(normal, heatDir) + heatWrap) / (1.0 + heatWrap), 0.0, 1.0); totalEmissiveRadiance += heatCol * f * f; }`);
+        };
+        c.customProgramCacheKey = () => "entry-heat";
+        copies.set(m, c);
+        return c;
+      };
+      swaps.push([o, o.material]);
+      o.material = Array.isArray(o.material) ? o.material.map(one) : one(o.material);
+    });
+    return { u, dispose() { swaps.forEach(([o, m]) => { o.material = m; }); copies.forEach(c => c.dispose()); } };
+  }
+
+  // ---------- close up: the whole entry around one craft ----------
+  // parent: the craft's group, in metres (the close-up pass). opts:
+  //   radius   the body's radius across the flow, m (Huygens' heat shield 1.35; Cassini, dish and all, ~3.5)
+  //   nose     how far ahead of the parent's origin its front is, m (default radius / 2)
+  //   gas      the atmosphere, a key of the viewer's ATMOSPHERES table ("TITAN", "SATURN", ...)
+  //   skin     an object whose meshes heat up on their windward side (optional)
+  //   skinHot  the skin's temperature at full heating, K (default 1900)
+  //   sparks   how many sparks the ablating skin throws, 1 = a heat shield's few (default 1)
+  //   stream   how fast the air seems to stream past, in body radii per second (default 9; the real flow is km/s,
+  //            far too fast to see)
+  // update(dt, motion, heat, more): motion = the direction the craft moves, in scene axes; heat 0..1 (the cutscene's
+  // own heating curve: deceleration, or the load the air puts on it); more.debris 0..1 throws pieces off as it breaks
+  // up. level is the smoothed heat, for sound and shake
+  function entry(parent, opts = {}) {
+    const R = opts.radius || 1.5, nose = opts.nose != null ? opts.nose : R / 2, gas = gasOf(opts.gas), layer = opts.layer != null ? opts.layer : 1;
+    const skinHot = opts.skinHot || 1900, sparkRate = opts.sparks != null ? opts.sparks : 1, stream = (opts.stream || 9) * R;
+    const root = new THREE.Group();
+    // two shells: the bright shock layer hugging the body with a short wake, and a wider, fainter one trailing far back
+    const inner = sheathGeometry(0.16, 1.0, 3.2), outer = sheathGeometry(0.3, 1.35, 7.5);
+    const mIn = new THREE.Mesh(inner.geo, sheathMaterial(gas, inner.front, inner.tail, 0.14));
+    const mOut = new THREE.Mesh(outer.geo, sheathMaterial(gas, outer.front, outer.tail, 0.08));
+    [mIn, mOut].forEach(m => { m.position.y = nose / R; m.renderOrder = 2; m.frustumCulled = false; });
+    const shells = new THREE.Group(); shells.add(mOut, mIn); shells.scale.setScalar(R); root.add(shells);
+    // the glow it all throws: a white-hot core at the cap (hidden behind the craft when seen from behind) and a wide,
+    // faint halo in the air's color
+    const core = halo(0xffffff, layer, true), glow = halo(gas.haze, layer, false);
+    root.add(core, glow);
+    const sp = streaks(opts.maxSparks || 420, layer, true);
+    root.add(sp);
+    root.traverse(o => o.layers.set(layer));
+    parent.add(root);
+    const skin = opts.skin ? heatSkin(opts.skin) : null;
+    // sparks are kept in scene axes about the craft (so they stream behind it however it turns) and turned into its
+    // frame when drawn
+    const qW = new THREE.Quaternion(), qInv = new THREE.Quaternion(), sW = new THREE.Vector3(), dir = new THREE.Vector3(), dirL = new THREE.Vector3();
+    const negY = new THREE.Vector3(0, -1, 0), flipX = new THREE.Quaternion().setFromAxisAngle(new THREE.Vector3(1, 0, 0), Math.PI);
+    const side = new THREE.Vector3(), up = new THREE.Vector3(), Y = new THREE.Vector3(0, 1, 0), tmp = new THREE.Vector3(), pW = new THREE.Vector3();
+    const E = { level: 0, time: 0, root };
+    const toLocal = v => v.applyQuaternion(qInv);
+    E.update = (dt, motion, heat, more = {}) => {
+      dt = Math.min(dt, 0.1); E.time += dt;
+      heat = clamp01(heat);
+      E.level += (heat - E.level) * (1 - Math.exp(-dt / 0.15));
+      const h = E.level;
+      parent.updateMatrixWorld();
+      parent.matrixWorld.decompose(pW, qW, sW);
+      qInv.copy(qW).invert();
+      dir.copy(motion).normalize(); dirL.copy(dir).applyQuaternion(qInv);
+      // the shells along the flow, the wake longer and the whole glow stronger as the heating grows
+      // (turned from straight back when the flow is nearer that way: setFromUnitVectors picks its turning axis afresh
+      // every frame for nearly opposite directions, which is always the case for a probe flying shield first, and the
+      // glow flashed in and out)
+      if (dirL.y >= 0) shells.quaternion.setFromUnitVectors(Y, dirL);
+      else shells.quaternion.setFromUnitVectors(negY, dirL).multiply(flipX);
+      const flick = 0.93 + 0.07 * Math.sin(E.time * 37) * Math.sin(E.time * 23.7);
+      // the shock layer's own temperature reads white-hot well before the skin glows
+      const shockT = 3200 + 9000 * h;
+      [[mIn, 1.5], [mOut, 0.55]].forEach(([m, k]) => {
+        const u = m.material.uniforms;
+        u.glow.value = k * Math.pow(h, 1.3) * flick; u.time.value = E.time; u.stretch.value = 0.55 + 0.75 * h;
+        u.flow.value = stream / R * 0.35; blackbody(shockT, u.hot.value);
+      });
+      core.position.copy(dirL).multiplyScalar(nose + 0.3 * R);
+      core.material.opacity = 0.8 * h * h * flick; core.scale.setScalar(R * (1.6 + 2.4 * h));
+      glow.position.copy(dirL).multiplyScalar(nose - 0.5 * R);
+      glow.material.opacity = 0.3 * h * flick; glow.scale.setScalar(R * (4 + 7 * h));
+      // the skin: a radiating surface's temperature goes as the fourth root of its heating
+      if (skin) {
+        const T = skinHot * Math.pow(h, 0.25);
+        blackbody(T, skin.u.heatCol.value).multiplyScalar(2.2 * glowOf(T, skinHot) * (0.96 + 0.04 * flick));
+        skin.u.heatDir.value.copy(dir).transformDirection(camera.matrixWorldInverse);
+      }
+      // sparks off the shoulders, where the flow scrubs the edge of the skin, swept back and cooling
+      side.crossVectors(dir, Math.abs(dir.y) < 0.9 ? Y : tmp.set(1, 0, 0)).normalize(); up.crossVectors(side, dir);
+      const nS = Math.floor(sparkRate * 90 * Math.pow(h, 2) * dt + Math.random());
+      for (let i = 0; i < nS; i++) {
+        const a = Math.random() * Math.PI * 2, at = new THREE.Vector3().addScaledVector(side, Math.cos(a) * R * 0.95).addScaledVector(up, Math.sin(a) * R * 0.95).addScaledVector(dir, nose * 0.4);
+        const v = dir.clone().multiplyScalar(-stream * rnd(0.5, 1.2)).addScaledVector(at.clone().addScaledVector(dir, -at.dot(dir)).normalize(), stream * rnd(0.03, 0.12));
+        emit(sp, at, v, R * rnd(0.005, 0.012), rnd(0.25, 0.8), skinHot * rnd(1.1, 1.4), 1.2);
+      }
+      // pieces as it breaks up: bigger, slower, longer-lived, from anywhere on the body
+      const nD = Math.floor(70 * (more.debris || 0) * dt + Math.random() * Math.min(1, more.debris || 0));
+      for (let i = 0; i < nD; i++) {
+        const at = new THREE.Vector3(rnd(-1, 1), rnd(-1, 1), rnd(-1, 1)).multiplyScalar(R * 0.8);
+        const v = dir.clone().multiplyScalar(-stream * rnd(0.15, 0.6)).add(new THREE.Vector3(rnd(-1, 1), rnd(-1, 1), rnd(-1, 1)).multiplyScalar(stream * 0.08));
+        emit(sp, at, v, R * rnd(0.012, 0.035), rnd(0.8, 2.2), rnd(2500, 3000), 0.6);
+      }
+      stepStreaks(sp, dt, toLocal, 0.09, 2600);
+    };
+    E.dispose = () => {
+      parent.remove(root);
+      [mIn, mOut].forEach(m => { m.geometry.dispose(); m.material.dispose(); });
+      [core, glow].forEach(s => s.material.dispose());
+      sp.geometry.dispose(); sp.material.dispose();
+      if (skin) skin.dispose();
+    };
+    return E;
+  }
+
+  // ---------- far off: a fireball and its trail, breaking up ----------
+  // In the main scene (scene units, layer 0), drawn over everything near it like a bright light. opts.gas as above,
+  // opts.pieces how many pieces it breaks into (default 7). update(o) each frame:
+  //   head    where it is (scene)
+  //   path    points back along its real path, head first (scene); the trail is drawn along them
+  //   size    scene units per unit of drawn size (the cutscene's scale for its camera distance)
+  //   hot     0..1 how bright the head burns; train 0..1 how strong the glowing trail is; spread 1.. how far it has
+  //           spread; breakup 0..1 how far it has come apart; front 0..1 whether it is in view (behind a planet: 0)
+  function meteor(opts = {}) {
+    const gas = gasOf(opts.gas), N = opts.points || 48, P = opts.pieces != null ? opts.pieces : 7;
+    const head = halo(0xfff4e6, 0, false), glow = halo(gas.haze, 0, false);
+    const geo = new THREE.BufferGeometry(), uv = new Float32Array(N * 4);
+    for (let i = 0; i < N; i++) uv.set([i / (N - 1), -1, i / (N - 1), 1], 4 * i);
+    geo.setAttribute("position", new THREE.BufferAttribute(new Float32Array(N * 6), 3));
+    geo.setAttribute("uv", new THREE.BufferAttribute(uv, 2));
+    const idx = [];
+    for (let i = 0; i < N - 1; i++) idx.push(2 * i, 2 * i + 1, 2 * i + 2, 2 * i + 1, 2 * i + 3, 2 * i + 2);
+    geo.setIndex(idx);
+    // the trail: white-hot at the head, cooling through yellow and orange, then the air's own glow lingering behind
+    // and breaking into knots and billows as it spreads
+    const trail = new THREE.Mesh(geo, new THREE.ShaderMaterial({
+      uniforms: { hot: { value: 0 }, train: { value: 0 }, time: { value: 0 }, spread: { value: 1 }, line: { value: gas.line }, wake: { value: gas.wake } },
+      vertexShader: `varying vec2 vUv; void main() { vUv = uv; gl_Position = projectionMatrix * modelViewMatrix * vec4(position, 1.0); }`,
+      fragmentShader: `uniform float hot, train, time, spread; uniform vec3 line, wake; varying vec2 vUv;
+        ${NOISE}
+        void main() {
+          float u = vUv.x, w = vUv.y;
+          float n = fbm(vec3(u * 26.0, w * 1.7, time * 0.35)), n2 = fbm(vec3(u * 70.0 + 4.0, w * 3.0, time * 0.8));
+          float wob = w + 0.35 * (n - 0.5) * smoothstep(0.02, 0.4, u);
+          float core = exp(-wob * wob * 9.0 * (1.0 + 2.0 * u)), soft = exp(-wob * wob * 2.2);
+          vec3 c = mix(vec3(1.0, 0.97, 0.9), vec3(1.0, 0.78, 0.45), smoothstep(0.0, 0.08, u));
+          c = mix(c, vec3(1.0, 0.5, 0.2), smoothstep(0.06, 0.22, u));
+          c = mix(c, mix(line, wake, smoothstep(0.2, 0.7, u)), smoothstep(0.14, 0.45, u));
+          float headPart = hot * pow(1.0 - u, 5.0) * (0.7 * core + 0.3 * soft);
+          float glowPart = train * pow(1.0 - u, 1.2) * smoothstep(0.0, 0.03, u) * (0.3 * core + 0.7 * soft) * (0.45 + 1.1 * n * (0.6 + 0.8 * n2));
+          gl_FragColor = vec4(c * (2.4 * headPart + 1.2 * glowPart / spread), 1.0);
+        }`,
+      transparent: true, blending: THREE.AdditiveBlending, depthWrite: false, depthTest: false, side: THREE.DoubleSide }));
+    trail.frustumCulled = false;
+    // the pieces: each a small fireball with its own short trail, drifting apart and falling behind
+    const bits = Array.from({ length: P }, (_, i) => ({ s: halo(0xffe0b0, 0, false), off: new THREE.Vector2(rnd(-1, 1), rnd(-1, 1)).normalize().multiplyScalar(rnd(0.3, 1)), lag: rnd(0.2, 1), b: rnd(0.4, 1), seed: i * 1.7 }));
+    const sp = streaks(P, 0, false);
+    scene.add(trail, glow, head, sp, ...bits.map(b => b.s));
+    const pts = Array.from({ length: N }, () => new THREE.Vector3());
+    const tan = new THREE.Vector3(), cam = new THREE.Vector3(), side = new THREE.Vector3(), up = new THREE.Vector3(), back = new THREE.Vector3(), at = new THREE.Vector3();
+    let time = 0, last = performance.now();
+    return {
+      update(o) {
+        const now = performance.now(); time += Math.min(0.1, (now - last) / 1000); last = now;
+        const k = o.size || 1, front = o.front != null ? o.front : 1, hot = clamp01(o.hot) * front, br = clamp01(o.breakup || 0);
+        const flick = 0.85 + 0.15 * Math.sin(time * 31) * Math.sin(time * 17.3);
+        head.position.copy(o.head); head.material.opacity = Math.min(1, hot * 1.2) * flick; head.scale.setScalar(k * (5 + 12 * hot));
+        glow.position.copy(o.head); glow.material.opacity = 0.5 * hot; glow.scale.setScalar(k * (22 + 40 * hot));
+        const pa = trail.geometry.attributes.position.array, path = o.path, M = Math.min(N, path.length);
+        for (let i = 0; i < N; i++) pts[i].copy(path[Math.min(M - 1, Math.round(i * (M - 1) / (N - 1)))]);
+        for (let i = 0; i < N; i++) {
+          const p = pts[i], u = i / (N - 1);
+          tan.subVectors(pts[Math.max(0, i - 1)], pts[Math.min(N - 1, i + 1)]);
+          cam.subVectors(camera.position, p);
+          side.crossVectors(tan, cam).normalize().multiplyScalar(k * (0.9 + 2.2 * u) * (o.spread || 1) * (1 + 0.5 * hot));
+          pa.set([p.x - side.x, p.y - side.y, p.z - side.z, p.x + side.x, p.y + side.y, p.z + side.z], 6 * i);
+        }
+        trail.geometry.attributes.position.needsUpdate = true;
+        const u = trail.material.uniforms;
+        u.hot.value = hot * flick; u.train.value = clamp01(o.train) * front; u.time.value = time; u.spread.value = o.spread || 1;
+        // the pieces come apart across the path and fall behind it, each burning out at its own pace
+        back.subVectors(pts[Math.min(2, N - 1)], pts[0]).normalize();
+        cam.subVectors(camera.position, o.head).normalize();
+        side.crossVectors(back, cam).normalize(); up.crossVectors(side, back).normalize();
+        const g = sp.geometry, a = g.userData;
+        let n = 0;
+        for (const b of bits) {
+          const life = clamp01(1 - br * (1.3 - 0.5 * b.b)), on = br > 0 ? front * life * Math.min(1, br * 4) * clamp01(hot * 3) : 0;
+          at.copy(o.head).addScaledVector(side, b.off.x * k * 9 * br).addScaledVector(up, b.off.y * k * 6 * br).addScaledVector(back, b.lag * k * 40 * br);
+          b.s.position.copy(at); b.s.material.opacity = on * b.b * (0.75 + 0.25 * Math.sin(time * 23 + b.seed)); b.s.scale.setScalar(k * (2 + 2.5 * b.b));
+          if (on > 0.01) {
+            a.to.set([at.x, at.y, at.z], 3 * n); a.from.set([at.x + back.x * k * 5, at.y + back.y * k * 5, at.z + back.z * k * 5], 3 * n);
+            blackbody(2600 - 900 * br * (1 - b.b), tmpCol).multiplyScalar(on * 0.8);
+            a.col.set([tmpCol.r, tmpCol.g, tmpCol.b, k * 0.3], 4 * n); n++;
+          }
+        }
+        g.instanceCount = n;
+        ["iFrom", "iTo", "iCol"].forEach(key => { g.attributes[key].needsUpdate = true; });
+      },
+      dispose() {
+        scene.remove(trail, glow, head, sp, ...bits.map(b => b.s));
+        trail.geometry.dispose(); trail.material.dispose(); sp.geometry.dispose(); sp.material.dispose();
+        [head, glow, ...bits.map(b => b.s)].forEach(s => s.material.dispose());
+      },
+    };
+  }
+
+  // a smooth shake (sums of incommensurate sines, so it never repeats or jumps), amount in whatever units the camera
+  // moves in; t in seconds
+  function shake(amount, t, out) {
+    const f = (a, b, c) => (Math.sin(a * t + b) + 0.6 * Math.sin(2.3 * a * t + c) + 0.35 * Math.sin(5.1 * a * t + b + c)) / 1.95;
+    return (out || new THREE.Vector3()).set(f(13, 0, 1.3), f(11.7, 2.1, 0.4), f(12.9, 4.2, 2.7)).multiplyScalar(amount);
+  }
+
+  Object.assign(CS.fx, { entry, meteor, shake, blackbody, haloTexture });
 })();
 </script>
 <script>
 // ---------- the Grand Finale: Cassini's last minute and a mission recap, at the end of the data ----------
 (function () {
   const root = document.getElementById("finale"), black = root.querySelector(".cs-black"), caps = root.querySelector(".cs-caps"), air = root.querySelector(".fx-air");
-  const read = root.querySelector(".fx-read"), note = root.querySelector(".fx-note"), hint = root.querySelector(".cs-hint");
+  const read = root.querySelector(".cs-read"), note = root.querySelector(".cs-note"), hint = root.querySelector(".cs-hint");
   // what every cutscene shares (cutscene.html)
   const CS = cassiniCutscene, { fadeTo, drop, sound, look } = CS, runCaptions = (list, t, shown) => CS.runCaptions(caps, list, t, shown);
   const roll = root.querySelector(".fx-roll"), rollIn = roll.querySelector(".in");
@@ -10694,6 +12086,7 @@ function frame(now) {
   const RAMP = 60;             // s from 10 percent of the thrusters' capacity to 100 percent
   const BEAM = 0.3;            // deg off Earth at which the link is half gone ("a few fractions of a degree")
   const VIS = 15;              // the wobble is drawn this many times larger than the angle it stands for
+  const SPIN = 2;              // rad/s² of spin-up per unit of load past full, once the air wins and Cassini tumbles
   const LEAD = 62;             // s of the descent shown before loss of signal
   const AFTER = 5.5;           // s after loss of signal the view cuts to Saturn, where Cassini burns up as a flare
   const FLARE = 2.5;           // s into the Saturn view the flare peaks
@@ -10766,23 +12159,12 @@ function frame(now) {
   // pseudo-random but smooth, in -1..1
   const wob = (t, k) => (Math.sin(1.7 * t + k) + Math.sin(2.9 * t + 2.1 * k) + 0.5 * Math.sin(6.3 * t + 3.7 * k)) / 2.5;
   const clamp01 = x => Math.max(0, Math.min(1, x));
+  // how hard the air heats Cassini, 0..1: a faint glow as the load nears full, then the heating after loss of signal
+  const entryHeat = (L, heat) => Math.max(0.42 * clamp01((L - 0.35) / 0.65) ** 2, heat > 0 ? 0.42 + 0.58 * heat * (2 - heat) : 0);
   const jitter = s => new THREE.Vector3(Math.random() - 0.5, Math.random() - 0.5, Math.random() - 0.5).multiplyScalar(s);
 
   // ---------- effects, all children of the Cassini group (so they share its close-up render pass), in metres ----------
-  let glowTex = null;
-  function glowTexture() {
-    if (glowTex) return glowTex;
-    const c = document.createElement("canvas"); c.width = c.height = 64;
-    const g = c.getContext("2d"), gr = g.createRadialGradient(32, 32, 0, 32, 32, 32);
-    gr.addColorStop(0, "rgba(255,255,255,1)"); gr.addColorStop(0.25, "rgba(255,255,255,.55)"); gr.addColorStop(1, "rgba(255,255,255,0)");
-    g.fillStyle = gr; g.fillRect(0, 0, 64, 64);
-    return glowTex = new THREE.CanvasTexture(c);
-  }
-  function sprite(color, size) {
-    const s = new THREE.Sprite(new THREE.SpriteMaterial({ map: glowTexture(), color, transparent: true, opacity: 0, blending: THREE.AdditiveBlending, depthWrite: false }));
-    s.scale.setScalar(size); s.layers.set(1);
-    return s;
-  }
+  const { glowTexture, sprite } = CS.fx;
   // a thruster plume: a 1 N hydrazine jet is small and faint, so a soft glow that fades along its length and toward its
   // edges (no hard cone), with a bright point at the nozzle. The shader keeps the viewer's logarithmic depth
   let plumeMat = null;
@@ -10846,18 +12228,17 @@ function frame(now) {
       thr.push(plume(at(sx * 1.236, -2.36, sz * 1.78), new THREE.Vector3(0, sz, 0)));
     }
     thr.forEach(p => cassini.add(p));
-    const fx = { thr, glow: sprite(0xffa24a, 4), core: sprite(0xfff1d6, 3), fine: cloud(900, 5), big: cloud(80, 11) };
-    [fx.glow, fx.core, fx.fine, fx.big].forEach(o => cassini.add(o));
-    // the model's own materials, warmed as it heats (put back afterwards)
-    fx.mats = [];
-    if (window.cassiniModel) window.cassiniModel.traverse(o => { if (o.isMesh && o.material && o.material.emissive && !fx.mats.includes(o.material)) fx.mats.push(o.material); });
-    fx.emissive = fx.mats.map(m => m.emissive.clone());
+    const fx = { thr, fine: cloud(900, 5) };
+    cassini.add(fx.fine);
+    // the entry itself (entry-fx.html): Saturn's hydrogen glowing round it in a shock layer, its windward side heating
+    // by its temperature, sparks and then pieces streaming off. Cassini across the flow, dish and all, is about 3.5 m
+    fx.entry = CS.fx.entry(cassini, { radius: 3.5, nose: 2, gas: "SATURN", skin: window.cassiniModel || null, skinHot: 2300, sparks: 3, maxSparks: 600 });
     return fx;
   }
   function removeEffects(fx) {
     if (!fx) return;
-    [...fx.thr, fx.glow, fx.core, fx.fine, fx.big].forEach(o => cassini.remove(o));
-    fx.mats.forEach((m, i) => m.emissive.copy(fx.emissive[i]));
+    [...fx.thr, fx.fine].forEach(o => cassini.remove(o));
+    fx.entry.dispose();
     if (window.cassiniModel) window.cassiniModel.visible = true;
   }
   // n particles at `at` (spread m), moving at vel (m/s, spread vs), colour col (or a cooling ember), life in s
@@ -10880,44 +12261,42 @@ function frame(now) {
     }
     geo.setDrawRange(0, n); geo.attributes.position.needsUpdate = true; geo.attributes.color.needsUpdate = true;
   }
-  function stepParticles(fx, dt, vdir, L, heat) {
+  function stepParticles(fx, dt, vdir, L) {
     const rate = r => Math.floor(r * dt + Math.random()), Lc = Math.min(1.5, L);
     // the thickening air streaming past: faint wisps from ahead, faster and more of them as the load grows
     spawn(fx.fine, rate(20 + 160 * Lc), vdir.clone().multiplyScalar(14), 18, vdir.clone().multiplyScalar(-(30 + 60 * Lc)), 2, [0.3, 0.36, 0.48], 0.9);
-    // after loss of signal: plasma off the leading side streaming back, and the first glowing flakes
-    if (heat > 0) spawn(fx.fine, rate(300 * heat), vdir.clone().multiplyScalar(2.5), 3.5, vdir.clone().multiplyScalar(-(14 + 20 * heat)), 6, null, 1.3);
-    if (heat > 0.4 && Math.random() < dt * 6 * heat) spawn(fx.big, 1, new THREE.Vector3(), 4, vdir.clone().multiplyScalar(-(6 + 12 * Math.random())), 9, null, 3);
-    stepCloud(fx.fine, dt); stepCloud(fx.big, dt);
+    stepCloud(fx.fine, dt);
   }
 
-  // ---------- seen from afar: Cassini burns up as a small flare on Saturn, with a short meteor's trail ----------
-  // (sprites in the main scene, sized in km so they read from hundreds of thousands of km away)
+  // ---------- seen from above Saturn: Cassini burns up as a fireball, with a meteor's trail ----------
+  // The fireball (CS.fx.meteor, entry-fx.html) is in the main scene, sized in km so it reads from hundreds of thousands
+  // of km away. Its trail lies along Cassini's real path in (its last TRAIL_S seconds), drawn longer than the glowing
+  // stretch was, as the wobble is drawn larger, or it would be a speck: white-hot at the head, cooling to orange, then
+  // the red-pink glow of Saturn's hydrogen (H-alpha) that lingers after the head is gone and slowly spreads. As it
+  // peaks it comes apart into pieces that drift off its path and burn out one by one. Its sizes follow the camera's
+  // distance (F.flareK), so it stays a fireball, not a blob, while the view is close in and still shows once it has
+  // pulled out
+  const TRAIL_S = 150, TRAIL_N = 48;
   function addFlare() {
-    const head = new THREE.Sprite(new THREE.SpriteMaterial({ map: glowTexture(), color: 0xfff0d8, transparent: true, opacity: 0, blending: THREE.AdditiveBlending, depthWrite: false, depthTest: false }));
-    const trail = [];
-    for (let i = 0; i < 10; i++) {
-      const t = new THREE.Sprite(new THREE.SpriteMaterial({ map: glowTexture(), color: 0xff9a4a, transparent: true, opacity: 0, blending: THREE.AdditiveBlending, depthWrite: false, depthTest: false }));
-      trail.push(t); scene.add(t);
-    }
-    scene.add(head);
-    return { head, trail };
+    return { m: CS.fx.meteor({ gas: "SATURN", points: TRAIL_N, pieces: 8 }), pts: Array.from({ length: TRAIL_N }, () => new THREE.Vector3()) };
   }
   function stepFlare(R) {
     const f = F.flare; if (!f) return;
-    // where Cassini is (Saturn is the focus) and which way it moves
-    rel(F.tau, tmpC); toScene(tmpC, vT).multiplyScalar(1 / KM);
-    rel(F.tau + 1, tmpS); toScene(sub(tmpS, tmpC, tmpS), vScene).normalize();
-    // it brightens to a peak at FLARE seconds, flickers as it breaks up, and dies away over a few seconds
+    // the head follows Cassini until it has broken up; the trail stays where it formed
+    const tHead = F.tau - Math.max(0, R - (FLARE + 1.5));
+    rel(tHead, tmpC); toScene(tmpC, vT).multiplyScalar(1 / KM);
+    // it brightens to a peak at FLARE seconds, comes apart, and dies away over a few seconds
     const up = clamp01((R - 0.6) / (FLARE - 0.6)), down = clamp01(1 - (R - FLARE) / 4.5), k = R < FLARE ? up * up : down * down;
-    const flick = 0.75 + 0.25 * Math.random();
-    f.head.position.copy(vT); f.head.material.opacity = k * flick; f.head.scale.setScalar((2.5 + 7 * k) * (R > FLARE ? 1 + 0.3 * Math.random() : 1));
-    f.trail.forEach((t, i) => {
-      t.position.copy(vT).addScaledVector(vScene, -(i + 1) * 0.9);
-      t.material.opacity = k * 0.7 * (1 - i / f.trail.length) * flick; t.scale.setScalar((1.6 + 3 * k) * (1 - 0.5 * i / f.trail.length));
-    });
+    // seen only on the side of Saturn facing the camera
+    const n = vT.clone().divide(new THREE.Vector3(1, 0.82, 1)).normalize(), front = clamp01(n.dot(camera.position.clone().sub(vT).normalize()) * 8 + 0.5);
+    // the trail grows from the head as the burn starts, its hot part goes with the head, its glow lingers and spreads
+    const grow = clamp01((R - 0.6) / 2), linger = clamp01(1 - (R - FLARE - 2) / 9), spread = 1 + 1.2 * clamp01((R - FLARE) / 10);
+    for (let i = 0; i < TRAIL_N; i++) { rel(tHead - TRAIL_S * grow * i / (TRAIL_N - 1), tmpS); toScene(tmpS, f.pts[i]).multiplyScalar(1 / KM); }
+    f.m.update({ head: vT, path: f.pts, size: F.flareK, hot: k, train: Math.min(1, up * 1.4) * linger * linger, spread,
+      breakup: clamp01((R - FLARE + 0.6) / 5), front });
     if (R > FLARE && !F.belled) { F.belled = true; sound("bell"); }
   }
-  function removeFlare(f) { if (f) [f.head, ...f.trail].forEach(o => scene.remove(o)); }
+  function removeFlare(f) { if (f) f.m.dispose(); }
 
   // ---------- the real readings: a strip chart drawn up to the moment on screen ----------
   function drawData(et) {
@@ -11065,7 +12444,7 @@ function frame(now) {
       if (s > AFTER - 1.6 && !F.dark) { F.dark = true; fadeTo(black, 1, 1.5); read.classList.remove("on"); dataBox.classList.remove("on"); }
       if (s > AFTER) {
         // the recap: the view cuts to Saturn from far away, where Cassini burns up as a flare
-        F.phase = "recap"; F.recapAt = performance.now();
+        F.phase = "recap"; F.recapAt = performance.now(); F.flareK = 0.18;
         CS.dropAll(F.shownD);
         sound("carrier", 0, 0); sound("drone", 0);
         removeEffects(F.fx); F.fx = null;
@@ -11113,13 +12492,36 @@ function frame(now) {
     if (L > 1) err += 25 * (L - 1) ** 1.5;
     const signal = F.lost ? 0 : 1 / (1 + (err / BEAM) ** 8);
     if (!F.lost && signal < 0.1) { F.lost = true; sound("carrier", 0, 0); sound("drone", 0); }
-    cassini.up.copy(uScene);
-    cassini.lookAt(eScene.clone().add(cassini.position));
     const a = Math.min(err * VIS, 160) * Math.PI / 180;
-    const w0 = err < 1 ? [a * wob(t, 0), a * wob(t, 5)] : [0.2 * wob(t, 0), 0];
-    F.wobRate = F.wob && dt > 0 ? [(w0[0] - F.wob[0]) / dt, (w0[1] - F.wob[1]) / dt] : [0, 0]; F.wob = w0;
-    if (err < 1) { cassini.rotateX(w0[0]); cassini.rotateY(w0[1]); }
-    else { cassini.rotateX(0.2 * wob(t, 0)); cassini.rotateOnAxis(F.tumbleAxis, a + 0.6 * Math.max(0, s) ** 1.3); }
+    if (!F.spin) {
+      // held: the dish on Earth, wobbling about it
+      cassini.up.copy(uScene);
+      cassini.lookAt(eScene.clone().add(cassini.position));
+      const w0 = [a * wob(t, 0), a * wob(t, 5)];
+      F.wobRate = F.wob && dt > 0 ? [(w0[0] - F.wob[0]) / dt, (w0[1] - F.wob[1]) / dt] : [0, 0]; F.wob = w0;
+      cassini.rotateX(w0[0]); cassini.rotateY(w0[1]);
+      // how fast it turns right now (scene frame), so a tumble can carry on from it
+      const q = cassini.quaternion;
+      if (F.qPrev && dt > 0) {
+        const d = q.clone().multiply(F.qPrev.clone().invert());
+        if (d.w < 0) d.set(-d.x, -d.y, -d.z, -d.w);
+        const ang = 2 * Math.acos(Math.min(1, d.w)), sn = Math.sqrt(Math.max(1e-12, 1 - d.w * d.w));
+        F.omega = new THREE.Vector3(d.x, d.y, d.z).multiplyScalar(ang / sn / dt);
+      }
+      F.qPrev = q.clone();
+      // past full load the air's torque beats the thrusters' and the attitude is no longer held: from here on it turns
+      // freely, starting from exactly where it is and as fast as it was already turning, so there is no jump
+      if (L > 1) F.spin = { q: q.clone(), w: F.omega ? F.omega.clone() : new THREE.Vector3() };
+    } else {
+      // tumbling: the torque, fixed to the spacecraft (the air pushes on the side of the dish), spins it up faster as the
+      // air thickens; the spin is integrated frame by frame, so it builds smoothly from the wobble it had
+      const sp = F.spin, axis = F.tumbleAxis.clone().applyQuaternion(sp.q);
+      sp.w.addScaledVector(axis, SPIN * Math.min(3, L - 1 + 0.05) * dt);
+      const wl = sp.w.length();
+      if (wl > 1e-9) sp.q.premultiply(new THREE.Quaternion().setFromAxisAngle(sp.w.clone().divideScalar(wl), wl * dt)).normalize();
+      cassini.quaternion.copy(sp.q);
+      F.wob = [0, 0]; F.wobRate = [0, 0];
+    }
     qInv.copy(cassini.quaternion).invert();
     const heat = F.lost ? clamp01((s - 0.3) / 5) : 0;
     const fx = F.fx;
@@ -11136,15 +12538,12 @@ function frame(now) {
         p.userData.core.material.opacity = lit;
         p.userData.jet.scale.set(1, (0.3 + 0.5 * Math.min(1, L)) * (0.85 + 0.3 * Math.random()), 1);
       });
-      // heating on the leading side (where the mass spectrometer looks), the model warming toward red, then the break-up
-      const lead = vScene.clone().applyQuaternion(qInv);
-      fx.glow.position.copy(lead).multiplyScalar(3.2); fx.core.position.copy(lead).multiplyScalar(2.6);
-      fx.glow.material.opacity = Math.min(1, heat * 1.3) * (0.8 + 0.2 * Math.random()); fx.glow.scale.setScalar(4 + 22 * heat * heat);
-      fx.core.material.opacity = heat * (0.7 + 0.3 * Math.random()); fx.core.scale.setScalar(2 + 6 * heat);
-      fx.mats.forEach(m => m.emissive.setRGB(1.1 * heat * heat, 0.32 * heat * heat, 0.06 * heat));
-      stepParticles(fx, dt, vScene, L, heat);
+      // the entry: at 34 km/s even this thin air glows, faintly while the thrusters still hold, then the leading side
+      // heats, and past halfway it starts to come apart
+      fx.entry.update(dt, vScene, entryHeat(L, heat), { debris: clamp01((heat - 0.5) / 0.5) });
+      stepParticles(fx, dt, vScene, L);
     }
-    air.style.opacity = Math.min(1, 0.1 * Math.min(1, L) ** 2 + 0.75 * heat);
+    air.style.opacity = 0.1 * Math.min(1, L) ** 2;
     if (!F.lost) { sound("carrier", signal, Math.min(1, L)); sound("drone", Math.min(1, 0.15 + L)); }
     read.innerHTML = `Altitude ${fmtInt(h)} km · Thrusters <i>${Math.round(Math.min(100, L * 100))}%</i> · Antenna <i>${err < 10 ? err.toFixed(2) : fmtInt(err)}°</i> off Earth · Signal <i>${F.lost ? "lost" : Math.round(signal * 100) + "%"}</i>`;
     drawData(F.tau);
@@ -11170,10 +12569,10 @@ function frame(now) {
       const dirv = rScene.clone().applyAxisAngle(uScene, yaw).multiplyScalar(Math.cos(pitch)).addScaledVector(uScene, -Math.sin(pitch)).normalize();
       const d = (3.6e-5 - 1.6e-5 * clamp01((s + LEAD) / LEAD)) * look.zoom;
       // shake: the struggle, then the heating
-      const L = load(altitude(F.tau)), heat = F.lost ? clamp01((s - 0.3) / 5) : 0, sh = d * (0.004 * Math.min(1, L) + 0.03 * heat);
+      const L = load(altitude(F.tau)), heat = F.lost ? clamp01((s - 0.3) / 5) : 0, sh = d * (0.004 * Math.min(1, L) + 0.022 * heat);
       camera.position.copy(cassini.position).addScaledVector(dirv, -d);
       camera.up.copy(uScene);
-      camera.lookAt(cassini.position.clone().add(jitter(sh)));
+      camera.lookAt(cassini.position.clone().add(CS.fx.shake(sh, F.tau)));
     } else {
       // Saturn from the sunlit side, a little above the rings, turning slowly
       const R = iauMatrix(bodies.SATURN, state.et), pole = toScene(R[2], new THREE.Vector3()).normalize();
@@ -11181,12 +12580,17 @@ function frame(now) {
       const side = new THREE.Vector3().crossVectors(pole, vScene).normalize();
       const k = (performance.now() - F.recapAt) / 1000;
       // facing the spot where Cassini went in at first, then drifting round to the sunlit side as it pulls back
-      rel(F.tau, tmpC); const entry = toScene(tmpC, new THREE.Vector3()).normalize(), m = clamp01(k / 25);
+      // starting closer, on the burn-up itself, so the flare and its trail read, then easing out to the whole planet
+      rel(F.tau, tmpC); const spot = toScene(tmpC, new THREE.Vector3()).multiplyScalar(1 / KM), entry = spot.clone().normalize(), m = clamp01(k / 25);
       const dir = entry.multiplyScalar(0.9 * (1 - m)).addScaledVector(vScene, 0.25 + 0.5 * m).addScaledVector(side, 0.25 + 0.3 * m).normalize();
       dir.addScaledVector(pole, 0.3 + look.pitch).normalize().applyAxisAngle(pole, -0.003 * k + look.yaw);
-      camera.position.copy(dir.multiplyScalar((260 + 180 * (1 - Math.exp(-k / 9))) * look.zoom));
+      // close in on the burn-up (a few thousand km), held while it flares and its trail glows, then out to the planet
+      const out = clamp01((k - 6.5) / 10), e = out * out * (3 - 2 * out);
+      const aim = new THREE.Vector3().addScaledVector(pole, -22).lerp(spot, 1 - e), dist = 9 + 431 * e;
+      F.flareK = Math.min(1, 0.12 + dist / 160);
+      camera.position.copy(aim).addScaledVector(dir, dist * look.zoom);
       camera.up.copy(pole);
-      camera.lookAt(new THREE.Vector3().addScaledVector(pole, -22));
+      camera.lookAt(aim);
     }
   }
 
@@ -11248,7 +12652,7 @@ function frame(now) {
     const l = L; L = null;
     caps.textContent = ""; clock.classList.remove("on");
     setTime(l.tau);
-    spent = true;
+    start.spend();   // playback picks up from here, which may be the very start of the data: not a second launch
     if (state.focus !== "CASSINI") setFocus("CASSINI");
     setFocus("CASSINI", 6e-5);
     setSpeed(l.speed); setPlaying(true);
@@ -11290,18 +12694,11 @@ function frame(now) {
     camera.lookAt(cassini.position.clone().addScaledVector(toEarth, tall ? 0 : d * 0.35));
   }
   CS.register("launch", { root, frame, camera: camera_, onEnd });
-  // playback running forward from the very start of the data starts it (the Launch moment does that); the data starts
-  // at separation, so the clock never crosses a moment before it and cutscene.html's crossing trigger cannot catch it
-  let spent = false;
-  const advance = window.studyAdvance;
-  window.studyAdvance = (et, dt, speed) => {
-    const next = advance ? advance(et, dt, speed) : et + dt * speed;
-    if (et > coverage[0] + 30) spent = false;
-    if (!L && !spent && !CS.active && speed > 0 && et <= coverage[0] + 1 && next > et) { spent = true; setTimeout(play, 0); return et; }
-    return next;
-  };
+  // playback setting off forward from the very start of the data plays it (the Launch moment does that): the data
+  // starts at separation, so there is no moment before it to cross
+  const start = CS.atStart(() => play());
   window.cassiniLaunch = { play, skip: () => CS.end("launch"), get running() { return !!L; } };
   // ?launch plays it as soon as the start of the mission is loaded
-  CS.fromUrl("launch", () => coverage[0], () => { spent = true; play(); });
+  CS.fromUrl("launch", () => coverage[0], () => { start.spend(); play(); });
 })();
 </script>

@@ -171,7 +171,9 @@ body.idle #app .bodywin:has(.well.has-frame) { opacity: 1; pointer-events: auto;
     // was seen. A camera that imaged its target within the stale time wants a window; an open window stays however
     // long its camera then goes quiet (after a jump, only the recent ones do; one
     // whose frames are no longer in the loaded months closes)
+    const lc = F.liveCams ? F.liveCams() : null;   // a closed camera window turns its camera off: none of its body windows
     for (const name of targets) for (const cam of CAMS) {
+      if (lc && !lc.includes(cam)) continue;
       const k = key(name, cam), t = latestOf(name, cam), w = B.wins.get(k), up = w && !w.closing;
       if (!(t > -Infinity) || (!(state.et - t <= stale) && (!up || reset))) { B.rec.delete(k); B.dismissed.delete(k); continue; }
       let r = B.rec.get(k);

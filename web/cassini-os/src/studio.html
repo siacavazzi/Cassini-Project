@@ -23,8 +23,12 @@
      the moves laid over it, composed by mosaic.compose), never moved in the page: the picture's address carries the
      change (&tune=n:dx:dy,…&hide=n,…), so saving, links and Reset all keep working the same way.
 
-     window.cassiniStudio = { open({ kind, blob, url, item, edit, target }), close, apply(blob, edit) -> JPEG blob,
-     encode(params), decode(string), get state }. -->
+     A movie's look (the Movie Editor, movieedit.html): open({ kind: "picture", url, look: recipe => … }) edits one frame
+     of the film for the look of all of them: only the Adjust and Filters tabs, and Use for the movie hands back the
+     recipe's color part (lookOf) instead of saving a picture; Download still saves that frame as edited.
+
+     window.cassiniStudio = { open({ kind, blob, url, item, edit, target, look }), close, apply(blob, edit) -> JPEG blob,
+     encode(params), decode(string), lookOf(params), renderer(canvas), get state }. -->
 <style>
 #stucard { top: calc(env(safe-area-inset-top, 0px) + 34px); left: 50%; transform: translateX(-50%); width: clamp(560px, 72vw, 1180px); height: min(720px, calc(100% - 120px)); display: flex; flex-direction: column; }
 #stucard[style*="left"] { transform: none; }
@@ -261,6 +265,8 @@ body.phone .stufoot .galbtn { padding: 6px 10px; }
     });
     return p;
   }
+  // the color part of a recipe (a movie's look: what every picture of a film gets), the frame left at rest
+  const lookOf = p => { const q = clone(DEF); for (const a of [...ADJ, TONE]) q[a.k] = p[a.k]; q.filter = p.filter; q.strength = p.strength; return q; };
   const fitCrop = c => { const w = clamp(c[2], 0.02, 1), h = clamp(c[3], 0.02, 1); return [clamp(c[0], 0, 1 - w), clamp(c[1], 0, 1 - h), w, h]; };
 
   // ---------- the frame: output pixel -> source pixel, one affine map ----------
@@ -477,7 +483,10 @@ void main() {
     $("stufilters").querySelectorAll("button").forEach(b => b.setAttribute("aria-pressed", String(b.dataset.v === st.p.filter)));
     $("stuundo").disabled = !st.undo.length; $("sturedo").disabled = !st.redo.length;
     $("stucrop").hidden = st.tab !== "crop" || !source();
-    $("stutabs").querySelector('[data-v="mosaic"]').hidden = !st.mos;
+    $("stutabs").querySelector('[data-v="mosaic"]').hidden = !st.mos || !!st.look;
+    $("stutabs").querySelector('[data-v="crop"]').hidden = !!st.look;
+    $("stushare").hidden = !!st.look;
+    $("stusave").textContent = st.look ? "Use for the movie" : "Save to Gallery";
     $("stumos").toggleAttribute("hidden", st.tab !== "mosaic" || !st.mos);   // an svg has no hidden property
     trimShow();
   }
@@ -726,7 +735,7 @@ void main() {
     if (!opts.blob && !opts.url) { sync(); $("stuempty").hidden = !!source(); draw(); return; }
     if (!R) { $("stuempty").textContent = "This browser has no WebGL, which the studio draws with."; $("stuempty").hidden = false; return; }
     unload(); $("stuempty").hidden = true; wait("Opening…");
-    st.item = opts.item || null; st.target = opts.target || null; st.from = opts.from || null;
+    st.item = opts.item || null; st.target = opts.target || null; st.from = opts.from || null; st.look = typeof opts.look === "function" ? opts.look : null;
     st.p = opts.edit ? (typeof opts.edit === "string" ? decode(opts.edit) : clone(opts.edit)) : clone(DEF);
     st.undo = []; st.redo = []; st.changed = false; st.saved = null;
     st.kind = opts.kind === "movie" ? "movie" : "picture";
@@ -746,9 +755,9 @@ void main() {
         if (Math.max(st.W, st.H) > R.max) throw new Error(`the picture is larger than this browser draws (${R.max} px)`);
         R.upload(st.bmp, st.W, st.H);
       }
-      wait(null); if (st.tab === "mosaic") st.tab = "adjust";
+      wait(null); if (st.tab === "mosaic" || (st.look && st.tab === "crop")) st.tab = "adjust";
       sync(); draw(); if (st.tab === "filters") filterTiles();
-      if (!isMovie()) mosOpen(st.item);
+      if (!isMovie() && !st.look) mosOpen(st.item);
     } catch (e) {
       console.warn("studio open", e); wait(null); unload();
       $("stuempty").textContent = `Could not open that ${opts.kind === "movie" ? "film" : "picture"}: ${e.message || e}`; $("stuempty").hidden = false;
@@ -886,7 +895,10 @@ void main() {
   $("stuundo").addEventListener("click", () => undo(false));
   $("sturedo").addEventListener("click", () => undo(true));
   $("stureset").addEventListener("click", () => commit(() => { const t = st.p.trim; st.p = clone(DEF); st.p.trim = t; }));
-  $("stusave").addEventListener("click", async () => { const s = await save(); if (s) $("stusave").textContent = "Saved"; setTimeout(() => { $("stusave").textContent = "Save to Gallery"; }, 1600); });
+  $("stusave").addEventListener("click", async () => {
+    // a movie's look: the recipe goes back to the Movie Editor, nothing is saved
+    if (st.look) { const fn = st.look; st.look = null; fn(encode(lookOf(st.p))); close(); sync(); return; }
+    const s = await save(); if (s) $("stusave").textContent = "Saved"; setTimeout(() => { $("stusave").textContent = "Save to Gallery"; }, 1600); });
   $("studl").addEventListener("click", download);
   $("stushare").addEventListener("click", async e => {
     const btn = e.currentTarget, s = await save();
@@ -915,7 +927,7 @@ void main() {
     }
     if (e.key === "\\") { e.preventDefault(); cmp(true); }
     else if (e.key === " " && isMovie()) { e.preventDefault(); e.stopImmediatePropagation(); playPause(); }
-    else if (e.key === "r" || e.key === "R") { e.preventDefault(); turn(e.shiftKey ? -1 : 1); }
+    else if ((e.key === "r" || e.key === "R") && !st.look) { e.preventDefault(); turn(e.shiftKey ? -1 : 1); }
     else if (e.key === "Escape") { e.stopImmediatePropagation(); close(); }
   }, true);
   window.addEventListener("keyup", e => { if (e.key === "\\") cmp(false); });
@@ -923,6 +935,6 @@ void main() {
   if (go) { const li = document.createElement("li"); li.innerHTML = '<button id="gostudio">Cassini Studio…</button>'; go.appendChild(li); li.querySelector("button").addEventListener("click", () => open()); }
   sync();
 
-  window.cassiniStudio = { open, close, apply, encode, decode, fromScreen, save, get state() { return st; }, _map: mapOf, _effective: effective };
+  window.cassiniStudio = { open, close, apply, encode, decode, lookOf, renderer, fromScreen, save, get state() { return st; }, _map: mapOf, _effective: effective };
 })();
 </script>
