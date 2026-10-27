@@ -18,6 +18,7 @@ http://192.168.68.52:8765/?t=2005-02-17T05:46:09&view=enceladus&speed=3600&play=
 | `speed` | mission seconds per second of playback (`60`, `600`, `3600`, `86400`) |
 | `play=0` | open paused, which is usually what you want for showing a single picture |
 | `movie=1` | open in movie mode |
+| `ambient=1` | open in ambient mode (or a mode: `live`, `60`, `600`, `3600`, `pictures`, `highlights`); `live` ignores `t` and runs ten years behind today |
 
 Other parameters keep working alongside them (`?finale`, `?frames=`, `?tex=`).
 

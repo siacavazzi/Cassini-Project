@@ -13,7 +13,8 @@
        cassiniSettings.set("cameras.composites", false);
 
      Types: "toggle"; "range" (min, max, step, unit; log: true slides on a log scale from min to max, landing on
-     the nearest of stops when given); "choice" (options: [[value, "Label"], …]); "action" (run, a
+     the nearest of stops when given); "choice" (options: [[value, "Label"], …]; menu: true shows a drop-down menu
+     instead of buttons, for a long list); "action" (run, a
      button). reload: true marks a setting that takes effect when the page is opened again. -->
 <style>
 #settings { width: min(620px, calc(100% - 20px)); height: min(460px, calc(100% - 80px)); z-index: 900; }
@@ -41,6 +42,9 @@
 .srow input[type=range] { width: 130px; accent-color: var(--q-accent); }
 .srow .val { min-width: 54px; text-align: right; font-size: 11px; color: var(--q-text); font-variant-numeric: tabular-nums; }
 .srow .seg { flex-wrap: wrap; }
+.srow select { font: inherit; font-size: 11.5px; color: var(--q-text); background: rgba(255,255,255,.07); border: 1px solid var(--q-line); border-radius: 5px; padding: 3px 6px; max-width: 220px; }
+.srow select:focus-visible { outline: 1px solid var(--q-accent); }
+.srow select option { background: #1b1e24; color: #e8ecf2; }
 .srow .seg .btn { padding: 4px 8px; flex: none; }
 .srow .act { border: 1px solid var(--q-line); border-radius: 6px; padding: 4px 10px; }
 #settings footer { flex: none; display: flex; align-items: center; justify-content: space-between; gap: 10px; padding: 6px 12px; border-top: 1px solid var(--q-line); font-size: 10.5px; color: var(--q-dim); }
@@ -153,13 +157,15 @@ body.phone .srow input[type=range] { width: 96px; }
       if (d.type === "toggle") ctl = `<button class="sw" id="${id}" role="switch" aria-checked="false"></button>`;
       if (d.type === "range") ctl = d.log ? `<input type="range" id="${id}" min="0" max="1000" step="1"><span class="val"></span>`
         : `<input type="range" id="${id}" min="${d.min}" max="${d.max}" step="${d.step || 1}"><span class="val"></span>`;
-      if (d.type === "choice") ctl = `<div class="seg" role="radiogroup" aria-labelledby="${id}">${d.options.map((o, i) => `<button class="btn" role="radio" data-i="${i}">${o[1]}</button>`).join("")}</div>`;
+      if (d.type === "choice" && d.menu) ctl = `<select id="${id}-m" aria-labelledby="${id}">${d.options.map((o, i) => `<option value="${i}">${o[1]}</option>`).join("")}</select>`;
+      else if (d.type === "choice") ctl = `<div class="seg" role="radiogroup" aria-labelledby="${id}">${d.options.map((o, i) => `<button class="btn" role="radio" data-i="${i}">${o[1]}</button>`).join("")}</div>`;
       if (d.type === "action") ctl = `<button class="btn act" id="${id}">${d.button || "Run"}</button>`;
       row.innerHTML = `<${d.type === "choice" ? "span" : "label"} class="lab" id="${d.type === "choice" ? id : ""}"${d.type === "choice" ? "" : ` for="${id}"`}>${d.label}${tag}</${d.type === "choice" ? "span" : "label"}>`
         + `<div class="ctl">${ctl}</div>` + (d.hint ? `<div class="hint">${d.hint}</div>` : "");
       if (d.type === "toggle") row.querySelector(".sw").addEventListener("click", () => S.set(d.key, !values[d.key]));
       if (d.type === "range") row.querySelector("input").addEventListener("input", e => S.set(d.key, d.log ? logVal(d, +e.target.value) : +e.target.value));
       if (d.type === "choice") row.querySelectorAll(".seg .btn").forEach(b => b.addEventListener("click", () => S.set(d.key, d.options[+b.dataset.i][0])));
+      if (d.type === "choice" && d.menu) row.querySelector("select").addEventListener("change", e => S.set(d.key, d.options[+e.target.value][0]));
       if (d.type === "action") row.querySelector(".act").addEventListener("click", () => d.run());
       pane.appendChild(row);
       sync(d.key);
@@ -170,6 +176,7 @@ body.phone .srow input[type=range] { width: 96px; }
     if (!row) return;
     if (d.type === "toggle") row.querySelector(".sw").setAttribute("aria-checked", String(v));
     if (d.type === "range") { row.querySelector("input").value = d.log ? logPos(d, v) : v; row.querySelector(".val").textContent = fmtVal(d, v); }
+    if (d.type === "choice" && d.menu) row.querySelector("select").value = String(d.options.findIndex(o => o[0] === v));
     if (d.type === "choice") row.querySelectorAll(".seg .btn").forEach(b => { const on = d.options[+b.dataset.i][0] === v; b.setAttribute("aria-pressed", String(on)); b.setAttribute("aria-checked", String(on)); });
   }
   nav.addEventListener("click", e => {
@@ -272,10 +279,10 @@ body.phone .srow input[type=range] { width: 96px; }
   // exposure normalization of a movie pass (obs_mosaic.exposure_gains): its smoothing in frames, 0 when off
   window.cassiniExposure = () => !S.get("movies.exposure") ? 0 : (S.get("movies.exposureSmooth") ?? 8);
   window.cassiniMovieStyle = (o = {}) => `${(o.center ?? S.get("cameras.autoCenter")) === false ? "&center=0" : ""}&trail=${o.trail ?? (S.get("movies.trail") || 0)}&laps=${S.get("movies.laps") || 1}` +
-    (S.get("movies.fade") ? `&fade=${S.get("movies.fade")}&persist=${S.get("movies.persist") ?? 35}` : "") +
+    (S.get("movies.fade") && S.get("movies.mosaicFrames") !== "whole" ? `&fade=${S.get("movies.fade")}&persist=${S.get("movies.persist") ?? 35}` : "") +
     ((o.steady ?? window.cassiniStabilize()) ? `&steady=${o.steady ?? window.cassiniStabilize()}` : "") +
     ((o.exposure ?? window.cassiniExposure()) ? `&exposure=${o.exposure ?? window.cassiniExposure()}` : "");
-  // Cameras (the camera windows read cameras.steady, cameras.passes, cameras.fullRes, cameras.fullDelay, cameras.drill, cameras.stale and cameras.lingerColor / lingerMosaic)
+  // Cameras (the camera windows read cameras.steady, cameras.passes, cameras.fullRes, cameras.fullDelay, cameras.drill, cameras.pointingLook, cameras.stale and cameras.lingerColor / lingerMosaic)
   D({ key: "cameras.channels", section: "Cameras", label: "Filter channels", type: "toggle", value: true,
       hint: "The frames that make up a color picture, in a strip under it." });
   cls("cameras.channels", "s-nochans", false);
@@ -292,6 +299,9 @@ body.phone .srow input[type=range] { width: 96px; }
       hint: "A picture in full view (double-click it, F or the title bar button) always loads at the camera's full resolution, playing or paused, with a button to save it. Other windows show each picture at its true resolution, or smaller only when the window or screen is too small to show more." });
   D({ key: "cameras.drill", section: "Cameras", label: "Open channels in place", type: "toggle", value: true,
       hint: "Click a channel under a color picture to open it in that window on the picture's own scale. The window holds still until you press Esc or its held badge; other windows play on." });
+  D({ key: "cameras.pointingLook", section: "Cameras", label: "Frames opened from a mosaic", type: "choice", value: "mosaic",
+      options: [["mosaic", "As in the mosaic"], ["own", "On its own"]],
+      hint: "Hover a mosaic to outline a frame (arrow keys step to the others) and click to open it. As in the mosaic shows that spot of the mosaic, larger: the same levels, seams and colors. On its own shows the frames as a picture of their own, on their own scale. The switch by a held frame's breadcrumb changes it." });
   D({ key: "cameras.stale", section: "Cameras", label: "Clear a quiet camera after", type: "range", value: 6, min: 1, max: 48, step: 1, unit: "h",
       hint: "A camera that has taken nothing for this long shows Idle instead of its last picture (an important picture stays longer, below)." });
   D({ key: "cameras.lingerColor", section: "Cameras", label: "Color pictures stay longer", type: "range", value: 1.5, min: 1, max: 4, step: 0.25, format: v => `${v}×`,
@@ -396,6 +406,10 @@ body.phone .srow input[type=range] { width: 96px; }
       hint: "In a steady movie pass, this many earlier frames of the same filter stay under the newest one, fading with age, so a moving moon or a ring's shadow leaves a short trail. 0 shows each frame alone." });
   D({ key: "movies.laps", section: "Movie", label: "Mosaic movies keep", type: "range", value: 1, min: 1, max: 6, step: 1, unit: "laps",
       hint: "A mosaic movie (the camera going over the same mosaic again and again, as on the approach to Jupiter) plays as a mosaic that never empties: each new tile replaces its own earlier copy. 1 is a time-lapse; more keeps that many copies of each tile, older ones under the newest." });
+  // how often a mosaic movie's picture changes (head-quiet.html complete and cameraFeed, export.py whole=)
+  D({ key: "movies.mosaicFrames", section: "Movie", label: "Mosaic movie frames", type: "choice", value: "rolling",
+      options: [["rolling", "Rolling"], ["whole", "Whole mosaics"]],
+      hint: "Rolling puts each new tile of a mosaic movie into the mosaic as it is taken. Whole mosaics waits until the camera has gone round every place again: a four-panel mosaic shows a new picture once all four new panels are in, so every frame of the movie is a whole new mosaic (movie mode steps lap to lap, and older tiles never fade)." });
   // a mosaic movie's older tiles fade (obs_mosaic.rolling_layout fade=, persist=): Rolling rather than Time-lapse
   D({ key: "movies.fade", section: "Movie", label: "Older tiles fade over", type: "range", value: 0, min: 0, max: 120, step: 4,
       format: v => v ? `${v} frames` : "Off",

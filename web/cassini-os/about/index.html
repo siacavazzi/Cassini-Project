@@ -1,0 +1,128 @@
+<!doctype html>
+<!-- The About page (about/index.html, written by seo.py from this file): Cassini OS in plain words, for people and
+     search engines that arrive without the 3D page, with links into it. The HEAD marker below becomes the title, description,
+     share card and structured data from site.json. -->
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1">
+<title>About Cassini OS: the Cassini mission to Saturn, replayed with its pictures</title>
+<meta name="description" content="What Cassini OS is: a free replay of the Cassini-Huygens mission in the browser, where the spacecraft flies its real path and the camera windows show the pictures it took of Saturn, Titan, Enceladus and the other moons, calibrated and in color.">
+<meta name="author" content="Sam Iacavazzi">
+<meta name="robots" content="index, follow, max-image-preview:large">
+<link rel="icon" href="../favicon.svg" type="image/svg+xml">
+<link rel="icon" href="../favicon-48.png" sizes="48x48" type="image/png">
+<link rel="apple-touch-icon" href="../apple-touch-icon.png">
+<meta name="theme-color" content="#000000">
+<meta property="og:type" content="website">
+<meta property="og:site_name" content="Cassini OS">
+<meta property="og:title" content="About Cassini OS: the Cassini mission to Saturn, replayed with its pictures">
+<meta property="og:description" content="What Cassini OS is: a free replay of the Cassini-Huygens mission in the browser, where the spacecraft flies its real path and the camera windows show the pictures it took of Saturn, Titan, Enceladus and the other moons, calibrated and in color.">
+<meta property="og:image" content="../share.jpg">
+<meta property="og:image:width" content="1200">
+<meta property="og:image:height" content="630">
+<meta property="og:image:alt" content="Cassini OS in Titan&#x27;s view: Titan backlit by the Sun in 3D, Titan&#x27;s imaging sessions and moments, and its pictures across the mission timeline">
+<meta property="og:locale" content="en_US">
+<meta name="twitter:card" content="summary_large_image">
+<meta name="twitter:title" content="About Cassini OS: the Cassini mission to Saturn, replayed with its pictures">
+<meta name="twitter:description" content="What Cassini OS is: a free replay of the Cassini-Huygens mission in the browser, where the spacecraft flies its real path and the camera windows show the pictures it took of Saturn, Titan, Enceladus and the other moons, calibrated and in color.">
+<meta name="twitter:image" content="../share.jpg">
+<meta name="twitter:image:alt" content="Cassini OS in Titan&#x27;s view: Titan backlit by the Sun in 3D, Titan&#x27;s imaging sessions and moments, and its pictures across the mission timeline">
+<script type="application/ld+json">{"@context": "https://schema.org", "@type": "AboutPage", "name": "About Cassini OS: the Cassini mission to Saturn, replayed with its pictures", "description": "What Cassini OS is: a free replay of the Cassini-Huygens mission in the browser, where the spacecraft flies its real path and the camera windows show the pictures it took of Saturn, Titan, Enceladus and the other moons, calibrated and in color.", "inLanguage": "en", "mainEntity": {"@type": "WebApplication", "name": "Cassini OS", "description": "A 3D replay of NASA and ESA's Cassini-Huygens mission, 1997 to 2017, in your browser: the spacecraft's real path, and the 443,000 pictures it took of Saturn, its rings, Titan and Enceladus, each shown at the moment it was taken.", "applicationCategory": "EducationalApplication", "operatingSystem": "Any (a web browser with WebGL)", "browserRequirements": "Requires JavaScript and WebGL", "offers": {"@type": "Offer", "price": "0", "priceCurrency": "USD"}, "isAccessibleForFree": true, "inLanguage": "en", "image": "../share.jpg", "author": {"@type": "Person", "name": "Sam Iacavazzi", "url": "https://github.com/siacavazzi"}, "about": [{"@type": "Thing", "name": "Cassini-Huygens", "sameAs": "https://en.wikipedia.org/wiki/Cassini%E2%80%93Huygens"}, {"@type": "Thing", "name": "Saturn", "sameAs": "https://en.wikipedia.org/wiki/Saturn"}]}}</script>
+<style>
+:root {
+  color-scheme: dark;
+  --ui: -apple-system, "Lucida Grande", "Lucida Sans Unicode", "Lucida Sans", Verdana, Tahoma, sans-serif;
+  --mono: "Share Tech Mono", ui-monospace, Menlo, monospace;
+  --bg: #000;
+  --panel: rgba(16, 17, 20, .72);
+  --line: rgba(255, 255, 255, .10);
+  --text: rgba(232, 236, 242, .86);
+  --dim: rgba(232, 236, 242, .52);
+  --accent: #8ab6ff;
+}
+* { box-sizing: border-box; }
+html { background: var(--bg); }
+body { margin: 0; background: var(--bg) radial-gradient(1200px 600px at 70% -10%, rgba(255, 196, 120, .07), transparent 60%); color: var(--text); font: 15px/1.65 var(--ui); -webkit-font-smoothing: antialiased; }
+main { max-width: 760px; margin: 0 auto; padding: 56px 16px 40px; }
+header .kicker { font: 11px/1 var(--mono); letter-spacing: .16em; text-transform: uppercase; color: var(--dim); }
+h1 { margin: 10px 0 12px; font-size: 40px; line-height: 1.1; font-weight: normal; color: #fff; letter-spacing: -.01em; }
+.lede { margin: 0 0 22px; font-size: 18px; line-height: 1.55; color: var(--text); }
+.open { display: inline-block; padding: 9px 18px; border-radius: 7px; background: var(--accent); color: #0b1220; text-decoration: none; font-size: 14px; }
+.open:hover { background: #a3c6ff; }
+.open:focus-visible, a:focus-visible { outline: 2px solid var(--accent); outline-offset: 2px; }
+.req { margin-left: 12px; font-size: 12px; color: var(--dim); }
+figure { margin: 36px 0 8px; }
+figure img { display: block; width: 100%; height: auto; border-radius: 10px; border: 1px solid var(--line); background: #050505; }
+figcaption { margin-top: 8px; font-size: 12px; color: var(--dim); }
+h2 { margin: 40px 0 8px; font-size: 13px; font-weight: normal; letter-spacing: .12em; text-transform: uppercase; color: var(--dim); }
+p { margin: 8px 0; }
+a { color: var(--accent); text-decoration: none; }
+a:hover { text-decoration: underline; text-underline-offset: 2px; }
+ul { margin: 8px 0; padding-left: 20px; }
+li { margin: 4px 0; }
+.moments { list-style: none; padding: 0; border-top: 1px solid var(--line); }
+.moments li { margin: 0; border-bottom: 1px solid var(--line); }
+.moments a { display: grid; grid-template-columns: 110px minmax(0, 1fr); gap: 12px; padding: 9px 4px; color: var(--text); }
+.moments a:hover { background: rgba(255, 255, 255, .04); text-decoration: none; }
+.moments time { font: 12px/1.9 var(--mono); color: var(--dim); }
+.moments b { font-weight: normal; color: #fff; }
+footer { margin-top: 48px; padding-top: 14px; border-top: 1px solid var(--line); font-size: 12px; color: var(--dim); }
+@media (max-width: 560px) {
+  main { padding-top: 36px; }
+  h1 { font-size: 32px; }
+  .lede { font-size: 16px; }
+  .req { display: block; margin: 10px 0 0; }
+  .moments a { grid-template-columns: 1fr; gap: 0; }
+}
+</style>
+</head>
+<body>
+<main>
+  <header>
+    <div class="kicker">Cassini-Huygens · 1997–2017</div>
+    <h1>Cassini OS</h1>
+    <p class="lede">A replay of the Cassini mission to Saturn, in 3D in your browser, with the pictures the spacecraft took shown at the moment it took them.</p>
+    <a class="open" href="../">Open Cassini OS</a><span class="req">Free · runs in the browser · needs WebGL</span>
+  </header>
+
+  <figure>
+    <img src="../share.jpg" width="1200" height="630" alt="Cassini OS in Titan&#x27;s view: Titan backlit by the Sun in 3D, Titan&#x27;s imaging sessions and moments, and its pictures across the mission timeline">
+    <figcaption>Titan's view, 15 September 2006: Titan's sessions and moments on the right, every picture of Titan on the timeline below.</figcaption>
+  </figure>
+
+  <h2>What it is</h2>
+  <p>Cassini OS follows NASA and ESA's Cassini-Huygens spacecraft through its whole mission, from launch in October 1997, past Venus, Earth and Jupiter, through thirteen years in orbit around Saturn, to the Grand Finale plunge into Saturn's atmosphere on 15 September 2017. The spacecraft flies its real path and turns the way it really turned, and a timeline lets you go anywhere in those twenty years.</p>
+  <p>It looks like a small desktop: the narrow-angle and wide-angle camera windows show the picture Cassini was taking at that moment, from the roughly 443,000 images in the mission's archive. Pictures of the same scene in red, green and blue filters become true color composites, and pictures that tile a moon or the planet become mosaics.</p>
+
+  <h2>What Cassini saw</h2>
+  <ul>
+    <li>Saturn and its rings: storms, the north polar hexagon, the Great Northern Storm of 2010–2011, equinox, and the rings backlit by the Sun.</li>
+    <li>Titan, Saturn's largest moon, over more than a hundred flybys, and the Huygens probe's descent to its surface in January 2005.</li>
+    <li>Enceladus and the jets of ice spraying from its south pole.</li>
+    <li>The other moons up close: Mimas, Tethys, Dione, Rhea, Iapetus, Hyperion, Phoebe and the small ring moons.</li>
+    <li>Jupiter on the way, in December 2000, and the last pictures before the plunge.</li>
+  </ul>
+
+  <h2>Moments to start with</h2>
+  <ul class="moments">
+    <li><a href="../?t=2000-12-29T04:09:55&amp;view=jupiter&amp;play=0"><time datetime="2000-12-29">29 Dec 2000</time><span><b>Jupiter portrait</b> · the color mosaic of the whole planet</span></a></li>
+    <li><a href="../?t=2005-11-27T19:19:46&amp;view=enceladus&amp;play=0"><time datetime="2005-11-27">27 Nov 2005</time><span><b>Fountains of Enceladus</b> · the backlit jets from the south pole</span></a></li>
+    <li><a href="../?t=2006-09-15T15:49:29&amp;view=saturn&amp;play=0"><time datetime="2006-09-15">15 Sep 2006</time><span><b>In Saturn's Shadow</b> · Saturn eclipsing the Sun, the rings lit from behind</span></a></li>
+    <li><a href="../?t=2013-07-20T00:37:30&amp;view=saturn&amp;play=0"><time datetime="2013-07-19">19 Jul 2013</time><span><b>The Day the Earth Smiled</b> · Earth a pale dot below the rings</span></a></li>
+    <li><a href="../?t=2017-09-14T19:59:03&amp;view=saturn&amp;play=0"><time datetime="2017-09-14">14 Sep 2017</time><span><b>The last pictures</b> · the day before the plunge</span></a></li>
+  </ul>
+
+  <h2>How the pictures are made</h2>
+  <p>Every picture starts as a raw frame from NASA's Planetary Data System. Each is calibrated, repeat exposures are stacked, color sets are aligned and combined, and the spacecraft's position and pointing come from the mission's SPICE navigation data, so the pictures sit where the cameras were really looking. Nothing is painted in.</p>
+
+  <h2>Using it</h2>
+  <p>Play the mission at any speed, jump between Moments and Highlights, open a body's view to see only its pictures, or play a stretch of pictures as a film. The address bar always holds the moment on screen, so a link opens on the same picture. It works best on a desktop browser and is usable on a phone.</p>
+
+  <footer>
+    <p>Made by <a href="https://github.com/siacavazzi" rel="author">Sam Iacavazzi</a>. Pictures NASA/JPL-Caltech/Space Science Institute; Huygens pictures ESA/NASA/JPL/University of Arizona; flight data NASA/JPL's SPICE archive. Every credit is in the app's About window.</p>
+    <p>An independent project, not affiliated with NASA, JPL, ESA or the Space Science Institute.</p>
+  </footer>
+</main>
+</body>
+</html>
