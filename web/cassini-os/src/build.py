@@ -17,11 +17,22 @@ if len(sys.argv) == 1:
     for head, out in [("head-quiet.html", "index.html")]:
         subprocess.run([sys.executable, __file__, os.path.join(root, "..", "replay", "index.html"),
                         os.path.join(HERE, head), os.path.join(root, out)], check=True)
+    sys.path.insert(0, HERE)
+    import seo
+    seo.write_files(seo.load())      # about/, robots.txt, sitemap.xml (site.json)
     sys.exit(0)
 import sys, re, json, hashlib
 src = open(sys.argv[1]).read()           # prototype source
 study = open(sys.argv[2]).read()          # study: everything up to (not incl.) the three.js script tags
 out = sys.argv[3]
+# what search engines and link previews read (seo.py, site.json): title, description, share card, structured data,
+# and a few lines for browsers without JavaScript
+sys.path.insert(0, HERE)
+import seo
+site = seo.load()
+for old, new in [("<title>Cassini OS Quiet</title>", seo.head(site)), ("<body>\n<div id=\"app\">", "<body>\n" + seo.noscript(site) + "\n<div id=\"app\">")]:
+    assert study.count(old) == 1, old
+    study = study.replace(old, new)
 script = src[src.index('<script src="https://cdn.jsdelivr.net/npm/three@0.128.0/build/three.min.js">'):]
 
 # movie mode (movie.html): its style joins the head's, a Movie button joins the transport, and its script runs after

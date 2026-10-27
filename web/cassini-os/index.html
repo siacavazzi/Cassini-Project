@@ -3,7 +3,29 @@
 <head>
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width,initial-scale=1,viewport-fit=cover">
-<title>Cassini OS Quiet</title>
+<title>Cassini OS: replay the Cassini mission and every picture it took</title>
+<meta name="description" content="A 3D replay of NASA and ESA&#x27;s Cassini-Huygens mission, 1997 to 2017, in your browser: the spacecraft&#x27;s real path, and the 443,000 pictures it took of Saturn, its rings, Titan and Enceladus, each shown at the moment it was taken.">
+<meta name="author" content="Sam Iacavazzi">
+<meta name="robots" content="index, follow, max-image-preview:large">
+<link rel="icon" href="favicon.svg" type="image/svg+xml">
+<link rel="icon" href="favicon-48.png" sizes="48x48" type="image/png">
+<link rel="apple-touch-icon" href="apple-touch-icon.png">
+<meta name="theme-color" content="#000000">
+<meta property="og:type" content="website">
+<meta property="og:site_name" content="Cassini OS">
+<meta property="og:title" content="Cassini OS: replay the Cassini mission and every picture it took">
+<meta property="og:description" content="A 3D replay of NASA and ESA&#x27;s Cassini-Huygens mission, 1997 to 2017, in your browser: the spacecraft&#x27;s real path, and the 443,000 pictures it took of Saturn, its rings, Titan and Enceladus, each shown at the moment it was taken.">
+<meta property="og:image" content="share.jpg">
+<meta property="og:image:width" content="1200">
+<meta property="og:image:height" content="630">
+<meta property="og:image:alt" content="Cassini OS in Titan&#x27;s view: Titan backlit by the Sun in 3D, Titan&#x27;s imaging sessions and moments, and its pictures across the mission timeline">
+<meta property="og:locale" content="en_US">
+<meta name="twitter:card" content="summary_large_image">
+<meta name="twitter:title" content="Cassini OS: replay the Cassini mission and every picture it took">
+<meta name="twitter:description" content="A 3D replay of NASA and ESA&#x27;s Cassini-Huygens mission, 1997 to 2017, in your browser: the spacecraft&#x27;s real path, and the 443,000 pictures it took of Saturn, its rings, Titan and Enceladus, each shown at the moment it was taken.">
+<meta name="twitter:image" content="share.jpg">
+<meta name="twitter:image:alt" content="Cassini OS in Titan&#x27;s view: Titan backlit by the Sun in 3D, Titan&#x27;s imaging sessions and moments, and its pictures across the mission timeline">
+<script type="application/ld+json">{"@context": "https://schema.org", "@type": "WebApplication", "name": "Cassini OS", "description": "A 3D replay of NASA and ESA's Cassini-Huygens mission, 1997 to 2017, in your browser: the spacecraft's real path, and the 443,000 pictures it took of Saturn, its rings, Titan and Enceladus, each shown at the moment it was taken.", "applicationCategory": "EducationalApplication", "operatingSystem": "Any (a web browser with WebGL)", "browserRequirements": "Requires JavaScript and WebGL", "offers": {"@type": "Offer", "price": "0", "priceCurrency": "USD"}, "isAccessibleForFree": true, "inLanguage": "en", "image": "share.jpg", "author": {"@type": "Person", "name": "Sam Iacavazzi", "url": "https://github.com/siacavazzi"}, "about": [{"@type": "Thing", "name": "Cassini-Huygens", "sameAs": "https://en.wikipedia.org/wiki/Cassini%E2%80%93Huygens"}, {"@type": "Thing", "name": "Saturn", "sameAs": "https://en.wikipedia.org/wiki/Saturn"}]}</script>
 <meta name="claude:viewport-fit-sides" content="cover">
 <link rel="preconnect" href="https://fonts.googleapis.com">
 <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
@@ -1544,6 +1566,7 @@ body.phone #launch .lx-clock { font-size: 9.5px; bottom: 9vh; }
 </style>
 </head>
 <body>
+<noscript><div style="max-width:640px;margin:80px auto;padding:0 16px;font:15px/1.6 -apple-system,'Lucida Grande',Verdana,sans-serif;color:#e8ecf2"><h1 style="font-weight:normal">Cassini OS</h1><p>A 3D replay of NASA and ESA&#x27;s Cassini-Huygens mission, 1997 to 2017, in your browser: the spacecraft&#x27;s real path, and the 443,000 pictures it took of Saturn, its rings, Titan and Enceladus, each shown at the moment it was taken.</p><p>Cassini OS is a 3D page and needs JavaScript and WebGL. <a href="about/" style="color:#8ab6ff">Read about the project</a>.</p></div></noscript>
 <div id="app">
   <canvas id="gl" aria-label="3D view of the Saturn system"></canvas>
   <canvas id="hud" aria-hidden="true"></canvas>
@@ -9009,7 +9032,7 @@ void main() {
     "Cassini OS": () => `<h2>Cassini OS</h2>
       <p>A replay of NASA and ESA's Cassini-Huygens mission, from launch in 1997 to the plunge into Saturn in 2017. The spacecraft flies its real path and turns the way it really turned, and the camera windows show the pictures it took at that moment, each one calibrated, stacked and aligned from the raw frames.</p>
       <p>Made by Sam Iacavazzi · <a href="https://github.com/siacavazzi" target="_blank" rel="noopener">github.com/siacavazzi</a></p>
-      <p class="note">More about the project is coming here.</p>
+      <p class="note"><a href="about/" target="_blank" rel="noopener">More about the project</a></p>
       <h3>Credits</h3>
       <p>The pictures are NASA/JPL-Caltech/Space Science Institute, the probe's are ESA/NASA/JPL/University of Arizona, and the flight data is from NASA/JPL's SPICE archive. The maps, models, sound, software and fonts have their own authors. <a href="#" data-tab="Credits">See all credits</a>.</p>
       <h3>Privacy</h3>
@@ -9048,7 +9071,7 @@ void main() {
   window.cassiniAbout = { open, addTab, esc, close: () => show(false), credits: CREDITS };
 
   // ---- which version this is: this page's build id (build.py writes it), and what the frame server says it serves ----
-  const BUILD = /*BUILD*/"b5905c812037";
+  const BUILD = /*BUILD*/"b35ddc289f26";
   const FRAMES = (() => {                       // the frame server, chosen as the camera window chooses it
     const q = new URLSearchParams(location.search).get("frames");
     if (q) return q.replace(/\/$/, "");
