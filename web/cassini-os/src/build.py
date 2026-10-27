@@ -24,8 +24,8 @@ study = open(sys.argv[2]).read()          # study: everything up to (not incl.) 
 out = sys.argv[3]
 script = src[src.index('<script src="https://cdn.jsdelivr.net/npm/three@0.128.0/build/three.min.js">'):]
 
-# movie mode (movie.html): its style joins the head's, its window goes into #app next to the others, a Movie
-# button joins the transport, and its script runs after the chrome script
+# movie mode (movie.html): its style joins the head's, a Movie button joins the transport, and its script runs after
+# the chrome script (it wraps the clock's studyAdvance hook)
 # flagging pictures (flag.html): its style joins the head's, its panel and toast go into #app, and its script runs right
 # after the chrome script, ahead of movie mode's and the body reels' (its key handler must see keys typed into a note first)
 flag = open(os.path.join(os.path.dirname(os.path.abspath(sys.argv[2])), "flag.html")).read()
@@ -42,10 +42,9 @@ movie = open(os.path.join(os.path.dirname(os.path.abspath(sys.argv[2])), "movie.
 part = lambda tag: movie[movie.index(f"<{tag}"):movie.index(f"</{tag}>") + len(tag) + 3]
 for old, new in [
     ("</style>\n</head>", part("style")[len("<style>"):] + "\n</head>"),
-    ('  <div id="loading">', "  " + part("section") + "\n\n" + '  <div id="loading">'),
     ('<button class="btn round skip" id="next" aria-label="Next moment">▶▶</button>',
      '<button class="btn round skip" id="next" aria-label="Next moment">▶▶</button>\n'
-     '          <button class="btn round skip" id="movie" aria-pressed="false" aria-label="Movie mode" title="Movie mode: play one body\'s frames as a film (M)">'
+     '          <button class="btn round skip" id="movie" aria-pressed="false" aria-label="Movie mode" title="Movie mode: skip the time between pictures and play them at a set frame rate (M)">'
      '<svg viewBox="0 0 16 16" aria-hidden="true"><rect x="2" y="3" width="12" height="10" rx="1.5"/><path d="M5 3v10M11 3v10M2 6.3h3M2 9.7h3M11 6.3h3M11 9.7h3"/></svg></button>'),
 ]:
     assert study.count(old) == 1, old
@@ -158,6 +157,69 @@ study += part("script") + "\n"
 # chrome script (it draws the marked stretch through window.studyTimeline and adds "Export Movie…" to the Go menu)
 ex = open(os.path.join(os.path.dirname(os.path.abspath(sys.argv[2])), "export.html")).read()
 part = lambda tag: ex[ex.index(f"<{tag}"):ex.index(f"</{tag}>") + len(tag) + 3]
+for old, new in [
+    ("</style>\n</head>", part("style")[len("<style>"):] + "\n</head>"),
+    ('  <div id="loading">', "  " + part("section") + "\n\n" + '  <div id="loading">'),
+]:
+    assert study.count(old) == 1, old
+    study = study.replace(old, new)
+study += part("script") + "\n"
+
+# pre-processing a stretch (segment.html): its style joins the head's, its bar and note go into #app, and its script runs
+# after the export script, whose marks it follows ("cassini:marks") and whose timeline drawing it wraps
+sg = open(os.path.join(os.path.dirname(os.path.abspath(sys.argv[2])), "segment.html")).read()
+part = lambda tag: sg[sg.index(f"<{tag}"):sg.index(f"</{tag}>") + len(tag) + 3]
+for old, new in [
+    ("</style>\n</head>", part("style")[len("<style>"):] + "\n</head>"),
+    ('  <div id="loading">', "  " + part("aside") + "\n\n" + '  <div id="loading">'),
+]:
+    assert study.count(old) == 1, old
+    study = study.replace(old, new)
+study += part("script") + "\n"
+
+# the gallery (gallery.html): its style joins the head's, its window, share menu and toast go into #app, and its script
+# runs after the chrome script and movie export's (it adds Add to Gallery to the picture windows and asks the export for
+# a film's sound) and before the dock's, which opens it
+gal = open(os.path.join(os.path.dirname(os.path.abspath(sys.argv[2])), "gallery.html")).read()
+part = lambda tag: gal[gal.index(f"<{tag}"):gal.index(f"</{tag}>") + len(tag) + 3]
+gextra = gal[gal.index('<ul id="galshare"'):gal.index("</div>", gal.index('<div id="galtoast"')) + 6]
+for old, new in [
+    ("</style>\n</head>", part("style")[len("<style>"):] + "\n</head>"),
+    ('  <div id="loading">', "  " + part("section") + "\n" + gextra + "\n\n" + '  <div id="loading">'),
+]:
+    assert study.count(old) == 1, old
+    study = study.replace(old, new)
+study += part("script") + "\n"
+
+# the zoom lens (loupe.html): its style joins the head's, the lens goes into #app, and its script runs after the chrome
+# script; it finds the pictures under the pointer itself (every window's .well .shot, any img[data-loupe])
+lp = open(os.path.join(os.path.dirname(os.path.abspath(sys.argv[2])), "loupe.html")).read()
+part = lambda tag: lp[lp.index(f"<{tag}"):lp.index(f"</{tag}>") + len(tag) + 3]
+for old, new in [
+    ("</style>\n</head>", part("style")[len("<style>"):] + "\n</head>"),
+    ('  <div id="loading">', "  " + lp[lp.index('<div id="loupe"'):lp.index("</div>", lp.index('<div id="loupe"')) + 6] + "\n\n" + '  <div id="loading">'),
+]:
+    assert study.count(old) == 1, old
+    study = study.replace(old, new)
+study += part("script") + "\n"
+
+# Cassini Studio (studio.html): its style joins the head's, its window goes into #app, and its script runs after the
+# gallery's (it saves and shares through window.cassiniGallery) and before the dock's, which opens it
+stu = open(os.path.join(os.path.dirname(os.path.abspath(sys.argv[2])), "studio.html")).read()
+part = lambda tag: stu[stu.index(f"<{tag}"):stu.index(f"</{tag}>") + len(tag) + 3]
+for old, new in [
+    ("</style>\n</head>", part("style")[len("<style>"):] + "\n</head>"),
+    ('  <div id="loading">', "  " + part("section") + "\n\n" + '  <div id="loading">'),
+]:
+    assert study.count(old) == 1, old
+    study = study.replace(old, new)
+study += part("script") + "\n"
+
+# the Movie Editor (movieedit.html): its style joins the head's, its window goes into #app, and its script runs after
+# Cassini Studio's (it draws with the studio's renderer and edits the look there) and the export's and pre-processing's,
+# whose stretch it edits
+me = open(os.path.join(os.path.dirname(os.path.abspath(sys.argv[2])), "movieedit.html")).read()
+part = lambda tag: me[me.index(f"<{tag}"):me.index(f"</{tag}>") + len(tag) + 3]
 for old, new in [
     ("</style>\n</head>", part("style")[len("<style>"):] + "\n</head>"),
     ('  <div id="loading">', "  " + part("section") + "\n\n" + '  <div id="loading">'),
@@ -343,9 +405,9 @@ function loadTexture(url, onLoad, onError) {
 rep('  texLoader.load(dir + f + ".webp", t => {', '  loadTexture(dir + f + ".webp", t => {')
 rep('  }, undefined, () => console.warn("texture missing for " + name));', '  }, () => console.warn("texture missing for " + name));')
 
-# HUD hook: studies can add their own read-outs
+# HUD hook: studies can add their own read-outs (and the speed reads from the shared scale, any speed the slider sets)
 rep('''  $("mday").textContent = `Mission day ${fmtInt(Math.floor((ms - LAUNCH_MS) / 86400000))} · ${SPEEDS.find(s => s[0] === state.speed)[1]}${state.playing ? "" : " · paused"}`;''',
-    '''  $("mday").textContent = `Mission day ${fmtInt(Math.floor((ms - LAUNCH_MS) / 86400000))} · ${SPEEDS.find(s => s[0] === state.speed)[1]}${state.playing ? "" : " · paused"}`;
+    '''  $("mday").textContent = `Mission day ${fmtInt(Math.floor((ms - LAUNCH_MS) / 86400000))} · ${cassiniSpeed.label(state.speed)}${state.playing ? "" : " · paused"}`;
   if (window.studyHud) window.studyHud(ms);''')
 rep('''<span class="sc" title="Photo score">''', '''<span class="sc" title="Photo score" style="--s:${Math.round(e.photo_score)}">''')
 rep('''    list.appendChild(li);
