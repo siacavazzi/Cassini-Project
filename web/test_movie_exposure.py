@@ -39,22 +39,20 @@ json.dump({"key": list(u["key"]), "display_scale": scale, "angle": 0, "footprint
 
 with calibration.looking("balanced"):
     logs = om.exposure_chain(u, cache)
-    # the chain follows each filter's brightness (to the 8-bit picture's rounding)
-    for n, f in enumerate(filters):
-        first = filters.index(f)
-        assert abs(logs[n] - math.log(bright[n] / bright[first])) < 0.03, (n, logs[n], math.log(bright[n] / bright[first]))
+    # the chain follows the movie's brightness frame to frame, whichever filter (to the 8-bit picture's rounding)
+    for n in range(N):
+        assert abs(logs[n] - math.log(bright[n] / bright[0])) < 0.03, (n, logs[n], math.log(bright[n] / bright[0]))
     gains = om.exposure_gains(u, cache, smooth=4)
     shown = [bright[n] * gains[n] for n in range(N)]
     print("gains:", [gains[n] for n in range(N)])
-    # the flash is brought to its neighbours (of its filter)
-    assert abs(shown[FLASH] / shown[FLASH - 2] - 1) < 0.08 and abs(shown[FLASH] / shown[FLASH + 2] - 1) < 0.08, shown[FLASH - 2:FLASH + 3]
-    # the step is spread out: no frame of a filter more than 1.2x the one before it (it was 1.6x), the whole step kept
-    for f in level:
-        ns = [n for n in range(N) if filters[n] == f]
-        steps = [shown[b] / shown[a] for a, b in zip(ns, ns[1:])]
-        assert max(steps) < 1.2, (f, np.round(steps, 3).tolist())
-        # and far from the flash and the step the frames keep their brightness (the slow brightening stays)
-        assert abs(gains[ns[2]] - 1) < 0.03 and abs(gains[ns[-1]] - 1) < 0.03, (gains[ns[2]], gains[ns[-1]])
+    steps = [shown[n] / shown[n - 1] for n in range(1, N)]
+    print("brightness steps shown:", np.round(steps, 3).tolist())
+    # the flash is brought to its neighbours, and GRN's flicker against RED (0.8x every other frame) is evened out
+    assert abs(shown[FLASH] / shown[FLASH - 1] - 1) < 0.08 and abs(shown[FLASH] / shown[FLASH + 1] - 1) < 0.08, shown[FLASH - 2:FLASH + 3]
+    # the step is spread out: no frame more than 1.15x the one before it (it was 1.6x), and none flickers by more than 8%
+    assert max(steps) < 1.15 and min(steps) > 0.92, np.round(steps, 3).tolist()
+    # the whole step is kept, and the slow brightening (1% a frame) too
+    assert abs(shown[-2] / shown[2] / (bright[-2] / bright[2]) - 1) < 0.1, (shown[2], shown[-2])
     assert om.exposure_gains(u, cache, smooth=0) == {}
     # the pure functions alone, as the viewer would run them
     assert om.evened_gains([0, 0, 1, 0, 0], 3)[2] == round(math.exp(-1) * 200) / 200
