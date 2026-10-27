@@ -6861,7 +6861,7 @@ function setFocus(name, dist) {
 }
 // focus chips for the bodies on stage now: the cruise planets, Jupiter's moons near Jupiter, Saturn's at Saturn
 function focusChoices() {
-  const near = shown("HUYGENS") || probe && state.et > probe.track.start - 30 * 86400 && state.et < probe.track.end + 30 * 86400;
+  const near = shown("HUYGENS") || probe && state.et >= (probe.events.separation || probe.track.start) && state.et < probe.track.end + 30 * 86400;
   const rest = [...CRUISE_FOCUS, ...FOCUS_LIST.slice(1)].filter(n => present(n) && (n === "SATURN" || inContext(n)));
   const sun = mission && (state.context === "SUN" || state.focus === "SUN") ? ["SUN"] : [];   // the inner solar system from above
   return ["CASSINI", ...sun, ...(near || (probe && !mission) ? ["HUYGENS"] : []), ...rest];

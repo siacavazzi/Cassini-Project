@@ -471,7 +471,7 @@ rep('  probeTrail.visible = probeActive() && state.et < probe.events.landing + 6
     '  probeTrail.visible = !!probe && probeActive() && state.et < probe.events.landing + 6 * 3600;')
 rep('  pe.hidden = !probeActive();', '  pe.hidden = !probe || !shown("HUYGENS");')
 rep('  const near = probe && state.et > probe.track.start - 30 * 86400 && state.et < probe.track.end + 30 * 86400;',
-    '  const near = shown("HUYGENS") || probe && state.et > probe.track.start - 30 * 86400 && state.et < probe.track.end + 30 * 86400;')
+    '  const near = shown("HUYGENS") || probe && state.et >= (probe.events.separation || probe.track.start) && state.et < probe.track.end + 30 * 86400;')
 # while it coasts, the probe is a spacecraft to look at up close, not a point above Titan; landed, it is 10 m off
 rep('name === "HUYGENS" ? 4 :', 'name === "HUYGENS" ? (window.studyCoast && studyCoast.modelShown(state.et) ? 1.6e-5 : window.studyLanded && studyLanded.active(state.et) ? 1e-5 : 4) :')
 rep('  if (name === "HUYGENS") {\n    // from the side', '  if (name === "HUYGENS" && !(window.studyCoast && studyCoast.modelShown(state.et)) && !(window.studyLanded && studyLanded.active(state.et))) {\n    // from the side')
