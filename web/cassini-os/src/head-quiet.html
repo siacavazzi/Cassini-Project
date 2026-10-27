@@ -1575,7 +1575,7 @@ body.idle .win.full .titlebar { opacity: 0; }
     };
     return api;
   }
-  const STUCK = 8000;
+  const STUCK = 8000, WHOLE_STUCK = 60000;
   // Complete mosaics only (Settings > Playback): a mosaic pass shows once, finished, at its last frame
   const completeMosaics = () => !!S.get("playback.completeMosaics") && !!S.get("cameras.mosaics") && window.cassiniMosaics !== false;
   // Whole mosaics (Settings > Movie > Mosaic movie frames): a mosaic movie shows a new picture only when a lap is
@@ -1966,7 +1966,8 @@ body.idle .win.full .titlebar { opacity: 0; }
     // which never empties when the camera starts its raster again (Settings > Movie > Mosaic movies keep)
     const playsRolling = k => playsAs(k) === "mosaic_movie";
     window.cassiniRolling = true;   // so the pass mosaic lane leaves mosaic movies to this route (mosaicOf)
-    const rollingUrl = (id, sz) => `${FRAMES}/frames/movie/${id}.webp?mode=rolling&size=${sz || size()}${window.cassiniMovieStyle({ center: centreOn() })}${window.cassiniLook()}`;
+    // (Whole mosaics: the server makes every tile of the lap before it answers, whole=1)
+    const rollingUrl = (id, sz) => `${FRAMES}/frames/movie/${id}.webp?mode=rolling&size=${sz || size()}${window.cassiniMovieStyle({ center: centreOn() })}${window.cassiniLook()}${wholeLaps() ? "&whole=1" : ""}`;
     // the filmstrip: the pass the frame on screen is in (/frames/movie/<ID>.json: its frames, in time order), its
     // frames drawn along a strip by time, colored by filter, with the frame shown marked and the frames around it
     const passInfos = new Map(), filmAsked = new Set();
@@ -2663,8 +2664,10 @@ body.idle .win.full .titlebar { opacity: 0; }
       const pos = q => lastOfCam(cam, catalog.et[q], body), now = performance.now();
       // nothing up yet (the window's first picture, or a month that just came in): the picture asked for counts as
       // one behind until it is up, so movie mode waits for a mosaic movie's first whole lap instead of running past
-      if (!shown || shown.cat !== catalog) return now - wantAt < STUCK ? 1 : 0;
-      let b = shownKey !== want.key && now - shownAt < STUCK ? pos(want.k) - pos(shown.k) : 0;
+      if (!shown || shown.cat !== catalog) return now - wantAt < (want.rolling && wholeLaps() ? WHOLE_STUCK : STUCK) ? 1 : 0;
+      // a whole lap of a mosaic movie (Whole mosaics) may take the server a while to make cold: waited for longer
+      const stuck = want.rolling && wholeLaps() ? WHOLE_STUCK : STUCK;
+      let b = shownKey !== want.key && now - shownAt < stuck ? pos(want.k) - pos(shown.k) : 0;
       if (obsShown && obsK >= 0 && catalog.obs[lastK] === obsShown && now - mosaicAt < STUCK) b = Math.max(b, pos(lastK) - pos(obsK));
       return Math.max(0, b);
     };

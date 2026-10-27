@@ -94,6 +94,9 @@ Routes:
                                pass's mosaic (obs_mosaic.rolling_webp), so it never empties when a lap begins;
                                fade=N: older tiles fade over N frames down to persist per cent (Rolling), 0 keeps
                                every tile as bright as the newest (Time-lapse)
+                               whole=1 (Whole mosaics: the page asks only a lap's last frame): every tile of the
+                               picture is made before it answers, never a partial picture or a 503, so the
+                               window shows the whole new lap
   /frames/movie/<ID>.json      the pass the frame is in: its frames [id, time, filter], cadence, movie/mosaic call
   /frames/thumb.webp?mosaic=<ID>&color=R,G,B&frame=<ID>&size=256
                                a highlight's thumbnail (any of the three, as data/highlights.json's "thumb" gives them):
@@ -1349,7 +1352,7 @@ def make_handler(site, cache, flags=None):
                         full = size_of(query, 512) == FULL
                         made = obs_mosaic.rolling_webp(m.group(1), FULL if full else size, cache, laps, _mosaic_slots, fmt,
                                                        out=min(obs_mosaic.CANVAS, FULL_MAX) if full else obs_mosaic.OUT,
-                                                       fade=fade)
+                                                       fade=fade, wait=query.get("whole", ["0"])[0] == "1")
                         if made and made[0] is not None:
                             return self.send_picture(made[0], fmt, query, f"Cassini_{m.group(1)}_mosaic_movie", {"X-Movie": json.dumps(made[1])},
                                                      forever=not made[1].get("partial"))
