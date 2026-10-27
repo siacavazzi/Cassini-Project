@@ -541,6 +541,9 @@ script += cpart("script") + "\n"
 # atmospheric entry effects for the cutscenes (entry-fx.html, adds to cutscene.html's fx): script only
 efx = open(os.path.join(os.path.dirname(os.path.abspath(sys.argv[2])), "entry-fx.html")).read()
 script += efx[efx.index("<script"):efx.index("</script>") + len("</script>")] + "\n"
+# Huygens' own models (huygens-models.html, window.huygensModels), for the release and landing cutscenes: script only
+hmod = open(os.path.join(os.path.dirname(os.path.abspath(sys.argv[2])), "huygens-models.html")).read()
+script += hmod[hmod.index("<script"):hmod.index("</script>") + len("</script>")] + "\n"
 # the Grand Finale (finale.html): its style joins the head's, its overlay goes into #app, and its script runs last (it
 # registers its hooks and its trigger with cutscene.html)
 fin = open(os.path.join(os.path.dirname(os.path.abspath(sys.argv[2])), "finale.html")).read()
