@@ -64,11 +64,13 @@ for overlap in (40, 100, 200):
     # the outer edge across the seam is the edge along a tile's middle
     for r in range(TOP, TOP + 60):
         assert abs(int(on[r, seam, 3]) - int(on[r, 500, 3])) <= 3, (overlap, r, on[r, seam, 3], on[r, 500, 3])
-    # a tile's own edges and corners are as they were
-    assert np.array_equal(on[TOP:TOP + 60, 500, 3], off[TOP:TOP + 60, 500, 3]), overlap
-    assert abs(int(on[TOP, 0, 3]) - int(off[TOP, 0, 3])) <= 1, overlap
+    # a tile's own edges and corners are as they were, less the tile's outermost RIM pixels
+    R = mosaic.RIM
+    assert np.array_equal(on[TOP + R:TOP + 60, 500, 3], off[TOP + R:TOP + 60, 500, 3]), overlap
+    assert not on[TOP:TOP + R, :, 3].any() and not on[:, :R, 3].any(), overlap
+    assert abs(int(on[TOP + R, R, 3]) - int(off[TOP + R, R, 3])) <= 2, overlap
     # the lost line's gap in the first tile, where the second does not cover, stays a gap
-    assert on[601, 400, 3] == 0 and on[597, 400, 3] == 255, overlap
+    assert on[601, 400, 3] == 0 and on[596, 400, 3] == 255, overlap
     print(f"overlap {overlap}: seam opaque (was down to {255 - old_dip}/255), outer edge unbroken")
 
 # tiles of different brightness: no step anywhere along a row across the seam
@@ -76,3 +78,29 @@ on = draw(tiles(40, 1.1))
 row = on[560, 900:1100, 0].astype(int)
 assert np.abs(np.diff(row)).max() <= 3 and row[0] == 230 and row[-1] == 253, row
 print("tiles of different brightness meet without a step; ok")
+
+# tiles whose outermost pixels are dark (as resized, north-up tiles' are): no dark line where their rims fall inside
+# the mosaic, nor where a rim meets the next tile's
+frames = tiles(40)
+for f in frames:
+    a = f[..., 3] > 0
+    rim = a & (mosaic._inside(a.astype(np.uint8)) <= 2)
+    f[rim, :3] = 5
+on = draw(frames)
+inner = on[TOP + 100:TOP + 900, 100:1900]
+assert inner[inner[..., 3] == 255][:, 0].min() >= 229, inner[..., 0].min()
+print("tiles' dark outermost pixels never drawn; ok")
+
+# where tiles do not quite meet (two tiles 36 px apart under a third that spans both), the gap between them keeps a
+# soft edge, as the mosaic's outer edge does
+frames = []
+for x0, y0 in ((0, 0), (1000, 0), (-30, 1000), (1030, 1000)):
+    f = np.zeros((2100, 2100, 4), np.uint8)
+    xa, ya = max(x0, 0), y0
+    f[ya:ya + 1024, xa:x0 + 1024, :3] = (230, 215, 160)
+    f[ya:ya + 1024, xa:x0 + 1024, 3] = mask[:, xa - x0:]
+    frames.append(f)
+on = draw(frames)
+row = on[1600, 900:1012, 3].astype(int)
+assert row[0] == 255 and row[-1] == 0 and np.all(np.diff(row) <= 0) and (row > 0).sum() - (row == 255).sum() > 30, row
+print("a gap between tiles keeps a soft edge; ok")

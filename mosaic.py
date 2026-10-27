@@ -383,14 +383,20 @@ def _edge_width(alpha, dist):
 
 """
 The blend step's per frame parts (prepare): (where the frame has picture, its weight in the blend, the width of its
-own soft edge). The weight ramps from 0 at the edge of the frame's picture to 1 at feather_px inside, on where it
+own soft edge). A frame's outermost RIM pixels are not its picture: resized and turned north up, its edge pixels are
+part dark (a Tethys tile's outermost ring averaged 111 against 155 inside, a third of it under 20), which its soft
+edge used to hide. The weight ramps from 0 at the edge of the frame's picture to 1 at feather_px inside, on where it
 has picture only: the soft edge it was made with (mask.png) is the mosaic's outer edge, not a weight, so where two
 frames meet their colours blend and nothing between them is left part transparent.
 """
+RIM = 2
+
+
 def _blend_parts(alpha):
-    valid = (alpha > 0).astype(np.uint8)
-    dist = _inside(valid)
-    return valid.astype(np.float32), np.minimum(dist * (1.0 / feather_px), 1.0), _edge_width(alpha, dist)
+    dist = _inside((alpha > 0).astype(np.uint8))
+    has = dist > RIM
+    return (has.astype(np.float32), np.clip((dist - RIM) * (1.0 / feather_px), 0, 1).astype(np.float32),
+            _edge_width(alpha, dist))
 
 
 def _inside(valid):
@@ -504,7 +510,11 @@ def _outer_edge(cover, width):
     blur = cv2.GaussianBlur(cover, (0, 0), sigma, borderType=cv2.BORDER_CONSTANT)
     # the blur at a pixel d pixels inside a straight edge is the normal curve at (d - 0.5) / sigma
     d = np.interp(blur, _normal[1], _normal[0]) * sigma + 0.5
-    soft = np.interp(d * (at / width), np.arange(1, len(profile) + 1), profile, left=0, right=1)
+    # nor farther in than the pixel lies from the nearest edge: round a small gap inside the mosaic (where tiles do not
+    # quite meet) the blur sees picture nearly everywhere, and the gap would get a hard edge
+    d = np.minimum(d, _inside((cover > 0).astype(np.uint8)))
+    # (cover starts RIM pixels inside the frames' own edge, where their soft edge is RIM pixels along)
+    soft = np.interp((d + RIM) * (at / width), np.arange(1, len(profile) + 1), profile, left=0, right=1)
     return soft.astype(np.float32) * cover
 
 
@@ -551,10 +561,10 @@ def _blended(out, frames, infos, gains, offsets, gamma, area):
         rgb[sl] += color
         weight[sl] = ramp + wb * (1 - ramp)
         cover[sl] = np.maximum(below, has)
-        alpha[sl] = np.maximum(alpha[sl], own)
+        alpha[sl] = np.maximum(alpha[sl], own * has)
     if width > 0:
-        # never more transparent than the most opaque frame there, so a frame's own corners and a lost line's gap keep
-        # the edge they were made with
+        # never more transparent than the most opaque frame there (inside its rim), so a frame's own corners and a lost
+        # line's gap keep the edge they were made with
         alpha = np.maximum(alpha, _outer_edge(cover, width))
     out[y0:y1, x0:x1, :3] = np.clip(rgb, 0, 255).round()
     out[y0:y1, x0:x1, 3] = (alpha * 255).round()
