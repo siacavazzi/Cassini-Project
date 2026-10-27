@@ -2062,7 +2062,9 @@ def exposure_gains(u, cache, p=None, smooth=EXPOSURE_SMOOTH, colour=True, centre
     pass) stay; the frames' data stays, only scaled. smooth 0: no gains ({})."""
     if smooth <= 0:
         return {}
-    logs = exposure_chain(u, cache, p, colour, centre, steady)
+    # (measured once per pass on SPICE's places, whatever the stabilization: a few px of it hardly change which lit
+    # pixels two pictures share, and one chain serves every smoothing, here and in the viewer)
+    logs = exposure_chain(u, cache, p, colour, centre, 0)
     stretches = collections.defaultdict(list)
     in_colour = any(v[2] for v in logs.values())
     gains = {}
@@ -2399,8 +2401,8 @@ def movie_webp(frame_id, size, cache, trail=0, colour=True, wait=False, ahead=6,
     rec = _record(u, cache)
     if not wait and ((_footprint_kept(u, rec) is None and
                       not all(os.path.exists(os.path.join(folder(u, cache), f)) for f in (PLAN_FILE, _footprint_file(u))))
-                     or (steady and not _steady_ready(u, cache, rec)) or (exposure and not _exposure_ready(u, cache, rec, (bool(colour), bool(centre), steady)))):
-        warm_movie(u, n, ahead, cache, steady=bool(steady), exposure=(bool(colour), bool(centre), steady) if exposure else None)
+                     or (steady and not _steady_ready(u, cache, rec)) or (exposure and not _exposure_ready(u, cache, rec, (bool(colour), bool(centre), 0)))):
+        warm_movie(u, n, ahead, cache, steady=bool(steady), exposure=(bool(colour), bool(centre), 0) if exposure else None)
         return None, {"why": "working out the pass", "observation": u["key"][1], "pass": u["key"][3]}
     # (a feature track's frames, at their steady places, are named apart from the frames it played before, and so
     # are a stabilized movie's, by its smoothing)
