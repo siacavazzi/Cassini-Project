@@ -1967,7 +1967,7 @@ EXPOSURE_SIDE = 160      # px: the movie pictures a pass's brightness is measure
 # a movie's brightness chain (exposure_chain), kept with the pass for each way of drawing it; renamed (with the movie
 # frames drawn with it, movie_webp) whenever the rule changes
 EXPOSURE_FILE = "exposure4-{}-" + PLAN_FILE
-EXPOSURE_RULE = 5        # the way the gains are worked out from the chain: in the movie frames' names (movie_webp)
+EXPOSURE_RULE = 6        # the way the gains are worked out from the chain: in the movie frames' names (movie_webp)
 EXPOSURE_GREY_RUN = 6    # frames: a colour pass's grey frames (its filters coming in) evened only in a run this long
 EXPOSURE_SAME = 0.5      # of the larger lit area: two pictures sharing less lit view than this show different scenes
 
@@ -2337,7 +2337,7 @@ def movie_frame(u, n, cache, trail=0, colour=True, out=OUT, centre=True, steady=
         if gain != 1.0:
             q = dict(q, gain=round(q.get("gain", 1.0) * gain, 3), gamma=q.get("gamma", gamma))
         return q
-    spice = t["offset"]
+    spice, raw = t["offset"], t
     t = at(t)
     if track:
         rep["steady"] = "track"
@@ -2363,7 +2363,8 @@ def movie_frame(u, n, cache, trail=0, colour=True, out=OUT, centre=True, steady=
             if len(got) < len(want):
                 continue
             for f, j in got.items():
-                q = t if j == n else tile(u, j, cache, p["display_scale"])
+                # (frame n's own tile as made: at() is applied once, below, so its gain is not taken twice)
+                q = raw if j == n else tile(u, j, cache, p["display_scale"])
                 if "offset" in q:
                     newest[f] = at(q)
             if len(newest) == len(want):
