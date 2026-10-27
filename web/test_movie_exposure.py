@@ -61,6 +61,13 @@ with calibration.looking("balanced"):
     # the whole step is kept, and the slow brightening (1% a frame) too
     assert abs(shown[N - 2] / shown[2] / (bright[N - 2] / bright[2]) - 1) < 0.1, (shown[2], shown[-2])
     assert om.exposure_gains(u, cache, smooth=0) == {}
+    # a pass that plays in colour: its grey frames before the set is complete (a filter each) keep gain 1
+    real = om.exposure_chain
+    om.exposure_chain = lambda *a, **k: {0: [0.0, 0, False], 1: [0.8, 0, False], 2: [-0.5, 0, False], 3: [0.0, 1, True],
+                                         4: [0.0, 1, True], 5: [1.0, 1, True], 6: [0.0, 1, True], 7: [0.0, 1, True]}
+    g = om.exposure_gains(u, cache, smooth=4)
+    om.exposure_chain = real
+    assert g[0] == g[1] == g[2] == 1.0 and g[5] < 0.5, g
     # the pure functions alone, as the viewer would run them
     assert om.evened_gains([0, 0, 1, 0, 0], 3)[2] == round(math.exp(-1) * 200) / 200
     assert om.held_to_spice([[0, 0], [10, 0]], [[0, 0], [10, 0]], 4) == [[0.0, 0.0], [10.0, 0.0]]
