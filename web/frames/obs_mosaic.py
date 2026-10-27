@@ -52,6 +52,7 @@ from PIL import Image
 HERE = os.path.dirname(os.path.abspath(__file__))
 sys.path.insert(0, HERE)
 import reel  # noqa: E402  (puts the repo on the path)
+import sets_passes  # noqa: E402
 import color_image  # noqa: E402
 import calibration  # noqa: E402
 import mosaic  # noqa: E402
@@ -83,9 +84,19 @@ LAP_GAP = 7200       # a mosaic taken again over the same ground within this man
 LAP_OVERLAP = 0.6    # ... when the two footprints share at least this much (area both cover / either covers)
 MOVIE_LAPS = 2       # a mosaic whose places are taken again (median, per filter) this many times is a mosaic movie
 MOVIE_DWELL = 8      # ... or whose camera stays this many frames of one filter (median) at each place it goes
+TRACK_VISITS = 2     # ... or that follows a moving feature (_judge's track): at least this many visits of 3+ filters,
+TRACK_SPAN = 0.08    # ... whose frames spread (median) over more than this much of a frame (twice REGISTER_MAX)
+TRACK_CARRY = 0.5    # ... and, on a turning body (SPIN), whose turning carries a feature at least this share of that spread
 RADIUS = {"SATURN": 60268, "JUPITER": 69911, "TITAN": 2575, "RHEA": 764, "IAPETUS": 735, "DIONE": 561,
           "TETHYS": 531, "ENCELADUS": 252, "MIMAS": 198, "HYPERION": 135, "PHOEBE": 107}
 IFOV = {"N": 6.0e-6, "W": 60e-6}   # radians per full resolution pixel
+# radius (km) and rotation period (hours) of the bodies a camera can follow a feature on (_judge's track): a feature
+# the body's turning carries along. The moons turn with their orbits (Phoebe and Hyperion on their own)
+SPIN = {"SATURN": (60268, 10.66), "JUPITER": (71492, 9.925), "EARTH": (6378, 23.93), "VENUS": (6052, 5832.5),
+        "MOON": (1737, 655.7), "IO": (1822, 42.46), "EUROPA": (1561, 85.23), "GANYMEDE": (2634, 171.7),
+        "CALLISTO": (2410, 400.5), "TITAN": (2575, 382.7), "RHEA": (764, 108.4), "IAPETUS": (735, 1903.9),
+        "DIONE": (561, 65.69), "TETHYS": (531, 45.31), "ENCELADUS": (252, 32.89), "MIMAS": (198, 22.62),
+        "HYPERION": (135, 312.0), "PHOEBE": (107, 9.27)}
 QUALITY = 95         # WebP quality of every picture sent; its folders carry it (frame_server.QUALITY)
 
 _units = {}           # (target, obs, cam) -> [unit dicts]
@@ -229,7 +240,8 @@ def repeat_window(u):
 def _judge(u):
     """Sets u["movie"] (the camera creeps or stares), u["jump_frac"], u["dwell"], u["mosaic"] (enough places,
     footprint not too big, not a movie), u["whole"] (the body's disk inside it), u["place"], u["repeats"] and
-    u["kind"]: "movie", "mosaic", "mosaic_movie" (a mosaic whose places are taken lap after lap) or None."""
+    u["kind"]: "movie", "mosaic", "mosaic_movie" (a mosaic whose places are taken lap after lap) or None, and
+    u["track"] (the camera follows a moving feature: a movie)."""
     pts = [(-x * z / u["z"], -y * z / u["z"]) for _, _, _, _, _, x, y, z in u["frames"] if z]
     # the steps between consecutive frames of one filter, in frames: a mosaic jumps, a movie creeps
     last, steps = {}, []
@@ -268,7 +280,40 @@ def _judge(u):
             last[f] = [p, 1]
     runs += [n for _, n in last.values()]
     u["dwell"] = float(np.median(runs)) if runs else None
-    u["movie"] = u["jump_frac"] is not None and (u["jump_frac"] < MOVIE_JUMPS or (u["dwell"] or 0) >= MOVIE_DWELL)
+    # track: the camera follows something that moves across the body (a cloud feature, FEATRAK), so the filters of
+    # one pointing do not land on one another: ISS_191SA_FEATRAK001 creeps 0.13 of a frame over each 10-filter visit
+    # (and one CB3 frame sits 585 px off), ISS_222SA_FEATRAK001 drifts all the way through. Drawn as a mosaic that
+    # makes narrow colour strips and doubled limbs, so it plays as a movie. A visit is a run of frames through
+    # different filters, each within REGISTER_GAP and SAME_PLACE of the one before; in a mosaic a visit holds still
+    # (SPICE within REGISTER_MAX, what registration believes), in a track its frames spread over more than TRACK_SPAN
+    # (median over the pass's visits of three or more frames). A raster stepping a pointing every frame has no visits.
+    # The spread is where SPICE puts each frame on the pass's canvas (body centred, at its reference distance), which
+    # already follows the spacecraft; what is left in a close flyby is the view turning as Cassini passes (parallax).
+    # So on a body whose turning is known (SPIN) a pass is a track only where that turning can carry a surface feature
+    # across at least TRACK_CARRY of the spread in a visit's time: Saturn's clouds 10 km/s, a moon's surface centimetres
+    # to metres a second, so a moon's regional map stays a mosaic. A target with no body (rings named by themselves,
+    # the sky) keeps the spread alone.
+    spans, visit, took = [], [], []
+    for _, _, f, t, _, x, y, z in u["frames"]:
+        if not z:
+            continue
+        p = (-x * z / u["z"], -y * z / u["z"], t, f)
+        if visit and (t - visit[-1][2] > REGISTER_GAP or f in {q[3] for q in visit}
+                      or math.hypot(p[0] - visit[-1][0], p[1] - visit[-1][1]) > SAME_PLACE * FRAME):
+            if len(visit) >= 3:
+                spans.append(max(math.hypot(a[0] - c[0], a[1] - c[1]) for a in visit for c in visit) / FRAME)
+                took.append(visit[-1][2] - visit[0][2])
+            visit = []
+        visit.append(p)
+    if len(visit) >= 3:
+        spans.append(max(math.hypot(a[0] - c[0], a[1] - c[1]) for a in visit for c in visit) / FRAME)
+        took.append(visit[-1][2] - visit[0][2])
+    u["track"] = bool(len(spans) >= TRACK_VISITS and np.median(spans) > TRACK_SPAN)
+    spin = SPIN.get(u["key"][0])
+    if u["track"] and spin and u["z"]:
+        carried = 2 * math.pi * spin[0] / (spin[1] * 3600) * float(np.median(took)) / (u["z"] * IFOV[u["key"][2]]) / FRAME
+        u["track"] = carried >= TRACK_CARRY * float(np.median(spans))
+    u["movie"] = u["jump_frac"] is not None and (u["jump_frac"] < MOVIE_JUMPS or (u["dwell"] or 0) >= MOVIE_DWELL or u["track"])
     places = []
     for p in pts:
         if all(max(abs(p[0] - q[0]), abs(p[1] - q[1])) >= mosaic.min_step * FRAME for q in places):
@@ -1835,23 +1880,30 @@ def _place(u, t, rect, k, W, H, cache, scale):
 
 
 def colour_sets(frames):
-    """The pass's frames grouped into filter sets as the camera windows find them (head-quiet's findSets,
-    reel.load_index): a run of frames, each taken within reel.SET_GAP of the one before, through different
-    filters; a clear or polarizer frame ends it, and a filter coming round again starts a new one (the next
-    pointing of a mosaic, the next colour cycle). Each set is a list of (filter, frame index), in time order."""
-    sets, run, last = [], None, None
-    for j, fr in enumerate(frames):
-        f = fr[2]
-        if f == "CL1/CL2" or _polarizer(f):
-            run = None
-            continue
-        if run is not None and fr[3] - last <= reel.SET_GAP and all(f != g for g, _ in run):
-            run.append((f, j))
-        else:
-            run = [(f, j)]
-            sets.append(run)
-        last = fr[3]
-    return sets
+    """The pass's frames grouped into filter sets, the camera windows' own (sets_passes, the one rule: reel.load_index's
+    sets, which the page reads from the data): a run of frames, each taken within SET_GAP of the one before, through
+    different filters; a clear or polarizer frame ends it, and a filter coming round again starts a new one (the next
+    pointing of a mosaic, the next colour cycle). Each set is a list of (filter, frame index), in time order, with the
+    set's frames that are tiles of the pass (a repeat exposure units leaves out is stacked into its tile). Frames
+    the index does not have are grouped by the same rule among themselves."""
+    try:
+        idx, row = _row_of()
+    except FileNotFoundError:   # no index (a synthetic pass)
+        idx, row = None, {}
+    qs = [row.get(fr[1]) for fr in frames]
+    if not frames or any(q is None for q in qs):
+        return _own_sets(frames)
+    set_of, by = idx["set"].to_numpy(), {}
+    for j, (fr, q) in enumerate(zip(frames, qs)):
+        if set_of[q] >= 0:
+            by.setdefault(int(set_of[q]), []).append((fr[2], j))
+    return [run for _, run in sorted(by.items(), key=lambda kv: kv[1][0][1]) if len(run) >= 2]
+
+
+def _own_sets(frames):
+    """colour_sets' rule applied to frames on their own (one camera, target and observation)."""
+    at = sets_passes.runs([("", "", "", None if fr[2] == "CL1/CL2" or _polarizer(fr[2]) else fr[2], fr[3]) for fr in frames])
+    return [[(frames[j][2], j) for j in run] for run in sorted(at, key=lambda r: r[0])]
 
 
 def movie_frame(u, n, cache, trail=0, colour=True, out=OUT, centre=True):
@@ -1897,10 +1949,15 @@ def movie_frame(u, n, cache, trail=0, colour=True, out=OUT, centre=True):
             break
     if used:
         planes = [_place(u, newest[f], rect, k, W, H, cache, p["display_scale"]) for f in used]
-        rgba = colour_picture(u, p, used, planes)
-        rep["color"] = used
-        rep["ids"] = [newest[f]["id"] for f in used]
-    else:
+        # a colour set held from an earlier pointing that is out of this frame's view (a track's last visit, a
+        # thousand px away) leaves the picture empty: the frame is drawn on its own instead
+        if any(a[..., 3].any() for a in planes):
+            rgba = colour_picture(u, p, used, planes)
+            rep["color"] = used
+            rep["ids"] = [newest[f]["id"] for f in used]
+        else:
+            used = None
+    if not used:
         rgba = _place(u, t, rect, k, W, H, cache, p["display_scale"])
         # the rolling trail: earlier frames of this filter under it, older ones fainter
         if trail:

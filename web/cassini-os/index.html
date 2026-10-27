@@ -607,6 +607,13 @@ body.phone .wmopt, body.phone .wmset { padding: 10px 14px; }
 .savepic svg { width: 10px; height: 10px; } .savepic svg * { fill: none; stroke: currentColor; stroke-width: 1.3; }
 .savepic .caret { font-size: 8px; opacity: .7; }
 :is(.win.full, .win[data-held]) .well.has-frame .savewrap { display: block; }
+/* "Open its mosaic" on a lone frame of a mosaic pass (cameraFeed lone()) */
+.openmosaic { all: unset; position: absolute; left: 6px; top: 5px; z-index: 3; padding: 3px 7px; border-radius: 4px; box-sizing: border-box;
+  font: 9px/1 var(--hudf); letter-spacing: .04em; color: var(--q-text); background: rgba(0,0,0,.55); border: 1px solid var(--q-line); cursor: pointer; }
+.openmosaic:hover { color: #fff; border-color: var(--q-accent); }
+.openmosaic:focus-visible { outline: 1px solid var(--q-accent); }
+.openmosaic[hidden] { display: none; }
+body.idle .openmosaic { opacity: .35; } body.idle .openmosaic:hover { opacity: 1; }
 .well.fullres .savepic { color: var(--q-accent); }
 .win.full .well.has-frame .shottag { right: 190px; }
 body.idle .win.full .savewrap { opacity: .35; } body.idle .win.full .savewrap:hover { opacity: 1; }
@@ -3283,7 +3290,30 @@ body.ambient.phone .amb-where { font-size: 18px; }
     }
     s.ready = Math.max(...s.use.map(k => catalog.et[k]));   // the picture exists once its last channel is taken
   }
+  // the sets as the data names them (build_data.py --groups: the frame server's one rule, web/frames/sets_passes.py),
+  // in the order their first frames were taken; a set that runs on into a month not loaded is made of the frames
+  // that are (pickChannels on them), and one left with a single frame is none
+  function dataSets() {
+    const n = catalog.et.length, setOf = new Int32Array(n).fill(-1), sets = [], at = new Map(), all = catalog.allOrder || order;
+    for (let i = 0; i < all.length; i++) {
+      const k = all[i], id = catalog.set[k];
+      if (id < 0) continue;
+      let r = at.get(id);
+      if (!r) at.set(id, r = { id, cam: catalog.cam[k], target: catalog.target[k], obs: catalog.obs[k], frames: [], filters: [] });
+      r.frames.push(k); r.filters.push(colourFilter(k));
+    }
+    for (const r of at.values()) {
+      if (r.frames.length < 2) continue;
+      const t = catalog.groups.sets[r.id], use = t ? t[1].map(kOf) : [];
+      if (t && use.every(q => q >= 0)) { r.kind = t[0]; r.use = use; r.ready = Math.max(...use.map(q => catalog.et[q])); }
+      else pickChannels(r);
+      for (const q of r.frames) setOf[q] = sets.length;
+      sets.push(r);
+    }
+    return { setOf, sets };
+  }
   function findSets() {
+    if (catalog.set && catalog.groups) return dataSets();
     const n = catalog.et.length, setOf = new Int32Array(n).fill(-1), sets = [], run = {}, all = catalog.allOrder || order;
     const close = cam => {
       const r = run[cam]; run[cam] = null;
@@ -3573,11 +3603,17 @@ body.ambient.phone .amb-where { font-size: 18px; }
   const STUCK = 8000;
   // Complete mosaics only (Settings > Playback): a mosaic pass shows once, finished, at its last frame
   const completeMosaics = () => !!S.get("playback.completeMosaics") && !!S.get("cameras.mosaics") && window.cassiniMosaics !== false;
-  // the pass (target and observation) of a camera's p-th frame, as the first and last index of its frames in a row
+  // a frame's pass: the pass id the data gives it (build_data.py --groups: the frame server's passes, obs_mosaic.units,
+  // which split an observation where the camera pauses or the distance changes), else its target and observation
+  const passKey = k => catalog.pass && catalog.pass[k] >= 0 ? `p${catalog.pass[k]}` : `${catalog.target[k]}|${catalog.obs[k]}`;
+  // what the data says a frame's pass is: [kind ("mosaic", "movie", "mosaic_movie" or ""), observation, pass number in
+  // it, last frame id, frames], or null (no ids in the data: the server's answers say, as they come)
+  const passInfo = k => (catalog.pass && catalog.pass[k] >= 0 && catalog.groups.passes[catalog.pass[k]]) || null;
+  // the pass of a camera's p-th frame, as the first and last index of its frames in a row
   function passSpan(cam, body, p) {
     const ks = framesOf(cam, body).ks, spans = catalog.passSpans = catalog.passSpans || new Map(), key = `${cam}|${body || ""}|${p}`;
     if (spans.has(key)) return spans.get(key);
-    const o = k => `${catalog.target[k]}|${catalog.obs[k]}`, me = o(ks[p]);
+    const o = passKey, me = o(ks[p]);
     let first = p, last = p;
     while (first > 0 && o(ks[first - 1]) === me) first--;
     while (last + 1 < ks.length && o(ks[last + 1]) === me) last++;
@@ -3595,7 +3631,7 @@ body.ambient.phone .amb-where { font-size: 18px; }
     let want = null, shownKey = null, shown = null, next = [], lastK = -2, lastReady = null, stripKey = "", stripSet = null;
     // steady size: shapeOf is the target and observation whose pass mosaic gave the picture its shape, which it
     // keeps for every picture of that observation
-    const steady = () => S.get("cameras.steady"), passOf = k => `${catalog.target[k]}|${catalog.obs[k]}`;
+    const steady = () => S.get("cameras.steady"), passOf = passKey;
     let shapeOf = null;
     // what kind of picture is up (a color composite, a mosaic, both), for how long it stays (importance)
     let kind = { color: false, mosaic: false };
@@ -3840,7 +3876,7 @@ body.ambient.phone .amb-where { font-size: 18px; }
         }).catch(() => {});
       }
       if (v.set >= 0) { channelsFrom(im, catalog.sets[v.set]); howMade(v); }
-      drillable();
+      drillable(); lone();
       // (a frame kept behind its pass's mosaic, or of a pass known to be one, asked for it already, update; one whose
       // observation's note is still out asks once the note is in, heard)
       if (v.tile && !keep && !mosaicPass(v.k) && modeOf(v.k) !== "mosaic") {
@@ -3954,10 +3990,14 @@ body.ambient.phone .amb-where { font-size: 18px; }
     // after 4 s while the server works out the pass (seconds), and the mosaic comes back in the pass lane
     // after anything took it down.
     let mosaicUrl = null, obsShown = null, obsTiles = 0, obsK = -1, obsSize = 0;
-    const mosaicPasses = new Set();   // target|observation the server said is a mosaic pass
-    const mosaicPass = k => mosaicPasses.has(passOf(k));
-    const moviePasses = new Set();    // target|observation the server said is a movie or a stare: never a mosaic, never asked
+    const mosaicPasses = new Set();   // passes (passOf) the server said is a mosaic pass
+    const moviePasses = new Set();    // passes the server said is a movie or a stare: never a mosaic, never asked
     const lapPasses = new Set();
+    // what the data says (passInfo, the server's own rule worked out ahead) counts as the server's answer
+    const dataKind = k => { const p = passInfo(k); return p ? p[0] : null; };
+    const mosaicPass = k => mosaicPasses.has(passOf(k)) || dataKind(k) === "mosaic" || dataKind(k) === "mosaic_movie";
+    const moviePass = k => moviePasses.has(passOf(k)) || dataKind(k) === "movie";
+    const lapPass = k => lapPasses.has(passOf(k)) || dataKind(k) === "mosaic_movie";
     // the movie route's rolling mosaic (movie work, window.cassiniRolling) draws mosaic movies when it is there
     const rolls = () => !!window.cassiniRolling;      // target|observation the server said is a mosaic movie (the same places, lap after lap)
     // Mosaic / Movie / Mosaic movie: the person's call for a pass (the chip on the picture, kept for that pass in this
@@ -3965,12 +4005,13 @@ body.ambient.phone .amb-where { font-size: 18px; }
     // plays its frames, a mosaic movie rolls: each place shows its newest tile)
     const passChoice = new Map();
     const modeOf = k => passChoice.get(passOf(k)) || S.get("cameras.passes") || "auto";
-    const playsAs = k => { const m = modeOf(k), o = passOf(k); return m !== "auto" ? m : lapPasses.has(o) ? "mosaic_movie" : mosaicPass(k) ? "mosaic" : moviePasses.has(o) ? "movie" : ""; };
+    const playsAs = k => { const m = modeOf(k); return m !== "auto" ? m : lapPass(k) ? "mosaic_movie" : mosaicPass(k) ? "mosaic" : moviePass(k) ? "movie" : ""; };
     const NAMES = { auto: "AUTO", mosaic: "MOSAIC", movie: "MOVIE", mosaic_movie: "MOSAIC MOVIE" };
     // the window's settings menu (winMenu: the slider button in its title bar) holds Auto center and, while the
     // window is in a pass, how that pass plays; chipText keeps it in step with the pass on screen
     const menu = winMenu(win, card);
     function chipText() {
+      lone();
       const k = lastK >= 0 ? lastK : -1, on = k >= 0 && want && (want.tile || want.held || obsShown === catalog.obs[k]);
       well.classList.toggle("inpass", !!on);
       const m = on ? modeOf(k) : "auto", p = on ? playsAs(k) : "";
@@ -4124,7 +4165,7 @@ body.ambient.phone .amb-where { font-size: 18px; }
     function mosaicOf(w, pass) {
       if (hold || window.cassiniMosaics === false || !S.get("cameras.mosaics")) return;
       const mode = modeOf(w.k), plays = playsAs(w.k);
-      if (mode === "movie" || (mode === "auto" && moviePasses.has(passOf(w.k)))) return;   // a movie plays as frames
+      if (mode === "movie" || (mode === "auto" && moviePass(w.k))) return;   // a movie plays as frames
       if (plays === "mosaic_movie" && rolls()) return;   // a mosaic movie rolls (the movie route), never the pass mosaic
       // without the rolling route, a mosaic movie shows the pass mosaic (newer tiles drawn over older)
       if (mode === "mosaic" || mode === "mosaic_movie") pass = true;   // asked for: the pass's mosaic, whatever the server's call
@@ -4257,7 +4298,7 @@ body.ambient.phone .amb-where { font-size: 18px; }
       if (near[0] === k) return near[1];
       if (!catalog.setsByPass) {
         catalog.setsByPass = new Map();
-        catalog.sets.forEach(s => { const key = `${s.cam}|${s.target}|${s.obs}`; catalog.setsByPass.has(key) ? catalog.setsByPass.get(key).push(s) : catalog.setsByPass.set(key, [s]); });
+        catalog.sets.forEach(s => { const key = `${s.cam}|${passKey(s.frames[0])}`; catalog.setsByPass.has(key) ? catalog.setsByPass.get(key).push(s) : catalog.setsByPass.set(key, [s]); });
       }
       const list = catalog.obs[k] ? catalog.setsByPass.get(`${catalog.cam[k]}|${passOf(k)}`) : null;
       let s = list ? list[0] : null;
@@ -4371,6 +4412,38 @@ body.ambient.phone .amb-where { font-size: 18px; }
     well.append(overlay, tip);
     const look = () => (window.cassiniLook ? window.cassiniLook() : "");
     const mosaicObs = () => { const k = mosaicId ? kOf(mosaicId) : -1; return k >= 0 ? `${catalog.cam[k]}|${catalog.obs[k]}` : null; };
+    // ---- a lone frame of a mosaic pass opens its mosaic ----
+    // A frame on its own (not in its pass's mosaic: the pass plays as a movie or as frames, or mosaics are off) whose
+    // pass is a mosaic (passInfo, from the data, or the server's answer) offers "Open its mosaic": the window is held on
+    // the pass's whole mosaic (its last frame's /frames/mosaic picture, made as the pass's mosaic always is), whose
+    // frames open from it like any other mosaic's.
+    const openM = document.createElement("button");
+    openM.className = "openmosaic"; openM.hidden = true; openM.textContent = "Open its mosaic";
+    openM.title = "Hold this window on the whole mosaic of the pass this frame is in (Esc goes back)";
+    for (const t of ["dblclick", "pointerdown"]) openM.addEventListener(t, e => e.stopPropagation());
+    openM.addEventListener("click", e => { e.stopPropagation(); unfocus(e); openMosaic(); });
+    well.appendChild(openM);
+    function lone() {
+      const k = lastK, on = !hold && k >= 0 && !!shown && !shown.movie && well.classList.contains("has-frame") && !well.classList.contains("mosaic")
+        && mosaicPass(k) && (playsAs(k) !== "mosaic" || !S.get("cameras.mosaics") || window.cassiniMosaics === false);
+      openM.hidden = !on;
+      return on;
+    }
+    // the last frame of frame k's pass: the data names it; else the last of the pass's frames loaded
+    function passLast(k) {
+      const info = passInfo(k);
+      if (info) return info[3];
+      const F = framesOf(cam, body), [, last] = passSpan(cam, body, lastOfCam(cam, catalog.et[k], body));
+      return catalog.id[F.ks[last]];
+    }
+    function openMosaic() {
+      if (!lone()) return;
+      const k = lastK, id = passLast(k), info = passInfo(k);
+      hold1([{ kind: "mosaic", mid: id, label: `Mosaic · ${catalog.obs[k]}`, url: sz => `${FRAMES}/frames/mosaic/${id}.webp?size=${sz}&force=1${look()}`,
+        tag: "THE PASS'S WHOLE MOSAIC", shot: catalog.obs[k],
+        lines: { ...liveLines(), colour: info ? `Mosaic of the pass's ${info[4]} frames` : "Mosaic of the pass" } }]);
+      lone();
+    }
     function mapFor() {
       if (!mosaicId || !drillOn()) return null;
       const key = `${mosaicId}|${shot.dataset.src}`;
@@ -4698,11 +4771,11 @@ body.ambient.phone .amb-where { font-size: 18px; }
       lastK = k; lastReady = ready;
       want = view(k, state.et);
       if (!want.movie) filmstrip(k);   // a movie frame moves the filmstrip when it is on screen (display)
-      // a possible mosaic tile: the frame before is of the same body and observation, and a frame of a colour
+      // a possible mosaic tile: the frame before is of the same pass (body and observation), and a frame of a colour
       // set only once its composite is shown (the mosaic is made of composites)
       const kb = framesOf(cam, body).ks[p - 1];   // p counts this feed's frames (a body window's: that body's only)
       // (or the frame after is: the first tile of a pass)
-      const same = q => q !== undefined && catalog.target[q] === catalog.target[k] && catalog.obs[q] === catalog.obs[k];
+      const same = q => q !== undefined && passOf(q) === passOf(k);
       want.tile = !want.held && (same(kb) || same(framesOf(cam, body).ks[p + 1])) && (!s || want.set >= 0 || !!want.movie);
       // a new frame of the pass whose mosaic is up: ask for the mosaic with it now, alongside the frame itself
       // (by this frame, also while the window holds an earlier colour set)
@@ -4725,7 +4798,7 @@ body.ambient.phone .amb-where { font-size: 18px; }
       // out (seconds for its plan) before the clock gets there
       if (window.cassiniMosaics !== false && (S.get("cameras.mosaics") || S.get("movies.steady")))
         for (let d = 0; d <= 120 && ks[p + d] !== undefined; d++) {
-          const q = ks[p + d], o = `${catalog.target[q]}|${catalog.obs[q]}`;
+          const q = ks[p + d], o = passOf(q);
           if (warnedObs.has(o)) continue;
           const c0 = catalog, sig = warnCtl.signal;
           warnedObs.add(o); notePending.set(o, sig);
@@ -9602,7 +9675,7 @@ void main() {
   window.cassiniAbout = { open, addTab, esc, close: () => show(false), credits: CREDITS };
 
   // ---- which version this is: this page's build id (build.py writes it), and what the frame server says it serves ----
-  const BUILD = /*BUILD*/"7a03016abb0e";
+  const BUILD = /*BUILD*/"806d586855ef";
   const FRAMES = (() => {                       // the frame server, chosen as the camera window chooses it
     const q = new URLSearchParams(location.search).get("frames");
     if (q) return q.replace(/\/$/, "");
@@ -10611,6 +10684,7 @@ async function fetchBuf(u) {
 }
 const yearOf = et => new Date(etToMs(et)).getUTCFullYear();
 const CAT_KEYS = ["id", "et", "cam", "f1", "f2", "target", "obs", "range_km", "km_per_px"];
+const GROUP_KEYS = ["set", "pass"];   // optional: each frame's filter set and pass ids (build_data.py --groups)
 function sortCatalog() {
   order = Array.from(catalog.et.keys()).sort((a, b) => catalog.et[a] - catalog.et[b]);
   catalog.sorted = Float64Array.from(order, i => catalog.et[i]);
@@ -10687,6 +10761,11 @@ function assemble(parts) {
   // a new catalog object, so pages that cache per-catalog work (Cassini OS) redo it
   const cat = {};
   for (const k of CAT_KEYS) cat[k] = [].concat(...parts.map(p => p.cat[k]));
+  // each frame's filter set and pass, with their tables, when the data has them (build_data.py --groups) in every part
+  if (parts.every(p => p.cat.set && p.cat.pass && p.cat.groups)) {
+    for (const k of GROUP_KEYS) cat[k] = [].concat(...parts.map(p => p.cat[k]));
+    cat.groups = { sets: Object.assign({}, ...parts.map(p => p.cat.groups.sets)), passes: Object.assign({}, ...parts.map(p => p.cat.groups.passes)) };
+  }
   catalog = cat; sortCatalog();
   const withAtt = parts.filter(p => p.att);
   att = withAtt.length ? buildAttitude(withAtt.map(p => ({ file: p.att, et: p.cat.et, cam: p.cat.cam }))) : null;
