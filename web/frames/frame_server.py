@@ -95,7 +95,7 @@ Routes:
                                pass's mosaic (obs_mosaic.rolling_webp), so it never empties when a lap begins;
                                fade=N: older tiles fade over N frames down to persist per cent (Rolling), 0 keeps
                                every tile as bright as the newest (Time-lapse)
-  /frames/movie/<ID>.steady.json?center=1
+  /frames/movie/<ID>.steady.json?center=1&color=0
                                what the page needs to stabilize the frame's movie pass itself, for any smoothing
                                (obs_mosaic.steady_table, Settings > Movie > Stabilize in: This computer)
   /frames/movie/<ID>.json      the pass the frame is in: its frames [id, time, filter], cadence, movie/mosaic call
@@ -1295,7 +1295,8 @@ def make_handler(site, cache, flags=None):
                     return self.send_error(400, "Not a frame id")
                 if reel._index is None:
                     return self.send_error(404, "No index of the frames")
-                info = obs_mosaic.steady_table(m.group(1), cache, parse_qs(url.query).get("center", ["1"])[0] != "0")
+                q = parse_qs(url.query)
+                info = obs_mosaic.steady_table(m.group(1), cache, q.get("center", ["1"])[0] != "0", q.get("color", ["0"])[0] != "0")
                 return self.send_json(info) if info else self.send_error(404, "Not in a pass")
             m = re.match(r"^/frames/movie/([^/]+)\.(webp|json)$", url.path)
             if m:

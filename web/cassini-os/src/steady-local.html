@@ -1,5 +1,5 @@
 <script>
-// ---------- image stabilization on this computer (Settings > Movie > Stabilize on this computer) ----------
+// ---------- image stabilization and exposure normalization on this computer (Settings > Processing > Stabilize on this computer) ----------
 // The pre-built movie frames are drawn where SPICE puts each tile (steady 0). Stabilized at any smoothing, a frame of
 // one filter in a pass whose view is the whole pass is that same picture with its tile moved by whole pixels
 // (obs_mosaic._place rounds a tile's corner to a canvas pixel at the 1024 px drawing). So the page asks once per pass
@@ -43,25 +43,83 @@
       const s = corner(t, a, t.spice[a]), p = corner(t, a, pl[a]);
       return [p[0] - s[0], p[1] - s[1]];
     }
-    return { pyRound, pyRound2, places, shift };
+    // obs_mosaic.evened_gains for one stretch's log brightnesses in order: a running median over FLASH frames, a
+    // Gaussian-weighted line over smooth frames (_gaussian_line), the gain to that line within GAIN either way, to 1/200
+    function evenedGains(L, smooth, c) {
+      const N = L.length, h = Math.floor(c.flash / 2), pad = [];
+      for (let k = 0; k < h; k++) pad.push(L[0]);
+      pad.push(...L);
+      for (let k = 0; k < h; k++) pad.push(L[N - 1]);
+      const steady = [];
+      for (let k = 0; k < N; k++) {
+        const w = pad.slice(k, k + c.flash).sort((a, b) => a - b), m = w.length >> 1;
+        steady.push(w.length % 2 ? w[m] : (w[m - 1] + w[m]) / 2);
+      }
+      const out = [];
+      for (let a = 0; a < N; a++) {
+        let s0 = 0, s1 = 0, s2 = 0, t0 = 0, t1 = 0;
+        for (let b = 0; b < N; b++) {
+          const d = b - a;
+          if (Math.abs(d) > 3 * smooth) continue;
+          const w = Math.exp(-0.5 * (d / smooth) ** 2);
+          s0 += w; s1 += w * d; s2 += w * d * d; t0 += w * steady[b]; t1 += w * d * steady[b];
+        }
+        const det = s0 * s2 - s1 * s1, ok = det > 1e-9 * Math.max(s0 * s2, 1e-300);
+        const want = ok ? (s2 * t0 - s1 * t1) / det : t0 / s0;
+        out.push(pyRound(Math.min(Math.max(Math.exp(want - L[a]), 1 / c.gain), c.gain) * 200) / 200);
+      }
+      return out;
+    }
+    // obs_mosaic.exposure_gains: {frame n: gain} from the chain ({n: [log, stretch, in colour]}), each stretch on its own
+    function gains(e, smooth) {
+      if (smooth <= 0) return {};
+      const ns = Object.keys(e.logs).map(Number).sort((a, b) => a - b), by = new Map(), out = {};
+      const inColour = ns.some(n => e.logs[n][2]);
+      for (const n of ns) { const k = e.logs[n][1]; if (!by.has(k)) by.set(k, []); by.get(k).push(n); }
+      for (const [k, run] of by) if (inColour && !e.logs[run[0]][2] && run.length < e.greyRun) { for (const n of run) out[n] = 1.0; by.delete(k); }
+      for (const run of by.values()) {
+        const g = run.length >= e.flash ? evenedGains(run.map(n => e.logs[n][0]), smooth, e) : run.map(() => 1.0);
+        run.forEach((n, i) => { out[n] = g[i]; });
+      }
+      return out;
+    }
+    // obs_mosaic._shade's lookup table for a gain on linear brightness (calibration.decode / encode at gamma)
+    function lut(g, gamma) {
+      const t = new Uint8Array(256);
+      const dec = v => gamma === "srgb" ? (v <= 0.04045 ? v / 12.92 : Math.pow((Math.max(v, 0.04045) + 0.055) / 1.055, 2.4)) : Math.pow(v, gamma);
+      const enc = x => gamma === "srgb" ? (x <= 0.0031308 ? 12.92 * x : 1.055 * Math.pow(Math.max(x, 0.0031308), 1 / 2.4) - 0.055) : Math.pow(x, 1 / gamma);
+      for (let i = 0; i < 256; i++) t[i] = Math.trunc(enc(Math.min(Math.max(dec(i / 255) * g, 0), 1)) * 255 + 0.5);
+      return t;
+    }
+    return { pyRound, pyRound2, places, shift, evenedGains, gains, lut };
   };
   window.cassiniSteadyMath = STEADY_MATH;
   if (typeof document === "undefined") return;
 
   // the worker: keeps each pass's table and its places per smoothing, moves a frame's picture
   const src = `const M = (${STEADY_MATH.toString()})();
-const tables = new Map(), placed = new Map();
+const tables = new Map(), placed = new Map(), gained = new Map(), luts = new Map();
 onmessage = async e => {
   const m = e.data;
   if (m.table) { tables.set(m.key, m.table); return; }
-  const t = tables.get(m.key), pk = m.key + ":" + m.smooth, t0 = performance.now();
-  if (!placed.has(pk)) placed.set(pk, M.places(t, m.smooth));
-  const [dx, dy] = M.shift(t, placed.get(pk), m.i), t1 = performance.now();
-  const c = new OffscreenCanvas(m.bitmap.width, m.bitmap.height), g = c.getContext("2d");
+  const t = tables.get(m.key), pk = m.key + ":" + m.steady, gk = m.key + ":" + m.exposure, t0 = performance.now();
+  if (!placed.has(pk)) placed.set(pk, M.places(t, m.steady));
+  if (m.exposure && !gained.has(gk)) gained.set(gk, M.gains(t.exposure, m.exposure));
+  const [dx, dy] = M.shift(t, placed.get(pk), m.i);
+  const gain = m.exposure ? (gained.get(gk)[m.n] ?? 1.0) : 1.0, t1 = performance.now();
+  const c = new OffscreenCanvas(m.bitmap.width, m.bitmap.height), g = c.getContext("2d", { willReadFrequently: gain !== 1.0 });
   g.drawImage(m.bitmap, dx, dy);
   m.bitmap.close();
+  if (gain !== 1.0) {
+    // _shade: the gain through its lookup table on every colour channel, alpha as it is
+    const lk = gain + ":" + t.exposure.gamma;
+    if (!luts.has(lk)) luts.set(lk, M.lut(gain, t.exposure.gamma));
+    const L = luts.get(lk), im = g.getImageData(0, 0, c.width, c.height), d = im.data;
+    for (let i = 0; i < d.length; i += 4) { d[i] = L[d[i]]; d[i + 1] = L[d[i + 1]]; d[i + 2] = L[d[i + 2]]; }
+    g.putImageData(im, 0, 0);
+  }
   const blob = await c.convertToBlob({ type: "image/png" });
-  postMessage({ id: m.id, blob, dx, dy, ms: [t1 - t0, performance.now() - t1] });
+  postMessage({ id: m.id, blob, dx, dy, gain, ms: [t1 - t0, performance.now() - t1] });
 };`;
   let worker = null, seq = 0;
   const waiting = new Map();
@@ -73,61 +131,68 @@ onmessage = async e => {
     return worker;
   };
   const S = () => window.cassiniSettings;
-  const byId = new Map();     // `${center}:${frame id}` -> {key, table, index of the id} once its pass's table is here
+  const byId = new Map();     // `${center}${color}:${frame id}` -> {key, table, a: its tile's index, n: its frame} once its pass's table is here
   const asked = new Set();
   const stats = { frames: 0, placeMs: 0, drawMs: 0, last: null };
   let urls = [];
+  const tag = (center, color) => `${center ? 1 : 0}${color ? 1 : 0}`;
   // the pass's table, asked for once (in the background); null until it is here and the pass can be done locally
-  function lookup(frames, id, center) {
-    const k = `${center ? 1 : 0}:${id}`;
+  function lookup(frames, id, center, color) {
+    const k = `${tag(center, color)}:${id}`;
     if (byId.has(k)) return byId.get(k);
     if (!asked.has(k)) {
       asked.add(k);
-      fetch(`${frames}/frames/movie/${id}.steady.json?center=${center ? 1 : 0}`, { priority: "low" }).then(r => r.ok ? r.json() : null).then(t => {
+      fetch(`${frames}/frames/movie/${id}.steady.json?center=${center ? 1 : 0}&color=${color ? 1 : 0}`, { priority: "low" }).then(r => r.ok ? r.json() : null).then(t => {
         if (!t || t.working) { setTimeout(() => asked.delete(k), 5000); return; }
-        const key = `${center ? 1 : 0}:${t.local ? t.ids[t.n[0]] : id}`;
         if (!t.local) { byId.set(k, null); return; }
+        const key = `${tag(center, color)}:${t.ids[t.n[0]]}`;
         work().postMessage({ key, table: t });
-        t.n.forEach((n, a) => byId.set(`${center ? 1 : 0}:${t.ids[n]}`, { key, table: t, a }));
+        t.n.forEach((n, a) => byId.set(`${tag(center, color)}:${t.ids[n]}`, { key, table: t, a, n }));
+        if (!byId.has(k)) byId.set(k, null);   // a frame SPICE could not place: the server shows it
         // the camera windows ask again (a paused clock would keep the server's picture otherwise)
         window.dispatchEvent(new Event("cassini-steady-local"));
+        // a brightness chain still being worked out: asked for again
+        if (t.exposure === null) setTimeout(() => { for (const n of t.n) byId.delete(`${tag(center, color)}:${t.ids[n]}`); asked.delete(k); }, 15000);
       }).catch(() => asked.delete(k));
     }
     return null;
   }
   window.cassiniSteadyLocal = {
     stats,
-    // the frame's pass table once it is here (null: the server draws the pass), asking for it as smoothFor does
-    async ready(frames, id, center = true) {
-      for (let tries = 0; tries < 120; tries++) {
-        const k = `${center ? 1 : 0}:${id}`;
-        if (byId.has(k)) return byId.get(k);
-        lookup(frames, id, center);
+    // the frame's pass table once it is here (null: the server draws the pass), asking for it as want does
+    async ready(frames, id, center = true, color = false) {
+      for (let tries = 0; tries < 240; tries++) {
+        const k = `${tag(center, color)}:${id}`;
+        if (byId.has(k) && (!byId.get(k) || byId.get(k).table.exposure !== null)) return byId.get(k);
+        lookup(frames, id, center, color);
         await new Promise(r => setTimeout(r, 500));
       }
       return null;
     },
-    // the smoothing to work out here for this frame, or 0 when the server draws it (setting off, no stabilization,
-    // a trail, a color frame, a pass not done here, or its table not here yet)
-    smoothFor(frames, id, o = {}) {
-      if (!S() || !S().get("movies.stabilizeLocal") || !window.cassiniStabilize || !window.cassiniStabilize()) return 0;
-      if (S().get("movies.trail")) return 0;
-      const e = lookup(frames, id, o.center !== false);
-      if (!e || (e.table.colour && o.color)) return 0;
-      return window.cassiniStabilize();
+    // what this computer works out for this frame ({steady, exposure} smoothing), or null when the server draws it
+    // (setting off, nothing to work out, a trail, a color frame, a pass not done here, or its table not here yet)
+    want(frames, id, o = {}) {
+      if (!S() || !S().get("movies.stabilizeLocal") || S().get("movies.trail")) return null;
+      const steady = window.cassiniStabilize ? window.cassiniStabilize() : 0, exposure = window.cassiniExposure ? window.cassiniExposure() : 0;
+      if (!steady && !exposure) return null;
+      const e = lookup(frames, id, o.center !== false, !!o.color);
+      if (!e || (e.table.colour && o.color)) return null;
+      if (exposure && !(e.table.exposure && e.table.exposure.local)) return null;
+      return { steady, exposure };
     },
-    // the picture of the frame (SPICE's places, OUT px) moved to its stabilized place: a new Image, or null
+    // the picture of the frame (SPICE's places, no gain, OUT px) moved to its stabilized place and given its
+    // exposure gain: a new Image, or null
     async apply(frames, id, im, o = {}) {
-      const e = byId.get(`${o.center !== false ? 1 : 0}:${id}`);
+      const e = byId.get(`${tag(o.center !== false, !!o.color)}:${id}`);
       if (!e) return null;
       const bitmap = await createImageBitmap(im), mid = ++seq;
-      const r = await new Promise(res => { waiting.set(mid, res); work().postMessage({ id: mid, key: e.key, i: e.a, smooth: o.smooth, bitmap }, [bitmap]); });
-      stats.frames++; stats.placeMs += r.ms[0]; stats.drawMs += r.ms[1]; stats.last = { id, dx: r.dx, dy: r.dy };
+      const r = await new Promise(res => { waiting.set(mid, res); work().postMessage({ id: mid, key: e.key, i: e.a, n: e.n, steady: o.steady || 0, exposure: o.exposure || 0, bitmap }, [bitmap]); });
+      stats.frames++; stats.placeMs += r.ms[0]; stats.drawMs += r.ms[1]; stats.last = { id, dx: r.dx, dy: r.dy, gain: r.gain };
       const url = URL.createObjectURL(r.blob), out = new Image();
       urls.push(url);
       if (urls.length > 8) URL.revokeObjectURL(urls.shift());
       await new Promise((res, rej) => { out.onload = res; out.onerror = rej; out.src = url; });
-      out.dataset.steadyLocal = `${r.dx},${r.dy}`;
+      out.dataset.steadyLocal = `${r.dx},${r.dy},${r.gain}`;
       return out;
     },
   };

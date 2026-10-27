@@ -2093,7 +2093,7 @@ def evened_gains(logs, smooth):
             for own, want in zip(L, target)]
 
 
-def steady_table(frame_id, cache, centre=True):
+def steady_table(frame_id, cache, centre=True, colour=False):
     """What a browser needs to stabilize the pass frame_id is in by itself (web/cassini-os/src/steady-local.js): the
     pass's stabilization chain (steady_chain), each tile's SPICE place and box, and the movie's view (movie_rect)
     with its scale at OUT, so steady_places and the integer place _place draws a tile at are worked out in the page
@@ -2106,11 +2106,17 @@ def steady_table(frame_id, cache, centre=True):
     found = unit_of(frame_id)
     if not found or found[1] < 0:
         return None
-    return _steady_table(*found, cache, centre)
+    return _steady_table(*found, cache, centre, colour)
 
 
-def _steady_table(u, n, cache, centre=True):
-    """steady_table for frame n of pass u."""
+EXPOSURE_CHAIN_STEADY = 0   # the stabilization the brightness chain the page evens is measured with (SPICE's places)
+
+
+def _steady_table(u, n, cache, centre=True, colour=False):
+    """steady_table for frame n of pass u. "exposure": the pass's brightness chain as the movie is drawn (colour,
+    centre; exposure_chain at EXPOSURE_CHAIN_STEADY) and what exposure_gains needs besides, so the page evens it for
+    any smoothing; "local" false where the gain cannot be put on the drawn frame (a tile with a gain of its own, or
+    the detail filter, which runs after the gain); null while the chain is worked out (in the background)."""
     if u.get("track") or not calibration.step("align"):
         return {"local": False}
     rec = _record(u, cache)
@@ -2128,7 +2134,16 @@ def _steady_table(u, n, cache, centre=True):
     ns = sorted(chain)
     tiles = {n: tile(u, n, cache, p["display_scale"]) for n in ns}
     rect = movie_rect(fp, tiles[ns[0]], radius, centre)
-    return {"local": True, "fixed": True, "ids": [fr[1] for fr in u["frames"]], "n": ns,
+    how = (bool(colour), bool(centre), EXPOSURE_CHAIN_STEADY)
+    exposure = None
+    if _exposure_ready(u, cache, rec, how):
+        logs = exposure_chain(u, cache, p, *how)
+        exposure = {"local": not p["display_scale"].get("filled") and all(tiles[m].get("gain", 1.0) == 1.0 for m in ns),
+                    "logs": {str(m): v for m, v in logs.items()}, "gamma": p["display_scale"].get("gamma", 2.2),
+                    "flash": EXPOSURE_FLASH, "gain": EXPOSURE_GAIN, "greyRun": EXPOSURE_GREY_RUN, "most": EXPOSURE_MOST}
+    else:
+        warm_movie(u, n, 6, cache, exposure=how)
+    return {"local": True, "fixed": True, "ids": [fr[1] for fr in u["frames"]], "n": ns, "exposure": exposure,
             "chain": [chain[n] for n in ns], "spice": [tiles[n]["offset"] for n in ns],
             "box": [tiles[n]["box"] for n in ns], "view": list(rect), "out": OUT, "k": OUT / max(rect[2], rect[3]),
             "colour": bool(p.get("colour")), "most": STEADY_MOST, "detail": bool(p["display_scale"].get("filled"))}
