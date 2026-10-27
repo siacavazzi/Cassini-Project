@@ -4,6 +4,7 @@
 # round the ground-calibration dust ring (sample 887, line 636 from the top; CISSCAL's
 # "line 388" counts from the bottom). Run from the repo root with CASSINI_DATA and
 # CASSINI_CISSCAL set.
+# EVIDENCE_STEP=dark compares the dark current step instead (off: before, on: after).
 # usage: render_frames.py OUTDIR ID[:name] ...
 import os
 import sys
@@ -15,6 +16,7 @@ import flat_field as ff  # noqa: E402
 import stacking  # noqa: E402
 
 out = sys.argv[1]
+STEP = os.environ.get("EVIDENCE_STEP", "flat")
 os.makedirs(out, exist_ok=True)
 
 
@@ -34,7 +36,7 @@ def label(img, text):
 for arg in sys.argv[2:]:
     fid, _, name = arg.partition(":")
     name = name or fid
-    with cal.stepping("flat"):
+    with cal.stepping(STEP):
         lbl, before, n = load(fid)
     _, after, _ = load(fid)
     info = lbl.get_info()
@@ -59,7 +61,7 @@ for arg in sys.argv[2:]:
         return cv2.resize(c, (size // 2, size // 2), interpolation=cv2.INTER_NEAREST)
 
     rows = []
-    for tag, x in (("before (no flat field)", before), ("after (flat field)", after)):
+    for tag, x in ((f"before (no {STEP})", before), (f"after ({STEP})", after)):
         s, h = show(x), high(x)
         rows.append(np.hstack([label(cv2.resize(s, (size, size), interpolation=cv2.INTER_AREA), tag),
                                label(cv2.resize(h, (size, size), interpolation=cv2.INTER_AREA), "high-pass +-4%"),
@@ -70,7 +72,7 @@ for arg in sys.argv[2:]:
              f"dust {ff.dust_name(info) if info.get('INSTRUMENT_ID') == 'ISSNA' else '-'}")
     bar = np.full((36, sheet.shape[1]), 32, np.uint8)
     cv2.putText(bar, title.replace('"', ""), (8, 25), cv2.FONT_HERSHEY_SIMPLEX, 0.6, 255, 1, cv2.LINE_AA)
-    cv2.imwrite(os.path.join(out, f"{name}_before_after.png"), np.vstack([bar, sheet]))
+    cv2.imwrite(os.path.join(out, f"{name}_{STEP}_before_after.png"), np.vstack([bar, sheet]))
     # how even the lit part is, before and after: the high-pass spread (lower is flatter)
     for tag, x in (("before", before), ("after", after)):
         hp = x / np.maximum(cv2.GaussianBlur(x, (0, 0), 20), 1e-12)

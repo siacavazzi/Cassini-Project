@@ -62,30 +62,34 @@ def _warn(what):
 
 
 """
-Reads an ISIS 3 cube (one band of 32-bit floats, tiled or band sequential) as a float32 image, special pixels NaN.
+Reads an ISIS 3 cube of 32-bit floats (tiled or band sequential) as a float32 image, special pixels NaN: (lines,
+samples) for one band, (bands, lines, samples) for more.
 """
 def read_cube(path):
     with open(path, "rb") as f:
         raw = f.read()
     head = raw[:65536].decode("latin1")
 
-    def key(name):
-        return re.search(r"(?<![A-Za-z])" + name + r"\s*=\s*(\S+)", head).group(1)
+    def key(name, default=None):
+        m = re.search(r"(?<![A-Za-z])" + name + r"\s*=\s*(\S+)", head)
+        return m.group(1) if m else default
 
     start, samples, lines = int(key("StartByte")) - 1, int(key("Samples")), int(key("Lines"))
+    bands = int(key("Bands", "1"))
     if key("Type") != "Real":
         raise ValueError(f"{path}: not a cube of floats")
     dtype = "<f4" if key("ByteOrder") == "Lsb" else ">f4"
     if key("Format") == "Tile":
         ts, tl = int(key("TileSamples")), int(key("TileLines"))
         rows, cols = -(-lines // tl), -(-samples // ts)
-        a = np.frombuffer(raw, dtype, count=rows * cols * tl * ts, offset=start)
-        a = a.reshape(rows, cols, tl, ts).transpose(0, 2, 1, 3).reshape(rows * tl, cols * ts)[:lines, :samples]
+        a = np.frombuffer(raw, dtype, count=bands * rows * cols * tl * ts, offset=start)
+        a = a.reshape(bands, rows, cols, tl, ts).transpose(0, 1, 3, 2, 4).reshape(bands, rows * tl, cols * ts)
+        a = a[:, :lines, :samples]
     else:
-        a = np.frombuffer(raw, dtype, count=samples * lines, offset=start).reshape(lines, samples)
+        a = np.frombuffer(raw, dtype, count=bands * samples * lines, offset=start).reshape(bands, lines, samples)
     a = a.astype(np.float32)
     a[~np.isfinite(a) | (np.abs(a) > SPECIAL)] = np.nan
-    return a
+    return a[0] if bands == 1 else a
 
 
 def _value(info, key, default=""):

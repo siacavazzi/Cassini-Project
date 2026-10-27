@@ -16,26 +16,27 @@ the label allows:
   1. undo the PNG stretch (only possible for 8 bit "TABLE" frames, and for 12 bit
      frames whose brightest and darkest pixels are less than 254 DN apart)
   2. undo the camera's 12 -> 8 bit square root table
-  3. subtract the bias (BIAS_STRIP_MEAN)
-  4. divide by the exposure time, corrected for the shutter offset
-  4. correct the camera's nonlinearity (CISSCAL's linearize tables, by gain state)
-  5. take the flat field out: dust rings, mottle and the ground calibration's flat
-     (flat_field.py, CISSCAL's own maps; the "flat" step, Settings > Processing)
+  3. subtract the bias: fitted down the frame from the overclocked pixels in each line's
+     prefix where the archive has them (overclock_bias), else BIAS_STRIP_MEAN
+  4. subtract the dark current and hot pixels (dark_current.py; the "dark" step)
+  5. correct the camera's nonlinearity (CISSCAL's linearize tables, by gain state)
   6. divide by the exposure time, corrected for the shutter offset
-  7. scale by the gain state, the pixel summation and the sensor's decline over time
-  8. divide by the filter's sensitivity to sunlight (filter_calibration.csv) and the
+  7. take the flat field out: dust rings, mottle and the ground calibration's flat
+     (flat_field.py, CISSCAL's own maps; the "flat" step, Settings > Processing)
+  8. scale by the gain state, the pixel summation and the sensor's decline over time
+  9. divide by the filter's sensitivity to sunlight (filter_calibration.csv) and the
      distance from the sun, giving I/F
 
-Not done: dark current (CISSCAL's model needs each line's readout timing; a few DN on
-long exposures only), the overclocked pixels' bias fit (the bias strip mean is used, as
-CISSCAL does for lossy frames), 2 Hz noise and anti-blooming pixel pair filters (which
-CISSCAL itself counts as filters rather than calibration).
+Not done: bit weights (the converter's uneven steps, under 1 DN, mostly lost in the 8-bit
+archive), and the 2 Hz noise and anti-blooming pixel pair filters (which CISSCAL itself
+counts as filters rather than calibration, and ISIS's cisscal leaves out).
 
 Frames that can't be unstretched return None and the caller keeps the old behavior.
 """
 import contextlib
 import contextvars
 import datetime
+import gzip
 import json
 import math
 import os
@@ -43,6 +44,7 @@ import os
 import cv2
 import numpy as np
 
+import dark_current as dc
 import data_source as ds
 import flat_field as ff
 
@@ -328,11 +330,68 @@ level, so the darkest 0.1% of the frame is taken instead, leaving out the lost l
 """
 def bias_of(png, info):
     bias = float(_value(info, "BIAS_STRIP_MEAN", "0"))
+    lossy = _value(info, "INST_CMPRS_TYPE", "").upper() == "LOSSY"
+    if lossy and _fsw(info) <= 1.3:
+        bias = 0  # the SIS: a lossy frame's strip mean is not valid with flight software 1.2 and 1.3
     if bias <= 0 and ds.lut8():
         stored = stored_values(png, info)
         kept = stored[np.asarray(png) > 0]
         bias = float(np.percentile(kept, 0.1)) if kept.size else 0.0
     return bias
+
+
+def _fsw(info):
+    try:
+        return float(_value(info, "FLIGHT_SOFTWARE_VERSION_ID", "0"))
+    except ValueError:
+        return 0.0
+
+
+"""
+CISSCAL's bias from the overclocked pixels (cisscal ComputeBias, OverclockFit; ciss2isis ComputeOverclockAvg): the
+two overclocked pixel sums each line's binary prefix carries (bytes 12-13 and 22-23, the lean archive's
+.prefix.gz), averaged as the summing mode needs (one valid column before flight software 1.3), in DN (through the
+12 -> 8 bit table for TABLE frames), and a straight line fitted to them down the frame: the bias at each line. Lines
+lost in downlink (no valid pixels) are left out of the fit. None where cisscal uses the strip mean instead (a lossy
+frame, whose overclocks are corrupt) or the prefixes aren't there.
+"""
+def overclock_bias(info):
+    path = info.get("path")
+    if not path or _value(info, "INST_CMPRS_TYPE", "").upper() == "LOSSY":
+        return None
+    base = str(path).split(".")[0]
+    try:
+        raw = gzip.decompress(ds.read_bytes(base + ".prefix.gz"))
+    except Exception:
+        return None
+    lines = int(_value(info, "LINES", "0") or 0)
+    if lines <= 0 or len(raw) % lines:
+        return None
+    prefix = np.frombuffer(raw, np.uint8).reshape(lines, -1)
+    if prefix.shape[1] < 24:
+        return None
+    first = prefix[:, 12:14].copy().view(">i2")[:, 0].astype(np.float64)
+    last = prefix[:, 22:24].copy().view(">i2")[:, 0].astype(np.float64)
+    sums = {"FULL": 1, "SUM2": 2, "SUM4": 4}.get(_value(info, "INSTRUMENT_MODE_ID", "FULL"), 1)
+    if _fsw(info) < 1.3:
+        avg = last
+    elif sums == 1:
+        avg = (first / 2 + last / 6) / 2
+    elif sums == 2:
+        avg = (first + last / 3) / 2
+    else:
+        avg = (first + last) / 2
+    if _value(info, "DATA_CONVERSION_TYPE") == "TABLE":
+        avg = LUT[np.clip(avg, 0, 255).astype(np.int64)]
+    kept = (prefix[:, 2].astype(int) * 256 + prefix[:, 3]) > 0
+    if kept.sum() < 2:
+        return None
+    avg = avg.copy()
+    if avg[0] > 2 * avg[1]:
+        avg[0] = avg[1]
+    n = np.arange(1, lines + 1, dtype=np.float64)
+    b, a = np.polyfit(n[kept], avg[kept], 1)
+    return a + b * n
 
 
 """
@@ -371,6 +430,22 @@ def calibrate(png, info, image=None):
         dn = np.interp(dn, np.arange(256), LUT)
         bias = LUT[int(min(max(bias, 0), 255))]
     dn = dn - bias
+    # what changes from pixel to pixel before the nonlinearity: the overclocked pixels' bias, line by line, in place
+    # of the strip mean, and the dark current (the "dark" step); with neither, every step up to the shutter is
+    # worked out per code
+    shape = pixels.shape if codes else dn.shape
+    offset = None
+    lines_bias = overclock_bias(info)
+    if lines_bias is not None:
+        rows = np.interp(np.linspace(0, len(lines_bias) - 1, shape[0]), np.arange(len(lines_bias)), lines_bias)
+        offset = (rows - bias)[:, None] * np.ones((1, shape[1]))
+    if step("dark"):
+        dark = dc.dark_for(info, shape)
+        if dark is not None:
+            offset = dark.astype(np.float64) if offset is None else offset + dark
+    if offset is not None:
+        dn = (_lookup(pixels, dn) if codes else dn) - offset
+        codes = False
     # CISSCAL's linearize: the factor for the whole DN below (a negative DN takes DN 0's)
     dn = dn * linearity(camera, GAIN_STATES[gain])[np.clip(dn, 0, 4095).astype(np.int64)]
 
@@ -494,12 +569,12 @@ The pipeline's steps a request turns off (Settings > Processing; the picture rou
 each one does: "stack" (repeat exposures of the same filter merged, stacking.load_stacked and load_hdr), "hdr" (an
 exposure bracket merged into one picture in mosaics and movies, stacking.load_hdr; off merges only identical
 exposures, a plain stack), "fill" (pixels lost in downlink filled from round them), "calibrate" (every frame put on
-I/F and one display scale; off shows each frame on the archive's own stretch), "flat" (calibrate's flat field: dust
-rings, mottle and the detector's flat taken out, flat_field.py) and "align" (a color set's channels moved onto one
-another). Every step is on by default; off steps go into the cache names (variant), so the pictures
-made with every step on keep their names.
+I/F and one display scale; off shows each frame on the archive's own stretch), "dark" (calibrate's dark current and
+hot pixels taken out, dark_current.py), "flat" (calibrate's flat field: dust rings, mottle and the detector's flat
+taken out, flat_field.py) and "align" (a color set's channels moved onto one another). Every step is on by default;
+off steps go into the cache names (variant), so the pictures made with every step on keep their names.
 """
-STEPS = ("stack", "hdr", "fill", "calibrate", "flat", "align")
+STEPS = ("stack", "hdr", "fill", "calibrate", "dark", "flat", "align")
 _off = contextvars.ContextVar("off", default=frozenset())
 
 

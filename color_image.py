@@ -332,8 +332,8 @@ def science_frame(path):
     saturated = cal.saturated(codes, info)
     note = (f"I/F of {info.get('PRODUCT_ID', path)} (Cassini ISS), float32, {iof.shape[1]} x {iof.shape[0]} px, made by the "
             f"Cassini Project's calibration.calibrate: bias, shutter offset, exposure, gain, filter and sensitivity "
-            f"corrections, nonlinearity, flat field (dust rings and mottle, CISSCAL's maps) and the Sun's distance. "
-            f"Not dark-current corrected (CISSCAL does that too). "
+            f"corrections, bias from the overclocked pixels, dark current and hot pixels, nonlinearity, flat field (dust "
+            f"rings and mottle) and the Sun's distance, with CISSCAL's own calibration maps. "
             f"Lost pixels (downlink): NaN, {int((~valid).sum())}. Saturated pixels: {int(saturated.sum())}.")
     return iof, ds.read_text(lbl.path), note
 
