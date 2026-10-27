@@ -9399,14 +9399,30 @@ function frame(now) {
     const M = probe.map, g = new THREE.Group();
     if (!M) return g;
     const lv = M.levels[M.levels.length - 1], [lx, ly] = M.landing_px, half = PATCH / 2 / lv.m_per_px;
-    const geo = new THREE.PlaneGeometry(PATCH, PATCH, 1, 1), uv = geo.attributes.uv;
-    for (let i = 0; i < uv.count; i++) uv.setXY(i, (lx + (uv.getX(i) * 2 - 1) * half) / M.width, 1 - (ly - (uv.getY(i) * 2 - 1) * half) / M.height);
+    // rings closer together toward the middle (a few centimetres apart around the impact hole, metres at the edge),
+    // the relief (relief()) on them; east is +x, north +y, up +z
+    const RINGS = 120, SEGS = 160, r0 = 0.02, grow = Math.log(PATCH / 2 / r0) / (RINGS - 1), pos = [0, 0, relief(0, 0)], uvs = [], idx = [];
+    for (let i = 0; i < RINGS; i++) for (let j = 0; j < SEGS; j++) {
+      const r = r0 * Math.exp(grow * i), a = j / SEGS * Math.PI * 2, x = r * Math.cos(a), y = r * Math.sin(a);
+      pos.push(x, y, relief(x, y));
+    }
+    for (let j = 0; j < SEGS; j++) idx.push(0, 1 + j, 1 + (j + 1) % SEGS);
+    for (let i = 0; i < RINGS - 1; i++) for (let j = 0; j < SEGS; j++) {
+      const a = 1 + i * SEGS + j, b = 1 + i * SEGS + (j + 1) % SEGS;
+      idx.push(a, a + SEGS, b, b, a + SEGS, b + SEGS);
+    }
+    for (let i = 0; i < pos.length; i += 3) uvs.push((lx + pos[i] / lv.m_per_px) / M.width, 1 - (ly - pos[i + 1] / lv.m_per_px) / M.height);
+    const geo = new THREE.BufferGeometry();
+    geo.setAttribute("position", new THREE.Float32BufferAttribute(pos, 3));
+    geo.setAttribute("uv", new THREE.Float32BufferAttribute(uvs, 2));
+    geo.setIndex(idx); geo.computeVertexNormals();
     const mat = new THREE.ShaderMaterial({
-      uniforms: { map: { value: new THREE.TextureLoader().load(lv.file) }, uLight: { value: 1 }, uOp: { value: 0 }, uHaze: { value: new THREE.Vector3(0.8, 0.53, 0.27) } },
-      vertexShader: VHEAD + `varying vec2 vUv; varying vec2 vP; void main(){ vUv = uv; vP = position.xy; gl_Position = projectionMatrix * modelViewMatrix * vec4(position, 1.0);
+      uniforms: { map: { value: new THREE.TextureLoader().load(lv.file) }, uLight: { value: 1 }, uOp: { value: 0 }, uHaze: { value: new THREE.Vector3(0.8, 0.53, 0.27) },
+        uSunL: { value: new THREE.Vector3(0, 0, 1) }, uDay: { value: 1 } },
+      vertexShader: VHEAD + `varying vec2 vUv; varying vec2 vP; varying vec3 vN; void main(){ vUv = uv; vP = position.xy; vN = normal; gl_Position = projectionMatrix * modelViewMatrix * vec4(position, 1.0);
         #include <logdepthbuf_vertex>
       }`,
-      fragmentShader: FHEAD + `uniform sampler2D map; uniform float uLight; uniform float uOp; uniform vec3 uHaze; varying vec2 vUv; varying vec2 vP;
+      fragmentShader: FHEAD + `uniform sampler2D map; uniform float uLight; uniform float uOp; uniform vec3 uHaze; uniform vec3 uSunL; uniform float uDay; varying vec2 vUv; varying vec2 vP; varying vec3 vN;
         void main(){
           #include <logdepthbuf_fragment>
           // the mosaic is grey: the ground under Titan's orange skylight, the brighter pebbles paler (as in the
@@ -9418,7 +9434,12 @@ function frame(now) {
           for (int i = 0; i < 8; i++) { float a = float(i) * 0.7854; ring += dot(texture2D(map, vUv + vec2(cos(a), sin(a)) * 4.0 * px).rgb, vec3(0.333)); }
           float d = length(vP);
           k = mix(ring / 8.0, k, smoothstep(2.0, 3.5, d));
-          vec3 c = (0.38 + 0.9 * k) * vec3(0.86, 0.56, 0.31) * uLight;
+          // the hue of the ground in the probe's own color picture of it (PIA07232)
+          vec3 c = (0.38 + 0.9 * k) * vec3(0.86, 0.64, 0.38) * uLight;
+          // the relief: the skylight from above (the walls of the impact hole get less of it), and the Sun's share,
+          // so flat ground keeps its shade
+          vec3 n = normalize(vN);
+          c *= clamp(0.82 + 0.18 * n.z + 0.5 * uDay * (max(dot(n, uSunL), 0.0) - max(uSunL.z, 0.0)), 0.3, 1.3);
           // the probe's shade on the ground under it (it stands at the patch's centre), then the haze between it and
           // the ground farther off: by the patch's edge the ground is lost in it
           c *= 1.0 - 0.55 * exp(-d * d / 0.7);
@@ -9428,7 +9449,109 @@ function frame(now) {
           gl_FragColor = vec4(c, a * uOp);
         }`,
       transparent: true, depthWrite: false });
-    g.add(new THREE.Mesh(geo, mat)); g.userData.mat = mat;
+    g.add(new THREE.Mesh(geo, mat), pebbles()); g.userData.mat = mat;
+    return g;
+  }
+  // ---------- the ground at the landing site, up close ----------
+  // From what the probe measured and saw there (Karkoschka et al. 2007; Keller et al. 2008; Schröder et al. 2017,
+  // "Bouncing on Titan"): a damp, sand-like plain strewn with rounded pebbles of water ice, 3 mm to 15 cm across, their
+  // bases sunk and eroded. Huygens hit the ground 70 cm north of where it came to rest, made a hole 12 cm deep and
+  // 53 cm in radius, bounced out of it and slid south. It stands with DISR's side toward azimuth 193 degrees (13 west
+  // of south), DISR's side-looking camera 48 cm above the ground; that camera's picture of the ground in front of it
+  // (PIA07232, "First color view of Titan's surface") gives the pebbles in front of it, where it shows them and as
+  // large as it shows them, and the mix of sizes for the rest of the ground around it.
+  const DISR_AZ = 193 * Math.PI / 180, LAND_HEAD = -(193 - 90) * Math.PI / 180;   // LAND_HEAD turns the model's +X (DISR's side) to it
+  const SLI = { h: 0.48, out: 0.7 };   // the camera: 48 cm up, at the edge of the probe on DISR's side
+  const HOLE = { x: 0.7 * Math.sin(10 * Math.PI / 180), y: 0.7 * Math.cos(10 * Math.PI / 180), r: 0.53, depth: 0.12 };
+  // a smooth hash noise, for the gentle unevenness of the ground (a centimetre or two over a metre or so)
+  const hash = (x, y) => { const h = Math.sin(x * 127.1 + y * 311.7) * 43758.5453; return h - Math.floor(h); };
+  function noise(x, y) {
+    const xi = Math.floor(x), yi = Math.floor(y), xf = x - xi, yf = y - yi, u = xf * xf * (3 - 2 * xf), v = yf * yf * (3 - 2 * yf);
+    const a = hash(xi, yi), b = hash(xi + 1, yi), c = hash(xi, yi + 1), d = hash(xi + 1, yi + 1);
+    return (a + (b - a) * u + (c - a) * v + (a - b - c + d) * u * v) * 2 - 1;
+  }
+  // the ground's height (m) at x east, y north (m) from where the probe stands
+  function relief(x, y) {
+    let z = 0.012 * noise(x * 0.8, y * 0.8) + 0.006 * noise(x * 2.3 + 7, y * 2.3 - 3);
+    const hr = Math.hypot(x - HOLE.x, y - HOLE.y) / HOLE.r;
+    if (hr < 1) z -= HOLE.depth * (1 - hr * hr) * (1 - hr * hr);
+    z += 0.015 * Math.exp(-(((hr - 1.1) / 0.18) ** 2));   // the rim of thrown-out ground
+    // under the probe itself, level
+    return z * (1 - Math.exp(-(((x * x + y * y) / 0.3) ** 2)));
+  }
+  // the pebbles in the picture: its pixels (a 316 x 628 picture, horizon at row 98), the base's row, the width and
+  // the height on the picture, and the color. The picture covers about 28 x 56 degrees: the scale is set so the large
+  // flat pebble just below the middle (the first) is 85 cm from the probe, as ESA's caption has it, which makes it
+  // 19 cm across (the caption's 15 cm is its width less the eroded rim)
+  const PHOTO = { w: 316, horizon: 98, rows: [
+    [97, 426, 125, 55, 0xdca462], [190, 440, 68, 72, 0xc29157], [35, 466, 70, 35, 0xce995c], [122, 486, 85, 45, 0xce995d], [35, 513, 75, 42, 0xdca463],
+    [123, 578, 125, 55, 0xd49e5f], [237, 568, 95, 38, 0xdfa664], [303, 343, 30, 40, 0xbe8e55], [245, 340, 45, 27, 0xc59257], [203, 352, 25, 15, 0xd6a061],
+    [303, 413, 30, 20, 0xd29e5f], [303, 478, 30, 18, 0xd9a261], [62, 343, 35, 30, 0xb78853], [65, 280, 35, 12, 0xb0824e], [67, 250, 25, 10, 0xbe8f59],
+    [270, 308, 22, 12, 0xd9a362], [230, 303, 28, 12, 0xba8b53], [33, 298, 35, 12, 0xab804c], [170, 423, 18, 12, 0xad804f], [220, 380, 25, 10, 0xc69459],
+    [225, 273, 20, 8, 0xb78850]] };
+  // a seeded random number generator, so the ground is the same every time
+  function rng(seed) { return () => { seed |= 0; seed = seed + 0x6D2B79F5 | 0; let t = Math.imul(seed ^ seed >>> 15, 1 | seed); t = t + Math.imul(t ^ t >>> 7, 61 | t) ^ t; return ((t ^ t >>> 14) >>> 0) / 4294967296; }; }
+  function pebbles() {
+    const list = [];   // x, y (m), long, short, thick (m), the long side's angle from east (counterclockwise), color
+    // the picture's: from the camera at the probe's edge, out along DISR's azimuth
+    const cx = SLI.out * Math.sin(DISR_AZ), cy = SLI.out * Math.cos(DISR_AZ);
+    const k = Math.atan(SLI.h / 0.85) / (PHOTO.rows[0][1] - PHOTO.horizon);   // radians a pixel
+    PHOTO.rows.forEach(([px, base, w, h, col]) => {
+      const dep = (base - PHOTO.horizon) * k, d = SLI.h / Math.tan(dep), az = DISR_AZ + (px - PHOTO.w / 2) * k, slant = Math.hypot(d, SLI.h);
+      // as wide as it looks from the camera, measured at its middle (a little beyond its base)
+      let D = w * k * slant;
+      for (let it = 0; it < 3; it++) D = w * k * Math.hypot(d + 0.4 * D, SLI.h);
+      // how thick: what of its height on the picture is not its top seen from above
+      const T = Math.max(0.45 * D, Math.min(0.75 * D, (h * k * slant - 0.5 * D * Math.sin(dep)) / Math.cos(dep)));
+      list.push([cx + (d + 0.4 * D) * Math.sin(az), cy + (d + 0.4 * D) * Math.cos(az), D, 0.8 * D, T, -az, col]);   // long side across the view
+    });
+    // the rest of the ground, out to 14 m: the same kind of pebbles at the density the picture shows, about 25 a
+    // square metre 4 cm and larger, more of the small than of the large (as the number larger than D goes as 1/D^2),
+    // up to 20 cm; farther out only the larger ones are drawn. Not where the picture shows the ground, not under the
+    // probe, not in the impact hole
+    const R = rng(14012005), inPhoto = (x, y) => {
+      const dx = x - cx, dy = y - cy, d = Math.hypot(dx, dy), off = Math.atan2(dx, dy) - DISR_AZ;
+      return d > 0.3 && d < 3.2 && Math.abs(Math.atan2(Math.sin(off), Math.cos(off))) < 0.26;
+    };
+    const tones = PHOTO.rows.map(r => r[4]);
+    for (let r = 0.72; r < 14; r += 0.05) {
+      const Dmin = Math.max(0.02, 0.012 * r), n = 25 * (0.04 / Dmin) ** 2 * 2 * Math.PI * r * 0.05;
+      for (let m = Math.floor(n + R()); m > 0; m--) {
+        const a = R() * Math.PI * 2, rr = r + R() * 0.05, x = rr * Math.sin(a), y = rr * Math.cos(a);
+        if (inPhoto(x, y) || Math.hypot(x - HOLE.x, y - HOLE.y) < HOLE.r) continue;
+        const D = Dmin / Math.sqrt(1 - R() * (1 - (Dmin / 0.2) ** 2));
+        list.push([x, y, D, D * (0.65 + 0.3 * R()), D * (0.45 + 0.25 * R()), R() * Math.PI, tones[Math.floor(R() * tones.length)]]);
+      }
+    }
+    // a lumpy, rounded stone, unit size: a sphere pushed in and out a little, darker toward its base where it sits in
+    // the damp ground; finer near the probe
+    function stone(w, h) {
+      const geo = new THREE.SphereGeometry(1, w, h), p = geo.attributes.position, shade = [];
+      for (let i = 0; i < p.count; i++) {
+        const x = p.getX(i), y = p.getY(i), z = p.getZ(i), f = 1 + 0.14 * Math.sin(3.1 * x + 1.7) * Math.cos(2.3 * z - 0.4) + 0.06 * Math.sin(4.3 * x - 3.1 * z + 1.0);
+        p.setXYZ(i, x * f, -z * f, y * f);   // the sphere's poles to the sides, +z up
+        const s = 0.5 + 0.5 * Math.min(1, (y + 0.5) / 1.1); shade.push(s, s, s);
+      }
+      geo.setAttribute("color", new THREE.Float32BufferAttribute(shade, 3));
+      geo.computeVertexNormals();
+      return geo;
+    }
+    // under Titan's haze most of the light is the sky's, from all over: a glow of it besides the scene's Sun
+    const mat = new THREE.MeshStandardMaterial({ vertexColors: true, roughness: 1, metalness: 0, emissive: 0x2a1c0e }), g = new THREE.Group();
+    const mtx = new THREE.Matrix4(), q = new THREE.Quaternion(), zAxis = new THREE.Vector3(0, 0, 1), c = new THREE.Color();
+    [[list.filter(a => Math.hypot(a[0], a[1]) < 4), stone(18, 12)], [list.filter(a => Math.hypot(a[0], a[1]) >= 4), stone(9, 6)]].forEach(([part, geo]) => {
+      const mesh = new THREE.InstancedMesh(geo, mat, part.length);
+      part.forEach(([x, y, L, W, T, yaw, col], i) => {
+        // sunk a little into the ground (their bases look eroded), on the ground's slope where it lies
+        mtx.compose(new THREE.Vector3(x, y, relief(x, y) + 0.3 * T), q.setFromAxisAngle(zAxis, yaw), new THREE.Vector3(L / 2, W / 2, T / 2));
+        mesh.setMatrixAt(i, mtx);
+        // lit by the scene's Sun, so darker than their color in the picture, to stand as much brighter than the ground
+        // as they do there (about a fifth)
+        mesh.setColorAt(i, c.setHex(col).multiplyScalar(0.5));
+      });
+      mesh.frustumCulled = false;
+      g.add(mesh);
+    });
     return g;
   }
   // where the probe came down: the descent team's landing point (the one the viewer's landing-site map is centred on,
@@ -9483,6 +9606,8 @@ function frame(now) {
     // the light on Titan's ground is mostly the sky's (the haze scatters nearly all of the sunlight), a little the Sun's
     const day = ease((uSun.value.dot(up) + 0.2) / 0.55);
     mat.uniforms.uLight.value = (0.3 + 0.75 * day) * (0.8 + 0.4 * Math.max(0, uSun.value.dot(up)));
+    mat.uniforms.uSunL.value.set(uSun.value.dot(east), uSun.value.dot(north), uSun.value.dot(up));
+    mat.uniforms.uDay.value = day;
     mat.uniforms.uHaze.value.set(0.8, 0.53, 0.27).multiplyScalar(0.3 + 0.75 * day);
     G.visible = on && mat.uniforms.uOp.value > 0.01;
   }
@@ -9523,7 +9648,7 @@ function frame(now) {
     if (!P) P = build();
     P.root.visible = true; P.root.scale.setScalar(1e-6);
     P.root.position.copy(probeObj.position);
-    orient(state.et, 0, null);
+    orient(state.et, LAND_HEAD, null);
     pose(EV.landing + 3600, 0);
     placeGround(state.et, 0, true);
   }
@@ -9729,7 +9854,7 @@ function frame(now) {
       P.root.position.copy(probeObj.position).add(toScene(dr, tmpV).multiplyScalar(1 / KM));
       // standing on the ground, tilted while it flies so the chutes hang straight up the air flow; the drawn spin, slow
       // enough to read, stops at the touchdown where the landed probe stands
-      H.spin = SPIN * (Math.min(H.T, tLand()) - tLand());
+      H.spin = LAND_HEAD + SPIN * (Math.min(H.T, tLand()) - tLand());
       orient(et, H.spin, landed ? null : vS.clone().negate());
       pose(s, now);
       // the entry (entry-fx.html), as hot as the heating (deceleration times speed) is strong: Titan's nitrogen and
