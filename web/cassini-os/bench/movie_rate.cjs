@@ -14,6 +14,10 @@
 //   PRE='js'    runs in the page before each run (e.g. cassiniSettings.set("cameras.autoCenter", false))
 //   VIDEO=OUT.webm  records the timed run's page (W x H) to that file; OUT.json's videoStartS is where in it the
 //               run starts (ffmpeg -ss), so two servers' clips can be laid side by side from the same moment
+//   NET=ms,down,up  the link to the server as Chrome emulates it: ms latency added to each request, down and up
+//               Mbit/s (NET=20,100,50 a home Wi-Fi; NET=80,30,10 Tailscale away from home)
+//   NOTE_DELAY=ms  holds each look-ahead note (/frames/mosaic/<id>.webp?warm=1) that long, as a server busy working
+//               out a pass would: the windows must not ask a pass's mosaic before the note says what the pass is
 let chromium;
 try { ({ chromium } = require("playwright-core")); } catch (e) { ({ chromium } = require("playwright")); }
 const fs = require("fs");
@@ -26,6 +30,13 @@ async function open(br, video) {
   ctx.openedAt = Date.now();
   const page = await ctx.newPage();
   page.on("pageerror", e => console.log("PAGEERROR", e.message));
+  if (env.NOTE_DELAY) await page.route(/\/frames\/mosaic\/[^?]*\?warm=1/, r => setTimeout(() => r.continue().catch(() => {}), +env.NOTE_DELAY));
+  if (env.NET) {
+    const [ms, down, up] = env.NET.split(",").map(Number), cdp = await ctx.newCDPSession(page);
+    await cdp.send("Network.enable");
+    await cdp.send("Network.emulateNetworkConditions", { offline: false, latency: ms || 0,
+      downloadThroughput: down ? down * 125000 : -1, uploadThroughput: up ? up * 125000 : -1 });
+  }
   if (env.THREE_DIR) {
     await page.route("https://cdn.jsdelivr.net/npm/three@0.128.0/**", r =>
       r.fulfill({ path: `${env.THREE_DIR}/${r.request().url().split("three@0.128.0/")[1]}`, headers: { "Content-Type": "application/javascript" } }));
@@ -133,7 +144,7 @@ async function run(page, label, profile) {
   const args = ["--ignore-gpu-blocklist", "--enable-precise-memory-info"];
   if (env.SOFTWARE) args.push("--use-gl=swiftshader", "--enable-unsafe-swiftshader");
   const br = await chromium.launch({ channel: env.CHANNEL || undefined, executablePath: env.EXE || undefined, headless: !env.HEADED, args });
-  const result = { url, from: FROM, until: UNTIL, viewport: [+W, +H, +DPR], runs: [] };
+  const result = { url, net: env.NET || null, from: FROM, until: UNTIL, viewport: [+W, +H, +DPR], runs: [] };
   if (env.WARM) {
     const w = await open(br);
     result.runs.push(await run(w.page, "warm-up (makes what is missing)", false));

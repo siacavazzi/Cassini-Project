@@ -3,14 +3,17 @@
      other script on the page (chrome, movie mode, the replay viewer) can use window.cassiniSettings.
 
      A setting is declared once with define() and read with get() / on(); the Settings window lists every defined
-     setting, grouped by section, and saves the values on this device (localStorage cassini-os-settings-v1).
+     setting, grouped by section, and saves the values on this device (localStorage cassini-os-settings-v1), each
+     with the default it had then, so a value left at its default follows a new default. was: [the defaults it had
+     before] does the same for values saved before the defaults were kept with them.
 
        const v = cassiniSettings.define({ key: "cameras.composites", section: "Cameras", label: "Color composites",
                                           hint: "…", type: "toggle", value: true });
        cassiniSettings.on("cameras.composites", v => { … });   // runs now and on every change
        cassiniSettings.set("cameras.composites", false);
 
-     Types: "toggle"; "range" (min, max, step, unit); "choice" (options: [[value, "Label"], …]); "action" (run, a
+     Types: "toggle"; "range" (min, max, step, unit; log: true slides on a log scale from min to max, landing on
+     the nearest of stops when given); "choice" (options: [[value, "Label"], …]); "action" (run, a
      button). reload: true marks a setting that takes effect when the page is opened again. -->
 <style>
 #settings { width: min(620px, calc(100% - 20px)); height: min(460px, calc(100% - 80px)); z-index: 900; }
@@ -82,8 +85,14 @@ body.phone .srow input[type=range] { width: 96px; }
   };
   let saved = {};
   try { saved = JSON.parse(localStorage.getItem(KEY)) || {}; } catch (e) {}
+  // the defaults the values were saved with (DEFAULTS): a value saved at its default then follows the default now
+  const DEFAULTS = "~defaults", savedDefaults = saved[DEFAULTS] && typeof saved[DEFAULTS] === "object" ? saved[DEFAULTS] : {};
   const defs = new Map(), subs = new Map(), values = {};
-  const store = () => { try { localStorage.setItem(KEY, JSON.stringify(values)); } catch (e) {} };
+  const store = () => {
+    const defaults = {};
+    for (const [k, d] of defs) if (d.type !== "action") defaults[k] = d.value;
+    try { localStorage.setItem(KEY, JSON.stringify({ ...values, [DEFAULTS]: defaults })); } catch (e) {}
+  };
   const valid = (d, v) => {
     if (d.type === "toggle") return typeof v === "boolean";
     if (d.type === "range") return typeof v === "number" && isFinite(v) && v >= d.min && v <= d.max;
@@ -94,7 +103,10 @@ body.phone .srow input[type=range] { width: 96px; }
     define(d) {
       d = Object.assign({ section: "Interface", hint: "" }, d);
       defs.set(d.key, d);
-      if (d.type !== "action" && !(d.key in values)) values[d.key] = valid(d, saved[d.key]) ? saved[d.key] : d.value;
+      if (d.type !== "action" && !(d.key in values)) {
+        const v = saved[d.key], atDefault = d.key in savedDefaults ? [savedDefaults[d.key]] : d.was || [];
+        values[d.key] = valid(d, v) && !atDefault.includes(v) ? v : d.value;
+      }
       if (!SECTIONS.includes(d.section)) SECTIONS.push(d.section);
       if (!card.hidden) render();
       return values[d.key];
@@ -122,6 +134,12 @@ body.phone .srow input[type=range] { width: 96px; }
   let section = "Interface";
   try { section = sessionStorage.getItem("cassini-os-settings-tab") || section; } catch (e) {}
   const fmtVal = (d, v) => d.format ? d.format(v) : `${v}${d.unit ? " " + d.unit : ""}`;
+  // a log range: the slider runs 0..1000 and the value between min and max, on the nearest of its stops
+  const logPos = (d, v) => Math.round(1000 * Math.log(v / d.min) / Math.log(d.max / d.min));
+  const logVal = (d, p) => {
+    const v = d.min * Math.pow(d.max / d.min, p / 1000);
+    return d.stops ? d.stops.reduce((a, b) => Math.abs(Math.log(b / v)) < Math.abs(Math.log(a / v)) ? b : a) : Math.round(v);
+  };
   function render() {
     const used = SECTIONS.filter(s => S.defined.some(d => d.section === s));
     if (!used.includes(section)) section = used[0];
@@ -133,13 +151,14 @@ body.phone .srow input[type=range] { width: 96px; }
       const tag = d.reload ? '<span class="tag">after reload</span>' : "";
       let ctl = "";
       if (d.type === "toggle") ctl = `<button class="sw" id="${id}" role="switch" aria-checked="false"></button>`;
-      if (d.type === "range") ctl = `<input type="range" id="${id}" min="${d.min}" max="${d.max}" step="${d.step || 1}"><span class="val"></span>`;
+      if (d.type === "range") ctl = d.log ? `<input type="range" id="${id}" min="0" max="1000" step="1"><span class="val"></span>`
+        : `<input type="range" id="${id}" min="${d.min}" max="${d.max}" step="${d.step || 1}"><span class="val"></span>`;
       if (d.type === "choice") ctl = `<div class="seg" role="radiogroup" aria-labelledby="${id}">${d.options.map((o, i) => `<button class="btn" role="radio" data-i="${i}">${o[1]}</button>`).join("")}</div>`;
       if (d.type === "action") ctl = `<button class="btn act" id="${id}">${d.button || "Run"}</button>`;
       row.innerHTML = `<${d.type === "choice" ? "span" : "label"} class="lab" id="${d.type === "choice" ? id : ""}"${d.type === "choice" ? "" : ` for="${id}"`}>${d.label}${tag}</${d.type === "choice" ? "span" : "label"}>`
         + `<div class="ctl">${ctl}</div>` + (d.hint ? `<div class="hint">${d.hint}</div>` : "");
       if (d.type === "toggle") row.querySelector(".sw").addEventListener("click", () => S.set(d.key, !values[d.key]));
-      if (d.type === "range") row.querySelector("input").addEventListener("input", e => S.set(d.key, +e.target.value));
+      if (d.type === "range") row.querySelector("input").addEventListener("input", e => S.set(d.key, d.log ? logVal(d, +e.target.value) : +e.target.value));
       if (d.type === "choice") row.querySelectorAll(".seg .btn").forEach(b => b.addEventListener("click", () => S.set(d.key, d.options[+b.dataset.i][0])));
       if (d.type === "action") row.querySelector(".act").addEventListener("click", () => d.run());
       pane.appendChild(row);
@@ -150,7 +169,7 @@ body.phone .srow input[type=range] { width: 96px; }
     const row = pane.querySelector(`.srow[data-key="${CSS.escape(key)}"]`), d = defs.get(key), v = values[key];
     if (!row) return;
     if (d.type === "toggle") row.querySelector(".sw").setAttribute("aria-checked", String(v));
-    if (d.type === "range") { row.querySelector("input").value = v; row.querySelector(".val").textContent = fmtVal(d, v); }
+    if (d.type === "range") { row.querySelector("input").value = d.log ? logPos(d, v) : v; row.querySelector(".val").textContent = fmtVal(d, v); }
     if (d.type === "choice") row.querySelectorAll(".seg .btn").forEach(b => { const on = d.options[+b.dataset.i][0] === v; b.setAttribute("aria-pressed", String(on)); b.setAttribute("aria-checked", String(on)); });
   }
   nav.addEventListener("click", e => {
@@ -286,9 +305,19 @@ body.phone .srow input[type=range] { width: 96px; }
       hint: "The moment Cassini OS opens on. A shared link still opens on its own moment." });
   D({ key: "playback.autoplay", section: "Playback", label: "Play when Cassini OS opens", type: "toggle", value: true,
       hint: "Off opens paused at the starting moment." });
-  D({ key: "playback.speed", section: "Playback", label: "Starting speed", type: "choice", value: 600,
-      options: [[60, "1 min/s"], [600, "10 min/s"], [3600, "1 h/s"], [21600, "6 h/s"], [86400, "1 day/s"]],
-      hint: "Mission time per second of playback when the page opens. Jumping to a moment still picks its own speed." });
+  // the playback speed scale, shared by the dock's speed slider, this setting and the clock's read-out: mission
+  // seconds per second, from real time to a month a second, on a log scale that lands on round values
+  const SP = window.cassiniSpeed = {
+    min: 1, max: 2592000,
+    stops: [1, 2, 5, 10, 20, 30, 60, 120, 300, 600, 1200, 1800, 3600, 7200, 10800, 21600, 43200, 86400, 172800, 345600, 604800, 1209600, 2592000],
+    label(v) {
+      const r = x => +x.toFixed(x < 10 && x % 1 ? 1 : 0), u = (x, one, many) => `${r(x)} ${r(x) === 1 ? one : many}/s`;
+      return v <= 1 ? "real time" : v < 60 ? `${r(v)}×` : v < 3600 ? u(v / 60, "min", "min") : v < 86400 ? u(v / 3600, "h", "h")
+        : v < 604800 ? u(v / 86400, "day", "days") : v < 2592000 ? u(v / 604800, "wk", "wk") : u(v / 2592000, "month", "months");
+    }
+  };
+  D({ key: "playback.speed", section: "Playback", label: "Starting speed", type: "range", log: true, value: 600, min: SP.min, max: SP.max, stops: SP.stops, format: SP.label,
+      hint: "Mission time per second of playback when the page opens; the speed slider in the replay window changes it while you watch. Jumping to a moment still picks its own speed." });
   D({ key: "playback.span", section: "Playback", label: "Timeline shows", type: "choice", value: 432000,
       options: [[86400, "Day"], [432000, "5 days"], [604800, "Week"], [2592000, "Month"]],
       hint: "How much of the mission the timeline covers when the page opens." });
@@ -327,6 +356,11 @@ body.phone .srow input[type=range] { width: 96px; }
   D({ key: "view.atmospheres", section: "View", label: "Atmospheres", type: "choice", value: "full",
       options: [["off", "Off"], ["light", "Light"], ["full", "Full"]],
       hint: "Titan's orange haze with its high detached layer, Earth's thin blue limb, Venus's pale yellow haze, and the thin hazes at Saturn's and Jupiter's limbs, all lit by the Sun: soft twilight past the terminator and a bright ring when a body is backlit. Light is quicker on weak graphics; Off draws the bare globes." });
+  // the viewer reads view.plumes and view.plumeBrightness (makePlume)
+  D({ key: "view.plumes", section: "View", label: "Enceladus plumes", type: "toggle", value: true,
+      hint: "The jets of ice grains rising from the tiger stripes at Enceladus's south pole, lit by the Sun. Like the real ones they show mostly when Cassini looks back toward the Sun, against the dark sky, and stay faint otherwise." });
+  D({ key: "view.plumeBrightness", section: "View", label: "Plume brightness", type: "range", value: 1, min: 0.25, max: 4, step: 0.05,
+      format: v => `${Math.round(v * 100)}%`, hint: "How bright the plumes are drawn. 100% is subtle, as in an unstretched picture; higher shows the faint outer plume the way stretched pictures do." });
   // movie mode (movie.html) is a rule for the clock, so its speed sits with the playback settings
   D({ key: "movie.fps", section: "Playback", label: "Movie mode speed", type: "range", value: 8, min: 2, max: 30, step: 1, unit: "fps",
       hint: "Movie mode (M) skips the time between pictures and steps from one picture to the next this many times a second. The camera windows show every picture as they always do." });

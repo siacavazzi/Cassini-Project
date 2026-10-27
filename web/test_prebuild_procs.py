@@ -73,13 +73,34 @@ def main():
         # --only: the items using a listed frame
         listed = os.path.join(d, "only.txt")
         with open(listed, "w") as fh:
-            fh.write("# lost lines\nN2_1\nW5_1 extra\n")
+            fh.write("# lost lines\nN2_1,own\nW5_1 extra\n")
         todo = [("N1_1", None), ("N2_1", None), ("W5_1", None)]
         assert [t[0] for t in prebuild.only("frames", todo, listed)] == ["N2_1", "W5_1"]
         sets = [("N1_1_N3_1", None), ("N3_1_N2_1", None), ("W4_1_W5_1_W6_1", None), ("N2_11_N7_1", None)]
         assert [t[0] for t in prebuild.only("composites", sets, listed)] == ["N3_1_N2_1", "W4_1_W5_1_W6_1"]
         ok += 1
+        # --watched-first: a watched observation's stretch, WATCH_PAD either side, comes first (its neighbours too)
+        import pandas as pd
+        obs = next(iter(_watched_obs()))
+        h = 3600
+        idx = pd.DataFrame({"id": ["A_1", "B_1", "C_1", "D_1"], "OBSERVATION_ID": ["X", obs, "Y", "Z"],
+                            "seconds_1970": [0.0, 10 * h, 12 * h, 20 * h]})
+        real_index = prebuild.reel.load_index
+        prebuild.reel.load_index = lambda: (idx, None)
+        try:
+            todo = [("A_1", None), ("B_1", None), ("C_1", None), ("D_1", None), ("Q_1_C_1", None)]
+            out, n = prebuild.watched_first(todo)
+            assert [t[0] for t in out] == ["B_1", "C_1", "Q_1_C_1", "A_1", "D_1"] and n == 3, out
+        finally:
+            prebuild.reel.load_index = real_index
+        ok += 1
     print(f"{ok} checks ok")
+
+
+def _watched_obs():
+    import csv
+    with open(os.path.join(os.path.dirname(os.path.abspath(__file__)), "replay", "moments.csv")) as fh:
+        return {o for row in csv.DictReader(fh) for o in row["obs"].split()}
 
 
 if __name__ == "__main__":
