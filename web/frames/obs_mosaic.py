@@ -1911,6 +1911,7 @@ movie_frame = _kept_for_next_size(movie_frame, lambda u, n, cache, trail=0, colo
 
 # a pass's movie frames, renamed whenever the way they are drawn changes (movie-2: colour frames mixed as the mosaic is)
 MOVIE_DIR = "movie-2"
+MOVIE_SIZES = (512, 1024)   # the sizes the windows play a movie at, smallest first (a smaller one is shrunk from them)
 
 
 def movie_webp(frame_id, size, cache, trail=0, colour=True, wait=False, ahead=6, centre=True):
@@ -1931,8 +1932,17 @@ def movie_webp(frame_id, size, cache, trail=0, colour=True, wait=False, ahead=6,
     report, meta = {}, path[:-4] + "json"
 
     def make():
-        with _asking():
-            im, rep = movie_frame(u, n, cache, trail, colour, centre=centre)
+        # a strip (smaller than the sizes a window plays) of a frame already kept at one of them is that picture
+        # shrunk (both are movie_frame at OUT, shrunk): the pass's tiles are not read again
+        for big in MOVIE_SIZES:
+            kept = os.path.join(folder(u, cache), MOVIE_DIR, str(big), os.path.basename(path))
+            if size < MOVIE_SIZES[0] and os.path.exists(kept) and os.path.exists(kept[:-4] + "json"):
+                im, rep = Image.open(kept), reel.report_of(kept[:-4] + "json")
+                im.load()
+                break
+        else:
+            with _asking():
+                im, rep = movie_frame(u, n, cache, trail, colour, centre=centre)
         report.update(rep)
         reel._cached(meta, lambda: json.dumps(rep).encode())
         reel.keep_report(meta, rep)
