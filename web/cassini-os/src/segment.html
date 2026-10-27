@@ -58,6 +58,7 @@ body.phone #segfps { flex: 1; }
       <span class="grow"></span>
       <button id="segedit" title="Pick which frames go into this movie, and its look (Movie Editor)">Edit…</button>
       <button id="segexport" title="Make a video file of this stretch to download (E)">Save movie…</button>
+      <button id="segfull" hidden title="Save this stretch as a video with its mosaics at their own full resolution (extra work on the frame server)">Full resolution…</button>
     </div>
     <div id="segprog" hidden><i></i></div>
     <div class="segrow" id="segstaterow" hidden><span id="segstate" role="status" aria-live="polite"></span></div>
@@ -135,9 +136,27 @@ body.phone #segfps { flex: 1; }
     const j = P.job, busy = j && /^(queued|planning|making|waiting|finishing)$/.test(j.state), done = j && j.state === "done" && P.key === optKey() && inside();
     $("segprep").hidden = busy || done; $("segstop").hidden = !busy;
     $("segplay").classList.toggle("go", !!done);
+    fullCheck(done);
     $("segplay").textContent = P.playing && state.playing ? "❚❚ Pause" : "▶ Play";
     bar.classList.toggle("busy", !!busy);
     camsUi();
+  }
+  // a stretch made ahead whose mosaics hold more than 1024 px: "Full resolution…" saves it with them at their own size
+  // (the export's Picture size Full), its label saying how big; asked of the frame server once per stretch and choices
+  let fullKey = "";
+  function fullCheck(done) {
+    const b = $("segfull");
+    if (!done) { b.hidden = true; return; }
+    const q = new URLSearchParams(EX.params()); q.set("size", "full"); q.set("cams", windows().cams);
+    const key = q.toString();
+    if (key === fullKey) return;
+    fullKey = key; b.hidden = true;
+    fetch(`${FRAMES}/export/plan.json?${key}`).then(r => r.ok ? r.json() : null).then(p => {
+      if (fullKey !== key || !p || !p.full) return;
+      const f = p.full;
+      b.hidden = !(f.native > 1024 && f.mosaic_pictures);
+      b.textContent = `Full resolution · ${f.pane.toLocaleString()} px…`;
+    }).catch(() => {});
   }
   function summary() {
     $("segwhen").textContent = `${short(P.a)} → ${short(P.b)} UTC`;
@@ -268,7 +287,8 @@ body.phone #segfps { flex: 1; }
   $("segprep").addEventListener("click", prep);
   $("segstop").addEventListener("click", stop);
   $("segplay").addEventListener("click", play);
-  $("segexport").addEventListener("click", () => EX.open());
+  $("segexport").addEventListener("click", () => EX.open({ full: false }));
+  $("segfull").addEventListener("click", () => EX.open({ full: true }));
   $("segcams").addEventListener("click", e => {
     const b = e.target.closest("button"); if (!b) return;
     EX.state.cams = b.dataset.v; camsUi(); summary();

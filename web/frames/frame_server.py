@@ -115,7 +115,11 @@ Routes:
                                picture (a Cassini Studio recipe's color part, web/frames/studio_look.py);
                                &pictures=movie|color|processed|raw: what each frame shows (as the windows show it, full
                                color sets only, each frame processed alone, each frame raw); &list=1: every frame however
-                               many (the editor's list; a film holds at most CASSINI_EXPORT_MAX, default 20,000)
+                               many (the editor's list; a film holds at most CASSINI_EXPORT_MAX, default 20,000).
+                               size=1536|2048: mosaics up to that size, each at the bucket its pass has detail for;
+                               size=full: mosaics at native resolution (export.full_size: "full" says the panes' side,
+                               the passes that set it and how many pictures are drawn that big; passes not
+                               pre-processed are counted as pending)
   POST /export?...             (same options, plus sound=1 caption=1) starts making that film, or finds it made
                                or on its way; one film is made at a time. Answers the job's status, as
   /export/<JOB>.json           does: state queued/making/sound/done/failed, pictures done of total, seconds left
@@ -1351,7 +1355,7 @@ def make_handler(site, cache, flags=None):
                 return self.send_bytes(samples_text().encode(), "text/plain", False)
             if url.path == "/export/plan.json":
                 try:
-                    return self.send_json(export.public_plan(export.plan(export.options(parse_qs(url.query)))))
+                    return self.send_json(export.public_plan(export.plan(export.options(parse_qs(url.query)), cache)))
                 except ValueError as e:
                     return self.send_json({"error": str(e)}, 400)
                 except OverflowError as e:
@@ -1561,8 +1565,17 @@ def make_handler(site, cache, flags=None):
                         laps = max(1, min(obs_mosaic.TRAIL, int(query.get("laps", ["1"])[0] or 1)))
                         fade = (int(query.get("fade", ["0"])[0] or 0), int(query.get("persist", [str(obs_mosaic.FADE_PERSIST)])[0] or 0))
                         full = size_of(query, 512) == FULL
+                        # full: the biggest size the pass has detail for (export.bucket of its native size), never
+                        # the canvas enlarged past it
+                        out = obs_mosaic.OUT
+                        if full:
+                            try:
+                                out = export.bucket(mosaic_native.native_side(m.group(1), cache) or obs_mosaic.OUT,
+                                                    min(obs_mosaic.CANVAS, FULL_MAX))
+                            except (FileNotFoundError, ValueError, KeyError):
+                                out = min(obs_mosaic.CANVAS, FULL_MAX)
                         made = obs_mosaic.rolling_webp(m.group(1), FULL if full else size, cache, laps, _mosaic_slots, fmt,
-                                                       out=min(obs_mosaic.CANVAS, FULL_MAX) if full else obs_mosaic.OUT,
+                                                       out=out,
                                                        fade=fade)
                         if made and made[0] is not None:
                             return self.send_picture(made[0], fmt, query, f"Cassini_{m.group(1)}_mosaic_movie", {"X-Movie": json.dumps(made[1])},
