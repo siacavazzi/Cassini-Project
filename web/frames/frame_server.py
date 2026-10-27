@@ -15,7 +15,9 @@ it once with `python bootleg_autonav.py geometry` (see bootleg_autonav.py).
 
 Routes:
   /frames/<ID>.webp?size=256   the frame as WebP, longest side 128-1024 px (default 512),
-                               made on first request and cached on disk
+                               made on first request and cached on disk; every body's sharpest frame
+                               (data/targets.json "best", the All bodies folder's picture) is made at 256 as
+                               the server starts
   ...?size=full                any picture route below at full resolution, for a picture looked at on its own
                                (full view): a frame or composite at its native size, losslessly for frames;
                                a pass's mosaic at its canvas size; never more than CASSINI_FULL_MAX px
@@ -419,6 +421,37 @@ def warm_thumbs(site, cache):
             failed += 1
             print(f"highlight thumbnail {hint}: {e}", flush=True)
     print(f"highlight thumbnails: {len(hints)} ({made} made, {failed} failed) in {time.monotonic() - started:.0f} s", flush=True)
+
+
+# the picture each body shows in the dock's All bodies folder and its body window when it has no surface map: its
+# sharpest frame (data/targets.json "best"), at this size
+ICON_SIZE = 256
+
+
+def warm_icons(site, cache):
+    """Makes every body's folder picture that is not in the cache yet, one at a time, so the All bodies folder opens
+    with its pictures in place instead of filling in one by one from the archive."""
+    try:
+        with open(os.path.join(site, "data", "targets.json")) as fh:
+            ids = [b["best"] for b in json.load(fh)["bodies"].values() if b.get("best")]
+    except (OSError, ValueError, KeyError, TypeError, AttributeError):
+        return
+    started, made, failed = time.monotonic(), 0, 0
+    for frame_id in ids:
+        if not FRAME_ID.match(frame_id) or os.path.exists(os.path.join(cache, size_dir(ICON_SIZE, "webp"), f"{frame_id}.webp")):
+            continue
+        try:
+            webp(frame_id, ICON_SIZE, cache)
+            made += 1
+        except Exception as e:   # one picture that cannot be made must not stop the others
+            failed += 1
+            print(f"body picture {frame_id}: {e}", flush=True)
+    print(f"body pictures: {len(ids)} ({made} made, {failed} failed) in {time.monotonic() - started:.0f} s", flush=True)
+
+
+def warm_site(site, cache):
+    warm_thumbs(site, cache)
+    warm_icons(site, cache)
 
 
 # ---------- slow loads: the page reports a wait for data on the loading screen, kept to find out what held it ----------
@@ -913,8 +946,9 @@ def make_handler(site, cache, flags=None):
                         return self.send_bytes(archive_png(frame_id), "image/png")
                     query = parse_qs(url.query)
                     size, fmt = size_of(query, 512), picture_format(query)
-                    if reel._index is not None and size != FULL:
-                        # a frame of a mosaic pass (the window asks for frames a few ahead): start its tiles
+                    if reel._index is not None and size != FULL and size >= 512:
+                        # a frame of a mosaic pass (the window asks for frames a few ahead): start its tiles; not
+                        # for a small picture (a body's folder picture), which no camera window asks for
                         threading.Thread(target=obs_mosaic.warm_frame, args=(frame_id, cache), daemon=True).start()
                     return self.send_picture(webp(frame_id, size, cache, fmt), fmt, query, f"Cassini_{frame_id}")
                 except FileNotFoundError:
@@ -1043,8 +1077,9 @@ def main():
     # the first composite would otherwise wait while stacking reads the whole image index (all ~443k rows)
     threading.Thread(target=color_image.stacking.load_index, daemon=True).start()
     if site:
-        # the Highlights window's thumbnails, made now (and after any version bump) rather than when it opens
-        threading.Thread(target=warm_thumbs, args=(site, args.cache), daemon=True).start()
+        # the Highlights window's thumbnails and the All bodies folder's pictures, made now (and after any version
+        # bump) rather than when they open
+        threading.Thread(target=warm_site, args=(site, args.cache), daemon=True).start()
     flags = os.path.abspath(os.path.expanduser(args.flags))
     print(f"Flagged pictures go to {flags}")
     global counts
