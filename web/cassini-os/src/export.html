@@ -1,6 +1,6 @@
 <!-- Movie export for Cassini OS. build.py splices the three parts below into the page: the style into the head,
      the window into #app (so the window manager picks it up) and the script after the chrome script.
-     Mark a stretch of the timeline (shift-drag across it, or I at the start and O at the end; drag a marked edge to
+     Mark a stretch of the timeline (drag across it, or I at the start and O at the end; drag a marked edge to
      move it) and press Export: the frame server makes the film from the pipeline's pictures, the same ones the camera
      windows show (web/frames/export.py), and the page adds the sound, made by the live sound's own synth
      (cassiniSound.render, sound.html) from the film's picture list. The film downloads, plays here, and has a link. -->
@@ -33,7 +33,7 @@ body.phone #excard:not(.full) { width: calc(100% - 16px) !important; left: 8px !
 <section class="win" id="excard" aria-label="Export Movie" hidden>
   <div class="titlebar"><span class="lights"><button class="close" aria-label="Close">×</button><button class="min" aria-label="Minimize">–</button><button class="zoom" aria-label="Zoom">+</button></span>Export Movie</div>
   <div class="body">
-    <div id="exhint">Shift-drag across the timeline to mark a stretch, or press I at its start and O at its end.</div>
+    <div id="exhint">Drag across the timeline to mark a stretch, or press I at its start and O at its end.</div>
     <div class="exrow"><span>From</span><input type="text" id="exfrom" placeholder="YYYY-MM-DD hh:mm:ss" spellcheck="false" aria-label="Start, UTC"><button class="exbtn" id="exin" title="Start at the mission clock (I)">Here</button></div>
     <div class="exrow"><span>Until</span><input type="text" id="exuntil" placeholder="YYYY-MM-DD hh:mm:ss" spellcheck="false" aria-label="End, UTC"><button class="exbtn" id="exout" title="End at the mission clock (O)">Here</button></div>
     <div id="exsum"></div>
@@ -41,11 +41,11 @@ body.phone #excard:not(.full) { width: calc(100% - 16px) !important; left: 8px !
     <div class="exrow"><span>Frame rate</span><label class="chk"><input type="checkbox" id="exauto"> Adaptive</label><input type="range" id="exfps" min="2" max="30" step="1" aria-label="Pictures per second"><span class="val" id="exfpsv"></span></div>
     <div class="exrow"><span>Picture size</span><input type="range" id="exsize" min="0" max="2" step="1" aria-label="Picture size per camera"><span class="val" id="exsizev"></span></div>
     <div class="exrow"><span></span><label class="chk"><input type="checkbox" id="exsound"> Sound</label><label class="chk"><input type="checkbox" id="excap"> Captions</label></div>
-    <div class="exrow"><button class="exbtn go" id="exgo" disabled>Export</button><button class="exbtn" id="exclear">Clear marks</button><span id="exstate"></span></div>
+    <div class="exrow"><button class="exbtn go" id="exgo" disabled>Export</button><button class="exbtn" id="exclear">Clear marks</button><button class="exbtn" id="exedit" title="Pick the frames and the look of this movie (Movie Editor)">Edit frames…</button><span id="exstate"></span></div>
     <div id="exbar"><i></i></div>
     <div id="exdone" hidden>
       <video id="exvid" controls playsinline preload="metadata" hidden></video>
-      <div class="exrow" style="margin-top:7px"><a class="exbtn go" id="exdl" download>Download</a><button class="exbtn" id="excopy">Copy link</button><span id="exsize2"></span></div>
+      <div class="exrow" style="margin-top:7px"><a class="exbtn go" id="exdl" download>Download</a><button class="exbtn" id="exgal" title="Keep this film in your Gallery">Add to Gallery</button><button class="exbtn" id="excopy">Copy link</button><span id="exsize2"></span></div>
     </div>
   </div>
 </section>
@@ -83,16 +83,26 @@ body.phone #excard:not(.full) { width: calc(100% - 16px) !important; left: 8px !
   const show = et => iso(et).replace("T", " ");
   const parse = s => { const t = s.trim().replace(" ", "T"); return /^\d{4}-\d\d-\d\d(T\d\d:\d\d(:\d\d)?)?$/.test(t) ? utcToEt(t.length === 10 ? t + "T00:00:00" : t) : null; };
   const redraw = () => { if (typeof drawTimeline === "function" && catalog) drawTimeline(); };
-  function mark(a, b) {
-    if (a != null) X.a = a;
-    if (b != null) X.b = b;
-    if (X.a != null && X.b != null && X.b < X.a) [X.a, X.b] = [X.b, X.a];
+  // X.guard (segment.html, while a stretch is being made or is made ahead): guard(a, b, how) answers the stretch a
+  // change may make, [a, b], or null when it may not change at all; how is "edge" (an end dragged or typed), "new" (a
+  // fresh highlight) or "clear"
+  const guarded = (a, b, how) => (X.guard && X.a != null && X.b != null ? X.guard(a, b, how) : [a, b]);
+  function mark(a, b, how) {
+    let na = a != null ? a : X.a, nb = b != null ? b : X.b;
+    if (na != null && nb != null && nb < na) [na, nb] = [nb, na];
+    if (na != null && nb != null && (a != null || b != null)) { const g = guarded(na, nb, how || "edge"); if (!g) return; [na, nb] = g; }
+    X.a = na; X.b = nb;
     $("exfrom").value = X.a != null ? show(X.a) : "";
     $("exuntil").value = X.b != null ? show(X.b) : "";
     $("exhint").hidden = X.a != null && X.b != null;
     redraw(); estimate();
+    // the highlighted stretch's bar (segment.html: pre-process it, play it) follows the marks
+    document.dispatchEvent(new CustomEvent("cassini:marks", { detail: { a: X.a, b: X.b } }));
   }
-  function clear() { X.a = X.b = null; mark(); }
+  // a stretch just highlighted: the bar over it comes up (segment.html), or this window where there is no bar
+  const marked = () => { if (!window.cassiniSegment) open(); };
+  // force: the person's own × or Escape (a stretch kept by X.guard otherwise stays)
+  function clear(force) { if (!force && X.guard && X.a != null && !X.guard(null, null, "clear")) return; X.a = X.b = null; mark(); }
 
   // drawn over the timeline: the stretch lit in the camera blue, a handle at each end
   const prevTimeline = window.studyTimeline;
@@ -110,34 +120,48 @@ body.phone #excard:not(.full) { width: calc(100% - 16px) !important; left: 8px !
     if (prevTimeline) prevTimeline(g, w, h, xn);
   };
 
-  // shift-drag marks a stretch; dragging a marked edge moves it; anything else scrubs as before
-  const tl = $("tl");
-  let drag = null;
+  // dragging across the timeline's lanes marks a stretch (a click still moves the clock there; the row of dates along
+  // the top still pans); dragging a marked edge moves it; shift-drag marks one anywhere, the date row included
+  const tl = $("tl"), MOVE = 5;
+  let drag = null, press = null;
   const etAt = e => { const r = tl.getBoundingClientRect(); return xToEt(e.clientX - r.left, r.width); };
   window.addEventListener("pointerdown", e => {
-    if (e.target !== tl || !catalog) return;
+    if (e.target !== tl || !catalog || e.button > 0) return;
     const r = tl.getBoundingClientRect(), x = e.clientX - r.left, near = v => v != null && Math.abs(etToX(v, r.width) - x) < 7;
     if (e.shiftKey) drag = { from: etAt(e), edge: null };
     else if (near(X.a)) drag = { edge: "a" };
     else if (near(X.b)) drag = { edge: "b" };
-    else return;
+    else {
+      // a press in the lanes scrubs as a click does (index.html); once it moves MOVE px it becomes a highlight from
+      // where it was pressed, and the clock goes back to where it was
+      if (e.offsetY >= (e.pointerType === "touch" ? 26 : 18)) press = { x0: e.clientX, from: etAt(e), et: state.et, id: e.pointerId };
+      return;
+    }
     e.stopImmediatePropagation(); e.preventDefault();
     tl.setPointerCapture(e.pointerId);
   }, true);
   window.addEventListener("pointermove", e => {
+    if (press && !drag && Math.abs(e.clientX - press.x0) > MOVE) {
+      state.dragging = false; setTime(press.et);
+      drag = { from: press.from, edge: null }; press = null;
+      tl.style.cursor = "col-resize";
+    }
     if (!drag) return;
     e.stopImmediatePropagation();
     const t = etAt(e);
     if (drag.edge) mark(drag.edge === "a" ? t : null, drag.edge === "b" ? t : null);
-    else { X.a = Math.min(drag.from, t); X.b = Math.max(drag.from, t); mark(); }
+    else if (!drag.held) { const g = guarded(Math.min(drag.from, t), Math.max(drag.from, t), "new"); if (g) { X.a = g[0]; X.b = g[1]; mark(); } else drag.held = true; }
   }, true);
   window.addEventListener("pointerup", e => {
+    press = null;
     if (!drag) return;
     e.stopImmediatePropagation();
     const made = !drag.edge;
-    drag = null;
-    if (made && X.a != null && X.b - X.a > 1) open();
+    drag = null; tl.style.cursor = "";
+    if (made && X.a != null && X.b - X.a > 1) marked();
+    else if (made) clear();
   }, true);
+  window.addEventListener("pointercancel", () => { press = null; }, true);
   // the cursor says when an edge can be dragged
   tl.addEventListener("pointermove", e => {
     if (drag || !catalog) return;
@@ -150,7 +174,8 @@ body.phone #excard:not(.full) { width: calc(100% - 16px) !important; left: 8px !
   const params = () => {
     const q = new URLSearchParams({ from: iso(X.a), until: iso(X.b), cams: X.cams || "NW", fps: opt("export.adaptive", true) ? "auto" : String(opt("export.fps", 12)),
       size: String(opt("export.size", 1024)), sound: opt("export.sound", true) ? "1" : "0", caption: opt("export.caption", true) ? "1" : "0" });
-    return q.toString();
+    // the Movie Editor's cut and look for this stretch (movieedit.html): frames left out, and the look on every picture
+    return q.toString() + window.cassiniLook() + (window.cassiniMovieStyle ? window.cassiniMovieStyle() : "") + (window.cassiniMovieCut ? window.cassiniMovieCut() : "");
   };
   let timer = 0;
   function estimate() {
@@ -174,7 +199,8 @@ body.phone #excard:not(.full) { width: calc(100% - 16px) !important; left: 8px !
         const n = { N: 0, W: 0 }; p.pictures.forEach(e => n[e.cam]++);
         // measured on the Mac Mini: about 0.065 MB a second of film at 1024 x 1072, 0.11 at 2048 x 1072, sound included
         const mb = p.frames ? Math.max(0.1, p.seconds * (0.03 + 0.035 * p.width * p.height / (1024 * 1072))) : 0;
-        $("exsum").innerHTML = p.count ? `${p.count.toLocaleString()} pictures (NAC ${n.N.toLocaleString()}, WAC ${n.W.toLocaleString()}) · film ${fmtDur(p.seconds)} at ${p.width}×${p.height} · about ${mb.toFixed(mb < 10 ? 1 : 0)} MB` : `<span class="warn">No pictures in this stretch.</span>`;
+        const edited = window.cassiniMovieCut && window.cassiniMovieCut() ? " · edited in the Movie Editor" : "";
+        $("exsum").innerHTML = p.count ? `${p.count.toLocaleString()} pictures (NAC ${n.N.toLocaleString()}, WAC ${n.W.toLocaleString()}) · film ${fmtDur(p.seconds)} at ${p.width}×${p.height} · about ${mb.toFixed(mb < 10 ? 1 : 0)} MB${edited}` : `<span class="warn">No pictures in this stretch.</span>`;
         $("exgo").disabled = !p.count;
       } catch (err) { $("exsum").innerHTML = `<span class="warn">No frame server at ${FRAMES}.</span>`; }
     }, 250);
@@ -214,6 +240,16 @@ body.phone #excard:not(.full) { width: calc(100% - 16px) !important; left: 8px !
     const v = $("exvid"); v.hidden = false; if (v.dataset.src !== url) { v.src = url; v.dataset.src = url; }
     $("exdl").href = `${url}?download=1`; $("exdl").setAttribute("download", job.name || "cassini.mp4");
     $("exsize2").textContent = job.bytes ? `${(job.bytes / 1048576).toFixed(1)} MB · ${job.name}` : job.name || "";
+    const film = X.planKey || params(), from = X.a;
+    $("exgal").hidden = !window.cassiniGallery;
+    $("exgal").onclick = async () => {
+      const G = window.cassiniGallery; if (!G) return;
+      $("exgal").disabled = true;
+      const moment = [["t", iso(from)], ["view", state.focus !== "CASSINI" ? state.focus.toLowerCase() : state.follow ? "follow" : "cassini"], ["play", "0"]];
+      const item = await G.add({ kind: "movie", src: url, film, title: `Film · ${show(from)} UTC`, sub: `${job.name || ""}${job.bytes ? ` · ${(job.bytes / 1048576).toFixed(1)} MB` : ""}`, moment });
+      $("exgal").disabled = false; if (item) $("exgal").textContent = "In Gallery";
+    };
+    $("exgal").textContent = "Add to Gallery";
     $("excopy").onclick = async () => { try { await navigator.clipboard.writeText(url); $("excopy").textContent = "Copied"; setTimeout(() => { $("excopy").textContent = "Copy link"; }, 1500); } catch (e) { prompt("Film link", url); } };
   }
 
@@ -275,7 +311,7 @@ body.phone #excard:not(.full) { width: calc(100% - 16px) !important; left: 8px !
     mark();
   }
   function close() { card.hidden = true; }
-  window.cassiniExport = { open, close, mark, clear, get state() { return X; } };
+  window.cassiniExport = { open, close, mark, clear, soundtrack, get state() { return X; } };
 
   $("exin").addEventListener("click", () => mark(state.et, null));
   $("exout").addEventListener("click", () => mark(null, state.et));
@@ -293,8 +329,8 @@ body.phone #excard:not(.full) { width: calc(100% - 16px) !important; left: 8px !
   window.addEventListener("keydown", e => {
     if (e.metaKey || e.ctrlKey || e.altKey || /INPUT|SELECT|TEXTAREA/.test(e.target.tagName) || !catalog) return;
     const k = e.key.toLowerCase();
-    if (k === "i") { mark(state.et, null); if (X.b != null) open(); }
-    else if (k === "o") { mark(null, state.et); open(); }
+    if (k === "i") { mark(state.et, null); if (X.b != null) marked(); }
+    else if (k === "o") { mark(null, state.et); marked(); }
     else if (k === "e") { card.hidden ? open() : close(); }
     else if (e.key === "Escape" && !card.hidden) close();
   });

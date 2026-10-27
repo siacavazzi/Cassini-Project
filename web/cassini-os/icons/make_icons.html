@@ -202,6 +202,33 @@ const ICONS = {
     st.scene.add(g); fit(st, g, 0.95);
     return shot(st);
   },
+  // Gallery: the viewer's own pictures, a graphite frame holding a print of Rhea, more framed prints stacked behind it
+  async gallery() {
+    const ps = stage(30), b = await body("rhea");
+    ps.key.position.set(-5, 4, 5); ps.scene.add(b); fit(ps, b, 0.82);
+    const rt = new THREE.WebGLRenderTarget(512, 512, { encoding: THREE.sRGBEncoding });
+    R.setRenderTarget(rt); R.setClearColor(0x000000, 1); R.render(ps.scene, ps.cam); R.setRenderTarget(null);
+    const st = stage(26), g = new THREE.Group();
+    const frameMat = new THREE.MeshStandardMaterial({ color: 0x2a2d33, metalness: 0.7, roughness: 0.35, envMap: ENV, envMapIntensity: 1.0 });
+    const edge = new THREE.MeshStandardMaterial({ color: 0x9aa0a8, metalness: 0.2, roughness: 0.6, envMap: ENV, envMapIntensity: 0.6 });
+    const frame = (W, H, pic) => {
+      const f = new THREE.Group(), t = 0.13;
+      for (const [w, h, x, y] of [[W, t, 0, (H - t) / 2], [W, t, 0, -(H - t) / 2], [t, H, (W - t) / 2, 0], [t, H, -(W - t) / 2, 0]]) {
+        const bar = new THREE.Mesh(new THREE.BoxGeometry(w, h, 0.14), frameMat); bar.position.set(x, y, 0.03); f.add(bar);
+      }
+      const back = new THREE.Mesh(new THREE.BoxGeometry(W, H, 0.04), edge); back.position.z = -0.03; f.add(back);
+      const inner = pic ? new THREE.Mesh(new THREE.PlaneGeometry(W - 2 * t, H - 2 * t), new THREE.MeshBasicMaterial({ map: pic, toneMapped: false }))
+        : new THREE.Mesh(new THREE.PlaneGeometry(W - 2 * t, H - 2 * t), new THREE.MeshStandardMaterial({ color: 0x0c0d10, roughness: 0.8 }));
+      inner.position.z = 0.0; f.add(inner);
+      return f;
+    };
+    const back2 = frame(1.6, 1.6, null); back2.position.set(0.42, 0.42, -0.3); back2.rotation.z = -0.08; g.add(back2);
+    const back1 = frame(1.6, 1.6, null); back1.position.set(0.21, 0.21, -0.15); back1.rotation.z = -0.04; g.add(back1);
+    const front = frame(1.6, 1.6, rt.texture); g.add(front);
+    g.rotation.set(-0.3, 0.38, 0.04);
+    st.scene.add(g); fit(st, g, 0.94);
+    return shot(st);
+  },
   // the two cameras of the Imaging Science Subsystem: the narrow-angle is a long, slim telescope (2 m focal length)
   // behind a deep black sunshade; the wide-angle a short, wide barrel with a big domed lens (20 cm)
   nac() { return this._camera({ r: 0.3, len: 2.9, shade: 0.75, lens: 0.55, dome: 0.35 }); },
