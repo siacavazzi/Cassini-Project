@@ -72,11 +72,22 @@ lens holds the magnification, size, delay, shape and position (`src/loupe.html`;
 Along the bottom of the screen, as on the Mac (`src/dock.html`): Cassini and each body on stage now (the same list as
 the main window's body picker; a click on a body opens its body view, below, flies the view there and brings that
 body's windows forward; a blue dot marks the body in view, a grey dot one with windows open, a ring the body whose view
-is open), then every planet Cassini photographed that is not on stage, then Moments, Highlights and Settings (a click opens the window,
+is open), then every planet Cassini photographed that is not on stage, then Moments, Highlights, Gallery and Settings (a click opens the window,
 brings it forward, or tucks it away). A minimized window shrinks into the dock as a tile showing its last picture,
 including the main window, and a click brings it back. Settings > Interface: Dock on or off (off brings back the
 menu-bar tray), Dock position (bottom, left, right), icon size and magnification. On a phone the dock is a strip under
 the replay controls that scrolls sideways.
+
+Huygens is not in the row: once it has left Cassini (and while the viewer has it on stage) it waits in All bodies, under
+Spacecraft.
+
+The icons that are not a body's surface map are rendered pictures in `icons/` (256 px WebP): Cassini from NASA's model,
+Huygens from ESA's descent module as it stood on Titan (`models/huygens_dm.glb.b64.txt`, from the Huygens landing
+work), Saturn from its map with its rings passing in front of the globe (it takes a wider place in the dock), All bodies as seven of Saturn's moons from their maps, and Moments, Highlights, Settings and the two cameras lit as the
+planets are. A minimized camera window shows its camera's icon in the corner of its picture.
+`node web/cassini-os/icons/make_icons.cjs [name ...]` renders them again from `icons/make_icons.html` (Playwright; set
+`THREE_DIR` to an unpacked three@0.128.0 where jsDelivr is out of reach; Saturn's icon needs
+`data/textures/rings/saturn_rings.png`).
 
 ## Body view
 
@@ -113,6 +124,62 @@ The page rewrites the URL with `history.replaceState` at most twice a second, so
 a link's view is for that visit only (it does not change the Follow camera setting). Go > Copy Link to This Moment
 (⇧⌘C) copies it.
 
+## Gallery
+
+The viewer's own library of saved pictures and films (`src/gallery.html`, Gallery in the dock or Go > Gallery…). The ＋ in
+a picture window's title bar (or G) adds the picture on screen, full view has Add to Gallery beside its save button, and a
+finished movie export has Add to Gallery beside Download. Everything stays on this device, in the browser's IndexedDB
+(database `cassini-gallery`); no server keeps anything. Each item is its recipe (the moment, as share-link parameters
+`t`, `view`, `cam`, `play=0`, plus the `/frames/...` address or the export options that make it through the pipeline)
+and, unless Settings > Gallery > Keep a copy of each file is off, the file itself (full-resolution JPEG, or the MP4).
+An item without its file (the browser cleared storage, or the setting is off) is made again by the server when opened.
+Export Library writes one `.zip` of the pictures (JPEG) and films (MP4); with Include metadata
+(Settings > Gallery > Export with metadata) it adds gallery.json and thumbs/, and Import reads that back.
+
+Open an item to see it large, go to its moment, download it, remove it (with Undo) or share it. A shared link carries
+the recipe, never the picture: `?t=…&view=…&play=0&pic=/frames/color.webp?ids=…` (or `film=from=…&until=…`) opens the
+moment and shows the picture over it, made by the frame server. Share also offers the device's share sheet with the
+file itself (phones), Copy picture, Reddit, X, Bluesky, Facebook, a text message and email. Link previews on social sites
+need the frame server reachable from the internet.
+
+
+## Cassini Studio
+
+Editing saved pictures and films (`src/studio.html`): Edit on a gallery item, E for the picture in front, Studio in the
+dock, or Go > Cassini Studio…. It works on the finished picture the pipeline made (or the export's film), like a photo
+app: Adjust (exposure, contrast, black and white levels, midtones, saturation, warmth and tint for color balance,
+sharpness, Auto levels, a histogram), Crop (Free, Original, Square, 4:5, 3:2, 16:9, 9:16; turn left/right, flip,
+straighten), Filters (Vivid, Mono, Noir, Warm, Cool, Sepia, at a strength), and for a film its start and end. One WebGL
+pass draws the edit for the preview, the saved JPEG and every frame of a film (recorded in the browser at its own
+speed: MP4 where the browser records MP4, WebM in Firefox). Compare (hold, or \) shows the original; undo and redo.
+Save to Gallery keeps the original and adds the edit beside it with its recipe (`edit`, a short string such as
+`ct:30,sa:60,cr:0_0_0.7_0.7`) and the original's id, so editing it again starts from the original with every slider
+where it was; Share… is the gallery's share menu, and a shared link to an edited picture carries `&edit=` so the page
+that opens it applies the same edit to the picture the frame server makes. Settings > Studio: picture quality, film
+quality (Mbit/s) and largest film size.
+
+## Movie Editor
+
+Choosing which frames go into a movie, and how they all look (`src/movieedit.html`), the way Cassini movies used to
+be made by hand: every frame out, the bad ones thrown away, the rest put together. **Edit…** on a highlighted
+stretch's row, **Edit frames…** in Export Movie, or Go > Movie Editor…. The window lists every raw frame of the
+stretch as a filmstrip (the export's own plan, `/export/plan.json`), with the frame in front big above it, as in the
+movie (its mosaic, color picture, movie pass or processed frame) or as the raw frame; double-click it to fill the
+window. Click a frame and press Delete to take it out (shift-click for a run, Delete again puts it back); Cameras,
+Targets and Filters chips leave out whole groups (click to leave one out, double-click to keep only it, so "only the
+Jupiter frames" is one double-click). **Pictures** picks what each frame shows: As in the movie (the camera windows'
+mosaics, color pictures and movie passes), Full color only (each three-filter set once, as its color picture), Every
+frame processed (every filter on its own, stacked and calibrated, never put together) or Every frame raw (as Cassini
+took it). The list holds every frame of the stretch however long it is; a film holds up to 20,000 pictures
+(`CASSINI_EXPORT_MAX`). Left-out frames stay in the strip, dimmed. Taking a frame out never changes how
+the others are made (a mosaic keeps all its tiles, a composite all its channels); its picture is only not shown.
+**Edit the look in Studio…** opens the frame in front in Cassini Studio (Adjust and Filters); **Use for the movie**
+makes that the look of every frame: the preview, **Play** (the kept frames at the movie frame rate), **Download
+frame** (one frame at full size with the look, JPEG) and the saved movie, which the frame server draws the same way
+(`web/frames/studio_look.py`). The edit is kept on this device per stretch, **Copy link** shares it (`&cut=`, the
+stretch, cameras, frames taken out, targets and filters kept, and the look), and **Save movie…** opens Export Movie
+on the edited film (the export takes `drop=`, `targets=`, `filters=` and `edit=`).
+
 ## Phone layout
 
 On a screen under 600 px wide, or a touch screen under 500 px tall (Settings > Interface > Phone layout: Automatic,
@@ -131,6 +198,12 @@ back when there is room; 3D resolution (30 to 100 %) is the most it may use. Whi
 touching the view) the view is not redrawn, except once a second. Frosted windows off removes the blur behind
 windows, which the browser redoes every frame. Show frame rate puts a read-out in the bottom right corner. The HUD
 glow is drawn on the GPU in the HUD's own canvas, and surface maps are decoded off the main thread.
+
+Orbits, trails and outlines are drawn as smooth lines (`src/smoothlines.html`): WebGL's own lines are one pixel wide
+and the graphics card's multisampling hardly smooths them, so each line gets a mesh of thin quads whose pixels are lit
+by how much of them the line covers. Settings > Performance > Smooth lines switches back to the plain lines (pixel
+for pixel what the page drew before); Settings > View > Line width sets their width in screen pixels (1 by default,
+as thin as the plain lines).
 
 To measure: `node bench/fps.js URL OUT [WIDTH HEIGHT DPR SECS]` (needs `npm i playwright-core`; `CHANNEL=chrome`
 on a Mac for the real GPU) reports the uncapped frame rate, the CPU time of each step of the render loop and the GPU.
@@ -151,7 +224,7 @@ past that point. Pausing, scrubbing, movie mode or a slower speed bring the pict
 
 ## Imaging bursts
 
-In normal playback each camera window shows at most a set number of new pictures a second (5 by default). When
+In normal playback each camera window shows at most a set number of new pictures a second (10 by default). When
 Cassini takes a burst of frames faster than that at the chosen speed, the clock slows down so every picture gets its
 turn, then returns to full speed once the burst is over; the status line reads "imaging burst, slowed to …" while
 it does. Change it with the slider under View > Bursts (0 to 24, 0 = no limit), or in the Settings window (Playback > Maximum images per second,
