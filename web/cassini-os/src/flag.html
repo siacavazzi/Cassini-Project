@@ -4,7 +4,7 @@
      Every picture window gets a flag in its title bar (R flags the picture in front, as F gives it full view). A flag
      keeps the picture exactly as the window shows it, what it was made from (the frame server URL and its
      X-Composite / X-Reel report), each frame's catalog details, the mission time with a link back to it, the
-     viewer's settings and an optional note and tags. The frame server saves it (POST /flags) with each frame's
+     viewer's settings, the version (page build and the site's commit) and an optional note and tags. The frame server saves it (POST /flags) with each frame's
      archive PNG into its flagged-pictures folder; /flags/ on the server shows them all. Nothing here knows about
      any particular picture or moment. -->
 <style>
@@ -197,6 +197,9 @@ body.phone #flagtoast { bottom: calc(env(safe-area-inset-bottom, 0px) + 12px); }
       ids: got.ids, frames: got.ids.map(frameInfo),
       movie: !!(window.cassiniMovie && window.cassiniMovie.on), playing: !!state.playing, speed: state.speed,
       settings: settings(),
+      // the version the page was built from and the one the server said it served when the page loaded; the server
+      // adds the version it serves now (site and server commits, picture makers' versions) as it saves the flag
+      build: window.cassiniVersion ? { page: cassiniVersion.page, version: cassiniVersion.server ? cassiniVersion.server.version : null } : null,
       client: { agent: navigator.userAgent, dpr: devicePixelRatio, viewport: [innerWidth, innerHeight], phone: document.body.classList.contains("phone") },
       image: await dataUrl(got.png)
     };
