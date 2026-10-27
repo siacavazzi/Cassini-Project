@@ -406,6 +406,11 @@ script = script.replace(tl, '''function barRect(g, x, y, w, h) {
 # real Cassini: NASA's Cassini-Huygens model (NASA 3D Resources), Draco-decoded, shipped as base64 text
 rep('<script src="https://cdn.jsdelivr.net/npm/three@0.128.0/examples/js/controls/OrbitControls.js"></script>\n',
     '<script src="https://cdn.jsdelivr.net/npm/three@0.128.0/examples/js/controls/OrbitControls.js"></script>\n<script src="https://cdn.jsdelivr.net/npm/three@0.128.0/examples/js/loaders/GLTFLoader.js"></script>\n')
+# smooth lines (smoothlines.html): its script runs right after three.js loads, ahead of the viewer, so every line the
+# viewer adds to a scene is drawn anti-aliased
+sl = open(os.path.join(os.path.dirname(os.path.abspath(sys.argv[2])), "smoothlines.html")).read()
+rep('<script src="https://cdn.jsdelivr.net/npm/three@0.128.0/examples/js/loaders/GLTFLoader.js"></script>\n',
+    '<script src="https://cdn.jsdelivr.net/npm/three@0.128.0/examples/js/loaders/GLTFLoader.js"></script>\n' + sl[sl.index("<script>"):sl.index("</script>") + 9] + "\n")
 rep('function makeCassini() {\n  // Rough', 'function makeCassiniPrimitive() {\n  // Rough')
 rep('// ---------- state ----------\n', """// NASA's Cassini-Huygens model replaces the primitive one once it has loaded.
 const HUYGENS_RELEASE_ET = 157212064.18; // 2004-12-25 02:00 UTC, Huygens separates (same as the release milestone)
