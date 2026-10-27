@@ -95,17 +95,27 @@ assert abs(int(on[560, 1100, 0]) - int(on[560, 900, 0])) <= 6 and 238 <= on[560,
 assert row[0] < 236 and row[-1] > 247, row
 print("tiles of different brightness meet without a step, and leveled to each other; ok")
 
-# tiles whose outermost pixels are dark (as resized, north-up tiles' are): no dark line where their rims fall inside
-# the mosaic, nor where a rim meets the next tile's
-frames = tiles(40)
-for f in frames:
-    a = f[..., 3] > 0
-    rim = a & (mosaic._inside(a.astype(np.uint8), np.zeros_like(a)) <= 2)
-    f[rim, :3] = 5
+# tiles made as obs_mosaic's are: turned north up (linear, on colour and alpha apart, so the edge mixes with the black
+# round it), then resized (Lanczos) to twice their size: no dark line or specks where their edges fall inside the
+# mosaic, nor along its outer edge
+import cv2  # noqa: E402
+frames = []
+for i, x0 in enumerate((0, 1300)):
+    t = np.zeros((1448, 1448, 4), np.uint8)
+    t[212:1236, 212:1236, :3] = (230, 215, 160)
+    t[212:1236, 212:1236, 3] = mask
+    t = cv2.warpAffine(t, cv2.getRotationMatrix2D((724, 724), 20, 1.0), (1448, 1448), flags=cv2.INTER_LINEAR)
+    t = t[150:1300, 150:1300]
+    t = np.asarray(Image.fromarray(t).resize((2300, 2300), Image.LANCZOS))
+    f = np.zeros((2400, 3700, 4), np.uint8)
+    f[50:2350, x0:x0 + 2300] = t
+    frames.append(f)
 on = draw(frames)
-inner = on[TOP + 100:TOP + 900, 100:1900]
-assert inner[inner[..., 3] == 255][:, 0].min() >= 229, inner[..., 0].min()
-print("tiles' dark outermost pixels never drawn; ok")
+solid = on[..., 3] == 255
+assert on[..., 0][solid].min() >= 228, on[..., 0][solid].min()
+edge = (on[..., 3] > 60) & ~solid
+assert on[..., 0][edge].min() >= 200, np.sort(on[..., 0][edge])[:10]
+print("tiles' dark, specked edges never drawn; ok")
 
 # where tiles do not quite meet (two tiles 36 px apart under a third that spans both), the gap between them keeps a
 # soft edge, as the mosaic's outer edge does
@@ -120,3 +130,22 @@ on = draw(frames)
 row = on[1600, 900:1012, 3].astype(int)
 assert row[0] == 255 and row[-1] == 0 and np.all(np.diff(row) <= 0) and (row > 0).sum() - (row == 255).sum() > 30, row
 print("a gap between tiles keeps a soft edge; ok")
+
+# a mosaic grown a tile at a time over the picture so far (obs_mosaic.draw_over: the part of the picture round the
+# tile, composed with the tile as a picture drawn so far, under=0), the same place drawn again and again as a mosaic
+# movie's is: the picture's outer edge round it, a neighbour's, stays as it was drawn, never eaten into a few pixels
+# with every tile drawn near it
+sys.path.insert(0, os.path.join(os.path.dirname(os.path.abspath(__file__)), "frames"))
+import obs_mosaic  # noqa: E402
+pic = draw(tiles(40))
+first = pic.copy()
+t = tiles(40)[1]
+ys, xs = np.nonzero(t[..., 3])
+part = t[ys.min():ys.max() + 1, xs.min():xs.max() + 1]
+with calibration.stepping(""):
+    for i in range(12):
+        obs_mosaic.draw_over(pic, lambda: part, int(xs.min()), int(ys.min()), part.shape[1], part.shape[0], 1.0,
+                             match=False)
+grown = np.abs(pic[..., 3].astype(int) - first[..., 3])
+assert grown.max() <= 2, (grown.max(), np.argwhere(grown > 2)[:5])
+print("a picture grown over and over keeps its outer edge; ok")

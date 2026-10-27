@@ -69,12 +69,14 @@ for n in (3, 7, 11, 15):   # whole laps (a whole picture of mixed laps pulls the
     calls.clear()
     whole = pic(om.rolling_webp(fr[n][1], 512, cache2, 1)[0])
     assert calls and calls[0] > 2 or n < 4, (n, calls)
-    # where only one place's tile is (the middle of each quarter) the two are the same picture; where places
-    # overlap, the grown one has each place's newest tile on top and the whole one blends them
+    # where only one place's tile is (the middle of each quarter) the two are the same picture, but for the whole
+    # one's seams leveled (its places' patterns here do not line up, so their seams are leveled a level or so over
+    # half a frame, which a new lap grown over the picture is not); where places overlap, the grown one has each
+    # place's newest tile on top and the whole one blends them
     H, W = whole.shape[:2]
     for cy, cx in ((H // 4, W // 4), (H // 4, 3 * W // 4), (3 * H // 4, W // 4), (3 * H // 4, 3 * W // 4)):
         a, b = whole[cy - 30:cy + 30, cx - 30:cx + 30, :3], grown[n][cy - 30:cy + 30, cx - 30:cx + 30, :3]
-        assert np.abs(a - b).mean() < 6, (n, cy, cx, np.abs(a - b).mean())
+        assert np.abs(a - b).mean() < 7, (n, cy, cx, np.abs(a - b).mean())
     diff = np.abs(whole[..., :3] - grown[n][..., :3])[whole[..., 3] > 200]
     print(n, "grown vs whole: places' middles the same; whole picture mean diff", round(float(diff.mean()), 2))
 

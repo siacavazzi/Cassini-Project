@@ -97,9 +97,11 @@ def measure(rgba, edge, band=4, sigma=4.0):
     return {"seam50": pct(seam, 50), "seam95": pct(seam, 95), "flat50": pct(flat, 50), "flat95": pct(flat, 95)}, worst
 
 
-def spots(worst, n=CROPS, half=CROP // 2):
-    """The n places where worst is highest, at least a crop apart."""
+def spots(worst, n=CROPS, half=CROP // 2, taken=()):
+    """The n places where worst is highest, at least a crop apart and from the places taken."""
     w = worst.copy()
+    for y, x in taken:
+        w[max(0, y - 2 * half):y + 2 * half, max(0, x - 2 * half):x + 2 * half] = 0
     out = []
     for _ in range(n):
         y, x = np.unravel_index(int(np.argmax(w)), w.shape)
@@ -170,7 +172,8 @@ def main():
             if not pics:
                 continue
             # the worst seams before, and after, cropped at 1:1 from every setting side by side
-            places = spots(pics[SETTINGS[0][0]][1], CROPS // 2) + spots(pics[SETTINGS[-1][0]][1], CROPS // 2)
+            places = spots(pics[SETTINGS[0][0]][1], CROPS // 2)
+            places += spots(pics[SETTINGS[-1][0]][1], CROPS - len(places), taken=places)
             row["crops"] = []
             for i, (y, x) in enumerate(places):
                 parts = []

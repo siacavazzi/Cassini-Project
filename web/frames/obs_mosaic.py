@@ -1260,7 +1260,7 @@ def draw_over(rgba, part, left, top, sw, sh, k, match=True):
             kw = {"corrections": same, "pin": 0}
         else:
             kw = {"pin": 0}
-        rgba[y0:y1, x0:x1] = _compose([(below, None, None, None), (frame, None, None, None)], k, **kw)
+        rgba[y0:y1, x0:x1] = _compose([(below, None, None, None), (frame, None, None, None)], k, under=0, **kw)
 
 
 _grown_last = collections.OrderedDict()   # path of a grown filter mosaic -> its RGBA, the few made last
