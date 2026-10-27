@@ -1757,7 +1757,7 @@ body.idle .win.full .titlebar { opacity: 0; }
         // stabilized on this computer (steady-local.html): the server's frame at SPICE's places, at the 1024 px it is
         // drawn at, moved here; the key names the smoothing, so a new one is a new picture (the request is the same)
         const here = hereWant(k);
-        if (here) return { key: movieUrl(catalog.id[k], 1024, 0, 0) + `#here=s${here.steady}e${here.exposure}`, set: -1, k, movie: true, here };
+        if (here) return { key: movieUrl(catalog.id[k], 1024, 0, 0, 0, 0) + `#here=s${here.steady}e${here.exposure}t${here.trail}c${S.get("cameras.composites") ? 1 : 0}`, set: -1, k, movie: true, here };
         return { key: movieUrl(catalog.id[k], sz), set: -1, k, movie: true };
       }
       // a mosaic movie (a raster repeated over the same places): its rolling mosaic, every place's newest tile
@@ -1854,7 +1854,7 @@ body.idle .win.full .titlebar { opacity: 0; }
         lane[which] = null; warmed.add(v.key);
         // stabilized on this computer: the frame moved to its place first (a worker), then shown as any picture
         const show = pic => { if (want && !hold && !v.warm && v.cat === catalog && fits(v)) display(v, pic); };   // no want: the camera went idle (or was held) while this loaded
-        if (v.here && !v.warm) window.cassiniSteadyLocal.apply(FRAMES, catalog.id[v.k], im, { center: centreOn() !== false, color: !!S.get("cameras.composites"), ...v.here })
+        if (v.here && !v.warm) window.cassiniSteadyLocal.apply(FRAMES, catalog.id[v.k], im, { center: centreOn() !== false, color: !!S.get("cameras.composites"), planeUrl: id => movieUrl(id, 1024, 0, 0, 0, 0), ...v.here })
           .then(pic => show(pic || im), () => show(im)).then(pump);
         else { show(im); pump(); }
       };
@@ -2006,7 +2006,7 @@ body.idle .win.full .titlebar { opacity: 0; }
     // a pass played as a movie (the Mosaic / Movie switch, with Settings > Movie > Steady movie passes on): its
     // frames come from /frames/movie
     const playsMovie = k => S.get("movies.steady") && playsAs(k) === "movie";
-    const movieUrl = (id, sz, steady, exposure) => `${FRAMES}/frames/movie/${id}.webp?size=${sz || size()}&color=${S.get("cameras.composites") ? 1 : 0}${window.cassiniMovieStyle({ center: centreOn(), steady, exposure })}${window.cassiniLook()}`;
+    const movieUrl = (id, sz, steady, exposure, color, trail) => `${FRAMES}/frames/movie/${id}.webp?size=${sz || size()}&color=${(color ?? (S.get("cameras.composites") ? 1 : 0))}${window.cassiniMovieStyle({ center: centreOn(), steady, exposure, trail })}${window.cassiniLook()}`;
     // what this computer works out for frame k's movie picture ({steady, exposure}: steady-local.html), null when the server draws it
     const hereWant = k => window.cassiniSteadyLocal ? window.cassiniSteadyLocal.want(FRAMES, catalog.id[k], { center: centreOn() !== false, color: !!S.get("cameras.composites") }) : null;
     const movieFailed = new Set();    // frames the server did not steady: they show as they are
@@ -2076,7 +2076,7 @@ body.idle .win.full .titlebar { opacity: 0; }
       while (thumbs.children.length > Math.min(7, fr.length)) thumbs.lastChild.remove();
       [...thumbs.children].forEach((im, j) => {
         const id = fr[first + j][0];
-        if (im.dataset.id !== id) { im.dataset.id = id; im.src = playsRolling(k) ? frameUrl(id, 128) : (S.get("movies.stabilizeLocal") ? movieUrl(id, 128, 0, 0) : movieUrl(id, 128)); }
+        if (im.dataset.id !== id) { im.dataset.id = id; im.src = playsRolling(k) ? frameUrl(id, 128) : (S.get("movies.stabilizeLocal") ? movieUrl(id, 128, 0, 0, undefined, 0) : movieUrl(id, 128)); }
         im.classList.toggle("now", first + j === n);
         im.title = `${id} · ${fr[first + j][2]}`;
       });

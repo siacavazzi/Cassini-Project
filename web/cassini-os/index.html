@@ -2175,8 +2175,8 @@ body.phone #launch .lx-clock { font-size: 9.5px; bottom: 9vh; }
       hint: "SPICE places each frame of a movie pass from where Cassini was said to point, and that is a few pixels off, differently from frame to frame, so a moon or Jupiter's clouds can wobble. On, each frame is matched to the frame before it by what the pictures show (the pipeline's own alignment, with SPICE's place as the starting guess), and held to SPICE over a longer stretch so the body stays where it is. Feature tracks (a cloud followed across Saturn) are always steadied. Off shows every frame where SPICE puts it." });
   D({ key: "movies.stabilizeSmooth", section: "Processing", label: "Stabilization smoothing", type: "range", value: 12, min: 4, max: 60, step: 4, unit: "frames",
       hint: "How long the pictures are believed over SPICE (with Image stabilization on). Low takes out only the frame-to-frame wobble and follows SPICE closely; high also holds slow drifts still, trusting the frame-to-frame matching over that many frames." });
-  D({ key: "movies.stabilizeLocal", section: "Processing", label: "Steady movies on this computer", type: "toggle", value: false,
-      hint: "Image stabilization and exposure normalization worked out by this computer, at any smoothing: it moves and brightens the frame the server already has, instead of the server drawing every frame again for each setting. Single-filter frames only for now (color frames, a trail and feature tracks are still drawn by the server); exports are always made by the server." });
+  D({ key: "movies.stabilizeLocal", section: "Processing", label: "Steady movies on this computer", type: "toggle", value: true,
+      hint: "Image stabilization and exposure normalization worked out by this computer, at any smoothing: it moves and brightens the frame the server already has, instead of the server drawing every frame again for each setting. True-color frames and a trail too; false-color sets, feature tracks and passes whose view follows the frames are still drawn by the server, and exports are always made by the server. Off asks the server to draw every frame again for each setting, which is slower and is not offered when many people are watching." });
   D({ key: "movies.exposure", section: "Processing", label: "Exposure normalization", type: "toggle", value: false,
       hint: "A movie pass is drawn on one brightness scale, so a frame whose exposure the calibration did not fully even out, or one lit by stray light, flashes or jumps in brightness. On, each picture's brightness is measured against the picture before it, a frame or two far brighter or darker than their neighbours are brought to their level, and other jumps are spread over several frames, one gain for the whole picture so a color picture keeps its color. Slow changes stay, and every frame keeps its data, only scaled. Off shows every frame as the pass's scale draws it." });
   D({ key: "movies.exposureSmooth", section: "Processing", label: "Exposure smoothing", type: "range", value: 8, min: 2, max: 30, step: 2, unit: "frames",
@@ -2195,7 +2195,7 @@ body.phone #launch .lx-clock { font-size: 9.5px; bottom: 9vh; }
   window.cassiniStabilize = () => !S.get("movies.stabilize") ? 0 : (S.get("movies.stabilizeSmooth") ?? 12);
   // exposure normalization of a movie pass (obs_mosaic.exposure_gains): its smoothing in frames, 0 when off
   window.cassiniExposure = () => !S.get("movies.exposure") ? 0 : (S.get("movies.exposureSmooth") ?? 8);
-  window.cassiniMovieStyle = (o = {}) => `${(o.center ?? S.get("cameras.autoCenter")) === false ? "&center=0" : ""}&trail=${S.get("movies.trail") || 0}&laps=${S.get("movies.laps") || 1}` +
+  window.cassiniMovieStyle = (o = {}) => `${(o.center ?? S.get("cameras.autoCenter")) === false ? "&center=0" : ""}&trail=${o.trail ?? (S.get("movies.trail") || 0)}&laps=${S.get("movies.laps") || 1}` +
     (S.get("movies.fade") ? `&fade=${S.get("movies.fade")}&persist=${S.get("movies.persist") ?? 35}` : "") +
     ((o.steady ?? window.cassiniStabilize()) ? `&steady=${o.steady ?? window.cassiniStabilize()}` : "") +
     ((o.exposure ?? window.cassiniExposure()) ? `&exposure=${o.exposure ?? window.cassiniExposure()}` : "");
@@ -2723,7 +2723,81 @@ body.phone #launch .lx-clock { font-size: 9.5px; bottom: 9vh; }
       for (let i = 0; i < 256; i++) t[i] = Math.trunc(enc(Math.min(Math.max(dec(i / 255) * g, 0), 1)) * 255 + 0.5);
       return t;
     }
-    return { pyRound, pyRound2, places, shift, evenedGains, gains, lut };
+    // obs_mosaic.colour_picture on its planes (RGBA, each a filter's tile placed in the view, red channel = the
+    // filter): calibration.mix_display (decode, the 3x3 natural mix, _shoulder's roll-off, encode) in float32 as numpy
+    // does it, then the picture only where every filter has it. c: {mix (3x3, or null: straight), gamma, shoulder}
+    function mix(planes, c) {
+      const f = Math.fround, N = planes[0].length, out = new Uint8ClampedArray(N), g = c.gamma, srgb = g === "srgb";
+      const gf = srgb ? 0 : f(g), ig = srgb ? 0 : f(1 / g);
+      const dec = new Float32Array(256);
+      for (let v = 0; v < 256; v++) {
+        const x = f(v / 255);
+        dec[v] = srgb ? (x <= f(0.04045) ? f(x / f(12.92)) : f(Math.pow(f(f(Math.max(x, f(0.04045)) + f(0.055)) / f(1.055)), f(2.4)))) : f(Math.pow(x, gf));
+      }
+      const enc = x => srgb ? (x <= f(0.0031308) ? f(f(12.92) * x) : f(f(f(1.055) * f(Math.pow(f(Math.max(x, f(0.0031308))), f(1 / 2.4)))) - f(0.055))) : f(Math.pow(x, ig));
+      const M = c.mix && c.mix.map(r => r.map(f)), knee = f(c.shoulder), room = f(1 - c.shoulder), tiny = f(1e-12);
+      // the level a linear value encodes to: trunc(encode(y) * 255 + 0.5), which only grows with y, so each level's
+      // smallest float32 y is found once (a search over float32 bit patterns) and a pixel's level is a search of
+      // those 255 thresholds: the same levels at an eighth of the cost of a pow per channel
+      const level = y => Math.trunc(f(f(enc(y) * 255) + 0.5));
+      let lv = level;
+      if (!srgb) {
+        const bits = new Float32Array(1), word = new Uint32Array(bits.buffer), T = new Float32Array(256);
+        const asF = w => { word[0] = w; return bits[0]; };
+        for (let b = 1; b < 256; b++) {
+          let lo = 0, hi = 0x3f800000;   // 0 .. 1.0
+          if (level(1) < b) { T[b] = Infinity; continue; }
+          while (lo < hi) { const mid = (lo + hi) >>> 1; if (level(asF(mid)) >= b) hi = mid; else lo = mid + 1; }
+          T[b] = asF(lo);
+        }
+        lv = y => { let lo = 0, hi = 255; while (lo < hi) { const mid = (lo + hi + 1) >> 1; if (T[mid] <= y) lo = mid; else hi = mid - 1; } return lo; };
+      }
+      const x = [0, 0, 0], y = [0, 0, 0];
+      for (let i = 0; i < N; i += 4) {
+        let r0 = planes[0][i], r1 = planes[1][i], r2 = planes[2][i];
+        if (M) {
+          x[0] = dec[r0]; x[1] = dec[r1]; x[2] = dec[r2];
+          for (let k = 0; k < 3; k++) y[k] = f(f(f(M[k][0] * x[0]) + f(M[k][1] * x[1])) + f(M[k][2] * x[2]));
+          const top = Math.max(y[0], y[1], y[2]);
+          if (top > knee) {
+            const roll = f(knee + f(room * f(Math.tanh(f(f(top - knee) / room)))));
+            const k = f(roll / Math.max(top, tiny));
+            for (let j = 0; j < 3; j++) y[j] = f(y[j] * k);
+          }
+          r0 = lv(Math.min(Math.max(y[0], 0), 1)); r1 = lv(Math.min(Math.max(y[1], 0), 1)); r2 = lv(Math.min(Math.max(y[2], 0), 1));
+        }
+        const a = Math.min(planes[0][i + 3], planes[1][i + 3], planes[2][i + 3]), s = f(a / 255);
+        out[i] = Math.trunc(f(f(r0 * s) + 0.5)); out[i + 1] = Math.trunc(f(f(r1 * s) + 0.5)); out[i + 2] = Math.trunc(f(f(r2 * s) + 0.5));
+        out[i + 3] = a;
+      }
+      return out;
+    }
+    // movie_frame's rolling trail: the up to trail earlier placed frames of frame n's filter, oldest first
+    function trailOf(t, n, trail) {
+      const placed = new Set(t.n), js = [];
+      for (let j = n - 1; j > Math.max(-1, n - 8 * trail) && js.length < trail; j--) if (t.filters[j] === t.filters[n]) js.push(j);
+      return js.reverse().filter(j => placed.has(j));
+    }
+    // ... drawn under the newest, older ones fainter (float32 as numpy does it): older and newest are RGBA planes
+    function blendTrail(older, newest) {
+      const f = Math.fround, N = newest.length, acc = new Float32Array(N), L = older.length, out = new Uint8ClampedArray(N);
+      older.forEach((a, q) => {
+        const k = f(1 - (L - q) / (L + 1));
+        for (let i = 0; i < N; i += 4) {
+          const w = f(f(a[i + 3] / 255) * k), v = f(1 - w);
+          for (let c = 0; c < 3; c++) acc[i + c] = f(f(acc[i + c] * v) + f(a[i + c] * w));
+          acc[i + 3] = Math.max(acc[i + 3], f(w * 255));
+        }
+      });
+      for (let i = 0; i < N; i += 4) {
+        const w = f(newest[i + 3] / 255), v = f(1 - w);
+        for (let c = 0; c < 3; c++) acc[i + c] = f(f(acc[i + c] * v) + f(newest[i + c] * w));
+        acc[i + 3] = Math.max(acc[i + 3], newest[i + 3]);
+        for (let c = 0; c < 4; c++) out[i + c] = Math.trunc(f(acc[i + c] + 0.5));
+      }
+      return out;
+    }
+    return { pyRound, pyRound2, places, shift, evenedGains, gains, lut, mix, trailOf, blendTrail };
   };
   window.cassiniSteadyMath = STEADY_MATH;
   if (typeof document === "undefined") return;
@@ -2737,21 +2811,36 @@ onmessage = async e => {
   const t = tables.get(m.key), pk = m.key + ":" + m.steady, gk = m.key + ":" + m.exposure, t0 = performance.now();
   if (!placed.has(pk)) placed.set(pk, M.places(t, m.steady));
   if (m.exposure && !gained.has(gk)) gained.set(gk, M.gains(t.exposure, m.exposure));
-  const [dx, dy] = M.shift(t, placed.get(pk), m.i);
+  // one gain for every tile of the picture (movie_frame), through _shade's lookup table
   const gain = m.exposure ? (gained.get(gk)[m.n] ?? 1.0) : 1.0, t1 = performance.now();
-  const c = new OffscreenCanvas(m.bitmap.width, m.bitmap.height), g = c.getContext("2d", { willReadFrequently: gain !== 1.0 });
-  g.drawImage(m.bitmap, dx, dy);
-  m.bitmap.close();
+  let L = null;
   if (gain !== 1.0) {
-    // _shade: the gain through its lookup table on every colour channel, alpha as it is
     const lk = gain + ":" + t.exposure.gamma;
     if (!luts.has(lk)) luts.set(lk, M.lut(gain, t.exposure.gamma));
-    const L = luts.get(lk), im = g.getImageData(0, 0, c.width, c.height), d = im.data;
-    for (let i = 0; i < d.length; i += 4) { d[i] = L[d[i]]; d[i + 1] = L[d[i + 1]]; d[i + 2] = L[d[i + 2]]; }
-    g.putImageData(im, 0, 0);
+    L = luts.get(lk);
   }
-  const blob = await c.convertToBlob({ type: "image/png" });
-  postMessage({ id: m.id, blob, dx, dy, gain, ms: [t1 - t0, performance.now() - t1] });
+  const W = m.planes[0].bitmap.width, H = m.planes[0].bitmap.height, mixing = m.planes.length > 1 || m.trail, moves = [];
+  // each tile's picture (the movie frame drawn at SPICE's places) moved to its stabilized place, its gain on it
+  const planes = m.planes.map(p => {
+    const [dx, dy] = M.shift(t, placed.get(pk), p.i), c = new OffscreenCanvas(W, H), g = c.getContext("2d", { willReadFrequently: !!(L || mixing) });
+    g.drawImage(p.bitmap, dx, dy);
+    p.bitmap.close();
+    moves.push([dx, dy]);
+    if (!L && !mixing) return c;
+    const im = g.getImageData(0, 0, W, H), d = im.data;
+    if (L) for (let i = 0; i < d.length; i += 4) { d[i] = L[d[i]]; d[i + 1] = L[d[i + 1]]; d[i + 2] = L[d[i + 2]]; }
+    if (!mixing) { g.putImageData(im, 0, 0); return c; }
+    return d;
+  });
+  let out = planes[0];
+  if (mixing) {
+    // a colour set: colour_picture's mix of the filters' planes; a trail: the earlier frames under the newest
+    out = new OffscreenCanvas(W, H);
+    const px = m.trail ? M.blendTrail(planes.slice(0, -1), planes[planes.length - 1]) : M.mix(planes, t.sets);
+    out.getContext("2d").putImageData(new ImageData(px, W, H), 0, 0);
+  }
+  const blob = await out.convertToBlob({ type: "image/png" });
+  postMessage({ id: m.id, blob, moves, gain, ms: [t1 - t0, performance.now() - t1] });
 };`;
   let worker = null, seq = 0;
   const waiting = new Map();
@@ -2804,27 +2893,46 @@ onmessage = async e => {
     // what this computer works out for this frame ({steady, exposure} smoothing), or null when the server draws it
     // (setting off, nothing to work out, a trail, a color frame, a pass not done here, or its table not here yet)
     want(frames, id, o = {}) {
-      if (!S() || !S().get("movies.stabilizeLocal") || S().get("movies.trail")) return null;
+      if (!S() || !S().get("movies.stabilizeLocal")) return null;
       const steady = window.cassiniStabilize ? window.cassiniStabilize() : 0, exposure = window.cassiniExposure ? window.cassiniExposure() : 0;
-      if (!steady && !exposure) return null;
+      const trail = S().get("movies.trail") || 0;
+      if (!steady && !exposure && !trail) return null;
+      // the pictures as Settings > Processing draws them by default only (another look or a step off: the server)
+      if (window.cassiniLook && window.cassiniLook()) return null;
       const e = lookup(frames, id, o.center !== false, !!o.color);
-      if (!e || (e.table.colour && o.color)) return null;
+      if (!e) return null;
+      // a colour set: its natural mix here (a false colour set, or the detail filter after the mix: the server)
+      const set = o.color && e.table.sets ? e.table.sets.by[e.n] : null;
+      if (o.color && e.table.colour && (!e.table.sets || (set && e.table.detail))) return null;
+      // a trail drawn under a frame alone (the detail filter runs after it: the server)
+      if (trail && !set && e.table.detail) return null;
       if (exposure && !(e.table.exposure && e.table.exposure.local)) return null;
-      return { steady, exposure };
+      return { steady, exposure, trail: set ? 0 : Math.min(trail, e.table.trail_most) };
     },
     // the picture of the frame (SPICE's places, no gain, OUT px) moved to its stabilized place and given its
     // exposure gain: a new Image, or null
+    // im: the frame's picture at SPICE's places with no gain, alone (color=0); o.planeUrl(id): another frame's, for
+    // the tiles of a colour set
     async apply(frames, id, im, o = {}) {
       const e = byId.get(`${tag(o.center !== false, !!o.color)}:${id}`);
       if (!e) return null;
-      const bitmap = await createImageBitmap(im), mid = ++seq;
-      const r = await new Promise(res => { waiting.set(mid, res); work().postMessage({ id: mid, key: e.key, i: e.a, n: e.n, steady: o.steady || 0, exposure: o.exposure || 0, bitmap }, [bitmap]); });
-      stats.frames++; stats.placeMs += r.ms[0]; stats.drawMs += r.ms[1]; stats.last = { id, dx: r.dx, dy: r.dy, gain: r.gain };
+      const T = e.table, set = o.color && T.sets ? T.sets.by[e.n] : null;
+      const load = async j => {
+        if (j === e.n) return createImageBitmap(im);
+        const r = await fetch(o.planeUrl(T.ids[j]));
+        if (!r.ok) throw new Error(`plane ${T.ids[j]}: ${r.status}`);
+        return createImageBitmap(await r.blob());
+      };
+      const older = !set && o.trail ? window.cassiniSteadyMath().trailOf(T, e.n, o.trail) : [];
+      const tiles = set || [...older, e.n], bitmaps = await Promise.all(tiles.map(load)), mid = ++seq;
+      const planes = tiles.map((j, q) => ({ i: T.n.indexOf(j), bitmap: bitmaps[q] }));
+      const r = await new Promise(res => { waiting.set(mid, res); work().postMessage({ id: mid, key: e.key, n: e.n, steady: o.steady || 0, exposure: o.exposure || 0, trail: older.length > 0, planes }, bitmaps); });
+      stats.frames++; stats.placeMs += r.ms[0]; stats.drawMs += r.ms[1]; stats.last = { id, moves: r.moves, gain: r.gain, set: tiles.map(j => T.ids[j]) };
       const url = URL.createObjectURL(r.blob), out = new Image();
       urls.push(url);
       if (urls.length > 8) URL.revokeObjectURL(urls.shift());
       await new Promise((res, rej) => { out.onload = res; out.onerror = rej; out.src = url; });
-      out.dataset.steadyLocal = `${r.dx},${r.dy},${r.gain}`;
+      out.dataset.steadyLocal = `${r.moves.map(m => m.join(",")).join(" ")} ×${r.gain}`;
       return out;
     },
   };
@@ -3801,7 +3909,7 @@ onmessage = async e => {
         // stabilized on this computer (steady-local.html): the server's frame at SPICE's places, at the 1024 px it is
         // drawn at, moved here; the key names the smoothing, so a new one is a new picture (the request is the same)
         const here = hereWant(k);
-        if (here) return { key: movieUrl(catalog.id[k], 1024, 0, 0) + `#here=s${here.steady}e${here.exposure}`, set: -1, k, movie: true, here };
+        if (here) return { key: movieUrl(catalog.id[k], 1024, 0, 0, 0, 0) + `#here=s${here.steady}e${here.exposure}t${here.trail}c${S.get("cameras.composites") ? 1 : 0}`, set: -1, k, movie: true, here };
         return { key: movieUrl(catalog.id[k], sz), set: -1, k, movie: true };
       }
       // a mosaic movie (a raster repeated over the same places): its rolling mosaic, every place's newest tile
@@ -3898,7 +4006,7 @@ onmessage = async e => {
         lane[which] = null; warmed.add(v.key);
         // stabilized on this computer: the frame moved to its place first (a worker), then shown as any picture
         const show = pic => { if (want && !hold && !v.warm && v.cat === catalog && fits(v)) display(v, pic); };   // no want: the camera went idle (or was held) while this loaded
-        if (v.here && !v.warm) window.cassiniSteadyLocal.apply(FRAMES, catalog.id[v.k], im, { center: centreOn() !== false, color: !!S.get("cameras.composites"), ...v.here })
+        if (v.here && !v.warm) window.cassiniSteadyLocal.apply(FRAMES, catalog.id[v.k], im, { center: centreOn() !== false, color: !!S.get("cameras.composites"), planeUrl: id => movieUrl(id, 1024, 0, 0, 0, 0), ...v.here })
           .then(pic => show(pic || im), () => show(im)).then(pump);
         else { show(im); pump(); }
       };
@@ -4050,7 +4158,7 @@ onmessage = async e => {
     // a pass played as a movie (the Mosaic / Movie switch, with Settings > Movie > Steady movie passes on): its
     // frames come from /frames/movie
     const playsMovie = k => S.get("movies.steady") && playsAs(k) === "movie";
-    const movieUrl = (id, sz, steady, exposure) => `${FRAMES}/frames/movie/${id}.webp?size=${sz || size()}&color=${S.get("cameras.composites") ? 1 : 0}${window.cassiniMovieStyle({ center: centreOn(), steady, exposure })}${window.cassiniLook()}`;
+    const movieUrl = (id, sz, steady, exposure, color, trail) => `${FRAMES}/frames/movie/${id}.webp?size=${sz || size()}&color=${(color ?? (S.get("cameras.composites") ? 1 : 0))}${window.cassiniMovieStyle({ center: centreOn(), steady, exposure, trail })}${window.cassiniLook()}`;
     // what this computer works out for frame k's movie picture ({steady, exposure}: steady-local.html), null when the server draws it
     const hereWant = k => window.cassiniSteadyLocal ? window.cassiniSteadyLocal.want(FRAMES, catalog.id[k], { center: centreOn() !== false, color: !!S.get("cameras.composites") }) : null;
     const movieFailed = new Set();    // frames the server did not steady: they show as they are
@@ -4120,7 +4228,7 @@ onmessage = async e => {
       while (thumbs.children.length > Math.min(7, fr.length)) thumbs.lastChild.remove();
       [...thumbs.children].forEach((im, j) => {
         const id = fr[first + j][0];
-        if (im.dataset.id !== id) { im.dataset.id = id; im.src = playsRolling(k) ? frameUrl(id, 128) : (S.get("movies.stabilizeLocal") ? movieUrl(id, 128, 0, 0) : movieUrl(id, 128)); }
+        if (im.dataset.id !== id) { im.dataset.id = id; im.src = playsRolling(k) ? frameUrl(id, 128) : (S.get("movies.stabilizeLocal") ? movieUrl(id, 128, 0, 0, undefined, 0) : movieUrl(id, 128)); }
         im.classList.toggle("now", first + j === n);
         im.title = `${id} · ${fr[first + j][2]}`;
       });
@@ -9374,7 +9482,7 @@ void main() {
   window.cassiniAbout = { open, addTab, esc, close: () => show(false), credits: CREDITS };
 
   // ---- which version this is: this page's build id (build.py writes it), and what the frame server says it serves ----
-  const BUILD = /*BUILD*/"d485b317335c";
+  const BUILD = /*BUILD*/"01e7618d80a7";
   const FRAMES = (() => {                       // the frame server, chosen as the camera window chooses it
     const q = new URLSearchParams(location.search).get("frames");
     if (q) return q.replace(/\/$/, "");

@@ -38,11 +38,11 @@ Ordered by what it costs the Mini now. Each step ships as its own PR with before
 
 | # | Feature | Today | Moves to | Status |
 |---|---|---|---|---|
-| 1 | Image stabilization, single-filter movie frames | server draws every frame per smoothing value (`_s<N>`) | page moves the pre-built steady-0 frame (`steady-local.html`) | PR #149, off by default |
-| 2 | Exposure normalization | server draws every frame per smoothing value (`_e<N>`) | page: port of `evened_gains`, then `_shade`'s lookup table per frame | next |
-| 3 | Colour movie frames under 1 and 2 | server mixes each set's planes | page: the set's grey frames (`color=0`, pre-built) moved and gained, mixed by a WebGL port of `colour_picture` / `calibration.mix_display`, then `detail` for filled passes | after 2 |
-| 4 | Movie trail | server blends earlier frames per trail length | page: the same blend over grey frames it already has | with 3 |
-| 5 | Defaults switch | stabilization and exposure default on, drawn by the server | page does 1 to 4 by default; the pre-build keeps only base frames (steady 0, exposure 0), and #147's ~23 GB frame remake is no longer needed (its chains still are) | after 3 |
+| 1 | Image stabilization, single-filter movie frames | server draws every frame per smoothing value (`_s<N>`) | page moves the pre-built steady-0 frame (`steady-local.html`) | PR #149 |
+| 2 | Exposure normalization | server draws every frame per smoothing value (`_e<N>`) | page: port of `evened_gains`, then `_shade`'s lookup table per frame | PR #149 |
+| 3 | Colour movie frames under 1 and 2 | server mixes each set's planes | page: the set's grey frames (`color=0`, pre-built) moved and gained, mixed by a WebGL port of `colour_picture` / `calibration.mix_display`, then `detail` for filled passes | PR #149, natural colour only; false-colour sets and filled passes' colour stay on the server |
+| 4 | Movie trail | server blends earlier frames per trail length | page: the same blend over grey frames it already has | PR #149 |
+| 5 | Defaults switch | stabilization and exposure default on, drawn by the server | page does 1 to 4 by default; the pre-build keeps only base frames (steady 0, exposure 0), and #147's ~23 GB frame remake is no longer needed (its chains still are) | PR #149 turns the page path on by default; the pre-build change is the pre-build thread's |
 | 6 | Film export "as in the movie" | Mini encodes (~10 pictures/s, one at a time) | page encodes from the pictures it shows (WebCodecs H.264), with the Studio look already applied there | later |
 | 7 | Mosaic movie fade / laps / persist | server draws each combination (`rolling_webp`) | to be assessed: per-place pictures plus a page-side blend, or one pre-built default | later |
 | 8 | Processing toggles, classic look, raw colours (`off=`, `look=`, `colors=`) | server redraws everything | stay on the server; local-only (Sam), not offered on the public site unless pre-built | rule only |

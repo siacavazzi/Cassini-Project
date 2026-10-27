@@ -41,6 +41,25 @@ for n, (x, y) in enumerate(truth):
 json.dump({"key": list(u["key"]), "display_scale": scale, "angle": 0, "footprint": [0, 0, 1800, 1100], "fixed": True,
            "view": [1800, 1100], "k": 1, "colour": None, "grey": "CL1", "whole": False}, open(os.path.join(d, om.PLAN_FILE), "w"))
 
+# a colour pass: RED, GRN, BL1 over and over (natural colour, the NAC's mix), each filter as bright as it is
+FILTERS = ["RED", "GRN", "BL1"]
+fr2 = [(f"q{n}", f"N{1600100000 + 30 * n}_1", FILTERS[n % 3], 30.0 * n, 600, 0, 0, 1e6) for n in range(N)]
+u2 = {"key": ("MIMAS", "ISS_TEST_LOCALC", "N", 0), "frames": fr2, "z": 1e6, "movie": True, "mosaic": False,
+      "track": False, "kind": "movie", "last": fr2[-1][3]}
+d2, TD2 = om.folder(u2, cache), om._tiles(u2, cache, scale)
+os.makedirs(TD2, exist_ok=True)
+for n, (x, y) in enumerate(truth):
+    crop = cv2.warpAffine(field, np.float32([[1, 0, x], [0, 1, y]]), (S, S), flags=cv2.INTER_CUBIC | cv2.WARP_INVERSE_MAP)
+    im = np.zeros((S, S, 4), np.uint8)
+    im[..., 3] = 255
+    level = {"RED": 210, "GRN": 170, "BL1": 120}[FILTERS[n % 3]] * (1.5 if n in (13, 14, 15) else 1.0)
+    im[..., :3] = np.clip(crop * level, 0, 255).astype(np.uint8)[..., None]
+    Image.fromarray(im).save(f"{TD2}/{n}.png")
+    json.dump({"n": n, "id": fr2[n][1], "filter": FILTERS[n % 3], "t": fr2[n][3], "offset": spice[n], "box": [-S / 2, -S / 2, S, S]},
+              open(f"{TD2}/{n}.json", "w"))
+json.dump({"key": list(u2["key"]), "display_scale": scale, "angle": 0, "footprint": [0, 0, 1800, 1100], "fixed": True,
+           "view": [1800, 1100], "k": 1, "colour": FILTERS, "grey": "RED", "whole": False}, open(os.path.join(d2, om.PLAN_FILE), "w"))
+
 # the page's arithmetic, as the page has it
 page = open(os.path.join(HERE, "cassini-os", "src", "steady-local.html")).read()
 script = page[page.index("<script>") + 8:page.index("</script>")]
@@ -168,4 +187,113 @@ with calibration.looking("balanced"):
         print(f"centre={centre}: {table['view']} k={table['k']:.4f}; places and moves equal the server's for smoothing "
               f"{SMOOTHS}; {worst['exact']} pixels equal, at most {worst['edge']} uncovered at an edge; as WebP q95 the "
               f"moved picture is {min(worst['psnr']):.1f} dB (worst) / {np.median(worst['psnr']):.1f} dB (median) from the server's")
+
+def node_mix(cases, sets):
+    """The page's colour mix (cassiniSteadyMath.mix) of each case's planes, run in node on the raw bytes."""
+    tmp = tempfile.mkdtemp()
+    for c, planes in enumerate(cases):
+        for q, pl in enumerate(planes):
+            pl.tofile(f"{tmp}/{c}_{q}.bin")
+    js = ("const window = {};\n" + script + "\nconst M = window.cassiniSteadyMath(), fs = require('fs'), c = " + json.dumps(sets) + ";\n"
+          f"for (let i = 0; i < {len(cases)}; i++) {{ const P = [0, 1, 2].map(q => new Uint8ClampedArray(fs.readFileSync('{tmp}/' + i + '_' + q + '.bin')));"
+          f" fs.writeFileSync('{tmp}/' + i + '.out', M.mix(P, c)); }}")
+    with open(f"{tmp}/mix.js", "w") as fh:
+        fh.write(js)
+    subprocess.run(["node", f"{tmp}/mix.js"], check=True)
+    return [np.fromfile(f"{tmp}/{c}.out", np.uint8).reshape(cases[c][0].shape) for c in range(len(cases))]
+
+
+with calibration.looking("balanced"):
+    # colour: each frame's set of tiles, each moved and gained as above, mixed by the page's port of colour_picture
+    om.steady_chain(u2, cache)
+    om.exposure_chain(u2, cache, None, True, True, 0)
+    table = om._steady_table(u2, 0, cache, True, True)
+    assert table["sets"] and table["sets"]["mix"] and table["exposure"]["local"], table.get("sets")
+    got = in_node(table)
+    cases, wants, alone, labels = [], [], 0, []
+    for s, x in ((12, 0), (12, 8)):
+        gains = got["gains"][str(x)] if x else {}
+        for n in range(N):
+            recipe = table["sets"]["by"].get(str(n)) or [n]
+            planes = []
+            for j in recipe:
+                A = np.asarray(om.movie_frame(u2, j, cache, colour=False, centre=True)[0])
+                dx, dy = got[str(s)]["shifts"][table["n"].index(j)] if s else (0, 0)
+                C = moved(A, dx, dy)
+                if gains.get(str(n), 1.0) != 1.0:
+                    C[..., :3] = np.array(server_lut(gains[str(n)], table["exposure"]["gamma"]), np.uint8)[C[..., :3]]
+                planes.append(C)
+            B = np.asarray(om.movie_frame(u2, n, cache, colour=True, centre=True, steady=s, exposure=x)[0])
+            if len(planes) == 1:
+                assert (planes[0] == B).all(), (s, x, n)
+                alone += 1
+            else:
+                cases.append(planes)
+                wants.append(B)
+                labels.append((s, x, n, recipe))
+    # numpy's 3x3 mix (tensordot) runs through BLAS, whose vector and remainder loops round a few pixels' sums
+    # differently by position, and differently again with another BLAS (the Mini's Accelerate): the page sums in
+    # order, so a handful of pixels in millions may be a level apart, never more
+    off, total = 0, 0
+    for out, B, lab in zip(node_mix(cases, table["sets"]), wants, labels):
+        diff = np.abs(out.astype(int) - B.astype(int))
+        if diff.max() > 1:
+            w = np.argwhere(diff > 1)
+            print("DIFF", lab, len(w), [(tuple(map(int, i)), int(out[tuple(i)]), int(B[tuple(i)])) for i in w[:4]])
+        assert diff.max() <= 1, int(diff.max())
+        off += int((diff > 0).sum())
+        total += diff.size
+    assert off <= total * 1e-6, (off, total)
+    print(f"colour: {len(cases)} colour pictures and {alone} frames alone, stabilized (0, 12) and exposure-normalized "
+          f"(0, 8): the page's moved, gained and mixed picture equals the server's but for {off} values of {total} a level apart")
+def node_trail(table, trails, cases):
+    """The page's trail (cassiniSteadyMath.trailOf, then blendTrail over each case's planes, oldest first), in node."""
+    tmp = tempfile.mkdtemp()
+    for c, planes in enumerate(cases):
+        for q, pl in enumerate(planes):
+            pl.tofile(f"{tmp}/{c}_{q}.bin")
+    js = ("const window = {};\n" + script + "\nconst M = window.cassiniSteadyMath(), fs = require('fs'), t = " + json.dumps(table) + ";\n"
+          "const js = {}; for (const T of " + json.dumps(trails) + ") js[T] = t.n.map(n => M.trailOf(t, n, T));\n"
+          "fs.writeFileSync('" + tmp + "/js.json', JSON.stringify(js));\n"
+          "const L = " + json.dumps([len(c) for c in cases]) + ";\n"
+          "L.forEach((k, i) => { const P = []; for (let q = 0; q < k; q++) P.push(new Uint8ClampedArray(fs.readFileSync('" + tmp + "/' + i + '_' + q + '.bin')));"
+          " fs.writeFileSync('" + tmp + "/' + i + '.out', M.blendTrail(P.slice(0, -1), P[k - 1])); });")
+    with open(f"{tmp}/trail.js", "w") as fh:
+        fh.write(js)
+    subprocess.run(["node", f"{tmp}/trail.js"], check=True)
+    return json.load(open(f"{tmp}/js.json")), [np.fromfile(f"{tmp}/{c}.out", np.uint8).reshape(cases[c][0].shape) for c in range(len(cases))]
+
+
+with calibration.looking("balanced"):
+    # trail: earlier frames of the filter, each moved and gained as above, blended under the newest by the page
+    TRAILS = (3, 12)
+    table = om._steady_table(u, 0, cache, True, False)
+    got = in_node(table)
+    order, _ = node_trail(table, TRAILS, [])
+    cases, wants, labels = [], [], []
+    for s, x in ((0, 0), (12, 8)):
+        gains = got["gains"][str(x)] if x else {}
+        for T in TRAILS:
+            for a, n in enumerate(table["n"]):
+                planes = []
+                for j in order[str(T)][a] + [n]:
+                    A = np.asarray(om.movie_frame(u, j, cache, colour=False, centre=True)[0])
+                    dx, dy = got[str(s)]["shifts"][table["n"].index(j)] if s else (0, 0)
+                    C = moved(A, dx, dy)
+                    if gains.get(str(n), 1.0) != 1.0:
+                        C[..., :3] = np.array(server_lut(gains[str(n)], table["exposure"]["gamma"]), np.uint8)[C[..., :3]]
+                    planes.append(C)
+                im, rep = om.movie_frame(u, n, cache, trail=T, colour=False, centre=True, steady=s, exposure=x)
+                assert rep.get("trail", 0) == len(planes) - 1, (s, x, T, n, rep.get("trail"), len(planes) - 1)
+                cases.append(planes)
+                wants.append(np.asarray(im))
+                labels.append((s, x, T, n))
+    _, outs = node_trail(table, TRAILS, cases)
+    for out, B, lab in zip(outs, wants, labels):
+        if not (out == B).all():
+            w = np.argwhere(out != B)
+            print("DIFF", lab, len(w), [(tuple(map(int, i)), int(out[tuple(i)]), int(B[tuple(i)])) for i in w[:4]])
+        assert (out == B).all(), lab
+    print(f"trail: {len(cases)} trailed frames (trail {TRAILS}, stabilized and exposure-normalized (0, 0) and (12, 8)): "
+          "the page's trail equals the server's pixel for pixel")
 print("ok")

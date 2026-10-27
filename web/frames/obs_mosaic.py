@@ -2143,9 +2143,35 @@ def _steady_table(u, n, cache, centre=True, colour=False):
     else:
         warm_movie(u, n, 6, cache, exposure=how)
     return {"local": True, "fixed": True, "ids": [fr[1] for fr in u["frames"]], "n": ns, "exposure": exposure,
+            "sets": _colour_recipes(u, p, cache, ns, tiles) if colour and p.get("colour") else None,
+            "filters": [fr[2] for fr in u["frames"]], "trail_most": TRAIL,
             "chain": [chain[n] for n in ns], "spice": [tiles[n]["offset"] for n in ns],
             "box": [tiles[n]["box"] for n in ns], "view": list(rect), "out": OUT, "k": OUT / max(rect[2], rect[3]),
             "colour": bool(p.get("colour")), "most": STEADY_MOST, "detail": bool(p["display_scale"].get("filled"))}
+
+
+def _colour_recipes(u, p, cache, ns, tiles):
+    """How movie_frame draws each frame of a colour pass, for the page: {"filters", "mix" (colour_picture's 3x3
+    natural mix, or None to draw the filters straight), "gamma", "shoulder", "by": {frame n: the tiles of its colour
+    set in the filters' order, or absent when the frame is drawn alone}}; None for a false colour pass (its mix
+    blurs and balances the picture: drawn by the server). The set is the one movie_frame picks at SPICE's places."""
+    want = p["colour"]
+    scale = p["display_scale"]
+    bal = scale.get("balance")
+    mix = calibration.color_mix(u["key"][2], want, u["key"][0], [bal[f] for f in want] if bal else None)
+    if isinstance(mix, calibration.FalseMix):
+        return None
+    by, placed = {}, set(ns)
+    for n in ns:
+        for run in reversed(colour_sets(u["frames"][:n + 1])):
+            got = {f: j for f, j in run if f in want}
+            if len(got) < len(want):
+                continue
+            if all(got[f] in placed for f in want):
+                by[str(n)] = [got[f] for f in want]
+            break
+    return {"filters": list(want), "mix": None if mix is None else np.asarray(mix, float).tolist(),
+            "gamma": scale.get("gamma", 2.2), "shoulder": calibration.SHOULDER, "by": by}
 
 
 def movie_rect(fp, t, radius=0.0, centre=False):
