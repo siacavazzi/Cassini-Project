@@ -46,6 +46,15 @@
           "detail": "The facts on the loading screen (each one names its source as it shows), and the numbers and timings the Grand Finale is pinned to (JPL, \"Cassini Spacecraft Makes Its Final Approach to Saturn\", 13 September 2017; \"Cassini by the Numbers\"), and the opening at the start of the mission (ESA, \"Cassini-Huygens: Launch information\"; NASA, \"Cassini Quick Facts\").",
           "license": "Facts, with their sources named",
           "url": "https://science.nasa.gov/mission/cassini/"
+        },
+        {
+          "id": "soi-facts",
+          "title": "Saturn arrival numbers",
+          "credit": "ESA, \"Approach and arrival at Saturn\"; NASA Cassini Significant Event Reports (July 2004); NASA/JPL Saturn Arrival press kit; Spaceflight Now (June 2004)",
+          "short": "NASA · ESA · Spaceflight Now",
+          "detail": "The times and numbers the Saturn arrival cutscene is pinned to (src/soi-data.json names the source of each): the ring plane crossing, the 96.4-minute main engine burn from 01:12 UTC, 626.17 m/s, about 850 kg of propellant, 445 N, the 46-degree steering, the closest approach 19,980 km above the clouds, and the 83-minute light time. Cassini's path in it is its real trajectory, which puts the crossing and the closest approach within a minute of these times.",
+          "license": "Facts, with their sources named",
+          "url": "https://sci.esa.int/web/cassini-huygens/-/approach-and-arrival-at-saturn"
         }
       ]
     },
