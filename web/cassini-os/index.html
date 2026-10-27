@@ -1040,7 +1040,8 @@ body.phone.has-dock { --appdockh: 50px; }
 #about .cr .what { margin-top: 2px; font-size: 10.5px; line-height: 1.45; color: var(--q-dim); }
 #about .cr .lic { margin-top: 2px; font-size: 10px; color: var(--q-dim); }
 #about .cr .lic a { margin-left: 8px; }
-#about footer { flex: none; padding: 6px 12px; border-top: 1px solid var(--q-line); font-size: 10.5px; color: var(--q-dim); }
+#about footer { flex: none; display: flex; flex-wrap: wrap; justify-content: space-between; gap: 2px 12px; padding: 6px 12px; border-top: 1px solid var(--q-line); font-size: 10.5px; color: var(--q-dim); }
+#about footer .ver { margin-left: auto; text-align: right; font-family: var(--hudf, monospace); font-size: 10px; opacity: .8; user-select: text; }
 /* a short credit on the page that opens the full one here */
 .credit { all: unset; cursor: default; color: inherit; opacity: .8; }
 .credit:hover { opacity: 1; text-decoration: underline; text-underline-offset: 2px; }
@@ -1438,7 +1439,7 @@ body.phone #hland .cs-read { font-size: 9.5px; bottom: 9vh; white-space: normal;
     <nav id="anav" role="tablist" aria-label="About sections"></nav>
     <div class="pane" id="apane" role="tabpanel"></div>
   </div>
-  <footer>An independent project, not affiliated with NASA, JPL, ESA or the Space Science Institute.</footer>
+  <footer><span>An independent project, not affiliated with NASA, JPL, ESA or the Space Science Institute.</span><span class="ver" id="aver"></span></footer>
 </section>
 
   <section id="loadscreen" hidden>
@@ -1847,6 +1848,16 @@ body.phone #hland .cs-read { font-size: 9.5px; bottom: 9vh; white-space: normal;
 (function () {
   const KEYS = ["t", "view", "speed", "play", "movie", "cam"];
   const S = window.cassiniSettings, $ = id => document.getElementById(id);
+  // the frame server, chosen as the camera window chooses it; it keeps the usage counts
+  const FRAMES = (() => {
+    const q = new URLSearchParams(location.search).get("frames");
+    if (q) return q.replace(/\/$/, "");
+    if (/^https?:$/.test(location.protocol) && !/claude\.ai$|claudeusercontent\.com$|claude\.site$/.test(location.hostname)) return location.origin;
+    return "http://localhost:8765";
+  })();
+  const tell = word => { try { navigator.sendBeacon(`${FRAMES}/usage`, word); } catch (e) {} };
+  // opened on a shared moment: arrived with a time in the link, not a reload of a page that wrote its own
+  const opened = new URLSearchParams(location.search).has("t") && ((performance.getEntriesByType("navigation")[0] || {}).type || "navigate") === "navigate";
   const num = v => (+(+v).toPrecision(4)).toString().replace("e+", "e");   // short, and no "+" (a space in a query)
   const utc = et => new Date(etToMs(et)).toISOString().slice(0, 19);
   // the link for the moment on screen; other pages (flagging) use it too
@@ -1903,6 +1914,7 @@ body.phone #hland .cs-read { font-size: 9.5px; bottom: 9vh; white-space: normal;
   async function copy() {
     write();
     const h = href();
+    tell("copy-link");
     try { await navigator.clipboard.writeText(h); toast("Link to this moment copied"); }
     catch (e) { if (navigator.share) navigator.share({ url: h }).catch(() => {}); else toast(h); }
   }
@@ -1917,7 +1929,7 @@ body.phone #hland .cs-read { font-size: 9.5px; bottom: 9vh; white-space: normal;
 
   window.cassiniLink = { href, params, copy };
   const ready = () => typeof state !== "undefined" && typeof setSpeed === "function" && $("loading").hidden;
-  const start = () => { apply(); write(); setInterval(write, 500); addEventListener("pagehide", write); };
+  const start = () => { tell(opened ? "visit-link" : "visit"); apply(); write(); setInterval(write, 500); addEventListener("pagehide", write); };
   if (ready()) start();
   else { const mo = new MutationObserver(() => { if (ready()) { mo.disconnect(); start(); } }); mo.observe($("loading"), { attributes: true, attributeFilter: ["hidden"] }); }
 })();
@@ -3269,6 +3281,9 @@ body.phone #hland .cs-read { font-size: 9.5px; bottom: 9vh; white-space: normal;
       ids: got.ids, frames: got.ids.map(frameInfo),
       movie: !!(window.cassiniMovie && window.cassiniMovie.on), playing: !!state.playing, speed: state.speed,
       settings: settings(),
+      // the version the page was built from and the one the server said it served when the page loaded; the server
+      // adds the version it serves now (site and server commits, picture makers' versions) as it saves the flag
+      build: window.cassiniVersion ? { page: cassiniVersion.page, version: cassiniVersion.server ? cassiniVersion.server.version : null } : null,
       client: { agent: navigator.userAgent, dpr: devicePixelRatio, viewport: [innerWidth, innerHeight], phone: document.body.classList.contains("phone") },
       image: await dataUrl(got.png)
     };
@@ -5297,7 +5312,9 @@ body.phone #hland .cs-read { font-size: 9.5px; bottom: 9vh; white-space: normal;
       <p>Made by Sam Iacavazzi · <a href="https://github.com/siacavazzi" target="_blank" rel="noopener">github.com/siacavazzi</a></p>
       <p class="note">More about the project is coming here.</p>
       <h3>Credits</h3>
-      <p>The pictures are NASA/JPL-Caltech/Space Science Institute, the probe's are ESA/NASA/JPL/University of Arizona, and the flight data is from NASA/JPL's SPICE archive. The maps, models, sound, software and fonts have their own authors. <a href="#" data-tab="Credits">See all credits</a>.</p>`,
+      <p>The pictures are NASA/JPL-Caltech/Space Science Institute, the probe's are ESA/NASA/JPL/University of Arizona, and the flight data is from NASA/JPL's SPICE archive. The maps, models, sound, software and fonts have their own authors. <a href="#" data-tab="Credits">See all credits</a>.</p>
+      <h3>Privacy</h3>
+      <p>Cassini OS uses no cookies and no outside trackers. Its server keeps daily totals only: how many people visited and from which country, and which pictures were looked at and saved. Nothing is kept that could tell one visitor from another.</p>`,
     Credits: () => CREDITS.groups.map(g => `<h3>${esc(g.title)}</h3>` + (g.note ? `<p class="note">${esc(g.note)}</p>` : "")
       + g.entries.map(e => `<div class="cr" id="cr-${esc(e.id)}"><b>${esc(e.title)}</b><div class="by">${esc(e.credit)}</div>`
         + (e.detail ? `<div class="what">${esc(e.detail)}</div>` : "")
@@ -5330,6 +5347,26 @@ body.phone #hland .cs-read { font-size: 9.5px; bottom: 9vh; white-space: normal;
   // other parts of the page add their own tabs: cassiniAbout.addTab("Mission team", () => "<h2>…</h2>…") (html, escaped by the caller)
   function addTab(name, html) { TABS[name] = html; if (!card.hidden) render(); }
   window.cassiniAbout = { open, addTab, esc, close: () => show(false), credits: CREDITS };
+
+  // ---- which version this is: this page's build id (build.py writes it), and what the frame server says it serves ----
+  const BUILD = /*BUILD*/"a31a66081ef7";
+  const FRAMES = (() => {                       // the frame server, chosen as the camera window chooses it
+    const q = new URLSearchParams(location.search).get("frames");
+    if (q) return q.replace(/\/$/, "");
+    if (/^https?:$/.test(location.protocol) && !/claude\.ai$|claudeusercontent\.com$|claude\.site$/.test(location.hostname)) return location.origin;
+    return "http://localhost:8765";
+  })();
+  const ver = window.cassiniVersion = { page: BUILD || null, server: null };
+  function showVersion() {
+    const v = ver.server, el = $("aver");
+    const old = v && v.page && BUILD && v.page !== BUILD;
+    el.textContent = v ? `Version ${v.version}${old ? " · reload for the newest" : ""}` : BUILD ? `Build ${BUILD}` : "";
+    el.title = v ? [`Site ${v.site ? v.site.commit + " " + v.site.subject : "unknown"}`,
+      `Frame server ${v.server_version}${v.server_current ? "" : " (restart pending)"}`, `Page build ${BUILD || "none"}`].join("\n") : "";
+  }
+  ver.ready = fetch(`${FRAMES}/version.json`, { cache: "no-store" }).then(r => r.ok ? r.json() : null, () => null)
+    .then(v => { ver.server = v; showVersion(); return ver; });
+  showVersion();
   // closing or minimizing the window just closes it (it never goes to the menu-bar tray)
   card.addEventListener("click", e => { if (e.target.closest(".close, .min")) { e.stopImmediatePropagation(); show(false); } }, true);
   card.addEventListener("dblclick", e => { if (e.target.closest(".titlebar")) { e.stopImmediatePropagation(); show(false); } }, true);
