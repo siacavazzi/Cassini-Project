@@ -1967,6 +1967,8 @@ EXPOSURE_SIDE = 160      # px: the movie pictures a pass's brightness is measure
 # a movie's brightness chain (exposure_chain), kept with the pass for each way of drawing it; renamed (with the movie
 # frames drawn with it, movie_webp) whenever the rule changes
 EXPOSURE_FILE = "exposure4-{}-" + PLAN_FILE
+EXPOSURE_RULE = 5        # the way the gains are worked out from the chain: in the movie frames' names (movie_webp)
+EXPOSURE_GREY_RUN = 6    # frames: a colour pass's grey frames (its filters coming in) evened only in a run this long
 EXPOSURE_SAME = 0.5      # of the larger lit area: two pictures sharing less lit view than this show different scenes
 
 
@@ -2053,9 +2055,10 @@ def exposure_gains(u, cache, p=None, smooth=EXPOSURE_SMOOTH, colour=True, centre
     keeps its colour): the movie's brightness (exposure_chain) moved to the brightness of the frames round it
     (evened_gains), each stretch of one kind of picture and one scene on its own: a flash of a frame or two brought
     to its neighbours' level, a jump spread over smooth frames. A stretch shorter than EXPOSURE_FLASH frames is left
-    as it is (gain 1: too short to tell a flash from the picture), and so are the grey frames of a pass that plays in
-    colour (each a filter of the set filling in, as bright as that filter is: evening them out only moves their steps
-    onto their neighbours, as in the UV aurora stares). Slow changes (a body coming into sunlight over the
+    as it is (gain 1: too short to tell a flash from the picture), and so is a run of fewer than EXPOSURE_GREY_RUN grey
+    frames in a pass that plays in colour (each a filter of the set filling in, as bright as that filter is: in the
+    UV aurora stares' four, evening them out only moved their steps onto their neighbours; COMPHILIT001's ten flicker
+    filter to filter and are evened). Slow changes (a body coming into sunlight over the
     pass) stay; the frames' data stays, only scaled. smooth 0: no gains ({})."""
     if smooth <= 0:
         return {}
@@ -2064,10 +2067,11 @@ def exposure_gains(u, cache, p=None, smooth=EXPOSURE_SMOOTH, colour=True, centre
     in_colour = any(v[2] for v in logs.values())
     gains = {}
     for n in sorted(logs):
-        if in_colour and not logs[n][2]:
-            gains[n] = 1.0
-        else:
-            stretches[logs[n][1]].append(n)
+        stretches[logs[n][1]].append(n)
+    for key, ns in list(stretches.items()):
+        if in_colour and not logs[ns[0]][2] and len(ns) < EXPOSURE_GREY_RUN:
+            gains.update((n, 1.0) for n in ns)
+            del stretches[key]
     for ns in stretches.values():
         gains.update(zip(ns, evened_gains([logs[n][0] for n in ns], smooth) if len(ns) >= EXPOSURE_FLASH else [1.0] * len(ns)))
     return gains
@@ -2402,7 +2406,7 @@ def movie_webp(frame_id, size, cache, trail=0, colour=True, wait=False, ahead=6,
     # are a stabilized movie's, by its smoothing)
     path = os.path.join(folder(u, cache), MOVIE_DIR, str(size),
                         f"{n}_{trail}_{int(bool(colour))}{'_c2' if centre else ''}{'_k2' if u.get('track') else ''}"
-                        f"{f'_s{steady}' if steady else ''}{f'_e{exposure}' if exposure else ''}.webp")
+                        f"{f'_s{steady}' if steady else ''}{f'_e{exposure}r{EXPOSURE_RULE}' if exposure else ''}.webp")
     report, meta = {}, path[:-4] + "json"
 
     def make():
