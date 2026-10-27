@@ -1718,6 +1718,11 @@ body.phone #hland .cs-read { font-size: 9.5px; bottom: 9vh; white-space: normal;
   D({ key: "view.atmospheres", section: "View", label: "Atmospheres", type: "choice", value: "full",
       options: [["off", "Off"], ["light", "Light"], ["full", "Full"]],
       hint: "Titan's orange haze with its high detached layer, Earth's thin blue limb, Venus's pale yellow haze, and the thin hazes at Saturn's and Jupiter's limbs, all lit by the Sun: soft twilight past the terminator and a bright ring when a body is backlit. Light is quicker on weak graphics; Off draws the bare globes." });
+  // the viewer reads view.plumes and view.plumeBrightness (makePlume)
+  D({ key: "view.plumes", section: "View", label: "Enceladus plumes", type: "toggle", value: true,
+      hint: "The jets of ice grains rising from the tiger stripes at Enceladus's south pole, lit by the Sun. Like the real ones they show mostly when Cassini looks back toward the Sun, against the dark sky, and stay faint otherwise." });
+  D({ key: "view.plumeBrightness", section: "View", label: "Plume brightness", type: "range", value: 1, min: 0.25, max: 4, step: 0.05,
+      format: v => `${Math.round(v * 100)}%`, hint: "How bright the plumes are drawn. 100% is subtle, as in an unstretched picture; higher shows the faint outer plume the way stretched pictures do." });
   // Movie
   D({ key: "movie.fps", section: "Movie", label: "Movie speed", type: "range", value: 8, min: 2, max: 24, step: 1, unit: "fps",
       hint: "Frames per second in movie mode (M). The slider in the Movie window changes this too." });
@@ -5962,7 +5967,9 @@ function makeMoon(name, b) {
   const g = new THREE.Group(); g.add(mesh);
   const atm = ATMOSPHERES[name] ? makeAtmosphere(ATMOSPHERES[name], mat.uniforms.sunDir) : null;
   if (atm) g.add(atm);
-  return { group: g, mesh, mat, atm, shape: !!shapeGeom[name], radius: b.radii ? (b.radii[0] + b.radii[1] + b.radii[2]) / 3 : 10 };
+  const plume = name === "ENCELADUS" ? makePlume(mat.uniforms.sunDir) : null;
+  if (plume) g.add(plume);
+  return { group: g, mesh, mat, atm, plume, shape: !!shapeGeom[name], radius: b.radii ? (b.radii[0] + b.radii[1] + b.radii[2]) / 3 : 10 };
 }
 
 // ---------- atmospheres: a haze shell around the globe, shaded by marching the view ray through it ----------
@@ -6076,6 +6083,135 @@ function makeAtmosphere(a, sunDir) {
     mat.uniforms.inside.value = inn ? 1 : 0;
     mat.side = inn ? THREE.BackSide : THREE.FrontSide; mat.depthTest = !inn;
     mat.uniforms.radii.value.copy(s);
+    mat.uniforms.rot.value.setFromMatrix4(mAtm.extractRotation(mesh.matrixWorld));
+  };
+  return mesh;
+}
+
+// ---------- Enceladus's plumes: sunlit ice grains over the south-polar tiger stripes, marched like the atmospheres ----------
+// Each stripe feeds a curtain of grains that rises straight up, thins with height (scale height H, plus a faint tall
+// tail) and spreads out until the four curtains merge into one broad plume. The grains are a few microns across, so
+// they scatter almost all their light forward (two-term Henyey-Greenstein): the plume shows against the dark sky when
+// Cassini looks back toward the Sun and is nearly invisible otherwise, as in the real pictures. It is optically thin,
+// so it only adds light, and grains in Enceladus's shadow stay dark. Lengths are in Enceladus radii; body frame z = north.
+//   stripes: [lat, east lon] of each end, traced on the surface map (the stripes drawn on the globe), and a share of
+//   the activity (Baghdad and Damascus strongest, Alexandria weakest; Spitale & Porco 2007, Porco et al. 2014)
+const PLUME = {
+  stripes: { DAMASCUS: [-77.5, 13.0, -70.4, 118.4, 1.0], BAGHDAD: [-79.7, 320.5, -70.5, 136.0, 1.0],
+             CAIRO: [-80.2, 275.4, -78.8, 184.8, 0.7], ALEXANDRIA: [-69.3, 263.5, -73.9, 202.1, 0.4] },
+  H: 0.25, tail: [0.15, 1.0], w0: 0.06, spread: 0.45, column: 0.011,
+  // jets: [spacing, width at the vent, widening per unit height, tilt], their share, and how high they stay distinct
+  jets: [0.02, 0.006, 0.18, 0.5], jetShare: 0.35, jetH: 0.2, g: [0.85, 0.2, 0.85], color: [0.9, 0.95, 1.0],
+  center: -2.0, reach: 1.9, steps: 48
+};
+const plumes = [];
+const plumeOn = () => window.cassiniSettings ? cassiniSettings.get("view.plumes") !== false : true;
+const plumeBrightness = () => window.cassiniSettings ? +cassiniSettings.get("view.plumeBrightness") || 1 : 1;
+function applyPlumes() {
+  const on = plumeOn(), lv = atmosphereLevel();
+  for (const m of plumes) {
+    m.visible = on;
+    m.material.uniforms.bright.value = plumeBrightness();
+    m.material.uniforms.steps.value = lv === "light" ? PLUME.steps / 2 : PLUME.steps;
+  }
+  if (window.cassiniPerf) cassiniPerf.invalidate();
+}
+function makePlume(sunDir) {
+  const p = PLUME, unit = (lat, lon) => { const a = lat * Math.PI / 180, o = lon * Math.PI / 180;
+    return new THREE.Vector3(Math.cos(a) * Math.cos(o), Math.cos(a) * Math.sin(o), Math.sin(a)); };
+  const S = Object.values(p.stripes);
+  const mat = new THREE.ShaderMaterial({
+    uniforms: { sunDir, sA: { value: S.map(s => unit(s[0], s[1])) }, sB: { value: S.map(s => unit(s[2], s[3])) },
+                sW: { value: new THREE.Vector4(...S.map(s => s[4])) }, H: { value: p.H }, tail: { value: new THREE.Vector2(...p.tail) },
+                w0: { value: p.w0 }, spread: { value: p.spread }, column: { value: p.column }, g: { value: new THREE.Vector3(...p.g) },
+                color: { value: new THREE.Vector3(...p.color) }, C: { value: new THREE.Vector3(0, 0, p.center) }, reach: { value: p.reach },
+                radii: { value: new THREE.Vector3(1, 1, 1) }, rot: { value: new THREE.Matrix3() }, inside: { value: 0 },
+                jet: { value: new THREE.Vector4(...p.jets) }, jetShare: { value: p.jetShare }, jetH: { value: p.jetH },
+                steps: { value: p.steps }, bright: { value: 1 } },
+    vertexShader: VHEAD + `varying vec3 vLocal; varying vec3 vView;
+      void main(){ vLocal = position; vec4 mv = modelViewMatrix * vec4(position, 1.0); vView = mv.xyz;
+        gl_Position = projectionMatrix * mv;
+        #include <logdepthbuf_vertex>
+      }`,
+    fragmentShader: FHEAD + `uniform vec3 sunDir, sA[4], sB[4], C, g, color, radii; uniform vec4 sW; uniform vec2 tail;
+      uniform float H, w0, spread, column, reach, inside, steps, bright, jetShare, jetH; uniform vec4 jet;
+      uniform mat3 rot;
+      varying vec3 vLocal; varying vec3 vView;
+      #define STEPS 48
+      float hg(float c, float k) { float q = 1.0 + k * k - 2.0 * k * c; return (1.0 - k * k) / (q * sqrt(q)); }
+      float hash(vec2 q) { return fract(sin(dot(q, vec2(127.1, 311.7))) * 43758.5453); }
+      // grains per unit length at x: over each stripe a curtain, a gaussian across it that widens with height, and near
+      // the surface the narrow jets it is made of (one every ~5 km, each tilted its own way) that blur into it higher up
+      float density(vec3 x, float r) {
+        float h = r - 1.0, w = w0 + spread * h, wj = jet.y + jet.z * h, n = 0.0, nj = 0.0;
+        vec3 s = x / r;
+        for (int k = 0; k < 4; k++) {
+          vec3 ab = sB[k] - sA[k];
+          float len = length(ab), t = dot(s - sA[k], ab) / (len * len);
+          vec3 q = normalize(sA[k] + ab * clamp(t, 0.0, 1.0));
+          float l = length(s - q) * r;
+          n += sW[k] * exp(-l * l / (w * w));
+          if (h < 0.6 && l < 2.5 * w) {   // jets only where the curtain is
+            float N = floor(len / jet.x), j0 = floor(t * N);
+            vec3 al = ab / len, ac = normalize(cross(s, al));
+            for (int i = -1; i <= 1; i++) {
+              float j = j0 + float(i);
+              if (j < 0.0 || j >= N) continue;
+              vec2 id = vec2(float(k), j);
+              vec3 b = normalize(sA[k] + ab * (j + 0.2 + 0.6 * hash(id)) / N);
+              vec3 axis = b * r + h * jet.w * ((hash(id + 7.1) - 0.5) * al + (hash(id + 3.3) - 0.5) * ac);
+              vec3 dj = x - axis;
+              nj += sW[k] * (0.3 + hash(id + 5.7)) * exp(-dot(dj, dj) / (wj * wj)) / wj;
+            }
+          }
+        }
+        float fade = smoothstep(reach, reach * 0.8, length(x - C));   // no hard edge where the volume ends
+        return (n / w * (exp(-h / H) + tail.x * exp(-h / tail.y)) + nj * jetShare * exp(-h / jetH)) * fade;
+      }
+      void main(){
+        #include <logdepthbuf_fragment>
+        vec3 dw = (normalize(vView) * mat3(viewMatrix)) * rot;
+        vec3 sd = normalize(sunDir * rot);
+        vec3 p = vLocal, d = normalize(dw / radii);
+        vec3 cam = p - dw * length(vView) / radii;
+        vec3 o = inside > 0.5 ? cam : p;
+        float L = inside > 0.5 ? length(p - cam) : max(-2.0 * dot(p - C, d), 0.0);   // to where the ray leaves the volume
+        float b = dot(o, d), c = dot(o, o) - 1.0, disc = b * b - c;
+        if (disc > 0.0) { float t0 = -b - sqrt(disc); if (t0 > 0.0 && t0 < L) L = t0; }       // the globe hides what is behind it
+        float mu = dot(d, sd);
+        float ph = g.z * hg(mu, g.x) + (1.0 - g.z) * hg(mu, g.y);
+        float tm = clamp(-b, 0.0, L);                       // samples bunch toward the surface, where the curtains are thin
+        float nh = floor(steps / 2.0), jit = fract(sin(dot(gl_FragCoord.xy, vec2(12.9898, 78.233))) * 43758.5453);
+        float I = 0.0, t1 = 0.0;
+        for (int i = 0; i < STEPS; i++) {
+          if (float(i) >= 2.0 * nh) break;
+          float u = (float(i) + 1.0) / nh;
+          float t2 = float(i) < nh ? tm - tm * (1.0 - u) * (1.0 - u) : tm + (L - tm) * (u - 1.0) * (u - 1.0);
+          vec3 x = o + d * mix(t1, t2, jit);
+          float r = length(x);
+          // lit unless the globe stands between the grain and the Sun (soft over the shadow's edge)
+          float sb = dot(x, sd), m = sqrt(max(dot(x, x) - sb * sb, 0.0));
+          float lit = sb > 0.0 ? 1.0 : smoothstep(0.97, 1.03, m);
+          if (r > 1.0) I += density(x, r) * lit * (t2 - t1);
+          t1 = t2;
+        }
+        I *= column * ph;
+        float top = 0.35 * bright;                          // a soft shoulder keeps even a backlit plume subtle
+        gl_FragColor = vec4(color * top * (1.0 - exp(-I / top)), 0.0);
+      }`,
+    transparent: true, depthWrite: false, blending: THREE.CustomBlending,
+    blendSrc: THREE.OneFactor, blendDst: THREE.OneMinusSrcAlphaFactor
+  });
+  const mesh = new THREE.Mesh(new THREE.SphereGeometry(p.reach, 64, 48).translate(0, 0, p.center), mat);
+  mesh.renderOrder = 1;
+  plumes.push(mesh);
+  const cl = new THREE.Vector3();
+  mesh.onBeforeRender = (r, sc, cam) => {
+    cl.copy(cam.getWorldPosition(new THREE.Vector3())); mesh.worldToLocal(cl);
+    const inn = cl.distanceTo(mat.uniforms.C.value) < p.reach * 1.001;
+    mat.uniforms.inside.value = inn ? 1 : 0;
+    mat.side = inn ? THREE.BackSide : THREE.FrontSide; mat.depthTest = !inn;
+    mat.uniforms.radii.value.copy(mesh.scale);
     mat.uniforms.rot.value.setFromMatrix4(mAtm.extractRotation(mesh.matrixWorld));
   };
   return mesh;
@@ -6342,6 +6478,7 @@ function build() {
   cassini = makeCassini(); scene.add(cassini);
   cassini.traverse(o => o.layers.set(1));
   if (window.cassiniSettings) cassiniSettings.on("view.atmospheres", applyAtmospheres); else applyAtmospheres();
+  if (window.cassiniSettings) { for (const k of ["view.plumes", "view.plumeBrightness", "view.atmospheres"]) cassiniSettings.on(k, applyPlumes); } else applyPlumes();
   buildFov();
   if (probe && probe.map) buildHuygensMap();
 
@@ -6489,6 +6626,7 @@ function updateBodies() {
       toScene(norm(sub(pos.SUN, pos[name], tmp2)), m.mat.uniforms.sunDir.value).normalize();
       // the haze shell turns with the body and keeps its shape, so an oblate Jupiter's limb has haze all the way round
       if (m.atm) { m.atm.quaternion.copy(m.mesh.quaternion); m.atm.scale.set(r[0], r[1], r[2]); }
+      if (m.plume) { m.plume.quaternion.copy(m.mesh.quaternion); m.plume.scale.set(r[0], r[1], r[2]); }
     }
   }
   saturnObj.ring.uniforms.camLocal.value.copy(camera.position).sub(saturnObj.group.position);
