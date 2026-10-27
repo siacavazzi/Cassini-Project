@@ -1303,23 +1303,24 @@ def _compose(window, k, **kw):
     return rgba
 
 
-def _over(u, p, rgba, t, rect, cache, match=True):
+def _over(u, p, rgba, t, rect, cache, match=True, kept=None):
     """Tile t composed over the mosaic rgba (in place) and matched to it (pin 0): only the tile's part of the
     canvas, and a margin for its soft edge, is composed, since nothing outside it changes. match=False: drawn
     over it with its soft edge as it is, on the pass's one scale (a mosaic movie's new lap is not pulled toward
-    the older picture of its place under it)."""
+    the older picture of its place under it). kept: as draw_over."""
     k = p["k"]
     bx, by, bw, bh = t["box"]
     left = round((t["offset"][0] + bx - rect[0]) * k)
     top = round((t["offset"][1] + by - rect[1]) * k)
     sw, sh = max(1, round(bw * k)), max(1, round(bh * k))
     draw_over(rgba, lambda: _shade(_part(os.path.join(_tiles(u, cache, p["display_scale"]), f"{t['n']}.png"), sw, sh), t),
-              left, top, sw, sh, k, match)
+              left, top, sw, sh, k, match, kept)
 
 
-def draw_over(rgba, part, left, top, sw, sh, k, match=True):
+def draw_over(rgba, part, left, top, sw, sh, k, match=True, kept=None):
     """_over's drawing: the tile part() (RGBA, sw x sh canvas pixels, its top left corner at left, top) composed over
-    the mosaic rgba in place, on the tile's part of the canvas and a margin for its soft edge."""
+    the mosaic rgba in place, on the tile's part of the canvas and a margin for its soft edge. kept: a list that gets
+    what the blend step decided for the tile (mosaic.composite's kept, at the canvas's pixels), or None."""
     H, W = rgba.shape[:2]
     pad = max(8, round(64 * k / 0.5)) + 1
     x0, y0 = max(left - pad, 0), max(top - pad, 0)
@@ -1343,7 +1344,12 @@ def draw_over(rgba, part, left, top, sw, sh, k, match=True):
             kw = {"corrections": same, "pin": 0}
         else:
             kw = {"pin": 0}
-        rgba[y0:y1, x0:x1] = _compose([(below, None, None, None), (frame, None, None, None)], k, under=0, **kw)
+        decided = [] if kept is not None else None
+        rgba[y0:y1, x0:x1] = _compose([(below, None, None, None), (frame, None, None, None)], k, under=0, kept=decided, **kw)
+        if kept is not None:
+            kept.append(mosaic.moved(decided[-1], y0, x0) if decided else None)
+    elif kept is not None:
+        kept.append(None)
 
 
 _grown_last = collections.OrderedDict()   # path of a grown filter mosaic -> its RGBA, the few made last

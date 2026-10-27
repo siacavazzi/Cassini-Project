@@ -66,8 +66,10 @@ the corrections are then solved and applied on linear values. corrections = (gai
 out beforehand (seams), used instead of solving them here; offsets are always on the levels.
 level = seam leveling where the level step is on (composite); False draws the frames as the gains leave them.
 under = the frame that is a picture drawn so far (composite).
+kept, decided = what the blend step decided for each frame (its leveling and its seam) kept, or given (composite).
 """
-def compose(window, reproject=None, calibrated=False, pin=-1, gamma=None, corrections=None, level=True, under=None):
+def compose(window, reproject=None, calibrated=False, pin=-1, gamma=None, corrections=None, level=True, under=None,
+            kept=None, decided=None):
     if reproject is None:
         reproject = reproject_surface
     frames = [np.asarray(entry[0]) for entry in window]
@@ -78,11 +80,12 @@ def compose(window, reproject=None, calibrated=False, pin=-1, gamma=None, correc
                     and newest[1]["et"] - entry[1]["et"] <= max_reproject_age):
                 frames[i] = rp.warp_to_newest((frames[i],) + tuple(entry[1:]), newest)
 
+    more = {"level": level, "pin": pin, "under": under, "kept": kept, "decided": decided}
     if corrections is not None:
-        return composite(frames, *corrections, gamma=gamma, level=level, pin=pin, under=under)
+        return composite(frames, *corrections, gamma=gamma, **more)
     if not calibrated:
-        return composite(frames, match_gains(frames, pin=pin), level=level, pin=pin, under=under)
-    return composite(frames, *seams(frames, pin, gamma), gamma=gamma, level=level, pin=pin, under=under)
+        return composite(frames, match_gains(frames, pin=pin), **more)
+    return composite(frames, *seams(frames, pin, gamma), gamma=gamma, **more)
 
 
 """
@@ -487,11 +490,13 @@ def _rim(color, has, dist):
     lum = color.min(axis=2)   # the darkest band, so a rim missing one colour is found too
     h, w = lum.shape
     q = 4
-    small = (max(1, -(-w // q)), max(1, -(-h // q)))
+    # (in whole quarters: a frame's box starts on a multiple of 8 of its pixels, prepare)
+    fit = lambda v: np.pad(v, ((0, -h % q), (0, -w % q)))
+    small = (-(-w // q), -(-h // q))
     sigma = max(1.0, depth / q / 2)
-    wd = cv2.GaussianBlur(cv2.resize(deep.astype(np.float32), small, interpolation=cv2.INTER_AREA), (0, 0), sigma)
-    wl = cv2.GaussianBlur(cv2.resize(lum * deep, small, interpolation=cv2.INTER_AREA), (0, 0), sigma)
-    ref = cv2.resize(wl / np.maximum(wd, 1e-3), (w, h), interpolation=cv2.INTER_LINEAR)
+    wd = cv2.GaussianBlur(cv2.resize(fit(deep.astype(np.float32)), small, interpolation=cv2.INTER_AREA), (0, 0), sigma)
+    wl = cv2.GaussianBlur(cv2.resize(fit(lum * deep), small, interpolation=cv2.INTER_AREA), (0, 0), sigma)
+    ref = cv2.resize(wl / np.maximum(wd, 1e-3), (small[0] * q, small[1] * q), interpolation=cv2.INTER_LINEAR)[:h, :w]
     bad = band & (lum < ref * TRUST_DARK) & (ref > TRUST_LIT)
     if not bad.any():
         return None
@@ -521,6 +526,15 @@ BAND_TOP = 1 / 8
 
 def _levels_of():
     return max(1, round(math.log2(max(feather_px * BAND_TOP, 1))))
+
+
+"""
+The pixels the blend step lays its pyramids and blurs on: the frames' pixel (0, 0) and every GRID-th one from it
+(each pyramid starts on one, a blur worked out smaller has its pixels on them). Frames that are parts of one bigger
+picture starting on the same grid (mosaic_native's blocks) so get the same pixels where they hold the same, whatever
+part each is (for pyramids up to 6 levels: feather_px up to 512 or so).
+"""
+GRID = 64
 
 
 def _pyramid(x, n):
@@ -628,8 +642,11 @@ pin = the frame whose leveling gain stays 1 (as compose's pin), None for none
 under = the frame that is a picture drawn so far, not a tile (obs_mosaic's growing mosaics draw a tile over the part
 of the picture round it): with the blend step its picture is its alpha as it is, its own soft edge kept, none of it
 taken for a tile's edge (that took a few pixels off the picture's outer edge with every tile drawn near it)
+kept = a list the blend step adds what it decided for each frame to (_blended: its leveling and its seam, None
+for a frame it decided nothing for), so the same mosaic can be drawn again at another scale or in parts with them
+(mosaic_native); decided = those decisions given, one per frame (_blended), used instead of working any out
 """
-def composite(frames, gains, offsets=None, gamma=None, level=True, pin=None, under=None):
+def composite(frames, gains, offsets=None, gamma=None, level=True, pin=None, under=None, kept=None, decided=None):
     if offsets is None:
         offsets = np.zeros((len(frames), 3))
     h, w = frames[0].shape[:2]
@@ -648,7 +665,7 @@ def composite(frames, gains, offsets=None, gamma=None, level=True, pin=None, und
     x0, x1 = min(b[2] for b in used), max(b[3] for b in used)
 
     if len(next(info for info in infos if info is not None)) == 7:
-        _blended(out, infos, gains, offsets, gamma, (y0, y1, x0, x1), level and leveling(), pin)
+        _blended(out, infos, gains, offsets, gamma, (y0, y1, x0, x1), level and leveling(), pin, kept, decided)
         return out
 
     rgb = np.zeros((y1 - y0, x1 - x0, 3), np.float32)
@@ -702,14 +719,17 @@ def _outer_edge(support, cover, width, on):
         _normal = (z, (0.5 * (1 + np.vectorize(math.erf)(z / math.sqrt(2)))).astype(np.float32))
     profile, at = edge_profile()
     sigma = width / 2
-    m = int(math.ceil(3 * sigma))
+    # (worked out at a power of two smaller, on GRID: the array's pixel (0, 0) is one of its pixels)
+    q = 1 << max(0, int(sigma // 4).bit_length() - 1)
+    m = -(-int(math.ceil(3 * sigma)) // q) * q
     padded = _past(support, on, m)
-    q = max(1, int(sigma // 4))
     if q > 1:
+        h, w = support.shape
         H, W = padded.shape
-        small = cv2.resize(padded, (-(-W // q), -(-H // q)), interpolation=cv2.INTER_AREA)
+        padded = np.pad(padded, ((0, -H % q), (0, -W % q)), mode="edge")
+        small = cv2.resize(padded, (padded.shape[1] // q, padded.shape[0] // q), interpolation=cv2.INTER_AREA)
         small = cv2.GaussianBlur(small, (0, 0), sigma / q, borderType=cv2.BORDER_CONSTANT)
-        blur = cv2.resize(small, (W, H), interpolation=cv2.INTER_LINEAR)[m:-m, m:-m]
+        blur = cv2.resize(small, padded.shape[::-1], interpolation=cv2.INTER_LINEAR)[m:m + h, m:m + w]
     else:
         blur = cv2.GaussianBlur(padded, (0, 0), sigma, borderType=cv2.BORDER_CONSTANT)[m:-m, m:-m]
     # the profile at x canvas pixels from the edge (a frame's first pixel, its middle half a pixel in, has the
@@ -765,7 +785,7 @@ def leveling():
     return calibration.step("blend") and calibration.step("level")
 
 
-DRAWING = 4   # bumped when the blend or level steps change how a mosaic is drawn
+DRAWING = 5   # bumped when the blend or level steps change how a mosaic is drawn
 
 
 def drawing():
@@ -787,8 +807,9 @@ def _cells(a, c, oy, ox):
 
 
 def _levels(boxes, colors, hases, ramps, pin=None):
-    """Seam leveling's gains (above) for the frames (boxes in the area, colours as toned, where each has picture,
-    their weights): a list of (h, w, 1 or 3) gains, or None for a frame that needs none."""
+    """Seam leveling (above) of the frames (boxes in the area, colours as toned, where each has picture, their
+    weights): a list of each frame's (log gains of its cells (rows, columns, 1 or 3), the cells' size, the area pixel
+    the first cell's corner lies at (y, x)), or None for a frame that needs none; _field makes its gains."""
     from scipy.sparse import coo_matrix
     from scipy.sparse.linalg import spsolve
     n = len(boxes)
@@ -883,20 +904,24 @@ def _levels(boxes, colors, hases, ramps, pin=None):
     A = coo_matrix((vals, (rows, cols)), shape=(first, first)).tocsc()
     f = np.asarray(spsolve(A, rhs)).reshape(first, ch)
     out = []
-    for g, b in zip(grids, boxes):
+    for g in grids:
         if g is None:
             out.append(None)
             continue
         gy0, gx0, gh, gw, k0 = g
         grid = np.clip(f[k0:k0 + gh * gw].reshape(gh, gw, ch), -math.log(LEVEL_MAX), math.log(LEVEL_MAX))
-        if not np.abs(grid).max() > 1e-4:
-            out.append(None)
-            continue
-        # each cell's gain at its middle, linear in between, cut to the frame's box
-        up = cv2.resize(grid.astype(np.float32), (gw * c, gh * c), interpolation=cv2.INTER_LINEAR).reshape(gh * c, gw * c, ch)
-        ty, tx = b[0] - gy0 * c, b[2] - gx0 * c
-        out.append(np.exp(up[ty:ty + b[1] - b[0], tx:tx + b[3] - b[2]]))
+        out.append((grid.astype(np.float32), c, gy0 * c, gx0 * c) if np.abs(grid).max() > 1e-4 else None)
     return out
+
+
+def _field(level, box):
+    """A frame's gains from its leveling (_levels) over box (y0, y1, x0, x1, in the pixels its first cell's corner
+    is given in): each cell's gain at its middle, linear in between."""
+    grid, c, oy, ox = level
+    gh, gw, ch = grid.shape
+    up = cv2.resize(grid, (gw * c, gh * c), interpolation=cv2.INTER_LINEAR).reshape(gh * c, gw * c, ch)
+    ty, tx = box[0] - oy, box[2] - ox
+    return np.exp(up[ty:ty + box[1] - box[0], tx:tx + box[3] - box[2]])
 
 
 def _toned(color, gain, offset, gamma):
@@ -915,7 +940,7 @@ def _toned(color, gain, offset, gamma):
     return color
 
 
-def _blended(out, infos, gains, offsets, gamma, area, level, pin=None):
+def _blended(out, infos, gains, offsets, gamma, area, level, pin=None, kept=None, decided=None):
     """composite with the blend step on (calibration.step("blend"), Settings > Processing > Blend mosaic seams).
     The frames' soft edges (mask.png) no longer go into one another: drawn over each other they left the join part
     transparent wherever two frames overlap by less than their two soft edges, a darker line along every seam and a
@@ -927,8 +952,16 @@ def _blended(out, infos, gains, offsets, gamma, area, level, pin=None):
     across the seam (_seam_cut) over a few of its own sizes. level: the frames leveled first (_levels; pin as there). Where
     any frame has picture the mosaic is opaque; the soft edge is kept along the mosaic's outer edge only, the same
     profile as each frame's (edge_profile) at the frames' width (_edge_width), from the edge of what all of them
-    cover. Without overlaps (a lone frame) the picture is the frame as it is, its alpha included."""
+    cover. Without overlaps (a lone frame) the picture is the frame as it is, its alpha included.
+    What is decided for the whole of the frames (its leveling, solved over all of them, and each seam, cut through all
+    of its overlap) changes with what of them is drawn. So a mosaic drawn in parts (mosaic_native's blocks) is
+    drawn with what was decided for it whole: kept, a list, gets each frame's {"field": its leveling (_levels, at the
+    frame's pixels), "cut": (where it comes in over its seam's area (_seam_cut), the frame's pixel that area starts
+    at (y, x))}, or None; decided, one per frame, gives them back as (gains (h, w, 1 or 3) over a box of the frame's
+    pixels (y0, y1, x0, x1), where it comes in over a box: 0 to 1, -1 for nothing said), functions of the box, either
+    or the pair None, and nothing else is worked out. The pyramids and blurs are laid on GRID."""
     y0, y1, x0, x1 = area
+    y0, x0 = y0 - y0 % GRID, x0 - x0 % GRID
     # one band when every frame is grey (each band the same, and so its gain and offset), else three
     same = lambda v: v is None or np.all(np.asarray(v) == np.asarray(v).flat[0])
     one = all(info is None or (info[1].shape[2] == 1 and same(gain) and same(offset))
@@ -944,15 +977,22 @@ def _blended(out, infos, gains, offsets, gamma, area, level, pin=None):
     margin = 4 << levels
     toned = [None if info is None else _toned(info[1] if one or info[1].shape[2] == 3 else np.repeat(info[1], 3, axis=2),
                                               gain, offset, gamma) for info, gain, offset in zip(infos, gains, offsets)]
-    if level and sum(info is not None for info in infos) > 1:
-        boxes = [None if info is None else (info[0][0] - y0, info[0][1] - y0, info[0][2] - x0, info[0][3] - x0) for info in infos]
-        fields = _levels(boxes, toned, [None if info is None else (info[4] > 0).astype(np.float32) for info in infos],
-                         [None if info is None else info[4] for info in infos],
-                         None if pin is None else range(len(infos))[pin])
+    decisions = [None if info is None else {"field": None, "cut": None} for info in infos]
+    if level and decided is not None:
+        fields = [None if info is None or d is None or d[0] is None else d[0](info[0]) for info, d in zip(infos, decided)]
         toned = [t if fl is None else t * fl for t, fl in zip(toned, fields)]
+    elif level and sum(info is not None for info in infos) > 1:
+        boxes = [None if info is None else (info[0][0] - y0, info[0][1] - y0, info[0][2] - x0, info[0][3] - x0) for info in infos]
+        found = _levels(boxes, toned, [None if info is None else (info[4] > 0).astype(np.float32) for info in infos],
+                        [None if info is None else info[4] for info in infos],
+                        None if pin is None else range(len(infos))[pin])
+        toned = [t if lv is None else t * _field(lv, b) for t, lv, b in zip(toned, found, boxes)]
+        for d, lv in zip(decisions, found):
+            if lv is not None:
+                d["field"] = (lv[0], lv[1], lv[2] + y0, lv[3] + x0)
     if one:
         toned = [None if t is None else t[..., 0] for t in toned]
-    for info, color in zip(infos, toned):
+    for i, (info, color) in enumerate(zip(infos, toned)):
         if info is None:
             continue
         box, _, own, has, ramp, w, support = info
@@ -963,11 +1003,18 @@ def _blended(out, infos, gains, offsets, gamma, area, level, pin=None):
         if (below * has).any():
             # the frame and what is below it in bands, worked out over a margin round the frame, so the pyramids near
             # its box's edge see what lies past it
-            ya, yb = max(sl[0].start - margin, 0), min(sl[0].stop + margin, y1 - y0)
-            xa, xb = max(sl[1].start - margin, 0), min(sl[1].stop + margin, x1 - x0)
+            # (starting on a pixel the pyramid's coarsest level has, of the frames' own: GRID)
+            ya, yb = max((sl[0].start - margin) >> levels << levels, 0), min(sl[0].stop + margin, y1 - y0)
+            xa, xb = max((sl[1].start - margin) >> levels << levels, 0), min(sl[1].stop + margin, x1 - x0)
             inner = (slice(sl[0].start - ya, sl[0].stop - ya), slice(sl[1].start - xa, sl[1].stop - xa))
             under = rgb[sl]
-            seam = _seam_cut(a, has, below, color, under)
+            if decided is None:
+                seam, cut = _seam_cut(a, has, below, color, under)
+                if cut is not None:
+                    decisions[i]["cut"] = (cut[0], cut[1] + box[0], cut[2] + box[2])
+            else:
+                given = decided[i] is not None and decided[i][1]
+                seam = _seam_given(a, has, below, given(box) if given else None)
             pad = lambda v: np.pad(v, ((inner[0].start, yb - ya - inner[0].stop), (inner[1].start, xb - xa - inner[1].stop))
                                    + ((0, 0),) * (v.ndim - 2))
             mixed = _bands_blended(pad(color), pad((ramp > 0).astype(np.float32)), rgb[ya:yb, xa:xb], cover[ya:yb, xa:xb],
@@ -985,9 +1032,21 @@ def _blended(out, infos, gains, offsets, gamma, area, level, pin=None):
         # never more transparent than the most opaque frame there, so a frame's own corners and a lost line's gap keep
         # the edge they were made with
         alpha = np.maximum(alpha, _outer_edge(outline, cover, width, alpha >= EDGE_AT / 255))
+    if kept is not None:
+        kept.extend(decisions)
     rgb = np.clip(rgb, 0, 255).round()
     out[y0:y1, x0:x1, :3] = rgb[..., None] if one else rgb
     out[y0:y1, x0:x1, 3] = (alpha * 255).round()
+
+
+def moved(decision, y, x):
+    """A frame's decisions (_blended's kept) for the frame's pixels moved by (y, x): of a part of a bigger picture,
+    for the whole of it."""
+    if decision is None:
+        return None
+    field, cut = decision["field"], decision["cut"]
+    return {"field": None if field is None else (field[0], field[1], field[2] + y, field[3] + x),
+            "cut": None if cut is None else (cut[0], cut[1] + y, cut[2] + x)}
 
 
 """
@@ -1004,12 +1063,17 @@ SEAM_CORE = 0.3
 SEAM_PX = 32
 
 
+def _core(a, has, below):
+    return (has > 0) & (below > 0) & (a >= SEAM_CORE) & (a <= 1 - SEAM_CORE)
+
+
 def _seam_cut(a, has, below, color, under):
+    """(the seam, (the cut, the pixel of a it starts at (y, x)) or None where it is a's half)"""
     seam = (a >= 0.5).astype(np.float32)
-    core = (has > 0) & (below > 0) & (a >= SEAM_CORE) & (a <= 1 - SEAM_CORE)
+    core = _core(a, has, below)
     finder = getattr(getattr(cv2, "detail", None), "GraphCutSeamFinder", None)
     if finder is None or core.sum() < 64:
-        return seam
+        return seam, None
     ys, xs = np.nonzero(core)
     m = 2
     y0, y1 = max(ys.min() - m, 0), min(ys.max() + 1 + m, a.shape[0])
@@ -1022,7 +1086,7 @@ def _seam_cut(a, has, below, color, under):
     mine = hs & ~(bs & (ar < SEAM_CORE))
     theirs = bs & ~(hs & (ar > 1 - SEAM_CORE))
     if not (mine & theirs).any():
-        return seam
+        return seam, None
     # (the finder takes three bands)
     three = lambda v: np.ascontiguousarray(np.broadcast_to(v[..., None], v.shape + (3,)) if v.ndim == 2 else v, np.float32)
     found = finder("COST_COLOR").find([cv2.UMat(three(shrink(color))), cv2.UMat(three(shrink(under)))],
@@ -1033,6 +1097,16 @@ def _seam_cut(a, has, below, color, under):
     part = seam[y0:y1, x0:x1]
     inside = core[y0:y1, x0:x1]
     part[inside] = cut[inside]
+    return seam, (cut, y0, x0)
+
+
+def _seam_given(a, has, below, cut):
+    """The seam as decided (_blended's decided): cut (a's shape: 1 where the frame comes in, 0 where what is below
+    stays, -1 where it says nothing, or None) inside the same core _seam_cut looks in, a's half elsewhere."""
+    seam = (a >= 0.5).astype(np.float32)
+    if cut is not None:
+        take = _core(a, has, below) & (cut >= 0)
+        seam[take] = cut[take] >= 0.5
     return seam
 
 

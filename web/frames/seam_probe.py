@@ -168,10 +168,10 @@ def main():
                         cut, bands, blended = mosaic._seam_cut, mosaic._bands_blended, mosaic._blended
 
                         def seam_cut(a_, has_, below_, color_, under_):
-                            s = cut(a_, has_, below_, color_, under_)
+                            s, found = cut(a_, has_, below_, color_, under_)
                             caught.update(a=a_.copy(), has=has_.copy(), below=below_.copy(), color=color_.copy(),
                                           under=under_.copy(), seam=s.copy())
-                            return s
+                            return s, found
 
                         def bl(out, infos, *rest, **kw):
                             caught["boxes"] = [None if i is None else i[0] for i in infos]
