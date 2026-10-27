@@ -1625,14 +1625,19 @@ body.idle .win.full .titlebar { opacity: 0; }
     }
     const save = saveWrap.querySelector(".savepic"), saveMenu = saveWrap.querySelector(".savemenu");
     save.addEventListener("click", e => { saveOpen(!saveWrap.classList.contains("open")); if (e.detail) save.blur(); });
-    saveMenu.addEventListener("click", e => { if (e.target.closest("a")) setTimeout(() => { saveOpen(false); if (e.detail) document.activeElement.blur(); }, 0); });
+    saveMenu.addEventListener("click", e => {
+      const a = e.target.closest("a");
+      if (a && a.dataset.native && nativeSave(a, e)) return;
+      if (a) setTimeout(() => { saveOpen(false); if (e.detail) document.activeElement.blur(); }, 0);
+    });
     document.addEventListener("click", () => saveOpen(false));
     window.addEventListener("keydown", e => { if (e.key === "Escape" && saveWrap.classList.contains("open")) { e.stopImmediatePropagation(); saveOpen(false); } }, true);
     function saveOpen(on) {
       if (on) {
         const rows = savesFor(shot.dataset.src || "");
         saveMenu.innerHTML = rows.map(r => r === "-" ? '<li class="sep" role="separator"></li>'
-          : `<li class="${r.now ? "now" : ""}"><a role="menuitem" href="${r.href}" download>${r.label}<span>${r.note}</span></a></li>`).join("");
+          : `<li class="${r.now ? "now" : ""}"><a role="menuitem" href="${r.href}" download${r.native ? ` data-native="${r.native}"` : ""}>${r.label}<span>${r.note}</span></a></li>`).join("");
+        for (const a of saveMenu.querySelectorAll("a[data-native]")) nativeNote(a);
       }
       saveWrap.classList.toggle("open", !!on); save.setAttribute("aria-expanded", String(!!on));
     }
@@ -1669,12 +1674,65 @@ body.idle .win.full .titlebar { opacity: 0; }
         rows.push("-", ...frame(ch !== null ? ids[+ch] || ids[0] : ids[ids.length - 1]));
       } else if (/\/frames\/mosaic\//.test(u.pathname)) {
         rows.push({ label: "Whole mosaic, as shown", note: "PNG", href: saveUrl(url), now: true });
+        // the mosaic at its tiles' own resolution (mosaic_native), made when asked for: nativeNote and nativeSave below
+        if (/\/frames\/mosaic\/[NW]\d{10}_\d+\.webp$/.test(u.pathname)) {
+          const n = new URL(u); n.pathname = n.pathname.replace(/\.webp$/, "/full.jpg");
+          for (const k of ["size", "format", "download", "warm"]) n.searchParams.delete(k);
+          rows.push({ label: "Full resolution mosaic", note: "JPEG · native size", href: n.href + (n.search ? "&" : "?") + "download=1", native: n.href.replace(/\/full\.jpg/, "/full.json") });
+        }
       } else {
         const m = u.pathname.match(/\/frames\/(?:processed\/)?([NW]\d{10}_\d+)\.webp$/);
         rows.push({ label: "This frame as shown", note: "PNG", href: saveUrl(url), now: true });
         if (m) rows.push(...frame(m[1]).filter(r => !(u.pathname.includes("/processed/") && r.note.includes("calibrated"))));
       }
       return rows;
+    }
+    // the full resolution mosaic's row: its size and about how big the file is (asked of the frame server when the menu
+    // opens; gone when the server has no mosaic for the picture), or how far its making has got
+    const nativeJobs = new Map();   // its .json address -> { done 0-1 } while the server makes it
+    const mb = v => v >= 100 ? `${Math.round(v)} MB` : v >= 1 ? `${v.toFixed(1)} MB` : `${Math.max(0.1, v).toFixed(1)} MB`;
+    function nativeNote(a, about) {
+      const job = nativeJobs.get(a.dataset.native), span = a.querySelector("span");
+      if (job) { span.textContent = `JPEG · making it… ${Math.round(job.done * 100)}%`; return; }
+      if (about) { span.textContent = `JPEG · ${about.width.toLocaleString()} × ${about.height.toLocaleString()} px · ${about.ready.jpg ? "" : "about "}${mb(about.estimate_mb.jpg)}`; return; }
+      fetch(a.dataset.native).then(r => r.ok ? r.json() : null).catch(() => null).then(v => {
+        if (!a.isConnected) return;
+        if (!v || !v.width) { a.closest("li").remove(); return; }
+        a.dataset.ready = v.ready.jpg ? "1" : "";
+        if (!nativeJobs.has(a.dataset.native)) nativeNote(a, v);
+      });
+    }
+    // a click on it: saved at once when it is made; otherwise the server makes it (minutes for a big pass) while
+    // the row counts up, and it is saved when it is ready, whether the menu is still open or not
+    function nativeSave(a, e) {
+      if (a.dataset.ready) return false;
+      e.preventDefault();
+      const info = a.dataset.native, href = a.href;
+      if (nativeJobs.has(info)) return true;
+      const job = { done: 0 };
+      nativeJobs.set(info, job);
+      const look = () => {
+        const row = saveMenu.querySelector(`a[data-native="${CSS.escape(info)}"]`);
+        if (row) nativeNote(row);
+      };
+      look();
+      let misses = 0;
+      const poll = first => fetch(first ? info + (info.includes("?") ? "&" : "?") + "make=jpg" : info).then(r => r.ok ? r.json() : null).catch(() => null).then(v => {
+        // gone, or no longer being made and not made (the server says why in its log)
+        if (v && !v.ready.jpg && !("jpg" in v.making)) misses++;
+        if (!v || misses > 2) { nativeJobs.delete(info); const row = saveMenu.querySelector(`a[data-native="${CSS.escape(info)}"]`); if (row) row.querySelector("span").textContent = "JPEG · could not be made"; return; }
+        if (v.ready.jpg) {
+          nativeJobs.delete(info);
+          const row = saveMenu.querySelector(`a[data-native="${CSS.escape(info)}"]`);
+          if (row) { row.dataset.ready = "1"; nativeNote(row, v); }
+          const go = document.createElement("a"); go.href = href; go.download = ""; document.body.appendChild(go); go.click(); go.remove();
+          return;
+        }
+        job.done = v.making.jpg || job.done; look();
+        setTimeout(() => poll(false), 1000);
+      });
+      poll(true);
+      return true;
     }
     // the save button's label: the picture's size once the full one is up
     function saving() {
