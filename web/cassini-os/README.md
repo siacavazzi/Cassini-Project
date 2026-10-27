@@ -27,7 +27,12 @@ slowly turns to look past it at the most interesting thing around it. One rule p
 it looks from Cassini, plus a bonus when Cassini photographs it next (more the sooner; the look-ahead grows with the
 speed) and a smaller one when it was just photographed. So a Saturn filling the sky wins, and a picture of Enceladus
 coming up turns the view to Enceladus as Cassini closes in. A new subject has to win for a few seconds and each one
-holds at least half a minute; the view eases between them and swings gently from side to side (Camera drift). The narrow-angle and wide-angle pictures stay on as two
+holds at least half a minute. Framing keeps Cassini and its subject both in the picture: the camera stands off the line
+from Cassini to the subject by the subject's apparent radius plus a spacing (Spacing, 22° by default, kept inside the
+screen), and looks halfway between the spacecraft and the subject's near edge. A small moon is seen past Cassini; a big
+planet close by is seen from beside the spacecraft, or from between the two looking back at Cassini with the limb
+alongside. The camera circles slowly around that line (Camera drift). Framing > Past Cassini keeps the earlier view
+over the spacecraft's shoulder. The narrow-angle and wide-angle pictures stay on as two
 frameless panels in the bottom corners. They are the camera windows themselves, restyled, so every picture comes
 through the same pipeline as in Cassini OS, with every processing switch; through a quiet stretch each panel keeps its
 last picture, and the caption counts down to the next one.

@@ -9543,7 +9543,12 @@ function frame(now) {
   D({ key: "ambient.pace", label: "Every picture: seconds each", type: "range", value: 4, min: 1, max: 30, step: 1, unit: "s",
     hint: "How long each picture stays up in Every picture mode." });
   D({ key: "ambient.drift", label: "Camera drift", type: "range", value: 6, min: 0, max: 30, step: 1, unit: "°/min",
-    hint: "How fast the view swings from side to side behind Cassini. 0 holds it still." });
+    hint: "How fast the view swings slowly around Cassini. 0 holds it still." });
+  D({ key: "ambient.framing", label: "Framing", type: "choice", value: "both",
+    options: [["both", "Cassini and its subject"], ["past", "Past Cassini, at the subject"]],
+    hint: "Cassini and its subject: the camera stands off to the side so the spacecraft and the body it looks at (its near edge, for a big one) are both in the picture; close to a big body that puts the camera between them, looking back at Cassini with the body's edge beside it. Past Cassini: the earlier view over the spacecraft's shoulder, at the subject." });
+  D({ key: "ambient.spacing", label: "Spacing", type: "range", value: 22, min: 6, max: 40, step: 1, unit: "°",
+    hint: "How far apart Cassini and its subject's near edge sit on screen, Cassini and its subject framing. Kept inside the screen." });
   D({ key: "ambient.captions", label: "Caption", type: "toggle", value: true, hint: "What Cassini is looking at, the date and the time to the next picture, at the top of the screen." });
   D({ key: "ambient.timeline", label: "Timeline", type: "toggle", value: true,
     hint: "A thin line along the top: the pictures of the last stretch and the ones coming, with the next few bodies named." });
@@ -9641,38 +9646,60 @@ function frame(now) {
   // Cassini's model a little off the middle of the screen, its subject beyond it
   const DIST = 6e-5;
   function switchTo(n, now) { A.subject = n; A.nextSwitch = now + 30000; }
-  // ---- the drift: the camera sits behind Cassini and a little to one side, and pans to look between the spacecraft
-  // and its subject beyond it, so both are on screen; it swings slowly from side to side (ambient.drift) and the
-  // distance breathes. With nothing to look at (between the planets) it circles the spacecraft ----
+  // ---- the drift. Cassini and its subject (ambient.framing "both"): the camera stands off the line from Cassini to
+  // the subject by the subject's apparent radius plus the spacing, so Cassini sits on one side of the screen and the
+  // subject's near edge the spacing away on the other; a small moon is seen past the spacecraft, a big close planet
+  // from beside it or from between the two, looking back at Cassini with the limb alongside. The view looks halfway
+  // between the two. The camera circles slowly around that line (ambient.drift) and the distance breathes. "past":
+  // the earlier view from behind Cassini and a little to one side, looking past it at the subject. With nothing to look
+  // at (between the planets) it circles the spacecraft ----
   const v = new THREE.Vector3(), want = new THREE.Vector3(), Y = new THREE.Vector3(0, 1, 0);
-  const aim = new THREE.Vector3(), aimWant = new THREE.Vector3();   // where the view looks, eased (scene units, Cassini at 0)
+  const sv = new THREE.Vector3(), up = new THREE.Vector3(), side = new THREE.Vector3(), limb = new THREE.Vector3();
+  const aim = new THREE.Vector3(0, 0, -1), aimWant = new THREE.Vector3();   // the direction the view looks, eased
   function drift(dt) {
     if (!(dt > 0)) return;
     const t = (performance.now() - A.since) / 1000, p = camera.position, r = p.length();
     if (!(r > 0)) return;
     const rate = S.get("ambient.drift") * Math.PI / 180 / 60;   // rad per second
+    A.phase += rate * dt / 0.44;
     v.copy(p).normalize();
     if (A.subject && ok(A.subject)) {
-      relScene(A.subject, want); want.normalize();
-      // the pan: look a little past Cassini toward the subject, so the two sit on either side of the middle
-      aimWant.copy(want).multiplyScalar(r * 0.9);
-      want.negate();
-      // the swing: ±25° around a 15° offset, as fast as the drift setting turns
-      const swing = rate > 0 ? 0.26 + 0.44 * Math.sin(A.phase += rate * dt / 0.44) : 0.26;
-      want.applyAxisAngle(Y, swing).addScaledVector(Y, 0.12).normalize();
+      relScene(A.subject, sv);
+      const d = sv.length(); sv.normalize();
+      if (S.get("ambient.framing") === "past") {
+        // look a little past Cassini toward the subject; swing ±25° around a 15° offset
+        aimWant.copy(sv).multiplyScalar(r * 0.9).sub(p).normalize();
+        want.copy(sv).negate().applyAxisAngle(Y, rate > 0 ? 0.26 + 0.44 * Math.sin(A.phase) : 0.26).addScaledVector(Y, 0.12).normalize();
+      } else {
+        const b = bodies[A.subject], R = b && b.radii ? b.radii[0] / KM : 0;
+        const rho = R > 0 ? Math.asin(Math.min(1, R / Math.max(d, R))) : 0;   // the subject's apparent radius
+        // the spacing, kept to what fits on the screen's narrower side
+        const vf = camera.fov * Math.PI / 180, fit = 0.8 * Math.min(vf, 2 * Math.atan(Math.tan(vf / 2) * camera.aspect));
+        const phi = Math.min(2.8, rho + Math.min(fit, S.get("ambient.spacing") * Math.PI / 180));
+        // the side the camera stands on: mostly beside the line, a little above, wandering slowly
+        up.copy(Y).addScaledVector(sv, -sv.dot(Y)); if (up.lengthSq() < 1e-6) up.set(1, 0, 0).addScaledVector(sv, -sv.x); up.normalize();
+        side.crossVectors(sv, up);
+        const around = Math.PI / 2 - 0.45 + 0.35 * Math.sin(A.phase);
+        side.multiplyScalar(Math.sin(around)).addScaledVector(up, Math.cos(around)).normalize();
+        want.copy(sv).multiplyScalar(-Math.cos(phi)).addScaledVector(side, Math.sin(phi)).normalize();
+        // the near edge, seen from the camera (the subject is far beyond it), and the view halfway to Cassini
+        limb.copy(sv).multiplyScalar(Math.cos(rho)).addScaledVector(side, -Math.sin(rho)).normalize();
+        aimWant.copy(want).negate().add(limb).normalize();
+      }
       if (window.cassiniFollow && cassiniFollow.easeDir) cassiniFollow.easeDir(v, want, dt, 5);
       else v.lerp(want, 1 - Math.exp(-dt / 5)).normalize();
-    } else { v.applyAxisAngle(Y, rate * dt); aimWant.set(0, 0, 0); }
-    aim.lerp(aimWant, 1 - Math.exp(-dt / 5));
+    } else { v.applyAxisAngle(Y, rate * dt); aimWant.copy(v).negate(); }
+    aim.lerp(aimWant, 1 - Math.exp(-dt / 4)).normalize();
     const rWant = DIST * (1 + 0.15 * Math.sin(2 * Math.PI * t / 210));
     p.copy(v).multiplyScalar(r + (rWant - r) * (1 - Math.exp(-dt / 6)));
   }
 
   // after the orbit controls have aimed at Cassini, the pan
+  const look = new THREE.Vector3();
   const studyCamera = window.studyCamera;
   window.studyCamera = () => {
     if (studyCamera) studyCamera();
-    if (A.on && !(window.cassiniCutscene && cassiniCutscene.active) && state.focus === "CASSINI") camera.lookAt(aim);
+    if (A.on && !(window.cassiniCutscene && cassiniCutscene.active) && state.focus === "CASSINI") camera.lookAt(look.copy(camera.position).add(aim));
   };
 
   // ---- the camera cones: the only part of the HUD left on (orbits and the trail are hidden while it draws), fainter
@@ -9881,7 +9908,7 @@ function frame(now) {
     root.hidden = false;
     A.since = performance.now(); A.subject = null; A.cand = null; A.nextSwitch = 0; A.shiftAt = 0; A.liveAt = performance.now(); A.phase = 0;
     if (state.focus !== "CASSINI") setFocus("CASSINI", DIST);
-    camera.position.setLength(DIST); aim.set(0, 0, 0);
+    camera.position.setLength(DIST); aim.copy(camera.position).negate().normalize();
     applyMode();
     if (F && F.windows && catalog && catalog.byCam) F.windows.forEach(f => f(true));   // (the catalog may still be loading)
     const u = new URL(location.href);
