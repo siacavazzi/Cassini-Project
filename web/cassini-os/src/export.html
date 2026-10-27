@@ -39,7 +39,7 @@ body.phone #excard:not(.full) { width: calc(100% - 16px) !important; left: 8px !
     <div id="exsum"></div>
     <div class="exrow"><span>Cameras</span><div class="exseg" id="excams"><button data-v="NW">Both</button><button data-v="N">NAC</button><button data-v="W">WAC</button></div></div>
     <div class="exrow"><span>Frame rate</span><label class="chk"><input type="checkbox" id="exauto"> Adaptive</label><input type="range" id="exfps" min="2" max="30" step="1" aria-label="Pictures per second"><span class="val" id="exfpsv"></span></div>
-    <div class="exrow"><span>Picture size</span><input type="range" id="exsize" min="0" max="2" step="1" aria-label="Picture size per camera"><span class="val" id="exsizev"></span></div>
+    <div class="exrow"><span>Picture size</span><input type="range" id="exsize" min="0" max="5" step="1" aria-label="Picture size per camera"><span class="val" id="exsizev"></span></div>
     <div class="exrow"><span></span><label class="chk"><input type="checkbox" id="exsound"> Sound</label><label class="chk"><input type="checkbox" id="excap"> Captions</label></div>
     <div class="exrow"><button class="exbtn go" id="exgo" disabled>Export</button><button class="exbtn" id="exclear">Clear marks</button><button class="exbtn" id="exedit" title="Pick the frames and the look of this movie (Movie Editor)">Edit frames…</button><span id="exstate"></span></div>
     <div id="exbar"><i></i></div>
@@ -61,7 +61,13 @@ body.phone #excard:not(.full) { width: calc(100% - 16px) !important; left: 8px !
     return "http://localhost:8765";
   })();
   const S = window.cassiniSettings, card = $("excard");
-  const SIZES = [512, 768, 1024];
+  // 1536 and 2048: "up to", each mosaic at the biggest size its pass has detail for; "full": mosaics at their native
+  // resolution (export.py)
+  const SIZES = [512, 768, 1024, 1536, 2048, "full"];
+  const CANVAS_S = 0.7;   // seconds a mosaic picture takes up to 2048 (the windows' canvas: about as 1024)
+  // measured on the Mac Mini (bench_fullres_movie.py): seconds to draw a mosaic picture at Full, per million pixels
+  // (hexagon mosaic movies 2012-11-27 and 2013-06-26: 5.5-7.4 s a picture of 2400-3100 px, two made at once)
+  const FULL_S_PER_MP = 0.5;
   // the export's choices live in the settings registry, so they are kept on this device and listed in Settings
   if (S) {
     const D = d => S.define(Object.assign({ section: "Export" }, d));
@@ -69,8 +75,10 @@ body.phone #excard:not(.full) { width: calc(100% - 16px) !important; left: 8px !
         hint: "Pictures stay on screen for their real gap to the next one, sped up: bursts flip fast, quiet spells linger (1/30 to 1/2 s each)." });
     D({ key: "export.fps", label: "Fixed frame rate", type: "range", value: 12, min: 2, max: 30, step: 1, unit: "fps",
         hint: "Pictures per second when the frame rate is not adaptive." });
-    D({ key: "export.size", label: "Picture size", type: "range", value: 1024, min: 512, max: 1024, step: 256, unit: "px",
-        hint: "Pixels per camera in an exported film; 1024 is a full Cassini frame." });
+    D({ key: "export.size", label: "Picture size", type: "range", value: 1024, min: 512, max: 2048, step: 256, unit: "px",
+        hint: "Pixels per camera in an exported film; 1024 is a full Cassini frame. Above 1024, mosaics are drawn up to that size, each only as big as its pass has detail for." });
+    D({ key: "export.full", label: "Mosaics at full resolution", type: "toggle", value: false,
+        hint: "Picture size Full: a mosaic or mosaic movie keeps every pixel its frames took (up to 4096 px a side) instead of fitting 1024. Extra work on the frame server, made only when asked for: pre-process the stretch first." });
     D({ key: "export.sound", label: "Sound", type: "toggle", value: true, hint: "Exported films carry the picture sounds, set as in Settings > Sound." });
     D({ key: "export.caption", label: "Captions", type: "toggle", value: true, hint: "A strip under each camera with the time, target, filters and kind of picture." });
   }
@@ -173,7 +181,7 @@ body.phone #excard:not(.full) { width: calc(100% - 16px) !important; left: 8px !
   // ---------- what the film will be: the server's plan, asked for as the choices change ----------
   const params = () => {
     const q = new URLSearchParams({ from: iso(X.a), until: iso(X.b), cams: X.cams || "NW", fps: opt("export.adaptive", true) ? "auto" : String(opt("export.fps", 12)),
-      size: String(opt("export.size", 1024)), sound: opt("export.sound", true) ? "1" : "0", caption: opt("export.caption", true) ? "1" : "0" });
+      size: opt("export.full", false) ? "full" : String(opt("export.size", 1024)), sound: opt("export.sound", true) ? "1" : "0", caption: opt("export.caption", true) ? "1" : "0" });
     // Whole mosaics (Settings > Movie): a mosaic movie's film shows only its whole laps (export.py whole=); the Movie
     // Editor's cut and look for this stretch (movieedit.html): frames left out, and the look on every picture
     return q.toString() + window.cassiniLook() + (window.cassiniMovieStyle ? window.cassiniMovieStyle() : "") + (opt("movies.mosaicFrames", "rolling") === "whole" ? "&whole=1" : "") + (window.cassiniMovieCut ? window.cassiniMovieCut() : "");
@@ -199,12 +207,29 @@ body.phone #excard:not(.full) { width: calc(100% - 16px) !important; left: 8px !
         X.plan = p; X.planKey = key;
         const n = { N: 0, W: 0 }; p.pictures.forEach(e => n[e.cam]++);
         // measured on the Mac Mini: about 0.065 MB a second of film at 1024 x 1072, 0.11 at 2048 x 1072, sound included
-        const mb = p.frames ? Math.max(0.1, p.seconds * (0.03 + 0.035 * p.width * p.height / (1024 * 1072))) : 0;
+        // (a Full film, mostly a mosaic's dark sky, about half that a pixel: 3.6 MB for 19 s at 3078 x 3222)
+        const mb = p.frames ? Math.max(0.1, p.seconds * (0.03 + (p.full ? 0.017 : 0.035) * p.width * p.height / (1024 * 1072))) : 0;
         const edited = window.cassiniMovieCut && window.cassiniMovieCut() ? " · edited in the Movie Editor" : "";
-        $("exsum").innerHTML = p.count ? `${p.count.toLocaleString()} pictures (NAC ${n.N.toLocaleString()}, WAC ${n.W.toLocaleString()}) · film ${fmtDur(p.seconds)} at ${p.width}×${p.height} · about ${mb.toFixed(mb < 10 ? 1 : 0)} MB${edited}` : `<span class="warn">No pictures in this stretch.</span>`;
+        $("exsum").innerHTML = p.count ? `${p.count.toLocaleString()} pictures (NAC ${n.N.toLocaleString()}, WAC ${n.W.toLocaleString()}) · film ${fmtDur(p.seconds)} at ${p.width}×${p.height} · about ${mb.toFixed(mb < 10 ? 1 : 0)} MB${edited}${fullNote(p.full)}` : `<span class="warn">No pictures in this stretch.</span>`;
         $("exgo").disabled = !p.count;
       } catch (err) { $("exsum").innerHTML = `<span class="warn">No frame server at ${FRAMES}.</span>`; }
     }, 250);
+  }
+
+  // Picture size Full: what is drawn that big, how long it takes, and what is not known until the stretch is made ahead
+  function fullNote(f) {
+    if (!f) return "";
+    const fmt = v => v.toLocaleString();
+    if (!f.mosaic_pictures) return `<br><span class="warn">No mosaic in this stretch: a bigger size gives the same pictures as 1024.</span>`;
+    const full = opt("export.full", false);
+    const secs = f.mosaic_pictures * (full ? FULL_S_PER_MP * f.pane * f.pane / 1e6 : CANVAS_S);
+    // up to a size: how many passes are drawn at each size (a pass only as big as it has detail for)
+    const by = {}; for (const ps of f.passes || []) by[ps.drawn] = (by[ps.drawn] || 0) + 1;
+    const mix = Object.keys(by).length > 1 ? ` (passes at ${Object.keys(by).sort((a, b) => b - a).map(k => `${fmt(+k)}: ${by[k]}`).join(", ")})` : "";
+    let out = f.native > 1024 ? `<br>${fmt(f.mosaic_pictures)} mosaic pictures ${full ? "at" : "up to"} ${fmt(f.pane)} px${full && f.native > f.pane ? ` (their own ${fmt(f.native)} px, fitted)` : mix} · about ${fmtDur(Math.max(60, secs))} to make`
+      : `<br><span class="warn">The mosaics here are no bigger than 1024 px: a bigger size gives the same pictures.</span>`;
+    if (f.pending) out += `<br><span class="warn">${f.pending} mosaic pass${f.pending > 1 ? "es are" : " is"} not pre-processed yet, so ${f.pending > 1 ? "their" : "its"} size is not known: pre-process the stretch first.</span>`;
+    return out;
   }
 
   // ---------- making the film ----------
@@ -302,17 +327,21 @@ body.phone #excard:not(.full) { width: calc(100% - 16px) !important; left: 8px !
     $("exauto").checked = opt("export.adaptive", true);
     $("exfps").value = opt("export.fps", 12); $("exfps").disabled = $("exauto").checked;
     $("exfpsv").textContent = $("exauto").checked ? "adaptive" : `${opt("export.fps", 12)} fps`;
-    const sz = opt("export.size", 1024); $("exsize").value = Math.max(0, SIZES.indexOf(sz)); $("exsizev").textContent = `${sz} px`;
+    const full = opt("export.full", false), sz = opt("export.size", 1024);
+    const near = SIZES.slice(0, -1).reduce((m, v, i) => (Math.abs(v - sz) < Math.abs(SIZES[m] - sz) ? i : m), 0);
+    $("exsize").value = full ? SIZES.length - 1 : near; $("exsizev").textContent = full ? "Full" : sz > 1024 ? `≤ ${sz} px` : `${sz} px`;
     $("exsound").checked = opt("export.sound", true); $("excap").checked = opt("export.caption", true);
     segs();
   }
-  function open() {
+  // o.full: opens on Picture size Full, or off it (the highlighted stretch's "Full resolution…" and "Save movie…", segment.html)
+  function open(o) {
+    if (o && "full" in o) setOpt("export.full", !!o.full);
     controls();
     card.hidden = false; card.dispatchEvent(new Event("pointerdown"));
     mark();
   }
   function close() { card.hidden = true; }
-  window.cassiniExport = { open, close, mark, clear, soundtrack, get state() { return X; } };
+  window.cassiniExport = { open, close, mark, clear, soundtrack, params, get state() { return X; } };
 
   $("exin").addEventListener("click", () => mark(state.et, null));
   $("exout").addEventListener("click", () => mark(null, state.et));
@@ -320,7 +349,11 @@ body.phone #excard:not(.full) { width: calc(100% - 16px) !important; left: 8px !
   $("excams").addEventListener("click", e => { const b = e.target.closest("button"); if (!b) return; X.cams = b.dataset.v; segs(); estimate(); });
   $("exauto").addEventListener("change", e => { setOpt("export.adaptive", e.target.checked); controls(); estimate(); });
   $("exfps").addEventListener("input", e => { setOpt("export.fps", +e.target.value); controls(); estimate(); });
-  $("exsize").addEventListener("input", e => { setOpt("export.size", SIZES[+e.target.value]); controls(); estimate(); });
+  $("exsize").addEventListener("input", e => {
+    const v = SIZES[+e.target.value];
+    setOpt("export.full", v === "full"); if (v !== "full") setOpt("export.size", v);
+    controls(); estimate();
+  });
   $("exsound").addEventListener("change", e => { setOpt("export.sound", e.target.checked); estimate(); });
   $("excap").addEventListener("change", e => { setOpt("export.caption", e.target.checked); estimate(); });
   $("exgo").addEventListener("click", go);
@@ -336,6 +369,6 @@ body.phone #excard:not(.full) { width: calc(100% - 16px) !important; left: 8px !
     else if (e.key === "Escape" && !card.hidden) close();
   });
   const go2 = $("gomenu");
-  if (go2) { const li = document.createElement("li"); li.innerHTML = '<button id="goexport">Export Movie…<span class="kbd">E</span></button>'; go2.appendChild(li); li.querySelector("button").addEventListener("click", open); }
+  if (go2) { const li = document.createElement("li"); li.innerHTML = '<button id="goexport">Export Movie…<span class="kbd">E</span></button>'; go2.appendChild(li); li.querySelector("button").addEventListener("click", () => open()); }
 })();
 </script>

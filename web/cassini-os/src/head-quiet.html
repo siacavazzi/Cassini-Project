@@ -562,6 +562,10 @@ body.idle .camwin .well.has-frame { border-color: transparent; box-shadow: 0 6px
 .wmrow { display: flex; align-items: center; justify-content: space-between; gap: 12px; padding: 7px 12px; }
 .wml { display: grid; gap: 2px; } .wml small { font-size: 10px; color: var(--q-dim); }
 .wmpass { border-top: 1px solid var(--q-line); margin-top: 4px; padding-top: 4px; }
+/* under Auto center: a movie pass's image stabilization and exposure evening (Settings > Movie), each with its smoothing */
+.wmsub { padding: 3px 12px 5px 22px; display: grid; grid-template-columns: 1fr auto; align-items: center; gap: 2px 10px; }
+.wmsub input[type=range] { grid-column: 1 / -1; width: 100%; margin: 2px 0 0; accent-color: var(--q-accent); }
+.wmsub input[type=range]:disabled { opacity: .35; }
 .wmh { padding: 4px 12px 3px; font-size: 9.5px; letter-spacing: .08em; text-transform: uppercase; color: var(--q-dim); }
 .wmopt, .wmset { all: unset; box-sizing: border-box; display: grid; grid-template-columns: 14px auto 1fr; align-items: baseline; gap: 6px; width: 100%; padding: 5px 12px; cursor: default; }
 .wmopt span { color: var(--q-dim); font-size: 10px; text-align: right; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
@@ -585,7 +589,22 @@ body.phone .wmopt, body.phone .wmset { padding: 10px 14px; }
 .savepic svg { width: 10px; height: 10px; } .savepic svg * { fill: none; stroke: currentColor; stroke-width: 1.3; }
 .savepic .caret { font-size: 8px; opacity: .7; }
 :is(.win.full, .win[data-held]) .well.has-frame .savewrap { display: block; }
+/* "Open its mosaic" on a lone frame of a mosaic pass (cameraFeed lone()) */
+.openmosaic { all: unset; position: absolute; left: 6px; top: 5px; z-index: 3; padding: 3px 7px; border-radius: 4px; box-sizing: border-box;
+  font: 9px/1 var(--hudf); letter-spacing: .04em; color: var(--q-text); background: rgba(0,0,0,.55); border: 1px solid var(--q-line); cursor: pointer; }
+.openmosaic:hover { color: #fff; border-color: var(--q-accent); }
+.openmosaic:focus-visible { outline: 1px solid var(--q-accent); }
+.openmosaic[hidden] { display: none; }
+body.idle .openmosaic { opacity: .35; } body.idle .openmosaic:hover { opacity: 1; }
 .well.fullres .savepic { color: var(--q-accent); }
+/* "Finish mosaic" on a pass's mosaic part way through, while paused (cameraFeed finishSync) */
+.finishmosaic { all: unset; position: absolute; left: 6px; top: 5px; z-index: 3; padding: 3px 7px; border-radius: 4px; box-sizing: border-box;
+  font: 9px/1 var(--hudf); letter-spacing: .04em; color: var(--q-text); background: rgba(0,0,0,.55); border: 1px solid var(--q-line); cursor: pointer; }
+.finishmosaic:hover { color: #fff; border-color: var(--q-accent); }
+.finishmosaic:focus-visible { outline: 1px solid var(--q-accent); }
+.finishmosaic[hidden] { display: none; }
+.finishmosaic.busy { color: var(--q-dim); cursor: default; border-color: var(--q-line); }
+body.idle .finishmosaic { opacity: .35; } body.idle .finishmosaic:hover { opacity: 1; }
 .win.full .well.has-frame .shottag { right: 190px; }
 body.idle .win.full .savewrap { opacity: .35; } body.idle .win.full .savewrap:hover { opacity: 1; }
 .savemenu { display: none; position: absolute; right: 0; bottom: calc(100% + 4px); min-width: 250px; margin: 0; padding: 4px 0; list-style: none; border-radius: 6px;
@@ -607,6 +626,10 @@ body.phone .savemenu a { padding: 11px 14px; }
 .crumbs button:hover { text-decoration: underline; }
 .crumbs .here { color: var(--q-text); min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
 .crumbs .sep { opacity: .6; }
+.crumbs .ownbtn { margin-left: auto; padding: 2px 7px; border-radius: 9px; border: 1px solid var(--q-line); color: var(--q-text); font-size: 9.5px; }
+.crumbs .ownbtn[aria-pressed="true"] { border-color: var(--q-accent); color: var(--q-accent); }
+.crumbs .ownbtn:hover { text-decoration: none; background: rgba(255,255,255,.06); }
+.crumbs .ownbtn + .heldbadge { margin-left: 0; }
 .crumbs .heldbadge { margin-left: auto; padding: 2px 7px; border-radius: 9px; border: 1px solid rgba(227,179,65,.7); color: #e3b341; font-size: 9.5px; }
 .crumbs .heldbadge:hover { text-decoration: none; background: rgba(227,179,65,.14); }
 .win[data-held] .well { border-color: rgba(227,179,65,.35); }
@@ -1276,7 +1299,30 @@ body.idle .win.full .titlebar { opacity: 0; }
     }
     s.ready = Math.max(...s.use.map(k => catalog.et[k]));   // the picture exists once its last channel is taken
   }
+  // the sets as the data names them (build_data.py --groups: the frame server's one rule, web/frames/sets_passes.py),
+  // in the order their first frames were taken; a set that runs on into a month not loaded is made of the frames
+  // that are (pickChannels on them), and one left with a single frame is none
+  function dataSets() {
+    const n = catalog.et.length, setOf = new Int32Array(n).fill(-1), sets = [], at = new Map(), all = catalog.allOrder || order;
+    for (let i = 0; i < all.length; i++) {
+      const k = all[i], id = catalog.set[k];
+      if (id < 0) continue;
+      let r = at.get(id);
+      if (!r) at.set(id, r = { id, cam: catalog.cam[k], target: catalog.target[k], obs: catalog.obs[k], frames: [], filters: [] });
+      r.frames.push(k); r.filters.push(colourFilter(k));
+    }
+    for (const r of at.values()) {
+      if (r.frames.length < 2) continue;
+      const t = catalog.groups.sets[r.id], use = t ? t[1].map(kOf) : [];
+      if (t && use.every(q => q >= 0)) { r.kind = t[0]; r.use = use; r.ready = Math.max(...use.map(q => catalog.et[q])); }
+      else pickChannels(r);
+      for (const q of r.frames) setOf[q] = sets.length;
+      sets.push(r);
+    }
+    return { setOf, sets };
+  }
   function findSets() {
+    if (catalog.set && catalog.groups) return dataSets();
     const n = catalog.et.length, setOf = new Int32Array(n).fill(-1), sets = [], run = {}, all = catalog.allOrder || order;
     const close = cam => {
       const r = run[cam]; run[cam] = null;
@@ -1493,6 +1539,8 @@ body.idle .win.full .titlebar { opacity: 0; }
   // takes its Esc first
   const holding = new Set();
   window.cassiniHeld = holding;
+  // the camera window the arrow keys step through a mosaic's frames in: the one whose frame was outlined or opened last
+  let pointingKeys = null;
   window.addEventListener("keydown", e => {
     if (e.key !== "Escape" || !holding.size || e.metaKey || e.ctrlKey || e.altKey || /^(INPUT|SELECT|TEXTAREA)$/.test(e.target.tagName)) return;
     if (document.querySelector(".menu.open")) return;
@@ -1528,6 +1576,9 @@ body.idle .win.full .titlebar { opacity: 0; }
   // (onCenter, onMode)
   const PASS_MODES = [["auto", "Auto", "the server's call"], ["mosaic", "Mosaic", "build it tile by tile"],
     ["movie", "Movie", "its frames in place"], ["mosaic_movie", "Mosaic movie", "each place's newest tile, lap after lap"]];
+  // the movie's steadying under Auto center (Settings > Movie, for every window): [setting, its smoothing, label, slider min, max, step]
+  const MOVIE_STEADY = [["movies.stabilize", "movies.stabilizeSmooth", "Stabilize movies", 4, 60, 4],
+    ["movies.exposure", "movies.exposureSmooth", "Even exposure", 2, 30, 2]];
   function winMenu(win, card) {
     const bar = win.querySelector(".titlebar");
     let btn = bar.querySelector(".winopt");
@@ -1540,6 +1591,7 @@ body.idle .win.full .titlebar { opacity: 0; }
     }
     const el = document.createElement("div"); el.className = "winmenu"; el.setAttribute("role", "menu"); el.hidden = true;
     el.innerHTML = `<div class="wmrow"><span class="wml">Auto center<small></small></span><button class="sw" role="menuitemcheckbox" aria-checked="true" aria-label="Auto center"></button></div>
+      ${MOVIE_STEADY.map(([key, smooth, label, min, max, step]) => `<div class="wmsub" data-key="${key}"><span class="wml">${label}<small></small></span><button class="sw" role="menuitemcheckbox" aria-checked="true" aria-label="${label}"></button><input type="range" min="${min}" max="${max}" step="${step}" data-smooth="${smooth}" aria-label="${label} smoothing"></div>`).join("")}
       <div class="wmpass"><div class="wmh">This pass plays as</div>${PASS_MODES.map(([m, l, n]) => `<button class="wmopt" role="menuitemradio" data-mode="${m}" aria-checked="false"><i></i>${l}<span>${n}</span></button>`).join("")}</div>
       <div class="wmfoot"><button class="wmset">All settings…</button></div>`;
     win.appendChild(el);
@@ -1555,6 +1607,12 @@ body.idle .win.full .titlebar { opacity: 0; }
     window.addEventListener("keydown", e => { if (e.key === "Escape" && !el.hidden) { e.stopImmediatePropagation(); open(false); } }, true);
     sw.addEventListener("click", () => api.onCenter(sw.getAttribute("aria-checked") !== "true"));
     pass.addEventListener("click", e => { const b = e.target.closest(".wmopt"); if (b) api.onMode(b.dataset.mode); });
+    for (const row of el.querySelectorAll(".wmsub")) {
+      const key = row.dataset.key, range = row.querySelector("input");
+      row.querySelector(".sw").addEventListener("click", () => { S.set(key, !S.get(key)); api.sync(api.state); });
+      range.addEventListener("change", () => { S.set(range.dataset.smooth, +range.value); api.sync(api.state); });
+      range.addEventListener("input", () => { row.querySelector("small").textContent = `smoothed over ${range.value} frames`; });
+    }
     el.querySelector(".wmset").addEventListener("click", () => { open(false); if (window.cassiniSettings && window.cassiniSettings.open) window.cassiniSettings.open(); });
     api.sync = st => {
       api.state = st;
@@ -1562,6 +1620,13 @@ body.idle .win.full .titlebar { opacity: 0; }
       sw.setAttribute("aria-checked", String(!!st.centre));
       note.textContent = !st.centre ? (def ? "Off for this window" : "Off (the Settings default)")
         : st.centred ? "Body in the middle, north up" : "Moons and planets that fit go north up in the middle";
+      for (const row of el.querySelectorAll(".wmsub")) {
+        const on = !!S.get(row.dataset.key), range = row.querySelector("input"), v = S.get(range.dataset.smooth);
+        row.querySelector(".sw").setAttribute("aria-checked", String(on));
+        if (v != null) range.value = v;
+        range.disabled = !on;
+        row.querySelector("small").textContent = on ? `smoothed over ${range.value} frames` : "Off (every window)";
+      }
       pass.hidden = !st.inPass;
       for (const b of pass.querySelectorAll(".wmopt")) {
         const m = b.dataset.mode, on = m === st.mode;
@@ -1580,15 +1645,21 @@ body.idle .win.full .titlebar { opacity: 0; }
   const completeMosaics = () => !!S.get("playback.completeMosaics") && !!S.get("cameras.mosaics") && window.cassiniMosaics !== false;
   // Whole mosaics (Settings > Movie > Mosaic movie frames): a mosaic movie shows a new picture only when a lap is
   // finished, every place taken again, so each frame of it is a whole new mosaic. lapEnds: the frames that finish a
-  // lap, as the server's note on each observation lists them (kind_of lap_ends); lapKnown: cam|target|observation
+  // lap, as the server's note on each observation lists them (kind_of lap_ends); lapKnown: cam|pass (passKey)
   // the note has come back for (until then the pass rolls tile by tile)
   const wholeLaps = () => S.get("movies.mosaicFrames") === "whole";
   const lapEnds = new Set(), lapKnown = new Set();
-  // the pass (target and observation) of a camera's p-th frame, as the first and last index of its frames in a row
+  // a frame's pass: the pass id the data gives it (build_data.py --groups: the frame server's passes, obs_mosaic.units,
+  // which split an observation where the camera pauses or the distance changes), else its target and observation
+  const passKey = k => catalog.pass && catalog.pass[k] >= 0 ? `p${catalog.pass[k]}` : `${catalog.target[k]}|${catalog.obs[k]}`;
+  // what the data says a frame's pass is: [kind ("mosaic", "movie", "mosaic_movie" or ""), observation, pass number in
+  // it, last frame id, frames], or null (no ids in the data: the server's answers say, as they come)
+  const passInfo = k => (catalog.pass && catalog.pass[k] >= 0 && catalog.groups.passes[catalog.pass[k]]) || null;
+  // the pass of a camera's p-th frame, as the first and last index of its frames in a row
   function passSpan(cam, body, p) {
     const ks = framesOf(cam, body).ks, spans = catalog.passSpans = catalog.passSpans || new Map(), key = `${cam}|${body || ""}|${p}`;
     if (spans.has(key)) return spans.get(key);
-    const o = k => `${catalog.target[k]}|${catalog.obs[k]}`, me = o(ks[p]);
+    const o = passKey, me = o(ks[p]);
     let first = p, last = p;
     while (first > 0 && o(ks[first - 1]) === me) first--;
     while (last + 1 < ks.length && o(ks[last + 1]) === me) last++;
@@ -1606,7 +1677,7 @@ body.idle .win.full .titlebar { opacity: 0; }
     let want = null, shownKey = null, shown = null, next = [], lastK = -2, lastReady = null, stripKey = "", stripSet = null;
     // steady size: shapeOf is the target and observation whose pass mosaic gave the picture its shape, which it
     // keeps for every picture of that observation
-    const steady = () => S.get("cameras.steady"), passOf = k => `${catalog.target[k]}|${catalog.obs[k]}`;
+    const steady = () => S.get("cameras.steady"), passOf = passKey;
     let shapeOf = null;
     // what kind of picture is up (a color composite, a mosaic, both), for how long it stays (importance)
     let kind = { color: false, mosaic: false };
@@ -1645,14 +1716,19 @@ body.idle .win.full .titlebar { opacity: 0; }
     }
     const save = saveWrap.querySelector(".savepic"), saveMenu = saveWrap.querySelector(".savemenu");
     save.addEventListener("click", e => { saveOpen(!saveWrap.classList.contains("open")); if (e.detail) save.blur(); });
-    saveMenu.addEventListener("click", e => { if (e.target.closest("a")) setTimeout(() => { saveOpen(false); if (e.detail) document.activeElement.blur(); }, 0); });
+    saveMenu.addEventListener("click", e => {
+      const a = e.target.closest("a");
+      if (a && a.dataset.native && nativeSave(a, e)) return;
+      if (a) setTimeout(() => { saveOpen(false); if (e.detail) document.activeElement.blur(); }, 0);
+    });
     document.addEventListener("click", () => saveOpen(false));
     window.addEventListener("keydown", e => { if (e.key === "Escape" && saveWrap.classList.contains("open")) { e.stopImmediatePropagation(); saveOpen(false); } }, true);
     function saveOpen(on) {
       if (on) {
         const rows = savesFor(shot.dataset.src || "");
         saveMenu.innerHTML = rows.map(r => r === "-" ? '<li class="sep" role="separator"></li>'
-          : `<li class="${r.now ? "now" : ""}"><a role="menuitem" href="${r.href}" download>${r.label}<span>${r.note}</span></a></li>`).join("");
+          : `<li class="${r.now ? "now" : ""}"><a role="menuitem" href="${r.href}" download${r.native ? ` data-native="${r.native}"` : ""}>${r.label}<span>${r.note}</span></a></li>`).join("");
+        for (const a of saveMenu.querySelectorAll("a[data-native]")) nativeNote(a);
       }
       saveWrap.classList.toggle("open", !!on); save.setAttribute("aria-expanded", String(!!on));
     }
@@ -1681,7 +1757,8 @@ body.idle .win.full .titlebar { opacity: 0; }
           rows.push(Object.assign(whole, { label: `This ${kindOf(ids)} picture`, now: true }), "-");
           ids.forEach((id, j) => rows.push({ label: `${nameOf(id)} channel, as in it`, note: "PNG", href: saveUrl(`${url}&channel=${slots[j]}`) }));
         }
-      } else if (/\/frames\/mosaic\/[^/]+\/frame\.webp$/.test(u.pathname)) {
+      } else if (/\/frames\/mosaic\/[^/]+\/(frame|p\/\d+)\.webp$/.test(u.pathname)) {
+        // (p/<n>: ids= names the pointing's frames, for these rows; the server draws pointing n)
         const ids = (q.get("ids") || "").split(","), ch = q.get("channel"), whole = url.replace(/&channel=\d/, "");
         rows.push({ label: ch !== null ? "This channel as shown" : "This frame as in the mosaic", note: "PNG · mosaic's look", href: saveUrl(url), now: true });
         if (ch !== null) rows.push({ label: "The whole frame, as in the mosaic", note: "PNG", href: saveUrl(whole) });
@@ -1689,12 +1766,65 @@ body.idle .win.full .titlebar { opacity: 0; }
         rows.push("-", ...frame(ch !== null ? ids[+ch] || ids[0] : ids[ids.length - 1]));
       } else if (/\/frames\/mosaic\//.test(u.pathname)) {
         rows.push({ label: "Whole mosaic, as shown", note: "PNG", href: saveUrl(url), now: true });
+        // the mosaic at its tiles' own resolution (mosaic_native), made when asked for: nativeNote and nativeSave below
+        if (/\/frames\/mosaic\/[NW]\d{10}_\d+\.webp$/.test(u.pathname)) {
+          const n = new URL(u); n.pathname = n.pathname.replace(/\.webp$/, "/full.jpg");
+          for (const k of ["size", "format", "download", "warm"]) n.searchParams.delete(k);
+          rows.push({ label: "Full resolution mosaic", note: "JPEG · native size", href: n.href + (n.search ? "&" : "?") + "download=1", native: n.href.replace(/\/full\.jpg/, "/full.json") });
+        }
       } else {
         const m = u.pathname.match(/\/frames\/(?:processed\/)?([NW]\d{10}_\d+)\.webp$/);
         rows.push({ label: "This frame as shown", note: "PNG", href: saveUrl(url), now: true });
         if (m) rows.push(...frame(m[1]).filter(r => !(u.pathname.includes("/processed/") && r.note.includes("calibrated"))));
       }
       return rows;
+    }
+    // the full resolution mosaic's row: its size and about how big the file is (asked of the frame server when the menu
+    // opens; gone when the server has no mosaic for the picture), or how far its making has got
+    const nativeJobs = new Map();   // its .json address -> { done 0-1 } while the server makes it
+    const mb = v => v >= 100 ? `${Math.round(v)} MB` : v >= 1 ? `${v.toFixed(1)} MB` : `${Math.max(0.1, v).toFixed(1)} MB`;
+    function nativeNote(a, about) {
+      const job = nativeJobs.get(a.dataset.native), span = a.querySelector("span");
+      if (job) { span.textContent = `JPEG · making it… ${Math.round(job.done * 100)}%`; return; }
+      if (about) { span.textContent = `JPEG · ${about.width.toLocaleString()} × ${about.height.toLocaleString()} px · ${about.ready.jpg ? "" : "about "}${mb(about.estimate_mb.jpg)}`; return; }
+      fetch(a.dataset.native).then(r => r.ok ? r.json() : null).catch(() => null).then(v => {
+        if (!a.isConnected) return;
+        if (!v || !v.width) { a.closest("li").remove(); return; }
+        a.dataset.ready = v.ready.jpg ? "1" : "";
+        if (!nativeJobs.has(a.dataset.native)) nativeNote(a, v);
+      });
+    }
+    // a click on it: saved at once when it is made; otherwise the server makes it (minutes for a big pass) while
+    // the row counts up, and it is saved when it is ready, whether the menu is still open or not
+    function nativeSave(a, e) {
+      if (a.dataset.ready) return false;
+      e.preventDefault();
+      const info = a.dataset.native, href = a.href;
+      if (nativeJobs.has(info)) return true;
+      const job = { done: 0 };
+      nativeJobs.set(info, job);
+      const look = () => {
+        const row = saveMenu.querySelector(`a[data-native="${CSS.escape(info)}"]`);
+        if (row) nativeNote(row);
+      };
+      look();
+      let misses = 0;
+      const poll = first => fetch(first ? info + (info.includes("?") ? "&" : "?") + "make=jpg" : info).then(r => r.ok ? r.json() : null).catch(() => null).then(v => {
+        // gone, or no longer being made and not made (the server says why in its log)
+        if (v && !v.ready.jpg && !("jpg" in v.making)) misses++;
+        if (!v || misses > 2) { nativeJobs.delete(info); const row = saveMenu.querySelector(`a[data-native="${CSS.escape(info)}"]`); if (row) row.querySelector("span").textContent = "JPEG · could not be made"; return; }
+        if (v.ready.jpg) {
+          nativeJobs.delete(info);
+          const row = saveMenu.querySelector(`a[data-native="${CSS.escape(info)}"]`);
+          if (row) { row.dataset.ready = "1"; nativeNote(row, v); }
+          const go = document.createElement("a"); go.href = href; go.download = ""; document.body.appendChild(go); go.click(); go.remove();
+          return;
+        }
+        job.done = v.making.jpg || job.done; look();
+        setTimeout(() => poll(false), 1000);
+      });
+      poll(true);
+      return true;
     }
     // the save button's label: the picture's size once the full one is up
     function saving() {
@@ -1792,7 +1922,7 @@ body.idle .win.full .titlebar { opacity: 0; }
         }).catch(() => {});
       }
       if (v.set >= 0) { channelsFrom(im, catalog.sets[v.set]); howMade(v); }
-      drillable();
+      drillable(); lone();
       // (a frame kept behind its pass's mosaic, or of a pass known to be one, asked for it already, update; one whose
       // observation's note is still out asks once the note is in, heard)
       if (v.tile && !keep && !mosaicPass(v.k) && modeOf(v.k) !== "mosaic") {
@@ -1906,11 +2036,15 @@ body.idle .win.full .titlebar { opacity: 0; }
     // mosaic pass: the frames of one go to the pass lane from the first, so its first tiles are never dropped
     // after 4 s while the server works out the pass (seconds), and the mosaic comes back in the pass lane
     // after anything took it down.
-    let mosaicUrl = null, obsShown = null, obsTiles = 0, obsK = -1, obsSize = 0;
-    const mosaicPasses = new Set();   // target|observation the server said is a mosaic pass
-    const mosaicPass = k => mosaicPasses.has(passOf(k));
-    const moviePasses = new Set();    // target|observation the server said is a movie or a stare: never a mosaic, never asked
+    let mosaicUrl = null, obsShown = null, obsTiles = 0, obsK = -1, obsSize = 0, obsRep = null;
+    const mosaicPasses = new Set();   // passes (passOf) the server said is a mosaic pass
+    const moviePasses = new Set();    // passes the server said is a movie or a stare: never a mosaic, never asked
     const lapPasses = new Set();
+    // what the data says (passInfo, the server's own rule worked out ahead) counts as the server's answer
+    const dataKind = k => { const p = passInfo(k); return p ? p[0] : null; };
+    const mosaicPass = k => mosaicPasses.has(passOf(k)) || dataKind(k) === "mosaic" || dataKind(k) === "mosaic_movie";
+    const moviePass = k => moviePasses.has(passOf(k)) || dataKind(k) === "movie";
+    const lapPass = k => lapPasses.has(passOf(k)) || dataKind(k) === "mosaic_movie";
     // the movie route's rolling mosaic (movie work, window.cassiniRolling) draws mosaic movies when it is there
     const rolls = () => !!window.cassiniRolling;      // target|observation the server said is a mosaic movie (the same places, lap after lap)
     // Mosaic / Movie / Mosaic movie: the person's call for a pass (the chip on the picture, kept for that pass in this
@@ -1918,12 +2052,13 @@ body.idle .win.full .titlebar { opacity: 0; }
     // plays its frames, a mosaic movie rolls: each place shows its newest tile)
     const passChoice = new Map();
     const modeOf = k => passChoice.get(passOf(k)) || S.get("cameras.passes") || "auto";
-    const playsAs = k => { const m = modeOf(k), o = passOf(k); return m !== "auto" ? m : lapPasses.has(o) ? "mosaic_movie" : mosaicPass(k) ? "mosaic" : moviePasses.has(o) ? "movie" : ""; };
+    const playsAs = k => { const m = modeOf(k); return m !== "auto" ? m : lapPass(k) ? "mosaic_movie" : mosaicPass(k) ? "mosaic" : moviePass(k) ? "movie" : ""; };
     const NAMES = { auto: "AUTO", mosaic: "MOSAIC", movie: "MOVIE", mosaic_movie: "MOSAIC MOVIE" };
     // the window's settings menu (winMenu: the slider button in its title bar) holds Auto center and, while the
     // window is in a pass, how that pass plays; chipText keeps it in step with the pass on screen
     const menu = winMenu(win, card);
     function chipText() {
+      lone();
       const k = lastK >= 0 ? lastK : -1, on = k >= 0 && want && (want.tile || want.held || obsShown === catalog.obs[k]);
       well.classList.toggle("inpass", !!on);
       const m = on ? modeOf(k) : "auto", p = on ? playsAs(k) : "";
@@ -2078,7 +2213,7 @@ body.idle .win.full .titlebar { opacity: 0; }
     function mosaicOf(w, pass) {
       if (hold || window.cassiniMosaics === false || !S.get("cameras.mosaics")) return;
       const mode = modeOf(w.k), plays = playsAs(w.k);
-      if (mode === "movie" || (mode === "auto" && moviePasses.has(passOf(w.k)))) return;   // a movie plays as frames
+      if (mode === "movie" || (mode === "auto" && moviePass(w.k))) return;   // a movie plays as frames
       if (plays === "mosaic_movie" && rolls()) return;   // a mosaic movie rolls (the movie route), never the pass mosaic
       // without the rolling route, a mosaic movie shows the pass mosaic (newer tiles drawn over older)
       if (mode === "mosaic" || mode === "mosaic_movie") pass = true;   // asked for: the pass's mosaic, whatever the server's call
@@ -2146,7 +2281,7 @@ body.idle .win.full .titlebar { opacity: 0; }
           if (mode !== "mosaic") mosaicPasses.add(passOf(k));   // the server's call, not one the person asked for
           chipText();
           if (window.cassiniPicture && rep.mosaic > (obsShown === catalog.obs[k] ? obsTiles : 0)) window.cassiniPicture({ cam, body, win, k, nm: nmOf(k), set, use: set >= 0 ? catalog.sets[set].use.map(nmOf) : null, tile: rep.mosaic, of: rep.of });
-          obsShown = catalog.obs[k]; obsTiles = rep.mosaic; obsK = k; mosaicAt = performance.now(); obsSize = rank(sz); shotTag(set, k); kind = { color: rep.filters >= 3, mosaic: true };
+          obsShown = catalog.obs[k]; obsTiles = rep.mosaic; obsRep = rep; obsK = k; mosaicAt = performance.now(); obsSize = rank(sz); shotTag(set, k); kind = { color: rep.filters >= 3, mosaic: true };
           // the window takes the mosaic's shape, within 1:2 to 3:1 (a whole long strip fits inside, letterboxed,
           // rather than running off the screen)
           well.style.aspectRatio = String(Math.min(3, Math.max(0.5, rep.width / rep.height))); shapeOf = passOf(k);
@@ -2211,7 +2346,7 @@ body.idle .win.full .titlebar { opacity: 0; }
       if (near[0] === k) return near[1];
       if (!catalog.setsByPass) {
         catalog.setsByPass = new Map();
-        catalog.sets.forEach(s => { const key = `${s.cam}|${s.target}|${s.obs}`; catalog.setsByPass.has(key) ? catalog.setsByPass.get(key).push(s) : catalog.setsByPass.set(key, [s]); });
+        catalog.sets.forEach(s => { const key = `${s.cam}|${passKey(s.frames[0])}`; catalog.setsByPass.has(key) ? catalog.setsByPass.get(key).push(s) : catalog.setsByPass.set(key, [s]); });
       }
       const list = catalog.obs[k] ? catalog.setsByPass.get(`${catalog.cam[k]}|${passOf(k)}`) : null;
       let s = list ? list[0] : null;
@@ -2252,6 +2387,7 @@ body.idle .win.full .titlebar { opacity: 0; }
     crumbs.addEventListener("click", e => {
       e.stopPropagation(); unfocus(e);
       const b = e.target.closest("button"); if (!b) return;
+      if (b.classList.contains("ownbtn")) { const t = top(); lookOf(t, !t.own); S.set("cameras.pointingLook", t.own ? "own" : "mosaic"); return showLevel(); }
       if (b.classList.contains("heldbadge") || b.dataset.lv === "live") return release();
       hold.levels.length = +b.dataset.lv + 1; showLevel();
     });
@@ -2299,9 +2435,9 @@ body.idle .win.full .titlebar { opacity: 0; }
       if (t && t.kind === "channel" && t.ch === ch) { hold.levels = levels; return showLevel(); }   // the open channel again: back up
       const up = levels[levels.length - 1].lines || {};
       levels.push({ kind: "channel", ch, label: `${fname(q)} ${Math.round(nmOf(q))} nm · ${catalog.id[q]}`, url: sz => `${s.url ? s.url(sz) : colorUrl(s, sz)}&channel=${ch}`,
-        tag: `CHANNEL · ${fname(q)} · AS IN THE ${s.url ? "MOSAIC" : "COMPOSITE"}`, shot: catalog.id[q],
+        tag: `CHANNEL · ${fname(q)} · AS IN THE ${s.inMosaic && s.inMosaic() ? "MOSAIC" : "COMPOSITE"}`, shot: catalog.id[q],
         lines: { frame: `${titleCase(catalog.target[q] || "Unknown")} · ${catalog.id[q]}`, filter: `${catalog.f1[q]}/${catalog.f2[q]}${nmOf(q) ? ` · ${Math.round(nmOf(q))} nm` : ""}`,
-          colour: s.url ? "One channel of the frame, as in the mosaic" : "One channel of the composite, on its brightness scale", details: up.details || "" } });
+          colour: s.inMosaic && s.inMosaic() ? "One channel of the frame, as in the mosaic" : "One channel of the composite, on its brightness scale", details: up.details || "" } });
       hold1(levels);
     }
     // a click leaves no focus behind, so Space still plays and pauses (index.html takes it only from the page itself)
@@ -2313,8 +2449,10 @@ body.idle .win.full .titlebar { opacity: 0; }
     // The tile map (/frames/mosaic/<ID>.json, obs_mosaic.tile_map) is the mosaic builder's own placement of each
     // tile, outlines as fractions of the picture, so it fits every size the mosaic is sent at. Asked for once per
     // mosaic picture, on the first hover. While the clock runs the outline waits until the pointer rests a quarter
-    // second. On a phone (full view) the first tap outlines a frame and a second tap on it opens it.
-    let mosaicId = null, tmap = null, hot = null, clickT = 0, pointer = null;
+    // second. On a phone (full view) the first tap outlines a frame and a second tap on it opens it. The arrow keys
+    // step the outline (or the frame opened) to the next frame in time (left, right) or the nearest one beside it (up,
+    // down); Enter opens the outlined one.
+    let mosaicId = null, tmap = null, hot = null, clickT = 0, pointer = null, restT = 0;
     const NS = "http://www.w3.org/2000/svg";
     const overlay = document.createElementNS(NS, "svg");
     overlay.setAttribute("class", "tilemap"); overlay.setAttribute("viewBox", "0 0 1 1"); overlay.setAttribute("preserveAspectRatio", "none");
@@ -2322,6 +2460,92 @@ body.idle .win.full .titlebar { opacity: 0; }
     well.append(overlay, tip);
     const look = () => (window.cassiniLook ? window.cassiniLook() : "");
     const mosaicObs = () => { const k = mosaicId ? kOf(mosaicId) : -1; return k >= 0 ? `${catalog.cam[k]}|${catalog.obs[k]}` : null; };
+    // ---- a lone frame of a mosaic pass opens its mosaic ----
+    // A frame on its own (not in its pass's mosaic: the pass plays as a movie or as frames, or mosaics are off) whose
+    // pass is a mosaic (passInfo, from the data, or the server's answer) offers "Open its mosaic": the window is held on
+    // the pass's whole mosaic (its last frame's /frames/mosaic picture, made as the pass's mosaic always is), whose
+    // frames open from it like any other mosaic's.
+    const openM = document.createElement("button");
+    openM.className = "openmosaic"; openM.hidden = true; openM.textContent = "Open its mosaic";
+    openM.title = "Hold this window on the whole mosaic of the pass this frame is in (Esc goes back)";
+    for (const t of ["dblclick", "pointerdown"]) openM.addEventListener(t, e => e.stopPropagation());
+    openM.addEventListener("click", e => { e.stopPropagation(); unfocus(e); openMosaic(); });
+    well.appendChild(openM);
+    function lone() {
+      const k = lastK, on = !hold && k >= 0 && !!shown && !shown.movie && well.classList.contains("has-frame") && !well.classList.contains("mosaic")
+        && mosaicPass(k) && (playsAs(k) !== "mosaic" || !S.get("cameras.mosaics") || window.cassiniMosaics === false);
+      openM.hidden = !on;
+      return on;
+    }
+    // the last frame of frame k's pass: the data names it; else the last of the pass's frames loaded
+    function passLast(k) {
+      const info = passInfo(k);
+      if (info) return info[3];
+      const F = framesOf(cam, body), [, last] = passSpan(cam, body, lastOfCam(cam, catalog.et[k], body));
+      return catalog.id[F.ks[last]];
+    }
+    function openMosaic() {
+      if (!lone()) return;
+      const k = lastK, id = passLast(k), info = passInfo(k);
+      hold1([{ kind: "mosaic", mid: id, label: `Mosaic · ${catalog.obs[k]}`, url: sz => `${FRAMES}/frames/mosaic/${id}.webp?size=${sz}&force=1${look()}`,
+        tag: "THE PASS'S WHOLE MOSAIC", shot: catalog.obs[k],
+        lines: { ...liveLines(), colour: info ? `Mosaic of the pass's ${info[4]} frames` : "Mosaic of the pass" } }]);
+      lone();
+    }
+    // ---- a mosaic part way through, paused: finish it ----
+    // Paused on a pass's mosaic that is still being taken (fewer tiles than the pass takes), "Finish mosaic" moves the
+    // clock to the pass's last frame (/frames/movie/<ID>.json: the server's own pass, the one its mosaic is made of) and
+    // leaves it paused there: the window asks for the mosaic at that frame as at any other moment, which is the
+    // whole mosaic, and the clock stops before the camera's next picture.
+    const finishB = document.createElement("button");
+    finishB.className = "finishmosaic"; finishB.hidden = true; finishB.textContent = "Finish mosaic";
+    finishB.title = "Jump to the moment this pass's last tile is taken: the whole mosaic, before the next picture";
+    for (const t of ["dblclick", "pointerdown"]) finishB.addEventListener(t, e => e.stopPropagation());
+    finishB.addEventListener("click", e => { e.stopPropagation(); unfocus(e); finishMosaic(); });
+    well.appendChild(finishB);
+    let finishing = null;   // the pass the clock was moved to the end of, until its whole mosaic is up
+    function finishSync() {
+      const k = lastK, o = k >= 0 ? passOf(k) : null;
+      const on = !state.playing && !hold && !win.hidden && k >= 0 && !!obsRep && !!mosaicId && well.classList.contains("mosaic")
+        && obsShown === catalog.obs[k] && obsK >= 0 && passOf(obsK) === o && obsRep.mosaic < obsRep.of;
+      // (finishing: until the whole mosaic is up, or the clock is moved off the pass's end)
+      if (finishing && (finishing.o !== o || !on || (finishing.et !== undefined && state.et < finishing.et - 1))) finishing = null;
+      if (finishB.hidden !== !on) finishB.hidden = !on;
+      const busy = !!finishing, label = busy ? "Finishing mosaic…" : `Finish mosaic · ${obsRep ? obsRep.of : ""} tiles`;
+      if (finishB.classList.contains("busy") !== busy) finishB.classList.toggle("busy", busy);
+      if (finishB.textContent !== label) finishB.textContent = label;
+    }
+    // the pass's frames ([id, seconds since 1970, filter], time order), as the filmstrip has them
+    function passFrames(k) {
+      const o = `${cam}|${passOf(k)}`, t = unix(k);
+      const got = (passInfos.get(o) || []).find(i => t >= i.frames[0][1] - 1 && t <= i.frames[i.frames.length - 1][1] + 1);
+      if (got) return Promise.resolve(got);
+      return fetch(`${FRAMES}/frames/movie/${catalog.id[k]}.json`).then(r => r.ok ? r.json() : null).then(i => {
+        if (!i || !i.frames.length) return null;
+        i.key = o; passInfos.set(o, (passInfos.get(o) || []).concat([i]));
+        return i;
+      }, () => null);
+    }
+    function finishMosaic() {
+      const k = lastK, cat0 = catalog;
+      if (finishB.hidden || finishing || k < 0) return;
+      finishing = { o: passOf(k) };
+      finishSync();
+      passFrames(k).then(info => {
+        if (catalog !== cat0 || lastK !== k || !finishing) { finishing = null; return; }
+        // the pass's last frame: by its id in the months loaded, else by its time (a pass running into the next month);
+        // without the server's pass, the last frame of the observation the window has
+        const end = info && info.frames[info.frames.length - 1];
+        let et = end && kOf(end[0]) >= 0 ? catalog.et[kOf(end[0])] : end ? utcToEt(new Date(end[1] * 1000).toISOString()) : NaN;
+        if (!Number.isFinite(et)) {
+          const [, last] = passSpan(cam, body, lastOfCam(cam, catalog.et[k], body));
+          et = catalog.et[framesOf(cam, body).ks[last]];
+        }
+        if (state.playing) setPlaying(false);
+        if (et > state.et) { setTime(et); finishing.et = state.et; } else finishing = null;
+        finishSync();
+      });
+    }
     function mapFor() {
       if (!mosaicId || !drillOn()) return null;
       const key = `${mosaicId}|${shot.dataset.src}`;
@@ -2361,7 +2585,10 @@ body.idle .win.full .titlebar { opacity: 0; }
     const idOf = (q, f) => q.ids[f] || (q.luminance || {})[f];
     const hhmm = t => new Date(t * 1000).toISOString().slice(11, 19);
     function draw(q) {
+      // another frame under the pointer: the lens (loupe.html) goes away and waits for a rest on this one
+      if (q && q !== hot && window.cassiniLoupe && window.cassiniLoupe.isOpen()) window.cassiniLoupe.close();
       hot = q;
+      if (q) pointingKeys = feedApi;   // (also when the outline comes with a tile map that arrived after the pointer)
       const m = tmap && (tmap.data || tmap.prev), b = picBox();
       if (q && m && !b) return;   // decoding: drawn again once it is up (shot load)
       if (!q || !m || !b) { overlay.classList.remove("on"); tip.hidden = true; well.classList.remove("tilehover"); return; }
@@ -2370,25 +2597,29 @@ body.idle .win.full .titlebar { opacity: 0; }
         + m.pointings.map(p => `<polygon class="${p === q ? "hot" : "other"}" points="${polyStr(p)}" vector-effect="non-scaling-stroke"/>`).join("");
       overlay.classList.add("on"); well.classList.add("tilehover");
       const fs = drawnFs(m, q);
-      tip.innerHTML = `<b>Frame ${q.n} of ${m.pointings.length}</b><br>${fs.join(" ")} · ${hhmm(q.t)} UTC<br><span>${phoneNow() ? "Tap again" : "Click"} to open it</span>`;
+      tip.innerHTML = `<b>Frame ${q.n} of ${m.pointings.length}</b><br>${fs.join(" ")} · ${hhmm(q.t)} UTC<br><span>${phoneNow() ? "Tap again to open it" : "Click to open it · arrow keys: other frames"}</span>`;
       tip.hidden = false;
       const cx = (Math.max(...q.poly.map(c => c[0])) + Math.min(...q.poly.map(c => c[0]))) / 2, top0 = Math.min(...q.poly.map(c => c[1]));
       tip.style.left = Math.max(4, Math.min(b.well.width - 220, b.x - b.well.left + cx * b.w - 100)) + "px";
       tip.style.top = Math.max(4, b.y - b.well.top + top0 * b.h - 40) + "px";
     }
     const phoneNow = () => document.body.classList.contains("phone");
+    let rested = true;   // the pointer has rested (or the clock is stopped): a new picture of the mosaic outlines under it at once
+    const outlineHere = () => { rested = true; if (!pointer) return; const q = hitAt(pointer); if (q !== hot) draw(q); };
     well.addEventListener("pointermove", e => {
       if (e.pointerType === "touch") return;
       pointer = { clientX: e.clientX, clientY: e.clientY };
-      const q = hitAt(e);
-      if (q !== hot) draw(q);
+      clearTimeout(restT);
+      // playing, the picture changes under the pointer: outline only once it rests
+      if (state.playing && mosaicId) { rested = false; restT = setTimeout(outlineHere, 250); }
+      else outlineHere();
     });
-    well.addEventListener("pointerleave", () => { pointer = null; draw(null); });
+    well.addEventListener("pointerleave", () => { pointer = null; clearTimeout(restT); draw(null); });
     // a new picture of the mosaic (another tile came): the outline under the pointer is drawn again on it
-    const redraw = () => (pointer && mosaicId ? draw(hitAt(pointer)) : draw(null));
-    shot.addEventListener("load", () => { if (pointer && mosaicId) draw(hitAt(pointer)); });
-    function openPointing(q) {
-      const m = tmap.data || tmap.prev, fs = drawnFs(m, q), ids = fs.map(f => idOf(q, f));
+    const redraw = () => (pointer && mosaicId ? (rested && draw(hitAt(pointer))) : draw(null));
+    shot.addEventListener("load", () => { if (pointer && mosaicId && rested) draw(hitAt(pointer)); });
+    function openPointing(q, m = tmap && (tmap.data || tmap.prev), own = S.get("cameras.pointingLook") === "own") {
+      const fs = drawnFs(m, q), ids = fs.map(f => idOf(q, f));
       const base = hold ? hold.levels.slice() : [{ kind: "mosaic", live: true, mid: mosaicId, label: `Mosaic · ${m.observation}`, src: shot.dataset.src,
         url(sz) { return this.src.replace(/size=[^&]*/, `size=${sz}`); }, tag: card.querySelector(".kindtag").textContent, shot: m.observation,
         lines: { ...liveLines(), filter: m.filters.join(" "), colour: `Mosaic of ${m.pointings.length} frames` } }];
@@ -2397,28 +2628,78 @@ body.idle .win.full .titlebar { opacity: 0; }
       const ks = ids.map(kOf), k0 = ks[0], kp = k0 >= 0 ? catalog.km_per_px[k0] : 0;
       const lines = { frame: `${titleCase(m.target || (k0 >= 0 && catalog.target[k0]) || "Unknown")} · ${ids[0]}${ids.length > 1 ? ` +${ids.length - 1}` : ""}`,
         filter: fs.join(" "), details: `${hhmm(q.t)} UTC${kp ? ` · ${kp < 10 ? kp.toFixed(2) : fmt(kp)} km/px` : ""}` };
-      // on its own, the frame keeps the mosaic's levels and colors (obs_mosaic.pointing_picture), not a composite's
-      // or a frame's own stretch, so opening it changes nothing but its size
-      const mid = base[base.length - 1].mid, inMosaic = (use, sz) => `${FRAMES}/frames/mosaic/${mid}/frame.webp?ids=${use.join(",")}&size=${sz}${look()}`;
+      // as in the mosaic (the default), the frame is the mosaic's own picture of that spot, larger: its tiles with the
+      // mosaic's seam corrections, color mix and detail (/frames/mosaic/<id>/p/<n>, obs_mosaic.pointing_picture), so
+      // opening it changes nothing but its size. On its own (the switch by the breadcrumb, Settings > Cameras): the
+      // frames as a composite or a frame of their own, on their own scale
+      const mid = base[base.length - 1].mid, inMosaic = sz => `${FRAMES}/frames/mosaic/${mid}/p/${q.n}.webp?size=${sz}&ids=${ids.join(",")}${look()}`;
       let lv;
       if (ids.length === 3) {
         const si = k0 >= 0 ? catalog.setOf[k0] : -1, cs = si >= 0 ? catalog.sets[si] : null;
         const cat = cs && cs.use.length === 3 && cs.use.every((u, j) => catalog.id[u] === ids[j]) ? cs : null;
-        const kind = cat ? KIND[cat.kind] : (fs.includes("GRN") ? "Color" : "False color");
-        // the frame is a set of its own (its channels in the strip open on the mosaic's look too)
-        const s = ks.every(k => k >= 0) ? { use: ks, frames: ks, kind: cat ? cat.kind : "false", ready: -Infinity, url: sz => inMosaic(ids, sz) } : null;
-        lv = { kind: "composite", s, label: `Frame ${q.n} · ${kind} · ${fs.join(" ")}`, url: sz => inMosaic(ids, sz),
-          tag: `FRAME ${q.n} OF THE MOSAIC · ${kind.toUpperCase()} · AS IN THE MOSAIC`, shot: ids.join(" "),
-          lines: { ...lines, colour: `${kind}, frame ${q.n} of ${m.pointings.length} of the mosaic` } };
+        const kind = cat ? KIND[cat.kind] : (fs.includes("GRN") ? "Color" : "False color"), all = ks.every(k => k >= 0);
+        const own = all ? sz => colorUrl({ use: ks }, sz) : null;
+        // the frame is a set of its own (its channels in the strip open on the look it is shown with)
+        const s = all ? { use: ks, frames: ks, kind: cat ? cat.kind : "false", ready: -Infinity, url: sz => lv.url(sz), inMosaic: () => !lv.own } : null;
+        lv = { kind: "composite", s, label: `Frame ${q.n} · ${kind} · ${fs.join(" ")}`, inMosaic, own: false, ownUrl: own, kindName: kind,
+          url(sz) { return this.own && this.ownUrl ? this.ownUrl(sz) : this.inMosaic(sz); }, shot: ids.join(" "), lines };
       } else {
-        const id = ids[ids.length - 1];
-        lv = { kind: "frame", label: `Frame ${q.n} · ${nameOf(id)} · ${id}`, url: sz => inMosaic([id], sz),
-          tag: `FRAME ${q.n} OF THE MOSAIC · AS IN THE MOSAIC`, shot: id,
-          lines: { ...lines, frame: `${titleCase(m.target || "Unknown")} · ${id}`, filter: nameOf(id), colour: `Single filter, frame ${q.n} of ${m.pointings.length} of the mosaic` } };
+        const id = ids[ids.length - 1], k = kOf(id);
+        lv = { kind: "frame", label: `Frame ${q.n} · ${nameOf(id)} · ${id}`, inMosaic, own: false, ownUrl: k >= 0 ? sz => shownFrameUrl(k, sz) : null,
+          url(sz) { return this.own && this.ownUrl ? this.ownUrl(sz) : this.inMosaic(sz); }, shot: id,
+          lines: { ...lines, frame: `${titleCase(m.target || "Unknown")} · ${id}`, filter: nameOf(id) } };
       }
+      Object.assign(lv, { pointing: q, map: m });
+      lookOf(lv, own);
       draw(null);
+      pointingKeys = feedApi;
+      if (window.cassiniLoupe) window.cassiniLoupe.close();
       hold1(base.concat([lv]));
     }
+    // a frame opened from a mosaic: as in the mosaic, or on its own scale (lv.own); its tag and color line say which
+    function lookOf(lv, own) {
+      lv.own = !!own && !!lv.ownUrl;
+      const q = lv.pointing, N = lv.map.pointings.length, how = lv.own ? "ON ITS OWN" : "AS IN THE MOSAIC";
+      lv.tag = lv.kind === "composite" ? `FRAME ${q.n} OF THE MOSAIC · ${lv.kindName.toUpperCase()} · ${how}` : `FRAME ${q.n} OF THE MOSAIC · ${how}`;
+      lv.lines = { ...lv.lines, colour: `${lv.kind === "composite" ? lv.kindName : "Single filter"}, frame ${q.n} of ${N} of the mosaic${lv.own ? ", on its own scale" : ""}` };
+    }
+    // the arrow keys: the pointing after or before q in time (dx), or the nearest one beside it (dy: up -1, down 1)
+    function stepFrom(m, q, dx, dy) {
+      const ps = m.pointings, i = ps.indexOf(q);
+      if (dx) return ps[i + dx] || null;
+      let best = null, bd = Infinity;
+      for (const p of ps) {
+        const vx = p.center[0] - q.center[0], vy = p.center[1] - q.center[1];
+        if (p === q || vy * dy <= 0 || Math.abs(vx) > Math.abs(vy) * 1.5) continue;   // in that direction, give or take
+        const d = Math.hypot(vx, vy); if (d < bd) { bd = d; best = p; }
+      }
+      return best;
+    }
+    function arrowKey(e) {
+      const dx = e.key === "ArrowRight" ? 1 : e.key === "ArrowLeft" ? -1 : 0, dy = e.key === "ArrowDown" ? 1 : e.key === "ArrowUp" ? -1 : 0;
+      const t = top();
+      if (hold && t.pointing) {
+        // held on a frame of the mosaic: open the next one in its place, on the same look
+        if (!dx && !dy) return false;
+        const q = stepFrom(t.map, t.pointing, dx, dy); if (!q) return true;
+        hold.levels.pop();
+        openPointing(q, t.map, t.own);
+        return true;
+      }
+      if (!hot || !mosaicId) return false;
+      const m = tmap && (tmap.data || tmap.prev); if (!m) return false;
+      if (e.key === "Enter") { openPointing(hot); return true; }
+      if (!dx && !dy) return false;
+      const q = stepFrom(m, hot, dx, dy); if (q) draw(q);
+      if (window.cassiniLoupe) window.cassiniLoupe.close();
+      return true;
+    }
+    window.addEventListener("keydown", e => {
+      if (pointingKeys !== feedApi || e.metaKey || e.ctrlKey || e.altKey || e.shiftKey || !/^(Arrow(Left|Right|Up|Down)|Enter)$/.test(e.key)) return;
+      if (e.target !== document.body && !win.contains(e.target) || /^(INPUT|SELECT|TEXTAREA)$/.test(e.target.tagName)) return;
+      if (document.querySelector(".menu.open") || !(hold ? top().pointing : hot && mosaicId)) return;
+      if (arrowKey(e)) { e.preventDefault(); e.stopImmediatePropagation(); }
+    }, true);
     well.addEventListener("click", e => {
       if (!mosaicId) return;
       const q = hitAt(e); if (!q) return;
@@ -2442,6 +2723,7 @@ body.idle .win.full .titlebar { opacity: 0; }
       crumbs.hidden = false;
       crumbs.innerHTML = '<button data-lv="live" title="Back to the live camera">Live</button><span class="sep">›</span>' + hold.levels.map((l, i) => i < hold.levels.length - 1
         ? `<button data-lv="${i}">${l.label}</button><span class="sep">›</span>` : `<span class="here" title="${l.label}">${l.label}</span>`).join("")
+        + (t.pointing && t.ownUrl ? `<button class="ownbtn" aria-pressed="${t.own}" title="${t.own ? "Show it as it is in the mosaic: the mosaic's levels, seams and colors" : "Show the frames on their own scale, as a picture of their own"}">${t.own ? "On its own" : "As in the mosaic"}</button>` : "")
         + '<button class="heldbadge" title="Back to the live camera (Esc goes one step back)">held · Esc goes back</button>';
       // flags (flag.html) record where the window is
       shot.dataset.path = JSON.stringify(hold.levels.map(l => ({ kind: l.kind, label: l.label, src: l.url(capped()) })));
@@ -2469,10 +2751,13 @@ body.idle .win.full .titlebar { opacity: 0; }
         if (t.kind === "composite" && t.s) channelsFrom(im, t.s);
         saving();
       };
+      // a frame the server cannot draw as in the mosaic: on its own instead, and the switch says so
+      im.onerror = () => { if (hold && top() === t && t.pointing && !t.own && t.ownUrl) { lookOf(t, true); showLevel(); } };
       im.src = url;
     }
     function release() {
       if (!hold) return;
+      if (pointingKeys === feedApi) pointingKeys = null;
       hold = null; levelKey = ""; mosaicId = null; crumbs.hidden = true; crumbs.innerHTML = ""; delete win.dataset.held; holding.delete(feedApi);
       delete shot.dataset.path; saveOpen(false); draw(null);
       // back to live: the live picture as it was, then the clock's picture from there (a mosaic still being
@@ -2521,6 +2806,7 @@ body.idle .win.full .titlebar { opacity: 0; }
     }
     let cat = null, letGone = false, hiddenGone = false;
     function update(force) {
+      finishSync();
       if (dataWait()) { if (!letGone) { letGone = true; letGo(window.cassiniAway && cassiniAway.on); } return; }
       letGone = false;
       if (!own && viewBody() !== body) { body = viewBody(); letGo(); shapeOf = null; force = true; }
@@ -2596,11 +2882,11 @@ body.idle .win.full .titlebar { opacity: 0; }
       lastK = k; lastReady = ready;
       want = view(k, state.et); wantAt = performance.now();
       if (!want.movie) filmstrip(k);   // a movie frame moves the filmstrip when it is on screen (display)
-      // a possible mosaic tile: the frame before is of the same body and observation, and a frame of a colour
+      // a possible mosaic tile: the frame before is of the same pass (body and observation), and a frame of a colour
       // set only once its composite is shown (the mosaic is made of composites)
       const kb = framesOf(cam, body).ks[p - 1];   // p counts this feed's frames (a body window's: that body's only)
       // (or the frame after is: the first tile of a pass)
-      const same = q => q !== undefined && catalog.target[q] === catalog.target[k] && catalog.obs[q] === catalog.obs[k];
+      const same = q => q !== undefined && passOf(q) === passOf(k);
       want.tile = !want.held && (same(kb) || same(framesOf(cam, body).ks[p + 1])) && (!s || want.set >= 0 || !!want.movie);
       // a new frame of the pass whose mosaic is up: ask for the mosaic with it now, alongside the frame itself
       // (by this frame, also while the window holds an earlier colour set)
@@ -2623,7 +2909,7 @@ body.idle .win.full .titlebar { opacity: 0; }
       // out (seconds for its plan) before the clock gets there
       if (window.cassiniMosaics !== false && (S.get("cameras.mosaics") || S.get("movies.steady")))
         for (let d = 0; d <= 120 && ks[p + d] !== undefined; d++) {
-          const q = ks[p + d], o = `${catalog.target[q]}|${catalog.obs[q]}`;
+          const q = ks[p + d], o = passOf(q);
           if (warnedObs.has(o)) continue;
           const c0 = catalog, sig = warnCtl.signal;
           warnedObs.add(o); notePending.set(o, sig);
@@ -2725,7 +3011,7 @@ body.idle .win.full .titlebar { opacity: 0; }
     const cam = catalog.cam[k];
     // how the camera's windows play k's pass (any of them), asked only when a rule needs it
     const plays = how => { for (const f of allFeeds) if (f.cam === cam && f.playsAs && f.playsAs(k) === how) return true; return false; };
-    if (wholeLaps() && lapKnown.has(`${cam}|${catalog.target[k]}|${catalog.obs[k]}`) && plays("mosaic_movie")) return lapEnds.has(catalog.id[k]);
+    if (wholeLaps() && lapKnown.has(`${cam}|${passKey(k)}`) && plays("mosaic_movie")) return lapEnds.has(catalog.id[k]);
     const si = catalog.setOf ? catalog.setOf[k] : -1;
     if (si >= 0 && S.get("movie.completeFrames") !== false && S.get("cameras.composites") && catalog.et[k] !== catalog.sets[si].ready) return false;
     if (si < 0 && catalog.repeat && catalog.repeat[k] && S.get("processing.stack") !== false && !plays("movie")) return false;
@@ -2738,10 +3024,12 @@ body.idle .win.full .titlebar { opacity: 0; }
   // how many frames the furthest-behind camera window's picture is behind the clock (update.behind, below)
   // cams ("N", "W"): only that camera's windows
   const behind = cams => { let b = 0; for (const f of allFeeds) if (!cams || cams.includes(f.cam)) b = Math.max(b, f.behind()); return b; };
-  window.cassiniFeeds = { frames: FRAMES, cameraFeed, framesOf, lastOfCam, prep, weight, nextPicture, prevPicture, behind, liveCams, reopenCams, stale: () => S.get("cameras.stale") * 3600 };
+  // windows: the camera windows' own feeds (feed.hold = true keeps a picture up through a quiet stretch, as a body
+  // window does; ambient mode)
+  window.cassiniFeeds = { frames: FRAMES, cameraFeed, framesOf, lastOfCam, prep, weight, nextPicture, prevPicture, behind, liveCams, reopenCams, stale: () => S.get("cameras.stale") * 3600, windows: feeds };
   document.addEventListener("cassini:bodymode", () => { if (typeof catalog !== "undefined" && catalog && catalog.byCam) feeds.forEach(f => f(true)); });
   // a change to what the windows show takes effect straight away
-  for (const key of ["cameras.composites", "cameras.stale", "cameras.steady", "cameras.passes", "cameras.balancedColor", "cameras.colors", "cameras.lingerColor", "cameras.lingerMosaic", "movies.steady", "cameras.autoCenter", "cameras.processedFrames", "movies.trail", "movies.filmstrip", "movies.laps", "movies.fade", "movies.persist", "movies.mosaicFrames", "playback.completeMosaics", ...(window.cassiniSteps || []).map(st => st.key)]) S.on(key, () => { if (typeof catalog !== "undefined" && catalog && catalog.byCam) feeds.forEach(f => f(true)); });
+  for (const key of ["cameras.composites", "cameras.stale", "cameras.steady", "cameras.passes", "cameras.balancedColor", "cameras.colors", "cameras.lingerColor", "cameras.lingerMosaic", "movies.steady", "cameras.autoCenter", "cameras.processedFrames", "movies.trail", "movies.stabilize", "movies.stabilizeSmooth", "movies.exposure", "movies.exposureSmooth", "movies.filmstrip", "movies.laps", "movies.fade", "movies.persist", "movies.mosaicFrames", "playback.completeMosaics", ...(window.cassiniSteps || []).map(st => st.key)]) S.on(key, () => { if (typeof catalog !== "undefined" && catalog && catalog.byCam) feeds.forEach(f => f(true)); });
 
   // ---------- burst limit: in normal playback each camera window gets at most maxRate new pictures a second ----------
   // The clock runs at the chosen speed except inside an imaging burst, where it slows so that crossing the gap

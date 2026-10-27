@@ -17,11 +17,22 @@ if len(sys.argv) == 1:
     for head, out in [("head-quiet.html", "index.html")]:
         subprocess.run([sys.executable, __file__, os.path.join(root, "..", "replay", "index.html"),
                         os.path.join(HERE, head), os.path.join(root, out)], check=True)
+    sys.path.insert(0, HERE)
+    import seo
+    seo.write_files(seo.load())      # about/, robots.txt, sitemap.xml (site.json)
     sys.exit(0)
 import sys, re, json, hashlib
 src = open(sys.argv[1]).read()           # prototype source
 study = open(sys.argv[2]).read()          # study: everything up to (not incl.) the three.js script tags
 out = sys.argv[3]
+# what search engines and link previews read (seo.py, site.json): title, description, share card, structured data,
+# and a few lines for browsers without JavaScript
+sys.path.insert(0, HERE)
+import seo
+site = seo.load()
+for old, new in [("<title>Cassini OS Quiet</title>", seo.head(site)), ("<body>\n<div id=\"app\">", "<body>\n" + seo.noscript(site) + "\n<div id=\"app\">")]:
+    assert study.count(old) == 1, old
+    study = study.replace(old, new)
 script = src[src.index('<script src="https://cdn.jsdelivr.net/npm/three@0.128.0/build/three.min.js">'):]
 
 # movie mode (movie.html): its style joins the head's, a Movie button joins the transport, and its script runs after
@@ -521,6 +532,51 @@ rep('  for (const name in tracks) positionAt(tracks[name], state.et, pos[name]);
     '  for (const name in tracks) positionAt(tracks[name], state.et, pos[name]);\n  if (window.studyPositions) window.studyPositions();\n')
 rep('  } else { relScene("EARTH", vA); cassini.lookAt(vA); }\n', '  } else { relScene("EARTH", vA); cassini.lookAt(vA); }\n  if (window.studyAttitude) window.studyAttitude();\n')
 rep('  aimFollow();\n', '  aimFollow();\n  if (window.studyCamera) window.studyCamera();\n')
+# Huygens after the release (huygens-release.html): window.studyCoast places the probe for its first hour from ESA's
+# separation numbers and gives it a model of its own until it reaches Titan's air; it works without the probe's own
+# track (data/huygens.json) too, for the days before Cassini's getaway burn. Not a cutscene hook: it runs whenever the
+# probe is on its own
+# From the landing on, window.studyLanded (huygens-landing.html) keeps the probe on its landing point for good, marked
+# while the camera is near Titan, and draws it there up close
+rep('function probeActive() { return !!probe && state.et >= probe.track.start && state.et <= probe.track.end; }',
+    'function probeActive() { return !!probe && state.et >= probe.track.start && state.et <= probe.track.end || !probe && !!window.studyCoast && studyCoast.active(state.et) || !!window.studyLanded && studyLanded.active(state.et); }')
+rep('  if (name === "HUYGENS") return probeActive();\n', '  if (name === "HUYGENS") return probeActive() && (!window.studyLanded || studyLanded.marked(state.et));\n')
+rep('  if (probe) {\n    pos.HUYGENS = v3(); probeObj = new THREE.Object3D(); names.push("HUYGENS");',
+    '  if (probe || window.studyCoast) {\n    pos.HUYGENS = v3(); probeObj = new THREE.Object3D(); names.push("HUYGENS");')
+rep('  if (probe) { positionAt(probe.track, state.et, pos.HUYGENS); relScene("HUYGENS", probeObj.position); }',
+    '  if (pos.HUYGENS) {\n    if (probe) positionAt(probe.track, state.et, pos.HUYGENS);\n    if (window.studyCoast) studyCoast.place(state.et, pos.HUYGENS);\n    if (window.studyLanded) studyLanded.place(state.et, pos.HUYGENS);\n    relScene("HUYGENS", probeObj.position);\n    if (window.studyCoast) studyCoast.draw();\n    if (window.studyLanded) studyLanded.draw();\n  }')
+rep('  probeTrail.visible = probeActive() && state.et < probe.events.landing + 6 * 3600;',
+    '  probeTrail.visible = !!probe && probeActive() && state.et < probe.events.landing + 6 * 3600;')
+rep('  pe.hidden = !probeActive();', '  pe.hidden = !probe || !shown("HUYGENS");')
+rep('  const near = probe && state.et > probe.track.start - 30 * 86400 && state.et < probe.track.end + 30 * 86400;',
+    '  const near = shown("HUYGENS") || probe && state.et >= (probe.events.separation || probe.track.start) && state.et < probe.track.end + 30 * 86400;')
+# while it coasts, the probe is a spacecraft to look at up close, not a point above Titan; landed, it is 10 m off
+rep('name === "HUYGENS" ? 4 :', 'name === "HUYGENS" ? (window.studyCoast && studyCoast.modelShown(state.et) ? 1.6e-5 : window.studyLanded && studyLanded.active(state.et) ? 1e-5 : 4) :')
+rep('  if (name === "HUYGENS") {\n    // from the side', '  if (name === "HUYGENS" && !(window.studyCoast && studyCoast.modelShown(state.et)) && !(window.studyLanded && studyLanded.active(state.et))) {\n    // from the side')
+# the close-up pass takes in every small craft near the camera (Cassini, and Huygens on its own): the nearest sets the
+# range, and all of them are blown up about it together
+rep("""  const cd = camera.position.distanceTo(cassini.position);
+  if (!draw) {}""", """  const closeObjs = [cassini].concat(window.studyCloseObjects ? studyCloseObjects() : []);
+  let cRef = cassini, cd = camera.position.distanceTo(cassini.position);
+  for (const o of closeObjs) { const d = camera.position.distanceTo(o.position); if (o.visible && d < cd) { cd = d; cRef = o; } }
+  if (!draw) {}""")
+rep("""    const K = 1e6, cs = cassini.scale.x;
+    closeCam.position.copy(camera.position).sub(cassini.position).multiplyScalar(K).add(cassini.position); closeCam.quaternion.copy(camera.quaternion);
+    closeCam.fov = camera.fov; closeCam.aspect = camera.aspect; closeCam.near = cd * 0.02 * K; closeCam.far = cd * 60 * K;
+    closeCam.updateProjectionMatrix();
+    cassini.scale.setScalar(cs * K);
+    renderer.clearDepth();
+    renderer.render(scene, closeCam);
+    cassini.scale.setScalar(cs);""", """    const K = 1e6, O = cRef.position.clone(), keep = closeObjs.map(o => [o.position.clone(), o.scale.clone()]);
+    let far = cd * 60;
+    for (const o of closeObjs) if (o.visible) far = Math.max(far, Math.min(camera.position.distanceTo(o.position) * 1.5, 0.02));
+    closeCam.position.copy(camera.position).sub(O).multiplyScalar(K).add(O); closeCam.quaternion.copy(camera.quaternion);
+    closeCam.fov = camera.fov; closeCam.aspect = camera.aspect; closeCam.near = cd * 0.02 * K; closeCam.far = far * K;
+    closeCam.updateProjectionMatrix();
+    for (const o of closeObjs) { o.position.sub(O).multiplyScalar(K).add(O); o.scale.multiplyScalar(K); }
+    renderer.clearDepth();
+    renderer.render(scene, closeCam);
+    closeObjs.forEach((o, i) => { o.position.copy(keep[i][0]); o.scale.copy(keep[i][1]); });""")
 # effective wavelength of every filter pair, for placing colour channels: "N:CL1/RED" -> nm
 nm = {}
 for line in open(os.path.join(HERE, "..", "..", "..", "filter_calibration.csv")).read().splitlines()[1:]:
@@ -561,6 +617,9 @@ script += cpart("script") + "\n"
 # atmospheric entry effects for the cutscenes (entry-fx.html, adds to cutscene.html's fx): script only
 efx = open(os.path.join(os.path.dirname(os.path.abspath(sys.argv[2])), "entry-fx.html")).read()
 script += efx[efx.index("<script"):efx.index("</script>") + len("</script>")] + "\n"
+# Huygens' own models (huygens-models.html, window.huygensModels), for the release and landing cutscenes: script only
+hmod = open(os.path.join(os.path.dirname(os.path.abspath(sys.argv[2])), "huygens-models.html")).read()
+script += hmod[hmod.index("<script"):hmod.index("</script>") + len("</script>")] + "\n"
 # the Grand Finale (finale.html): its style joins the head's, its overlay goes into #app, and its script runs last (it
 # registers its hooks and its trigger with cutscene.html)
 fin = open(os.path.join(os.path.dirname(os.path.abspath(sys.argv[2])), "finale.html")).read()
@@ -586,7 +645,7 @@ fscript = fscript.replace("/*MISSION_TEAM*/null", json.dumps({k: team[k] for k i
 script += fscript + "\n"
 # more cutscenes, each its own file spliced like the finale (style into the head, section into #app, script after the
 # finale's; each chains the study* hooks): skipped while a file is not there yet
-CUTSCENES = ["soi.html", "launch.html", "huygens-release.html"]
+CUTSCENES = ["soi.html", "launch.html", "huygens-release.html", "huygens-landing.html"]
 for name in CUTSCENES:
     cpath = os.path.join(os.path.dirname(os.path.abspath(sys.argv[2])), name)
     if not os.path.exists(cpath):
@@ -607,6 +666,17 @@ for name in CUTSCENES:
         assert os.path.exists(cdata), cdata
         cscript = cscript.replace(marker, json.dumps(json.load(open(cdata)), ensure_ascii=False, separators=(",", ":")))
     script += cscript + "\n"
+# ambient mode (ambient.html): its style joins the head's, its overlay goes into #app, and its script runs last (it
+# chains the cutscenes' studyFrame hook and restyles the camera windows as its picture panels)
+amb = open(os.path.join(os.path.dirname(os.path.abspath(sys.argv[2])), "ambient.html")).read()
+mpart = lambda tag: amb[amb.index(f"<{tag}"):amb.index(f"</{tag}>") + len(tag) + 3]
+for old, new in [
+    ("</style>\n</head>", mpart("style")[len("<style>"):] + "\n</head>"),
+    ('  <div id="loading">', "  " + amb[amb.index('<div id="ambient"'):amb.index("</div>\n\n<script>") + 6] + "\n\n" + '  <div id="loading">'),
+]:
+    assert study.count(old) == 1, old
+    study = study.replace(old, new)
+script += mpart("script") + "\n"
 # the page's build id (about.html's /*BUILD*/""): a hash of everything else in it, so the same sources always build the
 # same page, and the frame server's /version.json (which reads it back from index.html) and each flag can tell an
 # older page, open since before the last merge, from the one being served

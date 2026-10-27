@@ -1,0 +1,25 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!-- Optional: starts the stream at login and keeps it alive (run.sh already restarts stream.mjs; launchd restarts run.sh).
+     cp web/stream/com.cassini.stream.plist ~/Library/LaunchAgents/ && launchctl load ~/Library/LaunchAgents/com.cassini.stream.plist
+     Edit the --out lines first; for YouTube the key comes from ~/.config/cassini-stream/youtube.key. -->
+<!DOCTYPE plist PUBLIC "-//Apple//DTD PLIST 1.0//EN" "http://www.apple.com/DTDs/PropertyList-1.0.dtd">
+<plist version="1.0">
+<dict>
+  <key>Label</key><string>com.cassini.stream</string>
+  <key>ProgramArguments</key>
+  <array>
+    <string>/Users/lazarus/dev/Cassini-Project/web/stream/run.sh</string>
+    <string>--out</string><string>/Users/lazarus/server/stream/hls/live.m3u8</string>
+  </array>
+  <key>EnvironmentVariables</key>
+  <dict>
+    <key>PATH</key><string>/opt/homebrew/bin:/usr/bin:/bin:/usr/sbin:/sbin</string>
+    <key>STREAM_URL</key><string>http://127.0.0.1:8765/?ambient=live</string>
+  </dict>
+  <key>RunAtLoad</key><true/>
+  <key>KeepAlive</key><true/>
+  <key>ProcessType</key><string>Background</string>
+  <key>StandardOutPath</key><string>/Users/lazarus/server/stream/launchd.log</string>
+  <key>StandardErrorPath</key><string>/Users/lazarus/server/stream/launchd.log</string>
+</dict>
+</plist>

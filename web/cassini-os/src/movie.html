@@ -17,7 +17,8 @@
   const $ = id => document.getElementById(id);
   const S = window.cassiniSettings;
   const opt = (key, dflt) => (S && S.get(key) !== undefined ? S.get(key) : dflt);
-  const fps = () => Math.min(30, Math.max(1, +opt("movie.fps", 8) || 8));
+  // range.fps (start, below) plays a stretch at its own rate, under one picture a second if it likes (ambient mode)
+  const fps = () => M.fps ? Math.min(30, Math.max(0.05, M.fps)) : Math.min(30, Math.max(1, +opt("movie.fps", 8) || 8));
   // A step waits for the camera windows (Sam: movie mode slows, it never skips a picture): while a window has not
   // yet put up the picture the clock is at (the frame server is still making it: a cold composite, a mosaic's new
   // tile), the next step waits. cassiniFeeds.behind stops counting a picture that has been stuck for seconds, so a
@@ -25,7 +26,7 @@
   // Slow: when the film has spent more than SLOW_SHARE of the last SLOW_SPAN ms waiting, the page hears
   // "cassini:movie-slow" (once, until it has caught up again), so it can offer to make a stretch ahead of time.
   const CUT = 3 * 3600, SLOW_SPAN = 20000, SLOW_SHARE = 0.5;
-  const M = { on: false, stepAt: 0, waiting: false, cut: 0, cutAt: -1e9, until: Infinity, cams: null, waits: [], slow: false, lastAt: 0, steps: [] };
+  const M = { on: false, fps: 0, stepAt: 0, waiting: false, cut: 0, cutAt: -1e9, until: Infinity, cams: null, waits: [], slow: false, lastAt: 0, steps: [] };
   // the pictures really shown a second: the steps of the last RATE_SPAN ms (a step is one new picture, cassiniFeeds
   // complete: a color set once, a stack of repeat exposures once, a whole mosaic once with Whole mosaics)
   const RATE_SPAN = 3000;
@@ -88,19 +89,21 @@
   // play: also start the clock (the Movie button, M); a shared link (link.html) leaves play as the link says.
   // range { from, until } (mission times): play one stretch, from its first picture, and leave movie mode after
   // its last (a stretch made ahead of time plays at movie.fps, its pictures all waiting in the server's cache);
-  // range.cams ("N" or "W"): step through that camera's pictures only, waiting on its windows alone
+  // range.cams ("N" or "W"): step through that camera's pictures only, waiting on its windows alone;
+  // range.fps: this stretch's own rate (pictures a second), instead of movie.fps
   function start(play, range) {
     if (M.on && !range) return;
     M.on = true; M.stepAt = 0; M.cutAt = -1e9; M.waits = []; M.slow = false; M.lastAt = 0; M.steps = [];
     M.until = range && range.until !== undefined ? range.until : Infinity;
     M.cams = range && /^[NW]$/.test(range.cams || "") ? range.cams : null;
+    M.fps = range && +range.fps > 0 ? +range.fps : 0;
     if (range && range.from !== undefined) { setTime(range.from - 1e-3); keepNowInView(); }
     $("movie").setAttribute("aria-pressed", "true");
     if (play) setPlaying(true);
   }
   function stop() {
     if (!M.on) return;
-    M.on = false; M.until = Infinity; M.cams = null;
+    M.on = false; M.until = Infinity; M.cams = null; M.fps = 0;
     if (M.slow) { M.slow = false; document.dispatchEvent(new CustomEvent("cassini:movie-slow", { detail: { slow: false, share: 0, et: state.et } })); }
     $("movie").setAttribute("aria-pressed", "false");
   }
