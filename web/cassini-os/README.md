@@ -40,7 +40,11 @@ Pictures are large when they are rare and smaller when they come fast (Picture s
 are in between). While it runs the page never pauses in the background, sound starts without a click where the browser
 allows it (a kiosk or stream browser started with `--autoplay-policy=no-user-gesture-required`), the 3D view is drawn
 at most 30 times a second (Frame rate), and the caption and panels move a few pixels every minute against screen
-burn-in. Cutscenes still play when the clock crosses them; after one, or at the end of the reel or the mission, it
+burn-in. The camera cones stay on (orbits and the trail go), fainter, fading in and out and turning smoothly from one
+pointing to the next; the sound turns calm (softer, slower chimes with more echo, a quiet bed under them, no flyby
+pulse), each with its own switch in Settings > Ambient. A thin timeline along the top shows the imaging sessions of
+the last stretch and the coming one as short dashes (a day at live, about four minutes of playback at the faster
+speeds), with the next three bodies to be photographed named and how long until then. Cutscenes still play when the clock crosses them; after one, or at the end of the reel or the mission, it
 carries on by itself.
 
 ## Pre-processing a stretch

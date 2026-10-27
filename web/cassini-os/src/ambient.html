@@ -19,13 +19,18 @@
      ?ambient=1 (or a mode) opens in ambient mode; Go > Ambient Mode or A starts it; Escape or the Leave button (it
      shows when the pointer moves) ends it. While it runs the page never pauses in the background, the 3D view is drawn
      at most ambient.fps times a second, and the caption and panels drift a few pixels every minute (screen burn-in).
-     Cutscenes still play when the clock crosses them; afterwards the clock carries on.
+     Cutscenes still play when the clock crosses them; afterwards the clock carries on. The camera cones stay (the rest
+     of the HUD goes), fainter, fading in and out and turning smoothly (ambient.cones), and the sound is calmer
+     (ambient.calmSound: cassiniSound.setCalm).
 
      window.cassiniAmbient: { start(mode), stop(), on, mode, subject } -->
 <style>
 #ambient { position: fixed; inset: 0; z-index: 40; pointer-events: none; }
 #ambient[hidden] { display: none; }
-#ambient .amb-cap { position: absolute; left: 50%; top: calc(env(safe-area-inset-top, 0px) + 5vh); transform: translateX(-50%); translate: var(--amb-dx, 0) var(--amb-dy, 0);
+#ambient .amb-tl { position: absolute; left: 50%; top: calc(env(safe-area-inset-top, 0px) + 1.6vh); transform: translateX(-50%); translate: var(--amb-dx, 0) var(--amb-dy, 0);
+  width: min(820px, 64vw); height: 30px; opacity: .85; transition: opacity 1.6s ease, translate 20s linear; }
+#ambient .amb-tl[hidden] { display: none; }
+#ambient .amb-cap { position: absolute; left: 50%; top: calc(env(safe-area-inset-top, 0px) + 1.6vh + 44px); transform: translateX(-50%); translate: var(--amb-dx, 0) var(--amb-dy, 0);
   width: min(720px, calc(100vw - 32px)); text-align: center; color: var(--q-text); text-shadow: 0 1px 12px rgba(0,0,0,.9), 0 0 2px rgba(0,0,0,.8);
   transition: opacity 1.6s ease, translate 20s linear; }
 #ambient .amb-mode { display: block; margin-bottom: 8px; font: 10.5px/1.2 var(--ui); letter-spacing: .22em; text-transform: uppercase; color: var(--q-dim); }
@@ -45,7 +50,7 @@ body.ambient:not(.amb-woke) { cursor: none; }
 body.ambient.cutscene #ambient { display: none; }
 
 /* everything that makes it Cassini OS goes; the 3D view, the two camera panels and the cutscenes stay */
-body.ambient #app > :not(#gl):not(#imgcard):not(#wacard):not(#ambient):not(.cs-root):not(#loading) { display: none !important; }
+body.ambient #app > :not(#gl):not(#hud):not(#imgcard):not(#wacard):not(#ambient):not(.cs-root):not(#loading) { display: none !important; }
 body.ambient > :not(#app):not(script) { display: none !important; }
 /* the camera windows, as two frameless picture panels at the bottom corners; their size follows the mode (--amb-size) */
 body.ambient :is(#imgcard, #wacard) { position: fixed !important; top: auto !important; bottom: calc(env(safe-area-inset-bottom, 0px) + 4vh) !important; right: auto !important;
@@ -73,6 +78,7 @@ body.ambient.phone .amb-where { font-size: 18px; }
 </style>
 
 <div id="ambient" hidden aria-live="off">
+  <canvas class="amb-tl" aria-hidden="true"></canvas>
   <div class="amb-cap"><span class="amb-mode"><i hidden></i><span></span></span><span class="amb-where"></span><span class="amb-when"></span><span class="amb-next"></span></div>
   <div class="amb-credit">Pictures NASA/JPL-Caltech/SSI</div>
   <button class="amb-leave" aria-label="Leave ambient mode">Leave ambient mode · Esc</button>
@@ -96,6 +102,12 @@ body.ambient.phone .amb-where { font-size: 18px; }
   D({ key: "ambient.drift", label: "Camera drift", type: "range", value: 6, min: 0, max: 30, step: 1, unit: "°/min",
     hint: "How fast the view swings from side to side behind Cassini. 0 holds it still." });
   D({ key: "ambient.captions", label: "Caption", type: "toggle", value: true, hint: "What Cassini is looking at, the date and the time to the next picture, at the top of the screen." });
+  D({ key: "ambient.timeline", label: "Timeline", type: "toggle", value: true,
+    hint: "A thin line along the top: the pictures of the last stretch and the ones coming, with the next few bodies named." });
+  D({ key: "ambient.cones", label: "Camera cones", type: "toggle", value: true,
+    hint: "The narrow-angle and wide-angle cameras' field of view, drawn from Cassini while it takes pictures: fainter than in Cassini OS, fading in and out and turning smoothly." });
+  D({ key: "ambient.calmSound", label: "Calm sound", type: "toggle", value: true,
+    hint: "Softer, slower chimes with more echo, a quiet bed under them and no flyby pulse. Off plays the sound as in Cassini OS." });
   D({ key: "ambient.fps", label: "Frame rate", type: "range", value: 30, min: 10, max: 60, step: 5, unit: "fps",
     hint: "The 3D view is drawn at most this often. A slow drift looks the same at 30 as at 60, for half the work." });
   D({ key: "ambient.start", label: "Ambient mode", type: "action", button: "Start", run: () => { S.close(); start(); } });
@@ -138,6 +150,8 @@ body.ambient.phone .amb-where { font-size: 18px; }
   S.on("ambient.mode", v => { if (A.on && v !== A.mode) { A.mode = v; applyMode(); } });
   S.on("ambient.pace", v => { if (A.on && A.mode === "pictures" && window.cassiniMovie) cassiniMovie.state.fps = 1 / Math.max(1, v); });
   S.on("ambient.fps", v => { if (A.on && window.cassiniPerf) cassiniPerf.cap = v; });
+  S.on("ambient.calmSound", v => { if (A.on && window.cassiniSound && cassiniSound.setCalm) cassiniSound.setCalm(v); });
+  S.on("ambient.timeline", v => { root.querySelector(".amb-tl").hidden = !v; });
   S.on("ambient.captions", v => { capEl.style.opacity = v ? "" : "0"; });
 
   // ---- what the view looks toward. The camera stays on Cassini and turns to the most interesting thing around it,
@@ -218,6 +232,42 @@ body.ambient.phone .amb-where { font-size: 18px; }
     if (A.on && !(window.cassiniCutscene && cassiniCutscene.active) && state.focus === "CASSINI") camera.lookAt(aim);
   };
 
+  // ---- the camera cones: the only part of the HUD left on (orbits and the trail are hidden while it draws), fainter
+  // than in Cassini OS; a cone fades in and out instead of appearing and vanishing, and turns and stretches
+  // smoothly from one pointing to the next ----
+  const cone = { a: 0, at: 0, q: new THREE.Quaternion(), s: new THREE.Vector3(1, 1, 1), hidden: [], base: null };
+  const CONE_EDGE = 0.4, CONE_FACE = 0.045;
+  function restoreCone() {
+    if (!cone.base || typeof fov === "undefined" || !fov) return;
+    fov.children[0].material.opacity = cone.base[0]; fov.children[1].material.opacity = cone.base[1];
+  }
+  const beforeHud = window.studyBeforeHud;
+  window.studyBeforeHud = () => {
+    if (beforeHud) beforeHud();
+    if (!A.on || typeof fov === "undefined" || !fov || (window.cassiniCutscene && cassiniCutscene.active)) return;
+    if (!cone.base) cone.base = [fov.children[0].material.opacity, fov.children[1].material.opacity];
+    const now = performance.now(), dt = Math.min(0.25, (now - (cone.at || now)) / 1000); cone.at = now;
+    const want = fov.visible && S.get("ambient.cones") ? 1 : 0, k = 1 - Math.exp(-dt / 1.4);
+    // the viewer placed the cone for this frame (or left it where it last was): ease toward that
+    if (fov.visible) {
+      if (cone.a < 0.02) { cone.q.copy(fov.quaternion); cone.s.copy(fov.scale); }
+      else { cone.q.slerp(fov.quaternion, 1 - Math.exp(-dt / 0.8)); cone.s.lerp(fov.scale, 1 - Math.exp(-dt / 0.8)); }
+    }
+    cone.a += (want - cone.a) * k;
+    fov.quaternion.copy(cone.q); fov.scale.copy(cone.s);
+    fov.visible = cone.a > 0.01;
+    fov.children[0].material.opacity = CONE_EDGE * cone.a; fov.children[1].material.opacity = CONE_FACE * cone.a;
+    // the rest of the HUD (orbits, Cassini's trail, the probe's) stays off for this frame's draw and its glow
+    cone.hidden.length = 0;
+    for (const o of hudScene.children) if (o.isLine && o.visible) { o.visible = false; cone.hidden.push(o); }
+  };
+  const afterRender = window.studyAfterRender;
+  window.studyAfterRender = () => {
+    if (afterRender) afterRender();
+    for (const o of cone.hidden) o.visible = true;
+    cone.hidden.length = 0;
+  };
+
   // ---- each frame: the subject, the drift, the clock's rules, the caption ----
   const studyFrame = window.studyFrame;
   window.studyFrame = dt => {
@@ -260,6 +310,7 @@ body.ambient.phone .amb-where { font-size: 18px; }
       document.body.style.setProperty("--amb-dy", Math.round(Math.random() * 12 - 6) + "px");
     }
     caption(now);
+    timeline(now);
   };
 
   // ---- the caption: mode, subject, date and time, distance, the next picture ----
@@ -299,6 +350,59 @@ body.ambient.phone .amb-where { font-size: 18px; }
       if (tag && tag.textContent !== bits.join(" · ")) tag.textContent = bits.join(" · ");
     }
   }
+  // ---- the timeline: a hairline with the imaging sessions as short dashes, a quarter of it behind the clock and
+  // the rest ahead; how much time it spans follows the speed (a day at live, about four minutes of playback
+  // otherwise). The next three bodies to be photographed are named over their dashes, with how
+  // much mission time until then. Drawn four times a second ----
+  const tl = root.querySelector(".amb-tl"), tlx = tl.getContext("2d");
+  function timeline(now) {
+    if (tl.hidden || now - (timeline.at || 0) < 250 || typeof catalog === "undefined" || !catalog || !catalog.sorted) return;
+    timeline.at = now;
+    const dpr = Math.min(2, window.devicePixelRatio || 1), w = tl.clientWidth, h = tl.clientHeight;
+    if (!w) return;
+    if (tl.width !== Math.round(w * dpr)) { tl.width = Math.round(w * dpr); tl.height = Math.round(h * dpr); }
+    const c = tlx; c.setTransform(dpr, 0, 0, dpr, 0, 0); c.clearRect(0, 0, w, h);
+    const W = A.mode === "live" ? 86400 : Math.min(30 * 86400, Math.max(6 * 3600, 240 * Math.max(1, state.speed)));
+    const t0 = state.et - W / 4, t1 = state.et + W * 3 / 4, x = t => (t - t0) / (t1 - t0) * w, y = h - 7;
+    const line = (a, b, alpha, lw) => { c.globalAlpha = alpha; c.lineWidth = lw; c.beginPath(); c.moveTo(a, y); c.lineTo(b, y); c.stroke(); };
+    c.strokeStyle = c.fillStyle = "rgb(232,236,242)";
+    // the hairline, fading out at both ends
+    const g = c.createLinearGradient(0, 0, w, 0);
+    g.addColorStop(0, "rgba(232,236,242,0)"); g.addColorStop(0.12, "rgba(232,236,242,.22)"); g.addColorStop(0.88, "rgba(232,236,242,.22)"); g.addColorStop(1, "rgba(232,236,242,0)");
+    c.strokeStyle = g; line(0, w, 1, 1); c.strokeStyle = "rgb(232,236,242)";
+    // sessions: a camera's frames of one target with less than 20 minutes between them
+    const ts = catalog.sorted, i0 = Math.max(0, lastImageIndex(t0) + 1), names = [];
+    let cur = null;
+    const flush = () => {
+      if (!cur) return;
+      const a = x(cur.a), b = Math.max(a + 2, x(cur.b)), past = cur.b < state.et;
+      line(a, b, past ? 0.3 : 0.75, 3);
+      if (cur.a > state.et && cur.name && names.length < 3 && !names.some(n => n.name === cur.name)) names.push({ name: cur.name, x: a, t: cur.a });
+      cur = null;
+    };
+    for (let i = i0, n = 0; i < ts.length && ts[i] <= t1 && n < 30000; i++, n++) {
+      const k = order[i], tg = String(catalog.target[k] || "").toUpperCase();
+      const name = /RING/.test(tg) ? "Rings" : tg && tg !== "SKY" && tg !== "UNKNOWN" && bodies[tg] ? titleCase(tg) : tg === "SATURN" ? "Saturn" : "";
+      if (cur && (ts[i] - cur.b > 1200 || name !== cur.name)) flush();
+      if (!cur) cur = { a: ts[i], b: ts[i], name };
+      else cur.b = ts[i];
+    }
+    flush();
+    // now
+    const xn = x(state.et);
+    c.globalAlpha = 0.9; c.fillRect(xn - 0.5, y - 6, 1, 10);
+    // the next bodies, named over their first dash, skipping a name that would sit on the one before
+    c.font = "10px " + (getComputedStyle(document.body).getPropertyValue("--ui") || "sans-serif"); c.textBaseline = "bottom";
+    let lastRight = xn + 4;
+    for (const nm of names) {
+      const label = `${nm.name} in ${span(nm.t - state.et)}`, tw = c.measureText(label).width;
+      const lx = Math.min(w - tw - 2, Math.max(nm.x - tw / 2, lastRight + 8));
+      if (lx < lastRight + 4) continue;
+      c.globalAlpha = 0.6; c.fillText(label, lx, y - 6); c.globalAlpha = 0.5; c.fillRect(nm.x - 0.5, y - 4, 1, 3);
+      lastRight = lx + tw;
+    }
+    c.globalAlpha = 1;
+  }
   function span(s) {
     if (s < 90) return `${Math.max(1, Math.round(s))} s`;
     if (s < 2 * 86400) return fmtSpan(s);
@@ -325,7 +429,10 @@ body.ambient.phone .amb-where { font-size: 18px; }
     if (window.cassiniSound && cassiniSound.unlock) cassiniSound.unlock();
     S.transient(() => setFollow(false));
     document.querySelectorAll(".menu.open").forEach(m => m.classList.remove("open"));
-    document.body.classList.add("ambient", "nohud");
+    document.body.classList.add("ambient");
+    document.body.classList.remove("nohud");
+    cone.a = 0; cone.at = 0;
+    if (window.cassiniSound && cassiniSound.setCalm) cassiniSound.setCalm(S.get("ambient.calmSound"));
     root.hidden = false;
     A.since = performance.now(); A.subject = null; A.cand = null; A.nextSwitch = 0; A.shiftAt = 0; A.liveAt = performance.now(); A.phase = 0;
     if (state.focus !== "CASSINI") setFocus("CASSINI", DIST);
@@ -346,7 +453,9 @@ body.ambient.phone .amb-where { font-size: 18px; }
     if (window.cassiniAway) { cassiniAway.keepRunning = false; cassiniAway.check(); }
     if (window.cassiniPerf) cassiniPerf.cap = 0;
     document.body.classList.remove("ambient", "amb-woke");
-    if (s.hud) document.body.classList.remove("nohud");
+    document.body.classList.toggle("nohud", !s.hud);
+    if (window.cassiniSound && cassiniSound.setCalm) cassiniSound.setCalm(false);
+    restoreCone();
     root.hidden = true;
     controls.enabled = true;
     for (const [w, hidden, min, full] of s.wins) { w.hidden = hidden; if (min) w.dataset.min = min; if (full) w.classList.add("full"); }
