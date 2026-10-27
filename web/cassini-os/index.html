@@ -3391,7 +3391,11 @@ body.phone #launch .lx-clock { font-size: 9.5px; bottom: 9vh; }
       }
       if (v.set >= 0) { channelsFrom(im, catalog.sets[v.set]); howMade(v); }
       drillable();
-      if (v.tile && !keep && !mosaicPass(v.k) && modeOf(v.k) !== "mosaic") mosaicOf(v);   // a frame kept behind its pass's mosaic, or of a pass known to be one, asked for it already (update)
+      // (a frame kept behind its pass's mosaic, or of a pass known to be one, asked for it already, update; one whose
+      // observation's note is still out asks once the note is in, heard)
+      if (v.tile && !keep && !mosaicPass(v.k) && modeOf(v.k) !== "mosaic") {
+        if (notePending.has(passOf(v.k))) heldTiles.set(passOf(v.k), v); else mosaicOf(v);
+      }
       // the sound (sound.html) hears every picture that goes up: its camera, filter wavelength, target and window
       // (keep: a pass mosaic stays up, so this frame rings when its tile shows, below in mosaicOf)
       if (window.cassiniPicture && !again) window.cassiniPicture({ cam, body, win, k: v.k, nm: nmOf(v.k), set: v.set, use: v.set >= 0 ? catalog.sets[v.set].use.map(nmOf) : null, keep });
@@ -3653,6 +3657,20 @@ body.phone #launch .lx-clock { font-size: 9.5px; bottom: 9vh; }
     const rank = sz => sz === "full" ? Infinity : +sz;
     const mLane = { pass: { busy: false, next: null, last: "" }, other: { busy: false, next: null, last: "" } };
     const warnedObs = new Set();   // observations already named to the server ahead of time (update)
+    // observations whose note is still out, and the frame each one put up meanwhile that may be a mosaic tile: it asks
+    // /frames/mosaic once the server has said what the pass is (heard), since a mosaic movie never asks there (it
+    // rolls) and a mosaic pass asks in its pass lane; asked before, a mosaic movie's frame had the server make its pass
+    // mosaic (seconds for a pass whose mosaics were never made) and held the window behind the clock (2026-10-27)
+    const notePending = new Map(), heldTiles = new Map();   // observation -> its note's signal / the frame waiting on it
+    function heard(o, sig) {
+      if (notePending.get(o) !== sig) return;   // (a newer note on it is out: the window's requests were let go)
+      notePending.delete(o);
+      const v = heldTiles.get(o);
+      heldTiles.delete(o);
+      // a note dropped with the window's requests (letGo) is sent again by the next update, which hears the answer
+      if (sig.aborted) { warnedObs.delete(o); return; }
+      if (v && shown === v && v.cat === catalog && !mosaicPass(v.k) && modeOf(v.k) !== "mosaic") mosaicOf(v);
+    }
     function mosaicOf(w, pass) {
       if (hold || window.cassiniMosaics === false || !S.get("cameras.mosaics")) return;
       const mode = modeOf(w.k), plays = playsAs(w.k);
@@ -3691,6 +3709,17 @@ body.phone #launch .lx-clock { font-size: 9.5px; bottom: 9vh; }
         // the frame in the catalog loaded now (another catalog object once the months around have loaded; a
         // pass's mosaic still goes up, found by its frame id)
         const kNow = () => catalog === cat0 ? w.k : rep && rep.observation ? kOf(wid) : -1;
+        // a mosaic movie's pass mosaic, asked for before anything said the pass is one: in Auto the pass rolls (the
+        // movie route), so this one never goes up (up, it held the window behind the clock, update.behind, and movie
+        // mode waited STUCK ms on it); the window moves to its rolling picture now if the note has not said so yet
+        if (rep && rep.kind === "mosaic_movie" && mode === "auto" && rolls()) {
+          const k = kNow(), o = k >= 0 ? passOf(k) : null;
+          if (o && !lapPasses.has(o)) {
+            lapPasses.add(o); mosaicPasses.add(o); chipText();
+            if (lastK >= 0 && passOf(lastK) === o) update(true);
+          }
+          return;
+        }
         // a pass's mosaic shows while the window is still in the pass and the clock is not before its frame,
         // unless the mosaic up already has a later frame (and is not ahead of the clock after a scrub back);
         // a rolling mosaic only while its frame is the one shown
@@ -4181,9 +4210,9 @@ body.phone #launch .lx-clock { font-size: 9.5px; bottom: 9vh; }
         for (let d = 0; d <= 120 && ks[p + d] !== undefined; d++) {
           const q = ks[p + d], o = `${catalog.target[q]}|${catalog.obs[q]}`;
           if (warnedObs.has(o)) continue;
-          warnedObs.add(o);
-          const c0 = catalog;
-          fetch(`${FRAMES}/frames/mosaic/${catalog.id[q]}.webp?warm=1${window.cassiniLook()}`, { priority: "low", signal: warnCtl.signal }).then(r => r.ok ? r.json() : null).then(a => {
+          const c0 = catalog, sig = warnCtl.signal;
+          warnedObs.add(o); notePending.set(o, sig);
+          fetch(`${FRAMES}/frames/mosaic/${catalog.id[q]}.webp?warm=1${window.cassiniLook()}`, { priority: "low", signal: sig }).then(r => r.ok ? r.json() : null).then(a => {
             if (a && a.movie) { moviePasses.add(o); chipText(); }
             if (a && a.kind === "mosaic_movie") { lapPasses.add(o); chipText(); }
             // the window is in that pass already: its frame is steadied (or rolls) from now on
@@ -4193,7 +4222,7 @@ body.phone #launch .lx-clock { font-size: 9.5px; bottom: 9vh; }
             if (catalog !== c0) return;
             // the window is in that pass already: its frame asks now (the server is working the pass out)
             if (lastK >= 0 && passOf(lastK) === o && want && (want.tile || want.held)) mosaicOf(want.held ? { key: want.key, set: -1, k: lastK } : want, true);
-          }).catch(() => {});
+          }).catch(() => {}).finally(() => heard(o, sig));
         }
       chipText();
       pump();

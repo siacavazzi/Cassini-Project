@@ -16,6 +16,8 @@
 //               run starts (ffmpeg -ss), so two servers' clips can be laid side by side from the same moment
 //   NET=ms,down,up  the link to the server as Chrome emulates it: ms latency added to each request, down and up
 //               Mbit/s (NET=20,100,50 a home Wi-Fi; NET=80,30,10 Tailscale away from home)
+//   NOTE_DELAY=ms  holds each look-ahead note (/frames/mosaic/<id>.webp?warm=1) that long, as a server busy working
+//               out a pass would: the windows must not ask a pass's mosaic before the note says what the pass is
 let chromium;
 try { ({ chromium } = require("playwright-core")); } catch (e) { ({ chromium } = require("playwright")); }
 const fs = require("fs");
@@ -28,6 +30,7 @@ async function open(br, video) {
   ctx.openedAt = Date.now();
   const page = await ctx.newPage();
   page.on("pageerror", e => console.log("PAGEERROR", e.message));
+  if (env.NOTE_DELAY) await page.route(/\/frames\/mosaic\/[^?]*\?warm=1/, r => setTimeout(() => r.continue().catch(() => {}), +env.NOTE_DELAY));
   if (env.NET) {
     const [ms, down, up] = env.NET.split(",").map(Number), cdp = await ctx.newCDPSession(page);
     await cdp.send("Network.enable");
