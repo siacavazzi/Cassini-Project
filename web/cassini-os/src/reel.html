@@ -92,13 +92,14 @@ body.phone #reelcard:not(.full) { width: calc(100% - 16px) !important; left: 8px
   }
 
   // ---- pictures: fetched ahead of the play head; the server makes each one the first time it is asked ----
-  const size = () => (window.cassiniWM && window.cassiniWM.big ? window.cassiniWM.big(card, $("rlwellN"), 800) : card.classList.contains("zoomed")) ? 1024 : 768;
+  // the reel's full size (1024) unless the card shows its pictures small (cassiniWM.sized)
+  const size = () => window.cassiniWM && window.cassiniWM.sized ? window.cassiniWM.sized(card, $("rlwellN"), 768) : 1024;
   function want(i) {
     let b = R.buf.get(i);
     if (b && b.size === size() && b.mosaic === R.mosaic) return b;
     b = { ok: null, img: null, how: null, size: size(), mosaic: R.mosaic, ctl: new AbortController() };
     R.buf.set(i, b);
-    fetch(`${FRAMES}/frames/reel/${R.target}/${i}.webp?size=${b.size}&mosaic=${R.mosaic ? 1 : 0}`, { signal: b.ctl.signal }).then(async r => {
+    fetch(`${FRAMES}/frames/reel/${R.target}/${i}.webp?size=${b.size}&mosaic=${R.mosaic ? 1 : 0}${window.cassiniLook()}`, { signal: b.ctl.signal }).then(async r => {
       if (!r.ok) throw new Error(r.status);
       try { b.how = JSON.parse(r.headers.get("X-Reel") || "null"); } catch (e) {}
       b.img = await createImageBitmap(await r.blob()); b.ok = true;
@@ -196,7 +197,7 @@ body.phone #reelcard:not(.full) { width: calc(100% - 16px) !important; left: 8px
   function open() {
     if (R.open) return;
     R.open = true; card.hidden = false; card.dispatchEvent(new Event("pointerdown"));
-    R.hidden = ["imgcard", "wacard", "moviecard"].map($).filter(w => w && !w.hidden);
+    R.hidden = ["imgcard", "wacard"].map($).filter(w => w && !w.hidden);
     R.hidden.forEach(w => { w.hidden = true; });
     if (window.cassiniMovie && window.cassiniMovie.on) window.cassiniMovie.stop();
     loadBodies();
