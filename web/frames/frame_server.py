@@ -773,6 +773,16 @@ def warm_site(site, cache):
     warm_icons(site, cache)
 
 
+def warm_prebuild():
+    """Pre-process (POST /prebuild, prebuild.Segments): the mission's filter sets in the order they are ready
+    (prebuild.sets_ready, a second of work over the whole index), made as the server starts rather than while the
+    first stretch asked for waits."""
+    # prebuild imports this module by name: the running server's own makers and caches, not a second copy
+    sys.modules.setdefault("frame_server", sys.modules[__name__])
+    import prebuild
+    prebuild.sets_ready()
+
+
 # ---------- slow loads: the page reports a wait for data on the loading screen, kept to find out what held it ----------
 # POST /jumplog takes the page's report (what loaded, each data file's timings, the picture requests under way, the
 # page's long tasks); the server adds when, who and how busy it was, and appends it to <cache>/jump-log.jsonl.
@@ -1206,7 +1216,7 @@ def make_handler(site, cache, flags=None):
                     return self.send_json(job) if job else self.send_json({"error": "no such stretch"}, 404)
                 import prebuild
                 try:
-                    return self.send_json(prebuilds().submit(prebuild.segment_options(parse_qs(url.query))))
+                    return self.send_json(prebuilds().submit(prebuild.segment_options(parse_qs(url.query)), prebuild.SEGMENT_ANSWER))
                 except ValueError as e:
                     return self.send_json({"error": str(e)}, 400)
             n = int(self.headers.get("Content-Length") or 0)
@@ -1723,8 +1733,9 @@ def main():
     data_source.KEEP_SPICE_CACHE = True
     data_source._zip_index() if data_source.using_zip() else None  # build or load the zip index up front
     # the camera windows' mosaic route and centred pictures need the index, its observations (obs_mosaic.units) and
-    # its frames' rows (obs_mosaic._row_of); made now rather than on the first request
-    threading.Thread(target=lambda: (reel.target_of(), obs_mosaic._observations(), obs_mosaic._row_of()), daemon=True).start()
+    # its frames' rows (obs_mosaic._row_of), and Pre-process its filter sets (warm_prebuild); made now rather than on
+    # the first request
+    threading.Thread(target=lambda: (reel.target_of(), obs_mosaic._observations(), obs_mosaic._row_of(), warm_prebuild()), daemon=True).start()
     if os.environ.get("FRAME_SERVER_SAMPLE") == "1":
         threading.Thread(target=sample_stacks, daemon=True).start()
     # the first composite would otherwise wait while stacking reads the whole image index (all ~443k rows)
