@@ -5703,7 +5703,8 @@ body.phone #launch .lx-clock { font-size: 9.5px; bottom: 9vh; }
   const S = window.cassiniSettings, card = $("excard");
   const SIZES = [512, 768, 1024, "full"];   // "full": mosaics at their native resolution (export.py, Picture size Full)
   // measured on the Mac Mini (bench_fullres_movie.py): seconds to draw a mosaic picture at Full, per million pixels
-  const FULL_S_PER_MP = 1.0;
+  // (hexagon mosaic movies 2012-11-27 and 2013-06-26: 5.5-7.4 s a picture of 2400-3100 px, two made at once)
+  const FULL_S_PER_MP = 0.5;
   // the export's choices live in the settings registry, so they are kept on this device and listed in Settings
   if (S) {
     const D = d => S.define(Object.assign({ section: "Export" }, d));
@@ -5853,8 +5854,8 @@ body.phone #launch .lx-clock { font-size: 9.5px; bottom: 9vh; }
     if (!f) return "";
     const fmt = v => v.toLocaleString();
     if (!f.mosaic_pictures) return `<br><span class="warn">No mosaic in this stretch: Full gives the same pictures as 1024.</span>`;
-    const mins = f.mosaic_pictures * FULL_S_PER_MP * f.pane * f.pane / 1e6;
-    let out = f.native > 1024 ? `<br>${fmt(f.mosaic_pictures)} mosaic pictures at ${fmt(f.pane)} px${f.native > f.pane ? ` (their own ${fmt(f.native)} px, fitted)` : ""} · about ${fmtDur(Math.max(60, mins))} to make`
+    const secs = f.mosaic_pictures * FULL_S_PER_MP * f.pane * f.pane / 1e6;
+    let out = f.native > 1024 ? `<br>${fmt(f.mosaic_pictures)} mosaic pictures at ${fmt(f.pane)} px${f.native > f.pane ? ` (their own ${fmt(f.native)} px, fitted)` : ""} · about ${fmtDur(Math.max(60, secs))} to make`
       : `<br><span class="warn">The mosaics here are no bigger than 1024 px: Full gives the same pictures.</span>`;
     if (f.pending) out += `<br><span class="warn">${f.pending} mosaic pass${f.pending > 1 ? "es are" : " is"} not pre-processed yet, so ${f.pending > 1 ? "their" : "its"} size is not known: pre-process the stretch first.</span>`;
     return out;
