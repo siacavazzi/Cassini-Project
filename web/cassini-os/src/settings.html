@@ -287,6 +287,11 @@ body.phone .srow input[type=range] { width: 96px; }
   D({ key: "view.atmospheres", section: "View", label: "Atmospheres", type: "choice", value: "full",
       options: [["off", "Off"], ["light", "Light"], ["full", "Full"]],
       hint: "Titan's orange haze with its high detached layer, Earth's thin blue limb, Venus's pale yellow haze, and the thin hazes at Saturn's and Jupiter's limbs, all lit by the Sun: soft twilight past the terminator and a bright ring when a body is backlit. Light is quicker on weak graphics; Off draws the bare globes." });
+  // the viewer reads view.plumes and view.plumeBrightness (makePlume)
+  D({ key: "view.plumes", section: "View", label: "Enceladus plumes", type: "toggle", value: true,
+      hint: "The jets of ice grains rising from the tiger stripes at Enceladus's south pole, lit by the Sun. Like the real ones they show mostly when Cassini looks back toward the Sun, against the dark sky, and stay faint otherwise." });
+  D({ key: "view.plumeBrightness", section: "View", label: "Plume brightness", type: "range", value: 1, min: 0.25, max: 4, step: 0.05,
+      format: v => `${Math.round(v * 100)}%`, hint: "How bright the plumes are drawn. 100% is subtle, as in an unstretched picture; higher shows the faint outer plume the way stretched pictures do." });
   // Movie
   D({ key: "movie.fps", section: "Movie", label: "Movie speed", type: "range", value: 8, min: 2, max: 24, step: 1, unit: "fps",
       hint: "Frames per second in movie mode (M). The slider in the Movie window changes this too." });
