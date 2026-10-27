@@ -199,8 +199,11 @@ body.phone.phone-land #bodymenu { left: auto !important; width: min(380px, 46vw)
   // ---- the window ----
   function bodyLook(n) {
     const look = typeof MOON_LOOK !== "undefined" && MOON_LOOK[n], c = look ? `rgb(${look.map(v => Math.round(v * 255)).join(",")})` : "#888";
-    const has = typeof bodies !== "undefined" && bodies[n] && n !== "SUN";
-    return `--c:${c};${has ? `background-image:url(data/textures/1k/${n.toLowerCase()}.webp);` : ""}`;
+    // its surface map, or else (as in the dock's All bodies folder) its sharpest real picture
+    const map = typeof TEX_FILES !== "undefined" && TEX_ON && TEX_FILES[n], b = M.index && M.index.bodies[n];
+    if (map) return `--c:${c};background-image:url(data/textures/1k/${map}.webp);`;
+    if (b && b.best && window.cassiniFeeds && n !== "SUN") return `--c:${c};background-image:url('${cassiniFeeds.frames}/frames/${b.best}.webp?size=256');background-size:cover;background-position:50% 50%;`;
+    return `--c:${c};`;
   }
   function fillPick() {
     const sel = $("bmpick"), ix = M.index && M.index.bodies;
