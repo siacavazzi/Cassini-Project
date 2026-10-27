@@ -10,6 +10,9 @@ one built on the other (a rented cloud machine for a whole rebuild, 2026-10-27).
                                                      (cassini_lut8.zip), checked against their CRCs
   REPO=<checkout> PHASE=<phase> OUT=<json> python rebuild_bench.py
                                                      one phase on the sample (CASSINI_DATA=OUT.zip), its own process
+  python rebuild_bench.py report OUTDIR GEOMETRY     the first runs' hashes, short enough to paste and compare with
+                                                     another machine's (pixels as well as files, the processed
+                                                     pictures' centring)
 
 Phases: frames (1024, 512 and 128 of each frame), processed (1024, 512 and 256, centred as Auto center asks),
 composites (the page's filter sets of the sample and the golden rig's, 1024 and 512, centred), movies (make_pass on
@@ -51,7 +54,7 @@ def make_sample(archive, out):
     clears the other indexes of that zip), else through zipfile (about 1 GB of memory for the whole archive)."""
     datas = {}
     os.environ["CASSINI_DATA"] = archive
-    sys.path.insert(0, os.path.dirname(os.path.dirname(os.path.dirname(os.path.abspath(__file__)))))
+    sys.path.insert(0, os.environ.get("REPO") or os.path.dirname(os.path.dirname(os.path.dirname(os.path.abspath(__file__)))))
     import data_source
     if os.path.isdir(data_source._index_folder(archive)):
         for name in MEMBERS:
@@ -71,6 +74,59 @@ def make_sample(archive, out):
     print(json.dumps({"members": len(MEMBERS), "bytes": sum(map(len, datas.values())), "digest": digest,
                       "same_as_cloud_sample": digest == SAMPLE_DIGEST}))
     return digest == SAMPLE_DIGEST
+
+
+def picture_stats(path):
+    """A picture's decoded pixels: their hash (the same pixels whatever bytes the encoder made of them), shape, mean,
+    spread and brightness centroid, to tell rounding from a shift when two machines' pictures differ."""
+    import numpy as np
+    from PIL import Image
+    with Image.open(path) as im:
+        a = np.asarray(im)
+    f = a.astype(np.float64)
+    if f.ndim == 3:
+        f = f[..., :3].mean(axis=2)
+    total = f.sum()
+    ys, xs = np.indices(f.shape)
+    cx, cy = ((xs * f).sum() / total, (ys * f).sum() / total) if total else (0.0, 0.0)
+    pix = hashlib.sha256(f"{a.shape} {a.dtype.str} ".encode() + a.tobytes()).hexdigest()[:12]
+    return [pix, list(a.shape), round(float(f.mean()), 4), round(float(f.std()), 4), round(float(cx), 3), round(float(cy), 3)]
+
+
+def report(folder, geometry):
+    """What two machines compare, short enough to paste: the sample's geometry rows, then per phase (its first run,
+    one-<phase>-1.json in folder) the digests of its files by kind and of its pictures' decoded pixels, every report's
+    and every picture's hash (6 characters each, in path order), then the processed 256s' centring and statistics."""
+    import sqlite3
+    rows = sqlite3.connect(geometry).execute(
+        "select * from target where frame in (%s) order by frame" % ",".join("?" * len(SAMPLE)), SAMPLE).fetchall()
+    print(f"geometry {hashlib.sha256(repr(rows).encode()).hexdigest()[:16]} rows={len(rows)}")
+
+    def digest(lines):
+        return hashlib.sha256("\n".join(lines).encode()).hexdigest()[:8]
+    for phase in ("frames", "processed", "composites", "movies", "mosaics"):
+        path = os.path.join(folder, f"one-{phase}-1.json")
+        if not os.path.exists(path):
+            print(phase, "missing")
+            continue
+        with open(path) as fh:
+            d = json.load(fh)
+        h, pixels = d["hashes"], d.get("pixels", {})
+        kinds = " ".join(f"{ext}={digest(f'{k} {v}' for k, v in sorted(h.items()) if k.endswith(ext))}"
+                         for ext in (".webp", ".png", ".json"))
+        print(f"{phase} files={len(h)} bytes={d['bytes']} keys={digest(sorted(h))} {kinds} "
+              f"pix={digest(f'{k} {v[0]}' for k, v in sorted(pixels.items()))}")
+        if phase == "frames":
+            continue
+        print(" json", " ".join(v[:6] for k, v in sorted(h.items()) if k.endswith(".json")))
+        print(" pix", " ".join(v[0][:6] for k, v in sorted(pixels.items())))
+        if phase == "processed":
+            texts = d.get("texts", {})
+            for k, v in sorted(pixels.items()):
+                if "/256/" in k:
+                    rep = json.loads(texts.get(k[:-len(".webp")] + ".json", "{}"))
+                    off = ",".join(map(str, rep.get("frame_offset", [])))
+                    print(f" {k.rsplit('/', 1)[-1][5:-5]} off={off} mean={v[2]} std={v[3]} c={v[4]},{v[5]}")
 
 
 def bench():
@@ -129,13 +185,19 @@ def bench():
                 errors.append([name, err])
             each.append([name, pictures, round(time.perf_counter() - t0, 4), round(time.process_time() - c0, 4), err])
     wall, cpu = time.perf_counter() - t_all, time.process_time() - cpu_all
-    hashes, size = {}, 0
+    hashes, size, pixels, texts = {}, 0, {}, {}
     for root, _, files in os.walk(cache):
         for f in files:
-            with open(os.path.join(root, f), "rb") as fh:
+            full = os.path.join(root, f)
+            rel = os.path.relpath(full, cache)
+            with open(full, "rb") as fh:
                 data = fh.read()
             size += len(data)
-            hashes[os.path.relpath(os.path.join(root, f), cache)] = hashlib.sha256(data).hexdigest()[:20]
+            hashes[rel] = hashlib.sha256(data).hexdigest()[:20]
+            if f.endswith((".webp", ".png")):
+                pixels[rel] = picture_stats(full)
+            elif f.endswith(".json") and len(data) <= 4096:
+                texts[rel] = data.decode("utf-8", "replace")
     shutil.rmtree(cache, ignore_errors=True)
     ok = [e for e in each if not e[4]]
 
@@ -149,13 +211,15 @@ def bench():
            "bytes": size, "files": len(hashes), "startup_s": round(t_ready, 2), "load": os.getloadavg(),
            # the same digest on two machines: every file (pictures and their reports) came out byte for byte the same
            "digest": digest(lambda k: True), "digest_pictures": digest(lambda k: k.endswith((".webp", ".png"))),
-           "each": each, "hashes": hashes}
+           "each": each, "hashes": hashes, "pixels": pixels, "texts": texts}
     with open(os.environ["OUT"], "w") as fh:
         json.dump(out, fh, indent=1)
-    print(json.dumps({k: v for k, v in out.items() if k not in ("each", "hashes")}), flush=True)
+    print(json.dumps({k: v for k, v in out.items() if k not in ("each", "hashes", "pixels", "texts")}), flush=True)
 
 
 if __name__ == "__main__":
     if sys.argv[1:2] == ["sample"]:
         sys.exit(0 if make_sample(sys.argv[2], sys.argv[3]) else 1)
+    if sys.argv[1:2] == ["report"]:
+        sys.exit(report(sys.argv[2], sys.argv[3]))
     bench()
