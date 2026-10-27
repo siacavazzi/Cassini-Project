@@ -3431,7 +3431,8 @@ body.phone #launch .lx-clock { font-size: 9.5px; bottom: 9vh; }
       im.fetchPriority = v.warm ? "low" : "high";   // the picture wanted now goes ahead of look-ahead requests
       im.onload = () => {
         lane[which] = null; warmed.add(v.key);
-        if (want && !hold && !v.warm && v.cat === catalog && fits(v)) display(v, im);   // no want: the camera went idle (or was held) while this loaded
+        // (prep first: months that came in since the last frame drew leave a catalog not yet worked through)
+        if (want && !hold && !v.warm && v.cat === catalog && fits(v)) { prep(); display(v, im); }   // no want: the camera went idle (or was held) while this loaded
         pump();
       };
       im.onerror = () => {
