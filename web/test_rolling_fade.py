@@ -72,7 +72,7 @@ for n in range(N):
         assert min(got) > 0.25 * max(got), (n, got)   # never empties: the oldest place keeps the floor
     print(n, "middles", [round(x) for x in got])
 
-names = os.listdir(os.path.join(d, "rolling-level", "512"))
+names = os.listdir(os.path.join(om.drawn(u, cache), "rolling-level", "512"))
 assert any(x.startswith("lap-1-f2p30-") for x in names) and any(x.startswith("lap-1-") and "-f" not in x[6:9] for x in names), names
 print("time-lapse names unchanged, faded pictures named lap-1-f2p30-...")
 
@@ -81,13 +81,13 @@ om._rolled.clear()
 cache3 = tempfile.mkdtemp()
 shutil.copytree(d, om.folder(u, cache3), dirs_exist_ok=True)
 for sub in ("rolling-level", "filters-level"):
-    shutil.rmtree(os.path.join(om.folder(u, cache3), sub), ignore_errors=True)
+    shutil.rmtree(os.path.join(om.drawn(u, cache3), sub), ignore_errors=True)
 om.rolling_webp(fr[4][1], 512, cache3, 1, fade=FADE)
 ahead(u, 4, 512, cache3, fade=FADE)
 t0 = time.time()
 while om._roll_ahead and time.time() - t0 < 120:
     time.sleep(0.2)
-level = os.path.join(om.folder(u, cache3), "rolling-level", "512")
+level = os.path.join(om.drawn(u, cache3), "rolling-level", "512")
 made = [x for x in os.listdir(level) if x.endswith(".webp")]
 assert all("-f2p30-" in x for x in made) and len(made) - 1 >= min(om.ROLL_AHEAD, N - 5), made
 calls.clear()

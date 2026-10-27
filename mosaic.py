@@ -366,8 +366,8 @@ def edge_profile():
 
 """
 How wide a frame's own soft edge is on this canvas, in pixels from its edge to where its alpha reaches EDGE_AT:
-the farthest distance from the edge at which still at least half as many pixels are under EDGE_AT as right at the
-edge (along a straight edge every distance up to the width has the same number; the corners, where two soft edges
+the farthest distance from the edge at which still at least a quarter as many pixels are under EDGE_AT as right at the
+edge (along a straight edge every distance up to the width has about the same number; the corners, where two soft edges
 cross, add a few farther in). A frame drawn at another size than 1024 px has its soft edge at that size. 0 for a
 frame with a hard edge.
 """
@@ -378,7 +378,7 @@ def _edge_width(alpha, dist):
     counts = np.bincount(np.rint(dist[soft]).astype(np.int64))
     if len(counts) < 2 or counts[1] == 0:
         return 0.0
-    return float(np.flatnonzero(counts >= counts[1] / 2).max())
+    return float(np.flatnonzero(counts >= counts[1] / 4).max())
 
 
 """
@@ -451,7 +451,7 @@ def composite(frames, gains, offsets=None, gamma=None):
     y0, y1 = min(b[0] for b in used), max(b[1] for b in used)
     x0, x1 = min(b[2] for b in used), max(b[3] for b in used)
 
-    if len(infos[0]) == 6:
+    if len(next(info for info in infos if info is not None)) == 6:
         _blended(out, frames, infos, gains, offsets, gamma, (y0, y1, x0, x1))
         return out
 
@@ -535,7 +535,7 @@ def _blended(out, frames, infos, gains, offsets, gamma, area):
     rgb = np.zeros((y1 - y0, x1 - x0, 3), np.float32)
     cover = np.zeros((y1 - y0, x1 - x0), np.float32)   # 1 where a frame drawn so far has picture
     weight = np.zeros((y1 - y0, x1 - x0), np.float32)  # what is drawn so far's own ramp, drawn over each other
-    alpha = np.zeros((y1 - y0, x1 - x0), np.float32)   # the frames' own alphas drawn over each other, as before
+    alpha = np.zeros((y1 - y0, x1 - x0), np.float32)   # the most of the frames' own alphas
     width = 0.0
     for info, gain, offset in zip(infos, gains, offsets):
         if info is None:
@@ -551,8 +551,10 @@ def _blended(out, frames, infos, gains, offsets, gamma, area):
         rgb[sl] += color
         weight[sl] = ramp + wb * (1 - ramp)
         cover[sl] = np.maximum(below, has)
-        alpha[sl] = own + alpha[sl] * (1 - own)
+        alpha[sl] = np.maximum(alpha[sl], own)
     if width > 0:
+        # never more transparent than the most opaque frame there, so a frame's own corners and a lost line's gap keep
+        # the edge they were made with
         alpha = np.maximum(alpha, _outer_edge(cover, width))
     out[y0:y1, x0:x1, :3] = np.clip(rgb, 0, 255).round()
     out[y0:y1, x0:x1, 3] = (alpha * 255).round()

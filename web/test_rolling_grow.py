@@ -65,7 +65,7 @@ for n in (3, 7, 11, 15):   # whole laps (a whole picture of mixed laps pulls the
     import shutil
     shutil.copytree(d, om.folder(u, cache2), dirs_exist_ok=True)
     for sub in ("rolling-level", "filters-level"):
-        shutil.rmtree(os.path.join(om.folder(u, cache2), sub), ignore_errors=True)
+        shutil.rmtree(os.path.join(om.drawn(u, cache2), sub), ignore_errors=True)
     calls.clear()
     whole = pic(om.rolling_webp(fr[n][1], 512, cache2, 1)[0])
     assert calls and calls[0] > 2 or n < 4, (n, calls)
@@ -83,13 +83,13 @@ om._rolled.clear()
 cache3 = tempfile.mkdtemp()
 shutil.copytree(d, om.folder(u, cache3), dirs_exist_ok=True)
 for sub in ("rolling-level", "filters-level"):
-    shutil.rmtree(os.path.join(om.folder(u, cache3), sub), ignore_errors=True)
+    shutil.rmtree(os.path.join(om.drawn(u, cache3), sub), ignore_errors=True)
 om.rolling_webp(fr[4][1], 512, cache3, 1)
 ahead(u, 4, 512, cache3)
 t0 = time.time()
 while om._roll_ahead and time.time() - t0 < 120:
     time.sleep(0.2)
-level = os.path.join(om.folder(u, cache3), "rolling-level", "512")
+level = os.path.join(om.drawn(u, cache3), "rolling-level", "512")
 made = len([x for x in os.listdir(level) if x.endswith(".webp")])
 print("made ahead:", made - 1, "pictures")
 assert made - 1 >= min(om.ROLL_AHEAD, N - 5), made
