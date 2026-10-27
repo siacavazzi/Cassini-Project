@@ -1,7 +1,23 @@
-pandas
-numpy
-spiceypy
-opencv-python
-pillow
-matplotlib
-scikit-image
+# Pinned to the Mac Mini's .venv (Python 3.11): pictures are cached, and other versions change pixels by a level (O38, docs/optimization-audit.md)
+pandas==1.5.3
+numpy==1.26.4
+spiceypy==8.3.0
+opencv-python==4.11.0.86
+pillow==13.0.0
+matplotlib==3.11.2
+scikit-image==0.26.0
+# and what those install, at the Mini's versions too
+contourpy==1.3.3
+cycler==0.12.1
+fonttools==4.67.0
+imageio==2.38.1
+kiwisolver==1.5.1
+lazy-loader==0.6
+networkx==3.6.1
+packaging==26.3
+pyparsing==3.3.3
+python-dateutil==2.9.0.post0
+pytz==2026.5
+scipy==1.17.1
+six==1.17.0
+tifffile==2026.3.3
