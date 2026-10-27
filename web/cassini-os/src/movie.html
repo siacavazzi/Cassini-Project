@@ -25,7 +25,11 @@
   // Slow: when the film has spent more than SLOW_SHARE of the last SLOW_SPAN ms waiting, the page hears
   // "cassini:movie-slow" (once, until it has caught up again), so it can offer to make a stretch ahead of time.
   const CUT = 3 * 3600, SLOW_SPAN = 20000, SLOW_SHARE = 0.5;
-  const M = { on: false, stepAt: 0, waiting: false, cut: 0, cutAt: -1e9, until: Infinity, cams: null, waits: [], slow: false, lastAt: 0 };
+  const M = { on: false, stepAt: 0, waiting: false, cut: 0, cutAt: -1e9, until: Infinity, cams: null, waits: [], slow: false, lastAt: 0, steps: [] };
+  // the pictures really shown a second: the steps of the last RATE_SPAN ms (a step is one new picture, cassiniFeeds
+  // complete: a color set once, a stack of repeat exposures once, a whole mosaic once with Whole mosaics)
+  const RATE_SPAN = 3000;
+  const shownRate = now => { while (M.steps.length && M.steps[0] < now - RATE_SPAN) M.steps.shift(); return M.steps.length >= 3 ? (M.steps.length - 1) * 1000 / Math.max(now - M.steps[0], 1) : 0; };
   const ready = () => typeof catalog !== "undefined" && catalog && catalog.byCam && window.cassiniFeeds;
 
   const base = window.studyAdvance;
@@ -47,6 +51,7 @@
     // 24 fps would otherwise wait three frames a step and play 20); a step that came a whole interval late (after
     // a wait for pictures) starts the cadence again, so there is no burst to catch up
     M.stepAt = now - due < 1000 / fps() ? due : now;
+    M.steps.push(now);
     if (next - et > CUT) { M.cut = next - et; M.cutAt = now; }
     return next;
   };
@@ -70,7 +75,10 @@
     if (hud) hud(ms);
     if (!M.on) return;
     const el = $("mday"); if (!el) return;
+    // the frame rate set, and the pictures a second it really shows when that is lower (waiting for the server)
+    const real = state.playing ? shownRate(performance.now()) : 0;
     let t = ` · movie, ${fps()} fps`;
+    if (real && real < fps() - 0.5) t += ` (showing ${real < 10 ? real.toFixed(1) : Math.round(real)} pictures/s)`;
     if (M.waiting && state.playing) t += ", waiting for pictures";
     if (performance.now() - M.cutAt < 1500) t += ` · skipped ${fmtDur(M.cut)}`;
     el.textContent += t;
@@ -83,7 +91,7 @@
   // range.cams ("N" or "W"): step through that camera's pictures only, waiting on its windows alone
   function start(play, range) {
     if (M.on && !range) return;
-    M.on = true; M.stepAt = 0; M.cutAt = -1e9; M.waits = []; M.slow = false; M.lastAt = 0;
+    M.on = true; M.stepAt = 0; M.cutAt = -1e9; M.waits = []; M.slow = false; M.lastAt = 0; M.steps = [];
     M.until = range && range.until !== undefined ? range.until : Infinity;
     M.cams = range && /^[NW]$/.test(range.cams || "") ? range.cams : null;
     if (range && range.from !== undefined) { setTime(range.from - 1e-3); keepNowInView(); }
@@ -98,7 +106,8 @@
   }
   const toggle = () => (M.on ? stop() : start(true));
   // fps: the frame rate (the movie.fps setting, Settings > Playback; set it with cassiniSettings.set("movie.fps", n))
-  window.cassiniMovie = { start, stop, get on() { return M.on; }, get slow() { return M.slow; }, fps, state: M };
+  // rate(): the pictures a second movie mode has really shown over the last few seconds (0 when it has not stepped)
+  window.cassiniMovie = { start, stop, get on() { return M.on; }, get slow() { return M.slow; }, fps, rate: () => shownRate(performance.now()), state: M };
 
   // ---- controls ----
   $("movie").addEventListener("click", toggle);
