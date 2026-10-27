@@ -40,6 +40,9 @@
 #ambient .amb-when { display: block; margin-top: 4px; font: 300 13px/1.4 var(--ui); color: var(--q-dim); font-variant-numeric: tabular-nums; }
 #ambient .amb-next { display: block; margin-top: 10px; font: 12px/1.4 var(--ui); color: var(--q-dim); opacity: 0; transition: opacity 1.6s ease; font-variant-numeric: tabular-nums; }
 #ambient .amb-next.on { opacity: 1; }
+#ambient .amb-snd { position: absolute; left: 50%; bottom: calc(env(safe-area-inset-bottom, 0px) + 3vh); transform: translateX(-50%); translate: var(--amb-dx, 0) var(--amb-dy, 0);
+  font: 11px/1.2 var(--ui); letter-spacing: .08em; color: rgba(232,236,242,.55); opacity: 0; transition: opacity 1.6s ease, translate 20s linear; }
+#ambient .amb-snd.on { opacity: 1; }
 #ambient .amb-credit { position: absolute; right: 3vw; top: calc(env(safe-area-inset-top, 0px) + 2.4vh); translate: var(--amb-dx, 0) var(--amb-dy, 0); font: 10px/1 var(--ui);
   letter-spacing: .08em; color: rgba(232,236,242,.38); transition: translate 20s linear; }
 #ambient .amb-leave { all: unset; position: absolute; left: 16px; top: calc(env(safe-area-inset-top, 0px) + 14px); padding: 5px 12px; border-radius: 12px; border: 1px solid var(--q-line);
@@ -80,7 +83,7 @@ body.ambient.phone .amb-where { font-size: 18px; }
 <div id="ambient" hidden aria-live="off">
   <canvas class="amb-tl" aria-hidden="true"></canvas>
   <div class="amb-cap"><span class="amb-mode"><i hidden></i><span></span></span><span class="amb-where"></span><span class="amb-when"></span><span class="amb-next"></span></div>
-  <div class="amb-credit">Pictures NASA/JPL-Caltech/SSI</div>
+  <div class="amb-snd">Click anywhere for sound</div><div class="amb-credit">Pictures NASA/JPL-Caltech/SSI</div>
   <button class="amb-leave" aria-label="Leave ambient mode">Leave ambient mode · Esc</button>
 </div>
 
@@ -247,11 +250,11 @@ body.ambient.phone .amb-where { font-size: 18px; }
     if (!A.on || typeof fov === "undefined" || !fov || (window.cassiniCutscene && cassiniCutscene.active)) return;
     if (!cone.base) cone.base = [fov.children[0].material.opacity, fov.children[1].material.opacity];
     const now = performance.now(), dt = Math.min(0.25, (now - (cone.at || now)) / 1000); cone.at = now;
-    const want = fov.visible && S.get("ambient.cones") ? 1 : 0, k = 1 - Math.exp(-dt / 1.4);
+    const want = fov.visible && S.get("ambient.cones") ? 1 : 0, k = 1 - Math.exp(-dt / 0.3);
     // the viewer placed the cone for this frame (or left it where it last was): ease toward that
     if (fov.visible) {
       if (cone.a < 0.02) { cone.q.copy(fov.quaternion); cone.s.copy(fov.scale); }
-      else { cone.q.slerp(fov.quaternion, 1 - Math.exp(-dt / 0.8)); cone.s.lerp(fov.scale, 1 - Math.exp(-dt / 0.8)); }
+      else { const turn = 1 - Math.exp(-dt / 0.25); cone.q.slerp(fov.quaternion, turn); cone.s.lerp(fov.scale, turn); }
     }
     cone.a += (want - cone.a) * k;
     fov.quaternion.copy(cone.q); fov.scale.copy(cone.s);
@@ -332,6 +335,8 @@ body.ambient.phone .amb-where { font-size: 18px; }
     let next = "";
     const t = window.cassiniFeeds ? cassiniFeeds.nextPicture(state.et) : Infinity, gap = t - state.et;
     if (isFinite(gap) && gap > 0 && A.mode !== "pictures" && gap / Math.max(1, state.speed) > 20) next = `Next picture in ${span(A.mode === "live" ? gap : gap / state.speed)}`;
+    // browsers keep a page silent until it is clicked once: say so while that is what keeps it quiet
+    root.querySelector(".amb-snd").classList.toggle("on", !!(window.cassiniSound && cassiniSound.blocked));
     const key = [mode, where, when, next].join("|");
     if (key === A.lastCap) return;
     A.lastCap = key;
