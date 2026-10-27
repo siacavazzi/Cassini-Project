@@ -49,6 +49,16 @@ SATURN_SYSTEM = ["CASSINI", "SUN", "EARTH", "SATURN", "MIMAS", "ENCELADUS", "TET
                  "PROMETHEUS", "PANDORA", "PAN", "METHONE", "PALLENE", "POLYDEUCES", "DAPHNIS"]
 # the cruise: Venus twice, Earth and the Moon, Jupiter and its large moons
 CRUISE = ["VENUS", "MOON", "JUPITER", "IO", "EUROPA", "GANYMEDE", "CALLISTO"]
+# the small moons Cassini photographed from afar (export_tracks.py --bodies), so the body view has somewhere to put the
+# camera; a whole-mission build leaves out any the manifest does not have yet. The PCK gives most of them no radii, so
+# they get their mean radius in km (Thomas 2010, Denk et al. 2018; Himalia from Cassini's 2000 pictures)
+SMALL_MOONS = {"ANTHE": 0.5, "AEGAEON": 0.33, "HIMALIA": 75, "YMIR": 9, "PAALIAQ": 11, "TARVOS": 7.5, "IJIRAQ": 6,
+               "SUTTUNGR": 3.5, "KIVIUQ": 8, "MUNDILFARI": 3.5, "ALBIORIX": 16, "SKATHI": 4, "ERRIAPUS": 5,
+               "SIARNAQ": 20, "THRYMR": 4, "NARVI": 3.5, "BEBHIONN": 3, "BERGELMIR": 3, "BESTLA": 3.5, "FORNJOT": 3,
+               "HATI": 3, "HYROKKIN": 4, "KARI": 3.5, "LOGE": 3, "SKOLL": 3, "SURTUR": 3, "JARNSAXA": 3, "GREIP": 3,
+               "TARQEQ": 3.5}
+# other spellings of the same moon in the image catalog, folded into one name
+TARGET_ALIASES = {"ERRIAPO": "ERRIAPUS", "SUTTUNG": "SUTTUNGR", "THRYM": "THRYMR", "SKADI": "SKATHI"}
 CATALOG_KEYS = ["id", "et", "cam", "f1", "f2", "target", "obs", "range_km", "km_per_px"]
 MOMENTS = os.path.join(os.path.dirname(os.path.abspath(__file__)), "moments.csv")
 # targets in the catalog that are not bodies (the sky, calibration stars, unknown), left out of the body views
@@ -112,6 +122,7 @@ def slim_catalog(data, year):
     cat = json.load(open(path))
     slim = {k: cat[k] for k in CATALOG_KEYS}
     slim["et"] = [round(t, 1) for t in slim["et"]]
+    slim["target"] = [TARGET_ALIASES.get(t, t) for t in slim["target"]]
     return slim
 
 
@@ -303,7 +314,9 @@ def build_mission(args):
     man = json.load(open(os.path.join(args.data, "manifest.json")))
     out = args.out
     bodies, start, end = {}, None, None
-    for name in SATURN_SYSTEM + CRUISE:
+    for name in SATURN_SYSTEM + CRUISE + list(SMALL_MOONS):
+        if name in SMALL_MOONS and name not in man["bodies"]:
+            continue
         body = man["bodies"][name]
         slug = name.lower().replace(" ", "_")
         files = {}
@@ -320,7 +333,7 @@ def build_mission(args):
         if not files:
             continue
         rot = body.get("iau_rotation", {})
-        bodies[name] = {"naif": body["naif_id"], "years": files, "radii": rot.get("RADII"),
+        bodies[name] = {"naif": body["naif_id"], "years": files, "radii": rot.get("RADII") or [SMALL_MOONS.get(name, 10)] * 3,
                         "pole_ra": rot.get("POLE_RA"), "pole_dec": rot.get("POLE_DEC"), "pm": rot.get("PM")}
 
     enc = [e for e in json.load(open(os.path.join(args.data, "encounters.json"))) if int(e["utc"][:4]) in years]
