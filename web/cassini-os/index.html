@@ -3223,7 +3223,7 @@ body.phone #launch .lx-clock { font-size: 9.5px; bottom: 9vh; }
     // body: a body window's own target; the two camera windows show the body in view in the body view, else every target
     const own = card.dataset.body || null, cam = card.dataset.cam, win = card.closest(".win") || card, well = card.querySelector(".well"), shot = card.querySelector(".shot"), chans = card.querySelector(".chans");
     const field = f => card.querySelector(`[data-f="${f}"]`) || { set textContent(v) {}, set innerHTML(v) {} };
-    let shownAt = 0, mosaicAt = 0;   // when the last picture and the last pass mosaic went up (behind)
+    let shownAt = 0, mosaicAt = 0, wantAt = 0;   // when the last picture and the last pass mosaic went up, and the picture wanted now was asked for (behind)
     let body = own || viewBody(), heldBody = null;   // heldBody: the body the picture up is of
     let want = null, shownKey = null, shown = null, next = [], lastK = -2, lastReady = null, stripKey = "", stripSet = null;
     // steady size: shapeOf is the target and observation whose pass mosaic gave the picture its shape, which it
@@ -4212,7 +4212,7 @@ body.phone #launch .lx-clock { font-size: 9.5px; bottom: 9vh; }
       chans.classList.toggle("held", !!held);
       if (k === lastK && ready === lastReady && !force) return;
       lastK = k; lastReady = ready;
-      want = view(k, state.et);
+      want = view(k, state.et); wantAt = performance.now();
       if (!want.movie) filmstrip(k);   // a movie frame moves the filmstrip when it is on screen (display)
       // a possible mosaic tile: the frame before is of the same body and observation, and a frame of a colour
       // set only once its composite is shown (the mosaic is made of composites)
@@ -4278,8 +4278,11 @@ body.phone #launch .lx-clock { font-size: 9.5px; bottom: 9vh; }
     // picture or mosaic nothing new has come for in STUCK ms does not count, so a server that stops answering (or
     // a pass minutes from being made) never stops the clock
     update.behind = () => {
-      if (!want || hold || win.hidden || !win.isConnected || lastK < 0 || !shown || shown.cat !== catalog) return 0;
+      if (!want || hold || win.hidden || !win.isConnected || lastK < 0) return 0;
       const pos = q => lastOfCam(cam, catalog.et[q], body), now = performance.now();
+      // nothing up yet (the window's first picture, or a month that just came in): the picture asked for counts as
+      // one behind until it is up, so movie mode waits for a mosaic movie's first whole lap instead of running past
+      if (!shown || shown.cat !== catalog) return now - wantAt < STUCK ? 1 : 0;
       let b = shownKey !== want.key && now - shownAt < STUCK ? pos(want.k) - pos(shown.k) : 0;
       if (obsShown && obsK >= 0 && catalog.obs[lastK] === obsShown && now - mosaicAt < STUCK) b = Math.max(b, pos(lastK) - pos(obsK));
       return Math.max(0, b);
