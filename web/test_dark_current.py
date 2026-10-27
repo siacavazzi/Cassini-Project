@@ -62,7 +62,11 @@ open(f"{root}/darkcurrent/WAC_hotpix2006.9_140219.tab", "w").write(open(f"{root}
 # the NAC's lists are left out by default (they over-predict its hot pixels), the WAC's are used
 assert dc.readout(INFO)[-1] == ""
 assert dc.readout({**INFO, "INSTRUMENT_ID": "ISSWA"})[-1] == "WAC_hotpix2006.9_140219.tab"
-dc.HOT_PIXEL_CAMERAS = ("ISSNA", "ISSWA")     # the rest checks the hot pixel model itself, on the NAC maps
+smooth = dc.dark_dn(INFO)
+assert smooth is not None and smooth.max() < 2 * np.median(smooth)    # the NAC's maps taken through a 3x3 median
+dc._parameters.cache_clear(); dc._dark.cache_clear()
+dc.HOT_PIXEL_CAMERAS = ("ISSNA", "ISSWA")     # the rest checks cisscal's own model, on the NAC maps as they are
+dc.SMOOTH_MAP_CAMERAS = ()
 r = dc.readout(INFO)
 assert r is not None and r[-1] == "NAC_hotpix2006.9_140219.tab"                   # the nearest epoch
 assert dc.readout({**INFO, "IMAGE_TIME": "2013-300T00:00:00"})[-1] == "NAC_hotpix2014.3_171204.tab"

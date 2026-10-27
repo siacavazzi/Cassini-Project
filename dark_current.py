@@ -22,8 +22,12 @@ readout order (which camera is read first) is not in the PDS label, so the label
 one, else 0 (the NAC first, the usual order); and the NAC's hot pixel lists are left out (HOT_PIXEL_CAMERAS). Their
 curves, put in exactly as cisscal does, are 3 to 6 times the hot pixels' real excess on raw NAC frames (median 0.17 to
 0.29 of the model over 2006-2014 frames, smaller still on the brightest), so taking them out dug dark holes where the
-hot pixels were (pixels under -5 sigma: 478 to 1177 on N1778453158); the WAC's lists match (about 0.99) and stay. Maps from CASSINI_CISSCAL (flat_field.ROOT), downloaded by
-"helper programs/fetch_cisscal.py".
+hot pixels were (pixels under -5 sigma: 478 to 1177 on N1778453158); the WAC's lists match (about 0.99) and stay.
+The NAC's parameter maps carry hot spots of their own that over-predict the same way (up to 1961 DN on a 180 s frame,
+still 478 to 826 holes there), so its maps are taken through a 3x3 median first (SMOOTH_MAP_CAMERAS): the NAC gets
+its smooth dark (the ramp down the frame) and its hot pixels stay in the picture as they were before this step.
+
+Maps from CASSINI_CISSCAL (flat_field.ROOT), downloaded by "helper programs/fetch_cisscal.py".
 """
 import functools
 import glob
@@ -38,6 +42,8 @@ import flat_field as ff
 
 # the cameras whose hot pixel lists are used (the NAC's over-predict its hot pixels; see above)
 HOT_PIXEL_CAMERAS = ("ISSWA",)
+# the cameras whose dark parameter maps are put through a 3x3 median (the NAC's hot spots over-predict too)
+SMOOTH_MAP_CAMERAS = ("ISSNA",)
 TGRID = np.array([0.0, 10.0, 32.0, 100.0, 220.0, 320.0, 460.0, 1200.0])
 # DarkCurrent::ComputeDarkDN: gain constants (e-/DN at gain state 2, ratios by GAIN_MODE_ID) and the saturation points
 GAIN2 = {"ISSNA": 30.27, "ISSWA": 27.68}
@@ -273,6 +279,8 @@ def _parameters(camera, lines, hot):
         ff._warn(f"{os.path.basename(path)} missing, no dark current")
         return None
     p = np.nan_to_num(ff.read_cube(path).astype(np.float64))
+    if camera in SMOOTH_MAP_CAMERAS:
+        p = np.stack([cv2.medianBlur(band.astype(np.float32), 3) for band in p]).astype(np.float64)
     if hot:
         for y, x, curve in _hot_pixels(os.path.join(ff.ROOT, "darkcurrent", hot), lines):
             p[:, y, x] = curve
