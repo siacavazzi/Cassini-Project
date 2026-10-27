@@ -165,7 +165,13 @@ def keys(name, who, write, hours):
 # ---------- the driver (where the AWS key is) ----------
 
 def check(args):
-    me = client("sts").get_caller_identity()
+    from botocore.exceptions import ClientError, NoCredentialsError
+    try:
+        me = client("sts").get_caller_identity()
+    except (ClientError, NoCredentialsError) as e:
+        code = e.response["Error"]["Code"] if isinstance(e, ClientError) else type(e).__name__
+        sys.exit(f"AWS refused the key ({code}): the cassini-rebuild user's AWS_ACCESS_KEY_ID and "
+                 "AWS_SECRET_ACCESS_KEY are not set here, or not valid")
     print(f"AWS account {me['Account']} as {me['Arn']}")
     name, region = bucket()
     print(f"bucket: {name or 'none yet (setup makes it)'}")
