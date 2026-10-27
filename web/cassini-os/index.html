@@ -4063,6 +4063,9 @@ body.ambient.phone .amb-where { font-size: 18px; }
     // after 4 s while the server works out the pass (seconds), and the mosaic comes back in the pass lane
     // after anything took it down.
     let mosaicUrl = null, obsShown = null, obsTiles = 0, obsK = -1, obsSize = 0, obsRep = null;
+    // the frame the server has no mosaic for (404 at /frames/mosaic: a frame of the pass that is no tile, a movie's,
+    // or a pass with nothing placed yet): with the clock at it, the mosaic up is as far as it goes (update.behind)
+    let noMosaic = "";
     const mosaicPasses = new Set();   // passes (passOf) the server said is a mosaic pass
     const moviePasses = new Set();    // passes the server said is a movie or a stare: never a mosaic, never asked
     const lapPasses = new Set();
@@ -4269,7 +4272,7 @@ body.ambient.phone .amb-where { font-size: 18px; }
         setTimeout(patience, 8000);
       }
       fetch(`${FRAMES}/frames/mosaic/${id}.webp?size=${sz}${mode === "mosaic" || mode === "mosaic_movie" ? "&force=1" : ""}${window.cassiniLook()}`, { signal: ctl.signal }).then(async r => {
-        if (!r.ok) return;
+        if (!r.ok) { if (r.status === 404) noMosaic = wid; return; }
         const rep = JSON.parse(r.headers.get("X-Reel") || "null");
         // the frame in the catalog loaded now (another catalog object once the months around have loaded; a
         // pass's mosaic still goes up, found by its frame id)
@@ -4980,7 +4983,9 @@ body.ambient.phone .amb-where { font-size: 18px; }
       // a whole lap of a mosaic movie (Whole mosaics) may take the server a while to make cold: waited for longer
       const stuck = want.rolling && wholeLaps() ? WHOLE_STUCK : STUCK;
       let b = shownKey !== want.key && now - shownAt < stuck ? pos(want.k) - pos(shown.k) : 0;
-      if (obsShown && obsK >= 0 && catalog.obs[lastK] === obsShown && now - mosaicAt < STUCK) b = Math.max(b, pos(lastK) - pos(obsK));
+      // (not when the server has no mosaic for the frame the clock is at: no tile is coming for it, and movie mode
+      // held STUCK ms on one, 2026-10-27)
+      if (obsShown && obsK >= 0 && catalog.obs[lastK] === obsShown && now - mosaicAt < STUCK && catalog.id[lastK] !== noMosaic) b = Math.max(b, pos(lastK) - pos(obsK));
       return Math.max(0, b);
     };
     allFeeds.add(update);
@@ -6930,17 +6935,22 @@ body.ambient.phone .amb-where { font-size: 18px; }
   function hide() { bar.hidden = true; untuck(); stopPoll(); clearTimeout(grow); P.playBack = false; titled(null); P.job = null; P.span = null; P.a = P.b = null; P.playing = false; progress(null); say(""); }
   document.addEventListener("cassini:marks", e => marked(e.detail.a, e.detail.b));
 
-  // ---- making it ahead: the frame server's job, followed every second ----
+  // ---- making it ahead: the frame server's job, followed every second (more often as it starts) ----
+  // The server answers once the stretch is made when that is quick (every picture in the cache: a tenth of a second),
+  // or after a moment with how far it is; the page then looks again after 0.1, 0.2, 0.4 and 0.8 s and every second
+  // from there, so a stretch made in a moment says Ready in that moment, not after a second of "Starting…"
   async function prep() {
     const key = params(), old = P.job && /^(queued|planning|making|waiting|finishing)$/.test(P.job.state) ? P.job.id : null;
     // a stretch grown while it is being made: the old job gives way to the whole stretch's (its pictures are made)
     if (old) fetch(`${FRAMES}/prebuild/${old}/stop`, { method: "POST" }).catch(() => {});
-    P.key = optKey(); P.span = [P.a, P.b]; say("Asking the frame server…"); progress(P.job && P.job.total ? P.job.done / P.job.total : 0);
+    // (the old job is no longer followed while the server answers, so its last word never shows over the new one's)
+    stopPoll();
+    P.key = optKey(); P.span = [P.a, P.b]; P.looks = 0; P.pressed = true; say("Asking the frame server…"); progress(P.job && P.job.total ? P.job.done / P.job.total : 0);
     try {
       const r = await fetch(`${FRAMES}/prebuild?${key}`, { method: "POST" }), j = await r.json();
-      if (!r.ok) { P.job = null; progress(null); say(j.error || "The frame server cannot pre-process that.", true); buttons(); return; }
+      if (!r.ok) { P.job = null; P.pressed = false; progress(null); say(j.error || "The frame server cannot pre-process that.", true); buttons(); return; }
       follow(j);
-    } catch (err) { P.job = null; progress(null); say(`No frame server at ${FRAMES} that pre-processes.`, true); buttons(); }
+    } catch (err) { P.job = null; P.pressed = false; progress(null); say(`No frame server at ${FRAMES} that pre-processes.`, true); buttons(); }
   }
   function stopPoll() { clearTimeout(P.poll); P.poll = 0; }
   // The stretch is made on the frame server, so it carries on while the page is in the background (the tab hidden,
@@ -6953,13 +6963,14 @@ body.ambient.phone .amb-where { font-size: 18px; }
   }
   function follow(j) {
     stopPoll();
-    const was = P.job && P.job.state;
-    P.job = j; buttons(); redraw(); titled(j);
+    // pressed: the first answer since Pre-process, which is the stretch made when it was quick enough to wait for
+    const was = P.job && P.job.state, pressed = P.pressed;
+    P.job = j; P.pressed = false; buttons(); redraw(); titled(j);
     const frac = j.total ? j.done / j.total : 0;
     if (j.state === "done") {
       progress(1);
-      say(`Ready: ${j.total.toLocaleString()} pictures made ahead${j.took ? ` in ${fmtDur(j.took)}` : ""}${j.errors ? ` (${j.errors} could not be made)` : ""}`);
-      if (was && was !== "done" && opt("segment.autoplay", true)) { if (window.cassiniAway && cassiniAway.on) P.playBack = true; else play(); }
+      say(`Ready: ${j.total.toLocaleString()} pictures made ahead${j.took ? ` in ${j.took < 1 ? "under a second" : fmtDur(j.took)}` : ""}${j.errors ? ` (${j.errors} could not be made)` : ""}`);
+      if ((pressed || (was && was !== "done")) && opt("segment.autoplay", true)) { if (window.cassiniAway && cassiniAway.on) P.playBack = true; else play(); }
       return;
     }
     if (j.state === "failed") { progress(null); say(j.error || "Pre-processing failed; see the frame server's log.", true); return; }
@@ -6974,7 +6985,7 @@ body.ambient.phone .amb-where { font-size: 18px; }
       if (!P.job || P.job.id !== j.id) return;   // another job took over (the stretch grew)
       try { const r = await fetch(`${FRAMES}/prebuild/${j.id}.json`, { cache: "no-store" }); const n = r.ok ? await r.json() : j; if (P.job && P.job.id === j.id) follow(n); }
       catch (err) { if (P.job && P.job.id === j.id) follow(j); }
-    }, 1000);
+    }, P.looks < 4 ? 100 << P.looks++ : 1000);
   }
   async function stop() {
     if (!P.job) return;
@@ -9835,7 +9846,7 @@ void main() {
   window.cassiniAbout = { open, addTab, esc, close: () => show(false), credits: CREDITS };
 
   // ---- which version this is: this page's build id (build.py writes it), and what the frame server says it serves ----
-  const BUILD = /*BUILD*/"7faa99f741c7";
+  const BUILD = /*BUILD*/"436843b67516";
   const FRAMES = (() => {                       // the frame server, chosen as the camera window chooses it
     const q = new URLSearchParams(location.search).get("frames");
     if (q) return q.replace(/\/$/, "");
