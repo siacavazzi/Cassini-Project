@@ -208,9 +208,16 @@ def sample_stacks(interval=0.005, top=6):
             if ident == me:
                 continue
             stack, f = [], frame
-            while f is not None:
-                stack.append(f"{os.path.basename(f.f_code.co_filename)}:{f.f_code.co_name}:{f.f_lineno}")
-                f = f.f_back
+            try:
+                while f is not None:
+                    stack.append(f"{os.path.basename(f.f_code.co_filename)}:{f.f_code.co_name}:{f.f_lineno}")
+                    f = f.f_back
+            except AttributeError:
+                # another thread's stack read while it changes (seen on the Mini: a function where its caller's
+                # frame was): the stack as far as it was read, so the sampler carries on
+                pass
+            if not stack:
+                continue
             # the innermost frames, and the thread's own function (what started it)
             seen.append(" < ".join(stack[:top]) + ("" if len(stack) <= top else f" ... {stack[-1]}"))
         with _samples_lock:
