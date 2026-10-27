@@ -72,7 +72,7 @@ lens holds the magnification, size, delay, shape and position (`src/loupe.html`;
 Along the bottom of the screen, as on the Mac (`src/dock.html`): Cassini and each body on stage now (the same list as
 the main window's body picker; a click on a body opens its body view, below, flies the view there and brings that
 body's windows forward; a blue dot marks the body in view, a grey dot one with windows open, a ring the body whose view
-is open), then every planet Cassini photographed that is not on stage, then Moments, Highlights and Settings (a click opens the window,
+is open), then every planet Cassini photographed that is not on stage, then Moments, Highlights, Gallery and Settings (a click opens the window,
 brings it forward, or tucks it away). A minimized window shrinks into the dock as a tile showing its last picture,
 including the main window, and a click brings it back. Settings > Interface: Dock on or off (off brings back the
 menu-bar tray), Dock position (bottom, left, right), icon size and magnification. On a phone the dock is a strip under
@@ -123,6 +123,40 @@ second; `play=0` opens paused and `movie=1` in movie mode. Other parameters (`?f
 The page rewrites the URL with `history.replaceState` at most twice a second, so the back button is unaffected, and
 a link's view is for that visit only (it does not change the Follow camera setting). Go > Copy Link to This Moment
 (⇧⌘C) copies it.
+
+## Gallery
+
+The viewer's own library of saved pictures and films (`src/gallery.html`, Gallery in the dock or Go > Gallery…). The ＋ in
+a picture window's title bar (or G) adds the picture on screen, full view has Add to Gallery beside its save button, and a
+finished movie export has Add to Gallery beside Download. Everything stays on this device, in the browser's IndexedDB
+(database `cassini-gallery`); no server keeps anything. Each item is its recipe (the moment, as share-link parameters
+`t`, `view`, `cam`, `play=0`, plus the `/frames/...` address or the export options that make it through the pipeline)
+and, unless Settings > Gallery > Keep a copy of each file is off, the file itself (full-resolution JPEG, or the MP4).
+An item without its file (the browser cleared storage, or the setting is off) is made again by the server when opened.
+Export Library writes one `.zip` of the pictures (JPEG) and films (MP4); with Include metadata
+(Settings > Gallery > Export with metadata) it adds gallery.json and thumbs/, and Import reads that back.
+
+Open an item to see it large, go to its moment, download it, remove it (with Undo) or share it. A shared link carries
+the recipe, never the picture: `?t=…&view=…&play=0&pic=/frames/color.webp?ids=…` (or `film=from=…&until=…`) opens the
+moment and shows the picture over it, made by the frame server. Share also offers the device's share sheet with the
+file itself (phones), Copy picture, Reddit, X, Bluesky, Facebook, a text message and email. Link previews on social sites
+need the frame server reachable from the internet.
+
+
+## Cassini Studio
+
+Editing saved pictures and films (`src/studio.html`): Edit on a gallery item, E for the picture in front, Studio in the
+dock, or Go > Cassini Studio…. It works on the finished picture the pipeline made (or the export's film), like a photo
+app: Adjust (exposure, contrast, black and white levels, midtones, saturation, warmth and tint for color balance,
+sharpness, Auto levels, a histogram), Crop (Free, Original, Square, 4:5, 3:2, 16:9, 9:16; turn left/right, flip,
+straighten), Filters (Vivid, Mono, Noir, Warm, Cool, Sepia, at a strength), and for a film its start and end. One WebGL
+pass draws the edit for the preview, the saved JPEG and every frame of a film (recorded in the browser at its own
+speed: MP4 where the browser records MP4, WebM in Firefox). Compare (hold, or \) shows the original; undo and redo.
+Save to Gallery keeps the original and adds the edit beside it with its recipe (`edit`, a short string such as
+`ct:30,sa:60,cr:0_0_0.7_0.7`) and the original's id, so editing it again starts from the original with every slider
+where it was; Share… is the gallery's share menu, and a shared link to an edited picture carries `&edit=` so the page
+that opens it applies the same edit to the picture the frame server makes. Settings > Studio: picture quality, film
+quality (Mbit/s) and largest film size.
 
 ## Phone layout
 
