@@ -158,6 +158,28 @@ where it was; Share… is the gallery's share menu, and a shared link to an edit
 that opens it applies the same edit to the picture the frame server makes. Settings > Studio: picture quality, film
 quality (Mbit/s) and largest film size.
 
+## Movie Editor
+
+Choosing which frames go into a movie, and how they all look (`src/movieedit.html`), the way Cassini movies used to
+be made by hand: every frame out, the bad ones thrown away, the rest put together. **Edit…** on a highlighted
+stretch's row, **Edit frames…** in Export Movie, or Go > Movie Editor…. The window lists every raw frame of the
+stretch as a filmstrip (the export's own plan, `/export/plan.json`), with the frame in front big above it, as in the
+movie (its mosaic, color picture, movie pass or processed frame) or as the raw frame; double-click it to fill the
+window. Click a frame and press Delete to take it out (shift-click for a run, Delete again puts it back); Cameras,
+Targets and Filters chips leave out whole groups (click to leave one out, double-click to keep only it, so "only the
+Jupiter frames" is one double-click). **Pictures** picks what each frame shows: As in the movie (the camera windows'
+mosaics, color pictures and movie passes), Full color only (each three-filter set once, as its color picture), Every
+frame processed (every filter on its own, stacked and calibrated, never put together) or Every frame raw (as Cassini
+took it). The list holds every frame of the stretch however long it is; a film holds up to 20,000 pictures
+(`CASSINI_EXPORT_MAX`). Left-out frames stay in the strip, dimmed. Taking a frame out never changes how
+the others are made (a mosaic keeps all its tiles, a composite all its channels); its picture is only not shown.
+**Edit the look in Studio…** opens the frame in front in Cassini Studio (Adjust and Filters); **Use for the movie**
+makes that the look of every frame: the preview, **Play** (the kept frames at the movie frame rate), **Download
+frame** (one frame at full size with the look, JPEG) and the saved movie, which the frame server draws the same way
+(`web/frames/studio_look.py`). The edit is kept on this device per stretch, **Copy link** shares it (`&cut=`, the
+stretch, cameras, frames taken out, targets and filters kept, and the look), and **Save movie…** opens Export Movie
+on the edited film (the export takes `drop=`, `targets=`, `filters=` and `edit=`).
+
 ## Phone layout
 
 On a screen under 600 px wide, or a touch screen under 500 px tall (Settings > Interface > Phone layout: Automatic,
