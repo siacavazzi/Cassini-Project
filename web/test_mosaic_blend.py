@@ -118,6 +118,34 @@ edge = (on[..., 3] > 60) & ~solid
 assert on[..., 0][edge].min() >= 200, np.sort(on[..., 0][edge])[:10]
 print("tiles' dark, specked edges never drawn; ok")
 
+# what is dark in the picture itself near a tile's edge is not its rim (mosaic._rim): the sky beside a bright ring
+# that crosses the edge, straight or slanted (Saturn's rings, 2013, were left out in wedges); a rim of a pixel of
+# black and four at half brightness all along the edge is found
+mosaic.feather_px = 128
+yy, xx = np.mgrid[0:1024, 0:1024]
+for slant in (0, 0.5, 2.0):
+    f = np.zeros((1100, 1100, 4), np.uint8)
+    picture = np.full((1024, 1024), 12, np.uint8)
+    picture[(xx >= 400 + yy * slant) & (xx < 560 + yy * slant)] = 200
+    f[40:1064, 40:1064, :3] = picture[..., None]
+    f[40:1064, 40:1064, 3] = mask
+    dist = mosaic._inside((f[..., 3] > 0).astype(np.uint8), np.zeros(f.shape[:2], bool))
+    rim = mosaic._rim(mosaic._colors(f), dist > 0, dist)
+    assert rim is None or (rim & (dist > 1.5)).sum() < 20, (slant, (rim & (dist > 1.5)).sum())
+good = (f[..., 3] >= 40).astype(np.uint8)
+d = cv2.distanceTransform(np.pad(good, 1), cv2.DIST_L2, 5)[1:-1, 1:-1]
+f[..., :3] = 150
+f[(d > 0) & (d <= 1), :3] = 0
+f[(d > 1) & (d <= 5), :3] = 75
+dist = mosaic._inside((f[..., 3] > 0).astype(np.uint8), np.zeros(f.shape[:2], bool))
+rim = mosaic._rim(mosaic._colors(f), dist > 0, dist)
+assert rim is not None and rim[(good > 0) & (d <= 5)].all(), rim[(good > 0) & (d <= 5)].mean()
+# and drawn where nothing is below it, the rim has the colour of the picture next to it, not its own dark one (a
+# tile drawn over it later would show a faint line of it in its bands of detail)
+on = draw([f])
+assert on[..., 0][on[..., 3] > 0].min() >= 145, on[..., 0][on[..., 3] > 0].min()
+print("a ring's dark sky at a tile's edge is picture, a dark rim is not, and is never drawn dark; ok")
+
 # where tiles do not quite meet (two tiles 36 px apart under a third that spans both), the gap between them keeps a
 # soft edge, as the mosaic's outer edge does
 frames = []

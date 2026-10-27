@@ -155,7 +155,7 @@ def main():
                 if f == om.LUM or j <= om.GROW_FROM or j >= len(mine):
                     print("  (not grown at this tile: no redraw)")
                     continue
-                for label, off in seam_bench.SETTINGS[:2]:
+                for label, off in seam_bench.SETTINGS:
                     with calibration.stepping(off):
                         before = om._filter_path(u, f, j, rect, args.cache)
                         after = om._filter_path(u, f, j + 1, rect, args.cache)
@@ -178,11 +178,17 @@ def main():
                             caught["area"] = rest[3] if len(rest) > 3 else kw.get("area")
                             caught["ramps"] = [None if i is None or len(i) < 6 else i[4] for i in infos]
                             return blended(out, infos, *rest, **kw)
-                        mosaic._seam_cut, mosaic._blended = seam_cut, bl
+                        composite = mosaic.composite
+
+                        def co(frames_, gains_, *rest, **kw):
+                            caught["gain"] = np.asarray(gains_)[-1]
+                            return composite(frames_, gains_, *rest, **kw)
+                        mosaic._seam_cut, mosaic._blended, mosaic.composite = seam_cut, bl, co
+                        kept = []
                         try:
-                            om._over(u, p, rgba, t, rect, args.cache)
+                            om._over(u, p, rgba, t, rect, args.cache, kept=kept)
                         finally:
-                            mosaic._seam_cut, mosaic._blended = cut, blended
+                            mosaic._seam_cut, mosaic._blended, mosaic.composite = cut, blended, composite
                         x0r = max(left - (feather + 1), 0)
                         y0r = max(top - (feather + 1), 0)
                         print(f"  [{label}] tile #{j} drawn again over the picture so far:")
@@ -192,6 +198,19 @@ def main():
                         row("so far alpha", under[lyc, lxc, 3])
                         row("drawn", rgba[lyc, lxc, :3].astype(np.float32).mean(axis=1))
                         row("drawn alpha", rgba[lyc, lxc, 3])
+                        if "gain" in caught:
+                            print(f"   (the tile's gain, matched to the picture so far: {np.round(caught['gain'], 3)})")
+                        lv = kept[0]["field"] if kept and kept[0] else None
+                        if lv is not None:
+                            grid, c, gy, gx = lv
+                            whole = mosaic._field(lv, (gy, gy + grid.shape[0] * c, gx, gx + grid.shape[1] * c))[..., 0]
+                            fy = np.clip(lyc - gy, 0, whole.shape[0] - 1)
+                            fx = np.clip(lxc - gx, 0, whole.shape[1] - 1)
+                            row("level field", whole[fy, fx], "{:5.2f}")
+                            g = np.exp(grid[..., 0])
+                            print(f"   (its leveling over the tile: mean x{g.mean():.3f}, from x{g.min():.3f} to x{g.max():.3f})")
+                        elif label == "blend + level":
+                            print("   (no leveling for this tile)")
                         if os.path.exists(after):
                             nxt = np.asarray(Image.open(after).convert("RGBA"))
                             row("cached next", nxt[lyc, lxc, :3].astype(np.float32).mean(axis=1))
@@ -207,8 +226,9 @@ def main():
                                 row("ramp", caught["ramps"][1][by_, bx_], "{:5.2f}")
                             row("weight a", caught["a"][by_, bx_], "{:5.2f}")
                             row("seam", caught["seam"][by_, bx_], "{:5.1f}")
-                            row("tile toned", caught["color"][by_, bx_].mean(axis=1))
-                            row("under", caught["under"][by_, bx_].mean(axis=1))
+                            lum = lambda v: v if v.ndim == 1 else v.mean(axis=1)
+                            row("tile toned", lum(caught["color"][by_, bx_]))
+                            row("under", lum(caught["under"][by_, bx_]))
                             print(f"   (box {b}, area {area}, region at {x0r},{y0r})")
                         elif label != "before":
                             print("   (the tile met nothing below it: drawn with its weight alone)")

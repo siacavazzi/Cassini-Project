@@ -426,23 +426,29 @@ def _blend_parts(frame, drawn=False):
         ramp = (dist - max(2.0, feather_px * TRUST_DEPTH)) * (1.0 / feather_px)
         return (color, (alpha > 0).astype(np.float32), np.clip(ramp, 0, 1).astype(np.float32), _edge_width(alpha, dist),
                 _support(alpha, dist))
-    off = (alpha > 0) & (alpha < PICTURE_AT)
-    if off.any() and (alpha >= PICTURE_AT).any():
-        # each such pixel's nearest that is the frame's (the labels number those in raster order)
-        _, nearest = cv2.distanceTransformWithLabels((alpha < PICTURE_AT).astype(np.uint8), cv2.DIST_L2, 5,
-                                                     labelType=cv2.DIST_LABEL_PIXEL)
-        good = np.flatnonzero(alpha.ravel() >= PICTURE_AT)
-        flat = color.reshape(-1, color.shape[2])
-        flat[np.flatnonzero(off.ravel())] = flat[good[nearest[off] - 1]]
+    _nearest(color, (alpha > 0) & (alpha < PICTURE_AT), alpha >= PICTURE_AT)
     on = alpha >= EDGE_AT
     dist = _inside((alpha > 0).astype(np.uint8), on)
     has = dist > RIM
     # the weight ramps in from the edge of what is the frame's own picture (not its rim, _rim), so a frame's dark rim
-    # never goes into what is below it
+    # never goes into what is below it; and where nothing is below, the rim has the colour of the picture next to it
+    # (drawn dark there, a tile drawn over it later left a faint line of it in its bands of detail)
     rim = _rim(color, has, dist)
     inside = dist - (RIM + 1) if rim is None else _inside((has & ~rim).astype(np.uint8), on)
+    if rim is not None:
+        _nearest(color, rim, has & ~rim)
     return (color, has.astype(np.float32), np.clip((inside - TRUST_INSET) * (1.0 / feather_px), 0, 1).astype(np.float32),
             _edge_width(alpha, dist), _support(alpha, dist))
+
+
+def _nearest(color, off, good):
+    """color (h, w, bands) where off with the colour of the nearest pixel where good, in place (the labels of
+    cv2.distanceTransformWithLabels number the good pixels in raster order)."""
+    if not off.any() or not good.any():
+        return
+    _, nearest = cv2.distanceTransformWithLabels((~good).astype(np.uint8), cv2.DIST_L2, 5, labelType=cv2.DIST_LABEL_PIXEL)
+    flat = color.reshape(-1, color.shape[2])
+    flat[np.flatnonzero(off.ravel())] = flat[np.flatnonzero(good.ravel())[nearest[off] - 1]]
 
 
 def _support(alpha, dist):
@@ -472,8 +478,11 @@ pyramids carry it farther in. So a pixel within TRUST_DEPTH of feather_px of the
 bright as the frame just inside it (where that is brighter than TRUST_LIT, not the sky), and that reaches the edge
 through such pixels (a rim, not a dark crater just inside the edge), is not the frame's: the frame is drawn there
 only where nothing is below it, as it is, and its weight starts TRUST_INSET pixels inside the rest. The frame just
-inside: its mean round each pixel past TRUST_DEPTH, worked out at a quarter of the size. The frame's outermost
-pixel is its rim anyway. None for a frame without one.
+inside: the darkest of its means (cells a quarter of TRUST_DEPTH across, past TRUST_DEPTH) within twice TRUST_DEPTH
+of the pixel, so what is dark in the picture itself, the sky beside a ring's bright edge or a limb, is not taken for
+a rim: there the frame is dark just inside too (a mean round each pixel did: the sky beside Saturn's rings, 2013,
+was left out in wedges, and other tiles showed through). The frame's outermost pixel is its rim anyway. None for a
+frame without one.
 """
 TRUST_DEPTH = 1 / 4
 TRUST_DARK = 0.9
@@ -493,11 +502,14 @@ def _rim(color, has, dist):
     # (in whole quarters: a frame's box starts on a multiple of 8 of its pixels, prepare)
     fit = lambda v: np.pad(v, ((0, -h % q), (0, -w % q)))
     small = (-(-w // q), -(-h // q))
-    sigma = max(1.0, depth / q / 2)
-    wd = cv2.GaussianBlur(cv2.resize(fit(deep.astype(np.float32)), small, interpolation=cv2.INTER_AREA), (0, 0), sigma)
-    wl = cv2.GaussianBlur(cv2.resize(fit(lum * deep), small, interpolation=cv2.INTER_AREA), (0, 0), sigma)
-    ref = cv2.resize(wl / np.maximum(wd, 1e-3), (small[0] * q, small[1] * q), interpolation=cv2.INTER_LINEAR)[:h, :w]
-    bad = band & (lum < ref * TRUST_DARK) & (ref > TRUST_LIT)
+    wd = cv2.resize(fit(deep.astype(np.float32)), small, interpolation=cv2.INTER_AREA)
+    wl = cv2.resize(fit(lum * deep), small, interpolation=cv2.INTER_AREA)
+    # (a cell counts when it is mostly past TRUST_DEPTH)
+    mean = np.where(wd > 0.5, wl / np.maximum(wd, 1e-3), np.float32(255))
+    r = int(math.ceil(2 * depth / q))
+    ref = cv2.erode(mean, np.ones((2 * r + 1, 2 * r + 1), np.uint8), borderType=cv2.BORDER_CONSTANT, borderValue=255)
+    ref = cv2.resize(ref, (small[0] * q, small[1] * q), interpolation=cv2.INTER_LINEAR)[:h, :w]
+    bad = band & (lum < ref * TRUST_DARK) & (ref > TRUST_LIT) & (ref < 255)
     if not bad.any():
         return None
     # what reaches the frame's edge through such pixels
@@ -768,8 +780,8 @@ rim a pixel of pointing is a big ratio that says nothing about the light); withi
 be its neighbours' (so the gain changes smoothly, never in a step); and every gain is held to 1 so that a seam's
 correction fades over LEVEL_REACH into the frame (a screened membrane), which keeps each frame at its own level away
 from its seams and the mosaic at its overall level. Least squares over all of it, each colour band on its own. pin =
-a frame whose gain stays 1 (the mosaic a tile is grown over: what is drawn stays as drawn, and the new tile is
-leveled to it along its edge, at its own level inside).
+a frame whose gain stays 1 (the mosaic a tile is grown over: what is drawn stays as drawn, and the new tile, its
+gain matched to it, is leveled to it along its edge).
 """
 LEVEL_CELL = 1 / 4    # of feather_px: the cells the gain is worked out in
 LEVEL_MAX = 1.5       # the most a frame is brightened or darkened anywhere (and 1 / LEVEL_MAX)

@@ -1335,15 +1335,10 @@ def draw_over(rgba, part, left, top, sw, sh, k, match=True, kept=None):
         frame[b0 - y0:b1 - y0, a0 - x0:a1 - x0] = part[b0 - top:b1 - top, a0 - left:a1 - left]
         below = np.ascontiguousarray(rgba[y0:y1, x0:x1])
         same = (np.ones((2, 3)), np.zeros((2, 3)))
-        if not match:
-            kw = {"corrections": same, "level": False}
-        elif mosaic.leveling():
-            # leveled to the picture so far along its seams (mosaic._levels, pinned to it), on the pass's one scale
-            # away from them: a gain matched to the picture so far would carry each tile's error on to the next, and
-            # over a long pass the mosaic's brightness would wander
-            kw = {"corrections": same, "pin": 0}
-        else:
-            kw = {"pin": 0}
+        # matched to the picture so far (pin 0), and with the level step leveled to it along its seams as well
+        # (mosaic._levels, pinned to it): leveled alone (gains of 1, each tile on the pass's one scale away from its
+        # seams), Saturn's 725 tile mosaic movie of 2013 drawn whole came out 12% darker at the bottom than matched
+        kw = {"corrections": same, "level": False} if not match else {"pin": 0}
         decided = [] if kept is not None else None
         rgba[y0:y1, x0:x1] = _compose([(below, None, None, None), (frame, None, None, None)], k, under=0, kept=decided, **kw)
         if kept is not None:

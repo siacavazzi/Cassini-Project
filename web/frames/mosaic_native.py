@@ -180,8 +180,7 @@ def corrections(u, made, cache):
     against the mosaic of the tiles before it, as _over cuts it. The luminance base (obs_mosaic.LUM, its tiles with
     their gains, _mine / _shade) is one more filter; "_grey" is over_grey's match of it to the colour, measured on the
     window's whole canvas (grey_gain), so every block lays the gray under the colour alike. With the blend step, each
-    tile's (gains, offsets, what the blend step decided for it on that canvas: _packed, or None); a tile grown over
-    the mosaic before it is then leveled to it, not matched (gains 1), as obs_mosaic.draw_over does. Kept beside the
+    tile's (gains, offsets, what the blend step decided for it on that canvas: _packed, or None). Kept beside the
     native pictures."""
     p, tiles, rect, count, used, name = made
     path = _seams_path(u, made, cache)
@@ -190,7 +189,7 @@ def corrections(u, made, cache):
         out = {}
         filters, colour, base, tag, ref = drawn(u, made)
         tagged = bool(tag)
-        blend, level = calibration.step("blend"), mosaic.leveling()
+        blend = calibration.step("blend")
         for f in filters:
             mine = om._mine(u, p, tiles, f)
             first = mine if tagged or len(mine) <= om.GROW_FROM else mine[:om.GROW_FROM]
@@ -210,15 +209,13 @@ def corrections(u, made, cache):
             elif len(first) < len(mine):
                 rgba = om.filter_mosaic(u, p, f, first, rect, cache).copy()
             for t in mine[len(first):]:
-                pair = None if level else _pair(u, p, rgba, t, rect, cache)
+                pair = _pair(u, p, rgba, t, rect, cache)
                 if pair is not None:
                     with reel._mosaic_lock:
                         mosaic.reset()
                         gains, offsets = mosaic.seams(pair, 0)
                         mosaic.reset()
                     got[t["n"]] = [list(map(float, gains[1])), list(map(float, offsets[1]))]
-                elif level:
-                    got[t["n"]] = [[1.0] * 3, [0.0] * 3]
                 kept = [] if blend else None
                 om._over(u, p, rgba, t, rect, cache, kept=kept)
                 if kept and t["n"] in got:
