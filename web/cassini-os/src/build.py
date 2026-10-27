@@ -313,10 +313,10 @@ rep("""  if (hudRenderer) { if (window.studyBeforeHud) window.studyBeforeHud(); 
   if (window.cassiniPerf) cassiniPerf.frame(now, draw);
 """)
 # the moons' painted look (noise, craters) is only worked out when there is no surface map to show instead
-rep("""        float m = fbm(nb * 5.0) - 0.5;
-        float craters = smoothstep(0.62, 0.7, vnoise(nb * 22.0)) * 0.12;
+rep("""        float m = 0.0, craters = 0.0;
+        if (kind < 3.5) { m = fbm(nb * 5.0) - 0.5; craters = smoothstep(0.62, 0.7, vnoise(nb * 22.0)) * 0.12; }
         vec3 alb = color * (1.0 + 0.32 * m - craters);""", """        float m = 0.0, craters = 0.0;
-        if (hasMap < 0.5) { m = fbm(nb * 5.0) - 0.5; craters = smoothstep(0.62, 0.7, vnoise(nb * 22.0)) * 0.12; }
+        if (hasMap < 0.5 && kind < 3.5) { m = fbm(nb * 5.0) - 0.5; craters = smoothstep(0.62, 0.7, vnoise(nb * 22.0)) * 0.12; }
         vec3 alb = color * (1.0 + 0.32 * m - craters);""")
 rep('t.anisotropy = renderer.capabilities.getMaxAnisotropy();', 't.anisotropy = Math.min(8, renderer.capabilities.getMaxAnisotropy());')
 # the Moments list greys out the moments already past: only touch the list when that count changes
