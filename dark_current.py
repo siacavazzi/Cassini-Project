@@ -19,7 +19,10 @@ parameter maps worked out once per map. A frame's dark is kept for the next fram
 
 Not as cisscal: a time past the last grid point (1200 s) is taken at the grid's end instead of failing; the
 readout order (which camera is read first) is not in the PDS label, so the label's READOUT_ORDER is used when it has
-one, else 0 (the NAC first, the usual order). Maps from CASSINI_CISSCAL (flat_field.ROOT), downloaded by
+one, else 0 (the NAC first, the usual order); and the NAC's hot pixel lists are left out (HOT_PIXEL_CAMERAS). Their
+curves, put in exactly as cisscal does, are 3 to 6 times the hot pixels' real excess on raw NAC frames (median 0.17 to
+0.29 of the model over 2006-2014 frames, smaller still on the brightest), so taking them out dug dark holes where the
+hot pixels were (pixels under -5 sigma: 478 to 1177 on N1778453158); the WAC's lists match (about 0.99) and stay. Maps from CASSINI_CISSCAL (flat_field.ROOT), downloaded by
 "helper programs/fetch_cisscal.py".
 """
 import functools
@@ -33,6 +36,8 @@ from scipy.interpolate import CubicSpline
 
 import flat_field as ff
 
+# the cameras whose hot pixel lists are used (the NAC's over-predict its hot pixels; see above)
+HOT_PIXEL_CAMERAS = ("ISSWA",)
 TGRID = np.array([0.0, 10.0, 32.0, 100.0, 220.0, 320.0, 460.0, 1200.0])
 # DarkCurrent::ComputeDarkDN: gain constants (e-/DN at gain state 2, ratios by GAIN_MODE_ID) and the saturation points
 GAIN2 = {"ISSNA": 30.27, "ISSWA": 27.68}
@@ -223,8 +228,11 @@ def _hot_lists(prefix):
 
 
 def hot_file(camera, year):
-    """The hot pixel list of the epoch nearest the frame's year (cisscal's FindDarkFiles), or ""."""
+    """The hot pixel list of the epoch nearest the frame's year (cisscal's FindDarkFiles), or "" (none, or a camera
+    whose lists are left out)."""
     best, name = 0.0, ""
+    if camera not in HOT_PIXEL_CAMERAS:
+        return name
     for epoch, base in _hot_lists("NAC" if camera == "ISSNA" else "WAC"):
         if abs(epoch - year) < abs(best - year):
             best, name = epoch, base

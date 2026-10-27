@@ -58,6 +58,11 @@ INFO = {"INSTRUMENT_ID": "ISSNA", "FILTER_NAME": '("CL1","CB3")', "GAIN_MODE_ID"
         "DELAYED_READOUT_FLAG": "NO", "FLIGHT_SOFTWARE_VERSION_ID": "1.4", "TARGET_NAME": "TITAN",
         "IMAGE_TIME": "2006-182T23:23:23.444Z", "IMAGE_NUMBER": "1530489265", "LINES": str(L), "LINE_SAMPLES": str(L)}
 
+open(f"{root}/darkcurrent/WAC_hotpix2006.9_140219.tab", "w").write(open(f"{root}/darkcurrent/NAC_hotpix2006.9_140219.tab").read())
+# the NAC's lists are left out by default (they over-predict its hot pixels), the WAC's are used
+assert dc.readout(INFO)[-1] == ""
+assert dc.readout({**INFO, "INSTRUMENT_ID": "ISSWA"})[-1] == "WAC_hotpix2006.9_140219.tab"
+dc.HOT_PIXEL_CAMERAS = ("ISSNA", "ISSWA")     # the rest checks the hot pixel model itself, on the NAC maps
 r = dc.readout(INFO)
 assert r is not None and r[-1] == "NAC_hotpix2006.9_140219.tab"                   # the nearest epoch
 assert dc.readout({**INFO, "IMAGE_TIME": "2013-300T00:00:00"})[-1] == "NAC_hotpix2014.3_171204.tab"
