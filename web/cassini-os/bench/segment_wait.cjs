@@ -11,6 +11,8 @@
 //   CHANNEL=chrome (the installed Google Chrome, the Mac Mini), WAIT=8000 ms after the page is up, HOLD=1500 ms
 //   between the highlight and the press, RUNS=3, SHIFT=60 s, MODE=drag|mark, PLAY=1 (the clock playing when it is
 //   pressed), MAXSECS=120 for each stretch, W=1440 H=900 DPR=2, PRE='js' run in the page before the first highlight
+//   (PRE='cassiniMovie.start(true)': movie mode playing), NET=ms,down,up the link as Chrome emulates it (NET=20,100,50
+//   a home Wi-Fi, NET=80,30,10 Tailscale away from home; play_rate.cjs)
 let chromium;
 try { ({ chromium } = require("playwright-core")); } catch (e) { ({ chromium } = require("playwright")); }
 const fs = require("fs");
@@ -29,6 +31,12 @@ const now = () => performance.now();
   const ctx = await br.newContext({ viewport: { width: W, height: H }, deviceScaleFactor: DPR });
   const page = await ctx.newPage();
   page.on("pageerror", e => console.log("PAGEERROR", e.message));
+  if (env.NET) {
+    const [ms, down, up] = env.NET.split(",").map(Number), cdp = await ctx.newCDPSession(page);
+    await cdp.send("Network.enable");
+    await cdp.send("Network.emulateNetworkConditions", { offline: false, latency: ms || 0,
+      downloadThroughput: down ? down * 125000 : -1, uploadThroughput: up ? up * 125000 : -1 });
+  }
   if (env.THREE_DIR) {
     await page.route("https://cdn.jsdelivr.net/npm/three@0.128.0/**", r =>
       r.fulfill({ path: `${env.THREE_DIR}/${r.request().url().split("three@0.128.0/")[1]}`, headers: { "Content-Type": "application/javascript" } }));
@@ -121,10 +129,16 @@ const now = () => performance.now();
     const r = { stretch: ends, job, post: got.post, asking: asking ? asking.for : null, first: first ? first.at : null, ready: ready ? ready.at : null,
       lines, outAtPress, sinceMark, postSamples, samplesAfter: await samples() };
     runs.push(r);
+    // the requests out at the press, by route (a picture, a pass's mosaic, a look-ahead note, ...) and how much longer each took
+    const route = e => e.u.replace(/\?.*/, "").replace(/[NW]\d{10}_\d+(_[NW]\d{10}_\d+)*/g, "ID").replace(/[0-9a-f]{16}/g, "JOB") + (/[?&]warm=1/.test(e.u) ? "?warm" : "");
+    const routes = {};
+    for (const e of outAtPress) { const k2 = `${e.m} ${route(e)}`; (routes[k2] = routes[k2] || []).push(e.left); }
+    r.outByRoute = routes;
     console.log(`run ${k + 1} ${ends[0]}..${ends[1]}: asking ${r.asking} ms (POST queued ${got.post ? got.post.queued : "?"} + server ${got.post ? got.post.server : "?"} ms, ${outAtPress.length} requests out at the press), ` +
       `first picture shown done ${r.first} ms, ready ${r.ready} ms; ${job ? `${job.state} ${job.done}/${job.total}, server took ${job.took != null ? job.took.toFixed(2) : "?"} s` : "no job"}\n` +
-      lines.map(l => `     ${String(l.at).padStart(8)} ms  ${String(l.for).padStart(8)} ms  ${l.says}`).join("\n"));
+      lines.map(l => `     ${String(l.at).padStart(8)} ms  ${String(l.for).padStart(8)} ms  ${l.says}`).join("\n") +
+      Object.entries(routes).map(([k2, v]) => `\n     out at the press: ${v.length} x ${k2}, done ${v.map(x => x == null ? "never" : `${x} ms`).join(", ")} after it`).join(""));
   }
-  fs.writeFileSync(`${out}.json`, JSON.stringify({ url, from: FROM, until: UNTIL, mode: MODE, hold: HOLD, wait: WAIT, play: !!env.PLAY, runs }, null, 1));
+  fs.writeFileSync(`${out}.json`, JSON.stringify({ url, from: FROM, until: UNTIL, mode: MODE, hold: HOLD, wait: WAIT, play: !!env.PLAY, net: env.NET || null, pre: env.PRE || null, runs }, null, 1));
   await br.close();
 })();
