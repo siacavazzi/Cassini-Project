@@ -77,8 +77,12 @@ Routes:
                                per flag in index.jsonl; answers {"name", "count"}
   POST /flags/<name>/undo      takes a flag back: its folder moves to undone/ and its index line goes
   /flags/                      every flag on one page, newest first, each with a link to its moment
-  /flags/index.json            the flags as a list, newest first ({"count", "flags"})
+  /flags/index.json            the flags as a list, newest first ({"count", "flags"}); both take ?version=<commit>
+                               to list only the flags made on that version
   /flags/<name>/<file>         a flag's files
+  /version.json                which version this is: the commit the site is checked out at (its date, the PR it
+                               merged), the commit the server itself runs, the page build in --site and every
+                               picture-maker version (obs-v*, color-v*, reel-v*...); each flag keeps a copy
   anything else                a file from --site, if given (the replay page and its data)
 
 <ID> is a frame id from the catalog, e.g. N1500060789_2. The camera page picks which frames
@@ -96,6 +100,7 @@ import io
 import os
 import re
 import shutil
+import subprocess
 import sys
 import threading
 import time
@@ -472,6 +477,84 @@ def jumplog(cache, n=50):
         return []
 
 
+# ---------- the version: which commit the site and the server are, so each flag says which build made its picture ----------
+REPO = os.path.dirname(os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
+PAGE_BUILD = re.compile(rb'/\*BUILD\*/"([0-9a-f]+)"')   # build.py writes the page's build id into index.html
+_version_lock = threading.Lock()
+_site_version = {}
+
+
+def git_version(folder):
+    """The commit checked out where folder is: short and full hash, commit date, subject, the PR it merged (from
+    "Merge pull request #N" or a squash's "(#N)"), the branch, and whether tracked files differ; None without git."""
+    def git(*args):
+        return subprocess.run(["git", "-C", folder, *args], capture_output=True, text=True, timeout=10, check=True).stdout
+    try:
+        full, short, date, subject = git("log", "-1", "--format=%H%n%h%n%cI%n%s").split("\n")[:4]
+        branch = git("rev-parse", "--abbrev-ref", "HEAD").strip()
+        changed = bool(git("status", "--porcelain", "--untracked-files=no").strip())
+    except (OSError, ValueError, subprocess.SubprocessError):
+        return None
+    pr = re.search(r"^Merge pull request #(\d+)|\(#(\d+)\)$", subject)
+    date = datetime.datetime.fromisoformat(date).astimezone(datetime.timezone.utc).isoformat(timespec="seconds").replace("+00:00", "Z")
+    return {"commit": short, "full": full, "date": date, "subject": subject, "pr": int(pr.group(1) or pr.group(2)) if pr else None,
+            "branch": branch, "changed": changed}
+
+
+def version_label(v):
+    """A version as people say it: 2026-10-27 · #137 · a1b2c3d (+ local changes)."""
+    if not v:
+        return "unknown"
+    return " · ".join(filter(None, [v["date"][:10], f"#{v['pr']}" if v.get("pr") else None, v["commit"]])) + (" + local changes" if v.get("changed") else "")
+
+
+def pipeline_versions():
+    """Every picture maker's version string, as named in the code (obs_mosaic.VERSION, frame_server.COLOR_VERSION...):
+    the same strings that name the cache folders, so a flag says which pipeline made its picture."""
+    out = {}
+    for name, mod in sorted(sys.modules.items()):
+        if not os.path.abspath(getattr(mod, "__file__", None) or "/").startswith(REPO + os.sep):
+            continue
+        name = "frame_server" if name == "__main__" else name
+        for key, value in vars(mod).items():
+            if not re.match(r"^[A-Z0-9_]*(VERSION|VERSIONS|SUFFIX)$", key):
+                continue
+            if isinstance(value, str) or (isinstance(value, dict) and all(isinstance(x, str) for x in value.values())):
+                out[f"{name}.{key}"] = value
+    return out
+
+
+SERVER_VERSION = git_version(REPO)   # the code this server runs: read once, as it starts
+
+
+def site_version(site):
+    """The version as it is now: the site is a checkout that git pull moves on without a restart, so its commit is read
+    again every 30 seconds; the page build is read from index.html when that file changes."""
+    folder = site or REPO
+    index = os.path.join(site, "index.html") if site else None
+    try:
+        mtime = os.stat(index).st_mtime_ns if index else None
+    except OSError:
+        mtime = None
+    with _version_lock:
+        got = _site_version.get(folder)
+        if got and time.monotonic() - got[0] < 30 and got[1] == mtime:
+            return got[2]
+    page = None
+    if mtime is not None:
+        with open(index, "rb") as fh:
+            m = PAGE_BUILD.search(fh.read())
+        page = m.group(1).decode() if m else None
+    site_v = git_version(folder)
+    v = {"version": version_label(site_v), "site": site_v, "page": page,
+         "server": SERVER_VERSION, "server_version": version_label(SERVER_VERSION),
+         "server_current": bool(site_v and SERVER_VERSION and site_v["full"] == SERVER_VERSION["full"]),
+         "pipeline": pipeline_versions()}
+    with _version_lock:
+        _site_version[folder] = (time.monotonic(), mtime, v)
+    return v
+
+
 # ---------- flagged pictures: pictures that look wrong, kept with what was shown so they can be looked into later ----------
 FLAG_NAME = re.compile(r"^[0-9]{8}-[0-9]{6}(-[0-9]+)?_[A-Za-z0-9_]+$")
 FLAG_FILE = re.compile(r"^(shown\.(png|webp|jpg)|flag\.json|raw/[NW][0-9]{10}_[0-9]+\.png)$")
@@ -484,8 +567,12 @@ index.jsonl   one line per flag, oldest first: the flag.json below plus "name" (
 <name>/raw/<ID>.png    the archive PNG of each frame in it, before any processing
 <name>/flag.json       when it was flagged, the mission time and a link to that moment, the window and how it was
                        showing the picture (frame, colour composite, mosaic; the server's X-Composite / X-Reel
-                       report), each frame's camera, filters, target and observation, the note and tags, and the
-                       viewer's settings
+                       report), each frame's camera, filters, target and observation, the note and tags, the
+                       viewer's settings, and "version": the site's commit (date, PR, hash; "version" is its
+                       label, e.g. 2026-10-27 · #137 · a1b2c3d), the server's own commit, the page build the
+                       viewer was running (page_current false: an older page, not reloaded since) and every
+                       picture maker's version (obs-v*, color-v*, reel-v*...). /flags/?version=<commit> lists only
+                       the flags made on that version.
 undone/       flags taken back with Undo (moved here, not deleted)
 
 Made by web/frames/frame_server.py; the page /flags/ on the frame server shows them all.
@@ -500,10 +587,14 @@ def flag_entries(folder):
         return []
 
 
-def save_flag(folder, flag):
+def save_flag(folder, flag, version=None):
     """Writes a flag (the JSON the page sent) into folder: its own folder with the picture as shown, the archive
-    PNG of each frame and flag.json, and a line in index.jsonl. Returns the flag's name and how many there are."""
+    PNG of each frame and flag.json, and a line in index.jsonl; version (site_version) says which build it was made
+    on. Returns the flag's name and how many there are."""
     image = flag.pop("image", None) or ""
+    if version is not None:
+        page = (flag.get("build") or {}).get("page") if isinstance(flag.get("build"), dict) else None
+        flag["version"] = {**version, "page_shown": page, "page_current": bool(page and page == version.get("page"))}
     ids = [i for i in flag.get("ids") or [] if isinstance(i, str) and FRAME_ID.match(i)][:24]
     flag["ids"] = ids
     flag["received"] = datetime.datetime.now(datetime.timezone.utc).isoformat(timespec="seconds")
@@ -563,11 +654,36 @@ def undo_flag(folder, name):
         return len(keep)
 
 
-def flags_page(folder):
-    """Every flag on one page, newest first: the picture as shown, when and what it was, the note."""
+def flag_version(e):
+    """A flag's site commit and its label; flags made before versions were kept have neither."""
+    v = e.get("version") or {}
+    return (v.get("site") or {}).get("commit"), v.get("version")
+
+
+def flags_of_version(entries, version):
+    """The flags made on version (a commit, short or full, or a label's start such as 2026-10-27); all with none."""
+    if not version:
+        return entries
+    keep = []
+    for e in entries:
+        site = (e.get("version") or {}).get("site") or {}
+        if version in (site.get("commit"), site.get("full")) or (site.get("full") or "").startswith(version) \
+                or ((e.get("version") or {}).get("version") or "").startswith(version):
+            keep.append(e)
+    return keep
+
+
+def flags_page(folder, version="", now=None):
+    """Every flag on one page, newest first: the picture as shown, when and what it was, the note, and the version it
+    was made on; version= shows only that version's flags, and every version that has flags gets a link."""
     esc = lambda v: html.escape(str(v if v is not None else ""))
+    every = flag_entries(folder)
+    versions = {}
+    for e in every:
+        commit, label = flag_version(e)
+        versions.setdefault(commit, [label or "before versions were kept", 0])[1] += 1
     cards = []
-    for e in reversed(flag_entries(folder)):
+    for e in reversed(flags_of_version(every, version)):
         name, shown = e.get("name", ""), next((f for f in e.get("files", []) if f.startswith("shown.")), None)
         win, what = e.get("window") or {}, e.get("shown") or {}
         frames = e.get("frames") or []
@@ -578,7 +694,8 @@ def flags_page(folder):
   <figcaption><b>{esc(e.get('mission_utc', ''))}</b> {esc(win.get('title', ''))}{' · ' + esc(what.get('what')) if what.get('what') else ''}
   <div class=ids>{esc(detail)}</div>{tags}{f'<p>{esc(e.get("note"))}</p>' if e.get('note') else ''}
   <div class=links><a href="{esc(e.get('link') or '#')}">open this moment</a> · <a href="{esc(name)}/flag.json">details</a>{''.join(f' · <a href="{esc(name)}/{esc(f)}">{esc(f.split("/")[-1])}</a>' for f in e.get('files', []) if f.startswith('raw/'))}
-  <div class=when>flagged {esc(e.get('received', ''))}</div></div></figcaption>
+  <div class=when>flagged {esc(e.get('received', ''))}</div>
+  <div class=when>{f'version <a href="?version={esc(flag_version(e)[0])}">{esc(flag_version(e)[1])}</a>' if flag_version(e)[0] else 'version not kept (flagged before versions)'}{'' if (e.get('version') or {}).get('page_current', True) else ' · flagged from an older page, not reloaded since'}</div></div></figcaption>
 </figure>""")
     return f"""<!doctype html><html lang=en><head><meta charset=utf-8><meta name=viewport content="width=device-width,initial-scale=1">
 <title>Flagged pictures</title><style>
@@ -592,7 +709,8 @@ figcaption {{ padding: 8px 10px 10px; }} figcaption p {{ margin: 6px 0 0; white-
 .ids, .when {{ font: 11px/1.4 ui-monospace, Menlo, monospace; color: #8a94a3; word-break: break-all; }}
 .tag {{ display: inline-block; margin: 5px 4px 0 0; padding: 1px 7px; border-radius: 9px; background: rgba(138,182,255,.16); color: #b9d0ff; font-size: 11px; }}
 .links {{ margin-top: 6px; font-size: 11.5px; }} a {{ color: #8ab6ff; text-decoration: none; }} a:hover {{ text-decoration: underline; }}
-</style></head><body><h1>Flagged pictures</h1><p class=sub>{len(cards)} flagged · saved in {esc(folder)} · <a href="index.json">index.json</a></p>
+</style></head><body><h1>Flagged pictures</h1><p class=sub>{len(cards)} flagged{' on version ' + esc(version) + ' · <a href=".">every version</a>' if version else ''} · saved in {esc(folder)} · <a href="index.json{'?version=' + esc(version) if version else ''}">index.json</a>
+{'<br>running version ' + esc(now['version']) if now else ''}{''.join(f' · <a href="?version={esc(c)}">{esc(lab)}</a> ({n})' for c, (lab, n) in versions.items() if c) if len(versions) > 1 or version else ''}</p>
 <main>{''.join(cards) or '<p>Nothing flagged yet. In Cassini OS, press the flag in a picture window&#39;s title bar, or R.</p>'}</main></body></html>"""
 
 
@@ -728,7 +846,7 @@ def make_handler(site, cache, flags=None):
                     assert isinstance(flag, dict)
                 except (ValueError, AssertionError):
                     return self.send_error(400, "Not a flag")
-                name, count = save_flag(flags, flag)
+                name, count = save_flag(flags, flag, site_version(site))
                 return self.send_bytes(json.dumps({"name": name, "count": count}).encode(), "application/json", False)
             name = url.path.split("/")[2]
             count = undo_flag(flags, name) if FLAG_NAME.match(name) else None
@@ -806,7 +924,9 @@ def make_handler(site, cache, flags=None):
                     return self.send_error(404, "That film is not made (yet)")
                 return self.send_film(path, job, parse_qs(url.query).get("download", ["0"])[0] != "0")
             if flags and (url.path == "/flags" or url.path.startswith("/flags/")):
-                return self.send_flags(url.path)
+                return self.send_flags(url.path, parse_qs(url.query).get("version", [""])[0])
+            if url.path == "/version.json":
+                return self.send_json(site_version(site))
             if url.path == "/jumplog":
                 return self.send_json(jumplog(cache))
             if url.path == "/health":
@@ -951,7 +1071,7 @@ def make_handler(site, cache, flags=None):
                 if took > 1 and "/data/" in url.path:
                     print(f"slow data {took:.1f} s {url.path} ({threading.active_count()} threads)", flush=True)
 
-        def send_flags(self, url_path):
+        def send_flags(self, url_path, version=""):
             if url_path == "/flags":
                 self.send_response(301)
                 self.send_header("Location", "/flags/")
@@ -959,9 +1079,9 @@ def make_handler(site, cache, flags=None):
                 return self.end_headers()
             rest = url_path[len("/flags/"):]
             if rest == "":
-                return self.send_bytes(flags_page(flags).encode(), "text/html; charset=utf-8", False)
+                return self.send_bytes(flags_page(flags, version, site_version(site)).encode(), "text/html; charset=utf-8", False)
             if rest == "index.json":
-                entries = flag_entries(flags)[::-1]
+                entries = flags_of_version(flag_entries(flags), version)[::-1]
                 return self.send_bytes(json.dumps({"count": len(entries), "flags": entries}).encode(), "application/json", False)
             name, _, file = rest.partition("/")
             if not FLAG_NAME.match(name) or not FLAG_FILE.match(file):

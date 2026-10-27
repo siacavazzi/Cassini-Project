@@ -18,7 +18,7 @@ if len(sys.argv) == 1:
         subprocess.run([sys.executable, __file__, os.path.join(root, "..", "replay", "index.html"),
                         os.path.join(HERE, head), os.path.join(root, out)], check=True)
     sys.exit(0)
-import sys, re, json
+import sys, re, json, hashlib
 src = open(sys.argv[1]).read()           # prototype source
 study = open(sys.argv[2]).read()          # study: everything up to (not incl.) the three.js script tags
 out = sys.argv[3]
@@ -542,5 +542,11 @@ for name in CUTSCENES:
         assert os.path.exists(cdata), cdata
         cscript = cscript.replace(marker, json.dumps(json.load(open(cdata)), ensure_ascii=False, separators=(",", ":")))
     script += cscript + "\n"
-open(out, 'w').write(study + script)
-print("ok", out, len(study + script))
+# the page's build id (about.html's /*BUILD*/""): a hash of everything else in it, so the same sources always build the
+# same page, and the frame server's /version.json (which reads it back from index.html) and each flag can tell an
+# older page, open since before the last merge, from the one being served
+page = study + script
+assert page.count('/*BUILD*/""') == 1
+page = page.replace('/*BUILD*/""', '/*BUILD*/"%s"' % hashlib.sha256(page.encode()).hexdigest()[:12])
+open(out, 'w').write(page)
+print("ok", out, len(page))
