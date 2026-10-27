@@ -427,6 +427,49 @@ def start(frame_id, cache, fmt, force=False, tune=None, slots=None):
     return run
 
 
+def movie_picture(frame_id, cache, side, rolling=False, laps=1, fade=(0, 0), slots=None):
+    """frame_id's mosaic as an exported film shows it (export.py, Picture size: Full), RGBA, the layout at side px
+    on its longest side (native, k = 1, when the pass is no bigger; less when it is): the pass's mosaic so far
+    (obs_mosaic.layout, as mosaic_webp draws it) or, rolling, its mosaic movie picture at that frame
+    (obs_mosaic.rolling_layout, as rolling_webp draws it with wait), with the fade (fade_style) after compose as
+    _faded does it. The same blocks, seam corrections and colour mix as the save menu's native mosaic; kept nowhere
+    (the film is what is kept). None when the frame is in no pass or nothing is placed yet."""
+    found = om.unit_of(frame_id)
+    if not found or found[1] < 0:
+        return None
+    u, n = found
+    fade = om.fade_style(*fade)
+    made = om.rolling_layout(u, n, cache, laps, fade=fade) if rolling else om.layout(u, n, cache)
+    if not made:
+        return None
+    rect = made[2]
+    k = min(1.0, side / max(rect[2], rect[3]))
+    w, h = max(1, math.ceil(rect[2] * k)), max(1, math.ceil(rect[3] * k))
+    corr = corrections(u, made, cache)
+    rgba = np.empty((h, w, 4), np.uint8)
+    y = 0
+    for strip in _rows(u, made, corr, k, 0, 0, w, h, cache, slots):
+        rgba[y:y + strip.shape[0]] = strip
+        y += strip.shape[0]
+    im = Image.fromarray(rgba, "RGBA")
+    if om.blank(im):
+        return None
+    return om._faded(u, made, cache)(im) if fade[0] else im
+
+
+def native_side(frame_id, cache, work=True):
+    """The longest side, px, of frame_id's pass at native resolution (its view, one reference px a pixel), or None
+    when it is in no pass, or its plan is not worked out yet and work is False (a stretch not pre-processed)."""
+    found = om.unit_of(frame_id)
+    if not found:
+        return None
+    u = found[0]
+    if not work and not os.path.exists(om._plan_path(u, cache)) and om._record(u, cache) is None:
+        return None
+    v = om.plan(u, cache)["view"]
+    return math.ceil(max(v))
+
+
 def _touch(path):
     try:
         os.utime(path)

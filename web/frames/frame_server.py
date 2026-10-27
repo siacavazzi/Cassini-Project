@@ -108,7 +108,9 @@ Routes:
                                thumbnail as it starts, so the Highlights window finds them made. X-Thumb says which
   /export/plan.json?from=2006-09-15T14:32&until=2006-09-15T17:12&cams=NW&fps=auto&size=1024
                                a movie export's plan (web/frames/export.py): its pictures, when each shows in the
-                               film, the film's length and size; nothing is made
+                               film, the film's length and size; nothing is made. size=full: mosaics at native
+                               resolution (export.full_size: "full" says the panes' side, the passes that set it and
+                               how many pictures are drawn that big; passes not pre-processed are counted as pending)
   POST /export?...             (same options, plus sound=1 caption=1) starts making that film, or finds it made
                                or on its way; one film is made at a time. Answers the job's status, as
   /export/<JOB>.json           does: state queued/making/sound/done/failed, pictures done of total, seconds left
@@ -1208,7 +1210,7 @@ def make_handler(site, cache, flags=None):
                 return self.send_bytes(samples_text().encode(), "text/plain", False)
             if url.path == "/export/plan.json":
                 try:
-                    return self.send_json(export.public_plan(export.plan(export.options(parse_qs(url.query)))))
+                    return self.send_json(export.public_plan(export.plan(export.options(parse_qs(url.query)), cache)))
                 except ValueError as e:
                     return self.send_json({"error": str(e)}, 400)
                 except OverflowError as e:
