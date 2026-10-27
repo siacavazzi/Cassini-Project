@@ -5322,7 +5322,7 @@ body.phone #hrel .cs-note { bottom: auto; top: 40px; max-width: calc(100vw - 32p
   window.cassiniAbout = { open, addTab, esc, close: () => show(false), credits: CREDITS };
 
   // ---- which version this is: this page's build id (build.py writes it), and what the frame server says it serves ----
-  const BUILD = /*BUILD*/"33adc6688e76";
+  const BUILD = /*BUILD*/"dbe80c85b7ac";
   const FRAMES = (() => {                       // the frame server, chosen as the camera window chooses it
     const q = new URLSearchParams(location.search).get("frames");
     if (q) return q.replace(/\/$/, "");
@@ -9056,8 +9056,8 @@ window.huygensModels = (() => {
   const sprite = CS.sprite;   // a soft additive glow (cutscene.html)
 
   // ---------- Huygens on its own, from the release until it reaches Titan's air ----------
-  // After the release the probe is a craft of its own: the Huygens part of NASA's model, cloned, with Cassini's
-  // model's other parts hidden. Where it is: for its first half hour, ESA's numbers (straight out from its mounting at
+  // The probe is ESA's model of it (huygens-models.html, shared with the landing), mounted on Cassini where NASA's
+  // model has it until the release, and after the release a craft of its own. Where it is then: for its first half hour, ESA's numbers (straight out from its mounting at
   // 0.35 m/s), fading over the next half hour into the probe's own track (data/huygens.json, NAIF's reconstructed
   // SPK, whose samples are only good to 10 m); without that track, ESA's numbers until Cassini's getaway burn, after
   // which the two part ways and the probe is left to the marker. How it is turned: spin-stabilized, so its axis
@@ -9065,7 +9065,6 @@ window.huygensModels = (() => {
   const GETAWAY = utcToEt(DATA.getaway_utc);
   const OWN = 1800;            // s from the release on ESA's numbers alone, then as long again fading into the track
   let co = null;               // the probe on its own (null until NASA's model has loaded)
-  const isProbe = o => { for (; o; o = o.parent) if (/_h$/.test(o.name)) return true; return false; };
   // Cassini's turn at et in the scene, as the viewer works it out (the reconstructed attitude, else the dish on Earth)
   function cassiniTurn(et) {
     const qb = att && attitudeAt(att, et), q = new THREE.Quaternion();
@@ -9080,15 +9079,24 @@ window.huygensModels = (() => {
     return { q, real: !!qb };
   }
   const fromScene = v => [v.x * E[0][0] + v.y * E[1][0] + v.z * E[2][0], v.x * E[0][1] + v.y * E[1][1] + v.z * E[2][1], v.x * E[0][2] + v.y * E[1][2] + v.z * E[2][2]];
-  // the probe alone: a clone of NASA's model with everything but the probe hidden, framed like the model in Cassini's
-  // group (a part that holds the probe stays, drawn with nothing, so the probe under it still shows)
-  const none = new THREE.MeshBasicMaterial({ visible: false });
-  const holds = o => { let h = false; o.traverse(c => { if (c !== o && /_h$/.test(c.name)) h = true; }); return h; };
-  function probeClone(m) {
-    const model = m.clone();
-    model.traverse(o => { o.layers.set(1); if (isProbe(o)) o.visible = true; else if (o.isMesh) { if (holds(o)) o.material = none; else o.visible = false; } });
-    return model;
+  // ESA's probe (shell and descent module, which share a frame), framed like Cassini's group: its centre on p, the heat
+  // shield facing out along axis. Empty until the models have loaded; then(shell) once the shell is in
+  function esaProbe(p, axis, then) {
+    const outer = new THREE.Group(), inner = new THREE.Group();
+    inner.quaternion.setFromUnitVectors(new THREE.Vector3(0, -1, 0), axis);
+    outer.add(inner);
+    huygensModels.get("shell", sh => {
+      sh.updateMatrixWorld(true);
+      const c = new THREE.Box3().setFromObject(sh).getCenter(new THREE.Vector3());
+      inner.position.copy(p).sub(c.applyQuaternion(inner.quaternion));
+      inner.add(sh);
+      if (then) then(sh);
+    });
+    huygensModels.get("dm", dm => inner.add(dm));
+    return outer;
   }
+  // NASA's own probe on Cassini goes, drawn with nothing, once ESA's is there to take its place
+  const none = new THREE.MeshBasicMaterial({ visible: false });
   function coastSetup() {
     if (co) {
       // the turn at the release, once the attitude that covers it has loaded
@@ -9107,12 +9115,16 @@ window.huygensModels = (() => {
     const p0 = box(cassiniProbe), hub = dish ? box([dish]) : new THREE.Vector3();
     const axis = p0.clone().sub(hub); axis.addScaledVector(up, -axis.dot(up)).normalize();
     cassini.position.copy(saved[0]); cassini.quaternion.copy(saved[1]); cassini.scale.copy(saved[2]); cassini.updateMatrixWorld(true);
-    const group = new THREE.Group(), model = probeClone(m);
-    const beacon = sprite(0xffd7a0, 1);
+    // on Cassini until the release
+    const mounted = esaProbe(p0, axis, () => cassiniProbe.forEach(o => o.traverse(c => { if (c.isMesh) c.material = none; })));
+    mounted.visible = state.et < RELEASE;
+    cassini.add(mounted);
+    // on its own after
+    const group = new THREE.Group(), beacon = sprite(0xffd7a0, 1);
     beacon.position.copy(p0);
-    group.add(model, beacon); group.visible = false;
+    group.add(esaProbe(p0, axis), beacon); group.visible = false;
     scene.add(group);
-    co = { group, beacon, p0, axis, up, spin: null };
+    co = { group, beacon, mounted, p0, axis, up, spin: null };
     coastAim(cassiniTurn(RELEASE));
     return co;
   }
@@ -9137,12 +9149,11 @@ window.huygensModels = (() => {
     modelShown: et => et >= RELEASE && et < lastEt() && !!coastSetup(),
     // the model, after the viewer has placed the probe's marker
     draw: () => drawCoast(),
-    // a fresh copy of the probe for another scene to place itself (the landing): a group framed like Cassini's, in
-    // metres, with the probe's centre p0 and the axis it left along (outward, the heat shield's side); null until
-    // NASA's model has loaded
+    // a fresh copy of the probe as it left: a group framed like Cassini's, in metres, with the probe's centre p0 and
+    // the axis it left along (outward, the heat shield's side); null until NASA's model (which says where) has loaded
     probeModel() {
       if (!coastSetup()) return null;
-      const group = new THREE.Group(); group.add(probeClone(window.cassiniModel));
+      const group = new THREE.Group(); group.add(esaProbe(co.p0, co.axis));
       return { group, p0: co.p0.clone(), axis: co.axis.clone() };
     },
     place(et, out) {
@@ -9155,7 +9166,8 @@ window.huygensModels = (() => {
   // the model follows the marker each frame, after the viewer has placed Cassini
   const qSpin = new THREE.Quaternion();
   function drawCoast() {
-    if (!co || !probeObj) return;
+    if (!coastSetup() || !probeObj) return;
+    co.mounted.visible = state.et < RELEASE;
     const et = state.et, on = studyCoast.modelShown(et) && !!pos.HUYGENS;
     co.group.visible = on;
     if (!on) return;
