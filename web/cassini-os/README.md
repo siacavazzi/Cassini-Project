@@ -143,6 +143,12 @@ touching the view) the view is not redrawn, except once a second. Frosted window
 windows, which the browser redoes every frame. Show frame rate puts a read-out in the bottom right corner. The HUD
 glow is drawn on the GPU in the HUD's own canvas, and surface maps are decoded off the main thread.
 
+Orbits, trails and outlines are drawn as smooth lines (`src/smoothlines.html`): WebGL's own lines are one pixel wide
+and the graphics card's multisampling hardly smooths them, so each line gets a mesh of thin quads whose pixels are lit
+by how much of them the line covers. Settings > Performance > Smooth lines switches back to the plain lines (pixel
+for pixel what the page drew before); Settings > View > Line width sets their width in screen pixels (1 by default,
+as thin as the plain lines).
+
 To measure: `node bench/fps.js URL OUT [WIDTH HEIGHT DPR SECS]` (needs `npm i playwright-core`; `CHANNEL=chrome`
 on a Mac for the real GPU) reports the uncapped frame rate, the CPU time of each step of the render loop and the GPU.
 
