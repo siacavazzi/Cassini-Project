@@ -167,7 +167,9 @@ body.phone.phone-land #bodymenu { left: auto !important; width: min(380px, 46vw)
     let best = Infinity;
     const loaded = t => t >= loadedSpan[0] && t < loadedSpan[1];
     if (loaded(et) && catalog && catalog.byCam) {
+      const lc = cassiniFeeds.liveCams ? cassiniFeeds.liveCams() : null;   // a closed camera's pictures are not waited for
       for (const cam of ["N", "W"]) {
+        if (lc && !lc.includes(cam)) continue;
         const a = cassiniFeeds.framesOf(cam, M.name).et; let lo = 0, hi = a.length;
         while (lo < hi) { const m = (lo + hi) >> 1; if (a[m] <= et) lo = m + 1; else hi = m; }
         if (lo < a.length && loaded(a[lo])) best = Math.min(best, a[lo]);
@@ -413,8 +415,13 @@ body.phone.phone-land #bodymenu { left: auto !important; width: min(380px, 46vw)
   let lastMark = 0;
   window.studyHud = ms => {
     if (base) base(ms);
-    // a moment's jump keeps the view on the body too
-    if (typeof jump === "function" && !jump.bodyLook) { const j = jump; jump = async e => { const r = await j(e); look(); return r; }; jump.bodyLook = true; }
+    // a moment's jump keeps the view on the body too; a jump to another body's moment (a highlight, a cutscene) leaves
+    // the body's view first, or its skip-the-gaps clock and its camera windows would pull the jump back to the body
+    if (typeof jump === "function" && !jump.bodyLook) {
+      const j = jump;
+      jump = async e => { if (M.name && momentBody(e) !== M.name) exit(); const r = await j(e); look(); return r; };
+      jump.bodyLook = true;
+    }
     if (want && !M.pending && typeof catalog !== "undefined" && catalog) { M.pending = true; enter(want, { jump: false }); }
     const now = performance.now();
     if (M.name && now - lastMark > 250) { lastMark = now; mark(); }
