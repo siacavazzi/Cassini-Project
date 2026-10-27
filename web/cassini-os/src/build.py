@@ -177,6 +177,20 @@ for old, new in [
     study = study.replace(old, new)
 study += part("script") + "\n"
 
+# the gallery (gallery.html): its style joins the head's, its window, share menu and toast go into #app, and its script
+# runs after the chrome script and movie export's (it adds Add to Gallery to the picture windows and asks the export for
+# a film's sound) and before the dock's, which opens it
+gal = open(os.path.join(os.path.dirname(os.path.abspath(sys.argv[2])), "gallery.html")).read()
+part = lambda tag: gal[gal.index(f"<{tag}"):gal.index(f"</{tag}>") + len(tag) + 3]
+gextra = gal[gal.index('<ul id="galshare"'):gal.index("</div>", gal.index('<div id="galtoast"')) + 6]
+for old, new in [
+    ("</style>\n</head>", part("style")[len("<style>"):] + "\n</head>"),
+    ('  <div id="loading">', "  " + part("section") + "\n" + gextra + "\n\n" + '  <div id="loading">'),
+]:
+    assert study.count(old) == 1, old
+    study = study.replace(old, new)
+study += part("script") + "\n"
+
 # the zoom lens (loupe.html): its style joins the head's, the lens goes into #app, and its script runs after the chrome
 # script; it finds the pictures under the pointer itself (every window's .well .shot, any img[data-loupe])
 lp = open(os.path.join(os.path.dirname(os.path.abspath(sys.argv[2])), "loupe.html")).read()
@@ -184,6 +198,18 @@ part = lambda tag: lp[lp.index(f"<{tag}"):lp.index(f"</{tag}>") + len(tag) + 3]
 for old, new in [
     ("</style>\n</head>", part("style")[len("<style>"):] + "\n</head>"),
     ('  <div id="loading">', "  " + lp[lp.index('<div id="loupe"'):lp.index("</div>", lp.index('<div id="loupe"')) + 6] + "\n\n" + '  <div id="loading">'),
+]:
+    assert study.count(old) == 1, old
+    study = study.replace(old, new)
+study += part("script") + "\n"
+
+# Cassini Studio (studio.html): its style joins the head's, its window goes into #app, and its script runs after the
+# gallery's (it saves and shares through window.cassiniGallery) and before the dock's, which opens it
+stu = open(os.path.join(os.path.dirname(os.path.abspath(sys.argv[2])), "studio.html")).read()
+part = lambda tag: stu[stu.index(f"<{tag}"):stu.index(f"</{tag}>") + len(tag) + 3]
+for old, new in [
+    ("</style>\n</head>", part("style")[len("<style>"):] + "\n</head>"),
+    ('  <div id="loading">', "  " + part("section") + "\n\n" + '  <div id="loading">'),
 ]:
     assert study.count(old) == 1, old
     study = study.replace(old, new)
@@ -325,10 +351,10 @@ rep("""  if (hudRenderer) { if (window.studyBeforeHud) window.studyBeforeHud(); 
   if (window.cassiniPerf) cassiniPerf.frame(now, draw);
 """)
 # the moons' painted look (noise, craters) is only worked out when there is no surface map to show instead
-rep("""        float m = fbm(nb * 5.0) - 0.5;
-        float craters = smoothstep(0.62, 0.7, vnoise(nb * 22.0)) * 0.12;
+rep("""        float m = 0.0, craters = 0.0;
+        if (kind < 3.5) { m = fbm(nb * 5.0) - 0.5; craters = smoothstep(0.62, 0.7, vnoise(nb * 22.0)) * 0.12; }
         vec3 alb = color * (1.0 + 0.32 * m - craters);""", """        float m = 0.0, craters = 0.0;
-        if (hasMap < 0.5) { m = fbm(nb * 5.0) - 0.5; craters = smoothstep(0.62, 0.7, vnoise(nb * 22.0)) * 0.12; }
+        if (hasMap < 0.5 && kind < 3.5) { m = fbm(nb * 5.0) - 0.5; craters = smoothstep(0.62, 0.7, vnoise(nb * 22.0)) * 0.12; }
         vec3 alb = color * (1.0 + 0.32 * m - craters);""")
 rep('t.anisotropy = renderer.capabilities.getMaxAnisotropy();', 't.anisotropy = Math.min(8, renderer.capabilities.getMaxAnisotropy());')
 # the Moments list greys out the moments already past: only touch the list when that count changes
@@ -415,6 +441,11 @@ script = script.replace(tl, '''function barRect(g, x, y, w, h) {
 # real Cassini: NASA's Cassini-Huygens model (NASA 3D Resources), Draco-decoded, shipped as base64 text
 rep('<script src="https://cdn.jsdelivr.net/npm/three@0.128.0/examples/js/controls/OrbitControls.js"></script>\n',
     '<script src="https://cdn.jsdelivr.net/npm/three@0.128.0/examples/js/controls/OrbitControls.js"></script>\n<script src="https://cdn.jsdelivr.net/npm/three@0.128.0/examples/js/loaders/GLTFLoader.js"></script>\n')
+# smooth lines (smoothlines.html): its script runs right after three.js loads, ahead of the viewer, so every line the
+# viewer adds to a scene is drawn anti-aliased
+sl = open(os.path.join(os.path.dirname(os.path.abspath(sys.argv[2])), "smoothlines.html")).read()
+rep('<script src="https://cdn.jsdelivr.net/npm/three@0.128.0/examples/js/loaders/GLTFLoader.js"></script>\n',
+    '<script src="https://cdn.jsdelivr.net/npm/three@0.128.0/examples/js/loaders/GLTFLoader.js"></script>\n' + sl[sl.index("<script>"):sl.index("</script>") + 9] + "\n")
 rep('function makeCassini() {\n  // Rough', 'function makeCassiniPrimitive() {\n  // Rough')
 rep('// ---------- state ----------\n', """// NASA's Cassini-Huygens model replaces the primitive one once it has loaded.
 const HUYGENS_RELEASE_ET = 157212064.18; // 2004-12-25 02:00 UTC, Huygens separates (same as the release milestone)
