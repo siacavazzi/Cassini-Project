@@ -15,6 +15,8 @@ Phases (each its own run; a run picks up where the last one stopped, since a mad
   movies      the same for every movie pass: its steadied frames (movie_webp)
   processed   /frames/processed/<ID>.webp at 1024, 512 and 256, every frame, centred as Auto center asks
   strips      a movie pass's steadied frames at 128 (the movie strip)
+  chains      every movie pass's stabilization and exposure chains (small JSON files; no pictures), which the page's
+              Stabilize and Even exposure read
 
 Made to share the Mac Mini with the live and preview servers: run it under `nice -n 19 taskpolicy -b` (low CPU and
 disk priority), one process with a few threads. It waits while the 1-minute load is over --max-load, while the
@@ -54,7 +56,7 @@ import calibration  # noqa: E402
 import obs_mosaic  # noqa: E402
 import reel  # noqa: E402
 
-PHASES = ("frames", "composites", "mosaics", "movies", "processed", "strips")
+PHASES = ("frames", "composites", "mosaics", "movies", "processed", "strips", "chains")
 
 
 @functools.lru_cache(None)
@@ -94,6 +96,11 @@ def all_passes():
     return out
 
 
+def movie_passes():
+    """Every pass the windows play as a movie (its frames steadied one by one, not a mosaic), in time order."""
+    return [u for u in all_passes() if u.get("kind") == "movie" or (u.get("movie") and not u["mosaic"])]
+
+
 def centred(frame_id):
     """Auto center (on by default in a camera window, center=1): the view the server's centre_of gives the frame's
     pass (centred on the body, or north up where it is), which names the cache folder the window's picture is
@@ -123,11 +130,14 @@ def items(phase):
                 for i in frame_ids()]
     if phase == "mosaics":
         return [("_".join(map(str, u["key"])), lambda c, u=u: make_pass(u, c)) for u in mosaic_passes()]
+    if phase == "chains":
+        # a movie pass's stabilization and exposure chains (steady1-, exposure4-c11s0-plan4.json), which the page
+        # holds to SPICE and evens out itself (Settings > Processing, Stabilize / Even exposure): no frames are made
+        return [("_".join(map(str, u["key"])), lambda c, u=u: make_chains(u, c)) for u in movie_passes()]
     if phase in ("movies", "strips"):
         # strips: a movie pass's steadied frames at 128, the movie strip under a window
         sizes = (1024, 512) if phase == "movies" else (128,)
-        return [("_".join(map(str, u["key"])), lambda c, u=u: make_pass(u, c, sizes))
-                for u in all_passes() if u.get("kind") == "movie" or (u.get("movie") and not u["mosaic"])]
+        return [("_".join(map(str, u["key"])), lambda c, u=u: make_pass(u, c, sizes)) for u in movie_passes()]
     raise ValueError(phase)
 
 
@@ -242,6 +252,19 @@ def make_pass(u, cache, sizes=(1024, 512), within=None, style=None, made=None):
             if made:
                 made(f[3])
     return n
+
+
+def make_chains(u, cache):
+    """A movie pass's stabilization chain and exposure chain, as the window plays it by default (colour, Auto
+    center, not stabilized), after the pass's plan and every tile: the small files a window's Stabilize and Even
+    exposure read, worked out once over the whole pass (obs_mosaic.steady_chain, exposure_chain). A made chain is
+    found, not made. The pass's frames."""
+    p = obs_mosaic.plan(u, cache)
+    for j in range(len(u["frames"])):
+        obs_mosaic.tile(u, j, cache, p["display_scale"])
+    obs_mosaic.steady_chain(u, cache, p)
+    obs_mosaic.exposure_chain(u, cache, p, True, True, 0)
+    return len(u["frames"])
 
 
 # ---------- sharing the Mini ----------
@@ -456,7 +479,7 @@ def sample(args):
                 traceback.print_exc()
                 continue
             took = time.monotonic() - t0
-            times.append((took, out if args.phase == "mosaics" else 1))
+            times.append((took, out if args.phase in ("mosaics", "chains") else 1))
             print(f"{k + 1}/{len(picked)} {name} {took:.2f} s", flush=True)
     by_dir = collections.Counter()
     files = collections.Counter()
