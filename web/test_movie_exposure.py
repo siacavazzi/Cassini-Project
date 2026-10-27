@@ -15,7 +15,7 @@ import obs_mosaic as om  # noqa: E402
 rng = np.random.default_rng(7)
 field = cv2.GaussianBlur(rng.random((500, 500)).astype(np.float32), (0, 0), 5)
 field = 0.05 + 0.25 * (field - field.min()) / (field.max() - field.min())   # linear brightness
-S, N, FLASH, STEP = 500, 80, 14, 34
+S, N, FLASH, STEP, SCENE = 500, 80, 14, 34, 60
 cache = tempfile.mkdtemp()
 scale = {"blacks": {}, "white": 1, "gamma": 2.2, "balance": {"RED": 1.0, "GRN": 1.0}}
 filters = ["RED", "GRN"] * (N // 2)
@@ -31,6 +31,9 @@ for n, f in enumerate(filters):
     im = np.zeros((S, S, 4), np.uint8)
     im[..., 3] = 255
     im[..., :3] = (calibration.encode(np.clip(field * bright[n], 0, 1), 2.2) * 255 + 0.5).astype(np.uint8)[..., None]
+    if n == SCENE:   # another scene: a narrow strip of the view, twice as bright (a ring arc between wide views)
+        im[:, :, :3] = np.minimum(255, im[:, :, :3].astype(int) * 2).astype(np.uint8)
+        im[:, 100:, 3] = 0
     Image.fromarray(im).save(f"{TD}/{n}.png")
     json.dump({"n": n, "id": fr[n][1], "filter": f, "t": fr[n][3], "offset": [0.0, 0.0], "box": [-S / 2, -S / 2, S, S]},
               open(f"{TD}/{n}.json", "w"))
@@ -40,9 +43,13 @@ json.dump({"key": list(u["key"]), "display_scale": scale, "angle": 0, "footprint
 with calibration.looking("balanced"):
     logs = om.exposure_chain(u, cache)
     # the chain follows the movie's brightness frame to frame, whichever filter (to the 8-bit picture's rounding)
-    for n in range(N):
-        assert abs(logs[n] - math.log(bright[n] / bright[0])) < 0.03, (n, logs[n], math.log(bright[n] / bright[0]))
+    # the narrow strip is a scene of its own, and the frame after it starts the next stretch: the strip left as it is
+    assert logs[SCENE][1] == 1 and logs[SCENE + 1][1] == 2, (logs[SCENE], logs[SCENE + 1])
+    for n in range(SCENE):
+        assert abs(logs[n][0] - math.log(bright[n] / bright[0])) < 0.03 and logs[n][1] == 0, (n, logs[n], math.log(bright[n] / bright[0]))
     gains = om.exposure_gains(u, cache, smooth=4)
+    assert gains[SCENE] == 1.0, gains[SCENE]
+    N = SCENE   # (the rest: the stretch before the other scene)
     shown = [bright[n] * gains[n] for n in range(N)]
     print("gains:", [gains[n] for n in range(N)])
     steps = [shown[n] / shown[n - 1] for n in range(1, N)]
@@ -52,7 +59,7 @@ with calibration.looking("balanced"):
     # the step is spread out: no frame more than 1.15x the one before it (it was 1.6x), and none flickers by more than 8%
     assert max(steps) < 1.15 and min(steps) > 0.92, np.round(steps, 3).tolist()
     # the whole step is kept, and the slow brightening (1% a frame) too
-    assert abs(shown[-2] / shown[2] / (bright[-2] / bright[2]) - 1) < 0.1, (shown[2], shown[-2])
+    assert abs(shown[N - 2] / shown[2] / (bright[N - 2] / bright[2]) - 1) < 0.1, (shown[2], shown[-2])
     assert om.exposure_gains(u, cache, smooth=0) == {}
     # the pure functions alone, as the viewer would run them
     assert om.evened_gains([0, 0, 1, 0, 0], 3)[2] == round(math.exp(-1) * 200) / 200

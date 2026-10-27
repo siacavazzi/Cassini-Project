@@ -1966,7 +1966,8 @@ EXPOSURE_LIT = 0.04      # of the brightest: the pixels a brightness is measured
 EXPOSURE_SIDE = 160      # px: the movie pictures a pass's brightness is measured on (exposure_chain) are this big
 # a movie's brightness chain (exposure_chain), kept with the pass for each way of drawing it; renamed (with the movie
 # frames drawn with it, movie_webp) whenever the rule changes
-EXPOSURE_FILE = "exposure2-{}-" + PLAN_FILE
+EXPOSURE_FILE = "exposure3-{}-" + PLAN_FILE
+EXPOSURE_SAME = 0.5      # of the larger lit area: two pictures sharing less lit view than this show different scenes
 
 
 def _lit_level(a, gamma):
@@ -1989,31 +1990,44 @@ def exposure_chain(u, cache, p=None, colour=True, centre=True, steady=0):
     measured is the movie itself: each frame's picture as movie_frame draws it (colour, centre, steady as asked; no
     trail, EXPOSURE_SIDE px), against the picture before it, over the part of the view both show (one view for the
     pass), as the ratio of the medians of the lit pixels in linear brightness; the chain adds up the logs. A pair with
-    too little lit in common adds nothing (the same brightness); a held colour set is the same picture. Worked out
-    once over every frame of the pass, for each way of drawing it, and kept with it."""
+    too little lit in common adds nothing (the same brightness); a held colour set is the same picture. The chain is
+    cut into stretches ({n: [log, stretch]}) where the picture changes kind (grey frames before the colour set is
+    complete, then colour; another set of filters) or scene (the two share less than EXPOSURE_SAME of their lit
+    view: a narrow ring arc between two wide views): a step there is the picture changing, not its exposure, and
+    exposure_gains evens each stretch on its own. Worked out once over every frame of the pass, for each way of
+    drawing it, and kept with it."""
     p = p or plan(u, cache)
     gamma = p["display_scale"].get("gamma", 2.2)
     key = ("exposure", bool(colour), bool(centre), steady)
 
     def work():
-        logs, hows, last = {}, {}, None
+        logs, hows, last, stretch = {}, {}, None, 0
+
+        def lit(a):
+            v = calibration.decode(a[..., :3].astype(np.float64).mean(axis=2) / 255, gamma)
+            return (a[..., 3] > 0) & (v > EXPOSURE_LIT * max(float(np.percentile(v[a[..., 3] > 0], 99.5)) if (a[..., 3] > 0).any() else 0, 1e-6))
         for n in range(len(u["frames"])):
-            im, _ = movie_frame(u, n, cache, 0, colour, out=EXPOSURE_SIDE, centre=centre, steady=steady)
+            im, rep = movie_frame(u, n, cache, 0, colour, out=EXPOSURE_SIDE, centre=centre, steady=steady)
             if im is None:
                 continue
-            a = np.asarray(im)
+            a, kind = np.asarray(im), tuple(rep.get("color") or ())
             if last is None:
-                logs[n], hows[n] = 0.0, "first"
+                logs[n], hows[n] = [0.0, stretch], "first"
             else:
-                j, b = last
-                logs[n], hows[n] = logs[j], f"same as {j}"
-                if a.shape == b.shape:
+                j, b, was = last
+                la, lb = lit(a), lit(b)
+                shared = (la & lb).sum() / max(1, la.sum(), lb.sum()) if a.shape == b.shape else 0.0
+                if kind != was or shared < EXPOSURE_SAME:
+                    stretch += 1
+                    logs[n], hows[n] = [0.0, stretch], "another kind of picture" if kind != was else f"another scene ({shared:.2f} shared)"
+                else:
+                    logs[n], hows[n] = [logs[j][0], stretch], f"same as {j}"
                     both = (a[..., 3] > 0) & (b[..., 3] > 0)
                     levels = [_lit_level(np.where(both[..., None], q, 0), gamma) for q in (b, a)]
                     if None not in levels and min(levels) > 0:
                         step = math.log(levels[1] / levels[0])
-                        logs[n], hows[n] = logs[j] + step, f"{math.exp(step):.3f} x {j}"
-            last = (n, a)
+                        logs[n], hows[n] = [logs[j][0] + step, stretch], f"{math.exp(step):.3f} x {j}"
+            last = (n, a, kind)
         return logs, hows
 
     rec = _kept_tiles(u, cache, p["display_scale"])
@@ -2024,7 +2038,7 @@ def exposure_chain(u, cache, p=None, colour=True, centre=True, steady=0):
     with _ulock(u):
         if not os.path.exists(path):
             logs, hows = work()
-            data = json.dumps({"logs": {str(n): round(v, 5) for n, v in logs.items()}, "how": hows})
+            data = json.dumps({"logs": {str(n): [round(v[0], 5), v[1]] for n, v in logs.items()}, "how": hows})
             reel._cached(path, data.encode)
         with open(path) as fh:
             kept = {int(n): v for n, v in json.load(fh)["logs"].items()}
@@ -2037,14 +2051,20 @@ def exposure_chain(u, cache, p=None, colour=True, centre=True, steady=0):
 def exposure_gains(u, cache, p=None, smooth=EXPOSURE_SMOOTH, colour=True, centre=True, steady=0):
     """Each movie frame's exposure gain ({n: gain}, on linear brightness, one for the whole picture so a colour set
     keeps its colour): the movie's brightness (exposure_chain) moved to the brightness of the frames round it
-    (evened_gains): a flash of a frame or two brought to its neighbours' level, a jump spread over smooth frames.
-    Slow changes (a body coming into sunlight over the pass) stay; the frames' data stays, only scaled.
-    smooth 0: no gains ({})."""
+    (evened_gains), each stretch of one kind of picture and one scene on its own: a flash of a frame or two brought
+    to its neighbours' level, a jump spread over smooth frames. A stretch shorter than EXPOSURE_FLASH frames is left
+    as it is (gain 1: too short to tell a flash from the picture). Slow changes (a body coming into sunlight over the
+    pass) stay; the frames' data stays, only scaled. smooth 0: no gains ({})."""
     if smooth <= 0:
         return {}
     logs = exposure_chain(u, cache, p, colour, centre, steady)
-    ns = sorted(logs)
-    return dict(zip(ns, evened_gains([logs[n] for n in ns], smooth))) if ns else {}
+    stretches = collections.defaultdict(list)
+    for n in sorted(logs):
+        stretches[logs[n][1]].append(n)
+    gains = {}
+    for ns in stretches.values():
+        gains.update(zip(ns, evened_gains([logs[n][0] for n in ns], smooth) if len(ns) >= EXPOSURE_FLASH else [1.0] * len(ns)))
+    return gains
 
 
 def evened_gains(logs, smooth):
