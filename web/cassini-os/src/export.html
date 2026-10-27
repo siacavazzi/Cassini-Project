@@ -395,7 +395,7 @@ body.phone #excard:not(.full) { width: calc(100% - 16px) !important; left: 8px !
     const w = SL.want(FRAMES, id, { center, color: true });
     if (!w) return null;
     const base = j => `${FRAMES}/frames/movie/${j}.webp?size=1024&color=0${window.cassiniMovieStyle({ center, steady: 0, exposure: 0, trail: 0 })}${window.cassiniLook()}`;
-    const r = await fetch(base(id)).catch(() => null);
+    const r = await fetch(base(id) + (w.raw ? "&detail=0" : "")).catch(() => null);
     if (!r || !r.ok) return null;
     const im = new Image(), u = URL.createObjectURL(await r.blob());
     try { im.src = u; await im.decode(); } catch (e) { URL.revokeObjectURL(u); return null; }

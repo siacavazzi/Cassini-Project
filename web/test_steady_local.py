@@ -296,4 +296,83 @@ with calibration.looking("balanced"):
         assert (out == B).all(), lab
     print(f"trail: {len(cases)} trailed frames (trail {TRAILS}, stabilized and exposure-normalized (0, 0) and (12, 8)): "
           "the page's trail equals the server's pixel for pixel")
+
+def node_filled(table, cases):
+    """The page's whole step for a filled pass, in node: each case's planes mixed (a colour set), blended (a trail)
+    or alone, then the detail filter (the processor's blur, which test_detail_local.py holds to the GPU's)."""
+    tmp = tempfile.mkdtemp()
+    for c, (_, planes) in enumerate(cases):
+        for q, pl in enumerate(planes):
+            pl.tofile(f"{tmp}/{c}_{q}.bin")
+    js = ("const window = {};\n" + script + "\nconst M = window.cassiniSteadyMath(), fs = require('fs'), t = " + json.dumps(table) + ";\n"
+          "const C = " + json.dumps([[how, len(planes), planes[0].shape[1], planes[0].shape[0]] for how, planes in cases]) + ";\n"
+          "C.forEach(([how, k, W, H], i) => { const P = []; for (let q = 0; q < k; q++) P.push(new Uint8ClampedArray(fs.readFileSync('" + tmp + "/' + i + '_' + q + '.bin')));"
+          " let px = how === 'mix' ? M.mix(P, t.sets) : how === 'trail' ? M.blendTrail(P.slice(0, -1), P[k - 1]) : P[0];"
+          " const g = M.gaussKernel(t.sigma), d = M.detailInputs(px);"
+          " px = M.detailFinish(px, d.lum, M.blurCPU(d.a, W, H, g), M.blurCPU(d.la, W, H, g), t.amount);"
+          " fs.writeFileSync('" + tmp + "/' + i + '.out', px); });")
+    with open(f"{tmp}/filled.js", "w") as fh:
+        fh.write(js)
+    subprocess.run(["node", f"{tmp}/filled.js"], check=True)
+    return [np.fromfile(f"{tmp}/{c}.out", np.uint8).reshape(cases[c][1][0].shape) for c in range(len(cases))]
+
+
+def filled_copy(src_u, src_d, tag):
+    """The pass src_u again as a filled pass (its frames end in detail()): its plan and tiles, in a folder of its own."""
+    import shutil
+    v = dict(src_u, key=(src_u["key"][0], src_u["key"][1] + tag, "N", 0))
+    dv = om.folder(v, cache)
+    os.makedirs(dv, exist_ok=True)
+    pl = json.load(open(os.path.join(src_d, om.PLAN_FILE)))
+    pl["key"], pl["display_scale"] = list(v["key"]), dict(pl["display_scale"], filled=True)
+    json.dump(pl, open(os.path.join(dv, om.PLAN_FILE), "w"))
+    shutil.copytree(om._tiles(src_u, cache, scale), om._tiles(v, cache, pl["display_scale"]), dirs_exist_ok=True)
+    return v
+
+
+with calibration.looking("balanced"):
+    # a filled pass (Titan's, Jupiter's): every frame ends in detail(), so the page gains, mixes and trails the frames
+    # drawn without it (sharpen False, what the pre-build keeps for these passes) and sharpens the result itself
+    u3, u4 = filled_copy(u2, d2, "F"), filled_copy(u, d, "F")
+    real_unit = om.unit_of
+    om.unit_of = lambda fid: next(((v, [q[1] for q in v["frames"]].index(fid)) for v in (u3, u4) if fid in [q[1] for q in v["frames"]]), None) or real_unit(fid)
+    cases, wants, labels = [], [], []
+    for v, colour in ((u3, True), (u4, False)):
+        om.steady_chain(v, cache)
+        om.exposure_chain(v, cache, None, colour, True, 0)
+        table = om._steady_table(v, 0, cache, True, colour)
+        assert table["detail"] and table["exposure"]["local"], table.get("exposure")
+        got = in_node(table)
+        for s_, x, T in ((12, 8, 0), (0, 0, 3)) if not colour else ((12, 8, 0),):
+            gains = got["gains"][str(x)] if x else {}
+            for n in range(0, N, 3):
+                recipe = (table["sets"]["by"].get(str(n)) or [n]) if colour else list(range(max(0, n - 8 * T), n))[-T:] + [n] if T else [n]
+                if not colour and T:
+                    recipe = [j for j in range(n - 1, max(-1, n - 8 * T), -1)][:T][::-1] + [n]
+                planes = []
+                for j in recipe:
+                    A = np.asarray(om.movie_frame(v, j, cache, colour=False, centre=True, sharpen=False)[0])
+                    dx, dy = got[str(s_)]["shifts"][table["n"].index(j)] if s_ else (0, 0)
+                    C = moved(A, dx, dy)
+                    if gains.get(str(n), 1.0) != 1.0:
+                        C[..., :3] = np.array(server_lut(gains[str(n)], table["exposure"]["gamma"]), np.uint8)[C[..., :3]]
+                    planes.append(C)
+                B = np.asarray(om.movie_frame(v, n, cache, trail=T, colour=colour, centre=True, steady=s_, exposure=x)[0])
+                cases.append(("mix" if len(planes) > 1 and colour else "trail" if len(planes) > 1 else "one", planes))
+                wants.append(B)
+                labels.append((v["key"][1], s_, x, T, n))
+        off = total = 0
+        for out, B, lab in zip(node_filled(table, cases), wants, labels):
+            diff = np.abs(out.astype(int) - B.astype(int))
+            if diff.max() > 1:
+                w = np.argwhere(diff > 1)
+                print("DIFF", lab, len(w), [(tuple(map(int, i)), int(out[tuple(i)]), int(B[tuple(i)])) for i in w[:4]])
+            assert diff.max() <= 1, int(diff.max())
+            off += int((diff > 0).sum())
+            total += diff.size
+        assert off <= total * 1e-4, (off, total)
+        print(f"filled {'colour' if colour else 'grey'} pass: {len(cases)} pictures (gained, moved, {'mixed' if colour else 'trailed'}, then "
+              f"the detail filter): the page's equals the server's but for {off} values of {total} a level apart")
+        cases, wants, labels = [], [], []
+    om.unit_of = real_unit
 print("ok")

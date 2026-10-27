@@ -40,13 +40,16 @@ Ordered by what it costs the Mini now. Each step ships as its own PR with before
 |---|---|---|---|---|
 | 1 | Image stabilization, single-filter movie frames | server draws every frame per smoothing value (`_s<N>`) | page moves the pre-built steady-0 frame (`steady-local.html`) | PR #149 |
 | 2 | Exposure normalization | server draws every frame per smoothing value (`_e<N>`) | page: port of `evened_gains`, then `_shade`'s lookup table per frame | PR #149 |
-| 3 | Colour movie frames under 1 and 2 | server mixes each set's planes | page: the set's grey frames (`color=0`, pre-built) moved and gained, mixed by a WebGL port of `colour_picture` / `calibration.mix_display`, then `detail` for filled passes | PR #149, natural colour only; false-colour sets and filled passes' colour stay on the server |
+| 3 | Colour movie frames under 1 and 2 | server mixes each set's planes | page: the set's grey frames (`color=0`, pre-built) moved and gained, mixed by a WebGL port of `colour_picture` / `calibration.mix_display`, then `detail` for filled passes | PR #149, natural colour only (false-colour sets stay on the server); filled passes on on-machine: the page gains, mixes and trails their frames drawn without `detail` (`detail=0`, `_d0`) and runs `detail` itself on the GPU (`web/test_detail_local.py`) |
 | 4 | Movie trail | server blends earlier frames per trail length | page: the same blend over grey frames it already has | PR #149 |
 | 5 | Defaults switch | stabilization and exposure default on, drawn by the server | page does 1 to 4 by default; the pre-build keeps only base frames (steady 0, exposure 0), and #147's ~23 GB frame remake is no longer needed (its chains still are) | PR #149 turns the page path on by default; the pre-build change is the pre-build thread's |
 | 6 | Film export "as in the movie" | Mini encodes (~10 pictures/s, one at a time) | page encodes from the pictures it shows (WebCodecs H.264), with the Studio look already applied there | on-machine: export.html makes films up to 1024 px a camera here by default (`web/test_export_here.py`); Full and "up to" sizes stay on the server |
 | 7 | Mosaic movie fade / laps / persist | server draws each combination (`rolling_webp`) | fade: page dims the pre-built time-lapse picture (`fade_table`: each tile's alpha on the fade map, zlib) by a port of `_faded` (`web/test_fade_local.py`); laps above 1 change the composition and stay on the server | on-machine (fade) |
 | 8 | Processing toggles, classic look, raw colours (`off=`, `look=`, `colors=`) | server redraws everything | stay on the server; local-only (Sam), not offered on the public site unless pre-built | rule only |
 | 9 | Seam blend and level, full-resolution export, Pre-process | heavy, need tiles | stay on the server: seams pre-built as one variant; full-res and Pre-process off on the public site | rule only |
+
+For filled passes (Titan, Jupiter) the pre-build keeps their movie frames drawn without the detail filter too
+(`/frames/movie/<ID>.webp?...&detail=0`, files `_d0`): the page's exposure, colour and trail start from those.
 
 Steps 1 to 5 also need two shared pieces:
 

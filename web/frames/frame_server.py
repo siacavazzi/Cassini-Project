@@ -97,7 +97,9 @@ Routes:
                                its disk fits the view; steady=N image stabilization, each frame registered to the one
                                before it and held to SPICE over N frames (obs_mosaic.steady_places; 0, the default:
                                SPICE's places); exposure=N exposure normalization, flashes taken out and brightness
-                               jumps spread over N frames (obs_mosaic.exposure_gains; 0, the default: none). 503 while the pass is being worked out (the window shows the frame)
+                               jumps spread over N frames (obs_mosaic.exposure_gains; 0, the default: none); detail=0 a filled
+                               pass's frame before its detail filter (the plane the page sharpens itself,
+                               steady-local.html). 503 while the pass is being worked out (the window shows the frame)
   /frames/movie/<ID>.webp?mode=rolling&laps=1&fade=0&persist=35
                                a mosaic movie (a raster repeated over the same places): every place's newest tile
                                by this frame (laps=N: its N newest copies, older under newer), composed like the
@@ -1641,7 +1643,7 @@ def make_handler(site, cache, flags=None):
                         with _movie_slots:
                             made = obs_mosaic.movie_webp(m.group(1), size, cache, trail, query.get("color", ["1"])[0] != "0",
                                                        centre=query.get("center", ["1"])[0] != "0", steady=steady,
-                                                       exposure=exposure)
+                                                       exposure=exposure, sharpen=query.get("detail", ["1"])[0] != "0")
                 except (FileNotFoundError, ValueError):
                     made = None
                 if not made:

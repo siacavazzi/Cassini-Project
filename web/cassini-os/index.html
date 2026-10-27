@@ -3038,13 +3038,138 @@ body.ambient.phone .amb-where { font-size: 18px; }
       for (let i = 0, p = 0; p < L.length; p++, i += 4) for (let c = 0; c < 3; c++) px[i + c] = Math.min(255, Math.max(0, Math.trunc(f(f(px[i + c] * L[p]) + 0.5))));
       return px;
     }
-    return { pyRound, pyRound2, places, shift, evenedGains, gains, lut, mix, trailOf, blendTrail, fadeWeight, fadeLight, resizeLinear, applyLight };
+    // ---- a filled pass's last step (obs_mosaic.detail, the balanced look): local contrast raised on the luminance ----
+    // cv2.getGaussianKernel(ksize, sigma, CV_32F) for GaussianBlur's ksize (0, 0) on float32: 4 sigma each side
+    function gaussKernel(sigma) {
+      const n = (pyRound(sigma * 4 * 2 + 1) | 1), scale2X = -0.5 / (sigma * sigma), k = new Float32Array(n);
+      let sum = 0;
+      for (let i = 0; i < n; i++) { const x = i - (n - 1) * 0.5; k[i] = Math.exp(scale2X * x * x); sum += k[i]; }
+      sum = 1 / sum;
+      for (let i = 0; i < n; i++) k[i] = k[i] * sum;
+      return k;
+    }
+    // what is blurred: the alpha a and the luminance times it, float32 as numpy has them
+    function detailInputs(px) {
+      const f = Math.fround, N = px.length / 4, a = new Float32Array(N), la = new Float32Array(N), lum = new Float32Array(N);
+      for (let p = 0, i = 0; p < N; p++, i += 4) {
+        a[p] = f(px[i + 3] / 255);
+        lum[p] = f((px[i] + px[i + 1] + px[i + 2]) / 3);
+        la[p] = f(lum[p] * a[p]);
+      }
+      return { a, la, lum };
+    }
+    // the rest of detail() once the two blurs (ga of a, gla of lum * a) are in: mean, the change, clip, round half to even
+    function detailFinish(px, lum, ga, gla, amount) {
+      const f = Math.fround, floor = f(1e-3), D = f(amount);
+      for (let p = 0, i = 0; p < lum.length; p++, i += 4) {
+        const mean = f(gla[p] / Math.max(ga[p], floor)), d = f(D * f(lum[p] - mean));
+        for (let c = 0; c < 3; c++) px[i + c] = pyRound(Math.min(255, Math.max(0, f(px[i + c] + d))));
+      }
+      return px;
+    }
+    // cv2's separable float32 blur (BORDER_REFLECT_101), on the processor: rows summed tap by tap, then columns
+    // centre first and each pair of taps together, as cv2's RowFilter and SymmColumnFilter (the reference the GPU's
+    // version is tested against; slow for a whole picture)
+    function blurCPU(src, w, h, k) {
+      const f = Math.fround, n = k.length, r = (n - 1) >> 1, rows = new Float32Array(w * h), out = new Float32Array(w * h);
+      const refl = (i, len) => { while (i < 0 || i >= len) i = i < 0 ? -i : 2 * len - 2 - i; return i; };
+      for (let y = 0; y < h; y++) for (let x = 0; x < w; x++) {
+        let s = 0;
+        for (let j = 0; j < n; j++) s = f(s + f(k[j] * src[y * w + refl(x - r + j, w)]));
+        rows[y * w + x] = s;
+      }
+      for (let y = 0; y < h; y++) for (let x = 0; x < w; x++) {
+        let s = f(k[r] * rows[y * w + x]);
+        for (let j = 1; j <= r; j++) s = f(s + f(k[r + j] * f(rows[refl(y + j, h) * w + x] + rows[refl(y - j, h) * w + x])));
+        out[y * w + x] = s;
+      }
+      return out;
+    }
+    return { pyRound, pyRound2, places, shift, evenedGains, gains, lut, mix, trailOf, blendTrail, fadeWeight, fadeLight, resizeLinear, applyLight,
+      gaussKernel, detailInputs, detailFinish, blurCPU };
   };
   window.cassiniSteadyMath = STEADY_MATH;
+  // the same blur on the GPU (WebGL 2 with float colour buffers): blur([a, b], w, h, kernel) -> [blurred a, blurred b],
+  // the two maps in one float texture, a pass along the rows and one along the columns in blurCPU's order
+  const STEADY_GPU = function () {
+    let gl = null, prog = null, tex = [], fbo = [], ktex = null, size = [0, 0], kn = 0;
+    try {
+      const c = new OffscreenCanvas(1, 1);
+      gl = c.getContext("webgl2", { antialias: false, depth: false, stencil: false, premultipliedAlpha: false });
+      if (!gl || !gl.getExtension("EXT_color_buffer_float")) gl = null;
+    } catch (e) { gl = null; }
+    if (!gl) return null;
+    const sh = (type, src) => { const o = gl.createShader(type); gl.shaderSource(o, src); gl.compileShader(o); if (!gl.getShaderParameter(o, gl.COMPILE_STATUS)) throw new Error(gl.getShaderInfoLog(o)); return o; };
+    prog = gl.createProgram();
+    gl.attachShader(prog, sh(gl.VERTEX_SHADER, "#version 300 es\nin vec2 p; void main() { gl_Position = vec4(p, 0., 1.); }"));
+    gl.attachShader(prog, sh(gl.FRAGMENT_SHADER, `#version 300 es
+precision highp float; precision highp int; precision highp sampler2D;
+uniform sampler2D src; uniform sampler2D kern; uniform int r; uniform int horiz; uniform ivec2 size;
+out vec4 o;
+int refl(int i, int len) { for (int t = 0; t < 8 && (i < 0 || i >= len); t++) i = i < 0 ? -i : 2 * len - 2 - i; return i; }
+float kk(int j) { return texelFetch(kern, ivec2(j, 0), 0).r; }
+void main() {
+  ivec2 q = ivec2(gl_FragCoord.xy);
+  vec4 s;
+  if (horiz == 1) {
+    s = vec4(0.);
+    for (int j = 0; j <= 2 * r; j++) s = s + kk(j) * texelFetch(src, ivec2(refl(q.x - r + j, size.x), q.y), 0);
+  } else {
+    s = kk(r) * texelFetch(src, q, 0);
+    for (int j = 1; j <= r; j++) s = s + kk(r + j) * (texelFetch(src, ivec2(q.x, refl(q.y + j, size.y)), 0) + texelFetch(src, ivec2(q.x, refl(q.y - j, size.y)), 0));
+  }
+  o = s;
+}`));
+    gl.linkProgram(prog);
+    if (!gl.getProgramParameter(prog, gl.LINK_STATUS)) return null;
+    gl.useProgram(prog);
+    const buf = gl.createBuffer(); gl.bindBuffer(gl.ARRAY_BUFFER, buf); gl.bufferData(gl.ARRAY_BUFFER, new Float32Array([-1, -1, 1, -1, -1, 1, 1, 1]), gl.STATIC_DRAW);
+    const loc = gl.getAttribLocation(prog, "p"); gl.enableVertexAttribArray(loc); gl.vertexAttribPointer(loc, 2, gl.FLOAT, false, 0, 0);
+    const U = n => gl.getUniformLocation(prog, n);
+    const newTex = (w, h, data, fmt = gl.RGBA32F, f2 = gl.RGBA) => {
+      const t = gl.createTexture(); gl.bindTexture(gl.TEXTURE_2D, t);
+      [[gl.TEXTURE_MIN_FILTER, gl.NEAREST], [gl.TEXTURE_MAG_FILTER, gl.NEAREST], [gl.TEXTURE_WRAP_S, gl.CLAMP_TO_EDGE], [gl.TEXTURE_WRAP_T, gl.CLAMP_TO_EDGE]].forEach(([k, v]) => gl.texParameteri(gl.TEXTURE_2D, k, v));
+      gl.texImage2D(gl.TEXTURE_2D, 0, fmt, w, h, 0, f2, gl.FLOAT, data);
+      return t;
+    };
+    return function blur(maps, w, h, k) {
+      if (size[0] !== w || size[1] !== h) {
+        tex.forEach(t => gl.deleteTexture(t)); fbo.forEach(b => gl.deleteFramebuffer(b));
+        tex = [newTex(w, h, null), newTex(w, h, null), newTex(w, h, null)];
+        fbo = tex.slice(1).map(t => { const b = gl.createFramebuffer(); gl.bindFramebuffer(gl.FRAMEBUFFER, b); gl.framebufferTexture2D(gl.FRAMEBUFFER, gl.COLOR_ATTACHMENT0, gl.TEXTURE_2D, t, 0); return b; });
+        gl.canvas.width = w; gl.canvas.height = h; size = [w, h];
+      }
+      if (kn !== k.length || !ktex) { if (ktex) gl.deleteTexture(ktex); ktex = newTex(k.length, 1, k, gl.R32F, gl.RED); kn = k.length; }
+      else { gl.bindTexture(gl.TEXTURE_2D, ktex); gl.texSubImage2D(gl.TEXTURE_2D, 0, 0, 0, k.length, 1, gl.RED, gl.FLOAT, k); }
+      const N = w * h, inp = new Float32Array(N * 4);
+      for (let p = 0; p < N; p++) { inp[p * 4] = maps[0][p]; inp[p * 4 + 1] = maps[1][p]; }
+      gl.bindTexture(gl.TEXTURE_2D, tex[0]); gl.texSubImage2D(gl.TEXTURE_2D, 0, 0, 0, w, h, gl.RGBA, gl.FLOAT, inp);
+      gl.viewport(0, 0, w, h);
+      gl.uniform1i(U("src"), 0); gl.uniform1i(U("kern"), 1); gl.uniform1i(U("r"), (k.length - 1) >> 1); gl.uniform2i(U("size"), w, h);
+      gl.activeTexture(gl.TEXTURE1); gl.bindTexture(gl.TEXTURE_2D, ktex); gl.activeTexture(gl.TEXTURE0);
+      [[tex[0], fbo[0], 1], [tex[1], fbo[1], 0]].forEach(([from, to, horiz]) => {
+        gl.bindFramebuffer(gl.FRAMEBUFFER, to); gl.bindTexture(gl.TEXTURE_2D, from); gl.uniform1i(U("horiz"), horiz);
+        gl.drawArrays(gl.TRIANGLE_STRIP, 0, 4);
+      });
+      const out = new Float32Array(N * 4);
+      gl.readPixels(0, 0, w, h, gl.RGBA, gl.FLOAT, out);
+      const a = new Float32Array(N), b = new Float32Array(N);
+      for (let p = 0; p < N; p++) { a[p] = out[p * 4]; b[p] = out[p * 4 + 1]; }
+      return [a, b];
+    };
+  };
+  window.cassiniSteadyGPU = STEADY_GPU;
   if (typeof document === "undefined") return;
 
   // the worker: keeps each pass's table and its places per smoothing, moves a frame's picture
   const src = `const M = (${STEADY_MATH.toString()})();
+let blur;   // the GPU blur, made when a filled pass first needs it
+const sharpen = (px, W, H, t) => {
+  if (blur === undefined) blur = (${STEADY_GPU.toString()})();
+  const k = M.gaussKernel(t.sigma), d = M.detailInputs(px);
+  const [ga, gla] = blur ? blur([d.a, d.la], W, H, k) : [M.blurCPU(d.a, W, H, k), M.blurCPU(d.la, W, H, k)];
+  return M.detailFinish(px, d.lum, ga, gla, t.amount);
+};
 const tables = new Map(), placed = new Map(), gained = new Map(), luts = new Map();
 onmessage = async e => {
   const m = e.data;
@@ -3063,7 +3188,7 @@ onmessage = async e => {
   const W = m.planes[0].bitmap.width, H = m.planes[0].bitmap.height, mixing = m.planes.length > 1 || m.trail, moves = [];
   // each tile's picture (the movie frame drawn at SPICE's places) moved to its stabilized place, its gain on it
   const planes = m.planes.map(p => {
-    const [dx, dy] = M.shift(t, placed.get(pk), p.i), c = new OffscreenCanvas(W, H), g = c.getContext("2d", { willReadFrequently: !!(L || mixing) });
+    const [dx, dy] = M.shift(t, placed.get(pk), p.i), c = new OffscreenCanvas(W, H), g = c.getContext("2d", { willReadFrequently: !!(L || mixing || m.detail) });
     g.drawImage(p.bitmap, dx, dy);
     p.bitmap.close();
     moves.push([dx, dy]);
@@ -3074,10 +3199,13 @@ onmessage = async e => {
     return d;
   });
   let out = planes[0];
-  if (mixing) {
-    // a colour set: colour_picture's mix of the filters' planes; a trail: the earlier frames under the newest
+  if (mixing || m.detail) {
+    // a colour set: colour_picture's mix of the filters' planes; a trail: the earlier frames under the newest;
+    // a filled pass: then its detail filter (the planes came without it)
+    let px = !mixing ? planes[0].getContext("2d").getImageData(0, 0, W, H).data
+      : m.trail ? M.blendTrail(planes.slice(0, -1), planes[planes.length - 1]) : M.mix(planes, t.sets);
+    if (m.detail) px = sharpen(px, W, H, t);
     out = new OffscreenCanvas(W, H);
-    const px = m.trail ? M.blendTrail(planes.slice(0, -1), planes[planes.length - 1]) : M.mix(planes, t.sets);
     out.getContext("2d").putImageData(new ImageData(px, W, H), 0, 0);
   }
   const blob = await out.convertToBlob({ type: "image/png" });
@@ -3093,6 +3221,12 @@ onmessage = async e => {
     return worker;
   };
   const S = () => window.cassiniSettings;
+  // whether this computer can blur on the GPU (the detail filter of filled passes), asked once
+  let gpuOk;
+  const gpu = () => {
+    if (gpuOk === undefined) { try { const c = new OffscreenCanvas(1, 1), g = c.getContext("webgl2"); gpuOk = !!(g && g.getExtension("EXT_color_buffer_float")); } catch (e) { gpuOk = false; } }
+    return gpuOk;
+  };
   const byId = new Map();     // `${center}${color}:${frame id}` -> {key, table, a: its tile's index, n: its frame} once its pass's table is here
   const asked = new Set();
   const stats = { frames: 0, placeMs: 0, drawMs: 0, last: null };
@@ -3142,13 +3276,16 @@ onmessage = async e => {
       if (window.cassiniLook && window.cassiniLook()) return null;
       const e = lookup(frames, id, o.center !== false, !!o.color);
       if (!e) return null;
-      // a colour set: its natural mix here (a false colour set, or the detail filter after the mix: the server)
+      // a colour set: its natural mix here (a false colour set: the server)
       const set = o.color && e.table.sets ? e.table.sets.by[e.n] : null;
-      if (o.color && e.table.colour && (!e.table.sets || (set && e.table.detail))) return null;
-      // a trail drawn under a frame alone (the detail filter runs after it: the server)
-      if (trail && !set && e.table.detail) return null;
+      if (o.color && e.table.colour && !e.table.sets) return null;
       if (exposure && !(e.table.exposure && e.table.exposure.local)) return null;
-      return { steady, exposure, trail: set ? 0 : Math.min(trail, e.table.trail_most) };
+      const tr = set ? 0 : Math.min(trail, e.table.trail_most);
+      // a filled pass ends in its detail filter: anything but a move is done on its frames drawn without it, and
+      // the filter here (on the GPU; a computer without one leaves the pass to the server)
+      const raw = !!e.table.detail && !!(exposure || tr || (set && set.length > 1));
+      if (raw && !gpu()) return null;
+      return { steady, exposure, trail: tr, raw };
     },
     // the picture of the frame (SPICE's places, no gain, OUT px) moved to its stabilized place and given its
     // exposure gain: a new Image, or null
@@ -3160,14 +3297,14 @@ onmessage = async e => {
       const T = e.table, set = o.color && T.sets ? T.sets.by[e.n] : null;
       const load = async j => {
         if (j === e.n) return createImageBitmap(im);
-        const r = await fetch(o.planeUrl(T.ids[j]));
+        const r = await fetch(o.planeUrl(T.ids[j]) + (o.raw ? "&detail=0" : ""));
         if (!r.ok) throw new Error(`plane ${T.ids[j]}: ${r.status}`);
         return createImageBitmap(await r.blob());
       };
       const older = !set && o.trail ? window.cassiniSteadyMath().trailOf(T, e.n, o.trail) : [];
       const tiles = set || [...older, e.n], bitmaps = await Promise.all(tiles.map(load)), mid = ++seq;
       const planes = tiles.map((j, q) => ({ i: T.n.indexOf(j), bitmap: bitmaps[q] }));
-      const r = await new Promise(res => { waiting.set(mid, res); work().postMessage({ id: mid, key: e.key, n: e.n, steady: o.steady || 0, exposure: o.exposure || 0, trail: older.length > 0, planes }, bitmaps); });
+      const r = await new Promise(res => { waiting.set(mid, res); work().postMessage({ id: mid, key: e.key, n: e.n, steady: o.steady || 0, exposure: o.exposure || 0, trail: older.length > 0, detail: !!o.raw, planes }, bitmaps); });
       stats.frames++; stats.placeMs += r.ms[0]; stats.drawMs += r.ms[1]; stats.last = { id, moves: r.moves, gain: r.gain, set: tiles.map(j => T.ids[j]) };
       const url = URL.createObjectURL(r.blob), out = new Image();
       urls.push(url);
@@ -4284,7 +4421,7 @@ onmessage = async e => {
         // stabilized on this computer (steady-local.html): the server's frame at SPICE's places, at the 1024 px it is
         // drawn at, moved here; the key names the smoothing, so a new one is a new picture (the request is the same)
         const here = hereWant(k);
-        if (here) return { key: movieUrl(catalog.id[k], 1024, 0, 0, 0, 0) + `#here=s${here.steady}e${here.exposure}t${here.trail}c${S.get("cameras.composites") ? 1 : 0}`, set: -1, k, movie: true, here };
+        if (here) return { key: movieUrl(catalog.id[k], 1024, 0, 0, 0, 0) + (here.raw ? "&detail=0" : "") + `#here=s${here.steady}e${here.exposure}t${here.trail}c${S.get("cameras.composites") ? 1 : 0}`, set: -1, k, movie: true, here };
         return { key: movieUrl(catalog.id[k], sz), set: -1, k, movie: true };
       }
       // a mosaic movie (a raster repeated over the same places): its rolling mosaic, every place's newest tile
@@ -7247,7 +7384,7 @@ onmessage = async e => {
     const w = SL.want(FRAMES, id, { center, color: true });
     if (!w) return null;
     const base = j => `${FRAMES}/frames/movie/${j}.webp?size=1024&color=0${window.cassiniMovieStyle({ center, steady: 0, exposure: 0, trail: 0 })}${window.cassiniLook()}`;
-    const r = await fetch(base(id)).catch(() => null);
+    const r = await fetch(base(id) + (w.raw ? "&detail=0" : "")).catch(() => null);
     if (!r || !r.ok) return null;
     const im = new Image(), u = URL.createObjectURL(await r.blob());
     try { im.src = u; await im.decode(); } catch (e) { URL.revokeObjectURL(u); return null; }
@@ -10529,7 +10666,7 @@ void main() {
   window.cassiniAbout = { open, addTab, esc, close: () => show(false), credits: CREDITS };
 
   // ---- which version this is: this page's build id (build.py writes it), and what the frame server says it serves ----
-  const BUILD = /*BUILD*/"d621fef7ad55";
+  const BUILD = /*BUILD*/"194e1000b628";
   const FRAMES = (() => {                       // the frame server, chosen as the camera window chooses it
     const q = new URLSearchParams(location.search).get("frames");
     if (q) return q.replace(/\/$/, "");
