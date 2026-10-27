@@ -3,7 +3,9 @@
      other script on the page (chrome, movie mode, the replay viewer) can use window.cassiniSettings.
 
      A setting is declared once with define() and read with get() / on(); the Settings window lists every defined
-     setting, grouped by section, and saves the values on this device (localStorage cassini-os-settings-v1).
+     setting, grouped by section, and saves the values on this device (localStorage cassini-os-settings-v1), each
+     with the default it had then, so a value left at its default follows a new default. was: [the defaults it had
+     before] does the same for values saved before the defaults were kept with them.
 
        const v = cassiniSettings.define({ key: "cameras.composites", section: "Cameras", label: "Color composites",
                                           hint: "…", type: "toggle", value: true });
@@ -83,8 +85,14 @@ body.phone .srow input[type=range] { width: 96px; }
   };
   let saved = {};
   try { saved = JSON.parse(localStorage.getItem(KEY)) || {}; } catch (e) {}
+  // the defaults the values were saved with (DEFAULTS): a value saved at its default then follows the default now
+  const DEFAULTS = "~defaults", savedDefaults = saved[DEFAULTS] && typeof saved[DEFAULTS] === "object" ? saved[DEFAULTS] : {};
   const defs = new Map(), subs = new Map(), values = {};
-  const store = () => { try { localStorage.setItem(KEY, JSON.stringify(values)); } catch (e) {} };
+  const store = () => {
+    const defaults = {};
+    for (const [k, d] of defs) if (d.type !== "action") defaults[k] = d.value;
+    try { localStorage.setItem(KEY, JSON.stringify({ ...values, [DEFAULTS]: defaults })); } catch (e) {}
+  };
   const valid = (d, v) => {
     if (d.type === "toggle") return typeof v === "boolean";
     if (d.type === "range") return typeof v === "number" && isFinite(v) && v >= d.min && v <= d.max;
@@ -95,7 +103,10 @@ body.phone .srow input[type=range] { width: 96px; }
     define(d) {
       d = Object.assign({ section: "Interface", hint: "" }, d);
       defs.set(d.key, d);
-      if (d.type !== "action" && !(d.key in values)) values[d.key] = valid(d, saved[d.key]) ? saved[d.key] : d.value;
+      if (d.type !== "action" && !(d.key in values)) {
+        const v = saved[d.key], atDefault = d.key in savedDefaults ? [savedDefaults[d.key]] : d.was || [];
+        values[d.key] = valid(d, v) && !atDefault.includes(v) ? v : d.value;
+      }
       if (!SECTIONS.includes(d.section)) SECTIONS.push(d.section);
       if (!card.hidden) render();
       return values[d.key];
