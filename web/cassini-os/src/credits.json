@@ -124,7 +124,7 @@
           "id": "huygens-dm",
           "title": "Huygens 3D models (entry shell and descent module)",
           "credit": "ESA SPICE Service (Huygens SPICE dataset, doi:10.5270/esa-ssem3np)",
-          "detail": "Huygens in the landing cutscene: ESA's meshes from its Cosmographia \"Huygens descent\" set, the entry shell split into the back cover and the heat shield that come off during the descent, and the descent module under its parachutes and on Titan's surface; scaled to the real sizes and colored for Cassini OS.",
+          "detail": "Huygens from its mounting on Cassini to Titan's surface: ESA's meshes from its Cosmographia \"Huygens descent\" set, the entry shell split into the back cover and the heat shield that come off during the descent, and the descent module under its parachutes and on Titan's surface; scaled to the real sizes and colored for Cassini OS.",
           "license": "CC BY-NC 3.0 IGO",
           "url": "https://spiftp.esac.esa.int/data/SPICE/HUYGENS/misc/cosmo/models/"
         }

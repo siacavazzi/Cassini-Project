@@ -1,0 +1,36 @@
+<!-- Huygens' own models, shared by everything that shows the probe off Cassini: the release and coast
+     (huygens-release.html), the entry, descent and landing (huygens-landing.html). build.py splices its script in
+     before the cutscenes'. While Huygens is still mounted it is part of NASA's Cassini model; from the release on it is
+     ESA's models (the ESA SPICE Service's Huygens dataset, the ones its Cosmographia "Huygens descent" uses; credits.json
+     id huygens-dm), made into small GLBs by models/make_huygens_shell.py and make_huygens_dm.py:
+       shell  the entry shell, its two parts as nodes "front_shield" and "back_cover"
+       dm     the descent module
+     Both in metres in one frame: spin axis +Y, the heat shield facing -Y, DISR's side +X, the base of the descent
+     module's fore dome at y = 0 (where it touches the ground).
+     window.huygensModels.get(name, then) calls then(object) with a new copy of the model each time (on the close-up
+     layer, 1, vertex colors on), once it has loaded; nothing if it cannot load. -->
+<script>
+window.huygensModels = (() => {
+  const FILES = { shell: "models/huygens_shell.glb.b64.txt", dm: "models/huygens_dm.glb.b64.txt" };
+  const loads = {};   // name: a promise of the loaded scene
+  function load(name) {
+    if (!loads[name]) loads[name] = new Promise((ok, fail) => {
+      if (!window.THREE || !THREE.GLTFLoader) return fail(new Error("no GLTFLoader"));
+      fetch(FILES[name]).then(r => { if (!r.ok) throw new Error(r.status); return r.text(); }).then(t => {
+        const b = atob(t.trim()), u = new Uint8Array(b.length);
+        for (let i = 0; i < b.length; i++) u[i] = b.charCodeAt(i);
+        new THREE.GLTFLoader().parse(u.buffer, "", gltf => {
+          gltf.scene.traverse(o => { o.layers.set(1); if (o.isMesh) o.material.vertexColors = true; });
+          ok(gltf.scene);
+        }, fail);
+      }).catch(fail);
+    });
+    return loads[name];
+  }
+  return {
+    get(name, then) {
+      load(name).then(s => then(s.clone())).catch(err => console.warn(`Huygens model ${name} not loaded`, err));
+    },
+  };
+})();
+</script>

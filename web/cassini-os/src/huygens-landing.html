@@ -170,18 +170,7 @@ body.phone #hland .cs-read { font-size: 9.5px; bottom: 9vh; white-space: normal;
     ];
   }
 
-  // ---------- the probe: ESA's models of it (entry shell in two parts, descent module), the parachutes ----------
-  // ESA's models (the ESA SPICE Service's Huygens dataset, the ones its Cosmographia "Huygens descent" uses), made into
-  // small GLBs by models/make_huygens_dm.py and make_huygens_shell.py, in metres in one frame: spin axis +Y, the heat
-  // shield facing -Y, the base of the descent module's fore dome at y = 0 (where it touches the ground)
-  function loadModel(file, then) {
-    if (!THREE.GLTFLoader) return;
-    fetch(file).then(r => { if (!r.ok) throw new Error(r.status); return r.text(); }).then(t => {
-      const b = atob(t.trim()), u = new Uint8Array(b.length);
-      for (let i = 0; i < b.length; i++) u[i] = b.charCodeAt(i);
-      new THREE.GLTFLoader().parse(u.buffer, "", gltf => { gltf.scene.traverse(o => o.layers.set(1)); then(gltf.scene); });
-    }).catch(err => console.warn(`${file} not loaded`, err));
-  }
+  // ---------- the probe: ESA's models of it (huygens-models.html), the parachutes ----------
   // the parachutes hang from the swivel above the descent module's top platform; the pilot chute from the top of the
   // back cover
   const DM_TOP = 0.84, BC_TOP = 0.94;
@@ -297,10 +286,9 @@ body.phone #hland .cs-read { font-size: 9.5px; bottom: 9vh; white-space: normal;
   function chuteOpacity(c, o) { c.visible = o > 0.01; c.userData.canopy.material.opacity = o; c.userData.lines.material.opacity = 0.6 * o; }
   function build() {
     const P = { root: new THREE.Group(), mod: new THREE.Group(), front: new THREE.Group(), back: new THREE.Group() };
-    loadModel("models/huygens_dm.glb.b64.txt", s => { s.traverse(o => { if (o.isMesh) o.material.vertexColors = true; }); P.mod.add(s); });
-    loadModel("models/huygens_shell.glb.b64.txt", s => {
+    huygensModels.get("dm", s => P.mod.add(s));
+    huygensModels.get("shell", s => {
       const f = s.getObjectByName("front_shield"), b = s.getObjectByName("back_cover");
-      s.traverse(o => { if (o.isMesh) o.material.vertexColors = true; });
       if (f) P.front.add(f); if (b) P.back.add(b);
     });
     // the pilot chute inflated about 27 m behind the probe (ESA); the main and the drogue hang from the swivel above the
