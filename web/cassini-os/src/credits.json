@@ -83,6 +83,7 @@
         { "id": "map-titan-surface", "title": "Titan's surface", "credit": "Cassini VIMS and ISS map (Seignovert et al. 2019) with radar lakes, via Celestia", "license": "CC BY 3.0", "files": ["titan_surface.webp"] },
         { "id": "map-hyperion", "title": "Hyperion", "credit": "Map: reprojected Cassini imagery (ItzImcool), via Celestia. Shape: P. C. Thomas et al., NASA Planetary Data System", "license": "Map CC BY 4.0; shape CC0", "files": ["hyperion.webp", "models/hyperion.mesh.b64.txt"] },
         { "id": "map-phoebe", "title": "Phoebe", "credit": "Map: John van Vliet, via Celestia. Shape: R. W. Gaskell, NASA Planetary Data System", "license": "No license stated", "files": ["phoebe.webp", "models/phoebe.mesh.b64.txt"] },
+        { "id": "shape-small-moons", "title": "Saturn's small moons (shapes)", "credit": "Pan, Daphnis, Atlas, Prometheus, Pandora, Epimetheus, Janus, Telesto, Calypso and Helene: P. Thomas, J. Joseph and T. Ansty, Saturn Small Moon Shape Models V1.0, NASA Planetary Data System, 2018 (doi:10.26033/ewy3-jy61), from Cassini ISS images; via Celestia", "license": "CC0 1.0", "files": ["models/pan.mesh.b64.txt", "models/daphnis.mesh.b64.txt", "models/atlas.mesh.b64.txt", "models/prometheus.mesh.b64.txt", "models/pandora.mesh.b64.txt", "models/epimetheus.mesh.b64.txt", "models/janus.mesh.b64.txt", "models/telesto.mesh.b64.txt", "models/calypso.mesh.b64.txt", "models/helene.mesh.b64.txt"] },
         { "id": "map-jupiter", "title": "Jupiter", "credit": "Cassini 2000 flyby and Juno data, recolored by Askaniy Anpilogov (via Celestia)", "license": "CC BY 3.0", "files": ["jupiter.webp"] },
         { "id": "map-venus", "title": "Venus", "credit": "Cloud tops by Björn Jónsson, recolored by FarGetaNik (via Celestia)", "license": "No license stated", "files": ["venus.webp"] },
         { "id": "map-earth", "title": "Earth", "credit": "\"Mappamondo\" (earthstartsbeating.com), Natural Earth II (Tom Patterson), NASA Blue Marble Next Generation (via Celestia)", "license": "No license stated", "files": ["earth.webp"] },
@@ -128,17 +129,8 @@
           "id": "sound",
           "title": "Sonification",
           "credit": "Made for Cassini OS, after Erich Karkoschka's \"Titan Descent Data Movie with Bells and Whistles\" (DISR team, University of Arizona)",
-          "detail": "The default sounds are synthesized in the browser from what Cassini is doing; the idea of a chime for each instrument part follows Karkoschka's Huygens descent movie.",
+          "detail": "Every sound is synthesized in the browser from what Cassini is doing (no recordings); the idea of a chime for each instrument part follows Karkoschka's Huygens descent movie.",
           "license": "Part of Cassini OS"
-        },
-        {
-          "id": "instrument-samples",
-          "title": "Instrument notes",
-          "credit": "Instrument samples: Versilian Community Sample Library and VSCO 2 Community Edition, Versilian Studios (CC0)",
-          "short": "Versilian Studios (CC0)",
-          "detail": "The recorded notes that Settings > Sound > Instrument can play instead of the synthesized chimes: Steinway B grand piano, hand chimes, glockenspiel, vibraphone (soft mallets and bowed), marimba, Tanzanian kalimba, concert harp, tubular bells, rubbed wine glasses, quiet pipe organ and Nepalese hand bells from VCSL; the violin and cello sections from VSCO 2 CE. One recording per note, trimmed and pitched to the scale (web/cassini-os/sounds/make_sounds.py).",
-          "license": "CC0 1.0 (public domain dedication)",
-          "url": "https://github.com/sgossner/VCSL"
         }
       ]
     },
