@@ -18,6 +18,40 @@ step, scrubbing the timeline carries the film on from the new time, and Escape (
 main play button) leaves. Frames are fetched ahead of the play head; a frame that has not arrived holds the film
 rather than being skipped.
 
+## Ambient mode
+
+The non-interactive Cassini OS, for a screen nobody touches: a wallpaper, a screen saver, a TV, a 24/7 stream
+(`src/ambient.html`). `?ambient=1` opens in it, Go > Ambient Mode (A) starts it, Escape or the Leave button that shows
+when the pointer moves ends it. No menus, windows or dock: the 3D view fills the screen, centered on Cassini, and
+slowly turns to look past it at the most interesting thing around it. One rule picks it: each body scores by how big
+it looks from Cassini, plus a bonus when Cassini photographs it next (more the sooner; the look-ahead grows with the
+speed) and a smaller one when it was just photographed. So a Saturn filling the sky wins, and a picture of Enceladus
+coming up turns the view to Enceladus as Cassini closes in. A new subject has to win for a few seconds and each one
+holds at least half a minute. Framing keeps Cassini and its subject both in the picture: the camera stands off the line
+from Cassini to the subject by the subject's apparent radius plus a spacing (Spacing, 22° by default, kept inside the
+screen), and looks halfway between the spacecraft and the subject's near edge. A small moon is seen past Cassini; a big
+planet close by is seen from beside the spacecraft, or from between the two looking back at Cassini with the limb
+alongside. The camera circles slowly around that line (Camera drift). Framing > Past Cassini keeps the earlier view
+over the spacecraft's shoulder. The narrow-angle and wide-angle pictures stay on as two
+frameless panels in the bottom corners. They are the camera windows themselves, restyled, so every picture comes
+through the same pipeline as in Cassini OS, with every processing switch; through a quiet stretch each panel keeps its
+last picture, and the caption counts down to the next one.
+
+Modes (Settings > Ambient, or `?ambient=<mode>`): `live`, real time ten years behind today (the clock is today's date
+and time minus ten years, checked every few seconds, so a stream started now reaches the Grand Finale on its 10th
+anniversary, 15 Sep 2027); `60`, `600` and `3600`, a minute, ten minutes or an hour a second; `pictures`, every
+picture (movie mode, a few seconds each, the quiet hours skipped); `highlights`, the highlight reel over and over.
+Pictures are large when they are rare and smaller when they come fast (Picture size, live and fast; the speeds between
+are in between). While it runs the page never pauses in the background, sound starts without a click where the browser
+allows it (a kiosk or stream browser started with `--autoplay-policy=no-user-gesture-required`), the 3D view is drawn
+at most 30 times a second (Frame rate), and the caption and panels move a few pixels every minute against screen
+burn-in. The camera cones stay on (orbits and the trail go), fainter, fading in and out and turning smoothly from one
+pointing to the next; the sound turns calm (softer, slower chimes with more echo, a quiet bed under them, no flyby
+pulse), each with its own switch in Settings > Ambient. A thin timeline along the top shows the imaging sessions of
+the last stretch and the coming one as short dashes (a day at live, about four minutes of playback at the faster
+speeds), with the next three bodies to be photographed named and how long until then. Cutscenes still play when the clock crosses them; after one, or at the end of the reel or the mission, it
+carries on by itself.
+
 ## Pre-processing a stretch
 
 Drag across the timeline's lanes to highlight a stretch (a click still moves the clock there, and dragging the row
@@ -66,6 +100,17 @@ the area under the pointer magnified; it follows the pointer and the scroll whee
 It draws from the frame server's full resolution picture (`size=full`, asked for once the lens is up), so it shows
 detail the window's 512 or 1024 px picture does not have. On a phone, press and hold on a picture. Settings > Zoom
 lens holds the magnification, size, delay, shape and position (`src/loupe.html`; any `<img data-loupe>` gets it too).
+
+A mosaic's full resolution picture is still its 2048 px canvas, a fraction of its tiles' pixels. When the lens
+magnifies past it, a moment after the pointer stops it loads the part under it at native resolution (one pixel per
+frame pixel, `/frames/mosaic/<ID>/full.webp?crop=`, `web/frames/mosaic_native.py`: the same tiles, layout, seam
+corrections, compose and colour as the window's mosaic) and the label says "native resolution W × H". Settings >
+Zoom lens > "Native resolution in mosaics" turns it off. In full view a mosaic is shown big enough to look at its seams, so the
+lens stays away there until the magnifying glass in the picture's top right corner turns it on (Settings > Zoom
+lens > "On mosaics in full view", off by default). The save menu of a mosaic has "Full resolution mosaic":
+the whole mosaic at native resolution as a JPEG (up to 24,000 px on its longest side); the server makes it when
+it is first asked for (the row counts up) and keeps it in its own cache (`CASSINI_FULLRES_CACHE`, default
+`<cache>-fullres`, at most `CASSINI_FULLRES_MB` = 5 GB), never in the pre-built cache.
 
 ## Dock
 
@@ -119,7 +164,8 @@ The address bar always holds the moment on screen (`src/link.html`), so a copied
 `?t=2005-02-16T23:27:00&view=enceladus&speed=3600&play=0&cam=1.836,0.4572,-0.6478`. `t` is the mission time
 (UTC, to the second) and follows playback; `view` is `follow` (Cassini, looking where its camera points), `cassini`
 (Cassini, free camera) or a body; `cam` is where the free camera sits around it; `speed` is mission seconds per
-second; `play=0` opens paused and `movie=1` in movie mode. Other parameters (`?frames=`, `?tex=`, `?finale`) are kept.
+second; `play=0` opens paused and `movie=1` in movie mode. `ambient=1` (or a mode) opens in ambient mode. Other
+parameters (`?frames=`, `?tex=`, `?finale`) are kept.
 The page rewrites the URL with `history.replaceState` at most twice a second, so the back button is unaffected, and
 a link's view is for that visit only (it does not change the Follow camera setting). Go > Copy Link to This Moment
 (⇧⌘C) copies it.
@@ -242,6 +288,32 @@ orbit: the screen fades to black, then up on Cassini on its own with Earth falli
 its real distance and speed from Earth, and the captions name the plan ahead (borrow speed from Venus twice, Earth and
 Jupiter, then Saturn). Then the interface comes back and the mission plays on from there.
 
+## Huygens landing
+
+Playback crossing Huygens's entry into Titan's air (2005-01-14 09:05 UTC), the "Huygens enters Titan's atmosphere" or
+"Huygens lands on Titan" Moment, the release cutscene's "Watch the landing", or `?huygens-landing` plays the landing
+(`src/huygens-landing.html`, under two minutes): the entry glow at up to 12 g, the parachutes and the heat shield falling
+away, Cassini listening from 69,000 km, the drogue descent over the probe's own landing-site map, touchdown at 4.5 m/s
+on the DISR mosaic, then Cassini as the site sets at 12:50 UTC and its turn to Earth, ending on the first data at ESOC
+(16:19 UTC). The probe's speed, altitude and deceleration come from its track (needs `--huygens` in the data build);
+the event times and facts are in `src/huygens-landing-data.json` with their sources. The probe is ESA's own models
+(`models/make_huygens_shell.py` and `models/make_huygens_dm.py` turn the ESA SPICE Service's Cosmographia meshes into
+`models/*.glb.b64.txt`; sources on branch `assets/huygens-models`): the entry shell comes off in two parts in the real
+order, and the parachutes are disk-gap-band canopies at their real sizes. Inside Titan's haze the sky closes in around the
+probe; near the ground the probe is held to the landing point on the globe at the descent table's altitude. The last card
+stays with Huygens or goes back to Cassini. `bench/huygens-landing.cjs` records it on a hand-stepped clock.
+
+Huygens stays on Titan after the landing, at any time to the end of the mission: its marker and label sit on the landing
+point while the camera is near Titan (within a dozen Titan radii, the site on the near side) or the view is on Huygens,
+and the Huygens chip is there too. Clicking either goes down to it: ESA's model on the landing-site map, the drogue
+lying downwind of it, under Titan's sky, with the ground kept level while you drag around it. The ground there is from what the
+probe measured and saw: it stands with DISR toward azimuth 193 degrees, the pebbles in front of it are where and as large as its
+own surface picture (PIA07232) shows them, the rest of the ground has the same mix of pebbles, and the 12 cm hole it made on
+impact is 70 cm north of it. The drogue drifted on a few seconds after the landing toward the south-south-east (the
+probe's camera saw it cross the Sun's glow, Schröder et al. 2017) and lies there collapsed, about 12 m off, its lines
+slack across the ground and its riser draped over the probe's top. For example
+`?t=2005-01-31T12:00:00&view=huygens&play=0`.
+
 ## Run it
 
 The page reads the replay data through the `data` link (`data -> ../replay/data`), and the camera frames
@@ -314,3 +386,22 @@ calibrates the frames onto one brightness scale, aligns them and caches the resu
 
 Design rule (Sam, 2026-10-19): the interface should be as unobtrusive as possible; the OS stays because
 there is a lot to configure, and the camera feed is the main feature.
+
+## Search and link previews
+
+What Google and link previews read comes from `src/site.json` through `src/seo.py`, which `src/build.py` runs: the
+page title and description, the share card (Open Graph and Twitter tags with `share.jpg`, 1200 × 630), the icons
+(`favicon.svg`, `favicon-48.png`, `apple-touch-icon.png`), JSON-LD structured data (a `WebApplication`), a few lines
+for browsers without JavaScript, and the About page, `about/index.html` (from `src/landing.html`): Cassini OS in plain
+words with links into the app at a few moments. The About window's "More about the project" opens it. `robots.txt`
+keeps `/flags/`, `/export/`, `/replay/` and `/stats/` out of search.
+
+`site.json` `"url"` is the public address, empty while the site is only on the Mini. Set it (or build with
+`CASSINI_SITE_URL=https://.../`) once the site has its public address: the build then writes the canonical links,
+`og:url`, absolute share-image addresses, `sitemap.xml` and the robots.txt sitemap line. At launch:
+
+1. Set the address in `site.json`, rebuild, commit `index.html`, `about/`, `robots.txt` and `sitemap.xml`.
+2. Make `share.jpg` again from the live site with real pictures in the camera windows (a 1200 × 630 screenshot).
+3. Verify the domain in Google Search Console (a DNS TXT record at Cloudflare is the easiest) and submit
+   `sitemap.xml`; Bing Webmaster Tools can import it from Search Console.
+4. Check the share card with a link preview checker and the structured data with Google's Rich Results Test.
