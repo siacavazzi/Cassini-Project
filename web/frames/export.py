@@ -117,6 +117,15 @@ def options(q):
     # a mosaic movie's fade (Rolling), only when on, so a film made without it keeps its name
     fade = max(0, min(120, int(get("fade", "0") or 0)))
     movie.update({"fade": fade, "persist": max(0, min(100, int(get("persist", "35") or 0))) if fade else 0})
+    # image stabilization of movie passes (obs_mosaic.steady_places), smoothed over this many frames, only when on,
+    # so a film made without it keeps its name
+    steady = max(0, min(60, int(get("steady", "0") or 0)))
+    if steady:
+        movie["steady"] = steady
+    # exposure normalization of movie passes (obs_mosaic.exposure_gains), the same way
+    exposure = max(0, min(30, int(get("exposure", "0") or 0)))
+    if exposure:
+        movie["exposure"] = exposure
     off = ",".join(s for s in calibration.STEPS if s in get("off", "").split(","))   # Settings > Processing
     # the movie editor's cut (movieedit.html): frames taken out by hand, and only these targets and filter pairs kept
     words = lambda k: sorted({w.strip() for w in get(k, "").split(",") if w.strip()})
@@ -348,7 +357,8 @@ class Pictures:
             return (reel.shot_webp(*found, size, self.cache, True, self.slots)[0], "mosaic") if found else None
         if kind == "movie":
             made = obs_mosaic.movie_webp(arg, size, self.cache, self.movie["trail"], wait=True, ahead=0,
-                                         centre=self.movie["center"])
+                                         centre=self.movie["center"], steady=self.movie.get("steady", 0),
+                                         exposure=self.movie.get("exposure", 0))
             return (made[0], "movie") if made and made[0] else None
         if kind == "rolling":
             made = obs_mosaic.rolling_webp(arg, size, self.cache, self.movie["laps"], slots=self.slots, wait=True,
