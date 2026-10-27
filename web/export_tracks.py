@@ -50,6 +50,16 @@ BODIES = [
     ("PANDORA", 617, 0.05), ("PAN", 618, 0.05), ("METHONE", 632, 0.05), ("PALLENE", 633, 0.05),
     ("POLYDEUCES", 634, 0.05), ("DAPHNIS", 635, 0.05), ("URANUS BARYCENTER", 7, 50.0),
     ("NEPTUNE BARYCENTER", 8, 50.0),
+    # the small moons Cassini photographed from afar, so the body view can show them too: Anthe and Aegaeon (the
+    # regular-moon SPK), the irregular moons (the IRRE SPK every year's meta-kernel loads) and Himalia (the Jupiter
+    # cruise SPK); named as the image catalog names them (HYROKKIN is the catalog's spelling of Hyrrokkin)
+    ("ANTHE", 649, 0.05), ("AEGAEON", 653, 0.05), ("HIMALIA", 506, 1.0),
+    ("YMIR", 619, 1.0), ("PAALIAQ", 620, 1.0), ("TARVOS", 621, 1.0), ("IJIRAQ", 622, 1.0), ("SUTTUNGR", 623, 1.0),
+    ("KIVIUQ", 624, 1.0), ("MUNDILFARI", 625, 1.0), ("ALBIORIX", 626, 1.0), ("SKATHI", 627, 1.0),
+    ("ERRIAPUS", 628, 1.0), ("SIARNAQ", 629, 1.0), ("THRYMR", 630, 1.0), ("NARVI", 631, 1.0), ("BEBHIONN", 637, 1.0),
+    ("BERGELMIR", 638, 1.0), ("BESTLA", 639, 1.0), ("FORNJOT", 642, 1.0), ("HATI", 643, 1.0), ("HYROKKIN", 644, 1.0),
+    ("KARI", 645, 1.0), ("LOGE", 646, 1.0), ("SKOLL", 647, 1.0), ("SURTUR", 648, 1.0), ("JARNSAXA", 650, 1.0),
+    ("GREIP", 651, 1.0), ("TARQEQ", 652, 1.0),
 ]
 
 # bodies Cassini can fly close to; used for the adaptive step and the encounter search
@@ -185,7 +195,8 @@ def rotation_constants(body):
     return out
 
 
-def export_tracks(kdir, out, years):
+def export_tracks(kdir, out, years, only=None):
+    """Every body's track (and Cassini's), or with only (a set of names) just those bodies'."""
     manifest_bodies = {}
     mks = {int(re.search(r"cas_(\d{4})", m).group(1)): m for m in glob.glob(f"{kdir}/mk/*.tm")}
     for year in years:
@@ -204,6 +215,8 @@ def export_tracks(kdir, out, years):
             jobs.append((name, nid, (lambda p, et, tol=tol: body_tol(p, et, tol)), 6 * 3600.0, 60.0))
 
         for name, nid, tol_fn, step0, min_step in jobs:
+            if only is not None and name not in only:
+                continue
             samples = []
             intervals = []
             for a, b in coverage(nid, files):
@@ -355,6 +368,8 @@ def main():
     ap.add_argument("--highlights", default=None, help="encounters_ranked.csv from the highlight scoring")
     ap.add_argument("--years", default="1997-2017")
     ap.add_argument("--skip", default="", help="comma list of steps to skip: tracks,catalog,encounters")
+    ap.add_argument("--bodies", default="", help="comma list of bodies: export only their tracks and add them to the "
+                                                 "manifest's bodies (the catalog and encounters are left as they are)")
     args = ap.parse_args()
     y0, y1 = (int(x) for x in args.years.split("-"))
     years = list(range(y0, y1 + 1))
@@ -375,6 +390,15 @@ def main():
         with open(path, "w") as fh:
             json.dump(merged, fh, indent=1)
 
+    only = set(filter(None, args.bodies.upper().split(",")))
+    if only:
+        unknown = only - {n for n, _, _ in BODIES} - {"CASSINI"}
+        if unknown:
+            raise SystemExit(f"not in BODIES: {', '.join(sorted(unknown))}")
+        merged = json.load(open(path)) if os.path.exists(path) else {}
+        manifest["bodies"] = {**merged.get("bodies", {}), **export_tracks(args.kernels, args.out, years, only)}
+        save()
+        return
     if "tracks" not in skip:
         manifest["bodies"] = export_tracks(args.kernels, args.out, years)
         save()

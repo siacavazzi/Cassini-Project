@@ -143,14 +143,14 @@ with calibration.looking("balanced"):
                 worst["psnr"].append(99.0 if mse == 0 else 10 * np.log10(255 ** 2 / mse))
         # exposure, with stabilization off and on: the steady-0, exposure-0 frame moved and put through the gain's table
         assert table["exposure"] is None   # the chain is worked out in the background; asked again
-        om.exposure_chain(u, cache, None, False, centre, om.EXPOSURE_CHAIN_STEADY)
+        om.exposure_chain(u, cache, None, False, centre, 0)
         table = om._steady_table(u, 0, cache, centre, False)
         assert table["exposure"]["local"], table["exposure"]
         got = in_node(table)
-        flat, apart = 0, [0, 0]
+        flat = 0
         for x in EXPOSURES:
             gains = got["gains"][str(x)]
-            assert gains == {str(n): g for n, g in om.exposure_gains(u, cache, None, x, False, centre, om.EXPOSURE_CHAIN_STEADY).items()}, x
+            assert gains == {str(n): g for n, g in om.exposure_gains(u, cache, None, x, False, centre, 0).items()}, x
             flat += sum(g != 1.0 for g in gains.values())
             for s in (0, 12):
                 for a, n in enumerate(table["n"]):
@@ -161,14 +161,10 @@ with calibration.looking("balanced"):
                     lut = np.array(server_lut(gains[str(n)], table["exposure"]["gamma"]), np.uint8)
                     C[..., :3] = lut[C[..., :3]]
                     have = C[..., 3] > 0
-                    if s == om.EXPOSURE_CHAIN_STEADY:
-                        assert (C == B)[have].all(), (x, s, n)
-                    else:   # the server measures the chain on the stabilized movie: how often that changes the picture
-                        apart[0] += int(not (C == B)[have].all())
-                        apart[1] += 1
+                    # (the server evens every smoothing on the one chain measured at steady 0)
+                    assert (C == B)[have].all(), (x, s, n)
         print(f"centre={centre}: exposure gains and lookup tables equal the server's ({flat} frames gained over smoothing "
-              f"{EXPOSURES}); the moved, gained frame equals the server's exposure frame pixel for pixel (stabilized 12: "
-              f"{apart[0]} of {apart[1]} frames differ, the server's chain being measured on the stabilized movie)")
+              f"{EXPOSURES}); the moved, gained frame equals the server's stabilized (0, 12), exposure-normalized frame pixel for pixel")
         print(f"centre={centre}: {table['view']} k={table['k']:.4f}; places and moves equal the server's for smoothing "
               f"{SMOOTHS}; {worst['exact']} pixels equal, at most {worst['edge']} uncovered at an edge; as WebP q95 the "
               f"moved picture is {min(worst['psnr']):.1f} dB (worst) / {np.median(worst['psnr']):.1f} dB (median) from the server's")
