@@ -102,6 +102,10 @@ def options(q):
     steady = max(0, min(60, int(get("steady", "0") or 0)))
     if steady:
         movie["steady"] = steady
+    # exposure normalization of movie passes (obs_mosaic.exposure_gains), the same way
+    exposure = max(0, min(30, int(get("exposure", "0") or 0)))
+    if exposure:
+        movie["exposure"] = exposure
     off = ",".join(s for s in calibration.STEPS if s in get("off", "").split(","))   # Settings > Processing
     return {"off": off, "from": t0, "until": t1, "cams": cams, "fps": fps, "size": size,
             "sound": get("sound", "1") != "0", "caption": get("caption", "1") != "0",
@@ -240,7 +244,8 @@ class Pictures:
             return (reel.shot_webp(*found, size, self.cache, True, self.slots)[0], "mosaic") if found else None
         if kind == "movie":
             made = obs_mosaic.movie_webp(arg, size, self.cache, self.movie["trail"], wait=True, ahead=0,
-                                         centre=self.movie["center"], steady=self.movie.get("steady", 0))
+                                         centre=self.movie["center"], steady=self.movie.get("steady", 0),
+                                         exposure=self.movie.get("exposure", 0))
             return (made[0], "movie") if made and made[0] else None
         if kind == "rolling":
             made = obs_mosaic.rolling_webp(arg, size, self.cache, self.movie["laps"], slots=self.slots, wait=True,

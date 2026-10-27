@@ -112,7 +112,8 @@ body.phone #segfps { flex: 1; }
       color: opt("cameras.composites", true) ? "1" : "0", processed: opt("cameras.processedFrames", true) === false ? "0" : "1",
       center: opt("cameras.autoCenter", true) === false ? "0" : "1", trail: String(opt("movies.trail", 0) || 0), laps: String(opt("movies.laps", 1) || 1),
       fade: String(opt("movies.fade", 0) || 0), persist: String(opt("movies.persist", 35) ?? 35),
-      steady_smooth: String(window.cassiniStabilize ? window.cassiniStabilize() : 0) });
+      steady_smooth: String(window.cassiniStabilize ? window.cassiniStabilize() : 0),
+      exposure: String(window.cassiniExposure ? window.cassiniExposure() : 0) });
     return q.toString() + (window.cassiniLook ? window.cassiniLook() : "");
   }
   // frames of the windows' cameras in the stretch (in the months loaded now)
@@ -278,7 +279,7 @@ body.phone #segfps { flex: 1; }
   $("segx").addEventListener("click", () => { EX.clear(true); hide(); });
   $("segfps").addEventListener("input", e => { if (S) S.set("movie.fps", +e.target.value); fpsUi(); });
   if (S) S.on("movie.fps", fpsUi);
-  for (const k of ["cameras.composites", "cameras.mosaics", "movies.steady", "movies.stabilize", "movies.stabilizeSmooth", "movies.trail", "movies.laps", "movies.fade", "movies.persist", "cameras.autoCenter", "cameras.processedFrames", "cameras.balancedColor", "cameras.colors", ...(window.cassiniSteps || []).map(st => st.key)])
+  for (const k of ["cameras.composites", "cameras.mosaics", "movies.steady", "movies.stabilize", "movies.stabilizeSmooth", "movies.exposure", "movies.exposureSmooth", "movies.trail", "movies.laps", "movies.fade", "movies.persist", "cameras.autoCenter", "cameras.processedFrames", "cameras.balancedColor", "cameras.colors", ...(window.cassiniSteps || []).map(st => st.key)])
     if (S && S.get(k) !== undefined) S.on(k, () => { if (!bar.hidden) { if (P.job && P.key !== optKey()) { stopPoll(); P.job = null; progress(null); say(""); } buttons(); } });
   window.addEventListener("keydown", e => {
     if (bar.hidden || e.key !== "Escape" || document.querySelector(".menu.open, .win.full") || (window.cassiniMovie && window.cassiniMovie.on)) return;

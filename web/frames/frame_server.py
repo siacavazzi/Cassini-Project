@@ -79,7 +79,7 @@ Routes:
                                pass starts making its tiles. A movie pass (obs_mosaic: the camera creeps or
                                stares) is never a mosaic; warm=1 answers {"mosaic", "movie"} for the observation;
                                force=1 makes the pass's mosaic whatever obs_mosaic calls it (Mosaic switch)
-  /frames/movie/<ID>.webp?size=512&trail=0&color=1&center=1&steady=12
+  /frames/movie/<ID>.webp?size=512&trail=0&color=1&center=1&steady=12&exposure=8
                                the frame played as a movie of its pass (obs_mosaic.movie_webp): the pass's tile
                                (processed_frame, centred north up by SPICE) on the pass's one display scale, drawn
                                where SPICE puts it in one view for the whole pass; color=1 draws the newest frames
@@ -87,7 +87,8 @@ Routes:
                                fading under it; center=1 (the default) the body in the middle of every frame, when
                                its disk fits the view; steady=N image stabilization, each frame registered to the one
                                before it and held to SPICE over N frames (obs_mosaic.steady_places; 0, the default:
-                               SPICE's places). 503 while the pass is being worked out (the window shows the frame)
+                               SPICE's places); exposure=N exposure normalization, flashes taken out and brightness
+                               jumps spread over N frames (obs_mosaic.exposure_gains; 0, the default: none). 503 while the pass is being worked out (the window shows the frame)
   /frames/movie/<ID>.webp?mode=rolling&laps=1&fade=0&persist=35
                                a mosaic movie (a raster repeated over the same places): every place's newest tile
                                by this frame (laps=N: its N newest copies, older under newer), composed like the
@@ -1302,8 +1303,9 @@ def make_handler(site, cache, flags=None):
                 try:
                     trail = max(0, min(obs_mosaic.TRAIL, int(query.get("trail", ["0"])[0] or 0)))
                     steady = max(0, min(obs_mosaic.STEADY_MOST, int(query.get("steady", ["0"])[0] or 0)))
+                    exposure = obs_mosaic.exposure_of(query.get("exposure", ["0"])[0])
                 except ValueError:
-                    return self.send_error(400, "trail= and steady= take a number of frames")
+                    return self.send_error(400, "trail=, steady= and exposure= take a number of frames")
                 try:
                     if query.get("mode", [""])[0] == "rolling":
                         # a mosaic movie: every place's newest tile (laps= newest copies of each), never emptied
@@ -1319,7 +1321,8 @@ def make_handler(site, cache, flags=None):
                     else:
                         with _movie_slots:
                             made = obs_mosaic.movie_webp(m.group(1), size, cache, trail, query.get("color", ["1"])[0] != "0",
-                                                       centre=query.get("center", ["1"])[0] != "0", steady=steady)
+                                                       centre=query.get("center", ["1"])[0] != "0", steady=steady,
+                                                       exposure=exposure)
                 except (FileNotFoundError, ValueError):
                     made = None
                 if not made:

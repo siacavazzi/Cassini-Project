@@ -209,7 +209,8 @@ def make_pass(u, cache, sizes=(1024, 512), within=None, style=None):
                 obs_mosaic._mosaic_at(u, j, size, cache)
             else:
                 obs_mosaic.movie_webp(f[1], size, cache, style.get("trail", 0), style.get("color", True), wait=True, ahead=0,
-                                      centre=style.get("center", True), steady=style.get("steady", 0))
+                                      centre=style.get("center", True), steady=style.get("steady", 0),
+                                      exposure=style.get("exposure", 0))
     return n
 
 
@@ -486,7 +487,7 @@ def segment_options(q):
     try:
         sizes = sorted({min(SEGMENT_SIZES, key=lambda z: abs(z - int(x))) for x in (get("sizes") or "1024").split(",") if x})
         trail, laps = int(get("trail", "0") or 0), int(get("laps", "1") or 1)
-        steady = int(get("steady_smooth", "0") or 0)
+        steady, exposure = int(get("steady_smooth", "0") or 0), int(get("exposure", "0") or 0)
         fade = obs_mosaic.fade_style(int(get("fade", "0") or 0), int(get("persist", str(obs_mosaic.FADE_PERSIST)) or 0))
     except ValueError:
         raise ValueError("sizes=, trail=, laps=, fade= and persist= take numbers")
@@ -503,7 +504,8 @@ def segment_options(q):
                       "fade": fade[0], "persist": fade[1],
                       "center": on("center"), "color": on("color"),
                       # image stabilization (Settings > Movie), only when on, so a stretch's id is as before
-                      **({"steady": max(0, min(obs_mosaic.STEADY_MOST, steady))} if steady else {})}}
+                      **({"steady": max(0, min(obs_mosaic.STEADY_MOST, steady))} if steady else {}),
+                      **({"exposure": obs_mosaic.exposure_of(exposure)} if exposure else {})}}
 
 
 @functools.lru_cache(None)
