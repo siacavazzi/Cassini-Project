@@ -443,6 +443,16 @@ body.s-steady .info dd[data-f="colour"] { white-space: normal; display: -webkit-
    zoom and "back to now" on the right, so the timeline under them gets the whole width */
 .lcdhead { display: grid; grid-template-columns: auto auto minmax(0, 1fr) auto; align-items: center; gap: 10px; }
 .lcdhead .clockbox { min-width: 0; display: grid; gap: 1px; }
+/* one camera off: a small pill on the timeline, at the top of the lane the camera that is on now fills (camOff, below) */
+.camchip { position: absolute; z-index: 2; display: flex; align-items: center; gap: 7px; height: 18px; box-sizing: border-box; padding: 0 2px 0 7px;
+  border: 1px solid rgba(242,176,76,.5); border-radius: 9px; background: rgba(18,19,23,.9); box-shadow: 0 1px 6px rgba(0,0,0,.45);
+  font: 600 9.5px/1 var(--ui); letter-spacing: .04em; color: #f2c27a; white-space: nowrap; pointer-events: auto; }
+.camchip[hidden] { display: none; }
+.camchip i { width: 5px; height: 5px; border-radius: 50%; border: 1.5px solid #f2b04c; flex: none; }
+.camchip button { all: unset; cursor: pointer; height: 14px; padding: 0 8px; border-radius: 7px; background: rgba(242,176,76,.16); color: #ffd79a;
+  font: 600 9.5px/14px var(--ui); letter-spacing: .02em; transition: background .15s, color .15s; }
+.camchip button:hover { background: #f2b04c; color: #17120a; }
+.camchip button:focus-visible { outline: 1px solid #f2b04c; outline-offset: 1px; }
 .lcdhead .transport { flex: none; justify-self: start; gap: 1px; padding: 2px; border: 1px solid var(--q-line); border-radius: 16px; }
 .lcdhead .transport .round { border: 0; background: none; }
 .lcdhead .transport .round:hover { background: rgba(255,255,255,.1); }
@@ -740,6 +750,7 @@ body.idle .win.full .titlebar { opacity: 0; }
           </div>
         </div>
         <div class="sub probe" id="probe" hidden></div>
+        <div class="camchip" id="camoff" hidden role="status"><i aria-hidden="true"></i><span></span><button type="button">Turn on</button></div>
         <canvas id="tl" aria-label="Timeline: drag to scrub, drag the top edge or scroll to move through time, pinch or use the slider to zoom"></canvas>
         <div class="legend"><span class="keys" id="lkeys"></span><span id="l24">—</span></div>
       </div>
@@ -1222,6 +1233,11 @@ body.idle .win.full .titlebar { opacity: 0; }
   // ---------- imaging lanes in the LCD: filters, cameras, RGB sets ----------
   const CLS = [["Clear", "#3a3f33"], ["Red", "#cc3a2e"], ["Green", "#3e9b33"], ["Blue", "#2f63cc"], ["IR / methane", "#8f2f6c"], ["UV", "#7a50d8"]];
   const LANES = { nTop: .36, nBase: .62, wTop: .66, wBase: .85, rTop: .89, rH: .08 };
+  // each camera's lane as [top, base] in pixels; with one camera off (lc: the one on), the camera on takes both lanes' room
+  function laneBox(h, lc) {
+    const both = { N: [h * LANES.nTop, h * LANES.nBase], W: [h * LANES.wTop, h * LANES.wBase] }, all = [h * LANES.nTop, h * LANES.wBase];
+    return lc ? { N: lc === "N" ? all : null, W: lc === "W" ? all : null } : both;
+  }
   function classify(a, b) {
     const f = [a, b].filter(x => x && !/^CL|^P\d|^IRP/.test(x));
     if (f.some(x => x === "RED")) return 1;
@@ -1261,7 +1277,7 @@ body.idle .win.full .titlebar { opacity: 0; }
     s.ready = Math.max(...s.use.map(k => catalog.et[k]));   // the picture exists once its last channel is taken
   }
   function findSets() {
-    const n = catalog.et.length, setOf = new Int32Array(n).fill(-1), sets = [], run = {};
+    const n = catalog.et.length, setOf = new Int32Array(n).fill(-1), sets = [], run = {}, all = catalog.allOrder || order;
     const close = cam => {
       const r = run[cam]; run[cam] = null;
       if (!r || r.frames.length < 2) return;
@@ -1270,7 +1286,7 @@ body.idle .win.full .titlebar { opacity: 0; }
       sets.push(r);
     };
     for (let i = 0; i < n; i++) {
-      const k = order[i], cam = catalog.cam[k], f = colourFilter(k), r = run[cam];
+      const k = all[i], cam = catalog.cam[k], f = colourFilter(k), r = run[cam];
       if (!f) { close(cam); continue; }
       if (r && catalog.target[k] === r.target && catalog.obs[k] === r.obs && catalog.et[k] - r.last <= SET_GAP && !r.filters.includes(f)) {
         r.frames.push(k); r.filters.push(f); r.last = catalog.et[k];
@@ -1291,7 +1307,7 @@ body.idle .win.full .titlebar { opacity: 0; }
     // each camera's frames in time order, so each window finds its own latest frame
     catalog.byCam = {};
     for (const cam of ["N", "W"]) {
-      const ks = Array.from(order).filter(k => catalog.cam[k] === cam);
+      const ks = Array.from(catalog.allOrder || order).filter(k => catalog.cam[k] === cam);
       catalog.byCam[cam] = { ks, et: Float64Array.from(ks, k => catalog.et[k]) };
     }
     catalog.cls = cls; catalog.rgb = rgb; catalog.setOf = setOf; catalog.sets = sets;
@@ -1317,35 +1333,86 @@ body.idle .win.full .titlebar { opacity: 0; }
     if (!by[key]) { const ks = catalog.byCam[cam].ks.filter(k => catalog.target[k] === body); by[key] = { ks, et: Float64Array.from(ks, k => catalog.et[k]) }; }
     return by[key];
   }
+  // ---------- a closed camera is off ----------
+  // With one camera window closed (or minimized) and the other open, the page takes it that only the open camera
+  // matters (Sam, 2026-10-26): the closed window asks for nothing (cameraFeed), its camera's body windows close
+  // (bodywin.html), the timeline leaves its lane empty, and the burst limit and movie mode go by the open camera's
+  // pictures alone (capOf, nextPicture). Both open, or both closed: both cameras, as before. A Moment brings both
+  // windows back. Settings > Cameras: cameras.closedOff, cameras.momentsReopen.
+  const CAMWIN = { N: "imgcard", W: "wacard" }, CAMWORD = { N: "narrow-angle", W: "wide-angle" };
+  S.define({ key: "cameras.closedOff", section: "Cameras", label: "A closed camera window turns its camera off", type: "toggle", value: true,
+    hint: "With only one of the two camera windows open, the other camera's pictures are not loaded or processed, the timeline shows the open camera's frames only, and playback and movie mode go by its pictures alone." });
+  S.define({ key: "cameras.momentsReopen", section: "Cameras", label: "Moments open both camera windows", type: "toggle", value: true,
+    hint: "Jumping to a Moment brings back a camera window that is closed or minimized." });
+  const camOpen = c => { const w = $(CAMWIN[c]); return !!w && !w.hidden && !w.dataset.min; };
+  // "N" or "W" while only that camera is on, otherwise null (both)
+  function liveCams() {
+    if (!S.get("cameras.closedOff")) return null;
+    const on = ["N", "W"].filter(camOpen);
+    return on.length === 1 ? on[0] : null;
+  }
+  const camOn = (cam, lc) => !lc || lc.includes(cam);
+  function reopenCams() { for (const c of ["N", "W"]) { const w = $(CAMWIN[c]); if (w && (w.hidden || w.dataset.min || w.classList.contains("shaded"))) restore(w); } }
+  $("camoff").addEventListener("pointerdown", e => e.stopPropagation());
+  $("camoff").querySelector("button").addEventListener("click", e => { e.stopPropagation(); reopenCams(); });
+  let camOffText = "";
+  function camOff() {
+    const lc = liveCams(), off = lc === "N" ? "W" : "N", el = $("camoff"), tl = $("tl");
+    const t = lc ? `${off}AC OFF` : "";
+    if (t !== camOffText) {
+      camOffText = t; el.hidden = !t; el.querySelector("span").textContent = t;
+      el.title = lc ? `The ${CAMWORD[off]} camera is off because its window is closed: its pictures are not loaded, shown or heard, and the timeline shows ${CAMWORD[lc]} pictures only` : "";
+    }
+    // on the timeline (it shares the canvas's positioned parent), at the top of the lane, clear of the lane names
+    if (lc) { el.style.left = tl.offsetLeft + 30 + "px"; el.style.top = tl.offsetTop + Math.max(0, tl.clientHeight * LANES.nTop - 1) + "px"; }
+  }
+  // The viewer sees only the cameras that are on: with one off, its frames leave the viewer's time order (order,
+  // catalog.sorted), so the camera's field-of-view cone, the HUD's CAM line, the imaging target, "Camera now", the
+  // timeline, movie mode and everything else that reads the frames treat that camera as taking no pictures at all.
+  // The whole order stays in catalog.allOrder (the camera windows' own lists, catalog.byCam, are made from it).
+  function applyCams() {
+    if (typeof catalog === "undefined" || !catalog || !order) return;
+    const lc = liveCams() || "";
+    if (catalog.allOrder && catalog.camsKey === lc) return;
+    if (!catalog.allOrder) { catalog.allOrder = order; catalog.allSorted = catalog.sorted; }
+    order = lc ? catalog.allOrder.filter(k => catalog.cam[k] === lc) : catalog.allOrder;
+    catalog.sorted = lc ? Float64Array.from(order, k => catalog.et[k]) : catalog.allSorted;
+    catalog.camsKey = lc;
+  }
+  // a Moment (the list, or the next / previous moment buttons, which click its row) brings both camera windows back
+  $("mlist").addEventListener("click", e => { if (e.target.closest("button") && S.get("cameras.momentsReopen") !== false) reopenCams(); }, true);
   // the body in view in the body view (bodymode.html), whose pictures alone the timeline and camera windows show
   const viewBody = () => (window.cassiniBodyMode && cassiniBodyMode.name) || null;
   window.studyBars = (g, w, h) => {
-    prep();
-    const vb = viewBody();
-    if (vb) return bodyBars(g, w, h, vb);
-    const bw = 2, nT = h * LANES.nTop, nB = h * LANES.nBase, wT = h * LANES.wTop, wB = h * LANES.wBase, rT = h * LANES.rTop, rH = Math.max(4, h * LANES.rH);
+    prep(); applyCams();
+    const vb = viewBody(), lc = liveCams();
+    if (vb) return bodyBars(g, w, h, vb, lc);
+    const bw = 2, L = laneBox(h, lc), rT = h * LANES.rTop, rH = Math.max(4, h * LANES.rH);
     const sc = v => Math.min(1, Math.log1p(v) / Math.log1p(18));
     const cN = new Array(6), cW = new Array(6);
     for (let x = 0; x < w; x += bw) {
       const i0 = lastImageIndex(xToEt(x, w)) + 1, i1 = lastImageIndex(xToEt(x + bw, w)) + 1;
       if (i1 <= i0) continue;
       cN.fill(0); cW.fill(0); let nN = 0, nW = 0, set = false;
-      for (let i = i0; i < i1; i++) { const k = order[i], c = catalog.cls[k]; if (catalog.cam[k] === "N") { cN[c]++; nN++; } else { cW[c]++; nW++; } if (catalog.rgb[k]) set = true; }
-      for (const [cnt, tot, top, base] of [[cN, nN, nT, nB], [cW, nW, wT, wB]]) {
-        if (!tot) continue;
+      for (let i = i0; i < i1; i++) { const k = order[i], c = catalog.cls[k], cam = catalog.cam[k]; if (!camOn(cam, lc)) continue; if (cam === "N") { cN[c]++; nN++; } else { cW[c]++; nW++; } if (catalog.rgb[k]) set = true; }
+      for (const [cnt, tot, lane] of [[cN, nN, L.N], [cW, nW, L.W]]) {
+        if (!tot || !lane) continue;
+        const [top, base] = lane;
         let y = base; const H = sc(tot) * (base - top);
         for (let c = 0; c < 6; c++) { if (!cnt[c]) continue; const hh = H * cnt[c] / tot; g.fillStyle = CLS[c][1]; g.fillRect(x, y - hh, bw - 0.5, hh); y -= hh; }
       }
       if (set) { const s = rH / 3; g.fillStyle = CLS[1][1]; g.fillRect(x, rT, bw, s); g.fillStyle = CLS[2][1]; g.fillRect(x, rT + s, bw, s); g.fillStyle = CLS[3][1]; g.fillRect(x, rT + 2 * s, bw, s); }
     }
-    laneNames(g, w, h);
+    laneNames(g, w, h, lc);
   };
   // the same lanes with one body's pictures only (each camera's frames of it, walked once from left to right)
-  function bodyBars(g, w, h, body) {
-    const bw = 2, nT = h * LANES.nTop, nB = h * LANES.nBase, wT = h * LANES.wTop, wB = h * LANES.wBase, rT = h * LANES.rTop, rH = Math.max(4, h * LANES.rH);
+  function bodyBars(g, w, h, body, lc) {
+    const bw = 2, L = laneBox(h, lc), rT = h * LANES.rTop, rH = Math.max(4, h * LANES.rH);
     const sc = v => Math.min(1, Math.log1p(v) / Math.log1p(18));
     const cnt = new Array(6), sets = new Uint8Array(Math.ceil(w / bw) + 1);
-    for (const [cam, top, base] of [["N", nT, nB], ["W", wT, wB]]) {
+    for (const cam of ["N", "W"]) {
+      if (!L[cam]) continue;
+      const [top, base] = L[cam];
       const F = framesOf(cam, body), a = F.et;
       let j = 0, lo = 0, hi = a.length; const t0 = xToEt(0, w);
       while (lo < hi) { const m = (lo + hi) >> 1; if (a[m] < t0) lo = m + 1; else hi = m; }
@@ -1360,25 +1427,34 @@ body.idle .win.full .titlebar { opacity: 0; }
       }
     }
     for (let s = 0; s < sets.length; s++) if (sets[s]) { const x = s * bw, q = rH / 3; g.fillStyle = CLS[1][1]; g.fillRect(x, rT, bw, q); g.fillStyle = CLS[2][1]; g.fillRect(x, rT + q, bw, q); g.fillStyle = CLS[3][1]; g.fillRect(x, rT + 2 * q, bw, q); }
-    laneNames(g, w, h);
+    laneNames(g, w, h, lc);
   }
-  function laneNames(g, w, h) {
-    const nB = h * LANES.nBase, wB = h * LANES.wBase, nT = h * LANES.nTop, wT = h * LANES.wTop, rT = h * LANES.rTop, rH = Math.max(4, h * LANES.rH);
-    g.fillStyle = "rgba(255,255,255,0.12)"; g.fillRect(0, nB, w, 1); g.fillRect(0, wB, w, 1);
+  // (lc: the camera that is on alone, whose lane is the only one named; the pill on the timeline says the other is off)
+  function laneNames(g, w, h, lc) {
+    const L = laneBox(h, lc), rT = h * LANES.rTop, rH = Math.max(4, h * LANES.rH);
+    g.fillStyle = "rgba(255,255,255,0.12)";
+    for (const cam of ["N", "W"]) if (L[cam]) g.fillRect(0, L[cam][1], w, 1);
     // lane names, on a patch of LCD so they stay readable over the bars
     g.font = "400 9px 'Lucida Grande', Verdana, sans-serif"; g.textBaseline = "middle";
-    for (const [t, y] of [["NAC", (nT + nB) / 2], ["WAC", (wT + wB) / 2], ["RGB", rT + rH / 2]]) {
+    for (const [t, lane] of [["NAC", L.N], ["WAC", L.W], ["RGB", [rT, rT + rH]]]) {
+      if (!lane) continue;
+      const y = (lane[0] + lane[1]) / 2;
       g.fillStyle = "rgba(16,17,20,0.85)"; g.fillRect(0, y - 6, 26, 12); g.fillStyle = "rgba(232,236,242,0.5)"; g.fillText(t, 2, y);
     }
     g.textBaseline = "top";
   }
   const FNAME = ["Clear", "Red", "Green", "Blue", "IR / methane", "UV"];
-  let lastI = -2;
+  let lastI = "";
   const baseHud = window.studyHud;
   window.studyHud = ms => {
+    applyCams();
     baseHud(ms);
     if (!catalog.cls) return;
-    const i = lastImageIndex(state.et); if (i === lastI) return; lastI = i;
+    camOff();
+    const lc = liveCams();
+    let i = lastImageIndex(state.et);
+    for (let n = 0; lc && i >= 0 && n < 5000 && !camOn(catalog.cam[order[i]], lc); n++) i--;
+    if (i + (lc || "") === lastI) return; lastI = i + (lc || "");
     if (i < 0) { $("nowcam").textContent = "No frames yet"; $("l24").textContent = "No frames yet"; return; }
     const k = order[i], c = catalog.cls[k], pol = /^P\d|^IRP/.test(catalog.f1[k]) ? ` · polarizer ${catalog.f1[k]}` : "";
     const si = catalog.setOf[k];
@@ -2421,7 +2497,7 @@ body.idle .win.full .titlebar { opacity: 0; }
       mosaicStop();
       lastK = -2;   // asks again for what it shows, once the data is in
     }
-    let cat = null, letGone = false;
+    let cat = null, letGone = false, hiddenGone = false;
     function update(force) {
       if (dataWait()) { if (!letGone) { letGone = true; letGo(window.cassiniAway && cassiniAway.on); } return; }
       letGone = false;
@@ -2433,7 +2509,10 @@ body.idle .win.full .titlebar { opacity: 0; }
         obsK = obsId ? kOf(obsId) : -1;
         if (obsK < 0) { obsShown = null; shapeOf = null; }
       }
-      if (win.hidden && !force) { mosaicStop(); return; }   // a closed or tucked-away window fetches nothing; it catches up when shown
+      // a closed or tucked-away window fetches nothing, not even when a setting or a resize asks it to look again:
+      // it lets go of what it was fetching, and catches up when shown
+      if (win.hidden) { if (!hiddenGone) { hiddenGone = true; letGo(true); } return; }
+      hiddenGone = false;
       // too fast for pictures (tooFast, below): the window keeps what it shows, dimmed, and asks for nothing until the
       // clock slows, pauses or is scrubbed; then it catches up on the picture of that moment
       if (tooFast()) {
@@ -2574,6 +2653,7 @@ body.idle .win.full .titlebar { opacity: 0; }
   // cams ("N", "W"): only that camera's pictures (a stretch played for one camera). Only complete pictures count
   // (complete, below), so movie mode and the body view's skip over the gaps step from one finished picture to the next
   function nextPicture(et, body, cams) {
+    cams = cams || liveCams();
     if (!body && !cams) {
       const a = catalog.sorted;
       for (let i = lastImageIndex(et) + 1; i < a.length; i++) if (complete(order[i], body)) return a[i];
@@ -2588,6 +2668,7 @@ body.idle .win.full .titlebar { opacity: 0; }
     return t;
   }
   function prevPicture(et, body, cams) {
+    cams = cams || liveCams();
     let t = -Infinity;
     for (const cam in catalog.byCam) {
       if (cams && !cams.includes(cam)) continue;
@@ -2616,7 +2697,7 @@ body.idle .win.full .titlebar { opacity: 0; }
   // how many frames the furthest-behind camera window's picture is behind the clock (update.behind, below)
   // cams ("N", "W"): only that camera's windows
   const behind = cams => { let b = 0; for (const f of allFeeds) if (!cams || cams.includes(f.cam)) b = Math.max(b, f.behind()); return b; };
-  window.cassiniFeeds = { frames: FRAMES, cameraFeed, framesOf, lastOfCam, prep, weight, nextPicture, prevPicture, behind, stale: () => S.get("cameras.stale") * 3600 };
+  window.cassiniFeeds = { frames: FRAMES, cameraFeed, framesOf, lastOfCam, prep, weight, nextPicture, prevPicture, behind, liveCams, reopenCams, stale: () => S.get("cameras.stale") * 3600 };
   document.addEventListener("cassini:bodymode", () => { if (typeof catalog !== "undefined" && catalog && catalog.byCam) feeds.forEach(f => f(true)); });
   // a change to what the windows show takes effect straight away
   for (const key of ["cameras.composites", "cameras.stale", "cameras.steady", "cameras.passes", "cameras.balancedColor", "cameras.colors", "cameras.lingerColor", "cameras.lingerMosaic", "movies.steady", "cameras.autoCenter", "cameras.processedFrames", "movies.trail", "movies.filmstrip", "movies.laps", "movies.fade", "movies.persist", "playback.completeMosaics", ...(window.cassiniSteps || []).map(st => st.key)]) S.on(key, () => { if (typeof catalog !== "undefined" && catalog && catalog.byCam) feeds.forEach(f => f(true)); });
@@ -2706,14 +2787,16 @@ body.idle .win.full .titlebar { opacity: 0; }
   let playRate = 0, rateOf = 0;
   window.cassiniPlayRate = () => playRate || state.speed;
   const advance = (et, dt, speed) => {
+    applyCams();   // (a new catalog, months loaded around the clock, gets the camera rule before the viewer draws it)
     if (tooFast()) { slowedTo = 0; paced = 1; return et + dt * speed; }
     slowedTo = 0;
     paced = catalog && catalog.byCam ? pace() : 1;
     dt *= paced;
     if (!maxRate || !catalog || !catalog.byCam) return et + dt * speed;
+    const lc = liveCams();   // a closed camera's bursts do not slow the clock
     for (let n = 0; n < 200; n++) {
       let s = speed, stop = Infinity;
-      for (const cam in catalog.byCam) { const [cap, nx] = capOf(cam, et); s = Math.min(s, cap); stop = Math.min(stop, nx); }
+      for (const cam in catalog.byCam) { if (!camOn(cam, lc)) continue; const [cap, nx] = capOf(cam, et); s = Math.min(s, cap); stop = Math.min(stop, nx); }
       s = Math.max(s, speed * burstFloor);
       if (s < speed) slowedTo = slowedTo ? Math.min(slowedTo, s) : s;
       if (et + dt * s <= stop) return et + dt * s;
