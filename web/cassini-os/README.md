@@ -163,10 +163,12 @@ stays with Huygens or goes back to Cassini. `bench/huygens-landing.cjs` records 
 Huygens stays on Titan after the landing, at any time to the end of the mission: its marker and label sit on the landing
 point while the camera is near Titan (within a dozen Titan radii, the site on the near side) or the view is on Huygens,
 and the Huygens chip is there too. Clicking either goes down to it: ESA's model on the landing-site map, the drogue
-lying beside it, under Titan's sky, with the ground kept level while you drag around it. The ground there is from what the
+lying downwind of it, under Titan's sky, with the ground kept level while you drag around it. The ground there is from what the
 probe measured and saw: it stands with DISR toward azimuth 193 degrees, the pebbles in front of it are where and as large as its
 own surface picture (PIA07232) shows them, the rest of the ground has the same mix of pebbles, and the 12 cm hole it made on
-impact is 70 cm north of it. For example
+impact is 70 cm north of it. The drogue drifted on a few seconds after the landing toward the south-south-east (the
+probe's camera saw it cross the Sun's glow, Schröder et al. 2017) and lies there collapsed, about 12 m off, its lines
+slack across the ground and its riser draped over the probe's top. For example
 `?t=2005-01-31T12:00:00&view=huygens&play=0`.
 
 ## Run it
