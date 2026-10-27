@@ -944,10 +944,19 @@ body.phone.phone-land #bodymenu { left: auto !important; width: min(380px, 46vw)
 .dk .gl { width: 100%; height: 100%; border-radius: 22%; display: grid; place-items: center; background: rgba(255,255,255,.07); border: 1px solid var(--q-line); box-sizing: border-box; color: var(--q-text); }
 .dk .gl svg { width: 58%; height: 58%; } .dk .gl svg * { fill: none; stroke: currentColor; stroke-width: 1.3; stroke-linecap: round; stroke-linejoin: round; }
 .dk:hover .gl { background: rgba(255,255,255,.12); color: #fff; }
+/* rendered icons (icons/make_icons.html): Cassini from NASA's model, Huygens from ESA's, the apps in the planets' light */
+.dk .ic { width: 94%; height: 94%; object-fit: contain; pointer-events: none; -webkit-user-drag: none; filter: drop-shadow(0 1px 2px rgba(0,0,0,.55)); transition: filter .12s; }
+/* Saturn takes a wider place, so its rings fit beside its neighbours and the globe stays near the others' size */
+#appdock:not(.side-left):not(.side-right) .dk:has(.ic.ringed) { width: calc(var(--ds) * var(--k) * 1.7); }
+.dk .ic.ringed { position: absolute; left: 50%; top: 50%; width: calc(var(--ds) * var(--k) * 1.7); height: calc(var(--ds) * var(--k) * 1.7); max-width: none; transform: translate(-50%, -50%); }
+#dkfolder .fic .ic { width: 44px; height: 44px; object-fit: contain; }
+#dkfolder .fic { position: relative; }
+#dkfolder .fcraft[hidden] { display: none; }
+#dkfolder .fic .ic.ringed { position: absolute; left: 50%; top: 50%; width: 74px; height: 74px; max-width: none; transform: translate(-50%, -50%); }
+.dk:hover .ic { filter: drop-shadow(0 1px 2px rgba(0,0,0,.55)) brightness(1.12); }
 /* bodies: the body itself, from its surface map, lit from the upper left */
 :is(.dk, #dkfolder) .orb { width: 78%; height: 78%; border-radius: 50%; position: relative; background-color: var(--c, #888); background-size: 200% 100%; background-position: 30% 50%;
   box-shadow: inset calc(var(--ds) * -.12) calc(var(--ds) * -.1) calc(var(--ds) * .2) rgba(0,0,0,.75), 0 0 0 1px rgba(255,255,255,.06); }
-:is(.dk, #dkfolder) .orb.ringed::after { content: ""; position: absolute; left: -30%; right: -30%; top: 38%; bottom: 38%; border-radius: 50%; border: calc(var(--ds) * .05) solid rgba(222,204,170,.7); border-top-color: transparent; transform: rotate(-14deg); }
 :is(.dk, #dkfolder) .orb.sun { background: radial-gradient(circle at 40% 40%, #fff6d8, #ffc95a 55%, #e08a1e); box-shadow: 0 0 calc(var(--ds) * .2) rgba(255,190,90,.45); }
 /* running dot: a window of that app is open; blue: the body in view */
 .dk::before { content: ""; position: absolute; left: 50%; bottom: -4px; width: 4px; height: 4px; margin-left: -2px; border-radius: 50%; background: transparent; }
@@ -973,15 +982,18 @@ body.phone.phone-land #bodymenu { left: auto !important; width: min(380px, 46vw)
 #dkfolder button.inview { background: rgba(138,182,255,.18); }
 #dkfolder .fic { width: 44px; height: 44px; display: grid; place-items: center; --ds: 50px; }
 #dkfolder .fic .orb { width: 40px; height: 40px; }
-#dkfolder .fic .orb.ringed { width: 34px; height: 34px; }
 #dkfolder .pic { width: 44px; height: 44px; border-radius: 50%; background: #000 center / 150% no-repeat; box-shadow: inset 0 0 0 1px rgba(255,255,255,.1); }
 #dkfolder .fn { max-width: 84px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
 #dkfolder .fc { font: 9.5px/1 var(--hudf); color: var(--q-dim); }
 body.idle #dkfolder { opacity: 0; pointer-events: none; }
 /* minimized windows: a tile of the window's last picture, or its glyph */
 .dk.mini .gl { background: rgba(0,0,0,.55) center / cover no-repeat; }
-.dk.mini .gl.pic svg { display: none; }
-.dk.mini .tag { position: absolute; left: 3px; bottom: 2px; right: 3px; font: 8px/1 var(--hudf); letter-spacing: .04em; color: rgba(232,236,242,.85); text-shadow: 0 0 3px #000, 0 0 5px #000; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; text-align: left; }
+.dk.mini .gl.pic svg, .dk.mini .gl.pic .ic { display: none; }
+.dk.mini .gl .ic { width: 82%; height: 82%; }
+/* the app's icon on a window's picture, in the corner, as on the Mac */
+.dk.mini .badge { position: absolute; right: -3px; bottom: -3px; width: 46%; height: 46%; pointer-events: none; filter: drop-shadow(0 1px 2px rgba(0,0,0,.7)); }
+.dk.mini .gl:not(.pic) ~ .badge { display: none; }
+.dk.mini .tag { position: absolute; left: 3px; bottom: 2px; right: 40%; font: 8px/1 var(--hudf); letter-spacing: .04em; color: rgba(232,236,242,.85); text-shadow: 0 0 3px #000, 0 0 5px #000; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; text-align: left; }
 .dk.arrive { animation: dkin .34s ease-out; }
 @keyframes dkin { from { width: 0; opacity: 0; } }
 /* the dock takes the bottom of the screen: the main window sits on top of it (a window the viewer moved keeps its own
@@ -1028,7 +1040,8 @@ body.phone.has-dock { --appdockh: 50px; }
 #about .cr .what { margin-top: 2px; font-size: 10.5px; line-height: 1.45; color: var(--q-dim); }
 #about .cr .lic { margin-top: 2px; font-size: 10px; color: var(--q-dim); }
 #about .cr .lic a { margin-left: 8px; }
-#about footer { flex: none; padding: 6px 12px; border-top: 1px solid var(--q-line); font-size: 10.5px; color: var(--q-dim); }
+#about footer { flex: none; display: flex; flex-wrap: wrap; justify-content: space-between; gap: 2px 12px; padding: 6px 12px; border-top: 1px solid var(--q-line); font-size: 10.5px; color: var(--q-dim); }
+#about footer .ver { margin-left: auto; text-align: right; font-family: var(--hudf, monospace); font-size: 10px; opacity: .8; user-select: text; }
 /* a short credit on the page that opens the full one here */
 .credit { all: unset; cursor: default; color: inherit; opacity: .8; }
 .credit:hover { opacity: 1; text-decoration: underline; text-underline-offset: 2px; }
@@ -1412,7 +1425,7 @@ body.phone #hrel .cs-note { bottom: auto; top: 40px; max-width: calc(100vw - 32p
     <nav id="anav" role="tablist" aria-label="About sections"></nav>
     <div class="pane" id="apane" role="tabpanel"></div>
   </div>
-  <footer>An independent project, not affiliated with NASA, JPL, ESA or the Space Science Institute.</footer>
+  <footer><span>An independent project, not affiliated with NASA, JPL, ESA or the Space Science Institute.</span><span class="ver" id="aver"></span></footer>
 </section>
 
   <section id="loadscreen" hidden>
@@ -1679,6 +1692,11 @@ body.phone #hrel .cs-note { bottom: auto; top: 40px; max-width: calc(100vw - 32p
   D({ key: "view.atmospheres", section: "View", label: "Atmospheres", type: "choice", value: "full",
       options: [["off", "Off"], ["light", "Light"], ["full", "Full"]],
       hint: "Titan's orange haze with its high detached layer, Earth's thin blue limb, Venus's pale yellow haze, and the thin hazes at Saturn's and Jupiter's limbs, all lit by the Sun: soft twilight past the terminator and a bright ring when a body is backlit. Light is quicker on weak graphics; Off draws the bare globes." });
+  // the viewer reads view.plumes and view.plumeBrightness (makePlume)
+  D({ key: "view.plumes", section: "View", label: "Enceladus plumes", type: "toggle", value: true,
+      hint: "The jets of ice grains rising from the tiger stripes at Enceladus's south pole, lit by the Sun. Like the real ones they show mostly when Cassini looks back toward the Sun, against the dark sky, and stay faint otherwise." });
+  D({ key: "view.plumeBrightness", section: "View", label: "Plume brightness", type: "range", value: 1, min: 0.25, max: 4, step: 0.05,
+      format: v => `${Math.round(v * 100)}%`, hint: "How bright the plumes are drawn. 100% is subtle, as in an unstretched picture; higher shows the faint outer plume the way stretched pictures do." });
   // Movie
   D({ key: "movie.fps", section: "Movie", label: "Movie speed", type: "range", value: 8, min: 2, max: 24, step: 1, unit: "fps",
       hint: "Frames per second in movie mode (M). The slider in the Movie window changes this too." });
@@ -3225,6 +3243,9 @@ body.phone #hrel .cs-note { bottom: auto; top: 40px; max-width: calc(100vw - 32p
       ids: got.ids, frames: got.ids.map(frameInfo),
       movie: !!(window.cassiniMovie && window.cassiniMovie.on), playing: !!state.playing, speed: state.speed,
       settings: settings(),
+      // the version the page was built from and the one the server said it served when the page loaded; the server
+      // adds the version it serves now (site and server commits, picture makers' versions) as it saves the flag
+      build: window.cassiniVersion ? { page: cassiniVersion.page, version: cassiniVersion.server ? cassiniVersion.server.version : null } : null,
       client: { agent: navigator.userAgent, dpr: devicePixelRatio, viewport: [innerWidth, innerHeight], phone: document.body.classList.contains("phone") },
       image: await dataUrl(got.png)
     };
@@ -3961,6 +3982,8 @@ body.phone #hrel .cs-note { bottom: auto; top: 40px; max-width: calc(100vw - 32p
     H.i = i; H.auto = !!auto; H.jumping = true; mark();
     if (window.cassiniReel) window.cassiniReel.close();
     if (window.cassiniMovie && window.cassiniMovie.on) window.cassiniMovie.stop();
+    // a highlight is Cassini's moment: a body's view (its timeline, camera windows and skip-the-gaps clock) gives way to the mission
+    if (window.cassiniBodyMode && window.cassiniBodyMode.name) window.cassiniBodyMode.exit();
     // the camera windows that took the highlight's pictures come out; the other one is put away until the reel stops
     untuck();
     for (const [cam, id] of Object.entries(CAMS)) {
@@ -3975,6 +3998,8 @@ body.phone #hrel .cs-note { bottom: auto; top: 40px; max-width: calc(100vw - 32p
     H.left = e.end_et + 60; H.jumping = false;
   }
   function stop() { H.auto = false; untuck(); mark(); }
+  // opening a body's view stops Play all, which would otherwise move on to the next highlight and leave the body's view
+  document.addEventListener("cassini:bodymode", e => { if (e.detail.name && H.auto) stop(); });
   function next() { if (H.i + 1 < H.list.length) play(H.i + 1, true); else { stop(); H.i = -1; mark(); } }
   // Play all moves on a minute after a highlight's last picture; moving the clock away by hand stops it
   function tick() {
@@ -4745,8 +4770,11 @@ body.phone #hrel .cs-note { bottom: auto; top: 40px; max-width: calc(100vw - 32p
   // ---- the window ----
   function bodyLook(n) {
     const look = typeof MOON_LOOK !== "undefined" && MOON_LOOK[n], c = look ? `rgb(${look.map(v => Math.round(v * 255)).join(",")})` : "#888";
-    const has = typeof bodies !== "undefined" && bodies[n] && n !== "SUN";
-    return `--c:${c};${has ? `background-image:url(data/textures/1k/${n.toLowerCase()}.webp);` : ""}`;
+    // its surface map, or else (as in the dock's All bodies folder) its sharpest real picture
+    const map = typeof TEX_FILES !== "undefined" && TEX_ON && TEX_FILES[n], b = M.index && M.index.bodies[n];
+    if (map) return `--c:${c};background-image:url(data/textures/1k/${map}.webp);`;
+    if (b && b.best && window.cassiniFeeds && n !== "SUN") return `--c:${c};background-image:url('${cassiniFeeds.frames}/frames/${b.best}.webp?size=256');background-size:cover;background-position:50% 50%;`;
+    return `--c:${c};`;
   }
   function fillPick() {
     const sel = $("bmpick"), ix = M.index && M.index.bodies;
@@ -4958,8 +4986,13 @@ body.phone #hrel .cs-note { bottom: auto; top: 40px; max-width: calc(100vw - 32p
   let lastMark = 0;
   window.studyHud = ms => {
     if (base) base(ms);
-    // a moment's jump keeps the view on the body too
-    if (typeof jump === "function" && !jump.bodyLook) { const j = jump; jump = async e => { const r = await j(e); look(); return r; }; jump.bodyLook = true; }
+    // a moment's jump keeps the view on the body too; a jump to another body's moment (a highlight, a cutscene) leaves
+    // the body's view first, or its skip-the-gaps clock and its camera windows would pull the jump back to the body
+    if (typeof jump === "function" && !jump.bodyLook) {
+      const j = jump;
+      jump = async e => { if (M.name && momentBody(e) !== M.name) exit(); const r = await j(e); look(); return r; };
+      jump.bodyLook = true;
+    }
     if (want && !M.pending && typeof catalog !== "undefined" && catalog) { M.pending = true; enter(want, { jump: false }); }
     const now = performance.now();
     if (M.name && now - lastMark > 250) { lastMark = now; mark(); }
@@ -4988,25 +5021,23 @@ body.phone #hrel .cs-note { bottom: auto; top: 40px; max-width: calc(100vw - 32p
   // ---- icons ----
   const svg = d => `<svg viewBox="0 0 24 24" aria-hidden="true">${d}</svg>`;
   const GLYPH = {
-    // the spacecraft: the high-gain dish on top, the body and the magnetometer boom
-    CASSINI: svg('<ellipse cx="12" cy="6.5" rx="7.5" ry="2.4"/><path d="M9.5 8.6v8.2h5V8.6M10.3 16.8l-1.2 3.4M13.7 16.8l1.2 3.4M14.5 11.5l6.5-4.2M5 12.5h4.5"/><circle cx="12" cy="4.2" r=".7"/>'),
-    HUYGENS: svg('<path d="M4.5 13.5a7.5 4 0 0 0 15 0z"/><path d="M7 13.5a5 5.5 0 0 1 10 0"/><path d="M12 8V5"/>'),
-    moments: svg('<path d="M5 7h14M5 12h14M5 17h9"/><path d="M18 15.5l1 2 2.2.3-1.6 1.5.4 2.2-2-1-2 1 .4-2.2-1.6-1.5 2.2-.3z"/>'),
-    highlights: svg('<rect x="3.5" y="5.5" width="17" height="13" rx="1.6"/><path d="M10 9.3v5.4l4.6-2.7z"/>'),
-    settings: svg('<circle cx="12" cy="12" r="3.2"/><path d="M12 3v2.6M12 18.4V21M3 12h2.6M18.4 12H21M5.6 5.6l1.9 1.9M16.5 16.5l1.9 1.9M5.6 18.4l1.9-1.9M16.5 7.5l1.9-1.9"/>'),
     window: svg('<rect x="3.5" y="5" width="17" height="14" rx="1.6"/><path d="M3.5 8.5h17"/><circle cx="6" cy="6.8" r=".5"/><circle cx="7.8" cy="6.8" r=".5"/>'),
-    folder: svg('<path d="M3.5 7.5v10a1.5 1.5 0 0 0 1.5 1.5h14a1.5 1.5 0 0 0 1.5-1.5v-8.5a1.5 1.5 0 0 0-1.5-1.5h-7l-2-2h-5a1.5 1.5 0 0 0-1.5 1.5z"/><circle cx="9" cy="13.5" r="2"/><circle cx="15" cy="13.5" r="1.3"/>'),
     replay: svg('<path d="M3.5 16.5h17"/><path d="M6 16.5v-3M9 16.5v-6M12 16.5v-4M15 16.5v-8M18 16.5v-2"/><path d="M8 5.5l3 2-3 2z"/>')
   };
+  // rendered icons, 256 px (icons/make_icons.html renders them again): Cassini is NASA's model, Huygens ESA's descent
+  // module as it stood on Titan, Saturn and All bodies (seven of its moons) from their maps, and the apps and cameras
+  // are lit as the planets are
+  const ICON = { CASSINI: "cassini", HUYGENS: "huygens", SATURN: "saturn", moments: "moments", highlights: "highlights", settings: "settings", folder: "bodies", N: "nac", W: "wac" };
+  const icon = k => `<img class="ic${k === "SATURN" ? " ringed" : ""}" src="icons/${ICON[k]}.webp" alt="" draggable="false">`;
   const MAP = { SATURN: "saturn", TITAN: "titan", ENCELADUS: "enceladus", MIMAS: "mimas", TETHYS: "tethys", DIONE: "dione", RHEA: "rhea", HYPERION: "hyperion",
     IAPETUS: "iapetus", PHOEBE: "phoebe", VENUS: "venus", EARTH: "earth", MOON: "moon", JUPITER: "jupiter", IO: "io", EUROPA: "europa", GANYMEDE: "ganymede", CALLISTO: "callisto" };
   const name = n => n.charAt(0) + n.slice(1).toLowerCase();
   function bodyIcon(n) {
-    if (GLYPH[n]) return `<span class="gl">${GLYPH[n]}</span>`;
+    if (ICON[n]) return icon(n);
     if (n === "SUN") return '<span class="orb sun"></span>';
     const look = typeof MOON_LOOK !== "undefined" && MOON_LOOK[n], c = look ? `rgb(${look.map(v => Math.round(v * 255)).join(",")})` : "#888";
     const map = MAP[n] ? `background-image: url(data/textures/1k/${MAP[n]}.webp);` : "";
-    return `<span class="orb${n === "SATURN" ? " ringed" : ""}" style="--c:${c};${map}"></span>`;
+    return `<span class="orb" style="--c:${c};${map}"></span>`;
   }
   // each icon is made once and kept, so the dock can be laid out again under the pointer without losing it
   const made = new Map();
@@ -5038,18 +5069,22 @@ body.phone #hrel .cs-note { bottom: auto; top: 40px; max-width: calc(100vw - 32p
       run() { const c = $("settings"); if (c && !c.hidden && !inFront(c)) WM.front(c); else $("sgear").click(); } }
   ];
 
-  // ---- bodies: the viewer's focus list (Cassini, the Sun, Huygens near its descent, the bodies on stage) ----
+  // ---- bodies: the viewer's focus list (Cassini, the Sun, the bodies on stage) ----
   const bodyWins = n => [...document.querySelectorAll(".bodywin")].filter(w => w.dataset.body === n);
   function goBody(n) {
     const BM = window.cassiniBodyMode;
-    if (n === "CASSINI" && BM && BM.name) BM.exit();
-    if (n !== "CASSINI" && n !== "SUN" && BM) BM.enter(n);
+    if ((n === "CASSINI" || n === "HUYGENS") && BM && BM.name) BM.exit();
+    if (n !== "CASSINI" && n !== "SUN" && n !== "HUYGENS" && BM) BM.enter(n);
     else if (typeof setFocus === "function") setFocus(n);
     // its windows come back from the dock and forward
     for (const w of bodyWins(n)) { if (w.dataset.min) WM.restore(w); else WM.front(w); }
   }
   let bodies = [], away = [], bodyKey = "";
-  function bodyList() { try { return typeof focusChoices === "function" ? focusChoices() : []; } catch (e) { return []; } }
+  function focusList() { try { return typeof focusChoices === "function" ? focusChoices() : []; } catch (e) { return []; } }
+  // Huygens is not a body to come back to often: it waits in All bodies (below), not in the row
+  const bodyList = () => focusList().filter(n => n !== "HUYGENS");
+  // ...and only once it has left Cassini (until then it is part of Cassini's model)
+  const huygensOut = () => typeof HUYGENS_RELEASE_ET !== "undefined" && typeof state !== "undefined" && state.et >= HUYGENS_RELEASE_ET && focusList().includes("HUYGENS");
   // the planets (and the body in view) that are not on stage now
   function awayList(list) { try { return window.cassiniBodyMode ? cassiniBodyMode.planets().filter(n => !list.includes(n)) : []; } catch (e) { return []; } }
 
@@ -5082,7 +5117,8 @@ body.phone #hrel .cs-note { bottom: auto; top: 40px; max-width: calc(100vw - 32p
     const by = {};
     for (const [n, b] of Object.entries(ix.bodies)) (by[groupOf(n, b)] = by[groupOf(n, b)] || []).push([n, b]);
     folder.innerHTML = GROUPS.filter(([g]) => by[g]).map(([g, label]) => `<h3>${label}</h3><div class="fgrid">${by[g].sort((a, c) => c[1].frames - a[1].frames)
-      .map(([n, b]) => `<button data-body="${n}" title="${name(n)}: ${b.frames.toLocaleString("en-US")} pictures">${folderIcon(n, b)}<span class="fn">${name(n)}</span><span class="fc">${b.frames.toLocaleString("en-US")}</span></button>`).join("")}</div>`).join("");
+      .map(([n, b]) => `<button data-body="${n}" title="${name(n)}: ${b.frames.toLocaleString("en-US")} pictures">${folderIcon(n, b)}<span class="fn">${name(n)}</span><span class="fc">${b.frames.toLocaleString("en-US")}</span></button>`).join("")}</div>`).join("")
+      + `<div class="fcraft" hidden><h3>Spacecraft</h3><div class="fgrid"><button data-body="HUYGENS" title="Huygens, ESA's probe to Titan"><span class="fic">${icon("HUYGENS")}</span><span class="fn">Huygens</span><span class="fc">probe</span></button></div></div>`;
     folderMade = true;
   }
   folder.addEventListener("click", e => { e.stopPropagation(); const b = e.target.closest("button[data-body]"); if (b) { closeFolder(); goBody(b.dataset.body); } });
@@ -5099,6 +5135,7 @@ body.phone #hrel .cs-note { bottom: auto; top: 40px; max-width: calc(100vw - 32p
     if (!folderMade) await fillFolder();
     const now = window.cassiniBodyMode && cassiniBodyMode.name;
     folder.querySelectorAll("button[data-body]").forEach(b => b.classList.toggle("inview", b.dataset.body === now));
+    const craft = folder.querySelector(".fcraft"); if (craft) craft.hidden = !huygensOut();
     folder.hidden = false; anchor.classList.add("open"); placeFolder(anchor);
   }
   function closeFolder() { folder.hidden = true; const a = made.get("app:bodies"); if (a) a.classList.remove("open"); }
@@ -5107,7 +5144,9 @@ body.phone #hrel .cs-note { bottom: auto; top: 40px; max-width: calc(100vw - 32p
 
   // ---- minimized windows ----
   const winLabel = w => w.dataset.name || ({ dock: "Cassini Replay", imgcard: "Narrow-angle Camera", wacard: "Wide-angle Camera" })[w.id] || w.getAttribute("aria-label") || "Window";
-  const winGlyph = w => w.id === "dock" ? GLYPH.replay : w.id === "moments" ? GLYPH.moments : GLYPH.window;
+  // a camera window's camera: the main windows by id, a body's windows by data-cam
+  const winCam = w => ({ imgcard: "N", wacard: "W" })[w.id] || (/^[NW]$/.test(w.dataset.cam || "") ? w.dataset.cam : "");
+  const winGlyph = w => w.id === "dock" ? GLYPH.replay : w.id === "moments" ? icon("moments") : winCam(w) ? icon(winCam(w)) : GLYPH.window;
   function snapshot(w) {
     const img = w.querySelector(".well.has-frame .shot, .rlwell img, .mvwell img");
     if (img && img.src && img.naturalWidth) return img.src;
@@ -5125,6 +5164,7 @@ body.phone #hrel .cs-note { bottom: auto; top: 40px; max-width: calc(100vw - 32p
       t.addEventListener("animationend", () => t.classList.remove("arrive"), { once: true });
       const tag = (w.dataset.cam ? (w.dataset.body ? name(w.dataset.body) + " " : "") + w.dataset.cam + "AC" : "");
       if (tag) t.insertAdjacentHTML("beforeend", `<span class="tag">${tag}</span>`);
+      if (winCam(w)) t.insertAdjacentHTML("beforeend", `<img class="badge" src="icons/${ICON[winCam(w)]}.webp" alt="" draggable="false">`);
       tiles.set(w, t);
     }
     const src = snapshot(w), gl = t.querySelector(".gl");
@@ -5148,9 +5188,9 @@ body.phone #hrel .cs-note { bottom: auto; top: 40px; max-width: calc(100vw - 32p
     const kids = [
       ...bodies.map(n => item("body:" + n, name(n), bodyIcon(n), () => goBody(n))),
       ...(away.length ? [seps[2], ...away.map(n => item("body:" + n, name(n), bodyIcon(n), () => goBody(n)))] : []),
-      item("app:bodies", "All bodies", `<span class="gl">${GLYPH.folder}</span>`, b => toggleFolder(b)),
+      item("app:bodies", "All bodies", icon("folder"), b => toggleFolder(b)),
       seps[0],
-      ...APPS.map(a => item("app:" + a.key, a.label, `<span class="gl">${GLYPH[a.key]}</span>`, () => a.run())),
+      ...APPS.map(a => item("app:" + a.key, a.label, icon(a.key), () => a.run())),
       seps[1],
       ...mins.map(tileFor)
     ];
@@ -5225,7 +5265,7 @@ body.phone #hrel .cs-note { bottom: auto; top: 40px; max-width: calc(100vw - 32p
 // ---------- About: what Cassini OS is, and every credit in one list (credits.json) ----------
 (function () {
   const $ = id => document.getElementById(id);
-  const CREDITS = {"groups":[{"title":"Cassini mission data","entries":[{"id":"iss","title":"Cassini camera pictures","credit":"NASA/JPL-Caltech/Space Science Institute","short":"NASA/JPL-Caltech/SSI","detail":"Every picture in the camera windows, mosaics, color sets, movies and highlights is a frame from Cassini's Imaging Science Subsystem (the narrow-angle and wide-angle cameras), archived by NASA's Planetary Data System, Cartography and Imaging Sciences Node. Cassini OS calibrates, stacks, aligns and centers them with SPICE; the colors are its own reconstruction, not NASA's.","license":"NASA material, not copyrighted in the US (NASA media usage guidelines)","url":"https://pds-imaging.jpl.nasa.gov/"},{"id":"spice","title":"Trajectory, pointing and planet positions","credit":"NASA/JPL Navigation and Ancillary Information Facility (NAIF), Cassini SPICE archive co-s_j_e_v-spice-6-v1.0","short":"NASA/JPL NAIF SPICE","detail":"Where Cassini, the planets and the moons were, which way Cassini pointed (its reconstructed attitude kernels), and the camera frames. Read with SpiceyPy.","license":"NASA material, not copyrighted in the US","url":"https://naif.jpl.nasa.gov/naif/"},{"id":"calibration","title":"Camera calibration","credit":"Cassini ISS team: CISSCAL and the Cassini ISS Data User's Guide (Porco et al. 2004; West et al. 2010; Knowles et al. 2020)","detail":"The steps and constants Cassini OS uses to turn raw frames into brightness (I/F): the bias, exposure, gain and per-filter sensitivity, and each filter's effective wavelength.","license":"Published by NASA's Planetary Data System","url":"https://pds-imaging.jpl.nasa.gov/documentation/iss_data_user_guide_180916.pdf"},{"id":"finale-data","title":"Grand Finale readings","credit":"NASA Planetary Data System, Planetary Plasma Interactions Node; Cassini INMS (Southwest Research Institute), MAG (Imperial College London) and RPWS (University of Iowa) teams","short":"NASA PDS · INMS, MAG, RPWS","detail":"The real readings from Cassini's last hour shown in the Grand Finale: INMS raw count rates (counts, not densities), the magnetometer at full resolution, and RPWS 60 s key parameters, from 15 September 2017.","license":"NASA material, not copyrighted in the US","url":"https://pds-ppi.igpp.ucla.edu/"},{"id":"facts","title":"Mission facts and numbers","credit":"NASA, NASA/JPL and ESA mission pages","detail":"The facts on the loading screen (each one names its source as it shows), and the numbers and timings the Grand Finale is pinned to (JPL, \"Cassini Spacecraft Makes Its Final Approach to Saturn\", 13 September 2017; \"Cassini by the Numbers\"), and the opening at the start of the mission (ESA, \"Cassini-Huygens: Launch information\"; NASA, \"Cassini Quick Facts\").","license":"Facts, with their sources named","url":"https://science.nasa.gov/mission/cassini/"}]},{"title":"Huygens probe","entries":[{"id":"disr","title":"Huygens descent pictures","credit":"ESA/NASA/JPL/University of Arizona; mosaics by Erich Karkoschka (DISR team)","short":"ESA/NASA/JPL/UA","detail":"The probe's own pictures of Titan from its Descent Imager/Spectral Radiometer (DISR), and the nested mosaics of the landing site (60 m down to 1 m per pixel) Erich Karkoschka assembled from them, from ESA's Planetary Science Archive (HP-SSA-DISR-2-3-EDR-RDR-V1.3).","license":"ESA Planetary Science Archive data","url":"https://archives.esac.esa.int/psa/"},{"id":"huygens-track","title":"Huygens trajectory","credit":"ESA Huygens Descent Trajectory Working Group (B. Kazeminejad, ESTEC), HP-SSA-DTWG-6-TRAJECTORY-V2.0; NASA/JPL NAIF","detail":"The probe's path through Titan's atmosphere to the ground; its coast from Cassini to Titan comes from NAIF's reconstructed trajectory.","license":"ESA Planetary Science Archive data","url":"https://archives.esac.esa.int/psa/"}]},{"title":"Surface maps and shapes","note":"Maps come from the Celestia project's CelestiaContent collection, resized into the 1k, 2k and 4k sizes; credit lines follow Celestia's license files. Maps marked \"No license stated\" are reworks of NASA/JPL and other material without a license file and will be rebuilt from public-domain originals before a public launch.","entries":[{"id":"map-saturn","title":"Saturn","credit":"Cassini imagery, Björn Jónsson; recolored by Askaniy Anpilogov (via Celestia)","license":"CC BY 3.0","url":"https://github.com/CelestiaProject/CelestiaContent","files":["saturn.webp"]},{"id":"map-rings","title":"Saturn's rings","credit":"Björn Jónsson ring data (Celestia composite)","license":"No license stated","url":"https://bjj.mmedia.is/","files":["rings/saturn_rings.png"]},{"id":"map-icy","title":"Mimas, Enceladus, Tethys, Dione, Iapetus","credit":"Paul Schenk's Cassini color maps (NASA/JPL/LPI), via Celestia","license":"No license stated","files":["mimas.webp","enceladus.webp","tethys.webp","dione.webp","iapetus.webp"]},{"id":"map-rhea","title":"Rhea","credit":"Paul Schenk's map and Björn Jónsson's albedo, via Celestia","license":"No license stated","files":["rhea.webp"]},{"id":"map-titan","title":"Titan","credit":"Cassini haze images, Gordan Ugarković, Kevin M. Gill, ShadowDragon777, AstroChara (via Celestia)","license":"CC BY 4.0","files":["titan.webp"]},{"id":"map-titan-surface","title":"Titan's surface","credit":"Cassini VIMS and ISS map (Seignovert et al. 2019) with radar lakes, via Celestia","license":"CC BY 3.0","files":["titan_surface.webp"]},{"id":"map-hyperion","title":"Hyperion","credit":"Map: reprojected Cassini imagery (ItzImcool), via Celestia. Shape: P. C. Thomas et al., NASA Planetary Data System","license":"Map CC BY 4.0; shape CC0","files":["hyperion.webp","models/hyperion.mesh.b64.txt"]},{"id":"map-phoebe","title":"Phoebe","credit":"Map: John van Vliet, via Celestia. Shape: R. W. Gaskell, NASA Planetary Data System","license":"No license stated","files":["phoebe.webp","models/phoebe.mesh.b64.txt"]},{"id":"map-jupiter","title":"Jupiter","credit":"Cassini 2000 flyby and Juno data, recolored by Askaniy Anpilogov (via Celestia)","license":"CC BY 3.0","files":["jupiter.webp"]},{"id":"map-venus","title":"Venus","credit":"Cloud tops by Björn Jónsson, recolored by FarGetaNik (via Celestia)","license":"No license stated","files":["venus.webp"]},{"id":"map-earth","title":"Earth","credit":"\"Mappamondo\" (earthstartsbeating.com), Natural Earth II (Tom Patterson), NASA Blue Marble Next Generation (via Celestia)","license":"No license stated","files":["earth.webp"]},{"id":"map-moon","title":"The Moon","credit":"Celestia's lunar map (NASA data)","license":"No license stated","files":["moon.webp"]},{"id":"map-io","title":"Io","credit":"ItzImcool, AstroChara; NASA/JPL-Caltech/ASI/USGS; NASA/JPL/SwRI/MSSS/Gerald Eichstädt/Jason Perry/John Rogers (via Celestia)","license":"CC BY 4.0","files":["io.webp"]},{"id":"map-europa","title":"Europa","credit":"John van Vliet (via Celestia)","license":"No license stated","files":["europa.webp"]},{"id":"map-ganymede","title":"Ganymede","credit":"Askaniy Anpilogov; NASA/JPL-Caltech/ASI/USGS; Björn Jónsson; NASA/JPL-Caltech/SwRI/MSSS/Brian Swift (via Celestia)","license":"CC BY 3.0","files":["ganymede.webp"]},{"id":"map-callisto","title":"Callisto","credit":"Askaniy Anpilogov, from John van Vliet's map (via Celestia)","license":"No license stated","files":["callisto.webp"]}]},{"title":"Sky","entries":[{"id":"star-sky","title":"Stars and the Milky Way","credit":"NASA/Goddard Space Flight Center Scientific Visualization Studio. Gaia DR2: ESA/Gaia/DPAC","short":"NASA SVS Deep Star Maps","detail":"The background sky, from NASA's \"Deep Star Maps 2020\": Hipparcos, Tycho-2 and Gaia DR2 stars plus the Milky Way, placed in J2000 where Cassini saw them.","license":"NASA material, public domain","url":"https://svs.gsfc.nasa.gov/4851","files":["sky/sky_2k.webp","sky/sky_4k.webp","sky/sky_8k.webp"]}]},{"title":"Spacecraft","entries":[{"id":"model","title":"Cassini-Huygens 3D model","credit":"NASA/JPL-Caltech, NASA 3D Resources \"Cassini-Huygens\"","detail":"The spacecraft in the 3D view and the wireframe on the loading screen (decoded from Draco compression for the page).","license":"NASA material, not copyrighted in the US","url":"https://github.com/nasa/NASA-3D-Resources"}]},{"title":"Sound","entries":[{"id":"sound","title":"Sonification","credit":"Made for Cassini OS, after Erich Karkoschka's \"Titan Descent Data Movie with Bells and Whistles\" (DISR team, University of Arizona)","detail":"Every sound is synthesized in the browser from what Cassini is doing (no recordings); the idea of a chime for each instrument part follows Karkoschka's Huygens descent movie.","license":"Part of Cassini OS"}]},{"title":"Software and fonts","entries":[{"id":"threejs","title":"three.js","credit":"three.js authors, r128, with OrbitControls and GLTFLoader","license":"MIT","url":"https://threejs.org/"},{"id":"draco","title":"Draco","credit":"Google, used to decode the spacecraft model ahead of time","license":"Apache 2.0","url":"https://google.github.io/draco/"},{"id":"pipeline-libs","title":"Picture pipeline","credit":"SpiceyPy (Andrew Annex et al.), NumPy, pandas, OpenCV, Pillow, scikit-image, Matplotlib","detail":"The Python libraries the frame server and the image pipeline run on.","license":"MIT, BSD and Apache 2.0 (each project's own)"},{"id":"font-silkscreen","title":"Silkscreen","credit":"Jason Kottke, via Google Fonts","license":"SIL Open Font License 1.1","url":"https://fonts.google.com/specimen/Silkscreen"},{"id":"font-sharetech","title":"Share Tech Mono","credit":"Carrois Apostrophe, via Google Fonts","license":"SIL Open Font License 1.1","url":"https://fonts.google.com/specimen/Share+Tech+Mono"}]}]};
+  const CREDITS = {"groups":[{"title":"Cassini mission data","entries":[{"id":"iss","title":"Cassini camera pictures","credit":"NASA/JPL-Caltech/Space Science Institute","short":"NASA/JPL-Caltech/SSI","detail":"Every picture in the camera windows, mosaics, color sets, movies and highlights is a frame from Cassini's Imaging Science Subsystem (the narrow-angle and wide-angle cameras), archived by NASA's Planetary Data System, Cartography and Imaging Sciences Node. Cassini OS calibrates, stacks, aligns and centers them with SPICE; the colors are its own reconstruction, not NASA's.","license":"NASA material, not copyrighted in the US (NASA media usage guidelines)","url":"https://pds-imaging.jpl.nasa.gov/"},{"id":"spice","title":"Trajectory, pointing and planet positions","credit":"NASA/JPL Navigation and Ancillary Information Facility (NAIF), Cassini SPICE archive co-s_j_e_v-spice-6-v1.0","short":"NASA/JPL NAIF SPICE","detail":"Where Cassini, the planets and the moons were, which way Cassini pointed (its reconstructed attitude kernels), and the camera frames. Read with SpiceyPy.","license":"NASA material, not copyrighted in the US","url":"https://naif.jpl.nasa.gov/naif/"},{"id":"calibration","title":"Camera calibration","credit":"Cassini ISS team: CISSCAL and the Cassini ISS Data User's Guide (Porco et al. 2004; West et al. 2010; Knowles et al. 2020)","detail":"The steps and constants Cassini OS uses to turn raw frames into brightness (I/F): the bias, exposure, gain and per-filter sensitivity, and each filter's effective wavelength.","license":"Published by NASA's Planetary Data System","url":"https://pds-imaging.jpl.nasa.gov/documentation/iss_data_user_guide_180916.pdf"},{"id":"finale-data","title":"Grand Finale readings","credit":"NASA Planetary Data System, Planetary Plasma Interactions Node; Cassini INMS (Southwest Research Institute), MAG (Imperial College London) and RPWS (University of Iowa) teams","short":"NASA PDS · INMS, MAG, RPWS","detail":"The real readings from Cassini's last hour shown in the Grand Finale: INMS raw count rates (counts, not densities), the magnetometer at full resolution, and RPWS 60 s key parameters, from 15 September 2017.","license":"NASA material, not copyrighted in the US","url":"https://pds-ppi.igpp.ucla.edu/"},{"id":"facts","title":"Mission facts and numbers","credit":"NASA, NASA/JPL and ESA mission pages","detail":"The facts on the loading screen (each one names its source as it shows), and the numbers and timings the Grand Finale is pinned to (JPL, \"Cassini Spacecraft Makes Its Final Approach to Saturn\", 13 September 2017; \"Cassini by the Numbers\"), and the opening at the start of the mission (ESA, \"Cassini-Huygens: Launch information\"; NASA, \"Cassini Quick Facts\").","license":"Facts, with their sources named","url":"https://science.nasa.gov/mission/cassini/"}]},{"title":"Huygens probe","entries":[{"id":"disr","title":"Huygens descent pictures","credit":"ESA/NASA/JPL/University of Arizona; mosaics by Erich Karkoschka (DISR team)","short":"ESA/NASA/JPL/UA","detail":"The probe's own pictures of Titan from its Descent Imager/Spectral Radiometer (DISR), and the nested mosaics of the landing site (60 m down to 1 m per pixel) Erich Karkoschka assembled from them, from ESA's Planetary Science Archive (HP-SSA-DISR-2-3-EDR-RDR-V1.3).","license":"ESA Planetary Science Archive data","url":"https://archives.esac.esa.int/psa/"},{"id":"huygens-track","title":"Huygens trajectory","credit":"ESA Huygens Descent Trajectory Working Group (B. Kazeminejad, ESTEC), HP-SSA-DTWG-6-TRAJECTORY-V2.0; NASA/JPL NAIF","detail":"The probe's path through Titan's atmosphere to the ground; its coast from Cassini to Titan comes from NAIF's reconstructed trajectory.","license":"ESA Planetary Science Archive data","url":"https://archives.esac.esa.int/psa/"}]},{"title":"Surface maps and shapes","note":"Maps come from the Celestia project's CelestiaContent collection, resized into the 1k, 2k and 4k sizes; credit lines follow Celestia's license files. Maps marked \"No license stated\" are reworks of NASA/JPL and other material without a license file and will be rebuilt from public-domain originals before a public launch.","entries":[{"id":"map-saturn","title":"Saturn","credit":"Cassini imagery, Björn Jónsson; recolored by Askaniy Anpilogov (via Celestia)","license":"CC BY 3.0","url":"https://github.com/CelestiaProject/CelestiaContent","files":["saturn.webp"]},{"id":"map-rings","title":"Saturn's rings","credit":"Björn Jónsson ring data (Celestia composite)","license":"No license stated","url":"https://bjj.mmedia.is/","files":["rings/saturn_rings.png"]},{"id":"map-icy","title":"Mimas, Enceladus, Tethys, Dione, Iapetus","credit":"Paul Schenk's Cassini color maps (NASA/JPL/LPI), via Celestia","license":"No license stated","files":["mimas.webp","enceladus.webp","tethys.webp","dione.webp","iapetus.webp"]},{"id":"map-rhea","title":"Rhea","credit":"Paul Schenk's map and Björn Jónsson's albedo, via Celestia","license":"No license stated","files":["rhea.webp"]},{"id":"map-titan","title":"Titan","credit":"Cassini haze images, Gordan Ugarković, Kevin M. Gill, ShadowDragon777, AstroChara (via Celestia)","license":"CC BY 4.0","files":["titan.webp"]},{"id":"map-titan-surface","title":"Titan's surface","credit":"Cassini VIMS and ISS map (Seignovert et al. 2019) with radar lakes, via Celestia","license":"CC BY 3.0","files":["titan_surface.webp"]},{"id":"map-hyperion","title":"Hyperion","credit":"Map: reprojected Cassini imagery (ItzImcool), via Celestia. Shape: P. C. Thomas et al., NASA Planetary Data System","license":"Map CC BY 4.0; shape CC0","files":["hyperion.webp","models/hyperion.mesh.b64.txt"]},{"id":"map-phoebe","title":"Phoebe","credit":"Map: John van Vliet, via Celestia. Shape: R. W. Gaskell, NASA Planetary Data System","license":"No license stated","files":["phoebe.webp","models/phoebe.mesh.b64.txt"]},{"id":"shape-small-moons","title":"Saturn's small moons (shapes)","credit":"Pan, Daphnis, Atlas, Prometheus, Pandora, Epimetheus, Janus, Telesto, Calypso and Helene: P. Thomas, J. Joseph and T. Ansty, Saturn Small Moon Shape Models V1.0, NASA Planetary Data System, 2018 (doi:10.26033/ewy3-jy61), from Cassini ISS images; via Celestia","license":"CC0 1.0","files":["models/pan.mesh.b64.txt","models/daphnis.mesh.b64.txt","models/atlas.mesh.b64.txt","models/prometheus.mesh.b64.txt","models/pandora.mesh.b64.txt","models/epimetheus.mesh.b64.txt","models/janus.mesh.b64.txt","models/telesto.mesh.b64.txt","models/calypso.mesh.b64.txt","models/helene.mesh.b64.txt"]},{"id":"map-jupiter","title":"Jupiter","credit":"Cassini 2000 flyby and Juno data, recolored by Askaniy Anpilogov (via Celestia)","license":"CC BY 3.0","files":["jupiter.webp"]},{"id":"map-venus","title":"Venus","credit":"Cloud tops by Björn Jónsson, recolored by FarGetaNik (via Celestia)","license":"No license stated","files":["venus.webp"]},{"id":"map-earth","title":"Earth","credit":"\"Mappamondo\" (earthstartsbeating.com), Natural Earth II (Tom Patterson), NASA Blue Marble Next Generation (via Celestia)","license":"No license stated","files":["earth.webp"]},{"id":"map-moon","title":"The Moon","credit":"Celestia's lunar map (NASA data)","license":"No license stated","files":["moon.webp"]},{"id":"map-io","title":"Io","credit":"ItzImcool, AstroChara; NASA/JPL-Caltech/ASI/USGS; NASA/JPL/SwRI/MSSS/Gerald Eichstädt/Jason Perry/John Rogers (via Celestia)","license":"CC BY 4.0","files":["io.webp"]},{"id":"map-europa","title":"Europa","credit":"John van Vliet (via Celestia)","license":"No license stated","files":["europa.webp"]},{"id":"map-ganymede","title":"Ganymede","credit":"Askaniy Anpilogov; NASA/JPL-Caltech/ASI/USGS; Björn Jónsson; NASA/JPL-Caltech/SwRI/MSSS/Brian Swift (via Celestia)","license":"CC BY 3.0","files":["ganymede.webp"]},{"id":"map-callisto","title":"Callisto","credit":"Askaniy Anpilogov, from John van Vliet's map (via Celestia)","license":"No license stated","files":["callisto.webp"]}]},{"title":"Sky","entries":[{"id":"star-sky","title":"Stars and the Milky Way","credit":"NASA/Goddard Space Flight Center Scientific Visualization Studio. Gaia DR2: ESA/Gaia/DPAC","short":"NASA SVS Deep Star Maps","detail":"The background sky, from NASA's \"Deep Star Maps 2020\": Hipparcos, Tycho-2 and Gaia DR2 stars plus the Milky Way, placed in J2000 where Cassini saw them.","license":"NASA material, public domain","url":"https://svs.gsfc.nasa.gov/4851","files":["sky/sky_2k.webp","sky/sky_4k.webp","sky/sky_8k.webp"]}]},{"title":"Spacecraft","entries":[{"id":"model","title":"Cassini-Huygens 3D model","credit":"NASA/JPL-Caltech, NASA 3D Resources \"Cassini-Huygens\"","detail":"The spacecraft in the 3D view and the wireframe on the loading screen (decoded from Draco compression for the page).","license":"NASA material, not copyrighted in the US","url":"https://github.com/nasa/NASA-3D-Resources"}]},{"title":"Sound","entries":[{"id":"sound","title":"Sonification","credit":"Made for Cassini OS, after Erich Karkoschka's \"Titan Descent Data Movie with Bells and Whistles\" (DISR team, University of Arizona)","detail":"Every sound is synthesized in the browser from what Cassini is doing (no recordings); the idea of a chime for each instrument part follows Karkoschka's Huygens descent movie.","license":"Part of Cassini OS"}]},{"title":"Software and fonts","entries":[{"id":"threejs","title":"three.js","credit":"three.js authors, r128, with OrbitControls and GLTFLoader","license":"MIT","url":"https://threejs.org/"},{"id":"draco","title":"Draco","credit":"Google, used to decode the spacecraft model ahead of time","license":"Apache 2.0","url":"https://google.github.io/draco/"},{"id":"pipeline-libs","title":"Picture pipeline","credit":"SpiceyPy (Andrew Annex et al.), NumPy, pandas, OpenCV, Pillow, scikit-image, Matplotlib","detail":"The Python libraries the frame server and the image pipeline run on.","license":"MIT, BSD and Apache 2.0 (each project's own)"},{"id":"font-silkscreen","title":"Silkscreen","credit":"Jason Kottke, via Google Fonts","license":"SIL Open Font License 1.1","url":"https://fonts.google.com/specimen/Silkscreen"},{"id":"font-sharetech","title":"Share Tech Mono","credit":"Carrois Apostrophe, via Google Fonts","license":"SIL Open Font License 1.1","url":"https://fonts.google.com/specimen/Share+Tech+Mono"}]}]};
   const card = $("about"), nav = $("anav"), pane = $("apane");
   const esc = s => String(s).replace(/[&<>"]/g, c => ({ "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;" })[c]);
   const TABS = {
@@ -5267,6 +5307,26 @@ body.phone #hrel .cs-note { bottom: auto; top: 40px; max-width: calc(100vw - 32p
   // other parts of the page add their own tabs: cassiniAbout.addTab("Mission team", () => "<h2>…</h2>…") (html, escaped by the caller)
   function addTab(name, html) { TABS[name] = html; if (!card.hidden) render(); }
   window.cassiniAbout = { open, addTab, esc, close: () => show(false), credits: CREDITS };
+
+  // ---- which version this is: this page's build id (build.py writes it), and what the frame server says it serves ----
+  const BUILD = /*BUILD*/"d1cd0e245304";
+  const FRAMES = (() => {                       // the frame server, chosen as the camera window chooses it
+    const q = new URLSearchParams(location.search).get("frames");
+    if (q) return q.replace(/\/$/, "");
+    if (/^https?:$/.test(location.protocol) && !/claude\.ai$|claudeusercontent\.com$|claude\.site$/.test(location.hostname)) return location.origin;
+    return "http://localhost:8765";
+  })();
+  const ver = window.cassiniVersion = { page: BUILD || null, server: null };
+  function showVersion() {
+    const v = ver.server, el = $("aver");
+    const old = v && v.page && BUILD && v.page !== BUILD;
+    el.textContent = v ? `Version ${v.version}${old ? " · reload for the newest" : ""}` : BUILD ? `Build ${BUILD}` : "";
+    el.title = v ? [`Site ${v.site ? v.site.commit + " " + v.site.subject : "unknown"}`,
+      `Frame server ${v.server_version}${v.server_current ? "" : " (restart pending)"}`, `Page build ${BUILD || "none"}`].join("\n") : "";
+  }
+  ver.ready = fetch(`${FRAMES}/version.json`, { cache: "no-store" }).then(r => r.ok ? r.json() : null, () => null)
+    .then(v => { ver.server = v; showVersion(); return ver; });
+  showVersion();
   // closing or minimizing the window just closes it (it never goes to the menu-bar tray)
   card.addEventListener("click", e => { if (e.target.closest(".close, .min")) { e.stopImmediatePropagation(); show(false); } }, true);
   card.addEventListener("dblclick", e => { if (e.target.closest(".titlebar")) { e.stopImmediatePropagation(); show(false); } }, true);
@@ -5281,6 +5341,173 @@ body.phone #hrel .cs-note { bottom: auto; top: 40px; max-width: calc(100vw - 32p
 <script src="https://cdn.jsdelivr.net/npm/three@0.128.0/build/three.min.js"></script>
 <script src="https://cdn.jsdelivr.net/npm/three@0.128.0/examples/js/controls/OrbitControls.js"></script>
 <script src="https://cdn.jsdelivr.net/npm/three@0.128.0/examples/js/loaders/GLTFLoader.js"></script>
+<script>
+// ---------- smooth lines: anti-aliased orbits, trails and outlines ----------
+(function () {
+  const S = window.cassiniSettings;
+  S.define({ key: "perf.smoothLines", section: "Performance", label: "Smooth lines", type: "toggle", value: true,
+             hint: "Anti-aliased orbits, trails and outlines. Off draws the plain one-pixel lines, which look jagged." });
+  S.define({ key: "view.lineWidth", section: "View", label: "Line width", type: "range", value: 1, min: 0.5, max: 3, step: 0.25, unit: "px",
+             hint: "Orbits, trails and outlines, in screen pixels (with smooth lines on). 1 is as thin as the plain lines." });
+  let on = S.get("perf.smoothLines"), half = S.get("view.lineWidth") / 2;
+  const redraw = () => { if (window.cassiniPerf) cassiniPerf.invalidate(); };
+  S.on("perf.smoothLines", v => { on = v; redraw(); });
+  S.on("view.lineWidth", v => { half = v / 2; redraw(); });
+
+  const VS = `
+    #include <common>
+    #include <color_pars_vertex>
+    #include <logdepthbuf_pars_vertex>
+    uniform vec4 viewport;
+    uniform float halfWidth;
+    attribute vec3 instanceStart, instanceEnd;
+    #ifdef USE_COLOR
+    attribute vec3 instanceColorStart, instanceColorEnd;
+    #endif
+    varying vec2 vA, vB;
+    // the end behind the camera moves along the segment to the near plane, so the projection stays on screen
+    void trim(const in vec4 a, inout vec4 b) {
+      float near = -0.5 * projectionMatrix[3][2] / projectionMatrix[2][2];
+      b.xyz = mix(a.xyz, b.xyz, (near - a.z) / (b.z - a.z));
+    }
+    void main() {
+      #ifdef USE_COLOR
+      vColor = position.y < 0.5 ? instanceColorStart : instanceColorEnd;
+      #endif
+      vec4 a = modelViewMatrix * vec4(instanceStart, 1.0), b = modelViewMatrix * vec4(instanceEnd, 1.0);
+      if (projectionMatrix[2][3] == -1.0) {
+        if (a.z >= 0.0 && b.z >= 0.0) { gl_Position = vec4(2.0, 2.0, 2.0, 1.0); return; }
+        if (a.z < 0.0 && b.z >= 0.0) trim(a, b); else if (b.z < 0.0 && a.z >= 0.0) trim(b, a);
+      }
+      vec4 ca = projectionMatrix * a, cb = projectionMatrix * b;
+      // the segment's ends in window pixels
+      vA = viewport.xy + (ca.xy / ca.w * 0.5 + 0.5) * viewport.zw;
+      vB = viewport.xy + (cb.xy / cb.w * 0.5 + 0.5) * viewport.zw;
+      vec2 d = vB - vA;
+      float l = length(d);
+      if (l < 1e-3) { gl_Position = vec4(2.0, 2.0, 2.0, 1.0); return; }
+      // a quad one pixel wider than the line on each side, for the partly covered pixels at its edges
+      vec2 n = vec2(-d.y, d.x) / l * position.x * (halfWidth + 1.0);
+      vec4 clip = position.y < 0.5 ? ca : cb;
+      clip.xy += n / viewport.zw * 2.0 * clip.w;
+      gl_Position = clip;
+      #include <logdepthbuf_vertex>
+    }`;
+  const FS = `
+    uniform vec3 diffuse;
+    uniform float opacity;
+    uniform float halfWidth;
+    varying vec2 vA, vB;
+    #include <common>
+    #include <color_pars_fragment>
+    #include <logdepthbuf_pars_fragment>
+    void main() {
+      vec2 d = vB - vA;
+      float r = abs(dot(gl_FragCoord.xy - vA, normalize(vec2(-d.y, d.x))));
+      // share of this pixel (one pixel across) the line covers: 1 inside, a ramp over its edges, the same total for
+      // a line thinner than a pixel, so it reads as bright as the plain line it replaces
+      float cover = clamp(min(r + 0.5, halfWidth) - max(r - 0.5, -halfWidth), 0.0, 1.0);
+      if (cover <= 0.0) discard;
+      vec4 diffuseColor = vec4(diffuse, opacity * cover);
+      #include <logdepthbuf_fragment>
+      #include <color_fragment>
+      gl_FragColor = diffuseColor;
+    }`;
+
+  const lines = new Set(), vp = new THREE.Vector4();
+  // the quad: x across the line (-1, 1), y along it (0 at the segment's start, 1 at its end)
+  const QUAD = new Float32Array([-1, 0, 0, 1, 0, 0, -1, 1, 0, 1, 1, 0]);
+
+  function adopt(L) {
+    const src = L.material;
+    if (L.userData.smooth || !src || src.type !== "LineBasicMaterial") return;
+    const g = new THREE.InstancedBufferGeometry();
+    g.setAttribute("position", new THREE.BufferAttribute(QUAD, 3));
+    g.setIndex([0, 2, 1, 2, 3, 1]);
+    const m = new THREE.ShaderMaterial({ vertexShader: VS, fragmentShader: FS, transparent: true, vertexColors: !!src.vertexColors,
+      uniforms: { diffuse: { value: new THREE.Color() }, opacity: { value: 1 }, halfWidth: { value: 0.5 }, viewport: { value: new THREE.Vector4() } } });
+    const M = new THREE.Mesh(g, m);
+    M.frustumCulled = false; M.cap = 0; M.key = "";
+    M.onBeforeRender = function (r) { r.getCurrentViewport(vp); m.uniforms.viewport.value.copy(vp); };
+    L.userData.smooth = M; M.layers.mask = L.layers.mask;
+    add0.call(L, M);
+    lines.add(L);
+  }
+
+  // copies the line's segments into the mesh's instances when its points, colors or draw range changed
+  function fill(L, M) {
+    const g = L.geometry, pa = g && g.attributes.position;
+    if (!pa) { M.visible = false; return; }
+    const ca = L.material.vertexColors ? g.attributes.color : null, ix = g.index;
+    const n = ix ? ix.count : pa.count, s0 = Math.max(0, g.drawRange.start), s1 = Math.min(n, s0 + g.drawRange.count);
+    const key = `${g.id} ${pa.version} ${ca ? ca.version : -1} ${ix ? ix.version : -1} ${s0} ${s1}`;
+    if (key === M.key) return;
+    M.key = key;
+    const segs = L.isLineSegments ? Math.max(0, (s1 - s0) >> 1) : Math.max(0, s1 - s0 - 1) + (L.isLineLoop && s1 - s0 > 2 ? 1 : 0);
+    const G = M.geometry;
+    if (segs > M.cap) {
+      M.cap = Math.max(segs, 2 * M.cap, 16);
+      for (const k of ["instanceStart", "instanceEnd", "instanceColorStart", "instanceColorEnd"])
+        G.setAttribute(k, new THREE.InstancedBufferAttribute(new Float32Array(3 * M.cap), 3));
+      G.dispose();   // new buffers: drop the old ones from the GPU
+    }
+    const A = G.attributes.instanceStart.array, B = G.attributes.instanceEnd.array, CA = G.attributes.instanceColorStart.array, CB = G.attributes.instanceColorEnd.array;
+    const p = pa.array, ps = pa.itemSize, c = ca && ca.array, cs = ca && ca.itemSize, at = k => ix ? ix.array[k] : k;
+    const put = (j, a, b) => {
+      a = at(a); b = at(b);
+      for (let q = 0; q < 3; q++) { A[3 * j + q] = p[ps * a + q]; B[3 * j + q] = p[ps * b + q]; }
+      if (c) for (let q = 0; q < 3; q++) { CA[3 * j + q] = c[cs * a + q]; CB[3 * j + q] = c[cs * b + q]; }
+    };
+    let j = 0;
+    if (L.isLineSegments) for (let k = s0; k + 1 < s1; k += 2) put(j++, k, k + 1);
+    else {
+      for (let k = s0; k + 1 < s1; k++) put(j++, k, k + 1);
+      if (L.isLineLoop && s1 - s0 > 2) put(j++, s1 - 1, s0);
+    }
+    for (const k of ["instanceStart", "instanceEnd", "instanceColorStart", "instanceColorEnd"]) G.attributes[k].needsUpdate = true;
+    G.instanceCount = j;
+  }
+
+  function sync() {
+    for (const L of lines) {
+      const M = L.userData.smooth, src = L.material;
+      if (!on || src.type !== "LineBasicMaterial") {
+        // plain lines: the line draws itself again
+        if (!L.layers.mask) L.layers.mask = M.layers.mask;
+        M.visible = false; continue;
+      }
+      // the line stays off every camera; a mask the viewer set on it meanwhile (layers.set) passes to the mesh
+      if (L.layers.mask) { M.layers.mask = L.layers.mask; L.layers.mask = 0; }
+      M.visible = true;
+      fill(L, M);
+      const m = M.material;
+      m.uniforms.diffuse.value.copy(src.color); m.uniforms.opacity.value = src.opacity; m.uniforms.halfWidth.value = half;
+      m.visible = src.visible; m.blending = src.blending; m.depthTest = src.depthTest; m.depthWrite = src.depthWrite;
+      M.renderOrder = L.renderOrder;
+    }
+  }
+
+  const P = THREE.Object3D.prototype, add0 = P.add, remove0 = P.remove;
+  P.add = function (...objs) {
+    const r = add0.apply(this, objs);
+    for (const o of objs) if (o && o.isLine) { adopt(o); if (o.userData.smooth) lines.add(o); }
+    return r;
+  };
+  P.remove = function (...objs) {
+    for (const o of objs) if (o && o.isLine) lines.delete(o);
+    return remove0.apply(this, objs);
+  };
+  // three.js r128 makes render() inside the renderer's constructor, so each new renderer's render is wrapped
+  const R0 = THREE.WebGLRenderer;
+  THREE.WebGLRenderer = function (params) {
+    R0.call(this, params);
+    const render0 = this.render;
+    this.render = function () { if (lines.size) sync(); return render0.apply(this, arguments); };
+  };
+  THREE.WebGLRenderer.prototype = R0.prototype;
+  window.cassiniSmoothLines = { count: () => lines.size };
+})();
+</script>
 <script>
 "use strict";
 // ---------- study theme: colours and fonts for the canvas/3D parts come from CSS custom properties ----------
@@ -5420,7 +5647,7 @@ const MAJOR = ["MIMAS", "ENCELADUS", "TETHYS", "DIONE", "RHEA", "TITAN", "HYPERI
 // the cruise to Saturn: two Venus flybys, Earth and the Moon, Jupiter and its four large moons
 const PLANETS = ["VENUS", "EARTH", "JUPITER", "SATURN"];
 const GALILEAN = ["IO", "EUROPA", "GANYMEDE", "CALLISTO"];
-const PARENT = { MOON: "EARTH", IO: "JUPITER", EUROPA: "JUPITER", GANYMEDE: "JUPITER", CALLISTO: "JUPITER" };
+const PARENT = { MOON: "EARTH", IO: "JUPITER", EUROPA: "JUPITER", GANYMEDE: "JUPITER", CALLISTO: "JUPITER", HIMALIA: "JUPITER" };
 const parentOf = n => PARENT[n] || (PLANETS.includes(n) ? "SUN" : "SATURN");
 const MOONS_OF = { SATURN: MAJOR, JUPITER: GALILEAN, EARTH: ["MOON"], VENUS: [] };
 const GM = { SUN: 1.32712440018e11, SATURN: 37931207.7, JUPITER: 126686534.9, EARTH: 398600.4 };   // km^3/s^2
@@ -5433,7 +5660,14 @@ const MOON_LOOK = {
   MIMAS: [0.80, 0.80, 0.80], ENCELADUS: [0.98, 0.98, 1.0], TETHYS: [0.88, 0.87, 0.85], DIONE: [0.84, 0.84, 0.86],
   RHEA: [0.82, 0.80, 0.78], TITAN: [0.86, 0.58, 0.28], HYPERION: [0.62, 0.55, 0.47], IAPETUS: [0.78, 0.76, 0.72], PHOEBE: [0.30, 0.29, 0.28],
   VENUS: [0.93, 0.86, 0.66], EARTH: [0.36, 0.52, 0.78], MOON: [0.62, 0.60, 0.57], JUPITER: [0.86, 0.76, 0.62],
-  IO: [0.92, 0.84, 0.46], EUROPA: [0.90, 0.85, 0.76], GANYMEDE: [0.62, 0.58, 0.52], CALLISTO: [0.42, 0.38, 0.34]
+  IO: [0.92, 0.84, 0.46], EUROPA: [0.90, 0.85, 0.76], GANYMEDE: [0.62, 0.58, 0.52], CALLISTO: [0.42, 0.38, 0.34],
+  // the small moons, near enough from Cassini's color pictures (Buratti et al. 2019, Thomas et al. 2013): the ring
+  // moons inside the F ring dusty and reddish, the co-orbitals grey, the Lagrangian moons and the Alkyonides bright
+  // with E-ring ice
+  PAN: [0.78, 0.72, 0.62], DAPHNIS: [0.78, 0.73, 0.64], ATLAS: [0.76, 0.70, 0.60], PROMETHEUS: [0.80, 0.77, 0.72],
+  PANDORA: [0.80, 0.78, 0.74], JANUS: [0.82, 0.80, 0.77], EPIMETHEUS: [0.82, 0.80, 0.77], TELESTO: [0.93, 0.93, 0.94],
+  CALYPSO: [0.95, 0.95, 0.96], HELENE: [0.94, 0.94, 0.95], METHONE: [0.84, 0.82, 0.79], PALLENE: [0.86, 0.85, 0.83],
+  POLYDEUCES: [0.88, 0.88, 0.88]
 };
 const SMOOTH = ["VENUS", "EARTH", "JUPITER"];   // cloud-covered: no procedural craters
 const FOV_HALF = { N: 0.3516 / 2, W: 3.4884 / 2 };   // ISS fields of view, degrees (half width)
@@ -5540,7 +5774,9 @@ const TEX_DIR = "data/textures/" + (/^[124]k$/.test(TEX_TIER) ? TEX_TIER : "2k")
 const TEX_FILES = { SATURN: "saturn", MIMAS: "mimas", ENCELADUS: "enceladus", TETHYS: "tethys", DIONE: "dione", RHEA: "rhea",
                     TITAN: "titan", HYPERION: "hyperion", IAPETUS: "iapetus", PHOEBE: "phoebe", JUPITER: "jupiter",
                     VENUS: "venus", EARTH: "earth", MOON: "moon", IO: "io", EUROPA: "europa", GANYMEDE: "ganymede", CALLISTO: "callisto" };
-const SHAPES = { HYPERION: "data/textures/models/hyperion.mesh.b64.txt", PHOEBE: "data/textures/models/phoebe.mesh.b64.txt" };
+// real shape models (Thomas et al. 2018 and Gaskell, PDS; web/replay/make_shapes.py for the small moons)
+const SHAPES = Object.fromEntries(["HYPERION", "PHOEBE", "PAN", "DAPHNIS", "ATLAS", "PROMETHEUS", "PANDORA", "EPIMETHEUS", "JANUS", "TELESTO", "CALYPSO", "HELENE"]
+  .map(n => [n, `data/textures/models/${n.toLowerCase()}.mesh.b64.txt`]));
 const shapeGeom = {};
 const texLoader = new THREE.TextureLoader();
 const bitmapLoader = typeof createImageBitmap === "function" && THREE.ImageBitmapLoader ? new THREE.ImageBitmapLoader().setOptions({ imageOrientation: "flipY", premultiplyAlpha: "none" }) : null;
@@ -5579,6 +5815,7 @@ async function loadShapes() {
     } catch (err) { console.warn("shape model not loaded for " + name, err); }
   }));
 }
+const shapesLoading = loadShapes();
 const RING_IN = 66900, RING_OUT = 140600;
 function ringTexture() {
   const N = 2048, c = document.createElement("canvas"); c.width = N; c.height = 1;
@@ -5705,9 +5942,12 @@ function makeSaturn(radii) {
   return { group: g, ring: rmat, radius: radii[0] };
 }
 
+// the moons Cassini only saw from afar: the irregular moons and Himalia are dark captured bodies, Anthe and Aegaeon icy
+const FAR_LOOK = n => ["ANTHE", "AEGAEON"].includes(n) ? [0.86, 0.85, 0.83] : [0.30, 0.28, 0.26];
 function makeMoon(name, b) {
-  const look = MOON_LOOK[name] || [0.7, 0.68, 0.65];
-  const kind = name === "IAPETUS" ? 1 : name === "TITAN" ? 2 : SMOOTH.includes(name) ? 3 : 0;
+  const look = MOON_LOOK[name] || (b.naif === 506 || (b.naif >= 619 && b.naif <= 653) ? FAR_LOOK(name) : [0.7, 0.68, 0.65]);
+  // kind 4: a small moon, shown plain (its shape model carries its relief; no painted craters)
+  const kind = name === "IAPETUS" ? 1 : name === "TITAN" ? 2 : SMOOTH.includes(name) ? 3 : TEX_FILES[name] ? 0 : 4;
   const mat = new THREE.ShaderMaterial({
     uniforms: { sunDir: { value: new THREE.Vector3(1, 0, 0) }, toScene: { value: new THREE.Matrix3() }, radii: { value: new THREE.Vector3(1, 1, 1) },
                 color: { value: new THREE.Vector3(...look) }, kind: { value: kind },
@@ -5724,7 +5964,7 @@ function makeMoon(name, b) {
         vec3 nb = normalize(vBody / radii);
         vec3 n = normalize(toScene * (shape > 0.5 ? normalize(vNrm) : nb));
         float m = 0.0, craters = 0.0;
-        if (hasMap < 0.5) { m = fbm(nb * 5.0) - 0.5; craters = smoothstep(0.62, 0.7, vnoise(nb * 22.0)) * 0.12; }
+        if (hasMap < 0.5 && kind < 3.5) { m = fbm(nb * 5.0) - 0.5; craters = smoothstep(0.62, 0.7, vnoise(nb * 22.0)) * 0.12; }
         vec3 alb = color * (1.0 + 0.32 * m - craters);
         float mu0 = dot(n, sunDir);
         float L = max(mu0, 0.0);
@@ -5732,10 +5972,10 @@ function makeMoon(name, b) {
           float lead = dot(nb, vec3(0.0, -1.0, 0.0)) + 0.18 * m;
           alb = mix(alb, vec3(0.07, 0.055, 0.045), smoothstep(-0.05, 0.25, lead));
         }
-        if (kind > 2.5) { // cloud-covered planets: soft banding, no craters
+        if (kind > 2.5 && kind < 3.5) { // cloud-covered planets: soft banding, no craters
           alb = color * (1.0 + 0.06 * sin(asin(nb.z) * 9.0) + 0.05 * m);
           L = smoothstep(-0.08, 0.6, mu0);
-        } else if (kind > 1.5) { // Titan: featureless haze, soft terminator
+        } else if (kind > 1.5 && kind < 2.5) { // Titan: featureless haze, soft terminator
           alb = color * (1.0 + 0.05 * sin(asin(nb.z) * 6.0) + 0.04 * m);
           L = smoothstep(-0.18, 0.75, mu0) * 0.95;
         }
@@ -5749,7 +5989,9 @@ function makeMoon(name, b) {
   const g = new THREE.Group(); g.add(mesh);
   const atm = ATMOSPHERES[name] ? makeAtmosphere(ATMOSPHERES[name], mat.uniforms.sunDir) : null;
   if (atm) g.add(atm);
-  return { group: g, mesh, mat, atm, shape: !!shapeGeom[name], radius: b.radii ? (b.radii[0] + b.radii[1] + b.radii[2]) / 3 : 10 };
+  const plume = name === "ENCELADUS" ? makePlume(mat.uniforms.sunDir) : null;
+  if (plume) g.add(plume);
+  return { group: g, mesh, mat, atm, plume, shape: !!shapeGeom[name], radius: b.radii ? (b.radii[0] + b.radii[1] + b.radii[2]) / 3 : 10 };
 }
 
 // ---------- atmospheres: a haze shell around the globe, shaded by marching the view ray through it ----------
@@ -5863,6 +6105,135 @@ function makeAtmosphere(a, sunDir) {
     mat.uniforms.inside.value = inn ? 1 : 0;
     mat.side = inn ? THREE.BackSide : THREE.FrontSide; mat.depthTest = !inn;
     mat.uniforms.radii.value.copy(s);
+    mat.uniforms.rot.value.setFromMatrix4(mAtm.extractRotation(mesh.matrixWorld));
+  };
+  return mesh;
+}
+
+// ---------- Enceladus's plumes: sunlit ice grains over the south-polar tiger stripes, marched like the atmospheres ----------
+// Each stripe feeds a curtain of grains that rises straight up, thins with height (scale height H, plus a faint tall
+// tail) and spreads out until the four curtains merge into one broad plume. The grains are a few microns across, so
+// they scatter almost all their light forward (two-term Henyey-Greenstein): the plume shows against the dark sky when
+// Cassini looks back toward the Sun and is nearly invisible otherwise, as in the real pictures. It is optically thin,
+// so it only adds light, and grains in Enceladus's shadow stay dark. Lengths are in Enceladus radii; body frame z = north.
+//   stripes: [lat, east lon] of each end, traced on the surface map (the stripes drawn on the globe), and a share of
+//   the activity (Baghdad and Damascus strongest, Alexandria weakest; Spitale & Porco 2007, Porco et al. 2014)
+const PLUME = {
+  stripes: { DAMASCUS: [-77.5, 13.0, -70.4, 118.4, 1.0], BAGHDAD: [-79.7, 320.5, -70.5, 136.0, 1.0],
+             CAIRO: [-80.2, 275.4, -78.8, 184.8, 0.7], ALEXANDRIA: [-69.3, 263.5, -73.9, 202.1, 0.4] },
+  H: 0.25, tail: [0.15, 1.0], w0: 0.06, spread: 0.45, column: 0.011,
+  // jets: [spacing, width at the vent, widening per unit height, tilt], their share, and how high they stay distinct
+  jets: [0.02, 0.006, 0.18, 0.5], jetShare: 0.35, jetH: 0.2, g: [0.85, 0.2, 0.85], color: [0.9, 0.95, 1.0],
+  center: -2.0, reach: 1.9, steps: 48
+};
+const plumes = [];
+const plumeOn = () => window.cassiniSettings ? cassiniSettings.get("view.plumes") !== false : true;
+const plumeBrightness = () => window.cassiniSettings ? +cassiniSettings.get("view.plumeBrightness") || 1 : 1;
+function applyPlumes() {
+  const on = plumeOn(), lv = atmosphereLevel();
+  for (const m of plumes) {
+    m.visible = on;
+    m.material.uniforms.bright.value = plumeBrightness();
+    m.material.uniforms.steps.value = lv === "light" ? PLUME.steps / 2 : PLUME.steps;
+  }
+  if (window.cassiniPerf) cassiniPerf.invalidate();
+}
+function makePlume(sunDir) {
+  const p = PLUME, unit = (lat, lon) => { const a = lat * Math.PI / 180, o = lon * Math.PI / 180;
+    return new THREE.Vector3(Math.cos(a) * Math.cos(o), Math.cos(a) * Math.sin(o), Math.sin(a)); };
+  const S = Object.values(p.stripes);
+  const mat = new THREE.ShaderMaterial({
+    uniforms: { sunDir, sA: { value: S.map(s => unit(s[0], s[1])) }, sB: { value: S.map(s => unit(s[2], s[3])) },
+                sW: { value: new THREE.Vector4(...S.map(s => s[4])) }, H: { value: p.H }, tail: { value: new THREE.Vector2(...p.tail) },
+                w0: { value: p.w0 }, spread: { value: p.spread }, column: { value: p.column }, g: { value: new THREE.Vector3(...p.g) },
+                color: { value: new THREE.Vector3(...p.color) }, C: { value: new THREE.Vector3(0, 0, p.center) }, reach: { value: p.reach },
+                radii: { value: new THREE.Vector3(1, 1, 1) }, rot: { value: new THREE.Matrix3() }, inside: { value: 0 },
+                jet: { value: new THREE.Vector4(...p.jets) }, jetShare: { value: p.jetShare }, jetH: { value: p.jetH },
+                steps: { value: p.steps }, bright: { value: 1 } },
+    vertexShader: VHEAD + `varying vec3 vLocal; varying vec3 vView;
+      void main(){ vLocal = position; vec4 mv = modelViewMatrix * vec4(position, 1.0); vView = mv.xyz;
+        gl_Position = projectionMatrix * mv;
+        #include <logdepthbuf_vertex>
+      }`,
+    fragmentShader: FHEAD + `uniform vec3 sunDir, sA[4], sB[4], C, g, color, radii; uniform vec4 sW; uniform vec2 tail;
+      uniform float H, w0, spread, column, reach, inside, steps, bright, jetShare, jetH; uniform vec4 jet;
+      uniform mat3 rot;
+      varying vec3 vLocal; varying vec3 vView;
+      #define STEPS 48
+      float hg(float c, float k) { float q = 1.0 + k * k - 2.0 * k * c; return (1.0 - k * k) / (q * sqrt(q)); }
+      float hash(vec2 q) { return fract(sin(dot(q, vec2(127.1, 311.7))) * 43758.5453); }
+      // grains per unit length at x: over each stripe a curtain, a gaussian across it that widens with height, and near
+      // the surface the narrow jets it is made of (one every ~5 km, each tilted its own way) that blur into it higher up
+      float density(vec3 x, float r) {
+        float h = r - 1.0, w = w0 + spread * h, wj = jet.y + jet.z * h, n = 0.0, nj = 0.0;
+        vec3 s = x / r;
+        for (int k = 0; k < 4; k++) {
+          vec3 ab = sB[k] - sA[k];
+          float len = length(ab), t = dot(s - sA[k], ab) / (len * len);
+          vec3 q = normalize(sA[k] + ab * clamp(t, 0.0, 1.0));
+          float l = length(s - q) * r;
+          n += sW[k] * exp(-l * l / (w * w));
+          if (h < 0.6 && l < 2.5 * w) {   // jets only where the curtain is
+            float N = floor(len / jet.x), j0 = floor(t * N);
+            vec3 al = ab / len, ac = normalize(cross(s, al));
+            for (int i = -1; i <= 1; i++) {
+              float j = j0 + float(i);
+              if (j < 0.0 || j >= N) continue;
+              vec2 id = vec2(float(k), j);
+              vec3 b = normalize(sA[k] + ab * (j + 0.2 + 0.6 * hash(id)) / N);
+              vec3 axis = b * r + h * jet.w * ((hash(id + 7.1) - 0.5) * al + (hash(id + 3.3) - 0.5) * ac);
+              vec3 dj = x - axis;
+              nj += sW[k] * (0.3 + hash(id + 5.7)) * exp(-dot(dj, dj) / (wj * wj)) / wj;
+            }
+          }
+        }
+        float fade = smoothstep(reach, reach * 0.8, length(x - C));   // no hard edge where the volume ends
+        return (n / w * (exp(-h / H) + tail.x * exp(-h / tail.y)) + nj * jetShare * exp(-h / jetH)) * fade;
+      }
+      void main(){
+        #include <logdepthbuf_fragment>
+        vec3 dw = (normalize(vView) * mat3(viewMatrix)) * rot;
+        vec3 sd = normalize(sunDir * rot);
+        vec3 p = vLocal, d = normalize(dw / radii);
+        vec3 cam = p - dw * length(vView) / radii;
+        vec3 o = inside > 0.5 ? cam : p;
+        float L = inside > 0.5 ? length(p - cam) : max(-2.0 * dot(p - C, d), 0.0);   // to where the ray leaves the volume
+        float b = dot(o, d), c = dot(o, o) - 1.0, disc = b * b - c;
+        if (disc > 0.0) { float t0 = -b - sqrt(disc); if (t0 > 0.0 && t0 < L) L = t0; }       // the globe hides what is behind it
+        float mu = dot(d, sd);
+        float ph = g.z * hg(mu, g.x) + (1.0 - g.z) * hg(mu, g.y);
+        float tm = clamp(-b, 0.0, L);                       // samples bunch toward the surface, where the curtains are thin
+        float nh = floor(steps / 2.0), jit = fract(sin(dot(gl_FragCoord.xy, vec2(12.9898, 78.233))) * 43758.5453);
+        float I = 0.0, t1 = 0.0;
+        for (int i = 0; i < STEPS; i++) {
+          if (float(i) >= 2.0 * nh) break;
+          float u = (float(i) + 1.0) / nh;
+          float t2 = float(i) < nh ? tm - tm * (1.0 - u) * (1.0 - u) : tm + (L - tm) * (u - 1.0) * (u - 1.0);
+          vec3 x = o + d * mix(t1, t2, jit);
+          float r = length(x);
+          // lit unless the globe stands between the grain and the Sun (soft over the shadow's edge)
+          float sb = dot(x, sd), m = sqrt(max(dot(x, x) - sb * sb, 0.0));
+          float lit = sb > 0.0 ? 1.0 : smoothstep(0.97, 1.03, m);
+          if (r > 1.0) I += density(x, r) * lit * (t2 - t1);
+          t1 = t2;
+        }
+        I *= column * ph;
+        float top = 0.35 * bright;                          // a soft shoulder keeps even a backlit plume subtle
+        gl_FragColor = vec4(color * top * (1.0 - exp(-I / top)), 0.0);
+      }`,
+    transparent: true, depthWrite: false, blending: THREE.CustomBlending,
+    blendSrc: THREE.OneFactor, blendDst: THREE.OneMinusSrcAlphaFactor
+  });
+  const mesh = new THREE.Mesh(new THREE.SphereGeometry(p.reach, 64, 48).translate(0, 0, p.center), mat);
+  mesh.renderOrder = 1;
+  plumes.push(mesh);
+  const cl = new THREE.Vector3();
+  mesh.onBeforeRender = (r, sc, cam) => {
+    cl.copy(cam.getWorldPosition(new THREE.Vector3())); mesh.worldToLocal(cl);
+    const inn = cl.distanceTo(mat.uniforms.C.value) < p.reach * 1.001;
+    mat.uniforms.inside.value = inn ? 1 : 0;
+    mat.side = inn ? THREE.BackSide : THREE.FrontSide; mat.depthTest = !inn;
+    mat.uniforms.radii.value.copy(mesh.scale);
     mat.uniforms.rot.value.setFromMatrix4(mAtm.extractRotation(mesh.matrixWorld));
   };
   return mesh;
@@ -6096,7 +6467,7 @@ async function load(startEt) {
       probe = { ...h, track: parseTrack(await fetchBuf(h.file)) };
     }
   } catch (err) { console.warn("Huygens data not loaded", err); probe = null; }
-  await loadShapes();
+  await shapesLoading;
 }
 // the one-year layout (the artifact build): every file at once
 async function loadYearFiles() {
@@ -6129,6 +6500,7 @@ function build() {
   cassini = makeCassini(); scene.add(cassini);
   cassini.traverse(o => o.layers.set(1));
   if (window.cassiniSettings) cassiniSettings.on("view.atmospheres", applyAtmospheres); else applyAtmospheres();
+  if (window.cassiniSettings) { for (const k of ["view.plumes", "view.plumeBrightness", "view.atmospheres"]) cassiniSettings.on(k, applyPlumes); } else applyPlumes();
   buildFov();
   if (probe && probe.map) buildHuygensMap();
 
@@ -6274,6 +6646,7 @@ function updateBodies() {
       toScene(norm(sub(pos.SUN, pos[name], tmp2)), m.mat.uniforms.sunDir.value).normalize();
       // the haze shell turns with the body and keeps its shape, so an oblate Jupiter's limb has haze all the way round
       if (m.atm) { m.atm.quaternion.copy(m.mesh.quaternion); m.atm.scale.set(r[0], r[1], r[2]); }
+      if (m.plume) { m.plume.quaternion.copy(m.mesh.quaternion); m.plume.scale.set(r[0], r[1], r[2]); }
     }
   }
   saturnObj.ring.uniforms.camLocal.value.copy(camera.position).sub(saturnObj.group.position);
@@ -6297,10 +6670,14 @@ function updateBodies() {
   // markers
   const arr = markerPts.geometry.attributes.position.array;
   const mc = markerPts.geometry.attributes.color.array, base = markerPts.userData.base;
+  const pxPerRad = canvas.clientHeight / 2 / Math.tan(rad(camera.fov / 2));
   markerPts.userData.names.forEach((n, i) => {
     const p = objPos(n);
     arr[3 * i] = p.x; arr[3 * i + 1] = p.y; arr[3 * i + 2] = p.z;
-    const k = shown(n) ? 1 : 0;   // additive blending: black draws nothing
+    // the dot stands in for a body too small to see and fades out once its disc covers a pixel or two:
+    // the globe hides the dot's middle and leaves its glow as a colored ring around it
+    const pr = meshes[n] ? (bodyRadius(n) / KM) * (state.enlarge && n !== "SATURN" ? 10 : 1) / Math.max(camera.position.distanceTo(p), 1e-12) * pxPerRad : 0;
+    const k = shown(n) ? 1 - THREE.MathUtils.smoothstep(pr, 0.6, 1.6) : 0;   // additive blending: black draws nothing
     mc[3 * i] = base[3 * i] * k; mc[3 * i + 1] = base[3 * i + 1] * k; mc[3 * i + 2] = base[3 * i + 2] * k;
   });
   markerPts.geometry.attributes.position.needsUpdate = true;
@@ -6810,7 +7187,7 @@ function setFocus(name, dist) {
   if (!pos[name] || (name !== "HUYGENS" && !present(name))) return;
   if (name !== "CASSINI" && state.follow) setFollow(false);
   const old = camera.position.clone();
-  const d = dist || (name === "CASSINI" ? 3.5e-5 : name === "HUYGENS" ? (window.studyCoast && studyCoast.modelShown(state.et) ? 1.6e-5 : 4) : name === "SUN" ? 6e5 : name === "SATURN" ? 420 : Math.max(bodyRadius(name) / KM * 7, 2));
+  const d = dist || (name === "CASSINI" ? 3.5e-5 : name === "HUYGENS" ? (window.studyCoast && studyCoast.modelShown(state.et) ? 1.6e-5 : 4) : name === "SUN" ? 6e5 : name === "SATURN" ? 420 : Math.max(bodyRadius(name) / KM * 7, 0.004));
   state.focus = name;
   let dir = old.lengthSq() > 0 ? old.normalize() : new THREE.Vector3(0, 0.3, 1).normalize();
   if (name === "HUYGENS" && !(window.studyCoast && studyCoast.modelShown(state.et))) {
@@ -7310,12 +7687,18 @@ function frame(now) {
     return el;
   }
   function drop(el) { fadeTo(el, 0, 1.1, () => el.remove()); }
-  // one line at a time in a caption box: a new line takes the place of the one before (null just takes it down)
+  // one line at a time in a caption box: a new line takes the place of the one before, which goes quickly first so the
+  // two never sit on top of each other (null just takes it down)
   const lines = new WeakMap();
   function line(caps, html, cls) {
     const was = lines.get(caps);
-    if (was && was.isConnected) drop(was);
-    const el = html == null ? null : caption(caps, html, cls);
+    let el = null;
+    if (html != null) {
+      el = document.createElement("div");
+      el.className = "cs-cap" + (cls ? " " + cls : ""); el.innerHTML = html; el.style.opacity = 0; caps.appendChild(el);
+    }
+    const show = () => { if (el) fadeTo(el, 1, 1.2); };
+    if (was && was.isConnected) fadeTo(was, 0, 0.4, () => { was.remove(); show(); }); else show();
     lines.set(caps, el);
     return el;
   }
@@ -7530,6 +7913,429 @@ function frame(now) {
 })();
 </script>
 <script>
+// ---------- atmospheric entry: the glowing gas, the heating skin, sparks and pieces, a fireball from afar ----------
+(function () {
+  const CS = window.cassiniCutscene;
+  if (!CS) return;
+  const clamp01 = x => Math.max(0, Math.min(1, x));
+
+  // the color of a glowing body at temperature T (K), brightest channel 1 (after Tanner Helland's fit to the CIE
+  // blackbody curve)
+  function blackbody(T, out) {
+    const t = T / 100;
+    const r = t <= 66 ? 255 : 329.7 * Math.pow(t - 60, -0.1332);
+    const g = t <= 66 ? 99.47 * Math.log(t) - 161.12 : 288.12 * Math.pow(t - 60, -0.0755);
+    const b = t >= 66 ? 255 : t <= 19 ? 0 : 138.52 * Math.log(t - 10) - 305.04;
+    const c = (out || new THREE.Color()).setRGB(Math.max(0, r) / 255, Math.max(0, g) / 255, Math.max(0, b) / 255);
+    const m = Math.max(c.r, c.g, c.b) || 1;
+    return c.multiplyScalar(1 / m);
+  }
+  // how bright that glow looks, 0 below a dull red (~800 K) to 1 at `hot`: a soft curve over T^4, so a skin that is
+  // barely glowing reads as barely glowing
+  const glowOf = (T, hot) => clamp01((T - 780) / 500) * Math.pow(clamp01(T / hot), 2.2);
+
+  // what each air glows with: line = the shock layer, wake = the cooling gas behind it
+  const GAS = {
+    TITAN: { line: [0.66, 0.5, 1.0], wake: [1.0, 0.48, 0.66] },    // CN violet over nitrogen's first positive bands
+    SATURN: { line: [1.0, 0.42, 0.58], wake: [0.95, 0.3, 0.42] },  // hydrogen: H-alpha with a little H-beta
+    EARTH: { line: [0.82, 0.62, 1.0], wake: [1.0, 0.6, 0.32] },    // nitrogen and oxygen, sodium in the wake
+  };
+  function gasOf(name) {
+    const g = GAS[name] || GAS.EARTH, a = typeof ATMOSPHERES === "object" && ATMOSPHERES[name];
+    const line = new THREE.Color(...g.line), wake = new THREE.Color(...g.wake);
+    // the haze around lights up with the glow, in its own color
+    const haze = a ? new THREE.Color(...a.albedo) : wake.clone();
+    return { line, wake, haze: haze.lerp(line, 0.35) };
+  }
+
+  // ---------- glow textures: a bright source as a camera sees it, a soft core and a long faint skirt ----------
+  let haloTex = null;
+  function haloTexture() {
+    if (haloTex) return haloTex;
+    const N = 256, c = document.createElement("canvas"); c.width = c.height = N;
+    const g = c.getContext("2d"), img = g.createImageData(N, N);
+    for (let y = 0; y < N; y++) for (let x = 0; x < N; x++) {
+      const r = Math.hypot(x + 0.5 - N / 2, y + 0.5 - N / 2) / (N / 2);
+      // three falloffs, as a lens and a sensor spread a point: the core, the near glow, the faint wide skirt
+      let v = 0.62 * Math.exp(-r * r / 0.004) + 0.3 * Math.exp(-r * r / 0.03) + 0.14 * Math.exp(-r / 0.2);
+      v *= clamp01((1 - r) / 0.25);
+      const i = 4 * (y * N + x), k = Math.min(255, Math.round(255 * Math.pow(v, 0.9)));
+      img.data[i] = img.data[i + 1] = img.data[i + 2] = 255; img.data[i + 3] = k;
+    }
+    g.putImageData(img, 0, 0);
+    return haloTex = new THREE.CanvasTexture(c);
+  }
+  function halo(color, layer, depthTest) {
+    const s = new THREE.Sprite(new THREE.SpriteMaterial({ map: haloTexture(), color, transparent: true, opacity: 0, blending: THREE.AdditiveBlending, depthWrite: false, depthTest }));
+    s.layers.set(layer); s.frustumCulled = false;
+    return s;
+  }
+
+  // a little value noise for the shaders: fbm over three octaves, 0..1
+  const NOISE = `
+    float hash3(vec3 p) { p = fract(p * 0.3183099 + 0.1); p *= 17.0; return fract(p.x * p.y * p.z * (p.x + p.y + p.z)); }
+    float vnoise(vec3 x) {
+      vec3 i = floor(x), f = fract(x); f = f * f * (3.0 - 2.0 * f);
+      return mix(mix(mix(hash3(i), hash3(i + vec3(1,0,0)), f.x), mix(hash3(i + vec3(0,1,0)), hash3(i + vec3(1,1,0)), f.x), f.y),
+                 mix(mix(hash3(i + vec3(0,0,1)), hash3(i + vec3(1,0,1)), f.x), mix(hash3(i + vec3(0,1,1)), hash3(i + vec3(1,1,1)), f.x), f.y), f.z);
+    }
+    float fbm(vec3 p) { return 0.55 * vnoise(p) + 0.3 * vnoise(p * 2.07 + 3.1) + 0.15 * vnoise(p * 4.13 + 7.7); }`;
+
+  // ---------- the shock layer and its wake: a glowing shell shaped like the flow round a blunt body ----------
+  // Its axis is +Y, the way the craft is moving; 1 = the body's radius, 0 = its front face. The bow shock stands a
+  // little off the front, curves back round the shoulders, and opens into a wake that narrows far behind. Seen
+  // through, the cap is a thin bright sheet (brightest edge-on) and the wake a filled glow (brightest through its
+  // middle, soft at its edges), which is what makes it read as gas rather than a surface
+  function sheathGeometry(standoff, flare, wake) {
+    const pts = [];
+    for (let i = 0; i <= 14; i++) { const r = 1.3 * flare * i / 14; pts.push(new THREE.Vector2(r, standoff - r * r / (2 * 1.25 * flare))); }
+    const y0 = pts[pts.length - 1].y, r0 = pts[pts.length - 1].x;
+    for (let i = 1; i <= 24; i++) {
+      const k = i / 24, r = r0 * (1 + 0.28 * Math.sin(Math.PI * Math.min(1, k * 1.6)) * (1 - k)) * (1 - 0.72 * k * k);
+      pts.push(new THREE.Vector2(Math.max(0.02, r), y0 - wake * k));
+    }
+    pts.reverse();   // LatheGeometry wants the profile from bottom to top for outward normals
+    const geo = new THREE.LatheGeometry(pts, 48);
+    geo.computeVertexNormals();
+    return { geo, front: standoff, tail: y0 - wake };
+  }
+  function sheathMaterial(gas, front, tail, cap) {
+    return new THREE.ShaderMaterial({
+      uniforms: { glow: { value: 0 }, time: { value: 0 }, stretch: { value: 1 }, hot: { value: new THREE.Color(1, 1, 1) }, line: { value: gas.line }, wake: { value: gas.wake },
+        front: { value: front }, tail: { value: tail }, cap: { value: cap }, flow: { value: 3 } },
+      vertexShader: `uniform float stretch, front, tail; varying float vAlong; varying vec3 vN; varying vec3 vV; varying vec3 vP;
+        #include <common>
+        #include <logdepthbuf_pars_vertex>
+        void main() {
+          vec3 p = position; if (p.y < 0.0) p.y *= stretch;
+          vAlong = clamp((front - position.y) / (front - tail), 0.0, 1.0); vP = p;
+          vec4 mv = modelViewMatrix * vec4(p, 1.0); vN = normalize(normalMatrix * normal); vV = normalize(-mv.xyz);
+          gl_Position = projectionMatrix * mv;
+          #include <logdepthbuf_vertex>
+        }`,
+      fragmentShader: `uniform float glow, time, cap, flow; uniform vec3 hot, line, wake; varying float vAlong; varying vec3 vN; varying vec3 vV; varying vec3 vP;
+        ${NOISE}
+        #include <logdepthbuf_pars_fragment>
+        void main() {
+          #include <logdepthbuf_fragment>
+          float a = vAlong, ndv = abs(dot(normalize(vN), normalize(vV)));
+          float c = 1.0 - smoothstep(0.0, cap, a);                   // on the cap
+          // a thin sheet: bright edge-on, but never a hard line at its very edge
+          float thin = (0.9 / (ndv + 0.3)) * 0.45 * smoothstep(0.0, 0.35, ndv) + 0.2;
+          float filled = pow(ndv, 2.2);                               // a filled glow: bright through the middle, soft edges
+          float shape = mix(filled, thin, c);
+          // turbulence streaming back along the wake, calm on the cap
+          float n = fbm(vec3(vP.x * 2.2, vP.y * 0.7 + time * flow, vP.z * 2.2));
+          float n2 = fbm(vec3(vP.x * 5.0 + 9.0, vP.y * 1.6 + time * flow * 1.7, vP.z * 5.0));
+          float turb = mix(1.0, 0.25 + 1.5 * n * (0.7 + 0.6 * n2), smoothstep(0.02, 0.3, a));
+          float fall = exp(-3.2 * a) * smoothstep(1.0, 0.55, a);
+          vec3 col = mix(hot, line, smoothstep(0.0, cap * 1.6, a));
+          col = mix(col, wake, smoothstep(cap, 0.75, a));
+          gl_FragColor = vec4(col * glow * shape * turb * fall, 1.0);
+        }`,
+      transparent: true, blending: THREE.AdditiveBlending, depthWrite: false });
+  }
+
+  // ---------- sparks and pieces: camera-facing streaks, one instanced draw ----------
+  // each streak runs from its tail to its head (in the parent's frame), with a width and a color, soft at its edges
+  function streaks(max, layer, depthTest) {
+    const geo = new THREE.InstancedBufferGeometry();
+    geo.setAttribute("position", new THREE.BufferAttribute(new Float32Array([0, -1, 0, 1, -1, 0, 1, 1, 0, 0, 1, 0]), 3));
+    geo.setIndex([0, 1, 2, 0, 2, 3]);
+    const a = geo.userData = { from: new Float32Array(max * 3), to: new Float32Array(max * 3), col: new Float32Array(max * 4) };
+    geo.setAttribute("iFrom", new THREE.InstancedBufferAttribute(a.from, 3).setUsage(THREE.DynamicDrawUsage));
+    geo.setAttribute("iTo", new THREE.InstancedBufferAttribute(a.to, 3).setUsage(THREE.DynamicDrawUsage));
+    geo.setAttribute("iCol", new THREE.InstancedBufferAttribute(a.col, 4).setUsage(THREE.DynamicDrawUsage));
+    geo.instanceCount = 0;
+    const mat = new THREE.ShaderMaterial({
+      vertexShader: `attribute vec3 iFrom; attribute vec3 iTo; attribute vec4 iCol; varying vec2 vUv; varying vec3 vCol; varying float vLen;
+        #include <common>
+        #include <logdepthbuf_pars_vertex>
+        void main() {
+          vec4 a = modelViewMatrix * vec4(iFrom, 1.0), b = modelViewMatrix * vec4(iTo, 1.0);
+          vec3 d = b.xyz - a.xyz; vec2 dir = d.xy; float l = length(dir);
+          dir = l > 1e-6 * abs(a.z) ? dir / l : vec2(1.0, 0.0);
+          vec2 side = vec2(-dir.y, dir.x); float w = iCol.w;
+          vec4 p = mix(a, b, position.x);
+          p.xy += side * position.y * w + dir * (position.x * 2.0 - 1.0) * w;
+          vUv = vec2(position.x, position.y); vCol = iCol.rgb; vLen = l / (l + 2.0 * w);
+          gl_Position = projectionMatrix * p;
+          #include <logdepthbuf_vertex>
+        }`,
+      fragmentShader: `varying vec2 vUv; varying vec3 vCol; varying float vLen;
+        #include <logdepthbuf_pars_fragment>
+        void main() {
+          #include <logdepthbuf_fragment>
+          float across = exp(-vUv.y * vUv.y * 3.5);
+          float along = mix(1.0, pow(vUv.x, 1.6), vLen);   // the head bright, the tail fading
+          float cap = (1.0 - vLen) + 0.02;                  // round, soft ends
+          float ends = smoothstep(0.0, cap, vUv.x) * smoothstep(1.0, 1.0 - cap, vUv.x);
+          gl_FragColor = vec4(vCol * across * along * ends, 1.0);
+        }`,
+      transparent: true, blending: THREE.AdditiveBlending, depthWrite: false, depthTest });
+    const m = new THREE.Mesh(geo, mat);
+    m.layers.set(layer); m.frustumCulled = false;
+    m.userData = { max, list: [] };
+    return m;
+  }
+  // add one: at p, moving at v, width w, life in s, starting at temperature T (K), drag (1/s)
+  function emit(s, p, v, w, life, T, drag) {
+    const l = s.userData.list;
+    if (l.length < s.userData.max) l.push({ p, v, w, life, age: 0, T, drag });
+  }
+  const tmpCol = new THREE.Color();
+  // move them on and write them out; toLocal turns a stored point into the parent's frame (in place); len = how many
+  // seconds of motion a streak shows; hot = the temperature of full brightness
+  function stepStreaks(s, dt, toLocal, len, hot) {
+    const l = s.userData.list, g = s.geometry, a = g.userData;
+    let n = 0;
+    for (let i = l.length - 1; i >= 0; i--) {
+      const q = l[i]; q.age += dt;
+      if (q.age > q.life) { l.splice(i, 1); continue; }
+      q.v.multiplyScalar(Math.exp(-q.drag * dt)); q.p.addScaledVector(q.v, dt);
+      const k = q.age / q.life, T = q.T * (1 - 0.6 * k);   // cooling as it goes
+      blackbody(T, tmpCol).multiplyScalar(glowOf(T, hot) * (1 - k * k) * 1.6);
+      const h = toLocal(vA.copy(q.p)), t = toLocal(vB.copy(q.p).addScaledVector(q.v, -len));
+      a.from.set([t.x, t.y, t.z], 3 * n); a.to.set([h.x, h.y, h.z], 3 * n);
+      a.col.set([tmpCol.r, tmpCol.g, tmpCol.b, q.w], 4 * n); n++;
+    }
+    g.instanceCount = n;
+    ["iFrom", "iTo", "iCol"].forEach(k => { g.attributes[k].needsUpdate = true; });
+  }
+  const vA = new THREE.Vector3(), vB = new THREE.Vector3();
+  const rnd = (a, b) => a + (b - a) * Math.random();
+
+  // ---------- the windward skin, glowing by its temperature ----------
+  // each mesh under `skin` gets a copy of its material that adds, where the surface faces into the flow, the glow of a
+  // blackbody at the skin's temperature (the originals go back on dispose). Shared uniforms: the flow direction in view
+  // space and the glow's color
+  function heatSkin(skin) {
+    const u = { heatDir: { value: new THREE.Vector3(0, 0, 1) }, heatCol: { value: new THREE.Color(0, 0, 0) }, heatWrap: { value: 0.15 } };
+    const swaps = [], copies = new Map();
+    skin.traverse(o => {
+      if (!o.isMesh || !o.material) return;
+      const one = m => {
+        if (!m || !("emissive" in m)) return m;
+        if (copies.has(m)) return copies.get(m);
+        const c = m.clone();
+        c.onBeforeCompile = sh => {
+          Object.assign(sh.uniforms, u);
+          sh.fragmentShader = "uniform vec3 heatDir; uniform vec3 heatCol; uniform float heatWrap;\n" + sh.fragmentShader.replace("#include <emissivemap_fragment>",
+            `#include <emissivemap_fragment>
+            { float f = clamp((dot(normal, heatDir) + heatWrap) / (1.0 + heatWrap), 0.0, 1.0); totalEmissiveRadiance += heatCol * f * f; }`);
+        };
+        c.customProgramCacheKey = () => "entry-heat";
+        copies.set(m, c);
+        return c;
+      };
+      swaps.push([o, o.material]);
+      o.material = Array.isArray(o.material) ? o.material.map(one) : one(o.material);
+    });
+    return { u, dispose() { swaps.forEach(([o, m]) => { o.material = m; }); copies.forEach(c => c.dispose()); } };
+  }
+
+  // ---------- close up: the whole entry around one craft ----------
+  // parent: the craft's group, in metres (the close-up pass). opts:
+  //   radius   the body's radius across the flow, m (Huygens' heat shield 1.35; Cassini, dish and all, ~3.5)
+  //   nose     how far ahead of the parent's origin its front is, m (default radius / 2)
+  //   gas      the atmosphere, a key of the viewer's ATMOSPHERES table ("TITAN", "SATURN", ...)
+  //   skin     an object whose meshes heat up on their windward side (optional)
+  //   skinHot  the skin's temperature at full heating, K (default 1900)
+  //   sparks   how many sparks the ablating skin throws, 1 = a heat shield's few (default 1)
+  //   stream   how fast the air seems to stream past, in body radii per second (default 9; the real flow is km/s,
+  //            far too fast to see)
+  // update(dt, motion, heat, more): motion = the direction the craft moves, in scene axes; heat 0..1 (the cutscene's
+  // own heating curve: deceleration, or the load the air puts on it); more.debris 0..1 throws pieces off as it breaks
+  // up. level is the smoothed heat, for sound and shake
+  function entry(parent, opts = {}) {
+    const R = opts.radius || 1.5, nose = opts.nose != null ? opts.nose : R / 2, gas = gasOf(opts.gas), layer = opts.layer != null ? opts.layer : 1;
+    const skinHot = opts.skinHot || 1900, sparkRate = opts.sparks != null ? opts.sparks : 1, stream = (opts.stream || 9) * R;
+    const root = new THREE.Group();
+    // two shells: the bright shock layer hugging the body with a short wake, and a wider, fainter one trailing far back
+    const inner = sheathGeometry(0.16, 1.0, 3.2), outer = sheathGeometry(0.3, 1.35, 7.5);
+    const mIn = new THREE.Mesh(inner.geo, sheathMaterial(gas, inner.front, inner.tail, 0.14));
+    const mOut = new THREE.Mesh(outer.geo, sheathMaterial(gas, outer.front, outer.tail, 0.08));
+    [mIn, mOut].forEach(m => { m.position.y = nose / R; m.renderOrder = 2; m.frustumCulled = false; });
+    const shells = new THREE.Group(); shells.add(mOut, mIn); shells.scale.setScalar(R); root.add(shells);
+    // the glow it all throws: a white-hot core at the cap (hidden behind the craft when seen from behind) and a wide,
+    // faint halo in the air's color
+    const core = halo(0xffffff, layer, true), glow = halo(gas.haze, layer, false);
+    root.add(core, glow);
+    const sp = streaks(opts.maxSparks || 420, layer, true);
+    root.add(sp);
+    root.traverse(o => o.layers.set(layer));
+    parent.add(root);
+    const skin = opts.skin ? heatSkin(opts.skin) : null;
+    // sparks are kept in scene axes about the craft (so they stream behind it however it turns) and turned into its
+    // frame when drawn
+    const qW = new THREE.Quaternion(), qInv = new THREE.Quaternion(), sW = new THREE.Vector3(), dir = new THREE.Vector3(), dirL = new THREE.Vector3();
+    const negY = new THREE.Vector3(0, -1, 0), flipX = new THREE.Quaternion().setFromAxisAngle(new THREE.Vector3(1, 0, 0), Math.PI);
+    const side = new THREE.Vector3(), up = new THREE.Vector3(), Y = new THREE.Vector3(0, 1, 0), tmp = new THREE.Vector3(), pW = new THREE.Vector3();
+    const E = { level: 0, time: 0, root };
+    const toLocal = v => v.applyQuaternion(qInv);
+    E.update = (dt, motion, heat, more = {}) => {
+      dt = Math.min(dt, 0.1); E.time += dt;
+      heat = clamp01(heat);
+      E.level += (heat - E.level) * (1 - Math.exp(-dt / 0.15));
+      const h = E.level;
+      parent.updateMatrixWorld();
+      parent.matrixWorld.decompose(pW, qW, sW);
+      qInv.copy(qW).invert();
+      dir.copy(motion).normalize(); dirL.copy(dir).applyQuaternion(qInv);
+      // the shells along the flow, the wake longer and the whole glow stronger as the heating grows
+      // (turned from straight back when the flow is nearer that way: setFromUnitVectors picks its turning axis afresh
+      // every frame for nearly opposite directions, which is always the case for a probe flying shield first, and the
+      // glow flashed in and out)
+      if (dirL.y >= 0) shells.quaternion.setFromUnitVectors(Y, dirL);
+      else shells.quaternion.setFromUnitVectors(negY, dirL).multiply(flipX);
+      const flick = 0.93 + 0.07 * Math.sin(E.time * 37) * Math.sin(E.time * 23.7);
+      // the shock layer's own temperature reads white-hot well before the skin glows
+      const shockT = 3200 + 9000 * h;
+      [[mIn, 1.5], [mOut, 0.55]].forEach(([m, k]) => {
+        const u = m.material.uniforms;
+        u.glow.value = k * Math.pow(h, 1.3) * flick; u.time.value = E.time; u.stretch.value = 0.55 + 0.75 * h;
+        u.flow.value = stream / R * 0.35; blackbody(shockT, u.hot.value);
+      });
+      core.position.copy(dirL).multiplyScalar(nose + 0.3 * R);
+      core.material.opacity = 0.8 * h * h * flick; core.scale.setScalar(R * (1.6 + 2.4 * h));
+      glow.position.copy(dirL).multiplyScalar(nose - 0.5 * R);
+      glow.material.opacity = 0.3 * h * flick; glow.scale.setScalar(R * (4 + 7 * h));
+      // the skin: a radiating surface's temperature goes as the fourth root of its heating
+      if (skin) {
+        const T = skinHot * Math.pow(h, 0.25);
+        blackbody(T, skin.u.heatCol.value).multiplyScalar(2.2 * glowOf(T, skinHot) * (0.96 + 0.04 * flick));
+        skin.u.heatDir.value.copy(dir).transformDirection(camera.matrixWorldInverse);
+      }
+      // sparks off the shoulders, where the flow scrubs the edge of the skin, swept back and cooling
+      side.crossVectors(dir, Math.abs(dir.y) < 0.9 ? Y : tmp.set(1, 0, 0)).normalize(); up.crossVectors(side, dir);
+      const nS = Math.floor(sparkRate * 90 * Math.pow(h, 2) * dt + Math.random());
+      for (let i = 0; i < nS; i++) {
+        const a = Math.random() * Math.PI * 2, at = new THREE.Vector3().addScaledVector(side, Math.cos(a) * R * 0.95).addScaledVector(up, Math.sin(a) * R * 0.95).addScaledVector(dir, nose * 0.4);
+        const v = dir.clone().multiplyScalar(-stream * rnd(0.5, 1.2)).addScaledVector(at.clone().addScaledVector(dir, -at.dot(dir)).normalize(), stream * rnd(0.03, 0.12));
+        emit(sp, at, v, R * rnd(0.005, 0.012), rnd(0.25, 0.8), skinHot * rnd(1.1, 1.4), 1.2);
+      }
+      // pieces as it breaks up: bigger, slower, longer-lived, from anywhere on the body
+      const nD = Math.floor(70 * (more.debris || 0) * dt + Math.random() * Math.min(1, more.debris || 0));
+      for (let i = 0; i < nD; i++) {
+        const at = new THREE.Vector3(rnd(-1, 1), rnd(-1, 1), rnd(-1, 1)).multiplyScalar(R * 0.8);
+        const v = dir.clone().multiplyScalar(-stream * rnd(0.15, 0.6)).add(new THREE.Vector3(rnd(-1, 1), rnd(-1, 1), rnd(-1, 1)).multiplyScalar(stream * 0.08));
+        emit(sp, at, v, R * rnd(0.012, 0.035), rnd(0.8, 2.2), rnd(2500, 3000), 0.6);
+      }
+      stepStreaks(sp, dt, toLocal, 0.09, 2600);
+    };
+    E.dispose = () => {
+      parent.remove(root);
+      [mIn, mOut].forEach(m => { m.geometry.dispose(); m.material.dispose(); });
+      [core, glow].forEach(s => s.material.dispose());
+      sp.geometry.dispose(); sp.material.dispose();
+      if (skin) skin.dispose();
+    };
+    return E;
+  }
+
+  // ---------- far off: a fireball and its trail, breaking up ----------
+  // In the main scene (scene units, layer 0), drawn over everything near it like a bright light. opts.gas as above,
+  // opts.pieces how many pieces it breaks into (default 7). update(o) each frame:
+  //   head    where it is (scene)
+  //   path    points back along its real path, head first (scene); the trail is drawn along them
+  //   size    scene units per unit of drawn size (the cutscene's scale for its camera distance)
+  //   hot     0..1 how bright the head burns; train 0..1 how strong the glowing trail is; spread 1.. how far it has
+  //           spread; breakup 0..1 how far it has come apart; front 0..1 whether it is in view (behind a planet: 0)
+  function meteor(opts = {}) {
+    const gas = gasOf(opts.gas), N = opts.points || 48, P = opts.pieces != null ? opts.pieces : 7;
+    const head = halo(0xfff4e6, 0, false), glow = halo(gas.haze, 0, false);
+    const geo = new THREE.BufferGeometry(), uv = new Float32Array(N * 4);
+    for (let i = 0; i < N; i++) uv.set([i / (N - 1), -1, i / (N - 1), 1], 4 * i);
+    geo.setAttribute("position", new THREE.BufferAttribute(new Float32Array(N * 6), 3));
+    geo.setAttribute("uv", new THREE.BufferAttribute(uv, 2));
+    const idx = [];
+    for (let i = 0; i < N - 1; i++) idx.push(2 * i, 2 * i + 1, 2 * i + 2, 2 * i + 1, 2 * i + 3, 2 * i + 2);
+    geo.setIndex(idx);
+    // the trail: white-hot at the head, cooling through yellow and orange, then the air's own glow lingering behind
+    // and breaking into knots and billows as it spreads
+    const trail = new THREE.Mesh(geo, new THREE.ShaderMaterial({
+      uniforms: { hot: { value: 0 }, train: { value: 0 }, time: { value: 0 }, spread: { value: 1 }, line: { value: gas.line }, wake: { value: gas.wake } },
+      vertexShader: `varying vec2 vUv; void main() { vUv = uv; gl_Position = projectionMatrix * modelViewMatrix * vec4(position, 1.0); }`,
+      fragmentShader: `uniform float hot, train, time, spread; uniform vec3 line, wake; varying vec2 vUv;
+        ${NOISE}
+        void main() {
+          float u = vUv.x, w = vUv.y;
+          float n = fbm(vec3(u * 26.0, w * 1.7, time * 0.35)), n2 = fbm(vec3(u * 70.0 + 4.0, w * 3.0, time * 0.8));
+          float wob = w + 0.35 * (n - 0.5) * smoothstep(0.02, 0.4, u);
+          float core = exp(-wob * wob * 9.0 * (1.0 + 2.0 * u)), soft = exp(-wob * wob * 2.2);
+          vec3 c = mix(vec3(1.0, 0.97, 0.9), vec3(1.0, 0.78, 0.45), smoothstep(0.0, 0.08, u));
+          c = mix(c, vec3(1.0, 0.5, 0.2), smoothstep(0.06, 0.22, u));
+          c = mix(c, mix(line, wake, smoothstep(0.2, 0.7, u)), smoothstep(0.14, 0.45, u));
+          float headPart = hot * pow(1.0 - u, 5.0) * (0.7 * core + 0.3 * soft);
+          float glowPart = train * pow(1.0 - u, 1.2) * smoothstep(0.0, 0.03, u) * (0.3 * core + 0.7 * soft) * (0.45 + 1.1 * n * (0.6 + 0.8 * n2));
+          gl_FragColor = vec4(c * (2.4 * headPart + 1.2 * glowPart / spread), 1.0);
+        }`,
+      transparent: true, blending: THREE.AdditiveBlending, depthWrite: false, depthTest: false, side: THREE.DoubleSide }));
+    trail.frustumCulled = false;
+    // the pieces: each a small fireball with its own short trail, drifting apart and falling behind
+    const bits = Array.from({ length: P }, (_, i) => ({ s: halo(0xffe0b0, 0, false), off: new THREE.Vector2(rnd(-1, 1), rnd(-1, 1)).normalize().multiplyScalar(rnd(0.3, 1)), lag: rnd(0.2, 1), b: rnd(0.4, 1), seed: i * 1.7 }));
+    const sp = streaks(P, 0, false);
+    scene.add(trail, glow, head, sp, ...bits.map(b => b.s));
+    const pts = Array.from({ length: N }, () => new THREE.Vector3());
+    const tan = new THREE.Vector3(), cam = new THREE.Vector3(), side = new THREE.Vector3(), up = new THREE.Vector3(), back = new THREE.Vector3(), at = new THREE.Vector3();
+    let time = 0, last = performance.now();
+    return {
+      update(o) {
+        const now = performance.now(); time += Math.min(0.1, (now - last) / 1000); last = now;
+        const k = o.size || 1, front = o.front != null ? o.front : 1, hot = clamp01(o.hot) * front, br = clamp01(o.breakup || 0);
+        const flick = 0.85 + 0.15 * Math.sin(time * 31) * Math.sin(time * 17.3);
+        head.position.copy(o.head); head.material.opacity = Math.min(1, hot * 1.2) * flick; head.scale.setScalar(k * (5 + 12 * hot));
+        glow.position.copy(o.head); glow.material.opacity = 0.5 * hot; glow.scale.setScalar(k * (22 + 40 * hot));
+        const pa = trail.geometry.attributes.position.array, path = o.path, M = Math.min(N, path.length);
+        for (let i = 0; i < N; i++) pts[i].copy(path[Math.min(M - 1, Math.round(i * (M - 1) / (N - 1)))]);
+        for (let i = 0; i < N; i++) {
+          const p = pts[i], u = i / (N - 1);
+          tan.subVectors(pts[Math.max(0, i - 1)], pts[Math.min(N - 1, i + 1)]);
+          cam.subVectors(camera.position, p);
+          side.crossVectors(tan, cam).normalize().multiplyScalar(k * (0.9 + 2.2 * u) * (o.spread || 1) * (1 + 0.5 * hot));
+          pa.set([p.x - side.x, p.y - side.y, p.z - side.z, p.x + side.x, p.y + side.y, p.z + side.z], 6 * i);
+        }
+        trail.geometry.attributes.position.needsUpdate = true;
+        const u = trail.material.uniforms;
+        u.hot.value = hot * flick; u.train.value = clamp01(o.train) * front; u.time.value = time; u.spread.value = o.spread || 1;
+        // the pieces come apart across the path and fall behind it, each burning out at its own pace
+        back.subVectors(pts[Math.min(2, N - 1)], pts[0]).normalize();
+        cam.subVectors(camera.position, o.head).normalize();
+        side.crossVectors(back, cam).normalize(); up.crossVectors(side, back).normalize();
+        const g = sp.geometry, a = g.userData;
+        let n = 0;
+        for (const b of bits) {
+          const life = clamp01(1 - br * (1.3 - 0.5 * b.b)), on = br > 0 ? front * life * Math.min(1, br * 4) * clamp01(hot * 3) : 0;
+          at.copy(o.head).addScaledVector(side, b.off.x * k * 9 * br).addScaledVector(up, b.off.y * k * 6 * br).addScaledVector(back, b.lag * k * 40 * br);
+          b.s.position.copy(at); b.s.material.opacity = on * b.b * (0.75 + 0.25 * Math.sin(time * 23 + b.seed)); b.s.scale.setScalar(k * (2 + 2.5 * b.b));
+          if (on > 0.01) {
+            a.to.set([at.x, at.y, at.z], 3 * n); a.from.set([at.x + back.x * k * 5, at.y + back.y * k * 5, at.z + back.z * k * 5], 3 * n);
+            blackbody(2600 - 900 * br * (1 - b.b), tmpCol).multiplyScalar(on * 0.8);
+            a.col.set([tmpCol.r, tmpCol.g, tmpCol.b, k * 0.3], 4 * n); n++;
+          }
+        }
+        g.instanceCount = n;
+        ["iFrom", "iTo", "iCol"].forEach(key => { g.attributes[key].needsUpdate = true; });
+      },
+      dispose() {
+        scene.remove(trail, glow, head, sp, ...bits.map(b => b.s));
+        trail.geometry.dispose(); trail.material.dispose(); sp.geometry.dispose(); sp.material.dispose();
+        [head, glow, ...bits.map(b => b.s)].forEach(s => s.material.dispose());
+      },
+    };
+  }
+
+  // a smooth shake (sums of incommensurate sines, so it never repeats or jumps), amount in whatever units the camera
+  // moves in; t in seconds
+  function shake(amount, t, out) {
+    const f = (a, b, c) => (Math.sin(a * t + b) + 0.6 * Math.sin(2.3 * a * t + c) + 0.35 * Math.sin(5.1 * a * t + b + c)) / 1.95;
+    return (out || new THREE.Vector3()).set(f(13, 0, 1.3), f(11.7, 2.1, 0.4), f(12.9, 4.2, 2.7)).multiplyScalar(amount);
+  }
+
+  Object.assign(CS.fx, { entry, meteor, shake, blackbody, haloTexture });
+})();
+</script>
+<script>
 // ---------- the Grand Finale: Cassini's last minute and a mission recap, at the end of the data ----------
 (function () {
   const root = document.getElementById("finale"), black = root.querySelector(".cs-black"), caps = root.querySelector(".cs-caps"), air = root.querySelector(".fx-air");
@@ -7550,6 +8356,7 @@ function frame(now) {
   const RAMP = 60;             // s from 10 percent of the thrusters' capacity to 100 percent
   const BEAM = 0.3;            // deg off Earth at which the link is half gone ("a few fractions of a degree")
   const VIS = 15;              // the wobble is drawn this many times larger than the angle it stands for
+  const SPIN = 2;              // rad/s² of spin-up per unit of load past full, once the air wins and Cassini tumbles
   const LEAD = 62;             // s of the descent shown before loss of signal
   const AFTER = 5.5;           // s after loss of signal the view cuts to Saturn, where Cassini burns up as a flare
   const FLARE = 2.5;           // s into the Saturn view the flare peaks
@@ -7622,6 +8429,8 @@ function frame(now) {
   // pseudo-random but smooth, in -1..1
   const wob = (t, k) => (Math.sin(1.7 * t + k) + Math.sin(2.9 * t + 2.1 * k) + 0.5 * Math.sin(6.3 * t + 3.7 * k)) / 2.5;
   const clamp01 = x => Math.max(0, Math.min(1, x));
+  // how hard the air heats Cassini, 0..1: a faint glow as the load nears full, then the heating after loss of signal
+  const entryHeat = (L, heat) => Math.max(0.42 * clamp01((L - 0.35) / 0.65) ** 2, heat > 0 ? 0.42 + 0.58 * heat * (2 - heat) : 0);
   const jitter = s => new THREE.Vector3(Math.random() - 0.5, Math.random() - 0.5, Math.random() - 0.5).multiplyScalar(s);
 
   // ---------- effects, all children of the Cassini group (so they share its close-up render pass), in metres ----------
@@ -7689,18 +8498,17 @@ function frame(now) {
       thr.push(plume(at(sx * 1.236, -2.36, sz * 1.78), new THREE.Vector3(0, sz, 0)));
     }
     thr.forEach(p => cassini.add(p));
-    const fx = { thr, glow: sprite(0xffa24a, 4), core: sprite(0xfff1d6, 3), fine: cloud(900, 5), big: cloud(80, 11) };
-    [fx.glow, fx.core, fx.fine, fx.big].forEach(o => cassini.add(o));
-    // the model's own materials, warmed as it heats (put back afterwards)
-    fx.mats = [];
-    if (window.cassiniModel) window.cassiniModel.traverse(o => { if (o.isMesh && o.material && o.material.emissive && !fx.mats.includes(o.material)) fx.mats.push(o.material); });
-    fx.emissive = fx.mats.map(m => m.emissive.clone());
+    const fx = { thr, fine: cloud(900, 5) };
+    cassini.add(fx.fine);
+    // the entry itself (entry-fx.html): Saturn's hydrogen glowing round it in a shock layer, its windward side heating
+    // by its temperature, sparks and then pieces streaming off. Cassini across the flow, dish and all, is about 3.5 m
+    fx.entry = CS.fx.entry(cassini, { radius: 3.5, nose: 2, gas: "SATURN", skin: window.cassiniModel || null, skinHot: 2300, sparks: 3, maxSparks: 600 });
     return fx;
   }
   function removeEffects(fx) {
     if (!fx) return;
-    [...fx.thr, fx.glow, fx.core, fx.fine, fx.big].forEach(o => cassini.remove(o));
-    fx.mats.forEach((m, i) => m.emissive.copy(fx.emissive[i]));
+    [...fx.thr, fx.fine].forEach(o => cassini.remove(o));
+    fx.entry.dispose();
     if (window.cassiniModel) window.cassiniModel.visible = true;
   }
   // n particles at `at` (spread m), moving at vel (m/s, spread vs), colour col (or a cooling ember), life in s
@@ -7723,44 +8531,42 @@ function frame(now) {
     }
     geo.setDrawRange(0, n); geo.attributes.position.needsUpdate = true; geo.attributes.color.needsUpdate = true;
   }
-  function stepParticles(fx, dt, vdir, L, heat) {
+  function stepParticles(fx, dt, vdir, L) {
     const rate = r => Math.floor(r * dt + Math.random()), Lc = Math.min(1.5, L);
     // the thickening air streaming past: faint wisps from ahead, faster and more of them as the load grows
     spawn(fx.fine, rate(20 + 160 * Lc), vdir.clone().multiplyScalar(14), 18, vdir.clone().multiplyScalar(-(30 + 60 * Lc)), 2, [0.3, 0.36, 0.48], 0.9);
-    // after loss of signal: plasma off the leading side streaming back, and the first glowing flakes
-    if (heat > 0) spawn(fx.fine, rate(300 * heat), vdir.clone().multiplyScalar(2.5), 3.5, vdir.clone().multiplyScalar(-(14 + 20 * heat)), 6, null, 1.3);
-    if (heat > 0.4 && Math.random() < dt * 6 * heat) spawn(fx.big, 1, new THREE.Vector3(), 4, vdir.clone().multiplyScalar(-(6 + 12 * Math.random())), 9, null, 3);
-    stepCloud(fx.fine, dt); stepCloud(fx.big, dt);
+    stepCloud(fx.fine, dt);
   }
 
-  // ---------- seen from afar: Cassini burns up as a small flare on Saturn, with a short meteor's trail ----------
-  // (sprites in the main scene, sized in km so they read from hundreds of thousands of km away)
+  // ---------- seen from above Saturn: Cassini burns up as a fireball, with a meteor's trail ----------
+  // The fireball (CS.fx.meteor, entry-fx.html) is in the main scene, sized in km so it reads from hundreds of thousands
+  // of km away. Its trail lies along Cassini's real path in (its last TRAIL_S seconds), drawn longer than the glowing
+  // stretch was, as the wobble is drawn larger, or it would be a speck: white-hot at the head, cooling to orange, then
+  // the red-pink glow of Saturn's hydrogen (H-alpha) that lingers after the head is gone and slowly spreads. As it
+  // peaks it comes apart into pieces that drift off its path and burn out one by one. Its sizes follow the camera's
+  // distance (F.flareK), so it stays a fireball, not a blob, while the view is close in and still shows once it has
+  // pulled out
+  const TRAIL_S = 150, TRAIL_N = 48;
   function addFlare() {
-    const head = new THREE.Sprite(new THREE.SpriteMaterial({ map: glowTexture(), color: 0xfff0d8, transparent: true, opacity: 0, blending: THREE.AdditiveBlending, depthWrite: false, depthTest: false }));
-    const trail = [];
-    for (let i = 0; i < 10; i++) {
-      const t = new THREE.Sprite(new THREE.SpriteMaterial({ map: glowTexture(), color: 0xff9a4a, transparent: true, opacity: 0, blending: THREE.AdditiveBlending, depthWrite: false, depthTest: false }));
-      trail.push(t); scene.add(t);
-    }
-    scene.add(head);
-    return { head, trail };
+    return { m: CS.fx.meteor({ gas: "SATURN", points: TRAIL_N, pieces: 8 }), pts: Array.from({ length: TRAIL_N }, () => new THREE.Vector3()) };
   }
   function stepFlare(R) {
     const f = F.flare; if (!f) return;
-    // where Cassini is (Saturn is the focus) and which way it moves
-    rel(F.tau, tmpC); toScene(tmpC, vT).multiplyScalar(1 / KM);
-    rel(F.tau + 1, tmpS); toScene(sub(tmpS, tmpC, tmpS), vScene).normalize();
-    // it brightens to a peak at FLARE seconds, flickers as it breaks up, and dies away over a few seconds
+    // the head follows Cassini until it has broken up; the trail stays where it formed
+    const tHead = F.tau - Math.max(0, R - (FLARE + 1.5));
+    rel(tHead, tmpC); toScene(tmpC, vT).multiplyScalar(1 / KM);
+    // it brightens to a peak at FLARE seconds, comes apart, and dies away over a few seconds
     const up = clamp01((R - 0.6) / (FLARE - 0.6)), down = clamp01(1 - (R - FLARE) / 4.5), k = R < FLARE ? up * up : down * down;
-    const flick = 0.75 + 0.25 * Math.random();
-    f.head.position.copy(vT); f.head.material.opacity = k * flick; f.head.scale.setScalar((2.5 + 7 * k) * (R > FLARE ? 1 + 0.3 * Math.random() : 1));
-    f.trail.forEach((t, i) => {
-      t.position.copy(vT).addScaledVector(vScene, -(i + 1) * 0.9);
-      t.material.opacity = k * 0.7 * (1 - i / f.trail.length) * flick; t.scale.setScalar((1.6 + 3 * k) * (1 - 0.5 * i / f.trail.length));
-    });
+    // seen only on the side of Saturn facing the camera
+    const n = vT.clone().divide(new THREE.Vector3(1, 0.82, 1)).normalize(), front = clamp01(n.dot(camera.position.clone().sub(vT).normalize()) * 8 + 0.5);
+    // the trail grows from the head as the burn starts, its hot part goes with the head, its glow lingers and spreads
+    const grow = clamp01((R - 0.6) / 2), linger = clamp01(1 - (R - FLARE - 2) / 9), spread = 1 + 1.2 * clamp01((R - FLARE) / 10);
+    for (let i = 0; i < TRAIL_N; i++) { rel(tHead - TRAIL_S * grow * i / (TRAIL_N - 1), tmpS); toScene(tmpS, f.pts[i]).multiplyScalar(1 / KM); }
+    f.m.update({ head: vT, path: f.pts, size: F.flareK, hot: k, train: Math.min(1, up * 1.4) * linger * linger, spread,
+      breakup: clamp01((R - FLARE + 0.6) / 5), front });
     if (R > FLARE && !F.belled) { F.belled = true; sound("bell"); }
   }
-  function removeFlare(f) { if (f) [f.head, ...f.trail].forEach(o => scene.remove(o)); }
+  function removeFlare(f) { if (f) f.m.dispose(); }
 
   // ---------- the real readings: a strip chart drawn up to the moment on screen ----------
   function drawData(et) {
@@ -7908,7 +8714,7 @@ function frame(now) {
       if (s > AFTER - 1.6 && !F.dark) { F.dark = true; fadeTo(black, 1, 1.5); read.classList.remove("on"); dataBox.classList.remove("on"); }
       if (s > AFTER) {
         // the recap: the view cuts to Saturn from far away, where Cassini burns up as a flare
-        F.phase = "recap"; F.recapAt = performance.now();
+        F.phase = "recap"; F.recapAt = performance.now(); F.flareK = 0.18;
         CS.dropAll(F.shownD);
         sound("carrier", 0, 0); sound("drone", 0);
         removeEffects(F.fx); F.fx = null;
@@ -7956,13 +8762,36 @@ function frame(now) {
     if (L > 1) err += 25 * (L - 1) ** 1.5;
     const signal = F.lost ? 0 : 1 / (1 + (err / BEAM) ** 8);
     if (!F.lost && signal < 0.1) { F.lost = true; sound("carrier", 0, 0); sound("drone", 0); }
-    cassini.up.copy(uScene);
-    cassini.lookAt(eScene.clone().add(cassini.position));
     const a = Math.min(err * VIS, 160) * Math.PI / 180;
-    const w0 = err < 1 ? [a * wob(t, 0), a * wob(t, 5)] : [0.2 * wob(t, 0), 0];
-    F.wobRate = F.wob && dt > 0 ? [(w0[0] - F.wob[0]) / dt, (w0[1] - F.wob[1]) / dt] : [0, 0]; F.wob = w0;
-    if (err < 1) { cassini.rotateX(w0[0]); cassini.rotateY(w0[1]); }
-    else { cassini.rotateX(0.2 * wob(t, 0)); cassini.rotateOnAxis(F.tumbleAxis, a + 0.6 * Math.max(0, s) ** 1.3); }
+    if (!F.spin) {
+      // held: the dish on Earth, wobbling about it
+      cassini.up.copy(uScene);
+      cassini.lookAt(eScene.clone().add(cassini.position));
+      const w0 = [a * wob(t, 0), a * wob(t, 5)];
+      F.wobRate = F.wob && dt > 0 ? [(w0[0] - F.wob[0]) / dt, (w0[1] - F.wob[1]) / dt] : [0, 0]; F.wob = w0;
+      cassini.rotateX(w0[0]); cassini.rotateY(w0[1]);
+      // how fast it turns right now (scene frame), so a tumble can carry on from it
+      const q = cassini.quaternion;
+      if (F.qPrev && dt > 0) {
+        const d = q.clone().multiply(F.qPrev.clone().invert());
+        if (d.w < 0) d.set(-d.x, -d.y, -d.z, -d.w);
+        const ang = 2 * Math.acos(Math.min(1, d.w)), sn = Math.sqrt(Math.max(1e-12, 1 - d.w * d.w));
+        F.omega = new THREE.Vector3(d.x, d.y, d.z).multiplyScalar(ang / sn / dt);
+      }
+      F.qPrev = q.clone();
+      // past full load the air's torque beats the thrusters' and the attitude is no longer held: from here on it turns
+      // freely, starting from exactly where it is and as fast as it was already turning, so there is no jump
+      if (L > 1) F.spin = { q: q.clone(), w: F.omega ? F.omega.clone() : new THREE.Vector3() };
+    } else {
+      // tumbling: the torque, fixed to the spacecraft (the air pushes on the side of the dish), spins it up faster as the
+      // air thickens; the spin is integrated frame by frame, so it builds smoothly from the wobble it had
+      const sp = F.spin, axis = F.tumbleAxis.clone().applyQuaternion(sp.q);
+      sp.w.addScaledVector(axis, SPIN * Math.min(3, L - 1 + 0.05) * dt);
+      const wl = sp.w.length();
+      if (wl > 1e-9) sp.q.premultiply(new THREE.Quaternion().setFromAxisAngle(sp.w.clone().divideScalar(wl), wl * dt)).normalize();
+      cassini.quaternion.copy(sp.q);
+      F.wob = [0, 0]; F.wobRate = [0, 0];
+    }
     qInv.copy(cassini.quaternion).invert();
     const heat = F.lost ? clamp01((s - 0.3) / 5) : 0;
     const fx = F.fx;
@@ -7979,15 +8808,12 @@ function frame(now) {
         p.userData.core.material.opacity = lit;
         p.userData.jet.scale.set(1, (0.3 + 0.5 * Math.min(1, L)) * (0.85 + 0.3 * Math.random()), 1);
       });
-      // heating on the leading side (where the mass spectrometer looks), the model warming toward red, then the break-up
-      const lead = vScene.clone().applyQuaternion(qInv);
-      fx.glow.position.copy(lead).multiplyScalar(3.2); fx.core.position.copy(lead).multiplyScalar(2.6);
-      fx.glow.material.opacity = Math.min(1, heat * 1.3) * (0.8 + 0.2 * Math.random()); fx.glow.scale.setScalar(4 + 22 * heat * heat);
-      fx.core.material.opacity = heat * (0.7 + 0.3 * Math.random()); fx.core.scale.setScalar(2 + 6 * heat);
-      fx.mats.forEach(m => m.emissive.setRGB(1.1 * heat * heat, 0.32 * heat * heat, 0.06 * heat));
-      stepParticles(fx, dt, vScene, L, heat);
+      // the entry: at 34 km/s even this thin air glows, faintly while the thrusters still hold, then the leading side
+      // heats, and past halfway it starts to come apart
+      fx.entry.update(dt, vScene, entryHeat(L, heat), { debris: clamp01((heat - 0.5) / 0.5) });
+      stepParticles(fx, dt, vScene, L);
     }
-    air.style.opacity = Math.min(1, 0.1 * Math.min(1, L) ** 2 + 0.75 * heat);
+    air.style.opacity = 0.1 * Math.min(1, L) ** 2;
     if (!F.lost) { sound("carrier", signal, Math.min(1, L)); sound("drone", Math.min(1, 0.15 + L)); }
     read.innerHTML = `Altitude ${fmtInt(h)} km · Thrusters <i>${Math.round(Math.min(100, L * 100))}%</i> · Antenna <i>${err < 10 ? err.toFixed(2) : fmtInt(err)}°</i> off Earth · Signal <i>${F.lost ? "lost" : Math.round(signal * 100) + "%"}</i>`;
     drawData(F.tau);
@@ -8013,10 +8839,10 @@ function frame(now) {
       const dirv = rScene.clone().applyAxisAngle(uScene, yaw).multiplyScalar(Math.cos(pitch)).addScaledVector(uScene, -Math.sin(pitch)).normalize();
       const d = (3.6e-5 - 1.6e-5 * clamp01((s + LEAD) / LEAD)) * look.zoom;
       // shake: the struggle, then the heating
-      const L = load(altitude(F.tau)), heat = F.lost ? clamp01((s - 0.3) / 5) : 0, sh = d * (0.004 * Math.min(1, L) + 0.03 * heat);
+      const L = load(altitude(F.tau)), heat = F.lost ? clamp01((s - 0.3) / 5) : 0, sh = d * (0.004 * Math.min(1, L) + 0.022 * heat);
       camera.position.copy(cassini.position).addScaledVector(dirv, -d);
       camera.up.copy(uScene);
-      camera.lookAt(cassini.position.clone().add(jitter(sh)));
+      camera.lookAt(cassini.position.clone().add(CS.fx.shake(sh, F.tau)));
     } else {
       // Saturn from the sunlit side, a little above the rings, turning slowly
       const R = iauMatrix(bodies.SATURN, state.et), pole = toScene(R[2], new THREE.Vector3()).normalize();
@@ -8024,12 +8850,17 @@ function frame(now) {
       const side = new THREE.Vector3().crossVectors(pole, vScene).normalize();
       const k = (performance.now() - F.recapAt) / 1000;
       // facing the spot where Cassini went in at first, then drifting round to the sunlit side as it pulls back
-      rel(F.tau, tmpC); const entry = toScene(tmpC, new THREE.Vector3()).normalize(), m = clamp01(k / 25);
+      // starting closer, on the burn-up itself, so the flare and its trail read, then easing out to the whole planet
+      rel(F.tau, tmpC); const spot = toScene(tmpC, new THREE.Vector3()).multiplyScalar(1 / KM), entry = spot.clone().normalize(), m = clamp01(k / 25);
       const dir = entry.multiplyScalar(0.9 * (1 - m)).addScaledVector(vScene, 0.25 + 0.5 * m).addScaledVector(side, 0.25 + 0.3 * m).normalize();
       dir.addScaledVector(pole, 0.3 + look.pitch).normalize().applyAxisAngle(pole, -0.003 * k + look.yaw);
-      camera.position.copy(dir.multiplyScalar((260 + 180 * (1 - Math.exp(-k / 9))) * look.zoom));
+      // close in on the burn-up (a few thousand km), held while it flares and its trail glows, then out to the planet
+      const out = clamp01((k - 6.5) / 10), e = out * out * (3 - 2 * out);
+      const aim = new THREE.Vector3().addScaledVector(pole, -22).lerp(spot, 1 - e), dist = 9 + 431 * e;
+      F.flareK = Math.min(1, 0.12 + dist / 160);
+      camera.position.copy(aim).addScaledVector(dir, dist * look.zoom);
       camera.up.copy(pole);
-      camera.lookAt(new THREE.Vector3().addScaledVector(pole, -22));
+      camera.lookAt(aim);
     }
   }
 
@@ -8091,7 +8922,7 @@ function frame(now) {
     const l = L; L = null;
     caps.textContent = ""; clock.classList.remove("on");
     setTime(l.tau);
-    spent = true;
+    start.spend();   // playback picks up from here, which may be the very start of the data: not a second launch
     if (state.focus !== "CASSINI") setFocus("CASSINI");
     setFocus("CASSINI", 6e-5);
     setSpeed(l.speed); setPlaying(true);
@@ -8133,19 +8964,12 @@ function frame(now) {
     camera.lookAt(cassini.position.clone().addScaledVector(toEarth, tall ? 0 : d * 0.35));
   }
   CS.register("launch", { root, frame, camera: camera_, onEnd });
-  // playback running forward from the very start of the data starts it (the Launch moment does that); the data starts
-  // at separation, so the clock never crosses a moment before it and cutscene.html's crossing trigger cannot catch it
-  let spent = false;
-  const advance = window.studyAdvance;
-  window.studyAdvance = (et, dt, speed) => {
-    const next = advance ? advance(et, dt, speed) : et + dt * speed;
-    if (et > coverage[0] + 30) spent = false;
-    if (!L && !spent && !CS.active && speed > 0 && et <= coverage[0] + 1 && next > et) { spent = true; setTimeout(play, 0); return et; }
-    return next;
-  };
+  // playback setting off forward from the very start of the data plays it (the Launch moment does that): the data
+  // starts at separation, so there is no moment before it to cross
+  const start = CS.atStart(() => play());
   window.cassiniLaunch = { play, skip: () => CS.end("launch"), get running() { return !!L; } };
   // ?launch plays it as soon as the start of the mission is loaded
-  CS.fromUrl("launch", () => coverage[0], () => { spent = true; play(); });
+  CS.fromUrl("launch", () => coverage[0], () => { start.spend(); play(); });
 })();
 </script>
 <script>
