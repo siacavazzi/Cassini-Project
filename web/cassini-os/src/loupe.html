@@ -277,6 +277,7 @@ body.idle .win.full .lensbtn { opacity: .35; } body.idle .win.full .lensbtn:hove
   // the picture under the lens can change on its own: drawn again on each new picture
   document.addEventListener("load", e => { if (cur && e.target === cur.img) paint(); }, true);
 
+  const MOSAIC_REST = 0.7;   // s the pointer rests on a mosaic's outlined frame before the lens comes up
   // the mouse (and a pen): rest on a picture, then the lens follows
   document.addEventListener("pointermove", e => {
     if (e.pointerType === "touch") return;
@@ -291,7 +292,9 @@ body.idle .win.full .lensbtn { opacity: .35; } body.idle .win.full .lensbtn:hove
     if (arm && arm.img === img && Math.hypot(e.clientX - arm.x0, e.clientY - arm.y0) < 8) { arm.x = e.clientX; arm.y = e.clientY; return; }
     clearTimeout(arm && arm.t);
     arm = { img, x0: e.clientX, y0: e.clientY, x: e.clientX, y: e.clientY };
-    arm.t = setTimeout(() => { const a = arm; arm = null; if (a) open(a.img, a.x, a.y, false); }, opt("loupe.delay", 0) * 1000);
+    // over a mosaic with a frame outlined (head-quiet's tile map) the outline shows first: the lens waits for a longer rest
+    const wait = Math.max(opt("loupe.delay", 0), img.closest(".well.tilehover") ? MOSAIC_REST : 0);
+    arm.t = setTimeout(() => { const a = arm; arm = null; if (a) open(a.img, a.x, a.y, false); }, wait * 1000);
   }, { passive: true });
   // a press (a click, a drag, a double-click into full view) puts the lens away; resting again brings it back
   document.addEventListener("pointerdown", e => { if (e.pointerType !== "touch") close(); }, true);

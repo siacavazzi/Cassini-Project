@@ -629,6 +629,10 @@ body.phone .savemenu a { padding: 11px 14px; }
 .crumbs button:hover { text-decoration: underline; }
 .crumbs .here { color: var(--q-text); min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
 .crumbs .sep { opacity: .6; }
+.crumbs .ownbtn { margin-left: auto; padding: 2px 7px; border-radius: 9px; border: 1px solid var(--q-line); color: var(--q-text); font-size: 9.5px; }
+.crumbs .ownbtn[aria-pressed="true"] { border-color: var(--q-accent); color: var(--q-accent); }
+.crumbs .ownbtn:hover { text-decoration: none; background: rgba(255,255,255,.06); }
+.crumbs .ownbtn + .heldbadge { margin-left: 0; }
 .crumbs .heldbadge { margin-left: auto; padding: 2px 7px; border-radius: 9px; border: 1px solid rgba(227,179,65,.7); color: #e3b341; font-size: 9.5px; }
 .crumbs .heldbadge:hover { text-decoration: none; background: rgba(227,179,65,.14); }
 .win[data-held] .well { border-color: rgba(227,179,65,.35); }
@@ -2342,7 +2346,7 @@ body.ambient.phone .amb-where { font-size: 18px; }
   // o.center: the window's Auto center (else the Settings default)
   window.cassiniMovieStyle = (o = {}) => `${(o.center ?? S.get("cameras.autoCenter")) === false ? "&center=0" : ""}&trail=${S.get("movies.trail") || 0}&laps=${S.get("movies.laps") || 1}` +
     (S.get("movies.fade") ? `&fade=${S.get("movies.fade")}&persist=${S.get("movies.persist") ?? 35}` : "");
-  // Cameras (the camera windows read cameras.steady, cameras.passes, cameras.fullRes, cameras.fullDelay, cameras.drill, cameras.stale and cameras.lingerColor / lingerMosaic)
+  // Cameras (the camera windows read cameras.steady, cameras.passes, cameras.fullRes, cameras.fullDelay, cameras.drill, cameras.pointingLook, cameras.stale and cameras.lingerColor / lingerMosaic)
   D({ key: "cameras.channels", section: "Cameras", label: "Filter channels", type: "toggle", value: true,
       hint: "The frames that make up a color picture, in a strip under it." });
   cls("cameras.channels", "s-nochans", false);
@@ -2359,6 +2363,9 @@ body.ambient.phone .amb-where { font-size: 18px; }
       hint: "A picture in full view (double-click it, F or the title bar button) always loads at the camera's full resolution, playing or paused, with a button to save it. Other windows show each picture at its true resolution, or smaller only when the window or screen is too small to show more." });
   D({ key: "cameras.drill", section: "Cameras", label: "Open channels in place", type: "toggle", value: true,
       hint: "Click a channel under a color picture to open it in that window on the picture's own scale. The window holds still until you press Esc or its held badge; other windows play on." });
+  D({ key: "cameras.pointingLook", section: "Cameras", label: "Frames opened from a mosaic", type: "choice", value: "mosaic",
+      options: [["mosaic", "As in the mosaic"], ["own", "On its own"]],
+      hint: "Hover a mosaic to outline a frame (arrow keys step to the others) and click to open it. As in the mosaic shows that spot of the mosaic, larger: the same levels, seams and colors. On its own shows the frames as a picture of their own, on their own scale. The switch by a held frame's breadcrumb changes it." });
   D({ key: "cameras.stale", section: "Cameras", label: "Clear a quiet camera after", type: "range", value: 6, min: 1, max: 48, step: 1, unit: "h",
       hint: "A camera that has taken nothing for this long shows Idle instead of its last picture (an important picture stays longer, below)." });
   D({ key: "cameras.lingerColor", section: "Cameras", label: "Color pictures stay longer", type: "range", value: 1.5, min: 1, max: 4, step: 0.25, format: v => `${v}×`,
@@ -3479,6 +3486,8 @@ body.ambient.phone .amb-where { font-size: 18px; }
   // takes its Esc first
   const holding = new Set();
   window.cassiniHeld = holding;
+  // the camera window the arrow keys step through a mosaic's frames in: the one whose frame was outlined or opened last
+  let pointingKeys = null;
   window.addEventListener("keydown", e => {
     if (e.key !== "Escape" || !holding.size || e.metaKey || e.ctrlKey || e.altKey || /^(INPUT|SELECT|TEXTAREA)$/.test(e.target.tagName)) return;
     if (document.querySelector(".menu.open")) return;
@@ -3666,7 +3675,8 @@ body.ambient.phone .amb-where { font-size: 18px; }
           rows.push(Object.assign(whole, { label: `This ${kindOf(ids)} picture`, now: true }), "-");
           ids.forEach((id, j) => rows.push({ label: `${nameOf(id)} channel, as in it`, note: "PNG", href: saveUrl(`${url}&channel=${slots[j]}`) }));
         }
-      } else if (/\/frames\/mosaic\/[^/]+\/frame\.webp$/.test(u.pathname)) {
+      } else if (/\/frames\/mosaic\/[^/]+\/(frame|p\/\d+)\.webp$/.test(u.pathname)) {
+        // (p/<n>: ids= names the pointing's frames, for these rows; the server draws pointing n)
         const ids = (q.get("ids") || "").split(","), ch = q.get("channel"), whole = url.replace(/&channel=\d/, "");
         rows.push({ label: ch !== null ? "This channel as shown" : "This frame as in the mosaic", note: "PNG · mosaic's look", href: saveUrl(url), now: true });
         if (ch !== null) rows.push({ label: "The whole frame, as in the mosaic", note: "PNG", href: saveUrl(whole) });
@@ -4288,6 +4298,7 @@ body.ambient.phone .amb-where { font-size: 18px; }
     crumbs.addEventListener("click", e => {
       e.stopPropagation(); unfocus(e);
       const b = e.target.closest("button"); if (!b) return;
+      if (b.classList.contains("ownbtn")) { const t = top(); lookOf(t, !t.own); S.set("cameras.pointingLook", t.own ? "own" : "mosaic"); return showLevel(); }
       if (b.classList.contains("heldbadge") || b.dataset.lv === "live") return release();
       hold.levels.length = +b.dataset.lv + 1; showLevel();
     });
@@ -4335,9 +4346,9 @@ body.ambient.phone .amb-where { font-size: 18px; }
       if (t && t.kind === "channel" && t.ch === ch) { hold.levels = levels; return showLevel(); }   // the open channel again: back up
       const up = levels[levels.length - 1].lines || {};
       levels.push({ kind: "channel", ch, label: `${fname(q)} ${Math.round(nmOf(q))} nm · ${catalog.id[q]}`, url: sz => `${s.url ? s.url(sz) : colorUrl(s, sz)}&channel=${ch}`,
-        tag: `CHANNEL · ${fname(q)} · AS IN THE ${s.url ? "MOSAIC" : "COMPOSITE"}`, shot: catalog.id[q],
+        tag: `CHANNEL · ${fname(q)} · AS IN THE ${s.inMosaic && s.inMosaic() ? "MOSAIC" : "COMPOSITE"}`, shot: catalog.id[q],
         lines: { frame: `${titleCase(catalog.target[q] || "Unknown")} · ${catalog.id[q]}`, filter: `${catalog.f1[q]}/${catalog.f2[q]}${nmOf(q) ? ` · ${Math.round(nmOf(q))} nm` : ""}`,
-          colour: s.url ? "One channel of the frame, as in the mosaic" : "One channel of the composite, on its brightness scale", details: up.details || "" } });
+          colour: s.inMosaic && s.inMosaic() ? "One channel of the frame, as in the mosaic" : "One channel of the composite, on its brightness scale", details: up.details || "" } });
       hold1(levels);
     }
     // a click leaves no focus behind, so Space still plays and pauses (index.html takes it only from the page itself)
@@ -4349,8 +4360,10 @@ body.ambient.phone .amb-where { font-size: 18px; }
     // The tile map (/frames/mosaic/<ID>.json, obs_mosaic.tile_map) is the mosaic builder's own placement of each
     // tile, outlines as fractions of the picture, so it fits every size the mosaic is sent at. Asked for once per
     // mosaic picture, on the first hover. While the clock runs the outline waits until the pointer rests a quarter
-    // second. On a phone (full view) the first tap outlines a frame and a second tap on it opens it.
-    let mosaicId = null, tmap = null, hot = null, clickT = 0, pointer = null;
+    // second. On a phone (full view) the first tap outlines a frame and a second tap on it opens it. The arrow keys
+    // step the outline (or the frame opened) to the next frame in time (left, right) or the nearest one beside it (up,
+    // down); Enter opens the outlined one.
+    let mosaicId = null, tmap = null, hot = null, clickT = 0, pointer = null, restT = 0;
     const NS = "http://www.w3.org/2000/svg";
     const overlay = document.createElementNS(NS, "svg");
     overlay.setAttribute("class", "tilemap"); overlay.setAttribute("viewBox", "0 0 1 1"); overlay.setAttribute("preserveAspectRatio", "none");
@@ -4397,7 +4410,10 @@ body.ambient.phone .amb-where { font-size: 18px; }
     const idOf = (q, f) => q.ids[f] || (q.luminance || {})[f];
     const hhmm = t => new Date(t * 1000).toISOString().slice(11, 19);
     function draw(q) {
+      // another frame under the pointer: the lens (loupe.html) goes away and waits for a rest on this one
+      if (q && q !== hot && window.cassiniLoupe && window.cassiniLoupe.isOpen()) window.cassiniLoupe.close();
       hot = q;
+      if (q) pointingKeys = feedApi;   // (also when the outline comes with a tile map that arrived after the pointer)
       const m = tmap && (tmap.data || tmap.prev), b = picBox();
       if (q && m && !b) return;   // decoding: drawn again once it is up (shot load)
       if (!q || !m || !b) { overlay.classList.remove("on"); tip.hidden = true; well.classList.remove("tilehover"); return; }
@@ -4406,25 +4422,29 @@ body.ambient.phone .amb-where { font-size: 18px; }
         + m.pointings.map(p => `<polygon class="${p === q ? "hot" : "other"}" points="${polyStr(p)}" vector-effect="non-scaling-stroke"/>`).join("");
       overlay.classList.add("on"); well.classList.add("tilehover");
       const fs = drawnFs(m, q);
-      tip.innerHTML = `<b>Frame ${q.n} of ${m.pointings.length}</b><br>${fs.join(" ")} · ${hhmm(q.t)} UTC<br><span>${phoneNow() ? "Tap again" : "Click"} to open it</span>`;
+      tip.innerHTML = `<b>Frame ${q.n} of ${m.pointings.length}</b><br>${fs.join(" ")} · ${hhmm(q.t)} UTC<br><span>${phoneNow() ? "Tap again to open it" : "Click to open it · arrow keys: other frames"}</span>`;
       tip.hidden = false;
       const cx = (Math.max(...q.poly.map(c => c[0])) + Math.min(...q.poly.map(c => c[0]))) / 2, top0 = Math.min(...q.poly.map(c => c[1]));
       tip.style.left = Math.max(4, Math.min(b.well.width - 220, b.x - b.well.left + cx * b.w - 100)) + "px";
       tip.style.top = Math.max(4, b.y - b.well.top + top0 * b.h - 40) + "px";
     }
     const phoneNow = () => document.body.classList.contains("phone");
+    let rested = true;   // the pointer has rested (or the clock is stopped): a new picture of the mosaic outlines under it at once
+    const outlineHere = () => { rested = true; if (!pointer) return; const q = hitAt(pointer); if (q !== hot) draw(q); };
     well.addEventListener("pointermove", e => {
       if (e.pointerType === "touch") return;
       pointer = { clientX: e.clientX, clientY: e.clientY };
-      const q = hitAt(e);
-      if (q !== hot) draw(q);
+      clearTimeout(restT);
+      // playing, the picture changes under the pointer: outline only once it rests
+      if (state.playing && mosaicId) { rested = false; restT = setTimeout(outlineHere, 250); }
+      else outlineHere();
     });
-    well.addEventListener("pointerleave", () => { pointer = null; draw(null); });
+    well.addEventListener("pointerleave", () => { pointer = null; clearTimeout(restT); draw(null); });
     // a new picture of the mosaic (another tile came): the outline under the pointer is drawn again on it
-    const redraw = () => (pointer && mosaicId ? draw(hitAt(pointer)) : draw(null));
-    shot.addEventListener("load", () => { if (pointer && mosaicId) draw(hitAt(pointer)); });
-    function openPointing(q) {
-      const m = tmap.data || tmap.prev, fs = drawnFs(m, q), ids = fs.map(f => idOf(q, f));
+    const redraw = () => (pointer && mosaicId ? (rested && draw(hitAt(pointer))) : draw(null));
+    shot.addEventListener("load", () => { if (pointer && mosaicId && rested) draw(hitAt(pointer)); });
+    function openPointing(q, m = tmap && (tmap.data || tmap.prev), own = S.get("cameras.pointingLook") === "own") {
+      const fs = drawnFs(m, q), ids = fs.map(f => idOf(q, f));
       const base = hold ? hold.levels.slice() : [{ kind: "mosaic", live: true, mid: mosaicId, label: `Mosaic · ${m.observation}`, src: shot.dataset.src,
         url(sz) { return this.src.replace(/size=[^&]*/, `size=${sz}`); }, tag: card.querySelector(".kindtag").textContent, shot: m.observation,
         lines: { ...liveLines(), filter: m.filters.join(" "), colour: `Mosaic of ${m.pointings.length} frames` } }];
@@ -4433,28 +4453,78 @@ body.ambient.phone .amb-where { font-size: 18px; }
       const ks = ids.map(kOf), k0 = ks[0], kp = k0 >= 0 ? catalog.km_per_px[k0] : 0;
       const lines = { frame: `${titleCase(m.target || (k0 >= 0 && catalog.target[k0]) || "Unknown")} · ${ids[0]}${ids.length > 1 ? ` +${ids.length - 1}` : ""}`,
         filter: fs.join(" "), details: `${hhmm(q.t)} UTC${kp ? ` · ${kp < 10 ? kp.toFixed(2) : fmt(kp)} km/px` : ""}` };
-      // on its own, the frame keeps the mosaic's levels and colors (obs_mosaic.pointing_picture), not a composite's
-      // or a frame's own stretch, so opening it changes nothing but its size
-      const mid = base[base.length - 1].mid, inMosaic = (use, sz) => `${FRAMES}/frames/mosaic/${mid}/frame.webp?ids=${use.join(",")}&size=${sz}${look()}`;
+      // as in the mosaic (the default), the frame is the mosaic's own picture of that spot, larger: its tiles with the
+      // mosaic's seam corrections, color mix and detail (/frames/mosaic/<id>/p/<n>, obs_mosaic.pointing_picture), so
+      // opening it changes nothing but its size. On its own (the switch by the breadcrumb, Settings > Cameras): the
+      // frames as a composite or a frame of their own, on their own scale
+      const mid = base[base.length - 1].mid, inMosaic = sz => `${FRAMES}/frames/mosaic/${mid}/p/${q.n}.webp?size=${sz}&ids=${ids.join(",")}${look()}`;
       let lv;
       if (ids.length === 3) {
         const si = k0 >= 0 ? catalog.setOf[k0] : -1, cs = si >= 0 ? catalog.sets[si] : null;
         const cat = cs && cs.use.length === 3 && cs.use.every((u, j) => catalog.id[u] === ids[j]) ? cs : null;
-        const kind = cat ? KIND[cat.kind] : (fs.includes("GRN") ? "Color" : "False color");
-        // the frame is a set of its own (its channels in the strip open on the mosaic's look too)
-        const s = ks.every(k => k >= 0) ? { use: ks, frames: ks, kind: cat ? cat.kind : "false", ready: -Infinity, url: sz => inMosaic(ids, sz) } : null;
-        lv = { kind: "composite", s, label: `Frame ${q.n} · ${kind} · ${fs.join(" ")}`, url: sz => inMosaic(ids, sz),
-          tag: `FRAME ${q.n} OF THE MOSAIC · ${kind.toUpperCase()} · AS IN THE MOSAIC`, shot: ids.join(" "),
-          lines: { ...lines, colour: `${kind}, frame ${q.n} of ${m.pointings.length} of the mosaic` } };
+        const kind = cat ? KIND[cat.kind] : (fs.includes("GRN") ? "Color" : "False color"), all = ks.every(k => k >= 0);
+        const own = all ? sz => colorUrl({ use: ks }, sz) : null;
+        // the frame is a set of its own (its channels in the strip open on the look it is shown with)
+        const s = all ? { use: ks, frames: ks, kind: cat ? cat.kind : "false", ready: -Infinity, url: sz => lv.url(sz), inMosaic: () => !lv.own } : null;
+        lv = { kind: "composite", s, label: `Frame ${q.n} · ${kind} · ${fs.join(" ")}`, inMosaic, own: false, ownUrl: own, kindName: kind,
+          url(sz) { return this.own && this.ownUrl ? this.ownUrl(sz) : this.inMosaic(sz); }, shot: ids.join(" "), lines };
       } else {
-        const id = ids[ids.length - 1];
-        lv = { kind: "frame", label: `Frame ${q.n} · ${nameOf(id)} · ${id}`, url: sz => inMosaic([id], sz),
-          tag: `FRAME ${q.n} OF THE MOSAIC · AS IN THE MOSAIC`, shot: id,
-          lines: { ...lines, frame: `${titleCase(m.target || "Unknown")} · ${id}`, filter: nameOf(id), colour: `Single filter, frame ${q.n} of ${m.pointings.length} of the mosaic` } };
+        const id = ids[ids.length - 1], k = kOf(id);
+        lv = { kind: "frame", label: `Frame ${q.n} · ${nameOf(id)} · ${id}`, inMosaic, own: false, ownUrl: k >= 0 ? sz => shownFrameUrl(k, sz) : null,
+          url(sz) { return this.own && this.ownUrl ? this.ownUrl(sz) : this.inMosaic(sz); }, shot: id,
+          lines: { ...lines, frame: `${titleCase(m.target || "Unknown")} · ${id}`, filter: nameOf(id) } };
       }
+      Object.assign(lv, { pointing: q, map: m });
+      lookOf(lv, own);
       draw(null);
+      pointingKeys = feedApi;
+      if (window.cassiniLoupe) window.cassiniLoupe.close();
       hold1(base.concat([lv]));
     }
+    // a frame opened from a mosaic: as in the mosaic, or on its own scale (lv.own); its tag and color line say which
+    function lookOf(lv, own) {
+      lv.own = !!own && !!lv.ownUrl;
+      const q = lv.pointing, N = lv.map.pointings.length, how = lv.own ? "ON ITS OWN" : "AS IN THE MOSAIC";
+      lv.tag = lv.kind === "composite" ? `FRAME ${q.n} OF THE MOSAIC · ${lv.kindName.toUpperCase()} · ${how}` : `FRAME ${q.n} OF THE MOSAIC · ${how}`;
+      lv.lines = { ...lv.lines, colour: `${lv.kind === "composite" ? lv.kindName : "Single filter"}, frame ${q.n} of ${N} of the mosaic${lv.own ? ", on its own scale" : ""}` };
+    }
+    // the arrow keys: the pointing after or before q in time (dx), or the nearest one beside it (dy: up -1, down 1)
+    function stepFrom(m, q, dx, dy) {
+      const ps = m.pointings, i = ps.indexOf(q);
+      if (dx) return ps[i + dx] || null;
+      let best = null, bd = Infinity;
+      for (const p of ps) {
+        const vx = p.center[0] - q.center[0], vy = p.center[1] - q.center[1];
+        if (p === q || vy * dy <= 0 || Math.abs(vx) > Math.abs(vy) * 1.5) continue;   // in that direction, give or take
+        const d = Math.hypot(vx, vy); if (d < bd) { bd = d; best = p; }
+      }
+      return best;
+    }
+    function arrowKey(e) {
+      const dx = e.key === "ArrowRight" ? 1 : e.key === "ArrowLeft" ? -1 : 0, dy = e.key === "ArrowDown" ? 1 : e.key === "ArrowUp" ? -1 : 0;
+      const t = top();
+      if (hold && t.pointing) {
+        // held on a frame of the mosaic: open the next one in its place, on the same look
+        if (!dx && !dy) return false;
+        const q = stepFrom(t.map, t.pointing, dx, dy); if (!q) return true;
+        hold.levels.pop();
+        openPointing(q, t.map, t.own);
+        return true;
+      }
+      if (!hot || !mosaicId) return false;
+      const m = tmap && (tmap.data || tmap.prev); if (!m) return false;
+      if (e.key === "Enter") { openPointing(hot); return true; }
+      if (!dx && !dy) return false;
+      const q = stepFrom(m, hot, dx, dy); if (q) draw(q);
+      if (window.cassiniLoupe) window.cassiniLoupe.close();
+      return true;
+    }
+    window.addEventListener("keydown", e => {
+      if (pointingKeys !== feedApi || e.metaKey || e.ctrlKey || e.altKey || e.shiftKey || !/^(Arrow(Left|Right|Up|Down)|Enter)$/.test(e.key)) return;
+      if (e.target !== document.body && !win.contains(e.target) || /^(INPUT|SELECT|TEXTAREA)$/.test(e.target.tagName)) return;
+      if (document.querySelector(".menu.open") || !(hold ? top().pointing : hot && mosaicId)) return;
+      if (arrowKey(e)) { e.preventDefault(); e.stopImmediatePropagation(); }
+    }, true);
     well.addEventListener("click", e => {
       if (!mosaicId) return;
       const q = hitAt(e); if (!q) return;
@@ -4478,6 +4548,7 @@ body.ambient.phone .amb-where { font-size: 18px; }
       crumbs.hidden = false;
       crumbs.innerHTML = '<button data-lv="live" title="Back to the live camera">Live</button><span class="sep">›</span>' + hold.levels.map((l, i) => i < hold.levels.length - 1
         ? `<button data-lv="${i}">${l.label}</button><span class="sep">›</span>` : `<span class="here" title="${l.label}">${l.label}</span>`).join("")
+        + (t.pointing && t.ownUrl ? `<button class="ownbtn" aria-pressed="${t.own}" title="${t.own ? "Show it as it is in the mosaic: the mosaic's levels, seams and colors" : "Show the frames on their own scale, as a picture of their own"}">${t.own ? "On its own" : "As in the mosaic"}</button>` : "")
         + '<button class="heldbadge" title="Back to the live camera (Esc goes one step back)">held · Esc goes back</button>';
       // flags (flag.html) record where the window is
       shot.dataset.path = JSON.stringify(hold.levels.map(l => ({ kind: l.kind, label: l.label, src: l.url(capped()) })));
@@ -4505,10 +4576,13 @@ body.ambient.phone .amb-where { font-size: 18px; }
         if (t.kind === "composite" && t.s) channelsFrom(im, t.s);
         saving();
       };
+      // a frame the server cannot draw as in the mosaic: on its own instead, and the switch says so
+      im.onerror = () => { if (hold && top() === t && t.pointing && !t.own && t.ownUrl) { lookOf(t, true); showLevel(); } };
       im.src = url;
     }
     function release() {
       if (!hold) return;
+      if (pointingKeys === feedApi) pointingKeys = null;
       hold = null; levelKey = ""; mosaicId = null; crumbs.hidden = true; crumbs.innerHTML = ""; delete win.dataset.held; holding.delete(feedApi);
       delete shot.dataset.path; saveOpen(false); draw(null);
       // back to live: the live picture as it was, then the clock's picture from there (a mosaic still being
@@ -7640,6 +7714,7 @@ body.ambient.phone .amb-where { font-size: 18px; }
   // the picture under the lens can change on its own: drawn again on each new picture
   document.addEventListener("load", e => { if (cur && e.target === cur.img) paint(); }, true);
 
+  const MOSAIC_REST = 0.7;   // s the pointer rests on a mosaic's outlined frame before the lens comes up
   // the mouse (and a pen): rest on a picture, then the lens follows
   document.addEventListener("pointermove", e => {
     if (e.pointerType === "touch") return;
@@ -7654,7 +7729,9 @@ body.ambient.phone .amb-where { font-size: 18px; }
     if (arm && arm.img === img && Math.hypot(e.clientX - arm.x0, e.clientY - arm.y0) < 8) { arm.x = e.clientX; arm.y = e.clientY; return; }
     clearTimeout(arm && arm.t);
     arm = { img, x0: e.clientX, y0: e.clientY, x: e.clientX, y: e.clientY };
-    arm.t = setTimeout(() => { const a = arm; arm = null; if (a) open(a.img, a.x, a.y, false); }, opt("loupe.delay", 0) * 1000);
+    // over a mosaic with a frame outlined (head-quiet's tile map) the outline shows first: the lens waits for a longer rest
+    const wait = Math.max(opt("loupe.delay", 0), img.closest(".well.tilehover") ? MOSAIC_REST : 0);
+    arm.t = setTimeout(() => { const a = arm; arm = null; if (a) open(a.img, a.x, a.y, false); }, wait * 1000);
   }, { passive: true });
   // a press (a click, a drag, a double-click into full view) puts the lens away; resting again brings it back
   document.addEventListener("pointerdown", e => { if (e.pointerType !== "touch") close(); }, true);
@@ -9525,7 +9602,7 @@ void main() {
   window.cassiniAbout = { open, addTab, esc, close: () => show(false), credits: CREDITS };
 
   // ---- which version this is: this page's build id (build.py writes it), and what the frame server says it serves ----
-  const BUILD = /*BUILD*/"8af89b00af60";
+  const BUILD = /*BUILD*/"7a03016abb0e";
   const FRAMES = (() => {                       // the frame server, chosen as the camera window chooses it
     const q = new URLSearchParams(location.search).get("frames");
     if (q) return q.replace(/\/$/, "");

@@ -67,8 +67,11 @@ Routes:
                                layers (colour set, gray luminance base) and pointings, each with its frames by filter
                                (drawn in colour, in the gray base only, or not drawn), whether it shows in colour, and
                                its outline and centre as fractions of the picture
-  /frames/mosaic/<ID>/frame.webp?ids=A,B,C&size=full   one frame of that mosaic on its own, on the mosaic's levels
-                               and colours (obs_mosaic.pointing_picture; format=png, download=1 as below)
+  /frames/mosaic/<ID>/p/<n>.webp?size=full   pointing n of that mosaic (as the .json numbers them) opened on its own,
+                               the mosaic's own picture of that spot at the tiles' full size: its tiles with the seam
+                               corrections the mosaic gave them, through mosaic.compose, mixed and given detail as the
+                               mosaic is (obs_mosaic.pointing_picture; &channel=0-2 one filter's plane; format=png,
+                               download=1 as below). frame.webp?ids=A,B,C is the same for the pointing of those frames
   /frames/mosaic/<ID>/full.json      that mosaic at native resolution (mosaic_native): its size, estimated MB, made yet
                                (&make=jpg|png: make it now); full.webp?crop=x0,y0,x1,y1 a part of it for the zoom lens
                                (fractions of the picture, at most CASSINI_NATIVE_CROP px); full.jpg / full.png all of it
@@ -1480,23 +1483,39 @@ def make_handler(site, cache, flags=None):
                     return self.send_error(400, "Not a frame id")
                 found = obs_mosaic.tile_map(m.group(1), cache) if reel._index is not None else None
                 return self.send_json(found) if found else self.send_json({"error": "not a mosaic pass"}, 404)
-            m = re.match(r"^/frames/mosaic/([^/]+)/frame\.webp$", url.path)
+            m = re.match(r"^/frames/mosaic/([^/]+)/(?:p/(\d+)|frame)\.webp$", url.path)
             if m:
-                # one frame of that mosaic on its own at full resolution, with the mosaic's levels and colours
-                # (obs_mosaic.pointing_picture): ids = its frames, one per filter as the tile map gives them
-                # (&channel=0-2: one filter's channel of it)
+                # pointing n of that mosaic opened on its own at full resolution, the mosaic's own picture of that spot
+                # (obs_mosaic.pointing_picture: its tiles with the mosaic's seam corrections, through mosaic.compose,
+                # mixed and given detail as the mosaic is); &channel=0-2: one filter's plane of it. frame.webp?ids=A,B,C
+                # (the links before pointings were numbered) is the pointing those frames are
                 query = parse_qs(url.query)
-                ids = [i for i in query.get("ids", [""])[0].split(",") if i]
-                if not FRAME_ID.match(m.group(1)) or not ids or len(ids) > 3 or not all(FRAME_ID.match(i) for i in ids):
-                    return self.send_error(400, "Not frame ids")
+                if not FRAME_ID.match(m.group(1)):
+                    return self.send_error(400, "Not a frame id")
                 size, fmt, ch = size_of(query, FULL), picture_format(query), query.get("channel", [None])[0]
                 if ch is not None and ch not in ("0", "1", "2"):
                     return self.send_error(400, "channel is 0, 1 or 2")
-                made = obs_mosaic.pointing_picture(m.group(1), ids, cache, size, fmt, _mosaic_slots, None if ch is None else int(ch)) \
-                    if reel._index is not None else None
+                if reel._index is None:
+                    return self.send_error(404, "No index of the frames")
+                n = int(m.group(2)) if m.group(2) else None
+                if n is None:
+                    ids = [i for i in query.get("ids", [""])[0].split(",") if i]
+                    if not ids or len(ids) > 3 or not all(FRAME_ID.match(i) for i in ids):
+                        return self.send_error(400, "Not frame ids")
+                    mapped = obs_mosaic.tile_map(m.group(1), cache)
+                    q = obs_mosaic.pointing_of(mapped, ids) if mapped else None
+                    if q is None:
+                        return self.send_error(404, "Not frames of that mosaic")
+                    n = q["n"]
+                    if len(ids) == 1 and ch is None and q["set"]:
+                        # one filter of a colour pointing: its plane
+                        f = next((f for f, i in q["ids"].items() if i == ids[0]), None)
+                        ch = str(mapped["filters"].index(f)) if f in mapped["filters"] else None
+                made = obs_mosaic.pointing_picture(m.group(1), n, cache, size, fmt, _mosaic_slots, None if ch is None else int(ch))
                 if not made:
-                    return self.send_error(404, "Not frames of that mosaic")
-                return self.send_picture(made[0], fmt, query, f"Cassini_{'_'.join(ids)}_in_mosaic" + ("" if ch is None else f"_channel{ch}"), {"X-Reel": json.dumps(made[1])})
+                    return self.send_error(404, "No such pointing in that mosaic")
+                name = f"Cassini_{made[1]['observation']}_frame{n}_in_mosaic" + ("" if ch is None else f"_channel{ch}")
+                return self.send_picture(made[0], fmt, query, name, {"X-Reel": json.dumps(made[1])})
             m = re.match(r"^/frames/mosaic/([^/]+)/full\.(json|webp|jpg|png)$", url.path)
             if m:
                 # the mosaic shown for that frame at native resolution (mosaic_native): .json its size, estimates and
