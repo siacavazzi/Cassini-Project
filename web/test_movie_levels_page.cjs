@@ -1,7 +1,7 @@
 // The Movie Editor's exposure graph and framing, driven in a browser: the stretch's brightness measured, level points
 // added and dragged, Even out (when the server has it), Auto center for the movie, zoom, a frame nudged and undone,
 // the export taking the edit, and a frame downloaded with it. Screenshots and a screen recording go to OUT.
-// Run: node web/test_movie_levels_page.js http://127.0.0.1:PORT OUT [FROM UNTIL] [THREE_DIR] [--film]
+// Run: node web/test_movie_levels_page.cjs http://127.0.0.1:PORT OUT [FROM UNTIL] [THREE_DIR] [--film]
 // (a frame server with replay data; THREE_DIR an `npm pack three@0.128.0` unpacked, for when the CDN is blocked;
 // --film also makes the edited film, NAC only, 512 px, no sound)
 const { chromium } = require("playwright");
@@ -29,6 +29,8 @@ const check = (ok, what) => { console.log(ok ? "ok" : "FAIL", what); if (!ok) pr
   await page.waitForFunction(() => cassiniMovieEdit.state.frames.length > 0 && !cassiniMovieEdit.state.loading, null, { timeout: 120000 });
   await page.waitForFunction(() => { const l = cassiniMovieEdit.state.lv; return l.error || l.total != null && l.done >= l.total; }, null, { timeout: 600000 });
   clearInterval(awake);
+  // the pointer rests from here on (a drag must not be moved by it): the interface stays up as long as Settings allows
+  await page.evaluate(() => window.cassiniSettings && cassiniSettings.set("interface.idleDelay", 30));
   await page.waitForTimeout(2500);
   const lv = await page.evaluate(() => { const s = cassiniMovieEdit.state; return { n: s.frames.length, measured: Object.values(s.lv.level).filter(v => v != null).length, ready: s.lv.ready, error: s.lv.error }; });
   console.log(JSON.stringify(lv));
