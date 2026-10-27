@@ -4059,6 +4059,9 @@ body.ambient.phone .amb-where { font-size: 18px; }
     // after 4 s while the server works out the pass (seconds), and the mosaic comes back in the pass lane
     // after anything took it down.
     let mosaicUrl = null, obsShown = null, obsTiles = 0, obsK = -1, obsSize = 0, obsRep = null;
+    // the frame the server has no mosaic for (404 at /frames/mosaic: a frame of the pass that is no tile, a movie's,
+    // or a pass with nothing placed yet): with the clock at it, the mosaic up is as far as it goes (update.behind)
+    let noMosaic = "";
     const mosaicPasses = new Set();   // passes (passOf) the server said is a mosaic pass
     const moviePasses = new Set();    // passes the server said is a movie or a stare: never a mosaic, never asked
     const lapPasses = new Set();
@@ -4265,7 +4268,7 @@ body.ambient.phone .amb-where { font-size: 18px; }
         setTimeout(patience, 8000);
       }
       fetch(`${FRAMES}/frames/mosaic/${id}.webp?size=${sz}${mode === "mosaic" || mode === "mosaic_movie" ? "&force=1" : ""}${window.cassiniLook()}`, { signal: ctl.signal }).then(async r => {
-        if (!r.ok) return;
+        if (!r.ok) { if (r.status === 404) noMosaic = wid; return; }
         const rep = JSON.parse(r.headers.get("X-Reel") || "null");
         // the frame in the catalog loaded now (another catalog object once the months around have loaded; a
         // pass's mosaic still goes up, found by its frame id)
@@ -4976,7 +4979,9 @@ body.ambient.phone .amb-where { font-size: 18px; }
       // a whole lap of a mosaic movie (Whole mosaics) may take the server a while to make cold: waited for longer
       const stuck = want.rolling && wholeLaps() ? WHOLE_STUCK : STUCK;
       let b = shownKey !== want.key && now - shownAt < stuck ? pos(want.k) - pos(shown.k) : 0;
-      if (obsShown && obsK >= 0 && catalog.obs[lastK] === obsShown && now - mosaicAt < STUCK) b = Math.max(b, pos(lastK) - pos(obsK));
+      // (not when the server has no mosaic for the frame the clock is at: no tile is coming for it, and movie mode
+      // held STUCK ms on one, 2026-10-27)
+      if (obsShown && obsK >= 0 && catalog.obs[lastK] === obsShown && now - mosaicAt < STUCK && catalog.id[lastK] !== noMosaic) b = Math.max(b, pos(lastK) - pos(obsK));
       return Math.max(0, b);
     };
     allFeeds.add(update);
@@ -9837,7 +9842,7 @@ void main() {
   window.cassiniAbout = { open, addTab, esc, close: () => show(false), credits: CREDITS };
 
   // ---- which version this is: this page's build id (build.py writes it), and what the frame server says it serves ----
-  const BUILD = /*BUILD*/"63cbe7a9869b";
+  const BUILD = /*BUILD*/"acda0cf8eec0";
   const FRAMES = (() => {                       // the frame server, chosen as the camera window chooses it
     const q = new URLSearchParams(location.search).get("frames");
     if (q) return q.replace(/\/$/, "");
