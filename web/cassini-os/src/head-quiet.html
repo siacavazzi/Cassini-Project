@@ -657,8 +657,8 @@ body.idle .win.full .titlebar { opacity: 0; }
         <li><button data-act="span" data-v="604800">Timeline: Week</button></li>
         <li><button data-act="span" data-v="2592000">Timeline: Month</button></li>
         <li class="sep" data-rate></li>
-        <li data-rate class="slider"><label for="maxrate">Bursts: at most <b id="maxratev">5 images/s</b></label>
-          <input type="range" id="maxrate" min="0" max="24" step="1" value="5" aria-label="Maximum new images per second during imaging bursts"></li>
+        <li data-rate class="slider"><label for="maxrate">Bursts: at most <b id="maxratev">10 images/s</b></label>
+          <input type="range" id="maxrate" min="0" max="24" step="1" value="10" aria-label="Maximum new images per second during imaging bursts"></li>
       </ul></div>
     <div class="menu"><button aria-haspopup="true">Go</button>
       <ul id="gomenu">
@@ -2709,7 +2709,9 @@ body.idle .win.full .titlebar { opacity: 0; }
   // (playback.burstFloor), so 1 day/s skips pictures in a long burst instead of crawling like 10 min/s does.
   // Movie mode steps the clock itself (movie.html). 0 = no limit. The setting lives in the Settings window when the page has one
   // (playback.maxImageRate), otherwise in the View menu.
-  const RATE_DEFAULT = 5, FLOOR_DEFAULT = 0.25, RATE_KEY = "cassini-os-max-image-rate", SETTINGS = window.cassiniSettings;
+  // (10 since 2026-10-27, when the pictures came from the cache in milliseconds: 5 held 10 min/s to half its speed in a
+  // busy stretch, 10 to three quarters; a value saved at the old default moves up with it, was)
+  const RATE_DEFAULT = 10, FLOOR_DEFAULT = 0.25, RATE_KEY = "cassini-os-max-image-rate", SETTINGS = window.cassiniSettings;
   let maxRate = RATE_DEFAULT, burstFloor = FLOOR_DEFAULT, slowedTo = 0;
   function syncRateMenu() {
     const r = $("maxrate"); if (!r) return;
@@ -2724,7 +2726,7 @@ body.idle .win.full .titlebar { opacity: 0; }
     document.querySelectorAll("#menubar [data-rate]").forEach(li => li.remove());
     maxRate = +SETTINGS.define({ key: "playback.maxImageRate", section: "Playback", label: "Maximum images per second",
       hint: "When Cassini takes a burst of pictures, the timeline slows down so each camera window shows at most this many new pictures a second. Only frames that change the picture count: a color set counts once, at its last filter. 0 = no limit.",
-      type: "range", value: RATE_DEFAULT, min: 0, max: 24, step: 1, unit: "images/s" }) || 0;
+      type: "range", value: RATE_DEFAULT, was: [5], min: 0, max: 24, step: 1, unit: "images/s" }) || 0;
     SETTINGS.on("playback.maxImageRate", v => { maxRate = +v || 0; });
     SETTINGS.define({ key: "playback.burstFloor", section: "Playback", label: "Bursts slow playback to no less than",
       hint: "However many pictures a burst has, the timeline keeps at least this share of the chosen speed, so a faster speed always plays faster (skipping pictures in long bursts). 100 % = never slow down.",
