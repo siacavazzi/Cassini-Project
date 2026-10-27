@@ -496,7 +496,7 @@ def _rim(color, has, dist):
     deep = has & (dist > depth)
     if not band.any() or not deep.any():
         return None
-    lum = color.min(axis=2)   # the darkest band, so a rim missing one colour is found too
+    lum = _of_bands(color, np.minimum)   # the darkest band, so a rim missing one colour is found too
     h, w = lum.shape
     q = 4
     # (in whole quarters: a frame's box starts on a multiple of 8 of its pixels, prepare)
@@ -559,6 +559,15 @@ def _pyramid(x, n):
 def _per_pixel(color):
     """How a weight (h, w) multiplies colours like color: as it is for one band (h, w), with an axis added for three."""
     return (lambda w: w) if color.ndim == 2 else (lambda w: w[..., None])
+
+
+def _of_bands(color, how):
+    """color (h, w, bands) taken down to (h, w) by how (np.minimum, np.maximum, np.add) band by band: the same as
+    numpy's own reductions over the last axis, many times faster over three bands."""
+    out = color[..., 0]
+    for k in range(1, color.shape[2]):
+        out = how(out, color[..., k])
+    return out
 
 
 def _normed(color, has, n):
@@ -853,7 +862,7 @@ def _levels(boxes, colors, hases, ramps, pin=None):
     def calm_of(i):
         # where frame i's brightness changes slowly (LEVEL_EDGE)
         if i not in calm:
-            lum = np.log(np.maximum(cv2.GaussianBlur(colors[i].mean(axis=2), (0, 0), 1.0), 1))
+            lum = np.log(np.maximum(cv2.GaussianBlur(_of_bands(colors[i], np.add) / colors[i].shape[2], (0, 0), 1.0), 1))
             gx, gy = cv2.Sobel(lum, cv2.CV_32F, 1, 0, ksize=3), cv2.Sobel(lum, cv2.CV_32F, 0, 1, ksize=3)
             calm[i] = np.hypot(gx, gy) * (feather_px / 64) < LEVEL_EDGE
         return calm[i]
@@ -874,12 +883,13 @@ def _levels(boxes, colors, hases, ramps, pin=None):
             if not seam.any():
                 continue
             fi, fj = colors[i][si][..., :ch], colors[j][sj][..., :ch]
-            lit = seam & (fi.min(axis=2) > LEVEL_LIT) & (fj.min(axis=2) > LEVEL_LIT) & calm_of(i)[si] & calm_of(j)[sj]
+            lit = (seam & (_of_bands(fi, np.minimum) > LEVEL_LIT) & (_of_bands(fj, np.minimum) > LEVEL_LIT)
+                   & calm_of(i)[si] & calm_of(j)[sj])
             if not lit.any():
                 continue
             ratio = np.log(np.maximum(fj, 1)) - np.log(np.maximum(fi, 1))
             # a pixel the two do not agree on within LEVEL_MAX is not the light: the limb a pixel off, a moved cloud, a star
-            ok = lit & (np.abs(ratio).max(axis=2) < math.log(LEVEL_MAX))
+            ok = lit & (_of_bands(np.abs(ratio), np.maximum) < math.log(LEVEL_MAX))
             cnt, (cy, cx) = _cells(ok.astype(np.float32), c, y0, x0)
             tot, _ = _cells(ratio * ok[..., None], c, y0, x0)
             for gy, gx in zip(*np.nonzero(cnt >= LEVEL_FILL * c * c)):
