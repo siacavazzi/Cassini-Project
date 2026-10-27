@@ -3,7 +3,7 @@
 Streams Cassini OS in ambient mode (`/?ambient=live`: the clock is today minus ten years, so the stream reaches the
 Grand Finale on 15 September 2027) from the Mac Mini, 24/7.
 
-How it works: one headless Chrome draws the page at 1920x1080; the DevTools screencast hands every new frame (JPEG) to
+How it works: one headless Chrome draws the page at 1280x720; the DevTools screencast hands every new frame (JPEG) to
 `stream.mjs`, which feeds the newest one to ffmpeg 30 times a second; ffmpeg encodes H.264 on the Mac's hardware
 encoder (`h264_videotoolbox`, not the CPU cores) with silent AAC audio and sends it to YouTube, a local HLS folder, a
 file, or several at once. Nothing is re-rendered: the stream is exactly what the page draws, pictures included.
@@ -31,14 +31,25 @@ the stream privately before anything is public.
 
 ### Priority ("reserve a core")
 
-macOS has no way to pin a program to a core. Instead `run.sh` runs the whole rig (Chrome, ffmpeg, the script) at
-utility QoS and nice 10: below the pre-build's and the servers' interactive work, but not starved. The rig itself is
-cheap (about 0.3 of a core on the M4: Chrome draws on the GPU and the hardware encoder does the encoding), so this
-costs the rest of the Mini little. `STREAM_PRIORITY=background` (`taskpolicy -b`, nice 20) clamps it harder; under a
-full pre-build (load 30 and up) that starved it to 3 to 8 frames a second, so it is only for when the stream may
-stutter. `normal` removes the clamp. ffmpeg is held to 2 threads and Chrome to one renderer process. Below 3 GB of
-available memory (`--min-free-gb`) the stream stops and tries again ten minutes later; so does ten minutes in a row
-at under half of real time.
+macOS has no way to pin a program to a core. What it can do is lower a program's QoS class, and that turned out to be
+the wrong lever: measured on the Mini (27 Oct, five 150 s runs of the live ambient page), any clamp slows the page's
+own animation, not just its share of the CPU.
+
+| run | priority | size | page draws | frames to ffmpeg | new frames in a 20 s clip | CPU, cores |
+|---|---|---|---|---|---|---|
+| A | utility | 1080p | 22 fps | 10 fps | 182 of 600 | 0.48 |
+| B | normal | 1080p | 60 fps | 29 fps | 275 of 600 | 1.11 |
+| C | utility | 1080p, JPEG q60 | 21 fps | 10 fps | 188 of 600 | 0.51 |
+| D | utility | 720p | 14 fps | 7 fps | 45 of 600 | 0.22 |
+| E | normal | 720p, q70 | 60 fps | 28 fps | 291 of 600 | 0.52 |
+
+So the defaults are E's: normal priority, 1280x720 at 3 Mbps, JPEG quality 70, about half a core and 1.7 to 2 GB of
+memory. That half core is the "reserved core": the stream simply always gets it. (A slowly drifting scene repeats
+some frames on its own, so even a perfect capture shows fewer than 600 new frames in 20 s.) `STREAM_PRIORITY=utility`
+(utility QoS, nice 10) or `background` (`taskpolicy -b`, nice 20; 3 to 8 frames a second under a full pre-build)
+give the CPU back at the cost of a choppy stream. ffmpeg is held to 2 threads and Chrome to one renderer process.
+Below 3 GB of available memory (`--min-free-gb`) the stream stops and tries again ten minutes later; so does ten
+minutes in a row at under half of real time.
 
 Note that the pre-build pauses itself while the load average is over 30, and every running program adds to the load,
 so while the pre-build runs flat out, the stream slows it a little.
@@ -49,8 +60,9 @@ so while the pre-build runs flat out, the stream slows it a little.
 |---|---|---|
 | `--url` | `http://127.0.0.1:8765/?ambient=live` | any Cassini OS link; `run.sh` takes it from `STREAM_URL` |
 | `--out` | (required, repeatable) | `youtube`, an `rtmp://`/`rtmps://` URL, a `.m3u8` path (HLS) or a `.mp4`/`.mkv` file |
-| `--width`, `--height`, `--fps` | 1920, 1080, 30 | the page is drawn at this size; ambient mode caps its own 3D at 30 fps |
-| `--bitrate` | `6M` | YouTube suggests 4.5 to 9 Mbps for 1080p30 |
+| `--width`, `--height`, `--fps` | 1280, 720, 30 | the page is drawn at this size; 1080p costs twice the CPU for little gain |
+| `--bitrate` | `3M` | YouTube suggests 2.5 to 6 Mbps for 720p30 (4.5 to 9 for 1080p) |
+| `--quality` | 70 | JPEG quality of the screencast frames |
 | `--encoder` | `h264_videotoolbox` on a Mac | `libx264` elsewhere (cloud tests) |
 | `--settings` | | Cassini OS settings as JSON, merged into the page's saved settings, e.g. `'{"ambient.fps":24}'` |
 | `--audio` | `silence` | or a music file, looped (it must be cleared for YouTube's Content ID) |

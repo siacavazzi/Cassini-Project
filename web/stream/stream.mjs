@@ -19,7 +19,7 @@ import os from "node:os";
 import path from "node:path";
 
 const DEFAULTS = {
-  url: "http://127.0.0.1:8765/?ambient=live", out: [], width: 1920, height: 1080, fps: 30, bitrate: "6M", quality: 85,
+  url: "http://127.0.0.1:8765/?ambient=live", out: [], width: 1280, height: 720, fps: 30, bitrate: "3M", quality: 70,
   encoder: os.platform() === "darwin" ? "h264_videotoolbox" : "libx264", threads: 2, chrome: "", state: "",
   "key-file": path.join(os.homedir(), ".config/cassini-stream/youtube.key"), duration: 0, stall: 90,
   "stats-every": 60, "reload-hours": 0, settings: "", "hls-seconds": 4, "hls-window": 15, audio: "silence", "min-free-gb": 3,
