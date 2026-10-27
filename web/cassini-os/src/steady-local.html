@@ -1,0 +1,133 @@
+<script>
+// ---------- image stabilization on this computer (Settings > Movie > Stabilize on this computer) ----------
+// The pre-built movie frames are drawn where SPICE puts each tile (steady 0). Stabilized at any smoothing, a frame of
+// one filter in a pass whose view is the whole pass is that same picture with its tile moved by whole pixels
+// (obs_mosaic._place rounds a tile's corner to a canvas pixel at the 1024 px drawing). So the page asks once per pass
+// for its stabilization chain (/frames/movie/<ID>.steady.json, obs_mosaic.steady_table), works out steady_places for
+// the smoothing set here in a worker (the same arithmetic, in the same order: web/test_steady_local.py checks it
+// against the Python), and the worker moves the pre-built 1024 px frame by the difference. Color frames, a trail, a
+// feature track and a pass whose view follows its frames are drawn by the server as before; so is the film export.
+(function () {
+  // the arithmetic, shared by the worker and the test (web/test_steady_local.py runs it in node)
+  const STEADY_MATH = function () {
+    // Python's round(x): half to even
+    const pyRound = x => { let r = Math.round(x); if (r - x === 0.5 && r % 2 !== 0) r -= 1; return r; };
+    // Python's round(x, 2): the double nearest the correctly rounded decimal; a tie (x * 8 an odd whole number,
+    // the only doubles exactly half way between two hundredths) goes to the even hundredth
+    const pyRound2 = x => {
+      const e = x * 8;
+      if (Number.isInteger(e) && e % 2 !== 0) { const h = x * 100, f = Math.floor(h); return (f % 2 === 0 ? f : f + 1) / 100; }
+      return Number(x.toFixed(2));
+    };
+    // obs_mosaic.steady_places: the chain plus a Gaussian (sigma smooth frames, cut at 3 sigma) of SPICE - chain
+    function places(t, smooth) {
+      const N = t.n.length, out = new Array(N);
+      if (smooth <= 0) return null;
+      for (let a = 0; a < N; a++) {
+        let sx = 0, sy = 0, sw = 0;
+        for (let b = 0; b < N; b++) {
+          const d = a - b;
+          if (Math.abs(d) > 3 * smooth) continue;
+          const w = Math.exp(-0.5 * (d / smooth) ** 2);
+          sx += w * (t.spice[b][0] - t.chain[b][0]); sy += w * (t.spice[b][1] - t.chain[b][1]); sw += w;
+        }
+        out[a] = [pyRound2(t.chain[a][0] + sx / sw), pyRound2(t.chain[a][1] + sy / sw)];
+      }
+      return out;
+    }
+    // obs_mosaic._place's corner of tile a in the canvas (k at OUT), at place o
+    const corner = (t, a, o) => [pyRound((o[0] + t.box[a][0] - t.view[0]) * t.k), pyRound((o[1] + t.box[a][1] - t.view[1]) * t.k)];
+    // how far frame a's tile moves from SPICE's place to its stabilized one, canvas pixels
+    function shift(t, pl, a) {
+      if (!pl) return [0, 0];
+      const s = corner(t, a, t.spice[a]), p = corner(t, a, pl[a]);
+      return [p[0] - s[0], p[1] - s[1]];
+    }
+    return { pyRound, pyRound2, places, shift };
+  };
+  window.cassiniSteadyMath = STEADY_MATH;
+  if (typeof document === "undefined") return;
+
+  // the worker: keeps each pass's table and its places per smoothing, moves a frame's picture
+  const src = `const M = (${STEADY_MATH.toString()})();
+const tables = new Map(), placed = new Map();
+onmessage = async e => {
+  const m = e.data;
+  if (m.table) { tables.set(m.key, m.table); return; }
+  const t = tables.get(m.key), pk = m.key + ":" + m.smooth, t0 = performance.now();
+  if (!placed.has(pk)) placed.set(pk, M.places(t, m.smooth));
+  const [dx, dy] = M.shift(t, placed.get(pk), m.i), t1 = performance.now();
+  const c = new OffscreenCanvas(m.bitmap.width, m.bitmap.height), g = c.getContext("2d");
+  g.drawImage(m.bitmap, dx, dy);
+  m.bitmap.close();
+  const blob = await c.convertToBlob({ type: "image/png" });
+  postMessage({ id: m.id, blob, dx, dy, ms: [t1 - t0, performance.now() - t1] });
+};`;
+  let worker = null, seq = 0;
+  const waiting = new Map();
+  const work = () => {
+    if (!worker) {
+      worker = new Worker(URL.createObjectURL(new Blob([src], { type: "text/javascript" })));
+      worker.onmessage = e => { const w = waiting.get(e.data.id); waiting.delete(e.data.id); if (w) w(e.data); };
+    }
+    return worker;
+  };
+  const S = () => window.cassiniSettings;
+  const byId = new Map();     // `${center}:${frame id}` -> {key, table, index of the id} once its pass's table is here
+  const asked = new Set();
+  const stats = { frames: 0, placeMs: 0, drawMs: 0, last: null };
+  let urls = [];
+  // the pass's table, asked for once (in the background); null until it is here and the pass can be done locally
+  function lookup(frames, id, center) {
+    const k = `${center ? 1 : 0}:${id}`;
+    if (byId.has(k)) return byId.get(k);
+    if (!asked.has(k)) {
+      asked.add(k);
+      fetch(`${frames}/frames/movie/${id}.steady.json?center=${center ? 1 : 0}`, { priority: "low" }).then(r => r.ok ? r.json() : null).then(t => {
+        if (!t || t.working) { setTimeout(() => asked.delete(k), 5000); return; }
+        const key = `${center ? 1 : 0}:${t.local ? t.ids[t.n[0]] : id}`;
+        if (!t.local) { byId.set(k, null); return; }
+        work().postMessage({ key, table: t });
+        t.n.forEach((n, a) => byId.set(`${center ? 1 : 0}:${t.ids[n]}`, { key, table: t, a }));
+      }).catch(() => asked.delete(k));
+    }
+    return null;
+  }
+  window.cassiniSteadyLocal = {
+    stats,
+    // the frame's pass table once it is here (null: the server draws the pass), asking for it as smoothFor does
+    async ready(frames, id, center = true) {
+      for (let tries = 0; tries < 120; tries++) {
+        const k = `${center ? 1 : 0}:${id}`;
+        if (byId.has(k)) return byId.get(k);
+        lookup(frames, id, center);
+        await new Promise(r => setTimeout(r, 500));
+      }
+      return null;
+    },
+    // the smoothing to work out here for this frame, or 0 when the server draws it (setting off, no stabilization,
+    // a trail, a color frame, a pass not done here, or its table not here yet)
+    smoothFor(frames, id, o = {}) {
+      if (!S() || !S().get("movies.stabilizeLocal") || !window.cassiniStabilize || !window.cassiniStabilize()) return 0;
+      if (S().get("movies.trail")) return 0;
+      const e = lookup(frames, id, o.center !== false);
+      if (!e || (e.table.colour && o.color)) return 0;
+      return window.cassiniStabilize();
+    },
+    // the picture of the frame (SPICE's places, OUT px) moved to its stabilized place: a new Image, or null
+    async apply(frames, id, im, o = {}) {
+      const e = byId.get(`${o.center !== false ? 1 : 0}:${id}`);
+      if (!e) return null;
+      const bitmap = await createImageBitmap(im), mid = ++seq;
+      const r = await new Promise(res => { waiting.set(mid, res); work().postMessage({ id: mid, key: e.key, i: e.a, smooth: o.smooth, bitmap }, [bitmap]); });
+      stats.frames++; stats.placeMs += r.ms[0]; stats.drawMs += r.ms[1]; stats.last = { id, dx: r.dx, dy: r.dy };
+      const url = URL.createObjectURL(r.blob), out = new Image();
+      urls.push(url);
+      if (urls.length > 8) URL.revokeObjectURL(urls.shift());
+      await new Promise((res, rej) => { out.onload = res; out.onerror = rej; out.src = url; });
+      out.dataset.steadyLocal = `${r.dx},${r.dy}`;
+      return out;
+    },
+  };
+})();
+</script>

@@ -2075,6 +2075,47 @@ def evened_gains(logs, smooth):
             for own, want in zip(L, target)]
 
 
+def steady_table(frame_id, cache, centre=True):
+    """What a browser needs to stabilize the pass frame_id is in by itself (web/cassini-os/src/steady-local.js): the
+    pass's stabilization chain (steady_chain), each tile's SPICE place and box, and the movie's view (movie_rect)
+    with its scale at OUT, so steady_places and the integer place _place draws a tile at are worked out in the page
+    for any smoothing, and a movie frame drawn at SPICE's places (steady 0, the pre-built frames) is moved by the
+    difference. "fixed": the view is the pass's whole (it does not follow the tile), the case where a single
+    tile's frame moved by that difference is the frame drawn at its steady place; a pass whose view follows its
+    frames, a feature track and a pass with Settings > Processing's alignment off answer {"local": false} (the
+    server draws them). None when the frame is in no pass; {"working": true} while the chain is not worked out
+    (the page asks the server for the stabilized frames meanwhile)."""
+    found = unit_of(frame_id)
+    if not found or found[1] < 0:
+        return None
+    return _steady_table(*found, cache, centre)
+
+
+def _steady_table(u, n, cache, centre=True):
+    """steady_table for frame n of pass u."""
+    if u.get("track") or not calibration.step("align"):
+        return {"local": False}
+    rec = _record(u, cache)
+    if not _steady_ready(u, cache, rec):
+        warm_movie(u, n, 6, cache, steady=True)
+        return {"working": True}
+    p = plan(u, cache)
+    chain = steady_chain(u, cache, p)
+    radius = RADIUS.get(u["key"][0], 0) / (u["z"] * IFOV[u["key"][2]])
+    fp = movie_footprint(u, cache, p)
+    x0, y0, x1, y1 = fp
+    fixed = bool((centre and centre_half(fp, radius)) or max(x1 - x0, y1 - y0) <= MOVIE_FIT * FRAME)
+    if not fixed:
+        return {"local": False}
+    ns = sorted(chain)
+    tiles = {n: tile(u, n, cache, p["display_scale"]) for n in ns}
+    rect = movie_rect(fp, tiles[ns[0]], radius, centre)
+    return {"local": True, "fixed": True, "ids": [fr[1] for fr in u["frames"]], "n": ns,
+            "chain": [chain[n] for n in ns], "spice": [tiles[n]["offset"] for n in ns],
+            "box": [tiles[n]["box"] for n in ns], "view": list(rect), "out": OUT, "k": OUT / max(rect[2], rect[3]),
+            "colour": bool(p.get("colour")), "most": STEADY_MOST, "detail": bool(p["display_scale"].get("filled"))}
+
+
 def movie_rect(fp, t, radius=0.0, centre=False):
     """The view of a pass played as a movie (x0, y0, w, h in reference pixels from the body's centre): its whole
     footprint fp (movie_footprint) when that is at most MOVIE_FIT frames across, so the body holds still while the

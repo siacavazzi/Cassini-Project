@@ -1,0 +1,70 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Stabilize on this computer</title>
+<style>
+  body { background: #111; color: #ddd; font: 13px/1.4 system-ui, sans-serif; margin: 16px; }
+  table { border-collapse: collapse; } td, th { padding: 2px 8px; text-align: right; } th { color: #999; font-weight: 500; }
+  .row { display: flex; gap: 8px; flex-wrap: wrap; margin: 12px 0; } .row figure { margin: 0; } .row img, .row canvas { width: 320px; background: #000; }
+  figcaption { color: #999; }
+</style>
+</head>
+<body>
+<h3>Image stabilization worked out on this computer, against the server's stabilized frames</h3>
+<p id="what">?frames=&lt;server&gt;&amp;id=&lt;a frame of a movie pass&gt;&amp;smooth=12&amp;count=40&amp;center=1</p>
+<div class="row" id="pics"></div>
+<pre id="out">working…</pre>
+<script>
+// Each frame of the pass: the server's frame at SPICE's places (steady 0, the pre-built one) moved here by
+// window.cassiniSteadyLocal (the page's own code, steady-local.html), against the server's frame drawn stabilized
+// (steady=N), both decoded by this browser; where both have picture, how far apart they are. window.result has it all.
+(async () => {
+  const q = new URLSearchParams(location.search), FR = q.get("frames") || location.origin, id = q.get("id");
+  const smooth = +(q.get("smooth") || 12), count = +(q.get("count") || 40), center = q.get("center") !== "0";
+  const extra = q.get("extra") || "";   // more of the movie route's query (look, exposure)
+  const out = document.getElementById("out");
+  const page = await (await fetch("../src/steady-local.html")).text();
+  (0, eval)(page.slice(page.indexOf("<script>") + 8, page.indexOf("<\/script>")));
+  const L = window.cassiniSteadyLocal;
+  const t0 = performance.now(), e = await L.ready(FR, id, center), tableMs = performance.now() - t0;
+  if (!e) { out.textContent = "the server draws this pass (no table)"; window.result = { local: false }; return; }
+  const T = e.table, url = (fid, s) => `${FR}/frames/movie/${fid}.webp?size=1024&color=0&center=${center ? 1 : 0}${s ? `&steady=${s}` : ""}${extra}`;
+  const load = src => new Promise((res, rej) => { const im = new Image(); im.crossOrigin = "anonymous"; const a = performance.now(); im.onload = () => res([im, performance.now() - a]); im.onerror = rej; im.src = src; });
+  const pixels = im => { const c = document.createElement("canvas"); c.width = im.naturalWidth; c.height = im.naturalHeight; const g = c.getContext("2d", { willReadFrequently: true }); g.drawImage(im, 0, 0); return g.getImageData(0, 0, c.width, c.height).data; };
+  const rows = [], first = Math.max(0, T.n.indexOf(T.ids.indexOf(id)));
+  for (let a = first; a < Math.min(T.n.length, first + count); a++) {
+    const fid = T.ids[T.n[a]];
+    try {
+      const [s0, s0Ms] = await load(url(fid, 0));
+      const a0 = performance.now(), here = await L.apply(FR, fid, s0, { center, smooth }), hereMs = performance.now() - a0;
+      const [srv, srvMs] = await load(url(fid, smooth));
+      const A = pixels(here), B = pixels(srv);
+      let n = 0, se = 0, max = 0, same = 0, lack = 0;
+      for (let i = 0; i < A.length; i += 4) {
+        if (A[i + 3] && B[i + 3]) { for (let c = 0; c < 3; c++) { const d = A[i + c] - B[i + c]; se += d * d; max = Math.max(max, Math.abs(d)); } n++; if (A[i] === B[i] && A[i + 1] === B[i + 1] && A[i + 2] === B[i + 2]) same++; }
+        else if (B[i + 3]) lack++;
+      }
+      const mse = se / Math.max(1, 3 * n);
+      rows.push({ id: fid, move: here.dataset.steadyLocal, s0Ms: +s0Ms.toFixed(1), hereMs: +hereMs.toFixed(1), serverMs: +srvMs.toFixed(1),
+                  psnr: mse ? +(10 * Math.log10(255 * 255 / mse)).toFixed(1) : 99, maxDiff: max, samePct: +(100 * same / Math.max(1, n)).toFixed(1), uncovered: lack });
+      if (a === first) {
+        const pics = document.getElementById("pics");
+        for (const [im, cap] of [[s0, "server, SPICE's places (pre-built)"], [here, `moved here (${here.dataset.steadyLocal})`], [srv, `server, steady=${smooth}`]]) {
+          const f = document.createElement("figure"); f.append(im, Object.assign(document.createElement("figcaption"), { textContent: cap })); pics.append(f);
+        }
+      }
+    } catch (err) { rows.push({ id: fid, error: String(err) }); }
+    out.textContent = JSON.stringify(rows.slice(-1)[0]);
+  }
+  const ok = rows.filter(r => !r.error), med = k => { const v = ok.map(r => r[k]).sort((x, y) => x - y); return v[Math.floor(v.length / 2)]; };
+  window.result = { local: true, frames: ok.length, errors: rows.length - ok.length, tableMs: +tableMs.toFixed(0), pass: T.n.length, smooth,
+                    median: { s0Ms: med("s0Ms"), hereMs: med("hereMs"), serverMs: med("serverMs"), psnr: med("psnr"), samePct: med("samePct") },
+                    worstPsnr: Math.min(...ok.map(r => r.psnr)), worker: { frames: L.stats.frames, placeMs: +(L.stats.placeMs / Math.max(1, L.stats.frames)).toFixed(2), drawMs: +(L.stats.drawMs / Math.max(1, L.stats.frames)).toFixed(1) },
+                    ua: navigator.userAgent, cores: navigator.hardwareConcurrency, rows };
+  out.textContent = JSON.stringify(window.result, null, 1);
+})();
+</script>
+</body>
+</html>

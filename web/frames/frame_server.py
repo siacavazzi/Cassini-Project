@@ -95,6 +95,9 @@ Routes:
                                pass's mosaic (obs_mosaic.rolling_webp), so it never empties when a lap begins;
                                fade=N: older tiles fade over N frames down to persist per cent (Rolling), 0 keeps
                                every tile as bright as the newest (Time-lapse)
+  /frames/movie/<ID>.steady.json?center=1
+                               what the page needs to stabilize the frame's movie pass itself, for any smoothing
+                               (obs_mosaic.steady_table, Settings > Movie > Stabilize in: This computer)
   /frames/movie/<ID>.json      the pass the frame is in: its frames [id, time, filter], cadence, movie/mosaic call
   /frames/thumb.webp?mosaic=<ID>&color=R,G,B&frame=<ID>&size=256
                                a highlight's thumbnail (any of the three, as data/highlights.json's "thumb" gives them):
@@ -1285,6 +1288,15 @@ def make_handler(site, cache, flags=None):
                 if not made:
                     return self.send_error(404, "Not frames of that mosaic")
                 return self.send_picture(made[0], fmt, query, f"Cassini_{'_'.join(ids)}_in_mosaic" + ("" if ch is None else f"_channel{ch}"), {"X-Reel": json.dumps(made[1])})
+            m = re.match(r"^/frames/movie/([^/]+)\.steady\.json$", url.path)
+            if m:
+                # what the page needs to stabilize a movie pass itself (obs_mosaic.steady_table, steady-local.js)
+                if not FRAME_ID.match(m.group(1)):
+                    return self.send_error(400, "Not a frame id")
+                if reel._index is None:
+                    return self.send_error(404, "No index of the frames")
+                info = obs_mosaic.steady_table(m.group(1), cache, parse_qs(url.query).get("center", ["1"])[0] != "0")
+                return self.send_json(info) if info else self.send_error(404, "Not in a pass")
             m = re.match(r"^/frames/movie/([^/]+)\.(webp|json)$", url.path)
             if m:
                 # a frame played as a movie of its pass (obs_mosaic.movie_webp): centred by SPICE, on the pass's one

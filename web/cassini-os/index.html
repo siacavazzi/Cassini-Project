@@ -1773,7 +1773,7 @@ body.phone #launch .lx-clock { font-size: 9.5px; bottom: 9vh; }
   window.cassiniExposure = () => S.get("movies.exposure") === false ? 0 : (S.get("movies.exposureSmooth") ?? 8);
   window.cassiniMovieStyle = (o = {}) => `${(o.center ?? S.get("cameras.autoCenter")) === false ? "&center=0" : ""}&trail=${S.get("movies.trail") || 0}&laps=${S.get("movies.laps") || 1}` +
     (S.get("movies.fade") ? `&fade=${S.get("movies.fade")}&persist=${S.get("movies.persist") ?? 35}` : "") +
-    (window.cassiniStabilize() ? `&steady=${window.cassiniStabilize()}` : "") +
+    ((o.steady ?? window.cassiniStabilize()) ? `&steady=${o.steady ?? window.cassiniStabilize()}` : "") +
     (window.cassiniExposure() ? `&exposure=${window.cassiniExposure()}` : "");
   // Cameras (the camera windows read cameras.steady, cameras.passes, cameras.fullRes, cameras.fullDelay, cameras.drill, cameras.stale and cameras.lingerColor / lingerMosaic)
   D({ key: "cameras.channels", section: "Cameras", label: "Filter channels", type: "toggle", value: true,
@@ -1888,6 +1888,8 @@ body.phone #launch .lx-clock { font-size: 9.5px; bottom: 9vh; }
       hint: "SPICE places each frame of a movie pass from where Cassini was said to point, and that is a few pixels off, differently from frame to frame, so a moon or Jupiter's clouds can wobble. On, each frame is matched to the frame before it by what the pictures show (the pipeline's own alignment, with SPICE's place as the starting guess), and held to SPICE over a longer stretch so the body stays where it is. Feature tracks (a cloud followed across Saturn) are always steadied. Off shows every frame where SPICE puts it." });
   D({ key: "movies.stabilizeSmooth", section: "Movie", label: "Stabilization smoothing", type: "range", value: 12, min: 4, max: 60, step: 4, unit: "frames",
       hint: "How long the pictures are believed over SPICE (with Image stabilization on). Low takes out only the frame-to-frame wobble and follows SPICE closely; high also holds slow drifts still, trusting the frame-to-frame matching over that many frames." });
+  D({ key: "movies.stabilizeLocal", section: "Movie", label: "Stabilize on this computer", type: "toggle", value: false,
+      hint: "With Image stabilization on: this computer works out where each frame goes, at any smoothing, and moves the frame the server already has, instead of the server drawing every frame again for each smoothing. Single-filter frames only (color frames, a trail and feature tracks are still drawn by the server); exports are always made by the server." });
   D({ key: "movies.exposure", section: "Movie", label: "Exposure normalization", type: "toggle", value: true,
       hint: "A movie pass is drawn on one brightness scale, so a frame whose exposure the calibration did not fully even out, or one lit by stray light, flashes or jumps in brightness. On, each frame's brightness is measured against the frame of its filter before it, a single frame far brighter or darker than its neighbours is brought to their level, and other jumps are spread over several frames. Slow changes stay, and every frame keeps its data, only scaled. Off shows every frame as the pass's scale draws it." });
   D({ key: "movies.exposureSmooth", section: "Movie", label: "Exposure smoothing", type: "range", value: 8, min: 2, max: 30, step: 2, unit: "frames",
@@ -2196,6 +2198,139 @@ body.phone #launch .lx-clock { font-size: 9.5px; bottom: 9vh; }
   });
   // a surface map or a model finishing its load changes the picture without moving anything
   window.addEventListener("DOMContentLoaded", () => { if (window.THREE) THREE.DefaultLoadingManager.onProgress = () => P.invalidate(); });
+})();
+</script>
+<script>
+// ---------- image stabilization on this computer (Settings > Movie > Stabilize on this computer) ----------
+// The pre-built movie frames are drawn where SPICE puts each tile (steady 0). Stabilized at any smoothing, a frame of
+// one filter in a pass whose view is the whole pass is that same picture with its tile moved by whole pixels
+// (obs_mosaic._place rounds a tile's corner to a canvas pixel at the 1024 px drawing). So the page asks once per pass
+// for its stabilization chain (/frames/movie/<ID>.steady.json, obs_mosaic.steady_table), works out steady_places for
+// the smoothing set here in a worker (the same arithmetic, in the same order: web/test_steady_local.py checks it
+// against the Python), and the worker moves the pre-built 1024 px frame by the difference. Color frames, a trail, a
+// feature track and a pass whose view follows its frames are drawn by the server as before; so is the film export.
+(function () {
+  // the arithmetic, shared by the worker and the test (web/test_steady_local.py runs it in node)
+  const STEADY_MATH = function () {
+    // Python's round(x): half to even
+    const pyRound = x => { let r = Math.round(x); if (r - x === 0.5 && r % 2 !== 0) r -= 1; return r; };
+    // Python's round(x, 2): the double nearest the correctly rounded decimal; a tie (x * 8 an odd whole number,
+    // the only doubles exactly half way between two hundredths) goes to the even hundredth
+    const pyRound2 = x => {
+      const e = x * 8;
+      if (Number.isInteger(e) && e % 2 !== 0) { const h = x * 100, f = Math.floor(h); return (f % 2 === 0 ? f : f + 1) / 100; }
+      return Number(x.toFixed(2));
+    };
+    // obs_mosaic.steady_places: the chain plus a Gaussian (sigma smooth frames, cut at 3 sigma) of SPICE - chain
+    function places(t, smooth) {
+      const N = t.n.length, out = new Array(N);
+      if (smooth <= 0) return null;
+      for (let a = 0; a < N; a++) {
+        let sx = 0, sy = 0, sw = 0;
+        for (let b = 0; b < N; b++) {
+          const d = a - b;
+          if (Math.abs(d) > 3 * smooth) continue;
+          const w = Math.exp(-0.5 * (d / smooth) ** 2);
+          sx += w * (t.spice[b][0] - t.chain[b][0]); sy += w * (t.spice[b][1] - t.chain[b][1]); sw += w;
+        }
+        out[a] = [pyRound2(t.chain[a][0] + sx / sw), pyRound2(t.chain[a][1] + sy / sw)];
+      }
+      return out;
+    }
+    // obs_mosaic._place's corner of tile a in the canvas (k at OUT), at place o
+    const corner = (t, a, o) => [pyRound((o[0] + t.box[a][0] - t.view[0]) * t.k), pyRound((o[1] + t.box[a][1] - t.view[1]) * t.k)];
+    // how far frame a's tile moves from SPICE's place to its stabilized one, canvas pixels
+    function shift(t, pl, a) {
+      if (!pl) return [0, 0];
+      const s = corner(t, a, t.spice[a]), p = corner(t, a, pl[a]);
+      return [p[0] - s[0], p[1] - s[1]];
+    }
+    return { pyRound, pyRound2, places, shift };
+  };
+  window.cassiniSteadyMath = STEADY_MATH;
+  if (typeof document === "undefined") return;
+
+  // the worker: keeps each pass's table and its places per smoothing, moves a frame's picture
+  const src = `const M = (${STEADY_MATH.toString()})();
+const tables = new Map(), placed = new Map();
+onmessage = async e => {
+  const m = e.data;
+  if (m.table) { tables.set(m.key, m.table); return; }
+  const t = tables.get(m.key), pk = m.key + ":" + m.smooth, t0 = performance.now();
+  if (!placed.has(pk)) placed.set(pk, M.places(t, m.smooth));
+  const [dx, dy] = M.shift(t, placed.get(pk), m.i), t1 = performance.now();
+  const c = new OffscreenCanvas(m.bitmap.width, m.bitmap.height), g = c.getContext("2d");
+  g.drawImage(m.bitmap, dx, dy);
+  m.bitmap.close();
+  const blob = await c.convertToBlob({ type: "image/png" });
+  postMessage({ id: m.id, blob, dx, dy, ms: [t1 - t0, performance.now() - t1] });
+};`;
+  let worker = null, seq = 0;
+  const waiting = new Map();
+  const work = () => {
+    if (!worker) {
+      worker = new Worker(URL.createObjectURL(new Blob([src], { type: "text/javascript" })));
+      worker.onmessage = e => { const w = waiting.get(e.data.id); waiting.delete(e.data.id); if (w) w(e.data); };
+    }
+    return worker;
+  };
+  const S = () => window.cassiniSettings;
+  const byId = new Map();     // `${center}:${frame id}` -> {key, table, index of the id} once its pass's table is here
+  const asked = new Set();
+  const stats = { frames: 0, placeMs: 0, drawMs: 0, last: null };
+  let urls = [];
+  // the pass's table, asked for once (in the background); null until it is here and the pass can be done locally
+  function lookup(frames, id, center) {
+    const k = `${center ? 1 : 0}:${id}`;
+    if (byId.has(k)) return byId.get(k);
+    if (!asked.has(k)) {
+      asked.add(k);
+      fetch(`${frames}/frames/movie/${id}.steady.json?center=${center ? 1 : 0}`, { priority: "low" }).then(r => r.ok ? r.json() : null).then(t => {
+        if (!t || t.working) { setTimeout(() => asked.delete(k), 5000); return; }
+        const key = `${center ? 1 : 0}:${t.local ? t.ids[t.n[0]] : id}`;
+        if (!t.local) { byId.set(k, null); return; }
+        work().postMessage({ key, table: t });
+        t.n.forEach((n, a) => byId.set(`${center ? 1 : 0}:${t.ids[n]}`, { key, table: t, a }));
+      }).catch(() => asked.delete(k));
+    }
+    return null;
+  }
+  window.cassiniSteadyLocal = {
+    stats,
+    // the frame's pass table once it is here (null: the server draws the pass), asking for it as smoothFor does
+    async ready(frames, id, center = true) {
+      for (let tries = 0; tries < 120; tries++) {
+        const k = `${center ? 1 : 0}:${id}`;
+        if (byId.has(k)) return byId.get(k);
+        lookup(frames, id, center);
+        await new Promise(r => setTimeout(r, 500));
+      }
+      return null;
+    },
+    // the smoothing to work out here for this frame, or 0 when the server draws it (setting off, no stabilization,
+    // a trail, a color frame, a pass not done here, or its table not here yet)
+    smoothFor(frames, id, o = {}) {
+      if (!S() || !S().get("movies.stabilizeLocal") || !window.cassiniStabilize || !window.cassiniStabilize()) return 0;
+      if (S().get("movies.trail")) return 0;
+      const e = lookup(frames, id, o.center !== false);
+      if (!e || (e.table.colour && o.color)) return 0;
+      return window.cassiniStabilize();
+    },
+    // the picture of the frame (SPICE's places, OUT px) moved to its stabilized place: a new Image, or null
+    async apply(frames, id, im, o = {}) {
+      const e = byId.get(`${o.center !== false ? 1 : 0}:${id}`);
+      if (!e) return null;
+      const bitmap = await createImageBitmap(im), mid = ++seq;
+      const r = await new Promise(res => { waiting.set(mid, res); work().postMessage({ id: mid, key: e.key, i: e.a, smooth: o.smooth, bitmap }, [bitmap]); });
+      stats.frames++; stats.placeMs += r.ms[0]; stats.drawMs += r.ms[1]; stats.last = { id, dx: r.dx, dy: r.dy };
+      const url = URL.createObjectURL(r.blob), out = new Image();
+      urls.push(url);
+      if (urls.length > 8) URL.revokeObjectURL(urls.shift());
+      await new Promise((res, rej) => { out.onload = res; out.onerror = rej; out.src = url; });
+      out.dataset.steadyLocal = `${r.dx},${r.dy}`;
+      return out;
+    },
+  };
 })();
 </script>
 <script>
@@ -3083,7 +3218,13 @@ body.phone #launch .lx-clock { font-size: 9.5px; bottom: 9vh; }
     function view(k, et, sz) {
       // a pass played as a movie: the frame steadied by the server (SPICE-centered on the pass's one scale and view,
       // its color set drawn together), unless the server could not make that frame
-      if (playsMovie(k) && !movieFailed.has(catalog.id[k]) && !passCold(k)) return { key: movieUrl(catalog.id[k], sz), set: -1, k, movie: true };
+      if (playsMovie(k) && !movieFailed.has(catalog.id[k]) && !passCold(k)) {
+        // stabilized on this computer (steady-local.html): the server's frame at SPICE's places, at the 1024 px it is
+        // drawn at, moved here; the key names the smoothing, so a new one is a new picture (the request is the same)
+        const here = hereSmooth(k);
+        if (here) return { key: movieUrl(catalog.id[k], 1024, 0) + `#here=${here}`, set: -1, k, movie: true, here };
+        return { key: movieUrl(catalog.id[k], sz), set: -1, k, movie: true };
+      }
       // a mosaic movie (a raster repeated over the same places): its rolling mosaic, every place's newest tile
       if (playsRolling(k) && !movieFailed.has(catalog.id[k]) && !passCold(k)) return { key: rollingUrl(catalog.id[k], sz), set: -1, k, movie: true, rolling: true };
       const si = catalog.setOf[k], s = si >= 0 ? catalog.sets[si] : null;
@@ -3172,8 +3313,11 @@ body.phone #launch .lx-clock { font-size: 9.5px; bottom: 9vh; }
       im.fetchPriority = v.warm ? "low" : "high";   // the picture wanted now goes ahead of look-ahead requests
       im.onload = () => {
         lane[which] = null; warmed.add(v.key);
-        if (want && !hold && !v.warm && v.cat === catalog && fits(v)) display(v, im);   // no want: the camera went idle (or was held) while this loaded
-        pump();
+        // stabilized on this computer: the frame moved to its place first (a worker), then shown as any picture
+        const show = pic => { if (want && !hold && !v.warm && v.cat === catalog && fits(v)) display(v, pic); };   // no want: the camera went idle (or was held) while this loaded
+        if (v.here && !v.warm) window.cassiniSteadyLocal.apply(FRAMES, catalog.id[v.k], im, { center: centreOn() !== false, smooth: v.here })
+          .then(pic => show(pic || im), () => show(im)).then(pump);
+        else { show(im); pump(); }
       };
       im.onerror = () => {
         lane[which] = null;
@@ -3323,7 +3467,9 @@ body.phone #launch .lx-clock { font-size: 9.5px; bottom: 9vh; }
     // a pass played as a movie (the Mosaic / Movie switch, with Settings > Movie > Steady movie passes on): its
     // frames come from /frames/movie
     const playsMovie = k => S.get("movies.steady") && playsAs(k) === "movie";
-    const movieUrl = (id, sz) => `${FRAMES}/frames/movie/${id}.webp?size=${sz || size()}&color=${S.get("cameras.composites") ? 1 : 0}${window.cassiniMovieStyle({ center: centreOn() })}${window.cassiniLook()}`;
+    const movieUrl = (id, sz, steady) => `${FRAMES}/frames/movie/${id}.webp?size=${sz || size()}&color=${S.get("cameras.composites") ? 1 : 0}${window.cassiniMovieStyle({ center: centreOn(), steady })}${window.cassiniLook()}`;
+    // the smoothing frame k's movie picture is stabilized with on this computer, 0 when the server draws it
+    const hereSmooth = k => window.cassiniSteadyLocal ? window.cassiniSteadyLocal.smoothFor(FRAMES, catalog.id[k], { center: centreOn() !== false, color: !!S.get("cameras.composites") }) : 0;
     const movieFailed = new Set();    // frames the server did not steady: they show as they are
     // passes the server is still working out (a movie request failed): their frames show as they are, with the
     // steadying note, and the steady frame is asked for again every COLD_RETRY ms
@@ -3391,7 +3537,7 @@ body.phone #launch .lx-clock { font-size: 9.5px; bottom: 9vh; }
       while (thumbs.children.length > Math.min(7, fr.length)) thumbs.lastChild.remove();
       [...thumbs.children].forEach((im, j) => {
         const id = fr[first + j][0];
-        if (im.dataset.id !== id) { im.dataset.id = id; im.src = playsRolling(k) ? frameUrl(id, 128) : movieUrl(id, 128); }
+        if (im.dataset.id !== id) { im.dataset.id = id; im.src = playsRolling(k) ? frameUrl(id, 128) : movieUrl(id, 128, S.get("movies.stabilizeLocal") ? 0 : undefined); }
         im.classList.toggle("now", first + j === n);
         im.title = `${id} · ${fr[first + j][2]}`;
       });
