@@ -112,6 +112,8 @@ body.phone #hllist { grid-template-columns: 1fr; }
     H.i = i; H.auto = !!auto; H.jumping = true; mark();
     if (window.cassiniReel) window.cassiniReel.close();
     if (window.cassiniMovie && window.cassiniMovie.on) window.cassiniMovie.stop();
+    // a highlight is Cassini's moment: a body's view (its timeline, camera windows and skip-the-gaps clock) gives way to the mission
+    if (window.cassiniBodyMode && window.cassiniBodyMode.name) window.cassiniBodyMode.exit();
     // the camera windows that took the highlight's pictures come out; the other one is put away until the reel stops
     untuck();
     for (const [cam, id] of Object.entries(CAMS)) {
@@ -126,6 +128,8 @@ body.phone #hllist { grid-template-columns: 1fr; }
     H.left = e.end_et + 60; H.jumping = false;
   }
   function stop() { H.auto = false; untuck(); mark(); }
+  // opening a body's view stops Play all, which would otherwise move on to the next highlight and leave the body's view
+  document.addEventListener("cassini:bodymode", e => { if (e.detail.name && H.auto) stop(); });
   function next() { if (H.i + 1 < H.list.length) play(H.i + 1, true); else { stop(); H.i = -1; mark(); } }
   // Play all moves on a minute after a highlight's last picture; moving the clock away by hand stops it
   function tick() {
