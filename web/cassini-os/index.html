@@ -1563,6 +1563,23 @@ body.phone #finale .fx-data { width: min(220px, calc(100vw - 32px)); top: 10px; 
 body.phone #launch .cs-cap.big { font-size: 23px; }
 body.phone #launch .lx-road span { font-size: 11px; } body.phone #launch .lx-road small { font-size: 9.5px; }
 body.phone #launch .lx-clock { font-size: 9.5px; bottom: 9vh; }
+
+#hrel .hr-shade { position: absolute; inset: 0; background: linear-gradient(to top, rgba(0,0,0,.72) 0, rgba(0,0,0,.45) 22%, rgba(0,0,0,0) 46%); }
+/* tags on Cassini, the probe and Titan once the view pulls back */
+#hrel .hr-tag { position: absolute; left: 0; top: 0; font: 10.5px/1 var(--hudf); letter-spacing: .1em; text-transform: uppercase; color: rgba(232,236,242,.7);
+  white-space: nowrap; opacity: 0; transition: opacity 1s ease; text-shadow: 0 1px 6px rgba(0,0,0,.9); }
+#hrel .hr-tag::before { content: ""; display: inline-block; width: 14px; height: 1px; margin: 0 6px 3px 0; background: currentColor; vertical-align: middle; }
+#hrel .hr-tag.on { opacity: 1; }
+#hrel .hr-tag small { font-size: 9.5px; color: rgba(232,236,242,.45); letter-spacing: .06em; text-transform: none; }
+/* the last card's choices and sources */
+#hrel .cs-cap .btns { display: flex; gap: 10px; justify-content: center; flex-wrap: wrap; margin-top: 16px; }
+#hrel .cs-cap button { all: unset; pointer-events: auto; padding: 6px 15px; border-radius: 13px; border: 1px solid var(--q-line); background: rgba(16,17,20,.55);
+  color: rgba(232,236,242,.8); font-size: 12px; cursor: pointer; }
+#hrel .cs-cap button:hover { color: var(--q-text); border-color: rgba(232,236,242,.35); }
+#hrel .cs-cap small { font-size: 10.5px; color: rgba(232,236,242,.4); }
+#hrel .cs-cap small a { color: inherit; pointer-events: auto; }
+body.phone #hrel .cs-read { font-size: 9.5px; bottom: 9vh; white-space: normal; width: calc(100vw - 32px); text-align: center; line-height: 1.6; }
+body.phone #hrel .cs-note { bottom: auto; top: 40px; max-width: calc(100vw - 32px); }
 </style>
 </head>
 <body>
@@ -2002,6 +2019,19 @@ body.phone #launch .lx-clock { font-size: 9.5px; bottom: 9vh; }
   <div class="cs-black"></div>
   <div class="cs-caps"></div>
   <div class="lx-clock" aria-hidden="true"></div>
+  <button class="cs-skip" type="button">Skip ▸</button>
+</section>
+
+  <section id="hrel" class="cs-root" hidden aria-live="polite">
+  <div class="hr-shade"></div>
+  <div class="cs-black"></div>
+  <div class="hr-tag" data-tag="probe">Huygens</div>
+  <div class="hr-tag" data-tag="cassini">Cassini</div>
+  <div class="hr-tag" data-tag="titan">Titan</div>
+  <div class="cs-caps"></div>
+  <div class="cs-read" aria-hidden="true"></div>
+  <div class="cs-note">Cassini's path and pointing are its real trajectory and attitude. The release follows ESA's numbers; after the first seconds the clock runs faster.</div>
+  <div class="cs-hint">Drag to look around</div>
   <button class="cs-skip" type="button">Skip ▸</button>
 </section>
 
@@ -9025,7 +9055,7 @@ void main() {
 // ---------- About: what Cassini OS is, and every credit in one list (credits.json) ----------
 (function () {
   const $ = id => document.getElementById(id);
-  const CREDITS = {"groups":[{"title":"Cassini mission data","entries":[{"id":"iss","title":"Cassini camera pictures","credit":"NASA/JPL-Caltech/Space Science Institute","short":"NASA/JPL-Caltech/SSI","detail":"Every picture in the camera windows, mosaics, color sets, movies and highlights is a frame from Cassini's Imaging Science Subsystem (the narrow-angle and wide-angle cameras), archived by NASA's Planetary Data System, Cartography and Imaging Sciences Node. Cassini OS calibrates, stacks, aligns and centers them with SPICE; the colors are its own reconstruction, not NASA's.","license":"NASA material, not copyrighted in the US (NASA media usage guidelines)","url":"https://pds-imaging.jpl.nasa.gov/"},{"id":"spice","title":"Trajectory, pointing and planet positions","credit":"NASA/JPL Navigation and Ancillary Information Facility (NAIF), Cassini SPICE archive co-s_j_e_v-spice-6-v1.0","short":"NASA/JPL NAIF SPICE","detail":"Where Cassini, the planets and the moons were, which way Cassini pointed (its reconstructed attitude kernels), and the camera frames. Read with SpiceyPy.","license":"NASA material, not copyrighted in the US","url":"https://naif.jpl.nasa.gov/naif/"},{"id":"calibration","title":"Camera calibration","credit":"Cassini ISS team: CISSCAL and the Cassini ISS Data User's Guide (Porco et al. 2004; West et al. 2010; Knowles et al. 2020)","detail":"The steps and constants Cassini OS uses to turn raw frames into brightness (I/F): the bias, exposure, gain and per-filter sensitivity, and each filter's effective wavelength.","license":"Published by NASA's Planetary Data System","url":"https://pds-imaging.jpl.nasa.gov/documentation/iss_data_user_guide_180916.pdf"},{"id":"finale-data","title":"Grand Finale readings","credit":"NASA Planetary Data System, Planetary Plasma Interactions Node; Cassini INMS (Southwest Research Institute), MAG (Imperial College London) and RPWS (University of Iowa) teams","short":"NASA PDS · INMS, MAG, RPWS","detail":"The real readings from Cassini's last hour shown in the Grand Finale: INMS raw count rates (counts, not densities), the magnetometer at full resolution, and RPWS 60 s key parameters, from 15 September 2017.","license":"NASA material, not copyrighted in the US","url":"https://pds-ppi.igpp.ucla.edu/"},{"id":"facts","title":"Mission facts and numbers","credit":"NASA, NASA/JPL and ESA mission pages","detail":"The facts on the loading screen (each one names its source as it shows), and the numbers and timings the Grand Finale is pinned to (JPL, \"Cassini Spacecraft Makes Its Final Approach to Saturn\", 13 September 2017; \"Cassini by the Numbers\"), and the opening at the start of the mission (ESA, \"Cassini-Huygens: Launch information\"; NASA, \"Cassini Quick Facts\").","license":"Facts, with their sources named","url":"https://science.nasa.gov/mission/cassini/"}]},{"title":"Huygens probe","entries":[{"id":"disr","title":"Huygens descent pictures","credit":"ESA/NASA/JPL/University of Arizona; mosaics by Erich Karkoschka (DISR team)","short":"ESA/NASA/JPL/UA","detail":"The probe's own pictures of Titan from its Descent Imager/Spectral Radiometer (DISR), and the nested mosaics of the landing site (60 m down to 1 m per pixel) Erich Karkoschka assembled from them, from ESA's Planetary Science Archive (HP-SSA-DISR-2-3-EDR-RDR-V1.3).","license":"ESA Planetary Science Archive data","url":"https://archives.esac.esa.int/psa/"},{"id":"huygens-track","title":"Huygens trajectory","credit":"ESA Huygens Descent Trajectory Working Group (B. Kazeminejad, ESTEC), HP-SSA-DTWG-6-TRAJECTORY-V2.0; NASA/JPL NAIF","detail":"The probe's path through Titan's atmosphere to the ground; its coast from Cassini to Titan comes from NAIF's reconstructed trajectory.","license":"ESA Planetary Science Archive data","url":"https://archives.esac.esa.int/psa/"}]},{"title":"Surface maps and shapes","note":"Maps come from the Celestia project's CelestiaContent collection, resized into the 1k, 2k and 4k sizes; credit lines follow Celestia's license files. Maps marked \"No license stated\" are reworks of NASA/JPL and other material without a license file and will be rebuilt from public-domain originals before a public launch.","entries":[{"id":"map-saturn","title":"Saturn","credit":"Cassini imagery, Björn Jónsson; recolored by Askaniy Anpilogov (via Celestia)","license":"CC BY 3.0","url":"https://github.com/CelestiaProject/CelestiaContent","files":["saturn.webp"]},{"id":"map-rings","title":"Saturn's rings","credit":"Björn Jónsson ring data (Celestia composite)","license":"No license stated","url":"https://bjj.mmedia.is/","files":["rings/saturn_rings.png"]},{"id":"map-icy","title":"Mimas, Enceladus, Tethys, Dione, Iapetus","credit":"Paul Schenk's Cassini color maps (NASA/JPL/LPI), via Celestia","license":"No license stated","files":["mimas.webp","enceladus.webp","tethys.webp","dione.webp","iapetus.webp"]},{"id":"map-rhea","title":"Rhea","credit":"Paul Schenk's map and Björn Jónsson's albedo, via Celestia","license":"No license stated","files":["rhea.webp"]},{"id":"map-titan","title":"Titan","credit":"Cassini haze images, Gordan Ugarković, Kevin M. Gill, ShadowDragon777, AstroChara (via Celestia)","license":"CC BY 4.0","files":["titan.webp"]},{"id":"map-titan-surface","title":"Titan's surface","credit":"Cassini VIMS and ISS map (Seignovert et al. 2019) with radar lakes, via Celestia","license":"CC BY 3.0","files":["titan_surface.webp"]},{"id":"map-hyperion","title":"Hyperion","credit":"Map: reprojected Cassini imagery (ItzImcool), via Celestia. Shape: P. C. Thomas et al., NASA Planetary Data System","license":"Map CC BY 4.0; shape CC0","files":["hyperion.webp","models/hyperion.mesh.b64.txt"]},{"id":"map-phoebe","title":"Phoebe","credit":"Map: John van Vliet, via Celestia. Shape: R. W. Gaskell, NASA Planetary Data System","license":"No license stated","files":["phoebe.webp","models/phoebe.mesh.b64.txt"]},{"id":"shape-small-moons","title":"Saturn's small moons (shapes)","credit":"Pan, Daphnis, Atlas, Prometheus, Pandora, Epimetheus, Janus, Telesto, Calypso and Helene: P. Thomas, J. Joseph and T. Ansty, Saturn Small Moon Shape Models V1.0, NASA Planetary Data System, 2018 (doi:10.26033/ewy3-jy61), from Cassini ISS images; via Celestia","license":"CC0 1.0","files":["models/pan.mesh.b64.txt","models/daphnis.mesh.b64.txt","models/atlas.mesh.b64.txt","models/prometheus.mesh.b64.txt","models/pandora.mesh.b64.txt","models/epimetheus.mesh.b64.txt","models/janus.mesh.b64.txt","models/telesto.mesh.b64.txt","models/calypso.mesh.b64.txt","models/helene.mesh.b64.txt"]},{"id":"map-jupiter","title":"Jupiter","credit":"Cassini 2000 flyby and Juno data, recolored by Askaniy Anpilogov (via Celestia)","license":"CC BY 3.0","files":["jupiter.webp"]},{"id":"map-venus","title":"Venus","credit":"Cloud tops by Björn Jónsson, recolored by FarGetaNik (via Celestia)","license":"No license stated","files":["venus.webp"]},{"id":"map-earth","title":"Earth","credit":"\"Mappamondo\" (earthstartsbeating.com), Natural Earth II (Tom Patterson), NASA Blue Marble Next Generation (via Celestia)","license":"No license stated","files":["earth.webp"]},{"id":"map-moon","title":"The Moon","credit":"Celestia's lunar map (NASA data)","license":"No license stated","files":["moon.webp"]},{"id":"map-io","title":"Io","credit":"ItzImcool, AstroChara; NASA/JPL-Caltech/ASI/USGS; NASA/JPL/SwRI/MSSS/Gerald Eichstädt/Jason Perry/John Rogers (via Celestia)","license":"CC BY 4.0","files":["io.webp"]},{"id":"map-europa","title":"Europa","credit":"John van Vliet (via Celestia)","license":"No license stated","files":["europa.webp"]},{"id":"map-ganymede","title":"Ganymede","credit":"Askaniy Anpilogov; NASA/JPL-Caltech/ASI/USGS; Björn Jónsson; NASA/JPL-Caltech/SwRI/MSSS/Brian Swift (via Celestia)","license":"CC BY 3.0","files":["ganymede.webp"]},{"id":"map-callisto","title":"Callisto","credit":"Askaniy Anpilogov, from John van Vliet's map (via Celestia)","license":"No license stated","files":["callisto.webp"]}]},{"title":"Sky","entries":[{"id":"star-sky","title":"Stars and the Milky Way","credit":"NASA/Goddard Space Flight Center Scientific Visualization Studio. Gaia DR2: ESA/Gaia/DPAC","short":"NASA SVS Deep Star Maps","detail":"The background sky, from NASA's \"Deep Star Maps 2020\": Hipparcos, Tycho-2 and Gaia DR2 stars plus the Milky Way, placed in J2000 where Cassini saw them.","license":"NASA material, public domain","url":"https://svs.gsfc.nasa.gov/4851","files":["sky/sky_2k.webp","sky/sky_4k.webp","sky/sky_8k.webp"]}]},{"title":"Spacecraft","entries":[{"id":"model","title":"Cassini-Huygens 3D model","credit":"NASA/JPL-Caltech, NASA 3D Resources \"Cassini-Huygens\"","detail":"The spacecraft in the 3D view and the wireframe on the loading screen (decoded from Draco compression for the page).","license":"NASA material, not copyrighted in the US","url":"https://github.com/nasa/NASA-3D-Resources"}]},{"title":"Sound","entries":[{"id":"sound","title":"Sonification","credit":"Made for Cassini OS, after Erich Karkoschka's \"Titan Descent Data Movie with Bells and Whistles\" (DISR team, University of Arizona)","detail":"Every sound is synthesized in the browser from what Cassini is doing (no recordings); the idea of a chime for each instrument part follows Karkoschka's Huygens descent movie.","license":"Part of Cassini OS"}]},{"title":"Software and fonts","entries":[{"id":"threejs","title":"three.js","credit":"three.js authors, r128, with OrbitControls and GLTFLoader","license":"MIT","url":"https://threejs.org/"},{"id":"draco","title":"Draco","credit":"Google, used to decode the spacecraft model ahead of time","license":"Apache 2.0","url":"https://google.github.io/draco/"},{"id":"pipeline-libs","title":"Picture pipeline","credit":"SpiceyPy (Andrew Annex et al.), NumPy, pandas, OpenCV, Pillow, scikit-image, Matplotlib","detail":"The Python libraries the frame server and the image pipeline run on.","license":"MIT, BSD and Apache 2.0 (each project's own)"},{"id":"font-silkscreen","title":"Silkscreen","credit":"Jason Kottke, via Google Fonts","license":"SIL Open Font License 1.1","url":"https://fonts.google.com/specimen/Silkscreen"},{"id":"font-sharetech","title":"Share Tech Mono","credit":"Carrois Apostrophe, via Google Fonts","license":"SIL Open Font License 1.1","url":"https://fonts.google.com/specimen/Share+Tech+Mono"}]}]};
+  const CREDITS = {"groups":[{"title":"Cassini mission data","entries":[{"id":"iss","title":"Cassini camera pictures","credit":"NASA/JPL-Caltech/Space Science Institute","short":"NASA/JPL-Caltech/SSI","detail":"Every picture in the camera windows, mosaics, color sets, movies and highlights is a frame from Cassini's Imaging Science Subsystem (the narrow-angle and wide-angle cameras), archived by NASA's Planetary Data System, Cartography and Imaging Sciences Node. Cassini OS calibrates, stacks, aligns and centers them with SPICE; the colors are its own reconstruction, not NASA's.","license":"NASA material, not copyrighted in the US (NASA media usage guidelines)","url":"https://pds-imaging.jpl.nasa.gov/"},{"id":"spice","title":"Trajectory, pointing and planet positions","credit":"NASA/JPL Navigation and Ancillary Information Facility (NAIF), Cassini SPICE archive co-s_j_e_v-spice-6-v1.0","short":"NASA/JPL NAIF SPICE","detail":"Where Cassini, the planets and the moons were, which way Cassini pointed (its reconstructed attitude kernels), and the camera frames. Read with SpiceyPy.","license":"NASA material, not copyrighted in the US","url":"https://naif.jpl.nasa.gov/naif/"},{"id":"calibration","title":"Camera calibration","credit":"Cassini ISS team: CISSCAL and the Cassini ISS Data User's Guide (Porco et al. 2004; West et al. 2010; Knowles et al. 2020)","detail":"The steps and constants Cassini OS uses to turn raw frames into brightness (I/F): the bias, exposure, gain and per-filter sensitivity, and each filter's effective wavelength.","license":"Published by NASA's Planetary Data System","url":"https://pds-imaging.jpl.nasa.gov/documentation/iss_data_user_guide_180916.pdf"},{"id":"finale-data","title":"Grand Finale readings","credit":"NASA Planetary Data System, Planetary Plasma Interactions Node; Cassini INMS (Southwest Research Institute), MAG (Imperial College London) and RPWS (University of Iowa) teams","short":"NASA PDS · INMS, MAG, RPWS","detail":"The real readings from Cassini's last hour shown in the Grand Finale: INMS raw count rates (counts, not densities), the magnetometer at full resolution, and RPWS 60 s key parameters, from 15 September 2017.","license":"NASA material, not copyrighted in the US","url":"https://pds-ppi.igpp.ucla.edu/"},{"id":"facts","title":"Mission facts and numbers","credit":"NASA, NASA/JPL and ESA mission pages","detail":"The facts on the loading screen (each one names its source as it shows), and the numbers and timings the Grand Finale is pinned to (JPL, \"Cassini Spacecraft Makes Its Final Approach to Saturn\", 13 September 2017; \"Cassini by the Numbers\"), and the opening at the start of the mission (ESA, \"Cassini-Huygens: Launch information\"; NASA, \"Cassini Quick Facts\").","license":"Facts, with their sources named","url":"https://science.nasa.gov/mission/cassini/"}]},{"title":"Huygens probe","entries":[{"id":"disr","title":"Huygens descent pictures","credit":"ESA/NASA/JPL/University of Arizona; mosaics by Erich Karkoschka (DISR team)","short":"ESA/NASA/JPL/UA","detail":"The probe's own pictures of Titan from its Descent Imager/Spectral Radiometer (DISR), and the nested mosaics of the landing site (60 m down to 1 m per pixel) Erich Karkoschka assembled from them, from ESA's Planetary Science Archive (HP-SSA-DISR-2-3-EDR-RDR-V1.3).","license":"ESA Planetary Science Archive data","url":"https://archives.esac.esa.int/psa/"},{"id":"huygens-track","title":"Huygens trajectory","credit":"ESA Huygens Descent Trajectory Working Group (B. Kazeminejad, ESTEC), HP-SSA-DTWG-6-TRAJECTORY-V2.0; NASA/JPL NAIF","detail":"The probe's path through Titan's atmosphere to the ground; its coast from Cassini to Titan comes from NAIF's reconstructed trajectory.","license":"ESA Planetary Science Archive data","url":"https://archives.esac.esa.int/psa/"}]},{"title":"Surface maps and shapes","note":"Maps come from the Celestia project's CelestiaContent collection, resized into the 1k, 2k and 4k sizes; credit lines follow Celestia's license files. Maps marked \"No license stated\" are reworks of NASA/JPL and other material without a license file and will be rebuilt from public-domain originals before a public launch.","entries":[{"id":"map-saturn","title":"Saturn","credit":"Cassini imagery, Björn Jónsson; recolored by Askaniy Anpilogov (via Celestia)","license":"CC BY 3.0","url":"https://github.com/CelestiaProject/CelestiaContent","files":["saturn.webp"]},{"id":"map-rings","title":"Saturn's rings","credit":"Björn Jónsson ring data (Celestia composite)","license":"No license stated","url":"https://bjj.mmedia.is/","files":["rings/saturn_rings.png"]},{"id":"map-icy","title":"Mimas, Enceladus, Tethys, Dione, Iapetus","credit":"Paul Schenk's Cassini color maps (NASA/JPL/LPI), via Celestia","license":"No license stated","files":["mimas.webp","enceladus.webp","tethys.webp","dione.webp","iapetus.webp"]},{"id":"map-rhea","title":"Rhea","credit":"Paul Schenk's map and Björn Jónsson's albedo, via Celestia","license":"No license stated","files":["rhea.webp"]},{"id":"map-titan","title":"Titan","credit":"Cassini haze images, Gordan Ugarković, Kevin M. Gill, ShadowDragon777, AstroChara (via Celestia)","license":"CC BY 4.0","files":["titan.webp"]},{"id":"map-titan-surface","title":"Titan's surface","credit":"Cassini VIMS and ISS map (Seignovert et al. 2019) with radar lakes, via Celestia","license":"CC BY 3.0","files":["titan_surface.webp"]},{"id":"map-hyperion","title":"Hyperion","credit":"Map: reprojected Cassini imagery (ItzImcool), via Celestia. Shape: P. C. Thomas et al., NASA Planetary Data System","license":"Map CC BY 4.0; shape CC0","files":["hyperion.webp","models/hyperion.mesh.b64.txt"]},{"id":"map-phoebe","title":"Phoebe","credit":"Map: John van Vliet, via Celestia. Shape: R. W. Gaskell, NASA Planetary Data System","license":"No license stated","files":["phoebe.webp","models/phoebe.mesh.b64.txt"]},{"id":"shape-small-moons","title":"Saturn's small moons (shapes)","credit":"Pan, Daphnis, Atlas, Prometheus, Pandora, Epimetheus, Janus, Telesto, Calypso and Helene: P. Thomas, J. Joseph and T. Ansty, Saturn Small Moon Shape Models V1.0, NASA Planetary Data System, 2018 (doi:10.26033/ewy3-jy61), from Cassini ISS images; via Celestia","license":"CC0 1.0","files":["models/pan.mesh.b64.txt","models/daphnis.mesh.b64.txt","models/atlas.mesh.b64.txt","models/prometheus.mesh.b64.txt","models/pandora.mesh.b64.txt","models/epimetheus.mesh.b64.txt","models/janus.mesh.b64.txt","models/telesto.mesh.b64.txt","models/calypso.mesh.b64.txt","models/helene.mesh.b64.txt"]},{"id":"map-jupiter","title":"Jupiter","credit":"Cassini 2000 flyby and Juno data, recolored by Askaniy Anpilogov (via Celestia)","license":"CC BY 3.0","files":["jupiter.webp"]},{"id":"map-venus","title":"Venus","credit":"Cloud tops by Björn Jónsson, recolored by FarGetaNik (via Celestia)","license":"No license stated","files":["venus.webp"]},{"id":"map-earth","title":"Earth","credit":"\"Mappamondo\" (earthstartsbeating.com), Natural Earth II (Tom Patterson), NASA Blue Marble Next Generation (via Celestia)","license":"No license stated","files":["earth.webp"]},{"id":"map-moon","title":"The Moon","credit":"Celestia's lunar map (NASA data)","license":"No license stated","files":["moon.webp"]},{"id":"map-io","title":"Io","credit":"ItzImcool, AstroChara; NASA/JPL-Caltech/ASI/USGS; NASA/JPL/SwRI/MSSS/Gerald Eichstädt/Jason Perry/John Rogers (via Celestia)","license":"CC BY 4.0","files":["io.webp"]},{"id":"map-europa","title":"Europa","credit":"John van Vliet (via Celestia)","license":"No license stated","files":["europa.webp"]},{"id":"map-ganymede","title":"Ganymede","credit":"Askaniy Anpilogov; NASA/JPL-Caltech/ASI/USGS; Björn Jónsson; NASA/JPL-Caltech/SwRI/MSSS/Brian Swift (via Celestia)","license":"CC BY 3.0","files":["ganymede.webp"]},{"id":"map-callisto","title":"Callisto","credit":"Askaniy Anpilogov, from John van Vliet's map (via Celestia)","license":"No license stated","files":["callisto.webp"]}]},{"title":"Sky","entries":[{"id":"star-sky","title":"Stars and the Milky Way","credit":"NASA/Goddard Space Flight Center Scientific Visualization Studio. Gaia DR2: ESA/Gaia/DPAC","short":"NASA SVS Deep Star Maps","detail":"The background sky, from NASA's \"Deep Star Maps 2020\": Hipparcos, Tycho-2 and Gaia DR2 stars plus the Milky Way, placed in J2000 where Cassini saw them.","license":"NASA material, public domain","url":"https://svs.gsfc.nasa.gov/4851","files":["sky/sky_2k.webp","sky/sky_4k.webp","sky/sky_8k.webp"]}]},{"title":"Spacecraft","entries":[{"id":"model","title":"Cassini-Huygens 3D model","credit":"NASA/JPL-Caltech, NASA 3D Resources \"Cassini-Huygens\"","detail":"The spacecraft in the 3D view and the wireframe on the loading screen (decoded from Draco compression for the page).","license":"NASA material, not copyrighted in the US","url":"https://github.com/nasa/NASA-3D-Resources"},{"id":"huygens-dm","title":"Huygens 3D models (entry shell and descent module)","credit":"ESA SPICE Service (Huygens SPICE dataset, doi:10.5270/esa-ssem3np)","detail":"Huygens from its mounting on Cassini to Titan's surface: ESA's meshes from its Cosmographia \"Huygens descent\" set, the entry shell split into the back cover and the heat shield that come off during the descent, and the descent module under its parachutes and on Titan's surface; scaled to the real sizes and colored for Cassini OS.","license":"CC BY-NC 3.0 IGO","url":"https://spiftp.esac.esa.int/data/SPICE/HUYGENS/misc/cosmo/models/"}]},{"title":"Sound","entries":[{"id":"sound","title":"Sonification","credit":"Made for Cassini OS, after Erich Karkoschka's \"Titan Descent Data Movie with Bells and Whistles\" (DISR team, University of Arizona)","detail":"Every sound is synthesized in the browser from what Cassini is doing (no recordings); the idea of a chime for each instrument part follows Karkoschka's Huygens descent movie.","license":"Part of Cassini OS"}]},{"title":"Software and fonts","entries":[{"id":"threejs","title":"three.js","credit":"three.js authors, r128, with OrbitControls and GLTFLoader","license":"MIT","url":"https://threejs.org/"},{"id":"draco","title":"Draco","credit":"Google, used to decode the spacecraft model ahead of time","license":"Apache 2.0","url":"https://google.github.io/draco/"},{"id":"pipeline-libs","title":"Picture pipeline","credit":"SpiceyPy (Andrew Annex et al.), NumPy, pandas, OpenCV, Pillow, scikit-image, Matplotlib","detail":"The Python libraries the frame server and the image pipeline run on.","license":"MIT, BSD and Apache 2.0 (each project's own)"},{"id":"font-silkscreen","title":"Silkscreen","credit":"Jason Kottke, via Google Fonts","license":"SIL Open Font License 1.1","url":"https://fonts.google.com/specimen/Silkscreen"},{"id":"font-sharetech","title":"Share Tech Mono","credit":"Carrois Apostrophe, via Google Fonts","license":"SIL Open Font License 1.1","url":"https://fonts.google.com/specimen/Share+Tech+Mono"}]}]};
   const card = $("about"), nav = $("anav"), pane = $("apane");
   const esc = s => String(s).replace(/[&<>"]/g, c => ({ "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;" })[c]);
   const TABS = {
@@ -9071,7 +9101,7 @@ void main() {
   window.cassiniAbout = { open, addTab, esc, close: () => show(false), credits: CREDITS };
 
   // ---- which version this is: this page's build id (build.py writes it), and what the frame server says it serves ----
-  const BUILD = /*BUILD*/"b35ddc289f26";
+  const BUILD = /*BUILD*/"d3061889f0a6";
   const FRAMES = (() => {                       // the frame server, chosen as the camera window chooses it
     const q = new URLSearchParams(location.search).get("frames");
     if (q) return q.replace(/\/$/, "");
@@ -10268,7 +10298,7 @@ function build() {
 
   // always-visible dots so small or distant bodies never vanish
   const names = Object.keys(meshes).concat(["CASSINI"]);
-  if (probe) {
+  if (probe || window.studyCoast) {
     pos.HUYGENS = v3(); probeObj = new THREE.Object3D(); names.push("HUYGENS");
     const N = 600, pg = new THREE.BufferGeometry();
     pg.setAttribute("position", new THREE.BufferAttribute(new Float32Array(N * 3), 3));
@@ -10361,7 +10391,7 @@ function inContext(name) {
   if (PLANETS.includes(name)) return name === "SATURN" || state.context === "SUN" || state.focus === "SUN" || state.context === name;
   return state.context === parentOf(name);
 }
-function probeActive() { return !!probe && state.et >= probe.track.start && state.et <= probe.track.end; }
+function probeActive() { return !!probe && state.et >= probe.track.start && state.et <= probe.track.end || !probe && !!window.studyCoast && studyCoast.active(state.et); }
 function objPos(n) { return n === "CASSINI" ? cassini.position : n === "HUYGENS" ? probeObj.position : meshes[n].group.position; }
 function shown(name) {
   if (name === "HUYGENS") return probeActive();
@@ -10377,7 +10407,12 @@ function relScene(name, out) { sub(pos[name], pos[state.focus], tmp); return toS
 function updateBodies() {
   for (const name in tracks) positionAt(tracks[name], state.et, pos[name]);
   if (window.studyPositions) window.studyPositions();
-  if (probe) { positionAt(probe.track, state.et, pos.HUYGENS); relScene("HUYGENS", probeObj.position); }
+  if (pos.HUYGENS) {
+    if (probe) positionAt(probe.track, state.et, pos.HUYGENS);
+    if (window.studyCoast) studyCoast.place(state.et, pos.HUYGENS);
+    relScene("HUYGENS", probeObj.position);
+    if (window.studyCoast) studyCoast.draw();
+  }
   state.target = imagingTarget();
   state.context = systemOf();
   const sunv = norm(sub(pos.SUN, pos[present("SATURN") ? "SATURN" : "CASSINI"], tmp2));
@@ -10618,7 +10653,7 @@ function updateHuygensMap() {
 // Huygens' path relative to Titan over the last 12 hours, up to landing
 function updateProbeTrail() {
   if (!probeTrail) return;
-  probeTrail.visible = probeActive() && state.et < probe.events.landing + 6 * 3600;
+  probeTrail.visible = !!probe && probeActive() && state.et < probe.events.landing + 6 * 3600;
   if (!probeTrail.visible) return;
   const N = probeTrail.userData.N, p = probeTrail.geometry.attributes.position.array, c = probeTrail.geometry.attributes.color.array;
   const a = v3(), b = v3(), d = v3(), now0 = v3(), v = new THREE.Vector3();
@@ -10749,7 +10784,7 @@ function updateHud() {
     : `Cassini is <b>${fmtInt(alt)} km</b> above ${titleCase(ref)} · <b>${vrel.toFixed(2)} km/s</b>`;
 
   const pe = $("probe");
-  pe.hidden = !probeActive();
+  pe.hidden = !probe || !probeActive();
   if (!pe.hidden) {
     const ev = probe.events, t = state.et;
     if (t >= ev.landing) pe.innerHTML = `Huygens has been on Titan's surface for <b>${fmtDur(t - ev.landing)}</b>`;
@@ -10944,10 +10979,10 @@ function setFocus(name, dist) {
   if (!pos[name] || (name !== "HUYGENS" && !present(name))) return;
   if (name !== "CASSINI" && state.follow) setFollow(false);
   const old = camera.position.clone();
-  const d = dist || (name === "CASSINI" ? 3.5e-5 : name === "HUYGENS" ? 4 : name === "SUN" ? 6e5 : name === "SATURN" ? 420 : Math.max(bodyRadius(name) / KM * 7, 0.004));
+  const d = dist || (name === "CASSINI" ? 3.5e-5 : name === "HUYGENS" ? (window.studyCoast && studyCoast.modelShown(state.et) ? 1.6e-5 : 4) : name === "SUN" ? 6e5 : name === "SATURN" ? 420 : Math.max(bodyRadius(name) / KM * 7, 0.004));
   state.focus = name;
   let dir = old.lengthSq() > 0 ? old.normalize() : new THREE.Vector3(0, 0.3, 1).normalize();
-  if (name === "HUYGENS") {
+  if (name === "HUYGENS" && !(window.studyCoast && studyCoast.modelShown(state.et))) {
     // from the side, a little above the probe, so it sits against Titan's limb
     toScene(norm(sub(pos.HUYGENS, pos.TITAN, v3())), vA);
     const side = new THREE.Vector3().crossVectors(vA, new THREE.Vector3(0, 1, 0)).normalize();
@@ -10966,7 +11001,7 @@ function setFocus(name, dist) {
 }
 // focus chips for the bodies on stage now: the cruise planets, Jupiter's moons near Jupiter, Saturn's at Saturn
 function focusChoices() {
-  const near = probe && state.et > probe.track.start - 30 * 86400 && state.et < probe.track.end + 30 * 86400;
+  const near = probeActive() || probe && state.et > probe.track.start - 30 * 86400 && state.et < probe.track.end + 30 * 86400;
   const rest = [...CRUISE_FOCUS, ...FOCUS_LIST.slice(1)].filter(n => present(n) && (n === "SATURN" || inContext(n)));
   const sun = mission && (state.context === "SUN" || state.focus === "SUN") ? ["SUN"] : [];   // the inner solar system from above
   return ["CASSINI", ...sun, ...(near || (probe && !mission) ? ["HUYGENS"] : []), ...rest];
@@ -11204,20 +11239,24 @@ function frame(now) {
   if (window.studyCamera) window.studyCamera();
   const draw = !window.cassiniPerf || cassiniPerf.draw(now);
   if (draw) renderer.clear();
-  const cd = camera.position.distanceTo(cassini.position);
+  const closeObjs = [cassini].concat(window.studyCloseObjects ? studyCloseObjects() : []);
+  let cRef = cassini, cd = camera.position.distanceTo(cassini.position);
+  for (const o of closeObjs) { const d = camera.position.distanceTo(o.position); if (o.visible && d < cd) { cd = d; cRef = o; } }
   if (!draw) {}
   else if (cd < 0.01) {
     camera.layers.disable(1);
     renderer.render(scene, camera);
     camera.layers.enable(1);
-    const K = 1e6, cs = cassini.scale.x;
-    closeCam.position.copy(camera.position).sub(cassini.position).multiplyScalar(K).add(cassini.position); closeCam.quaternion.copy(camera.quaternion);
-    closeCam.fov = camera.fov; closeCam.aspect = camera.aspect; closeCam.near = cd * 0.02 * K; closeCam.far = cd * 60 * K;
+    const K = 1e6, O = cRef.position.clone(), keep = closeObjs.map(o => [o.position.clone(), o.scale.clone()]);
+    let far = cd * 60;
+    for (const o of closeObjs) if (o.visible) far = Math.max(far, Math.min(camera.position.distanceTo(o.position) * 1.5, 0.02));
+    closeCam.position.copy(camera.position).sub(O).multiplyScalar(K).add(O); closeCam.quaternion.copy(camera.quaternion);
+    closeCam.fov = camera.fov; closeCam.aspect = camera.aspect; closeCam.near = cd * 0.02 * K; closeCam.far = far * K;
     closeCam.updateProjectionMatrix();
-    cassini.scale.setScalar(cs * K);
+    for (const o of closeObjs) { o.position.sub(O).multiplyScalar(K).add(O); o.scale.multiplyScalar(K); }
     renderer.clearDepth();
     renderer.render(scene, closeCam);
-    cassini.scale.setScalar(cs);
+    closeObjs.forEach((o, i) => { o.position.copy(keep[i][0]); o.scale.copy(keep[i][1]); });
   } else renderer.render(scene, camera);
   if (hudRenderer && draw && !document.body.classList.contains("nohud")) {
     if (window.studyBeforeHud) window.studyBeforeHud();
@@ -12089,6 +12128,31 @@ function frame(now) {
 })();
 </script>
 <script>
+window.huygensModels = (() => {
+  const FILES = { shell: "models/huygens_shell.glb.b64.txt", dm: "models/huygens_dm.glb.b64.txt" };
+  const loads = {};   // name: a promise of the loaded scene
+  function load(name) {
+    if (!loads[name]) loads[name] = new Promise((ok, fail) => {
+      if (!window.THREE || !THREE.GLTFLoader) return fail(new Error("no GLTFLoader"));
+      fetch(FILES[name]).then(r => { if (!r.ok) throw new Error(r.status); return r.text(); }).then(t => {
+        const b = atob(t.trim()), u = new Uint8Array(b.length);
+        for (let i = 0; i < b.length; i++) u[i] = b.charCodeAt(i);
+        new THREE.GLTFLoader().parse(u.buffer, "", gltf => {
+          gltf.scene.traverse(o => { o.layers.set(1); if (o.isMesh) o.material.vertexColors = true; });
+          ok(gltf.scene);
+        }, fail);
+      }).catch(fail);
+    });
+    return loads[name];
+  }
+  return {
+    get(name, then) {
+      load(name).then(s => then(s.clone())).catch(err => console.warn(`Huygens model ${name} not loaded`, err));
+    },
+  };
+})();
+</script>
+<script>
 // ---------- the Grand Finale: Cassini's last minute and a mission recap, at the end of the data ----------
 (function () {
   const root = document.getElementById("finale"), black = root.querySelector(".cs-black"), caps = root.querySelector(".cs-caps"), air = root.querySelector(".fx-air");
@@ -12723,5 +12787,348 @@ function frame(now) {
   window.cassiniLaunch = { play, skip: () => CS.end("launch"), get running() { return !!L; } };
   // ?launch plays it as soon as the start of the mission is loaded
   CS.fromUrl("launch", () => coverage[0], () => { start.spend(); play(); });
+})();
+</script>
+<script>
+// ---------- Huygens lets go: the probe's release from Cassini, 2004-12-25 02:00 UTC, and the probe on its own after ----------
+(function () {
+  const root = document.getElementById("hrel"), black = root.querySelector(".cs-black"), caps = root.querySelector(".cs-caps");
+  const read = root.querySelector(".cs-read"), note = root.querySelector(".cs-note"), hint = root.querySelector(".cs-hint");
+  const tags = {}; root.querySelectorAll("[data-tag]").forEach(el => { tags[el.dataset.tag] = el; });
+  // what every cutscene shares (cutscene.html)
+  const CS = cassiniCutscene, { fadeTo, sound, look } = CS, runCaptions = (list, t, shown) => CS.runCaptions(caps, list, t, shown);
+  // ESA's numbers and facts, written in by build.py from huygens-release-data.json:
+  // { release_utc, speed_m_s, spin_rpm, mass_kg, getaway_utc, facts: [{ id, text, source }] }
+  const DATA = {"release_utc":"2004-12-25T02:00:00","speed_m_s":0.35,"spin_rpm":7.5,"mass_kg":320,"getaway_utc":"2004-12-27T23:45:00","getaway_note":"Cassini's getaway burn (ESA: 28 December, about 24 m/s), timed from the reconstructed trajectory: a 23.8 m/s step between 23:30 and 00:00 UTC. Without the probe's own track, ESA's separation numbers place it until then.","facts":[{"id":"time","text":"Huygens separated from Cassini on 25 December 2004 at 02:00 UTC.","source":"https://sci.esa.int/web/cassini-huygens/34956-huygens-probe-separation"},{"id":"coast_mode","text":"Cassini switched to coast mode, with its RCS thrusters inhibited, 10 seconds before separation; they were re-enabled about 60 seconds after.","source":"https://sci.esa.int/web/cassini-huygens/34956-huygens-probe-separation"},{"id":"sed","text":"The Spin/Eject Device released Huygens at about 0.35 m/s relative speed and a spin of 7.5 rpm; the whole release took about 0.15 seconds.","source":"https://sci.esa.int/web/cassini-huygens/34956-huygens-probe-separation"},{"id":"how","text":"Pyrotechnic devices fired, then push-off springs, ramps and rollers moved the probe away from the orbiter.","source":"https://www.esa.int/Newsroom/Press_Releases/Huygens_begins_its_final_journey_into_the_unknown"},{"id":"mass","text":"The probe weighs 320 kg; the two spacecraft together weighed 5548 kg at launch.","source":"https://www.esa.int/Newsroom/Press_Releases/Huygens_begins_its_final_journey_into_the_unknown"},{"id":"spin_confirmed","text":"Cassini's magnetometer saw the probe's spin and confirmed 7.5 revolutions per minute, the rate predicted.","source":"https://innovations-report.com/physics-and-astronomy/report-38699"},{"id":"news","text":"There was no contact with Earth during the release; Cassini recorded it, then turned to Earth, and the signal took 1 hour 8 minutes to arrive from 1.2 billion km away.","source":"https://www.esa.int/Newsroom/Press_Releases/Huygens_begins_its_final_journey_into_the_unknown"},{"id":"coast","text":"The probe coasted, dormant, for 20 days; its timer started it up about 5 hours before it reached the entry altitude of 1270 km above Titan.","source":"https://sci.esa.int/web/cassini-huygens/34956-huygens-probe-separation"},{"id":"odm","text":"On 28 December 2004 Cassini made a deflection manoeuvre of about 24 m/s so it would fly past Titan at 60,000 km instead of following the probe.","source":"https://sci.esa.int/web/cassini-huygens/34956-huygens-probe-separation"},{"id":"entry","text":"Huygens entered Titan's atmosphere on 14 January 2005 at about 09:06 UTC, at about 6 km/s and a steep 65 degrees.","source":"https://www.esa.int/Newsroom/Press_Releases/Huygens_begins_its_final_journey_into_the_unknown"}]};
+  if (!DATA) return;
+  const RELEASE = utcToEt(DATA.release_utc);
+  const SPEED = DATA.speed_m_s, SPIN = DATA.spin_rpm * 2 * Math.PI / 60;   // m/s, rad/s
+  const LEAD = 8;              // s of mission time shown before the release
+  const REAL = 16;             // screen s that run in real time
+  const WARP = 30;             // how much faster the clock runs after that
+  const RAMP = 6;              // screen s to reach it
+  const PULL = 26;             // screen s when the camera starts to pull back
+  const END = 59;              // screen s when it closes by itself
+  const SPIN_MAX = 2.4;        // rad/s, the most the drawn spin turns, so the sped-up clock does not strobe it
+  const FAR_M = 11;            // m from the probe the camera ends
+  const esc = t => String(t).replace(/[&<>"]/g, c => ({ "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;" })[c]);
+  const SOURCES = [...new Set(DATA.facts.map(f => f.source))].map(u => `<a href="${esc(u)}" target="_blank" rel="noopener">${esc(new URL(u).hostname.replace(/^www\./, ""))}</a>`).join(" · ");
+  // the near part, in mission seconds from the release: when, how long, the line, a class, the chord under it
+  const NEAR = [
+    [-7.8, 4.2, `<b>December 25, 2004 · 02:00 UTC</b>Seven years after leaving Earth together, Cassini lets go of Huygens.`, "", [0, 2, 4]],
+    [-3.6, 3.8, `Ten seconds before, Cassini's thrusters are switched off, so nothing nudges the probe on its way out.`, "", null],
+    [0.2, 4.5, `Pyrotechnic devices fire, and springs push the probe out on rollers. The whole release takes 0.15 seconds.`, "", [0, 2, 4, 7]],
+    [4.8, 7, `It leaves at ${Math.round(SPEED * 100)} centimeters a second, spinning ${DATA.spin_rpm} times a minute so it holds steady all the way to Titan.`, "", null],
+    [60, 999, `A minute later Cassini's thrusters wake again.`, "", null],
+  ];
+  // the far part, in screen seconds: when, how long, the line, a class, the chord
+  const FAR_CAPS = [
+    [PULL + 1, 7, `<b>${DATA.mass_kg} kg · 20 days to Titan</b>Huygens sleeps now. A timer wakes it about five hours before it reaches Titan's air.`, "", [1, 3, 5]],
+    [PULL + 8, 7, `Three days later Cassini fires its engine to swerve aside, so it can pass Titan 60,000 km away and listen.`, "", [0, 3, 5]],
+    [PULL + 15, 7, `No one saw it live. Cassini recorded the release, then turned to Earth: the news took 1 hour 8 minutes to arrive.`, "", [2, 4, 7]],
+    [PULL + 22, 99, `<b>Next · January 14, 2005</b>Huygens falls through Titan's haze and lands.<div class="btns"><button type="button" data-hr="stay">Stay with Huygens</button><button type="button" data-hr="landing">Watch the landing</button><button type="button" data-hr="back">Back to Cassini</button></div><small>Sources: ${SOURCES}</small>`, "big", [0, 2, 4, 7, 9]],
+  ];
+
+  let H = null;   // the running cutscene
+  const clamp01 = x => Math.max(0, Math.min(1, x));
+  const ease = x => { x = clamp01(x); return x * x * (3 - 2 * x); };
+  const sprite = CS.sprite;   // a soft additive glow (cutscene.html)
+
+  // ---------- Huygens on its own, from the release until it reaches Titan's air ----------
+  // The probe is ESA's model of it (huygens-models.html, shared with the landing), mounted on Cassini where NASA's
+  // model has it until the release, and after the release a craft of its own. Where it is then: for its first half hour, ESA's numbers (straight out from its mounting at
+  // 0.35 m/s), fading over the next half hour into the probe's own track (data/huygens.json, NAIF's reconstructed
+  // SPK, whose samples are only good to 10 m); without that track, ESA's numbers until Cassini's getaway burn, after
+  // which the two part ways and the probe is left to the marker. How it is turned: spin-stabilized, so its axis
+  // keeps the direction it left in, turning 7.5 times a minute about it
+  const GETAWAY = utcToEt(DATA.getaway_utc);
+  const OWN = 1800;            // s from the release on ESA's numbers alone, then as long again fading into the track
+  let co = null;               // the probe on its own (null until NASA's model has loaded)
+  // Cassini's turn at et in the scene, as the viewer works it out (the reconstructed attitude, else the dish on Earth)
+  function cassiniTurn(et) {
+    const qb = att && attitudeAt(att, et), q = new THREE.Quaternion();
+    if (qb) {
+      const R = q2rows(qb), bx = toScene(R[0], new THREE.Vector3()), by = toScene(R[1], new THREE.Vector3()), bz = toScene(R[2], new THREE.Vector3());
+      q.setFromRotationMatrix(new THREE.Matrix4().makeBasis(bx, by.negate(), bz.negate()));
+    } else {
+      const o = new THREE.Object3D();
+      o.lookAt(toScene(sub(positionAt(tracks.EARTH, et, v3()), positionAt(tracks.CASSINI, et, v3()), v3()), new THREE.Vector3()));
+      q.copy(o.quaternion);
+    }
+    return { q, real: !!qb };
+  }
+  const fromScene = v => [v.x * E[0][0] + v.y * E[1][0] + v.z * E[2][0], v.x * E[0][1] + v.y * E[1][1] + v.z * E[2][1], v.x * E[0][2] + v.y * E[1][2] + v.z * E[2][2]];
+  // ESA's probe (shell and descent module, which share a frame), framed like Cassini's group: its centre on p, the heat
+  // shield facing out along axis. Empty until the models have loaded; then(shell) once the shell is in
+  function esaProbe(p, axis, then) {
+    const outer = new THREE.Group(), inner = new THREE.Group();
+    inner.quaternion.setFromUnitVectors(new THREE.Vector3(0, -1, 0), axis);
+    outer.add(inner);
+    huygensModels.get("shell", sh => {
+      sh.updateMatrixWorld(true);
+      const c = new THREE.Box3().setFromObject(sh).getCenter(new THREE.Vector3());
+      inner.position.copy(p).sub(c.applyQuaternion(inner.quaternion));
+      inner.add(sh);
+      if (then) then(sh);
+    });
+    huygensModels.get("dm", dm => inner.add(dm));
+    return outer;
+  }
+  // NASA's own probe on Cassini goes, drawn with nothing, once ESA's is there to take its place
+  const none = new THREE.MeshBasicMaterial({ visible: false });
+  function coastSetup() {
+    if (co) {
+      // the turn at the release, once the attitude that covers it has loaded
+      if (!co.real && att && tracks.CASSINI) { const t = cassiniTurn(RELEASE); if (t.real) coastAim(t); }
+      return co;
+    }
+    const m = window.cassiniModel;
+    if (!m || !cassiniProbe.length || !tracks.CASSINI || !tracks.EARTH) return null;
+    // the probe's centre and the way it leaves (straight out from the bus's axis), in the Cassini group's frame (metres)
+    const saved = [cassini.position.clone(), cassini.quaternion.clone(), cassini.scale.clone()];
+    cassini.position.set(0, 0, 0); cassini.quaternion.identity(); cassini.scale.setScalar(1); cassini.updateMatrixWorld(true);
+    const box = objs => { const b = new THREE.Box3(); objs.forEach(o => b.expandByObject(o)); return b.getCenter(new THREE.Vector3()); };
+    // the bus's axis runs through the dish's centre along the group's +Z (the viewer turns the model so the dish faces
+    // +Z); the probe leaves straight out from it
+    const dish = m.getObjectByName("dish"), up = new THREE.Vector3(0, 0, 1);
+    const p0 = box(cassiniProbe), hub = dish ? box([dish]) : new THREE.Vector3();
+    const axis = p0.clone().sub(hub); axis.addScaledVector(up, -axis.dot(up)).normalize();
+    cassini.position.copy(saved[0]); cassini.quaternion.copy(saved[1]); cassini.scale.copy(saved[2]); cassini.updateMatrixWorld(true);
+    // on Cassini until the release
+    const mounted = esaProbe(p0, axis, () => cassiniProbe.forEach(o => o.traverse(c => { if (c.isMesh) c.material = none; })));
+    mounted.visible = state.et < RELEASE;
+    cassini.add(mounted);
+    // on its own after
+    const group = new THREE.Group(), beacon = sprite(0xffd7a0, 1);
+    beacon.position.copy(p0);
+    group.add(esaProbe(p0, axis), beacon); group.visible = false;
+    scene.add(group);
+    co = { group, beacon, mounted, p0, axis, up, spin: null };
+    coastAim(cassiniTurn(RELEASE));
+    return co;
+  }
+  // the turn Cassini had at the release fixes the probe's axis in space, and where its centre sat
+  function coastAim(t) {
+    co.q0 = t.q; co.real = t.real;
+    co.axisS = co.axis.clone().applyQuaternion(t.q);
+    co.axisJ = fromScene(co.axisS);
+    co.p0J = fromScene(co.p0.clone().applyQuaternion(t.q)).map(x => x / 1000);
+  }
+  // ESA's numbers: Cassini's position, plus where the probe sat on it, plus 0.35 m/s straight out
+  function ownPlace(et, out) {
+    positionAt(tracks.CASSINI, et, out);
+    const k = (et - RELEASE) * SPEED / 1000;
+    for (let i = 0; i < 3; i++) out[i] += co.p0J[i] + co.axisJ[i] * k;
+    return out;
+  }
+  const lastEt = () => probe ? Math.min(probe.events.entry_interface, probe.track.end) : GETAWAY;
+  window.studyCoast = {
+    // with no track of its own, the probe is placed only while ESA's numbers hold
+    active: et => et >= RELEASE && et < GETAWAY && !!coastSetup(),
+    modelShown: et => et >= RELEASE && et < lastEt() && !!coastSetup(),
+    // the model, after the viewer has placed the probe's marker
+    draw: () => drawCoast(),
+    // a fresh copy of the probe as it left: a group framed like Cassini's, in metres, with the probe's centre p0 and
+    // the axis it left along (outward, the heat shield's side); null until NASA's model (which says where) has loaded
+    probeModel() {
+      if (!coastSetup()) return null;
+      const group = new THREE.Group(); group.add(esaProbe(co.p0, co.axis));
+      return { group, p0: co.p0.clone(), axis: co.axis.clone() };
+    },
+    place(et, out) {
+      if (et < RELEASE || et >= lastEt() || !coastSetup() || !tracks.CASSINI) return;
+      if (probe && et > RELEASE + 2 * OWN) return;
+      const own = ownPlace(et, v3()), w = probe ? ease((et - RELEASE - OWN) / OWN) : 0;
+      for (let i = 0; i < 3; i++) out[i] = own[i] * (1 - w) + out[i] * w;
+    },
+  };
+  // the model follows the marker each frame, after the viewer has placed Cassini
+  const qSpin = new THREE.Quaternion();
+  function drawCoast() {
+    if (!coastSetup() || !probeObj) return;
+    co.mounted.visible = state.et < RELEASE;
+    const et = state.et, on = studyCoast.modelShown(et) && !!pos.HUYGENS;
+    co.group.visible = on;
+    if (!on) return;
+    // spinning about its axis, which stays fixed in space; the cutscene may draw the spin slower
+    const ang = co.spin !== null ? co.spin : (et - RELEASE) * SPIN;
+    co.group.quaternion.copy(qSpin.setFromAxisAngle(co.axisS, ang)).multiply(co.q0);
+    // true size up close; far off it is enlarged like Cassini so it stays visible (the cutscene keeps it true)
+    const d = camera.position.distanceTo(probeObj.position), s = H ? 1e-6 : Math.max(1e-6, d * 0.0012);
+    co.group.scale.setScalar(s);
+    co.group.position.copy(co.p0).applyQuaternion(co.group.quaternion).multiplyScalar(-s).add(probeObj.position);
+    // a faint warm point on it, a few pixels wide however far the camera is
+    co.beacon.scale.setScalar(0.012 * d / s);
+    co.beacon.material.opacity = (H ? 0.85 : 0.7) * clamp01((d - 2e-4) / 1e-3);
+  }
+  window.studyCloseObjects = () => co && co.group.visible ? [co.group] : [];
+
+  // ---------- the cutscene's small glows: Cassini's own point for the far view, the thrusters' puffs ----------
+  function addEffects() {
+    const fx = { beacon: sprite(0xcfe2ff, 1), puffs: [] };
+    // the hydrazine thrusters: four clusters at the ends of the booms at the base (the finale's placement, from NASA's
+    // model; model axes become the group's as (-x, z, y)), each puff firing aft along the group's -Z
+    for (const sx of [1, -1]) for (const sz of [1, -1]) {
+      const p = sprite(0xeef4ff, 0.5); p.position.set(-sx * 1.236, sz * 1.585, -2.6); fx.puffs.push(p);
+    }
+    [fx.beacon, ...fx.puffs].forEach(o => cassini.add(o));
+    return fx;
+  }
+  function removeEffects(fx) { if (fx) [fx.beacon, ...fx.puffs].forEach(o => cassini.remove(o)); }
+
+  // ---------- the clock: screen seconds T -> mission seconds from the release ----------
+  // real time for REAL seconds, then a smooth ramp up to WARP times faster
+  function missionAt(T) {
+    if (T <= REAL) return T - LEAD;
+    const u = T - REAL, r = Math.min(u, RAMP);
+    // the ramp's rate is 1 + (WARP - 1) * ease(u / RAMP); its integral, in closed form for the smoothstep
+    const x = r / RAMP, ramp = r + (WARP - 1) * RAMP * (x * x * x - x * x * x * x / 2);
+    return REAL - LEAD + ramp + Math.max(0, u - RAMP) * WARP;
+  }
+  const rateAt = T => T <= REAL ? 1 : 1 + (WARP - 1) * ease((T - REAL) / RAMP);
+  const fmtClock = s => { const a = Math.abs(Math.round(s)), m = Math.floor(a / 60), ss = String(a % 60).padStart(2, "0"); return `${s < 0 ? "T−" : "T+"}${m}:${ss}`; };
+
+
+  function play() {
+    if (H || CS.active || !tracks.CASSINI) return;
+    if (!CS.begin("huygens")) return;
+    H = { t0: performance.now(), phase: "out", T: 0, s: -LEAD, shownN: [], shownF: [], playing: state.playing, speed: state.speed,
+      spin: 0, lastFrame: performance.now(), fx: null, how: "back" };
+    fadeTo(black, 1, 1.4);
+  }
+  // how it ends: "stay" leaves the view on Huygens, paused, to look around it; "back" returns to Cassini and plays on
+  // as before; "landing" jumps to Huygens entering Titan's air. Skip and Escape (cutscene.html) are "back"
+  function finish(how) { if (H) H.how = how; CS.end("huygens"); }
+  function cleanUp() {
+    const h = H; H = null;
+    if (!h) return;
+    removeEffects(h.fx);
+    if (co) co.spin = null;
+    caps.textContent = ""; [read, note, hint].forEach(e => e.classList.remove("on"));
+    Object.values(tags).forEach(e => e.classList.remove("on"));
+    // the mission carries on from where the cutscene left it
+    setTime(RELEASE + Math.max(60, h.s));
+    const entry = (encounters || []).find(x => x.kind === "milestone" && /^Huygens enters/.test(x.label));
+    // the landing's own cutscene when it is there (huygens-landing.html), once this one has fully ended
+    if (h.how === "landing" && window.cassiniHuygensLanding) setTimeout(() => cassiniHuygensLanding.play(), 0);
+    else if (h.how === "landing" && entry && typeof jump === "function") jump(entry);
+    else if (h.how === "stay" && studyCoast.modelShown(state.et)) {
+      // paused on the probe, once cutscene.html has put the interface back (it picks playback up again if it was on)
+      setTimeout(() => { setPlaying(false); setFocus("HUYGENS"); }, 0);
+      return { follow: false };
+    } else { setFocus("CASSINI"); if (h.playing) { setSpeed(h.speed); setPlaying(true); } }
+  }
+  caps.addEventListener("click", e => {
+    const b = e.target.closest("[data-hr]"); if (!b) return;
+    e.stopPropagation(); finish(b.dataset.hr);
+  });
+
+  // the cutscene's clock, before the viewer places the bodies
+  function frame() {
+    const now = performance.now();
+    if (H.phase === "out" && now - H.t0 >= 1600) {
+      // behind the black: a few seconds before the release, on Cassini
+      H.phase = "run"; H.runAt = now;
+      setFocus("CASSINI", 4e-5); markerPts.visible = false;
+      fadeTo(black, 0, 2.5);
+      note.classList.add("on"); read.classList.add("on"); hint.classList.add("on");
+    }
+    if (H.phase !== "run") return;
+    const T = (now - H.runAt) / 1000;
+    H.T = T; H.s = missionAt(T);
+    if (!H.fx) H.fx = addEffects();
+    if (T > 7) hint.classList.remove("on");
+    if (T > PULL) note.classList.remove("on");
+    runCaptions(NEAR, H.s, H.shownN);
+    if (T > PULL) { CS.dropAll(H.shownN); runCaptions(FAR_CAPS, T, H.shownF); }
+    if (H.s >= 0 && !H.chimed) { H.chimed = true; sound("chord", [0, 4, 7, 11]); }
+    if (T > END - 2 && !H.closing) { H.closing = true; fadeTo(black, 1, 2); }
+    if (T > END) { finish("stay"); return; }
+    state.et = RELEASE + H.s;
+  }
+  // where the probe is during the cutscene, in the scene: ESA's numbers (as the viewer draws it for its first half hour)
+  const toW = (local, out) => out.copy(local).applyQuaternion(cassini.quaternion).multiplyScalar(1e-6).add(cassini.position);
+  function probeScene(et, out) {
+    if (!co) return toW(new THREE.Vector3(-1.5, 0, -1.2), out);
+    toScene(sub(ownPlace(et, v3()), positionAt(tracks.CASSINI, et, v3()), v3()), out).multiplyScalar(1 / KM);
+    return out.add(cassini.position);
+  }
+  // after the viewer has turned Cassini: true sizes, the drawn spin, the thrusters' puffs and the readout
+  function attitude() {
+    if (H.phase !== "run") return;
+    const now = performance.now(), dt = Math.min(0.1, (now - H.lastFrame) / 1000); H.lastFrame = now;
+    // true size throughout: Cassini is never enlarged here, so the gap between the two is the real one
+    cassini.scale.setScalar(1e-6);
+    // the drawn spin: the real rate, capped once the clock speeds up
+    if (H.s > 0) H.spin += dt * Math.min(SPIN * rateAt(H.T), Math.max(SPIN, SPIN_MAX));
+    if (co) co.spin = H.spin;
+    const s = H.s, out = Math.max(0, s) * SPEED;   // metres from where it sat
+    const fx = H.fx;
+    if (fx) {
+      // Cassini's own faint point for the far view
+      const camD = camera.position.distanceTo(cassini.position);
+      fx.beacon.scale.setScalar(0.012 * camD / cassini.scale.x);
+      fx.beacon.material.opacity = 0.7 * clamp01((H.T - PULL) / 4);
+      // a minute after the release the thrusters come back on: a few short puffs as they settle Cassini
+      const w = s - 60;
+      fx.puffs.forEach((p, i) => {
+        const on = w > 0 && w < 40 && Math.sin(w * 1.3 + i * 2.1) > 0.82;
+        p.material.opacity = on ? 0.55 + 0.3 * Math.random() : 0;
+      });
+    }
+    const rate = rateAt(H.T);
+    read.innerHTML = s < 0 ? `Release in <i>${Math.ceil(-s)} s</i> · Thrusters <i>${s > -10 ? "off" : "on"}</i>`
+      : `${fmtClock(s)} · Huygens <i>${out < 10 ? out.toFixed(1) : Math.round(out)} m</i> away · ${SPEED} m/s · Spin <i>${DATA.spin_rpm} rpm</i>${rate > 1.05 ? ` · Time <i>×${Math.round(rate)}</i>` : ""}`;
+  }
+  // the camera, through cutscene.html's orbit() and frameOn(), so its subject stays in the middle of the view and a drag
+  // turns round it: first the middle of the two craft, from beside Cassini with its dish up, widening as the probe
+  // drifts off; then the subject slides over to the probe and the camera swings round behind it, looking on toward
+  // Titan, and closes in
+  const vB2 = new THREE.Vector3(), pW = new THREE.Vector3();
+  function cameraAt() {
+    if (H.phase !== "run") return;
+    const T = H.T;
+    probeScene(state.et, pW);
+    const up = co ? co.up : new THREE.Vector3(0, 0, 1), upW = up.clone().applyQuaternion(cassini.quaternion).normalize();
+    const axisW = co ? co.axisS.clone() : new THREE.Vector3(-1, 0, 0).applyQuaternion(cassini.quaternion);
+    const gap = pW.distanceTo(cassini.position) / 1e-6;   // metres between the two
+    // near: off to the side of the probe's path, a little ahead of it and above, drifting slowly round
+    const side = new THREE.Vector3().crossVectors(upW, axisW).normalize();
+    const yaw = -0.35 + 0.01 * T;
+    const fromN = side.clone().multiplyScalar(Math.cos(yaw)).addScaledVector(axisW, Math.sin(yaw) + 0.25).addScaledVector(upW, 0.28).normalize();
+    // an upright phone sees less across, so the camera stands further back
+    const fit = Math.max(1, 0.9 / camera.aspect);
+    const dN = (15 + 1.1 * gap) * fit;
+    const tW = relScene("TITAN", vB2).sub(cassini.position).normalize();
+    // far: behind the probe and to one side, so it is seen heading on toward Titan
+    const sideW = new THREE.Vector3().crossVectors(upW, tW).normalize();
+    const fromF = sideW.clone().multiplyScalar(0.85).addScaledVector(tW, -0.45).addScaledVector(upW, 0.25).normalize();
+    const k = ease((T - PULL) / 10);
+    const subject = cassini.position.clone().lerp(pW, 0.5 + 0.5 * ease((T - PULL) / 3));
+    const from = fromN.clone().applyQuaternion(new THREE.Quaternion().slerp(new THREE.Quaternion().setFromUnitVectors(fromN, fromF), k));
+    const dist = Math.exp(Math.log(dN) * (1 - k) + Math.log(FAR_M * fit) * k) * 1e-6;
+    const o = CS.orbit(from.negate(), upW);
+    CS.frameOn(subject, o.dir, dist, o.up);
+    // the tags, once the view has pulled back
+    const showTags = T > PULL;
+    const place = (el, w, extra) => {
+      const v = w.clone().project(camera), on = showTags && v.z < 1 && Math.abs(v.x) < 1.05 && Math.abs(v.y) < 1.05;
+      el.classList.toggle("on", on);
+      if (on) el.style.transform = `translate(${(v.x + 1) / 2 * innerWidth + 8}px, ${(1 - v.y) / 2 * innerHeight - 5}px)`;
+      if (extra !== undefined) el.innerHTML = extra;
+    };
+    camera.updateMatrixWorld();
+    place(tags.cassini, cassini.position);
+    place(tags.probe, pW);
+    const titanKm = len(sub(pos.TITAN, pos.CASSINI, v3()));
+    place(tags.titan, cassini.position.clone().addScaledVector(tW, 50), `Titan <small>${(titanKm / 1e6).toFixed(1)} million km</small>`);
+  }
+
+  CS.register("huygens", { root, frame, attitude, camera: cameraAt, onEnd: cleanUp });
+  // playback crossing the release plays it; so does ?huygens
+  const inData = () => RELEASE >= coverage[0] && RELEASE <= coverage[1];
+  CS.at(RELEASE, play, inData);
+  CS.fromUrl("huygens", () => RELEASE - 600, play, inData);
+  window.cassiniHuygensRelease = { play, skip: () => finish("back"), get running() { return !!H; }, get facts() { return DATA.facts; } };
 })();
 </script>
