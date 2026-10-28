@@ -64,7 +64,7 @@ import calibration  # noqa: E402
 import studio_look  # noqa: E402
 
 # bumped whenever the way films are made changes, so older ones are not served again
-VERSION = "export-v21"   # v21: Auto center centres the pictures shown on their own too, as the windows do
+VERSION = "export-v22"   # v22: the flat fielded, dark subtracted, hot pixel repaired pictures; v21: Auto center centres the pictures shown on their own too, as the windows do
 FPS = 30                     # frames a second in the file
 HOLD_MIN, HOLD_MAX = 1 / FPS, 0.5
 TYPICAL = 1 / 8              # adaptive: how long the stretch's median gap lasts on screen
