@@ -441,7 +441,7 @@ body.phone #mestrip { grid-template-columns: repeat(auto-fill, 72px); grid-auto-
   }
   async function tick() {
     if (!ME.playing) return;
-    const fps = Math.min(30, Math.max(1, window.cassiniMovie && window.cassiniMovie.fps ? window.cassiniMovie.fps() : +opt("movie.fps", 8) || 8));
+    const fps = Math.min(30, Math.max(1, window.cassiniMovie && window.cassiniMovie.fps ? window.cassiniMovie.fps() : +opt("movie.fps", 5) || 5));
     const at = performance.now(), next = ME.frames.findIndex((e, i) => i > ME.sel && kept(e));
     if (next < 0) return stopPlay();
     ME.sel = next; ME.picked = new Set(); stripState();

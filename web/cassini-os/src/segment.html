@@ -54,7 +54,7 @@ body.phone #segfps { flex: 1; }
       <button id="segprep" title="Make every picture of this stretch ahead of time, so it plays smoothly at any frame rate">Pre-process</button>
       <button id="segstop" hidden>Stop</button>
       <button id="segplay" title="Play this stretch as a movie">▶ Play</button>
-      <label for="segfps">Frame rate</label><input type="range" id="segfps" min="2" max="30" step="1" aria-label="Movie frame rate"><span id="segfpsv"></span>
+      <label for="segfps">Frame rate</label><input type="range" id="segfps" min="1" max="30" step="1" aria-label="Movie frame rate"><span id="segfpsv"></span>
       <span class="grow"></span>
       <button id="segedit" title="Pick which frames go into this movie, and its look (Movie Editor)">Edit…</button>
       <button id="segexport" title="Make a video file of this stretch to download (E)">Save movie…</button>
@@ -136,7 +136,7 @@ body.phone #segfps { flex: 1; }
   const place = () => {};   // the bar is a row of the Cassini Replay window, laid out with it
   function say(text, warn) { $("segstate").textContent = text || ""; $("segstate").classList.toggle("warn", !!warn); $("segstaterow").hidden = !text; }
   function progress(frac) { $("segprog").hidden = frac == null; if (frac != null) $("segprog").firstElementChild.style.width = `${(frac * 100).toFixed(1)}%`; }
-  function fpsUi() { const f = Math.round(window.cassiniMovie && window.cassiniMovie.fps ? window.cassiniMovie.fps() : opt("movie.fps", 8)); $("segfps").value = f; $("segfpsv").textContent = `${f} fps`; }
+  function fpsUi() { const f = Math.round(window.cassiniMovie && window.cassiniMovie.fps ? window.cassiniMovie.fps() : opt("movie.fps", 5)); $("segfps").value = f; $("segfpsv").textContent = `${f} fps`; }
   // the choices a stretch is made with, apart from its times (P.key; P.span: the times it was made for)
   function optKey() { const q = new URLSearchParams(params()); q.delete("from"); q.delete("until"); return q.toString(); }
   const inside = () => P.span && P.a >= P.span[0] && P.b <= P.span[1];
@@ -273,9 +273,10 @@ body.phone #segfps { flex: 1; }
     if (P.playing && M.on) { setPlaying(!state.playing); buttons(); return; }
     P.playing = true;
     const cams = windows().cams;
-    // one camera: the other camera's window steps aside while the stretch plays, and comes back after
+    // one camera: the other camera's window used to step aside while the stretch played; with a stretch highlighted
+    // the camera windows are pinned (cassiniPin, head-quiet.html), so it stays where it is
     const other = cams === "N" ? $("wacard") : cams === "W" ? $("imgcard") : null;
-    if (other && !other.hidden && window.cassiniWM) { P.tucked = other; cassiniWM.minimize(other); }
+    if (other && !other.hidden && window.cassiniWM && !(window.cassiniPin && cassiniPin.editing())) { P.tucked = other; cassiniWM.minimize(other); }
     M.start(true, { from: P.a, until: P.b, cams: cams.length === 1 ? cams : undefined });
     buttons();
   }

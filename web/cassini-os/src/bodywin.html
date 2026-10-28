@@ -251,7 +251,9 @@ body.idle #app .bodywin:has(.well.has-frame) { opacity: 1; pointer-events: auto;
     show = show.filter(k => capped.includes(k));
     show = show.concat(held);
     const swapped = new Set(swaps.values());
-    for (const k of [...B.wins.keys()]) if (!show.includes(k) && !swapped.has(k)) close(k);
+    // while pinned (paused, a stretch highlighted, an editor open: cassiniPin) no window closes by itself
+    const pin = window.cassiniPin && cassiniPin.pinned();
+    for (const k of [...B.wins.keys()]) if (!show.includes(k) && !swapped.has(k) && !pin) close(k);
     // oldest target first, so the newest windows land on top; the narrow-angle window first, so the wide-angle one sits beside it
     for (const name of [...new Set(bodies.concat(held.map(k => k.split("|")[0])))].reverse()) for (const cam of CAMS) {
       const k = key(name, cam); if (!show.includes(k)) continue;
