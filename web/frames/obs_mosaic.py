@@ -84,6 +84,12 @@ SCALE_FRAMES = 96    # most frames the pass's display scale is measured on (even
 LAP_GAP = 7200       # a mosaic taken again over the same ground within this many seconds is its next lap
 LAP_OVERLAP = 0.6    # ... when the two footprints share at least this much (area both cover / either covers)
 MOVIE_LAPS = 2       # a mosaic whose places are taken again (median, per filter) this many times is a mosaic movie
+LAP_INSIDE = 0.9     # a few frames after a mosaic (a lap stopped short) are part of it when this much of them is inside it
+PAIR_STEP = 1.0      # two places at most this many frames apart (their tiles touching) are a 1x2 mosaic
+STRAY_LINK = 4       # frames of a pass within this many frames of one another are one patch of sky (_drop_strays) ...
+STRAY_SHARE = 0.25   # ... and patches holding at most this share of its frames, away from the rest, are not the pass's
+GROUPING = "_g2"     # the folder suffix of a pass these three rules (_drop_strays, _piece, a 1x2) group anew, so the
+                     # passes made before them are not served for it; every other pass keeps its folder
 MOVIE_DWELL = 8      # ... or whose camera stays this many frames of one filter (median) at each place it goes
 TRACK_VISITS = 2     # ... or that follows a moving feature (_judge's track): at least this many visits of 3+ filters,
 TRACK_SPAN = 0.08    # ... whose frames spread (median) over more than this much of a frame (twice REGISTER_MAX)
@@ -185,20 +191,30 @@ def units(target, obs, cam):
     # laps: a mosaic taken again over the same places after a pause longer than GAP (the Jupiter approach's 2x2
     # color mosaics, six laps 74 minutes apart in one observation) is one pass, a mosaic movie, rather than a
     # mosaic that starts again from nothing every lap
+    for u in out:
+        _drop_strays(u)
     laps = []
     for u in out:
         u["key"] = (target, obs, cam, len(laps))
         _judge(u)
         prev = laps[-1] if laps else None
-        if (prev and prev["mosaic"] and u["mosaic"] and u["frames"][0][3] - prev["last"] <= LAP_GAP and u["z"]
-                and 1 / ZOOM < u["z"] / prev["z"] < ZOOM and _overlap(prev, u) >= LAP_OVERLAP):
+        if (prev and prev["mosaic"] and u["frames"] and u["frames"][0][3] - prev["last"] <= LAP_GAP and u["z"]
+                and 1 / ZOOM < u["z"] / prev["z"] < ZOOM
+                and (u["mosaic"] and _overlap(prev, u) >= LAP_OVERLAP or _piece(prev, u))):
+            # (a piece, or a lap that is a mosaic only by the newer rules, joining it groups it anew)
+            prev["regrouped"] = bool(prev.get("regrouped") or not u["mosaic"] or u.get("pair") or u.get("regrouped"))
             for k in ("frames", "all", "taken"):
                 prev[k] += u[k]
             prev["last"] = u["last"]
+            prev["off"] = prev.get("off", set()) | u.get("off", set())
             _judge(prev)
         else:
             laps.append(u)
     out = laps
+    # a pass grouped anew renumbers the passes after it, so every pass of its observation gets GROUPING's folder
+    if any(u.get("regrouped") or u.get("pair") for u in out):
+        for u in out:
+            u["regrouped"] = True
     for n, u in enumerate(out):
         u["key"] = (target, obs, cam, n)
         _judge(u)
@@ -214,6 +230,65 @@ def units(target, obs, cam):
     with _lock:
         _units[(target, obs, cam)] = out
     return out
+
+
+def _drop_strays(u):
+    """Takes out of pass u the frames that are not of its sky: patches of frames (frames within STRAY_LINK frames
+    of one another) far from the rest that hold at most STRAY_SHARE of its placed frames. The Jupiter approach's
+    2x2 laps have a clear frame or one UV1 frame 38 to 430 frames off Jupiter (pointed at a moon or a star), which
+    made the lap's footprint too wide for a mosaic, so its tiles played on their own and split the mosaic movie in
+    two. Their ids go in u["off"] (unit_of leaves them out of the pass, so they show as themselves) and the pass
+    is marked regrouped. A pass whose frames all lie within MAX_FRAMES of one another is left as it is."""
+    pts = [(q, -fr[5] * fr[7] / u["z"] / FRAME, -fr[6] * fr[7] / u["z"] / FRAME)
+           for q, fr in enumerate(u["all"]) if fr[7] and u["z"]]
+    if len(pts) < 2:
+        return
+    xy = np.array([(x, y) for _, x, y in pts])
+    if (xy.max(0) - xy.min(0)).max() < MAX_FRAMES:
+        return
+    # patches: grid cells STRAY_LINK frames wide, a cell joined to the cells round it
+    cells = {}
+    for (q, x, y) in pts:
+        cells.setdefault((math.floor(x / STRAY_LINK), math.floor(y / STRAY_LINK)), []).append(q)
+    parent = {c: c for c in cells}
+
+    def root(c):
+        while parent[c] != c:
+            c = parent[c]
+        return c
+    for (a, b) in cells:
+        for da in (-1, 0, 1):
+            for db in (-1, 0, 1):
+                if (a + da, b + db) in cells and root((a + da, b + db)) != root((a, b)):
+                    parent[root((a + da, b + db))] = root((a, b))
+    patch = {}
+    for c, qs in cells.items():
+        patch.setdefault(root(c), []).extend(qs)
+    main = max(patch.values(), key=len)
+    strays = {q for qs in patch.values() if qs is not main for q in qs}
+    if not strays or len(strays) > STRAY_SHARE * len(pts):
+        return
+    u["off"] = {u["all"][q][1] for q in strays}
+    u["all"] = [fr for q, fr in enumerate(u["all"]) if q not in strays]
+    u["taken"] = [fr for q, fr in enumerate(u["taken"]) if q not in strays]
+    u["frames"] = [fr for fr in u["frames"] if fr[1] not in u["off"]]
+    u["regrouped"] = True
+
+
+def _piece(prev, u):
+    """Pass u is the rest of mosaic prev's last lap: a few frames taken after a pause (too few places for a mosaic
+    of their own, the camera not staying on them: a lap stopped short), at least LAP_INSIDE of them inside prev's
+    footprint. 18ATM2X2A139's three frames at one place between two laps were a pass of their own, a movie, which
+    kept the laps either side of it from being one mosaic movie."""
+    if u["mosaic"] or not u["frames"] or (u["dwell"] or 0) >= MOVIE_DWELL or u["track"]:
+        return False
+    if len({i for i in u["place"] if i is not None}) >= MIN_PLACES:
+        return False
+    p, q = _box(prev, prev["z"]), _box(u, prev["z"])
+    if not p or not q:
+        return False
+    w, h = min(p[2], q[2]) - max(p[0], q[0]), min(p[3], q[3]) - max(p[1], q[1])
+    return max(w, 0) * max(h, 0) >= LAP_INSIDE * (q[2] - q[0]) * (q[3] - q[1])
 
 
 def _box(u, z):
@@ -353,7 +428,10 @@ def _judge(u):
     # rings is a good strip mosaic, and the pointing alone cannot tell them apart: the window's chip decides those)
     u["mosaic"] = u["whole"] = False
     u["kind"] = "movie" if u["movie"] else None
-    if len(places) < MIN_PLACES or u["movie"]:
+    # two places whose tiles touch (ISS_C24JU_1X2NITE, a 2x2 seen by one camera as two) are a 1x2 mosaic
+    u["pair"] = len(places) == 2 and max(abs(places[0][0] - places[1][0]), abs(places[0][1] - places[1][1])) <= PAIR_STEP * FRAME
+    if len(places) < MIN_PLACES and not u["pair"] or u["movie"]:
+        u["pair"] = False
         return
     pts = np.array(pts)
     lo, hi = pts.min(0) - FRAME / 2, pts.max(0) + FRAME / 2
@@ -385,7 +463,8 @@ def unit_of(frame_id):
     for u in units(r["TARGET_NAME"], r["OBSERVATION_ID"], cam):
         ts = [fr[3] for fr in u["frames"]]
         if ts and ts[0] <= t <= u["last"]:
-            found = u, sum(1 for x in ts if x <= t + 1) - 1
+            # (a frame _drop_strays took out of the pass is in none)
+            found = None if frame_id in u.get("off", ()) else (u, sum(1 for x in ts if x <= t + 1) - 1)
             break
     with _lock:
         if len(_unit_of) >= UNIT_OF_KEEP:
@@ -414,7 +493,7 @@ def kind_of(frame_id):
 def folder(u, cache):
     # a movie's frames stacked with a shorter repeat window are other pictures than the ones made before it
     gap = u.get("repeat_gap", mosaic_benchmark.REPEAT_GAP)
-    suffix = "" if gap >= mosaic_benchmark.REPEAT_GAP else f"_r{gap:g}"
+    suffix = ("" if gap >= mosaic_benchmark.REPEAT_GAP else f"_r{gap:g}") + (GROUPING if u.get("regrouped") else "")
     return os.path.join(cache, f"{VERSIONS[calibration.style()]}{calibration.variant()}-q{QUALITY}", "_".join(map(str, u["key"])) + suffix)
 
 
