@@ -97,7 +97,9 @@ Routes:
                                its disk fits the view; steady=N image stabilization, each frame registered to the one
                                before it and held to SPICE over N frames (obs_mosaic.steady_places; 0, the default:
                                SPICE's places); exposure=N exposure normalization, flashes taken out and brightness
-                               jumps spread over N frames (obs_mosaic.exposure_gains; 0, the default: none). 503 while the pass is being worked out (the window shows the frame)
+                               jumps spread over N frames (obs_mosaic.exposure_gains; 0, the default: none); detail=0 a filled
+                               pass's frame before its detail filter (the plane the page sharpens itself,
+                               steady-local.html). 503 while the pass is being worked out (the window shows the frame)
   /frames/movie/<ID>.webp?mode=rolling&laps=1&fade=0&persist=35
                                a mosaic movie (a raster repeated over the same places): every place's newest tile
                                by this frame (laps=N: its N newest copies, older under newer), composed like the
@@ -107,6 +109,12 @@ Routes:
                                whole=1 (Whole mosaics: the page asks only a lap's last frame): every tile of the
                                picture is made before it answers, never a partial picture or a 503, so the
                                window shows the whole new lap
+  /frames/movie/<ID>.fade.json?laps=1&w=W&h=H
+                               what the page needs to fade a mosaic movie's older tiles itself on the time-lapse
+                               picture (W x H as made), for any fade (obs_mosaic.fade_table)
+  /frames/movie/<ID>.steady.json?center=1&color=0
+                               what the page needs to stabilize the frame's movie pass itself, for any smoothing
+                               (obs_mosaic.steady_table, Settings > Movie > Stabilize in: This computer)
   /frames/movie/<ID>.json      the pass the frame is in: its frames [id, time, filter], cadence, movie/mosaic call
   /frames/thumb.webp?mosaic=<ID>&color=R,G,B&frame=<ID>&size=256
                                a highlight's thumbnail (any of the three, as data/highlights.json's "thumb" gives them):
@@ -1590,6 +1598,30 @@ def make_handler(site, cache, flags=None):
                 name = f"Cassini_{m.group(1)}_mosaic_full_resolution_{report['width']}x{report['height']}"
                 return self.send_file(path, {"jpg": "image/jpeg", "png": "image/png", "webp": "image/webp"}[kind],
                                       query, name + "." + kind, {"X-Native": json.dumps(report)}, forever=not report["behind"])
+            m = re.match(r"^/frames/movie/([^/]+)\.fade\.json$", url.path)
+            if m:
+                # what the page needs to fade a mosaic movie's older tiles itself (obs_mosaic.fade_table)
+                if not FRAME_ID.match(m.group(1)):
+                    return self.send_error(400, "Not a frame id")
+                if reel._index is None:
+                    return self.send_error(404, "No index of the frames")
+                q = parse_qs(url.query)
+                try:
+                    laps, W, H = (max(1, min(12, int(q.get("laps", ["1"])[0]))), int(q.get("w", ["0"])[0]), int(q.get("h", ["0"])[0]))
+                except ValueError:
+                    return self.send_error(400, "laps=, w= and h= are whole numbers")
+                info = obs_mosaic.fade_table(m.group(1), cache, laps, min(W, 4096), min(H, 4096))
+                return self.send_json(info) if info else self.send_error(404, "Not in a mosaic movie")
+            m = re.match(r"^/frames/movie/([^/]+)\.steady\.json$", url.path)
+            if m:
+                # what the page needs to stabilize a movie pass itself (obs_mosaic.steady_table, steady-local.js)
+                if not FRAME_ID.match(m.group(1)):
+                    return self.send_error(400, "Not a frame id")
+                if reel._index is None:
+                    return self.send_error(404, "No index of the frames")
+                q = parse_qs(url.query)
+                info = obs_mosaic.steady_table(m.group(1), cache, q.get("center", ["1"])[0] != "0", q.get("color", ["0"])[0] != "0")
+                return self.send_json(info) if info else self.send_error(404, "Not in a pass")
             m = re.match(r"^/frames/movie/([^/]+)\.(webp|json)$", url.path)
             if m:
                 # a frame played as a movie of its pass (obs_mosaic.movie_webp): centred by SPICE, on the pass's one
@@ -1636,7 +1668,7 @@ def make_handler(site, cache, flags=None):
                         with _movie_slots:
                             made = obs_mosaic.movie_webp(m.group(1), size, cache, trail, query.get("color", ["1"])[0] != "0",
                                                        centre=query.get("center", ["1"])[0] != "0", steady=steady,
-                                                       exposure=exposure)
+                                                       exposure=exposure, sharpen=query.get("detail", ["1"])[0] != "0")
                 except (FileNotFoundError, ValueError):
                     made = None
                 if not made:

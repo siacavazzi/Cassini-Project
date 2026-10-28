@@ -13,8 +13,10 @@ the canvas's scale), the colour mix (colour_picture) and the local contrast (det
 the seam corrections are worked out apart from the drawing: the windows' mosaic solves them on its canvas, so the
 same gains and offsets, tile by tile, are found again on that canvas (corrections: the first GROW_FROM tiles of a
 filter solved together, each one after laid over the mosaic before it, as obs_mosaic.filter_mosaic and _grown do)
-and given to the compose at native scale. So the native picture has the levels and colours of the one in the
-window, with more pixels.
+and given to the compose at native scale, and with them, with the blend step on, what it decided for each tile
+there (its leveling, solved over the whole mosaic, and its seam, cut through the whole of its overlap: mosaic._blended's
+kept), which a block could not work out for itself from the part of the mosaic it holds. So the native picture has
+the levels, colours and seams of the one in the window, with more pixels.
 
 The canvas is drawn in blocks of BLOCK px (each with a margin for the soft edge and the local contrast, cut off
 again), so memory stays bounded whatever the mosaic's size: a block holds the tiles that reach it, one block-sized
@@ -26,6 +28,7 @@ The pictures are kept in a cache of their own (CASSINI_FULLRES_CACHE, by default
 server's), at most CASSINI_FULLRES_MB (5 GB) of them, the least recently used going first. They are made only
 when asked for, never ahead and never by the pre-build.
 """
+import base64
 import hashlib
 import io
 import json
@@ -36,6 +39,7 @@ import threading
 import time
 import zlib
 
+import cv2
 import numpy as np
 from PIL import Image
 
@@ -136,12 +140,20 @@ def coverage(made, side=256):
     return float(grid.mean())
 
 
+def _drawing():
+    """What the names of a mosaic's pictures and seams get for how its tiles are drawn together (mosaic.drawing): ""
+    with the blend step off, as they were named before it."""
+    name = mosaic.drawing()
+    return "-" + name if name else ""
+
+
 def _seams_path(u, made, cache):
-    return os.path.join(cache_dir(cache), VERSION, calibration.style(), "_".join(map(str, u["key"])), f"{made[5]}-seams.json")
+    return os.path.join(cache_dir(cache), VERSION, calibration.style(), "_".join(map(str, u["key"])),
+                        f"{made[5]}{_drawing()}-seams.json")
 
 
 def _path(u, made, cache, crop, fmt, k):
-    name = made[5] + (f"-crop{'_'.join(f'{v:.4f}' for v in crop)}" if crop else "") + f"-k{k:.4f}"
+    name = made[5] + _drawing() + (f"-crop{'_'.join(f'{v:.4f}' for v in crop)}" if crop else "") + f"-k{k:.4f}"
     if len(name) > 180:
         name = name[:100] + hashlib.sha1(name.encode()).hexdigest()[:16]
     return os.path.join(cache_dir(cache), VERSION, calibration.style(), "_".join(map(str, u["key"])), f"{name}.{fmt}")
@@ -167,8 +179,9 @@ def corrections(u, made, cache):
     that, the first GROW_FROM solved together and each tile after found as _grown finds it, matched (pin 0)
     against the mosaic of the tiles before it, as _over cuts it. The luminance base (obs_mosaic.LUM, its tiles with
     their gains, _mine / _shade) is one more filter; "_grey" is over_grey's match of it to the colour, measured on the
-    window's whole canvas (grey_gain), so every block lays the gray under the colour alike. Kept beside the native
-    pictures."""
+    window's whole canvas (grey_gain), so every block lays the gray under the colour alike. With the blend step, each
+    tile's (gains, offsets, what the blend step decided for it on that canvas: _packed, or None). Kept beside the
+    native pictures."""
     p, tiles, rect, count, used, name = made
     path = _seams_path(u, made, cache)
 
@@ -176,6 +189,7 @@ def corrections(u, made, cache):
         out = {}
         filters, colour, base, tag, ref = drawn(u, made)
         tagged = bool(tag)
+        blend = calibration.step("blend")
         for f in filters:
             mine = om._mine(u, p, tiles, f)
             first = mine if tagged or len(mine) <= om.GROW_FROM else mine[:om.GROW_FROM]
@@ -186,9 +200,14 @@ def corrections(u, made, cache):
                     gains, offsets = om.held_level([np.asarray(w[0]) for w in window])
                 for t, g, o in zip(shown, gains, offsets):
                     got[t["n"]] = [list(map(float, g)), list(map(float, o))]
-            if len(first) == len(mine):
-                continue
-            rgba = om.filter_mosaic(u, p, f, first, rect, cache).copy()
+            if blend and len(window) > 1:
+                # drawn as filter_mosaic draws them, what the blend step decides for each tile kept
+                kept = []
+                rgba = om._compose(window, p["k"], pin=None, kept=kept)
+                for t, d in zip(shown, kept):
+                    got[t["n"]].append(_packed(d))
+            elif len(first) < len(mine):
+                rgba = om.filter_mosaic(u, p, f, first, rect, cache).copy()
             for t in mine[len(first):]:
                 pair = _pair(u, p, rgba, t, rect, cache)
                 if pair is not None:
@@ -197,7 +216,10 @@ def corrections(u, made, cache):
                         gains, offsets = mosaic.seams(pair, 0)
                         mosaic.reset()
                     got[t["n"]] = [list(map(float, gains[1])), list(map(float, offsets[1]))]
-                om._over(u, p, rgba, t, rect, cache)
+                kept = [] if blend else None
+                om._over(u, p, rgba, t, rect, cache, kept=kept)
+                if kept and t["n"] in got:
+                    got[t["n"]].append(_packed(kept[0]))
                 om._yield()
         if colour and base:
             picture = om.colour_picture(u, p, colour, [om.filter_mosaic(u, p, f, tiles, rect, cache, ref, tag) for f in colour])
@@ -211,9 +233,90 @@ def corrections(u, made, cache):
     with lock:
         solved = json.loads(reel._cached(path, make))
     grey = solved.pop("_grey", None)
-    out = {f: {int(n): (np.array(v[0]), np.array(v[1])) for n, v in by.items()} for f, by in solved.items()}
+    out = {f: {int(n): (np.array(v[0]), np.array(v[1]), _unpacked(v[2] if len(v) > 2 else None)) for n, v in by.items()}
+           for f, by in solved.items()}
     out["_grey"] = None if grey is None else np.array(grey, np.float32)
     return out
+
+
+def _packed(decision):
+    """What the blend step decided for a tile on the windows' canvas (mosaic._blended's kept), for the seams' JSON:
+    its leveling's cells (log gains, as half floats) and its seam's cut (bits), deflated, each with where it lies on
+    the canvas."""
+    if decision is None:
+        return None
+    out = {}
+    if decision["field"] is not None:
+        grid, c, y, x = decision["field"]
+        out["field"] = {"grid": _deflated(grid.astype(np.float16)), "shape": list(grid.shape), "c": int(c), "at": [int(y), int(x)]}
+    if decision["cut"] is not None:
+        cut, y, x = decision["cut"]
+        out["cut"] = {"bits": _deflated(np.packbits(cut.astype(bool))), "shape": list(cut.shape), "at": [int(y), int(x)]}
+    return out or None
+
+
+def _deflated(a):
+    return base64.b64encode(zlib.compress(a.tobytes(), 9)).decode()
+
+
+def _inflated(text, dtype):
+    return np.frombuffer(zlib.decompress(base64.b64decode(text)), dtype)
+
+
+def _unpacked(packed):
+    """_packed's decisions again: {"field": (log gains (rows, columns, bands), cell size, y, x) or None, "cut": (bool
+    (h, w), y, x) or None}, or None."""
+    if not packed:
+        return None
+    field = cut = None
+    if "field" in packed:
+        f = packed["field"]
+        field = (_inflated(f["grid"], np.float16).reshape(f["shape"]).astype(np.float32), f["c"], f["at"][0], f["at"][1])
+    if "cut" in packed:
+        c = packed["cut"]
+        h, w = c["shape"]
+        bits = np.unpackbits(_inflated(c["bits"], np.uint8))[:h * w]
+        cut = (bits.reshape(h, w).astype(bool), c["at"][0], c["at"][1])
+    return {"field": field, "cut": cut}
+
+
+def _decided(d, r, top, left):
+    """A tile's decisions on the windows' canvas (corrections) as a block's compose takes them (mosaic._blended's
+    decided): functions of a box of the block's frame pixels, the frame's first pixel at (top, left) of the native
+    canvas, r of the windows' canvas pixels to a native one. Each pixel's middle is looked up on the windows' canvas,
+    linear in between: the same values for a native pixel whatever block it is drawn in."""
+    if d is None:
+        return None
+
+    def at(box, y, x):
+        # the box's pixel middles on the windows' canvas, as pixels of what starts at (y, x) there
+        ys = (np.arange(box[0], box[1]) + top + 0.5) * r - 0.5 - y
+        xs = (np.arange(box[2], box[3]) + left + 0.5) * r - 0.5 - x
+        return ys.astype(np.float32), xs.astype(np.float32)
+
+    def look(a, ys, xs):
+        mx, my = np.meshgrid(xs, ys)
+        return cv2.remap(a, mx, my, cv2.INTER_LINEAR, borderMode=cv2.BORDER_REPLICATE)
+
+    field = cut = None
+    if d["field"] is not None:
+        grid, c, gy, gx = d["field"]
+
+        def field(box):
+            # a cell's middle is its gain (mosaic._field): cell i's middle lies at (i + 0.5) * c - 0.5
+            ys, xs = at(box, gy, gx)
+            return np.exp(look(grid, (ys + 0.5) / c - 0.5, (xs + 0.5) / c - 0.5).reshape(len(ys), len(xs), grid.shape[2]))
+    if d["cut"] is not None:
+        bits, cy, cx = d["cut"]
+        h, w = bits.shape
+        bits = bits.astype(np.float32)
+
+        def cut(box):
+            ys, xs = at(box, cy, cx)
+            out = look(bits, ys, xs)
+            out[~(((ys >= -0.5) & (ys <= h - 0.5))[:, None] & ((xs >= -0.5) & (xs <= w - 0.5))[None, :])] = -1
+            return out
+    return field, cut
 
 
 def _pair(u, p, rgba, t, rect, cache):
@@ -246,10 +349,14 @@ def block(u, made, corr, k, x0, y0, w, h, cache):
     cut off again, so blocks side by side join without a seam."""
     p, tiles, rect, count, used, name = made
     filters, colour, base, _, _ = drawn(u, made)
+    blend = calibration.step("blend")
     filled = p["display_scale"].get("filled")
     sigma = om.DETAIL_SIGMA * om.FRAME * k
     pad = max(8, round(64 * k / 0.5)) + 2 + (math.ceil(4 * sigma) + 2 if filled else 0)
-    sub = (rect[0] + (x0 - pad) / k, rect[1] + (y0 - pad) / k, (w + 2 * pad) / k, (h + 2 * pad) / k)
+    # the block's frames start on the blend step's grid (mosaic.GRID) of the whole canvas, so blocks side by side lay
+    # their pyramids and blurs on the same pixels
+    px, py = pad + (x0 - pad) % mosaic.GRID, pad + (y0 - pad) % mosaic.GRID
+    sub = (rect[0] + (x0 - px) / k, rect[1] + (y0 - py) / k, (w + px + pad) / k, (h + py + pad) / k)
     pk = dict(p, k=k)
     planes = {}
     for f in filters:
@@ -258,9 +365,12 @@ def block(u, made, corr, k, x0, y0, w, h, cache):
         if not window:
             planes[f] = np.zeros((math.ceil(sub[3] * k), math.ceil(sub[2] * k), 4), np.uint8)
             continue
-        one = (np.ones(3), np.zeros(3))
+        one = (np.ones(3), np.zeros(3), None)
         got = [corr.get(f, {}).get(t["n"], one) for t in shown]
-        planes[f] = om._compose(window, k, corrections=(np.array([g for g, _ in got]), np.array([o for _, o in got])))
+        # with the blend step, each tile's leveling and seam as decided on the windows' canvas (corrections)
+        decided = [_decided(g[2], p["k"] / k, y0 - py, x0 - px) for g in got] if blend else None
+        planes[f] = om._compose(window, k, corrections=(np.array([g[0] for g in got]), np.array([g[1] for g in got])),
+                                decided=decided)
     # as so_far: the colour picture over the luminance base where it has one, the base alone, or the one filter
     if colour:
         rgba = om.colour_picture(u, p, colour, [planes[f] for f in colour])
@@ -270,7 +380,7 @@ def block(u, made, corr, k, x0, y0, w, h, cache):
         rgba = planes[filters[0]]
     if filled:
         rgba = om.detail(rgba, sigma)
-    return np.ascontiguousarray(rgba[pad:pad + h, pad:pad + w])
+    return np.ascontiguousarray(rgba[py:py + h, px:px + w])
 
 
 def _rows(u, made, corr, k, x0, y0, w, h, cache, slots=None, done=None):

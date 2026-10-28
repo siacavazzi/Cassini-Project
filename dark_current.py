@@ -361,7 +361,8 @@ def _hot_spots(name):
 # last part is the exposure band (EXPOSURE_BANDS): a pixel's dark charge grows with the exposure, so a 220 s frame has
 # thousands of defects that a month of 30 s frames never shows (Hyrokkin, August 2015: 7,760 against 1,000)
 HOT_MAPS = os.environ.get("CASSINI_HOT_MAPS") or os.path.join(ff.ROOT, "hot_maps.npz")
-HOT_MAP_MONTHS = 3     # a frame uses its own month's map, else the nearest within this many months
+HOT_MAP_SPAN = 1       # a frame uses its band's maps of its month and this many months either side, together,
+HOT_MAP_MONTHS = 3     # else the nearest month's within this many months
 EXPOSURE_BANDS = (2.0, 10.0, 60.0, 180.0)   # seconds: band 0 is 2-10 s, ..., band 3 is 180 s and longer
 
 
@@ -392,14 +393,21 @@ def _month(info):
 
 
 def hot_map(info):
-    """The frame's defect map from HOT_MAPS, (n, 3) int (line, sample, sign), or None: its exposure band's in the
-    nearest month within HOT_MAP_MONTHS, else the band nearest it there (a longer one first: a defect it lists that
-    isn't misbehaving in a shorter exposure is left alone by repair_hot, one missing is left in)."""
+    """The frame's defect map from HOT_MAPS, (n, 3) int (line, sample, sign), or None: the maps of its exposure band
+    and the shorter ones (a pixel hot in a shorter exposure is hot in a longer one), of its own month and the months
+    either side of it, together (HOT_MAP_SPAN; a pixel that turns hot late in a month is in too few of that month's
+    frames, but in the next month's map: the 2013 Hyrrokkin pass's late March dots, in April's 10-60 s map), else
+    the nearest month's within HOT_MAP_MONTHS in the band nearest it (a longer one first: a defect it lists that isn't
+    misbehaving in a shorter exposure is left alone by repair_hot, one missing is left in)."""
     maps, month = _hot_maps(HOT_MAPS), _month(info)
     band = exposure_band(ff._number(_value(info, "EXPOSURE_DURATION", "0"), 0.0) / 1000)
     if not maps or month is None or band is None:
         return None
     camera, mode = _value(info, "INSTRUMENT_ID"), _value(info, "INSTRUMENT_MODE_ID", "FULL")
+    near = [m for d in range(-HOT_MAP_SPAN, HOT_MAP_SPAN + 1) for b in range(band, -1, -1)
+            if (m := maps.get(map_key(camera, mode, month + d, b))) is not None]
+    if near:
+        return near[0] if len(near) == 1 else np.unique(np.concatenate(near), axis=0)
     bands = sorted(range(len(EXPOSURE_BANDS)), key=lambda b: (abs(b - band), -b))
     for b in bands:
         for d in sorted(range(-HOT_MAP_MONTHS, HOT_MAP_MONTHS + 1), key=abs):
