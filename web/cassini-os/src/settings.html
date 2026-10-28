@@ -57,7 +57,7 @@
 body.idle #settings:not([hidden]) { opacity: 1; pointer-events: auto; }
 /* settings that only show or hide parts of the page */
 body.s-nolabels #labels, body.s-nolabels #reticle { display: none; }
-body.s-nohudline #hudline { display: none; }
+body.s-nohudline #mread { display: none; }
 body.s-nochans .camwin .chans { display: none !important; }
 body.s-nofilmstrip .camwin .filmstrip { display: none !important; }
 body.s-noinfo .camwin .info { display: none; }
@@ -223,8 +223,8 @@ body.phone .srow input[type=range] { width: 96px; }
   D({ key: "interface.labels", section: "Interface", label: "Body labels", type: "toggle", value: true,
       hint: "Names and ranges next to Saturn, the moons and Cassini, and the target bracket." });
   cls("interface.labels", "s-nolabels", false);
-  D({ key: "interface.hudline", section: "Interface", label: "Flight data strip", type: "toggle", value: true,
-      hint: "Target, altitude, speed, camera and pointing along the top of the view." });
+  D({ key: "interface.hudline", section: "Interface", label: "Flight readout in the menu bar", type: "toggle", value: true,
+      hint: "Cassini's altitude above the nearest body and its speed relative to it, in the menu bar. Off, they show under the clock in the dock." });
   cls("interface.hudline", "s-nohudline", false);
   // Processing: every step the picture pipeline takes, in the order it takes them, each on by default and each
   // switched off on its own to see what it does (the camera windows read cameras.*; processing.* go to the frame
