@@ -48,7 +48,8 @@ Ordered by what it costs the Mini now. Each step ships as its own PR with before
 | 8 | Processing toggles, classic look, raw colours (`off=`, `look=`, `colors=`) | server redraws everything | stay on the server; local-only (Sam), not offered on the public site unless pre-built | rule only |
 | 9 | Seam blend and level, full-resolution export, Pre-process | heavy, need tiles | stay on the server: seams pre-built as one variant; full-res and Pre-process off on the public site | rule only |
 
-For filled passes (Titan, Jupiter) the pre-build keeps their movie frames drawn without the detail filter too
+The pre-build (`prebuild.py` movies phase, `make_planes`) keeps every movie frame alone at 1024 (`color=0`), the
+plane the page starts from, and for filled passes (Titan, Jupiter) their movie frames drawn without the detail filter too
 (`/frames/movie/<ID>.webp?...&detail=0`, files `_d0`): the page's exposure, colour and trail start from those.
 
 Steps 1 to 5 also need two shared pieces:
