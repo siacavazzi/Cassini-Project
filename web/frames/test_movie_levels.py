@@ -115,6 +115,19 @@ def test_glide():
     o = opts("crop2=0.5_0.5_1_1")
     assert o["frame"]["crop"] == [0, 0, 1, 1] and o["frame"]["crop2"] == [0.5, 0.5, 1, 1]
 
+
+def test_frame_edit():
+    # a frame's own look: the studio keys it sets over the movie's, kept even at rest, the last of a key winning
+    assert L.override("ct:0,ex:9,zz:1,fi:warm,ex:0.5,cr:0.1_0.1_0.5_0.5") == "ex:0.5,ct:0,fi:warm"
+    assert L.override("bad") == ""
+    o = opts("edit=ct:20,sa:30&fedit=N1_1~ct:0,ex:0.5|N2_1~nonsense|~ex:1|W3_1~fi:mono")
+    assert o["fedit"] == {"N1_1": "ex:0.5,ct:0", "W3_1": "fi:mono"}
+    assert export.job_id(o) != export.job_id(opts("edit=ct:20,sa:30")) and opts("")["fedit"] == {}
+    # drawn as the movie's look with the frame's keys over it: contrast back at rest, saturation the movie's
+    im = disk(0.3)
+    own = L.parse(f"{o['edit']},{o['fedit']['N1_1']}")
+    assert np.array_equal(np.asarray(L.apply(im, own)), np.asarray(L.apply(im, L.parse("ex:0.5,sa:30"))))
+
 if __name__ == "__main__":
     for name, fn in list(globals().items()):
         if name.startswith("test_"):

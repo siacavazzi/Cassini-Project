@@ -37,11 +37,17 @@
      move the frame in front, or
      the picked frames, when SPICE's centering is a little off. Drawn the same way here and in the film (export.framed).
 
+     One frame edited on its own: This frame changes only the frame in front (or the picked frames): its exposure,
+     contrast, saturation and warmth over the movie's look, or Edit this frame in Studio… for every slider and filter
+     (Use for this frame). The rest of the movie keeps the movie's look; the frame keeps its level, crop and nudge, and
+     follows the movie's look in every slider it leaves alone. A frame with its own look has a dot in the strip; Reset
+     gives it the movie's look again. Drawn the same way on the preview, Play, downloads and the film (export.py fedit).
+
      A frame on its own: the big picture over the strip is the frame in front, as in the movie or as the raw frame;
      double-click it to fill the window. Download frame saves it at full size with the look, as a JPEG.
 
      The edit is one short recipe (from, until, cams, drop, targets, filters, edit, URL-encoded), kept on this device
-     for the stretch (and levels, even, ctr, crop, crop2, nudge), put in links as &cut=…, and sent to the export with its plan (cassiniMovieCut), so Save movie… makes
+     for the stretch (and levels, even, ctr, crop, crop2, nudge, fedit), put in links as &cut=…, and sent to the export with its plan (cassiniMovieCut), so Save movie… makes
      the film edited. window.cassiniMovieEdit = { open(recipe?), close, recipe(), cut(), get state }. -->
 <style>
 #mecard { top: calc(env(safe-area-inset-top, 0px) + 34px); left: 50%; transform: translateX(-50%); width: clamp(600px, 76vw, 1240px); height: min(780px, calc(100% - 110px)); display: flex; flex-direction: column; }
@@ -95,6 +101,7 @@
 .meth.out img { opacity: .22; filter: grayscale(1); }
 .meth.out span { color: rgba(232,236,242,.45); }
 .meth.dropped::after { content: ""; position: absolute; inset: 0; background: linear-gradient(to top right, transparent calc(50% - 1px), rgba(255,120,100,.75) 50%, transparent calc(50% + 1px)); pointer-events: none; }
+.meth.own::before { content: ""; position: absolute; right: 4px; top: 4px; z-index: 1; width: 7px; height: 7px; border-radius: 50%; background: var(--q-accent, #8ab6ff); box-shadow: 0 0 0 1.5px rgba(0,0,0,.7); }
 .meth.picked { outline: 2px solid rgba(138,182,255,.55); }
 .meth.sel { outline: 2px solid var(--q-accent); }
 #mecard .meside { min-height: 0; overflow-y: auto; padding: 2px 12px 12px; border-left: 1px solid var(--q-line); }
@@ -152,6 +159,13 @@ body.phone #mestrip { grid-template-columns: repeat(auto-fill, 72px); grid-auto-
       <div id="mestrip" role="listbox" aria-label="Frames of the movie" aria-multiselectable="true"></div>
     </div>
     <div class="meside" hidden>
+      <h4 style="margin-top:10px"><span id="meownh">This frame</span><span class="sp"></span><button id="meownclear" title="Give this frame (or the picked frames) the movie's look again">Reset</button></h4>
+      <div class="merow"><span>Exposure</span><input type="range" id="meown-ex" data-k="exposure" min="-2" max="2" step="0.05" aria-label="This frame's exposure"><span class="val"></span></div>
+      <div class="merow"><span>Contrast</span><input type="range" id="meown-ct" data-k="contrast" min="-100" max="100" step="1" aria-label="This frame's contrast"><span class="val"></span></div>
+      <div class="merow"><span>Saturation</span><input type="range" id="meown-sa" data-k="saturation" min="-100" max="100" step="1" aria-label="This frame's saturation"><span class="val"></span></div>
+      <div class="merow"><span>Warmth</span><input type="range" id="meown-wa" data-k="warmth" min="-100" max="100" step="1" aria-label="This frame's warmth"><span class="val"></span></div>
+      <div class="mechips" style="margin-top:7px"><button class="galbtn" id="meownedit">Edit this frame in Studio…</button></div>
+      <div class="menote" id="meownnote"></div>
       <h4><span>Pictures</span></h4>
       <div class="mechips" id="mepics" role="group" aria-label="Pictures in the movie">
         <button class="galbtn" data-v="movie" title="As the camera windows show them: mosaics, color pictures, movie passes, processed frames">As in the movie</button>
@@ -169,7 +183,7 @@ body.phone #mestrip { grid-template-columns: repeat(auto-fill, 72px); grid-auto-
       <h4><span>Removed by hand</span><span class="sp"></span><button id="merestore">Put all back</button></h4>
       <div class="menote" id="medropped" style="margin-top:0"></div>
       <label class="mecheck"><input type="checkbox" id="meshowout"> Show left-out frames</label>
-      <h4><span>Look</span><span class="sp"></span><button id="melookclear">Clear</button></h4>
+      <h4><span>Movie look</span><span class="sp"></span><button id="melookclear">Clear</button></h4>
       <div class="menote" id="melook" style="margin-top:0"></div>
       <div class="mechips" style="margin-top:6px"><button class="galbtn" id="melookedit">Edit the look in Studio…</button></div>
       <div class="menote">The look goes on every frame: the preview, Play, each downloaded frame and the saved movie.</div>
@@ -218,10 +232,11 @@ body.phone #mestrip { grid-template-columns: repeat(auto-fill, 72px); grid-auto-
   // filter pair, else the ones kept), cams (the export's Cameras), edit (the studio look's recipe)
   // levels (frame id -> EV: the exposure level points), even (Even out over that many pictures, 0 off), ctr (Auto center
   // for the movie: null as the windows have it, true, false), crop (x0, y0, x1, y1, parts of the picture, or null), crop2 (the end crop the
-  // movie glides to, or null), nudge (frame id -> [x, y], parts of the picture);
+  // movie glides to, or null), nudge (frame id -> [x, y], parts of the picture), fedit (frame id -> the studio keys that
+  // frame has over the movie's look, "ex:0.5,ct:0": a frame edited on its own);
   // lv: the frame server's measured brightness of each frame (EV) and Even out's change for each picture
   const ME = { a: null, b: null, frames: [], pictures: "movie", loading: false, error: "", drop: new Set(), targets: null, filters: null, edit: "",
-    levels: new Map(), even: 0, ctr: null, crop: null, crop2: null, nudge: new Map(), lv: { level: {}, even: {}, done: 0, total: null, ready: false, error: "" },
+    levels: new Map(), even: 0, ctr: null, crop: null, crop2: null, nudge: new Map(), fedit: new Map(), lv: { level: {}, even: {}, done: 0, total: null, ready: false, error: "" },
     sel: -1, anchor: -1, picked: new Set(), showOut: true, src: "movie", undo: [], playing: false, pending: null };
   const EV = 2, NUDGE = 0.5, CROP = 0.05, EVEN = 30;   // as export.py's LEVEL_EV, NUDGE_MOST, CROP_LEAST, EVEN_MOST
   const WHOLE = [0, 0, 1, 1], boxStr = b => b.map(v => +v.toFixed(4)).join("_");
@@ -249,6 +264,7 @@ body.phone #mestrip { grid-template-columns: repeat(auto-fill, 72px); grid-auto-
     if (ME.crop) q.set("crop", boxStr(ME.crop));
     if (ME.crop2) q.set("crop2", boxStr(ME.crop2));
     if (ME.nudge.size) q.set("nudge", byId(ME.nudge).map(([k, [x, y]]) => `${k}:${+x.toFixed(3)}:${+y.toFixed(3)}`).join(","));
+    if (ME.fedit.size) q.set("fedit", byId(ME.fedit).map(([k, r]) => `${k}~${r}`).join("|"));
     return q.toString();
   }
   // what the export adds to its plan and film for the stretch marked now: the cut, when the editor has one for it
@@ -262,7 +278,7 @@ body.phone #mestrip { grid-template-columns: repeat(auto-fill, 72px); grid-auto-
   function remember() {
     try {
       const all = JSON.parse(localStorage.getItem(STORE) || "{}"), key = `${isoOf(ME.a)}|${isoOf(ME.b)}`, r = recipe();
-      const empty = !ME.drop.size && !ME.targets && !ME.filters && !ME.edit && ME.pictures === "movie" && !ME.levels.size && !ME.even && ME.ctr == null && !ME.crop && !ME.crop2 && !ME.nudge.size;
+      const empty = !ME.drop.size && !ME.targets && !ME.filters && !ME.edit && ME.pictures === "movie" && !ME.levels.size && !ME.even && ME.ctr == null && !ME.crop && !ME.crop2 && !ME.nudge.size && !ME.fedit.size;
       if (empty) delete all[key]; else all[key] = { r, at: Date.now() };
       const keys = Object.keys(all).sort((x, y) => all[y].at - all[x].at); keys.slice(30).forEach(k => delete all[k]);
       localStorage.setItem(STORE, JSON.stringify(all));
@@ -287,9 +303,11 @@ body.phone #mestrip { grid-template-columns: repeat(auto-fill, 72px); grid-auto-
     ME.crop = box("crop"); ME.crop2 = box("crop2"); if (ME.crop2 && !ME.crop) ME.crop = WHOLE.slice();
     ME.nudge = new Map(words("nudge").map(w => w.split(":")).filter(a => a.length === 3 && a[0] && isFinite(+a[1]) && isFinite(+a[2]))
       .map(([k, x, y]) => [k, [clamp(+x, -NUDGE, NUDGE), clamp(+y, -NUDGE, NUDGE)]]));
+    ME.fedit = new Map((q.get("fedit") || "").split("|").map(w => { const i = w.indexOf("~"); return i > 0 ? [w.slice(0, i), override(w.slice(i + 1))] : null; })
+      .filter(a => a && a[1]));
   }
   const snapshot = () => ({ pictures: ME.pictures, drop: new Set(ME.drop), targets: ME.targets && new Set(ME.targets), filters: ME.filters && new Set(ME.filters), edit: ME.edit, cams: camsOf(),
-    levels: new Map(ME.levels), even: ME.even, ctr: ME.ctr, crop: ME.crop && ME.crop.slice(), crop2: ME.crop2 && ME.crop2.slice(), nudge: new Map(ME.nudge) });
+    levels: new Map(ME.levels), even: ME.even, ctr: ME.ctr, crop: ME.crop && ME.crop.slice(), crop2: ME.crop2 && ME.crop2.slice(), nudge: new Map(ME.nudge), fedit: new Map(ME.fedit) });
   function change(fn) {
     ME.undo.push(snapshot()); if (ME.undo.length > 200) ME.undo.shift();
     fn(); changed();
@@ -304,7 +322,7 @@ body.phone #mestrip { grid-template-columns: repeat(auto-fill, 72px); grid-auto-
     const s = ME.undo.pop(); if (!s) return;
     const reload = s.pictures !== ME.pictures;
     ME.drop = s.drop; ME.targets = s.targets; ME.filters = s.filters; ME.edit = s.edit; EX.state.cams = s.cams; ME.pictures = s.pictures;
-    ME.levels = s.levels; ME.even = s.even; ME.ctr = s.ctr; ME.crop = s.crop; ME.crop2 = s.crop2; ME.nudge = s.nudge;
+    ME.levels = s.levels; ME.even = s.even; ME.ctr = s.ctr; ME.crop = s.crop; ME.crop2 = s.crop2; ME.nudge = s.nudge; ME.fedit = s.fedit;
     changed(); if (reload) load(); else show();
   }
 
@@ -362,7 +380,7 @@ body.phone #mestrip { grid-template-columns: repeat(auto-fill, 72px); grid-auto-
     $("mestrip").querySelectorAll(".meth").forEach(b => {
       const i = +b.dataset.i, e = ME.frames[i], w = why(e);
       b.hidden = !vis.has(i);
-      b.classList.toggle("out", !!w); b.classList.toggle("dropped", w === "removed");
+      b.classList.toggle("out", !!w); b.classList.toggle("dropped", w === "removed"); b.classList.toggle("own", ME.fedit.has(e.id));
       b.classList.toggle("sel", i === ME.sel); b.classList.toggle("picked", ME.picked.has(i));
       b.setAttribute("aria-selected", String(ME.picked.has(i) || i === ME.sel));
     });
@@ -463,7 +481,7 @@ body.phone #mestrip { grid-template-columns: repeat(auto-fill, 72px); grid-auto-
     const e = ME.frames[ME.sel], n = ++drawn;
     pos();
     if (!e) { shown = shownE = null; paint(); return; }
-    $("metag").textContent = `${hms(e)} UTC · ${name(e.target)} · ${e.cam === "N" ? "NAC" : "WAC"} ${e.filters} · ${ME.src === "raw" ? "raw frame" : { mosaic: "mosaic", rolling: "mosaic movie", movie: "movie pass", color: "color", processed: "processed", frame: "frame" }[e.first] || ""} · ${e.id}${evOf(e) ? ` · ${fmtEv(evOf(e))}` : ""}`;
+    $("metag").textContent = `${hms(e)} UTC · ${name(e.target)} · ${e.cam === "N" ? "NAC" : "WAC"} ${e.filters} · ${ME.src === "raw" ? "raw frame" : { mosaic: "mosaic", rolling: "mosaic movie", movie: "movie pass", color: "color", processed: "processed", frame: "frame" }[e.first] || ""} · ${e.id}${evOf(e) ? ` · ${fmtEv(evOf(e))}` : ""}${ME.fedit.has(e.id) ? " · own look" : ""}`;
     // the picture the film shows; one that cannot be centered as it is, and one that cannot be made the raw frame, as in the film
     shown = null;
     for (const url of tries(e, 1024)) {
@@ -475,7 +493,7 @@ body.phone #mestrip { grid-template-columns: repeat(auto-fill, 72px); grid-auto-
     return shown;
   }
   // the look drawn on frame e: the movie's look at e's exposure level
-  const lookFor = e => { const p = STU().decode(ME.edit); if (e) p.exposure += evOf(e); return p; };
+  const lookFor = e => { const p = STU().decode(e && ME.fedit.has(e.id) ? `${ME.edit},${ME.fedit.get(e.id)}` : ME.edit); if (e) p.exposure += evOf(e); return p; };
   // frame e's crop: the movie's, or with an end crop the way there from the start crop, eased in and out over the
   // movie's pictures (export.crop_at); while a crop is drawn, the one being drawn
   function cropAt(e) {
@@ -592,7 +610,7 @@ body.phone #mestrip { grid-template-columns: repeat(auto-fill, 72px); grid-auto-
     try {
       const jpg = await STU().apply(await fullFramed(e), lookFor(e));
       const a = document.createElement("a"); a.href = URL.createObjectURL(jpg);
-      a.download = `Cassini_${e.id}_${new Date(e.t * 1000).toISOString().slice(0, 19).replace(/[:T]/g, "-")}${ME.edit || evOf(e) || cropAt(e) || ME.nudge.has(e.id) ? "_edited" : ""}.jpg`;
+      a.download = `Cassini_${e.id}_${new Date(e.t * 1000).toISOString().slice(0, 19).replace(/[:T]/g, "-")}${ME.edit || evOf(e) || cropAt(e) || ME.nudge.has(e.id) || ME.fedit.has(e.id) ? "_edited" : ""}.jpg`;
       document.body.appendChild(a); a.click(); a.remove(); setTimeout(() => URL.revokeObjectURL(a.href), 60000);
     } catch (err) { toast(`Could not save the frame: ${err.message || err}`); }
     finally { b.disabled = false; b.textContent = "Download frame"; }
@@ -732,9 +750,10 @@ body.phone #mestrip { grid-template-columns: repeat(auto-fill, 72px); grid-auto-
     show();
   });
 
-  // the side's Exposure and Framing
+  // the side's This frame, Exposure and Framing
   function sideLevels() {
     if (!ME.frames.length) return;
+    sideOwn();
     const e = ME.frames[ME.sel], inFilm = e && kept(e), here = $("melvhere");
     here.disabled = !inFilm;
     if (document.activeElement !== here || !here.matches(":active")) here.value = inFilm ? lineOf(e) : 0;
@@ -890,6 +909,78 @@ body.phone #mestrip { grid-template-columns: repeat(auto-fill, 72px); grid-auto-
     STU().open({ kind: "picture", blob, edit: ME.edit || undefined, item: { title: `Movie look · ${hms(e)} UTC`, src: e.src, ids: [e.id] },
       look: r => { change(() => { ME.edit = r; }); show(); if (WM) WM.front(card); } });
   }
+
+  // ---------- one frame edited on its own ----------
+  // a frame's own look: the studio keys it sets over the movie's look, each kept even at rest, the last of a key
+  // winning, in the studio's order (studio_look.override); the frame's look is decode(movie look + "," + these)
+  const OWN = { ex: ["exposure", -2, 2], ct: ["contrast", -100, 100], bk: ["black", 0, 60], wt: ["white", 40, 100], md: ["midtones", -100, 100],
+    sa: ["saturation", -100, 100], wa: ["warmth", -100, 100], ti: ["tint", -100, 100], sh: ["sharpness", 0, 100], to: ["tone", 0, 100] };
+  const OWNKEYS = [...Object.keys(OWN), "fi", "st"], FILTERNAMES = ["none", "vivid", "mono", "noir", "warm", "cool", "sepia"];
+  function ownMap(r) {
+    const m = new Map();
+    String(r || "").split(",").forEach(kv => {
+      const i = kv.indexOf(":"), k = kv.slice(0, i), v = kv.slice(i + 1);
+      if (OWN[k] && v !== "" && isFinite(+v)) m.set(k, String(+clamp(+v, OWN[k][1], OWN[k][2]).toFixed(4)));
+      else if (k === "fi" && FILTERNAMES.includes(v)) m.set(k, v);
+      else if (k === "st" && v !== "" && isFinite(+v)) m.set(k, String(+clamp(+v, 0, 100).toFixed(4)));
+    });
+    return m;
+  }
+  const ownStr = m => OWNKEYS.filter(k => m.has(k)).map(k => `${k}:${m.get(k)}`).join(",");
+  function override(r) { return ownStr(ownMap(r)); }
+  const LONGOF = k => (OWN[k] ? OWN[k][0] : k === "fi" ? "filter" : "strength");
+  // the frames This frame changes: the picked ones, else the one in front
+  const ownSel = () => (ME.picked.size ? [...ME.picked].sort((a, b) => a - b) : [ME.sel]).map(i => ME.frames[i]).filter(Boolean);
+  // the look frame e is drawn with, before its exposure level
+  const ownLook = e => STU().decode(ME.fedit.has(e.id) ? `${ME.edit},${ME.fedit.get(e.id)}` : ME.edit);
+  // frame e's own keys with key k at value v: a key at the movie's own value is not the frame's
+  function ownSet(e, k, v) {
+    const m = ownMap(ME.fedit.get(e.id)), movie = STU().decode(ME.edit)[LONGOF(k)];
+    if (String(v) === String(movie) || +v === +movie) m.delete(k); else m.set(k, String(v));
+    const r = ownStr(m); if (r) ME.fedit.set(e.id, r); else ME.fedit.delete(e.id);
+  }
+  function sideOwn() {
+    const sel = ownSel(), e = sel[0], studio = !!STU();
+    $("meownh").textContent = sel.length > 1 ? `These ${sel.length} frames` : "This frame";
+    $("meownclear").disabled = !sel.some(x => ME.fedit.has(x.id));
+    $("meownedit").disabled = !e || !studio;
+    $("meownedit").textContent = sel.length > 1 ? `Edit these ${sel.length} frames in Studio…` : "Edit this frame in Studio…";
+    const p = e && studio ? ownLook(e) : null, own = e ? ownMap(ME.fedit.get(e.id)) : new Map();
+    document.querySelectorAll("#mecard input[data-k]").forEach(el => {
+      const k = el.dataset.k, sk = Object.keys(OWN).find(x => OWN[x][0] === k);
+      el.disabled = !p;
+      if (p && !el.matches(":active")) el.value = p[k];
+      const v = p ? p[k] : 0, val = el.nextElementSibling;
+      val.textContent = !p ? "—" : (k === "exposure" ? `${v > 0 ? "+" : v < 0 ? "−" : ""}${Math.abs(v).toFixed(2)}` : `${v > 0 ? "+" : ""}${Math.round(v)}`) + (own.has(sk) ? " •" : "");
+      val.title = own.has(sk) ? "This frame's own" : "The movie's look";
+    });
+    const n = ME.fedit.size;
+    $("meownnote").textContent = (sel.length > 1 ? "Only the picked frames change; the rest keep the movie's look." : "Only the frame in front changes; the rest keep the movie's look.")
+      + (n ? ` ${n.toLocaleString()} frame${n === 1 ? " has its" : "s have their"} own look (a dot in the strip).` : "");
+  }
+  document.querySelectorAll("#mecard input[data-k]").forEach(el => {
+    const sk = Object.keys(OWN).find(x => OWN[x][0] === el.dataset.k);
+    slide(el, v => ownSel().forEach(e => ownSet(e, sk, +(+v).toFixed(4))), () => { sideOwn(); paint(); });
+  });
+  $("meownclear").addEventListener("click", () => { const sel = ownSel(); change(() => sel.forEach(e => ME.fedit.delete(e.id))); show(); });
+  // Studio on the frame in front with its own look; Use for this frame (or these frames) keeps whatever differs from
+  // the movie's look as the frames' own
+  async function editOwn() {
+    const sel = ownSel(), e = sel[0]; if (!e || !STU()) return;
+    stopPlay();
+    let blob; try { blob = await full(e); } catch (err) { toast(`Could not open the frame: ${err.message || err}`); return; }
+    const start = ME.fedit.has(e.id) ? `${ME.edit},${ME.fedit.get(e.id)}` : ME.edit;
+    STU().open({ kind: "picture", blob, edit: start || undefined, lookLabel: sel.length > 1 ? `Use for these ${sel.length} frames` : "Use for this frame",
+      item: { title: `${hms(e)} UTC · this frame's look`, src: e.src, ids: [e.id] },
+      look: r => {
+        const got = STU().decode(r), movie = STU().decode(ME.edit), m = new Map();
+        OWNKEYS.forEach(k => { const L = LONGOF(k); if (String(got[L]) !== String(movie[L])) m.set(k, String(got[L])); });
+        const own = ownStr(ownMap(ownStr(m)));
+        change(() => sel.forEach(x => { if (own) ME.fedit.set(x.id, own); else ME.fedit.delete(x.id); }));
+        show(); if (WM) WM.front(card);
+      } });
+  }
+  $("meownedit").addEventListener("click", editOwn);
 
   // ---------- opening ----------
   function front() { card.hidden = false; delete card.dataset.min; if (WM) { WM.front(card); WM.syncMenu(); } }

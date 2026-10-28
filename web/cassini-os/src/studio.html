@@ -25,7 +25,8 @@
 
      A movie's look (the Movie Editor, movieedit.html): open({ kind: "picture", url, look: recipe => … }) edits one frame
      of the film for the look of all of them: only the Adjust and Filters tabs, and Use for the movie hands back the
-     recipe's color part (lookOf) instead of saving a picture; Download still saves that frame as edited.
+     recipe's color part (lookOf) instead of saving a picture; Download still saves that frame as edited. lookLabel
+     names that button otherwise (Use for this frame: a frame edited on its own).
 
      window.cassiniStudio = { open({ kind, blob, url, item, edit, target, look }), close, apply(blob, edit) -> JPEG blob,
      encode(params), decode(string), lookOf(params), renderer(canvas), get state }. -->
@@ -486,7 +487,7 @@ void main() {
     $("stutabs").querySelector('[data-v="mosaic"]').hidden = !st.mos || !!st.look;
     $("stutabs").querySelector('[data-v="crop"]').hidden = !!st.look;
     $("stushare").hidden = !!st.look;
-    $("stusave").textContent = st.look ? "Use for the movie" : "Save to Gallery";
+    $("stusave").textContent = st.look ? st.lookLabel || "Use for the movie" : "Save to Gallery";
     $("stumos").toggleAttribute("hidden", st.tab !== "mosaic" || !st.mos);   // an svg has no hidden property
     trimShow();
   }
@@ -735,7 +736,7 @@ void main() {
     if (!opts.blob && !opts.url) { sync(); $("stuempty").hidden = !!source(); draw(); return; }
     if (!R) { $("stuempty").textContent = "This browser has no WebGL, which the studio draws with."; $("stuempty").hidden = false; return; }
     unload(); $("stuempty").hidden = true; wait("Opening…");
-    st.item = opts.item || null; st.target = opts.target || null; st.from = opts.from || null; st.look = typeof opts.look === "function" ? opts.look : null;
+    st.item = opts.item || null; st.target = opts.target || null; st.from = opts.from || null; st.look = typeof opts.look === "function" ? opts.look : null; st.lookLabel = opts.lookLabel || "";
     st.p = opts.edit ? (typeof opts.edit === "string" ? decode(opts.edit) : clone(opts.edit)) : clone(DEF);
     st.undo = []; st.redo = []; st.changed = false; st.saved = null;
     st.kind = opts.kind === "movie" ? "movie" : "picture";

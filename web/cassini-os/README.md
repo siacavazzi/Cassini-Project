@@ -228,6 +228,14 @@ frame** (one frame at full size with the look, JPEG) and the saved movie, which 
 stretch, cameras, frames taken out, targets and filters kept, and the look), and **Save movie…** opens Export Movie
 on the edited film (the export takes `drop=`, `targets=`, `filters=` and `edit=`).
 
+**This frame** edits one frame on its own, for the frame that looks off: Exposure, Contrast, Saturation and Warmth
+for the frame in front (or every picked frame), or **Edit this frame in Studio…** for every slider and filter
+(**Use for this frame**). Only those frames change; the rest keep the movie's look. An edited frame keeps its
+exposure level, crop and nudge (drag the picture to move it), follows the movie's look in every slider it leaves
+alone, and has a dot in the strip; **Reset** gives it the movie's look again. Its look is drawn the same way on the
+preview, Play, Download frame and the saved movie, and travels in links and the export as
+`fedit=ID~ex:-0.5,ct:0|ID~…` (the studio keys the frame sets over the movie's look, `studio_look.override`).
+
 ## Phone layout
 
 On a screen under 600 px wide, or a touch screen under 500 px tall (Settings > Interface > Phone layout: Automatic,
