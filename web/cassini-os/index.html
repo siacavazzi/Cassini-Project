@@ -1254,12 +1254,11 @@ body.phone .stufoot .galbtn { padding: 6px 10px; }
 #mecard[style*="left"] { transform: none; }
 #mecard.zoomed { width: calc(100% - 20px); height: calc(100% - 50px); }
 #mecard .mebody { flex: 1 1 auto; min-height: 0; display: grid; grid-template-columns: minmax(0, 1fr) 250px; border-top: 1px solid var(--q-line); }
-#mecard .memain { min-width: 0; min-height: 0; display: grid; grid-template-rows: minmax(140px, 1fr) auto minmax(110px, 38%); background: #000; }
-#mecard.big .memain { grid-template-rows: minmax(140px, 1fr) auto 0; }
+#mecard .memain { min-width: 0; min-height: 0; display: grid; grid-template-rows: minmax(140px, 1fr) auto auto minmax(110px, 34%); background: #000; }
+#mecard.big .memain { grid-template-rows: minmax(140px, 1fr) auto auto 0; }
 #mecard.big #mestrip { display: none; }
 #mestage { position: relative; min-height: 0; overflow: hidden; }
-#mecanvas { position: absolute; display: block; cursor: zoom-in; }
-#mecard.big #mecanvas { cursor: zoom-out; }
+#mecanvas { position: absolute; display: block; cursor: grab; touch-action: none; }
 #mestage .metag { position: absolute; left: 8px; top: 7px; right: 8px; z-index: 2; font: 9.5px/1.4 var(--hudf); letter-spacing: .04em; color: rgba(232,236,242,.78); text-shadow: 0 0 3px #000; pointer-events: none; }
 #meoff { position: absolute; right: 8px; bottom: 8px; z-index: 2; font: 10px var(--hudf); letter-spacing: .08em; text-transform: uppercase; padding: 2px 6px; border-radius: 3px; background: rgba(255,120,100,.25); color: #ffb2a6; }
 #meempty { position: absolute; inset: 0; display: grid; place-items: center; text-align: center; padding: 20px; font-size: 12px; line-height: 1.55; color: var(--q-dim); }
@@ -1269,6 +1268,31 @@ body.phone .stufoot .galbtn { padding: 6px 10px; }
 #mecard .mebar .rnd { all: unset; width: 24px; height: 24px; display: grid; place-items: center; border-radius: 50%; color: var(--q-text); background: rgba(255,255,255,.08); cursor: pointer; flex: none; font-size: 12px; }
 #mecard .mebar .rnd:hover { background: rgba(255,255,255,.16); color: #fff; }
 #mepos { min-width: 120px; font-variant-numeric: tabular-nums; }
+#melevels { position: relative; height: 68px; border-top: 1px solid var(--q-line); background: rgba(6,8,11,.92); cursor: crosshair; touch-action: none; }
+#melevels.onpt { cursor: ns-resize; }
+#melevels canvas { position: absolute; inset: 0; width: 100%; height: 100%; display: block; }
+#melevels .lvtag { position: absolute; left: 8px; top: 4px; font: 9px/1.3 var(--hudf); letter-spacing: .06em; color: rgba(232,236,242,.5); pointer-events: none; text-transform: uppercase; }
+#melevels .lvtag b { font-weight: normal; color: rgba(232,236,242,.8); }
+#mecanvas.nudging { cursor: grabbing; }
+#mecropbox { position: absolute; z-index: 3; box-shadow: 0 0 0 9999px rgba(0,0,0,.6); outline: 1px solid rgba(255,255,255,.85); cursor: move; touch-action: none;
+  background-image: linear-gradient(rgba(255,255,255,.18), rgba(255,255,255,.18)), linear-gradient(rgba(255,255,255,.18), rgba(255,255,255,.18)), linear-gradient(90deg, rgba(255,255,255,.18), rgba(255,255,255,.18)), linear-gradient(90deg, rgba(255,255,255,.18), rgba(255,255,255,.18));
+  background-size: 100% 1px, 100% 1px, 1px 100%, 1px 100%; background-position: 0 33.33%, 0 66.67%, 33.33% 0, 66.67% 0; background-repeat: no-repeat; }
+#mecropbox[hidden] { display: none; }
+#mecropbox i { position: absolute; width: 14px; height: 14px; border: 2px solid #fff; }
+#mecropbox i[data-h="nw"] { left: -3px; top: -3px; border-width: 2px 0 0 2px; cursor: nwse-resize; }
+#mecropbox i[data-h="ne"] { right: -3px; top: -3px; border-width: 2px 2px 0 0; cursor: nesw-resize; }
+#mecropbox i[data-h="sw"] { left: -3px; bottom: -3px; border-width: 0 0 2px 2px; cursor: nesw-resize; }
+#mecropbox i[data-h="se"] { right: -3px; bottom: -3px; border-width: 0 2px 2px 0; cursor: nwse-resize; }
+#mecropbox span { position: absolute; left: 0; top: -18px; font: 9.5px var(--hudf); letter-spacing: .06em; text-transform: uppercase; color: #fff; text-shadow: 0 0 3px #000; white-space: nowrap; }
+#mecard .mecropctl { display: flex; flex-wrap: wrap; gap: 6px; align-items: center; margin-top: 7px; }
+#mecard .mecropctl[hidden] { display: none; }
+#mecard .merow { display: flex; gap: 8px; align-items: center; margin-top: 7px; font-size: 11px; color: var(--q-text); }
+#mecard .merow > span:first-child { flex: none; width: 66px; color: var(--q-dim); }
+#mecard .merow input[type=range] { flex: 1; min-width: 60px; accent-color: var(--q-accent, #8ab6ff); }
+#mecard .merow .val { flex: none; min-width: 52px; text-align: right; font: 10.5px var(--hudf); font-variant-numeric: tabular-nums; color: var(--q-text); }
+#mecard .merow input:disabled, #mecard .merow input:disabled ~ .val { opacity: .4; }
+#mecard .meside .galseg { margin-top: 2px; }
+#mecard .meside .galseg button { font-size: 10.5px; padding: 2px 8px; }
 #mestrip { min-height: 0; overflow-y: auto; padding: 6px; display: grid; grid-template-columns: repeat(auto-fill, 96px); grid-auto-rows: 96px; justify-content: space-between; gap: 5px; align-content: start; border-top: 1px solid var(--q-line); background: rgba(0,0,0,.55); }
 .meth { all: unset; position: relative; display: block; border-radius: 4px; overflow: hidden; background: #0b0d11; outline: 1px solid rgba(255,255,255,.06); cursor: pointer; }
 .meth img { position: absolute; inset: 0; display: block; width: 100%; height: 100%; object-fit: cover; }
@@ -1303,6 +1327,7 @@ body.phone #mecard { left: var(--side, 6px) !important; right: var(--sider, 6px)
   height: calc(100dvh - var(--menu, 30px) - var(--appdockh, 0px) - 3 * var(--gap, 6px)) !important; z-index: 1460 !important; }
 body.phone #mecard .mebody { grid-template-columns: minmax(0, 1fr); grid-template-rows: minmax(0, 1fr) auto; }
 body.phone #mecard .meside { border-left: 0; border-top: 1px solid var(--q-line); max-height: 30vh; }
+body.phone #melevels { height: 54px; }
 body.phone #mestrip { grid-template-columns: repeat(auto-fill, 72px); grid-auto-rows: 72px; }
 
 #bodymenu { top: calc(env(safe-area-inset-top, 0px) + 36px); right: max(14px, env(safe-area-inset-right, 0px)); width: 340px; height: min(360px, calc(100% - 330px)); min-height: 220px; display: flex; flex-direction: column; }
@@ -2069,7 +2094,8 @@ body.ambient.phone .amb-where { font-size: 18px; }
   <div class="mebody">
     <div class="memain">
       <div id="mestage">
-        <canvas id="mecanvas" title="Double-click to fill the window"></canvas>
+        <div id="mecropbox" hidden><span id="mecroplabel"></span><i data-h="nw"></i><i data-h="ne"></i><i data-h="sw"></i><i data-h="se"></i></div>
+        <canvas id="mecanvas" title="Drag to move this frame (or the picked frames) · double-click to fill the window"></canvas>
         <span class="metag" id="metag"></span>
         <span id="meoff" hidden>Left out</span>
         <div id="meempty">Highlight a stretch of the timeline (drag across it), then Edit… on its bar.</div>
@@ -2083,6 +2109,9 @@ body.ambient.phone .amb-where { font-size: 18px; }
         <span class="sp"></span>
         <button class="galbtn" id="metoggle" title="Take the picked frames out of the movie, or put them back (Delete)">Remove</button>
         <button class="galbtn" id="medl" title="Save this frame at full size, with the look, as a JPEG">Download frame</button>
+      </div>
+      <div id="melevels" title="The movie's brightness, picture by picture. Drag a point to brighten or dim the movie there; double-click to add a point, double-click a point to take it out">
+        <canvas id="melvcanvas"></canvas><span class="lvtag" id="melvtag"></span>
       </div>
       <div id="mestrip" role="listbox" aria-label="Frames of the movie" aria-multiselectable="true"></div>
     </div>
@@ -2108,6 +2137,20 @@ body.ambient.phone .amb-where { font-size: 18px; }
       <div class="menote" id="melook" style="margin-top:0"></div>
       <div class="mechips" style="margin-top:6px"><button class="galbtn" id="melookedit">Edit the look in Studio…</button></div>
       <div class="menote">The look goes on every frame: the preview, Play, each downloaded frame and the saved movie.</div>
+      <h4><span>Exposure</span><span class="sp"></span><button id="melvclear" title="Take out every level point">Clear</button></h4>
+      <div class="merow"><span>Level here</span><input type="range" id="melvhere" min="-2" max="2" step="0.05" aria-label="Exposure level at the frame in front"><span class="val" id="melvherev"></span></div>
+      <div class="merow"><span>Even out</span><input type="range" id="meeven" min="0" max="30" step="1" aria-label="Even out the brightness over this many pictures"><span class="val" id="meevenv"></span></div>
+      <div class="menote" id="melvnote"></div>
+      <h4><span>Framing</span><span class="sp"></span><button id="mefrclear" title="Take the crop off and put every nudged frame back">Reset</button></h4>
+      <div class="galseg" id="mectr" role="group" aria-label="Auto center for the movie"><button data-v="" title="Each camera window's Auto center setting">As the windows</button><button data-v="1" title="Every picture centered on its body (north up), movie passes and single pictures alike">On</button><button data-v="0" title="Every picture as Cassini pointed">Off</button></div>
+      <div class="mechips" style="margin-top:7px"><button class="galbtn" id="mecrop" aria-pressed="false" title="Draw the crop on the picture">Crop…</button></div>
+      <div class="mecropctl" id="mecropctl" hidden>
+        <div class="galseg" id="measpect" role="group" aria-label="Crop shape"><button data-v="free">Free</button><button data-v="1">Square</button><button data-v="1.7778">16:9</button><button data-v="1.3333">4:3</button><button data-v="pic">Picture</button></div>
+        <label class="mecheck" style="margin-top:2px"><input type="checkbox" id="meglide"> Start and end crop</label>
+        <div class="galseg" id="mecropend" role="group" aria-label="Which crop" hidden><button data-v="start" title="The crop at the movie's first picture">Start</button><button data-v="end" title="The crop at the movie's last picture">End</button></div>
+        <button class="galbtn" id="mecropdone">Done</button>
+      </div>
+      <div class="menote" id="menudged"></div>
     </div>
   </div>
   <div class="mefoot">
@@ -8981,8 +9024,16 @@ void main() {
 
   // ME: the stretch (a, b), its plan's frames, and the edit: drop (ids taken out by hand), keep (null = every target /
   // filter pair, else the ones kept), cams (the export's Cameras), edit (the studio look's recipe)
+  // levels (frame id -> EV: the exposure level points), even (Even out over that many pictures, 0 off), ctr (Auto center
+  // for the movie: null as the windows have it, true, false), crop (x0, y0, x1, y1, parts of the picture, or null), crop2 (the end crop the
+  // movie glides to, or null), nudge (frame id -> [x, y], parts of the picture);
+  // lv: the frame server's measured brightness of each frame (EV) and Even out's change for each picture
   const ME = { a: null, b: null, frames: [], pictures: "movie", loading: false, error: "", drop: new Set(), targets: null, filters: null, edit: "",
+    levels: new Map(), even: 0, ctr: null, crop: null, crop2: null, nudge: new Map(), lv: { level: {}, even: {}, done: 0, total: null, ready: false, error: "" },
     sel: -1, anchor: -1, picked: new Set(), showOut: true, src: "movie", undo: [], playing: false, pending: null };
+  const EV = 2, NUDGE = 0.5, CROP = 0.05, EVEN = 30;   // as export.py's LEVEL_EV, NUDGE_MOST, CROP_LEAST, EVEN_MOST
+  const WHOLE = [0, 0, 1, 1], boxStr = b => b.map(v => +v.toFixed(4)).join("_");
+  const clamp = (v, a, b) => Math.max(a, Math.min(b, v));
   const camsOf = () => (/^(N|W|NW)$/.test(EX.state.cams || "") ? EX.state.cams : "NW");
   const why = e => !camsOf().includes(e.cam) ? "camera" : ME.drop.has(e.id) ? "removed" : ME.targets && !ME.targets.has(e.target || "UNKNOWN") ? "target"
     : ME.filters && !ME.filters.has(e.filters) ? "filter" : "";
@@ -8999,6 +9050,13 @@ void main() {
     if (ME.targets) q.set("targets", listOf(ME.targets));
     if (ME.filters) q.set("filters", listOf(ME.filters));
     if (ME.edit) q.set("edit", ME.edit);
+    const byId = m => [...m].sort((x, y) => (x[0] < y[0] ? -1 : 1));
+    if (ME.levels.size) q.set("levels", byId(ME.levels).map(([k, v]) => `${k}:${+v.toFixed(2)}`).join(","));
+    if (ME.even) q.set("even", String(ME.even));
+    if (ME.ctr != null) q.set("ctr", ME.ctr ? "1" : "0");
+    if (ME.crop) q.set("crop", boxStr(ME.crop));
+    if (ME.crop2) q.set("crop2", boxStr(ME.crop2));
+    if (ME.nudge.size) q.set("nudge", byId(ME.nudge).map(([k, [x, y]]) => `${k}:${+x.toFixed(3)}:${+y.toFixed(3)}`).join(","));
     return q.toString();
   }
   // what the export adds to its plan and film for the stretch marked now: the cut, when the editor has one for it
@@ -9012,7 +9070,7 @@ void main() {
   function remember() {
     try {
       const all = JSON.parse(localStorage.getItem(STORE) || "{}"), key = `${isoOf(ME.a)}|${isoOf(ME.b)}`, r = recipe();
-      const empty = !ME.drop.size && !ME.targets && !ME.filters && !ME.edit && ME.pictures === "movie";
+      const empty = !ME.drop.size && !ME.targets && !ME.filters && !ME.edit && ME.pictures === "movie" && !ME.levels.size && !ME.even && ME.ctr == null && !ME.crop && !ME.crop2 && !ME.nudge.size;
       if (empty) delete all[key]; else all[key] = { r, at: Date.now() };
       const keys = Object.keys(all).sort((x, y) => all[y].at - all[x].at); keys.slice(30).forEach(k => delete all[k]);
       localStorage.setItem(STORE, JSON.stringify(all));
@@ -9029,15 +9087,24 @@ void main() {
     ME.targets = set("targets"); ME.filters = set("filters"); ME.edit = q.get("edit") || "";
     ME.pictures = /^(movie|color|processed|raw)$/.test(q.get("pictures") || "") ? q.get("pictures") : "movie";
     if (/^(N|W|NW)$/.test(q.get("cams") || "")) EX.state.cams = q.get("cams");
+    const words = k => (q.get(k) || "").split(",").filter(Boolean);
+    ME.levels = new Map(words("levels").map(w => { const i = w.lastIndexOf(":"); return [w.slice(0, i), clamp(+w.slice(i + 1), -EV, EV)]; }).filter(([k, v]) => k && isFinite(v)));
+    ME.even = clamp(Math.round(+q.get("even") || 0), 0, EVEN);
+    ME.ctr = q.get("ctr") === "1" ? true : q.get("ctr") === "0" ? false : null;
+    const box = k => { const b = (q.get(k) || "").split("_").map(Number); return b.length === 4 && b.every(isFinite) && b[2] - b[0] >= CROP && b[3] - b[1] >= CROP ? b.map(v => clamp(v, 0, 1)) : null; };
+    ME.crop = box("crop"); ME.crop2 = box("crop2"); if (ME.crop2 && !ME.crop) ME.crop = WHOLE.slice();
+    ME.nudge = new Map(words("nudge").map(w => w.split(":")).filter(a => a.length === 3 && a[0] && isFinite(+a[1]) && isFinite(+a[2]))
+      .map(([k, x, y]) => [k, [clamp(+x, -NUDGE, NUDGE), clamp(+y, -NUDGE, NUDGE)]]));
   }
-  const snapshot = () => ({ pictures: ME.pictures, drop: new Set(ME.drop), targets: ME.targets && new Set(ME.targets), filters: ME.filters && new Set(ME.filters), edit: ME.edit, cams: camsOf() });
+  const snapshot = () => ({ pictures: ME.pictures, drop: new Set(ME.drop), targets: ME.targets && new Set(ME.targets), filters: ME.filters && new Set(ME.filters), edit: ME.edit, cams: camsOf(),
+    levels: new Map(ME.levels), even: ME.even, ctr: ME.ctr, crop: ME.crop && ME.crop.slice(), crop2: ME.crop2 && ME.crop2.slice(), nudge: new Map(ME.nudge) });
   function change(fn) {
     ME.undo.push(snapshot()); if (ME.undo.length > 200) ME.undo.shift();
     fn(); changed();
   }
   let exT = 0;
   function changed() {
-    remember(); render();
+    remember(); render(); levelsSoon();
     // the export's plan follows (EX.mark re-plans the marked stretch, cut included)
     clearTimeout(exT); exT = setTimeout(() => { if (same()) EX.mark(); }, 300);
   }
@@ -9045,6 +9112,7 @@ void main() {
     const s = ME.undo.pop(); if (!s) return;
     const reload = s.pictures !== ME.pictures;
     ME.drop = s.drop; ME.targets = s.targets; ME.filters = s.filters; ME.edit = s.edit; EX.state.cams = s.cams; ME.pictures = s.pictures;
+    ME.levels = s.levels; ME.even = s.even; ME.ctr = s.ctr; ME.crop = s.crop; ME.crop2 = s.crop2; ME.nudge = s.nudge;
     changed(); if (reload) load(); else show();
   }
 
@@ -9052,7 +9120,7 @@ void main() {
   let ask = 0;
   async function load() {
     const n = ++ask;
-    ME.loading = true; ME.error = ""; ME.frames = []; render();
+    ME.loading = true; ME.error = ""; ME.frames = []; ME.lv = { level: {}, even: {}, done: 0, total: null, ready: ME.lv.ready, error: "" }; render();
     // every frame of the stretch, however many (list=1: the plan's cap is the film's, not the list's)
     const q = new URLSearchParams({ from: isoOf(ME.a), until: isoOf(ME.b), cams: "NW", fps: opt("export.adaptive", true) ? "auto" : String(opt("export.fps", 12)),
       size: "512", sound: "0", caption: "0", pictures: ME.pictures, list: "1" });
@@ -9068,7 +9136,7 @@ void main() {
     const has = (s, k) => s && [...s].some(v => ME.frames.some(e => (k === "target" ? e.target || "UNKNOWN" : e.filters) === v));
     if (ME.targets && !has(ME.targets, "target")) ME.targets = null;
     if (ME.filters && !has(ME.filters, "filters")) ME.filters = null;
-    strip(); render();
+    strip(); render(); levelsSoon(0);
     const keep = ME.frames[ME.sel] && ME.frames[ME.sel].id, at = keep ? ME.frames.findIndex(e => e.id === keep) : -1;
     ME.sel = -1; ME.picked = new Set();
     const first = at >= 0 ? at : ME.frames.findIndex(kept); select(first >= 0 ? first : 0);
@@ -9141,6 +9209,7 @@ void main() {
     $("melook").textContent = ME.edit ? lookText(ME.edit) : "As the pipeline made the pictures.";
     $("melookclear").disabled = !ME.edit;
     $("meshowout").checked = ME.showOut;
+    sideLevels();
   }
   const LOOKNAMES = { ex: "exposure", ct: "contrast", bk: "black", wt: "white", md: "midtones", sa: "saturation", wa: "warmth", ti: "tint", sh: "sharpness", to: "tone", fi: "filter", st: "strength" };
   const lookText = r => r.split(",").map(kv => { const [k, v] = kv.split(":"); return `${LOOKNAMES[k] || k} ${/^-?[\d.]+$/.test(v) && +v > 0 && k !== "st" && k !== "wt" ? "+" : ""}${v}`; }).join(", ");
@@ -9156,6 +9225,7 @@ void main() {
     $("meexport").disabled = $("mecopy").disabled = ME.a == null;
     $("mepics").querySelectorAll("button").forEach(b => b.setAttribute("aria-pressed", String(b.dataset.v === ME.pictures)));
     $("mesrc").querySelectorAll("button").forEach(b => b.setAttribute("aria-pressed", String(b.dataset.v === ME.src)));
+    EVS = null;
     if (ME.frames.length) { side(); stripState(); }
     pos();
   }
@@ -9169,14 +9239,23 @@ void main() {
     $("medl").disabled = !e;
     $("meoff").hidden = !e || kept(e);
     if (e && !kept(e)) $("meoff").textContent = { removed: "Removed", camera: "Camera left out", target: "Target left out", filter: "Filter left out" }[why(e)];
+    graph(); sideLevels();
   }
 
   // ---------- the frame in front, drawn with the look ----------
   const cv = $("mecanvas"), stage = $("mestage");
   let R = null;
   const ren = () => { if (!R && STU() && STU().renderer) { try { R = STU().renderer(cv); } catch (e) { R = null; } } return R; };
-  const picUrl = (e, size) => ME.src === "raw" || !e.src ? `${FRAMES}/frames/${e.id}.webp?size=${size}`
-    : `${FRAMES}${e.src}${e.src.includes("?") ? "&" : "?"}size=${size}${window.cassiniLook ? window.cassiniLook() : ""}${/^\/frames\/movie\//.test(e.src) && window.cassiniMovieStyle ? window.cassiniMovieStyle() : ""}`;
+  // Auto center for the movie: the editor's choice, else the windows' setting; on, a picture shown on its own (a color
+  // composite, a processed frame) is centered too, as the windows and the film draw it (plain: as it is, the stand-in
+  // for a picture the server does not center)
+  const centreOn = () => ME.ctr ?? (opt("cameras.autoCenter", true) !== false);
+  const picUrl = (e, size, plain) => {
+    if (ME.src === "raw" || !e.src) return `${FRAMES}/frames/${e.id}.webp?size=${size}`;
+    const movie = /^\/frames\/movie\//.test(e.src), still = /^\/frames\/(color|processed)/.test(e.src);
+    return `${FRAMES}${e.src}${e.src.includes("?") ? "&" : "?"}size=${size}${window.cassiniLook ? window.cassiniLook({ center: still && !plain && centreOn() }) : ""}${movie && window.cassiniMovieStyle ? window.cassiniMovieStyle({ center: centreOn() }) : ""}`;
+  };
+  const tries = (e, size) => [...new Set([picUrl(e, size), picUrl(e, size, true), `${FRAMES}/frames/${e.id}.webp?size=${size}`])];
   // pictures kept as bitmaps for a while (Play steps through them), the oldest let go
   const bitmaps = new Map();
   function bitmap(url) {
@@ -9187,34 +9266,57 @@ void main() {
     while (bitmaps.size > 24) { const [k, old] = bitmaps.entries().next().value; bitmaps.delete(k); old.then(b => b.close && b.close(), () => {}); }
     return p;
   }
-  let shown = null, drawn = 0;
+  let shown = null, shownE = null, drawn = 0;
   async function show() {
     const e = ME.frames[ME.sel], n = ++drawn;
     pos();
-    if (!e) { shown = null; paint(); return; }
-    $("metag").textContent = `${hms(e)} UTC · ${name(e.target)} · ${e.cam === "N" ? "NAC" : "WAC"} ${e.filters} · ${ME.src === "raw" ? "raw frame" : { mosaic: "mosaic", rolling: "mosaic movie", movie: "movie pass", color: "color", processed: "processed", frame: "frame" }[e.first] || ""} · ${e.id}`;
-    try {
-      const b = await bitmap(picUrl(e, 1024));
-      if (n !== drawn) return;
-      shown = b;
-    } catch (err) {
-      if (n !== drawn) return;
-      // the picture the film shows cannot be made: the raw frame stands in, as in the film
-      try { shown = await bitmap(`${FRAMES}/frames/${e.id}.webp?size=1024`); } catch (e2) { shown = null; }
-      if (n !== drawn) return;
+    if (!e) { shown = shownE = null; paint(); return; }
+    $("metag").textContent = `${hms(e)} UTC · ${name(e.target)} · ${e.cam === "N" ? "NAC" : "WAC"} ${e.filters} · ${ME.src === "raw" ? "raw frame" : { mosaic: "mosaic", rolling: "mosaic movie", movie: "movie pass", color: "color", processed: "processed", frame: "frame" }[e.first] || ""} · ${e.id}${evOf(e) ? ` · ${fmtEv(evOf(e))}` : ""}`;
+    // the picture the film shows; one that cannot be centered as it is, and one that cannot be made the raw frame, as in the film
+    shown = null;
+    for (const url of tries(e, 1024)) {
+      try { shown = await bitmap(url); break; } catch (err) { if (n !== drawn) return; }
     }
+    if (n !== drawn) return;
+    shownE = shown ? e : null;
     paint();
     return shown;
+  }
+  // the look drawn on frame e: the movie's look at e's exposure level
+  const lookFor = e => { const p = STU().decode(ME.edit); if (e) p.exposure += evOf(e); return p; };
+  // frame e's crop: the movie's, or with an end crop the way there from the start crop, eased in and out over the
+  // movie's pictures (export.crop_at); while a crop is drawn, the one being drawn
+  function cropAt(e) {
+    if (cropping) return null;
+    const a = ME.crop, b = ME.crop2, at = e && evs().at.get(e.id), n = evs().film.length;
+    if (!b || at == null || n < 2) return a;
+    let t = at / (n - 1); t = t * t * (3 - 2 * t);
+    return a.map((u, i) => u + (b[i] - u) * t);
+  }
+  // picture b (a bitmap) with e's framing (moved by e's nudge, cut to the crop), as export.framed draws it; b itself
+  // when it has none
+  function framedOf(b, e, crop = cropAt(e)) {
+    const nd = (e && ME.nudge.get(e.id)) || [0, 0];
+    if (!crop && !nd[0] && !nd[1]) return b;
+    const [x0, y0, x1, y1] = crop || WHOLE, W = b.width, H = b.height, cw = (x1 - x0) * W, ch = (y1 - y0) * H, k = Math.max(W, H) / Math.max(cw, ch);
+    const c = document.createElement("canvas"); c.width = Math.max(1, Math.round(cw * k)); c.height = Math.max(1, Math.round(ch * k));
+    const g = c.getContext("2d"); g.fillStyle = "#000"; g.fillRect(0, 0, c.width, c.height);
+    g.imageSmoothingQuality = "high";
+    g.setTransform(k, 0, 0, k, -k * (x0 - nd[0]) * W, -k * (y0 - nd[1]) * H);
+    g.drawImage(b, 0, 0);
+    return c;
   }
   function paint() {
     const r = ren();
     if (!r || !shown || card.hidden) { cv.style.width = "0px"; return; }
-    const box = stage.getBoundingClientRect(), dpr = Math.min(2, devicePixelRatio || 1), W = shown.width, H = shown.height;
-    const k = Math.min((box.width - 12) / W, (box.height - 12) / H); if (!(k > 0)) return;
+    const src = framedOf(shown, shownE), box = stage.getBoundingClientRect(), dpr = Math.min(2, devicePixelRatio || 1), W = src.width, H = src.height;
+    // room round the picture for the crop box's handles while a crop is drawn
+    const m = cropping ? 40 : 12, k = Math.min((box.width - m) / W, (box.height - m) / H); if (!(k > 0)) return;
     const cw = W * k, ch = H * k;
     Object.assign(cv.style, { width: cw + "px", height: ch + "px", left: (box.width - cw) / 2 + "px", top: (box.height - ch) / 2 + "px" });
-    r.upload(shown, W, H);
-    r.draw(STU().decode(ME.edit), Math.max(1, Math.round(cw * dpr)), Math.max(1, Math.round(ch * dpr)));
+    r.upload(src, W, H);
+    r.draw(lookFor(shownE), Math.max(1, Math.round(cw * dpr)), Math.max(1, Math.round(ch * dpr)));
+    cropBox();
   }
   new ResizeObserver(() => paint()).observe(stage);
 
@@ -9279,18 +9381,26 @@ void main() {
   // ---------- one frame, downloaded at full size with the look ----------
   // the frame's picture at full size, as shown (the raw frame standing in when the movie's picture cannot be made)
   async function full(e) {
-    let r = await fetch(picUrl(e, "full"));
-    if (!r.ok) r = await fetch(`${FRAMES}/frames/${e.id}.webp?size=full`);
+    let r;
+    for (const url of tries(e, "full")) { r = await fetch(url); if (r.ok) break; }
     if (!r.ok) throw new Error(`the frame server said ${r.status}`);
     return r.blob();
+  }
+  // and with e's framing
+  async function fullFramed(e) {
+    const blob = await full(e), nd = ME.nudge.get(e.id);
+    if (!cropAt(e) && !nd) return blob;
+    const b = await createImageBitmap(blob), c = framedOf(b, e);
+    if (b.close) b.close();
+    return await new Promise(res => c.toBlob(res, "image/png")) || blob;
   }
   async function download() {
     const e = ME.frames[ME.sel]; if (!e || !STU()) return;
     const b = $("medl"); b.disabled = true; b.textContent = "Making…";
     try {
-      const jpg = await STU().apply(await full(e), ME.edit);
+      const jpg = await STU().apply(await fullFramed(e), lookFor(e));
       const a = document.createElement("a"); a.href = URL.createObjectURL(jpg);
-      a.download = `Cassini_${e.id}_${new Date(e.t * 1000).toISOString().slice(0, 19).replace(/[:T]/g, "-")}${ME.edit ? "_edited" : ""}.jpg`;
+      a.download = `Cassini_${e.id}_${new Date(e.t * 1000).toISOString().slice(0, 19).replace(/[:T]/g, "-")}${ME.edit || evOf(e) || cropAt(e) || ME.nudge.has(e.id) ? "_edited" : ""}.jpg`;
       document.body.appendChild(a); a.click(); a.remove(); setTimeout(() => URL.revokeObjectURL(a.href), 60000);
     } catch (err) { toast(`Could not save the frame: ${err.message || err}`); }
     finally { b.disabled = false; b.textContent = "Download frame"; }
@@ -9299,6 +9409,286 @@ void main() {
     const g = $("galtoast");
     if (g) { g.firstElementChild.textContent = t; const o = g.querySelector("button"); if (o) o.remove(); g.hidden = false; clearTimeout(toast.t); toast.t = setTimeout(() => { g.hidden = true; }, 3200); }
   }
+
+  // ---------- exposure: the movie's brightness, its level points and Even out ----------
+  const fmtEv = v => `${v > 0 ? "+" : v < 0 ? "−" : ""}${Math.abs(v).toFixed(2)} EV`;
+  // the film's pictures in order, and the levels' line over them: straight between the points, flat before the first
+  // and after the last (export.exposures draws it the same way); a left-out frame is not in the film and has none
+  let EVS = null;
+  function evs() {
+    if (EVS) return EVS;
+    const film = ME.frames.filter(kept), line = new Map(), at = new Map();
+    const pts = film.map((e, i) => [i, ME.levels.get(e.id)]).filter(p => p[1] != null);
+    film.forEach((e, i) => {
+      at.set(e.id, i);
+      let v = 0;
+      if (pts.length) {
+        const k = pts.findIndex(p => p[0] >= i);
+        v = k < 0 ? pts[pts.length - 1][1] : k === 0 || pts[k][0] === i ? pts[k][1] : pts[k - 1][1] + (pts[k][1] - pts[k - 1][1]) * (i - pts[k - 1][0]) / (pts[k][0] - pts[k - 1][0]);
+      }
+      line.set(e.id, v);
+    });
+    return (EVS = { film, line, at });
+  }
+  const lineOf = e => evs().line.get(e.id) || 0;
+  const evenOf = e => (ME.even && evs().at.has(e.id) && ME.lv.even[e.id]) || 0;
+  const evOf = e => clamp(lineOf(e) + evenOf(e), -2 * EV, 2 * EV);
+
+  // the frame server's measurements, asked for again while it is still measuring
+  let lvAsk = 0, lvT = 0;
+  function levelsSoon(ms = 400) { clearTimeout(lvT); lvT = setTimeout(levelsFetch, ms); }
+  async function levelsFetch() {
+    if (ME.a == null || ME.loading || card.hidden || !ME.frames.length) return;
+    const n = ++lvAsk, r0 = new URLSearchParams(recipe());
+    const q = new URLSearchParams({ from: isoOf(ME.a), until: isoOf(ME.b), cams: camsOf(), fps: "auto", size: "512", sound: "0", caption: "0", pictures: ME.pictures, list: "1" });
+    ["drop", "targets", "filters", "even", "ctr"].forEach(k => { if (r0.get(k)) q.set(k, r0.get(k)); });
+    try {
+      const r = await fetch(`${FRAMES}/export/levels.json?${q}${window.cassiniLook ? window.cassiniLook() : ""}${window.cassiniMovieStyle ? window.cassiniMovieStyle({ center: centreOn() }) : ""}`);
+      const j = await r.json().catch(() => ({ error: `the frame server said ${r.status}` }));
+      if (n !== lvAsk) return;
+      if (!r.ok || j.error && j.total == null) throw new Error(j.error || r.status);
+      ME.lv = { level: j.level || {}, even: j.even || {}, done: j.done || 0, total: j.total, ready: !!j.even_ready, error: j.error || "" };
+    } catch (e) {
+      if (n !== lvAsk) return;
+      ME.lv = { ...ME.lv, error: /fetch|network|404/i.test(String(e.message || e)) ? "This frame server does not measure brightness yet." : `Could not measure the brightness: ${e.message || e}` };
+    }
+    graph(); sideLevels(); if (ME.even) paint();
+    if (!ME.lv.error && (ME.lv.total == null || ME.lv.done < ME.lv.total)) levelsSoon(1500);
+  }
+
+  // the graph: x the film's pictures in order, y brightness in EV round the stretch's median (SPAN either way)
+  const gbox = $("melevels"), gcv = $("melvcanvas"), SPAN = 2.5;
+  let G = null;
+  function graph() {
+    const box = gbox.getBoundingClientRect();
+    if (card.hidden || !box.width || !box.height) return;
+    const dpr = Math.min(2, devicePixelRatio || 1), W = box.width, H = box.height;
+    if (gcv.width !== Math.round(W * dpr)) gcv.width = Math.round(W * dpr);
+    if (gcv.height !== Math.round(H * dpr)) gcv.height = Math.round(H * dpr);
+    const g = gcv.getContext("2d"); g.setTransform(dpr, 0, 0, dpr, 0, 0); g.clearRect(0, 0, W, H);
+    const { film, line } = evs(), n = film.length, L = ME.lv;
+    const tag = $("melvtag");
+    if (!n) { G = null; tag.textContent = ""; return; }
+    const lv = film.map(e => L.level[e.id] ?? null), known = lv.filter(v => v != null).sort((a, b) => a - b);
+    const mid = known.length ? known[known.length >> 1] : 0, pad = 10, top = 14, bot = H - 6;
+    const x = i => pad + (n === 1 ? (W - 2 * pad) / 2 : i * (W - 2 * pad) / (n - 1));
+    const per = (bot - top) / 2 / SPAN, y = v => clamp((top + bot) / 2 - (v - mid) * per, 2, H - 2);
+    // a level line at the middle, and ±1 EV
+    g.lineWidth = 1;
+    [[0, .1], [1, .05], [-1, .05]].forEach(([v, a]) => { g.strokeStyle = `rgba(255,255,255,${a})`; g.beginPath(); g.moveTo(0, Math.round(y(mid + v)) + .5); g.lineTo(W, Math.round(y(mid + v)) + .5); g.stroke(); });
+    // each camera's brightness as made (dim) and as the film will show it (bright)
+    const series = (cam, f, style, w) => {
+      g.strokeStyle = style; g.lineWidth = w; g.beginPath(); let on = false;
+      film.forEach((e, i) => { if (e.cam !== cam) return; const v = f(i, e); if (v == null) { on = false; return; } if (on) g.lineTo(x(i), y(v)); else { g.moveTo(x(i), y(v)); on = true; } });
+      g.stroke();
+      if (n < 400) { g.fillStyle = style; film.forEach((e, i) => { if (e.cam !== cam) return; const v = f(i, e); if (v != null) g.fillRect(x(i) - w, y(v) - w, 2 * w, 2 * w); }); }
+    };
+    const COL = { N: ["rgba(232,236,242,.22)", "rgba(232,236,242,.85)"], W: ["rgba(255,196,140,.22)", "rgba(255,196,140,.85)"] };
+    const any = known.length > 0, changed = film.some(e => evOf(e));
+    for (const cam of "NW") {
+      if (!film.some(e => e.cam === cam)) continue;
+      if (changed) series(cam, i => lv[i], COL[cam][0], 1);
+      series(cam, (i, e) => lv[i] == null ? null : lv[i] + evOf(e), COL[cam][1], 1.25);
+    }
+    // the levels' line where nothing is measured yet (round the middle)
+    if (!any && ME.levels.size) { g.strokeStyle = "rgba(138,182,255,.5)"; g.lineWidth = 1; g.beginPath(); film.forEach((e, i) => (i ? g.lineTo : g.moveTo).call(g, x(i), y(mid + line.get(e.id)))); g.stroke(); }
+    // the frame in front
+    const sel = ME.frames[ME.sel], si = sel ? evs().at.get(sel.id) : undefined;
+    if (si != null) { g.fillStyle = "rgba(138,182,255,.55)"; g.fillRect(Math.round(x(si)) - .5, 0, 1, H); }
+    // the level points
+    const pts = [];
+    film.forEach((e, i) => {
+      if (!ME.levels.has(e.id)) return;
+      const py = y((lv[i] ?? mid) + evOf(e));
+      pts.push({ i, id: e.id, x: x(i), y: py });
+      g.beginPath(); g.arc(x(i), py, 4.5, 0, 7); g.fillStyle = "#0b0d11"; g.fill(); g.lineWidth = 1.5; g.strokeStyle = "rgba(138,182,255,1)"; g.stroke();
+    });
+    G = { film, x, per, pts, n, pad, W };
+    const measuring = L.total == null ? "Measuring the brightness…" : L.done < L.total ? `Measuring ${L.done.toLocaleString()} of ${L.total.toLocaleString()}` : "";
+    tag.innerHTML = `<b>Exposure</b>${measuring ? " · " + measuring : ""}${L.error ? " · " + L.error : ""}${ME.levels.size ? ` · ${ME.levels.size} point${ME.levels.size === 1 ? "" : "s"}` : ""}${ME.even ? ` · evened over ${ME.even}` : ""}`;
+  }
+  new ResizeObserver(() => graph()).observe(gbox);
+  // the graph's picture under x, and the level point under (x, y)
+  const filmAt = px => G ? clamp(Math.round((px - G.pad) / Math.max(1e-6, (G.W - 2 * G.pad) / Math.max(1, G.n - 1))), 0, G.n - 1) : -1;
+  const pointAt = (px, py) => G && G.pts.find(p => Math.hypot(p.x - px, p.y - py) <= 7);
+  let gdrag = null;
+  gbox.addEventListener("pointerdown", ev => {
+    if (ev.button !== 0 || !G) return;
+    const r = gbox.getBoundingClientRect(), px = ev.clientX - r.left, py = ev.clientY - r.top, pt = pointAt(px, py);
+    stopPlay();
+    if (pt && ev.altKey) { change(() => ME.levels.delete(pt.id)); show(); return; }
+    gbox.setPointerCapture(ev.pointerId);
+    if (pt) { ME.undo.push(snapshot()); gdrag = { id: pt.id, y0: py, v0: ME.levels.get(pt.id), moved: false }; select(ME.frames.indexOf(G.film[pt.i]), { noScroll: false }); }
+    else { gdrag = { scrub: true }; const i = filmAt(px); if (i >= 0) select(ME.frames.indexOf(G.film[i])); }
+  });
+  gbox.addEventListener("pointermove", ev => {
+    const r = gbox.getBoundingClientRect(), px = ev.clientX - r.left, py = ev.clientY - r.top;
+    if (!gdrag) { gbox.classList.toggle("onpt", !!pointAt(px, py)); return; }
+    if (gdrag.scrub) { const i = filmAt(px); const k = i >= 0 ? ME.frames.indexOf(G.film[i]) : -1; if (k >= 0 && k !== ME.sel) select(k); return; }
+    gdrag.moved = true;
+    ME.levels.set(gdrag.id, clamp(Math.round((gdrag.v0 + (gdrag.y0 - py) / G.per) * 20) / 20, -EV, EV));
+    EVS = null; graph(); sideLevels(); paint();
+  });
+  const gend = () => { if (gdrag && gdrag.id) { if (gdrag.moved) changed(); else ME.undo.pop(); show(); render(); } gdrag = null; };
+  gbox.addEventListener("pointerup", gend); gbox.addEventListener("pointercancel", gend);
+  // double-click: a point where there is none (at the line's level there, so nothing changes until it is moved), or one taken out
+  gbox.addEventListener("dblclick", ev => {
+    if (!G) return;
+    const r = gbox.getBoundingClientRect(), px = ev.clientX - r.left, py = ev.clientY - r.top, pt = pointAt(px, py);
+    if (pt) change(() => ME.levels.delete(pt.id));
+    else { const i = filmAt(px); if (i < 0) return; const e = G.film[i]; change(() => ME.levels.set(e.id, clamp(Math.round(lineOf(e) * 100) / 100, -EV, EV))); }
+    show();
+  });
+
+  // the side's Exposure and Framing
+  function sideLevels() {
+    if (!ME.frames.length) return;
+    const e = ME.frames[ME.sel], inFilm = e && kept(e), here = $("melvhere");
+    here.disabled = !inFilm;
+    if (document.activeElement !== here || !here.matches(":active")) here.value = inFilm ? lineOf(e) : 0;
+    $("melvherev").textContent = inFilm ? fmtEv(+here.value) : "—";
+    const ev = $("meeven"); ev.disabled = !ME.lv.ready; ev.value = ME.even;
+    $("meevenv").textContent = ME.even ? `${ME.even} pictures` : "Off";
+    $("melvclear").disabled = !ME.levels.size;
+    $("melvnote").textContent = !ME.lv.ready && !ME.lv.error && ME.lv.total != null ? "Even out needs a newer frame server; the level points work now."
+      : ME.lv.error || (ME.levels.size ? "Drag a point on the graph to brighten or dim the movie there. Double-click a point to take it out."
+        : "Double-click the graph to add a level point, then drag it up or down. Even out smooths flashes and jumps in brightness.");
+    $("mectr").querySelectorAll("button").forEach(b => b.setAttribute("aria-pressed", String(b.dataset.v === (ME.ctr == null ? "" : ME.ctr ? "1" : "0"))));
+    $("mecrop").setAttribute("aria-pressed", String(!!cropping));
+    $("mecrop").textContent = cropping ? "Cropping…" : ME.crop2 ? "Crop… · start and end" : ME.crop ? "Crop…  · on" : "Crop…";
+    $("mecropctl").hidden = !cropping;
+    $("meglide").checked = !!ME.crop2; $("mecropend").hidden = !ME.crop2;
+    $("mecropend").querySelectorAll("button").forEach(b => b.setAttribute("aria-pressed", String(b.dataset.v === cropping)));
+    $("measpect").querySelectorAll("button").forEach(b => b.setAttribute("aria-pressed", String(b.dataset.v === aspect)));
+    $("mefrclear").disabled = !ME.crop && !ME.crop2 && !ME.nudge.size;
+    $("menudged").textContent = (ME.nudge.size ? `${ME.nudge.size.toLocaleString()} frame${ME.nudge.size === 1 ? "" : "s"} nudged. ` : "") +
+      "Drag the picture to move the frame in front (or the picked frames) when its centering is off.";
+  }
+  // a slider moved: one undo step for the whole move
+  function slide(el, set, live) {
+    let on = false;
+    el.addEventListener("input", () => { if (!on) { ME.undo.push(snapshot()); on = true; } set(+el.value); EVS = null; if (live) live(); });
+    el.addEventListener("change", () => { on = false; changed(); show(); });
+  }
+  slide($("melvhere"), v => { const e = ME.frames[ME.sel]; if (e && kept(e)) ME.levels.set(e.id, clamp(v, -EV, EV)); }, () => { graph(); sideLevels(); paint(); });
+  slide($("meeven"), v => { ME.even = clamp(Math.round(v), 0, EVEN); }, () => { $("meevenv").textContent = ME.even ? `${ME.even} pictures` : "Off"; });
+
+  $("melvclear").addEventListener("click", () => { change(() => { ME.levels = new Map(); }); show(); });
+  $("mefrclear").addEventListener("click", () => { change(() => { ME.crop = ME.crop2 = null; ME.nudge = new Map(); }); cropping = null; show(); });
+  $("mectr").addEventListener("click", ev => {
+    const b = ev.target.closest("button"); if (!b) return;
+    const v = b.dataset.v === "" ? null : b.dataset.v === "1";
+    if (v === ME.ctr) return;
+    change(() => { ME.ctr = v; }); show();
+  });
+
+  // nudging: drag the picture to move the frame in front, or the picked frames (parts of the picture, as export.framed)
+  let ndrag = null;
+  cv.addEventListener("pointerdown", ev => {
+    if (ev.button !== 0 || !shownE || cropping) return;
+    const ids = (ME.picked.size ? [...ME.picked].map(i => ME.frames[i]) : [ME.frames[ME.sel]]).filter(Boolean).map(e => e.id);
+    ndrag = { x0: ev.clientX, y0: ev.clientY, ids, base: new Map(ids.map(id => [id, ME.nudge.get(id) || [0, 0]])), on: false, pid: ev.pointerId };
+  });
+  cv.addEventListener("pointermove", ev => {
+    if (!ndrag) return;
+    const dx = ev.clientX - ndrag.x0, dy = ev.clientY - ndrag.y0;
+    if (!ndrag.on) { if (Math.hypot(dx, dy) < 4) return; ndrag.on = true; stopPlay(); ME.undo.push(snapshot()); cv.setPointerCapture(ndrag.pid); cv.classList.add("nudging"); }
+    // the picture shown is the crop: a drag across it is that part of the picture
+    const [x0, y0, x1, y1] = cropAt(ME.frames[ME.sel]) || WHOLE, w = (cv.clientWidth || 1) / (x1 - x0), h = (cv.clientHeight || 1) / (y1 - y0);
+    ndrag.ids.forEach(id => {
+      const [bx, by] = ndrag.base.get(id), x = clamp(Math.round((bx + dx / w) * 1000) / 1000, -NUDGE, NUDGE), y = clamp(Math.round((by + dy / h) * 1000) / 1000, -NUDGE, NUDGE);
+      if (x || y) ME.nudge.set(id, [x, y]); else ME.nudge.delete(id);
+    });
+    paint();
+  });
+  const nend = () => { if (ndrag && ndrag.on) { cv.classList.remove("nudging"); changed(); } ndrag = null; };
+  cv.addEventListener("pointerup", nend); cv.addEventListener("pointercancel", nend);
+
+
+  // ---------- the crop, drawn on the picture ----------
+  // cropping: which crop is being drawn ("start": the crop, "end": the end crop), null when none is; aspect: the
+  // crop's shape while it is drawn ("free", width over height, or "pic" the picture's own)
+  let cropping = null, aspect = "free";
+  const cbox = $("mecropbox");
+  const editing = () => (cropping === "end" ? ME.crop2 : ME.crop) || WHOLE;
+  function cropBox() {
+    cbox.hidden = !cropping || !shown || card.hidden;
+    if (cbox.hidden) return;
+    const [x0, y0, x1, y1] = editing(), L = parseFloat(cv.style.left), T = parseFloat(cv.style.top), w = cv.clientWidth, h = cv.clientHeight;
+    Object.assign(cbox.style, { left: L + x0 * w + "px", top: T + y0 * h + "px", width: (x1 - x0) * w + "px", height: (y1 - y0) * h + "px" });
+    $("mecroplabel").textContent = ME.crop2 ? (cropping === "end" ? "End crop" : "Start crop") : "Crop";
+  }
+  // the crop's shape as parts of the picture: width over height in parts, from an aspect of the picture's pixels
+  const ratio = () => aspect === "free" ? null : (aspect === "pic" ? 1 : +aspect * (shown ? shown.height / shown.width : 1));
+  // box b fitted to the shape round its middle, inside the picture
+  function shaped(b) {
+    const r = ratio(); if (!r) return b;
+    let [x0, y0, x1, y1] = b, w = x1 - x0, h = y1 - y0;
+    if (w / h > r) w = h * r; else h = w / r;
+    if (w > 1) { w = 1; h = w / r; } if (h > 1) { h = 1; w = h * r; }
+    const cx = clamp((x0 + x1) / 2, w / 2, 1 - w / 2), cy = clamp((y0 + y1) / 2, h / 2, 1 - h / 2);
+    return [cx - w / 2, cy - h / 2, cx + w / 2, cy + h / 2];
+  }
+  function setEditing(b) { b = b.map(v => Math.round(v * 10000) / 10000); if (cropping === "end") ME.crop2 = b; else ME.crop = b; }
+  // the frame shown while a crop is drawn: the movie's first picture for the start crop (when it has an end), its last for the end
+  function cropFrame() {
+    if (!ME.crop2) return;
+    const film = evs().film, e = cropping === "end" ? film[film.length - 1] : film[0];
+    if (e) select(ME.frames.indexOf(e));
+  }
+  function crop(which) {
+    stopPlay();
+    cropping = which;
+    if (which && !ME.crop) { ME.undo.push(snapshot()); ME.crop = WHOLE.slice(); }
+    if (which) cropFrame();
+    EVS = null; sideLevels(); paint();
+    if (!which) { if (ME.crop && boxStr(ME.crop) === boxStr(WHOLE) && !ME.crop2) ME.crop = null; changed(); show(); }
+  }
+  $("mecrop").addEventListener("click", () => crop(cropping ? null : "start"));
+  $("mecropdone").addEventListener("click", () => crop(null));
+  $("mecropend").addEventListener("click", ev => { const b = ev.target.closest("button"); if (b && cropping) crop(b.dataset.v); });
+  $("measpect").addEventListener("click", ev => {
+    const b = ev.target.closest("button"); if (!b) return;
+    aspect = b.dataset.v;
+    if (cropping) { ME.undo.push(snapshot()); setEditing(shaped(editing())); EVS = null; changed(); paint(); } else sideLevels();
+  });
+  $("meglide").addEventListener("change", ev => {
+    change(() => { if (ev.target.checked) { ME.crop = ME.crop || WHOLE.slice(); ME.crop2 = ME.crop.slice(); } else ME.crop2 = null; });
+    if (cropping) crop(ev.target.checked ? "end" : "start");
+  });
+  // dragging the box (moves it) or a corner (sizes it, the opposite corner held, at the shape when it has one)
+  let cdrag = null;
+  cbox.addEventListener("pointerdown", ev => {
+    if (ev.button !== 0) return;
+    ev.preventDefault(); ev.stopPropagation();
+    cbox.setPointerCapture(ev.pointerId);
+    ME.undo.push(snapshot());
+    cdrag = { h: ev.target.dataset.h || "", x0: ev.clientX, y0: ev.clientY, b: editing().slice(), moved: false };
+  });
+  cbox.addEventListener("pointermove", ev => {
+    if (!cdrag) return;
+    cdrag.moved = true;
+    const w = cv.clientWidth || 1, h = cv.clientHeight || 1, dx = (ev.clientX - cdrag.x0) / w, dy = (ev.clientY - cdrag.y0) / h;
+    let [x0, y0, x1, y1] = cdrag.b;
+    if (!cdrag.h) {
+      const bw = x1 - x0, bh = y1 - y0, nx = clamp(x0 + dx, 0, 1 - bw), ny = clamp(y0 + dy, 0, 1 - bh);
+      setEditing([nx, ny, nx + bw, ny + bh]);
+    } else {
+      const west = cdrag.h.includes("w"), north = cdrag.h.includes("n");
+      let ax = west ? x1 : x0, ay = north ? y1 : y0;               // the corner held
+      let px = clamp((west ? x0 : x1) + dx, 0, 1), py = clamp((north ? y0 : y1) + dy, 0, 1);
+      let bw = Math.max(CROP, Math.abs(px - ax)), bh = Math.max(CROP, Math.abs(py - ay));
+      const r = ratio();
+      if (r) { if (bw / bh > r) bh = bw / r; else bw = bh * r; }
+      bw = Math.min(bw, west ? ax : 1 - ax); bh = Math.min(bh, north ? ay : 1 - ay);
+      if (r) { if (bw / bh > r) bw = bh * r; else bh = bw / r; }
+      setEditing([west ? ax - bw : ax, north ? ay - bh : ay, west ? ax : ax + bw, north ? ay : ay + bh]);
+    }
+    cropBox();
+  });
+  const cend = () => { if (cdrag) { if (cdrag.moved) { EVS = null; changed(); } else ME.undo.pop(); } cdrag = null; };
+  cbox.addEventListener("pointerup", cend); cbox.addEventListener("pointercancel", cend);
+  cbox.addEventListener("dblclick", ev => { ev.stopPropagation(); crop(null); });
 
   // ---------- the look, edited in Cassini Studio on the frame in front ----------
   async function editLook() {
@@ -9324,7 +9714,7 @@ void main() {
       stopPlay(); ME.a = a; ME.b = b; ME.undo = []; ME.sel = -1; ME.picked = new Set();
       take(r || recalled(a, b) || ""); remember();
       load();
-    } else render();
+    } else { render(); levelsSoon(0); }
     setTimeout(paint);
   }
   function close() { stopPlay(); card.hidden = true; card.classList.remove("big"); if (WM) WM.syncMenu(); }
@@ -9366,6 +9756,7 @@ void main() {
     if (k === "ArrowRight" || k === "ArrowLeft") { stopPlay(); step(k === "ArrowRight" ? 1 : -1, { range: e.shiftKey }); }
     else if (k === "Delete" || k === "Backspace") toggleRemoved();
     else if (k === " ") play();
+    else if ((k === "Escape" || k === "Enter") && cropping) crop(null);
     else if (k === "Escape") { if (card.classList.contains("big")) { card.classList.remove("big"); setTimeout(paint); } else close(); }
     else return;
     e.preventDefault(); e.stopImmediatePropagation();
@@ -10038,7 +10429,7 @@ void main() {
   window.cassiniAbout = { open, addTab, esc, close: () => show(false), credits: CREDITS };
 
   // ---- which version this is: this page's build id (build.py writes it), and what the frame server says it serves ----
-  const BUILD = /*BUILD*/"f17ec14e8c4e";
+  const BUILD = /*BUILD*/"4fd7083e6306";
   const FRAMES = (() => {                       // the frame server, chosen as the camera window chooses it
     const q = new URLSearchParams(location.search).get("frames");
     if (q) return q.replace(/\/$/, "");
