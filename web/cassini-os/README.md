@@ -216,7 +216,9 @@ movie (its mosaic, color picture, movie pass or processed frame) or as the raw f
 window. Frames are picked the Mac way: click picks one, shift-click picks the run to it, Cmd-click (Ctrl-click, or
 Option/Alt-click) adds a frame to the pick or takes it out, Cmd-A picks every frame, Esc lets go. **Keep only** (K)
 keeps the picked frames and removes all the others, so "these few would make a movie together" is a shift-click and
-one button; **Remove** (Delete) takes the picked frames out, and Delete again puts them back. Cameras,
+one button; **Remove** (Delete) takes the picked frames out, and Delete again puts them back. NAC and WAC frames never
+go in one movie: a stretch with both cameras shows **NAC** and **WAC** tabs over the strip, each with only its own
+frames, and the tab picked is the camera the movie is made from. Cameras,
 Targets and Filters chips leave out whole groups (click to leave one out, double-click to keep only it, so "only the
 Jupiter frames" is one double-click). **Pictures** picks what each frame shows: As in the movie (the camera windows'
 mosaics, color pictures and movie passes), Full color only (each three-filter set once, as its color picture), Every

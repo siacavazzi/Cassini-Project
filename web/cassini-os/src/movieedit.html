@@ -17,6 +17,10 @@
      Option/Alt-click) adds a frame to the pick or takes it out, Cmd-A picks every frame in the strip, Esc lets go.
      Keep only (K) keeps the picked frames and removes every other one; Remove (Delete) takes the picked ones out.
 
+     One camera per movie: NAC and WAC frames never go in one film, so a stretch with both shows them as two tabs over
+     the strip, each with its own frames (targets, filters and Keep only count that camera's frames). The tab picked is
+     the movie's camera (the export's Cameras); opened on Both, the editor starts on the camera with more frames.
+
      What it keeps: frames removed by hand (Remove, or Keep only the picked ones), and only the cameras, targets
      and filter pairs left on (click a chip to leave it out, double-click it to keep only it). Left-out frames stay in
      the strip, dimmed, so they can be put back. Removing a frame never changes how the others are made: a mosaic keeps
@@ -37,16 +41,24 @@
 #mecard[style*="left"] { transform: none; }
 #mecard.zoomed { width: calc(100% - 20px); height: calc(100% - 50px); }
 #mecard .mebody { flex: 1 1 auto; min-height: 0; display: grid; grid-template-columns: minmax(0, 1fr) 250px; border-top: 1px solid var(--q-line); }
-#mecard .memain { min-width: 0; min-height: 0; display: grid; grid-template-rows: minmax(140px, 1fr) auto minmax(110px, 38%); background: #000; }
-#mecard.big .memain { grid-template-rows: minmax(140px, 1fr) auto 0; }
-#mecard.big #mestrip { display: none; }
+#mecard .memain { min-width: 0; min-height: 0; display: grid; grid-template-rows: minmax(140px, 1fr) auto auto minmax(110px, 38%); grid-template-areas: "stage" "bar" "tabs" "strip"; background: #000; }
+#mecard.big .memain { grid-template-rows: minmax(140px, 1fr) auto 0 0; }
+#mecard.big :is(#mestrip, #metabs) { display: none; }
+#mestage { grid-area: stage; } #mecard .mebar { grid-area: bar; } #mestrip { grid-area: strip; }
+#metabs { grid-area: tabs; display: flex; align-items: stretch; gap: 2px; padding: 0 10px; border-top: 1px solid var(--q-line); background: var(--q-panel); font: 10.5px var(--hudf); color: var(--q-dim); }
+#metabs[hidden] { display: none; }
+#metabs button { all: unset; padding: 6px 12px 5px; cursor: pointer; color: var(--q-dim); border-bottom: 2px solid transparent; letter-spacing: .04em; }
+#metabs button:hover { color: var(--q-text); }
+#metabs button[aria-selected="true"] { color: #fff; border-bottom-color: var(--q-accent); }
+#metabs button i { font-style: normal; opacity: .7; margin-left: 5px; }
+#metabs .menote { margin: 0 0 0 auto; align-self: center; font-family: var(--ui); }
 #mestage { position: relative; min-height: 0; overflow: hidden; }
 #mecanvas { position: absolute; display: block; cursor: zoom-in; }
 #mecard.big #mecanvas { cursor: zoom-out; }
 #mestage .metag { position: absolute; left: 8px; top: 7px; right: 8px; z-index: 2; font: 9.5px/1.4 var(--hudf); letter-spacing: .04em; color: rgba(232,236,242,.78); text-shadow: 0 0 3px #000; pointer-events: none; }
 #meoff { position: absolute; right: 8px; bottom: 8px; z-index: 2; font: 10px var(--hudf); letter-spacing: .08em; text-transform: uppercase; padding: 2px 6px; border-radius: 3px; background: rgba(255,120,100,.25); color: #ffb2a6; }
 #meempty { position: absolute; inset: 0; display: grid; place-items: center; text-align: center; padding: 20px; font-size: 12px; line-height: 1.55; color: var(--q-dim); }
-:is(#meempty, #meoff, #mecard .meside, #mecard [data-hide])[hidden] { display: none !important; }
+:is(#meempty, #meoff, #mecard .meside, #mecard [data-hide], #mecard [data-cams])[hidden] { display: none !important; }
 #mecard .mebar { display: flex; gap: 8px; align-items: center; flex-wrap: wrap; padding: 6px 10px; border-top: 1px solid var(--q-line); background: var(--q-panel); font: 10.5px var(--hudf); color: var(--q-dim); }
 #mecard .mebar .sp { flex: 1; }
 #mecard .mebar .rnd { all: unset; width: 24px; height: 24px; display: grid; place-items: center; border-radius: 50%; color: var(--q-text); background: rgba(255,255,255,.08); cursor: pointer; flex: none; font-size: 12px; }
@@ -111,6 +123,7 @@ body.phone #mestrip { grid-template-columns: repeat(auto-fill, 72px); grid-auto-
         <button class="galbtn" id="metoggle" title="Take the picked frames out of the movie, or put them back (Delete)">Remove</button>
         <button class="galbtn" id="medl" title="Save this frame at full size, with the look, as a JPEG">Download frame</button>
       </div>
+      <div id="metabs" role="tablist" aria-label="Camera of the movie" hidden></div>
       <div id="mestrip" role="listbox" aria-label="Frames of the movie" aria-multiselectable="true"></div>
     </div>
     <div class="meside" hidden>
@@ -121,8 +134,8 @@ body.phone #mestrip { grid-template-columns: repeat(auto-fill, 72px); grid-auto-
         <button class="galbtn" data-v="processed" title="Every frame in every filter on its own, made by the pipeline (stacked, calibrated), never put together">Every frame, processed</button>
         <button class="galbtn" data-v="raw" title="Every frame in every filter as Cassini took it: nothing stacked, calibrated or put together">Every frame, raw</button>
       </div>
-      <h4><span>Cameras</span></h4>
-      <div class="mechips" id="mecams"></div>
+      <h4 data-cams><span>Cameras</span></h4>
+      <div class="mechips" id="mecams" data-cams></div>
       <h4><span>Targets</span><span class="sp"></span><button id="metgall">All</button></h4>
       <div class="mechips" id="metargets"></div>
       <h4><span>Filters</span><span class="sp"></span><button id="meflall">All</button></h4>
@@ -165,12 +178,31 @@ body.phone #mestrip { grid-template-columns: repeat(auto-fill, 72px); grid-auto-
   // ME: the stretch (a, b), its plan's frames, and the edit: drop (ids taken out by hand), keep (null = every target /
   // filter pair, else the ones kept), cams (the export's Cameras), edit (the studio look's recipe)
   const ME = { a: null, b: null, frames: [], pictures: "movie", loading: false, error: "", drop: new Set(), targets: null, filters: null, edit: "",
-    sel: -1, anchor: -1, picked: new Set(), none: false, showOut: true, src: "movie", undo: [], playing: false, pending: null };
+    sel: -1, anchor: -1, picked: new Set(), none: false, selOf: {}, showOut: true, src: "movie", undo: [], playing: false, pending: null };
   const camsOf = () => (/^(N|W|NW)$/.test(EX.state.cams || "") ? EX.state.cams : "NW");
   const why = e => !camsOf().includes(e.cam) ? "camera" : ME.drop.has(e.id) ? "removed" : ME.targets && !ME.targets.has(e.target || "UNKNOWN") ? "target"
     : ME.filters && !ME.filters.has(e.filters) ? "filter" : "";
   const kept = e => !why(e);
-  const visible = () => ME.frames.map((e, i) => i).filter(i => ME.showOut || kept(ME.frames[i]));
+  // NAC and WAC never go in one movie: a stretch with both shows one camera's frames at a time (its tab), and that
+  // camera is the movie's (the export's Cameras)
+  const both = () => new Set(ME.frames.map(e => e.cam)).size > 1;
+  const ofCam = e => !both() || camsOf().includes(e.cam);
+  const visible = () => ME.frames.map((e, i) => i).filter(i => ofCam(ME.frames[i]) && (ME.showOut || kept(ME.frames[i])));
+  function oneCamera() {
+    if (!both() || camsOf().length === 1) return;
+    const n = c => ME.frames.filter(e => e.cam === c).length;
+    EX.state.cams = n("N") >= n("W") ? "N" : "W";
+  }
+  // the other camera's tab: its frames in the strip, and it is the movie's camera now (one undo step)
+  function camera(c) {
+    if (camsOf() === c) return;
+    stopPlay();
+    const cur = ME.frames[ME.sel]; if (cur) ME.selOf[cur.cam] = cur.id;
+    change(() => { EX.state.cams = c; });
+    const back = ME.selOf[c] ? ME.frames.findIndex(e => e.id === ME.selOf[c]) : -1;
+    const first = back >= 0 ? back : ME.frames.findIndex(e => e.cam === c && kept(e));
+    ME.anchor = -1; select(first >= 0 ? first : ME.frames.findIndex(e => e.cam === c));
+  }
 
   // ---------- the recipe ----------
   const listOf = s => [...s].sort().join(",");
@@ -228,7 +260,10 @@ body.phone #mestrip { grid-template-columns: repeat(auto-fill, 72px); grid-auto-
     const s = ME.undo.pop(); if (!s) return;
     const reload = s.pictures !== ME.pictures;
     ME.drop = s.drop; ME.targets = s.targets; ME.filters = s.filters; ME.edit = s.edit; EX.state.cams = s.cams; ME.pictures = s.pictures;
-    changed(); if (reload) load(); else show();
+    changed(); if (reload) return load();
+    // undone back to the other camera: the strip shows that camera's frames, so does the frame in front
+    if (ME.frames[ME.sel] && !ofCam(ME.frames[ME.sel])) { const f = ME.frames.findIndex(e => ofCam(e) && kept(e)); ME.anchor = -1; select(f >= 0 ? f : ME.frames.findIndex(ofCam)); }
+    else show();
   }
 
   // ---------- the plan: every frame of the stretch, from the frame server ----------
@@ -251,10 +286,10 @@ body.phone #mestrip { grid-template-columns: repeat(auto-fill, 72px); grid-auto-
     const has = (s, k) => s && [...s].some(v => ME.frames.some(e => (k === "target" ? e.target || "UNKNOWN" : e.filters) === v));
     if (ME.targets && !has(ME.targets, "target")) ME.targets = null;
     if (ME.filters && !has(ME.filters, "filters")) ME.filters = null;
-    strip(); render();
-    const keep = ME.frames[ME.sel] && ME.frames[ME.sel].id, at = keep ? ME.frames.findIndex(e => e.id === keep) : -1;
+    oneCamera(); strip(); render();
+    const keep = ME.frames[ME.sel] && ME.frames[ME.sel].id, at0 = keep ? ME.frames.findIndex(e => e.id === keep) : -1, at = at0 >= 0 && ofCam(ME.frames[at0]) ? at0 : -1;
     ME.sel = -1; ME.picked = new Set(); ME.none = false;
-    const first = at >= 0 ? at : ME.frames.findIndex(kept); select(first >= 0 ? first : 0);
+    const first = at >= 0 ? at : ME.frames.findIndex(kept); select(first >= 0 ? first : Math.max(0, ME.frames.findIndex(ofCam)));
   }
 
   // ---------- the strip ----------
@@ -299,7 +334,7 @@ body.phone #mestrip { grid-template-columns: repeat(auto-fill, 72px); grid-auto-
       return b;
     }));
   }
-  const count = f => { const m = new Map(); ME.frames.forEach(e => { const k = f(e); m.set(k, (m.get(k) || 0) + 1); }); return [...m].sort((x, y) => y[1] - x[1]); };
+  const count = (f, list = ME.frames.filter(ofCam)) => { const m = new Map(); list.forEach(e => { const k = f(e); m.set(k, (m.get(k) || 0) + 1); }); return [...m].sort((x, y) => y[1] - x[1]); };
   // a keep list toggled: null keeps all; leaving every one in again goes back to null
   function toggleKeep(field, all, k) {
     change(() => {
@@ -309,7 +344,19 @@ body.phone #mestrip { grid-template-columns: repeat(auto-fill, 72px); grid-auto-
     });
   }
   function side() {
-    const tg = count(e => e.target || "UNKNOWN"), fl = count(e => e.filters), cm = count(e => e.cam);
+    const tg = count(e => e.target || "UNKNOWN"), fl = count(e => e.filters), cm = count(e => e.cam, ME.frames);
+    const two = cm.length > 1;
+    $("metabs").hidden = !two; $("mecard").querySelectorAll("[data-cams]").forEach(el => { el.hidden = two; });
+    if (two) {
+      $("metabs").replaceChildren(...["N", "W"].map(c => {
+        const b = document.createElement("button"); b.setAttribute("role", "tab"); b.dataset.v = c;
+        b.setAttribute("aria-selected", String(camsOf() === c));
+        b.title = `The ${c === "N" ? "narrow-angle" : "wide-angle"} camera's frames: the movie is made from the camera picked here`;
+        b.innerHTML = `${c === "N" ? "NAC" : "WAC"}<i></i>`; b.lastChild.textContent = (cm.find(x => x[0] === c) || [, 0])[1].toLocaleString();
+        b.addEventListener("click", () => camera(c));
+        return b;
+      }), Object.assign(document.createElement("span"), { className: "menote", textContent: "One camera per movie" }));
+    }
     chips($("mecams"), cm.map(([k, n]) => [k, k === "N" ? "NAC" : "WAC", n]), k => camsOf().includes(k),
       k => change(() => { const c = camsOf(), next = c.includes(k) ? c.replace(k, "") : "NW".split("").filter(x => x === k || c.includes(x)).join(""); if (next) EX.state.cams = next; }));
     chips($("metargets"), tg.map(([k, n]) => [k, name(k), n]), k => !ME.targets || ME.targets.has(k), k => toggleKeep("targets", tg.map(x => x[0]), k),
@@ -330,8 +377,8 @@ body.phone #mestrip { grid-template-columns: repeat(auto-fill, 72px); grid-auto-
     $("meempty").textContent = ME.a == null ? "Highlight a stretch of the timeline (drag across it), then Edit… on its bar." : ME.loading ? "Listing the frames of this stretch…"
       : ME.error || "No frames in this stretch.";
     $("mecard").querySelector(".meside").hidden = !ME.frames.length;
-    const n = ME.frames.filter(kept).length;
-    $("mesum").textContent = ME.frames.length ? `${n.toLocaleString()} of ${ME.frames.length.toLocaleString()} frames in the movie` : "";
+    const n = ME.frames.filter(kept).length, all = ME.frames.filter(ofCam).length;
+    $("mesum").textContent = ME.frames.length ? `${n.toLocaleString()} of ${all.toLocaleString()} ${both() ? (camsOf() === "N" ? "NAC " : "WAC ") : ""}frames in the movie` : "";
     $("meundo").disabled = !ME.undo.length;
     $("meexport").disabled = $("mecopy").disabled = ME.a == null;
     $("mepics").querySelectorAll("button").forEach(b => b.setAttribute("aria-pressed", String(b.dataset.v === ME.pictures)));
@@ -450,7 +497,7 @@ body.phone #mestrip { grid-template-columns: repeat(auto-fill, 72px); grid-auto-
   function keepOnly() {
     const ids = new Set(chosen().map(i => ME.frames[i].id)); if (!ids.size) return;
     stopPlay();
-    change(() => ME.frames.forEach(e => ids.has(e.id) ? ME.drop.delete(e.id) : ME.drop.add(e.id)));
+    change(() => ME.frames.forEach(e => { if (ofCam(e)) ids.has(e.id) ? ME.drop.delete(e.id) : ME.drop.add(e.id); }));
     ME.picked = new Set(); ME.none = false; stripState(); pos();
   }
   function toggleRemoved() {
