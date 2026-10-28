@@ -64,7 +64,7 @@ def main():
             xb0, yb0 = tb["offset"][0] + tb["box"][0], tb["offset"][1] + tb["box"][1]
             ox = (max(xa0, xb0) + min(xa0 + ta["box"][2], xb0 + tb["box"][2])) / 2
             oy = (max(ya0, yb0) + min(ya0 + ta["box"][3], yb0 + tb["box"][3])) / 2
-            pred = {}
+            pred, why = {}, "off the body"
             for sign in (1, -1):   # picture x = sign * east
                 try:
                     pred[sign] = predict(sp, target, ga[0], gb[0], ox, oy, km, sign)

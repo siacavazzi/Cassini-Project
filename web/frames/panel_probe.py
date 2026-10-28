@@ -120,25 +120,41 @@ def main():
             return pics[j]
         spice = {t["n"]: t["offset"] for t in tiles}
         before = pairs(u, p, tiles, spice, pic)
+        # the surface redrawn as at the pass's epoch (surface_pictures), measured again where SPICE put each tile
+        t1 = time.time()
+        surfaced = om.surface_pictures(u, a.cache, p, tiles)
+        surf_s = time.time() - t1
+        spics = {}
+
+        def spic(j):
+            if j not in surfaced:
+                return pic(j)
+            if j not in spics:
+                spics[j] = np.asarray(Image.open(surfaced[j]).convert("RGBA"))
+            return spics[j]
+        surface = pairs(u, p, tiles, spice, spic) if surfaced else []
         t1 = time.time()
         report = {}
-        moved = om.panel_places(u, a.cache, p, tiles, pic=pic, report=report)
+        drawn = [dict(t, pic=surfaced[t["n"]]) if t["n"] in surfaced else t for t in tiles]
+        moved = om.panel_places(u, a.cache, p, drawn, pic=spic, report=report)
         reg_s = time.time() - t1
         placed = {n: [xy[0] + moved.get(n, [0, 0])[0], xy[1] + moved.get(n, [0, 0])[1]] for n, xy in spice.items()}
-        after = pairs(u, p, tiles, placed, pic)
+        after = pairs(u, p, tiles, placed, spic)
         rec = {"pass": spec, "key": u["key"], "tiles": len(tiles), "z_km": u["z"], "kind": u.get("kind"),
                "km_per_px": round(om.IFOV[u["key"][2]] * u["z"], 3), "tiles_s": round(made_s, 1), "register_s": round(reg_s, 2),
-               "before": stats(before), "after": stats(after),
-               "moves": {str(k): v for k, v in sorted(moved.items())}, "pairs_before": before, "pairs_after": after,
+               "surface_s": round(surf_s, 1), "surfaced": len(surfaced),
+               "before": stats(before), "surface": stats(surface), "after": stats(after),
+               "moves": {str(k): v for k, v in sorted(moved.items())}, "pairs_before": before, "pairs_surface": surface,
+               "pairs_after": after,
                "report": {str(k): v for k, v in report.items()}}
-        print(json.dumps({k: rec[k] for k in ("pass", "key", "tiles", "km_per_px", "before", "after", "register_s")}), flush=True)
+        print(json.dumps({k: rec[k] for k in ("pass", "key", "tiles", "km_per_px", "surfaced", "before", "surface", "after", "surface_s", "register_s")}), flush=True)
         for r in before:
             print("   before", r, flush=True)
         for k, v in sorted(moved.items()):
             print("   move", k, v, flush=True)
         # the whole mosaic, panels off and on, and crops where the pairs moved most
         pictures = {}
-        for label, off in (("spice", "panels"), ("registered", "")):
+        for label, off in (("spice", "surface,panels"), ("surface", "panels"), ("registered", "")):
             with calibration.stepping(off):
                 made = om.layout(u, n, a.cache)
                 im, _ = om.so_far(u, n, a.cache, made=made, out=om.CANVAS)
@@ -158,20 +174,22 @@ def main():
             cx = (max(xa0, xb0) + min(xa0 + ta["box"][2], xb0 + tb["box"][2])) / 2
             cy = (max(ya0, yb0) + min(ya0 + ta["box"][3], yb0 + tb["box"][3])) / 2
             x, y = (cx - rect[0]) * k, (cy - rect[1]) * k
-            row = Image.new("RGBA", (CROP * ZOOM * 2 + 8, CROP * ZOOM), (0, 0, 0, 255))
-            row.paste(crop(pictures["spice"][0], x, y), (0, 0))
-            row.paste(crop(pictures["registered"][0], x, y), (CROP * ZOOM + 8, 0))
+            row = Image.new("RGBA", (CROP * ZOOM * 3 + 16, CROP * ZOOM), (0, 0, 0, 255))
+            for i3, label in enumerate(("spice", "surface", "registered")):
+                row.paste(crop(pictures[label][0], x, y), ((CROP * ZOOM + 8) * i3, 0))
             fn = f"{name}_crop{i}.png"
             row.save(os.path.join(a.out, fn))
             crops.append((fn, r, round(x), round(y)))
         rec["crops"] = [{"file": c[0], "x": c[2], "y": c[3], "pair": [c[1]["a"], c[1]["b"]]} for c in crops]
         every.append(rec)
         page.append(f"<h2>{html.escape(spec)} ({len(tiles)} tiles, {rec['km_per_px']} km/px)</h2>"
-                    f"<p>SPICE's places: pairs {rec['before']}<br>registered: pairs {rec['after']}<br>"
+                    f"<p>SPICE's places: pairs {rec['before']}<br>surface at one moment: pairs {rec['surface']}<br>"
+                    f"surface and panels lined up: pairs {rec['after']}<br>"
                     f"moves {html.escape(json.dumps(rec['moves']))}</p>"
-                    f"<p>whole: <a href='{name}_spice.png'>SPICE</a> | <a href='{name}_registered.png'>registered</a></p>"
+                    f"<p>whole: <a href='{name}_spice.png'>SPICE</a> | <a href='{name}_surface.png'>surface</a> | "
+                    f"<a href='{name}_registered.png'>surface + panels</a></p>"
                     + "".join(f"<p>pair {c[1]['a']}–{c[1]['b']}: {c[1]['px']} px apart at SPICE's places, {c[1]['dt']} s between, "
-                              f"at ({c[2]}, {c[3]}). Left SPICE, right registered ({ZOOM}x)<br><img src='{c[0]}'></p>" for c in crops))
+                              f"at ({c[2]}, {c[3]}). Left SPICE, middle surface at one moment, right surface + panels lined up ({ZOOM}x)<br><img src='{c[0]}'></p>" for c in crops))
     json.dump(every, open(os.path.join(a.out, "probe.json"), "w"), indent=1, default=str)
     with open(os.path.join(a.out, "index.html"), "w") as fh:
         fh.write("<!doctype html><meta charset=utf-8><title>Panel registration probe</title><body style='background:#111;color:#ddd;font:14px sans-serif'>"

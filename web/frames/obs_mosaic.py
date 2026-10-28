@@ -423,6 +423,12 @@ def _tiles(u, cache, scale):
     return os.path.join(folder(u, cache), "tiles-" + hashlib.md5(json.dumps(scale, sort_keys=True).encode()).hexdigest()[:8])
 
 
+def _pic(u, cache, scale, t):
+    """The picture tile t is drawn from: its own (_tiles/<n>.png), or the one its layout gave it (t["pic"]: its
+    surface redrawn as at the mosaic's epoch, surface_pictures)."""
+    return t.get("pic") or os.path.join(_tiles(u, cache, scale), f"{t['n']}.png")
+
+
 # ---------- what the cache holds of a pass, kept in memory ----------
 # A pass's plan, its movie footprint and its tiles' reports are each written once and never change (the plan file is
 # renamed when its rules change, the tiles' folder is named after the plan's display scale): each is read from the
@@ -1182,7 +1188,11 @@ def _shift_onto(q, ref, at_q, t, crop, at_t):
     return (shifts[1][0] + rest[0][1] - rest[0][0], shifts[1][1] + rest[1][1] - rest[1][0]), how[1]
 
 
-PANEL_MAX = 0.06     # of a frame: the largest correction to SPICE's place of a pointing that registration is believed for
+# of a frame: the largest correction to SPICE's place of a pointing that registration is believed for. SPICE's pointing
+# is 3 to 5 px off on the moons' mapping mosaics once the surface's motion between panels is taken out (median; 11 at
+# most, panel_motion); a larger match is the surface's own motion, or a planet's clouds turning (Jupiter's matched 35
+# px off), and moving a panel that far puts its limb off the body
+PANEL_MAX = 12 / 1024
 PANEL_MATCHES = 6    # earlier tiles a pointing's first tile is measured against at most (those it overlaps most)
 PANEL_NARROW = 24    # px: the narrowest overlap (across) a pair of tiles is measured on
 PANEL_AREA = 6000    # px: ... and the least area the two share
@@ -1279,6 +1289,111 @@ def _pointing_root(u, n, roots):
     return roots.get(j, j) if j is not None else n
 
 
+SURFACE_STEP = 16    # reference px: the grid a tile's surface motion (reproject.sky_field) is worked out on
+# a pass's tiles redrawn as at its epoch (surface_pictures), kept beside its tiles; renamed whenever the rule changes
+SURFACE_DIR = "surface1"
+SURFACE_TAG = "-s1"  # in the name of a layout whose tiles are redrawn so (layout), so its pictures are its own
+_spice_lock = threading.RLock()
+
+
+def _with_kernels(t):
+    """SPICE kernels loaded for the year of a frame taken at t (s since 1970), as label_handler.auto_center loads
+    them (one year at a time); False when they cannot be."""
+    import label_handler as lh
+    import bootleg_autonav as ba
+    year = time.gmtime(t).tm_year
+    if getattr(lh, "cur_year", None) != year:
+        try:
+            ba.unload_kernels()
+            lh.cur_year = year
+            ba.load_kernels(year, year)
+        except Exception as e:
+            print(f"no kernels for {year}: {e}", flush=True)
+            return False
+    return True
+
+
+def _ets(ids):
+    """{frame id: et} of frames, from the geometry cache (find_target's time, IMAGE_MID_TIME)."""
+    import bootleg_autonav as ba
+    if not ba.GEOMETRY_CACHE or not os.path.exists(ba.GEOMETRY_CACHE):
+        return {}
+    db, out = ba._geometry_db(), {}
+    for k in range(0, len(ids), 900):
+        part = ids[k:k + 900]
+        out.update(db.execute(f"SELECT frame, et FROM target WHERE version = ? AND error IS NULL AND frame IN "
+                              f"({','.join('?' * len(part))})", (ba.GEOMETRY_VERSION, *part)).fetchall())
+    return out
+
+
+def surface_pictures(u, cache, p, tiles):
+    """Surface reprojection of a mosaic's panels: {tile n: the path of its picture redrawn as at the pass's epoch}.
+    A mosaic's panels are taken minutes apart, and the body turns and Cassini moves in between, so the surface under
+    one place on the sky moves between panels (8 to 18 px on the moons' mapping mosaics, which SPICE predicts to 3 to
+    5 px, panel_motion) while every tile is put on the body's centre: craters double or step at the seams. Each tile's
+    lit surface is moved to where it was at the epoch (the pass's middle frame's time, fixed before any tile is made,
+    so a mosaic grown a tile at a time stays as drawn), with SPICE's shape, orientation and Cassini's position
+    (reproject.sky_field, warp_sky); the sky, the rings, the night side and the limb's edge stay where they are. Made
+    once per tile and kept. {} with Settings > Processing's surface step off, for a body SPICE has no shape for, or
+    when the kernels or the geometry cache cannot say."""
+    if not calibration.step("surface") or not tiles:
+        return {}
+    import reproject as rp
+    there = _tiles(u, cache, p["display_scale"])
+    out_dir = os.path.join(there, SURFACE_DIR)
+    out, todo = {}, []
+    for t in tiles:
+        if "offset" not in t:
+            continue
+        path = os.path.join(out_dir, f"{t['n']}.png")
+        if os.path.exists(path):
+            out[t["n"]] = path
+        elif os.path.exists(os.path.join(there, f"{t['n']}.png")):
+            todo.append(t)
+    if not todo:
+        return out
+    fr = u["frames"]
+    mid = fr[len(fr) // 2]
+    ets = _ets([mid[1]] + [t["id"] for t in todo])
+    if mid[1] not in ets:
+        return out
+    km_px = IFOV[u["key"][2]] * u["z"]
+    with _spice_lock:
+        if not _with_kernels(mid[3]):
+            return out
+        try:
+            epoch = rp.sky_view(u["key"][0], ets[mid[1]])
+        except Exception as e:
+            print(f"no surface for {u['key'][0]}: {type(e).__name__}: {e}"[:200], flush=True)
+            return out
+        os.makedirs(out_dir, exist_ok=True)
+        for t in todo:
+            if t["id"] not in ets or not _with_kernels(t["t"]):
+                continue
+            try:
+                if time.gmtime(t["t"]).tm_year != time.gmtime(mid[3]).tm_year:
+                    continue   # (one year's kernels at a time: a pass across New Year keeps those tiles as they are)
+                view = rp.sky_view(u["key"][0], ets[t["id"]])
+            except Exception as e:
+                print(f"no surface for {t['id']}: {type(e).__name__}: {e}"[:200], flush=True)
+                continue
+            src = os.path.join(there, f"{t['n']}.png")
+            with _lock:
+                image = _made_pictures.get(src)
+            if image is None:
+                image = np.asarray(Image.open(src).convert("RGBA"))
+            h, w = image.shape[:2]
+            # (the grid's first point is the tile's pixel (0, 0), at the tile's corner on the sky)
+            gy, gx = np.mgrid[0:h + SURFACE_STEP:SURFACE_STEP, 0:w + SURFACE_STEP:SURFACE_STEP].astype(np.float64)
+            x0, y0 = t["offset"][0] + t["box"][0], t["offset"][1] + t["box"][1]
+            dx, dy, weight = rp.sky_field(epoch, view, gx + x0, gy + y0, km_px)
+            path = os.path.join(out_dir, f"{t['n']}.png")
+            Image.fromarray(rp.warp_sky(image, dx, dy, weight, SURFACE_STEP)).save(path + ".part.png", compress_level=1)
+            os.replace(path + ".part.png", path)
+            out[t["n"]] = path
+    return out
+
+
 def panel_places(u, cache, p, tiles, pic=None, report=None):
     """Panel registration: {tile n: [dx, dy]}, how far each tile is moved from SPICE's place (reference pixels), so
     a mosaic's pointings line up where they overlap. SPICE places each frame on its own and its pointing is a few
@@ -1292,17 +1407,19 @@ def panel_places(u, cache, p, tiles, pic=None, report=None):
     Processing's panels (or align) step off. report: a dict that gets each tile's measurements."""
     if not (calibration.step("align") and calibration.step("panels")):
         return {}
-    path = os.path.join(folder(u, cache), PANEL_FILE)
+    # (measured on the tiles as drawn: their surface redrawn as at the epoch, or not, each kept apart)
+    surfaced = any("pic" in t for t in tiles)
+    path = os.path.join(folder(u, cache), (SURFACE_DIR + "-" if surfaced else "") + PANEL_FILE)
     rec = _kept_tiles(u, cache, p["display_scale"])
     with _ulock(u):
-        kept = rec.get("panels") if rec is not None else None
+        kept = rec.get("panels" + SURFACE_TAG * surfaced) if rec is not None else None
         if kept is None:
             kept = {}
             if os.path.exists(path):
                 with open(path) as fh:
                     kept = {int(n): v for n, v in json.load(fh).items()}
             if rec is not None:
-                rec["panels"] = kept
+                rec["panels" + SURFACE_TAG * surfaced] = kept
         todo = [t for t in tiles if "offset" in t and t["n"] not in kept]
         if not todo:
             return {n: v[:2] for n, v in kept.items() if v[:2] != [0, 0]}
@@ -1313,7 +1430,7 @@ def panel_places(u, cache, p, tiles, pic=None, report=None):
             if pic is not None:
                 return pic(j)
             if j not in pics:
-                fp = os.path.join(there, f"{j}.png")
+                fp = by_n[j].get("pic") or os.path.join(there, f"{j}.png")
                 with _lock:
                     pics[j] = _made_pictures.get(fp)
                 if pics[j] is None:
@@ -1395,7 +1512,7 @@ def _window(u, p, mine, rect, cache):
         sw, sh = max(1, round(bw * k)), max(1, round(bh * k))
         if left >= W or top >= H or left + sw <= 0 or top + sh <= 0:
             continue
-        part = _shade(_part(os.path.join(_tiles(u, cache, p["display_scale"]), f"{t['n']}.png"), sw, sh), t)
+        part = _shade(_part(_pic(u, cache, p["display_scale"], t), sw, sh), t)
         frame = np.zeros((H, W, 4), np.uint8)
         x0, y0, x1, y1 = max(left, 0), max(top, 0), min(left + sw, W), min(top + sh, H)
         frame[y0:y1, x0:x1] = part[y0 - top:y1 - top, x0 - left:x1 - left]
@@ -1507,7 +1624,7 @@ def _over(u, p, rgba, t, rect, cache, match=True):
     # (a tile wholly past the canvas's edge, only its soft edge's margin on it, has nothing to draw: SPICE, filter
     # registration or a person's tuning can put a tile outside the pass's footprint)
     if x1 > x0 and y1 > y0 and a1 > a0 and b1 > b0:
-        part = _shade(_part(os.path.join(_tiles(u, cache, p["display_scale"]), f"{t['n']}.png"), sw, sh), t)
+        part = _shade(_part(_pic(u, cache, p["display_scale"], t), sw, sh), t)
         frame = np.zeros((y1 - y0, x1 - x0, 4), np.uint8)
         frame[b0 - y0:b1 - y0, a0 - x0:a1 - x0] = part[b0 - top:b1 - top, a0 - left:a1 - left]
         below = np.ascontiguousarray(rgba[y0:y1, x0:x1])
@@ -1620,7 +1737,7 @@ def filter_mosaic(u, p, f, tiles, rect, cache, ref=None, tag=""):
 
     def make():
         # (panel registration's tiles are every tile up to the newest too, each kept where it was first put)
-        if not balanced and tag in ("", PANEL_TAG) and len(mine) > GROW_FROM:
+        if not balanced and tag in ("", PANEL_TAG, SURFACE_TAG, SURFACE_TAG + PANEL_TAG) and len(mine) > GROW_FROM:
             return _grown(u, p, f, mine, rect, cache, tag)
         window, shown = _window(u, p, mine, rect, cache)
         corrections = None
@@ -1750,7 +1867,11 @@ def layout(u, n, cache):
     p = plan(u, cache)
     tiles = _reports(u, cache, p, range(n + 1))
     rect = view_rect(p, tiles)
-    # each pointing moved onto the ones before it where they overlap (panel registration)
+    # each tile's surface redrawn as at the pass's epoch (surface reprojection), then each pointing moved onto the
+    # ones before it where they overlap (panel registration: what is left is SPICE's pointing, a few pixels)
+    surfaced = surface_pictures(u, cache, p, tiles)
+    if surfaced:
+        tiles = [dict(t, pic=surfaced[t["n"]]) if t["n"] in surfaced else t for t in tiles]
     moved = panel_places(u, cache, p, tiles)
     if moved:
         tiles = [dict(t, offset=[t["offset"][0] + moved[t["n"]][0], t["offset"][1] + moved[t["n"]][1]], spice_place=t["offset"])
@@ -1775,7 +1896,7 @@ def layout(u, n, cache):
     name = "_".join(f"{f.replace('/', '-')}{count[f]}" for f in used)
     if any(f not in used for f in base):
         name += f"_L{len(base)}"
-    return p, tiles, rect, count, used, name + "_" + "_".join(str(round(v)) for v in rect) + (PANEL_TAG if moved else "")
+    return p, tiles, rect, count, used, name + "_" + "_".join(str(round(v)) for v in rect) + (SURFACE_TAG if surfaced else "") + (PANEL_TAG if moved else "")
 
 
 TUNE_MAX = 0.5   # furthest a pointing can be moved, as a fraction of the picture
@@ -1884,7 +2005,7 @@ def so_far(u, n, cache, made=None, out=OUT):
     plain, _, tuned = name.partition("-tune")
     # (and a layout whose tiles panel registration moved: its tiles are not where the pre-built pictures have them)
     tag = ("-" + plain.rsplit("-", 1)[1] if plain.startswith("lap-") else "") + \
-        (PANEL_TAG if plain.endswith(PANEL_TAG) else "") + ("-tune" + tuned if tuned else "")
+        "".join(x for x in (SURFACE_TAG, PANEL_TAG) if x in plain) + ("-tune" + tuned if tuned else "")
     # the seams are solved on the best covered filter drawn and shared by all (balanced look)
     ref = max(used, key=lambda f: count[f])
     # the luminance base under the picture, where it holds tiles the picture would not show (a mosaic movie's

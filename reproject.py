@@ -199,3 +199,85 @@ def warp_to_newest(old, new):
     out = np.zeros_like(image)
     out[y0:y1, x0:x1] = np.clip(warped * w + centered * (1 - w), 0, 255).round()
     return out
+
+
+"""
+Surface reprojection for pictures put north up on the body's centre by SPICE (the camera windows' mosaic tiles,
+obs_mosaic): there a picture's pixel is a place on the sky round the body's centre, x = -east and y = -north on the
+sky plane at the body (celestial north up, east to the left as on the sky), in reference pixels of km_px km. A
+mosaic's panels are taken minutes apart and the body turns, and Cassini moves, in between, so the surface under one
+place on the sky moves between panels by 8 to 18 px on the moons (measured, panel_probe / panel_motion) while the
+body's centre stays put. sky_field works out, for a picture taken at et, where each place on the sky at another
+time (the mosaic's epoch) shows that surface point in the picture, so the picture can be redrawn as at the epoch.
+"""
+def sky_view(target, et):
+    """The geometry of target from Cassini at et: (centre vector from Cassini, unit line of sight, sky north, sky
+    east (J2000), J2000 to body-fixed rotation, radii, sun direction body-fixed)."""
+    import spiceypy as sp
+    pos, lt = sp.spkpos(target, et, "J2000", "LT+S", "CASSINI")
+    c = np.array(pos)
+    ch = c / np.linalg.norm(c)
+    north = np.array([0.0, 0.0, 1.0]) - ch[2] * ch
+    north /= np.linalg.norm(north)
+    east = np.cross(north, ch)
+    rot = np.array(sp.pxform("J2000", f"IAU_{target}", et - lt))
+    radii = np.array(sp.bodvrd(target, "RADII", 3)[1])
+    sun = np.array(sp.spkpos("SUN", et - lt, "J2000", "LT+S", target)[0])
+    return {"c": c, "ch": ch, "north": north, "east": east, "rot": rot, "radii": radii,
+            "sun": rot @ (sun / np.linalg.norm(sun))}
+
+
+def sky_to_surface(view, x, y, km_px):
+    """Body-fixed points (km) under sky places x, y (reference pixels from the body's centre), and which hit."""
+    ray = (view["c"] + (-x * km_px)[..., None] * view["east"] + (-y * km_px)[..., None] * view["north"]) @ view["rot"].T
+    o = view["rot"] @ -view["c"] / view["radii"]
+    d = ray / view["radii"]
+    a = (d * d).sum(-1)
+    b = 2 * (d @ o)
+    cc = o @ o - 1
+    disc = b * b - 4 * a * cc
+    hit = disc >= 0
+    t = (-b - np.sqrt(np.where(hit, disc, 0))) / (2 * a)
+    hit &= t > 0
+    return view["rot"] @ -view["c"] + t[..., None] * ray, hit
+
+
+def surface_to_sky(view, points, km_px):
+    """Sky places (reference pixels from the body's centre) of body-fixed points, and which are on the near side."""
+    observer = view["rot"] @ -view["c"]
+    to_point = points - observer
+    visible = ((points / view["radii"] ** 2) * to_point).sum(-1) < 0
+    v = to_point @ view["rot"]   # body-fixed -> J2000 (Cassini to the point)
+    d = np.linalg.norm(view["c"])
+    sky = v * (d / (v @ view["ch"]))[..., None] - view["c"]
+    return -(sky @ view["east"]) / km_px, -(sky @ view["north"]) / km_px, visible
+
+
+def sky_field(epoch, view, x, y, km_px):
+    """For sky places x, y at the epoch's view: where the picture taken at view shows the same surface point (its
+    shift dx, dy from x, y) and how much to believe it (weight 0..1: 0 off the body, on its far side, or in the dark
+    at either time, fading in as the sun rises, as warp_to_newest does past the terminator)."""
+    points, hit = sky_to_surface(epoch, x, y, km_px)
+    sx, sy, visible = surface_to_sky(view, points, km_px)
+    drawn = hit & visible
+    normal = points / epoch["radii"] ** 2
+    normal /= np.maximum(np.linalg.norm(normal, axis=-1, keepdims=True), 1e-12)
+    lit = np.minimum(np.clip(normal @ epoch["sun"], 0, 1), np.clip(normal @ view["sun"], 0, 1))
+    weight = np.where(drawn, np.clip((lit - 0.05) / 0.10, 0, 1), 0).astype(np.float32)
+    return np.where(drawn, sx - x, 0).astype(np.float32), np.where(drawn, sy - y, 0).astype(np.float32), weight
+
+
+def warp_sky(image, dx, dy, weight, step):
+    """image (RGBA, its pixel (0, 0) at the field's grid point (0, 0)) redrawn as at the field's epoch: dx, dy,
+    weight on a grid of step pixels (sky_field), filled in between; off the body (weight 0) it stays as it is, and
+    the edge between moved and unmoved pixels is softened over a grid step, as warp_to_newest does."""
+    h, w = image.shape[:2]
+    fy, fx = np.meshgrid(np.arange(h, dtype=np.float32) / step, np.arange(w, dtype=np.float32) / step, indexing="ij")
+    fine = lambda a: cv2.remap(a, fx, fy, cv2.INTER_LINEAR, borderMode=cv2.BORDER_REPLICATE)
+    sx, sy = fine(dx), fine(dy)
+    wt = cv2.GaussianBlur(fine(weight), (0, 0), step)
+    px, py = np.meshgrid(np.arange(w, dtype=np.float32), np.arange(h, dtype=np.float32))
+    warped = cv2.remap(image, px + sx, py + sy, cv2.INTER_LINEAR, borderMode=cv2.BORDER_CONSTANT,
+                       borderValue=(0, 0, 0, 0)).astype(np.float32)
+    k = wt[..., None]
+    return np.clip(warped * k + image.astype(np.float32) * (1 - k), 0, 255).round().astype(np.uint8)
