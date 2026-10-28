@@ -264,14 +264,18 @@ def _hot_pixels(path, lines):
         if hotsat == 0.0:
             continue
         top = exptimes[int(hotsat) - 1] if hotsat > 0 else max(exptimes)
-        known = [(t, e) for t, e in zip(exptimes, elec) if t <= top]
+        # some of cisscal's own lists have NaN for a time (WAC_hotpix2014.3 and 2015.7 at 1200 s): that time is left
+        # out, as if never measured, since one NaN here turns the pixel's whole column of the frame NaN
+        known = [(t, e) for t, e in zip(exptimes, elec) if t <= top and math.isfinite(e)]
         if len(known) < 2:
             continue
         kt, ke = np.array(known).T
         # IDL style linear interpolation, carried on past the ends along the end segments
         i = np.clip(np.searchsorted(kt, TGRID, side="left"), 1, len(kt) - 1)
         slope = (ke[i] - ke[i - 1]) / (kt[i] - kt[i - 1])
-        out.append((y, x, slope * (TGRID - kt[i - 1]) + ke[i - 1]))
+        curve = slope * (TGRID - kt[i - 1]) + ke[i - 1]
+        if np.isfinite(curve).all():
+            out.append((y, x, curve))
     return out
 
 
