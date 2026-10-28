@@ -12,7 +12,8 @@ Phases (each its own run; a run picks up where the last one stopped, since a mad
               also writes full) and 512, in the default look (balanced, natural colors)
   mosaics     every mosaic pass's plan and tiles (obs_mosaic), then what the window shows at each of its frames,
               1024 and 512: its mosaic so far, or a mosaic movie's rolling picture
-  movies      the same for every movie pass: its steadied frames (movie_webp)
+  movies      the same for every movie pass: its steadied frames (movie_webp), then the planes the page's own steps
+              start from (make_planes: each frame alone, color=0, at 1024; a filled pass's also before detail, _d0)
   processed   /frames/processed/<ID>.webp at 1024, 512 and 256, every frame, centred as Auto center asks
   strips      a movie pass's steadied frames at 128 (the movie strip)
   chains      every movie pass's stabilization and exposure chains (small JSON files; no pictures), which the page's
@@ -138,8 +139,9 @@ def items(phase):
         return [("_".join(map(str, u["key"])), lambda c, u=u: make_chains(u, c)) for u in movie_passes()]
     if phase in ("movies", "strips"):
         # strips: a movie pass's steadied frames at 128, the movie strip under a window
-        sizes = (1024, 512) if phase == "movies" else (128,)
-        return [("_".join(map(str, u["key"])), lambda c, u=u: make_pass(u, c, sizes)) for u in movie_passes()]
+        if phase == "strips":
+            return [("_".join(map(str, u["key"])), lambda c, u=u: make_pass(u, c, (128,))) for u in movie_passes()]
+        return [("_".join(map(str, u["key"])), lambda c, u=u: make_pass(u, c) + make_planes(u, c)) for u in movie_passes()]
     raise ValueError(phase)
 
 
@@ -259,6 +261,19 @@ def make_pass(u, cache, sizes=(1024, 512), within=None, style=None, made=None, s
             if made:
                 made(f[3])
     return n
+
+
+def make_planes(u, cache, centre=True):
+    """The frames the page's movie steps start from (steady-local.html, Settings > Processing > Steady movies on this
+    computer), as it asks for them: each frame alone at SPICE's places with no gain and no trail (color=0, trail=0,
+    steady=0, exposure=0), at 1024, Auto center as the window has it; and for a filled pass (Titan, Jupiter), the
+    same before its detail filter (sharpen False, detail=0, files _d0), which the page sharpens itself after its
+    exposure, trail or colour mix. Returns 0: make_pass has counted the pass's frames."""
+    filled = bool(obs_mosaic.plan(u, cache)["display_scale"].get("filled"))
+    for f in u["frames"]:
+        for sharpen in ((True, False) if filled else (True,)):
+            obs_mosaic.movie_webp(f[1], 1024, cache, 0, False, wait=True, ahead=0, centre=centre, sharpen=sharpen)
+    return 0
 
 
 def make_chains(u, cache):
