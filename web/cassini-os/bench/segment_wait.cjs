@@ -1,0 +1,193 @@
+// Times the wait after Pre-process, as the page shows it: opens the page at FROM (paused), lets the camera windows
+// settle, highlights FROM..UNTIL on the timeline with the mouse (a real drag, as a person does; MODE=mark uses
+// cassiniExport.mark instead), waits HOLD ms (the pointer moving to the button), presses Pre-process and records
+// every line the bar says (#segstate) with when it said it, the POST /prebuild's own timing (Resource Timing: how
+// long it waited for a connection, for the server's answer, in all), the page's requests to the frame server still
+// out when it was pressed and those the highlight started, and (FRAME_SERVER_SAMPLE=1 on the server) what the
+// server's threads did while the page waited. RUNS stretches, each SHIFT s later than the last (the same stretch
+// asked again is the same job, answered as made).
+//   npm i playwright-core
+//   node segment_wait.cjs URL FROM UNTIL OUT        writes OUT.json, prints one line per run
+//   CHANNEL=chrome (the installed Google Chrome, the Mac Mini), WAIT=8000 ms after the page is up, HOLD=1500 ms
+//   between the highlight and the press, RUNS=3, SHIFT=60 s, MODE=drag|mark, PLAY=1 (the clock playing when it is
+//   pressed), MAXSECS=120 for each stretch, W=1440 H=900 DPR=2, PRE='js' run in the page before the first highlight
+//   (PRE='cassiniMovie.start(true)': movie mode playing), NET=ms,down,up the link as Chrome emulates it (NET=20,100,50
+//   a home Wi-Fi, NET=80,30,10 Tailscale away from home; play_rate.cjs), PLAYSECS=8 the most it waits, once ready,
+//   for the stretch's movie (Settings > Playback > play when ready) to start and step five pictures; REQS=1 also
+//   prints each pass mosaic the windows asked for from the press to the movie's fifth step, and what came back
+let chromium;
+try { ({ chromium } = require("playwright-core")); } catch (e) { ({ chromium } = require("playwright")); }
+const fs = require("fs");
+const [url, FROM, UNTIL, out] = process.argv.slice(2);
+const env = process.env, W = +(env.W || 1440), H = +(env.H || 900), DPR = +(env.DPR || 2);
+const WAIT = +(env.WAIT || 8000), HOLD = +(env.HOLD || 1500), RUNS = +(env.RUNS || 3), SHIFT = +(env.SHIFT || 60);
+const MODE = env.MODE || "drag", MAXSECS = +(env.MAXSECS || 120);
+const iso = s => new Date(s * 1000).toISOString().slice(0, 19);
+const secs = s => Date.parse(s + "Z") / 1000;
+const now = () => performance.now();
+
+(async () => {
+  const args = ["--ignore-gpu-blocklist"];
+  if (env.SOFTWARE) args.push("--use-gl=swiftshader", "--enable-unsafe-swiftshader");
+  const br = await chromium.launch({ channel: env.CHANNEL || undefined, executablePath: env.EXE || undefined, headless: !env.HEADED, args });
+  const ctx = await br.newContext({ viewport: { width: W, height: H }, deviceScaleFactor: DPR });
+  const page = await ctx.newPage();
+  page.on("pageerror", e => console.log("PAGEERROR", e.message));
+  if (env.NET) {
+    const [ms, down, up] = env.NET.split(",").map(Number), cdp = await ctx.newCDPSession(page);
+    await cdp.send("Network.enable");
+    await cdp.send("Network.emulateNetworkConditions", { offline: false, latency: ms || 0,
+      downloadThroughput: down ? down * 125000 : -1, uploadThroughput: up ? up * 125000 : -1 });
+  }
+  if (env.THREE_DIR) {
+    await page.route("https://cdn.jsdelivr.net/npm/three@0.128.0/**", r =>
+      r.fulfill({ path: `${env.THREE_DIR}/${r.request().url().split("three@0.128.0/")[1]}`, headers: { "Content-Type": "application/javascript" } }));
+    await page.route("https://fonts.googleapis.com/**", r => r.fulfill({ status: 200, body: "", headers: { "Content-Type": "text/css" } }));
+  }
+  await page.addInitScript(() => { try { localStorage.clear(); } catch (e) {} });
+  const origin = new URL(url).origin;
+  // every request to the frame server, by when it went out and came back (this script's clock)
+  const reqs = [];
+  const byReq = new Map();
+  page.on("request", r => { if (r.url().startsWith(origin)) { const e = { m: r.method(), u: r.url().slice(origin.length), t0: now(), t1: null, s: null }; reqs.push(e); byReq.set(r, e); } });
+  page.on("requestfinished", async r => { const e = byReq.get(r); if (!e) return; e.t1 = now(); try { const x = await r.response(); e.s = x && x.status(); } catch (err) {} });
+  page.on("requestfailed", r => { const e = byReq.get(r); if (e) { e.t1 = now(); e.s = "failed"; } });
+  const samples = async () => { try { const r = await fetch(`${origin}/debug/samples`); return r.ok ? await r.text() : null; } catch (e) { return null; } };
+  // the samples taken while the page waited for the POST's answer, read as soon as it comes
+  let postSamples = null;
+  page.on("response", async r => { if (r.request().method() === "POST" && /\/prebuild\?/.test(r.url())) postSamples = await samples(); });
+
+  const u = new URL(url); u.searchParams.set("t", FROM); u.searchParams.set("play", env.PLAY ? "1" : "0");
+  await page.goto(u.href);
+  await page.waitForFunction("document.getElementById('loading').hidden && typeof catalog !== 'undefined' && catalog && catalog.byCam && window.cassiniFeeds && window.cassiniExport && window.cassiniSegment", null, { timeout: 300000 });
+  await page.evaluate(() => cassiniSettings.set("interface.autohide", false));
+  if (env.PRE) await page.evaluate(env.PRE);
+  await page.waitForTimeout(WAIT);
+
+  const runs = [];
+  for (let k = 0; k < RUNS; k++) {
+    const A = iso(secs(FROM) + k * SHIFT), B = iso(secs(UNTIL) + k * SHIFT);
+    // the last stretch let go (its ×), as a person does before highlighting another
+    await page.evaluate(() => { if (!document.getElementById("segbar").hidden) document.getElementById("segx").click(); });
+    // and the last stretch's movie stopped: the clock as the run asks for it (PLAY, PRE) for each stretch
+    if (k) {
+      await page.evaluate(play => { if (cassiniMovie.on && isFinite(cassiniMovie.state.until)) cassiniMovie.stop(); setPlaying(play); }, !!env.PLAY);
+      if (env.PRE) await page.evaluate(env.PRE);
+    }
+    await page.waitForTimeout(300);
+    const marked = now();
+    if (MODE === "drag") {
+      // the timeline shows the stretch across its middle; a press in its lanes, dragged from one end to the other
+      const box = await page.evaluate(([a, b]) => {
+        const ea = utcToEt(a), eb = utcToEt(b), pad = (eb - ea) * 0.4;
+        state.tlFollow = false; state.view = [ea - pad, eb + pad]; drawTimeline();
+        const r = document.getElementById("tl").getBoundingClientRect();
+        return { left: r.left, top: r.top, w: r.width, h: r.height, xa: etToX(ea, r.width), xb: etToX(eb, r.width) };
+      }, [A, B]);
+      const y = box.top + Math.max(24, box.h * 0.65);
+      await page.mouse.move(box.left + box.xa, y);
+      await page.mouse.down();
+      for (let i = 1; i <= 12; i++) { await page.mouse.move(box.left + box.xa + (box.xb - box.xa) * i / 12, y); await page.waitForTimeout(16); }
+      await page.mouse.up();
+    }
+    // (a drag that did not reach the timeline, something over it: the marks as the drag would set them)
+    if (MODE !== "drag" || !(await page.waitForFunction("!document.getElementById('segbar').hidden", null, { timeout: 3000 }).then(() => true, () => false))) {
+      if (MODE === "drag") console.log("  (the drag did not highlight the stretch; marked instead)");
+      await page.evaluate(([a, b]) => cassiniExport.mark(utcToEt(a), utcToEt(b), "new"), [A, B]);
+    }
+    await page.waitForFunction("!document.getElementById('segbar').hidden", null, { timeout: 10000 });
+    const ends = await page.evaluate(() => { const P = cassiniSegment.state; return [new Date(etToMs(P.a)).toISOString().slice(0, 19), new Date(etToMs(P.b)).toISOString().slice(0, 19)]; });
+    await page.waitForTimeout(HOLD);
+    await samples();   // (from here on)
+    postSamples = null;
+    await page.evaluate(() => {
+      const el = document.getElementById("segstate");
+      // (the browser keeps 250 timings by default: a full buffer would leave the POST's out)
+      performance.clearResourceTimings(); performance.setResourceTimingBufferSize(5000);
+      window.__seg = { t0: null, log: [], mov: [], stalls: [] };
+      const note = () => { const t = el.textContent; const L = window.__seg.log; if (!L.length || L[L.length - 1][1] !== t) L.push([performance.now(), t]); };
+      if (window.__segObs) window.__segObs.disconnect();
+      window.__segObs = new MutationObserver(note); window.__segObs.observe(el, { childList: true, characterData: true, subtree: true });
+      document.getElementById("segprep").addEventListener("click", () => { window.__seg.t0 = performance.now(); }, { capture: true, once: true });
+      // the movie the stretch plays as when it is ready (segment.autoplay): when movie mode is on and playing, and
+      // each step of its clock, every animation frame
+      const me = window.__seg;
+      (function tick() {
+        if (window.__seg !== me) return;
+        const M = window.cassiniMovie, P = cassiniSegment.state, L = me.mov, last = L[L.length - 1];
+        const on = !!(M && M.on && state.playing && P.b != null && M.state.until === P.b);   // (this stretch's movie)
+        const t = performance.now();
+        if (on && (!last || last[1] !== state.et)) L.push([t, state.et, !!M.state.waiting]);
+        // a step held more than 1.5 s: what each camera window shows then (its picture, its tag, how far behind)
+        else if (on && last && t - last[0] > 1500 && !(me.stalls.length && me.stalls[me.stalls.length - 1].from === last[0])) {
+          me.stalls.push({ from: last[0], at: t, et: state.et, wins: [...document.querySelectorAll(".camwin")].filter(w => !w.hidden).map(w => {
+            const well = w.querySelector(".well"), shot = w.querySelector(".shot");
+            return { id: w.id, cam: w.dataset.cam, behind: window.cassiniFeeds.behind(w.dataset.cam), tag: w.querySelector(".kindtag").textContent,
+              classes: well.className, src: (shot.dataset.src || "").replace(/^https?:\/\/[^/]+/, "").slice(0, 160) };
+          }) });
+        }
+        requestAnimationFrame(tick);
+      })();
+    });
+    const box = await page.evaluate(() => { const r = document.getElementById("segprep").getBoundingClientRect(); return r.width ? { x: r.left + r.width / 2, y: r.top + r.height / 2 } : null; });
+    const pressed = now();
+    if (box) await page.mouse.click(box.x, box.y); else await page.evaluate(() => document.getElementById("segprep").click());
+    let job = null;
+    while ((now() - pressed) / 1000 < MAXSECS) {
+      await page.waitForTimeout(50);
+      job = await page.evaluate(() => { const j = cassiniSegment.state.job; return j && { id: j.id, state: j.state, done: j.done, total: j.total, took: j.took, errors: j.errors }; });
+      if (job && /^(done|failed|stopped)$/.test(job.state)) break;
+    }
+    // the movie: up to PLAYSECS (default 8) for it to start and step 5 pictures
+    const playUntil = now() + 1000 * +(env.PLAYSECS || 8);
+    while (now() < playUntil && job && job.state === "done" && (await page.evaluate(() => window.__seg.mov.length)) < 6) await page.waitForTimeout(100);
+    await page.waitForTimeout(200);
+    const got = await page.evaluate(() => {
+      const t0 = window.__seg.t0, rel = t => +(t - t0).toFixed(1), mov = window.__seg.mov;
+      // on: movie mode on and playing (the clock set to the stretch's start); steps: the clock's first moves from there
+      const movie = mov.length ? { on: rel(mov[0][0]), steps: mov.slice(1, 6).map(m => rel(m[0])),
+        stalls: window.__seg.stalls.map(x => ({ from: rel(x.from), at: rel(x.at), wins: x.wins })) } : null;
+      const post = performance.getEntriesByType("resource").filter(e => /\/prebuild\?/.test(e.name) && e.startTime >= t0 - 5).pop();
+      return { t0, movie, log: window.__seg.log.map(([t, s]) => [rel(t), s]),
+        post: post && { start: rel(post.startTime), queued: +(post.requestStart - post.startTime).toFixed(1), connect: +(post.connectEnd - post.connectStart).toFixed(1),
+          server: +(post.responseStart - post.requestStart).toFixed(1), total: +(post.responseEnd - post.startTime).toFixed(1) } };
+    });
+    // the bar's lines, each with how long it stayed
+    const lines = got.log.map(([t, s], i) => ({ at: t, for: got.log[i + 1] ? +(got.log[i + 1][0] - t).toFixed(1) : null, says: s }));
+    const asking = lines.find(l => /^Asking the frame server/.test(l.says));
+    const first = lines.find(l => /^(Pre-processing [1-9]|Ready)/.test(l.says));
+    const ready = lines.find(l => /^Ready/.test(l.says));
+    const out1 = (e, t) => ({ m: e.m, u: e.u.slice(0, 140), age: +(t - e.t0).toFixed(0), left: e.t1 == null ? null : +(e.t1 - t).toFixed(0), s: e.s });
+    const outAtPress = reqs.filter(e => e.t0 < pressed && (e.t1 == null || e.t1 > pressed)).map(e => out1(e, pressed));
+    const sinceMark = reqs.filter(e => e.t0 >= marked && e.t0 < pressed).map(e => ({ m: e.m, u: e.u.slice(0, 140), at: +(e.t0 - pressed).toFixed(0), took: e.t1 == null ? null : +(e.t1 - e.t0).toFixed(0), s: e.s }));
+    // the requests around each held step: those that went out from 1.5 s before it until it moved on (page times
+    // put on this script's clock by the press, which both saw within a few ms)
+    const pageToHere = t => pressed + t;
+    if (got.movie) for (const st of got.movie.stalls) {
+      const next = got.movie.steps.find(x => x > st.from), a = pageToHere(st.from - 1500), b = pageToHere(next != null ? next : st.at);
+      st.requests = reqs.filter(e => e.t0 >= a && e.t0 <= b).map(e => ({ m: e.m, u: e.u.slice(0, 160), at: +(e.t0 - pressed).toFixed(0), took: e.t1 == null ? null : +(e.t1 - e.t0).toFixed(0), s: e.s }));
+    }
+    // REQS=1: the pass mosaics asked for from the press to the movie's last step seen (a 404 is a frame with none)
+    const until = got.movie && got.movie.steps.length ? pageToHere(got.movie.steps[got.movie.steps.length - 1]) : now();
+    const mosaics = env.REQS ? reqs.filter(e => e.t0 >= pressed && e.t0 <= until && /^\/frames\/mosaic\//.test(e.u))
+      .map(e => ({ u: e.u.slice(0, 160), at: +(e.t0 - pressed).toFixed(0), took: e.t1 == null ? null : +(e.t1 - e.t0).toFixed(0), s: e.s })) : [];
+    const r = { stretch: ends, job, post: got.post, asking: asking ? asking.for : null, first: first ? first.at : null, ready: ready ? ready.at : null, movie: got.movie,
+      lines, outAtPress, sinceMark, mosaics, postSamples, samplesAfter: await samples() };
+    runs.push(r);
+    // the requests out at the press, by route (a picture, a pass's mosaic, a look-ahead note, ...) and how much longer each took
+    const route = e => e.u.replace(/\?.*/, "").replace(/[NW]\d{10}_\d+(_[NW]\d{10}_\d+)*/g, "ID").replace(/[0-9a-f]{16}/g, "JOB") + (/[?&]warm=1/.test(e.u) ? "?warm" : "");
+    const routes = {};
+    for (const e of outAtPress) { const k2 = `${e.m} ${route(e)}`; (routes[k2] = routes[k2] || []).push(e.left); }
+    r.outByRoute = routes;
+    console.log(`run ${k + 1} ${ends[0]}..${ends[1]}: asking ${r.asking} ms (POST queued ${got.post ? got.post.queued : "?"} + server ${got.post ? got.post.server : "?"} ms, ${outAtPress.length} requests out at the press), ` +
+      `first picture shown done ${r.first} ms, ready ${r.ready} ms; ${job ? `${job.state} ${job.done}/${job.total}, server took ${job.took != null ? job.took.toFixed(2) : "?"} s` : "no job"}; ` +
+      `movie ${got.movie ? `on at ${got.movie.on} ms, its first steps at ${got.movie.steps.join(", ")} ms` : "never on"}\n` +
+      lines.map(l => `     ${String(l.at).padStart(8)} ms  ${String(l.for).padStart(8)} ms  ${l.says}`).join("\n") +
+      Object.entries(routes).map(([k2, v]) => `\n     out at the press: ${v.length} x ${k2}, done ${v.map(x => x == null ? "never" : `${x} ms`).join(", ")} after it`).join("") +
+      (got.movie ? got.movie.stalls.map(st => `\n     movie held from ${st.from} ms (seen at ${st.at} ms): ` + st.wins.map(w => `${w.id} behind ${w.behind} [${w.tag}] ${w.classes} ${w.src}`).join(" | ") +
+        st.requests.map(q => `\n        ${String(q.at).padStart(7)} ms ${q.m} ${q.u} -> ${q.s} in ${q.took} ms`).join("")).join("") : "") +
+      mosaics.map(q => `\n     mosaic asked at ${q.at} ms: ${q.u} -> ${q.s} in ${q.took} ms`).join(""));
+  }
+  fs.writeFileSync(`${out}.json`, JSON.stringify({ url, from: FROM, until: UNTIL, mode: MODE, hold: HOLD, wait: WAIT, play: !!env.PLAY, net: env.NET || null, pre: env.PRE || null, runs }, null, 1));
+  await br.close();
+})();

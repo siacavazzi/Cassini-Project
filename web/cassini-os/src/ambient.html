@@ -16,8 +16,8 @@
      Through a quiet stretch each panel keeps its last picture (the camera feed holds, as a body window does) and a
      line under the caption counts down to the next picture.
 
-     ?ambient=1 (or a mode) opens in ambient mode; Go > Ambient Mode or A starts it; Escape or the Leave button (it
-     shows when the pointer moves) ends it. While it runs the page never pauses in the background, the 3D view is drawn
+     ?ambient=1 (or a mode) opens in ambient mode; the dock's Ambient mode icon, Go > Ambient Mode or A starts it; Escape
+     or the Leave button (it shows for a few seconds after the start and whenever the pointer moves) ends it. While it runs the page never pauses in the background, the 3D view is drawn
      at most ambient.fps times a second, and the caption and panels drift a few pixels every minute (screen burn-in).
      Cutscenes still play when the clock crosses them; afterwards the clock carries on. The camera cones stay (the rest
      of the HUD goes), fainter, fading in and out and turning smoothly (ambient.cones), and the sound is calmer
@@ -473,6 +473,7 @@ body.ambient.phone .amb-where { font-size: 18px; }
     if (F && F.windows && catalog && catalog.byCam) F.windows.forEach(f => f(true));   // (the catalog may still be loading)
     const u = new URL(location.href);
     if (u.searchParams.get("ambient") !== (mode || "1")) { u.searchParams.set("ambient", mode || "1"); try { history.replaceState(history.state, "", u); } catch (e) {} }
+    wake(5000);   // the way out, shown for a moment at the start
     document.dispatchEvent(new CustomEvent("cassini:ambient", { detail: { on: true, mode: A.mode } }));
   }
   function stop() {
@@ -504,10 +505,10 @@ body.ambient.phone .amb-where { font-size: 18px; }
 
   // ---- the only controls: Escape or the Leave button (shown while the pointer moves) ----
   let wokeTimer = 0;
-  function wake() {
+  function wake(ms) {
     if (!A.on) return;
     document.body.classList.add("amb-woke"); clearTimeout(wokeTimer);
-    wokeTimer = setTimeout(() => document.body.classList.remove("amb-woke"), 2500);
+    wokeTimer = setTimeout(() => document.body.classList.remove("amb-woke"), typeof ms === "number" ? ms : 2500);
   }
   window.addEventListener("pointermove", wake, { passive: true });
   window.addEventListener("pointerdown", e => { if (A.on && !e.target.closest(".amb-leave, .cs-root")) { wake(); e.stopPropagation(); } }, true);

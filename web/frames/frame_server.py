@@ -124,11 +124,17 @@ Routes:
                                picture (a Cassini Studio recipe's color part, web/frames/studio_look.py);
                                &pictures=movie|color|processed|raw: what each frame shows (as the windows show it, full
                                color sets only, each frame processed alone, each frame raw); &list=1: every frame however
-                               many (the editor's list; a film holds at most CASSINI_EXPORT_MAX, default 20,000).
+                               many (the editor's list; a film has no cap unless CASSINI_EXPORT_MAX sets one).
                                size=1536|2048: mosaics up to that size, each at the bucket its pass has detail for;
                                size=full: mosaics at native resolution (export.full_size: "full" says the panes' side,
                                the passes that set it and how many pictures are drawn that big; passes not
-                               pre-processed are counted as pending)
+                               pre-processed are counted as pending);
+                               &levels=ID:EV,...&even=N: its exposure levels (points the film's exposure goes through,
+                               and Even out over N pictures, movie mode's math); &ctr=0|1&zoom=Z&nudge=ID:X:Y,...: its
+                               framing (Auto center for the whole film, stills too; a zoom; single frames moved)
+  /export/levels.json?...      (the plan's options) the Movie Editor's exposure graph: each frame's brightness in EV,
+                               measured on the film's own pictures on a thread of its own (done of total so far,
+                               kept in the cache), and once all are, each picture's Even out change for the edit
   POST /export?...             (same options, plus sound=1 caption=1) starts making that film, or finds it made
                                or on its way; one film is made at a time. Answers the job's status, as
   /export/<JOB>.json           does: state queued/making/sound/done/failed, pictures done of total, seconds left
@@ -139,9 +145,10 @@ Routes:
                                of time (web/frames/prebuild.py segment_items: frames, composites, mosaic and movie
                                passes, with the page's look and movie style: mosaics, steady, color, trail, laps,
                                center), so it plays as a movie at any frame rate from the cache; one stretch at a
-                               time, behind the server's own requests. Answers the job's status, as
+                               time, behind the server's own requests; most= frames at most (the page's Settings >
+                               Playback; 0 no limit, CASSINI_SEGMENT_MAX a ceiling over it). Answers the job's status, as
   /prebuild/<JOB>.json         does: state queued/planning/making/waiting/finishing/done/failed/stopped, pictures done of
-                               total, made through (UTC), seconds left
+                               total (frames: how many of them are the stretch's frames), made through (UTC), seconds left
   POST /prebuild/<JOB>/stop    stops it (what is made stays made)
   /health                      "ok" plus where the frames come from
   POST /flags                  a picture flagged in Cassini OS (the ⚑ button or R in a picture window): JSON with
@@ -793,6 +800,16 @@ def warm_site(site, cache):
     warm_icons(site, cache)
 
 
+def warm_prebuild():
+    """Pre-process (POST /prebuild, prebuild.Segments): the mission's filter sets in the order they are ready
+    (prebuild.sets_ready, a second of work over the whole index), made as the server starts rather than while the
+    first stretch asked for waits."""
+    # prebuild imports this module by name: the running server's own makers and caches, not a second copy
+    sys.modules.setdefault("frame_server", sys.modules[__name__])
+    import prebuild
+    prebuild.sets_ready()
+
+
 # ---------- slow loads: the page reports a wait for data on the loading screen, kept to find out what held it ----------
 # POST /jumplog takes the page's report (what loaded, each data file's timings, the picture requests under way, the
 # page's long tasks); the server adds when, who and how busy it was, and appends it to <cache>/jump-log.jsonl.
@@ -1245,7 +1262,7 @@ def make_handler(site, cache, flags=None):
                     return self.send_json(job) if job else self.send_json({"error": "no such stretch"}, 404)
                 import prebuild
                 try:
-                    return self.send_json(prebuilds().submit(prebuild.segment_options(parse_qs(url.query))))
+                    return self.send_json(prebuilds().submit(prebuild.segment_options(parse_qs(url.query)), prebuild.SEGMENT_ANSWER))
                 except ValueError as e:
                     return self.send_json({"error": str(e)}, 400)
             n = int(self.headers.get("Content-Length") or 0)
@@ -1370,6 +1387,11 @@ def make_handler(site, cache, flags=None):
                     return self.send_json({"error": str(e)}, 400)
                 except OverflowError as e:
                     return self.send_json({"error": str(e)}, 413)
+            if url.path == "/export/levels.json":
+                try:
+                    return self.send_json(export.levels(export.options(parse_qs(url.query)), cache, self.pictures()))
+                except ValueError as e:
+                    return self.send_json({"error": str(e)}, 400)
             m = re.match(r"^/export/([0-9a-f]{16})\.(json|mp4)$", url.path)
             if m:
                 job = export.status(cache, m.group(1))
@@ -1835,8 +1857,9 @@ def main():
     data_source.KEEP_SPICE_CACHE = True
     data_source._zip_index() if data_source.using_zip() else None  # build or load the zip index up front
     # the camera windows' mosaic route and centred pictures need the index, its observations (obs_mosaic.units) and
-    # its frames' rows (obs_mosaic._row_of); made now rather than on the first request
-    threading.Thread(target=lambda: (reel.target_of(), obs_mosaic._observations(), obs_mosaic._row_of()), daemon=True).start()
+    # its frames' rows (obs_mosaic._row_of), and Pre-process its filter sets (warm_prebuild); made now rather than on
+    # the first request
+    threading.Thread(target=lambda: (reel.target_of(), obs_mosaic._observations(), obs_mosaic._row_of(), warm_prebuild()), daemon=True).start()
     if os.environ.get("FRAME_SERVER_SAMPLE") == "1":
         threading.Thread(target=sample_stacks, daemon=True).start()
     # the first composite would otherwise wait while stacking reads the whole image index (all ~443k rows)

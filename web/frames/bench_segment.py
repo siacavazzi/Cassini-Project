@@ -9,6 +9,7 @@ the cached path alone.
 
   python web/frames/bench_segment.py http://localhost:8790 2006-09-15T14:30:00 2006-09-15T17:13:00 [--out seg.json]
     --cams NW --sizes 512,1024   as the page asks on a desktop (a phone asks 512)
+    --every 0.05                 follows the job every 50 ms (when each state starts, to the tenth of a second)
     --again                      when the first run is done, ask again for the same stretch a second later (a new job:
                                  the same stretch asked again is the same job, answered as done), so the second run
                                  times the cached path
@@ -39,6 +40,7 @@ def one(base, q, every, stall, max_s):
     """One stretch, from POST to its end: [(seconds, state, done, total, through)], the stalls, the last status."""
     t0 = time.monotonic()
     status, body = call(base, "/prebuild?" + urlencode(q), "POST")
+    post = time.monotonic() - t0
     job = json.loads(body)
     if "id" not in job:
         raise SystemExit(f"the server said {job}")
@@ -64,7 +66,13 @@ def one(base, q, every, stall, max_s):
     took = time.monotonic() - t0
     if stalls and stalls[-1].get("ended_at") is None:
         stalls[-1]["ended_at"] = round(took, 1)
-    return {"id": job["id"], "seconds": round(took, 2), "final": job, "log": log, "stalls": stalls,
+    # when each state was first seen, and the first picture made (the page's bar moves from there)
+    seen = {}
+    for at, state, done, *_ in log:
+        seen.setdefault(state, at)
+        if done and "first" not in seen:
+            seen["first"] = at
+    return {"id": job["id"], "seconds": round(took, 2), "post_ms": round(post * 1000, 1), "seen": seen, "final": job, "log": log, "stalls": stalls,
             "pictures_per_second": round(job.get("done", 0) / took, 1) if took else None, "samples_after": samples(base)}
 
 
@@ -94,7 +102,8 @@ def main():
         runs.append(r)
         f = r["final"]
         print(f"run {k + 1}: {f['state']} {f.get('done')}/{f.get('total')} pictures in {r['seconds']} s = {r['pictures_per_second']}/s, "
-              f"{f.get('errors')} errors, {len(r['stalls'])} stalls" + "".join(
+              f"{f.get('errors')} errors, {len(r['stalls'])} stalls; POST answered in {r['post_ms']} ms; first seen (s): "
+              + ", ".join(f"{st} {v}" for st, v in r["seen"].items()) + "".join(
                   f"\n   stall {s['from']}-{s['ended_at']} s in {s['state']} at {s['done']}/{s['total']} (through {s['through']})" for s in r["stalls"]), flush=True)
     if args.out:
         with open(args.out, "w") as fh:

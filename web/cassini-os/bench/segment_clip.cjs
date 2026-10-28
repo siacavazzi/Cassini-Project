@@ -1,8 +1,9 @@
 // Records a stretch's Pre-process as the page shows it: highlights FROM..UNTIL on the timeline (cassiniExport.mark,
 // as a drag does), presses Pre-process, follows the frame server's job (/prebuild/<id>.json) every half second until
 // it is done, then lets the stretch play as a movie (Settings > Playback > play when ready) for PLAYSECS. Writes
-// OUT.webm (the page, W x H) and OUT.json (the job every half second: [s, state, done, total, through]); prints how
-// long it took and every stall (no new picture for 10 s).
+// OUT.webm (the page, W x H) and OUT.json (the job every half second: [s, state, done, total, through]; what the
+// stretch's bar said and when, in ms after the press; where the bar is on the page, to crop the video to it); prints
+// how long it took, what the bar said and every stall (no new picture for 10 s).
 //   npm i playwright-core
 //   node segment_clip.cjs URL FROM UNTIL OUT [W=1440 H=900 DPR=2]
 //   CHANNEL=chrome  the installed Google Chrome (the Mac Mini); SOFTWARE=1 SwiftShader and THREE_DIR=.../three/package
@@ -42,8 +43,16 @@ const env = process.env, MAXSECS = +(env.MAXSECS || 600), PLAYSECS = +(env.PLAYS
   await page.waitForTimeout(3000);
   await page.evaluate(([a, b]) => cassiniExport.mark(utcToEt(a), utcToEt(b), "new"), [FROM, UNTIL]);
   await page.waitForTimeout(1500);
+  // what the bar says from the press on (its text each time it changes), and where it is
+  const bar = await page.evaluate(() => {
+    const el = document.getElementById("segstate"), L = window.__says = [];
+    new MutationObserver(() => { const t = el.textContent; if (!L.length || L[L.length - 1][1] !== t) L.push([performance.now(), t]); })
+      .observe(el, { childList: true, characterData: true, subtree: true });
+    const r = document.getElementById("segbar").getBoundingClientRect();
+    return { x: Math.round(r.x), y: Math.round(r.y), w: Math.round(r.width), h: Math.round(r.height) };
+  });
   const videoStartS = (Date.now() - opened) / 1000;
-  await page.evaluate(() => document.getElementById("segprep").click());   // (a DOM click: a dock tucked away still takes it)
+  await page.evaluate(() => { window.__pressed = performance.now(); document.getElementById("segprep").click(); });   // (a DOM click: a dock tucked away still takes it)
   const t0 = Date.now(), log = [], stalls = [];
   let job = null, lastDone = -1, lastMove = t0;
   while ((Date.now() - t0) / 1000 < MAXSECS) {
@@ -61,7 +70,9 @@ const env = process.env, MAXSECS = +(env.MAXSECS || 600), PLAYSECS = +(env.PLAYS
   const took = (Date.now() - t0) / 1000;
   if (job && Date.now() - lastMove >= 10000 && job.state !== "done") stalls.push([+((lastMove - t0) / 1000).toFixed(1), +took.toFixed(1), lastDone, job.total]);
   await page.waitForTimeout(PLAYSECS * 1000);
-  fs.writeFileSync(`${out}.json`, JSON.stringify({ url, from: FROM, until: UNTIL, job, took, videoStartS, stalls, log }, null, 1));
+  const says = await page.evaluate(() => window.__says.map(([t, x]) => [Math.round(t - window.__pressed), x]));
+  fs.writeFileSync(`${out}.json`, JSON.stringify({ url, from: FROM, until: UNTIL, job, took, videoStartS, bar, says, stalls, log }, null, 1));
+  console.log(`the bar said (ms after the press): ${says.map(([t, x]) => `${t} ${x}`).join(" | ")}; the bar is at x ${bar.x}, y ${bar.y}, ${bar.w} x ${bar.h}`);
   console.log(`pre-process: ${job ? `${job.state} ${job.done}/${job.total}` : "no job"} pictures in ${took.toFixed(1)} s (the server says ${job && job.took != null ? job.took.toFixed(1) : "?"} s); ${stalls.length} stalls${stalls.map(s => `\n   stall ${s[0]}-${s[1]} s at ${s[2]}/${s[3]}`).join("")}; video from ${videoStartS.toFixed(1)} s`);
   await ctx.close();
   await page.video().saveAs(`${out}.webm`);
