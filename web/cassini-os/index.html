@@ -5524,7 +5524,7 @@ body.ambient.phone .amb-where { font-size: 18px; }
   const F = window.cassiniFeeds, WM = window.cassiniWM;
   if (!F || !WM) return;
   const S = window.cassiniSettings;
-  const LS = "cassini-os-bodywin-v1";
+  const LS = "cassini-os-bodywin-v2";   // v2: off again for everyone (Sam 2026-10-28), whatever v1 had
   // settings: in the Settings window when the page has one, otherwise remembered here and switched from the Window menu
   let own = {};
   try { own = JSON.parse(localStorage.getItem(LS)) || {}; } catch (e) {}
@@ -5536,8 +5536,10 @@ body.ambient.phone .amb-where { font-size: 18px; }
   };
   const saveOwn = () => { if (S) return; try { localStorage.setItem(LS, JSON.stringify({ on: B.on, linger: B.linger, max: B.max, room: B.room, perCam: B.perCam })); } catch (e) {} };
   if (S) {
-    B.on = !!S.define({ key: "cameras.bodyWindows", section: "Cameras", label: "A window for each body", type: "toggle", value: false,
-      hint: "Each target Cassini images gets its own narrow-angle and wide-angle windows. They stay up while the screen is calm and make way for new ones when it gets busy." });
+    // a new key, so the per-body windows start off for everyone again, also where cameras.bodyWindows was saved on:
+    // the two camera windows are the default (Sam 2026-10-28)
+    B.on = !!S.define({ key: "cameras.bodyWindowsOptIn", section: "Cameras", label: "Extra windows for each body", type: "toggle", value: false,
+      hint: "Off: one narrow-angle and one wide-angle window. On: each target Cassini images gets its own narrow-angle and wide-angle windows instead, up to the number below for each camera." });
     B.perCam = +S.define({ key: "cameras.bodyWindowsPerCamera", section: "Cameras", label: "Windows per camera", type: "range", value: 2, min: 1, max: 4, step: 1,
       hint: "The most body windows each camera has up at once: the target it has just imaged, and the ones before it. A newer target takes an older window's place." });
     B.room = +S.define({ key: "cameras.bodyWindowRoom", section: "Cameras", label: "Body windows before they make way", type: "range", value: 4, min: 1, max: 12, step: 1,
@@ -5567,7 +5569,7 @@ body.ambient.phone .amb-where { font-size: 18px; }
   }
   const camWins = () => ["imgcard", "wacard"].map($).filter(Boolean);
   if (S) {
-    S.on("cameras.bodyWindows", v => { if (B.started) setOn(v); });
+    S.on("cameras.bodyWindowsOptIn", v => { if (B.started) setOn(v); });
     S.on("cameras.bodyWindowLinger", v => { B.linger = +v; });
     S.on("cameras.bodyWindowMax", v => { B.max = +v; });
     S.on("cameras.bodyWindowRoom", v => { B.room = +v; });
@@ -9906,7 +9908,7 @@ void main() {
   window.cassiniAbout = { open, addTab, esc, close: () => show(false), credits: CREDITS };
 
   // ---- which version this is: this page's build id (build.py writes it), and what the frame server says it serves ----
-  const BUILD = /*BUILD*/"1d5f2799de63";
+  const BUILD = /*BUILD*/"4461f3b2c325";
   const FRAMES = (() => {                       // the frame server, chosen as the camera window chooses it
     const q = new URLSearchParams(location.search).get("frames");
     if (q) return q.replace(/\/$/, "");
