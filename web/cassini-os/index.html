@@ -2463,7 +2463,11 @@ body.ambient.phone .amb-where { font-size: 18px; }
     { key: "processing.blend", step: "blend", label: "Blend mosaic seams",
       hint: "Where two mosaic tiles meet, their pictures fade into each other and the mosaic stays solid, with its soft edge only along its outside. Off draws each tile with its own soft edge, as before, which leaves a faint dark line along the seams and a notch where a seam meets the mosaic's edge." },
     { key: "processing.level", step: "level", label: "Level mosaic seams",
-      hint: "Evens out the brightness where mosaic tiles overlap, smoothly across each tile, as the planetary mosaic tools do (a gentle brightness field per tile, solved together so no tile's step shows at a seam). Works with Blend mosaic seams on; off blends the tiles as they are." }
+      hint: "Evens out the brightness where mosaic tiles overlap, smoothly across each tile, as the planetary mosaic tools do (a gentle brightness field per tile, solved together so no tile's step shows at a seam). Works with Blend mosaic seams on; off blends the tiles as they are." },
+    { key: "processing.surface", step: "surface", label: "Mosaic surface at one moment",
+      hint: "A mosaic's panels are taken minutes apart, and the moon turns and Cassini moves in between, so the same crater sits 8 to 18 pixels apart in neighboring panels and doubles or steps at their seam. On, each panel's surface is redrawn as it was at the middle of the pass, from SPICE's shape, spin and Cassini's position; the limb, the sky and the rings stay where they are. Off shows each panel as it was taken." },
+    { key: "processing.panels", step: "panels", label: "Line up mosaic panels",
+      hint: "SPICE places each mosaic panel from where Cassini was said to point, 3 to 5 pixels off and differently for each panel. On, each panel is matched to the panels taken before it where they overlap (by what the pictures show) and moved by the few pixels it is off (12 at most), all its filters together. Panels with nothing to match on stay where SPICE puts them. Needs Align." }
   ];
   for (const st of window.cassiniSteps) D({ key: st.key, section: "Processing", label: st.label, type: "toggle", value: true, hint: st.hint });
   D({ key: "cameras.composites", section: "Processing", label: "Color composites", type: "toggle", value: true,
@@ -11470,7 +11474,7 @@ void main() {
   window.cassiniAbout = { open, addTab, esc, close: () => show(false), credits: CREDITS };
 
   // ---- which version this is: this page's build id (build.py writes it), and what the frame server says it serves ----
-  const BUILD = /*BUILD*/"98a4eb4ad8ae";
+  const BUILD = /*BUILD*/"e8e9006a3efc";
   const FRAMES = (() => {                       // the frame server, chosen as the camera window chooses it
     const q = new URLSearchParams(location.search).get("frames");
     if (q) return q.replace(/\/$/, "");

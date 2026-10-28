@@ -335,7 +335,7 @@ def _pair(u, p, rgba, t, rect, cache):
     a1, b1 = min(left + sw, W), min(top + sh, H)
     if not (x1 > x0 and y1 > y0 and a1 > a0 and b1 > b0):
         return None
-    part = om._shade(om._part(os.path.join(om._tiles(u, cache, p["display_scale"]), f"{t['n']}.png"), sw, sh), t)
+    part = om._shade(om._part(om._pic(u, cache, p["display_scale"], t), sw, sh), t)
     frame = np.zeros((y1 - y0, x1 - x0, 4), np.uint8)
     frame[b0 - y0:b1 - y0, a0 - x0:a1 - x0] = part[b0 - top:b1 - top, a0 - left:a1 - left]
     return [np.ascontiguousarray(rgba[y0:y1, x0:x1]), frame]
