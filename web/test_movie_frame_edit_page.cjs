@@ -71,7 +71,7 @@ const check = (ok, what) => { console.log(ok ? "ok" : "FAIL", what); if (!ok) pr
 
   // Cassini Studio on the frame: Use for this frame
   await page.click("#meownedit");
-  await page.waitForFunction(() => !document.getElementById("stucard").hidden && document.getElementById("stusave").textContent === "Use for this frame", null, { timeout: 60000 });
+  await page.waitForFunction(() => !document.getElementById("stucard").hidden && document.getElementById("stusave").textContent === "Use for this frame", null, { timeout: 300000 });
   check(true, "Studio opens with Use for this frame");
   await page.waitForTimeout(1500);
   await page.evaluate(() => { const t = document.querySelector('#stutabs [data-v="filters"]'); if (t) t.click(); });
@@ -98,6 +98,12 @@ const check = (ok, what) => { console.log(ok ? "ok" : "FAIL", what); if (!ok) pr
   check(Object.keys((await S()).fedit).length === 4, "undo brings them back");
   await page.keyboard.press("Control+z"); await page.waitForTimeout(600);
   check(Object.keys((await S()).fedit).length === 1, "undo again takes the warmth off");
+  // a frame far off brought back further than the studio's old ±2 EV
+  await page.click('.meth[data-i="30"]'); await page.waitForTimeout(600);
+  await slideTo("meown-ex", 2.8); await page.waitForTimeout(800);
+  s = await S();
+  check(s.fedit[s.id] === "ex:2.8", `exposure +2.8 on one frame (${s.fedit[s.id]})`);
+  await page.keyboard.press("Control+z"); await page.waitForTimeout(600);
 
   // Play through the edited frame
   await page.click('.meth[data-i="7"]'); await page.waitForTimeout(800);

@@ -19,7 +19,7 @@ import numpy as np
 from PIL import Image
 
 # the studio's sliders: key, short key, range, rest (studio.html ADJ, TONE, DEF)
-ADJ = {"exposure": ("ex", -2, 2, 0), "contrast": ("ct", -100, 100, 0), "black": ("bk", 0, 60, 0),
+ADJ = {"exposure": ("ex", -4, 4, 0), "contrast": ("ct", -100, 100, 0), "black": ("bk", 0, 60, 0),
        "white": ("wt", 40, 100, 100), "midtones": ("md", -100, 100, 0), "saturation": ("sa", -100, 100, 0),
        "warmth": ("wa", -100, 100, 0), "tint": ("ti", -100, 100, 0), "sharpness": ("sh", 0, 100, 0),
        "tone": ("to", 0, 100, 0)}

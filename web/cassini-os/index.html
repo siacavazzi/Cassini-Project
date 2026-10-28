@@ -2118,7 +2118,7 @@ body.ambient.phone .amb-where { font-size: 18px; }
     </div>
     <div class="meside" hidden>
       <h4 style="margin-top:10px"><span id="meownh">This frame</span><span class="sp"></span><button id="meownclear" title="Give this frame (or the picked frames) the movie's look again">Reset</button></h4>
-      <div class="merow"><span>Exposure</span><input type="range" id="meown-ex" data-k="exposure" min="-2" max="2" step="0.05" aria-label="This frame's exposure"><span class="val"></span></div>
+      <div class="merow"><span>Exposure</span><input type="range" id="meown-ex" data-k="exposure" min="-4" max="4" step="0.05" aria-label="This frame's exposure"><span class="val"></span></div>
       <div class="merow"><span>Contrast</span><input type="range" id="meown-ct" data-k="contrast" min="-100" max="100" step="1" aria-label="This frame's contrast"><span class="val"></span></div>
       <div class="merow"><span>Saturation</span><input type="range" id="meown-sa" data-k="saturation" min="-100" max="100" step="1" aria-label="This frame's saturation"><span class="val"></span></div>
       <div class="merow"><span>Warmth</span><input type="range" id="meown-wa" data-k="warmth" min="-100" max="100" step="1" aria-label="This frame's warmth"><span class="val"></span></div>
@@ -8279,7 +8279,7 @@ body.ambient.phone .amb-where { font-size: 18px; }
 
   // ---------- the edit: one recipe of plain numbers ----------
   const ADJ = [
-    { k: "exposure", label: "Exposure", min: -2, max: 2, step: 0.05, group: "Light", fmt: v => (v > 0 ? "+" : "") + v.toFixed(2) + " EV" },
+    { k: "exposure", label: "Exposure", min: -4, max: 4, step: 0.05, group: "Light", fmt: v => (v > 0 ? "+" : "") + v.toFixed(2) + " EV" },
     { k: "contrast", label: "Contrast", min: -100, max: 100, step: 1, group: "Light" },
     { k: "black", label: "Black level", min: 0, max: 60, step: 0.5, group: "Light", fmt: v => v.toFixed(1) + "%" },
     { k: "white", label: "White level", min: 40, max: 100, step: 0.5, group: "Light", fmt: v => v.toFixed(1) + "%" },
@@ -9496,11 +9496,11 @@ void main() {
       if (n < 400) { g.fillStyle = style; film.forEach((e, i) => { if (e.cam !== cam) return; const v = f(i, e); if (v != null) g.fillRect(x(i) - w, y(v) - w, 2 * w, 2 * w); }); }
     };
     const COL = { N: ["rgba(232,236,242,.22)", "rgba(232,236,242,.85)"], W: ["rgba(255,196,140,.22)", "rgba(255,196,140,.85)"] };
-    const any = known.length > 0, changed = film.some(e => evOf(e));
+    const any = known.length > 0, changed = film.some(e => evOf(e) || ownEv(e));
     for (const cam of "NW") {
       if (!film.some(e => e.cam === cam)) continue;
       if (changed) series(cam, i => lv[i], COL[cam][0], 1);
-      series(cam, (i, e) => lv[i] == null ? null : lv[i] + evOf(e), COL[cam][1], 1.25);
+      series(cam, (i, e) => lv[i] == null ? null : lv[i] + evOf(e) + ownEv(e), COL[cam][1], 1.25);
     }
     // the levels' line where nothing is measured yet (round the middle)
     if (!any && ME.levels.size) { g.strokeStyle = "rgba(138,182,255,.5)"; g.lineWidth = 1; g.beginPath(); film.forEach((e, i) => (i ? g.lineTo : g.moveTo).call(g, x(i), y(mid + line.get(e.id)))); g.stroke(); }
@@ -9511,7 +9511,7 @@ void main() {
     const pts = [];
     film.forEach((e, i) => {
       if (!ME.levels.has(e.id)) return;
-      const py = y((lv[i] ?? mid) + evOf(e));
+      const py = y((lv[i] ?? mid) + evOf(e) + ownEv(e));
       pts.push({ i, id: e.id, x: x(i), y: py });
       g.beginPath(); g.arc(x(i), py, 4.5, 0, 7); g.fillStyle = "#0b0d11"; g.fill(); g.lineWidth = 1.5; g.strokeStyle = "rgba(138,182,255,1)"; g.stroke();
     });
@@ -9704,10 +9704,18 @@ void main() {
   cbox.addEventListener("dblclick", ev => { ev.stopPropagation(); crop(null); });
 
   // ---------- the look, edited in Cassini Studio on the frame in front ----------
+  // the frame's full-size picture for the studio, button b saying so while the frame server makes it (the first time
+  // can take a minute or more)
+  async function opening(b, e) {
+    const was = b.textContent, t0 = Date.now(), tick = setInterval(() => { b.textContent = `Making the full-size picture… ${Math.round((Date.now() - t0) / 1000)} s`; }, 1000);
+    b.disabled = true; b.textContent = "Opening…";
+    try { return await full(e); } catch (err) { toast(`Could not open the frame: ${err.message || err}`); return null; }
+    finally { clearInterval(tick); b.disabled = false; b.textContent = was; }
+  }
   async function editLook() {
     const e = ME.frames[ME.sel]; if (!e || !STU()) return;
     stopPlay();
-    let blob; try { blob = await full(e); } catch (err) { toast(`Could not open the frame: ${err.message || err}`); return; }
+    const blob = await opening($("melookedit"), e); if (!blob) return;
     STU().open({ kind: "picture", blob, edit: ME.edit || undefined, item: { title: `Movie look · ${hms(e)} UTC`, src: e.src, ids: [e.id] },
       look: r => { change(() => { ME.edit = r; }); show(); if (WM) WM.front(card); } });
   }
@@ -9715,7 +9723,7 @@ void main() {
   // ---------- one frame edited on its own ----------
   // a frame's own look: the studio keys it sets over the movie's look, each kept even at rest, the last of a key
   // winning, in the studio's order (studio_look.override); the frame's look is decode(movie look + "," + these)
-  const OWN = { ex: ["exposure", -2, 2], ct: ["contrast", -100, 100], bk: ["black", 0, 60], wt: ["white", 40, 100], md: ["midtones", -100, 100],
+  const OWN = { ex: ["exposure", -4, 4], ct: ["contrast", -100, 100], bk: ["black", 0, 60], wt: ["white", 40, 100], md: ["midtones", -100, 100],
     sa: ["saturation", -100, 100], wa: ["warmth", -100, 100], ti: ["tint", -100, 100], sh: ["sharpness", 0, 100], to: ["tone", 0, 100] };
   const OWNKEYS = [...Object.keys(OWN), "fi", "st"], FILTERNAMES = ["none", "vivid", "mono", "noir", "warm", "cool", "sepia"];
   function ownMap(r) {
@@ -9735,6 +9743,13 @@ void main() {
   const ownSel = () => (ME.picked.size ? [...ME.picked].sort((a, b) => a - b) : [ME.sel]).map(i => ME.frames[i]).filter(Boolean);
   // the look frame e is drawn with, before its exposure level
   const ownLook = e => STU().decode(ME.fedit.has(e.id) ? `${ME.edit},${ME.fedit.get(e.id)}` : ME.edit);
+  // how much frame e's own exposure moves it from the movie's look, in EV (the graph shows the film's brightness with it)
+  function ownEv(e) {
+    const m = ME.fedit.has(e.id) && ownMap(ME.fedit.get(e.id));
+    if (!m || !m.has("ex")) return 0;
+    const at = String(ME.edit || "").split(",").filter(kv => kv.startsWith("ex:")).pop();
+    return +m.get("ex") - (at ? +at.slice(3) || 0 : 0);
+  }
   // frame e's own keys with key k at value v: a key at the movie's own value is not the frame's
   function ownSet(e, k, v) {
     const m = ownMap(ME.fedit.get(e.id)), movie = STU().decode(ME.edit)[LONGOF(k)];
@@ -9762,7 +9777,7 @@ void main() {
   }
   document.querySelectorAll("#mecard input[data-k]").forEach(el => {
     const sk = Object.keys(OWN).find(x => OWN[x][0] === el.dataset.k);
-    slide(el, v => ownSel().forEach(e => ownSet(e, sk, +(+v).toFixed(4))), () => { sideOwn(); paint(); });
+    slide(el, v => ownSel().forEach(e => ownSet(e, sk, +(+v).toFixed(4))), () => { sideOwn(); graph(); paint(); });
   });
   $("meownclear").addEventListener("click", () => { const sel = ownSel(); change(() => sel.forEach(e => ME.fedit.delete(e.id))); show(); });
   // Studio on the frame in front with its own look; Use for this frame (or these frames) keeps whatever differs from
@@ -9770,7 +9785,7 @@ void main() {
   async function editOwn() {
     const sel = ownSel(), e = sel[0]; if (!e || !STU()) return;
     stopPlay();
-    let blob; try { blob = await full(e); } catch (err) { toast(`Could not open the frame: ${err.message || err}`); return; }
+    const blob = await opening($("meownedit"), e); if (!blob) return;
     const start = ME.fedit.has(e.id) ? `${ME.edit},${ME.fedit.get(e.id)}` : ME.edit;
     STU().open({ kind: "picture", blob, edit: start || undefined, lookLabel: sel.length > 1 ? `Use for these ${sel.length} frames` : "Use for this frame",
       item: { title: `${hms(e)} UTC · this frame's look`, src: e.src, ids: [e.id] },
@@ -10514,7 +10529,7 @@ void main() {
   window.cassiniAbout = { open, addTab, esc, close: () => show(false), credits: CREDITS };
 
   // ---- which version this is: this page's build id (build.py writes it), and what the frame server says it serves ----
-  const BUILD = /*BUILD*/"39c4fada436a";
+  const BUILD = /*BUILD*/"5f86ef457452";
   const FRAMES = (() => {                       // the frame server, chosen as the camera window chooses it
     const q = new URLSearchParams(location.search).get("frames");
     if (q) return q.replace(/\/$/, "");

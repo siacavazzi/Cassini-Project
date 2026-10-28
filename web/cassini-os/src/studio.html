@@ -204,7 +204,7 @@ body.phone .stufoot .galbtn { padding: 6px 10px; }
 
   // ---------- the edit: one recipe of plain numbers ----------
   const ADJ = [
-    { k: "exposure", label: "Exposure", min: -2, max: 2, step: 0.05, group: "Light", fmt: v => (v > 0 ? "+" : "") + v.toFixed(2) + " EV" },
+    { k: "exposure", label: "Exposure", min: -4, max: 4, step: 0.05, group: "Light", fmt: v => (v > 0 ? "+" : "") + v.toFixed(2) + " EV" },
     { k: "contrast", label: "Contrast", min: -100, max: 100, step: 1, group: "Light" },
     { k: "black", label: "Black level", min: 0, max: 60, step: 0.5, group: "Light", fmt: v => v.toFixed(1) + "%" },
     { k: "white", label: "White level", min: 40, max: 100, step: 0.5, group: "Light", fmt: v => v.toFixed(1) + "%" },

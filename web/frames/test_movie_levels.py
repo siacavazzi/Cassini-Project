@@ -87,7 +87,8 @@ def test_look_ev():
     im = disk(0.3)
     assert np.array_equal(np.asarray(L.apply(im, None, 0.5)), np.asarray(L.apply(im, L.parse("ex:0.5"))))
     assert np.array_equal(np.asarray(L.apply(im, L.parse("ex:0.5,sa:20"), 0.25)), np.asarray(L.apply(im, L.parse("ex:0.75,sa:20"))))
-    assert np.array_equal(np.asarray(L.apply(im, L.parse("ex:1.5"), 1)), np.asarray(L.apply(im, L.parse("ex:2"))))
+    assert np.array_equal(np.asarray(L.apply(im, L.parse("ex:1.5"), 1)), np.asarray(L.apply(im, L.parse("ex:2.5"))))
+    assert np.array_equal(np.asarray(L.apply(im, L.parse("ex:3.5"), 1)), np.asarray(L.apply(im, L.parse("ex:4"))))
     assert L.apply(im, None, 0) is im
 
 
