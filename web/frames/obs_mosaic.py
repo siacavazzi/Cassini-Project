@@ -1291,8 +1291,15 @@ def _pointing_root(u, n, roots):
 
 SURFACE_STEP = 16    # reference px: the grid a tile's surface motion (reproject.sky_field) is worked out on
 # a pass's tiles redrawn as at its epoch (surface_pictures), kept beside its tiles; renamed whenever the rule changes
-SURFACE_DIR = "surface3"
-SURFACE_TAG = "-s3"  # in the name of a layout whose tiles are redrawn so (layout), so its pictures are its own
+SURFACE_DIR = "surface4"
+SURFACE_TAG = "-s4"  # in the name of a layout whose tiles are redrawn so (layout), so its pictures are its own
+# what is seen of these is cloud or haze that moves on its own, not a surface turning with the body (Titan's
+# mapping mosaic came out 25 px apart redrawn, Saturn's rings pass lost its one match): their tiles stay as taken
+SURFACE_CLOUDED = frozenset({"SATURN", "JUPITER", "TITAN", "URANUS", "NEPTUNE", "VENUS", "EARTH"})
+# a tile whose redrawing would stretch or squeeze its picture by more than this (the shift's change per pixel, where
+# it fades to none at the limb or the terminator) stays as taken: on Rhea's mapping mosaic a limb panel shifted
+# ~40 px squeezed its limb out of the picture and streaked its night side (round 5 of the panel probe)
+SURFACE_STRETCH = 0.5
 _spice_lock = threading.RLock()
 
 
@@ -1335,8 +1342,9 @@ def surface_pictures(u, cache, p, tiles):
     so a mosaic grown a tile at a time stays as drawn), with SPICE's shape, orientation and Cassini's position
     (reproject.sky_field, warp_sky); the sky, the rings, the night side and the limb's edge stay where they are. Made
     once per tile and kept. {} with Settings > Processing's surface step off, for a body SPICE has no shape for, or
-    when the kernels or the geometry cache cannot say."""
-    if not calibration.step("surface") or not tiles:
+    when the kernels or the geometry cache cannot say; none for a clouded body (SURFACE_CLOUDED), and not a tile
+    the redrawing would distort (SURFACE_STRETCH), which keeps SPICE's place and the panels step's nudge."""
+    if not calibration.step("surface") or not tiles or u["key"][0] in SURFACE_CLOUDED:
         return {}
     import reproject as rp
     there = _tiles(u, cache, p["display_scale"])
@@ -1388,6 +1396,10 @@ def surface_pictures(u, cache, p, tiles):
             x0, y0 = t["offset"][0] + t["box"][0], t["offset"][1] + t["box"][1]
             dx, dy, weight = rp.sky_field(epoch, view, gx + x0, gy + y0, km_px)
             path = os.path.join(out_dir, f"{t['n']}.png")
+            stretch = rp.field_stretch(dx, dy, weight, SURFACE_STEP)
+            if stretch > SURFACE_STRETCH:
+                print(f"surface: tile {t['n']} kept as taken (stretch {stretch:.2f})", flush=True)
+                continue
             Image.fromarray(rp.warp_sky(image, dx, dy, weight, SURFACE_STEP)).save(path + ".part.png", compress_level=1)
             os.replace(path + ".part.png", path)
             out[t["n"]] = path
