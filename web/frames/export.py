@@ -64,7 +64,7 @@ import calibration  # noqa: E402
 import studio_look  # noqa: E402
 
 # bumped whenever the way films are made changes, so older ones are not served again
-VERSION = "export-v23"   # v23: a mosaic pass is its mosaic at every frame, and stays a mosaic (or mosaic movie) in Full color only; v22: the flat fielded, dark subtracted, hot pixel repaired pictures; v21: Auto center centres the pictures shown on their own too, as the windows do
+VERSION = "export-v24"   # v24: Whole mosaics keep a mosaic movie's whole laps only, its drifting tiles one copy each (obs_mosaic.slots); v23: a mosaic pass is its mosaic at every frame, and stays a mosaic (or mosaic movie) in Full color only; v22: the flat fielded, dark subtracted, hot pixel repaired pictures; v21: Auto center centres the pictures shown on their own too, as the windows do
 FPS = 30                     # frames a second in the file
 HOLD_MIN, HOLD_MAX = 1 / FPS, 0.5
 TYPICAL = 1 / 8              # adaptive: how long the stretch's median gap lasts on screen

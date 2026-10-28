@@ -2981,13 +2981,51 @@ def warm_movie(u, n, ahead, cache, steady=False, exposure=None):
         threading.Thread(target=run, daemon=True).start()
 
 
+def slots(u):
+    """The place of each frame of pass u (places), with the camera's drift over a long mosaic movie taken out:
+    places closer than half the pass's step (the median jump from one place to the next in one filter) are one
+    slot. The Jupiter approach's 2x2s drift over nine laps by more than mosaic.min_step, so the classifier gives
+    their last laps places of their own (8 for 4 tiles), and without this a lap over the drifted places would run
+    on into the next (lap_of) and a drifted tile would stay up beside its own older copy (rolling_layout). None
+    for a frame with no place."""
+    if "slots" in u:
+        return u["slots"]
+    where = places(u)
+    at, last, steps = {}, {}, []
+    for fr, i in zip(u["frames"], where):
+        x, y, z = fr[5:8]
+        if i is None or not z or not u.get("z"):
+            continue
+        p = (-x * z / u["z"], -y * z / u["z"])
+        at.setdefault(i, []).append(p)
+        if fr[2] in last and last[fr[2]][0] != i:
+            steps.append(max(abs(p[0] - last[fr[2]][1][0]), abs(p[1] - last[fr[2]][1][1])))
+        last[fr[2]] = (i, p)
+    near = 0.5 * float(np.median(steps)) if steps else 0.0
+    centre = {i: np.mean(v, 0) for i, v in at.items()}
+    parent = {i: i for i in centre}
+
+    def root(i):
+        while parent[i] != i:
+            i = parent[i]
+        return i
+    if near > mosaic.min_step * FRAME:
+        for a in sorted(centre):
+            for b in sorted(centre):
+                if b > a and np.abs(centre[a] - centre[b]).max() < near and root(a) != root(b):
+                    parent[max(root(a), root(b))] = min(root(a), root(b))
+    out = [root(i) if i in parent else i for i in where]
+    u["slots"] = out
+    return out
+
+
 def lap_of(u):
-    """The lap each frame of pass u is in: how many times the camera has come back to a place in one filter by that
-    frame (a run of frames at one place counts once), the most over its filters; 1 for a pass that never comes back."""
+    """The lap each frame of pass u is in: how many times the camera has come back to a slot in one filter by that
+    frame (a run of frames at one slot counts once), the most over its filters; 1 for a pass that never comes back."""
     if "lap_of" in u:
         return u["lap_of"]
     runs, lap, out = {}, 1, []
-    for fr, i in zip(u["frames"], u.get("place") or [None] * len(u["frames"])):
+    for fr, i in zip(u["frames"], slots(u) if u["frames"] else []):
         if i is not None:
             seq = runs.setdefault(fr[2], [])
             if not seq or seq[-1] != i:
@@ -2999,14 +3037,25 @@ def lap_of(u):
 
 
 def lap_ends(u):
-    """The frames (indices into u["frames"]) that finish a lap of a mosaic movie: the last frame before the camera
-    comes back to a place it has already taken in this lap, and the pass's last frame. At one of them every place
-    of the lap is new, so the rolling picture there (rolling_layout) is a whole new mosaic (Settings > Movie >
-    Mosaic movie frames: Whole mosaics). [] for a pass that is not a mosaic movie."""
+    """The frames (indices into u["frames"]) that finish a whole lap of a mosaic movie: the last frame before the
+    camera comes back to a slot it has already taken in this lap (lap_of), or the pass's last frame, of a lap that
+    took every slot in every filter the pass's laps usually take (the median over its laps: a lap that started or
+    stopped short, or missed a filter's tile, is not whole). At one of them every tile is new, so the rolling
+    picture there (rolling_layout) is a whole new mosaic (Settings > Movie > Mosaic movie frames: Whole mosaics),
+    rather than new tiles over the last lap's, which Jupiter has turned a sixth of a turn away from. When no lap
+    is whole, the pass's last frame. [] for a pass that is not a mosaic movie."""
     if u.get("kind") != "mosaic_movie" or not u["frames"]:
         return []
     lap = lap_of(u)
-    return [j for j in range(len(lap) - 1) if lap[j + 1] > lap[j]] + [len(lap) - 1]
+    ends = [j for j in range(len(lap) - 1) if lap[j + 1] > lap[j]] + [len(lap) - 1]
+    took = {n: {} for n in set(lap)}
+    for fr, i, n in zip(u["frames"], slots(u), lap):
+        if i is not None:
+            took[n].setdefault(fr[2], set()).add(i)
+    filters = {f for t in took.values() for f in t}
+    need = {f: float(np.median([len(t.get(f, ())) for t in took.values()])) for f in filters}
+    whole = [j for j in ends if all(len(took[lap[j]].get(f, ())) >= need[f] for f in filters)]
+    return whole or ends[-1:]
 
 
 def lap_end(frame_id):
@@ -3086,7 +3135,7 @@ def rolling_layout(u, n, cache, laps=1, made_only=False, skipped=None, fade=(0, 
     newest (Time-lapse): each drawn tile gets a "fade" field (0-1, _fade_weight of its age in frames behind the
     newest drawn), which _faded applies to the composed picture, and the picture's name says so."""
     p = plan(u, cache)
-    where = places(u)
+    where = slots(u)
     rec = _kept_tiles(u, cache, p["display_scale"])
     with _lock:
         kept = dict(rec["tiles"]) if rec is not None else {}
