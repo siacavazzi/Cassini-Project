@@ -3,9 +3,13 @@
 under that place, each tile's colour and alpha against its distance from its edge (made and at the canvas's size),
 the bench's pictures along a line through the place, and the newest tile at the place drawn again over the picture
 so far, as the pass grows it, with what the blend works with along that line (its weight, the seam, its colours).
+Then which tiles made the line what it is: the filter's mosaic drawn again (whole, as the pass draws its first
+GROW_FROM tiles; then, with --history, grown a tile at a time to the newest), and every tile that changed the line
+by more than --change levels shown with what it drew over, its weight and seam, and the line after it.
 
   CASSINI_DATA=... CASSINI_KERNELS=... CASSINI_GEOMETRY_CACHE=... \\
   python web/frames/seam_probe.py --cache SCRATCH_CACHE --bench BENCH_OUT PASS X,Y [X,Y ...] [--half 24] [--dir h]
+      [--history] [--change 2]
 
 PASS as seam_bench.py takes it; X,Y on the bench's 2048 px picture; --dir h: the line runs left to right (across a
 tile edge that runs up and down), v: top to bottom. Reads the scratch cache seam_bench.py drew into and writes
@@ -59,6 +63,8 @@ def main():
     ap.add_argument("--bench", required=True, help="seam_bench.py's --out for this pass")
     ap.add_argument("--half", type=int, default=24)
     ap.add_argument("--dir", default="h", choices="hv")
+    ap.add_argument("--history", action="store_true", help="grow the filter's mosaic tile by tile past GROW_FROM too")
+    ap.add_argument("--change", type=float, default=2.0, help="levels a tile must change the line by to be shown")
     ap.add_argument("spec")
     ap.add_argument("at", nargs="+")
     args = ap.parse_args()
@@ -152,10 +158,10 @@ def main():
                 row("tile alpha", a[ly, lx])
                 row("tile colour", part[ly, lx, :3].astype(np.float32).mean(axis=1))
                 row("edge dist", dist[ly, lx], "{:5.1f}")
-                if f == om.LUM or j <= om.GROW_FROM or j >= len(mine):
+                grown = not (f == om.LUM or j <= om.GROW_FROM or j >= len(mine))
+                if not grown:
                     print("  (not grown at this tile: no redraw)")
-                    continue
-                for label, off in seam_bench.SETTINGS:
+                for label, off in (seam_bench.SETTINGS if grown else []):
                     with calibration.stepping(off):
                         before = om._filter_path(u, f, j, rect, args.cache)
                         after = om._filter_path(u, f, j + 1, rect, args.cache)
@@ -232,6 +238,81 @@ def main():
                             print(f"   (box {b}, area {area}, region at {x0r},{y0r})")
                         elif label != "before":
                             print("   (the tile met nothing below it: drawn with its weight alone)")
+
+                for label, off in (seam_bench.SETTINGS[1:] if f != om.LUM else []):
+                    with calibration.stepping(off):
+                        history(u, p, f, mine, rect, args.cache, k, W, H, cx, cy, half, args, label)
+
+
+def history(u, p, f, mine, rect, cache, k, W, H, cx, cy, half, args, label):
+    """The filter f's mosaic drawn again as the pass draws it (its first GROW_FROM tiles whole, then a tile at a time
+    with --history), and the tiles that changed the line through (cx, cy) by more than args.change levels."""
+    import mosaic
+    import obs_mosaic as om
+    st = np.arange(-int(round(half)), int(round(half)) + 1)
+    lx = np.clip(np.rint(cx + (st if args.dir == "h" else 0)).astype(int), 0, W - 1)
+    ly = np.clip(np.rint(cy + (st if args.dir == "v" else 0)).astype(int), 0, H - 1)
+    seen = []
+
+    def watch(region, names):
+        def w(i, origin, sl, parts):
+            if i not in names:
+                return
+            ay, ax = ly - region[0] - origin[0] - sl[0].start, lx - region[1] - origin[1] - sl[1].start
+            hh, ww = parts["has"].shape
+            on = (ay >= 0) & (ay < hh) & (ax >= 0) & (ax < ww)
+            if not on.any():
+                return
+            ay, ax = np.clip(ay, 0, hh - 1), np.clip(ax, 0, ww - 1)
+            pick = lambda v: np.where(on, (v if v.ndim == 2 else v.mean(axis=2))[ay, ax], np.nan) if v is not None else None
+            seen.append((names[i], {n: pick(v) for n, v in parts.items()}))
+        return w
+
+    def show(name, got):
+        before, after = got["before"], got["after"]
+        change = np.nanmax(np.abs(after - before)) if np.isfinite(after - before).any() else 0
+        if change <= args.change:
+            return
+        print(f"  [{label}] {name} changed the line by up to {change:.0f}:")
+        for n in ("before", "after", "color", "has", "below", "ramp", "a", "seam"):
+            if got.get(n) is not None:
+                row(n if n != "color" else "tile toned", got[n], "{:5.0f}" if n in ("before", "after", "color") else "{:5.2f}")
+
+    first = mine[:om.GROW_FROM] if len(mine) > om.GROW_FROM else mine
+    window, shown = om._window(u, p, first, rect, cache)
+    print(f"\n filter {f}, {label}: its first {len(shown)} tiles drawn whole, the tiles that changed the line:")
+    row("offset", st, "{:5d}")
+    mosaic._watch = watch((0, 0), {i: f"tile #{mine.index(t)} {t['n']} {t.get('id')}" for i, t in enumerate(shown)})
+    try:
+        rgba = om._compose(window, k, pin=None) if window else np.zeros((H, W, 4), np.uint8)
+    finally:
+        mosaic._watch = None
+    for name, got in seen:
+        show(name, got)
+    row("whole", rgba[ly, lx, :3].astype(np.float32).mean(axis=1))
+    if not args.history or len(mine) <= om.GROW_FROM:
+        return
+    print(f" filter {f}, {label}: grown a tile at a time, the tiles that changed the line:")
+    rgba = rgba.copy()
+    for j in range(om.GROW_FROM, len(mine)):
+        t = mine[j]
+        bx, by, bw, bh = t["box"]
+        left = round((t["offset"][0] + bx - rect[0]) * k)
+        top = round((t["offset"][1] + by - rect[1]) * k)
+        sw, sh = max(1, round(bw * k)), max(1, round(bh * k))
+        if not (left - half <= cx < left + sw + half and top - half <= cy < top + sh + half):
+            om._over(u, p, rgba, t, rect, cache)
+            continue
+        pad = max(8, round(64 * k / 0.5)) + 1
+        seen.clear()
+        mosaic._watch = watch((max(top - pad, 0), max(left - pad, 0)), {1: f"tile #{j} {t['n']} {t.get('id')}"})
+        try:
+            om._over(u, p, rgba, t, rect, cache)
+        finally:
+            mosaic._watch = None
+        for name, got in seen:
+            show(name, got)
+    row("grown", rgba[ly, lx, :3].astype(np.float32).mean(axis=1))
 
 
 if __name__ == "__main__":

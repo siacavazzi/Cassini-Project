@@ -422,8 +422,10 @@ def _blend_parts(frame, drawn=False):
             whole = np.ones(alpha.shape, np.float32)
             return color, whole, whole, 0.0, whole
         dist = _inside((alpha > 0).astype(np.uint8), alpha >= EDGE_AT)
-        # its weight from TRUST_DEPTH in: along its outer edge it holds its tiles' rims (_rim) where they were alone
-        ramp = (dist - max(2.0, feather_px * TRUST_DEPTH)) * (1.0 / feather_px)
+        # its weight ramps in from its edge as a tile's does (its tiles' rims, _rim, were drawn with the colour next to
+        # them): from farther in, a tile drawn again over its outer edge took over at once where the picture's weight
+        # was 0, a step along the mosaic's edge as big as the two differed (Saturn's movie's bottom edge, 2013)
+        ramp = (dist - (RIM + 1 + TRUST_INSET)) * (1.0 / feather_px)
         return (color, (alpha > 0).astype(np.float32), np.clip(ramp, 0, 1).astype(np.float32), _edge_width(alpha, dist),
                 _support(alpha, dist))
     _nearest(color, (alpha > 0) & (alpha < PICTURE_AT), alpha >= PICTURE_AT)
@@ -547,6 +549,11 @@ picture starting on the same grid (mosaic_native's blocks) so get the same pixel
 part each is (for pyramids up to 6 levels: feather_px up to 512 or so).
 """
 GRID = 64
+
+# seam_probe's look at each frame as _blended draws it: called with (the frame's number, the area's first pixel in
+# the frames (y, x), the frame's slices of the area, {its parts there: what was drawn before it, after it, its colours,
+# has, below, ramp, weight a, seam (None where it met nothing below)}), or None
+_watch = None
 
 
 def _pyramid(x, n):
@@ -790,7 +797,7 @@ be its neighbours' (so the gain changes smoothly, never in a step); and every ga
 correction fades over LEVEL_REACH into the frame (a screened membrane), which keeps each frame at its own level away
 from its seams and the mosaic at its overall level. Least squares over all of it, each colour band on its own. pin =
 a frame whose gain stays 1 (the mosaic a tile is grown over: what is drawn stays as drawn, and the new tile, its
-gain matched to it, is leveled to it along its edge).
+gain matched to it, is leveled to it along its edge, on the whole by LEVEL_HOLD at most).
 """
 LEVEL_CELL = 1 / 4    # of feather_px: the cells the gain is worked out in
 LEVEL_MAX = 1.5       # the most a frame is brightened or darkened anywhere (and 1 / LEVEL_MAX)
@@ -798,6 +805,7 @@ LEVEL_LIT = 12        # levels: both pictures above this where their ratio is me
 LEVEL_FILL = 0.2      # of a cell: the share of its pixels measured for it to count
 LEVEL_EDGE = 0.25     # the most a pixel's brightness (log) changes over an eighth of feather_px for it to be measured
 LEVEL_STIFF = 1.0     # how much a cell's gain is held to its neighbours' against what it measures
+LEVEL_HOLD = 1.03     # the most a tile is leveled to the picture drawn so far on the whole (pin)
 LEVEL_REACH = 4       # of feather_px (half a frame): how far into a frame a seam's correction reaches before
                       # it has faded to a third, the frame back at its own (matched) gain past that
 
@@ -806,7 +814,7 @@ def leveling():
     return calibration.step("blend") and calibration.step("level")
 
 
-DRAWING = 6   # bumped when the blend or level steps change how a mosaic is drawn
+DRAWING = 7   # bumped when the blend or level steps change how a mosaic is drawn
 
 
 def drawing():
@@ -854,9 +862,6 @@ def _levels(boxes, colors, hases, ramps, pin=None):
     rows, cols, vals = [], [], []
     rhs = np.zeros((first, ch))
 
-    def add(r, k, v):
-        rows.append(r); cols.append(k); vals.append(v)
-
     calm = {}
 
     def calm_of(i):
@@ -892,19 +897,29 @@ def _levels(boxes, colors, hases, ramps, pin=None):
             ok = lit & (_of_bands(np.abs(ratio), np.maximum) < math.log(LEVEL_MAX))
             cnt, (cy, cx) = _cells(ok.astype(np.float32), c, y0, x0)
             tot, _ = _cells(ratio * ok[..., None], c, y0, x0)
-            for gy, gx in zip(*np.nonzero(cnt >= LEVEL_FILL * c * c)):
-                w = float(cnt[gy, gx]) / (c * c)
-                d = tot[gy, gx] / cnt[gy, gx]   # f_i - f_j should be this: frame i times e^f_i meets j times e^f_j
-                Y, X = cy + gy, cx + gx
-                ki = None if grids[i] is None else grids[i][4] + (Y - grids[i][0]) * grids[i][3] + (X - grids[i][1])
-                kj = None if grids[j] is None else grids[j][4] + (Y - grids[j][0]) * grids[j][3] + (X - grids[j][1])
-                if ki is not None:
-                    add(ki, ki, w); rhs[ki] += w * d
-                if kj is not None:
-                    add(kj, kj, w); rhs[kj] -= w * d
-                if ki is not None and kj is not None:
-                    add(ki, kj, -w); add(kj, ki, -w)
-                measured += w
+            gy, gx = np.nonzero(cnt >= LEVEL_FILL * c * c)
+            if not len(gy):
+                continue
+            w = cnt[gy, gx] / (c * c)
+            d = tot[gy, gx] / cnt[gy, gx][:, None]   # f_i - f_j should be this: frame i times e^f_i meets j times e^f_j
+            if pin in (i, j):
+                # a tile against the picture drawn so far (the pin): leveled to it by LEVEL_HOLD at most on the whole,
+                # past that it keeps the level its gain gives it (a place drawn again an hour on that really is
+                # brighter, past what the gain's limit lets it follow, was held at the first lap's level: Saturn's
+                # mosaic movie of 2013 drawn whole came out 25% darker than its last laps), and what changes along
+                # the seam is leveled all the same
+                m = (w[:, None] * d).sum(axis=0) / w.sum()
+                d = d - np.sign(m) * np.maximum(np.abs(m) - math.log(LEVEL_HOLD), 0)
+            Y, X = cy + gy, cx + gx
+            ki = None if grids[i] is None else grids[i][4] + (Y - grids[i][0]) * grids[i][3] + (X - grids[i][1])
+            kj = None if grids[j] is None else grids[j][4] + (Y - grids[j][0]) * grids[j][3] + (X - grids[j][1])
+            if ki is not None:
+                rows.append(ki); cols.append(ki); vals.append(w); rhs[ki] += w[:, None] * d
+            if kj is not None:
+                rows.append(kj); cols.append(kj); vals.append(w); rhs[kj] -= w[:, None] * d
+            if ki is not None and kj is not None:
+                rows += [ki, kj]; cols += [kj, ki]; vals += [-w, -w]
+            measured += float(w.sum())
     if measured == 0:
         return [None] * n
     # within each frame its neighbouring cells alike, and every cell held to 0 just so much that a correction fades
@@ -918,12 +933,10 @@ def _levels(boxes, colors, hases, ramps, pin=None):
         idx = k0 + np.arange(gh * gw).reshape(gh, gw)
         for p, q in ((idx[:, :-1], idx[:, 1:]), (idx[:-1, :], idx[1:, :])):
             p, q = p.ravel(), q.ravel()
-            rows.extend(p); cols.extend(p); vals.extend([LEVEL_STIFF] * len(p))
-            rows.extend(q); cols.extend(q); vals.extend([LEVEL_STIFF] * len(p))
-            rows.extend(p); cols.extend(q); vals.extend([-LEVEL_STIFF] * len(p))
-            rows.extend(q); cols.extend(p); vals.extend([-LEVEL_STIFF] * len(p))
-    rows.extend(range(first)); cols.extend(range(first)); vals.extend([pull] * first)
-    A = coo_matrix((vals, (rows, cols)), shape=(first, first)).tocsc()
+            stiff = np.full(len(p), LEVEL_STIFF)
+            rows += [p, q, p, q]; cols += [p, q, q, p]; vals += [stiff, stiff, -stiff, -stiff]
+    rows.append(np.arange(first)); cols.append(np.arange(first)); vals.append(np.full(first, pull))
+    A = coo_matrix((np.concatenate(vals), (np.concatenate(rows), np.concatenate(cols))), shape=(first, first)).tocsc()
     f = np.asarray(spsolve(A, rhs)).reshape(first, ch)
     out = []
     for g in grids:
@@ -1022,6 +1035,7 @@ def _blended(out, infos, gains, offsets, gamma, area, level, pin=None, kept=None
         sl = (slice(box[0] - y0, box[1] - y0), slice(box[2] - x0, box[3] - x0))
         below, wb = cover[sl], weight[sl]
         a = np.where(below > 0, ramp / np.maximum(ramp + (1 - ramp) * wb, 1e-6), has)
+        seam, drew = None, None if _watch is None else rgb[sl].copy()
         if (below * has).any():
             # the frame and what is below it in bands, worked out over a margin round the frame, so the pyramids near
             # its box's edge see what lies past it
@@ -1046,6 +1060,9 @@ def _blended(out, infos, gains, offsets, gamma, area, level, pin=None, kept=None
             rgb[sl] = np.where(px(has > 0), np.where(px(below > 0), mixed, color), under)
         else:
             rgb[sl] += (color - rgb[sl]) * px(a)
+        if _watch is not None:
+            _watch(i, (y0, x0), sl, {"before": drew, "after": rgb[sl], "color": color, "has": has, "below": below,
+                                     "ramp": ramp, "a": a, "seam": seam})
         weight[sl] = ramp + wb * (1 - ramp)
         cover[sl] = np.maximum(below, has)
         alpha[sl] = np.maximum(alpha[sl], own * has)
@@ -1078,11 +1095,17 @@ overlap where the two differ least, so detail that is not in quite the same plac
 few minutes apart, a limb a pixel off) is cut where it barely shows instead of across it. Looked for only where the
 coarse weight is between SEAM_CORE and 1 - SEAM_CORE, so every band has room to change over before either frame's
 edge; worked out with the two shrunk so feather_px is SEAM_PX (the cut is for the mid-sized detail; the finest
-bands change over within a few pixels wherever it runs). Elsewhere, and without OpenCV's stitching module, the
-seam is where the coarse weight is a half: 1 where the frame comes in, 0 where what is below stays.
+bands change over within a few pixels wherever it runs). The cut is held to the middle of the overlap (where the
+coarse weight is a half) by SEAM_PULL levels of difference for every pixel of SEAM_PX it runs from it, so it leaves
+the middle only where the two clearly differ there: where they barely differ (dark sky, a smooth disc) it ran
+wherever noise led it, and a colour mosaic, drawn a filter at a time, got its red, green and blue cuts tens of pixels
+apart, coloured stripes and glows wherever the two frames differed a little (Saturn's rings, 2013). Elsewhere, and
+without OpenCV's stitching module, the seam is where the coarse weight is a half: 1 where the frame comes in, 0
+where what is below stays.
 """
 SEAM_CORE = 0.3
 SEAM_PX = 32
+SEAM_PULL = 2.0
 
 
 def _core(a, has, below):
@@ -1109,9 +1132,12 @@ def _seam_cut(a, has, below, color, under):
     theirs = bs & ~(hs & (ar > 1 - SEAM_CORE))
     if not (mine & theirs).any():
         return seam, None
-    # (the finder takes three bands)
-    three = lambda v: np.ascontiguousarray(np.broadcast_to(v[..., None], v.shape + (3,)) if v.ndim == 2 else v, np.float32)
-    found = finder("COST_COLOR").find([cv2.UMat(three(shrink(color))), cv2.UMat(three(shrink(under)))],
+    # (the finder takes three bands, and costs a cut by the square of the difference of the two in all three: the
+    # two's brightness in two of them, and in the third how far the cut runs from the middle, the frame's alone)
+    lum = lambda v: v if v.ndim == 2 else _of_bands(v, np.add) / v.shape[2]
+    pull = (ar - 0.5) * (SEAM_PULL * SEAM_PX)
+    bands = lambda v, p: np.ascontiguousarray(np.dstack([lum(shrink(v))] * 2 + [p]), np.float32)
+    found = finder("COST_COLOR").find([cv2.UMat(bands(color, pull)), cv2.UMat(bands(under, np.zeros_like(pull)))],
                                       [(0, 0), (0, 0)],
                                       [cv2.UMat(mine.astype(np.uint8) * 255), cv2.UMat(theirs.astype(np.uint8) * 255)])
     cut = found[0].get() if hasattr(found[0], "get") else np.asarray(found[0])

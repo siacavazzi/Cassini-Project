@@ -181,3 +181,65 @@ grown = np.abs(pic[..., 3].astype(int) - first[..., 3])
 assert grown.max() <= 3, (grown.max(), np.argwhere(grown > 3)[:5])
 assert np.abs(pic[..., 3].astype(int) - last[..., 3]).max() <= 1
 print("a picture grown over and over keeps its outer edge; ok")
+
+# a tile drawn again over a picture's outer edge (a mosaic movie's lap redrawing its bottom row), a little brighter
+# than it: the picture changes over across the tile's edge there as it does inside, not in a step (the picture's
+# weight was 0 near its edge, so the tile took over at once)
+pic = draw(tiles(40)[:1] + [tiles(140)[1]])
+t = tiles(40)[0][TOP:TOP + 1024, :1024].copy()
+t[..., :3] = (t[..., :3] * 1.04).astype(np.uint8)
+with calibration.stepping(""):
+    obs_mosaic.draw_over(pic, lambda: t, 0, TOP, 1024, 1024, 1.0, match=False)
+for r in (TOP + 1000, TOP + 1012):
+    assert pic[r, 1000, 3] > 0 and np.abs(np.diff(pic[r, 900:1100, 0].astype(int))).max() <= 2, (r, pic[r, 900:1100:10, 0])
+print("a tile drawn again over a picture's outer edge changes over smoothly there; ok")
+
+# the same two tiles in three filters, each with its own noise, the second a little brighter in all: the seam's cut
+# runs along the middle of the overlap in every filter (where the two barely differ it ran wherever the noise led it,
+# and a colour mosaic's filters were cut tens of pixels apart: coloured stripes)
+cuts, seam_cut = [], mosaic._seam_cut
+
+
+def caught(a, has, below, color, under):
+    seam, cut = seam_cut(a, has, below, color, under)
+    rows = range(200, 800)   # (away from the tiles' corners, where the overlap's middle bends)
+    cuts.append((np.array([np.argmax(seam[r] > 0.5) for r in rows]), np.array([np.argmax(a[r] >= 0.5) for r in rows])))
+    return seam, cut
+
+
+mosaic._seam_cut = caught
+try:
+    for seed in (1, 2, 3):
+        noisy = tiles(200, 1.15)
+        for f in noisy:
+            f[..., :3] = np.clip(f[..., :3] * 0.3 + np.random.default_rng(seed).normal(0, 2, f.shape[:2])[..., None], 0, 255)
+        draw(noisy, "level")
+finally:
+    mosaic._seam_cut = seam_cut
+assert len(cuts) == 3 and all(np.abs(c - mid).max() <= 3 for c, mid in cuts), [np.abs(c - mid).max() for c, mid in cuts]
+assert all(np.abs(c - cuts[0][0]).max() <= 2 for c, _ in cuts), [np.abs(c - cuts[0][0]).max() for c, _ in cuts]
+print("where the tiles barely differ, every filter's seam is cut along the overlap's middle; ok")
+
+# a mosaic grown a tile at a time over a first lap that is darker than the laps after it (a mosaic movie's place
+# seen again later, brighter than the gains' limit lets a tile be matched to): with the level step the picture
+# brightens with the later laps as with blend alone (leveled to the picture so far on the whole, it stayed at the
+# first lap's level: Saturn's movie of 2013 drawn whole came out 25% darker)
+import seam_synth  # noqa: E402
+rng = np.random.default_rng(0)
+ground = np.full((900, 900), 150, np.float32) + cv2.GaussianBlur(rng.normal(0, 6, (900, 900)).astype(np.float32), (0, 0), 3)
+laps = [[np.clip(f.astype(np.float32) * np.array([0.7 if lap == 0 else 1.0] * 3 + [1]), 0, 255).astype(np.uint8)
+         for f, _ in seam_synth.tiles(ground, side=340, grid=(2, 2), overlap=(30, 60), seed=lap % 3, slope=0.05)]
+        for lap in range(6)]
+level = {}
+for off in ("level", ""):
+    with calibration.stepping(off):
+        pic = seam_synth.compose(laps[0], off=off).copy()
+        for lap in laps[1:]:
+            for f in lap:
+                ys, xs = np.nonzero(f[..., 3])
+                part = f[ys.min():ys.max() + 1, xs.min():xs.max() + 1]
+                obs_mosaic.draw_over(pic, lambda: part, int(xs.min()), int(ys.min()), part.shape[1], part.shape[0], 0.5)
+    inner = cv2.erode((pic[..., 3] == 255).astype(np.uint8), np.ones((61, 61), np.uint8)) > 0
+    level[off] = float(np.median(pic[..., 0][inner]))
+assert level[""] > 0.96 * level["level"] and level["level"] > 120, level
+print(f"a grown picture follows later, brighter laps with the level step too ({level[''] :.0f} vs {level['level']:.0f}); ok")
