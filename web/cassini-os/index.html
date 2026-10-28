@@ -9726,7 +9726,7 @@ void main() {
   const D = d => S ? S.define(d) : d.value;
   const pref = {
     on: D({ key: "interface.dock", section: "Interface", label: "Dock", type: "toggle", value: true,
-      hint: "A strip of apps at the edge of the screen: Cassini and each body (click to fly there), Moments, Highlights, Gallery, Studio and Settings. Minimized windows shrink into it." }),
+      hint: "A strip of apps at the edge of the screen: Cassini and each body (click to fly there), Moments, Highlights, Gallery, Studio, Ambient mode and Settings. Minimized windows shrink into it." }),
     side: D({ key: "interface.dockPosition", section: "Interface", label: "Dock position", type: "choice", value: "bottom",
       options: [["bottom", "Bottom"], ["left", "Left"], ["right", "Right"]], hint: "On a phone the dock always sits under the replay controls." }),
     size: D({ key: "interface.dockSize", section: "Interface", label: "Dock icon size", type: "range", value: 40, min: 28, max: 72, step: 2, unit: "px" }),
@@ -9744,9 +9744,9 @@ void main() {
     replay: svg('<path d="M3.5 16.5h17"/><path d="M6 16.5v-3M9 16.5v-6M12 16.5v-4M15 16.5v-8M18 16.5v-2"/><path d="M8 5.5l3 2-3 2z"/>')
   };
   // rendered icons, 256 px (icons/make_icons.html renders them again): Cassini is NASA's model, Huygens ESA's descent
-  // module as it stood on Titan, Saturn and All bodies (seven of its moons) from their maps, and the apps and cameras
-  // are lit as the planets are
-  const ICON = { CASSINI: "cassini", HUYGENS: "huygens", SATURN: "saturn", moments: "moments", highlights: "highlights", gallery: "gallery", settings: "settings", folder: "bodies", N: "nac", W: "wac" };
+  // module as it stood on Titan, Saturn and All bodies (seven of its moons) from their maps, and the apps (Ambient mode: a
+  // display with Saturn on it) and cameras are lit as the planets are
+  const ICON = { CASSINI: "cassini", HUYGENS: "huygens", SATURN: "saturn", moments: "moments", highlights: "highlights", gallery: "gallery", settings: "settings", ambient: "ambient", folder: "bodies", N: "nac", W: "wac" };
   const icon = k => !ICON[k] && GLYPH[k] ? `<span class="gl">${GLYPH[k]}</span>` : `<img class="ic${k === "SATURN" ? " ringed" : ""}" src="icons/${ICON[k]}.webp" alt="" draggable="false">`;
   const MAP = { SATURN: "saturn", TITAN: "titan", ENCELADUS: "enceladus", MIMAS: "mimas", TETHYS: "tethys", DIONE: "dione", RHEA: "rhea", HYPERION: "hyperion",
     IAPETUS: "iapetus", PHOEBE: "phoebe", VENUS: "venus", EARTH: "earth", MOON: "moon", JUPITER: "jupiter", IO: "io", EUROPA: "europa", GANYMEDE: "ganymede", CALLISTO: "callisto" };
@@ -9788,6 +9788,8 @@ void main() {
       run() { const G = window.cassiniGallery, c = $("galcard"); if (!G || !c) return; if (c.hidden) G.open(); else if (inFront(c)) G.close(); else WM.front(c); } },
     { key: "studio", label: "Studio", open: () => !!$("stucard") && !$("stucard").hidden,
       run() { const T = window.cassiniStudio, c = $("stucard"); if (!T || !c) return; if (c.hidden) T.open(); else if (inFront(c)) T.close(); else WM.front(c); } },
+    { key: "ambient", label: "Ambient mode", open: () => false,
+      run() { if (window.cassiniAmbient) cassiniAmbient.start(); } },
     { key: "settings", label: "Settings", open: () => !!$("settings") && !$("settings").hidden,
       run() { const c = $("settings"); if (c && !c.hidden && !inFront(c)) WM.front(c); else $("sgear").click(); } }
   ];
@@ -10036,7 +10038,7 @@ void main() {
   window.cassiniAbout = { open, addTab, esc, close: () => show(false), credits: CREDITS };
 
   // ---- which version this is: this page's build id (build.py writes it), and what the frame server says it serves ----
-  const BUILD = /*BUILD*/"387308111391";
+  const BUILD = /*BUILD*/"f17ec14e8c4e";
   const FRAMES = (() => {                       // the frame server, chosen as the camera window chooses it
     const q = new URLSearchParams(location.search).get("frames");
     if (q) return q.replace(/\/$/, "");
@@ -15900,6 +15902,7 @@ window.huygensModels = (() => {
     if (F && F.windows && catalog && catalog.byCam) F.windows.forEach(f => f(true));   // (the catalog may still be loading)
     const u = new URL(location.href);
     if (u.searchParams.get("ambient") !== (mode || "1")) { u.searchParams.set("ambient", mode || "1"); try { history.replaceState(history.state, "", u); } catch (e) {} }
+    wake(5000);   // the way out, shown for a moment at the start
     document.dispatchEvent(new CustomEvent("cassini:ambient", { detail: { on: true, mode: A.mode } }));
   }
   function stop() {
@@ -15931,10 +15934,10 @@ window.huygensModels = (() => {
 
   // ---- the only controls: Escape or the Leave button (shown while the pointer moves) ----
   let wokeTimer = 0;
-  function wake() {
+  function wake(ms) {
     if (!A.on) return;
     document.body.classList.add("amb-woke"); clearTimeout(wokeTimer);
-    wokeTimer = setTimeout(() => document.body.classList.remove("amb-woke"), 2500);
+    wokeTimer = setTimeout(() => document.body.classList.remove("amb-woke"), typeof ms === "number" ? ms : 2500);
   }
   window.addEventListener("pointermove", wake, { passive: true });
   window.addEventListener("pointerdown", e => { if (A.on && !e.target.closest(".amb-leave, .cs-root")) { wake(); e.stopPropagation(); } }, true);
