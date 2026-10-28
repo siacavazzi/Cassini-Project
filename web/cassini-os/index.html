@@ -2341,7 +2341,11 @@ body.ambient.phone .amb-where { font-size: 18px; }
     { key: "processing.calibrate", step: "calibrate", label: "Calibrate",
       hint: "Every frame is turned into reflectance (I/F: bias, exposure, gain, filter and distance from the Sun taken out) and drawn on one display scale, so filters and mosaic tiles match and colors are true. Off shows each frame on the archive's own stretch, as it came down." },
     { key: "processing.align", step: "align", label: "Align",
-      hint: "A color set's channels, taken seconds or minutes apart, are moved onto one another, and a mosaic's filters onto each other's tiles. Off lays them over one another as the camera pointed, so moving bodies show colored fringes." }
+      hint: "A color set's channels, taken seconds or minutes apart, are moved onto one another, and a mosaic's filters onto each other's tiles. Off lays them over one another as the camera pointed, so moving bodies show colored fringes." },
+    { key: "processing.surface", step: "surface", label: "Mosaic surface at one moment",
+      hint: "A mosaic's panels are taken minutes apart, and the moon turns and Cassini moves in between, so the same crater sits 8 to 18 pixels apart in neighboring panels and doubles or steps at their seam. On, each panel's surface is redrawn as it was at the middle of the pass, from SPICE's shape, spin and Cassini's position; the limb, the sky and the rings stay where they are. Off shows each panel as it was taken." },
+    { key: "processing.panels", step: "panels", label: "Line up mosaic panels",
+      hint: "SPICE places each mosaic panel from where Cassini was said to point, 3 to 5 pixels off and differently for each panel. On, each panel is matched to the panels taken before it where they overlap (by what the pictures show) and moved by the few pixels it is off (12 at most), all its filters together. Panels with nothing to match on stay where SPICE puts them. Needs Align." }
   ];
   for (const st of window.cassiniSteps) D({ key: st.key, section: "Processing", label: st.label, type: "toggle", value: true, hint: st.hint });
   D({ key: "cameras.composites", section: "Processing", label: "Color composites", type: "toggle", value: true,
@@ -9842,7 +9846,7 @@ void main() {
   window.cassiniAbout = { open, addTab, esc, close: () => show(false), credits: CREDITS };
 
   // ---- which version this is: this page's build id (build.py writes it), and what the frame server says it serves ----
-  const BUILD = /*BUILD*/"acda0cf8eec0";
+  const BUILD = /*BUILD*/"30da08c68688";
   const FRAMES = (() => {                       // the frame server, chosen as the camera window chooses it
     const q = new URLSearchParams(location.search).get("frames");
     if (q) return q.replace(/\/$/, "");
