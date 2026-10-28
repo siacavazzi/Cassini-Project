@@ -119,7 +119,8 @@ body.phone #hllist { grid-template-columns: 1fr; }
     for (const [cam, id] of Object.entries(CAMS)) {
       const w = $(id); if (!w) continue;
       if (e.cams && e.cams[cam]) { if (w.hidden || w.classList.contains("shaded")) window.cassiniWM.restore(w); }
-      else if (!w.hidden && e.kind !== "milestone") { w.hidden = true; H.tucked.push(w); }
+      // (not while editing, cassiniPin: then no camera window is put away)
+      else if (!w.hidden && e.kind !== "milestone" && !(window.cassiniPin && cassiniPin.editing())) { w.hidden = true; H.tucked.push(w); }
     }
     if (window.cassiniWM) window.cassiniWM.syncMenu();
     // a phone has no room for the list while a highlight plays
