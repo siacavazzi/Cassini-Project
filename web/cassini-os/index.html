@@ -121,6 +121,12 @@ body.nohud #hud, body.nohud #hudline, body.nohud #reticle { display: none; }
 #tray button { all: unset; font: 10px/1 var(--ui); padding: 3px 8px; border-radius: 9px; border: 1px solid #6f8fb8; cursor: default;
   background: linear-gradient(var(--aqua-1), var(--aqua-2) 50%, var(--aqua-3) 50%, var(--aqua-4)); color: #04203e; }
 #mclock { font-variant-numeric: tabular-nums; white-space: pre; }
+/* the simulation's play/pause, in the menu bar above every window (the dock's button can be covered or put away) */
+#gplay { all: unset; width: 22px; height: 18px; display: grid; place-items: center; border-radius: 4px; cursor: default; color: inherit; }
+#gplay:hover { background: rgba(255,255,255,.14); } #gplay:focus-visible { outline: 1px solid var(--q-accent, #8ab6ff); }
+#gplay svg { width: 12px; height: 12px; } #gplay .pz { fill: none; stroke: currentColor; stroke-width: 2.2; } #gplay .pl { fill: currentColor; }
+#gplay .pl, #gplay.paused .pz { display: none; } #gplay.paused .pl { display: block; }
+body.phone #gplay { width: 30px; height: 30px; }
 
 /* ---------- windows ---------- */
 .win { position: absolute; background: #fff; border: 1px solid #555; border-radius: 6px 6px 4px 4px; overflow: hidden;
@@ -539,9 +545,12 @@ body.idle .lbl:not(.focus):not(.cassini) { opacity: .35; }
 /* ...except the camera feed: while a frame is showing, the picture stays and only its frame fades
    (named by id: the rule above counts as an id selector, so a class-only rule here would lose to it) */
 .camwin, .camwin .titlebar, .camwin .info, .well { transition: opacity .7s ease, background-color .7s ease, border-color .7s ease, box-shadow .7s ease; }
-body.idle :is(#imgcard, #wacard):has(.well.has-frame) { opacity: 1; pointer-events: auto; background: transparent; border-color: transparent; box-shadow: none; -webkit-backdrop-filter: none; backdrop-filter: none; }
+body.idle #app .camwin:has(.well.has-frame) { opacity: 1; pointer-events: auto; background: transparent; border-color: transparent; box-shadow: none; -webkit-backdrop-filter: none; backdrop-filter: none; }
 body.idle .camwin:has(.well.has-frame) :is(.titlebar, .info) { opacity: 0; }
 body.idle .camwin .well.has-frame { border-color: transparent; box-shadow: 0 6px 30px rgba(0,0,0,.6); }
+/* ...and while pinned (paused, a stretch highlighted, an editor open: cassiniPin) a camera window stays even with no
+   picture in it yet */
+body.idle.pinned #app .camwin { opacity: 1; pointer-events: auto; }
 @media (prefers-reduced-motion: reduce) { #menubar, .win, #dock, #hudline, #labels { transition: none; } }
 
 /* resizing: every window has a grip in its bottom-right corner; a picture window's picture follows its width */
@@ -1729,7 +1738,7 @@ body.ambient.phone .amb-where { font-size: 18px; }
         <li><button data-act="win" data-win="wacard" role="menuitemcheckbox" aria-checked="true">Wide-angle Camera</button></li>
         <li><button data-act="win" data-win="moments" role="menuitemcheckbox" aria-checked="true">Moments</button></li>
       </ul></div>
-    <div class="menuright"><div id="tray"></div><button id="sgear" aria-pressed="false" aria-label="Settings" title="Settings (⌘,)"><svg viewBox="0 0 16 16" aria-hidden="true"><circle cx="8" cy="8" r="2.3"/><path d="M8 1.5v2M8 12.5v2M1.5 8h2M12.5 8h2M3.4 3.4l1.4 1.4M11.2 11.2l1.4 1.4M3.4 12.6l1.4-1.4M11.2 4.8l1.4-1.4"/></svg></button><span id="mclock">—</span></div>
+    <div class="menuright"><button id="gplay" aria-label="Pause" title="Pause (Space)"><svg viewBox="0 0 16 16" aria-hidden="true"><path class="pz" d="M5 3.5v9M11 3.5v9"/><path class="pl" d="M5 3l8 5-8 5z"/></svg></button><div id="tray"></div><button id="sgear" aria-pressed="false" aria-label="Settings" title="Settings (⌘,)"><svg viewBox="0 0 16 16" aria-hidden="true"><circle cx="8" cy="8" r="2.3"/><path d="M8 1.5v2M8 12.5v2M1.5 8h2M12.5 8h2M3.4 3.4l1.4 1.4M11.2 11.2l1.4 1.4M3.4 12.6l1.4-1.4M11.2 4.8l1.4-1.4"/></svg></button><span id="mclock">—</span></div>
   </nav>
 
   <section class="win frame img camwin" id="imgcard" data-cam="N" aria-label="Narrow-angle Camera">
@@ -2835,7 +2844,13 @@ body.ambient.phone .amb-where { font-size: 18px; }
 
   // windows: drag by the title bar, click to bring forward, close / minimize / zoom
   let z = 30;
-  function front(w) { document.querySelectorAll(".win").forEach(x => x.classList.toggle("front", x === w)); w.style.zIndex = ++z; }
+  function front(w) {
+    const all = [...document.querySelectorAll(".win")];
+    all.forEach(x => x.classList.toggle("front", x === w));
+    // the stack is renumbered before it reaches the menu bar (z-index 1000), so the bar and its play/pause stay on top
+    if (z > 900) { z = 30; all.filter(x => x.style.zIndex).sort((a, b) => a.style.zIndex - b.style.zIndex).forEach(x => { x.style.zIndex = ++z; }); }
+    w.style.zIndex = ++z;
+  }
   function syncMenu() {
     document.querySelectorAll('[data-act="win"]').forEach(b => b.setAttribute("aria-checked", String(!$(b.dataset.win).hidden)));
     const tray = $("tray"); tray.innerHTML = "";
@@ -3003,11 +3018,31 @@ body.ambient.phone .amb-where { font-size: 18px; }
 
   // resting: after a few seconds without the pointer or keyboard, the interface fades out of the way (Settings: Interface)
   const S = window.cassiniSettings;
+  // pinned: while the simulation is paused, a stretch of the timeline is highlighted (a movie picked), or an editor is
+  // open (Movie Editor, Cassini Studio, Export, the Gallery), no camera window goes away: the interface does not fade
+  // out while editing, a camera window keeps its picture past the stale time, body windows do not close, and no
+  // camera window is put away to make room (segment.html, highlights.html, bodywin.html ask cassiniPin)
+  const EDITORS = ["mecard", "stucard", "excard", "galcard"];
+  const isUp = id => { const w = $(id); return !!w && !w.hidden && !w.dataset.min; };
+  const editing = () => EDITORS.some(isUp) || (!!$("segbar") && !$("segbar").hidden);
+  const pinned = () => editing() || (typeof state !== "undefined" && !state.playing);
+  window.cassiniPin = { pinned, editing };
   let autoHide = true, idleTimer = 0;
   function wake() {
     document.body.classList.remove("idle"); clearTimeout(idleTimer);
-    if (autoHide) idleTimer = setTimeout(() => { if (!document.querySelector(".menu.open, .win:hover")) document.body.classList.add("idle"); else wake(); }, S.get("interface.idleDelay") * 1000);
+    if (autoHide) idleTimer = setTimeout(() => { if (!document.querySelector(".menu.open, .win:hover") && !editing()) document.body.classList.add("idle"); else wake(); }, S.get("interface.idleDelay") * 1000);
   }
+  // the menu bar's play/pause: the same as the dock's (and Space), whatever is open; it follows the dock's button
+  const gplay = $("gplay");
+  gplay.addEventListener("click", e => { e.stopPropagation(); if (typeof setPlaying === "function") setPlaying(!state.playing); gplay.blur(); });
+  function syncPlay() {
+    const paused = typeof state !== "undefined" && !state.playing;
+    gplay.classList.toggle("paused", paused);
+    gplay.setAttribute("aria-label", paused ? "Play" : "Pause"); gplay.title = (paused ? "Play" : "Pause") + " (Space)";
+  }
+  new MutationObserver(syncPlay).observe($("play"), { childList: true, characterData: true, subtree: true });
+  // (and every quarter second, for the clock stopped without the dock's button, as by a cutscene)
+  setInterval(() => { document.body.classList.toggle("pinned", pinned()); syncPlay(); }, 250);
   S.on("interface.autohide", v => { autoHide = v; document.querySelector('[data-act="autohide"]').setAttribute("aria-checked", String(v)); wake(); });
   S.on("interface.idleDelay", () => wake());
   S.on("interface.hud", v => { document.body.classList.toggle("nohud", !v); document.querySelector('[data-act="hud"]').setAttribute("aria-checked", String(v)); });
@@ -4886,7 +4921,9 @@ body.ambient.phone .amb-where { font-size: 18px; }
       // which closes by itself) keeps its picture
       const stale = S.get("cameras.stale") * (lastK >= 0 ? importance() : 1);
       if (k < 0 && holdUp && up) { field("status").textContent = "Waiting for the next picture"; return; }
-      if (k < 0 || (!holdUp && state.et - catalog.et[k] > stale * 3600)) {
+      // (while pinned, cassiniPin, a picture already up stays however old it gets)
+      const keep = lastK >= 0 && well.classList.contains("has-frame") && window.cassiniPin && cassiniPin.pinned();
+      if (k < 0 || (!holdUp && !keep && state.et - catalog.et[k] > stale * 3600)) {
         field("status").textContent = k < 0 ? "Camera" : `Last frame ${fmtDur(state.et - catalog.et[k])} ago`;
         strip(null); filmstrip(-1);
         if (lastK !== -1) {
@@ -5737,7 +5774,9 @@ body.ambient.phone .amb-where { font-size: 18px; }
     show = show.filter(k => capped.includes(k));
     show = show.concat(held);
     const swapped = new Set(swaps.values());
-    for (const k of [...B.wins.keys()]) if (!show.includes(k) && !swapped.has(k)) close(k);
+    // while pinned (paused, a stretch highlighted, an editor open: cassiniPin) no window closes by itself
+    const pin = window.cassiniPin && cassiniPin.pinned();
+    for (const k of [...B.wins.keys()]) if (!show.includes(k) && !swapped.has(k) && !pin) close(k);
     // oldest target first, so the newest windows land on top; the narrow-angle window first, so the wide-angle one sits beside it
     for (const name of [...new Set(bodies.concat(held.map(k => k.split("|")[0])))].reverse()) for (const cam of CAMS) {
       const k = key(name, cam); if (!show.includes(k)) continue;
@@ -6009,7 +6048,8 @@ body.ambient.phone .amb-where { font-size: 18px; }
     for (const [cam, id] of Object.entries(CAMS)) {
       const w = $(id); if (!w) continue;
       if (e.cams && e.cams[cam]) { if (w.hidden || w.classList.contains("shaded")) window.cassiniWM.restore(w); }
-      else if (!w.hidden && e.kind !== "milestone") { w.hidden = true; H.tucked.push(w); }
+      // (not while editing, cassiniPin: then no camera window is put away)
+      else if (!w.hidden && e.kind !== "milestone" && !(window.cassiniPin && cassiniPin.editing())) { w.hidden = true; H.tucked.push(w); }
     }
     if (window.cassiniWM) window.cassiniWM.syncMenu();
     // a phone has no room for the list while a highlight plays
@@ -7042,9 +7082,10 @@ body.ambient.phone .amb-where { font-size: 18px; }
     if (P.playing && M.on) { setPlaying(!state.playing); buttons(); return; }
     P.playing = true;
     const cams = windows().cams;
-    // one camera: the other camera's window steps aside while the stretch plays, and comes back after
+    // one camera: the other camera's window used to step aside while the stretch played; with a stretch highlighted
+    // the camera windows are pinned (cassiniPin, head-quiet.html), so it stays where it is
     const other = cams === "N" ? $("wacard") : cams === "W" ? $("imgcard") : null;
-    if (other && !other.hidden && window.cassiniWM) { P.tucked = other; cassiniWM.minimize(other); }
+    if (other && !other.hidden && window.cassiniWM && !(window.cassiniPin && cassiniPin.editing())) { P.tucked = other; cassiniWM.minimize(other); }
     M.start(true, { from: P.a, until: P.b, cams: cams.length === 1 ? cams : undefined });
     buttons();
   }
@@ -9889,7 +9930,7 @@ void main() {
   window.cassiniAbout = { open, addTab, esc, close: () => show(false), credits: CREDITS };
 
   // ---- which version this is: this page's build id (build.py writes it), and what the frame server says it serves ----
-  const BUILD = /*BUILD*/"31cecd68bdfb";
+  const BUILD = /*BUILD*/"e1793a83a8f0";
   const FRAMES = (() => {                       // the frame server, chosen as the camera window chooses it
     const q = new URLSearchParams(location.search).get("frames");
     if (q) return q.replace(/\/$/, "");
