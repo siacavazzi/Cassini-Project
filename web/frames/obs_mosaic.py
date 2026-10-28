@@ -1329,13 +1329,12 @@ def panel_places(u, cache, p, tiles, pic=None, report=None):
             if roots[n] != n:
                 kept[n] = list(kept.get(roots[n], [0, 0, "root"])[:2]) + [f"with {roots[n]}"]
                 continue
-            at = lambda s: [s["offset"][0] + kept.get(s["n"], [0, 0])[0], s["offset"][1] + kept.get(s["n"], [0, 0])[1]]
             here = t["offset"]
             cands = []
             for s in by_n.values():
                 if s["n"] >= n or roots.get(s["n"]) == n or s["n"] not in kept:
                     continue
-                a, b = at(s), here
+                a, b = s["offset"], here
                 w = min(a[0] + s["box"][0] + s["box"][2], b[0] + t["box"][0] + t["box"][2]) - max(a[0] + s["box"][0], b[0] + t["box"][0])
                 h = min(a[1] + s["box"][1] + s["box"][3], b[1] + t["box"][1] + t["box"][3]) - max(a[1] + s["box"][1], b[1] + t["box"][1])
                 if w >= PANEL_NARROW and h >= PANEL_NARROW:
@@ -1347,10 +1346,13 @@ def panel_places(u, cache, p, tiles, pic=None, report=None):
                 if ref is None or mine is None:
                     continue
                 s = by_n[j]
-                shift, how = panel_shift(s, ref, at(s), t, mine, here)
+                # measured where SPICE put both (the overlap SPICE says, the same however far the earlier one has
+                # been moved), and taken from where the earlier one now is
+                shift, how = panel_shift(s, ref, s["offset"], t, mine, here)
                 seen[j] = how if shift is None else {**how, "shift": [round(shift[0], 2), round(shift[1], 2)]}
                 if shift is not None:
-                    found.append((-shift[0], -shift[1]))
+                    was = kept.get(j, [0, 0])
+                    found.append((was[0] - shift[0], was[1] - shift[1]))
             move = [0.0, 0.0]
             if found:
                 f = np.array(found)
