@@ -68,7 +68,7 @@ body { background: #000; color: var(--ink); font: 11px/1.35 var(--ui); overflow:
 #gl, #hud { position: absolute; inset: 0; width: 100%; height: 100%; display: block; }
 #gl { touch-action: none; }
 #hud { pointer-events: none; mix-blend-mode: screen; }
-body.nohud #hud, body.nohud #hudline, body.nohud #reticle { display: none; }
+body.nohud #hud, body.nohud #reticle { display: none; }
 #labels { position: absolute; inset: 0; pointer-events: none; overflow: hidden; }
 
 /* ---------- HUD tags for bodies ---------- */
@@ -92,9 +92,6 @@ body.nohud #hud, body.nohud #hudline, body.nohud #reticle { display: none; }
   filter: drop-shadow(0 0 3px var(--neon)); }
 #reticle::after { inset: -7px; opacity: .3; animation: lock 2.4s ease-in-out infinite; }
 @keyframes lock { 50% { inset: -2px; opacity: .75; } }
-#hudline { position: absolute; top: calc(env(safe-area-inset-top, 0px) + 32px); left: 50%; transform: translateX(-50%); pointer-events: none;
-  font: 11px/1 var(--hudf); letter-spacing: .12em; color: var(--neon); text-shadow: 0 0 6px rgba(61,255,143,.7); white-space: nowrap; display: flex; gap: 22px; }
-#hudline span { color: rgba(61,255,143,.55); margin-right: 6px; }
 
 /* ---------- menu bar ---------- */
 #menubar { position: absolute; top: 0; left: 0; right: 0; height: calc(22px + env(safe-area-inset-top, 0px)); padding: env(safe-area-inset-top, 0px) max(10px, env(safe-area-inset-right, 0px)) 0 max(10px, env(safe-area-inset-left, 0px));
@@ -121,6 +118,19 @@ body.nohud #hud, body.nohud #hudline, body.nohud #reticle { display: none; }
 #tray button { all: unset; font: 10px/1 var(--ui); padding: 3px 8px; border-radius: 9px; border: 1px solid #6f8fb8; cursor: default;
   background: linear-gradient(var(--aqua-1), var(--aqua-2) 50%, var(--aqua-3) 50%, var(--aqua-4)); color: #04203e; }
 #mclock { font-variant-numeric: tabular-nums; white-space: pre; }
+/* the simulation's play/pause, in the menu bar above every window (the dock's button can be covered or put away) */
+#gplay { all: unset; width: 22px; height: 18px; display: grid; place-items: center; border-radius: 4px; cursor: default; color: inherit; }
+#gplay:hover { background: rgba(255,255,255,.14); } #gplay:focus-visible { outline: 1px solid var(--q-accent, #8ab6ff); }
+#gplay svg { width: 12px; height: 12px; } #gplay .pz { fill: none; stroke: currentColor; stroke-width: 2.2; } #gplay .pl { fill: currentColor; }
+#gplay .pl, #gplay.paused .pz { display: none; } #gplay.paused .pl { display: block; }
+body.phone #gplay { width: 30px; height: 30px; }
+/* the flight readout: how far above the nearest body Cassini is and how fast it moves relative to it */
+#mread { font-size: 12px; color: var(--q-dim, #555); font-variant-numeric: tabular-nums; white-space: nowrap; }
+#mread b { font-weight: 400; color: var(--q-text, #111); }
+#mread:empty { display: none; }
+@media (max-width: 820px) { #mread { display: none; } }
+/* ...and while the menu bar shows it, the dock under the clock keeps only the mission day */
+@media (min-width: 821px) { body:not(.phone):not(.s-nohudline) .clockbox :is(#rel, .relsep) { display: none; } }
 
 /* ---------- windows ---------- */
 .win { position: absolute; background: #fff; border: 1px solid #555; border-radius: 6px 6px 4px 4px; overflow: hidden;
@@ -328,7 +338,7 @@ body.glass .round { border-color: rgba(10,24,44,.8); box-shadow: 0 0 0 1px rgba(
   --tl-ms: rgba(255,255,255,.75); --tl-sat: rgba(255,255,255,.25); --tl-titan: rgba(255,190,110,.7); --tl-other: rgba(255,255,255,.45); --tl-now: #8ab6ff; --tl-now-glow: transparent;
 }
 body { color: var(--q-text); }
-#menubar, .win, #dock, #hudline, #labels { transition: opacity .7s ease; }
+#menubar, .win, #dock, #labels { transition: opacity .7s ease; }
 
 /* menu bar: a thin smoked strip */
 #menubar { background: rgba(14,15,18,.62); -webkit-backdrop-filter: blur(14px); backdrop-filter: blur(14px); border-bottom: 1px solid var(--q-line); box-shadow: none; color: var(--q-text); font-size: 13px; }
@@ -509,6 +519,8 @@ body.s-steady .info dd[data-f="colour"] { white-space: normal; display: -webkit-
 #speedv { font-size: 12.5px; color: var(--q-text); font-variant-numeric: tabular-nums; white-space: nowrap; }
 #speedeff { font-size: 9.5px; color: var(--q-dim); white-space: nowrap; font-variant-numeric: tabular-nums; }
 .speedtool.nopics #speedv { color: var(--q-dim); }
+/* movie mode: the slider sets pictures a second (movie.fps); its read-out takes the Movie button's accent */
+.speedtool.movie #speedeff { color: var(--q-accent, #8ab6ff); }
 /* too fast for pictures: a camera window keeps its last picture, dimmed, and says why */
 .well.toofast .shot { opacity: .3; }
 .well.toofast:not(.has-frame)::before { display: none; }
@@ -530,19 +542,21 @@ body.s-steady .info dd[data-f="colour"] { white-space: normal; display: -webkit-
 #dock:not(.zoomed) .toolbar > .col:first-child { display: none; }
 
 /* the HUD in space stays, a little softer */
-#hudline { opacity: .7; }
 .lbl:not(.focus):not(.cassini) { opacity: .75; }
 
 /* resting: the interface fades away until the pointer moves */
-body.idle :is(#menubar, .win, #hudline) { opacity: 0; pointer-events: none; }
+body.idle :is(#menubar, .win) { opacity: 0; pointer-events: none; }
 body.idle .lbl:not(.focus):not(.cassini) { opacity: .35; }
 /* ...except the camera feed: while a frame is showing, the picture stays and only its frame fades
    (named by id: the rule above counts as an id selector, so a class-only rule here would lose to it) */
 .camwin, .camwin .titlebar, .camwin .info, .well { transition: opacity .7s ease, background-color .7s ease, border-color .7s ease, box-shadow .7s ease; }
-body.idle :is(#imgcard, #wacard):has(.well.has-frame) { opacity: 1; pointer-events: auto; background: transparent; border-color: transparent; box-shadow: none; -webkit-backdrop-filter: none; backdrop-filter: none; }
+body.idle #app .camwin:has(.well.has-frame) { opacity: 1; pointer-events: auto; background: transparent; border-color: transparent; box-shadow: none; -webkit-backdrop-filter: none; backdrop-filter: none; }
 body.idle .camwin:has(.well.has-frame) :is(.titlebar, .info) { opacity: 0; }
 body.idle .camwin .well.has-frame { border-color: transparent; box-shadow: 0 6px 30px rgba(0,0,0,.6); }
-@media (prefers-reduced-motion: reduce) { #menubar, .win, #dock, #hudline, #labels { transition: none; } }
+/* ...and while pinned (paused, a stretch highlighted, an editor open: cassiniPin) a camera window stays even with no
+   picture in it yet */
+body.idle.pinned #app .camwin { opacity: 1; pointer-events: auto; }
+@media (prefers-reduced-motion: reduce) { #menubar, .win, #dock, #labels { transition: none; } }
 
 /* resizing: every window has a grip in its bottom-right corner; a picture window's picture follows its width */
 .grip { position: absolute; right: 0; bottom: 0; width: 16px; height: 16px; cursor: nwse-resize; touch-action: none; z-index: 5; opacity: 0; transition: opacity .2s ease;
@@ -760,7 +774,7 @@ body.phone #flagtoast { bottom: calc(env(safe-area-inset-bottom, 0px) + 12px); }
 body.idle #settings:not([hidden]) { opacity: 1; pointer-events: auto; }
 /* settings that only show or hide parts of the page */
 body.s-nolabels #labels, body.s-nolabels #reticle { display: none; }
-body.s-nohudline #hudline { display: none; }
+body.s-nohudline #mread { display: none; }
 body.s-nochans .camwin .chans { display: none !important; }
 body.s-nofilmstrip .camwin .filmstrip { display: none !important; }
 body.s-noinfo .camwin .info { display: none; }
@@ -788,7 +802,7 @@ body.phone .menu.app > button { padding-left: 4px; }
 body.phone .menu ul { top: 30px; max-width: calc(100vw - 12px); max-height: calc(100dvh - 40px); overflow-y: auto; }
 body.phone .menu:nth-last-child(2) ul { left: auto; right: 0; }
 body.phone .menu li button { padding-top: 6px; padding-bottom: 6px; }
-body.phone #mclock, body.phone #hudline { display: none; }
+body.phone #mclock, body.phone #mread { display: none; }
 body.phone #sgear { width: 30px; height: 30px; }
 body.phone .grip { display: none; }
 body.phone .titlebar { cursor: default; }
@@ -1240,21 +1254,53 @@ body.phone .stufoot .galbtn { padding: 6px 10px; }
 #mecard[style*="left"] { transform: none; }
 #mecard.zoomed { width: calc(100% - 20px); height: calc(100% - 50px); }
 #mecard .mebody { flex: 1 1 auto; min-height: 0; display: grid; grid-template-columns: minmax(0, 1fr) 250px; border-top: 1px solid var(--q-line); }
-#mecard .memain { min-width: 0; min-height: 0; display: grid; grid-template-rows: minmax(140px, 1fr) auto minmax(110px, 38%); background: #000; }
-#mecard.big .memain { grid-template-rows: minmax(140px, 1fr) auto 0; }
-#mecard.big #mestrip { display: none; }
+#mecard .memain { min-width: 0; min-height: 0; display: grid; grid-template-rows: minmax(140px, 1fr) auto auto auto minmax(110px, 34%); grid-template-areas: "stage" "bar" "levels" "tabs" "strip"; background: #000; }
+#mecard.big .memain { grid-template-rows: minmax(140px, 1fr) auto auto 0 0; }
+#mecard.big :is(#mestrip, #metabs) { display: none; }
+#mestage { grid-area: stage; } #mecard .mebar { grid-area: bar; } #melevels { grid-area: levels; } #mestrip { grid-area: strip; }
+#metabs { grid-area: tabs; display: flex; align-items: stretch; gap: 2px; padding: 0 10px; border-top: 1px solid var(--q-line); background: var(--q-panel); font: 10.5px var(--hudf); color: var(--q-dim); }
+#metabs[hidden] { display: none; }
+#metabs button { all: unset; padding: 6px 12px 5px; cursor: pointer; color: var(--q-dim); border-bottom: 2px solid transparent; letter-spacing: .04em; }
+#metabs button:hover { color: var(--q-text); }
+#metabs button[aria-selected="true"] { color: #fff; border-bottom-color: var(--q-accent); }
+#metabs button i { font-style: normal; opacity: .7; margin-left: 5px; }
+#metabs .menote { margin: 0 0 0 auto; align-self: center; font-family: var(--ui); }
 #mestage { position: relative; min-height: 0; overflow: hidden; }
-#mecanvas { position: absolute; display: block; cursor: zoom-in; }
-#mecard.big #mecanvas { cursor: zoom-out; }
+#mecanvas { position: absolute; display: block; cursor: grab; touch-action: none; }
 #mestage .metag { position: absolute; left: 8px; top: 7px; right: 8px; z-index: 2; font: 9.5px/1.4 var(--hudf); letter-spacing: .04em; color: rgba(232,236,242,.78); text-shadow: 0 0 3px #000; pointer-events: none; }
 #meoff { position: absolute; right: 8px; bottom: 8px; z-index: 2; font: 10px var(--hudf); letter-spacing: .08em; text-transform: uppercase; padding: 2px 6px; border-radius: 3px; background: rgba(255,120,100,.25); color: #ffb2a6; }
 #meempty { position: absolute; inset: 0; display: grid; place-items: center; text-align: center; padding: 20px; font-size: 12px; line-height: 1.55; color: var(--q-dim); }
-:is(#meempty, #meoff, #mecard .meside, #mecard [data-hide])[hidden] { display: none !important; }
+:is(#meempty, #meoff, #mecard .meside, #mecard [data-hide], #mecard [data-cams])[hidden] { display: none !important; }
 #mecard .mebar { display: flex; gap: 8px; align-items: center; flex-wrap: wrap; padding: 6px 10px; border-top: 1px solid var(--q-line); background: var(--q-panel); font: 10.5px var(--hudf); color: var(--q-dim); }
 #mecard .mebar .sp { flex: 1; }
 #mecard .mebar .rnd { all: unset; width: 24px; height: 24px; display: grid; place-items: center; border-radius: 50%; color: var(--q-text); background: rgba(255,255,255,.08); cursor: pointer; flex: none; font-size: 12px; }
 #mecard .mebar .rnd:hover { background: rgba(255,255,255,.16); color: #fff; }
 #mepos { min-width: 120px; font-variant-numeric: tabular-nums; }
+#melevels { position: relative; height: 68px; border-top: 1px solid var(--q-line); background: rgba(6,8,11,.92); cursor: crosshair; touch-action: none; }
+#melevels.onpt { cursor: ns-resize; }
+#melevels canvas { position: absolute; inset: 0; width: 100%; height: 100%; display: block; }
+#melevels .lvtag { position: absolute; left: 8px; top: 4px; font: 9px/1.3 var(--hudf); letter-spacing: .06em; color: rgba(232,236,242,.5); pointer-events: none; text-transform: uppercase; }
+#melevels .lvtag b { font-weight: normal; color: rgba(232,236,242,.8); }
+#mecanvas.nudging { cursor: grabbing; }
+#mecropbox { position: absolute; z-index: 3; box-shadow: 0 0 0 9999px rgba(0,0,0,.6); outline: 1px solid rgba(255,255,255,.85); cursor: move; touch-action: none;
+  background-image: linear-gradient(rgba(255,255,255,.18), rgba(255,255,255,.18)), linear-gradient(rgba(255,255,255,.18), rgba(255,255,255,.18)), linear-gradient(90deg, rgba(255,255,255,.18), rgba(255,255,255,.18)), linear-gradient(90deg, rgba(255,255,255,.18), rgba(255,255,255,.18));
+  background-size: 100% 1px, 100% 1px, 1px 100%, 1px 100%; background-position: 0 33.33%, 0 66.67%, 33.33% 0, 66.67% 0; background-repeat: no-repeat; }
+#mecropbox[hidden] { display: none; }
+#mecropbox i { position: absolute; width: 14px; height: 14px; border: 2px solid #fff; }
+#mecropbox i[data-h="nw"] { left: -3px; top: -3px; border-width: 2px 0 0 2px; cursor: nwse-resize; }
+#mecropbox i[data-h="ne"] { right: -3px; top: -3px; border-width: 2px 2px 0 0; cursor: nesw-resize; }
+#mecropbox i[data-h="sw"] { left: -3px; bottom: -3px; border-width: 0 0 2px 2px; cursor: nesw-resize; }
+#mecropbox i[data-h="se"] { right: -3px; bottom: -3px; border-width: 0 2px 2px 0; cursor: nwse-resize; }
+#mecropbox span { position: absolute; left: 0; top: -18px; font: 9.5px var(--hudf); letter-spacing: .06em; text-transform: uppercase; color: #fff; text-shadow: 0 0 3px #000; white-space: nowrap; }
+#mecard .mecropctl { display: flex; flex-wrap: wrap; gap: 6px; align-items: center; margin-top: 7px; }
+#mecard .mecropctl[hidden] { display: none; }
+#mecard .merow { display: flex; gap: 8px; align-items: center; margin-top: 7px; font-size: 11px; color: var(--q-text); }
+#mecard .merow > span:first-child { flex: none; width: 66px; color: var(--q-dim); }
+#mecard .merow input[type=range] { flex: 1; min-width: 60px; accent-color: var(--q-accent, #8ab6ff); }
+#mecard .merow .val { flex: none; min-width: 52px; text-align: right; font: 10.5px var(--hudf); font-variant-numeric: tabular-nums; color: var(--q-text); }
+#mecard .merow input:disabled, #mecard .merow input:disabled ~ .val { opacity: .4; }
+#mecard .meside .galseg { margin-top: 2px; }
+#mecard .meside .galseg button { font-size: 10.5px; padding: 2px 8px; }
 #mestrip { min-height: 0; overflow-y: auto; padding: 6px; display: grid; grid-template-columns: repeat(auto-fill, 96px); grid-auto-rows: 96px; justify-content: space-between; gap: 5px; align-content: start; border-top: 1px solid var(--q-line); background: rgba(0,0,0,.55); }
 .meth { all: unset; position: relative; display: block; border-radius: 4px; overflow: hidden; background: #0b0d11; outline: 1px solid rgba(255,255,255,.06); cursor: pointer; }
 .meth img { position: absolute; inset: 0; display: block; width: 100%; height: 100%; object-fit: cover; }
@@ -1263,8 +1309,10 @@ body.phone .stufoot .galbtn { padding: 6px 10px; }
 .meth.out img { opacity: .22; filter: grayscale(1); }
 .meth.out span { color: rgba(232,236,242,.45); }
 .meth.dropped::after { content: ""; position: absolute; inset: 0; background: linear-gradient(to top right, transparent calc(50% - 1px), rgba(255,120,100,.75) 50%, transparent calc(50% + 1px)); pointer-events: none; }
+.meth.own::before { content: ""; position: absolute; right: 4px; top: 4px; z-index: 1; width: 7px; height: 7px; border-radius: 50%; background: var(--q-accent, #8ab6ff); box-shadow: 0 0 0 1.5px rgba(0,0,0,.7); }
 .meth.picked { outline: 2px solid rgba(138,182,255,.55); }
 .meth.sel { outline: 2px solid var(--q-accent); }
+.meth.sel.unpicked { outline: 1px dashed rgba(138,182,255,.45); }
 #mecard .meside { min-height: 0; overflow-y: auto; padding: 2px 12px 12px; border-left: 1px solid var(--q-line); }
 #mecard .meside h4 { margin: 12px 0 4px; font: 10px/1 var(--ui); letter-spacing: .12em; text-transform: uppercase; color: var(--q-dim); font-weight: normal; display: flex; align-items: center; gap: 6px; }
 #mecard .meside h4 .sp { flex: 1; }
@@ -1289,6 +1337,7 @@ body.phone #mecard { left: var(--side, 6px) !important; right: var(--sider, 6px)
   height: calc(100dvh - var(--menu, 30px) - var(--appdockh, 0px) - 3 * var(--gap, 6px)) !important; z-index: 1460 !important; }
 body.phone #mecard .mebody { grid-template-columns: minmax(0, 1fr); grid-template-rows: minmax(0, 1fr) auto; }
 body.phone #mecard .meside { border-left: 0; border-top: 1px solid var(--q-line); max-height: 30vh; }
+body.phone #melevels { height: 54px; }
 body.phone #mestrip { grid-template-columns: repeat(auto-fill, 72px); grid-auto-rows: 72px; }
 
 #bodymenu { top: calc(env(safe-area-inset-top, 0px) + 36px); right: max(14px, env(safe-area-inset-right, 0px)); width: 340px; height: min(360px, calc(100% - 330px)); min-height: 220px; display: flex; flex-direction: column; }
@@ -1482,6 +1531,43 @@ body.idle #about:not([hidden]) { opacity: 1; pointer-events: auto; }
 body.phone #about { left: 8px !important; top: calc(env(safe-area-inset-top, 0px) + 30px) !important; width: calc(100% - 16px) !important; height: calc(100% - 50px - var(--appdockh, 0px) - var(--gap, 0px)) !important; }
 body.phone #about .abody { grid-template-columns: 1fr; grid-template-rows: auto minmax(0, 1fr); }
 body.phone #about nav { flex-direction: row; border-right: 0; border-bottom: 1px solid var(--q-line); overflow-x: auto; }
+
+#tourhint { position: fixed; z-index: 1500; left: 0; top: 0; width: min(290px, calc(100vw - 24px)); box-sizing: border-box;
+  padding: 11px 13px 9px; border-radius: 9px; background: var(--q-panel, rgba(16,17,20,.82)); color: var(--q-text);
+  -webkit-backdrop-filter: blur(16px) saturate(1.2); backdrop-filter: blur(16px) saturate(1.2);
+  border: 1px solid var(--q-line); box-shadow: 0 10px 30px rgba(0,0,0,.5); font: 12px/1.5 var(--ui);
+  opacity: 0; transform: translateY(4px); transition: opacity .25s ease, transform .25s ease, left .3s ease, top .3s ease; }
+#tourhint.on { opacity: 1; transform: none; }
+#tourhint[hidden] { display: none; }
+#tourhint .th-title { margin: 0 18px 3px 0; font-size: 13px; color: #fff; }
+#tourhint .th-text { margin: 0; color: var(--q-text); }
+#tourhint .th-text b { font-weight: normal; color: #fff; }
+#tourhint .th-foot { display: flex; align-items: center; gap: 6px; margin-top: 9px; }
+#tourhint .th-count { flex: 1; font: 10px var(--hudf, monospace); color: var(--q-dim); letter-spacing: .04em; }
+#tourhint button { all: unset; cursor: default; padding: 3px 9px; border-radius: 5px; font-size: 11.5px; color: var(--q-dim); }
+#tourhint button:hover { color: var(--q-text); background: rgba(255,255,255,.06); }
+#tourhint button:focus-visible { outline: 1px solid var(--q-accent); }
+#tourhint .th-next { color: #fff; background: rgba(138,182,255,.22); }
+#tourhint .th-next:hover { color: #fff; background: rgba(138,182,255,.32); }
+#tourhint .th-x { position: absolute; top: 5px; right: 6px; padding: 1px 6px; font-size: 14px; line-height: 1.2; }
+/* the little arrow toward the control */
+#tourhint .th-arrow { position: absolute; width: 10px; height: 10px; background: inherit; border: 1px solid var(--q-line);
+  -webkit-backdrop-filter: none; backdrop-filter: none; transform: rotate(45deg); }
+#tourhint .th-arrow[hidden] { display: none; }
+#tourhint[data-side="below"] .th-arrow { top: -6px; border-right: 0; border-bottom: 0; }
+#tourhint[data-side="above"] .th-arrow { bottom: -6px; border-left: 0; border-top: 0; }
+#tourhint[data-side="right"] .th-arrow { left: -6px; border-top: 0; border-right: 0; }
+#tourhint[data-side="left"] .th-arrow { right: -6px; border-left: 0; border-bottom: 0; }
+/* a soft ring round the control the hint is about (nothing else is dimmed) */
+#tourring { position: fixed; z-index: 1499; left: 0; top: 0; pointer-events: none; border-radius: 8px;
+  border: 1px solid rgba(138,182,255,.85); box-shadow: 0 0 0 3px rgba(138,182,255,.16), 0 0 18px rgba(138,182,255,.25);
+  opacity: 0; transition: opacity .25s ease, left .3s ease, top .3s ease, width .3s ease, height .3s ease; animation: tourpulse 2.4s ease-in-out infinite; }
+#tourring.on { opacity: 1; }
+#tourring[hidden] { display: none; }
+@keyframes tourpulse { 50% { box-shadow: 0 0 0 5px rgba(138,182,255,.08), 0 0 24px rgba(138,182,255,.18); } }
+@media (prefers-reduced-motion: reduce) { #tourhint, #tourring { transition: opacity .2s ease; animation: none; } }
+body.phone #tourhint { font-size: 12.5px; }
+body.phone #tourhint button { padding: 6px 11px; }
 
 #loadscreen { position: fixed; inset: 0; z-index: 2001; display: grid; place-items: center; padding: 0 16px; pointer-events: none;
   background: rgba(0,0,0,.8); opacity: 0; transition: opacity .35s ease; }
@@ -1696,11 +1782,10 @@ body.ambient.phone .amb-where { font-size: 18px; }
   <canvas id="hud" aria-hidden="true"></canvas>
   <div id="reticle" hidden></div>
   <div id="labels"></div>
-  <div id="hudline" aria-hidden="true"></div>
 
   <nav id="menubar" aria-label="Menu bar">
     <div class="menu app"><button aria-haspopup="true"><svg viewBox="0 0 40 28" aria-hidden="true"><circle cx="20" cy="14" r="8" fill="#222"/><ellipse cx="20" cy="14" rx="18" ry="5" fill="none" stroke="#222" stroke-width="2.4" transform="rotate(-16 20 14)"/></svg>Cassini OS</button>
-      <ul><li><button data-act="about">About Cassini OS</button></li><li class="sep"></li><li><button data-act="settings">Settings…<span class="kbd">⌘,</span></button></li><li class="sep"></li><li><button data-act="hud" role="menuitemcheckbox" aria-checked="true">Neon HUD</button></li><li><button data-act="autohide" role="menuitemcheckbox" aria-checked="true">Hide Interface When Idle</button></li></ul></div>
+      <ul><li><button data-act="about">About Cassini OS</button></li><li><button data-act="tour">Tour of Cassini OS</button></li><li class="sep"></li><li><button data-act="settings">Settings…<span class="kbd">⌘,</span></button></li><li class="sep"></li><li><button data-act="hud" role="menuitemcheckbox" aria-checked="true">Neon HUD</button></li><li><button data-act="autohide" role="menuitemcheckbox" aria-checked="true">Hide Interface When Idle</button></li></ul></div>
     <div class="menu"><button aria-haspopup="true">View</button>
       <ul>
         <li><button data-act="orbits" role="menuitemcheckbox" aria-checked="false">All Moons<span class="kbd">⌘M</span></button></li>
@@ -1729,7 +1814,7 @@ body.ambient.phone .amb-where { font-size: 18px; }
         <li><button data-act="win" data-win="wacard" role="menuitemcheckbox" aria-checked="true">Wide-angle Camera</button></li>
         <li><button data-act="win" data-win="moments" role="menuitemcheckbox" aria-checked="true">Moments</button></li>
       </ul></div>
-    <div class="menuright"><div id="tray"></div><button id="sgear" aria-pressed="false" aria-label="Settings" title="Settings (⌘,)"><svg viewBox="0 0 16 16" aria-hidden="true"><circle cx="8" cy="8" r="2.3"/><path d="M8 1.5v2M8 12.5v2M1.5 8h2M12.5 8h2M3.4 3.4l1.4 1.4M11.2 11.2l1.4 1.4M3.4 12.6l1.4-1.4M11.2 4.8l1.4-1.4"/></svg></button><span id="mclock">—</span></div>
+    <div class="menuright"><span id="mread" title="Cassini's altitude above the nearest body and its speed relative to it"></span><button id="gplay" aria-label="Pause" title="Pause (Space)"><svg viewBox="0 0 16 16" aria-hidden="true"><path class="pz" d="M5 3.5v9M11 3.5v9"/><path class="pl" d="M5 3l8 5-8 5z"/></svg></button><div id="tray"></div><button id="sgear" aria-pressed="false" aria-label="Settings" title="Settings (⌘,)"><svg viewBox="0 0 16 16" aria-hidden="true"><circle cx="8" cy="8" r="2.3"/><path d="M8 1.5v2M8 12.5v2M1.5 8h2M12.5 8h2M3.4 3.4l1.4 1.4M11.2 11.2l1.4 1.4M3.4 12.6l1.4-1.4M11.2 4.8l1.4-1.4"/></svg></button><span id="mclock">—</span></div>
   </nav>
 
   <section class="win frame img camwin" id="imgcard" data-cam="N" aria-label="Narrow-angle Camera">
@@ -1795,7 +1880,7 @@ body.ambient.phone .amb-where { font-size: 18px; }
           </div>
           <div class="clockbox">
             <div class="clock" id="clock">—</div>
-            <div class="sub"><span id="rel">—</span> · <span id="mday">—</span></div>
+            <div class="sub"><span id="rel">—</span><span class="relsep"> · </span><span id="mday">—</span></div>
           </div>
           <div class="tltools">
             <button class="tlstep" id="tlout" aria-label="Zoom the timeline out" title="Zoom out">−</button>
@@ -1902,7 +1987,7 @@ body.ambient.phone .amb-where { font-size: 18px; }
       <button id="segprep" title="Make every picture of this stretch ahead of time, so it plays smoothly at any frame rate">Pre-process</button>
       <button id="segstop" hidden>Stop</button>
       <button id="segplay" title="Play this stretch as a movie">▶ Play</button>
-      <label for="segfps">Frame rate</label><input type="range" id="segfps" min="2" max="30" step="1" aria-label="Movie frame rate"><span id="segfpsv"></span>
+      <label for="segfps">Frame rate</label><input type="range" id="segfps" min="1" max="30" step="1" aria-label="Movie frame rate"><span id="segfpsv"></span>
       <span class="grow"></span>
       <button id="segedit" title="Pick which frames go into this movie, and its look (Movie Editor)">Edit…</button>
       <button id="segexport" title="Make a video file of this stretch to download (E)">Save movie…</button>
@@ -2019,7 +2104,8 @@ body.ambient.phone .amb-where { font-size: 18px; }
   <div class="mebody">
     <div class="memain">
       <div id="mestage">
-        <canvas id="mecanvas" title="Double-click to fill the window"></canvas>
+        <div id="mecropbox" hidden><span id="mecroplabel"></span><i data-h="nw"></i><i data-h="ne"></i><i data-h="sw"></i><i data-h="se"></i></div>
+        <canvas id="mecanvas" title="Drag to move this frame (or the picked frames) · double-click to fill the window"></canvas>
         <span class="metag" id="metag"></span>
         <span id="meoff" hidden>Left out</span>
         <div id="meempty">Highlight a stretch of the timeline (drag across it), then Edit… on its bar.</div>
@@ -2031,12 +2117,24 @@ body.ambient.phone .amb-where { font-size: 18px; }
         <span id="mepos"></span>
         <div class="galseg" id="mesrc" role="group" aria-label="Picture shown"><button data-v="movie" title="The picture the film shows for this frame (mosaic, color, movie pass or processed)">As in the movie</button><button data-v="raw" title="The frame as Cassini took it">Raw frame</button></div>
         <span class="sp"></span>
+        <button class="galbtn go" id="mekeep" title="Keep only the picked frames: every other frame comes out of the movie (K)" hidden>Keep only</button>
         <button class="galbtn" id="metoggle" title="Take the picked frames out of the movie, or put them back (Delete)">Remove</button>
         <button class="galbtn" id="medl" title="Save this frame at full size, with the look, as a JPEG">Download frame</button>
       </div>
+      <div id="melevels" title="The movie's brightness, picture by picture. Drag a point to brighten or dim the movie there; double-click to add a point, double-click a point to take it out">
+        <canvas id="melvcanvas"></canvas><span class="lvtag" id="melvtag"></span>
+      </div>
+      <div id="metabs" role="tablist" aria-label="Camera of the movie" hidden></div>
       <div id="mestrip" role="listbox" aria-label="Frames of the movie" aria-multiselectable="true"></div>
     </div>
     <div class="meside" hidden>
+      <h4 style="margin-top:10px"><span id="meownh">This frame</span><span class="sp"></span><button id="meownclear" title="Give this frame (or the picked frames) the movie's look again">Reset</button></h4>
+      <div class="merow"><span>Exposure</span><input type="range" id="meown-ex" data-k="exposure" min="-4" max="4" step="0.05" aria-label="This frame's exposure"><span class="val"></span></div>
+      <div class="merow"><span>Contrast</span><input type="range" id="meown-ct" data-k="contrast" min="-100" max="100" step="1" aria-label="This frame's contrast"><span class="val"></span></div>
+      <div class="merow"><span>Saturation</span><input type="range" id="meown-sa" data-k="saturation" min="-100" max="100" step="1" aria-label="This frame's saturation"><span class="val"></span></div>
+      <div class="merow"><span>Warmth</span><input type="range" id="meown-wa" data-k="warmth" min="-100" max="100" step="1" aria-label="This frame's warmth"><span class="val"></span></div>
+      <div class="mechips" style="margin-top:7px"><button class="galbtn" id="meownedit">Edit this frame in Studio…</button></div>
+      <div class="menote" id="meownnote"></div>
       <h4><span>Pictures</span></h4>
       <div class="mechips" id="mepics" role="group" aria-label="Pictures in the movie">
         <button class="galbtn" data-v="movie" title="As the camera windows show them: mosaics, color pictures, movie passes, processed frames">As in the movie</button>
@@ -2044,8 +2142,8 @@ body.ambient.phone .amb-where { font-size: 18px; }
         <button class="galbtn" data-v="processed" title="Every frame in every filter on its own, made by the pipeline (stacked, calibrated), never put together">Every frame, processed</button>
         <button class="galbtn" data-v="raw" title="Every frame in every filter as Cassini took it: nothing stacked, calibrated or put together">Every frame, raw</button>
       </div>
-      <h4><span>Cameras</span></h4>
-      <div class="mechips" id="mecams"></div>
+      <h4 data-cams><span>Cameras</span></h4>
+      <div class="mechips" id="mecams" data-cams></div>
       <h4><span>Targets</span><span class="sp"></span><button id="metgall">All</button></h4>
       <div class="mechips" id="metargets"></div>
       <h4><span>Filters</span><span class="sp"></span><button id="meflall">All</button></h4>
@@ -2054,10 +2152,24 @@ body.ambient.phone .amb-where { font-size: 18px; }
       <h4><span>Removed by hand</span><span class="sp"></span><button id="merestore">Put all back</button></h4>
       <div class="menote" id="medropped" style="margin-top:0"></div>
       <label class="mecheck"><input type="checkbox" id="meshowout"> Show left-out frames</label>
-      <h4><span>Look</span><span class="sp"></span><button id="melookclear">Clear</button></h4>
+      <h4><span>Movie look</span><span class="sp"></span><button id="melookclear">Clear</button></h4>
       <div class="menote" id="melook" style="margin-top:0"></div>
       <div class="mechips" style="margin-top:6px"><button class="galbtn" id="melookedit">Edit the look in Studio…</button></div>
       <div class="menote">The look goes on every frame: the preview, Play, each downloaded frame and the saved movie.</div>
+      <h4><span>Exposure</span><span class="sp"></span><button id="melvclear" title="Take out every level point">Clear</button></h4>
+      <div class="merow"><span>Level here</span><input type="range" id="melvhere" min="-2" max="2" step="0.05" aria-label="Exposure level at the frame in front"><span class="val" id="melvherev"></span></div>
+      <div class="merow"><span>Even out</span><input type="range" id="meeven" min="0" max="30" step="1" aria-label="Even out the brightness over this many pictures"><span class="val" id="meevenv"></span></div>
+      <div class="menote" id="melvnote"></div>
+      <h4><span>Framing</span><span class="sp"></span><button id="mefrclear" title="Take the crop off and put every nudged frame back">Reset</button></h4>
+      <div class="galseg" id="mectr" role="group" aria-label="Auto center for the movie"><button data-v="" title="Each camera window's Auto center setting">As the windows</button><button data-v="1" title="Every picture centered on its body (north up), movie passes and single pictures alike">On</button><button data-v="0" title="Every picture as Cassini pointed">Off</button></div>
+      <div class="mechips" style="margin-top:7px"><button class="galbtn" id="mecrop" aria-pressed="false" title="Draw the crop on the picture">Crop…</button></div>
+      <div class="mecropctl" id="mecropctl" hidden>
+        <div class="galseg" id="measpect" role="group" aria-label="Crop shape"><button data-v="free">Free</button><button data-v="1">Square</button><button data-v="1.7778">16:9</button><button data-v="1.3333">4:3</button><button data-v="pic">Picture</button></div>
+        <label class="mecheck" style="margin-top:2px"><input type="checkbox" id="meglide"> Start and end crop</label>
+        <div class="galseg" id="mecropend" role="group" aria-label="Which crop" hidden><button data-v="start" title="The crop at the movie's first picture">Start</button><button data-v="end" title="The crop at the movie's last picture">End</button></div>
+        <button class="galbtn" id="mecropdone">Done</button>
+      </div>
+      <div class="menote" id="menudged"></div>
     </div>
   </div>
   <div class="mefoot">
@@ -2323,8 +2435,8 @@ body.ambient.phone .amb-where { font-size: 18px; }
   D({ key: "interface.labels", section: "Interface", label: "Body labels", type: "toggle", value: true,
       hint: "Names and ranges next to Saturn, the moons and Cassini, and the target bracket." });
   cls("interface.labels", "s-nolabels", false);
-  D({ key: "interface.hudline", section: "Interface", label: "Flight data strip", type: "toggle", value: true,
-      hint: "Target, altitude, speed, camera and pointing along the top of the view." });
+  D({ key: "interface.hudline", section: "Interface", label: "Flight readout in the menu bar", type: "toggle", value: true,
+      hint: "Cassini's altitude above the nearest body and its speed relative to it, in the menu bar. Off, they show under the clock in the dock." });
   cls("interface.hudline", "s-nohudline", false);
   // Processing: every step the picture pipeline takes, in the order it takes them, each on by default and each
   // switched off on its own to see what it does (the camera windows read cameras.*; processing.* go to the frame
@@ -2340,6 +2452,12 @@ body.ambient.phone .amb-where { font-size: 18px; }
       hint: "Lines a frame lost on its way to Earth are filled from the lines round them, so they don't show as black stripes or throw off the stretch. Off leaves them black." },
     { key: "processing.calibrate", step: "calibrate", label: "Calibrate",
       hint: "Every frame is turned into reflectance (I/F: bias, exposure, gain, filter and distance from the Sun taken out) and drawn on one display scale, so filters and mosaic tiles match and colors are true. Off shows each frame on the archive's own stretch, as it came down." },
+    { key: "processing.dark", step: "dark", label: "Dark current",
+      hint: "Takes out the charge the camera's detector gathers without any light, which grows with the exposure and with how long each line waits to be read out, with the camera team's own dark model. Most visible on long exposures: night sides, rings, Titan's surface. Off leaves them in. Needs Calibrate." },
+    { key: "processing.flat", step: "flat", label: "Flat field",
+      hint: "Takes out what the camera itself adds to every picture, with the mission's own calibration maps: the dust rings (shadows of dust on the narrow-angle camera's optics, more of them as the mission went on), the fine mottle that appeared in late 2003, the darker corners and the faint column pattern of the detector. Off leaves them in. Needs Calibrate." },
+    { key: "processing.hotpix", step: "hotpix", label: "Hot pixels",
+      hint: "The detector pixels that went hot or dead over the mission (the camera team's lists, and the far more the archive's own frames show, month by month) are filled in from the pixels round them, so they don't show as dots that stay put while the stars and the moon move in a movie. A star that lands exactly on one is filled in too. Off leaves them in. Needs Calibrate." },
     { key: "processing.align", step: "align", label: "Align",
       hint: "A color set's channels, taken seconds or minutes apart, are moved onto one another, and a mosaic's filters onto each other's tiles. Off lays them over one another as the camera pointed, so moving bodies show colored fringes." },
     { key: "processing.blend", step: "blend", label: "Blend mosaic seams",
@@ -2445,6 +2563,12 @@ body.ambient.phone .amb-where { font-size: 18px; }
         : v < 604800 ? u(v / 86400, "day", "days") : v < 2592000 ? u(v / 604800, "wk", "wk") : u(v / 2592000, "month", "months");
     }
   };
+  // movie mode's speed scale (movie.html), which the same dock slider switches to while movie mode is on: pictures a
+  // second, from one a second to 30, on a log scale that lands on the usual frame rates
+  const MF = window.cassiniMovieFps = {
+    min: 1, max: 30, stops: [1, 2, 3, 4, 5, 6, 8, 10, 12, 15, 20, 24, 30],
+    label: v => `${+(+v).toFixed(v < 10 && v % 1 ? 1 : 0)} fps`
+  };
   D({ key: "playback.speed", section: "Playback", label: "Starting speed", type: "range", log: true, value: 600, min: SP.min, max: SP.max, stops: SP.stops, format: SP.label,
       hint: "Mission time per second of playback when the page opens; the speed slider in the replay window changes it while you watch. Jumping to a moment still picks its own speed." });
   D({ key: "playback.span", section: "Playback", label: "Timeline shows", type: "choice", value: 432000,
@@ -2462,6 +2586,9 @@ body.ambient.phone .amb-where { font-size: 18px; }
   mirror("view.allOrbits", "allorbits");
   D({ key: "view.enlarge", section: "View", label: "Enlarge moons ×10", type: "toggle", value: false, hint: "Moons drawn ten times their size so they can be seen from afar." });
   mirror("view.enlarge", "enlarge");
+  // the viewer's camera cones read view.conesEverywhere
+  D({ key: "view.conesEverywhere", section: "View", label: "Camera cones on every view", type: "toggle", value: false,
+      hint: "Draw the cameras' fields of view when looking at a body too. Off shows them only while the view is on Cassini." });
   // a new key, so a saved "off" from when follow started off does not carry over
   D({ key: "view.followcam", section: "View", label: "Follow camera", type: "toggle", value: true, hint: "Look where Cassini's camera points (needs the pointing data)." });
   mirror("view.followcam", "followcam");
@@ -2491,8 +2618,9 @@ body.ambient.phone .amb-where { font-size: 18px; }
   D({ key: "view.plumeBrightness", section: "View", label: "Plume brightness", type: "range", value: 1, min: 0.25, max: 4, step: 0.05,
       format: v => `${Math.round(v * 100)}%`, hint: "How bright the plumes are drawn. 100% is subtle, as in an unstretched picture; higher shows the faint outer plume the way stretched pictures do." });
   // movie mode (movie.html) is a rule for the clock, so its speed sits with the playback settings
-  D({ key: "movie.fps", section: "Playback", label: "Movie mode speed", type: "range", value: 8, min: 2, max: 30, step: 1, unit: "fps",
-      hint: "Movie mode (M) skips the time between pictures and steps from one picture to the next this many times a second. The camera windows show every picture as they always do." });
+  // Sam 2026-10-28: movie mode is about watching the pictures, so it starts slow (5) and the dock slider sets it
+  D({ key: "movie.fps", section: "Playback", label: "Movie mode speed", type: "range", log: true, value: 5, was: [8], min: MF.min, max: MF.max, stops: MF.stops, format: MF.label,
+      hint: "Movie mode (M) skips the time between pictures and steps from one picture to the next this many times a second. While movie mode is on, the speed slider in the replay window sets this instead of mission time per second. The camera windows show every picture as they always do." });
   // what counts as a picture (head-quiet.html complete, cameraFeed)
   D({ key: "movie.completeFrames", section: "Playback", label: "Complete color pictures only", type: "toggle", value: true,
       hint: "Movie mode steps from one finished picture to the next: a color set shows once, as its color picture when its last filter is taken, never the black-and-white frames on the way. Off steps through every frame." });
@@ -2839,7 +2967,13 @@ body.ambient.phone .amb-where { font-size: 18px; }
 
   // windows: drag by the title bar, click to bring forward, close / minimize / zoom
   let z = 30;
-  function front(w) { document.querySelectorAll(".win").forEach(x => x.classList.toggle("front", x === w)); w.style.zIndex = ++z; }
+  function front(w) {
+    const all = [...document.querySelectorAll(".win")];
+    all.forEach(x => x.classList.toggle("front", x === w));
+    // the stack is renumbered before it reaches the menu bar (z-index 1000), so the bar and its play/pause stay on top
+    if (z > 900) { z = 30; all.filter(x => x.style.zIndex).sort((a, b) => a.style.zIndex - b.style.zIndex).forEach(x => { x.style.zIndex = ++z; }); }
+    w.style.zIndex = ++z;
+  }
   function syncMenu() {
     document.querySelectorAll('[data-act="win"]').forEach(b => b.setAttribute("aria-checked", String(!$(b.dataset.win).hidden)));
     const tray = $("tray"); tray.innerHTML = "";
@@ -3007,11 +3141,31 @@ body.ambient.phone .amb-where { font-size: 18px; }
 
   // resting: after a few seconds without the pointer or keyboard, the interface fades out of the way (Settings: Interface)
   const S = window.cassiniSettings;
+  // pinned: while the simulation is paused, a stretch of the timeline is highlighted (a movie picked), or an editor is
+  // open (Movie Editor, Cassini Studio, Export, the Gallery), no camera window goes away: the interface does not fade
+  // out while editing, a camera window keeps its picture past the stale time, body windows do not close, and no
+  // camera window is put away to make room (segment.html, highlights.html, bodywin.html ask cassiniPin)
+  const EDITORS = ["mecard", "stucard", "excard", "galcard"];
+  const isUp = id => { const w = $(id); return !!w && !w.hidden && !w.dataset.min; };
+  const editing = () => EDITORS.some(isUp) || (!!$("segbar") && !$("segbar").hidden);
+  const pinned = () => editing() || (typeof state !== "undefined" && !state.playing);
+  window.cassiniPin = { pinned, editing };
   let autoHide = true, idleTimer = 0;
   function wake() {
     document.body.classList.remove("idle"); clearTimeout(idleTimer);
-    if (autoHide) idleTimer = setTimeout(() => { if (!document.querySelector(".menu.open, .win:hover")) document.body.classList.add("idle"); else wake(); }, S.get("interface.idleDelay") * 1000);
+    if (autoHide) idleTimer = setTimeout(() => { if (!document.querySelector(".menu.open, .win:hover") && !editing()) document.body.classList.add("idle"); else wake(); }, S.get("interface.idleDelay") * 1000);
   }
+  // the menu bar's play/pause: the same as the dock's (and Space), whatever is open; it follows the dock's button
+  const gplay = $("gplay");
+  gplay.addEventListener("click", e => { e.stopPropagation(); if (typeof setPlaying === "function") setPlaying(!state.playing); gplay.blur(); });
+  function syncPlay() {
+    const paused = typeof state !== "undefined" && !state.playing;
+    gplay.classList.toggle("paused", paused);
+    gplay.setAttribute("aria-label", paused ? "Play" : "Pause"); gplay.title = (paused ? "Play" : "Pause") + " (Space)";
+  }
+  new MutationObserver(syncPlay).observe($("play"), { childList: true, characterData: true, subtree: true });
+  // (and every quarter second, for the clock stopped without the dock's button, as by a cutscene)
+  setInterval(() => { document.body.classList.toggle("pinned", pinned()); syncPlay(); }, 250);
   S.on("interface.autohide", v => { autoHide = v; document.querySelector('[data-act="autohide"]').setAttribute("aria-checked", String(v)); wake(); });
   S.on("interface.idleDelay", () => wake());
   S.on("interface.hud", v => { document.body.classList.toggle("nohud", !v); document.querySelector('[data-act="hud"]').setAttribute("aria-checked", String(v)); });
@@ -3084,40 +3238,68 @@ body.ambient.phone .amb-where { font-size: 18px; }
   // set the speed last (a moment's jump, a link, the setting). Past playback.picturesUpTo its track is dimmer: the
   // camera windows stop loading pictures there (tooFast, below). Under the speed: the rate the clock really runs at
   // while a burst or a picture still being made slows it, so a new speed always shows that it took.
-  const SP = window.cassiniSpeed;
-  const spPos = v => Math.round(1000 * Math.log(Math.min(SP.max, Math.max(SP.min, v)) / SP.min) / Math.log(SP.max / SP.min));
-  const spAt = p => { const v = SP.min * Math.pow(SP.max / SP.min, p / 1000); return SP.stops.reduce((a, b) => Math.abs(Math.log(b / v)) < Math.abs(Math.log(a / v)) ? b : a); };
+  // In movie mode (movie.html) the clock steps picture to picture, so the same slider switches to movie mode's own
+  // scale, pictures a second (window.cassiniMovieFps, the movie.fps setting), and back to mission time when it ends.
+  const SP = window.cassiniSpeed, MF = window.cassiniMovieFps;
+  const inMovie = () => !!(MF && window.cassiniMovie && cassiniMovie.on);
+  const spScale = () => inMovie() ? MF : SP;
+  const spNow = () => inMovie() ? cassiniMovie.fps() : state.speed;
+  const spSet = v => { if (inMovie()) { if (v !== cassiniMovie.fps()) cassiniMovie.setFps(v); } else if (v !== state.speed) setSpeed(v); };
+  const spPos = (v, K = spScale()) => Math.round(1000 * Math.log(Math.min(K.max, Math.max(K.min, v)) / K.min) / Math.log(K.max / K.min));
+  const spAt = (p, K = spScale()) => { const v = K.min * Math.pow(K.max / K.min, p / 1000); return K.stops.reduce((a, b) => Math.abs(Math.log(b / v)) < Math.abs(Math.log(a / v)) ? b : a); };
   let spShown = "", spHeld = false;
   function syncSpeedTool() {
-    const v = state.speed, cap = picturesCap(), movie = window.cassiniMovie && cassiniMovie.on, fast = tooFast();
-    const rate = window.cassiniPlayRate ? cassiniPlayRate() : v, slowed = state.playing && !movie && !fast && rate < v * 0.9;
-    const eff = movie ? "movie mode" : fast ? "pictures paused" : slowed ? `now ${SP.label(+rate.toPrecision(2))}` : "";
+    if (inMovie()) return syncMovieSpeed();
+    const v = state.speed, cap = picturesCap(), fast = tooFast();
+    const rate = window.cassiniPlayRate ? cassiniPlayRate() : v, slowed = state.playing && !fast && rate < v * 0.9;
+    const eff = fast ? "pictures paused" : slowed ? `now ${SP.label(+rate.toPrecision(2))}` : "";
     const key = `${v}|${cap}|${eff}`;
     if (key === spShown) return;
     spShown = key;
     const el = $("speed");
-    if (!spHeld) el.value = spPos(v);
-    el.style.setProperty("--cut", cap >= SP.max ? "100%" : (spPos(cap) / 10).toFixed(1) + "%");
+    if (!spHeld) el.value = spPos(v, SP);
+    el.style.setProperty("--cut", cap >= SP.max ? "100%" : (spPos(cap, SP) / 10).toFixed(1) + "%");
+    el.setAttribute("aria-label", "Playback speed");
     el.setAttribute("aria-valuetext", SP.label(v));
     $("speedv").textContent = SP.label(v);
     $("speedeff").hidden = !eff; $("speedeff").textContent = eff;
     $("speedtool").classList.toggle("nopics", fast);
+    $("speedtool").classList.remove("movie");
     $("speedtool").title = `Playback speed: ${SP.label(v)} of mission time each second`
       + (cap < SP.max ? `. Pictures load up to ${SP.label(cap)} (Settings › Playback)` : "")
       + (slowed ? `. Slowed to ${SP.label(+rate.toPrecision(2))} while the camera windows catch up on pictures` : "");
   }
-  $("speed").addEventListener("input", e => { const v = spAt(+e.target.value); if (v !== state.speed) setSpeed(v); });
+  // movie mode: the frame rate set, and under it the pictures a second really shown when that is lower (the camera
+  // windows waiting on the frame server; movie mode slows, it never skips a picture)
+  function syncMovieSpeed() {
+    const v = cassiniMovie.fps(), real = state.playing ? cassiniMovie.rate() : 0;
+    const eff = real && real < v - 0.5 ? `showing ${real < 10 ? real.toFixed(1) : Math.round(real)}/s` : "movie mode";
+    const key = `movie|${v}|${eff}`;
+    if (key === spShown) return;
+    spShown = key;
+    const el = $("speed");
+    if (!spHeld) el.value = spPos(v, MF);
+    el.style.setProperty("--cut", "100%");
+    el.setAttribute("aria-label", "Movie mode speed");
+    el.setAttribute("aria-valuetext", `${MF.label(v)}, pictures a second`);
+    $("speedv").textContent = MF.label(v);
+    $("speedeff").hidden = false; $("speedeff").textContent = eff;
+    $("speedtool").classList.remove("nopics");
+    $("speedtool").classList.add("movie");
+    $("speedtool").title = `Movie mode speed: ${MF.label(v)}, pictures a second (the time between pictures is skipped). Leave movie mode (M) for mission time a second`;
+  }
+  $("speed").addEventListener("input", e => spSet(spAt(+e.target.value)));
   // while it is dragged the thumb follows the pointer; let go, it settles on the speed it landed on
   $("speed").addEventListener("pointerdown", () => { spHeld = true; });
   window.addEventListener("pointerup", () => { if (spHeld) { spHeld = false; spShown = ""; } });
-  // the arrow keys step from one round speed to the next, Home and End go to either end
+  // the arrow keys step from one round speed (or frame rate) to the next, Home and End go to either end
   $("speed").addEventListener("keydown", e => {
     const n = { ArrowLeft: -1, ArrowDown: -1, ArrowRight: 1, ArrowUp: 1, PageDown: -3, PageUp: 3, Home: -99, End: 99 }[e.key];
     if (!n) return;
-    const down = SP.stops.filter(v => v < state.speed), up = SP.stops.filter(v => v > state.speed);
+    const now = spNow(), K = spScale(), down = K.stops.filter(v => v < now), up = K.stops.filter(v => v > now);
     const v = n < 0 ? down[Math.max(0, down.length + n)] : up[Math.min(up.length, n) - 1];
     e.preventDefault();
-    if (v !== undefined) setSpeed(v);
+    if (v !== undefined) spSet(v);
   });
   $("tlout").addEventListener("click", () => zoomTimeline((state.view[1] - state.view[0]) * 2));
   $("tlin").addEventListener("click", () => zoomTimeline((state.view[1] - state.view[0]) / 2));
@@ -3265,11 +3447,11 @@ body.ambient.phone .amb-where { font-size: 18px; }
     const p = Math.max(0, Math.min(1, (ms - START) / (END - START)));
     $("mprog").style.width = (p * 100).toFixed(2) + "%";
     $("mpct").textContent = `Mission ${(p * 100).toFixed(1)}% complete`;
-    const b = document.querySelectorAll("#rel b"), ref = ($("rel").textContent.match(/above (\w+)/) || [])[1] || "";
+    const b = document.querySelectorAll("#rel b");
     if (b.length === 2) {
       state.vrel = parseFloat(b[1].textContent);
-      const cam = (($("imgv").textContent.split("·")[1]) || "—").trim().toUpperCase();
-      $("hudline").innerHTML = `<div><span>TGT</span>${ref.toUpperCase()}</div><div><span>ALT</span>${b[0].textContent.toUpperCase()}</div><div><span>VREL</span>${b[1].textContent.toUpperCase()}</div><div><span>CAM</span>${cam}</div><div><span>PTG</span>${window.cassiniPointing === "CK" ? "CK ATTITUDE" : "DISH TO EARTH"}</div>`;
+      const read = $("rel").innerHTML.replace(/^Cassini is /, "");
+      if ($("mread").innerHTML !== read) $("mread").innerHTML = read;
     }
     $("sbar").textContent = $("imgm").textContent.split("·").pop().trim();
   };
@@ -4890,7 +5072,9 @@ body.ambient.phone .amb-where { font-size: 18px; }
       // which closes by itself) keeps its picture
       const stale = S.get("cameras.stale") * (lastK >= 0 ? importance() : 1);
       if (k < 0 && holdUp && up) { field("status").textContent = "Waiting for the next picture"; return; }
-      if (k < 0 || (!holdUp && state.et - catalog.et[k] > stale * 3600)) {
+      // (while pinned, cassiniPin, a picture already up stays however old it gets)
+      const keep = lastK >= 0 && well.classList.contains("has-frame") && window.cassiniPin && cassiniPin.pinned();
+      if (k < 0 || (!holdUp && !keep && state.et - catalog.et[k] > stale * 3600)) {
         field("status").textContent = k < 0 ? "Camera" : `Last frame ${fmtDur(state.et - catalog.et[k])} ago`;
         strip(null); filmstrip(-1);
         if (lastK !== -1) {
@@ -5406,7 +5590,7 @@ body.ambient.phone .amb-where { font-size: 18px; }
   const S = window.cassiniSettings;
   const opt = (key, dflt) => (S && S.get(key) !== undefined ? S.get(key) : dflt);
   // range.fps (start, below) plays a stretch at its own rate, under one picture a second if it likes (ambient mode)
-  const fps = () => M.fps ? Math.min(30, Math.max(0.05, M.fps)) : Math.min(30, Math.max(1, +opt("movie.fps", 8) || 8));
+  const fps = () => M.fps ? Math.min(30, Math.max(0.05, M.fps)) : Math.min(30, Math.max(1, +opt("movie.fps", 5) || 5));
   // A step waits for the camera windows (Sam: movie mode slows, it never skips a picture): while a window has not
   // yet put up the picture the clock is at (the frame server is still making it: a cold composite, a mosaic's new
   // tile), the next step waits. cassiniFeeds.behind stops counting a picture that has been stuck for seconds, so a
@@ -5458,12 +5642,14 @@ body.ambient.phone .amb-where { font-size: 18px; }
   // paused in the background (away.html): the step carries on where it was, by the time away
   document.addEventListener("cassini:away", e => { if (!e.detail.away) { M.stepAt += e.detail.ms; M.cutAt += e.detail.ms; } });
 
-  // the status line under the timeline says movie mode is on, how fast, and how much time a cut left out
+  // the status line under the timeline says movie mode is on, how fast (in pictures a second, in place of the mission
+  // time a second the clock does not run at here), and how much time a cut left out
   const hud = window.studyHud;
   window.studyHud = ms => {
     if (hud) hud(ms);
     if (!M.on) return;
     const el = $("mday"); if (!el) return;
+    if (window.cassiniSpeed) el.textContent = el.textContent.replace(` · ${cassiniSpeed.label(state.speed)}`, "");
     // the frame rate set, and the pictures a second it really shows when that is lower (waiting for the server)
     const real = state.playing ? shownRate(performance.now()) : 0;
     let t = ` · movie, ${fps()} fps`;
@@ -5495,10 +5681,16 @@ body.ambient.phone .amb-where { font-size: 18px; }
     if (M.slow) { M.slow = false; document.dispatchEvent(new CustomEvent("cassini:movie-slow", { detail: { slow: false, share: 0, et: state.et } })); }
     $("movie").setAttribute("aria-pressed", "false");
   }
-  const toggle = () => (M.on ? stop() : start(true));
-  // fps: the frame rate (the movie.fps setting, Settings > Playback; set it with cassiniSettings.set("movie.fps", n))
+  // the Movie button, M and Go > Movie mode: going in pauses (Sam: movie mode is for watching the pictures, so it
+  // waits on the first one for play at its own speed, pictures a second on the dock slider); coming out keeps playing
+  // or paused as it was, at the mission time a second the slider showed before
+  const toggle = () => { if (M.on) stop(); else { setPlaying(false); start(false); } };
+  // the dock slider in movie mode: a rate the viewer picks wins over a stretch's own rate (range.fps)
+  function setFps(v) { M.fps = 0; if (S) S.set("movie.fps", v); }
+  // fps: the frame rate (the movie.fps setting, Settings > Playback; set it with cassiniSettings.set("movie.fps", n)
+  // or setFps(n), which also drops a stretch's own rate)
   // rate(): the pictures a second movie mode has really shown over the last few seconds (0 when it has not stepped)
-  window.cassiniMovie = { start, stop, get on() { return M.on; }, get slow() { return M.slow; }, fps, rate: () => shownRate(performance.now()), state: M };
+  window.cassiniMovie = { start, stop, get on() { return M.on; }, get slow() { return M.slow; }, fps, setFps, rate: () => shownRate(performance.now()), state: M };
 
   // ---- controls ----
   $("movie").addEventListener("click", toggle);
@@ -5528,7 +5720,7 @@ body.ambient.phone .amb-where { font-size: 18px; }
   const F = window.cassiniFeeds, WM = window.cassiniWM;
   if (!F || !WM) return;
   const S = window.cassiniSettings;
-  const LS = "cassini-os-bodywin-v1";
+  const LS = "cassini-os-bodywin-v2";   // v2: off again for everyone (Sam 2026-10-28), whatever v1 had
   // settings: in the Settings window when the page has one, otherwise remembered here and switched from the Window menu
   let own = {};
   try { own = JSON.parse(localStorage.getItem(LS)) || {}; } catch (e) {}
@@ -5540,8 +5732,10 @@ body.ambient.phone .amb-where { font-size: 18px; }
   };
   const saveOwn = () => { if (S) return; try { localStorage.setItem(LS, JSON.stringify({ on: B.on, linger: B.linger, max: B.max, room: B.room, perCam: B.perCam })); } catch (e) {} };
   if (S) {
-    B.on = !!S.define({ key: "cameras.bodyWindows", section: "Cameras", label: "A window for each body", type: "toggle", value: false,
-      hint: "Each target Cassini images gets its own narrow-angle and wide-angle windows. They stay up while the screen is calm and make way for new ones when it gets busy." });
+    // a new key, so the per-body windows start off for everyone again, also where cameras.bodyWindows was saved on:
+    // the two camera windows are the default (Sam 2026-10-28)
+    B.on = !!S.define({ key: "cameras.bodyWindowsOptIn", section: "Cameras", label: "Extra windows for each body", type: "toggle", value: false,
+      hint: "Off: one narrow-angle and one wide-angle window. On: each target Cassini images gets its own narrow-angle and wide-angle windows instead, up to the number below for each camera." });
     B.perCam = +S.define({ key: "cameras.bodyWindowsPerCamera", section: "Cameras", label: "Windows per camera", type: "range", value: 2, min: 1, max: 4, step: 1,
       hint: "The most body windows each camera has up at once: the target it has just imaged, and the ones before it. A newer target takes an older window's place." });
     B.room = +S.define({ key: "cameras.bodyWindowRoom", section: "Cameras", label: "Body windows before they make way", type: "range", value: 4, min: 1, max: 12, step: 1,
@@ -5571,7 +5765,7 @@ body.ambient.phone .amb-where { font-size: 18px; }
   }
   const camWins = () => ["imgcard", "wacard"].map($).filter(Boolean);
   if (S) {
-    S.on("cameras.bodyWindows", v => { if (B.started) setOn(v); });
+    S.on("cameras.bodyWindowsOptIn", v => { if (B.started) setOn(v); });
     S.on("cameras.bodyWindowLinger", v => { B.linger = +v; });
     S.on("cameras.bodyWindowMax", v => { B.max = +v; });
     S.on("cameras.bodyWindowRoom", v => { B.room = +v; });
@@ -5741,7 +5935,9 @@ body.ambient.phone .amb-where { font-size: 18px; }
     show = show.filter(k => capped.includes(k));
     show = show.concat(held);
     const swapped = new Set(swaps.values());
-    for (const k of [...B.wins.keys()]) if (!show.includes(k) && !swapped.has(k)) close(k);
+    // while pinned (paused, a stretch highlighted, an editor open: cassiniPin) no window closes by itself
+    const pin = window.cassiniPin && cassiniPin.pinned();
+    for (const k of [...B.wins.keys()]) if (!show.includes(k) && !swapped.has(k) && !pin) close(k);
     // oldest target first, so the newest windows land on top; the narrow-angle window first, so the wide-angle one sits beside it
     for (const name of [...new Set(bodies.concat(held.map(k => k.split("|")[0])))].reverse()) for (const cam of CAMS) {
       const k = key(name, cam); if (!show.includes(k)) continue;
@@ -6013,7 +6209,8 @@ body.ambient.phone .amb-where { font-size: 18px; }
     for (const [cam, id] of Object.entries(CAMS)) {
       const w = $(id); if (!w) continue;
       if (e.cams && e.cams[cam]) { if (w.hidden || w.classList.contains("shaded")) window.cassiniWM.restore(w); }
-      else if (!w.hidden && e.kind !== "milestone") { w.hidden = true; H.tucked.push(w); }
+      // (not while editing, cassiniPin: then no camera window is put away)
+      else if (!w.hidden && e.kind !== "milestone" && !(window.cassiniPin && cassiniPin.editing())) { w.hidden = true; H.tucked.push(w); }
     }
     if (window.cassiniWM) window.cassiniWM.syncMenu();
     // a phone has no room for the list while a highlight plays
@@ -6556,7 +6753,7 @@ body.ambient.phone .amb-where { font-size: 18px; }
         hint: "Pixels per camera in an exported film; 1024 is a full Cassini frame. Above 1024, mosaics are drawn up to that size, each only as big as its pass has detail for." });
     D({ key: "export.full", label: "Mosaics at full resolution", type: "toggle", value: false,
         hint: "Picture size Full: a mosaic or mosaic movie keeps every pixel its frames took (up to 4096 px a side) instead of fitting 1024. Extra work on the frame server, made only when asked for: pre-process the stretch first." });
-    D({ key: "export.sound", label: "Sound", type: "toggle", value: true, hint: "Exported films carry the picture sounds, set as in Settings > Sound." });
+    D({ key: "export.sound", label: "Sound", type: "toggle", value: false, was: [true], hint: "Exported films carry the picture sounds, set as in Settings > Sound." });
     D({ key: "export.caption", label: "Captions", type: "toggle", value: true, hint: "A strip under each camera with the time, target, filters and kind of picture." });
   }
   const opt = (k, d) => (S && S.get(k) !== undefined ? S.get(k) : d);
@@ -6658,7 +6855,7 @@ body.ambient.phone .amb-where { font-size: 18px; }
   // ---------- what the film will be: the server's plan, asked for as the choices change ----------
   const params = () => {
     const q = new URLSearchParams({ from: iso(X.a), until: iso(X.b), cams: X.cams || "NW", fps: opt("export.adaptive", true) ? "auto" : String(opt("export.fps", 12)),
-      size: opt("export.full", false) ? "full" : String(opt("export.size", 1024)), sound: opt("export.sound", true) ? "1" : "0", caption: opt("export.caption", true) ? "1" : "0" });
+      size: opt("export.full", false) ? "full" : String(opt("export.size", 1024)), sound: opt("export.sound", false) ? "1" : "0", caption: opt("export.caption", true) ? "1" : "0" });
     // Whole mosaics (Settings > Movie): a mosaic movie's film shows only its whole laps (export.py whole=); the Movie
     // Editor's cut and look for this stretch (movieedit.html): frames left out, and the look on every picture
     return q.toString() + window.cassiniLook() + (window.cassiniMovieStyle ? window.cassiniMovieStyle() : "") + (opt("movies.mosaicFrames", "rolling") === "whole" ? "&whole=1" : "") + (window.cassiniMovieCut ? window.cassiniMovieCut() : "");
@@ -6687,7 +6884,7 @@ body.ambient.phone .amb-where { font-size: 18px; }
         // (a Full film, mostly a mosaic's dark sky, about half that a pixel: 3.6 MB for 19 s at 3078 x 3222)
         const mb = p.frames ? Math.max(0.1, p.seconds * (0.03 + (p.full ? 0.017 : 0.035) * p.width * p.height / (1024 * 1072))) : 0;
         const edited = window.cassiniMovieCut && window.cassiniMovieCut() ? " · edited in the Movie Editor" : "";
-        $("exsum").innerHTML = p.count ? `${p.count.toLocaleString()} pictures (NAC ${n.N.toLocaleString()}, WAC ${n.W.toLocaleString()}) · film ${fmtDur(p.seconds)} at ${p.width}×${p.height} · about ${mb.toFixed(mb < 10 ? 1 : 0)} MB${edited}${fullNote(p.full)}` : `<span class="warn">No pictures in this stretch.</span>`;
+        $("exsum").innerHTML = p.count ? `${p.count.toLocaleString()} pictures (NAC ${n.N.toLocaleString()}, WAC ${n.W.toLocaleString()}) · film ${fmtDur(p.seconds)} at ${p.width}×${p.height} · about ${mb.toFixed(mb < 10 ? 1 : 0)} MB${p.seconds > SOUND_MOST ? " · without sound (over 30 min)" : ""}${edited}${fullNote(p.full)}` : `<span class="warn">No pictures in this stretch.</span>`;
         $("exgo").disabled = !p.count;
       } catch (err) { $("exsum").innerHTML = `<span class="warn">No frame server at ${FRAMES}.</span>`; }
     }, 250);
@@ -6718,7 +6915,7 @@ body.ambient.phone .amb-where { font-size: 18px; }
       const r = await fetch(`${FRAMES}/export?${params()}`, { method: "POST" }), job = await r.json();
       if (!r.ok) return setState(job.error || "The server refused the export.", 0);
       X.job = job;
-      if (opt("export.sound", true) && !job.audio && job.state !== "failed") soundtrack(job.id, plan);
+      if (opt("export.sound", false) && !job.audio && job.state !== "failed") soundtrack(job.id, plan);
       follow(job);
     } catch (err) { setState("No frame server.", 0); }
   }
@@ -6756,10 +6953,14 @@ body.ambient.phone .amb-where { font-size: 18px; }
     $("excopy").onclick = async () => { try { await navigator.clipboard.writeText(url); $("excopy").textContent = "Copied"; setTimeout(() => { $("excopy").textContent = "Copy link"; }, 1500); } catch (e) { prompt("Film link", url); } };
   }
 
-  // the soundtrack: the film's picture list played through the live sound's synth, offline, sent to the job as a WAV
+  // the soundtrack: the film's picture list played through the live sound's synth, offline, sent to the job as a WAV.
+  // Only up to SOUND_MOST seconds of film: the offline synth holds the whole track in the tab's memory (an hour is
+  // ~1.4 GB), so a longer film (a month of pictures) is saved silent, as the plan's summary says, instead of
+  // taking the tab down with it
+  const SOUND_MOST = 30 * 60;
   async function soundtrack(id, plan) {
     const snd = window.cassiniSound;
-    if (!snd || !snd.render || X.sent.has(id)) return;
+    if (!snd || !snd.render || X.sent.has(id) || plan.seconds > SOUND_MOST) return;
     X.sent.add(id);
     const byId = new Map(); for (let k = 0; k < catalog.id.length; k++) byId.set(catalog.id[k], k);
     const both = new Set(plan.pictures.map(e => e.cam)).size > 1, run = {}, events = [];
@@ -6807,7 +7008,7 @@ body.ambient.phone .amb-where { font-size: 18px; }
     const full = opt("export.full", false), sz = opt("export.size", 1024);
     const near = SIZES.slice(0, -1).reduce((m, v, i) => (Math.abs(v - sz) < Math.abs(SIZES[m] - sz) ? i : m), 0);
     $("exsize").value = full ? SIZES.length - 1 : near; $("exsizev").textContent = full ? "Full" : sz > 1024 ? `≤ ${sz} px` : `${sz} px`;
-    $("exsound").checked = opt("export.sound", true); $("excap").checked = opt("export.caption", true);
+    $("exsound").checked = opt("export.sound", false); $("excap").checked = opt("export.caption", true);
     segs();
   }
   // o.full: opens on Picture size Full, or off it (the highlighted stretch's "Full resolution…" and "Save movie…", segment.html)
@@ -6862,9 +7063,15 @@ body.ambient.phone .amb-where { font-size: 18px; }
   const S = window.cassiniSettings, EX = window.cassiniExport;
   if (!EX) return;
   const opt = (k, d) => (S && S.get(k) !== undefined ? S.get(k) : d);
+  const MOST_NONE = 200000;                     // the top of Settings > Playback > Pre-process up to: no limit
+  const most = () => { const v = +opt("segment.maxFrames", MOST_NONE) || MOST_NONE; return v >= MOST_NONE ? 0 : v; };
   if (S) {
     S.define({ key: "segment.autoplay", section: "Playback", label: "Play a pre-processed stretch when it is ready", type: "toggle", value: true,
       hint: "After Pre-process on a highlighted stretch of the timeline, it plays as a movie from its start at the bar's frame rate." });
+    // the most frames one Pre-process takes (prebuild.py SEGMENT_MAX: the server may set its own ceiling over this)
+    S.define({ key: "segment.maxFrames", section: "Playback", label: "Pre-process up to", type: "range", value: MOST_NONE, min: 5000, max: MOST_NONE, step: 5000,
+      format: v => v >= MOST_NONE ? "No limit" : `${v.toLocaleString()} frames`,
+      hint: "The most frames one highlighted stretch can pre-process at once (the frames the bar counts; a busy day near Saturn has about 1,500). A long stretch takes a while: the bar shows how long is left, and what is made stays made if you stop it. A public site may set its own limit." });
     S.define({ key: "segment.hint", section: "Playback", label: "Suggest pre-processing when movie mode waits", type: "toggle", value: true,
       hint: "A quiet note when movie mode spends most of its time waiting for pictures to be made." });
   }
@@ -6913,7 +7120,7 @@ body.ambient.phone .amb-where { font-size: 18px; }
   const place = () => {};   // the bar is a row of the Cassini Replay window, laid out with it
   function say(text, warn) { $("segstate").textContent = text || ""; $("segstate").classList.toggle("warn", !!warn); $("segstaterow").hidden = !text; }
   function progress(frac) { $("segprog").hidden = frac == null; if (frac != null) $("segprog").firstElementChild.style.width = `${(frac * 100).toFixed(1)}%`; }
-  function fpsUi() { const f = Math.round(window.cassiniMovie && window.cassiniMovie.fps ? window.cassiniMovie.fps() : opt("movie.fps", 8)); $("segfps").value = f; $("segfpsv").textContent = `${f} fps`; }
+  function fpsUi() { const f = Math.round(window.cassiniMovie && window.cassiniMovie.fps ? window.cassiniMovie.fps() : opt("movie.fps", 5)); $("segfps").value = f; $("segfpsv").textContent = `${f} fps`; }
   // the choices a stretch is made with, apart from its times (P.key; P.span: the times it was made for)
   function optKey() { const q = new URLSearchParams(params()); q.delete("from"); q.delete("until"); return q.toString(); }
   const inside = () => P.span && P.a >= P.span[0] && P.b <= P.span[1];
@@ -6994,7 +7201,7 @@ body.ambient.phone .amb-where { font-size: 18px; }
     stopPoll();
     P.key = optKey(); P.span = [P.a, P.b]; P.looks = 0; P.pressed = true; say("Asking the frame server…"); progress(P.job && P.job.total ? P.job.done / P.job.total : 0);
     try {
-      const r = await fetch(`${FRAMES}/prebuild?${key}`, { method: "POST" }), j = await r.json();
+      const r = await fetch(`${FRAMES}/prebuild?${key}&most=${most()}`, { method: "POST" }), j = await r.json();
       if (!r.ok) { P.job = null; P.pressed = false; progress(null); say(j.error || "The frame server cannot pre-process that.", true); buttons(); return; }
       follow(j);
     } catch (err) { P.job = null; P.pressed = false; progress(null); say(`No frame server at ${FRAMES} that pre-processes.`, true); buttons(); }
@@ -7008,6 +7215,10 @@ body.ambient.phone .amb-where { font-size: 18px; }
     const busy = j && /^(queued|planning|making|waiting|finishing)$/.test(j.state);
     document.title = busy && j.total ? `${Math.floor(100 * j.done / j.total)}% pre-processed · ${TITLE}` : j && j.state === "done" && P.job === j && document.hidden ? `Ready · ${TITLE}` : TITLE;
   }
+  // A stretch's frames (the bar's count) and its pictures (what the server makes): each frame, and with them each
+  // color composite and each mosaic or movie picture a pass shows at those frames, so pictures run to about twice frames
+  const made = j => j.frames ? `${j.frames.toLocaleString()} frame${j.frames === 1 ? "" : "s"} (${j.total.toLocaleString()} pictures)` : `${j.total.toLocaleString()} pictures`;
+  $("segstate").title = "Pictures: each frame, plus each color composite and each mosaic or movie picture its pass shows at those frames.";
   function follow(j) {
     stopPoll();
     // pressed: the first answer since Pre-process, which is the stretch made when it was quick enough to wait for
@@ -7016,7 +7227,7 @@ body.ambient.phone .amb-where { font-size: 18px; }
     const frac = j.total ? j.done / j.total : 0;
     if (j.state === "done") {
       progress(1);
-      say(`Ready: ${j.total.toLocaleString()} pictures made ahead${j.took ? ` in ${j.took < 1 ? "under a second" : fmtDur(j.took)}` : ""}${j.errors ? ` (${j.errors} could not be made)` : ""}`);
+      say(`Ready: ${made(j)} made ahead${j.took ? ` in ${j.took < 1 ? "under a second" : fmtDur(j.took)}` : ""}${j.errors ? ` (${j.errors} could not be made)` : ""}`);
       if ((pressed || (was && was !== "done")) && opt("segment.autoplay", true)) { if (window.cassiniAway && cassiniAway.on) P.playBack = true; else play(); }
       return;
     }
@@ -7027,7 +7238,7 @@ body.ambient.phone .amb-where { font-size: 18px; }
       : j.state === "planning" ? "Finding every picture in the stretch…"
       : j.state === "finishing" ? "Finishing the last mosaic tiles…"
       : j.state === "waiting" ? `On hold: the frame server's machine is reserved for another job · ${j.done.toLocaleString()} of ${j.total.toLocaleString()}`
-      : `Pre-processing ${j.done.toLocaleString()} of ${j.total.toLocaleString()} pictures${j.eta != null ? ` · ${fmtDur(j.eta)} left` : ""}`);
+      : `Pre-processing ${j.done.toLocaleString()} of ${j.total.toLocaleString()} pictures${j.frames ? ` for ${j.frames.toLocaleString()} frames` : ""}${j.eta != null ? ` · ${fmtDur(j.eta)} left` : ""}`);
     P.poll = setTimeout(async () => {
       if (!P.job || P.job.id !== j.id) return;   // another job took over (the stretch grew)
       try { const r = await fetch(`${FRAMES}/prebuild/${j.id}.json`, { cache: "no-store" }); const n = r.ok ? await r.json() : j; if (P.job && P.job.id === j.id) follow(n); }
@@ -7046,9 +7257,10 @@ body.ambient.phone .amb-where { font-size: 18px; }
     if (P.playing && M.on) { setPlaying(!state.playing); buttons(); return; }
     P.playing = true;
     const cams = windows().cams;
-    // one camera: the other camera's window steps aside while the stretch plays, and comes back after
+    // one camera: the other camera's window used to step aside while the stretch played; with a stretch highlighted
+    // the camera windows are pinned (cassiniPin, head-quiet.html), so it stays where it is
     const other = cams === "N" ? $("wacard") : cams === "W" ? $("imgcard") : null;
-    if (other && !other.hidden && window.cassiniWM) { P.tucked = other; cassiniWM.minimize(other); }
+    if (other && !other.hidden && window.cassiniWM && !(window.cassiniPin && cassiniPin.editing())) { P.tucked = other; cassiniWM.minimize(other); }
     M.start(true, { from: P.a, until: P.b, cams: cams.length === 1 ? cams : undefined });
     buttons();
   }
@@ -8088,7 +8300,7 @@ body.ambient.phone .amb-where { font-size: 18px; }
 
   // ---------- the edit: one recipe of plain numbers ----------
   const ADJ = [
-    { k: "exposure", label: "Exposure", min: -2, max: 2, step: 0.05, group: "Light", fmt: v => (v > 0 ? "+" : "") + v.toFixed(2) + " EV" },
+    { k: "exposure", label: "Exposure", min: -4, max: 4, step: 0.05, group: "Light", fmt: v => (v > 0 ? "+" : "") + v.toFixed(2) + " EV" },
     { k: "contrast", label: "Contrast", min: -100, max: 100, step: 1, group: "Light" },
     { k: "black", label: "Black level", min: 0, max: 60, step: 0.5, group: "Light", fmt: v => v.toFixed(1) + "%" },
     { k: "white", label: "White level", min: 40, max: 100, step: 0.5, group: "Light", fmt: v => v.toFixed(1) + "%" },
@@ -8371,7 +8583,7 @@ void main() {
     $("stutabs").querySelector('[data-v="mosaic"]').hidden = !st.mos || !!st.look;
     $("stutabs").querySelector('[data-v="crop"]').hidden = !!st.look;
     $("stushare").hidden = !!st.look;
-    $("stusave").textContent = st.look ? "Use for the movie" : "Save to Gallery";
+    $("stusave").textContent = st.look ? st.lookLabel || "Use for the movie" : "Save to Gallery";
     $("stumos").toggleAttribute("hidden", st.tab !== "mosaic" || !st.mos);   // an svg has no hidden property
     trimShow();
   }
@@ -8620,7 +8832,7 @@ void main() {
     if (!opts.blob && !opts.url) { sync(); $("stuempty").hidden = !!source(); draw(); return; }
     if (!R) { $("stuempty").textContent = "This browser has no WebGL, which the studio draws with."; $("stuempty").hidden = false; return; }
     unload(); $("stuempty").hidden = true; wait("Opening…");
-    st.item = opts.item || null; st.target = opts.target || null; st.from = opts.from || null; st.look = typeof opts.look === "function" ? opts.look : null;
+    st.item = opts.item || null; st.target = opts.target || null; st.from = opts.from || null; st.look = typeof opts.look === "function" ? opts.look : null; st.lookLabel = opts.lookLabel || "";
     st.p = opts.edit ? (typeof opts.edit === "string" ? decode(opts.edit) : clone(opts.edit)) : clone(DEF);
     st.undo = []; st.redo = []; st.changed = false; st.saved = null;
     st.kind = opts.kind === "movie" ? "movie" : "picture";
@@ -8841,13 +9053,42 @@ void main() {
 
   // ME: the stretch (a, b), its plan's frames, and the edit: drop (ids taken out by hand), keep (null = every target /
   // filter pair, else the ones kept), cams (the export's Cameras), edit (the studio look's recipe)
+  // levels (frame id -> EV: the exposure level points), even (Even out over that many pictures, 0 off), ctr (Auto center
+  // for the movie: null as the windows have it, true, false), crop (x0, y0, x1, y1, parts of the picture, or null), crop2 (the end crop the
+  // movie glides to, or null), nudge (frame id -> [x, y], parts of the picture), fedit (frame id -> the studio keys that
+  // frame has over the movie's look, "ex:0.5,ct:0": a frame edited on its own);
+  // lv: the frame server's measured brightness of each frame (EV) and Even out's change for each picture
   const ME = { a: null, b: null, frames: [], pictures: "movie", loading: false, error: "", drop: new Set(), targets: null, filters: null, edit: "",
-    sel: -1, anchor: -1, picked: new Set(), showOut: true, src: "movie", undo: [], playing: false, pending: null };
+    levels: new Map(), even: 0, ctr: null, crop: null, crop2: null, nudge: new Map(), fedit: new Map(), lv: { level: {}, even: {}, done: 0, total: null, ready: false, error: "" },
+    sel: -1, anchor: -1, picked: new Set(), none: false, selOf: {}, showOut: true, src: "movie", undo: [], playing: false, pending: null };
+  const EV = 2, NUDGE = 0.5, CROP = 0.05, EVEN = 30;   // as export.py's LEVEL_EV, NUDGE_MOST, CROP_LEAST, EVEN_MOST
+  const WHOLE = [0, 0, 1, 1], boxStr = b => b.map(v => +v.toFixed(4)).join("_");
+  const clamp = (v, a, b) => Math.max(a, Math.min(b, v));
   const camsOf = () => (/^(N|W|NW)$/.test(EX.state.cams || "") ? EX.state.cams : "NW");
   const why = e => !camsOf().includes(e.cam) ? "camera" : ME.drop.has(e.id) ? "removed" : ME.targets && !ME.targets.has(e.target || "UNKNOWN") ? "target"
     : ME.filters && !ME.filters.has(e.filters) ? "filter" : "";
   const kept = e => !why(e);
-  const visible = () => ME.frames.map((e, i) => i).filter(i => ME.showOut || kept(ME.frames[i]));
+  // NAC and WAC never go in one movie: a stretch with both shows one camera's frames at a time (its tab), and that
+  // camera is the movie's (the export's Cameras)
+  let bothOf = null, bothIs = false;   // (worked out once per list: visible() asks for every frame)
+  const both = () => { if (bothOf !== ME.frames) { bothOf = ME.frames; bothIs = new Set(ME.frames.map(e => e.cam)).size > 1; } return bothIs; };
+  const ofCam = e => !both() || camsOf().includes(e.cam);
+  const visible = () => ME.frames.map((e, i) => i).filter(i => ofCam(ME.frames[i]) && (ME.showOut || kept(ME.frames[i])));
+  function oneCamera() {
+    if (!both() || camsOf().length === 1) return;
+    const n = c => ME.frames.filter(e => e.cam === c).length;
+    EX.state.cams = n("N") >= n("W") ? "N" : "W";
+  }
+  // the other camera's tab: its frames in the strip, and it is the movie's camera now (one undo step)
+  function camera(c) {
+    if (camsOf() === c) return;
+    stopPlay();
+    const cur = ME.frames[ME.sel]; if (cur) ME.selOf[cur.cam] = cur.id;
+    change(() => { EX.state.cams = c; });
+    const back = ME.selOf[c] ? ME.frames.findIndex(e => e.id === ME.selOf[c]) : -1;
+    const first = back >= 0 ? back : ME.frames.findIndex(e => e.cam === c && kept(e));
+    ME.anchor = -1; select(first >= 0 ? first : ME.frames.findIndex(e => e.cam === c));
+  }
 
   // ---------- the recipe ----------
   const listOf = s => [...s].sort().join(",");
@@ -8859,6 +9100,14 @@ void main() {
     if (ME.targets) q.set("targets", listOf(ME.targets));
     if (ME.filters) q.set("filters", listOf(ME.filters));
     if (ME.edit) q.set("edit", ME.edit);
+    const byId = m => [...m].sort((x, y) => (x[0] < y[0] ? -1 : 1));
+    if (ME.levels.size) q.set("levels", byId(ME.levels).map(([k, v]) => `${k}:${+v.toFixed(2)}`).join(","));
+    if (ME.even) q.set("even", String(ME.even));
+    if (ME.ctr != null) q.set("ctr", ME.ctr ? "1" : "0");
+    if (ME.crop) q.set("crop", boxStr(ME.crop));
+    if (ME.crop2) q.set("crop2", boxStr(ME.crop2));
+    if (ME.nudge.size) q.set("nudge", byId(ME.nudge).map(([k, [x, y]]) => `${k}:${+x.toFixed(3)}:${+y.toFixed(3)}`).join(","));
+    if (ME.fedit.size) q.set("fedit", byId(ME.fedit).map(([k, r]) => `${k}~${r}`).join("|"));
     return q.toString();
   }
   // what the export adds to its plan and film for the stretch marked now: the cut, when the editor has one for it
@@ -8872,7 +9121,7 @@ void main() {
   function remember() {
     try {
       const all = JSON.parse(localStorage.getItem(STORE) || "{}"), key = `${isoOf(ME.a)}|${isoOf(ME.b)}`, r = recipe();
-      const empty = !ME.drop.size && !ME.targets && !ME.filters && !ME.edit && ME.pictures === "movie";
+      const empty = !ME.drop.size && !ME.targets && !ME.filters && !ME.edit && ME.pictures === "movie" && !ME.levels.size && !ME.even && ME.ctr == null && !ME.crop && !ME.crop2 && !ME.nudge.size && !ME.fedit.size;
       if (empty) delete all[key]; else all[key] = { r, at: Date.now() };
       const keys = Object.keys(all).sort((x, y) => all[y].at - all[x].at); keys.slice(30).forEach(k => delete all[k]);
       localStorage.setItem(STORE, JSON.stringify(all));
@@ -8889,15 +9138,26 @@ void main() {
     ME.targets = set("targets"); ME.filters = set("filters"); ME.edit = q.get("edit") || "";
     ME.pictures = /^(movie|color|processed|raw)$/.test(q.get("pictures") || "") ? q.get("pictures") : "movie";
     if (/^(N|W|NW)$/.test(q.get("cams") || "")) EX.state.cams = q.get("cams");
+    const words = k => (q.get(k) || "").split(",").filter(Boolean);
+    ME.levels = new Map(words("levels").map(w => { const i = w.lastIndexOf(":"); return [w.slice(0, i), clamp(+w.slice(i + 1), -EV, EV)]; }).filter(([k, v]) => k && isFinite(v)));
+    ME.even = clamp(Math.round(+q.get("even") || 0), 0, EVEN);
+    ME.ctr = q.get("ctr") === "1" ? true : q.get("ctr") === "0" ? false : null;
+    const box = k => { const b = (q.get(k) || "").split("_").map(Number); return b.length === 4 && b.every(isFinite) && b[2] - b[0] >= CROP && b[3] - b[1] >= CROP ? b.map(v => clamp(v, 0, 1)) : null; };
+    ME.crop = box("crop"); ME.crop2 = box("crop2"); if (ME.crop2 && !ME.crop) ME.crop = WHOLE.slice();
+    ME.nudge = new Map(words("nudge").map(w => w.split(":")).filter(a => a.length === 3 && a[0] && isFinite(+a[1]) && isFinite(+a[2]))
+      .map(([k, x, y]) => [k, [clamp(+x, -NUDGE, NUDGE), clamp(+y, -NUDGE, NUDGE)]]));
+    ME.fedit = new Map((q.get("fedit") || "").split("|").map(w => { const i = w.indexOf("~"); return i > 0 ? [w.slice(0, i), override(w.slice(i + 1))] : null; })
+      .filter(a => a && a[1]));
   }
-  const snapshot = () => ({ pictures: ME.pictures, drop: new Set(ME.drop), targets: ME.targets && new Set(ME.targets), filters: ME.filters && new Set(ME.filters), edit: ME.edit, cams: camsOf() });
+  const snapshot = () => ({ pictures: ME.pictures, drop: new Set(ME.drop), targets: ME.targets && new Set(ME.targets), filters: ME.filters && new Set(ME.filters), edit: ME.edit, cams: camsOf(),
+    levels: new Map(ME.levels), even: ME.even, ctr: ME.ctr, crop: ME.crop && ME.crop.slice(), crop2: ME.crop2 && ME.crop2.slice(), nudge: new Map(ME.nudge), fedit: new Map(ME.fedit) });
   function change(fn) {
     ME.undo.push(snapshot()); if (ME.undo.length > 200) ME.undo.shift();
     fn(); changed();
   }
   let exT = 0;
   function changed() {
-    remember(); render();
+    remember(); render(); levelsSoon();
     // the export's plan follows (EX.mark re-plans the marked stretch, cut included)
     clearTimeout(exT); exT = setTimeout(() => { if (same()) EX.mark(); }, 300);
   }
@@ -8905,14 +9165,18 @@ void main() {
     const s = ME.undo.pop(); if (!s) return;
     const reload = s.pictures !== ME.pictures;
     ME.drop = s.drop; ME.targets = s.targets; ME.filters = s.filters; ME.edit = s.edit; EX.state.cams = s.cams; ME.pictures = s.pictures;
-    changed(); if (reload) load(); else show();
+    ME.levels = s.levels; ME.even = s.even; ME.ctr = s.ctr; ME.crop = s.crop; ME.crop2 = s.crop2; ME.nudge = s.nudge; ME.fedit = s.fedit;
+    changed(); if (reload) return load();
+    // undone back to the other camera: the strip shows that camera's frames, so does the frame in front
+    if (ME.frames[ME.sel] && !ofCam(ME.frames[ME.sel])) { const f = ME.frames.findIndex(e => ofCam(e) && kept(e)); ME.anchor = -1; select(f >= 0 ? f : ME.frames.findIndex(ofCam)); }
+    else show();
   }
 
   // ---------- the plan: every frame of the stretch, from the frame server ----------
   let ask = 0;
   async function load() {
     const n = ++ask;
-    ME.loading = true; ME.error = ""; ME.frames = []; render();
+    ME.loading = true; ME.error = ""; ME.frames = []; ME.lv = { level: {}, even: {}, done: 0, total: null, ready: ME.lv.ready, error: "" }; render();
     // every frame of the stretch, however many (list=1: the plan's cap is the film's, not the list's)
     const q = new URLSearchParams({ from: isoOf(ME.a), until: isoOf(ME.b), cams: "NW", fps: opt("export.adaptive", true) ? "auto" : String(opt("export.fps", 12)),
       size: "512", sound: "0", caption: "0", pictures: ME.pictures, list: "1" });
@@ -8928,10 +9192,10 @@ void main() {
     const has = (s, k) => s && [...s].some(v => ME.frames.some(e => (k === "target" ? e.target || "UNKNOWN" : e.filters) === v));
     if (ME.targets && !has(ME.targets, "target")) ME.targets = null;
     if (ME.filters && !has(ME.filters, "filters")) ME.filters = null;
-    strip(); render();
-    const keep = ME.frames[ME.sel] && ME.frames[ME.sel].id, at = keep ? ME.frames.findIndex(e => e.id === keep) : -1;
-    ME.sel = -1; ME.picked = new Set();
-    const first = at >= 0 ? at : ME.frames.findIndex(kept); select(first >= 0 ? first : 0);
+    oneCamera(); strip(); render(); levelsSoon(0);
+    const keep = ME.frames[ME.sel] && ME.frames[ME.sel].id, at0 = keep ? ME.frames.findIndex(e => e.id === keep) : -1, at = at0 >= 0 && ofCam(ME.frames[at0]) ? at0 : -1;
+    ME.sel = -1; ME.picked = new Set(); ME.none = false;
+    const first = at >= 0 ? at : ME.frames.findIndex(kept); select(first >= 0 ? first : Math.max(0, ME.frames.findIndex(ofCam)));
   }
 
   // ---------- the strip ----------
@@ -8941,7 +9205,9 @@ void main() {
   const thumbUrl = e => `${FRAMES}/frames/${e.id}.webp?size=256`;
   function strip() {
     const host = $("mestrip");
-    host.replaceChildren(...ME.frames.map((e, i) => {
+    // (built in a fragment, not spread as arguments to replaceChildren, which ~100,000 frames overflow)
+    const all = document.createDocumentFragment();
+    ME.frames.forEach((e, i) => {
       const b = document.createElement("button"); b.className = "meth"; b.dataset.i = i; b.setAttribute("role", "option");
       b.title = `${hms(e)} UTC · ${name(e.target)} · ${e.cam === "N" ? "NAC" : "WAC"} ${e.filters} · ${e.id}`;
       b.innerHTML = `<img loading="lazy" decoding="async" alt=""><b></b><span></span>`;
@@ -8951,17 +9217,18 @@ void main() {
       img.src = thumbUrl(e);
       b.querySelector("b").textContent = `${e.cam === "N" ? "N" : "W"}${KIND[e.first] ? " · " + KIND[e.first] : ""}`;
       b.querySelector("span").textContent = `${hms(e)} ${name(e.target)}`;
-      return b;
-    }));
+      all.appendChild(b);
+    });
+    host.replaceChildren(all);
   }
   function stripState() {
     const vis = new Set(visible());
     $("mestrip").querySelectorAll(".meth").forEach(b => {
       const i = +b.dataset.i, e = ME.frames[i], w = why(e);
       b.hidden = !vis.has(i);
-      b.classList.toggle("out", !!w); b.classList.toggle("dropped", w === "removed");
-      b.classList.toggle("sel", i === ME.sel); b.classList.toggle("picked", ME.picked.has(i));
-      b.setAttribute("aria-selected", String(ME.picked.has(i) || i === ME.sel));
+      b.classList.toggle("out", !!w); b.classList.toggle("dropped", w === "removed"); b.classList.toggle("own", ME.fedit.has(e.id));
+      b.classList.toggle("sel", i === ME.sel); b.classList.toggle("picked", ME.picked.has(i)); b.classList.toggle("unpicked", ME.none && i === ME.sel);
+      b.setAttribute("aria-selected", String(!ME.none && (ME.picked.has(i) || i === ME.sel)));
     });
   }
 
@@ -8976,7 +9243,7 @@ void main() {
       return b;
     }));
   }
-  const count = f => { const m = new Map(); ME.frames.forEach(e => { const k = f(e); m.set(k, (m.get(k) || 0) + 1); }); return [...m].sort((x, y) => y[1] - x[1]); };
+  const count = (f, list = ME.frames.filter(ofCam)) => { const m = new Map(); list.forEach(e => { const k = f(e); m.set(k, (m.get(k) || 0) + 1); }); return [...m].sort((x, y) => y[1] - x[1]); };
   // a keep list toggled: null keeps all; leaving every one in again goes back to null
   function toggleKeep(field, all, k) {
     change(() => {
@@ -8986,7 +9253,19 @@ void main() {
     });
   }
   function side() {
-    const tg = count(e => e.target || "UNKNOWN"), fl = count(e => e.filters), cm = count(e => e.cam);
+    const tg = count(e => e.target || "UNKNOWN"), fl = count(e => e.filters), cm = count(e => e.cam, ME.frames);
+    const two = cm.length > 1;
+    $("metabs").hidden = !two; $("mecard").querySelectorAll("[data-cams]").forEach(el => { el.hidden = two; });
+    if (two) {
+      $("metabs").replaceChildren(...["N", "W"].map(c => {
+        const b = document.createElement("button"); b.setAttribute("role", "tab"); b.dataset.v = c;
+        b.setAttribute("aria-selected", String(camsOf() === c));
+        b.title = `The ${c === "N" ? "narrow-angle" : "wide-angle"} camera's frames: the movie is made from the camera picked here`;
+        b.innerHTML = `${c === "N" ? "NAC" : "WAC"}<i></i>`; b.lastChild.textContent = (cm.find(x => x[0] === c) || [, 0])[1].toLocaleString();
+        b.addEventListener("click", () => camera(c));
+        return b;
+      }), Object.assign(document.createElement("span"), { className: "menote", textContent: "One camera per movie" }));
+    }
     chips($("mecams"), cm.map(([k, n]) => [k, k === "N" ? "NAC" : "WAC", n]), k => camsOf().includes(k),
       k => change(() => { const c = camsOf(), next = c.includes(k) ? c.replace(k, "") : "NW".split("").filter(x => x === k || c.includes(x)).join(""); if (next) EX.state.cams = next; }));
     chips($("metargets"), tg.map(([k, n]) => [k, name(k), n]), k => !ME.targets || ME.targets.has(k), k => toggleKeep("targets", tg.map(x => x[0]), k),
@@ -8998,6 +9277,7 @@ void main() {
     $("melook").textContent = ME.edit ? lookText(ME.edit) : "As the pipeline made the pictures.";
     $("melookclear").disabled = !ME.edit;
     $("meshowout").checked = ME.showOut;
+    sideLevels();
   }
   const LOOKNAMES = { ex: "exposure", ct: "contrast", bk: "black", wt: "white", md: "midtones", sa: "saturation", wa: "warmth", ti: "tint", sh: "sharpness", to: "tone", fi: "filter", st: "strength" };
   const lookText = r => r.split(",").map(kv => { const [k, v] = kv.split(":"); return `${LOOKNAMES[k] || k} ${/^-?[\d.]+$/.test(v) && +v > 0 && k !== "st" && k !== "wt" ? "+" : ""}${v}`; }).join(", ");
@@ -9007,33 +9287,46 @@ void main() {
     $("meempty").textContent = ME.a == null ? "Highlight a stretch of the timeline (drag across it), then Edit… on its bar." : ME.loading ? "Listing the frames of this stretch…"
       : ME.error || "No frames in this stretch.";
     $("mecard").querySelector(".meside").hidden = !ME.frames.length;
-    const n = ME.frames.filter(kept).length;
-    $("mesum").textContent = ME.frames.length ? `${n.toLocaleString()} of ${ME.frames.length.toLocaleString()} frames in the movie` : "";
+    const n = ME.frames.filter(kept).length, all = ME.frames.filter(ofCam).length;
+    $("mesum").textContent = ME.frames.length ? `${n.toLocaleString()} of ${all.toLocaleString()} ${both() ? (camsOf() === "N" ? "NAC " : "WAC ") : ""}frames in the movie` : "";
     $("meundo").disabled = !ME.undo.length;
     $("meexport").disabled = $("mecopy").disabled = ME.a == null;
     $("mepics").querySelectorAll("button").forEach(b => b.setAttribute("aria-pressed", String(b.dataset.v === ME.pictures)));
     $("mesrc").querySelectorAll("button").forEach(b => b.setAttribute("aria-pressed", String(b.dataset.v === ME.src)));
+    EVS = null;
     if (ME.frames.length) { side(); stripState(); }
     pos();
   }
+  // the picked frames: the pick, or the frame in front when nothing more is picked (none: all let go with Cmd-click)
+  const chosen = () => ME.none ? [] : ME.picked.size ? [...ME.picked].filter(i => ME.frames[i]) : ME.frames[ME.sel] ? [ME.sel] : [];
   function pos() {
     const e = ME.frames[ME.sel], vis = ME.frames.filter(kept);
     const at = e ? vis.indexOf(e) : -1;
     $("mepos").textContent = e ? (at >= 0 ? `${at + 1} of ${vis.length}` : "left out") + ` · ${hms(e)} UTC` : "";
-    const sel = ME.picked.size ? [...ME.picked].map(i => ME.frames[i]) : e ? [e] : [];
+    const sel = chosen().map(i => ME.frames[i]);
     $("metoggle").disabled = !sel.length;
+    $("mekeep").hidden = sel.length < 2; $("mekeep").textContent = `Keep only ${sel.length}`;
     $("metoggle").textContent = sel.length && sel.every(x => ME.drop.has(x.id)) ? `Put back${sel.length > 1 ? ` ${sel.length}` : ""}` : `Remove${sel.length > 1 ? ` ${sel.length}` : ""}`;
     $("medl").disabled = !e;
     $("meoff").hidden = !e || kept(e);
     if (e && !kept(e)) $("meoff").textContent = { removed: "Removed", camera: "Camera left out", target: "Target left out", filter: "Filter left out" }[why(e)];
+    graph(); sideLevels();
   }
 
   // ---------- the frame in front, drawn with the look ----------
   const cv = $("mecanvas"), stage = $("mestage");
   let R = null;
   const ren = () => { if (!R && STU() && STU().renderer) { try { R = STU().renderer(cv); } catch (e) { R = null; } } return R; };
-  const picUrl = (e, size) => ME.src === "raw" || !e.src ? `${FRAMES}/frames/${e.id}.webp?size=${size}`
-    : `${FRAMES}${e.src}${e.src.includes("?") ? "&" : "?"}size=${size}${window.cassiniLook ? window.cassiniLook() : ""}${/^\/frames\/movie\//.test(e.src) && window.cassiniMovieStyle ? window.cassiniMovieStyle() : ""}`;
+  // Auto center for the movie: the editor's choice, else the windows' setting; on, a picture shown on its own (a color
+  // composite, a processed frame) is centered too, as the windows and the film draw it (plain: as it is, the stand-in
+  // for a picture the server does not center)
+  const centreOn = () => ME.ctr ?? (opt("cameras.autoCenter", true) !== false);
+  const picUrl = (e, size, plain) => {
+    if (ME.src === "raw" || !e.src) return `${FRAMES}/frames/${e.id}.webp?size=${size}`;
+    const movie = /^\/frames\/movie\//.test(e.src), still = /^\/frames\/(color|processed)/.test(e.src);
+    return `${FRAMES}${e.src}${e.src.includes("?") ? "&" : "?"}size=${size}${window.cassiniLook ? window.cassiniLook({ center: still && !plain && centreOn() }) : ""}${movie && window.cassiniMovieStyle ? window.cassiniMovieStyle({ center: centreOn() }) : ""}`;
+  };
+  const tries = (e, size) => [...new Set([picUrl(e, size), picUrl(e, size, true), `${FRAMES}/frames/${e.id}.webp?size=${size}`])];
   // pictures kept as bitmaps for a while (Play steps through them), the oldest let go
   const bitmaps = new Map();
   function bitmap(url) {
@@ -9044,34 +9337,57 @@ void main() {
     while (bitmaps.size > 24) { const [k, old] = bitmaps.entries().next().value; bitmaps.delete(k); old.then(b => b.close && b.close(), () => {}); }
     return p;
   }
-  let shown = null, drawn = 0;
+  let shown = null, shownE = null, drawn = 0;
   async function show() {
     const e = ME.frames[ME.sel], n = ++drawn;
     pos();
-    if (!e) { shown = null; paint(); return; }
-    $("metag").textContent = `${hms(e)} UTC · ${name(e.target)} · ${e.cam === "N" ? "NAC" : "WAC"} ${e.filters} · ${ME.src === "raw" ? "raw frame" : { mosaic: "mosaic", rolling: "mosaic movie", movie: "movie pass", color: "color", processed: "processed", frame: "frame" }[e.first] || ""} · ${e.id}`;
-    try {
-      const b = await bitmap(picUrl(e, 1024));
-      if (n !== drawn) return;
-      shown = b;
-    } catch (err) {
-      if (n !== drawn) return;
-      // the picture the film shows cannot be made: the raw frame stands in, as in the film
-      try { shown = await bitmap(`${FRAMES}/frames/${e.id}.webp?size=1024`); } catch (e2) { shown = null; }
-      if (n !== drawn) return;
+    if (!e) { shown = shownE = null; paint(); return; }
+    $("metag").textContent = `${hms(e)} UTC · ${name(e.target)} · ${e.cam === "N" ? "NAC" : "WAC"} ${e.filters} · ${ME.src === "raw" ? "raw frame" : { mosaic: "mosaic", rolling: "mosaic movie", movie: "movie pass", color: "color", processed: "processed", frame: "frame" }[e.first] || ""} · ${e.id}${evOf(e) ? ` · ${fmtEv(evOf(e))}` : ""}${ME.fedit.has(e.id) ? " · own look" : ""}`;
+    // the picture the film shows; one that cannot be centered as it is, and one that cannot be made the raw frame, as in the film
+    shown = null;
+    for (const url of tries(e, 1024)) {
+      try { shown = await bitmap(url); break; } catch (err) { if (n !== drawn) return; }
     }
+    if (n !== drawn) return;
+    shownE = shown ? e : null;
     paint();
     return shown;
+  }
+  // the look drawn on frame e: the movie's look at e's exposure level
+  const lookFor = e => { const p = STU().decode(e && ME.fedit.has(e.id) ? `${ME.edit},${ME.fedit.get(e.id)}` : ME.edit); if (e) p.exposure += evOf(e); return p; };
+  // frame e's crop: the movie's, or with an end crop the way there from the start crop, eased in and out over the
+  // movie's pictures (export.crop_at); while a crop is drawn, the one being drawn
+  function cropAt(e) {
+    if (cropping) return null;
+    const a = ME.crop, b = ME.crop2, at = e && evs().at.get(e.id), n = evs().film.length;
+    if (!b || at == null || n < 2) return a;
+    let t = at / (n - 1); t = t * t * (3 - 2 * t);
+    return a.map((u, i) => u + (b[i] - u) * t);
+  }
+  // picture b (a bitmap) with e's framing (moved by e's nudge, cut to the crop), as export.framed draws it; b itself
+  // when it has none
+  function framedOf(b, e, crop = cropAt(e)) {
+    const nd = (e && ME.nudge.get(e.id)) || [0, 0];
+    if (!crop && !nd[0] && !nd[1]) return b;
+    const [x0, y0, x1, y1] = crop || WHOLE, W = b.width, H = b.height, cw = (x1 - x0) * W, ch = (y1 - y0) * H, k = Math.max(W, H) / Math.max(cw, ch);
+    const c = document.createElement("canvas"); c.width = Math.max(1, Math.round(cw * k)); c.height = Math.max(1, Math.round(ch * k));
+    const g = c.getContext("2d"); g.fillStyle = "#000"; g.fillRect(0, 0, c.width, c.height);
+    g.imageSmoothingQuality = "high";
+    g.setTransform(k, 0, 0, k, -k * (x0 - nd[0]) * W, -k * (y0 - nd[1]) * H);
+    g.drawImage(b, 0, 0);
+    return c;
   }
   function paint() {
     const r = ren();
     if (!r || !shown || card.hidden) { cv.style.width = "0px"; return; }
-    const box = stage.getBoundingClientRect(), dpr = Math.min(2, devicePixelRatio || 1), W = shown.width, H = shown.height;
-    const k = Math.min((box.width - 12) / W, (box.height - 12) / H); if (!(k > 0)) return;
+    const src = framedOf(shown, shownE), box = stage.getBoundingClientRect(), dpr = Math.min(2, devicePixelRatio || 1), W = src.width, H = src.height;
+    // room round the picture for the crop box's handles while a crop is drawn
+    const m = cropping ? 40 : 12, k = Math.min((box.width - m) / W, (box.height - m) / H); if (!(k > 0)) return;
     const cw = W * k, ch = H * k;
     Object.assign(cv.style, { width: cw + "px", height: ch + "px", left: (box.width - cw) / 2 + "px", top: (box.height - ch) / 2 + "px" });
-    r.upload(shown, W, H);
-    r.draw(STU().decode(ME.edit), Math.max(1, Math.round(cw * dpr)), Math.max(1, Math.round(ch * dpr)));
+    r.upload(src, W, H);
+    r.draw(lookFor(shownE), Math.max(1, Math.round(cw * dpr)), Math.max(1, Math.round(ch * dpr)));
+    cropBox();
   }
   new ResizeObserver(() => paint()).observe(stage);
 
@@ -9079,9 +9395,25 @@ void main() {
   function select(i, how = {}) {
     if (!ME.frames.length) { ME.sel = -1; show(); return; }
     i = Math.max(0, Math.min(ME.frames.length - 1, i));
-    if (how.range && ME.anchor >= 0) { ME.picked = new Set(); const vis = new Set(visible()), [a, b] = [Math.min(ME.anchor, i), Math.max(ME.anchor, i)]; for (let k = a; k <= b; k++) if (vis.has(k)) ME.picked.add(k); }
-    else if (how.toggle) { if (ME.picked.has(i)) ME.picked.delete(i); else ME.picked.add(i); if (ME.sel >= 0 && !ME.picked.size) ME.picked.add(ME.sel); ME.anchor = i; }
-    else { ME.picked = new Set(); ME.anchor = i; }
+    // the pick so far as a set (the frame in front counts as picked when nothing more is)
+    const had = new Set(chosen());
+    if (how.range && ME.anchor >= 0) {
+      // shift-click: the run from the anchor; Cmd-shift-click adds the run to the pick
+      ME.picked = how.toggle ? had : new Set();
+      const vis = new Set(visible()), [a, b] = [Math.min(ME.anchor, i), Math.max(ME.anchor, i)];
+      for (let k = a; k <= b; k++) if (vis.has(k)) ME.picked.add(k);
+      ME.none = false;
+    } else if (how.toggle) {
+      // Cmd/Ctrl/Option-click: this frame in or out of the pick; the frame in front moves to one still picked
+      ME.picked = had; ME.anchor = i;
+      if (ME.picked.has(i)) {
+        ME.picked.delete(i);
+        const left = [...ME.picked].sort((x, y) => Math.abs(x - i) - Math.abs(y - i));
+        ME.none = !left.length;
+        if (left.length) i = left[0];
+      } else { ME.picked.add(i); ME.none = false; }
+      if (ME.picked.size === 1) ME.picked = new Set();
+    } else { ME.picked = new Set(); ME.anchor = i; ME.none = false; }
     ME.sel = i; stripState(); show();
     const el = $("mestrip").querySelector(`.meth[data-i="${i}"]`); if (el && !how.noScroll) el.scrollIntoView({ block: "nearest" });
   }
@@ -9092,18 +9424,37 @@ void main() {
     if (at < 0) { at = d > 0 ? vis.findIndex(i => i > ME.sel) - 1 : vis.findIndex(i => i >= ME.sel); if (at < -1) at = d > 0 ? vis.length - 1 : 0; }
     select(vis[Math.max(0, Math.min(vis.length - 1, at + d))], how);
   }
+  // every frame picked, or none
+  function pickAll() {
+    const vis = visible(); if (!vis.length) return;
+    stopPlay(); ME.picked = new Set(vis); ME.none = false;
+    if (!ME.picked.has(ME.sel)) ME.sel = vis[0];
+    if (ME.picked.size === 1) ME.picked = new Set();
+    stripState(); show();
+  }
+  function letGo() {
+    if (!ME.picked.size && !ME.none) return false;
+    ME.picked = new Set(); ME.none = false; ME.anchor = ME.sel; stripState(); pos(); return true;
+  }
+  // keep only the picked frames: every other one is removed by hand (a picked frame removed before comes back)
+  function keepOnly() {
+    const ids = new Set(chosen().map(i => ME.frames[i].id)); if (!ids.size) return;
+    stopPlay();
+    change(() => ME.frames.forEach(e => { if (ofCam(e)) ids.has(e.id) ? ME.drop.delete(e.id) : ME.drop.add(e.id); }));
+    ME.picked = new Set(); ME.none = false; stripState(); pos();
+  }
   function toggleRemoved() {
-    const sel = (ME.picked.size ? [...ME.picked] : [ME.sel]).filter(i => ME.frames[i]).map(i => ME.frames[i]);
+    const sel = chosen().map(i => ME.frames[i]);
     if (!sel.length) return;
     const back = sel.every(e => ME.drop.has(e.id));
     change(() => sel.forEach(e => back ? ME.drop.delete(e.id) : ME.drop.add(e.id)));
     // one frame removed: on to the next, so a run of bad frames goes with Delete, Delete, Delete
     if (!back && sel.length === 1) { if (!ME.showOut) { const nx = ME.frames.findIndex((e, i) => i > ME.sel && kept(e)); select(nx >= 0 ? nx : ME.sel); } else step(1); }
-    else { ME.picked = new Set(); stripState(); pos(); }
+    else { ME.picked = new Set(); ME.none = false; stripState(); pos(); }
   }
   $("mestrip").addEventListener("click", e => {
     const b = e.target.closest(".meth"); if (!b) return;
-    stopPlay(); select(+b.dataset.i, { range: e.shiftKey, toggle: e.metaKey || e.ctrlKey, noScroll: true });
+    stopPlay(); select(+b.dataset.i, { range: e.shiftKey, toggle: e.metaKey || e.ctrlKey || e.altKey, noScroll: true });
   });
   $("mestrip").addEventListener("dblclick", e => { if (e.target.closest(".meth")) { card.classList.add("big"); paint(); } });
   cv.addEventListener("dblclick", () => { card.classList.toggle("big"); setTimeout(paint); const el = $("mestrip").querySelector(".meth.sel"); if (el && !card.classList.contains("big")) el.scrollIntoView({ block: "nearest" }); });
@@ -9121,10 +9472,10 @@ void main() {
   }
   async function tick() {
     if (!ME.playing) return;
-    const fps = Math.min(30, Math.max(1, window.cassiniMovie && window.cassiniMovie.fps ? window.cassiniMovie.fps() : +opt("movie.fps", 8) || 8));
+    const fps = Math.min(30, Math.max(1, window.cassiniMovie && window.cassiniMovie.fps ? window.cassiniMovie.fps() : +opt("movie.fps", 5) || 5));
     const at = performance.now(), next = ME.frames.findIndex((e, i) => i > ME.sel && kept(e));
     if (next < 0) return stopPlay();
-    ME.sel = next; ME.picked = new Set(); stripState();
+    ME.sel = next; ME.picked = new Set(); ME.none = false; stripState();
     const el = $("mestrip").querySelector(`.meth[data-i="${next}"]`); if (el) el.scrollIntoView({ block: "nearest" });
     // the next few, asked for ahead
     let ahead = next; for (let n = 0; n < 4; n++) { ahead = ME.frames.findIndex((e, i) => i > ahead && kept(e)); if (ahead < 0) break; bitmap(picUrl(ME.frames[ahead], 1024)); }
@@ -9136,18 +9487,26 @@ void main() {
   // ---------- one frame, downloaded at full size with the look ----------
   // the frame's picture at full size, as shown (the raw frame standing in when the movie's picture cannot be made)
   async function full(e) {
-    let r = await fetch(picUrl(e, "full"));
-    if (!r.ok) r = await fetch(`${FRAMES}/frames/${e.id}.webp?size=full`);
+    let r;
+    for (const url of tries(e, "full")) { r = await fetch(url); if (r.ok) break; }
     if (!r.ok) throw new Error(`the frame server said ${r.status}`);
     return r.blob();
+  }
+  // and with e's framing
+  async function fullFramed(e) {
+    const blob = await full(e), nd = ME.nudge.get(e.id);
+    if (!cropAt(e) && !nd) return blob;
+    const b = await createImageBitmap(blob), c = framedOf(b, e);
+    if (b.close) b.close();
+    return await new Promise(res => c.toBlob(res, "image/png")) || blob;
   }
   async function download() {
     const e = ME.frames[ME.sel]; if (!e || !STU()) return;
     const b = $("medl"); b.disabled = true; b.textContent = "Making…";
     try {
-      const jpg = await STU().apply(await full(e), ME.edit);
+      const jpg = await STU().apply(await fullFramed(e), lookFor(e));
       const a = document.createElement("a"); a.href = URL.createObjectURL(jpg);
-      a.download = `Cassini_${e.id}_${new Date(e.t * 1000).toISOString().slice(0, 19).replace(/[:T]/g, "-")}${ME.edit ? "_edited" : ""}.jpg`;
+      a.download = `Cassini_${e.id}_${new Date(e.t * 1000).toISOString().slice(0, 19).replace(/[:T]/g, "-")}${ME.edit || evOf(e) || cropAt(e) || ME.nudge.has(e.id) || ME.fedit.has(e.id) ? "_edited" : ""}.jpg`;
       document.body.appendChild(a); a.click(); a.remove(); setTimeout(() => URL.revokeObjectURL(a.href), 60000);
     } catch (err) { toast(`Could not save the frame: ${err.message || err}`); }
     finally { b.disabled = false; b.textContent = "Download frame"; }
@@ -9157,14 +9516,382 @@ void main() {
     if (g) { g.firstElementChild.textContent = t; const o = g.querySelector("button"); if (o) o.remove(); g.hidden = false; clearTimeout(toast.t); toast.t = setTimeout(() => { g.hidden = true; }, 3200); }
   }
 
+  // ---------- exposure: the movie's brightness, its level points and Even out ----------
+  const fmtEv = v => `${v > 0 ? "+" : v < 0 ? "−" : ""}${Math.abs(v).toFixed(2)} EV`;
+  // the film's pictures in order, and the levels' line over them: straight between the points, flat before the first
+  // and after the last (export.exposures draws it the same way); a left-out frame is not in the film and has none
+  let EVS = null;
+  function evs() {
+    if (EVS) return EVS;
+    const film = ME.frames.filter(kept), line = new Map(), at = new Map();
+    const pts = film.map((e, i) => [i, ME.levels.get(e.id)]).filter(p => p[1] != null);
+    film.forEach((e, i) => {
+      at.set(e.id, i);
+      let v = 0;
+      if (pts.length) {
+        const k = pts.findIndex(p => p[0] >= i);
+        v = k < 0 ? pts[pts.length - 1][1] : k === 0 || pts[k][0] === i ? pts[k][1] : pts[k - 1][1] + (pts[k][1] - pts[k - 1][1]) * (i - pts[k - 1][0]) / (pts[k][0] - pts[k - 1][0]);
+      }
+      line.set(e.id, v);
+    });
+    return (EVS = { film, line, at });
+  }
+  const lineOf = e => evs().line.get(e.id) || 0;
+  const evenOf = e => (ME.even && evs().at.has(e.id) && ME.lv.even[e.id]) || 0;
+  const evOf = e => clamp(lineOf(e) + evenOf(e), -2 * EV, 2 * EV);
+
+  // the frame server's measurements, asked for again while it is still measuring
+  let lvAsk = 0, lvT = 0;
+  function levelsSoon(ms = 400) { clearTimeout(lvT); lvT = setTimeout(levelsFetch, ms); }
+  async function levelsFetch() {
+    if (ME.a == null || ME.loading || card.hidden || !ME.frames.length) return;
+    const n = ++lvAsk, r0 = new URLSearchParams(recipe());
+    const q = new URLSearchParams({ from: isoOf(ME.a), until: isoOf(ME.b), cams: camsOf(), fps: "auto", size: "512", sound: "0", caption: "0", pictures: ME.pictures, list: "1" });
+    ["drop", "targets", "filters", "even", "ctr"].forEach(k => { if (r0.get(k)) q.set(k, r0.get(k)); });
+    try {
+      const r = await fetch(`${FRAMES}/export/levels.json?${q}${window.cassiniLook ? window.cassiniLook() : ""}${window.cassiniMovieStyle ? window.cassiniMovieStyle({ center: centreOn() }) : ""}`);
+      const j = await r.json().catch(() => ({ error: `the frame server said ${r.status}` }));
+      if (n !== lvAsk) return;
+      if (!r.ok || j.error && j.total == null) throw new Error(j.error || r.status);
+      ME.lv = { level: j.level || {}, even: j.even || {}, done: j.done || 0, total: j.total, ready: !!j.even_ready, error: j.error || "" };
+    } catch (e) {
+      if (n !== lvAsk) return;
+      ME.lv = { ...ME.lv, error: /fetch|network|404/i.test(String(e.message || e)) ? "This frame server does not measure brightness yet." : `Could not measure the brightness: ${e.message || e}` };
+    }
+    graph(); sideLevels(); if (ME.even) paint();
+    if (!ME.lv.error && (ME.lv.total == null || ME.lv.done < ME.lv.total)) levelsSoon(1500);
+  }
+
+  // the graph: x the film's pictures in order, y brightness in EV round the stretch's median (SPAN either way)
+  const gbox = $("melevels"), gcv = $("melvcanvas"), SPAN = 2.5;
+  let G = null;
+  function graph() {
+    const box = gbox.getBoundingClientRect();
+    if (card.hidden || !box.width || !box.height) return;
+    const dpr = Math.min(2, devicePixelRatio || 1), W = box.width, H = box.height;
+    if (gcv.width !== Math.round(W * dpr)) gcv.width = Math.round(W * dpr);
+    if (gcv.height !== Math.round(H * dpr)) gcv.height = Math.round(H * dpr);
+    const g = gcv.getContext("2d"); g.setTransform(dpr, 0, 0, dpr, 0, 0); g.clearRect(0, 0, W, H);
+    const { film, line } = evs(), n = film.length, L = ME.lv;
+    const tag = $("melvtag");
+    if (!n) { G = null; tag.textContent = ""; return; }
+    const lv = film.map(e => L.level[e.id] ?? null), known = lv.filter(v => v != null).sort((a, b) => a - b);
+    const mid = known.length ? known[known.length >> 1] : 0, pad = 10, top = 14, bot = H - 6;
+    const x = i => pad + (n === 1 ? (W - 2 * pad) / 2 : i * (W - 2 * pad) / (n - 1));
+    const per = (bot - top) / 2 / SPAN, y = v => clamp((top + bot) / 2 - (v - mid) * per, 2, H - 2);
+    // a level line at the middle, and ±1 EV
+    g.lineWidth = 1;
+    [[0, .1], [1, .05], [-1, .05]].forEach(([v, a]) => { g.strokeStyle = `rgba(255,255,255,${a})`; g.beginPath(); g.moveTo(0, Math.round(y(mid + v)) + .5); g.lineTo(W, Math.round(y(mid + v)) + .5); g.stroke(); });
+    // each camera's brightness as made (dim) and as the film will show it (bright)
+    const series = (cam, f, style, w) => {
+      g.strokeStyle = style; g.lineWidth = w; g.beginPath(); let on = false;
+      film.forEach((e, i) => { if (e.cam !== cam) return; const v = f(i, e); if (v == null) { on = false; return; } if (on) g.lineTo(x(i), y(v)); else { g.moveTo(x(i), y(v)); on = true; } });
+      g.stroke();
+      if (n < 400) { g.fillStyle = style; film.forEach((e, i) => { if (e.cam !== cam) return; const v = f(i, e); if (v != null) g.fillRect(x(i) - w, y(v) - w, 2 * w, 2 * w); }); }
+    };
+    const COL = { N: ["rgba(232,236,242,.22)", "rgba(232,236,242,.85)"], W: ["rgba(255,196,140,.22)", "rgba(255,196,140,.85)"] };
+    const any = known.length > 0, changed = film.some(e => evOf(e) || ownEv(e));
+    for (const cam of "NW") {
+      if (!film.some(e => e.cam === cam)) continue;
+      if (changed) series(cam, i => lv[i], COL[cam][0], 1);
+      series(cam, (i, e) => lv[i] == null ? null : lv[i] + evOf(e) + ownEv(e), COL[cam][1], 1.25);
+    }
+    // the levels' line where nothing is measured yet (round the middle)
+    if (!any && ME.levels.size) { g.strokeStyle = "rgba(138,182,255,.5)"; g.lineWidth = 1; g.beginPath(); film.forEach((e, i) => (i ? g.lineTo : g.moveTo).call(g, x(i), y(mid + line.get(e.id)))); g.stroke(); }
+    // the frame in front
+    const sel = ME.frames[ME.sel], si = sel ? evs().at.get(sel.id) : undefined;
+    if (si != null) { g.fillStyle = "rgba(138,182,255,.55)"; g.fillRect(Math.round(x(si)) - .5, 0, 1, H); }
+    // the level points
+    const pts = [];
+    film.forEach((e, i) => {
+      if (!ME.levels.has(e.id)) return;
+      const py = y((lv[i] ?? mid) + evOf(e) + ownEv(e));
+      pts.push({ i, id: e.id, x: x(i), y: py });
+      g.beginPath(); g.arc(x(i), py, 4.5, 0, 7); g.fillStyle = "#0b0d11"; g.fill(); g.lineWidth = 1.5; g.strokeStyle = "rgba(138,182,255,1)"; g.stroke();
+    });
+    G = { film, x, per, pts, n, pad, W };
+    const measuring = L.total == null ? "Measuring the brightness…" : L.done < L.total ? `Measuring ${L.done.toLocaleString()} of ${L.total.toLocaleString()}` : "";
+    tag.innerHTML = `<b>Exposure</b>${measuring ? " · " + measuring : ""}${L.error ? " · " + L.error : ""}${ME.levels.size ? ` · ${ME.levels.size} point${ME.levels.size === 1 ? "" : "s"}` : ""}${ME.even ? ` · evened over ${ME.even}` : ""}`;
+  }
+  new ResizeObserver(() => graph()).observe(gbox);
+  // the graph's picture under x, and the level point under (x, y)
+  const filmAt = px => G ? clamp(Math.round((px - G.pad) / Math.max(1e-6, (G.W - 2 * G.pad) / Math.max(1, G.n - 1))), 0, G.n - 1) : -1;
+  const pointAt = (px, py) => G && G.pts.find(p => Math.hypot(p.x - px, p.y - py) <= 7);
+  let gdrag = null;
+  gbox.addEventListener("pointerdown", ev => {
+    if (ev.button !== 0 || !G) return;
+    const r = gbox.getBoundingClientRect(), px = ev.clientX - r.left, py = ev.clientY - r.top, pt = pointAt(px, py);
+    stopPlay();
+    if (pt && ev.altKey) { change(() => ME.levels.delete(pt.id)); show(); return; }
+    gbox.setPointerCapture(ev.pointerId);
+    if (pt) { ME.undo.push(snapshot()); gdrag = { id: pt.id, y0: py, v0: ME.levels.get(pt.id), moved: false }; select(ME.frames.indexOf(G.film[pt.i]), { noScroll: false }); }
+    else { gdrag = { scrub: true }; const i = filmAt(px); if (i >= 0) select(ME.frames.indexOf(G.film[i])); }
+  });
+  gbox.addEventListener("pointermove", ev => {
+    const r = gbox.getBoundingClientRect(), px = ev.clientX - r.left, py = ev.clientY - r.top;
+    if (!gdrag) { gbox.classList.toggle("onpt", !!pointAt(px, py)); return; }
+    if (gdrag.scrub) { const i = filmAt(px); const k = i >= 0 ? ME.frames.indexOf(G.film[i]) : -1; if (k >= 0 && k !== ME.sel) select(k); return; }
+    gdrag.moved = true;
+    ME.levels.set(gdrag.id, clamp(Math.round((gdrag.v0 + (gdrag.y0 - py) / G.per) * 20) / 20, -EV, EV));
+    EVS = null; graph(); sideLevels(); paint();
+  });
+  const gend = () => { if (gdrag && gdrag.id) { if (gdrag.moved) changed(); else ME.undo.pop(); show(); render(); } gdrag = null; };
+  gbox.addEventListener("pointerup", gend); gbox.addEventListener("pointercancel", gend);
+  // double-click: a point where there is none (at the line's level there, so nothing changes until it is moved), or one taken out
+  gbox.addEventListener("dblclick", ev => {
+    if (!G) return;
+    const r = gbox.getBoundingClientRect(), px = ev.clientX - r.left, py = ev.clientY - r.top, pt = pointAt(px, py);
+    if (pt) change(() => ME.levels.delete(pt.id));
+    else { const i = filmAt(px); if (i < 0) return; const e = G.film[i]; change(() => ME.levels.set(e.id, clamp(Math.round(lineOf(e) * 100) / 100, -EV, EV))); }
+    show();
+  });
+
+  // the side's This frame, Exposure and Framing
+  function sideLevels() {
+    if (!ME.frames.length) return;
+    sideOwn();
+    const e = ME.frames[ME.sel], inFilm = e && kept(e), here = $("melvhere");
+    here.disabled = !inFilm;
+    if (document.activeElement !== here || !here.matches(":active")) here.value = inFilm ? lineOf(e) : 0;
+    $("melvherev").textContent = inFilm ? fmtEv(+here.value) : "—";
+    const ev = $("meeven"); ev.disabled = !ME.lv.ready; ev.value = ME.even;
+    $("meevenv").textContent = ME.even ? `${ME.even} pictures` : "Off";
+    $("melvclear").disabled = !ME.levels.size;
+    $("melvnote").textContent = !ME.lv.ready && !ME.lv.error && ME.lv.total != null ? "Even out needs a newer frame server; the level points work now."
+      : ME.lv.error || (ME.levels.size ? "Drag a point on the graph to brighten or dim the movie there. Double-click a point to take it out."
+        : "Double-click the graph to add a level point, then drag it up or down. Even out smooths flashes and jumps in brightness.");
+    $("mectr").querySelectorAll("button").forEach(b => b.setAttribute("aria-pressed", String(b.dataset.v === (ME.ctr == null ? "" : ME.ctr ? "1" : "0"))));
+    $("mecrop").setAttribute("aria-pressed", String(!!cropping));
+    $("mecrop").textContent = cropping ? "Cropping…" : ME.crop2 ? "Crop… · start and end" : ME.crop ? "Crop…  · on" : "Crop…";
+    $("mecropctl").hidden = !cropping;
+    $("meglide").checked = !!ME.crop2; $("mecropend").hidden = !ME.crop2;
+    $("mecropend").querySelectorAll("button").forEach(b => b.setAttribute("aria-pressed", String(b.dataset.v === cropping)));
+    $("measpect").querySelectorAll("button").forEach(b => b.setAttribute("aria-pressed", String(b.dataset.v === aspect)));
+    $("mefrclear").disabled = !ME.crop && !ME.crop2 && !ME.nudge.size;
+    $("menudged").textContent = (ME.nudge.size ? `${ME.nudge.size.toLocaleString()} frame${ME.nudge.size === 1 ? "" : "s"} nudged. ` : "") +
+      "Drag the picture to move the frame in front (or the picked frames) when its centering is off.";
+  }
+  // a slider moved: one undo step for the whole move
+  function slide(el, set, live) {
+    let on = false;
+    el.addEventListener("input", () => { if (!on) { ME.undo.push(snapshot()); on = true; } set(+el.value); EVS = null; if (live) live(); });
+    el.addEventListener("change", () => { on = false; changed(); show(); });
+  }
+  slide($("melvhere"), v => { const e = ME.frames[ME.sel]; if (e && kept(e)) ME.levels.set(e.id, clamp(v, -EV, EV)); }, () => { graph(); sideLevels(); paint(); });
+  slide($("meeven"), v => { ME.even = clamp(Math.round(v), 0, EVEN); }, () => { $("meevenv").textContent = ME.even ? `${ME.even} pictures` : "Off"; });
+
+  $("melvclear").addEventListener("click", () => { change(() => { ME.levels = new Map(); }); show(); });
+  $("mefrclear").addEventListener("click", () => { change(() => { ME.crop = ME.crop2 = null; ME.nudge = new Map(); }); cropping = null; show(); });
+  $("mectr").addEventListener("click", ev => {
+    const b = ev.target.closest("button"); if (!b) return;
+    const v = b.dataset.v === "" ? null : b.dataset.v === "1";
+    if (v === ME.ctr) return;
+    change(() => { ME.ctr = v; }); show();
+  });
+
+  // nudging: drag the picture to move the frame in front, or the picked frames (parts of the picture, as export.framed)
+  let ndrag = null;
+  cv.addEventListener("pointerdown", ev => {
+    if (ev.button !== 0 || !shownE || cropping) return;
+    const ids = (ME.picked.size ? [...ME.picked].map(i => ME.frames[i]) : [ME.frames[ME.sel]]).filter(Boolean).map(e => e.id);
+    ndrag = { x0: ev.clientX, y0: ev.clientY, ids, base: new Map(ids.map(id => [id, ME.nudge.get(id) || [0, 0]])), on: false, pid: ev.pointerId };
+  });
+  cv.addEventListener("pointermove", ev => {
+    if (!ndrag) return;
+    const dx = ev.clientX - ndrag.x0, dy = ev.clientY - ndrag.y0;
+    if (!ndrag.on) { if (Math.hypot(dx, dy) < 4) return; ndrag.on = true; stopPlay(); ME.undo.push(snapshot()); cv.setPointerCapture(ndrag.pid); cv.classList.add("nudging"); }
+    // the picture shown is the crop: a drag across it is that part of the picture
+    const [x0, y0, x1, y1] = cropAt(ME.frames[ME.sel]) || WHOLE, w = (cv.clientWidth || 1) / (x1 - x0), h = (cv.clientHeight || 1) / (y1 - y0);
+    ndrag.ids.forEach(id => {
+      const [bx, by] = ndrag.base.get(id), x = clamp(Math.round((bx + dx / w) * 1000) / 1000, -NUDGE, NUDGE), y = clamp(Math.round((by + dy / h) * 1000) / 1000, -NUDGE, NUDGE);
+      if (x || y) ME.nudge.set(id, [x, y]); else ME.nudge.delete(id);
+    });
+    paint();
+  });
+  const nend = () => { if (ndrag && ndrag.on) { cv.classList.remove("nudging"); changed(); } ndrag = null; };
+  cv.addEventListener("pointerup", nend); cv.addEventListener("pointercancel", nend);
+
+
+  // ---------- the crop, drawn on the picture ----------
+  // cropping: which crop is being drawn ("start": the crop, "end": the end crop), null when none is; aspect: the
+  // crop's shape while it is drawn ("free", width over height, or "pic" the picture's own)
+  let cropping = null, aspect = "free";
+  const cbox = $("mecropbox");
+  const editing = () => (cropping === "end" ? ME.crop2 : ME.crop) || WHOLE;
+  function cropBox() {
+    cbox.hidden = !cropping || !shown || card.hidden;
+    if (cbox.hidden) return;
+    const [x0, y0, x1, y1] = editing(), L = parseFloat(cv.style.left), T = parseFloat(cv.style.top), w = cv.clientWidth, h = cv.clientHeight;
+    Object.assign(cbox.style, { left: L + x0 * w + "px", top: T + y0 * h + "px", width: (x1 - x0) * w + "px", height: (y1 - y0) * h + "px" });
+    $("mecroplabel").textContent = ME.crop2 ? (cropping === "end" ? "End crop" : "Start crop") : "Crop";
+  }
+  // the crop's shape as parts of the picture: width over height in parts, from an aspect of the picture's pixels
+  const ratio = () => aspect === "free" ? null : (aspect === "pic" ? 1 : +aspect * (shown ? shown.height / shown.width : 1));
+  // box b fitted to the shape round its middle, inside the picture
+  function shaped(b) {
+    const r = ratio(); if (!r) return b;
+    let [x0, y0, x1, y1] = b, w = x1 - x0, h = y1 - y0;
+    if (w / h > r) w = h * r; else h = w / r;
+    if (w > 1) { w = 1; h = w / r; } if (h > 1) { h = 1; w = h * r; }
+    const cx = clamp((x0 + x1) / 2, w / 2, 1 - w / 2), cy = clamp((y0 + y1) / 2, h / 2, 1 - h / 2);
+    return [cx - w / 2, cy - h / 2, cx + w / 2, cy + h / 2];
+  }
+  function setEditing(b) { b = b.map(v => Math.round(v * 10000) / 10000); if (cropping === "end") ME.crop2 = b; else ME.crop = b; }
+  // the frame shown while a crop is drawn: the movie's first picture for the start crop (when it has an end), its last for the end
+  function cropFrame() {
+    if (!ME.crop2) return;
+    const film = evs().film, e = cropping === "end" ? film[film.length - 1] : film[0];
+    if (e) select(ME.frames.indexOf(e));
+  }
+  function crop(which) {
+    stopPlay();
+    cropping = which;
+    if (which && !ME.crop) { ME.undo.push(snapshot()); ME.crop = WHOLE.slice(); }
+    if (which) cropFrame();
+    EVS = null; sideLevels(); paint();
+    if (!which) { if (ME.crop && boxStr(ME.crop) === boxStr(WHOLE) && !ME.crop2) ME.crop = null; changed(); show(); }
+  }
+  $("mecrop").addEventListener("click", () => crop(cropping ? null : "start"));
+  $("mecropdone").addEventListener("click", () => crop(null));
+  $("mecropend").addEventListener("click", ev => { const b = ev.target.closest("button"); if (b && cropping) crop(b.dataset.v); });
+  $("measpect").addEventListener("click", ev => {
+    const b = ev.target.closest("button"); if (!b) return;
+    aspect = b.dataset.v;
+    if (cropping) { ME.undo.push(snapshot()); setEditing(shaped(editing())); EVS = null; changed(); paint(); } else sideLevels();
+  });
+  $("meglide").addEventListener("change", ev => {
+    change(() => { if (ev.target.checked) { ME.crop = ME.crop || WHOLE.slice(); ME.crop2 = ME.crop.slice(); } else ME.crop2 = null; });
+    if (cropping) crop(ev.target.checked ? "end" : "start");
+  });
+  // dragging the box (moves it) or a corner (sizes it, the opposite corner held, at the shape when it has one)
+  let cdrag = null;
+  cbox.addEventListener("pointerdown", ev => {
+    if (ev.button !== 0) return;
+    ev.preventDefault(); ev.stopPropagation();
+    cbox.setPointerCapture(ev.pointerId);
+    ME.undo.push(snapshot());
+    cdrag = { h: ev.target.dataset.h || "", x0: ev.clientX, y0: ev.clientY, b: editing().slice(), moved: false };
+  });
+  cbox.addEventListener("pointermove", ev => {
+    if (!cdrag) return;
+    cdrag.moved = true;
+    const w = cv.clientWidth || 1, h = cv.clientHeight || 1, dx = (ev.clientX - cdrag.x0) / w, dy = (ev.clientY - cdrag.y0) / h;
+    let [x0, y0, x1, y1] = cdrag.b;
+    if (!cdrag.h) {
+      const bw = x1 - x0, bh = y1 - y0, nx = clamp(x0 + dx, 0, 1 - bw), ny = clamp(y0 + dy, 0, 1 - bh);
+      setEditing([nx, ny, nx + bw, ny + bh]);
+    } else {
+      const west = cdrag.h.includes("w"), north = cdrag.h.includes("n");
+      let ax = west ? x1 : x0, ay = north ? y1 : y0;               // the corner held
+      let px = clamp((west ? x0 : x1) + dx, 0, 1), py = clamp((north ? y0 : y1) + dy, 0, 1);
+      let bw = Math.max(CROP, Math.abs(px - ax)), bh = Math.max(CROP, Math.abs(py - ay));
+      const r = ratio();
+      if (r) { if (bw / bh > r) bh = bw / r; else bw = bh * r; }
+      bw = Math.min(bw, west ? ax : 1 - ax); bh = Math.min(bh, north ? ay : 1 - ay);
+      if (r) { if (bw / bh > r) bw = bh * r; else bh = bw / r; }
+      setEditing([west ? ax - bw : ax, north ? ay - bh : ay, west ? ax : ax + bw, north ? ay : ay + bh]);
+    }
+    cropBox();
+  });
+  const cend = () => { if (cdrag) { if (cdrag.moved) { EVS = null; changed(); } else ME.undo.pop(); } cdrag = null; };
+  cbox.addEventListener("pointerup", cend); cbox.addEventListener("pointercancel", cend);
+  cbox.addEventListener("dblclick", ev => { ev.stopPropagation(); crop(null); });
+
   // ---------- the look, edited in Cassini Studio on the frame in front ----------
+  // the frame's full-size picture for the studio, button b saying so while the frame server makes it (the first time
+  // can take a minute or more)
+  async function opening(b, e) {
+    const was = b.textContent, t0 = Date.now(), tick = setInterval(() => { b.textContent = `Making the full-size picture… ${Math.round((Date.now() - t0) / 1000)} s`; }, 1000);
+    b.disabled = true; b.textContent = "Opening…";
+    try { return await full(e); } catch (err) { toast(`Could not open the frame: ${err.message || err}`); return null; }
+    finally { clearInterval(tick); b.disabled = false; b.textContent = was; }
+  }
   async function editLook() {
     const e = ME.frames[ME.sel]; if (!e || !STU()) return;
     stopPlay();
-    let blob; try { blob = await full(e); } catch (err) { toast(`Could not open the frame: ${err.message || err}`); return; }
+    const blob = await opening($("melookedit"), e); if (!blob) return;
     STU().open({ kind: "picture", blob, edit: ME.edit || undefined, item: { title: `Movie look · ${hms(e)} UTC`, src: e.src, ids: [e.id] },
       look: r => { change(() => { ME.edit = r; }); show(); if (WM) WM.front(card); } });
   }
+
+  // ---------- one frame edited on its own ----------
+  // a frame's own look: the studio keys it sets over the movie's look, each kept even at rest, the last of a key
+  // winning, in the studio's order (studio_look.override); the frame's look is decode(movie look + "," + these)
+  const OWN = { ex: ["exposure", -4, 4], ct: ["contrast", -100, 100], bk: ["black", 0, 60], wt: ["white", 40, 100], md: ["midtones", -100, 100],
+    sa: ["saturation", -100, 100], wa: ["warmth", -100, 100], ti: ["tint", -100, 100], sh: ["sharpness", 0, 100], to: ["tone", 0, 100] };
+  const OWNKEYS = [...Object.keys(OWN), "fi", "st"], FILTERNAMES = ["none", "vivid", "mono", "noir", "warm", "cool", "sepia"];
+  function ownMap(r) {
+    const m = new Map();
+    String(r || "").split(",").forEach(kv => {
+      const i = kv.indexOf(":"), k = kv.slice(0, i), v = kv.slice(i + 1);
+      if (OWN[k] && v !== "" && isFinite(+v)) m.set(k, String(+clamp(+v, OWN[k][1], OWN[k][2]).toFixed(4)));
+      else if (k === "fi" && FILTERNAMES.includes(v)) m.set(k, v);
+      else if (k === "st" && v !== "" && isFinite(+v)) m.set(k, String(+clamp(+v, 0, 100).toFixed(4)));
+    });
+    return m;
+  }
+  const ownStr = m => OWNKEYS.filter(k => m.has(k)).map(k => `${k}:${m.get(k)}`).join(",");
+  function override(r) { return ownStr(ownMap(r)); }
+  const LONGOF = k => (OWN[k] ? OWN[k][0] : k === "fi" ? "filter" : "strength");
+  // the frames This frame changes: the picked ones, else the one in front
+  const ownSel = () => chosen().sort((a, b) => a - b).map(i => ME.frames[i]).filter(Boolean);
+  // the look frame e is drawn with, before its exposure level
+  const ownLook = e => STU().decode(ME.fedit.has(e.id) ? `${ME.edit},${ME.fedit.get(e.id)}` : ME.edit);
+  // how much frame e's own exposure moves it from the movie's look, in EV (the graph shows the film's brightness with it)
+  function ownEv(e) {
+    const m = ME.fedit.has(e.id) && ownMap(ME.fedit.get(e.id));
+    if (!m || !m.has("ex")) return 0;
+    const at = String(ME.edit || "").split(",").filter(kv => kv.startsWith("ex:")).pop();
+    return +m.get("ex") - (at ? +at.slice(3) || 0 : 0);
+  }
+  // frame e's own keys with key k at value v: a key at the movie's own value is not the frame's
+  function ownSet(e, k, v) {
+    const m = ownMap(ME.fedit.get(e.id)), movie = STU().decode(ME.edit)[LONGOF(k)];
+    if (String(v) === String(movie) || +v === +movie) m.delete(k); else m.set(k, String(v));
+    const r = ownStr(m); if (r) ME.fedit.set(e.id, r); else ME.fedit.delete(e.id);
+  }
+  function sideOwn() {
+    const sel = ownSel(), e = sel[0], studio = !!STU();
+    $("meownh").textContent = sel.length > 1 ? `These ${sel.length} frames` : "This frame";
+    $("meownclear").disabled = !sel.some(x => ME.fedit.has(x.id));
+    $("meownedit").disabled = !e || !studio;
+    $("meownedit").textContent = sel.length > 1 ? `Edit these ${sel.length} frames in Studio…` : "Edit this frame in Studio…";
+    const p = e && studio ? ownLook(e) : null, own = e ? ownMap(ME.fedit.get(e.id)) : new Map();
+    document.querySelectorAll("#mecard input[data-k]").forEach(el => {
+      const k = el.dataset.k, sk = Object.keys(OWN).find(x => OWN[x][0] === k);
+      el.disabled = !p;
+      if (p && !el.matches(":active")) el.value = p[k];
+      const v = p ? p[k] : 0, val = el.nextElementSibling;
+      val.textContent = !p ? "—" : (k === "exposure" ? `${v > 0 ? "+" : v < 0 ? "−" : ""}${Math.abs(v).toFixed(2)}` : `${v > 0 ? "+" : ""}${Math.round(v)}`) + (own.has(sk) ? " •" : "");
+      val.title = own.has(sk) ? "This frame's own" : "The movie's look";
+    });
+    const n = ME.fedit.size;
+    $("meownnote").textContent = (sel.length > 1 ? "Only the picked frames change; the rest keep the movie's look." : "Only the frame in front changes; the rest keep the movie's look.")
+      + (n ? ` ${n.toLocaleString()} frame${n === 1 ? " has its" : "s have their"} own look (a dot in the strip).` : "");
+  }
+  document.querySelectorAll("#mecard input[data-k]").forEach(el => {
+    const sk = Object.keys(OWN).find(x => OWN[x][0] === el.dataset.k);
+    slide(el, v => ownSel().forEach(e => ownSet(e, sk, +(+v).toFixed(4))), () => { sideOwn(); graph(); paint(); });
+  });
+  $("meownclear").addEventListener("click", () => { const sel = ownSel(); change(() => sel.forEach(e => ME.fedit.delete(e.id))); show(); });
+  // Studio on the frame in front with its own look; Use for this frame (or these frames) keeps whatever differs from
+  // the movie's look as the frames' own
+  async function editOwn() {
+    const sel = ownSel(), e = sel[0]; if (!e || !STU()) return;
+    stopPlay();
+    const blob = await opening($("meownedit"), e); if (!blob) return;
+    const start = ME.fedit.has(e.id) ? `${ME.edit},${ME.fedit.get(e.id)}` : ME.edit;
+    STU().open({ kind: "picture", blob, edit: start || undefined, lookLabel: sel.length > 1 ? `Use for these ${sel.length} frames` : "Use for this frame",
+      item: { title: `${hms(e)} UTC · this frame's look`, src: e.src, ids: [e.id] },
+      look: r => {
+        const got = STU().decode(r), movie = STU().decode(ME.edit), m = new Map();
+        OWNKEYS.forEach(k => { const L = LONGOF(k); if (String(got[L]) !== String(movie[L])) m.set(k, String(got[L])); });
+        const own = ownStr(ownMap(ownStr(m)));
+        change(() => sel.forEach(x => { if (own) ME.fedit.set(x.id, own); else ME.fedit.delete(x.id); }));
+        show(); if (WM) WM.front(card);
+      } });
+  }
+  $("meownedit").addEventListener("click", editOwn);
 
   // ---------- opening ----------
   function front() { card.hidden = false; delete card.dataset.min; if (WM) { WM.front(card); WM.syncMenu(); } }
@@ -9178,10 +9905,10 @@ void main() {
     }
     if (a == null || b == null || b - a < 1) { ME.a = ME.b = null; ME.frames = []; strip(); render(); return; }
     if (ME.a !== a || ME.b !== b || r) {
-      stopPlay(); ME.a = a; ME.b = b; ME.undo = []; ME.sel = -1; ME.picked = new Set();
+      stopPlay(); ME.a = a; ME.b = b; ME.undo = []; ME.sel = -1; ME.picked = new Set(); ME.none = false;
       take(r || recalled(a, b) || ""); remember();
       load();
-    } else render();
+    } else { render(); levelsSoon(0); }
     setTimeout(paint);
   }
   function close() { stopPlay(); card.hidden = true; card.classList.remove("big"); if (WM) WM.syncMenu(); }
@@ -9198,6 +9925,7 @@ void main() {
   $("meplay").addEventListener("click", play);
   $("mesrc").addEventListener("click", e => { const b = e.target.closest("button"); if (!b) return; ME.src = b.dataset.v; render(); show(); });
   $("metoggle").addEventListener("click", toggleRemoved);
+  $("mekeep").addEventListener("click", keepOnly);
   // another kind of picture: the frame server plans the stretch again (what is removed by hand stays removed)
   $("mepics").addEventListener("click", e => { const b = e.target.closest("button"); if (!b || b.dataset.v === ME.pictures) return; stopPlay(); change(() => { ME.pictures = b.dataset.v; }); load(); });
   $("medl").addEventListener("click", download);
@@ -9218,11 +9946,15 @@ void main() {
   window.addEventListener("keydown", e => {
     if (card.hidden || !card.classList.contains("front") || /INPUT|SELECT|TEXTAREA/.test(e.target.tagName) && e.target.type !== "checkbox") return;
     if ((e.metaKey || e.ctrlKey) && e.key.toLowerCase() === "z") { e.preventDefault(); e.stopImmediatePropagation(); undo(); paint(); return; }
+    if ((e.metaKey || e.ctrlKey) && e.key.toLowerCase() === "a") { e.preventDefault(); e.stopImmediatePropagation(); pickAll(); return; }
     if (e.metaKey || e.ctrlKey || e.altKey) return;
     const k = e.key;
     if (k === "ArrowRight" || k === "ArrowLeft") { stopPlay(); step(k === "ArrowRight" ? 1 : -1, { range: e.shiftKey }); }
     else if (k === "Delete" || k === "Backspace") toggleRemoved();
+    else if (k === "k" || k === "K") keepOnly();
     else if (k === " ") play();
+    else if ((k === "Escape" || k === "Enter") && cropping) crop(null);
+    else if (k === "Escape" && letGo()) {}
     else if (k === "Escape") { if (card.classList.contains("big")) { card.classList.remove("big"); setTimeout(paint); } else close(); }
     else return;
     e.preventDefault(); e.stopImmediatePropagation();
@@ -9583,7 +10315,7 @@ void main() {
   const D = d => S ? S.define(d) : d.value;
   const pref = {
     on: D({ key: "interface.dock", section: "Interface", label: "Dock", type: "toggle", value: true,
-      hint: "A strip of apps at the edge of the screen: Cassini and each body (click to fly there), Moments, Highlights, Gallery, Studio and Settings. Minimized windows shrink into it." }),
+      hint: "A strip of apps at the edge of the screen: Cassini and each body (click to fly there), Moments, Highlights, Gallery, Studio, Ambient mode and Settings. Minimized windows shrink into it." }),
     side: D({ key: "interface.dockPosition", section: "Interface", label: "Dock position", type: "choice", value: "bottom",
       options: [["bottom", "Bottom"], ["left", "Left"], ["right", "Right"]], hint: "On a phone the dock always sits under the replay controls." }),
     size: D({ key: "interface.dockSize", section: "Interface", label: "Dock icon size", type: "range", value: 40, min: 28, max: 72, step: 2, unit: "px" }),
@@ -9601,9 +10333,9 @@ void main() {
     replay: svg('<path d="M3.5 16.5h17"/><path d="M6 16.5v-3M9 16.5v-6M12 16.5v-4M15 16.5v-8M18 16.5v-2"/><path d="M8 5.5l3 2-3 2z"/>')
   };
   // rendered icons, 256 px (icons/make_icons.html renders them again): Cassini is NASA's model, Huygens ESA's descent
-  // module as it stood on Titan, Saturn and All bodies (seven of its moons) from their maps, and the apps and cameras
-  // are lit as the planets are
-  const ICON = { CASSINI: "cassini", HUYGENS: "huygens", SATURN: "saturn", moments: "moments", highlights: "highlights", gallery: "gallery", settings: "settings", folder: "bodies", N: "nac", W: "wac" };
+  // module as it stood on Titan, Saturn and All bodies (seven of its moons) from their maps, and the apps (Ambient mode: a
+  // display with Saturn on it) and cameras are lit as the planets are
+  const ICON = { CASSINI: "cassini", HUYGENS: "huygens", SATURN: "saturn", moments: "moments", highlights: "highlights", gallery: "gallery", settings: "settings", ambient: "ambient", folder: "bodies", N: "nac", W: "wac" };
   const icon = k => !ICON[k] && GLYPH[k] ? `<span class="gl">${GLYPH[k]}</span>` : `<img class="ic${k === "SATURN" ? " ringed" : ""}" src="icons/${ICON[k]}.webp" alt="" draggable="false">`;
   const MAP = { SATURN: "saturn", TITAN: "titan", ENCELADUS: "enceladus", MIMAS: "mimas", TETHYS: "tethys", DIONE: "dione", RHEA: "rhea", HYPERION: "hyperion",
     IAPETUS: "iapetus", PHOEBE: "phoebe", VENUS: "venus", EARTH: "earth", MOON: "moon", JUPITER: "jupiter", IO: "io", EUROPA: "europa", GANYMEDE: "ganymede", CALLISTO: "callisto" };
@@ -9645,6 +10377,8 @@ void main() {
       run() { const G = window.cassiniGallery, c = $("galcard"); if (!G || !c) return; if (c.hidden) G.open(); else if (inFront(c)) G.close(); else WM.front(c); } },
     { key: "studio", label: "Studio", open: () => !!$("stucard") && !$("stucard").hidden,
       run() { const T = window.cassiniStudio, c = $("stucard"); if (!T || !c) return; if (c.hidden) T.open(); else if (inFront(c)) T.close(); else WM.front(c); } },
+    { key: "ambient", label: "Ambient mode", open: () => false,
+      run() { if (window.cassiniAmbient) cassiniAmbient.start(); } },
     { key: "settings", label: "Settings", open: () => !!$("settings") && !$("settings").hidden,
       run() { const c = $("settings"); if (c && !c.hidden && !inFront(c)) WM.front(c); else $("sgear").click(); } }
   ];
@@ -9893,7 +10627,7 @@ void main() {
   window.cassiniAbout = { open, addTab, esc, close: () => show(false), credits: CREDITS };
 
   // ---- which version this is: this page's build id (build.py writes it), and what the frame server says it serves ----
-  const BUILD = /*BUILD*/"41129b472269";
+  const BUILD = /*BUILD*/"6372db3724f4";
   const FRAMES = (() => {                       // the frame server, chosen as the camera window chooses it
     const q = new URLSearchParams(location.search).get("frames");
     if (q) return q.replace(/\/$/, "");
@@ -9920,6 +10654,216 @@ void main() {
     e.preventDefault(); e.stopPropagation(); document.querySelectorAll(".menu.open").forEach(m => m.classList.remove("open"));
     b.dataset.about ? open("Credits", b.dataset.about) : open("Cassini OS");
   }, true);
+})();
+</script>
+<script>
+// ---------- the tour: quiet hints for a first visit, and one-time tips for new features ----------
+(function () {
+  const $ = id => document.getElementById(id);
+  const S = window.cassiniSettings;
+  const KEY = "cassini-os-tour-v1";
+  const q = new URLSearchParams(location.search).get("tour");
+  let saved = {};
+  try { saved = JSON.parse(localStorage.getItem(KEY)) || {}; } catch (e) {}
+  saved.tips = saved.tips || {};
+  const store = () => { try { localStorage.setItem(KEY, JSON.stringify(saved)); } catch (e) {} };
+  const phone = () => document.body.classList.contains("phone");
+  const mac = /Mac|iPhone|iPad/.test(navigator.platform || navigator.userAgent);
+  const key = k => mac ? "⌘" + k : "Ctrl+" + k;
+
+  const tipsOn = S ? S.define({ key: "interface.tips", section: "Interface", label: "Tips", type: "toggle", value: true,
+    hint: "The short tour on a first visit, and a one-time tip when a new feature arrives." }) : true;
+  if (S) S.define({ key: "interface.tour", section: "Interface", label: "Tour of Cassini OS", type: "action", button: "Take the tour",
+    hint: "A few hints about the main controls. Skip it at any step.", run: () => { S.close(); start(); } });
+  const tipsAllowed = () => q === "1" || (S ? S.get("interface.tips") : tipsOn);
+
+  // ---- the steps of the tour (other features add theirs with cassiniTutorial.add) ----
+  const STEPS = [
+    { id: "welcome", at: null, title: "Welcome aboard Cassini",
+      text: p => `This is NASA and ESA's Cassini mission, 1997 to 2017, replayed along its real path. ${p ? "Drag to look around and pinch to zoom." : "Drag the view to look around and scroll to zoom."} A few quick pointers follow; skip them whenever you like.` },
+    { id: "play", at: ["#speedtool", "#play"], title: "Play and speed",
+      text: "Play or pause the mission here. The speed slider sets how much mission time passes each second, from real time up to days a second." },
+    { id: "timeline", at: ["#tl"], title: "The timeline",
+      text: p => `Each mark is a picture Cassini took: narrow-angle camera on one lane, wide-angle on the other. ${p ? "Drag" : "Drag or scroll"} to move through time.` },
+    { id: "cameras", at: ["#imgcard", "#wacard"], title: "Cassini's cameras",
+      text: p => `These windows show the pictures Cassini took at this moment: the <b>narrow-angle</b> camera for close detail and the <b>wide-angle</b> for the wider scene. ${p ? "Tap" : "Double-click"} a picture to see it full size.` },
+    { id: "bodies", at: ["#appdock", "#focusrow"], title: "Moons and planets",
+      text: p => `${p ? "Tap" : "Click"} a moon or planet here to see the mission from its side: only its pictures, its moments and its imaging sessions. Cassini brings you back.` },
+    { id: "moments", at: ["#moments", "#phmom", '#appdock [data-key="app:moments"]'], title: "Moments",
+      text: p => `The mission's big moments, in order. ${p ? "Tap" : "Click"} one to jump there${p ? "" : `, or step through them from the Go menu (${key("[")} and ${key("]")})`}. <b>Highlights</b> in the dock plays the best pictures as a reel.` },
+    { id: "settings", at: ["#sgear"], title: "Make it yours",
+      text: p => `Settings holds every option, from the dock to how the pictures are processed.${p ? "" : " Windows can be moved, minimized into the dock and brought back from the Window menu."} This tour is in the Cassini OS menu whenever you want it again.` }
+  ];
+  function add(step) {
+    const i = step.after ? STEPS.findIndex(s => s.id === step.after) + 1 : STEPS.length - 1;
+    STEPS.splice(i > 0 ? i : STEPS.length - 1, 0, step);
+  }
+
+  // ---- what is on screen ----
+  function onScreen(el) {
+    if (!el || el.hidden || el.closest("[hidden]")) return false;
+    const r = el.getBoundingClientRect();
+    if (r.width < 4 || r.height < 4 || r.right < 0 || r.bottom < 0 || r.left > innerWidth || r.top > innerHeight) return false;
+    const cs = getComputedStyle(el);
+    return cs.visibility !== "hidden" && cs.display !== "none" && +cs.opacity > 0.05;
+  }
+  const anchorOf = st => st.at === null ? null : (st.at || []).map(s => document.querySelector(s)).find(onScreen) || undefined;
+  // a cutscene, ambient mode, a movie, the highlight reel or a loading screen: the hints wait
+  function busy() {
+    const b = document.body.classList;
+    return b.contains("cutscene") || b.contains("cutscene-out") || (window.cassiniAmbient && cassiniAmbient.on) || (window.cassiniMovie && cassiniMovie.on)
+      || ($("loading") && !$("loading").hidden) || ($("loadscreen") && $("loadscreen").classList.contains("on"))
+      || ["cassiniFinale", "cassiniLaunch", "cassiniSOI", "cassiniHuygensRelease", "cassiniHuygensLanding"].some(k => window[k] && window[k].running);
+  }
+
+  // ---- the hint and its ring ----
+  const hint = document.createElement("div");
+  hint.id = "tourhint"; hint.hidden = true; hint.setAttribute("role", "dialog"); hint.setAttribute("aria-live", "polite");
+  hint.innerHTML = `<span class="th-arrow" aria-hidden="true"></span><button class="th-x" aria-label="Close the tour" title="Close">×</button>
+    <p class="th-title"></p><p class="th-text"></p>
+    <div class="th-foot"><span class="th-count"></span><button class="th-skip">Skip tour</button><button class="th-back">Back</button><button class="th-next">Next</button></div>`;
+  const ring = document.createElement("div");
+  ring.id = "tourring"; ring.hidden = true; ring.setAttribute("aria-hidden", "true");
+  ($("app") || document.body).append(ring, hint);
+  // the hints are not part of the 3D view: clicks on them stay theirs
+  for (const t of ["pointerdown", "mousedown", "click", "dblclick", "wheel", "touchstart"]) hint.addEventListener(t, e => e.stopPropagation(), { passive: true });
+
+  const T = { active: false, mode: "", i: 0, steps: [], cur: null, el: null, timer: 0, tip: null };
+  function place() {
+    if (!T.cur) return;
+    if (busy()) { hint.classList.remove("on"); ring.classList.remove("on"); return; }
+    let el = T.el;
+    if (el !== null && !onScreen(el)) {           // the control went away (closed, minimized): find another, or move on
+      el = T.el = anchorOf(T.cur);
+      if (el === undefined) return T.mode === "tour" ? go(T.i + (T.back ? -1 : 1)) : close();
+    }
+    const W = innerWidth, H = innerHeight, m = 12, gap = 12, hr = hint.getBoundingClientRect();
+    const w = hr.width, h = hr.height;
+    let x, y, side = "";
+    if (el === null) {                            // no anchor: at the top of the view, under the menu bar
+      x = (W - w) / 2; y = Math.min(H * 0.16, 90);
+      ring.classList.remove("on");
+    } else {
+      const r = el.getBoundingClientRect(), pad = 4;
+      const R = { l: Math.max(2, r.left - pad), t: Math.max(2, r.top - pad), r: Math.min(W - 2, r.right + pad), b: Math.min(H - 2, r.bottom + pad) };
+      Object.assign(ring.style, { left: R.l + "px", top: R.t + "px", width: R.r - R.l + "px", height: R.b - R.t + "px" });
+      ring.hidden = false; ring.classList.add("on");
+      // the side with the most room that fits the hint: below, above, right, left
+      const room = { below: H - R.b, above: R.t, right: W - R.r, left: R.l };
+      const fits = ["below", "above", "right", "left"].filter(s => (s === "below" || s === "above") ? room[s] > h + gap + m : room[s] > w + gap + m);
+      side = fits.length ? fits.sort((a, b) => room[b] - room[a])[0] : "";
+      const cx = (R.l + R.r) / 2, cy = (R.t + R.b) / 2;
+      if (side === "below") { x = cx - w / 2; y = R.b + gap; }
+      else if (side === "above") { x = cx - w / 2; y = R.t - gap - h; }
+      else if (side === "right") { x = R.r + gap; y = cy - h / 2; }
+      else if (side === "left") { x = R.l - gap - w; y = cy - h / 2; }
+      else { x = (W - w) / 2; y = Math.max(m, (H - h) / 2); }   // a control as big as the screen: the hint in the middle of it
+      x = Math.max(m, Math.min(W - w - m, x)); y = Math.max(m, Math.min(H - h - m, y));
+      const arrow = hint.querySelector(".th-arrow");
+      arrow.hidden = !side;
+      if (side === "below" || side === "above") { arrow.style.left = Math.max(10, Math.min(w - 20, cx - x - 5)) + "px"; arrow.style.top = ""; }
+      else if (side) { arrow.style.top = Math.max(10, Math.min(h - 20, cy - y - 5)) + "px"; arrow.style.left = ""; }
+    }
+    hint.dataset.side = side;
+    hint.querySelector(".th-arrow").hidden = !side;
+    hint.style.left = Math.round(x) + "px"; hint.style.top = Math.round(y) + "px";
+    hint.classList.add("on");
+  }
+  function show(st, el) {
+    T.cur = st; T.el = el;
+    hint.querySelector(".th-title").textContent = st.title || "";
+    hint.querySelector(".th-text").innerHTML = typeof st.text === "function" ? st.text(phone()) : st.text;
+    const tour = T.mode === "tour", last = tour && T.i === T.steps.length - 1;
+    hint.querySelector(".th-count").textContent = tour ? `${T.i + 1} of ${T.steps.length}` : "Tip";
+    hint.querySelector(".th-skip").hidden = !tour || last;
+    hint.querySelector(".th-back").hidden = !tour || T.i === 0;
+    hint.querySelector(".th-next").textContent = last || !tour ? (tour ? "Done" : "Got it") : "Next";
+    hint.setAttribute("aria-label", st.title || "Tip");
+    const first = hint.hidden;
+    hint.hidden = false;
+    if (first) { hint.classList.remove("on"); hint.style.transition = "none"; place(); hint.offsetWidth; hint.style.transition = ""; }
+    place();
+    if (!T.timer) T.timer = setInterval(place, 250);
+  }
+  // the tour's steps that have something on screen to point at, worked out as the tour goes
+  function go(i) {
+    T.back = i < T.i;
+    while (i >= 0 && i < T.steps.length) {
+      const el = anchorOf(T.steps[i]);
+      if (el !== undefined) { T.i = i; return show(T.steps[i], el); }
+      i += T.back ? -1 : 1;
+    }
+    if (i < 0) return go(T.i);
+    stop();
+  }
+  function close() {
+    clearInterval(T.timer); T.timer = 0;
+    hint.classList.remove("on"); ring.classList.remove("on");
+    setTimeout(() => { if (!T.cur) { hint.hidden = true; ring.hidden = true; } }, 260);
+    if (T.mode === "tip" && T.tip) { saved.tips[T.tip] = 1; store(); }
+    if (T.mode === "tour") { saved.tour = 1; store(); }   // skipped, closed or finished: not shown on its own again
+    T.cur = null; T.el = null; T.active = false; T.mode = ""; T.tip = null;
+    document.removeEventListener("keydown", keys, true);
+    setTimeout(nextTip, 1500);
+  }
+  function start() {
+    if (T.active) close();
+    T.active = true; T.mode = "tour"; T.steps = STEPS.slice(); T.i = 0;
+    document.removeEventListener("keydown", keys, true);
+    document.addEventListener("keydown", keys, true);
+    go(0);
+  }
+  function stop() { if (T.active) close(); }
+  function keys(e) {
+    if (!T.active || e.target.closest("input, textarea, select, [contenteditable]")) return;
+    if (e.key === "Escape") { e.stopImmediatePropagation(); stop(); }
+  }
+  hint.addEventListener("click", e => {
+    const b = e.target.closest("button"); if (!b) return;
+    if (b.classList.contains("th-x") || b.classList.contains("th-skip")) return stop();
+    if (b.classList.contains("th-back")) return go(T.i - 1);
+    if (b.classList.contains("th-next")) return T.mode === "tour" ? go(T.i + 1) : close();
+  });
+
+  // while a hint is up the interface stays awake (the hint points at controls the idle fade would hide)
+  new MutationObserver(() => { if (T.cur && document.body.classList.contains("idle")) document.body.classList.remove("idle"); })
+    .observe(document.body, { attributes: true, attributeFilter: ["class"] });
+
+  // ---- one-time tips for new features ----
+  const tips = [];
+  function tip(t) { if (!saved.tips[t.id] && !tips.some(x => x.id === t.id)) { tips.push(t); setTimeout(nextTip, 0); } }
+  function nextTip() {
+    if (T.active || !tipsAllowed() || !saved.tour || busy()) return;
+    for (const t of tips) {
+      if (saved.tips[t.id]) continue;
+      const el = anchorOf(t); if (el === undefined) continue;
+      tips.splice(tips.indexOf(t), 1);
+      T.active = true; T.mode = "tip"; T.tip = t.id;
+      document.addEventListener("keydown", keys, true);
+      return show(t, el);
+    }
+  }
+  setInterval(() => { if (tips.length) nextTip(); }, 3000);
+
+  // ---- the first visit: once the page has loaded and is quiet, after a few seconds of the view on its own ----
+  if (q !== "0" && (q === "1" || (!saved.tour && tipsAllowed()))) {
+    let calm = 0;
+    const wait = setInterval(() => {
+      calm = busy() || document.querySelector(".menu.open") ? 0 : calm + 1;
+      if (calm >= 4) { clearInterval(wait); if (!T.active && (q === "1" || !saved.tour)) start(); }
+    }, 1000);
+  }
+
+  // the Cassini OS menu's "Tour of Cassini OS"
+  document.addEventListener("click", e => {
+    const b = e.target.closest('[data-act="tour"]'); if (!b) return;
+    e.preventDefault(); e.stopPropagation(); document.querySelectorAll(".menu.open").forEach(m => m.classList.remove("open"));
+    start();
+  }, true);
+  addEventListener("resize", place);
+
+  window.cassiniTutorial = { add, tip, start, stop, get active() { return T.active; }, get step() { return T.cur && T.cur.id; },
+    seen: id => id ? !!saved.tips[id] : !!saved.tour, steps: STEPS };
 })();
 </script>
 <script src="https://cdn.jsdelivr.net/npm/three@0.128.0/build/three.min.js"></script>
@@ -11199,6 +12143,8 @@ function shown(name) {
   if (PLANETS.includes(name) || parentOf(name) !== "SATURN") return true;
   return state.allOrbits || name === "TITAN" || (MAJOR.includes(name) && name !== "PHOEBE" && name !== "HYPERION");
 }
+// "Enlarge moons ×10" scales moons only: planets (Saturn, Jupiter, Earth, Venus), the Sun and the spacecraft stay true size
+const enlargeOf = name => state.enlarge && meshes[name] && !PLANETS.includes(name) ? 10 : 1;
 function bodyRadius(name) { return name === "CASSINI" ? 0.0035 : name === "HUYGENS" ? 0.0013 : meshes[name] ? meshes[name].radius : 10; }
 function relScene(name, out) { sub(pos[name], pos[state.focus], tmp); return toScene(tmp, out).multiplyScalar(1 / KM); }
 
@@ -11224,7 +12170,7 @@ function updateBodies() {
     m.group.visible = present(name);
     if (!m.group.visible) continue;
     relScene(name, m.group.position);
-    const k = state.enlarge && name !== "SATURN" ? 10 : 1;
+    const k = enlargeOf(name);
     if (name !== "SATURN") {
       const R = iauMatrix(b, state.et); // rows: body axes in J2000
       const cx = toScene(R[0], new THREE.Vector3()), cy = toScene(R[1], new THREE.Vector3()), cz = toScene(R[2], new THREE.Vector3());
@@ -11251,7 +12197,6 @@ function updateBodies() {
   for (const o of cassiniProbe) o.visible = state.et < HUYGENS_RELEASE_ET;
   const qb = att && attitudeAt(att, state.et, qBody);
   state.pointed = !!qb;
-  window.cassiniPointing = qb ? "CK" : "EARTH";
   if (qb) {
     // model +Z is the dish (body -Z), model +Y the camera side (body -Y)
     const R = q2rows(qb), bx = toScene(R[0], new THREE.Vector3()), by = toScene(R[1], new THREE.Vector3()), bz = toScene(R[2], new THREE.Vector3());
@@ -11268,7 +12213,7 @@ function updateBodies() {
     arr[3 * i] = p.x; arr[3 * i + 1] = p.y; arr[3 * i + 2] = p.z;
     // the dot stands in for a body too small to see and fades out once its disc covers a pixel or two:
     // the globe hides the dot's middle and leaves its glow as a colored ring around it
-    const pr = meshes[n] ? (bodyRadius(n) / KM) * (state.enlarge && n !== "SATURN" ? 10 : 1) / Math.max(camera.position.distanceTo(p), 1e-12) * pxPerRad : 0;
+    const pr = meshes[n] ? (bodyRadius(n) / KM) * enlargeOf(n) / Math.max(camera.position.distanceTo(p), 1e-12) * pxPerRad : 0;
     const k = shown(n) ? 1 - THREE.MathUtils.smoothstep(pr, 0.6, 1.6) : 0;   // additive blending: black draws nothing
     mc[3 * i] = base[3 * i] * k; mc[3 * i + 1] = base[3 * i + 1] * k; mc[3 * i + 2] = base[3 * i + 2] * k;
   });
@@ -11308,6 +12253,7 @@ function imagingState(et) {
 }
 function updateFov() {
   fov.visible = false;
+  if (state.focus !== "CASSINI" && !(window.cassiniSettings && cassiniSettings.get("view.conesEverywhere"))) return;
   // only while the camera is imaging: shortly after a frame, or between frames of one observation.
   // Between observations Cassini holds or turns away, and the cone would point at empty sky.
   const { i, age, inSequence } = imagingState(state.et);
@@ -11531,7 +12477,7 @@ function updateLabels() {
     const d = camera.position.distanceTo(p);
     const small = LABEL_PRIORITY(name) === 5;
     let hide = vA.z > 1 || vA.z < -1 || !shown(name) || (small && d > 400 && name !== state.target);
-    const pr = (bodyRadius(name) / KM) * (state.enlarge && name !== "SATURN" ? 10 : 1) / d / Math.tan(rad(camera.fov / 2)) * h / 2;
+    const pr = (bodyRadius(name) / KM) * enlargeOf(name) / d / Math.tan(rad(camera.fov / 2)) * h / 2;
     const x = (vA.x + 1) / 2 * w + Math.min(pr, 140) + 6, y = (1 - vA.y) / 2 * h;
     const box = [x, y - 8, x + name.length * 8 + 10, y + 8];
     if (!hide && placed.some(b => box[0] < b[2] && box[2] > b[0] && box[1] < b[3] && box[3] > b[1])) hide = true;
@@ -11795,7 +12741,7 @@ function setFocus(name, dist) {
     dir = vA.clone().negate().addScaledVector(new THREE.Vector3(0, 1, 0), 0.12).addScaledVector(side, -0.15).normalize();
   }
   camera.position.copy(dir.multiplyScalar(d));
-  controls.minDistance = name === "CASSINI" ? 1.2e-5 : (bodyRadius(name) / KM) * (state.enlarge ? 10.5 : 1.05);
+  controls.minDistance = name === "CASSINI" ? 1.2e-5 : (bodyRadius(name) / KM) * 1.05 * enlargeOf(name);
   controls.maxDistance = 5e6;
   document.querySelectorAll("#focusrow .btn").forEach(b => b.setAttribute("aria-pressed", String(b.dataset.name === name)));
 }
@@ -15547,6 +16493,7 @@ window.huygensModels = (() => {
     if (F && F.windows && catalog && catalog.byCam) F.windows.forEach(f => f(true));   // (the catalog may still be loading)
     const u = new URL(location.href);
     if (u.searchParams.get("ambient") !== (mode || "1")) { u.searchParams.set("ambient", mode || "1"); try { history.replaceState(history.state, "", u); } catch (e) {} }
+    wake(5000);   // the way out, shown for a moment at the start
     document.dispatchEvent(new CustomEvent("cassini:ambient", { detail: { on: true, mode: A.mode } }));
   }
   function stop() {
@@ -15578,10 +16525,10 @@ window.huygensModels = (() => {
 
   // ---- the only controls: Escape or the Leave button (shown while the pointer moves) ----
   let wokeTimer = 0;
-  function wake() {
+  function wake(ms) {
     if (!A.on) return;
     document.body.classList.add("amb-woke"); clearTimeout(wokeTimer);
-    wokeTimer = setTimeout(() => document.body.classList.remove("amb-woke"), 2500);
+    wokeTimer = setTimeout(() => document.body.classList.remove("amb-woke"), typeof ms === "number" ? ms : 2500);
   }
   window.addEventListener("pointermove", wake, { passive: true });
   window.addEventListener("pointerdown", e => { if (A.on && !e.target.closest(".amb-leave, .cs-root")) { wake(); e.stopPropagation(); } }, true);

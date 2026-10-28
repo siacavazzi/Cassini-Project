@@ -213,7 +213,12 @@ be made by hand: every frame out, the bad ones thrown away, the rest put togethe
 stretch's row, **Edit frames…** in Export Movie, or Go > Movie Editor…. The window lists every raw frame of the
 stretch as a filmstrip (the export's own plan, `/export/plan.json`), with the frame in front big above it, as in the
 movie (its mosaic, color picture, movie pass or processed frame) or as the raw frame; double-click it to fill the
-window. Click a frame and press Delete to take it out (shift-click for a run, Delete again puts it back); Cameras,
+window. Frames are picked the Mac way: click picks one, shift-click picks the run to it, Cmd-click (Ctrl-click, or
+Option/Alt-click) adds a frame to the pick or takes it out, Cmd-A picks every frame, Esc lets go. **Keep only** (K)
+keeps the picked frames and removes all the others, so "these few would make a movie together" is a shift-click and
+one button; **Remove** (Delete) takes the picked frames out, and Delete again puts them back. NAC and WAC frames never
+go in one movie: a stretch with both cameras shows **NAC** and **WAC** tabs over the strip, each with only its own
+frames, and the tab picked is the camera the movie is made from. Cameras,
 Targets and Filters chips leave out whole groups (click to leave one out, double-click to keep only it, so "only the
 Jupiter frames" is one double-click). **Pictures** picks what each frame shows: As in the movie (the camera windows'
 mosaics, color pictures and movie passes), Full color only (each three-filter set once, as its color picture), Every
@@ -227,6 +232,14 @@ frame** (one frame at full size with the look, JPEG) and the saved movie, which 
 (`web/frames/studio_look.py`). The edit is kept on this device per stretch, **Copy link** shares it (`&cut=`, the
 stretch, cameras, frames taken out, targets and filters kept, and the look), and **Save movie…** opens Export Movie
 on the edited film (the export takes `drop=`, `targets=`, `filters=` and `edit=`).
+
+**This frame** edits one frame on its own, for the frame that looks off: Exposure, Contrast, Saturation and Warmth
+for the frame in front (or every picked frame), or **Edit this frame in Studio…** for every slider and filter
+(**Use for this frame**). Only those frames change; the rest keep the movie's look. An edited frame keeps its
+exposure level, crop and nudge (drag the picture to move it), follows the movie's look in every slider it leaves
+alone, and has a dot in the strip; **Reset** gives it the movie's look again. Its look is drawn the same way on the
+preview, Play, Download frame and the saved movie, and travels in links and the export as
+`fedit=ID~ex:-0.5,ct:0|ID~…` (the studio keys the frame sets over the movie's look, `studio_look.override`).
 
 ## Phone layout
 

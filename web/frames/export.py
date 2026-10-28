@@ -43,6 +43,7 @@ import hashlib
 import contextvars
 import io
 import json
+import math
 import os
 import queue
 import shutil
@@ -63,12 +64,14 @@ import calibration  # noqa: E402
 import studio_look  # noqa: E402
 
 # bumped whenever the way films are made changes, so older ones are not served again
-VERSION = "export-v20"
+VERSION = "export-v22"   # v22: the flat fielded, dark subtracted, hot pixel repaired pictures; v21: Auto center centres the pictures shown on their own too, as the windows do
 FPS = 30                     # frames a second in the file
 HOLD_MIN, HOLD_MAX = 1 / FPS, 0.5
 TYPICAL = 1 / 8              # adaptive: how long the stretch's median gap lasts on screen
 LAST = 1.5                   # seconds the last picture stays
-MAX_PICTURES = int(os.environ.get("CASSINI_EXPORT_MAX", 20000))   # a film; the Movie Editor's list (list=1) has no cap
+# pictures in a film at most, 0 for no limit (the default: a film is drawn a picture at a time, so a month of pictures
+# is only a longer film); a public site sets CASSINI_EXPORT_MAX. The Movie Editor's list (list=1) has no cap either way
+MAX_PICTURES = int(os.environ.get("CASSINI_EXPORT_MAX", "0") or 0)
 SIZES = (512, 768, 1024)
 FULL = "full"               # Picture size Full: mosaics at native resolution (module notes)
 BUCKETS = (1024, 1536, 2048)   # mosaic sizes up to the canvas: a pass is drawn at the biggest its native size fills
@@ -96,6 +99,18 @@ def utc(t, seconds=True):
 
 
 PICTURES = ("movie", "color", "processed", "raw")
+# the Movie Editor's exposure levels: a level point moves the film's exposure up to this many EV either way (the
+# studio's exposure slider's range; with the look's own exposure the sum stays within it, studio_look.effective)
+LEVEL_EV = 2.0
+EVEN_MOST = 30               # pictures: the most Even out smooths over
+LEVELS_SIDE = 160            # px: the pictures' brightness is measured on them this big (as movie mode's, obs_mosaic)
+LEVELS_LIT = 0.04            # of the brightest: the pixels a brightness is measured on (the body, not the sky's noise)
+LEVELS_VERSION = "levels-v1"
+# and its framing: a crop of every picture (or a start and an end crop the film glides between), and a nudge of a
+# single frame (parts of the picture)
+CROP_LEAST = 0.05            # of the picture: the smallest crop's side
+NUDGE_MOST = 0.5
+FRAME = {"crop": None, "crop2": None, "nudge": {}}
 MOVIE = {"center": True, "trail": 0, "laps": 1, "fade": 0, "persist": 0}   # the movie style by default (a film named as before)
 
 
@@ -136,12 +151,56 @@ def options(q):
     kept = {"drop": words("drop"), "targets": sorted(w.upper() for w in words("targets")), "filters": words("filters")}
     # and its look on every picture: the color part of a Cassini Studio recipe
     look_edit = studio_look.parse(get("edit", ""))
+    # its exposure levels: points (frame id: EV) the film's exposure goes through, straight lines between them, and
+    # Even out over that many pictures (exposures)
+    levels = {}
+    for w in words("levels"):
+        k, _, v = w.rpartition(":")
+        try:
+            levels[k] = round(max(-LEVEL_EV, min(LEVEL_EV, float(v))), 2)
+        except ValueError:
+            continue
+    even = max(0, min(EVEN_MOST, int(float(get("even", "0") or 0))))
+    # and single frames edited on their own (fedit=ID~ex:0.5,ct:0|ID~...): each such frame's look is the movie's with
+    # these studio keys over it (studio_look.override); its level and framing still apply
+    fedit = {}
+    for w in get("fedit", "").split("|"):
+        k, _, r = w.partition("~")
+        r = studio_look.override(r)
+        if k.strip() and r:
+            fedit[k.strip()] = r
+    # its framing: Auto center for the whole film (ctr, over the windows' setting), a crop of every picture (crop:
+    # x0_y0_x1_y1, parts of the picture; crop2: the end crop the film glides to from crop), and a nudge (frame id: x, y,
+    # parts of the picture) on single frames (framed)
+    def box(k):
+        try:
+            x0, y0, x1, y1 = (max(0.0, min(1.0, round(float(v), 4))) for v in get(k, "").split("_"))
+        except ValueError:
+            return None
+        if x1 - x0 < CROP_LEAST or y1 - y0 < CROP_LEAST or [x0, y0, x1, y1] == [0, 0, 1, 1]:
+            return None
+        return [x0, y0, x1, y1]
+    crop, crop2 = box("crop"), box("crop2")
+    if crop2 and not crop:
+        crop = [0.0, 0.0, 1.0, 1.0]
+    nudge = {}
+    for w in words("nudge"):
+        k, *xy = w.split(":")
+        try:
+            dx, dy = (round(max(-NUDGE_MOST, min(NUDGE_MOST, float(v))), 3) for v in xy)
+        except ValueError:
+            continue
+        if dx or dy:
+            nudge[k] = [dx, dy]
+    if get("ctr", "") in ("0", "1"):
+        movie["center"] = get("ctr", "") == "1"
     # which picture each frame shows (the Movie Editor's Pictures): as the camera windows show it (movie), only the
     # full color pictures (color: the frames completing a three-filter set, each its composite), every frame on its
     # own made by the pipeline (processed: stacked and calibrated, never composited) or every frame as Cassini took it
     # (raw: the archive frame, nothing stacked)
     pictures = get("pictures", "movie") if get("pictures", "movie") in PICTURES else "movie"
     return {"off": off, "cut": {k: v for k, v in kept.items() if v}, "edit": studio_look.encode(look_edit),
+            "levels": levels, "even": even, "fedit": fedit, "frame": {"crop": crop, "crop2": crop2, "nudge": nudge},
             "pictures": pictures, "list": get("list", "0") == "1",
             "from": t0, "until": t1, "cams": cams, "fps": fps, "size": size,
             "sound": get("sound", "1") != "0", "caption": get("caption", "1") != "0",
@@ -164,6 +223,14 @@ def job_id(opt):
         key["cut"] = opt["cut"]
     if opt.get("edit"):
         key["edit"] = opt["edit"]
+    if opt.get("levels"):
+        key["levels"] = opt["levels"]
+    if opt.get("even"):
+        key["even"] = opt["even"]
+    if opt.get("fedit"):
+        key["fedit"] = opt["fedit"]
+    if opt.get("frame", FRAME) != FRAME:
+        key["frame"] = opt["frame"]
     if opt.get("pictures", "movie") != "movie":
         key["pictures"] = opt["pictures"]
     return hashlib.sha1(json.dumps([VERSION, key], sort_keys=True).encode()).hexdigest()[:16]
@@ -251,7 +318,7 @@ def plan(opt, cache=None, work=False):
             e["set_nm"] = [reel.wavelength(insts[u], f1s[u] + f2s[u]) for u in st["use"]]
         out.append(e)
     out = cut(out, opt)
-    if len(out) > MAX_PICTURES and not opt.get("list"):
+    if MAX_PICTURES and len(out) > MAX_PICTURES and not opt.get("list"):
         raise OverflowError(f"{len(out):,} pictures: an export holds at most {MAX_PICTURES:,}; pick a shorter stretch")
     timing(out, opt["fps"])
     full = full_size(opt, out, cache, work) if big(opt) else None
@@ -341,6 +408,177 @@ def timing(pics, fps):
         at += n / FPS
 
 
+# ---------- the Movie Editor's exposure levels and framing ----------
+
+def evener():
+    """Movie mode's exposure normalization math (obs_mosaic.evened_gains: log brightnesses of pictures in order in,
+    each one's gain out, flashes taken out and steps spread), which Even out uses as it is; None on a server
+    without it."""
+    import obs_mosaic
+    return getattr(obs_mosaic, "evened_gains", None)
+
+
+def brightness(im):
+    """How bright a finished picture is (RGB, black where it has nothing): the natural log of the median gray (0..1,
+    the picture's display values) of its lit pixels, as movie mode measures a movie frame's, or None when too few
+    are lit. An exposure change of x EV (studio_look) moves it by x ln 2."""
+    k = LEVELS_SIDE / max(im.size)
+    if k < 1:
+        im = im.resize((max(1, round(im.width * k)), max(1, round(im.height * k))), Image.BILINEAR)
+    v = np.asarray(im.convert("L"), np.float32).ravel() / 255
+    v = v[v > 1 / 255]
+    if v.size < 64:
+        return None
+    lit = v[v > LEVELS_LIT * max(float(np.percentile(v, 99.5)), 1e-6)]
+    return float(np.log(np.median(lit))) if lit.size >= 64 else None
+
+
+_measuring, _measured = {}, {}   # levels key -> the measuring under way ({done, total, logs}), the last few measured
+
+
+def levels_key(opt):
+    """What a stretch's measured brightnesses depend on: its pictures and how they are drawn, not the cut, look,
+    levels or framing (one measuring serves every edit of the stretch)."""
+    key = {k: opt.get(k) for k in ("from", "until", "pictures", "look", "colors", "off", "movie")}
+    return hashlib.sha1(json.dumps([LEVELS_VERSION, key], sort_keys=True).encode()).hexdigest()[:16]
+
+
+def measure(opt, cache, pictures, wait=False):
+    """The brightness (brightness) of the picture every frame of opt's stretch shows, both cameras, nothing cut:
+    {done, total, logs: {frame id: log or None}} so far. Measured once on a thread of its own on the pictures the
+    film draws (the frame server's makers and cache, at 512 px), kept in the cache. wait: until every one is."""
+    key = levels_key(opt)
+    path = os.path.join(cache, LEVELS_VERSION, key + ".json")
+    with _lock:
+        got = _measured.get(key) or _measuring.get(key)
+        if got is None and os.path.exists(path):
+            try:
+                with open(path) as fh:
+                    logs = json.load(fh)
+                got = _measured[key] = {"done": len(logs), "total": len(logs), "logs": logs}
+            except (OSError, ValueError):
+                got = None
+        if got is None:
+            got = _measuring[key] = {"done": 0, "total": None, "logs": {}}
+            got["thread"] = threading.Thread(target=contextvars.copy_context().run, args=(_measure, opt, key, path, pictures, got), daemon=True)
+            got["thread"].start()
+    if wait and got.get("thread"):
+        got["thread"].join()
+    return {k: (dict(v) if k == "logs" else v) for k, v in got.items() if k != "thread"}
+
+
+def _measure(opt, key, path, pictures, got):
+    try:
+        with calibration.looking(opt.get("look", "balanced")), calibration.coloring(opt.get("colors", "natural")), \
+                calibration.stepping(opt.get("off", "")):
+            pictures = Pictures(pictures.cache, pictures._color, pictures._processed, pictures._frame, pictures.slots)
+            pictures.movie = {**MOVIE, **opt.get("movie", {})}
+            pics = plan(dict(opt, cams="NW", cut={}, list=True))["pictures"]
+            got["total"] = len(pics)
+
+            def one(e):
+                im, _ = pictures.picture(e, 512)
+                return e["id"], brightness(im) if im is not None else None
+            with ThreadPoolExecutor(3) as pool:
+                for fid, lv in pool.map(lambda e: contextvars.copy_context().run(one, e), pics):
+                    got["logs"][fid] = None if lv is None else round(lv, 5)
+                    got["done"] += 1
+        os.makedirs(os.path.dirname(path), exist_ok=True)
+        with open(path + ".part", "w") as fh:
+            json.dump(got["logs"], fh)
+        os.replace(path + ".part", path)
+    except Exception as e:
+        got["error"] = f"{type(e).__name__}: {e}"
+        print(f"export levels {key}: {got['error']}", flush=True)
+    with _lock:
+        _measuring.pop(key, None)
+        if "error" not in got:
+            _measured[key] = {k: v for k, v in got.items() if k != "thread"}
+            while len(_measured) > 8:
+                _measured.pop(next(iter(_measured)))
+
+
+def stretches(pics):
+    """The film's pictures (indexes) Even out evens on their own, as movie mode evens a pass (exposure_gains): one
+    camera's pictures in a row of one kind (mosaic, movie pass, color, processed or raw frame), in color or gray, of
+    one target. A change of any of those is the picture changing, not its exposure."""
+    out, last = [], {}
+    for i, e in enumerate(pics):
+        k = (e.get("first") or (e["try"][0][0] if e.get("try") else "frame"),
+             bool(e.get("set")) or (e.get("first") or (e["try"][0][0] if e.get("try") else "")) == "color", e.get("target"))
+        run = last.get(e["cam"])
+        if run is None or run[0] != k:
+            run = last[e["cam"]] = (k, [])
+            out.append(run[1])
+        run[1].append(i)
+    return out
+
+
+def exposures(opt, pics, logs=None):
+    """Each of the film's pictures' (pics, in order) exposure change in EV, and its two parts: the levels' line
+    (straight between its points, flat before the first and after the last) and Even out's (obs_mosaic.evened_gains
+    over each stretch of the pictures' brightnesses logs; a stretch shorter than a flash, or a picture with too
+    little lit, keeps its own). (total, line, even)."""
+    n = len(pics)
+    pts = [(i, opt["levels"][e["id"]]) for i, e in enumerate(pics) if e["id"] in (opt.get("levels") or {})]
+    line = np.interp(np.arange(n), [i for i, _ in pts], [v for _, v in pts]) if pts else np.zeros(n)
+    even = np.zeros(n)
+    fn = evener() if opt.get("even") and logs else None
+    if fn:
+        import obs_mosaic
+        flash = getattr(obs_mosaic, "EXPOSURE_FLASH", 3)
+        for run in stretches(pics):
+            run = [i for i in run if logs.get(pics[i]["id"]) is not None]
+            if len(run) >= flash:
+                for i, g in zip(run, fn([logs[pics[i]["id"]] for i in run], opt["even"])):
+                    even[i] = math.log2(g)
+    total = np.clip(line + even, -2 * LEVEL_EV, 2 * LEVEL_EV)
+    return [round(float(v), 4) for v in total], [round(float(v), 4) for v in line], [round(float(v), 4) for v in even]
+
+
+def levels(opt, cache, pictures):
+    """The Movie Editor's exposure graph (/export/levels.json): each frame's brightness in EV (log2, None when it
+    has too little lit), measured so far, and for the film the edit makes (its cameras and cut) each picture's Even
+    out change in EV, once every picture is measured."""
+    m = measure(opt, cache, pictures)
+    done = m["total"] is not None and m["done"] >= m["total"]
+    out = {"done": m["done"], "total": m["total"], "even_ready": evener() is not None, "error": m.get("error"),
+           "level": {k: None if v is None else round(v / math.log(2), 4) for k, v in m["logs"].items()}}
+    if done and opt.get("even") and evener():
+        pics = plan(dict(opt, list=True))["pictures"]
+        for e in pics:
+            e["first"] = e["try"][0][0]
+        out["even"] = {e["id"]: v for e, v in zip(pics, exposures(opt, pics, m["logs"])[2]) if v}
+    return out
+
+
+def crop_at(fr, n, count):
+    """The crop of the film's picture n of count (x0, y0, x1, y1, parts of the picture), or None: the film's crop, or
+    with an end crop the way from the start crop to it, eased in and out over the film (movieedit.html cropAt)."""
+    a, b = fr.get("crop"), fr.get("crop2")
+    if not b or count < 2:
+        return a
+    t = n / (count - 1)
+    t = t * t * (3 - 2 * t)
+    return [u + (v - u) * t for u, v in zip(a, b)]
+
+
+def framed(im, crop, nudge):
+    """Picture im moved by nudge (x, y, parts of the picture) and cut to crop (x0, y0, x1, y1, parts of the picture;
+    None the whole), drawn as big as the picture was on its longer side, black where it has nothing: the Movie Editor's
+    framing (movieedit.html framedOf draws it the same way)."""
+    dx, dy = nudge
+    if not crop and not dx and not dy:
+        return im
+    x0, y0, x1, y1 = crop or (0, 0, 1, 1)
+    W, H = im.size
+    cw, ch = (x1 - x0) * W, (y1 - y0) * H
+    k = max(W, H) / max(cw, ch)
+    # a film pixel at (x, y) shows the picture's (x / k + x0 - d)
+    return im.transform((max(1, round(cw * k)), max(1, round(ch * k))), Image.AFFINE,
+                        (1 / k, 0, (x0 - dx) * W, 0, 1 / k, (y0 - dy) * H), Image.BICUBIC, fillcolor=(0, 0, 0))
+
+
 def width(opt):
     return pane(opt) * len(opt["cams"])
 
@@ -382,15 +620,32 @@ class Pictures:
             return (made[0], "mosaic movie") if made and made[0] else None
         if kind == "color":
             if self._color:
-                return self._color(arg, size, self.cache)[0], "colour"
+                return self._centred(self._color, arg, arg[-1], size), "colour"
             return self._pipeline(arg), "colour"
         if kind == "processed":
             if self._processed:
-                return self._processed(arg, size, self.cache)[0], "processed"
+                return self._centred(self._processed, arg, arg, size), "processed"
             return self._pipeline([arg]), "processed"
         if self._frame:
             return self._frame(arg, size, self.cache), "frame"
         return reel.data_source.read_bytes(f"{reel.FOLDERS[arg[0]]}/{arg}.png"), "frame"
+
+    def _centred(self, maker, arg, frame_id, size):
+        """A picture shown on its own (a color composite or a processed frame) made by the frame server's maker, with
+        Auto center as the camera windows draw it when the film's movie style has it on (obs_mosaic.centre_view, the
+        server's center=1): centred on the body or turned north up, else as it is."""
+        if self.movie.get("center"):
+            import obs_mosaic
+            try:
+                view = obs_mosaic.centre_view(frame_id)
+            except Exception:
+                view = {}
+            if view.get("centre") or view.get("north"):
+                try:
+                    return maker(arg, size, self.cache, centre=view)[0]
+                except LookupError:   # SPICE cannot place the frame: as it is, as in the window
+                    pass
+        return maker(arg, size, self.cache)[0]
 
     @staticmethod
     def _pipeline(ids):
@@ -538,6 +793,12 @@ def render(opt, p, pictures, path, progress=lambda done, total: None, workers=3)
         workers = min(workers, FULL_WORKERS)
     pics, ahead = p["pictures"], max(2, workers * (2 if full else 3))
     look = studio_look.parse(opt.get("edit", ""))
+    # the Movie Editor's exposure levels (Even out measures the stretch's pictures first) and framing
+    logs = measure(opt, pictures.cache, pictures, wait=True)["logs"] if opt.get("even") and evener() else None
+    evs = exposures(opt, pics, logs)[0]
+    fr = opt.get("frame") or FRAME
+    # a frame edited on its own: the movie's look with its own keys over it
+    own = {k: studio_look.parse(f"{opt.get('edit', '')},{r}") for k, r in (opt.get("fedit") or {}).items()}
     kinds, building = Counter(), {}
     try:
         with ThreadPoolExecutor(workers) as pool:
@@ -551,8 +812,13 @@ def render(opt, p, pictures, path, progress=lambda done, total: None, workers=3)
                     nxt += 1
                 im, what = todo.popleft().result()
                 kinds[what or "none"] += 1
-                if im is not None and look:
-                    im = studio_look.apply(im, look)   # the movie editor's look, as Cassini Studio draws it
+                if im is not None:
+                    im = framed(im, crop_at(fr, n, len(pics)), fr["nudge"].get(e["id"], (0, 0)))
+                its = own[e["id"]] if e["id"] in own else look
+                if im is not None and (its or evs[n]):
+                    # the movie editor's look (or the frame's own), as Cassini Studio draws it, at this picture's
+                    # exposure level
+                    im = studio_look.apply(im, its, evs[n])
                 # a mosaic stays up while its observation goes on: the pass's other frames (another filter, a frame
                 # that is not a tile) would otherwise flash in and out between its tiles
                 if what in ("mosaic", "mosaic movie"):
@@ -585,6 +851,7 @@ _lock = threading.Lock()
 _queue = queue.Queue()
 _worker = None
 SOUND_WAIT = 90   # seconds a finished video waits for its soundtrack before it is kept silent
+SOUND_MOST = 30 * 60   # seconds of film the page makes a soundtrack for (export.html SOUND_MOST): a longer one is silent, not waited for
 
 
 def folder(cache, jid, full=None):
@@ -706,7 +973,7 @@ def _work(pictures):
                 job["made_as"] = render(opt, job["plan"], pictures, video + ".part.mp4", progress)
             os.replace(video + ".part.mp4", video)
             wav = os.path.join(d, "sound.wav")
-            if opt["sound"]:
+            if opt["sound"] and job["plan"]["seconds"] <= SOUND_MOST:
                 with _lock:
                     job.update(state="sound", eta=None)
                 waited = time.time()

@@ -229,6 +229,26 @@ const ICONS = {
     st.scene.add(g); fit(st, g, 0.94);
     return shot(st);
   },
+  // Ambient mode: a slim graphite display on its stand, left running with Saturn on the screen
+  async ambient() {
+    const ps = stage(30), b = await body("saturn");
+    ps.key.position.set(-5, 2.5, 5); ps.scene.add(b); fit(ps, b, 1.15);
+    const rt = new THREE.WebGLRenderTarget(800, 512, { encoding: THREE.sRGBEncoding });
+    ps.cam.aspect = 800 / 512; ps.cam.updateProjectionMatrix();
+    R.setRenderTarget(rt); R.setClearColor(0x000000, 1); R.render(ps.scene, ps.cam); R.setRenderTarget(null);
+    const st = stage(26), g = new THREE.Group(), W = 2.5, H = 1.6, t = 0.07;
+    const metal = new THREE.MeshStandardMaterial({ color: 0x2a2d33, metalness: 0.75, roughness: 0.32, envMap: ENV, envMapIntensity: 1.0 });
+    const alu = new THREE.MeshStandardMaterial({ color: 0x9aa1ac, metalness: 0.95, roughness: 0.28, envMap: ENV, envMapIntensity: 1.2 });
+    const body_ = new THREE.Mesh(new THREE.BoxGeometry(W, H, 0.09), metal); g.add(body_);
+    const screen = new THREE.Mesh(new THREE.PlaneGeometry(W - 2 * t, H - 2 * t), new THREE.MeshBasicMaterial({ map: rt.texture, toneMapped: false }));
+    screen.position.z = 0.046; g.add(screen);
+    // the stand: a tilted aluminium leg and a flat foot
+    const leg = new THREE.Mesh(new THREE.BoxGeometry(0.42, 0.62, 0.05), alu); leg.position.set(0, -H / 2 - 0.22, -0.12); leg.rotation.x = -0.18; g.add(leg);
+    const foot = new THREE.Mesh(new THREE.BoxGeometry(0.95, 0.04, 0.55), alu); foot.position.set(0, -H / 2 - 0.53, -0.08); g.add(foot);
+    g.rotation.set(-0.12, 0.36, 0.0);
+    st.scene.add(g); fit(st, g, 0.95);
+    return shot(st);
+  },
   // the two cameras of the Imaging Science Subsystem: the narrow-angle is a long, slim telescope (2 m focal length)
   // behind a deep black sunshade; the wide-angle a short, wide barrel with a big domed lens (20 cm)
   nac() { return this._camera({ r: 0.3, len: 2.9, shade: 0.75, lens: 0.55, dome: 0.35 }); },
