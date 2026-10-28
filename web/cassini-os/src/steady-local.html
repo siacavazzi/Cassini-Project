@@ -1,0 +1,547 @@
+<script>
+// ---------- image stabilization and exposure normalization on this computer (Settings > Processing > Stabilize on this computer) ----------
+// The pre-built movie frames are drawn where SPICE puts each tile (steady 0). Stabilized at any smoothing, a frame of
+// one filter in a pass whose view is the whole pass is that same picture with its tile moved by whole pixels
+// (obs_mosaic._place rounds a tile's corner to a canvas pixel at the 1024 px drawing). So the page asks once per pass
+// for its stabilization chain (/frames/movie/<ID>.steady.json, obs_mosaic.steady_table), works out steady_places for
+// the smoothing set here in a worker (the same arithmetic, in the same order: web/test_steady_local.py checks it
+// against the Python), and the worker moves the pre-built 1024 px frame by the difference. Color frames, a trail, a
+// feature track and a pass whose view follows its frames are drawn by the server as before; so is the film export.
+(function () {
+  // the arithmetic, shared by the worker and the test (web/test_steady_local.py runs it in node)
+  const STEADY_MATH = function () {
+    // Python's round(x): half to even
+    const pyRound = x => { let r = Math.round(x); if (r - x === 0.5 && r % 2 !== 0) r -= 1; return r; };
+    // Python's round(x, 2): the double nearest the correctly rounded decimal; a tie (x * 8 an odd whole number,
+    // the only doubles exactly half way between two hundredths) goes to the even hundredth
+    const pyRound2 = x => {
+      const e = x * 8;
+      if (Number.isInteger(e) && e % 2 !== 0) { const h = x * 100, f = Math.floor(h); return (f % 2 === 0 ? f : f + 1) / 100; }
+      return Number(x.toFixed(2));
+    };
+    // obs_mosaic.steady_places: the chain plus a Gaussian (sigma smooth frames, cut at 3 sigma) of SPICE - chain
+    function places(t, smooth) {
+      const N = t.n.length, out = new Array(N);
+      if (smooth <= 0) return null;
+      for (let a = 0; a < N; a++) {
+        let sx = 0, sy = 0, sw = 0;
+        for (let b = 0; b < N; b++) {
+          const d = a - b;
+          if (Math.abs(d) > 3 * smooth) continue;
+          const w = Math.exp(-0.5 * (d / smooth) ** 2);
+          sx += w * (t.spice[b][0] - t.chain[b][0]); sy += w * (t.spice[b][1] - t.chain[b][1]); sw += w;
+        }
+        out[a] = [pyRound2(t.chain[a][0] + sx / sw), pyRound2(t.chain[a][1] + sy / sw)];
+      }
+      return out;
+    }
+    // obs_mosaic._place's corner of tile a in the canvas (k at OUT), at place o
+    const corner = (t, a, o) => [pyRound((o[0] + t.box[a][0] - t.view[0]) * t.k), pyRound((o[1] + t.box[a][1] - t.view[1]) * t.k)];
+    // how far frame a's tile moves from SPICE's place to its stabilized one, canvas pixels
+    function shift(t, pl, a) {
+      if (!pl) return [0, 0];
+      const s = corner(t, a, t.spice[a]), p = corner(t, a, pl[a]);
+      return [p[0] - s[0], p[1] - s[1]];
+    }
+    // obs_mosaic.evened_gains for one stretch's log brightnesses in order: a running median over FLASH frames, a
+    // Gaussian-weighted line over smooth frames (_gaussian_line), the gain to that line within GAIN either way, to 1/200
+    function evenedGains(L, smooth, c) {
+      const N = L.length, h = Math.floor(c.flash / 2), pad = [];
+      for (let k = 0; k < h; k++) pad.push(L[0]);
+      pad.push(...L);
+      for (let k = 0; k < h; k++) pad.push(L[N - 1]);
+      const steady = [];
+      for (let k = 0; k < N; k++) {
+        const w = pad.slice(k, k + c.flash).sort((a, b) => a - b), m = w.length >> 1;
+        steady.push(w.length % 2 ? w[m] : (w[m - 1] + w[m]) / 2);
+      }
+      const out = [];
+      for (let a = 0; a < N; a++) {
+        let s0 = 0, s1 = 0, s2 = 0, t0 = 0, t1 = 0;
+        for (let b = 0; b < N; b++) {
+          const d = b - a;
+          if (Math.abs(d) > 3 * smooth) continue;
+          const w = Math.exp(-0.5 * (d / smooth) ** 2);
+          s0 += w; s1 += w * d; s2 += w * d * d; t0 += w * steady[b]; t1 += w * d * steady[b];
+        }
+        const det = s0 * s2 - s1 * s1, ok = det > 1e-9 * Math.max(s0 * s2, 1e-300);
+        const want = ok ? (s2 * t0 - s1 * t1) / det : t0 / s0;
+        out.push(pyRound(Math.min(Math.max(Math.exp(want - L[a]), 1 / c.gain), c.gain) * 200) / 200);
+      }
+      return out;
+    }
+    // obs_mosaic.exposure_gains: {frame n: gain} from the chain ({n: [log, stretch, in colour]}), each stretch on its own
+    function gains(e, smooth) {
+      if (smooth <= 0) return {};
+      const ns = Object.keys(e.logs).map(Number).sort((a, b) => a - b), by = new Map(), out = {};
+      const inColour = ns.some(n => e.logs[n][2]);
+      for (const n of ns) { const k = e.logs[n][1]; if (!by.has(k)) by.set(k, []); by.get(k).push(n); }
+      for (const [k, run] of by) if (inColour && !e.logs[run[0]][2] && run.length < e.greyRun) { for (const n of run) out[n] = 1.0; by.delete(k); }
+      for (const run of by.values()) {
+        const g = run.length >= e.flash ? evenedGains(run.map(n => e.logs[n][0]), smooth, e) : run.map(() => 1.0);
+        run.forEach((n, i) => { out[n] = g[i]; });
+      }
+      return out;
+    }
+    // obs_mosaic._shade's lookup table for a gain on linear brightness (calibration.decode / encode at gamma)
+    function lut(g, gamma) {
+      const t = new Uint8Array(256);
+      const dec = v => gamma === "srgb" ? (v <= 0.04045 ? v / 12.92 : Math.pow((Math.max(v, 0.04045) + 0.055) / 1.055, 2.4)) : Math.pow(v, gamma);
+      const enc = x => gamma === "srgb" ? (x <= 0.0031308 ? 12.92 * x : 1.055 * Math.pow(Math.max(x, 0.0031308), 1 / 2.4) - 0.055) : Math.pow(x, 1 / gamma);
+      for (let i = 0; i < 256; i++) t[i] = Math.trunc(enc(Math.min(Math.max(dec(i / 255) * g, 0), 1)) * 255 + 0.5);
+      return t;
+    }
+    // obs_mosaic.colour_picture on its planes (RGBA, each a filter's tile placed in the view, red channel = the
+    // filter): calibration.mix_display (decode, the 3x3 natural mix, _shoulder's roll-off, encode) in float32 as numpy
+    // does it, then the picture only where every filter has it. c: {mix (3x3, or null: straight), gamma, shoulder}
+    function mix(planes, c) {
+      const f = Math.fround, N = planes[0].length, out = new Uint8ClampedArray(N), g = c.gamma, srgb = g === "srgb";
+      const gf = srgb ? 0 : f(g), ig = srgb ? 0 : f(1 / g);
+      const dec = new Float32Array(256);
+      for (let v = 0; v < 256; v++) {
+        const x = f(v / 255);
+        dec[v] = srgb ? (x <= f(0.04045) ? f(x / f(12.92)) : f(Math.pow(f(f(Math.max(x, f(0.04045)) + f(0.055)) / f(1.055)), f(2.4)))) : f(Math.pow(x, gf));
+      }
+      const enc = x => srgb ? (x <= f(0.0031308) ? f(f(12.92) * x) : f(f(f(1.055) * f(Math.pow(f(Math.max(x, f(0.0031308))), f(1 / 2.4)))) - f(0.055))) : f(Math.pow(x, ig));
+      const M = c.mix && c.mix.map(r => r.map(f)), knee = f(c.shoulder), room = f(1 - c.shoulder), tiny = f(1e-12);
+      // the level a linear value encodes to: trunc(encode(y) * 255 + 0.5), which only grows with y, so each level's
+      // smallest float32 y is found once (a search over float32 bit patterns) and a pixel's level is a search of
+      // those 255 thresholds: the same levels at an eighth of the cost of a pow per channel
+      const level = y => Math.trunc(f(f(enc(y) * 255) + 0.5));
+      let lv = level;
+      if (!srgb) {
+        const bits = new Float32Array(1), word = new Uint32Array(bits.buffer), T = new Float32Array(256);
+        const asF = w => { word[0] = w; return bits[0]; };
+        for (let b = 1; b < 256; b++) {
+          let lo = 0, hi = 0x3f800000;   // 0 .. 1.0
+          if (level(1) < b) { T[b] = Infinity; continue; }
+          while (lo < hi) { const mid = (lo + hi) >>> 1; if (level(asF(mid)) >= b) hi = mid; else lo = mid + 1; }
+          T[b] = asF(lo);
+        }
+        lv = y => { let lo = 0, hi = 255; while (lo < hi) { const mid = (lo + hi + 1) >> 1; if (T[mid] <= y) lo = mid; else hi = mid - 1; } return lo; };
+      }
+      const x = [0, 0, 0], y = [0, 0, 0];
+      for (let i = 0; i < N; i += 4) {
+        let r0 = planes[0][i], r1 = planes[1][i], r2 = planes[2][i];
+        if (M) {
+          x[0] = dec[r0]; x[1] = dec[r1]; x[2] = dec[r2];
+          for (let k = 0; k < 3; k++) y[k] = f(f(f(M[k][0] * x[0]) + f(M[k][1] * x[1])) + f(M[k][2] * x[2]));
+          const top = Math.max(y[0], y[1], y[2]);
+          if (top > knee) {
+            const roll = f(knee + f(room * f(Math.tanh(f(f(top - knee) / room)))));
+            const k = f(roll / Math.max(top, tiny));
+            for (let j = 0; j < 3; j++) y[j] = f(y[j] * k);
+          }
+          r0 = lv(Math.min(Math.max(y[0], 0), 1)); r1 = lv(Math.min(Math.max(y[1], 0), 1)); r2 = lv(Math.min(Math.max(y[2], 0), 1));
+        }
+        const a = Math.min(planes[0][i + 3], planes[1][i + 3], planes[2][i + 3]), s = f(a / 255);
+        out[i] = Math.trunc(f(f(r0 * s) + 0.5)); out[i + 1] = Math.trunc(f(f(r1 * s) + 0.5)); out[i + 2] = Math.trunc(f(f(r2 * s) + 0.5));
+        out[i + 3] = a;
+      }
+      return out;
+    }
+    // movie_frame's rolling trail: the up to trail earlier placed frames of frame n's filter, oldest first
+    function trailOf(t, n, trail) {
+      const placed = new Set(t.n), js = [];
+      for (let j = n - 1; j > Math.max(-1, n - 8 * trail) && js.length < trail; j--) if (t.filters[j] === t.filters[n]) js.push(j);
+      return js.reverse().filter(j => placed.has(j));
+    }
+    // ... drawn under the newest, older ones fainter (float32 as numpy does it): older and newest are RGBA planes
+    function blendTrail(older, newest) {
+      const f = Math.fround, N = newest.length, acc = new Float32Array(N), L = older.length, out = new Uint8ClampedArray(N);
+      older.forEach((a, q) => {
+        const k = f(1 - (L - q) / (L + 1));
+        for (let i = 0; i < N; i += 4) {
+          const w = f(f(a[i + 3] / 255) * k), v = f(1 - w);
+          for (let c = 0; c < 3; c++) acc[i + c] = f(f(acc[i + c] * v) + f(a[i + c] * w));
+          acc[i + 3] = Math.max(acc[i + 3], f(w * 255));
+        }
+      });
+      for (let i = 0; i < N; i += 4) {
+        const w = f(newest[i + 3] / 255), v = f(1 - w);
+        for (let c = 0; c < 3; c++) acc[i + c] = f(f(acc[i + c] * v) + f(newest[i + c] * w));
+        acc[i + 3] = Math.max(acc[i + 3], newest[i + 3]);
+        for (let c = 0; c < 4; c++) out[i + c] = Math.trunc(f(acc[i + c] + 0.5));
+      }
+      return out;
+    }
+    // ---- a mosaic movie's fade (obs_mosaic._faded's post step, on the time-lapse picture) ----
+    // obs_mosaic._fade_weight: 1 for the newest, falling evenly to the floor (persist per cent) over fade frames
+    const fadeWeight = (age, fade, persist) => { const floor = persist / 100; return age <= 0 ? 1.0 : Math.max(floor, 1 - (1 - floor) * age / fade); };
+    // the brightness map (w x h) of frame n: each drawn tile's alpha laid over it oldest first, at its fade (float32)
+    function fadeLight(t, n, fade, persist, alphas) {
+      const f = Math.fround, fr = t.frames[n], light = new Float32Array(t.w * t.h).fill(1);
+      if (!fr) return light;
+      for (const j of fr.n) {
+        const part = t.parts[j];
+        if (!part) continue;
+        const [a0, b0, a1, b1] = part.at, aw = a1 - a0, A = alphas(j), wt = fadeWeight(fr.newest - j, fade, persist);
+        for (let y = b0; y < b1; y++) for (let x = a0; x < a1; x++) {
+          const a = f(A[(y - b0) * aw + (x - a0)] / 255), i = y * t.w + x;
+          light[i] = f(f(light[i] * f(1 - a)) + f(wt * a));
+        }
+      }
+      return light;
+    }
+    // cv2.resize(src, (W, H), interpolation=INTER_LINEAR) of a float32 map: each axis's source place
+    // (d + 0.5) * scale - 0.5, clamped at the edges, the rows first and then the columns, in float32
+    function resizeLinear(src, w, h, W, H) {
+      const f = Math.fround, axis = (n, N) => {
+        const scale = n / N, at = new Int32Array(N), wt = new Float32Array(N);
+        for (let d = 0; d < N; d++) {
+          let fx = f((d + 0.5) * scale - 0.5), sx = Math.floor(fx);
+          fx = f(fx - sx);
+          if (sx < 0) { fx = 0; sx = 0; }
+          if (sx >= n - 1) { fx = 0; sx = n - 1; }
+          at[d] = sx; wt[d] = fx;
+        }
+        return [at, wt];
+      };
+      const [xs, xw] = axis(w, W), [ys, yw] = axis(h, H), rows = new Float32Array(h * W), out = new Float32Array(W * H);
+      for (let y = 0; y < h; y++) for (let x = 0; x < W; x++) {
+        const s0 = src[y * w + xs[x]], s1 = xs[x] + 1 < w ? src[y * w + xs[x] + 1] : s0;
+        rows[y * W + x] = f(f(s0 * f(1 - xw[x])) + f(s1 * xw[x]));
+      }
+      for (let y = 0; y < H; y++) {
+        const r0 = ys[y] * W, r1 = Math.min(ys[y] + 1, h - 1) * W, b1 = yw[y], b0 = f(1 - b1);
+        for (let x = 0; x < W; x++) out[y * W + x] = f(f(rows[r0 + x] * b0) + f(rows[r1 + x] * b1));
+      }
+      return out;
+    }
+    // the picture's colour times the map, + 0.5, cut to a byte (alpha as it is)
+    function applyLight(px, L) {
+      const f = Math.fround;
+      for (let i = 0, p = 0; p < L.length; p++, i += 4) for (let c = 0; c < 3; c++) px[i + c] = Math.min(255, Math.max(0, Math.trunc(f(f(px[i + c] * L[p]) + 0.5))));
+      return px;
+    }
+    // ---- a filled pass's last step (obs_mosaic.detail, the balanced look): local contrast raised on the luminance ----
+    // cv2.getGaussianKernel(ksize, sigma, CV_32F) for GaussianBlur's ksize (0, 0) on float32: 4 sigma each side
+    function gaussKernel(sigma) {
+      const n = (pyRound(sigma * 4 * 2 + 1) | 1), scale2X = -0.5 / (sigma * sigma), k = new Float32Array(n);
+      let sum = 0;
+      for (let i = 0; i < n; i++) { const x = i - (n - 1) * 0.5; k[i] = Math.exp(scale2X * x * x); sum += k[i]; }
+      sum = 1 / sum;
+      for (let i = 0; i < n; i++) k[i] = k[i] * sum;
+      return k;
+    }
+    // what is blurred: the alpha a and the luminance times it, float32 as numpy has them
+    function detailInputs(px) {
+      const f = Math.fround, N = px.length / 4, a = new Float32Array(N), la = new Float32Array(N), lum = new Float32Array(N);
+      for (let p = 0, i = 0; p < N; p++, i += 4) {
+        a[p] = f(px[i + 3] / 255);
+        lum[p] = f((px[i] + px[i + 1] + px[i + 2]) / 3);
+        la[p] = f(lum[p] * a[p]);
+      }
+      return { a, la, lum };
+    }
+    // the rest of detail() once the two blurs (ga of a, gla of lum * a) are in: mean, the change, clip, round half to even
+    function detailFinish(px, lum, ga, gla, amount) {
+      const f = Math.fround, floor = f(1e-3), D = f(amount);
+      for (let p = 0, i = 0; p < lum.length; p++, i += 4) {
+        const mean = f(gla[p] / Math.max(ga[p], floor)), d = f(D * f(lum[p] - mean));
+        for (let c = 0; c < 3; c++) px[i + c] = pyRound(Math.min(255, Math.max(0, f(px[i + c] + d))));
+      }
+      return px;
+    }
+    // cv2's separable float32 blur (BORDER_REFLECT_101), on the processor: rows summed tap by tap, then columns
+    // centre first and each pair of taps together, as cv2's RowFilter and SymmColumnFilter (the reference the GPU's
+    // version is tested against; slow for a whole picture)
+    function blurCPU(src, w, h, k) {
+      const f = Math.fround, n = k.length, r = (n - 1) >> 1, rows = new Float32Array(w * h), out = new Float32Array(w * h);
+      const refl = (i, len) => { while (i < 0 || i >= len) i = i < 0 ? -i : 2 * len - 2 - i; return i; };
+      for (let y = 0; y < h; y++) for (let x = 0; x < w; x++) {
+        let s = 0;
+        for (let j = 0; j < n; j++) s = f(s + f(k[j] * src[y * w + refl(x - r + j, w)]));
+        rows[y * w + x] = s;
+      }
+      for (let y = 0; y < h; y++) for (let x = 0; x < w; x++) {
+        let s = f(k[r] * rows[y * w + x]);
+        for (let j = 1; j <= r; j++) s = f(s + f(k[r + j] * f(rows[refl(y + j, h) * w + x] + rows[refl(y - j, h) * w + x])));
+        out[y * w + x] = s;
+      }
+      return out;
+    }
+    return { pyRound, pyRound2, places, shift, evenedGains, gains, lut, mix, trailOf, blendTrail, fadeWeight, fadeLight, resizeLinear, applyLight,
+      gaussKernel, detailInputs, detailFinish, blurCPU };
+  };
+  window.cassiniSteadyMath = STEADY_MATH;
+  // the same blur on the GPU (WebGL 2 with float colour buffers): blur([a, b], w, h, kernel) -> [blurred a, blurred b],
+  // the two maps in one float texture, a pass along the rows and one along the columns in blurCPU's order
+  const STEADY_GPU = function () {
+    let gl = null, prog = null, tex = [], fbo = [], ktex = null, size = [0, 0], kn = 0;
+    try {
+      const c = new OffscreenCanvas(1, 1);
+      gl = c.getContext("webgl2", { antialias: false, depth: false, stencil: false, premultipliedAlpha: false });
+      if (!gl || !gl.getExtension("EXT_color_buffer_float")) gl = null;
+    } catch (e) { gl = null; }
+    if (!gl) return null;
+    const sh = (type, src) => { const o = gl.createShader(type); gl.shaderSource(o, src); gl.compileShader(o); if (!gl.getShaderParameter(o, gl.COMPILE_STATUS)) throw new Error(gl.getShaderInfoLog(o)); return o; };
+    prog = gl.createProgram();
+    gl.attachShader(prog, sh(gl.VERTEX_SHADER, "#version 300 es\nin vec2 p; void main() { gl_Position = vec4(p, 0., 1.); }"));
+    gl.attachShader(prog, sh(gl.FRAGMENT_SHADER, `#version 300 es
+precision highp float; precision highp int; precision highp sampler2D;
+uniform sampler2D src; uniform sampler2D kern; uniform int r; uniform int horiz; uniform ivec2 size;
+out vec4 o;
+int refl(int i, int len) { for (int t = 0; t < 8 && (i < 0 || i >= len); t++) i = i < 0 ? -i : 2 * len - 2 - i; return i; }
+float kk(int j) { return texelFetch(kern, ivec2(j, 0), 0).r; }
+void main() {
+  ivec2 q = ivec2(gl_FragCoord.xy);
+  vec4 s;
+  if (horiz == 1) {
+    s = vec4(0.);
+    for (int j = 0; j <= 2 * r; j++) s = s + kk(j) * texelFetch(src, ivec2(refl(q.x - r + j, size.x), q.y), 0);
+  } else {
+    s = kk(r) * texelFetch(src, q, 0);
+    for (int j = 1; j <= r; j++) s = s + kk(r + j) * (texelFetch(src, ivec2(q.x, refl(q.y + j, size.y)), 0) + texelFetch(src, ivec2(q.x, refl(q.y - j, size.y)), 0));
+  }
+  o = s;
+}`));
+    gl.linkProgram(prog);
+    if (!gl.getProgramParameter(prog, gl.LINK_STATUS)) return null;
+    gl.useProgram(prog);
+    const buf = gl.createBuffer(); gl.bindBuffer(gl.ARRAY_BUFFER, buf); gl.bufferData(gl.ARRAY_BUFFER, new Float32Array([-1, -1, 1, -1, -1, 1, 1, 1]), gl.STATIC_DRAW);
+    const loc = gl.getAttribLocation(prog, "p"); gl.enableVertexAttribArray(loc); gl.vertexAttribPointer(loc, 2, gl.FLOAT, false, 0, 0);
+    const U = n => gl.getUniformLocation(prog, n);
+    const newTex = (w, h, data, fmt = gl.RGBA32F, f2 = gl.RGBA) => {
+      const t = gl.createTexture(); gl.bindTexture(gl.TEXTURE_2D, t);
+      [[gl.TEXTURE_MIN_FILTER, gl.NEAREST], [gl.TEXTURE_MAG_FILTER, gl.NEAREST], [gl.TEXTURE_WRAP_S, gl.CLAMP_TO_EDGE], [gl.TEXTURE_WRAP_T, gl.CLAMP_TO_EDGE]].forEach(([k, v]) => gl.texParameteri(gl.TEXTURE_2D, k, v));
+      gl.texImage2D(gl.TEXTURE_2D, 0, fmt, w, h, 0, f2, gl.FLOAT, data);
+      return t;
+    };
+    return function blur(maps, w, h, k) {
+      if (size[0] !== w || size[1] !== h) {
+        tex.forEach(t => gl.deleteTexture(t)); fbo.forEach(b => gl.deleteFramebuffer(b));
+        tex = [newTex(w, h, null), newTex(w, h, null), newTex(w, h, null)];
+        fbo = tex.slice(1).map(t => { const b = gl.createFramebuffer(); gl.bindFramebuffer(gl.FRAMEBUFFER, b); gl.framebufferTexture2D(gl.FRAMEBUFFER, gl.COLOR_ATTACHMENT0, gl.TEXTURE_2D, t, 0); return b; });
+        gl.canvas.width = w; gl.canvas.height = h; size = [w, h];
+      }
+      if (kn !== k.length || !ktex) { if (ktex) gl.deleteTexture(ktex); ktex = newTex(k.length, 1, k, gl.R32F, gl.RED); kn = k.length; }
+      else { gl.bindTexture(gl.TEXTURE_2D, ktex); gl.texSubImage2D(gl.TEXTURE_2D, 0, 0, 0, k.length, 1, gl.RED, gl.FLOAT, k); }
+      const N = w * h, inp = new Float32Array(N * 4);
+      for (let p = 0; p < N; p++) { inp[p * 4] = maps[0][p]; inp[p * 4 + 1] = maps[1][p]; }
+      gl.bindTexture(gl.TEXTURE_2D, tex[0]); gl.texSubImage2D(gl.TEXTURE_2D, 0, 0, 0, w, h, gl.RGBA, gl.FLOAT, inp);
+      gl.viewport(0, 0, w, h);
+      gl.uniform1i(U("src"), 0); gl.uniform1i(U("kern"), 1); gl.uniform1i(U("r"), (k.length - 1) >> 1); gl.uniform2i(U("size"), w, h);
+      gl.activeTexture(gl.TEXTURE1); gl.bindTexture(gl.TEXTURE_2D, ktex); gl.activeTexture(gl.TEXTURE0);
+      [[tex[0], fbo[0], 1], [tex[1], fbo[1], 0]].forEach(([from, to, horiz]) => {
+        gl.bindFramebuffer(gl.FRAMEBUFFER, to); gl.bindTexture(gl.TEXTURE_2D, from); gl.uniform1i(U("horiz"), horiz);
+        gl.drawArrays(gl.TRIANGLE_STRIP, 0, 4);
+      });
+      const out = new Float32Array(N * 4);
+      gl.readPixels(0, 0, w, h, gl.RGBA, gl.FLOAT, out);
+      const a = new Float32Array(N), b = new Float32Array(N);
+      for (let p = 0; p < N; p++) { a[p] = out[p * 4]; b[p] = out[p * 4 + 1]; }
+      return [a, b];
+    };
+  };
+  window.cassiniSteadyGPU = STEADY_GPU;
+  if (typeof document === "undefined") return;
+
+  // the worker: keeps each pass's table and its places per smoothing, moves a frame's picture
+  const src = `const M = (${STEADY_MATH.toString()})();
+let blur;   // the GPU blur, made when a filled pass first needs it
+const sharpen = (px, W, H, t) => {
+  if (blur === undefined) blur = (${STEADY_GPU.toString()})();
+  const k = M.gaussKernel(t.sigma), d = M.detailInputs(px);
+  const [ga, gla] = blur ? blur([d.a, d.la], W, H, k) : [M.blurCPU(d.a, W, H, k), M.blurCPU(d.la, W, H, k)];
+  return M.detailFinish(px, d.lum, ga, gla, t.amount);
+};
+const tables = new Map(), placed = new Map(), gained = new Map(), luts = new Map();
+onmessage = async e => {
+  const m = e.data;
+  if (m.table) { tables.set(m.key, m.table); return; }
+  const t = tables.get(m.key), pk = m.key + ":" + m.steady, gk = m.key + ":" + m.exposure, t0 = performance.now();
+  if (!placed.has(pk)) placed.set(pk, M.places(t, m.steady));
+  if (m.exposure && !gained.has(gk)) gained.set(gk, M.gains(t.exposure, m.exposure));
+  // one gain for every tile of the picture (movie_frame), through _shade's lookup table
+  const gain = m.exposure ? (gained.get(gk)[m.n] ?? 1.0) : 1.0, t1 = performance.now();
+  let L = null;
+  if (gain !== 1.0) {
+    const lk = gain + ":" + t.exposure.gamma;
+    if (!luts.has(lk)) luts.set(lk, M.lut(gain, t.exposure.gamma));
+    L = luts.get(lk);
+  }
+  const W = m.planes[0].bitmap.width, H = m.planes[0].bitmap.height, mixing = m.planes.length > 1 || m.trail, moves = [];
+  // each tile's picture (the movie frame drawn at SPICE's places) moved to its stabilized place, its gain on it
+  const planes = m.planes.map(p => {
+    const [dx, dy] = M.shift(t, placed.get(pk), p.i), c = new OffscreenCanvas(W, H), g = c.getContext("2d", { willReadFrequently: !!(L || mixing || m.detail) });
+    g.drawImage(p.bitmap, dx, dy);
+    p.bitmap.close();
+    moves.push([dx, dy]);
+    if (!L && !mixing) return c;
+    const im = g.getImageData(0, 0, W, H), d = im.data;
+    if (L) for (let i = 0; i < d.length; i += 4) { d[i] = L[d[i]]; d[i + 1] = L[d[i + 1]]; d[i + 2] = L[d[i + 2]]; }
+    if (!mixing) { g.putImageData(im, 0, 0); return c; }
+    return d;
+  });
+  let out = planes[0];
+  if (mixing || m.detail) {
+    // a colour set: colour_picture's mix of the filters' planes; a trail: the earlier frames under the newest;
+    // a filled pass: then its detail filter (the planes came without it)
+    let px = !mixing ? planes[0].getContext("2d").getImageData(0, 0, W, H).data
+      : m.trail ? M.blendTrail(planes.slice(0, -1), planes[planes.length - 1]) : M.mix(planes, t.sets);
+    if (m.detail) px = sharpen(px, W, H, t);
+    out = new OffscreenCanvas(W, H);
+    out.getContext("2d").putImageData(new ImageData(px, W, H), 0, 0);
+  }
+  const blob = await out.convertToBlob({ type: "image/png" });
+  postMessage({ id: m.id, blob, moves, gain, ms: [t1 - t0, performance.now() - t1] });
+};`;
+  let worker = null, seq = 0;
+  const waiting = new Map();
+  const work = () => {
+    if (!worker) {
+      worker = new Worker(URL.createObjectURL(new Blob([src], { type: "text/javascript" })));
+      worker.onmessage = e => { const w = waiting.get(e.data.id); waiting.delete(e.data.id); if (w) w(e.data); };
+    }
+    return worker;
+  };
+  const S = () => window.cassiniSettings;
+  // whether this computer can blur on the GPU (the detail filter of filled passes), asked once
+  let gpuOk;
+  const gpu = () => {
+    if (gpuOk === undefined) { try { const c = new OffscreenCanvas(1, 1), g = c.getContext("webgl2"); gpuOk = !!(g && g.getExtension("EXT_color_buffer_float")); } catch (e) { gpuOk = false; } }
+    return gpuOk;
+  };
+  const byId = new Map();     // `${center}${color}:${frame id}` -> {key, table, a: its tile's index, n: its frame} once its pass's table is here
+  const asked = new Set();
+  const stats = { frames: 0, placeMs: 0, drawMs: 0, last: null };
+  let urls = [];
+  const tag = (center, color) => `${center ? 1 : 0}${color ? 1 : 0}`;
+  // the pass's table, asked for once (in the background); null until it is here and the pass can be done locally
+  function lookup(frames, id, center, color) {
+    const k = `${tag(center, color)}:${id}`;
+    if (byId.has(k)) return byId.get(k);
+    if (!asked.has(k)) {
+      asked.add(k);
+      fetch(`${frames}/frames/movie/${id}.steady.json?center=${center ? 1 : 0}&color=${color ? 1 : 0}`, { priority: "low" }).then(r => r.ok ? r.json() : null).then(t => {
+        if (!t || t.working) { setTimeout(() => asked.delete(k), 5000); return; }
+        if (!t.local) { byId.set(k, null); return; }
+        const key = `${tag(center, color)}:${t.ids[t.n[0]]}`;
+        work().postMessage({ key, table: t });
+        t.n.forEach((n, a) => byId.set(`${tag(center, color)}:${t.ids[n]}`, { key, table: t, a, n }));
+        if (!byId.has(k)) byId.set(k, null);   // a frame SPICE could not place: the server shows it
+        // the camera windows ask again (a paused clock would keep the server's picture otherwise)
+        window.dispatchEvent(new Event("cassini-steady-local"));
+        // a brightness chain still being worked out: asked for again
+        if (t.exposure === null) setTimeout(() => { for (const n of t.n) byId.delete(`${tag(center, color)}:${t.ids[n]}`); asked.delete(k); }, 15000);
+      }).catch(() => asked.delete(k));
+    }
+    return null;
+  }
+  window.cassiniSteadyLocal = {
+    stats,
+    // the frame's pass table once it is here (null: the server draws the pass), asking for it as want does
+    async ready(frames, id, center = true, color = false) {
+      for (let tries = 0; tries < 240; tries++) {
+        const k = `${tag(center, color)}:${id}`;
+        if (byId.has(k) && (!byId.get(k) || byId.get(k).table.exposure !== null)) return byId.get(k);
+        lookup(frames, id, center, color);
+        await new Promise(r => setTimeout(r, 500));
+      }
+      return null;
+    },
+    // what this computer works out for this frame ({steady, exposure} smoothing), or null when the server draws it
+    // (setting off, nothing to work out, a trail, a color frame, a pass not done here, or its table not here yet)
+    want(frames, id, o = {}) {
+      if (!S() || !S().get("movies.stabilizeLocal")) return null;
+      const steady = window.cassiniStabilize ? window.cassiniStabilize() : 0, exposure = window.cassiniExposure ? window.cassiniExposure() : 0;
+      const trail = S().get("movies.trail") || 0;
+      if (!steady && !exposure && !trail) return null;
+      // the pictures as Settings > Processing draws them by default only (another look or a step off: the server)
+      if (window.cassiniLook && window.cassiniLook()) return null;
+      const e = lookup(frames, id, o.center !== false, !!o.color);
+      if (!e) return null;
+      // a colour set: its natural mix here (a false colour set: the server)
+      const set = o.color && e.table.sets ? e.table.sets.by[e.n] : null;
+      if (o.color && e.table.colour && !e.table.sets) return null;
+      if (exposure && !(e.table.exposure && e.table.exposure.local)) return null;
+      const tr = set ? 0 : Math.min(trail, e.table.trail_most);
+      // a filled pass ends in its detail filter: anything but a move is done on its frames drawn without it, and
+      // the filter here (on the GPU; a computer without one leaves the pass to the server)
+      const raw = !!e.table.detail && !!(exposure || tr || (set && set.length > 1));
+      if (raw && !gpu()) return null;
+      return { steady, exposure, trail: tr, raw };
+    },
+    // the picture of the frame (SPICE's places, no gain, OUT px) moved to its stabilized place and given its
+    // exposure gain: a new Image, or null
+    // im: the frame's picture at SPICE's places with no gain, alone (color=0); o.planeUrl(id): another frame's, for
+    // the tiles of a colour set
+    async apply(frames, id, im, o = {}) {
+      const e = byId.get(`${tag(o.center !== false, !!o.color)}:${id}`);
+      if (!e) return null;
+      const T = e.table, set = o.color && T.sets ? T.sets.by[e.n] : null;
+      const load = async j => {
+        if (j === e.n) return createImageBitmap(im);
+        const r = await fetch(o.planeUrl(T.ids[j]) + (o.raw ? "&detail=0" : ""));
+        if (!r.ok) throw new Error(`plane ${T.ids[j]}: ${r.status}`);
+        return createImageBitmap(await r.blob());
+      };
+      const older = !set && o.trail ? window.cassiniSteadyMath().trailOf(T, e.n, o.trail) : [];
+      const tiles = set || [...older, e.n], bitmaps = await Promise.all(tiles.map(load)), mid = ++seq;
+      const planes = tiles.map((j, q) => ({ i: T.n.indexOf(j), bitmap: bitmaps[q] }));
+      const r = await new Promise(res => { waiting.set(mid, res); work().postMessage({ id: mid, key: e.key, n: e.n, steady: o.steady || 0, exposure: o.exposure || 0, trail: older.length > 0, detail: !!o.raw, planes }, bitmaps); });
+      stats.frames++; stats.placeMs += r.ms[0]; stats.drawMs += r.ms[1]; stats.last = { id, moves: r.moves, gain: r.gain, set: tiles.map(j => T.ids[j]) };
+      const url = URL.createObjectURL(r.blob), out = new Image();
+      urls.push(url);
+      if (urls.length > 8) URL.revokeObjectURL(urls.shift());
+      await new Promise((res, rej) => { out.onload = res; out.onerror = rej; out.src = url; });
+      out.dataset.steadyLocal = `${r.moves.map(m => m.join(",")).join(" ")} ×${r.gain}`;
+      return out;
+    },
+  };
+
+  // ---------- a mosaic movie's fade on this computer: the time-lapse picture the server has, its older tiles dimmed ----------
+  const fades = new Map();     // `${laps}:${frame id}` -> {table, n, alphas} | null (the server fades it)
+  const fadeAsked = new Map();
+  async function fadeTable(frames, id, laps, W, H) {
+    const k = `${laps}:${id}`;
+    if (fades.has(k)) return fades.get(k);
+    if (!fadeAsked.has(k)) {
+      fadeAsked.set(k, fetch(`${frames}/frames/movie/${id}.fade.json?laps=${laps}&w=${W}&h=${H}`).then(r => r.ok ? r.json() : { local: false }).then(t => {
+        if (!t || t.working) { setTimeout(() => fadeAsked.delete(k), 15000); return; }
+        if (!t.local) { fades.set(k, null); return; }
+        // each tile's alpha (zlib), unpacked once when a frame first draws it
+        const decoded = new Map(), alphas = j => decoded.get(j);
+        const unpack = js => Promise.all(js.filter(j => t.parts[j] && !decoded.has(j)).map(async j => {
+          const b = atob(t.parts[j].alpha), z = new Uint8Array(b.length); for (let i = 0; i < b.length; i++) z[i] = b.charCodeAt(i);
+          decoded.set(j, new Uint8Array(await new Response(new Blob([z]).stream().pipeThrough(new DecompressionStream("deflate"))).arrayBuffer()));
+        }));
+        t.ids.forEach((fid, n) => fades.set(`${laps}:${fid}`, { table: t, n, alphas, unpack }));
+      }).catch(() => { fadeAsked.delete(k); }));
+    }
+    await fadeAsked.get(k);
+    return fades.get(k) || null;
+  }
+  window.cassiniFadeLocal = {
+    // the fade this computer puts on a mosaic movie's frame ({fade, persist, laps}), or null when the server draws it
+    want(frames, id) {
+      const s = S();
+      if (!s || !s.get("movies.stabilizeLocal") || !s.get("movies.fade") || s.get("movies.mosaicFrames") === "whole") return null;
+      if (window.cassiniLook && window.cassiniLook()) return null;
+      const laps = s.get("movies.laps") || 1;
+      if (fades.has(`${laps}:${id}`) && !fades.get(`${laps}:${id}`)) return null;
+      return { fade: s.get("movies.fade"), persist: s.get("movies.persist") ?? 35, laps };
+    },
+    // im: the frame's time-lapse picture (fade 0, as made at 1024): a new Image with the fade on it, or null
+    // (the pass's table is not here yet, or the server fades this pass)
+    async apply(frames, id, im, o) {
+      const W = im.naturalWidth, H = im.naturalHeight, e = await fadeTable(frames, id, o.laps || 1, W, H);
+      if (!e || e.table.W !== W || e.table.H !== H) return null;
+      const M = window.cassiniSteadyMath(), t = e.table, t0 = performance.now();
+      if (t.frames[e.n]) await e.unpack(t.frames[e.n].n);
+      const L = M.resizeLinear(M.fadeLight(t, e.n, Math.min(o.fade, t.fade_max), Math.max(0, Math.min(100, o.persist)), e.alphas), t.w, t.h, W, H);
+      const c = document.createElement("canvas"); c.width = W; c.height = H;
+      const g = c.getContext("2d", { willReadFrequently: true }); g.drawImage(im, 0, 0);
+      const d = g.getImageData(0, 0, W, H); M.applyLight(d.data, L); g.putImageData(d, 0, 0);
+      const out = new Image(), blob = await new Promise(r => c.toBlob(r, "image/png")), url = URL.createObjectURL(blob);
+      urls.push(url);
+      if (urls.length > 8) URL.revokeObjectURL(urls.shift());
+      await new Promise((res, rej) => { out.onload = res; out.onerror = rej; out.src = url; });
+      stats.fades = (stats.fades || 0) + 1; stats.fadeMs = (stats.fadeMs || 0) + performance.now() - t0;
+      out.dataset.fadeLocal = `${o.fade}/${o.persist}`;
+      return out;
+    },
+  };
+})();
+</script>
