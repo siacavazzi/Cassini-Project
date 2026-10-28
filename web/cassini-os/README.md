@@ -213,7 +213,10 @@ be made by hand: every frame out, the bad ones thrown away, the rest put togethe
 stretch's row, **Edit frames…** in Export Movie, or Go > Movie Editor…. The window lists every raw frame of the
 stretch as a filmstrip (the export's own plan, `/export/plan.json`), with the frame in front big above it, as in the
 movie (its mosaic, color picture, movie pass or processed frame) or as the raw frame; double-click it to fill the
-window. Click a frame and press Delete to take it out (shift-click for a run, Delete again puts it back); Cameras,
+window. Frames are picked the Mac way: click picks one, shift-click picks the run to it, Cmd-click (Ctrl-click, or
+Option/Alt-click) adds a frame to the pick or takes it out, Cmd-A picks every frame, Esc lets go. **Keep only** (K)
+keeps the picked frames and removes all the others, so "these few would make a movie together" is a shift-click and
+one button; **Remove** (Delete) takes the picked frames out, and Delete again puts them back. Cameras,
 Targets and Filters chips leave out whole groups (click to leave one out, double-click to keep only it, so "only the
 Jupiter frames" is one double-click). **Pictures** picks what each frame shows: As in the movie (the camera windows'
 mosaics, color pictures and movie passes), Full color only (each three-filter set once, as its color picture), Every

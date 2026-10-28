@@ -13,7 +13,11 @@
      own, stacked and calibrated, never put together) or every frame raw (as Cassini took it). The list has every frame
      of the stretch however long it is (plan.json list=1); only a film is capped (export.py MAX_PICTURES).
 
-     What it keeps: frames removed by hand (click a frame, Delete; shift-click for a run), and only the cameras, targets
+     Picking frames, as on a Mac: click picks one, shift-click picks the run to it, Cmd-click (Ctrl-click, or
+     Option/Alt-click) adds a frame to the pick or takes it out, Cmd-A picks every frame in the strip, Esc lets go.
+     Keep only (K) keeps the picked frames and removes every other one; Remove (Delete) takes the picked ones out.
+
+     What it keeps: frames removed by hand (Remove, or Keep only the picked ones), and only the cameras, targets
      and filter pairs left on (click a chip to leave it out, double-click it to keep only it). Left-out frames stay in
      the strip, dimmed, so they can be put back. Removing a frame never changes how the others are made: a mosaic keeps
      every tile, a composite every channel; that frame's picture is only not shown, and the film closes over the gap.
@@ -58,6 +62,7 @@
 .meth.dropped::after { content: ""; position: absolute; inset: 0; background: linear-gradient(to top right, transparent calc(50% - 1px), rgba(255,120,100,.75) 50%, transparent calc(50% + 1px)); pointer-events: none; }
 .meth.picked { outline: 2px solid rgba(138,182,255,.55); }
 .meth.sel { outline: 2px solid var(--q-accent); }
+.meth.sel.unpicked { outline: 1px dashed rgba(138,182,255,.45); }
 #mecard .meside { min-height: 0; overflow-y: auto; padding: 2px 12px 12px; border-left: 1px solid var(--q-line); }
 #mecard .meside h4 { margin: 12px 0 4px; font: 10px/1 var(--ui); letter-spacing: .12em; text-transform: uppercase; color: var(--q-dim); font-weight: normal; display: flex; align-items: center; gap: 6px; }
 #mecard .meside h4 .sp { flex: 1; }
@@ -102,6 +107,7 @@ body.phone #mestrip { grid-template-columns: repeat(auto-fill, 72px); grid-auto-
         <span id="mepos"></span>
         <div class="galseg" id="mesrc" role="group" aria-label="Picture shown"><button data-v="movie" title="The picture the film shows for this frame (mosaic, color, movie pass or processed)">As in the movie</button><button data-v="raw" title="The frame as Cassini took it">Raw frame</button></div>
         <span class="sp"></span>
+        <button class="galbtn go" id="mekeep" title="Keep only the picked frames: every other frame comes out of the movie (K)" hidden>Keep only</button>
         <button class="galbtn" id="metoggle" title="Take the picked frames out of the movie, or put them back (Delete)">Remove</button>
         <button class="galbtn" id="medl" title="Save this frame at full size, with the look, as a JPEG">Download frame</button>
       </div>
@@ -159,7 +165,7 @@ body.phone #mestrip { grid-template-columns: repeat(auto-fill, 72px); grid-auto-
   // ME: the stretch (a, b), its plan's frames, and the edit: drop (ids taken out by hand), keep (null = every target /
   // filter pair, else the ones kept), cams (the export's Cameras), edit (the studio look's recipe)
   const ME = { a: null, b: null, frames: [], pictures: "movie", loading: false, error: "", drop: new Set(), targets: null, filters: null, edit: "",
-    sel: -1, anchor: -1, picked: new Set(), showOut: true, src: "movie", undo: [], playing: false, pending: null };
+    sel: -1, anchor: -1, picked: new Set(), none: false, showOut: true, src: "movie", undo: [], playing: false, pending: null };
   const camsOf = () => (/^(N|W|NW)$/.test(EX.state.cams || "") ? EX.state.cams : "NW");
   const why = e => !camsOf().includes(e.cam) ? "camera" : ME.drop.has(e.id) ? "removed" : ME.targets && !ME.targets.has(e.target || "UNKNOWN") ? "target"
     : ME.filters && !ME.filters.has(e.filters) ? "filter" : "";
@@ -247,7 +253,7 @@ body.phone #mestrip { grid-template-columns: repeat(auto-fill, 72px); grid-auto-
     if (ME.filters && !has(ME.filters, "filters")) ME.filters = null;
     strip(); render();
     const keep = ME.frames[ME.sel] && ME.frames[ME.sel].id, at = keep ? ME.frames.findIndex(e => e.id === keep) : -1;
-    ME.sel = -1; ME.picked = new Set();
+    ME.sel = -1; ME.picked = new Set(); ME.none = false;
     const first = at >= 0 ? at : ME.frames.findIndex(kept); select(first >= 0 ? first : 0);
   }
 
@@ -277,8 +283,8 @@ body.phone #mestrip { grid-template-columns: repeat(auto-fill, 72px); grid-auto-
       const i = +b.dataset.i, e = ME.frames[i], w = why(e);
       b.hidden = !vis.has(i);
       b.classList.toggle("out", !!w); b.classList.toggle("dropped", w === "removed");
-      b.classList.toggle("sel", i === ME.sel); b.classList.toggle("picked", ME.picked.has(i));
-      b.setAttribute("aria-selected", String(ME.picked.has(i) || i === ME.sel));
+      b.classList.toggle("sel", i === ME.sel); b.classList.toggle("picked", ME.picked.has(i)); b.classList.toggle("unpicked", ME.none && i === ME.sel);
+      b.setAttribute("aria-selected", String(!ME.none && (ME.picked.has(i) || i === ME.sel)));
     });
   }
 
@@ -333,12 +339,15 @@ body.phone #mestrip { grid-template-columns: repeat(auto-fill, 72px); grid-auto-
     if (ME.frames.length) { side(); stripState(); }
     pos();
   }
+  // the picked frames: the pick, or the frame in front when nothing more is picked (none: all let go with Cmd-click)
+  const chosen = () => ME.none ? [] : ME.picked.size ? [...ME.picked].filter(i => ME.frames[i]) : ME.frames[ME.sel] ? [ME.sel] : [];
   function pos() {
     const e = ME.frames[ME.sel], vis = ME.frames.filter(kept);
     const at = e ? vis.indexOf(e) : -1;
     $("mepos").textContent = e ? (at >= 0 ? `${at + 1} of ${vis.length}` : "left out") + ` · ${hms(e)} UTC` : "";
-    const sel = ME.picked.size ? [...ME.picked].map(i => ME.frames[i]) : e ? [e] : [];
+    const sel = chosen().map(i => ME.frames[i]);
     $("metoggle").disabled = !sel.length;
+    $("mekeep").hidden = sel.length < 2; $("mekeep").textContent = `Keep only ${sel.length}`;
     $("metoggle").textContent = sel.length && sel.every(x => ME.drop.has(x.id)) ? `Put back${sel.length > 1 ? ` ${sel.length}` : ""}` : `Remove${sel.length > 1 ? ` ${sel.length}` : ""}`;
     $("medl").disabled = !e;
     $("meoff").hidden = !e || kept(e);
@@ -396,9 +405,25 @@ body.phone #mestrip { grid-template-columns: repeat(auto-fill, 72px); grid-auto-
   function select(i, how = {}) {
     if (!ME.frames.length) { ME.sel = -1; show(); return; }
     i = Math.max(0, Math.min(ME.frames.length - 1, i));
-    if (how.range && ME.anchor >= 0) { ME.picked = new Set(); const vis = new Set(visible()), [a, b] = [Math.min(ME.anchor, i), Math.max(ME.anchor, i)]; for (let k = a; k <= b; k++) if (vis.has(k)) ME.picked.add(k); }
-    else if (how.toggle) { if (ME.picked.has(i)) ME.picked.delete(i); else ME.picked.add(i); if (ME.sel >= 0 && !ME.picked.size) ME.picked.add(ME.sel); ME.anchor = i; }
-    else { ME.picked = new Set(); ME.anchor = i; }
+    // the pick so far as a set (the frame in front counts as picked when nothing more is)
+    const had = new Set(chosen());
+    if (how.range && ME.anchor >= 0) {
+      // shift-click: the run from the anchor; Cmd-shift-click adds the run to the pick
+      ME.picked = how.toggle ? had : new Set();
+      const vis = new Set(visible()), [a, b] = [Math.min(ME.anchor, i), Math.max(ME.anchor, i)];
+      for (let k = a; k <= b; k++) if (vis.has(k)) ME.picked.add(k);
+      ME.none = false;
+    } else if (how.toggle) {
+      // Cmd/Ctrl/Option-click: this frame in or out of the pick; the frame in front moves to one still picked
+      ME.picked = had; ME.anchor = i;
+      if (ME.picked.has(i)) {
+        ME.picked.delete(i);
+        const left = [...ME.picked].sort((x, y) => Math.abs(x - i) - Math.abs(y - i));
+        ME.none = !left.length;
+        if (left.length) i = left[0];
+      } else { ME.picked.add(i); ME.none = false; }
+      if (ME.picked.size === 1) ME.picked = new Set();
+    } else { ME.picked = new Set(); ME.anchor = i; ME.none = false; }
     ME.sel = i; stripState(); show();
     const el = $("mestrip").querySelector(`.meth[data-i="${i}"]`); if (el && !how.noScroll) el.scrollIntoView({ block: "nearest" });
   }
@@ -409,18 +434,37 @@ body.phone #mestrip { grid-template-columns: repeat(auto-fill, 72px); grid-auto-
     if (at < 0) { at = d > 0 ? vis.findIndex(i => i > ME.sel) - 1 : vis.findIndex(i => i >= ME.sel); if (at < -1) at = d > 0 ? vis.length - 1 : 0; }
     select(vis[Math.max(0, Math.min(vis.length - 1, at + d))], how);
   }
+  // every frame picked, or none
+  function pickAll() {
+    const vis = visible(); if (!vis.length) return;
+    stopPlay(); ME.picked = new Set(vis); ME.none = false;
+    if (!ME.picked.has(ME.sel)) ME.sel = vis[0];
+    if (ME.picked.size === 1) ME.picked = new Set();
+    stripState(); show();
+  }
+  function letGo() {
+    if (!ME.picked.size && !ME.none) return false;
+    ME.picked = new Set(); ME.none = false; ME.anchor = ME.sel; stripState(); pos(); return true;
+  }
+  // keep only the picked frames: every other one is removed by hand (a picked frame removed before comes back)
+  function keepOnly() {
+    const ids = new Set(chosen().map(i => ME.frames[i].id)); if (!ids.size) return;
+    stopPlay();
+    change(() => ME.frames.forEach(e => ids.has(e.id) ? ME.drop.delete(e.id) : ME.drop.add(e.id)));
+    ME.picked = new Set(); ME.none = false; stripState(); pos();
+  }
   function toggleRemoved() {
-    const sel = (ME.picked.size ? [...ME.picked] : [ME.sel]).filter(i => ME.frames[i]).map(i => ME.frames[i]);
+    const sel = chosen().map(i => ME.frames[i]);
     if (!sel.length) return;
     const back = sel.every(e => ME.drop.has(e.id));
     change(() => sel.forEach(e => back ? ME.drop.delete(e.id) : ME.drop.add(e.id)));
     // one frame removed: on to the next, so a run of bad frames goes with Delete, Delete, Delete
     if (!back && sel.length === 1) { if (!ME.showOut) { const nx = ME.frames.findIndex((e, i) => i > ME.sel && kept(e)); select(nx >= 0 ? nx : ME.sel); } else step(1); }
-    else { ME.picked = new Set(); stripState(); pos(); }
+    else { ME.picked = new Set(); ME.none = false; stripState(); pos(); }
   }
   $("mestrip").addEventListener("click", e => {
     const b = e.target.closest(".meth"); if (!b) return;
-    stopPlay(); select(+b.dataset.i, { range: e.shiftKey, toggle: e.metaKey || e.ctrlKey, noScroll: true });
+    stopPlay(); select(+b.dataset.i, { range: e.shiftKey, toggle: e.metaKey || e.ctrlKey || e.altKey, noScroll: true });
   });
   $("mestrip").addEventListener("dblclick", e => { if (e.target.closest(".meth")) { card.classList.add("big"); paint(); } });
   cv.addEventListener("dblclick", () => { card.classList.toggle("big"); setTimeout(paint); const el = $("mestrip").querySelector(".meth.sel"); if (el && !card.classList.contains("big")) el.scrollIntoView({ block: "nearest" }); });
@@ -441,7 +485,7 @@ body.phone #mestrip { grid-template-columns: repeat(auto-fill, 72px); grid-auto-
     const fps = Math.min(30, Math.max(1, window.cassiniMovie && window.cassiniMovie.fps ? window.cassiniMovie.fps() : +opt("movie.fps", 8) || 8));
     const at = performance.now(), next = ME.frames.findIndex((e, i) => i > ME.sel && kept(e));
     if (next < 0) return stopPlay();
-    ME.sel = next; ME.picked = new Set(); stripState();
+    ME.sel = next; ME.picked = new Set(); ME.none = false; stripState();
     const el = $("mestrip").querySelector(`.meth[data-i="${next}"]`); if (el) el.scrollIntoView({ block: "nearest" });
     // the next few, asked for ahead
     let ahead = next; for (let n = 0; n < 4; n++) { ahead = ME.frames.findIndex((e, i) => i > ahead && kept(e)); if (ahead < 0) break; bitmap(picUrl(ME.frames[ahead], 1024)); }
@@ -495,7 +539,7 @@ body.phone #mestrip { grid-template-columns: repeat(auto-fill, 72px); grid-auto-
     }
     if (a == null || b == null || b - a < 1) { ME.a = ME.b = null; ME.frames = []; strip(); render(); return; }
     if (ME.a !== a || ME.b !== b || r) {
-      stopPlay(); ME.a = a; ME.b = b; ME.undo = []; ME.sel = -1; ME.picked = new Set();
+      stopPlay(); ME.a = a; ME.b = b; ME.undo = []; ME.sel = -1; ME.picked = new Set(); ME.none = false;
       take(r || recalled(a, b) || ""); remember();
       load();
     } else render();
@@ -515,6 +559,7 @@ body.phone #mestrip { grid-template-columns: repeat(auto-fill, 72px); grid-auto-
   $("meplay").addEventListener("click", play);
   $("mesrc").addEventListener("click", e => { const b = e.target.closest("button"); if (!b) return; ME.src = b.dataset.v; render(); show(); });
   $("metoggle").addEventListener("click", toggleRemoved);
+  $("mekeep").addEventListener("click", keepOnly);
   // another kind of picture: the frame server plans the stretch again (what is removed by hand stays removed)
   $("mepics").addEventListener("click", e => { const b = e.target.closest("button"); if (!b || b.dataset.v === ME.pictures) return; stopPlay(); change(() => { ME.pictures = b.dataset.v; }); load(); });
   $("medl").addEventListener("click", download);
@@ -535,11 +580,14 @@ body.phone #mestrip { grid-template-columns: repeat(auto-fill, 72px); grid-auto-
   window.addEventListener("keydown", e => {
     if (card.hidden || !card.classList.contains("front") || /INPUT|SELECT|TEXTAREA/.test(e.target.tagName) && e.target.type !== "checkbox") return;
     if ((e.metaKey || e.ctrlKey) && e.key.toLowerCase() === "z") { e.preventDefault(); e.stopImmediatePropagation(); undo(); paint(); return; }
+    if ((e.metaKey || e.ctrlKey) && e.key.toLowerCase() === "a") { e.preventDefault(); e.stopImmediatePropagation(); pickAll(); return; }
     if (e.metaKey || e.ctrlKey || e.altKey) return;
     const k = e.key;
     if (k === "ArrowRight" || k === "ArrowLeft") { stopPlay(); step(k === "ArrowRight" ? 1 : -1, { range: e.shiftKey }); }
     else if (k === "Delete" || k === "Backspace") toggleRemoved();
+    else if (k === "k" || k === "K") keepOnly();
     else if (k === " ") play();
+    else if (k === "Escape" && letGo()) {}
     else if (k === "Escape") { if (card.classList.contains("big")) { card.classList.remove("big"); setTimeout(paint); } else close(); }
     else return;
     e.preventDefault(); e.stopImmediatePropagation();
