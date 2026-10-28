@@ -139,9 +139,10 @@ Routes:
                                of time (web/frames/prebuild.py segment_items: frames, composites, mosaic and movie
                                passes, with the page's look and movie style: mosaics, steady, color, trail, laps,
                                center), so it plays as a movie at any frame rate from the cache; one stretch at a
-                               time, behind the server's own requests. Answers the job's status, as
+                               time, behind the server's own requests; most= frames at most (the page's Settings >
+                               Playback; 0 no limit, CASSINI_SEGMENT_MAX a ceiling over it). Answers the job's status, as
   /prebuild/<JOB>.json         does: state queued/planning/making/waiting/finishing/done/failed/stopped, pictures done of
-                               total, made through (UTC), seconds left
+                               total (frames: how many of them are the stretch's frames), made through (UTC), seconds left
   POST /prebuild/<JOB>/stop    stops it (what is made stays made)
   /health                      "ok" plus where the frames come from
   POST /flags                  a picture flagged in Cassini OS (the ⚑ button or R in a picture window): JSON with

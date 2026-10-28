@@ -79,9 +79,15 @@ body.phone #segfps { flex: 1; }
   const S = window.cassiniSettings, EX = window.cassiniExport;
   if (!EX) return;
   const opt = (k, d) => (S && S.get(k) !== undefined ? S.get(k) : d);
+  const MOST_NONE = 200000;                     // the top of Settings > Playback > Pre-process up to: no limit
+  const most = () => { const v = +opt("segment.maxFrames", MOST_NONE) || MOST_NONE; return v >= MOST_NONE ? 0 : v; };
   if (S) {
     S.define({ key: "segment.autoplay", section: "Playback", label: "Play a pre-processed stretch when it is ready", type: "toggle", value: true,
       hint: "After Pre-process on a highlighted stretch of the timeline, it plays as a movie from its start at the bar's frame rate." });
+    // the most frames one Pre-process takes (prebuild.py SEGMENT_MAX: the server may set its own ceiling over this)
+    S.define({ key: "segment.maxFrames", section: "Playback", label: "Pre-process up to", type: "range", value: MOST_NONE, min: 5000, max: MOST_NONE, step: 5000,
+      format: v => v >= MOST_NONE ? "No limit" : `${v.toLocaleString()} frames`,
+      hint: "The most frames one highlighted stretch can pre-process at once (the frames the bar counts; a busy day near Saturn has about 1,500). A long stretch takes a while: the bar shows how long is left, and what is made stays made if you stop it. A public site may set its own limit." });
     S.define({ key: "segment.hint", section: "Playback", label: "Suggest pre-processing when movie mode waits", type: "toggle", value: true,
       hint: "A quiet note when movie mode spends most of its time waiting for pictures to be made." });
   }
@@ -211,7 +217,7 @@ body.phone #segfps { flex: 1; }
     stopPoll();
     P.key = optKey(); P.span = [P.a, P.b]; P.looks = 0; P.pressed = true; say("Asking the frame server…"); progress(P.job && P.job.total ? P.job.done / P.job.total : 0);
     try {
-      const r = await fetch(`${FRAMES}/prebuild?${key}`, { method: "POST" }), j = await r.json();
+      const r = await fetch(`${FRAMES}/prebuild?${key}&most=${most()}`, { method: "POST" }), j = await r.json();
       if (!r.ok) { P.job = null; P.pressed = false; progress(null); say(j.error || "The frame server cannot pre-process that.", true); buttons(); return; }
       follow(j);
     } catch (err) { P.job = null; P.pressed = false; progress(null); say(`No frame server at ${FRAMES} that pre-processes.`, true); buttons(); }
@@ -225,6 +231,10 @@ body.phone #segfps { flex: 1; }
     const busy = j && /^(queued|planning|making|waiting|finishing)$/.test(j.state);
     document.title = busy && j.total ? `${Math.floor(100 * j.done / j.total)}% pre-processed · ${TITLE}` : j && j.state === "done" && P.job === j && document.hidden ? `Ready · ${TITLE}` : TITLE;
   }
+  // A stretch's frames (the bar's count) and its pictures (what the server makes): each frame, and with them each
+  // color composite and each mosaic or movie picture a pass shows at those frames, so pictures run to about twice frames
+  const made = j => j.frames ? `${j.frames.toLocaleString()} frame${j.frames === 1 ? "" : "s"} (${j.total.toLocaleString()} pictures)` : `${j.total.toLocaleString()} pictures`;
+  $("segstate").title = "Pictures: each frame, plus each color composite and each mosaic or movie picture its pass shows at those frames.";
   function follow(j) {
     stopPoll();
     // pressed: the first answer since Pre-process, which is the stretch made when it was quick enough to wait for
@@ -233,7 +243,7 @@ body.phone #segfps { flex: 1; }
     const frac = j.total ? j.done / j.total : 0;
     if (j.state === "done") {
       progress(1);
-      say(`Ready: ${j.total.toLocaleString()} pictures made ahead${j.took ? ` in ${j.took < 1 ? "under a second" : fmtDur(j.took)}` : ""}${j.errors ? ` (${j.errors} could not be made)` : ""}`);
+      say(`Ready: ${made(j)} made ahead${j.took ? ` in ${j.took < 1 ? "under a second" : fmtDur(j.took)}` : ""}${j.errors ? ` (${j.errors} could not be made)` : ""}`);
       if ((pressed || (was && was !== "done")) && opt("segment.autoplay", true)) { if (window.cassiniAway && cassiniAway.on) P.playBack = true; else play(); }
       return;
     }
@@ -244,7 +254,7 @@ body.phone #segfps { flex: 1; }
       : j.state === "planning" ? "Finding every picture in the stretch…"
       : j.state === "finishing" ? "Finishing the last mosaic tiles…"
       : j.state === "waiting" ? `On hold: the frame server's machine is reserved for another job · ${j.done.toLocaleString()} of ${j.total.toLocaleString()}`
-      : `Pre-processing ${j.done.toLocaleString()} of ${j.total.toLocaleString()} pictures${j.eta != null ? ` · ${fmtDur(j.eta)} left` : ""}`);
+      : `Pre-processing ${j.done.toLocaleString()} of ${j.total.toLocaleString()} pictures${j.frames ? ` for ${j.frames.toLocaleString()} frames` : ""}${j.eta != null ? ` · ${fmtDur(j.eta)} left` : ""}`);
     P.poll = setTimeout(async () => {
       if (!P.job || P.job.id !== j.id) return;   // another job took over (the stretch grew)
       try { const r = await fetch(`${FRAMES}/prebuild/${j.id}.json`, { cache: "no-store" }); const n = r.ok ? await r.json() : j; if (P.job && P.job.id === j.id) follow(n); }
