@@ -523,7 +523,6 @@ rep("""    closeCam.position.copy(camera.position); closeCam.quaternion.copy(cam
     renderer.clearDepth();
     renderer.render(scene, closeCam);
     cassini.scale.setScalar(cs);""")
-rep('  state.pointed = !!qb;\n', '  state.pointed = !!qb;\n  window.cassiniPointing = qb ? "CK" : "EARTH";\n')
 rep('  const card = $("imgcard");\n', '  const card = $("camsink");\n')   # the page has a window per camera (see the head)
 # finale hooks (finale.html): its own clock before the bodies are placed, Cassini carried on past the end of the data,
 # its attitude, and the camera after the orbit controls
