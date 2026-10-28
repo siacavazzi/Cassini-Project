@@ -10429,7 +10429,7 @@ void main() {
   window.cassiniAbout = { open, addTab, esc, close: () => show(false), credits: CREDITS };
 
   // ---- which version this is: this page's build id (build.py writes it), and what the frame server says it serves ----
-  const BUILD = /*BUILD*/"4fd7083e6306";
+  const BUILD = /*BUILD*/"32bfc46188ff";
   const FRAMES = (() => {                       // the frame server, chosen as the camera window chooses it
     const q = new URLSearchParams(location.search).get("frames");
     if (q) return q.replace(/\/$/, "");
@@ -11945,6 +11945,8 @@ function shown(name) {
   if (PLANETS.includes(name) || parentOf(name) !== "SATURN") return true;
   return state.allOrbits || name === "TITAN" || (MAJOR.includes(name) && name !== "PHOEBE" && name !== "HYPERION");
 }
+// "Enlarge moons ×10" scales moons only: planets (Saturn, Jupiter, Earth, Venus), the Sun and the spacecraft stay true size
+const enlargeOf = name => state.enlarge && meshes[name] && !PLANETS.includes(name) ? 10 : 1;
 function bodyRadius(name) { return name === "CASSINI" ? 0.0035 : name === "HUYGENS" ? 0.0013 : meshes[name] ? meshes[name].radius : 10; }
 function relScene(name, out) { sub(pos[name], pos[state.focus], tmp); return toScene(tmp, out).multiplyScalar(1 / KM); }
 
@@ -11970,7 +11972,7 @@ function updateBodies() {
     m.group.visible = present(name);
     if (!m.group.visible) continue;
     relScene(name, m.group.position);
-    const k = state.enlarge && name !== "SATURN" ? 10 : 1;
+    const k = enlargeOf(name);
     if (name !== "SATURN") {
       const R = iauMatrix(b, state.et); // rows: body axes in J2000
       const cx = toScene(R[0], new THREE.Vector3()), cy = toScene(R[1], new THREE.Vector3()), cz = toScene(R[2], new THREE.Vector3());
@@ -12013,7 +12015,7 @@ function updateBodies() {
     arr[3 * i] = p.x; arr[3 * i + 1] = p.y; arr[3 * i + 2] = p.z;
     // the dot stands in for a body too small to see and fades out once its disc covers a pixel or two:
     // the globe hides the dot's middle and leaves its glow as a colored ring around it
-    const pr = meshes[n] ? (bodyRadius(n) / KM) * (state.enlarge && n !== "SATURN" ? 10 : 1) / Math.max(camera.position.distanceTo(p), 1e-12) * pxPerRad : 0;
+    const pr = meshes[n] ? (bodyRadius(n) / KM) * enlargeOf(n) / Math.max(camera.position.distanceTo(p), 1e-12) * pxPerRad : 0;
     const k = shown(n) ? 1 - THREE.MathUtils.smoothstep(pr, 0.6, 1.6) : 0;   // additive blending: black draws nothing
     mc[3 * i] = base[3 * i] * k; mc[3 * i + 1] = base[3 * i + 1] * k; mc[3 * i + 2] = base[3 * i + 2] * k;
   });
@@ -12277,7 +12279,7 @@ function updateLabels() {
     const d = camera.position.distanceTo(p);
     const small = LABEL_PRIORITY(name) === 5;
     let hide = vA.z > 1 || vA.z < -1 || !shown(name) || (small && d > 400 && name !== state.target);
-    const pr = (bodyRadius(name) / KM) * (state.enlarge && name !== "SATURN" ? 10 : 1) / d / Math.tan(rad(camera.fov / 2)) * h / 2;
+    const pr = (bodyRadius(name) / KM) * enlargeOf(name) / d / Math.tan(rad(camera.fov / 2)) * h / 2;
     const x = (vA.x + 1) / 2 * w + Math.min(pr, 140) + 6, y = (1 - vA.y) / 2 * h;
     const box = [x, y - 8, x + name.length * 8 + 10, y + 8];
     if (!hide && placed.some(b => box[0] < b[2] && box[2] > b[0] && box[1] < b[3] && box[3] > b[1])) hide = true;
@@ -12541,7 +12543,7 @@ function setFocus(name, dist) {
     dir = vA.clone().negate().addScaledVector(new THREE.Vector3(0, 1, 0), 0.12).addScaledVector(side, -0.15).normalize();
   }
   camera.position.copy(dir.multiplyScalar(d));
-  controls.minDistance = name === "CASSINI" ? 1.2e-5 : (bodyRadius(name) / KM) * (state.enlarge ? 10.5 : 1.05);
+  controls.minDistance = name === "CASSINI" ? 1.2e-5 : (bodyRadius(name) / KM) * 1.05 * enlargeOf(name);
   controls.maxDistance = 5e6;
   document.querySelectorAll("#focusrow .btn").forEach(b => b.setAttribute("aria-pressed", String(b.dataset.name === name)));
 }
