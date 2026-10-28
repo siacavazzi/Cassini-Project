@@ -89,17 +89,21 @@ TRACK_VISITS = 2     # ... or that follows a moving feature (_judge's track): at
 TRACK_SPAN = 0.08    # ... whose frames spread (median) over more than this much of a frame (twice REGISTER_MAX)
 TRACK_CARRY = 0.5    # ... and, on a turning body (SPIN), whose turning carries a feature at least this share of that spread
 RADIUS = {"SATURN": 60268, "JUPITER": 69911, "TITAN": 2575, "RHEA": 764, "IAPETUS": 735, "DIONE": 561,
-          "TETHYS": 531, "ENCELADUS": 252, "MIMAS": 198, "HYPERION": 135, "PHOEBE": 107,
-          # Saturn's small moons (mean radius, Thomas 2010, Denk et al. 2018; web/replay/build_data.SMALL_MOONS), so
-          # Auto center has a disk to centre their passes on; under the catalog's own names (bootleg_autonav.CATALOG_NAMES)
-          "JANUS": 89.5, "EPIMETHEUS": 58.1, "PROMETHEUS": 43.1, "PANDORA": 40.6, "HELENE": 18, "ATLAS": 15.1,
-          "PAN": 14, "TELESTO": 12.4, "CALYPSO": 9.5, "DAPHNIS": 3.8, "PALLENE": 2.2, "METHONE": 1.45,
-          "POLYDEUCES": 1.3, "ANTHE": 0.5, "K07S4": 0.5, "AEGAEON": 0.33,
-          "SIARNAQ": 20, "ALBIORIX": 16, "PAALIAQ": 11, "YMIR": 9, "KIVIUQ": 8, "TARVOS": 7.5, "IJIRAQ": 6,
-          "ERRIAPUS": 5, "ERRIAPO": 5, "SKATHI": 4, "SKADI": 4, "THRYMR": 4, "THRYM": 4, "HYROKKIN": 4,
-          "SUTTUNGR": 3.5, "SUTTUNG": 3.5, "MUNDILFARI": 3.5, "NARVI": 3.5, "BESTLA": 3.5, "KARI": 3.5,
-          "TARQEQ": 3.5, "BEBHIONN": 3, "BERGELMIR": 3, "FORNJOT": 3, "HATI": 3, "LOGE": 3, "SKOLL": 3, "SURTUR": 3,
-          "JARNSAXA": 3, "GREIP": 3, "S13_2004": 3, "S12_2004": 2.5}
+          "TETHYS": 531, "ENCELADUS": 252, "MIMAS": 198, "HYPERION": 135, "PHOEBE": 107}
+# Saturn's small moons (mean radius, Thomas 2010, Denk et al. 2018; web/replay/build_data.SMALL_MOONS), so Auto center
+# has a disk to centre their passes on; under the catalog's own names (bootleg_autonav.CATALOG_NAMES). pass_scale's
+# filled scale (a body filling the frames) stays with the bodies above: frames centred on a small moon are mostly
+# sky round a disk a few per cent of the frame, which that scale (gamma 1.5) blew out to white
+SMALL_RADIUS = {"JANUS": 89.5, "EPIMETHEUS": 58.1, "PROMETHEUS": 43.1, "PANDORA": 40.6, "HELENE": 18, "ATLAS": 15.1,
+                "PAN": 14, "TELESTO": 12.4, "CALYPSO": 9.5, "DAPHNIS": 3.8, "PALLENE": 2.2, "METHONE": 1.45,
+                "POLYDEUCES": 1.3, "ANTHE": 0.5, "K07S4": 0.5, "AEGAEON": 0.33,
+                "SIARNAQ": 20, "ALBIORIX": 16, "PAALIAQ": 11, "YMIR": 9, "KIVIUQ": 8, "TARVOS": 7.5, "IJIRAQ": 6,
+                "ERRIAPUS": 5, "ERRIAPO": 5, "SKATHI": 4, "SKADI": 4, "THRYMR": 4, "THRYM": 4, "HYROKKIN": 4,
+                "SUTTUNGR": 3.5, "SUTTUNG": 3.5, "MUNDILFARI": 3.5, "NARVI": 3.5, "BESTLA": 3.5, "KARI": 3.5,
+                "TARQEQ": 3.5, "BEBHIONN": 3, "BERGELMIR": 3, "FORNJOT": 3, "HATI": 3, "LOGE": 3, "SKOLL": 3, "SURTUR": 3,
+                "JARNSAXA": 3, "GREIP": 3, "S13_2004": 3, "S12_2004": 2.5}
+FILL_RADIUS = dict(RADIUS)
+RADIUS.update(SMALL_RADIUS)
 IFOV = {"N": 6.0e-6, "W": 60e-6}   # radians per full resolution pixel
 # radius (km) and rotation period (hours) of the bodies a camera can follow a feature on (_judge's track): a feature
 # the body's turning carries along. The moons turn with their orbits (Phoebe and Hyperion on their own)
@@ -920,7 +924,7 @@ def pass_scale(frames, u, drawn=None, true_colour=False, sky_tops=None, lit_leve
     blacks, white = dict(zip(by, scale["blacks"])), scale["white"]
     # all body: the geometry cache puts the middle of most frames on the body's disk (a plume or limb pass of
     # mostly sky, however bright its scattered light, is not)
-    radius = RADIUS.get(u["key"][0], 0) / IFOV[u["key"][2]]
+    radius = FILL_RADIUS.get(u["key"][0], 0) / IFOV[u["key"][2]]
     inside = [math.hypot(x, y) < radius / z for *_, x, y, z in frames if z]
     floor = float(np.mean(inside)) if inside else 0.0
     filled = floor > FILLED
