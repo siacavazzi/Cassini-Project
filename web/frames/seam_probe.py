@@ -274,7 +274,7 @@ def history(u, p, f, mine, rect, cache, k, W, H, cx, cy, half, args, label):
         if change <= args.change:
             return
         print(f"  [{label}] {name} changed the line by up to {change:.0f}:")
-        for n in ("before", "after", "color", "has", "below", "ramp", "a", "seam"):
+        for n in ("before", "after", "color", "has", "below", "ramp", "a", "seam", "level"):
             if got.get(n) is not None:
                 row(n if n != "color" else "tile toned", got[n], "{:5.0f}" if n in ("before", "after", "color") else "{:5.2f}")
 

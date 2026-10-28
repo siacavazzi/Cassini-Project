@@ -422,10 +422,11 @@ def _blend_parts(frame, drawn=False):
             whole = np.ones(alpha.shape, np.float32)
             return color, whole, whole, 0.0, whole
         dist = _inside((alpha > 0).astype(np.uint8), alpha >= EDGE_AT)
-        # its weight ramps in from its edge as a tile's does (its tiles' rims, _rim, were drawn with the colour next to
-        # them): from farther in, a tile drawn again over its outer edge took over at once where the picture's weight
-        # was 0, a step along the mosaic's edge as big as the two differed (Saturn's movie's bottom edge, 2013)
-        ramp = (dist - (RIM + 1 + TRUST_INSET)) * (1.0 / feather_px)
+        # its weight from TRUST_DEPTH in: along its outer edge it holds its tiles' rims (_rim) where they were alone,
+        # and a tile drawn over it there takes over (over TAKE of feather_px from the tile's own edge, _blended);
+        # weighed as a tile's edge is, from its edge in, an older lap's picture along the mosaic's edge held on where
+        # the newest lap's tile came in near its own edge, and a limb that had moved showed twice (Saturn's movie, 2013)
+        ramp = (dist - max(2.0, feather_px * TRUST_DEPTH)) * (1.0 / feather_px)
         return (color, (alpha > 0).astype(np.float32), np.clip(ramp, 0, 1).astype(np.float32), _edge_width(alpha, dist),
                 _support(alpha, dist))
     _nearest(color, (alpha > 0) & (alpha < PICTURE_AT), alpha >= PICTURE_AT)
@@ -552,7 +553,7 @@ GRID = 64
 
 # seam_probe's look at each frame as _blended draws it: called with (the frame's number, the area's first pixel in
 # the frames (y, x), the frame's slices of the area, {its parts there: what was drawn before it, after it, its colours,
-# has, below, ramp, weight a, seam (None where it met nothing below)}), or None
+# has, below, ramp, weight a, seam (None where it met nothing below), its leveling's gains (None for none)}), or None
 _watch = None
 
 
@@ -814,7 +815,7 @@ def leveling():
     return calibration.step("blend") and calibration.step("level")
 
 
-DRAWING = 7   # bumped when the blend or level steps change how a mosaic is drawn
+DRAWING = 8   # bumped when the blend or level steps change how a mosaic is drawn
 
 
 def drawing():
@@ -975,6 +976,16 @@ def _toned(color, gain, offset, gamma):
     return color
 
 
+"""
+How fast a frame comes in over what is below it at the least (_blended): its weight is never more than its ramp over
+TAKE, so it comes in over TAKE of feather_px from its own edge at the fastest. Where what is below it weighs nothing
+(along the mosaic's outer edge, _blend_parts) its weight would be 1 right from its edge, and a frame drawn again
+there with a level a little off showed a step as big where its side edge crossed the mosaic's edge (Saturn's movie's
+bottom edge, 2013).
+"""
+TAKE = 1 / 8
+
+
 def _blended(out, infos, gains, offsets, gamma, area, level, pin=None, kept=None, decided=None):
     """composite with the blend step on (calibration.step("blend"), Settings > Processing > Blend mosaic seams).
     The frames' soft edges (mask.png) no longer go into one another: drawn over each other they left the join part
@@ -1013,6 +1024,7 @@ def _blended(out, infos, gains, offsets, gamma, area, level, pin=None, kept=None
     toned = [None if info is None else _toned(info[1] if one or info[1].shape[2] == 3 else np.repeat(info[1], 3, axis=2),
                                               gain, offset, gamma) for info, gain, offset in zip(infos, gains, offsets)]
     decisions = [None if info is None else {"field": None, "cut": None} for info in infos]
+    fields = [None] * len(infos)
     if level and decided is not None:
         fields = [None if info is None or d is None or d[0] is None else d[0](info[0]) for info, d in zip(infos, decided)]
         toned = [t if fl is None else t * fl for t, fl in zip(toned, fields)]
@@ -1022,6 +1034,8 @@ def _blended(out, infos, gains, offsets, gamma, area, level, pin=None, kept=None
                         [None if info is None else info[4] for info in infos],
                         None if pin is None else range(len(infos))[pin])
         toned = [t if lv is None else t * _field(lv, b) for t, lv, b in zip(toned, found, boxes)]
+        if _watch is not None:
+            fields = [None if lv is None else _field(lv, b) for lv, b in zip(found, boxes)]
         for d, lv in zip(decisions, found):
             if lv is not None:
                 d["field"] = (lv[0], lv[1], lv[2] + y0, lv[3] + x0)
@@ -1034,7 +1048,7 @@ def _blended(out, infos, gains, offsets, gamma, area, level, pin=None, kept=None
         width = max(width, w)
         sl = (slice(box[0] - y0, box[1] - y0), slice(box[2] - x0, box[3] - x0))
         below, wb = cover[sl], weight[sl]
-        a = np.where(below > 0, ramp / np.maximum(ramp + (1 - ramp) * wb, 1e-6), has)
+        a = np.where(below > 0, np.minimum(ramp / np.maximum(ramp + (1 - ramp) * wb, 1e-6), ramp * (1 / TAKE)), has)
         seam, drew = None, None if _watch is None else rgb[sl].copy()
         if (below * has).any():
             # the frame and what is below it in bands, worked out over a margin round the frame, so the pyramids near
@@ -1062,7 +1076,7 @@ def _blended(out, infos, gains, offsets, gamma, area, level, pin=None, kept=None
             rgb[sl] += (color - rgb[sl]) * px(a)
         if _watch is not None:
             _watch(i, (y0, x0), sl, {"before": drew, "after": rgb[sl], "color": color, "has": has, "below": below,
-                                     "ramp": ramp, "a": a, "seam": seam})
+                                     "ramp": ramp, "a": a, "seam": seam, "level": fields[i]})
         weight[sl] = ramp + wb * (1 - ramp)
         cover[sl] = np.maximum(below, has)
         alpha[sl] = np.maximum(alpha[sl], own * has)
