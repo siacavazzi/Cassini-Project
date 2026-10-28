@@ -14,6 +14,8 @@ const check = (ok, what) => { console.log(ok ? "ok" : "FAIL", what); if (!ok) pr
   const br = await chromium.launch({ args: ["--use-gl=swiftshader", "--enable-unsafe-swiftshader", "--ignore-gpu-blocklist"] });
   const ctx = await br.newContext({ viewport: { width: 1440, height: 900 }, acceptDownloads: true, recordVideo: { dir: out, size: { width: 1440, height: 900 } } });
   const page = await ctx.newPage();
+  // the first-visit tour's card would sit over the editor's picture (a drag there lands on it)
+  await page.addInitScript(() => { try { const k = "cassini-os-settings-v1", s = JSON.parse(localStorage.getItem(k) || "{}"); s["interface.tips"] = false; localStorage.setItem(k, JSON.stringify(s)); } catch (e) {} });
   const errs = [];
   page.on("pageerror", e => { console.log("PAGEERROR", e.message); errs.push(e.message); });
   if (three) await page.route("https://cdn.jsdelivr.net/npm/three@0.128.0/**", r => r.fulfill({ path: `${three}/${r.request().url().split("three@0.128.0/")[1]}`, headers: { "Content-Type": "application/javascript" } }));
