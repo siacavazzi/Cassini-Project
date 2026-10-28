@@ -107,7 +107,7 @@ style = src[src.index("<style>"):src.index("</style>") + 8]
 window = src[src.index('<section class="win" id="excard"'):src.index("</section>") + 10]
 script = src[src.index("<script>"):src.rindex("</script>") + 9]
 stubs = """<script>
-const store = {};
+const store = { "export.sound": true };   // sound is off by default (#174); the test checks the soundtrack too
 window.cassiniSettings = { define(d) { if (!(d.key in store)) store[d.key] = d.value; }, get: k => store[k], set(k, v) { store[k] = v; }, on() {} };
 window.cassiniLook = () => ""; window.cassiniMovieStyle = () => "&trail=0&laps=1";
 const etToMs = et => et * 1000, utcToEt = s => Date.parse(s + "Z") / 1000, etToX = () => 0, xToEt = () => 0, drawTimeline = () => {};
