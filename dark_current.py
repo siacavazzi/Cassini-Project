@@ -414,11 +414,15 @@ The "hotpix" step: the detector's defects, the pixels that stay put while the sk
 fixed dots), each put back to the median of the 3x3 round it, in place. They are the pixels the camera team listed as
 hot at the frame's epoch (the list nearest its date, either camera; the dark step can't take them out on the NAC, its
 lists over-predict, see above) and the far more the archive's own frames show (hot_map; a 220 s Hyrokkin pass in
-2015 has about 7,300, the list 530 of them). A hot one is repaired only where it stands above the pixels round it and
-a dead one only where it is below, so one that isn't misbehaving in this frame is left alone; a star that lands
+2015 has about 7,300, the list 530 of them). A hot one is repaired only where it stands REPAIR_SIGMAS times the frame's
+grain above the pixels round it and a dead one only where it is as far below, so one that isn't misbehaving in this
+frame is left alone (a short exposure's listed pixels are mostly just noise); a star that lands
 exactly on one is filled in too. image = the frame at a whole multiple of its own size (label.resize_image gives a
 summed frame's pixels as 2x2 or 4x4 blocks); returns how many were repaired.
 """
+REPAIR_SIGMAS = 3.0
+
+
 def repair_hot(image, info):
     lines = int(ff._number(_value(info, "LINES", "1024"), 1024) or 1024)
     h, w = image.shape[:2]
@@ -437,7 +441,13 @@ def repair_hot(image, info):
     k = h // lines
     native = np.ascontiguousarray(image[::k, ::k], np.float32)
     level = cv2.medianBlur(native, 3)
-    fix = ((sign > 0) & (native > level)) | ((sign < 0) & (native < level))
+    # only where it stands out from the frame's grain (the spread of the frame minus its 3x3 median, from every 4th
+    # pixel), so a listed pixel that is just noise in this frame is left as it is
+    rest = (native - level)[::4, ::4]
+    rest = rest[np.isfinite(rest)]
+    grain = 1.4826 * float(np.median(np.abs(rest))) if rest.size else 0.0
+    fix = (((sign > 0) & (native > level + REPAIR_SIGMAS * grain))
+           | ((sign < 0) & (native < level - REPAIR_SIGMAS * grain)))
     fix &= np.isfinite(level)
     if k > 1:
         level = np.repeat(np.repeat(level, k, 0), k, 1)
