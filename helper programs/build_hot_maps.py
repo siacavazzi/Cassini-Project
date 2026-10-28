@@ -13,7 +13,7 @@ dark_current.HOT_MAP_MONTHS). Written to one .npz (default dark_current.HOT_MAPS
 ISSNA_SUM2_2015-08_3, values (n, 3) int16 (line, sample, +1 hot / -1 dead) at the mode's own resolution.
 
 Run from the main folder with CASSINI_DATA set:
-  python "helper programs/build_hot_maps.py" [--out hot_maps.npz] [--workers 4] [--years 2004-2017]
+  python "helper programs/build_hot_maps.py" [--out hot_maps.npz] [--workers 2] [--years 2004-2017]
 """
 import argparse
 import os
@@ -72,7 +72,7 @@ def main():
     ap.add_argument("--out", default=dc.HOT_MAPS)
     ap.add_argument("--index", default=os.path.join(REPO, "Image_index.csv"))
     ap.add_argument("--years", default="1999-2017")
-    ap.add_argument("--workers", type=int, default=4)
+    ap.add_argument("--workers", type=int, default=2, help="more makes the LaCie unresponsive")
     ap.add_argument("--labels", type=int, default=600, help="labels read per camera and month")
     ap.add_argument("--frames", type=int, default=40, help="frames measured per camera, mode, month and band")
     ap.add_argument("--least", type=int, default=8)
