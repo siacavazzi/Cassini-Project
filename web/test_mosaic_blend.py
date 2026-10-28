@@ -286,3 +286,24 @@ assert (f[..., 3][off_line] == 0).any()   # (the holes are there to be drawn)
 on = draw([f])
 assert on[..., 3][off_line].min() == 255 and on[..., 0][off_line].min() >= 148, (on[..., 3][off_line].min(), on[..., 0][off_line].min())
 print("a turned tile's lost line has no holes; ok")
+
+# a tile drawn over a picture whose bottom band is darker (an older lap there, along the mosaic's edge, as a movie
+# brightens lap by lap), its bottom edge 8 px above the picture's: with the level step it is not leveled down to that
+# band where none of the picture is left past its edge (it was, and every lap of Saturn's 2013 movie was leveled
+# down to the one before along the bottom edge: a band 20% dark); its sides still meet the band where it goes on past
+# them, so it is leveled a little toward it there
+pic = np.zeros((1400, 1400, 4), np.uint8)
+pic[100:1300, 100:1300, :3] = 180
+pic[1180:1300, 100:1300, :3] = 135
+pic[100:1300, 100:1300, 3] = cv2.resize(mask, (1200, 1200), interpolation=cv2.INTER_AREA)
+t = np.zeros((600, 600, 4), np.uint8)
+t[..., :3] = 180
+t[..., 3] = cv2.resize(mask, (600, 600), interpolation=cv2.INTER_AREA)
+bottom = {}
+for off in ("level", ""):
+    p = pic.copy()
+    with calibration.stepping(off):
+        obs_mosaic.draw_over(p, lambda: t, 400, 692, 600, 600, 1.0)
+    bottom[off] = float(np.median(p[1232:1272, 600:800, 0]))
+assert bottom[""] >= bottom["level"] - 12, bottom
+print(f"a tile is not leveled down to an older band along the mosaic's edge ({bottom[''] :.0f} vs {bottom['level']:.0f}); ok")

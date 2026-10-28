@@ -424,7 +424,7 @@ def _blend_parts(frame, drawn=False):
         if alpha.min() >= EDGE_AT:
             # (opaque all over, inside the mosaic: picture everywhere at its full weight, no edge of its own here)
             whole = np.ones(alpha.shape, np.float32)
-            return color, whole, whole, 0.0, whole
+            return color, whole, whole, 0.0, whole, alpha * np.float32(1 / 255)
         dist = _inside((alpha > 0).astype(np.uint8), alpha >= EDGE_AT)
         # its weight from TRUST_DEPTH in: along its outer edge it holds its tiles' rims (_rim) where they were alone,
         # and a tile drawn over it there takes over (over TAKE of feather_px from the tile's own edge, _blended);
@@ -818,7 +818,8 @@ be its neighbours' (so the gain changes smoothly, never in a step); and every ga
 correction fades over LEVEL_REACH into the frame (a screened membrane), which keeps each frame at its own level away
 from its seams and the mosaic at its overall level. Least squares over all of it, each colour band on its own. pin =
 a frame whose gain stays 1 (the mosaic a tile is grown over: what is drawn stays as drawn, and the new tile, its
-gain matched to it, is leveled to it along its edge, on the whole by LEVEL_HOLD at most).
+gain matched to it, is leveled to it along its edge where the picture goes on past it, on the whole by LEVEL_HOLD at
+most).
 """
 LEVEL_CELL = 1 / 4    # of feather_px: the cells the gain is worked out in
 LEVEL_MAX = 1.5       # the most a frame is brightened or darkened anywhere (and 1 / LEVEL_MAX)
@@ -835,7 +836,7 @@ def leveling():
     return calibration.step("blend") and calibration.step("level")
 
 
-DRAWING = 8   # bumped when the blend or level steps change how a mosaic is drawn
+DRAWING = 9   # bumped when the blend or level steps change how a mosaic is drawn
 
 
 def drawing():
@@ -906,6 +907,13 @@ def _levels(boxes, colors, hases, ramps, pin=None):
             sj = (slice(y0 - b[0], y1 - b[0]), slice(x0 - b[2], x1 - b[2]))
             # the seam: where j, drawn over i, fades in over it
             seam = (hases[i][si] > 0) & (hases[j][sj] > 0) & (ramps[j][sj] < 1)
+            if pin == i:
+                # over the picture drawn so far, only where the picture goes on past the tile's edge (it weighs more
+                # than the tile there): along the mosaic's outer edge, where the tile's edge lies on the picture's,
+                # none of the picture is left beside the tile to meet, and what was measured there was an older lap
+                # (Saturn's movie of 2013, brighter lap by lap, kept its first laps' level along its bottom edge, every
+                # new lap's tile leveled down to it there: a band 20% dark)
+                seam &= ramps[i][si] > ramps[j][sj]
             if not seam.any():
                 continue
             fi, fj = colors[i][si][..., :ch], colors[j][sj][..., :ch]
