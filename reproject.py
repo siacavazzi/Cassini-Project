@@ -253,40 +253,36 @@ def surface_to_sky(view, points, km_px):
     return -(sky @ view["east"]) / km_px, -(sky @ view["north"]) / km_px, visible
 
 
+LIMB_TAPER = 0.25         # the shift fades to none where the epoch sees the surface at a cosine below this (the limb)
+TERMINATOR_TAPER = 0.15   # and where the sun is lower than this cosine (the terminator)
+
+
 def sky_field(epoch, view, x, y, km_px):
     """For sky places x, y at the epoch's view: where the picture taken at view shows the same surface point (its
-    shift dx, dy from x, y), and weight 1 on the body, 0 off it. A point the body has turned out of sight by then (a
-    thin crescent at the receding limb) is looked up where it projects, just inside the limb, so the limb stays one
-    edge; no relighting, and the night side moves with the rest (on a moon the shift is the same light or dark). A
-    soft edge between moved and unmoved pixels anywhere on the body doubled the Rhea mapping mosaic's limb and smeared
-    Enceladus's terminator (round 3 of the panel probe)."""
+    shift dx, dy from x, y), and weight 1 on the body, 0 off it. The shift fades smoothly to none toward the limb and
+    toward the terminator (as seen and lit at the epoch), so the picture's mapping stays continuous: the limb stays
+    where SPICE drew it, one edge, with no sky looked up inside it, and the night side keeps its place instead of
+    dragging dark ground over lit (round 4 of the panel probe: a dark band inside Rhea's limb, black patches at
+    Dione's terminator). The few pixels of misregistration left in those bands are the panels step's to take up."""
     points, hit = sky_to_surface(epoch, x, y, km_px)
     sx, sy, _ = surface_to_sky(view, points, km_px)
-    return (np.where(hit, sx - x, 0).astype(np.float32), np.where(hit, sy - y, 0).astype(np.float32),
-            hit.astype(np.float32))
+    normal = points / epoch["radii"] ** 2
+    normal /= np.linalg.norm(normal, axis=-1, keepdims=True)
+    seen = epoch["rot"] @ -epoch["c"] - points
+    mu = (normal * seen).sum(-1) / np.maximum(np.linalg.norm(seen, axis=-1), 1e-9)
+    mu0 = normal @ epoch["sun"]
+    k = np.clip(mu / LIMB_TAPER, 0, 1) * np.clip(mu0 / TERMINATOR_TAPER, 0, 1) * hit
+    return ((sx - x) * k).astype(np.float32), ((sy - y) * k).astype(np.float32), hit.astype(np.float32)
 
 
-def warp_sky(image, dx, dy, weight, step, exact=None):
+def warp_sky(image, dx, dy, weight, step):
     """image (RGBA, its pixel (0, 0) at the field's grid point (0, 0)) redrawn as at the field's epoch: dx, dy,
-    weight on a grid of step pixels (sky_field), filled in between; off the body (weight 0) it stays as it is.
-    exact(x, y): sky_field at the image's pixels x, y, for the grid cells the limb crosses: near the limb the shift
-    changes fastest (a surface point turning out of sight), and filled in from the grid it looked up the sky beyond
-    the limb, a dark band just inside it (synthetic: 5 px, Rhea's mapping mosaic: 10 to 20 px)."""
+    weight on a grid of step pixels (sky_field), filled in between; off the body (weight 0) it stays as it is (the
+    shift fades to none at the limb, so the cells the limb crosses need nothing worked out pixel by pixel)."""
     h, w = image.shape[:2]
     fy, fx = np.meshgrid(np.arange(h, dtype=np.float32) / step, np.arange(w, dtype=np.float32) / step, indexing="ij")
     fine = lambda a: cv2.remap(a, fx, fy, cv2.INTER_LINEAR, borderMode=cv2.BORDER_REPLICATE)
     sx, sy, wt = fine(dx), fine(dy), fine(weight)
-    if exact is not None:
-        # the cells whose corners are not all on the body, or all off it: worked out pixel by pixel
-        on = weight > 0.5
-        mixed = (on[:-1, :-1] != on[1:, :-1]) | (on[:-1, :-1] != on[:-1, 1:]) | (on[:-1, :-1] != on[1:, 1:])
-        cell = cv2.resize(mixed.astype(np.uint8), (mixed.shape[1] * step, mixed.shape[0] * step),
-                          interpolation=cv2.INTER_NEAREST)[:h, :w]
-        cell = np.pad(cell, ((0, max(0, h - cell.shape[0])), (0, max(0, w - cell.shape[1]))))
-        ys, xs = np.nonzero(cell)
-        if len(ys):
-            ex, ey, ew = exact(xs.astype(np.float64), ys.astype(np.float64))
-            sx[ys, xs], sy[ys, xs], wt[ys, xs] = ex, ey, ew
     px, py = np.meshgrid(np.arange(w, dtype=np.float32), np.arange(h, dtype=np.float32))
     # (Lanczos, as the tiles are resized: a linear lookup softened every crater rim)
     warped = cv2.remap(image, px + sx, py + sy, cv2.INTER_LANCZOS4, borderMode=cv2.BORDER_CONSTANT,

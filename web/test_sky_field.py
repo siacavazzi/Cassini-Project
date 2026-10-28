@@ -52,10 +52,28 @@ disk[..., 3] = 255
 disk[..., :3] = np.where(np.hypot(xx, yy) <= r, 200, 0)[..., None]
 ep, vw = view(0), view(5.0, sun=(0, 1.0, 0))
 dx, dy, w = rp.sky_field(ep, vw, xs, ys, KM)
-out = rp.warp_sky(disk, dx, dy, w, 16, exact=lambda x, y: rp.sky_field(ep, vw, x - 1200, y - 1200, KM))
+out = rp.warp_sky(disk, dx, dy, w, 16)
 row = out[1200, :, 0].astype(int)
 inside = row[1200 - int(r) + 3:1200 + int(r) - 3]
 print("limb row: darkest inside the disk", inside.min())
 assert inside.min() > 150, "no dark band inside the limb"
 assert row[1200 - int(r) - 4] < 20 and row[1200 + int(r) + 4] < 20, "the sky stays dark"
+# the shift fades toward the limb (to a fraction of the middle's in the outer 1%) and is none on the night side
+# (the epoch lit from +y body-fixed: half the disk dark)
+assert np.abs(dx[(w > 0) & (np.hypot(xs, ys) > 0.99 * r)]).max() < 0.15 * np.abs(dx[mid]).max(), "fades at the limb"
+ep2 = view(0, sun=(0, 1.0, 0))
+dx2, _, _ = rp.sky_field(ep2, vw, xs, ys, KM)
+on, hit2 = rp.sky_to_surface(ep2, xs, ys, KM)
+lit = (on / R) @ ep2["sun"]
+assert np.all(dx2[hit2 & (lit <= 0)] == 0) and np.abs(dx2[hit2 & (lit > 0.3)]).min() > 0, "the night side keeps its place"
+# fast: a 1448 px tile at the disk's middle in well under a second
+import time
+big = np.zeros((1448, 1448, 4), np.uint8)
+gy, gx = np.mgrid[0:1448 + 16:16, 0:1448 + 16:16].astype(np.float64)
+t0 = time.time()
+fx_, fy_, fw_ = rp.sky_field(ep, vw, gx - 724, gy - 724, KM)
+rp.warp_sky(big, fx_, fy_, fw_, 16)
+took = time.time() - t0
+print("1448 px tile", round(took, 3), "s")
+assert took < 0.8, took
 print("sky field: ok")
