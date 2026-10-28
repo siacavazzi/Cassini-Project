@@ -64,7 +64,7 @@ import calibration  # noqa: E402
 import studio_look  # noqa: E402
 
 # bumped whenever the way films are made changes, so older ones are not served again
-VERSION = "export-v21"   # v21: Auto center centres the pictures shown on their own too, as the windows do
+VERSION = "export-v22"   # v22: the flat fielded, dark subtracted, hot pixel repaired pictures; v21: Auto center centres the pictures shown on their own too, as the windows do
 FPS = 30                     # frames a second in the file
 HOLD_MIN, HOLD_MAX = 1 / FPS, 0.5
 TYPICAL = 1 / 8              # adaptive: how long the stretch's median gap lasts on screen
@@ -161,6 +161,14 @@ def options(q):
         except ValueError:
             continue
     even = max(0, min(EVEN_MOST, int(float(get("even", "0") or 0))))
+    # and single frames edited on their own (fedit=ID~ex:0.5,ct:0|ID~...): each such frame's look is the movie's with
+    # these studio keys over it (studio_look.override); its level and framing still apply
+    fedit = {}
+    for w in get("fedit", "").split("|"):
+        k, _, r = w.partition("~")
+        r = studio_look.override(r)
+        if k.strip() and r:
+            fedit[k.strip()] = r
     # its framing: Auto center for the whole film (ctr, over the windows' setting), a crop of every picture (crop:
     # x0_y0_x1_y1, parts of the picture; crop2: the end crop the film glides to from crop), and a nudge (frame id: x, y,
     # parts of the picture) on single frames (framed)
@@ -192,7 +200,7 @@ def options(q):
     # (raw: the archive frame, nothing stacked)
     pictures = get("pictures", "movie") if get("pictures", "movie") in PICTURES else "movie"
     return {"off": off, "cut": {k: v for k, v in kept.items() if v}, "edit": studio_look.encode(look_edit),
-            "levels": levels, "even": even, "frame": {"crop": crop, "crop2": crop2, "nudge": nudge},
+            "levels": levels, "even": even, "fedit": fedit, "frame": {"crop": crop, "crop2": crop2, "nudge": nudge},
             "pictures": pictures, "list": get("list", "0") == "1",
             "from": t0, "until": t1, "cams": cams, "fps": fps, "size": size,
             "sound": get("sound", "1") != "0", "caption": get("caption", "1") != "0",
@@ -219,6 +227,8 @@ def job_id(opt):
         key["levels"] = opt["levels"]
     if opt.get("even"):
         key["even"] = opt["even"]
+    if opt.get("fedit"):
+        key["fedit"] = opt["fedit"]
     if opt.get("frame", FRAME) != FRAME:
         key["frame"] = opt["frame"]
     if opt.get("pictures", "movie") != "movie":
@@ -787,6 +797,8 @@ def render(opt, p, pictures, path, progress=lambda done, total: None, workers=3)
     logs = measure(opt, pictures.cache, pictures, wait=True)["logs"] if opt.get("even") and evener() else None
     evs = exposures(opt, pics, logs)[0]
     fr = opt.get("frame") or FRAME
+    # a frame edited on its own: the movie's look with its own keys over it
+    own = {k: studio_look.parse(f"{opt.get('edit', '')},{r}") for k, r in (opt.get("fedit") or {}).items()}
     kinds, building = Counter(), {}
     try:
         with ThreadPoolExecutor(workers) as pool:
@@ -802,9 +814,11 @@ def render(opt, p, pictures, path, progress=lambda done, total: None, workers=3)
                 kinds[what or "none"] += 1
                 if im is not None:
                     im = framed(im, crop_at(fr, n, len(pics)), fr["nudge"].get(e["id"], (0, 0)))
-                if im is not None and (look or evs[n]):
-                    # the movie editor's look, as Cassini Studio draws it, at this picture's exposure level
-                    im = studio_look.apply(im, look, evs[n])
+                its = own[e["id"]] if e["id"] in own else look
+                if im is not None and (its or evs[n]):
+                    # the movie editor's look (or the frame's own), as Cassini Studio draws it, at this picture's
+                    # exposure level
+                    im = studio_look.apply(im, its, evs[n])
                 # a mosaic stays up while its observation goes on: the pass's other frames (another filter, a frame
                 # that is not a tile) would otherwise flash in and out between its tiles
                 if what in ("mosaic", "mosaic movie"):
