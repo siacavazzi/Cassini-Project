@@ -67,8 +67,8 @@ strays = []
 for p in Q4:
     for f in F5:
         a.frame(f, p)
-for x in (38.14, 38.66, 40.22, 41.80, 42.83, 43.99):
-    strays.append(a.frame(("CL1", "CL2"), (x, -1.4)))
+for x in (38.14, 38.3, 38.66, 39.5, 40.22, 41.0, 41.80, 42.3, 42.83, 43.99):   # (repeats too: ten clear frames 30 s apart)
+    strays.append(a.frame(("CL1", "CL2"), (x, -1.4), dt=30))
 a.t += 4437
 a.lap()
 # 18ATM2X2B139: a lap whose UV1 frame at the last place is 161 frames off
@@ -111,7 +111,14 @@ s.t = 977000000.0
 for k in range(41):
     s.frame(("CL1", "CB2"), (k * 1.0 - 20, 0.0), dt=150)
 
-us = units(a, b, n, h, c, s)
+# a 1x2 and, three hours on, a stare: only the 1x2 is grouped anew (nothing is renumbered), the stare keeps its folder
+m = Obs("ISS_C24JU_MIXED")
+m.t = 978000000.0
+m.lap([(0.0, 0.4), (0.0, -0.4)], [("BL1", "CL2"), ("CL1", "GRN"), ("RED", "CL2")], pause=3 * 3600)
+for _ in range(30):
+    m.frame(("CL1", "CB2"), (0.1, 0.1), dt=20)
+
+us = units(a, b, n, h, c, s, m)
 
 A = us[a.name]
 assert kinds(A) == [("mosaic_movie", 163)], kinds(A)
@@ -131,4 +138,7 @@ assert kinds(C) == [("mosaic", 20), ("movie", 40)], kinds(C)
 assert not any(u.get("regrouped") for u in C) and om.folder(C[0], "/c").endswith("ISS_C23JU_PLAIN2X2_N_0")
 S = us[s.name]
 assert len(S) == 1 and not S[0].get("off") and not S[0].get("regrouped") and len(S[0]["frames"]) == 41, kinds(S)
+M = us[m.name]
+assert kinds(M) == [("mosaic", 6), ("movie", 30)] and [bool(u.get("regrouped")) for u in M] == [True, False], kinds(M)
+assert "ISS_C24JU_MIXED_N_1" in om.folder(M[1], "/c") and om.GROUPING not in om.folder(M[1], "/c")
 print("pass grouping ok:", {k: kinds(v) for k, v in us.items()})

@@ -87,7 +87,7 @@ MOVIE_LAPS = 2       # a mosaic whose places are taken again (median, per filter
 LAP_INSIDE = 0.9     # a few frames after a mosaic (a lap stopped short) are part of it when this much of them is inside it
 PAIR_STEP = 1.0      # two places at most this many frames apart (their tiles touching) are a 1x2 mosaic
 STRAY_LINK = 4       # frames of a pass within this many frames of one another are one patch of sky (_drop_strays) ...
-STRAY_SHARE = 0.25   # ... and patches holding at most this share of its frames, away from the rest, are not the pass's
+STRAY_SHARE = 0.5    # ... and patches holding less than this share of its frames, away from the rest, are not the pass's
 GROUPING = "_g2"     # the folder suffix of a pass these three rules (_drop_strays, _piece, a 1x2) group anew, so the
                      # passes made before them are not served for it; every other pass keeps its folder
 MOVIE_DWELL = 8      # ... or whose camera stays this many frames of one filter (median) at each place it goes
@@ -193,7 +193,7 @@ def units(target, obs, cam):
     # mosaic that starts again from nothing every lap
     for u in out:
         _drop_strays(u)
-    laps = []
+    laps, shifted = [], False
     for u in out:
         u["key"] = (target, obs, cam, len(laps))
         _judge(u)
@@ -201,8 +201,8 @@ def units(target, obs, cam):
         if (prev and prev["mosaic"] and u["frames"] and u["frames"][0][3] - prev["last"] <= LAP_GAP and u["z"]
                 and 1 / ZOOM < u["z"] / prev["z"] < ZOOM
                 and (u["mosaic"] and _overlap(prev, u) >= LAP_OVERLAP or _piece(prev, u))):
-            # (a piece, or a lap that is a mosaic only by the newer rules, joining it groups it anew)
-            prev["regrouped"] = bool(prev.get("regrouped") or not u["mosaic"] or u.get("pair") or u.get("regrouped"))
+            # (a piece, or a lap that is a mosaic only by the newer rules, joining it renumbers the passes after it)
+            shifted = shifted or not u["mosaic"] or any(v.get("pair") or v.get("off") for v in (prev, u))
             for k in ("frames", "all", "taken"):
                 prev[k] += u[k]
             prev["last"] = u["last"]
@@ -211,13 +211,12 @@ def units(target, obs, cam):
         else:
             laps.append(u)
     out = laps
-    # a pass grouped anew renumbers the passes after it, so every pass of its observation gets GROUPING's folder
-    if any(u.get("regrouped") or u.get("pair") for u in out):
-        for u in out:
-            u["regrouped"] = True
     for n, u in enumerate(out):
         u["key"] = (target, obs, cam, n)
         _judge(u)
+        # GROUPING's folder: a pass grouped anew (strays out, or a mosaic only as a 1x2), or every pass of an
+        # observation whose passes these rules renumbered
+        u["regrouped"] = bool(shifted or u.get("off") or u.get("pair"))
         u["repeat_gap"] = repeat_window(u)
         if u["repeat_gap"] < mosaic_benchmark.REPEAT_GAP:
             u["frames"], last = [], {}
@@ -234,11 +233,11 @@ def units(target, obs, cam):
 
 def _drop_strays(u):
     """Takes out of pass u the frames that are not of its sky: patches of frames (frames within STRAY_LINK frames
-    of one another) far from the rest that hold at most STRAY_SHARE of its placed frames. The Jupiter approach's
-    2x2 laps have a clear frame or one UV1 frame 38 to 430 frames off Jupiter (pointed at a moon or a star), which
+    of one another) away from the biggest one, together less than STRAY_SHARE of its placed frames, repeats too.
+    The Jupiter approach's 2x2 laps have clear frames or one UV1 frame 38 to 430 frames off Jupiter, which
     made the lap's footprint too wide for a mosaic, so its tiles played on their own and split the mosaic movie in
     two. Their ids go in u["off"] (unit_of leaves them out of the pass, so they show as themselves) and the pass
-    is marked regrouped. A pass whose frames all lie within MAX_FRAMES of one another is left as it is."""
+    is regrouped (GROUPING). A pass whose frames all lie within MAX_FRAMES of one another is left as it is."""
     pts = [(q, -fr[5] * fr[7] / u["z"] / FRAME, -fr[6] * fr[7] / u["z"] / FRAME)
            for q, fr in enumerate(u["all"]) if fr[7] and u["z"]]
     if len(pts) < 2:
@@ -266,13 +265,12 @@ def _drop_strays(u):
         patch.setdefault(root(c), []).extend(qs)
     main = max(patch.values(), key=len)
     strays = {q for qs in patch.values() if qs is not main for q in qs}
-    if not strays or len(strays) > STRAY_SHARE * len(pts):
+    if not strays or len(strays) >= STRAY_SHARE * len(pts):
         return
     u["off"] = {u["all"][q][1] for q in strays}
     u["all"] = [fr for q, fr in enumerate(u["all"]) if q not in strays]
     u["taken"] = [fr for q, fr in enumerate(u["taken"]) if q not in strays]
     u["frames"] = [fr for fr in u["frames"] if fr[1] not in u["off"]]
-    u["regrouped"] = True
 
 
 def _piece(prev, u):
