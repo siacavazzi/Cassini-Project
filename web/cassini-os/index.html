@@ -2558,6 +2558,8 @@ body.ambient.phone .amb-where { font-size: 18px; }
       hint: "The moment Cassini OS opens on. A shared link still opens on its own moment." });
   D({ key: "playback.autoplay", section: "Playback", label: "Play when Cassini OS opens", type: "toggle", value: true,
       hint: "Off opens paused at the starting moment." });
+  D({ key: "playback.builtOnly", section: "Playback", label: "Only years with pictures built", type: "toggle", value: true, reload: true,
+      hint: "When the picture cache holds only some years (a test build of one year), the timeline, Moments and Highlights keep to them. Off shows the whole mission, and pictures outside them are made as they are asked for." });
   // the playback speed scale, shared by the dock's speed slider, this setting and the clock's read-out: mission
   // seconds per second, from real time to a month a second, on a log scale that lands on round values
   const SP = window.cassiniSpeed = {
@@ -3870,7 +3872,8 @@ onmessage = async e => {
       el.textContent = "★".repeat(n) + "·".repeat(5 - n);
     });
     const ms = picks.filter(e => e.kind === "milestone").length;
-    $("mfoot").textContent = `${picks.length} moments, ${ms} milestone${ms === 1 ? "" : "s"}`;
+    $("mfoot").textContent = `${picks.length} moments, ${ms} milestone${ms === 1 ? "" : "s"}` + (cassiniSlice.spans ? ` · ${cassiniSlice.label} only` : "");
+    if (cassiniSlice.spans) $("mfoot").title = `The picture cache holds ${cassiniSlice.label} (a slice); Settings > Playback shows the whole mission`;
     const go = $("gomenu");
     for (const n of FOCUS_LIST) { const li = document.createElement("li"); li.innerHTML = `<button data-act="go" data-body="${n}">${titleCase(n)}</button>`; go.appendChild(li); }
   };
@@ -4294,6 +4297,30 @@ onmessage = async e => {
     if (/^https?:$/.test(location.protocol) && !/claude\.ai$|claudeusercontent\.com$|claude\.site$/.test(location.hostname)) return location.origin;
     return "http://localhost:8765";
   })();
+  // cache slices (prebuild.py --years): the stretches of the mission the frame server's picture cache holds under its
+  // versions (/frames/slices.json; spans null: the whole mission). With Settings > Playback "Only years with pictures
+  // built" on, the viewer keeps its timeline, Moments and Highlights to them (studyCoverage, called as it loads), so
+  // a test build of one year plays without the rest of the mission being made on demand. cassiniSlice.has(et): in them
+  const slice = window.cassiniSlice = { spans: null, label: "", has: () => true };
+  const sliceAsked = fetch(`${FRAMES}/frames/slices.json`, { cache: "no-store" }).then(r => r.ok ? r.json() : null).catch(() => null);
+  let sliceDone;
+  slice.ready = new Promise(r => { sliceDone = r; });
+  window.studyCoverage = async whole => {
+    const on = !window.cassiniSettings || cassiniSettings.get("playback.builtOnly") !== false;
+    // a server that doesn't answer soon (or an older one, 404) leaves the whole mission
+    const got = on ? await Promise.race([sliceAsked, new Promise(r => setTimeout(r, 4000, null))]) : null;
+    const spans = (got && Array.isArray(got.spans) ? got.spans : [])
+      .map(([a, b]) => [a ? Math.max(whole[0], utcToEt(a)) : whole[0], b ? Math.min(whole[1], utcToEt(b)) : whole[1]])
+      .filter(([a, b]) => b > a);
+    if (spans.length) {
+      const yearOf = et => new Date(etToMs(et)).getUTCFullYear(), inc = et => new Date(etToMs(et) - 1000).getUTCFullYear();
+      // cutsStart: the slice starts after the mission does, so its start is not the launch (cutscene.html atStart)
+      Object.assign(slice, { spans, has: et => spans.some(([a, b]) => et >= a && et < b), cutsStart: spans[0][0] > whole[0] + 1,
+        label: spans.map(([a, b]) => yearOf(a) === inc(b) ? `${yearOf(a)}` : `${yearOf(a)}–${inc(b)}`).join(", ") });
+    }
+    sliceDone(slice);
+    return slice.spans;
+  };
   const CH_COLOUR = ["#e5534b", "#57ab5a", "#539bf5"];
   // the camera windows held on a part of their picture (drill-down, in cameraFeed); Esc brings one back to live: the
   // held window in full view, else the one in front, else the one held last. A panel in front (Settings, a reel...)
@@ -6847,8 +6874,9 @@ onmessage = async e => {
 
   // after the viewer's own script has run (this one comes first in the page), so its jump, state and formats exist
   const ready = document.readyState === "loading" ? new Promise(r => addEventListener("DOMContentLoaded", r)) : Promise.resolve();
-  Promise.all([ready, fetch("data/highlights.json").then(r => r.ok ? r.json() : []).catch(() => [])]).then(([, h]) => {
-    H.list = h || [];
+  // a picture cache of some years only (cassiniSlice, head-quiet.html): only their highlights
+  Promise.all([ready, fetch("data/highlights.json").then(r => r.ok ? r.json() : []).catch(() => []), window.cassiniSlice && cassiniSlice.ready]).then(([, h]) => {
+    H.list = (h || []).filter(x => !window.cassiniSlice || cassiniSlice.has(x.et));
     const m = menu && menu.closest(".menu");
     if (!H.list.length) { if (m) m.hidden = true; return; }
     build();
@@ -11474,7 +11502,7 @@ void main() {
   window.cassiniAbout = { open, addTab, esc, close: () => show(false), credits: CREDITS };
 
   // ---- which version this is: this page's build id (build.py writes it), and what the frame server says it serves ----
-  const BUILD = /*BUILD*/"e8e9006a3efc";
+  const BUILD = /*BUILD*/"bc8667aa6c71";
   const FRAMES = (() => {                       // the frame server, chosen as the camera window chooses it
     const q = new URLSearchParams(location.search).get("frames");
     if (q) return q.replace(/\/$/, "");
@@ -12836,6 +12864,15 @@ async function load(startEt) {
   if (mission) {
     bodies = mission.bodies; encounters = await fetchJson("data/encounters.json");
     coverage = [mission.coverage[0] + 1, mission.coverage[1] - 1];
+    // a picture cache of some years only (Cassini OS: studyCoverage): the timeline and Moments keep to them, and a
+    // start outside them moves to their first moment
+    const built = window.studyCoverage ? await window.studyCoverage(coverage) : null;
+    if (built && built.length) {
+      coverage = [Math.max(coverage[0], built[0][0] + 1), Math.min(coverage[1], built[built.length - 1][1] - 1)];
+      const inside = et => built.some(([a, b]) => et >= a && et < b);
+      encounters = encounters.filter(e => inside(e.et));
+      if (!inside(startEt)) startEt = (encounters.find(e => e.kind === "observation") || encounters[0] || { et: coverage[0] }).et;
+    }
     await requestYears(partOf(Math.min(coverage[1], Math.max(coverage[0], startEt))));
     lastWantedYear = partOf(Math.min(coverage[1], Math.max(coverage[0], startEt)));
     if (!catalog) throw new Error("no mission year could be loaded");
@@ -12849,6 +12886,7 @@ async function load(startEt) {
     }
   } catch (err) { console.warn("Huygens data not loaded", err); probe = null; }
   await shapesLoading;
+  return startEt;
 }
 // the one-year layout (the artifact build): every file at once
 async function loadYearFiles() {
@@ -13867,9 +13905,9 @@ function frame(now) {
 
 (async function main() {
   // ?t=1999-08-18T03:00 opens at that moment
-  const start = utcToEt(new URLSearchParams(location.search).get("t") || (window.cassiniSettings && cassiniSettings.get("playback.start")) || "2006-09-15T14:28:00");
+  let start = utcToEt(new URLSearchParams(location.search).get("t") || (window.cassiniSettings && cassiniSettings.get("playback.start")) || "2006-09-15T14:28:00");
   try {
-    await load(start);
+    start = await load(start);
   } catch (err) {
     $("loading").textContent = "Could not load the trajectory files: " + err.message;
     return;
@@ -14251,7 +14289,8 @@ function frame(now) {
   // playback crossing a moment going forward plays a cutscene (when(et) can say no: not this time)
   const triggers = [];
   function at(et, play, when) { triggers.push({ et, play, when }); }
-  // playback setting off forward from the very start of the data (where setTime clamps, so nothing is crossed) plays
+  // playback setting off forward from the very start of the data (where setTime clamps, so nothing is crossed; not a
+  // cache slice's start, cassiniSlice.cutsStart) plays
   // one: once per visit, armed again once playback is 30 s past the start. Returns { spend() } to count a play from
   // elsewhere (?name) as this visit's
   const starts = [];
@@ -14261,7 +14300,7 @@ function frame(now) {
     const next = advance ? advance(et, dt, speed) : et + dt * speed;
     for (const g of starts) {
       if (et > coverage[0] + 30) g.spent = false;
-      if (!active && !urlPending && !g.spent && speed > 0 && et <= coverage[0] + 1 && next > et && (!g.when || g.when())) { g.spent = true; setTimeout(g.play, 0); return et; }
+      if (!active && !urlPending && !g.spent && speed > 0 && et <= coverage[0] + 1 && !(window.cassiniSlice && cassiniSlice.cutsStart) && next > et && (!g.when || g.when())) { g.spent = true; setTimeout(g.play, 0); return et; }
     }
     if (!active && !urlPending) for (const g of triggers) {
       const t = typeof g.et === "function" ? g.et() : g.et;

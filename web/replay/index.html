@@ -1031,6 +1031,15 @@ async function load(startEt) {
   if (mission) {
     bodies = mission.bodies; encounters = await fetchJson("data/encounters.json");
     coverage = [mission.coverage[0] + 1, mission.coverage[1] - 1];
+    // a picture cache of some years only (Cassini OS: studyCoverage): the timeline and Moments keep to them, and a
+    // start outside them moves to their first moment
+    const built = window.studyCoverage ? await window.studyCoverage(coverage) : null;
+    if (built && built.length) {
+      coverage = [Math.max(coverage[0], built[0][0] + 1), Math.min(coverage[1], built[built.length - 1][1] - 1)];
+      const inside = et => built.some(([a, b]) => et >= a && et < b);
+      encounters = encounters.filter(e => inside(e.et));
+      if (!inside(startEt)) startEt = (encounters.find(e => e.kind === "observation") || encounters[0] || { et: coverage[0] }).et;
+    }
     await requestYears(partOf(Math.min(coverage[1], Math.max(coverage[0], startEt))));
     lastWantedYear = partOf(Math.min(coverage[1], Math.max(coverage[0], startEt)));
     if (!catalog) throw new Error("no mission year could be loaded");
@@ -1044,6 +1053,7 @@ async function load(startEt) {
     }
   } catch (err) { console.warn("Huygens data not loaded", err); probe = null; }
   await shapesLoading;
+  return startEt;
 }
 // the one-year layout (the artifact build): every file at once
 async function loadYearFiles() {
@@ -2014,9 +2024,9 @@ function frame(now) {
 
 (async function main() {
   // ?t=1999-08-18T03:00 opens at that moment
-  const start = utcToEt(new URLSearchParams(location.search).get("t") || "2005-01-14T09:30:00");
+  let start = utcToEt(new URLSearchParams(location.search).get("t") || "2005-01-14T09:30:00");
   try {
-    await load(start);
+    start = await load(start);
   } catch (err) {
     $("loading").textContent = "Could not load the trajectory files: " + err.message;
     return;
