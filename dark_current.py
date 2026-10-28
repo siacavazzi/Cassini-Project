@@ -106,8 +106,7 @@ def readout(info):
     conv = "12Bit" if _value(info, "DATA_CONVERSION_TYPE").upper() == "12BIT" else "8Bit"
     order = int(ff._number(_value(info, "READOUT_ORDER", "0"), 0) or 0)
     exposure = ff._number(_value(info, "EXPOSURE_DURATION", "0"), 0.0)
-    time = _value(info, "IMAGE_TIME", "0000-000")
-    year = float(time[0:4]) + float(time[5:8]) / 365 if time[0:4].isdigit() and time[5:8].isdigit() else 0.0
+    year = _year(info)
     return (camera, lines, int(gain), comp, float(ratio), conv, float(fsw), telemetry, int(cycle), delayed, order,
             float(exposure), hot_file(camera, year))
 
@@ -233,11 +232,16 @@ def _hot_lists(prefix):
     return tuple(out)
 
 
-def hot_file(camera, year):
+def _year(info):
+    time = _value(info, "IMAGE_TIME", "0000-000")
+    return float(time[0:4]) + float(time[5:8]) / 365 if time[0:4].isdigit() and time[5:8].isdigit() else 0.0
+
+
+def hot_file(camera, year, every=False):
     """The hot pixel list of the epoch nearest the frame's year (cisscal's FindDarkFiles), or "" (none, or a camera
-    whose lists are left out)."""
+    whose lists are left out of the dark; every=True: any camera's, for repair_hot)."""
     best, name = 0.0, ""
-    if camera not in HOT_PIXEL_CAMERAS:
+    if camera not in HOT_PIXEL_CAMERAS and not every:
         return name
     for epoch, base in _hot_lists("NAC" if camera == "ISSNA" else "WAC"):
         if abs(epoch - year) < abs(best - year):
@@ -339,3 +343,50 @@ def dark_for(info, shape):
     if d is None or d.shape == tuple(shape[:2]):
         return d
     return cv2.resize(d, (shape[1], shape[0]), interpolation=cv2.INTER_LINEAR if shape[0] > d.shape[0] else cv2.INTER_AREA)
+
+
+@functools.lru_cache(maxsize=8)
+def _hot_spots(name):
+    """(x, y) at full resolution (0-1023) of every pixel a hot pixel list names, (n, 2) int"""
+    with open(os.path.join(ff.ROOT, "darkcurrent", name)) as f:
+        text = f.read().split("\\begindata", 1)[-1]
+    rows = [r.split() for r in text.splitlines() if r.strip()][2:]
+    return np.array([(int(float(r[0])), int(float(r[1]))) for r in rows if len(r) > 3], np.int64).reshape(-1, 2)
+
+
+"""
+The "hotpix" step: the pixels the camera team listed as hot at the frame's epoch (the list nearest its date, either
+camera), each put back to the median of the ring of pixels round it when it stands above that median, in place.
+They stay put while the sky moves, so a movie shows them as fixed dots; the dark step can't take them out on the NAC
+(its lists over-predict, see above). A listed pixel that isn't hot in this frame is left alone; a star that lands
+exactly on one is filled in too. image = the frame at any size whole multiples of its own pixels
+(label.resize_image gives a summed frame's pixels as 2x2 or 4x4 blocks); returns how many were repaired.
+"""
+def repair_hot(image, info):
+    camera = _value(info, "INSTRUMENT_ID")
+    name = hot_file(camera, _year(info), every=True)
+    lines = int(ff._number(_value(info, "LINES", "1024"), 1024) or 1024)
+    if not name or image.ndim != 2:
+        return 0
+    h, w = image.shape
+    step_y, step_x = h / lines, w / lines
+    fixed = 0
+    for x, y in _hot_spots(name):
+        i, j = int(y / 1024 * lines), int(x / 1024 * lines)
+        r0, r1 = int(round(i * step_y)), int(round((i + 1) * step_y))
+        c0, c1 = int(round(j * step_x)), int(round((j + 1) * step_x))
+        if r1 <= r0 or c1 <= c0 or r1 > h or c1 > w:
+            continue
+        a0, a1 = max(r0 - (r1 - r0), 0), min(r1 + (r1 - r0), h)
+        b0, b1 = max(c0 - (c1 - c0), 0), min(c1 + (c1 - c0), w)
+        box = image[a0:a1, b0:b1]
+        ring = np.ones(box.shape, bool)
+        ring[r0 - a0:r1 - a0, c0 - b0:c1 - b0] = False
+        if not ring.any():
+            continue
+        level = np.median(box[ring])
+        spot = image[r0:r1, c0:c1]
+        if np.isfinite(level) and spot.mean() > level:
+            spot[...] = level
+            fixed += 1
+    return fixed

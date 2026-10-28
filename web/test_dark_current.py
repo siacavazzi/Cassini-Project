@@ -145,16 +145,34 @@ info = {**INFO, "path": f"nac_data/{fid}.LBL"}
 fit = cal.overclock_bias(info)
 assert np.abs(fit - lines_bias).max() < 0.6, np.abs(fit - lines_bias).max()
 assert cal.overclock_bias({**info, "INST_CMPRS_TYPE": "LOSSY"}) is None
-with cal.stepping("flat"):
+with cal.stepping("flat,hotpix"):
     on = cal.calibrate(codes, info)
-    with cal.stepping("flat,dark"):
+    with cal.stepping("flat,dark,hotpix"):
         off = cal.calibrate(codes, info)
 hot = (int(482 / 4), int(213 / 4))
 print("hot pixel over the frame: dark on", round(float(on[hot] / np.median(on)), 3),
       "off", round(float(off[hot] / np.median(off)), 3))
 assert abs(on[hot] / np.median(on) - 1) < 0.05 < off[hot] / np.median(off) - 1    # the hot pixel gone
 assert np.std(on[5:-5].mean(axis=1)) / np.median(on) < 0.005                        # no ramp down the frame
+with cal.stepping("flat,dark"):                     # the hotpix step alone repairs it too
+    assert abs(cal.calibrate(codes, info)[hot] / np.median(on) - 1) < 0.05
 assert cal.variant() == ""
+with cal.stepping("hotpix"):
+    assert cal.variant() == "-off-hotpix"
+
+# repair_hot: the listed pixels of a SUM4 frame, drawn 4x4 by resize_image, put back to the sky; a sky pixel that
+# isn't listed, and a listed one that isn't hot, left alone
+sky = np.random.default_rng(5).normal(100, 2, (1024, 1024)).astype(np.float32)
+img = sky.copy()
+img[480:484, 212:216] = 900                    # listed (213, 482): hot
+img[84:88, 96:100] = 50                         # listed (98, 87): darker than the sky round it, so not hot here
+img[600:604, 300:304] = 900                     # not listed: a star
+assert dc.repair_hot(img, INFO) == 2            # (213, 482) and (37, 647); the hotsat 0 one counts as listed
+assert abs(img[480:484, 212:216].mean() - 100) < 2 and (img[84:88, 96:100] == 50).all() and (img[600:604, 300:304] == 900).all()
+full = sky.copy()
+full[482, 213] = 900
+assert dc.repair_hot(full, {**INFO, "LINES": "1024", "INSTRUMENT_MODE_ID": "FULL"}) >= 1 and abs(full[482, 213] - 100) < 8
+assert (full[481, 212:215] == sky[481, 212:215]).all()      # only the pixel itself
 with cal.stepping("dark"):
     assert cal.variant() == "-off-dark"
 print("ok")

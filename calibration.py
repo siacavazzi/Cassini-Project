@@ -18,11 +18,13 @@ the label allows:
   2. undo the camera's 12 -> 8 bit square root table
   3. subtract the bias: fitted down the frame from the overclocked pixels in each line's
      prefix where the archive has them (overclock_bias), else BIAS_STRIP_MEAN
-  4. subtract the dark current and hot pixels (dark_current.py; the "dark" step)
+  4. subtract the dark current (dark_current.py; the "dark" step)
   5. correct the camera's nonlinearity (CISSCAL's linearize tables, by gain state)
   6. divide by the exposure time, corrected for the shutter offset
   7. take the flat field out: dust rings, mottle and the ground calibration's flat
      (flat_field.py, CISSCAL's own maps; the "flat" step, Settings > Processing)
+     and put the listed hot pixels back to the sky round them (dark_current.repair_hot;
+     the "hotpix" step)
   8. scale by the gain state, the pixel summation and the sensor's decline over time
   9. divide by the filter's sensitivity to sunlight (filter_calibration.csv) and the
      distance from the sun, giving I/F
@@ -460,6 +462,8 @@ def calibrate(png, info, image=None):
         flat = ff.correction_for(info, per_second.shape)
         if flat is not None:
             per_second *= flat
+    if step("hotpix"):
+        dc.repair_hot(per_second, info)
 
     gain_ratio = GAIN_RATIOS[camera][GAIN_STATES[gain]]
     slope, start = SENSITIVITY[camera]
@@ -570,11 +574,12 @@ each one does: "stack" (repeat exposures of the same filter merged, stacking.loa
 exposure bracket merged into one picture in mosaics and movies, stacking.load_hdr; off merges only identical
 exposures, a plain stack), "fill" (pixels lost in downlink filled from round them), "calibrate" (every frame put on
 I/F and one display scale; off shows each frame on the archive's own stretch), "dark" (calibrate's dark current and
-hot pixels taken out, dark_current.py), "flat" (calibrate's flat field: dust rings, mottle and the detector's flat
-taken out, flat_field.py) and "align" (a color set's channels moved onto one another). Every step is on by default;
+the WAC's hot pixels taken out, dark_current.py), "flat" (calibrate's flat field: dust rings, mottle and the
+detector's flat taken out, flat_field.py), "hotpix" (calibrate's repair of the listed hot pixels, which stay put
+while the sky moves, dark_current.repair_hot) and "align" (a color set's channels moved onto one another). Every step is on by default;
 off steps go into the cache names (variant), so the pictures made with every step on keep their names.
 """
-STEPS = ("stack", "hdr", "fill", "calibrate", "dark", "flat", "align")
+STEPS = ("stack", "hdr", "fill", "calibrate", "dark", "flat", "hotpix", "align")
 _off = contextvars.ContextVar("off", default=frozenset())
 
 
