@@ -577,10 +577,14 @@ exposures, a plain stack), "fill" (pixels lost in downlink filled from round the
 I/F and one display scale; off shows each frame on the archive's own stretch), "dark" (calibrate's dark current and
 the WAC's hot pixels taken out, dark_current.py), "flat" (calibrate's flat field: dust rings, mottle and the
 detector's flat taken out, flat_field.py), "hotpix" (calibrate's repair of the hot and dead pixels, which stay put
-while the sky moves, dark_current.repair_hot) and "align" (a color set's channels moved onto one another). Every step is on by default;
-off steps go into the cache names (variant), so the pictures made with every step on keep their names.
+while the sky moves, dark_current.repair_hot), "align" (a color set's channels moved onto one another), "blend" (a
+mosaic's tiles blended where they meet, mosaic.composite) and "level" (each tile leveled to the tiles round it along
+their seams, mosaic._level). Every step is on by default; off steps go into the cache names (variant), so the pictures
+made with every step on keep their names. "blend" and "level" are the exception: they change only how tiles are drawn
+together, never a frame or a tile, so they are left out of variant (a mosaic with them off draws the same tiles) and
+the mosaics name them themselves (mosaic.drawing).
 """
-STEPS = ("stack", "hdr", "fill", "calibrate", "dark", "flat", "hotpix", "align")
+STEPS = ("stack", "hdr", "fill", "calibrate", "dark", "flat", "hotpix", "align", "blend", "level")
 _off = contextvars.ContextVar("off", default=frozenset())
 
 
@@ -591,7 +595,7 @@ def step(name):
 
 def variant():
     """What a cache name gets for the steps turned off: "" with every step on, else "-off-" and their names."""
-    off = _off.get()
+    off = _off.get() - {"blend", "level"}
     return "-off-" + "-".join(s for s in STEPS if s in off) if off else ""
 
 

@@ -2459,7 +2459,11 @@ body.ambient.phone .amb-where { font-size: 18px; }
     { key: "processing.hotpix", step: "hotpix", label: "Hot pixels",
       hint: "The detector pixels that went hot or dead over the mission (the camera team's lists, and the far more the archive's own frames show, month by month) are filled in from the pixels round them, so they don't show as dots that stay put while the stars and the moon move in a movie. A star that lands exactly on one is filled in too. Off leaves them in. Needs Calibrate." },
     { key: "processing.align", step: "align", label: "Align",
-      hint: "A color set's channels, taken seconds or minutes apart, are moved onto one another, and a mosaic's filters onto each other's tiles. Off lays them over one another as the camera pointed, so moving bodies show colored fringes." }
+      hint: "A color set's channels, taken seconds or minutes apart, are moved onto one another, and a mosaic's filters onto each other's tiles. Off lays them over one another as the camera pointed, so moving bodies show colored fringes." },
+    { key: "processing.blend", step: "blend", label: "Blend mosaic seams",
+      hint: "Where two mosaic tiles meet, their pictures fade into each other and the mosaic stays solid, with its soft edge only along its outside. Off draws each tile with its own soft edge, as before, which leaves a faint dark line along the seams and a notch where a seam meets the mosaic's edge." },
+    { key: "processing.level", step: "level", label: "Level mosaic seams",
+      hint: "Evens out the brightness where mosaic tiles overlap, smoothly across each tile, as the planetary mosaic tools do (a gentle brightness field per tile, solved together so no tile's step shows at a seam). Works with Blend mosaic seams on; off blends the tiles as they are." }
   ];
   for (const st of window.cassiniSteps) D({ key: st.key, section: "Processing", label: st.label, type: "toggle", value: true, hint: st.hint });
   D({ key: "cameras.composites", section: "Processing", label: "Color composites", type: "toggle", value: true,
@@ -11466,7 +11470,7 @@ void main() {
   window.cassiniAbout = { open, addTab, esc, close: () => show(false), credits: CREDITS };
 
   // ---- which version this is: this page's build id (build.py writes it), and what the frame server says it serves ----
-  const BUILD = /*BUILD*/"09bbfdaf1e5e";
+  const BUILD = /*BUILD*/"98a4eb4ad8ae";
   const FRAMES = (() => {                       // the frame server, chosen as the camera window chooses it
     const q = new URLSearchParams(location.search).get("frames");
     if (q) return q.replace(/\/$/, "");
