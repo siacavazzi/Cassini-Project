@@ -13,7 +13,7 @@ const ok = (c, m) => { console.log((c ? "PASS " : "FAIL ") + m); if (!c) process
     page.on("pageerror", e => { console.log("PAGEERROR", e.message); page.errors.push(e.message); });
     await page.route("https://cdn.jsdelivr.net/npm/three@0.128.0/**", r => r.fulfill({ path: `${three}/${r.request().url().split("three@0.128.0/")[1]}`, headers: { "Content-Type": "application/javascript" } }));
     await page.route("https://fonts.googleapis.com/**", r => r.fulfill({ status: 200, body: "", headers: { "Content-Type": "text/css" } }));
-    await page.addInitScript(s => { try { localStorage.clear(); localStorage.setItem("cassini-os-settings-v1", JSON.stringify(Object.assign({ "interface.autohide": false }, s.v))); if (s.d) localStorage.setItem("cassini-os-settings-defaults-v1", JSON.stringify(s.d)); } catch (e) {} }, settings);
+    await page.addInitScript(s => { try { localStorage.clear(); localStorage.setItem("cassini-os-settings-v1", JSON.stringify(Object.assign({ "interface.autohide": false, "interface.tips": false }, s.v))); if (s.d) localStorage.setItem("cassini-os-settings-defaults-v1", JSON.stringify(s.d)); } catch (e) {} }, settings);
     await page.goto(`http://127.0.0.1:${port}/?${q}`);
     await page.waitForFunction("document.getElementById('loading').hidden", null, { timeout: 240000 });
     await page.waitForTimeout(2500);
