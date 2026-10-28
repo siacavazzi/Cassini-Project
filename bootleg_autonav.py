@@ -73,6 +73,22 @@ def unload_kernels():
 # boresight and twist calibration, so no hard coded camera vectors are needed.
 CAMERA_FRAMES = {"NAC": "CASSINI_ISS_NAC", "WAC": "CASSINI_ISS_WAC"}
 
+# Catalog TARGET_NAMEs that NAIF's built-in name table doesn't know: misspellings of a moon's
+# name (HYROKKIN is Hyrrokkin) and the provisional designations moons had when Cassini took
+# their pictures (K07S4 is S/2007 S4, named Anthe later; S12_2004 and S13_2004 are still unnamed
+# and have only NAIF's provisional codes). Registered with boddef so find_target (bodn2c, spkpos)
+# places them; the ephemerides are in the irregular-satellite SPK (140809BP_IRRE_00256_25017.bsp)
+# and, for Anthe, the regular-moon one. Every code was checked against frames of its name: the
+# body lands in the frame. S8_2004 (Fornjot, 642), S14_2004 (Hati, 643) and S18_2004 (Bestla, 639)
+# are left out: in their 2007 frames the SPK puts the moon 1.4-2.6 frame widths off the CCD (the
+# shots were aimed with the orbits known then), so centring on it would draw an empty frame.
+CATALOG_NAMES = {"HYROKKIN": 644, "SKADI": 627, "THRYM": 630, "ERRIAPO": 628, "SUTTUNG": 623,
+                 "K07S4": 649, "S12_2004": 65040, "S13_2004": 65041}
+for _name, _code in CATALOG_NAMES.items():
+    sp.boddef(_name, _code)
+# a frame cached before its name was registered failed with this; it is worked out again
+UNKNOWN_NAME = "Spice returns not found for function: bodn2c"
+
 # Correct for light time and stellar aberration so we get where the body *appears* to
 # Cassini, not where it geometrically is at the instant of the exposure
 ABCORR = "LT+S"
@@ -238,9 +254,19 @@ def cached_target(label):
     if row is None:
         return None
     if row[8] is not None:
+        if UNKNOWN_NAME in row[8] and _known(label.info["TARGET_NAME"]):
+            return None
         raise ValueError(row[8])
     label.geometry = {"et": row[4], "camera": row[5], "target": row[6], "center": CCD_CENTER, "scale": row[7]}
     return list(row[:4])
+
+
+def _known(target):
+    try:
+        sp.bodn2c(target)
+        return True
+    except Exception:
+        return False
 
 
 def _store_rows(rows):
@@ -300,7 +326,11 @@ def build_geometry_cache(years=None, target=None):
     # label_handler.auto_center loads the kernels of the year of IMAGE_TIME (shutter close), which
     # can be the next year for a frame taken in the last seconds of a year; those are left to it
     index = index[~((index["day"] >= 365) & (index["IMAGE_MID_TIME"].str[9:11] == "23"))]
-    done = {r[0] for r in _geometry_db().execute("SELECT frame FROM target WHERE version = ?", (GEOMETRY_VERSION,))}
+    cached = list(_geometry_db().execute("SELECT frame, error FROM target WHERE version = ?", (GEOMETRY_VERSION,)))
+    # frames that failed because SPICE didn't know their target's name, which is registered now (CATALOG_NAMES)
+    retry = set(index.loc[index["TARGET_NAME"].isin(CATALOG_NAMES), "frame"]) & {
+        frame for frame, error in cached if error and UNKNOWN_NAME in error}
+    done = {frame for frame, _ in cached} - retry
     for year, rows in index.groupby("year"):
         if years and year not in years:
             continue
