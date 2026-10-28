@@ -124,7 +124,7 @@ Routes:
                                picture (a Cassini Studio recipe's color part, web/frames/studio_look.py);
                                &pictures=movie|color|processed|raw: what each frame shows (as the windows show it, full
                                color sets only, each frame processed alone, each frame raw); &list=1: every frame however
-                               many (the editor's list; a film holds at most CASSINI_EXPORT_MAX, default 20,000).
+                               many (the editor's list; a film has no cap unless CASSINI_EXPORT_MAX sets one).
                                size=1536|2048: mosaics up to that size, each at the bucket its pass has detail for;
                                size=full: mosaics at native resolution (export.full_size: "full" says the panes' side,
                                the passes that set it and how many pictures are drawn that big; passes not
@@ -139,9 +139,10 @@ Routes:
                                of time (web/frames/prebuild.py segment_items: frames, composites, mosaic and movie
                                passes, with the page's look and movie style: mosaics, steady, color, trail, laps,
                                center), so it plays as a movie at any frame rate from the cache; one stretch at a
-                               time, behind the server's own requests. Answers the job's status, as
+                               time, behind the server's own requests; most= frames at most (the page's Settings >
+                               Playback; 0 no limit, CASSINI_SEGMENT_MAX a ceiling over it). Answers the job's status, as
   /prebuild/<JOB>.json         does: state queued/planning/making/waiting/finishing/done/failed/stopped, pictures done of
-                               total, made through (UTC), seconds left
+                               total (frames: how many of them are the stretch's frames), made through (UTC), seconds left
   POST /prebuild/<JOB>/stop    stops it (what is made stays made)
   /health                      "ok" plus where the frames come from
   POST /flags                  a picture flagged in Cassini OS (the ⚑ button or R in a picture window): JSON with
