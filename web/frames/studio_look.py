@@ -74,10 +74,14 @@ def encode(p):
     return ",".join(out)
 
 
-def apply(im, p):
-    """Picture im (PIL) with look p drawn over it, as the studio's shader draws it, RGB."""
-    if not p:
+def apply(im, p, ev=0.0):
+    """Picture im (PIL) with look p drawn over it, as the studio's shader draws it, RGB. ev: exposure added to the
+    look's (the movie editor's exposure level for the picture), the sum within the exposure slider's range."""
+    if not p and not ev:
         return im
+    if ev:
+        p = dict(p or effective(None), filter=(p or {}).get("filter", "none"), strength=(p or {}).get("strength", 100.0))
+        p["exposure"] = p["exposure"] + ev
     e = effective(p)
     c = np.asarray(im.convert("RGB"), np.float32) / 255
     sharp = e["sharpness"] / 100 * 2.5
