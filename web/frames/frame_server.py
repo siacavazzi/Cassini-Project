@@ -112,7 +112,7 @@ Routes:
                                a highlight's thumbnail (any of the three, as data/highlights.json's "thumb" gives them):
                                the pass's mosaic when it has three or more tiles (in three or more filters when a
                                colour set is given too), else the colour composite, else the frame, each from its
-                               route's maker above. The answer is kept under thumb-v1/, named by the hint and the
+                               route's maker above. The answer is kept under thumb-v2/, named by the hint and the
                                makers' versions, so a version bump makes it again; the server makes every highlight's
                                thumbnail as it starts, so the Highlights window finds them made. X-Thumb says which
   /export/plan.json?from=2006-09-15T14:32&until=2006-09-15T17:12&cams=NW&fps=auto&size=1024
@@ -131,7 +131,9 @@ Routes:
                                pre-processed are counted as pending);
                                &levels=ID:EV,...&even=N: its exposure levels (points the film's exposure goes through,
                                and Even out over N pictures, movie mode's math); &ctr=0|1&zoom=Z&nudge=ID:X:Y,...: its
-                               framing (Auto center for the whole film, stills too; a zoom; single frames moved)
+                               framing (Auto center for the whole film, stills too; a zoom; single frames moved);
+                               &fedit=ID~ex:0.5,ct:0|ID~...: single frames edited on their own (the movie's look with
+                               those studio keys over it, studio_look.override)
   /export/levels.json?...      (the plan's options) the Movie Editor's exposure graph: each frame's brightness in EV,
                                measured on the film's own pictures on a thread of its own (done of total so far,
                                kept in the cache), and once all are, each picture's Even out change for the edit
@@ -478,8 +480,9 @@ def webp(frame_id, size, cache, fmt="webp"):
 
 # the caches of the pictures drawn from I/F, one per display model (calibration.style), so the classic look keeps the
 # pictures made before the balanced display model and raw colors the balanced ones made before natural color
-COLOR_VERSIONS = {"balanced": "color-v29", "raw": "color-v12", "classic": "color-v6"}
-PROC_VERSIONS = {"balanced": "proc-v8", "raw": "proc-v8", "classic": "proc-v2"}   # one frame: no colors to mix
+# color-v30/v13/v7, proc-v9/v3: calibration takes the flat field (dust rings, mottle) and the nonlinearity out
+COLOR_VERSIONS = {"balanced": "color-v30", "raw": "color-v13", "classic": "color-v7"}
+PROC_VERSIONS = {"balanced": "proc-v9", "raw": "proc-v9", "classic": "proc-v3"}   # one frame: no colors to mix
 # Auto center (center=1): the same pictures centred on the body by SPICE, cached beside them in folders of their own
 CENTRE_VERSION = "ctr4"   # ctr2: the shift stops at the frame's data edge; ctr3: only when the body's disk is cut by it;
                           # ctr4: a close-up pass is turned north up where it is
@@ -643,7 +646,7 @@ def processed_webp(frame_id, size, cache, fmt="webp", centre=None):
 
 
 # ---------- highlight thumbnails: one small picture per highlight, picked by the page's old rule and kept ----------
-THUMB_VERSION = "thumb-v1"
+THUMB_VERSION = "thumb-v2"   # v2: the flat fielded pictures
 THUMB_SIZE = 256
 
 
