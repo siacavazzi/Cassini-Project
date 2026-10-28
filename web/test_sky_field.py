@@ -76,4 +76,10 @@ rp.warp_sky(big, fx_, fy_, fw_, 16)
 took = time.time() - t0
 print("1448 px tile", round(took, 3), "s")
 assert took < 0.8, took
+# how much a field distorts: none for a turn of nothing, a little for 1 degree, a lot for a big turn at the limb
+assert rp.field_stretch(*rp.sky_field(view(0), view(0), xs, ys, KM), 16) < 1e-6
+small = rp.field_stretch(*rp.sky_field(view(0), view(1.0), xs, ys, KM), 16)
+large = rp.field_stretch(*rp.sky_field(view(0), view(5.0), xs, ys, KM), 16)
+print("stretch 1 degree", round(small, 3), "5 degrees", round(large, 3))
+assert small < 0.5 < large
 print("sky field: ok")

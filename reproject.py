@@ -275,6 +275,19 @@ def sky_field(epoch, view, x, y, km_px):
     return ((sx - x) * k).astype(np.float32), ((sy - y) * k).astype(np.float32), hit.astype(np.float32)
 
 
+def field_stretch(dx, dy, weight, step):
+    """How much a field (sky_field, on a grid of step pixels) stretches or squeezes the picture it redraws: the
+    largest change of its shift per pixel between neighboring grid points both on the body (0 for a shift the same
+    everywhere; 1 squeezes a stretch of surface to nothing)."""
+    on = weight > 0.5
+    worst = 0.0
+    for a in (dx, dy):
+        for g, both in ((np.diff(a, axis=1), on[:, 1:] & on[:, :-1]), (np.diff(a, axis=0), on[1:] & on[:-1])):
+            if both.any():
+                worst = max(worst, float(np.abs(g[both]).max()) / step)
+    return worst
+
+
 def warp_sky(image, dx, dy, weight, step):
     """image (RGBA, its pixel (0, 0) at the field's grid point (0, 0)) redrawn as at the field's epoch: dx, dy,
     weight on a grid of step pixels (sky_field), filled in between; off the body (weight 0) it stays as it is (the
