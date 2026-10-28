@@ -273,9 +273,10 @@ body.phone #segfps { flex: 1; }
     if (P.playing && M.on) { setPlaying(!state.playing); buttons(); return; }
     P.playing = true;
     const cams = windows().cams;
-    // one camera: the other camera's window steps aside while the stretch plays, and comes back after
+    // one camera: the other camera's window used to step aside while the stretch played; with a stretch highlighted
+    // the camera windows are pinned (cassiniPin, head-quiet.html), so it stays where it is
     const other = cams === "N" ? $("wacard") : cams === "W" ? $("imgcard") : null;
-    if (other && !other.hidden && window.cassiniWM) { P.tucked = other; cassiniWM.minimize(other); }
+    if (other && !other.hidden && window.cassiniWM && !(window.cassiniPin && cassiniPin.editing())) { P.tucked = other; cassiniWM.minimize(other); }
     M.start(true, { from: P.a, until: P.b, cams: cams.length === 1 ? cams : undefined });
     buttons();
   }
