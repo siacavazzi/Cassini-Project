@@ -215,7 +215,7 @@ def watched_first(todo):
     return first + [t for t, m in zip(todo, marks) if not m], len(first)
 
 
-def make_pass(u, cache, sizes=(1024, 512), within=None, style=None, made=None):
+def make_pass(u, cache, sizes=(1024, 512), within=None, style=None, made=None, stopped=None):
     """What a window shows as it plays through the pass, at every frame at 1024 and 512, after the pass's plan and
     every tile (as web/frames/warm_pass.py does for one observation): a mosaic movie's rolling picture
     (rolling_webp, wait=True, in frame order, so each grows from the one before and is named after every tile
@@ -224,7 +224,8 @@ def make_pass(u, cache, sizes=(1024, 512), within=None, style=None, made=None):
     below), after every tile up to the last of them (and every rolling picture before them, each grown from the
     last). style: the page's Settings > Movie choices, as the window puts them in its request ({trail, laps,
     center, color}; the defaults when None). made(t): called as each frame of the stretch has its pictures, with
-    the frame's time (a stretch's progress, Segments), so a long pass counts up frame by frame."""
+    the frame's time (a stretch's progress, Segments), so a long pass counts up frame by frame. stopped(): true once
+    the stretch is stopped, so a long pass ends at the next picture instead of making the rest of it."""
     style = style or {}
     t0, t1 = within or (-float("inf"), float("inf"))
     last = max((j for j, f in enumerate(u["frames"]) if f[3] <= t1), default=-1)
@@ -232,9 +233,13 @@ def make_pass(u, cache, sizes=(1024, 512), within=None, style=None, made=None):
         return 0
     p = obs_mosaic.plan(u, cache)
     for j in range(last + 1):
+        if stopped and stopped():
+            return 0
         obs_mosaic.tile(u, j, cache, p["display_scale"])
     kind, n = u.get("kind"), 0
     for j, f in enumerate(u["frames"][:last + 1]):
+        if stopped and stopped():
+            return n
         if f[3] < t0 and kind != "mosaic_movie":
             continue
         for size in sizes:
@@ -612,7 +617,13 @@ def sample(args):
 SEGMENT_THREADS = max(2, min(4, (os.cpu_count() or 4) // 2))
 SEGMENT_PAUSE = "~/prebuild.pause"
 SEGMENT_YIELD = 1.0     # seconds at most a picture of the stretch waits for the server's own requests to clear
-SEGMENT_MAX = 6000      # pictures in one stretch (a busy day near Saturn has ~1,500)
+# frames in one stretch at most (the frames the bar counts; a busy day near Saturn has ~1,500): 0 is no limit. The
+# page asks its own (Settings > Playback, most=); this is the ceiling over it, for a server that needs one (the public
+# site, CASSINI_SEGMENT_MAX). A stretch's pictures are made a few at a time and its plan is a small row per picture
+# (~0.6 KB), so a stretch of 100,000 frames (~200,000 pictures) holds ~120 MB while it is made.
+SEGMENT_MAX = int(os.environ.get("CASSINI_SEGMENT_MAX", "0") or 0)
+ETA_WINDOW, ETA_LEAST = 60.0, 8.0   # seconds of pace the time left is worked out from, and the least that says anything
+SEGMENT_KEEP = 12       # finished stretches the server keeps the status of (a stretch asked again past them is made again from the cache)
 SEGMENT_SIZES = (512, 768, 1024)
 SEGMENT_ANSWER = 0.3    # seconds POST /prebuild waits for its stretch to be made before it answers how far it is
 
@@ -621,7 +632,8 @@ def segment_options(q):
     """The stretch and the page's choices from a POST /prebuild query (parse_qs): from/until (UTC, ISO), cams (N,
     W or NW), sizes (the windows' picture sizes), look/colors (as on every picture route), mosaics/steady/color
     (Settings > Cameras and Movie), processed (processed single frames), center (Auto center: center=1 as the
-    windows ask), off (the pipeline steps turned off, calibration.STEPS) and trail/laps/fade/persist (the movie style). ValueError for anything else."""
+    windows ask), off (the pipeline steps turned off, calibration.STEPS), trail/laps/fade/persist (the movie style)
+    and most (frames in the stretch at most, 0 for no limit; not part of the stretch's id). ValueError for anything else."""
     get = lambda k, d=None: q.get(k, [d])[0]
     when = lambda s: datetime.datetime.fromisoformat(s.replace("Z", "")).replace(tzinfo=datetime.timezone.utc).timestamp()
     try:
@@ -635,14 +647,15 @@ def segment_options(q):
         sizes = sorted({min(SEGMENT_SIZES, key=lambda z: abs(z - int(x))) for x in (get("sizes") or "1024").split(",") if x})
         trail, laps = int(get("trail", "0") or 0), int(get("laps", "1") or 1)
         steady, exposure = int(get("steady_smooth", "0") or 0), int(get("exposure", "0") or 0)
+        most = max(0, int(get("most", "0") or 0))
         fade = obs_mosaic.fade_style(int(get("fade", "0") or 0), int(get("persist", str(obs_mosaic.FADE_PERSIST)) or 0))
     except ValueError:
-        raise ValueError("sizes=, trail=, laps=, fade= and persist= take numbers")
+        raise ValueError("sizes=, trail=, laps=, fade=, persist= and most= take numbers")
     if not cams or not sizes:
         raise ValueError("cams= takes N, W or NW")
     on = lambda k: get(k, "1") != "0"
     off = [s for s in calibration.STEPS if s in (get("off") or "").split(",")]
-    return {"from": t0, "until": t1, "cams": cams, "sizes": sizes,
+    return {"from": t0, "until": t1, "cams": cams, "sizes": sizes, "most": most,
             "look": get("look", calibration.LOOKS[0]), "colors": get("colors", calibration.COLORS[0]),
             # the pipeline steps turned off (Settings > Processing), only when any are, so a stretch's id is as before
             **({"off": off} if off else {}),
@@ -696,7 +709,9 @@ def segment_items(o):
         cam = "N" if r.INSTRUMENT_ID == "ISSNA" else "W"
         if cam not in cams:
             continue
-        out.append((r.id, float(r.seconds_1970), 1, lambda c, i=r.id: single(i, c)))
+        work = lambda c, i=r.id: single(i, c)
+        work.frame = True   # one of the frames the bar counts (Segments: the stretch's frames, its limit)
+        out.append((r.id, float(r.seconds_1970), 1, work))
         if isinstance(r.OBSERVATION_ID, str):
             keys.setdefault((r.TARGET_NAME, r.OBSERVATION_ID, cam), None)
     readies, sets = sets_ready()
@@ -712,7 +727,7 @@ def segment_items(o):
             movie = u.get("kind") != "mosaic_movie" and not u["mosaic"]
             if (o["mosaics"] if not movie else o["steady"] and (u.get("kind") == "movie" or u.get("movie"))):
                 first = next(f[3] for f in u["frames"] if f[3] >= t0)
-                work = lambda c, made=None, u=u: make_pass(u, c, sizes, (t0, t1), o["style"], made)
+                work = lambda c, made=None, stopped=None, u=u: make_pass(u, c, sizes, (t0, t1), o["style"], made, stopped)
                 work.pass_key = u["key"]
                 out.append(("_".join(map(str, u["key"])), first, n, work))
     out.sort(key=lambda x: x[1])
@@ -733,6 +748,7 @@ class Segments:
     @staticmethod
     def key(o):
         import hashlib
+        o = {k: v for k, v in o.items() if k != "most"}   # the limit is not part of what is made
         return hashlib.sha1(json.dumps(o, sort_keys=True).encode()).hexdigest()[:16]
 
     def submit(self, o, wait=0.0):
@@ -743,19 +759,28 @@ class Segments:
         jid = self.key(o)
         with self.lock:
             job = self.jobs.get(jid)
-            if job and job["state"] not in ("failed", "stopped"):
+            # (a stretch stopped but still letting go of its last pictures is asked again as a new run, queued behind it)
+            if job and job["state"] not in ("failed", "stopped") and not job["stop"]:
                 return self._public(job)
-            job = {"id": jid, "state": "queued", "options": o, "items": [], "total": 0, "done": 0, "errors": 0,
+            job = {"id": jid, "state": "queued", "options": o, "items": [], "total": 0, "frames": 0, "done": 0, "errors": 0, "first": 0,
                    "finished": [], "partial": {}, "asked": time.time(), "took": None, "why_waiting": None, "error": None,
-                   "stop": False, "recent": collections.deque(maxlen=60)}
+                   "stop": False, "recent": collections.deque(maxlen=2000)}
             self.jobs[jid] = job
-            self.queue.append(jid)
+            self.queue.append(job)
+            self._forget()
         self.wake.set()
         until = time.monotonic() + wait
         while job["state"] not in ("done", "failed", "stopped") and time.monotonic() < until:
             time.sleep(0.01)
         with self.lock:
             return self._public(job)
+
+    def _forget(self):
+        """Only the last SEGMENT_KEEP finished stretches are kept (with the lock held): a long session of stretches
+        does not pile up their plans."""
+        ended = [j for j, x in self.jobs.items() if x["state"] in ("done", "failed", "stopped")]
+        for j in ended[:max(0, len(ended) - SEGMENT_KEEP)]:
+            del self.jobs[j]
 
     def status(self, jid):
         with self.lock:
@@ -770,32 +795,38 @@ class Segments:
             job["stop"] = True
             if job["state"] == "queued":
                 job["state"] = "stopped"
-                self.queue.remove(jid)
+                self.queue.remove(job)
             return self._public(job)
 
     def _public(self, job):
         """What the page reads: state (queued, planning, making, waiting (held by the pause file), finishing, done, failed, stopped), pictures done of total, how
         far in time every picture is made (through, UTC), seconds left and the place in line."""
-        out = {k: job[k] for k in ("id", "state", "total", "done", "errors", "took", "why_waiting", "error")}
+        out = {k: job[k] for k in ("id", "state", "total", "frames", "done", "errors", "took", "why_waiting", "error")}
         through = job["options"]["from"]
         if job["finished"] and all(job["finished"]):
             through = job["options"]["until"]
         elif job["items"]:
             # up to the first picture not made yet: an item not finished holds it at its time, a pass being made at
             # its last frame made (make_pass's made), so the line moves through a long pass with its frames
-            limit = job["options"]["until"]
-            for k, (item, ok) in enumerate(zip(job["items"], job["finished"])):
-                if item[1] >= limit:
+            # (from the first item not finished, job["first"], so a stretch of 100,000 pictures reads as fast as one of 100)
+            limit, items, fin = job["options"]["until"], job["items"], job["finished"]
+            while job["first"] < len(fin) and fin[job["first"]]:
+                job["first"] += 1
+            for k in range(job["first"], len(items)):
+                if items[k][1] >= limit:
                     break
-                if not ok:
-                    limit = min(limit, job["partial"].get(k, item[1]))
+                if not fin[k]:
+                    limit = min(limit, job["partial"].get(k, items[k][1]))
             through = max(through, limit)
         out["through"] = datetime.datetime.fromtimestamp(through, datetime.timezone.utc).strftime("%Y-%m-%dT%H:%M:%S")
-        r = job["recent"]
-        if job["state"] == "making" and len(r) > 1 and r[-1][0] > r[0][0] and r[-1][1] > r[0][1]:
+        # seconds left from the pace of the last ETA_WINDOW seconds, once there are ETA_LEAST of them: the pictures found
+        # in the cache come by the hundred a second, so a stretch's first second says nothing of the ones to be made
+        r, now = job["recent"], time.monotonic()
+        r = [x for x in r if x[0] >= now - ETA_WINDOW]
+        if job["state"] == "making" and len(r) > 1 and r[-1][0] - r[0][0] >= ETA_LEAST and r[-1][1] > r[0][1]:
             out["eta"] = (job["total"] - job["done"]) / ((r[-1][1] - r[0][1]) / (r[-1][0] - r[0][0]))
         if job["state"] == "queued":
-            out["ahead"] = self.queue.index(job["id"])
+            out["ahead"] = self.queue.index(job)
         return out
 
     def _worker(self):
@@ -806,26 +837,30 @@ class Segments:
                 with self.lock:
                     if not self.queue:
                         break
-                    job = self.jobs[self.queue[0]]
+                    job = self.queue[0]
                 try:
                     self._run(job)
                 except Exception as e:   # noqa: BLE001  (a stretch that fails says why; the next one goes on)
                     job["state"], job["error"] = "failed", f"{type(e).__name__}: {e}"[:300]
                     traceback.print_exc()
                 with self.lock:
-                    if self.queue and self.queue[0] == job["id"]:
+                    if self.queue and self.queue[0] is job:
                         self.queue.pop(0)
 
     def _run(self, job):
         o, t_start = job["options"], time.monotonic()
         job["state"] = "planning"
         items = segment_items(o)
-        total = sum(x[2] for x in items)
-        if total > SEGMENT_MAX:
-            job["state"], job["error"], job["total"] = "failed", f"{total:,} pictures in that stretch; pre-process up to {SEGMENT_MAX:,} at a time", total
+        total, frames = sum(x[2] for x in items), sum(bool(getattr(x[3], "frame", False)) for x in items)
+        limits = [m for m in (o.get("most") or 0, SEGMENT_MAX) if m > 0]
+        most = min(limits) if limits else 0
+        if most and frames > most:
+            job["state"], job["total"], job["frames"] = "failed", total, frames
+            job["error"] = (f"{frames:,} frames in that stretch; pre-process up to {most:,} at a time"
+                            + (" (Settings > Playback)" if most == o.get("most") else ""))
             return
         with self.lock:
-            job.update(items=items, total=total, finished=[False] * len(items), state="making")
+            job.update(items=items, total=total, frames=frames, finished=[False] * len(items), state="making")
 
         def one(k):
             if job["stop"]:
@@ -842,7 +877,9 @@ class Segments:
                     job["recent"].append((time.monotonic(), job["done"]))
             try:
                 if getattr(work, "pass_key", None):
-                    work(self.cache, made)
+                    work(self.cache, made, lambda: job["stop"])
+                    if job["stop"] and told[0] < job["items"][k][2]:
+                        return k, "stopped", told[0]   # ended part way: what it made is counted, the rest is not
                 else:
                     work(self.cache)
                 return k, None, told[0]
@@ -893,7 +930,10 @@ class Segments:
             job["state"] = "finishing"
             time.sleep(1)
         job["took"] = time.monotonic() - t_start
-        job["state"] = "stopped" if job["stop"] else "done"
+        with self.lock:
+            # the plan's makers (and what they hold) are let go: only the times and counts stay for the status
+            job["items"] = [(x[0], x[1], x[2], None) for x in items]
+            job["state"] = "stopped" if job["stop"] else "done"
 
 
 def main():
