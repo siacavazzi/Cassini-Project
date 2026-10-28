@@ -119,7 +119,10 @@ def main():
                 pics[j] = np.asarray(Image.open(os.path.join(there, f"{j}.png")).convert("RGBA"))
             return pics[j]
         spice = {t["n"]: t["offset"] for t in tiles}
+        # (measured up to 6% of a frame, as in the first rounds, so the shifts registration no longer believes show)
+        cap, om.PANEL_MAX = om.PANEL_MAX, 0.06
         before = pairs(u, p, tiles, spice, pic)
+        om.PANEL_MAX = cap
         # the surface redrawn as at the pass's epoch (surface_pictures), measured again where SPICE put each tile
         t1 = time.time()
         surfaced = om.surface_pictures(u, a.cache, p, tiles)
@@ -132,7 +135,9 @@ def main():
             if j not in spics:
                 spics[j] = np.asarray(Image.open(surfaced[j]).convert("RGBA"))
             return spics[j]
+        om.PANEL_MAX = 0.06
         surface = pairs(u, p, tiles, spice, spic) if surfaced else []
+        om.PANEL_MAX = cap
         t1 = time.time()
         report = {}
         drawn = [dict(t, pic=surfaced[t["n"]]) if t["n"] in surfaced else t for t in tiles]

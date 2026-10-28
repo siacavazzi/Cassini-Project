@@ -1291,8 +1291,8 @@ def _pointing_root(u, n, roots):
 
 SURFACE_STEP = 16    # reference px: the grid a tile's surface motion (reproject.sky_field) is worked out on
 # a pass's tiles redrawn as at its epoch (surface_pictures), kept beside its tiles; renamed whenever the rule changes
-SURFACE_DIR = "surface1"
-SURFACE_TAG = "-s1"  # in the name of a layout whose tiles are redrawn so (layout), so its pictures are its own
+SURFACE_DIR = "surface2"
+SURFACE_TAG = "-s2"  # in the name of a layout whose tiles are redrawn so (layout), so its pictures are its own
 _spice_lock = threading.RLock()
 
 
@@ -1388,7 +1388,8 @@ def surface_pictures(u, cache, p, tiles):
             x0, y0 = t["offset"][0] + t["box"][0], t["offset"][1] + t["box"][1]
             dx, dy, weight = rp.sky_field(epoch, view, gx + x0, gy + y0, km_px)
             path = os.path.join(out_dir, f"{t['n']}.png")
-            Image.fromarray(rp.warp_sky(image, dx, dy, weight, SURFACE_STEP)).save(path + ".part.png", compress_level=1)
+            exact = lambda x, y, view=view: rp.sky_field(epoch, view, x + x0, y + y0, km_px)
+            Image.fromarray(rp.warp_sky(image, dx, dy, weight, SURFACE_STEP, exact)).save(path + ".part.png", compress_level=1)
             os.replace(path + ".part.png", path)
             out[t["n"]] = path
     return out

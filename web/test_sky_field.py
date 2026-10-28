@@ -1,6 +1,6 @@
 """Synthetic check of surface reprojection for north-up tiles (reproject.sky_field, warp_sky): a moon seen from
 Cassini at the same time moves nothing; turned by an angle, the point under the disk's middle moves R sin(angle)
-across the sky (east-west, none north-south), the limb's sky stays put (weight 0 off the body and on the night side),
+across the sky (east-west, none north-south), the sky stays put (weight 0 off the body), the limb stays one edge,
 and a tile redrawn with the field lands its surface where it was at the epoch. Run: python web/test_sky_field.py"""
 import os, sys, math
 sys.path.insert(0, os.path.join(os.path.dirname(os.path.abspath(__file__)), ".."))
@@ -24,7 +24,7 @@ def view(turn, sun=(-1.0, 0.0, 0.0)):
 ys, xs = np.mgrid[-1200:1201:16, -1200:1201:16].astype(np.float64)
 dx, dy, w = rp.sky_field(view(0), view(0), xs, ys, KM)
 assert np.abs(dx).max() < 1e-6 and np.abs(dy).max() < 1e-6, "same view, nothing moves"
-assert w[75, 75] == 1 and w[0, 0] == 0, "lit middle believed, sky not"
+assert w[75, 75] == 1 and w[0, 0] == 0, "the body moves, the sky not"
 turn = 1.0
 dx, dy, w = rp.sky_field(view(0), view(turn), xs, ys, KM)
 mid = (ys == 0) & (xs == 0)
@@ -44,4 +44,18 @@ out = rp.warp_sky(img, dx, dy, w, 16)
 ys2, xs2 = np.nonzero(out[..., 0] > 150)
 print("spot redrawn at", xs2.mean() - 1200, ys2.mean() - 1200)
 assert abs(xs2.mean() - 1200) < 1 and abs(ys2.mean() - 1200) < 1
+# the limb: a bright disk (night side too) turned, redrawn, keeps one edge where it was (no second limb inside)
+r = R / KM
+yy, xx = np.mgrid[0:2401, 0:2401] - 1200.0
+disk = np.zeros((2401, 2401, 4), np.uint8)
+disk[..., 3] = 255
+disk[..., :3] = np.where(np.hypot(xx, yy) <= r, 200, 0)[..., None]
+ep, vw = view(0), view(5.0, sun=(0, 1.0, 0))
+dx, dy, w = rp.sky_field(ep, vw, xs, ys, KM)
+out = rp.warp_sky(disk, dx, dy, w, 16, exact=lambda x, y: rp.sky_field(ep, vw, x - 1200, y - 1200, KM))
+row = out[1200, :, 0].astype(int)
+inside = row[1200 - int(r) + 3:1200 + int(r) - 3]
+print("limb row: darkest inside the disk", inside.min())
+assert inside.min() > 150, "no dark band inside the limb"
+assert row[1200 - int(r) - 4] < 20 and row[1200 + int(r) + 4] < 20, "the sky stays dark"
 print("sky field: ok")
