@@ -185,10 +185,14 @@ for n in range(12):
     frames.append(f)
 found = {tuple(r) for r in dc.defects(frames)}
 assert (150, 150, 1) in found and (160, 170, -1) in found and len(found) < 6, found
-np.savez(os.path.join(root, "hot_maps.npz"), **{dc.map_key("ISSNA", "SUM4", 2006 * 12 + 8): np.array(sorted(found), np.int16)})
+np.savez(os.path.join(root, "hot_maps.npz"), **{dc.map_key("ISSNA", "SUM4", 2006 * 12 + 8, 1): np.array(sorted(found), np.int16),
+                                                dc.map_key("ISSNA", "SUM4", 2006 * 12 + 6, 3): np.zeros((0, 3), np.int16)})
 dc._hot_maps.cache_clear()
-assert dc.map_key("ISSNA", "SUM4", 2006 * 12 + 8) == "ISSNA_SUM4_2006-09"
-assert dc.hot_map(INFO) is not None and len(dc.hot_map(INFO)) == len(found)    # July uses September's, 2 months off
+assert dc.map_key("ISSNA", "SUM4", 2006 * 12 + 8, 1) == "ISSNA_SUM4_2006-09_1"
+assert [dc.exposure_band(t) for t in (1, 2, 46, 60, 220)] == [None, 0, 1, 2, 3]
+assert dc.hot_map(INFO) is not None and len(dc.hot_map(INFO)) == len(found)    # 46 s: band 1, September's, 2 months off
+assert len(dc.hot_map({**INFO, "EXPOSURE_DURATION": "100000"})) == 0           # band 2 has none: the longer band 3 first
+assert len(dc.hot_map({**INFO, "EXPOSURE_DURATION": "220000"})) == 0           # its own band, July
 assert dc.hot_map({**INFO, "IMAGE_TIME": "2007-001T00:00:00"}) is None
 img = sky.copy()
 img[600:604, 600:604] = 300                                         # native (150, 150)

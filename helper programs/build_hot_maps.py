@@ -4,12 +4,13 @@ Measures the detectors' defect maps from the archive itself, for the "hotpix" ca
 HOT_MAPS): the camera team's hot pixel lists hold only a small share of the pixels that stay put as fixed dots while the
 sky moves (530 of about 7,300 in a 220 s Hyrokkin pass in 2015).
 
-For each camera, summing mode and month, up to --frames of that month's longest exposures (at least --min-exposure,
-no lost lines, at most --per-obs from one observation, so the scene moves between them) go through
+For each camera, summing mode, month and exposure band (dark_current.EXPOSURE_BANDS: a pixel's dark charge grows with
+the exposure, so long exposures show far more defects), up to --frames of that month's longest exposures in the band
+(no lost lines, at most --per-obs from one observation, so the scene moves between them) go through
 dark_current.defects: the pixels more than 4 times the grain above (hot) or below (dead) their 3x3 median in 60% of
 them. A month with fewer than --least such frames gets no map (frames there use the nearest month's within
 dark_current.HOT_MAP_MONTHS). Written to one .npz (default dark_current.HOT_MAPS, beside the CISSCAL maps), keys like
-ISSNA_SUM2_2015-08, values (n, 3) int16 (line, sample, +1 hot / -1 dead) at the mode's own resolution.
+ISSNA_SUM2_2015-08_3, values (n, 3) int16 (line, sample, +1 hot / -1 dead) at the mode's own resolution.
 
 Run from the main folder with CASSINI_DATA set:
   python "helper programs/build_hot_maps.py" [--out hot_maps.npz] [--workers 4] [--years 2004-2017]
@@ -47,10 +48,11 @@ def one_month(job):
             exposure = float(info.get("EXPOSURE_DURATION", 0))
         except Exception:
             continue
-        if exposure >= args.min_exposure * 1000:
-            found.setdefault(info.get("INSTRUMENT_MODE_ID", "FULL"), []).append((exposure, obs, path))
+        band = dc.exposure_band(exposure / 1000)
+        if band is not None:
+            found.setdefault((info.get("INSTRUMENT_MODE_ID", "FULL"), band), []).append((exposure, obs, path))
     out = {}
-    for mode, picks in found.items():
+    for (mode, band), picks in found.items():
         picks.sort(reverse=True)
         chosen, per = [], {}
         for exposure, obs, path in picks:
@@ -61,7 +63,7 @@ def one_month(job):
         shapes = {f.shape for f in frames}
         if len(frames) < args.least or len(shapes) != 1:
             continue
-        out[dc.map_key(camera, mode, month)] = dc.defects(frames)
+        out[dc.map_key(camera, mode, month, band)] = dc.defects(frames)
     return out
 
 
@@ -71,11 +73,10 @@ def main():
     ap.add_argument("--index", default=os.path.join(REPO, "Image_index.csv"))
     ap.add_argument("--years", default="1999-2017")
     ap.add_argument("--workers", type=int, default=4)
-    ap.add_argument("--labels", type=int, default=200, help="labels read per camera and month")
-    ap.add_argument("--frames", type=int, default=40, help="frames measured per camera, mode and month")
-    ap.add_argument("--least", type=int, default=10)
+    ap.add_argument("--labels", type=int, default=600, help="labels read per camera and month")
+    ap.add_argument("--frames", type=int, default=40, help="frames measured per camera, mode, month and band")
+    ap.add_argument("--least", type=int, default=8)
     ap.add_argument("--per-obs", type=int, default=4)
-    ap.add_argument("--min-exposure", type=float, default=2.0, help="seconds")
     args = ap.parse_args()
     first, last = (int(y) for y in args.years.split("-"))
     idx = pd.read_csv(args.index, usecols=["INSTRUMENT_ID", "IMAGE_MID_TIME", "OBSERVATION_ID", "MISSING_LINES", "path"],

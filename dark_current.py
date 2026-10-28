@@ -357,9 +357,17 @@ def _hot_spots(name):
 
 # the defect maps measured from the archive itself ("helper programs/build_hot_maps.py"): for each camera, summing
 # mode and month, the pixels that stood out from the 3x3 round them in most of that month's frames while the scene
-# moved, as (line, sample, +1 hot / -1 dead) at the mode's own resolution, under keys "ISSNA_SUM2_2015-08"
+# moved, as (line, sample, +1 hot / -1 dead) at the mode's own resolution, under keys "ISSNA_SUM2_2015-08_3". The
+# last part is the exposure band (EXPOSURE_BANDS): a pixel's dark charge grows with the exposure, so a 220 s frame has
+# thousands of defects that a month of 30 s frames never shows (Hyrokkin, August 2015: 7,760 against 1,000)
 HOT_MAPS = os.environ.get("CASSINI_HOT_MAPS") or os.path.join(ff.ROOT, "hot_maps.npz")
-HOT_MAP_MONTHS = 2     # a frame uses its own month's map, else the nearest within this many months
+HOT_MAP_MONTHS = 3     # a frame uses its own month's map, else the nearest within this many months
+EXPOSURE_BANDS = (2.0, 10.0, 60.0, 180.0)   # seconds: band 0 is 2-10 s, ..., band 3 is 180 s and longer
+
+
+def exposure_band(seconds):
+    """The EXPOSURE_BANDS band of an exposure in seconds, or None under the shortest"""
+    return None if seconds < EXPOSURE_BANDS[0] else int(np.searchsorted(EXPOSURE_BANDS, seconds, side="right")) - 1
 
 
 @functools.lru_cache(maxsize=1)
@@ -371,8 +379,8 @@ def _hot_maps(path):
         return {k: z[k] for k in z.files}
 
 
-def map_key(camera, mode, month):
-    return f"{camera}_{mode}_{month // 12:04d}-{month % 12 + 1:02d}"
+def map_key(camera, mode, month, band):
+    return f"{camera}_{mode}_{month // 12:04d}-{month % 12 + 1:02d}_{band}"
 
 
 def _month(info):
@@ -384,15 +392,20 @@ def _month(info):
 
 
 def hot_map(info):
-    """The frame's defect map from HOT_MAPS, (n, 3) int (line, sample, sign), or None."""
+    """The frame's defect map from HOT_MAPS, (n, 3) int (line, sample, sign), or None: its exposure band's in the
+    nearest month within HOT_MAP_MONTHS, else the band nearest it there (a longer one first: a defect it lists that
+    isn't misbehaving in a shorter exposure is left alone by repair_hot, one missing is left in)."""
     maps, month = _hot_maps(HOT_MAPS), _month(info)
-    if not maps or month is None:
+    band = exposure_band(ff._number(_value(info, "EXPOSURE_DURATION", "0"), 0.0) / 1000)
+    if not maps or month is None or band is None:
         return None
     camera, mode = _value(info, "INSTRUMENT_ID"), _value(info, "INSTRUMENT_MODE_ID", "FULL")
-    for d in sorted(range(-HOT_MAP_MONTHS, HOT_MAP_MONTHS + 1), key=abs):
-        found = maps.get(map_key(camera, mode, month + d))
-        if found is not None:
-            return found
+    bands = sorted(range(len(EXPOSURE_BANDS)), key=lambda b: (abs(b - band), -b))
+    for b in bands:
+        for d in sorted(range(-HOT_MAP_MONTHS, HOT_MAP_MONTHS + 1), key=abs):
+            found = maps.get(map_key(camera, mode, month + d, b))
+            if found is not None:
+                return found
     return None
 
 
