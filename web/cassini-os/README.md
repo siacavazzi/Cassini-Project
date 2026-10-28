@@ -61,7 +61,9 @@ same choice as Export Movie's Cameras; with one camera the stretch is made and p
 camera's window stepping aside while it plays). **Pre-process** asks the frame
 server to make every picture the camera windows will show in the stretch ahead of time (`POST /prebuild`, made by the
 pre-build tool's own makers in `web/frames/prebuild.py`: processed and centered single frames, color composites,
-mosaic and movie passes, at the windows' sizes and in the page's look and movie style). The row and a line along the
+mosaic and movie passes, at the windows' sizes and in the page's look and movie style). A stretch whose pictures are
+all made already is ready in a moment: the server answers once it is made when that takes under a third of a second
+(`prebuild.SEGMENT_ANSWER`), so the row says Ready and the stretch plays right away. The row and a line along the
 foot of the timeline show how far it is; when it is done the stretch plays in movie mode at the row's **Frame rate**
 (`movie.fps`, the same as Settings > Playback), every picture waiting in the cache. **Play** works before
 pre-processing too (movie mode then waits for each picture), **Save movie…** opens Export Movie for the stretch (a
