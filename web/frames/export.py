@@ -68,7 +68,9 @@ FPS = 30                     # frames a second in the file
 HOLD_MIN, HOLD_MAX = 1 / FPS, 0.5
 TYPICAL = 1 / 8              # adaptive: how long the stretch's median gap lasts on screen
 LAST = 1.5                   # seconds the last picture stays
-MAX_PICTURES = int(os.environ.get("CASSINI_EXPORT_MAX", 20000))   # a film; the Movie Editor's list (list=1) has no cap
+# pictures in a film at most, 0 for no limit (the default: a film is drawn a picture at a time, so a month of pictures
+# is only a longer film); a public site sets CASSINI_EXPORT_MAX. The Movie Editor's list (list=1) has no cap either way
+MAX_PICTURES = int(os.environ.get("CASSINI_EXPORT_MAX", "0") or 0)
 SIZES = (512, 768, 1024)
 FULL = "full"               # Picture size Full: mosaics at native resolution (module notes)
 BUCKETS = (1024, 1536, 2048)   # mosaic sizes up to the canvas: a pass is drawn at the biggest its native size fills
@@ -251,7 +253,7 @@ def plan(opt, cache=None, work=False):
             e["set_nm"] = [reel.wavelength(insts[u], f1s[u] + f2s[u]) for u in st["use"]]
         out.append(e)
     out = cut(out, opt)
-    if len(out) > MAX_PICTURES and not opt.get("list"):
+    if MAX_PICTURES and len(out) > MAX_PICTURES and not opt.get("list"):
         raise OverflowError(f"{len(out):,} pictures: an export holds at most {MAX_PICTURES:,}; pick a shorter stretch")
     timing(out, opt["fps"])
     full = full_size(opt, out, cache, work) if big(opt) else None
@@ -585,6 +587,7 @@ _lock = threading.Lock()
 _queue = queue.Queue()
 _worker = None
 SOUND_WAIT = 90   # seconds a finished video waits for its soundtrack before it is kept silent
+SOUND_MOST = 30 * 60   # seconds of film the page makes a soundtrack for (export.html SOUND_MOST): a longer one is silent, not waited for
 
 
 def folder(cache, jid, full=None):
@@ -706,7 +709,7 @@ def _work(pictures):
                 job["made_as"] = render(opt, job["plan"], pictures, video + ".part.mp4", progress)
             os.replace(video + ".part.mp4", video)
             wav = os.path.join(d, "sound.wav")
-            if opt["sound"]:
+            if opt["sound"] and job["plan"]["seconds"] <= SOUND_MOST:
                 with _lock:
                     job.update(state="sound", eta=None)
                 waited = time.time()

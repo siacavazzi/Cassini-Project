@@ -36,7 +36,7 @@ body.idle #app .bodywin:has(.well.has-frame) { opacity: 1; pointer-events: auto;
   const F = window.cassiniFeeds, WM = window.cassiniWM;
   if (!F || !WM) return;
   const S = window.cassiniSettings;
-  const LS = "cassini-os-bodywin-v1";
+  const LS = "cassini-os-bodywin-v2";   // v2: off again for everyone (Sam 2026-10-28), whatever v1 had
   // settings: in the Settings window when the page has one, otherwise remembered here and switched from the Window menu
   let own = {};
   try { own = JSON.parse(localStorage.getItem(LS)) || {}; } catch (e) {}
@@ -48,8 +48,10 @@ body.idle #app .bodywin:has(.well.has-frame) { opacity: 1; pointer-events: auto;
   };
   const saveOwn = () => { if (S) return; try { localStorage.setItem(LS, JSON.stringify({ on: B.on, linger: B.linger, max: B.max, room: B.room, perCam: B.perCam })); } catch (e) {} };
   if (S) {
-    B.on = !!S.define({ key: "cameras.bodyWindows", section: "Cameras", label: "A window for each body", type: "toggle", value: false,
-      hint: "Each target Cassini images gets its own narrow-angle and wide-angle windows. They stay up while the screen is calm and make way for new ones when it gets busy." });
+    // a new key, so the per-body windows start off for everyone again, also where cameras.bodyWindows was saved on:
+    // the two camera windows are the default (Sam 2026-10-28)
+    B.on = !!S.define({ key: "cameras.bodyWindowsOptIn", section: "Cameras", label: "Extra windows for each body", type: "toggle", value: false,
+      hint: "Off: one narrow-angle and one wide-angle window. On: each target Cassini images gets its own narrow-angle and wide-angle windows instead, up to the number below for each camera." });
     B.perCam = +S.define({ key: "cameras.bodyWindowsPerCamera", section: "Cameras", label: "Windows per camera", type: "range", value: 2, min: 1, max: 4, step: 1,
       hint: "The most body windows each camera has up at once: the target it has just imaged, and the ones before it. A newer target takes an older window's place." });
     B.room = +S.define({ key: "cameras.bodyWindowRoom", section: "Cameras", label: "Body windows before they make way", type: "range", value: 4, min: 1, max: 12, step: 1,
@@ -79,7 +81,7 @@ body.idle #app .bodywin:has(.well.has-frame) { opacity: 1; pointer-events: auto;
   }
   const camWins = () => ["imgcard", "wacard"].map($).filter(Boolean);
   if (S) {
-    S.on("cameras.bodyWindows", v => { if (B.started) setOn(v); });
+    S.on("cameras.bodyWindowsOptIn", v => { if (B.started) setOn(v); });
     S.on("cameras.bodyWindowLinger", v => { B.linger = +v; });
     S.on("cameras.bodyWindowMax", v => { B.max = +v; });
     S.on("cameras.bodyWindowRoom", v => { B.room = +v; });
@@ -249,7 +251,9 @@ body.idle #app .bodywin:has(.well.has-frame) { opacity: 1; pointer-events: auto;
     show = show.filter(k => capped.includes(k));
     show = show.concat(held);
     const swapped = new Set(swaps.values());
-    for (const k of [...B.wins.keys()]) if (!show.includes(k) && !swapped.has(k)) close(k);
+    // while pinned (paused, a stretch highlighted, an editor open: cassiniPin) no window closes by itself
+    const pin = window.cassiniPin && cassiniPin.pinned();
+    for (const k of [...B.wins.keys()]) if (!show.includes(k) && !swapped.has(k) && !pin) close(k);
     // oldest target first, so the newest windows land on top; the narrow-angle window first, so the wide-angle one sits beside it
     for (const name of [...new Set(bodies.concat(held.map(k => k.split("|")[0])))].reverse()) for (const cam of CAMS) {
       const k = key(name, cam); if (!show.includes(k)) continue;
