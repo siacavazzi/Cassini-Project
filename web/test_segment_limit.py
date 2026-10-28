@@ -59,4 +59,33 @@ prebuild.SEGMENT_MAX = 0
 for m in range(4, 4 + prebuild.SEGMENT_KEEP + 5):
     run(stretch(m))
 assert len(seg.jobs) <= prebuild.SEGMENT_KEEP + 1, len(seg.jobs)
-print("ok")
+print("ok limit")
+
+# Stop ends a long pass at its next picture (make_pass stopped=), and the stretch asked again while the stopped run is
+# still letting go is a new run, queued behind it, which its own Stop stops
+om = prebuild.obs_mosaic
+om.plan = lambda u, cache: {"display_scale": 1.0}
+om.tile = lambda u, j, cache, scale=None: time.sleep(0.01)
+om.movie_webp = lambda fid, size, cache, *a, **k: time.sleep(0.01)
+long_pass = {"key": ("T", "OBS", "N", 0), "kind": "movie", "mosaic": False, "movie": True,
+             "frames": [(None, f"N{1000 + j}_1", "CL1", 100.0 + j) for j in range(3000)]}
+work = lambda c, made=None, stopped=None: prebuild.make_pass(long_pass, c, (512,), None, None, made, stopped)
+work.pass_key = long_pass["key"]
+plan[:] = [("T_OBS_N_0", 100.0, 3000, work)]
+first = seg.submit(stretch(40))
+time.sleep(0.5)
+seg.stop(first["id"])
+again = seg.submit(stretch(40))
+assert again["id"] == first["id"] and again["state"] == "queued", again   # not the stopping run's "making"
+t = time.monotonic()
+while seg.status(first["id"])["state"] == "queued" and time.monotonic() - t < 5:
+    time.sleep(0.02)
+assert time.monotonic() - t < 2, "the stopped run let go within a picture or two"
+time.sleep(0.3)
+seg.stop(again["id"])
+t = time.monotonic()
+while seg.status(again["id"])["state"] != "stopped" and time.monotonic() - t < 5:
+    time.sleep(0.02)
+st = seg.status(again["id"])
+assert st["state"] == "stopped" and st["done"] < 3000 and time.monotonic() - t < 2, st
+print("ok stop")
