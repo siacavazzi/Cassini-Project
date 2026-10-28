@@ -370,7 +370,10 @@ body { color: var(--q-text); }
 .shottag a.pds, .info a.pds { color: inherit; text-decoration: none; }
 .info a.pds { text-decoration: underline dotted; text-underline-offset: 2px; }
 .shottag a.pds { pointer-events: auto; }
+/* (room under the caption's one line for the underline, which its overflow would cut off; the text stays put) */
+.camwin .well.has-frame .shottag:has(a.pds) { bottom: 2px; padding-bottom: 2px; }
 :is(.shottag, .info) a.pds:hover { text-decoration: underline; text-underline-offset: 2px; }
+.shottag a.pds:hover { text-underline-offset: 1px; }
 :is(.shottag, .info) a.pds:focus-visible { outline: 1px solid currentColor; outline-offset: 1px; border-radius: 2px; }
 /* colour sets: the channels that went into the composite, under the main picture */
 .chans { display: none; grid-template-columns: repeat(var(--n, 3), minmax(0, 76px)); gap: 6px; }
