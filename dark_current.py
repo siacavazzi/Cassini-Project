@@ -407,7 +407,7 @@ def hot_map(info):
     near = [m for d in range(-HOT_MAP_SPAN, HOT_MAP_SPAN + 1) for b in range(band, -1, -1)
             if (m := maps.get(map_key(camera, mode, month + d, b))) is not None]
     if near:
-        return near[0] if len(near) == 1 else np.concatenate(near)
+        return near[0] if len(near) == 1 else np.unique(np.concatenate(near), axis=0)
     bands = sorted(range(len(EXPOSURE_BANDS)), key=lambda b: (abs(b - band), -b))
     for b in bands:
         for d in sorted(range(-HOT_MAP_MONTHS, HOT_MAP_MONTHS + 1), key=abs):
