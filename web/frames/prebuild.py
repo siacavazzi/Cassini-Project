@@ -46,6 +46,7 @@ import random
 import shutil
 import subprocess
 import sys
+import tempfile
 import threading
 import time
 import traceback
@@ -373,6 +374,8 @@ def run(args):
     if getattr(args, "watched_first", False):
         todo, n = watched_first(todo)
         print(f"{n} items of watched observations first", flush=True)
+    if getattr(args, "queue", None):
+        return run_queue(args, todo)
     if args.first:
         todo = todo[args.first:]
     if args.shard:
@@ -384,9 +387,16 @@ def run(args):
     status.update(done=args.first, state="running")
     errors = open(os.path.join(args.status or args.cache, f"errors-{args.phase}{_shard_tag(args)}.jsonl"), "a")
     holds = Holds(args)
-    pending, i = set(), 0
     # every thread may be drawing its own mosaic movie: each keeps its last pictures to grow the next from
     obs_mosaic.rolled_room(args.threads + 1)
+    make(args, todo, status, errors, holds)
+    status.update(state="done")
+
+
+def make(args, todo, status, errors, holds):
+    """todo's items made on args.threads threads, waiting while holds says to, each counted into status and each
+    error written to errors (run, run_queue)."""
+    pending, i = set(), 0
     with calibration.looking(calibration.LOOKS[0]), calibration.coloring(calibration.COLORS[0]), \
             concurrent.futures.ThreadPoolExecutor(args.threads) as pool:
         def one(name, work):
@@ -417,6 +427,81 @@ def run(args):
                     status.s["made_s"] += took
                     status.s["errors"] += bool(err)
                 status.update(last=name)
+
+
+PASS_PHASES = ("mosaics", "movies", "strips", "chains")
+BALANCE = 8   # stretches per process (procs --balanced): enough small ones that the processes run out together
+
+
+def stretches(args):
+    """procs --balanced: the phase's items, as run takes them (--only, --watched-first), cut into consecutive
+    stretches of about the same work, BALANCE for each process, and written as the files of a queue folder in the
+    order the processes take them (run_queue): the watched observations' first, then biggest first, so the longest
+    passes start at once and every process runs out of work at about the same time. A pass's work is its frames,
+    any other item's one. Cut by count into one stretch a process (--shard), the busiest stretch of the mission ran
+    on long after the rest: worked out from the passes' frames on one core, 64 processes take 0.84 h over the movie
+    passes and 0.51 h over the mosaics that way, 0.47 h and 0.14 h balanced (2026-10-27). (folder, items)."""
+    todo = items(args.phase)
+    if getattr(args, "only", None):
+        todo = only(args.phase, todo, args.only)
+    first = 0
+    if getattr(args, "watched_first", False):
+        todo, first = watched_first(todo)
+    size = {"_".join(map(str, u["key"])): len(u["frames"]) for u in all_passes()} if args.phase in PASS_PHASES else {}
+    work = [size.get(name, 1) for name, _ in todo]
+    each = sum(work) / max(1, args.procs * BALANCE)
+    parts, start, w = [], 0, 0
+    for k, x in enumerate(work):
+        if k > start and (w >= each or k == first):   # a stretch ends at its share, and where the watched items end
+            parts.append((start < first, w, start, k))
+            start, w = k, 0
+        w += x
+    if start < len(todo):
+        parts.append((start < first, w, start, len(todo)))
+    parts.sort(key=lambda p: (not p[0], -p[1], p[2]))
+    folder = os.path.join(args.status, f"queue-{args.phase}") if args.status else tempfile.mkdtemp(prefix="prebuild-queue-")
+    shutil.rmtree(os.path.join(folder, "todo"), ignore_errors=True)   # a queue left by an earlier run (names only)
+    shutil.rmtree(os.path.join(folder, "taken"), ignore_errors=True)
+    for d in ("todo", "taken"):
+        os.makedirs(os.path.join(folder, d))
+    for n, (_, _, a, b) in enumerate(parts):
+        with open(os.path.join(folder, "todo", f"{n:06d}"), "w") as fh:
+            fh.write("".join(name + "\n" for name, _ in todo[a:b]))
+    print(f"{len(todo)} items in {len(parts)} stretches of about {each:.0f} {'frames' if size else 'items'}, biggest first", flush=True)
+    return folder, len(todo)
+
+
+def take(queue, me):
+    """The item names of the queue's next stretch, now this process's (moved into taken, which only one process
+    can do), or None when none is left."""
+    for f in sorted(os.listdir(os.path.join(queue, "todo"))):
+        mine = os.path.join(queue, "taken", f"{f}-{me}")
+        try:
+            os.rename(os.path.join(queue, "todo", f), mine)
+        except FileNotFoundError:   # another process took it first
+            continue
+        with open(mine) as fh:
+            return [line for line in fh.read().splitlines() if line]
+    return None
+
+
+def run_queue(args, todo):
+    """One process of procs --balanced: makes the queue's stretches (stretches), the next one each time it is done
+    with the last, as run makes its items, until none is left. todo: the phase's items, as run takes them."""
+    by_name = dict(todo)
+    status = Status(args, 0)
+    status.update(state="running")
+    errors = open(os.path.join(args.status or args.cache, f"errors-{args.phase}{_shard_tag(args)}.jsonl"), "a")
+    holds = Holds(args)
+    obs_mosaic.rolled_room(args.threads + 1)
+    while True:
+        names = take(args.queue, _shard_tag(args).lstrip("-") or str(os.getpid()))
+        if names is None:
+            break
+        part = [(name, by_name[name]) for name in names if name in by_name]
+        with status.lock:
+            status.s["total"] += len(part)
+        make(args, part, status, errors, holds)
     status.update(state="done")
 
 
@@ -427,13 +512,19 @@ def _shard_tag(args):
 def procs(args):
     """The phase as args.procs processes of one thread each, each making its own stretch of the items (--shard),
     and their status files added up into the phase's own. The pictures' makers are mostly Python, so threads of one
-    process take turns on one core: composites ran 1.2 a second on 9 threads, ~8 on 9 processes (2026-10-26)."""
+    process take turns on one core: composites ran 1.2 a second on 9 threads, ~8 on 9 processes (2026-10-26).
+    --balanced: each process takes the next of many stretches of about the same work as it finishes the last
+    (stretches, run_queue) instead of one stretch of its own."""
     n = args.procs
     argv = [a for a in sys.argv[1:]]
     for flag in ("--procs", "--threads", "--first"):
         while flag in argv:
             j = argv.index(flag)
             del argv[j:j + 2]
+    total = None
+    if args.balanced:
+        queue, total = stretches(args)
+        argv = [a for a in argv if a != "--balanced"] + ["--queue", queue]
     env = {**os.environ, "OPENBLAS_NUM_THREADS": "1", "OMP_NUM_THREADS": "1"}
     kids = [subprocess.Popen([sys.executable, sys.argv[0]] + argv + ["--threads", "1", "--shard", f"{k}/{n}"],
                              env=env) for k in range(n)]
@@ -450,7 +541,8 @@ def procs(args):
                     pass
             if parts:
                 waiting = [p.get("why_waiting") for p in parts if p.get("state") == "waiting"]
-                status.s.update(total=sum(p["total"] for p in parts), errors=sum(p["errors"] for p in parts),
+                status.s.update(total=total if total is not None else sum(p["total"] for p in parts),
+                                errors=sum(p["errors"] for p in parts),
                                 made_s=sum(p["made_s"] for p in parts), procs=n,
                                 state="waiting" if waiting and len(waiting) == len(parts) else "running",
                                 why_waiting=waiting[0] if waiting else None)
@@ -822,7 +914,11 @@ def main():
     ap.add_argument("--only", help="file of frame ids: only the items using them (a remake after a fix)")
     ap.add_argument("--watched-first", action="store_true", help="the Moments and Highlights observations' items first")
     ap.add_argument("--procs", type=int, default=0, help="run the phase as this many processes of one thread each")
+    ap.add_argument("--balanced", action="store_true",
+                    help="with --procs: the items in many stretches of about the same work (a pass's frames), biggest "
+                         "first, each process taking the next as it finishes the last")
     ap.add_argument("--shard", help=argparse.SUPPRESS)   # k/n: one process's stretch (--procs)
+    ap.add_argument("--queue", help=argparse.SUPPRESS)   # a --balanced process's queue folder (stretches)
     args = ap.parse_args()
     if args.phase == "count":
         sets, passes = page_sets(), mosaic_passes()
