@@ -341,6 +341,12 @@ body.phone .srow input[type=range] { width: 96px; }
         : v < 604800 ? u(v / 86400, "day", "days") : v < 2592000 ? u(v / 604800, "wk", "wk") : u(v / 2592000, "month", "months");
     }
   };
+  // movie mode's speed scale (movie.html), which the same dock slider switches to while movie mode is on: pictures a
+  // second, from one a second to 30, on a log scale that lands on the usual frame rates
+  const MF = window.cassiniMovieFps = {
+    min: 1, max: 30, stops: [1, 2, 3, 4, 5, 6, 8, 10, 12, 15, 20, 24, 30],
+    label: v => `${+(+v).toFixed(v < 10 && v % 1 ? 1 : 0)} fps`
+  };
   D({ key: "playback.speed", section: "Playback", label: "Starting speed", type: "range", log: true, value: 600, min: SP.min, max: SP.max, stops: SP.stops, format: SP.label,
       hint: "Mission time per second of playback when the page opens; the speed slider in the replay window changes it while you watch. Jumping to a moment still picks its own speed." });
   D({ key: "playback.span", section: "Playback", label: "Timeline shows", type: "choice", value: 432000,
@@ -387,8 +393,9 @@ body.phone .srow input[type=range] { width: 96px; }
   D({ key: "view.plumeBrightness", section: "View", label: "Plume brightness", type: "range", value: 1, min: 0.25, max: 4, step: 0.05,
       format: v => `${Math.round(v * 100)}%`, hint: "How bright the plumes are drawn. 100% is subtle, as in an unstretched picture; higher shows the faint outer plume the way stretched pictures do." });
   // movie mode (movie.html) is a rule for the clock, so its speed sits with the playback settings
-  D({ key: "movie.fps", section: "Playback", label: "Movie mode speed", type: "range", value: 8, min: 2, max: 30, step: 1, unit: "fps",
-      hint: "Movie mode (M) skips the time between pictures and steps from one picture to the next this many times a second. The camera windows show every picture as they always do." });
+  // Sam 2026-10-28: movie mode is about watching the pictures, so it starts slow (5) and the dock slider sets it
+  D({ key: "movie.fps", section: "Playback", label: "Movie mode speed", type: "range", log: true, value: 5, was: [8], min: MF.min, max: MF.max, stops: MF.stops, format: MF.label,
+      hint: "Movie mode (M) skips the time between pictures and steps from one picture to the next this many times a second. While movie mode is on, the speed slider in the replay window sets this instead of mission time per second. The camera windows show every picture as they always do." });
   // what counts as a picture (head-quiet.html complete, cameraFeed)
   D({ key: "movie.completeFrames", section: "Playback", label: "Complete color pictures only", type: "toggle", value: true,
       hint: "Movie mode steps from one finished picture to the next: a color set shows once, as its color picture when its last filter is taken, never the black-and-white frames on the way. Off steps through every frame." });

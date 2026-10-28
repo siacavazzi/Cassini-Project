@@ -493,6 +493,8 @@ body.s-steady .info dd[data-f="colour"] { white-space: normal; display: -webkit-
 #speedv { font-size: 12.5px; color: var(--q-text); font-variant-numeric: tabular-nums; white-space: nowrap; }
 #speedeff { font-size: 9.5px; color: var(--q-dim); white-space: nowrap; font-variant-numeric: tabular-nums; }
 .speedtool.nopics #speedv { color: var(--q-dim); }
+/* movie mode: the slider sets pictures a second (movie.fps); its read-out takes the Movie button's accent */
+.speedtool.movie #speedeff { color: var(--q-accent, #8ab6ff); }
 /* too fast for pictures: a camera window keeps its last picture, dimmed, and says why */
 .well.toofast .shot { opacity: .3; }
 .well.toofast:not(.has-frame)::before { display: none; }
@@ -1093,40 +1095,68 @@ body.idle .win.full .titlebar { opacity: 0; }
   // set the speed last (a moment's jump, a link, the setting). Past playback.picturesUpTo its track is dimmer: the
   // camera windows stop loading pictures there (tooFast, below). Under the speed: the rate the clock really runs at
   // while a burst or a picture still being made slows it, so a new speed always shows that it took.
-  const SP = window.cassiniSpeed;
-  const spPos = v => Math.round(1000 * Math.log(Math.min(SP.max, Math.max(SP.min, v)) / SP.min) / Math.log(SP.max / SP.min));
-  const spAt = p => { const v = SP.min * Math.pow(SP.max / SP.min, p / 1000); return SP.stops.reduce((a, b) => Math.abs(Math.log(b / v)) < Math.abs(Math.log(a / v)) ? b : a); };
+  // In movie mode (movie.html) the clock steps picture to picture, so the same slider switches to movie mode's own
+  // scale, pictures a second (window.cassiniMovieFps, the movie.fps setting), and back to mission time when it ends.
+  const SP = window.cassiniSpeed, MF = window.cassiniMovieFps;
+  const inMovie = () => !!(MF && window.cassiniMovie && cassiniMovie.on);
+  const spScale = () => inMovie() ? MF : SP;
+  const spNow = () => inMovie() ? cassiniMovie.fps() : state.speed;
+  const spSet = v => { if (inMovie()) { if (v !== cassiniMovie.fps()) cassiniMovie.setFps(v); } else if (v !== state.speed) setSpeed(v); };
+  const spPos = (v, K = spScale()) => Math.round(1000 * Math.log(Math.min(K.max, Math.max(K.min, v)) / K.min) / Math.log(K.max / K.min));
+  const spAt = (p, K = spScale()) => { const v = K.min * Math.pow(K.max / K.min, p / 1000); return K.stops.reduce((a, b) => Math.abs(Math.log(b / v)) < Math.abs(Math.log(a / v)) ? b : a); };
   let spShown = "", spHeld = false;
   function syncSpeedTool() {
-    const v = state.speed, cap = picturesCap(), movie = window.cassiniMovie && cassiniMovie.on, fast = tooFast();
-    const rate = window.cassiniPlayRate ? cassiniPlayRate() : v, slowed = state.playing && !movie && !fast && rate < v * 0.9;
-    const eff = movie ? "movie mode" : fast ? "pictures paused" : slowed ? `now ${SP.label(+rate.toPrecision(2))}` : "";
+    if (inMovie()) return syncMovieSpeed();
+    const v = state.speed, cap = picturesCap(), fast = tooFast();
+    const rate = window.cassiniPlayRate ? cassiniPlayRate() : v, slowed = state.playing && !fast && rate < v * 0.9;
+    const eff = fast ? "pictures paused" : slowed ? `now ${SP.label(+rate.toPrecision(2))}` : "";
     const key = `${v}|${cap}|${eff}`;
     if (key === spShown) return;
     spShown = key;
     const el = $("speed");
-    if (!spHeld) el.value = spPos(v);
-    el.style.setProperty("--cut", cap >= SP.max ? "100%" : (spPos(cap) / 10).toFixed(1) + "%");
+    if (!spHeld) el.value = spPos(v, SP);
+    el.style.setProperty("--cut", cap >= SP.max ? "100%" : (spPos(cap, SP) / 10).toFixed(1) + "%");
+    el.setAttribute("aria-label", "Playback speed");
     el.setAttribute("aria-valuetext", SP.label(v));
     $("speedv").textContent = SP.label(v);
     $("speedeff").hidden = !eff; $("speedeff").textContent = eff;
     $("speedtool").classList.toggle("nopics", fast);
+    $("speedtool").classList.remove("movie");
     $("speedtool").title = `Playback speed: ${SP.label(v)} of mission time each second`
       + (cap < SP.max ? `. Pictures load up to ${SP.label(cap)} (Settings › Playback)` : "")
       + (slowed ? `. Slowed to ${SP.label(+rate.toPrecision(2))} while the camera windows catch up on pictures` : "");
   }
-  $("speed").addEventListener("input", e => { const v = spAt(+e.target.value); if (v !== state.speed) setSpeed(v); });
+  // movie mode: the frame rate set, and under it the pictures a second really shown when that is lower (the camera
+  // windows waiting on the frame server; movie mode slows, it never skips a picture)
+  function syncMovieSpeed() {
+    const v = cassiniMovie.fps(), real = state.playing ? cassiniMovie.rate() : 0;
+    const eff = real && real < v - 0.5 ? `showing ${real < 10 ? real.toFixed(1) : Math.round(real)}/s` : "movie mode";
+    const key = `movie|${v}|${eff}`;
+    if (key === spShown) return;
+    spShown = key;
+    const el = $("speed");
+    if (!spHeld) el.value = spPos(v, MF);
+    el.style.setProperty("--cut", "100%");
+    el.setAttribute("aria-label", "Movie mode speed");
+    el.setAttribute("aria-valuetext", `${MF.label(v)}, pictures a second`);
+    $("speedv").textContent = MF.label(v);
+    $("speedeff").hidden = false; $("speedeff").textContent = eff;
+    $("speedtool").classList.remove("nopics");
+    $("speedtool").classList.add("movie");
+    $("speedtool").title = `Movie mode speed: ${MF.label(v)}, pictures a second (the time between pictures is skipped). Leave movie mode (M) for mission time a second`;
+  }
+  $("speed").addEventListener("input", e => spSet(spAt(+e.target.value)));
   // while it is dragged the thumb follows the pointer; let go, it settles on the speed it landed on
   $("speed").addEventListener("pointerdown", () => { spHeld = true; });
   window.addEventListener("pointerup", () => { if (spHeld) { spHeld = false; spShown = ""; } });
-  // the arrow keys step from one round speed to the next, Home and End go to either end
+  // the arrow keys step from one round speed (or frame rate) to the next, Home and End go to either end
   $("speed").addEventListener("keydown", e => {
     const n = { ArrowLeft: -1, ArrowDown: -1, ArrowRight: 1, ArrowUp: 1, PageDown: -3, PageUp: 3, Home: -99, End: 99 }[e.key];
     if (!n) return;
-    const down = SP.stops.filter(v => v < state.speed), up = SP.stops.filter(v => v > state.speed);
+    const now = spNow(), K = spScale(), down = K.stops.filter(v => v < now), up = K.stops.filter(v => v > now);
     const v = n < 0 ? down[Math.max(0, down.length + n)] : up[Math.min(up.length, n) - 1];
     e.preventDefault();
-    if (v !== undefined) setSpeed(v);
+    if (v !== undefined) spSet(v);
   });
   $("tlout").addEventListener("click", () => zoomTimeline((state.view[1] - state.view[0]) * 2));
   $("tlin").addEventListener("click", () => zoomTimeline((state.view[1] - state.view[0]) / 2));

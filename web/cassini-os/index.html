@@ -515,6 +515,8 @@ body.s-steady .info dd[data-f="colour"] { white-space: normal; display: -webkit-
 #speedv { font-size: 12.5px; color: var(--q-text); font-variant-numeric: tabular-nums; white-space: nowrap; }
 #speedeff { font-size: 9.5px; color: var(--q-dim); white-space: nowrap; font-variant-numeric: tabular-nums; }
 .speedtool.nopics #speedv { color: var(--q-dim); }
+/* movie mode: the slider sets pictures a second (movie.fps); its read-out takes the Movie button's accent */
+.speedtool.movie #speedeff { color: var(--q-accent, #8ab6ff); }
 /* too fast for pictures: a camera window keeps its last picture, dimmed, and says why */
 .well.toofast .shot { opacity: .3; }
 .well.toofast:not(.has-frame)::before { display: none; }
@@ -1911,7 +1913,7 @@ body.ambient.phone .amb-where { font-size: 18px; }
       <button id="segprep" title="Make every picture of this stretch ahead of time, so it plays smoothly at any frame rate">Pre-process</button>
       <button id="segstop" hidden>Stop</button>
       <button id="segplay" title="Play this stretch as a movie">▶ Play</button>
-      <label for="segfps">Frame rate</label><input type="range" id="segfps" min="2" max="30" step="1" aria-label="Movie frame rate"><span id="segfpsv"></span>
+      <label for="segfps">Frame rate</label><input type="range" id="segfps" min="1" max="30" step="1" aria-label="Movie frame rate"><span id="segfpsv"></span>
       <span class="grow"></span>
       <button id="segedit" title="Pick which frames go into this movie, and its look (Movie Editor)">Edit…</button>
       <button id="segexport" title="Make a video file of this stretch to download (E)">Save movie…</button>
@@ -2450,6 +2452,12 @@ body.ambient.phone .amb-where { font-size: 18px; }
         : v < 604800 ? u(v / 86400, "day", "days") : v < 2592000 ? u(v / 604800, "wk", "wk") : u(v / 2592000, "month", "months");
     }
   };
+  // movie mode's speed scale (movie.html), which the same dock slider switches to while movie mode is on: pictures a
+  // second, from one a second to 30, on a log scale that lands on the usual frame rates
+  const MF = window.cassiniMovieFps = {
+    min: 1, max: 30, stops: [1, 2, 3, 4, 5, 6, 8, 10, 12, 15, 20, 24, 30],
+    label: v => `${+(+v).toFixed(v < 10 && v % 1 ? 1 : 0)} fps`
+  };
   D({ key: "playback.speed", section: "Playback", label: "Starting speed", type: "range", log: true, value: 600, min: SP.min, max: SP.max, stops: SP.stops, format: SP.label,
       hint: "Mission time per second of playback when the page opens; the speed slider in the replay window changes it while you watch. Jumping to a moment still picks its own speed." });
   D({ key: "playback.span", section: "Playback", label: "Timeline shows", type: "choice", value: 432000,
@@ -2496,8 +2504,9 @@ body.ambient.phone .amb-where { font-size: 18px; }
   D({ key: "view.plumeBrightness", section: "View", label: "Plume brightness", type: "range", value: 1, min: 0.25, max: 4, step: 0.05,
       format: v => `${Math.round(v * 100)}%`, hint: "How bright the plumes are drawn. 100% is subtle, as in an unstretched picture; higher shows the faint outer plume the way stretched pictures do." });
   // movie mode (movie.html) is a rule for the clock, so its speed sits with the playback settings
-  D({ key: "movie.fps", section: "Playback", label: "Movie mode speed", type: "range", value: 8, min: 2, max: 30, step: 1, unit: "fps",
-      hint: "Movie mode (M) skips the time between pictures and steps from one picture to the next this many times a second. The camera windows show every picture as they always do." });
+  // Sam 2026-10-28: movie mode is about watching the pictures, so it starts slow (5) and the dock slider sets it
+  D({ key: "movie.fps", section: "Playback", label: "Movie mode speed", type: "range", log: true, value: 5, was: [8], min: MF.min, max: MF.max, stops: MF.stops, format: MF.label,
+      hint: "Movie mode (M) skips the time between pictures and steps from one picture to the next this many times a second. While movie mode is on, the speed slider in the replay window sets this instead of mission time per second. The camera windows show every picture as they always do." });
   // what counts as a picture (head-quiet.html complete, cameraFeed)
   D({ key: "movie.completeFrames", section: "Playback", label: "Complete color pictures only", type: "toggle", value: true,
       hint: "Movie mode steps from one finished picture to the next: a color set shows once, as its color picture when its last filter is taken, never the black-and-white frames on the way. Off steps through every frame." });
@@ -3115,40 +3124,68 @@ body.ambient.phone .amb-where { font-size: 18px; }
   // set the speed last (a moment's jump, a link, the setting). Past playback.picturesUpTo its track is dimmer: the
   // camera windows stop loading pictures there (tooFast, below). Under the speed: the rate the clock really runs at
   // while a burst or a picture still being made slows it, so a new speed always shows that it took.
-  const SP = window.cassiniSpeed;
-  const spPos = v => Math.round(1000 * Math.log(Math.min(SP.max, Math.max(SP.min, v)) / SP.min) / Math.log(SP.max / SP.min));
-  const spAt = p => { const v = SP.min * Math.pow(SP.max / SP.min, p / 1000); return SP.stops.reduce((a, b) => Math.abs(Math.log(b / v)) < Math.abs(Math.log(a / v)) ? b : a); };
+  // In movie mode (movie.html) the clock steps picture to picture, so the same slider switches to movie mode's own
+  // scale, pictures a second (window.cassiniMovieFps, the movie.fps setting), and back to mission time when it ends.
+  const SP = window.cassiniSpeed, MF = window.cassiniMovieFps;
+  const inMovie = () => !!(MF && window.cassiniMovie && cassiniMovie.on);
+  const spScale = () => inMovie() ? MF : SP;
+  const spNow = () => inMovie() ? cassiniMovie.fps() : state.speed;
+  const spSet = v => { if (inMovie()) { if (v !== cassiniMovie.fps()) cassiniMovie.setFps(v); } else if (v !== state.speed) setSpeed(v); };
+  const spPos = (v, K = spScale()) => Math.round(1000 * Math.log(Math.min(K.max, Math.max(K.min, v)) / K.min) / Math.log(K.max / K.min));
+  const spAt = (p, K = spScale()) => { const v = K.min * Math.pow(K.max / K.min, p / 1000); return K.stops.reduce((a, b) => Math.abs(Math.log(b / v)) < Math.abs(Math.log(a / v)) ? b : a); };
   let spShown = "", spHeld = false;
   function syncSpeedTool() {
-    const v = state.speed, cap = picturesCap(), movie = window.cassiniMovie && cassiniMovie.on, fast = tooFast();
-    const rate = window.cassiniPlayRate ? cassiniPlayRate() : v, slowed = state.playing && !movie && !fast && rate < v * 0.9;
-    const eff = movie ? "movie mode" : fast ? "pictures paused" : slowed ? `now ${SP.label(+rate.toPrecision(2))}` : "";
+    if (inMovie()) return syncMovieSpeed();
+    const v = state.speed, cap = picturesCap(), fast = tooFast();
+    const rate = window.cassiniPlayRate ? cassiniPlayRate() : v, slowed = state.playing && !fast && rate < v * 0.9;
+    const eff = fast ? "pictures paused" : slowed ? `now ${SP.label(+rate.toPrecision(2))}` : "";
     const key = `${v}|${cap}|${eff}`;
     if (key === spShown) return;
     spShown = key;
     const el = $("speed");
-    if (!spHeld) el.value = spPos(v);
-    el.style.setProperty("--cut", cap >= SP.max ? "100%" : (spPos(cap) / 10).toFixed(1) + "%");
+    if (!spHeld) el.value = spPos(v, SP);
+    el.style.setProperty("--cut", cap >= SP.max ? "100%" : (spPos(cap, SP) / 10).toFixed(1) + "%");
+    el.setAttribute("aria-label", "Playback speed");
     el.setAttribute("aria-valuetext", SP.label(v));
     $("speedv").textContent = SP.label(v);
     $("speedeff").hidden = !eff; $("speedeff").textContent = eff;
     $("speedtool").classList.toggle("nopics", fast);
+    $("speedtool").classList.remove("movie");
     $("speedtool").title = `Playback speed: ${SP.label(v)} of mission time each second`
       + (cap < SP.max ? `. Pictures load up to ${SP.label(cap)} (Settings › Playback)` : "")
       + (slowed ? `. Slowed to ${SP.label(+rate.toPrecision(2))} while the camera windows catch up on pictures` : "");
   }
-  $("speed").addEventListener("input", e => { const v = spAt(+e.target.value); if (v !== state.speed) setSpeed(v); });
+  // movie mode: the frame rate set, and under it the pictures a second really shown when that is lower (the camera
+  // windows waiting on the frame server; movie mode slows, it never skips a picture)
+  function syncMovieSpeed() {
+    const v = cassiniMovie.fps(), real = state.playing ? cassiniMovie.rate() : 0;
+    const eff = real && real < v - 0.5 ? `showing ${real < 10 ? real.toFixed(1) : Math.round(real)}/s` : "movie mode";
+    const key = `movie|${v}|${eff}`;
+    if (key === spShown) return;
+    spShown = key;
+    const el = $("speed");
+    if (!spHeld) el.value = spPos(v, MF);
+    el.style.setProperty("--cut", "100%");
+    el.setAttribute("aria-label", "Movie mode speed");
+    el.setAttribute("aria-valuetext", `${MF.label(v)}, pictures a second`);
+    $("speedv").textContent = MF.label(v);
+    $("speedeff").hidden = false; $("speedeff").textContent = eff;
+    $("speedtool").classList.remove("nopics");
+    $("speedtool").classList.add("movie");
+    $("speedtool").title = `Movie mode speed: ${MF.label(v)}, pictures a second (the time between pictures is skipped). Leave movie mode (M) for mission time a second`;
+  }
+  $("speed").addEventListener("input", e => spSet(spAt(+e.target.value)));
   // while it is dragged the thumb follows the pointer; let go, it settles on the speed it landed on
   $("speed").addEventListener("pointerdown", () => { spHeld = true; });
   window.addEventListener("pointerup", () => { if (spHeld) { spHeld = false; spShown = ""; } });
-  // the arrow keys step from one round speed to the next, Home and End go to either end
+  // the arrow keys step from one round speed (or frame rate) to the next, Home and End go to either end
   $("speed").addEventListener("keydown", e => {
     const n = { ArrowLeft: -1, ArrowDown: -1, ArrowRight: 1, ArrowUp: 1, PageDown: -3, PageUp: 3, Home: -99, End: 99 }[e.key];
     if (!n) return;
-    const down = SP.stops.filter(v => v < state.speed), up = SP.stops.filter(v => v > state.speed);
+    const now = spNow(), K = spScale(), down = K.stops.filter(v => v < now), up = K.stops.filter(v => v > now);
     const v = n < 0 ? down[Math.max(0, down.length + n)] : up[Math.min(up.length, n) - 1];
     e.preventDefault();
-    if (v !== undefined) setSpeed(v);
+    if (v !== undefined) spSet(v);
   });
   $("tlout").addEventListener("click", () => zoomTimeline((state.view[1] - state.view[0]) * 2));
   $("tlin").addEventListener("click", () => zoomTimeline((state.view[1] - state.view[0]) / 2));
@@ -5439,7 +5476,7 @@ body.ambient.phone .amb-where { font-size: 18px; }
   const S = window.cassiniSettings;
   const opt = (key, dflt) => (S && S.get(key) !== undefined ? S.get(key) : dflt);
   // range.fps (start, below) plays a stretch at its own rate, under one picture a second if it likes (ambient mode)
-  const fps = () => M.fps ? Math.min(30, Math.max(0.05, M.fps)) : Math.min(30, Math.max(1, +opt("movie.fps", 8) || 8));
+  const fps = () => M.fps ? Math.min(30, Math.max(0.05, M.fps)) : Math.min(30, Math.max(1, +opt("movie.fps", 5) || 5));
   // A step waits for the camera windows (Sam: movie mode slows, it never skips a picture): while a window has not
   // yet put up the picture the clock is at (the frame server is still making it: a cold composite, a mosaic's new
   // tile), the next step waits. cassiniFeeds.behind stops counting a picture that has been stuck for seconds, so a
@@ -5491,12 +5528,14 @@ body.ambient.phone .amb-where { font-size: 18px; }
   // paused in the background (away.html): the step carries on where it was, by the time away
   document.addEventListener("cassini:away", e => { if (!e.detail.away) { M.stepAt += e.detail.ms; M.cutAt += e.detail.ms; } });
 
-  // the status line under the timeline says movie mode is on, how fast, and how much time a cut left out
+  // the status line under the timeline says movie mode is on, how fast (in pictures a second, in place of the mission
+  // time a second the clock does not run at here), and how much time a cut left out
   const hud = window.studyHud;
   window.studyHud = ms => {
     if (hud) hud(ms);
     if (!M.on) return;
     const el = $("mday"); if (!el) return;
+    if (window.cassiniSpeed) el.textContent = el.textContent.replace(` · ${cassiniSpeed.label(state.speed)}`, "");
     // the frame rate set, and the pictures a second it really shows when that is lower (waiting for the server)
     const real = state.playing ? shownRate(performance.now()) : 0;
     let t = ` · movie, ${fps()} fps`;
@@ -5528,10 +5567,16 @@ body.ambient.phone .amb-where { font-size: 18px; }
     if (M.slow) { M.slow = false; document.dispatchEvent(new CustomEvent("cassini:movie-slow", { detail: { slow: false, share: 0, et: state.et } })); }
     $("movie").setAttribute("aria-pressed", "false");
   }
-  const toggle = () => (M.on ? stop() : start(true));
-  // fps: the frame rate (the movie.fps setting, Settings > Playback; set it with cassiniSettings.set("movie.fps", n))
+  // the Movie button, M and Go > Movie mode: going in pauses (Sam: movie mode is for watching the pictures, so it
+  // waits on the first one for play at its own speed, pictures a second on the dock slider); coming out keeps playing
+  // or paused as it was, at the mission time a second the slider showed before
+  const toggle = () => { if (M.on) stop(); else { setPlaying(false); start(false); } };
+  // the dock slider in movie mode: a rate the viewer picks wins over a stretch's own rate (range.fps)
+  function setFps(v) { M.fps = 0; if (S) S.set("movie.fps", v); }
+  // fps: the frame rate (the movie.fps setting, Settings > Playback; set it with cassiniSettings.set("movie.fps", n)
+  // or setFps(n), which also drops a stretch's own rate)
   // rate(): the pictures a second movie mode has really shown over the last few seconds (0 when it has not stepped)
-  window.cassiniMovie = { start, stop, get on() { return M.on; }, get slow() { return M.slow; }, fps, rate: () => shownRate(performance.now()), state: M };
+  window.cassiniMovie = { start, stop, get on() { return M.on; }, get slow() { return M.slow; }, fps, setFps, rate: () => shownRate(performance.now()), state: M };
 
   // ---- controls ----
   $("movie").addEventListener("click", toggle);
@@ -6961,7 +7006,7 @@ body.ambient.phone .amb-where { font-size: 18px; }
   const place = () => {};   // the bar is a row of the Cassini Replay window, laid out with it
   function say(text, warn) { $("segstate").textContent = text || ""; $("segstate").classList.toggle("warn", !!warn); $("segstaterow").hidden = !text; }
   function progress(frac) { $("segprog").hidden = frac == null; if (frac != null) $("segprog").firstElementChild.style.width = `${(frac * 100).toFixed(1)}%`; }
-  function fpsUi() { const f = Math.round(window.cassiniMovie && window.cassiniMovie.fps ? window.cassiniMovie.fps() : opt("movie.fps", 8)); $("segfps").value = f; $("segfpsv").textContent = `${f} fps`; }
+  function fpsUi() { const f = Math.round(window.cassiniMovie && window.cassiniMovie.fps ? window.cassiniMovie.fps() : opt("movie.fps", 5)); $("segfps").value = f; $("segfpsv").textContent = `${f} fps`; }
   // the choices a stretch is made with, apart from its times (P.key; P.span: the times it was made for)
   function optKey() { const q = new URLSearchParams(params()); q.delete("from"); q.delete("until"); return q.toString(); }
   const inside = () => P.span && P.a >= P.span[0] && P.b <= P.span[1];
@@ -9177,7 +9222,7 @@ void main() {
   }
   async function tick() {
     if (!ME.playing) return;
-    const fps = Math.min(30, Math.max(1, window.cassiniMovie && window.cassiniMovie.fps ? window.cassiniMovie.fps() : +opt("movie.fps", 8) || 8));
+    const fps = Math.min(30, Math.max(1, window.cassiniMovie && window.cassiniMovie.fps ? window.cassiniMovie.fps() : +opt("movie.fps", 5) || 5));
     const at = performance.now(), next = ME.frames.findIndex((e, i) => i > ME.sel && kept(e));
     if (next < 0) return stopPlay();
     ME.sel = next; ME.picked = new Set(); stripState();
@@ -9949,7 +9994,7 @@ void main() {
   window.cassiniAbout = { open, addTab, esc, close: () => show(false), credits: CREDITS };
 
   // ---- which version this is: this page's build id (build.py writes it), and what the frame server says it serves ----
-  const BUILD = /*BUILD*/"17d3f26d71b3";
+  const BUILD = /*BUILD*/"8ab2ffa5f669";
   const FRAMES = (() => {                       // the frame server, chosen as the camera window chooses it
     const q = new URLSearchParams(location.search).get("frames");
     if (q) return q.replace(/\/$/, "");
