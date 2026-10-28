@@ -15,6 +15,8 @@ Phases (each its own run; a run picks up where the last one stopped, since a mad
   movies      the same for every movie pass: its steadied frames (movie_webp)
   processed   /frames/processed/<ID>.webp at 1024, 512 and 256, every frame, centred as Auto center asks
   strips      a movie pass's steadied frames at 128 (the movie strip)
+  chains      every movie pass's stabilization and exposure chains (small JSON files; no pictures), which the page's
+              Stabilize and Even exposure read
 
 Made to share the Mac Mini with the live and preview servers: run it under `nice -n 19 taskpolicy -b` (low CPU and
 disk priority), one process with a few threads. It waits while the 1-minute load is over --max-load, while the
@@ -32,6 +34,7 @@ status.json (and a page reading it, index.html) in --status says how far it is.
                                                 seconds and bytes per item (and the totals they mean)
 """
 import argparse
+import bisect
 import collections
 import concurrent.futures
 import contextvars
@@ -43,6 +46,7 @@ import random
 import shutil
 import subprocess
 import sys
+import tempfile
 import threading
 import time
 import traceback
@@ -54,7 +58,7 @@ import calibration  # noqa: E402
 import obs_mosaic  # noqa: E402
 import reel  # noqa: E402
 
-PHASES = ("frames", "composites", "mosaics", "movies", "processed", "strips")
+PHASES = ("frames", "composites", "mosaics", "movies", "processed", "strips", "chains")
 
 
 @functools.lru_cache(None)
@@ -94,6 +98,11 @@ def all_passes():
     return out
 
 
+def movie_passes():
+    """Every pass the windows play as a movie (its frames steadied one by one, not a mosaic), in time order."""
+    return [u for u in all_passes() if u.get("kind") == "movie" or (u.get("movie") and not u["mosaic"])]
+
+
 def centred(frame_id):
     """Auto center (on by default in a camera window, center=1): the view the server's centre_of gives the frame's
     pass (centred on the body, or north up where it is), which names the cache folder the window's picture is
@@ -123,11 +132,14 @@ def items(phase):
                 for i in frame_ids()]
     if phase == "mosaics":
         return [("_".join(map(str, u["key"])), lambda c, u=u: make_pass(u, c)) for u in mosaic_passes()]
+    if phase == "chains":
+        # a movie pass's stabilization and exposure chains (steady1-, exposure4-c11s0-plan4.json), which the page
+        # holds to SPICE and evens out itself (Settings > Processing, Stabilize / Even exposure): no frames are made
+        return [("_".join(map(str, u["key"])), lambda c, u=u: make_chains(u, c)) for u in movie_passes()]
     if phase in ("movies", "strips"):
         # strips: a movie pass's steadied frames at 128, the movie strip under a window
         sizes = (1024, 512) if phase == "movies" else (128,)
-        return [("_".join(map(str, u["key"])), lambda c, u=u: make_pass(u, c, sizes))
-                for u in all_passes() if u.get("kind") == "movie" or (u.get("movie") and not u["mosaic"])]
+        return [("_".join(map(str, u["key"])), lambda c, u=u: make_pass(u, c, sizes)) for u in movie_passes()]
     raise ValueError(phase)
 
 
@@ -244,6 +256,19 @@ def make_pass(u, cache, sizes=(1024, 512), within=None, style=None, made=None):
     return n
 
 
+def make_chains(u, cache):
+    """A movie pass's stabilization chain and exposure chain, as the window plays it by default (colour, Auto
+    center, not stabilized), after the pass's plan and every tile: the small files a window's Stabilize and Even
+    exposure read, worked out once over the whole pass (obs_mosaic.steady_chain, exposure_chain). A made chain is
+    found, not made. The pass's frames."""
+    p = obs_mosaic.plan(u, cache)
+    for j in range(len(u["frames"])):
+        obs_mosaic.tile(u, j, cache, p["display_scale"])
+    obs_mosaic.steady_chain(u, cache, p)
+    obs_mosaic.exposure_chain(u, cache, p, True, True, 0)
+    return len(u["frames"])
+
+
 # ---------- sharing the Mini ----------
 
 def busy(args):
@@ -349,6 +374,8 @@ def run(args):
     if getattr(args, "watched_first", False):
         todo, n = watched_first(todo)
         print(f"{n} items of watched observations first", flush=True)
+    if getattr(args, "queue", None):
+        return run_queue(args, todo)
     if args.first:
         todo = todo[args.first:]
     if args.shard:
@@ -360,9 +387,16 @@ def run(args):
     status.update(done=args.first, state="running")
     errors = open(os.path.join(args.status or args.cache, f"errors-{args.phase}{_shard_tag(args)}.jsonl"), "a")
     holds = Holds(args)
-    pending, i = set(), 0
     # every thread may be drawing its own mosaic movie: each keeps its last pictures to grow the next from
     obs_mosaic.rolled_room(args.threads + 1)
+    make(args, todo, status, errors, holds)
+    status.update(state="done")
+
+
+def make(args, todo, status, errors, holds):
+    """todo's items made on args.threads threads, waiting while holds says to, each counted into status and each
+    error written to errors (run, run_queue)."""
+    pending, i = set(), 0
     with calibration.looking(calibration.LOOKS[0]), calibration.coloring(calibration.COLORS[0]), \
             concurrent.futures.ThreadPoolExecutor(args.threads) as pool:
         def one(name, work):
@@ -393,6 +427,81 @@ def run(args):
                     status.s["made_s"] += took
                     status.s["errors"] += bool(err)
                 status.update(last=name)
+
+
+PASS_PHASES = ("mosaics", "movies", "strips", "chains")
+BALANCE = 8   # stretches per process (procs --balanced): enough small ones that the processes run out together
+
+
+def stretches(args):
+    """procs --balanced: the phase's items, as run takes them (--only, --watched-first), cut into consecutive
+    stretches of about the same work, BALANCE for each process, and written as the files of a queue folder in the
+    order the processes take them (run_queue): the watched observations' first, then biggest first, so the longest
+    passes start at once and every process runs out of work at about the same time. A pass's work is its frames,
+    any other item's one. Cut by count into one stretch a process (--shard), the busiest stretch of the mission ran
+    on long after the rest: worked out from the passes' frames on one core, 64 processes take 0.84 h over the movie
+    passes and 0.51 h over the mosaics that way, 0.47 h and 0.14 h balanced (2026-10-27). (folder, items)."""
+    todo = items(args.phase)
+    if getattr(args, "only", None):
+        todo = only(args.phase, todo, args.only)
+    first = 0
+    if getattr(args, "watched_first", False):
+        todo, first = watched_first(todo)
+    size = {"_".join(map(str, u["key"])): len(u["frames"]) for u in all_passes()} if args.phase in PASS_PHASES else {}
+    work = [size.get(name, 1) for name, _ in todo]
+    each = sum(work) / max(1, args.procs * BALANCE)
+    parts, start, w = [], 0, 0
+    for k, x in enumerate(work):
+        if k > start and (w >= each or k == first):   # a stretch ends at its share, and where the watched items end
+            parts.append((start < first, w, start, k))
+            start, w = k, 0
+        w += x
+    if start < len(todo):
+        parts.append((start < first, w, start, len(todo)))
+    parts.sort(key=lambda p: (not p[0], -p[1], p[2]))
+    folder = os.path.join(args.status, f"queue-{args.phase}") if args.status else tempfile.mkdtemp(prefix="prebuild-queue-")
+    shutil.rmtree(os.path.join(folder, "todo"), ignore_errors=True)   # a queue left by an earlier run (names only)
+    shutil.rmtree(os.path.join(folder, "taken"), ignore_errors=True)
+    for d in ("todo", "taken"):
+        os.makedirs(os.path.join(folder, d))
+    for n, (_, _, a, b) in enumerate(parts):
+        with open(os.path.join(folder, "todo", f"{n:06d}"), "w") as fh:
+            fh.write("".join(name + "\n" for name, _ in todo[a:b]))
+    print(f"{len(todo)} items in {len(parts)} stretches of about {each:.0f} {'frames' if size else 'items'}, biggest first", flush=True)
+    return folder, len(todo)
+
+
+def take(queue, me):
+    """The item names of the queue's next stretch, now this process's (moved into taken, which only one process
+    can do), or None when none is left."""
+    for f in sorted(os.listdir(os.path.join(queue, "todo"))):
+        mine = os.path.join(queue, "taken", f"{f}-{me}")
+        try:
+            os.rename(os.path.join(queue, "todo", f), mine)
+        except FileNotFoundError:   # another process took it first
+            continue
+        with open(mine) as fh:
+            return [line for line in fh.read().splitlines() if line]
+    return None
+
+
+def run_queue(args, todo):
+    """One process of procs --balanced: makes the queue's stretches (stretches), the next one each time it is done
+    with the last, as run makes its items, until none is left. todo: the phase's items, as run takes them."""
+    by_name = dict(todo)
+    status = Status(args, 0)
+    status.update(state="running")
+    errors = open(os.path.join(args.status or args.cache, f"errors-{args.phase}{_shard_tag(args)}.jsonl"), "a")
+    holds = Holds(args)
+    obs_mosaic.rolled_room(args.threads + 1)
+    while True:
+        names = take(args.queue, _shard_tag(args).lstrip("-") or str(os.getpid()))
+        if names is None:
+            break
+        part = [(name, by_name[name]) for name in names if name in by_name]
+        with status.lock:
+            status.s["total"] += len(part)
+        make(args, part, status, errors, holds)
     status.update(state="done")
 
 
@@ -403,13 +512,19 @@ def _shard_tag(args):
 def procs(args):
     """The phase as args.procs processes of one thread each, each making its own stretch of the items (--shard),
     and their status files added up into the phase's own. The pictures' makers are mostly Python, so threads of one
-    process take turns on one core: composites ran 1.2 a second on 9 threads, ~8 on 9 processes (2026-10-26)."""
+    process take turns on one core: composites ran 1.2 a second on 9 threads, ~8 on 9 processes (2026-10-26).
+    --balanced: each process takes the next of many stretches of about the same work as it finishes the last
+    (stretches, run_queue) instead of one stretch of its own."""
     n = args.procs
     argv = [a for a in sys.argv[1:]]
     for flag in ("--procs", "--threads", "--first"):
         while flag in argv:
             j = argv.index(flag)
             del argv[j:j + 2]
+    total = None
+    if args.balanced:
+        queue, total = stretches(args)
+        argv = [a for a in argv if a != "--balanced"] + ["--queue", queue]
     env = {**os.environ, "OPENBLAS_NUM_THREADS": "1", "OMP_NUM_THREADS": "1"}
     kids = [subprocess.Popen([sys.executable, sys.argv[0]] + argv + ["--threads", "1", "--shard", f"{k}/{n}"],
                              env=env) for k in range(n)]
@@ -426,7 +541,8 @@ def procs(args):
                     pass
             if parts:
                 waiting = [p.get("why_waiting") for p in parts if p.get("state") == "waiting"]
-                status.s.update(total=sum(p["total"] for p in parts), errors=sum(p["errors"] for p in parts),
+                status.s.update(total=total if total is not None else sum(p["total"] for p in parts),
+                                errors=sum(p["errors"] for p in parts),
                                 made_s=sum(p["made_s"] for p in parts), procs=n,
                                 state="waiting" if waiting and len(waiting) == len(parts) else "running",
                                 why_waiting=waiting[0] if waiting else None)
@@ -456,7 +572,7 @@ def sample(args):
                 traceback.print_exc()
                 continue
             took = time.monotonic() - t0
-            times.append((took, out if args.phase == "mosaics" else 1))
+            times.append((took, out if args.phase in ("mosaics", "chains") else 1))
             print(f"{k + 1}/{len(picked)} {name} {took:.2f} s", flush=True)
     by_dir = collections.Counter()
     files = collections.Counter()
@@ -498,6 +614,7 @@ SEGMENT_PAUSE = "~/prebuild.pause"
 SEGMENT_YIELD = 1.0     # seconds at most a picture of the stretch waits for the server's own requests to clear
 SEGMENT_MAX = 6000      # pictures in one stretch (a busy day near Saturn has ~1,500)
 SEGMENT_SIZES = (512, 768, 1024)
+SEGMENT_ANSWER = 0.3    # seconds POST /prebuild waits for its stretch to be made before it answers how far it is
 
 
 def segment_options(q):
@@ -539,10 +656,15 @@ def segment_options(q):
 
 
 @functools.lru_cache(None)
-def frame_times():
-    """Each frame's time, seconds since 1970, by id."""
-    idx, _ = reel.load_index()
-    return dict(zip(idx["id"].tolist(), idx["seconds_1970"].astype(float).tolist()))
+def sets_ready():
+    """page_sets in the order they are ready (the time of a set's last frame, when its composite can be made; sets
+    ready at the same time in page_sets' order), and those times (seconds since 1970): a stretch finds its sets by
+    bisection instead of going through all ~45,000 of the mission (a tenth of a second on each Pre-process). Made as
+    the frame server starts (frame_server.warm_prebuild), from the rows of the frames it keeps for the mosaics."""
+    idx, row = obs_mosaic._row_of()
+    t = idx["seconds_1970"].to_numpy()
+    ready = sorted(((float(max(t[row[i]] for i in s)), s) for s in page_sets()), key=lambda x: x[0])
+    return [r for r, _ in ready], [s for _, s in ready]
 
 
 def segment_items(o):
@@ -577,10 +699,10 @@ def segment_items(o):
         out.append((r.id, float(r.seconds_1970), 1, lambda c, i=r.id: single(i, c)))
         if isinstance(r.OBSERVATION_ID, str):
             keys.setdefault((r.TARGET_NAME, r.OBSERVATION_ID, cam), None)
-    times = frame_times()
-    for s in page_sets():
-        ready = max(times[i] for i in s)
-        if t0 <= ready <= t1 and s[0][0] in cams:
+    readies, sets = sets_ready()
+    for k in range(bisect.bisect_left(readies, t0), bisect.bisect_right(readies, t1)):
+        ready, s = readies[k], sets[k]
+        if s[0][0] in cams:
             out.append(("_".join(s), ready, 1, lambda c, s=s: [frame_server.color_webp(s, z, c, centre=centre(s[-1])) for z in sizes]))
     for key in keys:
         for u in obs_mosaic.units(*key):
@@ -613,7 +735,11 @@ class Segments:
         import hashlib
         return hashlib.sha1(json.dumps(o, sort_keys=True).encode()).hexdigest()[:16]
 
-    def submit(self, o):
+    def submit(self, o, wait=0.0):
+        """The stretch o asked for: its job as the page reads it (_public). wait: seconds to wait for a new job to
+        be made before answering (SEGMENT_ANSWER from POST /prebuild): a stretch whose pictures are all in the cache is
+        made in a tenth of a second, and answered made, so the page says it is ready at once; a longer one is answered
+        as far as it got."""
         jid = self.key(o)
         with self.lock:
             job = self.jobs.get(jid)
@@ -625,7 +751,11 @@ class Segments:
             self.jobs[jid] = job
             self.queue.append(jid)
         self.wake.set()
-        return self._public(job)
+        until = time.monotonic() + wait
+        while job["state"] not in ("done", "failed", "stopped") and time.monotonic() < until:
+            time.sleep(0.01)
+        with self.lock:
+            return self._public(job)
 
     def status(self, jid):
         with self.lock:
@@ -784,7 +914,11 @@ def main():
     ap.add_argument("--only", help="file of frame ids: only the items using them (a remake after a fix)")
     ap.add_argument("--watched-first", action="store_true", help="the Moments and Highlights observations' items first")
     ap.add_argument("--procs", type=int, default=0, help="run the phase as this many processes of one thread each")
+    ap.add_argument("--balanced", action="store_true",
+                    help="with --procs: the items in many stretches of about the same work (a pass's frames), biggest "
+                         "first, each process taking the next as it finishes the last")
     ap.add_argument("--shard", help=argparse.SUPPRESS)   # k/n: one process's stretch (--procs)
+    ap.add_argument("--queue", help=argparse.SUPPRESS)   # a --balanced process's queue folder (stretches)
     args = ap.parse_args()
     if args.phase == "count":
         sets, passes = page_sets(), mosaic_passes()

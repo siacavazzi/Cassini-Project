@@ -277,7 +277,7 @@ body.phone .srow input[type=range] { width: 96px; }
   // exposure normalization of a movie pass (obs_mosaic.exposure_gains): its smoothing in frames, 0 when off
   window.cassiniExposure = () => !S.get("movies.exposure") ? 0 : (S.get("movies.exposureSmooth") ?? 8);
   window.cassiniMovieStyle = (o = {}) => `${(o.center ?? S.get("cameras.autoCenter")) === false ? "&center=0" : ""}&trail=${S.get("movies.trail") || 0}&laps=${S.get("movies.laps") || 1}` +
-    (S.get("movies.fade") ? `&fade=${S.get("movies.fade")}&persist=${S.get("movies.persist") ?? 35}` : "") +
+    (S.get("movies.fade") && S.get("movies.mosaicFrames") !== "whole" ? `&fade=${S.get("movies.fade")}&persist=${S.get("movies.persist") ?? 35}` : "") +
     (window.cassiniStabilize() ? `&steady=${window.cassiniStabilize()}` : "") +
     (window.cassiniExposure() ? `&exposure=${window.cassiniExposure()}` : "");
   // Cameras (the camera windows read cameras.steady, cameras.passes, cameras.fullRes, cameras.fullDelay, cameras.drill, cameras.pointingLook, cameras.stale and cameras.lingerColor / lingerMosaic)
@@ -404,6 +404,10 @@ body.phone .srow input[type=range] { width: 96px; }
       hint: "In a steady movie pass, this many earlier frames of the same filter stay under the newest one, fading with age, so a moving moon or a ring's shadow leaves a short trail. 0 shows each frame alone." });
   D({ key: "movies.laps", section: "Movie", label: "Mosaic movies keep", type: "range", value: 1, min: 1, max: 6, step: 1, unit: "laps",
       hint: "A mosaic movie (the camera going over the same mosaic again and again, as on the approach to Jupiter) plays as a mosaic that never empties: each new tile replaces its own earlier copy. 1 is a time-lapse; more keeps that many copies of each tile, older ones under the newest." });
+  // how often a mosaic movie's picture changes (head-quiet.html complete and cameraFeed, export.py whole=)
+  D({ key: "movies.mosaicFrames", section: "Movie", label: "Mosaic movie frames", type: "choice", value: "rolling",
+      options: [["rolling", "Rolling"], ["whole", "Whole mosaics"]],
+      hint: "Rolling puts each new tile of a mosaic movie into the mosaic as it is taken. Whole mosaics waits until the camera has gone round every place again: a four-panel mosaic shows a new picture once all four new panels are in, so every frame of the movie is a whole new mosaic (movie mode steps lap to lap, and older tiles never fade)." });
   // a mosaic movie's older tiles fade (obs_mosaic.rolling_layout fade=, persist=): Rolling rather than Time-lapse
   D({ key: "movies.fade", section: "Movie", label: "Older tiles fade over", type: "range", value: 0, min: 0, max: 120, step: 4,
       format: v => v ? `${v} frames` : "Off",

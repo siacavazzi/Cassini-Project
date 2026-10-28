@@ -383,14 +383,17 @@ def kind_of(frame_id):
     """What the camera windows do with the frames of frame_id's observation (one camera): {"mosaic": its pass is
     a mosaic, "movie": every pass of the observation with the camera moving is a movie or a stare, so its frames
     never make a mosaic of any kind and the window need not ask, "kind": its pass's kind (mosaic, movie,
-    mosaic_movie or None), "repeats": its laps}."""
+    mosaic_movie or None), "repeats": its laps, "lap_ends": the ids of the frames that finish a lap of its mosaic
+    movies, when it has any}."""
     found = unit_of(frame_id)
     if not found:
         return {"mosaic": False, "movie": False, "kind": None}
     us = units(*found[0]["key"][:3])
     judged = [v for v in us if v["jump_frac"] is not None]
+    # lap_ends: the frames of the observation's mosaic movies that finish a lap, for Whole mosaics (lap_ends)
+    ends = [v["frames"][j][1] for v in us for j in lap_ends(v)]
     return {"mosaic": bool(found[0]["mosaic"]), "movie": bool(judged) and all(v["movie"] for v in judged),
-            "kind": found[0]["kind"], "repeats": found[0]["repeats"]}
+            "kind": found[0]["kind"], "repeats": found[0]["repeats"], **({"lap_ends": ends} if ends else {})}
 
 
 def folder(u, cache):
@@ -1706,15 +1709,7 @@ def so_far(u, n, cache, made=None, out=OUT):
     # of all the pass takes, so its total stays the same while the grey mosaic turns to colour
     drawn = p["colour"] or [p["grey"]]
     # a mosaic movie counts laps: the lap is how many times the camera has come back to a place by tile n
-    runs, lap = {}, 1
-    for fr, i in zip(u["frames"][:n + 1], u.get("place", [])):
-        if i is None:
-            continue
-        seq = runs.setdefault(fr[2], [])
-        if not seq or seq[-1] != i:
-            seq.append(i)
-            lap = max(lap, seq.count(i))
-    laps = {"kind": u.get("kind"), "lap": lap, "laps": u.get("repeats"), "places": len(set(x for x in u.get("place", []) if x is not None))}
+    laps = {"kind": u.get("kind"), "lap": lap_of(u)[min(n, len(u["frames"]) - 1)] if u["frames"] else 1, "laps": u.get("repeats"), "places": len(set(x for x in u.get("place", []) if x is not None))}
     return im, {**laps, "mosaic": sum(count.get(f, 0) for f in drawn), "filters": len(used), "filter_names": used,
                 "observation": u["key"][1], "pass": u["key"][3], "of": sum(1 for fr in u["frames"] if fr[2] in drawn),
                 "fixed": p["fixed"], "luminance": bool(base), "width": im.width, "height": im.height}
@@ -2524,6 +2519,44 @@ def warm_movie(u, n, ahead, cache, steady=False, exposure=None):
     workers = [MOVIE_WORKERS]
     for _ in range(MOVIE_WORKERS):
         threading.Thread(target=run, daemon=True).start()
+
+
+def lap_of(u):
+    """The lap each frame of pass u is in: how many times the camera has come back to a place in one filter by that
+    frame (a run of frames at one place counts once), the most over its filters; 1 for a pass that never comes back."""
+    if "lap_of" in u:
+        return u["lap_of"]
+    runs, lap, out = {}, 1, []
+    for fr, i in zip(u["frames"], u.get("place") or [None] * len(u["frames"])):
+        if i is not None:
+            seq = runs.setdefault(fr[2], [])
+            if not seq or seq[-1] != i:
+                seq.append(i)
+                lap = max(lap, seq.count(i))
+        out.append(lap)
+    u["lap_of"] = out
+    return out
+
+
+def lap_ends(u):
+    """The frames (indices into u["frames"]) that finish a lap of a mosaic movie: the last frame before the camera
+    comes back to a place it has already taken in this lap, and the pass's last frame. At one of them every place
+    of the lap is new, so the rolling picture there (rolling_layout) is a whole new mosaic (Settings > Movie >
+    Mosaic movie frames: Whole mosaics). [] for a pass that is not a mosaic movie."""
+    if u.get("kind") != "mosaic_movie" or not u["frames"]:
+        return []
+    lap = lap_of(u)
+    return [j for j in range(len(lap) - 1) if lap[j + 1] > lap[j]] + [len(lap) - 1]
+
+
+def lap_end(frame_id):
+    """True when frame_id finishes a lap of a mosaic movie (lap_ends), False for another frame of one, None when
+    it is in no mosaic movie."""
+    found = unit_of(frame_id)
+    if not found or found[0].get("kind") != "mosaic_movie":
+        return None
+    u, n = found
+    return u["frames"][n][1] == frame_id and n in lap_ends(u)
 
 
 def pass_info(frame_id, cache):

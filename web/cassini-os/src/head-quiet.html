@@ -1344,6 +1344,20 @@ body.idle .win.full .titlebar { opacity: 0; }
     close("N"); close("W");
     return { setOf, sets };
   }
+  // repeat exposures: a frame taken again through the same filters, of the same target in the same observation,
+  // within REPEAT_GAP s of the first of its run (at most REPEAT_MAX in a run). The pipeline stacks each run into one
+  // picture (stacking.find_repeats, processing.stack), so each of its frames shows the same picture: 1 for every
+  // frame of a run but its first. Only frames of no color set (a filter coming round again starts a new set)
+  const REPEAT_GAP = 120, REPEAT_MAX = 5;
+  function repeats() {
+    const n = catalog.et.length, out = new Uint8Array(n), run = {};
+    for (let i = 0; i < n; i++) {
+      const k = order[i], cam = catalog.cam[k], key = `${catalog.target[k]}|${catalog.obs[k]}|${catalog.f1[k]}|${catalog.f2[k]}`, r = run[cam];
+      if (catalog.setOf[k] < 0 && r && r.key === key && catalog.et[k] - r.et <= REPEAT_GAP && r.n < REPEAT_MAX) { out[k] = 1; r.n++; }
+      else run[cam] = catalog.setOf[k] < 0 ? { key, et: catalog.et[k], n: 1 } : null;
+    }
+    return out;
+  }
   function prep() {
     if (catalog.cls) return;
     const n = catalog.et.length, cls = new Uint8Array(n), rgb = new Uint8Array(n);
@@ -1356,7 +1370,7 @@ body.idle .win.full .titlebar { opacity: 0; }
       const ks = Array.from(catalog.allOrder || order).filter(k => catalog.cam[k] === cam);
       catalog.byCam[cam] = { ks, et: Float64Array.from(ks, k => catalog.et[k]) };
     }
-    catalog.cls = cls; catalog.rgb = rgb; catalog.setOf = setOf; catalog.sets = sets;
+    catalog.cls = cls; catalog.rgb = rgb; catalog.setOf = setOf; catalog.sets = sets; catalog.repeat = repeats();
     $("lkeys").innerHTML = CLS.map(([n, c]) => `<span><i style="background:${c}"></i>${n}</span>`).join("");
   }
   // position in catalog.byCam[cam] of the camera's latest frame at et, or -1
@@ -1626,9 +1640,15 @@ body.idle .win.full .titlebar { opacity: 0; }
     };
     return api;
   }
-  const STUCK = 8000;
+  const STUCK = 8000, WHOLE_STUCK = 60000;
   // Complete mosaics only (Settings > Playback): a mosaic pass shows once, finished, at its last frame
   const completeMosaics = () => !!S.get("playback.completeMosaics") && !!S.get("cameras.mosaics") && window.cassiniMosaics !== false;
+  // Whole mosaics (Settings > Movie > Mosaic movie frames): a mosaic movie shows a new picture only when a lap is
+  // finished, every place taken again, so each frame of it is a whole new mosaic. lapEnds: the frames that finish a
+  // lap, as the server's note on each observation lists them (kind_of lap_ends); lapKnown: cam|pass (passKey)
+  // the note has come back for (until then the pass rolls tile by tile)
+  const wholeLaps = () => S.get("movies.mosaicFrames") === "whole";
+  const lapEnds = new Set(), lapKnown = new Set();
   // a frame's pass: the pass id the data gives it (build_data.py --groups: the frame server's passes, obs_mosaic.units,
   // which split an observation where the camera pauses or the distance changes), else its target and observation
   const passKey = k => catalog.pass && catalog.pass[k] >= 0 ? `p${catalog.pass[k]}` : `${catalog.target[k]}|${catalog.obs[k]}`;
@@ -1652,7 +1672,7 @@ body.idle .win.full .titlebar { opacity: 0; }
     // body: a body window's own target; the two camera windows show the body in view in the body view, else every target
     const own = card.dataset.body || null, cam = card.dataset.cam, win = card.closest(".win") || card, well = card.querySelector(".well"), shot = card.querySelector(".shot"), chans = card.querySelector(".chans");
     const field = f => card.querySelector(`[data-f="${f}"]`) || { set textContent(v) {}, set innerHTML(v) {} };
-    let shownAt = 0, mosaicAt = 0;   // when the last picture and the last pass mosaic went up (behind)
+    let shownAt = 0, mosaicAt = 0, wantAt = 0;   // when the last picture and the last pass mosaic went up, and the picture wanted now was asked for (behind)
     let body = own || viewBody(), heldBody = null;   // heldBody: the body the picture up is of
     let want = null, shownKey = null, shown = null, next = [], lastK = -2, lastReady = null, stripKey = "", stripSet = null;
     // steady size: shapeOf is the target and observation whose pass mosaic gave the picture its shape, which it
@@ -1919,7 +1939,8 @@ body.idle .win.full .titlebar { opacity: 0; }
       im.fetchPriority = v.warm ? "low" : "high";   // the picture wanted now goes ahead of look-ahead requests
       im.onload = () => {
         lane[which] = null; warmed.add(v.key);
-        if (want && !hold && !v.warm && v.cat === catalog && fits(v)) display(v, im);   // no want: the camera went idle (or was held) while this loaded
+        // (prep first: months that came in since the last frame drew leave a catalog not yet worked through)
+        if (want && !hold && !v.warm && v.cat === catalog && fits(v)) { prep(); display(v, im); }   // no want: the camera went idle (or was held) while this loaded
         pump();
       };
       im.onerror = () => {
@@ -2016,6 +2037,9 @@ body.idle .win.full .titlebar { opacity: 0; }
     // after 4 s while the server works out the pass (seconds), and the mosaic comes back in the pass lane
     // after anything took it down.
     let mosaicUrl = null, obsShown = null, obsTiles = 0, obsK = -1, obsSize = 0, obsRep = null;
+    // the frame the server has no mosaic for (404 at /frames/mosaic: a frame of the pass that is no tile, a movie's,
+    // or a pass with nothing placed yet): with the clock at it, the mosaic up is as far as it goes (update.behind)
+    let noMosaic = "";
     const mosaicPasses = new Set();   // passes (passOf) the server said is a mosaic pass
     const moviePasses = new Set();    // passes the server said is a movie or a stare: never a mosaic, never asked
     const lapPasses = new Set();
@@ -2080,7 +2104,8 @@ body.idle .win.full .titlebar { opacity: 0; }
     // which never empties when the camera starts its raster again (Settings > Movie > Mosaic movies keep)
     const playsRolling = k => playsAs(k) === "mosaic_movie";
     window.cassiniRolling = true;   // so the pass mosaic lane leaves mosaic movies to this route (mosaicOf)
-    const rollingUrl = (id, sz) => `${FRAMES}/frames/movie/${id}.webp?mode=rolling&size=${sz || size()}${window.cassiniMovieStyle({ center: centreOn() })}${window.cassiniLook()}`;
+    // (Whole mosaics: the server makes every tile of the lap before it answers, whole=1)
+    const rollingUrl = (id, sz) => `${FRAMES}/frames/movie/${id}.webp?mode=rolling&size=${sz || size()}${window.cassiniMovieStyle({ center: centreOn() })}${window.cassiniLook()}${wholeLaps() ? "&whole=1" : ""}`;
     // the filmstrip: the pass the frame on screen is in (/frames/movie/<ID>.json: its frames, in time order), its
     // frames drawn along a strip by time, colored by filter, with the frame shown marked and the frames around it
     const passInfos = new Map(), filmAsked = new Set();
@@ -2221,7 +2246,7 @@ body.idle .win.full .titlebar { opacity: 0; }
         setTimeout(patience, 8000);
       }
       fetch(`${FRAMES}/frames/mosaic/${id}.webp?size=${sz}${mode === "mosaic" || mode === "mosaic_movie" ? "&force=1" : ""}${window.cassiniLook()}`, { signal: ctl.signal }).then(async r => {
-        if (!r.ok) return;
+        if (!r.ok) { if (r.status === 404) noMosaic = wid; return; }
         const rep = JSON.parse(r.headers.get("X-Reel") || "null");
         // the frame in the catalog loaded now (another catalog object once the months around have loaded; a
         // pass's mosaic still goes up, found by its frame id)
@@ -2824,6 +2849,14 @@ body.idle .win.full .titlebar { opacity: 0; }
         const [first, last] = passSpan(cam, body, p);
         if (p < last) { p = first - 1; k = p < 0 ? -1 : framesOf(cam, body).ks[p]; }
       }
+      // Whole mosaics: inside a lap of a mosaic movie the window keeps the last finished lap (the picture from before
+      // the pass in its first lap), so the mosaic changes once a lap, all of it new
+      if (k >= 0 && !coming && wholeLaps() && playsAs(k) === "mosaic_movie" && lapKnown.has(`${cam}|${passOf(k)}`)) {
+        const [first] = passSpan(cam, body, p), ks = framesOf(cam, body).ks;
+        while (p >= first && !lapEnds.has(catalog.id[ks[p]])) p--;
+        if (p < first) p = first - 1;
+        k = p < 0 ? -1 : ks[p];
+      }
       const live = k >= 0 && state.et - catalog.et[k] < 180;
       card.classList.toggle("live", live);
       // a camera that has been quiet for longer than the stale setting shows nothing rather than an old picture; an
@@ -2850,7 +2883,7 @@ body.idle .win.full .titlebar { opacity: 0; }
       chans.classList.toggle("held", !!held);
       if (k === lastK && ready === lastReady && !force) return;
       lastK = k; lastReady = ready;
-      want = view(k, state.et);
+      want = view(k, state.et); wantAt = performance.now();
       if (!want.movie) filmstrip(k);   // a movie frame moves the filmstrip when it is on screen (display)
       // a possible mosaic tile: the frame before is of the same pass (body and observation), and a frame of a colour
       // set only once its composite is shown (the mosaic is made of composites)
@@ -2886,6 +2919,7 @@ body.idle .win.full .titlebar { opacity: 0; }
           fetch(`${FRAMES}/frames/mosaic/${catalog.id[q]}.webp?warm=1${window.cassiniLook()}`, { priority: "low", signal: sig }).then(r => r.ok ? r.json() : null).then(a => {
             if (a && a.movie) { moviePasses.add(o); chipText(); }
             if (a && a.kind === "mosaic_movie") { lapPasses.add(o); chipText(); }
+            if (a && a.lap_ends) { a.lap_ends.forEach(id => lapEnds.add(id)); lapKnown.add(`${cam}|${o}`); }
             // the window is in that pass already: its frame is steadied (or rolls) from now on
             if (a && catalog === c0 && lastK >= 0 && passOf(lastK) === o && (playsMovie(lastK) || playsRolling(lastK))) update(true);
             if (!a || !a.mosaic) return;
@@ -2915,10 +2949,17 @@ body.idle .win.full .titlebar { opacity: 0; }
     // picture or mosaic nothing new has come for in STUCK ms does not count, so a server that stops answering (or
     // a pass minutes from being made) never stops the clock
     update.behind = () => {
-      if (!want || hold || win.hidden || !win.isConnected || lastK < 0 || !shown || shown.cat !== catalog) return 0;
+      if (!want || hold || win.hidden || !win.isConnected || lastK < 0) return 0;
       const pos = q => lastOfCam(cam, catalog.et[q], body), now = performance.now();
-      let b = shownKey !== want.key && now - shownAt < STUCK ? pos(want.k) - pos(shown.k) : 0;
-      if (obsShown && obsK >= 0 && catalog.obs[lastK] === obsShown && now - mosaicAt < STUCK) b = Math.max(b, pos(lastK) - pos(obsK));
+      // nothing up yet (the window's first picture, or a month that just came in): the picture asked for counts as
+      // one behind until it is up, so movie mode waits for a mosaic movie's first whole lap instead of running past
+      if (!shown || shown.cat !== catalog) return now - wantAt < (want.rolling && wholeLaps() ? WHOLE_STUCK : STUCK) ? 1 : 0;
+      // a whole lap of a mosaic movie (Whole mosaics) may take the server a while to make cold: waited for longer
+      const stuck = want.rolling && wholeLaps() ? WHOLE_STUCK : STUCK;
+      let b = shownKey !== want.key && now - shownAt < stuck ? pos(want.k) - pos(shown.k) : 0;
+      // (not when the server has no mosaic for the frame the clock is at: no tile is coming for it, and movie mode
+      // held STUCK ms on one, 2026-10-27)
+      if (obsShown && obsK >= 0 && catalog.obs[lastK] === obsShown && now - mosaicAt < STUCK && catalog.id[lastK] !== noMosaic) b = Math.max(b, pos(lastK) - pos(obsK));
       return Math.max(0, b);
     };
     allFeeds.add(update);
@@ -2968,15 +3009,20 @@ body.idle .win.full .titlebar { opacity: 0; }
   // channels on the way. Complete mosaics only (playback.completeMosaics): of a pass a camera window plays as a
   // mosaic, only its last frame (the finished mosaic; body: among that body's pictures, as its windows show them).
   // Every other frame is a picture of its own.
+  // Whole mosaics (movies.mosaicFrames): of a mosaic movie, only the frames that finish a lap. Repeat exposures
+  // (catalog.repeat; with Stack repeat exposures on, outside a pass played as a movie, whose frames are each their
+  // own): only the first of a run, since the pipeline shows the run as one stacked picture.
   function complete(k, body) {
+    const cam = catalog.cam[k];
+    // how the camera's windows play k's pass (any of them), asked only when a rule needs it
+    const plays = how => { for (const f of allFeeds) if (f.cam === cam && f.playsAs && f.playsAs(k) === how) return true; return false; };
+    if (wholeLaps() && lapKnown.has(`${cam}|${passKey(k)}`) && plays("mosaic_movie")) return lapEnds.has(catalog.id[k]);
     const si = catalog.setOf ? catalog.setOf[k] : -1;
     if (si >= 0 && S.get("movie.completeFrames") !== false && S.get("cameras.composites") && catalog.et[k] !== catalog.sets[si].ready) return false;
-    if (completeMosaics()) {
-      const cam = catalog.cam[k];
-      for (const f of allFeeds) if (f.cam === cam && f.playsAs && f.playsAs(k) === "mosaic") {
-        const [, last] = passSpan(cam, body, lastOfCam(cam, catalog.et[k], body));
-        return framesOf(cam, body).ks[last] === k;
-      }
+    if (si < 0 && catalog.repeat && catalog.repeat[k] && S.get("processing.stack") !== false && !plays("movie")) return false;
+    if (completeMosaics() && plays("mosaic")) {
+      const [, last] = passSpan(cam, body, lastOfCam(cam, catalog.et[k], body));
+      return framesOf(cam, body).ks[last] === k;
     }
     return true;
   }
@@ -2988,7 +3034,7 @@ body.idle .win.full .titlebar { opacity: 0; }
   window.cassiniFeeds = { frames: FRAMES, cameraFeed, framesOf, lastOfCam, prep, weight, nextPicture, prevPicture, behind, liveCams, reopenCams, stale: () => S.get("cameras.stale") * 3600, windows: feeds };
   document.addEventListener("cassini:bodymode", () => { if (typeof catalog !== "undefined" && catalog && catalog.byCam) feeds.forEach(f => f(true)); });
   // a change to what the windows show takes effect straight away
-  for (const key of ["cameras.composites", "cameras.stale", "cameras.steady", "cameras.passes", "cameras.balancedColor", "cameras.colors", "cameras.lingerColor", "cameras.lingerMosaic", "movies.steady", "cameras.autoCenter", "cameras.processedFrames", "movies.trail", "movies.stabilize", "movies.stabilizeSmooth", "movies.exposure", "movies.exposureSmooth", "movies.filmstrip", "movies.laps", "movies.fade", "movies.persist", "playback.completeMosaics", ...(window.cassiniSteps || []).map(st => st.key)]) S.on(key, () => { if (typeof catalog !== "undefined" && catalog && catalog.byCam) feeds.forEach(f => f(true)); });
+  for (const key of ["cameras.composites", "cameras.stale", "cameras.steady", "cameras.passes", "cameras.balancedColor", "cameras.colors", "cameras.lingerColor", "cameras.lingerMosaic", "movies.steady", "cameras.autoCenter", "cameras.processedFrames", "movies.trail", "movies.stabilize", "movies.stabilizeSmooth", "movies.exposure", "movies.exposureSmooth", "movies.filmstrip", "movies.laps", "movies.fade", "movies.persist", "movies.mosaicFrames", "playback.completeMosaics", ...(window.cassiniSteps || []).map(st => st.key)]) S.on(key, () => { if (typeof catalog !== "undefined" && catalog && catalog.byCam) feeds.forEach(f => f(true)); });
 
   // ---------- burst limit: in normal playback each camera window gets at most maxRate new pictures a second ----------
   // The clock runs at the chosen speed except inside an imaging burst, where it slows so that crossing the gap

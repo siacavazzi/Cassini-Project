@@ -2420,7 +2420,7 @@ body.ambient.phone .amb-where { font-size: 18px; }
   // exposure normalization of a movie pass (obs_mosaic.exposure_gains): its smoothing in frames, 0 when off
   window.cassiniExposure = () => !S.get("movies.exposure") ? 0 : (S.get("movies.exposureSmooth") ?? 8);
   window.cassiniMovieStyle = (o = {}) => `${(o.center ?? S.get("cameras.autoCenter")) === false ? "&center=0" : ""}&trail=${S.get("movies.trail") || 0}&laps=${S.get("movies.laps") || 1}` +
-    (S.get("movies.fade") ? `&fade=${S.get("movies.fade")}&persist=${S.get("movies.persist") ?? 35}` : "") +
+    (S.get("movies.fade") && S.get("movies.mosaicFrames") !== "whole" ? `&fade=${S.get("movies.fade")}&persist=${S.get("movies.persist") ?? 35}` : "") +
     (window.cassiniStabilize() ? `&steady=${window.cassiniStabilize()}` : "") +
     (window.cassiniExposure() ? `&exposure=${window.cassiniExposure()}` : "");
   // Cameras (the camera windows read cameras.steady, cameras.passes, cameras.fullRes, cameras.fullDelay, cameras.drill, cameras.pointingLook, cameras.stale and cameras.lingerColor / lingerMosaic)
@@ -2547,6 +2547,10 @@ body.ambient.phone .amb-where { font-size: 18px; }
       hint: "In a steady movie pass, this many earlier frames of the same filter stay under the newest one, fading with age, so a moving moon or a ring's shadow leaves a short trail. 0 shows each frame alone." });
   D({ key: "movies.laps", section: "Movie", label: "Mosaic movies keep", type: "range", value: 1, min: 1, max: 6, step: 1, unit: "laps",
       hint: "A mosaic movie (the camera going over the same mosaic again and again, as on the approach to Jupiter) plays as a mosaic that never empties: each new tile replaces its own earlier copy. 1 is a time-lapse; more keeps that many copies of each tile, older ones under the newest." });
+  // how often a mosaic movie's picture changes (head-quiet.html complete and cameraFeed, export.py whole=)
+  D({ key: "movies.mosaicFrames", section: "Movie", label: "Mosaic movie frames", type: "choice", value: "rolling",
+      options: [["rolling", "Rolling"], ["whole", "Whole mosaics"]],
+      hint: "Rolling puts each new tile of a mosaic movie into the mosaic as it is taken. Whole mosaics waits until the camera has gone round every place again: a four-panel mosaic shows a new picture once all four new panels are in, so every frame of the movie is a whole new mosaic (movie mode steps lap to lap, and older tiles never fade)." });
   // a mosaic movie's older tiles fade (obs_mosaic.rolling_layout fade=, persist=): Rolling rather than Time-lapse
   D({ key: "movies.fade", section: "Movie", label: "Older tiles fade over", type: "range", value: 0, min: 0, max: 120, step: 4,
       format: v => v ? `${v} frames` : "Off",
@@ -3405,6 +3409,20 @@ body.ambient.phone .amb-where { font-size: 18px; }
     close("N"); close("W");
     return { setOf, sets };
   }
+  // repeat exposures: a frame taken again through the same filters, of the same target in the same observation,
+  // within REPEAT_GAP s of the first of its run (at most REPEAT_MAX in a run). The pipeline stacks each run into one
+  // picture (stacking.find_repeats, processing.stack), so each of its frames shows the same picture: 1 for every
+  // frame of a run but its first. Only frames of no color set (a filter coming round again starts a new set)
+  const REPEAT_GAP = 120, REPEAT_MAX = 5;
+  function repeats() {
+    const n = catalog.et.length, out = new Uint8Array(n), run = {};
+    for (let i = 0; i < n; i++) {
+      const k = order[i], cam = catalog.cam[k], key = `${catalog.target[k]}|${catalog.obs[k]}|${catalog.f1[k]}|${catalog.f2[k]}`, r = run[cam];
+      if (catalog.setOf[k] < 0 && r && r.key === key && catalog.et[k] - r.et <= REPEAT_GAP && r.n < REPEAT_MAX) { out[k] = 1; r.n++; }
+      else run[cam] = catalog.setOf[k] < 0 ? { key, et: catalog.et[k], n: 1 } : null;
+    }
+    return out;
+  }
   function prep() {
     if (catalog.cls) return;
     const n = catalog.et.length, cls = new Uint8Array(n), rgb = new Uint8Array(n);
@@ -3417,7 +3435,7 @@ body.ambient.phone .amb-where { font-size: 18px; }
       const ks = Array.from(catalog.allOrder || order).filter(k => catalog.cam[k] === cam);
       catalog.byCam[cam] = { ks, et: Float64Array.from(ks, k => catalog.et[k]) };
     }
-    catalog.cls = cls; catalog.rgb = rgb; catalog.setOf = setOf; catalog.sets = sets;
+    catalog.cls = cls; catalog.rgb = rgb; catalog.setOf = setOf; catalog.sets = sets; catalog.repeat = repeats();
     $("lkeys").innerHTML = CLS.map(([n, c]) => `<span><i style="background:${c}"></i>${n}</span>`).join("");
   }
   // position in catalog.byCam[cam] of the camera's latest frame at et, or -1
@@ -3687,9 +3705,15 @@ body.ambient.phone .amb-where { font-size: 18px; }
     };
     return api;
   }
-  const STUCK = 8000;
+  const STUCK = 8000, WHOLE_STUCK = 60000;
   // Complete mosaics only (Settings > Playback): a mosaic pass shows once, finished, at its last frame
   const completeMosaics = () => !!S.get("playback.completeMosaics") && !!S.get("cameras.mosaics") && window.cassiniMosaics !== false;
+  // Whole mosaics (Settings > Movie > Mosaic movie frames): a mosaic movie shows a new picture only when a lap is
+  // finished, every place taken again, so each frame of it is a whole new mosaic. lapEnds: the frames that finish a
+  // lap, as the server's note on each observation lists them (kind_of lap_ends); lapKnown: cam|pass (passKey)
+  // the note has come back for (until then the pass rolls tile by tile)
+  const wholeLaps = () => S.get("movies.mosaicFrames") === "whole";
+  const lapEnds = new Set(), lapKnown = new Set();
   // a frame's pass: the pass id the data gives it (build_data.py --groups: the frame server's passes, obs_mosaic.units,
   // which split an observation where the camera pauses or the distance changes), else its target and observation
   const passKey = k => catalog.pass && catalog.pass[k] >= 0 ? `p${catalog.pass[k]}` : `${catalog.target[k]}|${catalog.obs[k]}`;
@@ -3713,7 +3737,7 @@ body.ambient.phone .amb-where { font-size: 18px; }
     // body: a body window's own target; the two camera windows show the body in view in the body view, else every target
     const own = card.dataset.body || null, cam = card.dataset.cam, win = card.closest(".win") || card, well = card.querySelector(".well"), shot = card.querySelector(".shot"), chans = card.querySelector(".chans");
     const field = f => card.querySelector(`[data-f="${f}"]`) || { set textContent(v) {}, set innerHTML(v) {} };
-    let shownAt = 0, mosaicAt = 0;   // when the last picture and the last pass mosaic went up (behind)
+    let shownAt = 0, mosaicAt = 0, wantAt = 0;   // when the last picture and the last pass mosaic went up, and the picture wanted now was asked for (behind)
     let body = own || viewBody(), heldBody = null;   // heldBody: the body the picture up is of
     let want = null, shownKey = null, shown = null, next = [], lastK = -2, lastReady = null, stripKey = "", stripSet = null;
     // steady size: shapeOf is the target and observation whose pass mosaic gave the picture its shape, which it
@@ -3980,7 +4004,8 @@ body.ambient.phone .amb-where { font-size: 18px; }
       im.fetchPriority = v.warm ? "low" : "high";   // the picture wanted now goes ahead of look-ahead requests
       im.onload = () => {
         lane[which] = null; warmed.add(v.key);
-        if (want && !hold && !v.warm && v.cat === catalog && fits(v)) display(v, im);   // no want: the camera went idle (or was held) while this loaded
+        // (prep first: months that came in since the last frame drew leave a catalog not yet worked through)
+        if (want && !hold && !v.warm && v.cat === catalog && fits(v)) { prep(); display(v, im); }   // no want: the camera went idle (or was held) while this loaded
         pump();
       };
       im.onerror = () => {
@@ -4077,6 +4102,9 @@ body.ambient.phone .amb-where { font-size: 18px; }
     // after 4 s while the server works out the pass (seconds), and the mosaic comes back in the pass lane
     // after anything took it down.
     let mosaicUrl = null, obsShown = null, obsTiles = 0, obsK = -1, obsSize = 0, obsRep = null;
+    // the frame the server has no mosaic for (404 at /frames/mosaic: a frame of the pass that is no tile, a movie's,
+    // or a pass with nothing placed yet): with the clock at it, the mosaic up is as far as it goes (update.behind)
+    let noMosaic = "";
     const mosaicPasses = new Set();   // passes (passOf) the server said is a mosaic pass
     const moviePasses = new Set();    // passes the server said is a movie or a stare: never a mosaic, never asked
     const lapPasses = new Set();
@@ -4141,7 +4169,8 @@ body.ambient.phone .amb-where { font-size: 18px; }
     // which never empties when the camera starts its raster again (Settings > Movie > Mosaic movies keep)
     const playsRolling = k => playsAs(k) === "mosaic_movie";
     window.cassiniRolling = true;   // so the pass mosaic lane leaves mosaic movies to this route (mosaicOf)
-    const rollingUrl = (id, sz) => `${FRAMES}/frames/movie/${id}.webp?mode=rolling&size=${sz || size()}${window.cassiniMovieStyle({ center: centreOn() })}${window.cassiniLook()}`;
+    // (Whole mosaics: the server makes every tile of the lap before it answers, whole=1)
+    const rollingUrl = (id, sz) => `${FRAMES}/frames/movie/${id}.webp?mode=rolling&size=${sz || size()}${window.cassiniMovieStyle({ center: centreOn() })}${window.cassiniLook()}${wholeLaps() ? "&whole=1" : ""}`;
     // the filmstrip: the pass the frame on screen is in (/frames/movie/<ID>.json: its frames, in time order), its
     // frames drawn along a strip by time, colored by filter, with the frame shown marked and the frames around it
     const passInfos = new Map(), filmAsked = new Set();
@@ -4282,7 +4311,7 @@ body.ambient.phone .amb-where { font-size: 18px; }
         setTimeout(patience, 8000);
       }
       fetch(`${FRAMES}/frames/mosaic/${id}.webp?size=${sz}${mode === "mosaic" || mode === "mosaic_movie" ? "&force=1" : ""}${window.cassiniLook()}`, { signal: ctl.signal }).then(async r => {
-        if (!r.ok) return;
+        if (!r.ok) { if (r.status === 404) noMosaic = wid; return; }
         const rep = JSON.parse(r.headers.get("X-Reel") || "null");
         // the frame in the catalog loaded now (another catalog object once the months around have loaded; a
         // pass's mosaic still goes up, found by its frame id)
@@ -4885,6 +4914,14 @@ body.ambient.phone .amb-where { font-size: 18px; }
         const [first, last] = passSpan(cam, body, p);
         if (p < last) { p = first - 1; k = p < 0 ? -1 : framesOf(cam, body).ks[p]; }
       }
+      // Whole mosaics: inside a lap of a mosaic movie the window keeps the last finished lap (the picture from before
+      // the pass in its first lap), so the mosaic changes once a lap, all of it new
+      if (k >= 0 && !coming && wholeLaps() && playsAs(k) === "mosaic_movie" && lapKnown.has(`${cam}|${passOf(k)}`)) {
+        const [first] = passSpan(cam, body, p), ks = framesOf(cam, body).ks;
+        while (p >= first && !lapEnds.has(catalog.id[ks[p]])) p--;
+        if (p < first) p = first - 1;
+        k = p < 0 ? -1 : ks[p];
+      }
       const live = k >= 0 && state.et - catalog.et[k] < 180;
       card.classList.toggle("live", live);
       // a camera that has been quiet for longer than the stale setting shows nothing rather than an old picture; an
@@ -4911,7 +4948,7 @@ body.ambient.phone .amb-where { font-size: 18px; }
       chans.classList.toggle("held", !!held);
       if (k === lastK && ready === lastReady && !force) return;
       lastK = k; lastReady = ready;
-      want = view(k, state.et);
+      want = view(k, state.et); wantAt = performance.now();
       if (!want.movie) filmstrip(k);   // a movie frame moves the filmstrip when it is on screen (display)
       // a possible mosaic tile: the frame before is of the same pass (body and observation), and a frame of a colour
       // set only once its composite is shown (the mosaic is made of composites)
@@ -4947,6 +4984,7 @@ body.ambient.phone .amb-where { font-size: 18px; }
           fetch(`${FRAMES}/frames/mosaic/${catalog.id[q]}.webp?warm=1${window.cassiniLook()}`, { priority: "low", signal: sig }).then(r => r.ok ? r.json() : null).then(a => {
             if (a && a.movie) { moviePasses.add(o); chipText(); }
             if (a && a.kind === "mosaic_movie") { lapPasses.add(o); chipText(); }
+            if (a && a.lap_ends) { a.lap_ends.forEach(id => lapEnds.add(id)); lapKnown.add(`${cam}|${o}`); }
             // the window is in that pass already: its frame is steadied (or rolls) from now on
             if (a && catalog === c0 && lastK >= 0 && passOf(lastK) === o && (playsMovie(lastK) || playsRolling(lastK))) update(true);
             if (!a || !a.mosaic) return;
@@ -4976,10 +5014,17 @@ body.ambient.phone .amb-where { font-size: 18px; }
     // picture or mosaic nothing new has come for in STUCK ms does not count, so a server that stops answering (or
     // a pass minutes from being made) never stops the clock
     update.behind = () => {
-      if (!want || hold || win.hidden || !win.isConnected || lastK < 0 || !shown || shown.cat !== catalog) return 0;
+      if (!want || hold || win.hidden || !win.isConnected || lastK < 0) return 0;
       const pos = q => lastOfCam(cam, catalog.et[q], body), now = performance.now();
-      let b = shownKey !== want.key && now - shownAt < STUCK ? pos(want.k) - pos(shown.k) : 0;
-      if (obsShown && obsK >= 0 && catalog.obs[lastK] === obsShown && now - mosaicAt < STUCK) b = Math.max(b, pos(lastK) - pos(obsK));
+      // nothing up yet (the window's first picture, or a month that just came in): the picture asked for counts as
+      // one behind until it is up, so movie mode waits for a mosaic movie's first whole lap instead of running past
+      if (!shown || shown.cat !== catalog) return now - wantAt < (want.rolling && wholeLaps() ? WHOLE_STUCK : STUCK) ? 1 : 0;
+      // a whole lap of a mosaic movie (Whole mosaics) may take the server a while to make cold: waited for longer
+      const stuck = want.rolling && wholeLaps() ? WHOLE_STUCK : STUCK;
+      let b = shownKey !== want.key && now - shownAt < stuck ? pos(want.k) - pos(shown.k) : 0;
+      // (not when the server has no mosaic for the frame the clock is at: no tile is coming for it, and movie mode
+      // held STUCK ms on one, 2026-10-27)
+      if (obsShown && obsK >= 0 && catalog.obs[lastK] === obsShown && now - mosaicAt < STUCK && catalog.id[lastK] !== noMosaic) b = Math.max(b, pos(lastK) - pos(obsK));
       return Math.max(0, b);
     };
     allFeeds.add(update);
@@ -5029,15 +5074,20 @@ body.ambient.phone .amb-where { font-size: 18px; }
   // channels on the way. Complete mosaics only (playback.completeMosaics): of a pass a camera window plays as a
   // mosaic, only its last frame (the finished mosaic; body: among that body's pictures, as its windows show them).
   // Every other frame is a picture of its own.
+  // Whole mosaics (movies.mosaicFrames): of a mosaic movie, only the frames that finish a lap. Repeat exposures
+  // (catalog.repeat; with Stack repeat exposures on, outside a pass played as a movie, whose frames are each their
+  // own): only the first of a run, since the pipeline shows the run as one stacked picture.
   function complete(k, body) {
+    const cam = catalog.cam[k];
+    // how the camera's windows play k's pass (any of them), asked only when a rule needs it
+    const plays = how => { for (const f of allFeeds) if (f.cam === cam && f.playsAs && f.playsAs(k) === how) return true; return false; };
+    if (wholeLaps() && lapKnown.has(`${cam}|${passKey(k)}`) && plays("mosaic_movie")) return lapEnds.has(catalog.id[k]);
     const si = catalog.setOf ? catalog.setOf[k] : -1;
     if (si >= 0 && S.get("movie.completeFrames") !== false && S.get("cameras.composites") && catalog.et[k] !== catalog.sets[si].ready) return false;
-    if (completeMosaics()) {
-      const cam = catalog.cam[k];
-      for (const f of allFeeds) if (f.cam === cam && f.playsAs && f.playsAs(k) === "mosaic") {
-        const [, last] = passSpan(cam, body, lastOfCam(cam, catalog.et[k], body));
-        return framesOf(cam, body).ks[last] === k;
-      }
+    if (si < 0 && catalog.repeat && catalog.repeat[k] && S.get("processing.stack") !== false && !plays("movie")) return false;
+    if (completeMosaics() && plays("mosaic")) {
+      const [, last] = passSpan(cam, body, lastOfCam(cam, catalog.et[k], body));
+      return framesOf(cam, body).ks[last] === k;
     }
     return true;
   }
@@ -5049,7 +5099,7 @@ body.ambient.phone .amb-where { font-size: 18px; }
   window.cassiniFeeds = { frames: FRAMES, cameraFeed, framesOf, lastOfCam, prep, weight, nextPicture, prevPicture, behind, liveCams, reopenCams, stale: () => S.get("cameras.stale") * 3600, windows: feeds };
   document.addEventListener("cassini:bodymode", () => { if (typeof catalog !== "undefined" && catalog && catalog.byCam) feeds.forEach(f => f(true)); });
   // a change to what the windows show takes effect straight away
-  for (const key of ["cameras.composites", "cameras.stale", "cameras.steady", "cameras.passes", "cameras.balancedColor", "cameras.colors", "cameras.lingerColor", "cameras.lingerMosaic", "movies.steady", "cameras.autoCenter", "cameras.processedFrames", "movies.trail", "movies.stabilize", "movies.stabilizeSmooth", "movies.exposure", "movies.exposureSmooth", "movies.filmstrip", "movies.laps", "movies.fade", "movies.persist", "playback.completeMosaics", ...(window.cassiniSteps || []).map(st => st.key)]) S.on(key, () => { if (typeof catalog !== "undefined" && catalog && catalog.byCam) feeds.forEach(f => f(true)); });
+  for (const key of ["cameras.composites", "cameras.stale", "cameras.steady", "cameras.passes", "cameras.balancedColor", "cameras.colors", "cameras.lingerColor", "cameras.lingerMosaic", "movies.steady", "cameras.autoCenter", "cameras.processedFrames", "movies.trail", "movies.stabilize", "movies.stabilizeSmooth", "movies.exposure", "movies.exposureSmooth", "movies.filmstrip", "movies.laps", "movies.fade", "movies.persist", "movies.mosaicFrames", "playback.completeMosaics", ...(window.cassiniSteps || []).map(st => st.key)]) S.on(key, () => { if (typeof catalog !== "undefined" && catalog && catalog.byCam) feeds.forEach(f => f(true)); });
 
   // ---------- burst limit: in normal playback each camera window gets at most maxRate new pictures a second ----------
   // The clock runs at the chosen speed except inside an imaging burst, where it slows so that crossing the gap
@@ -5403,7 +5453,11 @@ body.ambient.phone .amb-where { font-size: 18px; }
   // Slow: when the film has spent more than SLOW_SHARE of the last SLOW_SPAN ms waiting, the page hears
   // "cassini:movie-slow" (once, until it has caught up again), so it can offer to make a stretch ahead of time.
   const CUT = 3 * 3600, SLOW_SPAN = 20000, SLOW_SHARE = 0.5;
-  const M = { on: false, fps: 0, stepAt: 0, waiting: false, cut: 0, cutAt: -1e9, until: Infinity, cams: null, waits: [], slow: false, lastAt: 0 };
+  const M = { on: false, fps: 0, stepAt: 0, waiting: false, cut: 0, cutAt: -1e9, until: Infinity, cams: null, waits: [], slow: false, lastAt: 0, steps: [] };
+  // the pictures really shown a second: the steps of the last RATE_SPAN ms (a step is one new picture, cassiniFeeds
+  // complete: a color set once, a stack of repeat exposures once, a whole mosaic once with Whole mosaics)
+  const RATE_SPAN = 3000;
+  const shownRate = now => { while (M.steps.length && M.steps[0] < now - RATE_SPAN) M.steps.shift(); return M.steps.length >= 3 ? (M.steps.length - 1) * 1000 / Math.max(now - M.steps[0], 1) : 0; };
   const ready = () => typeof catalog !== "undefined" && catalog && catalog.byCam && window.cassiniFeeds;
 
   const base = window.studyAdvance;
@@ -5425,6 +5479,7 @@ body.ambient.phone .amb-where { font-size: 18px; }
     // 24 fps would otherwise wait three frames a step and play 20); a step that came a whole interval late (after
     // a wait for pictures) starts the cadence again, so there is no burst to catch up
     M.stepAt = now - due < 1000 / fps() ? due : now;
+    M.steps.push(now);
     if (next - et > CUT) { M.cut = next - et; M.cutAt = now; }
     return next;
   };
@@ -5448,7 +5503,10 @@ body.ambient.phone .amb-where { font-size: 18px; }
     if (hud) hud(ms);
     if (!M.on) return;
     const el = $("mday"); if (!el) return;
+    // the frame rate set, and the pictures a second it really shows when that is lower (waiting for the server)
+    const real = state.playing ? shownRate(performance.now()) : 0;
     let t = ` · movie, ${fps()} fps`;
+    if (real && real < fps() - 0.5) t += ` (showing ${real < 10 ? real.toFixed(1) : Math.round(real)} pictures/s)`;
     if (M.waiting && state.playing) t += ", waiting for pictures";
     if (performance.now() - M.cutAt < 1500) t += ` · skipped ${fmtDur(M.cut)}`;
     el.textContent += t;
@@ -5462,7 +5520,7 @@ body.ambient.phone .amb-where { font-size: 18px; }
   // range.fps: this stretch's own rate (pictures a second), instead of movie.fps
   function start(play, range) {
     if (M.on && !range) return;
-    M.on = true; M.stepAt = 0; M.cutAt = -1e9; M.waits = []; M.slow = false; M.lastAt = 0;
+    M.on = true; M.stepAt = 0; M.cutAt = -1e9; M.waits = []; M.slow = false; M.lastAt = 0; M.steps = [];
     M.until = range && range.until !== undefined ? range.until : Infinity;
     M.cams = range && /^[NW]$/.test(range.cams || "") ? range.cams : null;
     M.fps = range && +range.fps > 0 ? +range.fps : 0;
@@ -5478,7 +5536,8 @@ body.ambient.phone .amb-where { font-size: 18px; }
   }
   const toggle = () => (M.on ? stop() : start(true));
   // fps: the frame rate (the movie.fps setting, Settings > Playback; set it with cassiniSettings.set("movie.fps", n))
-  window.cassiniMovie = { start, stop, get on() { return M.on; }, get slow() { return M.slow; }, fps, state: M };
+  // rate(): the pictures a second movie mode has really shown over the last few seconds (0 when it has not stepped)
+  window.cassiniMovie = { start, stop, get on() { return M.on; }, get slow() { return M.slow; }, fps, rate: () => shownRate(performance.now()), state: M };
 
   // ---- controls ----
   $("movie").addEventListener("click", toggle);
@@ -5515,12 +5574,15 @@ body.ambient.phone .amb-where { font-size: 18px; }
   const q = new URLSearchParams(location.search).get("bodywin");
   const B = {
     on: !!own.on, linger: own.linger > 0 ? own.linger : 30, max: own.max > 0 ? own.max : 4, room: own.room > 0 ? own.room : 4,
+    perCam: own.perCam > 0 ? own.perCam : 2,
     clock: 0, lastNow: 0, lastEt: null, cat: null, wins: new Map(), rec: new Map(), dismissed: new Set(), hiddenCams: []
   };
-  const saveOwn = () => { if (S) return; try { localStorage.setItem(LS, JSON.stringify({ on: B.on, linger: B.linger, max: B.max, room: B.room })); } catch (e) {} };
+  const saveOwn = () => { if (S) return; try { localStorage.setItem(LS, JSON.stringify({ on: B.on, linger: B.linger, max: B.max, room: B.room, perCam: B.perCam })); } catch (e) {} };
   if (S) {
     B.on = !!S.define({ key: "cameras.bodyWindows", section: "Cameras", label: "A window for each body", type: "toggle", value: false,
       hint: "Each target Cassini images gets its own narrow-angle and wide-angle windows. They stay up while the screen is calm and make way for new ones when it gets busy." });
+    B.perCam = +S.define({ key: "cameras.bodyWindowsPerCamera", section: "Cameras", label: "Windows per camera", type: "range", value: 2, min: 1, max: 4, step: 1,
+      hint: "The most body windows each camera has up at once: the target it has just imaged, and the ones before it. A newer target takes an older window's place." });
     B.room = +S.define({ key: "cameras.bodyWindowRoom", section: "Cameras", label: "Body windows before they make way", type: "range", value: 4, min: 1, max: 12, step: 1,
       hint: "Up to this many body windows stay up however long their cameras go quiet. With more, the least relevant close first." });
     B.linger = +S.define({ key: "cameras.bodyWindowLinger", section: "Cameras", label: "Body window stays for at least", type: "range", value: 30, min: 5, max: 120, step: 5, unit: "s",
@@ -5552,6 +5614,7 @@ body.ambient.phone .amb-where { font-size: 18px; }
     S.on("cameras.bodyWindowLinger", v => { B.linger = +v; });
     S.on("cameras.bodyWindowMax", v => { B.max = +v; });
     S.on("cameras.bodyWindowRoom", v => { B.room = +v; });
+    S.on("cameras.bodyWindowsPerCamera", v => { B.perCam = +v; });
   } else {
     // no Settings window on this page: a Window-menu switch
     const ul = document.querySelector('[data-act="win"][data-win="dock"]')?.closest("ul");
@@ -5566,6 +5629,7 @@ body.ambient.phone .amb-where { font-size: 18px; }
 
   // ---- one window per target and camera ----
   const title = n => n === "UNK" ? "Unknown target" : titleCase(n);
+  const DWELL = 3000;   // ms on the linger clock a window stays before a newer target may take its place
   const CAMS = ["N", "W"], CAMNAME = { N: "Narrow-angle", W: "Wide-angle" };
   const key = (name, cam) => name + "|" + cam;
   function pane(name, cam) {
@@ -5588,7 +5652,9 @@ body.ambient.phone .amb-where { font-size: 18px; }
     const n = B.wins.size;   // no room: cascade
     Object.assign(w.style, { left: x0 + 24 * n + "px", top: y0 + 24 * n + "px" });
   }
-  function open(name, cam) {
+  // from: a window of the same camera making way for this one: the new window takes its place and size, and the old
+  // one stays under it until the new one has its picture, so the screen never shows a gap or a pop
+  function open(name, cam, from) {
     const k = key(name, cam), label = `${title(name)} · ${cam}AC`;
     const el = document.createElement("section");
     el.className = "win frame img camwin bodywin opening";
@@ -5601,11 +5667,27 @@ body.ambient.phone .amb-where { font-size: 18px; }
     // closing a body window dismisses it until its camera goes quiet on that target; minimizing tucks it into the tray as usual
     el.querySelector(".close").addEventListener("click", e => { e.stopImmediatePropagation(); B.dismissed.add(k); close(k); }, true);
     const p = el.querySelector(".pane");
-    const w = { el, name, cam, update: F.cameraFeed(p), closing: false };
+    const w = { el, name, cam, update: F.cameraFeed(p), closing: false, since: B.clock };
     B.wins.set(k, w);
+    if (from && !from.el.hidden && !from.el.dataset.min) {
+      el.classList.remove("opening");
+      for (const p of ["left", "top", "width", "height"]) el.style[p] = from.el.style[p];
+      el.classList.toggle("zoomed", from.el.classList.contains("zoomed"));
+      WM.front(el); swapOut(from, w);
+      return w;
+    }
+    if (from) close(key(from.name, from.cam));
     place(el); WM.front(el);
     el.addEventListener("animationend", () => el.classList.remove("opening"), { once: true });
     return w;
+  }
+  function swapOut(old, neu) {
+    const k = key(old.name, old.cam), well = neu.el.querySelector(".well");
+    old.closing = true; old.el.classList.add("swapping");
+    const gone = () => { mo.disconnect(); if (!old.el.isConnected) return; old.el.remove(); if (B.wins.get(k) === old) B.wins.delete(k); WM.syncMenu(); };
+    const mo = new MutationObserver(() => { if (well.classList.contains("has-frame")) gone(); });
+    mo.observe(well, { attributes: true, attributeFilter: ["class"] });
+    setTimeout(gone, 1500);
   }
   function close(k, now) {
     const w = B.wins.get(k); if (!w || w.closing) return;
@@ -5673,13 +5755,37 @@ body.ambient.phone .amb-where { font-size: 18px; }
       const over = show.filter(k => k !== newest.k && age(k) / weight(k) > limit).sort((a, b) => age(b) / weight(b) - age(a) / weight(a));
       while (show.length > B.room && over.length) { const k = over.shift(); B.rec.get(k).gone = true; show = show.filter(x => x !== k); }
     }
+    // the contract: at most perCam windows for each camera. The target the camera has just imaged always has one; the
+    // other places go to the windows already up, the most recently imaged first, so windows do not come and go with
+    // every picture; a target imaged since takes the place of one of them only once that one has been up a few
+    // seconds (on the linger clock). A window that makes way is swapped in place by the one that takes its place.
+    const swaps = new Map();   // new window's key -> the key of the window it replaces
+    const up = k => { const w = B.wins.get(k); return !!w && !w.closing; };
+    const capped = [];
+    for (const cam of CAMS) {
+      const pinned = held.filter(k => k.endsWith("|" + cam)).length;   // held windows count against their camera
+      const cand = show.filter(k => k.endsWith("|" + cam)).sort((a, b) => B.rec.get(b).t - B.rec.get(a).t);
+      const cap = Math.max(1, B.perCam - pinned), keep = cand.slice(0, 1);
+      for (const k of cand.slice(1)) if (up(k) && keep.length < cap) keep.push(k);
+      for (const k of cand.slice(1)) {
+        if (keep.includes(k) || up(k)) continue;
+        if (keep.length < cap) { keep.push(k); continue; }
+        const i = keep.findIndex((o, j) => j > 0 && up(o) && B.rec.get(o).t < B.rec.get(k).t && B.clock - B.wins.get(o).since >= DWELL);
+        if (i > 0) keep[i] = k;
+      }
+      const out = cand.filter(k => up(k) && !keep.includes(k));
+      keep.filter(k => !up(k)).forEach((k, i) => { if (out[i]) swaps.set(k, out[i]); });
+      capped.push(...keep);
+    }
+    show = show.filter(k => capped.includes(k));
     show = show.concat(held);
-    for (const k of [...B.wins.keys()]) if (!show.includes(k)) close(k);
+    const swapped = new Set(swaps.values());
+    for (const k of [...B.wins.keys()]) if (!show.includes(k) && !swapped.has(k)) close(k);
     // oldest target first, so the newest windows land on top; the narrow-angle window first, so the wide-angle one sits beside it
     for (const name of [...new Set(bodies.concat(held.map(k => k.split("|")[0])))].reverse()) for (const cam of CAMS) {
       const k = key(name, cam); if (!show.includes(k)) continue;
       let w = B.wins.get(k);
-      if (!w || w.closing) { w = open(name, cam); w.update.hold = true; }   // the window, not the stale time, decides when its picture goes
+      if (!w || w.closing) { w = open(name, cam, swaps.has(k) ? B.wins.get(swaps.get(k)) : null); w.update.hold = true; }   // the window, not the stale time, decides when its picture goes
       // a wide-angle window with no narrow-angle one beside it takes its place on a phone
       w.el.classList.toggle("alone", !show.includes(key(name, cam === "N" ? "W" : "N")));
       w.update(); w.update.retier();
@@ -6592,8 +6698,9 @@ body.ambient.phone .amb-where { font-size: 18px; }
   const params = () => {
     const q = new URLSearchParams({ from: iso(X.a), until: iso(X.b), cams: X.cams || "NW", fps: opt("export.adaptive", true) ? "auto" : String(opt("export.fps", 12)),
       size: opt("export.full", false) ? "full" : String(opt("export.size", 1024)), sound: opt("export.sound", true) ? "1" : "0", caption: opt("export.caption", true) ? "1" : "0" });
-    // the Movie Editor's cut and look for this stretch (movieedit.html): frames left out, and the look on every picture
-    return q.toString() + window.cassiniLook() + (window.cassiniMovieStyle ? window.cassiniMovieStyle() : "") + (window.cassiniMovieCut ? window.cassiniMovieCut() : "");
+    // Whole mosaics (Settings > Movie): a mosaic movie's film shows only its whole laps (export.py whole=); the Movie
+    // Editor's cut and look for this stretch (movieedit.html): frames left out, and the look on every picture
+    return q.toString() + window.cassiniLook() + (window.cassiniMovieStyle ? window.cassiniMovieStyle() : "") + (opt("movies.mosaicFrames", "rolling") === "whole" ? "&whole=1" : "") + (window.cassiniMovieCut ? window.cassiniMovieCut() : "");
   };
   let timer = 0;
   function estimate() {
@@ -6828,7 +6935,7 @@ body.ambient.phone .amb-where { font-size: 18px; }
       mosaics: opt("cameras.mosaics", true) && window.cassiniMosaics !== false ? "1" : "0", steady: opt("movies.steady", true) ? "1" : "0",
       color: opt("cameras.composites", true) ? "1" : "0", processed: opt("cameras.processedFrames", true) === false ? "0" : "1",
       center: opt("cameras.autoCenter", true) === false ? "0" : "1", trail: String(opt("movies.trail", 0) || 0), laps: String(opt("movies.laps", 1) || 1),
-      fade: String(opt("movies.fade", 0) || 0), persist: String(opt("movies.persist", 35) ?? 35),
+      fade: String(opt("movies.mosaicFrames", "rolling") === "whole" ? 0 : opt("movies.fade", 0) || 0), persist: String(opt("movies.persist", 35) ?? 35),
       steady_smooth: String(window.cassiniStabilize ? window.cassiniStabilize() : 0),
       exposure: String(window.cassiniExposure ? window.cassiniExposure() : 0) });
     return q.toString() + (window.cassiniLook ? window.cassiniLook() : "");
@@ -6914,17 +7021,22 @@ body.ambient.phone .amb-where { font-size: 18px; }
   function hide() { bar.hidden = true; untuck(); stopPoll(); clearTimeout(grow); P.playBack = false; titled(null); P.job = null; P.span = null; P.a = P.b = null; P.playing = false; progress(null); say(""); }
   document.addEventListener("cassini:marks", e => marked(e.detail.a, e.detail.b));
 
-  // ---- making it ahead: the frame server's job, followed every second ----
+  // ---- making it ahead: the frame server's job, followed every second (more often as it starts) ----
+  // The server answers once the stretch is made when that is quick (every picture in the cache: a tenth of a second),
+  // or after a moment with how far it is; the page then looks again after 0.1, 0.2, 0.4 and 0.8 s and every second
+  // from there, so a stretch made in a moment says Ready in that moment, not after a second of "Starting…"
   async function prep() {
     const key = params(), old = P.job && /^(queued|planning|making|waiting|finishing)$/.test(P.job.state) ? P.job.id : null;
     // a stretch grown while it is being made: the old job gives way to the whole stretch's (its pictures are made)
     if (old) fetch(`${FRAMES}/prebuild/${old}/stop`, { method: "POST" }).catch(() => {});
-    P.key = optKey(); P.span = [P.a, P.b]; say("Asking the frame server…"); progress(P.job && P.job.total ? P.job.done / P.job.total : 0);
+    // (the old job is no longer followed while the server answers, so its last word never shows over the new one's)
+    stopPoll();
+    P.key = optKey(); P.span = [P.a, P.b]; P.looks = 0; P.pressed = true; say("Asking the frame server…"); progress(P.job && P.job.total ? P.job.done / P.job.total : 0);
     try {
       const r = await fetch(`${FRAMES}/prebuild?${key}`, { method: "POST" }), j = await r.json();
-      if (!r.ok) { P.job = null; progress(null); say(j.error || "The frame server cannot pre-process that.", true); buttons(); return; }
+      if (!r.ok) { P.job = null; P.pressed = false; progress(null); say(j.error || "The frame server cannot pre-process that.", true); buttons(); return; }
       follow(j);
-    } catch (err) { P.job = null; progress(null); say(`No frame server at ${FRAMES} that pre-processes.`, true); buttons(); }
+    } catch (err) { P.job = null; P.pressed = false; progress(null); say(`No frame server at ${FRAMES} that pre-processes.`, true); buttons(); }
   }
   function stopPoll() { clearTimeout(P.poll); P.poll = 0; }
   // The stretch is made on the frame server, so it carries on while the page is in the background (the tab hidden,
@@ -6937,13 +7049,14 @@ body.ambient.phone .amb-where { font-size: 18px; }
   }
   function follow(j) {
     stopPoll();
-    const was = P.job && P.job.state;
-    P.job = j; buttons(); redraw(); titled(j);
+    // pressed: the first answer since Pre-process, which is the stretch made when it was quick enough to wait for
+    const was = P.job && P.job.state, pressed = P.pressed;
+    P.job = j; P.pressed = false; buttons(); redraw(); titled(j);
     const frac = j.total ? j.done / j.total : 0;
     if (j.state === "done") {
       progress(1);
-      say(`Ready: ${j.total.toLocaleString()} pictures made ahead${j.took ? ` in ${fmtDur(j.took)}` : ""}${j.errors ? ` (${j.errors} could not be made)` : ""}`);
-      if (was && was !== "done" && opt("segment.autoplay", true)) { if (window.cassiniAway && cassiniAway.on) P.playBack = true; else play(); }
+      say(`Ready: ${j.total.toLocaleString()} pictures made ahead${j.took ? ` in ${j.took < 1 ? "under a second" : fmtDur(j.took)}` : ""}${j.errors ? ` (${j.errors} could not be made)` : ""}`);
+      if ((pressed || (was && was !== "done")) && opt("segment.autoplay", true)) { if (window.cassiniAway && cassiniAway.on) P.playBack = true; else play(); }
       return;
     }
     if (j.state === "failed") { progress(null); say(j.error || "Pre-processing failed; see the frame server's log.", true); return; }
@@ -6958,7 +7071,7 @@ body.ambient.phone .amb-where { font-size: 18px; }
       if (!P.job || P.job.id !== j.id) return;   // another job took over (the stretch grew)
       try { const r = await fetch(`${FRAMES}/prebuild/${j.id}.json`, { cache: "no-store" }); const n = r.ok ? await r.json() : j; if (P.job && P.job.id === j.id) follow(n); }
       catch (err) { if (P.job && P.job.id === j.id) follow(j); }
-    }, 1000);
+    }, P.looks < 4 ? 100 << P.looks++ : 1000);
   }
   async function stop() {
     if (!P.job) return;
@@ -7015,7 +7128,7 @@ body.ambient.phone .amb-where { font-size: 18px; }
   $("segx").addEventListener("click", () => { EX.clear(true); hide(); });
   $("segfps").addEventListener("input", e => { if (S) S.set("movie.fps", +e.target.value); fpsUi(); });
   if (S) S.on("movie.fps", fpsUi);
-  for (const k of ["cameras.composites", "cameras.mosaics", "movies.steady", "movies.stabilize", "movies.stabilizeSmooth", "movies.exposure", "movies.exposureSmooth", "movies.trail", "movies.laps", "movies.fade", "movies.persist", "cameras.autoCenter", "cameras.processedFrames", "cameras.balancedColor", "cameras.colors", ...(window.cassiniSteps || []).map(st => st.key)])
+  for (const k of ["cameras.composites", "cameras.mosaics", "movies.steady", "movies.stabilize", "movies.stabilizeSmooth", "movies.exposure", "movies.exposureSmooth", "movies.trail", "movies.laps", "movies.fade", "movies.persist", "movies.mosaicFrames", "cameras.autoCenter", "cameras.processedFrames", "cameras.balancedColor", "cameras.colors", ...(window.cassiniSteps || []).map(st => st.key)])
     if (S && S.get(k) !== undefined) S.on(k, () => { if (!bar.hidden) { if (P.job && P.key !== optKey()) { stopPoll(); P.job = null; progress(null); say(""); } buttons(); } });
   window.addEventListener("keydown", e => {
     if (bar.hidden || e.key !== "Escape" || document.querySelector(".menu.open, .win.full") || (window.cassiniMovie && window.cassiniMovie.on)) return;
@@ -10167,7 +10280,7 @@ void main() {
   window.cassiniAbout = { open, addTab, esc, close: () => show(false), credits: CREDITS };
 
   // ---- which version this is: this page's build id (build.py writes it), and what the frame server says it serves ----
-  const BUILD = /*BUILD*/"d8d150c29f4a";
+  const BUILD = /*BUILD*/"da51af906262";
   const FRAMES = (() => {                       // the frame server, chosen as the camera window chooses it
     const q = new URLSearchParams(location.search).get("frames");
     if (q) return q.replace(/\/$/, "");
