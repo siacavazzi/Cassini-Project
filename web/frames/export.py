@@ -64,7 +64,7 @@ import calibration  # noqa: E402
 import studio_look  # noqa: E402
 
 # bumped whenever the way films are made changes, so older ones are not served again
-VERSION = "export-v22"   # v22: the flat fielded, dark subtracted, hot pixel repaired pictures; v21: Auto center centres the pictures shown on their own too, as the windows do
+VERSION = "export-v23"   # v23: a mosaic pass is its mosaic at every frame, and stays a mosaic (or mosaic movie) in Full color only; v22: the flat fielded, dark subtracted, hot pixel repaired pictures; v21: Auto center centres the pictures shown on their own too, as the windows do
 FPS = 30                     # frames a second in the file
 HOLD_MIN, HOLD_MAX = 1 / FPS, 0.5
 TYPICAL = 1 / 8              # adaptive: how long the stretch's median gap lasts on screen
@@ -136,6 +136,16 @@ def options(q):
     # lap, every place new, and its older tiles do not fade; only when on, so a film made without it keeps its name
     if get("whole", "0") == "1":
         movie.update({"whole": True, "fade": 0, "persist": 0})
+    # Complete mosaics only (Settings > Playback): a mosaic pass shows once, its whole mosaic at its last frame (in the
+    # stretch); only when on, the same way
+    if get("complete", "0") == "1":
+        movie["complete"] = True
+    # the Movie Editor's Mosaics, over both settings: whole (every mosaic whole: a pass once, finished; a mosaic movie a
+    # lap at a time) or tiles (every mosaic built tile by tile)
+    if get("mos", "") == "whole":
+        movie.update({"whole": True, "complete": True, "fade": 0, "persist": 0})
+    elif get("mos", "") == "tiles":
+        movie.pop("whole", None); movie.pop("complete", None)
     # image stabilization of movie passes (obs_mosaic.steady_places), smoothed over this many frames, only when on,
     # so a film made without it keeps its name
     steady = max(0, min(60, int(get("steady", "0") or 0)))
@@ -260,6 +270,34 @@ def _lap_end(frame_id):
         return True
 
 
+def _pass_of(frame_id):
+    """The mosaic pass frame_id is in (obs_mosaic's unit key, as text), or None."""
+    import obs_mosaic
+    try:
+        found = obs_mosaic.unit_of(frame_id)
+    except Exception:
+        return None
+    return "|".join(map(str, found[0]["key"])) if found else None
+
+
+def complete_mosaics(pics):
+    """Complete mosaics only: of each mosaic pass, only its last picture in the stretch, showing the pass's whole
+    mosaic (its last frame's /frames/mosaic picture: every tile and filter), as a camera window shows a pass with
+    Settings > Playback > Complete mosaics only. The film's timing then holds the picture before the pass over it."""
+    last = {}
+    for i, e in enumerate(pics):
+        if e.get("pass"):
+            last[(e["cam"], e["pass"])] = i
+    out = []
+    for i, e in enumerate(pics):
+        if e.get("pass"):
+            if last[(e["cam"], e["pass"])] != i:
+                continue
+            e["try"] = [("mosaic", e["id"])] + [x for x in e["try"] if x[0] != "mosaic"]
+        out.append(e)
+    return out
+
+
 def plan(opt, cache=None, work=False):
     """The film's pictures in time order, each {id, cam, t, target, filters, try, kind, at (film seconds), hold,
     frames, nm, set_nm?, tile?, skipped?}, and the film's length. try = the pictures to make, best first. At Picture
@@ -288,7 +326,12 @@ def plan(opt, cache=None, work=False):
         tries = []
         # a pass the server calls a movie plays as steady movie frames, a mosaic movie as its rolling mosaic, as
         # the camera windows play them on Auto (obs_mosaic.movie_webp, rolling_webp)
-        kind = pass_kind(ids[q]) if opt.get("pictures", "movie") == "movie" else None
+        # (Full color only keeps a mosaic pass and a mosaic movie mosaics, in color; its movie passes are color
+        # pictures)
+        how = opt.get("pictures", "movie")
+        kind = pass_kind(ids[q]) if how in ("movie", "color") else None
+        if how == "color" and kind == "movie":
+            kind = None
         if kind == "movie":
             tries.append(("movie", ids[q]))
         elif kind == "mosaic_movie":
@@ -296,16 +339,24 @@ def plan(opt, cache=None, work=False):
             if opt["movie"].get("whole") and not _lap_end(ids[q]):
                 continue
             tries.append(("rolling", ids[q]))
+        elif kind == "mosaic":
+            # every frame of a mosaic pass shows the pass's mosaic so far, as the camera windows play it
+            tries.append(("mosaic", ids[q]))
         elif tile:
             tries.append(("mosaic", ids[st["use"][0]] if comp else ids[q]))
         if comp:
             tries.append(("color", [ids[u] for u in st["use"]]))
         tries += [("processed", ids[q]), ("frame", ids[q])]
-        how = opt.get("pictures", "movie")
         if how == "color":
-            if not comp or len(st["use"]) < 3:
+            # a mosaic pass stays its mosaic and a mosaic movie its rolling mosaic (in color, every tile and filter
+            # so far), as in the movie, not each pointing's own color picture on its own: at each finished color set,
+            # or with Whole mosaics at each lap's end (only those got here)
+            full = comp and len(st["use"]) >= 3
+            lap = kind == "mosaic_movie" and opt["movie"].get("whole") and st is not None
+            if not full and not lap:
                 continue
-            tries = [("color", [ids[u] for u in st["use"]]), ("processed", ids[q]), ("frame", ids[q])]
+            lead = [tries[0]] if kind in ("mosaic", "mosaic_movie") and tries[0][0] in ("mosaic", "rolling") else []
+            tries = lead + ([("color", [ids[u] for u in st["use"]])] if full else []) + [("processed", ids[q]), ("frame", ids[q])]
         elif how == "processed":
             tries = [("processed", ids[q]), ("frame", ids[q])]
         elif how == "raw":
@@ -316,7 +367,11 @@ def plan(opt, cache=None, work=False):
         if comp:
             e["set"] = st["kind"]
             e["set_nm"] = [reel.wavelength(insts[u], f1s[u] + f2s[u]) for u in st["use"]]
+        if kind == "mosaic":
+            e["pass"] = _pass_of(ids[q])
         out.append(e)
+    if opt["movie"].get("complete"):
+        out = complete_mosaics(out)
     out = cut(out, opt)
     if MAX_PICTURES and len(out) > MAX_PICTURES and not opt.get("list"):
         raise OverflowError(f"{len(out):,} pictures: an export holds at most {MAX_PICTURES:,}; pick a shorter stretch")
@@ -1011,7 +1066,7 @@ def public_plan(p):
     """The plan as the page gets it: what shows when, and the best picture each may be (mosaic, color or
     processed); tries: every picture to make, best first, as [kind, address], which the page follows when it makes
     the film itself (export.html: a film made on this computer)."""
-    keep = ("id", "cam", "t", "target", "filters", "obs", "nm", "set", "set_nm", "at", "hold", "frames", "skipped")
+    keep = ("id", "cam", "t", "target", "filters", "obs", "nm", "set", "set_nm", "at", "hold", "frames", "skipped", "pass")
     pics = [dict({k: e[k] for k in keep if k in e}, first=e["try"][0][0], src=source(*e["try"][0]),
                  tries=[[k, source(k, a)] for k, a in e["try"]]) for e in p["pictures"]]
     return dict(p, pictures=pics)
