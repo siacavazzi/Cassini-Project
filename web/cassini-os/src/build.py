@@ -297,6 +297,14 @@ ascript = part("script")
 assert ascript.count('/*CREDITS*/{"groups":[]}') == 1
 study += ascript.replace('/*CREDITS*/{"groups":[]}', json.dumps({"groups": credits["groups"]}, ensure_ascii=False, separators=(",", ":"))) + "\n"
 
+# the tour (tutorial.html): its style joins the head's and its script runs after every other part's (its hints point at
+# their controls; the hint itself is made by the script)
+tu = open(os.path.join(os.path.dirname(os.path.abspath(sys.argv[2])), "tutorial.html")).read()
+part = lambda tag: tu[tu.index(f"<{tag}"):tu.index(f"</{tag}>") + len(tag) + 3]
+assert study.count("</style>\n</head>") == 1
+study = study.replace("</style>\n</head>", part("style")[len("<style>"):] + "\n</head>")
+study += part("script") + "\n"
+
 def rep(old, new, count=1):
     global script
     assert script.count(old) == count, (old, script.count(old))
@@ -350,6 +358,11 @@ const hudRenderer = hudCanvas ? new THREE.WebGLRenderer({ canvas: hudCanvas, ant
 if (hudRenderer) { hudRenderer.setPixelRatio(Math.min(window.devicePixelRatio, 2)); hudRenderer.setClearColor(0x000000, 1); }
 """)
 rep('fov.visible = false; scene.add(fov);', 'fov.visible = false; hudScene.add(fov);')
+# the camera cones belong to Cassini: with the view on a body they flick on and off with every frame, so they are
+# drawn only while the view is on Cassini (free or follow camera) unless View > "Camera cones on every view" is on
+rep('function updateFov() {\n  fov.visible = false;\n',
+    'function updateFov() {\n  fov.visible = false;\n'
+    '  if (state.focus !== "CASSINI" && !(window.cassiniSettings && cassiniSettings.get("view.conesEverywhere"))) return;\n')
 rep('trailLine.userData.N = N; trailLine.frustumCulled = false; scene.add(trailLine);', 'trailLine.userData.N = N; trailLine.frustumCulled = false; hudScene.add(trailLine);')
 rep('ln.frustumCulled = false; ln.userData.last = -1e99; scene.add(ln);', 'ln.frustumCulled = false; ln.userData.last = -1e99; hudScene.add(ln);')
 rep('renderer.setSize(w, h, false); camera.aspect = w / h;', 'renderer.setSize(w, h, false); if (hudRenderer) hudRenderer.setSize(w, h, false); camera.aspect = w / h;')
@@ -530,7 +543,6 @@ rep("""    closeCam.position.copy(camera.position); closeCam.quaternion.copy(cam
     renderer.clearDepth();
     renderer.render(scene, closeCam);
     cassini.scale.setScalar(cs);""")
-rep('  state.pointed = !!qb;\n', '  state.pointed = !!qb;\n  window.cassiniPointing = qb ? "CK" : "EARTH";\n')
 rep('  const card = $("imgcard");\n', '  const card = $("camsink");\n')   # the page has a window per camera (see the head)
 # finale hooks (finale.html): its own clock before the bodies are placed, Cassini carried on past the end of the data,
 # its attitude, and the camera after the orbit controls

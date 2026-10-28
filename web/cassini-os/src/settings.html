@@ -57,7 +57,7 @@
 body.idle #settings:not([hidden]) { opacity: 1; pointer-events: auto; }
 /* settings that only show or hide parts of the page */
 body.s-nolabels #labels, body.s-nolabels #reticle { display: none; }
-body.s-nohudline #hudline { display: none; }
+body.s-nohudline #mread { display: none; }
 body.s-nochans .camwin .chans { display: none !important; }
 body.s-nofilmstrip .camwin .filmstrip { display: none !important; }
 body.s-noinfo .camwin .info { display: none; }
@@ -223,8 +223,8 @@ body.phone .srow input[type=range] { width: 96px; }
   D({ key: "interface.labels", section: "Interface", label: "Body labels", type: "toggle", value: true,
       hint: "Names and ranges next to Saturn, the moons and Cassini, and the target bracket." });
   cls("interface.labels", "s-nolabels", false);
-  D({ key: "interface.hudline", section: "Interface", label: "Flight data strip", type: "toggle", value: true,
-      hint: "Target, altitude, speed, camera and pointing along the top of the view." });
+  D({ key: "interface.hudline", section: "Interface", label: "Flight readout in the menu bar", type: "toggle", value: true,
+      hint: "Cassini's altitude above the nearest body and its speed relative to it, in the menu bar. Off, they show under the clock in the dock." });
   cls("interface.hudline", "s-nohudline", false);
   // Processing: every step the picture pipeline takes, in the order it takes them, each on by default and each
   // switched off on its own to see what it does (the camera windows read cameras.*; processing.* go to the frame
@@ -343,6 +343,12 @@ body.phone .srow input[type=range] { width: 96px; }
         : v < 604800 ? u(v / 86400, "day", "days") : v < 2592000 ? u(v / 604800, "wk", "wk") : u(v / 2592000, "month", "months");
     }
   };
+  // movie mode's speed scale (movie.html), which the same dock slider switches to while movie mode is on: pictures a
+  // second, from one a second to 30, on a log scale that lands on the usual frame rates
+  const MF = window.cassiniMovieFps = {
+    min: 1, max: 30, stops: [1, 2, 3, 4, 5, 6, 8, 10, 12, 15, 20, 24, 30],
+    label: v => `${+(+v).toFixed(v < 10 && v % 1 ? 1 : 0)} fps`
+  };
   D({ key: "playback.speed", section: "Playback", label: "Starting speed", type: "range", log: true, value: 600, min: SP.min, max: SP.max, stops: SP.stops, format: SP.label,
       hint: "Mission time per second of playback when the page opens; the speed slider in the replay window changes it while you watch. Jumping to a moment still picks its own speed." });
   D({ key: "playback.span", section: "Playback", label: "Timeline shows", type: "choice", value: 432000,
@@ -360,6 +366,9 @@ body.phone .srow input[type=range] { width: 96px; }
   mirror("view.allOrbits", "allorbits");
   D({ key: "view.enlarge", section: "View", label: "Enlarge moons ×10", type: "toggle", value: false, hint: "Moons drawn ten times their size so they can be seen from afar." });
   mirror("view.enlarge", "enlarge");
+  // the viewer's camera cones read view.conesEverywhere
+  D({ key: "view.conesEverywhere", section: "View", label: "Camera cones on every view", type: "toggle", value: false,
+      hint: "Draw the cameras' fields of view when looking at a body too. Off shows them only while the view is on Cassini." });
   // a new key, so a saved "off" from when follow started off does not carry over
   D({ key: "view.followcam", section: "View", label: "Follow camera", type: "toggle", value: true, hint: "Look where Cassini's camera points (needs the pointing data)." });
   mirror("view.followcam", "followcam");
@@ -389,8 +398,9 @@ body.phone .srow input[type=range] { width: 96px; }
   D({ key: "view.plumeBrightness", section: "View", label: "Plume brightness", type: "range", value: 1, min: 0.25, max: 4, step: 0.05,
       format: v => `${Math.round(v * 100)}%`, hint: "How bright the plumes are drawn. 100% is subtle, as in an unstretched picture; higher shows the faint outer plume the way stretched pictures do." });
   // movie mode (movie.html) is a rule for the clock, so its speed sits with the playback settings
-  D({ key: "movie.fps", section: "Playback", label: "Movie mode speed", type: "range", value: 8, min: 2, max: 30, step: 1, unit: "fps",
-      hint: "Movie mode (M) skips the time between pictures and steps from one picture to the next this many times a second. The camera windows show every picture as they always do." });
+  // Sam 2026-10-28: movie mode is about watching the pictures, so it starts slow (5) and the dock slider sets it
+  D({ key: "movie.fps", section: "Playback", label: "Movie mode speed", type: "range", log: true, value: 5, was: [8], min: MF.min, max: MF.max, stops: MF.stops, format: MF.label,
+      hint: "Movie mode (M) skips the time between pictures and steps from one picture to the next this many times a second. While movie mode is on, the speed slider in the replay window sets this instead of mission time per second. The camera windows show every picture as they always do." });
   // what counts as a picture (head-quiet.html complete, cameraFeed)
   D({ key: "movie.completeFrames", section: "Playback", label: "Complete color pictures only", type: "toggle", value: true,
       hint: "Movie mode steps from one finished picture to the next: a color set shows once, as its color picture when its last filter is taken, never the black-and-white frames on the way. Off steps through every frame." });

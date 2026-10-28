@@ -217,7 +217,7 @@ body.phone #excard:not(.full) { width: calc(100% - 16px) !important; left: 8px !
         // (a Full film, mostly a mosaic's dark sky, about half that a pixel: 3.6 MB for 19 s at 3078 x 3222)
         const mb = p.frames ? Math.max(0.1, p.seconds * (0.03 + (p.full ? 0.017 : 0.035) * p.width * p.height / (1024 * 1072))) : 0;
         const edited = window.cassiniMovieCut && window.cassiniMovieCut() ? " · edited in the Movie Editor" : "";
-        $("exsum").innerHTML = p.count ? `${p.count.toLocaleString()} pictures (NAC ${n.N.toLocaleString()}, WAC ${n.W.toLocaleString()}) · film ${fmtDur(p.seconds)} at ${p.width}×${p.height} · about ${mb.toFixed(mb < 10 ? 1 : 0)} MB${edited}${fullNote(p.full)}` : `<span class="warn">No pictures in this stretch.</span>`;
+        $("exsum").innerHTML = p.count ? `${p.count.toLocaleString()} pictures (NAC ${n.N.toLocaleString()}, WAC ${n.W.toLocaleString()}) · film ${fmtDur(p.seconds)} at ${p.width}×${p.height} · about ${mb.toFixed(mb < 10 ? 1 : 0)} MB${p.seconds > SOUND_MOST ? " · without sound (over 30 min)" : ""}${edited}${fullNote(p.full)}` : `<span class="warn">No pictures in this stretch.</span>`;
         $("exgo").disabled = !p.count;
       } catch (err) { $("exsum").innerHTML = `<span class="warn">No frame server at ${FRAMES}.</span>`; }
     }, 250);
@@ -295,10 +295,14 @@ body.phone #excard:not(.full) { width: calc(100% - 16px) !important; left: 8px !
     $("excopy").onclick = async () => { try { await navigator.clipboard.writeText(url); $("excopy").textContent = "Copied"; setTimeout(() => { $("excopy").textContent = "Copy link"; }, 1500); } catch (e) { prompt("Film link", url); } };
   }
 
-  // the soundtrack: the film's picture list played through the live sound's synth, offline, sent to the job as a WAV
+  // the soundtrack: the film's picture list played through the live sound's synth, offline, sent to the job as a WAV.
+  // Only up to SOUND_MOST seconds of film: the offline synth holds the whole track in the tab's memory (an hour is
+  // ~1.4 GB), so a longer film (a month of pictures) is saved silent, as the plan's summary says, instead of
+  // taking the tab down with it
+  const SOUND_MOST = 30 * 60;
   async function soundtrack(id, plan) {
     const snd = window.cassiniSound;
-    if (!snd || !snd.render || X.sent.has(id)) return;
+    if (!snd || !snd.render || X.sent.has(id) || plan.seconds > SOUND_MOST) return;
     X.sent.add(id);
     const events = soundEvents(plan);
     try {

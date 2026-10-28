@@ -18,7 +18,7 @@
   const S = window.cassiniSettings;
   const opt = (key, dflt) => (S && S.get(key) !== undefined ? S.get(key) : dflt);
   // range.fps (start, below) plays a stretch at its own rate, under one picture a second if it likes (ambient mode)
-  const fps = () => M.fps ? Math.min(30, Math.max(0.05, M.fps)) : Math.min(30, Math.max(1, +opt("movie.fps", 8) || 8));
+  const fps = () => M.fps ? Math.min(30, Math.max(0.05, M.fps)) : Math.min(30, Math.max(1, +opt("movie.fps", 5) || 5));
   // A step waits for the camera windows (Sam: movie mode slows, it never skips a picture): while a window has not
   // yet put up the picture the clock is at (the frame server is still making it: a cold composite, a mosaic's new
   // tile), the next step waits. cassiniFeeds.behind stops counting a picture that has been stuck for seconds, so a
@@ -70,12 +70,14 @@
   // paused in the background (away.html): the step carries on where it was, by the time away
   document.addEventListener("cassini:away", e => { if (!e.detail.away) { M.stepAt += e.detail.ms; M.cutAt += e.detail.ms; } });
 
-  // the status line under the timeline says movie mode is on, how fast, and how much time a cut left out
+  // the status line under the timeline says movie mode is on, how fast (in pictures a second, in place of the mission
+  // time a second the clock does not run at here), and how much time a cut left out
   const hud = window.studyHud;
   window.studyHud = ms => {
     if (hud) hud(ms);
     if (!M.on) return;
     const el = $("mday"); if (!el) return;
+    if (window.cassiniSpeed) el.textContent = el.textContent.replace(` · ${cassiniSpeed.label(state.speed)}`, "");
     // the frame rate set, and the pictures a second it really shows when that is lower (waiting for the server)
     const real = state.playing ? shownRate(performance.now()) : 0;
     let t = ` · movie, ${fps()} fps`;
@@ -107,10 +109,16 @@
     if (M.slow) { M.slow = false; document.dispatchEvent(new CustomEvent("cassini:movie-slow", { detail: { slow: false, share: 0, et: state.et } })); }
     $("movie").setAttribute("aria-pressed", "false");
   }
-  const toggle = () => (M.on ? stop() : start(true));
-  // fps: the frame rate (the movie.fps setting, Settings > Playback; set it with cassiniSettings.set("movie.fps", n))
+  // the Movie button, M and Go > Movie mode: going in pauses (Sam: movie mode is for watching the pictures, so it
+  // waits on the first one for play at its own speed, pictures a second on the dock slider); coming out keeps playing
+  // or paused as it was, at the mission time a second the slider showed before
+  const toggle = () => { if (M.on) stop(); else { setPlaying(false); start(false); } };
+  // the dock slider in movie mode: a rate the viewer picks wins over a stretch's own rate (range.fps)
+  function setFps(v) { M.fps = 0; if (S) S.set("movie.fps", v); }
+  // fps: the frame rate (the movie.fps setting, Settings > Playback; set it with cassiniSettings.set("movie.fps", n)
+  // or setFps(n), which also drops a stretch's own rate)
   // rate(): the pictures a second movie mode has really shown over the last few seconds (0 when it has not stepped)
-  window.cassiniMovie = { start, stop, get on() { return M.on; }, get slow() { return M.slow; }, fps, rate: () => shownRate(performance.now()), state: M };
+  window.cassiniMovie = { start, stop, get on() { return M.on; }, get slow() { return M.slow; }, fps, setFps, rate: () => shownRate(performance.now()), state: M };
 
   // ---- controls ----
   $("movie").addEventListener("click", toggle);
