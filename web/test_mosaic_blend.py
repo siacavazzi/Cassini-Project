@@ -243,3 +243,46 @@ for off in ("level", ""):
     level[off] = float(np.median(pic[..., 0][inner]))
 assert level[""] > 0.96 * level["level"] and level["level"] > 120, level
 print(f"a grown picture follows later, brighter laps with the level step too ({level[''] :.0f} vs {level['level']:.0f}); ok")
+
+# a mosaic movie's laps over a disc that gets smaller by 10 px a lap: an older lap's limb does not show past the
+# newest one along the mosaic's edge, where the newest lap's tiles come in near their own edges (the picture drawn
+# so far weighed in there, and Saturn's limb of 2013 showed twice, with a bright sliver between)
+yy, xx = np.mgrid[0:1100, 0:1100].astype(np.float32)
+r = np.hypot(xx - 640, yy - 560)
+texture = cv2.GaussianBlur(rng.normal(0, 8, (1100, 1100)).astype(np.float32), (0, 0), 2)
+radii = [360 - 10 * lap for lap in range(5)]
+laps = [[f for f, _ in seam_synth.tiles(3 + (165 + texture) * np.clip((R - r) / 2 + 0.5, 0, 1), side=420, grid=(2, 2),
+                                        overlap=(30, 60), seed=lap % 3 + 1, noise=1.0, gain=0.03, slope=0.03,
+                                        falloff=0.05, pointing=1.0)]
+        for lap, R in enumerate(radii)]
+newest = np.any([f[..., 3] >= 250 for f in laps[-1]], axis=0)
+twice = {}
+for off in ("blend,level", "level"):
+    with calibration.stepping(off):
+        pic = seam_synth.compose(laps[0], off=off).copy()
+        for lap in laps[1:]:
+            for f in lap:
+                ys, xs = np.nonzero(f[..., 3])
+                part = f[ys.min():ys.max() + 1, xs.min():xs.max() + 1]
+                obs_mosaic.draw_over(pic, lambda: part, int(xs.min()), int(ys.min()), part.shape[1], part.shape[0], 0.5)
+    sky = (pic[..., 3] == 255) & newest & (r > radii[-1] + 4) & (r < radii[0] + 6)
+    twice[off] = float(np.mean(pic[..., 0][sky] > 30))
+assert twice["level"] <= 0.7 * twice["blend,level"], twice
+print(f"an older lap's limb does not show past the newest ({twice['level']:.1%} of the sky past it lit, "
+      f"{twice['blend,level']:.1%} before); ok")
+
+# a tile with a lost line (a row of alpha 0) turned 20 degrees onto the canvas, nothing else there: along the line
+# its alpha is 0 at a pixel here and there among low alpha, and those pixels were drawn as holes (black dots in a
+# colour mosaic, where the colour is only where every filter has picture: Enceladus, 2005)
+t = np.zeros((420, 420, 4), np.float32)
+t[..., :3] = 150
+t[..., 3] = cv2.resize(mask, (420, 420), interpolation=cv2.INTER_AREA)
+t[200, :, 3] = 0
+turn = cv2.getRotationMatrix2D((210, 210), 20, 1.0)
+turn[:, 2] += 190
+f = np.clip(cv2.warpAffine(t, turn, (800, 800), flags=cv2.INTER_LINEAR) + 0.5, 0, 255).astype(np.uint8)
+off_line = cv2.warpAffine(np.pad(np.ones((340, 340), np.float32), 40), turn, (800, 800)) > 0.99
+assert (f[..., 3][off_line] == 0).any()   # (the holes are there to be drawn)
+on = draw([f])
+assert on[..., 3][off_line].min() == 255 and on[..., 0][off_line].min() >= 148, (on[..., 3][off_line].min(), on[..., 0][off_line].min())
+print("a turned tile's lost line has no holes; ok")

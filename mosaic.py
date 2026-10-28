@@ -397,7 +397,11 @@ specks in its faint corners; none where its alpha reaches 40). Those pixels take
 is the frame's, so a weight there draws the frame's colour. The
 weight ramps from 0 at the edge of the frame's picture to 1 at feather_px inside, on where it has picture only: the
 soft edge it was made with (mask.png) is the mosaic's outer edge, not a weight, so where two frames meet their
-colours blend and nothing between them is left part transparent.
+colours blend and nothing between them is left part transparent. Where it has picture is where its alpha is over 0
+less what a 3 x 3 closing fills in and a 3 x 3 opening takes off (_picture): a lost line of a turned tile is low
+alpha all along, and 0 at a pixel here and there, where it was drawn as a hole (Enceladus, 2005: a dotted line of
+black, with the other filters' picture all round it); specks of alpha a pixel or two past a tile's edge (resizing
+it) are not its picture either. The returned own alpha has a filled pixel at the most of its neighbours'.
 """
 RIM = 0
 PICTURE_AT = 40
@@ -428,8 +432,10 @@ def _blend_parts(frame, drawn=False):
         # the newest lap's tile came in near its own edge, and a limb that had moved showed twice (Saturn's movie, 2013)
         ramp = (dist - max(2.0, feather_px * TRUST_DEPTH)) * (1.0 / feather_px)
         return (color, (alpha > 0).astype(np.float32), np.clip(ramp, 0, 1).astype(np.float32), _edge_width(alpha, dist),
-                _support(alpha, dist))
-    _nearest(color, (alpha > 0) & (alpha < PICTURE_AT), alpha >= PICTURE_AT)
+                _support(alpha, dist), alpha * np.float32(1 / 255))
+    raw, alpha = alpha, _picture(alpha)
+    # (a pixel _picture filled in has no colour of its own)
+    _nearest(color, (alpha > 0) & ((alpha < PICTURE_AT) | (raw == 0)), (alpha >= PICTURE_AT) & (raw > 0))
     on = alpha >= EDGE_AT
     dist = _inside((alpha > 0).astype(np.uint8), on)
     has = dist > RIM
@@ -441,7 +447,21 @@ def _blend_parts(frame, drawn=False):
     if rim is not None:
         _nearest(color, rim, has & ~rim)
     return (color, has.astype(np.float32), np.clip((inside - TRUST_INSET) * (1.0 / feather_px), 0, 1).astype(np.float32),
-            _edge_width(alpha, dist), _support(alpha, dist))
+            _edge_width(alpha, dist), _support(alpha, dist), alpha * np.float32(1 / 255))
+
+
+def _picture(alpha):
+    """A tile's alpha (uint8) where it has picture (_blend_parts): 0 where a 3 x 3 opening of its nonzero alpha
+    takes a pixel off, the most of its neighbours' alpha where a 3 x 3 closing fills one in."""
+    k = np.ones((3, 3), np.uint8)
+    on = (alpha > 0).astype(np.uint8)
+    valid = cv2.morphologyEx(cv2.morphologyEx(on, cv2.MORPH_CLOSE, k), cv2.MORPH_OPEN, k)
+    if np.array_equal(valid, on):
+        return alpha
+    out = np.where(valid > 0, alpha, 0).astype(np.uint8)
+    fill = (valid > 0) & (alpha == 0)
+    out[fill] = cv2.dilate(alpha, k)[fill]
+    return out
 
 
 def _nearest(color, off, good):
@@ -650,8 +670,8 @@ def prepare(frame, drawn=False):
                max(xs.min() * 8 - 8, 0), min(xs.max() * 8 + 9, w))
         f = frame[box[0]:box[1], box[2]:box[3]]
         if calibration.step("blend"):
-            color, has, ramp, width, support = _blend_parts(f, drawn)
-            info = (box, color, f[..., 3] * np.float32(1 / 255), has, ramp, width, support)
+            color, has, ramp, width, support, own = _blend_parts(f, drawn)
+            info = (box, color, own, has, ramp, width, support)
         else:
             info = (box, f[..., :3].astype(np.float32), f[..., 3] * np.float32(1 / 255), feather_alpha(f[..., 3]))
     _prepared[id(frame)] = (frame, info, drawn)
