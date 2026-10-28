@@ -6683,7 +6683,7 @@ body.ambient.phone .amb-where { font-size: 18px; }
         // (a Full film, mostly a mosaic's dark sky, about half that a pixel: 3.6 MB for 19 s at 3078 x 3222)
         const mb = p.frames ? Math.max(0.1, p.seconds * (0.03 + (p.full ? 0.017 : 0.035) * p.width * p.height / (1024 * 1072))) : 0;
         const edited = window.cassiniMovieCut && window.cassiniMovieCut() ? " · edited in the Movie Editor" : "";
-        $("exsum").innerHTML = p.count ? `${p.count.toLocaleString()} pictures (NAC ${n.N.toLocaleString()}, WAC ${n.W.toLocaleString()}) · film ${fmtDur(p.seconds)} at ${p.width}×${p.height} · about ${mb.toFixed(mb < 10 ? 1 : 0)} MB${edited}${fullNote(p.full)}` : `<span class="warn">No pictures in this stretch.</span>`;
+        $("exsum").innerHTML = p.count ? `${p.count.toLocaleString()} pictures (NAC ${n.N.toLocaleString()}, WAC ${n.W.toLocaleString()}) · film ${fmtDur(p.seconds)} at ${p.width}×${p.height} · about ${mb.toFixed(mb < 10 ? 1 : 0)} MB${p.seconds > SOUND_MOST ? " · without sound (over 30 min)" : ""}${edited}${fullNote(p.full)}` : `<span class="warn">No pictures in this stretch.</span>`;
         $("exgo").disabled = !p.count;
       } catch (err) { $("exsum").innerHTML = `<span class="warn">No frame server at ${FRAMES}.</span>`; }
     }, 250);
@@ -6752,10 +6752,14 @@ body.ambient.phone .amb-where { font-size: 18px; }
     $("excopy").onclick = async () => { try { await navigator.clipboard.writeText(url); $("excopy").textContent = "Copied"; setTimeout(() => { $("excopy").textContent = "Copy link"; }, 1500); } catch (e) { prompt("Film link", url); } };
   }
 
-  // the soundtrack: the film's picture list played through the live sound's synth, offline, sent to the job as a WAV
+  // the soundtrack: the film's picture list played through the live sound's synth, offline, sent to the job as a WAV.
+  // Only up to SOUND_MOST seconds of film: the offline synth holds the whole track in the tab's memory (an hour is
+  // ~1.4 GB), so a longer film (a month of pictures) is saved silent, as the plan's summary says, instead of
+  // taking the tab down with it
+  const SOUND_MOST = 30 * 60;
   async function soundtrack(id, plan) {
     const snd = window.cassiniSound;
-    if (!snd || !snd.render || X.sent.has(id)) return;
+    if (!snd || !snd.render || X.sent.has(id) || plan.seconds > SOUND_MOST) return;
     X.sent.add(id);
     const byId = new Map(); for (let k = 0; k < catalog.id.length; k++) byId.set(catalog.id[k], k);
     const both = new Set(plan.pictures.map(e => e.cam)).size > 1, run = {}, events = [];
@@ -6858,9 +6862,15 @@ body.ambient.phone .amb-where { font-size: 18px; }
   const S = window.cassiniSettings, EX = window.cassiniExport;
   if (!EX) return;
   const opt = (k, d) => (S && S.get(k) !== undefined ? S.get(k) : d);
+  const MOST_NONE = 200000;                     // the top of Settings > Playback > Pre-process up to: no limit
+  const most = () => { const v = +opt("segment.maxFrames", MOST_NONE) || MOST_NONE; return v >= MOST_NONE ? 0 : v; };
   if (S) {
     S.define({ key: "segment.autoplay", section: "Playback", label: "Play a pre-processed stretch when it is ready", type: "toggle", value: true,
       hint: "After Pre-process on a highlighted stretch of the timeline, it plays as a movie from its start at the bar's frame rate." });
+    // the most frames one Pre-process takes (prebuild.py SEGMENT_MAX: the server may set its own ceiling over this)
+    S.define({ key: "segment.maxFrames", section: "Playback", label: "Pre-process up to", type: "range", value: MOST_NONE, min: 5000, max: MOST_NONE, step: 5000,
+      format: v => v >= MOST_NONE ? "No limit" : `${v.toLocaleString()} frames`,
+      hint: "The most frames one highlighted stretch can pre-process at once (the frames the bar counts; a busy day near Saturn has about 1,500). A long stretch takes a while: the bar shows how long is left, and what is made stays made if you stop it. A public site may set its own limit." });
     S.define({ key: "segment.hint", section: "Playback", label: "Suggest pre-processing when movie mode waits", type: "toggle", value: true,
       hint: "A quiet note when movie mode spends most of its time waiting for pictures to be made." });
   }
@@ -6990,7 +7000,7 @@ body.ambient.phone .amb-where { font-size: 18px; }
     stopPoll();
     P.key = optKey(); P.span = [P.a, P.b]; P.looks = 0; P.pressed = true; say("Asking the frame server…"); progress(P.job && P.job.total ? P.job.done / P.job.total : 0);
     try {
-      const r = await fetch(`${FRAMES}/prebuild?${key}`, { method: "POST" }), j = await r.json();
+      const r = await fetch(`${FRAMES}/prebuild?${key}&most=${most()}`, { method: "POST" }), j = await r.json();
       if (!r.ok) { P.job = null; P.pressed = false; progress(null); say(j.error || "The frame server cannot pre-process that.", true); buttons(); return; }
       follow(j);
     } catch (err) { P.job = null; P.pressed = false; progress(null); say(`No frame server at ${FRAMES} that pre-processes.`, true); buttons(); }
@@ -7004,6 +7014,10 @@ body.ambient.phone .amb-where { font-size: 18px; }
     const busy = j && /^(queued|planning|making|waiting|finishing)$/.test(j.state);
     document.title = busy && j.total ? `${Math.floor(100 * j.done / j.total)}% pre-processed · ${TITLE}` : j && j.state === "done" && P.job === j && document.hidden ? `Ready · ${TITLE}` : TITLE;
   }
+  // A stretch's frames (the bar's count) and its pictures (what the server makes): each frame, and with them each
+  // color composite and each mosaic or movie picture a pass shows at those frames, so pictures run to about twice frames
+  const made = j => j.frames ? `${j.frames.toLocaleString()} frame${j.frames === 1 ? "" : "s"} (${j.total.toLocaleString()} pictures)` : `${j.total.toLocaleString()} pictures`;
+  $("segstate").title = "Pictures: each frame, plus each color composite and each mosaic or movie picture its pass shows at those frames.";
   function follow(j) {
     stopPoll();
     // pressed: the first answer since Pre-process, which is the stretch made when it was quick enough to wait for
@@ -7012,7 +7026,7 @@ body.ambient.phone .amb-where { font-size: 18px; }
     const frac = j.total ? j.done / j.total : 0;
     if (j.state === "done") {
       progress(1);
-      say(`Ready: ${j.total.toLocaleString()} pictures made ahead${j.took ? ` in ${j.took < 1 ? "under a second" : fmtDur(j.took)}` : ""}${j.errors ? ` (${j.errors} could not be made)` : ""}`);
+      say(`Ready: ${made(j)} made ahead${j.took ? ` in ${j.took < 1 ? "under a second" : fmtDur(j.took)}` : ""}${j.errors ? ` (${j.errors} could not be made)` : ""}`);
       if ((pressed || (was && was !== "done")) && opt("segment.autoplay", true)) { if (window.cassiniAway && cassiniAway.on) P.playBack = true; else play(); }
       return;
     }
@@ -7023,7 +7037,7 @@ body.ambient.phone .amb-where { font-size: 18px; }
       : j.state === "planning" ? "Finding every picture in the stretch…"
       : j.state === "finishing" ? "Finishing the last mosaic tiles…"
       : j.state === "waiting" ? `On hold: the frame server's machine is reserved for another job · ${j.done.toLocaleString()} of ${j.total.toLocaleString()}`
-      : `Pre-processing ${j.done.toLocaleString()} of ${j.total.toLocaleString()} pictures${j.eta != null ? ` · ${fmtDur(j.eta)} left` : ""}`);
+      : `Pre-processing ${j.done.toLocaleString()} of ${j.total.toLocaleString()} pictures${j.frames ? ` for ${j.frames.toLocaleString()} frames` : ""}${j.eta != null ? ` · ${fmtDur(j.eta)} left` : ""}`);
     P.poll = setTimeout(async () => {
       if (!P.job || P.job.id !== j.id) return;   // another job took over (the stretch grew)
       try { const r = await fetch(`${FRAMES}/prebuild/${j.id}.json`, { cache: "no-store" }); const n = r.ok ? await r.json() : j; if (P.job && P.job.id === j.id) follow(n); }
@@ -8937,7 +8951,9 @@ void main() {
   const thumbUrl = e => `${FRAMES}/frames/${e.id}.webp?size=256`;
   function strip() {
     const host = $("mestrip");
-    host.replaceChildren(...ME.frames.map((e, i) => {
+    // (built in a fragment, not spread as arguments to replaceChildren, which ~100,000 frames overflow)
+    const all = document.createDocumentFragment();
+    ME.frames.forEach((e, i) => {
       const b = document.createElement("button"); b.className = "meth"; b.dataset.i = i; b.setAttribute("role", "option");
       b.title = `${hms(e)} UTC · ${name(e.target)} · ${e.cam === "N" ? "NAC" : "WAC"} ${e.filters} · ${e.id}`;
       b.innerHTML = `<img loading="lazy" decoding="async" alt=""><b></b><span></span>`;
@@ -8947,8 +8963,9 @@ void main() {
       img.src = thumbUrl(e);
       b.querySelector("b").textContent = `${e.cam === "N" ? "N" : "W"}${KIND[e.first] ? " · " + KIND[e.first] : ""}`;
       b.querySelector("span").textContent = `${hms(e)} ${name(e.target)}`;
-      return b;
-    }));
+      all.appendChild(b);
+    });
+    host.replaceChildren(all);
   }
   function stripState() {
     const vis = new Set(visible());
@@ -9889,7 +9906,7 @@ void main() {
   window.cassiniAbout = { open, addTab, esc, close: () => show(false), credits: CREDITS };
 
   // ---- which version this is: this page's build id (build.py writes it), and what the frame server says it serves ----
-  const BUILD = /*BUILD*/"31cecd68bdfb";
+  const BUILD = /*BUILD*/"1d5f2799de63";
   const FRAMES = (() => {                       // the frame server, chosen as the camera window chooses it
     const q = new URLSearchParams(location.search).get("frames");
     if (q) return q.replace(/\/$/, "");

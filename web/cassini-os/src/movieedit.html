@@ -258,7 +258,9 @@ body.phone #mestrip { grid-template-columns: repeat(auto-fill, 72px); grid-auto-
   const thumbUrl = e => `${FRAMES}/frames/${e.id}.webp?size=256`;
   function strip() {
     const host = $("mestrip");
-    host.replaceChildren(...ME.frames.map((e, i) => {
+    // (built in a fragment, not spread as arguments to replaceChildren, which ~100,000 frames overflow)
+    const all = document.createDocumentFragment();
+    ME.frames.forEach((e, i) => {
       const b = document.createElement("button"); b.className = "meth"; b.dataset.i = i; b.setAttribute("role", "option");
       b.title = `${hms(e)} UTC · ${name(e.target)} · ${e.cam === "N" ? "NAC" : "WAC"} ${e.filters} · ${e.id}`;
       b.innerHTML = `<img loading="lazy" decoding="async" alt=""><b></b><span></span>`;
@@ -268,8 +270,9 @@ body.phone #mestrip { grid-template-columns: repeat(auto-fill, 72px); grid-auto-
       img.src = thumbUrl(e);
       b.querySelector("b").textContent = `${e.cam === "N" ? "N" : "W"}${KIND[e.first] ? " · " + KIND[e.first] : ""}`;
       b.querySelector("span").textContent = `${hms(e)} ${name(e.target)}`;
-      return b;
-    }));
+      all.appendChild(b);
+    });
+    host.replaceChildren(all);
   }
   function stripState() {
     const vis = new Set(visible());
