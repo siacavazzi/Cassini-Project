@@ -23,7 +23,8 @@ the label allows:
   6. divide by the exposure time, corrected for the shutter offset
   7. take the flat field out: dust rings, mottle and the ground calibration's flat
      (flat_field.py, CISSCAL's own maps; the "flat" step, Settings > Processing)
-     and put the listed hot pixels back to the sky round them (dark_current.repair_hot;
+     and put the detector's hot and dead pixels back to the sky round them
+     (dark_current.repair_hot, the camera team's lists and maps measured from the archive;
      the "hotpix" step)
   8. scale by the gain state, the pixel summation and the sensor's decline over time
   9. divide by the filter's sensitivity to sunlight (filter_calibration.csv) and the
@@ -575,7 +576,7 @@ exposure bracket merged into one picture in mosaics and movies, stacking.load_hd
 exposures, a plain stack), "fill" (pixels lost in downlink filled from round them), "calibrate" (every frame put on
 I/F and one display scale; off shows each frame on the archive's own stretch), "dark" (calibrate's dark current and
 the WAC's hot pixels taken out, dark_current.py), "flat" (calibrate's flat field: dust rings, mottle and the
-detector's flat taken out, flat_field.py), "hotpix" (calibrate's repair of the listed hot pixels, which stay put
+detector's flat taken out, flat_field.py), "hotpix" (calibrate's repair of the hot and dead pixels, which stay put
 while the sky moves, dark_current.repair_hot) and "align" (a color set's channels moved onto one another). Every step is on by default;
 off steps go into the cache names (variant), so the pictures made with every step on keep their names.
 """

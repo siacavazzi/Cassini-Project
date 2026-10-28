@@ -29,6 +29,7 @@ its smooth dark (the ramp down the frame) and its hot pixels stay in the picture
 
 Maps from CASSINI_CISSCAL (flat_field.ROOT), downloaded by "helper programs/fetch_cisscal.py".
 """
+import datetime
 import functools
 import glob
 import math
@@ -354,39 +355,108 @@ def _hot_spots(name):
     return np.array([(int(float(r[0])), int(float(r[1]))) for r in rows if len(r) > 3], np.int64).reshape(-1, 2)
 
 
+# the defect maps measured from the archive itself ("helper programs/build_hot_maps.py"): for each camera, summing
+# mode and month, the pixels that stood out from the 3x3 round them in most of that month's frames while the scene
+# moved, as (line, sample, +1 hot / -1 dead) at the mode's own resolution, under keys "ISSNA_SUM2_2015-08"
+HOT_MAPS = os.environ.get("CASSINI_HOT_MAPS") or os.path.join(ff.ROOT, "hot_maps.npz")
+HOT_MAP_MONTHS = 2     # a frame uses its own month's map, else the nearest within this many months
+
+
+@functools.lru_cache(maxsize=1)
+def _hot_maps(path):
+    if not os.path.exists(path):
+        ff._warn(f"{os.path.basename(path)} missing, only the listed hot pixels are repaired")
+        return {}
+    with np.load(path) as z:
+        return {k: z[k] for k in z.files}
+
+
+def map_key(camera, mode, month):
+    return f"{camera}_{mode}_{month // 12:04d}-{month % 12 + 1:02d}"
+
+
+def _month(info):
+    time = _value(info, "IMAGE_TIME", "")
+    if not (time[0:4].isdigit() and time[5:8].isdigit()):
+        return None
+    year, day = int(time[0:4]), int(time[5:8])
+    return year * 12 + (datetime.date(year, 1, 1) + datetime.timedelta(day - 1)).month - 1
+
+
+def hot_map(info):
+    """The frame's defect map from HOT_MAPS, (n, 3) int (line, sample, sign), or None."""
+    maps, month = _hot_maps(HOT_MAPS), _month(info)
+    if not maps or month is None:
+        return None
+    camera, mode = _value(info, "INSTRUMENT_ID"), _value(info, "INSTRUMENT_MODE_ID", "FULL")
+    for d in sorted(range(-HOT_MAP_MONTHS, HOT_MAP_MONTHS + 1), key=abs):
+        found = maps.get(map_key(camera, mode, month + d))
+        if found is not None:
+            return found
+    return None
+
+
 """
-The "hotpix" step: the pixels the camera team listed as hot at the frame's epoch (the list nearest its date, either
-camera), each put back to the median of the ring of pixels round it when it stands above that median, in place.
-They stay put while the sky moves, so a movie shows them as fixed dots; the dark step can't take them out on the NAC
-(its lists over-predict, see above). A listed pixel that isn't hot in this frame is left alone; a star that lands
-exactly on one is filled in too. image = the frame at any size whole multiples of its own pixels
-(label.resize_image gives a summed frame's pixels as 2x2 or 4x4 blocks); returns how many were repaired.
+The "hotpix" step: the detector's defects, the pixels that stay put while the sky moves (so a movie shows them as
+fixed dots), each put back to the median of the 3x3 round it, in place. They are the pixels the camera team listed as
+hot at the frame's epoch (the list nearest its date, either camera; the dark step can't take them out on the NAC, its
+lists over-predict, see above) and the far more the archive's own frames show (hot_map; a 220 s Hyrokkin pass in
+2015 has about 7,300, the list 530 of them). A hot one is repaired only where it stands above the pixels round it and
+a dead one only where it is below, so one that isn't misbehaving in this frame is left alone; a star that lands
+exactly on one is filled in too. image = the frame at a whole multiple of its own size (label.resize_image gives a
+summed frame's pixels as 2x2 or 4x4 blocks); returns how many were repaired.
 """
 def repair_hot(image, info):
-    camera = _value(info, "INSTRUMENT_ID")
-    name = hot_file(camera, _year(info), every=True)
     lines = int(ff._number(_value(info, "LINES", "1024"), 1024) or 1024)
-    if not name or image.ndim != 2:
+    h, w = image.shape[:2]
+    if image.ndim != 2 or h % lines or w % lines or h != w:
         return 0
-    h, w = image.shape
-    step_y, step_x = h / lines, w / lines
-    fixed = 0
-    for x, y in _hot_spots(name):
-        i, j = int(y / 1024 * lines), int(x / 1024 * lines)
-        r0, r1 = int(round(i * step_y)), int(round((i + 1) * step_y))
-        c0, c1 = int(round(j * step_x)), int(round((j + 1) * step_x))
-        if r1 <= r0 or c1 <= c0 or r1 > h or c1 > w:
-            continue
-        a0, a1 = max(r0 - (r1 - r0), 0), min(r1 + (r1 - r0), h)
-        b0, b1 = max(c0 - (c1 - c0), 0), min(c1 + (c1 - c0), w)
-        box = image[a0:a1, b0:b1]
-        ring = np.ones(box.shape, bool)
-        ring[r0 - a0:r1 - a0, c0 - b0:c1 - b0] = False
-        if not ring.any():
-            continue
-        level = np.median(box[ring])
-        spot = image[r0:r1, c0:c1]
-        if np.isfinite(level) and spot.mean() > level:
-            spot[...] = level
-            fixed += 1
-    return fixed
+    sign = np.zeros((lines, lines), np.int8)
+    name = hot_file(_value(info, "INSTRUMENT_ID"), _year(info), every=True)
+    if name:
+        xy = _hot_spots(name) * lines // 1024
+        sign[xy[:, 1], xy[:, 0]] = 1
+    measured = hot_map(info)
+    if measured is not None and len(measured):
+        sign[measured[:, 0], measured[:, 1]] = measured[:, 2]
+    if not sign.any():
+        return 0
+    k = h // lines
+    native = np.ascontiguousarray(image[::k, ::k], np.float32)
+    level = cv2.medianBlur(native, 3)
+    fix = ((sign > 0) & (native > level)) | ((sign < 0) & (native < level))
+    fix &= np.isfinite(level)
+    if k > 1:
+        level = np.repeat(np.repeat(level, k, 0), k, 1)
+        fix_up = np.repeat(np.repeat(fix, k, 0), k, 1)
+    else:
+        fix_up = fix
+    image[fix_up] = level[fix_up]
+    return int(fix.sum())
+
+
+"""
+The defects a run of one camera and summing mode's frames shows (for HOT_MAPS, "helper programs/build_hot_maps.py"):
+frames = 2D arrays of one size (the archive's codes), from different observations so the scene moves. A pixel is a
+defect when it stands more than SIGMAS times the frame's grain (the spread of the frame minus its 3x3 median) above
+(hot) or below (dead) its 3x3 median in at least SHARE of the frames. Returns (n, 3) int16 (line, sample, sign).
+"""
+DEFECT_SIGMAS = 4.0
+DEFECT_SHARE = 0.6
+
+
+def defects(frames):
+    above = below = None
+    for f in frames:
+        f = np.asarray(f, np.float32)
+        r = f - cv2.medianBlur(f, 3)
+        grain = max(1.4826 * float(np.median(np.abs(r))), 0.5)
+        hi, lo = (r > DEFECT_SIGMAS * grain), (r < -DEFECT_SIGMAS * grain)
+        above = hi.astype(np.int32) if above is None else above + hi
+        below = lo.astype(np.int32) if below is None else below + lo
+    if above is None:
+        return np.zeros((0, 3), np.int16)
+    need = DEFECT_SHARE * len(frames)
+    hot, dead = np.argwhere(above >= need), np.argwhere(below >= need)
+    return np.concatenate([np.column_stack([hot, np.ones(len(hot), np.int64)]),
+                           np.column_stack([dead, -np.ones(len(dead), np.int64)])]).astype(np.int16)

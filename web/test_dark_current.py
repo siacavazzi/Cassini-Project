@@ -167,12 +167,34 @@ img = sky.copy()
 img[480:484, 212:216] = 900                    # listed (213, 482): hot
 img[84:88, 96:100] = 50                         # listed (98, 87): darker than the sky round it, so not hot here
 img[600:604, 300:304] = 900                     # not listed: a star
-assert dc.repair_hot(img, INFO) == 2            # (213, 482) and (37, 647); the hotsat 0 one counts as listed
+assert dc.repair_hot(img, INFO) in (1, 2)       # (213, 482), and (37, 647) if its sky is above its 3x3's median
 assert abs(img[480:484, 212:216].mean() - 100) < 2 and (img[84:88, 96:100] == 50).all() and (img[600:604, 300:304] == 900).all()
 full = sky.copy()
 full[482, 213] = 900
 assert dc.repair_hot(full, {**INFO, "LINES": "1024", "INSTRUMENT_MODE_ID": "FULL"}) >= 1 and abs(full[482, 213] - 100) < 8
 assert (full[481, 212:215] == sky[481, 212:215]).all()      # only the pixel itself
+
+# the defect maps measured from the archive: dots that stay put while the scene moves, found and repaired
+rng = np.random.default_rng(9)
+frames = []
+for n in range(12):
+    f = rng.normal(60, 3, (256, 256)).astype(np.float32)
+    f[rng.integers(0, 256, 40), rng.integers(0, 256, 40)] += 80         # stars, somewhere else in every frame
+    f[150, 150] += 60                                                   # hot
+    f[160, 170] -= 40                                                   # dead
+    frames.append(f)
+found = {tuple(r) for r in dc.defects(frames)}
+assert (150, 150, 1) in found and (160, 170, -1) in found and len(found) < 6, found
+np.savez(os.path.join(root, "hot_maps.npz"), **{dc.map_key("ISSNA", "SUM4", 2006 * 12 + 8): np.array(sorted(found), np.int16)})
+dc._hot_maps.cache_clear()
+assert dc.map_key("ISSNA", "SUM4", 2006 * 12 + 8) == "ISSNA_SUM4_2006-09"
+assert dc.hot_map(INFO) is not None and len(dc.hot_map(INFO)) == len(found)    # July uses September's, 2 months off
+assert dc.hot_map({**INFO, "IMAGE_TIME": "2007-001T00:00:00"}) is None
+img = sky.copy()
+img[600:604, 600:604] = 300                                         # native (150, 150)
+img[640:644, 680:684] = 20                                          # native (160, 170)
+dc.repair_hot(img, INFO)
+assert abs(img[600:604, 600:604].mean() - 100) < 8 and abs(img[640:644, 680:684].mean() - 100) < 8
 with cal.stepping("dark"):
     assert cal.variant() == "-off-dark"
 print("ok")
