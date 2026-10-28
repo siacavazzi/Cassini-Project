@@ -19,7 +19,7 @@ import numpy as np
 from PIL import Image
 
 # the studio's sliders: key, short key, range, rest (studio.html ADJ, TONE, DEF)
-ADJ = {"exposure": ("ex", -2, 2, 0), "contrast": ("ct", -100, 100, 0), "black": ("bk", 0, 60, 0),
+ADJ = {"exposure": ("ex", -4, 4, 0), "contrast": ("ct", -100, 100, 0), "black": ("bk", 0, 60, 0),
        "white": ("wt", 40, 100, 100), "midtones": ("md", -100, 100, 0), "saturation": ("sa", -100, 100, 0),
        "warmth": ("wa", -100, 100, 0), "tint": ("ti", -100, 100, 0), "sharpness": ("sh", 0, 100, 0),
        "tone": ("to", 0, 100, 0)}
@@ -72,6 +72,27 @@ def encode(p):
     if p.get("strength", 100) != 100:
         out.append(f"st:{+round(p['strength'], 4):g}")
     return ",".join(out)
+
+
+def override(s):
+    """A single frame's own look in the Movie Editor (movieedit.html frameLook): the studio keys it sets over the
+    movie's look, each kept even at its rest (contrast 0 over a movie's contrast 20 is a change), the last of a key
+    winning, in the studio's order; "" when it sets nothing. The frame's look is parse(movie look + "," + override)."""
+    got = {}
+    for kv in str(s or "").split(","):
+        k, _, v = kv.partition(":")
+        try:
+            if k in SHORT:
+                lo, hi = ADJ[SHORT[k]][1:3]
+                got[k] = f"{+round(clamp(float(v), lo, hi), 4):g}"
+            elif k == "fi" and v in FILTERS:
+                got[k] = v
+            elif k == "st":
+                got[k] = f"{+round(clamp(float(v), 0, 100), 4):g}"
+        except ValueError:
+            continue
+    order = [v[0] for v in ADJ.values()] + ["fi", "st"]
+    return ",".join(f"{k}:{got[k]}" for k in order if k in got)
 
 
 def apply(im, p, ev=0.0):
