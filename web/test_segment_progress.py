@@ -59,7 +59,7 @@ def frame(c):
     return None
 
 
-def a_pass(c, made=None):
+def a_pass(c, made=None, stopped=None):
     made(110.0)
     made(115.0)
     half.set()

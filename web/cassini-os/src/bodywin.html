@@ -36,19 +36,24 @@ body.idle #app .bodywin:has(.well.has-frame) { opacity: 1; pointer-events: auto;
   const F = window.cassiniFeeds, WM = window.cassiniWM;
   if (!F || !WM) return;
   const S = window.cassiniSettings;
-  const LS = "cassini-os-bodywin-v1";
+  const LS = "cassini-os-bodywin-v2";   // v2: off again for everyone (Sam 2026-10-28), whatever v1 had
   // settings: in the Settings window when the page has one, otherwise remembered here and switched from the Window menu
   let own = {};
   try { own = JSON.parse(localStorage.getItem(LS)) || {}; } catch (e) {}
   const q = new URLSearchParams(location.search).get("bodywin");
   const B = {
     on: !!own.on, linger: own.linger > 0 ? own.linger : 30, max: own.max > 0 ? own.max : 4, room: own.room > 0 ? own.room : 4,
+    perCam: own.perCam > 0 ? own.perCam : 2,
     clock: 0, lastNow: 0, lastEt: null, cat: null, wins: new Map(), rec: new Map(), dismissed: new Set(), hiddenCams: []
   };
-  const saveOwn = () => { if (S) return; try { localStorage.setItem(LS, JSON.stringify({ on: B.on, linger: B.linger, max: B.max, room: B.room })); } catch (e) {} };
+  const saveOwn = () => { if (S) return; try { localStorage.setItem(LS, JSON.stringify({ on: B.on, linger: B.linger, max: B.max, room: B.room, perCam: B.perCam })); } catch (e) {} };
   if (S) {
-    B.on = !!S.define({ key: "cameras.bodyWindows", section: "Cameras", label: "A window for each body", type: "toggle", value: false,
-      hint: "Each target Cassini images gets its own narrow-angle and wide-angle windows. They stay up while the screen is calm and make way for new ones when it gets busy." });
+    // a new key, so the per-body windows start off for everyone again, also where cameras.bodyWindows was saved on:
+    // the two camera windows are the default (Sam 2026-10-28)
+    B.on = !!S.define({ key: "cameras.bodyWindowsOptIn", section: "Cameras", label: "Extra windows for each body", type: "toggle", value: false,
+      hint: "Off: one narrow-angle and one wide-angle window. On: each target Cassini images gets its own narrow-angle and wide-angle windows instead, up to the number below for each camera." });
+    B.perCam = +S.define({ key: "cameras.bodyWindowsPerCamera", section: "Cameras", label: "Windows per camera", type: "range", value: 2, min: 1, max: 4, step: 1,
+      hint: "The most body windows each camera has up at once: the target it has just imaged, and the ones before it. A newer target takes an older window's place." });
     B.room = +S.define({ key: "cameras.bodyWindowRoom", section: "Cameras", label: "Body windows before they make way", type: "range", value: 4, min: 1, max: 12, step: 1,
       hint: "Up to this many body windows stay up however long their cameras go quiet. With more, the least relevant close first." });
     B.linger = +S.define({ key: "cameras.bodyWindowLinger", section: "Cameras", label: "Body window stays for at least", type: "range", value: 30, min: 5, max: 120, step: 5, unit: "s",
@@ -76,10 +81,11 @@ body.idle #app .bodywin:has(.well.has-frame) { opacity: 1; pointer-events: auto;
   }
   const camWins = () => ["imgcard", "wacard"].map($).filter(Boolean);
   if (S) {
-    S.on("cameras.bodyWindows", v => { if (B.started) setOn(v); });
+    S.on("cameras.bodyWindowsOptIn", v => { if (B.started) setOn(v); });
     S.on("cameras.bodyWindowLinger", v => { B.linger = +v; });
     S.on("cameras.bodyWindowMax", v => { B.max = +v; });
     S.on("cameras.bodyWindowRoom", v => { B.room = +v; });
+    S.on("cameras.bodyWindowsPerCamera", v => { B.perCam = +v; });
   } else {
     // no Settings window on this page: a Window-menu switch
     const ul = document.querySelector('[data-act="win"][data-win="dock"]')?.closest("ul");
@@ -94,6 +100,7 @@ body.idle #app .bodywin:has(.well.has-frame) { opacity: 1; pointer-events: auto;
 
   // ---- one window per target and camera ----
   const title = n => n === "UNK" ? "Unknown target" : titleCase(n);
+  const DWELL = 3000;   // ms on the linger clock a window stays before a newer target may take its place
   const CAMS = ["N", "W"], CAMNAME = { N: "Narrow-angle", W: "Wide-angle" };
   const key = (name, cam) => name + "|" + cam;
   function pane(name, cam) {
@@ -116,7 +123,9 @@ body.idle #app .bodywin:has(.well.has-frame) { opacity: 1; pointer-events: auto;
     const n = B.wins.size;   // no room: cascade
     Object.assign(w.style, { left: x0 + 24 * n + "px", top: y0 + 24 * n + "px" });
   }
-  function open(name, cam) {
+  // from: a window of the same camera making way for this one: the new window takes its place and size, and the old
+  // one stays under it until the new one has its picture, so the screen never shows a gap or a pop
+  function open(name, cam, from) {
     const k = key(name, cam), label = `${title(name)} · ${cam}AC`;
     const el = document.createElement("section");
     el.className = "win frame img camwin bodywin opening";
@@ -129,11 +138,27 @@ body.idle #app .bodywin:has(.well.has-frame) { opacity: 1; pointer-events: auto;
     // closing a body window dismisses it until its camera goes quiet on that target; minimizing tucks it into the tray as usual
     el.querySelector(".close").addEventListener("click", e => { e.stopImmediatePropagation(); B.dismissed.add(k); close(k); }, true);
     const p = el.querySelector(".pane");
-    const w = { el, name, cam, update: F.cameraFeed(p), closing: false };
+    const w = { el, name, cam, update: F.cameraFeed(p), closing: false, since: B.clock };
     B.wins.set(k, w);
+    if (from && !from.el.hidden && !from.el.dataset.min) {
+      el.classList.remove("opening");
+      for (const p of ["left", "top", "width", "height"]) el.style[p] = from.el.style[p];
+      el.classList.toggle("zoomed", from.el.classList.contains("zoomed"));
+      WM.front(el); swapOut(from, w);
+      return w;
+    }
+    if (from) close(key(from.name, from.cam));
     place(el); WM.front(el);
     el.addEventListener("animationend", () => el.classList.remove("opening"), { once: true });
     return w;
+  }
+  function swapOut(old, neu) {
+    const k = key(old.name, old.cam), well = neu.el.querySelector(".well");
+    old.closing = true; old.el.classList.add("swapping");
+    const gone = () => { mo.disconnect(); if (!old.el.isConnected) return; old.el.remove(); if (B.wins.get(k) === old) B.wins.delete(k); WM.syncMenu(); };
+    const mo = new MutationObserver(() => { if (well.classList.contains("has-frame")) gone(); });
+    mo.observe(well, { attributes: true, attributeFilter: ["class"] });
+    setTimeout(gone, 1500);
   }
   function close(k, now) {
     const w = B.wins.get(k); if (!w || w.closing) return;
@@ -201,13 +226,39 @@ body.idle #app .bodywin:has(.well.has-frame) { opacity: 1; pointer-events: auto;
       const over = show.filter(k => k !== newest.k && age(k) / weight(k) > limit).sort((a, b) => age(b) / weight(b) - age(a) / weight(a));
       while (show.length > B.room && over.length) { const k = over.shift(); B.rec.get(k).gone = true; show = show.filter(x => x !== k); }
     }
+    // the contract: at most perCam windows for each camera. The target the camera has just imaged always has one; the
+    // other places go to the windows already up, the most recently imaged first, so windows do not come and go with
+    // every picture; a target imaged since takes the place of one of them only once that one has been up a few
+    // seconds (on the linger clock). A window that makes way is swapped in place by the one that takes its place.
+    const swaps = new Map();   // new window's key -> the key of the window it replaces
+    const up = k => { const w = B.wins.get(k); return !!w && !w.closing; };
+    const capped = [];
+    for (const cam of CAMS) {
+      const pinned = held.filter(k => k.endsWith("|" + cam)).length;   // held windows count against their camera
+      const cand = show.filter(k => k.endsWith("|" + cam)).sort((a, b) => B.rec.get(b).t - B.rec.get(a).t);
+      const cap = Math.max(1, B.perCam - pinned), keep = cand.slice(0, 1);
+      for (const k of cand.slice(1)) if (up(k) && keep.length < cap) keep.push(k);
+      for (const k of cand.slice(1)) {
+        if (keep.includes(k) || up(k)) continue;
+        if (keep.length < cap) { keep.push(k); continue; }
+        const i = keep.findIndex((o, j) => j > 0 && up(o) && B.rec.get(o).t < B.rec.get(k).t && B.clock - B.wins.get(o).since >= DWELL);
+        if (i > 0) keep[i] = k;
+      }
+      const out = cand.filter(k => up(k) && !keep.includes(k));
+      keep.filter(k => !up(k)).forEach((k, i) => { if (out[i]) swaps.set(k, out[i]); });
+      capped.push(...keep);
+    }
+    show = show.filter(k => capped.includes(k));
     show = show.concat(held);
-    for (const k of [...B.wins.keys()]) if (!show.includes(k)) close(k);
+    const swapped = new Set(swaps.values());
+    // while pinned (paused, a stretch highlighted, an editor open: cassiniPin) no window closes by itself
+    const pin = window.cassiniPin && cassiniPin.pinned();
+    for (const k of [...B.wins.keys()]) if (!show.includes(k) && !swapped.has(k) && !pin) close(k);
     // oldest target first, so the newest windows land on top; the narrow-angle window first, so the wide-angle one sits beside it
     for (const name of [...new Set(bodies.concat(held.map(k => k.split("|")[0])))].reverse()) for (const cam of CAMS) {
       const k = key(name, cam); if (!show.includes(k)) continue;
       let w = B.wins.get(k);
-      if (!w || w.closing) { w = open(name, cam); w.update.hold = true; }   // the window, not the stale time, decides when its picture goes
+      if (!w || w.closing) { w = open(name, cam, swaps.has(k) ? B.wins.get(swaps.get(k)) : null); w.update.hold = true; }   // the window, not the stale time, decides when its picture goes
       // a wide-angle window with no narrow-angle one beside it takes its place on a phone
       w.el.classList.toggle("alone", !show.includes(key(name, cam === "N" ? "W" : "N")));
       w.update(); w.update.retier();
