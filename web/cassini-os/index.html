@@ -2477,6 +2477,9 @@ body.ambient.phone .amb-where { font-size: 18px; }
   mirror("view.allOrbits", "allorbits");
   D({ key: "view.enlarge", section: "View", label: "Enlarge moons ×10", type: "toggle", value: false, hint: "Moons drawn ten times their size so they can be seen from afar." });
   mirror("view.enlarge", "enlarge");
+  // the viewer's camera cones read view.conesEverywhere
+  D({ key: "view.conesEverywhere", section: "View", label: "Camera cones on every view", type: "toggle", value: false,
+      hint: "Draw the cameras' fields of view when looking at a body too. Off shows them only while the view is on Cassini." });
   // a new key, so a saved "off" from when follow started off does not carry over
   D({ key: "view.followcam", section: "View", label: "Follow camera", type: "toggle", value: true, hint: "Look where Cassini's camera points (needs the pointing data)." });
   mirror("view.followcam", "followcam");
@@ -9996,7 +9999,7 @@ void main() {
   window.cassiniAbout = { open, addTab, esc, close: () => show(false), credits: CREDITS };
 
   // ---- which version this is: this page's build id (build.py writes it), and what the frame server says it serves ----
-  const BUILD = /*BUILD*/"3b2000d1e63f";
+  const BUILD = /*BUILD*/"8a5716ccc7ea";
   const FRAMES = (() => {                       // the frame server, chosen as the camera window chooses it
     const q = new URLSearchParams(location.search).get("frames");
     if (q) return q.replace(/\/$/, "");
@@ -11410,6 +11413,7 @@ function imagingState(et) {
 }
 function updateFov() {
   fov.visible = false;
+  if (state.focus !== "CASSINI" && !(window.cassiniSettings && cassiniSettings.get("view.conesEverywhere"))) return;
   // only while the camera is imaging: shortly after a frame, or between frames of one observation.
   // Between observations Cassini holds or turns away, and the cone would point at empty sky.
   const { i, age, inSequence } = imagingState(state.et);

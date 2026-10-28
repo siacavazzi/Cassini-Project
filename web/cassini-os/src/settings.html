@@ -364,6 +364,9 @@ body.phone .srow input[type=range] { width: 96px; }
   mirror("view.allOrbits", "allorbits");
   D({ key: "view.enlarge", section: "View", label: "Enlarge moons ×10", type: "toggle", value: false, hint: "Moons drawn ten times their size so they can be seen from afar." });
   mirror("view.enlarge", "enlarge");
+  // the viewer's camera cones read view.conesEverywhere
+  D({ key: "view.conesEverywhere", section: "View", label: "Camera cones on every view", type: "toggle", value: false,
+      hint: "Draw the cameras' fields of view when looking at a body too. Off shows them only while the view is on Cassini." });
   // a new key, so a saved "off" from when follow started off does not carry over
   D({ key: "view.followcam", section: "View", label: "Follow camera", type: "toggle", value: true, hint: "Look where Cassini's camera points (needs the pointing data)." });
   mirror("view.followcam", "followcam");
