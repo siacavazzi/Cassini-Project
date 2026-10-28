@@ -14,7 +14,7 @@ om.folder = lambda u, cache: cache
 drawn = []
 
 
-def movie_frame(u, n, cache, trail=0, colour=True, out=om.OUT, centre=True, steady=0, exposure=0):
+def movie_frame(u, n, cache, trail=0, colour=True, out=om.OUT, centre=True, steady=0, exposure=0, sharpen=True):
     drawn.append(n)
     return Image.new("RGBA", (1024, 1024), (200, 100, 50, 255)), {"movie": True, "n": n, "id": f"N{n}"}
 
