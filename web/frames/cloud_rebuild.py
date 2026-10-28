@@ -257,11 +257,14 @@ beat() { printf '{"run": "%s", "state": "%s", "updated": %s}' "$RUN" "$1" "$(dat
 finish() { aws s3 cp /var/log/cassini-rebuild.log "s3://$B/runs/$RUN/log.txt" --quiet; shutdown -h now; }
 trap finish EXIT
 beat "installing"
-dnf install -y -q python3.11 python3.11-pip mesa-libGL glib2 sqlite tar || { beat "failed: installing packages"; exit 1; }
+dnf install -y -q python3.11 python3.11-pip python3.11-pip-wheel mesa-libGL glib2 sqlite tar \
+  || { beat "failed: installing packages"; exit 1; }
 mkdir -p /work/repo
 aws s3 cp "s3://$B/code/@COMMIT@.tar.gz" - --quiet | tar -xz -C /work/repo || { beat "failed: getting the code"; exit 1; }
 python3.11 -m venv /work/venv && /work/venv/bin/pip install -q -r /work/repo/requirements.txt boto3 \
   || { beat "failed: installing the Python packages"; exit 1; }
+/work/venv/bin/python -c "import cv2, numpy, PIL, scipy, skimage, matplotlib, pandas, spiceypy, boto3" \
+  || { beat "failed: importing the Python packages (see log.txt)"; exit 1; }
 /work/venv/bin/python /work/repo/web/frames/cloud_rebuild.py work --run "$RUN" --bucket "$B" || beat "failed: work (see log.txt)"
 """
 
@@ -400,7 +403,11 @@ def status(args):
         sh = beat.get("shipped") or {}
         if sh:
             print(f"  shipped {sh.get('shards', 0)} shards, {sh.get('bytes', 0) / 1e9:.1f} GB "
-                  f"({sh.get('served_bytes', 0) / 1e9:.1f} served, {sh.get('work_bytes', 0) / 1e9:.1f} working files)")
+                  f"({sh.get('served_bytes', 0) / 1e9:.1f} served, {sh.get('work_bytes', 0) / 1e9:.1f} working files; "
+                  f"{sh.get('pruned_bytes', 0) / 1e9:.1f} GB of filter levels left out as the sweeper prunes them)")
+        if beat.get("geometry_misses"):
+            print(f"  geometry: {beat['geometry_misses']:,} frames were not in the geometry cache, and with no kernels "
+                  f"the machine could not centre them: their pictures may differ from the Mini's")
         for k in ("load", "disk_used_gb", "mem_used_gb"):
             if k in beat:
                 print(f"  {k}: {beat[k]}")
@@ -431,6 +438,20 @@ def is_work(rel):
     return "filters-level" in parts[:-1] or (any(p.startswith("tiles-") for p in parts[:-1]) and rel.endswith(".png"))
 
 
+def geometry_new(path, after=0):
+    """The geometry cache's last row, and the frames it got after row after: frames the build had to work out on the
+    machine, where there are no kernels (the lean archive has none), so failures the Mini's build did not have.
+    (last row, how many, the first 50)."""
+    db = sqlite3.connect(path)
+    try:
+        last = db.execute("SELECT coalesce(max(rowid), 0) FROM target").fetchone()[0]
+        n = db.execute("SELECT count(*) FROM target WHERE rowid > ?", (after,)).fetchone()[0]
+        first = [r[0] for r in db.execute("SELECT frame FROM target WHERE rowid > ? ORDER BY rowid LIMIT 50", (after,))]
+    finally:
+        db.close()
+    return last, n, first
+
+
 class Shipper:
     """Ships what the machine made into the bucket while it builds on: at each phase's end, every file made before
     then and not shipped yet, as tar shards of about SHARD bytes (served and working files apart)."""
@@ -438,7 +459,8 @@ class Shipper:
     def __init__(self, s3, name, run, cache, work_files):
         self.s3, self.name, self.run, self.cache, self.work_files = s3, name, run, cache, work_files
         self.sent, self.shards, self.n = set(), [], 0
-        self.totals = {"shards": 0, "bytes": 0, "files": 0, "served_bytes": 0, "work_bytes": 0, "skipped_work_bytes": 0}
+        self.totals = {"shards": 0, "bytes": 0, "files": 0, "served_bytes": 0, "work_bytes": 0, "skipped_work_bytes": 0,
+                       "pruned_bytes": 0}
         self.q = queue.Queue()
         self.thread = threading.Thread(target=self._loop, daemon=True)
         self.thread.start()
@@ -479,6 +501,8 @@ class Shipper:
                 self.totals["skipped_work_bytes"] += sum(s for _, s in files)
                 self.sent.update(r for r, _ in files)
                 continue
+            if kind == "work":
+                files = self._pruned(files)
             chunk, size = [], 0
             for rel, s in files + [(None, 0)]:
                 if rel is None or (chunk and size + s > SHARD):
@@ -488,6 +512,23 @@ class Shipper:
                 if rel is not None:
                     chunk.append(rel)
                     size += s
+
+    def _pruned(self, files):
+        """files without the filters-level pictures the Mini's sweeper prunes (filters_prune.doomed: of each filter
+        it keeps the newest count and every 16th), which no served picture needs: they are never shipped."""
+        from filters_prune import doomed
+        out, gone = [], {}
+        for rel, s in files:
+            folder, f = os.path.split(rel)
+            if "filters-level" in folder.split(os.sep):
+                if folder not in gone:
+                    gone[folder] = set(doomed(os.listdir(os.path.join(self.cache, folder))))
+                if f in gone[folder]:
+                    self.totals["pruned_bytes"] += s
+                    self.sent.add(rel)
+                    continue
+            out.append((rel, s))
+        return out
 
     def _tar(self, kind, phase, rels, size):
         self.n += 1
@@ -564,6 +605,7 @@ def work(args):
         s3.download_file(name, f"runs/{run}/only.txt", only)
     state["inputs_s"] = round(time.time() - t0, 1)
     print(f"inputs in {state['inputs_s']} s", flush=True)
+    g0, missed = geometry_new(geometry)[0], []
 
     env = {**os.environ, "CASSINI_DATA": archive, "CASSINI_GEOMETRY_CACHE": geometry,
            "CASSINI_INDEX_CACHE": os.path.join(WORK, "zip_index"), "CASSINI_SPICE_CACHE": os.path.join(WORK, "spice_cache"),
@@ -584,7 +626,8 @@ def work(args):
         except (OSError, ValueError):
             pass
         state["phases_done"].append(done)
-        print(f"{phase}: {done}", flush=True)
+        _, state["geometry_misses"], missed = geometry_new(geometry, g0)
+        print(f"{phase}: {done}, {state['geometry_misses']} frames not in the geometry cache so far", flush=True)
         shipper.ship(phase, time.time())
     state.update(state="shipping the last phase", phase=None)
     shipper.finish()
@@ -595,6 +638,7 @@ def work(args):
         s3.upload_file(notes, name, f"runs/{run}/status-files.tar.gz")
     manifest = {"run": run, "commit": cfg["commit"], "phases": state["phases_done"], "inputs_s": state["inputs_s"],
                 "shards": shipper.shards, "totals": shipper.totals, "procs": procs, "cpu": os.cpu_count(),
+                "geometry_misses": state.get("geometry_misses", 0), "geometry_missed": missed,
                 "finished": time.time(), "took_s": round(time.time() - state["started"], 1)}
     put_json(s3, name, f"runs/{run}/manifest.json", manifest)
     state.update(state="done" if all(p["exit"] == 0 for p in state["phases_done"]) and "error" not in shipper.totals
@@ -612,13 +656,15 @@ def upload_inputs(args):
     s3 = client("s3", region)
     with tempfile.TemporaryDirectory(dir=args.tmp) as tmp:
         snap = os.path.join(tmp, "geometry.sqlite")
-        src = sqlite3.connect(os.path.expanduser(args.geometry))
+        geometry = os.path.expanduser(args.geometry)
+        changed = max(os.path.getmtime(p) for p in (geometry, geometry + "-wal") if os.path.exists(p))   # rows wait in the WAL
+        src = sqlite3.connect(geometry)
         dst = sqlite3.connect(snap)
         src.backup(dst)
         dst.close()
         src.close()
         for path, key, stamp in ((os.path.expanduser(args.archive), INPUTS["archive"], None),
-                                 (snap, INPUTS["geometry"], os.path.getmtime(os.path.expanduser(args.geometry)))):
+                                 (snap, INPUTS["geometry"], changed)):
             size, stamp = os.path.getsize(path), str(int(stamp or os.path.getmtime(path)))
             h = head(s3, name, key)
             if h and h["ContentLength"] == size and h.get("Metadata", {}).get("mtime") == stamp:
@@ -664,22 +710,61 @@ def compare_file(new, live):
     return {"mean": round(abs(p[2] - q[2]), 4), "centre": round(max(abs(p[4] - q[4]), abs(p[5] - q[5])), 3)}
 
 
+def link(path, target):
+    """path made a symlink to target, in one step (a dangling link there replaced), as the sweeper makes them."""
+    os.makedirs(os.path.dirname(path), exist_ok=True)
+    tmp = path + ".link"
+    if os.path.lexists(tmp):
+        os.remove(tmp)
+    os.symlink(target, tmp)
+    os.replace(tmp, path)
+
+
+def land(to, work_to, rel):
+    """The working file work_to/rel shown at to/rel the way the Mini's sweeper lays them out
+    (~/server/cache/cassini-prebuild-sweep.py): a pass's filters-level/ one link to its folder in work_to, a tile's
+    picture a link of its own beside its report, which stays a real file in to. Links are absolute."""
+    parts = rel.split("/")
+    if "filters-level" in parts[:-1]:
+        k = parts.index("filters-level") + 1
+        folder = os.path.join(to, *parts[:k])
+        if not os.path.lexists(folder):
+            link(folder, os.path.abspath(os.path.join(work_to, *parts[:k])))
+    if not os.path.exists(os.path.join(to, rel)):   # a tile's picture, or a filters-level/ that is a real folder
+        link(os.path.join(to, rel), os.path.abspath(os.path.join(work_to, rel)))
+
+
 def fetch(args):
     """A run's shards into --to (served) and --work-to (working files; default --to), each checked against its
     hash and unpacked file by file, a file already there left as it is: the served ones first, then the working
-    files (--no-work: none). --follow: shards as the machine ships them, until it is done. --compare: every file
-    against the live cache's of the same name (same bytes, same pixels, or how far apart), a report at the end."""
+    files (--no-work: none). With a --work-to of its own, each working file shows in --to through a symlink, as the
+    Mini's sweeper leaves them (land). --follow: shards as the machine ships them, until it is done. --compare: every
+    file against the live cache's of the same name (same bytes, same pixels, or how far apart), a report at the end."""
     name, region = bucket()
     s3 = client("s3", region)
     to = os.path.expanduser(args.to)
     work_to = os.path.expanduser(args.work_to or args.to)
+    for d in (to, work_to):   # an unmounted disk (the LaCie image after a reboot) would be made a folder on the SSD
+        volume = os.sep.join(os.path.abspath(d).split(os.sep)[:3])
+        if volume.startswith("/Volumes/") and not os.path.ismount(volume):
+            sys.exit(f"{volume} is not mounted")
     os.makedirs(to, exist_ok=True)
     os.makedirs(work_to, exist_ok=True)
+    if os.path.abspath(work_to) != os.path.abspath(to) and not args.no_work:
+        probe = os.path.join(to, ".cloud-fetch-link")
+        try:
+            if os.path.lexists(probe):
+                os.remove(probe)
+            os.symlink(os.path.abspath(work_to), probe)
+            os.remove(probe)
+        except OSError as e:
+            sys.exit(f"{to} cannot hold links to the working files ({e.strerror}): exFAT cannot; put --to on APFS")
     tmp = os.path.expanduser(args.tmp or os.path.join(to, ".cloud-fetch"))
     os.makedirs(tmp, exist_ok=True)
     state_path = os.path.join(tmp, f"{args.run}.json")
     done = json.load(open(state_path)) if os.path.exists(state_path) else {}
     report = {"same": 0, "pixels": 0, "differs": 0, "new": 0, "kept": 0, "worst": []}
+    written = [0, time.time()]   # bytes written and since when (--max-mb-s)
     while True:
         manifest = get_json(s3, name, f"runs/{args.run}/manifest.json")
         if manifest:
@@ -706,18 +791,25 @@ def fetch(args):
             if want and h.hexdigest() != want:
                 os.remove(path)
                 sys.exit(f"{s['key']}: hash differs from the machine's; run fetch again")
+            linked = s["kind"] != "served" and os.path.abspath(work_to) != os.path.abspath(to)
             n = kept = 0
             with tarfile.open(path) as tf:
                 for m in safe_members(tf):
                     out = os.path.join(dest, m.name)
-                    if os.path.exists(out):
+                    if os.path.exists(os.path.join(to, m.name) if linked else out):   # where the server looks
                         kept += 1
                         continue
-                    os.makedirs(os.path.dirname(out), exist_ok=True)
-                    part = out + ".fetch.part"
-                    with tf.extractfile(m) as src, open(part, "wb") as fh:
-                        shutil.copyfileobj(src, fh)
-                    os.replace(part, out)
+                    if not os.path.exists(out):   # (linked: there from a fetch stopped before its link)
+                        os.makedirs(os.path.dirname(out), exist_ok=True)
+                        part = out + ".fetch.part"
+                        with tf.extractfile(m) as src, open(part, "wb") as fh:
+                            shutil.copyfileobj(src, fh)
+                        os.replace(part, out)
+                        if args.max_mb_s:   # (the LaCie image hung once under heavy writes: the sweeper's rsync goes at 50)
+                            written[0] += m.size
+                            time.sleep(max(0.0, written[0] / (args.max_mb_s * 1e6) - (time.time() - written[1])))
+                    if linked:
+                        land(to, work_to, m.name)
                     n += 1
                     if args.compare and s["kind"] == "served":
                         live = os.path.join(os.path.expanduser(args.compare), m.name)
@@ -753,6 +845,9 @@ def fetch(args):
               f"(worst mean {report['worst'][0]['mean'] if report['worst'] else 0} gray levels), "
               f"{report['new']:,} not in the live cache")
     print(f"fetched {len(done)} shards into {to}" + (f" and {work_to}" if work_to != to else ""))
+    if manifest and manifest.get("geometry_misses"):
+        print(f"warning: {manifest['geometry_misses']:,} frames were not in the geometry cache, so the machine could not "
+              f"centre them (first: {', '.join(manifest['geometry_missed'][:5])})")
 
 
 def main():
@@ -798,6 +893,7 @@ def main():
     p.add_argument("--min-free", type=float, default=50, help="GB the disks keep free")
     p.add_argument("--follow", action="store_true", help="fetch shards as they are shipped, until the run is done")
     p.add_argument("--compare", help="a live cache to compare every served file with")
+    p.add_argument("--max-mb-s", type=float, help="write at most this many MB a second (into the LaCie image: 50, as the sweeper)")
     args = ap.parse_args()
     {"check": check, "setup": setup, "creds": creds, "launch": launch, "status": status, "stop": stop, "work": work,
      "upload-inputs": upload_inputs, "fetch": fetch}[args.cmd](args)
