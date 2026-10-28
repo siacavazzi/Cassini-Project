@@ -131,7 +131,9 @@ Routes:
                                pre-processed are counted as pending);
                                &levels=ID:EV,...&even=N: its exposure levels (points the film's exposure goes through,
                                and Even out over N pictures, movie mode's math); &ctr=0|1&zoom=Z&nudge=ID:X:Y,...: its
-                               framing (Auto center for the whole film, stills too; a zoom; single frames moved)
+                               framing (Auto center for the whole film, stills too; a zoom; single frames moved);
+                               &fedit=ID~ex:0.5,ct:0|ID~...: single frames edited on their own (the movie's look with
+                               those studio keys over it, studio_look.override)
   /export/levels.json?...      (the plan's options) the Movie Editor's exposure graph: each frame's brightness in EV,
                                measured on the film's own pictures on a thread of its own (done of total so far,
                                kept in the cache), and once all are, each picture's Even out change for the edit
