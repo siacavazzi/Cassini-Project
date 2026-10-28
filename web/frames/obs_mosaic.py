@@ -1188,6 +1188,7 @@ PANEL_NARROW = 24    # px: the narrowest overlap (across) a pair of tiles is mea
 PANEL_AREA = 6000    # px: ... and the least area the two share
 PANEL_NCC = 0.25     # the least the two overlaps must agree (normalized cross-correlation, detail only) once moved
 PANEL_GAIN = 0.02    # ... and how much better than at SPICE's places they must agree, for a move of over half a pixel
+PANEL_LEAST = 0.3    # px: a smaller move is the measure's own noise, and the pointing stays where SPICE put it
 PANEL_AGREE = 2.0    # px: matches further than this from the others' median are left out
 # a pass's panel registration (panel_places), kept with it; renamed whenever the rule changes
 PANEL_FILE = "panels1-" + PLAN_FILE
@@ -1355,7 +1356,7 @@ def panel_places(u, cache, p, tiles, pic=None, report=None):
                 f = np.array(found)
                 mid = np.median(f, axis=0)
                 ok = f[np.hypot(*(f - mid).T) <= PANEL_AGREE]
-                if len(ok) and (len(ok) * 2 > len(f) or len(f) == 1):
+                if len(ok) and (len(ok) * 2 > len(f) or len(f) == 1) and math.hypot(*ok.mean(axis=0)) >= PANEL_LEAST:
                     move = [round(float(v), 2) for v in ok.mean(axis=0)]
             kept[n] = move + [f"{len(found)} of {len(seen)}"]
             if report is not None:
