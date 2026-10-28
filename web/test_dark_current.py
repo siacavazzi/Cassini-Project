@@ -194,6 +194,16 @@ assert dc.hot_map(INFO) is not None and len(dc.hot_map(INFO)) == len(found)    #
 assert len(dc.hot_map({**INFO, "EXPOSURE_DURATION": "100000"})) == 0           # band 2 has none: the longer band 3 first
 assert len(dc.hot_map({**INFO, "EXPOSURE_DURATION": "220000"})) == 0           # its own band, July
 assert dc.hot_map({**INFO, "IMAGE_TIME": "2007-001T00:00:00"}) is None
+# a defect that turned hot late in July is only in August's map: a July frame takes its band's maps of June to August
+np.savez(os.path.join(root, "hot_maps.npz"), **{dc.map_key("ISSNA", "SUM4", 2006 * 12 + 6, 1): np.array([[10, 10, 1]], np.int16),
+                                                dc.map_key("ISSNA", "SUM4", 2006 * 12 + 7, 0): np.array([[20, 20, 1]], np.int16),
+                                                dc.map_key("ISSNA", "SUM4", 2006 * 12 + 7, 2): np.array([[40, 40, 1]], np.int16),
+                                                dc.map_key("ISSNA", "SUM4", 2006 * 12 + 9, 1): np.array([[30, 30, 1]], np.int16)})
+dc._hot_maps.cache_clear()
+assert sorted(map(tuple, dc.hot_map(INFO))) == [(10, 10, 1), (20, 20, 1)]       # July, and August's shorter band; not a longer band, not October
+np.savez(os.path.join(root, "hot_maps.npz"), **{dc.map_key("ISSNA", "SUM4", 2006 * 12 + 8, 1): np.array(sorted(found), np.int16),
+                                                dc.map_key("ISSNA", "SUM4", 2006 * 12 + 6, 3): np.zeros((0, 3), np.int16)})
+dc._hot_maps.cache_clear()
 img = sky.copy()
 img[600:604, 600:604] = 300                                         # native (150, 150)
 img[640:644, 680:684] = 20                                          # native (160, 170)
