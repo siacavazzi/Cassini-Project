@@ -1470,7 +1470,8 @@ def _tile_made(u, n, cache, scale, base):
     seen = {}
     try:
         image, _, rep = color_image.processed_frame([path], hdr=True, scale=tile_scale(scale, f, bool(u.get("movie")), seen),
-                                                    repeat_window=u.get("repeat_gap", mosaic_benchmark.REPEAT_GAP))
+                                                    repeat_window=u.get("repeat_gap", mosaic_benchmark.REPEAT_GAP),
+                                                    around=_around(u, n) if u.get("movie") else None)
     except Exception as e:
         image, rep = None, {"why": f"{type(e).__name__}: {e}"[:200]}
     if (image is not None and u.get("mosaic") and rep.get("calibrated") is False and calibration.step("calibrate")
@@ -1480,6 +1481,8 @@ def _tile_made(u, n, cache, scale, base):
         # out such a channel. Phoebe 2004-06-11 has them at pointings of their own
         image, rep = None, {**rep, "why": "can't be calibrated (8LSB or an unknown filter or gain): left out of the mosaic"}
     out = {"n": n, "id": fid, "filter": f, "t": t, "stacked": rep.get("stacked"), "calibrated": rep.get("calibrated"), **seen}
+    if rep.get("spikes_px"):
+        out["spikes_px"] = rep["spikes_px"]
     if rep.get("lost_px"):
         # the share of the frame lost in downlink that no repeat or fill made up (load_aligned's lost_px): partial()
         out["lost"] = round(rep["lost_px"][1] / FRAME ** 2, 4)
@@ -1501,6 +1504,15 @@ def _tile_made(u, n, cache, scale, base):
     data = json.dumps(out, default=str)
     reel._cached(base + ".json", data.encode)
     return json.loads(data)
+
+
+def _around(u, n):
+    """The paths of the frames of tile n's filter just before and just after it in the pass (None at either end):
+    what a movie's frame is checked against for one-frame spikes (color_image.load_aligned, image_correction.spikes)."""
+    frames, f = u["frames"], u["frames"][n][2]
+    before = next((frames[j][0] for j in range(n - 1, -1, -1) if frames[j][2] == f), None)
+    after = next((frames[j][0] for j in range(n + 1, len(frames)) if frames[j][2] == f), None)
+    return [before, after]
 
 
 REGISTER_GAP = 180   # s: a tile of another filter taken this soon before, at the same pointing, is what it is registered to
