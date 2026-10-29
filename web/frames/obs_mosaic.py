@@ -95,12 +95,17 @@ GROUPING = "_g2"     # the folder suffix of a pass these three rules (_drop_stra
                      # passes made before them are not served for it; every other pass keeps its folder
 MOVIE_DWELL = 8      # ... or whose camera stays this many frames of one filter (median) at each place it goes
 TRACK_VISITS = 2     # ... or that follows a moving feature (_judge's track): at least this many visits of 3+ filters,
-TRACK_SPAN = 0.08    # ... whose frames spread (median) over more than this much of a frame (twice REGISTER_MAX)
+TRACK_SPAN = 0.12    # ... whose frames spread (median) over more than this much of a frame: more than a colour set's own
+                     # pointing jitter (249SA_LIMBINT002's five filters a pointing land 0.09-0.12 apart, 003SA_3X3MOVIE's
+                     # and 052SA_STRMOVIA's 0.08-0.11), less than the least a feature track creeps (182SA_FEATRAK012 0.14)
+TRACK_SPAN_WAS = 0.08   # (the span before: a pass it judges otherwise gets RETRACKED's folder)
 TRACK_CARRY = 0.5    # ... and, on a turning body (SPIN), whose turning carries a feature at least this share of that spread
 RELAID = "_g3"       # the folder suffix, after GROUPING's, of a pass the layout rules below lay out anew (a time series, a
                      # drifting filter set, laps over drifted places, a map split by ZOOM joined again, a movie cut at a
                      # retarget, a turning camera, filters a lone frame set aside), or of every pass of an observation
                      # they renumber
+RETRACKED = "_g4"    # the folder suffix, after RELAID's, of every pass of an observation where TRACK_SPAN (TRACK_SPAN_WAS
+                     # before) judges a pass's track otherwise
 REVISIT_PAUSE = 2    # a pause: a gap between frames this many times the pass's usual one (and at least REGISTER_GAP) ...
 REVISIT_SHARE = 0.5  # ... and a mosaic whose frames mostly retake, after a pause, one view their filter took is a time series
 JOIN_ZOOM = ZOOM * ZOOM   # a map units split at ZOOM is joined again while its frames stay within this of its first distance
@@ -204,10 +209,11 @@ def units(target, obs, cam):
     # mosaic that starts again from nothing every lap
     for u in out:
         _drop_strays(u)
-    laps, shifted, relaid = [], False, False
+    laps, shifted, relaid, retracked = [], False, False, False
     for u in out:
         u["key"] = (target, obs, cam, len(laps))
         _judge(u)
+        retracked = retracked or u["retracked"]
         prev = laps[-1] if laps else None
         # (and one view taken lap after lap, a filter set each time, is one pass: a time series, _judge's views)
         views = bool(prev and (prev.get("drift") or prev.get("views")) and u.get("drift"))
@@ -237,6 +243,7 @@ def units(target, obs, cam):
     for n, u in enumerate(out):
         u["key"] = (target, obs, cam, n)
         _judge(u)
+        retracked = retracked or u["retracked"]
         # GROUPING's folder: a pass grouped anew (strays out, or a mosaic only as a 1x2), or every pass of an
         # observation whose passes these rules renumbered; RELAID's: a pass the layout rules after them changed, or
         # every pass of an observation they renumbered
@@ -257,6 +264,8 @@ def units(target, obs, cam):
         u["aside"] = u["kind"] in ("mosaic", "mosaic_movie") and _aside(u["frames"], u) != _aside(u["frames"], u, 0, False)
         u["relaid"] = bool(relaid or u["revisit"] or u["drift"] or u["slot_laps"] or u.get("joined") or u.get("twist")
                            or u["aside"])
+    for u in out:   # (TRACK_SPAN judging a pass otherwise can join or split the passes: every pass of the observation)
+        u["retracked"] = retracked
     with _lock:
         _units[(target, obs, cam)] = out
     return out
@@ -593,11 +602,15 @@ def _judge(u):
     if len(visit) >= 3:
         spans.append(max(math.hypot(a[0] - c[0], a[1] - c[1]) for a in visit for c in visit) / FRAME)
         took.append(visit[-1][2] - visit[0][2])
-    u["track"] = bool(len(spans) >= TRACK_VISITS and np.median(spans) > TRACK_SPAN)
+    spread = float(np.median(spans)) if len(spans) >= TRACK_VISITS else 0.0
     spin = SPIN.get(u["key"][0])
-    if u["track"] and spin and u["z"]:
-        carried = 2 * math.pi * spin[0] / (spin[1] * 3600) * float(np.median(took)) / (u["z"] * IFOV[u["key"][2]]) / FRAME
-        u["track"] = carried >= TRACK_CARRY * float(np.median(spans))
+    carried = (2 * math.pi * spin[0] / (spin[1] * 3600) * float(np.median(took)) / (u["z"] * IFOV[u["key"][2]]) / FRAME
+               if spread and spin and u["z"] else None)
+
+    def track(span):
+        return bool(spread > span and (carried is None or carried >= TRACK_CARRY * spread))
+    u["track"] = track(TRACK_SPAN)
+    u["retracked"] = track(TRACK_SPAN_WAS) != u["track"]
     u["movie"] = u["jump_frac"] is not None and (u["jump_frac"] < MOVIE_JUMPS or (u["dwell"] or 0) >= MOVIE_DWELL or u["track"])
     places = []
     for p in pts:
@@ -705,7 +718,7 @@ def folder(u, cache):
     # a movie's frames stacked with a shorter repeat window are other pictures than the ones made before it
     gap = u.get("repeat_gap", mosaic_benchmark.REPEAT_GAP)
     suffix = (("" if gap >= mosaic_benchmark.REPEAT_GAP else f"_r{gap:g}")
-              + (RELAID if u.get("relaid") else GROUPING if u.get("regrouped") else ""))
+              + (RETRACKED if u.get("retracked") else RELAID if u.get("relaid") else GROUPING if u.get("regrouped") else ""))
     return os.path.join(cache, f"{VERSIONS[calibration.style()]}{calibration.variant()}-q{QUALITY}", "_".join(map(str, u["key"])) + suffix)
 
 

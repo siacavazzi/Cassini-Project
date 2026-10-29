@@ -11,7 +11,10 @@ of those observations as the Mac Mini's index and geometry cache have them (web/
 - a lone frame near the middle no longer puts the other filters aside (044RI_PHOTDRK003, _aside);
 - a mosaic the camera turns under has a footprint holding every tile the v46 cache placed (033RI_AZDKMRHPH001,
   173RI_DRCLOSE001, 208TI_HIRES002; footprint), where one angle left most of them outside;
-- the passes these rules change get RELAID's folder, every other pass keeps its own.
+- a colour set whose filters land a little apart at each pointing is no feature track (TRACK_SPAN): a limb scan
+  (249SA_LIMBINT002) is a mosaic, a 3x3 mosaic taken lap after lap (003SA_3X3MOVIEA002) a mosaic movie, while a feature
+  track creeping the least of them (182SA_FEATRAK012) stays a track;
+- the passes these rules change get RELAID's folder (RETRACKED's for TRACK_SPAN), every other pass keeps its own.
 Run: python web/test_mosaic_layout.py; with --refresh (and the index and CASSINI_GEOMETRY_CACHE) it writes the frames
 of the observations again."""
 import json
@@ -31,7 +34,8 @@ OBS = [("SATURN", "ISS_267SA_LIMBINT002_PRIME", "N"), ("SATURN", "ISS_191SA_FEAT
        ("SATURN", "ISS_287RI_PROPRETRG001_PRIME", "N"), ("SATURN", "ISS_044RI_PHOTDRK003_PRIME", "W"),
        ("DIONE", "ISS_129DI_REGMAP001_PRIME", "N"), ("SATURN", "ISS_033RI_AZDKMRHPH001_PRIME", "N"),
        ("SATURN", "ISS_173RI_DRCLOSE001_PIE", "N"), ("TITAN", "ISS_208TI_HIRES002_VIMS", "W"),
-       ("SATURN", "ISS_C44SA_APPRMOVB001_PRIME", "N")]
+       ("SATURN", "ISS_C44SA_APPRMOVB001_PRIME", "N"), ("SATURN", "ISS_249SA_LIMBINT002_PRIME", "N"),
+       ("SATURN", "ISS_003SA_3X3MOVIEA002_PRIME", "N"), ("SATURN", "ISS_182SA_FEATRAK012_PRIME", "N")]
 # the v46 cache's plan (angle, the frame it was measured on) and tile outlines of three passes the camera turns under
 # (/mnt/project-files/mosaic-layout/qc-data/v46-json)
 V46 = "/mnt/project-files/mosaic-layout/qc-data/v46-json"
@@ -158,6 +162,15 @@ def main():
         assert outside(new) == 0 and outside(v["footprint"]) > len(v["tiles"]) / 2, (name, outside(v["footprint"]), outside(new))
         if obs != "ISS_173RI_DRCLOSE001_PIE":
             assert u["kind"] == "mosaic" and relaid(u), (name, u["kind"])
+
+    # a colour set's pointing jitter is no feature track; the least creeping feature track still is
+    limb = passes(*OBS[15])
+    assert kinds(limb) == [("mosaic", 25)] and not limb[0]["track"] and limb[0]["retracked"], kinds(limb)
+    assert om.folder(limb[0], "/c").endswith(om.RETRACKED)
+    laps = passes(*OBS[16])
+    assert kinds(laps) == [("mosaic_movie", 80)] and laps[0]["retracked"], kinds(laps)
+    feat = passes(*OBS[17])
+    assert [k for k, _ in kinds(feat)] == ["movie"] and feat[0]["track"] and not feat[0]["retracked"], kinds(feat)
 
     print("mosaic layout ok:", {o: kinds(passes(t, o, c)) for t, o, c in OBS})
 
