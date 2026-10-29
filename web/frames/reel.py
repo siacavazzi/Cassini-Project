@@ -240,6 +240,23 @@ def north_angles(ids):
     return out
 
 
+def turns(ids):
+    """How far each of the frames ids is turned from north up, from the geometry cache: {id: degrees} (the angle
+    processed_frame turns the frame by; the camera's twist about its axis changes during a pass when the spacecraft
+    rolls). Frames that are not cached, or that SPICE could not place, are left out."""
+    import bootleg_autonav as ba
+    if not ba.GEOMETRY_CACHE or not os.path.exists(ba.GEOMETRY_CACHE):
+        return {}
+    db, out = ba._geometry_db(), {}
+    for k in range(0, len(ids), 900):
+        part = ids[k:k + 900]
+        for frame, a in db.execute(f"SELECT frame, angle FROM target WHERE version = ? AND error IS NULL "
+                                   f"AND frame IN ({','.join('?' * len(part))})", (ba.GEOMETRY_VERSION, *part)):
+            if a is not None:
+                out[frame] = a
+    return out
+
+
 _target_of = None
 
 

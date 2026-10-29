@@ -97,6 +97,15 @@ MOVIE_DWELL = 8      # ... or whose camera stays this many frames of one filter 
 TRACK_VISITS = 2     # ... or that follows a moving feature (_judge's track): at least this many visits of 3+ filters,
 TRACK_SPAN = 0.08    # ... whose frames spread (median) over more than this much of a frame (twice REGISTER_MAX)
 TRACK_CARRY = 0.5    # ... and, on a turning body (SPIN), whose turning carries a feature at least this share of that spread
+RELAID = "_g3"       # the folder suffix, after GROUPING's, of a pass the layout rules below lay out anew (a time series, a
+                     # drifting filter set, laps over drifted places, a map split by ZOOM joined again, a movie cut at a
+                     # retarget, a turning camera, filters a lone frame set aside), or of every pass of an observation
+                     # they renumber
+REVISIT_PAUSE = 2    # a pause: a gap between frames this many times the pass's usual one (and at least REGISTER_GAP) ...
+REVISIT_SHARE = 0.5  # ... and a mosaic whose frames mostly retake, after a pause, one view their filter took is a time series
+JOIN_ZOOM = ZOOM * ZOOM   # a map units split at ZOOM is joined again while its frames stay within this of its first distance
+TWIST = 0.04         # of a frame: a pass the camera turns under (reel.turns) by more than this at its frames' places is drawn
+                     # on a footprint turned frame by frame
 RADIUS = {"SATURN": 60268, "JUPITER": 69911, "TITAN": 2575, "RHEA": 764, "IAPETUS": 735, "DIONE": 561,
           "TETHYS": 531, "ENCELADUS": 252, "MIMAS": 198, "HYPERION": 135, "PHOEBE": 107}
 # Saturn's small moons (mean radius, Thomas 2010, Denk et al. 2018; web/replay/build_data.SMALL_MOONS), so Auto center
@@ -173,6 +182,7 @@ def units(target, obs, cam):
     # the rows of idx[(idx["OBSERVATION_ID"] == obs) & (idx["TARGET_NAME"] == target) & (idx["INSTRUMENT_ID"] == inst)]
     rows = idx.iloc[at] if at is not None else idx.iloc[:0]
     where = reel.geometry(rows["id"].tolist())
+    turned = reel.turns(rows["id"].tolist())
     out, cur = [], None
     for r in rows.itertuples(index=False):
         f1, f2 = str(r.filter1), str(r.filter2)
@@ -194,14 +204,19 @@ def units(target, obs, cam):
     # mosaic that starts again from nothing every lap
     for u in out:
         _drop_strays(u)
-    laps, shifted = [], False
+    laps, shifted, relaid = [], False, False
     for u in out:
         u["key"] = (target, obs, cam, len(laps))
         _judge(u)
         prev = laps[-1] if laps else None
-        if (prev and prev["mosaic"] and u["frames"] and u["frames"][0][3] - prev["last"] <= LAP_GAP and u["z"]
+        # (and one view taken lap after lap, a filter set each time, is one pass: a time series, _judge's views)
+        views = bool(prev and (prev.get("drift") or prev.get("views")) and u.get("drift"))
+        if (prev and (prev["mosaic"] or views) and u["frames"] and u["frames"][0][3] - prev["last"] <= LAP_GAP and u["z"]
                 and 1 / ZOOM < u["z"] / prev["z"] < ZOOM
-                and (u["mosaic"] and _overlap(prev, u) >= LAP_OVERLAP or _piece(prev, u))):
+                and (views and _overlap(prev, u) >= LAP_OVERLAP
+                     or not views and (u["mosaic"] and _overlap(prev, u) >= LAP_OVERLAP or _piece(prev, u)))):
+            prev["views"] = views
+            relaid = relaid or views   # (the passes after it are renumbered)
             # (a piece, or a lap that is a mosaic only by the newer rules, joining it renumbers the passes after it)
             shifted = shifted or not u["mosaic"] or any(v.get("pair") or v.get("off") for v in (prev, u))
             for k in ("frames", "all", "taken"):
@@ -209,19 +224,34 @@ def units(target, obs, cam):
             prev["last"] = u["last"]
             prev["off"] = prev.get("off", set()) | u.get("off", set())
             _judge(prev)
+        elif prev and _zoom_join(prev, u):
+            relaid = True   # (the passes after it are renumbered)
         else:
             laps.append(u)
-    out = laps
+    # a movie that re-points to sky it never comes back to plays each view as a pass of its own
+    out = []
+    for u in laps:
+        pieces = _retargets(u)
+        relaid = relaid or len(pieces) > 1
+        out += pieces
     for n, u in enumerate(out):
         u["key"] = (target, obs, cam, n)
         _judge(u)
         # GROUPING's folder: a pass grouped anew (strays out, or a mosaic only as a 1x2), or every pass of an
-        # observation whose passes these rules renumbered
+        # observation whose passes these rules renumbered; RELAID's: a pass the layout rules after them changed, or
+        # every pass of an observation they renumbered
         u["regrouped"] = bool(shifted or u.get("off") or u.get("pair"))
         u["repeat_gap"] = repeat_window(u)
         if u["repeat_gap"] < mosaic_benchmark.REPEAT_GAP:
             u["frames"] = _pictures(u["all"], u["repeat_gap"])
         del u["all"]
+        # the camera turning under a mosaic: its footprint is turned frame by frame (plan)
+        if u["kind"] in ("mosaic", "mosaic_movie") and _twist(u, turned) > TWIST * FRAME:
+            u["twist"] = {fr[1]: turned[fr[1]] for fr in u["frames"] if fr[1] in turned}
+        # (and a mosaic whose filters aside a lone frame near the middle had decided: its plan draws other filters)
+        u["aside"] = u["kind"] in ("mosaic", "mosaic_movie") and _aside(u["frames"], u) != _aside(u["frames"], u, 0, False)
+        u["relaid"] = bool(relaid or u["revisit"] or u["drift"] or u["slot_laps"] or u.get("joined") or u.get("twist")
+                           or u["aside"])
     with _lock:
         _units[(target, obs, cam)] = out
     return out
@@ -320,6 +350,141 @@ def _overlap(a, b):
     return both / either if either > 0 else 0.0
 
 
+def _zoom_join(prev, u):
+    """Joins pass u into prev when the two are one map that units split where the distance changed by ZOOM (Titan's
+    042TI_GLOBMAP001: its middle, then the ring round it as Cassini closed in, drawn as two mosaics with a hole in the
+    second): both mosaics, u straight after prev (within GAP), every frame of u within JOIN_ZOOM of prev's distance,
+    u's footprint touching prev's and not a closer look at ground prev already took (LAP_INSIDE of it inside prev's),
+    and the two still a mosaic together (tiles at another distance are scaled to the pass's, as ever). True when
+    joined (prev is the joined pass)."""
+    if prev["kind"] != "mosaic" or u["kind"] != "mosaic" or not u["frames"] or not prev["z"]:
+        return False
+    if u["frames"][0][3] - prev["last"] > GAP:
+        return False
+    zs = [fr[7] for fr in u["frames"] if fr[7]]
+    if not zs or not (1 / JOIN_ZOOM < min(zs) / prev["z"] and max(zs) / prev["z"] < JOIN_ZOOM):
+        return False
+    p, q = _box(prev, prev["z"]), _box(u, prev["z"])
+    if not p or not q:
+        return False
+    w, h = min(p[2], q[2]) - max(p[0], q[0]), min(p[3], q[3]) - max(p[1], q[1])
+    if w <= 0 or h <= 0 or w * h >= LAP_INSIDE * (q[2] - q[0]) * (q[3] - q[1]):
+        return False
+    joined = dict(prev, **{k: prev[k] + u[k] for k in ("frames", "all", "taken")})
+    joined.update(last=u["last"], off=prev.get("off", set()) | u.get("off", set()))
+    _judge(joined)
+    if joined["kind"] != "mosaic":
+        return False
+    prev.clear()
+    prev.update(joined, joined=True)
+    return True
+
+
+def _retargets(u):
+    """Pass u in pieces where it re-points to sky it never comes back to (a Grand Finale retarget's four ring patches
+    in one movie, 287RI_PROPRETRG001, which jumped from view to view): a movie is cut between two frames when no frame
+    after them shares any ground with a frame before (their footprints, frames at the pass's distance, do not touch).
+    [u] when there is nothing to cut (a movie going back and forth between two patches comes back, so is never cut)."""
+    if u["kind"] != "movie":
+        return [u]
+    pts = [(q, -fr[5] * fr[7] / u["z"], -fr[6] * fr[7] / u["z"]) for q, fr in enumerate(u["all"]) if fr[7]]
+    if len(pts) < 2:
+        return [u]
+    xy = np.array([(x, y) for _, x, y in pts])
+    lo, hi = np.minimum.accumulate(xy), np.maximum.accumulate(xy)   # the frames up to each one
+    rlo, rhi = np.minimum.accumulate(xy[::-1])[::-1], np.maximum.accumulate(xy[::-1])[::-1]   # ... and from it on
+    cuts = [pts[i + 1][0] for i in range(len(pts) - 1)
+            if ((rlo[i + 1] - hi[i] >= FRAME) | (lo[i] - rhi[i + 1] >= FRAME)).any()]
+    if not cuts:
+        return [u]
+    pieces = []
+    for a, b in zip([0] + cuts, cuts + [len(u["all"])]):
+        part = u["all"][a:b]
+        z = next((fr[7] for fr in part if fr[7]), None)
+        pieces.append({"key": u["key"], "all": part, "taken": u["taken"][a:b], "z": z, "last": part[-1][3],
+                       "frames": [fr for fr in u["frames"] if part[0][3] <= fr[3] <= part[-1][3]],
+                       **({"off": u["off"]} if u.get("off") else {})})
+    return pieces
+
+
+def _twist(u, turned):
+    """How far (reference pixels) the camera turning under pass u (reel.turns: degrees from north up, frame by frame)
+    moves its frames from where the turn of its first frame placed well off the body (as plan measures it) puts them."""
+    ref = next((turned[fr[1]] for fr in u["frames"] if fr[7] and fr[1] in turned and math.hypot(fr[5], fr[6]) > 200), None)
+    if ref is None or not u["z"]:
+        return 0.0
+    most = 0.0
+    for fr in u["frames"]:
+        if fr[7] and fr[1] in turned:
+            d = (math.radians(turned[fr[1]] - ref) + math.pi) % (2 * math.pi) - math.pi
+            most = max(most, abs(d) * math.hypot(fr[5], fr[6]) * fr[7] / u["z"])
+    return most
+
+
+def _one_view(u):
+    """Pass u shows one view, not a mosaic: the frames its mosaic draws (its luminance base's filters, as plan and
+    luminance_of choose them) all lie within mosaic.min_step of the first, or the camera drifts through a set of
+    filters (each frame within SAME_PLACE and REGISTER_GAP of the one before, at least three filters and none taken
+    more than twice: a storm rider's five filters sliding 0.7 of a frame, the Moon's nine in 1999, Mimas's fifteen in
+    072MI_MIDIECLN001), so its mosaic is offset strips of one picture. Its frames and colour sets show as themselves."""
+    aside = _aside(u["frames"], u)
+    count = collections.Counter(fr[2] for fr in u["frames"] if fr[2] not in aside) or collections.Counter(fr[2] for fr in u["frames"])
+    grey = max(count, key=count.get)
+    pts = [(f, t, -x * z / u["z"], -y * z / u["z"]) for _, _, f, t, _, x, y, z in u["frames"]
+           if z and f in count and (f == grey or not _polarizer(f))]
+    if not pts:
+        return False
+    if all(max(abs(p[2] - pts[0][2]), abs(p[3] - pts[0][3])) < mosaic.min_step * FRAME for p in pts):
+        return True
+    taken = collections.Counter(p[0] for p in pts)
+    if len(taken) < 3 or max(taken.values()) > 2:
+        return False
+    return all(b[1] - a[1] <= REGISTER_GAP and math.hypot(b[2] - a[2], b[3] - a[3]) <= SAME_PLACE * FRAME
+               for a, b in zip(pts, pts[1:]))
+
+
+def _revisits(u):
+    """Pass u is a time series, not a mosaic: most of its frames that take a filter again (REVISIT_SHARE) come back
+    after a pause (REVISIT_PAUSE) to the view of one frame of that filter taken before the pause (LAP_OVERLAP of the
+    frame), a little way off, so they counted as new places, and they come back at least twice (one return is a
+    two-tile mosaic with a wide overlap): Saturn's limb sampled every 28 minutes (267SA_LIMBINT002), the WAC beside a
+    NAC feature track (191SA_FEATRAK001), a CIRS feature track's two or three filters every few minutes (FTRACK),
+    Titan's cloud monitors. A mosaic steps on to new ground, even where it overlaps its earlier columns
+    (221DI_REGMAP001's interleaved columns, 242SA_NHEMOSAIC001's slow steps); a dense strip overlaps the frames just
+    before it, taken without a pause."""
+    fr = [(f, t, -x * z / u["z"] / FRAME, -y * z / u["z"] / FRAME) for _, _, f, t, _, x, y, z in u["frames"] if z]
+    if len(fr) < 3:
+        return False
+    gaps = np.diff([q[1] for q in fr])
+    pause = max(REVISIT_PAUSE * float(np.median(gaps)), REGISTER_GAP)
+    seen, start, back, again, returns = {}, 0, 0, 0, set()
+    for i, (f, t, x, y) in enumerate(fr):
+        if i and gaps[i - 1] >= pause:
+            start = i   # (frames before start were taken before a pause)
+        mine = seen.setdefault(f, [])
+        if mine:
+            again += 1
+            if any(j < start and (1 - abs(a - x)) * (1 - abs(b - y)) >= LAP_OVERLAP
+                   for j, a, b in mine if abs(a - x) < 1 and abs(b - y) < 1):
+                back += 1
+                returns.add(start)
+        mine.append((i, x, y))
+    return len(returns) >= 2 and back >= REVISIT_SHARE * again
+
+
+def _slot_laps(u):
+    """How many times (median over its slots, in one filter) pass u comes back to a slot: a lap over places a little
+    way off the last lap's (slots) counts as a lap, not as new places."""
+    where, runs = _slot_of(u, u["place"]), {}
+    for fr, i in zip(u["frames"], where):
+        if i is not None:
+            seq = runs.setdefault(fr[2], [])
+            if not seq or seq[-1] != i:
+                seq.append(i)
+    visits = [max(seq.count(i) for seq in runs.values()) for i in {i for i in where if i is not None}]
+    return int(np.median(visits)) if visits else 0
+
+
 def repeat_window(u):
     """How close two frames of one filter must be for stacking to merge them as repeat exposures, for pass u:
     REPEAT_GAP, or in a movie (u["movie"]) whose same-filter frames come more often than twice that, half the
@@ -340,7 +505,10 @@ def _judge(u):
     """Sets u["movie"] (the camera creeps or stares), u["jump_frac"], u["dwell"], u["mosaic"] (enough places,
     footprint not too big, not a movie), u["whole"] (the body's disk inside it), u["place"], u["repeats"] and
     u["kind"]: "movie", "mosaic", "mosaic_movie" (a mosaic whose places are taken lap after lap) or None, and
-    u["track"] (the camera follows a moving feature: a movie)."""
+    u["track"] (the camera follows a moving feature: a movie); a pass the later layout rules judge says which
+    (u["slot_laps"], u["drift"], u["revisit"])."""
+    for k in ("slots", "lap_of", "_lum"):   # (worked out from the frames the pass had when last judged)
+        u.pop(k, None)
     pts = [(-x * z / u["z"], -y * z / u["z"]) for _, _, _, _, _, x, y, z in u["frames"] if z]
     # the steps between consecutive frames of one filter, in frames: a mosaic jumps, a movie creeps
     last, steps = {}, []
@@ -433,21 +601,39 @@ def _judge(u):
             seq.append(i)
     visits = [max(seq.count(i) for seq in runs.values()) for i in range(len(places))] if runs else []
     u["repeats"] = int(np.median(visits)) if visits else 0
+    # laps over places the camera drifted off (slots, as a mosaic movie plays them) are laps, not new places
+    laps = _slot_laps(u)
+    u["slot_laps"] = len(places) >= 2 and u["repeats"] < MOVIE_LAPS <= laps
+    u["repeats"] = max(u["repeats"], laps)
     # (a pan along a ring, where every frame shows nearly the same rings, looks like a movie, but a pan across the
     # rings is a good strip mosaic, and the pointing alone cannot tell them apart: the window's chip decides those)
-    u["mosaic"] = u["whole"] = False
+    u["mosaic"] = u["whole"] = u["revisit"] = u["drift"] = False
     u["kind"] = "movie" if u["movie"] else None
+    if u.get("views"):
+        # laps of one view (units): a time series, a movie (C44SA_APPRMOVB001's colour set of Saturn every 104 minutes)
+        u["movie"], u["kind"], u["revisit"], u["pair"], u["slot_laps"] = True, "movie", True, False, False
+        return
     # two places whose tiles touch (ISS_C24JU_1X2NITE, a 2x2 seen by one camera as two) are a 1x2 mosaic
     u["pair"] = len(places) == 2 and max(abs(places[0][0] - places[1][0]), abs(places[0][1] - places[1][1])) <= PAIR_STEP * FRAME
     if len(places) < MIN_PLACES and not u["pair"] or u["movie"]:
-        u["pair"] = False
+        u["pair"] = u["slot_laps"] = False
         return
     pts = np.array(pts)
     lo, hi = pts.min(0) - FRAME / 2, pts.max(0) + FRAME / 2
     if (hi - lo).max() >= MAX_FRAMES * FRAME:
+        u["pair"] = u["slot_laps"] = False
+        return
+    kind = "mosaic_movie" if len(places) >= 2 and u["repeats"] >= MOVIE_LAPS else "mosaic"
+    if kind == "mosaic" and _one_view(u):
+        # a filter set taken as the camera drifts, or one place: its frames and colour sets, no mosaic
+        u["drift"], u["pair"] = True, False
+        return
+    if kind == "mosaic" and _revisits(u):
+        # a time series: a movie
+        u["movie"], u["kind"], u["revisit"], u["pair"] = True, "movie", True, False
         return
     u["mosaic"] = True
-    u["kind"] = "mosaic_movie" if len(places) >= 2 and u["repeats"] >= MOVIE_LAPS else "mosaic"
+    u["kind"] = kind
     radius = RADIUS.get(u["key"][0], 0) / (u["z"] * IFOV[u["key"][2]])
     u["whole"] = bool(radius and (lo < -radius).all() and (hi > radius).all())
 
@@ -502,7 +688,8 @@ def kind_of(frame_id):
 def folder(u, cache):
     # a movie's frames stacked with a shorter repeat window are other pictures than the ones made before it
     gap = u.get("repeat_gap", mosaic_benchmark.REPEAT_GAP)
-    suffix = ("" if gap >= mosaic_benchmark.REPEAT_GAP else f"_r{gap:g}") + (GROUPING if u.get("regrouped") else "")
+    suffix = (("" if gap >= mosaic_benchmark.REPEAT_GAP else f"_r{gap:g}")
+              + (RELAID if u.get("relaid") else GROUPING if u.get("regrouped") else ""))
     return os.path.join(cache, f"{VERSIONS[calibration.style()]}{calibration.variant()}-q{QUALITY}", "_".join(map(str, u["key"])) + suffix)
 
 
@@ -675,28 +862,16 @@ def plan(u, cache):
                            bool(colour and colour[1] == "GRN" and colour[2] in reel.TRUE_BLUES), lit_levels=levels)
         # the rotation from the camera's frame to north up: the angle between where the geometry cache puts
         # the body and where processed_frame does, from the first tile placed well off the body's centre
-        angle = 0.0
+        angle, ref = 0.0, None
         for k, fr in enumerate(frames):
             if fr[7] and math.hypot(fr[5], fr[6]) > 200:
                 rep = tile(u, k, cache, scale)
                 if "native_offset" in rep:
                     fo = rep["native_offset"]
                     angle = math.atan2(fo[1], fo[0]) - math.atan2(-fr[6], -fr[5])
+                    ref = fr[1]
                     break
-        c, s = math.cos(angle), math.sin(angle)
-        pts, ks = [], []
-        # the footprint of the filters drawn: frames of a filter left out (aside) would only hold empty canvas
-        for _, _, f, _, _, x, y, z in frames:
-            if z and f not in aside:
-                k = z / u["z"]
-                pts.append(((c * -x - s * -y) * k, (s * -x + c * -y) * k))
-                ks.append(k)
-        if not pts:
-            pts, ks = [(0.0, 0.0)], [1.0]
-        x0 = min(p[0] - HALF * k for p, k in zip(pts, ks))
-        x1 = max(p[0] + HALF * k for p, k in zip(pts, ks))
-        y0 = min(p[1] - HALF * k for p, k in zip(pts, ks))
-        y1 = max(p[1] + HALF * k for p, k in zip(pts, ks))
+        x0, y0, x1, y1 = footprint(u, angle, ref, aside)
         view = [x1 - x0, y1 - y0]
         p = {"key": list(u["key"]), "display_scale": scale, "angle": angle, "footprint": [x0, y0, x1, y1],
              "fixed": True, "view": view, "k": CANVAS / max(view), "colour": colour,
@@ -711,11 +886,47 @@ def plan(u, cache):
         return p
 
 
-def _aside(frames, u):
+def footprint(u, angle, ref, aside=()):
+    """The canvas rectangle [x0, y0, x1, y1] round pass u's frames (but those of the filters aside), turned north up
+    by angle, which the frame ref was measured at (plan). A pass the camera turns under (TWIST: 033RI_AZDKMRHPH001
+    turns 134 degrees, 173RI_DRCLOSE001 5 degrees 22,000 px from Saturn's centre) has each frame turned by its own
+    angle from the geometry cache (processed_frame turns it by that angle), measured from frame ref (or, with none,
+    by that angle alone): one angle for the whole pass put its footprint where the tiles are not, and cut them off
+    or left the canvas nearly empty."""
+    turned = u.get("twist") or {}
+
+    def turn(fid):
+        if fid not in turned:
+            return angle
+        return angle + math.radians(turned[ref] - turned[fid]) if ref in turned else math.pi - math.radians(turned[fid])
+    pts, ks = [], []
+    # the footprint of the filters drawn: frames of a filter left out (aside) would only hold empty canvas
+    for _, fid, f, _, _, x, y, z in u["frames"]:
+        if z and f not in aside:
+            k = z / u["z"]
+            c, s = math.cos(turn(fid)), math.sin(turn(fid))
+            pts.append(((c * -x - s * -y) * k, (s * -x + c * -y) * k))
+            ks.append(k)
+    if not pts:
+        pts, ks = [(0.0, 0.0)], [1.0]
+    # (and room round them for what registration may move a tile by, REGISTER_MAX and PANEL_MAX)
+    room = HALF + ((REGISTER_MAX + PANEL_MAX) * FRAME if turned else 0)
+    return [min(p[0] - room * k for p, k in zip(pts, ks)), min(p[1] - room * k for p, k in zip(pts, ks)),
+            max(p[0] + room * k for p, k in zip(pts, ks)), max(p[1] + room * k for p, k in zip(pts, ks))]
+
+
+ASIDE_SHARE = 0.25   # of the frames of the filter taken most: a filter with fewer never sets where the pass points (_aside)
+
+
+def _aside(frames, u, share=ASIDE_SHARE, disk=True):
     """The filters whose frames point, as a rule, more than half a frame further from the body's centre than the
-    filter pointed closest (median over each filter's placed frames, at the pass's reference distance). In
-    ISS_C23RI_RMOV001_PRIME the colour frames sit 316 px from Jupiter's centre, on the disk, and the clear and IR1
-    frames 1331 px out, beside it; the filters of a mosaic share their pointings and come out within pixels."""
+    filter pointed closest (median over each filter's placed frames, at the pass's reference distance) among those
+    taken at least share as often as the filter taken most, and off the body's disk (RADIUS, when disk and the body's
+    size is known). In ISS_C23RI_RMOV001_PRIME the colour frames sit 316 px from Jupiter's centre, on the disk, and
+    the clear and IR1 frames 1331 px out, beside it; the filters of a mosaic share their pointings and come out within
+    pixels. (Measured from any filter, a lone frame near the middle, the one IR2/IR1 frame of 044RI_PHOTDRK003's 96,
+    put every other filter aside, and the mosaic was that one frame; so did a close flyby's frames scattered over
+    Titan's disk, 005TI_HIGHRESNA001's one MT1 frame left of five.)"""
     far = {}
     for fr in frames:
         if fr[7]:
@@ -723,8 +934,10 @@ def _aside(frames, u):
     med = {f: sorted(v)[len(v) // 2] for f, v in far.items()}
     if not med:
         return set()
-    near = min(med.values())
-    return {f for f, m in med.items() if m > near + FRAME / 2}
+    most = max(len(v) for v in far.values())
+    near = min(m for f, m in med.items() if len(far[f]) >= share * most)
+    radius = RADIUS.get(u["key"][0], 0) / (u["z"] * IFOV[u["key"][2]]) if disk and u["z"] else 0
+    return {f for f, m in med.items() if m > near + FRAME / 2 and m > radius}
 
 
 # filter sets with a colour mapping of their own, looked up before the general rule in colour_of: frozenset of the
@@ -3282,7 +3495,12 @@ def slots(u):
     for a frame with no place."""
     if "slots" in u:
         return u["slots"]
-    where = places(u)
+    u["slots"] = _slot_of(u, places(u))
+    return u["slots"]
+
+
+def _slot_of(u, where):
+    """(slots) the slot of each frame of pass u, its places being where."""
     at, last, steps = {}, {}, []
     for fr, i in zip(u["frames"], where):
         x, y, z = fr[5:8]
@@ -3306,9 +3524,7 @@ def slots(u):
             for b in sorted(centre):
                 if b > a and np.abs(centre[a] - centre[b]).max() < near and root(a) != root(b):
                     parent[max(root(a), root(b))] = min(root(a), root(b))
-    out = [root(i) if i in parent else i for i in where]
-    u["slots"] = out
-    return out
+    return [root(i) if i in parent else i for i in where]
 
 
 def lap_of(u):
