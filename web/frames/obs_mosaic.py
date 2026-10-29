@@ -1539,7 +1539,7 @@ def _tile_made(u, n, cache, scale, base):
         # and white lace where the ground is bright) among tiles of its filter that are: left out, as a colour set leaves
         # out such a channel. Phoebe 2004-06-11 has them at pointings of their own
         image, rep = None, {**rep, "why": "can't be calibrated (8LSB or an unknown filter or gain): left out of the mosaic"}
-    share = _saturated_share(path, rep) if image is not None else 0.0
+    share = float(rep.get("saturated_share") or 0.0) if image is not None else 0.0
     if image is not None and u.get("mosaic") and share >= SATURATED_ALL and calibration.step("calibrate"):
         # a frame the camera saturated all over carries no picture: calibrated, it is one flat field at the top of the
         # camera's range over its exposure, so a long exposure's is dark and a short one's bright (101SA SPOLEDYN001 W
@@ -1552,7 +1552,8 @@ def _tile_made(u, n, cache, scale, base):
         # the share of the frame lost in downlink that no repeat or fill made up (load_aligned's lost_px): partial()
         out["lost"] = round(rep["lost_px"][1] / FRAME ** 2, 4)
     if share:
-        # the share of the frame the camera saturated (over_exposed)
+        # the share of the frame the camera saturated in every exposure merged (load_aligned's, the pixels drawn white:
+        # over_exposed)
         out["saturated"] = share
     os.makedirs(os.path.dirname(base), exist_ok=True)
     if image is not None and "frame_offset" in rep:
@@ -1572,21 +1573,6 @@ def _tile_made(u, n, cache, scale, base):
     data = json.dumps(out, default=str)
     reel._cached(base + ".json", data.encode)
     return json.loads(data)
-
-
-def _saturated_share(path, rep):
-    """The share of the frame at path the camera saturated (calibration.saturated, on its own codes), to 1/10000; 0
-    for a frame stacked with repeats (load_hdr took its saturated pixels from them) or one that can't be read."""
-    if (rep.get("stacked") or [1])[0] != 1:
-        return 0.0
-    try:
-        import label_handler as lh
-        lbl = lh.label(path, as_png=True)
-        codes = calibration.ds.imread(lbl.export(), cv2.IMREAD_GRAYSCALE)
-        return round(float(calibration.saturated(codes, lbl.get_info()).mean()), 4)
-    except Exception as e:
-        print(f"Can't read {path} for saturation: {e}")
-        return 0.0
 
 
 def _around(u, n):

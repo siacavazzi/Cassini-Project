@@ -119,9 +119,8 @@ fm = fr(["CL1/CL2"] * 2)
 
 
 def made(u, share):
-    om._saturated_share = lambda path, rep: share
-    color_image.processed_frame = lambda *a, **k: (np.full((1024, 1024, 4), 200, np.uint8), None,
-                                                   {"frame_offset": [0.0, 0.0], "calibrated": True, "stacked": [1]})
+    rep = {"frame_offset": [0.0, 0.0], "calibrated": True, "stacked": [1], **({"saturated_share": share} if share else {})}
+    color_image.processed_frame = lambda *a, **k: (np.full((1024, 1024, 4), 200, np.uint8), None, dict(rep))
     base = os.path.join(cache, f"t{len(os.listdir(cache))}", "0")
     om._register = lambda *a, **k: None
     return om._tile_made(u, 0, cache, SCALE, base)
