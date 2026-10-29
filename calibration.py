@@ -954,11 +954,14 @@ instead of calibrating that channel's image, or None
 scale = optional fixed display scale shared by every picture of a mosaic, a dict with "white"
 (the I/F that becomes full brightness), "blacks" (one I/F per channel that becomes black) and
 optionally "gamma" and "shoulder"; without it each picture is stretched on its own as below
+saturated = with scale, optional list, one per label: the pixels the camera saturated (stacking.load_hdr's clipped,
+saturated_of), drawn white, or None
 Returns one BGR uint8 image per label. If every frame calibrates, all channels share one
 stretch so their relative brightness is what the camera measured. Otherwise the images
 are returned unchanged, each with its own stretch as before.
 """
-def load_channels(labels, images=None, sky_fraction=0.1, sky_percentile=98, gamma=2.2, iofs=None, scale=None):
+def load_channels(labels, images=None, sky_fraction=0.1, sky_percentile=98, gamma=2.2, iofs=None, scale=None,
+                  saturated=None):
     if images is None:
         images = [lbl.resize_image() for lbl in labels]
     iofs = _calibrated(labels, images, iofs)
@@ -973,6 +976,12 @@ def load_channels(labels, images=None, sky_fraction=0.1, sky_percentile=98, gamm
             own = scale["black_of"](iof) if scale.get("black_of") else None
             black, toe = (own["black"], own["toe"]) if own else (black, scale.get("toe"))
             out.append(display(iof, black, scale["white"], gamma, scale.get("shoulder"), toe))
+        for picture, full in zip(out, saturated or []):
+            # what the camera saturated is brighter than it could measure: white, as in a one frame picture
+            # (draw_saturated), wherever the shared white puts its clipped value (a mosaic's white is its brightest
+            # tile's, often a shorter exposure's, and a clipped crescent came out one flat gray)
+            if full is not None:
+                picture[full] = 255
         return out
     blacks, white, _ = picture_scale(iofs, sky_fraction, sky_percentile)
     if white <= 0:
@@ -1224,11 +1233,19 @@ def draw_saturated(channels, margin, masks):
     for c, full in zip(channels, masks):
         if not full.any():
             continue
-        if full.shape != c.shape:
-            full = cv2.resize(full.astype(np.uint8), c.shape[::-1], interpolation=cv2.INTER_NEAREST).astype(bool)
         c[full] = np.maximum(c[full], np.float32(margin + SATURATED))
         share = max(share, float(full.mean()))
     return share
+
+
+"""
+The pixels the camera saturated in the frame of label lbl (saturated, on its own codes), at shape (rows, columns)
+"""
+def saturated_of(lbl, shape):
+    full = saturated(ds.imread(lbl.export(), cv2.IMREAD_GRAYSCALE), lbl.get_info())
+    if full.any() and full.shape != tuple(shape):
+        full = cv2.resize(full.astype(np.uint8), tuple(shape)[::-1], interpolation=cv2.INTER_NEAREST).astype(bool)
+    return full
 
 
 """

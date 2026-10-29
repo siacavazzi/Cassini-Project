@@ -141,11 +141,12 @@
       return out;
     }
     // obs_mosaic.held_of: the frame shown in frame n's place, n or, when n is partial (most of it lost in downlink,
-    // t.partial), the last earlier placed frame of its filter that is not; n when there is none
+    // t.partial), the last earlier placed frame of its filter that is not, else of any filter; n when there is none
     function heldOf(t, n) {
       const partial = new Set(t.partial || []), placed = new Set(t.n);
       if (!partial.has(n)) return n;
       for (let j = n - 1; j >= 0; j--) if (t.filters[j] === t.filters[n] && placed.has(j) && !partial.has(j)) return j;
+      for (let j = n - 1; j >= 0; j--) if (placed.has(j) && !partial.has(j)) return j;
       return n;
     }
     // movie_frame's rolling trail: the up to trail earlier placed frames of frame n's filter (n: the frame shown,
