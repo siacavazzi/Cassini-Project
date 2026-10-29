@@ -528,14 +528,29 @@ def _judge(u):
     for k in ("slots", "lap_of", "_lum"):   # (worked out from the frames the pass had when last judged)
         u.pop(k, None)
     pts = [(-x * z / u["z"], -y * z / u["z"]) for _, _, _, _, _, x, y, z in u["frames"] if z]
-    # the steps between consecutive frames of one filter, in frames: a mosaic jumps, a movie creeps
-    last, steps = {}, []
-    for _, _, f, _, _, x, y, z in u["frames"]:
+    # the steps between consecutive frames of one filter, in frames: a mosaic jumps, a movie creeps. A creep that
+    # adds up to a jump over one repeat window is a jump too: the step is also taken from the filter's latest frame
+    # at least REPEAT_GAP (and at most twice that) earlier, as long as the camera only crept since. Every frame at a
+    # pointing of its own is a picture (stacking.repeat_of), so a scan sweeping on a little each frame
+    # (ISS_013RI_AZSCNHIPH001: 0.1 of a frame every 73 s, 13 frames of ring in all) creeps under mosaic.min_step
+    # frame to frame, but jumps over the window, as it did when each window's frames made one tile
+    gap, creep, steps = mosaic_benchmark.REPEAT_GAP, {}, []
+    for _, _, f, t, _, x, y, z in u["frames"]:
         if z:
             p = (-x * z / u["z"], -y * z / u["z"])
-            if f in last:
-                steps.append(max(abs(p[0] - last[f][0]), abs(p[1] - last[f][1])) / FRAME)
-            last[f] = p
+            run = creep.setdefault(f, collections.deque())   # the filter's frames since its last jump
+            if run:
+                step = max(abs(p[0] - run[-1][1][0]), abs(p[1] - run[-1][1][1])) / FRAME
+                if step >= mosaic.min_step:
+                    run.clear()
+                else:
+                    while run and t - run[0][0] > 2 * gap:
+                        run.popleft()
+                    back = next((q for w, q in reversed(run) if t - w >= gap), None)
+                    if back is not None:
+                        step = max(step, abs(p[0] - back[0]) / FRAME, abs(p[1] - back[1]) / FRAME)
+                steps.append(step)
+            run.append((t, p))
     # no filter taken twice: the luminance base draws every filter's tiles in one gray mosaic, so the steps are
     # counted between consecutive frames whatever their filter. A scan that steps one filter a pointing (a limb
     # scan, a methane band map) jumps every frame and is a mosaic; a stare cycling its filters stays put and is a movie
