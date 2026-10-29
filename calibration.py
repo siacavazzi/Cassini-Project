@@ -355,9 +355,14 @@ CISSCAL's bias from the overclocked pixels (cisscal ComputeBias, OverclockFit; c
 two overclocked pixel sums each line's binary prefix carries (bytes 12-13 and 22-23, the lean archive's
 .prefix.gz), averaged as the summing mode needs (one valid column before flight software 1.3), in DN (through the
 12 -> 8 bit table for TABLE frames), and a straight line fitted to them down the frame: the bias at each line. Lines
-lost in downlink (no valid pixels) are left out of the fit. None where cisscal uses the strip mean instead (a lossy
-frame, whose overclocks are corrupt) or the prefixes aren't there.
+lost in downlink (no valid pixels) are left out of the fit, and so are lines whose overclocks came down garbled
+(OVERCLOCK_OUTLIER: more than 10 DN or 10 sigma from the frame's median; a partial downlink can keep a line's count
+but not its prefix: N1413937500_2's line 129 reads -8,155 DN, which tilted the fitted bias by 36 DN down the frame,
+a bright band at the top of a dark star field). Not as cisscal, which fits every line; a frame with no such line
+is fitted the same. None where cisscal uses the strip mean instead (a lossy frame, whose overclocks are corrupt) or
+the prefixes aren't there.
 """
+OVERCLOCK_OUTLIER = (10.0, 10.0)    # DN, robust sigmas: a line's overclock average further from the median than both
 def overclock_bias(info):
     path = info.get("path")
     if not path or _value(info, "INST_CMPRS_TYPE", "").upper() == "LOSSY":
@@ -392,6 +397,11 @@ def overclock_bias(info):
     avg = avg.copy()
     if avg[0] > 2 * avg[1]:
         avg[0] = avg[1]
+    middle = np.median(avg[kept])
+    spread = 1.4826 * np.median(np.abs(avg[kept] - middle))
+    kept &= np.abs(avg - middle) <= max(OVERCLOCK_OUTLIER[0], OVERCLOCK_OUTLIER[1] * spread)
+    if kept.sum() < 2:
+        return None
     n = np.arange(1, lines + 1, dtype=np.float64)
     b, a = np.polyfit(n[kept], avg[kept], 1)
     return a + b * n

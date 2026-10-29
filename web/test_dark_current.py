@@ -161,6 +161,14 @@ info = {**INFO, "path": f"nac_data/{fid}.LBL"}
 fit = cal.overclock_bias(info)
 assert np.abs(fit - lines_bias).max() < 0.6, np.abs(fit - lines_bias).max()
 assert cal.overclock_bias({**info, "INST_CMPRS_TYPE": "LOSSY"}) is None
+# a partial downlink can keep a line's pixel count but garble its prefix (N1413937500_2's line 129: -8,155 DN): that
+# line is left out of the fit, which otherwise tilts the bias by tens of DN down the frame
+garbled = prefix.copy()
+garbled[128, 12:14] = np.frombuffer(np.array([-32694], ">i2").tobytes(), np.uint8)
+garbled[128, 22:24] = np.frombuffer(np.array([220], ">i2").tobytes(), np.uint8)
+open(os.path.join(data, "nac_data", fid + ".prefix.gz"), "wb").write(gzip.compress(garbled.tobytes()))
+assert np.abs(cal.overclock_bias(info) - lines_bias).max() < 0.6, np.abs(cal.overclock_bias(info) - lines_bias).max()
+open(os.path.join(data, "nac_data", fid + ".prefix.gz"), "wb").write(gzip.compress(prefix.tobytes()))
 with cal.stepping("flat,hotpix"):
     on = cal.calibrate(codes, info)
     with cal.stepping("flat,dark,hotpix"):
