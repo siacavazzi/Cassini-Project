@@ -159,6 +159,23 @@ for i in range(1, 4):
     l = left(err, moved, i)
     assert abs(l[1]) < 1.0 and abs(moved[i][0]) < 1.0, (i, l, moved[i])
 
+# 3b. evenly spaced ringlets (36 px apart), SPICE off by about one spacing: the match is ambiguous, so either right or
+# not made, never onto the next ringlet
+def ringlets(x, y, drift):
+    r = np.hypot(x, (y + 2200) / 0.35)
+    lit = (np.sin(2 * np.pi * r * 0.35 / 36.0) > 0).astype(np.float32)
+    lit = cv2.GaussianBlur(lit, (0, 0), 1.0) * ((r > 5300) & (r < 6900))
+    return 3 + lit * (140 + 1.2 * clouds(x, y, drift))
+
+
+true = [(-400, -200), (350, -200), (-400, 300), (350, 300)]
+err = [(0.0, 0.0), (3.0, 33.0), (-4.0, -31.0), (2.0, 35.0)]
+u, cache, p, moved, report, reports = run("SATURN", ringlets, true, err, [(40.0 * i, 0.0) for i in range(4)], "RINGLETS")
+show("ringlets", err, moved, report)
+for i in range(1, 4):
+    l, before = left(err, moved, i), np.array(err[i]) - np.array(err[0])
+    assert abs(l[1]) < 1.0 or abs(l[1] - before[1]) < 0.5, (i, l, before)
+
 # 4. clouds moving 60 px a panel, SPICE right: nothing moves
 true = [(-1200, 0), (-450, 0), (300, 0)]
 err = [(0.0, 0.0)] * 3

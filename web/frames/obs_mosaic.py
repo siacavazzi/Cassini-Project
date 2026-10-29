@@ -1322,14 +1322,19 @@ EDGE_SIGMA = 4.0     # px: the detail of the lit-ness measured (_detail), a band
 # ring edge a few hundred px long is nearly straight), it is one line and says only how far across it the tile is
 # off; the move along it is left as SPICE has it (min-norm, _combine)
 EDGE_LINE = 0.1
+# a match whose correlation has a rival peak this high (of its own) more than EDGE_APART px away, across the edge for a
+# straight one, is not believed: parallel ringlets, gaps and ring shadows a few px to tens of px apart match one
+# another as well as themselves (the probe's 007RI ring scan moved 30 px onto the next ringlets and doubled them)
+EDGE_RIVAL = 0.7
+EDGE_APART = 4
 EDGE_MAX = 64 / 1024  # of a frame: the largest move believed (the quality check's worst was 60 WAC px on Titan)
 EDGE_NCC = 0.5       # the least the two edges must agree once moved
 EDGE_GAIN = 0.05     # ... and how much better than at SPICE's places, for a move of over half a pixel
 EDGE_AGREE = 3.0     # px: matches further than this (across their own edges) from the others' fit are left out
 # a limb sits higher or lower with the filter (Saturn's haze in UV3 stands ~8 px over its MT3 limb, Titan's in RED over
 # CB3, probe 10-29): edges are measured between tiles of one filter only
-EDGE_FILE = "edges2-"  # before PANEL_FILE: a clouded body's registration, kept apart from #169's; renamed when the rule changes
-EDGE_TAG = "-pe2"    # in the name of a layout whose tiles edge registration moved, instead of PANEL_TAG
+EDGE_FILE = "edges3-"  # before PANEL_FILE: a clouded body's registration, kept apart from #169's; renamed when the rule changes
+EDGE_TAG = "-pe3"    # in the name of a layout whose tiles edge registration moved, instead of PANEL_TAG
 
 
 def _detail(gray, mask, sigma=6.0):
@@ -1434,16 +1439,37 @@ def _lit(gray, inside):
 
 
 def _line(lit, weight):
-    """The unit normal of the edge in lit-ness lit when it is one line (EDGE_LINE), else None: the main direction of
-    its gradients (structure tensor, weighted)."""
+    """The main direction of the gradients of lit-ness lit (structure tensor, weighted), a unit vector, and whether
+    the edge is one line (EDGE_LINE: then that is its normal); (None, None) with no gradient."""
     gx = cv2.Sobel(lit, cv2.CV_32F, 1, 0, ksize=3)
     gy = cv2.Sobel(lit, cv2.CV_32F, 0, 1, ksize=3)
     j = np.array([[float((gx * gx * weight).sum()), float((gx * gy * weight).sum())],
                   [float((gx * gy * weight).sum()), float((gy * gy * weight).sum())]])
     vals, vecs = np.linalg.eigh(j)
-    if vals[1] <= 0 or vals[0] >= EDGE_LINE * vals[1]:
-        return None
-    return vecs[:, 1]
+    if vals[1] <= 0:
+        return None, None
+    return vecs[:, 1], vals[0] < EDGE_LINE * vals[1]
+
+
+def _rival(a, b, normal):
+    """How high the best other peak of the phase correlation of a and b stands, as a share of its highest, more than
+    EDGE_APART px from it and within EDGE_MAX of a frame of no shift, the correlation taken across the edges' main
+    direction (normal) only, its best along each line across it: along an edge the peak is a ridge, and parallel
+    edges (ringlets, bands) are what match one another."""
+    fa, fb = np.fft.fft2(a), np.fft.fft2(b)
+    cross = fa * np.conj(fb)
+    surface = np.fft.fftshift(np.real(np.fft.ifft2(cross / np.maximum(np.abs(cross), 1e-12))))
+    h, w = surface.shape
+    yy, xx = np.mgrid[0:h, 0:w]
+    yy, xx = yy - h // 2, xx - w // 2
+    inside = np.hypot(xx, yy) <= EDGE_MAX * FRAME
+    across = np.round(xx * normal[0] + yy * normal[1]).astype(int)
+    keys = across[inside]
+    profile = np.full(keys.max() - keys.min() + 1, -np.inf)
+    np.maximum.at(profile, keys - keys.min(), surface[inside])
+    k = int(np.argmax(profile))
+    far = np.abs(np.arange(len(profile)) - k) > EDGE_APART
+    return float(profile[far].max() / profile[k]) if far.any() and profile[k] > 0 else 0.0
 
 
 def edge_shift(q, ref, at_q, t, crop, at_t):
@@ -1489,8 +1515,15 @@ def edge_shift(q, ref, at_q, t, crop, at_t):
     if ds[0] is None or ds[1] is None:
         return None, "no edge"
     taper = cv2.GaussianBlur(both.astype(np.float32), (0, 0), 4.0) * both
-    normal = _line(lits[0], taper)
-    (dx, dy), response = cv2.phaseCorrelate(*(_even(d * taper) for d in ds))
+    main, line = _line(lits[0], taper)
+    if main is None:
+        return None, "no edge"
+    normal = main if line else None
+    pair = [_even(d * taper) for d in ds]
+    (dx, dy), response = cv2.phaseCorrelate(*pair)
+    rival = _rival(*pair, main)
+    if rival > EDGE_RIVAL:
+        return None, f"ambiguous {dx:+.1f},{dy:+.1f} rival {rival:.2f}"
     if normal is not None:
         # (a straight edge's match slides along it: only the part across it is measured)
         across = dx * normal[0] + dy * normal[1]
@@ -1503,7 +1536,8 @@ def edge_shift(q, ref, at_q, t, crop, at_t):
     if inner.sum() < PANEL_AREA / 2:
         return None, "little overlap once moved"
     after = _agree(ds[0], moved, inner)
-    seen = {"ncc": [round(before, 3), round(after, 3)], "area": area, "response": round(float(response), 3), "edge": True}
+    seen = {"ncc": [round(before, 3), round(after, 3)], "area": area, "response": round(float(response), 3), "edge": True,
+            "rival": round(rival, 3)}
     shift = (dx + rx[1] - rx[0], dy + ry[1] - ry[0])
     if normal is not None:
         across = float(shift[0] * normal[0] + shift[1] * normal[1])
