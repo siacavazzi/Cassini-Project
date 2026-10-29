@@ -1268,7 +1268,6 @@ def tile_scale(scale, f, own_sky=False, seen=None):
 DISK_WHITE = 99.5   # pass_scale: the percentile of the body's disk that the pass's white is at least
 DISK_MARGIN = (0.2, 16)   # ... the disk taken this much wider (of its radius, and full resolution pixels) for SPICE's error
 DISK_LEAST = 16     # ... measured only on at least this many pixels of the quarter-size frames
-DISK_GAMMA = 2.2    # pass_scale: an even body's gamma (a single picture's) from the pass's 3.0, as far as it is even
 
 
 def _disk_pixels(q, shape, x, y, radius):
@@ -1287,22 +1286,6 @@ def _disk_pixels(q, shape, x, y, radius):
     return q[inside]
 
 
-def _disk_inside(q, shape, x, y, radius):
-    """The pixels of q (as _disk_pixels) inside the body's disk: DISK_MARGIN[1] (SPICE's error) and a single picture's
-    FLOOR_EDGE inside its edge, the part of the body a single picture takes its floor on. Empty when that is not on
-    the frame or the disk is too small to have an inside. (Where SPICE is further off, sky comes into it, its floor is
-    the sky's and the body is not even: the scale is as without it.)"""
-    reach = radius - DISK_MARGIN[1] - calibration.FLOOR_EDGE
-    if reach <= 0:
-        return q[:0, 0]
-    k = 1024 / shape[0]
-    cy, cx = (511.5 - y) / k, (511.5 - x) / k
-    r = reach / k
-    rows = np.arange(0, shape[0], 4, dtype=np.float32)[:q.shape[0], None]
-    cols = np.arange(0, shape[1], 4, dtype=np.float32)[None, :q.shape[1]]
-    return q[(rows - cy) ** 2 + (cols - cx) ** 2 < r * r]
-
-
 def pass_scale(frames, u, drawn=None, true_colour=False, sky_tops=None, lit_levels=None):
     """The display scale of every tile of the pass (calibration.shared_scale over its frames merged in I/F, as
     mosaic_benchmark.display_scale): {"blacks": {filter: I/F}, "white": I/F, "gamma"}. Where the body fills
@@ -1314,16 +1297,14 @@ def pass_scale(frames, u, drawn=None, true_colour=False, sky_tops=None, lit_leve
     (the measured values come back as "sky_tops", with the soft "toe" above black). lit_levels: a dict given here gets
     each filter's lit median on the scale (linear, white = 1), which the luminance base's gains come from; the
     scale itself is the same with or without it."""
-    by, disks, inner = {}, {}, {}
+    by, disks = {}, {}
     for path, _, f, _, _, x, y, z in frames:
         _, iof, _ = stacking.load_hdr(path, u.get("repeat_gap", mosaic_benchmark.REPEAT_GAP))
         if iof is not None:
             q = iof[::4, ::4].astype(np.float32)
             by.setdefault(f, []).append(q)
             if z:
-                radius = RADIUS.get(u["key"][0], 0) / (z * IFOV[u["key"][2]])
-                disks.setdefault(f, []).append(_disk_pixels(q, iof.shape, x, y, radius))
-                inner.setdefault(f, []).append(_disk_inside(q, iof.shape, x, y, radius))
+                disks.setdefault(f, []).append(_disk_pixels(q, iof.shape, x, y, RADIUS.get(u["key"][0], 0) / (z * IFOV[u["key"][2]])))
     if not by:
         return {"blacks": {}, "white": 1.0, "gamma": 3.0, "filled": False}
     scale = calibration.shared_scale(list(by.values()), 99.9, gamma=3.0)
@@ -1371,7 +1352,7 @@ def pass_scale(frames, u, drawn=None, true_colour=False, sky_tops=None, lit_leve
         # body clipped white. White at least the DISK_WHITE percentile of its disk, as a body against the sky has (a
         # body over most of the frames already sets their 99.5th percentile: left as it is)
         white = max(white, max(float(np.percentile(on[f] - blacks[f], DISK_WHITE)) for f in on))
-    toe = shoulder = None
+    toe = None
     if calibration.look() == "balanced":
         # where the pass has dark sky, no band's black below that sky's level plus the noise margin, as a single
         # picture's (calibration.sky_levels): the 1st percentile of a pass that is mostly sky sits in the sky's
@@ -1398,14 +1379,7 @@ def pass_scale(frames, u, drawn=None, true_colour=False, sky_tops=None, lit_leve
                     tops[f] = max(margin, top)
             toe = SKY_TOE * max(tops.values())
             blacks = {f: max(blacks[f], level + tops[f]) for f, level in zip(by, levels)}
-            blacks, white, even = _even_body(by, on, inner, dict(zip(by, levels)), blacks, white, drawn)
-            if even:
-                # (toward a single picture's gamma from the steeper 3.0; a filled pass's gentler 1.5 is kept)
-                gamma = min(gamma, gamma + (DISK_GAMMA - gamma) * even)
-                shoulder = calibration.SHOULDER
     out = {"blacks": blacks, "white": white, "gamma": gamma, "filled": filled, "floor": round(floor, 3)}
-    if shoulder:
-        out["shoulder"] = shoulder
     if toe:
         out["toe"], out["sky_tops"] = toe, tops
     mine = [f for f in (drawn or []) if f in by]
@@ -1443,53 +1417,6 @@ def pass_scale(frames, u, drawn=None, true_colour=False, sky_tops=None, lit_leve
             lit = v[v > 0.2 * np.percentile(v, 99)]
             lit_levels[f] = float(np.median(lit)) if lit.size else 0.0
     return out
-
-
-def _even_body(by, on, inner, levels, blacks, white, drawn):
-    """pass_scale's blacks and white for an even body against the sky, and how even it is (0 to 1; 0: unchanged): a
-    moon's full disk at low phase (Dione at zero phase, Rhea) was drawn a white disk over a black set at the sky, in
-    every frame, though a single picture of it shows its surface. Each band's black is at least its sky level plus
-    the floor black of what is lit, as a single picture's (calibration.evenness: FLOOR_SHARE of the floor of the lit
-    pixels, FLOOR_EDGE from the sky, times how even they are; every frame of the band), and the white is as far above
-    the black as before. Only with the body on the frames, and as far as its disk's inside (_disk_inside, DISK_LEAST
-    pixels or more) is even as well; rings, a glow or another body in the frames are lit too and make them uneven (117RI EQXSHADOW's equinox
-    rings went black under a floor taken on Saturn's disk alone). How even is one for every band (the mean of the
-    bands drawn), so each band's black takes the same share of its floor and a colour set keeps the colour the camera
-    saw (one black in I/F over bands of different brightness turned a gray moon orange: its blue band's floor is
-    lower). by, levels: per band, its frames and its sky level; on, inner: per band, its disk's pixels (DISK_LEAST or
-    more) and its disk's inside; blacks: the blacks so far (the sky's), over which a pixel is lit."""
-    side = 2 * math.ceil(calibration.FLOOR_EDGE / 4) + 1   # (FLOOR_EDGE full resolution pixels, on the quarter size frames)
-    floors, evens = {}, {}
-    for f, iofs in by.items():
-        if sum(a.size for a in inner.get(f, ())) < DISK_LEAST:
-            continue
-        # (lit: over the band's black, so faint light the sky's mask takes for sky, rings at a few per cent of Saturn's
-        # brightness, counts)
-        far = [cv2.erode((i > blacks[f]).astype(np.uint8), np.ones((side, side), np.uint8)).astype(bool) for i in iofs]
-        lit = np.concatenate([i[k] for i, k in zip(iofs, far)])
-        if lit.size >= DISK_LEAST:
-            # (and the disk's inside even too: a crescent's lit part alone is, near enough, with its night side in its
-            # disk; taken on what is lit alone, 15% of a crescent went black)
-            (floor, even), (inside, even_inside) = (calibration.evenness(v - np.float32(levels[f]))
-                                                    for v in (lit, np.concatenate(inner[f])))
-            floors[f], evens[f] = min(floor, inside), min(even, even_inside)
-    if not floors:
-        return blacks, white, 0.0
-    even = float(np.mean([evens[f] for f in [f for f in (drawn or []) if f in floors] or floors]))
-    if even <= 0:
-        return blacks, white, 0.0
-    raised = {f: max(b, levels[f] + calibration.FLOOR_SHARE * even * floors[f]) if f in floors else b
-              for f, b in blacks.items()}
-    # (each band's brightest, the pass's 99.9th percentile or its disk's DISK_WHITE, as far over its new black as the
-    # brightest band's was over its old one)
-    tops = []
-    for f, iofs in by.items():
-        top = float(np.percentile(np.concatenate([i[::8, ::8].ravel() for i in iofs]), 99.9))
-        if f in on:
-            top = max(top, float(np.percentile(on[f], DISK_WHITE)))
-        tops.append((top - blacks[f], top - raised[f]))
-    old, new = max(tops)
-    return raised, white * new / old if old > 0 else white, even
 
 
 def _lit_crop(image, side):

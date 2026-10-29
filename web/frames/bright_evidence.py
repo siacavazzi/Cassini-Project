@@ -1,8 +1,8 @@
 #!/usr/bin/env python3
-"""Bright subjects blown white in movies and mosaics (spot check round 2): evidence for the pass scale's even body
-and a filled pass's disk white (obs_mosaic.pass_scale). Draws with the checkout given by WT (main's for before, this
-one's for after), in the repo venv, with the frame server's environment (CASSINI_DATA, CASSINI_KERNELS,
-CASSINI_GEOMETRY_CACHE, CASSINI_CISSCAL). Read-only on the archive.
+"""Bright subjects blown white in movies and mosaics (spot check round 2): evidence for a filled pass's disk white
+(obs_mosaic.pass_scale, FILL_DISK). Draws with the checkout given by WT (main's for before, this one's for after), in
+the repo venv, with the frame server's environment (CASSINI_DATA, CASSINI_KERNELS, CASSINI_GEOMETRY_CACHE,
+CASSINI_CISSCAL). Read-only on the archive.
 
   python web/frames/bright_evidence.py census --out census.tsv
       every pass (geometry only, no pictures): whether it is "all body" (filled), the body's radius in pixels and the
@@ -46,7 +46,7 @@ def disk_share(x, y, radius):
 
 def census(out):
     """Every pass's geometry: filled (all body) and how much of its frames its disk covers. A filled pass whose disk is
-    not over all of every frame can get its disk's white (DISK_WHITE); the even body's floor black needs pictures."""
+    not over all of every frame can get its disk's white (DISK_WHITE, under FILL_DISK of them with its margin)."""
     idx, _ = reel.load_index()
     n = small = 0
     with open(out, "w") as fh:

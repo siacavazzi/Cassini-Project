@@ -1272,21 +1272,11 @@ def _floor(iofs, levels, sky=None):
     far = cv2.erode((~sky).astype(np.uint8), np.ones((side, side), np.uint8)).astype(bool)
     if far.sum() < FLOOR_MIN * far.size:
         return 0.0
-    floor, even = evenness(lum[far])
-    return FLOOR_SHARE * even * floor
-
-
-"""
-(the floor, how even) of lit brightness values lum (above the sky levels): their FLOOR_PCT percentile, and 0 to 1 as
-that floor goes from FLOOR_EVEN[0] to FLOOR_EVEN[1] of their WHITE_PCT percentile; (0, 0) when either is not over 0.
-A picture's floor black is FLOOR_SHARE of the floor times how even (_floor); a mosaic's or movie's, its body's
-(obs_mosaic.pass_scale)
-"""
-def evenness(lum):
-    floor, top = (float(v) for v in np.percentile(lum, (FLOOR_PCT, WHITE_PCT)))
+    floor, top = (float(v) for v in np.percentile(lum[far], (FLOOR_PCT, WHITE_PCT)))
     if floor <= 0 or top <= 0:
-        return 0.0, 0.0
-    return floor, min(max((floor / top - FLOOR_EVEN[0]) / (FLOOR_EVEN[1] - FLOOR_EVEN[0]), 0.0), 1.0)
+        return 0.0
+    even = min(max((floor / top - FLOOR_EVEN[0]) / (FLOOR_EVEN[1] - FLOOR_EVEN[0]), 0.0), 1.0)
+    return FLOOR_SHARE * even * floor
 
 
 """

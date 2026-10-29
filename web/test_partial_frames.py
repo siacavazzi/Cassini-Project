@@ -133,17 +133,15 @@ def frames_of(radius_px, where):
 
 real = stacking.load_hdr
 with calibration.looking("balanced"):
-    for radius, where, kind in ((10, (80.0, -60.0), "small"), (150, (380.0, 0.0), "medium"), (400, (0.0, 0.0), "filled")):
+    for radius, where, kind in ((10, (80.0, -60.0), "small"), (150, (380.0, 0.0), "medium"), (400, (0.0, 0.0), "filled"),
+                                (60, (0.0, 0.0), "centred")):
         fr3, stacking.load_hdr = frames_of(radius, where)
         w = {"key": ("JUPITER", f"OBSJ{radius}", "W", 0), "frames": fr3, "z": fr3[0][7], "movie": True}
+        new = om.pass_scale(fr3, w)
         least = om.DISK_LEAST
         om.DISK_LEAST = 1 << 30   # no disk measured: the scale as it was
         old = om.pass_scale(fr3, w)
         om.DISK_LEAST = least
-        # (the disk's white alone: an even face's floor black, _even_body, is web/test_even_body.py's)
-        even_body, om._even_body = om._even_body, lambda by, on, inner, levels, blacks, white, drawn: (blacks, white, 0.0)
-        new = om.pass_scale(fr3, w)
-        om._even_body = even_body
         top = 0.35 - old["blacks"]["CB2"]   # the disk's brightest (centre of the face)
         if kind == "small":
             assert top / old["white"] > 2 and top / new["white"] < 1.3, (old["white"], new["white"], top)
@@ -154,6 +152,14 @@ with calibration.looking("balanced"):
             assert old["white"] <= new["white"] < 1.1 * old["white"], (old["white"], new["white"])
             print(f"medium body ({2 * radius} px, 7% of the frame): white {old['white']:.4f} -> {new['white']:.4f} "
                   f"({new['white'] / old['white'] - 1:+.1%})")
+        elif kind == "centred":
+            # a small body in the middle of the frames is "filled" (all body: the classic white, the frames' 99.5th
+            # percentile, here on the sky's noise and in the disk's middle): white at least its disk's as well
+            assert old["filled"] and new["filled"] and top / old["white"] > 1.2 and top / new["white"] < 1.05, \
+                (old["white"], new["white"], top)
+            print(f"small body in the middle of the frames ({2 * radius} px, filled): white {old['white']:.4f} -> "
+                  f"{new['white']:.4f}; the disk's brightest at {top / old['white']:.1f}x white before, "
+                  f"{top / new['white']:.2f}x now")
         else:
             assert new == old, (new, old)
             print(f"body filling the frames ({2 * radius} px): scale unchanged (white {new['white']:.4f})")
