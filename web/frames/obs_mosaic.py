@@ -822,16 +822,18 @@ def lum_frames(u, p):
 
 def _mine(u, p, tiles, f):
     """The placed tiles filter_mosaic draws for f: the filter's own, or for LUM the luminance base's (lum_frames),
-    a band other than the grey filter carrying its gain (applied by _shade)."""
+    a band other than the grey filter carrying its gain (applied by _shade, times a mosaic movie copy's own lap gain)."""
     if f != LUM:
         return [t for t in tiles if t["filter"] == f and "offset" in t]
-    lum, frames = _luminance(p), lum_frames(u, p)
+    lum = _luminance(p)
+    # (a mosaic movie's picture marks its own base, rolling_base)
+    frames = {t["n"] for t in tiles if t.get("base")} if any("base" in t for t in tiles) else lum_frames(u, p)
     gamma = p["display_scale"].get("gamma", 2.2)
     out = []
     for t in tiles:
         if "offset" in t and t["n"] in frames:
             g = lum["gains"].get(t["filter"], 1.0)
-            out.append(dict(t, gain=g, gamma=gamma) if g != 1.0 else t)
+            out.append(dict(t, gain=round(g * t.get("gain", 1.0), 4), gamma=gamma) if g != 1.0 else t)
     return out
 
 
@@ -856,12 +858,15 @@ def _shade(part, t):
     return out
 
 
-def lum_base(u, p, tiles, used):
+def lum_base(u, p, tiles, used, base=None):
     """Whether the mosaic of these tiles, drawn in the filters used, needs its luminance base under it: a tile of
     the base sits where the picture would otherwise have nothing (no tile of every colour filter at its place, or,
-    drawn in gray, a tile of a filter other than the one drawn)."""
-    frames = lum_frames(u, p)
-    base = [t for t in tiles if "offset" in t and t["n"] in frames]
+    drawn in gray, a tile of a filter other than the one drawn). base: the base's tiles (lum_frames' by default)."""
+    if any("base" in t for t in tiles):
+        return any(t.get("base") for t in tiles)   # (a mosaic movie's picture: rolling_base said)
+    if base is None:
+        frames = lum_frames(u, p)
+        base = [t for t in tiles if "offset" in t and t["n"] in frames]
     if len(used) != 3:
         return any(t["filter"] != used[0] for t in base)
     by = {f: [t["offset"] for t in tiles if t["filter"] == f and "offset" in t] for f in used}
@@ -1894,6 +1899,11 @@ def rolled_room(passes):
         ROLLED_PASSES = max(ROLLED_PASSES, int(passes))
 
 
+def _as_drawn(mine):
+    """What a mosaic movie's picture of one filter is drawn from (_rolled): each tile and the gain it is drawn at."""
+    return frozenset((t["n"], t.get("gain", 1.0)) for t in mine)
+
+
 def _rolled_put(key, drawn, rgba):
     with _lock:
         kept = [x for x in _rolled.get(key, []) if x[0] != drawn][-(ROLLED_EACH - 1):] + [(drawn, rgba)]
@@ -1915,20 +1925,20 @@ def _roll(u, p, key, mine, rect, cache):
     picture, a jump, a step back in time): the caller draws it whole."""
     with _lock:
         kept = list(_rolled.get(key, []))
-    want = {t["n"] for t in mine}
+    want = _as_drawn(mine)
     # only forward: what is kept of a picture is all still wanted or covered by a newer copy of its place; the
-    # one kept with the fewest tiles to add
+    # one kept with the fewest tiles to add (a tile drawn at another gain is not the same tile)
     best = None
     for drawn, rgba in kept:
         new = sorted(want - drawn)
-        if new and len(new) <= ROLL_STEPS and (not drawn or new[0] > max(drawn)) and (best is None or len(new) < len(best[0])):
+        if new and len(new) <= ROLL_STEPS and (not drawn or new[0][0] > max(drawn)[0]) and (best is None or len(new) < len(best[0])):
             best = (new, rgba)
     if best is None:
         return None
     new, rgba = best
     rgba = rgba.copy()
     by_n = {t["n"]: t for t in mine}
-    for n in new:
+    for n, _ in new:
         _over(u, p, rgba, by_n[n], rect, cache, match=False)
     return rgba
 
@@ -1976,7 +1986,7 @@ def filter_mosaic(u, p, f, tiles, rect, cache, ref=None, tag=""):
 
     with _lock:
         kept = _grown_last.get(path)
-        same = [x[1] for x in _rolled.get(roll, []) if x[0] == frozenset(t["n"] for t in mine)] if roll else []
+        same = [x[1] for x in _rolled.get(roll, []) if x[0] == _as_drawn(mine)] if roll else []
     if kept is not None:
         return kept
     # a mosaic movie's filter whose tiles did not change since one of its last pictures (the new tile is another
@@ -1987,7 +1997,7 @@ def filter_mosaic(u, p, f, tiles, rect, cache, ref=None, tag=""):
     # it is kept in the cache), as writing the filter's whole canvas costs more than growing it
     grew = _roll(u, p, roll, mine, rect, cache) if roll and not os.path.exists(path) else None
     if grew is not None:
-        _rolled_put(roll, frozenset(t["n"] for t in mine), grew)
+        _rolled_put(roll, _as_drawn(mine), grew)
         return grew
     data = reel._cached(path, make)
     with _lock:
@@ -1999,7 +2009,7 @@ def filter_mosaic(u, p, f, tiles, rect, cache, ref=None, tag=""):
         rgba = np.asarray(Image.open(io.BytesIO(data)).convert("RGBA"))
     if roll:
         # a picture the mosaic movie's next ones grow from (_roll)
-        _rolled_put(roll, frozenset(t["n"] for t in mine), rgba)
+        _rolled_put(roll, _as_drawn(mine), rgba)
     return rgba
 
 
@@ -2225,8 +2235,8 @@ def so_far(u, n, cache, made=None, out=OUT):
     # the seams are solved on the best covered filter drawn and shared by all (balanced look)
     ref = max(used, key=lambda f: count[f])
     # the luminance base under the picture, where it holds tiles the picture would not show (a mosaic movie's
-    # picture, rolling_layout, keeps its own drawing: its name does not count the base's tiles)
-    base = not plain.startswith("lap-") and lum_base(u, p, tiles, used)
+    # picture too: rolling_layout's name counts the base's tiles)
+    base = lum_base(u, p, tiles, used)
     if len(used) == 3:
         colour = used
         acc = [filter_mosaic(u, p, f, tiles, rect, cache, ref, tag) for f in colour]
@@ -3405,12 +3415,127 @@ def _fade_weight(age, fade):
     return 1.0 if age <= 0 else max(floor, 1 - (1 - floor) * age / fade[0])
 
 
+# ---------- a mosaic movie's laps on one level ----------
+# Each lap's copy of a place replaces the copy before it at its own brightness (its exposure, the light on it), so
+# a single panel flashed darker or brighter than the mosaic round it, then back, lap after lap (SPOLEDYN001: 20 such
+# swings). Each copy is brought to the level of the copy it replaces, one broad gain over the ground both see, so
+# the laps change only where the scene does. A step bigger than LAP_BELIEVE is another scene (a limb come into
+# view), not an exposure: that copy is drawn as it came, and the copies after it are brought to it.
+LAP_SIDE = 128           # px: the side of a frame the two copies are measured at
+LAP_LIT = 0.1            # of the brighter copy's bright end: the pixels measured (the body, not the sky's noise)
+LAP_MIN = 400            # lit pixels both copies share, at LAP_SIDE, for a match; fewer, and the copy stays as it is
+LAP_BELIEVE = 3.2        # the largest step (linear) from one copy to the next taken for an exposure (either way):
+                         # SPOLEDYN001's short and long exposures of one place differ 2.6-2.8 times
+LAP_GAIN = (0.25, 4.0)   # the furthest a copy's gain goes, over every lap
+LAP_RULE = "g1"          # in the pictures' names: these gains, and the base drawn under the picture
+
+
+def _lap_prev(u):
+    """For each frame of a mosaic movie, the frame before it at its slot in its filter (the copy it replaces), or
+    None."""
+    if "_lap_prev" in u:
+        return u["_lap_prev"]
+    where, last, out = slots(u), {}, []
+    for j, fr in enumerate(u["frames"]):
+        key = (where[j], fr[2]) if where[j] is not None else None
+        out.append(last.get(key) if key else None)
+        if key:
+            last[key] = j
+    u["_lap_prev"] = out
+    return out
+
+
+def _lap_step(u, p, cache, a, b):
+    """The broad gain that brings copy b of a place to copy a's level (tile reports), on linear brightness over
+    the lit ground both cover; 1.0 when they share too little lit ground; None when the step is a change of scene
+    (past LAP_BELIEVE)."""
+    memo = u.setdefault("_lap_step", {})
+    key = (_tiles(u, cache, p["display_scale"]), a["n"], b["n"])
+    if key in memo:
+        return memo[key]
+    k = LAP_SIDE / FRAME
+    boxes = []
+    for t in (a, b):
+        bx, by, bw, bh = t["box"]
+        boxes.append((round((t["offset"][0] + bx) * k), round((t["offset"][1] + by) * k), max(1, round(bw * k)), max(1, round(bh * k))))
+    x0, y0 = max(q[0] for q in boxes), max(q[1] for q in boxes)
+    x1, y1 = min(q[0] + q[2] for q in boxes), min(q[1] + q[3] for q in boxes)
+    g = 1.0
+    pics = [_pic(u, cache, p["display_scale"], t) for t in (a, b)]
+    if not all(os.path.exists(x) for x in pics):
+        return g   # (a layout worked out without the pictures: nothing to measure)
+    if x1 > x0 and y1 > y0:
+        gamma = p["display_scale"].get("gamma", 2.2)
+        cut = []
+        for pic, (left, top, sw, sh) in zip(pics, boxes):
+            part = _part(pic, sw, sh)[y0 - top:y1 - top, x0 - left:x1 - left]
+            cut.append((calibration.decode(part[..., 0].astype(np.float32) / 255, gamma), part[..., 3] > 250))
+        (la, ma), (lb, mb) = cut
+        both = ma & mb
+        if both.sum() >= LAP_MIN:
+            top = max(float(np.percentile(la[both], 99)), float(np.percentile(lb[both], 99)))
+            lit = both & (np.maximum(la, lb) > LAP_LIT * top)
+            if lit.sum() >= LAP_MIN and lb[lit].mean() > 0:
+                step = float(la[lit].mean() / lb[lit].mean())
+                g = step if 1 / LAP_BELIEVE <= step <= LAP_BELIEVE else None
+    memo[key] = g
+    return g
+
+
+def lap_gain(u, p, cache, j, report, made_only=False, skipped=None):
+    """The gain tile j of a mosaic movie is drawn at: its place's copies, from the first, each brought to the one
+    before it (_lap_step), within LAP_GAIN; a copy of another scene starts again at 1. report(i): tile i's report,
+    or None when it is not made (made_only), which then goes in skipped and ends the chain there: the picture is
+    not the frame's own yet (its name says which gains it drew)."""
+    prev = _lap_prev(u)
+    chain, i = [j], prev[j]
+    while i is not None:
+        t = report(i)
+        if t is None:
+            if skipped is not None and i not in skipped:
+                skipped.append(i)
+            break
+        if "offset" in t:
+            chain.append(i)
+        i = prev[i]
+    g = 1.0
+    for a, b in zip(chain[::-1], chain[-2::-1]):
+        step = _lap_step(u, p, cache, report(a), report(b))
+        g = 1.0 if step is None else float(np.clip(g * step, *LAP_GAIN))
+    return round(g, 4)
+
+
+def rolling_base(u, p, tiles, used):
+    """The tiles (their n) a mosaic movie's picture draws in its luminance base, or none when the filters used cover
+    every place it shows: the pass's base tiles (lum_frames) and, at a slot no base tile has reached yet, a tile
+    already there (of the filters drawn, else of the base's, else of any: the most taken so far, the newest), so a
+    place shown in one filter stays when the picture changes filters (a pass whose gray filter starts a lap after
+    its other filters, or after its polarized frames)."""
+    frames, where, allowed = lum_frames(u, p), slots(u), set(_luminance(p)["filters"])
+    base = [t for t in tiles if t["n"] in frames]
+    have = {where[t["n"]] for t in base if where[t["n"]] is not None}
+    # (ties: the filter taken first, as the picture's filter is chosen before a gray tile is placed)
+    taken = collections.Counter(t["filter"] for t in tiles)
+    first = {f: -i for i, f in enumerate(dict.fromkeys(t["filter"] for t in tiles))}
+    rank = lambda t: (t["filter"] in used, t["filter"] in allowed, taken[t["filter"]], first[t["filter"]], t["n"])
+    fill = {}
+    for t in tiles:
+        key = where[t["n"]] if where[t["n"]] is not None else ("frame", t["n"])
+        if t["n"] not in frames and key not in have and (key not in fill or rank(t) > rank(fill[key])):
+            fill[key] = t
+    base += fill.values()
+    return {t["n"] for t in base} if lum_base(u, p, tiles, used, base) else set()
+
+
 def rolling_layout(u, n, cache, laps=1, made_only=False, skipped=None, fade=(0, 0)):
     """What a mosaic movie (a raster repeated over the same places: kind "mosaic_movie") shows at frame n, in the
     form of layout(): every place's newest tile of each filter taken by then, so the mosaic never empties when a
     new lap begins and each tile replaces its own earlier copy (laps=1, a time-lapse); laps=N keeps the N newest
     copies of each place, older under newer (a rolling mosaic). Drawn by so_far through filter_mosaic and
-    mosaic.compose like the pass's mosaic, on its scale and in its view. made_only: only tile n is made here, the
+    mosaic.compose like the pass's mosaic, on its scale and in its view: the colour filters where all three
+    cover, over the luminance base (lum_base) everywhere a tile is, so the picture never shrinks when a colour set
+    completes (rolling_base: the tiles marked "base"). Each copy is drawn at its lap gain (lap_gain: brought to the copy it replaces). The tiles drawn
+    carry "drawn" (the colour's or the base's), which the name counts. made_only: only tile n is made here, the
     other places show the tiles already made (a window playing fast never waits on the tiles it missed;
     tiles_ahead makes them); skipped (a list) gets the tiles left out for that, so the caller knows the picture
     is not yet the frame's own. fade (fade_style): older tiles fade (Rolling) rather than stay as bright as the
@@ -3422,6 +3547,14 @@ def rolling_layout(u, n, cache, laps=1, made_only=False, skipped=None, fade=(0, 
     with _lock:
         kept = dict(rec["tiles"]) if rec is not None else {}
     there = rec["tiles_dir"] if rec is not None else _tiles(u, cache, p["display_scale"])
+
+    def report(j):
+        t = kept.get(j)
+        if t is None:
+            if made_only and j != n and not os.path.exists(os.path.join(there, f"{j}.json")):
+                return None
+            t = kept[j] = tile(u, j, cache, p["display_scale"])
+        return t
     # each place's newest copies that are there to draw: a copy not made yet (made_only) or one SPICE could not
     # place leaves the copy before it up, so a place never drops out of the mosaic and comes back
     keep, seen, spare = [], {}, {}
@@ -3431,13 +3564,11 @@ def rolling_layout(u, n, cache, laps=1, made_only=False, skipped=None, fade=(0, 
         key = (where[j] if where[j] is not None else ("frame", j), u["frames"][j][2])
         if seen.get(key, 0) >= laps:
             continue
-        t = kept.get(j)
+        t = report(j)
         if t is None:
-            if made_only and j != n and not os.path.exists(os.path.join(there, f"{j}.json")):
-                if skipped is not None:
-                    skipped.append(j)
-                continue
-            t = tile(u, j, cache, p["display_scale"])
+            if skipped is not None:
+                skipped.append(j)
+            continue
         if "offset" not in t:
             continue
         if partial(t):
@@ -3450,21 +3581,31 @@ def rolling_layout(u, n, cache, laps=1, made_only=False, skipped=None, fade=(0, 
     keep += [t for key, t in spare.items() if not seen.get(key)]
     # (in the order they are drawn, so a fade's brightness map, _faded and the page's, lays them alike)
     tiles = under_first(sorted(keep, key=lambda t: t["n"]))
-    rect = view_rect(p, tiles)
     count = {}
     for t in tiles:
-        if "offset" in t:
-            count[t["filter"]] = count.get(t["filter"], 0) + 1
+        count[t["filter"]] = count.get(t["filter"], 0) + 1
     if not count:
         return None
+    rect = view_rect(p, tiles)
     colour = p["colour"]
     used = colour if colour and all(count.get(f) for f in colour) else [p["grey"] if count.get(p["grey"]) else max(count, key=count.get)]
-    ids = hashlib.sha1(",".join(str(t["n"]) for t in tiles if t["filter"] in used).encode()).hexdigest()[:12]
+    base = rolling_base(u, p, tiles, used)
+    gamma = p["display_scale"].get("gamma", 2.2)
+    # copies of the tile dicts, since the pass's record keeps the originals
+    out = []
+    for t in tiles:
+        g = lap_gain(u, p, cache, t["n"], report, made_only, skipped)
+        t = dict(t, gain=g, gamma=gamma, base=t["n"] in base) if g != 1.0 else dict(t, base=t["n"] in base)
+        if t["filter"] in used or t["base"]:
+            t["drawn"] = True
+        out.append(t)
+    tiles = out
+    drawn = [t for t in tiles if t.get("drawn")]
+    ids = hashlib.sha1((LAP_RULE + ":" + ",".join(f"{t['n']}x{t['gain']}" if "gain" in t else str(t["n"]) for t in drawn)).encode()).hexdigest()[:12]
     if not fade[0]:
         return p, tiles, rect, count, used, f"lap-{laps}-{ids}"
-    # ages from the newest tile drawn, so frames of a filter the picture does not draw share its picture; copies
-    # of the tile dicts, since the pass's record keeps the originals
-    newest = max(t["n"] for t in tiles if t["filter"] in used)
+    # ages from the newest tile drawn, so frames of a filter the picture does not draw share its picture
+    newest = max(t["n"] for t in drawn)
     tiles = [dict(t, fade=_fade_weight(newest - t["n"], fade)) for t in tiles]
     return p, tiles, rect, count, used, f"lap-{laps}-f{fade[0]}p{fade[1]}-{ids}"
 
@@ -3487,7 +3628,7 @@ def _faded(u, made, cache):
         w, h = max(1, W // FADE_SCALE), max(1, H // FADE_SCALE)
         light = np.ones((h, w), np.float32)
         for t in tiles:
-            if t["filter"] not in used or "offset" not in t:
+            if not t.get("drawn") or "offset" not in t:
                 continue
             part = _fade_part(t, rect, w, h, there)
             if part is None:
@@ -3545,7 +3686,7 @@ def fade_table(frame_id, cache, laps=1, W=0, H=0):
             frames.append(None)
             continue
         _, tiles, rect, _, used, _ = made
-        drawn = [t for t in tiles if t["filter"] in used and "offset" in t]
+        drawn = [t for t in tiles if t.get("drawn") and "offset" in t]
         frames.append({"n": [t["n"] for t in drawn], "newest": max([t["n"] for t in drawn] or [j])})
         for t in drawn:
             if str(t["n"]) not in parts:
