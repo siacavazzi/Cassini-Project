@@ -7,6 +7,8 @@
 2. A place's copies stay on one level from lap to lap. Each copy is the same ground at another exposure; drawn as it
    came, a place flashed darker or brighter than its neighbours, lap after lap. Each copy is now brought to the copy it
    replaces (lap_gain), grown or drawn whole alike; a step bigger than LAP_BELIEVE (another scene) is left as it is.
+3. A pass whose gray filter starts a lap after its other filters (or its polarized frames) keeps the places they
+   showed (rolling_base).
 Run: python web/test_rolling_base.py"""
 import io
 import json
@@ -174,4 +176,37 @@ os.remove(os.path.join(om._tiles(u, cache, SCALE), "1.json"))
 skipped = []
 made = om.rolling_layout(u, 9, cache, made_only=True, skipped=skipped)
 assert 1 in skipped and made[5] != whole, (skipped, made[5], whole)
+
+# ---------- 3. the gray filter starts a lap after another: the places shown keep their picture ----------
+# BL1 at every place first, then the clear filter (the pass's gray) lap after lap: when the first clear tile came in,
+# the picture fell to it alone (the clear filter covers every place later in the pass, so BL1 was not in its base)
+seq = [("BL1", q, 1.0) for q in range(4)] + [("CL1/CL2", q, 1.0) for q in range(4)] * 2
+u, cache = make_pass("LATE", seq, None, "CL1/CL2")
+use(u)
+area = []
+for n in range(len(seq)):
+    a = pic(om.rolling_webp(u["frames"][n][1], 512, cache, 1, wait=True)[0])
+    area.append(round(float((a[..., 3] > 128).mean()), 3))
+print("gray filter late: covered", area)
+assert all(area[n] >= 0.97 * area[n - 1] for n in range(1, len(area))), area
+made = om.rolling_layout(u, 4, cache)
+assert sorted(t["n"] for t in made[1] if t.get("base")) == [1, 2, 3, 4], [(t["n"], t.get("base")) for t in made[1]]
+made = om.rolling_layout(u, 11, cache)
+assert not any(t.get("base") for t in made[1]) and sorted(t["n"] for t in made[1] if t.get("drawn")) == [8, 9, 10, 11]
+
+# polarized frames first (C23JU_PORTRAIT: P0/GRN and IRP0/CB3, which the base never draws), then BL1, the pass's gray:
+# the places keep the polarized filter drawn so far (the most taken) until BL1 reaches them
+LEVEL.update({"P0/GRN": 110, "IRP0/CB3": 70})
+seq = [(f, q, 1.0) for q in range(4) for f in ("P0/GRN", "IRP0/CB3")] + [("BL1", q, 1.0) for q in range(4)] * 3
+u, cache = make_pass("POLAR", seq, None, "BL1")
+use(u)
+area = []
+for n in range(len(seq)):
+    a = pic(om.rolling_webp(u["frames"][n][1], 512, cache, 1, wait=True)[0])
+    area.append(round(float((a[..., 3] > 128).mean()), 3))
+print("polarized frames first: covered", area)
+assert all(area[n] >= 0.97 * area[n - 1] for n in range(1, len(area))), area
+made = om.rolling_layout(u, 8, cache)
+assert sorted((t["n"], t["filter"]) for t in made[1] if t.get("base")) == [(2, "P0/GRN"), (4, "P0/GRN"), (6, "P0/GRN"), (8, "BL1")], \
+    [(t["n"], t["filter"], t.get("base")) for t in made[1]]
 print("ok")

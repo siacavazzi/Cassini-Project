@@ -814,7 +814,9 @@ def _mine(u, p, tiles, f):
     a band other than the grey filter carrying its gain (applied by _shade, times a mosaic movie copy's own lap gain)."""
     if f != LUM:
         return [t for t in tiles if t["filter"] == f and "offset" in t]
-    lum, frames = _luminance(p), lum_frames(u, p)
+    lum = _luminance(p)
+    # (a mosaic movie's picture marks its own base, rolling_base)
+    frames = {t["n"] for t in tiles if t.get("base")} if any("base" in t for t in tiles) else lum_frames(u, p)
     gamma = p["display_scale"].get("gamma", 2.2)
     out = []
     for t in tiles:
@@ -845,12 +847,15 @@ def _shade(part, t):
     return out
 
 
-def lum_base(u, p, tiles, used):
+def lum_base(u, p, tiles, used, base=None):
     """Whether the mosaic of these tiles, drawn in the filters used, needs its luminance base under it: a tile of
     the base sits where the picture would otherwise have nothing (no tile of every colour filter at its place, or,
-    drawn in gray, a tile of a filter other than the one drawn)."""
-    frames = lum_frames(u, p)
-    base = [t for t in tiles if "offset" in t and t["n"] in frames]
+    drawn in gray, a tile of a filter other than the one drawn). base: the base's tiles (lum_frames' by default)."""
+    if any("base" in t for t in tiles):
+        return any(t.get("base") for t in tiles)   # (a mosaic movie's picture: rolling_base said)
+    if base is None:
+        frames = lum_frames(u, p)
+        base = [t for t in tiles if "offset" in t and t["n"] in frames]
     if len(used) != 3:
         return any(t["filter"] != used[0] for t in base)
     by = {f: [t["offset"] for t in tiles if t["filter"] == f and "offset" in t] for f in used}
@@ -3294,6 +3299,28 @@ def lap_gain(u, p, cache, j, report, made_only=False, skipped=None):
     return round(g, 4)
 
 
+def rolling_base(u, p, tiles, used):
+    """The tiles (their n) a mosaic movie's picture draws in its luminance base, or none when the filters used cover
+    every place it shows: the pass's base tiles (lum_frames) and, at a slot no base tile has reached yet, a tile
+    already there (of the filters drawn, else of the base's, else of any: the most taken so far, the newest), so a
+    place shown in one filter stays when the picture changes filters (a pass whose gray filter starts a lap after
+    its other filters, or after its polarized frames)."""
+    frames, where, allowed = lum_frames(u, p), slots(u), set(_luminance(p)["filters"])
+    base = [t for t in tiles if t["n"] in frames]
+    have = {where[t["n"]] for t in base if where[t["n"]] is not None}
+    # (ties: the filter taken first, as the picture's filter is chosen before a gray tile is placed)
+    taken = collections.Counter(t["filter"] for t in tiles)
+    first = {f: -i for i, f in enumerate(dict.fromkeys(t["filter"] for t in tiles))}
+    rank = lambda t: (t["filter"] in used, t["filter"] in allowed, taken[t["filter"]], first[t["filter"]], t["n"])
+    fill = {}
+    for t in tiles:
+        key = where[t["n"]] if where[t["n"]] is not None else ("frame", t["n"])
+        if t["n"] not in frames and key not in have and (key not in fill or rank(t) > rank(fill[key])):
+            fill[key] = t
+    base += fill.values()
+    return {t["n"] for t in base} if lum_base(u, p, tiles, used, base) else set()
+
+
 def rolling_layout(u, n, cache, laps=1, made_only=False, skipped=None, fade=(0, 0)):
     """What a mosaic movie (a raster repeated over the same places: kind "mosaic_movie") shows at frame n, in the
     form of layout(): every place's newest tile of each filter taken by then, so the mosaic never empties when a
@@ -3301,7 +3328,7 @@ def rolling_layout(u, n, cache, laps=1, made_only=False, skipped=None, fade=(0, 
     copies of each place, older under newer (a rolling mosaic). Drawn by so_far through filter_mosaic and
     mosaic.compose like the pass's mosaic, on its scale and in its view: the colour filters where all three
     cover, over the luminance base (lum_base) everywhere a tile is, so the picture never shrinks when a colour set
-    completes. Each copy is drawn at its lap gain (lap_gain: brought to the copy it replaces). The tiles drawn
+    completes (rolling_base: the tiles marked "base"). Each copy is drawn at its lap gain (lap_gain: brought to the copy it replaces). The tiles drawn
     carry "drawn" (the colour's or the base's), which the name counts. made_only: only tile n is made here, the
     other places show the tiles already made (a window playing fast never waits on the tiles it missed;
     tiles_ahead makes them); skipped (a list) gets the tiles left out for that, so the caller knows the picture
@@ -3349,14 +3376,14 @@ def rolling_layout(u, n, cache, laps=1, made_only=False, skipped=None, fade=(0, 
     rect = view_rect(p, tiles)
     colour = p["colour"]
     used = colour if colour and all(count.get(f) for f in colour) else [p["grey"] if count.get(p["grey"]) else max(count, key=count.get)]
-    frames = lum_frames(u, p) if lum_base(u, p, tiles, used) else ()
+    base = rolling_base(u, p, tiles, used)
     gamma = p["display_scale"].get("gamma", 2.2)
     # copies of the tile dicts, since the pass's record keeps the originals
     out = []
     for t in tiles:
         g = lap_gain(u, p, cache, t["n"], report, made_only, skipped)
-        t = dict(t, gain=g, gamma=gamma) if g != 1.0 else dict(t)
-        if t["filter"] in used or t["n"] in frames:
+        t = dict(t, gain=g, gamma=gamma, base=t["n"] in base) if g != 1.0 else dict(t, base=t["n"] in base)
+        if t["filter"] in used or t["base"]:
             t["drawn"] = True
         out.append(t)
     tiles = out
