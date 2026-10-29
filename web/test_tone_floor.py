@@ -1,8 +1,8 @@
-"""Synthetic checks of a single picture's own black (calibration._balanced_scale with _floor and _dark_sky, then
+"""Synthetic checks of a single picture's own black (calibration._balanced_scale with _floor, then
 load_linear and tone): an even bright surface with no sky (Titan's haze) spreads over the range instead of sitting at
 near-white; a lit sky that fails the sky test goes dark; an even body beside sky (a moon close-up) gets its floor taken
-off, a body with a terminator or a ring shadow does not; a night side the sky test counts as sky keeps its glow while
-the real sky stays black; one black for every channel keeps the colour; saturated pixels draw white (draw_saturated);
+off, a body with a terminator or a ring shadow does not; a night side the sky test counts as sky fades out instead of
+a ragged cut while the real sky stays black; one black for every channel keeps the colour; saturated pixels draw white (draw_saturated);
 and a reel's shared scale (tiles_scale) still fits every tile's white. Run: python web/test_tone_floor.py"""
 import os
 import sys
@@ -28,20 +28,20 @@ class Label:
 
 
 """
-The picture drawn (one uint8 image per channel); floor=False: without the floor black, dark=False: the sky's level and
-noise floor over the whole sky mask (both as before)
+The picture drawn (one uint8 image per channel); floor=False: without the floor black, soft=False: with a toe an eighth
+of the margin wide (both about as before)
 """
-def draw(iofs, floor=True, dark=True):
-    keep = cal.FLOOR_SHARE, cal._dark_sky
+def draw(iofs, floor=True, soft=True):
+    keep = cal.FLOOR_SHARE, cal.TOE
     if not floor:
         cal.FLOOR_SHARE = 0.0
-    if not dark:
-        cal._dark_sky = lambda iofs, sky: sky
+    if not soft:
+        cal.TOE = 0.0
     try:
         channels, margin, mix = cal.load_linear([Label() for _ in iofs], [None] * len(iofs), [i.astype(np.float32) for i in iofs])
         return [t[..., 0] for t in cal.tone(channels, margin, mix)]
     finally:
-        cal.FLOOR_SHARE, cal._dark_sky = keep
+        cal.FLOOR_SHARE, cal.TOE = keep
 
 
 def pct(p, *q):
@@ -88,12 +88,17 @@ crescent = np.where((r < 180) & (xx < 200), 0.3 * np.clip((215 - xx) / 120, 0.02
 night = (r < 180) & (xx >= 200)
 crescent[night] = 0.006 * np.exp(-(xx[night] - 200) / 60)     # twilight fading into the night side, < 5% of the limb
 crescent += 0.0005 + rng.normal(0, 0.0004, (H, H))
-before, after = draw([crescent], dark=False)[0], draw([crescent])[0]
+before, after = draw([crescent], soft=False)[0], draw([crescent])[0]
 twilight = night & (xx < 260)
 real_sky = r > 200
+# where the old toe cut the glow: the columns of the night side it left partly black (salt and pepper)
+share = np.array([(before[night & (xx == x)] == 0).mean() if (night & (xx == x)).any() else 0 for x in range(H)])
+edge = night & np.isin(xx, np.flatnonzero((share > 0.2) & (share < 0.8)))
 print("night side twilight p50: before", int(np.median(before[twilight])), "after", int(np.median(after[twilight])),
+      "| black pixels where it meets the cut: before %.2f after %.2f" % ((before[edge] == 0).mean(), (after[edge] == 0).mean()),
       "| real sky p99:", int(np.percentile(after[real_sky], 99)))
-assert np.median(before[twilight]) < 15 and np.median(after[twilight]) > 20   # was cut off hard, now shows
+assert np.median(after[twilight]) > np.median(before[twilight]) + 5          # the twilight shows
+assert edge.any() and (after[edge] == 0).mean() < 0.1         # the salt and pepper cut is a fade
 assert np.percentile(after[real_sky], 99) < 12                # the real sky's noise stays dark
 
 # ---- color: one black for every channel, taken off the brightness, keeps an even surface's color ----

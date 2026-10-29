@@ -530,6 +530,10 @@ FLOOR_EDGE = 10      # With sky, the floor is taken at least FLOOR_EDGE pixels f
 FLOOR_MIN = 0.01     # picture is that far), and only an even lit part has it taken off: none when the floor is under
 FLOOR_EVEN = (0.3, 0.6)  # FLOOR_EVEN[0] of the lit part's WHITE_PCT percentile, all of FLOOR_SHARE from FLOOR_EVEN[1],
                      # so dim things between the sky and the body (faint rings, a shadow, a night side) keep their light
+TOE = 0.05           # balanced composites: a margin up to this share of white (the sky's noise) has a toe (tone) as wide as
+                     # it and centred on it, so a night side or twilight it reaches into (the sky test counts it as sky)
+                     # fades out smoothly instead of being cut off with a ragged edge; from twice this (a floor black,
+                     # FLOOR_SHARE) the toe is an eighth of the margin, starting at it, as before; in between, a blend
 SATURATED = 4.0      # balanced, one frame: a pixel the camera saturated is drawn at least this many times white above its
                      # black (past the shoulder: white), whatever the picture's scale puts it at (draw_saturated)
 
@@ -1041,8 +1045,9 @@ def _clean_spikes(channels, sky, natural=False):
 
 """
 Balanced composites' channels (load_linear, aligned) as BGR uint8 images: the noise margin comes off the
-brightness (the channels' mean) through a toe, black up to the margin (the sky at or below its own level is
-black), then turning within an eighth of the margin into the brightness less the margin, and every channel is scaled by the same factor, so a pixel keeps its color.
+brightness (the channels' mean) through a toe (TOE), black up to its start (the sky at or below its own level is
+black), then turning into the brightness less the margin, and every channel is scaled by the same factor, so a pixel
+keeps its color.
 Past the shoulder the brightest channel rolls off softly (roll_off), the others by the same factor. mix = the
 set's channel mix (color_mix), applied first, on the linear values.
 """
@@ -1051,10 +1056,13 @@ def tone(channels, margin, mix=None, shoulder=SHOULDER, gamma=2.2):
     if mix is not None:
         x = apply_mix(mix, x)
     lum = x.mean(axis=0)
-    w = margin / 8
+    w = max(margin / 8, min(margin, TOE))
+    # how far past the margin the toe starts: 0 for a sky's margin (centred on it), half its width for a floor black
+    late = w / 2 * min(max(margin / TOE - 1, 0.0), 1.0) if TOE > 0 else w / 2
+    start = margin - w / 2 + late
     if w > 0:
-        toed = np.where(lum <= margin, 0, np.where(lum <= margin + w, (lum - margin) ** 2 / (2 * w),
-                                                  lum - margin - w / 2))
+        toed = np.where(lum <= start, 0, np.where(lum <= start + w, (lum - start) ** 2 / (2 * w),
+                                                  lum - margin - late))
         x *= np.where(lum > 0, toed / np.maximum(lum, 1e-12), 0)
     if shoulder:
         _shoulder(x, shoulder)
@@ -1119,10 +1127,8 @@ def _balanced_scale(iofs, sky_fraction=0.1, sky_percentile=98, sky=None, floor=T
     measured = bool(sky.mean() > sky_fraction)
     levels, margin = [0.0] * len(iofs), 0.0
     if measured:
-        # the noise floor (noise_floor) taken with the sky levels, on the same sky pixels and medians: those of the
-        # dark sky (_dark_sky), so a night side or a glow the sky test counts as sky sets neither
-        dark = _dark_sky(iofs, sky)
-        levels, margin = sky_levels([[iof] for iof in iofs], [[dark]] * len(iofs), floor_pct=sky_percentile)
+        # the noise floor (noise_floor) taken with the sky levels, on the same sky pixels and medians
+        levels, margin = sky_levels([[iof] for iof in iofs], [[sky]] * len(iofs), floor_pct=sky_percentile)
     # the black no lower than a share of the lit picture's own floor, as one margin (tone takes it off the brightness,
     # so every channel keeps its color): its darkest parts stay a little above black and the rest spreads out
     if floor:
@@ -1158,18 +1164,6 @@ def draw_saturated(labels, channels, margin):
         c[full] = np.maximum(c[full], np.float32(margin + SATURATED))
         share = max(share, float(full.mean()))
     return share
-
-
-"""
-The dark sky: the sky pixels (sky, the sky mask) whose brightness, the channels' mean over 15 pixels, is at most the
-sky's median of it. Beside a crescent the sky test counts the dim night side and twilight as sky too, and a sky's
-noise floor taken over them sits above them, cutting them off hard; the darker half of the sky is the real sky.
-The whole sky when that half is under 100 pixels.
-"""
-def _dark_sky(iofs, sky):
-    local = cv2.blur(iofs[0] if len(iofs) == 1 else np.mean(iofs, axis=0), (15, 15))
-    dark = sky & (local <= np.median(local[sky]))
-    return dark if dark.sum() > 100 else sky
 
 
 """
