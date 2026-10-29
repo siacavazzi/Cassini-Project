@@ -642,13 +642,14 @@ def _judge(u):
     # pointing of its own is a picture (stacking.repeat_of), so a scan sweeping on a little each frame
     # (ISS_013RI_AZSCNHIPH001: 0.1 of a frame every 73 s, 13 frames of ring in all) creeps under mosaic.min_step
     # frame to frame, but jumps over the window, as it did when each window's frames made one tile
-    gap, creep, steps = mosaic_benchmark.REPEAT_GAP, {}, []
+    gap, creep, steps, own = mosaic_benchmark.REPEAT_GAP, {}, [], []
     for _, _, f, t, _, x, y, z in u["frames"]:
         if z:
             p = (-x * z / u["z"], -y * z / u["z"])
             run = creep.setdefault(f, collections.deque())   # the filter's frames since its last jump
             if run:
                 step = max(abs(p[0] - run[-1][1][0]), abs(p[1] - run[-1][1][1])) / FRAME
+                own.append(step)
                 if step >= mosaic.min_step:
                     run.clear()
                 else:
@@ -671,6 +672,13 @@ def _judge(u):
                     steps.append(max(abs(p[0] - prev[0]), abs(p[1] - prev[1])) / FRAME)
                 prev = p
     u["jump_frac"] = float(np.mean([s >= mosaic.min_step for s in steps])) if steps else None
+    # ... but only a pass that can be a mosaic is one for creeping over the window, and only when the creep takes it
+    # past its own field: a ring survey too big for one (ISS_241RI_PROPSURVY001, 057RI_AZSCAN001), or a propeller
+    # retarget's view drifting under a frame in all (ISS_277RI_PROPRETRG001), creeping frame to frame, stays the movie
+    # it plays as
+    creeps = bool(own) and float(np.mean([s >= mosaic.min_step for s in own])) < MOVIE_JUMPS
+    if creeps and pts and max(np.ptp([p[0] for p in pts]), np.ptp([p[1] for p in pts])) < FRAME:
+        u["jump_frac"] = float(np.mean([s >= mosaic.min_step for s in own]))
     # dwell: over every frame taken (repeat exposures too, which the tiles merge), how many frames of one filter
     # the camera takes at a place before it jumps. A raster takes one to a few per pointing; a movie films the
     # same field for minutes (a spoke movie going back and forth between two patches of ring, one frame every
@@ -764,11 +772,15 @@ def _judge(u):
     u["pair"] = len(places) == 2 and max(abs(places[0][0] - places[1][0]), abs(places[0][1] - places[1][1])) <= PAIR_STEP * FRAME
     if len(places) < MIN_PLACES and not u["pair"] or u["movie"]:
         u["pair"] = u["slot_laps"] = False
+        if creeps:
+            u["movie"], u["kind"] = True, "movie"
         return
     pts = np.array(pts)
     lo, hi = pts.min(0) - FRAME / 2, pts.max(0) + FRAME / 2
     if (hi - lo).max() >= MAX_FRAMES * FRAME:
         u["pair"] = u["slot_laps"] = False
+        if creeps:
+            u["movie"], u["kind"] = True, "movie"
         return
     kind = "mosaic_movie" if len(places) >= 2 and u["repeats"] >= MOVIE_LAPS else "mosaic"
     if kind == "mosaic" and _one_view(u):
