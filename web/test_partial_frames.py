@@ -136,11 +136,14 @@ with calibration.looking("balanced"):
     for radius, where, kind in ((10, (80.0, -60.0), "small"), (150, (380.0, 0.0), "medium"), (400, (0.0, 0.0), "filled")):
         fr3, stacking.load_hdr = frames_of(radius, where)
         w = {"key": ("JUPITER", f"OBSJ{radius}", "W", 0), "frames": fr3, "z": fr3[0][7], "movie": True}
-        new = om.pass_scale(fr3, w)
         least = om.DISK_LEAST
         om.DISK_LEAST = 1 << 30   # no disk measured: the scale as it was
         old = om.pass_scale(fr3, w)
         om.DISK_LEAST = least
+        # (the disk's white alone: an even face's floor black, _even_body, is web/test_even_body.py's)
+        even_body, om._even_body = om._even_body, lambda by, on, inner, levels, base, blacks, white, *a: (blacks, white, 0.0)
+        new = om.pass_scale(fr3, w)
+        om._even_body = even_body
         top = 0.35 - old["blacks"]["CB2"]   # the disk's brightest (centre of the face)
         if kind == "small":
             assert top / old["white"] > 2 and top / new["white"] < 1.3, (old["white"], new["white"], top)
