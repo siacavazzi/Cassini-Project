@@ -675,13 +675,17 @@ balanced like a false color set: straight, one band floods the picture (IR3 over
 solid blue). Two visible color filters (NATURAL_PAIR: RED with BL1 or GRN) already look natural and stay straight.
 """
 NATURAL_PAIR = ("RED", "GRN", "BL1", "BL2", "VIO")
+# A pair with the one filter a body's surface shows through, a window in its haze (Titan's CB3, 938 nm: its other filters
+# see the haze and clouds above), stays straight too: its surface shows as the difference between the bands (dark
+# markings bluer, the haze rim blue), which the false color balance flattens into one orange
+SURFACE_WINDOW = {"TITAN": "CB3"}
 
 
 def color_mix(camera, bands, target=None, gains=None, own=False):
     if style() != "balanced" or len(bands) not in (2, 3):
         return None
     if len(bands) == 2:
-        if all(b in NATURAL_PAIR for b in bands):
+        if all(b in NATURAL_PAIR for b in bands) or SURFACE_WINDOW.get(str(target or "").upper()) in bands:
             return None
         if gains:
             # gains bring each band to the set's mean: the levels they balance are as their inverses
@@ -691,7 +695,6 @@ def color_mix(camera, bands, target=None, gains=None, own=False):
         if m is not None:
             return m
     gains = gains or false_gains(target, bands, camera)
-    measured = bool(gains)
     if not gains and own:
         # no mission measure of the body in these bands (a clear frame, a rare filter or body): the picture's own
         # balance alone (load_linear's FALSE_OWN), so no band outshines the others
@@ -700,7 +703,6 @@ def color_mix(camera, bands, target=None, gains=None, own=False):
         return None
     m = np.diag(np.asarray(gains, np.float32)).view(FalseMix)
     m.tint = tint_of(target)
-    m.measured = measured
     return m
 
 
@@ -720,12 +722,10 @@ class FalseMix(np.ndarray):
     through arithmetic."""
     tint = None
     typical = None
-    measured = True   # False: no mission measure of the body in these bands, the picture's own balance alone
 
     def __array_finalize__(self, obj):
         self.tint = getattr(obj, "tint", None)
         self.typical = getattr(obj, "typical", None)
-        self.measured = getattr(obj, "measured", True)
 
 
 _matrices = None
@@ -800,15 +800,10 @@ OWN_NEAR = 0.3       # ... measured where every band's share is within this (log
 GAIN_SPREAD = 12.0
 
 
-# ... and in a composite's own balance (load_linear), which reaches past it: Saturn's MT3 is 17 times darker than CB2
-# (false_color_bodies.json, WAC), and held to 12 the planet came out teal. The rings and haze that cap was for are taken
-# back to the body's tint by apply_mix (FALSE_REVERT, FALSE_CHROMA) and its detail is drawn at DETAIL_SPREAD
-OWN_SPREAD = 24.0
 
-
-def spread_capped(gains, spread=GAIN_SPREAD):
+def spread_capped(gains):
     low = min(gains)
-    return [min(g, low * spread) for g in gains]
+    return [min(g, low * GAIN_SPREAD) for g in gains]
 
 
 # the target of the balance for bodies with a color of their own, instead of gray: their natural color (sRGB, the color
@@ -826,10 +821,10 @@ def tint_of(target):
     return [v * 3 / sum(lin) for v in lin]
 
 
-def balance(levels, tint=None, spread=GAIN_SPREAD):
+def balance(levels, tint=None):
     mean = sum(levels) / len(levels)
     tint = tint or [1.0] * len(levels)
-    gains = spread_capped([(mean * t / v) ** FALSE_BALANCE for v, t in zip(levels, tint)], spread)
+    gains = spread_capped([(mean * t / v) ** FALSE_BALANCE for v, t in zip(levels, tint)])
     k = sum(levels) / sum(g * v for g, v in zip(gains, levels))
     return [g * k for g in gains]
 
@@ -1043,9 +1038,7 @@ def load_linear(labels, images=None, iofs=None, floor=1.0):
     if false:
         # false color: the mission's typical balance of the body (the table) misses a frame unlike it (Saturn's
         # high latitudes); FALSE_OWN of what is left between the picture's own lit bands is taken off as well. A
-        # movie of one scene, whose frames are alike, still keeps one color. With no table for the body in these
-        # bands (a set whose TARGET_NAME is a moon while the frames show Saturn) the picture's own balance stands in
-        # for the table, then the same: FALSE_OWN of the own balance alone left Saturn's MT3 short, a teal planet
+        # movie of one scene, whose frames are alike, still keeps one color
         bands = two_bands(channels)
         lum = np.mean(channels, axis=0)
         lit = lum > 0.2 * np.percentile(lum, 99)
@@ -1057,14 +1050,9 @@ def load_linear(labels, images=None, iofs=None, floor=1.0):
                 lit = np.where(lit)
                 lit = tuple(i[typical] for i in lit)
             tint = tint_of(_value(infos[0], "TARGET_NAME", ""))
-            levels = [float(np.median(c[lit])) for c in bands]
-            table = np.diagonal(mix)
-            if not mix.measured and min(levels) > 0:
-                # no table: the picture's own balance stands in for it
-                table = balance(levels, tint, OWN_SPREAD)
-            own = [v * g for v, g in zip(levels, table)]
+            own = [float(np.median(c[lit])) * g for c, g in zip(bands, np.diagonal(mix))]
             if min(own) > 0:
-                gains = spread_capped([g * o ** FALSE_OWN for g, o in zip(table, balance(own, tint, OWN_SPREAD))], OWN_SPREAD)
+                gains = spread_capped([g * o ** FALSE_OWN for g, o in zip(np.diagonal(mix), balance(own, tint))])
                 mix = np.diag(np.asarray(gains, np.float32)).view(FalseMix)
                 mix.tint = tint
     margin /= white

@@ -14,7 +14,8 @@ the same colour sets made by two checkouts of the pipeline, side by side.
               CASSINI_DATA=sets.zip CASSINI_GEOMETRY_CACHE=geometry.sqlite CASSINI_CISSCAL=... \\
                   python web/frames/color_register_evidence.py compare log.tsv --old OLD --new NEW --out DIR
   movie     the movie frame and mosaic of the pass each frame named is in (obs_mosaic.movie_frame and so_far at that
-            frame, as the camera window plays it), by OLD and by NEW, each in a fresh cache of its own:
+            frame, as the camera window plays it) and its set's composite, by OLD (one panel per --old) and by NEW,
+            each in a fresh cache of its own:
               CASSINI_DATA=... CASSINI_GEOMETRY_CACHE=... python web/frames/color_register_evidence.py movie \
                   W1486331264_1 --old OLD --new NEW --out DIR
 """
@@ -119,7 +120,13 @@ from PIL import Image
 sys.path.insert(0, os.path.join(sys.argv[1], "web", "frames")); sys.path.insert(0, sys.argv[1])
 import frame_server, obs_mosaic
 out, cache = {}, tempfile.mkdtemp(dir=sys.argv[3])
-for fid in json.load(open(sys.argv[2])):
+for fid, members in json.load(open(sys.argv[2])).items():
+    if members:
+        try:
+            im, rep = frame_server.composite(members)
+            im.convert("RGBA").save(os.path.join(sys.argv[3], f"{fid}-composite.png"))
+        except Exception as e:
+            print(fid, "composite:", e, file=sys.stderr)
     found = obs_mosaic.unit_of(fid)
     if found is None:
         out[fid] = {"error": "in no pass"}
@@ -143,27 +150,31 @@ def movie(args):
     from PIL import Image, ImageDraw
     named = ids_in(args.items)
     os.makedirs(args.out, exist_ok=True)
+    sets = sets_of(named)
     with open(os.path.join(args.out, "ids.json"), "w") as f:
-        json.dump(named, f)
+        json.dump({i: sets.get(i) for i in named}, f)
     reports = {}
-    for name, tree in (("old", args.old), ("new", args.new)):
+    # the checkouts left to right: each --old (--old A --old B for three panels), then --new
+    trees = [(f"old{j}" if len(args.old) > 1 else "old", t) for j, t in enumerate(args.old)] + [("new", args.new)]
+    labels = args.labels.split(",") if args.labels else (["before"] * len(args.old) + ["after"])
+    for name, tree in trees:
         folder = os.path.join(args.out, name)
         os.makedirs(folder, exist_ok=True)
         subprocess.run([sys.executable, "-c", MOVIE, os.path.abspath(tree), os.path.join(args.out, "ids.json"), folder],
                        check=True, cwd=os.path.abspath(tree), stdout=subprocess.DEVNULL)
         reports[name] = json.load(open(os.path.join(folder, "reports.json")))
     for fid in named:
-        for kind in ("movie", "mosaic"):
-            pics = [os.path.join(args.out, n, f"{fid}-{kind}.png") for n in ("old", "new")]
+        for kind in ("movie", "mosaic", "composite"):
+            pics = [os.path.join(args.out, n, f"{fid}-{kind}.png") for n, _ in trees]
             if not all(os.path.exists(q) for q in pics):
                 continue
-            side = Image.new("RGB", (2 * 600 + 8, 640), (24, 24, 24))
-            for k, (q, name) in enumerate(zip(pics, ("before", "after"))):
+            side = Image.new("RGB", (len(trees) * 608 - 8, 640), (24, 24, 24))
+            for k, (q, (name, _), label) in enumerate(zip(pics, trees, labels)):
                 im = Image.open(q).convert("RGBA")
                 im.thumbnail((600, 600))
                 side.paste(im, (k * 608 + (600 - im.width) // 2, 40 + (600 - im.height) // 2), im)
-                r = reports["old" if k == 0 else "new"][fid].get(kind) or {}
-                ImageDraw.Draw(side).text((k * 608 + 8, 8), f"{name}  {fid} {kind}  " + " ".join(
+                r = reports[name][fid].get(kind) or {"filter_names": ["(its set)"]}
+                ImageDraw.Draw(side).text((k * 608 + 8, 8), f"{label}  {fid} {kind}  " + " ".join(
                     r.get("color") or r.get("filter_names") or ["grey"]), fill=(230, 230, 160))
             side.save(os.path.join(args.out, f"{fid}-{kind}.jpg"), quality=90)
     with open(os.path.join(args.out, "reports.json"), "w") as f:
@@ -180,7 +191,7 @@ def compare(args):
     with open(os.path.join(args.out, "sets.json"), "w") as f:
         json.dump(sets, f)
     reports = {}
-    for name, tree in (("old", args.old), ("new", args.new)):
+    for name, tree in (("old", args.old[0]), ("new", args.new)):
         folder = os.path.join(args.out, name)
         os.makedirs(folder, exist_ok=True)
         subprocess.run([sys.executable, "-c", MAKE, os.path.abspath(tree), os.path.join(args.out, "sets.json"), folder],
@@ -213,7 +224,8 @@ def main():
     ap.add_argument("--out", required=True)
     ap.add_argument("--window", type=float, default=WINDOW, help="extract: seconds round each frame named")
     ap.add_argument("--count", action="store_true", help="extract: only count the frames")
-    ap.add_argument("--old", help="compare, movie: the checkout before")
+    ap.add_argument("--old", action="append", help="compare, movie: the checkout before (movie: repeat for more panels)")
+    ap.add_argument("--labels", help="movie: the panels' labels, comma separated, left to right")
     ap.add_argument("--new", default=REPO, help="compare, movie: the checkout after (this one)")
     args = ap.parse_args()
     {"extract": extract, "compare": compare, "movie": movie}[args.mode](args)

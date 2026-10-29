@@ -3452,6 +3452,22 @@ def held_of(filters, n, is_partial, whole):
     return n
 
 
+HELD_COVER = 0.5   # of a movie frame's own place: a colour set covering less of it is not shown for it (movie_frame)
+
+
+def held_cover(t, planes, rect, k):
+    """The share of tile t's place in the view (its box where SPICE puts it, as _place draws it) where every plane
+    of a colour set has the picture: 1.0 when the set covers all of it, 0.0 off it (movie_frame)."""
+    H, W = planes[0].shape[:2]
+    bx, by, bw, bh = t["box"]
+    left, top = round((t["offset"][0] + bx - rect[0]) * k), round((t["offset"][1] + by - rect[1]) * k)
+    x0, y0 = max(left, 0), max(top, 0)
+    x1, y1 = min(left + max(1, round(bw * k)), W), min(top + max(1, round(bh * k)), H)
+    if x0 >= x1 or y0 >= y1:
+        return 0.0
+    return float(np.logical_and.reduce([a[y0:y1, x0:x1, 3] > 0 for a in planes]).mean())
+
+
 def colour_sets(frames):
     """The pass's frames grouped into filter sets, the camera windows' own (sets_passes, the one rule: reel.load_index's
     sets, which the page reads from the data): a run of frames, each taken within SET_GAP of the one before, through
@@ -3563,9 +3579,11 @@ def movie_frame(u, n, cache, trail=0, colour=True, out=OUT, centre=True, steady=
             break
     if used:
         planes = [_place(u, newest[f], rect, k, W, H, cache, p["display_scale"]) for f in used]
-        # a colour set held from an earlier pointing that is out of this frame's view (a track's last visit, a
-        # thousand px away) leaves the picture empty: the frame is drawn on its own instead
-        if any(a[..., 3].any() for a in planes):
+        # a colour set held from an earlier pointing (a track's last visit, a thousand px away, or a pass that moved
+        # on across the body) shows little or nothing where this frame is: colour_picture draws only where every
+        # filter has the picture. Under HELD_COVER of frame n's own place covered, the frame is drawn on its own
+        # instead
+        if held_cover(t, planes, rect, k) >= HELD_COVER:
             rgba = colour_picture(u, p, used, planes)
             rep["color"] = used
             rep["ids"] = [newest[f]["id"] for f in used]
