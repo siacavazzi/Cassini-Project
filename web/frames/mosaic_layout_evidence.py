@@ -3,7 +3,8 @@
 shows it, through the checkout's own makers (obs_mosaic.layout and so_far for a mosaic, movie_webp for a movie,
 frame_server.processed_webp for frames that are no mosaic), nothing re-implemented.
 
-Render one side (once with the old checkout, once with the new; each its own cache):
+Render one side (once with the old checkout, once with the new; each its own cache; it runs in the checkout's root,
+as the frame server does, since the pipeline reads some of its files from there):
   CASSINI_DATA=... CASSINI_KERNELS=... CASSINI_GEOMETRY_CACHE=... CASSINI_CISSCAL=... \\
   python mosaic_layout_evidence.py render --code <checkout>/web/frames --cache DIR --out OUT/before OBS...
 Then put the two sides together, one picture per observation, and an index page:
@@ -22,7 +23,10 @@ SIDE = 720
 
 
 def render(args):
-    sys.path.insert(0, os.path.abspath(args.code))
+    import collections
+    code, args.cache, args.out = (os.path.abspath(os.path.expanduser(v)) for v in (args.code, args.cache, args.out))
+    sys.path.insert(0, code)
+    os.chdir(os.path.join(code, "..", ".."))
     from PIL import Image
     import frame_server   # (first: it puts its own checkout's root, with calibration, on the path)
     import obs_mosaic as om
@@ -40,12 +44,15 @@ def render(args):
                 name = "_".join(map(str, u["key"]))
                 kind = u.get("kind")
                 print(name, kind, len(u["frames"]), "frames", flush=True)
-                pics = []
+                pics, why = [], collections.Counter()
                 if kind in ("mosaic", "mosaic_movie"):
                     n = len(u["frames"]) - 1
                     made = om.layout(u, n, args.cache)
                     im = om.so_far(u, n, args.cache, made)[0] if made else None
                     pics = [im] if im is not None else []
+                    if im is None:   # (why: what the tiles' reports say)
+                        p = om.plan(u, args.cache)
+                        why.update(str(t.get("why", "placed")) for t in om._reports(u, args.cache, p, range(n + 1)))
                 else:
                     count = min(FRAMES, len(u["frames"]))
                     for k in sorted({round(i * (len(u["frames"]) - 1) / max(1, count - 1)) for i in range(count)}):
@@ -54,12 +61,16 @@ def render(args):
                                else frame_server.processed_webp(fid, 512, args.cache))
                         if got and got[0]:
                             pics.append(Image.open(io.BytesIO(got[0])))
+                        else:
+                            why[str((got[1] or {}).get("why") if got else "in no pass")] += 1
                 files = []
                 for j, im in enumerate(pics):
                     f = f"{name}_{j}.png"
                     im.save(os.path.join(args.out, f))
                     files.append(f)
-                rows.append({"pass": name, "kind": kind, "frames": len(u["frames"]), "pictures": files})
+                rows.append({"pass": name, "kind": kind, "frames": len(u["frames"]), "pictures": files, "why": dict(why)})
+                if why:
+                    print("  not drawn:", dict(why), flush=True)
             summary[spec] = rows
             with open(path, "w") as fh:
                 json.dump(summary, fh, indent=1)
