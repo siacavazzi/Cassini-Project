@@ -50,12 +50,15 @@ def frames(obs, target, cam):
                       usecols=["path", "INSTRUMENT_ID", "TARGET_NAME", "OBSERVATION_ID", "filter1", "filter2", "seconds_1970"])
     idx = idx[(idx.OBSERVATION_ID == obs) & (idx.TARGET_NAME == target) & (idx.INSTRUMENT_ID == cam) & idx.path.notna()]
     idx = idx.sort_values("seconds_1970")
-    out, last = [], {}
+    where = stacking.places([stacking.frame_id(p) for p in idx.path])
+    out, kept = [], {}
     for r in idx.itertuples(index=False):
         f = "/".join(x for x in (str(r.filter1), str(r.filter2)) if not x.startswith("CL")) or "CL1/CL2"
-        if f in last and r.seconds_1970 - last[f] <= REPEAT_GAP:
+        # a repeat exposure at the same pointing (stacking.repeat_of) is merged into the frame before it
+        at = where.get(stacking.frame_id(r.path))
+        if stacking.repeat_of(kept.setdefault(f, []), r.seconds_1970, at, REPEAT_GAP) is not None:
             continue
-        last[f] = r.seconds_1970
+        kept[f].append((r.seconds_1970, at, r.path))
         out.append((r.path, f, r.seconds_1970))
     return out
 

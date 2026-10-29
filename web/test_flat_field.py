@@ -100,6 +100,18 @@ assert half.shape == (512, 512) and abs(half[r2].mean() / half[180:200, 400:420]
 resized = cal.calibrate(codes, {**INFO, "INSTRUMENT_MODE_ID": "SUM2"})   # a summed frame shown at 1024
 assert resized.shape == (1024, 1024) and abs(ring_contrast(resized)) < 0.03
 
+# a flat map that is not one (CISSCAL's own flat129, the NAC UV2 flat: 20 everywhere at full size, 1e-11 to 4e12
+# summed) is left out with a warning instead of turning the frame into blobs on black
+assert ff.usable_flat(slope_flat) and not ff.usable_flat(np.full((256, 256), 20.0, np.float32))
+broken = np.exp(np.random.default_rng(1).normal(0, 8, (256, 256))).astype(np.float32)
+assert not ff.usable_flat(broken)
+write_cube(f"{root}/slope/flat/flat113.sum4.cub", broken)
+quarter = {**INFO, "INSTRUMENT_MODE_ID": "SUM4"}
+assert ff.correction(quarter) is None                              # its dust ring map isn't there either: nothing
+with cal.stepping("flat"):
+    plain = cal.calibrate(codes[::4, ::4], quarter)
+assert np.allclose(cal.calibrate(codes[::4, ::4], quarter), plain)
+
 # without the maps nothing changes but the nonlinearity, and calibrate still works
 ff.ROOT = os.path.join(root, "missing")
 ff._slope_db.cache_clear()
