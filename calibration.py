@@ -448,7 +448,7 @@ def calibrate(png, info, image=None):
     # worked out per code
     shape = pixels.shape if codes else dn.shape
     offset = None
-    listed_dark = False
+    spots = None
     lines_bias = overclock_bias(info)
     if lines_bias is not None:
         rows = np.interp(np.linspace(0, len(lines_bias) - 1, shape[0]), np.arange(len(lines_bias)), lines_bias)
@@ -457,7 +457,7 @@ def calibrate(png, info, image=None):
         dark = dc.dark_for(info, shape)
         if dark is not None:
             offset = dark.astype(np.float64) if offset is None else offset + dark
-            listed_dark = dc.lists_in_dark(info)
+            spots = dc.dark_spots(info)
     if offset is not None:
         dn = (_lookup(pixels, dn) if codes else dn) - offset
         codes = False
@@ -476,7 +476,7 @@ def calibrate(png, info, image=None):
         if flat is not None:
             per_second *= flat
     if step("hotpix"):
-        dc.repair_hot(per_second, info, listed_dark)
+        dc.repair_hot(per_second, info, spots)
 
     gain_ratio = GAIN_RATIOS[camera][GAIN_STATES[gain]]
     slope, start = SENSITIVITY[camera]

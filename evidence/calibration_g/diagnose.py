@@ -49,18 +49,19 @@ def variant(name):
     off = {"v47": "", "dark": "dark", "flat": "flat", "hotpix": "hotpix", "overclock": "",
            "v46": "dark,flat,hotpix", "nopinfix": ""}[name]
     cal.overclock_bias = (lambda info: None) if name in ("overclock", "v46") else _overclock
-    # "nopinfix": as v47 was built, before listed pixels the dark over-subtracted were repaired (dc.lists_in_dark)
-    if name == "nopinfix" and hasattr(dc, "lists_in_dark"):
-        dc.lists_in_dark = lambda info: False
+    # "nopinfix": as v47 was built, before pixels the dark over-subtracted were repaired (dc.dark_spots)
+    if name == "nopinfix" and hasattr(dc, "dark_spots"):
+        dc.dark_spots = lambda info: None
     try:
         with cal.stepping(off):
             yield
     finally:
         cal.overclock_bias = _overclock
-        dc.lists_in_dark = _lists_in_dark
+        if _dark_spots is not None:
+            dc.dark_spots = _dark_spots
 
 
-_lists_in_dark = getattr(dc, "lists_in_dark", None)
+_dark_spots = getattr(dc, "dark_spots", None)
 VARIANTS = ("v47", "nopinfix", "dark", "flat", "hotpix", "overclock", "v46")
 
 

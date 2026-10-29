@@ -236,15 +236,16 @@ assert abs(img[600:604, 600:604].mean() - 100) < 8 and abs(img[640:644, 680:684]
 with cal.stepping("dark"):
     assert cal.variant() == "-off-dark"
 
-# a listed hot pixel that has cooled since its list: the dark step takes its list curve out (the WAC's lists), so it
-# lands below the sky, a black pinhole; repaired from the pixels round it when the dark took the list out, left
-# alone otherwise (a listed pixel darker than the sky with no list curve taken out is just noise there)
-assert dc.lists_in_dark({**INFO, "INSTRUMENT_ID": "ISSWA"}) and not dc.lists_in_dark({**INFO, "READOUT_CYCLE_INDEX": "-"})
+# a hot pixel that has cooled since its list: the dark step takes its list curve out (the WAC's lists), so it lands
+# below the sky, a black pinhole; repaired from the pixels round it where the dark stood out (dark_spots), left alone
+# otherwise (a listed pixel darker than the sky with no more dark taken out than round it is just noise there)
 low = sky.copy()
 low[84:88, 96:100] = 20
 dc.repair_hot(low, INFO)
 assert (low[84:88, 96:100] == 20).all()
-dc.repair_hot(low, INFO, listed_dark=True)
+spots = np.zeros((L, L), bool)
+spots[87 // 4, 98 // 4] = True                # listed (98, 87), at the SUM4 frame's own size
+dc.repair_hot(low, INFO, spots)
 assert abs(low[84:88, 96:100].mean() - 100) < 8
 # and through calibrate: a WAC frame whose listed pixel gathered no more than the sky comes out at the sky, not black
 wac = {**info, "INSTRUMENT_ID": "ISSWA", "GAIN_MODE_ID": "29 ELECTRONS PER DN", "FILTER_NAME": "(\"CL1\",\"CL2\")"}
