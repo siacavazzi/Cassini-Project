@@ -166,7 +166,7 @@ def drawn(u, made):
     p, tiles, rect, count, used, name = made
     plain, _, tuned = name.partition("-tune")
     tag = ("-" + plain.rsplit("-", 1)[1] if plain.startswith("lap-") else "") + ("-tune" + tuned if tuned else "")
-    base = not plain.startswith("lap-") and om.lum_base(u, p, tiles, used)
+    base = om.lum_base(u, p, tiles, used)
     colour = used if len(used) == 3 else None
     filters = (list(colour) if colour else []) + ([om.LUM] if base else [] if colour else [used[0]])
     return filters, colour, base, tag, max(used, key=lambda f: count[f])
