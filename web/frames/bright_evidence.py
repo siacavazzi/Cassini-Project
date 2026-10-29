@@ -1,16 +1,16 @@
 #!/usr/bin/env python3
 """Bright subjects blown white in movies and mosaics (spot check round 2): evidence for the pass scale's even body
-and FILL_SHARE (obs_mosaic.pass_scale). Draws with the checkout given by WT (main's for before, this one's for
-after), in the repo venv, with the frame server's environment (CASSINI_DATA, CASSINI_KERNELS, CASSINI_GEOMETRY_CACHE,
-CASSINI_CISSCAL). Read-only on the archive.
+and a filled pass's disk white (obs_mosaic.pass_scale). Draws with the checkout given by WT (main's for before, this
+one's for after), in the repo venv, with the frame server's environment (CASSINI_DATA, CASSINI_KERNELS,
+CASSINI_GEOMETRY_CACHE, CASSINI_CISSCAL). Read-only on the archive.
 
   python web/frames/bright_evidence.py census --out census.tsv
-      every pass (geometry only, no pictures): whether it is "all body" (filled) under main's rule and the branch's
-      (FILL_SHARE), the body's radius in pixels and the share of the frames on its disk
+      every pass (geometry only, no pictures): whether it is "all body" (filled), the body's radius in pixels and the
+      share of the frames on its disk
   python web/frames/bright_evidence.py draw --cache DIR --out DIR FRAME_ID ...
       for each pass named by one of its frames: its plan's display scale (plan(), into the scratch cache DIR) and
       up to FRAMES of its frames drawn as their tiles are (color_image.processed_frame with tile_scale), a JPEG
-      strip of the body and a JSON line each: md5 of every frame's pixels, share of the body's pixels drawn 250 or
+      strip (each frame whole and its middle, the same boxes before and after) and a JSON line each: md5 of every frame's pixels, share of the body's pixels drawn 250 or
       over, the body's median
   python web/frames/bright_evidence.py compare BEFORE AFTER --out DIR
       before | after strips and a table: scale before/after, identical pixels or not
@@ -34,14 +34,23 @@ import obs_mosaic as om  # noqa: E402
 import color_image  # noqa: E402
 
 FRAMES = 4
-SIDE = 320
+SIDE = 300
+
+
+def disk_share(x, y, radius):
+    """The share of a frame on the body's disk (x, y: the shift that centres the body, radius: the disk's, full
+    resolution pixels, as obs_mosaic._disk_pixels), on a grid of 32 x 32 of its points"""
+    at = np.arange(16, 1024, 32, dtype=np.float32)
+    return float(np.mean((at[:, None] - (511.5 - y)) ** 2 + (at[None, :] - (511.5 - x)) ** 2 < radius * radius))
 
 
 def census(out):
+    """Every pass's geometry: filled (all body) and how much of its frames its disk covers. A filled pass whose disk is
+    not over all of every frame can get its disk's white (DISK_WHITE); the even body's floor black needs pictures."""
     idx, _ = reel.load_index()
-    n = flipped = 0
+    n = small = 0
     with open(out, "w") as fh:
-        fh.write("pass\tfirst\tt\tframes\tkind\tradius_px\tshare_mean\tfilled_main\tfilled_branch\n")
+        fh.write("pass\tfirst\tt\tframes\tkind\tradius_px\tshare_mean\tfilled\n")
         for (target, obs, inst) in idx.groupby(["TARGET_NAME", "OBSERVATION_ID", "INSTRUMENT_ID"], sort=False).indices:
             if not isinstance(obs, str) or inst not in ("ISSNA", "ISSWA"):
                 continue
@@ -56,33 +65,28 @@ def census(out):
                 if not frames:
                     continue
                 radius = om.FILL_RADIUS.get(target, 0) / om.IFOV[cam]
-                centre = [math.hypot(x, y) < radius / z for *_, x, y, z in frames]
-                share = [om._disk_share(x, y, radius / z) if hasattr(om, "_disk_share") else 0.0 for *_, x, y, z in frames]
-                fill_share = getattr(om, "FILL_SHARE", 0.0)
-                old = float(np.mean(centre)) > om.FILLED
-                new = float(np.mean([c and s >= fill_share for c, s in zip(centre, share)])) > om.FILLED
+                filled = float(np.mean([math.hypot(x, y) < radius / z for *_, x, y, z in frames])) > om.FILLED
+                rpx = om.RADIUS.get(target, 0) / om.IFOV[cam]
+                share = float(np.mean([disk_share(x, y, rpx / z) for *_, x, y, z in frames]))
                 n += 1
-                flipped += old != new
-                rpx = om.RADIUS.get(target, 0) / (u["z"] * om.IFOV[cam]) if u.get("z") else 0
+                small += filled and share < 1
                 fh.write(f"{'_'.join(map(str, u['key']))}\t{u['frames'][0][1]}\t{u['frames'][0][3]:.0f}\t{len(u['frames'])}\t"
-                         f"{u.get('kind')}\t{rpx:.0f}\t{np.mean(share):.3f}\t{int(old)}\t{int(new)}\n")
+                         f"{u.get('kind')}\t{rpx / u['z'] if u.get('z') else 0:.0f}\t{share:.3f}\t{int(filled)}\n")
             with om._lock:
                 om._units.clear()
-    print(f"{n} passes, {flipped} no longer all body")
+    print(f"{n} passes, {small} filled with the disk not over all of every frame")
 
 
-def body_box(img):
-    """the body's box on a drawn tile: its pixels 40 or over, padded"""
-    grey = img[..., :3].max(axis=2)
-    lit = (grey >= 40) & (img[..., 3] > 0)
-    if not lit.any():
-        lit = img[..., 3] > 0
-    if not lit.any():
-        return None
-    rows, cols = np.where(lit)
+def boxes(img):
+    """Two boxes on a drawn tile, the same whatever its tone: the frame's footprint (its alpha), and a quarter of that
+    round the canvas's middle, where processed_frame puts the target's centre"""
+    rows, cols = np.where(img[..., 3] > 0)
+    if not rows.size:
+        return []
     r0, r1, c0, c1 = rows.min(), rows.max() + 1, cols.min(), cols.max() + 1
-    pad = max(8, (max(r1 - r0, c1 - c0)) // 8)
-    return max(0, r0 - pad), min(img.shape[0], r1 + pad), max(0, c0 - pad), min(img.shape[1], c1 + pad)
+    half = max(r1 - r0, c1 - c0) // 8
+    cy, cx = img.shape[0] // 2, img.shape[1] // 2
+    return [(r0, r1, c0, c1), (max(0, cy - half), cy + half, max(0, cx - half), cx + half)]
 
 
 def draw(ids, cache, out):
@@ -128,9 +132,7 @@ def draw(ids, cache, out):
             if body.any():
                 row["white_share"] = round(float((grey[body] >= 250).mean()), 4)
                 row["body_p5_50_95"] = [int(v) for v in np.percentile(grey[body], (5, 50, 95))]
-            box = body_box(img)
-            if box is not None:
-                r0, r1, c0, c1 = box
+            for r0, r1, c0, c1 in boxes(img):
                 crop = img[r0:r1, c0:c1, :3]
                 k = SIDE / max(crop.shape[:2])
                 crop = cv2.resize(crop, (max(1, round(crop.shape[1] * k)), max(1, round(crop.shape[0] * k))),

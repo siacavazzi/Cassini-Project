@@ -141,7 +141,7 @@ with calibration.looking("balanced"):
         old = om.pass_scale(fr3, w)
         om.DISK_LEAST = least
         # (the disk's white alone: an even face's floor black, _even_body, is web/test_even_body.py's)
-        even_body, om._even_body = om._even_body, lambda by, on, inner, levels, base, blacks, white, *a: (blacks, white, 0.0)
+        even_body, om._even_body = om._even_body, lambda by, on, inner, levels, blacks, white, drawn: (blacks, white, 0.0)
         new = om.pass_scale(fr3, w)
         om._even_body = even_body
         top = 0.35 - old["blacks"]["CB2"]   # the disk's brightest (centre of the face)
