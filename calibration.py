@@ -663,23 +663,48 @@ camera = "N" or "W"; bands = the set's color filters in channel order ("RED", "G
 target = the body the set is of (TARGET_NAME), for false color
 gains = false color: per band, the gain that brings the body's typical brightness to the set's mean
 (false_gains), when the caller has measured it itself (a mosaic's pass); otherwise the table's
+A two-filter set (longer wavelength first) is drawn as three channels, green the mean of the two (two_bands), and
+balanced like a false color set: straight, one band floods the picture (IR3 over VIO, solid orange; UV2 over UV1,
+solid blue). Two visible color filters (NATURAL_PAIR: RED with BL1 or GRN) already look natural and stay straight.
 """
+NATURAL_PAIR = ("RED", "GRN", "BL1", "BL2", "VIO")
+
+
 def color_mix(camera, bands, target=None, gains=None, own=False):
-    if style() != "balanced" or len(bands) != 3:
+    if style() != "balanced" or len(bands) not in (2, 3):
         return None
-    m = natural_mix(camera, bands)
-    if m is not None:
-        return m
+    if len(bands) == 2:
+        if all(b in NATURAL_PAIR for b in bands):
+            return None
+        if gains:
+            # gains bring each band to the set's mean: the levels they balance are as their inverses
+            gains = balance(two_bands([1 / g for g in gains]), tint_of(target))
+    else:
+        m = natural_mix(camera, bands)
+        if m is not None:
+            return m
     gains = gains or false_gains(target, bands, camera)
+    measured = bool(gains)
     if not gains and own:
         # no mission measure of the body in these bands (a clear frame, a rare filter or body): the picture's own
         # balance alone (load_linear's FALSE_OWN), so no band outshines the others
-        gains = [1.0] * len(bands)
+        gains = [1.0] * 3
     if not gains:
         return None
     m = np.diag(np.asarray(gains, np.float32)).view(FalseMix)
     m.tint = tint_of(target)
+    m.measured = measured
     return m
+
+
+"""
+A two-filter set's channels (or levels), longer wavelength first, as three: red the longer, blue the shorter and
+green their mean, as the frame server always drew them
+"""
+def two_bands(channels):
+    if len(channels) != 2:
+        return list(channels)
+    return [channels[0], (channels[0] + channels[1]) / 2, channels[1]]
 
 
 class FalseMix(np.ndarray):
@@ -688,10 +713,12 @@ class FalseMix(np.ndarray):
     through arithmetic."""
     tint = None
     typical = None
+    measured = True   # False: no mission measure of the body in these bands, the picture's own balance alone
 
     def __array_finalize__(self, obj):
         self.tint = getattr(obj, "tint", None)
         self.typical = getattr(obj, "typical", None)
+        self.measured = getattr(obj, "measured", True)
 
 
 _matrices = None
@@ -747,7 +774,7 @@ def false_gains(target, bands, camera=None):
         if not m or m.get("n", 0) < BODY_MIN or m["median"] <= 0 or m["iqr"][1] > BODY_SPREAD * max(m["iqr"][0], 1e-9):
             return None
         meds.append(m["median"])
-    return balance(meds, tint_of(target))
+    return balance(two_bands(meds), tint_of(target))
 
 
 """
@@ -766,9 +793,15 @@ OWN_NEAR = 0.3       # ... measured where every band's share is within this (log
 GAIN_SPREAD = 12.0
 
 
-def spread_capped(gains):
+# ... and in a composite's own balance (load_linear), which reaches past it: Saturn's MT3 is 17 times darker than CB2
+# (false_color_bodies.json, WAC), and held to 12 the planet came out teal. The rings and haze that cap was for are taken
+# back to the body's tint by apply_mix (FALSE_REVERT, FALSE_CHROMA) and its detail is drawn at DETAIL_SPREAD
+OWN_SPREAD = 24.0
+
+
+def spread_capped(gains, spread=GAIN_SPREAD):
     low = min(gains)
-    return [min(g, low * GAIN_SPREAD) for g in gains]
+    return [min(g, low * spread) for g in gains]
 
 
 # the target of the balance for bodies with a color of their own, instead of gray: their natural color (sRGB, the color
@@ -786,10 +819,10 @@ def tint_of(target):
     return [v * 3 / sum(lin) for v in lin]
 
 
-def balance(levels, tint=None):
+def balance(levels, tint=None, spread=GAIN_SPREAD):
     mean = sum(levels) / len(levels)
     tint = tint or [1.0] * len(levels)
-    gains = spread_capped([(mean * t / v) ** FALSE_BALANCE for v, t in zip(levels, tint)])
+    gains = spread_capped([(mean * t / v) ** FALSE_BALANCE for v, t in zip(levels, tint)], spread)
     k = sum(levels) / sum(g * v for g, v in zip(gains, levels))
     return [g * k for g in gains]
 
@@ -1003,20 +1036,28 @@ def load_linear(labels, images=None, iofs=None):
     if false:
         # false color: the mission's typical balance of the body (the table) misses a frame unlike it (Saturn's
         # high latitudes); FALSE_OWN of what is left between the picture's own lit bands is taken off as well. A
-        # movie of one scene, whose frames are alike, still keeps one color
+        # movie of one scene, whose frames are alike, still keeps one color. With no table for the body in these
+        # bands (a set whose TARGET_NAME is a moon while the frames show Saturn) the picture's own balance stands in
+        # for the table, then the same: FALSE_OWN of the own balance alone left Saturn's MT3 short, a teal planet
+        bands = two_bands(channels)
         lum = np.mean(channels, axis=0)
         lit = lum > 0.2 * np.percentile(lum, 99)
         if lit.sum() > 100:
             # over the pixels near the picture's typical band ratios, so rings or a bright equatorial band don't steer it
-            logs = [np.log(np.maximum(c[lit], 1e-6) / np.maximum(lum[lit], 1e-6)) for c in channels]
+            logs = [np.log(np.maximum(c[lit], 1e-6) / np.maximum(lum[lit], 1e-6)) for c in bands]
             typical = np.logical_and.reduce([np.abs(v - np.median(v)) < OWN_NEAR for v in logs])
             if typical.sum() > 100:
                 lit = np.where(lit)
                 lit = tuple(i[typical] for i in lit)
-            own = [float(np.median(c[lit])) * g for c, g in zip(channels, np.diagonal(mix))]
+            tint = tint_of(_value(infos[0], "TARGET_NAME", ""))
+            levels = [float(np.median(c[lit])) for c in bands]
+            table = np.diagonal(mix)
+            if not mix.measured and min(levels) > 0:
+                # no table: the picture's own balance stands in for it
+                table = balance(levels, tint, OWN_SPREAD)
+            own = [v * g for v, g in zip(levels, table)]
             if min(own) > 0:
-                tint = tint_of(_value(infos[0], "TARGET_NAME", ""))
-                gains = spread_capped([g * o ** FALSE_OWN for g, o in zip(np.diagonal(mix), balance(own, tint))])
+                gains = spread_capped([g * o ** FALSE_OWN for g, o in zip(table, balance(own, tint, OWN_SPREAD))], OWN_SPREAD)
                 mix = np.diag(np.asarray(gains, np.float32)).view(FalseMix)
                 mix.tint = tint
     margin /= white
@@ -1068,6 +1109,9 @@ Past the shoulder the brightest channel rolls off softly (roll_off), the others 
 set's channel mix (color_mix), applied first, on the linear values.
 """
 def tone(channels, margin, mix=None, shoulder=SHOULDER, gamma=2.2):
+    if mix is not None:
+        # a two-filter set's mix is on three channels, green the mean of the two (color_mix)
+        channels = two_bands(channels)
     x = np.stack(channels).astype(np.float32)
     if mix is not None:
         x = apply_mix(mix, x)

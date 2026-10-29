@@ -269,9 +269,12 @@ Phase correlation needs the frames to look alike; through filters far apart (UV 
 IR) it can fail to find a match. A whole target in every frame then still lines up by
 its centroid (centroid_shift).
 report = optional list that gets one entry per frame: how it was aligned
+guess = optional list, one per frame: where SPICE says the frame's target sits relative to the reference's,
+(dx, dy) in the frames' pixels, or None (see guided_shift). Only a colour set's channels pass it
+(color_image.load_aligned); mosaic registration (obs_mosaic._shift_onto) does not, so its tiles stay where they were
 returns (imgs, masks)
 """
-def align_with_masks(imgs, masks, ref=0, report=None, found=None, use=None):
+def align_with_masks(imgs, masks, ref=0, report=None, found=None, use=None, guess=None):
     for i in range(0, len(imgs)):
         if i == ref:
             if report is not None:
@@ -286,14 +289,21 @@ def align_with_masks(imgs, masks, ref=0, report=None, found=None, use=None):
                 masks[i] = shift_image(masks[i].astype(np.float32), *use[i]) > 0.99
             continue
         shift, how = find_shift(imgs[ref], imgs[i]), "phase"
+        g = guess[i] if guess is not None else None
+        if shift is None and g is not None:
+            # SPICE knows about where the frame is: the frames are matched again near there first
+            shift, how = guided_shift(imgs[ref], imgs[i], g)
         if shift is None:
             shift, how = find_shift(edges(imgs[ref]), edges(imgs[i])), "edges"
             # an edge match at exactly no shift is the camera's own fixed pattern (dust rings, bad
             # columns) matching itself, not the target: it says nothing
             if shift is not None and abs(shift[0]) < 0.25 and abs(shift[1]) < 0.25:
                 shift = None
-        if shift is None:
-            shift, how = centroid_shift(imgs[ref], imgs[i]), "centroid"
+            if shift is None:
+                shift, how = centroid_shift(imgs[ref], imgs[i]), "centroid"
+        if shift is None and g is not None:
+            # nothing matched anywhere: SPICE's offset, where it lines the frames up better than none
+            shift, how = spice_shift(imgs[ref], imgs[i], masks[ref], masks[i], g)
         if shift is not None:
             imgs[i] = shift_image(imgs[i], *shift)
             masks[i] = shift_image(masks[i].astype(np.float32), *shift) > 0.99
@@ -340,6 +350,73 @@ def centroid_shift(im1, im2, max_shift=100):
     if abs(dx) > max_shift or abs(dy) > max_shift:
         return None
     return dx, dy
+
+
+"""
+Offset of im2 from im1 when phase correlation alone found none, with SPICE's offset guess = (dx, dy) to go by:
+where the geometry cache places the target in each frame, which follows the camera's pointing from frame to frame.
+A frame-filling limb or ring seen through two filters far apart correlates too weakly to pass find_shift's bar, and
+its lit area touches the frame's edge so the centroid refuses it; the pointing drift between the frames then stayed
+in the picture as colour fringes, a quarter of Rhea wide when the camera moved 105 px between filters (N1711682068_1).
+Here the frame is first moved by SPICE's offset, then matched again within GUESS_WINDOW of it, where a weaker peak
+(GUESS_RESPONSE) is believed: by phase correlation, then on edges, then the centroid (on the frames as they are,
+believed within the same window). SPICE's pointing can itself be tens of pixels off (a WAC set of 2012-05-02,
+W1714632762_1, moved 30 px that SPICE doesn't show), so when nothing matches near it the frames' own fallbacks still
+run (align_with_masks), and only then SPICE's offset (spice_shift). A guess past GUESS_MAX is no help: the frames
+show different parts of the scene.
+returns ((dx, dy), how) or (None, "not aligned")
+"""
+GUESS_WINDOW = 12     # px: SPICE's pointing is 3 to 5 px off from panel to panel, 11 at most (obs_mosaic.PANEL_MAX)
+GUESS_RESPONSE = 0.1  # the least phase correlation peak believed within that window
+GUESS_MAX = 256       # px: a quarter of the frame
+AGREE_MARGIN = 0.02   # how much better SPICE's offset must line the edges up than no shift does
+
+
+def guided_shift(im1, im2, guess):
+    gx, gy = float(guess[0]), float(guess[1])
+    if np.hypot(gx, gy) > GUESS_MAX:
+        return None, "not aligned"
+    moved = shift_image(im2, gx, gy)
+    for how, a, b in (("phase", im1, moved), ("edges", edges(im1), edges(moved))):
+        found = find_shift(a, b, GUESS_WINDOW, GUESS_RESPONSE)
+        if found is not None:
+            dx, dy = gx + found[0], gy + found[1]
+            # as align_with_masks: an edge match at exactly no shift is the camera's fixed pattern
+            if how == "edges" and abs(dx) < 0.25 and abs(dy) < 0.25:
+                continue
+            return (dx, dy), how + " near SPICE"
+    found = centroid_shift(im1, im2)
+    if found is not None and np.hypot(found[0] - gx, found[1] - gy) <= GUESS_WINDOW:
+        return found, "centroid near SPICE"
+    return None, "not aligned"
+
+
+"""
+SPICE's offset guess for im2 when no match was found anywhere, if it lines the frames' edges up better than no shift
+(by AGREE_MARGIN), else none. masks = the two frames' valid pixels (label.valid_mask)
+returns ((dx, dy), "SPICE") or (None, "not aligned")
+"""
+def spice_shift(im1, im2, mask1, mask2, guess):
+    gx, gy = float(guess[0]), float(guess[1])
+    if np.hypot(gx, gy) <= GUESS_MAX and \
+            _agreement(im1, im2, mask1, mask2, (gx, gy)) > _agreement(im1, im2, mask1, mask2, (0.0, 0.0)) + AGREE_MARGIN:
+        return (gx, gy), "SPICE"
+    return None, "not aligned"
+
+
+"""
+How well im2 moved by shift lines up with im1: the correlation of their edges (edges) over the pixels valid in both
+"""
+def _agreement(im1, im2, mask1, mask2, shift):
+    a = edges(im1)[..., 0].astype(np.float32)
+    b = edges(shift_image(im2, *shift))[..., 0].astype(np.float32)
+    both = mask1 & (shift_image(mask2.astype(np.float32), *shift) > 0.99)
+    # not the edge the shift's own border makes (edges blurs it a few pixels into the frame)
+    both = cv2.erode(both.astype(np.uint8), np.ones((9, 9), np.uint8), borderValue=0) > 0
+    if both.sum() < 100:
+        return -1.0
+    a, b = a[both] - a[both].mean(), b[both] - b[both].mean()
+    return float((a * b).sum() / max(np.sqrt((a * a).sum() * (b * b).sum()), 1e-9))
 
 
 """

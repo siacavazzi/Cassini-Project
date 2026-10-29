@@ -875,7 +875,8 @@ def plan(u, cache):
             picks += mine[::max(1, math.ceil(len(mine) / SCALE_FRAMES))]
         levels = {}
         scale = pass_scale(sorted(picks, key=frames.index), u, colour or [max(count, key=count.get)],
-                           bool(colour and colour[1] == "GRN" and colour[2] in reel.TRUE_BLUES), lit_levels=levels)
+                           bool(colour and len(colour) == 3 and colour[1] == "GRN" and colour[2] in reel.TRUE_BLUES),
+                           lit_levels=levels)
         # the rotation from the camera's frame to north up: the angle between where the geometry cache puts
         # the body and where processed_frame does, from the first tile placed well off the body's centre
         angle, ref = 0.0, None
@@ -966,7 +967,9 @@ def colour_of(count, nms):
     """The pass's colour filters, [red, green, blue], or None for grey. count = tiles per filter, nms = each
     filter's wavelength. (Near) true colour when the pass takes GRN and a blue at a good share of its tiles, with
     RED or else the continuum filter nearest red (not a methane band); otherwise false colour from the filters
-    taken at most tiles (longest wavelength red). Polarizers are left out (they are not a colour)."""
+    taken at most tiles (longest wavelength red). Polarizers are left out (they are not a colour). A pass of two
+    colour filters (CB2 and MT2) is [longer, shorter], drawn as a two-filter composite is (calibration.two_bands:
+    green their mean); a clear filter is not one of the two."""
     most = max(count.values())
     # a clear frame is no color: it is left out wherever the color filters still make a set of their own (it
     # sees several times their light, so as a channel it outshines them, green on Saturn's rings)
@@ -984,7 +987,10 @@ def colour_of(count, nms):
     common = sorted([f for f in count if count[f] >= most / 2 and not _polarizer(f)], key=lambda f: -nms[f])
     if blue and red and "GRN" in good:
         return [red, "GRN", blue]
-    return [common[0], common[len(common) // 2], common[-1]] if len(common) >= 3 else None
+    if len(common) >= 3:
+        return [common[0], common[len(common) // 2], common[-1]]
+    two = [f for f in common if f in plain]
+    return two if len(two) == 2 else None
 
 
 def _polarizer(f):
@@ -1096,7 +1102,7 @@ def lum_base(u, p, tiles, used, base=None):
     if base is None:
         frames = lum_frames(u, p)
         base = [t for t in tiles if "offset" in t and t["n"] in frames]
-    if len(used) != 3:
+    if len(used) == 1:
         return any(t["filter"] != used[0] for t in base)
     by = {f: [t["offset"] for t in tiles if t["filter"] == f and "offset" in t] for f in used}
     near = lambda o, os_: any(math.hypot(o[0] - q[0], o[1] - q[1]) <= SAME_PLACE * FRAME for q in os_)
@@ -1384,6 +1390,20 @@ def pass_scale(frames, u, drawn=None, true_colour=False, sky_tops=None, lit_leve
             # and the body's typical color after it, so the broad-color flattening holds one color as tiles arrive
             shown = [out["balance"][f] * v for f, v in zip(mine, levels)]
             out["typical"] = {f: float(np.log(v * len(shown) / sum(shown))) for f, v in zip(mine, shown)}
+    elif calibration.style() == "balanced" and len(mine) == 2:
+        # two filters: each band's gain to the pair's mean, which calibration.color_mix balances as three channels
+        # (two_bands), and the typical color of those three, a list (the green channel is no one filter's)
+        levels = []
+        for f in mine:
+            v = np.concatenate([i.ravel() for i in by[f]]) - blacks[f]
+            lit = v[v > 0.2 * np.percentile(v, 99)]
+            levels.append(float(np.median(lit)) if lit.size else 0.0)
+        mix = calibration.color_mix(u["key"][2], mine, u["key"][0], [sum(levels) / 2 / v for v in levels]) \
+            if min(levels) > 0 else None
+        if isinstance(mix, calibration.FalseMix):
+            out["balance"] = {f: sum(levels) / 2 / v for f, v in zip(mine, levels)}
+            shown = [g * v for g, v in zip(np.diagonal(mix).tolist(), calibration.two_bands(levels))]
+            out["typical"] = [float(np.log(v * len(shown) / sum(shown))) for v in shown]
     if lit_levels is not None:
         for f, iofs in by.items():
             v = (np.concatenate([i.ravel() for i in iofs]) - blacks[f]) / white
@@ -2640,12 +2660,20 @@ def colour_picture(u, p, colour, planes):
     would see, a false color one balanced so the body comes out gray, on the pass's own measure of its body
     (pass_scale's balance); without the mix the bands stay on the grey scale, where the blue and green of a red
     body are close to black."""
-    rgb = np.dstack([a[..., 0] for a in planes])
     scale = p["display_scale"]
+    if len(planes) == 2:
+        # two filters: green their mean in linear light, as a two-filter composite draws it (calibration.two_bands)
+        g = scale.get("gamma", 2.2)
+        lin = [calibration.decode(a[..., 0].astype(np.float32) / 255, g) for a in planes]
+        mid = (calibration.encode(np.clip(calibration.two_bands(lin)[1], 0, 1), g) * 255 + 0.5).astype(np.uint8)
+        rgb = np.dstack([planes[0][..., 0], mid, planes[1][..., 0]])
+    else:
+        rgb = np.dstack([a[..., 0] for a in planes])
     bal = scale.get("balance")
     mix = calibration.color_mix(u["key"][2], colour, u["key"][0], [bal[f] for f in colour] if bal else None)
-    if mix is not None and scale.get("typical"):
-        mix.typical = [scale["typical"][f] for f in colour]
+    typical = scale.get("typical")
+    if mix is not None and typical:
+        mix.typical = typical if isinstance(typical, list) else [typical[f] for f in colour]
     if mix is not None:
         rgb = calibration.mix_display(rgb, mix, scale["gamma"])
     # only where every filter has the picture: past one filter's edge the others alone are a coloured rim
@@ -2692,7 +2720,7 @@ def so_far(u, n, cache, made=None, out=OUT):
     # the luminance base under the picture, where it holds tiles the picture would not show (a mosaic movie's
     # picture too: rolling_layout's name counts the base's tiles)
     base = lum_base(u, p, tiles, used)
-    if len(used) == 3:
+    if len(used) > 1:
         colour = used
         acc = [filter_mosaic(u, p, f, tiles, rect, cache, ref, tag) for f in colour]
         rgba, used = colour_picture(u, p, colour, acc), colour
@@ -3197,8 +3225,8 @@ def _colour_recipes(u, p, cache, ns, tiles):
     scale = p["display_scale"]
     bal = scale.get("balance")
     mix = calibration.color_mix(u["key"][2], want, u["key"][0], [bal[f] for f in want] if bal else None)
-    if isinstance(mix, calibration.FalseMix):
-        return None
+    if isinstance(mix, calibration.FalseMix) or len(want) != 3:
+        return None   # (two filters: the green of their mean, colour_picture's, is the server's too)
     by, placed = {}, set(ns)
     for n in ns:
         for run in reversed(colour_sets(u["frames"][:n + 1])):
@@ -4359,7 +4387,7 @@ def tile_map(frame_id, cache):
         return found
     p, tiles, rect, count, used, _ = made
     frames = lum_frames(u, p)
-    colour = used if len(used) == 3 else None
+    colour = used if len(used) > 1 else None
     x0, y0, w, h = rect
     frac = lambda x, y: [round((x - x0) / w, 5), round((y - y0) / h, 5)]
     pointings, complete = [], True
@@ -4456,7 +4484,7 @@ def pointing_picture(frame_id, n, cache, size="full", fmt="webp", slots=None, ch
         return None
     p, tiles, rect, count, used, name = made
     by_id = {t["id"]: t for t in tiles if "offset" in t}
-    colour = q["set"] and len(used) == 3
+    colour = q["set"] and len(used) > 1
     if colour:
         layers = [(by_id[q["ids"][f]], f) for f in used]
     else:
@@ -4475,7 +4503,7 @@ def pointing_picture(frame_id, n, cache, size="full", fmt="webp", slots=None, ch
         layers = [(mine[-1], f)]
     # a gray place in a colour mosaic: the gray takes the tint over_grey gives it toward the colour it borders
     tint = None
-    if not colour and len(used) == 3 and layers[0][1] == LUM and channel is None:
+    if not colour and len(used) > 1 and layers[0][1] == LUM and channel is None:
         ref = max(used, key=lambda g: count[g])
         tint = grey_gain(colour_picture(u, p, used, [filter_mosaic(u, p, g, tiles, rect, cache, ref) for g in used]),
                          filter_mosaic(u, p, LUM, tiles, rect, cache), p["k"], p["display_scale"]["gamma"])
@@ -4530,7 +4558,7 @@ def _pointing(u, p, tiles, rect, count, used, layers, cache, channel=None, tint=
         planes.append(_compose(window, k, corrections=(np.full((1, 3), gain), np.full((1, 3), offset))))
     if channel is not None:
         rgba = planes[channel]
-    elif len(planes) == 3:
+    elif len(planes) > 1:
         rgba = colour_picture(u, p, used, planes)
     elif tint is not None:
         rgba = np.dstack([(tinted(planes[0], tint, p["display_scale"]["gamma"]) + 0.5).astype(np.uint8), planes[0][..., 3]])
