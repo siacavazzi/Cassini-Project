@@ -8,7 +8,8 @@ main's), from the same I/F, so the two differ only in how the picture is drawn.
                16-bit PNG and its range, iof.json) and the picture as this checkout draws it, to work on elsewhere
   scan         --n random single frames from Image_index.csv: per frame the drawn picture's percentiles under --old
                and this checkout (scan.tsv), and a small old | new thumbnail of each
-  grid    IDS  raw | old | new, labeled, one JPEG per frame and an index.html
+  grid    IDS  raw | old | new through the whole of load_aligned under each calibration.py, labeled, one JPEG per
+               frame or color set (IDs joined by +, red first) and an index.html
 
   CASSINI_DATA=... CASSINI_CISSCAL=... python web/frames/tone_evidence.py scan --old /tmp/main_calibration.py --out DIR
 """
@@ -160,36 +161,70 @@ def scan(n, seed, old_path, out, workers):
 
 
 def label(picture, text):
-    p = cv2.cvtColor(picture, cv2.COLOR_GRAY2BGR)
+    p = cv2.cvtColor(picture, cv2.COLOR_GRAY2BGR) if picture.ndim == 2 else picture.copy()
     cv2.putText(p, text, (12, 36), cv2.FONT_HERSHEY_SIMPLEX, 1.0, (0, 0, 0), 5, cv2.LINE_AA)
     cv2.putText(p, text, (12, 36), cv2.FONT_HERSHEY_SIMPLEX, 1.0, (60, 220, 255), 2, cv2.LINE_AA)
     return p
+
+
+"""
+A frame (ID) or a color set (IDs joined by +, red first) through the whole of load_aligned with module as its
+calibration (main's calibration.py has no draw_saturated: it did not have that step): (BGR picture, valid, labels)
+"""
+def aligned(spec, module):
+    keep = color_image.cal
+    color_image.cal = module
+    if not hasattr(module, "draw_saturated"):
+        module.draw_saturated = lambda labels, channels, margin: 0.0
+    try:
+        ids = spec.split("+")
+        imgs, valid, _, report = color_image.load_aligned([f"{FOLDERS[i[0]]}/{i}.png" for i in ids])
+    finally:
+        color_image.cal = keep
+    chans = [img[..., 0] if img.ndim == 3 else img for img in imgs]
+    if len(chans) == 2:
+        chans = [chans[0], ((chans[0].astype(np.uint16) + chans[1]) // 2).astype(np.uint8), chans[1]]
+    picture = chans[0] if len(chans) == 1 else np.dstack(chans[::-1])
+    return picture, valid, report
+
+
+def flat(picture, valid, side):
+    p = np.where(valid[..., None] if picture.ndim == 3 else valid, picture, 128).astype(np.uint8)
+    return cv2.resize(p, (side, side), interpolation=cv2.INTER_AREA)
 
 
 def grid(ids, old_path, out, side):
     os.makedirs(out, exist_ok=True)
     old = old_module(old_path)
     rows = []
-    for frame_id in ids:
+    for spec in ids:
         try:
-            lbl, _, new, before, valid, report = draw(frame_id, old)
+            before, valid_before, _ = aligned(spec, old)
+            after, valid, report = aligned(spec, cal)
         except Exception as e:
-            print(f"{frame_id}: {e}")
+            print(f"{spec}: {e}")
             continue
-        raw = lbl.resize_image()
-        raw = raw[..., 0] if raw.ndim == 3 else raw
-        cells = [label(cv2.resize(thumb(p, valid if k else None, 1024), (side, side), interpolation=cv2.INTER_AREA), t)
-                 for k, (p, t) in enumerate(((raw, "raw"), (before, "today"), (new, "fixed")))
-                 if p is not None]
-        cv2.imwrite(os.path.join(out, frame_id + ".jpg"), np.hstack(cells), [cv2.IMWRITE_JPEG_QUALITY, 88])
-        info = info_of(lbl)
-        rows.append((frame_id, info["IMAGE_TIME"], info["TARGET_NAME"], info["FILTER_NAME"]))
-        print(frame_id, "ok")
+        lbls = [color_image.lh.label(f"{FOLDERS[i[0]]}/{i}.png", as_png=True) for i in spec.split("+")]
+        raws = [lbl.resize_image() for lbl in lbls]
+        raws = [r[..., 0] if r.ndim == 3 else r for r in raws]
+        raw = raws[0] if len(raws) == 1 else np.dstack(raws[::-1]) if len(raws) == 3 else raws[0]
+        cells = [label(cv2.resize(raw, (side, side), interpolation=cv2.INTER_AREA), "raw"),
+                 label(flat(before, valid_before, side), "today"), label(flat(after, valid, side), "fixed")]
+        name = spec.replace("+", "_")
+        cv2.imwrite(os.path.join(out, name + ".jpg"), np.hstack(cells), [cv2.IMWRITE_JPEG_QUALITY, 88])
+        info = info_of(lbls[0])
+        filters = " ".join(info_of(lbl)["FILTER_NAME"] for lbl in lbls)
+        rows.append((name, info["IMAGE_TIME"], info["TARGET_NAME"], filters, report.get("saturated")))
+        print(spec, "ok")
+    with open(os.path.join(out, "index.tsv"), "w") as f:
+        f.write("file\ttime\ttarget\tfilters\tsaturated\n")
+        for row in rows:
+            f.write("\t".join([row[0] + ".jpg"] + [str(v if v is not None else "") for v in row[1:]]) + "\n")
     with open(os.path.join(out, "index.html"), "w") as f:
         f.write("<!doctype html><meta charset=utf-8><title>Tone grid</title><body style='background:#777;font:14px sans-serif'>")
-        for frame_id, t, target, filters in rows:
-            f.write(f"<p>{html.escape(frame_id)} {html.escape(t)} {html.escape(target)} {html.escape(filters)}<br>"
-                    f"<img src='{frame_id}.jpg' style='max-width:100%'></p>")
+        for name, t, target, filters, _ in rows:
+            f.write(f"<p>{html.escape(name)} {html.escape(t)} {html.escape(target)} {html.escape(filters)}<br>"
+                    f"<img src='{name}.jpg' style='max-width:100%'></p>")
 
 
 def main():
