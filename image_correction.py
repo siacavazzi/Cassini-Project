@@ -175,6 +175,7 @@ returns ((dx, dy), how) or (None, "not aligned")
 GUESS_WINDOW = 12     # px: SPICE's pointing is 3 to 5 px off from panel to panel, 11 at most (obs_mosaic.PANEL_MAX)
 GUESS_RESPONSE = 0.1  # the least phase correlation peak believed within that window
 GUESS_MAX = 256       # px: a quarter of the frame
+AGREE_MARGIN = 0.02   # how much better SPICE's offset must line the edges up than no shift does
 
 
 def guided_shift(im1, im2, mask1, mask2, guess):
@@ -193,7 +194,7 @@ def guided_shift(im1, im2, mask1, mask2, guess):
     found = centroid_shift(im1, im2)
     if found is not None and np.hypot(found[0] - gx, found[1] - gy) <= GUESS_WINDOW:
         return found, "centroid near SPICE"
-    if _agreement(im1, im2, mask1, mask2, (gx, gy)) > _agreement(im1, im2, mask1, mask2, (0.0, 0.0)):
+    if _agreement(im1, im2, mask1, mask2, (gx, gy)) > _agreement(im1, im2, mask1, mask2, (0.0, 0.0)) + AGREE_MARGIN:
         return (gx, gy), "SPICE"
     return None, "not aligned"
 
@@ -205,6 +206,8 @@ def _agreement(im1, im2, mask1, mask2, shift):
     a = edges(im1)[..., 0].astype(np.float32)
     b = edges(shift_image(im2, *shift))[..., 0].astype(np.float32)
     both = mask1 & (shift_image(mask2.astype(np.float32), *shift) > 0.99)
+    # not the edge the shift's own border makes (edges blurs it a few pixels into the frame)
+    both = cv2.erode(both.astype(np.uint8), np.ones((9, 9), np.uint8), borderValue=0) > 0
     if both.sum() < 100:
         return -1.0
     a, b = a[both] - a[both].mean(), b[both] - b[both].mean()

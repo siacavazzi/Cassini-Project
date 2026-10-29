@@ -25,7 +25,8 @@ import zipfile
 
 HERE = os.path.dirname(os.path.abspath(__file__))
 REPO = os.path.abspath(os.path.join(HERE, "..", ".."))
-WINDOW = 700   # s: two set gaps (sets_passes.SET_GAP) and more, round each frame named
+WINDOW = 700   # s: two set gaps (sets_passes.SET_GAP) and more, round each frame named; at most 120 (the repeat
+               # exposures' window, stacking): round each frame of the named frames' sets only
 ID = re.compile(r"\b[NW]1\d{9}_\d+\b")
 
 
@@ -46,15 +47,19 @@ def extract(args):
         if r.get("path"):
             by_obs.setdefault((r["INSTRUMENT_ID"], r["OBSERVATION_ID"]), []).append(r)
     want = set()
-    for i in named:
+    members = sorted({m for ids in sets_of(named).values() for m in ids}) if args.window <= 120 else named
+    for i in members:
         r = by_id.get(i)
         if r is None:
             print("not in the index:", i)
             continue
         t = float(r["seconds_1970"])
         for q in by_obs[r["INSTRUMENT_ID"], r["OBSERVATION_ID"]]:
-            if abs(float(q["seconds_1970"]) - t) <= WINDOW:
+            if abs(float(q["seconds_1970"]) - t) <= args.window:
                 want.add(q["path"].rsplit("/", 1)[-1][:-4])
+    if args.count:
+        print(f"{len(named)} ids named, {len(want)} frames")
+        return
     src = zipfile.ZipFile(os.environ["CASSINI_DATA"])
     n = 0
     with zipfile.ZipFile(args.out, "w", zipfile.ZIP_STORED) as out:
@@ -141,6 +146,8 @@ def main():
     ap.add_argument("mode", choices=("extract", "compare"))
     ap.add_argument("items", nargs="+", help="logs or frame ids: every frame id in them names a set")
     ap.add_argument("--out", required=True)
+    ap.add_argument("--window", type=float, default=WINDOW, help="extract: seconds round each frame named")
+    ap.add_argument("--count", action="store_true", help="extract: only count the frames")
     ap.add_argument("--old", help="compare: the checkout before")
     ap.add_argument("--new", default=REPO, help="compare: the checkout after (this one)")
     args = ap.parse_args()
