@@ -993,17 +993,12 @@ def colour_of(count, nms):
     return two if len(two) == 2 else None
 
 
-# bodies whose surface shows through one filter only, a window in their haze: Titan's through CB3 (938 nm), where its
-# other filters see the haze and clouds above it
-SURFACE_WINDOW = {"TITAN": "CB3"}
-
-
 def pair_colour(colour, body):
     """(colour, grey filter or None) for a pass of colour_of's colour filters on body: a pair with the one filter the
-    body's surface shows through (SURFACE_WINDOW: Titan's CB3 maps and monitoring passes, CB3 with MT1, IR1, RED...)
-    is drawn grey in that filter, as before two-filter colour, since the pair's tint, the haze band's half of every
-    pixel, washes the surface's few per cent of contrast out; any other colour is as colour_of said."""
-    window = SURFACE_WINDOW.get(body)
+    body's surface shows through (calibration.SURFACE_WINDOW: Titan's CB3 maps and monitoring passes, CB3 with MT1,
+    IR1, RED...) is drawn grey in that filter, as before two-filter colour, since the pair's tint, the haze band's half
+    of every pixel, washes the surface's few per cent of contrast out; any other colour is as colour_of said."""
+    window = calibration.SURFACE_WINDOW.get(body)
     if colour and len(colour) == 2 and window in colour:
         return None, window
     return colour, None

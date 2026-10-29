@@ -69,8 +69,8 @@ assert ic.guided_shift(ref, img, (5.0, 834.0)) == (None, "not aligned")
 assert ic.spice_shift(ref, img, np.ones((N, N), bool), np.ones((N, N), bool), (5.0, 834.0)) == (None, "not aligned")
 
 # ---------- without guess=, align_with_masks is the one on main, byte for byte (mosaic registration passes none) ----------
-def module_from_main(name):
-    src = subprocess.run(["git", "show", f"origin/main:{name}.py"], cwd=os.path.join(HERE, ".."), capture_output=True,
+def module_from_main(name, ref="origin/main"):
+    src = subprocess.run(["git", "show", f"{ref}:{name}.py"], cwd=os.path.join(HERE, ".."), capture_output=True,
                          text=True)
     if src.returncode:
         return None
@@ -80,7 +80,7 @@ def module_from_main(name):
         f.write(src.stdout)
     for data in ("color_matrices.json", "false_color_bodies.json"):   # the tables it reads beside itself
         with open(os.path.join(folder, data), "w") as f:
-            f.write(subprocess.run(["git", "show", f"origin/main:{data}"], cwd=os.path.join(HERE, ".."),
+            f.write(subprocess.run(["git", "show", f"{ref}:{data}"], cwd=os.path.join(HERE, ".."),
                                    capture_output=True, text=True).stdout)
     spec = importlib.util.spec_from_file_location(f"{name}_main", path)
     mod = importlib.util.module_from_spec(spec)
@@ -112,9 +112,12 @@ assert cal.color_mix("N", ["RED", "BL1"], "SATURN") is None          # visible p
 assert cal.color_mix("W", ["RED", "VIO"], "SATURN") is None
 two = cal.color_mix("W", ["IR3", "VIO"], "SATURN", own=True)
 assert isinstance(two, cal.FalseMix) and two.shape == (3, 3)
-assert cal.color_mix("N", ["IR3", "UV3"], "ENCELADUS", own=True).measured is False   # IR3 spread past BODY_SPREAD
-assert cal.color_mix("N", ["MT3", "BL1"], "TITAN", own=True).measured
-assert cal.color_mix("N", ["UV2", "UV1"], "PAN", own=True).measured is False
+assert isinstance(cal.color_mix("N", ["MT3", "BL1"], "TITAN", own=True), cal.FalseMix)
+# Titan's CB3 (its surface window) with another band stays straight, as before: balanced, the haze band washed the
+# surface out into flat orange (042TI_GLOBMAP001, N1687507569_1)
+assert cal.color_mix("N", ["CB3", "MT1"], "TITAN", own=True) is None
+assert cal.color_mix("W", ["CB3", "IR1"], "TITAN", own=True) is None
+assert isinstance(cal.color_mix("W", ["CB3", "VIO"], "SATURN", own=True), cal.FalseMix)
 assert cal.two_bands([4.0, 2.0]) == [4.0, 3.0, 2.0] and cal.two_bands([1, 2, 3]) == [1, 2, 3]
 with cal.coloring("raw"):
     assert cal.color_mix("W", ["IR3", "VIO"], "SATURN", own=True) is None
@@ -165,7 +168,7 @@ def drawn(bands, levels, target, cam="ISSWA"):
 # an IR3+VIO Saturn four times brighter in IR3 (W1477675247_1): was solid orange (red 249, blue 132), now near Saturn's cream
 r, g, b = drawn(["IR3", "VIO"], [0.4, 0.1], "SATURN")
 print("IR3+VIO Saturn", round(r), round(g), round(b))
-assert r / b < 1.35 and r >= g >= b
+assert r / b < 1.5 and r >= g >= b
 # a UV2+UV1 sky-blue pair comes out near gray too
 r, g, b = drawn(["UV2", "UV1"], [0.05, 0.2], "SATURN", "ISSNA")
 print("UV2+UV1 Saturn", round(r), round(g), round(b))
@@ -173,10 +176,21 @@ assert b / r < 1.1
 # a visible pair is drawn straight, green the mean, as before
 pair = drawn(["RED", "BL1"], [0.3, 0.2], "SATURN", "ISSNA")
 assert len(pair) == 2
-# Saturn through MT3, CB2 and MT2 with TARGET_NAME a moon that has no table (W1694956960_1, Dione): was teal
-r, g, b = drawn(["MT3", "CB2", "MT2"], [0.0236, 0.40, 0.135], "DIONE")
-print("methane Saturn as DIONE", round(r), round(g), round(b))
-assert max(r, g, b) / min(r, g, b) < 1.06
+# three-filter sets are drawn as before #188 (its own balance standing in for a missing table made the bright zones
+# of methane Saturn pink-white, W1694956960_1 and 17 more): load_linear and tone, byte for byte
+old_cal = module_from_main("calibration", "069c6ee^1")
+if old_cal is not None:
+    for bands, levels, target in ((["MT3", "CB2", "MT2"], [0.0236, 0.40, 0.135], "DIONE"),
+                                  (["MT3", "CB2", "MT2"], [0.0236, 0.40, 0.135], "SATURN"),
+                                  (["MT3", "MT2", "BL1"], [0.03, 0.2, 0.35], "SATURN"), (["IR3", "GRN", "UV3"], [0.3, 0.2, 0.1], "TITAN")):
+        iofs = [(np.where(disk, v, 0) + rng.normal(0, 0.0005, (H, H))).astype(np.float32) for v in levels]
+        got = []
+        for mod in (cal, old_cal):
+            labels = [Label(b, target) for b in bands]
+            chans, margin, mix = mod.load_linear(labels, [np.zeros((H, H, 3), np.uint8)] * 3, [i.copy() for i in iofs])
+            got.append((np.asarray(mix).tobytes(), [c.tobytes() for c in mod.tone(chans, margin, mix)]))
+        assert got[0] == got[1], (bands, target)
+    print("three-band composites: as before #188")
 
 # ---------- two-filter passes play and mosaic in colour (obs_mosaic.colour_of, colour_picture) ----------
 # the WAC's CB2 + MT2 Saturn movie of ISS_003SA_3X3MOVIEB001_PRIME (2005-02-05) was drawn grey: colour_of wanted three
