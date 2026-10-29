@@ -158,12 +158,20 @@ for n in (9, 13):
 print("grown and whole alike")
 
 # another scene (a step past LAP_BELIEVE) is left as it is
-EXPO2 = [1.0] * 4 + [1.0, 3.5, 1.0, 1.0]
+EXPO2 = [1.0] * 4 + [1.0, 0.2, 1.0, 1.0]
 u, cache = make_pass("SCENE", [("CL1/CL2", i % 4, e) for i, e in enumerate(EXPO2)], None, "CL1/CL2")
 use(u)
 p = om.plan(u, cache)
 assert om.lap_gain(u, p, cache, 5, lambda i: om.tile(u, i, cache, SCALE)) == 1.0
 print("a change of scene keeps its own level")
+
+# a short and a long exposure of each place in turn (SPOLEDYN001: 2.6-2.8 times apart): the place holds its level
+EXPO3 = [1.0, 1.0, 1.0, 1.0] + [0.37, 0.37, 0.37, 0.37, 1.0, 1.0, 1.0, 1.0] * 2
+u, cache = make_pass("PAIRS", [("CL1/CL2", i % 4, e) for i, e in enumerate(EXPO3)], None, "CL1/CL2")
+use(u)
+lv = [float(middles(pic(om.rolling_webp(u["frames"][n][1], 512, cache, 1, wait=True)[0]))[1][..., :3].mean()) for n in range(3, len(EXPO3))]
+print("short and long exposures in turn, place 1:", [round(v) for v in lv])
+assert max(lv) / min(lv) < 1.03, lv
 
 # made_only: a copy whose earlier copies are not made yet is drawn on the level of those made, the picture is not
 # the frame's own yet (skipped), and its name is not the one the frame's own picture will have

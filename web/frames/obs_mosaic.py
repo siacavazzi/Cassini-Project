@@ -3219,8 +3219,9 @@ def _fade_weight(age, fade):
 LAP_SIDE = 128           # px: the side of a frame the two copies are measured at
 LAP_LIT = 0.1            # of the brighter copy's bright end: the pixels measured (the body, not the sky's noise)
 LAP_MIN = 400            # lit pixels both copies share, at LAP_SIDE, for a match; fewer, and the copy stays as it is
-LAP_BELIEVE = 2.5        # the largest step (linear) from one copy to the next taken for an exposure (either way)
-LAP_GAIN = (0.4, 2.5)    # the furthest a copy's gain goes, over every lap
+LAP_BELIEVE = 3.2        # the largest step (linear) from one copy to the next taken for an exposure (either way):
+                         # SPOLEDYN001's short and long exposures of one place differ 2.6-2.8 times
+LAP_GAIN = (0.25, 4.0)   # the furthest a copy's gain goes, over every lap
 LAP_RULE = "g1"          # in the pictures' names: these gains, and the base drawn under the picture
 
 

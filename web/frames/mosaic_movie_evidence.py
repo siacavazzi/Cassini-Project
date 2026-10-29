@@ -330,7 +330,7 @@ def main():
         return
     if a.obs_dir:
         om.VERSIONS["balanced"] = a.obs_dir
-    src = os.path.expanduser(a.src)
+    src = os.path.expanduser(a.src) if a.src else None
     if a.scan:
         scan(src, a.scan)
     if a.gains:
