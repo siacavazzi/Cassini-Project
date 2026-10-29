@@ -140,10 +140,19 @@
       }
       return out;
     }
-    // movie_frame's rolling trail: the up to trail earlier placed frames of frame n's filter, oldest first
+    // obs_mosaic.held_of: the frame shown in frame n's place, n or, when n is partial (most of it lost in downlink,
+    // t.partial), the last earlier placed frame of its filter that is not; n when there is none
+    function heldOf(t, n) {
+      const partial = new Set(t.partial || []), placed = new Set(t.n);
+      if (!partial.has(n)) return n;
+      for (let j = n - 1; j >= 0; j--) if (t.filters[j] === t.filters[n] && placed.has(j) && !partial.has(j)) return j;
+      return n;
+    }
+    // movie_frame's rolling trail: the up to trail earlier placed frames of frame n's filter (n: the frame shown,
+    // heldOf), partial ones left out, oldest first
     function trailOf(t, n, trail) {
-      const placed = new Set(t.n), js = [];
-      for (let j = n - 1; j > Math.max(-1, n - 8 * trail) && js.length < trail; j--) if (t.filters[j] === t.filters[n]) js.push(j);
+      const placed = new Set(t.n), partial = new Set(t.partial || []), js = [];
+      for (let j = n - 1; j > Math.max(-1, n - 8 * trail) && js.length < trail; j--) if (t.filters[j] === t.filters[n] && !partial.has(j)) js.push(j);
       return js.reverse().filter(j => placed.has(j));
     }
     // ... drawn under the newest, older ones fainter (float32 as numpy does it): older and newest are RGBA planes
@@ -261,7 +270,7 @@
       }
       return out;
     }
-    return { pyRound, pyRound2, places, shift, evenedGains, gains, lut, mix, trailOf, blendTrail, fadeWeight, fadeLight, resizeLinear, applyLight,
+    return { pyRound, pyRound2, places, shift, evenedGains, gains, lut, mix, heldOf, trailOf, blendTrail, fadeWeight, fadeLight, resizeLinear, applyLight,
       gaussKernel, detailInputs, detailFinish, blurCPU };
   };
   window.cassiniSteadyMath = STEADY_MATH;
@@ -470,15 +479,17 @@ onmessage = async e => {
     async apply(frames, id, im, o = {}) {
       const e = byId.get(`${tag(o.center !== false, !!o.color)}:${id}`);
       if (!e) return null;
-      const T = e.table, set = o.color && T.sets ? T.sets.by[e.n] : null;
+      const T = e.table, set = o.color && T.sets ? T.sets.by[e.n] : null, M = window.cassiniSteadyMath();
+      // a partial frame shows the whole one before it (the server's plane of frame n, im, is that frame's picture)
+      const shown = M.heldOf(T, e.n);
       const load = async j => {
-        if (j === e.n) return createImageBitmap(im);
+        if (j === e.n || j === shown) return createImageBitmap(im);
         const r = await fetch(o.planeUrl(T.ids[j]) + (o.raw ? "&detail=0" : ""));
         if (!r.ok) throw new Error(`plane ${T.ids[j]}: ${r.status}`);
         return createImageBitmap(await r.blob());
       };
-      const older = !set && o.trail ? window.cassiniSteadyMath().trailOf(T, e.n, o.trail) : [];
-      const tiles = set || [...older, e.n], bitmaps = await Promise.all(tiles.map(load)), mid = ++seq;
+      const older = !set && o.trail ? M.trailOf(T, shown, o.trail) : [];
+      const tiles = set || [...older, shown], bitmaps = await Promise.all(tiles.map(load)), mid = ++seq;
       const planes = tiles.map((j, q) => ({ i: T.n.indexOf(j), bitmap: bitmaps[q] }));
       const r = await new Promise(res => { waiting.set(mid, res); work().postMessage({ id: mid, key: e.key, n: e.n, steady: o.steady || 0, exposure: o.exposure || 0, trail: older.length > 0, detail: !!o.raw, planes }, bitmaps); });
       stats.frames++; stats.placeMs += r.ms[0]; stats.drawMs += r.ms[1]; stats.last = { id, moves: r.moves, gain: r.gain, set: tiles.map(j => T.ids[j]) };

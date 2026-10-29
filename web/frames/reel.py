@@ -19,7 +19,8 @@ different colour filters; clear and polarizer frames end a set and a repeated fi
 new one. RED, GRN and a blue make true colour; three or more other filters false colour
 (longest wavelength red, middle green, shortest blue); two filters a two-filter picture.
 A black and white frame within 120 s of an earlier one with the same camera, observation and
-filters is left out: stacking.load_stacked already folded it into that picture.
+filters, at the same pointing (stacking.repeat_of), is left out: stacking.load_stacked already
+folded it into that picture.
 
 Every picture is kept in the cache, so a body is only ever processed once. To build a body
 ahead of time (the server serves what this makes):
@@ -56,7 +57,7 @@ import stacking  # noqa: E402
 import sets_passes  # noqa: E402
 
 # bumped whenever the way reel pictures are made changes, so older ones are not served again
-VERSIONS = {"balanced": "reel-v31", "raw": "reel-v14", "classic": "reel-v8"}   # one per calibration.style(); v29/v12/v6: flat field; v31/v14/v8: colour sets aligned near SPICE, two-filter balance
+VERSIONS = {"balanced": "reel-v30", "raw": "reel-v13", "classic": "reel-v7"}   # one per calibration.style(); v30/v13/v7: the restart's calibration, tone and tile fixes; v29/v12/v6: flat field
 
 
 def version():
@@ -149,12 +150,15 @@ def shots(target):
             return _shots[target]
         idx, sets = load_index()
         rows = idx.index[idx["TARGET_NAME"] == target].tolist()
-        out, done, last_single, last_shot = [], set(), {}, {}
+        out, done, last_single = [], set(), {}
         members = idx.loc[rows].query("set >= 0").groupby("set")["id"].agg(list).to_dict()
         # the columns as arrays, read by row number (the index is 0..n-1), with the values idx.loc[q] gave (the
         # strings themselves, numpy numbers): a row at a time through idx.loc took 25 s of Saturn's 26
         ids, set_of, cams, obs, filters, f1s, f2s, times = (idx[k].to_numpy() for k in (
             "id", "set", "INSTRUMENT_ID", "OBSERVATION_ID", "FILTER_NAME", "filter1", "filter2", "seconds_1970"))
+        # where SPICE puts the body in each frame (the geometry cache): which frames are repeats at one pointing, and
+        # the mosaics' tiles
+        where = geometry(ids[rows].tolist())
         for q in rows:
             s = int(set_of[q])
             cam = "N" if cams[q] == "ISSNA" else "W"
@@ -169,17 +173,18 @@ def shots(target):
                             "also": [i for i in members.get(s, []) if i not in {ids[u] for u in use}]})
                 continue
             key = (cam, obs[q], filters[q])
-            if key in last_single and times[q] - last_single[key] <= REPEAT_GAP:
-                last_shot[key].setdefault("also", []).append(ids[q])
-                continue   # a repeat exposure, stacked into the picture before
-            last_single[key] = times[q]
-            last_shot[key] = {"ids": [ids[q]], "t": float(times[q]), "cam": cam, "kind": "bw",
-                             "filters": [f"{f1s[q]}/{f2s[q]}"], "obs": obs[q]}
-            out.append(last_shot[key])
+            mine = last_single.setdefault(key, [])
+            shot = stacking.repeat_of(mine, times[q], where.get(ids[q]), REPEAT_GAP)
+            if shot is not None:
+                shot.setdefault("also", []).append(ids[q])
+                continue   # a repeat exposure at the same pointing, stacked into the picture before
+            shot = {"ids": [ids[q]], "t": float(times[q]), "cam": cam, "kind": "bw",
+                    "filters": [f"{f1s[q]}/{f2s[q]}"], "obs": obs[q]}
+            mine.append((times[q], where.get(ids[q]), shot))
+            out.append(shot)
         out.sort(key=lambda s: s["t"])
         # the mosaic: the earlier pictures of the same filter this one is a new tile next to, by the rule in
         # mosaic.panels, from where SPICE puts the body in each frame (the geometry cache)
-        where = geometry([i for s in out for i in s["ids"]])
         pictures = []
         for s in out:
             g = where.get(s["ids"][len(s["ids"]) // 2])   # a set is aligned to its middle frame
@@ -215,15 +220,40 @@ def geometry(ids):
     """Where SPICE puts the body in each of the frames ids, from the geometry cache (bootleg_autonav,
     CASSINI_GEOMETRY_CACHE): {id: (x, y, z)}, find_target's centring shift in full resolution pixels and
     the distance in km. Frames that are not cached, or that SPICE could not place, are left out."""
+    return stacking.places(ids)
+
+
+def north_angles(ids):
+    """The turn that puts celestial north up in each of the frames ids (degrees, counter clockwise as
+    cv2.getRotationMatrix2D takes it: bootleg_autonav.find_target's angle), from the geometry cache: {id: angle}.
+    Frames that are not cached, or that SPICE could not place, are left out."""
     import bootleg_autonav as ba
     if not ba.GEOMETRY_CACHE or not os.path.exists(ba.GEOMETRY_CACHE):
         return {}
     db, out = ba._geometry_db(), {}
     for k in range(0, len(ids), 900):
         part = ids[k:k + 900]
-        for frame, x, y, z in db.execute(f"SELECT frame, x, y, z FROM target WHERE version = ? AND error IS NULL "
-                                         f"AND frame IN ({','.join('?' * len(part))})", (ba.GEOMETRY_VERSION, *part)):
-            out[frame] = (x, y, z)
+        for frame, angle in db.execute(f"SELECT frame, angle FROM target WHERE version = ? AND error IS NULL "
+                                       f"AND frame IN ({','.join('?' * len(part))})", (ba.GEOMETRY_VERSION, *part)):
+            if angle is not None:
+                out[frame] = angle
+    return out
+
+
+def turns(ids):
+    """How far each of the frames ids is turned from north up, from the geometry cache: {id: degrees} (the angle
+    processed_frame turns the frame by; the camera's twist about its axis changes during a pass when the spacecraft
+    rolls). Frames that are not cached, or that SPICE could not place, are left out."""
+    import bootleg_autonav as ba
+    if not ba.GEOMETRY_CACHE or not os.path.exists(ba.GEOMETRY_CACHE):
+        return {}
+    db, out = ba._geometry_db(), {}
+    for k in range(0, len(ids), 900):
+        part = ids[k:k + 900]
+        for frame, a in db.execute(f"SELECT frame, angle FROM target WHERE version = ? AND error IS NULL "
+                                   f"AND frame IN ({','.join('?' * len(part))})", (ba.GEOMETRY_VERSION, *part)):
+            if a is not None:
+                out[frame] = a
     return out
 
 

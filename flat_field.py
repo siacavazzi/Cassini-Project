@@ -246,12 +246,33 @@ def _correction(flat, dust, aboff, strength, mode):
             _warn(f"{flat}.{mode}.cub missing, no flat field")
         else:
             f = np.where(np.isfinite(f) & (f > 0), f, 1.0)
-            times(1.0 / f)
+            if usable_flat(f):
+                times(1.0 / f)
+            else:
+                _warn(f"{flat}.{mode}.cub is not a flat field (corrupt in CISSCAL's own files), no flat field")
     if out is None:
         return None
     out = out.astype(np.float32)
     out.setflags(write=False)
     return out
+
+
+"""
+True when a flat field map (as _correction takes it, the bad pixels already 1) is one: its middle at about 1 and
+next to none of it far from 1. The USGS mirror's flat129 (the NAC's UV2/CL2 flat at every temperature) is not: its
+slope file was read as the wrong number type when it was brought into ISIS (pds2isis, 2009) and then divided by
+-2.3e20, so its full map is 20 everywhere and its summed maps run from 1e-11 to 4e12, which turned every NAC UV2
+frame into a few bright blobs on black (the 2001 Jupiter and 2017 Titan UV pairs).
+"""
+FLAT_RANGE = (0.2, 5.0)    # a flat field's pixels lie well inside this; more than FLAT_OUTSIDE of them outside: not one
+FLAT_OUTSIDE = 0.01
+
+
+def usable_flat(f):
+    h, w = f.shape
+    middle = float(np.median(f[h // 2 - h // 5:h // 2 + h // 5, w // 2 - w // 5:w // 2 + w // 5]))
+    outside = float(np.mean((f < FLAT_RANGE[0]) | (f > FLAT_RANGE[1])))
+    return 0.5 < middle < 2.0 and outside < FLAT_OUTSIDE
 
 
 """

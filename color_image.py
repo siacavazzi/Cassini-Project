@@ -205,13 +205,18 @@ def load_aligned(paths, hdr=False, scale=None, repeat_window=120):
             if scale is not None:
                 scale = dict(scale, blacks=[scale["blacks"][j] for j in keep])
     calibrated = False
-    guide = linear = None
+    guide = linear = saturated = None
     if calibrating:
         if scale is None and cal.look() != "classic":
             # balanced: the channels stay linear until they are aligned, then are drawn together (calibration.tone)
             linear = cal.load_linear(lbls, imgs, iofs)
         if linear is not None:
             calibrated = True
+            if len(lbls) == 1 and iofs[0] is None:
+                # what the camera saturated is white (a frame saturated all over is white, not its flat field)
+                share = cal.draw_saturated(lbls, linear[0], linear[1])
+                if share >= 0.5:
+                    saturated = round(share, 3)
         if linear is not None and len(lbls) > 1:
             # the channels are aligned on their classic display whatever the look, so a look changes only how
             # the picture is drawn, never where its channels land
@@ -259,6 +264,9 @@ def load_aligned(paths, hdr=False, scale=None, repeat_window=120):
         report["lost_px"] = [lost, left]
     if dropped:
         report["dropped"] = dropped
+    if saturated:
+        # most of the frame saturated in the raw data (the camera's top), drawn white
+        report["saturated"] = saturated
     return imgs, np.logical_and.reduce(masks), lbls[ref], report
 
 

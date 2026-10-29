@@ -13,7 +13,9 @@ Phases (each its own run; a run picks up where the last one stopped, since a mad
   mosaics     every mosaic pass's plan and tiles (obs_mosaic), then what the window shows at each of its frames,
               1024 and 512: its mosaic so far, or a mosaic movie's rolling picture
   movies      the same for every movie pass: its steadied frames (movie_webp), then the planes the page's own steps
-              start from (make_planes: each frame alone, color=0, at 1024; a filled pass's also before detail, _d0)
+              start from (make_planes: each frame alone, color=0, at 1024; a filled pass's also before detail, _d0),
+              and for a pass the page cannot even itself (false colour, feature tracks), its frames with Exposure
+              normalization at its default smoothing (make_evened, _e8)
   processed   /frames/processed/<ID>.webp at 1024, 512 and 256, every frame, centred as Auto center asks
   strips      a movie pass's steadied frames at 128 (the movie strip)
   chains      every movie pass's stabilization and exposure chains (small JSON files; no pictures), which the page's
@@ -152,7 +154,8 @@ def items(phase):
         # strips: a movie pass's steadied frames at 128, the movie strip under a window
         if phase == "strips":
             return [("_".join(map(str, u["key"])), lambda c, u=u: make_pass(u, c, (128,))) for u in movie_passes()]
-        return [("_".join(map(str, u["key"])), lambda c, u=u: make_pass(u, c) + make_planes(u, c)) for u in movie_passes()]
+        return [("_".join(map(str, u["key"])), lambda c, u=u: make_pass(u, c) + make_planes(u, c) + make_evened(u, c))
+                for u in movie_passes()]
     raise ValueError(phase)
 
 
@@ -335,6 +338,21 @@ def make_planes(u, cache, centre=True):
     for f in u["frames"]:
         for sharpen in ((True, False) if filled else (True,)):
             obs_mosaic.movie_webp(f[1], 1024, cache, 0, False, wait=True, ahead=0, centre=centre, sharpen=sharpen)
+    return 0
+
+
+def make_evened(u, cache, sizes=(1024, 512), centre=True):
+    """A movie pass's frames with Exposure normalization at its default smoothing (exposure=EXPOSURE_SMOOTH, on by
+    default since 2026-10-29), as the window asks the server for them, for a pass the page cannot even itself
+    (obs_mosaic.page_evens: a false colour pass, a feature track, a pass whose view follows its frames); nothing for
+    the rest, which the page evens on the frames make_pass and make_planes made. Returns 0: make_pass has counted
+    the pass's frames."""
+    if obs_mosaic.page_evens(u, cache, True, centre):
+        return 0
+    for f in u["frames"]:
+        for size in sizes:
+            obs_mosaic.movie_webp(f[1], size, cache, 0, True, wait=True, ahead=0, centre=centre,
+                                  exposure=obs_mosaic.EXPOSURE_SMOOTH)
     return 0
 
 

@@ -161,6 +161,14 @@ info = {**INFO, "path": f"nac_data/{fid}.LBL"}
 fit = cal.overclock_bias(info)
 assert np.abs(fit - lines_bias).max() < 0.6, np.abs(fit - lines_bias).max()
 assert cal.overclock_bias({**info, "INST_CMPRS_TYPE": "LOSSY"}) is None
+# a partial downlink can keep a line's pixel count but garble its prefix (N1413937500_2's line 129: -8,155 DN): that
+# line is left out of the fit, which otherwise tilts the bias by tens of DN down the frame
+garbled = prefix.copy()
+garbled[128, 12:14] = np.frombuffer(np.array([-32694], ">i2").tobytes(), np.uint8)
+garbled[128, 22:24] = np.frombuffer(np.array([220], ">i2").tobytes(), np.uint8)
+open(os.path.join(data, "nac_data", fid + ".prefix.gz"), "wb").write(gzip.compress(garbled.tobytes()))
+assert np.abs(cal.overclock_bias(info) - lines_bias).max() < 0.6, np.abs(cal.overclock_bias(info) - lines_bias).max()
+open(os.path.join(data, "nac_data", fid + ".prefix.gz"), "wb").write(gzip.compress(prefix.tobytes()))
 with cal.stepping("flat,hotpix"):
     on = cal.calibrate(codes, info)
     with cal.stepping("flat,dark,hotpix"):
@@ -227,4 +235,32 @@ dc.repair_hot(img, INFO)
 assert abs(img[600:604, 600:604].mean() - 100) < 8 and abs(img[640:644, 680:684].mean() - 100) < 8
 with cal.stepping("dark"):
     assert cal.variant() == "-off-dark"
+
+# a hot pixel that has cooled since its list: the dark step takes its list curve out (the WAC's lists), so it lands
+# below the sky, a black pinhole; repaired from the pixels round it where the dark stood out (dark_spots), left alone
+# otherwise (a listed pixel darker than the sky with no more dark taken out than round it is just noise there)
+low = sky.copy()
+low[84:88, 96:100] = 20
+dc.repair_hot(low, INFO)
+assert (low[84:88, 96:100] == 20).all()
+spots = np.zeros((L, L), bool)
+spots[87 // 4, 98 // 4] = True                # listed (98, 87), at the SUM4 frame's own size
+dc.repair_hot(low, INFO, spots)
+assert abs(low[84:88, 96:100].mean() - 100) < 8
+# and through calibrate: a WAC frame whose listed pixel gathered no more than the sky comes out at the sky, not black
+wac = {**info, "INSTRUMENT_ID": "ISSWA", "GAIN_MODE_ID": "29 ELECTRONS PER DN", "FILTER_NAME": "(\"CL1\",\"CL2\")"}
+dc._parameters.cache_clear(); dc._dark.cache_clear()
+wdark = dc.dark_dn(wac)
+smooth = wdark.copy()
+smooth[int(482 / 4), int(213 / 4)] = np.median(wdark[int(482 / 4) - 2:int(482 / 4) + 3, int(213 / 4) - 2:int(213 / 4) + 3])
+wdn = 900 + lines_bias[:, None] + smooth        # the pixel gathered only the dark round it
+wcodes = np.searchsorted(mids, wdn).astype(np.uint8)
+hot = (int(482 / 4), int(213 / 4))
+with cal.stepping("flat,hotpix"):
+    pinhole = cal.calibrate(wcodes, wac)
+with cal.stepping("flat"):
+    repaired = cal.calibrate(wcodes, wac)
+print("cooled listed WAC pixel over the sky: hotpix off", round(float(pinhole[hot] / np.median(pinhole)), 3),
+      "on", round(float(repaired[hot] / np.median(repaired)), 3))
+assert pinhole[hot] < 0.5 * np.median(pinhole) and abs(repaired[hot] / np.median(repaired) - 1) < 0.05
 print("ok")

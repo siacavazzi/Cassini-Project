@@ -493,11 +493,9 @@ def webp(frame_id, size, cache, fmt="webp"):
 
 # the caches of the pictures drawn from I/F, one per display model (calibration.style), so the classic look keeps the
 # pictures made before the balanced display model and raw colors the balanced ones made before natural color
-# color-v30/v13/v7, proc-v9/v3: calibration takes the flat field (dust rings, mottle) and the nonlinearity out
-# color-v32/v15/v9: channels whose own match fails aligned near SPICE's offset (image_correction.guided_shift); two-filter
-# sets balanced like false color, a methane set with no table for its target balanced all the way (calibration.color_mix)
-COLOR_VERSIONS = {"balanced": "color-v32", "raw": "color-v15", "classic": "color-v9"}
-PROC_VERSIONS = {"balanced": "proc-v9", "raw": "proc-v9", "classic": "proc-v3"}   # one frame: no colors to mix
+# color-v31/v14/v8, proc-v10/v4: the calibration fixes (overclock lines, UV2 flat, pinholes) and the single-picture tone; color-v30/v13/v7, proc-v9/v3: calibration takes the flat field (dust rings, mottle) and the nonlinearity out
+COLOR_VERSIONS = {"balanced": "color-v31", "raw": "color-v14", "classic": "color-v8"}
+PROC_VERSIONS = {"balanced": "proc-v10", "raw": "proc-v10", "classic": "proc-v4"}   # one frame: no colors to mix
 # Auto center (center=1): the same pictures centred on the body by SPICE, cached beside them in folders of their own
 CENTRE_VERSION = "ctr4"   # ctr2: the shift stops at the frame's data edge; ctr3: only when the body's disk is cut by it;
                           # ctr4: a close-up pass is turned north up where it is
