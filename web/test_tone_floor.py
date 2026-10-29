@@ -1,10 +1,11 @@
 """Synthetic checks of a single picture's own black (calibration._balanced_scale with _floor, then load_linear and tone):
 an even bright surface with no sky (Titan's haze) spreads over the range instead of sitting at near-white; a lit sky
-that fails the sky test, and a star field's even offset, go near black (GLOW_IOF); an even body beside sky (a moon
-close-up) gets its floor taken off, a body with a terminator or a ring shadow does not; a night side the sky test
-counts as sky fades out instead of a ragged cut while the real sky stays black; one black for every channel keeps the
-color; saturated pixels draw white (draw_saturated); and a reel's shared scale (tiles_scale) still fits every tile's
-white. Run: python web/test_tone_floor.py"""
+that fails the sky test, and a star field's even offset, go near black (GLOW_IOF), faint rings as dim do not
+(GLOW_FINE); an even body beside sky (a moon close-up) gets its floor taken off, a body with a terminator or a ring
+shadow does not; a night side the sky test counts as sky fades out instead of a ragged cut while the real sky stays
+black; one black for every channel keeps the color; saturated pixels draw white (draw_saturated), and a frame
+saturated over most of it keeps its dim edge soft (SATURATED_FLOOR); and a reel's shared scale (tiles_scale) still
+fits every tile's white. Run: python web/test_tone_floor.py"""
 import os
 import sys
 sys.path.insert(0, os.path.join(os.path.dirname(os.path.abspath(__file__)), "frames"))
@@ -84,6 +85,22 @@ finally:
     cal.GLOW_IOF = keep
 assert np.array_equal(floor_only, draw([dim])[0])
 
+# ---- faint rings as dim as lit sky (high phase, or their unlit side) have fine structure (GLOW_FINE): they keep the floor
+# black instead of half of them going black at the median ----
+radius = np.hypot(xx - 256, yy + 600)
+rings = 5e-4 * (1 + 0.8 * np.sin(radius / 2.1) * np.sin(radius / 13.0)) + rng.normal(0, 5e-6, (H, H))
+print("rings fine structure %.3f" % cal.fine_structure(rings.astype(np.float32)))
+keep = cal.GLOW_FINE
+cal.GLOW_FINE = (1e9, 2e9)                                     # as before: every dim picture is lit sky
+try:
+    crushed = draw([rings])[0]
+finally:
+    cal.GLOW_FINE = keep
+after = draw([rings])[0]
+print("rings black share: as lit sky %.2f, now %.2f" % ((crushed <= 3).mean(), (after <= 3).mean()))
+assert (crushed <= 3).mean() > 0.3 and (after <= 3).mean() < 0.05
+assert max(cal.fine_structure(v.astype(np.float32)) for v in (glow, stars)) < cal.GLOW_FINE[0]   # both stay lit sky
+
 # ---- with sky: an even moon close-up (one edge of the frame is sky) gets its floor off ----
 moon = np.where(xx + yy > 380, 0.6 + 0.08 * smooth, 0.0) + rng.normal(0, 0.0005, (H, H))
 before, after = draw([moon], floor=False)[0], draw([moon])[0]
@@ -134,13 +151,35 @@ codes = np.full((H, H), 255, np.uint8)
 real_imread, real_lut8 = cal.ds.imread, cal.ds.lut8
 cal.ds.imread, cal.ds.lut8 = (lambda path, flags=None: codes.copy()), (lambda: False)
 try:
-    channels, margin, mix = cal.load_linear([Label()], [None], [flat])
-    share = cal.draw_saturated([Label()], channels, margin)
+    full = cal.saturated_masks([Label()])
+    channels, margin, mix = cal.load_linear([Label()], [None], [flat], floor=cal.saturated_floor(full[0].mean()))
+    share = cal.draw_saturated(channels, margin, full)
     toned = cal.tone(channels, margin, mix)[0][..., 0]
 finally:
     cal.ds.imread, cal.ds.lut8 = real_imread, real_lut8
 print("saturated frame: share", share, "output p1/p99", pct(toned, 1, 99))
 assert share == 1.0 and np.percentile(toned, 1) >= 254
+
+# ---- a frame saturated over most of it (SATURATED_FLOOR): its unsaturated corner, the dim edge of what saturated, keeps a
+# soft gradient up to the white instead of taking the floor black ----
+# the saturated part's I/F: the flat field's pattern
+edge = (0.0003 * (0.5 + np.clip((xx + yy) / 160, 0, 1.5)) * (1 + 0.01 * smooth)).astype(np.float32)
+codes = np.where(xx + yy > 160, 255, 200).astype(np.uint8)
+cal.ds.imread, cal.ds.lut8 = (lambda path, flags=None: codes.copy()), (lambda: False)
+try:
+    full = cal.saturated_masks([Label()])
+    pictures = []
+    for floor in (1.0, cal.saturated_floor(full[0].mean())):
+        channels, margin, mix = cal.load_linear([Label()], [None], [edge], floor=floor)
+        cal.draw_saturated(channels, margin, full)
+        pictures.append(cal.tone(channels, margin, mix)[0][..., 0])
+finally:
+    cal.ds.imread, cal.ds.lut8 = real_imread, real_lut8
+corner = xx + yy < 140
+print("mostly saturated frame: share %.2f floor %.2f, corner p50 with the floor black %d, now %d"
+      % (full[0].mean(), cal.saturated_floor(full[0].mean()), np.median(pictures[0][corner]), np.median(pictures[1][corner])))
+assert cal.saturated_floor(full[0].mean()) == 0.0 and cal.saturated_floor(0.01) == 1.0
+assert np.median(pictures[0][corner]) < 20 and np.median(pictures[1][corner]) > 120
 
 # ---- a reel's shared scale: tiles without sky on their lowest floor black, every tile's white under one white; a reel
 # with sky in a tile keeps the sky's black ----
