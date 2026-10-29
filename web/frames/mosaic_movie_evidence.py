@@ -238,7 +238,8 @@ def draw(src, scratch, target, obs, cam, out, size):
                            "mean": round(float(a[..., :3][a[..., 3] > 128].mean()) if (a[..., 3] > 128).any() else 0.0, 2),
                            "filters": rep.get("filter_names"), "base": rep.get("luminance")})
             print(name, n, fr[1], fr[2], frames[-1]["covered"], frames[-1]["mean"], flush=True)
-        row = {"pass": name, "frames": frames, "swings": sum(swings(v) for v in by_slot.values())}
+        row = {"pass": name, "frames": frames, "swings": sum(swings(v) for v in by_slot.values()),
+               "levels": {str(k): [round(x, 1) for x in v] for k, v in by_slot.items()}}
         cov = [f.get("covered", 0) for f in frames]
         if cov:
             top = 0
@@ -252,6 +253,29 @@ def draw(src, scratch, target, obs, cam, out, size):
         print(json.dumps({"pass": name, "swings": row["swings"], "collapsed_frames": row.get("collapsed_frames")}), flush=True)
     with open(os.path.join(out, f"{target}_{obs}_{cam}.json"), "w") as f:
         json.dump(rows, f)
+
+
+def gains(scratch, target, obs, cam):
+    """Each mosaic movie copy's lap step (to the copy it replaces) as measured, before LAP_BELIEVE, and the gain it
+    is drawn at, from a scratch cache --draw made (its tiles)."""
+    read_only(scratch, plans=False)
+    for u in om.units(target, obs, cam):
+        if u.get("kind") != "mosaic_movie" or not os.path.exists(os.path.join(om.folder(u, scratch), om.PLAN_FILE)):
+            continue
+        p = om.plan(u, scratch)
+        report = lambda i: om.tile(u, i, scratch, p["display_scale"])
+        prev, where = om._lap_prev(u), om.slots(u)
+        believe = om.LAP_BELIEVE
+        for j, fr in enumerate(u["frames"]):
+            t, i = report(j), prev[j]
+            raw = None
+            if i is not None and "offset" in t and "offset" in report(i):
+                om.LAP_BELIEVE, u["_lap_step"] = 1e9, {}
+                raw = om._lap_step(u, p, scratch, report(i), t)
+                om.LAP_BELIEVE, u["_lap_step"] = believe, {}
+            g = om.lap_gain(u, p, scratch, j, report) if "offset" in t else None
+            print(json.dumps({"pass": os.path.basename(om.folder(u, scratch)), "n": j, "filter": fr[2], "slot": where[j],
+                              "replaces": i, "step": None if raw is None else round(raw, 3), "gain": g}), flush=True)
 
 
 def compare(before, after, out, sheet=6):
@@ -298,6 +322,7 @@ def main():
     ap.add_argument("--out", help="--draw: the folder for the pictures and their numbers")
     ap.add_argument("--size", type=int, default=512)
     ap.add_argument("--compare", nargs=3, metavar=("BEFORE", "AFTER", "OUT"))
+    ap.add_argument("--gains", nargs=3, metavar=("TARGET", "OBSERVATION", "CAM"), help="print each copy's lap step and gain (--scratch)")
     ap.add_argument("--code", help="a worktree whose obs_mosaic is used (read before the arguments)")
     a = ap.parse_args()
     if a.compare:
@@ -308,6 +333,8 @@ def main():
     src = os.path.expanduser(a.src)
     if a.scan:
         scan(src, a.scan)
+    if a.gains:
+        gains(os.path.expanduser(a.scratch), *a.gains)
     if a.draw:
         assert a.scratch and a.out and os.path.abspath(a.scratch) != os.path.abspath(src)
         draw(src, os.path.expanduser(a.scratch), *a.draw, a.out, a.size)
