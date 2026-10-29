@@ -11,7 +11,7 @@ CASSINI_CISSCAL). Read-only on the archive.
       for each pass named by one of its frames: its plan's display scale (plan(), into the scratch cache DIR) and
       up to FRAMES of its frames drawn as their tiles are (color_image.processed_frame with tile_scale), a JPEG
       strip (each frame whole and its middle, the same boxes before and after) and a JSON line each: md5 of every frame's pixels, share of the body's pixels drawn 250 or
-      over, the body's median
+      over, the body's median; --zoom also each frame's body up close (zoom/, PNG)
   python web/frames/bright_evidence.py compare BEFORE AFTER --out DIR
       before | after strips and a table: scale before/after, identical pixels or not
 
@@ -89,7 +89,7 @@ def boxes(img):
     return [(r0, r1, c0, c1), (max(0, cy - half), cy + half, max(0, cx - half), cx + half)]
 
 
-def draw(ids, cache, out):
+def draw(ids, cache, out, zoom=False):
     os.makedirs(out, exist_ok=True)
     for fid in ids:
         found = om.unit_of(fid)
@@ -132,6 +132,20 @@ def draw(ids, cache, out):
             if body.any():
                 row["white_share"] = round(float((grey[body] >= 250).mean()), 4)
                 row["body_p5_50_95"] = [int(v) for v in np.percentile(grey[body], (5, 50, 95))]
+            if zoom:
+                # the body up close, round where SPICE puts it (the canvas's middle less the frame's offset from it),
+                # twice its radius each way: the same box before and after, a lossless PNG
+                off = rep.get("frame_offset") or [0.0, 0.0]
+                rpx = om.RADIUS.get(u["key"][0], 0) / (z * om.IFOV[u["key"][2]]) if z else 0
+                half = int(max(2 * rpx, 24))
+                cy, cx = int(img.shape[0] / 2 - off[1]), int(img.shape[1] / 2 - off[0])
+                box = img[max(0, cy - half):cy + half, max(0, cx - half):cx + half]
+                if box.size:
+                    os.makedirs(os.path.join(out, "zoom"), exist_ok=True)
+                    cv2.imwrite(os.path.join(out, "zoom", f"{name}_{n}.png"), box[..., :3])
+                    g = box[..., :3].max(axis=2)
+                    on = (g >= 40) & (box[..., 3] > 0)
+                    row["zoom_white"] = round(float((g[on] >= 250).mean()), 4) if on.any() else None
             for r0, r1, c0, c1 in boxes(img):
                 crop = img[r0:r1, c0:c1, :3]
                 k = SIDE / max(crop.shape[:2])
@@ -185,10 +199,12 @@ if __name__ == "__main__":
     ap.add_argument("ids", nargs="*")
     ap.add_argument("--cache")
     ap.add_argument("--out", required=True)
+    ap.add_argument("--zoom", action="store_true", help="draw: also each frame's body up close, zoom/<pass>_<n>.png")
+    ap.add_argument("--ids-file", help="draw: frame ids, one per line, as well as those given")
     a = ap.parse_args()
     if a.what == "census":
         census(a.out)
     elif a.what == "draw":
-        draw(a.ids, a.cache, a.out)
+        draw(a.ids + (open(a.ids_file).read().split() if a.ids_file else []), a.cache, a.out, a.zoom)
     else:
         compare(a.ids[0], a.ids[1], a.out)
