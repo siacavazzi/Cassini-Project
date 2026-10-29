@@ -19,7 +19,7 @@ of those observations as the Mac Mini's index and geometry cache have them (web/
   (249SA_LIMBINT002) is a mosaic, a 3x3 mosaic taken lap after lap (003SA_3X3MOVIEA002) a mosaic movie, while a feature
   track creeping the least of them (182SA_FEATRAK012) stays a track;
 - separate scans in one mosaic pass, islands a frame's width or so apart and not both on the body's disk, are cut into
-  a mosaic each (108RI_TMAPN30LP001 and 113RI_VTMPN60MP001's ring ansae, 282RI_HIRESAFRG001's three strips), while an
+  a mosaic each (108RI_TMAPN30LP001 and 113RI_VTMPN60MP001's ring ansae), while an
   azimuthal scan whose stretches do not quite meet (032RI_AZSCNLOPH001) and a map round Dione (129DI_REGMAP001) stay
   whole (_retargets, _island);
 - a camera stepping a fifth of a frame each run over Titan (059TI_GLOBMAP001 W, 153TI_FIRNADMAP001 W), each frame
@@ -200,9 +200,9 @@ def main():
     assert not any(u["rescanned"] for key in OBS[:2] for u in passes(*key))
 
     # separate scans in one mosaic pass (islands): a mosaic each, in ISLANDS' folder; the ring ansae of a CIRS
-    # ride-along, one ansa creeping under mosaic.min_step, and three strips of the A ring's edge
-    for key, want in ((OBS[18], [("mosaic", 17), ("mosaic", 11)]), (OBS[22], [("mosaic", 12), ("mosaic", 16)]),
-                      (OBS[23], [("mosaic", 24), ("mosaic", 24), ("mosaic", 6)])):
+    # ride-along, one ansa creeping under mosaic.min_step. (282RI_HIRESAFRG001's three strips of the A ring's edge,
+    # OBS[23], are one movie until a dense scan is judged by its creep over a repeat window, #202: then three mosaics)
+    for key, want in ((OBS[18], [("mosaic", 17), ("mosaic", 11)]), (OBS[22], [("mosaic", 12), ("mosaic", 16)])):
         us = passes(*key)
         assert kinds(us) == want and all(om.folder(u, "/c").endswith(om.ISLANDS) for u in us), (key, kinds(us))
         assert [u["key"][3] for u in us] == list(range(len(us)))
