@@ -301,6 +301,10 @@ def load_aligned(paths, hdr=False, scale=None, repeat_window=120, around=None):
     if saturated:
         # most of the frame saturated in the raw data (the camera's top), drawn white
         report["saturated"] = saturated
+    shares = [float(c.mean()) for c in clips if c is not None]
+    if shares and max(shares) > 0:
+        # the share of the frame the camera saturated in every exposure merged (the most of any channel): drawn white
+        report["saturated_share"] = round(max(shares), 4)
     return imgs, np.logical_and.reduce(masks), lbls[ref], report
 
 

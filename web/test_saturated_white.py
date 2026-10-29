@@ -91,6 +91,7 @@ imgs, valid, _, report = color_image.load_aligned(["long.png"], hdr=True, scale=
 tile = imgs[0][..., 0]
 assert report["calibrated"] and report["stacked"] == [2], report
 assert tile[core].min() == 255, tile[core].min()
+assert report["saturated_share"] == round(float(core.mean()), 4), report
 assert tile[side].max() < 255 and np.median(tile[side]) > 150, np.median(tile[side])
 imgs, _, _, report = color_image.load_aligned(["long.png"], hdr=True)
 own = imgs[0][..., 0]
