@@ -130,7 +130,7 @@ check("mosaic movie", play(frm, lambda fid: om.rolling_webp(fid, 512, cache, 1))
 # a server started on a cache made earlier (another server, or the pre-built cache): the first time through it reads
 # each tile report and the plan once, with a few background workers at a time, and then plays the pass as above
 def forget():
-    for d in (om._passes, om._grown_last, om._rolled, om._parts, om._centre_views, om._centre_of, om._outlines, om._maps,
+    for d in (om._passes, om._grown_last, om._rolled, om._parts, om._centre_views, om._centre_of, om._seen, om._outlines, om._maps,
               om._made, om._blank, om._upto, om._from, om.reel._reports):
         d.clear()
 
