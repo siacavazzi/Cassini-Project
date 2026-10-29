@@ -1326,6 +1326,8 @@ EDGE_LINE = 0.1
 # straight one, is not believed: parallel ringlets, gaps and ring shadows a few px to tens of px apart match one
 # another as well as themselves (the probe's 007RI ring scan moved 30 px onto the next ringlets and doubled them)
 EDGE_RIVAL = 0.7
+EDGE_RESPONSE = 0.15  # the least phase correlation peak believed (007RI's wrong ring matches were 0.04 to 0.08, the
+#                       Jupiter, Saturn limb and ring shadow matches the probe confirmed 0.2 to 0.7)
 EDGE_APART = 4
 EDGE_MAX = 64 / 1024  # of a frame: the largest move believed (the quality check's worst was 60 WAC px on Titan)
 EDGE_NCC = 0.5       # the least the two edges must agree once moved
@@ -1333,8 +1335,8 @@ EDGE_GAIN = 0.05     # ... and how much better than at SPICE's places, for a mov
 EDGE_AGREE = 3.0     # px: matches further than this (across their own edges) from the others' fit are left out
 # a limb sits higher or lower with the filter (Saturn's haze in UV3 stands ~8 px over its MT3 limb, Titan's in RED over
 # CB3, probe 10-29): edges are measured between tiles of one filter only
-EDGE_FILE = "edges3-"  # before PANEL_FILE: a clouded body's registration, kept apart from #169's; renamed when the rule changes
-EDGE_TAG = "-pe3"    # in the name of a layout whose tiles edge registration moved, instead of PANEL_TAG
+EDGE_FILE = "edges4-"  # before PANEL_FILE: a clouded body's registration, kept apart from #169's; renamed when the rule changes
+EDGE_TAG = "-pe4"    # in the name of a layout whose tiles edge registration moved, instead of PANEL_TAG
 
 
 def _detail(gray, mask, sigma=6.0):
@@ -1522,6 +1524,8 @@ def edge_shift(q, ref, at_q, t, crop, at_t):
     pair = [_even(d * taper) for d in ds]
     (dx, dy), response = cv2.phaseCorrelate(*pair)
     rival = _rival(*pair, main)
+    if response < EDGE_RESPONSE:
+        return None, f"weak {dx:+.1f},{dy:+.1f} response {response:.2f}"
     if rival > EDGE_RIVAL:
         return None, f"ambiguous {dx:+.1f},{dy:+.1f} rival {rival:.2f}"
     if normal is not None:
