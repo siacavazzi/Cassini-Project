@@ -277,6 +277,8 @@ def main():
                 sets.append(first)
             if "pinholes" in why:
                 frames.append(fid)     # the pinhole sets' members, frame by frame too
+        elif why.startswith("irp"):
+            continue                   # irp_pairs.txt's frames, for the polarizer check
         else:
             frames.append(fid)
     if a.sets:
