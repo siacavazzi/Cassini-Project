@@ -47,16 +47,21 @@ def variant(name):
     """The calibration with one change: "v47" every step on; "dark", "flat", "hotpix": that step off; "overclock":
     the strip mean in place of the overclock fit; "v46": all four (the calibration before #153)."""
     off = {"v47": "", "dark": "dark", "flat": "flat", "hotpix": "hotpix", "overclock": "",
-           "v46": "dark,flat,hotpix"}[name]
+           "v46": "dark,flat,hotpix", "nopinfix": ""}[name]
     cal.overclock_bias = (lambda info: None) if name in ("overclock", "v46") else _overclock
+    # "nopinfix": as v47 was built, before listed pixels the dark over-subtracted were repaired (dc.lists_in_dark)
+    if name == "nopinfix" and hasattr(dc, "lists_in_dark"):
+        dc.lists_in_dark = lambda info: False
     try:
         with cal.stepping(off):
             yield
     finally:
         cal.overclock_bias = _overclock
+        dc.lists_in_dark = _lists_in_dark
 
 
-VARIANTS = ("v47", "dark", "flat", "hotpix", "overclock", "v46")
+_lists_in_dark = getattr(dc, "lists_in_dark", None)
+VARIANTS = ("v47", "nopinfix", "dark", "flat", "hotpix", "overclock", "v46")
 
 
 def load(fid):
