@@ -225,24 +225,23 @@ def load_aligned(paths, hdr=False, scale=None, repeat_window=120, around=None):
             if scale is not None:
                 scale = dict(scale, blacks=[scale["blacks"][j] for j in keep])
     calibrated = False
-    guide = linear = saturated = None
+    guide = linear = saturated = full = None
     if calibrating:
         if scale is None and cal.look() != "classic":
-            # balanced: the channels stay linear until they are aligned, then are drawn together (calibration.tone)
-            linear = cal.load_linear(lbls, imgs, iofs)
+            # balanced: the channels stay linear until they are aligned, then are drawn together (calibration.tone);
+            # one frame: what the camera saturated is white (a frame saturated all over is white, not its flat field),
+            # and a frame saturated over much of it keeps the rest soft instead of taking its floor black
+            # (merged in I/F: what every exposure saturated, stacking.load_hdr's clipped)
+            share = 0.0
+            if len(lbls) == 1:
+                full = [cal.saturated_of(lbls[0], imgs[0].shape[:2]) if iofs[0] is None else clips[0]]
+                full = None if full[0] is None else full
+                share = float(full[0].mean()) if full else 0.0
+            linear = cal.load_linear(lbls, imgs, iofs, floor=cal.saturated_floor(share))
         if linear is not None:
             calibrated = True
-            if len(lbls) == 1:
-                # what the camera saturated is white (a frame saturated all over is white, not its flat field); merged
-                # in I/F, what every exposure saturated
-                if iofs[0] is None:
-                    share = cal.draw_saturated(lbls, linear[0], linear[1])
-                elif clips[0] is not None and clips[0].any():
-                    c = linear[0][0]
-                    c[clips[0]] = np.maximum(c[clips[0]], np.float32(linear[1] + cal.SATURATED))
-                    share = float(clips[0].mean())
-                else:
-                    share = 0.0
+            if full is not None:
+                share = cal.draw_saturated(linear[0], linear[1], full)
                 if share >= 0.5:
                     saturated = round(share, 3)
         if linear is not None and len(lbls) > 1:

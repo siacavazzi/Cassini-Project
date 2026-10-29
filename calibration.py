@@ -546,12 +546,19 @@ GLOW_IOF = (1e-3, 5e-3)  # balanced, no sky: a picture whose median brightness (
 GLOW_PCT = 50        # or the E ring's glow, stray light, a star field's offset), not a sunlit surface, which is brighter than
                      # GLOW_IOF[1]: its black is its GLOW_PCT percentile, so the sky goes near black and only the glow
                      # brighter than the sky shows; in between, a blend (on a log scale) from the floor black
+GLOW_FINE = (0.04, 0.12)  # ... but only for smooth light: none of it as the picture's fine structure (the 90th percentile of
+                     # its 1.5 px detail, against 8 px, over its median) goes from GLOW_FINE[0] to GLOW_FINE[1], so faint
+                     # rings seen at high phase or from their unlit side keep the floor black (glows and star fields measure
+                     # under 0.04, rings over 0.15)
 TOE = 0.05           # balanced composites: a margin up to this share of white (the sky's noise) has a toe (tone) as wide as
                      # it and centred on it, so a night side or twilight it reaches into (the sky test counts it as sky)
                      # fades out smoothly instead of being cut off with a ragged edge; from twice this (a floor black,
                      # FLOOR_SHARE) the toe is an eighth of the margin, starting at it, as before; in between, a blend
 SATURATED = 4.0      # balanced, one frame: a pixel the camera saturated is drawn at least this many times white above its
                      # black (past the shoulder: white), whatever the picture's scale puts it at (draw_saturated)
+SATURATED_FLOOR = (0.05, 0.25)  # ... and a frame saturated over more than SATURATED_FLOOR[0] of it has less of its floor (and
+                     # glow) black, none from SATURATED_FLOOR[1]: what is left unsaturated is its dim edge, not an even
+                     # surface, and keeps a soft gradient up to the white instead of going black
 
 
 def look():
@@ -1022,10 +1029,10 @@ Taking the margin off each channel on its own (a black above the sky per channel
 everything only a little brighter than the sky, a shadowed ring or a night side: the channel that is
 dimmest there loses the largest share of itself. tone takes it off the picture's brightness instead, so
 dim parts keep the color the camera measured and only get darker.
-labels, images, iofs = as load_channels
+labels, images, iofs = as load_channels; floor = how much of the picture's floor black to take (0 to 1, saturated_floor)
 returns (channels, margin, the channel mix (color_mix) or None), or None when a frame can't be calibrated or there is nothing to draw
 """
-def load_linear(labels, images=None, iofs=None):
+def load_linear(labels, images=None, iofs=None, floor=1.0):
     if images is None:
         images = [lbl.resize_image() for lbl in labels]
     iofs = _calibrated(labels, images, iofs)
@@ -1033,7 +1040,7 @@ def load_linear(labels, images=None, iofs=None):
         return None
     # the sky is measured once, for the scale and the toe below
     sky = _sky(iofs)
-    levels, margin, white, measured = _balanced_scale(iofs, sky=sky)
+    levels, margin, white, measured = _balanced_scale(iofs, sky=sky, floor=floor)
     if white <= 0:
         return None
     channels = [(iof - np.float32(level)) / np.float32(white) for iof, level in zip(iofs, levels)]
@@ -1201,7 +1208,7 @@ def _balanced_scale(iofs, sky_fraction=0.1, sky_percentile=98, sky=None, floor=T
     # the black no lower than a share of the lit picture's own floor, as one margin (tone takes it off the brightness,
     # so every channel keeps its color): its darkest parts stay a little above black and the rest spreads out
     if floor:
-        margin = max(margin, _floor(iofs, levels, sky if measured else None))
+        margin = max(margin, floor * _floor(iofs, levels, sky if measured else None))
     blacks = [level + margin for level in levels]
     # One white for all channels: the WHITE_PCT percentile of the brightest channel over the lit pixels (the
     # body, not the sky), so a few bright limb or ring pixels don't leave the body dim and gray; the shoulder
@@ -1216,16 +1223,26 @@ def _balanced_scale(iofs, sky_fraction=0.1, sky_percentile=98, sky=None, floor=T
 
 
 """
-Pixels the camera saturated (saturated: the top of its range, brighter than it could measure) drawn white in a one frame
-picture's balanced channel (load_linear's, white = 1 above the margin), in place: a frame saturated all over is otherwise
-one even surface its floor (FLOOR_SHARE) spreads into the flat field's pattern. labels = the channels' labels (their
-frames' own codes, so not for repeats merged in I/F, stacking.load_hdr); margin = load_linear's; returns the share of the
-frame saturated
+Pixels the camera saturated (saturated: the top of its range, brighter than it could measure), per frame, at the size of
+its codes; labels = the frames' labels (their own codes, so not for repeats merged in I/F, stacking.load_hdr)
 """
-def draw_saturated(labels, channels, margin):
+def saturated_masks(labels):
+    return [saturated(ds.imread(lbl.export(), cv2.IMREAD_GRAYSCALE), lbl.get_info()) for lbl in labels]
+
+
+"""How much of its floor black (load_linear's floor) a frame saturated over share of it gets (SATURATED_FLOOR)"""
+def saturated_floor(share):
+    return min(max((SATURATED_FLOOR[1] - share) / (SATURATED_FLOOR[1] - SATURATED_FLOOR[0]), 0.0), 1.0)
+
+
+"""
+Saturated pixels (masks, saturated_masks) drawn white in a one frame picture's balanced channels (load_linear's, white
+= 1 above the margin), in place: a frame saturated all over is otherwise one even surface spread into the flat field's
+pattern. margin = load_linear's; returns the share of the frame saturated
+"""
+def draw_saturated(channels, margin, masks):
     share = 0.0
-    for lbl, c in zip(labels, channels):
-        full = saturated_of(lbl, c.shape)
+    for c, full in zip(channels, masks):
         if not full.any():
             continue
         c[full] = np.maximum(c[full], np.float32(margin + SATURATED))
@@ -1244,9 +1261,18 @@ def saturated_of(lbl, shape):
 
 
 """
+A picture's fine structure (GLOW_FINE): the 90th percentile of its detail at 1.5 px (against 8 px) over its median
+brightness; a smooth glow, a star field or noise measure little, ringlets and gaps a lot
+"""
+def fine_structure(lum):
+    detail = np.abs(cv2.GaussianBlur(lum, (0, 0), 1.5) - cv2.GaussianBlur(lum, (0, 0), 8))
+    return float(np.percentile(detail, 90) / max(float(np.percentile(lum, 50)), 1e-12))
+
+
+"""
 The black a picture's floor sets (FLOOR_SHARE): a share of the FLOOR_PCT percentile of its brightness above the sky
 levels. sky = the sky mask, or None for a picture without sky: then every pixel, and FLOOR_SHARE of it, or up to its
-GLOW_PCT percentile when the picture is as dim as lit sky (GLOW_IOF). With sky, the
+GLOW_PCT percentile when the picture is as dim as lit sky (GLOW_IOF) and smooth (GLOW_FINE). With sky, the
 pixels at least FLOOR_EDGE from it, and a share from 0 to FLOOR_SHARE as that floor goes from FLOOR_EVEN[0] to
 FLOOR_EVEN[1] of their WHITE_PCT percentile; 0 when under FLOOR_MIN of the picture is that far from the sky
 """
@@ -1257,7 +1283,8 @@ def _floor(iofs, levels, sky=None):
         floor, middle, glow = (float(v) for v in np.percentile(lum, (FLOOR_PCT, 50, GLOW_PCT)))
         black = FLOOR_SHARE * max(floor, 0.0)
         dim = np.log(GLOW_IOF[1] / max(middle, 1e-12)) / np.log(GLOW_IOF[1] / GLOW_IOF[0])
-        return black + min(max(float(dim), 0.0), 1.0) * max(glow - black, 0.0)
+        smooth = (GLOW_FINE[1] - fine_structure(lum)) / (GLOW_FINE[1] - GLOW_FINE[0])
+        return black + min(max(float(dim), 0.0), 1.0) * min(max(smooth, 0.0), 1.0) * max(glow - black, 0.0)
     side = 2 * FLOOR_EDGE + 1
     far = cv2.erode((~sky).astype(np.uint8), np.ones((side, side), np.uint8)).astype(bool)
     if far.sum() < FLOOR_MIN * far.size:

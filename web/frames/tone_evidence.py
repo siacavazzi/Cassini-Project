@@ -53,10 +53,10 @@ def draw(frame_id, old=None):
     seen = {}
     real = cal.load_linear
 
-    def hook(labels, images=None, iofs=None):
+    def hook(labels, images=None, iofs=None, **kw):
         iofs = cal._calibrated(labels, images, iofs)
         seen.update(labels=labels, iofs=iofs)
-        return real(labels, images, iofs)
+        return real(labels, images, iofs, **kw)
 
     cal.load_linear = hook
     try:
@@ -169,13 +169,21 @@ def label(picture, text):
 
 """
 A frame (ID) or a color set (IDs joined by +, red first) through the whole of load_aligned with module as its
-calibration (main's calibration.py has no draw_saturated: it did not have that step): (BGR picture, valid, labels)
+calibration (an older calibration.py without saturated_masks drew saturated pixels as its own load_linear and
+draw_saturated did, or not at all): (BGR picture, valid, labels)
 """
 def aligned(spec, module):
     keep = color_image.cal
     color_image.cal = module
-    if not hasattr(module, "draw_saturated"):
-        module.draw_saturated = lambda labels, channels, margin: 0.0
+    if not hasattr(module, "saturated_masks"):
+        own_linear, own_draw, held = module.load_linear, getattr(module, "draw_saturated", None), []
+
+        def masks(labels):
+            held[:] = labels
+            return [np.zeros((1, 1), bool) for _ in labels]
+        module.saturated_masks, module.saturated_floor = masks, lambda share: 1.0
+        module.load_linear = lambda labels, images=None, iofs=None, floor=1.0: own_linear(labels, images, iofs)
+        module.draw_saturated = lambda channels, margin, full: own_draw(list(held), channels, margin) if own_draw else 0.0
     try:
         ids = spec.split("+")
         imgs, valid, _, report = color_image.load_aligned([f"{FOLDERS[i[0]]}/{i}.png" for i in ids])
