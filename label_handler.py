@@ -72,6 +72,75 @@ def warp_into(src, M, shape, box, **kwargs):
     return out
 
 # definition of a label - contains essential information for... stuff
+# garbled_lines: a pixel jumps when it differs from the rows above and below it by GARBLE_SIGMA times the frame's
+# noise more than they differ from each other; a line is garbled from where GARBLE_SHARE of GARBLE_RUN pixels jump
+GARBLE_SIGMA = 6.0
+GARBLE_RUN = 64
+GARBLE_SHARE = 0.5
+
+
+"""
+The garbled ends of a frame's lines (True = garbled), from its stored image (img) and the valid mask the line prefix
+gives (mask). When a compressed line loses a packet, the decompressor can lose its place: from there to the end of
+the line (sometimes the whole line) it writes values that have nothing to do with the picture, which the prefix
+still counts as valid (W1545335176_2: 52 lines). Such a stretch stands apart from the lines above and below it while
+those two agree with each other, over a long run (a ring's edge crossing a line does that at a pixel or two); next
+to another garbled line, it stands apart from the two good lines on its other side. A line is garbled from the first
+place where GARBLE_SHARE of GARBLE_RUN pixels jump, to its end. A second look, against the nearest lines not found
+garbled on the first, finds the rest of a run of them.
+"""
+def garbled_lines(img, mask):
+    c = img.astype(np.float32)
+    h, w = c.shape
+    if h < 3:
+        return np.zeros(c.shape, bool)
+    good = mask.copy()
+    steps = np.abs(np.diff(c, axis=0))[good[1:] & good[:-1]]
+    noise = 1.4826 * float(np.median(steps)) / np.sqrt(2) if steps.size else 0.0
+    limit = GARBLE_SIGMA * max(noise, 1.0)
+    rows = np.arange(h)[:, None]
+    out = np.zeros(c.shape, bool)
+    cols = np.broadcast_to(np.arange(w), c.shape)
+
+    def nearest(ok, step):
+        """the nearest row above (step -1) or below (step 1) each pixel that is ok, and the next one past it"""
+        if step < 0:
+            first = np.maximum.accumulate(np.where(ok, rows, -1), axis=0)
+            one = np.vstack([np.full((1, w), -1), first[:-1]])
+            two = np.where(one >= 0, first[np.clip(one - 1, 0, h - 1), cols], -1)
+            two[0] = -1
+            return one, np.where(one >= 1, two, -1)
+        first = np.minimum.accumulate(np.where(ok, rows, h)[::-1], axis=0)[::-1]
+        one = np.vstack([first[1:], np.full((1, w), h)])
+        two = np.where(one < h - 1, first[np.clip(one + 1, 0, h - 1), cols], h)
+        return one, two
+
+    for _ in range(2):
+        ok = good & ~out
+        (a1, a2), (b1, b2) = nearest(ok, -1), nearest(ok, 1)
+        jump = np.zeros(c.shape, bool)
+        # against the line above and below, and (a garbled line next to another) one line further on either side
+        for a, b in ((a1, b1), (a1, b2), (a2, b1)):
+            have = (a >= 0) & (b < h)
+            va, vb = c[np.clip(a, 0, h - 1), cols], c[np.clip(b, 0, h - 1), cols]
+            jump |= have & (np.minimum(np.abs(c - va), np.abs(c - vb)) - np.abs(va - vb) > limit)
+        jump &= good
+        # from where GARBLE_SHARE of GARBLE_RUN pixels jump, with GARBLE_SHARE of the rest of the line's valid
+        # pixels jumping too: garbage goes on to the end of the line, a thin feature lying along a line ends
+        share = cv2.blur(jump.astype(np.float32), (GARBLE_RUN, 1), borderType=cv2.BORDER_CONSTANT)
+        tail = np.cumsum(jump[:, ::-1], axis=1)[:, ::-1]
+        left = np.cumsum(good[:, ::-1], axis=1)[:, ::-1]
+        x = np.arange(w)[None, :] - GARBLE_RUN // 2
+        begin = np.clip(x, 0, w - 1)
+        starts = (share >= GARBLE_SHARE) & (tail[:, begin[0]] >= GARBLE_SHARE * np.maximum(left[:, begin[0]], GARBLE_RUN))
+        # (from the first pixel that jumps in the first such run)
+        first = np.minimum.accumulate(np.where(jump, np.arange(w)[None, :], w)[:, ::-1], axis=1)[:, ::-1]
+        at = np.maximum(np.argmax(starts, axis=1) - GARBLE_RUN // 2, 0)
+        start = np.where(starts.any(axis=1), first[np.arange(h), at], w)
+        out |= np.arange(w)[None, :] >= start[:, None]
+    return out & good
+
+
 """
 Label class
 Label objects represent an image and once loaded contain all image data for processing
@@ -183,6 +252,12 @@ class label:
                 tail = np.where(nonzero.any(1), np.argmax(nonzero, 1), samples)
                 tail = np.where(tail >= 16, tail, 0)
                 mask &= np.arange(samples) < (samples - tail)[:, None]
+        if self.info.get("MISSING_PACKET_FLAG") == "YES" or not mask.all():
+            # where a packet was lost the decompressor can lose its place in the line too: the rest of that line
+            # (and now and then a whole one) is garbage the prefix counts as valid, drawn as bright streaks
+            img = ds.imread(base + ".png", cv2.IMREAD_GRAYSCALE)
+            if img is not None and img.shape == mask.shape:
+                mask &= ~garbled_lines(img, mask)
         if lines < 1024:
             # a summed frame (512 or 256 lines) has a first and last column brighter than their neighbours in the
             # archive (3-7 levels in the 256 px ring frames of ISS_034RI_SPKDKFORM001), which the display stretch
