@@ -375,4 +375,96 @@ with calibration.looking("balanced"):
               f"the detail filter): the page's equals the server's but for {off} values of {total} a level apart")
         cases, wants, labels = [], [], []
     om.unit_of = real_unit
+
+def node_held(table, trails):
+    """The page's hold of partial frames (cassiniSteadyMath.heldOf) for each placed frame, and the trail behind the
+    frame shown (trailOf from it), in node."""
+    js = ("const window = {};\n" + script + "\nconst M = window.cassiniSteadyMath(), t = " + json.dumps(table) + ";\n"
+          "const out = { held: t.n.map(n => M.heldOf(t, n)), trails: {} };\n"
+          "for (const T of " + json.dumps(trails) + ") out.trails[T] = t.n.map(n => M.trailOf(t, M.heldOf(t, n), T));\n"
+          "console.log(JSON.stringify(out));")
+    return json.loads(subprocess.run(["node", "-e", js], capture_output=True, text=True, check=True).stdout)
+
+
+def partial_copy(src_u, src_d, tag, lost):
+    """The pass src_u again with the frames in lost came down partial (obs_mosaic.partial): most of each tile's
+    picture gone (its top rows transparent, as a downlink that lost its last lines leaves a north-up frame) and its
+    report's "lost" saying how much, in a folder of its own."""
+    import shutil
+    v = dict(src_u, key=(src_u["key"][0], src_u["key"][1] + tag, "N", 0))
+    dv = om.folder(v, cache)
+    os.makedirs(dv, exist_ok=True)
+    pl = json.load(open(os.path.join(src_d, om.PLAN_FILE)))
+    pl["key"] = list(v["key"])
+    json.dump(pl, open(os.path.join(dv, om.PLAN_FILE), "w"))
+    to = om._tiles(v, cache, pl["display_scale"])
+    shutil.copytree(om._tiles(src_u, cache, scale), to, dirs_exist_ok=True)
+    for n in lost:
+        im = np.asarray(Image.open(f"{to}/{n}.png")).copy()
+        im[:int(S * 0.8), :, 3] = 0
+        Image.fromarray(im).save(f"{to}/{n}.png")
+        t = json.load(open(f"{to}/{n}.json"))
+        json.dump(dict(t, lost=0.8), open(f"{to}/{n}.json", "w"))
+    return v
+
+
+with calibration.looking("balanced"):
+    # partial frames (most of the frame lost in downlink): the movie shows the last whole frame of the filter in
+    # their place (held_of), a colour set with one is not complete, a trail leaves them out; the page holds them the
+    # same way on the pre-built planes, whose partial frames the server already drew held
+    LOST = (0, 7, 8, 9, 20, 33)   # frame 0: nothing before it to hold (kept); 7-9: a run of them
+    v5, v6 = partial_copy(u, d, "P", LOST), partial_copy(u2, d2, "P", (5, 6, 12, 13, 30))
+    real_unit = om.unit_of
+    om.unit_of = lambda fid: next(((v, [q[1] for q in v["frames"]].index(fid)) for v in (v5, v6) if fid in [q[1] for q in v["frames"]]), None) or real_unit(fid)
+    held_count = 0
+    for v, colour, lost in ((v5, False, LOST), (v6, True, (5, 6, 12, 13, 30))):
+        om.steady_chain(v, cache)
+        om.exposure_chain(v, cache, None, colour, True, 0)
+        table = om._steady_table(v, 0, cache, True, colour)
+        assert table["partial"] == list(lost), table["partial"]
+        got, held = in_node(table), node_held(table, (3,))
+        planes0 = {n: np.asarray(om.movie_frame(v, n, cache, colour=False, centre=True)[0]) for n in table["n"]}
+        for a, n in enumerate(table["n"]):
+            s = held["held"][a]
+            rep = om.movie_frame(v, n, cache, colour=False, centre=True)[1]
+            assert (rep.get("held") or v["frames"][n][1]) == v["frames"][s][1], (n, s, rep.get("held"))
+            if s != n:
+                held_count += 1
+                # the pre-built plane of a partial frame is the held frame's picture
+                assert (planes0[n] == planes0[s]).all(), (n, s)
+        for s_, x, T in ((12, 8, 0), (0, 0, 3), (12, 8, 3)) if not colour else ((12, 8, 0), (0, 0, 0)):
+            gains = got["gains"][str(x)] if x else {}
+            cases, wants, labels = [], [], []
+            for a, n in enumerate(table["n"]):
+                shown = held["held"][a]
+                recipe = (table["sets"]["by"].get(str(n)) if colour else None) or \
+                    ((held["trails"][str(T)][a] if T else []) + [shown])
+                pl = []
+                for j in recipe:
+                    # (the page loads the frame's own plane for the frame shown, another frame's for the rest)
+                    A = planes0[n] if j in (n, shown) else planes0[j]
+                    dx, dy = got[str(s_)]["shifts"][table["n"].index(j)] if s_ else (0, 0)
+                    C = moved(A, dx, dy)
+                    if gains.get(str(n), 1.0) != 1.0:
+                        C[..., :3] = np.array(server_lut(gains[str(n)], table["exposure"]["gamma"]), np.uint8)[C[..., :3]]
+                    pl.append(C)
+                B = np.asarray(om.movie_frame(v, n, cache, trail=T, colour=colour, centre=True, steady=s_, exposure=x)[0])
+                if len(pl) == 1 and not (T and not colour):
+                    assert (pl[0] == B).all(), (v["key"][1], s_, x, T, n)
+                else:
+                    cases.append(pl)
+                    wants.append(B)
+                    labels.append((v["key"][1], s_, x, T, n, recipe))
+            if cases:
+                outs = node_mix(cases, table["sets"]) if colour else node_trail(table, (), cases)[1]
+                for out, B, lab in zip(outs, wants, labels):
+                    diff = np.abs(out.astype(int) - B.astype(int))
+                    assert diff.max() <= (1 if colour else 0), (lab, int(diff.max()))
+        if colour:
+            # no colour set the page mixes holds a partial frame
+            assert not any(j in lost for r in table["sets"]["by"].values() for j in r), table["sets"]["by"]
+    om.unit_of = real_unit
+    print(f"partial frames: {held_count} frames held (grey and colour passes, stabilized, exposure-normalized, trailed): "
+          "the page's hold, trail and colour sets give the server's pictures")
+
 print("ok")

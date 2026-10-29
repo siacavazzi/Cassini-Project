@@ -23,10 +23,11 @@ for c in range(3):
     im[disk] += body[c] * (0.8 + 0.2 * np.cos(np.radians(xx[disk] - 128)))
     im[120:126, 196:202] += 2 * body[c]        # a bright limb patch: 36 pixels, past a 3x3 median
     iofs.append(im.astype(np.float32))
+# the sky's black (the floor black of an even body, FLOOR_SHARE, is web/test_tone_floor.py's)
 with cal.looking("classic"):
     cb, cw, _ = cal.picture_scale(iofs)
 with cal.looking("balanced"):
-    bb, bw, _ = cal.picture_scale(iofs)
+    bb, bw, _ = cal.picture_scale(iofs, floor=False)
 c_margin = np.array(cb) - sky
 b_margin = np.array(bb) - sky
 print("classic blacks above sky", c_margin.round(4), "white", round(float(cw), 3))
@@ -44,7 +45,7 @@ dim = [im.copy() for im in iofs]
 for c in range(3):
     dim[c][20:60, 20:60] = sky[c] + 0.04 * body[c] / body.sum() * 3 + rng.normal(0, noise[c] / 4, (40, 40))
 with cal.looking("balanced"):
-    levels, margin, white, _ = cal._balanced_scale(dim)
+    levels, margin, white, _ = cal._balanced_scale(dim, floor=False)
     toned = cal.tone([(im - lv) / white for im, lv in zip(dim, levels)], margin / white)
 lin = np.array([cal.decode(t[20:60, 20:60, 0].mean() / 255, 2.2) for t in toned])
 true = body / body[0]
@@ -60,7 +61,7 @@ spiky[1][230, 30] += 0.2
 for c in range(3):
     spiky[c][240, 40] += 0.2
 with cal.looking("balanced"):
-    levels, margin, white, _ = cal._balanced_scale(spiky)
+    levels, margin, white, _ = cal._balanced_scale(spiky, floor=False)
     clean = cal._clean_spikes([(im - lv) / white for im, lv in zip(spiky, levels)], cal._sky(spiky))
 assert clean[1][230, 30] < 0.05 and all(c[240, 40] > 0.2 for c in clean)
 assert np.array_equal(clean[0][disk], ((spiky[0] - levels[0]) / white)[disk])
