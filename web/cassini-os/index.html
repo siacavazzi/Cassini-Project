@@ -2486,7 +2486,7 @@ body.ambient.phone .amb-where { font-size: 18px; }
       hint: "How long the pictures are believed over SPICE (with Image stabilization on). Low takes out only the frame-to-frame wobble and follows SPICE closely; high also holds slow drifts still, trusting the frame-to-frame matching over that many frames." });
   D({ key: "movies.stabilizeLocal", section: "Processing", label: "Steady movies on this computer", type: "toggle", value: true,
       hint: "Image stabilization and exposure normalization worked out by this computer, at any smoothing: it moves and brightens the frame the server already has, instead of the server drawing every frame again for each setting. True-color frames and a trail too; false-color sets, feature tracks and passes whose view follows the frames are still drawn by the server, and exports are always made by the server. Off asks the server to draw every frame again for each setting, which is slower and is not offered when many people are watching." });
-  D({ key: "movies.exposure", section: "Processing", label: "Exposure normalization", type: "toggle", value: true,
+  D({ key: "movies.exposure", section: "Processing", label: "Exposure normalization", type: "toggle", value: true, was: [false],
       hint: "A movie pass is drawn on one brightness scale, so a frame whose exposure the calibration did not fully even out, or one lit by stray light, flashes or jumps in brightness. On, each picture's brightness is measured against the picture before it, a frame or two far brighter or darker than their neighbours are brought to their level, and other jumps are spread over several frames, one gain for the whole picture so a color picture keeps its color. Slow changes stay, and every frame keeps its data, only scaled. Off shows every frame as the pass's scale draws it." });
   D({ key: "movies.exposureSmooth", section: "Processing", label: "Exposure smoothing", type: "range", value: 8, min: 2, max: 30, step: 2, unit: "frames",
       hint: "How many frames a change in brightness is spread over (with Exposure normalization on). Low keeps quick real changes; high evens the movie out more." });
@@ -11513,7 +11513,7 @@ void main() {
   window.cassiniAbout = { open, addTab, esc, close: () => show(false), credits: CREDITS };
 
   // ---- which version this is: this page's build id (build.py writes it), and what the frame server says it serves ----
-  const BUILD = /*BUILD*/"65676bc884ca";
+  const BUILD = /*BUILD*/"1573d70c3e13";
   const FRAMES = (() => {                       // the frame server, chosen as the camera window chooses it
     const q = new URLSearchParams(location.search).get("frames");
     if (q) return q.replace(/\/$/, "");

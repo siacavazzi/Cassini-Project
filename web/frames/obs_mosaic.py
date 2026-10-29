@@ -2853,8 +2853,8 @@ def movie_frame(u, n, cache, trail=0, colour=True, out=OUT, centre=True, steady=
     if "offset" not in t:
         rep["why"] = t.get("why", "not placed by SPICE")
         return None, rep
-    frames = u["frames"]
-    tile_of = lambda j: t if j == n else tile(u, j, cache, p["display_scale"])
+    frames, own = u["frames"], t
+    tile_of = lambda j: own if j == n else tile(u, j, cache, p["display_scale"])
     whole = lambda j: "offset" in tile_of(j) and not partial(tile_of(j))
     # a partial frame (most of its lines lost in downlink) shows the last whole frame of its filter in its place
     s = held_of([fr[2] for fr in frames], n, lambda j: partial(tile_of(j)), whole)
