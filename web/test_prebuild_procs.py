@@ -38,9 +38,12 @@ def main():
         rc = os.spawnv(os.P_WAIT, sys.executable, [sys.executable, __file__, "frames", "--cache", cache, "--status", status,
                                                  "--procs", "4", "--live", "", "--pause", os.path.join(d, "pause")])
         assert rc == 0, rc
-        made = sorted(f.split(".") for f in os.listdir(cache) if not f.startswith("errors-"))
+        made = sorted(f.split(".") for f in os.listdir(cache) if not f.startswith("errors-") and f != "slices.json")
         assert sorted(int(i) for i, _ in made) == list(range(N)), made          # every item, once
         assert len({pid for _, pid in made}) == 4, made                          # by four processes
+        with open(os.path.join(cache, "slices.json")) as fh:                    # the phase recorded once, whole
+            recs = json.load(fh)["records"]
+        assert [(r["phase"], r["from"], r["until"]) for r in recs] == [("frames", None, None)], recs
         with open(os.path.join(status, "status-frames.json")) as fh:
             s = json.load(fh)
         assert s["done"] == N and s["total"] == N and s["errors"] == 0 and s["state"] == "done", s
@@ -60,7 +63,7 @@ def main():
         t0 = time.monotonic()
         prebuild.run(a)
         took = time.monotonic() - t0
-        assert len([f for f in os.listdir(cache2) if not f.startswith("errors-")]) == N
+        assert len([f for f in os.listdir(cache2) if not f.startswith("errors-") and f != "slices.json"]) == N
         assert took < 1 + 3, took   # the first answer only (asked once when the holds start), not one per 20 items
         ok += 1
         prebuild.busy = real

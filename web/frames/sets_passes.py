@@ -102,7 +102,7 @@ def pass_table():
     import obs_mosaic
     import reel
     idx, _ = reel.load_index()
-    t = idx["seconds_1970"].to_numpy()
+    t, ids = idx["seconds_1970"].to_numpy(), idx["id"].to_numpy()
     pass_of, passes = np.full(len(idx), -1), []
     for (target, ob, inst), rows in idx.groupby(["TARGET_NAME", "OBSERVATION_ID", "INSTRUMENT_ID"], sort=False).indices.items():
         if not isinstance(ob, str):
@@ -114,6 +114,8 @@ def pass_table():
             # a pass's frames run from its first tile to its last frame taken (repeat exposures included): the
             # passes of one observation never overlap in time
             mine = rows[(t[rows] >= u["frames"][0][3]) & (t[rows] <= u["last"])]
+            if u.get("off"):   # (frames obs_mosaic._drop_strays took out of the pass are in none)
+                mine = mine[~np.isin(ids[mine], list(u["off"]))]
             pass_of[mine] = len(passes)
             passes.append({"key": u["key"], "kind": u.get("kind"), "rows": [int(mine[0]), int(mine[-1])], "frames": len(mine)})
     return pass_of, passes
