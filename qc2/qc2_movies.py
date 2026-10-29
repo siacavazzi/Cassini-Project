@@ -144,12 +144,12 @@ def push(a, lock):
         return
     with lock:
         g = a.push
-        subprocess.run(["rsync", "-a", "--include=*/", "--include=*.jpg", "--include=*.json", "--exclude=*", a.out + "/", g + "/movies/"], check=False)
+        subprocess.run(["rsync", "-a", "--include=*/", "--include=*.jpg", "--include=*.json", "--exclude=*", a.out + "/", g + "/qc2/out/"], check=False)
         subprocess.run(["git", "-C", g, "add", "-A"], check=False)
         if subprocess.run(["git", "-C", g, "diff", "--cached", "--quiet"]).returncode:
             subprocess.run(["git", "-C", g, "commit", "-qm", "qc2 movies batch"], check=False)
             for k in range(4):
-                if subprocess.run(["git", "-C", g, "push", "-q", "origin", "HEAD:scratch/qc2-movies"]).returncode == 0:
+                if subprocess.run(["git", "-C", g, "push", "-q", "origin", "HEAD:claude/project-thread-7aaoos"]).returncode == 0:
                     break
                 time.sleep(2 ** (k + 1))
 
