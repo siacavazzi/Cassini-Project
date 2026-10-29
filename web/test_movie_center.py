@@ -71,6 +71,11 @@ most = [(0, 0)] * 30 + [(700, 0)]
 assert om.CENTRE_KEEP <= om.kept_share(seen(*most), S / 2) < 1
 assert om.centre_half(box(*most), 200, seen(*most)) == S / 2
 
+# ... but not when that loses a frame altogether (a stray frame of another pointing)
+stray = [(0, 0)] * 60 + [(2000, 0)]
+assert om.kept_share(seen(*stray), S / 2) >= om.CENTRE_KEEP
+assert om.centre_half(box(*stray), 200, seen(*stray)) is None
+
 # a frame no SPICE place: nothing to look at the body
 assert om.frames_seen([(None, "X", "CL1/CL2", 0.0, 650, None, None, None)], Z) is None
 assert om.centre_half(box((0, 0)), 200, None) is None

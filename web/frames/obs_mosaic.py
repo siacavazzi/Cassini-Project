@@ -2673,20 +2673,27 @@ def centre_half(fp, radius, seen):
     CENTRE_MARGIN round it; the body's centre is on at least one of the pass's frames (seen, pass_seen: the frames
     look at the body, not only round it, as a ring movie on both ansae does, whose footprint fp takes in Saturn's
     centre though no frame shows it); and the square, round the whole footprint up to MOVIE_FIT frames, keeps
-    CENTRE_KEEP of the frames' area (a mosaic or retarget reaching further than that is not cut down to it)."""
+    CENTRE_KEEP of the frames' area and part of every frame (a mosaic or retarget reaching further than that is not
+    cut down to it, nor a stray frame dropped from the picture)."""
     x0, y0, x1, y1 = fp
     side = MOVIE_FIT * FRAME
     around = max(FRAME, 2 * radius * (1 + CENTRE_MARGIN))
     if not (radius > 0 and around <= side and seen and seen[0]):
         return None
     half = min(side, max(around, 2 * max(-x0, x1, -y0, y1))) / 2
-    return half if kept_share(seen, half) >= CENTRE_KEEP else None
+    inside = kept(seen, half)
+    return half if inside.mean() >= CENTRE_KEEP and inside.any(1).all() else None
+
+
+def kept(seen, half):
+    """Which of each frame's points (seen, pass_seen) the square of half side half round the body's centre keeps:
+    one row of SEEN_GRID x SEEN_GRID per frame."""
+    return (np.abs(seen[1]) <= half).all(1).reshape(-1, SEEN_GRID * SEEN_GRID)
 
 
 def kept_share(seen, half):
     """The share of the frames' area (seen, pass_seen) inside the square of half side half round the body's centre."""
-    pts = seen[1]
-    return float(np.mean((np.abs(pts) <= half).all(1))) if len(pts) else 0.0
+    return float(kept(seen, half).mean()) if len(seen[1]) else 0.0
 
 
 def frames_seen(frames, z):
