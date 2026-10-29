@@ -9,6 +9,8 @@ edge against the dark (the limb, a ring's edge) and lines the pointings up acros
   panels line up across the limb within a pixel, and along it are left as SPICE has them.
 - Saturn's rings, edges of concentric ringlets and gaps: lined up across the edges.
 - Clouds moving with no pointing error: nothing moves. Overlaps all on the disk (no edge): SPICE's places.
+- Two filters (a limb's height differs with the filter) are never measured against each other; edges nearly parallel
+  to one another say nothing along them, and a move adding up past EDGE_MAX is not believed.
 - A pass of a moon still takes #169's detail registration (test_panel_register.py), and its files and names.
 Run: python web/test_edge_register.py"""
 import os, sys, json, tempfile
@@ -172,6 +174,25 @@ show("disk", err, moved, report)
 assert moved == {}, moved
 assert all(v == "no edge" for r in report.values() for v in r["matches"].values()), report
 
-# 6. a moon is not a clouded body: #169's measure, file and tag
+# 6. two filters whose limbs stand at different heights (UV haze over a methane band): never matched to each other
+true = [(-1200, 0), (-450, 0), (300, 0), (1050, 0)]
+err = [(0.0, 0.0), (8.0, -22.0), (-15.0, 13.0), (5.0, 30.0)]
+u, cache, p, moved, report, reports = run("SATURN", saturn, true, err, [(60.0 * i, 0.0) for i in range(4)], "FILTERS",
+                                          filters=["UV3", "MT3", "UV3", "MT3"])
+show("filters", err, moved, report)
+assert all(v == "other filter" or j % 2 == i % 2 for i, r in report.items() for j, v in r["matches"].items()), report
+assert all(j % 2 == i % 2 for i, r in report.items() for j in r["matches"]), report
+
+# 7. matches across edges nearly parallel to one another that disagree a little say nothing along them (Saturn's
+# equatorial map moved a panel 580 px along its limb so), and a move adding up past EDGE_MAX is not believed
+a, b = np.array([-0.0901, 0.9959]), np.array([-0.0105, 0.9999])
+fit = om._combine([((0.0, 5.7), a / np.linalg.norm(a)), ((0.0, -12.0), b / np.linalg.norm(b))])
+print("near-parallel:", fit)
+assert fit is None or abs(fit[0]) < 3, fit
+fit = om._combine([((0.0, 4.0), a / np.linalg.norm(a)), ((0.0, 5.0), b / np.linalg.norm(b))])
+assert fit is not None and abs(fit[0]) < 1 and abs(fit[1] - 4.5) < 0.6, fit
+assert om._combine([((0.0, 70.0), None)]) is None
+
+# 8. a moon is not a clouded body: #169's measure, file and tag
 assert not om.clouded({"key": ("RHEA", "X", "N", 0)}) and om.clouded({"key": ("TITAN", "X", "N", 0)})
 print("edge registration: ok")

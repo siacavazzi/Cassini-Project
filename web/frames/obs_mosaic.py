@@ -1326,6 +1326,8 @@ EDGE_MAX = 64 / 1024  # of a frame: the largest move believed (the quality check
 EDGE_NCC = 0.5       # the least the two edges must agree once moved
 EDGE_GAIN = 0.05     # ... and how much better than at SPICE's places, for a move of over half a pixel
 EDGE_AGREE = 3.0     # px: matches further than this (across their own edges) from the others' fit are left out
+# a limb sits higher or lower with the filter (Saturn's haze in UV3 stands ~8 px over its MT3 limb, Titan's in RED over
+# CB3, probe 10-29): edges are measured between tiles of one filter only
 EDGE_FILE = "edges1-"  # before PANEL_FILE: a clouded body's registration, kept apart from #169's
 EDGE_TAG = "-pe1"    # in the name of a layout whose tiles edge registration moved, instead of PANEL_TAG
 
@@ -1452,7 +1454,9 @@ def edge_shift(q, ref, at_q, t, crop, at_t):
     an edge (lit and dark both, EDGE_SIDE, and EDGE_LENGTH of edge) and the two edges agree better moved than at
     SPICE's places (EDGE_NCC, EDGE_GAIN). An edge that is one line (_line) says only how far across it t is off: the
     shift is that, along its normal, and seen["normal"] says which way. (dx, dy) and seen as panel_shift's, or
-    (None, why)."""
+    (None, why). Tiles of two filters are not measured: a limb's height differs with the filter."""
+    if q["filter"] != t["filter"]:
+        return None, "other filter"
     corners = [(at[0] + s["box"][0], at[1] + s["box"][1], im) for s, at, im in ((q, at_q, ref), (t, at_t, crop))]
     x0 = max(c[0] for c in corners)
     y0 = max(c[1] for c in corners)
@@ -1515,9 +1519,11 @@ def edge_shift(q, ref, at_q, t, crop, at_t):
 def _combine(found):
     """The move of a pointing from its matches on edges [(where it lands by that match (x, y), the edge's normal or
     None)]: the least-squares place that agrees with each across its own edge (all ways for a match that is not one
-    line), the move along a lone straight edge left as SPICE has it (min-norm); matches further than EDGE_AGREE from
-    the others' fit are left out one at a time, the worst first. None when no more than half of them agree (one alone
-    is believed)."""
+    line), the move along a lone straight edge left as SPICE has it (min-norm; and along edges nearly parallel to one
+    another, whose small differences in angle would otherwise say how far along them: Saturn's equatorial map moved a
+    panel 580 px so); matches further than EDGE_AGREE from the others' fit are left out one at a time, the worst
+    first. None when no more than half of them agree (one alone is believed), or the move adds up to more than
+    EDGE_MAX of a frame (a chain of panels, each a few px off, that a limb seen in another light runs away with)."""
     rows = []
     for (x, y), n in found:
         proj = np.eye(2) if n is None else np.outer(n, n)
@@ -1526,13 +1532,13 @@ def _combine(found):
     while keep:
         a = sum(rows[i][0] for i in keep)
         b = sum(rows[i][0] @ rows[i][1] for i in keep)
-        move = np.linalg.pinv(a, rcond=1e-3) @ b
+        move = np.linalg.pinv(a, rcond=EDGE_LINE) @ b
         off = [(float(np.linalg.norm(rows[i][0] @ (move - rows[i][1]))), i) for i in keep]
         worst = max(off)
         if worst[0] <= EDGE_AGREE:
             break
         keep.remove(worst[1])
-    if not keep or not (len(keep) * 2 > len(rows) or len(rows) == 1):
+    if not keep or not (len(keep) * 2 > len(rows) or len(rows) == 1) or math.hypot(*move) > EDGE_MAX * FRAME:
         return None
     return move
 
@@ -1726,7 +1732,7 @@ def panel_places(u, cache, p, tiles, pic=None, report=None):
             here = t["offset"]
             cands = []
             for s in by_n.values():
-                if s["n"] >= n or roots.get(s["n"]) == n or s["n"] not in kept:
+                if s["n"] >= n or roots.get(s["n"]) == n or s["n"] not in kept or edges and s["filter"] != t["filter"]:
                     continue
                 a, b = s["offset"], here
                 w = min(a[0] + s["box"][0] + s["box"][2], b[0] + t["box"][0] + t["box"][2]) - max(a[0] + s["box"][0], b[0] + t["box"][0])
