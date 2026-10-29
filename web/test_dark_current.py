@@ -125,6 +125,22 @@ assert fast[int(482 / 4), int(213 / 4)] > 50 * np.median(fast)                  
 assert dc.dark_dn({**INFO, "INSTRUMENT_ID": "ISSWA", "GAIN_MODE_ID": "29 ELECTRONS PER DN"}) is not None
 print("dark ok")
 
+# cisscal's WAC_hotpix2014.3 and 2015.7 lists have NaN at 1200 s for some pixels: the time is skipped, and the dark
+# (whose FFT down each column would carry one NaN into the whole column) stays finite
+open(f"{root}/darkcurrent/WAC_hotpix2015.7_171204.tab", "w").write(
+    open(f"{root}/darkcurrent/NAC_hotpix2006.9_140219.tab").read().replace("123459.      4.00000", "NaN          4.00000")
+    .replace("123459.      -1.0000", "NaN          -1.0000"))
+dc._hot_lists.cache_clear()
+late = {**INFO, "INSTRUMENT_ID": "ISSWA", "IMAGE_TIME": "2015-200T00:00:00"}
+assert dc.readout(late)[-1] == "WAC_hotpix2015.7_171204.tab"
+hot = dc._hot_pixels(f"{root}/darkcurrent/WAC_hotpix2015.7_171204.tab", L)
+assert len(hot) == 2 and all(np.isfinite(c).all() for _, _, c in hot)
+dc._parameters.cache_clear(); dc._dark.cache_clear()
+d = dc.dark_dn(late)
+assert d is not None and np.isfinite(d).all(), "NaN in the WAC dark"
+assert d[int(482 / 4), int(213 / 4)] > 50 * np.median(d)                           # the hot pixel still in
+print("NaN in a hot pixel list ok")
+
 # a frame of flat Titan at DN 900 over a bias of 100 plus the dark: calibrate takes both out, and the line prefixes'
 # overclocked pixels give a bias that drifts down the frame
 lines_bias = 100 + np.linspace(0, 6, L)

@@ -346,6 +346,8 @@ body.phone .srow input[type=range] { width: 96px; }
       hint: "The moment Cassini OS opens on. A shared link still opens on its own moment." });
   D({ key: "playback.autoplay", section: "Playback", label: "Play when Cassini OS opens", type: "toggle", value: true,
       hint: "Off opens paused at the starting moment." });
+  D({ key: "playback.builtOnly", section: "Playback", label: "Only years with pictures built", type: "toggle", value: true, reload: true,
+      hint: "When the picture cache holds only some years (a test build of one year), the timeline, Moments and Highlights keep to them. Off shows the whole mission, and pictures outside them are made as they are asked for." });
   // the playback speed scale, shared by the dock's speed slider, this setting and the clock's read-out: mission
   // seconds per second, from real time to a month a second, on a log scale that lands on round values
   const SP = window.cassiniSpeed = {

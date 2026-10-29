@@ -261,7 +261,8 @@ body.phone .cs-root .cs-cap { font-size: 16px; } body.phone .cs-root .cs-cap.big
   // playback crossing a moment going forward plays a cutscene (when(et) can say no: not this time)
   const triggers = [];
   function at(et, play, when) { triggers.push({ et, play, when }); }
-  // playback setting off forward from the very start of the data (where setTime clamps, so nothing is crossed) plays
+  // playback setting off forward from the very start of the data (where setTime clamps, so nothing is crossed; not a
+  // cache slice's start, cassiniSlice.cutsStart) plays
   // one: once per visit, armed again once playback is 30 s past the start. Returns { spend() } to count a play from
   // elsewhere (?name) as this visit's
   const starts = [];
@@ -271,7 +272,7 @@ body.phone .cs-root .cs-cap { font-size: 16px; } body.phone .cs-root .cs-cap.big
     const next = advance ? advance(et, dt, speed) : et + dt * speed;
     for (const g of starts) {
       if (et > coverage[0] + 30) g.spent = false;
-      if (!active && !urlPending && !g.spent && speed > 0 && et <= coverage[0] + 1 && next > et && (!g.when || g.when())) { g.spent = true; setTimeout(g.play, 0); return et; }
+      if (!active && !urlPending && !g.spent && speed > 0 && et <= coverage[0] + 1 && !(window.cassiniSlice && cassiniSlice.cutsStart) && next > et && (!g.when || g.when())) { g.spent = true; setTimeout(g.play, 0); return et; }
     }
     if (!active && !urlPending) for (const g of triggers) {
       const t = typeof g.et === "function" ? g.et() : g.et;
