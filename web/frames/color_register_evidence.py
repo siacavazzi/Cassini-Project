@@ -17,10 +17,6 @@ the same colour sets made by two checkouts of the pipeline, side by side.
             frame, as the camera window plays it), by OLD and by NEW, each in a fresh cache of its own:
               CASSINI_DATA=... CASSINI_GEOMETRY_CACHE=... python web/frames/color_register_evidence.py movie \
                   W1486331264_1 --old OLD --new NEW --out DIR
-  detail    each named frame's pass: its colour_of filters, each band's fine detail (obs_mosaic.band_detail, as plan
-            measures it) and what pair_colour makes of them, as a TSV (no pictures made):
-              CASSINI_DATA=... CASSINI_GEOMETRY_CACHE=... python web/frames/color_register_evidence.py detail \
-                  N1554964589_1 W1486331264_1 --out detail.tsv
 """
 import argparse
 import csv
@@ -175,38 +171,6 @@ def movie(args):
     print(json.dumps(reports, indent=1))
 
 
-def detail(args):
-    sys.path.insert(0, HERE)
-    import math
-    import obs_mosaic as om
-    with open(args.out, "w") as f:
-        f.write("frame\tpass\tkind\tfilters\tcolour_of\tdetail\tratio\tdrawn\n")
-        for fid in ids_in(args.items):
-            found = om.unit_of(fid)
-            if found is None:
-                f.write(f"{fid}\tin no pass\n")
-                continue
-            u = found[0]
-            count, nms = {}, {}
-            for fr in u["frames"]:
-                count[fr[2]] = count.get(fr[2], 0) + 1
-                nms[fr[2]] = fr[4]
-            aside = om._aside(u["frames"], u)
-            count = {g: c for g, c in count.items() if g not in aside} or count
-            colour = om.colour_of(count, nms)
-            picks = []
-            for g in count:
-                mine = [fr for fr in u["frames"] if fr[2] == g]
-                picks += mine[::max(1, math.ceil(len(mine) / om.SCALE_FRAMES))]
-            scale = om.pass_scale(sorted(picks, key=u["frames"].index), u, colour or [max(count, key=count.get)])
-            d = scale.get("detail")
-            ratio = round(min(d.values()) / max(max(d.values()), 1e-12), 3) if d else ""
-            drawn, grey = om.pair_colour(colour, d)
-            f.write(f"{fid}\t{'/'.join(map(str, u['key']))}\t{u.get('kind')}\t{json.dumps(count)}\t{colour}\t"
-                    f"{json.dumps(d)}\t{ratio}\t{drawn or ['grey', grey or max(count, key=count.get)]}\n")
-            print(fid, colour, d, ratio, drawn or grey, flush=True)
-
-
 def compare(args):
     import numpy as np
     from PIL import Image, ImageDraw
@@ -244,7 +208,7 @@ def compare(args):
 
 def main():
     ap = argparse.ArgumentParser(description=__doc__, formatter_class=argparse.RawDescriptionHelpFormatter)
-    ap.add_argument("mode", choices=("extract", "compare", "movie", "detail"))
+    ap.add_argument("mode", choices=("extract", "compare", "movie"))
     ap.add_argument("items", nargs="+", help="logs or frame ids: every frame id in them names a set")
     ap.add_argument("--out", required=True)
     ap.add_argument("--window", type=float, default=WINDOW, help="extract: seconds round each frame named")
@@ -252,7 +216,7 @@ def main():
     ap.add_argument("--old", help="compare, movie: the checkout before")
     ap.add_argument("--new", default=REPO, help="compare, movie: the checkout after (this one)")
     args = ap.parse_args()
-    {"extract": extract, "compare": compare, "movie": movie, "detail": detail}[args.mode](args)
+    {"extract": extract, "compare": compare, "movie": movie}[args.mode](args)
 
 
 if __name__ == "__main__":

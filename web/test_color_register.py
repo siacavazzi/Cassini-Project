@@ -231,22 +231,15 @@ with cal.coloring("raw"):
     lin = lambda v: (v / 255) ** 2.2
     assert (r, b) == (160, 60) and abs(lin(g) - (lin(160) + lin(60)) / 2) < 0.005, (r, g, b)
 
-# ---------- a pair whose one band shows no detail stays grey in the other (obs_mosaic.pair_colour, band_detail) ----------
+# ---------- a pair with the filter a body's surface shows through stays grey in it (obs_mosaic.pair_colour) ----------
 # Titan's CB3 + MT1 maps (042TI_GLOBMAP001, 019TI_GLBMAPNLP001, 114TI_MONITORNA001): CB3 sees the surface, MT1 only
-# a smooth haze; drawn in two-filter colour their tint washed the surface out
-q = np.mgrid[0:256, 0:256].astype(np.float32)
-lit_disk = np.hypot(q[0] - 128, q[1] - 128) < 110
-surface = np.where(lit_disk, 0.10 * (1 + 0.08 * np.sin(q[0] / 2.3) * np.cos(q[1] / 3.1)), 0) + rng.normal(0, 0.0005, (256, 256))
-haze = np.where(lit_disk, 0.05 * (1 - 0.3 * ((q[0] - 128) ** 2 + (q[1] - 128) ** 2) / 110 ** 2), 0) + rng.normal(0, 0.0003, (256, 256))
-d = {"CB3": om.band_detail([surface], 0.0), "MT1": om.band_detail([haze], 0.0)}
-print("detail CB3", round(d["CB3"], 4), "MT1", round(d["MT1"], 4))
-assert d["MT1"] < 0.25 * d["CB3"], d
-assert om.pair_colour(["CB3", "MT1"], d) == (None, "CB3")
-assert om.pair_colour(["MT1", "CB3"], {"MT1": d["MT1"], "CB3": d["CB3"]}) == (None, "CB3")
-# both bands with detail (Saturn's belts in CB2 and MT2) keep their colour; three filters and grey are as colour_of said
-assert om.pair_colour(["CB2", "MT2"], {"CB2": 0.02, "MT2": 0.015}) == (["CB2", "MT2"], None)
-assert om.pair_colour(["CB2", "MT2"], None) == (["CB2", "MT2"], None)
-assert om.pair_colour(["RED", "GRN", "BL1"], {"RED": 0.02, "GRN": 0.0}) == (["RED", "GRN", "BL1"], None)
-assert om.pair_colour(None, None) == (None, None)
-assert om.band_detail([np.zeros((256, 256), np.float32)], 0.0) == 0.0
+# the haze above it; drawn in two-filter colour their tint washed the surface out (Titan's CB3 repeats merge into one
+# tile each, so CB3 and MT1 tie on tiles and colour_of pairs them)
+assert om.pair_colour(["CB3", "MT1"], "TITAN") == (None, "CB3")
+assert om.pair_colour(["IR1", "CB3"], "TITAN") == (None, "CB3")
+assert om.pair_colour(["BL1", "VIO"], "TITAN") == (["BL1", "VIO"], None)      # haze in both: its colour stays
+assert om.pair_colour(["CB3", "MT1", "UV3"], "TITAN") == (["CB3", "MT1", "UV3"], None)   # three filters: as before
+assert om.pair_colour(["CB2", "MT2"], "SATURN") == (["CB2", "MT2"], None)    # Saturn's belts in both bands
+assert om.pair_colour(["CB3", "VIO"], "SATURN") == (["CB3", "VIO"], None)
+assert om.pair_colour(None, "TITAN") == (None, None)
 print("ok")

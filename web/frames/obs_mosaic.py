@@ -866,7 +866,7 @@ def plan(u, cache):
         # the filters that see the body, not as a black mosaic of that sky
         aside = _aside(frames, u)
         count = {f: c for f, c in count.items() if f not in aside} or count
-        colour = colour_of(count, nms)
+        colour, grey = pair_colour(colour_of(count, nms), u["key"][0])
         # a long movie's scale from frames spread evenly over it, each filter's on its own (a step in time could
         # fall in step with the filter wheel and miss a filter): the same scale, without reading every frame first
         picks = []
@@ -874,14 +874,9 @@ def plan(u, cache):
             mine = [fr for fr in frames if fr[2] == f]
             picks += mine[::max(1, math.ceil(len(mine) / SCALE_FRAMES))]
         levels = {}
-        scale = pass_scale(sorted(picks, key=frames.index), u, colour or [max(count, key=count.get)],
+        scale = pass_scale(sorted(picks, key=frames.index), u, colour or [grey or max(count, key=count.get)],
                            bool(colour and len(colour) == 3 and colour[1] == "GRN" and colour[2] in reel.TRUE_BLUES),
                            lit_levels=levels)
-        colour, grey = pair_colour(colour, scale.pop("detail", None))
-        if grey:
-            # (the scale of a grey pass: pass_scale's for its grey filter is the same less the colour balance)
-            scale.pop("balance", None)
-            scale.pop("typical", None)
         # the rotation from the camera's frame to north up: the angle between where the geometry cache puts
         # the body and where processed_frame does, from the first tile placed well off the body's centre
         angle, ref = 0.0, None
@@ -998,38 +993,20 @@ def colour_of(count, nms):
     return two if len(two) == 2 else None
 
 
-PAIR_DETAIL = 0.4   # a two-filter pass plays in colour when its less detailed band shows at least this share of the
-                    # other's fine detail (band_detail)
+# bodies whose surface shows through one filter only, a window in their haze: Titan's through CB3 (938 nm), where its
+# other filters see the haze and clouds above it
+SURFACE_WINDOW = {"TITAN": "CB3"}
 
 
-def pair_colour(colour, detail):
-    """(colour, grey filter or None) for a pass whose colour_of filters are colour, given each band's fine detail
-    (pass_scale's "detail", band_detail): a pair whose one band shows the body's detail and the other next to none
-    (Titan's CB3, which sees its surface, and MT1, its featureless haze) is drawn grey in the detailed band, as it was
-    before two-filter colour, since their tint would wash the detail out; any other colour is as colour_of said."""
-    if not colour or len(colour) != 2 or not detail or set(detail) != set(colour):
-        return colour, None
-    if min(detail.values()) < PAIR_DETAIL * max(detail.values()):
-        return None, max(colour, key=detail.get)
+def pair_colour(colour, body):
+    """(colour, grey filter or None) for a pass of colour_of's colour filters on body: a pair with the one filter the
+    body's surface shows through (SURFACE_WINDOW: Titan's CB3 maps and monitoring passes, CB3 with MT1, IR1, RED...)
+    is drawn grey in that filter, as before two-filter colour, since the pair's tint, the haze band's half of every
+    pixel, washes the surface's few per cent of contrast out; any other colour is as colour_of said."""
+    window = SURFACE_WINDOW.get(body)
+    if colour and len(colour) == 2 and window in colour:
+        return None, window
     return colour, None
-
-
-def band_detail(iofs, black):
-    """A band's fine detail on the body: the median size of its structure a few pixels across (a difference of two
-    blurs on pass_scale's quarter-size frames) over its lit pixels away from their edges, as a share of their median
-    brightness; the median over the band's frames (0.0 when none has enough lit pixels)."""
-    out = []
-    for q in iofs:
-        v = (q - black).astype(np.float32)
-        top = float(np.percentile(v, 99))
-        if top <= 0:
-            continue
-        lit = cv2.erode((v > 0.2 * top).astype(np.uint8), np.ones((9, 9), np.uint8)) > 0
-        if lit.sum() < 200:
-            continue
-        fine = cv2.GaussianBlur(v, (0, 0), 1.0) - cv2.GaussianBlur(v, (0, 0), 4.0)
-        out.append(float(np.median(np.abs(fine[lit])) / max(float(np.median(v[lit])), 1e-12)))
-    return float(np.median(out)) if out else 0.0
 
 
 def _polarizer(f):
@@ -1334,7 +1311,7 @@ def pass_scale(frames, u, drawn=None, true_colour=False, sky_tops=None, lit_leve
     true colour set; sky_tops = optional {filter: I/F} overriding how far above its sky each filter's black sits
     (the measured values come back as "sky_tops", with the soft "toe" above black). lit_levels: a dict given here gets
     each filter's lit median on the scale (linear, white = 1), which the luminance base's gains come from; the
-    scale itself is the same with or without it. Two filters drawn: "detail", each one's band_detail (pair_colour)."""
+    scale itself is the same with or without it."""
     by, disks = {}, {}
     for path, _, f, _, _, x, y, z in frames:
         _, iof, _ = stacking.load_hdr(path, u.get("repeat_gap", mosaic_benchmark.REPEAT_GAP))
@@ -1415,9 +1392,6 @@ def pass_scale(frames, u, drawn=None, true_colour=False, sky_tops=None, lit_leve
     if toe:
         out["toe"], out["sky_tops"] = toe, tops
     mine = [f for f in (drawn or []) if f in by]
-    if len(mine) == 2:
-        # (plan's pair_colour: whether both bands show the body's detail)
-        out["detail"] = {f: round(band_detail(by[f], blacks[f]), 5) for f in mine}
     if calibration.style() == "balanced" and len(mine) == 3 and not true_colour:
         # false color: each band's gain to bring the body's lit median (above that band's black) to the bands'
         # mean, so the planet comes out gray and only its differences between bands show (calibration.false_gains);
