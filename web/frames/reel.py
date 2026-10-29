@@ -57,7 +57,7 @@ import stacking  # noqa: E402
 import sets_passes  # noqa: E402
 
 # bumped whenever the way reel pictures are made changes, so older ones are not served again
-VERSIONS = {"balanced": "reel-v30", "raw": "reel-v13", "classic": "reel-v7"}   # one per calibration.style(); v30/v13/v7: the restart's calibration, tone and tile fixes; v29/v12/v6: flat field
+VERSIONS = {"balanced": "reel-v31", "raw": "reel-v14", "classic": "reel-v8"}   # one per calibration.style(); v31/v14/v8: the small artifact and two-filter color fixes (groups I, F); v30/v13/v7: the restart's calibration, tone and tile fixes; v29/v12/v6: flat field
 
 
 def version():
