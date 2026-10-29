@@ -106,21 +106,29 @@ def scan(src, out):
         for u in us:
             if u.get("kind") != "mosaic_movie" or not os.path.exists(os.path.join(om.folder(u, src), om.PLAN_FILE)):
                 continue
-            before, after, lost = [], [], []
+            before, after, what = [], [], []
             for n in range(len(u["frames"])):
                 made = om.rolling_layout(u, n, src)
                 if not made:
                     before.append(0.0)
                     after.append(0.0)
+                    what.append(None)
                     continue
                 p, tiles, rect, count, used, _ = made
                 before.append(covered([t for t in tiles if t["filter"] in used], rect))
                 after.append(covered([t for t in tiles if t.get("drawn")], rect))
+                what.append({"filter": u["frames"][n][2], "used": used, "tiles": len(tiles),
+                             "drawn": sorted(t["n"] for t in tiles if t.get("drawn")), "slot": om.slots(u)[n]})
             drops = lambda a: [n for n in range(1, len(a)) if a[n - 1] > 0 and a[n] < (1 - COLLAPSE) * a[n - 1]]
             row = {"pass": os.path.basename(om.folder(u, src)), "frames": len(u["frames"]),
                    "collapses_before": drops(before), "collapses_after": drops(after),
                    "covered_before": [round(x, 3) for x in before], "covered_after": [round(x, 3) for x in after]}
+            # what each frame of a collapse after draws, the frame before it and itself
+            row["after_detail"] = [{"n": n, "covered": after[n - 1:n + 1], "was": what[n - 1], "now": what[n]}
+                                   for n in row["collapses_after"]]
             rows.append(row)
+            for d in row["after_detail"]:
+                print("  collapse after", json.dumps(d), flush=True)
             print(row["pass"], len(u["frames"]), "frames, collapses before", len(row["collapses_before"]),
                   "after", len(row["collapses_after"]), flush=True)
     summary = {"mosaic_movies": len(rows), "collapsing_before": sum(1 for r in rows if r["collapses_before"]),
@@ -132,8 +140,10 @@ def scan(src, out):
 
 
 def link_pass(u, src, scratch):
-    """The pass's plan and tiles in the scratch cache, as hard links to the source's (its plan, footprints and
-    tiles never change once made; whatever is written lands in the scratch folder)."""
+    """The pass's plan and tiles in the scratch cache: its JSON files copied, its tile pictures hard links to the
+    source's, or symlinks to where they really are when the source is on another volume (a pre-built cache's tiles
+    linked onto another disk image). Nothing writes into them: the cache writes a file anew and renames it over
+    (reel._cached), which replaces the link in the scratch folder, never what it points at."""
     a, b = om.folder(u, src), om.folder(u, scratch)
     os.makedirs(b, exist_ok=True)
     for name in os.listdir(a):
@@ -143,7 +153,14 @@ def link_pass(u, src, scratch):
         if os.path.isdir(s) and name.startswith("tiles-"):
             os.makedirs(d)
             for x in os.listdir(s):
-                os.link(os.path.join(s, x), os.path.join(d, x))
+                f, g = os.path.realpath(os.path.join(s, x)), os.path.join(d, x)
+                if x.endswith(".json"):
+                    shutil.copy2(f, g)
+                    continue
+                try:
+                    os.link(f, g)
+                except OSError:   # (another volume: EXDEV)
+                    os.symlink(f, g)
         elif os.path.isfile(s) and name.endswith(".json"):
             shutil.copy2(s, d)
 
@@ -182,7 +199,14 @@ def draw(src, scratch, target, obs, cam, out, size):
     om.rolling_ahead = lambda *a, **k: None
     os.makedirs(out, exist_ok=True)
     rows = []
-    for u in om.units(target, obs, cam):
+    us = om.units(target, obs, cam)
+    for u in us:
+        there = os.path.exists(os.path.join(om.folder(u, src), om.PLAN_FILE))
+        print(json.dumps({"pass": os.path.basename(om.folder(u, src)), "kind": u.get("kind"), "frames": len(u["frames"]),
+                          "in_source": there}), flush=True)
+    if not us:
+        print("no passes for", target, obs, cam, "(the observation id as the index has it, e.g. ISS_117RI_EQXSHADOW001_PRIME)")
+    for u in us:
         if u.get("kind") != "mosaic_movie" or not os.path.exists(os.path.join(om.folder(u, src), om.PLAN_FILE)):
             continue
         link_pass(u, src, scratch)
