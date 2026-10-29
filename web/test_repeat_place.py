@@ -47,6 +47,12 @@ scan = [frame("ISS_013RI_AZSCNHIPH001_PRIME", T0 + 60000 + 73 * i,
 drift = [frame("ISS_099RI_SPOKEMOVIE001_PRIME", T0 + 70000 + 30 * i, (31.0 * i, 0.0)) for i in range(30)]
 hop = [frame("ISS_00BDI_GLOCOL001_PRIME", T0 + 80000 + 30 * i, ((0.0 if i < 15 else 800.0) + 31.0 * (i % 15), 0.0))
        for i in range(30)]
+# creeping frame to frame but no mosaic: a ring survey stepping as the scan above, 200 frames, too wide
+# for one
+# (241RI_PROPSURVY001); a propeller retarget's view, 5 frames 0.1 of a frame apart, under a frame in all (277RI)
+survey = [frame("ISS_241RI_PROPSURVY001_PIE", T0 + 90000 + 73 * i, (102.4 * i + 61.4 * ((i + 3) // 4), 0.0))
+          for i in range(200)]
+view = [frame("ISS_277RI_PROPRETRG001_PRIME", T0 + 100000 + 104 * i, (0.0, 102.4 * i)) for i in range(5)]
 
 idx = pd.DataFrame(rows)
 geo_of = lambda ids: {i: geo[i] for i in ids if i in geo}
@@ -97,6 +103,9 @@ u = om.units("PHOEBE", "ISS_00BDI_GLOCOL001_PRIME", "N")[0]
 assert u["jump_frac"] == 1 / 29 and u["movie"], u["jump_frac"]
 u = om.units("PHOEBE", "ISS_000PH_HIRESA001_PRIME", "N")[0]
 assert u["jump_frac"] == 1 and not u["movie"], u["jump_frac"]   # A, B, A, B: every step a jump
+for obs in ("ISS_241RI_PROPSURVY001_PIE", "ISS_277RI_PROPRETRG001_PRIME"):   # ... stay the movies they play as
+    u = om.units("PHOEBE", obs, "N")[0]
+    assert u["kind"] == "movie" and u["movie"], (obs, u["kind"], u["jump_frac"])
 print("_judge ok")
 
 # ---------- stacking.find_repeats: only frames at the tile's pointing ----------
