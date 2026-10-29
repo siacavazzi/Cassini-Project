@@ -522,6 +522,24 @@ SPIKE = 6.0          # balanced composites: a one-channel spike this many times 
 SKY_DARK = 99        # balanced composites: this percentile of the dark sky's brightness is below the toe (tone)
 SHOULDER = 0.8       # balanced composites: above this share of white, brightness rolls off softly instead
                      # of clipping (limbs and ring highlights past the white keep their shape)
+FLOOR_SHARE = 0.8    # balanced: the black is at least this share of the lit picture's floor, the FLOOR_PCT percentile of
+FLOOR_PCT = 0.5      # its brightness (the channels' mean above their sky levels), so a picture whose lit part is one even
+                     # surface (Titan's haze, a moon close-up) spreads over the range instead of the gamma lifting it to
+                     # near-white, and a lit sky that fails the sky test (a plume's, stray light) goes dark.
+FLOOR_EDGE = 10      # With sky, the floor is taken at least FLOOR_EDGE pixels from it (none when under FLOOR_MIN of the
+FLOOR_MIN = 0.01     # picture is that far), and only an even lit part has it taken off: none when the floor is under
+FLOOR_EVEN = (0.3, 0.6)  # FLOOR_EVEN[0] of the lit part's WHITE_PCT percentile, all of FLOOR_SHARE from FLOOR_EVEN[1],
+                     # so dim things between the sky and the body (faint rings, a shadow, a night side) keep their light
+GLOW_IOF = (1e-3, 5e-3)  # balanced, no sky: a picture whose median brightness (I/F) is under GLOW_IOF[0] is lit sky (a plume's
+GLOW_PCT = 50        # or the E ring's glow, stray light, a star field's offset), not a sunlit surface, which is brighter than
+                     # GLOW_IOF[1]: its black is its GLOW_PCT percentile, so the sky goes near black and only the glow
+                     # brighter than the sky shows; in between, a blend (on a log scale) from the floor black
+TOE = 0.05           # balanced composites: a margin up to this share of white (the sky's noise) has a toe (tone) as wide as
+                     # it and centred on it, so a night side or twilight it reaches into (the sky test counts it as sky)
+                     # fades out smoothly instead of being cut off with a ragged edge; from twice this (a floor black,
+                     # FLOOR_SHARE) the toe is an eighth of the margin, starting at it, as before; in between, a blend
+SATURATED = 4.0      # balanced, one frame: a pixel the camera saturated is drawn at least this many times white above its
+                     # black (past the shoulder: white), whatever the picture's scale puts it at (draw_saturated)
 
 
 def look():
@@ -1031,8 +1049,9 @@ def _clean_spikes(channels, sky, natural=False):
 
 """
 Balanced composites' channels (load_linear, aligned) as BGR uint8 images: the noise margin comes off the
-brightness (the channels' mean) through a toe, black up to the margin (the sky at or below its own level is
-black), then turning within an eighth of the margin into the brightness less the margin, and every channel is scaled by the same factor, so a pixel keeps its color.
+brightness (the channels' mean) through a toe (TOE), black up to its start (the sky at or below its own level is
+black), then turning into the brightness less the margin, and every channel is scaled by the same factor, so a pixel
+keeps its color.
 Past the shoulder the brightest channel rolls off softly (roll_off), the others by the same factor. mix = the
 set's channel mix (color_mix), applied first, on the linear values.
 """
@@ -1041,10 +1060,13 @@ def tone(channels, margin, mix=None, shoulder=SHOULDER, gamma=2.2):
     if mix is not None:
         x = apply_mix(mix, x)
     lum = x.mean(axis=0)
-    w = margin / 8
+    w = max(margin / 8, min(margin, TOE))
+    # how far past the margin the toe starts: 0 for a sky's margin (centred on it), half its width for a floor black
+    late = w / 2 * min(max(margin / TOE - 1, 0.0), 1.0) if TOE > 0 else w / 2
+    start = margin - w / 2 + late
     if w > 0:
-        toed = np.where(lum <= margin, 0, np.where(lum <= margin + w, (lum - margin) ** 2 / (2 * w),
-                                                  lum - margin - w / 2))
+        toed = np.where(lum <= start, 0, np.where(lum <= start + w, (lum - start) ** 2 / (2 * w),
+                                                  lum - margin - late))
         x *= np.where(lum > 0, toed / np.maximum(lum, 1e-12), 0)
     if shoulder:
         _shoulder(x, shoulder)
@@ -1057,7 +1079,7 @@ One picture's own display scale, as load_channels uses it: (black per channel, w
 blacks were measured on the sky or left at zero for want of sky), in I/F.
 iofs = the picture's channels, float32 I/F
 """
-def picture_scale(iofs, sky_fraction=0.1, sky_percentile=98):
+def picture_scale(iofs, sky_fraction=0.1, sky_percentile=98, floor=True):
     # Sky is where every channel is dark; without enough sky the black point stays at zero.
     sky = _sky(iofs)
     blacks = [0.0] * len(iofs)
@@ -1073,7 +1095,7 @@ def picture_scale(iofs, sky_fraction=0.1, sky_percentile=98):
         white = max(cv2.medianBlur(iof - black, 3).max() for iof, black in zip(iofs, blacks))
         return blacks, white, measured
     # the sky just measured, not measured again (a percentile of every pixel of each channel)
-    levels, margin, white, measured = _balanced_scale(iofs, sky_fraction, sky_percentile, sky=sky)
+    levels, margin, white, measured = _balanced_scale(iofs, sky_fraction, sky_percentile, sky=sky, floor=floor)
     return [level + margin for level in levels], white, measured
 
 
@@ -1104,13 +1126,17 @@ def noise_floor(skies, sky_percentile=98):
     return max(float(np.percentile(v, sky_percentile) - np.median(v)) for v in skies if v.size) if skies else 0.0
 
 
-def _balanced_scale(iofs, sky_fraction=0.1, sky_percentile=98, sky=None):
+def _balanced_scale(iofs, sky_fraction=0.1, sky_percentile=98, sky=None, floor=True):
     sky = _sky(iofs) if sky is None else sky
     measured = bool(sky.mean() > sky_fraction)
     levels, margin = [0.0] * len(iofs), 0.0
     if measured:
         # the noise floor (noise_floor) taken with the sky levels, on the same sky pixels and medians
         levels, margin = sky_levels([[iof] for iof in iofs], [[sky]] * len(iofs), floor_pct=sky_percentile)
+    # the black no lower than a share of the lit picture's own floor, as one margin (tone takes it off the brightness,
+    # so every channel keeps its color): its darkest parts stay a little above black and the rest spreads out
+    if floor:
+        margin = max(margin, _floor(iofs, levels, sky if measured else None))
     blacks = [level + margin for level in levels]
     # One white for all channels: the WHITE_PCT percentile of the brightest channel over the lit pixels (the
     # body, not the sky), so a few bright limb or ring pixels don't leave the body dim and gray; the shoulder
@@ -1122,6 +1148,52 @@ def _balanced_scale(iofs, sky_fraction=0.1, sky_percentile=98, sky=None):
     white = max(float(np.percentile(b[lit], WHITE_PCT)) for b in blurred)
     white = max(white, max(float(b.max()) for b in blurred) / MAX_STRETCH)
     return levels, margin, white, measured
+
+
+"""
+Pixels the camera saturated (saturated: the top of its range, brighter than it could measure) drawn white in a one frame
+picture's balanced channel (load_linear's, white = 1 above the margin), in place: a frame saturated all over is otherwise
+one even surface its floor (FLOOR_SHARE) spreads into the flat field's pattern. labels = the channels' labels (their
+frames' own codes, so not for repeats merged in I/F, stacking.load_hdr); margin = load_linear's; returns the share of the
+frame saturated
+"""
+def draw_saturated(labels, channels, margin):
+    share = 0.0
+    for lbl, c in zip(labels, channels):
+        full = saturated(ds.imread(lbl.export(), cv2.IMREAD_GRAYSCALE), lbl.get_info())
+        if not full.any():
+            continue
+        if full.shape != c.shape:
+            full = cv2.resize(full.astype(np.uint8), c.shape[::-1], interpolation=cv2.INTER_NEAREST).astype(bool)
+        c[full] = np.maximum(c[full], np.float32(margin + SATURATED))
+        share = max(share, float(full.mean()))
+    return share
+
+
+"""
+The black a picture's floor sets (FLOOR_SHARE): a share of the FLOOR_PCT percentile of its brightness above the sky
+levels. sky = the sky mask, or None for a picture without sky: then every pixel, and FLOOR_SHARE of it, or up to its
+GLOW_PCT percentile when the picture is as dim as lit sky (GLOW_IOF). With sky, the
+pixels at least FLOOR_EDGE from it, and a share from 0 to FLOOR_SHARE as that floor goes from FLOOR_EVEN[0] to
+FLOOR_EVEN[1] of their WHITE_PCT percentile; 0 when under FLOOR_MIN of the picture is that far from the sky
+"""
+def _floor(iofs, levels, sky=None):
+    lum = iofs[0] - np.float32(levels[0]) if len(iofs) == 1 else \
+        np.mean([iof - np.float32(level) for iof, level in zip(iofs, levels)], axis=0)
+    if sky is None:
+        floor, middle, glow = (float(v) for v in np.percentile(lum, (FLOOR_PCT, 50, GLOW_PCT)))
+        black = FLOOR_SHARE * max(floor, 0.0)
+        dim = np.log(GLOW_IOF[1] / max(middle, 1e-12)) / np.log(GLOW_IOF[1] / GLOW_IOF[0])
+        return black + min(max(float(dim), 0.0), 1.0) * max(glow - black, 0.0)
+    side = 2 * FLOOR_EDGE + 1
+    far = cv2.erode((~sky).astype(np.uint8), np.ones((side, side), np.uint8)).astype(bool)
+    if far.sum() < FLOOR_MIN * far.size:
+        return 0.0
+    floor, top = (float(v) for v in np.percentile(lum[far], (FLOOR_PCT, WHITE_PCT)))
+    if floor <= 0 or top <= 0:
+        return 0.0
+    even = min(max((floor / top - FLOOR_EVEN[0]) / (FLOOR_EVEN[1] - FLOOR_EVEN[0]), 0.0), 1.0)
+    return FLOOR_SHARE * even * floor
 
 
 """
@@ -1177,17 +1249,24 @@ def _median_percentiles(v, pcts):
 
 """
 The display scale shared by the tiles of a mosaic that would each otherwise be stretched on its
-own (the reel's mosaics): every tile's own scale (picture_scale), then per channel the median of
-the blacks of the tiles that had sky to measure them on (a tile filled by the body says nothing
-about the sky), and one white, the brightest tile's, so no tile clips. Each tile looks much as it
-would alone, but all are on one scale, so they meet without brightness or colour steps.
+own (the reel's mosaics): every tile's own scale (picture_scale, without the floor black), then per
+channel the median of the blacks of the tiles that had sky to measure them on (a tile filled by the body
+says nothing about the sky), and one white, the brightest tile's, so no tile clips. With no sky in any
+tile, the tiles' own floor blacks (FLOOR_SHARE): the lowest, so no tile is darker than alone, and each
+tile's white, above its own black, that much higher on the shared one. Each tile looks much as it would
+alone, but all are on one scale, so they meet without brightness or colour steps.
 pictures = one list of channel I/F images per tile (stacking.load_hdr)
 """
 def tiles_scale(pictures, gamma=2.2):
-    scales = [picture_scale([iof.astype(np.float32) for iof in iofs]) for iofs in pictures]
+    scales = [picture_scale([iof.astype(np.float32) for iof in iofs], floor=False) for iofs in pictures]
     measured = [s for s in scales if s[2]]
-    blacks = [float(np.median([s[0][c] for s in measured])) if measured else 0.0 for c in range(len(pictures[0]))]
-    white = max(float(s[1]) for s in scales)
+    if measured:
+        blacks = [float(np.median([s[0][c] for s in measured])) for c in range(len(pictures[0]))]
+        white = max(float(s[1]) for s in scales)
+    else:
+        scales = [picture_scale([iof.astype(np.float32) for iof in iofs]) for iofs in pictures]
+        blacks = [min(float(s[0][c]) for s in scales) for c in range(len(pictures[0]))]
+        white = max(float(s[1]) + float(np.mean(s[0])) - float(np.mean(blacks)) for s in scales)
     scale = {"blacks": blacks, "white": white, "gamma": gamma}
     if look() == "balanced":
         scale["shoulder"] = SHOULDER
