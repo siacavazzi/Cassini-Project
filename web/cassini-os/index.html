@@ -388,6 +388,15 @@ body { color: var(--q-text); }
 #wacard.zoomed:has(.chans.on) { width: min(clamp(300px, 34vw, 560px), max(300px, calc(100vh - 480px))); }
 #wacard:not(:has(.well.has-frame, .well.kept)) { width: 200px; }
 #wacard .info { grid-template-columns: 42px 1fr; }
+/* a frame id links to its page in NASA's archive (OPUS): plain until pointed at */
+.shottag a.pds, .info a.pds { color: inherit; text-decoration: none; }
+.info a.pds { text-decoration: underline dotted; text-underline-offset: 2px; }
+.shottag a.pds { pointer-events: auto; }
+/* (room under the caption's one line for the underline, which its overflow would cut off; the text stays put) */
+.camwin .well.has-frame .shottag:has(a.pds) { bottom: 2px; padding-bottom: 2px; }
+:is(.shottag, .info) a.pds:hover { text-decoration: underline; text-underline-offset: 2px; }
+.shottag a.pds:hover { text-underline-offset: 1px; }
+:is(.shottag, .info) a.pds:focus-visible { outline: 1px solid currentColor; outline-offset: 1px; border-radius: 2px; }
 /* colour sets: the channels that went into the composite, under the main picture */
 .chans { display: none; grid-template-columns: repeat(var(--n, 3), minmax(0, 76px)); gap: 6px; }
 .camwin.zoomed .chans { grid-template-columns: repeat(var(--n, 3), minmax(0, 120px)); }
@@ -4473,6 +4482,14 @@ onmessage = async e => {
     for (let q = first; q <= last; q++) spans.set(`${cam}|${body || ""}|${q}`, span);
     return span;
   }
+  // each frame id on a picture links to that frame in NASA's Planetary Data System: the PDS Ring-Moon Systems Node's
+  // OPUS page for it (raw and calibrated files, label, preview). OPUS ids are co-iss- and the image name in lower case
+  // without its version (N1477496427_2 is co-iss-n1477496427; OPUS holds one version of each frame)
+  const opusUrl = id => `https://opus.pds-rings.seti.org/opus/#/view=detail&detail=co-iss-${id.toLowerCase().replace(/_\d+$/, "")}`;
+  const pdsLinks = text => String(text).replace(/[&<>"]/g, c => `&#${c.charCodeAt(0)};`)
+    .replace(/\b[NW]\d{10}_\d+\b/g, id => `<a class="pds" href="${opusUrl(id).replace(/&/g, "&amp;")}" target="_blank" rel="noopener" title="${id} in NASA's Planetary Data System (OPUS)">${id}</a>`);
+  // a link on the picture opens OPUS, not the picture's own click (a mosaic pointing, full view)
+  for (const t of ["click", "dblclick", "pointerdown"]) document.addEventListener(t, e => { if (e.target.closest && e.target.closest("a.pds")) e.stopPropagation(); }, true);
   const allFeeds = new Set();   // every camera window's feed, the body windows' too (playback.maxBehind)
   function cameraFeed(card) {
     // body: a body window's own target; the two camera windows show the body in view in the body view, else every target
@@ -4721,7 +4738,7 @@ onmessage = async e => {
       // fewer frames a second than the clock passes, and the caption should say which frame is on screen (also a
       // frame shown as it is while its pass is steadied, which went up in place of the movie frame asked for)
       if (v.movie || steadying) {
-        field("frame").textContent = `${titleCase(catalog.target[v.k] || "Unknown")} · ${catalog.id[v.k]}`;
+        field("frame").innerHTML = pdsLinks(`${titleCase(catalog.target[v.k] || "Unknown")} · ${catalog.id[v.k]}`);
         filmstrip(v.k);
       }
       // the caption on the picture names the picture on screen (a stand-in shown while the one wanted loads, a
@@ -4939,7 +4956,7 @@ onmessage = async e => {
     const passInfos = new Map(), filmAsked = new Set();
     let filmInfo = null, filmN = -1, filmCat = null;
     const unix = k => etToMs(catalog.et[k]) / 1000;
-    const shotTag = (set, k) => { card.querySelector(".shottag").textContent = set >= 0 ? catalog.sets[set].use.map(q => catalog.id[q]).join(" ") : `${catalog.id[k]} · ${catalog.f1[k]}/${catalog.f2[k]}`; };
+    const shotTag = (set, k) => { card.querySelector(".shottag").innerHTML = pdsLinks(set >= 0 ? catalog.sets[set].use.map(q => catalog.id[q]).join(" ") : `${catalog.id[k]} · ${catalog.f1[k]}/${catalog.f2[k]}`); };
     const filterHtml = k => {
       const c = catalog.cls[k], pol = /^P\d|^IRP/.test(catalog.f1[k]) || /^IRP/.test(catalog.f2[k]) ? " · polarizer" : "";
       return `<span class="swatch" style="background:${CLS[c][1]}"></span>${catalog.f1[k]}/${catalog.f2[k]}${nmOf(k) ? ` · ${Math.round(nmOf(k))} nm` : ""}${pol}`;
@@ -5267,7 +5284,7 @@ onmessage = async e => {
       const up = levels[levels.length - 1].lines || {};
       levels.push({ kind: "channel", ch, label: `${fname(q)} ${Math.round(nmOf(q))} nm · ${catalog.id[q]}`, url: sz => `${s.url ? s.url(sz) : colorUrl(s, sz)}&channel=${ch}`,
         tag: `CHANNEL · ${fname(q)} · AS IN THE ${s.inMosaic && s.inMosaic() ? "MOSAIC" : "COMPOSITE"}`, shot: catalog.id[q],
-        lines: { frame: `${titleCase(catalog.target[q] || "Unknown")} · ${catalog.id[q]}`, filter: `${catalog.f1[q]}/${catalog.f2[q]}${nmOf(q) ? ` · ${Math.round(nmOf(q))} nm` : ""}`,
+        lines: { frame: pdsLinks(`${titleCase(catalog.target[q] || "Unknown")} · ${catalog.id[q]}`), filter: `${catalog.f1[q]}/${catalog.f2[q]}${nmOf(q) ? ` · ${Math.round(nmOf(q))} nm` : ""}`,
           colour: s.inMosaic && s.inMosaic() ? "One channel of the frame, as in the mosaic" : "One channel of the composite, on its brightness scale", details: up.details || "" } });
       hold1(levels);
     }
@@ -5559,7 +5576,7 @@ onmessage = async e => {
       // flags (flag.html) record where the window is
       shot.dataset.path = JSON.stringify(hold.levels.map(l => ({ kind: l.kind, label: l.label, src: l.url(capped()) })));
       card.querySelector(".kindtag").textContent = t.tag;
-      card.querySelector(".shottag").textContent = t.shot;
+      card.querySelector(".shottag").innerHTML = pdsLinks(t.shot);
       // a held composite's channels in the strip (a frame opened from a mosaic is a set of its own)
       const s = t.s || (t.kind === "channel" ? heldSet() : null);
       if (s !== stripSet) strip(s, Infinity, -1);   // a picture with no set of its own: no strip (it would be the live one's)
@@ -5726,7 +5743,7 @@ onmessage = async e => {
       // (want.held: a colour set held up while the next is taken, as on opening paused inside a pass)
       if ((obsShown && catalog.obs[k] === obsShown) || ((want.tile || want.held) && (mosaicPass(k) || modeOf(k) === "mosaic" || modeOf(k) === "mosaic_movie"))) mosaicOf(want.held ? { key: want.key, set: -1, k } : want, true);
       const kp = catalog.km_per_px[k];
-      if (!want.movie) field("frame").textContent = `${titleCase(catalog.target[k] || "Unknown")} · ${catalog.id[k]}`;
+      if (!want.movie) field("frame").innerHTML = pdsLinks(`${titleCase(catalog.target[k] || "Unknown")} · ${catalog.id[k]}`);
       if (!want.movie) field("filter").innerHTML = filterHtml(k);
       field("colour").textContent = !s ? (colourFilter(k) ? "Single filter" : "Clear, no color") : ready
         ? colourText(s, si) : `${KIND[s.kind]} set, ${s.use.filter(q => catalog.et[q] <= state.et).length} of ${s.use.length} channels taken`;
@@ -11566,7 +11583,7 @@ void main() {
   window.cassiniAbout = { open, addTab, esc, close: () => show(false), credits: CREDITS };
 
   // ---- which version this is: this page's build id (build.py writes it), and what the frame server says it serves ----
-  const BUILD = /*BUILD*/"d4873af8332d";
+  const BUILD = /*BUILD*/"40eaa73e39be";
   const FRAMES = (() => {                       // the frame server, chosen as the camera window chooses it
     const q = new URLSearchParams(location.search).get("frames");
     if (q) return q.replace(/\/$/, "");
