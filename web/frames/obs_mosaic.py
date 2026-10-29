@@ -78,6 +78,8 @@ MOVIE_FIT = 2.0      # a pass played as a movie shows its whole footprint up to 
                      # window this wide following the frame, at one scale for the whole pass
 MOVIE_MARGIN = 0.15  # of a frame, round a movie's footprint
 CENTRE_MARGIN = 0.2  # of the body's diameter, round its disk in a movie centred on it
+CENTRE_KEEP = 0.95   # of the frames' area a view centred on the body must keep, or the pass is not centred (centre_half)
+SEEN_GRID = 16       # points across a frame that centre_half measures that share on (SEEN_GRID x SEEN_GRID per frame)
 MOVIE_SAMPLES = 6    # tiles a movie's footprint is measured on
 TRAIL = 12           # most earlier frames a movie's rolling trail keeps under the newest
 SCALE_FRAMES = 96    # most frames the pass's display scale is measured on (evenly spread over a long movie)
@@ -2593,12 +2595,13 @@ def _steady_table(u, n, cache, centre=True, colour=False):
     radius = RADIUS.get(u["key"][0], 0) / (u["z"] * IFOV[u["key"][2]])
     fp = movie_footprint(u, cache, p)
     x0, y0, x1, y1 = fp
-    fixed = bool((centre and centre_half(fp, radius)) or max(x1 - x0, y1 - y0) <= MOVIE_FIT * FRAME)
+    seen = pass_seen(u) if centre else None
+    fixed = bool((centre and centre_half(fp, radius, seen)) or max(x1 - x0, y1 - y0) <= MOVIE_FIT * FRAME)
     if not fixed:
         return {"local": False}
     ns = sorted(chain)
     tiles = {n: tile(u, n, cache, p["display_scale"]) for n in ns}
-    rect = movie_rect(fp, tiles[ns[0]], radius, centre)
+    rect = movie_rect(fp, tiles[ns[0]], radius, centre, seen)
     how = (bool(colour), bool(centre), 0)
     exposure = None
     if _exposure_ready(u, cache, rec, how):
@@ -2641,19 +2644,20 @@ def _colour_recipes(u, p, cache, ns, tiles):
             "gamma": scale.get("gamma", 2.2), "shoulder": calibration.SHOULDER, "by": by}
 
 
-def movie_rect(fp, t, radius=0.0, centre=False):
+def movie_rect(fp, t, radius=0.0, centre=False, seen=None):
     """The view of a pass played as a movie (x0, y0, w, h in reference pixels from the body's centre): its whole
     footprint fp (movie_footprint) when that is at most MOVIE_FIT frames across, so the body holds still while the
     pointing wanders; otherwise a window MOVIE_FIT frames across centred on frame t, kept inside fp (a creeping
     ring or limb movie moves along). Either way one size for the whole pass, so the picture never rescales.
     centre: a square view centred on the body (radius: its disk, reference pixels), wide enough for the whole
     footprint round it (a stare's rings stay in) and at least a frame or the disk with CENTRE_MARGIN round it, up
-    to MOVIE_FIT frames, when the disk fits that and the frames look at the body (its centre in fp): the body sits
-    in the middle of every frame, north up. A body bigger than that or not in the frames (a ring or spoke movie
-    past Saturn's limb) keeps the view above. All of it decided once for the pass (fp and radius are the pass's)."""
+    to MOVIE_FIT frames, when centre_half centres the pass (seen: its frames, pass_seen): the body sits in the
+    middle of every frame, north up. A body bigger than that, one no frame looks at (a ring movie on both ansae, a
+    plume stare above the limb) or a pass the square would cut (a mosaic or retarget reaching further) keeps the
+    view above. All of it decided once for the pass (fp, radius and seen are the pass's)."""
     x0, y0, x1, y1 = fp
     side = MOVIE_FIT * FRAME
-    half = centre_half(fp, radius) if centre else None
+    half = centre_half(fp, radius, seen) if centre else None
     if half:
         return -half, -half, 2 * half, 2 * half
     if max(x1 - x0, y1 - y0) <= side:
@@ -2663,16 +2667,69 @@ def movie_rect(fp, t, radius=0.0, centre=False):
     return min(max(cx - w / 2, x0), x1 - w), min(max(cy - h / 2, y0), y1 - h), w, h
 
 
-def centre_half(fp, radius):
+def centre_half(fp, radius, seen):
     """Half the side of the square view centred on the body that movie_rect uses (reference pixels), or None when
-    the body is not centred: its disk (radius) does not fit MOVIE_FIT frames with CENTRE_MARGIN round it, or the
-    frames do not look at it (its centre outside the footprint fp)."""
+    the body is not centred. It is centred when all three hold: its disk (radius) fits MOVIE_FIT frames with
+    CENTRE_MARGIN round it; the body's centre is on at least one of the pass's frames (seen, pass_seen: the frames
+    look at the body, not only round it, as a ring movie on both ansae does, whose footprint fp takes in Saturn's
+    centre though no frame shows it); and the square, round the whole footprint up to MOVIE_FIT frames, keeps
+    CENTRE_KEEP of the frames' area (a mosaic or retarget reaching further than that is not cut down to it)."""
     x0, y0, x1, y1 = fp
     side = MOVIE_FIT * FRAME
     around = max(FRAME, 2 * radius * (1 + CENTRE_MARGIN))
-    if radius > 0 and around <= side and x0 <= 0 <= x1 and y0 <= 0 <= y1:
-        return min(side, max(around, 2 * max(-x0, x1, -y0, y1))) / 2
-    return None
+    if not (radius > 0 and around <= side and seen and seen[0]):
+        return None
+    half = min(side, max(around, 2 * max(-x0, x1, -y0, y1))) / 2
+    return half if kept_share(seen, half) >= CENTRE_KEEP else None
+
+
+def kept_share(seen, half):
+    """The share of the frames' area (seen, pass_seen) inside the square of half side half round the body's centre."""
+    pts = seen[1]
+    return float(np.mean((np.abs(pts) <= half).all(1))) if len(pts) else 0.0
+
+
+def frames_seen(frames, z):
+    """What centre_half needs of a pass's frames (units' (path, id, filter, t, nm, x, y, fz) tuples; z, the pass's
+    reference distance), from the geometry cache: (on, points). on: the body's centre is on at least one frame
+    (find_target's shift, from the body's centre to the frame's middle, inside the frame). points: SEEN_GRID x
+    SEEN_GRID points spread evenly over each placed frame, turned north up by the frame's own angle as the tiles are
+    and put where the frame sits round the body's centre (reference pixels), so the share of the frames' area a
+    view keeps is the share of the points in it. None when SPICE places none of the frames."""
+    placed = [fr for fr in frames if fr[7]]
+    if not placed:
+        return None
+    angles = reel.north_angles([fr[1] for fr in placed])
+    g = ((np.arange(SEEN_GRID) + 0.5) / SEEN_GRID - 0.5) * FRAME
+    gx, gy = (a.ravel() for a in np.meshgrid(g, g))
+    on, pts = False, []
+    for fr in placed:
+        x, y, fz = fr[5], fr[6], fr[7]
+        on = on or (abs(x) <= FRAME / 2 and abs(y) <= FRAME / 2)
+        # the frame's points from the body's centre on the camera's axes, turned as cv2.getRotationMatrix2D turns
+        # them (label_handler.middle_rotation) and scaled to the pass's distance
+        a = math.radians(angles.get(fr[1], 0.0))
+        c, s, k = math.cos(a), math.sin(a), fz / z
+        px, py = x + gx, y + gy
+        pts.append(np.stack([(c * px + s * py) * k, (c * py - s * px) * k], 1))
+    return on, np.concatenate(pts)
+
+
+_seen = {}   # pass key -> pass_seen's answer
+
+
+def pass_seen(u):
+    """frames_seen of pass u's frames at its reference distance, worked out once for the pass."""
+    key = (u["key"], len(u["frames"]))
+    with _lock:
+        if key in _seen:
+            return _seen[key]
+    got = frames_seen(u["frames"], u["z"]) if u.get("z") else None
+    with _lock:
+        if len(_seen) >= UNIT_OF_KEEP // 100:
+            _seen.clear()
+        _seen[key] = got
+    return got
 
 
 _centre_views = {}   # pass key -> centre_view's decision for it
@@ -2715,11 +2772,12 @@ def centre_view(frame_id):
     if hit is None:
         radius = RADIUS.get(target, 0) / (z * IFOV[cam])
         fp = _box(u, z) if found else (-g[0] - HALF, -g[1] - HALF, -g[0] + HALF, -g[1] + HALF)
-        half = centre_half(fp, radius) if fp and radius else None
+        seen = (pass_seen(u) if found else frames_seen([(None, frame_id, None, None, None, *g)], z)) if fp and radius else None
+        half = centre_half(fp, radius, seen) if fp and radius else None
         hit = {"centre": bool(half), "pass": [str(v) for v in key]}
         if not half:
             hit["why"] = "no disk of a known body that fits the view" if not radius else \
-                "the body is too big for the view or the frames do not look at it"
+                "the body is too big for the view, no frame looks at its centre, or a view centred on it would cut the frames"
             # north up where it is only when the frames are on the body's disk (a close-up): the body's surface
             # then holds still. Off the disk (rings, sky) Cassini rolled to keep the scene upright in the camera,
             # so the camera's own orientation is the steady one and north up would turn it frame to frame
@@ -2842,7 +2900,8 @@ def movie_frame(u, n, cache, trail=0, colour=True, out=OUT, centre=True, steady=
     if exposure:
         rep["exposure"] = {"smooth": exposure, "gain": gain}
     radius = RADIUS.get(u["key"][0], 0) / (u["z"] * IFOV[u["key"][2]])
-    rect = movie_rect(movie_footprint(u, cache, p), t, radius, centre and not track)
+    seen = pass_seen(u) if centre and not track else None
+    rect = movie_rect(movie_footprint(u, cache, p), t, radius, centre and not track, seen)
     rep["centred"] = rect[0] == -rect[2] / 2 and rect[1] == -rect[3] / 2
     k = out / max(rect[2], rect[3])
     W, H = max(1, math.ceil(rect[2] * k)), max(1, math.ceil(rect[3] * k))
