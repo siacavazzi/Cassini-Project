@@ -1270,7 +1270,7 @@ body.phone .stufoot .galbtn { padding: 6px 10px; }
 #mestage .metag { position: absolute; left: 8px; top: 7px; right: 8px; z-index: 2; font: 9.5px/1.4 var(--hudf); letter-spacing: .04em; color: rgba(232,236,242,.78); text-shadow: 0 0 3px #000; pointer-events: none; }
 #meoff { position: absolute; right: 8px; bottom: 8px; z-index: 2; font: 10px var(--hudf); letter-spacing: .08em; text-transform: uppercase; padding: 2px 6px; border-radius: 3px; background: rgba(255,120,100,.25); color: #ffb2a6; }
 #meempty { position: absolute; inset: 0; display: grid; place-items: center; text-align: center; padding: 20px; font-size: 12px; line-height: 1.55; color: var(--q-dim); }
-:is(#meempty, #meoff, #mecard .meside, #mecard [data-hide], #mecard [data-cams])[hidden] { display: none !important; }
+:is(#meempty, #meoff, #mecard .meside, #mecard [data-hide])[hidden] { display: none !important; }
 #mecard .mebar { display: flex; gap: 8px; align-items: center; flex-wrap: wrap; padding: 6px 10px; border-top: 1px solid var(--q-line); background: var(--q-panel); font: 10.5px var(--hudf); color: var(--q-dim); }
 #mecard .mebar .sp { flex: 1; }
 #mecard .mebar .rnd { all: unset; width: 24px; height: 24px; display: grid; place-items: center; border-radius: 50%; color: var(--q-text); background: rgba(255,255,255,.08); cursor: pointer; flex: none; font-size: 12px; }
@@ -1300,6 +1300,8 @@ body.phone .stufoot .galbtn { padding: 6px 10px; }
 #mecard .merow .val { flex: none; min-width: 52px; text-align: right; font: 10.5px var(--hudf); font-variant-numeric: tabular-nums; color: var(--q-text); }
 #mecard .merow input:disabled, #mecard .merow input:disabled ~ .val { opacity: .4; }
 #mecard .meside .galseg { margin-top: 2px; }
+#mecard .meside .melabel { margin: 8px 0 3px; font-size: 10.5px; color: var(--q-dim); }
+#mecard .meside .galseg button i { font-style: normal; opacity: .7; margin-left: 5px; }
 #mecard .meside .galseg button { font-size: 10.5px; padding: 2px 8px; }
 #mestrip { min-height: 0; overflow-y: auto; padding: 6px; display: grid; grid-template-columns: repeat(auto-fill, 96px); grid-auto-rows: 96px; justify-content: space-between; gap: 5px; align-content: start; border-top: 1px solid var(--q-line); background: rgba(0,0,0,.55); }
 .meth { all: unset; position: relative; display: block; border-radius: 4px; overflow: hidden; background: #0b0d11; outline: 1px solid rgba(255,255,255,.06); cursor: pointer; }
@@ -1323,7 +1325,7 @@ body.phone .stufoot .galbtn { padding: 6px 10px; }
 .mechips .galbtn { padding: 2px 7px; font-size: 10.5px; }
 .mechips .galbtn i { font-style: normal; color: var(--q-dim); font-size: 9.5px; }
 .mechips .galbtn[aria-pressed="true"] { background: rgba(138,182,255,.22); border-color: rgba(138,182,255,.7); color: #fff; }
-#mecard .mechips:not(#mepics) .galbtn[aria-pressed="false"] { opacity: .6; text-decoration: line-through; text-decoration-color: rgba(255,255,255,.35); }
+#mecard .mechips:not(#mepics) .galbtn:not(#mecrop)[aria-pressed="false"] { opacity: .6; text-decoration: line-through; text-decoration-color: rgba(255,255,255,.35); }
 #mecard .menote { margin-top: 6px; font-size: 10.5px; line-height: 1.45; color: var(--q-dim); }
 #mecard .mecheck { display: flex; gap: 6px; align-items: center; margin-top: 10px; font-size: 11px; color: var(--q-text); cursor: pointer; }
 #mecard .mefoot { flex: none; display: flex; gap: 6px; flex-wrap: wrap; align-items: center; padding: 8px 10px; border-top: 1px solid var(--q-line); font-size: 11px; color: var(--q-text); }
@@ -2128,13 +2130,9 @@ body.ambient.phone .amb-where { font-size: 18px; }
       <div id="mestrip" role="listbox" aria-label="Frames of the movie" aria-multiselectable="true"></div>
     </div>
     <div class="meside" hidden>
-      <h4 style="margin-top:10px"><span id="meownh">This frame</span><span class="sp"></span><button id="meownclear" title="Give this frame (or the picked frames) the movie's look again">Reset</button></h4>
-      <div class="merow"><span>Exposure</span><input type="range" id="meown-ex" data-k="exposure" min="-4" max="4" step="0.05" aria-label="This frame's exposure"><span class="val"></span></div>
-      <div class="merow"><span>Contrast</span><input type="range" id="meown-ct" data-k="contrast" min="-100" max="100" step="1" aria-label="This frame's contrast"><span class="val"></span></div>
-      <div class="merow"><span>Saturation</span><input type="range" id="meown-sa" data-k="saturation" min="-100" max="100" step="1" aria-label="This frame's saturation"><span class="val"></span></div>
-      <div class="merow"><span>Warmth</span><input type="range" id="meown-wa" data-k="warmth" min="-100" max="100" step="1" aria-label="This frame's warmth"><span class="val"></span></div>
-      <div class="mechips" style="margin-top:7px"><button class="galbtn" id="meownedit">Edit this frame in Studio…</button></div>
-      <div class="menote" id="meownnote"></div>
+      <h4 style="margin-top:10px"><span>Camera</span></h4>
+      <div class="galseg" id="mecams" role="group" aria-label="Camera of the movie"></div>
+      <div class="menote" id="mecamnote"></div>
       <h4><span>Pictures</span></h4>
       <div class="mechips" id="mepics" role="group" aria-label="Pictures in the movie">
         <button class="galbtn" data-v="movie" title="As the camera windows show them: mosaics, color pictures, movie passes, processed frames">As in the movie</button>
@@ -2142,8 +2140,27 @@ body.ambient.phone .amb-where { font-size: 18px; }
         <button class="galbtn" data-v="processed" title="Every frame in every filter on its own, made by the pipeline (stacked, calibrated), never put together">Every frame, processed</button>
         <button class="galbtn" data-v="raw" title="Every frame in every filter as Cassini took it: nothing stacked, calibrated or put together">Every frame, raw</button>
       </div>
-      <h4 data-cams><span>Cameras</span></h4>
-      <div class="mechips" id="mecams" data-cams></div>
+      <div class="melabel">Mosaics</div>
+      <div class="galseg" id="memos" role="group" aria-label="Mosaics in the movie"><button data-v="" title="As the camera windows show them (Settings: Mosaic movie frames, Complete mosaics only)">As the windows</button><button data-v="whole" title="Each mosaic once it is whole: a mosaic pass at its last tile, a mosaic movie once a lap, every tile new">Whole</button><button data-v="tiles" title="Every tile as it is taken, the mosaic building up">Tile by tile</button></div>
+      <div class="menote" id="memosnote"></div>
+      <h4><span>Framing</span><span class="sp"></span><button id="mefrclear" title="Take the crop off and put every nudged frame back">Reset</button></h4>
+      <div class="melabel" style="margin-top:2px">Auto center</div>
+      <div class="galseg" id="mectr" role="group" aria-label="Auto center for the movie"><button data-v="" title="Each camera window's Auto center setting">As the windows</button><button data-v="1" title="Every picture centered on its body (north up), movie passes and single pictures alike">On</button><button data-v="0" title="Every picture as Cassini pointed">Off</button></div>
+      <div class="mechips" style="margin-top:7px"><button class="galbtn" id="mecrop" aria-pressed="false" title="Draw the crop on the picture">Crop…</button></div>
+      <div class="mecropctl" id="mecropctl" hidden>
+        <div class="galseg" id="measpect" role="group" aria-label="Crop shape"><button data-v="free">Free</button><button data-v="1">Square</button><button data-v="1.7778">16:9</button><button data-v="1.3333">4:3</button><button data-v="pic">Picture</button></div>
+        <label class="mecheck" style="margin-top:2px"><input type="checkbox" id="meglide"> Start and end crop</label>
+        <div class="galseg" id="mecropend" role="group" aria-label="Which crop" hidden><button data-v="start" title="The crop at the movie's first picture">Start</button><button data-v="end" title="The crop at the movie's last picture">End</button></div>
+        <button class="galbtn" id="mecropdone">Done</button>
+      </div>
+      <div class="menote" id="menudged"></div>
+      <h4><span id="meownh">This frame</span><span class="sp"></span><button id="meownclear" title="Give this frame (or the picked frames) the movie's look again">Reset</button></h4>
+      <div class="merow"><span>Exposure</span><input type="range" id="meown-ex" data-k="exposure" min="-4" max="4" step="0.05" aria-label="This frame's exposure"><span class="val"></span></div>
+      <div class="merow"><span>Contrast</span><input type="range" id="meown-ct" data-k="contrast" min="-100" max="100" step="1" aria-label="This frame's contrast"><span class="val"></span></div>
+      <div class="merow"><span>Saturation</span><input type="range" id="meown-sa" data-k="saturation" min="-100" max="100" step="1" aria-label="This frame's saturation"><span class="val"></span></div>
+      <div class="merow"><span>Warmth</span><input type="range" id="meown-wa" data-k="warmth" min="-100" max="100" step="1" aria-label="This frame's warmth"><span class="val"></span></div>
+      <div class="mechips" style="margin-top:7px"><button class="galbtn" id="meownedit">Edit this frame in Studio…</button></div>
+      <div class="menote" id="meownnote"></div>
       <h4><span>Targets</span><span class="sp"></span><button id="metgall">All</button></h4>
       <div class="mechips" id="metargets"></div>
       <h4><span>Filters</span><span class="sp"></span><button id="meflall">All</button></h4>
@@ -2160,16 +2177,6 @@ body.ambient.phone .amb-where { font-size: 18px; }
       <div class="merow"><span>Level here</span><input type="range" id="melvhere" min="-2" max="2" step="0.05" aria-label="Exposure level at the frame in front"><span class="val" id="melvherev"></span></div>
       <div class="merow"><span>Even out</span><input type="range" id="meeven" min="0" max="30" step="1" aria-label="Even out the brightness over this many pictures"><span class="val" id="meevenv"></span></div>
       <div class="menote" id="melvnote"></div>
-      <h4><span>Framing</span><span class="sp"></span><button id="mefrclear" title="Take the crop off and put every nudged frame back">Reset</button></h4>
-      <div class="galseg" id="mectr" role="group" aria-label="Auto center for the movie"><button data-v="" title="Each camera window's Auto center setting">As the windows</button><button data-v="1" title="Every picture centered on its body (north up), movie passes and single pictures alike">On</button><button data-v="0" title="Every picture as Cassini pointed">Off</button></div>
-      <div class="mechips" style="margin-top:7px"><button class="galbtn" id="mecrop" aria-pressed="false" title="Draw the crop on the picture">Crop…</button></div>
-      <div class="mecropctl" id="mecropctl" hidden>
-        <div class="galseg" id="measpect" role="group" aria-label="Crop shape"><button data-v="free">Free</button><button data-v="1">Square</button><button data-v="1.7778">16:9</button><button data-v="1.3333">4:3</button><button data-v="pic">Picture</button></div>
-        <label class="mecheck" style="margin-top:2px"><input type="checkbox" id="meglide"> Start and end crop</label>
-        <div class="galseg" id="mecropend" role="group" aria-label="Which crop" hidden><button data-v="start" title="The crop at the movie's first picture">Start</button><button data-v="end" title="The crop at the movie's last picture">End</button></div>
-        <button class="galbtn" id="mecropdone">Done</button>
-      </div>
-      <div class="menote" id="menudged"></div>
     </div>
   </div>
   <div class="mefoot">
@@ -7463,9 +7470,12 @@ onmessage = async e => {
   const params = () => {
     const q = new URLSearchParams({ from: iso(X.a), until: iso(X.b), cams: X.cams || "NW", fps: opt("export.adaptive", true) ? "auto" : String(opt("export.fps", 12)),
       size: opt("export.full", false) ? "full" : String(opt("export.size", 1024)), sound: opt("export.sound", false) ? "1" : "0", caption: opt("export.caption", true) ? "1" : "0" });
-    // Whole mosaics (Settings > Movie): a mosaic movie's film shows only its whole laps (export.py whole=); the Movie
-    // Editor's cut and look for this stretch (movieedit.html): frames left out, and the look on every picture
-    return q.toString() + window.cassiniLook() + (window.cassiniMovieStyle ? window.cassiniMovieStyle() : "") + (opt("movies.mosaicFrames", "rolling") === "whole" ? "&whole=1" : "") + (window.cassiniMovieCut ? window.cassiniMovieCut() : "");
+    // Whole mosaics (Settings > Movie): a mosaic movie's film shows only its whole laps (export.py whole=); Complete
+    // mosaics only (Settings > Playback): a mosaic pass only its finished mosaic (complete=); the Movie Editor's cut
+    // and look for this stretch (movieedit.html): frames left out, the look on every picture, and its Mosaics (mos=,
+    // over both settings)
+    return q.toString() + window.cassiniLook() + (window.cassiniMovieStyle ? window.cassiniMovieStyle() : "") + (opt("movies.mosaicFrames", "rolling") === "whole" ? "&whole=1" : "")
+      + (opt("playback.completeMosaics", false) && opt("cameras.mosaics", true) !== false ? "&complete=1" : "") + (window.cassiniMovieCut ? window.cassiniMovieCut() : "");
   };
   let timer = 0;
   function estimate() {
@@ -7654,10 +7664,12 @@ onmessage = async e => {
   }
   // a picture's address at the pane's size, with the look and movie style the plan was made with (the makers
   // export.py's Pictures.make calls)
+  // a mosaic movie shown a lap at a time: the Movie Editor's Mosaics for this stretch, else Settings > Movie
+  const wholeLaps = () => { const m = /[&?]mos=(\w+)/.exec(window.cassiniMovieCut ? window.cassiniMovieCut() : ""); return m ? m[1] === "whole" : opt("movies.mosaicFrames", "rolling") === "whole"; };
   function pictureUrl(kind, src, size) {
     const sep = src.includes("?") ? "&" : "?", look = window.cassiniLook(), style = window.cassiniMovieStyle ? window.cassiniMovieStyle() : "";
     if (kind === "movie") return `${FRAMES}${src}${sep}size=${size}&color=1${style}${look}`;
-    if (kind === "rolling") return `${FRAMES}${src}${sep}size=${size}${style}${look}${opt("movies.mosaicFrames", "rolling") === "whole" ? "&whole=1" : ""}`;
+    if (kind === "rolling") return `${FRAMES}${src}${sep}size=${size}${style}${look}${wholeLaps() ? "&whole=1" : ""}`;
     if (kind === "frame") return `${FRAMES}${src}${sep}size=${size}`;
     return `${FRAMES}${src}${sep}size=${size}${look}`;
   }
@@ -9929,17 +9941,24 @@ void main() {
   // ME: the stretch (a, b), its plan's frames, and the edit: drop (ids taken out by hand), keep (null = every target /
   // filter pair, else the ones kept), cams (the export's Cameras), edit (the studio look's recipe)
   // levels (frame id -> EV: the exposure level points), even (Even out over that many pictures, 0 off), ctr (Auto center
-  // for the movie: null as the windows have it, true, false), crop (x0, y0, x1, y1, parts of the picture, or null), crop2 (the end crop the
+  // for the movie: null as the windows have it, true, false), mos (Mosaics: null as the windows have them, "whole", "tiles"), crop (x0, y0, x1, y1, parts of the picture, or null), crop2 (the end crop the
   // movie glides to, or null), nudge (frame id -> [x, y], parts of the picture), fedit (frame id -> the studio keys that
   // frame has over the movie's look, "ex:0.5,ct:0": a frame edited on its own);
   // lv: the frame server's measured brightness of each frame (EV) and Even out's change for each picture
   const ME = { a: null, b: null, frames: [], pictures: "movie", loading: false, error: "", drop: new Set(), targets: null, filters: null, edit: "",
-    levels: new Map(), even: 0, ctr: null, crop: null, crop2: null, nudge: new Map(), fedit: new Map(), lv: { level: {}, even: {}, done: 0, total: null, ready: false, error: "" },
+    levels: new Map(), even: 0, ctr: null, mos: null, crop: null, crop2: null, nudge: new Map(), fedit: new Map(), lv: { level: {}, even: {}, done: 0, total: null, ready: false, error: "" },
     sel: -1, anchor: -1, picked: new Set(), none: false, selOf: {}, showOut: true, src: "movie", undo: [], playing: false, pending: null };
   const EV = 2, NUDGE = 0.5, CROP = 0.05, EVEN = 30;   // as export.py's LEVEL_EV, NUDGE_MOST, CROP_LEAST, EVEN_MOST
   const WHOLE = [0, 0, 1, 1], boxStr = b => b.map(v => +v.toFixed(4)).join("_");
   const clamp = (v, a, b) => Math.max(a, Math.min(b, v));
   const camsOf = () => (/^(N|W|NW)$/.test(EX.state.cams || "") ? EX.state.cams : "NW");
+  // Mosaics: the editor's choice (whole: a mosaic pass once, finished, and a mosaic movie a lap at a time; tiles: every
+  // tile as it is taken), else as the windows have them (Settings > Movie > Mosaic movie frames for mosaic movies,
+  // Settings > Playback > Complete mosaics only for mosaic passes); the plan's, the levels' and the film's (export.py mos=)
+  const winWhole = () => opt("movies.mosaicFrames", "rolling") === "whole";
+  const winComplete = () => !!opt("playback.completeMosaics", false) && opt("cameras.mosaics", true) !== false;
+  const wholeLaps = () => ME.mos ? ME.mos === "whole" : winWhole();
+  const mosQ = () => ME.mos ? `&mos=${ME.mos}` : `${winWhole() ? "&whole=1" : ""}${winComplete() ? "&complete=1" : ""}`;
   const why = e => !camsOf().includes(e.cam) ? "camera" : ME.drop.has(e.id) ? "removed" : ME.targets && !ME.targets.has(e.target || "UNKNOWN") ? "target"
     : ME.filters && !ME.filters.has(e.filters) ? "filter" : "";
   const kept = e => !why(e);
@@ -9979,6 +9998,7 @@ void main() {
     if (ME.levels.size) q.set("levels", byId(ME.levels).map(([k, v]) => `${k}:${+v.toFixed(2)}`).join(","));
     if (ME.even) q.set("even", String(ME.even));
     if (ME.ctr != null) q.set("ctr", ME.ctr ? "1" : "0");
+    if (ME.mos) q.set("mos", ME.mos);
     if (ME.crop) q.set("crop", boxStr(ME.crop));
     if (ME.crop2) q.set("crop2", boxStr(ME.crop2));
     if (ME.nudge.size) q.set("nudge", byId(ME.nudge).map(([k, [x, y]]) => `${k}:${+x.toFixed(3)}:${+y.toFixed(3)}`).join(","));
@@ -9996,7 +10016,7 @@ void main() {
   function remember() {
     try {
       const all = JSON.parse(localStorage.getItem(STORE) || "{}"), key = `${isoOf(ME.a)}|${isoOf(ME.b)}`, r = recipe();
-      const empty = !ME.drop.size && !ME.targets && !ME.filters && !ME.edit && ME.pictures === "movie" && !ME.levels.size && !ME.even && ME.ctr == null && !ME.crop && !ME.crop2 && !ME.nudge.size && !ME.fedit.size;
+      const empty = !ME.drop.size && !ME.targets && !ME.filters && !ME.edit && ME.pictures === "movie" && !ME.levels.size && !ME.even && ME.ctr == null && !ME.mos && !ME.crop && !ME.crop2 && !ME.nudge.size && !ME.fedit.size;
       if (empty) delete all[key]; else all[key] = { r, at: Date.now() };
       const keys = Object.keys(all).sort((x, y) => all[y].at - all[x].at); keys.slice(30).forEach(k => delete all[k]);
       localStorage.setItem(STORE, JSON.stringify(all));
@@ -10017,6 +10037,7 @@ void main() {
     ME.levels = new Map(words("levels").map(w => { const i = w.lastIndexOf(":"); return [w.slice(0, i), clamp(+w.slice(i + 1), -EV, EV)]; }).filter(([k, v]) => k && isFinite(v)));
     ME.even = clamp(Math.round(+q.get("even") || 0), 0, EVEN);
     ME.ctr = q.get("ctr") === "1" ? true : q.get("ctr") === "0" ? false : null;
+    ME.mos = /^(whole|tiles)$/.test(q.get("mos") || "") ? q.get("mos") : null;
     const box = k => { const b = (q.get(k) || "").split("_").map(Number); return b.length === 4 && b.every(isFinite) && b[2] - b[0] >= CROP && b[3] - b[1] >= CROP ? b.map(v => clamp(v, 0, 1)) : null; };
     ME.crop = box("crop"); ME.crop2 = box("crop2"); if (ME.crop2 && !ME.crop) ME.crop = WHOLE.slice();
     ME.nudge = new Map(words("nudge").map(w => w.split(":")).filter(a => a.length === 3 && a[0] && isFinite(+a[1]) && isFinite(+a[2]))
@@ -10025,7 +10046,7 @@ void main() {
       .filter(a => a && a[1]));
   }
   const snapshot = () => ({ pictures: ME.pictures, drop: new Set(ME.drop), targets: ME.targets && new Set(ME.targets), filters: ME.filters && new Set(ME.filters), edit: ME.edit, cams: camsOf(),
-    levels: new Map(ME.levels), even: ME.even, ctr: ME.ctr, crop: ME.crop && ME.crop.slice(), crop2: ME.crop2 && ME.crop2.slice(), nudge: new Map(ME.nudge), fedit: new Map(ME.fedit) });
+    levels: new Map(ME.levels), even: ME.even, ctr: ME.ctr, mos: ME.mos, crop: ME.crop && ME.crop.slice(), crop2: ME.crop2 && ME.crop2.slice(), nudge: new Map(ME.nudge), fedit: new Map(ME.fedit) });
   function change(fn) {
     ME.undo.push(snapshot()); if (ME.undo.length > 200) ME.undo.shift();
     fn(); changed();
@@ -10038,9 +10059,9 @@ void main() {
   }
   function undo() {
     const s = ME.undo.pop(); if (!s) return;
-    const reload = s.pictures !== ME.pictures;
+    const reload = s.pictures !== ME.pictures || s.mos !== ME.mos;
     ME.drop = s.drop; ME.targets = s.targets; ME.filters = s.filters; ME.edit = s.edit; EX.state.cams = s.cams; ME.pictures = s.pictures;
-    ME.levels = s.levels; ME.even = s.even; ME.ctr = s.ctr; ME.crop = s.crop; ME.crop2 = s.crop2; ME.nudge = s.nudge; ME.fedit = s.fedit;
+    ME.levels = s.levels; ME.even = s.even; ME.ctr = s.ctr; ME.mos = s.mos; ME.crop = s.crop; ME.crop2 = s.crop2; ME.nudge = s.nudge; ME.fedit = s.fedit;
     changed(); if (reload) return load();
     // undone back to the other camera: the strip shows that camera's frames, so does the frame in front
     if (ME.frames[ME.sel] && !ofCam(ME.frames[ME.sel])) { const f = ME.frames.findIndex(e => ofCam(e) && kept(e)); ME.anchor = -1; select(f >= 0 ? f : ME.frames.findIndex(ofCam)); }
@@ -10056,7 +10077,7 @@ void main() {
     const q = new URLSearchParams({ from: isoOf(ME.a), until: isoOf(ME.b), cams: "NW", fps: opt("export.adaptive", true) ? "auto" : String(opt("export.fps", 12)),
       size: "512", sound: "0", caption: "0", pictures: ME.pictures, list: "1" });
     try {
-      const r = await fetch(`${FRAMES}/export/plan.json?${q}${window.cassiniLook ? window.cassiniLook() : ""}${window.cassiniMovieStyle ? window.cassiniMovieStyle() : ""}`), p = await r.json();
+      const r = await fetch(`${FRAMES}/export/plan.json?${q}${window.cassiniLook ? window.cassiniLook() : ""}${window.cassiniMovieStyle ? window.cassiniMovieStyle() : ""}${mosQ()}`), p = await r.json();
       if (n !== ask) return;
       if (!r.ok) throw new Error(p.error || `the frame server said ${r.status}`);
       ME.frames = p.pictures;
@@ -10078,6 +10099,16 @@ void main() {
   const hms = e => new Date(e.t * 1000).toISOString().slice(11, 19);
   const KIND = { mosaic: "MOS", rolling: "MOS", movie: "MOV", color: "COL", processed: "", frame: "" };
   const thumbUrl = e => `${FRAMES}/frames/${e.id}.webp?size=256`;
+  // a frame's pictures for the strip, best first: as the stage shows it (As in the movie: the film's picture, the
+  // size the stage asks for, so a click shows it at once; Raw frame: the frame as Cassini took it), then stand-ins
+  const thumbTries = e => ME.src === "raw" || !e.src ? [thumbUrl(e), ...(e.src ? [`${FRAMES}${e.src}${e.src.includes("?") ? "&" : "?"}size=256`] : [])] : tries(e, 1024);
+  function thumb(img, e) {
+    const urls = thumbTries(e); let at = 0;
+    img.onerror = () => { if (++at < urls.length) img.src = urls[at]; else img.onerror = null; };
+    if (img.getAttribute("src") !== urls[0]) img.src = urls[0];
+  }
+  // the strip's pictures again, after Picture shown or Auto center changed
+  const thumbs = () => $("mestrip").querySelectorAll(".meth").forEach(b => { const e = ME.frames[+b.dataset.i]; if (e) thumb(b.querySelector("img"), e); });
   function strip() {
     const host = $("mestrip");
     // (built in a fragment, not spread as arguments to replaceChildren, which ~100,000 frames overflow)
@@ -10086,10 +10117,7 @@ void main() {
       const b = document.createElement("button"); b.className = "meth"; b.dataset.i = i; b.setAttribute("role", "option");
       b.title = `${hms(e)} UTC · ${name(e.target)} · ${e.cam === "N" ? "NAC" : "WAC"} ${e.filters} · ${e.id}`;
       b.innerHTML = `<img loading="lazy" decoding="async" alt=""><b></b><span></span>`;
-      const img = b.querySelector("img");
-      // a frame the server has no raw picture of: the movie's own picture of it stands in
-      img.onerror = () => { img.onerror = null; if (e.src) img.src = `${FRAMES}${e.src}${e.src.includes("?") ? "&" : "?"}size=256`; };
-      img.src = thumbUrl(e);
+      thumb(b.querySelector("img"), e);
       b.querySelector("b").textContent = `${e.cam === "N" ? "N" : "W"}${KIND[e.first] ? " · " + KIND[e.first] : ""}`;
       b.querySelector("span").textContent = `${hms(e)} ${name(e.target)}`;
       all.appendChild(b);
@@ -10130,7 +10158,7 @@ void main() {
   function side() {
     const tg = count(e => e.target || "UNKNOWN"), fl = count(e => e.filters), cm = count(e => e.cam, ME.frames);
     const two = cm.length > 1;
-    $("metabs").hidden = !two; $("mecard").querySelectorAll("[data-cams]").forEach(el => { el.hidden = two; });
+    $("metabs").hidden = !two;
     if (two) {
       $("metabs").replaceChildren(...["N", "W"].map(c => {
         const b = document.createElement("button"); b.setAttribute("role", "tab"); b.dataset.v = c;
@@ -10141,8 +10169,17 @@ void main() {
         return b;
       }), Object.assign(document.createElement("span"), { className: "menote", textContent: "One camera per movie" }));
     }
-    chips($("mecams"), cm.map(([k, n]) => [k, k === "N" ? "NAC" : "WAC", n]), k => camsOf().includes(k),
-      k => change(() => { const c = camsOf(), next = c.includes(k) ? c.replace(k, "") : "NW".split("").filter(x => x === k || c.includes(x)).join(""); if (next) EX.state.cams = next; }));
+    // the side's Camera: the same choice as the tabs, NAC or WAC (a stretch with one camera shows only that one)
+    $("mecams").replaceChildren(...cm.map(([c, n]) => {
+      const b = document.createElement("button"); b.dataset.v = c;
+      b.setAttribute("aria-pressed", String(camsOf().includes(c)));
+      b.title = two ? `Make the movie from the ${c === "N" ? "narrow-angle" : "wide-angle"} camera's frames` : `Every frame of this stretch is the ${c === "N" ? "narrow-angle" : "wide-angle"} camera's`;
+      b.innerHTML = `${c === "N" ? "NAC" : "WAC"}<i></i>`; b.lastChild.textContent = n.toLocaleString();
+      if (two) b.addEventListener("click", () => camera(c));
+      return b;
+    }));
+    $("mecamnote").textContent = two ? "One camera per movie: NAC and WAC frames never go in one film. The tabs over the strip pick it too." : "";
+    $("mecamnote").hidden = !two;
     chips($("metargets"), tg.map(([k, n]) => [k, name(k), n]), k => !ME.targets || ME.targets.has(k), k => toggleKeep("targets", tg.map(x => x[0]), k),
       k => change(() => { ME.targets = tg.length > 1 ? new Set([k]) : null; }));
     chips($("mefilters"), fl.map(([k, n]) => [k, k, n]), k => !ME.filters || ME.filters.has(k), k => toggleKeep("filters", fl.map(x => x[0]), k),
@@ -10199,7 +10236,9 @@ void main() {
   const picUrl = (e, size, plain) => {
     if (ME.src === "raw" || !e.src) return `${FRAMES}/frames/${e.id}.webp?size=${size}`;
     const movie = /^\/frames\/movie\//.test(e.src), still = /^\/frames\/(color|processed)/.test(e.src);
-    return `${FRAMES}${e.src}${e.src.includes("?") ? "&" : "?"}size=${size}${window.cassiniLook ? window.cassiniLook({ center: still && !plain && centreOn() }) : ""}${movie && window.cassiniMovieStyle ? window.cassiniMovieStyle({ center: centreOn() }) : ""}`;
+    // (a mosaic movie's whole lap: no fade, and the server makes every tile of the lap before it answers, whole=1)
+    const whole = movie && /mode=rolling/.test(e.src) && wholeLaps();
+    return `${FRAMES}${e.src}${e.src.includes("?") ? "&" : "?"}size=${size}${window.cassiniLook ? window.cassiniLook({ center: still && !plain && centreOn() }) : ""}${movie && window.cassiniMovieStyle ? window.cassiniMovieStyle({ center: centreOn(), ...(whole ? { fade: 0 } : {}) }) : ""}${whole ? "&whole=1" : ""}`;
   };
   const tries = (e, size) => [...new Set([picUrl(e, size), picUrl(e, size, true), `${FRAMES}/frames/${e.id}.webp?size=${size}`])];
   // pictures kept as bitmaps for a while (Play steps through them), the oldest let go
@@ -10220,11 +10259,13 @@ void main() {
     $("metag").textContent = `${hms(e)} UTC · ${name(e.target)} · ${e.cam === "N" ? "NAC" : "WAC"} ${e.filters} · ${ME.src === "raw" ? "raw frame" : { mosaic: "mosaic", rolling: "mosaic movie", movie: "movie pass", color: "color", processed: "processed", frame: "frame" }[e.first] || ""} · ${e.id}${evOf(e) ? ` · ${fmtEv(evOf(e))}` : ""}${ME.fedit.has(e.id) ? " · own look" : ""}`;
     // the picture the film shows; one that cannot be centered as it is, and one that cannot be made the raw frame, as in the film
     shown = null;
-    for (const url of tries(e, 1024)) {
-      try { shown = await bitmap(url); break; } catch (err) { if (n !== drawn) return; }
+    const urls = tries(e, 1024); let got = -1;
+    for (const url of urls) {
+      try { shown = await bitmap(url); got = urls.indexOf(url); break; } catch (err) { if (n !== drawn) return; }
     }
     if (n !== drawn) return;
     shownE = shown ? e : null;
+    if (got > 0 && urls[0] !== urls[1] && /center=1/.test(urls[0])) $("metag").textContent += " · as Cassini pointed (the body does not fit the frame to center it)";
     paint();
     return shown;
   }
@@ -10424,7 +10465,7 @@ void main() {
     const q = new URLSearchParams({ from: isoOf(ME.a), until: isoOf(ME.b), cams: camsOf(), fps: "auto", size: "512", sound: "0", caption: "0", pictures: ME.pictures, list: "1" });
     ["drop", "targets", "filters", "even", "ctr"].forEach(k => { if (r0.get(k)) q.set(k, r0.get(k)); });
     try {
-      const r = await fetch(`${FRAMES}/export/levels.json?${q}${window.cassiniLook ? window.cassiniLook() : ""}${window.cassiniMovieStyle ? window.cassiniMovieStyle({ center: centreOn() }) : ""}`);
+      const r = await fetch(`${FRAMES}/export/levels.json?${q}${window.cassiniLook ? window.cassiniLook() : ""}${window.cassiniMovieStyle ? window.cassiniMovieStyle({ center: centreOn() }) : ""}${mosQ()}`);
       const j = await r.json().catch(() => ({ error: `the frame server said ${r.status}` }));
       if (n !== lvAsk) return;
       if (!r.ok || j.error && j.total == null) throw new Error(j.error || r.status);
@@ -10536,6 +10577,11 @@ void main() {
       : ME.lv.error || (ME.levels.size ? "Drag a point on the graph to brighten or dim the movie there. Double-click a point to take it out."
         : "Double-click the graph to add a level point, then drag it up or down. Even out smooths flashes and jumps in brightness.");
     $("mectr").querySelectorAll("button").forEach(b => b.setAttribute("aria-pressed", String(b.dataset.v === (ME.ctr == null ? "" : ME.ctr ? "1" : "0"))));
+    $("memos").querySelectorAll("button").forEach(b => b.setAttribute("aria-pressed", String(b.dataset.v === (ME.mos || ""))));
+    const mp = new Set(ME.frames.filter(e => e.pass && ofCam(e)).map(e => e.pass)).size;
+    $("memosnote").textContent = ME.mos === "tiles" || !ME.mos && !winWhole() && !winComplete() ? "Each mosaic builds up tile by tile."
+      : ME.mos === "whole" || winWhole() && winComplete() ? `Each mosaic whole: a pass once, finished${mp ? ` (${mp.toLocaleString()} here)` : ""}, a mosaic movie once a lap.`
+      : winWhole() ? "As the windows: mosaic movies a lap at a time, mosaic passes tile by tile." : `As the windows: mosaic passes once, finished${mp ? ` (${mp.toLocaleString()} here)` : ""}; mosaic movies tile by tile.`;
     $("mecrop").setAttribute("aria-pressed", String(!!cropping));
     $("mecrop").textContent = cropping ? "Cropping…" : ME.crop2 ? "Crop… · start and end" : ME.crop ? "Crop…  · on" : "Crop…";
     $("mecropctl").hidden = !cropping;
@@ -10557,11 +10603,18 @@ void main() {
 
   $("melvclear").addEventListener("click", () => { change(() => { ME.levels = new Map(); }); show(); });
   $("mefrclear").addEventListener("click", () => { change(() => { ME.crop = ME.crop2 = null; ME.nudge = new Map(); }); cropping = null; show(); });
+  // another Mosaics: the frame server plans the stretch again (a whole mosaic is one picture of its pass)
+  $("memos").addEventListener("click", ev => {
+    const b = ev.target.closest("button"); if (!b) return;
+    const v = b.dataset.v || null;
+    if (v === ME.mos) return;
+    stopPlay(); change(() => { ME.mos = v; }); load();
+  });
   $("mectr").addEventListener("click", ev => {
     const b = ev.target.closest("button"); if (!b) return;
     const v = b.dataset.v === "" ? null : b.dataset.v === "1";
     if (v === ME.ctr) return;
-    change(() => { ME.ctr = v; }); show();
+    change(() => { ME.ctr = v; }); thumbs(); show();
   });
 
   // nudging: drag the picture to move the frame in front, or the picked frames (parts of the picture, as export.framed)
@@ -10798,7 +10851,7 @@ void main() {
   $("meprev").addEventListener("click", () => { stopPlay(); step(-1); });
   $("menext").addEventListener("click", () => { stopPlay(); step(1); });
   $("meplay").addEventListener("click", play);
-  $("mesrc").addEventListener("click", e => { const b = e.target.closest("button"); if (!b) return; ME.src = b.dataset.v; render(); show(); });
+  $("mesrc").addEventListener("click", e => { const b = e.target.closest("button"); if (!b) return; ME.src = b.dataset.v; render(); thumbs(); show(); });
   $("metoggle").addEventListener("click", toggleRemoved);
   $("mekeep").addEventListener("click", keepOnly);
   // another kind of picture: the frame server plans the stretch again (what is removed by hand stays removed)
@@ -11502,7 +11555,7 @@ void main() {
   window.cassiniAbout = { open, addTab, esc, close: () => show(false), credits: CREDITS };
 
   // ---- which version this is: this page's build id (build.py writes it), and what the frame server says it serves ----
-  const BUILD = /*BUILD*/"bc8667aa6c71";
+  const BUILD = /*BUILD*/"21688d59fc0e";
   const FRAMES = (() => {                       // the frame server, chosen as the camera window chooses it
     const q = new URLSearchParams(location.search).get("frames");
     if (q) return q.replace(/\/$/, "");

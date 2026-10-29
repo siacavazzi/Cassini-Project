@@ -84,6 +84,12 @@ SCALE_FRAMES = 96    # most frames the pass's display scale is measured on (even
 LAP_GAP = 7200       # a mosaic taken again over the same ground within this many seconds is its next lap
 LAP_OVERLAP = 0.6    # ... when the two footprints share at least this much (area both cover / either covers)
 MOVIE_LAPS = 2       # a mosaic whose places are taken again (median, per filter) this many times is a mosaic movie
+LAP_INSIDE = 0.9     # a few frames after a mosaic (a lap stopped short) are part of it when this much of them is inside it
+PAIR_STEP = 1.0      # two places at most this many frames apart (their tiles touching) are a 1x2 mosaic
+STRAY_LINK = 4       # frames of a pass within this many frames of one another are one patch of sky (_drop_strays) ...
+STRAY_SHARE = 0.5    # ... and patches holding less than this share of its frames, away from the rest, are not the pass's
+GROUPING = "_g2"     # the folder suffix of a pass these three rules (_drop_strays, _piece, a 1x2) group anew, so the
+                     # passes made before them are not served for it; every other pass keeps its folder
 MOVIE_DWELL = 8      # ... or whose camera stays this many frames of one filter (median) at each place it goes
 TRACK_VISITS = 2     # ... or that follows a moving feature (_judge's track): at least this many visits of 3+ filters,
 TRACK_SPAN = 0.08    # ... whose frames spread (median) over more than this much of a frame (twice REGISTER_MAX)
@@ -185,16 +191,22 @@ def units(target, obs, cam):
     # laps: a mosaic taken again over the same places after a pause longer than GAP (the Jupiter approach's 2x2
     # color mosaics, six laps 74 minutes apart in one observation) is one pass, a mosaic movie, rather than a
     # mosaic that starts again from nothing every lap
-    laps = []
+    for u in out:
+        _drop_strays(u)
+    laps, shifted = [], False
     for u in out:
         u["key"] = (target, obs, cam, len(laps))
         _judge(u)
         prev = laps[-1] if laps else None
-        if (prev and prev["mosaic"] and u["mosaic"] and u["frames"][0][3] - prev["last"] <= LAP_GAP and u["z"]
-                and 1 / ZOOM < u["z"] / prev["z"] < ZOOM and _overlap(prev, u) >= LAP_OVERLAP):
+        if (prev and prev["mosaic"] and u["frames"] and u["frames"][0][3] - prev["last"] <= LAP_GAP and u["z"]
+                and 1 / ZOOM < u["z"] / prev["z"] < ZOOM
+                and (u["mosaic"] and _overlap(prev, u) >= LAP_OVERLAP or _piece(prev, u))):
+            # (a piece, or a lap that is a mosaic only by the newer rules, joining it renumbers the passes after it)
+            shifted = shifted or not u["mosaic"] or any(v.get("pair") or v.get("off") for v in (prev, u))
             for k in ("frames", "all", "taken"):
                 prev[k] += u[k]
             prev["last"] = u["last"]
+            prev["off"] = prev.get("off", set()) | u.get("off", set())
             _judge(prev)
         else:
             laps.append(u)
@@ -202,6 +214,9 @@ def units(target, obs, cam):
     for n, u in enumerate(out):
         u["key"] = (target, obs, cam, n)
         _judge(u)
+        # GROUPING's folder: a pass grouped anew (strays out, or a mosaic only as a 1x2), or every pass of an
+        # observation whose passes these rules renumbered
+        u["regrouped"] = bool(shifted or u.get("off") or u.get("pair"))
         u["repeat_gap"] = repeat_window(u)
         if u["repeat_gap"] < mosaic_benchmark.REPEAT_GAP:
             u["frames"], last = [], {}
@@ -214,6 +229,64 @@ def units(target, obs, cam):
     with _lock:
         _units[(target, obs, cam)] = out
     return out
+
+
+def _drop_strays(u):
+    """Takes out of pass u the frames that are not of its sky: patches of frames (frames within STRAY_LINK frames
+    of one another) away from the biggest one, together less than STRAY_SHARE of its placed frames, repeats too.
+    The Jupiter approach's 2x2 laps have clear frames or one UV1 frame 38 to 430 frames off Jupiter, which
+    made the lap's footprint too wide for a mosaic, so its tiles played on their own and split the mosaic movie in
+    two. Their ids go in u["off"] (unit_of leaves them out of the pass, so they show as themselves) and the pass
+    is regrouped (GROUPING). A pass whose frames all lie within MAX_FRAMES of one another is left as it is."""
+    pts = [(q, -fr[5] * fr[7] / u["z"] / FRAME, -fr[6] * fr[7] / u["z"] / FRAME)
+           for q, fr in enumerate(u["all"]) if fr[7] and u["z"]]
+    if len(pts) < 2:
+        return
+    xy = np.array([(x, y) for _, x, y in pts])
+    if (xy.max(0) - xy.min(0)).max() < MAX_FRAMES:
+        return
+    # patches: grid cells STRAY_LINK frames wide, a cell joined to the cells round it
+    cells = {}
+    for (q, x, y) in pts:
+        cells.setdefault((math.floor(x / STRAY_LINK), math.floor(y / STRAY_LINK)), []).append(q)
+    parent = {c: c for c in cells}
+
+    def root(c):
+        while parent[c] != c:
+            c = parent[c]
+        return c
+    for (a, b) in cells:
+        for da in (-1, 0, 1):
+            for db in (-1, 0, 1):
+                if (a + da, b + db) in cells and root((a + da, b + db)) != root((a, b)):
+                    parent[root((a + da, b + db))] = root((a, b))
+    patch = {}
+    for c, qs in cells.items():
+        patch.setdefault(root(c), []).extend(qs)
+    main = max(patch.values(), key=len)
+    strays = {q for qs in patch.values() if qs is not main for q in qs}
+    if not strays or len(strays) >= STRAY_SHARE * len(pts):
+        return
+    u["off"] = {u["all"][q][1] for q in strays}
+    u["all"] = [fr for q, fr in enumerate(u["all"]) if q not in strays]
+    u["taken"] = [fr for q, fr in enumerate(u["taken"]) if q not in strays]
+    u["frames"] = [fr for fr in u["frames"] if fr[1] not in u["off"]]
+
+
+def _piece(prev, u):
+    """Pass u is the rest of mosaic prev's last lap: a few frames taken after a pause (too few places for a mosaic
+    of their own, the camera not staying on them: a lap stopped short), at least LAP_INSIDE of them inside prev's
+    footprint. 18ATM2X2A139's three frames at one place between two laps were a pass of their own, a movie, which
+    kept the laps either side of it from being one mosaic movie."""
+    if u["mosaic"] or not u["frames"] or (u["dwell"] or 0) >= MOVIE_DWELL or u["track"]:
+        return False
+    if len({i for i in u["place"] if i is not None}) >= MIN_PLACES:
+        return False
+    p, q = _box(prev, prev["z"]), _box(u, prev["z"])
+    if not p or not q:
+        return False
+    w, h = min(p[2], q[2]) - max(p[0], q[0]), min(p[3], q[3]) - max(p[1], q[1])
+    return max(w, 0) * max(h, 0) >= LAP_INSIDE * (q[2] - q[0]) * (q[3] - q[1])
 
 
 def _box(u, z):
@@ -353,7 +426,10 @@ def _judge(u):
     # rings is a good strip mosaic, and the pointing alone cannot tell them apart: the window's chip decides those)
     u["mosaic"] = u["whole"] = False
     u["kind"] = "movie" if u["movie"] else None
-    if len(places) < MIN_PLACES or u["movie"]:
+    # two places whose tiles touch (ISS_C24JU_1X2NITE, a 2x2 seen by one camera as two) are a 1x2 mosaic
+    u["pair"] = len(places) == 2 and max(abs(places[0][0] - places[1][0]), abs(places[0][1] - places[1][1])) <= PAIR_STEP * FRAME
+    if len(places) < MIN_PLACES and not u["pair"] or u["movie"]:
+        u["pair"] = False
         return
     pts = np.array(pts)
     lo, hi = pts.min(0) - FRAME / 2, pts.max(0) + FRAME / 2
@@ -385,7 +461,8 @@ def unit_of(frame_id):
     for u in units(r["TARGET_NAME"], r["OBSERVATION_ID"], cam):
         ts = [fr[3] for fr in u["frames"]]
         if ts and ts[0] <= t <= u["last"]:
-            found = u, sum(1 for x in ts if x <= t + 1) - 1
+            # (a frame _drop_strays took out of the pass is in none)
+            found = None if frame_id in u.get("off", ()) else (u, sum(1 for x in ts if x <= t + 1) - 1)
             break
     with _lock:
         if len(_unit_of) >= UNIT_OF_KEEP:
@@ -414,7 +491,7 @@ def kind_of(frame_id):
 def folder(u, cache):
     # a movie's frames stacked with a shorter repeat window are other pictures than the ones made before it
     gap = u.get("repeat_gap", mosaic_benchmark.REPEAT_GAP)
-    suffix = "" if gap >= mosaic_benchmark.REPEAT_GAP else f"_r{gap:g}"
+    suffix = ("" if gap >= mosaic_benchmark.REPEAT_GAP else f"_r{gap:g}") + (GROUPING if u.get("regrouped") else "")
     return os.path.join(cache, f"{VERSIONS[calibration.style()]}{calibration.variant()}-q{QUALITY}", "_".join(map(str, u["key"])) + suffix)
 
 
@@ -2981,13 +3058,51 @@ def warm_movie(u, n, ahead, cache, steady=False, exposure=None):
         threading.Thread(target=run, daemon=True).start()
 
 
+def slots(u):
+    """The place of each frame of pass u (places), with the camera's drift over a long mosaic movie taken out:
+    places closer than half the pass's step (the median jump from one place to the next in one filter) are one
+    slot. The Jupiter approach's 2x2s drift over nine laps by more than mosaic.min_step, so the classifier gives
+    their last laps places of their own (8 for 4 tiles), and without this a lap over the drifted places would run
+    on into the next (lap_of) and a drifted tile would stay up beside its own older copy (rolling_layout). None
+    for a frame with no place."""
+    if "slots" in u:
+        return u["slots"]
+    where = places(u)
+    at, last, steps = {}, {}, []
+    for fr, i in zip(u["frames"], where):
+        x, y, z = fr[5:8]
+        if i is None or not z or not u.get("z"):
+            continue
+        p = (-x * z / u["z"], -y * z / u["z"])
+        at.setdefault(i, []).append(p)
+        if fr[2] in last and last[fr[2]][0] != i:
+            steps.append(max(abs(p[0] - last[fr[2]][1][0]), abs(p[1] - last[fr[2]][1][1])))
+        last[fr[2]] = (i, p)
+    near = 0.5 * float(np.median(steps)) if steps else 0.0
+    centre = {i: np.mean(v, 0) for i, v in at.items()}
+    parent = {i: i for i in centre}
+
+    def root(i):
+        while parent[i] != i:
+            i = parent[i]
+        return i
+    if near > mosaic.min_step * FRAME:
+        for a in sorted(centre):
+            for b in sorted(centre):
+                if b > a and np.abs(centre[a] - centre[b]).max() < near and root(a) != root(b):
+                    parent[max(root(a), root(b))] = min(root(a), root(b))
+    out = [root(i) if i in parent else i for i in where]
+    u["slots"] = out
+    return out
+
+
 def lap_of(u):
-    """The lap each frame of pass u is in: how many times the camera has come back to a place in one filter by that
-    frame (a run of frames at one place counts once), the most over its filters; 1 for a pass that never comes back."""
+    """The lap each frame of pass u is in: how many times the camera has come back to a slot in one filter by that
+    frame (a run of frames at one slot counts once), the most over its filters; 1 for a pass that never comes back."""
     if "lap_of" in u:
         return u["lap_of"]
     runs, lap, out = {}, 1, []
-    for fr, i in zip(u["frames"], u.get("place") or [None] * len(u["frames"])):
+    for fr, i in zip(u["frames"], slots(u) if u["frames"] else []):
         if i is not None:
             seq = runs.setdefault(fr[2], [])
             if not seq or seq[-1] != i:
@@ -2999,14 +3114,25 @@ def lap_of(u):
 
 
 def lap_ends(u):
-    """The frames (indices into u["frames"]) that finish a lap of a mosaic movie: the last frame before the camera
-    comes back to a place it has already taken in this lap, and the pass's last frame. At one of them every place
-    of the lap is new, so the rolling picture there (rolling_layout) is a whole new mosaic (Settings > Movie >
-    Mosaic movie frames: Whole mosaics). [] for a pass that is not a mosaic movie."""
+    """The frames (indices into u["frames"]) that finish a whole lap of a mosaic movie: the last frame before the
+    camera comes back to a slot it has already taken in this lap (lap_of), or the pass's last frame, of a lap that
+    took every slot in every filter the pass's laps usually take (the median over its laps: a lap that started or
+    stopped short, or missed a filter's tile, is not whole). At one of them every tile is new, so the rolling
+    picture there (rolling_layout) is a whole new mosaic (Settings > Movie > Mosaic movie frames: Whole mosaics),
+    rather than new tiles over the last lap's, which Jupiter has turned a sixth of a turn away from. When no lap
+    is whole, the pass's last frame. [] for a pass that is not a mosaic movie."""
     if u.get("kind") != "mosaic_movie" or not u["frames"]:
         return []
     lap = lap_of(u)
-    return [j for j in range(len(lap) - 1) if lap[j + 1] > lap[j]] + [len(lap) - 1]
+    ends = [j for j in range(len(lap) - 1) if lap[j + 1] > lap[j]] + [len(lap) - 1]
+    took = {n: {} for n in set(lap)}
+    for fr, i, n in zip(u["frames"], slots(u), lap):
+        if i is not None:
+            took[n].setdefault(fr[2], set()).add(i)
+    filters = {f for t in took.values() for f in t}
+    need = {f: float(np.median([len(t.get(f, ())) for t in took.values()])) for f in filters}
+    whole = [j for j in ends if all(len(took[lap[j]].get(f, ())) >= need[f] for f in filters)]
+    return whole or ends[-1:]
 
 
 def lap_end(frame_id):
@@ -3086,7 +3212,7 @@ def rolling_layout(u, n, cache, laps=1, made_only=False, skipped=None, fade=(0, 
     newest (Time-lapse): each drawn tile gets a "fade" field (0-1, _fade_weight of its age in frames behind the
     newest drawn), which _faded applies to the composed picture, and the picture's name says so."""
     p = plan(u, cache)
-    where = places(u)
+    where = slots(u)
     rec = _kept_tiles(u, cache, p["display_scale"])
     with _lock:
         kept = dict(rec["tiles"]) if rec is not None else {}

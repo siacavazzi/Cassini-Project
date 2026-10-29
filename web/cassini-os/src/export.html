@@ -189,9 +189,12 @@ body.phone #excard:not(.full) { width: calc(100% - 16px) !important; left: 8px !
   const params = () => {
     const q = new URLSearchParams({ from: iso(X.a), until: iso(X.b), cams: X.cams || "NW", fps: opt("export.adaptive", true) ? "auto" : String(opt("export.fps", 12)),
       size: opt("export.full", false) ? "full" : String(opt("export.size", 1024)), sound: opt("export.sound", false) ? "1" : "0", caption: opt("export.caption", true) ? "1" : "0" });
-    // Whole mosaics (Settings > Movie): a mosaic movie's film shows only its whole laps (export.py whole=); the Movie
-    // Editor's cut and look for this stretch (movieedit.html): frames left out, and the look on every picture
-    return q.toString() + window.cassiniLook() + (window.cassiniMovieStyle ? window.cassiniMovieStyle() : "") + (opt("movies.mosaicFrames", "rolling") === "whole" ? "&whole=1" : "") + (window.cassiniMovieCut ? window.cassiniMovieCut() : "");
+    // Whole mosaics (Settings > Movie): a mosaic movie's film shows only its whole laps (export.py whole=); Complete
+    // mosaics only (Settings > Playback): a mosaic pass only its finished mosaic (complete=); the Movie Editor's cut
+    // and look for this stretch (movieedit.html): frames left out, the look on every picture, and its Mosaics (mos=,
+    // over both settings)
+    return q.toString() + window.cassiniLook() + (window.cassiniMovieStyle ? window.cassiniMovieStyle() : "") + (opt("movies.mosaicFrames", "rolling") === "whole" ? "&whole=1" : "")
+      + (opt("playback.completeMosaics", false) && opt("cameras.mosaics", true) !== false ? "&complete=1" : "") + (window.cassiniMovieCut ? window.cassiniMovieCut() : "");
   };
   let timer = 0;
   function estimate() {
@@ -380,10 +383,12 @@ body.phone #excard:not(.full) { width: calc(100% - 16px) !important; left: 8px !
   }
   // a picture's address at the pane's size, with the look and movie style the plan was made with (the makers
   // export.py's Pictures.make calls)
+  // a mosaic movie shown a lap at a time: the Movie Editor's Mosaics for this stretch, else Settings > Movie
+  const wholeLaps = () => { const m = /[&?]mos=(\w+)/.exec(window.cassiniMovieCut ? window.cassiniMovieCut() : ""); return m ? m[1] === "whole" : opt("movies.mosaicFrames", "rolling") === "whole"; };
   function pictureUrl(kind, src, size) {
     const sep = src.includes("?") ? "&" : "?", look = window.cassiniLook(), style = window.cassiniMovieStyle ? window.cassiniMovieStyle() : "";
     if (kind === "movie") return `${FRAMES}${src}${sep}size=${size}&color=1${style}${look}`;
-    if (kind === "rolling") return `${FRAMES}${src}${sep}size=${size}${style}${look}${opt("movies.mosaicFrames", "rolling") === "whole" ? "&whole=1" : ""}`;
+    if (kind === "rolling") return `${FRAMES}${src}${sep}size=${size}${style}${look}${wholeLaps() ? "&whole=1" : ""}`;
     if (kind === "frame") return `${FRAMES}${src}${sep}size=${size}`;
     return `${FRAMES}${src}${sep}size=${size}${look}`;
   }

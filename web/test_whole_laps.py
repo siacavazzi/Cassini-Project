@@ -1,7 +1,8 @@
-"""Synthetic check of Whole mosaics (obs_mosaic.lap_of, lap_ends, lap_end, kind_of lap_ends): a mosaic movie's
-frames that finish a lap are the last before the camera comes back to a place it has taken in this lap, in any
-filter, and the pass's last frame; repeats of a place in a row count once. Also export.plan leaves out the other
-frames of a mosaic movie with whole=1. Run: python web/test_whole_laps.py"""
+"""Synthetic check of Whole mosaics (obs_mosaic.slots, lap_of, lap_ends, lap_end, kind_of lap_ends): a mosaic
+movie's frames that finish a lap are the last before the camera comes back to a slot it has taken in this lap, in
+any filter, and the pass's last frame, of a lap that took every slot in every filter the laps usually take; repeats
+of a place in a row count once, and places the camera drifted to over the laps are the slots they drifted from.
+Also export.plan leaves out the other frames of a mosaic movie with whole=1. Run: python web/test_whole_laps.py"""
 import os, sys
 sys.path.insert(0, os.path.join(os.path.dirname(os.path.abspath(__file__)), "frames"))
 import obs_mosaic as om
@@ -21,9 +22,49 @@ assert om.lap_of(u)[11] == 1 and om.lap_of(u)[12] == 2
 u = unit([0, 0, 1, None, 2, 3, 0, 1, 2, 3, 3], ["CB2"] * 11)
 assert om.lap_ends(u) == [5, 10], om.lap_ends(u)
 
-# a last lap that stops short still ends at the pass's last frame
+# a lap that stops short is not whole: a last lap, and one that missed a filter's tile (a pass starting partway
+# round still has whole laps: four new places from wherever it starts)
 u = unit([0, 1, 2, 3, 0, 1], ["CB2"] * 6)
-assert om.lap_ends(u) == [3, 5], om.lap_ends(u)
+assert om.lap_ends(u) == [3], om.lap_ends(u)
+u = unit([2, 3, 0, 1, 2, 3, 0, 1, 2, 3], ["CB2"] * 10)
+assert om.lap_ends(u) == [3, 7], om.lap_ends(u)
+u = unit([p for p in range(4) for _f in F] * 2 + [0, 0, 0, 1, 1, 2, 2, 2, 3, 3, 3], F * 8 + ["RED", "GRN", "BL1", "RED", "BL1"] + F * 2)
+assert om.lap_ends(u) == [11, 23], om.lap_ends(u)
+# whole is what the laps usually take: three places, then two
+assert om.lap_ends(unit([0, 1, 2, 0, 1], ["CB2"] * 5)) == [2]
+# no lap whole in every filter (each lap misses the other's tile): the pass's last frame
+assert om.lap_ends(unit([0, 0, 1, 1, 2, 0, 0, 1, 2, 2], ["RED", "GRN"] * 2 + ["RED"] + ["RED", "GRN", "GRN", "RED", "GRN"])) == [9]
+
+
+def drifting(laps=9, drift=25, gap=None):
+    """A 2x2 in five filters, nine laps, the pointing drifting drift px a lap (the Jupiter approach's 2x2s), as the
+    classifier (_judge) places it"""
+    F5 = ["BL1", "MT2", "CB2", "MT3", "UV1"]
+    fr, t = [], 1000.0
+    for lap in range(laps):
+        for q, (a, b) in enumerate([(0, 0), (900, 0), (0, 900), (900, 900)]):
+            for f in F5:
+                fr.append((f"p{len(fr)}", f"N{1500000000 + len(fr)}_1", f, t, 600, -(a + drift * lap), -(b + drift * lap), 1e6))
+                t += 40
+        t += 3000
+    u = {"key": ("JUPITER", "OBS", "N", 0), "frames": fr, "taken": [(f[2], f[5], f[6], f[7]) for f in fr], "z": 1e6}
+    om._judge(u)
+    return u
+
+
+u = drifting()
+assert u["kind"] == "mosaic_movie" and len(set(u["place"])) > 4, (u["kind"], sorted(set(u["place"])))
+assert sorted(set(om.slots(u))) == [0, 1, 2, 3], sorted(set(om.slots(u)))
+assert om.lap_ends(u) == [20 * k + 19 for k in range(9)], om.lap_ends(u)
+assert max(om.lap_of(u)) == 9
+# no drift: the classifier's places as they are
+u = drifting(drift=0)
+assert om.slots(u) == u["place"] and om.lap_ends(u) == [20 * k + 19 for k in range(9)]
+# a raster finer than mosaic.min_step's double keeps every place its own
+u = unit(list(range(8)) * 2, ["CB2"] * 16)
+u["frames"] = [(*f[:5], -100.0 * (i % 8), 0, 1e6) for i, f in enumerate(u["frames"])]
+u["z"] = 1e6
+assert om.slots(u) == u["place"] and om.lap_ends(u) == [7, 15], om.lap_ends(u)
 
 # not a mosaic movie: no lap ends
 assert om.lap_ends(unit([0, 1, 2, 3], ["CB2"] * 4, kind="mosaic")) == []
