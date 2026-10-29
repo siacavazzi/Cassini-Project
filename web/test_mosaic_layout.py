@@ -119,9 +119,9 @@ def main():
     appr = passes(*OBS[14])
     assert kinds(appr) == [("movie", 70)] and appr[0]["views"] and relaid(appr[0]), kinds(appr)
 
-    # Titan's global map split by ZOOM: one mosaic again
+    # Titan's global map split by ZOOM: one mosaic again (100 pictures: a CB3 repeat 25-36 px off is its own, _pictures)
     titan = passes(*OBS[7])
-    assert kinds(titan) == [("mosaic", 99)] and titan[0]["joined"] and relaid(titan[0]), kinds(titan)
+    assert kinds(titan) == [("mosaic", 100)] and titan[0]["joined"] and relaid(titan[0]), kinds(titan)
 
     # the Grand Finale's propeller movie re-pointed three times: four movies
     prop = passes(*OBS[8])

@@ -3,11 +3,15 @@
 Finds repeat exposures of a frame so they can be stacked into one lower-noise image.
 
 A repeat is a frame from the same camera, target, observation and exact filter pair,
-taken within a short window of the original with the same exposure settings.
-Repeats that turn out to point somewhere else (the next panel of a mosaic) are
-dropped later, when image_correction.stack_frames fails to align them.
+taken within a short window of the original, that SPICE (the geometry cache) puts at the
+same pointing: within REPEAT_PLACE of a frame of it. A frame taken seconds later at another
+pointing (the next panel of a mosaic; Phoebe 2004-06-11 goes back and forth between two
+pointings a minute apart) is not a repeat, however close in time. Where SPICE can't place a
+frame, the repeat must line up with it (image_correction.find_shift) to be merged.
 """
 
+import math
+import os
 import threading
 import cv2
 import numpy as np
@@ -16,6 +20,7 @@ import calibration as cal
 import data_source as ds
 import label_handler as lh
 import image_correction as ic
+import bootleg_autonav as ba
 
 index = None
 groups = None
@@ -25,6 +30,59 @@ _index_lock = threading.Lock()
 keys = ["INSTRUMENT_ID", "TARGET_NAME", "OBSERVATION_ID", "FILTER_NAME"]
 # label fields that must match for two frames to be stacked
 same_settings = ["EXPOSURE_DURATION", "GAIN_MODE_ID", "INSTRUMENT_MODE_ID"]
+# of a frame (FRAME full resolution pixels): two frames whose body SPICE places this close are at one pointing. Over the
+# whole mission (geometry cache, 2026-10-26; spoke movies aside, which follow a patch of ring and are never stacked),
+# consecutive frames of one filter 20 to 40 s apart are within 20 px in 94% of cases (most 3 to 8 px: an exposure
+# bracket), and a third of those 80 to 120 s apart are over 40 px away, up to 2400 (the next panel of a mosaic).
+# find_shift lines a repeat up by at most 20 px, the same.
+REPEAT_PLACE = 0.02
+FRAME = 1024
+
+
+def frame_id(path):
+    return os.path.basename(path).split(".")[0]
+
+
+"""
+Where SPICE puts the body in each of the frames ids, from the geometry cache (bootleg_autonav,
+CASSINI_GEOMETRY_CACHE): {id: (x, y, z)}, find_target's centring shift in full resolution pixels and
+the distance in km. Frames that are not cached, or that SPICE could not place, are left out.
+"""
+def places(ids):
+    if not ba.GEOMETRY_CACHE or not os.path.exists(ba.GEOMETRY_CACHE):
+        return {}
+    db, out = ba._geometry_db(), {}
+    for k in range(0, len(ids), 900):
+        part = ids[k:k + 900]
+        for frame, x, y, z in db.execute(f"SELECT frame, x, y, z FROM target WHERE version = ? AND error IS NULL "
+                                         f"AND frame IN ({','.join('?' * len(part))})", (ba.GEOMETRY_VERSION, *part)):
+            out[frame] = (x, y, z)
+    return out
+
+
+"""
+Whether SPICE puts two frames at one pointing: a, b = their places ((x, y, ...) as places gives, or None);
+True within REPEAT_PLACE of a frame, False further apart, None when either has no place.
+"""
+def same_place(a, b):
+    if a is None or b is None or a[0] is None or b[0] is None:
+        return None
+    return math.hypot(a[0] - b[0], a[1] - b[1]) <= REPEAT_PLACE * FRAME
+
+
+"""
+Which picture a frame taken at t (unix seconds) at place is a repeat exposure of: kept = [(time, place, picture)],
+the pictures of its filter so far, oldest first; the newest of them taken within window seconds before t at the
+same place (or where SPICE can't tell: then find_shift decides as the frames are merged), else None, and the frame
+is a picture of its own. The one rule for the pictures obs_mosaic.units and reel.shots make of an observation.
+"""
+def repeat_of(kept, t, place, window):
+    for when, at, picture in reversed(kept):
+        if t - when > window:
+            return None
+        if same_place(at, place) is not False:
+            return picture
+    return None
 
 
 def load_index():
@@ -43,7 +101,7 @@ def load_index():
 
 """
 Returns the paths of repeat exposures of the frame at path, nearest in time first,
-including path itself as the first entry.
+including path itself as the first entry. A frame SPICE puts at another pointing is left out (same_place).
 path = frame path as get_images returns it (with or without the "data/" prefix)
 window = largest time difference in seconds for a frame to count as a repeat
 max_frames = most frames to return
@@ -69,6 +127,9 @@ def find_repeats(path, window=120, max_frames=5):
     gap = np.abs(columns["seconds_1970"][rows] - columns["seconds_1970"][at])
     near = pd.notna(paths) & (gap <= window) & (paths != key)
     nearest = paths[near][np.argsort(gap[near], kind="quicksort")].tolist()
+    if nearest:
+        where = places([frame_id(p) for p in [key] + nearest])
+        nearest = [p for p in nearest if same_place(where.get(frame_id(key)), where.get(frame_id(p))) is not False]
     return [path] + [prefix + p for p in nearest[:max_frames - 1]]
 
 
@@ -120,7 +181,9 @@ of both. Each frame is calibrated on its own, aligned to the frame at path, and 
 its exposure time (the long exposures carry the faint signal), leaving out its saturated pixels
 and the few around them (charge bleeds out of a full pixel), so where a long exposure saturated the
 short one is used. A repeat that can't be matched (a faint frame of mostly empty sky, where phase
-correlation finds nothing) is taken as it is: repeats are seconds apart at the same pointing.
+correlation finds nothing) is taken as it is only where SPICE puts it at the frame's pointing
+(same_place); otherwise it is left out, as a frame of another pointing would put its scene over
+this one (Phoebe's black blotches: the other pointing's shadow where this frame saturated).
 returns (label of the frame at path, float32 I/F image sized like label.resize_image, how many
 frames went in), or the label, None and 1 when the frame at path can't be calibrated.
 valid = also return, last, the mask of pixels valid in any frame merged (label.valid_mask): what a frame lost in
@@ -134,7 +197,9 @@ def load_hdr(path, window=120, max_frames=8, valid=False):
     total, weight, n = None, None, 0
     merging, own, differ = [], None, False
     plain = not cal.step("hdr")
-    for p in find_repeats(path, window, max_frames if cal.step("stack") else 1):
+    repeats = find_repeats(path, window, max_frames if cal.step("stack") else 1)
+    where = places([frame_id(p) for p in repeats]) if len(repeats) > 1 else {}
+    for p in repeats:
         try:
             l = lbl if p == path else lh.label(p, as_png=True)
             if plain and l is not lbl and any(l.info.get(k) != lbl.info.get(k) for k in same_settings):
@@ -151,6 +216,15 @@ def load_hdr(path, window=120, max_frames=8, valid=False):
             if p == path:
                 return (lbl, None, 1, None) if valid else (lbl, None, 1)
             continue
+        shift = None
+        if ref is not None:
+            # a frame SPICE puts at another pointing is never merged, one that doesn't line up only where SPICE puts it
+            # at this one
+            here = same_place(where.get(frame_id(path)), where.get(frame_id(p)))
+            shift = ic.find_shift(ref, image, 20) if here is not False else None
+            if not here and shift is None:
+                print(f"Skipping repeat {p}: it doesn't line up with {path}, and SPICE doesn't put it at the same pointing")
+                continue
         mask = l.valid_mask() if valid else None
         if valid:
             own = mask if own is None else own
@@ -159,13 +233,11 @@ def load_hdr(path, window=120, max_frames=8, valid=False):
             differ = differ or not np.array_equal(mask, own)
         if ref is None:
             ref, first = image, iof
-        else:
-            shift = ic.find_shift(ref, image, 20)
-            if shift is not None:
-                iof = ic.shift_image(iof.astype(np.float32), *shift)
-                gray = ic.shift_image(gray, *shift)
-                if valid:
-                    mask = ic.shift_image(mask.astype(np.float32), *shift) > 0.99
+        elif shift is not None:
+            iof = ic.shift_image(iof.astype(np.float32), *shift)
+            gray = ic.shift_image(gray, *shift)
+            if valid:
+                mask = ic.shift_image(mask.astype(np.float32), *shift) > 0.99
         good = ~cv2.dilate(cal.saturated(codes, info, gray).astype(np.uint8), np.ones((7, 7), np.uint8)).astype(bool)
         merging.append((iof, good, mask, np.float32(float(info.get("EXPOSURE_DURATION", 1)) or 1)))
     for iof, good, mask, exposure in merging:
