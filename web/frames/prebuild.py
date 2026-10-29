@@ -28,6 +28,16 @@ their own, so a slow check never holds the workers back. --procs N runs the phas
 each (the makers are mostly Python: threads take turns on one core), each its own stretch of the items.
 status.json (and a page reading it, index.html) in --status says how far it is.
 
+--years 2004 (or 2004-2006, 2004,2008; or --from 2004-06-01 --until 2004-08-01) builds a slice: only the items of
+that stretch (a frame taken then, a filter set or a pass with a frame then). A phase that finishes adds what it
+built to <cache>/slices.json (slices.py), under the versions it built them with, and the page keeps its timeline,
+Moments and Highlights to the stretches every recorded phase covers, so a change to the pictures can be looked at
+on one year in an hour or two instead of the whole mission in a day. Build a slice into a cache of its own (or a
+copy of the live one's links): a run without --years records the whole mission, and a cache with no record stays
+the whole mission.
+
+  ... prebuild.py processed --years 2004 --cache /Volumes/LaCie/claude_scratch_spk/slice-2004 --procs 8 --balanced
+
   CASSINI_DATA=/Volumes/LaCie/cassini_lut8.zip CASSINI_KERNELS=... CASSINI_GEOMETRY_CACHE=... \\
     nice -n 19 taskpolicy -b python web/frames/prebuild.py frames --cache /Volumes/cassini-cache \\
     --status web/cassini-os/prebuild
@@ -58,6 +68,7 @@ import frame_server  # noqa: E402  (puts the repo on the path, loads the pipelin
 import calibration  # noqa: E402
 import obs_mosaic  # noqa: E402
 import reel  # noqa: E402
+import slices  # noqa: E402
 
 PHASES = ("frames", "composites", "mosaics", "movies", "processed", "strips", "chains")
 
@@ -215,6 +226,57 @@ def watched_first(todo):
     marks = [hit(t[0]) for t in todo]
     first = [t for t, m in zip(todo, marks) if m]
     return first + [t for t, m in zip(todo, marks) if not m], len(first)
+
+
+def within(phase, todo, spans):
+    """todo cut to the items of the stretches spans ([(from, until)] UTC; --years, --from/--until): a frame taken
+    in one (frames, processed), a filter set with a frame in one (composites), a pass with a frame in one (mosaics,
+    movies, strips, chains: all its pictures, so a pass across New Year plays whole)."""
+    cuts = [(slices.seconds(a) if a else -float("inf"), slices.seconds(b) if b else float("inf")) for a, b in spans]
+    def hit(t):
+        return any(a <= t < b for a, b in cuts)
+    idx, _ = reel.load_index()
+    time_of = dict(zip(idx["id"].tolist(), idx["seconds_1970"].astype(float).tolist()))
+    if phase in ("frames", "processed"):
+        return [t for t in todo if hit(time_of.get(t[0], float("nan")))]
+    if phase == "composites":
+        def set_ids(name):
+            parts = name.split("_")
+            return ["_".join(parts[k:k + 2]) for k in range(0, len(parts), 2)]
+        return [t for t in todo if any(hit(time_of.get(i, float("nan"))) for i in set_ids(t[0]))]
+    names = {"_".join(map(str, u["key"])) for u in all_passes() if any(hit(f[3]) for f in u["frames"])}
+    return [t for t in todo if t[0] in names]
+
+
+def spans_of(args):
+    """The stretches --years / --from / --until ask for ([(from, until)] UTC), or None for the whole mission."""
+    spans = slices.parse_years(args.years) if getattr(args, "years", None) else []
+    if getattr(args, "since", None) or getattr(args, "until", None):
+        spans = slices.merge(spans + [(slices.utc(args.since) if args.since else None,
+                                       slices.utc(args.until) if args.until else None)])
+    return spans or None
+
+
+def chosen(args):
+    """The phase's items as a run takes them: all of them, or those using --only's frames, or those of the
+    stretches --years / --from / --until ask for."""
+    todo = items(args.phase)
+    if getattr(args, "only", None):
+        todo = only(args.phase, todo, args.only)
+        print(f"{len(todo)} items use the listed frames", flush=True)
+    spans = spans_of(args)
+    if spans:
+        todo = within(args.phase, todo, spans)
+        print(f"{len(todo)} items in " + ", ".join(f"{a or 'start'} to {b or 'end'}" for a, b in spans), flush=True)
+    return todo
+
+
+def built(args, total, errors):
+    """A finished phase recorded in the cache's slices.json (slices.record): the stretches it built and the picture
+    versions it built them under. A remake of some frames (--only) adds nothing: the stretch was built before."""
+    if getattr(args, "only", None):
+        return
+    slices.record(args.cache, args.phase, spans_of(args), frame_server.picture_versions(), total, errors)
 
 
 def make_pass(u, cache, sizes=(1024, 512), within=None, style=None, made=None, stopped=None):
@@ -387,10 +449,7 @@ class Status:
 
 
 def run(args):
-    todo = items(args.phase)
-    if getattr(args, "only", None):
-        todo = only(args.phase, todo, args.only)
-        print(f"{len(todo)} items use the listed frames", flush=True)
+    todo = chosen(args)
     if getattr(args, "watched_first", False):
         todo, n = watched_first(todo)
         print(f"{n} items of watched observations first", flush=True)
@@ -411,6 +470,8 @@ def run(args):
     obs_mosaic.rolled_room(args.threads + 1)
     make(args, todo, status, errors, holds)
     status.update(state="done")
+    if not args.shard:   # a process of procs: procs records the phase once all are done
+        built(args, status.s["total"], status.s["errors"])
 
 
 def make(args, todo, status, errors, holds):
@@ -461,9 +522,7 @@ def stretches(args):
     any other item's one. Cut by count into one stretch a process (--shard), the busiest stretch of the mission ran
     on long after the rest: worked out from the passes' frames on one core, 64 processes take 0.84 h over the movie
     passes and 0.51 h over the mosaics that way, 0.47 h and 0.14 h balanced (2026-10-27). (folder, items)."""
-    todo = items(args.phase)
-    if getattr(args, "only", None):
-        todo = only(args.phase, todo, args.only)
+    todo = chosen(args)
     first = 0
     if getattr(args, "watched_first", False):
         todo, first = watched_first(todo)
@@ -572,12 +631,15 @@ def procs(args):
         time.sleep(5)
     if status:
         status.update(state="done" if all(p.returncode == 0 for p in kids) else "stopped")
+    if all(p.returncode == 0 for p in kids):
+        built(args, status.s["total"] if status else 0, status.s["errors"] if status else 0)
     sys.exit(max(p.returncode for p in kids))
 
 
 def sample(args):
-    """Times args.sample items spread over the mission into a scratch cache, and what they add up to."""
-    todo = items(args.phase)
+    """Times args.sample items spread over the mission (or the --years asked for) into a scratch cache, and what
+    they add up to."""
+    todo = chosen(args)
     random.seed(1)
     picked = random.sample(todo, min(args.sample, len(todo)))
     os.makedirs(args.cache, exist_ok=True)
@@ -967,6 +1029,10 @@ def main():
     ap.add_argument("--pause", default="~/prebuild.pause", help="while this file exists the job waits")
     ap.add_argument("--min-free", type=float, default=0, help="GB: the job waits while the cache's disk has less free")
     ap.add_argument("--only", help="file of frame ids: only the items using them (a remake after a fix)")
+    ap.add_argument("--years", help="a slice: only these years' items (2004, 2004-2006 or 2004,2008), recorded in "
+                                    "the cache's slices.json so the page shows only them")
+    ap.add_argument("--from", dest="since", help="a slice from this UTC time (2004-06-30 or 2004-06-30T12:00)")
+    ap.add_argument("--until", help="a slice up to this UTC time")
     ap.add_argument("--watched-first", action="store_true", help="the Moments and Highlights observations' items first")
     ap.add_argument("--procs", type=int, default=0, help="run the phase as this many processes of one thread each")
     ap.add_argument("--balanced", action="store_true",
@@ -976,9 +1042,16 @@ def main():
     ap.add_argument("--queue", help=argparse.SUPPRESS)   # a --balanced process's queue folder (stretches)
     args = ap.parse_args()
     if args.phase == "count":
-        sets, passes = page_sets(), mosaic_passes()
-        print(json.dumps({"frames": len(frame_ids()), "sets": len(sets), "set_frames": sum(map(len, sets)),
-                          "mosaic_passes": len(passes), "mosaic_frames": sum(len(u["frames"]) for u in passes)}))
+        ids, sets, passes, movies = frame_ids(), page_sets(), mosaic_passes(), movie_passes()
+        spans = spans_of(args)
+        if spans:   # a slice's share (--years): what its phases would make
+            ids = [i for i, _ in within("frames", [(i, None) for i in ids], spans)]
+            sets = [s for s in sets if within("composites", [("_".join(s), None)], spans)]
+            keep = {name for name, _ in within("mosaics", [("_".join(map(str, u["key"])), None) for u in passes + movies], spans)}
+            passes, movies = [[u for u in us if "_".join(map(str, u["key"])) in keep] for us in (passes, movies)]
+        print(json.dumps({"frames": len(ids), "sets": len(sets), "set_frames": sum(map(len, sets)),
+                          "mosaic_passes": len(passes), "mosaic_frames": sum(len(u["frames"]) for u in passes),
+                          "movie_passes": len(movies), "movie_frames": sum(len(u["frames"]) for u in movies)}))
         return
     obs_mosaic.tiles_ahead = lambda *a, **k: None      # everything is made here, in order (warm_pass.py)
     obs_mosaic.rolling_ahead = lambda *a, **k: None

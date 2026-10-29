@@ -161,6 +161,10 @@ Routes:
                                total (frames: how many of them are the stretch's frames), made through (UTC), seconds left
   POST /prebuild/<JOB>/stop    stops it (what is made stays made)
   /health                      "ok" plus where the frames come from
+  /frames/slices.json          which stretches of the mission the cache holds pictures for under this server's
+                               versions (slices.py: prebuild.py --years records each finished phase): {"spans":
+                               [[from, until], ...] UTC, or null for the whole mission, "phases": {...}}. The page keeps
+                               its timeline, Moments and Highlights to the spans (Settings > Playback)
   POST /flags                  a picture flagged in Cassini OS (the ⚑ button or R in a picture window): JSON with
                                the picture as shown (a data: URL), what the window showed and an optional note.
                                Saved under --flags (default ~/Documents/flagged-pictures) as <name>/shown.png,
@@ -227,6 +231,7 @@ import reel  # noqa: E402
 import obs_mosaic  # noqa: E402
 import mosaic_native  # noqa: E402
 import export  # noqa: E402
+import slices  # noqa: E402
 import usage  # noqa: E402
 counts = None   # the usage counts (usage.Usage), set by main(); None counts nothing
 
@@ -894,6 +899,12 @@ def pipeline_versions():
     return out
 
 
+def picture_versions():
+    """The versions of the picture makers, which name the cache folders their pictures are in: what a cache slice
+    (slices.py) is recorded under by prebuild.py and matched against here."""
+    return slices.versions(frame_server=sys.modules[__name__], obs_mosaic=obs_mosaic, reel=reel, calibration=calibration)
+
+
 SERVER_VERSION = git_version(REPO)   # the code this server runs: read once, as it starts
 
 
@@ -1425,6 +1436,8 @@ def make_handler(site, cache, flags=None):
                 return self.send_stats(url)
             if url.path == "/health":
                 return self.send_bytes(f"ok {data_source.get_source()}\n".encode(), "text/plain", False)
+            if url.path == "/frames/slices.json":
+                return self.send_json(slices.covered(cache, picture_versions()))
             if url.path == "/frames/color.webp":
                 query = parse_qs(url.query)
                 ids = query.get("ids", [""])[0].split(",")

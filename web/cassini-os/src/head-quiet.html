@@ -1176,7 +1176,8 @@ body.idle .win.full .titlebar { opacity: 0; }
       el.textContent = "★".repeat(n) + "·".repeat(5 - n);
     });
     const ms = picks.filter(e => e.kind === "milestone").length;
-    $("mfoot").textContent = `${picks.length} moments, ${ms} milestone${ms === 1 ? "" : "s"}`;
+    $("mfoot").textContent = `${picks.length} moments, ${ms} milestone${ms === 1 ? "" : "s"}` + (cassiniSlice.spans ? ` · ${cassiniSlice.label} only` : "");
+    if (cassiniSlice.spans) $("mfoot").title = `The picture cache holds ${cassiniSlice.label} (a slice); Settings > Playback shows the whole mission`;
     const go = $("gomenu");
     for (const n of FOCUS_LIST) { const li = document.createElement("li"); li.innerHTML = `<button data-act="go" data-body="${n}">${titleCase(n)}</button>`; go.appendChild(li); }
   };
@@ -1600,6 +1601,30 @@ body.idle .win.full .titlebar { opacity: 0; }
     if (/^https?:$/.test(location.protocol) && !/claude\.ai$|claudeusercontent\.com$|claude\.site$/.test(location.hostname)) return location.origin;
     return "http://localhost:8765";
   })();
+  // cache slices (prebuild.py --years): the stretches of the mission the frame server's picture cache holds under its
+  // versions (/frames/slices.json; spans null: the whole mission). With Settings > Playback "Only years with pictures
+  // built" on, the viewer keeps its timeline, Moments and Highlights to them (studyCoverage, called as it loads), so
+  // a test build of one year plays without the rest of the mission being made on demand. cassiniSlice.has(et): in them
+  const slice = window.cassiniSlice = { spans: null, label: "", has: () => true };
+  const sliceAsked = fetch(`${FRAMES}/frames/slices.json`, { cache: "no-store" }).then(r => r.ok ? r.json() : null).catch(() => null);
+  let sliceDone;
+  slice.ready = new Promise(r => { sliceDone = r; });
+  window.studyCoverage = async whole => {
+    const on = !window.cassiniSettings || cassiniSettings.get("playback.builtOnly") !== false;
+    // a server that doesn't answer soon (or an older one, 404) leaves the whole mission
+    const got = on ? await Promise.race([sliceAsked, new Promise(r => setTimeout(r, 4000, null))]) : null;
+    const spans = (got && Array.isArray(got.spans) ? got.spans : [])
+      .map(([a, b]) => [a ? Math.max(whole[0], utcToEt(a)) : whole[0], b ? Math.min(whole[1], utcToEt(b)) : whole[1]])
+      .filter(([a, b]) => b > a);
+    if (spans.length) {
+      const yearOf = et => new Date(etToMs(et)).getUTCFullYear(), inc = et => new Date(etToMs(et) - 1000).getUTCFullYear();
+      // cutsStart: the slice starts after the mission does, so its start is not the launch (cutscene.html atStart)
+      Object.assign(slice, { spans, has: et => spans.some(([a, b]) => et >= a && et < b), cutsStart: spans[0][0] > whole[0] + 1,
+        label: spans.map(([a, b]) => yearOf(a) === inc(b) ? `${yearOf(a)}` : `${yearOf(a)}–${inc(b)}`).join(", ") });
+    }
+    sliceDone(slice);
+    return slice.spans;
+  };
   const CH_COLOUR = ["#e5534b", "#57ab5a", "#539bf5"];
   // the camera windows held on a part of their picture (drill-down, in cameraFeed); Esc brings one back to live: the
   // held window in full view, else the one in front, else the one held last. A panel in front (Settings, a reel...)
