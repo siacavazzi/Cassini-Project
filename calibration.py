@@ -615,7 +615,7 @@ obs_mosaic.panel_places). Every step is on by default; off steps go into the cac
 made with every step on keep their names. "blend", "level", "surface" and "panels" are the exception: they change
 only how tiles are drawn together, or redraw or move tiles from the tiles made, never a frame or a tile, so they are
 left out of variant (a mosaic with them off draws the same tiles) and the mosaics name them themselves
-(mosaic.drawing; obs_mosaic.SURFACE_TAG, PANEL_TAG).
+(mosaic.drawing; obs_mosaic.SURFACE_TAG, PANEL_TAG, EDGE_TAG).
 """
 STEPS = ("stack", "hdr", "fill", "calibrate", "dark", "flat", "hotpix", "align", "blend", "level", "surface", "panels")
 _off = contextvars.ContextVar("off", default=frozenset())
