@@ -1303,6 +1303,31 @@ PANEL_AGREE = 2.0    # px: matches further than this from the others' median are
 # a pass's panel registration (panel_places), kept with it; renamed whenever the rule changes
 PANEL_FILE = "panels1-" + PLAN_FILE
 PANEL_TAG = "-p1"    # in the name of a layout whose tiles registration moved (layout), so its pictures are its own
+# a clouded body's (SURFACE_CLOUDED: Saturn, Titan, the rings) pointings are measured on edges only (edge_shift): its
+# clouds turn with it and drift on its winds between panels (on Saturn's disk the turning alone is tens to hundreds of
+# px in a few minutes), so its detail matches that motion, never SPICE's pointing, and #169 kept SPICE's places there,
+# 5 to 60 px apart (26 of 303 mosaics, quality check 10-28). The limb, the terminator, a ring's edge and the shadows
+# on the disk stay where they are on the sky while the clouds move, so the lit edge against the dark is measured
+EDGE_LEVEL = 0.3     # of the way from the overlap's floor (1st percentile) to its lit top (99th): what is brighter
+EDGE_DARK = 0.1      # is lit (disk, haze, ring), what is darker than this is dark (the sky and its noise, the night
+EDGE_CONTRAST = 24   # side, a gap); and the top is this many levels over the floor at least, or nothing is lit
+EDGE_SIDE = 0.03     # the share of the overlap each side, lit and dark, holds at least, for it to hold an edge
+EDGE_LENGTH = 64     # px: the least edge (lit-ness changing by more than EDGE_STEEP a pixel) the overlap holds
+EDGE_STEEP = 0.03
+EDGE_SPAN = 128     # px: a patch of the lit or the dark shorter than this every way (a dark storm or cloud on a disk, a
+#                       star or a small moon in the sky) is a feature that moves, not an edge, and is filled in (_lit)
+EDGE_INSET = 12      # px: the overlap measured this far inside both tiles, so neither tile's dark rim is an edge
+EDGE_SIGMA = 4.0     # px: the detail of the lit-ness measured (_detail), a band this wide along each edge
+# the edge's structure: where its gradients' second direction holds less than this share of the first (a limb or a
+# ring edge a few hundred px long is nearly straight), it is one line and says only how far across it the tile is
+# off; the move along it is left as SPICE has it (min-norm, _combine)
+EDGE_LINE = 0.1
+EDGE_MAX = 64 / 1024  # of a frame: the largest move believed (the quality check's worst was 60 WAC px on Titan)
+EDGE_NCC = 0.5       # the least the two edges must agree once moved
+EDGE_GAIN = 0.05     # ... and how much better than at SPICE's places, for a move of over half a pixel
+EDGE_AGREE = 3.0     # px: matches further than this (across their own edges) from the others' fit are left out
+EDGE_FILE = "edges1-"  # before PANEL_FILE: a clouded body's registration, kept apart from #169's
+EDGE_TAG = "-pe1"    # in the name of a layout whose tiles edge registration moved, instead of PANEL_TAG
 
 
 def _detail(gray, mask, sigma=6.0):
@@ -1382,6 +1407,142 @@ def panel_shift(q, ref, at_q, t, crop, at_t):
     return shift, seen
 
 
+def _lit(gray, inside):
+    """A tile's lit-ness over the overlap: 0 on the dark sky (or night side, or a ring gap) up to EDGE_DARK of the
+    way from the overlap's floor to its lit top, rising to 1 at EDGE_LEVEL and staying 1 above it, so the clouds on a
+    disk and the sky's noise are all one and only the edges between the lit and the dark are left. None where the
+    overlap holds nothing lit (EDGE_CONTRAST), or nothing dark: its darkest is over EDGE_DARK of its top (a disk's
+    clouds, the sky's black being near 0 on the pass's display scale)."""
+    if not inside.any():
+        return None
+    floor, top = (float(v) for v in np.percentile(gray[inside], [1, 99]))
+    if top - floor < EDGE_CONTRAST or floor > EDGE_DARK * top:
+        return None
+    span = top - floor
+    lit = np.clip((gray - floor - EDGE_DARK * span) / ((EDGE_LEVEL - EDGE_DARK) * span), 0, 1).astype(np.float32)
+    # (patches of either side shorter than EDGE_SPAN every way, and the soft rim round them, take the side round them)
+    for side, fill in ((lit < 0.95, 1.0), (lit > 0.05, 0.0)):
+        count, labels, stats, _ = cv2.connectedComponentsWithStats(side.astype(np.uint8), connectivity=8)
+        small = np.zeros(count, bool)
+        small[1:] = np.maximum(stats[1:, cv2.CC_STAT_WIDTH], stats[1:, cv2.CC_STAT_HEIGHT]) < EDGE_SPAN
+        if small.any():
+            spots = cv2.dilate(small[labels].astype(np.uint8), np.ones((7, 7), np.uint8)) > 0
+            lit[spots] = fill
+    return lit
+
+
+def _line(lit, weight):
+    """The unit normal of the edge in lit-ness lit when it is one line (EDGE_LINE), else None: the main direction of
+    its gradients (structure tensor, weighted)."""
+    gx = cv2.Sobel(lit, cv2.CV_32F, 1, 0, ksize=3)
+    gy = cv2.Sobel(lit, cv2.CV_32F, 0, 1, ksize=3)
+    j = np.array([[float((gx * gx * weight).sum()), float((gx * gy * weight).sum())],
+                  [float((gx * gy * weight).sum()), float((gy * gy * weight).sum())]])
+    vals, vecs = np.linalg.eigh(j)
+    if vals[1] <= 0 or vals[0] >= EDGE_LINE * vals[1]:
+        return None
+    return vecs[:, 1]
+
+
+def edge_shift(q, ref, at_q, t, crop, at_t):
+    """panel_shift on a clouded body (SURFACE_CLOUDED): how far tile t is from tile q where they overlap, measured on
+    the edges between the lit and the dark only (_lit: the limb, the terminator, a ring's edge or gap, a shadow), which
+    stay put on the sky while the clouds between them turn and drift. The same phase correlation as panel_shift, on the
+    detail of the two lit-nesses over the part both cover, EDGE_INSET inside each; believed only when that part holds
+    an edge (lit and dark both, EDGE_SIDE, and EDGE_LENGTH of edge) and the two edges agree better moved than at
+    SPICE's places (EDGE_NCC, EDGE_GAIN). An edge that is one line (_line) says only how far across it t is off: the
+    shift is that, along its normal, and seen["normal"] says which way. (dx, dy) and seen as panel_shift's, or
+    (None, why)."""
+    corners = [(at[0] + s["box"][0], at[1] + s["box"][1], im) for s, at, im in ((q, at_q, ref), (t, at_t, crop))]
+    x0 = max(c[0] for c in corners)
+    y0 = max(c[1] for c in corners)
+    x1 = min(c[0] + c[2].shape[1] for c in corners)
+    y1 = min(c[1] + c[2].shape[0] for c in corners)
+    if x1 - x0 < PANEL_NARROW + 2 * EDGE_INSET or y1 - y0 < PANEL_NARROW + 2 * EDGE_INSET:
+        return None, "apart"
+    grays, masks = [], []
+    for cx, cy, im in corners:
+        left, top = int(round(x0 - cx)), int(round(y0 - cy))
+        part = im[top:top + int(y1 - y0), left:left + int(x1 - x0)]
+        grays.append(part[..., :3].astype(np.float32).mean(axis=2))
+        masks.append(part[..., 3] > 0)
+    h, w = min(g.shape[0] for g in grays), min(g.shape[1] for g in grays)
+    grays, masks = [g[:h, :w] for g in grays], [m[:h, :w] for m in masks]
+    common = np.pad(masks[0] & masks[1], 1).astype(np.uint8)
+    both = cv2.erode(common, np.ones((2 * EDGE_INSET + 1, 2 * EDGE_INSET + 1), np.uint8))[1:-1, 1:-1] > 0
+    area = int(both.sum())
+    if area < PANEL_AREA or min(np.ptp(np.nonzero(both)[0]), np.ptp(np.nonzero(both)[1])) < PANEL_NARROW - 8:
+        return None, "little overlap"
+    lits = [_lit(g, both) for g in grays]
+    if lits[0] is None or lits[1] is None:
+        return None, "no edge"
+    for lit in lits:
+        steep = np.hypot(cv2.Sobel(lit, cv2.CV_32F, 1, 0, ksize=3), cv2.Sobel(lit, cv2.CV_32F, 0, 1, ksize=3)) / 8
+        if ((lit >= 0.9) & both).sum() < EDGE_SIDE * area or ((lit <= 0.1) & both).sum() < EDGE_SIDE * area \
+                or ((steep > EDGE_STEEP) & both).sum() < EDGE_LENGTH:
+            return None, "no edge"
+    ds = [_detail(lit, both, EDGE_SIGMA) for lit in lits]
+    if ds[0] is None or ds[1] is None:
+        return None, "no edge"
+    taper = cv2.GaussianBlur(both.astype(np.float32), (0, 0), 4.0) * both
+    normal = _line(lits[0], taper)
+    (dx, dy), response = cv2.phaseCorrelate(*(_even(d * taper) for d in ds))
+    if normal is not None:
+        # (a straight edge's match slides along it: only the part across it is measured)
+        across = dx * normal[0] + dy * normal[1]
+        dx, dy = across * normal[0], across * normal[1]
+    rx = [(cx - x0) - round(cx - x0) for cx, _, _ in corners]
+    ry = [(cy - y0) - round(cy - y0) for _, cy, _ in corners]
+    before = _agree(ds[0], ds[1], both)
+    moved = image_correction.shift_image(ds[1], dx, dy)
+    inner = cv2.erode(both.astype(np.uint8), np.ones((3, 3), np.uint8), iterations=int(math.ceil(max(abs(dx), abs(dy)))) + 1) > 0
+    if inner.sum() < PANEL_AREA / 2:
+        return None, "little overlap once moved"
+    after = _agree(ds[0], moved, inner)
+    seen = {"ncc": [round(before, 3), round(after, 3)], "area": area, "response": round(float(response), 3), "edge": True}
+    shift = (dx + rx[1] - rx[0], dy + ry[1] - ry[0])
+    if normal is not None:
+        across = float(shift[0] * normal[0] + shift[1] * normal[1])
+        shift = (across * float(normal[0]), across * float(normal[1]))
+        seen["normal"] = [round(float(normal[0]), 4), round(float(normal[1]), 4)]
+    if math.hypot(*shift) > EDGE_MAX * FRAME:
+        return None, f"too far {shift[0]:+.1f},{shift[1]:+.1f}"
+    if after < EDGE_NCC or (math.hypot(*shift) > 0.5 and after < before + EDGE_GAIN):
+        return None, f"not believed {shift[0]:+.1f},{shift[1]:+.1f} ncc {before:.2f}->{after:.2f}"
+    return shift, seen
+
+
+def _combine(found):
+    """The move of a pointing from its matches on edges [(where it lands by that match (x, y), the edge's normal or
+    None)]: the least-squares place that agrees with each across its own edge (all ways for a match that is not one
+    line), the move along a lone straight edge left as SPICE has it (min-norm); matches further than EDGE_AGREE from
+    the others' fit are left out one at a time, the worst first. None when no more than half of them agree (one alone
+    is believed)."""
+    rows = []
+    for (x, y), n in found:
+        proj = np.eye(2) if n is None else np.outer(n, n)
+        rows.append((proj, np.array([x, y], float)))
+    keep = list(range(len(rows)))
+    while keep:
+        a = sum(rows[i][0] for i in keep)
+        b = sum(rows[i][0] @ rows[i][1] for i in keep)
+        move = np.linalg.pinv(a, rcond=1e-3) @ b
+        off = [(float(np.linalg.norm(rows[i][0] @ (move - rows[i][1]))), i) for i in keep]
+        worst = max(off)
+        if worst[0] <= EDGE_AGREE:
+            break
+        keep.remove(worst[1])
+    if not keep or not (len(keep) * 2 > len(rows) or len(rows) == 1):
+        return None
+    return move
+
+
+def clouded(u):
+    """True when pass u's body shows clouds or haze that move on their own (SURFACE_CLOUDED; the rings are Saturn's
+    passes): its panels are registered on edges only (edge_shift) and its surface is not redrawn."""
+    return u["key"][0] in SURFACE_CLOUDED
+
+
 def _pointing_root(u, n, roots):
     """The tile whose correction tile n takes: the tile C8 registers it to (_register_to, the first frame of its
     pointing in another filter), followed back to the pointing's first; n itself for a pointing's first tile."""
@@ -1444,7 +1605,7 @@ def surface_pictures(u, cache, p, tiles):
     once per tile and kept. {} with Settings > Processing's surface step off, for a body SPICE has no shape for, or
     when the kernels or the geometry cache cannot say; none for a clouded body (SURFACE_CLOUDED), and not a tile
     the redrawing would distort (SURFACE_STRETCH), which keeps SPICE's place and the panels step's nudge."""
-    if not calibration.step("surface") or not tiles or u["key"][0] in SURFACE_CLOUDED:
+    if not calibration.step("surface") or not tiles or clouded(u):
         return {}
     import reproject as rp
     there = _tiles(u, cache, p["display_scale"])
@@ -1515,23 +1676,27 @@ def panel_places(u, cache, p, tiles, pic=None, report=None):
     first), each where it was itself put, and moved by the median of the matches that agree (PANEL_AGREE); the
     other filters of the pointing (registered onto it by C8) move with it, so its colours stay together. A pointing
     nothing matches keeps SPICE's place. Earlier pointings never move for a later one, so a mosaic grown a tile at a
-    time stays as it was drawn, and every tile is worked out once and kept with the pass. {} with Settings >
-    Processing's panels (or align) step off. report: a dict that gets each tile's measurements."""
+    time stays as it was drawn, and every tile is worked out once and kept with the pass. A clouded body's
+    (SURFACE_CLOUDED) pointings are measured on their edges only (edge_shift) and moved by the place that agrees with
+    each across its edge (_combine), kept in a file of their own (EDGE_FILE). {} with Settings > Processing's panels
+    (or align) step off. report: a dict that gets each tile's measurements."""
     if not (calibration.step("align") and calibration.step("panels")):
         return {}
     # (measured on the tiles as drawn: their surface redrawn as at the epoch, or not, each kept apart)
     surfaced = any("pic" in t for t in tiles)
-    path = os.path.join(folder(u, cache), (SURFACE_DIR + "-" if surfaced else "") + PANEL_FILE)
+    edges = clouded(u)
+    path = os.path.join(folder(u, cache), (SURFACE_DIR + "-" if surfaced else "") + (EDGE_FILE if edges else "") + PANEL_FILE)
     rec = _kept_tiles(u, cache, p["display_scale"])
     with _ulock(u):
-        kept = rec.get("panels" + SURFACE_TAG * surfaced) if rec is not None else None
+        name = "panels" + SURFACE_TAG * surfaced + EDGE_TAG * edges
+        kept = rec.get(name) if rec is not None else None
         if kept is None:
             kept = {}
             if os.path.exists(path):
                 with open(path) as fh:
                     kept = {int(n): v for n, v in json.load(fh).items()}
             if rec is not None:
-                rec["panels" + SURFACE_TAG * surfaced] = kept
+                rec[name] = kept
         todo = [t for t in tiles if "offset" in t and t["n"] not in kept]
         if not todo:
             return {n: v[:2] for n, v in kept.items() if v[:2] != [0, 0]}
@@ -1577,13 +1742,18 @@ def panel_places(u, cache, p, tiles, pic=None, report=None):
                 s = by_n[j]
                 # measured where SPICE put both (the overlap SPICE says, the same however far the earlier one has
                 # been moved), and taken from where the earlier one now is
-                shift, how = panel_shift(s, ref, s["offset"], t, mine, here)
+                shift, how = (edge_shift if edges else panel_shift)(s, ref, s["offset"], t, mine, here)
                 seen[j] = how if shift is None else {**how, "shift": [round(shift[0], 2), round(shift[1], 2)]}
                 if shift is not None:
                     was = kept.get(j, [0, 0])
-                    found.append((was[0] - shift[0], was[1] - shift[1]))
+                    found.append(((was[0] - shift[0], was[1] - shift[1]), how.get("normal")) if edges else
+                                 (was[0] - shift[0], was[1] - shift[1]))
             move = [0.0, 0.0]
-            if found:
+            if found and edges:
+                fit = _combine(found)
+                if fit is not None and math.hypot(*fit) >= PANEL_LEAST:
+                    move = [round(float(v), 2) for v in fit]
+            elif found:
                 f = np.array(found)
                 mid = np.median(f, axis=0)
                 ok = f[np.hypot(*(f - mid).T) <= PANEL_AGREE]
@@ -1865,7 +2035,7 @@ def filter_mosaic(u, p, f, tiles, rect, cache, ref=None, tag=""):
 
     def make():
         # (panel registration's tiles are every tile up to the newest too, each kept where it was first put)
-        if not balanced and tag in ("", PANEL_TAG, SURFACE_TAG, SURFACE_TAG + PANEL_TAG) and len(mine) > GROW_FROM:
+        if not balanced and tag in ("", PANEL_TAG, EDGE_TAG, SURFACE_TAG, SURFACE_TAG + PANEL_TAG) and len(mine) > GROW_FROM:
             return _grown(u, p, f, mine, rect, cache, tag)
         window, shown = _window(u, p, mine, rect, cache)
         corrections = None
@@ -2024,7 +2194,7 @@ def layout(u, n, cache):
     name = "_".join(f"{f.replace('/', '-')}{count[f]}" for f in used)
     if any(f not in used for f in base):
         name += f"_L{len(base)}"
-    return p, tiles, rect, count, used, name + "_" + "_".join(str(round(v)) for v in rect) + (SURFACE_TAG if surfaced else "") + (PANEL_TAG if moved else "")
+    return p, tiles, rect, count, used, name + "_" + "_".join(str(round(v)) for v in rect) + (SURFACE_TAG if surfaced else "") + ((EDGE_TAG if clouded(u) else PANEL_TAG) if moved else "")
 
 
 TUNE_MAX = 0.5   # furthest a pointing can be moved, as a fraction of the picture
@@ -2133,7 +2303,7 @@ def so_far(u, n, cache, made=None, out=OUT):
     plain, _, tuned = name.partition("-tune")
     # (and a layout whose tiles panel registration moved: its tiles are not where the pre-built pictures have them)
     tag = ("-" + plain.rsplit("-", 1)[1] if plain.startswith("lap-") else "") + \
-        "".join(x for x in (SURFACE_TAG, PANEL_TAG) if x in plain) + ("-tune" + tuned if tuned else "")
+        "".join(x for x in (SURFACE_TAG, PANEL_TAG, EDGE_TAG) if x in plain) + ("-tune" + tuned if tuned else "")
     # the seams are solved on the best covered filter drawn and shared by all (balanced look)
     ref = max(used, key=lambda f: count[f])
     # the luminance base under the picture, where it holds tiles the picture would not show (a mosaic movie's

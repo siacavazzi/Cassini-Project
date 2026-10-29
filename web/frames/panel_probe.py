@@ -60,7 +60,7 @@ def pairs(u, p, tiles, places, pic):
     for i, b in enumerate(firsts):
         for a in firsts[:i]:
             at_a, at_b = places[a["n"]], places[b["n"]]
-            shift, how = om.panel_shift(a, pic(a["n"]), at_a, b, pic(b["n"]), at_b)
+            shift, how = (om.edge_shift if om.clouded(u) else om.panel_shift)(a, pic(a["n"]), at_a, b, pic(b["n"]), at_b)
             if how in ("apart",):
                 continue
             dt = abs(b["t"] - a["t"])
@@ -120,9 +120,11 @@ def main():
             return pics[j]
         spice = {t["n"]: t["offset"] for t in tiles}
         # (measured up to 6% of a frame, as in the first rounds, so the shifts registration no longer believes show)
+        # (edge registration's measure, on a clouded body: up to 10%)
         cap, om.PANEL_MAX = om.PANEL_MAX, 0.06
+        edge_cap, om.EDGE_MAX = om.EDGE_MAX, 0.1
         before = pairs(u, p, tiles, spice, pic)
-        om.PANEL_MAX = cap
+        om.PANEL_MAX, om.EDGE_MAX = cap, edge_cap
         # the surface redrawn as at the pass's epoch (surface_pictures), measured again where SPICE put each tile
         t1 = time.time()
         surfaced = om.surface_pictures(u, a.cache, p, tiles)
