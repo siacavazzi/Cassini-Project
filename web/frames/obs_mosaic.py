@@ -869,6 +869,8 @@ SKY_TOP_PCT = 99     # ... and each band's black at least this percentile of tha
 SKY_SMOOTH = 9      # ... on the sky less its mean over this many pixels (of the quarter-size frames, 36 full size)
 SKY_TOE = 1.0    # ... and the soft toe above those blacks, this many times the black's height over the sky wide
                  # (calibration.display): the sky's scan lines, not its pixel noise, set how far grain reaches
+SKY_OUTLIER = 6  # a movie frame's own sky (tile_scale): pixels further under its median than the sky's threshold (5% of
+                 # the 99.9th percentile) or this many times its noise are not sky (a lost line calibrates to ~-1 I/F)
 
 
 def _sky_fine(iofs, masks):
@@ -897,9 +899,23 @@ def tile_scale(scale, f, own_sky=False, seen=None):
     def black_of(iof):
         # the frame's sky as pass_scale finds it, at the size it measures on
         q = iof[::4, ::4].astype(np.float32)
-        m = q < 0.05 * np.percentile(q, 99.9)
+        top_of_sky = 0.05 * np.percentile(q, 99.9)
+        m = q < top_of_sky
         if m.mean() <= SKY_MIN:
             return None
+        # pixels far under the sky are not sky: a line lost in downlink calibrates to about -1 I/F, and the mean over
+        # SKY_SMOOTH pixels below spread a ninth of it onto the rows beside it, which the darker half of the sky then
+        # picked up as grain; a faint frame's black went to ~0.09 I/F, over everything in it (35 of the 57 black
+        # frames of 425 lit movie passes). They are left out of the sky and given its median, so they spread nothing
+        median = float(np.median(q[m]))
+        steps = np.abs(np.diff(q, axis=1))[m[:, 1:] & m[:, :-1]]
+        noise = 1.4826 * float(np.median(steps)) / math.sqrt(2) if steps.size else 0.0
+        low = q < median - max(abs(top_of_sky), SKY_OUTLIER * noise)
+        if low.any():
+            m &= ~low
+            q = np.where(low, np.float32(median), q)
+            if m.mean() <= SKY_MIN:
+                return None
         (level,), _ = calibration.sky_levels([[q]], [[m]])
         # the band's height over the sky at least this frame's own (its sky's fine structure, as pass_scale measures
         # the pass's): a frame lit by stray light has a grainier sky than the pass's typical one, and in the Jupiter
@@ -908,6 +924,10 @@ def tile_scale(scale, f, own_sky=False, seen=None):
         own = float(np.percentile(fine, SKY_TOP_PCT) - np.median(fine)) if fine.size > 100 else 0.0
         raised = level + max(top, own)
         if raised <= black:
+            return None
+        # and never at or over the frame's lit median (its pixels over the sky): a black there draws the frame black
+        lit = q[q >= top_of_sky]
+        if lit.size and raised >= float(np.median(lit)):
             return None
         if seen is not None:
             seen["black"] = raised
@@ -2591,6 +2611,22 @@ def _steady_table(u, n, cache, centre=True, colour=False):
             "box": [tiles[n]["box"] for n in ns], "view": list(rect), "out": OUT, "k": OUT / max(rect[2], rect[3]),
             "colour": bool(p.get("colour")), "most": STEADY_MOST, "detail": bool(p["display_scale"].get("filled")),
             "sigma": DETAIL_SIGMA * FRAME * OUT / max(rect[2], rect[3]), "amount": DETAIL}
+
+
+def page_evens(u, cache, colour=True, centre=True):
+    """True when a browser evens the exposure of pass u's movie by itself (steady-local.html want(), with Exposure
+    normalization on, its default): the pass's steady table is local, its brightness chain is on frames with no gain of
+    their own, and a colour pass mixes in natural colour (a false colour set is drawn by the server). Otherwise the
+    window asks the server for its frames with exposure= (the pre-build makes them, prebuild.make_evened). Works the
+    pass's chains out first when they are not made (steady_chain, exposure_chain)."""
+    if u.get("track") or not calibration.step("align"):
+        return False
+    p = plan(u, cache)
+    steady_chain(u, cache, p)
+    exposure_chain(u, cache, p, colour, centre, 0)
+    t = _steady_table(u, 0, cache, centre, colour)
+    return bool(t.get("local") and (t.get("exposure") or {}).get("local")
+                and not (colour and t.get("colour") and not t.get("sets")))
 
 
 def _colour_recipes(u, p, cache, ns, tiles):
