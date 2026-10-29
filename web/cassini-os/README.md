@@ -73,6 +73,19 @@ quiet note suggests pre-processing, with a button that highlights the next 300 f
 server's own picture requests (the camera windows' pictures go first), never to other jobs on the machine, and the
 row stays up while it is made, even when the rest of the interface fades. While it is being made, and once it is made, the highlight is kept: a drag elsewhere leaves it be (× lets it go), its ends drag outward to add to it (the part already made stays made and only the new ends are made), and they drag inward only once it is done. It also carries on with the tab in the background or another window in front (the rest of the page pauses, Settings > Playback > Pause in the background): the tab title shows how far it is, and a stretch finished meanwhile plays when you come back.
 
+## Cache slices (one year at a time)
+
+To try a change to the pictures on one year before rebuilding the whole mission, pre-build only that year into a
+cache of its own: `python web/frames/prebuild.py processed --years 2004 --cache <slice cache> ...` (each phase the
+same way; `--years 2004-2005` or `2004,2008`, or `--from 2004-06-01 --until 2004-07-15`; `prebuild.py count --years
+2004` says how many items that is). A phase that finishes records the stretch it built, and the picture versions it
+built them with, in `<cache>/slices.json` (`web/frames/slices.py`). A frame server on that cache answers
+`/frames/slices.json` with the stretches every recorded phase covers under its own versions, and the page keeps its
+timeline, Moments and Highlights to them, opens at their first moment when a link or the start time is outside them,
+and says "2004 only" under the Moments. A cache with no record (the live one), a server whose versions differ from
+the slice's, or a whole-mission run is the whole mission, as before. Settings > Playback > Only years with pictures
+built (`playback.builtOnly`, on) turns it off: the whole mission, with pictures outside the slice made on demand.
+
 ## Timeline
 
 The Cassini Replay window is mostly timeline. Its head holds the controls in one small cluster on the left (previous

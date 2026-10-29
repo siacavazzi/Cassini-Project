@@ -180,8 +180,9 @@ body.phone #hllist { grid-template-columns: 1fr; }
 
   // after the viewer's own script has run (this one comes first in the page), so its jump, state and formats exist
   const ready = document.readyState === "loading" ? new Promise(r => addEventListener("DOMContentLoaded", r)) : Promise.resolve();
-  Promise.all([ready, fetch("data/highlights.json").then(r => r.ok ? r.json() : []).catch(() => [])]).then(([, h]) => {
-    H.list = h || [];
+  // a picture cache of some years only (cassiniSlice, head-quiet.html): only their highlights
+  Promise.all([ready, fetch("data/highlights.json").then(r => r.ok ? r.json() : []).catch(() => []), window.cassiniSlice && cassiniSlice.ready]).then(([, h]) => {
+    H.list = (h || []).filter(x => !window.cassiniSlice || cassiniSlice.has(x.et));
     const m = menu && menu.closest(".menu");
     if (!H.list.length) { if (m) m.hidden = true; return; }
     build();
