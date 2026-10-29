@@ -6,7 +6,8 @@ re-implemented.
   CASSINI_DATA=... CASSINI_KERNELS=... CASSINI_GEOMETRY_CACHE=... \\
   python web/frames/panel_probe.py --cache SCRATCH_CACHE --out OUTDIR PASS...
 
-PASS is a frame id (N1477496427_2) or TARGET:OBSERVATION_ID:CAM[:pass]. Never point --cache at a cache the server
+PASS is a frame id (N1477496427_2: its pass up to that frame; --whole: the whole pass it is in) or
+TARGET:OBSERVATION_ID:CAM[:pass]. Never point --cache at a cache the server
 or the pre-build uses: the tiles and mosaics made here are written to it.
 
 For each pass: every pair of overlapping pointings measured where SPICE put them (panel_shift: how far apart they
@@ -60,7 +61,9 @@ def pairs(u, p, tiles, places, pic):
     for i, b in enumerate(firsts):
         for a in firsts[:i]:
             at_a, at_b = places[a["n"]], places[b["n"]]
-            shift, how = om.panel_shift(a, pic(a["n"]), at_a, b, pic(b["n"]), at_b)
+            # (getattr: the probe also runs against an obs_mosaic from before edge registration, for the before)
+            edges = getattr(om, "clouded", lambda u: False)(u)
+            shift, how = (om.edge_shift if edges else om.panel_shift)(a, pic(a["n"]), at_a, b, pic(b["n"]), at_b)
             if how in ("apart",):
                 continue
             dt = abs(b["t"] - a["t"])
@@ -95,6 +98,7 @@ def main():
     ap = argparse.ArgumentParser()
     ap.add_argument("--cache", required=True)
     ap.add_argument("--out", required=True)
+    ap.add_argument("--whole", action="store_true", help="a frame id stands for the whole pass it is in")
     ap.add_argument("passes", nargs="+")
     a = ap.parse_args()
     import calibration
@@ -106,6 +110,8 @@ def main():
         if u is None:
             print(spec, "no pass")
             continue
+        if a.whole:
+            n = len(u["frames"]) - 1
         name = "_".join(map(str, u["key"])).replace("/", "-")
         t0 = time.time()
         p = om.plan(u, a.cache)
@@ -120,9 +126,11 @@ def main():
             return pics[j]
         spice = {t["n"]: t["offset"] for t in tiles}
         # (measured up to 6% of a frame, as in the first rounds, so the shifts registration no longer believes show)
+        # (edge registration's measure, on a clouded body: up to 10%)
         cap, om.PANEL_MAX = om.PANEL_MAX, 0.06
+        edge_cap, om.EDGE_MAX = getattr(om, "EDGE_MAX", None), 0.1
         before = pairs(u, p, tiles, spice, pic)
-        om.PANEL_MAX = cap
+        om.PANEL_MAX, om.EDGE_MAX = cap, edge_cap
         # the surface redrawn as at the pass's epoch (surface_pictures), measured again where SPICE put each tile
         t1 = time.time()
         surfaced = om.surface_pictures(u, a.cache, p, tiles)
@@ -157,6 +165,9 @@ def main():
             print("   before", r, flush=True)
         for k, v in sorted(moved.items()):
             print("   move", k, v, flush=True)
+        for k, v in sorted(report.items()):
+            if math.hypot(*v["move"]) > 5:
+                print("   matched", k, json.dumps(v, default=str)[:600], flush=True)
         # the whole mosaic, panels off and on, and crops where the pairs moved most
         pictures = {}
         for label, off in (("spice", "surface,panels"), ("surface", "panels"), ("registered", "")):
@@ -164,12 +175,20 @@ def main():
                 made = om.layout(u, n, a.cache)
                 im, _ = om.so_far(u, n, a.cache, made=made, out=om.CANVAS)
             pictures[label] = (im, made)
-            im.save(os.path.join(a.out, f"{name}_{label}.png"))
+            if im is not None:
+                im.save(os.path.join(a.out, f"{name}_{label}.png"))
+        if any(im is None for im, _ in pictures.values()):
+            print("   no mosaic drawn", flush=True)
+            every.append(rec)
+            continue
         _, made = pictures["spice"]
         mp, _, rect, *_ = made
         k = mp["k"] * pictures["spice"][0].width / math.ceil(rect[2] * mp["k"])
         by = {t["n"]: t for t in tiles}
-        worst = sorted([r for r in before if "px" in r], key=lambda r: -r["px"])[:4]
+        # (where registration moved a pair of pointings most against each other, or else where they were furthest apart)
+        rel = lambda r: math.hypot(*(np.subtract(moved.get(r["b"], [0, 0]), moved.get(r["a"], [0, 0]))))
+        worst = sorted([r for r in before if rel(r) > 0.5], key=lambda r: -rel(r))[:4] or \
+            sorted([r for r in before if "px" in r], key=lambda r: -r["px"])[:4]
         crops = []
         for i, r in enumerate(worst):
             ta, tb = by[r["a"]], by[r["b"]]
@@ -185,6 +204,7 @@ def main():
             fn = f"{name}_crop{i}.png"
             row.save(os.path.join(a.out, fn))
             crops.append((fn, r, round(x), round(y)))
+            print(f"   crop{i} pair {r['a']}-{r['b']} moved apart {rel(r):.1f} px", flush=True)
         rec["crops"] = [{"file": c[0], "x": c[2], "y": c[3], "pair": [c[1]["a"], c[1]["b"]]} for c in crops]
         every.append(rec)
         page.append(f"<h2>{html.escape(spec)} ({len(tiles)} tiles, {rec['km_per_px']} km/px)</h2>"
@@ -193,7 +213,7 @@ def main():
                     f"moves {html.escape(json.dumps(rec['moves']))}</p>"
                     f"<p>whole: <a href='{name}_spice.png'>SPICE</a> | <a href='{name}_surface.png'>surface</a> | "
                     f"<a href='{name}_registered.png'>surface + panels</a></p>"
-                    + "".join(f"<p>pair {c[1]['a']}–{c[1]['b']}: {c[1]['px']} px apart at SPICE's places, {c[1]['dt']} s between, "
+                    + "".join(f"<p>pair {c[1]['a']}–{c[1]['b']}: {c[1].get('px', 'not measured')} px apart at SPICE's places, {c[1]['dt']} s between, "
                               f"at ({c[2]}, {c[3]}). Left SPICE, middle surface at one moment, right surface + panels lined up ({ZOOM}x)<br><img src='{c[0]}'></p>" for c in crops))
     json.dump(every, open(os.path.join(a.out, "probe.json"), "w"), indent=1, default=str)
     with open(os.path.join(a.out, "index.html"), "w") as fh:
