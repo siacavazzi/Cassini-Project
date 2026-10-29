@@ -57,15 +57,16 @@ print("phase match kept:", align(ref, small, [None, (9.0, -4.0)])[0])
 # than no shift, and not otherwise
 flat = cv2.cvtColor(np.clip((np.hypot(xx - 300 - 20, yy - 700 - 30) < 650) * 140 + rng.normal(0, 2, (N, N)), 0, 255)
                     .astype(np.uint8), cv2.COLOR_GRAY2BGR)
-shift, how = ic.guided_shift(ref, flat, np.ones((N, N), bool), np.ones((N, N), bool), (20.0, 30.0))
+shift, how = ic.guided_shift(ref, flat, (20.0, 30.0))
 assert shift is not None and np.hypot(shift[0] - 20, shift[1] - 30) < 2, (how, shift)
 blank = cv2.cvtColor(rng.normal(20, 2, (N, N)).clip(0, 255).astype(np.uint8), cv2.COLOR_GRAY2BGR)
 print("flat band:", how)
-shift, how = ic.guided_shift(ref, blank, np.ones((N, N), bool), np.ones((N, N), bool), (40.0, -50.0))
+shift, how = ic.spice_shift(ref, blank, np.ones((N, N), bool), np.ones((N, N), bool), (40.0, -50.0))
 print("blank:", how, shift)
 assert shift is None
 # a guess past GUESS_MAX (the frames show different parts of the scene) is no help
-assert ic.guided_shift(ref, img, np.ones((N, N), bool), np.ones((N, N), bool), (5.0, 834.0)) == (None, "not aligned")
+assert ic.guided_shift(ref, img, (5.0, 834.0)) == (None, "not aligned")
+assert ic.spice_shift(ref, img, np.ones((N, N), bool), np.ones((N, N), bool), (5.0, 834.0)) == (None, "not aligned")
 
 # ---------- without guess=, align_with_masks is the one on main, byte for byte (mosaic registration passes none) ----------
 def module_from_main(name):

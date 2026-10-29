@@ -65,7 +65,8 @@ def extract(args):
     with zipfile.ZipFile(args.out, "w", zipfile.ZIP_STORED) as out:
         for info in src.infolist():
             stem = info.filename.rsplit("/", 1)[-1].split(".")[0]
-            if stem in want:
+            # and the folders' FORMAT.txt, which says the PNGs hold the lean archive's codes (data_source.lut8)
+            if stem in want or info.filename.endswith("FORMAT.txt"):
                 out.writestr(info, src.read(info))
                 n += 1
     print(f"{len(named)} ids named, {len(want)} frames, {n} members into {args.out} ({os.path.getsize(args.out) >> 20} MB)")

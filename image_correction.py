@@ -100,10 +100,9 @@ def align_with_masks(imgs, masks, ref=0, report=None, found=None, use=None, gues
         shift, how = find_shift(imgs[ref], imgs[i]), "phase"
         g = guess[i] if guess is not None else None
         if shift is None and g is not None:
-            # SPICE knows about where the frame is: the fallbacks look near there, and SPICE's place stands when
-            # nothing is found
-            shift, how = guided_shift(imgs[ref], imgs[i], masks[ref], masks[i], g)
-        elif shift is None:
+            # SPICE knows about where the frame is: the frames are matched again near there first
+            shift, how = guided_shift(imgs[ref], imgs[i], g)
+        if shift is None:
             shift, how = find_shift(edges(imgs[ref]), edges(imgs[i])), "edges"
             # an edge match at exactly no shift is the camera's own fixed pattern (dust rings, bad
             # columns) matching itself, not the target: it says nothing
@@ -111,6 +110,9 @@ def align_with_masks(imgs, masks, ref=0, report=None, found=None, use=None, gues
                 shift = None
             if shift is None:
                 shift, how = centroid_shift(imgs[ref], imgs[i]), "centroid"
+        if shift is None and g is not None:
+            # nothing matched anywhere: SPICE's offset, where it lines the frames up better than none
+            shift, how = spice_shift(imgs[ref], imgs[i], masks[ref], masks[i], g)
         if shift is not None:
             imgs[i] = shift_image(imgs[i], *shift)
             masks[i] = shift_image(masks[i].astype(np.float32), *shift) > 0.99
@@ -167,9 +169,10 @@ its lit area touches the frame's edge so the centroid refuses it; the pointing d
 in the picture as colour fringes, a quarter of Rhea wide when the camera moved 105 px between filters (N1711682068_1).
 Here the frame is first moved by SPICE's offset, then matched again within GUESS_WINDOW of it, where a weaker peak
 (GUESS_RESPONSE) is believed: by phase correlation, then on edges, then the centroid (on the frames as they are,
-believed within the same window). With no match SPICE's offset stands, when it lines the frames' edges up better than
-no shift does. A guess past GUESS_MAX is no help: the frames show different parts of the scene.
-masks = the two frames' valid pixels (label.valid_mask), for that comparison
+believed within the same window). SPICE's pointing can itself be tens of pixels off (a WAC set of 2012-05-02,
+W1714632762_1, moved 30 px that SPICE doesn't show), so when nothing matches near it the frames' own fallbacks still
+run (align_with_masks), and only then SPICE's offset (spice_shift). A guess past GUESS_MAX is no help: the frames
+show different parts of the scene.
 returns ((dx, dy), how) or (None, "not aligned")
 """
 GUESS_WINDOW = 12     # px: SPICE's pointing is 3 to 5 px off from panel to panel, 11 at most (obs_mosaic.PANEL_MAX)
@@ -178,7 +181,7 @@ GUESS_MAX = 256       # px: a quarter of the frame
 AGREE_MARGIN = 0.02   # how much better SPICE's offset must line the edges up than no shift does
 
 
-def guided_shift(im1, im2, mask1, mask2, guess):
+def guided_shift(im1, im2, guess):
     gx, gy = float(guess[0]), float(guess[1])
     if np.hypot(gx, gy) > GUESS_MAX:
         return None, "not aligned"
@@ -194,7 +197,18 @@ def guided_shift(im1, im2, mask1, mask2, guess):
     found = centroid_shift(im1, im2)
     if found is not None and np.hypot(found[0] - gx, found[1] - gy) <= GUESS_WINDOW:
         return found, "centroid near SPICE"
-    if _agreement(im1, im2, mask1, mask2, (gx, gy)) > _agreement(im1, im2, mask1, mask2, (0.0, 0.0)) + AGREE_MARGIN:
+    return None, "not aligned"
+
+
+"""
+SPICE's offset guess for im2 when no match was found anywhere, if it lines the frames' edges up better than no shift
+(by AGREE_MARGIN), else none. masks = the two frames' valid pixels (label.valid_mask)
+returns ((dx, dy), "SPICE") or (None, "not aligned")
+"""
+def spice_shift(im1, im2, mask1, mask2, guess):
+    gx, gy = float(guess[0]), float(guess[1])
+    if np.hypot(gx, gy) <= GUESS_MAX and \
+            _agreement(im1, im2, mask1, mask2, (gx, gy)) > _agreement(im1, im2, mask1, mask2, (0.0, 0.0)) + AGREE_MARGIN:
         return (gx, gy), "SPICE"
     return None, "not aligned"
 
