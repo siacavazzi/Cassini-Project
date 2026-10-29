@@ -1312,6 +1312,12 @@ SMALL_BODY = 0.02   # of a frame: a body whose disk's radius is under this is sm
                    # Enceladus 64 px across the edge of a plume movie, whose plume fills the frame
 
 
+def _speck(u):
+    """True when pass u's body is small (small_body) on most of its placed frames."""
+    placed = [fr for fr in u["frames"] if fr[7]]
+    return bool(placed) and sum(small_body(u, fr) is not None for fr in placed) * 2 > len(placed)
+
+
 def small_body(u, frame):
     """The disk (x, y, radius in full resolution pixels) of pass u's body on frame (one of u["frames"]) when the body
     is small on it (under SMALL_BODY of a frame in radius: a small moon, a speck), else None: the sky round it is
@@ -3060,8 +3066,8 @@ EXPOSURE_LIT = 0.04      # of the brightest: the pixels a brightness is measured
 EXPOSURE_SIDE = 160      # px: the movie pictures a pass's brightness is measured on (exposure_chain) are this big
 # a movie's brightness chain (exposure_chain), kept with the pass for each way of drawing it; renamed (with the movie
 # frames drawn with it, movie_webp) whenever the rule changes
-EXPOSURE_FILE = "exposure4-{}-" + PLAN_FILE
-EXPOSURE_RULE = 6        # the way the gains are worked out from the chain: in the movie frames' names (movie_webp)
+EXPOSURE_FILE = "exposure5-{}-" + PLAN_FILE
+EXPOSURE_RULE = 7        # the way the gains are worked out from the chain: in the movie frames' names (movie_webp)
 EXPOSURE_GREY_RUN = 6    # frames: a colour pass's grey frames (its filters coming in) evened only in a run this long
 EXPOSURE_SAME = 0.5      # of the larger lit area: two pictures sharing less lit view than this show different scenes
 
@@ -3124,6 +3130,12 @@ def exposure_chain(u, cache, p=None, colour=True, centre=True, steady=0):
                         step = math.log(levels[1] / levels[0])
                         logs[n], hows[n] = [logs[j][0] + step, stretch, bool(kind)], f"{math.exp(step):.3f} x {j}"
             last = (n, a, kind)
+        if _speck(u):
+            # a pass of a speck (small_body on most of its frames): its pictures are sky with the body a dot, and the
+            # sky's noise and stars are all a brightness chain measures; evening them pumped that noise up 4x frame to
+            # frame (Kiviuq 112OT, Pallene 139PL once their stray-light veil went). Nothing to even: one level
+            logs = {n: [0.0] + v[1:] for n, v in logs.items()}
+            hows = {n: "a speck's pass: not evened" for n in hows}
         return logs, hows
 
     rec = _kept_tiles(u, cache, p["display_scale"])
@@ -3524,13 +3536,18 @@ def unfit(frames, n, tile_of):
 
 def held_of(filters, n, is_partial, whole):
     """The frame a movie shows in frame n's place (pure, ported to the page: steady-local.html heldOf): n, or when n
-    is partial (is_partial(n)), the last frame before it of its filter (filters[j]) that is whole (whole(j): placed and
-    not partial), as the camera windows hold a colour movie's last set; n when there is none, so a pass whose frames
-    of a filter all came down partial keeps them. The movie keeps its frame count: only the picture is held."""
+    is partial (is_partial(n): unfit's frames), the last frame before it of its filter (filters[j]) that is whole
+    (whole(j): placed and not partial), as the camera windows hold a colour movie's last set; when its filter has
+    none, the last whole frame before it of any filter (the Phoebe 2004-06-12 movie's 8LSB frames are each its
+    filter's first); n when there is none, so a pass whose frames all came down partial keeps them. The movie keeps
+    its frame count: only the picture is held."""
     if not is_partial(n):
         return n
     for j in range(n - 1, -1, -1):
         if filters[j] == filters[n] and whole(j):
+            return j
+    for j in range(n - 1, -1, -1):
+        if whole(j):
             return j
     return n
 

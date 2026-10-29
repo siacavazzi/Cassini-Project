@@ -60,9 +60,15 @@ frames3 = fr(["UV3", "UV3", "UV3", "GRN", "GRN"])
 tiles3 = [{**placed, "calibrated": True}, {**placed, "calibrated": False}, {**placed, "calibrated": True, "lost": 0.7},
           {**placed, "calibrated": False}, {**placed}]
 got = shown(frames3, tiles3)
-assert got == [0, 0, 0, 3, 4], got   # (the first GRN frame has nothing earlier to hold: shown)
+assert got == [0, 0, 0, 0, 4], got   # (the first GRN frame has no GRN before it: the last whole frame of any filter)
+assert shown(frames3[:1] + frames3[1:2], [{**placed, "calibrated": False}] * 2) == [0, 1]   # nothing whole: kept
 assert not om.unfit(frames3, 0, lambda j: {"why": "not placed"}) and not om.unfit(frames3, 4, lambda j: tiles3[j])
 print("8LSB and partial frames held")
+
+# ---- a speck's pass (small_body on most frames) is not evened: its chain is flat
+assert om._speck({"key": ("KIVIUQ", "O", "N", 0), "frames": [("p", "N1_1", "CL1", 0, 0, -30.0, -84.0, 9.4e6)] * 3})
+assert not om._speck({"key": ("TITAN", "O", "N", 0), "frames": [("p", "N1_1", "CL1", 0, 0, 0.0, 0.0, 1e5)] * 3})
+assert not om._speck({"key": ("KIVIUQ", "O", "N", 0), "frames": [("p", "N1_1", "CL1", 0, 0, 0, 0, 0)] * 3})
 
 # ---- the steady table's "partial" list (the page's heldOf) is unfit's
 assert [m for m in range(8) if om.unfit(frames, m, lambda j: [{**placed, "saturated": 0.17 if n % 2 == 0 else 0.75}
