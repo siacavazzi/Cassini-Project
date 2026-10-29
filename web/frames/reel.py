@@ -227,6 +227,23 @@ def geometry(ids):
     return out
 
 
+def north_angles(ids):
+    """The turn that puts celestial north up in each of the frames ids (degrees, counter clockwise as
+    cv2.getRotationMatrix2D takes it: bootleg_autonav.find_target's angle), from the geometry cache: {id: angle}.
+    Frames that are not cached, or that SPICE could not place, are left out."""
+    import bootleg_autonav as ba
+    if not ba.GEOMETRY_CACHE or not os.path.exists(ba.GEOMETRY_CACHE):
+        return {}
+    db, out = ba._geometry_db(), {}
+    for k in range(0, len(ids), 900):
+        part = ids[k:k + 900]
+        for frame, angle in db.execute(f"SELECT frame, angle FROM target WHERE version = ? AND error IS NULL "
+                                       f"AND frame IN ({','.join('?' * len(part))})", (ba.GEOMETRY_VERSION, *part)):
+            if angle is not None:
+                out[frame] = angle
+    return out
+
+
 _target_of = None
 
 
