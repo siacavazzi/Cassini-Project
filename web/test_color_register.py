@@ -113,15 +113,13 @@ assert cal.color_mix("W", ["RED", "VIO"], "SATURN") is None
 two = cal.color_mix("W", ["IR3", "VIO"], "SATURN", own=True)
 assert isinstance(two, cal.FalseMix) and two.shape == (3, 3)
 assert isinstance(cal.color_mix("N", ["MT3", "BL1"], "TITAN", own=True), cal.FalseMix)
-# Titan's CB3 (its surface window) with another band: the picture's brightness from CB3 (lum, its channel in two_bands'
-# three), as the haze band's half of every pixel washed the surface out into flat orange (042TI_GLOBMAP001, N1687507569_1)
-assert cal.color_mix("N", ["CB3", "MT1"], "TITAN", own=True).lum == 0
-assert cal.color_mix("W", ["IR1", "CB3"], "TITAN", own=True).lum == 2
-assert cal.color_mix("N", ["BL1", "UV3"], "TITAN", own=True).lum is None
-assert cal.color_mix("W", ["CB3", "VIO"], "SATURN", own=True).lum is None
-assert cal.color_mix("N", ["CB3", "MT1", "UV3"], "TITAN", own=True).lum is None
-m = cal.color_mix("N", ["CB3", "MT1"], "TITAN", own=True)
-assert (m * 2).lum == 0 and m[:, :].lum == 0      # kept through arithmetic
+# Titan's CB3 (its surface window) with another band stays straight, as before #188: its surface shows as the bands'
+# difference, which the balance flattened into one orange (042TI_GLOBMAP001, N1687507569_1)
+assert cal.color_mix("N", ["CB3", "MT1"], "TITAN", own=True) is None
+assert cal.color_mix("W", ["IR1", "CB3"], "TITAN", own=True) is None
+assert isinstance(cal.color_mix("N", ["BL1", "UV3"], "TITAN", own=True), cal.FalseMix)
+assert isinstance(cal.color_mix("W", ["CB3", "VIO"], "SATURN", own=True), cal.FalseMix)
+assert isinstance(cal.color_mix("N", ["CB3", "MT1", "UV3"], "TITAN", own=True), cal.FalseMix)
 assert cal.two_bands([4.0, 2.0]) == [4.0, 3.0, 2.0] and cal.two_bands([1, 2, 3]) == [1, 2, 3]
 with cal.coloring("raw"):
     assert cal.color_mix("W", ["IR3", "VIO"], "SATURN", own=True) is None
@@ -249,7 +247,7 @@ with cal.coloring("raw"):
     lin = lambda v: (v / 255) ** 2.2
     assert (r, b) == (160, 60) and abs(lin(g) - (lin(160) + lin(60)) / 2) < 0.005, (r, g, b)
 
-# ---------- Titan's CB3 + MT1 drawn in the pair's color with CB3's brightness ----------
+# ---------- Titan's CB3 + MT1 drawn straight: the markings show, in color ----------
 # CB3 sees the surface (dark markings 8% under the bright terrain), MT1 a featureless haze over the same disk
 H = 200
 yy2, xx2 = np.mgrid[:H, :H]
@@ -259,12 +257,10 @@ cb3 = np.where(disk, 0.10 * np.where(marks, 0.92, 1.0), 0).astype(np.float32)
 mt1 = np.where(disk, 0.20, 0).astype(np.float32)
 chans, margin, mix = cal.load_linear([Label("CB3", "TITAN", "ISSNA"), Label("MT1", "TITAN", "ISSNA")],
                                      [np.zeros((H, H, 3), np.uint8)] * 2, [cb3 + 0, mt1 + 0])
-assert mix.lum == 0
-out = np.stack([c[..., 0] for c in cal.tone(chans, margin, mix)]).astype(float)
+assert mix is None
+out = np.stack([c[..., 0] for c in cal.tone(chans, margin, mix)]).astype(float)   # (red CB3, blue MT1)
 inner = disk & (np.hypot(yy2 - 100, xx2 - 100) < 55)
 dark, bright = out[:, inner & marks].mean(axis=1), out[:, inner & ~marks].mean(axis=1)
-contrast = 1 - dark.mean() / bright.mean()
-print("Titan CB3+MT1: bright", bright.round(1), "markings", dark.round(1), "contrast", round(float(contrast), 3))
-assert contrast > 0.04                        # the markings show (drawn without lum: the haze halves them, and less)
-assert bright[0] > bright[2] + 3              # in the pair's color, not grey
+print("Titan CB3+MT1 straight: terrain", bright.round(1), "markings", dark.round(1))
+assert bright[0] - dark[0] > 5 and dark[0] / dark[1] < bright[0] / bright[1] - 0.01   # the markings darker, bluer
 print("ok")

@@ -45,4 +45,11 @@ b115 = [("", "", f, t) for f, t in [("VIO", 408), ("GRN", 456), ("CB2", 510), ("
                                     ("VIO", 828), ("GRN", 876), ("CB2", 930)]]
 assert [[j for _, j in s] for s in om.colour_sets(b115)] == [[0, 1, 2, 3, 4], [5, 6, 7]]
 assert [[j for _, j in s] for s in om.colour_sets(b115[:3] + [("", "", "CL1/CL2", 520)] + b115[3:5])] == [[0, 1, 2], [4, 5]]
+# a colour set held from an earlier pointing is shown only where it covers most of the frame's own place (held_cover)
+cv = lambda x: np.dstack([np.zeros((100, 100, 3), np.uint8), np.pad(np.full((100, 100 - x), 255, np.uint8), ((0, 0), (x, 0)))])
+own = {"offset": [10.0, 0.0], "box": [0, 0, 50, 100]}    # columns 10 to 60 of the view
+assert om.held_cover(own, [cv(0), cv(0)], [0, 0, 100, 100], 1) == 1.0
+assert om.held_cover(own, [cv(0), cv(35)], [0, 0, 100, 100], 1) == 0.5      # one filter starts halfway across it
+assert om.held_cover(own, [cv(0), cv(60)], [0, 0, 100, 100], 1) == 0.0      # past it
+assert om.held_cover(dict(own, offset=[500.0, 0.0]), [cv(0)], [0, 0, 100, 100], 1) == 0.0   # out of the view
 print("ok")
