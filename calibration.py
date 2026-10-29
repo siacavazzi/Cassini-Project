@@ -530,6 +530,10 @@ FLOOR_EDGE = 10      # With sky, the floor is taken at least FLOOR_EDGE pixels f
 FLOOR_MIN = 0.01     # picture is that far), and only an even lit part has it taken off: none when the floor is under
 FLOOR_EVEN = (0.3, 0.6)  # FLOOR_EVEN[0] of the lit part's WHITE_PCT percentile, all of FLOOR_SHARE from FLOOR_EVEN[1],
                      # so dim things between the sky and the body (faint rings, a shadow, a night side) keep their light
+GLOW_IOF = (1e-3, 5e-3)  # balanced, no sky: a picture whose median brightness (I/F) is under GLOW_IOF[0] is lit sky (a plume's
+GLOW_PCT = 50        # or the E ring's glow, stray light, a star field's offset), not a sunlit surface, which is brighter than
+                     # GLOW_IOF[1]: its black is its GLOW_PCT percentile, so the sky goes near black and only the glow
+                     # brighter than the sky shows; in between, a blend (on a log scale) from the floor black
 TOE = 0.05           # balanced composites: a margin up to this share of white (the sky's noise) has a toe (tone) as wide as
                      # it and centred on it, so a night side or twilight it reaches into (the sky test counts it as sky)
                      # fades out smoothly instead of being cut off with a ragged edge; from twice this (a floor black,
@@ -1168,7 +1172,8 @@ def draw_saturated(labels, channels, margin):
 
 """
 The black a picture's floor sets (FLOOR_SHARE): a share of the FLOOR_PCT percentile of its brightness above the sky
-levels. sky = the sky mask, or None for a picture without sky: then every pixel, and FLOOR_SHARE of it. With sky, the
+levels. sky = the sky mask, or None for a picture without sky: then every pixel, and FLOOR_SHARE of it, or up to its
+GLOW_PCT percentile when the picture is as dim as lit sky (GLOW_IOF). With sky, the
 pixels at least FLOOR_EDGE from it, and a share from 0 to FLOOR_SHARE as that floor goes from FLOOR_EVEN[0] to
 FLOOR_EVEN[1] of their WHITE_PCT percentile; 0 when under FLOOR_MIN of the picture is that far from the sky
 """
@@ -1176,7 +1181,10 @@ def _floor(iofs, levels, sky=None):
     lum = iofs[0] - np.float32(levels[0]) if len(iofs) == 1 else \
         np.mean([iof - np.float32(level) for iof, level in zip(iofs, levels)], axis=0)
     if sky is None:
-        return FLOOR_SHARE * max(float(np.percentile(lum, FLOOR_PCT)), 0.0)
+        floor, middle, glow = (float(v) for v in np.percentile(lum, (FLOOR_PCT, 50, GLOW_PCT)))
+        black = FLOOR_SHARE * max(floor, 0.0)
+        dim = np.log(GLOW_IOF[1] / max(middle, 1e-12)) / np.log(GLOW_IOF[1] / GLOW_IOF[0])
+        return black + min(max(float(dim), 0.0), 1.0) * max(glow - black, 0.0)
     side = 2 * FLOOR_EDGE + 1
     far = cv2.erode((~sky).astype(np.uint8), np.ones((side, side), np.uint8)).astype(bool)
     if far.sum() < FLOOR_MIN * far.size:

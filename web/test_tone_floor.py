@@ -1,9 +1,10 @@
-"""Synthetic checks of a single picture's own black (calibration._balanced_scale with _floor, then
-load_linear and tone): an even bright surface with no sky (Titan's haze) spreads over the range instead of sitting at
-near-white; a lit sky that fails the sky test goes dark; an even body beside sky (a moon close-up) gets its floor taken
-off, a body with a terminator or a ring shadow does not; a night side the sky test counts as sky fades out instead of
-a ragged cut while the real sky stays black; one black for every channel keeps the colour; saturated pixels draw white (draw_saturated);
-and a reel's shared scale (tiles_scale) still fits every tile's white. Run: python web/test_tone_floor.py"""
+"""Synthetic checks of a single picture's own black (calibration._balanced_scale with _floor, then load_linear and tone):
+an even bright surface with no sky (Titan's haze) spreads over the range instead of sitting at near-white; a lit sky
+that fails the sky test, and a star field's even offset, go near black (GLOW_IOF); an even body beside sky (a moon
+close-up) gets its floor taken off, a body with a terminator or a ring shadow does not; a night side the sky test
+counts as sky fades out instead of a ragged cut while the real sky stays black; one black for every channel keeps the
+color; saturated pixels draw white (draw_saturated); and a reel's shared scale (tiles_scale) still fits every tile's
+white. Run: python web/test_tone_floor.py"""
 import os
 import sys
 sys.path.insert(0, os.path.join(os.path.dirname(os.path.abspath(__file__)), "frames"))
@@ -28,20 +29,20 @@ class Label:
 
 
 """
-The picture drawn (one uint8 image per channel); floor=False: without the floor black, soft=False: with a toe an eighth
-of the margin wide (both about as before)
+The picture drawn (one uint8 image per channel); floor=False: without the floor black or the glow's (GLOW_IOF),
+soft=False: with a toe an eighth of the margin wide (both about as before)
 """
 def draw(iofs, floor=True, soft=True):
-    keep = cal.FLOOR_SHARE, cal.TOE
+    keep = cal.FLOOR_SHARE, cal.GLOW_IOF, cal.TOE
     if not floor:
-        cal.FLOOR_SHARE = 0.0
+        cal.FLOOR_SHARE, cal.GLOW_IOF = 0.0, (1e-30, 2e-30)
     if not soft:
         cal.TOE = 0.0
     try:
         channels, margin, mix = cal.load_linear([Label() for _ in iofs], [None] * len(iofs), [i.astype(np.float32) for i in iofs])
         return [t[..., 0] for t in cal.tone(channels, margin, mix)]
     finally:
-        cal.FLOOR_SHARE, cal.TOE = keep
+        cal.FLOOR_SHARE, cal.GLOW_IOF, cal.TOE = keep
 
 
 def pct(p, *q):
@@ -58,13 +59,30 @@ assert np.percentile(before, 10) > 230                        # today: near-whit
 assert np.percentile(after, 50) < 215 and np.percentile(after, 1) > 60   # spread out, nothing crushed to black
 assert np.percentile(after, 99) > 225                         # the brightest stays near white
 
-# ---- a lit sky that fails the sky test (a plume's forward-scattered light): a glow over the whole frame ----
+# ---- a lit sky that fails the sky test (a plume's forward-scattered light): a glow over the whole frame, its darker
+# half black (GLOW_PCT) ----
 glow = 0.0005 + 0.0004 * (yy / H) + rng.normal(0, 0.00002, (H, H))
 glow[440:, 200:320] += 0.004 * np.exp(-((xx[440:, 200:320] - 260) / 25) ** 2)   # the plume
 before, after = draw([glow], floor=False)[0], draw([glow])[0]
 print("lit sky top rows p50: before", int(np.median(before[:40])), "after", int(np.median(after[:40])))
 assert np.median(after[:40]) < np.median(before[:40]) - 40   # the sky's darkest part much darker
 assert after[:440].max() > after[:40].max()                  # the glow's gradient is kept
+
+# ---- a star field with an even offset (light scattered in the camera, as dim as lit sky, GLOW_IOF) goes near black, the
+# stars stay; a dim surface just brighter than lit sky keeps the floor black ----
+stars = 3.5e-5 + rng.normal(0, 2e-7, (H, H))
+stars[rng.integers(0, H, 300), rng.integers(0, H, 300)] += 4e-5
+before, after = draw([stars], floor=False)[0], draw([stars])[0]
+print("star field p50/p99.99: before", pct(before, 50, 99.99), "after", pct(after, 50, 99.99))
+assert np.percentile(before, 50) > 150 and np.percentile(after, 50) < 25 and np.percentile(after, 99.99) > 200
+dim = (haze * 0.05).astype(np.float32)                         # I/F 0.0085-0.0095: a sunlit surface, not sky
+keep = cal.GLOW_IOF
+cal.GLOW_IOF = (1e-30, 2e-30)
+try:
+    floor_only = draw([dim])[0]
+finally:
+    cal.GLOW_IOF = keep
+assert np.array_equal(floor_only, draw([dim])[0])
 
 # ---- with sky: an even moon close-up (one edge of the frame is sky) gets its floor off ----
 moon = np.where(xx + yy > 380, 0.6 + 0.08 * smooth, 0.0) + rng.normal(0, 0.0005, (H, H))
