@@ -173,7 +173,11 @@ def frame_report(fid, out):
         prof = np.array(bands(row_medians(iof)))
         sky = float(np.nanmedian(iof))
         low = int(np.nansum(iof < sky - 5 * g))
-        print(f"  {name:9s} rows - median, grains: {fmt((prof - sky) / g)}  | below 5 grain: {low}")
+        cols = np.nanmedian(iof, axis=0)
+        cols = (cols - cv2.medianBlur(np.nan_to_num(cols).astype(np.float32)[None], 5)[0]) / g
+        worst = np.argsort(-np.abs(np.nan_to_num(cols)))[:4]
+        print(f"  {name:9s} rows - median, grains: {fmt((prof - sky) / g)}  | below 5 grain: {low} | column stripes "
+              f"rms {float(np.sqrt(np.nanmean(cols ** 2))):.2f} grain, worst " + " ".join(f"{c}:{cols[c]:+.1f}" for c in worst))
     if "v47" in made:
         iof = made["v47"]
         g = grain_of(iof)
