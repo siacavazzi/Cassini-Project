@@ -1,0 +1,1 @@
+{"group": "new", "tag": "eclipse", "seed": "N1629633141_1", "name": "SATURN_ISS_117RI_EQXSHADOW006_PRIME_N", "kind": {"mosaic": true, "movie": false, "kind": "mosaic", "repeats": 1}, "status": 200, "observation": "ISS_117RI_EQXSHADOW006_PRIME", "target": "SATURN", "camera": "N", "pass": 0, "n": 15, "movie": false, "mosaic": true, "cadence": 63.0, "plays": "mosaic"}

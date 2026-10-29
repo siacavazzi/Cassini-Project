@@ -1,0 +1,1 @@
+{"group": "new", "tag": "grand-finale", "seed": "W1871825522_1", "name": "SATURN_ISS_271SA_NHEMMAP001_VIMS_W", "kind": {"mosaic": true, "movie": false, "kind": "mosaic", "repeats": 1}, "status": 200, "observation": "ISS_271SA_NHEMMAP001_VIMS", "target": "SATURN", "camera": "W", "pass": 0, "n": 12, "movie": false, "mosaic": true, "cadence": 19.0, "plays": "mosaic"}
