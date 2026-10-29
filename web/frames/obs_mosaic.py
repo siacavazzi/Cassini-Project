@@ -117,7 +117,7 @@ ISLAND_GAP = 0.75    # of a frame: the least empty sky between two islands of a 
                      # (_retargets): 108RI_TMAPN30LP001's ring ansae 0.92, 113RI_VTMPN60MP001's 1.04; an azimuthal scan
                      # whose stretches of ring do not quite meet (032RI_AZSCNLOPH001, 064RI_AZSCAN001) leaves at most 0.63
 ISLANDS = "_g6"      # the folder suffix, after RESCANNED's, of every pass of an observation where a mosaic is cut between
-                     # islands (_retargets) or a scan on a body that does not carry a feature along steps on (_walk)
+                     # islands (_retargets)
 JOIN_ZOOM = ZOOM * ZOOM   # a map units split at ZOOM is joined again while its frames stay within this of its first distance
 TWIST = 0.04         # of a frame: a pass the camera turns under (reel.turns) by more than this at its frames' places is drawn
                      # on a footprint turned frame by frame
@@ -219,13 +219,12 @@ def units(target, obs, cam):
     # mosaic that starts again from nothing every lap
     for u in out:
         _drop_strays(u)
-    laps, shifted, relaid, retracked, rescanned, islands = [], False, False, False, False, False
+    laps, shifted, relaid, retracked, rescanned = [], False, False, False, False
     for u in out:
         u["key"] = (target, obs, cam, len(laps))
         _judge(u)
         retracked = retracked or u["retracked"]
         rescanned = rescanned or u.get("rescanned", False)
-        islands = islands or u.get("walked", False)
         prev = laps[-1] if laps else None
         # (and one view taken lap after lap, a filter set each time, is one pass: a time series, _judge's views)
         views = bool(prev and (prev.get("drift") or prev.get("views")) and u.get("drift"))
@@ -243,16 +242,14 @@ def units(target, obs, cam):
             prev["off"] = prev.get("off", set()) | u.get("off", set())
             _judge(prev)
             rescanned = rescanned or prev["rescanned"]
-            islands = islands or prev["walked"]
         elif prev and _zoom_join(prev, u):
             relaid = True   # (the passes after it are renumbered)
             rescanned = rescanned or prev["rescanned"]
-            islands = islands or prev["walked"]
         else:
             laps.append(u)
     # a movie that re-points to sky it never comes back to plays each view as a pass of its own, and a mosaic that
     # holds separate scans (islands) draws each as a mosaic of its own
-    out = []
+    out, islands = [], False
     for u in laps:
         pieces = _retargets(u)
         relaid = relaid or len(pieces) > 1
@@ -263,7 +260,6 @@ def units(target, obs, cam):
         _judge(u)
         retracked = retracked or u["retracked"]
         rescanned = rescanned or u.get("rescanned", False)
-        islands = islands or u.get("walked", False)
         # GROUPING's folder: a pass grouped anew (strays out, or a mosaic only as a 1x2), or every pass of an
         # observation whose passes these rules renumbered; RELAID's: a pass the layout rules after them changed, or
         # every pass of an observation they renumbered
@@ -539,7 +535,7 @@ def _revisits(u):
     (221DI_REGMAP001's interleaved columns, 242SA_NHEMOSAIC001's slow steps); a dense strip overlaps the frames just
     before it, taken without a pause. A scan that pauses between its pointings steps on too, though its frames after a
     pause overlap the ones before it (_scan); u["rescanned"] says the time-series rule alone would have called it one."""
-    u["rescanned"] = u["walked"] = False
+    u["rescanned"] = False
     fr = [(f, t, -x * z / u["z"] / FRAME, -y * z / u["z"] / FRAME) for _, _, f, t, _, x, y, z in u["frames"] if z]
     if len(fr) < 3:
         return False
@@ -559,10 +555,7 @@ def _revisits(u):
         mine.append((i, x, y))
     if not (len(returns) >= 2 and back >= REVISIT_SHARE * again):
         return False
-    runs = np.split(np.arange(len(fr)), np.flatnonzero(gaps >= pause) + 1)
-    u["rescanned"] = _scan(np.array([q[2:] for q in fr]), runs)
-    if not u["rescanned"] and _walk(u, np.array([q[2:] for q in fr]), np.array([q[1] for q in fr]), runs):
-        u["rescanned"] = u["walked"] = True
+    u["rescanned"] = _scan(np.array([q[2:] for q in fr]), np.split(np.arange(len(fr)), np.flatnonzero(gaps >= pause) + 1))
     return not u["rescanned"]
 
 
@@ -590,25 +583,6 @@ def _scan(xy, runs):
     way = np.array(way)
     return bool(size.min() >= SCAN_STEP and np.bincount(way).min() >= 2
                 and all(np.abs(size[way == k] - np.median(size[way == k])).max() <= SCAN_EVEN for k in range(len(heads))))
-
-
-def _walk(u, xy, t, runs):
-    """(_revisits) The runs (between pauses) of a pass at canvas places xy (in frames) and times t step on to a pointing
-    of their own each time, at least SCAN_STEP from every earlier run's, on a body whose turning (SPIN) carries a
-    surface feature less than TRACK_CARRY of that step between runs: a scan of new ground, though each run's view
-    overlaps the last. A camera beside a NAC map, Titan nearly filling each WAC frame (059TI_GLOBMAP001,
-    153TI_FIRNADMAP001), steps a fifth of a frame each run. Saturn's turning carries its clouds a frame or more between
-    runs, so a wind movie stepping after them (159SA_WIND5HR001) stays a time series, as does a target with no known
-    turning (the rings by name, the sky); one coming back to an earlier view (Titan's cloud monitors) is one too."""
-    spin = SPIN.get(u["key"][0])
-    if not spin or not u["z"] or len(runs) < 3:
-        return False
-    at = np.array([np.median(xy[r], 0) for r in runs])
-    when = np.array([np.median(t[r]) for r in runs])
-    step = min(np.abs(at[k] - at[:k]).max(1).min() for k in range(1, len(at)))
-    carried = (2 * math.pi * spin[0] / (spin[1] * 3600) * float(np.diff(when).max()) / (u["z"] * IFOV[u["key"][2]])
-               / FRAME)
-    return bool(step >= SCAN_STEP and carried < TRACK_CARRY * step)
 
 
 def _slot_laps(u):
@@ -765,7 +739,7 @@ def _judge(u):
     u["repeats"] = max(u["repeats"], laps)
     # (a pan along a ring, where every frame shows nearly the same rings, looks like a movie, but a pan across the
     # rings is a good strip mosaic, and the pointing alone cannot tell them apart: the window's chip decides those)
-    u["mosaic"] = u["whole"] = u["revisit"] = u["drift"] = u["rescanned"] = u["walked"] = False
+    u["mosaic"] = u["whole"] = u["revisit"] = u["drift"] = u["rescanned"] = False
     u["kind"] = "movie" if u["movie"] else None
     if u.get("views"):
         # laps of one view (units): a time series, a movie (C44SA_APPRMOVB001's colour set of Saturn every 104 minutes)

@@ -22,11 +22,10 @@ of those observations as the Mac Mini's index and geometry cache have them (web/
   a mosaic each (108RI_TMAPN30LP001 and 113RI_VTMPN60MP001's ring ansae, 282RI_HIRESAFRG001's three strips), while an
   azimuthal scan whose stretches do not quite meet (032RI_AZSCNLOPH001) and a map round Dione (129DI_REGMAP001) stay
   whole (_retargets, _island);
-- a camera stepping a fifth of a frame each run over Titan (059TI_GLOBMAP001 W, 153TI_FIRNADMAP001 W) is a mosaic,
-  while a cloud monitor coming back to its view (175TI_CLOUD001) and a wind movie after Saturn's clouds
-  (159SA_WIND5HR001) stay movies (_walk);
+- a camera stepping a fifth of a frame each run over Titan (059TI_GLOBMAP001 W, 153TI_FIRNADMAP001 W), each frame
+  holding most of the disk, stays a movie, as do a cloud monitor (175TI_CLOUD001) and a wind movie (159SA_WIND5HR001);
 - the passes these rules change get RELAID's folder (RETRACKED's for TRACK_SPAN, RESCANNED's for the scan rule,
-  ISLANDS' for the islands and _walk), every other pass keeps its own.
+  ISLANDS' for the islands), every other pass keeps its own.
 Run: python web/test_mosaic_layout.py; with --refresh (and the index and CASSINI_GEOMETRY_CACHE) it writes the frames
 of the observations again."""
 import json
@@ -212,14 +211,15 @@ def main():
     az = passes(*OBS[24])
     assert kinds(az) == [("mosaic", 267), ("mosaic", 59)] and not any(u["islands"] for u in az), kinds(az)
 
-    # Titan nearly filling the WAC beside a NAC map, stepping a fifth of a frame each run: a mosaic (_walk), in
-    # ISLANDS' folder; a cloud monitor coming back to its view, and Saturn's wind movie after its clouds, stay movies
+    # Titan nearly filling the WAC beside a NAC map, stepping a fifth of a frame each run, stays a movie: each frame
+    # holds most of the disk, and drawn as a mosaic 153TI's crescents smeared over one another; so do a cloud monitor
+    # and Saturn's wind movie (no pass of theirs is cut or relaid by the islands)
     for key in OBS[25:27]:
-        first = passes(*key)[0]
-        assert first["kind"] == "mosaic" and first["walked"] and om.folder(first, "/c").endswith(om.ISLANDS), (key, kinds(passes(*key)))
+        assert passes(*key)[0]["kind"] == "movie", (key, kinds(passes(*key)))
     cloud, wind = passes(*OBS[27]), passes(*OBS[28])
-    assert kinds(cloud) == [("movie", 30)] and cloud[0]["revisit"] and not cloud[0]["walked"], kinds(cloud)
-    assert kinds(wind) == [("mosaic_movie", 72), ("movie", 16)] and wind[1]["revisit"] and not wind[1]["walked"], kinds(wind)
+    assert kinds(cloud) == [("movie", 26), ("movie", 4)] and cloud[0]["revisit"], kinds(cloud)
+    assert kinds(wind) == [("mosaic_movie", 72), ("movie", 16)] and wind[1]["revisit"], kinds(wind)
+    assert not any(u["islands"] for key in OBS[25:29] for u in passes(*key))
 
     print("mosaic layout ok:", {o: kinds(passes(t, o, c)) for t, o, c in OBS})
 
