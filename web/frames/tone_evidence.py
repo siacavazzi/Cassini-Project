@@ -202,7 +202,7 @@ def main():
     ap.add_argument("--seed", type=int, default=20261029)
     ap.add_argument("--workers", type=int, default=4)
     ap.add_argument("--side", type=int, default=512, help="grid: each picture's side, px")
-    a = ap.parse_args()
+    a = ap.parse_intermixed_args()
     if a.what == "export":
         export(a.ids, a.out)
     elif a.what == "scan":
