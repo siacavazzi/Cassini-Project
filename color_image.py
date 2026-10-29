@@ -154,14 +154,17 @@ bright ones from the short
 scale = a fixed display scale shared by all the pictures of a mosaic (calibration.load_channels)
 repeat_window = how close (seconds) a frame of the same filter must be to be stacked in as a repeat exposure;
 a movie taking frames faster than that passes less, so its frames are not stacked into one another
+around = a movie's frame (one path): the paths of the same filter's frames just before and after it in the movie,
+whose one-frame spikes (cosmic rays, image_correction.spikes) are then painted over (report["spikes_px"])
 returns (images, mask of pixels valid in every channel, the reference frame's label, report)
 where report says how each frame was calibrated and aligned, and report["dropped"] which frames were
 left out because they can't be calibrated (then there is one image fewer than paths: a two-filter picture)
 """
-def load_aligned(paths, hdr=False, scale=None, repeat_window=120):
+def load_aligned(paths, hdr=False, scale=None, repeat_window=120, around=None):
     # Settings > Processing turns steps off per request (calibration.step); stacking checks its own
     calibrating, fill, align = calibrate and cal.step("calibrate"), cal.step("fill"), cal.step("align")
     lbls, imgs, stacked, iofs, masks = [], [], [], [], []
+    spiked = 0
     for path in paths:
         iof = None
         if hdr and calibrating:
@@ -177,12 +180,27 @@ def load_aligned(paths, hdr=False, scale=None, repeat_window=120):
         stacked.append(n)
         # pixels each frame lost in downlink (truncated lines) that no repeat exposure stacked with it had
         masks.append(mask)
+    if around and fill and len(paths) == 1:
+        # a movie's frame: its one-frame spikes (cosmic rays, there in neither neighbour) painted over from round them
+        def neighbour(p):
+            try:
+                return lh.label(p, as_png=True).resize_image()
+            except Exception as e:
+                print(f"Can't read {p} for spikes: {e}")
+        found = ic.spikes(imgs[0], [neighbour(p) for p in around if p])
+        if found.any():
+            imgs[0] = ic.fill_invalid(imgs[0], ~found)
+            if iofs[0] is not None:
+                iofs[0] = ic.fill_invalid(iofs[0], ~found)
+            spiked = int(found.sum())
     lost = sum(int((~m).sum()) for m in masks)
     if fill and lost:
         # short runs of lost lines from the rows above and below (now valid); the rest from round them, only so
         # they don't skew the brightness scale or bleed when shifted: those stay invalid
-        lined = [ic.fill_lines(img, mask) for img, mask in zip(imgs, masks)]
-        iofs = [None if iof is None else ic.fill_lines(iof, mask)[0] for iof, mask in zip(iofs, masks)]
+        # (which runs are filled, and along which slant, is worked out on the display image, for its I/F too)
+        fills = [ic.line_fills(img, mask) for img, mask in zip(imgs, masks)]
+        lined = [ic.fill_lines(img, mask, fills=f) for img, mask, f in zip(imgs, masks, fills)]
+        iofs = [None if iof is None else ic.fill_lines(iof, mask, fills=f)[0] for iof, mask, f in zip(iofs, masks, fills)]
         imgs, masks = [l[0] for l in lined], [l[1] for l in lined]
     left = sum(int((~m).sum()) for m in masks)
     if fill:
@@ -255,6 +273,8 @@ def load_aligned(paths, hdr=False, scale=None, repeat_window=120):
         report["lost_px"] = [lost, left]
     if dropped:
         report["dropped"] = dropped
+    if spiked:
+        report["spikes_px"] = spiked
     return imgs, np.logical_and.reduce(masks), lbls[ref], report
 
 
@@ -272,10 +292,10 @@ the frame's middle at the canvas middle, rotated north up, and report["frame_off
 that middle sits relative to the target's centre (canvas pixels, x right, y down): a close-up's
 panels keep their places on the body, so they can mosaic. report["centred"] is True when the
 target's centre is on the frame. Without SPICE, the 1024 px frame as it is.
-hdr, scale, repeat_window = as load_aligned (for whole-observation mosaics and movies)
+hdr, scale, repeat_window, around = as load_aligned (for whole-observation mosaics and movies)
 """
-def processed_frame(paths, max_offset=600, hdr=False, scale=None, repeat_window=120):
-    imgs, valid, lbl, report = load_aligned(list(paths), hdr, scale, repeat_window)
+def processed_frame(paths, max_offset=600, hdr=False, scale=None, repeat_window=120, around=None):
+    imgs, valid, lbl, report = load_aligned(list(paths), hdr, scale, repeat_window, around=around)
     chans = [cv2.cvtColor(img, cv2.COLOR_BGR2GRAY) if img.ndim == 3 else img for img in imgs]
     if len(chans) == 1:
         chans = chans * 3

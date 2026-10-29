@@ -44,31 +44,197 @@ LINE_GAP = 8
 
 """
 Fills the short runs of lost pixels (mask False) down each column from the valid rows above and
-below, straight between the two, and returns (image, mask with those pixels now valid). Lost
-pixels are the ends of lines that never arrived, so a lost run down a column is a stack of
-those lines; where it is at most max_gap rows tall its two valid neighbours bound it closely.
-Taller runs, and runs at the top or bottom edge, are left as they are (still invalid).
+below, and returns (image, mask with those pixels now valid). Lost pixels are the ends of lines
+that never arrived, so a lost run down a column is a stack of those lines; where it is at most
+max_gap rows tall its two valid neighbours bound it closely. Taller runs, and runs at the top or
+bottom edge, are left as they are (still invalid). Which pixels are filled, and how, is
+line_fills' (worked out on img); fills = that, worked out on another picture of the same frame
+(its display image for its I/F), so both are filled alike.
 """
-def fill_lines(img, mask, max_gap=LINE_GAP):
+def fill_lines(img, mask, max_gap=LINE_GAP, fills=None):
     if mask.all():
+        return img, mask
+    fillable, slope = line_fills(img, mask, max_gap) if fills is None else fills
+    if not fillable.any():
         return img, mask
     h = mask.shape[0]
     rows = np.arange(h)[:, None]
     above = np.maximum.accumulate(np.where(mask, rows, -1), axis=0)
     below = np.minimum.accumulate(np.where(mask, rows, h)[::-1], axis=0)[::-1]
-    fillable = ~mask & (above >= 0) & (below < h) & (below - above - 1 <= max_gap)
-    if not fillable.any():
-        return img, mask
     ys, xs = np.nonzero(fillable)
     a, b = above[ys, xs], below[ys, xs]
     t = ((ys - a) / (b - a)).astype(np.float32)
+    k = slope[ys, xs]
+    va = _along(img, a, xs - k * (ys - a))
+    vb = _along(img, b, xs + k * (b - ys))
     if img.ndim == 3:
         t = t[:, None]
-    va, vb = img[a, xs].astype(np.float32), img[b, xs].astype(np.float32)
     v = va + (vb - va) * t
     out = img.copy()
     out[ys, xs] = np.clip(v + 0.5, 0, 255).astype(img.dtype) if img.dtype == np.uint8 else v.astype(img.dtype)
     return out, mask | fillable
+
+
+"""
+img's values in rows ys at the (fractional) columns xs, read between the two nearest pixels, as float32.
+"""
+def _along(img, ys, xs):
+    w = img.shape[1]
+    xs = np.clip(xs, 0, w - 1)
+    x0 = np.floor(xs).astype(int)
+    x1 = np.minimum(x0 + 1, w - 1)
+    f = (xs - x0).astype(np.float32)
+    if img.ndim == 3:
+        f = f[:, None]
+    lo, hi = img[ys, x0].astype(np.float32), img[ys, x1].astype(np.float32)
+    return lo + (hi - lo) * f
+
+
+# how far (pixels sideways per row) a fill may follow the picture's slant (line_fills): a ring's edge or a limb
+# crossing the gap at down to about 18 degrees from the lines
+FILL_SLANT = 3
+# a run is filled only when the same fill, tried on the valid rows just above and below it, is out by at most
+# FILL_MISS times the frame's row-to-row noise (and FILL_FLOOR display levels): a fill out by more is a flat grey
+# dash across the picture, and the run is better left lost (transparent)
+FILL_MISS = 3.0
+FILL_FLOOR = 3.0
+# ... or by at most this share of how much the picture there varies (a limb across the run: the fill misses where it
+# crosses, but draws the rest; a patch no slant reads, which a fill draws no better than its average, stays lost)
+FILL_GUESS = 0.5
+
+
+"""
+Which of mask's lost pixels fill_lines fills, and along which slant: (fillable mask, slope in pixels sideways per
+row, as float32 over the frame). A run of lost lines (a connected patch of short lost runs down the columns) is
+filled straight between the rows above and below it, along the slant that best matches the row above it to the
+row below (rings and limbs cross the gap at an angle; filled straight down, a dark gap between bright ringlets
+became a flat grey bar). The fill is first tried on the valid rows next to the run, as if a run as tall were lost
+there: a run whose trial fill misses the picture by more than the frame's noise allows (FILL_MISS), and by more than
+half of how much the picture varies there (FILL_GUESS), stays lost.
+"""
+def line_fills(img, mask, max_gap=LINE_GAP):
+    h, w = mask.shape
+    slope = np.zeros((h, w), np.float32)
+    rows = np.arange(h)[:, None]
+    above = np.maximum.accumulate(np.where(mask, rows, -1), axis=0)
+    below = np.minimum.accumulate(np.where(mask, rows, h)[::-1], axis=0)[::-1]
+    fillable = ~mask & (above >= 0) & (below < h) & (below - above - 1 <= max_gap)
+    if not fillable.any():
+        return fillable, slope
+    gray = (img.mean(axis=2) if img.ndim == 3 else img).astype(np.float32)
+    # the frame's noise, from the steps between valid neighbouring pixels down the columns and along the rows,
+    # whichever are smaller (structure running along one of them, as a ring's, steps only across it)
+    steps = [np.abs(np.diff(gray, axis=0))[mask[1:] & mask[:-1]], np.abs(np.diff(gray, axis=1))[mask[:, 1:] & mask[:, :-1]]]
+    noise = min(1.4826 * float(np.median(d)) / np.sqrt(2) if d.size else np.inf for d in steps)
+    noise = 0.0 if np.isinf(noise) else noise
+    # the nearest lost row above each pixel and below it, so a trial knows its rows are all valid
+    lost_above = np.maximum.accumulate(np.where(~mask, rows, -1), axis=0)
+    lost_below = np.minimum.accumulate(np.where(~mask, rows, h)[::-1], axis=0)[::-1]
+    count, runs = cv2.connectedComponents(fillable.astype(np.uint8), connectivity=8)
+    keep = np.zeros(count, bool)
+    every_y, every_x = np.nonzero(fillable)
+    of = runs[every_y, every_x]
+    order = np.argsort(of, kind="stable")
+    starts = np.searchsorted(of[order], np.arange(1, count + 1))
+    for r in range(1, count):
+        at = order[starts[r - 1]:starts[r]]
+        ys, xs = every_y[at], every_x[at]
+        a, b = above[ys, xs], below[ys, xs]
+        span = int((b - a).max())
+        x0, x1 = xs.min(), xs.max() + 1
+        k = _slant(gray, mask, a.min(), b.max(), x0, x1, span)
+        # the trial: the same fill on the rows above the run (a run as tall, ending at its top row) and below it
+        misses, spreads = [], []
+        for top, bottom in ((a - (b - a), a), (b, b + (b - a))):
+            ok = (top >= 0) & (bottom < h)
+            ok[ok] &= (lost_below[top[ok], xs[ok]] > bottom[ok])
+            if not ok.any():
+                continue
+            yy = ys[ok] - a[ok] + top[ok]
+            t, tt, bb = (yy - top[ok]) / (bottom[ok] - top[ok]), top[ok], bottom[ok]
+            va = _along(gray, tt, xs[ok] - k * (yy - tt))
+            vb = _along(gray, bb, xs[ok] + k * (bb - yy))
+            truth = gray[yy, xs[ok]]
+            misses.append(np.abs(va + (vb - va) * t - truth))
+            spreads.append(np.abs(truth - truth.mean()))
+        miss = float(np.mean(np.concatenate(misses))) if misses else 0.0
+        spread = float(np.mean(np.concatenate(spreads))) if spreads else 0.0
+        if miss <= max(FILL_MISS * noise, FILL_FLOOR, FILL_GUESS * spread):
+            keep[r] = True
+            slope[ys, xs] = k
+    fillable = keep[runs] & fillable
+    return fillable, slope
+
+
+"""
+The slant (pixels sideways per row) along which rows y0 and y1 of gray best match over columns x0..x1 (FILL_SLANT
+per row at most, in quarter pixel steps of the whole gap): 0 unless a slant matches clearly better than straight.
+"""
+def _slant(gray, mask, y0, y1, x0, x1, span):
+    w = gray.shape[1]
+    reach = int(np.ceil(FILL_SLANT * span))
+    xs = np.arange(max(x0 - reach // 2, 0), min(x1 + reach // 2, w))
+    dx = np.arange(-4 * reach, 4 * reach + 1)[:, None] / 4.0
+    # row y0 at x - dx / 2 against row y1 at x + dx / 2: the slant crossing the gap through x
+    left, right = xs - dx / 2, xs + dx / 2
+    ok = mask[y0, xs] & mask[y1, xs] & (left >= 0) & (right <= w - 1)
+    n = ok.sum(axis=1)
+    d = np.abs(_along(gray, np.full(left.shape, y0), left) - _along(gray, np.full(right.shape, y1), right))
+    d = np.where(n >= 4, (d * ok).sum(axis=1) / np.maximum(n, 1), np.inf)
+    straight, best = d[4 * reach], int(np.argmin(d))
+    if not np.isfinite(straight) or d[best] > 0.8 * straight:
+        return 0.0
+    return float(dx[best, 0]) / span
+
+
+# a one-frame spike (spikes): a peak this many times the frame's noise above its own surroundings
+SPIKE_SIGMA = 6.0
+# px: a peak in a neighbouring frame this close (after registration) is the same thing seen again (a star drifting,
+# a small moon), not a spike
+SPIKE_REACH = 5
+# px: the widest a spike is (a cosmic ray's dot or short track); a wider peak is structure (a crater, lightning)
+SPIKE_SIZE = 9
+
+
+"""
+The pixels of img (a movie's frame, as label.resize_image) that are one-frame spikes: a cosmic ray's dot or short
+track, there in this frame only. A pixel is one when it stands SPIKE_SIGMA times the frame's noise above the
+frame's own surroundings (its 5 px median), on a peak no wider than SPIKE_SIZE, and neither neighbour (the same
+filter's frames just before and after it in the movie, registered to it by find_shift as stack_frames does) has a
+peak within SPIKE_REACH of it. In a long dark stare a new set of them every frame twinkled across the sky. The
+frame's spikes are treated as lost pixels (color_image.load_aligned): filled from round them like a lost line.
+returns a bool mask the size of img, True on the spikes and the pixel round each
+"""
+def spikes(img, neighbours):
+    neighbours = [n for n in neighbours if n is not None and n.shape == img.shape]
+    if not neighbours:
+        return np.zeros(img.shape[:2], bool)
+
+    def peaks(im):
+        g = (cv2.cvtColor(im, cv2.COLOR_BGR2GRAY) if im.ndim == 3 else im).astype(np.float32)
+        p = g - cv2.medianBlur(g, 5)
+        return p, 1.4826 * float(np.median(np.abs(p))) + 0.5
+
+    own, noise = peaks(img)
+    found = own > SPIKE_SIGMA * noise
+    if not found.any():
+        return found
+    count, runs, stats, _ = cv2.connectedComponentsWithStats(found.astype(np.uint8), connectivity=8)
+    small = np.r_[False, (stats[1:, cv2.CC_STAT_WIDTH] <= SPIKE_SIZE) & (stats[1:, cv2.CC_STAT_HEIGHT] <= SPIKE_SIZE)]
+    found = small[runs]
+    near = np.ones((2 * SPIKE_REACH + 1, 2 * SPIKE_REACH + 1), np.uint8)
+    for other in neighbours:
+        if not found.any():
+            break
+        shift = find_shift(img, other) if img.ndim == 3 else None
+        if shift is not None:
+            other = shift_image(other, *shift)
+        theirs, their_noise = peaks(other)
+        # the highest peak near each pixel in the neighbour, against this frame's peak there (each in its own
+        # frame's noise): one half as high counts, as a star a little fainter in the next frame is still that star
+        seen = cv2.dilate(theirs / their_noise, near) >= 0.5 * own / noise
+        found &= ~seen
+    return cv2.dilate(found.astype(np.uint8), np.ones((3, 3), np.uint8)) > 0
 
 
 """
@@ -231,6 +397,13 @@ def agreeing_median(stack, agrees, count):
     return (low + high) / 2
 
 
+# a display level at or above this is clipped (a saturated star, a blown limb): it doesn't show how bright the scene is
+CLIPPED = 250
+# how far round a clipped pixel the change test also looks away: a star's wing beyond its clipped top, shifted a
+# pixel, and up and down its column, where the charge of a full pixel bleeds (by a different amount in each exposure)
+CLIP_MARGIN = np.ones((41, 7), np.uint8)
+
+
 def stack_frames(frames, sigma=3.0, max_shift=20, masks=None):
     if masks is not None and all(np.array_equal(m, masks[0]) for m in masks[1:]):
         # nothing lost, or every frame lost the same pixels (a summed frame's edge column): no frame can fill another,
@@ -247,7 +420,7 @@ def stack_frames(frames, sigma=3.0, max_shift=20, masks=None):
     ref_gray = cv2.cvtColor(ref,cv2.COLOR_BGR2GRAY).astype(np.float32)
     blurred = cv2.GaussianBlur(ref_gray, (0,0), 3)
     target = blurred > 0.1 * blurred.max()
-    unclipped = target & (ref_gray < 250)
+    unclipped = target & (ref_gray < CLIPPED)
 
     stack = [ref_gray]
     agrees = [ref_valid if lost else np.ones(ref_gray.shape, bool)]
@@ -277,6 +450,10 @@ def stack_frames(frames, sigma=3.0, max_shift=20, masks=None):
         if lost:
             # where either frame lost the pixel there is nothing to compare: not a change
             diff[~both] = 0
+        # nor where either frame is clipped, and just round it: a saturated star's flat top sits a fraction of a pixel
+        # elsewhere in each repeat, which reads as a change the size of the star and left a box of the reference
+        # alone round every bright star (W1601346192_1); a real change (a moving moon) is far larger than the margin
+        diff[cv2.dilate(((gray >= CLIPPED) | (ref_gray >= CLIPPED)).astype(np.uint8), CLIP_MARGIN) > 0] = 0
         smooth_diff = cv2.GaussianBlur(diff, (0,0), 2)
         smooth_diff = np.abs(smooth_diff - np.median(smooth_diff))
         noise = 1.4826 * np.median(smooth_diff)
@@ -285,7 +462,10 @@ def stack_frames(frames, sigma=3.0, max_shift=20, masks=None):
         changed = cv2.morphologyEx(changed, cv2.MORPH_OPEN, np.ones((7,7), np.uint8))
         changed = cv2.dilate(changed, np.ones((15,15), np.uint8)) > 0
         stack.append(gray)
-        agrees.append(~changed & valid if lost else ~changed)
+        # where the reference lost the pixel nothing was compared (diff 0 there): a change padded in from beside it
+        # says nothing about this frame's pixel, which is then the only picture there is; left out, it left a
+        # hole along the edge of every block the reference lost, filled as a flat grey dash (N1800422096_8)
+        agrees.append((~changed | ~ref_valid) & valid if lost else ~changed)
 
     if len(stack) == 1:
         return (ref, ref_valid) if lost else ref

@@ -71,14 +71,14 @@ def load_hdr(path, repeat_window=None, *a, **k):
     return None, frame(fid_of(path)) * 0.05, None
 
 
-def load_aligned(paths, hdr=False, scale=None, repeat_window=120):
+def load_aligned(paths, hdr=False, scale=None, repeat_window=120, around=None):
     time.sleep(DELAY * len(paths))
     imgs = [(frame(fid_of(p)) * 255).astype(np.uint8) for p in paths]
     return imgs, np.ones((N, N), bool), None, {"calibrated": True, "stacked": [1] * len(paths),
                                                 "aligned": ["reference"] + ["aligned"] * (len(paths) - 1), "rig": True}
 
 
-def processed_frame(paths, max_offset=600, hdr=False, scale=None, repeat_window=120):
+def processed_frame(paths, max_offset=600, hdr=False, scale=None, repeat_window=120, around=None):
     """As color_image.processed_frame: the frame north up in the middle of a canvas of its diagonal (RGBA), and
     frame_offset = where the frame's middle sits from the body's centre (the geometry cache's shift, turned)."""
     imgs, valid, _, report = load_aligned(paths, hdr, scale, repeat_window)
