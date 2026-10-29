@@ -227,4 +227,31 @@ dc.repair_hot(img, INFO)
 assert abs(img[600:604, 600:604].mean() - 100) < 8 and abs(img[640:644, 680:684].mean() - 100) < 8
 with cal.stepping("dark"):
     assert cal.variant() == "-off-dark"
+
+# a listed hot pixel that has cooled since its list: the dark step takes its list curve out (the WAC's lists), so it
+# lands below the sky, a black pinhole; repaired from the pixels round it when the dark took the list out, left
+# alone otherwise (a listed pixel darker than the sky with no list curve taken out is just noise there)
+assert dc.lists_in_dark({**INFO, "INSTRUMENT_ID": "ISSWA"}) and not dc.lists_in_dark({**INFO, "READOUT_CYCLE_INDEX": "-"})
+low = sky.copy()
+low[84:88, 96:100] = 20
+dc.repair_hot(low, INFO)
+assert (low[84:88, 96:100] == 20).all()
+dc.repair_hot(low, INFO, listed_dark=True)
+assert abs(low[84:88, 96:100].mean() - 100) < 8
+# and through calibrate: a WAC frame whose listed pixel gathered no more than the sky comes out at the sky, not black
+wac = {**info, "INSTRUMENT_ID": "ISSWA", "GAIN_MODE_ID": "29 ELECTRONS PER DN", "FILTER_NAME": "(\"CL1\",\"CL2\")"}
+dc._parameters.cache_clear(); dc._dark.cache_clear()
+wdark = dc.dark_dn(wac)
+smooth = wdark.copy()
+smooth[int(482 / 4), int(213 / 4)] = np.median(wdark[int(482 / 4) - 2:int(482 / 4) + 3, int(213 / 4) - 2:int(213 / 4) + 3])
+wdn = 900 + lines_bias[:, None] + smooth        # the pixel gathered only the dark round it
+wcodes = np.searchsorted(mids, wdn).astype(np.uint8)
+hot = (int(482 / 4), int(213 / 4))
+with cal.stepping("flat,hotpix"):
+    pinhole = cal.calibrate(wcodes, wac)
+with cal.stepping("flat"):
+    repaired = cal.calibrate(wcodes, wac)
+print("cooled listed WAC pixel over the sky: hotpix off", round(float(pinhole[hot] / np.median(pinhole)), 3),
+      "on", round(float(repaired[hot] / np.median(repaired)), 3))
+assert pinhole[hot] < 0.5 * np.median(pinhole) and abs(repaired[hot] / np.median(repaired) - 1) < 0.05
 print("ok")

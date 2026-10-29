@@ -431,20 +431,33 @@ grain above the pixels round it and a dead one only where it is as far below, so
 frame is left alone (a short exposure's listed pixels are mostly just noise); a star that lands
 exactly on one is filled in too. image = the frame at a whole multiple of its own size (label.resize_image gives a
 summed frame's pixels as 2x2 or 4x4 blocks); returns how many were repaired.
+listed_dark: the dark step took the list's own charge curves out of this frame (the WAC's, HOT_PIXEL_CAMERAS;
+lists_in_dark). A listed pixel that has cooled since its epoch's list was made then has more taken out than it
+gathered and lands below the sky round it, a black pinhole (dozens across a 2010 or 2016 WAC sky); such a listed
+pixel is repaired too, where it stands as far below.
 """
 REPAIR_SIGMAS = 3.0
 
 
-def repair_hot(image, info):
+def lists_in_dark(info):
+    """True when dark_dn(info) puts a hot pixel list's curves in (the frame's readout is modelled and its camera's
+    lists are used, HOT_PIXEL_CAMERAS)"""
+    r = readout(info)
+    return r is not None and bool(r[-1])
+
+
+def repair_hot(image, info, listed_dark=False):
     lines = int(ff._number(_value(info, "LINES", "1024"), 1024) or 1024)
     h, w = image.shape[:2]
     if image.ndim != 2 or h % lines or w % lines or h != w:
         return 0
     sign = np.zeros((lines, lines), np.int8)
+    listed = np.zeros((lines, lines), bool)
     name = hot_file(_value(info, "INSTRUMENT_ID"), _year(info), every=True)
     if name:
         xy = _hot_spots(name) * lines // 1024
         sign[xy[:, 1], xy[:, 0]] = 1
+        listed[xy[:, 1], xy[:, 0]] = listed_dark
     measured = hot_map(info)
     if measured is not None and len(measured):
         sign[measured[:, 0], measured[:, 1]] = measured[:, 2]
@@ -459,7 +472,7 @@ def repair_hot(image, info):
     rest = rest[np.isfinite(rest)]
     grain = 1.4826 * float(np.median(np.abs(rest))) if rest.size else 0.0
     fix = (((sign > 0) & (native > level + REPAIR_SIGMAS * grain))
-           | ((sign < 0) & (native < level - REPAIR_SIGMAS * grain)))
+           | (((sign < 0) | listed) & (native < level - REPAIR_SIGMAS * grain)))
     fix &= np.isfinite(level)
     if k > 1:
         level = np.repeat(np.repeat(level, k, 0), k, 1)
