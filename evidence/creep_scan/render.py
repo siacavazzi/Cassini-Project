@@ -7,6 +7,8 @@
 #   python evidence/creep_scan/render.py --cache CACHE_BEFORE --out OUT --tag before
 #   python evidence/creep_scan/render.py --cache CACHE_AFTER --out OUT --tag after
 #   python evidence/creep_scan/render.py --out OUT --compose
+# --old-repeats draws with the repeat rule before #189 (stacking.same_place not asked: every frame of a filter within
+# the repeat window merged, wherever it pointed), tag "pre189"; --compose puts it first when it is there.
 import argparse
 import json
 import os
@@ -28,6 +30,7 @@ ap.add_argument("--cache")
 ap.add_argument("--tag")
 ap.add_argument("--compose", action="store_true")
 ap.add_argument("--only", default="", help="comma separated names")
+ap.add_argument("--old-repeats", action="store_true")
 a = ap.parse_args()
 os.makedirs(a.out, exist_ok=True)
 todo = [p for p in PASSES if not a.only or p[0] in a.only.split(",")]
@@ -38,6 +41,9 @@ font = ImageFont.load_default()
 if not a.compose:
     import io
     import obs_mosaic as om
+    if a.old_repeats:
+        import stacking
+        stacking.same_place = lambda p, q: None
     for name, first in todo:
         t0 = time.time()
         u, _ = om.unit_of(first)
@@ -73,9 +79,10 @@ if not a.compose:
         print(name, a.tag, info, flush=True)
 else:
     for name, _ in todo:
-        pics = [os.path.join(a.out, f"{name}_{t}.png") for t in ("before", "after")]
-        if not all(os.path.exists(p) for p in pics):
+        tags = [t for t in ("pre189", "before", "after") if os.path.exists(os.path.join(a.out, f"{name}_{t}.png"))]
+        if "before" not in tags or "after" not in tags:
             continue
+        pics = [os.path.join(a.out, f"{name}_{t}.png") for t in tags]
         ims = [Image.open(p).convert("RGB") for p in pics]
         for im in ims:
             im.thumbnail((1600, 1600))
@@ -83,7 +90,7 @@ else:
         h = max(i.height for i in ims)
         sheet = Image.new("RGB", (sum(i.width for i in ims) + 16, h + 28), "black")
         x = 0
-        for im, info, t in zip(ims, infos, ("before", "after")):
+        for im, info, t in zip(ims, infos, tags):
             sheet.paste(im, (x, 28))
             what = f"{t}: {info['kind']}, {info['tiles']} pictures, jump share {info['jump_frac']:.2f} ({name})"
             ImageDraw.Draw(sheet).text((x + 8, 8), what, fill="white", font=font)
