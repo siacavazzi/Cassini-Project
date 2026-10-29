@@ -243,7 +243,12 @@ def units(target, obs, cam):
         u["regrouped"] = bool(shifted or u.get("off") or u.get("pair"))
         u["repeat_gap"] = repeat_window(u)
         if u["repeat_gap"] < mosaic_benchmark.REPEAT_GAP:
+            # (a movie's frames split anew, repeats closer than its own window kept apart: each frame placed again,
+            # so u["place"] and what follows it (slots, lap_of) have one entry per frame, as 209TI_CLOUD002's did not)
             u["frames"] = _pictures(u["all"], u["repeat_gap"])
+            u["place"] = _place_frames(u)
+            for k in ("slots", "lap_of", "_lum", "_lap_prev"):
+                u.pop(k, None)
         del u["all"]
         # the camera turning under a mosaic: its footprint is turned frame by frame (plan)
         if u["kind"] in ("mosaic", "mosaic_movie") and _twist(u, turned) > TWIST * FRAME:
@@ -501,6 +506,19 @@ def repeat_window(u):
     return min(mosaic_benchmark.REPEAT_GAP, round(g / 2, 1)) if g < 2 * mosaic_benchmark.REPEAT_GAP else mosaic_benchmark.REPEAT_GAP
 
 
+def _place_frames(u):
+    """u["place"] for each of u["frames"]: the index of the nearest of the pass's places (u["places_at"], _judge's,
+    on the pass's canvas), None when SPICE has no place for the frame."""
+    places, out = u["places_at"], []
+    for *_, x, y, z in u["frames"]:
+        if not z or not places:
+            out.append(None)
+            continue
+        p = (-x * z / u["z"], -y * z / u["z"])
+        out.append(min(range(len(places)), key=lambda j: max(abs(p[0] - places[j][0]), abs(p[1] - places[j][1]))))
+    return out
+
+
 def _judge(u):
     """Sets u["movie"] (the camera creeps or stares), u["jump_frac"], u["dwell"], u["mosaic"] (enough places,
     footprint not too big, not a movie), u["whole"] (the body's disk inside it), u["place"], u["repeats"] and
@@ -588,15 +606,13 @@ def _judge(u):
     # u["place"]: for each of u["frames"], the place it was taken at (index into places; None when SPICE has no
     # place for it). visits: how many separate times the camera comes back to a place in one filter; a mosaic
     # takes each place once per filter, a mosaic movie goes round the same places again and again (laps)
-    u["place"], runs = [], {}
-    for _, _, f, _, _, x, y, z in u["frames"]:
-        if not z:
-            u["place"].append(None)
+    u["places_at"] = places
+    u["place"] = _place_frames(u)
+    runs = {}
+    for fr, i in zip(u["frames"], u["place"]):
+        if i is None:
             continue
-        p = (-x * z / u["z"], -y * z / u["z"])
-        i = min(range(len(places)), key=lambda j: max(abs(p[0] - places[j][0]), abs(p[1] - places[j][1])))
-        u["place"].append(i)
-        seq = runs.setdefault(f, [])
+        seq = runs.setdefault(fr[2], [])
         if not seq or seq[-1] != i:
             seq.append(i)
     visits = [max(seq.count(i) for seq in runs.values()) for i in range(len(places))] if runs else []
