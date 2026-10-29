@@ -735,9 +735,9 @@ def _judge(u):
     u["retracked"] = track(TRACK_SPAN_WAS) != u["track"]
     # (an island of a mosaic, _retargets, steps over MIN_PLACES places however slowly it creeps: 108RI_TMAPN30LP001's
     # second ring ansa steps 0.14 of a frame, under mosaic.min_step, every 527 s)
-    creeps = (u["jump_frac"] is not None and not u.get("island")
-              and (u["jump_frac"] < MOVIE_JUMPS or (u["dwell"] or 0) >= MOVIE_DWELL))
-    u["movie"] = u["jump_frac"] is not None and (creeps or u["track"])
+    slow = (u["jump_frac"] is not None and not u.get("island")
+            and (u["jump_frac"] < MOVIE_JUMPS or (u["dwell"] or 0) >= MOVIE_DWELL))
+    u["movie"] = u["jump_frac"] is not None and (slow or u["track"])
     places = []
     for p in pts:
         if all(max(abs(p[0] - q[0]), abs(p[1] - q[1])) >= mosaic.min_step * FRAME for q in places):
@@ -772,14 +772,14 @@ def _judge(u):
     u["pair"] = len(places) == 2 and max(abs(places[0][0] - places[1][0]), abs(places[0][1] - places[1][1])) <= PAIR_STEP * FRAME
     if len(places) < MIN_PLACES and not u["pair"] or u["movie"]:
         u["pair"] = u["slot_laps"] = False
-        if creeps:
+        if creeps and not u.get("island"):
             u["movie"], u["kind"] = True, "movie"
         return
     pts = np.array(pts)
     lo, hi = pts.min(0) - FRAME / 2, pts.max(0) + FRAME / 2
     if (hi - lo).max() >= MAX_FRAMES * FRAME:
         u["pair"] = u["slot_laps"] = False
-        if creeps:
+        if creeps and not u.get("island"):
             u["movie"], u["kind"] = True, "movie"
         return
     kind = "mosaic_movie" if len(places) >= 2 and u["repeats"] >= MOVIE_LAPS else "mosaic"
