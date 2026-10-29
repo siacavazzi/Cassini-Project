@@ -516,6 +516,28 @@ CLIPPED = 250
 CLIP_MARGIN = np.ones((41, 7), np.uint8)
 # ... where a pixel differs from the reference's by more than this many times the frames' pixel noise, it is a change
 CLIP_SIGMA = 4.0
+# a clipped patch is a star when less than this share of the margin round it is lit (above a quarter of CLIPPED): a
+# blown spot on a moon has the moon round it, whose edge moving between repeats is a change like any other (a margin
+# under Enceladus showed as a grey box, N1710205762_3)
+CLIP_STAR = 0.5
+
+
+"""
+Where the change test looks at each pixel on its own (stack_frames): CLIP_MARGIN round each clipped patch of clipped
+(uint8) that is a star (CLIP_STAR: mostly dark round it in gray).
+"""
+def _stars(clipped, gray):
+    count, parts, stats, _ = cv2.connectedComponentsWithStats(clipped, connectivity=8)
+    out = np.zeros(clipped.shape, bool)
+    my, mx = CLIP_MARGIN.shape[0] // 2, CLIP_MARGIN.shape[1] // 2
+    h, w = clipped.shape
+    for i in range(1, count):
+        x, y, bw, bh = stats[i, :4]
+        y0, y1, x0, x1 = max(y - my, 0), min(y + bh + my, h), max(x - mx, 0), min(x + bw + mx, w)
+        near = cv2.dilate((parts[y0:y1, x0:x1] == i).astype(np.uint8), CLIP_MARGIN) > 0
+        if (gray[y0:y1, x0:x1][near] > CLIPPED / 4).mean() < CLIP_STAR:
+            out[y0:y1, x0:x1] |= near
+    return out
 
 
 def stack_frames(frames, sigma=3.0, max_shift=20, masks=None):
@@ -567,22 +589,26 @@ def stack_frames(frames, sigma=3.0, max_shift=20, masks=None):
         # nor where either frame is clipped, and just round it: a saturated star's flat top sits a fraction of a pixel
         # elsewhere in each repeat, which reads as a change the size of the star and left a box of the reference
         # alone round every bright star (W1601346192_1); a real change (a moving moon) is far larger than the margin
-        clipped = cv2.dilate(((gray >= CLIPPED) | (ref_gray >= CLIPPED)).astype(np.uint8), CLIP_MARGIN) > 0
+        clipped = _stars(((gray >= CLIPPED) | (ref_gray >= CLIPPED)).astype(np.uint8), ref_gray)
         pixel_diff = diff.copy()
         diff[clipped] = 0
         smooth_diff = cv2.GaussianBlur(diff, (0,0), 2)
-        smooth_diff = np.abs(smooth_diff - np.median(smooth_diff))
+        level = np.median(smooth_diff)
+        smooth_diff = np.abs(smooth_diff - level)
         noise = 1.4826 * np.median(smooth_diff)
         changed = (smooth_diff > max(5 * noise, 3)).astype(np.uint8)
         # drop specks (cosmic rays, hot pixels are handled per pixel below), then pad what is left
         changed = cv2.morphologyEx(changed, cv2.MORPH_OPEN, np.ones((7,7), np.uint8))
         changed = cv2.dilate(changed, np.ones((15,15), np.uint8)) > 0
-        # round a clipped star each pixel is judged on its own, with no padding: a longer repeat's bleed down the
-        # columns (a vertical spike averaged in, W1601346192_1) and the star's edge a fraction of a pixel off are
-        # the reference's alone, the sky between them is every frame's (no box)
+        # round a clipped star each pixel is judged on its own, by the same test with no specks dropped and no
+        # padding, or by its own difference: a repeat's bleed down the columns (a vertical spike averaged in,
+        # W1601346192_1), the star's edge a fraction of a pixel off and a limb's glow that differs (a grey box
+        # under Enceladus, N1710205762_3) are the reference's alone, the sky between them every frame's (no box)
+        near = cv2.GaussianBlur(pixel_diff, (0, 0), 2)
         spread = np.abs(pixel_diff - np.median(pixel_diff))
         pixel_noise = 1.4826 * float(np.median(spread[both] if lost else spread))
-        changed |= clipped & (np.abs(pixel_diff) > max(CLIP_SIGMA * pixel_noise, 3))
+        changed |= clipped & ((np.abs(near - level) > max(5 * noise, 3))
+                              | (np.abs(pixel_diff) > max(CLIP_SIGMA * pixel_noise, 3)))
         stack.append(gray)
         # where the reference lost the pixel nothing was compared (diff 0 there): a change padded in from beside it
         # says nothing about this frame's pixel, which is then the only picture there is; left out, it left a
