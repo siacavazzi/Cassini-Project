@@ -156,7 +156,9 @@ repeat_window = how close (seconds) a frame of the same filter must be to be sta
 a movie taking frames faster than that passes less, so its frames are not stacked into one another
 returns (images, mask of pixels valid in every channel, the reference frame's label, report)
 where report says how each frame was calibrated and aligned, and report["dropped"] which frames were
-left out because they can't be calibrated (then there is one image fewer than paths: a two-filter picture)
+left out because they can't be calibrated (then there is one image fewer than paths: a two-filter picture).
+A two-filter set balanced like false color (calibration.color_mix) comes back as three images, green the mean of the two
+Channels whose own match fails are aligned near where SPICE puts them (spice_offsets, image_correction.guided_shift)
 """
 def load_aligned(paths, hdr=False, scale=None, repeat_window=120):
     # Settings > Processing turns steps off per request (calibration.step); stacking checks its own
@@ -224,6 +226,8 @@ def load_aligned(paths, hdr=False, scale=None, repeat_window=120):
     # align to the middle frame in time so the largest offset is as small as possible
     order = sorted(range(len(lbls)), key=lambda j: lbls[j].info["IMAGE_TIME"])
     ref = order[len(order)//2]
+    # where SPICE says each channel's target sits relative to the reference's, for when the frames' own match fails
+    guess = spice_offsets(lbls, ref) if align and len(lbls) > 1 else None
 
     # masks move with the frames, so pixels alignment leaves uncovered become invalid too
     aligned = []
@@ -235,11 +239,11 @@ def load_aligned(paths, hdr=False, scale=None, repeat_window=120):
                 guide = None
         elif guide is not None:
             shifts = []
-            ic.align_with_masks(guide, [m.copy() for m in masks], ref, aligned, found=shifts)
+            ic.align_with_masks(guide, [m.copy() for m in masks], ref, aligned, found=shifts, guess=guess)
             channels, masks = ic.align_with_masks(linear[0], masks, ref, use=shifts)
             imgs = cal.tone(channels, linear[1], linear[2])
         else:
-            imgs, masks = ic.align_with_masks(imgs, masks, ref, aligned)
+            imgs, masks = ic.align_with_masks(imgs, masks, ref, aligned, guess=guess)
     except Exception:
         print("Image alignment failure")
         aligned = ["failed"] * len(imgs)
@@ -256,6 +260,28 @@ def load_aligned(paths, hdr=False, scale=None, repeat_window=120):
     if dropped:
         report["dropped"] = dropped
     return imgs, np.logical_and.reduce(masks), lbls[ref], report
+
+
+"""
+SPICE's offset of each frame's target from the reference frame's (lbls[ref]), (dx, dy) in full resolution pixels,
+as image_correction.align_with_masks takes it (guess): the geometry cache places the target on every frame
+(label.target_loc), and between the filters of a set it moves only as far as the camera's pointing drifted and the
+body moved. None for a frame SPICE can't place; None for the whole set when the geometry cache is off (the batch
+pipeline, which loads no kernels for this) or the frames are of different targets.
+"""
+def spice_offsets(lbls, ref):
+    if not ba.GEOMETRY_CACHE or len({lbl.info.get("TARGET_NAME") for lbl in lbls}) != 1:
+        return None
+    locs = []
+    with spice_lock:
+        for lbl in lbls:
+            try:
+                locs.append(lbl.target_loc())
+            except Exception:
+                locs.append(None)
+    if locs[ref] is None:
+        return None
+    return [None if loc is None else (locs[ref][0] - loc[0], locs[ref][1] - loc[1]) for loc in locs]
 
 
 """

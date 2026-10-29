@@ -18,7 +18,7 @@ BODY = {"RED": 0.08, "GRN": 0.05, "BL1": 0.03}   # a dark red-brown moon, in I/F
 class Label:
     def __init__(self, band, conversion, t):
         self.band = band
-        self.info = {"PRODUCT_ID": f"N{t}_1", "IMAGE_TIME": f"2004-06-11T19:{t:02d}:00", "FILTER_NAME": ("CL1", band),
+        self.info = {"PRODUCT_ID": f"N{t}_1", "IMAGE_TIME": f"2004-06-11T19:{t:02d}:00", "FILTER_NAME": f"(CL1,{band})",
                      "DATA_CONVERSION_TYPE": conversion, "INSTRUMENT_ID": "ISSNA", "TARGET_NAME": "PHOEBE",
                      "path": f"nac_data/N{t}_1.png"}
 

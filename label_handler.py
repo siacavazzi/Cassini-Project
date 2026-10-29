@@ -261,6 +261,16 @@ class label:
     draw = False: only where it goes and the canvas's shape (translate)
     """
     def auto_center(self, border=True, draw=True):
+        target_loc = self.target_loc()
+        print(target_loc)
+        return self.translate("png", target_loc[0],target_loc[1],target_loc[3],border, draw)
+
+    """
+    Where SPICE puts the target on this frame (bootleg_autonav.find_target): [x, y, z, angle], x and y the shift
+    (full resolution pixels) that centres it. From the geometry cache when it is on (the frame server), so no
+    kernels have to be loaded; otherwise the frame's year of kernels is loaded first. Raises when SPICE can't place it.
+    """
+    def target_loc(self):
         im_year = int(self.info["IMAGE_TIME"].split('-')[0])
 
         def load_year():
@@ -271,10 +281,7 @@ class label:
                 cur_year = im_year
                 ba.load_kernels(im_year,im_year)
 
-        # from the geometry cache when it is on (the frame server), so no kernels have to be loaded
-        target_loc = ba.find_target_cached(self, load_year)
-        print(target_loc)
-        return self.translate("png", target_loc[0],target_loc[1],target_loc[3],border, draw)
+        return ba.find_target_cached(self, load_year)
     
     def is_mosaic(self):
         panels = self.info["OBSERVATION_ID"].split("X")
