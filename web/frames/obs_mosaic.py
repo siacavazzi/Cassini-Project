@@ -866,7 +866,7 @@ def plan(u, cache):
         # the filters that see the body, not as a black mosaic of that sky
         aside = _aside(frames, u)
         count = {f: c for f, c in count.items() if f not in aside} or count
-        colour, grey = pair_colour(colour_of(count, nms), u["key"][0])
+        colour = colour_of(count, nms)
         # a long movie's scale from frames spread evenly over it, each filter's on its own (a step in time could
         # fall in step with the filter wheel and miss a filter): the same scale, without reading every frame first
         picks = []
@@ -874,7 +874,7 @@ def plan(u, cache):
             mine = [fr for fr in frames if fr[2] == f]
             picks += mine[::max(1, math.ceil(len(mine) / SCALE_FRAMES))]
         levels = {}
-        scale = pass_scale(sorted(picks, key=frames.index), u, colour or [grey or max(count, key=count.get)],
+        scale = pass_scale(sorted(picks, key=frames.index), u, colour or [max(count, key=count.get)],
                            bool(colour and len(colour) == 3 and colour[1] == "GRN" and colour[2] in reel.TRUE_BLUES),
                            lit_levels=levels)
         # the rotation from the camera's frame to north up: the angle between where the geometry cache puts
@@ -892,7 +892,7 @@ def plan(u, cache):
         view = [x1 - x0, y1 - y0]
         p = {"key": list(u["key"]), "display_scale": scale, "angle": angle, "footprint": [x0, y0, x1, y1],
              "fixed": True, "view": view, "k": CANVAS / max(view), "colour": colour,
-             "grey": grey or max(count, key=count.get), "whole": u["whole"]}
+             "grey": max(count, key=count.get), "whole": u["whole"]}
         p["luminance"] = luminance_of(count, p["grey"], levels)
         reel._cached(path, lambda: json.dumps(p).encode())
         stamp = _stamp(path)
@@ -991,17 +991,6 @@ def colour_of(count, nms):
         return [common[0], common[len(common) // 2], common[-1]]
     two = [f for f in common if f in plain]
     return two if len(two) == 2 else None
-
-
-def pair_colour(colour, body):
-    """(colour, grey filter or None) for a pass of colour_of's colour filters on body: a pair with the one filter the
-    body's surface shows through (calibration.SURFACE_WINDOW: Titan's CB3 maps and monitoring passes, CB3 with MT1,
-    IR1, RED...) is drawn grey in that filter, as before two-filter colour, since the pair's tint, the haze band's half
-    of every pixel, washes the surface's few per cent of contrast out; any other colour is as colour_of said."""
-    window = calibration.SURFACE_WINDOW.get(body)
-    if colour and len(colour) == 2 and window in colour:
-        return None, window
-    return colour, None
 
 
 def _polarizer(f):
@@ -3575,8 +3564,9 @@ def movie_frame(u, n, cache, trail=0, colour=True, out=OUT, centre=True, steady=
     if used:
         planes = [_place(u, newest[f], rect, k, W, H, cache, p["display_scale"]) for f in used]
         # a colour set held from an earlier pointing that is out of this frame's view (a track's last visit, a
-        # thousand px away) leaves the picture empty: the frame is drawn on its own instead
-        if any(a[..., 3].any() for a in planes):
+        # thousand px away), or whose filters overlap nowhere in it (colour_picture draws only where every filter
+        # has the picture), leaves the picture empty: the frame is drawn on its own instead
+        if np.logical_and.reduce([a[..., 3] > 0 for a in planes]).any():
             rgba = colour_picture(u, p, used, planes)
             rep["color"] = used
             rep["ids"] = [newest[f]["id"] for f in used]

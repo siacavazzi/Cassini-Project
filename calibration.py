@@ -676,8 +676,8 @@ solid blue). Two visible color filters (NATURAL_PAIR: RED with BL1 or GRN) alrea
 """
 NATURAL_PAIR = ("RED", "GRN", "BL1", "BL2", "VIO")
 # A pair with the one filter a body's surface shows through, a window in its haze (Titan's CB3, 938 nm: its other filters
-# see the haze and clouds above), stays straight too: balanced, the haze band's half of every pixel washes the
-# surface's few per cent of contrast into one flat tint (obs_mosaic.pair_colour draws such a pass grey in that filter)
+# see the haze and clouds above), takes its brightness from that filter and its color from the pair's mix (FalseMix.lum):
+# mixed alone, the haze band's half of every pixel washed the surface's few per cent of contrast into one flat tint
 SURFACE_WINDOW = {"TITAN": "CB3"}
 
 
@@ -685,7 +685,7 @@ def color_mix(camera, bands, target=None, gains=None, own=False):
     if style() != "balanced" or len(bands) not in (2, 3):
         return None
     if len(bands) == 2:
-        if all(b in NATURAL_PAIR for b in bands) or SURFACE_WINDOW.get(str(target or "").upper()) in bands:
+        if all(b in NATURAL_PAIR for b in bands):
             return None
         if gains:
             # gains bring each band to the set's mean: the levels they balance are as their inverses
@@ -703,6 +703,9 @@ def color_mix(camera, bands, target=None, gains=None, own=False):
         return None
     m = np.diag(np.asarray(gains, np.float32)).view(FalseMix)
     m.tint = tint_of(target)
+    window = SURFACE_WINDOW.get(str(target or "").upper())
+    if len(bands) == 2 and window in bands:
+        m.lum = 0 if bands[0] == window else 2   # (its channel in two_bands' three)
     return m
 
 
@@ -719,13 +722,15 @@ def two_bands(channels):
 class FalseMix(np.ndarray):
     """A false color mix (a gain per band, diagonal), the tint its balance aims at (tint_of) and, for a mosaic, its
     pass's typical color (each band's log share of the brightness, so the color doesn't shift as tiles arrive), kept
-    through arithmetic."""
+    through arithmetic. lum: the channel the picture's brightness is taken from (a body's SURFACE_WINDOW), or None."""
     tint = None
     typical = None
+    lum = None
 
     def __array_finalize__(self, obj):
         self.tint = getattr(obj, "tint", None)
         self.typical = getattr(obj, "typical", None)
+        self.lum = getattr(obj, "lum", None)
 
 
 _matrices = None
@@ -922,6 +927,15 @@ def apply_mix(mix, x):
         ok = (flat > REVERT_FLOOR) & (soft(mean) > REVERT_FLOOR)
         detail = np.where(ok, sharp * base / np.maximum(flat, 1e-12), bright)
         x = np.stack([np.where(ok, detail * soft(c) / np.maximum(base, 1e-12), c) for c in x])
+        if mix.lum is not None:
+            # a surface seen through one band (SURFACE_WINDOW): the picture's brightness is that band's, on the
+            # mix's level, and its color the mix's, so the surface's contrast shows in the pair's color
+            band = raw[mix.lum]
+            bright = x.mean(axis=0)
+            on = (bright > REVERT_FLOOR) & (band > 0)
+            if on.sum() > 100:
+                k = float(np.median(bright[on]) / np.median(band[on]))
+                x = np.where(on, x * (band * k / np.maximum(bright, 1e-12)), x)
     return x
 
 
@@ -1053,8 +1067,9 @@ def load_linear(labels, images=None, iofs=None, floor=1.0):
             own = [float(np.median(c[lit])) * g for c, g in zip(bands, np.diagonal(mix))]
             if min(own) > 0:
                 gains = spread_capped([g * o ** FALSE_OWN for g, o in zip(np.diagonal(mix), balance(own, tint))])
+                lum_band = mix.lum
                 mix = np.diag(np.asarray(gains, np.float32)).view(FalseMix)
-                mix.tint = tint
+                mix.tint, mix.lum = tint, lum_band
     margin /= white
     sky = sky if measured else np.ones(iofs[0].shape, dtype=bool)
     if measured:

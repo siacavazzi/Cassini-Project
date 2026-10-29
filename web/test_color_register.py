@@ -113,11 +113,15 @@ assert cal.color_mix("W", ["RED", "VIO"], "SATURN") is None
 two = cal.color_mix("W", ["IR3", "VIO"], "SATURN", own=True)
 assert isinstance(two, cal.FalseMix) and two.shape == (3, 3)
 assert isinstance(cal.color_mix("N", ["MT3", "BL1"], "TITAN", own=True), cal.FalseMix)
-# Titan's CB3 (its surface window) with another band stays straight, as before: balanced, the haze band washed the
-# surface out into flat orange (042TI_GLOBMAP001, N1687507569_1)
-assert cal.color_mix("N", ["CB3", "MT1"], "TITAN", own=True) is None
-assert cal.color_mix("W", ["CB3", "IR1"], "TITAN", own=True) is None
-assert isinstance(cal.color_mix("W", ["CB3", "VIO"], "SATURN", own=True), cal.FalseMix)
+# Titan's CB3 (its surface window) with another band: the picture's brightness from CB3 (lum, its channel in two_bands'
+# three), as the haze band's half of every pixel washed the surface out into flat orange (042TI_GLOBMAP001, N1687507569_1)
+assert cal.color_mix("N", ["CB3", "MT1"], "TITAN", own=True).lum == 0
+assert cal.color_mix("W", ["IR1", "CB3"], "TITAN", own=True).lum == 2
+assert cal.color_mix("N", ["BL1", "UV3"], "TITAN", own=True).lum is None
+assert cal.color_mix("W", ["CB3", "VIO"], "SATURN", own=True).lum is None
+assert cal.color_mix("N", ["CB3", "MT1", "UV3"], "TITAN", own=True).lum is None
+m = cal.color_mix("N", ["CB3", "MT1"], "TITAN", own=True)
+assert (m * 2).lum == 0 and m[:, :].lum == 0      # kept through arithmetic
 assert cal.two_bands([4.0, 2.0]) == [4.0, 3.0, 2.0] and cal.two_bands([1, 2, 3]) == [1, 2, 3]
 with cal.coloring("raw"):
     assert cal.color_mix("W", ["IR3", "VIO"], "SATURN", own=True) is None
@@ -245,15 +249,22 @@ with cal.coloring("raw"):
     lin = lambda v: (v / 255) ** 2.2
     assert (r, b) == (160, 60) and abs(lin(g) - (lin(160) + lin(60)) / 2) < 0.005, (r, g, b)
 
-# ---------- a pair with the filter a body's surface shows through stays grey in it (obs_mosaic.pair_colour) ----------
-# Titan's CB3 + MT1 maps (042TI_GLOBMAP001, 019TI_GLBMAPNLP001, 114TI_MONITORNA001): CB3 sees the surface, MT1 only
-# the haze above it; drawn in two-filter colour their tint washed the surface out (Titan's CB3 repeats merge into one
-# tile each, so CB3 and MT1 tie on tiles and colour_of pairs them)
-assert om.pair_colour(["CB3", "MT1"], "TITAN") == (None, "CB3")
-assert om.pair_colour(["IR1", "CB3"], "TITAN") == (None, "CB3")
-assert om.pair_colour(["BL1", "VIO"], "TITAN") == (["BL1", "VIO"], None)      # haze in both: its colour stays
-assert om.pair_colour(["CB3", "MT1", "UV3"], "TITAN") == (["CB3", "MT1", "UV3"], None)   # three filters: as before
-assert om.pair_colour(["CB2", "MT2"], "SATURN") == (["CB2", "MT2"], None)    # Saturn's belts in both bands
-assert om.pair_colour(["CB3", "VIO"], "SATURN") == (["CB3", "VIO"], None)
-assert om.pair_colour(None, "TITAN") == (None, None)
+# ---------- Titan's CB3 + MT1 drawn in the pair's color with CB3's brightness ----------
+# CB3 sees the surface (dark markings 8% under the bright terrain), MT1 a featureless haze over the same disk
+H = 200
+yy2, xx2 = np.mgrid[:H, :H]
+disk = np.hypot(yy2 - 100, xx2 - 100) < 70
+marks = (np.sin(xx2 / 6.0) > 0.3) & disk
+cb3 = np.where(disk, 0.10 * np.where(marks, 0.92, 1.0), 0).astype(np.float32)
+mt1 = np.where(disk, 0.20, 0).astype(np.float32)
+chans, margin, mix = cal.load_linear([Label("CB3", "TITAN", "ISSNA"), Label("MT1", "TITAN", "ISSNA")],
+                                     [np.zeros((H, H, 3), np.uint8)] * 2, [cb3 + 0, mt1 + 0])
+assert mix.lum == 0
+out = np.stack([c[..., 0] for c in cal.tone(chans, margin, mix)]).astype(float)
+inner = disk & (np.hypot(yy2 - 100, xx2 - 100) < 55)
+dark, bright = out[:, inner & marks].mean(axis=1), out[:, inner & ~marks].mean(axis=1)
+contrast = 1 - dark.mean() / bright.mean()
+print("Titan CB3+MT1: bright", bright.round(1), "markings", dark.round(1), "contrast", round(float(contrast), 3))
+assert contrast > 0.04                        # the markings show (drawn without lum: the haze halves them, and less)
+assert bright[0] > bright[2] + 3              # in the pair's color, not grey
 print("ok")
