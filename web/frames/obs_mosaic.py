@@ -1184,6 +1184,12 @@ def _tile_made(u, n, cache, scale, base):
                                                     repeat_window=u.get("repeat_gap", mosaic_benchmark.REPEAT_GAP))
     except Exception as e:
         image, rep = None, {"why": f"{type(e).__name__}: {e}"[:200]}
+    if (image is not None and u.get("mosaic") and rep.get("calibrated") is False and calibration.step("calibrate")
+            and f in ((scale or {}).get("blacks") or {})):
+        # a frame that can't be calibrated (an 8LSB frame: only its low 8 bits were sent, which wrap round into a black
+        # and white lace where the ground is bright) among tiles of its filter that are: left out, as a colour set leaves
+        # out such a channel. Phoebe 2004-06-11 has them at pointings of their own
+        image, rep = None, {**rep, "why": "can't be calibrated (8LSB or an unknown filter or gain): left out of the mosaic"}
     out = {"n": n, "id": fid, "filter": f, "t": t, "stacked": rep.get("stacked"), "calibrated": rep.get("calibrated"), **seen}
     os.makedirs(os.path.dirname(base), exist_ok=True)
     if image is not None and "frame_offset" in rep:

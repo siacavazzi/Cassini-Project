@@ -137,4 +137,35 @@ assert [s["ids"][0] for s in ph] == [phoebe[i] for i in (0, 1, 4, 5, 8, 9)], [s[
 assert ph[0]["also"] == [phoebe[2]] and ph[1]["also"] == [phoebe[3]], (ph[0].get("also"), ph[1].get("also"))
 assert len([s for s in shots if s["obs"] == "ISS_077RF_HIRESFRNG002_PRIME"]) == 25
 print("reel.shots ok")
+
+# ---------- a mosaic tile that can't be calibrated (8LSB) among calibrated ones is left out ----------
+import tempfile  # noqa: E402
+import color_image  # noqa: E402
+made = {}
+
+
+def processed(paths, hdr=False, scale=None, repeat_window=120):
+    side = 2 * om.HALF
+    return np.full((side, side, 4), 200, np.uint8), None, {"calibrated": made[paths[0]], "stacked": [1],
+                                                          "frame_offset": [0.0, 0.0]}
+
+
+color_image.processed_frame = processed
+om._register = lambda *a, **k: None
+om._keep_made = lambda *a, **k: None
+u = {"frames": [("x/a.png", "a", "CL1/CL2", 0.0, 600, 0.0, 0.0, 3e4)], "z": 3e4, "mosaic": True, "key": ("PHOEBE", "O", "N", 0)}
+scale = {"blacks": {"CL1/CL2": 0.01}, "white": 0.2, "gamma": 1.5}
+with tempfile.TemporaryDirectory() as there:
+    made["x/a.png"] = True
+    rep = om._tile_made(u, 0, there, scale, os.path.join(there, "ok"))
+    assert "box" in rep and os.path.exists(os.path.join(there, "ok.png")), rep
+    made["x/a.png"] = False
+    rep = om._tile_made(u, 0, there, scale, os.path.join(there, "lsb"))
+    assert "box" not in rep and "calibrated" in rep["why"] and not os.path.exists(os.path.join(there, "lsb.png")), rep
+    # ... but drawn when no frame of its filter calibrates (the pass has no black for it), or in a movie
+    rep = om._tile_made(u, 0, there, {**scale, "blacks": {}}, os.path.join(there, "lsb_only"))
+    assert "box" in rep, rep
+    rep = om._tile_made({**u, "mosaic": False}, 0, there, scale, os.path.join(there, "lsb_movie"))
+    assert "box" in rep, rep
+print("uncalibrated tile ok")
 print("ok")
