@@ -347,6 +347,11 @@ def dark_for(info, shape):
     d = dark_dn(info)
     if d is None or d.shape == tuple(shape[:2]):
         return d
+    k = shape[0] // d.shape[0]
+    if shape[0] == k * d.shape[0] and shape[1] == k * d.shape[1]:
+        # label.resize_image draws a summed frame's pixels as k x k blocks: the dark the same way, so a pixel's dark
+        # stays on its own block (spread linearly, a hot spot's dark ringed the block it was repaired in, repair_hot)
+        return np.repeat(np.repeat(d, k, 0), k, 1)
     return cv2.resize(d, (shape[1], shape[0]), interpolation=cv2.INTER_LINEAR if shape[0] > d.shape[0] else cv2.INTER_AREA)
 
 
