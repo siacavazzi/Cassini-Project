@@ -17,6 +17,7 @@ the same colour sets made by two checkouts of the pipeline, side by side.
             frame, as the camera window plays it), by OLD and by NEW, each in a fresh cache of its own:
               CASSINI_DATA=... CASSINI_GEOMETRY_CACHE=... python web/frames/color_register_evidence.py movie \
                   W1486331264_1 --old OLD --new NEW --out DIR
+            (and the frame drawn grey; MOVIE_ONLY=1 leaves the mosaics out)
 """
 import argparse
 import csv
@@ -126,13 +127,16 @@ for fid in json.load(open(sys.argv[2])):
         continue
     u, n = found
     rec = out[fid] = {"pass": list(u["key"]), "kind": u.get("kind"), "n": n, "plan colour": obs_mosaic.plan(u, cache)["colour"]}
-    for name, draw in (("movie", lambda: obs_mosaic.movie_frame(u, n, cache)), ("mosaic", lambda: obs_mosaic.so_far(u, n, cache))):
+    kinds = [("movie", lambda: obs_mosaic.movie_frame(u, n, cache)), ("grey", lambda: obs_mosaic.movie_frame(u, n, cache, colour=False)),
+             ("mosaic", lambda: obs_mosaic.so_far(u, n, cache))]
+    # MOVIE_ONLY=1: the movie frame (and the same frame drawn grey) only, not the pass's mosaic
+    for name, draw in kinds[:2] if os.environ.get("MOVIE_ONLY") else kinds:
         try:
             im, rep = draw()
             if im is not None:
                 im = im if isinstance(im, Image.Image) else Image.fromarray(np.asarray(im))
                 im.convert("RGBA").save(os.path.join(sys.argv[3], f"{fid}-{name}.png"))
-            rec[name] = {k: rep.get(k) for k in ("color", "ids", "filter_names", "filters", "why")} if rep else None
+            rec[name] = {k: rep.get(k) for k in ("color", "ids", "filter_names", "filters", "why", "set_places", "held")} if rep else None
         except Exception as e:
             rec[name] = {"error": f"{type(e).__name__}: {e}"[:300]}
 json.dump(out, open(os.path.join(sys.argv[3], "reports.json"), "w"), indent=1, default=str)
@@ -153,7 +157,7 @@ def movie(args):
                        check=True, cwd=os.path.abspath(tree), stdout=subprocess.DEVNULL)
         reports[name] = json.load(open(os.path.join(folder, "reports.json")))
     for fid in named:
-        for kind in ("movie", "mosaic"):
+        for kind in ("movie", "grey", "mosaic"):
             pics = [os.path.join(args.out, n, f"{fid}-{kind}.png") for n in ("old", "new")]
             if not all(os.path.exists(q) for q in pics):
                 continue

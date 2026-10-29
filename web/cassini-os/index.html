@@ -3021,6 +3021,12 @@ body.ambient.phone .amb-where { font-size: 18px; }
       const s = corner(t, a, t.spice[a]), p = corner(t, a, pl[a]);
       return [p[0] - s[0], p[1] - s[1]];
     }
+    // how far a colour set's tile a moves from SPICE's place to where movie_frame draws it: at (obs_mosaic.set_places)
+    // from where the set's newest tile r is drawn, its stabilized place or SPICE's
+    function setShift(t, pl, a, r, at) {
+      const o = pl ? pl[r] : t.spice[r], s = corner(t, a, t.spice[a]), p = corner(t, a, [o[0] + at[0], o[1] + at[1]]);
+      return [p[0] - s[0], p[1] - s[1]];
+    }
     // obs_mosaic.evened_gains for one stretch's log brightnesses in order: a running median over FLASH frames, a
     // Gaussian-weighted line over smooth frames (_gaussian_line), the gain to that line within GAIN either way, to 1/200
     function evenedGains(L, smooth, c) {
@@ -3248,7 +3254,7 @@ body.ambient.phone .amb-where { font-size: 18px; }
       }
       return out;
     }
-    return { pyRound, pyRound2, places, shift, evenedGains, gains, lut, mix, heldOf, trailOf, blendTrail, fadeWeight, fadeLight, resizeLinear, applyLight,
+    return { pyRound, pyRound2, places, shift, setShift, evenedGains, gains, lut, mix, heldOf, trailOf, blendTrail, fadeWeight, fadeLight, resizeLinear, applyLight,
       gaussKernel, detailInputs, detailFinish, blurCPU };
   };
   window.cassiniSteadyMath = STEADY_MATH;
@@ -3351,7 +3357,7 @@ onmessage = async e => {
   const W = m.planes[0].bitmap.width, H = m.planes[0].bitmap.height, mixing = m.planes.length > 1 || m.trail, moves = [];
   // each tile's picture (the movie frame drawn at SPICE's places) moved to its stabilized place, its gain on it
   const planes = m.planes.map(p => {
-    const [dx, dy] = M.shift(t, placed.get(pk), p.i), c = new OffscreenCanvas(W, H), g = c.getContext("2d", { willReadFrequently: !!(L || mixing || m.detail) });
+    const [dx, dy] = p.at ? M.setShift(t, placed.get(pk), p.i, p.ref, p.at) : M.shift(t, placed.get(pk), p.i), c = new OffscreenCanvas(W, H), g = c.getContext("2d", { willReadFrequently: !!(L || mixing || m.detail) });
     g.drawImage(p.bitmap, dx, dy);
     p.bitmap.close();
     moves.push([dx, dy]);
@@ -3468,7 +3474,9 @@ onmessage = async e => {
       };
       const older = !set && o.trail ? M.trailOf(T, shown, o.trail) : [];
       const tiles = set || [...older, shown], bitmaps = await Promise.all(tiles.map(load)), mid = ++seq;
-      const planes = tiles.map((j, q) => ({ i: T.n.indexOf(j), bitmap: bitmaps[q] }));
+      // a colour set's tiles drawn on one another, where its newest is (obs_mosaic.set_places)
+      const at = set && T.sets.at ? T.sets.at[e.n] : null, ref = set ? T.n.indexOf(Math.max(...set)) : -1;
+      const planes = tiles.map((j, q) => ({ i: T.n.indexOf(j), bitmap: bitmaps[q], ...(at ? { at: at[q], ref } : {}) }));
       const r = await new Promise(res => { waiting.set(mid, res); work().postMessage({ id: mid, key: e.key, n: e.n, steady: o.steady || 0, exposure: o.exposure || 0, trail: older.length > 0, detail: !!o.raw, planes }, bitmaps); });
       stats.frames++; stats.placeMs += r.ms[0]; stats.drawMs += r.ms[1]; stats.last = { id, moves: r.moves, gain: r.gain, set: tiles.map(j => T.ids[j]) };
       const url = URL.createObjectURL(r.blob), out = new Image();
@@ -11583,7 +11591,7 @@ void main() {
   window.cassiniAbout = { open, addTab, esc, close: () => show(false), credits: CREDITS };
 
   // ---- which version this is: this page's build id (build.py writes it), and what the frame server says it serves ----
-  const BUILD = /*BUILD*/"26e7430fe0d0";
+  const BUILD = /*BUILD*/"30b71b3dea5f";
   const FRAMES = (() => {                       // the frame server, chosen as the camera window chooses it
     const q = new URLSearchParams(location.search).get("frames");
     if (q) return q.replace(/\/$/, "");

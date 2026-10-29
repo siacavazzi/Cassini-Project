@@ -3219,7 +3219,8 @@ def page_evens(u, cache, colour=True, centre=True):
 def _colour_recipes(u, p, cache, ns, tiles):
     """How movie_frame draws each frame of a colour pass, for the page: {"filters", "mix" (colour_picture's 3x3
     natural mix, or None to draw the filters straight), "gamma", "shoulder", "by": {frame n: the tiles of its colour
-    set in the filters' order, or absent when the frame is drawn alone}}; None for a false colour pass (its mix
+    set in the filters' order, or absent when the frame is drawn alone}, "at": {frame n: where each of those is drawn
+    from where the set's newest is (set_places)}}; None for a false colour pass (its mix
     blurs and balances the picture: drawn by the server). The set is the one movie_frame picks at SPICE's places."""
     want = p["colour"]
     scale = p["display_scale"]
@@ -3227,7 +3228,7 @@ def _colour_recipes(u, p, cache, ns, tiles):
     mix = calibration.color_mix(u["key"][2], want, u["key"][0], [bal[f] for f in want] if bal else None)
     if isinstance(mix, calibration.FalseMix) or len(want) != 3:
         return None   # (two filters: the green of their mean, colour_picture's, is the server's too)
-    by, placed = {}, set(ns)
+    by, at, placed = {}, {}, set(ns)
     for n in ns:
         for run in reversed(colour_sets(u["frames"][:n + 1])):
             got = {f: j for f, j in run if f in want and not (j in placed and partial(tiles.get(j) or {}))}
@@ -3235,9 +3236,10 @@ def _colour_recipes(u, p, cache, ns, tiles):
                 continue
             if all(got[f] in placed for f in want):
                 by[str(n)] = [got[f] for f in want]
+                at[str(n)] = set_places(u, cache, p, by[str(n)])
             break
     return {"filters": list(want), "mix": None if mix is None else np.asarray(mix, float).tolist(),
-            "gamma": scale.get("gamma", 2.2), "shoulder": calibration.SHOULDER, "by": by}
+            "gamma": scale.get("gamma", 2.2), "shoulder": calibration.SHOULDER, "by": by, "at": at}
 
 
 def movie_rect(fp, t, radius=0.0, centre=False, seen=None):
@@ -3479,6 +3481,73 @@ def _own_sets(frames):
     return [[(frames[j][2], j) for j in run] for run in sorted(at, key=lambda r: r[0])]
 
 
+# a movie's colour set, its filters on one another (set_places): a move of at most this (of a frame) is believed, as
+# far as a feature track believes the clouds move between two of its frames; a larger match leaves SPICE's place
+SET_MAX = TRACK_MAX
+# the set registrations of a pass's tiles (set_places), kept with its tiles; renamed whenever the rule changes (with
+# SET_TAG, in the name of the movie frames drawn with it, movie_webp)
+SET_FILE = "sets1.json"
+SET_TAG = "_a1"
+
+
+def _set_shift(u, cache, p, ref, j):
+    """How far tile j's place moves back to land on tile ref (reference pixels), by the pipeline's own alignment of a
+    set's channels (_shift_onto) at the two tiles' own places; None when nothing was found or the match is past
+    SET_MAX. Worked out once per pair and kept with the pass's tiles."""
+    scale = p["display_scale"]
+    rec = _kept_tiles(u, cache, scale)
+    there = _tiles(u, cache, scale)
+    path, key = os.path.join(there, SET_FILE), f"{ref},{j}"
+    with _ulock(u):
+        kept = rec.get("sets") if rec is not None else None
+        if kept is None:
+            try:
+                with open(path) as fh:
+                    kept = json.load(fh)
+            except (OSError, ValueError):
+                kept = {}
+            if rec is not None:
+                rec["sets"] = kept
+        if key in kept:
+            return kept[key]["shift"]
+        q, t = tile(u, ref, cache, scale), tile(u, j, cache, scale)
+
+        def pic(n):
+            pp = os.path.join(there, f"{n}.png")
+            with _lock:
+                made = _made_pictures.get(pp)
+            return made if made is not None else np.asarray(Image.open(pp).convert("RGBA"))
+        shift, how = _shift_onto(q, pic(ref), q["offset"], t, pic(j), t["offset"])
+        if shift is not None and math.hypot(*shift) > SET_MAX * FRAME:
+            shift, how = None, f"{how}, past SET_MAX: SPICE's place"
+        kept[key] = {"shift": None if shift is None else [round(v, 2) for v in shift], "how": how}
+        os.makedirs(there, exist_ok=True)
+        with open(path + ".new", "w") as fh:
+            json.dump(kept, fh)
+        os.replace(path + ".new", path)
+        return kept[key]["shift"]
+
+
+def set_places(u, cache, p, js):
+    """Where each tile js of one colour set is drawn, as an offset from where its newest tile (the largest of js) is
+    drawn: [dx, dy] reference pixels each, rounded to 1/100 (the page adds them to the place it draws the newest at,
+    steady-local.html). A movie's colour set is taken over minutes, frame after frame: SPICE puts each frame on its own,
+    and a planet's clouds turn and drift between the filters (tens of px on the 2011 storm), so the filters drawn at
+    their own places smear the picture into soft, fringed copies of it (quality check 10-29). Each is moved onto the
+    newest by the pipeline's own alignment of a set's channels, as a colour still is aligned (color_image.load_aligned,
+    image_correction.align_with_masks), and the whole set is drawn where the newest frame is. With Settings >
+    Processing's alignment off, or where no match is found, a tile keeps where SPICE puts it from the newest."""
+    ref = max(js)
+    t0 = tile(u, ref, cache, p["display_scale"])["offset"]
+    out = []
+    for j in js:
+        t = tile(u, j, cache, p["display_scale"])["offset"]
+        s = _set_shift(u, cache, p, ref, j) if j != ref and calibration.step("align") else None
+        sx, sy = s or (0.0, 0.0)
+        out.append([round(t[0] - sx - t0[0], 2), round(t[1] - sy - t0[1], 2)])
+    return out
+
+
 def movie_frame(u, n, cache, trail=0, colour=True, out=OUT, centre=True, steady=0, exposure=0, sharpen=True):
     """Frame n of the pass played as a movie, RGBA out px on its longest side, and its report; (None, report)
     when SPICE could not place it. The frame is the pass's tile n (color_image.processed_frame: repeat exposures
@@ -3560,6 +3629,14 @@ def movie_frame(u, n, cache, trail=0, colour=True, out=OUT, centre=True, steady=
                     newest[f] = at(q)
             if len(newest) == len(want):
                 used = want
+                if not track:
+                    # the set's filters on one another, drawn where its newest frame is (a track's chain already
+                    # lands them on one another)
+                    js = [got[f] for f in want]
+                    rel = set_places(u, cache, p, js)
+                    x, y = newest[want[js.index(max(js))]]["offset"]
+                    newest = {f: dict(newest[f], offset=[x + d[0], y + d[1]]) for f, d in zip(want, rel)}
+                    rep["set_places"] = rel
             break
     if used:
         planes = [_place(u, newest[f], rect, k, W, H, cache, p["display_scale"]) for f in used]
@@ -3655,10 +3732,13 @@ def movie_webp(frame_id, size, cache, trail=0, colour=True, wait=False, ahead=6,
         warm_movie(u, n, ahead, cache, steady=bool(steady), exposure=(bool(colour), bool(centre), 0) if exposure else None)
         return None, {"why": "working out the pass", "observation": u["key"][1], "pass": u["key"][3]}
     # (a feature track's frames, at their steady places, are named apart from the frames it played before, and so
-    # are a stabilized movie's, by its smoothing; a filled pass's frame before detail() by _d0)
-    filled = not sharpen and bool(plan(u, cache)["display_scale"].get("filled"))
+    # are a stabilized movie's, by its smoothing; a filled pass's frame before detail() by _d0; and a colour pass's
+    # colour frames, their sets drawn on one another, by SET_TAG)
+    pl = plan(u, cache)
+    filled = not sharpen and bool(pl["display_scale"].get("filled"))
+    aligned = SET_TAG if colour and pl.get("colour") and not u.get("track") else ""
     path = os.path.join(folder(u, cache), MOVIE_DIR, str(size),
-                        f"{n}_{trail}_{int(bool(colour))}{'_c2' if centre else ''}{'_k2' if u.get('track') else ''}"
+                        f"{n}_{trail}_{int(bool(colour))}{aligned}{'_c2' if centre else ''}{'_k2' if u.get('track') else ''}"
                         f"{f'_s{steady}' if steady else ''}{f'_e{exposure}r{EXPOSURE_RULE}' if exposure else ''}{'_d0' if not sharpen and filled else ''}.webp")
     report, meta = {}, path[:-4] + "json"
 

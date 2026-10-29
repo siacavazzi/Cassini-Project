@@ -102,7 +102,12 @@ def in_node(table):
           "out.gains = {}; for (const x of " + json.dumps(EXPOSURES) + ") out.gains[x] = t.exposure ? M.gains(t.exposure, x) : null;\n"
           "out.chains = " + json.dumps(CHAINS) + ".map(c => " + json.dumps(EXPOSURES) + ".map(x => M.gains(c, x)));\n"
           "out.luts = " + json.dumps(LUTS) + ".map(([g, gm]) => Array.from(M.lut(g, gm)));\n"
-          "out.rounding = r;\nconsole.log(JSON.stringify(out));")
+          "out.rounding = r;\n"
+          # a colour set's tiles: each moved to where movie_frame draws it, on the set's newest (set_places)
+          "out.sets = {}; if (t.sets && t.sets.at) for (const s of [0, ..." + json.dumps(SMOOTHS) + "]) { const p = M.places(t, s); "
+          "out.sets[s] = {}; for (const [n, set] of Object.entries(t.sets.by)) { const r = t.n.indexOf(Math.max(...set)); "
+          "out.sets[s][n] = set.map((j, q) => M.setShift(t, p, t.n.indexOf(j), r, t.sets.at[n][q])); } }\n"
+          "console.log(JSON.stringify(out));")
     return json.loads(subprocess.run(["node", "-e", js], capture_output=True, text=True, check=True).stdout)
 
 
@@ -110,6 +115,14 @@ def webp(a):
     buf = io.BytesIO()
     Image.fromarray(a, "RGBA").save(buf, "WEBP", quality=om.QUALITY, method=4)
     return np.asarray(Image.open(io.BytesIO(buf.getvalue())).convert("RGBA"))
+
+
+def move_of(got, table, s, n, recipe, q, j):
+    """How far the page moves plane j (the q-th of frame n's recipe) at smoothing s: a colour set's tiles onto its
+    newest (set_places), any other frame to its stabilized place."""
+    if table.get("sets") and len(recipe) > 1 and str(n) in table["sets"]["by"]:
+        return got["sets"][str(s)][str(n)][q]
+    return got[str(s)]["shifts"][table["n"].index(j)] if s else (0, 0)
 
 
 def moved(a, dx, dy):
@@ -210,15 +223,17 @@ with calibration.looking("balanced"):
     table = om._steady_table(u2, 0, cache, True, True)
     assert table["sets"] and table["sets"]["mix"] and table["exposure"]["local"], table.get("sets")
     got = in_node(table)
-    cases, wants, alone, labels = [], [], 0, []
+    cases, wants, alone, labels, moves = [], [], 0, [], 0
     for s, x in ((12, 0), (12, 8)):
         gains = got["gains"][str(x)] if x else {}
         for n in range(N):
             recipe = table["sets"]["by"].get(str(n)) or [n]
             planes = []
-            for j in recipe:
+            for q, j in enumerate(recipe):
                 A = np.asarray(om.movie_frame(u2, j, cache, colour=False, centre=True)[0])
-                dx, dy = got[str(s)]["shifts"][table["n"].index(j)] if s else (0, 0)
+                # a set's tiles land on its newest (set_places), a frame alone moves to its stabilized place
+                dx, dy = move_of(got, table, s, n, recipe, q, j)
+                moves += abs(dx) + abs(dy) if len(recipe) > 1 else 0
                 C = moved(A, dx, dy)
                 if gains.get(str(n), 1.0) != 1.0:
                     C[..., :3] = np.array(server_lut(gains[str(n)], table["exposure"]["gamma"]), np.uint8)[C[..., :3]]
@@ -245,7 +260,8 @@ with calibration.looking("balanced"):
         total += diff.size
     assert off <= total * 1e-6, (off, total)
     print(f"colour: {len(cases)} colour pictures and {alone} frames alone, stabilized (0, 12) and exposure-normalized "
-          f"(0, 8): the page's moved, gained and mixed picture equals the server's but for {off} values of {total} a level apart")
+          f"(0, 8), each set's tiles on its newest ({moves} px moved in all): the page's moved, gained and mixed picture "
+          f"equals the server's but for {off} values of {total} a level apart")
 def node_trail(table, trails, cases):
     """The page's trail (cassiniSteadyMath.trailOf, then blendTrail over each case's planes, oldest first), in node."""
     tmp = tempfile.mkdtemp()
@@ -350,9 +366,9 @@ with calibration.looking("balanced"):
                 if not colour and T:
                     recipe = [j for j in range(n - 1, max(-1, n - 8 * T), -1)][:T][::-1] + [n]
                 planes = []
-                for j in recipe:
+                for q, j in enumerate(recipe):
                     A = np.asarray(om.movie_frame(v, j, cache, colour=False, centre=True, sharpen=False)[0])
-                    dx, dy = got[str(s_)]["shifts"][table["n"].index(j)] if s_ else (0, 0)
+                    dx, dy = move_of(got, table, s_, n, recipe, q, j)
                     C = moved(A, dx, dy)
                     if gains.get(str(n), 1.0) != 1.0:
                         C[..., :3] = np.array(server_lut(gains[str(n)], table["exposure"]["gamma"]), np.uint8)[C[..., :3]]
@@ -440,10 +456,10 @@ with calibration.looking("balanced"):
                 recipe = (table["sets"]["by"].get(str(n)) if colour else None) or \
                     ((held["trails"][str(T)][a] if T else []) + [shown])
                 pl = []
-                for j in recipe:
+                for q, j in enumerate(recipe):
                     # (the page loads the frame's own plane for the frame shown, another frame's for the rest)
                     A = planes0[n] if j in (n, shown) else planes0[j]
-                    dx, dy = got[str(s_)]["shifts"][table["n"].index(j)] if s_ else (0, 0)
+                    dx, dy = move_of(got, table, s_, n, recipe, q, j)
                     C = moved(A, dx, dy)
                     if gains.get(str(n), 1.0) != 1.0:
                         C[..., :3] = np.array(server_lut(gains[str(n)], table["exposure"]["gamma"]), np.uint8)[C[..., :3]]
