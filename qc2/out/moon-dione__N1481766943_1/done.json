@@ -1,0 +1,1 @@
+{"group": "new", "tag": "moon-dione", "seed": "N1481766943_1", "name": "DIONE_ISS_00BDI_REGMAP001_PRIME_N", "kind": {"mosaic": true, "movie": false, "kind": "mosaic", "repeats": 1}, "status": 200, "observation": "ISS_00BDI_REGMAP001_PRIME", "target": "DIONE", "camera": "N", "pass": 0, "n": 4, "movie": false, "mosaic": true, "cadence": 35.0, "plays": "mosaic"}
