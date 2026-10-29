@@ -1,0 +1,1 @@
+{"group": "new", "tag": "moon-hyperion", "seed": "N1692988032_1", "name": "HYPERION_ISS_152HY_HYPERION001_PRIME_N", "kind": {"mosaic": true, "movie": false, "kind": "mosaic", "repeats": 1}, "status": 200, "observation": "ISS_152HY_HYPERION001_PRIME", "target": "HYPERION", "camera": "N", "pass": 0, "n": 28, "movie": false, "mosaic": true, "cadence": 55.0, "plays": "mosaic"}
