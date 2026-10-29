@@ -155,7 +155,7 @@ scale = a fixed display scale shared by all the pictures of a mosaic (calibratio
 repeat_window = how close (seconds) a frame of the same filter must be to be stacked in as a repeat exposure;
 a movie taking frames faster than that passes less, so its frames are not stacked into one another
 around = a movie's frame (one path): the paths of the same filter's frames just before and after it in the movie,
-whose one-frame spikes (cosmic rays, image_correction.spikes) are then painted over (report["spikes_px"])
+whose one-frame spikes (cosmic rays, image_correction.spikes) are then replaced by what is round them (report["spikes_px"])
 returns (images, mask of pixels valid in every channel, the reference frame's label, report)
 where report says how each frame was calibrated and aligned, and report["dropped"] which frames were
 left out because they can't be calibrated (then there is one image fewer than paths: a two-filter picture)
@@ -181,17 +181,17 @@ def load_aligned(paths, hdr=False, scale=None, repeat_window=120, around=None):
         # pixels each frame lost in downlink (truncated lines) that no repeat exposure stacked with it had
         masks.append(mask)
     if around and fill and len(paths) == 1:
-        # a movie's frame: its one-frame spikes (cosmic rays, there in neither neighbour) painted over from round them
+        # a movie's frame: its one-frame spikes (cosmic rays, there in neither neighbour) replaced by what is round them
         def neighbour(p):
             try:
-                return lh.label(p, as_png=True).resize_image()
+                return _linear(lh.label(p, as_png=True))
             except Exception as e:
                 print(f"Can't read {p} for spikes: {e}")
-        found = ic.spikes(imgs[0], [neighbour(p) for p in around if p])
+        found = ic.spikes(_linear(lbls[0]), [neighbour(p) for p in around if p])
         if found.any():
-            imgs[0] = ic.fill_invalid(imgs[0], ~found)
+            imgs[0] = ic.unspike(imgs[0], found)
             if iofs[0] is not None:
-                iofs[0] = ic.fill_invalid(iofs[0], ~found)
+                iofs[0] = ic.unspike(iofs[0], found)
             spiked = int(found.sum())
     lost = sum(int((~m).sum()) for m in masks)
     if fill and lost:
@@ -276,6 +276,18 @@ def load_aligned(paths, hdr=False, scale=None, repeat_window=120, around=None):
     if spiked:
         report["spikes_px"] = spiked
     return imgs, np.logical_and.reduce(masks), lbls[ref], report
+
+
+"""
+A frame in the camera's own values (calibration.stored_values: DN, or the codes of a TABLE frame), float32, sized like
+label.resize_image: what image_correction.spikes looks for a movie frame's cosmic rays in
+"""
+def _linear(lbl):
+    codes = ds.imread(lbl.export(), cv2.IMREAD_GRAYSCALE)
+    values = (cal.stored_values(codes, lbl.info) if ds.lut8() else codes).astype(np.float32)
+    if values.shape != (1024, 1024):
+        values = cv2.resize(values, (1024, 1024), interpolation=cv2.INTER_AREA)
+    return values
 
 
 """

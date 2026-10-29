@@ -188,7 +188,7 @@ def _slant(gray, mask, y0, y1, x0, x1, span):
 
 
 # a one-frame spike (spikes): a peak this many times the frame's noise above its own surroundings
-SPIKE_SIGMA = 6.0
+SPIKE_SIGMA = 5.0
 # px: a peak in a neighbouring frame this close (after registration) is the same thing seen again (a star drifting,
 # a small moon), not a spike
 SPIKE_REACH = 5
@@ -197,12 +197,13 @@ SPIKE_SIZE = 9
 
 
 """
-The pixels of img (a movie's frame, as label.resize_image) that are one-frame spikes: a cosmic ray's dot or short
+The pixels of img (a movie's frame: as label.resize_image, or better in the camera's own values, color_image._linear,
+where a faint sky has more than the few levels a frame's 8-bit stretch leaves it) that are one-frame spikes: a cosmic ray's dot or short
 track, there in this frame only. A pixel is one when it stands SPIKE_SIGMA times the frame's noise above the
 frame's own surroundings (its 5 px median), on a peak no wider than SPIKE_SIZE, and neither neighbour (the same
 filter's frames just before and after it in the movie, registered to it by find_shift as stack_frames does) has a
 peak within SPIKE_REACH of it. In a long dark stare a new set of them every frame twinkled across the sky. The
-frame's spikes are treated as lost pixels (color_image.load_aligned): filled from round them like a lost line.
+frame's spikes are replaced by what is round them (unspike, color_image.load_aligned).
 returns a bool mask the size of img, True on the spikes and the pixel round each
 """
 def spikes(img, neighbours):
@@ -213,7 +214,10 @@ def spikes(img, neighbours):
     def peaks(im):
         g = (cv2.cvtColor(im, cv2.COLOR_BGR2GRAY) if im.ndim == 3 else im).astype(np.float32)
         p = g - cv2.medianBlur(g, 5)
-        return p, 1.4826 * float(np.median(np.abs(p))) + 0.5
+        # the noise: the spread of the peaks under the top 1%, as the median of them is 0 in a frame stored in
+        # coarse steps (a faint sky in the lean archive's codes is a level or two, 10 DN apart)
+        a = np.abs(p)
+        return p, max(1.4826 * float(np.median(a)), float(np.std(p[a <= np.percentile(a, 99)]))) + 0.5
 
     own, noise = peaks(img)
     found = own > SPIKE_SIGMA * noise
@@ -226,7 +230,7 @@ def spikes(img, neighbours):
     for other in neighbours:
         if not found.any():
             break
-        shift = find_shift(img, other) if img.ndim == 3 else None
+        shift = find_shift(_bgr(img), _bgr(other))
         if shift is not None:
             other = shift_image(other, *shift)
         theirs, their_noise = peaks(other)
@@ -235,6 +239,27 @@ def spikes(img, neighbours):
         seen = cv2.dilate(theirs / their_noise, near) >= 0.5 * own / noise
         found &= ~seen
     return cv2.dilate(found.astype(np.uint8), np.ones((3, 3), np.uint8)) > 0
+
+
+def _bgr(im):
+    """im as find_shift takes it: 8-bit BGR, a single channel float image stretched from 0 to its 99.9th percentile"""
+    if im.ndim == 3:
+        return im
+    if im.dtype != np.uint8:
+        top = max(float(np.percentile(im, 99.9)), 1e-9)
+        im = np.clip(im * (255.0 / top), 0, 255).astype(np.uint8)
+    return cv2.cvtColor(im, cv2.COLOR_GRAY2BGR)
+
+
+"""
+img with the pixels of found (spikes) replaced by the median of the 5 x 5 pixels round each: a spike a pixel or two
+wide (found takes in the pixel round it) is a few of those 25, so the median is what is round it.
+"""
+def unspike(img, found):
+    work = img if img.dtype in (np.uint8, np.float32) else img.astype(np.float32)
+    out = img.copy()
+    out[found] = cv2.medianBlur(work, 5)[found]
+    return out
 
 
 """

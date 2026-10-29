@@ -36,20 +36,34 @@ def path_of(idx, fid):
     return idx.path[idx.id == fid].iloc[0]
 
 
+def around(u, n):
+    """the same filter's frames just before and after frame n of pass u (obs_mosaic._around, which main lacks)"""
+    frames, f = u["frames"], u["frames"][n][2]
+    before = next((frames[j][0] for j in range(n - 1, -1, -1) if frames[j][2] == f), None)
+    after = next((frames[j][0] for j in range(n + 1, len(frames)) if frames[j][2] == f), None)
+    return [before, after]
+
+
 def movie_runs(idx):
-    """name -> [(path, [path before, path after]), ...] and the pass's repeat window, as obs_mosaic.units sets it."""
+    """name -> (the pass (obs_mosaic.units), the indices of the run of its frames to draw)."""
+    sys.path.insert(0, os.path.join(os.getcwd(), "web", "frames"))
+    import obs_mosaic
+    import data_source as ds
     out = {}
     for name, obs, mid, side in MOVIES:
-        s = idx[idx.OBSERVATION_ID == obs].sort_values("seconds_1970").reset_index(drop=True)
-        f = s.FILTER_NAME[s.id == mid].iloc[0] if mid else s.FILTER_NAME.mode().iloc[0]
-        s = s[s.FILTER_NAME == f].reset_index(drop=True)
-        at = int(s.index[s.id == mid][0]) if mid else len(s) // 2
-        gap = float(np.median(np.diff(s.seconds_1970))) if len(s) > 1 else 120.0
-        window = 120 if gap > 240 else gap / 2
-        first = max(0, min(at - side, len(s) - 2 * side - 1))
-        js = range(first, min(len(s), first + 2 * side + 1))
-        out[name] = ([(s.path[j], [s.path[j - 1] if j > 0 else None, s.path[j + 1] if j + 1 < len(s) else None])
-                      for j in js], window)
+        r = idx[idx.OBSERVATION_ID == obs].iloc[0]
+        inst = "N" if r.path.startswith("nac") else "W"
+        for u in (u for t in ("SATURN", "KIVIUQ") for u in obs_mosaic.units(t, obs, inst)):
+            ids = [fr[1] for fr in u["frames"]]
+            at = ids.index(mid) if mid in ids else (len(ids) // 2 if mid is None else None)
+            if at is None:
+                continue
+            first = max(0, min(at - side, len(ids) - 2 * side - 1))
+            # (only frames whose neighbours the data has: a sample of the archive holds a stretch of the pass)
+            run = [n for n in range(first, min(len(ids), first + 2 * side + 1))
+                   if all(p is None or ds.exists(p.rsplit(".", 1)[0] + ".lbl") for p in [u["frames"][n][0]] + around(u, n))]
+            out[name] = (u, run)
+            break
     return out
 
 
@@ -71,11 +85,18 @@ def render(out):
         cv2.imwrite(os.path.join(out, f"{name}__{fid}.png"), cv2.cvtColor(np.asarray(rgba), cv2.COLOR_RGBA2BGRA))
         report[name] = {k: v for k, v in rep.items() if k != "why"} | {"s": round(time.time() - t, 1)}
         print(name, fid, report[name], flush=True)
-    for name, (run, window) in movie_runs(idx).items():
-        for k, (path, around) in enumerate(run):
-            kw = {"around": around} if around_ok else {}
-            rgba, _, rep = color_image.processed_frame([path], hdr=True, repeat_window=window, **kw)
-            fid = os.path.basename(path).split(".")[0]
+    runs = movie_runs(idx)
+    import obs_mosaic
+    for name, (u, run) in runs.items():
+        # as obs_mosaic._tile_made draws a movie's tile: on the pass's one display scale (here worked out over the run)
+        scale = obs_mosaic.pass_scale([u["frames"][n] for n in run], u)
+        for k, n in enumerate(run):
+            path, fid, f = u["frames"][n][:3]
+            kw = {"around": obs_mosaic._around(u, n)} if around_ok else {}
+            seen = {}
+            rgba, _, rep = color_image.processed_frame([path], hdr=True, scale=obs_mosaic.tile_scale(scale, f, True, seen),
+                                                       repeat_window=u.get("repeat_gap", 120), **kw)
+            rep.update(seen)
             cv2.imwrite(os.path.join(out, f"{name}__{k:02d}__{fid}.png"), cv2.cvtColor(np.asarray(rgba), cv2.COLOR_RGBA2BGRA))
             report[f"{name}/{k:02d}"] = {kk: v for kk, v in rep.items() if kk != "why"}
         print(name, len(run), "frames", flush=True)
