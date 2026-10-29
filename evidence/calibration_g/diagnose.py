@@ -266,6 +266,8 @@ def main():
             first = why.split()[1]
             if first not in sets:
                 sets.append(first)
+            if "pinholes" in why:
+                frames.append(fid)     # the pinhole sets' members, frame by frame too
         else:
             frames.append(fid)
     if a.sets:
