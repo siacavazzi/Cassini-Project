@@ -1,0 +1,1 @@
+{"group": "new", "tag": "grand-finale", "seed": "N1861979615_1", "name": "SATURN_ISS_255RI_HRESCOLBC001_PRIME_N", "kind": {"mosaic": true, "movie": false, "kind": "mosaic", "repeats": 1}, "status": 200, "observation": "ISS_255RI_HRESCOLBC001_PRIME", "target": "SATURN", "camera": "N", "pass": 0, "n": 25, "movie": false, "mosaic": true, "cadence": 65.0, "plays": "mosaic"}
