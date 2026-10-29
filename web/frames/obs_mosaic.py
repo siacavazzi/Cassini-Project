@@ -1328,8 +1328,8 @@ EDGE_GAIN = 0.05     # ... and how much better than at SPICE's places, for a mov
 EDGE_AGREE = 3.0     # px: matches further than this (across their own edges) from the others' fit are left out
 # a limb sits higher or lower with the filter (Saturn's haze in UV3 stands ~8 px over its MT3 limb, Titan's in RED over
 # CB3, probe 10-29): edges are measured between tiles of one filter only
-EDGE_FILE = "edges1-"  # before PANEL_FILE: a clouded body's registration, kept apart from #169's
-EDGE_TAG = "-pe1"    # in the name of a layout whose tiles edge registration moved, instead of PANEL_TAG
+EDGE_FILE = "edges2-"  # before PANEL_FILE: a clouded body's registration, kept apart from #169's; renamed when the rule changes
+EDGE_TAG = "-pe2"    # in the name of a layout whose tiles edge registration moved, instead of PANEL_TAG
 
 
 def _detail(gray, mask, sigma=6.0):
