@@ -165,6 +165,9 @@ def main():
             print("   before", r, flush=True)
         for k, v in sorted(moved.items()):
             print("   move", k, v, flush=True)
+        for k, v in sorted(report.items()):
+            if math.hypot(*v["move"]) > 5:
+                print("   matched", k, json.dumps(v, default=str)[:600], flush=True)
         # the whole mosaic, panels off and on, and crops where the pairs moved most
         pictures = {}
         for label, off in (("spice", "surface,panels"), ("surface", "panels"), ("registered", "")):
@@ -182,7 +185,10 @@ def main():
         mp, _, rect, *_ = made
         k = mp["k"] * pictures["spice"][0].width / math.ceil(rect[2] * mp["k"])
         by = {t["n"]: t for t in tiles}
-        worst = sorted([r for r in before if "px" in r], key=lambda r: -r["px"])[:4]
+        # (where registration moved a pair of pointings most against each other, or else where they were furthest apart)
+        rel = lambda r: math.hypot(*(np.subtract(moved.get(r["b"], [0, 0]), moved.get(r["a"], [0, 0]))))
+        worst = sorted([r for r in before if rel(r) > 0.5], key=lambda r: -rel(r))[:4] or \
+            sorted([r for r in before if "px" in r], key=lambda r: -r["px"])[:4]
         crops = []
         for i, r in enumerate(worst):
             ta, tb = by[r["a"]], by[r["b"]]
@@ -198,6 +204,7 @@ def main():
             fn = f"{name}_crop{i}.png"
             row.save(os.path.join(a.out, fn))
             crops.append((fn, r, round(x), round(y)))
+            print(f"   crop{i} pair {r['a']}-{r['b']} moved apart {rel(r):.1f} px", flush=True)
         rec["crops"] = [{"file": c[0], "x": c[2], "y": c[3], "pair": [c[1]["a"], c[1]["b"]]} for c in crops]
         every.append(rec)
         page.append(f"<h2>{html.escape(spec)} ({len(tiles)} tiles, {rec['km_per_px']} km/px)</h2>"
@@ -206,7 +213,7 @@ def main():
                     f"moves {html.escape(json.dumps(rec['moves']))}</p>"
                     f"<p>whole: <a href='{name}_spice.png'>SPICE</a> | <a href='{name}_surface.png'>surface</a> | "
                     f"<a href='{name}_registered.png'>surface + panels</a></p>"
-                    + "".join(f"<p>pair {c[1]['a']}–{c[1]['b']}: {c[1]['px']} px apart at SPICE's places, {c[1]['dt']} s between, "
+                    + "".join(f"<p>pair {c[1]['a']}–{c[1]['b']}: {c[1].get('px', 'not measured')} px apart at SPICE's places, {c[1]['dt']} s between, "
                               f"at ({c[2]}, {c[3]}). Left SPICE, middle surface at one moment, right surface + panels lined up ({ZOOM}x)<br><img src='{c[0]}'></p>" for c in crops))
     json.dump(every, open(os.path.join(a.out, "probe.json"), "w"), indent=1, default=str)
     with open(os.path.join(a.out, "index.html"), "w") as fh:
