@@ -139,6 +139,44 @@ def do_pass(row, a, log):
     return key, f"{rec['plays']} {len(rows)}/{len(frames)} frames {rec['secs']} s"
 
 
+def full_sheet(d):
+    """six frames at full size (512): first, first colour frame, darkest, brightest, biggest jump, last"""
+    try:
+        rows = [r for r in json.load(open(os.path.join(d, "frames.json"))) if r.get("http") == 200]
+    except (OSError, ValueError):
+        return
+    if not rows or os.path.exists(os.path.join(d, "full.jpg")):
+        return
+    pick_, why = [], []
+    def add(r, w):
+        if r["i"] not in [p["i"] for p in pick_]:
+            pick_.append(r); why.append(w)
+    add(rows[0], "first")
+    col = [r for r in rows if r.get("chroma", 0) > 2]
+    if col:
+        add(col[0], "first colour")
+    add(min(rows, key=lambda r: r["mean"]), "darkest")
+    add(max(rows, key=lambda r: r["p995"] * 1000 + r["mean"]), "brightest")
+    if len(rows) > 1:
+        j = max(range(1, len(rows)), key=lambda k: abs(rows[k]["mean"] - rows[k - 1]["mean"]))
+        add(rows[j], "biggest jump")
+    add(rows[-1], "last")
+    for r in rows[1:]:
+        if len(pick_) >= 6:
+            break
+        add(rows[len(rows) // 2], "middle")
+        break
+    tiles = []
+    for r, w in zip(pick_[:6], why):
+        try:
+            im = Image.open(os.path.join(d, "frames", f"{r['i']:04d}_{r['id']}.webp"))
+        except OSError:
+            continue
+        tiles.append(label(im, f"{r['i']} {r['filter']} {r['id']} [{w}]", 512))
+    if tiles:
+        sheet(tiles, 3, 512, os.path.join(d, "full.jpg"), os.path.basename(d) + " (full size)")
+
+
 def push(a, lock):
     if not a.push:
         return
@@ -172,6 +210,7 @@ def main():
     def one(r):
         try:
             k, msg = do_pass(r, a, log)
+            full_sheet(os.path.join(a.out, k))
         except Exception as e:
             k, msg = f"{r[1]}__{r[2]}", f"ERROR {e!r}"
         with lock:
@@ -183,6 +222,9 @@ def main():
         if n % a.every == 0:
             push(a, plock)
     plock = threading.Lock()
+    for k in os.listdir(a.out):
+        if os.path.isdir(os.path.join(a.out, k)):
+            full_sheet(os.path.join(a.out, k))
     with ThreadPoolExecutor(a.jobs) as ex:
         list(ex.map(one, rows))
     push(a, plock)
