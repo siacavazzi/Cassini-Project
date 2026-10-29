@@ -2493,7 +2493,7 @@ body.ambient.phone .amb-where { font-size: 18px; }
       hint: "How long the pictures are believed over SPICE (with Image stabilization on). Low takes out only the frame-to-frame wobble and follows SPICE closely; high also holds slow drifts still, trusting the frame-to-frame matching over that many frames." });
   D({ key: "movies.stabilizeLocal", section: "Processing", label: "Steady movies on this computer", type: "toggle", value: true,
       hint: "Image stabilization and exposure normalization worked out by this computer, at any smoothing: it moves and brightens the frame the server already has, instead of the server drawing every frame again for each setting. True-color frames and a trail too; false-color sets, feature tracks and passes whose view follows the frames are still drawn by the server, and exports are always made by the server. Off asks the server to draw every frame again for each setting, which is slower and is not offered when many people are watching." });
-  D({ key: "movies.exposure", section: "Processing", label: "Exposure normalization", type: "toggle", value: false,
+  D({ key: "movies.exposure", section: "Processing", label: "Exposure normalization", type: "toggle", value: true, was: [false],
       hint: "A movie pass is drawn on one brightness scale, so a frame whose exposure the calibration did not fully even out, or one lit by stray light, flashes or jumps in brightness. On, each picture's brightness is measured against the picture before it, a frame or two far brighter or darker than their neighbours are brought to their level, and other jumps are spread over several frames, one gain for the whole picture so a color picture keeps its color. Slow changes stay, and every frame keeps its data, only scaled. Off shows every frame as the pass's scale draws it." });
   D({ key: "movies.exposureSmooth", section: "Processing", label: "Exposure smoothing", type: "range", value: 8, min: 2, max: 30, step: 2, unit: "frames",
       hint: "How many frames a change in brightness is spread over (with Exposure normalization on). Low keeps quick real changes; high evens the movie out more." });
@@ -3109,10 +3109,19 @@ body.ambient.phone .amb-where { font-size: 18px; }
       }
       return out;
     }
-    // movie_frame's rolling trail: the up to trail earlier placed frames of frame n's filter, oldest first
+    // obs_mosaic.held_of: the frame shown in frame n's place, n or, when n is partial (most of it lost in downlink,
+    // t.partial), the last earlier placed frame of its filter that is not; n when there is none
+    function heldOf(t, n) {
+      const partial = new Set(t.partial || []), placed = new Set(t.n);
+      if (!partial.has(n)) return n;
+      for (let j = n - 1; j >= 0; j--) if (t.filters[j] === t.filters[n] && placed.has(j) && !partial.has(j)) return j;
+      return n;
+    }
+    // movie_frame's rolling trail: the up to trail earlier placed frames of frame n's filter (n: the frame shown,
+    // heldOf), partial ones left out, oldest first
     function trailOf(t, n, trail) {
-      const placed = new Set(t.n), js = [];
-      for (let j = n - 1; j > Math.max(-1, n - 8 * trail) && js.length < trail; j--) if (t.filters[j] === t.filters[n]) js.push(j);
+      const placed = new Set(t.n), partial = new Set(t.partial || []), js = [];
+      for (let j = n - 1; j > Math.max(-1, n - 8 * trail) && js.length < trail; j--) if (t.filters[j] === t.filters[n] && !partial.has(j)) js.push(j);
       return js.reverse().filter(j => placed.has(j));
     }
     // ... drawn under the newest, older ones fainter (float32 as numpy does it): older and newest are RGBA planes
@@ -3230,7 +3239,7 @@ body.ambient.phone .amb-where { font-size: 18px; }
       }
       return out;
     }
-    return { pyRound, pyRound2, places, shift, evenedGains, gains, lut, mix, trailOf, blendTrail, fadeWeight, fadeLight, resizeLinear, applyLight,
+    return { pyRound, pyRound2, places, shift, evenedGains, gains, lut, mix, heldOf, trailOf, blendTrail, fadeWeight, fadeLight, resizeLinear, applyLight,
       gaussKernel, detailInputs, detailFinish, blurCPU };
   };
   window.cassiniSteadyMath = STEADY_MATH;
@@ -3439,15 +3448,17 @@ onmessage = async e => {
     async apply(frames, id, im, o = {}) {
       const e = byId.get(`${tag(o.center !== false, !!o.color)}:${id}`);
       if (!e) return null;
-      const T = e.table, set = o.color && T.sets ? T.sets.by[e.n] : null;
+      const T = e.table, set = o.color && T.sets ? T.sets.by[e.n] : null, M = window.cassiniSteadyMath();
+      // a partial frame shows the whole one before it (the server's plane of frame n, im, is that frame's picture)
+      const shown = M.heldOf(T, e.n);
       const load = async j => {
-        if (j === e.n) return createImageBitmap(im);
+        if (j === e.n || j === shown) return createImageBitmap(im);
         const r = await fetch(o.planeUrl(T.ids[j]) + (o.raw ? "&detail=0" : ""));
         if (!r.ok) throw new Error(`plane ${T.ids[j]}: ${r.status}`);
         return createImageBitmap(await r.blob());
       };
-      const older = !set && o.trail ? window.cassiniSteadyMath().trailOf(T, e.n, o.trail) : [];
-      const tiles = set || [...older, e.n], bitmaps = await Promise.all(tiles.map(load)), mid = ++seq;
+      const older = !set && o.trail ? M.trailOf(T, shown, o.trail) : [];
+      const tiles = set || [...older, shown], bitmaps = await Promise.all(tiles.map(load)), mid = ++seq;
       const planes = tiles.map((j, q) => ({ i: T.n.indexOf(j), bitmap: bitmaps[q] }));
       const r = await new Promise(res => { waiting.set(mid, res); work().postMessage({ id: mid, key: e.key, n: e.n, steady: o.steady || 0, exposure: o.exposure || 0, trail: older.length > 0, detail: !!o.raw, planes }, bitmaps); });
       stats.frames++; stats.placeMs += r.ms[0]; stats.drawMs += r.ms[1]; stats.last = { id, moves: r.moves, gain: r.gain, set: tiles.map(j => T.ids[j]) };
@@ -11555,7 +11566,7 @@ void main() {
   window.cassiniAbout = { open, addTab, esc, close: () => show(false), credits: CREDITS };
 
   // ---- which version this is: this page's build id (build.py writes it), and what the frame server says it serves ----
-  const BUILD = /*BUILD*/"21688d59fc0e";
+  const BUILD = /*BUILD*/"d4873af8332d";
   const FRAMES = (() => {                       // the frame server, chosen as the camera window chooses it
     const q = new URLSearchParams(location.search).get("frames");
     if (q) return q.replace(/\/$/, "");
