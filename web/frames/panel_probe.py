@@ -6,7 +6,8 @@ re-implemented.
   CASSINI_DATA=... CASSINI_KERNELS=... CASSINI_GEOMETRY_CACHE=... \\
   python web/frames/panel_probe.py --cache SCRATCH_CACHE --out OUTDIR PASS...
 
-PASS is a frame id (N1477496427_2) or TARGET:OBSERVATION_ID:CAM[:pass]. Never point --cache at a cache the server
+PASS is a frame id (N1477496427_2: its pass up to that frame; --whole: the whole pass it is in) or
+TARGET:OBSERVATION_ID:CAM[:pass]. Never point --cache at a cache the server
 or the pre-build uses: the tiles and mosaics made here are written to it.
 
 For each pass: every pair of overlapping pointings measured where SPICE put them (panel_shift: how far apart they
@@ -95,6 +96,7 @@ def main():
     ap = argparse.ArgumentParser()
     ap.add_argument("--cache", required=True)
     ap.add_argument("--out", required=True)
+    ap.add_argument("--whole", action="store_true", help="a frame id stands for the whole pass it is in")
     ap.add_argument("passes", nargs="+")
     a = ap.parse_args()
     import calibration
@@ -106,6 +108,8 @@ def main():
         if u is None:
             print(spec, "no pass")
             continue
+        if a.whole:
+            n = len(u["frames"]) - 1
         name = "_".join(map(str, u["key"])).replace("/", "-")
         t0 = time.time()
         p = om.plan(u, a.cache)
@@ -166,7 +170,12 @@ def main():
                 made = om.layout(u, n, a.cache)
                 im, _ = om.so_far(u, n, a.cache, made=made, out=om.CANVAS)
             pictures[label] = (im, made)
-            im.save(os.path.join(a.out, f"{name}_{label}.png"))
+            if im is not None:
+                im.save(os.path.join(a.out, f"{name}_{label}.png"))
+        if any(im is None for im, _ in pictures.values()):
+            print("   no mosaic drawn", flush=True)
+            every.append(rec)
+            continue
         _, made = pictures["spice"]
         mp, _, rect, *_ = made
         k = mp["k"] * pictures["spice"][0].width / math.ceil(rect[2] * mp["k"])
