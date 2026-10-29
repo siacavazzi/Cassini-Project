@@ -347,6 +347,11 @@ def dark_for(info, shape):
     d = dark_dn(info)
     if d is None or d.shape == tuple(shape[:2]):
         return d
+    k = shape[0] // d.shape[0]
+    if shape[0] == k * d.shape[0] and shape[1] == k * d.shape[1]:
+        # label.resize_image draws a summed frame's pixels as k x k blocks: the dark the same way, so a pixel's dark
+        # stays on its own block (spread linearly, a hot spot's dark ringed the block it was repaired in, repair_hot)
+        return np.repeat(np.repeat(d, k, 0), k, 1)
     return cv2.resize(d, (shape[1], shape[0]), interpolation=cv2.INTER_LINEAR if shape[0] > d.shape[0] else cv2.INTER_AREA)
 
 
@@ -431,11 +436,26 @@ grain above the pixels round it and a dead one only where it is as far below, so
 frame is left alone (a short exposure's listed pixels are mostly just noise); a star that lands
 exactly on one is filled in too. image = the frame at a whole multiple of its own size (label.resize_image gives a
 summed frame's pixels as 2x2 or 4x4 blocks); returns how many were repaired.
+spots: the pixels where the dark step took out more than round them (dark_spots), at the frame's own size. The
+dark model over-predicts some of those in the pictures: WAC hot pixels whose listed curves (HOT_PIXEL_CAMERAS) are
+stronger than the pixel has since become, and the WAC parameter maps' own hot spots (the NAC's are smoothed out,
+SMOOTH_MAP_CAMERAS). They land below the sky round them, black pinholes (dozens to hundreds across a 2010 or 2016
+WAC sky), and are repaired too where they stand REPAIR_SIGMAS below.
 """
 REPAIR_SIGMAS = 3.0
+DARK_SPOT_DN = 2.0     # a pixel whose dark is this many DN above the 3x3 median of the dark round it is a spot
 
 
-def repair_hot(image, info):
+def dark_spots(info):
+    """The pixels, (lines, samples) bool at the frame's own size, where dark_dn(info) stands DARK_SPOT_DN above the
+    3x3 median of the dark round it; None without a dark"""
+    d = dark_dn(info)
+    if d is None:
+        return None
+    return (d - cv2.medianBlur(np.ascontiguousarray(d, np.float32), 3)) > DARK_SPOT_DN
+
+
+def repair_hot(image, info, spots=None):
     lines = int(ff._number(_value(info, "LINES", "1024"), 1024) or 1024)
     h, w = image.shape[:2]
     if image.ndim != 2 or h % lines or w % lines or h != w:
@@ -448,7 +468,10 @@ def repair_hot(image, info):
     measured = hot_map(info)
     if measured is not None and len(measured):
         sign[measured[:, 0], measured[:, 1]] = measured[:, 2]
-    if not sign.any():
+    below = sign < 0
+    if spots is not None and spots.shape == below.shape:
+        below |= spots
+    if not sign.any() and not below.any():
         return 0
     k = h // lines
     native = np.ascontiguousarray(image[::k, ::k], np.float32)
@@ -459,7 +482,7 @@ def repair_hot(image, info):
     rest = rest[np.isfinite(rest)]
     grain = 1.4826 * float(np.median(np.abs(rest))) if rest.size else 0.0
     fix = (((sign > 0) & (native > level + REPAIR_SIGMAS * grain))
-           | ((sign < 0) & (native < level - REPAIR_SIGMAS * grain)))
+           | (below & (native < level - REPAIR_SIGMAS * grain)))
     fix &= np.isfinite(level)
     if k > 1:
         level = np.repeat(np.repeat(level, k, 0), k, 1)
