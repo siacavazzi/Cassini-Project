@@ -18,7 +18,15 @@ of those observations as the Mac Mini's index and geometry cache have them (web/
 - a colour set whose filters land a little apart at each pointing is no feature track (TRACK_SPAN): a limb scan
   (249SA_LIMBINT002) is a mosaic, a 3x3 mosaic taken lap after lap (003SA_3X3MOVIEA002) a mosaic movie, while a feature
   track creeping the least of them (182SA_FEATRAK012) stays a track;
-- the passes these rules change get RELAID's folder (RETRACKED's for TRACK_SPAN), every other pass keeps its own.
+- separate scans in one mosaic pass, islands a frame's width or so apart and not both on the body's disk, are cut into
+  a mosaic each (108RI_TMAPN30LP001 and 113RI_VTMPN60MP001's ring ansae, 282RI_HIRESAFRG001's three strips), while an
+  azimuthal scan whose stretches do not quite meet (032RI_AZSCNLOPH001) and a map round Dione (129DI_REGMAP001) stay
+  whole (_retargets, _island);
+- a camera stepping a fifth of a frame each run over Titan (059TI_GLOBMAP001 W, 153TI_FIRNADMAP001 W) is a mosaic,
+  while a cloud monitor coming back to its view (175TI_CLOUD001) and a wind movie after Saturn's clouds
+  (159SA_WIND5HR001) stay movies (_walk);
+- the passes these rules change get RELAID's folder (RETRACKED's for TRACK_SPAN, RESCANNED's for the scan rule,
+  ISLANDS' for the islands and _walk), every other pass keeps its own.
 Run: python web/test_mosaic_layout.py; with --refresh (and the index and CASSINI_GEOMETRY_CACHE) it writes the frames
 of the observations again."""
 import json
@@ -41,7 +49,11 @@ OBS = [("SATURN", "ISS_267SA_LIMBINT002_PRIME", "N"), ("SATURN", "ISS_191SA_FEAT
        ("SATURN", "ISS_C44SA_APPRMOVB001_PRIME", "N"), ("SATURN", "ISS_249SA_LIMBINT002_PRIME", "N"),
        ("SATURN", "ISS_003SA_3X3MOVIEA002_PRIME", "N"), ("SATURN", "ISS_182SA_FEATRAK012_PRIME", "N"),
        ("SATURN", "IOSIC_113RI_VTMPN60MP001_SI", "W"), ("SATURN", "ISS_028RI_HIPHASE001_VIMS", "W"),
-       ("SATURN", "ISS_026RI_LATPHASE001_VIMS", "W"), ("JUPITER", "CIRS_C23JU_NSMAP101_PRIME", "N")]
+       ("SATURN", "ISS_026RI_LATPHASE001_VIMS", "W"), ("JUPITER", "CIRS_C23JU_NSMAP101_PRIME", "N"),
+       ("SATURN", "IOSIC_108RI_TMAPN30LP001_SI", "W"), ("SATURN", "ISS_282RI_HIRESAFRG001_PRIME", "N"),
+       ("SATURN", "ISS_032RI_AZSCNLOPH001_PRIME", "N"), ("TITAN", "ISS_059TI_GLOBMAP001_PRIME", "W"),
+       ("TITAN", "ISS_153TI_FIRNADMAP001_CIRS", "W"), ("TITAN", "ISS_175TI_CLOUD001_PRIME", "N"),
+       ("SATURN", "ISS_159SA_WIND5HR001_PRIME", "N")]
 # the v46 cache's plan (angle, the frame it was measured on) and tile outlines of three passes the camera turns under
 # (/mnt/project-files/mosaic-layout/qc-data/v46-json)
 V46 = "/mnt/project-files/mosaic-layout/qc-data/v46-json"
@@ -179,7 +191,7 @@ def main():
     assert [k for k, _ in kinds(feat)] == ["movie"] and feat[0]["track"] and not feat[0]["retracked"], kinds(feat)
 
     # scans that pause between their pointings: mosaics (a whole map lap after lap: a mosaic movie), in RESCANNED's folder
-    for key, kind, n in ((OBS[18], "mosaic", 28), (OBS[19], "mosaic", 78), (OBS[21], "mosaic", 83), (OBS[2], "mosaic_movie", 147)):
+    for key, kind, n in ((OBS[19], "mosaic", 78), (OBS[21], "mosaic", 83), (OBS[2], "mosaic_movie", 147)):
         us = [u for u in passes(*key) if len(u["frames"]) >= 20]
         assert kinds(us) == [(kind, n)] and not us[0]["revisit"] and us[0]["rescanned"], (key, kinds(us))
         assert om.folder(us[0], "/c").endswith(om.RESCANNED)
@@ -187,6 +199,27 @@ def main():
     assert [k for k, _ in kinds(lat)] == ["mosaic", "mosaic"] and all(u["rescanned"] for u in lat), kinds(lat)
     # (the time series keep RELAID's folder)
     assert not any(u["rescanned"] for key in OBS[:2] for u in passes(*key))
+
+    # separate scans in one mosaic pass (islands): a mosaic each, in ISLANDS' folder; the ring ansae of a CIRS
+    # ride-along, one ansa creeping under mosaic.min_step, and three strips of the A ring's edge
+    for key, want in ((OBS[18], [("mosaic", 17), ("mosaic", 11)]), (OBS[22], [("mosaic", 12), ("mosaic", 16)]),
+                      (OBS[23], [("mosaic", 24), ("mosaic", 24), ("mosaic", 6)])):
+        us = passes(*key)
+        assert kinds(us) == want and all(om.folder(u, "/c").endswith(om.ISLANDS) for u in us), (key, kinds(us))
+        assert [u["key"][3] for u in us] == list(range(len(us)))
+    # an azimuthal scan whose stretches of ring do not quite meet stays whole, and a map round Dione's disk (its
+    # middle the next pass) is not cut either (above)
+    az = passes(*OBS[24])
+    assert kinds(az) == [("mosaic", 267), ("mosaic", 59)] and not any(u["islands"] for u in az), kinds(az)
+
+    # Titan nearly filling the WAC beside a NAC map, stepping a fifth of a frame each run: a mosaic (_walk), in
+    # ISLANDS' folder; a cloud monitor coming back to its view, and Saturn's wind movie after its clouds, stay movies
+    for key in OBS[25:27]:
+        first = passes(*key)[0]
+        assert first["kind"] == "mosaic" and first["walked"] and om.folder(first, "/c").endswith(om.ISLANDS), (key, kinds(passes(*key)))
+    cloud, wind = passes(*OBS[27]), passes(*OBS[28])
+    assert kinds(cloud) == [("movie", 30)] and cloud[0]["revisit"] and not cloud[0]["walked"], kinds(cloud)
+    assert kinds(wind) == [("mosaic_movie", 72), ("movie", 16)] and wind[1]["revisit"] and not wind[1]["walked"], kinds(wind)
 
     print("mosaic layout ok:", {o: kinds(passes(t, o, c)) for t, o, c in OBS})
 
