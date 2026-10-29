@@ -156,7 +156,8 @@ def _observations():
 def units(target, obs, cam):
     """The passes of one camera's frames of one observation: [{key, frames: [(path, id, filter, t, nm, x, y, z)],
     mosaic, whole, z, last, repeat_gap}] in time order, from the index and the geometry cache. Repeat exposures
-    (the same filter within the pass's repeat_gap) are left out, as stacking.load_hdr merges them in. repeat_gap
+    (the same filter within the pass's repeat_gap, at the same pointing: _pictures) are left out, as
+    stacking.load_hdr merges them in. repeat_gap
     is REPEAT_GAP, except in a movie that takes a filter more often than that (a spoke movie every 11 s): there it
     is half the movie's own pace, so every frame of the movie is its own picture rather than stacked with the
     next ones (repeat_window)."""
@@ -169,7 +170,7 @@ def units(target, obs, cam):
     # the rows of idx[(idx["OBSERVATION_ID"] == obs) & (idx["TARGET_NAME"] == target) & (idx["INSTRUMENT_ID"] == inst)]
     rows = idx.iloc[at] if at is not None else idx.iloc[:0]
     where = reel.geometry(rows["id"].tolist())
-    out, cur, last = [], None, {}
+    out, cur = [], None
     for r in rows.itertuples(index=False):
         f1, f2 = str(r.filter1), str(r.filter2)
         f = "/".join(x for x in (f1, f2) if not x.startswith("CL")) or "CL1/CL2"
@@ -178,16 +179,13 @@ def units(target, obs, cam):
         if cur is None or t - cur["last"] > GAP or (g and cur["z"] and not 1 / ZOOM < g[2] / cur["z"] < ZOOM):
             cur = {"frames": [], "all": [], "taken": [], "z": g and g[2], "last": t}
             out.append(cur)
-            last = {}
         cur["last"] = t
         cur["taken"].append((f, *(g or (None, None, None))))   # every frame, repeats too, for _judge
         if not cur["z"] and g:
             cur["z"] = g[2]
         cur["all"].append((r.path, r.id, f, t, reel.wavelength(inst, f1 + f2), *(g or (None, None, None))))
-        if f in last and t - last[f] <= mosaic_benchmark.REPEAT_GAP:
-            continue
-        last[f] = t
-        cur["frames"].append((r.path, r.id, f, t, reel.wavelength(inst, f1 + f2), *(g or (None, None, None))))
+    for u in out:
+        u["frames"] = _pictures(u["all"], mosaic_benchmark.REPEAT_GAP)
     # laps: a mosaic taken again over the same places after a pause longer than GAP (the Jupiter approach's 2x2
     # color mosaics, six laps 74 minutes apart in one observation) is one pass, a mosaic movie, rather than a
     # mosaic that starts again from nothing every lap
@@ -219,15 +217,25 @@ def units(target, obs, cam):
         u["regrouped"] = bool(shifted or u.get("off") or u.get("pair"))
         u["repeat_gap"] = repeat_window(u)
         if u["repeat_gap"] < mosaic_benchmark.REPEAT_GAP:
-            u["frames"], last = [], {}
-            for fr in u["all"]:
-                if fr[2] in last and fr[3] - last[fr[2]] <= u["repeat_gap"]:
-                    continue
-                last[fr[2]] = fr[3]
-                u["frames"].append(fr)
+            u["frames"] = _pictures(u["all"], u["repeat_gap"])
         del u["all"]
     with _lock:
         _units[(target, obs, cam)] = out
+    return out
+
+
+def _pictures(frames, gap):
+    """The frames of a pass that are pictures (tiles) of their own: frames [(path, id, filter, t, nm, x, y, z)] in time
+    order less the repeat exposures, a frame of a filter within gap seconds of a picture of that filter at the same
+    pointing (stacking.repeat_of), which stacking.load_hdr merges into it. A frame at another pointing is a picture
+    of its own however soon after: Phoebe 2004-06-11 goes back and forth between two pointings a minute apart, and
+    the frames of one were merged into the other's tiles (its shadows over the other's bright ground)."""
+    out, kept = [], {}
+    for fr in frames:
+        mine = kept.setdefault(fr[2], [])
+        if stacking.repeat_of(mine, fr[3], fr[5:], gap) is None:
+            mine.append((fr[3], fr[5:], fr))
+            out.append(fr)
     return out
 
 
