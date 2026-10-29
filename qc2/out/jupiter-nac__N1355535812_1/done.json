@@ -1,0 +1,1 @@
+{"group": "new", "tag": "jupiter-nac", "seed": "N1355535812_1", "name": "JUPITER_UVIS_C23JU_AURORA006_PRIME_C_N", "kind": {"mosaic": true, "movie": false, "kind": "mosaic", "repeats": 1}, "status": 200, "observation": "UVIS_C23JU_AURORA006_PRIME_C", "target": "JUPITER", "camera": "N", "pass": 0, "n": 5, "movie": false, "mosaic": true, "cadence": 20.0, "plays": "mosaic"}
