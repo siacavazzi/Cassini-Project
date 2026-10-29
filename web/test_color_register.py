@@ -177,4 +177,57 @@ assert len(pair) == 2
 r, g, b = drawn(["MT3", "CB2", "MT2"], [0.0236, 0.40, 0.135], "DIONE")
 print("methane Saturn as DIONE", round(r), round(g), round(b))
 assert max(r, g, b) / min(r, g, b) < 1.06
+
+# ---------- two-filter passes play and mosaic in colour (obs_mosaic.colour_of, colour_picture) ----------
+# the WAC's CB2 + MT2 Saturn movie of ISS_003SA_3X3MOVIEB001_PRIME (2005-02-05) was drawn grey: colour_of wanted three
+import json  # noqa: E402
+from PIL import Image  # noqa: E402
+import obs_mosaic as om  # noqa: E402
+NMS = {"CB2": 750, "MT2": 727, "RED": 649, "GRN": 568, "BL1": 451, "CL1/CL2": 611, "MT3": 889, "CB3": 938}
+assert om.colour_of({"CB2": 9, "MT2": 9}, NMS) == ["CB2", "MT2"]
+assert om.colour_of({"BL1": 4, "RED": 5}, NMS) == ["RED", "BL1"]
+assert om.colour_of({"CL1/CL2": 9, "RED": 9}, NMS) is None          # a clear frame is no colour
+assert om.colour_of({"CB2": 9, "MT2": 2}, NMS) is None               # one filter at most tiles: grey, as before
+assert om.colour_of({"RED": 6, "GRN": 6, "BL1": 6}, NMS) == ["RED", "GRN", "BL1"]
+assert om.colour_of({"MT3": 6, "CB2": 6, "MT2": 6}, NMS) == ["MT3", "CB2", "MT2"]
+assert om.colour_of({"CL1/CL2": 6, "CB2": 6, "MT2": 6}, NMS) == ["CB2", "MT2", "CL1/CL2"]   # (as on main)
+
+cache = tempfile.mkdtemp()
+levels = {"CB2": 160, "MT2": 60}          # Saturn's methane band dark against its continuum, on the grey scale
+scale = {"blacks": {}, "white": 1, "gamma": 2.2, "balance": {"CB2": 110 / 160, "MT2": 110 / 60}}
+fr = [(f"p{i}", f"W{1486330000 + i}_1", ["MT2", "CB2"][i % 2], 1000.0 + 37 * i, 727, 0, 0, 1e6) for i in range(6)]
+u = {"key": ("SATURN", "ISS_003SA_3X3MOVIEB001_PRIME", "W", 0), "frames": fr, "z": 1e6, "movie": True, "mosaic": False,
+     "last": 1400}
+d, TD = om.folder(u, cache), om._tiles(u, cache, scale)
+os.makedirs(TD, exist_ok=True)
+for i, (_, fid, f, t, *_r) in enumerate(fr):
+    im = np.zeros((1448, 1448, 4), np.uint8)
+    im[..., 3] = 255
+    im[400:1000, 400:1000, :3] = levels[f]
+    Image.fromarray(im).save(f"{TD}/{i}.png")
+    json.dump({"n": i, "id": fid, "filter": f, "t": t, "offset": [0.0, 0.0], "box": [-724, -724, 1448, 1448]},
+              open(f"{TD}/{i}.json", "w"))
+json.dump({"key": list(u["key"]), "display_scale": scale, "angle": 0, "footprint": [-724, -724, 724, 724], "fixed": True,
+           "view": [1448, 1448], "k": 1, "colour": ["CB2", "MT2"], "grey": "CB2", "whole": False},
+          open(os.path.join(d, om.PLAN_FILE), "w"))
+om.movie_footprint = lambda u, cache, p=None: [-724, -724, 724, 724]
+mid = lambda a: a[a.shape[0] // 3:2 * a.shape[0] // 3, a.shape[1] // 3:2 * a.shape[1] // 3, :3].reshape(-1, 3).astype(float).mean(axis=0)
+with cal.looking("balanced"):
+    im, rep = om.movie_frame(u, 5, cache, centre=False)
+    assert rep.get("color") == ["CB2", "MT2"], rep
+    r, g, b = got = mid(np.asarray(im))
+    print("CB2+MT2 Saturn movie", got.round(1))
+    assert r / b < 1.5 and r >= g >= b and r - b > 3, got     # toward Saturn's cream (drawn straight: 160 / 60), not grey
+    p = om.plan(u, cache)
+    rect = om.movie_rect(om.movie_footprint(u, cache, p), om.tile(u, 5, cache, scale))
+    k = om.OUT / max(rect[2], rect[3])
+    W, H = max(1, int(np.ceil(rect[2] * k))), max(1, int(np.ceil(rect[3] * k)))
+    planes = [om._place(u, om.tile(u, j, cache, scale), rect, k, W, H, cache, scale) for j in (5, 4)]
+    assert np.allclose(got, mid(om.colour_picture(u, p, ["CB2", "MT2"], planes)), atol=1)
+    assert om._colour_recipes(u, p, cache, [4, 5], {}) is None          # the server draws it
+with cal.coloring("raw"):
+    # no balance in the raw look: the two bands straight, green their mean (in linear light), as a composite draws
+    r, g, b = mid(om.colour_picture(u, p, ["CB2", "MT2"], planes))
+    lin = lambda v: (v / 255) ** 2.2
+    assert (r, b) == (160, 60) and abs(lin(g) - (lin(160) + lin(60)) / 2) < 0.005, (r, g, b)
 print("ok")
