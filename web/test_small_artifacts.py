@@ -1,6 +1,6 @@
 """Small artifacts in single frames and movies (group I of the picture fix plan), on synthetic frames:
 - stack_frames: a saturated star a fraction of a pixel off between repeats is not a change (no box of the reference
-  alone round it), and where the reference lost a block a repeat's pixels count however much changed beside it
+  alone round it), nor is a repeat's bleed down the star's column averaged in (no vertical spike), and where the reference lost a block a repeat's pixels count however much changed beside it
 - fill_lines: a lost run is filled along the picture's slant, and left lost where a trial fill beside it misses
   (judged only where the trial had enough of the run to try on, and never on a run one of the frame's lines tall)
 - label.garbled_lines: the garbage the decompressor writes after losing its place in a line is found, a thin feature
@@ -40,6 +40,18 @@ out = ic.stack_frames([starfield(0, 0, 1, 22), starfield(0.6, -0.4, 2, 18), star
 sky = cv2.dilate((out > 45).astype(np.uint8), np.ones((9, 9), np.uint8)) == 0
 level = cv2.blur(out.astype(np.float32), (5, 5))[sky]
 assert np.percentile(level, 99) - np.percentile(level, 1) < 1.6, np.percentile(level, [1, 99])
+# repeats whose saturated star bled 12-15 rows up and down its column (the reference's didn't): no spike averaged
+# into the stack
+bled = [starfield(0, 0, 1, 22), starfield(0.6, -0.4, 2, 18), starfield(-0.5, 0.7, 3, 18)]
+y, x, _ = max(stars, key=lambda s: s[2])
+y, x = int(round(y)), int(round(x))
+bled[1][max(y - 15, 0):y + 16, x:x + 2] = 255
+bled[2][max(y - 12, 0):y + 13, x:x + 2] = 255
+out = ic.stack_frames(bled)[..., 0].astype(float)
+column = np.r_[out[max(y - 12, 0):max(y - 6, 0), x:x + 2].ravel(), out[y + 7:y + 13, x:x + 2].ravel()]
+clean = ic.stack_frames(bled[:1] + [starfield(0.6, -0.4, 2, 18), starfield(-0.5, 0.7, 3, 18)])[..., 0].astype(float)
+reference = np.r_[clean[max(y - 12, 0):max(y - 6, 0), x:x + 2].ravel(), clean[y + 7:y + 13, x:x + 2].ravel()]
+assert np.abs(column - reference).max() < 12, np.abs(column - reference).max()   # 138 levels with #192's margin
 print("no boxes round saturated stars ok")
 
 # ---------- stack_frames: a repeat fills the whole block the reference lost ----------

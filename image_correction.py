@@ -514,6 +514,8 @@ CLIPPED = 250
 # how far round a clipped pixel the change test also looks away: a star's wing beyond its clipped top, shifted a
 # pixel, and up and down its column, where the charge of a full pixel bleeds (by a different amount in each exposure)
 CLIP_MARGIN = np.ones((41, 7), np.uint8)
+# ... where a pixel differs from the reference's by more than this many times the frames' pixel noise, it is a change
+CLIP_SIGMA = 4.0
 
 
 def stack_frames(frames, sigma=3.0, max_shift=20, masks=None):
@@ -565,7 +567,9 @@ def stack_frames(frames, sigma=3.0, max_shift=20, masks=None):
         # nor where either frame is clipped, and just round it: a saturated star's flat top sits a fraction of a pixel
         # elsewhere in each repeat, which reads as a change the size of the star and left a box of the reference
         # alone round every bright star (W1601346192_1); a real change (a moving moon) is far larger than the margin
-        diff[cv2.dilate(((gray >= CLIPPED) | (ref_gray >= CLIPPED)).astype(np.uint8), CLIP_MARGIN) > 0] = 0
+        clipped = cv2.dilate(((gray >= CLIPPED) | (ref_gray >= CLIPPED)).astype(np.uint8), CLIP_MARGIN) > 0
+        pixel_diff = diff.copy()
+        diff[clipped] = 0
         smooth_diff = cv2.GaussianBlur(diff, (0,0), 2)
         smooth_diff = np.abs(smooth_diff - np.median(smooth_diff))
         noise = 1.4826 * np.median(smooth_diff)
@@ -573,6 +577,12 @@ def stack_frames(frames, sigma=3.0, max_shift=20, masks=None):
         # drop specks (cosmic rays, hot pixels are handled per pixel below), then pad what is left
         changed = cv2.morphologyEx(changed, cv2.MORPH_OPEN, np.ones((7,7), np.uint8))
         changed = cv2.dilate(changed, np.ones((15,15), np.uint8)) > 0
+        # round a clipped star each pixel is judged on its own, with no padding: a longer repeat's bleed down the
+        # columns (a vertical spike averaged in, W1601346192_1) and the star's edge a fraction of a pixel off are
+        # the reference's alone, the sky between them is every frame's (no box)
+        spread = np.abs(pixel_diff - np.median(pixel_diff))
+        pixel_noise = 1.4826 * float(np.median(spread[both] if lost else spread))
+        changed |= clipped & (np.abs(pixel_diff) > max(CLIP_SIGMA * pixel_noise, 3))
         stack.append(gray)
         # where the reference lost the pixel nothing was compared (diff 0 there): a change padded in from beside it
         # says nothing about this frame's pixel, which is then the only picture there is; left out, it left a
