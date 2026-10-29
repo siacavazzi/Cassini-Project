@@ -2,6 +2,7 @@
 - stack_frames: a saturated star a fraction of a pixel off between repeats is not a change (no box of the reference
   alone round it), and where the reference lost a block a repeat's pixels count however much changed beside it
 - fill_lines: a lost run is filled along the picture's slant, and left lost where a trial fill beside it misses
+  (judged only where the trial had enough of the run to try on, and never on a run one of the frame's lines tall)
 - label.garbled_lines: the garbage the decompressor writes after losing its place in a line is found, a thin feature
   lying along a line is not
 - spikes: a movie frame's cosmic rays are found, a star (drifting) and a small moon (moving) are not
@@ -66,6 +67,12 @@ for angle in (1.0, 1.2, 1.3):
 blocks = cv2.resize(np.random.default_rng(3).uniform(0, 255, (50, 50)).astype(np.float32), (H, H), interpolation=cv2.INTER_NEAREST)
 filled, mask = ic.fill_lines(bgr(blocks)[..., 0], m)
 assert not mask[120:126, 60:110].any()   # a trial fill beside it misses: left lost
+# ... but a run one of the frame's own lines tall (a 256 line frame: 4 rows of the 1024 grid) is always filled
+m4 = np.ones((H, H), bool)
+m4[120:124, 60:110] = False
+blocky = bgr(blocks)[..., 0]
+assert not ic.fill_lines(blocky, m4)[1][120:124, 60:110].any()
+assert ic.fill_lines(blocky, m4, fills=ic.line_fills(blocky, m4, line=4))[1].all()
 smooth = 100 + 20 * np.sin(xx / 30)
 filled, mask = ic.fill_lines(bgr(smooth + np.random.default_rng(4).normal(0, 3, (H, H)))[..., 0], m)
 assert mask.all() and np.abs(filled[~m].astype(float) - smooth[~m]).mean() < 3
@@ -73,6 +80,16 @@ assert mask.all() and np.abs(filled[~m].astype(float) - smooth[~m]).mean() < 3
 fills = ic.line_fills(bgr(rings)[..., 0], m)
 f2, m2 = ic.fill_lines((rings / 255).astype(np.float32), m, fills=fills)
 assert m2.all() and np.abs(f2[~m] * 255 - rings[~m]).mean() < 2.5
+# every other line lost (a frame's lost packets), from columns that differ line to line: the trial has valid rows
+# beside only a few pixels at a run's start, where a ringlet lies along the lines, and they are too few to judge by
+ground = 100 + 20 * np.sin(xx / 30) + np.where((xx >= 150) & (xx < 160), np.where(yy % 2 == 0, 15, -15), 0)
+img = bgr(ground + np.random.default_rng(10).normal(0, 1, (H, H)))[..., 0]
+m = np.ones((H, H), bool)
+for y in range(100, 300, 2):
+    m[y, 150 if y % 4 == 0 else 160:] = False
+filled, mask = ic.fill_lines(img, m)
+assert mask.all(), (~mask).sum()   # 12,250 of its 24,500 pixels were left lost (black lines in a colour set)
+assert np.abs(filled[~m].astype(float) - ground[~m]).mean() < 3
 print("fill_lines slant and trial ok")
 
 # ---------- garbled_lines ----------
@@ -87,6 +104,15 @@ assert found[100, 160:].all() and not found[100, :120].any()
 assert found[200, 30:].all() and found[250, 120:].all() and found[251, 120:].all()
 assert not found[300].any() and found.any(axis=1).sum() == 4, np.nonzero(found.any(axis=1))[0]
 assert not lh.garbled_lines(sky, np.ones((H, H), bool)).any()
+# every other line lost across bands lying along the lines (rings): lines 2 and 4 apart differ by the bands, not by
+# garbage (17,585 pixels found before)
+bands = 110 + 40 * np.sin(2 * np.pi * (yy + 0.02 * xx) / 14)
+bands = bgr(np.where(yy < 250, bands, 60) + np.random.default_rng(11).normal(0, 0.5, (H, H)))[..., 0]
+m = np.ones((H, H), bool)
+for y in range(20, 240, 2):
+    m[y, 150 if y % 4 == 0 else 170:] = False
+bands[~m] = 0
+assert not lh.garbled_lines(bands, m).any(), np.nonzero(lh.garbled_lines(bands, m).any(axis=1))[0]
 print("garbled lines ok")
 
 # ---------- spikes ----------

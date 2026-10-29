@@ -101,6 +101,9 @@ FILL_FLOOR = 3.0
 # ... or by at most this share of how much the picture there varies (a limb across the run: the fill misses where it
 # crosses, but draws the rest; a patch no slant reads, which a fill draws no better than its average, stays lost)
 FILL_GUESS = 0.5
+# ... and only when the trial had valid rows next to at least this share of the run to try on: lines lost every other
+# line (a frame's lost packets) leave a few pixels at the run's end, too few to judge it by, and the run is filled
+FILL_TRIED = 0.5
 
 
 """
@@ -110,9 +113,11 @@ filled straight between the rows above and below it, along the slant that best m
 row below (rings and limbs cross the gap at an angle; filled straight down, a dark gap between bright ringlets
 became a flat grey bar). The fill is first tried on the valid rows next to the run, as if a run as tall were lost
 there: a run whose trial fill misses the picture by more than the frame's noise allows (FILL_MISS), and by more than
-half of how much the picture varies there (FILL_GUESS), stays lost.
+half of how much the picture varies there (FILL_GUESS), stays lost. A run one of the frame's own lines tall (line:
+rows of mask per line, 4 for a 256 line frame on the 1024 grid) is always filled: its two neighbours are the nearest
+lines the frame has, no fill does better, and left lost it is a black line through a colour set.
 """
-def line_fills(img, mask, max_gap=LINE_GAP):
+def line_fills(img, mask, max_gap=LINE_GAP, line=1):
     h, w = mask.shape
     slope = np.zeros((h, w), np.float32)
     rows = np.arange(h)[:, None]
@@ -141,6 +146,10 @@ def line_fills(img, mask, max_gap=LINE_GAP):
         ys, xs = every_y[at], every_x[at]
         a, b = above[ys, xs], below[ys, xs]
         span = int((b - a).max())
+        if span - 1 <= line:
+            keep[r] = True
+            slope[ys, xs] = _slant(gray, mask, a.min(), b.max(), xs.min(), xs.max() + 1, span)
+            continue
         x0, x1 = xs.min(), xs.max() + 1
         k = _slant(gray, mask, a.min(), b.max(), x0, x1, span)
         # the trial: the same fill on the rows above the run (a run as tall, ending at its top row) and below it
@@ -157,9 +166,10 @@ def line_fills(img, mask, max_gap=LINE_GAP):
             truth = gray[yy, xs[ok]]
             misses.append(np.abs(va + (vb - va) * t - truth))
             spreads.append(np.abs(truth - truth.mean()))
+        tried = sum(len(m) for m in misses)
         miss = float(np.mean(np.concatenate(misses))) if misses else 0.0
         spread = float(np.mean(np.concatenate(spreads))) if spreads else 0.0
-        if miss <= max(FILL_MISS * noise, FILL_FLOOR, FILL_GUESS * spread):
+        if tried < FILL_TRIED * len(ys) or miss <= max(FILL_MISS * noise, FILL_FLOOR, FILL_GUESS * spread):
             keep[r] = True
             slope[ys, xs] = k
     fillable = keep[runs] & fillable

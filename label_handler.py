@@ -76,6 +76,8 @@ def warp_into(src, M, shape, box, **kwargs):
 # noise more than they differ from each other; a line is garbled from where GARBLE_SHARE of GARBLE_RUN pixels jump
 GARBLE_SIGMA = 6.0
 GARBLE_RUN = 64
+# rows: the furthest a line is checked against, past lost lines (each distance with its own limit, garbled_lines)
+GARBLE_FAR = 8
 GARBLE_SHARE = 0.5
 
 
@@ -95,9 +97,13 @@ def garbled_lines(img, mask):
     if h < 3:
         return np.zeros(c.shape, bool)
     good = mask.copy()
-    steps = np.abs(np.diff(c, axis=0))[good[1:] & good[:-1]]
-    noise = 1.4826 * float(np.median(steps)) / np.sqrt(2) if steps.size else 0.0
-    limit = GARBLE_SIGMA * max(noise, 1.0)
+    # how much rows d apart differ in this frame (d = 1: its noise): rows further apart differ by the picture's own
+    # structure too (a ring's edge crossing them at an angle), which is no sign of garbage
+    limits = np.full(GARBLE_FAR + 2, np.inf, np.float32)
+    for d in range(1, min(GARBLE_FAR, h - 1) + 1):
+        steps = np.abs(c[d:] - c[:-d])[good[d:] & good[:-d]]
+        noise = 1.4826 * float(np.median(steps)) / np.sqrt(2) if steps.size else 0.0
+        limits[d] = GARBLE_SIGMA * max(noise, 1.0)
     rows = np.arange(h)[:, None]
     out = np.zeros(c.shape, bool)
     cols = np.broadcast_to(np.arange(w), c.shape)
@@ -123,6 +129,7 @@ def garbled_lines(img, mask):
         for a, b in ((a1, b1), (a1, b2), (a2, b1)):
             have = (a >= 0) & (b < h)
             va, vb = c[np.clip(a, 0, h - 1), cols], c[np.clip(b, 0, h - 1), cols]
+            limit = limits[np.clip(np.maximum(rows - a, b - rows), 1, GARBLE_FAR + 1)]
             jump |= have & (np.minimum(np.abs(c - va), np.abs(c - vb)) - np.abs(va - vb) > limit)
         jump &= good
         # from where GARBLE_SHARE of GARBLE_RUN pixels jump, with GARBLE_SHARE of the rest of the line's valid
