@@ -114,6 +114,11 @@ SCAN_EVEN = 0.01     # ... and by one step (to this, in a frame) each way they h
 SCAN_TURN = 30       # degrees
 RESCANNED = "_g5"    # the folder suffix, after RETRACKED's, of every pass of an observation where _revisits' scan rule
                      # (a scan that pauses is no time series) judges a pass otherwise than the time-series rule alone
+ISLAND_GAP = 0.75    # of a frame: the least empty sky between two islands of a mosaic, separate scans drawn apart
+                     # (_retargets): 108RI_TMAPN30LP001's ring ansae 0.92, 113RI_VTMPN60MP001's 1.04; an azimuthal scan
+                     # whose stretches of ring do not quite meet (032RI_AZSCNLOPH001, 064RI_AZSCAN001) leaves at most 0.63
+ISLANDS = "_g6"      # the folder suffix, after RESCANNED's, of every pass of an observation where a mosaic is cut between
+                     # islands (_retargets)
 LEAN_JUMPS = 0.08    # a pass within this of MOVIE_JUMPS, LEAN_DWELL of MOVIE_DWELL or LEAN_SPAN of TRACK_SPAN, so that
 LEAN_DWELL = 2       # moving them that far each way judges it a movie one way and none the other, is a toss-up: the
 LEAN_SPAN = 0.02     # pointing alone cannot tell (a pan along a ring, one view, from a pan across it, a strip mosaic)
@@ -124,7 +129,7 @@ RIDE_PAN = 0.4       # _name) the WAC rides along on, panning across the rings a
                      # W_5); the NAC's ride-alongs are filter sets on one view (036RI_SUBML27HP002)
 DRIFT_SET = 1.5      # frames: a filter set the camera drifts through at a steady rate (within DRIFT_FIT of a frame of
 DRIFT_FIT = 0.05     # a straight line in time) less far than this shows one view (_one_view)
-PANNED = "_g7"       # the folder suffix, after RESCANNED's, of every pass of an observation where a ride-along pan is a mosaic
+PANNED = "_g7"       # the folder suffix, after ISLANDS', of every pass of an observation where a ride-along pan is a mosaic
 RINGS = ("RI", "RA", "RB", "RC", "RD", "RE", "RF", "RG")   # the ring target codes of an observation's name (_name):
                      # the rings, a ring, the F and E rings (RH is Rhea)
 STRIP_LONG = 6       # frames: a ring mosaic of Saturn whose frames cover a strip at least this long and at most
@@ -265,12 +270,13 @@ def units(target, obs, cam):
             panned = panned or prev["panned"]
         else:
             laps.append(u)
-    # a movie that re-points to sky it never comes back to plays each view as a pass of its own (and a ride-along
-    # pan, _judge's panned, its pans over each ansa a mosaic of their own)
-    out = []
+    # a movie that re-points to sky it never comes back to plays each view as a pass of its own, and a mosaic that
+    # holds separate scans (islands) draws each as a mosaic of its own
+    out, islands = [], False
     for u in laps:
         pieces = _retargets(u)
         relaid = relaid or len(pieces) > 1
+        islands = islands or any(v.get("island") for v in pieces)
         out += pieces
     stripped = False
     for n, u in enumerate(out):
@@ -305,10 +311,10 @@ def units(target, obs, cam):
         u["aside"] = u["kind"] in ("mosaic", "mosaic_movie") and _aside(u["frames"], u) != _aside(u["frames"], u, 0, False)
         u["relaid"] = bool(relaid or u["revisit"] or u["drift"] or u["slot_laps"] or u.get("joined") or u.get("twist")
                            or u["aside"])
-    # (TRACK_SPAN, the scan rule, a ride-along pan or a ring strip judged a pass otherwise can join or split passes:
-    # every pass)
+    # (TRACK_SPAN, the scan rule, the islands or a ride-along pan judged a pass otherwise can join or split passes: every pass)
     for u in out:
-        u["retracked"], u["rescanned"], u["panned"], u["stripped"] = retracked, rescanned, panned, stripped
+        u["retracked"], u["rescanned"], u["islands"], u["panned"] = retracked, rescanned, islands, panned
+        u["stripped"] = stripped
     with _lock:
         _units[(target, obs, cam)] = out
     return out
@@ -438,24 +444,47 @@ def _zoom_join(prev, u):
 
 
 def _retargets(u):
-    """Pass u in pieces where it re-points to sky it never comes back to (a Grand Finale retarget's four ring patches
-    in one movie, 287RI_PROPRETRG001, which jumped from view to view): a movie is cut between two frames when no frame
-    after them shares any ground with a frame before (their footprints, frames at the pass's distance, do not touch).
-    A ride-along pan (_judge's panned) is cut as the movie it creeps as is: its two pans, one over each ansa
-    (079RI_TEMPN20LP001), are two mosaics.
-    [u] when there is nothing to cut (a movie going back and forth between two patches comes back, so is never cut)."""
-    if u["kind"] != "movie" and not u.get("panned"):
+    """Pass u in pieces where it re-points to sky it never comes back to: a movie is cut between two frames when no
+    frame after them shares any ground with a frame before (their footprints, frames at the pass's distance, do not
+    touch: a Grand Finale retarget's four ring patches in one movie, 287RI_PROPRETRG001, which jumped from view to
+    view). A mosaic is cut there only between two islands (_island), not both on the body's disk: separate scans in one
+    pass, each a mosaic of its own (the two ring ansae of a CIRS ride-along, 113RI_VTMPN60MP001 and 108RI_TMAPN30LP001;
+    282RI_HIRESAFRG001's three strips of the A ring's edge), drawn as one mosaic of strips far apart on a canvas mostly
+    empty. A sparse scan, its frames not touching one another (a satellite search, a ring scan of lone frames), has no
+    islands and stays whole. A ride-along pan (_judge's panned) is cut as the movie it creeps as is: its two pans,
+    one over each ansa (079RI_TEMPN20LP001), are two mosaics.
+    [u] when there is nothing to cut (a pass going back and forth between two patches comes back, so is never cut)."""
+    if u["kind"] not in ("movie", "mosaic", "mosaic_movie"):
         return [u]
     pts = [(q, -fr[5] * fr[7] / u["z"], -fr[6] * fr[7] / u["z"]) for q, fr in enumerate(u["all"]) if fr[7]]
     if len(pts) < 2:
         return [u]
     xy = np.array([(x, y) for _, x, y in pts])
-    lo, hi = np.minimum.accumulate(xy), np.maximum.accumulate(xy)   # the frames up to each one
-    rlo, rhi = np.minimum.accumulate(xy[::-1])[::-1], np.maximum.accumulate(xy[::-1])[::-1]   # ... and from it on
-    cuts = [pts[i + 1][0] for i in range(len(pts) - 1)
-            if ((rlo[i + 1] - hi[i] >= FRAME) | (lo[i] - rhi[i + 1] >= FRAME)).any()]
+    movie = u["kind"] == "movie" or u.get("panned")
+    if movie:
+        lo, hi = np.minimum.accumulate(xy), np.maximum.accumulate(xy)   # the frames up to each one
+        rlo, rhi = np.minimum.accumulate(xy[::-1])[::-1], np.maximum.accumulate(xy[::-1])[::-1]   # ... and from it on
+        cuts = [i + 1 for i in range(len(pts) - 1) if ((rlo[i + 1] - hi[i] >= FRAME) | (lo[i] - rhi[i + 1] >= FRAME)).any()]
+    else:
+        # a mosaic, frame by frame (the frames before and after a cut each round the other's boxes, 282RI's third
+        # strip between the first two): the latest frame each frame's footprint comes within ISLAND_GAP of
+        near = (np.abs(xy[:, None] - xy[None]) < (1 + ISLAND_GAP) * FRAME).all(2)
+        reach = np.maximum.accumulate(np.array([np.flatnonzero(row).max() for row in near]))
+        cuts = [i + 1 for i in range(len(pts) - 1) if reach[i] <= i]
+    if cuts and not movie:
+        # (pts between two cuts: a mosaic keeps a cut only with an island either side of it)
+        parts = list(zip([0] + cuts, cuts + [len(pts)]))
+        ts = [u["all"][q][3] for q, _, _ in pts]
+        pics = np.array([(-fr[5] * fr[7] / u["z"], -fr[6] * fr[7] / u["z"], fr[3]) for fr in u["frames"] if fr[7]])
+        solid = [_island(xy[a:b], pics[(pics[:, 2] >= ts[a]) & (pics[:, 2] <= ts[b - 1]), :2]) for a, b in parts]
+        # (and two islands on the body's disk are pieces of one map, its middle drawn by another pass or not taken:
+        # 129DI_REGMAP001's ring of frames round Dione, the middle closer in, split at ZOOM)
+        radius = (RADIUS.get(u["key"][0]) or SMALL_RADIUS.get(u["key"][0], 0)) / (u["z"] * IFOV[u["key"][2]])
+        on = [bool((np.hypot(*xy[a:b].T) < radius).any()) for a, b in parts]   # (a frame's middle on the disk)
+        cuts = [b for k, (_, b) in enumerate(parts[:-1]) if solid[k] and solid[k + 1] and not (on[k] and on[k + 1])]
     if not cuts:
         return [u]
+    cuts = [pts[i][0] for i in cuts]
     pieces = []
     for a, b in zip([0] + cuts, cuts + [len(u["all"])]):
         part = u["all"][a:b]
@@ -463,7 +492,36 @@ def _retargets(u):
         pieces.append({"key": u["key"], "all": part, "taken": u["taken"][a:b], "z": z, "last": part[-1][3],
                        "frames": [fr for fr in u["frames"] if part[0][3] <= fr[3] <= part[-1][3]],
                        **({"off": u["off"]} if u.get("off") else {})})
+    if not movie:
+        # (each island a mosaic of its own, or the pass stays whole: a feature track or a time series in one of them
+        # is a pass the rules above judged as a whole)
+        for v in pieces:
+            v["island"] = True
+            _judge(v)
+        if any(v["kind"] not in ("mosaic", "mosaic_movie") for v in pieces):
+            return [u]
     return pieces
+
+
+def _island(xy, pics):
+    """(_retargets) Frames at canvas places xy (reference pixels, repeats too) are an island: its pictures (at pics)
+    at MIN_PLACES places at least (mosaic.min_step apart), every frame's footprint joined to the others' through
+    footprints less than ISLAND_GAP apart. A colour set at one pointing is no island, nor a pair of filters, nor a few
+    lone frames."""
+    places = []
+    for p in pics:
+        if all(np.abs(p - q).max() >= mosaic.min_step * FRAME for q in places):
+            places.append(p)
+    if len(places) < MIN_PLACES:
+        return False
+    near = (np.abs(xy[:, None] - xy[None]) < (1 + ISLAND_GAP) * FRAME).all(2)
+    seen, todo = {0}, [0]
+    while todo:
+        for j in np.flatnonzero(near[todo.pop()]):
+            if j not in seen:
+                seen.add(int(j))
+                todo.append(int(j))
+    return len(seen) == len(xy)
 
 
 def _twist(u, turned):
@@ -511,7 +569,6 @@ def _one_view(u):
         return False
     rate = (xy[-1] - xy[0]) / t[-1]
     return bool(np.abs(xy - xy[0] - t[:, None] * rate).max() <= DRIFT_FIT)
-
 
 
 def _revisits(u):
@@ -743,10 +800,13 @@ def _judge(u):
 
     def movie(lean):
         # (lean 1 toward a movie, -1 away from one: each threshold moved by its LEAN margin, to find the toss-ups,
-        # whose both kinds prebuild.make_pass draws)
+        # whose both kinds prebuild.make_pass draws; an island of a mosaic, _retargets, steps over MIN_PLACES places
+        # however slowly it creeps: 108RI_TMAPN30LP001's second ring ansa steps 0.14 of a frame, under
+        # mosaic.min_step, every 527 s)
         span = TRACK_SPAN - lean * LEAN_SPAN
-        slow = (u["jump_frac"] is not None
-                and (u["jump_frac"] < MOVIE_JUMPS + lean * LEAN_JUMPS or (u["dwell"] or 0) >= MOVIE_DWELL - lean * LEAN_DWELL))
+        slow = (u["jump_frac"] is not None and not u.get("island")
+                and (u["jump_frac"] < MOVIE_JUMPS + lean * LEAN_JUMPS
+                     or (u["dwell"] or 0) >= MOVIE_DWELL - lean * LEAN_DWELL))
         return u["jump_frac"] is not None and (slow or track(span)), track(span)
     u["tossup"] = movie(-1)[0] != movie(1)[0]
     u["movie"], u["track"] = movie(0)
@@ -870,8 +930,9 @@ def folder(u, cache):
     # a movie's frames stacked with a shorter repeat window are other pictures than the ones made before it
     gap = u.get("repeat_gap", mosaic_benchmark.REPEAT_GAP)
     suffix = (("" if gap >= mosaic_benchmark.REPEAT_GAP else f"_r{gap:g}")
-              + (STRIPPED if u.get("stripped") else PANNED if u.get("panned") else RESCANNED if u.get("rescanned")
-                 else RETRACKED if u.get("retracked") else RELAID if u.get("relaid") else GROUPING if u.get("regrouped") else ""))
+              + (STRIPPED if u.get("stripped") else PANNED if u.get("panned") else ISLANDS if u.get("islands")
+                 else RESCANNED if u.get("rescanned") else RETRACKED if u.get("retracked") else RELAID if u.get("relaid")
+                 else GROUPING if u.get("regrouped") else ""))
     return os.path.join(cache, f"{VERSIONS[calibration.style()]}{calibration.variant()}-q{QUALITY}", "_".join(map(str, u["key"])) + suffix)
 
 
