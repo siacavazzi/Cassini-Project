@@ -1816,8 +1816,12 @@ def _tile_made(u, n, cache, scale, base):
         out["lost"] = round(rep["lost_px"][1] / FRAME ** 2, 4)
     if share:
         # the share of the frame the camera saturated in every exposure merged (load_aligned's, the pixels drawn white:
-        # over_exposed)
+        # over_exposed), and the share of it that is lit (LIT_LEVEL), what over_exposed measures it against
         out["saturated"] = share
+        if image is not None:
+            inside = image[..., 3] > 0
+            lit = inside & (image[..., :3].max(axis=2) >= LIT_LEVEL)
+            out["lit"] = round(float(lit.sum()) / max(1, int(inside.sum())), 4)
     os.makedirs(os.path.dirname(base), exist_ok=True)
     if image is not None and "frame_offset" in rep:
         side = round(image.shape[0] * k)
@@ -3757,16 +3761,23 @@ def partial(t):
     return "offset" in t and 1.0 - t.get("lost", 0.0) < PARTIAL
 
 
-OVER_EXPOSED = 0.5   # of a frame: a movie frame the camera saturated this much of is over-exposed (over_exposed)
+OVER_EXPOSED = 0.5   # of a frame: a movie frame the camera saturated this much of is over-exposed (over_exposed) ...
+OVER_LEAST = 0.05    # ... and so is one saturated this much of the frame, where that is OVER_EXPOSED of its lit part
+OVER_STEP = 3.0      # (unfit) a frame saturated OVER_LEAST or more, and this many times as much as its filter's frames
+#                      before and after it, is a long exposure among short ones
 SATURATED_ALL = 0.95   # ... and one saturated this much of carries no picture (left out of mosaics, never shown in movies)
+LIT_LEVEL = 16       # levels: the tile's pixels at least this bright are its lit part (its report's "lit", _tile_made)
 
 
 def over_exposed(t):
     """True when tile report t is over-exposed: the camera saturated OVER_EXPOSED of the frame or more (its
-    "saturated"). Its saturated part calibrates to the top of the camera's range over a long exposure, far under what
-    was there, and draws as one flat field (the long frames of 201RI DRNGMOV001, 8.2 s after 2 s ones, ~75% of them
-    saturated: the rings a grey slab, lifted 4x by exposure normalization, every other frame)."""
-    return t.get("saturated", 0.0) >= OVER_EXPOSED
+    "saturated"), or OVER_EXPOSED of the frame's lit part ("lit": a ring arc or a planet over a third of a frame of
+    sky, 011RI IMPACT003's clear frame) when that is OVER_LEAST of the frame or more. Its saturated part calibrates to
+    the top of the camera's range over a long exposure, far under what was there, and draws as one flat field (the
+    long frames of 201RI DRNGMOV001, 8.2 s after 2 s ones, ~75% of them saturated: the rings a grey slab, lifted 4x by
+    exposure normalization, every other frame), white since saturated pixels are drawn white (#205)."""
+    s = t.get("saturated", 0.0)
+    return s >= OVER_EXPOSED or (s >= OVER_LEAST and s >= OVER_EXPOSED * t.get("lit", 1.0))
 
 
 def unfit(frames, n, tile_of):
@@ -3775,20 +3786,26 @@ def unfit(frames, n, tile_of):
     among frames that can (an 8LSB frame, only its low 8 bits sent: the Phoebe 2004-06-12 movie's UV3 and IR3 frames
     flashed grey; calibrated False, the tile's), or an over-exposed frame (over_exposed) between frames of its filter
     that are not (a pass alternating short and long exposures; a run of over-exposed frames is what the camera saw,
-    and plays), or a frame saturated all over (SATURATED_ALL), which shows nothing. One rule for the server's movies and the page's (steady table's "partial")."""
+    and plays), or a long exposure among short ones: saturated OVER_LEAST of the frame or more and OVER_STEP times as
+    much as its filter's frames on either side (007RI HIPHASE001's clear frames, ~9% saturated after ones that are not:
+    the B ring a white band, flashing), or a frame saturated all over (SATURATED_ALL), which shows nothing. One rule
+    for the server's movies and the page's (steady table's "partial")."""
     t = tile_of(n)
     if "offset" not in t:
         return False
     if partial(t) or (t.get("calibrated") is False and calibration.step("calibrate")):
         return True
-    if not over_exposed(t):
+    s = t.get("saturated", 0.0)
+    if s < OVER_LEAST:
         return False
-    if t.get("saturated", 0.0) >= SATURATED_ALL:
+    if s >= SATURATED_ALL:
         return True   # (saturated all over: nothing of the picture, whatever is round it)
     f = frames[n][2]
-    near = (next((j for j in range(n - 1, -1, -1) if frames[j][2] == f), None),
-            next((j for j in range(n + 1, len(frames)) if frames[j][2] == f), None))
-    return not any(j is not None and over_exposed(tile_of(j)) for j in near)
+    near = [j for j in (next((j for j in range(n - 1, -1, -1) if frames[j][2] == f), None),
+                        next((j for j in range(n + 1, len(frames)) if frames[j][2] == f), None)) if j is not None]
+    if over_exposed(t):
+        return not any(over_exposed(tile_of(j)) for j in near)
+    return bool(near) and all(s >= OVER_STEP * tile_of(j).get("saturated", 0.0) for j in near)
 
 
 def held_of(filters, n, is_partial, whole):
@@ -3796,14 +3813,22 @@ def held_of(filters, n, is_partial, whole):
     is partial (is_partial(n): unfit's frames), the last frame before it of its filter (filters[j]) that is whole
     (whole(j): placed and not partial), as the camera windows hold a colour movie's last set; when its filter has
     none, the last whole frame before it of any filter (the Phoebe 2004-06-12 movie's 8LSB frames are each its
-    filter's first); n when there is none, so a pass whose frames all came down partial keeps them. The movie keeps
-    its frame count: only the picture is held."""
+    filter's first). With no whole frame before it (a pass whose first frame is over-exposed: 010SA EUVFUV003,
+    011RI IMPACT003 opened on a white frame), the first whole frame after it, of its filter, else of any; n when
+    there is none, so a pass whose frames all came down partial keeps them. The movie keeps its frame count: only
+    the picture is held."""
     if not is_partial(n):
         return n
     for j in range(n - 1, -1, -1):
         if filters[j] == filters[n] and whole(j):
             return j
     for j in range(n - 1, -1, -1):
+        if whole(j):
+            return j
+    for j in range(n + 1, len(filters)):
+        if filters[j] == filters[n] and whole(j):
+            return j
+    for j in range(n + 1, len(filters)):
         if whole(j):
             return j
     return n
