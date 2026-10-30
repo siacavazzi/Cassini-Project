@@ -18,7 +18,16 @@ of those observations as the Mac Mini's index and geometry cache have them (web/
 - a colour set whose filters land a little apart at each pointing is no feature track (TRACK_SPAN): a limb scan
   (249SA_LIMBINT002) is a mosaic, a 3x3 mosaic taken lap after lap (003SA_3X3MOVIEA002) a mosaic movie, while a feature
   track creeping the least of them (182SA_FEATRAK012) stays a track;
-- the passes these rules change get RELAID's folder (RETRACKED's for TRACK_SPAN), every other pass keeps its own.
+- the WAC riding along on a CIRS ring scan, panning across the rings a quarter to half a frame a step, is a strip
+  mosaic (057RI_TEMPL10LP001, 104RI_TDIFS20HP001's pans), while its holds (104RI_TDIFS20HP001's filter sets, moving
+  under RIDE_PAN) and the NAC's ride-alongs (036RI_SUBML27HP002) stay movies (_ride_along, the ring check of 2026-10-29),
+  and two pans of one pass, one over each ansa, are cut apart as the movie was (079RI_TEMPN20LP001, _retargets);
+- a filter set the camera drifts through at a steady rate, further than SAME_PLACE between two long exposures, is
+  one view (064RI_BEDG4FILT002, _one_view);
+- a long thin scan across the rings plays as a movie, its mosaic the window's other choice (033RI_AZDKMRHPH001,
+  032RI_AZSCNLOPH001's second pass; _strip, Sam 2026-10-29);
+- the passes these rules change get RELAID's folder (RETRACKED's for TRACK_SPAN, RESCANNED's for the scan rule,
+  PANNED's for the ride-along pans, STRIPPED's for the ring strips), every other pass keeps its own.
 Run: python web/test_mosaic_layout.py; with --refresh (and the index and CASSINI_GEOMETRY_CACHE) it writes the frames
 of the observations again."""
 import json
@@ -41,7 +50,11 @@ OBS = [("SATURN", "ISS_267SA_LIMBINT002_PRIME", "N"), ("SATURN", "ISS_191SA_FEAT
        ("SATURN", "ISS_C44SA_APPRMOVB001_PRIME", "N"), ("SATURN", "ISS_249SA_LIMBINT002_PRIME", "N"),
        ("SATURN", "ISS_003SA_3X3MOVIEA002_PRIME", "N"), ("SATURN", "ISS_182SA_FEATRAK012_PRIME", "N"),
        ("SATURN", "IOSIC_113RI_VTMPN60MP001_SI", "W"), ("SATURN", "ISS_028RI_HIPHASE001_VIMS", "W"),
-       ("SATURN", "ISS_026RI_LATPHASE001_VIMS", "W"), ("JUPITER", "CIRS_C23JU_NSMAP101_PRIME", "N")]
+       ("SATURN", "ISS_026RI_LATPHASE001_VIMS", "W"), ("JUPITER", "CIRS_C23JU_NSMAP101_PRIME", "N"),
+       ("SATURN", "ISS_282RI_HIRESAFRG001_PRIME", "N"), ("SATURN", "ISS_032RI_AZSCNLOPH001_PRIME", "N"),
+       ("SATURN", "IOSIC_057RI_TEMPL10LP001_SI", "W"), ("SATURN", "ISS_104RI_TDIFS20HP001_CIRS", "W"),
+       ("SATURN", "ISS_036RI_SUBML27HP002_CIRS", "N"), ("SATURN", "ISS_064RI_BEDG4FILT002_PRIME", "N"),
+       ("SATURN", "IOSIC_079RI_TEMPN20LP001_SI", "W")]
 # the v46 cache's plan (angle, the frame it was measured on) and tile outlines of three passes the camera turns under
 # (/mnt/project-files/mosaic-layout/qc-data/v46-json)
 V46 = "/mnt/project-files/mosaic-layout/qc-data/v46-json"
@@ -166,7 +179,9 @@ def main():
                 out += share < 0.99
             return out
         assert outside(new) == 0 and outside(v["footprint"]) > len(v["tiles"]) / 2, (name, outside(v["footprint"]), outside(new))
-        if obs != "ISS_173RI_DRCLOSE001_PIE":
+        if obs == "ISS_033RI_AZDKMRHPH001_PRIME":   # (a long thin ring strip: a movie, below)
+            assert u["kind"] == "movie" and u["strip"], (name, u["kind"])
+        elif obs != "ISS_173RI_DRCLOSE001_PIE":
             assert u["kind"] == "mosaic" and relaid(u), (name, u["kind"])
 
     # a colour set's pointing jitter is no feature track; the least creeping feature track still is
@@ -187,6 +202,31 @@ def main():
     assert [k for k, _ in kinds(lat)] == ["mosaic", "mosaic"] and all(u["rescanned"] for u in lat), kinds(lat)
     # (the time series keep RELAID's folder)
     assert not any(u["rescanned"] for key in OBS[:2] for u in passes(*key))
+
+    # the WAC riding along on a CIRS ring scan: its pans across the rings are strip mosaics, its holds stay movies,
+    # every pass in PANNED's folder, the passes split as they were; the NAC's ride-along filter sets stay movies
+    temp, tdif, subm = passes(*OBS[24]), passes(*OBS[25]), passes(*OBS[26])
+    assert kinds(temp) == [("mosaic", 9)] and temp[0]["panned"], kinds(temp)
+    assert kinds(tdif) == [(None, 1), ("movie", 5), ("movie", 5), ("movie", 5), ("mosaic", 7), ("movie", 5), ("mosaic", 5),
+                           (None, 1)], kinds(tdif)
+    assert all(om.folder(u, "/c").endswith(om.PANNED) for u in temp + tdif)
+    assert kinds(subm) == [("movie", 5)] * 6 and not any(u["panned"] for u in subm), kinds(subm)
+    # four filters drifting 0.6 to 0.9 of a frame through each set over the B ring's edge: single pictures, relaid
+    edge = passes(*OBS[27])
+    assert kinds(edge) == [(None, 4)] * 4 and all(u["drift"] and relaid(u) for u in edge), kinds(edge)
+    # two pans in one pass, one over each ring ansa: a mosaic each (joined, they were drawn side by side on one canvas)
+    ansae = passes(*OBS[28])
+    assert kinds(ansae) == [("mosaic", 13), ("mosaic", 12)] and all(u["panned"] for u in ansae), kinds(ansae)
+
+    # a long thin scan across the rings (18 frames by 1.2 round an arc; the azimuthal scan's second pass) plays as a
+    # movie, its mosaic pre-built besides it, every pass of the observation in STRIPPED's folder; the wide scan beside
+    # it, the ride-along pans and Titan's global map stay mosaics
+    arc, az = passes(*OBS[11]), passes(*OBS[23])
+    assert kinds(arc) == [("movie", 51)] and arc[0]["strip"] and arc[0]["tossup"] and not arc[0]["mosaic"], kinds(arc)
+    assert kinds(az) == [("mosaic", 267), ("movie", 59)] and az[1]["strip"] and not az[0]["strip"], kinds(az)
+    assert all(om.folder(u, "/c").endswith(om.STRIPPED) for u in arc + az)
+    assert not any(u["strip"] for key in (OBS[7], OBS[22], OBS[24], OBS[28]) for u in passes(*key))
+    assert not om.folder(passes(*OBS[22])[-1], "/c").endswith(om.STRIPPED)
 
     print("mosaic layout ok:", {o: kinds(passes(t, o, c)) for t, o, c in OBS})
 

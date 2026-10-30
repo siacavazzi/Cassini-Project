@@ -42,6 +42,7 @@ import itertools
 import json
 import math
 import os
+import re
 import sys
 import threading
 import time
@@ -113,6 +114,25 @@ SCAN_EVEN = 0.01     # ... and by one step (to this, in a frame) each way they h
 SCAN_TURN = 30       # degrees
 RESCANNED = "_g5"    # the folder suffix, after RETRACKED's, of every pass of an observation where _revisits' scan rule
                      # (a scan that pauses is no time series) judges a pass otherwise than the time-series rule alone
+LEAN_JUMPS = 0.08    # a pass within this of MOVIE_JUMPS, LEAN_DWELL of MOVIE_DWELL or LEAN_SPAN of TRACK_SPAN, so that
+LEAN_DWELL = 2       # moving them that far each way judges it a movie one way and none the other, is a toss-up: the
+LEAN_SPAN = 0.02     # pointing alone cannot tell (a pan along a ring, one view, from a pan across it, a strip mosaic)
+RIDE_ALONG = ("TEMP", "SUBM", "TMAP", "VERT", "TDIF", "EQLB", "VTMP")   # the CIRS ring scans (a ring target code,
+RIDE_PAN = 0.4       # _name) the WAC rides along on, panning across the rings a quarter to half a frame a step: a WAC
+                     # movie of one that travels RIDE_PAN of a frame or more is a strip mosaic (_judge). Its holds
+                     # travel at most 0.38 (104RI_TDIFS20HP001's filter sets), its pans at least 0.45 (104RI_TDIFS20HP001
+                     # W_5); the NAC's ride-alongs are filter sets on one view (036RI_SUBML27HP002)
+DRIFT_SET = 1.5      # frames: a filter set the camera drifts through at a steady rate (within DRIFT_FIT of a frame of
+DRIFT_FIT = 0.05     # a straight line in time) less far than this shows one view (_one_view)
+PANNED = "_g7"       # the folder suffix, after RESCANNED's, of every pass of an observation where a ride-along pan is a mosaic
+RINGS = ("RI", "RA", "RB", "RC", "RD", "RE", "RF", "RG")   # the ring target codes of an observation's name (_name):
+                     # the rings, a ring, the F and E rings (RH is Rhea)
+STRIP_LONG = 6       # frames: a ring mosaic of Saturn whose frames cover a strip at least this long and at most
+STRIP_WIDE = 1.5     # this wide (_strip) plays as a movie, its mosaic the window's other choice (Sam, 2026-10-29: the
+                     # long thin ring scans were awkward mosaics; 033RI_AZDKMRHPH001 18.0 x 1.2). No least width: a
+                     # strip of gappy frames (077RF 0.89, 208RI_SHADSCANU 0.52) falls apart into fragments as a mosaic
+STRIP_GRID = 8       # cells a frame, the grid _strip measures a pass's frames on
+STRIPPED = "_g8"     # the folder suffix, after PANNED's, of every pass of an observation where a ring strip is a movie
 JOIN_ZOOM = ZOOM * ZOOM   # a map units split at ZOOM is joined again while its frames stay within this of its first distance
 TWIST = 0.04         # of a frame: a pass the camera turns under (reel.turns) by more than this at its frames' places is drawn
                      # on a footprint turned frame by frame
@@ -214,12 +234,13 @@ def units(target, obs, cam):
     # mosaic that starts again from nothing every lap
     for u in out:
         _drop_strays(u)
-    laps, shifted, relaid, retracked, rescanned = [], False, False, False, False
+    laps, shifted, relaid, retracked, rescanned, panned = [], False, False, False, False, False
     for u in out:
         u["key"] = (target, obs, cam, len(laps))
         _judge(u)
         retracked = retracked or u["retracked"]
         rescanned = rescanned or u.get("rescanned", False)
+        panned = panned or u["panned"]
         prev = laps[-1] if laps else None
         # (and one view taken lap after lap, a filter set each time, is one pass: a time series, _judge's views)
         views = bool(prev and (prev.get("drift") or prev.get("views")) and u.get("drift"))
@@ -237,22 +258,33 @@ def units(target, obs, cam):
             prev["off"] = prev.get("off", set()) | u.get("off", set())
             _judge(prev)
             rescanned = rescanned or prev["rescanned"]
+            panned = panned or prev["panned"]
         elif prev and _zoom_join(prev, u):
             relaid = True   # (the passes after it are renumbered)
             rescanned = rescanned or prev["rescanned"]
+            panned = panned or prev["panned"]
         else:
             laps.append(u)
-    # a movie that re-points to sky it never comes back to plays each view as a pass of its own
+    # a movie that re-points to sky it never comes back to plays each view as a pass of its own (and a ride-along
+    # pan, _judge's panned, its pans over each ansa a mosaic of their own)
     out = []
     for u in laps:
         pieces = _retargets(u)
         relaid = relaid or len(pieces) > 1
         out += pieces
+    stripped = False
     for n, u in enumerate(out):
         u["key"] = (target, obs, cam, n)
         _judge(u)
         retracked = retracked or u["retracked"]
         rescanned = rescanned or u.get("rescanned", False)
+        panned = panned or u["panned"]
+        # a long thin scan across the rings plays as a movie, its mosaic pre-built besides it (a toss-up's, make_pass)
+        u["strip"] = u["kind"] in ("mosaic", "mosaic_movie") and _ring(u) and _strip(u)
+        if u["strip"]:
+            u["kind"], u["movie"], u["mosaic"], u["tossup"] = "movie", True, False, True
+            u["pair"] = u["slot_laps"] = u["whole"] = False
+        stripped = stripped or u["strip"]
         # GROUPING's folder: a pass grouped anew (strays out, or a mosaic only as a 1x2), or every pass of an
         # observation whose passes these rules renumbered; RELAID's: a pass the layout rules after them changed, or
         # every pass of an observation they renumbered
@@ -273,8 +305,10 @@ def units(target, obs, cam):
         u["aside"] = u["kind"] in ("mosaic", "mosaic_movie") and _aside(u["frames"], u) != _aside(u["frames"], u, 0, False)
         u["relaid"] = bool(relaid or u["revisit"] or u["drift"] or u["slot_laps"] or u.get("joined") or u.get("twist")
                            or u["aside"])
-    for u in out:   # (TRACK_SPAN or the scan rule judging a pass otherwise can join or split the passes: every pass)
-        u["retracked"], u["rescanned"] = retracked, rescanned
+    # (TRACK_SPAN, the scan rule, a ride-along pan or a ring strip judged a pass otherwise can join or split passes:
+    # every pass)
+    for u in out:
+        u["retracked"], u["rescanned"], u["panned"], u["stripped"] = retracked, rescanned, panned, stripped
     with _lock:
         _units[(target, obs, cam)] = out
     return out
@@ -407,8 +441,10 @@ def _retargets(u):
     """Pass u in pieces where it re-points to sky it never comes back to (a Grand Finale retarget's four ring patches
     in one movie, 287RI_PROPRETRG001, which jumped from view to view): a movie is cut between two frames when no frame
     after them shares any ground with a frame before (their footprints, frames at the pass's distance, do not touch).
+    A ride-along pan (_judge's panned) is cut as the movie it creeps as is: its two pans, one over each ansa
+    (079RI_TEMPN20LP001), are two mosaics.
     [u] when there is nothing to cut (a movie going back and forth between two patches comes back, so is never cut)."""
-    if u["kind"] != "movie":
+    if u["kind"] != "movie" and not u.get("panned"):
         return [u]
     pts = [(q, -fr[5] * fr[7] / u["z"], -fr[6] * fr[7] / u["z"]) for q, fr in enumerate(u["all"]) if fr[7]]
     if len(pts) < 2:
@@ -447,9 +483,9 @@ def _twist(u, turned):
 def _one_view(u):
     """Pass u shows one view, not a mosaic: the frames its mosaic draws (its luminance base's filters, as plan and
     luminance_of choose them) all lie within mosaic.min_step of the first, or the camera drifts through a set of
-    filters (each frame within SAME_PLACE and REGISTER_GAP of the one before, at least three filters and none taken
-    more than twice: a storm rider's five filters sliding 0.7 of a frame, the Moon's nine in 1999, Mimas's fifteen in
-    072MI_MIDIECLN001), so its mosaic is offset strips of one picture. Its frames and colour sets show as themselves."""
+    filters (each frame within REGISTER_GAP and SAME_PLACE of the one before, or all on a steady drift, at least
+    three filters and none taken more than twice: a storm rider's five filters sliding 0.7 of a frame, the Moon's nine
+    in 1999, Mimas's fifteen in 072MI_MIDIECLN001), so its mosaic is offset strips of one picture. Its frames and colour sets show as themselves."""
     aside = _aside(u["frames"], u)
     count = collections.Counter(fr[2] for fr in u["frames"] if fr[2] not in aside) or collections.Counter(fr[2] for fr in u["frames"])
     grey = max(count, key=count.get)
@@ -462,8 +498,20 @@ def _one_view(u):
     taken = collections.Counter(p[0] for p in pts)
     if len(taken) < 3 or max(taken.values()) > 2:
         return False
-    return all(b[1] - a[1] <= REGISTER_GAP and math.hypot(b[2] - a[2], b[3] - a[3]) <= SAME_PLACE * FRAME
-               for a, b in zip(pts, pts[1:]))
+    if any(b[1] - a[1] > REGISTER_GAP for a, b in zip(pts, pts[1:])):
+        return False
+    if all(math.hypot(b[2] - a[2], b[3] - a[3]) <= SAME_PLACE * FRAME for a, b in zip(pts, pts[1:])):
+        return True
+    # or the camera drifts at a steady rate through the set, further than SAME_PLACE between two long exposures, but
+    # less than DRIFT_SET in all (the B ring edge sets, 063RI_BEDG4FILT001 to 065RI: UV3, GRN, RED, IR2 sliding 0.6 to
+    # 1.3 of a frame, 0.004 of a frame a second; drawn as a mosaic they were a staircase of seams)
+    t = np.array([p[1] for p in pts]) - pts[0][1]
+    xy = np.array([p[2:] for p in pts]) / FRAME
+    if not t[-1] or np.hypot(*(xy[-1] - xy[0])) >= DRIFT_SET:
+        return False
+    rate = (xy[-1] - xy[0]) / t[-1]
+    return bool(np.abs(xy - xy[0] - t[:, None] * rate).max() <= DRIFT_FIT)
+
 
 
 def _revisits(u):
@@ -498,6 +546,48 @@ def _revisits(u):
         return False
     u["rescanned"] = _scan(np.array([q[2:] for q in fr]), np.split(np.arange(len(fr)), np.flatnonzero(gaps >= pause) + 1))
     return not u["rescanned"]
+
+
+def _name(obs):
+    """The purpose an observation's name gives, without its number: ISS_262RI_PROPRETRG003_PRIME -> RI_PROPRETRG
+    (the target code and the activity; the instrument in charge and the riders are left out); None for a name not
+    in the planning form (ICO_CALLAMPS)."""
+    m = re.match(r"^[A-Z]+_(?:C\d+|\d{3}|\d{2}[A-Z]|000)([A-Z]{2})_([A-Z0-9]+?)\d*_[A-Z]+$", obs)
+    return m and m.group(1) + "_" + m.group(2)
+
+
+def _ride_along(u):
+    """Pass u is the WAC riding along on a CIRS ring scan (RIDE_ALONG)."""
+    name = _name(u["key"][1])
+    return bool(u["key"][2] == "W" and name and name[:2] in RINGS and name[3:].startswith(RIDE_ALONG))
+
+
+def _ring(u):
+    """Pass u looks at Saturn's rings: Saturn its target and a ring its name's target code (RINGS)."""
+    name = _name(u["key"][1])
+    return bool(u["key"][0] == "SATURN" and name and name[:2] in RINGS)
+
+
+def _strip(u):
+    """(units) Pass u's frames, each a frame square at its place, cover a long thin strip: the rectangle with their
+    union's area A and perimeter P (L + W = P / 2, L W = A, on a grid of STRIP_GRID cells a frame), which follows an
+    arc of ring as it does a straight strip, is at least STRIP_LONG frames long and at most STRIP_WIDE wide."""
+    pts = np.array([(-x * z / u["z"], -y * z / u["z"]) for *_, x, y, z in u["frames"] if z]) / FRAME
+    if len(pts) < 2:
+        return False
+    k = STRIP_GRID
+    lo = pts.min(0) - 0.5
+    w, h = np.ceil((pts.max(0) + 0.5 - lo) * k).astype(int) + 2
+    if w * h > 4e6:
+        return False
+    grid = np.zeros((h, w), bool)
+    for p in pts:
+        x, y = np.round((p - 0.5 - lo) * k).astype(int) + 1
+        grid[y:y + k, x:x + k] = True
+    area = grid.sum() / k ** 2
+    half = (np.sum(grid[:, 1:] != grid[:, :-1]) + np.sum(grid[1:] != grid[:-1])) / k / 2
+    root = math.sqrt(max(half * half - 4 * area, 0))
+    return bool((half + root) / 2 >= STRIP_LONG and (half - root) / 2 <= STRIP_WIDE)
 
 
 def _scan(xy, runs):
@@ -649,9 +739,17 @@ def _judge(u):
 
     def track(span):
         return bool(spread > span and (carried is None or carried >= TRACK_CARRY * spread))
-    u["track"] = track(TRACK_SPAN)
-    u["retracked"] = track(TRACK_SPAN_WAS) != u["track"]
-    u["movie"] = u["jump_frac"] is not None and (u["jump_frac"] < MOVIE_JUMPS or (u["dwell"] or 0) >= MOVIE_DWELL or u["track"])
+    u["retracked"] = track(TRACK_SPAN_WAS) != track(TRACK_SPAN)
+
+    def movie(lean):
+        # (lean 1 toward a movie, -1 away from one: each threshold moved by its LEAN margin, to find the toss-ups,
+        # whose both kinds prebuild.make_pass draws)
+        span = TRACK_SPAN - lean * LEAN_SPAN
+        slow = (u["jump_frac"] is not None
+                and (u["jump_frac"] < MOVIE_JUMPS + lean * LEAN_JUMPS or (u["dwell"] or 0) >= MOVIE_DWELL - lean * LEAN_DWELL))
+        return u["jump_frac"] is not None and (slow or track(span)), track(span)
+    u["tossup"] = movie(-1)[0] != movie(1)[0]
+    u["movie"], u["track"] = movie(0)
     places = []
     for p in pts:
         if all(max(abs(p[0] - q[0]), abs(p[1] - q[1])) >= mosaic.min_step * FRAME for q in places):
@@ -674,32 +772,46 @@ def _judge(u):
     laps = _slot_laps(u)
     u["slot_laps"] = len(places) >= 2 and u["repeats"] < MOVIE_LAPS <= laps
     u["repeats"] = max(u["repeats"], laps)
+    # a CIRS ride-along panning across the rings a little each frame (RIDE_PAN) shows new ring every frame: a strip
+    # mosaic, as its sister passes that step faster are (057RI_TEMPL10LP001 against 061RI_TEMPL30MP001). Its pans and
+    # its holds creep alike, so only the observation's purpose tells them from a pan along a ring (one view, a movie)
+    u["panned"] = bool(u["movie"] and not u["track"] and len(pts) >= 2 and _ride_along(u)
+                       and max(math.dist(a, b) for a in pts for b in pts) >= RIDE_PAN * FRAME)
+    u["movie"] = u["movie"] and not u["panned"]
     # (a pan along a ring, where every frame shows nearly the same rings, looks like a movie, but a pan across the
     # rings is a good strip mosaic, and the pointing alone cannot tell them apart: the window's chip decides those)
     u["mosaic"] = u["whole"] = u["revisit"] = u["drift"] = u["rescanned"] = False
     u["kind"] = "movie" if u["movie"] else None
     if u.get("views"):
         # laps of one view (units): a time series, a movie (C44SA_APPRMOVB001's colour set of Saturn every 104 minutes)
-        u["movie"], u["kind"], u["revisit"], u["pair"], u["slot_laps"] = True, "movie", True, False, False
+        u["movie"], u["kind"], u["revisit"], u["pair"], u["slot_laps"], u["panned"] = True, "movie", True, False, False, False
         return
     # two places whose tiles touch (ISS_C24JU_1X2NITE, a 2x2 seen by one camera as two) are a 1x2 mosaic
     u["pair"] = len(places) == 2 and max(abs(places[0][0] - places[1][0]), abs(places[0][1] - places[1][1])) <= PAIR_STEP * FRAME
     if len(places) < MIN_PLACES and not u["pair"] or u["movie"]:
         u["pair"] = u["slot_laps"] = False
+        if u["panned"]:
+            u["movie"], u["kind"], u["panned"] = True, "movie", False
         return
     pts = np.array(pts)
     lo, hi = pts.min(0) - FRAME / 2, pts.max(0) + FRAME / 2
     if (hi - lo).max() >= MAX_FRAMES * FRAME:
         u["pair"] = u["slot_laps"] = False
+        if u["panned"]:
+            u["movie"], u["kind"], u["panned"] = True, "movie", False
         return
     kind = "mosaic_movie" if len(places) >= 2 and u["repeats"] >= MOVIE_LAPS else "mosaic"
     if kind == "mosaic" and _one_view(u):
-        # a filter set taken as the camera drifts, or one place: its frames and colour sets, no mosaic
+        # a filter set taken as the camera drifts, or one place: its frames and colour sets, no mosaic (and a
+        # ride-along pan stays the movie it creeps as)
+        if u["panned"]:
+            u["movie"], u["kind"], u["panned"], u["pair"] = True, "movie", False, False
+            return
         u["drift"], u["pair"] = True, False
         return
     if kind == "mosaic" and _revisits(u):
         # a time series: a movie
-        u["movie"], u["kind"], u["revisit"], u["pair"] = True, "movie", True, False
+        u["movie"], u["kind"], u["revisit"], u["pair"], u["panned"] = True, "movie", True, False, False
         return
     u["mosaic"] = True
     u["kind"] = kind
@@ -758,8 +870,8 @@ def folder(u, cache):
     # a movie's frames stacked with a shorter repeat window are other pictures than the ones made before it
     gap = u.get("repeat_gap", mosaic_benchmark.REPEAT_GAP)
     suffix = (("" if gap >= mosaic_benchmark.REPEAT_GAP else f"_r{gap:g}")
-              + (RESCANNED if u.get("rescanned") else RETRACKED if u.get("retracked") else RELAID if u.get("relaid")
-                 else GROUPING if u.get("regrouped") else ""))
+              + (STRIPPED if u.get("stripped") else PANNED if u.get("panned") else RESCANNED if u.get("rescanned")
+                 else RETRACKED if u.get("retracked") else RELAID if u.get("relaid") else GROUPING if u.get("regrouped") else ""))
     return os.path.join(cache, f"{VERSIONS[calibration.style()]}{calibration.variant()}-q{QUALITY}", "_".join(map(str, u["key"])) + suffix)
 
 
