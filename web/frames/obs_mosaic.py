@@ -1184,6 +1184,7 @@ def over_grey(colour, grey, k, gamma=2.2, gain=...):
 
 
 FILLED = 0.5       # a pass is all body when the body's disk covers the middle of more than this share of its frames
+FILL_DISK = 0.5    # ... and its white is its disk's (DISK_WHITE) when the disk covers less than this share of them
 DETAIL = 2.0       # filled passes: how much the local contrast is raised (detail())
 DETAIL_SIGMA = 0.05  # ... over this much of a frame
 
@@ -1389,6 +1390,12 @@ def pass_scale(frames, u, drawn=None, true_colour=False, sky_tops=None, lit_leve
         white = max(float(np.percentile(np.concatenate([i.ravel() for i in iofs]) - blacks[f], 99.5))
                     for f, iofs in by.items())
         gamma = 1.5
+    if filled and on and sum(v.size for v in on.values()) < FILL_DISK * sum(i.size for iofs in by.values() for i in iofs):
+        # a body in the middle of the frames but small in them (Titan 40 px across in 000TI's movie, Dione in 038DI's, an
+        # Enceladus plume movie): the 99.5th percentile of the frames is on the sky or in the body's middle, and the
+        # body clipped white. White at least the DISK_WHITE percentile of its disk, as a body against the sky has (a
+        # body over most of the frames already sets their 99.5th percentile: left as it is)
+        white = max(white, max(float(np.percentile(on[f] - blacks[f], DISK_WHITE)) for f in on))
     toe = None
     if calibration.look() == "balanced":
         # where the pass has dark sky, no band's black below that sky's level plus the noise margin, as a single
