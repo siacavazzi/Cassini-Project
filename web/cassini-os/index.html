@@ -2491,8 +2491,8 @@ body.ambient.phone .amb-where { font-size: 18px; }
   D({ key: "cameras.balancedColor", section: "Processing", label: "Balanced color", type: "toggle", value: true,
       hint: "A gentler color stretch: black sits just above the sky's noise so grain and scan lines stay dark, white sits at the bright part of the body but never stretches dim pictures far, bright edges roll off instead of clipping, and mosaic tiles are evened out without changing the mosaic's overall level. Off shows the earlier stretch." });
   D({ key: "cameras.colors", section: "Processing", label: "Filter colors", type: "choice", value: "natural",
-      options: [["natural", "Natural color"], ["raw", "Raw filters"]],
-      hint: "Natural color turns red, green and blue filter sets into the colors an eye would see, and balances false color sets (methane, ultraviolet, infrared) so the planet comes out gray and only its differences between filters show as color. Raw filters draws each filter straight as a channel. Needs Balanced color." });
+      options: [["natural", "Natural color"], ["eye", "Natural color (emulated)"], ["raw", "Raw filters"]],
+      hint: "Natural color turns red, green and blue filter sets into the colors an eye would see, and balances false color sets (methane, ultraviolet, infrared) so the planet comes out gray and only its differences between filters show as color. Natural color (emulated) shows false color sets too as an eye would have seen them: the body in its own color (Saturn and Jupiter cream, Titan orange, the icy moons gray), with what the filters show as its brightness and, where they reach both sides of the visible, as its shades. Methane bands give no color. Raw filters draws each filter straight as a channel. Needs Balanced color." });
   D({ key: "cameras.autoCenter", section: "Processing", label: "Auto center", type: "toggle", value: true,
       hint: "Every picture of a moon or a planet whose whole disk fits is turned north up with the body in the middle, by SPICE, at one size for the whole pass, so the body holds still from picture to picture. Ring, spoke and sky pictures, and a body too big for the picture, stay as the camera took them. Each camera window's settings button (the slider icon in its title bar) can turn it on or off for that window." });
   // right under Auto center (as in each camera window's settings menu): how a movie pass is steadied
@@ -2513,7 +2513,7 @@ body.ambient.phone .amb-where { font-size: 18px; }
   // the pipeline steps turned off (Settings > Processing): nothing while every step is on, so the usual pictures keep their addresses
   window.cassiniOff = () => { const off = window.cassiniSteps.filter(st => S.get(st.key) === false).map(st => st.step); return off.length ? `&off=${off.join(",")}` : ""; };
   window.cassiniLook = (o = {}) => (S.get("cameras.balancedColor") === false ? "&look=classic"
-    : S.get("cameras.colors") === "raw" ? "&colors=raw" : "") + window.cassiniOff() + (o.center ? "&center=1" : "");
+    : ["raw", "eye"].includes(S.get("cameras.colors")) ? `&colors=${S.get("cameras.colors")}` : "") + window.cassiniOff() + (o.center ? "&center=1" : "");
   // how a movie pass looks (Settings > Movie), for the camera windows' movie pictures and the film export alike;
   // o.center: the window's Auto center (else the Settings default)
   // image stabilization of a movie pass (obs_mosaic.steady_places): its smoothing in frames, 0 when off
@@ -11738,7 +11738,7 @@ void main() {
   window.cassiniAbout = { open, addTab, esc, close: () => show(false), credits: CREDITS };
 
   // ---- which version this is: this page's build id (build.py writes it), and what the frame server says it serves ----
-  const BUILD = /*BUILD*/"1ce425769fdd";
+  const BUILD = /*BUILD*/"a9b5940499da";
   const FRAMES = (() => {                       // the frame server, chosen as the camera window chooses it
     const q = new URLSearchParams(location.search).get("frames");
     if (q) return q.replace(/\/$/, "");
