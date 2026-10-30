@@ -147,7 +147,7 @@ def items(phase):
     if phase == "mosaics":
         return [("_".join(map(str, u["key"])), lambda c, u=u: make_pass(u, c)) for u in mosaic_passes()]
     if phase == "chains":
-        # a movie pass's stabilization and exposure chains (steady1-, exposure4-c11s0-plan4.json), which the page
+        # a movie pass's stabilization and exposure chains (steady1-, exposure5-c11s0-plan4.json), which the page
         # holds to SPICE and evens out itself (Settings > Processing, Stabilize / Even exposure): no frames are made
         return [("_".join(map(str, u["key"])), lambda c, u=u: make_chains(u, c)) for u in movie_passes()]
     if phase in ("movies", "strips"):

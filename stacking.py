@@ -188,10 +188,13 @@ returns (label of the frame at path, float32 I/F image sized like label.resize_i
 frames went in), or the label, None and 1 when the frame at path can't be calibrated.
 valid = also return, last, the mask of pixels valid in any frame merged (label.valid_mask): what a frame lost in
 downlink is left out of the merge, so a repeat fills it (None with the None image)
+clipped = also return, last, the mask of pixels the camera saturated in every exposure merged (cal.saturated: no
+shorter exposure measured them), which keep the first frame's clipped value: they are brighter than that, and are drawn
+white (calibration.load_channels); None with the None image
 Settings > Processing (calibration.step): with "hdr" off only the exposures identical to the frame at path are merged
 (a plain stack, in I/F), with "stack" off the frame at path alone.
 """
-def load_hdr(path, window=120, max_frames=8, valid=False):
+def load_hdr(path, window=120, max_frames=8, valid=False, clipped=False):
     lbl = lh.label(path, as_png=True)
     ref = first = None
     total, weight, n = None, None, 0
@@ -214,7 +217,7 @@ def load_hdr(path, window=120, max_frames=8, valid=False):
             continue
         if iof is None:
             if p == path:
-                return (lbl, None, 1, None) if valid else (lbl, None, 1)
+                return (lbl, None, 1) + ((None,) if valid else ()) + ((None,) if clipped else ())
             continue
         shift = None
         if ref is not None:
@@ -238,9 +241,10 @@ def load_hdr(path, window=120, max_frames=8, valid=False):
             gray = ic.shift_image(gray, *shift)
             if valid:
                 mask = ic.shift_image(mask.astype(np.float32), *shift) > 0.99
-        good = ~cv2.dilate(cal.saturated(codes, info, gray).astype(np.uint8), np.ones((7, 7), np.uint8)).astype(bool)
-        merging.append((iof, good, mask, np.float32(float(info.get("EXPOSURE_DURATION", 1)) or 1)))
-    for iof, good, mask, exposure in merging:
+        full = cal.saturated(codes, info, gray)
+        good = ~cv2.dilate(full.astype(np.uint8), np.ones((7, 7), np.uint8)).astype(bool)
+        merging.append((iof, good, mask, np.float32(float(info.get("EXPOSURE_DURATION", 1)) or 1), full))
+    for iof, good, mask, exposure, _ in merging:
         if differ:
             good = good & mask
         w = good * exposure
@@ -248,13 +252,25 @@ def load_hdr(path, window=120, max_frames=8, valid=False):
         weight = w if weight is None else weight + w
         n += 1
     if total is None:
-        return (lbl, None, 1, None) if valid else (lbl, None, 1)
+        return (lbl, None, 1) + ((None,) if valid else ()) + ((None,) if clipped else ())
     # pixels saturated in every exposure keep the reference's (clipped) value
     merged = total / np.maximum(weight, 1e-9)
     merged = np.where(weight > 0, merged, first).astype(np.float32)
+    # ... and where the first frame saturated or is next to a pixel it saturated (left out above), the shortest exposure
+    # that did not saturate there: next to a long exposure's blown crescent a short one measured it, though its own
+    # saturated core is near. What every exposure saturated keeps the first frame's clipped value (clip)
+    clip = (weight <= 0) & ~merging[0][1]
+    if n > 1 and clip.any():
+        for iof, _, mask, _, full in sorted(merging, key=lambda m: m[3]):
+            take = clip & ~full & (mask if differ else True)
+            merged[take] = iof[take]
+            clip &= ~take
     if n > 1:
         print(f"Merged {n} exposures for {path}")
+    out = (lbl, merged, n)
     if valid:
         # valid where some exposure went in, or where every one saturated but the frame at path has its (clipped) pixel
-        return lbl, merged, n, own | (weight > 0) if differ else own
-    return lbl, merged, n
+        out += (own | (weight > 0) if differ else own,)
+    if clipped:
+        out += (clip & merging[0][4],)
+    return out

@@ -165,12 +165,12 @@ Channels whose own match fails are aligned near where SPICE puts them (spice_off
 def load_aligned(paths, hdr=False, scale=None, repeat_window=120, around=None):
     # Settings > Processing turns steps off per request (calibration.step); stacking checks its own
     calibrating, fill, align = calibrate and cal.step("calibrate"), cal.step("fill"), cal.step("align")
-    lbls, imgs, stacked, iofs, masks = [], [], [], [], []
+    lbls, imgs, stacked, iofs, masks, clips = [], [], [], [], [], []
     spiked = 0
     for path in paths:
-        iof = None
+        iof = clip = None
         if hdr and calibrating:
-            lbl, iof, n, mask = stacking.load_hdr(path, repeat_window, valid=True)
+            lbl, iof, n, mask, clip = stacking.load_hdr(path, repeat_window, valid=True, clipped=True)
         if iof is None:
             lbl, img, n, mask = stacking.load_stacked(path, repeat_window, max_frames = 5 if stack_repeats else 1,
                                                       count=True, valid=True)
@@ -179,6 +179,8 @@ def load_aligned(paths, hdr=False, scale=None, repeat_window=120, around=None):
         lbls.append(lbl)
         imgs.append(img)
         iofs.append(iof)
+        # what the camera saturated in every exposure merged (drawn white)
+        clips.append(clip)
         stacked.append(n)
         # pixels each frame lost in downlink (truncated lines) that no repeat exposure stacked with it had
         masks.append(mask)
@@ -219,20 +221,27 @@ def load_aligned(paths, hdr=False, scale=None, repeat_window=120, around=None):
         if 2 <= len(keep) < len(lbls):
             dropped = [os.path.basename(paths[j]).split(".")[0] for j in range(len(lbls)) if j not in keep]
             print(f"Can't calibrate {dropped}, making a two-filter picture of the others")
-            lbls, imgs, iofs, masks, stacked = ([v[j] for j in keep] for v in (lbls, imgs, iofs, masks, stacked))
+            lbls, imgs, iofs, masks, stacked, clips = ([v[j] for j in keep] for v in (lbls, imgs, iofs, masks, stacked, clips))
             if scale is not None:
                 scale = dict(scale, blacks=[scale["blacks"][j] for j in keep])
     calibrated = False
-    guide = linear = saturated = None
+    guide = linear = saturated = full = None
     if calibrating:
         if scale is None and cal.look() != "classic":
-            # balanced: the channels stay linear until they are aligned, then are drawn together (calibration.tone)
-            linear = cal.load_linear(lbls, imgs, iofs)
+            # balanced: the channels stay linear until they are aligned, then are drawn together (calibration.tone);
+            # one frame: what the camera saturated is white (a frame saturated all over is white, not its flat field),
+            # and a frame saturated over much of it keeps the rest soft instead of taking its floor black
+            # (merged in I/F: what every exposure saturated, stacking.load_hdr's clipped)
+            share = 0.0
+            if len(lbls) == 1:
+                full = [cal.saturated_of(lbls[0], imgs[0].shape[:2]) if iofs[0] is None else clips[0]]
+                full = None if full[0] is None else full
+                share = float(full[0].mean()) if full else 0.0
+            linear = cal.load_linear(lbls, imgs, iofs, floor=cal.saturated_floor(share))
         if linear is not None:
             calibrated = True
-            if len(lbls) == 1 and iofs[0] is None:
-                # what the camera saturated is white (a frame saturated all over is white, not its flat field)
-                share = cal.draw_saturated(lbls, linear[0], linear[1])
+            if full is not None:
+                share = cal.draw_saturated(linear[0], linear[1], full)
                 if share >= 0.5:
                     saturated = round(share, 3)
         if linear is not None and len(lbls) > 1:
@@ -243,7 +252,11 @@ def load_aligned(paths, hdr=False, scale=None, repeat_window=120, around=None):
         elif linear is None:
             # puts every filter on the same brightness scale (see calibration.py)
             before = imgs
-            imgs = cal.load_channels(lbls, imgs, iofs=iofs, scale=scale)
+            if scale is not None:
+                # a mosaic's or movie's shared scale: what the camera saturated is white, as in a one frame picture
+                clips = [cal.saturated_of(l, img.shape[:2]) if clip is None else clip
+                         for l, img, clip in zip(lbls, imgs, clips)]
+            imgs = cal.load_channels(lbls, imgs, iofs=iofs, scale=scale, saturated=clips if scale is not None else None)
             calibrated = imgs is not before
 
     # align to the middle frame in time so the largest offset is as small as possible
@@ -287,6 +300,10 @@ def load_aligned(paths, hdr=False, scale=None, repeat_window=120, around=None):
     if saturated:
         # most of the frame saturated in the raw data (the camera's top), drawn white
         report["saturated"] = saturated
+    shares = [float(c.mean()) for c in clips if c is not None]
+    if shares and max(shares) > 0:
+        # the share of the frame the camera saturated in every exposure merged (the most of any channel): drawn white
+        report["saturated_share"] = round(max(shares), 4)
     return imgs, np.logical_and.reduce(masks), lbls[ref], report
 
 
