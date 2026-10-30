@@ -4,6 +4,8 @@ other pointing's frames (black blotches where the tile's own frame saturated and
 left). Checks the one rule where it is used: obs_mosaic.units keeps a frame at another pointing as a tile of its own,
 stacking.find_repeats and load_hdr merge only the frames at the tile's pointing, and reel.shots makes the same
 pictures. Fails on the code before it (units dropped every frame of a filter within 120 s, wherever it pointed).
+Also obs_mosaic._judge: with every frame of a dense scan a picture of its own, a creep that adds up to a jump over
+one repeat window counts as a jump (013RI_AZSCNHIPH001 stays a mosaic), while a slowly drifting stare stays a movie.
 Run: python web/test_repeat_place.py"""
 import os, sys
 sys.path.insert(0, os.path.join(os.path.dirname(os.path.abspath(__file__)), "frames"))
@@ -37,6 +39,20 @@ strip = [frame("ISS_077RF_HIRESFRNG002_PRIME", T0 + 20000 + 40 * i, (300.0 * i, 
 bracket = [frame("ISS_045RH_REGGEOD001_PRIME", T0 + 40000 + 12 * i, (4.0 * i, -3.0 * i)) for i in range(3)]
 step = frame("ISS_045RH_REGGEOD001_PRIME", T0 + 40050, (700.0, 0.0))
 unplaced = frame("ISS_045RH_REGGEOD001_PRIME", T0 + 40070, None)
+# a dense scan, each frame a picture of its own: 0.1 of a frame on every 73 s, and every fourth step 0.16, 30 frames
+# (013RI_AZSCNHIPH001's ring scan); a stare drifting 0.03 of a frame every 30 s; a stare that jumps to a second field halfway and creeps
+# on there a little (00BDI_GLOCOL001)
+scan = [frame("ISS_013RI_AZSCNHIPH001_PRIME", T0 + 60000 + 73 * i,
+              (-102.4 * i - 61.4 * ((i + 3) // 4), 0.0)) for i in range(30)]
+drift = [frame("ISS_099RI_SPOKEMOVIE001_PRIME", T0 + 70000 + 30 * i, (31.0 * i, 0.0)) for i in range(30)]
+hop = [frame("ISS_00BDI_GLOCOL001_PRIME", T0 + 80000 + 30 * i, ((0.0 if i < 15 else 800.0) + 31.0 * (i % 15), 0.0))
+       for i in range(30)]
+# creeping frame to frame but no mosaic: a ring survey stepping as the scan above, 200 frames, too wide
+# for one
+# (241RI_PROPSURVY001); a propeller retarget's view, 5 frames 0.1 of a frame apart, under a frame in all (277RI)
+survey = [frame("ISS_241RI_PROPSURVY001_PIE", T0 + 90000 + 73 * i, (102.4 * i + 61.4 * ((i + 3) // 4), 0.0))
+          for i in range(200)]
+view = [frame("ISS_277RI_PROPRETRG001_PRIME", T0 + 100000 + 104 * i, (0.0, 102.4 * i)) for i in range(5)]
 
 idx = pd.DataFrame(rows)
 geo_of = lambda ids: {i: geo[i] for i in ids if i in geo}
@@ -74,6 +90,23 @@ assert got == strip, len(got)
 got = tiles("ISS_045RH_REGGEOD001_PRIME")
 assert got == [bracket[0], step], got
 print("units ok")
+
+# ---------- obs_mosaic._judge: a creep that adds up to a jump within a repeat window is a jump ----------
+u = om.units("PHOEBE", "ISS_013RI_AZSCNHIPH001_PRIME", "N")[0]
+# one step in four jumps (mosaic.min_step) frame to frame, a movie's share (MOVIE_JUMPS), but every step does over
+# the repeat window: a mosaic, as when each window's frames made one tile
+assert len(u["frames"]) == 30 and u["jump_frac"] > 0.7 and not u["movie"], (len(u["frames"]), u["jump_frac"])
+u = om.units("PHOEBE", "ISS_099RI_SPOKEMOVIE001_PRIME", "N")[0]
+assert len(u["frames"]) == 30 and u["jump_frac"] == 0 and u["movie"], (len(u["frames"]), u["jump_frac"])
+u = om.units("PHOEBE", "ISS_00BDI_GLOCOL001_PRIME", "N")[0]
+# one jump: the creep is counted from the second field, not from the first
+assert u["jump_frac"] == 1 / 29 and u["movie"], u["jump_frac"]
+u = om.units("PHOEBE", "ISS_000PH_HIRESA001_PRIME", "N")[0]
+assert u["jump_frac"] == 1 and not u["movie"], u["jump_frac"]   # A, B, A, B: every step a jump
+for obs in ("ISS_241RI_PROPSURVY001_PIE", "ISS_277RI_PROPRETRG001_PRIME"):   # ... stay the movies they play as
+    u = om.units("PHOEBE", obs, "N")[0]
+    assert u["kind"] == "movie" and u["movie"], (obs, u["kind"], u["jump_frac"])
+print("_judge ok")
 
 # ---------- stacking.find_repeats: only frames at the tile's pointing ----------
 st = idx.assign(path=idx["path"]).set_index("path", drop=False)
