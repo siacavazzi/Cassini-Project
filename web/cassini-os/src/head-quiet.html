@@ -3119,13 +3119,21 @@ body.idle .win.full .titlebar { opacity: 0; }
   // is in the months loaded now; before: the last picture before et. Movie mode steps the clock from one to the next
   // cams ("N", "W"): only that camera's pictures (a stretch played for one camera). Only complete pictures count
   // (complete, below), so movie mode and the body view's skip over the gaps step from one finished picture to the next
+  // A narrow-angle and a wide-angle frame taken together (shutters within TOGETHER s; one camera never takes two
+  // that close) are one step: the clock goes to the later of the two, so both windows change at once (stepped one
+  // at a time, each window changed every other step, 2026-10-30)
+  const TOGETHER = 2;
   function nextPicture(et, body, cams) {
     cams = cams || liveCams();
     if (!body && !cams) {
       const a = catalog.sorted;
-      for (let i = lastImageIndex(et) + 1; i < a.length; i++) if (complete(order[i], body)) return a[i];
+      for (let i = lastImageIndex(et) + 1; i < a.length; i++) if (complete(order[i], body)) return together(a[i], body, cams);
       return Infinity;
     }
+    const t = firstAfter(et, body, cams);
+    return t < Infinity ? together(t, body, cams) : t;
+  }
+  function firstAfter(et, body, cams) {
     let t = Infinity;
     for (const cam in catalog.byCam) {
       if (cams && !cams.includes(cam)) continue;
@@ -3134,15 +3142,31 @@ body.idle .win.full .titlebar { opacity: 0; }
     }
     return t;
   }
-  function prevPicture(et, body, cams) {
-    cams = cams || liveCams();
-    let t = -Infinity;
+  // the step that picture time t is in: the latest of the cameras' first pictures from t to t + TOGETHER
+  function together(t, body, cams) {
+    let end = t;
     for (const cam in catalog.byCam) {
       if (cams && !cams.includes(cam)) continue;
       const f = framesOf(cam, body);
-      for (let p = lastOfCam(cam, et - 1e-3, body); p >= 0 && f.et[p] > t; p--) if (complete(f.ks[p], body)) { t = f.et[p]; break; }
+      for (let p = lastOfCam(cam, t - 1e-3, body) + 1; p < f.et.length && f.et[p] <= t + TOGETHER; p++) if (complete(f.ks[p], body)) { end = Math.max(end, f.et[p]); break; }
     }
-    return t;
+    return end;
+  }
+  function prevPicture(et, body, cams) {
+    cams = cams || liveCams();
+    const before = at => {
+      let t = -Infinity;
+      for (const cam in catalog.byCam) {
+        if (cams && !cams.includes(cam)) continue;
+        const f = framesOf(cam, body);
+        for (let p = lastOfCam(cam, at - 1e-3, body); p >= 0 && f.et[p] > t; p--) if (complete(f.ks[p], body)) { t = f.et[p]; break; }
+      }
+      return t;
+    };
+    // the step before the one the clock is at (or in, between the two frames of a pair)
+    let t = before(et);
+    while (t > -Infinity && together(t, body, cams) >= et - 1e-3) t = before(t);
+    return t > -Infinity ? together(t, body, cams) : t;
   }
   // a finished picture, the kind movie mode stops on. Complete frames only (movie.completeFrames, with color
   // composites on): of a color set, only the frame that completes it (its composite), never the black-and-white

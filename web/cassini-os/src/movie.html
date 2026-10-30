@@ -32,6 +32,9 @@
   const RATE_SPAN = 3000;
   const shownRate = now => { while (M.steps.length && M.steps[0] < now - RATE_SPAN) M.steps.shift(); return M.steps.length >= 3 ? (M.steps.length - 1) * 1000 / Math.max(now - M.steps[0], 1) : 0; };
   const ready = () => typeof catalog !== "undefined" && catalog && catalog.byCam && window.cassiniFeeds;
+  // in a body's view (bodymode.html) the camera windows show that body's pictures only, so the film steps through
+  // them alone (it stepped through every body's, and the windows sat on one picture for dozens of steps, 2026-10-30)
+  const viewBody = () => (window.cassiniBodyMode && window.cassiniBodyMode.name) || undefined;
 
   const base = window.studyAdvance;
   // called by the viewer's frame loop while playing: where the clock goes now
@@ -42,7 +45,10 @@
     if (now < due) { track(now, false); return et; }
     if (F.behind(M.cams) > 0) { M.waiting = now > due + 300; track(now, true); return et; }
     track(now, false);
-    const next = F.nextPicture(et, undefined, M.cams);
+    const body = viewBody();
+    let next = F.nextPicture(et, body, M.cams);
+    // a body's next picture beyond the months loaded now: its next imaging session (the viewer loads its months)
+    if (next === Infinity && body && window.cassiniBodyMode.nextPicture) { const n = window.cassiniBodyMode.nextPicture(et); if (n > et + 1) next = n; }
     // a stretch played as a movie (start's until) ends on its last picture
     if (next > M.until) { setPlaying(false); stop(); return et; }
     // no picture after this one in the months loaded now: the clock runs a day a frame until the next ones are in
@@ -125,7 +131,7 @@
   // step one picture forward or back (paused), keeping the timeline on the clock
   function step(dir) {
     if (!ready()) return;
-    const F = window.cassiniFeeds, t = dir > 0 ? F.nextPicture(state.et, undefined, M.cams) : F.prevPicture(state.et, undefined, M.cams);
+    const F = window.cassiniFeeds, t = dir > 0 ? F.nextPicture(state.et, viewBody(), M.cams) : F.prevPicture(state.et, viewBody(), M.cams);
     if (!isFinite(t)) return;
     setPlaying(false); setTime(t); keepNowInView();
   }
