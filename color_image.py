@@ -202,7 +202,8 @@ def load_aligned(paths, hdr=False, scale=None, repeat_window=120, around=None):
         # short runs of lost lines from the rows above and below (now valid); the rest from round them, only so
         # they don't skew the brightness scale or bleed when shifted: those stay invalid
         # (which runs are filled, and along which slant, is worked out on the display image, for its I/F too)
-        fills = [ic.line_fills(img, mask) for img, mask in zip(imgs, masks)]
+        fills = [ic.line_fills(img, mask, line=max(1024 // int(lbl.info.get("LINES", 1024)), 1))
+                 for img, mask, lbl in zip(imgs, masks, lbls)]
         lined = [ic.fill_lines(img, mask, fills=f) for img, mask, f in zip(imgs, masks, fills)]
         iofs = [None if iof is None else ic.fill_lines(iof, mask, fills=f)[0] for iof, mask, f in zip(iofs, masks, fills)]
         imgs, masks = [l[0] for l in lined], [l[1] for l in lined]

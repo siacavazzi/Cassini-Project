@@ -2,7 +2,9 @@
 the fixes can be tested away from the Mac Mini: each listed frame with every frame of its camera, observation and
 filter within PAD seconds (its repeat exposures, stacking.find_repeats), and a run of each sample movie pass, with
 every member of the archive that shares a frame's name (picture, label, line prefix) and the archive's FORMAT.txt.
-Run from the repo with CASSINI_DATA set:  python evidence/small_artifacts/fetch_samples.py out.tar"""
+Run from the repo with CASSINI_DATA set:  python evidence/small_artifacts/fetch_samples.py out.tar [frame ...]
+(frames given after the tar: only those, with every filter of their observation and camera within PAD seconds, so a
+colour set's other channels come too)"""
 import io
 import sys
 import tarfile
@@ -21,9 +23,12 @@ idx = pd.read_csv("Image_index.csv", usecols=["path", "OBSERVATION_ID", "FILTER_
                   low_memory=False)
 idx["id"] = idx.path.str.split("/").str[-1].str.split(".").str[0]
 want = set()
+given = sys.argv[2:]
+if given:
+    FRAMES, MOVIES = given, []
 for fid in FRAMES:
     r = idx[idx.id == fid].iloc[0]
-    s = idx[(idx.OBSERVATION_ID == r.OBSERVATION_ID) & (idx.FILTER_NAME == r.FILTER_NAME)
+    s = idx[(idx.OBSERVATION_ID == r.OBSERVATION_ID) & ((idx.FILTER_NAME == r.FILTER_NAME) | bool(given))
             & (idx.INSTRUMENT_ID == r.INSTRUMENT_ID) & ((idx.seconds_1970 - r.seconds_1970).abs() <= PAD)]
     want |= set(s.path)
 for obs, mid, side in MOVIES:
