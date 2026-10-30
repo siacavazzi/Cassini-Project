@@ -477,6 +477,9 @@ t2 = t2.replace('if (nW) { const hh = sc(nW) * (h - base - 6); g.fillRect(x, bas
                 'if (nW) { const hh = sc(nW) * (h - base - 6); barRect(g, x, base + 1, bw - 0.5, hh); }')
 t2 = t2.replace('  // camera frames per pixel slice, narrow-angle up, wide-angle down\n', '  if (window.studyBars) window.studyBars(g, w, h); else {\n  // camera frames per pixel slice, narrow-angle up, wide-angle down\n')
 t2 = t2.replace('g.fillStyle = THEME.axis; g.fillRect(0, base, w, 1);\n', 'g.fillStyle = THEME.axis; g.fillRect(0, base, w, 1);\n  }\n')
+# the months not loaded: Cassini OS draws them in its own lanes (studyBars, head-quiet.html)
+assert t2.count('  drawUnloadedBars(g, w, h);\n') == 1
+t2 = t2.replace('  drawUnloadedBars(g, w, h);\n', '  if (!window.studyBars) drawUnloadedBars(g, w, h);\n')
 script = script.replace(tl, '''function barRect(g, x, y, w, h) {
   if (THEME.barStyle !== "dots") { g.fillRect(x, y, w, h); return; }
   for (let yy = Math.round(y + h); yy > y; yy -= 3) g.fillRect(x, yy - 2, w, 2);

@@ -4255,8 +4255,89 @@ onmessage = async e => {
       }
       if (set) { const s = rH / 3; g.fillStyle = CLS[1][1]; g.fillRect(x, rT, bw, s); g.fillStyle = CLS[2][1]; g.fillRect(x, rT + s, bw, s); g.fillStyle = CLS[3][1]; g.fillRect(x, rT + 2 * s, bw, s); }
     }
+    unloadedBars(g, w, h, lc);
     laneNames(g, w, h, lc);
   };
+  // the months not loaded (the clock's month and two either side are): their own catalog files, fetched when the
+  // timeline shows no more than PARTS_DAYS of them (each once, window.cassiniParts, also what a highlighted stretch
+  // there counts: segment.html), drawn as the loaded ones are; wider, or while a file is on its way, frames per day
+  // from mission.json (the body view's: its body's, window.studyFramesPerDay), muted. Both in the same lanes as the
+  // loaded frames and with a closed camera's lane empty (the viewer's own drawUnloadedBars drew them in its two old
+  // lanes and both cameras, so with the WAC window alone the NAC bars there sat across the one WAC lane; build.py
+  // leaves it out of Cassini OS)
+  const PARTS_DAYS = 120;
+  const parts = window.cassiniParts = (() => {
+    const got = new Map();
+    // the catalog files covering a to b (months, or years in data without months), each with its span
+    function files(a, b) {
+      if (mission.months) return mission.months.filter(m => m.end > a && m.start <= b && m.images !== 0).map(m => ({ file: m.catalog, span: [m.start, m.end] }));
+      const out = [];
+      for (let y = yearOf(a); y <= yearOf(b); y++) if (mission.catalog[String(y)]) out.push({ file: mission.catalog[String(y)].file, span: [utcToEt(`${y}-01-01T00:00:00`), utcToEt(`${y + 1}-01-01T00:00:00`)] });
+      return out;
+    }
+    // one file's frames in time order (et, cam, target, filter class), or null while it is on its way
+    function cat(file) {
+      if (!got.has(file)) {
+        const e = { cat: null };
+        got.set(file, e);
+        fetch(file).then(r => { if (!r.ok) throw new Error(file + ": " + r.status); return r.json(); }).then(c => {
+          const ks = Array.from(c.et.keys()).sort((x, y) => c.et[x] - c.et[y]);
+          e.cat = { et: Float64Array.from(ks, k => c.et[k]), cam: ks.map(k => c.cam[k]), target: ks.map(k => c.target[k]), cls: Uint8Array.from(ks, k => classify(c.f1[k], c.f2[k])) };
+          if (typeof drawTimeline === "function" && catalog) drawTimeline();
+          document.dispatchEvent(new CustomEvent("cassini:part", { detail: { file } }));
+        }).catch(() => got.delete(file));
+      }
+      return got.get(file).cat;
+    }
+    return { files, cat };
+  })();
+  function unloadedBars(g, w, h, lc) {
+    if (typeof mission === "undefined" || !mission || !mission.frames_per_day) return;
+    const v0 = xToEt(0, w), v1 = xToEt(w, w), bw = 2, L = laneBox(h, lc), vb = viewBody();
+    const sc = v => Math.min(1, Math.log1p(v) / Math.log1p(18));
+    const out = (t0, t1) => !(t1 > loadedSpan[0] && t0 < loadedSpan[1]);
+    // the files, when few enough days of the view are outside the months loaded
+    const away = Math.max(0, Math.min(v1, loadedSpan[0]) - v0) + Math.max(0, v1 - Math.max(v0, loadedSpan[1]));
+    const own = [];
+    if (away > 0 && away <= PARTS_DAYS * 86400)
+      for (const { file, span } of parts.files(v0, v1)) { const c = out(span[0], span[1]) && parts.cat(file); if (c) own.push({ c, span }); }
+    const cnt = { N: new Array(6), W: new Array(6) };
+    for (const { c } of own) {
+      let lo = 0, hi = c.et.length;
+      while (lo < hi) { const m = (lo + hi) >> 1; if (c.et[m] < v0) lo = m + 1; else hi = m; }
+      for (let x = 0, j = lo; x < w && j < c.et.length; x += bw) {
+        const t1 = xToEt(x + bw, w);
+        if (c.et[j] >= t1) continue;
+        cnt.N.fill(0); cnt.W.fill(0); const tot = { N: 0, W: 0 };
+        for (; j < c.et.length && c.et[j] < t1; j++) { const cam = c.cam[j]; if (!camOn(cam, lc) || (vb && c.target[j] !== vb) || !cnt[cam]) continue; cnt[cam][c.cls[j]]++; tot[cam]++; }
+        for (const cam of ["N", "W"]) {
+          if (!tot[cam] || !L[cam]) continue;
+          const [top, base] = L[cam];
+          let y = base; const H = sc(tot[cam]) * (base - top);
+          for (let k = 0; k < 6; k++) { if (!cnt[cam][k]) continue; const hh = H * cnt[cam][k] / tot[cam]; g.fillStyle = CLS[k][1]; g.fillRect(x, y - hh, bw - 0.5, hh); y -= hh; }
+        }
+      }
+    }
+    // the rest: frames per day
+    const F = (window.studyFramesPerDay && window.studyFramesPerDay()) || mission.frames_per_day, n = F.N.length;
+    const drawn = (t0, t1) => own.some(({ span }) => t0 < span[1] && t1 > span[0]);
+    g.fillStyle = "rgba(150,172,205,0.38)";
+    for (let x = 0; x < w; x += bw) {
+      const t0 = xToEt(x, w), t1 = xToEt(x + bw, w);
+      if (!out(t0, t1) || drawn(t0, t1)) continue;
+      const d0 = (t0 - F.start_et) / 86400, d1 = (t1 - F.start_et) / 86400;
+      let nN = 0, nW = 0;
+      for (let d = Math.max(0, Math.floor(d0)); d < Math.min(n, Math.ceil(d1)); d++) {
+        const f = Math.min(d + 1, d1) - Math.max(d, d0);   // share of that day inside the slice
+        nN += F.N[d] * f; nW += F.W[d] * f;
+      }
+      for (const [v, lane] of [[nN, L.N], [nW, L.W]]) {
+        if (v < 0.5 || !lane) continue;
+        const [top, base] = lane, hh = sc(v) * (base - top);
+        g.fillRect(x, base - hh, bw - 0.5, hh);
+      }
+    }
+  }
   // the same lanes with one body's pictures only (each camera's frames of it, walked once from left to right)
   function bodyBars(g, w, h, body, lc) {
     const bw = 2, L = laneBox(h, lc), rT = h * LANES.rTop, rH = Math.max(4, h * LANES.rH);
@@ -4279,6 +4360,7 @@ onmessage = async e => {
       }
     }
     for (let s = 0; s < sets.length; s++) if (sets[s]) { const x = s * bw, q = rH / 3; g.fillStyle = CLS[1][1]; g.fillRect(x, rT, bw, q); g.fillStyle = CLS[2][1]; g.fillRect(x, rT + q, bw, q); g.fillStyle = CLS[3][1]; g.fillRect(x, rT + 2 * q, bw, q); }
+    unloadedBars(g, w, h, lc);
     laneNames(g, w, h, lc);
   }
   // (lc: the camera that is on alone, whose lane is the only one named; the pill on the timeline says the other is off)
@@ -7551,16 +7633,22 @@ onmessage = async e => {
     $("exgo").disabled = true;
     if (X.a == null || X.b == null || X.b - X.a < 1) { $("exsum").textContent = X.a != null || X.b != null ? "Mark the other end too." : ""; return; }
     $("exsum").textContent = "Counting pictures…";
+    // another stretch than the one the Cameras were picked for (and not set by hand since): pick them for it
+    if (X.auto && X.cams === X.auto.cams && (X.a !== X.auto.a || X.b !== X.auto.b)) { X.cams = null; segs(); }
     timer = setTimeout(async () => {
       const key = params();
       try {
         const r = await fetch(`${FRAMES}/export/plan.json?${key}`), p = await r.json();
         if (key !== params()) return;
         if (!r.ok) { $("exsum").innerHTML = `<span class="warn">${p.error || "The server cannot plan that film."}</span>`; return; }
-        // first plan of a stretch: both cameras when both take part, otherwise the one that does
+        // first plan of a stretch: both cameras when both take part, otherwise the one that does; with one camera
+        // window closed, the open one's (its camera is off: cassiniFeeds.liveCams). The pick is this stretch's
+        // alone (X.auto): a stretch highlighted after it is picked for again, unless the Cameras were set by hand
         if (!X.cams) {
           const n = { N: 0, W: 0 }; p.pictures.forEach(e => n[e.cam]++);
-          X.cams = n.N >= 0.1 * p.count && n.W >= 0.1 * p.count ? "NW" : n.N > n.W ? "N" : "W";
+          const lc = window.cassiniFeeds && cassiniFeeds.liveCams ? cassiniFeeds.liveCams() : null;
+          X.cams = lc || (n.N >= 0.1 * p.count && n.W >= 0.1 * p.count ? "NW" : n.N > n.W ? "N" : "W");
+          X.auto = { cams: X.cams, a: X.a, b: X.b };
           segs(); if (X.cams !== "NW") return estimate();
         }
         X.plan = p; X.planKey = key;
@@ -8041,7 +8129,11 @@ onmessage = async e => {
   // ---- what the camera windows will ask for: their cameras and sizes, and the page's look ----
   // A window's size changes with the picture in it (cassiniWM.sized: 1024, or 512 when it shows the picture that small,
   // which a window often does once its first picture is up), so both are made, except on a phone, which asks for 512
-  // The cameras: the row's NAC / WAC / Both (shared with the Export window's Cameras), else the camera windows open
+  // The cameras: the row's NAC / WAC / Both (shared with the Export window's Cameras), else the camera windows open.
+  // With one camera window closed its camera is off (cassiniFeeds.liveCams): the timeline, movie mode and the windows
+  // have none of its pictures, so the stretch is the open camera's whatever the row last said (a NAC picked for an
+  // earlier stretch counted none of the WAC frames on screen and said "no pictures")
+  const liveCams = () => (window.cassiniFeeds && cassiniFeeds.liveCams ? cassiniFeeds.liveCams() : null);
   function windows() {
     let cams = EX.state.cams;
     if (!/^(N|W|NW)$/.test(cams || "")) {
@@ -8049,9 +8141,16 @@ onmessage = async e => {
       for (const card of document.querySelectorAll(".win:not([hidden]) [data-cam]")) if (/^[NW]$/.test(card.dataset.cam)) open.add(card.dataset.cam);
       cams = open.size ? ["N", "W"].filter(c => open.has(c)).join("") : "NW";
     }
+    const lc = liveCams();
+    if (lc) cams = lc;
     return { cams, sizes: document.body.classList.contains("phone") ? "512" : "512,1024" };
   }
-  function camsUi() { const c = windows().cams; document.querySelectorAll("#segcams button").forEach(b => b.setAttribute("aria-pressed", String(b.dataset.v === c))); }
+  // (the count follows the cameras: the Export window picks them from its first plan of a stretch, a moment later)
+  let camsWas = "";
+  function camsUi() {
+    const c = windows().cams; document.querySelectorAll("#segcams button").forEach(b => b.setAttribute("aria-pressed", String(b.dataset.v === c)));
+    if (c !== camsWas) { camsWas = c; if (!bar.hidden && P.a != null) summary(); }
+  }
   function params() {
     const w = windows();
     const q = new URLSearchParams({ from: isoOf(P.a), until: isoOf(P.b), cams: w.cams, sizes: w.sizes,
@@ -8063,12 +8162,28 @@ onmessage = async e => {
       exposure: String(window.cassiniExposure ? window.cassiniExposure() : 0) });
     return q.toString() + (window.cassiniLook ? window.cassiniLook() : "");
   }
-  // frames of the windows' cameras in the stretch (in the months loaded now)
+  // frames of the windows' cameras in the stretch (in the body view, of its body alone, as the timeline and the
+  // windows show them): from the catalog in the months loaded now (the clock's and two either side), and from the
+  // catalog files of the months the stretch covers when it reaches past them, as the timeline's bars there do
+  // (window.cassiniParts, head-quiet.html: each file fetched once; null while one is on its way, and the count comes
+  // up when it is in)
+  const body = () => (window.cassiniBodyMode && cassiniBodyMode.name) || null;
+  document.addEventListener("cassini:part", () => { if (!bar.hidden && P.a != null) summary(); });
   function frames() {
     if (!catalog || P.a == null) return 0;
-    const cams = windows().cams, i0 = lastImageIndex(P.a) + 1, i1 = lastImageIndex(P.b) + 1;
-    let n = 0; for (let i = i0; i < i1; i++) if (cams.includes(catalog.cam[order[i]])) n++;
-    return n;
+    const cams = windows().cams, vb = body();
+    if (typeof loadedSpan === "undefined" || (P.a >= loadedSpan[0] && P.b <= loadedSpan[1])) {
+      const i0 = lastImageIndex(P.a) + 1, i1 = lastImageIndex(P.b) + 1;
+      let n = 0; for (let i = i0; i < i1; i++) { const k = order[i]; if (cams.includes(catalog.cam[k]) && (!vb || catalog.target[k] === vb)) n++; }
+      return n;
+    }
+    let n = 0, waiting = false;
+    for (const { file } of cassiniParts.files(P.a, P.b)) {
+      const c = cassiniParts.cat(file);
+      if (!c) { waiting = true; continue; }
+      for (let k = 0; k < c.et.length; k++) if (c.et[k] > P.a && c.et[k] <= P.b && cams.includes(c.cam[k]) && (!vb || c.target[k] === vb)) n++;
+    }
+    return waiting ? null : n;
   }
 
   // ---- the bar, over the stretch on the timeline ----
@@ -8108,7 +8223,7 @@ onmessage = async e => {
   function summary() {
     $("segwhen").textContent = `${short(P.a)} → ${short(P.b)} UTC`;
     const n = frames();
-    $("segwhat").textContent = n ? `· ${fmtDur(P.b - P.a)} · ${n.toLocaleString()} frame${n === 1 ? "" : "s"}` : `· ${fmtDur(P.b - P.a)} · no pictures`;
+    $("segwhat").textContent = n == null ? `· ${fmtDur(P.b - P.a)} · counting frames…` : n ? `· ${fmtDur(P.b - P.a)} · ${n.toLocaleString()} frame${n === 1 ? "" : "s"}` : `· ${fmtDur(P.b - P.a)} · no pictures`;
     $("segprep").disabled = $("segplay").disabled = !n;
   }
   // a stretch marked (export.html's marks, also its window's From and Until): the bar comes up for it
@@ -11623,7 +11738,7 @@ void main() {
   window.cassiniAbout = { open, addTab, esc, close: () => show(false), credits: CREDITS };
 
   // ---- which version this is: this page's build id (build.py writes it), and what the frame server says it serves ----
-  const BUILD = /*BUILD*/"ff079a2c4bbd";
+  const BUILD = /*BUILD*/"1ce425769fdd";
   const FRAMES = (() => {                       // the frame server, chosen as the camera window chooses it
     const q = new URLSearchParams(location.search).get("frames");
     if (q) return q.replace(/\/$/, "");
@@ -13640,7 +13755,7 @@ function drawTimeline() {
   }
   g.fillStyle = THEME.axis; g.fillRect(0, base, w, 1);
   }
-  drawUnloadedBars(g, w, h);
+  if (!window.studyBars) drawUnloadedBars(g, w, h);
   // encounters
   g.textBaseline = "alphabetic"; g.font = THEME.efont;
   let lastLabel = -1e9;

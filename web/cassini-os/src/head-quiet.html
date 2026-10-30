@@ -1540,8 +1540,89 @@ body.idle .win.full .titlebar { opacity: 0; }
       }
       if (set) { const s = rH / 3; g.fillStyle = CLS[1][1]; g.fillRect(x, rT, bw, s); g.fillStyle = CLS[2][1]; g.fillRect(x, rT + s, bw, s); g.fillStyle = CLS[3][1]; g.fillRect(x, rT + 2 * s, bw, s); }
     }
+    unloadedBars(g, w, h, lc);
     laneNames(g, w, h, lc);
   };
+  // the months not loaded (the clock's month and two either side are): their own catalog files, fetched when the
+  // timeline shows no more than PARTS_DAYS of them (each once, window.cassiniParts, also what a highlighted stretch
+  // there counts: segment.html), drawn as the loaded ones are; wider, or while a file is on its way, frames per day
+  // from mission.json (the body view's: its body's, window.studyFramesPerDay), muted. Both in the same lanes as the
+  // loaded frames and with a closed camera's lane empty (the viewer's own drawUnloadedBars drew them in its two old
+  // lanes and both cameras, so with the WAC window alone the NAC bars there sat across the one WAC lane; build.py
+  // leaves it out of Cassini OS)
+  const PARTS_DAYS = 120;
+  const parts = window.cassiniParts = (() => {
+    const got = new Map();
+    // the catalog files covering a to b (months, or years in data without months), each with its span
+    function files(a, b) {
+      if (mission.months) return mission.months.filter(m => m.end > a && m.start <= b && m.images !== 0).map(m => ({ file: m.catalog, span: [m.start, m.end] }));
+      const out = [];
+      for (let y = yearOf(a); y <= yearOf(b); y++) if (mission.catalog[String(y)]) out.push({ file: mission.catalog[String(y)].file, span: [utcToEt(`${y}-01-01T00:00:00`), utcToEt(`${y + 1}-01-01T00:00:00`)] });
+      return out;
+    }
+    // one file's frames in time order (et, cam, target, filter class), or null while it is on its way
+    function cat(file) {
+      if (!got.has(file)) {
+        const e = { cat: null };
+        got.set(file, e);
+        fetch(file).then(r => { if (!r.ok) throw new Error(file + ": " + r.status); return r.json(); }).then(c => {
+          const ks = Array.from(c.et.keys()).sort((x, y) => c.et[x] - c.et[y]);
+          e.cat = { et: Float64Array.from(ks, k => c.et[k]), cam: ks.map(k => c.cam[k]), target: ks.map(k => c.target[k]), cls: Uint8Array.from(ks, k => classify(c.f1[k], c.f2[k])) };
+          if (typeof drawTimeline === "function" && catalog) drawTimeline();
+          document.dispatchEvent(new CustomEvent("cassini:part", { detail: { file } }));
+        }).catch(() => got.delete(file));
+      }
+      return got.get(file).cat;
+    }
+    return { files, cat };
+  })();
+  function unloadedBars(g, w, h, lc) {
+    if (typeof mission === "undefined" || !mission || !mission.frames_per_day) return;
+    const v0 = xToEt(0, w), v1 = xToEt(w, w), bw = 2, L = laneBox(h, lc), vb = viewBody();
+    const sc = v => Math.min(1, Math.log1p(v) / Math.log1p(18));
+    const out = (t0, t1) => !(t1 > loadedSpan[0] && t0 < loadedSpan[1]);
+    // the files, when few enough days of the view are outside the months loaded
+    const away = Math.max(0, Math.min(v1, loadedSpan[0]) - v0) + Math.max(0, v1 - Math.max(v0, loadedSpan[1]));
+    const own = [];
+    if (away > 0 && away <= PARTS_DAYS * 86400)
+      for (const { file, span } of parts.files(v0, v1)) { const c = out(span[0], span[1]) && parts.cat(file); if (c) own.push({ c, span }); }
+    const cnt = { N: new Array(6), W: new Array(6) };
+    for (const { c } of own) {
+      let lo = 0, hi = c.et.length;
+      while (lo < hi) { const m = (lo + hi) >> 1; if (c.et[m] < v0) lo = m + 1; else hi = m; }
+      for (let x = 0, j = lo; x < w && j < c.et.length; x += bw) {
+        const t1 = xToEt(x + bw, w);
+        if (c.et[j] >= t1) continue;
+        cnt.N.fill(0); cnt.W.fill(0); const tot = { N: 0, W: 0 };
+        for (; j < c.et.length && c.et[j] < t1; j++) { const cam = c.cam[j]; if (!camOn(cam, lc) || (vb && c.target[j] !== vb) || !cnt[cam]) continue; cnt[cam][c.cls[j]]++; tot[cam]++; }
+        for (const cam of ["N", "W"]) {
+          if (!tot[cam] || !L[cam]) continue;
+          const [top, base] = L[cam];
+          let y = base; const H = sc(tot[cam]) * (base - top);
+          for (let k = 0; k < 6; k++) { if (!cnt[cam][k]) continue; const hh = H * cnt[cam][k] / tot[cam]; g.fillStyle = CLS[k][1]; g.fillRect(x, y - hh, bw - 0.5, hh); y -= hh; }
+        }
+      }
+    }
+    // the rest: frames per day
+    const F = (window.studyFramesPerDay && window.studyFramesPerDay()) || mission.frames_per_day, n = F.N.length;
+    const drawn = (t0, t1) => own.some(({ span }) => t0 < span[1] && t1 > span[0]);
+    g.fillStyle = "rgba(150,172,205,0.38)";
+    for (let x = 0; x < w; x += bw) {
+      const t0 = xToEt(x, w), t1 = xToEt(x + bw, w);
+      if (!out(t0, t1) || drawn(t0, t1)) continue;
+      const d0 = (t0 - F.start_et) / 86400, d1 = (t1 - F.start_et) / 86400;
+      let nN = 0, nW = 0;
+      for (let d = Math.max(0, Math.floor(d0)); d < Math.min(n, Math.ceil(d1)); d++) {
+        const f = Math.min(d + 1, d1) - Math.max(d, d0);   // share of that day inside the slice
+        nN += F.N[d] * f; nW += F.W[d] * f;
+      }
+      for (const [v, lane] of [[nN, L.N], [nW, L.W]]) {
+        if (v < 0.5 || !lane) continue;
+        const [top, base] = lane, hh = sc(v) * (base - top);
+        g.fillRect(x, base - hh, bw - 0.5, hh);
+      }
+    }
+  }
   // the same lanes with one body's pictures only (each camera's frames of it, walked once from left to right)
   function bodyBars(g, w, h, body, lc) {
     const bw = 2, L = laneBox(h, lc), rT = h * LANES.rTop, rH = Math.max(4, h * LANES.rH);
@@ -1564,6 +1645,7 @@ body.idle .win.full .titlebar { opacity: 0; }
       }
     }
     for (let s = 0; s < sets.length; s++) if (sets[s]) { const x = s * bw, q = rH / 3; g.fillStyle = CLS[1][1]; g.fillRect(x, rT, bw, q); g.fillStyle = CLS[2][1]; g.fillRect(x, rT + q, bw, q); g.fillStyle = CLS[3][1]; g.fillRect(x, rT + 2 * q, bw, q); }
+    unloadedBars(g, w, h, lc);
     laneNames(g, w, h, lc);
   }
   // (lc: the camera that is on alone, whose lane is the only one named; the pill on the timeline says the other is off)
