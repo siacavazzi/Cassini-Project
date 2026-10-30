@@ -208,6 +208,17 @@ assert om.colour_of({"RED": 6, "GRN": 6, "BL1": 6}, NMS) == ["RED", "GRN", "BL1"
 assert om.colour_of({"MT3": 6, "CB2": 6, "MT2": 6}, NMS) == ["MT3", "CB2", "MT2"]
 assert om.colour_of({"CL1/CL2": 6, "CB2": 6, "MT2": 6}, NMS) == ["CB2", "MT2", "CL1/CL2"]   # (as on main)
 
+# a movie whose tile counts make it grey still plays in colour when it takes colour sets of three or more filters
+# (_set_colour): the NAC Titan wind stare ISS_009TI_1X1WND10001_PRIME (2005-06-04) takes CB3 three times a cycle
+WND = {"CB3": 937.9, "MT3": 889.2, "IR3": 925.9, "CB1": 619.5, "MT1": 619.0, "UV1": 266.7, "UV3": 343.1}
+wnd = [(f"p{i}", f"N{1496546246 + dt}_1", f, 1496546246.0 + dt, WND[f], 0, 0, 1e6) for i, (f, dt) in enumerate(
+    zip(["CB3", "MT3", "IR3", "CB3", "CB3", "CB1", "MT1", "UV1", "UV3"], [0, 174, 244, 1232, 2220, 2275, 2307, 2507, 2579]))]
+assert om.colour_of({"CB3": 3, "MT3": 1, "IR3": 1, "CB1": 1, "MT1": 1, "UV1": 1, "UV3": 1}, WND) is None
+assert om._filters({"key": ("TITAN", "X", "N", 0), "frames": wnd, "z": 1e6, "kind": "movie"})[3] == ["CB3", "MT1", "UV1"]
+assert om._filters({"key": ("TITAN", "X", "N", 0), "frames": wnd, "z": 1e6, "kind": "mosaic"})[3] is None   # mosaics: as before
+two = [(f"p{i}", f"W{1486330000 + i}_1", ["CB2", "CB2", "CB2", "MT2"][i % 4], 1000.0 + 37 * i, NMS["CB2"], 0, 0, 1e6) for i in range(9)]
+assert om._filters({"key": ("SATURN", "X", "W", 0), "frames": two, "z": 1e6, "kind": "movie"})[3] is None     # two-filter sets: grey
+
 cache = tempfile.mkdtemp()
 levels = {"CB2": 160, "MT2": 60}          # Saturn's methane band dark against its continuum, on the grey scale
 scale = {"blacks": {}, "white": 1, "gamma": 2.2, "balance": {"CB2": 110 / 160, "MT2": 110 / 60}}
