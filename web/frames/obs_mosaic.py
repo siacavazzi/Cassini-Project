@@ -932,12 +932,69 @@ def unit_of(frame_id):
     return found
 
 
-def kind_of(frame_id):
+def mosaic_steps(u, p=None):
+    """The frames of mosaic pass u that movie mode stops on (indices into u["frames"], in order), passing over those
+    whose mosaic is the
+    same picture as the frame before's (layout gives a frame of no filter drawn the same name: a polarizer, a colour
+    filter before the pass's colour is whole, a clear frame where the grey filter is another), and those whose
+    pointing's next frames add another filter to it before the camera moves on (a pointing's clear tile, gray, then
+    its colour set over it), so a step of the movie is a new place of the mosaic, finished, not each frame it is
+    built from
+    (Sam 2026-10-30: at high frame rates mosaic construction steps counted as frames, the same picture again, and
+    a new place's edge flickered gray before its colour came). p: the pass's plan (its colour, grey and luminance
+    filters), else worked out from the frames as plan does (_filters). Every frame SPICE placed is taken to have its
+    tile (layout counts placed tiles); a frame before the mosaic has anything to draw is a step (the window shows the
+    frame itself). The pass's repeat exposures, which units leaves out of its frames, show the mosaic of the frame
+    before them: never a step."""
+    frames = u["frames"]
+    if not frames:
+        return set()
+    if p is None:
+        count, _, _, colour = _filters(u)
+        grey = max(count, key=count.get)
+        p = {"colour": colour, "grey": grey, "luminance": {"filters": [grey] + sorted(f for f in count if f != grey and not _polarizer(f))}}
+    colour, grey, lum = p["colour"], p["grey"], lum_frames(u, p)
+    names, count, base = [], {}, []
+    for j, fr in enumerate(frames):
+        if fr[7]:
+            count[fr[2]] = count.get(fr[2], 0) + 1
+            if j in lum:
+                base.append(fr[2])
+        used = colour if colour and all(count.get(f) for f in colour) else [grey] if count.get(grey) else \
+            [max(dict.fromkeys(base), key=base.count)] if base else None
+        names.append(None if used is None else (tuple(count[f] for f in used), len(base) if any(f not in used for f in base) else 0))
+
+    def at(fr):
+        return (-fr[5] * fr[7] / u["z"], -fr[6] * fr[7] / u["z"]) if fr[7] and u.get("z") else None
+    # the pointings: runs of frames within SAME_PLACE of a frame of the run's first
+    run, first = [], None
+    for j, fr in enumerate(frames):
+        q = at(fr)
+        if q is None or first is None or math.hypot(q[0] - first[0], q[1] - first[1]) > SAME_PLACE * FRAME:
+            first = q
+            run.append(j)
+        else:
+            run.append(run[-1])
+    new = [j for j in range(len(frames)) if names[j] is not None and (j == 0 or names[j] != names[j - 1])]
+    # a new picture whose pointing's later frames add another filter to it is a step on the way (one filter again
+    # over the same place, a slow scan creeping a little a frame, is a new picture each time)
+    later = {}   # pointing -> the filters of its new pictures from here on
+    step = set()
+    for j in reversed(new):
+        mine = later.setdefault(run[j], set())
+        if not mine - {frames[j][2]}:
+            step.add(j)
+        mine.add(frames[j][2])
+    return [j for j in range(len(frames)) if names[j] is None or j in step]
+
+
+def kind_of(frame_id, cache=None):
     """What the camera windows do with the frames of frame_id's observation (one camera): {"mosaic": its pass is
     a mosaic, "movie": every pass of the observation with the camera moving is a movie or a stare, so its frames
     never make a mosaic of any kind and the window need not ask, "kind": its pass's kind (mosaic, movie,
     mosaic_movie or None), "repeats": its laps, "lap_ends": the ids of the frames that finish a lap of its mosaic
-    movies, when it has any}."""
+    movies, when it has any, "mosaic_steps": the ids of the frames of its mosaic passes movie mode stops on
+    (mosaic_steps; by the pass's plan when cache holds it), when it has any}."""
     found = unit_of(frame_id)
     if not found:
         return {"mosaic": False, "movie": False, "kind": None}
@@ -945,8 +1002,26 @@ def kind_of(frame_id):
     judged = [v for v in us if v["jump_frac"] is not None]
     # lap_ends: the frames of the observation's mosaic movies that finish a lap, for Whole mosaics (lap_ends)
     ends = [v["frames"][j][1] for v in us for j in lap_ends(v)]
+    steps = [v["frames"][j][1] for v in us if v["mosaic"] and not v["movie"] and v.get("kind") != "mosaic_movie"
+             for j in mosaic_steps(v, _plan_if_made(v, cache))]
     return {"mosaic": bool(found[0]["mosaic"]), "movie": bool(judged) and all(v["movie"] for v in judged),
-            "kind": found[0]["kind"], "repeats": found[0]["repeats"], **({"lap_ends": ends} if ends else {})}
+            "kind": found[0]["kind"], "repeats": found[0]["repeats"], **({"lap_ends": ends} if ends else {}),
+            **({"mosaic_steps": steps} if steps else {})}
+
+
+def _plan_if_made(u, cache):
+    """The pass's plan when it is made already (kept, or in its file), else None: never makes one."""
+    if cache is None:
+        return None
+    rec = _record(u, cache)
+    if rec is not None:
+        return rec["plan"]
+    path = _plan_path(u, cache)
+    try:
+        with open(path) as fh:
+            return json.load(fh)
+    except (OSError, ValueError):
+        return None
 
 
 def folder(u, cache):
@@ -1090,6 +1165,22 @@ def _all_made(u, cache, p, first, last, look=False):
     return not unknown or (look and all(_has_tile(u, j, cache, p) for j in unknown))
 
 
+def _filters(u):
+    """The filters plan() draws pass u in, from its frames alone: (tiles per filter, each filter's wavelength, the
+    filters aside, the colour filters or None); the grey filter is the one taken most (max of the count)."""
+    frames = u["frames"]
+    count, nms = {}, {}
+    for fr in frames:
+        count[fr[2]] = count.get(fr[2], 0) + 1
+        nms[fr[2]] = fr[4]
+    # the filters chosen from those pointed at the body: a pass whose most taken filter looks beside it (the
+    # clear frames of ISS_C23RI_RMOV001_PRIME are a frame further off Jupiter, on dark sky) is drawn in
+    # the filters that see the body, not as a black mosaic of that sky
+    aside = _aside(frames, u)
+    count = {f: c for f, c in count.items() if f not in aside} or count
+    return count, nms, aside, colour_of(count, nms)
+
+
 def plan(u, cache):
     """The pass's display scale, rotation, footprint, view mode and colour filters, worked out once and kept."""
     path = _plan_path(u, cache)
@@ -1107,16 +1198,7 @@ def plan(u, cache):
             _keep_plan(u, cache, p, stamp)
             return p
         frames = u["frames"]
-        count, nms = {}, {}
-        for fr in frames:
-            count[fr[2]] = count.get(fr[2], 0) + 1
-            nms[fr[2]] = fr[4]
-        # the filters chosen from those pointed at the body: a pass whose most taken filter looks beside it (the
-        # clear frames of ISS_C23RI_RMOV001_PRIME are a frame further off Jupiter, on dark sky) is drawn in
-        # the filters that see the body, not as a black mosaic of that sky
-        aside = _aside(frames, u)
-        count = {f: c for f, c in count.items() if f not in aside} or count
-        colour = colour_of(count, nms)
+        count, nms, aside, colour = _filters(u)
         # a long movie's scale from frames spread evenly over it, each filter's on its own (a step in time could
         # fall in step with the filter wheel and miss a filter): the same scale, without reading every frame first
         picks = []
