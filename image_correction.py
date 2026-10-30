@@ -43,6 +43,31 @@ LINE_GAP = 8
 
 
 """
+For each pixel, the nearest row at or above it where on (a 2D bool mask) is True, -1 where there is none: what
+np.maximum.accumulate(np.where(on, rows, -1), axis=0) gives, worked out a row at a time (numpy's accumulate down a
+frame's columns steps across memory, ~16 ms a 1024 px frame; a row at a time ~1.5 ms). rows_below: the nearest row
+at or below, h where there is none.
+"""
+def rows_above(on):
+    out = np.empty(on.shape, int)
+    last = np.full(on.shape[1], -1, int)
+    for r in range(on.shape[0]):
+        np.copyto(last, r, where=on[r])
+        out[r] = last
+    return out
+
+
+def rows_below(on):
+    h = on.shape[0]
+    out = np.empty(on.shape, int)
+    last = np.full(on.shape[1], h, int)
+    for r in range(h - 1, -1, -1):
+        np.copyto(last, r, where=on[r])
+        out[r] = last
+    return out
+
+
+"""
 Fills the short runs of lost pixels (mask False) down each column from the valid rows above and
 below, and returns (image, mask with those pixels now valid). Lost pixels are the ends of lines
 that never arrived, so a lost run down a column is a stack of those lines; where it is at most
@@ -57,10 +82,7 @@ def fill_lines(img, mask, max_gap=LINE_GAP, fills=None):
     fillable, slope = line_fills(img, mask, max_gap) if fills is None else fills
     if not fillable.any():
         return img, mask
-    h = mask.shape[0]
-    rows = np.arange(h)[:, None]
-    above = np.maximum.accumulate(np.where(mask, rows, -1), axis=0)
-    below = np.minimum.accumulate(np.where(mask, rows, h)[::-1], axis=0)[::-1]
+    above, below = rows_above(mask), rows_below(mask)
     ys, xs = np.nonzero(fillable)
     a, b = above[ys, xs], below[ys, xs]
     t = ((ys - a) / (b - a)).astype(np.float32)
@@ -120,9 +142,7 @@ lines the frame has, no fill does better, and left lost it is a black line throu
 def line_fills(img, mask, max_gap=LINE_GAP, line=1):
     h, w = mask.shape
     slope = np.zeros((h, w), np.float32)
-    rows = np.arange(h)[:, None]
-    above = np.maximum.accumulate(np.where(mask, rows, -1), axis=0)
-    below = np.minimum.accumulate(np.where(mask, rows, h)[::-1], axis=0)[::-1]
+    above, below = rows_above(mask), rows_below(mask)
     fillable = ~mask & (above >= 0) & (below < h) & (below - above - 1 <= max_gap)
     if not fillable.any():
         return fillable, slope
@@ -132,9 +152,8 @@ def line_fills(img, mask, max_gap=LINE_GAP, line=1):
     steps = [np.abs(np.diff(gray, axis=0))[mask[1:] & mask[:-1]], np.abs(np.diff(gray, axis=1))[mask[:, 1:] & mask[:, :-1]]]
     noise = min(1.4826 * float(np.median(d)) / np.sqrt(2) if d.size else np.inf for d in steps)
     noise = 0.0 if np.isinf(noise) else noise
-    # the nearest lost row above each pixel and below it, so a trial knows its rows are all valid
-    lost_above = np.maximum.accumulate(np.where(~mask, rows, -1), axis=0)
-    lost_below = np.minimum.accumulate(np.where(~mask, rows, h)[::-1], axis=0)[::-1]
+    # the nearest lost row below each pixel, so a trial knows its rows are all valid
+    lost_below = rows_below(~mask)
     count, runs = cv2.connectedComponents(fillable.astype(np.uint8), connectivity=8)
     keep = np.zeros(count, bool)
     every_y, every_x = np.nonzero(fillable)
