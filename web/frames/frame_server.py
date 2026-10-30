@@ -1708,7 +1708,7 @@ def make_handler(site, cache, flags=None):
                     if reel._index is not None:
                         in_background(obs_mosaic.warm_frame, m.group(1), cache)
                         try:
-                            kind = obs_mosaic.kind_of(m.group(1))
+                            kind = obs_mosaic.kind_of(m.group(1), cache)
                         except Exception:
                             pass
                     return self.send_json(kind)
