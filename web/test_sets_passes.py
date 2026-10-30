@@ -195,6 +195,12 @@ if om:
     raster = [(900 * (j % 4), 900 * (j // 4)) for j in range(16)]   # one filter per pointing, filters cycling
     r = judged(raster, ["MT1", "CB1", "MT2", "CB2"])
     assert not r["track"] and r["kind"] == "mosaic", (r["kind"], r["track"])
+    # a limb scan taking a colour set at each of five pointings, its filters landing up to 0.11 of a frame apart (the
+    # camera settling, ISS_249SA_LIMBINT002), is a mosaic: a feature track creeps more than a colour set's own jitter
+    jitter = [(0, 0), (11, -16), (30, -27), (116, -15), (83, -76)]
+    limb = [(-920 * (i // 5) + jitter[i % 5][0], 400 * (i // 5) + jitter[i % 5][1]) for i in range(25)]
+    li = judged(limb, ["UV3", "GRN", "CB1", "CB3", "MT3"], [1380.0 * (i // 5) + [0, 75, 147, 237, 427][i % 5] for i in range(25)])
+    assert not li["track"] and li["kind"] == "mosaic", (li["kind"], li["track"])
     stare = [(3 * i, 2 * i) for i in range(30)]
     st = judged(stare, ["RED", "GRN", "BL1"])
     assert not st["track"] and st["kind"] == "movie", (st["kind"], st["track"])
