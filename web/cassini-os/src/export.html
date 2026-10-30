@@ -202,16 +202,22 @@ body.phone #excard:not(.full) { width: calc(100% - 16px) !important; left: 8px !
     $("exgo").disabled = true;
     if (X.a == null || X.b == null || X.b - X.a < 1) { $("exsum").textContent = X.a != null || X.b != null ? "Mark the other end too." : ""; return; }
     $("exsum").textContent = "Counting pictures…";
+    // another stretch than the one the Cameras were picked for (and not set by hand since): pick them for it
+    if (X.auto && X.cams === X.auto.cams && (X.a !== X.auto.a || X.b !== X.auto.b)) { X.cams = null; segs(); }
     timer = setTimeout(async () => {
       const key = params();
       try {
         const r = await fetch(`${FRAMES}/export/plan.json?${key}`), p = await r.json();
         if (key !== params()) return;
         if (!r.ok) { $("exsum").innerHTML = `<span class="warn">${p.error || "The server cannot plan that film."}</span>`; return; }
-        // first plan of a stretch: both cameras when both take part, otherwise the one that does
+        // first plan of a stretch: both cameras when both take part, otherwise the one that does; with one camera
+        // window closed, the open one's (its camera is off: cassiniFeeds.liveCams). The pick is this stretch's
+        // alone (X.auto): a stretch highlighted after it is picked for again, unless the Cameras were set by hand
         if (!X.cams) {
           const n = { N: 0, W: 0 }; p.pictures.forEach(e => n[e.cam]++);
-          X.cams = n.N >= 0.1 * p.count && n.W >= 0.1 * p.count ? "NW" : n.N > n.W ? "N" : "W";
+          const lc = window.cassiniFeeds && cassiniFeeds.liveCams ? cassiniFeeds.liveCams() : null;
+          X.cams = lc || (n.N >= 0.1 * p.count && n.W >= 0.1 * p.count ? "NW" : n.N > n.W ? "N" : "W");
+          X.auto = { cams: X.cams, a: X.a, b: X.b };
           segs(); if (X.cams !== "NW") return estimate();
         }
         X.plan = p; X.planKey = key;
