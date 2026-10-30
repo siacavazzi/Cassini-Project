@@ -2506,6 +2506,10 @@ body.ambient.phone .amb-where { font-size: 18px; }
       hint: "A movie pass is drawn on one brightness scale, so a frame whose exposure the calibration did not fully even out, or one lit by stray light, flashes or jumps in brightness. On, each picture's brightness is measured against the picture before it, a frame or two far brighter or darker than their neighbours are brought to their level, and other jumps are spread over several frames, one gain for the whole picture so a color picture keeps its color. Slow changes stay, and every frame keeps its data, only scaled. Off shows every frame as the pass's scale draws it." });
   D({ key: "movies.exposureSmooth", section: "Processing", label: "Exposure smoothing", type: "range", value: 8, min: 2, max: 30, step: 2, unit: "frames",
       hint: "How many frames a change in brightness is spread over (with Exposure normalization on). Low keeps quick real changes; high evens the movie out more." });
+  D({ key: "movies.colorSmooth", section: "Processing", label: "Color smoothing", type: "toggle", value: true,
+      hint: "A run of color pictures mostly shares one set of filters, but now and then Cassini swapped one filter for another (a blue filter in place of a continuum one), and that picture comes out in other colors: peach and blue among green. On, every color picture's colors are moved toward the palette of the pictures round it in the same camera window (the most common one, so the odd one out never sets it), worked out by this computer. Only the balance between the colors moves: each pixel keeps its brightness (that is Exposure normalization's), and a run of one palette is left almost as it is." });
+  D({ key: "movies.colorSmoothStrength", section: "Processing", label: "Color smoothing strength", type: "range", value: 100, min: 10, max: 100, step: 10, unit: "%",
+      hint: "How far an odd picture's colors are moved toward its neighbours' palette (with Color smoothing on). 100% matches them; lower keeps more of the picture's own colors." });
   D({ key: "cameras.mosaics", section: "Processing", label: "Mosaics in camera windows", type: "toggle", value: true,
       hint: "When Cassini steps a camera across a body, the window builds the mosaic tile by tile. Off shows every frame on its own, at face value. How a pass plays (mosaic, movie, mosaic movie) is under Cameras > Mosaic passes." });
   // what the frame server's picture routes are asked to add for them: nothing, the earlier stretch, or raw filters;
@@ -3539,6 +3543,133 @@ onmessage = async e => {
 })();
 </script>
 <script>
+(() => {
+  // ---------- colour_smooth.py, line for line ----------
+  const GRID = 128, LIT = 24, TOP = 250, FEW = 200, SHIFT = 0.5, SPREAD = 3.0, SPAN = 4, DARK = 24;
+  const stepOf = (w, h) => Math.max(1, Math.ceil(Math.max(w, h) / GRID));
+  // the picture's palette (RGBA bytes, w x h): [mean R, G, B, spread R, G, B] of each channel's log brightness less
+  // the pixel's mean, over its lit samples; null with fewer than FEW lit, or a grey picture
+  function palette(d, w, h) {
+    const s = stepOf(w, h), sums = [0, 0, 0], squares = [0, 0, 0];
+    let n = 0, grey = true;
+    for (let y = 0; y < h; y += s) for (let x = 0; x < w; x += s) {
+      const i = 4 * (y * w + x), r = d[i], g = d[i + 1], b = d[i + 2];
+      if (!(d[i + 3] > 0) || r + g + b < 3 * LIT || Math.max(r, g, b) >= TOP) continue;
+      if (r !== g || g !== b) grey = false;
+      const lr = Math.log(r || 1), lg = Math.log(g || 1), lb = Math.log(b || 1), yy = (lr + lg + lb) / 3, ls = [lr, lg, lb];
+      for (let k = 0; k < 3; k++) { const c = ls[k] - yy; sums[k] += c; squares[k] += c * c; }
+      n++;
+    }
+    if (n < FEW || grey) return null;
+    const mu = sums.map(v => v / n);
+    return mu.concat([0, 1, 2].map(k => Math.sqrt(Math.max(squares[k] / n - mu[k] * mu[k], 0))));
+  }
+  function median(v) {
+    v = v.slice().sort((a, b) => a - b);
+    const m = Math.floor(v.length / 2);
+    return v.length % 2 ? v[m] : (v[m - 1] + v[m]) / 2;
+  }
+  // the palette picture i is moved toward: each number's median over the pictures i - span .. i + span with one
+  function wanted(stats, i, span) {
+    if (!stats[i]) return null;
+    const near = stats.slice(Math.max(0, i - span), i + span + 1).filter(st => st);
+    return [0, 1, 2, 3, 4, 5].map(k => median(near.map(st => st[k])));
+  }
+  function moves(own, want, strength) {
+    const out = [];
+    for (let k = 0; k < 3; k++) {
+      const d = Math.max(-SHIFT, Math.min(SHIFT, strength * (want[k] - own[k])));
+      const r = own[3 + k] > 1e-6 && want[3 + k] > 1e-6 ? (want[3 + k] / own[3 + k]) ** strength : 1.0;
+      out.push([d, Math.max(1 / SPREAD, Math.min(SPREAD, r))]);
+    }
+    return out;
+  }
+  // the picture's bytes with its palette own moved strength (0..1) of the way to want, in place; false when there was
+  // nothing to move
+  function smoothed(d, own, want, strength) {
+    if (!own || !want || strength <= 0) return false;
+    const mv = moves(own, want, strength);
+    if (mv.every(([dd, r]) => Math.abs(dd) < 1e-9 && Math.abs(r - 1) < 1e-9)) return false;
+    const mu = own.slice(0, 3), l = [0, 0, 0], c = [0, 0, 0], c2 = [0, 0, 0];
+    for (let i = 0; i < d.length; i += 4) {
+      const v0 = d[i], v1 = d[i + 1], v2 = d[i + 2];
+      if (Math.max(v0, v1, v2) <= 0) continue;
+      l[0] = Math.log(Math.max(v0, 1)); l[1] = Math.log(Math.max(v1, 1)); l[2] = Math.log(Math.max(v2, 1));
+      const y = (l[0] + l[1] + l[2]) / 3;
+      for (let k = 0; k < 3; k++) { c[k] = l[k] - y; c2[k] = (mu[k] + mv[k][0]) + (c[k] - mu[k]) * mv[k][1]; }
+      const m = (c2[0] + c2[1] + c2[2]) / 3, wgt = Math.min((v0 + v1 + v2) / (3 * DARK), 1.0);
+      for (let k = 0; k < 3; k++) {
+        const o = Math.floor(Math.exp((y + c[k]) + ((c2[k] - m) - c[k]) * wgt) + 0.5);
+        d[i + k] = Math.max(0, Math.min(255, o));
+      }
+    }
+    return true;
+  }
+  const math = { GRID, LIT, TOP, FEW, SHIFT, SPREAD, SPAN, DARK, palette, median, wanted, moves, smoothed };
+
+  // ---------- in the page ----------
+  const S = () => window.cassiniSettings;
+  const GAP = 12 * 3600;       // ... taken within this many seconds of it (mission time): a new day's pictures start afresh
+  // Settings > Processing > Color smoothing: its strength (0..1), 0 when off
+  const strength = () => { const s = S(); return !s || !s.get("movies.colorSmooth") ? 0 : Math.max(0, Math.min(100, s.get("movies.colorSmoothStrength") ?? 100)) / 100; };
+  const urls = [];
+  const stats = { pictures: 0, moved: 0, ms: 0, last: null };
+  function pixels(im) {
+    const W = im.naturalWidth || im.width, H = im.naturalHeight || im.height;
+    if (!W || !H) return null;
+    const c = document.createElement("canvas"); c.width = W; c.height = H;
+    const g = c.getContext("2d", { willReadFrequently: true }); g.drawImage(im, 0, 0);
+    return { c, g, W, H, img: g.getImageData(0, 0, W, H) };
+  }
+  // a run of pictures: one per camera window, its color pictures' palettes by target, in mission time
+  function run() {
+    const groups = new Map();   // target -> Map(picture id -> {et, st})
+    const note = (p, st) => {
+      if (!groups.has(p.group)) groups.set(p.group, new Map());
+      groups.get(p.group).set(p.id, { et: p.et, st });
+    };
+    // the palette wanted for picture p: its neighbours in time of the same target (those this window has seen or
+    // looked ahead to), SPAN either side within GAP
+    const want = p => {
+      const all = [...(groups.get(p.group) || new Map()).entries()].filter(([, e]) => Math.abs(e.et - p.et) <= GAP)
+        .sort((a, b) => a[1].et - b[1].et || (a[0] < b[0] ? -1 : 1));
+      const i = all.findIndex(([id]) => id === p.id);
+      return i < 0 ? null : wanted(all.map(([, e]) => e.st), i, SPAN);
+    };
+    return {
+      // a picture looked ahead to (or one shown): its palette is kept for its neighbours
+      note(im, p) {
+        const g = groups.get(p.group);
+        if (g && g.has(p.id)) return;
+        const px = pixels(im);
+        if (px) note(p, palette(px.img.data, px.W, px.H));
+      },
+      // the picture p as shown here: a new Image with its colors moved, or null when it stays as it is
+      async apply(im, p) {
+        const s = strength(), t0 = performance.now();
+        const px = pixels(im);
+        if (!px) return null;
+        const own = palette(px.img.data, px.W, px.H);
+        note(p, own);
+        stats.pictures++;
+        if (!s || !own) return null;
+        const w = want(p);
+        if (!smoothed(px.img.data, own, w, s)) return null;
+        px.g.putImageData(px.img, 0, 0);
+        const blob = await new Promise(r => px.c.toBlob(r, "image/png")), url = URL.createObjectURL(blob), out = new Image();
+        urls.push(url);
+        if (urls.length > 16) URL.revokeObjectURL(urls.shift());
+        await new Promise((res, rej) => { out.onload = res; out.onerror = rej; out.src = url; });
+        stats.moved++; stats.ms += performance.now() - t0; stats.last = { id: p.id, own, want: w, moves: moves(own, w, s) };
+        out.dataset.colorSmooth = moves(own, w, s).map(([d, r]) => `${d.toFixed(3)}/${r.toFixed(3)}`).join(" ");
+        return out;
+      },
+    };
+  }
+  window.cassiniColourSmooth = { math, run, strength, stats, SPAN };
+})();
+</script>
+<script>
 // ---------- Cassini OS chrome: window manager, menu bar, HUD layer ----------
 (function () {
   const $ = id => document.getElementById(id);
@@ -4479,7 +4610,10 @@ onmessage = async e => {
     ["movie", "Movie", "its frames in place"], ["mosaic_movie", "Mosaic movie", "each place's newest tile, lap after lap"]];
   // the movie's steadying under Auto center (Settings > Movie, for every window): [setting, its smoothing, label, slider min, max, step]
   const MOVIE_STEADY = [["movies.stabilize", "movies.stabilizeSmooth", "Stabilize movies", 4, 60, 4],
-    ["movies.exposure", "movies.exposureSmooth", "Even exposure", 2, 30, 2]];
+    ["movies.exposure", "movies.exposureSmooth", "Even exposure", 2, 30, 2],
+    ["movies.colorSmooth", "movies.colorSmoothStrength", "Even color", 10, 100, 10]];
+  // the note under a row's label while it is on: its smoothing in frames, or color smoothing's strength
+  const steadyNote = (key, v) => key === "movies.colorSmooth" ? `${v}% toward the pictures round it` : `smoothed over ${v} frames`;
   function winMenu(win, card) {
     const bar = win.querySelector(".titlebar");
     let btn = bar.querySelector(".winopt");
@@ -4512,7 +4646,7 @@ onmessage = async e => {
       const key = row.dataset.key, range = row.querySelector("input");
       row.querySelector(".sw").addEventListener("click", () => { S.set(key, !S.get(key)); api.sync(api.state); });
       range.addEventListener("change", () => { S.set(range.dataset.smooth, +range.value); api.sync(api.state); });
-      range.addEventListener("input", () => { row.querySelector("small").textContent = `smoothed over ${range.value} frames`; });
+      range.addEventListener("input", () => { row.querySelector("small").textContent = steadyNote(key, range.value); });
     }
     el.querySelector(".wmset").addEventListener("click", () => { open(false); if (window.cassiniSettings && window.cassiniSettings.open) window.cassiniSettings.open(); });
     api.sync = st => {
@@ -4526,7 +4660,7 @@ onmessage = async e => {
         row.querySelector(".sw").setAttribute("aria-checked", String(on));
         if (v != null) range.value = v;
         range.disabled = !on;
-        row.querySelector("small").textContent = on ? `smoothed over ${range.value} frames` : "Off (every window)";
+        row.querySelector("small").textContent = on ? steadyNote(row.dataset.key, range.value) : "Off (every window)";
       }
       pass.hidden = !st.inPass;
       for (const b of pass.querySelectorAll(".wmopt")) {
@@ -4759,6 +4893,32 @@ onmessage = async e => {
     // completed it (or another of its channels); every other new frame shows itself, so a long run of filters
     // after the colour channels keeps the picture changing instead of holding the composite
     function view(k, et, sz) {
+      // a color picture moved toward its neighbours' palette here (colour-smooth.html) is a new picture for each
+      // strength: its key says so (the request is the same)
+      const w = viewOf(k, et, sz), pct = Math.round(CS ? CS.strength() * 100 : 0);
+      if (pct && colourPic(w)) w.key += `${w.key.includes("#") ? "," : "#"}cs${pct}`;
+      return w;
+    }
+    // Color smoothing (Settings > Processing, colour-smooth.html): this window's color pictures, by target, each moved
+    // toward the palette of the pictures round it, those shown and those looked ahead to (nextViews)
+    const CS = window.cassiniColourSmooth, csRun = CS ? CS.run() : null;
+    let nextViews = new Map();
+    const colourPic = w => w.set >= 0 || (!!w.movie && !!S.get("cameras.composites"));
+    const csOf = w => ({ id: catalog.id[w.k], et: catalog.et[w.k], group: catalog.target[w.k] || "" });
+    const smooth = (v, pic) => csRun && !v.warm && colourPic(v) && CS.strength() ? csRun.apply(pic, csOf(v)).then(p => p || pic, () => pic) : Promise.resolve(pic);
+    // a picture looked ahead to: its palette is kept for the pictures round it (a movie frame worked out here loads
+    // its grey base frame, which has none)
+    // Paused on a color picture, it is moved again once the pictures after it are in (it went up before they were)
+    let csAgain = 0;
+    const noteAhead = (key, im) => {
+      const w = nextViews.get(key);
+      if (!csRun || !w || w.here || !colourPic(w) || !CS.strength()) return;
+      try { csRun.note(im, csOf(w)); } catch (e) { return; }
+      if (state.playing || !shown || shown.warm || !colourPic(shown) || csOf(shown).group !== csOf(w).group) return;
+      clearTimeout(csAgain);
+      csAgain = setTimeout(() => { if (!state.playing && want && shown && shownKey === want.key && colourPic(shown)) { shownKey = null; pump(); } }, 400);
+    };
+    function viewOf(k, et, sz) {
       // a pass played as a movie: the frame steadied by the server (SPICE-centered on the pass's one scale and view,
       // its color set drawn together), unless the server could not make that frame
       if (playsMovie(k) && !movieFailed.has(catalog.id[k]) && !passCold(k)) {
@@ -4870,13 +5030,14 @@ onmessage = async e => {
         // (prep first: months that came in since the last frame drew leave a catalog not yet worked through)
         const show = pic => { if (want && !hold && !v.warm && v.cat === catalog && fits(v)) { prep(); display(v, pic); } };   // no want: the camera went idle (or was held) while this loaded
         if (v.here && !v.warm) window.cassiniSteadyLocal.apply(FRAMES, catalog.id[v.k], im, { center: centreOn() !== false, color: !!S.get("cameras.composites"), planeUrl: id => movieUrl(id, 1024, 0, 0, 0, 0), ...v.here })
-          .then(pic => show(pic || im), () => show(im)).then(pump);
+          .then(pic => smooth(v, pic || im), () => smooth(v, im)).then(show).then(pump);
         else if (v.fadeHere && !v.warm) {
           // faded here, or the server's faded picture when this pass's table is not here
-          const server = () => new Promise(res => { const s = new Image(); s.crossOrigin = "anonymous"; s.onload = () => { show(s); res(); }; s.onerror = res; s.src = v.server; });
-          window.cassiniFadeLocal.apply(FRAMES, catalog.id[v.k], im, v.fadeHere).then(pic => (pic ? show(pic) : server()), server).then(pump);
+          const server = () => new Promise(res => { const s = new Image(); s.crossOrigin = "anonymous"; s.onload = () => { smooth(v, s).then(show).then(res); }; s.onerror = res; s.src = v.server; });
+          window.cassiniFadeLocal.apply(FRAMES, catalog.id[v.k], im, v.fadeHere).then(pic => (pic ? smooth(v, pic).then(show) : server()), server).then(pump);
         }
-        else { show(im); pump(); }
+        else if (v.warm) { noteAhead(v.key, im); show(im); pump(); }
+        else smooth(v, im).then(show).then(pump);
       };
       im.onerror = () => {
         lane[which] = null;
@@ -4945,7 +5106,8 @@ onmessage = async e => {
         // (a mosaic movie's next pictures are made ahead by the frame server, in order: obs_mosaic.rolling_ahead)
         if (warmed.has(key) || warming.has(key) || key.includes("/color.webp") || key.includes("mode=rolling")) continue;
         const p = new Image(); p.crossOrigin = "anonymous"; p.fetchPriority = "low";
-        p.onload = p.onerror = () => { warming.delete(key); warmed.add(key); };
+        p.onload = () => { warming.delete(key); warmed.add(key); noteAhead(key, p); };
+        p.onerror = () => { warming.delete(key); warmed.add(key); };
         warming.set(key, p);
         p.src = key;
       }
@@ -5846,7 +6008,8 @@ onmessage = async e => {
       // look ahead: the next 6 frames, or up to 12 when they come within 4 s of playback (a burst), nearest first
       const ahead = []; for (let d = 1; d <= 12 && ks[p + d] !== undefined && (d <= 6 || catalog.et[ks[p + d]] - state.et <= 4 * state.speed); d++) ahead.push(ks[p + d]);
       // looked ahead at the size shown, so full view plays in full resolution too
-      next = ahead.map(q => view(q, catalog.et[q], size()).key);
+      nextViews = new Map(ahead.map(q => view(q, catalog.et[q], size())).map(w => [w.key, w]));
+      next = [...nextViews.keys()];
       // further ahead: each observation coming up is named to the server once, so a mosaic pass in it is worked
       // out (seconds for its plan) before the clock gets there
       if (window.cassiniMosaics !== false && (S.get("cameras.mosaics") || S.get("movies.steady")))
@@ -6000,7 +6163,7 @@ onmessage = async e => {
   window.cassiniFeeds = { frames: FRAMES, cameraFeed, framesOf, lastOfCam, prep, weight, nextPicture, prevPicture, behind, liveCams, reopenCams, stale: () => S.get("cameras.stale") * 3600, windows: feeds };
   document.addEventListener("cassini:bodymode", () => { if (typeof catalog !== "undefined" && catalog && catalog.byCam) feeds.forEach(f => f(true)); });
   // a change to what the windows show takes effect straight away
-  for (const key of ["cameras.composites", "cameras.stale", "cameras.steady", "cameras.passes", "cameras.balancedColor", "cameras.colors", "cameras.lingerColor", "cameras.lingerMosaic", "movies.steady", "cameras.autoCenter", "cameras.processedFrames", "movies.trail", "movies.stabilize", "movies.stabilizeSmooth", "movies.stabilizeLocal", "movies.exposure", "movies.exposureSmooth", "movies.filmstrip", "movies.laps", "movies.fade", "movies.persist", "movies.mosaicFrames", "playback.completeMosaics", ...(window.cassiniSteps || []).map(st => st.key)]) S.on(key, () => { if (typeof catalog !== "undefined" && catalog && catalog.byCam) feeds.forEach(f => f(true)); });
+  for (const key of ["cameras.composites", "cameras.stale", "cameras.steady", "cameras.passes", "cameras.balancedColor", "cameras.colors", "cameras.lingerColor", "cameras.lingerMosaic", "movies.steady", "cameras.autoCenter", "cameras.processedFrames", "movies.trail", "movies.stabilize", "movies.stabilizeSmooth", "movies.stabilizeLocal", "movies.exposure", "movies.exposureSmooth", "movies.colorSmooth", "movies.colorSmoothStrength", "movies.filmstrip", "movies.laps", "movies.fade", "movies.persist", "movies.mosaicFrames", "playback.completeMosaics", ...(window.cassiniSteps || []).map(st => st.key)]) S.on(key, () => { if (typeof catalog !== "undefined" && catalog && catalog.byCam) feeds.forEach(f => f(true)); });
   // a pass's table for stabilizing on this computer arrived (steady-local.html): its frames are asked for again
   window.addEventListener("cassini-steady-local", () => { if (typeof catalog !== "undefined" && catalog && catalog.byCam) feeds.forEach(f => f(true)); });
 
@@ -7630,7 +7793,9 @@ onmessage = async e => {
     // over both settings)
     return q.toString() + window.cassiniLook() + (window.cassiniMovieStyle ? window.cassiniMovieStyle() : "") + (opt("movies.mosaicFrames", "rolling") === "whole" ? "&whole=1" : "")
       + (opt("playback.completeMosaics", false) && opt("cameras.mosaics", true) !== false ? "&complete=1" : "") + (window.cassiniSetsQ ? window.cassiniSetsQ() : "")
-      + (window.cassiniMovieCut ? window.cassiniMovieCut() : "");
+      + (window.cassiniMovieCut ? window.cassiniMovieCut() : "")
+      // Color smoothing (Settings > Processing): its strength, as the windows move a film's color pictures
+      + (window.cassiniColourSmooth && window.cassiniColourSmooth.strength() ? `&cs=${Math.round(window.cassiniColourSmooth.strength() * 100)}` : "");
   };
   let timer = 0;
   function estimate() {
@@ -7934,12 +8099,36 @@ onmessage = async e => {
     const font = Math.max(10, Math.round(ch * 0.36)), small = Math.max(9, Math.round(ch * 0.3)), mono = `Menlo, "DejaVu Sans Mono", monospace`;
     const pics = plan.pictures, ahead = 6, todo = [], building = {}, kinds = {};
     let nxt = 0, at = 0, lastKey = -Infinity;
+    // Color smoothing (Settings > Processing, colour-smooth.html), as the camera windows do it: each picture's palette
+    // measured as it comes in, and each color picture moved toward the palette of the film's pictures round it of its
+    // camera and target (CS.SPAN either side: those pictures are among the ones fetched ahead)
+    const CS = window.cassiniColourSmooth, cs = CS ? CS.strength() : 0, past = [];
+    const groupOf = e => `${e.cam}|${e.target || ""}`;
+    const measured = (e, p) => !cs ? p : p.then(r => {
+      if (!r.bmp) return r;
+      const c = document.createElement("canvas"); c.width = r.bmp.width; c.height = r.bmp.height;
+      const cg = c.getContext("2d", { willReadFrequently: true }); cg.drawImage(r.bmp, 0, 0);
+      const px = cg.getImageData(0, 0, c.width, c.height), st = CS.math.palette(px.data, c.width, c.height);
+      return Object.assign(r, { cs: { c, cg, px, st, group: groupOf(e) } });
+    });
     try {
       for (let n = 0; n < pics.length; n++) {
         if (X.job !== job) { stop.done = true; venc.close(); return; }
         if (failed) throw failed;
-        while (nxt < pics.length && nxt < n + ahead) todo.push(pictureOf(pics[nxt++], size, stop));
-        const e = pics[n], { bmp, what } = await todo.shift();
+        while (nxt < pics.length && nxt < n + ahead) { todo.push(measured(pics[nxt], pictureOf(pics[nxt], size, stop))); nxt++; }
+        const e = pics[n], got = await todo.shift(), { what } = got;
+        let { bmp } = got;
+        if (got.cs) {
+          const me = got.cs, later = (await Promise.all(todo.slice(0, CS.SPAN))).map(r => r.cs).filter(Boolean);
+          const run = [...past, me, ...later].filter(q => q.group === me.group), i = run.indexOf(me);
+          if (me.st && CS.math.smoothed(me.px.data, me.st, CS.math.wanted(run.map(q => q.st), i, CS.SPAN), cs)) {
+            me.cg.putImageData(me.px, 0, 0);
+            if (bmp.close) bmp.close();
+            bmp = me.c;
+          }
+          past.push({ group: me.group, st: me.st });
+          if (past.length > 4 * CS.SPAN) past.shift();
+        }
         kinds[what || "none"] = (kinds[what || "none"] || 0) + 1;
         // a mosaic stays up while its observation goes on (render's building)
         let held = false;
@@ -11755,7 +11944,7 @@ void main() {
   window.cassiniAbout = { open, addTab, esc, close: () => show(false), credits: CREDITS };
 
   // ---- which version this is: this page's build id (build.py writes it), and what the frame server says it serves ----
-  const BUILD = /*BUILD*/"4171bf511a0a";
+  const BUILD = /*BUILD*/"e6ab690259a3";
   const FRAMES = (() => {                       // the frame server, chosen as the camera window chooses it
     const q = new URLSearchParams(location.search).get("frames");
     if (q) return q.replace(/\/$/, "");
