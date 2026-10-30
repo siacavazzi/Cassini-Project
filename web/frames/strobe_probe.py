@@ -63,6 +63,12 @@ def main():
                 row["exp"] = info.get("EXPOSURE_DURATION")
                 row["conv"] = info.get("DATA_CONVERSION_TYPE")
                 row["sat"] = round(float(cal.saturated(codes, info).mean()), 4)
+                # lines lost in downlink (the prefix's tails) and what garbled_lines cuts on top of them
+                valid = lbl.valid_mask()
+                row["invalid"] = round(1 - float(valid.mean()), 4)
+                if codes is not None and codes.shape == valid.shape:
+                    row["garbled"] = round(float(lh.garbled_lines(codes, valid).mean()), 4)
+                row["packet_flag"] = info.get("MISSING_PACKET_FLAG")
                 _, iof, _ = stacking.load_hdr(path, u.get("repeat_gap", om.mosaic_benchmark.REPEAT_GAP))
                 if iof is not None:
                     q = iof[::4, ::4].astype(np.float32)
