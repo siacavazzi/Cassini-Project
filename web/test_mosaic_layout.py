@@ -1,9 +1,13 @@
 """How obs_mosaic lays out the passes the image quality check (2026-10-28, group H) found drawn wrong, on the frames
 of those observations as the Mac Mini's index and geometry cache have them (web/test_mosaic_layout.json):
 - a time series is a movie, not a mosaic: Saturn's limb every 28 minutes (267SA_LIMBINT002), the WAC beside a NAC
-  feature track (191SA_FEATRAK001), a CIRS scan map of Jupiter (C23JU_NSMAP103); a map whose later columns overlap its
-  earlier ones (221DI_REGMAP001), a mosaic stepping slowly (242SA_NHEMOSAIC001) and the two ring ansae of an F ring
-  monitor (042RI_FMONITOR001) stay mosaics (_revisits);
+  feature track (191SA_FEATRAK001); a map whose later columns overlap its earlier ones (221DI_REGMAP001), a mosaic
+  stepping slowly (242SA_NHEMOSAIC001) and the two ring ansae of an F ring monitor (042RI_FMONITOR001) stay mosaics
+  (_revisits);
+- a scan that pauses between its pointings is no time series (_scan): a CIRS ride-along stepping across the rings
+  (113RI_VTMPN60MP001), a colour set at each pointing of a raster (028RI_HIPHASE001, 026RI_LATPHASE001), a CIRS map of
+  Jupiter in a filter set lap by lap (C23JU_NSMAP101, a mosaic) or lap after lap in each filter (C23JU_NSMAP103, a
+  mosaic movie);
 - a filter set drifting over one view is one picture (STORMW riders, _one_view), and taken lap after lap a movie
   (Saturn's approach, C44SA_APPRMOVB001: its colour set every 104 minutes);
 - a map split by ZOOM is joined again (042TI_GLOBMAP001, _zoom_join); a movie that re-points to sky it never comes back
@@ -11,7 +15,10 @@ of those observations as the Mac Mini's index and geometry cache have them (web/
 - a lone frame near the middle no longer puts the other filters aside (044RI_PHOTDRK003, _aside);
 - a mosaic the camera turns under has a footprint holding every tile the v46 cache placed (033RI_AZDKMRHPH001,
   173RI_DRCLOSE001, 208TI_HIRES002; footprint), where one angle left most of them outside;
-- the passes these rules change get RELAID's folder, every other pass keeps its own.
+- a colour set whose filters land a little apart at each pointing is no feature track (TRACK_SPAN): a limb scan
+  (249SA_LIMBINT002) is a mosaic, a 3x3 mosaic taken lap after lap (003SA_3X3MOVIEA002) a mosaic movie, while a feature
+  track creeping the least of them (182SA_FEATRAK012) stays a track;
+- the passes these rules change get RELAID's folder (RETRACKED's for TRACK_SPAN), every other pass keeps its own.
 Run: python web/test_mosaic_layout.py; with --refresh (and the index and CASSINI_GEOMETRY_CACHE) it writes the frames
 of the observations again."""
 import json
@@ -31,7 +38,10 @@ OBS = [("SATURN", "ISS_267SA_LIMBINT002_PRIME", "N"), ("SATURN", "ISS_191SA_FEAT
        ("SATURN", "ISS_287RI_PROPRETRG001_PRIME", "N"), ("SATURN", "ISS_044RI_PHOTDRK003_PRIME", "W"),
        ("DIONE", "ISS_129DI_REGMAP001_PRIME", "N"), ("SATURN", "ISS_033RI_AZDKMRHPH001_PRIME", "N"),
        ("SATURN", "ISS_173RI_DRCLOSE001_PIE", "N"), ("TITAN", "ISS_208TI_HIRES002_VIMS", "W"),
-       ("SATURN", "ISS_C44SA_APPRMOVB001_PRIME", "N")]
+       ("SATURN", "ISS_C44SA_APPRMOVB001_PRIME", "N"), ("SATURN", "ISS_249SA_LIMBINT002_PRIME", "N"),
+       ("SATURN", "ISS_003SA_3X3MOVIEA002_PRIME", "N"), ("SATURN", "ISS_182SA_FEATRAK012_PRIME", "N"),
+       ("SATURN", "IOSIC_113RI_VTMPN60MP001_SI", "W"), ("SATURN", "ISS_028RI_HIPHASE001_VIMS", "W"),
+       ("SATURN", "ISS_026RI_LATPHASE001_VIMS", "W"), ("JUPITER", "CIRS_C23JU_NSMAP101_PRIME", "N")]
 # the v46 cache's plan (angle, the frame it was measured on) and tile outlines of three passes the camera turns under
 # (/mnt/project-files/mosaic-layout/qc-data/v46-json)
 V46 = "/mnt/project-files/mosaic-layout/qc-data/v46-json"
@@ -99,7 +109,7 @@ def main():
     cases = load()
 
     # time series: movies, in RELAID's folder
-    for key in OBS[:3]:
+    for key in OBS[:2]:
         us = [u for u in passes(*key) if len(u["frames"]) >= 20]
         assert us and all(u["kind"] == "movie" and u["revisit"] and relaid(u) for u in us), (key, kinds(us))
     # maps and mosaics overlapping their earlier ground, and the F ring monitor's two ansae, stay mosaics
@@ -158,6 +168,25 @@ def main():
         assert outside(new) == 0 and outside(v["footprint"]) > len(v["tiles"]) / 2, (name, outside(v["footprint"]), outside(new))
         if obs != "ISS_173RI_DRCLOSE001_PIE":
             assert u["kind"] == "mosaic" and relaid(u), (name, u["kind"])
+
+    # a colour set's pointing jitter is no feature track; the least creeping feature track still is
+    limb = passes(*OBS[15])
+    assert kinds(limb) == [("mosaic", 25)] and not limb[0]["track"] and limb[0]["retracked"], kinds(limb)
+    assert om.folder(limb[0], "/c").endswith(om.RETRACKED)
+    laps = passes(*OBS[16])
+    assert kinds(laps) == [("mosaic_movie", 80)] and laps[0]["retracked"], kinds(laps)
+    feat = passes(*OBS[17])
+    assert [k for k, _ in kinds(feat)] == ["movie"] and feat[0]["track"] and not feat[0]["retracked"], kinds(feat)
+
+    # scans that pause between their pointings: mosaics (a whole map lap after lap: a mosaic movie), in RESCANNED's folder
+    for key, kind, n in ((OBS[18], "mosaic", 28), (OBS[19], "mosaic", 78), (OBS[21], "mosaic", 83), (OBS[2], "mosaic_movie", 147)):
+        us = [u for u in passes(*key) if len(u["frames"]) >= 20]
+        assert kinds(us) == [(kind, n)] and not us[0]["revisit"] and us[0]["rescanned"], (key, kinds(us))
+        assert om.folder(us[0], "/c").endswith(om.RESCANNED)
+    lat = [u for u in passes(*OBS[20]) if len(u["frames"]) >= 20]
+    assert [k for k, _ in kinds(lat)] == ["mosaic", "mosaic"] and all(u["rescanned"] for u in lat), kinds(lat)
+    # (the time series keep RELAID's folder)
+    assert not any(u["rescanned"] for key in OBS[:2] for u in passes(*key))
 
     print("mosaic layout ok:", {o: kinds(passes(t, o, c)) for t, o, c in OBS})
 
