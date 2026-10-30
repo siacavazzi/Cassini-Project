@@ -500,6 +500,7 @@ def webp(frame_id, size, cache, fmt="webp"):
 COLOR_VERSIONS = {"balanced": "color-v33", "raw": "color-v16", "classic": "color-v10"}
 PROC_VERSIONS = {"balanced": "proc-v12", "raw": "proc-v12", "classic": "proc-v6"}   # one frame: no colors to mix
 # Auto center (center=1): the same pictures centred on the body by SPICE, cached beside them in folders of their own
+HOLD_AGREE = 40   # full resolution px: SPICE's place for a held still and the pass's may differ by this much (centred)
 CENTRE_VERSION = "ctr4"   # ctr2: the shift stops at the frame's data edge; ctr3: only when the body's disk is cut by it;
                           # ctr4: a close-up pass is turned north up where it is
 
@@ -558,16 +559,27 @@ def centred(ids, view):
     side = int(view["side"])
     cx = (w - 1) / 2 - report["frame_offset"][0]
     cy = (h - 1) / 2 - report["frame_offset"][1]
+    # held (obs_mosaic.hold_of): a still Auto center cannot centre keeps the body where it sits on average over the
+    # pass, so it holds still as SPICE places it, black where the frame does not reach; only when SPICE's place for
+    # this picture agrees with the pass's (HOLD_AGREE px), else as below
+    hold = view.get("hold")
+    if hold and max(abs(report["frame_offset"][0] - view["at"][0]), abs(report["frame_offset"][1] - view["at"][1])) > HOLD_AGREE:
+        report["hold_skipped"] = [round(report["frame_offset"][0] - view["at"][0], 1), round(report["frame_offset"][1] - view["at"][1], 1)]
+        hold = None
     if not view.get("centre"):
         # north up only (a pass Auto center does not centre): the view stays on the frame's middle
         cx, cy = (w - 1) / 2, (h - 1) / 2
+    held = bool(hold) and (not view.get("centre") or not disk_in_frame(image[..., 3], cx, cy, view.get("radius", 0)))
+    if held:
+        cx, cy = (w - 1) / 2 + hold[0], (h - 1) / 2 + hold[1]
+        report["held"] = hold
     left, top = round(cx - side / 2), round(cy - side / 2)
     # a body whose whole disk is in the frame goes to the middle, the sky round it black where the frame ends; a
     # body the frame cuts (caught at its edge, or bigger than it) is moved only as far as the frame's data goes,
     # so the view never takes in black beyond the frame's edge on a side where the frame could fill it and half the
     # picture does not go black (where the frame is narrower than the view, the view sits on the frame's middle)
     rows, cols = np.flatnonzero(image[..., 3].any(1)), np.flatnonzero(image[..., 3].any(0))
-    if len(rows) and not disk_in_frame(image[..., 3], cx, cy, view.get("radius", 0)):
+    if len(rows) and not held and not disk_in_frame(image[..., 3], cx, cy, view.get("radius", 0)):
         def fit(start, lo, hi):
             return min(max(start, lo), hi - side) if hi - lo >= side else round((lo + hi) / 2 - side / 2)
         wanted = (left, top)
@@ -589,7 +601,7 @@ _recent, _recent_lock, RECENT = {}, threading.Lock(), 4
 
 
 def _recent_composite(ids, centre=None):
-    key = (calibration.mode(), tuple(ids), centre and centre["side"])
+    key = (calibration.mode(), tuple(ids), centre and centre["side"], centre and tuple(centre.get("hold") or ()))
     with _recent_lock:
         hit = _recent.pop(key, None)
         if hit:
@@ -605,7 +617,7 @@ def _recent_composite(ids, centre=None):
 
 def centre_folder(folder, centre):
     """The cache folder of the pictures in folder, centred by Auto center on a view of centre["side"] px."""
-    return f"{folder}-{CENTRE_VERSION}-s{int(centre['side'])}" if centre else folder
+    return f"{folder}-{CENTRE_VERSION}{obs_mosaic.HOLD_RULE if centre and centre.get('hold') else ''}-s{int(centre['side'])}" if centre else folder
 
 
 def color_webp(ids, size, cache, fmt="webp", channel=None, centre=None):

@@ -3797,11 +3797,50 @@ def centre_view(frame_id):
         hit = dict(hit, side=FRAME, radius=RADIUS.get(target, 0) / (g[2] * IFOV[cam]))
     else:
         hit = dict(hit, side=FRAME) if hit.get("north") else dict(hit)
+    if found and (hit["centre"] or hit.get("north")):
+        hold = hold_of(u, found[1])
+        # (a centred pass's frame holds only when the frame cuts the body's disk, so its still would not be centred)
+        if hold and (hit.get("north") or max(abs(v) for v in hold["at"]) + hit["radius"] > FRAME / 2):
+            hit = dict(hit, **hold)
     with _lock:
         if len(_centre_of) >= UNIT_OF_KEEP:
             _centre_of.clear()
         _centre_of[frame_id] = hit
     return dict(hit)
+
+
+HOLD_SPREAD = 0.25   # of a frame: the most a pass's frames may point away from their average for its stills to hold
+HOLD_RULE = "h1"     # names the held stills' cache folders (frame_server.centre_folder)
+
+
+def hold_of(u, n):
+    """Auto center's hold for frame n of pass u, when its still cannot be centred (the body's centre off the frame, a
+    close-up turned north up, or a disk the frame cuts): the body kept where it sits on average over the pass, so it
+    holds still from picture to picture as SPICE places it, as the pass's movie holds it (Sam 2026-10-30: a Saturn
+    stare's stills jumped with each pointing while Auto center was on). {"hold": (dx, dy), "at": (x, y)}: the view's
+    middle moved from the frame's middle by (dx, dy), and where SPICE puts the frame's middle from the body's centre
+    (both full resolution pixels of frame n), which centred checks against the picture's own placement; None for a
+    pass whose frames point further apart than HOLD_SPREAD of a frame (a mosaic: its stills would be mostly black)
+    or a frame SPICE has not placed."""
+    frames = u["frames"]
+    if not (0 <= n < len(frames)) or not frames[n][-1]:
+        return None
+    z = u["z"]
+    placed = [fr for fr in frames if fr[7]]
+    angles = reel.north_angles([fr[1] for fr in placed])
+
+    def middle(fr):
+        # where the frame's middle sits from the body's centre, north up, reference pixels (frames_seen's turn)
+        x, y, fz = fr[5], fr[6], fr[7]
+        a = math.radians(angles.get(fr[1], 0.0))
+        c, s, k = math.cos(a), math.sin(a), fz / z
+        return np.array(((c * x + s * y) * k, (c * y - s * x) * k))
+    pts = np.array([middle(fr) for fr in placed])
+    m = pts.mean(0)
+    if np.abs(pts - m).max() > HOLD_SPREAD * FRAME:
+        return None
+    me, k = middle(frames[n]), z / frames[n][7]
+    return {"hold": [round(float(v), 1) for v in (m - me) * k], "at": [round(float(v), 1) for v in me * k]}
 
 
 def _on_disk(fp, radius):
