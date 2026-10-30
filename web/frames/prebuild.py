@@ -286,7 +286,8 @@ def make_pass(u, cache, sizes=(1024, 512), within=None, style=None, made=None, s
     """What a window shows as it plays through the pass, at every frame at 1024 and 512, after the pass's plan and
     every tile (as web/frames/warm_pass.py does for one observation): a mosaic movie's rolling picture
     (rolling_webp, wait=True, in frame order, so each grows from the one before and is named after every tile
-    drawn, the name a window asks for), a mosaic's mosaic so far, a movie's steadied frame.
+    drawn, the name a window asks for), a mosaic's mosaic so far, a movie's steadied frame (and a toss-up's other
+    kind: a mosaic's frames, a movie's mosaic so far).
     within (t0, t1), seconds since 1970: only the pictures of frames taken then (a stretch of the timeline, segment
     below), after every tile up to the last of them (and every rolling picture before them, each grown from the
     last). style: the page's Settings > Movie choices, as the window puts them in its request ({trail, laps,
@@ -304,6 +305,11 @@ def make_pass(u, cache, sizes=(1024, 512), within=None, style=None, made=None, s
             return 0
         obs_mosaic.tile(u, j, cache, p["display_scale"])
     kind, n = u.get("kind"), 0
+
+    def movie(f, size):
+        obs_mosaic.movie_webp(f[1], size, cache, style.get("trail", 0), style.get("color", True), wait=True, ahead=0,
+                              centre=style.get("center", True), steady=style.get("steady", 0),
+                              exposure=style.get("exposure", 0))
     for j, f in enumerate(u["frames"][:last + 1]):
         if stopped and stopped():
             return n
@@ -318,9 +324,13 @@ def make_pass(u, cache, sizes=(1024, 512), within=None, style=None, made=None, s
             elif u["mosaic"]:
                 obs_mosaic._mosaic_at(u, j, size, cache)
             else:
-                obs_mosaic.movie_webp(f[1], size, cache, style.get("trail", 0), style.get("color", True), wait=True, ahead=0,
-                                      centre=style.get("center", True), steady=style.get("steady", 0),
-                                      exposure=style.get("exposure", 0))
+                movie(f, size)
+            # a toss-up, a pass the pointing alone cannot tell a movie from a mosaic (obs_mosaic._judge), has the other
+            # kind too, so the window's Movie or Mosaic shows it at once
+            if u.get("tossup") and kind == "mosaic":
+                movie(f, size)
+            elif u.get("tossup") and kind == "movie":
+                obs_mosaic._mosaic_at(u, j, size, cache)
         if f[3] >= t0:
             n += 1
             if made:
