@@ -72,6 +72,10 @@ def test_names():
     assert o("")["movie"] == export.MOVIE and o("sets=0")["movie"]["sets"] is False
     assert export.job_id(o("")) != export.job_id(o("sets=0"))
     assert export.job_id(o("sets=1")) == export.job_id(o(""))
+    # the Background: only another color than black is in the film's name, and paints its panes
+    assert "bg" not in o("bg=000000")["movie"] and o("bg=%230D1A33")["movie"]["bg"] == "0d1a33" and "bg" not in o("bg=zz")["movie"]
+    assert export.job_id(o("bg=0d1a33")) != export.job_id(o(""))
+    assert export.background(o("bg=0d1a33")["movie"]) == (13, 26, 51) and export.background(o("")["movie"]) == (0, 0, 0)
 
 
 if __name__ == "__main__":

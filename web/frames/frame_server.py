@@ -45,7 +45,8 @@ Routes:
   ...&center=1                 Auto center (a camera window's setting): the picture centred on the body, north up,
                                by SPICE (color_image.processed_frame), at the frame's own scale (one frame square
                                round the body); whether to centre is decided once for the pass (obs_mosaic.centre_view,
-                               the rule of a movie centred on its body).
+                               the rule of a movie centred on its body). Centred is centred: the body's centre is
+                               the picture's middle however much of it the frame leaves empty (transparent).
                                A close-up pass (frames on a body too big for the view) is turned north up where it
                                is, so the surface holds still. 404 with X-Center {"centre": false, "why"} for a ring,
                                spoke or sky pass (Cassini kept those upright in the camera, the steady view) or a
@@ -500,9 +501,9 @@ def webp(frame_id, size, cache, fmt="webp"):
 COLOR_VERSIONS = {"balanced": "color-v33", "raw": "color-v16", "classic": "color-v10"}
 PROC_VERSIONS = {"balanced": "proc-v12", "raw": "proc-v12", "classic": "proc-v6"}   # one frame: no colors to mix
 # Auto center (center=1): the same pictures centred on the body by SPICE, cached beside them in folders of their own
-HOLD_AGREE = 40   # full resolution px: SPICE's place for a held still and the pass's may differ by this much (centred)
-CENTRE_VERSION = "ctr4"   # ctr2: the shift stops at the frame's data edge; ctr3: only when the body's disk is cut by it;
-                          # ctr4: a close-up pass is turned north up where it is
+HOLD_AGREE = 40   # full resolution px: SPICE's place for a held still and the pass's may differ by this much
+CENTRE_VERSION = "ctr5"   # ctr2: the shift stops at the frame's data edge; ctr3: only when the body's disk is cut by it;
+                          # ctr4: a close-up pass is turned north up where it is; ctr5: no stop, centred is centred
 
 
 def in_background(target, *args):
@@ -533,19 +534,6 @@ def composite(ids, channel=None, centre=None):
     return Image.fromarray(np.dstack(chans + [alpha]), "RGBA"), report
 
 
-def disk_in_frame(alpha, cx, cy, r):
-    """True when the body's disk (centre cx, cy, radius r canvas pixels) lies on the frame's data: its centre and
-    the four ends of its axes are inside the frame (alpha, the frame's coverage on the canvas)."""
-    if not r or r <= 0:
-        return False
-    h, w = alpha.shape
-    for x, y in ((cx, cy), (cx - r, cy), (cx + r, cy), (cx, cy - r), (cx, cy + r)):
-        i, j = int(round(y)), int(round(x))
-        if not (0 <= i < h and 0 <= j < w and alpha[i, j]):
-            return False
-    return True
-
-
 def centred(ids, view):
     """The composite of ids (or one frame) centred on the body, north up: the pipeline's color path and SPICE
     placement (color_image.processed_frame: load_aligned as composite, then auto_center), cut to the square of
@@ -559,32 +547,21 @@ def centred(ids, view):
     side = int(view["side"])
     cx = (w - 1) / 2 - report["frame_offset"][0]
     cy = (h - 1) / 2 - report["frame_offset"][1]
-    # held (obs_mosaic.hold_of): a still Auto center cannot centre keeps the body where it sits on average over the
-    # pass, so it holds still as SPICE places it, black where the frame does not reach; only when SPICE's place for
-    # this picture agrees with the pass's (HOLD_AGREE px), else as below
-    hold = view.get("hold")
-    if hold and max(abs(report["frame_offset"][0] - view["at"][0]), abs(report["frame_offset"][1] - view["at"][1])) > HOLD_AGREE:
-        report["hold_skipped"] = [round(report["frame_offset"][0] - view["at"][0], 1), round(report["frame_offset"][1] - view["at"][1], 1)]
-        hold = None
+    # centred means centred (Sam, 2026-10-30): the body's centre goes to the middle however much of the view the
+    # frame leaves empty (black, or the page's background, where it does not reach), so it holds still from picture
+    # to picture as SPICE places it, even where the frame cuts its disk (Saturn's centre below a WAC stare's frame)
     if not view.get("centre"):
-        # north up only (a pass Auto center does not centre): the view stays on the frame's middle
+        # north up only (a pass Auto center does not centre): the view stays on the frame's middle, or, held
+        # (obs_mosaic.hold_of), keeps the body where it sits on average over the pass, so the pass holds still, only
+        # when SPICE's place for this picture agrees with the pass's (HOLD_AGREE px)
         cx, cy = (w - 1) / 2, (h - 1) / 2
-    held = bool(hold) and (not view.get("centre") or not disk_in_frame(image[..., 3], cx, cy, view.get("radius", 0)))
-    if held:
-        cx, cy = (w - 1) / 2 + hold[0], (h - 1) / 2 + hold[1]
-        report["held"] = hold
+        hold = view.get("hold")
+        if hold and max(abs(report["frame_offset"][0] - view["at"][0]), abs(report["frame_offset"][1] - view["at"][1])) > HOLD_AGREE:
+            report["hold_skipped"] = [round(report["frame_offset"][0] - view["at"][0], 1), round(report["frame_offset"][1] - view["at"][1], 1)]
+        elif hold:
+            cx, cy = (w - 1) / 2 + hold[0], (h - 1) / 2 + hold[1]
+            report["held"] = hold
     left, top = round(cx - side / 2), round(cy - side / 2)
-    # a body whose whole disk is in the frame goes to the middle, the sky round it black where the frame ends; a
-    # body the frame cuts (caught at its edge, or bigger than it) is moved only as far as the frame's data goes,
-    # so the view never takes in black beyond the frame's edge on a side where the frame could fill it and half the
-    # picture does not go black (where the frame is narrower than the view, the view sits on the frame's middle)
-    rows, cols = np.flatnonzero(image[..., 3].any(1)), np.flatnonzero(image[..., 3].any(0))
-    if len(rows) and not held and not disk_in_frame(image[..., 3], cx, cy, view.get("radius", 0)):
-        def fit(start, lo, hi):
-            return min(max(start, lo), hi - side) if hi - lo >= side else round((lo + hi) / 2 - side / 2)
-        wanted = (left, top)
-        left, top = fit(left, cols[0], cols[-1] + 1), fit(top, rows[0], rows[-1] + 1)
-        report["centre_shift_capped"] = [int(left - wanted[0]), int(top - wanted[1])]
     out = np.zeros((side, side, 4), np.uint8)
     x0, y0, x1, y1 = max(left, 0), max(top, 0), min(left + side, w), min(top + side, h)
     if x0 < x1 and y0 < y1:

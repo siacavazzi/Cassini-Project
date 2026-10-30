@@ -146,6 +146,11 @@ def options(q):
     # sets=0 (the setting off) shows every channel on its own as well, and only then is it in the film's name
     if get("sets", "1") == "0":
         movie["sets"] = False
+    # the Background (Settings > Processing, cameras.background) where a picture's frame does not reach (a centred
+    # body the frame caught at its edge): black by default, and only another color is in the film's name
+    bg = get("bg", "000000").lstrip("#").lower()
+    if len(bg) == 6 and all(c in "0123456789abcdef" for c in bg) and bg != "000000":
+        movie["bg"] = bg
     # the Movie Editor's Mosaics, over both settings: whole (every mosaic whole: a pass once, finished; a mosaic movie a
     # lap at a time) or tiles (every mosaic built tile by tile)
     if get("mos", "") == "whole":
@@ -792,14 +797,13 @@ class Pictures:
             return self._on_black(Image.open(io.BytesIO(made[0])), size), made[1]
         return None, ""
 
-    @staticmethod
-    def _on_black(im, size):
-        """im (any mode) size px on its longest side, as RGB over black."""
+    def _on_black(self, im, size):
+        """im (any mode) size px on its longest side, as RGB over black (or the film's Background, bg)."""
         im = im.convert("RGBA")
         if max(im.size) != size:
             s = size / max(im.size)
             im = im.resize((max(1, round(im.width * s)), max(1, round(im.height * s))), Image.LANCZOS)
-        black = Image.new("RGB", im.size)
+        black = Image.new("RGB", im.size, background(self.movie))
         black.paste(im, mask=im.getchannel("A"))
         return black
 
@@ -824,6 +828,12 @@ def label(e, what):
     return " · ".join(x for x in (f"{utc(e['t'])} UTC", target, f"{'NAC' if e['cam'] == 'N' else 'WAC'} {e['filters']}", kind) if x)
 
 
+def background(movie):
+    """The film's Background (options' bg) as an RGB tuple: black unless asked."""
+    bg = (movie or {}).get("bg", "000000")
+    return tuple(int(bg[i:i + 2], 16) for i in (0, 2, 4))
+
+
 class Film:
     """Draws the panes and caption and pipes whole frames to ffmpeg."""
 
@@ -842,7 +852,7 @@ class Film:
     def put(self, e, im, what):
         """Picture im of entry e goes up in its camera's pane (which keeps it until the next)."""
         x0 = self.opt["cams"].index(e["cam"]) * self.size
-        pane = Image.new("RGB", (self.size, self.size))
+        pane = Image.new("RGB", (self.size, self.size), background(self.opt["movie"]))
         if im is not None:
             pane.paste(im, ((self.size - im.width) // 2, (self.size - im.height) // 2))
         self.canvas.paste(pane, (x0, 0))

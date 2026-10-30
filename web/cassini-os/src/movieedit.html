@@ -72,6 +72,7 @@
 #mecard.zoomed { width: calc(100% - 20px); height: calc(100% - 50px); }
 #mecard .mebody { flex: 1 1 auto; min-height: 0; display: grid; grid-template-columns: minmax(0, 1fr) 250px; border-top: 1px solid var(--q-line); }
 #mecard .memain { min-width: 0; min-height: 0; display: grid; grid-template-rows: minmax(140px, 1fr) auto auto auto minmax(110px, 34%); grid-template-areas: "stage" "bar" "levels" "tabs" "strip"; background: #000; }
+#mestage { background: var(--cam-bg, #000); }
 #mecard.big .memain { grid-template-rows: minmax(140px, 1fr) auto auto 0 0; }
 #mecard.big :is(#mestrip, #metabs) { display: none; }
 #mestage { grid-area: stage; } #mecard .mebar { grid-area: bar; } #melevels { grid-area: levels; } #mestrip { grid-area: strip; }
@@ -613,11 +614,12 @@ body.phone #mestrip { grid-template-columns: repeat(auto-fill, 72px); grid-auto-
   // picture b (a bitmap) with e's framing (moved by e's nudge, cut to the crop), as export.framed draws it; b itself
   // when it has none
   function framedOf(b, e, crop = cropAt(e)) {
-    const nd = (e && ME.nudge.get(e.id)) || [0, 0];
-    if (!crop && !nd[0] && !nd[1]) return b;
+    const nd = (e && ME.nudge.get(e.id)) || [0, 0], bg = window.cassiniBackground ? window.cassiniBackground() : "#000000";
+    // (over the Background, Settings > Processing, where the frame does not reach: drawn even unframed when not black)
+    if (!crop && !nd[0] && !nd[1] && bg.toLowerCase() === "#000000") return b;
     const [x0, y0, x1, y1] = crop || WHOLE, W = b.width, H = b.height, cw = (x1 - x0) * W, ch = (y1 - y0) * H, k = Math.max(W, H) / Math.max(cw, ch);
     const c = document.createElement("canvas"); c.width = Math.max(1, Math.round(cw * k)); c.height = Math.max(1, Math.round(ch * k));
-    const g = c.getContext("2d"); g.fillStyle = "#000"; g.fillRect(0, 0, c.width, c.height);
+    const g = c.getContext("2d"); g.fillStyle = bg; g.fillRect(0, 0, c.width, c.height);
     g.imageSmoothingQuality = "high";
     g.setTransform(k, 0, 0, k, -k * (x0 - nd[0]) * W, -k * (y0 - nd[1]) * H);
     g.drawImage(b, 0, 0);
@@ -636,6 +638,7 @@ body.phone #mestrip { grid-template-columns: repeat(auto-fill, 72px); grid-auto-
     cropBox();
   }
   new ResizeObserver(() => paint()).observe(stage);
+  if (window.cassiniSettings) window.cassiniSettings.on("cameras.background", () => paint());
 
   // ---------- picking frames ----------
   function select(i, how = {}) {
