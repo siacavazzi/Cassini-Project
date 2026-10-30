@@ -556,11 +556,15 @@ def _measure(opt, key, path, pictures, got):
 def stretches(pics):
     """The film's pictures (indexes) Even out evens on their own, as movie mode evens a pass (exposure_gains): one
     camera's pictures in a row of one kind (mosaic, movie pass, color, processed or raw frame), in color or gray, of
-    one target. A change of any of those is the picture changing, not its exposure."""
+    one target. A change of any of those is the picture changing, not its exposure. In color: what the picture shows,
+    a color composite or a mosaic at a finished color set; a processed, raw or movie frame that completes a set is that
+    frame (a movie frame of a color pass is in color all through), so it stays in its neighbours' stretch (the set's
+    frames once split every color set's last frame off on its own, and Even out left them and the run between them
+    as they were, 2026-10-30)."""
     out, last = [], {}
     for i, e in enumerate(pics):
-        k = (e.get("first") or (e["try"][0][0] if e.get("try") else "frame"),
-             bool(e.get("set")) or (e.get("first") or (e["try"][0][0] if e.get("try") else "")) == "color", e.get("target"))
+        first = e.get("first") or (e["try"][0][0] if e.get("try") else "frame")
+        k = (first, first == "color" or (first == "mosaic" and bool(e.get("set"))), e.get("target"))
         run = last.get(e["cam"])
         if run is None or run[0] != k:
             run = last[e["cam"]] = (k, [])
