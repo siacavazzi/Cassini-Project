@@ -43,7 +43,7 @@
      measured by the frame server on the pictures the film draws, /export/levels.json; NAC white, WAC amber; dim as
      made, bright as the film will show it). Level points set the film's exposure there (straight lines between them,
      flat before the first and after the last): drag a point up or down, double-click the graph to add one, double-click
-     a point (or Alt-click it) to take it out; Level here does the same for the frame in front. Even out smooths the
+     a point (or Alt-click it) to take it out; Level here does the same for the frame in front. Even exposure smooths the
      brightness over that many pictures with movie mode's own exposure normalization (obs_mosaic.evened_gains, each
      camera's run of one kind of picture and one target on its own). The levels are an exposure change on top of the
      look's (the studio's exposure, within its range), on the preview, Play, downloads and the film alike.
@@ -234,7 +234,7 @@ body.phone #mestrip { grid-template-columns: repeat(auto-fill, 72px); grid-auto-
       <div class="menote">The look goes on every frame: the preview, Play, each downloaded frame and the saved movie.</div>
       <h4><span>Exposure</span><span class="sp"></span><button id="melvclear" title="Take out every level point">Clear</button></h4>
       <div class="merow"><span>Level here</span><input type="range" id="melvhere" min="-2" max="2" step="0.05" aria-label="Exposure level at the frame in front"><span class="val" id="melvherev"></span></div>
-      <div class="merow"><span>Even out</span><input type="range" id="meeven" min="0" max="30" step="1" aria-label="Even out the brightness over this many pictures"><span class="val" id="meevenv"></span></div>
+      <div class="merow"><span>Even exposure</span><input type="range" id="meeven" min="0" max="30" step="1" aria-label="Even exposure: smooth flashes and jumps in brightness over this many pictures (0 off)"><span class="val" id="meevenv"></span></div>
       <div class="menote" id="melvnote"></div>
     </div>
   </div>
@@ -896,11 +896,11 @@ body.phone #mestrip { grid-template-columns: repeat(auto-fill, 72px); grid-auto-
     if (document.activeElement !== here || !here.matches(":active")) here.value = inFilm ? lineOf(e) : 0;
     $("melvherev").textContent = inFilm ? fmtEv(+here.value) : "—";
     const ev = $("meeven"); ev.disabled = !ME.lv.ready; ev.value = ME.even;
-    $("meevenv").textContent = ME.even ? `${ME.even} pictures` : "Off";
+    $("meevenv").textContent = ME.even ? `over ${ME.even}` : "Off";
     $("melvclear").disabled = !ME.levels.size;
-    $("melvnote").textContent = !ME.lv.ready && !ME.lv.error && ME.lv.total != null ? "Even out needs a newer frame server; the level points work now."
+    $("melvnote").textContent = !ME.lv.ready && !ME.lv.error && ME.lv.total != null ? "Even exposure needs a newer frame server; the level points work now."
       : ME.lv.error || (ME.levels.size ? "Drag a point on the graph to brighten or dim the movie there. Double-click a point to take it out."
-        : "Double-click the graph to add a level point, then drag it up or down. Even out smooths flashes and jumps in brightness.");
+        : "Even exposure takes out flashes and jumps in brightness from picture to picture (a filter brighter than the next, stray light) and keeps slow changes; slide right to even more. Double-click the graph to add a level point, then drag it up or down.");
     $("mectr").querySelectorAll("button").forEach(b => b.setAttribute("aria-pressed", String(b.dataset.v === (ME.ctr == null ? "" : ME.ctr ? "1" : "0"))));
     $("memos").querySelectorAll("button").forEach(b => b.setAttribute("aria-pressed", String(b.dataset.v === (ME.mos || ""))));
     const mp = new Set(ME.frames.filter(e => e.pass && ofCam(e)).map(e => e.pass)).size;
@@ -924,7 +924,7 @@ body.phone #mestrip { grid-template-columns: repeat(auto-fill, 72px); grid-auto-
     el.addEventListener("change", () => { on = false; changed(); show(); });
   }
   slide($("melvhere"), v => { const e = ME.frames[ME.sel]; if (e && kept(e)) ME.levels.set(e.id, clamp(v, -EV, EV)); }, () => { graph(); sideLevels(); paint(); });
-  slide($("meeven"), v => { ME.even = clamp(Math.round(v), 0, EVEN); }, () => { $("meevenv").textContent = ME.even ? `${ME.even} pictures` : "Off"; });
+  slide($("meeven"), v => { ME.even = clamp(Math.round(v), 0, EVEN); }, () => { $("meevenv").textContent = ME.even ? `over ${ME.even}` : "Off"; });
 
   $("melvclear").addEventListener("click", () => { change(() => { ME.levels = new Map(); }); show(); });
   $("mefrclear").addEventListener("click", () => { change(() => { ME.crop = ME.crop2 = null; ME.nudge = new Map(); }); cropping = null; show(); });
