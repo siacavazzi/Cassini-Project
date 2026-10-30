@@ -1301,6 +1301,7 @@ def over_grey(colour, grey, k, gamma=2.2, gain=...):
 
 
 FILLED = 0.5       # a pass is all body when the body's disk covers the middle of more than this share of its frames
+FILL_DISK = 0.5    # ... and its white is its disk's (DISK_WHITE) when the disk covers less than this share of them
 DETAIL = 2.0       # filled passes: how much the local contrast is raised (detail())
 DETAIL_SIGMA = 0.05  # ... over this much of a frame
 
@@ -1327,16 +1328,20 @@ def _sky_fine(iofs, masks):
                            for i, l, m in zip(iofs, local, masks)])
 
 
-def tile_scale(scale, f, own_sky=False, seen=None):
+def tile_scale(scale, f, own_sky=False, seen=None, disk=None):
     """The display scale of one tile of filter f: the pass's, and with own_sky (a movie's frames, each shown
     alone) a black raised to the frame's own sky level plus the band's height over it (sky_tops) where that sky
     sits above the pass's: in the Jupiter approach movie one color set's stray light lifts its sky over the
     pass's level, and its frame showed as an olive square that the next set's didn't. Never lowered (the sky's
     stripes would come back as a veil), and never in a mosaic, whose tiles meet (one tile's black of its own
-    shows as a step). seen: a dict the raised black is put in."""
+    shows as a step), unless the body is small (small_body: its tiles are all sky, which meets sky). disk: the
+    body's disk on the frame (x, y, radius: _disk_mask's, full resolution pixels) when it is small: a frame lit all
+    over by stray light round a moon a few pixels across (Pallene, Hati, Kiviuq) has no dark sky to find, so its sky
+    is everything off the disk, and its own black takes the veil away (it went from white to black over the pass
+    as the stray light faded). seen: a dict the raised black is put in."""
     out = {**scale, "blacks": [scale["blacks"].get(f, 0.0)]}
     top = scale.get("sky_tops", {}).get(f)
-    if not own_sky or top is None:
+    if not own_sky or (top is None and disk is None):
         return out
     black = out["blacks"][0]
 
@@ -1345,8 +1350,15 @@ def tile_scale(scale, f, own_sky=False, seen=None):
         q = iof[::4, ::4].astype(np.float32)
         top_of_sky = 0.05 * np.percentile(q, 99.9)
         m = q < top_of_sky
+        veiled = False
         if m.mean() <= SKY_MIN:
-            return None
+            if disk is None:
+                return None
+            # no dark sky: a small body's frame lit all over (stray light), its sky everything off the disk
+            m = ~_disk_mask(q.shape, iof.shape, *disk)
+            top_of_sky, veiled = float(np.percentile(q[m], 99.9)) if m.any() else 0.0, True
+            if m.mean() <= SKY_MIN:
+                return None
         # pixels far under the sky are not sky: a line lost in downlink calibrates to about -1 I/F, and the mean over
         # SKY_SMOOTH pixels below spread a ninth of it onto the rows beside it, which the darker half of the sky then
         # picked up as grain; a faint frame's black went to ~0.09 I/F, over everything in it (35 of the 57 black
@@ -1360,18 +1372,24 @@ def tile_scale(scale, f, own_sky=False, seen=None):
             q = np.where(low, np.float32(median), q)
             if m.mean() <= SKY_MIN:
                 return None
-        (level,), _ = calibration.sky_levels([[q]], [[m]])
+        (level,), margin = calibration.sky_levels([[q]], [[m]])
+        if veiled:
+            # (the veil is all stray light, smooth, brighter on one side: black over the top of it, SKY_SMOOTH pixels
+            # round, so none of it shows; stars and the moon are sharp and stay over it)
+            level = float(np.percentile(cv2.blur(q, (SKY_SMOOTH, SKY_SMOOTH))[m], VEIL_TOP))
         # the band's height over the sky at least this frame's own (its sky's fine structure, as pass_scale measures
         # the pass's): a frame lit by stray light has a grainier sky than the pass's typical one, and in the Jupiter
         # approach movie its red and green grain rose over a black set by the pass's height, a faint red cast
         fine = _sky_fine([q], [m])
         own = float(np.percentile(fine, SKY_TOP_PCT) - np.median(fine)) if fine.size > 100 else 0.0
-        raised = level + max(top, own)
+        # (a pass with no dark sky has no height of its own: the frame's noise margin, as a single picture's)
+        raised = level + max(margin if top is None else top, own)
         if raised <= black:
             return None
         # and never at or over the frame's lit median (its pixels over the sky): a black there draws the frame black
+        # (a veiled frame's lit pixels are its veil: the sky, which is what goes black)
         lit = q[q >= top_of_sky]
-        if lit.size and raised >= float(np.median(lit)):
+        if not veiled and lit.size and raised >= float(np.median(lit)):
             return None
         if seen is not None:
             seen["black"] = raised
@@ -1392,14 +1410,41 @@ def _disk_pixels(q, shape, x, y, radius):
     radius: the disk's, full resolution pixels), DISK_MARGIN wider. Empty when the disk is not on the frame."""
     if radius <= 0:
         return q[:0, 0]
-    reach = radius * (1 + DISK_MARGIN[0]) + DISK_MARGIN[1]
+    return q[_disk_mask(q.shape, shape, x, y, radius)]
+
+
+def _disk_mask(qshape, shape, x, y, radius):
+    """_disk_pixels' disk as a mask of the quarter size frame (qshape) of a frame of the given shape; DISK_MARGIN
+    round the disk even when its radius is 0 (a body under a pixel across: SPICE's error round its place)."""
+    reach = max(radius, 0) * (1 + DISK_MARGIN[0]) + DISK_MARGIN[1]
     k = 1024 / shape[0]   # (the frame's pixels are full resolution ones scaled to 1024)
     cy, cx = (511.5 - y) / k, (511.5 - x) / k
     r = reach / k
-    rows = np.arange(0, shape[0], 4, dtype=np.float32)[:q.shape[0], None]
-    cols = np.arange(0, shape[1], 4, dtype=np.float32)[None, :q.shape[1]]
-    inside = (rows - cy) ** 2 + (cols - cx) ** 2 < r * r
-    return q[inside]
+    rows = np.arange(0, shape[0], 4, dtype=np.float32)[:qshape[0], None]
+    cols = np.arange(0, shape[1], 4, dtype=np.float32)[None, :qshape[1]]
+    return (rows - cy) ** 2 + (cols - cx) ** 2 < r * r
+
+
+VEIL_TOP = 99       # tile_scale: a small body's veiled frame's black is over this percentile of its smoothed sky
+SMALL_BODY = 0.02   # of a frame: a body whose disk's radius is under this is small (small_body): a speck, not
+                   # Enceladus 64 px across the edge of a plume movie, whose plume fills the frame
+
+
+def _speck(u):
+    """True when pass u's body is small (small_body) on most of its placed frames."""
+    placed = [fr for fr in u["frames"] if fr[7]]
+    return bool(placed) and sum(small_body(u, fr) is not None for fr in placed) * 2 > len(placed)
+
+
+def small_body(u, frame):
+    """The disk (x, y, radius in full resolution pixels) of pass u's body on frame (one of u["frames"]) when the body
+    is small on it (under SMALL_BODY of a frame in radius: a small moon, a speck), else None: the sky round it is
+    the whole frame but the disk (tile_scale)."""
+    *_, x, y, z = frame
+    if not z or u["key"][0] not in RADIUS:
+        return None   # (a target with no disk of its own, rings or sky, is not one)
+    radius = RADIUS[u["key"][0]] / (z * IFOV[u["key"][2]])
+    return (x, y, radius) if radius < SMALL_BODY * FRAME else None
 
 
 def pass_scale(frames, u, drawn=None, true_colour=False, sky_tops=None, lit_levels=None):
@@ -1462,6 +1507,12 @@ def pass_scale(frames, u, drawn=None, true_colour=False, sky_tops=None, lit_leve
         white = max(float(np.percentile(np.concatenate([i.ravel() for i in iofs]) - blacks[f], 99.5))
                     for f, iofs in by.items())
         gamma = 1.5
+    if filled and on and sum(v.size for v in on.values()) < FILL_DISK * sum(i.size for iofs in by.values() for i in iofs):
+        # a body in the middle of the frames but small in them (Titan 40 px across in 000TI's movie, Dione in 038DI's, an
+        # Enceladus plume movie): the 99.5th percentile of the frames is on the sky or in the body's middle, and the
+        # body clipped white. White at least the DISK_WHITE percentile of its disk, as a body against the sky has (a
+        # body over most of the frames already sets their 99.5th percentile: left as it is)
+        white = max(white, max(float(np.percentile(on[f] - blacks[f], DISK_WHITE)) for f in on))
     toe = None
     if calibration.look() == "balanced":
         # where the pass has dark sky, no band's black below that sky's level plus the noise margin, as a single
@@ -1605,8 +1656,9 @@ def _tile_made(u, n, cache, scale, base):
     path, fid, f, t, nm, x, y, z = u["frames"][n]
     k = z / u["z"] if z else 1.0
     seen = {}
+    disk = small_body(u, u["frames"][n])
     try:
-        image, _, rep = color_image.processed_frame([path], hdr=True, scale=tile_scale(scale, f, bool(u.get("movie")), seen),
+        image, _, rep = color_image.processed_frame([path], hdr=True, scale=tile_scale(scale, f, bool(u.get("movie") or disk), seen, disk),
                                                     repeat_window=u.get("repeat_gap", mosaic_benchmark.REPEAT_GAP),
                                                     around=_around(u, n) if u.get("movie") else None)
     except Exception as e:
@@ -1617,12 +1669,22 @@ def _tile_made(u, n, cache, scale, base):
         # and white lace where the ground is bright) among tiles of its filter that are: left out, as a colour set leaves
         # out such a channel. Phoebe 2004-06-11 has them at pointings of their own
         image, rep = None, {**rep, "why": "can't be calibrated (8LSB or an unknown filter or gain): left out of the mosaic"}
+    share = float(rep.get("saturated_share") or 0.0) if image is not None else 0.0
+    if image is not None and u.get("mosaic") and share >= SATURATED_ALL and calibration.step("calibrate"):
+        # a frame the camera saturated all over carries no picture: calibrated, it is one flat field at the top of the
+        # camera's range over its exposure, so a long exposure's is dark and a short one's bright (101SA SPOLEDYN001 W
+        # took 10 to 82 s frames between its 2.6 s ones: its places flickered black and white lap to lap). Left out
+        image, rep = None, {**rep, "why": f"saturated all over ({share:.0%}): left out of the mosaic"}
     out = {"n": n, "id": fid, "filter": f, "t": t, "stacked": rep.get("stacked"), "calibrated": rep.get("calibrated"), **seen}
     if rep.get("spikes_px"):
         out["spikes_px"] = rep["spikes_px"]
     if rep.get("lost_px"):
         # the share of the frame lost in downlink that no repeat or fill made up (load_aligned's lost_px): partial()
         out["lost"] = round(rep["lost_px"][1] / FRAME ** 2, 4)
+    if share:
+        # the share of the frame the camera saturated in every exposure merged (load_aligned's, the pixels drawn white:
+        # over_exposed)
+        out["saturated"] = share
     os.makedirs(os.path.dirname(base), exist_ok=True)
     if image is not None and "frame_offset" in rep:
         side = round(image.shape[0] * k)
@@ -3128,8 +3190,8 @@ EXPOSURE_LIT = 0.04      # of the brightest: the pixels a brightness is measured
 EXPOSURE_SIDE = 160      # px: the movie pictures a pass's brightness is measured on (exposure_chain) are this big
 # a movie's brightness chain (exposure_chain), kept with the pass for each way of drawing it; renamed (with the movie
 # frames drawn with it, movie_webp) whenever the rule changes
-EXPOSURE_FILE = "exposure4-{}-" + PLAN_FILE
-EXPOSURE_RULE = 6        # the way the gains are worked out from the chain: in the movie frames' names (movie_webp)
+EXPOSURE_FILE = "exposure5-{}-" + PLAN_FILE
+EXPOSURE_RULE = 7        # the way the gains are worked out from the chain: in the movie frames' names (movie_webp)
 EXPOSURE_GREY_RUN = 6    # frames: a colour pass's grey frames (its filters coming in) evened only in a run this long
 EXPOSURE_SAME = 0.5      # of the larger lit area: two pictures sharing less lit view than this show different scenes
 
@@ -3192,6 +3254,12 @@ def exposure_chain(u, cache, p=None, colour=True, centre=True, steady=0):
                         step = math.log(levels[1] / levels[0])
                         logs[n], hows[n] = [logs[j][0] + step, stretch, bool(kind)], f"{math.exp(step):.3f} x {j}"
             last = (n, a, kind)
+        if _speck(u):
+            # a pass of a speck (small_body on most of its frames): its pictures are sky with the body a dot, and the
+            # sky's noise and stars are all a brightness chain measures; evening them pumped that noise up 4x frame to
+            # frame (Kiviuq 112OT, Pallene 139PL once their stray-light veil went). Nothing to even: one level
+            logs = {n: [0.0] + v[1:] for n, v in logs.items()}
+            hows = {n: "a speck's pass: not evened" for n in hows}
         return logs, hows
 
     rec = _kept_tiles(u, cache, p["display_scale"])
@@ -3308,7 +3376,7 @@ def _steady_table(u, n, cache, centre=True, colour=False):
     else:
         warm_movie(u, n, 6, cache, exposure=how)
     return {"local": True, "fixed": True, "ids": [fr[1] for fr in u["frames"]], "n": ns, "exposure": exposure,
-            "partial": [m for m in ns if partial(tiles[m])],
+            "partial": [m for m in ns if unfit(u["frames"], m, lambda j: tiles.get(j) or {})],
             "sets": _colour_recipes(u, p, cache, ns, tiles) if colour and p.get("colour") else None,
             "filters": [fr[2] for fr in u["frames"]], "trail_most": TRAIL,
             "chain": [chain[n] for n in ns], "spice": [tiles[n]["offset"] for n in ns],
@@ -3347,7 +3415,7 @@ def _colour_recipes(u, p, cache, ns, tiles):
     by, placed = {}, set(ns)
     for n in ns:
         for run in reversed(colour_sets(u["frames"][:n + 1])):
-            got = {f: j for f, j in run if f in want and not (j in placed and partial(tiles.get(j) or {}))}
+            got = {f: j for f, j in run if f in want and not (j in placed and unfit(u["frames"], j, lambda i: tiles.get(i) or {}))}
             if len(got) < len(want):
                 continue
             if all(got[f] in placed for f in want):
@@ -3556,17 +3624,72 @@ def partial(t):
     return "offset" in t and 1.0 - t.get("lost", 0.0) < PARTIAL
 
 
+OVER_EXPOSED = 0.5   # of a frame: a movie frame the camera saturated this much of is over-exposed (over_exposed)
+SATURATED_ALL = 0.95   # ... and one saturated this much of carries no picture (left out of mosaics, never shown in movies)
+
+
+def over_exposed(t):
+    """True when tile report t is over-exposed: the camera saturated OVER_EXPOSED of the frame or more (its
+    "saturated"). Its saturated part calibrates to the top of the camera's range over a long exposure, far under what
+    was there, and draws as one flat field (the long frames of 201RI DRNGMOV001, 8.2 s after 2 s ones, ~75% of them
+    saturated: the rings a grey slab, lifted 4x by exposure normalization, every other frame)."""
+    return t.get("saturated", 0.0) >= OVER_EXPOSED
+
+
+def unfit(frames, n, tile_of):
+    """True when frame n of a movie (frames: the pass's, tile_of(j): tile j's report) is not shown, its filter's
+    whole frame before it held in its place (held_of): a partial frame (partial), a frame that can't be calibrated
+    among frames that can (an 8LSB frame, only its low 8 bits sent: the Phoebe 2004-06-12 movie's UV3 and IR3 frames
+    flashed grey; calibrated False, the tile's), or an over-exposed frame (over_exposed) between frames of its filter
+    that are not (a pass alternating short and long exposures; a run of over-exposed frames is what the camera saw,
+    and plays), or a frame saturated all over (SATURATED_ALL), which shows nothing. One rule for the server's movies and the page's (steady table's "partial")."""
+    t = tile_of(n)
+    if "offset" not in t:
+        return False
+    if partial(t) or (t.get("calibrated") is False and calibration.step("calibrate")):
+        return True
+    if not over_exposed(t):
+        return False
+    if t.get("saturated", 0.0) >= SATURATED_ALL:
+        return True   # (saturated all over: nothing of the picture, whatever is round it)
+    f = frames[n][2]
+    near = (next((j for j in range(n - 1, -1, -1) if frames[j][2] == f), None),
+            next((j for j in range(n + 1, len(frames)) if frames[j][2] == f), None))
+    return not any(j is not None and over_exposed(tile_of(j)) for j in near)
+
+
 def held_of(filters, n, is_partial, whole):
     """The frame a movie shows in frame n's place (pure, ported to the page: steady-local.html heldOf): n, or when n
-    is partial (is_partial(n)), the last frame before it of its filter (filters[j]) that is whole (whole(j): placed and
-    not partial), as the camera windows hold a colour movie's last set; n when there is none, so a pass whose frames
-    of a filter all came down partial keeps them. The movie keeps its frame count: only the picture is held."""
+    is partial (is_partial(n): unfit's frames), the last frame before it of its filter (filters[j]) that is whole
+    (whole(j): placed and not partial), as the camera windows hold a colour movie's last set; when its filter has
+    none, the last whole frame before it of any filter (the Phoebe 2004-06-12 movie's 8LSB frames are each its
+    filter's first); n when there is none, so a pass whose frames all came down partial keeps them. The movie keeps
+    its frame count: only the picture is held."""
     if not is_partial(n):
         return n
     for j in range(n - 1, -1, -1):
         if filters[j] == filters[n] and whole(j):
             return j
+    for j in range(n - 1, -1, -1):
+        if whole(j):
+            return j
     return n
+
+
+HELD_COVER = 0.5   # of a movie frame's own place: a colour set covering less of it is not shown for it (movie_frame)
+
+
+def held_cover(t, planes, rect, k):
+    """The share of tile t's place in the view (its box where SPICE puts it, as _place draws it) where every plane
+    of a colour set has the picture: 1.0 when the set covers all of it, 0.0 off it (movie_frame)."""
+    H, W = planes[0].shape[:2]
+    bx, by, bw, bh = t["box"]
+    left, top = round((t["offset"][0] + bx - rect[0]) * k), round((t["offset"][1] + by - rect[1]) * k)
+    x0, y0 = max(left, 0), max(top, 0)
+    x1, y1 = min(left + max(1, round(bw * k)), W), min(top + max(1, round(bh * k)), H)
+    if x0 >= x1 or y0 >= y1:
+        return 0.0
+    return float(np.logical_and.reduce([a[y0:y1, x0:x1, 3] > 0 for a in planes]).mean())
 
 
 def colour_sets(frames):
@@ -3621,9 +3744,16 @@ def movie_frame(u, n, cache, trail=0, colour=True, out=OUT, centre=True, steady=
         return None, rep
     frames, own = u["frames"], t
     tile_of = lambda j: own if j == n else tile(u, j, cache, p["display_scale"])
-    whole = lambda j: "offset" in tile_of(j) and not partial(tile_of(j))
-    # a partial frame (most of its lines lost in downlink) shows the last whole frame of its filter in its place
-    s = held_of([fr[2] for fr in frames], n, lambda j: partial(tile_of(j)), whole)
+    held = {}
+
+    def not_shown(j):
+        if j not in held:
+            held[j] = unfit(frames, j, tile_of)
+        return held[j]
+    whole = lambda j: "offset" in tile_of(j) and not not_shown(j)
+    # a partial frame (most of its lines lost in downlink), an uncalibrated or an over-exposed one (unfit) shows the
+    # last whole frame of its filter in its place
+    s = held_of([fr[2] for fr in frames], n, not_shown, whole)
     if s != n:
         rep["held"] = frames[s][1]
         t = tile_of(s)
@@ -3667,7 +3797,7 @@ def movie_frame(u, n, cache, trail=0, colour=True, out=OUT, centre=True, steady=
         want = p["colour"]
         for run in reversed(colour_sets(frames[:n + 1])):
             # (a partial member leaves its set incomplete: the set before it is held)
-            got = {f: j for f, j in run if f in want and not partial(tile_of(j))}
+            got = {f: j for f, j in run if f in want and not not_shown(j)}
             if len(got) < len(want):
                 continue
             for f, j in got.items():
@@ -3680,9 +3810,11 @@ def movie_frame(u, n, cache, trail=0, colour=True, out=OUT, centre=True, steady=
             break
     if used:
         planes = [_place(u, newest[f], rect, k, W, H, cache, p["display_scale"]) for f in used]
-        # a colour set held from an earlier pointing that is out of this frame's view (a track's last visit, a
-        # thousand px away) leaves the picture empty: the frame is drawn on its own instead
-        if any(a[..., 3].any() for a in planes):
+        # a colour set held from an earlier pointing (a track's last visit, a thousand px away, or a pass that moved
+        # on across the body) shows little or nothing where this frame is: colour_picture draws only where every
+        # filter has the picture. Under HELD_COVER of frame n's own place covered, the frame is drawn on its own
+        # instead
+        if held_cover(t, planes, rect, k) >= HELD_COVER:
             rgba = colour_picture(u, p, used, planes)
             rep["color"] = used
             rep["ids"] = [newest[f]["id"] for f in used]
@@ -3694,7 +3826,7 @@ def movie_frame(u, n, cache, trail=0, colour=True, out=OUT, centre=True, steady=
         if trail:
             # (behind the frame shown, held or not, and without partial frames)
             js = list(itertools.islice((j for j in range(s - 1, max(-1, s - 8 * trail), -1)
-                                        if frames[j][2] == t["filter"] and not partial(tile_of(j))), trail))
+                                        if frames[j][2] == t["filter"] and not not_shown(j)), trail))
             older = [at(q) for q in (tile(u, j, cache, p["display_scale"]) for j in reversed(js)) if "offset" in q]
             acc = np.zeros((H, W, 4), np.float32)
             for age, q in zip(range(len(older), 0, -1), older):

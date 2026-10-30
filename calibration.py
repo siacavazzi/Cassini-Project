@@ -546,12 +546,19 @@ GLOW_IOF = (1e-3, 5e-3)  # balanced, no sky: a picture whose median brightness (
 GLOW_PCT = 50        # or the E ring's glow, stray light, a star field's offset), not a sunlit surface, which is brighter than
                      # GLOW_IOF[1]: its black is its GLOW_PCT percentile, so the sky goes near black and only the glow
                      # brighter than the sky shows; in between, a blend (on a log scale) from the floor black
+GLOW_FINE = (0.04, 0.12)  # ... but only for smooth light: none of it as the picture's fine structure (the 90th percentile of
+                     # its 1.5 px detail, against 8 px, over its median) goes from GLOW_FINE[0] to GLOW_FINE[1], so faint
+                     # rings seen at high phase or from their unlit side keep the floor black (glows and star fields measure
+                     # under 0.04, rings over 0.15)
 TOE = 0.05           # balanced composites: a margin up to this share of white (the sky's noise) has a toe (tone) as wide as
                      # it and centred on it, so a night side or twilight it reaches into (the sky test counts it as sky)
                      # fades out smoothly instead of being cut off with a ragged edge; from twice this (a floor black,
                      # FLOOR_SHARE) the toe is an eighth of the margin, starting at it, as before; in between, a blend
 SATURATED = 4.0      # balanced, one frame: a pixel the camera saturated is drawn at least this many times white above its
                      # black (past the shoulder: white), whatever the picture's scale puts it at (draw_saturated)
+SATURATED_FLOOR = (0.05, 0.25)  # ... and a frame saturated over more than SATURATED_FLOOR[0] of it has less of its floor (and
+                     # glow) black, none from SATURATED_FLOOR[1]: what is left unsaturated is its dim edge, not an even
+                     # surface, and keeps a soft gradient up to the white instead of going black
 
 
 def look():
@@ -668,13 +675,17 @@ balanced like a false color set: straight, one band floods the picture (IR3 over
 solid blue). Two visible color filters (NATURAL_PAIR: RED with BL1 or GRN) already look natural and stay straight.
 """
 NATURAL_PAIR = ("RED", "GRN", "BL1", "BL2", "VIO")
+# A pair with the one filter a body's surface shows through, a window in its haze (Titan's CB3, 938 nm: its other filters
+# see the haze and clouds above), stays straight too: its surface shows as the difference between the bands (dark
+# markings bluer, the haze rim blue), which the false color balance flattens into one orange
+SURFACE_WINDOW = {"TITAN": "CB3"}
 
 
 def color_mix(camera, bands, target=None, gains=None, own=False):
     if style() != "balanced" or len(bands) not in (2, 3):
         return None
     if len(bands) == 2:
-        if all(b in NATURAL_PAIR for b in bands):
+        if all(b in NATURAL_PAIR for b in bands) or SURFACE_WINDOW.get(str(target or "").upper()) in bands:
             return None
         if gains:
             # gains bring each band to the set's mean: the levels they balance are as their inverses
@@ -684,7 +695,6 @@ def color_mix(camera, bands, target=None, gains=None, own=False):
         if m is not None:
             return m
     gains = gains or false_gains(target, bands, camera)
-    measured = bool(gains)
     if not gains and own:
         # no mission measure of the body in these bands (a clear frame, a rare filter or body): the picture's own
         # balance alone (load_linear's FALSE_OWN), so no band outshines the others
@@ -693,7 +703,6 @@ def color_mix(camera, bands, target=None, gains=None, own=False):
         return None
     m = np.diag(np.asarray(gains, np.float32)).view(FalseMix)
     m.tint = tint_of(target)
-    m.measured = measured
     return m
 
 
@@ -713,12 +722,10 @@ class FalseMix(np.ndarray):
     through arithmetic."""
     tint = None
     typical = None
-    measured = True   # False: no mission measure of the body in these bands, the picture's own balance alone
 
     def __array_finalize__(self, obj):
         self.tint = getattr(obj, "tint", None)
         self.typical = getattr(obj, "typical", None)
-        self.measured = getattr(obj, "measured", True)
 
 
 _matrices = None
@@ -793,15 +800,10 @@ OWN_NEAR = 0.3       # ... measured where every band's share is within this (log
 GAIN_SPREAD = 12.0
 
 
-# ... and in a composite's own balance (load_linear), which reaches past it: Saturn's MT3 is 17 times darker than CB2
-# (false_color_bodies.json, WAC), and held to 12 the planet came out teal. The rings and haze that cap was for are taken
-# back to the body's tint by apply_mix (FALSE_REVERT, FALSE_CHROMA) and its detail is drawn at DETAIL_SPREAD
-OWN_SPREAD = 24.0
 
-
-def spread_capped(gains, spread=GAIN_SPREAD):
+def spread_capped(gains):
     low = min(gains)
-    return [min(g, low * spread) for g in gains]
+    return [min(g, low * GAIN_SPREAD) for g in gains]
 
 
 # the target of the balance for bodies with a color of their own, instead of gray: their natural color (sRGB, the color
@@ -819,10 +821,10 @@ def tint_of(target):
     return [v * 3 / sum(lin) for v in lin]
 
 
-def balance(levels, tint=None, spread=GAIN_SPREAD):
+def balance(levels, tint=None):
     mean = sum(levels) / len(levels)
     tint = tint or [1.0] * len(levels)
-    gains = spread_capped([(mean * t / v) ** FALSE_BALANCE for v, t in zip(levels, tint)], spread)
+    gains = spread_capped([(mean * t / v) ** FALSE_BALANCE for v, t in zip(levels, tint)])
     k = sum(levels) / sum(g * v for g, v in zip(gains, levels))
     return [g * k for g in gains]
 
@@ -952,11 +954,14 @@ instead of calibrating that channel's image, or None
 scale = optional fixed display scale shared by every picture of a mosaic, a dict with "white"
 (the I/F that becomes full brightness), "blacks" (one I/F per channel that becomes black) and
 optionally "gamma" and "shoulder"; without it each picture is stretched on its own as below
+saturated = with scale, optional list, one per label: the pixels the camera saturated (stacking.load_hdr's clipped,
+saturated_of), drawn white, or None
 Returns one BGR uint8 image per label. If every frame calibrates, all channels share one
 stretch so their relative brightness is what the camera measured. Otherwise the images
 are returned unchanged, each with its own stretch as before.
 """
-def load_channels(labels, images=None, sky_fraction=0.1, sky_percentile=98, gamma=2.2, iofs=None, scale=None):
+def load_channels(labels, images=None, sky_fraction=0.1, sky_percentile=98, gamma=2.2, iofs=None, scale=None,
+                  saturated=None):
     if images is None:
         images = [lbl.resize_image() for lbl in labels]
     iofs = _calibrated(labels, images, iofs)
@@ -971,6 +976,12 @@ def load_channels(labels, images=None, sky_fraction=0.1, sky_percentile=98, gamm
             own = scale["black_of"](iof) if scale.get("black_of") else None
             black, toe = (own["black"], own["toe"]) if own else (black, scale.get("toe"))
             out.append(display(iof, black, scale["white"], gamma, scale.get("shoulder"), toe))
+        for picture, full in zip(out, saturated or []):
+            # what the camera saturated is brighter than it could measure: white, as in a one frame picture
+            # (draw_saturated), wherever the shared white puts its clipped value (a mosaic's white is its brightest
+            # tile's, often a shorter exposure's, and a clipped crescent came out one flat gray)
+            if full is not None:
+                picture[full] = 255
         return out
     blacks, white, _ = picture_scale(iofs, sky_fraction, sky_percentile)
     if white <= 0:
@@ -1013,10 +1024,10 @@ Taking the margin off each channel on its own (a black above the sky per channel
 everything only a little brighter than the sky, a shadowed ring or a night side: the channel that is
 dimmest there loses the largest share of itself. tone takes it off the picture's brightness instead, so
 dim parts keep the color the camera measured and only get darker.
-labels, images, iofs = as load_channels
+labels, images, iofs = as load_channels; floor = how much of the picture's floor black to take (0 to 1, saturated_floor)
 returns (channels, margin, the channel mix (color_mix) or None), or None when a frame can't be calibrated or there is nothing to draw
 """
-def load_linear(labels, images=None, iofs=None):
+def load_linear(labels, images=None, iofs=None, floor=1.0):
     if images is None:
         images = [lbl.resize_image() for lbl in labels]
     iofs = _calibrated(labels, images, iofs)
@@ -1024,7 +1035,7 @@ def load_linear(labels, images=None, iofs=None):
         return None
     # the sky is measured once, for the scale and the toe below
     sky = _sky(iofs)
-    levels, margin, white, measured = _balanced_scale(iofs, sky=sky)
+    levels, margin, white, measured = _balanced_scale(iofs, sky=sky, floor=floor)
     if white <= 0:
         return None
     channels = [(iof - np.float32(level)) / np.float32(white) for iof, level in zip(iofs, levels)]
@@ -1036,9 +1047,7 @@ def load_linear(labels, images=None, iofs=None):
     if false:
         # false color: the mission's typical balance of the body (the table) misses a frame unlike it (Saturn's
         # high latitudes); FALSE_OWN of what is left between the picture's own lit bands is taken off as well. A
-        # movie of one scene, whose frames are alike, still keeps one color. With no table for the body in these
-        # bands (a set whose TARGET_NAME is a moon while the frames show Saturn) the picture's own balance stands in
-        # for the table, then the same: FALSE_OWN of the own balance alone left Saturn's MT3 short, a teal planet
+        # movie of one scene, whose frames are alike, still keeps one color
         bands = two_bands(channels)
         lum = np.mean(channels, axis=0)
         lit = lum > 0.2 * np.percentile(lum, 99)
@@ -1050,14 +1059,9 @@ def load_linear(labels, images=None, iofs=None):
                 lit = np.where(lit)
                 lit = tuple(i[typical] for i in lit)
             tint = tint_of(_value(infos[0], "TARGET_NAME", ""))
-            levels = [float(np.median(c[lit])) for c in bands]
-            table = np.diagonal(mix)
-            if not mix.measured and min(levels) > 0:
-                # no table: the picture's own balance stands in for it
-                table = balance(levels, tint, OWN_SPREAD)
-            own = [v * g for v, g in zip(levels, table)]
+            own = [float(np.median(c[lit])) * g for c, g in zip(bands, np.diagonal(mix))]
             if min(own) > 0:
-                gains = spread_capped([g * o ** FALSE_OWN for g, o in zip(table, balance(own, tint, OWN_SPREAD))], OWN_SPREAD)
+                gains = spread_capped([g * o ** FALSE_OWN for g, o in zip(np.diagonal(mix), balance(own, tint))])
                 mix = np.diag(np.asarray(gains, np.float32)).view(FalseMix)
                 mix.tint = tint
     margin /= white
@@ -1192,7 +1196,7 @@ def _balanced_scale(iofs, sky_fraction=0.1, sky_percentile=98, sky=None, floor=T
     # the black no lower than a share of the lit picture's own floor, as one margin (tone takes it off the brightness,
     # so every channel keeps its color): its darkest parts stay a little above black and the rest spreads out
     if floor:
-        margin = max(margin, _floor(iofs, levels, sky if measured else None))
+        margin = max(margin, floor * _floor(iofs, levels, sky if measured else None))
     blacks = [level + margin for level in levels]
     # One white for all channels: the WHITE_PCT percentile of the brightest channel over the lit pixels (the
     # body, not the sky), so a few bright limb or ring pixels don't leave the body dim and gray; the shoulder
@@ -1207,29 +1211,56 @@ def _balanced_scale(iofs, sky_fraction=0.1, sky_percentile=98, sky=None, floor=T
 
 
 """
-Pixels the camera saturated (saturated: the top of its range, brighter than it could measure) drawn white in a one frame
-picture's balanced channel (load_linear's, white = 1 above the margin), in place: a frame saturated all over is otherwise
-one even surface its floor (FLOOR_SHARE) spreads into the flat field's pattern. labels = the channels' labels (their
-frames' own codes, so not for repeats merged in I/F, stacking.load_hdr); margin = load_linear's; returns the share of the
-frame saturated
+Pixels the camera saturated (saturated: the top of its range, brighter than it could measure), per frame, at the size of
+its codes; labels = the frames' labels (their own codes, so not for repeats merged in I/F, stacking.load_hdr)
 """
-def draw_saturated(labels, channels, margin):
+def saturated_masks(labels):
+    return [saturated(ds.imread(lbl.export(), cv2.IMREAD_GRAYSCALE), lbl.get_info()) for lbl in labels]
+
+
+"""How much of its floor black (load_linear's floor) a frame saturated over share of it gets (SATURATED_FLOOR)"""
+def saturated_floor(share):
+    return min(max((SATURATED_FLOOR[1] - share) / (SATURATED_FLOOR[1] - SATURATED_FLOOR[0]), 0.0), 1.0)
+
+
+"""
+Saturated pixels (masks, saturated_masks) drawn white in a one frame picture's balanced channels (load_linear's, white
+= 1 above the margin), in place: a frame saturated all over is otherwise one even surface spread into the flat field's
+pattern. margin = load_linear's; returns the share of the frame saturated
+"""
+def draw_saturated(channels, margin, masks):
     share = 0.0
-    for lbl, c in zip(labels, channels):
-        full = saturated(ds.imread(lbl.export(), cv2.IMREAD_GRAYSCALE), lbl.get_info())
+    for c, full in zip(channels, masks):
         if not full.any():
             continue
-        if full.shape != c.shape:
-            full = cv2.resize(full.astype(np.uint8), c.shape[::-1], interpolation=cv2.INTER_NEAREST).astype(bool)
         c[full] = np.maximum(c[full], np.float32(margin + SATURATED))
         share = max(share, float(full.mean()))
     return share
 
 
 """
+The pixels the camera saturated in the frame of label lbl (saturated, on its own codes), at shape (rows, columns)
+"""
+def saturated_of(lbl, shape):
+    full = saturated(ds.imread(lbl.export(), cv2.IMREAD_GRAYSCALE), lbl.get_info())
+    if full.any() and full.shape != tuple(shape):
+        full = cv2.resize(full.astype(np.uint8), tuple(shape)[::-1], interpolation=cv2.INTER_NEAREST).astype(bool)
+    return full
+
+
+"""
+A picture's fine structure (GLOW_FINE): the 90th percentile of its detail at 1.5 px (against 8 px) over its median
+brightness; a smooth glow, a star field or noise measure little, ringlets and gaps a lot
+"""
+def fine_structure(lum):
+    detail = np.abs(cv2.GaussianBlur(lum, (0, 0), 1.5) - cv2.GaussianBlur(lum, (0, 0), 8))
+    return float(np.percentile(detail, 90) / max(float(np.percentile(lum, 50)), 1e-12))
+
+
+"""
 The black a picture's floor sets (FLOOR_SHARE): a share of the FLOOR_PCT percentile of its brightness above the sky
 levels. sky = the sky mask, or None for a picture without sky: then every pixel, and FLOOR_SHARE of it, or up to its
-GLOW_PCT percentile when the picture is as dim as lit sky (GLOW_IOF). With sky, the
+GLOW_PCT percentile when the picture is as dim as lit sky (GLOW_IOF) and smooth (GLOW_FINE). With sky, the
 pixels at least FLOOR_EDGE from it, and a share from 0 to FLOOR_SHARE as that floor goes from FLOOR_EVEN[0] to
 FLOOR_EVEN[1] of their WHITE_PCT percentile; 0 when under FLOOR_MIN of the picture is that far from the sky
 """
@@ -1240,7 +1271,8 @@ def _floor(iofs, levels, sky=None):
         floor, middle, glow = (float(v) for v in np.percentile(lum, (FLOOR_PCT, 50, GLOW_PCT)))
         black = FLOOR_SHARE * max(floor, 0.0)
         dim = np.log(GLOW_IOF[1] / max(middle, 1e-12)) / np.log(GLOW_IOF[1] / GLOW_IOF[0])
-        return black + min(max(float(dim), 0.0), 1.0) * max(glow - black, 0.0)
+        smooth = (GLOW_FINE[1] - fine_structure(lum)) / (GLOW_FINE[1] - GLOW_FINE[0])
+        return black + min(max(float(dim), 0.0), 1.0) * min(max(smooth, 0.0), 1.0) * max(glow - black, 0.0)
     side = 2 * FLOOR_EDGE + 1
     far = cv2.erode((~sky).astype(np.uint8), np.ones((side, side), np.uint8)).astype(bool)
     if far.sum() < FLOOR_MIN * far.size:
