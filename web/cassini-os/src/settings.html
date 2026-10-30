@@ -292,6 +292,9 @@ body.phone .srow input[type=range] { width: 96px; }
   window.cassiniStabilize = () => !S.get("movies.stabilize") ? 0 : (S.get("movies.stabilizeSmooth") ?? 12);
   // exposure normalization of a movie pass (obs_mosaic.exposure_gains): its smoothing in frames, 0 when off
   window.cassiniExposure = () => !S.get("movies.exposure") ? 0 : (S.get("movies.exposureSmooth") ?? 8);
+  // what a film's plan asks for each color set (export.py sets=): Complete color pictures only (Playback, with Color
+  // composites on) makes a set one picture at its last channel, as movie mode steps; off, every channel is its own
+  window.cassiniSetsQ = () => (S.get("movie.completeFrames") === false || S.get("cameras.composites") === false ? "&sets=0" : "");
   window.cassiniMovieStyle = (o = {}) => `${(o.center ?? S.get("cameras.autoCenter")) === false ? "&center=0" : ""}&trail=${o.trail ?? (S.get("movies.trail") || 0)}&laps=${S.get("movies.laps") || 1}` +
     ((o.fade ?? S.get("movies.fade")) && S.get("movies.mosaicFrames") !== "whole" ? `&fade=${o.fade ?? S.get("movies.fade")}&persist=${S.get("movies.persist") ?? 35}` : "") +
     ((o.steady ?? window.cassiniStabilize()) ? `&steady=${o.steady ?? window.cassiniStabilize()}` : "") +

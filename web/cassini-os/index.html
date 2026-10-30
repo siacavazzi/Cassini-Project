@@ -2520,6 +2520,9 @@ body.ambient.phone .amb-where { font-size: 18px; }
   window.cassiniStabilize = () => !S.get("movies.stabilize") ? 0 : (S.get("movies.stabilizeSmooth") ?? 12);
   // exposure normalization of a movie pass (obs_mosaic.exposure_gains): its smoothing in frames, 0 when off
   window.cassiniExposure = () => !S.get("movies.exposure") ? 0 : (S.get("movies.exposureSmooth") ?? 8);
+  // what a film's plan asks for each color set (export.py sets=): Complete color pictures only (Playback, with Color
+  // composites on) makes a set one picture at its last channel, as movie mode steps; off, every channel is its own
+  window.cassiniSetsQ = () => (S.get("movie.completeFrames") === false || S.get("cameras.composites") === false ? "&sets=0" : "");
   window.cassiniMovieStyle = (o = {}) => `${(o.center ?? S.get("cameras.autoCenter")) === false ? "&center=0" : ""}&trail=${o.trail ?? (S.get("movies.trail") || 0)}&laps=${S.get("movies.laps") || 1}` +
     ((o.fade ?? S.get("movies.fade")) && S.get("movies.mosaicFrames") !== "whole" ? `&fade=${o.fade ?? S.get("movies.fade")}&persist=${S.get("movies.persist") ?? 35}` : "") +
     ((o.steady ?? window.cassiniStabilize()) ? `&steady=${o.steady ?? window.cassiniStabilize()}` : "") +
@@ -7621,11 +7624,13 @@ onmessage = async e => {
     const q = new URLSearchParams({ from: iso(X.a), until: iso(X.b), cams: X.cams || "NW", fps: opt("export.adaptive", true) ? "auto" : String(opt("export.fps", 12)),
       size: opt("export.full", false) ? "full" : String(opt("export.size", 1024)), sound: opt("export.sound", false) ? "1" : "0", caption: opt("export.caption", true) ? "1" : "0" });
     // Whole mosaics (Settings > Movie): a mosaic movie's film shows only its whole laps (export.py whole=); Complete
-    // mosaics only (Settings > Playback): a mosaic pass only its finished mosaic (complete=); the Movie Editor's cut
+    // mosaics only (Settings > Playback): a mosaic pass only its finished mosaic (complete=); Complete color pictures
+    // only off (Settings > Playback): every channel of a color set as well (sets=0); the Movie Editor's cut
     // and look for this stretch (movieedit.html): frames left out, the look on every picture, and its Mosaics (mos=,
     // over both settings)
     return q.toString() + window.cassiniLook() + (window.cassiniMovieStyle ? window.cassiniMovieStyle() : "") + (opt("movies.mosaicFrames", "rolling") === "whole" ? "&whole=1" : "")
-      + (opt("playback.completeMosaics", false) && opt("cameras.mosaics", true) !== false ? "&complete=1" : "") + (window.cassiniMovieCut ? window.cassiniMovieCut() : "");
+      + (opt("playback.completeMosaics", false) && opt("cameras.mosaics", true) !== false ? "&complete=1" : "") + (window.cassiniSetsQ ? window.cassiniSetsQ() : "")
+      + (window.cassiniMovieCut ? window.cassiniMovieCut() : "");
   };
   let timer = 0;
   function estimate() {
@@ -7822,8 +7827,14 @@ onmessage = async e => {
   // export.py's Pictures.make calls)
   // a mosaic movie shown a lap at a time: the Movie Editor's Mosaics for this stretch, else Settings > Movie
   const wholeLaps = () => { const m = /[&?]mos=(\w+)/.exec(window.cassiniMovieCut ? window.cassiniMovieCut() : ""); return m ? m[1] === "whole" : opt("movies.mosaicFrames", "rolling") === "whole"; };
-  function pictureUrl(kind, src, size) {
-    const sep = src.includes("?") ? "&" : "?", look = window.cassiniLook(), style = window.cassiniMovieStyle ? window.cassiniMovieStyle() : "";
+  // Auto center for the film: the Movie Editor's Framing for this stretch (ctr=), else Settings > Processing, as the
+  // server's film has it (export.py options ctr, Pictures._centred); the film made here ignored the editor's choice
+  // and never centred a picture shown on its own (2026-10-30)
+  const centreOn = () => { const m = /[&?]ctr=([01])/.exec(window.cassiniMovieCut ? window.cassiniMovieCut() : ""); return m ? m[1] === "1" : S.get("cameras.autoCenter") !== false; };
+  // plain: a picture shown on its own as it is (the stand-in when the server does not centre it, 404)
+  function pictureUrl(kind, src, size, plain) {
+    const sep = src.includes("?") ? "&" : "?", center = centreOn(), look = window.cassiniLook({ center: center && !plain && (kind === "color" || kind === "processed") }),
+      style = window.cassiniMovieStyle ? window.cassiniMovieStyle({ center }) : "";
     if (kind === "movie") return `${FRAMES}${src}${sep}size=${size}&color=1${style}${look}`;
     if (kind === "rolling") return `${FRAMES}${src}${sep}size=${size}${style}${look}${wholeLaps() ? "&whole=1" : ""}`;
     if (kind === "frame") return `${FRAMES}${src}${sep}size=${size}`;
@@ -7843,7 +7854,7 @@ onmessage = async e => {
   }
   // a movie frame whose steps this computer works out (steady-local.html): the base frame moved, gained and mixed
   async function movieHere(id, size, stop) {
-    const SL = window.cassiniSteadyLocal, center = S.get("cameras.autoCenter") !== false;
+    const SL = window.cassiniSteadyLocal, center = centreOn();
     if (!SL || size !== 1024 || !S.get("movies.stabilizeLocal")) return null;
     if (!SL.want(FRAMES, id, { center, color: true })) await SL.ready(FRAMES, id, center, true);
     const w = SL.want(FRAMES, id, { center, color: true });
@@ -7861,7 +7872,7 @@ onmessage = async e => {
   async function rollingHere(id, size, stop) {
     const FL = window.cassiniFadeLocal, fh = FL && size === 1024 ? FL.want(FRAMES, id) : null;
     if (!fh) return null;
-    const center = S.get("cameras.autoCenter") !== false;
+    const center = centreOn();
     const r = await fetch(`${FRAMES}/frames/movie/${id}.webp?mode=rolling&size=1024${window.cassiniMovieStyle({ center, fade: 0 })}${window.cassiniLook()}`).catch(() => null);
     if (!r || !r.ok) return null;
     const im = new Image(), u = URL.createObjectURL(await r.blob());
@@ -7873,7 +7884,8 @@ onmessage = async e => {
   // Pictures.picture: the first of the entry's tries the server has, and what it is
   async function pictureOf(e, size, stop) {
     for (const [kind, src] of e.tries) {
-      const bmp = (kind === "movie" ? await movieHere(e.id, size, stop) : kind === "rolling" ? await rollingHere(e.id, size, stop) : null) || await fetchPicture(pictureUrl(kind, src, size), stop);
+      const bmp = (kind === "movie" ? await movieHere(e.id, size, stop) : kind === "rolling" ? await rollingHere(e.id, size, stop) : null) || await fetchPicture(pictureUrl(kind, src, size), stop)
+        || (pictureUrl(kind, src, size, true) !== pictureUrl(kind, src, size) ? await fetchPicture(pictureUrl(kind, src, size, true), stop) : null);
       if (bmp) return { bmp, what: WHAT[kind] };
     }
     return { bmp: null, what: "" };
@@ -10260,7 +10272,7 @@ void main() {
     const q = new URLSearchParams({ from: isoOf(ME.a), until: isoOf(ME.b), cams: "NW", fps: opt("export.adaptive", true) ? "auto" : String(opt("export.fps", 12)),
       size: "512", sound: "0", caption: "0", pictures: ME.pictures, list: "1" });
     try {
-      const r = await fetch(`${FRAMES}/export/plan.json?${q}${window.cassiniLook ? window.cassiniLook() : ""}${window.cassiniMovieStyle ? window.cassiniMovieStyle() : ""}${mosQ()}`), p = await r.json();
+      const r = await fetch(`${FRAMES}/export/plan.json?${q}${window.cassiniLook ? window.cassiniLook() : ""}${window.cassiniMovieStyle ? window.cassiniMovieStyle() : ""}${mosQ()}${window.cassiniSetsQ ? window.cassiniSetsQ() : ""}`), p = await r.json();
       if (n !== ask) return;
       if (!r.ok) throw new Error(p.error || `the frame server said ${r.status}`);
       ME.frames = p.pictures;
@@ -10416,14 +10428,19 @@ void main() {
   // composite, a processed frame) is centered too, as the windows and the film draw it (plain: as it is, the stand-in
   // for a picture the server does not center)
   const centreOn = () => ME.ctr ?? (opt("cameras.autoCenter", true) !== false);
-  const picUrl = (e, size, plain) => {
-    if (ME.src === "raw" || !e.src) return `${FRAMES}/frames/${e.id}.webp?size=${size}`;
-    const movie = /^\/frames\/movie\//.test(e.src), still = /^\/frames\/(color|processed)/.test(e.src);
+  const picUrl = (e, size, plain, src = e.src) => {
+    if (ME.src === "raw" || !src) return `${FRAMES}/frames/${e.id}.webp?size=${size}`;
+    const movie = /^\/frames\/movie\//.test(src), still = /^\/frames\/(color|processed)/.test(src);
     // (a mosaic movie's whole lap: no fade, and the server makes every tile of the lap before it answers, whole=1)
-    const whole = movie && /mode=rolling/.test(e.src) && wholeLaps();
-    return `${FRAMES}${e.src}${e.src.includes("?") ? "&" : "?"}size=${size}${window.cassiniLook ? window.cassiniLook({ center: still && !plain && centreOn() }) : ""}${movie && window.cassiniMovieStyle ? window.cassiniMovieStyle({ center: centreOn(), ...(whole ? { fade: 0 } : {}) }) : ""}${whole ? "&whole=1" : ""}`;
+    const whole = movie && /mode=rolling/.test(src) && wholeLaps();
+    return `${FRAMES}${src}${src.includes("?") ? "&" : "?"}size=${size}${window.cassiniLook ? window.cassiniLook({ center: still && !plain && centreOn() }) : ""}${movie && window.cassiniMovieStyle ? window.cassiniMovieStyle({ center: centreOn(), ...(whole ? { fade: 0 } : {}) }) : ""}${whole ? "&whole=1" : ""}`;
   };
-  const tries = (e, size) => [...new Set([picUrl(e, size), picUrl(e, size, true), `${FRAMES}/frames/${e.id}.webp?size=${size}`])];
+  // the plan's pictures for the frame in its order (e.tries: a mosaic, else the movie frame, the color picture, the
+  // processed frame), each centred and then as it is, as the film takes the first the server has (export.py
+  // Pictures.picture); the raw frame last (it went from the first picture straight to the raw frame, so a frame whose
+  // mosaic or movie frame the server did not have showed raw, uncentred, in grey)
+  const tries = (e, size) => [...new Set([...(ME.src === "raw" || !e.tries ? [[0, e.src]] : e.tries).flatMap(([, src]) => [picUrl(e, size, false, src), picUrl(e, size, true, src)]),
+    `${FRAMES}/frames/${e.id}.webp?size=${size}`])];
   // pictures kept as bitmaps for a while (Play steps through them), the oldest let go
   const bitmaps = new Map();
   function bitmap(url) {
@@ -10448,7 +10465,7 @@ void main() {
     }
     if (n !== drawn) return;
     shownE = shown ? e : null;
-    if (got > 0 && urls[0] !== urls[1] && /center=1/.test(urls[0])) $("metag").textContent += " · as Cassini pointed (the body does not fit the frame to center it)";
+    if (got > 0 && urls[0] !== urls[1] && /center=1/.test(urls[0]) && urls[got] === urls[1]) $("metag").textContent += " · as Cassini pointed (the body does not fit the frame to center it)";
     paint();
     return shown;
   }
@@ -10648,7 +10665,7 @@ void main() {
     const q = new URLSearchParams({ from: isoOf(ME.a), until: isoOf(ME.b), cams: camsOf(), fps: "auto", size: "512", sound: "0", caption: "0", pictures: ME.pictures, list: "1" });
     ["drop", "targets", "filters", "even", "ctr"].forEach(k => { if (r0.get(k)) q.set(k, r0.get(k)); });
     try {
-      const r = await fetch(`${FRAMES}/export/levels.json?${q}${window.cassiniLook ? window.cassiniLook() : ""}${window.cassiniMovieStyle ? window.cassiniMovieStyle({ center: centreOn() }) : ""}${mosQ()}`);
+      const r = await fetch(`${FRAMES}/export/levels.json?${q}${window.cassiniLook ? window.cassiniLook() : ""}${window.cassiniMovieStyle ? window.cassiniMovieStyle({ center: centreOn() }) : ""}${mosQ()}${window.cassiniSetsQ ? window.cassiniSetsQ() : ""}`);
       const j = await r.json().catch(() => ({ error: `the frame server said ${r.status}` }));
       if (n !== lvAsk) return;
       if (!r.ok || j.error && j.total == null) throw new Error(j.error || r.status);
@@ -11738,7 +11755,7 @@ void main() {
   window.cassiniAbout = { open, addTab, esc, close: () => show(false), credits: CREDITS };
 
   // ---- which version this is: this page's build id (build.py writes it), and what the frame server says it serves ----
-  const BUILD = /*BUILD*/"1ce425769fdd";
+  const BUILD = /*BUILD*/"4171bf511a0a";
   const FRAMES = (() => {                       // the frame server, chosen as the camera window chooses it
     const q = new URLSearchParams(location.search).get("frames");
     if (q) return q.replace(/\/$/, "");

@@ -402,7 +402,7 @@ body.phone #mestrip { grid-template-columns: repeat(auto-fill, 72px); grid-auto-
     const q = new URLSearchParams({ from: isoOf(ME.a), until: isoOf(ME.b), cams: "NW", fps: opt("export.adaptive", true) ? "auto" : String(opt("export.fps", 12)),
       size: "512", sound: "0", caption: "0", pictures: ME.pictures, list: "1" });
     try {
-      const r = await fetch(`${FRAMES}/export/plan.json?${q}${window.cassiniLook ? window.cassiniLook() : ""}${window.cassiniMovieStyle ? window.cassiniMovieStyle() : ""}${mosQ()}`), p = await r.json();
+      const r = await fetch(`${FRAMES}/export/plan.json?${q}${window.cassiniLook ? window.cassiniLook() : ""}${window.cassiniMovieStyle ? window.cassiniMovieStyle() : ""}${mosQ()}${window.cassiniSetsQ ? window.cassiniSetsQ() : ""}`), p = await r.json();
       if (n !== ask) return;
       if (!r.ok) throw new Error(p.error || `the frame server said ${r.status}`);
       ME.frames = p.pictures;
@@ -558,14 +558,19 @@ body.phone #mestrip { grid-template-columns: repeat(auto-fill, 72px); grid-auto-
   // composite, a processed frame) is centered too, as the windows and the film draw it (plain: as it is, the stand-in
   // for a picture the server does not center)
   const centreOn = () => ME.ctr ?? (opt("cameras.autoCenter", true) !== false);
-  const picUrl = (e, size, plain) => {
-    if (ME.src === "raw" || !e.src) return `${FRAMES}/frames/${e.id}.webp?size=${size}`;
-    const movie = /^\/frames\/movie\//.test(e.src), still = /^\/frames\/(color|processed)/.test(e.src);
+  const picUrl = (e, size, plain, src = e.src) => {
+    if (ME.src === "raw" || !src) return `${FRAMES}/frames/${e.id}.webp?size=${size}`;
+    const movie = /^\/frames\/movie\//.test(src), still = /^\/frames\/(color|processed)/.test(src);
     // (a mosaic movie's whole lap: no fade, and the server makes every tile of the lap before it answers, whole=1)
-    const whole = movie && /mode=rolling/.test(e.src) && wholeLaps();
-    return `${FRAMES}${e.src}${e.src.includes("?") ? "&" : "?"}size=${size}${window.cassiniLook ? window.cassiniLook({ center: still && !plain && centreOn() }) : ""}${movie && window.cassiniMovieStyle ? window.cassiniMovieStyle({ center: centreOn(), ...(whole ? { fade: 0 } : {}) }) : ""}${whole ? "&whole=1" : ""}`;
+    const whole = movie && /mode=rolling/.test(src) && wholeLaps();
+    return `${FRAMES}${src}${src.includes("?") ? "&" : "?"}size=${size}${window.cassiniLook ? window.cassiniLook({ center: still && !plain && centreOn() }) : ""}${movie && window.cassiniMovieStyle ? window.cassiniMovieStyle({ center: centreOn(), ...(whole ? { fade: 0 } : {}) }) : ""}${whole ? "&whole=1" : ""}`;
   };
-  const tries = (e, size) => [...new Set([picUrl(e, size), picUrl(e, size, true), `${FRAMES}/frames/${e.id}.webp?size=${size}`])];
+  // the plan's pictures for the frame in its order (e.tries: a mosaic, else the movie frame, the color picture, the
+  // processed frame), each centred and then as it is, as the film takes the first the server has (export.py
+  // Pictures.picture); the raw frame last (it went from the first picture straight to the raw frame, so a frame whose
+  // mosaic or movie frame the server did not have showed raw, uncentred, in grey)
+  const tries = (e, size) => [...new Set([...(ME.src === "raw" || !e.tries ? [[0, e.src]] : e.tries).flatMap(([, src]) => [picUrl(e, size, false, src), picUrl(e, size, true, src)]),
+    `${FRAMES}/frames/${e.id}.webp?size=${size}`])];
   // pictures kept as bitmaps for a while (Play steps through them), the oldest let go
   const bitmaps = new Map();
   function bitmap(url) {
@@ -590,7 +595,7 @@ body.phone #mestrip { grid-template-columns: repeat(auto-fill, 72px); grid-auto-
     }
     if (n !== drawn) return;
     shownE = shown ? e : null;
-    if (got > 0 && urls[0] !== urls[1] && /center=1/.test(urls[0])) $("metag").textContent += " · as Cassini pointed (the body does not fit the frame to center it)";
+    if (got > 0 && urls[0] !== urls[1] && /center=1/.test(urls[0]) && urls[got] === urls[1]) $("metag").textContent += " · as Cassini pointed (the body does not fit the frame to center it)";
     paint();
     return shown;
   }
@@ -790,7 +795,7 @@ body.phone #mestrip { grid-template-columns: repeat(auto-fill, 72px); grid-auto-
     const q = new URLSearchParams({ from: isoOf(ME.a), until: isoOf(ME.b), cams: camsOf(), fps: "auto", size: "512", sound: "0", caption: "0", pictures: ME.pictures, list: "1" });
     ["drop", "targets", "filters", "even", "ctr"].forEach(k => { if (r0.get(k)) q.set(k, r0.get(k)); });
     try {
-      const r = await fetch(`${FRAMES}/export/levels.json?${q}${window.cassiniLook ? window.cassiniLook() : ""}${window.cassiniMovieStyle ? window.cassiniMovieStyle({ center: centreOn() }) : ""}${mosQ()}`);
+      const r = await fetch(`${FRAMES}/export/levels.json?${q}${window.cassiniLook ? window.cassiniLook() : ""}${window.cassiniMovieStyle ? window.cassiniMovieStyle({ center: centreOn() }) : ""}${mosQ()}${window.cassiniSetsQ ? window.cassiniSetsQ() : ""}`);
       const j = await r.json().catch(() => ({ error: `the frame server said ${r.status}` }));
       if (n !== lvAsk) return;
       if (!r.ok || j.error && j.total == null) throw new Error(j.error || r.status);

@@ -132,7 +132,10 @@ Routes:
                                picture (a Cassini Studio recipe's color part, web/frames/studio_look.py);
                                &pictures=movie|color|processed|raw: what each frame shows (as the windows show it, full
                                color sets only, each frame processed alone, each frame raw); &list=1: every frame however
-                               many (the editor's list; a film has no cap unless CASSINI_EXPORT_MAX sets one).
+                               many (the editor's list; a film has no cap unless CASSINI_EXPORT_MAX sets one);
+                               &sets=0: every channel of a color set its own picture (Complete color pictures only
+                               off; by default a set is one picture, at its last channel, in one color mix a camera
+                               and target through the film).
                                size=1536|2048: mosaics up to that size, each at the bucket its pass has detail for;
                                size=full: mosaics at native resolution (export.full_size: "full" says the panes' side,
                                the passes that set it and how many pictures are drawn that big; passes not

@@ -40,6 +40,7 @@ picture list, and handed to the job as a WAV, which ffmpeg adds as AAC.
 import argparse
 import calendar
 import hashlib
+from collections import Counter
 import contextvars
 import io
 import json
@@ -64,7 +65,7 @@ import calibration  # noqa: E402
 import studio_look  # noqa: E402
 
 # bumped whenever the way films are made changes, so older ones are not served again
-VERSION = "export-v27"   # v27: the batch-3 fixes (Titan color, saturated white, movie strobe, small bright bodies, line holes, pass kinds) reach exported pictures; v26: the small artifact, edge registration and two-filter color fixes (groups I, H2, F) reach exported pictures; v25: the restart's calibration and tone fixes (groups G, C) reach exported pictures; v24: Whole mosaics keep a mosaic movie's whole laps only, its drifting tiles one copy each (obs_mosaic.slots); v23: a mosaic pass is its mosaic at every frame, and stays a mosaic (or mosaic movie) in Full color only; v22: the flat fielded, dark subtracted, hot pixel repaired pictures; v21: Auto center centres the pictures shown on their own too, as the windows do
+VERSION = "export-v28"   # v28: Complete color pictures only (a color set once, at its last channel) and one color mix a camera and target through the film (movie audit); v27: the batch-3 fixes (Titan color, saturated white, movie strobe, small bright bodies, line holes, pass kinds) reach exported pictures; v26: the small artifact, edge registration and two-filter color fixes (groups I, H2, F) reach exported pictures; v25: the restart's calibration and tone fixes (groups G, C) reach exported pictures; v24: Whole mosaics keep a mosaic movie's whole laps only, its drifting tiles one copy each (obs_mosaic.slots); v23: a mosaic pass is its mosaic at every frame, and stays a mosaic (or mosaic movie) in Full color only; v22: the flat fielded, dark subtracted, hot pixel repaired pictures; v21: Auto center centres the pictures shown on their own too, as the windows do
 FPS = 30                     # frames a second in the file
 HOLD_MIN, HOLD_MAX = 1 / FPS, 0.5
 TYPICAL = 1 / 8              # adaptive: how long the stretch's median gap lasts on screen
@@ -140,6 +141,11 @@ def options(q):
     # stretch); only when on, the same way
     if get("complete", "0") == "1":
         movie["complete"] = True
+    # Complete color pictures only (Settings > Playback, movie.completeFrames, with color composites on): of a color
+    # set, only the frame that completes it is a picture of the film, as movie mode steps (head-quiet.html complete());
+    # sets=0 (the setting off) shows every channel on its own as well, and only then is it in the film's name
+    if get("sets", "1") == "0":
+        movie["sets"] = False
     # the Movie Editor's Mosaics, over both settings: whole (every mosaic whole: a pass once, finished; a mosaic movie a
     # lap at a time) or tiles (every mosaic built tile by tile)
     if get("mos", "") == "whole":
@@ -312,6 +318,26 @@ def plan(opt, cache=None, work=False):
     last = {}   # each camera's frame before, as movie mode looks it up (up to 64 frames back)
     for q in range(lo - 1, max(-1, lo - 65), -1):
         last.setdefault(cam_of(q), q)
+    # One color mix for each camera and target through the film: its most common set of three filters in the stretch.
+    # The one rule (sets_passes.channels) gives a set its widest spread of filters, so a run of four (Saturn's stare
+    # of 2005-07-03: MT2, CB2, MT3 and BL1 at one pointing in five) mixes MT3/MT2/BL1 where the others mix
+    # MT3/CB2/MT2, and its composite came up in other colors between them (the film flickered, 2026-10-30). A set
+    # that has the film's mix among its frames is made of those (the newest of each filter), in the mix's order.
+    def mix_of(st):
+        return tuple(st["filters"][st["rows"].index(u)] for u in st["use"])
+    seen = {}
+    for s in {int(v) for v in set_of[lo:hi] if v >= 0}:
+        if len(sets[s]["use"]) >= 3:
+            k = (cam_of(sets[s]["use"][0]), targets[sets[s]["use"][0]])
+            seen.setdefault(k, Counter())[mix_of(sets[s])] += 1
+    film_mix = {k: c.most_common(1)[0][0] for k, c in seen.items()}
+
+    def mix(st):
+        want = film_mix.get((cam_of(st["use"][0]), targets[st["use"][0]]))
+        if not want or len(st["use"]) < 3 or mix_of(st) == want:
+            return st["use"]
+        newest = {f: r for f, r in sorted(zip(st["filters"], st["rows"]), key=lambda fr: t[fr[1]])}
+        return [newest[f] for f in want] if all(f in newest for f in want) else st["use"]
     out = []
     for q in range(lo, hi):
         cam = cam_of(q)
@@ -332,6 +358,12 @@ def plan(opt, cache=None, work=False):
         kind = pass_kind(ids[q]) if how in ("movie", "color") else None
         if how == "color" and kind == "movie":
             kind = None
+        # Complete color pictures only: a channel of a color set on the way to its last one is not a picture of its
+        # own, outside a mosaic (movie mode's complete(): the black-and-white channels between the composites made a
+        # film flicker from grey to color, and a color movie pass held each set for three or four frames)
+        if how == "movie" and st is not None and opt["movie"].get("sets", True) and kind not in ("mosaic", "mosaic_movie") \
+                and t[q] != st["ready"]:
+            continue
         if kind == "movie":
             tries.append(("movie", ids[q]))
         elif kind == "mosaic_movie":
@@ -345,7 +377,7 @@ def plan(opt, cache=None, work=False):
         elif tile:
             tries.append(("mosaic", ids[st["use"][0]] if comp else ids[q]))
         if comp:
-            tries.append(("color", [ids[u] for u in st["use"]]))
+            tries.append(("color", [ids[u] for u in mix(st)]))
         tries += [("processed", ids[q]), ("frame", ids[q])]
         if how == "color":
             # a mosaic pass stays its mosaic and a mosaic movie its rolling mosaic (in color, every tile and filter
@@ -356,7 +388,7 @@ def plan(opt, cache=None, work=False):
             if not full and not lap:
                 continue
             lead = [tries[0]] if kind in ("mosaic", "mosaic_movie") and tries[0][0] in ("mosaic", "rolling") else []
-            tries = lead + ([("color", [ids[u] for u in st["use"]])] if full else []) + [("processed", ids[q]), ("frame", ids[q])]
+            tries = lead + ([("color", [ids[u] for u in mix(st)])] if full else []) + [("processed", ids[q]), ("frame", ids[q])]
         elif how == "processed":
             tries = [("processed", ids[q]), ("frame", ids[q])]
         elif how == "raw":
@@ -366,7 +398,7 @@ def plan(opt, cache=None, work=False):
              "nm": reel.wavelength(insts[q], f1s[q] + f2s[q])}
         if comp:
             e["set"] = st["kind"]
-            e["set_nm"] = [reel.wavelength(insts[u], f1s[u] + f2s[u]) for u in st["use"]]
+            e["set_nm"] = [reel.wavelength(insts[u], f1s[u] + f2s[u]) for u in mix(st)]
         if kind == "mosaic":
             e["pass"] = _pass_of(ids[q])
         out.append(e)
