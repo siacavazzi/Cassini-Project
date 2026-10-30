@@ -218,6 +218,25 @@ assert om._filters({"key": ("TITAN", "X", "N", 0), "frames": wnd, "z": 1e6, "kin
 assert om._filters({"key": ("TITAN", "X", "N", 0), "frames": wnd, "z": 1e6, "kind": "mosaic"})[3] is None   # mosaics: as before
 two = [(f"p{i}", f"W{1486330000 + i}_1", ["CB2", "CB2", "CB2", "MT2"][i % 4], 1000.0 + 37 * i, NMS["CB2"], 0, 0, 1e6) for i in range(9)]
 assert om._filters({"key": ("SATURN", "X", "W", 0), "frames": two, "z": 1e6, "kind": "movie"})[3] is None     # two-filter sets: grey
+# ... and the lone filters' cosmic rays (no frame of their filter either side to take them out against) are cleaned
+# from the set's planes as a still composite's channels are (_despiked): only the hits change, a star in every filter stays
+sp_rng = np.random.default_rng(1)
+yy, xx = np.mgrid[:300, :300]
+on = (yy - 150) ** 2 + (xx - 150) ** 2 < 80 ** 2
+sp = []
+for lvl in (180, 150, 90):
+    a = np.zeros((300, 300, 4), np.uint8)
+    a[..., :3] = np.clip(np.where(on, lvl, 0) + sp_rng.normal(0, 2, (300, 300)) * on, 0, 255)[..., None]
+    a[..., 3] = 255
+    sp.append(a)
+hits = [(20, 30), (150, 140), (200, 260), (100, 120)]
+for y, x in hits:
+    sp[2][y, x:x + 2, :3] = 250
+for a in sp:
+    a[40, 250, :3] = 230
+clean = om._despiked(sp, 2.2)
+assert all(clean[2][y, x, 0] < 100 for y, x in hits) and all(c[40, 250, 0] == 230 for c in clean)
+assert [int((c[..., 0] != a[..., 0]).sum()) for c, a in zip(clean, sp)] == [0, 0, 2 * len(hits)]
 
 cache = tempfile.mkdtemp()
 levels = {"CB2": 160, "MT2": 60}          # Saturn's methane band dark against its continuum, on the grey scale

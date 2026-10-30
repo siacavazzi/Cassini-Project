@@ -3083,6 +3083,21 @@ def tuned_layout(made, mapped, moves, gone):
     return p, tiles, rect, count, used, f"{name}-tune{hashlib.sha1(key.encode()).hexdigest()[:12]}"
 
 
+def _despiked(planes, gamma):
+    """A colour set's placed planes (RGBA, the pass's display scale) with each one-filter spike (a cosmic ray or hot
+    pixel in one filter only) set to what is round it: calibration._clean_spikes, the still composites' cleaner
+    (natural: 5x5, and where not every other filter peaks), in linear light."""
+    lin = [calibration.decode(a[..., 0].astype(np.float32) / 255, gamma) for a in planes]
+    seen = np.min([a[..., 3] for a in planes], axis=0) > 0
+    out = []
+    # (its grain over all the picture: a display scale's sky is mostly crushed to black, no grain to measure)
+    for a, c in zip(planes, calibration._clean_spikes(lin, seen if seen.sum() >= 100 else np.ones(seen.shape, bool), True)):
+        a = a.copy()
+        a[..., :3] = (calibration.encode(np.clip(c, 0, 1), gamma) * 255 + 0.5).astype(np.uint8)[..., None]
+        out.append(a)
+    return out
+
+
 def colour_picture(u, p, colour, planes):
     """The colour picture of a pass's three colour filters' planes (RGBA, each on the pass's display scale), RGBA:
     the pass's mosaic and its movie frames mixed alike. Natural color: a true color pass turned into what an eye
@@ -4060,6 +4075,11 @@ def movie_frame(u, n, cache, trail=0, colour=True, out=OUT, centre=True, steady=
             break
     if used:
         planes = [_place(u, newest[f], rect, k, W, H, cache, p["display_scale"]) for f in used]
+        # a colour filter the pass takes once (a cycle's lone MT1 and UV1, _set_colour's Titan stares) has no frame of
+        # its own filter either side to take its cosmic rays out against (_around): the set's planes are cleaned as a
+        # still composite's channels are (calibration._clean_spikes), or each hit is a bright dot through the mix
+        if any(_around(u, got[f]) == [None, None] for f in used if f in got):
+            planes = _despiked(planes, p["display_scale"].get("gamma", 2.2))
         # a colour set held from an earlier pointing (a track's last visit, a thousand px away, or a pass that moved
         # on across the body) shows little or nothing where this frame is: colour_picture draws only where every
         # filter has the picture. Under HELD_COVER of frame n's own place covered, the frame is drawn on its own
