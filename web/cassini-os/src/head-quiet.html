@@ -1832,6 +1832,12 @@ body.idle .win.full .titlebar { opacity: 0; }
   // the note has come back for (until then the pass rolls tile by tile)
   const wholeLaps = () => S.get("movies.mosaicFrames") === "whole";
   const lapEnds = new Set(), lapKnown = new Set();
+  // the frames of a mosaic pass that movie mode stops on, as the server's note on each observation lists them
+  // (kind_of mosaic_steps): it passes over a frame whose mosaic is the same picture as the frame before's (a
+  // polarizer, a repeat exposure) and one whose pointing's next frames add another filter (a new place's gray tile
+  // before its colour), so a step of the movie is one new place of the mosaic, finished; stepsKnown: cam|pass the
+  // note has listed them for (until then every frame that is a picture of its own counts, as before)
+  const mosaicSteps = new Set(), stepsKnown = new Set();
   // a frame's pass: the pass id the data gives it (build_data.py --groups: the frame server's passes, obs_mosaic.units,
   // which split an observation where the camera pauses or the distance changes), else its target and observation
   const passKey = k => catalog.pass && catalog.pass[k] >= 0 ? `p${catalog.pass[k]}` : `${catalog.target[k]}|${catalog.obs[k]}`;
@@ -3135,6 +3141,7 @@ body.idle .win.full .titlebar { opacity: 0; }
             if (a && a.movie) { moviePasses.add(o); chipText(); }
             if (a && a.kind === "mosaic_movie") { lapPasses.add(o); chipText(); }
             if (a && a.lap_ends) { a.lap_ends.forEach(id => lapEnds.add(id)); lapKnown.add(`${cam}|${o}`); }
+            if (a && a.mosaic_steps) { a.mosaic_steps.forEach(id => mosaicSteps.add(id)); stepsKnown.add(`${cam}|${o}`); }
             // the window is in that pass already: its frame is steadied (or rolls) from now on
             if (a && catalog === c0 && lastK >= 0 && passOf(lastK) === o && (playsMovie(lastK) || playsRolling(lastK))) update(true);
             if (!a || !a.mosaic) return;
@@ -3194,13 +3201,21 @@ body.idle .win.full .titlebar { opacity: 0; }
   // is in the months loaded now; before: the last picture before et. Movie mode steps the clock from one to the next
   // cams ("N", "W"): only that camera's pictures (a stretch played for one camera). Only complete pictures count
   // (complete, below), so movie mode and the body view's skip over the gaps step from one finished picture to the next
+  // A narrow-angle and a wide-angle frame taken together (shutters within TOGETHER s; one camera never takes two
+  // that close) are one step: the clock goes to the later of the two, so both windows change at once (stepped one
+  // at a time, each window changed every other step, 2026-10-30)
+  const TOGETHER = 2;
   function nextPicture(et, body, cams) {
     cams = cams || liveCams();
     if (!body && !cams) {
       const a = catalog.sorted;
-      for (let i = lastImageIndex(et) + 1; i < a.length; i++) if (complete(order[i], body)) return a[i];
+      for (let i = lastImageIndex(et) + 1; i < a.length; i++) if (complete(order[i], body)) return together(a[i], body, cams);
       return Infinity;
     }
+    const t = firstAfter(et, body, cams);
+    return t < Infinity ? together(t, body, cams) : t;
+  }
+  function firstAfter(et, body, cams) {
     let t = Infinity;
     for (const cam in catalog.byCam) {
       if (cams && !cams.includes(cam)) continue;
@@ -3209,15 +3224,31 @@ body.idle .win.full .titlebar { opacity: 0; }
     }
     return t;
   }
-  function prevPicture(et, body, cams) {
-    cams = cams || liveCams();
-    let t = -Infinity;
+  // the step that picture time t is in: the latest of the cameras' first pictures from t to t + TOGETHER
+  function together(t, body, cams) {
+    let end = t;
     for (const cam in catalog.byCam) {
       if (cams && !cams.includes(cam)) continue;
       const f = framesOf(cam, body);
-      for (let p = lastOfCam(cam, et - 1e-3, body); p >= 0 && f.et[p] > t; p--) if (complete(f.ks[p], body)) { t = f.et[p]; break; }
+      for (let p = lastOfCam(cam, t - 1e-3, body) + 1; p < f.et.length && f.et[p] <= t + TOGETHER; p++) if (complete(f.ks[p], body)) { end = Math.max(end, f.et[p]); break; }
     }
-    return t;
+    return end;
+  }
+  function prevPicture(et, body, cams) {
+    cams = cams || liveCams();
+    const before = at => {
+      let t = -Infinity;
+      for (const cam in catalog.byCam) {
+        if (cams && !cams.includes(cam)) continue;
+        const f = framesOf(cam, body);
+        for (let p = lastOfCam(cam, at - 1e-3, body); p >= 0 && f.et[p] > t; p--) if (complete(f.ks[p], body)) { t = f.et[p]; break; }
+      }
+      return t;
+    };
+    // the step before the one the clock is at (or in, between the two frames of a pair)
+    let t = before(et);
+    while (t > -Infinity && together(t, body, cams) >= et - 1e-3) t = before(t);
+    return t > -Infinity ? together(t, body, cams) : t;
   }
   // a finished picture, the kind movie mode stops on. Complete frames only (movie.completeFrames, with color
   // composites on): of a color set, only the frame that completes it (its composite), never the black-and-white
@@ -3226,12 +3257,14 @@ body.idle .win.full .titlebar { opacity: 0; }
   // Every other frame is a picture of its own.
   // Whole mosaics (movies.mosaicFrames): of a mosaic movie, only the frames that finish a lap. Repeat exposures
   // (catalog.repeat; with Stack repeat exposures on, outside a pass played as a movie, whose frames are each their
-  // own): only the first of a run, since the pipeline shows the run as one stacked picture.
+  // own): only the first of a run, since the pipeline shows the run as one stacked picture. Of a pass a window
+  // plays as a mosaic: the frames the server's note says (mosaicSteps), one step a new place of the mosaic.
   function complete(k, body) {
     const cam = catalog.cam[k];
     // how the camera's windows play k's pass (any of them), asked only when a rule needs it
     const plays = how => { for (const f of allFeeds) if (f.cam === cam && f.playsAs && f.playsAs(k) === how) return true; return false; };
     if (wholeLaps() && lapKnown.has(`${cam}|${passKey(k)}`) && plays("mosaic_movie")) return lapEnds.has(catalog.id[k]);
+    if (stepsKnown.has(`${cam}|${passKey(k)}`) && !completeMosaics() && plays("mosaic")) return mosaicSteps.has(catalog.id[k]);
     const si = catalog.setOf ? catalog.setOf[k] : -1;
     if (si >= 0 && S.get("movie.completeFrames") !== false && S.get("cameras.composites") && catalog.et[k] !== catalog.sets[si].ready) return false;
     if (si < 0 && catalog.repeat && catalog.repeat[k] && S.get("processing.stack") !== false && !plays("movie")) return false;
