@@ -4,8 +4,10 @@ GROUPING folder suffix, and the passes its layout rules after them lay out anew 
 laps over drifted places, maps joined across ZOOM, movies cut at a retarget, a turning camera, a lone frame no
 longer setting the filters aside), which get RELAID's, every pass of an observation where TRACK_SPAN judges a
 feature track otherwise than before, which gets RETRACKED's, and every pass of an observation where the scan rule (a
-scan that pauses is no time series) judges a pass otherwise, which gets RESCANNED's: a summary, and their frame ids for
-prebuild.py --only (the remake after the rules land).
+scan that pauses is no time series) judges a pass otherwise, which gets RESCANNED's, every pass of an observation
+where a CIRS ride-along pan is judged a mosaic, which gets PANNED's, and every pass of an observation where a long
+thin ring strip plays as a movie, which gets STRIPPED's: a summary, and their frame ids for prebuild.py --only (the
+remake after the rules land).
 Needs the index and the geometry cache (CASSINI_GEOMETRY_CACHE), as units does; reads only, about ten seconds.
 Run: python web/frames/regrouped.py --ids regrouped-ids.txt [--targets JUPITER,SATURN]"""
 import argparse
@@ -26,7 +28,8 @@ def regrouped(targets=None):
         if not isinstance(obs, str) or inst not in ("ISSNA", "ISSWA") or targets and target not in targets:
             continue
         us = obs_mosaic.units(target, obs, "N" if inst == "ISSNA" else "W")
-        anew = [v.get("regrouped") or v.get("relaid") or v.get("retracked") or v.get("rescanned") for v in us]
+        anew = [v.get("regrouped") or v.get("relaid") or v.get("retracked") or v.get("rescanned")
+                or v.get("panned") or v.get("stripped") for v in us]
         out += [(u, all(anew) and len(us) > 1) for u, new in zip(us, anew) if new]
         with obs_mosaic._lock:
             obs_mosaic._units.clear()
@@ -42,7 +45,8 @@ if __name__ == "__main__":
     ap.add_argument("--targets", help="only these targets, comma separated")
     a = ap.parse_args()
     found = regrouped(set(a.targets.split(",")) if a.targets else None)
-    why = collections.Counter("rescanned" if u.get("rescanned") else "retracked" if u.get("retracked") else "renumbered" if whole else "strays" if u.get("off") else "1x2" if u.get("pair") else
+    why = collections.Counter("stripped" if u.get("stripped") else "panned" if u.get("panned") else
+                              "rescanned" if u.get("rescanned") else "retracked" if u.get("retracked") else "renumbered" if whole else "strays" if u.get("off") else "1x2" if u.get("pair") else
                               next((k for k in LAID if u.get(k)), "other") for u, whole in found)
     print(f"{len(found)} passes in {len({u['key'][:3] for u, _ in found})} observations, "
           f"{sum(len(u['frames']) for u, _ in found)} frames: {dict(why)}")
