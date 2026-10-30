@@ -182,6 +182,8 @@ assert len(pair) == 2
 # of methane Saturn pink-white, W1694956960_1 and 17 more): load_linear and tone, byte for byte
 old_cal = module_from_main("calibration", "069c6ee^1")
 if old_cal is not None:
+    # the floor black changed since (round 3: darkest real feature, small dim bodies), not what #188 is about
+    old_cal._floor = cal._floor
     for bands, levels, target in ((["MT3", "CB2", "MT2"], [0.0236, 0.40, 0.135], "DIONE"),
                                   (["MT3", "CB2", "MT2"], [0.0236, 0.40, 0.135], "SATURN"),
                                   (["MT3", "MT2", "BL1"], [0.03, 0.2, 0.35], "SATURN"), (["IR3", "GRN", "UV3"], [0.3, 0.2, 0.1], "TITAN")):

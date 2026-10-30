@@ -535,13 +535,19 @@ SKY_DARK = 99        # balanced composites: this percentile of the dark sky's br
 SHOULDER = 0.8       # balanced composites: above this share of white, brightness rolls off softly instead
                      # of clipping (limbs and ring highlights past the white keep their shape)
 FLOOR_SHARE = 0.8    # balanced: the black is at least this share of the lit picture's floor, the FLOOR_PCT percentile of
-FLOOR_PCT = 0.5      # its brightness (the channels' mean above their sky levels), so a picture whose lit part is one even
-                     # surface (Titan's haze, a moon close-up) spreads over the range instead of the gamma lifting it to
-                     # near-white, and a lit sky that fails the sky test (a plume's, stray light) goes dark.
+FLOOR_PCT = 0.05     # its brightness (the channels' mean above their sky levels, after a 3x3 median), so a picture whose lit
+                     # part is one even surface (Titan's haze, a moon close-up) spreads over the range instead of the gamma
+                     # lifting it to near-white, and a lit sky that fails the sky test (a plume's, stray light) goes dark.
+                     # The floor is the lit part's darkest real feature: at the 0.5 percentile, the few cracks and crater
+                     # shadows under it went black ink on Enceladus and Rhea close-ups (spot check round 3)
 FLOOR_EDGE = 10      # With sky, the floor is taken at least FLOOR_EDGE pixels from it (none when under FLOOR_MIN of the
-FLOOR_MIN = 0.01     # picture is that far), and only an even lit part has it taken off: none when the floor is under
-FLOOR_EVEN = (0.3, 0.6)  # FLOOR_EVEN[0] of the lit part's WHITE_PCT percentile, all of FLOOR_SHARE from FLOOR_EVEN[1],
-                     # so dim things between the sky and the body (faint rings, a shadow, a night side) keep their light
+FLOOR_MIN = 0.01     # picture is that far), and only an even lit part has it taken off (with sky or without): none when
+FLOOR_EVEN = (0.3, 0.6)  # the floor is under FLOOR_EVEN[0] of the lit part's WHITE_PCT percentile, all of FLOOR_SHARE from
+                     # FLOOR_EVEN[1], so dim things between the sky and the body (faint rings, a shadow, a night side) keep
+                     # their light
+FLOOR_BODY = 2e-4    # ... and a lit thing of at least this share of the picture with no pixel FLOOR_EDGE from the sky (a small
+                     # moon, a narrow ring) whose median is lower is the floor, so a dim moon beside a bright ring is not
+                     # drawn black (Mimas under the A ring, spot check round 3)
 GLOW_IOF = (1e-3, 5e-3)  # balanced, no sky: a picture whose median brightness (I/F) is under GLOW_IOF[0] is lit sky (a plume's
 GLOW_PCT = 50        # or the E ring's glow, stray light, a star field's offset), not a sunlit surface, which is brighter than
                      # GLOW_IOF[1]: its black is its GLOW_PCT percentile, so the sky goes near black and only the glow
@@ -1259,29 +1265,55 @@ def fine_structure(lum):
 
 """
 The black a picture's floor sets (FLOOR_SHARE): a share of the FLOOR_PCT percentile of its brightness above the sky
-levels. sky = the sky mask, or None for a picture without sky: then every pixel, and FLOOR_SHARE of it, or up to its
-GLOW_PCT percentile when the picture is as dim as lit sky (GLOW_IOF) and smooth (GLOW_FINE). With sky, the
-pixels at least FLOOR_EDGE from it, and a share from 0 to FLOOR_SHARE as that floor goes from FLOOR_EVEN[0] to
-FLOOR_EVEN[1] of their WHITE_PCT percentile; 0 when under FLOOR_MIN of the picture is that far from the sky
+levels, taken after a 3x3 median (so a dead pixel or a lost line's edge doesn't set it): the darkest real feature of the
+lit part, a crack, a crater's shadow, so it keeps some light above the black instead of going black (FLOOR_PCT).
+sky = the sky mask, or None for a picture without sky: then every pixel brighter than the sky test's cut (_sky: a
+border of empty columns is not the floor), and FLOOR_SHARE of it as that floor goes from FLOOR_EVEN[0] to
+FLOOR_EVEN[1] of the WHITE_PCT percentile, or up to its GLOW_PCT percentile when the picture is as dim as lit sky
+(GLOW_IOF) and smooth (GLOW_FINE). With sky, the pixels at least FLOOR_EDGE from it, and the same share; 0 when under
+FLOOR_MIN of the picture is that far from the sky, and no higher than the median of any other lit thing in the picture
+too small or thin to be that far from the sky (a small moon, a narrow ring: FLOOR_BODY), so it is not drawn black
 """
 def _floor(iofs, levels, sky=None):
     lum = iofs[0] - np.float32(levels[0]) if len(iofs) == 1 else \
         np.mean([iof - np.float32(level) for iof, level in zip(iofs, levels)], axis=0)
+    lum = np.ascontiguousarray(lum, dtype=np.float32)
+    dark = cv2.medianBlur(lum, 3)
     if sky is None:
-        floor, middle, glow = (float(v) for v in np.percentile(lum, (FLOOR_PCT, 50, GLOW_PCT)))
-        black = FLOOR_SHARE * max(floor, 0.0)
+        middle, glow = (float(v) for v in np.percentile(lum, (50, GLOW_PCT)))
+        lit = lum >= 0.05 * np.percentile(lum, 99.9)
+        lit = lit if lit.sum() > 100 else np.ones(lum.shape, dtype=bool)
+        floor, top = (float(v) for v in np.percentile(dark[lit], (FLOOR_PCT, WHITE_PCT)))
+        black = FLOOR_SHARE * _even(floor, top) * max(floor, 0.0)
         dim = np.log(GLOW_IOF[1] / max(middle, 1e-12)) / np.log(GLOW_IOF[1] / GLOW_IOF[0])
         smooth = (GLOW_FINE[1] - fine_structure(lum)) / (GLOW_FINE[1] - GLOW_FINE[0])
         return black + min(max(float(dim), 0.0), 1.0) * min(max(smooth, 0.0), 1.0) * max(glow - black, 0.0)
     side = 2 * FLOOR_EDGE + 1
-    far = cv2.erode((~sky).astype(np.uint8), np.ones((side, side), np.uint8)).astype(bool)
+    lit = (~sky).astype(np.uint8)
+    far = cv2.erode(lit, np.ones((side, side), np.uint8)).astype(bool)
     if far.sum() < FLOOR_MIN * far.size:
         return 0.0
-    floor, top = (float(v) for v in np.percentile(lum[far], (FLOOR_PCT, WHITE_PCT)))
+    floor, top = (float(v) for v in np.percentile(dark[far], (FLOOR_PCT, WHITE_PCT)))
+    # a lit thing with no pixel that far from the sky: its median, when lower, is the floor
+    count, labels, stats, _ = cv2.connectedComponentsWithStats(lit, connectivity=8)
+    if count > 2:
+        reached = np.zeros(count, dtype=bool)
+        reached[np.unique(labels[far])] = True
+        small = [i for i in range(1, count) if not reached[i] and stats[i, cv2.CC_STAT_AREA] >= FLOOR_BODY * lum.size]
+        for i in small:
+            x, y, w, h = (int(v) for v in stats[i, :4])
+            box = labels[y:y + h, x:x + w] == i
+            floor = min(floor, float(np.median(lum[y:y + h, x:x + w][box])))
     if floor <= 0 or top <= 0:
         return 0.0
-    even = min(max((floor / top - FLOOR_EVEN[0]) / (FLOOR_EVEN[1] - FLOOR_EVEN[0]), 0.0), 1.0)
-    return FLOOR_SHARE * even * floor
+    return FLOOR_SHARE * _even(floor, top) * floor
+
+
+"""How even a lit part is (FLOOR_EVEN): 0 to 1 as its floor goes from FLOOR_EVEN[0] to FLOOR_EVEN[1] of its top"""
+def _even(floor, top):
+    if floor <= 0 or top <= 0:
+        return 0.0
+    return min(max((floor / top - FLOOR_EVEN[0]) / (FLOOR_EVEN[1] - FLOOR_EVEN[0]), 0.0), 1.0)
 
 
 """
