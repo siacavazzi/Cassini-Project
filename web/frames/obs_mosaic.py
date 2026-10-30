@@ -676,8 +676,8 @@ def _judge(u):
     # past its own field: a ring survey too big for one (ISS_241RI_PROPSURVY001, 057RI_AZSCAN001), or a propeller
     # retarget's view drifting under a frame in all (ISS_277RI_PROPRETRG001), creeping frame to frame, stays the movie
     # it plays as
-    creeps = bool(own) and float(np.mean([s >= mosaic.min_step for s in own])) < MOVIE_JUMPS
-    if creeps and pts and max(np.ptp([p[0] for p in pts]), np.ptp([p[1] for p in pts])) < FRAME:
+    crept = bool(own) and float(np.mean([s >= mosaic.min_step for s in own])) < MOVIE_JUMPS
+    if crept and pts and max(np.ptp([p[0] for p in pts]), np.ptp([p[1] for p in pts])) < FRAME:
         u["jump_frac"] = float(np.mean([s >= mosaic.min_step for s in own]))
     # dwell: over every frame taken (repeat exposures too, which the tiles merge), how many frames of one filter
     # the camera takes at a place before it jumps. A raster takes one to a few per pointing; a movie films the
@@ -772,14 +772,14 @@ def _judge(u):
     u["pair"] = len(places) == 2 and max(abs(places[0][0] - places[1][0]), abs(places[0][1] - places[1][1])) <= PAIR_STEP * FRAME
     if len(places) < MIN_PLACES and not u["pair"] or u["movie"]:
         u["pair"] = u["slot_laps"] = False
-        if creeps:
+        if crept and not u.get("island"):
             u["movie"], u["kind"] = True, "movie"
         return
     pts = np.array(pts)
     lo, hi = pts.min(0) - FRAME / 2, pts.max(0) + FRAME / 2
     if (hi - lo).max() >= MAX_FRAMES * FRAME:
         u["pair"] = u["slot_laps"] = False
-        if creeps:
+        if crept and not u.get("island"):
             u["movie"], u["kind"] = True, "movie"
         return
     kind = "mosaic_movie" if len(places) >= 2 and u["repeats"] >= MOVIE_LAPS else "mosaic"
