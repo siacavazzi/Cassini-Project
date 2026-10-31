@@ -309,7 +309,9 @@ body.phone #mestrip { grid-template-columns: repeat(auto-fill, 72px); grid-auto-
     return b && b.radii && kp > 0 ? b.radii.reduce((a, v) => a + v, 0) / b.radii.length / kp : null;
   }
   function smallFilm() {
-    const film = evs().film, sig = film.length ? `${film[0].id}|${film[film.length - 1].id}|${film.length}` : "";
+    let film;
+    try { film = ME.a == null || ME.loading ? [] : evs().film; } catch (err) { return false; }   // (the editor still setting up)
+    const sig = film.length ? `${film[0].id}|${film[film.length - 1].id}|${film.length}` : "";
     if (sig !== smallSig) {
       smallSig = sig;
       const r = film.filter((e, i) => i % Math.max(1, Math.floor(film.length / 60)) === 0).map(e => radiusPx(e.id));
@@ -409,7 +411,7 @@ body.phone #mestrip { grid-template-columns: repeat(auto-fill, 72px); grid-auto-
     note.textContent = !FS ? "" : !v ? "Off. For when SPICE's centering wobbles, as on a small moon in the NAC: slide it up to steady the movie by what the pictures show."
       : SD.error || (SD.phase === "fetch" ? `Steadying: getting pictures, ${SD.done.toLocaleString()} of ${SD.total.toLocaleString()}…`
         : SD.phase === "match" ? `Steadying: matching pictures, ${SD.done.toLocaleString()} of ${SD.total.toLocaleString()}…`
-          : SD.measured ? steadyText() : "Steadying…");
+          : SD.measured && SD.smooth === v ? steadyText() : "Steadying…");
   }
   function steadyText() {
     const n = SD.pics.length, held = n - SD.matched, px = [...SD.moves.values()].map(([x, y]) => Math.hypot(x, y) * 1024);
