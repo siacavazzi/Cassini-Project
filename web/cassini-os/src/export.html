@@ -271,7 +271,10 @@ body.phone #excard:not(.full) { width: calc(100% - 16px) !important; left: 8px !
     const plan = X.plan;
     if (await canMakeHere(plan)) return makeHere(plan, X.planKey);
     try {
-      const r = await fetch(`${FRAMES}/export?${params()}`, { method: "POST" }), job = await r.json();
+      // Additional stabilization's moves go in the body (export.py steadied=): one a picture, too long for an address
+      await steadied({ done: false });
+      const FS = window.cassiniFilmSteady, body = FS && FS.body ? FS.body() : "";
+      const r = await fetch(`${FRAMES}/export?${params()}`, { method: "POST", ...(body ? { body, headers: { "Content-Type": "application/x-www-form-urlencoded" } } : {}) }), job = await r.json();
       if (!r.ok) return setState(job.error || "The server refused the export.", 0);
       X.job = job;
       if (opt("export.sound", false) && !job.audio && job.state !== "failed") soundtrack(job.id, plan);
@@ -462,6 +465,56 @@ body.phone #excard:not(.full) { width: calc(100% - 16px) !important; left: 8px !
     }
     return { bmp: null, what: "" };
   }
+  // the Movie Editor's framing for the film (export.py options crop, crop2, nudge and steady, crop_at, framed): the
+  // crop of the film's picture n of count, each frame's nudge, and its Additional stabilization (film-steady.html: the
+  // editor's moves, cassiniFilmSteady.at); the film made here took none of it (2026-10-31)
+  function framing() {
+    const q = new URLSearchParams((window.cassiniMovieCut ? window.cassiniMovieCut() : "").replace(/^&/, ""));
+    const box = k => {
+      const b = (q.get(k) || "").split("_").map(v => Math.max(0, Math.min(1, Math.round(+v * 1e4) / 1e4)));
+      return b.length === 4 && b.every(isFinite) && b[2] - b[0] >= 0.05 && b[3] - b[1] >= 0.05 && b.join() !== "0,0,1,1" ? b : null;
+    };
+    let crop = box("crop");
+    const crop2 = box("crop2"), nudge = new Map();
+    if (crop2 && !crop) crop = [0, 0, 1, 1];
+    for (const w of (q.get("nudge") || "").split(",").filter(Boolean)) {
+      const [k, ...xy] = w.split(":"), v = xy.map(t => Math.round(Math.max(-0.5, Math.min(0.5, +t)) * 1000) / 1000);
+      if (v.length === 2 && v.every(isFinite) && (v[0] || v[1])) nudge.set(k, v);
+    }
+    const FS = window.cassiniFilmSteady;
+    return {
+      cropAt(n, count) {
+        if (!crop2 || count < 2) return crop;
+        let t = n / (count - 1); t = t * t * (3 - 2 * t);
+        return crop.map((u, i) => u + (crop2[i] - u) * t);
+      },
+      nudgeOf(id) {
+        const nd = nudge.get(id) || [0, 0], st = FS && FS.at ? FS.at(id) : null;
+        return st ? [nd[0] + st[0], nd[1] + st[1]] : nd;
+      },
+    };
+  }
+  // export.framed: picture im moved by nudge (parts of the picture) and cut to crop, as big as it was on its longer
+  // side, black where it has nothing; im itself when it has neither
+  function framedHere(im, crop, nd) {
+    if (!crop && !nd[0] && !nd[1]) return im;
+    const [x0, y0, x1, y1] = crop || [0, 0, 1, 1], W = im.width, H = im.height, cw = (x1 - x0) * W, ch = (y1 - y0) * H, k = Math.max(W, H) / Math.max(cw, ch);
+    const c = document.createElement("canvas"); c.width = Math.max(1, Math.round(cw * k)); c.height = Math.max(1, Math.round(ch * k));
+    const g = c.getContext("2d", { alpha: false }); g.fillStyle = "#000"; g.fillRect(0, 0, c.width, c.height);
+    g.imageSmoothingQuality = "high";
+    g.setTransform(k, 0, 0, k, -k * (x0 - nd[0]) * W, -k * (y0 - nd[1]) * H);
+    g.drawImage(im, 0, 0);
+    if (im.close) im.close();
+    return c;
+  }
+  // Additional stabilization still measuring the editor's film: the film waits for it (a few seconds a hundred pictures)
+  async function steadied(stop) {
+    const FS = window.cassiniFilmSteady;
+    if (!FS || !FS.busy || !FS.busy()) return;
+    setState("Steadying the movie first…", 0);
+    if (FS.run) FS.run();
+    for (let t = 0; FS.busy() && t < 1200 && !stop.done; t++) await sleep(500);
+  }
   const utcOf = t => new Date(t * 1000).toISOString().slice(0, 19).replace("T", " ");
   const durOf = s => (s >= 2 * 86400 ? `${(s / 86400).toFixed(0)} d` : s >= 3600 ? `${(s / 3600).toFixed(0)} h` : `${(s / 60).toFixed(0)} min`);
   // export.py label
@@ -473,7 +526,10 @@ body.phone #excard:not(.full) { width: calc(100% - 16px) !important; left: 8px !
   async function makeHere(plan, key) {
     const stop = { done: false }, cams = X.cams || "NW", size = paneOf(plan), ch = capH(plan), W = plan.width, H = plan.height;
     const job = X.job = { id: "here:" + key, here: true }, t0 = performance.now();
+    await steadied(stop);
+    if (X.job !== job) return;
     setState("Making the film here…", 0);
+    const fr = framing();
     let look = null;
     if (editOf(key)) {
       const STU = window.cassiniStudio, lc = document.createElement("canvas"), r = STU.renderer(lc);
@@ -536,6 +592,8 @@ body.phone #excard:not(.full) { width: calc(100% - 16px) !important; left: 8px !
           past.push({ group: me.group, st: me.st });
           if (past.length > 4 * CS.SPAN) past.shift();
         }
+        // the Movie Editor's framing (Film.render: framed before the look)
+        if (bmp) bmp = framedHere(bmp, fr.cropAt(n, pics.length), fr.nudgeOf(e.id));
         kinds[what || "none"] = (kinds[what || "none"] || 0) + 1;
         // a mosaic stays up while its observation goes on (render's building)
         let held = false;

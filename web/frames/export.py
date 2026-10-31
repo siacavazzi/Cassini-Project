@@ -112,6 +112,7 @@ LEVELS_VERSION = "levels-v4"   # v4: measured on the pictures of the batch-3 fix
 # single frame (parts of the picture)
 CROP_LEAST = 0.05            # of the picture: the smallest crop's side
 NUDGE_MOST = 0.5
+STEADY_MOST = 0.25           # of the picture: the most Additional stabilization moves a picture (film_steady.MOST a step)
 FRAME = {"crop": None, "crop2": None, "nudge": {}}
 MOVIE = {"center": True, "trail": 0, "laps": 1, "fade": 0, "persist": 0}   # the movie style by default (a film named as before)
 
@@ -223,6 +224,17 @@ def options(q):
             continue
         if dx or dy:
             nudge[k] = [dx, dy]
+    # and the Movie Editor's Additional stabilization (film_steady: worked out by the page, which sends each frame's
+    # move in POST /export's body, frame id: x, y in 1/100,000 of the picture), added to the frame's nudge
+    for w in words("steadied"):
+        k, *xy = w.split(":")
+        try:
+            sx, sy = (max(-STEADY_MOST, min(STEADY_MOST, int(v) / 1e5)) for v in xy)
+        except ValueError:
+            continue
+        dx, dy = nudge.get(k, (0.0, 0.0))
+        if sx or sy:
+            nudge[k] = [round(dx + sx, 5), round(dy + sy, 5)]
     if get("ctr", "") in ("0", "1"):
         movie["center"] = get("ctr", "") == "1"
     # which picture each frame shows (the Movie Editor's Pictures): as the camera windows show it (movie), only the

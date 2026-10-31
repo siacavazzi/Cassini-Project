@@ -1,0 +1,329 @@
+<script>
+// ---------- additional stabilization of a film (the Movie Editor's Framing, under Auto center) ----------
+// Auto center puts each picture's body where SPICE says it is, and SPICE's pointing is a few pixels off, differently
+// from picture to picture: a small moon in the NAC wobbles. This matches each picture of the film to the picture
+// before it by what the two show, adds the matches up to where the body drifts, and moves each picture by how far
+// that drift is from a Gaussian average of it, so the wobble comes out and the slow motion stays. It is
+// web/frames/film_steady.py, line for line (the pipeline's own alignment, image_correction.find_shift then
+// centroid_shift, and obs_mosaic.held_to_spice), run on this computer on the pictures the film shows
+// (docs/compute-on-viewer.md); web/test_film_steady.py runs both on the same pictures. The editor sends the moves
+// with the film (export.py steadied=), so the frame server only moves the pictures.
+(function () {
+  // the arithmetic, shared by the page, its worker and the test (web/test_film_steady.py runs it in node)
+  const MATH = function () {
+    const f = Math.fround;
+    const C = { SIDE: 512, MOST: 0.08, SMOOTH: 12, SMOOTH_MOST: 60, PLACES: 5 };
+
+    // Python's round(x): half to even
+    const pyRound = x => { let r = Math.round(x); if (r - x === 0.5 && r % 2 !== 0) r -= 1; return r; };
+    // Python's round(x, n): toFixed's decimal, except a double exactly half way (x * 10^n a whole number and a half,
+    // which only a dyadic x can be) goes to the even one
+    const pyRoundN = (x, n) => {
+      const k = 10 ** n, e = x * k;
+      if (Number.isInteger(2 * e) && !Number.isInteger(e)) { const fl = Math.floor(e); return (fl % 2 === 0 ? fl : fl + 1) / k; }
+      return Number(x.toFixed(n));
+    };
+
+    // film_steady.grey: cv2's RGB to grey (fixed point, 14 bits), 0 where the alpha is
+    function grey(rgba, w, h) {
+      const g = new Uint8Array(w * h);
+      for (let i = 0, p = 0; i < g.length; i++, p += 4) g[i] = rgba[p + 3] > 0 ? (rgba[p] * 4899 + rgba[p + 1] * 9617 + rgba[p + 2] * 1868 + 8192) >> 14 : 0;
+      return g;
+    }
+    const most = (w, h) => Math.max(1, pyRound(C.MOST * Math.max(w, h)));
+
+    // cv2.GaussianBlur(float32, (0, 0), sigma): cv2.getGaussianKernel's float32 kernel (25 taps at sigma 3), rows then
+    // columns, the border reflected without its edge pixel (BORDER_REFLECT_101)
+    const kernels = new Map();
+    function kernel(sigma) {
+      if (kernels.has(sigma)) return kernels.get(sigma);
+      const n = pyRound(sigma * 4 * 2 + 1) | 1, k = new Float32Array(n), s2 = -0.5 / (sigma * sigma);
+      let sum = 0;
+      for (let i = 0; i < n; i++) { const x = i - (n - 1) * 0.5; k[i] = f(Math.exp(s2 * x * x)); sum += k[i]; }
+      sum = 1 / sum;
+      for (let i = 0; i < n; i++) k[i] = f(k[i] * sum);
+      kernels.set(sigma, k);
+      return k;
+    }
+    const reflect = (i, n) => { if (n === 1) return 0; while (i < 0 || i >= n) i = i < 0 ? -i : 2 * n - 2 - i; return i; };
+    function blur(src, w, h, sigma) {
+      const k = kernel(sigma), r = k.length >> 1, tmp = new Float32Array(w * h), out = new Float32Array(w * h);
+      for (let y = 0; y < h; y++) {
+        const row = y * w;
+        for (let x = 0; x < w; x++) {
+          let s = 0;
+          for (let t = -r; t <= r; t++) s += k[t + r] * src[row + reflect(x + t, w)];
+          tmp[row + x] = s;
+        }
+      }
+      for (let y = 0; y < h; y++) {
+        for (let x = 0; x < w; x++) {
+          let s = 0;
+          for (let t = -r; t <= r; t++) s += k[t + r] * tmp[reflect(y + t, h) * w + x];
+          out[y * w + x] = s;
+        }
+      }
+      return out;
+    }
+
+    // cv2.getOptimalDFTSize: the smallest 2^a 3^b 5^c at least n
+    function optimal(n) {
+      for (let m = Math.max(1, n); ; m++) { let q = m; for (const p of [2, 3, 5]) while (q % p === 0) q /= p; if (q === 1) return m; }
+    }
+    // a complex DFT of any length made of small factors (mixed radix, decimation in time), in place on re, im
+    const plans = new Map();
+    function plan(n) {
+      if (plans.has(n)) return plans.get(n);
+      const factors = []; let q = n;
+      for (let p = 2; q > 1; p++) while (q % p === 0) { factors.push(p); q /= p; }
+      const cos = new Float64Array(n), sin = new Float64Array(n);
+      for (let i = 0; i < n; i++) { cos[i] = Math.cos(2 * Math.PI * i / n); sin[i] = -Math.sin(2 * Math.PI * i / n); }
+      const p = { n, factors, cos, sin, re: new Float64Array(n), im: new Float64Array(n) };
+      plans.set(n, p);
+      return p;
+    }
+    function fft(re, im, inverse) {
+      const n = re.length, P = plan(n), sgn = inverse ? -1 : 1;
+      // the input put in the digit-reversed order of the factors, then butterflies of each factor from the last
+      const order = new Int32Array(n);
+      for (let i = 0; i < n; i++) {
+        let a = i, rev = 0;
+        for (const p of P.factors) { rev = rev * p + (a % p); a = Math.floor(a / p); }
+        order[i] = rev;
+      }
+      const tr = P.re, ti = P.im;
+      for (let i = 0; i < n; i++) { tr[order[i]] = re[i]; ti[order[i]] = im[i]; }
+      let span = 1;
+      for (let fi = P.factors.length - 1; fi >= 0; fi--) {
+        const p = P.factors[fi], len = span * p, step = n / len;
+        const xr = new Float64Array(p), xi = new Float64Array(p);
+        for (let start = 0; start < n; start += len) {
+          for (let k = 0; k < span; k++) {
+            for (let j = 0; j < p; j++) {
+              const a = start + k + j * span, w = (j * k * step) % n;
+              const c = P.cos[w], s = sgn * P.sin[w];
+              xr[j] = tr[a] * c - ti[a] * s; xi[j] = tr[a] * s + ti[a] * c;
+            }
+            for (let m = 0; m < p; m++) {
+              let sr = 0, si = 0;
+              for (let j = 0; j < p; j++) {
+                const w = ((j * m) % p) * (n / p), c = P.cos[w], s = sgn * P.sin[w];
+                sr += xr[j] * c - xi[j] * s; si += xr[j] * s + xi[j] * c;
+              }
+              const a = start + k + m * span; re[a] = sr; im[a] = si;
+            }
+          }
+          // (written back into tr, ti below, after the whole stage)
+        }
+        for (let i = 0; i < n; i++) { tr[i] = re[i]; ti[i] = im[i]; }
+        span = len;
+      }
+    }
+    function fft2(re, im, W, H, inverse) {
+      const rr = new Float64Array(W), ri = new Float64Array(W);
+      for (let y = 0; y < H; y++) {
+        for (let x = 0; x < W; x++) { rr[x] = re[y * W + x]; ri[x] = im[y * W + x]; }
+        fft(rr, ri, inverse);
+        for (let x = 0; x < W; x++) { re[y * W + x] = rr[x]; im[y * W + x] = ri[x]; }
+      }
+      const cr = new Float64Array(H), ci = new Float64Array(H);
+      for (let x = 0; x < W; x++) {
+        for (let y = 0; y < H; y++) { cr[y] = re[y * W + x]; ci[y] = im[y * W + x]; }
+        fft(cr, ci, inverse);
+        for (let y = 0; y < H; y++) { re[y * W + x] = cr[y]; im[y * W + x] = ci[y]; }
+      }
+    }
+
+    // cv2.phaseCorrelate(a, b, cv2.createHanningWindow, the square root of
+    // the rows' and columns' Hann curves multiplied): each picture times the window, padded with 0 to the optimal DFT
+    // size, the cross-power spectrum normalized (as divSpectrums, with FLT_EPSILON), back, its quadrants swapped as
+    // OpenCV's fftShift does (an odd size leaves its last row and column), and the peak's 5 x 5 weighted centroid
+    function phaseCorrelate(a, b, w, h) {
+      const wc = new Float64Array(w), c0 = 2 * Math.PI / (w - 1), c1 = 2 * Math.PI / (h - 1);
+      for (let j = 0; j < w; j++) wc[j] = 0.5 * (1 - Math.cos(c0 * j));
+      const M = optimal(h), N = optimal(w), MN = M * N;
+      const ar = new Float64Array(MN), ai = new Float64Array(MN), br = new Float64Array(MN), bi = new Float64Array(MN);
+      for (let y = 0; y < h; y++) {
+        const wr = 0.5 * (1 - Math.cos(c1 * y));
+        for (let x = 0; x < w; x++) { const win = f(Math.sqrt(wr * wc[x])); ar[y * N + x] = f(a[y * w + x] * win); br[y * N + x] = f(b[y * w + x] * win); }
+      }
+      fft2(ar, ai, N, M, false); fft2(br, bi, N, M, false);
+      const eps = 1.1920928955078125e-7;
+      for (let i = 0; i < MN; i++) {
+        // P = A conj(B); C = P / |P|
+        const pr = ar[i] * br[i] + ai[i] * bi[i], pi = ai[i] * br[i] - ar[i] * bi[i], m = Math.sqrt(pr * pr + pi * pi), d = m * m + eps;
+        ar[i] = pr * m / d; ai[i] = pi * m / d;
+      }
+      fft2(ar, ai, N, M, true);
+      // fftShift: q0 <-> q3, q1 <-> q2, each xMid x yMid
+      const xm = N >> 1, ym = M >> 1, Cs = Float64Array.from(ar);
+      if (xm && ym) {
+        for (let y = 0; y < ym; y++) for (let x = 0; x < xm; x++) {
+          const swap = (p, q) => { const t = Cs[p]; Cs[p] = Cs[q]; Cs[q] = t; };
+          swap(y * N + x, (y + ym) * N + x + xm);
+          swap(y * N + x + xm, (y + ym) * N + x);
+        }
+      }
+      let best = -Infinity, px = 0, py = 0;
+      for (let y = 0; y < M; y++) for (let x = 0; x < N; x++) { const v = Cs[y * N + x]; if (v > best) { best = v; px = x; py = y; } }
+      // weightedCentroid over 5 x 5, clamped to the picture
+      const r0 = Math.max(0, py - 2), r1 = Math.min(M - 1, py + 2), q0 = Math.max(0, px - 2), q1 = Math.min(N - 1, px + 2);
+      let sx = 0, sy = 0, sum = 0;
+      for (let y = r0; y <= r1; y++) for (let x = q0; x <= q1; x++) { const v = Cs[y * N + x]; sx += x * v; sy += y * v; sum += v; }
+      const response = sum / MN; sum += 2.220446049250313e-16;
+      return { dx: N / 2 - sx / sum, dy: M / 2 - sy / sum, response };
+    }
+
+    // image_correction.find_shift(im1, im2, max_shift): phase correlation round the reference's target (where its blur
+    // is over a fifth of its brightest), or null when the peak is under min_response or past max_shift
+    function findShift(g1, g2, w, h, maxShift, minResponse = 0.3) {
+      const a = Float32Array.from(g1), b = Float32Array.from(g2), bl = blur(a, w, h, 3);
+      let top = -Infinity; for (let i = 0; i < bl.length; i++) if (bl[i] > top) top = bl[i];
+      const cut = f(0.2 * top);
+      let x0 = w, x1 = -1, y0 = h, y1 = -1;
+      for (let y = 0; y < h; y++) for (let x = 0; x < w; x++) if (bl[y * w + x] > cut) { if (x < x0) x0 = x; if (x > x1) x1 = x; if (y < y0) y0 = y; if (y > y1) y1 = y; }
+      if (x1 < 0) return null;
+      const Y0 = Math.max(y0 - maxShift, 0), Y1 = Math.min(y1 + maxShift, h), X0 = Math.max(x0 - maxShift, 0), X1 = Math.min(x1 + maxShift, w);
+      const cw = X1 - X0, ch = Y1 - Y0;
+      if (cw < 2 || ch < 2) return null;
+      const pa = new Float32Array(cw * ch), pb = new Float32Array(cw * ch);
+      for (let y = 0; y < ch; y++) for (let x = 0; x < cw; x++) { pa[y * cw + x] = a[(y + Y0) * w + x + X0]; pb[y * cw + x] = b[(y + Y0) * w + x + X0]; }
+      const { dx, dy, response } = phaseCorrelate(pa, pb, cw, ch);
+      if (response < minResponse || Math.abs(dx) > maxShift || Math.abs(dy) > maxShift) return null;
+      return [dx, dy];
+    }
+
+    // image_correction.centroid_shift(im1, im2, max_shift): the lit area's weighted centroid moved, when the target
+    // sits wholly inside both pictures
+    function centroidShift(g1, g2, w, h, maxShift) {
+      const centres = [];
+      for (const g of [g1, g2]) {
+        const bl = blur(Float32Array.from(g), w, h, 3);
+        let top = -Infinity; for (let i = 0; i < bl.length; i++) if (bl[i] > top) top = bl[i];
+        if (top <= 0) return null;
+        const cut = f(0.2 * top);
+        let n = 0, sx = 0, sy = 0, sw = 0, edge = false;
+        for (let y = 0; y < h; y++) for (let x = 0; x < w; x++) {
+          const v = bl[y * w + x];
+          if (!(v > cut)) continue;
+          n++;
+          if (y === 0 || y === h - 1 || x === 0 || x === w - 1) edge = true;
+          sx += x * v; sy += y * v; sw += v;
+        }
+        if (n < 50 || edge) return null;
+        centres.push([sx / sw, sy / sw]);
+      }
+      const dx = centres[1][0] - centres[0][0], dy = centres[1][1] - centres[0][1];
+      if (Math.abs(dx) > maxShift || Math.abs(dy) > maxShift) return null;
+      return [dx, dy];
+    }
+
+    // film_steady.shift: phase correlation, then the centroid
+    function shift(g0, g1, w, h) {
+      const m = most(w, h);
+      let s = findShift(g0, g1, w, h, m);
+      if (s) return { s, how: "phase" };
+      s = centroidShift(g0, g1, w, h, m);
+      if (s) return { s, how: "centroid" };
+      return { s: null, how: "not aligned" };
+    }
+
+    // film_steady.runs: pictures [{g, w, h, key}] in runs of one key and one shape
+    function runs(pics) {
+      const out = [];
+      pics.forEach((p, i) => {
+        const last = out.length ? pics[out[out.length - 1][out[out.length - 1].length - 1]] : null;
+        if (last && p.key === last.key && p.w === last.w && p.h === last.h) out[out.length - 1].push(i); else out.push([i]);
+      });
+      return out;
+    }
+    // film_steady.chain: a picture that matches nothing keeps the place before; the next is matched to the newest that did
+    function chain(pics, run, tick) {
+      const places = [[0, 0]], hows = ["first"];
+      let good = 0;
+      for (let k = 1; k < run.length; k++) {
+        let s = null, how = "", j = k - 1;
+        for (j of [...new Set([k - 1, good])]) {
+          ({ s, how } = shift(pics[run[j]].g, pics[run[k]].g, pics[run[k]].w, pics[run[k]].h));
+          if (s) break;
+        }
+        if (s) { places.push([places[j][0] + s[0], places[j][1] + s[1]]); good = k; } else places.push(places[places.length - 1].slice());
+        hows.push(j === k - 1 || !s ? how : `${how} to ${k - j} before`);
+        if (tick) tick();
+      }
+      return { places, hows };
+    }
+    // obs_mosaic.held_to_spice (spice at 0): the chain plus a Gaussian (sigma smooth, cut at 3 sigma) of 0 - chain, to 1/100
+    function held(places, smooth) {
+      const N = places.length, out = new Array(N);
+      for (let a = 0; a < N; a++) {
+        let sx = 0, sy = 0, sw = 0;
+        for (let b = 0; b < N; b++) {
+          const d = a - b;
+          if (Math.abs(d) > 3 * smooth) continue;
+          const wt = Math.exp(-0.5 * (d / smooth) ** 2);
+          sx += wt * (0 - places[b][0]); sy += wt * (0 - places[b][1]); sw += wt;
+        }
+        out[a] = [pyRoundN(places[a][0] + sx / sw, 2), pyRoundN(places[a][1] + sy / sw, 2)];
+      }
+      return out;
+    }
+    // film_steady.measure: [{run, places, hows}]
+    // (tick: called after each picture is matched)
+    const measure = (pics, tick) => runs(pics).map(run => Object.assign({ run }, chain(pics, run, tick)));
+    // film_steady.moves: each picture's move, parts of the picture, or null with smooth 0
+    function moves(pics, measured, smooth) {
+      if (smooth <= 0) return null;
+      const out = new Array(pics.length).fill(null);
+      for (const { run, places } of measured) {
+        const hd = held(places, smooth);
+        run.forEach((i, k) => { out[i] = [pyRoundN(-hd[k][0] / pics[i].w, C.PLACES) + 0, pyRoundN(-hd[k][1] / pics[i].h, C.PLACES) + 0]; });
+      }
+      return out;
+    }
+    // film_steady.offsets
+    function offsets(pics, smooth, report) {
+      if (smooth <= 0) return null;
+      const m = measure(pics);
+      if (report) m.forEach(r => report.push(...r.hows));
+      return moves(pics, m, smooth);
+    }
+
+    return { C, grey, most, blur, optimal, fft2, phaseCorrelate, findShift, centroidShift, shift, runs, chain, held, measure, moves, offsets, pyRoundN };
+  };
+  const M = MATH(), C = M.C;
+
+  // the matching, off the page's thread: a worker made of the same arithmetic, given the film's pictures (grey, at
+  // SIDE) and answering with each run's chain, telling how many pictures it has matched as it goes
+  let worker = null, asks = 0;
+  const waiting = new Map();
+  function work() {
+    if (worker || typeof Worker === "undefined") return worker;
+    try {
+      const src = `const M = (${MATH.toString()})();\nonmessage = e => { const { id, pics } = e.data; let done = 0;\n`
+        + `  const measured = M.measure(pics, () => { if (++done % 8 === 0) postMessage({ id, done }); });\n  postMessage({ id, measured }); };`;
+      worker = new Worker(URL.createObjectURL(new Blob([src], { type: "text/javascript" })));
+      worker.onmessage = e => { const w = waiting.get(e.data.id); if (!w) return; if (e.data.measured) { waiting.delete(e.data.id); w.res(e.data.measured); } else if (w.tick) w.tick(e.data.done); };
+      worker.onerror = () => { for (const w of waiting.values()) w.rej(new Error("the stabilization worker failed")); waiting.clear(); worker = null; };
+    } catch (e) { worker = null; }
+    return worker;
+  }
+  // measure(pics, tick): the chains, in the worker (on this thread when there is none)
+  function measure(pics, tick) {
+    const w = work();
+    if (!w) { let done = 0; return Promise.resolve(M.measure(pics, () => { if (tick && ++done % 8 === 0) tick(done); })); }
+    const id = ++asks;
+    return new Promise((res, rej) => { waiting.set(id, { res, rej, tick }); w.postMessage({ id, pics }); });
+  }
+  // a picture (an image or bitmap) as the matching sees it: at SIDE on its longer side, grey ({g, w, h})
+  function greyOf(im) {
+    const W = im.width, H = im.height, k = C.SIDE / Math.max(W, H), w = Math.max(1, Math.round(W * k)), h = Math.max(1, Math.round(H * k));
+    const c = typeof OffscreenCanvas !== "undefined" ? new OffscreenCanvas(w, h) : Object.assign(document.createElement("canvas"), { width: w, height: h });
+    const g = c.getContext("2d", { willReadFrequently: true });
+    g.imageSmoothingQuality = "high"; g.drawImage(im, 0, 0, w, h);
+    return { g: M.grey(g.getImageData(0, 0, w, h).data, w, h), w, h };
+  }
+
+  window.cassiniFilmSteady = Object.assign(window.cassiniFilmSteady || {}, { C, math: M, measure, greyOf });
+})();
+</script>
