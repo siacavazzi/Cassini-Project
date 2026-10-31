@@ -392,7 +392,7 @@ onmessage = async e => {
     // a colour set: colour_picture's mix of the filters' planes; a trail: the earlier frames under the newest;
     // a filled pass: then its detail filter (the planes came without it)
     let px = !mixing ? planes[0].getContext("2d").getImageData(0, 0, W, H).data
-      : m.trail ? M.blendTrail(planes.slice(0, -1), planes[planes.length - 1]) : M.mix(planes, t.sets);
+      : m.trail ? M.blendTrail(planes.slice(0, -1), planes[planes.length - 1]) : M.mix(planes, m.eye ? t.eye : t.sets);
     if (m.detail) px = sharpen(px, W, H, t);
     out = new OffscreenCanvas(W, H);
     out.getContext("2d").putImageData(new ImageData(px, W, H), 0, 0);
@@ -460,21 +460,26 @@ onmessage = async e => {
       if (!S() || !S().get("movies.stabilizeLocal")) return null;
       const steady = window.cassiniStabilize ? window.cassiniStabilize() : 0, exposure = window.cassiniExposure ? window.cassiniExposure() : 0;
       const trail = S().get("movies.trail") || 0;
-      if (!steady && !exposure && !trail) return null;
+      // Natural color (emulated): a colour set is always mixed here, with the pass's eye mix
+      const eye = !!(o.color && window.cassiniEye && window.cassiniEye());
+      if (!steady && !exposure && !trail && !eye) return null;
       // the pictures as Settings > Processing draws them by default only (another look or a step off: the server)
       if (window.cassiniLook && window.cassiniLook()) return null;
       const e = lookup(frames, id, o.center !== false, !!o.color);
       if (!e) return null;
-      // a colour set: its natural mix here (a false colour set: the server)
-      const set = o.color && e.table.sets ? e.table.sets.by[e.n] : null;
-      if (o.color && e.table.colour && !e.table.sets) return null;
+      // a colour set: its natural mix here (a false colour set: the server), or with Natural color (emulated) its eye
+      // mix, false colour sets too
+      const recipes = eye ? e.table.eye : e.table.sets;
+      const set = o.color && recipes ? recipes.by[e.n] : null;
+      if (o.color && e.table.colour && !recipes) return null;
       if (exposure && !(e.table.exposure && e.table.exposure.local)) return null;
       const tr = set ? 0 : Math.min(trail, e.table.trail_most);
+      if (!steady && !exposure && !tr && !set) return null;
       // a filled pass ends in its detail filter: anything but a move is done on its frames drawn without it, and
       // the filter here (on the GPU; a computer without one leaves the pass to the server)
       const raw = !!e.table.detail && !!(exposure || tr || (set && set.length > 1));
       if (raw && !gpu()) return null;
-      return { steady, exposure, trail: tr, raw };
+      return { steady, exposure, trail: tr, raw, eye };
     },
     // the picture of the frame (SPICE's places, no gain, OUT px) moved to its stabilized place and given its
     // exposure gain: a new Image, or null
@@ -483,7 +488,8 @@ onmessage = async e => {
     async apply(frames, id, im, o = {}) {
       const e = byId.get(`${tag(o.center !== false, !!o.color)}:${id}`);
       if (!e) return null;
-      const T = e.table, set = o.color && T.sets ? T.sets.by[e.n] : null, M = window.cassiniSteadyMath();
+      const recipes = o.eye ? e.table.eye : e.table.sets;
+      const T = e.table, set = o.color && recipes ? recipes.by[e.n] : null, M = window.cassiniSteadyMath();
       // a partial frame shows the whole one before it (the server's plane of frame n, im, is that frame's picture)
       const shown = M.heldOf(T, e.n);
       const load = async j => {
@@ -495,7 +501,7 @@ onmessage = async e => {
       const older = !set && o.trail ? M.trailOf(T, shown, o.trail) : [];
       const tiles = set || [...older, shown], bitmaps = await Promise.all(tiles.map(load)), mid = ++seq;
       const planes = tiles.map((j, q) => ({ i: T.n.indexOf(j), bitmap: bitmaps[q] }));
-      const r = await new Promise(res => { waiting.set(mid, res); work().postMessage({ id: mid, key: e.key, n: e.n, steady: o.steady || 0, exposure: o.exposure || 0, trail: older.length > 0, detail: !!o.raw, planes }, bitmaps); });
+      const r = await new Promise(res => { waiting.set(mid, res); work().postMessage({ id: mid, key: e.key, n: e.n, steady: o.steady || 0, exposure: o.exposure || 0, trail: older.length > 0, detail: !!o.raw, eye: !!o.eye, planes }, bitmaps); });
       stats.frames++; stats.placeMs += r.ms[0]; stats.drawMs += r.ms[1]; stats.last = { id, moves: r.moves, gain: r.gain, set: tiles.map(j => T.ids[j]) };
       const url = URL.createObjectURL(r.blob), out = new Image();
       urls.push(url);
