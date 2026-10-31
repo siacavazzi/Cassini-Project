@@ -3,8 +3,12 @@
      splices the style into the head, the window into #app, and the script after Cassini Studio's (it draws with the
      studio's renderer and edits the look in the studio) and before the dock's.
 
-     Opening: Edit… on the highlighted stretch's bar (segment.html), Edit frames… in the Export window, Go > Movie
-     Editor…, or a link that carries an edit (&cut=…). The editor asks the frame server for the stretch's film plan
+     Opening: Edit on the highlighted stretch's bar (segment.html: the highlight is let go), Edit frames… in the Export
+     window, Go > Movie Editor…, or a link that carries an edit (&cut=…). A new stretch opens as a small window that
+     shows it loading: its frames listed, then every picture the editor and the camera windows will show made ahead on
+     the frame server (cassiniSegment.make, POST /prebuild), with how far it is and how long is left; when that is done
+     the window grows into the whole editor (Open now grows it at once, the making carrying on in the footer). The
+     editor asks the frame server for the stretch's film plan
      (/export/plan.json, web/frames/export.py), every raw frame in time order with the picture the film shows for it
      (mosaic, color composite, movie pass or processed frame: plan entry src), and lists them as a filmstrip.
 
@@ -32,13 +36,15 @@
      starts on the camera with more frames.
 
      What it keeps: frames removed by hand (Remove, or Keep only the picked ones), and only the cameras, targets
-     and filter pairs left on (click a chip to leave it out, double-click it to keep only it). Left-out frames stay in
-     the strip, dimmed, so they can be put back. Removing a frame never changes how the others are made: a mosaic keeps
+     and filter pairs left on (click a chip to leave it out, double-click it to keep only it). Left-out frames leave
+     the strip; Show left-out frames (Settings > Movie, off by default) shows them dimmed, so they can be put back. Removing a frame never changes how the others are made: a mosaic keeps
      every tile, a composite every channel; that frame's picture is only not shown, and the film closes over the gap.
 
-     The look: Edit the look… opens the frame in front in Cassini Studio (Adjust and Filters), and Use for the movie
-     makes it the look of every frame: the preview, Play, each downloaded frame and the exported film (the frame
-     server draws it the same way, web/frames/studio_look.py).
+     The look: one section at the top of the side panel, with Apply to: Whole movie (every frame, the default) or
+     This frame (the frame in front, or the picked frames), said on the picture too. Its sliders (exposure, contrast,
+     saturation, warmth) and More in Studio… (Adjust and Filters, Use for the movie / Use for this frame) change what
+     Apply to says: the movie's look goes on every frame, the preview, Play, each downloaded frame and the exported
+     film (the frame server draws it the same way, web/frames/studio_look.py).
 
      Exposure: the graph under the picture is the film's brightness picture by picture (each picture's lit pixels,
      measured by the frame server on the pictures the film draws, /export/levels.json; NAC white, WAC amber; dim as
@@ -55,9 +61,9 @@
      move the frame in front, or
      the picked frames, when SPICE's centering is a little off. Drawn the same way here and in the film (export.framed).
 
-     One frame edited on its own: This frame changes only the frame in front (or the picked frames): its exposure,
-     contrast, saturation and warmth over the movie's look, or Edit this frame in Studio… for every slider and filter
-     (Use for this frame). The rest of the movie keeps the movie's look; the frame keeps its level, crop and nudge, and
+     One frame edited on its own: Look with Apply to This frame changes only the frame in front (or the picked
+     frames): its exposure, contrast, saturation and warmth over the movie's look, or More in Studio… for every slider
+     and filter (Use for this frame). The rest of the movie keeps the movie's look; the frame keeps its level, crop and nudge, and
      follows the movie's look in every slider it leaves alone. A frame with its own look has a dot in the strip; Reset
      gives it the movie's look again. Drawn the same way on the preview, Play, downloads and the film (export.py fedit).
 
@@ -66,7 +72,7 @@
 
      The edit is one short recipe (from, until, cams, drop, targets, filters, edit, URL-encoded), kept on this device
      for the stretch (and levels, even, ctr, mos, crop, crop2, nudge, fedit), put in links as &cut=…, and sent to the export with its plan (cassiniMovieCut), so Save movie… makes
-     the film edited. window.cassiniMovieEdit = { open(recipe?), close, recipe(), cut(), get state }. -->
+     the film edited. window.cassiniMovieEdit = { open({ a, b } | recipe?), close, recipe(), cut(), holds(a, b), get state, get loading }. -->
 <style>
 #mecard { top: calc(env(safe-area-inset-top, 0px) + 34px); left: 50%; transform: translateX(-50%); width: clamp(600px, 76vw, 1240px); height: min(780px, calc(100% - 110px)); display: flex; flex-direction: column; }
 #mecard[style*="left"] { transform: none; }
@@ -94,7 +100,7 @@
 #mecard .mebar .sp { flex: 1; }
 #mecard .mebar .rnd { all: unset; width: 24px; height: 24px; display: grid; place-items: center; border-radius: 50%; color: var(--q-text); background: rgba(255,255,255,.08); cursor: pointer; flex: none; font-size: 12px; }
 #mecard .mebar .rnd:hover { background: rgba(255,255,255,.16); color: #fff; }
-#mepos { min-width: 120px; font-variant-numeric: tabular-nums; }
+#mepos { min-width: 96px; font-variant-numeric: tabular-nums; }
 #melevels { position: relative; height: 68px; border-top: 1px solid var(--q-line); background: rgba(6,8,11,.92); cursor: crosshair; touch-action: none; }
 #melevels.onpt { cursor: ns-resize; }
 #melevels canvas { position: absolute; inset: 0; width: 100%; height: 100%; display: block; }
@@ -149,6 +155,41 @@
 #mecard .mecheck { display: flex; gap: 6px; align-items: center; margin-top: 10px; font-size: 11px; color: var(--q-text); cursor: pointer; }
 #mecard .mefoot { flex: none; display: flex; gap: 6px; flex-wrap: wrap; align-items: center; padding: 8px 10px; border-top: 1px solid var(--q-line); font-size: 11px; color: var(--q-text); }
 #mecard .mefoot .sp { flex: 1; }
+/* opening a stretch: a small window with how far it is, then the whole editor */
+#meload { display: none; padding: 14px 16px 14px; font-size: 11.5px; color: var(--q-text); }
+#mecard.loading { width: 420px !important; height: auto !important; }
+#mecard.loading :is(.mebody, .mefoot) { display: none; }
+#mecard.loading #meload { display: block; }
+#meload .mlwhen { font-variant-numeric: tabular-nums; color: #fff; font-size: 12.5px; }
+#meload .mlwhat { margin-top: 2px; color: var(--q-dim); font-variant-numeric: tabular-nums; }
+#meload ol { list-style: none; margin: 12px 0 0; padding: 0; display: grid; gap: 6px; }
+#meload li { display: flex; gap: 8px; align-items: baseline; color: var(--q-dim); font-variant-numeric: tabular-nums; }
+#meload li::before { content: "○"; width: 12px; flex: none; color: var(--q-dim); }
+#meload li.on { color: var(--q-text); } #meload li.on::before { content: "●"; color: var(--q-accent); animation: mlpulse 1.2s ease-in-out infinite; }
+#meload li.ok::before { content: "✓"; color: var(--q-accent); }
+#meload li.warn { color: #e6bb68; } #meload li.warn::before { content: "!"; color: #e6bb68; }
+@keyframes mlpulse { 50% { opacity: .35; } }
+#mlbar { margin-top: 10px; height: 4px; border-radius: 2px; background: rgba(255,255,255,.1); overflow: hidden; }
+#mlbar i { display: block; height: 100%; width: 0; background: var(--q-accent, #8ab6ff); transition: width .4s ease; }
+#mlbar.wait i { width: 30% !important; animation: mlslide 1.4s ease-in-out infinite; }
+@keyframes mlslide { from { transform: translateX(-100%); } to { transform: translateX(340%); } }
+#meload .mlbtns { display: flex; gap: 6px; justify-content: flex-end; margin-top: 12px; }
+#mecard.grow { animation: megrow .32s cubic-bezier(.2,.8,.2,1); transform-origin: 50% 0; }
+#mecard.grow:not([style*="left"]) { animation-name: megrowc; }
+@keyframes megrow { from { opacity: .4; transform: scale(.94); } to { opacity: 1; transform: none; } }
+@keyframes megrowc { from { opacity: .4; transform: translateX(-50%) scale(.94); } to { opacity: 1; transform: translateX(-50%); } }
+#meprep { display: flex; gap: 6px; align-items: center; color: var(--q-dim); font-variant-numeric: tabular-nums; }
+#meprep[hidden] { display: none; }
+#meprep button { all: unset; color: var(--q-accent); cursor: pointer; }
+/* what a change in Look applies to, said on the picture too */
+#mescopetag { position: absolute; left: 8px; bottom: 8px; z-index: 2; font: 10px var(--hudf); letter-spacing: .06em; padding: 3px 7px; border-radius: 3px; pointer-events: none;
+  background: rgba(10,12,16,.7); color: rgba(232,236,242,.8); border: 1px solid rgba(255,255,255,.14); }
+#mescopetag.frames { background: rgba(138,182,255,.2); border-color: rgba(138,182,255,.6); color: #fff; }
+#mecard .mescope { display: flex; margin-top: 2px; }
+#mecard .mescope button { flex: 1; text-align: center; }
+#mecard .mescope button i { font-style: normal; opacity: .7; margin-left: 5px; }
+#mefps { width: 56px; accent-color: var(--q-accent, #8ab6ff); }
+#mefpsv { min-width: 36px; font-variant-numeric: tabular-nums; }
 @media (max-width: 760px) {
   #mecard, #mecard.zoomed { width: calc(100% - 12px); left: 6px !important; transform: none; height: calc(100dvh - 60px); }
   #mecard .mebody { grid-template-columns: minmax(0, 1fr); grid-template-rows: minmax(0, 1fr) auto; }
@@ -164,6 +205,12 @@ body.phone #mestrip { grid-template-columns: repeat(auto-fill, 72px); grid-auto-
 
 <section class="win" id="mecard" aria-label="Movie Editor" hidden>
   <div class="titlebar"><span class="lights"><button class="close" aria-label="Close the movie editor">×</button><button class="min" aria-label="Close the movie editor">–</button><button class="zoom" aria-label="Zoom">+</button></span>Movie Editor</div>
+  <div id="meload" role="status" aria-live="polite">
+    <div class="mlwhen" id="mlwhen"></div><div class="mlwhat" id="mlwhat"></div>
+    <ol><li id="mlplan">Listing the frames</li><li id="mlmake">Making the pictures ahead</li></ol>
+    <div id="mlbar"><i></i></div>
+    <div class="mlbtns"><button class="galbtn" id="mlcancel">Cancel</button><button class="galbtn go" id="mlnow" title="Open the editor now; the pictures keep being made ahead">Open now</button></div>
+  </div>
   <div class="mebody">
     <div class="memain">
       <div id="mestage">
@@ -171,18 +218,20 @@ body.phone #mestrip { grid-template-columns: repeat(auto-fill, 72px); grid-auto-
         <canvas id="mecanvas" title="Drag to move this frame (or the picked frames) · double-click to fill the window"></canvas>
         <span class="metag" id="metag"></span>
         <span id="meoff" hidden>Left out</span>
-        <div id="meempty">Highlight a stretch of the timeline (drag across it), then Edit… on its bar.</div>
+        <span id="mescopetag"></span>
+        <div id="meempty">Highlight a stretch of the timeline (drag across it), then Edit on its bar.</div>
       </div>
       <div class="mebar">
         <button class="rnd" id="meprev" aria-label="Previous frame (←)" title="Previous frame (←)">‹</button>
         <button class="rnd" id="meplay" aria-label="Play the kept frames (Space)" title="Play the kept frames (Space)">▶</button>
         <button class="rnd" id="menext" aria-label="Next frame (→)" title="Next frame (→)">›</button>
         <span id="mepos"></span>
+        <input type="range" id="mefps" min="1" max="30" step="1" aria-label="Play frame rate" title="Play's frame rate (the movie mode frame rate, Settings > Playback)"><span id="mefpsv"></span>
         <div class="galseg" id="mesrc" role="group" aria-label="Picture shown"><button data-v="movie" title="The picture the film shows for this frame (mosaic, color, movie pass or processed)">As in the movie</button><button data-v="raw" title="The frame as Cassini took it">Raw frame</button></div>
         <span class="sp"></span>
         <button class="galbtn go" id="mekeep" title="Keep only the picked frames: every other frame comes out of the movie (K)" hidden>Keep only</button>
         <button class="galbtn" id="metoggle" title="Take the picked frames out of the movie, or put them back (Delete)">Remove</button>
-        <button class="galbtn" id="medl" title="Save this frame at full size, with the look, as a JPEG">Download frame</button>
+        <button class="galbtn" id="medl" title="Save this frame at full size, with the look, as a JPEG">Download</button>
       </div>
       <div id="melevels" title="The movie's brightness, picture by picture. Drag a point to brighten or dim the movie there; double-click to add a point, double-click a point to take it out">
         <canvas id="melvcanvas"></canvas><span class="lvtag" id="melvtag"></span>
@@ -191,7 +240,16 @@ body.phone #mestrip { grid-template-columns: repeat(auto-fill, 72px); grid-auto-
       <div id="mestrip" role="listbox" aria-label="Frames of the movie" aria-multiselectable="true"></div>
     </div>
     <div class="meside" hidden>
-      <h4 style="margin-top:10px"><span>Camera</span></h4>
+      <h4 style="margin-top:10px"><span>Look</span><span class="sp"></span><button id="melkclear" title="Take the look off what Apply to says">Reset</button></h4>
+      <div class="melabel" style="margin-top:2px">Apply to</div>
+      <div class="galseg mescope" id="mescope" role="radiogroup" aria-label="Changes to the look apply to"><button data-v="movie" role="radio" title="Every frame of the movie">Whole movie<i id="mescopen"></i></button><button data-v="frames" role="radio" title="Only the frame in front, or the picked frames">This frame</button></div>
+      <div class="merow"><span>Exposure</span><input type="range" id="melk-ex" data-k="exposure" min="-4" max="4" step="0.05" aria-label="Exposure"><span class="val"></span></div>
+      <div class="merow"><span>Contrast</span><input type="range" id="melk-ct" data-k="contrast" min="-100" max="100" step="1" aria-label="Contrast"><span class="val"></span></div>
+      <div class="merow"><span>Saturation</span><input type="range" id="melk-sa" data-k="saturation" min="-100" max="100" step="1" aria-label="Saturation"><span class="val"></span></div>
+      <div class="merow"><span>Warmth</span><input type="range" id="melk-wa" data-k="warmth" min="-100" max="100" step="1" aria-label="Warmth"><span class="val"></span></div>
+      <div class="mechips" style="margin-top:7px"><button class="galbtn" id="melkedit" title="Every slider and filter of Cassini Studio, on the frame in front">More in Studio…</button></div>
+      <div class="menote" id="melknote"></div>
+      <h4><span>Camera</span></h4>
       <div class="galseg" id="mecams" role="group" aria-label="Camera of the movie"></div>
       <div class="menote" id="mecamnote"></div>
       <h4><span>Pictures</span></h4>
@@ -202,11 +260,11 @@ body.phone #mestrip { grid-template-columns: repeat(auto-fill, 72px); grid-auto-
         <button class="galbtn" data-v="raw" title="Every frame in every filter as Cassini took it: nothing stacked, calibrated or put together">Every frame, raw</button>
       </div>
       <div class="melabel">Mosaics</div>
-      <div class="galseg" id="memos" role="group" aria-label="Mosaics in the movie"><button data-v="" title="As the camera windows show them (Settings: Mosaic movie frames, Complete mosaics only)">As the windows</button><button data-v="whole" title="Each mosaic once it is whole: a mosaic pass at its last tile, a mosaic movie once a lap, every tile new">Whole</button><button data-v="tiles" title="Every tile as it is taken, the mosaic building up">Tile by tile</button><button data-v="off" title="No mosaics: every frame of a mosaic or a ring strip on its own, as a still pass shows">Off</button></div>
+      <div class="galseg" id="memos" role="group" aria-label="Mosaics in the movie"><button data-v="" title="As the camera windows show them (Settings: Mosaic movie frames, Complete mosaics only)">Default</button><button data-v="whole" title="Each mosaic once it is whole: a mosaic pass at its last tile, a mosaic movie once a lap, every tile new">Whole</button><button data-v="tiles" title="Every tile as it is taken, the mosaic building up">Tile by tile</button><button data-v="off" title="No mosaics: every frame of a mosaic or a ring strip on its own, as a still pass shows">Off</button></div>
       <div class="menote" id="memosnote"></div>
       <h4><span>Framing</span><span class="sp"></span><button id="mefrclear" title="Take the crop off and put every nudged frame back">Reset</button></h4>
       <div class="melabel" style="margin-top:2px">Auto center</div>
-      <div class="galseg" id="mectr" role="group" aria-label="Auto center for the movie"><button data-v="" title="Each camera window's Auto center setting">As the windows</button><button data-v="1" title="Every picture centered on its body (north up), movie passes and single pictures alike">On</button><button data-v="0" title="Every picture as Cassini pointed">Off</button></div>
+      <div class="galseg" id="mectr" role="group" aria-label="Auto center for the movie"><button data-v="" title="Each camera window's Auto center setting (Settings > Processing)">Default</button><button data-v="1" title="Every picture centered on its body (north up), movie passes and single pictures alike">On</button><button data-v="0" title="Every picture as Cassini pointed">Off</button></div>
       <div class="mechips" style="margin-top:7px"><button class="galbtn" id="mecrop" aria-pressed="false" title="Draw the crop on the picture">Crop…</button></div>
       <div class="mecropctl" id="mecropctl" hidden>
         <div class="galseg" id="measpect" role="group" aria-label="Crop shape"><button data-v="free">Free</button><button data-v="1">Square</button><button data-v="1.7778">16:9</button><button data-v="1.3333">4:3</button><button data-v="pic">Picture</button></div>
@@ -215,13 +273,6 @@ body.phone #mestrip { grid-template-columns: repeat(auto-fill, 72px); grid-auto-
         <button class="galbtn" id="mecropdone">Done</button>
       </div>
       <div class="menote" id="menudged"></div>
-      <h4><span id="meownh">This frame</span><span class="sp"></span><button id="meownclear" title="Give this frame (or the picked frames) the movie's look again">Reset</button></h4>
-      <div class="merow"><span>Exposure</span><input type="range" id="meown-ex" data-k="exposure" min="-4" max="4" step="0.05" aria-label="This frame's exposure"><span class="val"></span></div>
-      <div class="merow"><span>Contrast</span><input type="range" id="meown-ct" data-k="contrast" min="-100" max="100" step="1" aria-label="This frame's contrast"><span class="val"></span></div>
-      <div class="merow"><span>Saturation</span><input type="range" id="meown-sa" data-k="saturation" min="-100" max="100" step="1" aria-label="This frame's saturation"><span class="val"></span></div>
-      <div class="merow"><span>Warmth</span><input type="range" id="meown-wa" data-k="warmth" min="-100" max="100" step="1" aria-label="This frame's warmth"><span class="val"></span></div>
-      <div class="mechips" style="margin-top:7px"><button class="galbtn" id="meownedit">Edit this frame in Studio…</button></div>
-      <div class="menote" id="meownnote"></div>
       <h4><span>Targets</span><span class="sp"></span><button id="metgall">All</button></h4>
       <div class="mechips" id="metargets"></div>
       <h4><span>Filters</span><span class="sp"></span><button id="meflall">All</button></h4>
@@ -230,10 +281,6 @@ body.phone #mestrip { grid-template-columns: repeat(auto-fill, 72px); grid-auto-
       <h4><span>Removed by hand</span><span class="sp"></span><button id="merestore">Put all back</button></h4>
       <div class="menote" id="medropped" style="margin-top:0"></div>
       <label class="mecheck"><input type="checkbox" id="meshowout"> Show left-out frames</label>
-      <h4><span>Movie look</span><span class="sp"></span><button id="melookclear">Clear</button></h4>
-      <div class="menote" id="melook" style="margin-top:0"></div>
-      <div class="mechips" style="margin-top:6px"><button class="galbtn" id="melookedit">Edit the look in Studio…</button></div>
-      <div class="menote">The look goes on every frame: the preview, Play, each downloaded frame and the saved movie.</div>
       <h4><span>Exposure</span><span class="sp"></span><button id="melvclear" title="Take out every level point">Clear</button></h4>
       <div class="merow"><span>Level here</span><input type="range" id="melvhere" min="-2" max="2" step="0.05" aria-label="Exposure level at the frame in front"><span class="val" id="melvherev"></span></div>
       <div class="merow"><span>Even exposure</span><input type="range" id="meeven" min="0" max="30" step="1" aria-label="Even exposure: smooth flashes and jumps in brightness over this many pictures (0 off)"><span class="val" id="meevenv"></span></div>
@@ -242,6 +289,7 @@ body.phone #mestrip { grid-template-columns: repeat(auto-fill, 72px); grid-auto-
   </div>
   <div class="mefoot">
     <span id="mesum"></span>
+    <span id="meprep" hidden><span id="mepreptext"></span><button id="meprepstop" title="Stop making the pictures ahead (what is made stays made)">Stop</button></span>
     <span class="sp"></span>
     <button class="galbtn" id="meundo" title="Undo (Ctrl+Z / ⌘Z)" disabled>Undo</button>
     <button class="galbtn" id="mecopy" title="A link that opens this stretch with these frames and this look">Copy link</button>
@@ -264,6 +312,8 @@ body.phone #mestrip { grid-template-columns: repeat(auto-fill, 72px); grid-auto-
   const opt = (k, d) => (S && S.get(k) !== undefined ? S.get(k) : d);
   const isoOf = et => new Date(etToMs(et)).toISOString().slice(0, 19);
   const STORE = "cassini-movie-edits";
+  if (S) S.define({ key: "movieEdit.showOut", section: "Movie", label: "Show left-out frames in the Movie Editor", type: "toggle", value: false,
+    hint: "Frames left out of a movie (removed by hand, or a camera, target or filter left out) stay in the editor's strip, dimmed, so they can be put back. Off, the strip shows only the movie's frames." });
 
   // ME: the stretch (a, b), its plan's frames, and the edit: drop (ids taken out by hand), keep (null = every target /
   // filter pair, else the ones kept), cams (the export's Cameras), edit (the studio look's recipe)
@@ -274,7 +324,8 @@ body.phone #mestrip { grid-template-columns: repeat(auto-fill, 72px); grid-auto-
   // lv: the frame server's measured brightness of each frame (EV) and Even out's change for each picture
   const ME = { a: null, b: null, frames: [], pictures: "movie", loading: false, error: "", drop: new Set(), targets: null, filters: null, edit: "",
     levels: new Map(), even: 0, ctr: null, mos: null, crop: null, crop2: null, nudge: new Map(), fedit: new Map(), lv: { level: {}, even: {}, done: 0, total: null, ready: false, error: "" },
-    sel: -1, anchor: -1, picked: new Set(), none: false, selOf: {}, showOut: true, src: "movie", undo: [], playing: false, pending: null };
+    sel: -1, anchor: -1, picked: new Set(), none: false, selOf: {}, showOut: !!opt("movieEdit.showOut", false), src: "movie", undo: [], playing: false, pending: null,
+    scope: "movie" };
   const EV = 2, NUDGE = 0.5, CROP = 0.05, EVEN = 30;   // as export.py's LEVEL_EV, NUDGE_MOST, CROP_LEAST, EVEN_MOST
   const WHOLE = [0, 0, 1, 1], boxStr = b => b.map(v => +v.toFixed(4)).join("_");
   const clamp = (v, a, b) => Math.max(a, Math.min(b, v));
@@ -380,6 +431,10 @@ body.phone #mestrip { grid-template-columns: repeat(auto-fill, 72px); grid-auto-
   }
   let exT = 0;
   function changed() {
+    if (!ME.showOut && ME.frames[ME.sel] && !kept(ME.frames[ME.sel]) && !ME.playing) {
+      const vis = visible(), near = vis.find(i => i > ME.sel) ?? vis[vis.length - 1];
+      if (near != null) { ME.sel = near; ME.anchor = near; ME.picked = new Set([...ME.picked].filter(i => kept(ME.frames[i]))); if (ME.picked.size < 2) ME.picked = new Set(); setTimeout(show); }
+    }
     remember(); render(); levelsSoon();
     // the export's plan follows (EX.mark re-plans the marked stretch, cut included)
     clearTimeout(exT); exT = setTimeout(() => { if (same()) EX.mark(); }, 300);
@@ -403,12 +458,23 @@ body.phone #mestrip { grid-template-columns: repeat(auto-fill, 72px); grid-auto-
     // every frame of the stretch, however many (list=1: the plan's cap is the film's, not the list's)
     const q = new URLSearchParams({ from: isoOf(ME.a), until: isoOf(ME.b), cams: "NW", fps: opt("export.adaptive", true) ? "auto" : String(opt("export.fps", 12)),
       size: "512", sound: "0", caption: "0", pictures: ME.pictures, list: "1" });
+    // how far the frame server is (progress=: /export/plan-progress/<key>.json, every half second; a server without
+    // it answers 404 throughout, and the words fall back to the time so far)
+    const key = Math.random().toString(36).slice(2, 14);
+    q.set("progress", key); ME.listing = null;
+    let poll = 0;
+    const look = async () => {
+      try { const r = await fetch(`${FRAMES}/export/plan-progress/${key}.json`, { cache: "no-store" }); if (r.ok && n === ask && ME.loading) { ME.listing = await r.json(); if (L) loadUi(); else render(); } } catch (e) {}
+      if (n === ask && ME.loading) poll = setTimeout(look, 500);
+    };
+    poll = setTimeout(look, 300);
     try {
       const r = await fetch(`${FRAMES}/export/plan.json?${q}${window.cassiniLook ? window.cassiniLook() : ""}${window.cassiniMovieStyle ? window.cassiniMovieStyle() : ""}${mosQ()}${window.cassiniSetsQ ? window.cassiniSetsQ() : ""}`), p = await r.json();
       if (n !== ask) return;
       if (!r.ok) throw new Error(p.error || `the frame server said ${r.status}`);
       ME.frames = p.pictures;
     } catch (e) { if (n === ask) ME.error = /fetch|network/i.test(String(e.message)) ? `No frame server at ${FRAMES}.` : `Could not list the frames: ${e.message || e}`; }
+    clearTimeout(poll);
     if (n !== ask) return;
     ME.loading = false;
     // keep lists that name nothing in the stretch mean nothing
@@ -513,8 +579,6 @@ body.phone #mestrip { grid-template-columns: repeat(auto-fill, 72px); grid-auto-
       k => change(() => { ME.filters = fl.length > 1 ? new Set([k]) : null; }));
     $("metgall").disabled = !ME.targets; $("meflall").disabled = !ME.filters; $("merestore").disabled = !ME.drop.size;
     $("medropped").textContent = ME.drop.size ? `${ME.drop.size.toLocaleString()} frame${ME.drop.size === 1 ? "" : "s"}` : "None. Pick a frame and press Delete.";
-    $("melook").textContent = ME.edit ? lookText(ME.edit) : "As the pipeline made the pictures.";
-    $("melookclear").disabled = !ME.edit;
     $("meshowout").checked = ME.showOut;
     sideLevels();
   }
@@ -523,11 +587,11 @@ body.phone #mestrip { grid-template-columns: repeat(auto-fill, 72px); grid-auto-
 
   function render() {
     $("meempty").hidden = !(ME.a == null || ME.loading || ME.error || !ME.frames.length);
-    $("meempty").textContent = ME.a == null ? "Highlight a stretch of the timeline (drag across it), then Edit… on its bar." : ME.loading ? "Listing the frames of this stretch…"
+    $("meempty").textContent = ME.a == null ? "Highlight a stretch of the timeline (drag across it), then Edit on its bar." : ME.loading ? (listText() || "Listing the frames of this stretch…")
       : ME.error || "No frames in this stretch.";
     $("mecard").querySelector(".meside").hidden = !ME.frames.length;
     const n = ME.frames.filter(kept).length, all = ME.frames.filter(ofCam).length;
-    $("mesum").textContent = ME.frames.length ? `${n.toLocaleString()} of ${all.toLocaleString()} ${both() ? (camsOf() === "N" ? "NAC " : "WAC ") : ""}frames in the movie` : "";
+    $("mesum").textContent = ME.frames.length ? `${n.toLocaleString()} of ${all.toLocaleString()} ${both() ? (camsOf() === "N" ? "NAC " : "WAC ") : ""}frames in the movie${!ME.showOut && all > n ? ` · ${(all - n).toLocaleString()} left out, hidden` : ""}` : "";
     $("meundo").disabled = !ME.undo.length;
     $("meexport").disabled = $("mecopy").disabled = ME.a == null;
     $("mepics").querySelectorAll("button").forEach(b => b.setAttribute("aria-pressed", String(b.dataset.v === ME.pictures)));
@@ -759,7 +823,7 @@ body.phone #mestrip { grid-template-columns: repeat(auto-fill, 72px); grid-auto-
       a.download = `Cassini_${e.id}_${new Date(e.t * 1000).toISOString().slice(0, 19).replace(/[:T]/g, "-")}${ME.edit || evOf(e) || cropAt(e) || ME.nudge.has(e.id) || ME.fedit.has(e.id) ? "_edited" : ""}.jpg`;
       document.body.appendChild(a); a.click(); a.remove(); setTimeout(() => URL.revokeObjectURL(a.href), 60000);
     } catch (err) { toast(`Could not save the frame: ${err.message || err}`); }
-    finally { b.disabled = false; b.textContent = "Download frame"; }
+    finally { b.disabled = false; b.textContent = "Download"; }
   }
   function toast(t) {
     const g = $("galtoast");
@@ -899,7 +963,7 @@ body.phone #mestrip { grid-template-columns: repeat(auto-fill, 72px); grid-auto-
   // the side's This frame, Exposure and Framing
   function sideLevels() {
     if (!ME.frames.length) return;
-    sideOwn();
+    sideLook();
     const e = ME.frames[ME.sel], inFilm = e && kept(e), here = $("melvhere");
     here.disabled = !inFilm;
     if (document.activeElement !== here || !here.matches(":active")) here.value = inFilm ? lineOf(e) : 0;
@@ -915,7 +979,7 @@ body.phone #mestrip { grid-template-columns: repeat(auto-fill, 72px); grid-auto-
     const mp = new Set(ME.frames.filter(e => e.pass && ofCam(e)).map(e => e.pass)).size;
     $("memosnote").textContent = ME.mos === "off" ? "No mosaics: every frame of a mosaic or a ring strip on its own, its color picture once a filter set is complete." : ME.mos === "tiles" || !ME.mos && !winWhole() && !winComplete() ? "Each mosaic builds up tile by tile."
       : ME.mos === "whole" || winWhole() && winComplete() ? `Each mosaic whole: a pass once, finished${mp ? ` (${mp.toLocaleString()} here)` : ""}, a mosaic movie once a lap.`
-      : winWhole() ? "As the windows: mosaic movies a lap at a time, mosaic passes tile by tile." : `As the windows: mosaic passes once, finished${mp ? ` (${mp.toLocaleString()} here)` : ""}; mosaic movies tile by tile.`;
+      : winWhole() ? "Default (as the camera windows): mosaic movies a lap at a time, mosaic passes tile by tile." : `Default (as the camera windows): mosaic passes once, finished${mp ? ` (${mp.toLocaleString()} here)` : ""}; mosaic movies tile by tile.`;
     $("mecrop").setAttribute("aria-pressed", String(!!cropping));
     $("mecrop").textContent = cropping ? "Cropping…" : ME.crop2 ? "Crop… · start and end" : ME.crop ? "Crop…  · on" : "Crop…";
     $("mecropctl").hidden = !cropping;
@@ -1071,7 +1135,7 @@ body.phone #mestrip { grid-template-columns: repeat(auto-fill, 72px); grid-auto-
   async function editLook() {
     const e = ME.frames[ME.sel]; if (!e || !STU()) return;
     stopPlay();
-    const blob = await opening($("melookedit"), e); if (!blob) return;
+    const blob = await opening($("melkedit"), e); if (!blob) return;
     STU().open({ kind: "picture", blob, edit: ME.edit || undefined, item: { title: `Movie look · ${hms(e)} UTC`, src: e.src, ids: [e.id] },
       look: r => { change(() => { ME.edit = r; }); show(); if (WM) WM.front(card); } });
   }
@@ -1112,36 +1176,60 @@ body.phone #mestrip { grid-template-columns: repeat(auto-fill, 72px); grid-auto-
     if (String(v) === String(movie) || +v === +movie) m.delete(k); else m.set(k, String(v));
     const r = ownStr(m); if (r) ME.fedit.set(e.id, r); else ME.fedit.delete(e.id);
   }
-  function sideOwn() {
-    const sel = ownSel(), e = sel[0], studio = !!STU();
-    $("meownh").textContent = sel.length > 1 ? `These ${sel.length} frames` : "This frame";
-    $("meownclear").disabled = !sel.some(x => ME.fedit.has(x.id));
-    $("meownedit").disabled = !e || !studio;
-    $("meownedit").textContent = sel.length > 1 ? `Edit these ${sel.length} frames in Studio…` : "Edit this frame in Studio…";
-    const p = e && studio ? ownLook(e) : null, own = e ? ownMap(ME.fedit.get(e.id)) : new Map();
+  // Look: Apply to the whole movie (its look, ME.edit) or to the frames This frame means (their own looks, ME.fedit)
+  const frameScope = () => ME.scope === "frames";
+  function scopeWords() {
+    const sel = ownSel(), n = sel.length;
+    return frameScope() ? (n > 1 ? `these ${n.toLocaleString()} picked frames` : "this frame") : "the whole movie";
+  }
+  function sideLook() {
+    // (the sliders show the frame in front when it is one of them)
+    const sel = ownSel(), e = sel.find(x => x === ME.frames[ME.sel]) || sel[0], studio = !!STU(), fr = frameScope(), film = ME.frames.filter(kept).length;
+    $("mescope").querySelectorAll("button").forEach(b => { const on = b.dataset.v === ME.scope; b.setAttribute("aria-pressed", String(on)); b.setAttribute("aria-checked", String(on)); });
+    $("mescopen").textContent = film.toLocaleString();
+    $("mescope").querySelector('[data-v="frames"]').firstChild.textContent = sel.length > 1 ? `${sel.length.toLocaleString()} picked` : "This frame";
+    $("melkclear").disabled = fr ? !sel.some(x => ME.fedit.has(x.id)) : !ME.edit;
+    $("melkedit").disabled = !e || !studio;
+    // the sliders: the movie's look, or the frame in front's (its own keys marked •)
+    const p = !studio ? null : fr ? (e ? ownLook(e) : null) : STU().decode(ME.edit), own = fr && e ? ownMap(ME.fedit.get(e.id)) : new Map();
     document.querySelectorAll("#mecard input[data-k]").forEach(el => {
       const k = el.dataset.k, sk = Object.keys(OWN).find(x => OWN[x][0] === k);
       el.disabled = !p;
+      el.setAttribute("aria-label", `${OWN[sk][0][0].toUpperCase()}${OWN[sk][0].slice(1)} of ${scopeWords()}`);
       if (p && !el.matches(":active")) el.value = p[k];
       const v = p ? p[k] : 0, val = el.nextElementSibling;
       val.textContent = !p ? "—" : (k === "exposure" ? `${v > 0 ? "+" : v < 0 ? "−" : ""}${Math.abs(v).toFixed(2)}` : `${v > 0 ? "+" : ""}${Math.round(v)}`) + (own.has(sk) ? " •" : "");
       val.title = own.has(sk) ? "This frame's own" : "The movie's look";
     });
-    const n = ME.fedit.size;
-    $("meownnote").textContent = (sel.length > 1 ? "Only the picked frames change; the rest keep the movie's look." : "Only the frame in front changes; the rest keep the movie's look.")
-      + (n ? ` ${n.toLocaleString()} frame${n === 1 ? " has its" : "s have their"} own look (a dot in the strip).` : "");
+    const n = ME.fedit.size, owns = n ? ` ${n.toLocaleString()} frame${n === 1 ? " has its" : "s have their"} own look (a dot in the strip).` : "";
+    const picked = ME.picked.size > 1 ? ME.picked.size : 0;
+    $("melknote").textContent = fr ? `Only ${scopeWords()} change${sel.length > 1 ? "" : "s"}; every other frame keeps the movie's look.${owns}`
+      : `Every frame of the movie changes.${e && ME.fedit.has(e.id) ? " The frame in front has its own look, which it keeps over these." : ""}${picked ? ` ${picked} frames are picked: Apply to ${picked} picked changes only them.` : ""}${owns}`;
+    // and on the picture: what a change applies to now
+    const tag = $("mescopetag");
+    tag.textContent = fr ? `Editing ${scopeWords()} only` : "Editing the whole movie";
+    tag.classList.toggle("frames", fr);
+    tag.hidden = !ME.frames.length;
   }
+  function setScope(v) { if (v === ME.scope) return; ME.scope = v; sideLook(); }
+  $("mescope").addEventListener("click", ev => { const b = ev.target.closest("button"); if (b) setScope(b.dataset.v); });
+  // the movie's look with key k at value v (the rest of it as it is)
+  function movieSet(k, v) { const st = STU(), q = st.decode(ME.edit); q[LONGOF(k)] = v; ME.edit = st.encode(st.lookOf(q)); }
   document.querySelectorAll("#mecard input[data-k]").forEach(el => {
     const sk = Object.keys(OWN).find(x => OWN[x][0] === el.dataset.k);
-    slide(el, v => ownSel().forEach(e => ownSet(e, sk, +(+v).toFixed(4))), () => { sideOwn(); graph(); paint(); });
+    slide(el, v => { v = +(+v).toFixed(4); if (frameScope()) ownSel().forEach(e => ownSet(e, sk, v)); else movieSet(sk, v); }, () => { sideLook(); graph(); paint(); });
   });
-  $("meownclear").addEventListener("click", () => { const sel = ownSel(); change(() => sel.forEach(e => ME.fedit.delete(e.id))); show(); });
+  $("melkclear").addEventListener("click", () => {
+    if (frameScope()) { const sel = ownSel(); change(() => sel.forEach(e => ME.fedit.delete(e.id))); }
+    else change(() => { ME.edit = ""; });
+    show();
+  });
   // Studio on the frame in front with its own look; Use for this frame (or these frames) keeps whatever differs from
   // the movie's look as the frames' own
   async function editOwn() {
     const sel = ownSel(), e = sel[0]; if (!e || !STU()) return;
     stopPlay();
-    const blob = await opening($("meownedit"), e); if (!blob) return;
+    const blob = await opening($("melkedit"), e); if (!blob) return;
     const start = ME.fedit.has(e.id) ? `${ME.edit},${ME.fedit.get(e.id)}` : ME.edit;
     STU().open({ kind: "picture", blob, edit: start || undefined, lookLabel: sel.length > 1 ? `Use for these ${sel.length} frames` : "Use for this frame",
       item: { title: `${hms(e)} UTC · this frame's look`, src: e.src, ids: [e.id] },
@@ -1153,33 +1241,115 @@ body.phone #mestrip { grid-template-columns: repeat(auto-fill, 72px); grid-auto-
         show(); if (WM) WM.front(card);
       } });
   }
-  $("meownedit").addEventListener("click", editOwn);
+  $("melkedit").addEventListener("click", () => (frameScope() ? editOwn() : editLook()));
 
-  // ---------- opening ----------
+  // ---------- opening: a small window while the stretch loads, then the whole editor ----------
   function front() { card.hidden = false; delete card.dataset.min; if (WM) { WM.front(card); WM.syncMenu(); } }
-  // r: a recipe to open (a link's), else the stretch highlighted now and what was kept for it on this device
-  function open(r) {
-    front();
+  // o: a stretch ({ a, b }: Edit on the highlighted stretch's bar), a recipe to open (a link's), else the stretch
+  // marked now (the Export window's Edit frames…, Go > Movie Editor…); what was kept for it on this device comes with it
+  function open(o) {
+    const r = typeof o === "string" ? o : null;
     let a = EX.state.a, b = EX.state.b;
-    if (r) {
-      const q = new URLSearchParams(r), f = q.get("from"), u = q.get("until");
-      if (f && u) { a = utcToEt(f); b = utcToEt(u); EX.mark(a, b, "new"); a = EX.state.a; b = EX.state.b; }
-    }
-    if (a == null || b == null || b - a < 1) { ME.a = ME.b = null; ME.frames = []; strip(); render(); return; }
+    if (o && typeof o === "object") { a = o.a; b = o.b; }
+    else if (r) { const q = new URLSearchParams(r), f = q.get("from"), u = q.get("until"); if (f && u) { a = utcToEt(f); b = utcToEt(u); } }
+    else if (window.cassiniSegment) cassiniSegment.hide();
+    front();
+    if (a == null || b == null || b - a < 1) { quit(); ME.a = ME.b = null; ME.frames = []; card.classList.remove("loading"); strip(); render(); return; }
     if (ME.a !== a || ME.b !== b || r) {
-      stopPlay(); ME.a = a; ME.b = b; ME.undo = []; ME.sel = -1; ME.picked = new Set(); ME.none = false;
+      quit(); stopPlay(); ME.a = a; ME.b = b; ME.undo = []; ME.sel = -1; ME.picked = new Set(); ME.none = false; ME.scope = "movie";
       take(r || recalled(a, b) || ""); remember();
-      load();
+      begin();
     } else { render(); levelsSoon(0); }
     setTimeout(paint);
   }
-  function close() { stopPlay(); card.hidden = true; card.classList.remove("big"); if (WM) WM.syncMenu(); }
-  // a new stretch highlighted while the editor is open: it edits that one
-  document.addEventListener("cassini:marks", e => {
-    if (card.hidden) return;
-    const { a, b } = e.detail;
-    if (a != null && b != null && (ME.a == null || Math.abs(a - ME.a) >= 1 || Math.abs(b - ME.b) >= 1)) { clearTimeout(open.t); open.t = setTimeout(() => open(), 400); }
-  });
+  // L: the stretch loading: its frames listed (plan), and its pictures made ahead on the frame server (job, from
+  // cassiniSegment.make; maker stops it); the window grows into the editor when both are done, or on Open now
+  let L = null;
+  function begin() {
+    const me = L = { plan: false, job: null, maker: null, at: performance.now(), planAt: performance.now(), expect: window.cassiniSegment ? cassiniSegment.frames(ME.a, ME.b) : null };
+    card.classList.add("loading"); loadUi();
+    // (the words tick on while the frame server is busy: how long it has been at each step)
+    clearInterval(begin.tick); begin.tick = setInterval(() => { if (L !== me || !card.classList.contains("loading")) clearInterval(begin.tick); else loadUi(); }, 1000);
+    load().then(() => { if (L !== me) return; me.plan = true; me.planTook = (performance.now() - me.planAt) / 1000; me.makeAt = performance.now(); loadUi(); ready(); });
+    if (window.cassiniSegment && cassiniSegment.make) me.maker = cassiniSegment.make(ME.a, ME.b, j => { if (L !== me) return; me.job = j; loadUi(); prepUi(); ready(); });
+    else me.job = { state: "failed", unsupported: true };
+  }
+  const BUSY = /^(queued|planning|making|waiting|finishing)$/;
+  const making = () => !!(L && L.job && BUSY.test(L.job.state));
+  // both done: the whole editor (a moment after, so the small window says so)
+  function ready() {
+    if (!L || !card.classList.contains("loading") || !L.plan || ME.loading || making() || !L.job && L.maker) return;
+    setTimeout(() => { if (L && card.classList.contains("loading") && !making()) grow(); }, 450);
+  }
+  function grow() {
+    if (!card.classList.contains("loading")) return;
+    card.classList.remove("loading"); card.classList.add("grow");
+    setTimeout(() => card.classList.remove("grow"), 400);
+    render(); prepUi(); fpsUi(); setTimeout(() => { paint(); graph(); const el = $("mestrip").querySelector(".meth.sel"); if (el) el.scrollIntoView({ block: "nearest" }); });
+    if (WM) WM.front(card);
+  }
+  // the listing's words: how far the frame server is through the stretch's frames (null: it has not said)
+  function listText() {
+    const g = ME.listing;
+    if (!g || !g.total) return null;
+    return g.step === "sizes" ? "Sizing the mosaics for full resolution…" : `Listing the frames · ${Math.min(g.done, g.total).toLocaleString()} of ${g.total.toLocaleString()}`;
+  }
+  // the job's words: how far it is
+  function jobText(j, short) {
+    if (!j) return "Asking the frame server…";
+    const of = `${j.done.toLocaleString()} of ${j.total.toLocaleString()}`, left = j.eta != null ? ` · ${fmtDur(j.eta)} left` : "";
+    return j.state === "queued" ? (j.ahead ? `Waiting for ${j.ahead} stretch${j.ahead > 1 ? "es" : ""} before it…` : "Starting…")
+      : j.state === "planning" ? "Finding every picture in the stretch…"
+      : j.state === "finishing" ? "Finishing the last mosaic tiles…"
+      : j.state === "waiting" ? `On hold: the frame server is busy with another job · ${of}`
+      : short ? `Making pictures ahead · ${j.total ? Math.floor(100 * j.done / j.total) : 0}%${left}` : `Making the pictures ahead · ${of}${left}`;
+  }
+  function loadUi() {
+    if (!L) return;
+    const short = et => { const d = new Date(etToMs(et)).toISOString(); return `${d.slice(0, 10)} ${d.slice(11, 16)}`; };
+    $("mlwhen").textContent = `${short(ME.a)} → ${short(ME.b)} UTC`;
+    const n = L.plan ? ME.frames.length : (window.cassiniSegment ? cassiniSegment.frames(ME.a, ME.b) : null);
+    $("mlwhat").textContent = `${fmtDur(ME.b - ME.a)}${n ? ` · ${n.toLocaleString()} frame${n === 1 ? "" : "s"}` : ""}`;
+    const plan = $("mlplan"), mk = $("mlmake"), j = L.job;
+    plan.className = !L.plan ? "on" : ME.error ? "warn" : "ok";
+    const secs = t => { const v = (performance.now() - t) / 1000; return v < 2 ? "" : ` · ${fmtDur(v)}`; };
+    plan.textContent = !L.plan && listText() ? listText() + secs(L.planAt) : !L.plan ? `Listing ${L.expect ? `the ${L.expect.toLocaleString()} frames` : "the frames"}: the frame server works out the picture each one shows${secs(L.planAt)}` : ME.error ? ME.error : ME.frames.length ? `${ME.frames.length.toLocaleString()} frame${ME.frames.length === 1 ? "" : "s"} listed${L.planTook >= 2 ? ` in ${fmtDur(L.planTook)}` : ""}` : "No frames in this stretch";
+    mk.className = !j ? "on" : BUSY.test(j.state) ? "on" : j.state === "done" ? "ok" : j.unsupported ? "" : "warn";
+    mk.textContent = !j ? "Making the pictures ahead"
+      : BUSY.test(j.state) ? jobText(j) + (j.state === "planning" || j.state === "queued" ? secs(L.makeAt || L.planAt) : "")
+      : j.state === "done" ? (j.took != null && j.took < 1 && j.total ? `Every picture made already (${j.total.toLocaleString()})` : `${(j.total || 0).toLocaleString()} pictures made ahead${j.took ? ` in ${fmtDur(j.took)}` : ""}${j.errors ? ` (${j.errors} could not be made)` : ""}`)
+      : j.state === "stopped" ? "Stopped; the rest are made as they are shown"
+      : j.unsupported ? "Pictures are made as they are shown" : (j.error || "Could not make the pictures ahead") + "; they are made as they are shown";
+    // the bar: the listing's own count while it lists (when the server gives one), then the pictures made
+    const g = ME.listing, frac = !L.plan ? (g && g.total && g.step === "frames" ? Math.min(1, g.done / g.total) : null)
+      : j && j.total && BUSY.test(j.state) ? j.done / j.total : j && j.state === "done" ? 1 : null, bar = $("mlbar");
+    bar.classList.toggle("wait", frac == null && (!L.plan || making() || !j));
+    bar.firstElementChild.style.width = frac == null ? "" : `${(frac * 100).toFixed(1)}%`;
+    $("mlnow").disabled = !L.plan || ME.loading;
+  }
+  // the footer, once the editor is open while the pictures are still made ahead
+  function prepUi() {
+    const on = !!L && !card.classList.contains("loading") && making();
+    $("meprep").hidden = !on;
+    if (on) $("mepreptext").textContent = `· ${jobText(L.job, true)}`;
+  }
+  // the stretch let go: its making ahead stops (what is made stays made)
+  function quit() { if (L && L.maker && making()) L.maker.stop(); L = null; prepUi(); }
+  function close() {
+    stopPlay(); quit(); card.hidden = true; card.classList.remove("big", "loading"); if (WM) WM.syncMenu();
+    // the stretch marked for Save movie… goes with the editor, unless the Export window has it
+    if (same() && (!$("excard") || $("excard").hidden)) EX.clear(true);
+  }
+  // the editor holds stretch a-b (the highlighted stretch's bar stays down for it: Save movie… marks it)
+  const holds = (a, b) => !card.hidden && ME.a != null && a != null && Math.abs(a - ME.a) < 1 && Math.abs(b - ME.b) < 1;
+  $("mlcancel").addEventListener("click", close);
+  $("mlnow").addEventListener("click", grow);
+  $("meprepstop").addEventListener("click", () => { if (L && L.maker) L.maker.stop(); if (L) L.job = { ...L.job, state: "stopped" }; prepUi(); });
+
+  // Play's frame rate: movie mode's (Settings > Playback)
+  function fpsUi() { const f = Math.round(window.cassiniMovie && window.cassiniMovie.fps ? window.cassiniMovie.fps() : +opt("movie.fps", 5) || 5); $("mefps").value = f; $("mefpsv").textContent = `${f} fps`; }
+  $("mefps").addEventListener("input", e => { if (S) S.set("movie.fps", +e.target.value); fpsUi(); });
+  if (S) S.on("movie.fps", fpsUi);
 
   // ---------- wiring ----------
   $("meprev").addEventListener("click", () => { stopPlay(); step(-1); });
@@ -1194,11 +1364,11 @@ body.phone #mestrip { grid-template-columns: repeat(auto-fill, 72px); grid-auto-
   $("metgall").addEventListener("click", () => change(() => { ME.targets = null; }));
   $("meflall").addEventListener("click", () => change(() => { ME.filters = null; }));
   $("merestore").addEventListener("click", () => change(() => { ME.drop = new Set(); }));
-  $("meshowout").addEventListener("change", e => { ME.showOut = e.target.checked; render(); });
-  $("melookedit").addEventListener("click", editLook);
-  $("melookclear").addEventListener("click", () => { change(() => { ME.edit = ""; }); paint(); });
+  $("meshowout").addEventListener("change", e => { if (S) S.set("movieEdit.showOut", e.target.checked); else { ME.showOut = e.target.checked; render(); } });
+  if (S) S.on("movieEdit.showOut", v => { ME.showOut = !!v; if (ME.frames.length) { render(); changed(); } });
   $("meundo").addEventListener("click", () => { undo(); paint(); });
-  $("meexport").addEventListener("click", () => { stopPlay(); if (same()) EX.mark(); EX.open(); });
+  // Save movie…: the Export window, its stretch this one (marked for it again: Edit let the highlight go)
+  $("meexport").addEventListener("click", () => { stopPlay(); if (same()) EX.mark(); else EX.mark(ME.a, ME.b, "new"); EX.open(); });
   $("mecopy").addEventListener("click", async () => {
     const base = window.cassiniLink && window.cassiniLink.href ? window.cassiniLink.href() : location.href.replace(/[?&]cut=[^&]*/, "");
     const url = `${base}${base.includes("?") ? "&" : "?"}cut=${encodeURIComponent(recipe())}`;
@@ -1206,7 +1376,12 @@ body.phone #mestrip { grid-template-columns: repeat(auto-fill, 72px); grid-auto-
   });
   card.addEventListener("click", e => { if (e.target.closest(".close, .min")) { e.stopPropagation(); close(); } }, true);
   window.addEventListener("keydown", e => {
-    if (card.hidden || !card.classList.contains("front") || /INPUT|SELECT|TEXTAREA/.test(e.target.tagName) && e.target.type !== "checkbox") return;
+    if (card.hidden || !card.classList.contains("front") || /INPUT|SELECT|TEXTAREA/.test(e.target.tagName) && e.target.type !== "checkbox" && e.target.type !== "range") return;
+    // still loading: Escape cancels, Enter opens it now
+    if (card.classList.contains("loading")) {
+      if (e.key === "Escape") close(); else if (e.key === "Enter" && !$("mlnow").disabled) grow(); else return;
+      e.preventDefault(); e.stopImmediatePropagation(); return;
+    }
     if ((e.metaKey || e.ctrlKey) && e.key.toLowerCase() === "z") { e.preventDefault(); e.stopImmediatePropagation(); undo(); paint(); return; }
     if ((e.metaKey || e.ctrlKey) && e.key.toLowerCase() === "a") { e.preventDefault(); e.stopImmediatePropagation(); pickAll(); return; }
     if (e.metaKey || e.ctrlKey || e.altKey) return;
@@ -1221,8 +1396,7 @@ body.phone #mestrip { grid-template-columns: repeat(auto-fill, 72px); grid-auto-
     else return;
     e.preventDefault(); e.stopImmediatePropagation();
   }, true);
-  // the bar of a highlighted stretch and the Export window open it; so do the Go menu and a link with &cut=
-  if ($("segedit")) $("segedit").addEventListener("click", () => open());
+  // the Export window opens it (the highlighted stretch's bar: segment.html's Edit); so do the Go menu and a link with &cut=
   if ($("exedit")) $("exedit").addEventListener("click", () => open());
   const go = $("gomenu");
   if (go) { const li = document.createElement("li"); li.innerHTML = '<button id="gomovieedit">Movie Editor…</button>'; go.appendChild(li); li.querySelector("button").addEventListener("click", () => open()); }
@@ -1232,6 +1406,6 @@ body.phone #mestrip { grid-template-columns: repeat(auto-fill, 72px); grid-auto-
     const go2 = () => open(shared);
     if (ready()) go2(); else { const mo = new MutationObserver(() => { if (ready()) { mo.disconnect(); setTimeout(go2, 300); } }); mo.observe($("loading"), { attributes: true, attributeFilter: ["hidden"] }); }
   }
-  window.cassiniMovieEdit = { open, close, recipe, cut, get state() { return ME; } };
+  window.cassiniMovieEdit = { open, close, recipe, cut, holds, get state() { return ME; }, get loading() { return L; } };
 })();
 </script>
