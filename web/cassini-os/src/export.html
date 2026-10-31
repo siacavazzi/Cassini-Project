@@ -186,6 +186,10 @@ body.phone #excard:not(.full) { width: calc(100% - 16px) !important; left: 8px !
   });
 
   // ---------- what the film will be: the server's plan, asked for as the choices change ----------
+  // the Background (Settings > Processing) where a picture's frame does not reach: only another color than black
+  // goes in the film's query (export.py bg=), so a film made with black keeps its name
+  const bg = () => (window.cassiniBackground ? window.cassiniBackground() : "#000000");
+  const bgQ = () => (bg().toLowerCase() === "#000000" ? "" : `&bg=${bg().slice(1)}`);
   const params = () => {
     const q = new URLSearchParams({ from: iso(X.a), until: iso(X.b), cams: X.cams || "NW", fps: opt("export.adaptive", true) ? "auto" : String(opt("export.fps", 12)),
       size: opt("export.full", false) ? "full" : String(opt("export.size", 1024)), sound: opt("export.sound", false) ? "1" : "0", caption: opt("export.caption", true) ? "1" : "0" });
@@ -194,7 +198,7 @@ body.phone #excard:not(.full) { width: calc(100% - 16px) !important; left: 8px !
     // only off (Settings > Playback): every channel of a color set as well (sets=0); the Movie Editor's cut
     // and look for this stretch (movieedit.html): frames left out, the look on every picture, and its Mosaics (mos=,
     // over both settings)
-    return q.toString() + window.cassiniLook() + (window.cassiniMovieStyle ? window.cassiniMovieStyle() : "") + (opt("movies.mosaicFrames", "rolling") === "whole" ? "&whole=1" : "")
+    return q.toString() + window.cassiniLook() + (window.cassiniMovieStyle ? window.cassiniMovieStyle() : "") + bgQ() + (opt("movies.mosaicFrames", "rolling") === "whole" ? "&whole=1" : "")
       + (opt("playback.completeMosaics", false) && opt("cameras.mosaics", true) !== false ? "&complete=1" : "") + (window.cassiniSetsQ ? window.cassiniSetsQ() : "")
       + (window.cassiniMovieCut ? window.cassiniMovieCut() : "")
       // Color smoothing (Settings > Processing): its strength, as the windows move a film's color pictures
@@ -542,14 +546,14 @@ body.phone #excard:not(.full) { width: calc(100% - 16px) !important; left: 8px !
         else {
           // Film.put: the pane black, the picture in its middle, the caption under it
           const x0 = cams.indexOf(e.cam) * size;
-          g.fillStyle = "#000"; g.fillRect(x0, 0, size, size);
+          g.fillStyle = bg(); g.fillRect(x0, 0, size, size);
           if (bmp) {
             const k = size / Math.max(bmp.width, bmp.height), w = Math.max(1, Math.round(bmp.width * k)), h = Math.max(1, Math.round(bmp.height * k));
             let src = bmp;
             if (look) {
               // the movie editor's look on the picture over black (render: studio_look.apply)
               const c = document.createElement("canvas"); c.width = w; c.height = h;
-              const cg = c.getContext("2d", { alpha: false }); cg.fillStyle = "#000"; cg.fillRect(0, 0, w, h); cg.imageSmoothingQuality = "high"; cg.drawImage(bmp, 0, 0, w, h);
+              const cg = c.getContext("2d", { alpha: false }); cg.fillStyle = bg(); cg.fillRect(0, 0, w, h); cg.imageSmoothingQuality = "high"; cg.drawImage(bmp, 0, 0, w, h);
               look.r.upload(c, w, h); look.r.draw(look.p, w, h); src = look.lc;
             }
             g.imageSmoothingQuality = "high";

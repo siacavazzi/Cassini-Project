@@ -140,7 +140,7 @@ body.phone #gplay { width: 30px; height: 30px; }
 .camwin.zoomed .well { height: 236px; }
 /* real frames: the well goes square and the frame fills it */
 .well.has-frame, .camwin.zoomed .well.has-frame { height: auto; aspect-ratio: 1; }
-.well .shot { position: absolute; inset: 0; width: 100%; height: 100%; object-fit: contain; display: none; background: #000; }
+.well .shot { position: absolute; inset: 0; width: 100%; height: 100%; object-fit: contain; display: none; background: var(--cam-bg, #000); }
 .well.has-frame .shot { display: block; }
 .well.has-frame .wellmsg { display: none; }
 .well.stale .shot { opacity: .55; }

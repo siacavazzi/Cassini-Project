@@ -1,8 +1,9 @@
-"""Synthetic check of Auto center's hold (obs_mosaic.hold_of, frame_server.centred): a still Auto center cannot
-centre (the body's centre off the frame, as Saturn's is in the WAC stares of 2005-07-03, 010SA_1X6MOVIED00*) keeps
-the body where it sits on average over the pass, so it holds still from picture to picture; before, it stayed where
-the frame put it and jumped with each pointing. A pass whose frames point further apart (a mosaic) is not held, and
-a still whose own SPICE place disagrees with the pass's is drawn as before.
+"""Synthetic check of Auto center on stills (frame_server.centred, obs_mosaic.hold_of).
+Centred is centred (Sam, 2026-10-30): a still of a centred pass has the body's centre in its middle even where the
+frame cuts the disk (Saturn's centre is below the WAC frame in the stares of 2005-07-03, 010SA_1X6MOVIED00*); before,
+the shift stopped at the frame's data edge, so the still stayed where the frame put it and jumped with each pointing.
+A north-up pass's stills hold the body where it sits on average over the pass; a pass whose frames point further
+apart (a mosaic) is not held, and a still whose own SPICE place disagrees with the pass's is drawn as before.
 Run: python web/test_centre_hold.py"""
 import os
 import sys
@@ -42,11 +43,16 @@ def still(n, offset):
     return img, None, {"frame_offset": [float(offset[0]), float(offset[1])]}
 
 
-def body_x(out):
-    """The column of the body's top (its centre's column: the top of its limb) in a centred picture (RGBA)."""
+def body_top(out):
+    """The column and row of the body's top (its centre's column: the top of its limb) in a picture (RGBA)."""
     a = np.asarray(out)[..., 0] > 100
     rows = np.flatnonzero(a.any(1))
-    return round(float(np.flatnonzero(a[rows[0]]).mean())) if len(rows) else None
+    return (round(float(np.flatnonzero(a[rows[0]]).mean())), int(rows[0])) if len(rows) else None
+
+
+def body_x(out):
+    top = body_top(out)
+    return top and top[0]
 
 
 def centred_all(views, offsets):
@@ -56,6 +62,18 @@ def centred_all(views, offsets):
         im, rep = fs.centred([f"W{n}"], v)
         xs.append((body_x(im), rep))
     return xs
+
+
+def test_centred_is_centred():
+    centre = {"centre": True, "side": 1024, "radius": 500}
+    tops = []
+    for n, off in enumerate(PLACES):
+        fs.color_image.processed_frame = lambda paths, off=off, n=n: still(n, off)
+        im, rep = fs.centred([f"W{n}"], centre)
+        tops.append(body_top(im))
+        assert "centre_shift_capped" not in rep
+    # the body's centre (its top's column, its top 500 px above it) in the middle of every still
+    assert all(abs(x - 511.5) <= 1 and abs(y - (511.5 - 500)) <= 1 for x, y in tops), tops
 
 
 def test_centred_holds():
@@ -78,5 +96,6 @@ def test_centred_holds():
 
 if __name__ == "__main__":
     test_hold_of()
+    test_centred_is_centred()
     test_centred_holds()
     print("ok")

@@ -3797,10 +3797,10 @@ def centre_view(frame_id):
         hit = dict(hit, side=FRAME, radius=RADIUS.get(target, 0) / (g[2] * IFOV[cam]))
     else:
         hit = dict(hit, side=FRAME) if hit.get("north") else dict(hit)
-    if found and (hit["centre"] or hit.get("north")):
+    # a north-up pass's stills hold where the pass has the body (a centred pass's are centred on it, frame_server.centred)
+    if found and not hit["centre"] and hit.get("north"):
         hold = hold_of(u, found[1])
-        # (a centred pass's frame holds only when the frame cuts the body's disk, so its still would not be centred)
-        if hold and (hit.get("north") or max(abs(v) for v in hold["at"]) + hit["radius"] > FRAME / 2):
+        if hold:
             hit = dict(hit, **hold)
     with _lock:
         if len(_centre_of) >= UNIT_OF_KEEP:

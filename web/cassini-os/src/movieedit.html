@@ -15,7 +15,8 @@
      only keeps a mosaic pass a mosaic and a mosaic movie a rolling mosaic, in color, at each finished color set.
 
      Mosaics: as the windows have them, Whole (a mosaic pass once, its finished mosaic at its last tile; a mosaic movie
-     once a lap, every tile new) or Tile by tile (the mosaic building up, a picture per tile). A whole mosaic is one
+     once a lap, every tile new), Tile by tile (the mosaic building up, a picture per tile) or Off (no mosaics: every
+     frame on its own, as a still pass shows). A whole mosaic is one
      entry of the strip; the film follows (export.py mos=).
 
      The strip shows what the big picture shows: As in the movie, the film's picture of each frame (the mosaic,
@@ -72,6 +73,7 @@
 #mecard.zoomed { width: calc(100% - 20px); height: calc(100% - 50px); }
 #mecard .mebody { flex: 1 1 auto; min-height: 0; display: grid; grid-template-columns: minmax(0, 1fr) 250px; border-top: 1px solid var(--q-line); }
 #mecard .memain { min-width: 0; min-height: 0; display: grid; grid-template-rows: minmax(140px, 1fr) auto auto auto minmax(110px, 34%); grid-template-areas: "stage" "bar" "levels" "tabs" "strip"; background: #000; }
+#mestage { background: var(--cam-bg, #000); }
 #mecard.big .memain { grid-template-rows: minmax(140px, 1fr) auto auto 0 0; }
 #mecard.big :is(#mestrip, #metabs) { display: none; }
 #mestage { grid-area: stage; } #mecard .mebar { grid-area: bar; } #melevels { grid-area: levels; } #mestrip { grid-area: strip; }
@@ -200,7 +202,7 @@ body.phone #mestrip { grid-template-columns: repeat(auto-fill, 72px); grid-auto-
         <button class="galbtn" data-v="raw" title="Every frame in every filter as Cassini took it: nothing stacked, calibrated or put together">Every frame, raw</button>
       </div>
       <div class="melabel">Mosaics</div>
-      <div class="galseg" id="memos" role="group" aria-label="Mosaics in the movie"><button data-v="" title="As the camera windows show them (Settings: Mosaic movie frames, Complete mosaics only)">As the windows</button><button data-v="whole" title="Each mosaic once it is whole: a mosaic pass at its last tile, a mosaic movie once a lap, every tile new">Whole</button><button data-v="tiles" title="Every tile as it is taken, the mosaic building up">Tile by tile</button></div>
+      <div class="galseg" id="memos" role="group" aria-label="Mosaics in the movie"><button data-v="" title="As the camera windows show them (Settings: Mosaic movie frames, Complete mosaics only)">As the windows</button><button data-v="whole" title="Each mosaic once it is whole: a mosaic pass at its last tile, a mosaic movie once a lap, every tile new">Whole</button><button data-v="tiles" title="Every tile as it is taken, the mosaic building up">Tile by tile</button><button data-v="off" title="No mosaics: every frame of a mosaic or a ring strip on its own, as a still pass shows">Off</button></div>
       <div class="menote" id="memosnote"></div>
       <h4><span>Framing</span><span class="sp"></span><button id="mefrclear" title="Take the crop off and put every nudged frame back">Reset</button></h4>
       <div class="melabel" style="margin-top:2px">Auto center</div>
@@ -266,7 +268,7 @@ body.phone #mestrip { grid-template-columns: repeat(auto-fill, 72px); grid-auto-
   // ME: the stretch (a, b), its plan's frames, and the edit: drop (ids taken out by hand), keep (null = every target /
   // filter pair, else the ones kept), cams (the export's Cameras), edit (the studio look's recipe)
   // levels (frame id -> EV: the exposure level points), even (Even out over that many pictures, 0 off), ctr (Auto center
-  // for the movie: null as the windows have it, true, false), mos (Mosaics: null as the windows have them, "whole", "tiles"), crop (x0, y0, x1, y1, parts of the picture, or null), crop2 (the end crop the
+  // for the movie: null as the windows have it, true, false), mos (Mosaics: null as the windows have them, "whole", "tiles", "off"), crop (x0, y0, x1, y1, parts of the picture, or null), crop2 (the end crop the
   // movie glides to, or null), nudge (frame id -> [x, y], parts of the picture), fedit (frame id -> the studio keys that
   // frame has over the movie's look, "ex:0.5,ct:0": a frame edited on its own);
   // lv: the frame server's measured brightness of each frame (EV) and Even out's change for each picture
@@ -362,7 +364,7 @@ body.phone #mestrip { grid-template-columns: repeat(auto-fill, 72px); grid-auto-
     ME.levels = new Map(words("levels").map(w => { const i = w.lastIndexOf(":"); return [w.slice(0, i), clamp(+w.slice(i + 1), -EV, EV)]; }).filter(([k, v]) => k && isFinite(v)));
     ME.even = clamp(Math.round(+q.get("even") || 0), 0, EVEN);
     ME.ctr = q.get("ctr") === "1" ? true : q.get("ctr") === "0" ? false : null;
-    ME.mos = /^(whole|tiles)$/.test(q.get("mos") || "") ? q.get("mos") : null;
+    ME.mos = /^(whole|tiles|off)$/.test(q.get("mos") || "") ? q.get("mos") : null;
     const box = k => { const b = (q.get(k) || "").split("_").map(Number); return b.length === 4 && b.every(isFinite) && b[2] - b[0] >= CROP && b[3] - b[1] >= CROP ? b.map(v => clamp(v, 0, 1)) : null; };
     ME.crop = box("crop"); ME.crop2 = box("crop2"); if (ME.crop2 && !ME.crop) ME.crop = WHOLE.slice();
     ME.nudge = new Map(words("nudge").map(w => w.split(":")).filter(a => a.length === 3 && a[0] && isFinite(+a[1]) && isFinite(+a[2]))
@@ -613,11 +615,12 @@ body.phone #mestrip { grid-template-columns: repeat(auto-fill, 72px); grid-auto-
   // picture b (a bitmap) with e's framing (moved by e's nudge, cut to the crop), as export.framed draws it; b itself
   // when it has none
   function framedOf(b, e, crop = cropAt(e)) {
-    const nd = (e && ME.nudge.get(e.id)) || [0, 0];
-    if (!crop && !nd[0] && !nd[1]) return b;
+    const nd = (e && ME.nudge.get(e.id)) || [0, 0], bg = window.cassiniBackground ? window.cassiniBackground() : "#000000";
+    // (over the Background, Settings > Processing, where the frame does not reach: drawn even unframed when not black)
+    if (!crop && !nd[0] && !nd[1] && bg.toLowerCase() === "#000000") return b;
     const [x0, y0, x1, y1] = crop || WHOLE, W = b.width, H = b.height, cw = (x1 - x0) * W, ch = (y1 - y0) * H, k = Math.max(W, H) / Math.max(cw, ch);
     const c = document.createElement("canvas"); c.width = Math.max(1, Math.round(cw * k)); c.height = Math.max(1, Math.round(ch * k));
-    const g = c.getContext("2d"); g.fillStyle = "#000"; g.fillRect(0, 0, c.width, c.height);
+    const g = c.getContext("2d"); g.fillStyle = bg; g.fillRect(0, 0, c.width, c.height);
     g.imageSmoothingQuality = "high";
     g.setTransform(k, 0, 0, k, -k * (x0 - nd[0]) * W, -k * (y0 - nd[1]) * H);
     g.drawImage(b, 0, 0);
@@ -636,6 +639,7 @@ body.phone #mestrip { grid-template-columns: repeat(auto-fill, 72px); grid-auto-
     cropBox();
   }
   new ResizeObserver(() => paint()).observe(stage);
+  if (window.cassiniSettings) window.cassiniSettings.on("cameras.background", () => paint());
 
   // ---------- picking frames ----------
   function select(i, how = {}) {
@@ -909,7 +913,7 @@ body.phone #mestrip { grid-template-columns: repeat(auto-fill, 72px); grid-auto-
     $("mectr").querySelectorAll("button").forEach(b => b.setAttribute("aria-pressed", String(b.dataset.v === (ME.ctr == null ? "" : ME.ctr ? "1" : "0"))));
     $("memos").querySelectorAll("button").forEach(b => b.setAttribute("aria-pressed", String(b.dataset.v === (ME.mos || ""))));
     const mp = new Set(ME.frames.filter(e => e.pass && ofCam(e)).map(e => e.pass)).size;
-    $("memosnote").textContent = ME.mos === "tiles" || !ME.mos && !winWhole() && !winComplete() ? "Each mosaic builds up tile by tile."
+    $("memosnote").textContent = ME.mos === "off" ? "No mosaics: every frame of a mosaic or a ring strip on its own, its color picture once a filter set is complete." : ME.mos === "tiles" || !ME.mos && !winWhole() && !winComplete() ? "Each mosaic builds up tile by tile."
       : ME.mos === "whole" || winWhole() && winComplete() ? `Each mosaic whole: a pass once, finished${mp ? ` (${mp.toLocaleString()} here)` : ""}, a mosaic movie once a lap.`
       : winWhole() ? "As the windows: mosaic movies a lap at a time, mosaic passes tile by tile." : `As the windows: mosaic passes once, finished${mp ? ` (${mp.toLocaleString()} here)` : ""}; mosaic movies tile by tile.`;
     $("mecrop").setAttribute("aria-pressed", String(!!cropping));
