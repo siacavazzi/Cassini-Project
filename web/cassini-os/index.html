@@ -2151,7 +2151,7 @@ body.ambient.phone .amb-where { font-size: 18px; }
         <button class="galbtn" data-v="raw" title="Every frame in every filter as Cassini took it: nothing stacked, calibrated or put together">Every frame, raw</button>
       </div>
       <div class="melabel">Mosaics</div>
-      <div class="galseg" id="memos" role="group" aria-label="Mosaics in the movie"><button data-v="" title="As the camera windows show them (Settings: Mosaic movie frames, Complete mosaics only)">As the windows</button><button data-v="whole" title="Each mosaic once it is whole: a mosaic pass at its last tile, a mosaic movie once a lap, every tile new">Whole</button><button data-v="tiles" title="Every tile as it is taken, the mosaic building up">Tile by tile</button><button data-v="off" title="No mosaics: every frame of a mosaic on its own, as a still pass shows">Off</button></div>
+      <div class="galseg" id="memos" role="group" aria-label="Mosaics in the movie"><button data-v="" title="As the camera windows show them (Settings: Mosaic movie frames, Complete mosaics only)">As the windows</button><button data-v="whole" title="Each mosaic once it is whole: a mosaic pass at its last tile, a mosaic movie once a lap, every tile new">Whole</button><button data-v="tiles" title="Every tile as it is taken, the mosaic building up">Tile by tile</button><button data-v="off" title="No mosaics: every frame of a mosaic or a ring strip on its own, as a still pass shows">Off</button></div>
       <div class="menote" id="memosnote"></div>
       <h4><span>Framing</span><span class="sp"></span><button id="mefrclear" title="Take the crop off and put every nudged frame back">Reset</button></h4>
       <div class="melabel" style="margin-top:2px">Auto center</div>
@@ -10793,7 +10793,7 @@ void main() {
     $("mectr").querySelectorAll("button").forEach(b => b.setAttribute("aria-pressed", String(b.dataset.v === (ME.ctr == null ? "" : ME.ctr ? "1" : "0"))));
     $("memos").querySelectorAll("button").forEach(b => b.setAttribute("aria-pressed", String(b.dataset.v === (ME.mos || ""))));
     const mp = new Set(ME.frames.filter(e => e.pass && ofCam(e)).map(e => e.pass)).size;
-    $("memosnote").textContent = ME.mos === "off" ? "No mosaics: every frame on its own, its color picture once a filter set is complete." : ME.mos === "tiles" || !ME.mos && !winWhole() && !winComplete() ? "Each mosaic builds up tile by tile."
+    $("memosnote").textContent = ME.mos === "off" ? "No mosaics: every frame of a mosaic or a ring strip on its own, its color picture once a filter set is complete." : ME.mos === "tiles" || !ME.mos && !winWhole() && !winComplete() ? "Each mosaic builds up tile by tile."
       : ME.mos === "whole" || winWhole() && winComplete() ? `Each mosaic whole: a pass once, finished${mp ? ` (${mp.toLocaleString()} here)` : ""}, a mosaic movie once a lap.`
       : winWhole() ? "As the windows: mosaic movies a lap at a time, mosaic passes tile by tile." : `As the windows: mosaic passes once, finished${mp ? ` (${mp.toLocaleString()} here)` : ""}; mosaic movies tile by tile.`;
     $("mecrop").setAttribute("aria-pressed", String(!!cropping));
@@ -11769,7 +11769,7 @@ void main() {
   window.cassiniAbout = { open, addTab, esc, close: () => show(false), credits: CREDITS };
 
   // ---- which version this is: this page's build id (build.py writes it), and what the frame server says it serves ----
-  const BUILD = /*BUILD*/"cf7351a885aa";
+  const BUILD = /*BUILD*/"a3529a5bbbcc";
   const FRAMES = (() => {                       // the frame server, chosen as the camera window chooses it
     const q = new URLSearchParams(location.search).get("frames");
     if (q) return q.replace(/\/$/, "");

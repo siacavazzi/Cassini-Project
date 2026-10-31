@@ -79,6 +79,12 @@ def test_mosaics_off():
         assert all(e["try"][0][0] in ("mosaic", "rolling") for e in go("mos=tiles"))
         off = go("mos=off")
         assert off and not any(k in ("mosaic", "rolling") for e in off for k, _ in e["try"]), kind
+    # a ring strip played as a movie (a toss-up: its mosaic the windows' other choice) is frames too; a movie is not
+    export.pass_kind = lambda fid: "movie"
+    for tossup in (True, False):
+        export._tossup = lambda fid, v=tossup: v
+        off = export.plan(export.options(parse_qs(q + "mos=off")))["pictures"]
+        assert any(k == "movie" for e in off for k, _ in e["try"]) != tossup
     o = lambda m: export.options(parse_qs(STRETCH + m))
     assert export.job_id(o("mos=off")) != export.job_id(o("mos=tiles"))
 

@@ -277,6 +277,17 @@ def pass_kind(frame_id):
     return u.get("kind") or ("movie" if u.get("movie") else "mosaic" if u.get("mosaic") else None)
 
 
+def _tossup(frame_id):
+    """Whether frame_id's pass is a toss-up between a movie and a mosaic (a ring strip played as a movie, its mosaic
+    the windows' other choice: obs_mosaic's tossup)."""
+    import obs_mosaic
+    try:
+        found = obs_mosaic.unit_of(frame_id)
+    except Exception:
+        return False
+    return bool(found and found[0].get("tossup"))
+
+
 def _lap_end(frame_id):
     """Whether frame_id finishes a lap of its mosaic movie (obs_mosaic.lap_end); True when that cannot be told."""
     import obs_mosaic
@@ -376,7 +387,9 @@ def plan(opt, cache=None, work=False, progress=None):
         kind = pass_kind(ids[q]) if how in ("movie", "color") else None
         if how == "color" and kind == "movie":
             kind = None
-        if kind in ("mosaic", "mosaic_movie") and not opt["movie"].get("mosaics", True):
+        # Mosaics Off: a mosaic pass, a mosaic movie and a ring strip played as a movie (its mosaic the windows'
+        # other choice, the window following the frame across a canvas) are every frame on its own
+        if not opt["movie"].get("mosaics", True) and (kind in ("mosaic", "mosaic_movie") or kind == "movie" and _tossup(ids[q])):
             kind, tile = None, False
         # Complete color pictures only: a channel of a color set on the way to its last one is not a picture of its
         # own, outside a mosaic (movie mode's complete(): the black-and-white channels between the composites made a
