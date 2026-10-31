@@ -850,6 +850,7 @@ def warm_prebuild():
 # page's long tasks); the server adds when, who and how busy it was, and appends it to <cache>/jump-log.jsonl.
 # GET /jumplog answers the last 50 reports.
 JUMPLOG_MAX = 256 * 1024
+EXPORT_BODY_MAX = 4 * 1024 * 1024   # POST /export's body (the Movie Editor's stabilization moves, ~25 bytes a picture) at most
 _jumplog_lock = threading.Lock()
 
 
@@ -1287,9 +1288,15 @@ def make_handler(site, cache, flags=None):
             self.revalidate = False
             url = urlparse(self.path)
             if url.path == "/export":
-                self.rfile.read(int(self.headers.get("Content-Length") or 0))
+                n = int(self.headers.get("Content-Length") or 0)
+                body = self.rfile.read(n) if n <= EXPORT_BODY_MAX else b""
+                q = parse_qs(url.query)
+                # the Movie Editor's Additional stabilization: a move per picture, too long for the address
+                # (movieedit.html, export.py steadied=)
+                if body:
+                    q.update({k: v for k, v in parse_qs(body.decode("ascii", "replace")).items() if k == "steadied"})
                 try:
-                    return self.send_json(export.submit(export.options(parse_qs(url.query)), cache, self.pictures()))
+                    return self.send_json(export.submit(export.options(q), cache, self.pictures()))
                 except (ValueError, LookupError) as e:
                     return self.send_json({"error": str(e)}, 400)
                 except OverflowError as e:
