@@ -80,6 +80,15 @@ def test_stretches():
     e = lambda cam, kind, t="SATURN", **k: dict({"id": "x", "cam": cam, "try": [(kind, "x")], "target": t}, **k)
     pics = [e("N", "movie"), e("W", "processed"), e("N", "movie"), e("N", "color", set="true"), e("N", "movie", t="TITAN")]
     assert export.stretches(pics) == [[0, 2], [1], [3], [4]]
+    # the frame that completes a color set, shown as the frame itself (a processed or movie frame), stays in its
+    # neighbours' stretch: Even out evens a filter cycle and a color movie pass through (Dione 2005-10-11, Saturn
+    # 2005-07-03 stares: every set's last frame once made a stretch of its own, and nothing was evened)
+    cycle = [e("N", "processed", **({"set": "color"} if i % 3 == 2 else {})) for i in range(9)]
+    assert export.stretches(cycle) == [list(range(9))]
+    movie = [e("W", "movie", **({"set": "false color"} if i % 3 == 2 else {})) for i in range(9)]
+    assert export.stretches(movie) == [list(range(9))]
+    # a mosaic at a finished color set is in color, the tiles between them gray
+    assert export.stretches([e("N", "mosaic"), e("N", "mosaic", set="color"), e("N", "mosaic")]) == [[0], [1], [2]]
 
 
 def test_look_ev():

@@ -1,0 +1,138 @@
+<!-- Color smoothing on this computer: a camera window's color pictures moved toward the palette of the pictures round
+     them, so a set taken with another filter now and then (the WAC Saturn stares' BL1 in place of CB2) bridges the gap
+     instead of flashing peach and blue among green. A line-for-line port of web/frames/colour_smooth.py
+     (web/test_colour_smooth.py runs both on the same pictures); build.py puts its script ahead of the chrome script,
+     whose camera feed and film export call window.cassiniColourSmooth. -->
+<script>
+(() => {
+  // ---------- colour_smooth.py, line for line ----------
+  const GRID = 128, LIT = 24, TOP = 250, FEW = 200, SHIFT = 0.5, SPREAD = 3.0, SPAN = 4, DARK = 24;
+  const stepOf = (w, h) => Math.max(1, Math.ceil(Math.max(w, h) / GRID));
+  // the picture's palette (RGBA bytes, w x h): [mean R, G, B, spread R, G, B] of each channel's log brightness less
+  // the pixel's mean, over its lit samples; null with fewer than FEW lit, or a grey picture
+  function palette(d, w, h) {
+    const s = stepOf(w, h), sums = [0, 0, 0], squares = [0, 0, 0];
+    let n = 0, grey = true;
+    for (let y = 0; y < h; y += s) for (let x = 0; x < w; x += s) {
+      const i = 4 * (y * w + x), r = d[i], g = d[i + 1], b = d[i + 2];
+      if (!(d[i + 3] > 0) || r + g + b < 3 * LIT || Math.max(r, g, b) >= TOP) continue;
+      if (r !== g || g !== b) grey = false;
+      const lr = Math.log(r || 1), lg = Math.log(g || 1), lb = Math.log(b || 1), yy = (lr + lg + lb) / 3, ls = [lr, lg, lb];
+      for (let k = 0; k < 3; k++) { const c = ls[k] - yy; sums[k] += c; squares[k] += c * c; }
+      n++;
+    }
+    if (n < FEW || grey) return null;
+    const mu = sums.map(v => v / n);
+    return mu.concat([0, 1, 2].map(k => Math.sqrt(Math.max(squares[k] / n - mu[k] * mu[k], 0))));
+  }
+  function median(v) {
+    v = v.slice().sort((a, b) => a - b);
+    const m = Math.floor(v.length / 2);
+    return v.length % 2 ? v[m] : (v[m - 1] + v[m]) / 2;
+  }
+  // the palette picture i is moved toward: each number's median over the pictures i - span .. i + span with one
+  function wanted(stats, i, span) {
+    if (!stats[i]) return null;
+    const near = stats.slice(Math.max(0, i - span), i + span + 1).filter(st => st);
+    return [0, 1, 2, 3, 4, 5].map(k => median(near.map(st => st[k])));
+  }
+  function moves(own, want, strength) {
+    const out = [];
+    for (let k = 0; k < 3; k++) {
+      const d = Math.max(-SHIFT, Math.min(SHIFT, strength * (want[k] - own[k])));
+      const r = own[3 + k] > 1e-6 && want[3 + k] > 1e-6 ? (want[3 + k] / own[3 + k]) ** strength : 1.0;
+      out.push([d, Math.max(1 / SPREAD, Math.min(SPREAD, r))]);
+    }
+    return out;
+  }
+  // the picture's bytes with its palette own moved strength (0..1) of the way to want, in place; false when there was
+  // nothing to move
+  // (each log brightness from a table of the 256 levels, the same numbers Math.log gives; and a pixel's three new
+  // levels kept by its old ones, as a picture repeats colors: the arithmetic per pixel is the Python's)
+  const LOG = Float64Array.from({ length: 256 }, (_, v) => Math.log(Math.max(v, 1)));
+  function smoothed(d, own, want, strength) {
+    if (!own || !want || strength <= 0) return false;
+    const mv = moves(own, want, strength);
+    if (mv.every(([dd, r]) => Math.abs(dd) < 1e-9 && Math.abs(r - 1) < 1e-9)) return false;
+    const mu = own.slice(0, 3), l = [0, 0, 0], c = [0, 0, 0], c2 = [0, 0, 0], done = new Map();
+    for (let i = 0; i < d.length; i += 4) {
+      const v0 = d[i], v1 = d[i + 1], v2 = d[i + 2];
+      if (Math.max(v0, v1, v2) <= 0) continue;
+      const key = (v0 << 16) | (v1 << 8) | v2, hit = done.get(key);
+      if (hit !== undefined) { d[i] = hit >> 16; d[i + 1] = (hit >> 8) & 255; d[i + 2] = hit & 255; continue; }
+      l[0] = LOG[v0]; l[1] = LOG[v1]; l[2] = LOG[v2];
+      const y = (l[0] + l[1] + l[2]) / 3;
+      for (let k = 0; k < 3; k++) { c[k] = l[k] - y; c2[k] = (mu[k] + mv[k][0]) + (c[k] - mu[k]) * mv[k][1]; }
+      const m = (c2[0] + c2[1] + c2[2]) / 3, wgt = Math.min((v0 + v1 + v2) / (3 * DARK), 1.0);
+      for (let k = 0; k < 3; k++) {
+        const o = Math.floor(Math.exp((y + c[k]) + ((c2[k] - m) - c[k]) * wgt) + 0.5);
+        d[i + k] = Math.max(0, Math.min(255, o));
+      }
+      done.set(key, (d[i] << 16) | (d[i + 1] << 8) | d[i + 2]);
+    }
+    return true;
+  }
+  const math = { GRID, LIT, TOP, FEW, SHIFT, SPREAD, SPAN, DARK, palette, median, wanted, moves, smoothed };
+
+  // ---------- in the page ----------
+  const S = () => window.cassiniSettings;
+  const GAP = 12 * 3600;       // ... taken within this many seconds of it (mission time): a new day's pictures start afresh
+  // Settings > Processing > Color smoothing: its strength (0..1), 0 when off
+  const strength = () => { const s = S(); return !s || !s.get("movies.colorSmooth") ? 0 : Math.max(0, Math.min(100, s.get("movies.colorSmoothStrength") ?? 100)) / 100; };
+  const urls = [];
+  const stats = { pictures: 0, moved: 0, ms: 0, last: null };
+  function pixels(im) {
+    const W = im.naturalWidth || im.width, H = im.naturalHeight || im.height;
+    if (!W || !H) return null;
+    const c = document.createElement("canvas"); c.width = W; c.height = H;
+    const g = c.getContext("2d", { willReadFrequently: true }); g.drawImage(im, 0, 0);
+    return { c, g, W, H, img: g.getImageData(0, 0, W, H) };
+  }
+  // a run of pictures: one per camera window, its color pictures' palettes by target, in mission time
+  function run() {
+    const groups = new Map();   // target -> Map(picture id -> {et, st})
+    const note = (p, st) => {
+      if (!groups.has(p.group)) groups.set(p.group, new Map());
+      groups.get(p.group).set(p.id, { et: p.et, st });
+    };
+    // the palette wanted for picture p: its neighbours in time of the same target (those this window has seen or
+    // looked ahead to), SPAN either side within GAP
+    const want = p => {
+      const all = [...(groups.get(p.group) || new Map()).entries()].filter(([, e]) => Math.abs(e.et - p.et) <= GAP)
+        .sort((a, b) => a[1].et - b[1].et || (a[0] < b[0] ? -1 : 1));
+      const i = all.findIndex(([id]) => id === p.id);
+      return i < 0 ? null : wanted(all.map(([, e]) => e.st), i, SPAN);
+    };
+    return {
+      // a picture looked ahead to (or one shown): its palette is kept for its neighbours
+      note(im, p) {
+        const g = groups.get(p.group);
+        if (g && g.has(p.id)) return;
+        const px = pixels(im);
+        if (px) note(p, palette(px.img.data, px.W, px.H));
+      },
+      // the picture p as shown here: a new Image with its colors moved, or null when it stays as it is
+      async apply(im, p) {
+        const s = strength(), t0 = performance.now();
+        const px = pixels(im);
+        if (!px) return null;
+        const own = palette(px.img.data, px.W, px.H);
+        note(p, own);
+        stats.pictures++;
+        if (!s || !own) return null;
+        const w = want(p);
+        if (!smoothed(px.img.data, own, w, s)) return null;
+        px.g.putImageData(px.img, 0, 0);
+        const blob = await new Promise(r => px.c.toBlob(r, "image/png")), url = URL.createObjectURL(blob), out = new Image();
+        urls.push(url);
+        if (urls.length > 16) URL.revokeObjectURL(urls.shift());
+        await new Promise((res, rej) => { out.onload = res; out.onerror = rej; out.src = url; });
+        stats.moved++; stats.ms += performance.now() - t0; stats.last = { id: p.id, own, want: w, moves: moves(own, w, s) };
+        out.dataset.colorSmooth = moves(own, w, s).map(([d, r]) => `${d.toFixed(3)}/${r.toFixed(3)}`).join(" ");
+        return out;
+      },
+    };
+  }
+  window.cassiniColourSmooth = { math, run, strength, stats, SPAN };
+})();
+</script>

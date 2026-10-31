@@ -1270,9 +1270,15 @@ def _floor(iofs, levels, sky=None):
     if sky is None:
         floor, middle, glow = (float(v) for v in np.percentile(lum, (FLOOR_PCT, 50, GLOW_PCT)))
         black = FLOOR_SHARE * max(floor, 0.0)
-        dim = np.log(GLOW_IOF[1] / max(middle, 1e-12)) / np.log(GLOW_IOF[1] / GLOW_IOF[0])
+        dim = min(max(float(np.log(GLOW_IOF[1] / max(middle, 1e-12)) / np.log(GLOW_IOF[1] / GLOW_IOF[0])), 0.0), 1.0)
+        glow = max(glow - black, 0.0)
+        if dim == 0 and -1e30 < lum.min() and lum.max() < 1e30:
+            # a picture brighter than lit sky (most): none of its glow whatever its fine structure, a finite share for
+            # pixels of this size (their blurs cannot overflow into a NaN), so the same number (zero, of the same
+            # sign) without measuring it (two blurs, ~35 ms)
+            return black + dim * glow
         smooth = (GLOW_FINE[1] - fine_structure(lum)) / (GLOW_FINE[1] - GLOW_FINE[0])
-        return black + min(max(float(dim), 0.0), 1.0) * min(max(smooth, 0.0), 1.0) * max(glow - black, 0.0)
+        return black + dim * min(max(smooth, 0.0), 1.0) * glow
     side = 2 * FLOOR_EDGE + 1
     far = cv2.erode((~sky).astype(np.uint8), np.ones((side, side), np.uint8)).astype(bool)
     if far.sum() < FLOOR_MIN * far.size:
