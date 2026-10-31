@@ -2654,6 +2654,17 @@ body.ambient.phone .amb-where { font-size: 18px; }
   // the viewer's camera cones read view.conesEverywhere
   D({ key: "view.conesEverywhere", section: "View", label: "Camera cones on every view", type: "toggle", value: false,
       hint: "Draw the cameras' fields of view when looking at a body too. Off shows them only while the view is on Cassini." });
+  // the viewer's picture footprints (updateFootprints) read view.footprints and view.footprintCount
+  D({ key: "view.footprints", section: "View", label: "Picture footprints", type: "toggle", value: false,
+      hint: "Outline on each body where Cassini's last pictures landed: every frame's field of view from the pointing data, laid on the surface and turning with it, the newest in warm white and older ones fading. Narrow-angle frames are the small blue squares, wide-angle the large grey-blue ones." });
+  D({ key: "view.footprintCount", section: "View", label: "Footprints of the last", type: "range", log: true, value: 50, min: 1, max: 1000,
+      stops: [1, 2, 3, 5, 10, 20, 30, 50, 100, 200, 300, 500, 1000], format: v => `${v} ${+v === 1 ? "picture" : "pictures"}`,
+      hint: "How many of the latest pictures leave a footprint. Only pictures that land on a body count." });
+  D({ key: "view.footprintPictures", section: "View", label: "Pictures in the footprints", type: "toggle", value: false,
+      hint: "With Picture footprints on, the newest footprints show the pictures themselves, laid on the body where the camera saw them: the frame server's processed frame (as in the camera windows, not centered), stretched over the footprint ray by ray, so each part of the picture sits where it looked. Newest on top; older ones fade." });
+  D({ key: "view.footprintPictureCount", section: "View", label: "Pictures laid down", type: "range", log: true, value: 20, min: 1, max: 100,
+      stops: [1, 2, 3, 5, 10, 20, 30, 50, 100], format: v => `${v} ${+v === 1 ? "picture" : "pictures"}`,
+      hint: "How many of the newest footprints show their picture. Each one is a picture to load, so more is slower." });
   // a new key, so a saved "off" from when follow started off does not carry over
   D({ key: "view.followcam", section: "View", label: "Follow camera", type: "toggle", value: true, hint: "Look where Cassini's camera points (needs the pointing data)." });
   mirror("view.followcam", "followcam");
@@ -12636,7 +12647,7 @@ void main() {
   window.cassiniAbout = { open, addTab, esc, close: () => show(false), credits: CREDITS };
 
   // ---- which version this is: this page's build id (build.py writes it), and what the frame server says it serves ----
-  const BUILD = /*BUILD*/"d3f6dcf01131";
+  const BUILD = /*BUILD*/"e7199c645872";
   const FRAMES = (() => {                       // the frame server, chosen as the camera window chooses it
     const q = new URLSearchParams(location.search).get("frames");
     if (q) return q.replace(/\/$/, "");
@@ -12988,6 +12999,7 @@ void main() {
         G.setAttribute(k, new THREE.InstancedBufferAttribute(new Float32Array(3 * M.cap), 3));
       G.dispose();   // new buffers: drop the old ones from the GPU
     }
+    if (!G.attributes.instanceStart) { G.instanceCount = 0; return; }   // a line with no segments yet
     const A = G.attributes.instanceStart.array, B = G.attributes.instanceEnd.array, CA = G.attributes.instanceColorStart.array, CB = G.attributes.instanceColorEnd.array;
     const p = pa.array, ps = pa.itemSize, c = ca && ca.array, cs = ca && ca.itemSize, at = k => ix ? ix.array[k] : k;
     const put = (j, a, b) => {
@@ -14239,6 +14251,7 @@ function updateBodies() {
   markerPts.geometry.attributes.position.needsUpdate = true;
   markerPts.geometry.attributes.color.needsUpdate = true;
   updateFov();
+  updateFootprints();
 
   starPts.position.copy(camera.position);
   if (skyMesh) { skyMesh.matrix.copy(skyMesh.userData.basis).setPosition(camera.position); skyMesh.matrixWorld.copy(skyMesh.matrix); }
@@ -14300,6 +14313,215 @@ function updateFov() {
   fov.children[0].material.color.set(col); fov.children[1].material.color.set(col);
   fov.visible = true;
 }
+
+// ---------- picture footprints ----------
+// Where the last pictures landed on the bodies: each frame's field of view, from the pointing at that frame and
+// Cassini's and the body's positions then, cut against the body's ellipsoid and kept fixed to its surface, so the
+// trail turns with the body. A frame across the limb is drawn only where it is on the body.
+// Settings view.footprints (on/off) and view.footprintCount (how many pictures); window.cassiniFootprints for tests.
+const FP_GRID = 17;                    // samples along each side of a frame: a 16 x 16 mesh per footprint
+const FP_SCAN = 6000;                  // frames looked back through for the trail
+const fpState = { cat: null, cache: new Map(), groups: {}, key: "", list: [] };
+const fpOn = () => !!(window.cassiniSettings && cassiniSettings.get("view.footprints")) || /[?&]footprints=1/.test(location.search);
+const fpCount = () => Math.max(1, Math.round((window.cassiniSettings && cassiniSettings.get("view.footprintCount")) || 50));
+// one frame's footprint on its target: body-fixed points (scene units) on a FP_GRID x FP_GRID mesh, or null
+function footprintOf(k) {
+  if (fpState.cache.has(k)) return fpState.cache.get(k);
+  let out = null;
+  const T = catalog.target[k], b = bodies[T], et = catalog.et[k];
+  if (b && b.radii && meshes[T] && tracks[T] && tracks.CASSINI && et >= tracks[T].start && et <= tracks[T].end) {
+    const q = attitudeAt(att, et, new Float64Array(4));
+    if (q) {
+      const cam = catalog.cam[k] === "W" ? "W" : "N", c = CAM_TO_BODY[cam], qc = new Float64Array(4);
+      qmul([c[0], -c[1], -c[2], -c[3]], q, qc, 0);
+      const C = q2rows(qc), B = iauMatrix(b, et), r = b.radii;
+      const pc = positionAt(tracks.CASSINI, et, v3()), pb = positionAt(tracks[T], et, v3()), rel = sub(pc, pb, v3());
+      // in body-fixed coordinates scaled by the radii, the body is the unit sphere
+      const o = [dot(B[0], rel) / r[0], dot(B[1], rel) / r[1], dot(B[2], rel) / r[2]];
+      const h = Math.tan(rad(FOV_HALF[cam])), pts = new Float32Array(3 * FP_GRID * FP_GRID), on = new Uint8Array(FP_GRID * FP_GRID);
+      let hits = 0, centre = false;
+      for (let j = 0; j < FP_GRID; j++) for (let i = 0; i < FP_GRID; i++) {
+        const u = (2 * i / (FP_GRID - 1) - 1) * h, w = (2 * j / (FP_GRID - 1) - 1) * h;
+        const dj = [C[2][0] + u * C[0][0] + w * C[1][0], C[2][1] + u * C[0][1] + w * C[1][1], C[2][2] + u * C[0][2] + w * C[1][2]];
+        const d = [dot(B[0], dj) / r[0], dot(B[1], dj) / r[1], dot(B[2], dj) / r[2]];
+        const A = dot(d, d), Bq = dot(o, d), Cq = dot(o, o) - 1, disc = Bq * Bq - A * Cq;
+        let t, hit = false;
+        if (disc >= 0 && (t = (-Bq - Math.sqrt(disc)) / A) > 0) hit = true;
+        else t = Math.max(0, -Bq / A);   // past the limb: the ray's closest point, pulled onto the surface below
+        let x = o[0] + t * d[0], y = o[1] + t * d[1], z = o[2] + t * d[2];
+        if (!hit) { const l = Math.hypot(x, y, z); x /= l; y /= l; z /= l; }
+        if (hit) { hits++; on[j * FP_GRID + i] = 1; if (i === (FP_GRID - 1) / 2 && j === (FP_GRID - 1) / 2) centre = true; }
+        const n = 3 * (j * FP_GRID + i);
+        pts[n] = x * r[0] / KM; pts[n + 1] = y * r[1] / KM; pts[n + 2] = z * r[2] / KM;
+      }
+      // a frame that only grazes the limb (sky, rings, a moon in front) leaves no footprint
+      if (centre || hits >= FP_GRID * FP_GRID / 4) out = { k, body: T, cam, et, pts, on, hits };
+    }
+  }
+  fpState.cache.set(k, out);
+  return out;
+}
+const FP_BANDS = 6;                    // outlines in this many age bands, each with its own opacity
+function fpGroup(T) {
+  let g = fpState.groups[T];
+  if (g) return g;
+  // normal blending: on Saturn's bright clouds an additive trail would only burn to white
+  const fill = new THREE.Mesh(new THREE.BufferGeometry(), new THREE.MeshBasicMaterial({ vertexColors: true, transparent: true, depthWrite: false, side: THREE.DoubleSide }));
+  const edges = [];
+  for (let k = 0; k < FP_BANDS; k++) {
+    const e = new THREE.LineSegments(new THREE.BufferGeometry(), new THREE.LineBasicMaterial({ vertexColors: true, transparent: true, depthWrite: false, opacity: 0.95 * (1 - 0.75 * k / (FP_BANDS - 1)) }));
+    e.renderOrder = 5; e.frustumCulled = false; edges.push(e);
+  }
+  g = new THREE.Group(); g.add(fill, ...edges); g.userData = { fill, edges };
+  // drawn after the globes, rings and hazes
+  fill.renderOrder = 4; fill.frustumCulled = false;
+  g.visible = false; scene.add(g); fpState.groups[T] = g;
+  return g;
+}
+// the newest frames that landed on a body, newest first
+function footprintList(n) {
+  const i0 = lastImageIndex(state.et), list = [];
+  for (let i = i0; i >= 0 && i > i0 - FP_SCAN && list.length < n; i--) { const f = footprintOf(order[i]); if (f) list.push(f); }
+  return list;
+}
+// NAC blue and WAC grey-blue as the cones, a shade deeper so they read on Saturn's pale clouds; the newest one amber
+const FP_COL = { N: [0.36, 0.66, 1.0], W: [0.55, 0.65, 0.86], new: [1.0, 0.8, 0.45] };
+function rebuildFootprints(list, n) {
+  const per = {};
+  list.forEach((f, rank) => (per[f.body] = per[f.body] || []).push([f, rank]));
+  for (const T in fpState.groups) if (!per[T]) fpState.groups[T].visible = false;
+  const G = FP_GRID, cells = (G - 1) * (G - 1);
+  const ring = [];   // the frame's edge, round the grid
+  for (let i = 0; i < G - 1; i++) ring.push(i);
+  for (let j = 0; j < G - 1; j++) ring.push(j * G + G - 1);
+  for (let i = G - 1; i > 0; i--) ring.push((G - 1) * G + i);
+  for (let j = G - 1; j > 0; j--) ring.push(j * G);
+  for (const T in per) {
+    const g = fpGroup(T), fs = per[T];
+    const fp = new Float32Array(fs.length * cells * 18), fc = new Float32Array(fs.length * cells * 24);
+    const ep = [], ec = [];
+    for (let k = 0; k < FP_BANDS; k++) { ep.push([]); ec.push([]); }
+    let a = 0, c4 = 0;
+    for (const [f, rank] of fs) {
+      // newest strongest, older ones fade toward the far end of the trail
+      const age = n > 1 ? rank / (n - 1) : 0, fa = 0.2 * (1 - 0.8 * age), band = Math.min(FP_BANDS - 1, Math.floor(age * FP_BANDS));
+      const col = rank === 0 ? FP_COL.new : FP_COL[f.cam], P = f.pts;
+      // only the cells wholly on the body: a cell past the limb would smear along it
+      for (let j = 0; j < G - 1; j++) for (let i = 0; i < G - 1; i++) {
+        const p00 = j * G + i, p10 = p00 + 1, p01 = p00 + G, p11 = p01 + 1;
+        if (!f.on[p00] || !f.on[p10] || !f.on[p01] || !f.on[p11]) continue;
+        for (const idx of [p00, p10, p11, p00, p11, p01]) {
+          fp[a] = P[3 * idx]; fp[a + 1] = P[3 * idx + 1]; fp[a + 2] = P[3 * idx + 2]; a += 3;
+          fc[c4] = col[0]; fc[c4 + 1] = col[1]; fc[c4 + 2] = col[2]; fc[c4 + 3] = fa; c4 += 4;
+        }
+      }
+      // the outline only where the frame's edge is on the surface: along the limb it would only trace the globe
+      for (let s = 0; s < ring.length; s++) {
+        const i0 = ring[s], i1 = ring[(s + 1) % ring.length];
+        if (!f.on[i0] || !f.on[i1]) continue;
+        for (const idx of [i0, i1]) { ep[band].push(P[3 * idx], P[3 * idx + 1], P[3 * idx + 2]); ec[band].push(...col); }
+      }
+    }
+    const { fill, edges } = g.userData;
+    fill.geometry.dispose();
+    fill.geometry = new THREE.BufferGeometry();
+    fill.geometry.setAttribute("position", new THREE.BufferAttribute(fp.subarray(0, a), 3)); fill.geometry.setAttribute("color", new THREE.BufferAttribute(fc.subarray(0, c4), 4));
+    edges.forEach((e, k) => {
+      e.geometry.dispose(); e.geometry = new THREE.BufferGeometry();
+      e.geometry.setAttribute("position", new THREE.Float32BufferAttribute(ep[k], 3)); e.geometry.setAttribute("color", new THREE.Float32BufferAttribute(ec[k], 3));
+    });
+    g.visible = true;
+  }
+}
+function updateFootprints() {
+  const on = fpOn() && !!att && !!catalog;
+  if (!on) { for (const T in fpState.groups) fpState.groups[T].visible = false; fpState.key = ""; fpState.list = []; syncPictures(); return; }
+  if (fpState.cat !== catalog) { fpState.cat = catalog; fpState.cache.clear(); fpState.key = ""; }
+  const n = fpCount(), i0 = lastImageIndex(state.et), key = `${i0}:${n}`;
+  if (key !== fpState.key) { fpState.key = key; fpState.list = footprintList(n); rebuildFootprints(fpState.list, n); }
+  syncPictures();
+  // each trail sits on its body as it is now: the body's rotation, its size (enlarged moons too), lifted a hair
+  // above the globe's facets and more from afar, so the log depth buffer keeps it on top of the surface
+  for (const T in fpState.groups) {
+    const g = fpState.groups[T];
+    if (!g.visible) continue;
+    const m = meshes[T], b = bodies[T];
+    if (!m || !m.group.visible) { g.visible = false; continue; }
+    const R = iauMatrix(b, state.et);
+    g.position.copy(m.group.position);
+    g.quaternion.setFromRotationMatrix(mB.makeBasis(toScene(R[0], new THREE.Vector3()), toScene(R[1], new THREE.Vector3()), toScene(R[2], new THREE.Vector3())));
+    const rs = Math.max(...b.radii) / KM, d = Math.max(0, camera.position.distanceTo(m.group.position) - rs);
+    const lift = Math.max(T === "SATURN" ? 3e-4 : 8e-4, Math.min(4e-3, 1e-3 * d / rs));
+    g.scale.setScalar(enlargeOf(T) * (1 + lift));
+  }
+}
+// ---------- the pictures themselves, laid into their footprints ----------
+// The newest footprints show the picture the frame server makes of that frame (/frames/processed: the pipeline's
+// stacked, calibrated frame on its display scale, as the camera windows show it, not centred), stretched over the
+// footprint's mesh. Each mesh vertex is a ray through the frame, so the picture lands where that pixel looked; the
+// pipeline's camera convention (bootleg_autonav.project, cas_iss_v10.ti): samples increase toward the camera frame's
+// -X, lines toward -Y. Settings view.footprintPictures and view.footprintPictureCount.
+const FRAMES_ORIGIN = (() => {                 // the frame server, chosen as the camera window chooses it
+  const q = new URLSearchParams(location.search).get("frames");
+  if (q) return q.replace(/\/$/, "");
+  if (/^https?:$/.test(location.protocol) && !/claude\.ai$|claudeusercontent\.com$|claude\.site$/.test(location.hostname)) return location.origin;
+  return "http://localhost:8765";
+})();
+const PIC_SIZE = 512, PIC_RETRY_MS = 20000;
+const picState = { shown: new Map(), failed: new Map(), loader: new THREE.TextureLoader() };
+const picOn = () => fpOn() && (!!(window.cassiniSettings && cassiniSettings.get("view.footprintPictures")) || /[?&]footprintPictures=1/.test(location.search));
+const picCount = () => Math.max(1, Math.round((window.cassiniSettings && cassiniSettings.get("view.footprintPictureCount")) || 20));
+const picUrl = id => `${FRAMES_ORIGIN}/frames/processed/${id}.webp?size=${PIC_SIZE}${window.cassiniLook ? window.cassiniLook() : ""}`;
+function pictureMesh(f) {
+  const G = FP_GRID, P = f.pts, pos = [], uv = [];
+  for (let j = 0; j < G - 1; j++) for (let i = 0; i < G - 1; i++) {
+    const p00 = j * G + i, p10 = p00 + 1, p01 = p00 + G, p11 = p01 + 1;
+    if (!f.on[p00] || !f.on[p10] || !f.on[p01] || !f.on[p11]) continue;
+    for (const idx of [p00, p10, p11, p00, p11, p01]) {
+      const gi = idx % G, gj = (idx - gi) / G;
+      pos.push(P[3 * idx], P[3 * idx + 1], P[3 * idx + 2]);
+      // grid i runs along +X and j along +Y; sample = 1 - i, line = 1 - j, and the texture's v is 1 - line
+      uv.push(1 - gi / (G - 1), gj / (G - 1));
+    }
+  }
+  const g = new THREE.BufferGeometry();
+  g.setAttribute("position", new THREE.Float32BufferAttribute(pos, 3)); g.setAttribute("uv", new THREE.Float32BufferAttribute(uv, 2));
+  const m = new THREE.Mesh(g, new THREE.MeshBasicMaterial({ transparent: true, depthWrite: false, side: THREE.DoubleSide, opacity: 0 }));
+  m.frustumCulled = false; m.visible = false;
+  return m;
+}
+function syncPictures() {
+  const want = new Map();
+  if (picOn()) for (const f of fpState.list.slice(0, picCount())) want.set(catalog.id[f.k], f);
+  for (const [id, p] of picState.shown) if (!want.has(id) || p.f !== want.get(id)) {
+    if (p.mesh.parent) p.mesh.parent.remove(p.mesh); p.mesh.geometry.dispose(); p.mesh.material.dispose(); if (p.tex) p.tex.dispose();
+    picState.shown.delete(id);
+  }
+  const ranks = [...want.keys()], M = ranks.length;
+  ranks.forEach((id, rank) => {
+    const f = want.get(id);
+    let p = picState.shown.get(id);
+    if (!p) {
+      if (Date.now() - (picState.failed.get(id) || -Infinity) < PIC_RETRY_MS) return;
+      p = { f, mesh: pictureMesh(f), tex: null };
+      fpGroup(f.body).add(p.mesh);
+      picState.shown.set(id, p);
+      p.tex = picState.loader.load(picUrl(id), tex => {
+        if (picState.shown.get(id) !== p) { tex.dispose(); return; }
+        tex.anisotropy = 4; p.mesh.material.map = tex; p.mesh.material.needsUpdate = true; p.mesh.visible = true;
+      }, undefined, () => { picState.failed.set(id, Date.now()); if (picState.shown.get(id) === p) { if (p.mesh.parent) p.mesh.parent.remove(p.mesh); picState.shown.delete(id); } });
+    }
+    // newest on top and whole, older ones fading under it
+    const age = M > 1 ? rank / (M - 1) : 0;
+    p.mesh.material.opacity = 1 - 0.6 * age;
+    p.mesh.renderOrder = 4.1 + 0.8 * (1 - age);
+  });
+}
+window.cassiniFootprints = {
+  get pictures() { return [...picState.shown.entries()].map(([id, p]) => ({ id, loaded: !!p.mesh.material.map, opacity: p.mesh.material.opacity })); },
+  get list() { return fpState.list.map(f => ({ id: catalog.id[f.k], body: f.body, cam: f.cam, et: f.et, hits: f.hits })); },
+  footprintOf: k => footprintOf(k), refresh() { fpState.key = ""; }
+};
 
 function updateTrail() {
   const N = trailLine.userData.N;

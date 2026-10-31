@@ -402,6 +402,17 @@ body.phone .srow input[type=range] { width: 96px; }
   // the viewer's camera cones read view.conesEverywhere
   D({ key: "view.conesEverywhere", section: "View", label: "Camera cones on every view", type: "toggle", value: false,
       hint: "Draw the cameras' fields of view when looking at a body too. Off shows them only while the view is on Cassini." });
+  // the viewer's picture footprints (updateFootprints) read view.footprints and view.footprintCount
+  D({ key: "view.footprints", section: "View", label: "Picture footprints", type: "toggle", value: false,
+      hint: "Outline on each body where Cassini's last pictures landed: every frame's field of view from the pointing data, laid on the surface and turning with it, the newest in warm white and older ones fading. Narrow-angle frames are the small blue squares, wide-angle the large grey-blue ones." });
+  D({ key: "view.footprintCount", section: "View", label: "Footprints of the last", type: "range", log: true, value: 50, min: 1, max: 1000,
+      stops: [1, 2, 3, 5, 10, 20, 30, 50, 100, 200, 300, 500, 1000], format: v => `${v} ${+v === 1 ? "picture" : "pictures"}`,
+      hint: "How many of the latest pictures leave a footprint. Only pictures that land on a body count." });
+  D({ key: "view.footprintPictures", section: "View", label: "Pictures in the footprints", type: "toggle", value: false,
+      hint: "With Picture footprints on, the newest footprints show the pictures themselves, laid on the body where the camera saw them: the frame server's processed frame (as in the camera windows, not centered), stretched over the footprint ray by ray, so each part of the picture sits where it looked. Newest on top; older ones fade." });
+  D({ key: "view.footprintPictureCount", section: "View", label: "Pictures laid down", type: "range", log: true, value: 20, min: 1, max: 100,
+      stops: [1, 2, 3, 5, 10, 20, 30, 50, 100], format: v => `${v} ${+v === 1 ? "picture" : "pictures"}`,
+      hint: "How many of the newest footprints show their picture. Each one is a picture to load, so more is slower." });
   // a new key, so a saved "off" from when follow started off does not carry over
   D({ key: "view.followcam", section: "View", label: "Follow camera", type: "toggle", value: true, hint: "Look where Cassini's camera points (needs the pointing data)." });
   mirror("view.followcam", "followcam");
