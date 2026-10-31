@@ -12647,7 +12647,7 @@ void main() {
   window.cassiniAbout = { open, addTab, esc, close: () => show(false), credits: CREDITS };
 
   // ---- which version this is: this page's build id (build.py writes it), and what the frame server says it serves ----
-  const BUILD = /*BUILD*/"e7199c645872";
+  const BUILD = /*BUILD*/"c67df471b7c2";
   const FRAMES = (() => {                       // the frame server, chosen as the camera window chooses it
     const q = new URLSearchParams(location.search).get("frames");
     if (q) return q.replace(/\/$/, "");
@@ -14398,7 +14398,7 @@ function rebuildFootprints(list, n) {
   for (let j = G - 1; j > 0; j--) ring.push(j * G);
   for (const T in per) {
     const g = fpGroup(T), fs = per[T];
-    const fp = new Float32Array(fs.length * cells * 18), fc = new Float32Array(fs.length * cells * 24);
+    const fp = new Float32Array(fs.length * cells / 4 * 18), fc = new Float32Array(fs.length * cells / 4 * 24);
     const ep = [], ec = [];
     for (let k = 0; k < FP_BANDS; k++) { ep.push([]); ec.push([]); }
     let a = 0, c4 = 0;
@@ -14406,9 +14406,10 @@ function rebuildFootprints(list, n) {
       // newest strongest, older ones fade toward the far end of the trail
       const age = n > 1 ? rank / (n - 1) : 0, fa = 0.2 * (1 - 0.8 * age), band = Math.min(FP_BANDS - 1, Math.floor(age * FP_BANDS));
       const col = rank === 0 ? FP_COL.new : FP_COL[f.cam], P = f.pts;
-      // only the cells wholly on the body: a cell past the limb would smear along it
-      for (let j = 0; j < G - 1; j++) for (let i = 0; i < G - 1; i++) {
-        const p00 = j * G + i, p10 = p00 + 1, p01 = p00 + G, p11 = p01 + 1;
+      // the tint on every other ray (8 x 8 cells; the pictures use them all), only the cells wholly on the body: a
+      // cell past the limb would smear along it
+      for (let j = 0; j < G - 1; j += 2) for (let i = 0; i < G - 1; i += 2) {
+        const p00 = j * G + i, p10 = p00 + 2, p01 = p00 + 2 * G, p11 = p01 + 2;
         if (!f.on[p00] || !f.on[p10] || !f.on[p01] || !f.on[p11]) continue;
         for (const idx of [p00, p10, p11, p00, p11, p01]) {
           fp[a] = P[3 * idx]; fp[a + 1] = P[3 * idx + 1]; fp[a + 2] = P[3 * idx + 2]; a += 3;
@@ -14438,7 +14439,10 @@ function updateFootprints() {
   if (!on) { for (const T in fpState.groups) fpState.groups[T].visible = false; fpState.key = ""; fpState.list = []; syncPictures(); return; }
   if (fpState.cat !== catalog) { fpState.cat = catalog; fpState.cache.clear(); fpState.key = ""; }
   const n = fpCount(), i0 = lastImageIndex(state.et), key = `${i0}:${n}`;
-  if (key !== fpState.key) { fpState.key = key; fpState.list = footprintList(n); rebuildFootprints(fpState.list, n); }
+  // while playing fast, at most a few rebuilds a second
+  if (key !== fpState.key && (!state.playing || performance.now() - (fpState.built || 0) > 250)) {
+    fpState.key = key; fpState.built = performance.now(); fpState.list = footprintList(n); rebuildFootprints(fpState.list, n);
+  }
   syncPictures();
   // each trail sits on its body as it is now: the body's rotation, its size (enlarged moons too), lifted a hair
   // above the globe's facets and more from afar, so the log depth buffer keeps it on top of the surface
