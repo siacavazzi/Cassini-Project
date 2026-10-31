@@ -298,7 +298,7 @@ body.phone #mestrip { grid-template-columns: repeat(auto-fill, 72px); grid-auto-
   const SD = { sig: "", pics: null, ids: [], measured: null, smooth: 0, done: 0, total: 0, matched: 0, phase: "", error: "", moves: new Map(), run: 0 };
   // the pictures the film shows for frame e, whatever the strip shows (export.py Pictures.picture: the first the server has)
   const filmTries = e => { const s = ME.src; ME.src = "movie"; try { return tries(e, 1024); } finally { ME.src = s; } };
-  const greys = new Map();    // a picture's address -> its grey at SIDE (a few hundred KB of them at most)
+  const greys = new Map();    // a picture's address -> its grey and where it has picture, at SIDE (half a MB each; the newest 1,000 kept)
   async function greyAt(urls) {
     for (const url of urls) {
       if (greys.has(url)) return greys.get(url);
@@ -308,7 +308,7 @@ body.phone #mestrip { grid-template-columns: repeat(auto-fill, 72px); grid-auto-
         const b = await createImageBitmap(await r.blob()), g = FS.greyOf(b);
         if (b.close) b.close();
         greys.set(url, g);
-        if (greys.size > 6000) greys.delete(greys.keys().next().value);
+        if (greys.size > 1000) greys.delete(greys.keys().next().value);
         return g;
       } catch (err) { /* the next stand-in */ }
     }
