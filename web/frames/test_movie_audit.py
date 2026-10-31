@@ -67,6 +67,46 @@ def test_one_color_mix():
     assert all(e["try"][0][0] == "color" for e in plan("pictures=color", "movie"))
 
 
+def test_mosaics_off():
+    """The Movie Editor's Mosaics: Off draws no mosaic (Sam's ring scan, ISS_006RI_LPHRLFMOV001: Tile by tile was the
+    windows' mosaic building up, the same pictures, so no setting took the mosaics out)."""
+    q = "from=2005-04-13T02:37:00&until=2005-04-13T16:23:00&cams=NW&list=1&"
+    export._pass_of = lambda fid: "P"
+    export._lap_end = lambda fid: True
+    for kind in ("mosaic", "mosaic_movie"):
+        export.pass_kind = lambda fid, k=kind: k
+        go = lambda m: export.plan(export.options(parse_qs(q + m)))["pictures"]
+        assert all(e["try"][0][0] in ("mosaic", "rolling") for e in go("mos=tiles"))
+        off = go("mos=off")
+        assert off and not any(k in ("mosaic", "rolling") for e in off for k, _ in e["try"]), kind
+    # a ring strip played as a movie (a toss-up: its mosaic the windows' other choice) is frames too; a movie is not
+    export.pass_kind = lambda fid: "movie"
+    for tossup in (True, False):
+        export._tossup = lambda fid, v=tossup: v
+        off = export.plan(export.options(parse_qs(q + "mos=off")))["pictures"]
+        assert any(k == "movie" for e in off for k, _ in e["try"]) != tossup
+    o = lambda m: export.options(parse_qs(STRETCH + m))
+    assert export.job_id(o("mos=off")) != export.job_id(o("mos=tiles"))
+
+
+def test_plan_progress():
+    """A plan reports how far it is (the Movie Editor's loading window, /export/plan-progress/KEY.json)."""
+    seen = []
+    export.pass_kind = lambda fid: None
+    ring = "from=2005-04-13T02:37:00&until=2005-04-13T16:23:00&cams=NW&list=1"
+    pics = export.plan(export.options(parse_qs(ring)), progress=lambda d, n, s: seen.append((d, n, s)))
+    assert pics["pictures"] and seen[0][0] == 0 and seen[-1][0] == seen[-1][1] > 1000 and len(seen) > 10, seen
+    assert all(a[0] <= b[0] for a, b in zip(seen, seen[1:]))
+    import frame_server as fs
+    assert fs.plan_progress_key({"progress": ["ab_1"]}) == "ab_1" and fs.plan_progress_key({"progress": ["../x"]}) is None
+    rep = fs.plan_progress("ab_1")
+    rep(5, 10, "frames")
+    assert fs._plans["ab_1"]["done"] == 5 and fs._plans["ab_1"]["total"] == 10
+    rep(None, None, "done")
+    assert fs._plans["ab_1"]["step"] == "done" and fs._plans["ab_1"]["done"] == 10
+    assert fs.plan_progress(None) is None
+
+
 def test_names():
     o = lambda q: export.options(parse_qs(STRETCH + q))
     assert o("")["movie"] == export.MOVIE and o("sets=0")["movie"]["sets"] is False

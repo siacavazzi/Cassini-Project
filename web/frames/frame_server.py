@@ -146,6 +146,11 @@ Routes:
                                framing (Auto center for the whole film, stills too; a zoom; single frames moved);
                                &fedit=ID~ex:0.5,ct:0|ID~...: single frames edited on their own (the movie's look with
                                those studio keys over it, studio_look.override)
+  ...&progress=KEY              (KEY: 1-40 of A-Z a-z 0-9 _ -) the plan reports how far it is under KEY:
+  /export/plan-progress/KEY.json
+                               {done, total, step}: step "frames" while the stretch's raw frames are looked at (done
+                               of total), "sizes" while Picture size Full sizes its passes, "done" once the plan is
+                               sent; 404 before the plan starts or 10 minutes after it ends
   /export/levels.json?...      (the plan's options) the Movie Editor's exposure graph: each frame's brightness in EV,
                                measured on the film's own pictures on a thread of its own (done of total so far,
                                kept in the cache), and once all are, each picture's Even out change for the edit
@@ -504,6 +509,29 @@ PROC_VERSIONS = {"balanced": "proc-v12", "raw": "proc-v12", "classic": "proc-v6"
 HOLD_AGREE = 40   # full resolution px: SPICE's place for a held still and the pass's may differ by this much
 CENTRE_VERSION = "ctr5"   # ctr2: the shift stops at the frame's data edge; ctr3: only when the body's disk is cut by it;
                           # ctr4: a close-up pass is turned north up where it is; ctr5: no stop, centred is centred
+
+
+# a plan being worked out (/export/plan.json?progress=KEY): how far it is, for GET /export/plan-progress/KEY.json
+# ({done, total, step}: step "frames" while the stretch's raw frames are looked at, done of total; "sizes" while
+# Picture size Full sizes its passes; "done" once the plan is sent), kept PLAN_KEEP s after its last report
+_plans, _plan_lock, PLAN_KEEP = {}, threading.Lock(), 600
+
+
+def plan_progress_key(q):
+    key = (q.get("progress") or [""])[0]
+    return key if re.fullmatch(r"[A-Za-z0-9_-]{1,40}", key) else None
+
+
+def plan_progress(key):
+    """The progress(done, total, step) export.plan reports to under key (nothing without a key)."""
+    def report(done, total, step):
+        now = time.monotonic()
+        with _plan_lock:
+            for k in [k for k, v in _plans.items() if now - v["at"] > PLAN_KEEP]:
+                _plans.pop(k)
+            st = _plans.setdefault(key, {"done": 0, "total": 0, "step": "frames", "at": now})
+            st.update(step=step, at=now, **({"done": done, "total": total} if done is not None else {"done": st["total"]}))
+    return report if key else None
 
 
 def in_background(target, *args):
@@ -1394,12 +1422,24 @@ def make_handler(site, cache, flags=None):
             if url.path == "/debug/samples" and os.environ.get("FRAME_SERVER_SAMPLE") == "1":
                 return self.send_bytes(samples_text().encode(), "text/plain", False)
             if url.path == "/export/plan.json":
+                key = plan_progress_key(parse_qs(url.query))
                 try:
-                    return self.send_json(export.public_plan(export.plan(export.options(parse_qs(url.query)), cache)))
+                    return self.send_json(export.public_plan(export.plan(export.options(parse_qs(url.query)), cache,
+                                                                         progress=plan_progress(key))))
                 except ValueError as e:
                     return self.send_json({"error": str(e)}, 400)
                 except OverflowError as e:
                     return self.send_json({"error": str(e)}, 413)
+                finally:
+                    if key:
+                        plan_progress(key)(None, None, "done")
+            m = re.match(r"^/export/plan-progress/([A-Za-z0-9_-]{1,40})\.json$", url.path)
+            if m:
+                with _plan_lock:
+                    st = dict(_plans.get(m.group(1)) or {})
+                if not st:
+                    return self.send_json({"error": "no such plan"}, 404)
+                return self.send_json({k: v for k, v in st.items() if k != "at"})
             if url.path == "/export/levels.json":
                 try:
                     return self.send_json(export.levels(export.options(parse_qs(url.query)), cache, self.pictures()))

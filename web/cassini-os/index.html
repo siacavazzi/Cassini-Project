@@ -2181,11 +2181,11 @@ body.ambient.phone .amb-where { font-size: 18px; }
         <button class="galbtn" data-v="raw" title="Every frame in every filter as Cassini took it: nothing stacked, calibrated or put together">Every frame, raw</button>
       </div>
       <div class="melabel">Mosaics</div>
-      <div class="galseg" id="memos" role="group" aria-label="Mosaics in the movie"><button data-v="" title="As the camera windows show them (Settings: Mosaic movie frames, Complete mosaics only)">As the windows</button><button data-v="whole" title="Each mosaic once it is whole: a mosaic pass at its last tile, a mosaic movie once a lap, every tile new">Whole</button><button data-v="tiles" title="Every tile as it is taken, the mosaic building up">Tile by tile</button></div>
+      <div class="galseg" id="memos" role="group" aria-label="Mosaics in the movie"><button data-v="" title="As the camera windows show them (Settings: Mosaic movie frames, Complete mosaics only)">Default</button><button data-v="whole" title="Each mosaic once it is whole: a mosaic pass at its last tile, a mosaic movie once a lap, every tile new">Whole</button><button data-v="tiles" title="Every tile as it is taken, the mosaic building up">Tile by tile</button><button data-v="off" title="No mosaics: every frame of a mosaic or a ring strip on its own, as a still pass shows">Off</button></div>
       <div class="menote" id="memosnote"></div>
       <h4><span>Framing</span><span class="sp"></span><button id="mefrclear" title="Take the crop off and put every nudged frame back">Reset</button></h4>
       <div class="melabel" style="margin-top:2px">Auto center</div>
-      <div class="galseg" id="mectr" role="group" aria-label="Auto center for the movie"><button data-v="" title="Each camera window's Auto center setting">As the windows</button><button data-v="1" title="Every picture centered on its body (north up), movie passes and single pictures alike">On</button><button data-v="0" title="Every picture as Cassini pointed">Off</button></div>
+      <div class="galseg" id="mectr" role="group" aria-label="Auto center for the movie"><button data-v="" title="Each camera window's Auto center setting (Settings > Processing)">Default</button><button data-v="1" title="Every picture centered on its body (north up), movie passes and single pictures alike">On</button><button data-v="0" title="Every picture as Cassini pointed">Off</button></div>
       <div class="mechips" style="margin-top:7px"><button class="galbtn" id="mecrop" aria-pressed="false" title="Draw the crop on the picture">Crop…</button></div>
       <div class="mecropctl" id="mecropctl" hidden>
         <div class="galseg" id="measpect" role="group" aria-label="Crop shape"><button data-v="free">Free</button><button data-v="1">Square</button><button data-v="1.7778">16:9</button><button data-v="1.3333">4:3</button><button data-v="pic">Picture</button></div>
@@ -10058,7 +10058,7 @@ void main() {
   // ME: the stretch (a, b), its plan's frames, and the edit: drop (ids taken out by hand), keep (null = every target /
   // filter pair, else the ones kept), cams (the export's Cameras), edit (the studio look's recipe)
   // levels (frame id -> EV: the exposure level points), even (Even out over that many pictures, 0 off), ctr (Auto center
-  // for the movie: null as the windows have it, true, false), mos (Mosaics: null as the windows have them, "whole", "tiles"), crop (x0, y0, x1, y1, parts of the picture, or null), crop2 (the end crop the
+  // for the movie: null as the windows have it, true, false), mos (Mosaics: null as the windows have them, "whole", "tiles", "off"), crop (x0, y0, x1, y1, parts of the picture, or null), crop2 (the end crop the
   // movie glides to, or null), nudge (frame id -> [x, y], parts of the picture), fedit (frame id -> the studio keys that
   // frame has over the movie's look, "ex:0.5,ct:0": a frame edited on its own);
   // lv: the frame server's measured brightness of each frame (EV) and Even out's change for each picture
@@ -10155,7 +10155,7 @@ void main() {
     ME.levels = new Map(words("levels").map(w => { const i = w.lastIndexOf(":"); return [w.slice(0, i), clamp(+w.slice(i + 1), -EV, EV)]; }).filter(([k, v]) => k && isFinite(v)));
     ME.even = clamp(Math.round(+q.get("even") || 0), 0, EVEN);
     ME.ctr = q.get("ctr") === "1" ? true : q.get("ctr") === "0" ? false : null;
-    ME.mos = /^(whole|tiles)$/.test(q.get("mos") || "") ? q.get("mos") : null;
+    ME.mos = /^(whole|tiles|off)$/.test(q.get("mos") || "") ? q.get("mos") : null;
     const box = k => { const b = (q.get(k) || "").split("_").map(Number); return b.length === 4 && b.every(isFinite) && b[2] - b[0] >= CROP && b[3] - b[1] >= CROP ? b.map(v => clamp(v, 0, 1)) : null; };
     ME.crop = box("crop"); ME.crop2 = box("crop2"); if (ME.crop2 && !ME.crop) ME.crop = WHOLE.slice();
     ME.nudge = new Map(words("nudge").map(w => w.split(":")).filter(a => a.length === 3 && a[0] && isFinite(+a[1]) && isFinite(+a[2]))
@@ -10198,12 +10198,23 @@ void main() {
     // every frame of the stretch, however many (list=1: the plan's cap is the film's, not the list's)
     const q = new URLSearchParams({ from: isoOf(ME.a), until: isoOf(ME.b), cams: "NW", fps: opt("export.adaptive", true) ? "auto" : String(opt("export.fps", 12)),
       size: "512", sound: "0", caption: "0", pictures: ME.pictures, list: "1" });
+    // how far the frame server is (progress=: /export/plan-progress/<key>.json, every half second; a server without
+    // it answers 404 throughout, and the words fall back to the time so far)
+    const key = Math.random().toString(36).slice(2, 14);
+    q.set("progress", key); ME.listing = null;
+    let poll = 0;
+    const look = async () => {
+      try { const r = await fetch(`${FRAMES}/export/plan-progress/${key}.json`, { cache: "no-store" }); if (r.ok && n === ask && ME.loading) { ME.listing = await r.json(); if (L) loadUi(); else render(); } } catch (e) {}
+      if (n === ask && ME.loading) poll = setTimeout(look, 500);
+    };
+    poll = setTimeout(look, 300);
     try {
       const r = await fetch(`${FRAMES}/export/plan.json?${q}${window.cassiniLook ? window.cassiniLook() : ""}${window.cassiniMovieStyle ? window.cassiniMovieStyle() : ""}${mosQ()}${window.cassiniSetsQ ? window.cassiniSetsQ() : ""}`), p = await r.json();
       if (n !== ask) return;
       if (!r.ok) throw new Error(p.error || `the frame server said ${r.status}`);
       ME.frames = p.pictures;
     } catch (e) { if (n === ask) ME.error = /fetch|network/i.test(String(e.message)) ? `No frame server at ${FRAMES}.` : `Could not list the frames: ${e.message || e}`; }
+    clearTimeout(poll);
     if (n !== ask) return;
     ME.loading = false;
     // keep lists that name nothing in the stretch mean nothing
@@ -10316,7 +10327,7 @@ void main() {
 
   function render() {
     $("meempty").hidden = !(ME.a == null || ME.loading || ME.error || !ME.frames.length);
-    $("meempty").textContent = ME.a == null ? "Highlight a stretch of the timeline (drag across it), then Edit on its bar." : ME.loading ? "Listing the frames of this stretch…"
+    $("meempty").textContent = ME.a == null ? "Highlight a stretch of the timeline (drag across it), then Edit on its bar." : ME.loading ? (listText() || "Listing the frames of this stretch…")
       : ME.error || "No frames in this stretch.";
     $("mecard").querySelector(".meside").hidden = !ME.frames.length;
     const n = ME.frames.filter(kept).length, all = ME.frames.filter(ofCam).length;
@@ -10706,9 +10717,9 @@ void main() {
     $("mectr").querySelectorAll("button").forEach(b => b.setAttribute("aria-pressed", String(b.dataset.v === (ME.ctr == null ? "" : ME.ctr ? "1" : "0"))));
     $("memos").querySelectorAll("button").forEach(b => b.setAttribute("aria-pressed", String(b.dataset.v === (ME.mos || ""))));
     const mp = new Set(ME.frames.filter(e => e.pass && ofCam(e)).map(e => e.pass)).size;
-    $("memosnote").textContent = ME.mos === "tiles" || !ME.mos && !winWhole() && !winComplete() ? "Each mosaic builds up tile by tile."
+    $("memosnote").textContent = ME.mos === "off" ? "No mosaics: every frame of a mosaic or a ring strip on its own, its color picture once a filter set is complete." : ME.mos === "tiles" || !ME.mos && !winWhole() && !winComplete() ? "Each mosaic builds up tile by tile."
       : ME.mos === "whole" || winWhole() && winComplete() ? `Each mosaic whole: a pass once, finished${mp ? ` (${mp.toLocaleString()} here)` : ""}, a mosaic movie once a lap.`
-      : winWhole() ? "As the windows: mosaic movies a lap at a time, mosaic passes tile by tile." : `As the windows: mosaic passes once, finished${mp ? ` (${mp.toLocaleString()} here)` : ""}; mosaic movies tile by tile.`;
+      : winWhole() ? "Default (as the camera windows): mosaic movies a lap at a time, mosaic passes tile by tile." : `Default (as the camera windows): mosaic passes once, finished${mp ? ` (${mp.toLocaleString()} here)` : ""}; mosaic movies tile by tile.`;
     $("mecrop").setAttribute("aria-pressed", String(!!cropping));
     $("mecrop").textContent = cropping ? "Cropping…" : ME.crop2 ? "Crop… · start and end" : ME.crop ? "Crop…  · on" : "Crop…";
     $("mecropctl").hidden = !cropping;
@@ -11017,6 +11028,12 @@ void main() {
     render(); prepUi(); fpsUi(); setTimeout(() => { paint(); graph(); const el = $("mestrip").querySelector(".meth.sel"); if (el) el.scrollIntoView({ block: "nearest" }); });
     if (WM) WM.front(card);
   }
+  // the listing's words: how far the frame server is through the stretch's frames (null: it has not said)
+  function listText() {
+    const g = ME.listing;
+    if (!g || !g.total) return null;
+    return g.step === "sizes" ? "Sizing the mosaics for full resolution…" : `Listing the frames · ${Math.min(g.done, g.total).toLocaleString()} of ${g.total.toLocaleString()}`;
+  }
   // the job's words: how far it is
   function jobText(j, short) {
     if (!j) return "Asking the frame server…";
@@ -11036,14 +11053,16 @@ void main() {
     const plan = $("mlplan"), mk = $("mlmake"), j = L.job;
     plan.className = !L.plan ? "on" : ME.error ? "warn" : "ok";
     const secs = t => { const v = (performance.now() - t) / 1000; return v < 2 ? "" : ` · ${fmtDur(v)}`; };
-    plan.textContent = !L.plan ? `Listing ${L.expect ? `the ${L.expect.toLocaleString()} frames` : "the frames"}: the frame server works out the picture each one shows${secs(L.planAt)}` : ME.error ? ME.error : ME.frames.length ? `${ME.frames.length.toLocaleString()} frame${ME.frames.length === 1 ? "" : "s"} listed${L.planTook >= 2 ? ` in ${fmtDur(L.planTook)}` : ""}` : "No frames in this stretch";
+    plan.textContent = !L.plan && listText() ? listText() + secs(L.planAt) : !L.plan ? `Listing ${L.expect ? `the ${L.expect.toLocaleString()} frames` : "the frames"}: the frame server works out the picture each one shows${secs(L.planAt)}` : ME.error ? ME.error : ME.frames.length ? `${ME.frames.length.toLocaleString()} frame${ME.frames.length === 1 ? "" : "s"} listed${L.planTook >= 2 ? ` in ${fmtDur(L.planTook)}` : ""}` : "No frames in this stretch";
     mk.className = !j ? "on" : BUSY.test(j.state) ? "on" : j.state === "done" ? "ok" : j.unsupported ? "" : "warn";
     mk.textContent = !j ? "Making the pictures ahead"
       : BUSY.test(j.state) ? jobText(j) + (j.state === "planning" || j.state === "queued" ? secs(L.makeAt || L.planAt) : "")
       : j.state === "done" ? (j.took != null && j.took < 1 && j.total ? `Every picture made already (${j.total.toLocaleString()})` : `${(j.total || 0).toLocaleString()} pictures made ahead${j.took ? ` in ${fmtDur(j.took)}` : ""}${j.errors ? ` (${j.errors} could not be made)` : ""}`)
       : j.state === "stopped" ? "Stopped; the rest are made as they are shown"
       : j.unsupported ? "Pictures are made as they are shown" : (j.error || "Could not make the pictures ahead") + "; they are made as they are shown";
-    const bar = $("mlbar"), frac = j && j.total && BUSY.test(j.state) ? j.done / j.total : j && j.state === "done" ? 1 : null;
+    // the bar: the listing's own count while it lists (when the server gives one), then the pictures made
+    const g = ME.listing, frac = !L.plan ? (g && g.total && g.step === "frames" ? Math.min(1, g.done / g.total) : null)
+      : j && j.total && BUSY.test(j.state) ? j.done / j.total : j && j.state === "done" ? 1 : null, bar = $("mlbar");
     bar.classList.toggle("wait", frac == null && (!L.plan || making() || !j));
     bar.firstElementChild.style.width = frac == null ? "" : `${(frac * 100).toFixed(1)}%`;
     $("mlnow").disabled = !L.plan || ME.loading;
@@ -11784,7 +11803,7 @@ void main() {
   window.cassiniAbout = { open, addTab, esc, close: () => show(false), credits: CREDITS };
 
   // ---- which version this is: this page's build id (build.py writes it), and what the frame server says it serves ----
-  const BUILD = /*BUILD*/"8c40398b00fd";
+  const BUILD = /*BUILD*/"70de0f5432ae";
   const FRAMES = (() => {                       // the frame server, chosen as the camera window chooses it
     const q = new URLSearchParams(location.search).get("frames");
     if (q) return q.replace(/\/$/, "");
