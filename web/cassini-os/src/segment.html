@@ -102,7 +102,11 @@ body.phone #segfps { flex: 1; }
   // ---- what the camera windows will ask for: their cameras and sizes, and the page's look ----
   // A window's size changes with the picture in it (cassiniWM.sized: 1024, or 512 when it shows the picture that small,
   // which a window often does once its first picture is up), so both are made, except on a phone, which asks for 512
-  // The cameras: the row's NAC / WAC / Both (shared with the Export window's Cameras), else the camera windows open
+  // The cameras: the row's NAC / WAC / Both (shared with the Export window's Cameras), else the camera windows open.
+  // With one camera window closed its camera is off (cassiniFeeds.liveCams): the timeline, movie mode and the windows
+  // have none of its pictures, so the stretch is the open camera's whatever the row last said (a NAC picked for an
+  // earlier stretch counted none of the WAC frames on screen and said "no pictures")
+  const liveCams = () => (window.cassiniFeeds && cassiniFeeds.liveCams ? cassiniFeeds.liveCams() : null);
   function windows() {
     let cams = EX.state.cams;
     if (!/^(N|W|NW)$/.test(cams || "")) {
@@ -110,9 +114,16 @@ body.phone #segfps { flex: 1; }
       for (const card of document.querySelectorAll(".win:not([hidden]) [data-cam]")) if (/^[NW]$/.test(card.dataset.cam)) open.add(card.dataset.cam);
       cams = open.size ? ["N", "W"].filter(c => open.has(c)).join("") : "NW";
     }
+    const lc = liveCams();
+    if (lc) cams = lc;
     return { cams, sizes: document.body.classList.contains("phone") ? "512" : "512,1024" };
   }
-  function camsUi() { const c = windows().cams; document.querySelectorAll("#segcams button").forEach(b => b.setAttribute("aria-pressed", String(b.dataset.v === c))); }
+  // (the count follows the cameras: the Export window picks them from its first plan of a stretch, a moment later)
+  let camsWas = "";
+  function camsUi() {
+    const c = windows().cams; document.querySelectorAll("#segcams button").forEach(b => b.setAttribute("aria-pressed", String(b.dataset.v === c)));
+    if (c !== camsWas) { camsWas = c; if (!bar.hidden && P.a != null) summary(); }
+  }
   function params() {
     const w = windows();
     const q = new URLSearchParams({ from: isoOf(P.a), until: isoOf(P.b), cams: w.cams, sizes: w.sizes,
@@ -124,12 +135,28 @@ body.phone #segfps { flex: 1; }
       exposure: String(window.cassiniExposure ? window.cassiniExposure() : 0) });
     return q.toString() + (window.cassiniLook ? window.cassiniLook() : "");
   }
-  // frames of the windows' cameras in the stretch (in the months loaded now)
+  // frames of the windows' cameras in the stretch (in the body view, of its body alone, as the timeline and the
+  // windows show them): from the catalog in the months loaded now (the clock's and two either side), and from the
+  // catalog files of the months the stretch covers when it reaches past them, as the timeline's bars there do
+  // (window.cassiniParts, head-quiet.html: each file fetched once; null while one is on its way, and the count comes
+  // up when it is in)
+  const body = () => (window.cassiniBodyMode && cassiniBodyMode.name) || null;
+  document.addEventListener("cassini:part", () => { if (!bar.hidden && P.a != null) summary(); });
   function frames() {
     if (!catalog || P.a == null) return 0;
-    const cams = windows().cams, i0 = lastImageIndex(P.a) + 1, i1 = lastImageIndex(P.b) + 1;
-    let n = 0; for (let i = i0; i < i1; i++) if (cams.includes(catalog.cam[order[i]])) n++;
-    return n;
+    const cams = windows().cams, vb = body();
+    if (typeof loadedSpan === "undefined" || (P.a >= loadedSpan[0] && P.b <= loadedSpan[1])) {
+      const i0 = lastImageIndex(P.a) + 1, i1 = lastImageIndex(P.b) + 1;
+      let n = 0; for (let i = i0; i < i1; i++) { const k = order[i]; if (cams.includes(catalog.cam[k]) && (!vb || catalog.target[k] === vb)) n++; }
+      return n;
+    }
+    let n = 0, waiting = false;
+    for (const { file } of cassiniParts.files(P.a, P.b)) {
+      const c = cassiniParts.cat(file);
+      if (!c) { waiting = true; continue; }
+      for (let k = 0; k < c.et.length; k++) if (c.et[k] > P.a && c.et[k] <= P.b && cams.includes(c.cam[k]) && (!vb || c.target[k] === vb)) n++;
+    }
+    return waiting ? null : n;
   }
 
   // ---- the bar, over the stretch on the timeline ----
@@ -169,7 +196,7 @@ body.phone #segfps { flex: 1; }
   function summary() {
     $("segwhen").textContent = `${short(P.a)} → ${short(P.b)} UTC`;
     const n = frames();
-    $("segwhat").textContent = n ? `· ${fmtDur(P.b - P.a)} · ${n.toLocaleString()} frame${n === 1 ? "" : "s"}` : `· ${fmtDur(P.b - P.a)} · no pictures`;
+    $("segwhat").textContent = n == null ? `· ${fmtDur(P.b - P.a)} · counting frames…` : n ? `· ${fmtDur(P.b - P.a)} · ${n.toLocaleString()} frame${n === 1 ? "" : "s"}` : `· ${fmtDur(P.b - P.a)} · no pictures`;
     $("segprep").disabled = $("segplay").disabled = !n;
   }
   // a stretch marked (export.html's marks, also its window's From and Until): the bar comes up for it
