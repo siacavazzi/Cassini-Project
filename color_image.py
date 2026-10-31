@@ -238,7 +238,7 @@ def load_aligned(paths, hdr=False, scale=None, repeat_window=120, around=None):
                 full = [cal.saturated_of(lbls[0], imgs[0].shape[:2]) if iofs[0] is None else clips[0]]
                 full = None if full[0] is None else full
                 share = float(full[0].mean()) if full else 0.0
-            linear = cal.load_linear(lbls, imgs, iofs, floor=cal.saturated_floor(share))
+            linear = cal.load_linear(lbls, imgs, iofs, floor=cal.saturated_floor(share), glow=cal.saturated_glow(share))
         if linear is not None:
             calibrated = True
             if full is not None:
@@ -405,7 +405,7 @@ def science_frame(path):
     lbl = lh.label(path, as_png=True)
     info = lbl.get_info()
     codes = ds.imread(lbl.export(), cv2.IMREAD_GRAYSCALE)
-    iof = cal.calibrate(codes, info)
+    iof = cal.calibrate(codes, info, smooth=False)
     if iof is None:
         return None
     iof = np.asarray(iof, np.float32)
