@@ -132,6 +132,16 @@ def main():
           f"(matched with the picture's edge in: {with_edge:.2f} px)")
     if after > 0.2 * before:
         fails.append(f"ringed: wobble only {before:.2f} -> {after:.2f}")
+
+    # on by itself for a small body: Atlas at 7.9 km/px (15 km: 2 px), not Mimas filling a third of the frame
+    cases = [[15.8 / 7.9] * 19, [198 / 0.6] * 10, [40.0, 60.0, 50.0, None], [None, None], [], [53.0, 54.0, 10.0]]
+    py_auto = [F.auto(r) for r in cases]
+    js_auto = json.loads(subprocess.run(["node", "-e", "const window = {};\n" + script + "\nconsole.log(JSON.stringify("
+                                         + json.dumps(cases).replace("NaN", "null") + ".map(r => window.cassiniFilmSteady.math.auto(r))))"],
+                                        capture_output=True, text=True, check=True).stdout)
+    print(f"on by itself: {py_auto} (page {js_auto})")
+    if py_auto != js_auto or py_auto != [True, False, True, False, False, False]:
+        fails.append(f"auto: {py_auto} page {js_auto}")
     if F.offsets([F.grey(a) for a in pictures], keys, 0) is not None or in_node(pictures[:3], keys[:3], 0)["moves"] is not None:
         fails.append("smooth 0 is not off")
     print("FAIL\n  " + "\n  ".join(fails) if fails else "ok")

@@ -12,7 +12,7 @@
   // the arithmetic, shared by the page, its worker and the test (web/test_film_steady.py runs it in node)
   const MATH = function () {
     const f = Math.fround;
-    const C = { SIDE: 512, MOST: 0.08, SMOOTH: 12, SMOOTH_MOST: 60, PLACES: 5, LEAST: 32 };
+    const C = { SIDE: 512, MOST: 0.08, SMOOTH: 12, SMOOTH_MOST: 60, PLACES: 5, LEAST: 32, AUTO: 0.05, FRAME: 1024 };
 
     // Python's round(x): half to even
     const pyRound = x => { let r = Math.round(x); if (r - x === 0.5 && r % 2 !== 0) r -= 1; return r; };
@@ -60,6 +60,11 @@
     }
     const crop = (g, w, [x0, y0, x1, y1]) => { const cw = x1 - x0, out = new Uint8Array(cw * (y1 - y0)); for (let y = y0; y < y1; y++) out.set(g.subarray(y * w + x0, y * w + x1), (y - y0) * cw); return out; };
     const most = (w, h) => Math.max(1, pyRound(C.MOST * Math.max(w, h)));
+    // film_steady.auto: steadied without being asked when the median of its body's radius (full resolution px) is under AUTO of a frame
+    function auto(radii) {
+      const r = radii.filter(v => v != null && v > 0).sort((a, b) => a - b);
+      return r.length > 0 && r[Math.floor(r.length / 2)] < C.AUTO * C.FRAME;
+    }
 
     // cv2.GaussianBlur(float32, (0, 0), sigma): cv2.getGaussianKernel's float32 kernel (25 taps at sigma 3), rows then
     // columns, the border reflected without its edge pixel (BORDER_REFLECT_101)
@@ -322,7 +327,7 @@
       return moves(pics, m, smooth);
     }
 
-    return { C, grey, valid, windowOf, most, blur, optimal, fft2, phaseCorrelate, findShift, centroidShift, shift, runs, chain, held, measure, moves, offsets, pyRoundN };
+    return { C, grey, valid, windowOf, auto, most, blur, optimal, fft2, phaseCorrelate, findShift, centroidShift, shift, runs, chain, held, measure, moves, offsets, pyRoundN };
   };
   const M = MATH(), C = M.C;
 

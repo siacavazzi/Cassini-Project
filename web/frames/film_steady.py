@@ -25,7 +25,7 @@ import cv2
 import numpy as np
 
 import image_correction
-from obs_mosaic import held_to_spice
+from obs_mosaic import FRAME, held_to_spice
 
 SIDE = 512        # px: the film's pictures are measured this big on their longer side
 MOST = 0.08       # of the picture: the largest move between two pictures believed (SPICE's centering is a few px off)
@@ -33,6 +33,9 @@ SMOOTH = 12       # pictures: the editor's smoothing by default
 SMOOTH_MOST = 60  # pictures: the most smoothing offered
 PLACES = 5        # decimals a move is sent with (parts of the picture: 1/100 px at 1024)
 LEAST = 32        # px: the smallest window two pictures are matched in; under it, the whole pictures
+AUTO = 0.05       # of a frame: a film whose body's radius is under this (the median over its pictures, full
+                  # resolution pixels) is steadied without being asked, at SMOOTH: SPICE's 3 to 5 px is a good part of
+                  # a body that small (Atlas, 2 px; obs_mosaic.SMALL_BODY's specks are under 0.02)
 
 
 def grey(rgba):
@@ -71,6 +74,13 @@ def window(v0, v1):
     if best is None or min(best[2] - best[0], best[3] - best[1]) < LEAST:
         return 0, 0, w, h
     return best
+
+
+def auto(radii):
+    """Whether a film is steadied without being asked: the radius of its body on each picture (full resolution pixels,
+    the body's mean radius over the frame's km per pixel; None where it has none), its median under AUTO of a frame."""
+    r = sorted(v for v in radii if v is not None and v > 0)
+    return bool(r) and r[len(r) // 2] < AUTO * FRAME
 
 
 def most(shape):
