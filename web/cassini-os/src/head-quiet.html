@@ -2047,7 +2047,7 @@ body.idle .win.full .titlebar { opacity: 0; }
         // stabilized on this computer (steady-local.html): the server's frame at SPICE's places, at the 1024 px it is
         // drawn at, moved here; the key names the smoothing, so a new one is a new picture (the request is the same)
         const here = hereWant(k);
-        if (here) return { key: movieUrl(catalog.id[k], 1024, 0, 0, 0, 0) + (here.raw ? "&detail=0" : "") + `#here=s${here.steady}e${here.exposure}t${here.trail}c${S.get("cameras.composites") ? 1 : 0}`, set: -1, k, movie: true, here };
+        if (here) return { key: movieUrl(catalog.id[k], 1024, 0, 0, 0, 0) + (here.raw ? "&detail=0" : "") + `#here=s${here.steady}e${here.exposure}t${here.trail}c${S.get("cameras.composites") ? 1 : 0}${here.eye ? "y" : ""}`, set: -1, k, movie: true, here };
         return { key: movieUrl(catalog.id[k], sz), set: -1, k, movie: true };
       }
       // a mosaic movie (a raster repeated over the same places): its rolling mosaic, every place's newest tile

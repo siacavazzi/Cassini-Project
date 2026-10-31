@@ -3066,7 +3066,7 @@ def colour_picture(u, p, colour, planes):
     bal = scale.get("balance")
     mix = calibration.color_mix(u["key"][2], colour, u["key"][0], [bal[f] for f in colour] if bal else None)
     typical = scale.get("typical")
-    if mix is not None and typical:
+    if isinstance(mix, calibration.FalseMix) and typical:
         mix.typical = typical if isinstance(typical, list) else [typical[f] for f in colour]
     if mix is not None:
         rgb = calibration.mix_display(rgb, mix, scale["gamma"])
@@ -3593,6 +3593,7 @@ def _steady_table(u, n, cache, centre=True, colour=False):
     return {"local": True, "fixed": True, "ids": [fr[1] for fr in u["frames"]], "n": ns, "exposure": exposure,
             "partial": [m for m in ns if unfit(u["frames"], m, lambda j: tiles.get(j) or {})],
             "sets": _colour_recipes(u, p, cache, ns, tiles) if colour and p.get("colour") else None,
+            "eye": _eye_recipes(u, p, ns, tiles) if colour and p.get("colour") else None,
             "filters": [fr[2] for fr in u["frames"]], "trail_most": TRAIL,
             "chain": [chain[n] for n in ns], "spice": [tiles[n]["offset"] for n in ns],
             "box": [tiles[n]["box"] for n in ns], "view": list(rect), "out": OUT, "k": OUT / max(rect[2], rect[3]),
@@ -3627,6 +3628,13 @@ def _colour_recipes(u, p, cache, ns, tiles):
     mix = calibration.color_mix(u["key"][2], want, u["key"][0], [bal[f] for f in want] if bal else None)
     if isinstance(mix, calibration.FalseMix) or len(want) != 3:
         return None   # (two filters: the green of their mean, colour_picture's, is the server's too)
+    return {"filters": list(want), "mix": None if mix is None else np.asarray(mix, float).tolist(),
+            "gamma": scale.get("gamma", 2.2), "shoulder": calibration.SHOULDER, "by": _colour_by(u, want, ns, tiles)}
+
+
+def _colour_by(u, want, ns, tiles):
+    """{frame n: the tiles of its colour set in the filters' order} for the frames of ns drawn with a set (the set
+    movie_frame picks at SPICE's places)."""
     by, placed = {}, set(ns)
     for n in ns:
         for run in reversed(colour_sets(u["frames"][:n + 1])):
@@ -3636,8 +3644,28 @@ def _colour_recipes(u, p, cache, ns, tiles):
             if all(got[f] in placed for f in want):
                 by[str(n)] = [got[f] for f in want]
             break
-    return {"filters": list(want), "mix": None if mix is None else np.asarray(mix, float).tolist(),
-            "gamma": scale.get("gamma", 2.2), "shoulder": calibration.SHOULDER, "by": by}
+    return by
+
+
+def _eye_recipes(u, p, ns, tiles):
+    """How the page draws each frame of a colour pass in natural color emulation (Settings > Filter colors >
+    Natural color (emulated), calibration.eye_mix), the same shape as _colour_recipes: {"filters", "mix" (the set's
+    3x3 eye mix, or for a true color set its natural mix), "gamma", "shoulder", "by"}, for false color passes too: the
+    eye mix is one matrix on the planes, what colour_picture draws with colors=eye. A two-filter set lists its longer
+    filter's tile twice (colour_picture's green, their mean, has no weight in the eye mix), so the page mixes three
+    planes as for any set. None when the set's filters have no eye mix."""
+    want = p["colour"]
+    if len(want) not in (2, 3):
+        return None
+    with calibration.coloring("eye"):
+        mix = calibration.color_mix(u["key"][2], want, u["key"][0])
+    if mix is None:
+        return None
+    by = _colour_by(u, want, ns, tiles)
+    if len(want) == 2:
+        by = {n: [a, a, b] for n, (a, b) in by.items()}
+    return {"filters": list(want), "mix": np.asarray(mix, float).tolist(),
+            "gamma": p["display_scale"].get("gamma", 2.2), "shoulder": calibration.SHOULDER, "by": by}
 
 
 def movie_rect(fp, t, radius=0.0, centre=False, seen=None):
