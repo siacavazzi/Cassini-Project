@@ -63,6 +63,7 @@ sys.path.insert(0, HERE)
 import reel  # noqa: E402  (puts the repo on the path)
 import calibration  # noqa: E402
 import studio_look  # noqa: E402
+import colour_smooth  # noqa: E402
 
 # bumped whenever the way films are made changes, so older ones are not served again
 VERSION = "export-v29"   # v29: Mosaics Off (mos=off), every frame of a mosaic on its own; v28: Complete color pictures only (a color set once, at its last channel) and one color mix a camera and target through the film (movie audit); v27: the batch-3 fixes (Titan color, saturated white, movie strobe, small bright bodies, line holes, pass kinds) reach exported pictures; v26: the small artifact, edge registration and two-filter color fixes (groups I, H2, F) reach exported pictures; v25: the restart's calibration and tone fixes (groups G, C) reach exported pictures; v24: Whole mosaics keep a mosaic movie's whole laps only, its drifting tiles one copy each (obs_mosaic.slots); v23: a mosaic pass is its mosaic at every frame, and stays a mosaic (or mosaic movie) in Full color only; v22: the flat fielded, dark subtracted, hot pixel repaired pictures; v21: Auto center centres the pictures shown on their own too, as the windows do
@@ -171,6 +172,10 @@ def options(q):
     exposure = max(0, min(30, int(get("exposure", "0") or 0)))
     if exposure:
         movie["exposure"] = exposure
+    # color smoothing (Settings > Processing; colour_smooth): its strength in percent, the same way
+    cs = max(0, min(100, int(get("cs", "0") or 0)))
+    if cs:
+        movie["colour"] = cs
     off = ",".join(s for s in calibration.STEPS if s in get("off", "").split(","))   # Settings > Processing
     # the movie editor's cut (movieedit.html): frames taken out by hand, and only these targets and filter pairs kept
     words = lambda k: sorted({w.strip() for w in get(k, "").split(",") if w.strip()})
@@ -928,6 +933,19 @@ def render(opt, p, pictures, path, progress=lambda done, total: None, workers=3)
     # a frame edited on its own: the movie's look with its own keys over it
     own = {k: studio_look.parse(f"{opt.get('edit', '')},{r}") for k, r in (opt.get("fedit") or {}).items()}
     kinds, building = Counter(), {}
+    # color smoothing (colour_smooth, as the page's windows and its own film do it): each picture's palette measured
+    # as it comes in, each color picture moved toward the palette of the film's pictures round it of its camera and
+    # target, colour_smooth's SPAN either side (fetched ahead of it)
+    cs = pictures.movie.get("colour", 0) / 100
+    span = colour_smooth.SPAN
+    past, measured = deque(maxlen=4 * span), {}
+
+    def palette_of(i, got):
+        if i not in measured:
+            im = got[0]
+            st = colour_smooth.palette(np.asarray(im.convert("RGBA"))) if im is not None else None
+            measured[i] = (f"{pics[i]['cam']}|{pics[i].get('target') or ''}", st)
+        return measured[i]
     try:
         with ThreadPoolExecutor(workers) as pool:
             todo = deque()
@@ -939,6 +957,19 @@ def render(opt, p, pictures, path, progress=lambda done, total: None, workers=3)
                                             opt["size"] if big(opt) and not full else None))
                     nxt += 1
                 im, what = todo.popleft().result()
+                if cs and im is not None:
+                    group, st = palette_of(n, (im, what))
+                    later = [palette_of(n + 1 + q, todo[q].result()) for q in range(min(span, len(todo)))]
+                    run = [x for x in [*past, (group, st), *later] if x[0] == group]
+                    i = len([x for x in past if x[0] == group])
+                    want = colour_smooth.wanted([x[1] for x in run], i, span)
+                    if st is not None and want is not None:
+                        a = np.asarray(im.convert("RGBA"))
+                        b = colour_smooth.smoothed(a, st, want, cs)
+                        if b is not a:
+                            im = Image.fromarray(b, "RGBA").convert(im.mode) if im.mode != "RGBA" else Image.fromarray(b, "RGBA")
+                    past.append((group, st))
+                    measured.pop(n, None)
                 kinds[what or "none"] += 1
                 if im is not None:
                     im = framed(im, crop_at(fr, n, len(pics)), fr["nudge"].get(e["id"], (0, 0)))
