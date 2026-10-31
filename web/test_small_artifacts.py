@@ -125,6 +125,18 @@ for y in range(20, 240, 2):
     m[y, 150 if y % 4 == 0 else 170:] = False
 bands[~m] = 0
 assert not lh.garbled_lines(bands, m).any(), np.nonzero(lh.garbled_lines(bands, m).any(axis=1))[0]
+# a bright ringlet and a dark gap a line or two wide, lying along the lines at a shallow angle (N1498392374_1,
+# N1498395214_1): the peak line stands apart from its shoulders for hundreds of pixels, but the shoulders lean towards
+# it, so it is picture, not garbage (1,344 and 936 pixels found before: black lines across the rings)
+ringlet = 100 + 125 * np.exp(-((yy - 100 - xx / 150) / 1.0) ** 2) - 40 * np.exp(-((yy - 300 + xx / 400) / 1.0) ** 2)
+ringlet = bgr(ringlet + np.random.default_rng(13).normal(0, 1, (H, H)))[..., 0]
+assert not lh.garbled_lines(ringlet, np.ones((H, H), bool)).any()
+# ... and garbage lines on either side of a good line, or next to the ringlet, are still found, the good line not
+ringlet[60, 100:], ringlet[62, 100:] = 230, np.random.default_rng(14).integers(0, 255, H - 100)
+ringlet[97, 200:] = 15
+found = lh.garbled_lines(ringlet, np.ones((H, H), bool))
+assert found[60, 110:].all() and found[62, 120:].all() and found[97, 210:].all(), found[[60, 62, 97]].sum(axis=1)
+assert not found[61].any() and found.any(axis=1).sum() == 3, np.nonzero(found.any(axis=1))[0]
 print("garbled lines ok")
 
 # ---------- spikes ----------
