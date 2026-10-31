@@ -329,15 +329,42 @@ def _dark(r):
     weights = _basis(end) - _basis(start)                       # (lines, 8): what each map adds per line travelled
     kernel = np.fft.rfft(weights, n=2 * lines, axis=0)          # (lines + 1, 8)
     summed = np.einsum("bfs,fb->fs", spectra, kernel.astype(np.complex64), optimize=True)
-    dark = constant + np.fft.irfft(summed, n=2 * lines, axis=0)[:lines].astype(np.float32)
-    # spikes below the summed dark: lifted to the median of 5 lines round them (not the first and last two lines)
-    med = dark.copy()
-    med[2:-2] = np.median(np.stack([dark[k:lines - 4 + k] for k in range(5)]), axis=0)
-    dark = np.where(med - dark > 10, med, dark)
+    # the inverse FFT down each column, taken along the rows of summed.T (einsum lays summed out column by column):
+    # the same transforms of the same numbers as down axis 0, without numpy copying the spectrum across twice
+    down = np.fft.irfft(summed.T, n=2 * lines, axis=1)[:, :lines].astype(np.float32)
+    dark = constant + cv2.transpose(down)
+    _lift_spikes(dark)
     dn = dark / (GAIN2[camera] / GAIN_RATIOS[camera][gain])
-    dn = np.where((dn >= DN_SATURATION) | (dark >= E_SATURATION[camera]), DN_SATURATION, dn).astype(np.float32)
+    dn[(dn >= DN_SATURATION) | (dark >= E_SATURATION[camera])] = DN_SATURATION
     dn.setflags(write=False)
     return dn
+
+
+"""
+Spikes below the summed dark (lines, samples) lifted in place to the median of the 5 lines round them (not the first
+and last two lines), where that is more than 10 above them. The median from minimum and maximum passes (_median5);
+np.median's own where it picks among values that are equal but not the same (zeros of both signs, NaN), since which
+of those it returns is its partition's choice
+"""
+def _lift_spikes(dark):
+    lines = len(dark)
+    five = [dark[k:lines - 4 + k] for k in range(5)]
+    if np.isnan(dark).any() or np.signbit(dark[dark == 0]).any():
+        med = np.median(np.stack(five), axis=0)
+    else:
+        med = _median5(*five)
+    inner = dark[2:-2]
+    np.copyto(inner, med, where=med - inner > 10)
+
+
+def _median5(a, b, c, d, e):
+    """np.median of five arrays stacked, at each place, from a few minimum and maximum passes (a sort of five at every
+    pixel down axis 0 took half the dark's time). The middle of five is the middle of e and the two of a, b, c, d that
+    are neither the least nor the greatest of the four: the greater of the two pairs' lower values and the lesser of
+    their upper ones."""
+    f = np.maximum(np.minimum(a, b), np.minimum(c, d))
+    g = np.minimum(np.maximum(a, b), np.maximum(c, d))
+    return np.maximum(np.minimum(e, f), np.minimum(np.maximum(e, f), g))
 
 
 """
