@@ -66,7 +66,7 @@ import studio_look  # noqa: E402
 import colour_smooth  # noqa: E402
 
 # bumped whenever the way films are made changes, so older ones are not served again
-VERSION = "export-v29"   # v29: Mosaics Off (mos=off), every frame of a mosaic on its own; v28: Complete color pictures only (a color set once, at its last channel) and one color mix a camera and target through the film (movie audit); v27: the batch-3 fixes (Titan color, saturated white, movie strobe, small bright bodies, line holes, pass kinds) reach exported pictures; v26: the small artifact, edge registration and two-filter color fixes (groups I, H2, F) reach exported pictures; v25: the restart's calibration and tone fixes (groups G, C) reach exported pictures; v24: Whole mosaics keep a mosaic movie's whole laps only, its drifting tiles one copy each (obs_mosaic.slots); v23: a mosaic pass is its mosaic at every frame, and stays a mosaic (or mosaic movie) in Full color only; v22: the flat fielded, dark subtracted, hot pixel repaired pictures; v21: Auto center centres the pictures shown on their own too, as the windows do
+VERSION = "export-v30"   # v30: the batch-4 fixes reach exported pictures (thin ringlets kept, gentler heavily compressed frames, Titan wind stares in color, movie long exposures held); v29: Mosaics Off (mos=off), every frame of a mosaic on its own; v28: Complete color pictures only (a color set once, at its last channel) and one color mix a camera and target through the film (movie audit); v27: the batch-3 fixes (Titan color, saturated white, movie strobe, small bright bodies, line holes, pass kinds) reach exported pictures; v26: the small artifact, edge registration and two-filter color fixes (groups I, H2, F) reach exported pictures; v25: the restart's calibration and tone fixes (groups G, C) reach exported pictures; v24: Whole mosaics keep a mosaic movie's whole laps only, its drifting tiles one copy each (obs_mosaic.slots); v23: a mosaic pass is its mosaic at every frame, and stays a mosaic (or mosaic movie) in Full color only; v22: the flat fielded, dark subtracted, hot pixel repaired pictures; v21: Auto center centres the pictures shown on their own too, as the windows do
 FPS = 30                     # frames a second in the file
 HOLD_MIN, HOLD_MAX = 1 / FPS, 0.5
 TYPICAL = 1 / 8              # adaptive: how long the stretch's median gap lasts on screen
@@ -107,7 +107,7 @@ LEVEL_EV = 2.0
 EVEN_MOST = 30               # pictures: the most Even out smooths over
 LEVELS_SIDE = 160            # px: the pictures' brightness is measured on them this big (as movie mode's, obs_mosaic)
 LEVELS_LIT = 0.04            # of the brightest: the pixels a brightness is measured on (the body, not the sky's noise)
-LEVELS_VERSION = "levels-v4"   # v4: measured on the pictures of the batch-3 fixes; v3: measured on the pictures of the small artifact and color fixes; v2: measured on the pictures of the restart's calibration and tone fixes
+LEVELS_VERSION = "levels-v5"   # v5: measured on the pictures of the batch-4 fixes; v4: measured on the pictures of the batch-3 fixes; v3: measured on the pictures of the small artifact and color fixes; v2: measured on the pictures of the restart's calibration and tone fixes
 # and its framing: a crop of every picture (or a start and an end crop the film glides between), and a nudge of a
 # single frame (parts of the picture)
 CROP_LEAST = 0.05            # of the picture: the smallest crop's side
