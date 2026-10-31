@@ -101,51 +101,96 @@ def garbled_lines(img, mask):
     # structure too (a ring's edge crossing them at an angle), which is no sign of garbage
     limits = np.full(GARBLE_FAR + 2, np.inf, np.float32)
     for d in range(1, min(GARBLE_FAR, h - 1) + 1):
-        steps = np.abs(c[d:] - c[:-d])[good[d:] & good[:-d]]
-        noise = 1.4826 * float(np.median(steps)) / np.sqrt(2) if steps.size else 0.0
+        both = good[d:] & good[:-d]
+        if img.dtype == np.uint8:
+            # (the archive's 8-bit codes: the steps' median from their histogram, the number np.median gives)
+            n = int(np.count_nonzero(both))
+            if n:
+                steps = cv2.absdiff(np.ascontiguousarray(img[d:]), np.ascontiguousarray(img[:-d]))
+                counts = cv2.calcHist([steps], [0], both.view(np.uint8), [256], [0, 256]).ravel().astype(np.int64)
+            noise = 1.4826 * _median_of_codes(counts, n) / np.sqrt(2) if n else 0.0
+        else:
+            steps = np.abs(c[d:] - c[:-d])[both]
+            noise = 1.4826 * float(np.median(steps)) / np.sqrt(2) if steps.size else 0.0
         limits[d] = GARBLE_SIGMA * max(noise, 1.0)
-    rows = np.arange(h)[:, None]
+    # (row numbers and flat indices as 32-bit numbers, which a frame of fewer than 2**31 pixels always fits)
+    ix = np.int32 if h * w < 2 ** 31 else np.int64
+    rows = np.arange(h, dtype=ix)[:, None]
     out = np.zeros(c.shape, bool)
-    cols = np.broadcast_to(np.arange(w), c.shape)
+    flat = c.ravel()
+    cols = np.arange(w, dtype=ix)[None, :]
 
-    def nearest(ok, step):
-        """the nearest row above (step -1) or below (step 1) each pixel that is ok, and the next one past it"""
-        if step < 0:
-            first = np.maximum.accumulate(np.where(ok, rows, -1), axis=0)
-            one = np.vstack([np.full((1, w), -1), first[:-1]])
-            two = np.where(one >= 0, first[np.clip(one - 1, 0, h - 1), cols], -1)
-            two[0] = -1
-            return one, np.where(one >= 1, two, -1)
-        first = np.minimum.accumulate(np.where(ok, rows, h)[::-1], axis=0)[::-1]
-        one = np.vstack([first[1:], np.full((1, w), h)])
-        two = np.where(one < h - 1, first[np.clip(one + 1, 0, h - 1), cols], h)
-        return one, two
+    def nearest(ok):
+        """the nearest row above each pixel that is ok and the next one past it (-1: none), and below (h: none)"""
+        a1, a2, b1, b2 = (np.empty(c.shape, ix) for _ in range(4))
+        one, two = np.full(w, -1, ix), np.full(w, -1, ix)
+        # a row at a time down the frame, then up it (numpy's accumulate down the columns was 10 times slower)
+        for r in range(h):
+            a1[r], a2[r] = one, two
+            np.copyto(two, one, where=ok[r])
+            np.copyto(one, r, where=ok[r])
+        one[:], two[:] = h, h
+        for r in range(h - 1, -1, -1):
+            b1[r], b2[r] = one, two
+            np.copyto(two, one, where=ok[r])
+            np.copyto(one, r, where=ok[r])
+        return a1, a2, b1, b2
+
+    def at(r):
+        return flat.take(np.clip(r, 0, h - 1) * w + cols)
 
     for _ in range(2):
         ok = good & ~out
-        (a1, a2), (b1, b2) = nearest(ok, -1), nearest(ok, 1)
-        jump = np.zeros(c.shape, bool)
-        # against the line above and below, and (a garbled line next to another) one line further on either side
-        for a, b in ((a1, b1), (a1, b2), (a2, b1)):
-            have = (a >= 0) & (b < h)
-            va, vb = c[np.clip(a, 0, h - 1), cols], c[np.clip(b, 0, h - 1), cols]
-            limit = limits[np.clip(np.maximum(rows - a, b - rows), 1, GARBLE_FAR + 1)]
-            jump |= have & (np.minimum(np.abs(c - va), np.abs(c - vb)) - np.abs(va - vb) > limit)
-        jump &= good
+        a1, a2, b1, b2 = nearest(ok)
+        va1, vb1, va2, vb2 = at(a1), at(b1), at(a2), at(b2)
+
+        def jumps(a, b, va, vb):
+            far = np.maximum(rows - a, b - rows)            # (1 or more)
+            limit = limits.take(np.minimum(far, GARBLE_FAR + 1, out=far))
+            return (a >= 0) & (b < h) & (np.minimum(np.abs(c - va), np.abs(c - vb)) - np.abs(va - vb) > limit)
+
+        # a thin ringlet or gap a few lines wide lying along the lines at a shallow angle (N1498392374_1,
+        # N1498395214_1) has a line that stands apart for hundreds of pixels, but the lines either side of it lean
+        # towards it from the lines past them, and themselves stand between their own neighbours; garbage stands
+        # apart from lines that carry on as the picture does (or that are garbage too)
+        near = jumps(a1, b1, va1, vb1) & good
+        side = np.sign(c - (va1 + vb1) / 2)
+        lean = ((a2 >= 0) & (b2 < h) & ((va1 - va2) * side > limits[np.clip(a1 - a2, 1, GARBLE_FAR + 1)])
+                & ((vb1 - vb2) * side > limits[np.clip(b2 - b1, 1, GARBLE_FAR + 1)])
+                & ~near[np.clip(a1, 0, h - 1), cols] & ~near[np.clip(b1, 0, h - 1), cols])
+        # against the line above and below, and (a garbled line next to another) one line further on either side,
+        # past a line that is not such a ringlet's
+        jump = (near | (jumps(a1, b2, va1, vb2) & ~lean[np.clip(b1, 0, h - 1), cols])
+                | (jumps(a2, b1, va2, vb1) & ~lean[np.clip(a1, 0, h - 1), cols]))
+        jump &= good & ~lean
         # from where GARBLE_SHARE of GARBLE_RUN pixels jump, with GARBLE_SHARE of the rest of the line's valid
         # pixels jumping too: garbage goes on to the end of the line, a thin feature lying along a line ends
         share = cv2.blur(jump.astype(np.float32), (GARBLE_RUN, 1), borderType=cv2.BORDER_CONSTANT)
+        # (only a line with such a run can start one: the rest are left as they are)
+        hit = np.flatnonzero((share >= GARBLE_SHARE).any(axis=1))
+        if not len(hit):
+            break
+        jump, good_hit, share = jump[hit], good[hit], share[hit]
         tail = np.cumsum(jump[:, ::-1], axis=1)[:, ::-1]
-        left = np.cumsum(good[:, ::-1], axis=1)[:, ::-1]
-        x = np.arange(w)[None, :] - GARBLE_RUN // 2
-        begin = np.clip(x, 0, w - 1)
-        starts = (share >= GARBLE_SHARE) & (tail[:, begin[0]] >= GARBLE_SHARE * np.maximum(left[:, begin[0]], GARBLE_RUN))
+        left = np.cumsum(good_hit[:, ::-1], axis=1)[:, ::-1]
+        begin = np.clip(np.arange(w) - GARBLE_RUN // 2, 0, w - 1)
+        starts = (share >= GARBLE_SHARE) & (tail[:, begin] >= GARBLE_SHARE * np.maximum(left[:, begin], GARBLE_RUN))
         # (from the first pixel that jumps in the first such run)
         first = np.minimum.accumulate(np.where(jump, np.arange(w)[None, :], w)[:, ::-1], axis=1)[:, ::-1]
-        at = np.maximum(np.argmax(starts, axis=1) - GARBLE_RUN // 2, 0)
-        start = np.where(starts.any(axis=1), first[np.arange(h), at], w)
-        out |= np.arange(w)[None, :] >= start[:, None]
+        at0 = np.maximum(np.argmax(starts, axis=1) - GARBLE_RUN // 2, 0)
+        start = np.where(starts.any(axis=1), first[np.arange(len(hit)), at0], w)
+        found = np.arange(w)[None, :] >= start[:, None]
+        if not (found & ~out[hit]).any():
+            break       # (nothing new: a second look would see what this one saw)
+        out[hit] |= found
     return out & good
+
+
+def _median_of_codes(counts, n):
+    """np.median of n whole numbers 0-255 from their histogram: the middle one, or the mean of the middle two"""
+    below = np.cumsum(counts)
+    upper = int(np.searchsorted(below, n // 2, side="right"))
+    return float(upper) if n % 2 else (int(np.searchsorted(below, n // 2 - 1, side="right")) + upper) / 2
 
 
 """
