@@ -65,7 +65,7 @@ import calibration  # noqa: E402
 import studio_look  # noqa: E402
 
 # bumped whenever the way films are made changes, so older ones are not served again
-VERSION = "export-v28"   # v28: Complete color pictures only (a color set once, at its last channel) and one color mix a camera and target through the film (movie audit); v27: the batch-3 fixes (Titan color, saturated white, movie strobe, small bright bodies, line holes, pass kinds) reach exported pictures; v26: the small artifact, edge registration and two-filter color fixes (groups I, H2, F) reach exported pictures; v25: the restart's calibration and tone fixes (groups G, C) reach exported pictures; v24: Whole mosaics keep a mosaic movie's whole laps only, its drifting tiles one copy each (obs_mosaic.slots); v23: a mosaic pass is its mosaic at every frame, and stays a mosaic (or mosaic movie) in Full color only; v22: the flat fielded, dark subtracted, hot pixel repaired pictures; v21: Auto center centres the pictures shown on their own too, as the windows do
+VERSION = "export-v29"   # v29: Mosaics Off (mos=off), every frame of a mosaic on its own; v28: Complete color pictures only (a color set once, at its last channel) and one color mix a camera and target through the film (movie audit); v27: the batch-3 fixes (Titan color, saturated white, movie strobe, small bright bodies, line holes, pass kinds) reach exported pictures; v26: the small artifact, edge registration and two-filter color fixes (groups I, H2, F) reach exported pictures; v25: the restart's calibration and tone fixes (groups G, C) reach exported pictures; v24: Whole mosaics keep a mosaic movie's whole laps only, its drifting tiles one copy each (obs_mosaic.slots); v23: a mosaic pass is its mosaic at every frame, and stays a mosaic (or mosaic movie) in Full color only; v22: the flat fielded, dark subtracted, hot pixel repaired pictures; v21: Auto center centres the pictures shown on their own too, as the windows do
 FPS = 30                     # frames a second in the file
 HOLD_MIN, HOLD_MAX = 1 / FPS, 0.5
 TYPICAL = 1 / 8              # adaptive: how long the stretch's median gap lasts on screen
@@ -157,6 +157,11 @@ def options(q):
         movie.update({"whole": True, "complete": True, "fade": 0, "persist": 0})
     elif get("mos", "") == "tiles":
         movie.pop("whole", None); movie.pop("complete", None)
+    elif get("mos", "") == "off":
+        # no mosaics: every frame of a mosaic pass or a mosaic movie on its own (its color picture at each finished
+        # set, else the frame), as a still pass shows (Sam, 2026-10-30: Tile by tile still drew the mosaic building up)
+        movie.pop("whole", None); movie.pop("complete", None)
+        movie["mosaics"] = False
     # image stabilization of movie passes (obs_mosaic.steady_places), smoothed over this many frames, only when on,
     # so a film made without it keeps its name
     steady = max(0, min(60, int(get("steady", "0") or 0)))
@@ -309,11 +314,16 @@ def complete_mosaics(pics):
     return out
 
 
-def plan(opt, cache=None, work=False):
+PROGRESS_EVERY = 100   # raw frames between a plan's progress reports
+
+
+def plan(opt, cache=None, work=False, progress=None):
     """The film's pictures in time order, each {id, cam, t, target, filters, try, kind, at (film seconds), hold,
     frames, nm, set_nm?, tile?, skipped?}, and the film's length. try = the pictures to make, best first. At Picture
     size Full (cache given) also the panes' size, opt["pane"], and what sets it (full_size; work: passes whose plan
-    is not worked out yet are worked out now, else left out and counted)."""
+    is not worked out yet are worked out now, else left out and counted). progress(done, total, step) hears how far
+    it is ("frames": the stretch's raw frames looked at; "sizes": Full's passes), for the Movie Editor's loading window."""
+    tell = progress or (lambda done, total, step: None)
     idx, sets = reel.load_index()
     t = idx["seconds_1970"].to_numpy()
     lo, hi = np.searchsorted(t, opt["from"], "left"), np.searchsorted(t, opt["until"], "right")
@@ -344,7 +354,10 @@ def plan(opt, cache=None, work=False):
         newest = {f: r for f, r in sorted(zip(st["filters"], st["rows"]), key=lambda fr: t[fr[1]])}
         return [newest[f] for f in want] if all(f in newest for f in want) else st["use"]
     out = []
+    tell(0, int(hi - lo), "frames")
     for q in range(lo, hi):
+        if (q - lo) % PROGRESS_EVERY == 0 and q > lo:
+            tell(int(q - lo), int(hi - lo), "frames")
         cam = cam_of(q)
         prev, last[cam] = last.get(cam), q
         if cam not in opt["cams"]:
@@ -363,6 +376,8 @@ def plan(opt, cache=None, work=False):
         kind = pass_kind(ids[q]) if how in ("movie", "color") else None
         if how == "color" and kind == "movie":
             kind = None
+        if kind in ("mosaic", "mosaic_movie") and not opt["movie"].get("mosaics", True):
+            kind, tile = None, False
         # Complete color pictures only: a channel of a color set on the way to its last one is not a picture of its
         # own, outside a mosaic (movie mode's complete(): the black-and-white channels between the composites made a
         # film flicker from grey to color, and a color movie pass held each set for three or four frames)
@@ -379,7 +394,7 @@ def plan(opt, cache=None, work=False):
         elif kind == "mosaic":
             # every frame of a mosaic pass shows the pass's mosaic so far, as the camera windows play it
             tries.append(("mosaic", ids[q]))
-        elif tile:
+        elif tile and opt["movie"].get("mosaics", True):
             tries.append(("mosaic", ids[st["use"][0]] if comp else ids[q]))
         if comp:
             tries.append(("color", [ids[u] for u in mix(st)]))
@@ -412,7 +427,10 @@ def plan(opt, cache=None, work=False):
     out = cut(out, opt)
     if MAX_PICTURES and len(out) > MAX_PICTURES and not opt.get("list"):
         raise OverflowError(f"{len(out):,} pictures: an export holds at most {MAX_PICTURES:,}; pick a shorter stretch")
+    tell(int(hi - lo), int(hi - lo), "frames")
     timing(out, opt["fps"])
+    if big(opt):
+        tell(0, 1, "sizes")
     full = full_size(opt, out, cache, work) if big(opt) else None
     return dict({"pictures": out, "count": len(out), "seconds": round(sum(e["frames"] for e in out) / FPS, 2),
                  "frames": sum(e["frames"] for e in out), "width": width(opt), "height": height(opt)},
