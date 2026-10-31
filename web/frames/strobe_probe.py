@@ -1,7 +1,7 @@
 #!/usr/bin/env python3
 """Probe for movie strobing, pumping and panel flicker (spot check round 2): for each pass named by one of its frames,
-every frame's exposure, saturated share, sky test, own-sky black, exposure gain and (mosaic movies) lap gain, as JSON
-lines. Reads the archive through the pipeline into a scratch cache (--cache); nothing is served.
+every frame's exposure, saturated share, sky test, own-sky black, exposure gain, tile place (SPICE's and registered) and
+(mosaic movies) lap gain, as JSON lines; --layout N ...: a mosaic movie's drawn tiles at those frames. Reads the archive through the pipeline into a scratch cache (--cache); nothing is served.
 
   CASSINI_DATA=... CASSINI_KERNELS=... CASSINI_GEOMETRY_CACHE=... \\
   python web/frames/strobe_probe.py --cache DIR --out probe.jsonl FRAME_ID ...
@@ -21,6 +21,7 @@ def main():
     ap.add_argument("--cache", required=True)
     ap.add_argument("--out", required=True)
     ap.add_argument("--max", type=int, default=80, help="most frames per pass")
+    ap.add_argument("--layout", type=int, nargs="*", default=[], help="mosaic movies: rolling_layout at these frames")
     ap.add_argument("ids", nargs="+")
     args = ap.parse_args()
     import cv2
@@ -42,7 +43,8 @@ def main():
         scale = p["display_scale"]
         head = {"pass": fid, "key": list(u["key"]), "frames": len(u["frames"]), "mosaic": bool(u.get("mosaic")),
                 "movie": bool(u.get("movie")), "kind": om.kind_of(fid).get("kind"), "z": u.get("z"),
-                "scale": {k: v for k, v in scale.items() if k != "black_of"}, "colour": p.get("colour")}
+                "scale": {k: v for k, v in scale.items() if k != "black_of"}, "colour": p.get("colour"),
+                "grey": p.get("grey"), "tiles_dir": om._tiles(u, args.cache, scale)}
         print(json.dumps(head, default=str))
         out.write(json.dumps(head, default=str) + "\n")
         radius_km = om.RADIUS.get(u["key"][0], 0)
@@ -61,6 +63,12 @@ def main():
                 row["exp"] = info.get("EXPOSURE_DURATION")
                 row["conv"] = info.get("DATA_CONVERSION_TYPE")
                 row["sat"] = round(float(cal.saturated(codes, info).mean()), 4)
+                # lines lost in downlink (the prefix's tails) and what garbled_lines cuts on top of them
+                valid = lbl.valid_mask()
+                row["invalid"] = round(1 - float(valid.mean()), 4)
+                if codes is not None and codes.shape == valid.shape:
+                    row["garbled"] = round(float(lh.garbled_lines(codes, valid).mean()), 4)
+                row["packet_flag"] = info.get("MISSING_PACKET_FLAG")
                 _, iof, _ = stacking.load_hdr(path, u.get("repeat_gap", om.mosaic_benchmark.REPEAT_GAP))
                 if iof is not None:
                     q = iof[::4, ::4].astype(np.float32)
@@ -75,7 +83,8 @@ def main():
                 row["read_error"] = repr(e)[:200]
             try:
                 tr = om.tile(u, n, args.cache, scale)
-                row.update({k: tr.get(k) for k in ("black", "lost", "why", "gain", "stacked") if k in tr})
+                row.update({k: tr.get(k) for k in ("black", "lost", "why", "gain", "stacked", "calibrated", "saturated", "offset",
+                                                   "spice_offset", "registered", "box") if k in tr})
                 row["placed"] = "offset" in tr
                 if prev is not None:
                     row["lap_prev"] = prev[n]
@@ -88,6 +97,17 @@ def main():
             print(json.dumps(row, default=str))
             out.write(json.dumps(row, default=str) + "\n")
             out.flush()
+        if args.layout and om.kind_of(fid).get("kind") == "mosaic_movie":
+            # a mosaic movie's pictures: what rolling_layout draws at each of these frames (tiles, base, filters)
+            for n in args.layout:
+                made = om.rolling_layout(u, min(n, len(u["frames"]) - 1), args.cache)
+                if made:
+                    _, tiles, rect, count, used, name = made
+                    row = {"layout": n, "used": used, "name": name, "rect": rect, "count": count,
+                           "base": sorted(t["n"] for t in tiles if t.get("base")),
+                           "drawn": sorted(t["n"] for t in tiles if t.get("drawn")), "luminance": om.lum_base(u, p, tiles, used)}
+                    print(json.dumps(row, default=str))
+                    out.write(json.dumps(row, default=str) + "\n")
 
 
 if __name__ == "__main__":
