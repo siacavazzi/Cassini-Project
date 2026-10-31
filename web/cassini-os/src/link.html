@@ -39,8 +39,9 @@ body.phone #linktoast { bottom: calc(env(safe-area-inset-bottom, 0px) + 12px); }
     return "http://localhost:8765";
   })();
   const tell = word => { try { navigator.sendBeacon(`${FRAMES}/usage`, word); } catch (e) {} };
-  // opened on a shared moment: arrived with a time in the link, not a reload of a page that wrote its own
-  const opened = new URLSearchParams(location.search).has("t") && ((performance.getEntriesByType("navigation")[0] || {}).type || "navigate") === "navigate";
+  // opened on a shared moment: arrived with a time in the link, not a reload of a page that wrote its own, nor a
+  // landing moment the settings put there (settings.html)
+  const opened = !window.cassiniLanding && new URLSearchParams(location.search).has("t") && ((performance.getEntriesByType("navigation")[0] || {}).type || "navigate") === "navigate";
   const num = v => (+(+v).toPrecision(4)).toString().replace("e+", "e");   // short, and no "+" (a space in a query)
   const utc = et => new Date(etToMs(et)).toISOString().slice(0, 19);
   // the link for the moment on screen; other pages (flagging) use it too

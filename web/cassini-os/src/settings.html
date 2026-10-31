@@ -358,9 +358,55 @@ body.phone .srow input[type=range] { width: 96px; }
       new MutationObserver(() => { if (!quiet) S.set(key, pressed()); }).observe(b, { attributes: true, attributeFilter: ["aria-pressed"] });
     });
   }
-  D({ key: "playback.start", section: "Playback", label: "Start time", type: "choice", value: "2006-09-15T14:28:00", reload: true,
-      options: [["2006-09-15T14:28:00", "In Saturn's Shadow"], ["2005-01-14T09:30:00", "Huygens lands"], ["2004-07-01T00:00:00", "Saturn arrival"]],
-      hint: "The moment Cassini OS opens on. A shared link still opens on its own moment." });
+  // Where a visit with no moment of its own lands: one of these famous moments, picked at random on each visit, so
+  // the first minute is something a visitor may know and something happens in it. Each starts a little before its
+  // pictures (or its cutscene) at a speed that plays them in about a minute. Start time can pin any one of them.
+  const LANDINGS = window.cassiniLandings = [
+    { t: "2006-09-15T14:28:00", speed: 600, label: "In Saturn's Shadow" },
+    { t: "2013-07-19T22:23:19", speed: 600, label: "The Day the Earth Smiled" },
+    { t: "2005-01-14T09:00:52", speed: 60, label: "Huygens descends to Titan" },
+    { t: "2004-07-01T01:09:00", speed: 60, label: "Arrival at Saturn" },
+    { t: "2010-11-30T07:25:10", speed: 600, label: "The plumes of Enceladus" },
+    { t: "2013-06-26T01:22:13", speed: 3600, label: "Saturn's hexagon" },
+    { t: "2010-02-13T17:54:31", speed: 60, label: "Mimas, the Death Star moon" },
+    { t: "2000-12-29T03:04:00", speed: 600, label: "Jupiter portrait" },
+    { t: "2017-04-26T07:48:14", speed: 60, label: "The first dive inside the rings" }
+  ];
+  const OLD_STARTS = [["2005-01-14T09:30:00", "Huygens lands"], ["2004-07-01T00:00:00", "Saturn arrival"]];
+  D({ key: "playback.start", section: "Playback", label: "Start time", type: "choice", menu: true, value: "random", reload: true, was: ["2006-09-15T14:28:00"],
+      options: [["random", "A famous moment, at random"], ...LANDINGS.map(l => [l.t, l.label]), ...OLD_STARTS],
+      hint: "The moment Cassini OS opens on. At random, each visit lands on one of the famous moments in this list, at its own speed. A shared link still opens on its own moment." });
+  // a visit with no moment of its own: put the landing's moment in the address, as a shared link would, so the viewer,
+  // the links and the cutscenes all start from it (no view: the view stays the Settings one, as a bare visit's did). A pinned start from the old list keeps its old way (time only).
+  (function land() {
+    const u = new URL(location.href);
+    if (["t", "ambient", "finale", "movie"].some(k => u.searchParams.has(k))) return;
+    const v = S.get("playback.start");
+    let pick = LANDINGS.find(l => l.t === v);
+    if (v === "random") {
+      // a per-viewer nicety: not the same moment twice in a row
+      let last = ""; try { last = localStorage.getItem("cassini-os-landing") || ""; } catch (e) {}
+      const pool = LANDINGS.length > 1 ? LANDINGS.filter(l => l.t !== last) : LANDINGS;
+      pick = pool[Math.floor(Math.random() * pool.length)];
+      try { localStorage.setItem("cassini-os-landing", pick.t); } catch (e) {}
+    }
+    if (!pick) return;
+    const keep = u.search.slice(1);
+    const put = l => {
+      window.cassiniLanding = l;
+      try { history.replaceState(history.state, "", u.pathname + `?t=${l.t}&speed=${l.speed}` + (keep ? "&" + keep : "") + u.hash); } catch (e) {}
+    };
+    put(pick);
+    // the viewer, when the picture cache holds only some years and the landing is outside them (Only years with
+    // pictures built): a landing inside them instead, if the list has one (its time), else null
+    window.cassiniLandingIn = inside => {
+      if (inside(utcToEt(window.cassiniLanding.t))) return null;
+      const pool = v === "random" ? LANDINGS.filter(l => inside(utcToEt(l.t))) : [];
+      if (!pool.length) return null;
+      put(pool[Math.floor(Math.random() * pool.length)]);
+      return utcToEt(window.cassiniLanding.t);
+    };
+  })();
   D({ key: "playback.autoplay", section: "Playback", label: "Play when Cassini OS opens", type: "toggle", value: true,
       hint: "Off opens paused at the starting moment." });
   D({ key: "playback.builtOnly", section: "Playback", label: "Only years with pictures built", type: "toggle", value: true, reload: true,
