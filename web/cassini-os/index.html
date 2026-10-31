@@ -2204,7 +2204,7 @@ body.ambient.phone .amb-where { font-size: 18px; }
       <label class="mecheck"><input type="checkbox" id="meshowout"> Show left-out frames</label>
       <h4><span>Exposure</span><span class="sp"></span><button id="melvclear" title="Take out every level point">Clear</button></h4>
       <div class="merow"><span>Level here</span><input type="range" id="melvhere" min="-2" max="2" step="0.05" aria-label="Exposure level at the frame in front"><span class="val" id="melvherev"></span></div>
-      <div class="merow"><span>Even out</span><input type="range" id="meeven" min="0" max="30" step="1" aria-label="Even out the brightness over this many pictures"><span class="val" id="meevenv"></span></div>
+      <div class="merow"><span>Even exposure</span><input type="range" id="meeven" min="0" max="30" step="1" aria-label="Even exposure: smooth flashes and jumps in brightness over this many pictures (0 off)"><span class="val" id="meevenv"></span></div>
       <div class="menote" id="melvnote"></div>
     </div>
   </div>
@@ -2512,8 +2512,8 @@ body.ambient.phone .amb-where { font-size: 18px; }
   D({ key: "cameras.balancedColor", section: "Processing", label: "Balanced color", type: "toggle", value: true,
       hint: "A gentler color stretch: black sits just above the sky's noise so grain and scan lines stay dark, white sits at the bright part of the body but never stretches dim pictures far, bright edges roll off instead of clipping, and mosaic tiles are evened out without changing the mosaic's overall level. Off shows the earlier stretch." });
   D({ key: "cameras.colors", section: "Processing", label: "Filter colors", type: "choice", value: "natural",
-      options: [["natural", "Natural color"], ["raw", "Raw filters"]],
-      hint: "Natural color turns red, green and blue filter sets into the colors an eye would see, and balances false color sets (methane, ultraviolet, infrared) so the planet comes out gray and only its differences between filters show as color. Raw filters draws each filter straight as a channel. Needs Balanced color." });
+      options: [["natural", "Natural color"], ["eye", "Natural color (emulated)"], ["raw", "Raw filters"]],
+      hint: "Natural color turns red, green and blue filter sets into the colors an eye would see, and balances false color sets (methane, ultraviolet, infrared) so the planet comes out gray and only its differences between filters show as color. Natural color (emulated) shows false color sets too as an eye would have seen them: the body in its own color (Saturn and Jupiter cream, Titan orange, the icy moons gray), with what the filters show as its brightness and, where they reach both sides of the visible, as its shades. Methane bands give no color. It is worked out on this computer, in movie passes for now (with Steady movies on this computer); still pictures and mosaics keep Natural color. Raw filters draws each filter straight as a channel. Needs Balanced color." });
   D({ key: "cameras.autoCenter", section: "Processing", label: "Auto center", type: "toggle", value: true,
       hint: "Every picture of a moon or a planet whose whole disk fits is turned north up with the body in the middle, by SPICE, even where a picture caught only its edge, at one size for the whole pass, so the body holds still from picture to picture. Ring, spoke and sky pictures, and a body too big for the picture, stay as the camera took them. Each camera window's settings button (the slider icon in its title bar) can turn it on or off for that window." });
   // where a centred picture's frame does not reach (Auto center keeps the body in the middle however much of the
@@ -2530,12 +2530,12 @@ body.ambient.phone .amb-where { font-size: 18px; }
       hint: "How long the pictures are believed over SPICE (with Image stabilization on). Low takes out only the frame-to-frame wobble and follows SPICE closely; high also holds slow drifts still, trusting the frame-to-frame matching over that many frames." });
   D({ key: "movies.stabilizeLocal", section: "Processing", label: "Steady movies on this computer", type: "toggle", value: true,
       hint: "Image stabilization and exposure normalization worked out by this computer, at any smoothing: it moves and brightens the frame the server already has, instead of the server drawing every frame again for each setting. True-color frames and a trail too; false-color sets, feature tracks and passes whose view follows the frames are still drawn by the server, and exports are always made by the server. Off asks the server to draw every frame again for each setting, which is slower and is not offered when many people are watching." });
-  D({ key: "movies.exposure", section: "Processing", label: "Exposure normalization", type: "toggle", value: true, was: [false],
+  D({ key: "movies.exposure", section: "Processing", label: "Even exposure", type: "toggle", value: true, was: [false],
       hint: "A movie pass is drawn on one brightness scale, so a frame whose exposure the calibration did not fully even out, or one lit by stray light, flashes or jumps in brightness. On, each picture's brightness is measured against the picture before it, a frame or two far brighter or darker than their neighbours are brought to their level, and other jumps are spread over several frames, one gain for the whole picture so a color picture keeps its color. Slow changes stay, and every frame keeps its data, only scaled. Off shows every frame as the pass's scale draws it." });
-  D({ key: "movies.exposureSmooth", section: "Processing", label: "Exposure smoothing", type: "range", value: 8, min: 2, max: 30, step: 2, unit: "frames",
-      hint: "How many frames a change in brightness is spread over (with Exposure normalization on). Low keeps quick real changes; high evens the movie out more." });
+  D({ key: "movies.exposureSmooth", section: "Processing", label: "Even exposure over", type: "range", value: 8, min: 2, max: 30, step: 2, unit: "frames",
+      hint: "How many frames a flash or jump in brightness is evened over (with Even exposure on). Low keeps quick real changes; high evens the movie out more. The same as each camera window's Even exposure slider." });
   D({ key: "movies.colorSmooth", section: "Processing", label: "Color smoothing", type: "toggle", value: true,
-      hint: "A run of color pictures mostly shares one set of filters, but now and then Cassini swapped one filter for another (a blue filter in place of a continuum one), and that picture comes out in other colors: peach and blue among green. On, every color picture's colors are moved toward the palette of the pictures round it in the same camera window (the most common one, so the odd one out never sets it), worked out by this computer. Only the balance between the colors moves: each pixel keeps its brightness (that is Exposure normalization's), and a run of one palette is left almost as it is." });
+      hint: "A run of color pictures mostly shares one set of filters, but now and then Cassini swapped one filter for another (a blue filter in place of a continuum one), and that picture comes out in other colors: peach and blue among green. On, every color picture's colors are moved toward the palette of the pictures round it in the same camera window (the most common one, so the odd one out never sets it), worked out by this computer. Only the balance between the colors moves: each pixel keeps its brightness (that is Even exposure's), and a run of one palette is left almost as it is." });
   D({ key: "movies.colorSmoothStrength", section: "Processing", label: "Color smoothing strength", type: "range", value: 100, min: 10, max: 100, step: 10, unit: "%",
       hint: "How far an odd picture's colors are moved toward its neighbours' palette (with Color smoothing on). 100% matches them; lower keeps more of the picture's own colors." });
   D({ key: "cameras.mosaics", section: "Processing", label: "Mosaics in camera windows", type: "toggle", value: true,
@@ -2546,6 +2546,9 @@ body.ambient.phone .amb-where { font-size: 18px; }
   window.cassiniOff = () => { const off = window.cassiniSteps.filter(st => S.get(st.key) === false).map(st => st.step); return off.length ? `&off=${off.join(",")}` : ""; };
   window.cassiniLook = (o = {}) => (S.get("cameras.balancedColor") === false ? "&look=classic"
     : S.get("cameras.colors") === "raw" ? "&colors=raw" : "") + window.cassiniOff() + (o.center ? "&center=1" : "");
+  // Natural color (emulated): worked out on this computer (steady-local.html, the pass table's eye mix), never asked of
+  // the server, so it needs no pictures of its own; with the earlier stretch the filters are drawn as before
+  window.cassiniEye = () => S.get("cameras.colors") === "eye" && S.get("cameras.balancedColor") !== false;
   // how a movie pass looks (Settings > Movie), for the camera windows' movie pictures and the film export alike;
   // o.center: the window's Auto center (else the Settings default)
   // image stabilization of a movie pass (obs_mosaic.steady_places): its smoothing in frames, 0 when off
@@ -3154,12 +3157,15 @@ body.ambient.phone .amb-where { font-size: 18px; }
       return out;
     }
     // obs_mosaic.held_of: the frame shown in frame n's place, n or, when n is partial (most of it lost in downlink,
-    // t.partial), the last earlier placed frame of its filter that is not, else of any filter; n when there is none
+    // over-exposed: t.partial), the last earlier placed frame of its filter that is not, else of any filter; with none
+    // before it, the first later one of its filter, else of any; n when there is none
     function heldOf(t, n) {
-      const partial = new Set(t.partial || []), placed = new Set(t.n);
+      const partial = new Set(t.partial || []), placed = new Set(t.n), whole = j => placed.has(j) && !partial.has(j);
       if (!partial.has(n)) return n;
-      for (let j = n - 1; j >= 0; j--) if (t.filters[j] === t.filters[n] && placed.has(j) && !partial.has(j)) return j;
-      for (let j = n - 1; j >= 0; j--) if (placed.has(j) && !partial.has(j)) return j;
+      for (let j = n - 1; j >= 0; j--) if (t.filters[j] === t.filters[n] && whole(j)) return j;
+      for (let j = n - 1; j >= 0; j--) if (whole(j)) return j;
+      for (let j = n + 1; j < t.filters.length; j++) if (t.filters[j] === t.filters[n] && whole(j)) return j;
+      for (let j = n + 1; j < t.filters.length; j++) if (whole(j)) return j;
       return n;
     }
     // movie_frame's rolling trail: the up to trail earlier placed frames of frame n's filter (n: the frame shown,
@@ -3402,7 +3408,7 @@ onmessage = async e => {
     // a colour set: colour_picture's mix of the filters' planes; a trail: the earlier frames under the newest;
     // a filled pass: then its detail filter (the planes came without it)
     let px = !mixing ? planes[0].getContext("2d").getImageData(0, 0, W, H).data
-      : m.trail ? M.blendTrail(planes.slice(0, -1), planes[planes.length - 1]) : M.mix(planes, t.sets);
+      : m.trail ? M.blendTrail(planes.slice(0, -1), planes[planes.length - 1]) : M.mix(planes, m.eye ? t.eye : t.sets);
     if (m.detail) px = sharpen(px, W, H, t);
     out = new OffscreenCanvas(W, H);
     out.getContext("2d").putImageData(new ImageData(px, W, H), 0, 0);
@@ -3470,21 +3476,26 @@ onmessage = async e => {
       if (!S() || !S().get("movies.stabilizeLocal")) return null;
       const steady = window.cassiniStabilize ? window.cassiniStabilize() : 0, exposure = window.cassiniExposure ? window.cassiniExposure() : 0;
       const trail = S().get("movies.trail") || 0;
-      if (!steady && !exposure && !trail) return null;
+      // Natural color (emulated): a colour set is always mixed here, with the pass's eye mix
+      const eye = !!(o.color && window.cassiniEye && window.cassiniEye());
+      if (!steady && !exposure && !trail && !eye) return null;
       // the pictures as Settings > Processing draws them by default only (another look or a step off: the server)
       if (window.cassiniLook && window.cassiniLook()) return null;
       const e = lookup(frames, id, o.center !== false, !!o.color);
       if (!e) return null;
-      // a colour set: its natural mix here (a false colour set: the server)
-      const set = o.color && e.table.sets ? e.table.sets.by[e.n] : null;
-      if (o.color && e.table.colour && !e.table.sets) return null;
+      // a colour set: its natural mix here (a false colour set: the server), or with Natural color (emulated) its eye
+      // mix, false colour sets too
+      const recipes = eye ? e.table.eye : e.table.sets;
+      const set = o.color && recipes ? recipes.by[e.n] : null;
+      if (o.color && e.table.colour && !recipes) return null;
       if (exposure && !(e.table.exposure && e.table.exposure.local)) return null;
       const tr = set ? 0 : Math.min(trail, e.table.trail_most);
+      if (!steady && !exposure && !tr && !set) return null;
       // a filled pass ends in its detail filter: anything but a move is done on its frames drawn without it, and
       // the filter here (on the GPU; a computer without one leaves the pass to the server)
       const raw = !!e.table.detail && !!(exposure || tr || (set && set.length > 1));
       if (raw && !gpu()) return null;
-      return { steady, exposure, trail: tr, raw };
+      return { steady, exposure, trail: tr, raw, eye };
     },
     // the picture of the frame (SPICE's places, no gain, OUT px) moved to its stabilized place and given its
     // exposure gain: a new Image, or null
@@ -3493,7 +3504,8 @@ onmessage = async e => {
     async apply(frames, id, im, o = {}) {
       const e = byId.get(`${tag(o.center !== false, !!o.color)}:${id}`);
       if (!e) return null;
-      const T = e.table, set = o.color && T.sets ? T.sets.by[e.n] : null, M = window.cassiniSteadyMath();
+      const recipes = o.eye ? e.table.eye : e.table.sets;
+      const T = e.table, set = o.color && recipes ? recipes.by[e.n] : null, M = window.cassiniSteadyMath();
       // a partial frame shows the whole one before it (the server's plane of frame n, im, is that frame's picture)
       const shown = M.heldOf(T, e.n);
       const load = async j => {
@@ -3505,7 +3517,7 @@ onmessage = async e => {
       const older = !set && o.trail ? M.trailOf(T, shown, o.trail) : [];
       const tiles = set || [...older, shown], bitmaps = await Promise.all(tiles.map(load)), mid = ++seq;
       const planes = tiles.map((j, q) => ({ i: T.n.indexOf(j), bitmap: bitmaps[q] }));
-      const r = await new Promise(res => { waiting.set(mid, res); work().postMessage({ id: mid, key: e.key, n: e.n, steady: o.steady || 0, exposure: o.exposure || 0, trail: older.length > 0, detail: !!o.raw, planes }, bitmaps); });
+      const r = await new Promise(res => { waiting.set(mid, res); work().postMessage({ id: mid, key: e.key, n: e.n, steady: o.steady || 0, exposure: o.exposure || 0, trail: older.length > 0, detail: !!o.raw, eye: !!o.eye, planes }, bitmaps); });
       stats.frames++; stats.placeMs += r.ms[0]; stats.drawMs += r.ms[1]; stats.last = { id, moves: r.moves, gain: r.gain, set: tiles.map(j => T.ids[j]) };
       const url = URL.createObjectURL(r.blob), out = new Image();
       urls.push(url);
@@ -4959,7 +4971,7 @@ onmessage = async e => {
         // stabilized on this computer (steady-local.html): the server's frame at SPICE's places, at the 1024 px it is
         // drawn at, moved here; the key names the smoothing, so a new one is a new picture (the request is the same)
         const here = hereWant(k);
-        if (here) return { key: movieUrl(catalog.id[k], 1024, 0, 0, 0, 0) + (here.raw ? "&detail=0" : "") + `#here=s${here.steady}e${here.exposure}t${here.trail}c${S.get("cameras.composites") ? 1 : 0}`, set: -1, k, movie: true, here };
+        if (here) return { key: movieUrl(catalog.id[k], 1024, 0, 0, 0, 0) + (here.raw ? "&detail=0" : "") + `#here=s${here.steady}e${here.exposure}t${here.trail}c${S.get("cameras.composites") ? 1 : 0}${here.eye ? "y" : ""}`, set: -1, k, movie: true, here };
         return { key: movieUrl(catalog.id[k], sz), set: -1, k, movie: true };
       }
       // a mosaic movie (a raster repeated over the same places): its rolling mosaic, every place's newest tile
@@ -10904,11 +10916,11 @@ void main() {
     if (document.activeElement !== here || !here.matches(":active")) here.value = inFilm ? lineOf(e) : 0;
     $("melvherev").textContent = inFilm ? fmtEv(+here.value) : "—";
     const ev = $("meeven"); ev.disabled = !ME.lv.ready; ev.value = ME.even;
-    $("meevenv").textContent = ME.even ? `${ME.even} pictures` : "Off";
+    $("meevenv").textContent = ME.even ? `over ${ME.even}` : "Off";
     $("melvclear").disabled = !ME.levels.size;
-    $("melvnote").textContent = !ME.lv.ready && !ME.lv.error && ME.lv.total != null ? "Even out needs a newer frame server; the level points work now."
+    $("melvnote").textContent = !ME.lv.ready && !ME.lv.error && ME.lv.total != null ? "Even exposure needs a newer frame server; the level points work now."
       : ME.lv.error || (ME.levels.size ? "Drag a point on the graph to brighten or dim the movie there. Double-click a point to take it out."
-        : "Double-click the graph to add a level point, then drag it up or down. Even out smooths flashes and jumps in brightness.");
+        : "Even exposure takes out flashes and jumps in brightness from picture to picture (a filter brighter than the next, stray light) and keeps slow changes; slide right to even more. Double-click the graph to add a level point, then drag it up or down.");
     $("mectr").querySelectorAll("button").forEach(b => b.setAttribute("aria-pressed", String(b.dataset.v === (ME.ctr == null ? "" : ME.ctr ? "1" : "0"))));
     $("memos").querySelectorAll("button").forEach(b => b.setAttribute("aria-pressed", String(b.dataset.v === (ME.mos || ""))));
     const mp = new Set(ME.frames.filter(e => e.pass && ofCam(e)).map(e => e.pass)).size;
@@ -10932,7 +10944,7 @@ void main() {
     el.addEventListener("change", () => { on = false; changed(); show(); });
   }
   slide($("melvhere"), v => { const e = ME.frames[ME.sel]; if (e && kept(e)) ME.levels.set(e.id, clamp(v, -EV, EV)); }, () => { graph(); sideLevels(); paint(); });
-  slide($("meeven"), v => { ME.even = clamp(Math.round(v), 0, EVEN); }, () => { $("meevenv").textContent = ME.even ? `${ME.even} pictures` : "Off"; });
+  slide($("meeven"), v => { ME.even = clamp(Math.round(v), 0, EVEN); }, () => { $("meevenv").textContent = ME.even ? `over ${ME.even}` : "Off"; });
 
   $("melvclear").addEventListener("click", () => { change(() => { ME.levels = new Map(); }); show(); });
   $("mefrclear").addEventListener("click", () => { change(() => { ME.crop = ME.crop2 = null; ME.nudge = new Map(); }); cropping = null; show(); });
@@ -11998,7 +12010,7 @@ void main() {
   window.cassiniAbout = { open, addTab, esc, close: () => show(false), credits: CREDITS };
 
   // ---- which version this is: this page's build id (build.py writes it), and what the frame server says it serves ----
-  const BUILD = /*BUILD*/"3cc8f5dfc12a";
+  const BUILD = /*BUILD*/"621978fe0470";
   const FRAMES = (() => {                       // the frame server, chosen as the camera window chooses it
     const q = new URLSearchParams(location.search).get("frames");
     if (q) return q.replace(/\/$/, "");

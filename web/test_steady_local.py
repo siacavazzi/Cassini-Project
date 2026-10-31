@@ -412,7 +412,7 @@ with calibration.looking("balanced"):
     # partial frames (most of the frame lost in downlink): the movie shows the last whole frame of the filter in
     # their place (held_of), a colour set with one is not complete, a trail leaves them out; the page holds them the
     # same way on the pre-built planes, whose partial frames the server already drew held
-    LOST = (0, 7, 8, 9, 20, 33)   # frame 0: nothing before it to hold (kept); 7-9: a run of them
+    LOST = (0, 7, 8, 9, 20, 33)   # frame 0: nothing before it to hold (the first whole one after it); 7-9: a run of them
     v5, v6 = partial_copy(u, d, "P", LOST), partial_copy(u2, d2, "P", (5, 6, 12, 13, 30))
     real_unit = om.unit_of
     om.unit_of = lambda fid: next(((v, [q[1] for q in v["frames"]].index(fid)) for v in (v5, v6) if fid in [q[1] for q in v["frames"]]), None) or real_unit(fid)

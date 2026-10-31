@@ -66,7 +66,7 @@ import stacking  # noqa: E402
 # display model (calibration.style), classic being the mosaics made before the balanced display model, raw the
 # balanced ones before natural color
 # obs-v50/v33/v20: the batch-3 fixes (Titan color, saturated white, movie strobe, small bright bodies keep their surface, line holes, pass kinds and scan rule, ride-along pans and ring strips, scan creep); obs-v49/v32/v19: movie cosmic rays and the small artifact fixes (group I), two-filter passes in color (group F), edge registration of clouded passes (group H2); obs-v48/v31/v18: repeats merged only at the same pointing, Auto center, movie tiles, mosaic movies and the calibration fixes; obs-v47/v30/v17: calibration takes the flat field (dust rings, mottle) and the nonlinearity out
-VERSIONS = {"balanced": "obs-v50", "raw": "obs-v33", "classic": "obs-v20-classic"}
+VERSIONS = {"balanced": "obs-v50", "raw": "obs-v33", "eye": "obs-v50-eye", "classic": "obs-v20-classic"}
 CANVAS = 2048        # longest side of the canvas the view is drawn on
 OUT = 1024           # longest side of the picture sent
 FRAME = 1024         # full resolution frame
@@ -112,6 +112,8 @@ REVISIT_SHARE = 0.5  # ... and a mosaic whose frames mostly retake, after a paus
 SCAN_STEP = 0.1      # of a frame: a pass whose pointings between pauses step on by at least this ...
 SCAN_EVEN = 0.01     # ... and by one step (to this, in a frame) each way they head (SCAN_TURN apart) is a scan, no time series
 SCAN_TURN = 30       # degrees
+SET_COLOUR = "_c1"   # the folder suffix, after the others, of a movie that plays in its colour sets' filters where its
+                     # tile counts alone made it grey (_set_colour), so its plan and frames are made again
 RESCANNED = "_g5"    # the folder suffix, after RETRACKED's, of every pass of an observation where _revisits' scan rule
                      # (a scan that pauses is no time series) judges a pass otherwise than the time-series rule alone
 ISLAND_GAP = 0.75    # of a frame: the least empty sky between two islands of a mosaic, separate scans drawn apart
@@ -1030,7 +1032,8 @@ def folder(u, cache):
     suffix = (("" if gap >= mosaic_benchmark.REPEAT_GAP else f"_r{gap:g}")
               + (STRIPPED if u.get("stripped") else PANNED if u.get("panned") else ISLANDS if u.get("islands")
                  else RESCANNED if u.get("rescanned") else RETRACKED if u.get("retracked") else RELAID if u.get("relaid")
-                 else GROUPING if u.get("regrouped") else ""))
+                 else GROUPING if u.get("regrouped") else "")
+              + (SET_COLOUR if _set_coloured(u) else ""))
     return os.path.join(cache, f"{VERSIONS[calibration.style()]}{calibration.variant()}-q{QUALITY}", "_".join(map(str, u["key"])) + suffix)
 
 
@@ -1125,6 +1128,37 @@ def _keep_plan(u, cache, p, stamp):
     return rec
 
 
+# every tile's report of a pass made whole (prebuild.make_pass), in one file beside its tiles' folder (reports-<that
+# folder>.json, out of the tools' tiles-*/*.json): a server's first look at the pass (its mosaic's layout, its tiles
+# made ahead, its tile maps) reads that file instead of one file a tile
+REPORTS_FILE = "reports-{}.json"
+
+
+def _reports_path(tiles_dir):
+    return os.path.join(os.path.dirname(tiles_dir), REPORTS_FILE.format(os.path.basename(tiles_dir)))
+
+
+def keep_reports(u, cache, p):
+    """Every tile's report of the pass in REPORTS_FILE, as each reads back from its own file; once every tile is
+    made (it makes those that are not)."""
+    path = _reports_path(_tiles(u, cache, p["display_scale"]))
+    if not os.path.exists(path):
+        reports = {str(j): tile(u, j, cache, p["display_scale"]) for j in range(len(u["frames"]))}
+        reel._cached(path, lambda: json.dumps(reports).encode())
+
+
+def _kept_reports(rec):
+    """The pass's tile reports from its REPORTS_FILE into its record rec, when the pre-build kept them so."""
+    try:
+        with open(_reports_path(rec["tiles_dir"])) as fh:
+            reports = json.load(fh)
+    except (OSError, ValueError):
+        return
+    with _lock:
+        for n, report in reports.items():
+            rec["tiles"].setdefault(int(n), report)
+
+
 def _kept_tiles(u, cache, scale):
     """The pass's record when scale is its kept plan's display scale (no stat: plan() looked at it); else None."""
     with _lock:
@@ -1178,7 +1212,39 @@ def _filters(u):
     # the filters that see the body, not as a black mosaic of that sky
     aside = _aside(frames, u)
     count = {f: c for f, c in count.items() if f not in aside} or count
-    return count, nms, aside, colour_of(count, nms)
+    colour = colour_of(count, nms)
+    u["set_colour"] = False
+    if colour is None and u.get("kind") == "movie":
+        colour = _set_colour(frames, count, nms)
+        u["set_colour"] = colour is not None
+    return count, nms, aside, colour
+
+
+def _set_coloured(u):
+    """Whether the pass is a movie _set_colour colours (folder: its own folder, SET_COLOUR)."""
+    if u.get("kind") != "movie":
+        return False
+    if "set_colour" not in u:
+        _filters(u)
+    return u["set_colour"]
+
+
+def _set_colour(frames, count, nms):
+    """The colour filters of a movie whose tile counts make it grey (colour_of) though it takes colour sets of three
+    or more filters (colour_sets, the camera windows' sets): the channels (sets_passes.channels) its sets use most
+    often, the widest in wavelength among those as often, then the newest; None without such a set. Sam 2026-10-30:
+    the NAC's Titan wind stares of 2005-06-04 (ISS_009TI_1X1WND10001..) take CB3 three times a cycle and every other
+    filter once, so no filter but CB3 reached half of CB3's count and the movie played grey, while its windows showed
+    each cycle's CB3, MT1 and UV1 set in colour."""
+    seen = {}
+    for n, run in enumerate(colour_sets(frames)):
+        filters = [f for f, _ in run]
+        if len(set(filters)) < 3 or any(f not in count for f in filters):
+            continue
+        kind, use = sets_passes.channels(filters, [nms[f] for f in filters])
+        rgb = tuple(filters[j] for j in use)
+        seen[rgb] = (seen.get(rgb, (0,))[0] + 1, nms[rgb[0]] - nms[rgb[-1]], n)
+    return list(max(seen, key=seen.get)) if seen else None
 
 
 def plan(u, cache):
@@ -1195,7 +1261,7 @@ def plan(u, cache):
             stamp = _stamp(path)
             with open(path) as fh:
                 p = json.load(fh)
-            _keep_plan(u, cache, p, stamp)
+            _kept_reports(_keep_plan(u, cache, p, stamp))
             return p
         frames = u["frames"]
         count, nms, aside, colour = _filters(u)
@@ -1898,8 +1964,12 @@ def _tile_made(u, n, cache, scale, base):
         out["lost"] = round(rep["lost_px"][1] / FRAME ** 2, 4)
     if share:
         # the share of the frame the camera saturated in every exposure merged (load_aligned's, the pixels drawn white:
-        # over_exposed)
+        # over_exposed), and the share of it that is lit (LIT_LEVEL), what over_exposed measures it against
         out["saturated"] = share
+        if image is not None:
+            inside = image[..., 3] > 0
+            lit = inside & (image[..., :3].max(axis=2) >= LIT_LEVEL)
+            out["lit"] = round(float(lit.sum()) / max(1, int(inside.sum())), 4)
     os.makedirs(os.path.dirname(base), exist_ok=True)
     if image is not None and "frame_offset" in rep:
         side = round(image.shape[0] * k)
@@ -2337,6 +2407,10 @@ SURFACE_CLOUDED = frozenset({"SATURN", "JUPITER", "TITAN", "URANUS", "NEPTUNE", 
 # it fades to none at the limb or the terminator) stays as taken: on Rhea's mapping mosaic a limb panel shifted
 # ~40 px squeezed its limb out of the picture and streaked its night side (round 5 of the panel probe)
 SURFACE_STRETCH = 0.5
+# the tiles found to stay as taken (SURFACE_STRETCH, or across New Year), kept in SURFACE_DIR beside the redrawn ones:
+# a later layout skips them instead of working each out again (the year's kernels, its picture, its sky field) for
+# every mosaic, tile map and look-ahead of the pass
+SURFACE_TAKEN = "taken.json"
 _spice_lock = threading.RLock()
 
 
@@ -2370,6 +2444,24 @@ def _ets(ids):
     return out
 
 
+def _surface_taken(u, cache, p, out_dir):
+    """The tiles of the pass that surface_pictures keeps as taken (SURFACE_TAKEN): read once, then from the pass's
+    record."""
+    rec = _kept_tiles(u, cache, p["display_scale"])
+    with _lock:
+        taken = rec.get("surface_taken") if rec is not None else None
+    if taken is None:
+        try:
+            with open(os.path.join(out_dir, SURFACE_TAKEN)) as fh:
+                taken = set(json.load(fh))
+        except (OSError, ValueError):
+            taken = set()
+        if rec is not None:
+            with _lock:
+                taken = rec.setdefault("surface_taken", taken)
+    return taken
+
+
 def surface_pictures(u, cache, p, tiles):
     """Surface reprojection of a mosaic's panels: {tile n: the path of its picture redrawn as at the pass's epoch}.
     A mosaic's panels are taken minutes apart, and the body turns and Cassini moves in between, so the surface under
@@ -2380,15 +2472,17 @@ def surface_pictures(u, cache, p, tiles):
     (reproject.sky_field, warp_sky); the sky, the rings, the night side and the limb's edge stay where they are. Made
     once per tile and kept. {} with Settings > Processing's surface step off, for a body SPICE has no shape for, or
     when the kernels or the geometry cache cannot say; none for a clouded body (SURFACE_CLOUDED), and not a tile
-    the redrawing would distort (SURFACE_STRETCH), which keeps SPICE's place and the panels step's nudge."""
+    the redrawing would distort (SURFACE_STRETCH), which keeps SPICE's place and the panels step's nudge (found
+    once and kept too, SURFACE_TAKEN)."""
     if not calibration.step("surface") or not tiles or clouded(u):
         return {}
     import reproject as rp
     there = _tiles(u, cache, p["display_scale"])
     out_dir = os.path.join(there, SURFACE_DIR)
+    taken = _surface_taken(u, cache, p, out_dir)
     out, todo = {}, []
     for t in tiles:
-        if "offset" not in t:
+        if "offset" not in t or t["n"] in taken:
             continue
         path = os.path.join(out_dir, f"{t['n']}.png")
         if os.path.exists(path):
@@ -2412,12 +2506,16 @@ def surface_pictures(u, cache, p, tiles):
             print(f"no surface for {u['key'][0]}: {type(e).__name__}: {e}"[:200], flush=True)
             return out
         os.makedirs(out_dir, exist_ok=True)
+        found = set()
         for t in todo:
+            if time.gmtime(t["t"]).tm_year != time.gmtime(mid[3]).tm_year:
+                # (one year's kernels at a time: a pass across New Year keeps those tiles as they are, without loading
+                # the other year's kernels for them and the epoch's again for the next tile)
+                found.add(t["n"])
+                continue
             if t["id"] not in ets or not _with_kernels(t["t"]):
                 continue
             try:
-                if time.gmtime(t["t"]).tm_year != time.gmtime(mid[3]).tm_year:
-                    continue   # (one year's kernels at a time: a pass across New Year keeps those tiles as they are)
                 view = rp.sky_view(u["key"][0], ets[t["id"]])
             except Exception as e:
                 print(f"no surface for {t['id']}: {type(e).__name__}: {e}"[:200], flush=True)
@@ -2436,10 +2534,21 @@ def surface_pictures(u, cache, p, tiles):
             stretch = rp.field_stretch(dx, dy, weight, SURFACE_STEP)
             if stretch > SURFACE_STRETCH:
                 print(f"surface: tile {t['n']} kept as taken (stretch {stretch:.2f})", flush=True)
+                found.add(t["n"])
                 continue
             Image.fromarray(rp.warp_sky(image, dx, dy, weight, SURFACE_STEP)).save(path + ".part.png", compress_level=1)
             os.replace(path + ".part.png", path)
             out[t["n"]] = path
+        if not found <= taken:
+            taken |= found
+            kept = os.path.join(out_dir, SURFACE_TAKEN)
+            part = f"{kept}.{os.getpid()}.{threading.get_ident()}.part"
+            try:
+                with open(part, "w") as fh:
+                    json.dump(sorted(taken), fh)
+                os.replace(part, kept)
+            except OSError as e:
+                print(f"cannot keep {kept} in the cache ({e})", flush=True)
     return out
 
 
@@ -3048,6 +3157,21 @@ def tuned_layout(made, mapped, moves, gone):
     return p, tiles, rect, count, used, f"{name}-tune{hashlib.sha1(key.encode()).hexdigest()[:12]}"
 
 
+def _despiked(planes, gamma):
+    """A colour set's placed planes (RGBA, the pass's display scale) with each one-filter spike (a cosmic ray or hot
+    pixel in one filter only) set to what is round it: calibration._clean_spikes, the still composites' cleaner
+    (natural: 5x5, and where not every other filter peaks), in linear light."""
+    lin = [calibration.decode(a[..., 0].astype(np.float32) / 255, gamma) for a in planes]
+    seen = np.min([a[..., 3] for a in planes], axis=0) > 0
+    out = []
+    # (its grain over all the picture: a display scale's sky is mostly crushed to black, no grain to measure)
+    for a, c in zip(planes, calibration._clean_spikes(lin, seen if seen.sum() >= 100 else np.ones(seen.shape, bool), True)):
+        a = a.copy()
+        a[..., :3] = (calibration.encode(np.clip(c, 0, 1), gamma) * 255 + 0.5).astype(np.uint8)[..., None]
+        out.append(a)
+    return out
+
+
 def colour_picture(u, p, colour, planes):
     """The colour picture of a pass's three colour filters' planes (RGBA, each on the pass's display scale), RGBA:
     the pass's mosaic and its movie frames mixed alike. Natural color: a true color pass turned into what an eye
@@ -3066,7 +3190,7 @@ def colour_picture(u, p, colour, planes):
     bal = scale.get("balance")
     mix = calibration.color_mix(u["key"][2], colour, u["key"][0], [bal[f] for f in colour] if bal else None)
     typical = scale.get("typical")
-    if mix is not None and typical:
+    if isinstance(mix, calibration.FalseMix) and typical:
         mix.typical = typical if isinstance(typical, list) else [typical[f] for f in colour]
     if mix is not None:
         rgb = calibration.mix_display(rgb, mix, scale["gamma"])
@@ -3593,6 +3717,7 @@ def _steady_table(u, n, cache, centre=True, colour=False):
     return {"local": True, "fixed": True, "ids": [fr[1] for fr in u["frames"]], "n": ns, "exposure": exposure,
             "partial": [m for m in ns if unfit(u["frames"], m, lambda j: tiles.get(j) or {})],
             "sets": _colour_recipes(u, p, cache, ns, tiles) if colour and p.get("colour") else None,
+            "eye": _eye_recipes(u, p, ns, tiles) if colour and p.get("colour") else None,
             "filters": [fr[2] for fr in u["frames"]], "trail_most": TRAIL,
             "chain": [chain[n] for n in ns], "spice": [tiles[n]["offset"] for n in ns],
             "box": [tiles[n]["box"] for n in ns], "view": list(rect), "out": OUT, "k": OUT / max(rect[2], rect[3]),
@@ -3627,6 +3752,13 @@ def _colour_recipes(u, p, cache, ns, tiles):
     mix = calibration.color_mix(u["key"][2], want, u["key"][0], [bal[f] for f in want] if bal else None)
     if isinstance(mix, calibration.FalseMix) or len(want) != 3:
         return None   # (two filters: the green of their mean, colour_picture's, is the server's too)
+    return {"filters": list(want), "mix": None if mix is None else np.asarray(mix, float).tolist(),
+            "gamma": scale.get("gamma", 2.2), "shoulder": calibration.SHOULDER, "by": _colour_by(u, want, ns, tiles)}
+
+
+def _colour_by(u, want, ns, tiles):
+    """{frame n: the tiles of its colour set in the filters' order} for the frames of ns drawn with a set (the set
+    movie_frame picks at SPICE's places)."""
     by, placed = {}, set(ns)
     for n in ns:
         for run in reversed(colour_sets(u["frames"][:n + 1])):
@@ -3636,8 +3768,28 @@ def _colour_recipes(u, p, cache, ns, tiles):
             if all(got[f] in placed for f in want):
                 by[str(n)] = [got[f] for f in want]
             break
-    return {"filters": list(want), "mix": None if mix is None else np.asarray(mix, float).tolist(),
-            "gamma": scale.get("gamma", 2.2), "shoulder": calibration.SHOULDER, "by": by}
+    return by
+
+
+def _eye_recipes(u, p, ns, tiles):
+    """How the page draws each frame of a colour pass in natural color emulation (Settings > Filter colors >
+    Natural color (emulated), calibration.eye_mix), the same shape as _colour_recipes: {"filters", "mix" (the set's
+    3x3 eye mix, or for a true color set its natural mix), "gamma", "shoulder", "by"}, for false color passes too: the
+    eye mix is one matrix on the planes, what colour_picture draws with colors=eye. A two-filter set lists its longer
+    filter's tile twice (colour_picture's green, their mean, has no weight in the eye mix), so the page mixes three
+    planes as for any set. None when the set's filters have no eye mix."""
+    want = p["colour"]
+    if len(want) not in (2, 3):
+        return None
+    with calibration.coloring("eye"):
+        mix = calibration.color_mix(u["key"][2], want, u["key"][0])
+    if mix is None:
+        return None
+    by = _colour_by(u, want, ns, tiles)
+    if len(want) == 2:
+        by = {n: [a, a, b] for n, (a, b) in by.items()}
+    return {"filters": list(want), "mix": np.asarray(mix, float).tolist(),
+            "gamma": p["display_scale"].get("gamma", 2.2), "shoulder": calibration.SHOULDER, "by": by}
 
 
 def movie_rect(fp, t, radius=0.0, centre=False, seen=None):
@@ -3878,16 +4030,23 @@ def partial(t):
     return "offset" in t and 1.0 - t.get("lost", 0.0) < PARTIAL
 
 
-OVER_EXPOSED = 0.5   # of a frame: a movie frame the camera saturated this much of is over-exposed (over_exposed)
+OVER_EXPOSED = 0.5   # of a frame: a movie frame the camera saturated this much of is over-exposed (over_exposed) ...
+OVER_LEAST = 0.05    # ... and so is one saturated this much of the frame, where that is OVER_EXPOSED of its lit part
+OVER_STEP = 3.0      # (unfit) a frame saturated OVER_LEAST or more, and this many times as much as its filter's frames
+#                      before and after it, is a long exposure among short ones
 SATURATED_ALL = 0.95   # ... and one saturated this much of carries no picture (left out of mosaics, never shown in movies)
+LIT_LEVEL = 16       # levels: the tile's pixels at least this bright are its lit part (its report's "lit", _tile_made)
 
 
 def over_exposed(t):
     """True when tile report t is over-exposed: the camera saturated OVER_EXPOSED of the frame or more (its
-    "saturated"). Its saturated part calibrates to the top of the camera's range over a long exposure, far under what
-    was there, and draws as one flat field (the long frames of 201RI DRNGMOV001, 8.2 s after 2 s ones, ~75% of them
-    saturated: the rings a grey slab, lifted 4x by exposure normalization, every other frame)."""
-    return t.get("saturated", 0.0) >= OVER_EXPOSED
+    "saturated"), or OVER_EXPOSED of the frame's lit part ("lit": a ring arc or a planet over a third of a frame of
+    sky, 011RI IMPACT003's clear frame) when that is OVER_LEAST of the frame or more. Its saturated part calibrates to
+    the top of the camera's range over a long exposure, far under what was there, and draws as one flat field (the
+    long frames of 201RI DRNGMOV001, 8.2 s after 2 s ones, ~75% of them saturated: the rings a grey slab, lifted 4x by
+    exposure normalization, every other frame), white since saturated pixels are drawn white (#205)."""
+    s = t.get("saturated", 0.0)
+    return s >= OVER_EXPOSED or (s >= OVER_LEAST and s >= OVER_EXPOSED * t.get("lit", 1.0))
 
 
 def unfit(frames, n, tile_of):
@@ -3896,20 +4055,26 @@ def unfit(frames, n, tile_of):
     among frames that can (an 8LSB frame, only its low 8 bits sent: the Phoebe 2004-06-12 movie's UV3 and IR3 frames
     flashed grey; calibrated False, the tile's), or an over-exposed frame (over_exposed) between frames of its filter
     that are not (a pass alternating short and long exposures; a run of over-exposed frames is what the camera saw,
-    and plays), or a frame saturated all over (SATURATED_ALL), which shows nothing. One rule for the server's movies and the page's (steady table's "partial")."""
+    and plays), or a long exposure among short ones: saturated OVER_LEAST of the frame or more and OVER_STEP times as
+    much as its filter's frames on either side (007RI HIPHASE001's clear frames, ~9% saturated after ones that are not:
+    the B ring a white band, flashing), or a frame saturated all over (SATURATED_ALL), which shows nothing. One rule
+    for the server's movies and the page's (steady table's "partial")."""
     t = tile_of(n)
     if "offset" not in t:
         return False
     if partial(t) or (t.get("calibrated") is False and calibration.step("calibrate")):
         return True
-    if not over_exposed(t):
+    s = t.get("saturated", 0.0)
+    if s < OVER_LEAST:
         return False
-    if t.get("saturated", 0.0) >= SATURATED_ALL:
+    if s >= SATURATED_ALL:
         return True   # (saturated all over: nothing of the picture, whatever is round it)
     f = frames[n][2]
-    near = (next((j for j in range(n - 1, -1, -1) if frames[j][2] == f), None),
-            next((j for j in range(n + 1, len(frames)) if frames[j][2] == f), None))
-    return not any(j is not None and over_exposed(tile_of(j)) for j in near)
+    near = [j for j in (next((j for j in range(n - 1, -1, -1) if frames[j][2] == f), None),
+                        next((j for j in range(n + 1, len(frames)) if frames[j][2] == f), None)) if j is not None]
+    if over_exposed(t):
+        return not any(over_exposed(tile_of(j)) for j in near)
+    return bool(near) and all(s >= OVER_STEP * tile_of(j).get("saturated", 0.0) for j in near)
 
 
 def held_of(filters, n, is_partial, whole):
@@ -3917,14 +4082,22 @@ def held_of(filters, n, is_partial, whole):
     is partial (is_partial(n): unfit's frames), the last frame before it of its filter (filters[j]) that is whole
     (whole(j): placed and not partial), as the camera windows hold a colour movie's last set; when its filter has
     none, the last whole frame before it of any filter (the Phoebe 2004-06-12 movie's 8LSB frames are each its
-    filter's first); n when there is none, so a pass whose frames all came down partial keeps them. The movie keeps
-    its frame count: only the picture is held."""
+    filter's first). With no whole frame before it (a pass whose first frame is over-exposed: 010SA EUVFUV003,
+    011RI IMPACT003 opened on a white frame), the first whole frame after it, of its filter, else of any; n when
+    there is none, so a pass whose frames all came down partial keeps them. The movie keeps its frame count: only
+    the picture is held."""
     if not is_partial(n):
         return n
     for j in range(n - 1, -1, -1):
         if filters[j] == filters[n] and whole(j):
             return j
     for j in range(n - 1, -1, -1):
+        if whole(j):
+            return j
+    for j in range(n + 1, len(filters)):
+        if filters[j] == filters[n] and whole(j):
+            return j
+    for j in range(n + 1, len(filters)):
         if whole(j):
             return j
     return n
@@ -3958,7 +4131,7 @@ def colour_sets(frames):
     except FileNotFoundError:   # no index (a synthetic pass)
         idx, row = None, {}
     qs = [row.get(fr[1]) for fr in frames]
-    if not frames or any(q is None for q in qs):
+    if not frames or any(q is None for q in qs) or "set" not in idx:   # (or an index made without its sets)
         return _own_sets(frames)
     set_of, by = idx["set"].to_numpy(), {}
     for j, (fr, q) in enumerate(zip(frames, qs)):
@@ -4064,6 +4237,11 @@ def movie_frame(u, n, cache, trail=0, colour=True, out=OUT, centre=True, steady=
             break
     if used:
         planes = [_place(u, newest[f], rect, k, W, H, cache, p["display_scale"]) for f in used]
+        # a colour filter the pass takes once (a cycle's lone MT1 and UV1, _set_colour's Titan stares) has no frame of
+        # its own filter either side to take its cosmic rays out against (_around): the set's planes are cleaned as a
+        # still composite's channels are (calibration._clean_spikes), or each hit is a bright dot through the mix
+        if any(_around(u, got[f]) == [None, None] for f in used if f in got):
+            planes = _despiked(planes, p["display_scale"].get("gamma", 2.2))
         # a colour set held from an earlier pointing (a track's last visit, a thousand px away, or a pass that moved
         # on across the body) shows little or nothing where this frame is: colour_picture draws only where every
         # filter has the picture. Under HELD_COVER of frame n's own place covered, the frame is drawn on its own

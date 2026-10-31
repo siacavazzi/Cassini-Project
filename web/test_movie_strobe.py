@@ -6,6 +6,9 @@
 - a frame saturated all over is never shown, and is left out of a mosaic (101SA SPOLEDYN001 W: flat panels dark or
   bright by exposure time, flickering lap to lap)
 - a frame that can't be calibrated (8LSB) among frames that can is held (Phoebe 2004-06-12: UV3/IR3 flashed grey)
+- round 3: a long exposure among short ones of its filter (007RI HIPHASE001's clear frames, ~9% saturated: the B ring
+  a white band) is held; a frame saturated over half its lit part is over-exposed (011RI IMPACT003's clear frame); a
+  pass's first frame held shows the first whole frame after it (010SA EUVFUV003, 011RI IMPACT003 opened white)
 - a small body's frame lit all over by stray light (no dark sky) takes its own black from everything off the disk
   (tile_scale's disk), so the veil goes (Pallene 139PL, Hati 182OT, Kiviuq 112OT); a frame with dark sky, a plume
   movie's Enceladus (64 px) and a pass without a small body keep the rule they had
@@ -49,6 +52,36 @@ assert got == [0, 1, 0, 3, 4], got
 # ... a pass over-exposed all through keeps its frames (nothing whole to hold)
 assert shown(frames, [{**placed, "saturated": 0.8}] * 8) == list(range(8))
 print("runs play, a lone over-exposed frame is held")
+
+# ---- a long exposure among short ones of its filter (007RI HIPHASE001 W, round 3): its clear frames alternate
+# short (unsaturated) and long (~9% saturated, the B ring a white band since #205) frames, under OVER_EXPOSED of the
+# frame: the long ones are held, a frame saturated about as much as its neighbours plays
+frames4 = fr(["VIO", "MT3", "CB3", "CL1/CL2", "CL1/CL2", "CL1/CL2", "CL1/CL2", "VIO", "CL1/CL2", "CL1/CL2", "CL1/CL2"])
+sat4 = (0.0, 0.0, 0.0, 0.0, 0.09, 0.001, 0.09, 0.0, 0.0, 0.094, 0.0)
+tiles4 = [{**placed, "saturated": s, "lit": 0.6} for s in sat4]
+got = shown(frames4, tiles4)
+assert got == [0, 1, 2, 3, 3, 5, 5, 7, 8, 8, 10], got
+# ... not under OVER_LEAST, nor when a neighbour is saturated a third as much or more (a bright limb coming in)
+tiles4b = [{**placed, "saturated": s, "lit": 0.6} for s in (0, 0, 0, 0.0, 0.04, 0.0, 0.09, 0, 0.04, 0.09, 0.0)]
+assert shown(frames4, tiles4b) == list(range(11)), shown(frames4, tiles4b)
+# ... nor a filter's only frame by the step alone (no frames of its own to compare)
+assert not om.unfit(fr(["GRN", "CL1/CL2", "IR1"]), 1, lambda j: {**placed, "saturated": 0.2 * (j == 1), "lit": 0.9})
+print("a long exposure among short ones is held:", got)
+
+# ---- over-exposed where the frame is lit: 011RI IMPACT003 W's clear frame 0, a ring arc and Saturn over a third of
+# the frame, most of it saturated (a white slab), then GRN and IR1; and the first frame shows the next whole one
+frames5 = fr(["CL1/CL2", "GRN", "IR1"])
+tiles5 = [{**placed, "saturated": 0.25, "lit": 0.35}, {**placed, "saturated": 0.03, "lit": 0.35}, {**placed, "lit": 0.3}]
+assert om.over_exposed(tiles5[0]) and not om.over_exposed(tiles5[1])
+assert not om.over_exposed({**placed, "saturated": 0.25}) and not om.over_exposed({**placed, "saturated": 0.03, "lit": 0.04})
+got = shown(frames5, tiles5)
+assert got == [1, 1, 2], got
+# 010SA EUVFUV003 N: CB1 and MT1 in turn, the first of each taken long: each shows the next of its filter
+frames6 = fr(["CB1", "MT1", "CB1", "MT1", "CB1", "MT1"])
+tiles6 = [{**placed, "saturated": s, "lit": 0.4} for s in (0.07, 0.3, 0.0, 0.01, 0.0, 0.0)]
+got = shown(frames6, tiles6)
+assert got == [2, 3, 2, 3, 4, 5], got
+print("an over-exposed first frame shows the next whole one:", got)
 
 # ---- saturated all over: held whatever is round it
 tiles = [{**placed, "saturated": s} for s in (0.0, 1.0, 1.0, 1.0, 0.0, 0.0, 1.0, 0.0)]

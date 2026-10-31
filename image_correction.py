@@ -43,6 +43,31 @@ LINE_GAP = 8
 
 
 """
+For each pixel, the nearest row at or above it where on (a 2D bool mask) is True, -1 where there is none: what
+np.maximum.accumulate(np.where(on, rows, -1), axis=0) gives, worked out a row at a time (numpy's accumulate down a
+frame's columns steps across memory, ~16 ms a 1024 px frame; a row at a time ~1.5 ms). rows_below: the nearest row
+at or below, h where there is none.
+"""
+def rows_above(on):
+    out = np.empty(on.shape, int)
+    last = np.full(on.shape[1], -1, int)
+    for r in range(on.shape[0]):
+        np.copyto(last, r, where=on[r])
+        out[r] = last
+    return out
+
+
+def rows_below(on):
+    h = on.shape[0]
+    out = np.empty(on.shape, int)
+    last = np.full(on.shape[1], h, int)
+    for r in range(h - 1, -1, -1):
+        np.copyto(last, r, where=on[r])
+        out[r] = last
+    return out
+
+
+"""
 Fills the short runs of lost pixels (mask False) down each column from the valid rows above and
 below, and returns (image, mask with those pixels now valid). Lost pixels are the ends of lines
 that never arrived, so a lost run down a column is a stack of those lines; where it is at most
@@ -57,10 +82,7 @@ def fill_lines(img, mask, max_gap=LINE_GAP, fills=None):
     fillable, slope = line_fills(img, mask, max_gap) if fills is None else fills
     if not fillable.any():
         return img, mask
-    h = mask.shape[0]
-    rows = np.arange(h)[:, None]
-    above = np.maximum.accumulate(np.where(mask, rows, -1), axis=0)
-    below = np.minimum.accumulate(np.where(mask, rows, h)[::-1], axis=0)[::-1]
+    above, below = rows_above(mask), rows_below(mask)
     ys, xs = np.nonzero(fillable)
     a, b = above[ys, xs], below[ys, xs]
     t = ((ys - a) / (b - a)).astype(np.float32)
@@ -120,9 +142,7 @@ lines the frame has, no fill does better, and left lost it is a black line throu
 def line_fills(img, mask, max_gap=LINE_GAP, line=1):
     h, w = mask.shape
     slope = np.zeros((h, w), np.float32)
-    rows = np.arange(h)[:, None]
-    above = np.maximum.accumulate(np.where(mask, rows, -1), axis=0)
-    below = np.minimum.accumulate(np.where(mask, rows, h)[::-1], axis=0)[::-1]
+    above, below = rows_above(mask), rows_below(mask)
     fillable = ~mask & (above >= 0) & (below < h) & (below - above - 1 <= max_gap)
     if not fillable.any():
         return fillable, slope
@@ -132,9 +152,8 @@ def line_fills(img, mask, max_gap=LINE_GAP, line=1):
     steps = [np.abs(np.diff(gray, axis=0))[mask[1:] & mask[:-1]], np.abs(np.diff(gray, axis=1))[mask[:, 1:] & mask[:, :-1]]]
     noise = min(1.4826 * float(np.median(d)) / np.sqrt(2) if d.size else np.inf for d in steps)
     noise = 0.0 if np.isinf(noise) else noise
-    # the nearest lost row above each pixel and below it, so a trial knows its rows are all valid
-    lost_above = np.maximum.accumulate(np.where(~mask, rows, -1), axis=0)
-    lost_below = np.minimum.accumulate(np.where(~mask, rows, h)[::-1], axis=0)[::-1]
+    # the nearest lost row below each pixel, so a trial knows its rows are all valid
+    lost_below = rows_below(~mask)
     count, runs = cv2.connectedComponents(fillable.astype(np.uint8), connectivity=8)
     keep = np.zeros(count, bool)
     every_y, every_x = np.nonzero(fillable)
@@ -503,10 +522,29 @@ least one), the same as np.nanmedian with the others set to NaN. A sort of the f
 several times quicker than nanmedian, which goes through masked arrays.
 """
 def agreeing_median(stack, agrees, count):
-    ordered = np.sort(np.where(agrees, stack, np.inf), axis=0)
+    ordered = _sorted(np.where(agrees, stack, np.inf))
     low = np.take_along_axis(ordered, ((count - 1) // 2)[None], 0)[0]
     high = np.take_along_axis(ordered, (count // 2)[None], 0)[0]
     return (low + high) / 2
+
+
+# up to this many frames _sorted sorts them with minimum and maximum passes over whole frames: numpy's sort down
+# axis 0 sorts each pixel's few values on its own (~70 ms a 1024 px stack of 2 to 6 frames, the passes 4 to 24 ms)
+SORT_PASSES = 8
+
+
+"""
+np.sort(values, axis=0) of a stack of a few frames: each frame sunk in turn into the sorted ones before it, which puts
+the same values in the same order (NaN, which numpy sorts last, goes to numpy's sort)
+"""
+def _sorted(values):
+    if len(values) > SORT_PASSES or np.isnan(values).any():
+        return np.sort(values, axis=0)
+    out = list(values)
+    for i in range(1, len(out)):
+        for j in range(i, 0, -1):
+            out[j - 1], out[j] = np.minimum(out[j - 1], out[j]), np.maximum(out[j - 1], out[j])
+    return np.stack(out)
 
 
 # a display level at or above this is clipped (a saturated star, a blown limb): it doesn't show how bright the scene is
@@ -590,8 +628,11 @@ def stack_frames(frames, sigma=3.0, max_shift=20, masks=None):
         # elsewhere in each repeat, which reads as a change the size of the star and left a box of the reference
         # alone round every bright star (W1601346192_1); a real change (a moving moon) is far larger than the margin
         clipped = _stars(((gray >= CLIPPED) | (ref_gray >= CLIPPED)).astype(np.uint8), ref_gray)
-        pixel_diff = diff.copy()
-        diff[clipped] = 0
+        # (most repeats have no clipped star: then nothing below is judged pixel by pixel)
+        stars = clipped.any()
+        if stars:
+            pixel_diff = diff.copy()
+            diff[clipped] = 0
         smooth_diff = cv2.GaussianBlur(diff, (0,0), 2)
         level = np.median(smooth_diff)
         smooth_diff = np.abs(smooth_diff - level)
@@ -604,11 +645,12 @@ def stack_frames(frames, sigma=3.0, max_shift=20, masks=None):
         # padding, or by its own difference: a repeat's bleed down the columns (a vertical spike averaged in,
         # W1601346192_1), the star's edge a fraction of a pixel off and a limb's glow that differs (a grey box
         # under Enceladus, N1710205762_3) are the reference's alone, the sky between them every frame's (no box)
-        near = cv2.GaussianBlur(pixel_diff, (0, 0), 2)
-        spread = np.abs(pixel_diff - np.median(pixel_diff))
-        pixel_noise = 1.4826 * float(np.median(spread[both] if lost else spread))
-        changed |= clipped & ((np.abs(near - level) > max(5 * noise, 3))
-                              | (np.abs(pixel_diff) > max(CLIP_SIGMA * pixel_noise, 3)))
+        if stars:
+            near = cv2.GaussianBlur(pixel_diff, (0, 0), 2)
+            spread = np.abs(pixel_diff - np.median(pixel_diff))
+            pixel_noise = 1.4826 * float(np.median(spread[both] if lost else spread))
+            changed |= clipped & ((np.abs(near - level) > max(5 * noise, 3))
+                                  | (np.abs(pixel_diff) > max(CLIP_SIGMA * pixel_noise, 3)))
         stack.append(gray)
         # where the reference lost the pixel nothing was compared (diff 0 there): a change padded in from beside it
         # says nothing about this frame's pixel, which is then the only picture there is; left out, it left a
