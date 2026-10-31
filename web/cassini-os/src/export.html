@@ -200,7 +200,9 @@ body.phone #excard:not(.full) { width: calc(100% - 16px) !important; left: 8px !
     // over both settings)
     return q.toString() + window.cassiniLook() + (window.cassiniMovieStyle ? window.cassiniMovieStyle() : "") + bgQ() + (opt("movies.mosaicFrames", "rolling") === "whole" ? "&whole=1" : "")
       + (opt("playback.completeMosaics", false) && opt("cameras.mosaics", true) !== false ? "&complete=1" : "") + (window.cassiniSetsQ ? window.cassiniSetsQ() : "")
-      + (window.cassiniMovieCut ? window.cassiniMovieCut() : "");
+      + (window.cassiniMovieCut ? window.cassiniMovieCut() : "")
+      // Color smoothing (Settings > Processing): its strength, as the windows move a film's color pictures
+      + (window.cassiniColourSmooth && window.cassiniColourSmooth.strength() ? `&cs=${Math.round(window.cassiniColourSmooth.strength() * 100)}` : "");
   };
   let timer = 0;
   function estimate() {
@@ -504,12 +506,36 @@ body.phone #excard:not(.full) { width: calc(100% - 16px) !important; left: 8px !
     const font = Math.max(10, Math.round(ch * 0.36)), small = Math.max(9, Math.round(ch * 0.3)), mono = `Menlo, "DejaVu Sans Mono", monospace`;
     const pics = plan.pictures, ahead = 6, todo = [], building = {}, kinds = {};
     let nxt = 0, at = 0, lastKey = -Infinity;
+    // Color smoothing (Settings > Processing, colour-smooth.html), as the camera windows do it: each picture's palette
+    // measured as it comes in, and each color picture moved toward the palette of the film's pictures round it of its
+    // camera and target (CS.SPAN either side: those pictures are among the ones fetched ahead)
+    const CS = window.cassiniColourSmooth, cs = CS ? CS.strength() : 0, past = [];
+    const groupOf = e => `${e.cam}|${e.target || ""}`;
+    const measured = (e, p) => !cs ? p : p.then(r => {
+      if (!r.bmp) return r;
+      const c = document.createElement("canvas"); c.width = r.bmp.width; c.height = r.bmp.height;
+      const cg = c.getContext("2d", { willReadFrequently: true }); cg.drawImage(r.bmp, 0, 0);
+      const px = cg.getImageData(0, 0, c.width, c.height), st = CS.math.palette(px.data, c.width, c.height);
+      return Object.assign(r, { cs: { c, cg, px, st, group: groupOf(e) } });
+    });
     try {
       for (let n = 0; n < pics.length; n++) {
         if (X.job !== job) { stop.done = true; venc.close(); return; }
         if (failed) throw failed;
-        while (nxt < pics.length && nxt < n + ahead) todo.push(pictureOf(pics[nxt++], size, stop));
-        const e = pics[n], { bmp, what } = await todo.shift();
+        while (nxt < pics.length && nxt < n + ahead) { todo.push(measured(pics[nxt], pictureOf(pics[nxt], size, stop))); nxt++; }
+        const e = pics[n], got = await todo.shift(), { what } = got;
+        let { bmp } = got;
+        if (got.cs) {
+          const me = got.cs, later = (await Promise.all(todo.slice(0, CS.SPAN))).map(r => r.cs).filter(Boolean);
+          const run = [...past, me, ...later].filter(q => q.group === me.group), i = run.indexOf(me);
+          if (me.st && CS.math.smoothed(me.px.data, me.st, CS.math.wanted(run.map(q => q.st), i, CS.SPAN), cs)) {
+            me.cg.putImageData(me.px, 0, 0);
+            if (bmp.close) bmp.close();
+            bmp = me.c;
+          }
+          past.push({ group: me.group, st: me.st });
+          if (past.length > 4 * CS.SPAN) past.shift();
+        }
         kinds[what || "none"] = (kinds[what || "none"] || 0) + 1;
         // a mosaic stays up while its observation goes on (render's building)
         let held = false;
