@@ -186,15 +186,21 @@ body.phone #excard:not(.full) { width: calc(100% - 16px) !important; left: 8px !
   });
 
   // ---------- what the film will be: the server's plan, asked for as the choices change ----------
+  // the Background (Settings > Processing) where a picture's frame does not reach: only another color than black
+  // goes in the film's query (export.py bg=), so a film made with black keeps its name
+  const bg = () => (window.cassiniBackground ? window.cassiniBackground() : "#000000");
+  const bgQ = () => (bg().toLowerCase() === "#000000" ? "" : `&bg=${bg().slice(1)}`);
   const params = () => {
     const q = new URLSearchParams({ from: iso(X.a), until: iso(X.b), cams: X.cams || "NW", fps: opt("export.adaptive", true) ? "auto" : String(opt("export.fps", 12)),
       size: opt("export.full", false) ? "full" : String(opt("export.size", 1024)), sound: opt("export.sound", false) ? "1" : "0", caption: opt("export.caption", true) ? "1" : "0" });
     // Whole mosaics (Settings > Movie): a mosaic movie's film shows only its whole laps (export.py whole=); Complete
-    // mosaics only (Settings > Playback): a mosaic pass only its finished mosaic (complete=); the Movie Editor's cut
+    // mosaics only (Settings > Playback): a mosaic pass only its finished mosaic (complete=); Complete color pictures
+    // only off (Settings > Playback): every channel of a color set as well (sets=0); the Movie Editor's cut
     // and look for this stretch (movieedit.html): frames left out, the look on every picture, and its Mosaics (mos=,
     // over both settings)
-    return q.toString() + window.cassiniLook() + (window.cassiniMovieStyle ? window.cassiniMovieStyle() : "") + (opt("movies.mosaicFrames", "rolling") === "whole" ? "&whole=1" : "")
-      + (opt("playback.completeMosaics", false) && opt("cameras.mosaics", true) !== false ? "&complete=1" : "") + (window.cassiniMovieCut ? window.cassiniMovieCut() : "");
+    return q.toString() + window.cassiniLook() + (window.cassiniMovieStyle ? window.cassiniMovieStyle() : "") + bgQ() + (opt("movies.mosaicFrames", "rolling") === "whole" ? "&whole=1" : "")
+      + (opt("playback.completeMosaics", false) && opt("cameras.mosaics", true) !== false ? "&complete=1" : "") + (window.cassiniSetsQ ? window.cassiniSetsQ() : "")
+      + (window.cassiniMovieCut ? window.cassiniMovieCut() : "");
   };
   let timer = 0;
   function estimate() {
@@ -391,8 +397,14 @@ body.phone #excard:not(.full) { width: calc(100% - 16px) !important; left: 8px !
   // export.py's Pictures.make calls)
   // a mosaic movie shown a lap at a time: the Movie Editor's Mosaics for this stretch, else Settings > Movie
   const wholeLaps = () => { const m = /[&?]mos=(\w+)/.exec(window.cassiniMovieCut ? window.cassiniMovieCut() : ""); return m ? m[1] === "whole" : opt("movies.mosaicFrames", "rolling") === "whole"; };
-  function pictureUrl(kind, src, size) {
-    const sep = src.includes("?") ? "&" : "?", look = window.cassiniLook(), style = window.cassiniMovieStyle ? window.cassiniMovieStyle() : "";
+  // Auto center for the film: the Movie Editor's Framing for this stretch (ctr=), else Settings > Processing, as the
+  // server's film has it (export.py options ctr, Pictures._centred); the film made here ignored the editor's choice
+  // and never centred a picture shown on its own (2026-10-30)
+  const centreOn = () => { const m = /[&?]ctr=([01])/.exec(window.cassiniMovieCut ? window.cassiniMovieCut() : ""); return m ? m[1] === "1" : S.get("cameras.autoCenter") !== false; };
+  // plain: a picture shown on its own as it is (the stand-in when the server does not centre it, 404)
+  function pictureUrl(kind, src, size, plain) {
+    const sep = src.includes("?") ? "&" : "?", center = centreOn(), look = window.cassiniLook({ center: center && !plain && (kind === "color" || kind === "processed") }),
+      style = window.cassiniMovieStyle ? window.cassiniMovieStyle({ center }) : "";
     if (kind === "movie") return `${FRAMES}${src}${sep}size=${size}&color=1${style}${look}`;
     if (kind === "rolling") return `${FRAMES}${src}${sep}size=${size}${style}${look}${wholeLaps() ? "&whole=1" : ""}`;
     if (kind === "frame") return `${FRAMES}${src}${sep}size=${size}`;
@@ -412,7 +424,7 @@ body.phone #excard:not(.full) { width: calc(100% - 16px) !important; left: 8px !
   }
   // a movie frame whose steps this computer works out (steady-local.html): the base frame moved, gained and mixed
   async function movieHere(id, size, stop) {
-    const SL = window.cassiniSteadyLocal, center = S.get("cameras.autoCenter") !== false;
+    const SL = window.cassiniSteadyLocal, center = centreOn();
     if (!SL || size !== 1024 || !S.get("movies.stabilizeLocal")) return null;
     if (!SL.want(FRAMES, id, { center, color: true })) await SL.ready(FRAMES, id, center, true);
     const w = SL.want(FRAMES, id, { center, color: true });
@@ -430,7 +442,7 @@ body.phone #excard:not(.full) { width: calc(100% - 16px) !important; left: 8px !
   async function rollingHere(id, size, stop) {
     const FL = window.cassiniFadeLocal, fh = FL && size === 1024 ? FL.want(FRAMES, id) : null;
     if (!fh) return null;
-    const center = S.get("cameras.autoCenter") !== false;
+    const center = centreOn();
     const r = await fetch(`${FRAMES}/frames/movie/${id}.webp?mode=rolling&size=1024${window.cassiniMovieStyle({ center, fade: 0 })}${window.cassiniLook()}`).catch(() => null);
     if (!r || !r.ok) return null;
     const im = new Image(), u = URL.createObjectURL(await r.blob());
@@ -442,7 +454,8 @@ body.phone #excard:not(.full) { width: calc(100% - 16px) !important; left: 8px !
   // Pictures.picture: the first of the entry's tries the server has, and what it is
   async function pictureOf(e, size, stop) {
     for (const [kind, src] of e.tries) {
-      const bmp = (kind === "movie" ? await movieHere(e.id, size, stop) : kind === "rolling" ? await rollingHere(e.id, size, stop) : null) || await fetchPicture(pictureUrl(kind, src, size), stop);
+      const bmp = (kind === "movie" ? await movieHere(e.id, size, stop) : kind === "rolling" ? await rollingHere(e.id, size, stop) : null) || await fetchPicture(pictureUrl(kind, src, size), stop)
+        || (pictureUrl(kind, src, size, true) !== pictureUrl(kind, src, size) ? await fetchPicture(pictureUrl(kind, src, size, true), stop) : null);
       if (bmp) return { bmp, what: WHAT[kind] };
     }
     return { bmp: null, what: "" };
@@ -507,14 +520,14 @@ body.phone #excard:not(.full) { width: calc(100% - 16px) !important; left: 8px !
         else {
           // Film.put: the pane black, the picture in its middle, the caption under it
           const x0 = cams.indexOf(e.cam) * size;
-          g.fillStyle = "#000"; g.fillRect(x0, 0, size, size);
+          g.fillStyle = bg(); g.fillRect(x0, 0, size, size);
           if (bmp) {
             const k = size / Math.max(bmp.width, bmp.height), w = Math.max(1, Math.round(bmp.width * k)), h = Math.max(1, Math.round(bmp.height * k));
             let src = bmp;
             if (look) {
               // the movie editor's look on the picture over black (render: studio_look.apply)
               const c = document.createElement("canvas"); c.width = w; c.height = h;
-              const cg = c.getContext("2d", { alpha: false }); cg.fillStyle = "#000"; cg.fillRect(0, 0, w, h); cg.imageSmoothingQuality = "high"; cg.drawImage(bmp, 0, 0, w, h);
+              const cg = c.getContext("2d", { alpha: false }); cg.fillStyle = bg(); cg.fillRect(0, 0, w, h); cg.imageSmoothingQuality = "high"; cg.drawImage(bmp, 0, 0, w, h);
               look.r.upload(c, w, h); look.r.draw(look.p, w, h); src = look.lc;
             }
             g.imageSmoothingQuality = "high";

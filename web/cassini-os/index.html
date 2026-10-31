@@ -162,7 +162,7 @@ body.phone #gplay { width: 30px; height: 30px; }
 .camwin.zoomed .well { height: 236px; }
 /* real frames: the well goes square and the frame fills it */
 .well.has-frame, .camwin.zoomed .well.has-frame { height: auto; aspect-ratio: 1; }
-.well .shot { position: absolute; inset: 0; width: 100%; height: 100%; object-fit: contain; display: none; background: #000; }
+.well .shot { position: absolute; inset: 0; width: 100%; height: 100%; object-fit: contain; display: none; background: var(--cam-bg, #000); }
 .well.has-frame .shot { display: block; }
 .well.has-frame .wellmsg { display: none; }
 .well.stale .shot { opacity: .55; }
@@ -1264,6 +1264,7 @@ body.phone .stufoot .galbtn { padding: 6px 10px; }
 #mecard.zoomed { width: calc(100% - 20px); height: calc(100% - 50px); }
 #mecard .mebody { flex: 1 1 auto; min-height: 0; display: grid; grid-template-columns: minmax(0, 1fr) 250px; border-top: 1px solid var(--q-line); }
 #mecard .memain { min-width: 0; min-height: 0; display: grid; grid-template-rows: minmax(140px, 1fr) auto auto auto minmax(110px, 34%); grid-template-areas: "stage" "bar" "levels" "tabs" "strip"; background: #000; }
+#mestage { background: var(--cam-bg, #000); }
 #mecard.big .memain { grid-template-rows: minmax(140px, 1fr) auto auto 0 0; }
 #mecard.big :is(#mestrip, #metabs) { display: none; }
 #mestage { grid-area: stage; } #mecard .mebar { grid-area: bar; } #melevels { grid-area: levels; } #mestrip { grid-area: strip; }
@@ -2150,7 +2151,7 @@ body.ambient.phone .amb-where { font-size: 18px; }
         <button class="galbtn" data-v="raw" title="Every frame in every filter as Cassini took it: nothing stacked, calibrated or put together">Every frame, raw</button>
       </div>
       <div class="melabel">Mosaics</div>
-      <div class="galseg" id="memos" role="group" aria-label="Mosaics in the movie"><button data-v="" title="As the camera windows show them (Settings: Mosaic movie frames, Complete mosaics only)">As the windows</button><button data-v="whole" title="Each mosaic once it is whole: a mosaic pass at its last tile, a mosaic movie once a lap, every tile new">Whole</button><button data-v="tiles" title="Every tile as it is taken, the mosaic building up">Tile by tile</button></div>
+      <div class="galseg" id="memos" role="group" aria-label="Mosaics in the movie"><button data-v="" title="As the camera windows show them (Settings: Mosaic movie frames, Complete mosaics only)">As the windows</button><button data-v="whole" title="Each mosaic once it is whole: a mosaic pass at its last tile, a mosaic movie once a lap, every tile new">Whole</button><button data-v="tiles" title="Every tile as it is taken, the mosaic building up">Tile by tile</button><button data-v="off" title="No mosaics: every frame of a mosaic or a ring strip on its own, as a still pass shows">Off</button></div>
       <div class="menote" id="memosnote"></div>
       <h4><span>Framing</span><span class="sp"></span><button id="mefrclear" title="Take the crop off and put every nudged frame back">Reset</button></h4>
       <div class="melabel" style="margin-top:2px">Auto center</div>
@@ -2494,7 +2495,14 @@ body.ambient.phone .amb-where { font-size: 18px; }
       options: [["natural", "Natural color"], ["raw", "Raw filters"]],
       hint: "Natural color turns red, green and blue filter sets into the colors an eye would see, and balances false color sets (methane, ultraviolet, infrared) so the planet comes out gray and only its differences between filters show as color. Raw filters draws each filter straight as a channel. Needs Balanced color." });
   D({ key: "cameras.autoCenter", section: "Processing", label: "Auto center", type: "toggle", value: true,
-      hint: "Every picture of a moon or a planet whose whole disk fits is turned north up with the body in the middle, by SPICE, at one size for the whole pass, so the body holds still from picture to picture. Ring, spoke and sky pictures, and a body too big for the picture, stay as the camera took them. Each camera window's settings button (the slider icon in its title bar) can turn it on or off for that window." });
+      hint: "Every picture of a moon or a planet whose whole disk fits is turned north up with the body in the middle, by SPICE, even where a picture caught only its edge, at one size for the whole pass, so the body holds still from picture to picture. Ring, spoke and sky pictures, and a body too big for the picture, stay as the camera took them. Each camera window's settings button (the slider icon in its title bar) can turn it on or off for that window." });
+  // where a centred picture's frame does not reach (Auto center keeps the body in the middle however much of the
+  // view the frame leaves empty): the camera windows', the Movie Editor's and a film's background
+  D({ key: "cameras.background", section: "Processing", label: "Background", type: "choice", menu: true, value: "#000000",
+      options: [["#000000", "Black"], ["#1c1c1c", "Dark gray"], ["#555555", "Gray"], ["#0d1a33", "Midnight blue"], ["#ffffff", "White"]],
+      hint: "What shows where a picture's frame does not reach, as when Auto center keeps a body in the middle that the camera caught at its edge. Black by default." });
+  window.cassiniBackground = () => S.get("cameras.background") || "#000000";
+  S.on("cameras.background", v => document.documentElement.style.setProperty("--cam-bg", v || "#000000"));
   // right under Auto center (as in each camera window's settings menu): how a movie pass is steadied
   D({ key: "movies.stabilize", section: "Processing", label: "Image stabilization", type: "toggle", value: false,
       hint: "SPICE places each frame of a movie pass from where Cassini was said to point, and that is a few pixels off, differently from frame to frame, so a moon or Jupiter's clouds can wobble. On, each frame is matched to the frame before it by what the pictures show (the pipeline's own alignment, with SPICE's place as the starting guess), and held to SPICE over a longer stretch so the body stays where it is. Feature tracks (a cloud followed across Saturn) are always steadied. Off shows every frame where SPICE puts it." });
@@ -2520,6 +2528,9 @@ body.ambient.phone .amb-where { font-size: 18px; }
   window.cassiniStabilize = () => !S.get("movies.stabilize") ? 0 : (S.get("movies.stabilizeSmooth") ?? 12);
   // exposure normalization of a movie pass (obs_mosaic.exposure_gains): its smoothing in frames, 0 when off
   window.cassiniExposure = () => !S.get("movies.exposure") ? 0 : (S.get("movies.exposureSmooth") ?? 8);
+  // what a film's plan asks for each color set (export.py sets=): Complete color pictures only (Playback, with Color
+  // composites on) makes a set one picture at its last channel, as movie mode steps; off, every channel is its own
+  window.cassiniSetsQ = () => (S.get("movie.completeFrames") === false || S.get("cameras.composites") === false ? "&sets=0" : "");
   window.cassiniMovieStyle = (o = {}) => `${(o.center ?? S.get("cameras.autoCenter")) === false ? "&center=0" : ""}&trail=${o.trail ?? (S.get("movies.trail") || 0)}&laps=${S.get("movies.laps") || 1}` +
     ((o.fade ?? S.get("movies.fade")) && S.get("movies.mosaicFrames") !== "whole" ? `&fade=${o.fade ?? S.get("movies.fade")}&persist=${S.get("movies.persist") ?? 35}` : "") +
     ((o.steady ?? window.cassiniStabilize()) ? `&steady=${o.steady ?? window.cassiniStabilize()}` : "") +
@@ -7617,15 +7628,21 @@ onmessage = async e => {
   });
 
   // ---------- what the film will be: the server's plan, asked for as the choices change ----------
+  // the Background (Settings > Processing) where a picture's frame does not reach: only another color than black
+  // goes in the film's query (export.py bg=), so a film made with black keeps its name
+  const bg = () => (window.cassiniBackground ? window.cassiniBackground() : "#000000");
+  const bgQ = () => (bg().toLowerCase() === "#000000" ? "" : `&bg=${bg().slice(1)}`);
   const params = () => {
     const q = new URLSearchParams({ from: iso(X.a), until: iso(X.b), cams: X.cams || "NW", fps: opt("export.adaptive", true) ? "auto" : String(opt("export.fps", 12)),
       size: opt("export.full", false) ? "full" : String(opt("export.size", 1024)), sound: opt("export.sound", false) ? "1" : "0", caption: opt("export.caption", true) ? "1" : "0" });
     // Whole mosaics (Settings > Movie): a mosaic movie's film shows only its whole laps (export.py whole=); Complete
-    // mosaics only (Settings > Playback): a mosaic pass only its finished mosaic (complete=); the Movie Editor's cut
+    // mosaics only (Settings > Playback): a mosaic pass only its finished mosaic (complete=); Complete color pictures
+    // only off (Settings > Playback): every channel of a color set as well (sets=0); the Movie Editor's cut
     // and look for this stretch (movieedit.html): frames left out, the look on every picture, and its Mosaics (mos=,
     // over both settings)
-    return q.toString() + window.cassiniLook() + (window.cassiniMovieStyle ? window.cassiniMovieStyle() : "") + (opt("movies.mosaicFrames", "rolling") === "whole" ? "&whole=1" : "")
-      + (opt("playback.completeMosaics", false) && opt("cameras.mosaics", true) !== false ? "&complete=1" : "") + (window.cassiniMovieCut ? window.cassiniMovieCut() : "");
+    return q.toString() + window.cassiniLook() + (window.cassiniMovieStyle ? window.cassiniMovieStyle() : "") + bgQ() + (opt("movies.mosaicFrames", "rolling") === "whole" ? "&whole=1" : "")
+      + (opt("playback.completeMosaics", false) && opt("cameras.mosaics", true) !== false ? "&complete=1" : "") + (window.cassiniSetsQ ? window.cassiniSetsQ() : "")
+      + (window.cassiniMovieCut ? window.cassiniMovieCut() : "");
   };
   let timer = 0;
   function estimate() {
@@ -7822,8 +7839,14 @@ onmessage = async e => {
   // export.py's Pictures.make calls)
   // a mosaic movie shown a lap at a time: the Movie Editor's Mosaics for this stretch, else Settings > Movie
   const wholeLaps = () => { const m = /[&?]mos=(\w+)/.exec(window.cassiniMovieCut ? window.cassiniMovieCut() : ""); return m ? m[1] === "whole" : opt("movies.mosaicFrames", "rolling") === "whole"; };
-  function pictureUrl(kind, src, size) {
-    const sep = src.includes("?") ? "&" : "?", look = window.cassiniLook(), style = window.cassiniMovieStyle ? window.cassiniMovieStyle() : "";
+  // Auto center for the film: the Movie Editor's Framing for this stretch (ctr=), else Settings > Processing, as the
+  // server's film has it (export.py options ctr, Pictures._centred); the film made here ignored the editor's choice
+  // and never centred a picture shown on its own (2026-10-30)
+  const centreOn = () => { const m = /[&?]ctr=([01])/.exec(window.cassiniMovieCut ? window.cassiniMovieCut() : ""); return m ? m[1] === "1" : S.get("cameras.autoCenter") !== false; };
+  // plain: a picture shown on its own as it is (the stand-in when the server does not centre it, 404)
+  function pictureUrl(kind, src, size, plain) {
+    const sep = src.includes("?") ? "&" : "?", center = centreOn(), look = window.cassiniLook({ center: center && !plain && (kind === "color" || kind === "processed") }),
+      style = window.cassiniMovieStyle ? window.cassiniMovieStyle({ center }) : "";
     if (kind === "movie") return `${FRAMES}${src}${sep}size=${size}&color=1${style}${look}`;
     if (kind === "rolling") return `${FRAMES}${src}${sep}size=${size}${style}${look}${wholeLaps() ? "&whole=1" : ""}`;
     if (kind === "frame") return `${FRAMES}${src}${sep}size=${size}`;
@@ -7843,7 +7866,7 @@ onmessage = async e => {
   }
   // a movie frame whose steps this computer works out (steady-local.html): the base frame moved, gained and mixed
   async function movieHere(id, size, stop) {
-    const SL = window.cassiniSteadyLocal, center = S.get("cameras.autoCenter") !== false;
+    const SL = window.cassiniSteadyLocal, center = centreOn();
     if (!SL || size !== 1024 || !S.get("movies.stabilizeLocal")) return null;
     if (!SL.want(FRAMES, id, { center, color: true })) await SL.ready(FRAMES, id, center, true);
     const w = SL.want(FRAMES, id, { center, color: true });
@@ -7861,7 +7884,7 @@ onmessage = async e => {
   async function rollingHere(id, size, stop) {
     const FL = window.cassiniFadeLocal, fh = FL && size === 1024 ? FL.want(FRAMES, id) : null;
     if (!fh) return null;
-    const center = S.get("cameras.autoCenter") !== false;
+    const center = centreOn();
     const r = await fetch(`${FRAMES}/frames/movie/${id}.webp?mode=rolling&size=1024${window.cassiniMovieStyle({ center, fade: 0 })}${window.cassiniLook()}`).catch(() => null);
     if (!r || !r.ok) return null;
     const im = new Image(), u = URL.createObjectURL(await r.blob());
@@ -7873,7 +7896,8 @@ onmessage = async e => {
   // Pictures.picture: the first of the entry's tries the server has, and what it is
   async function pictureOf(e, size, stop) {
     for (const [kind, src] of e.tries) {
-      const bmp = (kind === "movie" ? await movieHere(e.id, size, stop) : kind === "rolling" ? await rollingHere(e.id, size, stop) : null) || await fetchPicture(pictureUrl(kind, src, size), stop);
+      const bmp = (kind === "movie" ? await movieHere(e.id, size, stop) : kind === "rolling" ? await rollingHere(e.id, size, stop) : null) || await fetchPicture(pictureUrl(kind, src, size), stop)
+        || (pictureUrl(kind, src, size, true) !== pictureUrl(kind, src, size) ? await fetchPicture(pictureUrl(kind, src, size, true), stop) : null);
       if (bmp) return { bmp, what: WHAT[kind] };
     }
     return { bmp: null, what: "" };
@@ -7938,14 +7962,14 @@ onmessage = async e => {
         else {
           // Film.put: the pane black, the picture in its middle, the caption under it
           const x0 = cams.indexOf(e.cam) * size;
-          g.fillStyle = "#000"; g.fillRect(x0, 0, size, size);
+          g.fillStyle = bg(); g.fillRect(x0, 0, size, size);
           if (bmp) {
             const k = size / Math.max(bmp.width, bmp.height), w = Math.max(1, Math.round(bmp.width * k)), h = Math.max(1, Math.round(bmp.height * k));
             let src = bmp;
             if (look) {
               // the movie editor's look on the picture over black (render: studio_look.apply)
               const c = document.createElement("canvas"); c.width = w; c.height = h;
-              const cg = c.getContext("2d", { alpha: false }); cg.fillStyle = "#000"; cg.fillRect(0, 0, w, h); cg.imageSmoothingQuality = "high"; cg.drawImage(bmp, 0, 0, w, h);
+              const cg = c.getContext("2d", { alpha: false }); cg.fillStyle = bg(); cg.fillRect(0, 0, w, h); cg.imageSmoothingQuality = "high"; cg.drawImage(bmp, 0, 0, w, h);
               look.r.upload(c, w, h); look.r.draw(look.p, w, h); src = look.lc;
             }
             g.imageSmoothingQuality = "high";
@@ -10124,7 +10148,7 @@ void main() {
   // ME: the stretch (a, b), its plan's frames, and the edit: drop (ids taken out by hand), keep (null = every target /
   // filter pair, else the ones kept), cams (the export's Cameras), edit (the studio look's recipe)
   // levels (frame id -> EV: the exposure level points), even (Even out over that many pictures, 0 off), ctr (Auto center
-  // for the movie: null as the windows have it, true, false), mos (Mosaics: null as the windows have them, "whole", "tiles"), crop (x0, y0, x1, y1, parts of the picture, or null), crop2 (the end crop the
+  // for the movie: null as the windows have it, true, false), mos (Mosaics: null as the windows have them, "whole", "tiles", "off"), crop (x0, y0, x1, y1, parts of the picture, or null), crop2 (the end crop the
   // movie glides to, or null), nudge (frame id -> [x, y], parts of the picture), fedit (frame id -> the studio keys that
   // frame has over the movie's look, "ex:0.5,ct:0": a frame edited on its own);
   // lv: the frame server's measured brightness of each frame (EV) and Even out's change for each picture
@@ -10220,7 +10244,7 @@ void main() {
     ME.levels = new Map(words("levels").map(w => { const i = w.lastIndexOf(":"); return [w.slice(0, i), clamp(+w.slice(i + 1), -EV, EV)]; }).filter(([k, v]) => k && isFinite(v)));
     ME.even = clamp(Math.round(+q.get("even") || 0), 0, EVEN);
     ME.ctr = q.get("ctr") === "1" ? true : q.get("ctr") === "0" ? false : null;
-    ME.mos = /^(whole|tiles)$/.test(q.get("mos") || "") ? q.get("mos") : null;
+    ME.mos = /^(whole|tiles|off)$/.test(q.get("mos") || "") ? q.get("mos") : null;
     const box = k => { const b = (q.get(k) || "").split("_").map(Number); return b.length === 4 && b.every(isFinite) && b[2] - b[0] >= CROP && b[3] - b[1] >= CROP ? b.map(v => clamp(v, 0, 1)) : null; };
     ME.crop = box("crop"); ME.crop2 = box("crop2"); if (ME.crop2 && !ME.crop) ME.crop = WHOLE.slice();
     ME.nudge = new Map(words("nudge").map(w => w.split(":")).filter(a => a.length === 3 && a[0] && isFinite(+a[1]) && isFinite(+a[2]))
@@ -10260,7 +10284,7 @@ void main() {
     const q = new URLSearchParams({ from: isoOf(ME.a), until: isoOf(ME.b), cams: "NW", fps: opt("export.adaptive", true) ? "auto" : String(opt("export.fps", 12)),
       size: "512", sound: "0", caption: "0", pictures: ME.pictures, list: "1" });
     try {
-      const r = await fetch(`${FRAMES}/export/plan.json?${q}${window.cassiniLook ? window.cassiniLook() : ""}${window.cassiniMovieStyle ? window.cassiniMovieStyle() : ""}${mosQ()}`), p = await r.json();
+      const r = await fetch(`${FRAMES}/export/plan.json?${q}${window.cassiniLook ? window.cassiniLook() : ""}${window.cassiniMovieStyle ? window.cassiniMovieStyle() : ""}${mosQ()}${window.cassiniSetsQ ? window.cassiniSetsQ() : ""}`), p = await r.json();
       if (n !== ask) return;
       if (!r.ok) throw new Error(p.error || `the frame server said ${r.status}`);
       ME.frames = p.pictures;
@@ -10416,14 +10440,19 @@ void main() {
   // composite, a processed frame) is centered too, as the windows and the film draw it (plain: as it is, the stand-in
   // for a picture the server does not center)
   const centreOn = () => ME.ctr ?? (opt("cameras.autoCenter", true) !== false);
-  const picUrl = (e, size, plain) => {
-    if (ME.src === "raw" || !e.src) return `${FRAMES}/frames/${e.id}.webp?size=${size}`;
-    const movie = /^\/frames\/movie\//.test(e.src), still = /^\/frames\/(color|processed)/.test(e.src);
+  const picUrl = (e, size, plain, src = e.src) => {
+    if (ME.src === "raw" || !src) return `${FRAMES}/frames/${e.id}.webp?size=${size}`;
+    const movie = /^\/frames\/movie\//.test(src), still = /^\/frames\/(color|processed)/.test(src);
     // (a mosaic movie's whole lap: no fade, and the server makes every tile of the lap before it answers, whole=1)
-    const whole = movie && /mode=rolling/.test(e.src) && wholeLaps();
-    return `${FRAMES}${e.src}${e.src.includes("?") ? "&" : "?"}size=${size}${window.cassiniLook ? window.cassiniLook({ center: still && !plain && centreOn() }) : ""}${movie && window.cassiniMovieStyle ? window.cassiniMovieStyle({ center: centreOn(), ...(whole ? { fade: 0 } : {}) }) : ""}${whole ? "&whole=1" : ""}`;
+    const whole = movie && /mode=rolling/.test(src) && wholeLaps();
+    return `${FRAMES}${src}${src.includes("?") ? "&" : "?"}size=${size}${window.cassiniLook ? window.cassiniLook({ center: still && !plain && centreOn() }) : ""}${movie && window.cassiniMovieStyle ? window.cassiniMovieStyle({ center: centreOn(), ...(whole ? { fade: 0 } : {}) }) : ""}${whole ? "&whole=1" : ""}`;
   };
-  const tries = (e, size) => [...new Set([picUrl(e, size), picUrl(e, size, true), `${FRAMES}/frames/${e.id}.webp?size=${size}`])];
+  // the plan's pictures for the frame in its order (e.tries: a mosaic, else the movie frame, the color picture, the
+  // processed frame), each centred and then as it is, as the film takes the first the server has (export.py
+  // Pictures.picture); the raw frame last (it went from the first picture straight to the raw frame, so a frame whose
+  // mosaic or movie frame the server did not have showed raw, uncentred, in grey)
+  const tries = (e, size) => [...new Set([...(ME.src === "raw" || !e.tries ? [[0, e.src]] : e.tries).flatMap(([, src]) => [picUrl(e, size, false, src), picUrl(e, size, true, src)]),
+    `${FRAMES}/frames/${e.id}.webp?size=${size}`])];
   // pictures kept as bitmaps for a while (Play steps through them), the oldest let go
   const bitmaps = new Map();
   function bitmap(url) {
@@ -10448,7 +10477,7 @@ void main() {
     }
     if (n !== drawn) return;
     shownE = shown ? e : null;
-    if (got > 0 && urls[0] !== urls[1] && /center=1/.test(urls[0])) $("metag").textContent += " · as Cassini pointed (the body does not fit the frame to center it)";
+    if (got > 0 && urls[0] !== urls[1] && /center=1/.test(urls[0]) && urls[got] === urls[1]) $("metag").textContent += " · as Cassini pointed (the body does not fit the frame to center it)";
     paint();
     return shown;
   }
@@ -10466,11 +10495,12 @@ void main() {
   // picture b (a bitmap) with e's framing (moved by e's nudge, cut to the crop), as export.framed draws it; b itself
   // when it has none
   function framedOf(b, e, crop = cropAt(e)) {
-    const nd = (e && ME.nudge.get(e.id)) || [0, 0];
-    if (!crop && !nd[0] && !nd[1]) return b;
+    const nd = (e && ME.nudge.get(e.id)) || [0, 0], bg = window.cassiniBackground ? window.cassiniBackground() : "#000000";
+    // (over the Background, Settings > Processing, where the frame does not reach: drawn even unframed when not black)
+    if (!crop && !nd[0] && !nd[1] && bg.toLowerCase() === "#000000") return b;
     const [x0, y0, x1, y1] = crop || WHOLE, W = b.width, H = b.height, cw = (x1 - x0) * W, ch = (y1 - y0) * H, k = Math.max(W, H) / Math.max(cw, ch);
     const c = document.createElement("canvas"); c.width = Math.max(1, Math.round(cw * k)); c.height = Math.max(1, Math.round(ch * k));
-    const g = c.getContext("2d"); g.fillStyle = "#000"; g.fillRect(0, 0, c.width, c.height);
+    const g = c.getContext("2d"); g.fillStyle = bg; g.fillRect(0, 0, c.width, c.height);
     g.imageSmoothingQuality = "high";
     g.setTransform(k, 0, 0, k, -k * (x0 - nd[0]) * W, -k * (y0 - nd[1]) * H);
     g.drawImage(b, 0, 0);
@@ -10489,6 +10519,7 @@ void main() {
     cropBox();
   }
   new ResizeObserver(() => paint()).observe(stage);
+  if (window.cassiniSettings) window.cassiniSettings.on("cameras.background", () => paint());
 
   // ---------- picking frames ----------
   function select(i, how = {}) {
@@ -10648,7 +10679,7 @@ void main() {
     const q = new URLSearchParams({ from: isoOf(ME.a), until: isoOf(ME.b), cams: camsOf(), fps: "auto", size: "512", sound: "0", caption: "0", pictures: ME.pictures, list: "1" });
     ["drop", "targets", "filters", "even", "ctr"].forEach(k => { if (r0.get(k)) q.set(k, r0.get(k)); });
     try {
-      const r = await fetch(`${FRAMES}/export/levels.json?${q}${window.cassiniLook ? window.cassiniLook() : ""}${window.cassiniMovieStyle ? window.cassiniMovieStyle({ center: centreOn() }) : ""}${mosQ()}`);
+      const r = await fetch(`${FRAMES}/export/levels.json?${q}${window.cassiniLook ? window.cassiniLook() : ""}${window.cassiniMovieStyle ? window.cassiniMovieStyle({ center: centreOn() }) : ""}${mosQ()}${window.cassiniSetsQ ? window.cassiniSetsQ() : ""}`);
       const j = await r.json().catch(() => ({ error: `the frame server said ${r.status}` }));
       if (n !== lvAsk) return;
       if (!r.ok || j.error && j.total == null) throw new Error(j.error || r.status);
@@ -10762,7 +10793,7 @@ void main() {
     $("mectr").querySelectorAll("button").forEach(b => b.setAttribute("aria-pressed", String(b.dataset.v === (ME.ctr == null ? "" : ME.ctr ? "1" : "0"))));
     $("memos").querySelectorAll("button").forEach(b => b.setAttribute("aria-pressed", String(b.dataset.v === (ME.mos || ""))));
     const mp = new Set(ME.frames.filter(e => e.pass && ofCam(e)).map(e => e.pass)).size;
-    $("memosnote").textContent = ME.mos === "tiles" || !ME.mos && !winWhole() && !winComplete() ? "Each mosaic builds up tile by tile."
+    $("memosnote").textContent = ME.mos === "off" ? "No mosaics: every frame of a mosaic or a ring strip on its own, its color picture once a filter set is complete." : ME.mos === "tiles" || !ME.mos && !winWhole() && !winComplete() ? "Each mosaic builds up tile by tile."
       : ME.mos === "whole" || winWhole() && winComplete() ? `Each mosaic whole: a pass once, finished${mp ? ` (${mp.toLocaleString()} here)` : ""}, a mosaic movie once a lap.`
       : winWhole() ? "As the windows: mosaic movies a lap at a time, mosaic passes tile by tile." : `As the windows: mosaic passes once, finished${mp ? ` (${mp.toLocaleString()} here)` : ""}; mosaic movies tile by tile.`;
     $("mecrop").setAttribute("aria-pressed", String(!!cropping));
@@ -11738,7 +11769,7 @@ void main() {
   window.cassiniAbout = { open, addTab, esc, close: () => show(false), credits: CREDITS };
 
   // ---- which version this is: this page's build id (build.py writes it), and what the frame server says it serves ----
-  const BUILD = /*BUILD*/"1ce425769fdd";
+  const BUILD = /*BUILD*/"a3529a5bbbcc";
   const FRAMES = (() => {                       // the frame server, chosen as the camera window chooses it
     const q = new URLSearchParams(location.search).get("frames");
     if (q) return q.replace(/\/$/, "");
