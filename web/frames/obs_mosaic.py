@@ -112,6 +112,8 @@ REVISIT_SHARE = 0.5  # ... and a mosaic whose frames mostly retake, after a paus
 SCAN_STEP = 0.1      # of a frame: a pass whose pointings between pauses step on by at least this ...
 SCAN_EVEN = 0.01     # ... and by one step (to this, in a frame) each way they head (SCAN_TURN apart) is a scan, no time series
 SCAN_TURN = 30       # degrees
+SET_COLOUR = "_c1"   # the folder suffix, after the others, of a movie that plays in its colour sets' filters where its
+                     # tile counts alone made it grey (_set_colour), so its plan and frames are made again
 RESCANNED = "_g5"    # the folder suffix, after RETRACKED's, of every pass of an observation where _revisits' scan rule
                      # (a scan that pauses is no time series) judges a pass otherwise than the time-series rule alone
 ISLAND_GAP = 0.75    # of a frame: the least empty sky between two islands of a mosaic, separate scans drawn apart
@@ -1030,7 +1032,8 @@ def folder(u, cache):
     suffix = (("" if gap >= mosaic_benchmark.REPEAT_GAP else f"_r{gap:g}")
               + (STRIPPED if u.get("stripped") else PANNED if u.get("panned") else ISLANDS if u.get("islands")
                  else RESCANNED if u.get("rescanned") else RETRACKED if u.get("retracked") else RELAID if u.get("relaid")
-                 else GROUPING if u.get("regrouped") else ""))
+                 else GROUPING if u.get("regrouped") else "")
+              + (SET_COLOUR if _set_coloured(u) else ""))
     return os.path.join(cache, f"{VERSIONS[calibration.style()]}{calibration.variant()}-q{QUALITY}", "_".join(map(str, u["key"])) + suffix)
 
 
@@ -1209,7 +1212,39 @@ def _filters(u):
     # the filters that see the body, not as a black mosaic of that sky
     aside = _aside(frames, u)
     count = {f: c for f, c in count.items() if f not in aside} or count
-    return count, nms, aside, colour_of(count, nms)
+    colour = colour_of(count, nms)
+    u["set_colour"] = False
+    if colour is None and u.get("kind") == "movie":
+        colour = _set_colour(frames, count, nms)
+        u["set_colour"] = colour is not None
+    return count, nms, aside, colour
+
+
+def _set_coloured(u):
+    """Whether the pass is a movie _set_colour colours (folder: its own folder, SET_COLOUR)."""
+    if u.get("kind") != "movie":
+        return False
+    if "set_colour" not in u:
+        _filters(u)
+    return u["set_colour"]
+
+
+def _set_colour(frames, count, nms):
+    """The colour filters of a movie whose tile counts make it grey (colour_of) though it takes colour sets of three
+    or more filters (colour_sets, the camera windows' sets): the channels (sets_passes.channels) its sets use most
+    often, the widest in wavelength among those as often, then the newest; None without such a set. Sam 2026-10-30:
+    the NAC's Titan wind stares of 2005-06-04 (ISS_009TI_1X1WND10001..) take CB3 three times a cycle and every other
+    filter once, so no filter but CB3 reached half of CB3's count and the movie played grey, while its windows showed
+    each cycle's CB3, MT1 and UV1 set in colour."""
+    seen = {}
+    for n, run in enumerate(colour_sets(frames)):
+        filters = [f for f, _ in run]
+        if len(set(filters)) < 3 or any(f not in count for f in filters):
+            continue
+        kind, use = sets_passes.channels(filters, [nms[f] for f in filters])
+        rgb = tuple(filters[j] for j in use)
+        seen[rgb] = (seen.get(rgb, (0,))[0] + 1, nms[rgb[0]] - nms[rgb[-1]], n)
+    return list(max(seen, key=seen.get)) if seen else None
 
 
 def plan(u, cache):
@@ -3122,6 +3157,21 @@ def tuned_layout(made, mapped, moves, gone):
     return p, tiles, rect, count, used, f"{name}-tune{hashlib.sha1(key.encode()).hexdigest()[:12]}"
 
 
+def _despiked(planes, gamma):
+    """A colour set's placed planes (RGBA, the pass's display scale) with each one-filter spike (a cosmic ray or hot
+    pixel in one filter only) set to what is round it: calibration._clean_spikes, the still composites' cleaner
+    (natural: 5x5, and where not every other filter peaks), in linear light."""
+    lin = [calibration.decode(a[..., 0].astype(np.float32) / 255, gamma) for a in planes]
+    seen = np.min([a[..., 3] for a in planes], axis=0) > 0
+    out = []
+    # (its grain over all the picture: a display scale's sky is mostly crushed to black, no grain to measure)
+    for a, c in zip(planes, calibration._clean_spikes(lin, seen if seen.sum() >= 100 else np.ones(seen.shape, bool), True)):
+        a = a.copy()
+        a[..., :3] = (calibration.encode(np.clip(c, 0, 1), gamma) * 255 + 0.5).astype(np.uint8)[..., None]
+        out.append(a)
+    return out
+
+
 def colour_picture(u, p, colour, planes):
     """The colour picture of a pass's three colour filters' planes (RGBA, each on the pass's display scale), RGBA:
     the pass's mosaic and its movie frames mixed alike. Natural color: a true color pass turned into what an eye
@@ -4053,7 +4103,7 @@ def colour_sets(frames):
     except FileNotFoundError:   # no index (a synthetic pass)
         idx, row = None, {}
     qs = [row.get(fr[1]) for fr in frames]
-    if not frames or any(q is None for q in qs):
+    if not frames or any(q is None for q in qs) or "set" not in idx:   # (or an index made without its sets)
         return _own_sets(frames)
     set_of, by = idx["set"].to_numpy(), {}
     for j, (fr, q) in enumerate(zip(frames, qs)):
@@ -4159,6 +4209,11 @@ def movie_frame(u, n, cache, trail=0, colour=True, out=OUT, centre=True, steady=
             break
     if used:
         planes = [_place(u, newest[f], rect, k, W, H, cache, p["display_scale"]) for f in used]
+        # a colour filter the pass takes once (a cycle's lone MT1 and UV1, _set_colour's Titan stares) has no frame of
+        # its own filter either side to take its cosmic rays out against (_around): the set's planes are cleaned as a
+        # still composite's channels are (calibration._clean_spikes), or each hit is a bright dot through the mix
+        if any(_around(u, got[f]) == [None, None] for f in used if f in got):
+            planes = _despiked(planes, p["display_scale"].get("gamma", 2.2))
         # a colour set held from an earlier pointing (a track's last visit, a thousand px away, or a pass that moved
         # on across the body) shows little or nothing where this frame is: colour_picture draws only where every
         # filter has the picture. Under HELD_COVER of frame n's own place covered, the frame is drawn on its own
