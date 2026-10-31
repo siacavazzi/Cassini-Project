@@ -1125,6 +1125,37 @@ def _keep_plan(u, cache, p, stamp):
     return rec
 
 
+# every tile's report of a pass made whole (prebuild.make_pass), in one file beside its tiles' folder (reports-<that
+# folder>.json, out of the tools' tiles-*/*.json): a server's first look at the pass (its mosaic's layout, its tiles
+# made ahead, its tile maps) reads that file instead of one file a tile
+REPORTS_FILE = "reports-{}.json"
+
+
+def _reports_path(tiles_dir):
+    return os.path.join(os.path.dirname(tiles_dir), REPORTS_FILE.format(os.path.basename(tiles_dir)))
+
+
+def keep_reports(u, cache, p):
+    """Every tile's report of the pass in REPORTS_FILE, as each reads back from its own file; once every tile is
+    made (it makes those that are not)."""
+    path = _reports_path(_tiles(u, cache, p["display_scale"]))
+    if not os.path.exists(path):
+        reports = {str(j): tile(u, j, cache, p["display_scale"]) for j in range(len(u["frames"]))}
+        reel._cached(path, lambda: json.dumps(reports).encode())
+
+
+def _kept_reports(rec):
+    """The pass's tile reports from its REPORTS_FILE into its record rec, when the pre-build kept them so."""
+    try:
+        with open(_reports_path(rec["tiles_dir"])) as fh:
+            reports = json.load(fh)
+    except (OSError, ValueError):
+        return
+    with _lock:
+        for n, report in reports.items():
+            rec["tiles"].setdefault(int(n), report)
+
+
 def _kept_tiles(u, cache, scale):
     """The pass's record when scale is its kept plan's display scale (no stat: plan() looked at it); else None."""
     with _lock:
@@ -1195,7 +1226,7 @@ def plan(u, cache):
             stamp = _stamp(path)
             with open(path) as fh:
                 p = json.load(fh)
-            _keep_plan(u, cache, p, stamp)
+            _kept_reports(_keep_plan(u, cache, p, stamp))
             return p
         frames = u["frames"]
         count, nms, aside, colour = _filters(u)
@@ -1898,8 +1929,12 @@ def _tile_made(u, n, cache, scale, base):
         out["lost"] = round(rep["lost_px"][1] / FRAME ** 2, 4)
     if share:
         # the share of the frame the camera saturated in every exposure merged (load_aligned's, the pixels drawn white:
-        # over_exposed)
+        # over_exposed), and the share of it that is lit (LIT_LEVEL), what over_exposed measures it against
         out["saturated"] = share
+        if image is not None:
+            inside = image[..., 3] > 0
+            lit = inside & (image[..., :3].max(axis=2) >= LIT_LEVEL)
+            out["lit"] = round(float(lit.sum()) / max(1, int(inside.sum())), 4)
     os.makedirs(os.path.dirname(base), exist_ok=True)
     if image is not None and "frame_offset" in rep:
         side = round(image.shape[0] * k)
@@ -2337,6 +2372,10 @@ SURFACE_CLOUDED = frozenset({"SATURN", "JUPITER", "TITAN", "URANUS", "NEPTUNE", 
 # it fades to none at the limb or the terminator) stays as taken: on Rhea's mapping mosaic a limb panel shifted
 # ~40 px squeezed its limb out of the picture and streaked its night side (round 5 of the panel probe)
 SURFACE_STRETCH = 0.5
+# the tiles found to stay as taken (SURFACE_STRETCH, or across New Year), kept in SURFACE_DIR beside the redrawn ones:
+# a later layout skips them instead of working each out again (the year's kernels, its picture, its sky field) for
+# every mosaic, tile map and look-ahead of the pass
+SURFACE_TAKEN = "taken.json"
 _spice_lock = threading.RLock()
 
 
@@ -2370,6 +2409,24 @@ def _ets(ids):
     return out
 
 
+def _surface_taken(u, cache, p, out_dir):
+    """The tiles of the pass that surface_pictures keeps as taken (SURFACE_TAKEN): read once, then from the pass's
+    record."""
+    rec = _kept_tiles(u, cache, p["display_scale"])
+    with _lock:
+        taken = rec.get("surface_taken") if rec is not None else None
+    if taken is None:
+        try:
+            with open(os.path.join(out_dir, SURFACE_TAKEN)) as fh:
+                taken = set(json.load(fh))
+        except (OSError, ValueError):
+            taken = set()
+        if rec is not None:
+            with _lock:
+                taken = rec.setdefault("surface_taken", taken)
+    return taken
+
+
 def surface_pictures(u, cache, p, tiles):
     """Surface reprojection of a mosaic's panels: {tile n: the path of its picture redrawn as at the pass's epoch}.
     A mosaic's panels are taken minutes apart, and the body turns and Cassini moves in between, so the surface under
@@ -2380,15 +2437,17 @@ def surface_pictures(u, cache, p, tiles):
     (reproject.sky_field, warp_sky); the sky, the rings, the night side and the limb's edge stay where they are. Made
     once per tile and kept. {} with Settings > Processing's surface step off, for a body SPICE has no shape for, or
     when the kernels or the geometry cache cannot say; none for a clouded body (SURFACE_CLOUDED), and not a tile
-    the redrawing would distort (SURFACE_STRETCH), which keeps SPICE's place and the panels step's nudge."""
+    the redrawing would distort (SURFACE_STRETCH), which keeps SPICE's place and the panels step's nudge (found
+    once and kept too, SURFACE_TAKEN)."""
     if not calibration.step("surface") or not tiles or clouded(u):
         return {}
     import reproject as rp
     there = _tiles(u, cache, p["display_scale"])
     out_dir = os.path.join(there, SURFACE_DIR)
+    taken = _surface_taken(u, cache, p, out_dir)
     out, todo = {}, []
     for t in tiles:
-        if "offset" not in t:
+        if "offset" not in t or t["n"] in taken:
             continue
         path = os.path.join(out_dir, f"{t['n']}.png")
         if os.path.exists(path):
@@ -2412,12 +2471,16 @@ def surface_pictures(u, cache, p, tiles):
             print(f"no surface for {u['key'][0]}: {type(e).__name__}: {e}"[:200], flush=True)
             return out
         os.makedirs(out_dir, exist_ok=True)
+        found = set()
         for t in todo:
+            if time.gmtime(t["t"]).tm_year != time.gmtime(mid[3]).tm_year:
+                # (one year's kernels at a time: a pass across New Year keeps those tiles as they are, without loading
+                # the other year's kernels for them and the epoch's again for the next tile)
+                found.add(t["n"])
+                continue
             if t["id"] not in ets or not _with_kernels(t["t"]):
                 continue
             try:
-                if time.gmtime(t["t"]).tm_year != time.gmtime(mid[3]).tm_year:
-                    continue   # (one year's kernels at a time: a pass across New Year keeps those tiles as they are)
                 view = rp.sky_view(u["key"][0], ets[t["id"]])
             except Exception as e:
                 print(f"no surface for {t['id']}: {type(e).__name__}: {e}"[:200], flush=True)
@@ -2436,10 +2499,21 @@ def surface_pictures(u, cache, p, tiles):
             stretch = rp.field_stretch(dx, dy, weight, SURFACE_STEP)
             if stretch > SURFACE_STRETCH:
                 print(f"surface: tile {t['n']} kept as taken (stretch {stretch:.2f})", flush=True)
+                found.add(t["n"])
                 continue
             Image.fromarray(rp.warp_sky(image, dx, dy, weight, SURFACE_STEP)).save(path + ".part.png", compress_level=1)
             os.replace(path + ".part.png", path)
             out[t["n"]] = path
+        if not found <= taken:
+            taken |= found
+            kept = os.path.join(out_dir, SURFACE_TAKEN)
+            part = f"{kept}.{os.getpid()}.{threading.get_ident()}.part"
+            try:
+                with open(part, "w") as fh:
+                    json.dump(sorted(taken), fh)
+                os.replace(part, kept)
+            except OSError as e:
+                print(f"cannot keep {kept} in the cache ({e})", flush=True)
     return out
 
 
@@ -3797,11 +3871,50 @@ def centre_view(frame_id):
         hit = dict(hit, side=FRAME, radius=RADIUS.get(target, 0) / (g[2] * IFOV[cam]))
     else:
         hit = dict(hit, side=FRAME) if hit.get("north") else dict(hit)
+    # a north-up pass's stills hold where the pass has the body (a centred pass's are centred on it, frame_server.centred)
+    if found and not hit["centre"] and hit.get("north"):
+        hold = hold_of(u, found[1])
+        if hold:
+            hit = dict(hit, **hold)
     with _lock:
         if len(_centre_of) >= UNIT_OF_KEEP:
             _centre_of.clear()
         _centre_of[frame_id] = hit
     return dict(hit)
+
+
+HOLD_SPREAD = 0.25   # of a frame: the most a pass's frames may point away from their average for its stills to hold
+HOLD_RULE = "h1"     # names the held stills' cache folders (frame_server.centre_folder)
+
+
+def hold_of(u, n):
+    """Auto center's hold for frame n of pass u, when its still cannot be centred (the body's centre off the frame, a
+    close-up turned north up, or a disk the frame cuts): the body kept where it sits on average over the pass, so it
+    holds still from picture to picture as SPICE places it, as the pass's movie holds it (Sam 2026-10-30: a Saturn
+    stare's stills jumped with each pointing while Auto center was on). {"hold": (dx, dy), "at": (x, y)}: the view's
+    middle moved from the frame's middle by (dx, dy), and where SPICE puts the frame's middle from the body's centre
+    (both full resolution pixels of frame n), which centred checks against the picture's own placement; None for a
+    pass whose frames point further apart than HOLD_SPREAD of a frame (a mosaic: its stills would be mostly black)
+    or a frame SPICE has not placed."""
+    frames = u["frames"]
+    if not (0 <= n < len(frames)) or not frames[n][-1]:
+        return None
+    z = u["z"]
+    placed = [fr for fr in frames if fr[7]]
+    angles = reel.north_angles([fr[1] for fr in placed])
+
+    def middle(fr):
+        # where the frame's middle sits from the body's centre, north up, reference pixels (frames_seen's turn)
+        x, y, fz = fr[5], fr[6], fr[7]
+        a = math.radians(angles.get(fr[1], 0.0))
+        c, s, k = math.cos(a), math.sin(a), fz / z
+        return np.array(((c * x + s * y) * k, (c * y - s * x) * k))
+    pts = np.array([middle(fr) for fr in placed])
+    m = pts.mean(0)
+    if np.abs(pts - m).max() > HOLD_SPREAD * FRAME:
+        return None
+    me, k = middle(frames[n]), z / frames[n][7]
+    return {"hold": [round(float(v), 1) for v in (m - me) * k], "at": [round(float(v), 1) for v in me * k]}
 
 
 def _on_disk(fp, radius):
@@ -3839,16 +3952,23 @@ def partial(t):
     return "offset" in t and 1.0 - t.get("lost", 0.0) < PARTIAL
 
 
-OVER_EXPOSED = 0.5   # of a frame: a movie frame the camera saturated this much of is over-exposed (over_exposed)
+OVER_EXPOSED = 0.5   # of a frame: a movie frame the camera saturated this much of is over-exposed (over_exposed) ...
+OVER_LEAST = 0.05    # ... and so is one saturated this much of the frame, where that is OVER_EXPOSED of its lit part
+OVER_STEP = 3.0      # (unfit) a frame saturated OVER_LEAST or more, and this many times as much as its filter's frames
+#                      before and after it, is a long exposure among short ones
 SATURATED_ALL = 0.95   # ... and one saturated this much of carries no picture (left out of mosaics, never shown in movies)
+LIT_LEVEL = 16       # levels: the tile's pixels at least this bright are its lit part (its report's "lit", _tile_made)
 
 
 def over_exposed(t):
     """True when tile report t is over-exposed: the camera saturated OVER_EXPOSED of the frame or more (its
-    "saturated"). Its saturated part calibrates to the top of the camera's range over a long exposure, far under what
-    was there, and draws as one flat field (the long frames of 201RI DRNGMOV001, 8.2 s after 2 s ones, ~75% of them
-    saturated: the rings a grey slab, lifted 4x by exposure normalization, every other frame)."""
-    return t.get("saturated", 0.0) >= OVER_EXPOSED
+    "saturated"), or OVER_EXPOSED of the frame's lit part ("lit": a ring arc or a planet over a third of a frame of
+    sky, 011RI IMPACT003's clear frame) when that is OVER_LEAST of the frame or more. Its saturated part calibrates to
+    the top of the camera's range over a long exposure, far under what was there, and draws as one flat field (the
+    long frames of 201RI DRNGMOV001, 8.2 s after 2 s ones, ~75% of them saturated: the rings a grey slab, lifted 4x by
+    exposure normalization, every other frame), white since saturated pixels are drawn white (#205)."""
+    s = t.get("saturated", 0.0)
+    return s >= OVER_EXPOSED or (s >= OVER_LEAST and s >= OVER_EXPOSED * t.get("lit", 1.0))
 
 
 def unfit(frames, n, tile_of):
@@ -3857,20 +3977,26 @@ def unfit(frames, n, tile_of):
     among frames that can (an 8LSB frame, only its low 8 bits sent: the Phoebe 2004-06-12 movie's UV3 and IR3 frames
     flashed grey; calibrated False, the tile's), or an over-exposed frame (over_exposed) between frames of its filter
     that are not (a pass alternating short and long exposures; a run of over-exposed frames is what the camera saw,
-    and plays), or a frame saturated all over (SATURATED_ALL), which shows nothing. One rule for the server's movies and the page's (steady table's "partial")."""
+    and plays), or a long exposure among short ones: saturated OVER_LEAST of the frame or more and OVER_STEP times as
+    much as its filter's frames on either side (007RI HIPHASE001's clear frames, ~9% saturated after ones that are not:
+    the B ring a white band, flashing), or a frame saturated all over (SATURATED_ALL), which shows nothing. One rule
+    for the server's movies and the page's (steady table's "partial")."""
     t = tile_of(n)
     if "offset" not in t:
         return False
     if partial(t) or (t.get("calibrated") is False and calibration.step("calibrate")):
         return True
-    if not over_exposed(t):
+    s = t.get("saturated", 0.0)
+    if s < OVER_LEAST:
         return False
-    if t.get("saturated", 0.0) >= SATURATED_ALL:
+    if s >= SATURATED_ALL:
         return True   # (saturated all over: nothing of the picture, whatever is round it)
     f = frames[n][2]
-    near = (next((j for j in range(n - 1, -1, -1) if frames[j][2] == f), None),
-            next((j for j in range(n + 1, len(frames)) if frames[j][2] == f), None))
-    return not any(j is not None and over_exposed(tile_of(j)) for j in near)
+    near = [j for j in (next((j for j in range(n - 1, -1, -1) if frames[j][2] == f), None),
+                        next((j for j in range(n + 1, len(frames)) if frames[j][2] == f), None)) if j is not None]
+    if over_exposed(t):
+        return not any(over_exposed(tile_of(j)) for j in near)
+    return bool(near) and all(s >= OVER_STEP * tile_of(j).get("saturated", 0.0) for j in near)
 
 
 def held_of(filters, n, is_partial, whole):
@@ -3878,14 +4004,22 @@ def held_of(filters, n, is_partial, whole):
     is partial (is_partial(n): unfit's frames), the last frame before it of its filter (filters[j]) that is whole
     (whole(j): placed and not partial), as the camera windows hold a colour movie's last set; when its filter has
     none, the last whole frame before it of any filter (the Phoebe 2004-06-12 movie's 8LSB frames are each its
-    filter's first); n when there is none, so a pass whose frames all came down partial keeps them. The movie keeps
-    its frame count: only the picture is held."""
+    filter's first). With no whole frame before it (a pass whose first frame is over-exposed: 010SA EUVFUV003,
+    011RI IMPACT003 opened on a white frame), the first whole frame after it, of its filter, else of any; n when
+    there is none, so a pass whose frames all came down partial keeps them. The movie keeps its frame count: only
+    the picture is held."""
     if not is_partial(n):
         return n
     for j in range(n - 1, -1, -1):
         if filters[j] == filters[n] and whole(j):
             return j
     for j in range(n - 1, -1, -1):
+        if whole(j):
+            return j
+    for j in range(n + 1, len(filters)):
+        if filters[j] == filters[n] and whole(j):
+            return j
+    for j in range(n + 1, len(filters)):
         if whole(j):
             return j
     return n
