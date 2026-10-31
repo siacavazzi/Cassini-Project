@@ -444,6 +444,12 @@ body.phone .srow input[type=range] { width: 96px; }
   cls("movies.filmstrip", "s-nofilmstrip", false);
   D({ key: "movies.trail", section: "Movie", label: "Movie trail", type: "range", value: 0, min: 0, max: 12, step: 1, unit: "frames",
       hint: "In a steady movie pass, this many earlier frames of the same filter stay under the newest one, fading with age, so a moving moon or a ring's shadow leaves a short trail. 0 shows each frame alone." });
+  // a film's own stabilization (film-steady.html), the Movie Editor's Framing by default
+  D({ key: "movies.filmSteady", section: "Movie", label: "Additional stabilization", type: "range", value: 0, min: 0, max: 60, step: 2,
+      format: v => (+v ? `${v} pictures` : "Off"),
+      hint: "For the Movie Editor and saved movies: Auto center puts each picture's body where SPICE says it is, and on a small moon in the narrow-angle camera that can be off by a good part of the moon, differently from picture to picture, so the movie wobbles. On, this computer matches each picture of the movie to the one before it by what the two show (the pipeline's own alignment) and takes the wobble out, keeping slow motion over this many pictures. Higher holds the body stiller; the Movie Editor's Framing sets it for each movie." });
+  D({ key: "movies.filmSteadyAuto", section: "Movie", label: "Steady small bodies by themselves", type: "toggle", value: true,
+      hint: "With Additional stabilization Off, a movie of a small body (under a tenth of the frame across, as Atlas or Pan in the narrow-angle camera, where SPICE's few pixels of error are a good part of the body) is steadied anyway, over 12 pictures. The Movie Editor's Framing slider still sets it for each movie, Off included." });
   D({ key: "movies.laps", section: "Movie", label: "Mosaic movies keep", type: "range", value: 1, min: 1, max: 6, step: 1, unit: "laps",
       hint: "A mosaic movie (the camera going over the same mosaic again and again, as on the approach to Jupiter) plays as a mosaic that never empties: each new tile replaces its own earlier copy. 1 is a time-lapse; more keeps that many copies of each tile, older ones under the newest." });
   // how often a mosaic movie's picture changes (head-quiet.html complete and cameraFeed, export.py whole=)

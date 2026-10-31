@@ -134,6 +134,12 @@ smooth = open(os.path.join(os.path.dirname(os.path.abspath(sys.argv[2])), "colou
 study = study.replace("<script>\n// ---------- Cassini OS chrome", smooth[smooth.index("<script>"):smooth.index("</script>") + 9]
                       + "\n<script>\n// ---------- Cassini OS chrome")
 
+# additional stabilization of a film on this computer (film-steady.html): its script runs before the chrome script, so
+# the Movie Editor and the film export find window.cassiniFilmSteady
+filmsteady = open(os.path.join(os.path.dirname(os.path.abspath(sys.argv[2])), "film-steady.html")).read()
+study = study.replace("<script>\n// ---------- Cassini OS chrome", filmsteady[filmsteady.index("<script>"):filmsteady.index("</script>") + 9]
+                      + "\n<script>\n// ---------- Cassini OS chrome")
+
 # per-body camera windows (bodywin.html, a setting): its style joins the head's and its script runs after the chrome
 # script, whose camera feed and window manager it reuses
 bodywin = open(os.path.join(os.path.dirname(os.path.abspath(sys.argv[2])), "bodywin.html")).read()
