@@ -140,7 +140,7 @@ body.phone #gplay { width: 30px; height: 30px; }
 .camwin.zoomed .well { height: 236px; }
 /* real frames: the well goes square and the frame fills it */
 .well.has-frame, .camwin.zoomed .well.has-frame { height: auto; aspect-ratio: 1; }
-.well .shot { position: absolute; inset: 0; width: 100%; height: 100%; object-fit: contain; display: none; background: #000; }
+.well .shot { position: absolute; inset: 0; width: 100%; height: 100%; object-fit: contain; display: none; background: var(--cam-bg, #000); }
 .well.has-frame .shot { display: block; }
 .well.has-frame .wellmsg { display: none; }
 .well.stale .shot { opacity: .55; }
@@ -1540,8 +1540,89 @@ body.idle .win.full .titlebar { opacity: 0; }
       }
       if (set) { const s = rH / 3; g.fillStyle = CLS[1][1]; g.fillRect(x, rT, bw, s); g.fillStyle = CLS[2][1]; g.fillRect(x, rT + s, bw, s); g.fillStyle = CLS[3][1]; g.fillRect(x, rT + 2 * s, bw, s); }
     }
+    unloadedBars(g, w, h, lc);
     laneNames(g, w, h, lc);
   };
+  // the months not loaded (the clock's month and two either side are): their own catalog files, fetched when the
+  // timeline shows no more than PARTS_DAYS of them (each once, window.cassiniParts, also what a highlighted stretch
+  // there counts: segment.html), drawn as the loaded ones are; wider, or while a file is on its way, frames per day
+  // from mission.json (the body view's: its body's, window.studyFramesPerDay), muted. Both in the same lanes as the
+  // loaded frames and with a closed camera's lane empty (the viewer's own drawUnloadedBars drew them in its two old
+  // lanes and both cameras, so with the WAC window alone the NAC bars there sat across the one WAC lane; build.py
+  // leaves it out of Cassini OS)
+  const PARTS_DAYS = 120;
+  const parts = window.cassiniParts = (() => {
+    const got = new Map();
+    // the catalog files covering a to b (months, or years in data without months), each with its span
+    function files(a, b) {
+      if (mission.months) return mission.months.filter(m => m.end > a && m.start <= b && m.images !== 0).map(m => ({ file: m.catalog, span: [m.start, m.end] }));
+      const out = [];
+      for (let y = yearOf(a); y <= yearOf(b); y++) if (mission.catalog[String(y)]) out.push({ file: mission.catalog[String(y)].file, span: [utcToEt(`${y}-01-01T00:00:00`), utcToEt(`${y + 1}-01-01T00:00:00`)] });
+      return out;
+    }
+    // one file's frames in time order (et, cam, target, filter class), or null while it is on its way
+    function cat(file) {
+      if (!got.has(file)) {
+        const e = { cat: null };
+        got.set(file, e);
+        fetch(file).then(r => { if (!r.ok) throw new Error(file + ": " + r.status); return r.json(); }).then(c => {
+          const ks = Array.from(c.et.keys()).sort((x, y) => c.et[x] - c.et[y]);
+          e.cat = { et: Float64Array.from(ks, k => c.et[k]), cam: ks.map(k => c.cam[k]), target: ks.map(k => c.target[k]), cls: Uint8Array.from(ks, k => classify(c.f1[k], c.f2[k])) };
+          if (typeof drawTimeline === "function" && catalog) drawTimeline();
+          document.dispatchEvent(new CustomEvent("cassini:part", { detail: { file } }));
+        }).catch(() => got.delete(file));
+      }
+      return got.get(file).cat;
+    }
+    return { files, cat };
+  })();
+  function unloadedBars(g, w, h, lc) {
+    if (typeof mission === "undefined" || !mission || !mission.frames_per_day) return;
+    const v0 = xToEt(0, w), v1 = xToEt(w, w), bw = 2, L = laneBox(h, lc), vb = viewBody();
+    const sc = v => Math.min(1, Math.log1p(v) / Math.log1p(18));
+    const out = (t0, t1) => !(t1 > loadedSpan[0] && t0 < loadedSpan[1]);
+    // the files, when few enough days of the view are outside the months loaded
+    const away = Math.max(0, Math.min(v1, loadedSpan[0]) - v0) + Math.max(0, v1 - Math.max(v0, loadedSpan[1]));
+    const own = [];
+    if (away > 0 && away <= PARTS_DAYS * 86400)
+      for (const { file, span } of parts.files(v0, v1)) { const c = out(span[0], span[1]) && parts.cat(file); if (c) own.push({ c, span }); }
+    const cnt = { N: new Array(6), W: new Array(6) };
+    for (const { c } of own) {
+      let lo = 0, hi = c.et.length;
+      while (lo < hi) { const m = (lo + hi) >> 1; if (c.et[m] < v0) lo = m + 1; else hi = m; }
+      for (let x = 0, j = lo; x < w && j < c.et.length; x += bw) {
+        const t1 = xToEt(x + bw, w);
+        if (c.et[j] >= t1) continue;
+        cnt.N.fill(0); cnt.W.fill(0); const tot = { N: 0, W: 0 };
+        for (; j < c.et.length && c.et[j] < t1; j++) { const cam = c.cam[j]; if (!camOn(cam, lc) || (vb && c.target[j] !== vb) || !cnt[cam]) continue; cnt[cam][c.cls[j]]++; tot[cam]++; }
+        for (const cam of ["N", "W"]) {
+          if (!tot[cam] || !L[cam]) continue;
+          const [top, base] = L[cam];
+          let y = base; const H = sc(tot[cam]) * (base - top);
+          for (let k = 0; k < 6; k++) { if (!cnt[cam][k]) continue; const hh = H * cnt[cam][k] / tot[cam]; g.fillStyle = CLS[k][1]; g.fillRect(x, y - hh, bw - 0.5, hh); y -= hh; }
+        }
+      }
+    }
+    // the rest: frames per day
+    const F = (window.studyFramesPerDay && window.studyFramesPerDay()) || mission.frames_per_day, n = F.N.length;
+    const drawn = (t0, t1) => own.some(({ span }) => t0 < span[1] && t1 > span[0]);
+    g.fillStyle = "rgba(150,172,205,0.38)";
+    for (let x = 0; x < w; x += bw) {
+      const t0 = xToEt(x, w), t1 = xToEt(x + bw, w);
+      if (!out(t0, t1) || drawn(t0, t1)) continue;
+      const d0 = (t0 - F.start_et) / 86400, d1 = (t1 - F.start_et) / 86400;
+      let nN = 0, nW = 0;
+      for (let d = Math.max(0, Math.floor(d0)); d < Math.min(n, Math.ceil(d1)); d++) {
+        const f = Math.min(d + 1, d1) - Math.max(d, d0);   // share of that day inside the slice
+        nN += F.N[d] * f; nW += F.W[d] * f;
+      }
+      for (const [v, lane] of [[nN, L.N], [nW, L.W]]) {
+        if (v < 0.5 || !lane) continue;
+        const [top, base] = lane, hh = sc(v) * (base - top);
+        g.fillRect(x, base - hh, bw - 0.5, hh);
+      }
+    }
+  }
   // the same lanes with one body's pictures only (each camera's frames of it, walked once from left to right)
   function bodyBars(g, w, h, body, lc) {
     const bw = 2, L = laneBox(h, lc), rT = h * LANES.rTop, rH = Math.max(4, h * LANES.rH);
@@ -1564,6 +1645,7 @@ body.idle .win.full .titlebar { opacity: 0; }
       }
     }
     for (let s = 0; s < sets.length; s++) if (sets[s]) { const x = s * bw, q = rH / 3; g.fillStyle = CLS[1][1]; g.fillRect(x, rT, bw, q); g.fillStyle = CLS[2][1]; g.fillRect(x, rT + q, bw, q); g.fillStyle = CLS[3][1]; g.fillRect(x, rT + 2 * q, bw, q); }
+    unloadedBars(g, w, h, lc);
     laneNames(g, w, h, lc);
   }
   // (lc: the camera that is on alone, whose lane is the only one named; the pill on the timeline says the other is off)
@@ -1679,7 +1761,10 @@ body.idle .win.full .titlebar { opacity: 0; }
     ["movie", "Movie", "its frames in place"], ["mosaic_movie", "Mosaic movie", "each place's newest tile, lap after lap"]];
   // the movie's steadying under Auto center (Settings > Movie, for every window): [setting, its smoothing, label, slider min, max, step]
   const MOVIE_STEADY = [["movies.stabilize", "movies.stabilizeSmooth", "Stabilize movies", 4, 60, 4],
-    ["movies.exposure", "movies.exposureSmooth", "Even exposure", 2, 30, 2]];
+    ["movies.exposure", "movies.exposureSmooth", "Even exposure", 2, 30, 2],
+    ["movies.colorSmooth", "movies.colorSmoothStrength", "Even color", 10, 100, 10]];
+  // the note under a row's label while it is on: its smoothing in frames, or color smoothing's strength
+  const steadyNote = (key, v) => key === "movies.colorSmooth" ? `${v}% toward the pictures round it` : `smoothed over ${v} frames`;
   function winMenu(win, card) {
     const bar = win.querySelector(".titlebar");
     let btn = bar.querySelector(".winopt");
@@ -1712,7 +1797,7 @@ body.idle .win.full .titlebar { opacity: 0; }
       const key = row.dataset.key, range = row.querySelector("input");
       row.querySelector(".sw").addEventListener("click", () => { S.set(key, !S.get(key)); api.sync(api.state); });
       range.addEventListener("change", () => { S.set(range.dataset.smooth, +range.value); api.sync(api.state); });
-      range.addEventListener("input", () => { row.querySelector("small").textContent = `smoothed over ${range.value} frames`; });
+      range.addEventListener("input", () => { row.querySelector("small").textContent = steadyNote(key, range.value); });
     }
     el.querySelector(".wmset").addEventListener("click", () => { open(false); if (window.cassiniSettings && window.cassiniSettings.open) window.cassiniSettings.open(); });
     api.sync = st => {
@@ -1726,7 +1811,7 @@ body.idle .win.full .titlebar { opacity: 0; }
         row.querySelector(".sw").setAttribute("aria-checked", String(on));
         if (v != null) range.value = v;
         range.disabled = !on;
-        row.querySelector("small").textContent = on ? `smoothed over ${range.value} frames` : "Off (every window)";
+        row.querySelector("small").textContent = on ? steadyNote(row.dataset.key, range.value) : "Off (every window)";
       }
       pass.hidden = !st.inPass;
       for (const b of pass.querySelectorAll(".wmopt")) {
@@ -1750,6 +1835,12 @@ body.idle .win.full .titlebar { opacity: 0; }
   // the note has come back for (until then the pass rolls tile by tile)
   const wholeLaps = () => S.get("movies.mosaicFrames") === "whole";
   const lapEnds = new Set(), lapKnown = new Set();
+  // the frames of a mosaic pass that movie mode stops on, as the server's note on each observation lists them
+  // (kind_of mosaic_steps): it passes over a frame whose mosaic is the same picture as the frame before's (a
+  // polarizer, a repeat exposure) and one whose pointing's next frames add another filter (a new place's gray tile
+  // before its colour), so a step of the movie is one new place of the mosaic, finished; stepsKnown: cam|pass the
+  // note has listed them for (until then every frame that is a picture of its own counts, as before)
+  const mosaicSteps = new Set(), stepsKnown = new Set();
   // a frame's pass: the pass id the data gives it (build_data.py --groups: the frame server's passes, obs_mosaic.units,
   // which split an observation where the camera pauses or the distance changes), else its target and observation
   const passKey = k => catalog.pass && catalog.pass[k] >= 0 ? `p${catalog.pass[k]}` : `${catalog.target[k]}|${catalog.obs[k]}`;
@@ -1953,6 +2044,32 @@ body.idle .win.full .titlebar { opacity: 0; }
     // completed it (or another of its channels); every other new frame shows itself, so a long run of filters
     // after the colour channels keeps the picture changing instead of holding the composite
     function view(k, et, sz) {
+      // a color picture moved toward its neighbours' palette here (colour-smooth.html) is a new picture for each
+      // strength: its key says so (the request is the same)
+      const w = viewOf(k, et, sz), pct = Math.round(CS ? CS.strength() * 100 : 0);
+      if (pct && colourPic(w)) w.key += `${w.key.includes("#") ? "," : "#"}cs${pct}`;
+      return w;
+    }
+    // Color smoothing (Settings > Processing, colour-smooth.html): this window's color pictures, by target, each moved
+    // toward the palette of the pictures round it, those shown and those looked ahead to (nextViews)
+    const CS = window.cassiniColourSmooth, csRun = CS ? CS.run() : null;
+    let nextViews = new Map();
+    const colourPic = w => w.set >= 0 || (!!w.movie && !!S.get("cameras.composites"));
+    const csOf = w => ({ id: catalog.id[w.k], et: catalog.et[w.k], group: catalog.target[w.k] || "" });
+    const smooth = (v, pic) => csRun && !v.warm && colourPic(v) && CS.strength() ? csRun.apply(pic, csOf(v)).then(p => p || pic, () => pic) : Promise.resolve(pic);
+    // a picture looked ahead to: its palette is kept for the pictures round it (a movie frame worked out here loads
+    // its grey base frame, which has none)
+    // Paused on a color picture, it is moved again once the pictures after it are in (it went up before they were)
+    let csAgain = 0;
+    const noteAhead = (key, im) => {
+      const w = nextViews.get(key);
+      if (!csRun || !w || w.here || !colourPic(w) || !CS.strength()) return;
+      try { csRun.note(im, csOf(w)); } catch (e) { return; }
+      if (state.playing || !shown || shown.warm || !colourPic(shown) || csOf(shown).group !== csOf(w).group) return;
+      clearTimeout(csAgain);
+      csAgain = setTimeout(() => { if (!state.playing && want && shown && shownKey === want.key && colourPic(shown)) { shownKey = null; pump(); } }, 400);
+    };
+    function viewOf(k, et, sz) {
       // a pass played as a movie: the frame steadied by the server (SPICE-centered on the pass's one scale and view,
       // its color set drawn together), unless the server could not make that frame
       if (playsMovie(k) && !movieFailed.has(catalog.id[k]) && !passCold(k)) {
@@ -2064,13 +2181,14 @@ body.idle .win.full .titlebar { opacity: 0; }
         // (prep first: months that came in since the last frame drew leave a catalog not yet worked through)
         const show = pic => { if (want && !hold && !v.warm && v.cat === catalog && fits(v)) { prep(); display(v, pic); } };   // no want: the camera went idle (or was held) while this loaded
         if (v.here && !v.warm) window.cassiniSteadyLocal.apply(FRAMES, catalog.id[v.k], im, { center: centreOn() !== false, color: !!S.get("cameras.composites"), planeUrl: id => movieUrl(id, 1024, 0, 0, 0, 0), ...v.here })
-          .then(pic => show(pic || im), () => show(im)).then(pump);
+          .then(pic => smooth(v, pic || im), () => smooth(v, im)).then(show).then(pump);
         else if (v.fadeHere && !v.warm) {
           // faded here, or the server's faded picture when this pass's table is not here
-          const server = () => new Promise(res => { const s = new Image(); s.crossOrigin = "anonymous"; s.onload = () => { show(s); res(); }; s.onerror = res; s.src = v.server; });
-          window.cassiniFadeLocal.apply(FRAMES, catalog.id[v.k], im, v.fadeHere).then(pic => (pic ? show(pic) : server()), server).then(pump);
+          const server = () => new Promise(res => { const s = new Image(); s.crossOrigin = "anonymous"; s.onload = () => { smooth(v, s).then(show).then(res); }; s.onerror = res; s.src = v.server; });
+          window.cassiniFadeLocal.apply(FRAMES, catalog.id[v.k], im, v.fadeHere).then(pic => (pic ? smooth(v, pic).then(show) : server()), server).then(pump);
         }
-        else { show(im); pump(); }
+        else if (v.warm) { noteAhead(v.key, im); show(im); pump(); }
+        else smooth(v, im).then(show).then(pump);
       };
       im.onerror = () => {
         lane[which] = null;
@@ -2139,7 +2257,8 @@ body.idle .win.full .titlebar { opacity: 0; }
         // (a mosaic movie's next pictures are made ahead by the frame server, in order: obs_mosaic.rolling_ahead)
         if (warmed.has(key) || warming.has(key) || key.includes("/color.webp") || key.includes("mode=rolling")) continue;
         const p = new Image(); p.crossOrigin = "anonymous"; p.fetchPriority = "low";
-        p.onload = p.onerror = () => { warming.delete(key); warmed.add(key); };
+        p.onload = () => { warming.delete(key); warmed.add(key); noteAhead(key, p); };
+        p.onerror = () => { warming.delete(key); warmed.add(key); };
         warming.set(key, p);
         p.src = key;
       }
@@ -3040,7 +3159,8 @@ body.idle .win.full .titlebar { opacity: 0; }
       // look ahead: the next 6 frames, or up to 12 when they come within 4 s of playback (a burst), nearest first
       const ahead = []; for (let d = 1; d <= 12 && ks[p + d] !== undefined && (d <= 6 || catalog.et[ks[p + d]] - state.et <= 4 * state.speed); d++) ahead.push(ks[p + d]);
       // looked ahead at the size shown, so full view plays in full resolution too
-      next = ahead.map(q => view(q, catalog.et[q], size()).key);
+      nextViews = new Map(ahead.map(q => view(q, catalog.et[q], size())).map(w => [w.key, w]));
+      next = [...nextViews.keys()];
       // further ahead: each observation coming up is named to the server once, so a mosaic pass in it is worked
       // out (seconds for its plan) before the clock gets there
       if (window.cassiniMosaics !== false && (S.get("cameras.mosaics") || S.get("movies.steady")))
@@ -3053,6 +3173,7 @@ body.idle .win.full .titlebar { opacity: 0; }
             if (a && a.movie) { moviePasses.add(o); chipText(); }
             if (a && a.kind === "mosaic_movie") { lapPasses.add(o); chipText(); }
             if (a && a.lap_ends) { a.lap_ends.forEach(id => lapEnds.add(id)); lapKnown.add(`${cam}|${o}`); }
+            if (a && a.mosaic_steps) { a.mosaic_steps.forEach(id => mosaicSteps.add(id)); stepsKnown.add(`${cam}|${o}`); }
             // the window is in that pass already: its frame is steadied (or rolls) from now on
             if (a && catalog === c0 && lastK >= 0 && passOf(lastK) === o && (playsMovie(lastK) || playsRolling(lastK))) update(true);
             if (!a || !a.mosaic) return;
@@ -3112,13 +3233,21 @@ body.idle .win.full .titlebar { opacity: 0; }
   // is in the months loaded now; before: the last picture before et. Movie mode steps the clock from one to the next
   // cams ("N", "W"): only that camera's pictures (a stretch played for one camera). Only complete pictures count
   // (complete, below), so movie mode and the body view's skip over the gaps step from one finished picture to the next
+  // A narrow-angle and a wide-angle frame taken together (shutters within TOGETHER s; one camera never takes two
+  // that close) are one step: the clock goes to the later of the two, so both windows change at once (stepped one
+  // at a time, each window changed every other step, 2026-10-30)
+  const TOGETHER = 2;
   function nextPicture(et, body, cams) {
     cams = cams || liveCams();
     if (!body && !cams) {
       const a = catalog.sorted;
-      for (let i = lastImageIndex(et) + 1; i < a.length; i++) if (complete(order[i], body)) return a[i];
+      for (let i = lastImageIndex(et) + 1; i < a.length; i++) if (complete(order[i], body)) return together(a[i], body, cams);
       return Infinity;
     }
+    const t = firstAfter(et, body, cams);
+    return t < Infinity ? together(t, body, cams) : t;
+  }
+  function firstAfter(et, body, cams) {
     let t = Infinity;
     for (const cam in catalog.byCam) {
       if (cams && !cams.includes(cam)) continue;
@@ -3127,15 +3256,31 @@ body.idle .win.full .titlebar { opacity: 0; }
     }
     return t;
   }
-  function prevPicture(et, body, cams) {
-    cams = cams || liveCams();
-    let t = -Infinity;
+  // the step that picture time t is in: the latest of the cameras' first pictures from t to t + TOGETHER
+  function together(t, body, cams) {
+    let end = t;
     for (const cam in catalog.byCam) {
       if (cams && !cams.includes(cam)) continue;
       const f = framesOf(cam, body);
-      for (let p = lastOfCam(cam, et - 1e-3, body); p >= 0 && f.et[p] > t; p--) if (complete(f.ks[p], body)) { t = f.et[p]; break; }
+      for (let p = lastOfCam(cam, t - 1e-3, body) + 1; p < f.et.length && f.et[p] <= t + TOGETHER; p++) if (complete(f.ks[p], body)) { end = Math.max(end, f.et[p]); break; }
     }
-    return t;
+    return end;
+  }
+  function prevPicture(et, body, cams) {
+    cams = cams || liveCams();
+    const before = at => {
+      let t = -Infinity;
+      for (const cam in catalog.byCam) {
+        if (cams && !cams.includes(cam)) continue;
+        const f = framesOf(cam, body);
+        for (let p = lastOfCam(cam, at - 1e-3, body); p >= 0 && f.et[p] > t; p--) if (complete(f.ks[p], body)) { t = f.et[p]; break; }
+      }
+      return t;
+    };
+    // the step before the one the clock is at (or in, between the two frames of a pair)
+    let t = before(et);
+    while (t > -Infinity && together(t, body, cams) >= et - 1e-3) t = before(t);
+    return t > -Infinity ? together(t, body, cams) : t;
   }
   // a finished picture, the kind movie mode stops on. Complete frames only (movie.completeFrames, with color
   // composites on): of a color set, only the frame that completes it (its composite), never the black-and-white
@@ -3144,12 +3289,14 @@ body.idle .win.full .titlebar { opacity: 0; }
   // Every other frame is a picture of its own.
   // Whole mosaics (movies.mosaicFrames): of a mosaic movie, only the frames that finish a lap. Repeat exposures
   // (catalog.repeat; with Stack repeat exposures on, outside a pass played as a movie, whose frames are each their
-  // own): only the first of a run, since the pipeline shows the run as one stacked picture.
+  // own): only the first of a run, since the pipeline shows the run as one stacked picture. Of a pass a window
+  // plays as a mosaic: the frames the server's note says (mosaicSteps), one step a new place of the mosaic.
   function complete(k, body) {
     const cam = catalog.cam[k];
     // how the camera's windows play k's pass (any of them), asked only when a rule needs it
     const plays = how => { for (const f of allFeeds) if (f.cam === cam && f.playsAs && f.playsAs(k) === how) return true; return false; };
     if (wholeLaps() && lapKnown.has(`${cam}|${passKey(k)}`) && plays("mosaic_movie")) return lapEnds.has(catalog.id[k]);
+    if (stepsKnown.has(`${cam}|${passKey(k)}`) && !completeMosaics() && plays("mosaic")) return mosaicSteps.has(catalog.id[k]);
     const si = catalog.setOf ? catalog.setOf[k] : -1;
     if (si >= 0 && S.get("movie.completeFrames") !== false && S.get("cameras.composites") && catalog.et[k] !== catalog.sets[si].ready) return false;
     if (si < 0 && catalog.repeat && catalog.repeat[k] && S.get("processing.stack") !== false && !plays("movie")) return false;
@@ -3167,7 +3314,7 @@ body.idle .win.full .titlebar { opacity: 0; }
   window.cassiniFeeds = { frames: FRAMES, cameraFeed, framesOf, lastOfCam, prep, weight, nextPicture, prevPicture, behind, liveCams, reopenCams, stale: () => S.get("cameras.stale") * 3600, windows: feeds };
   document.addEventListener("cassini:bodymode", () => { if (typeof catalog !== "undefined" && catalog && catalog.byCam) feeds.forEach(f => f(true)); });
   // a change to what the windows show takes effect straight away
-  for (const key of ["cameras.composites", "cameras.stale", "cameras.steady", "cameras.passes", "cameras.balancedColor", "cameras.colors", "cameras.lingerColor", "cameras.lingerMosaic", "movies.steady", "cameras.autoCenter", "cameras.processedFrames", "movies.trail", "movies.stabilize", "movies.stabilizeSmooth", "movies.stabilizeLocal", "movies.exposure", "movies.exposureSmooth", "movies.filmstrip", "movies.laps", "movies.fade", "movies.persist", "movies.mosaicFrames", "playback.completeMosaics", ...(window.cassiniSteps || []).map(st => st.key)]) S.on(key, () => { if (typeof catalog !== "undefined" && catalog && catalog.byCam) feeds.forEach(f => f(true)); });
+  for (const key of ["cameras.composites", "cameras.stale", "cameras.steady", "cameras.passes", "cameras.balancedColor", "cameras.colors", "cameras.lingerColor", "cameras.lingerMosaic", "movies.steady", "cameras.autoCenter", "cameras.processedFrames", "movies.trail", "movies.stabilize", "movies.stabilizeSmooth", "movies.stabilizeLocal", "movies.exposure", "movies.exposureSmooth", "movies.colorSmooth", "movies.colorSmoothStrength", "movies.filmstrip", "movies.laps", "movies.fade", "movies.persist", "movies.mosaicFrames", "playback.completeMosaics", ...(window.cassiniSteps || []).map(st => st.key)]) S.on(key, () => { if (typeof catalog !== "undefined" && catalog && catalog.byCam) feeds.forEach(f => f(true)); });
   // a pass's table for stabilizing on this computer arrived (steady-local.html): its frames are asked for again
   window.addEventListener("cassini-steady-local", () => { if (typeof catalog !== "undefined" && catalog && catalog.byCam) feeds.forEach(f => f(true)); });
 
