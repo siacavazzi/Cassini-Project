@@ -3586,15 +3586,20 @@ onmessage = async e => {
   }
   // the picture's bytes with its palette own moved strength (0..1) of the way to want, in place; false when there was
   // nothing to move
+  // (each log brightness from a table of the 256 levels, the same numbers Math.log gives; and a pixel's three new
+  // levels kept by its old ones, as a picture repeats colors: the arithmetic per pixel is the Python's)
+  const LOG = Float64Array.from({ length: 256 }, (_, v) => Math.log(Math.max(v, 1)));
   function smoothed(d, own, want, strength) {
     if (!own || !want || strength <= 0) return false;
     const mv = moves(own, want, strength);
     if (mv.every(([dd, r]) => Math.abs(dd) < 1e-9 && Math.abs(r - 1) < 1e-9)) return false;
-    const mu = own.slice(0, 3), l = [0, 0, 0], c = [0, 0, 0], c2 = [0, 0, 0];
+    const mu = own.slice(0, 3), l = [0, 0, 0], c = [0, 0, 0], c2 = [0, 0, 0], done = new Map();
     for (let i = 0; i < d.length; i += 4) {
       const v0 = d[i], v1 = d[i + 1], v2 = d[i + 2];
       if (Math.max(v0, v1, v2) <= 0) continue;
-      l[0] = Math.log(Math.max(v0, 1)); l[1] = Math.log(Math.max(v1, 1)); l[2] = Math.log(Math.max(v2, 1));
+      const key = (v0 << 16) | (v1 << 8) | v2, hit = done.get(key);
+      if (hit !== undefined) { d[i] = hit >> 16; d[i + 1] = (hit >> 8) & 255; d[i + 2] = hit & 255; continue; }
+      l[0] = LOG[v0]; l[1] = LOG[v1]; l[2] = LOG[v2];
       const y = (l[0] + l[1] + l[2]) / 3;
       for (let k = 0; k < 3; k++) { c[k] = l[k] - y; c2[k] = (mu[k] + mv[k][0]) + (c[k] - mu[k]) * mv[k][1]; }
       const m = (c2[0] + c2[1] + c2[2]) / 3, wgt = Math.min((v0 + v1 + v2) / (3 * DARK), 1.0);
@@ -3602,6 +3607,7 @@ onmessage = async e => {
         const o = Math.floor(Math.exp((y + c[k]) + ((c2[k] - m) - c[k]) * wgt) + 0.5);
         d[i + k] = Math.max(0, Math.min(255, o));
       }
+      done.set(key, (d[i] << 16) | (d[i + 1] << 8) | d[i + 2]);
     }
     return true;
   }
@@ -11944,7 +11950,7 @@ void main() {
   window.cassiniAbout = { open, addTab, esc, close: () => show(false), credits: CREDITS };
 
   // ---- which version this is: this page's build id (build.py writes it), and what the frame server says it serves ----
-  const BUILD = /*BUILD*/"e6ab690259a3";
+  const BUILD = /*BUILD*/"8dfb82cdcd37";
   const FRAMES = (() => {                       // the frame server, chosen as the camera window chooses it
     const q = new URLSearchParams(location.search).get("frames");
     if (q) return q.replace(/\/$/, "");
