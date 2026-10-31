@@ -8383,7 +8383,7 @@ onmessage = async e => {
   async function canMakeHere(plan) {
     if (!opt("export.local", true) || plan.full || !plan.pictures.length || !plan.pictures[0].tries) return false;
     if (paneOf(plan) > 1024 || plan.height !== paneOf(plan) + capH(plan)) return false;
-    if (editOf(X.planKey) && !(window.cassiniStudio && window.cassiniStudio.renderer)) return false;
+    if (editedHere(X.planKey) && !(window.cassiniStudio && window.cassiniStudio.renderer)) return false;
     return !!(await videoCodec(plan.width, plan.height));
   }
   // a picture's address at the pane's size, with the look and movie style the plan was made with (the makers
@@ -8511,6 +8511,49 @@ onmessage = async e => {
     const target = (e.target || "Unknown").replace(/_/g, " ").toLowerCase().replace(/(^|[^a-z])([a-z])/g, (m, a, b) => a + b.toUpperCase());   // str.title()
     return [`${utcOf(e.t)} UTC`, target, `${e.cam === "N" ? "NAC" : "WAC"} ${e.filters}`, kind].filter(Boolean).join(" · ");
   }
+  // the Movie Editor's exposure levels, Even out and frames edited on their own, for the film made here as
+  // export.py render does them: each picture's EV (exposures: the levels' line straight between its points, flat
+  // before the first and after the last, plus Even out's change, which the frame server measures first:
+  // /export/levels.json "even"), and each picture's look (the movie's, a frame's own keys over it: fedit). The film
+  // made here took none of them (2026-10-31)
+  const LEVEL_EV = 2;
+  function levelsOf(key) {
+    const q = new URLSearchParams(key), lv = new Map(), own = new Map();
+    for (const w of (q.get("levels") || "").split(",").map(t => t.trim()).filter(Boolean)) {
+      const i = w.lastIndexOf(":"), v = +w.slice(i + 1);
+      if (i > 0 && w.slice(i + 1) !== "" && isFinite(v)) lv.set(w.slice(0, i), Math.round(Math.max(-LEVEL_EV, Math.min(LEVEL_EV, v)) * 100) / 100);
+    }
+    for (const w of (q.get("fedit") || "").split("|")) {
+      const i = w.indexOf("~");
+      if (i > 0 && w.slice(i + 1).trim()) own.set(w.slice(0, i).trim(), w.slice(i + 1));
+    }
+    return { lv, own, even: Math.max(0, Math.min(30, Math.floor(+q.get("even") || 0))) };
+  }
+  async function exposuresHere(plan, key, stop) {
+    const pics = plan.pictures, n = pics.length, L = levelsOf(key);
+    const pts = pics.map((e, i) => [i, L.lv.get(e.id)]).filter(p => p[1] != null);
+    const line = pics.map((e, i) => {
+      if (!pts.length) return 0;
+      const k = pts.findIndex(p => p[0] >= i);
+      return k < 0 ? pts[pts.length - 1][1] : k === 0 || pts[k][0] === i ? pts[k][1] : pts[k - 1][1] + (pts[k][1] - pts[k - 1][1]) * (i - pts[k - 1][0]) / (pts[k][0] - pts[k - 1][0]);
+    });
+    let even = {};
+    if (L.even) {
+      // Even out: the frame server measures the stretch's pictures (render waits for the measuring the same way)
+      for (;;) {
+        if (stop.done) return null;
+        let j = null;
+        try { j = await (await fetch(`${FRAMES}/export/levels.json?${key}`)).json(); } catch (err) { j = { error: String(err) }; }
+        if (!j || j.error || !j.even_ready) break;
+        if (j.total != null && j.done >= j.total) { even = j.even || {}; break; }
+        setState(`Measuring the pictures' brightness for Even out: ${(j.done || 0).toLocaleString()} of ${j.total == null ? "…" : j.total.toLocaleString()}`, 0);
+        await new Promise(r => setTimeout(r, 1000));
+      }
+    }
+    return { ev: line.map((v, i) => Math.max(-2 * LEVEL_EV, Math.min(2 * LEVEL_EV, v + (even[pics[i].id] || 0)))), own: L.own };
+  }
+  const editedHere = key => { const L = levelsOf(key); return !!(editOf(key) || L.lv.size || L.even || L.own.size); };
+
   async function makeHere(plan, key) {
     const stop = { done: false }, cams = X.cams || "NW", size = paneOf(plan), ch = capH(plan), W = plan.width, H = plan.height;
     const job = X.job = { id: "here:" + key, here: true }, t0 = performance.now();
@@ -8518,10 +8561,15 @@ onmessage = async e => {
     if (X.job !== job) return;
     setState("Making the film here…", 0);
     const fr = framing();
+    const ex = await exposuresHere(plan, key, stop);
+    if (!ex || X.job !== job) return;
+    setState("Making the film here…", 0);
     let look = null;
-    if (editOf(key)) {
+    if (editedHere(key)) {
       const STU = window.cassiniStudio, lc = document.createElement("canvas"), r = STU.renderer(lc);
-      if (r) look = { p: STU.decode(editOf(key)), r, lc };
+      // a picture's look: the movie's, or a frame's own keys over it, at its exposure level (render: studio_look.apply)
+      if (r) look = { r, lc, at: (e, n) => { const p = STU.decode(ex.own.has(e.id) ? `${editOf(key)},${ex.own.get(e.id)}` : editOf(key)); p.exposure += ex.ev[n]; return p; },
+                      on: (e, n) => !!(editOf(key) || ex.own.has(e.id) || ex.ev[n]) };
     }
     const vc = await videoCodec(W, H), { Muxer, ArrayBufferTarget } = await import(MUXER);
     // the soundtrack first (the live sound's synth, offline, as soundtrack makes it), so the film is written in one go
@@ -8596,11 +8644,11 @@ onmessage = async e => {
           if (bmp) {
             const k = size / Math.max(bmp.width, bmp.height), w = Math.max(1, Math.round(bmp.width * k)), h = Math.max(1, Math.round(bmp.height * k));
             let src = bmp;
-            if (look) {
+            if (look && look.on(e, n)) {
               // the movie editor's look on the picture over black (render: studio_look.apply)
               const c = document.createElement("canvas"); c.width = w; c.height = h;
               const cg = c.getContext("2d", { alpha: false }); cg.fillStyle = bg(); cg.fillRect(0, 0, w, h); cg.imageSmoothingQuality = "high"; cg.drawImage(bmp, 0, 0, w, h);
-              look.r.upload(c, w, h); look.r.draw(look.p, w, h); src = look.lc;
+              look.r.upload(c, w, h); look.r.draw(look.at(e, n), w, h); src = look.lc;
             }
             g.imageSmoothingQuality = "high";
             g.drawImage(src, x0 + Math.floor((size - w) / 2), Math.floor((size - h) / 2), w, h);
@@ -8716,7 +8764,8 @@ onmessage = async e => {
     mark();
   }
   function close() { card.hidden = true; }
-  window.cassiniExport = { open, close, mark, clear, soundtrack, params, get state() { return X; } };
+  // exposures(plan, key): each picture's EV and frame looks the film made here draws with (test_export_levels.py)
+  window.cassiniExport = { open, close, mark, clear, soundtrack, params, exposures: (plan, key) => exposuresHere(plan, key, { done: false }), get state() { return X; } };
 
   $("exin").addEventListener("click", () => mark(state.et, null));
   $("exout").addEventListener("click", () => mark(null, state.et));
@@ -12541,7 +12590,7 @@ void main() {
   window.cassiniAbout = { open, addTab, esc, close: () => show(false), credits: CREDITS };
 
   // ---- which version this is: this page's build id (build.py writes it), and what the frame server says it serves ----
-  const BUILD = /*BUILD*/"24b9078e7e52";
+  const BUILD = /*BUILD*/"cf381df69859";
   const FRAMES = (() => {                       // the frame server, chosen as the camera window chooses it
     const q = new URLSearchParams(location.search).get("frames");
     if (q) return q.replace(/\/$/, "");
