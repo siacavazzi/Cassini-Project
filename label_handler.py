@@ -143,16 +143,26 @@ def garbled_lines(img, mask):
         ok = good & ~out
         a1, a2, b1, b2 = nearest(ok)
         va1, vb1, va2, vb2 = at(a1), at(b1), at(a2), at(b2)
-        da1, db1, da2, db2 = np.abs(c - va1), np.abs(c - vb1), np.abs(c - va2), np.abs(c - vb2)
-        jump = np.zeros(c.shape, bool)
-        # against the line above and below, and (a garbled line next to another) one line further on either side
-        for a, b, va, vb, da, db in ((a1, b1, va1, vb1, da1, db1), (a1, b2, va1, vb2, da1, db2),
-                                     (a2, b1, va2, vb1, da2, db1)):
-            have = (a >= 0) & (b < h)
+
+        def jumps(a, b, va, vb):
             far = np.maximum(rows - a, b - rows)            # (1 or more)
             limit = limits.take(np.minimum(far, GARBLE_FAR + 1, out=far))
-            jump |= have & (np.minimum(da, db) - np.abs(va - vb) > limit)
-        jump &= good
+            return (a >= 0) & (b < h) & (np.minimum(np.abs(c - va), np.abs(c - vb)) - np.abs(va - vb) > limit)
+
+        # a thin ringlet or gap a few lines wide lying along the lines at a shallow angle (N1498392374_1,
+        # N1498395214_1) has a line that stands apart for hundreds of pixels, but the lines either side of it lean
+        # towards it from the lines past them, and themselves stand between their own neighbours; garbage stands
+        # apart from lines that carry on as the picture does (or that are garbage too)
+        near = jumps(a1, b1, va1, vb1) & good
+        side = np.sign(c - (va1 + vb1) / 2)
+        lean = ((a2 >= 0) & (b2 < h) & ((va1 - va2) * side > limits[np.clip(a1 - a2, 1, GARBLE_FAR + 1)])
+                & ((vb1 - vb2) * side > limits[np.clip(b2 - b1, 1, GARBLE_FAR + 1)])
+                & ~near[np.clip(a1, 0, h - 1), cols] & ~near[np.clip(b1, 0, h - 1), cols])
+        # against the line above and below, and (a garbled line next to another) one line further on either side,
+        # past a line that is not such a ringlet's
+        jump = (near | (jumps(a1, b2, va1, vb2) & ~lean[np.clip(b1, 0, h - 1), cols])
+                | (jumps(a2, b1, va2, vb1) & ~lean[np.clip(a1, 0, h - 1), cols]))
+        jump &= good & ~lean
         # from where GARBLE_SHARE of GARBLE_RUN pixels jump, with GARBLE_SHARE of the rest of the line's valid
         # pixels jumping too: garbage goes on to the end of the line, a thin feature lying along a line ends
         share = cv2.blur(jump.astype(np.float32), (GARBLE_RUN, 1), borderType=cv2.BORDER_CONSTANT)
