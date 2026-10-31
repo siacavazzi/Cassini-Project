@@ -2619,7 +2619,7 @@ body.ambient.phone .amb-where { font-size: 18px; }
     { t: "2005-01-14T09:00:52", speed: 60, label: "Huygens descends to Titan" },
     { t: "2004-07-01T01:09:00", speed: 60, label: "Arrival at Saturn" },
     { t: "2010-11-30T07:25:10", speed: 600, label: "The plumes of Enceladus" },
-    { t: "2013-06-26T01:22:13", speed: 3600, label: "Saturn's hexagon" },
+    { t: "2005-09-26T00:40:07", speed: 600, label: "Hyperion, the sponge moon" },
     { t: "2010-02-13T17:54:31", speed: 60, label: "Mimas, the Death Star moon" },
     { t: "2000-12-29T03:04:00", speed: 600, label: "Jupiter portrait" },
     { t: "2017-04-26T07:48:14", speed: 60, label: "The first dive inside the rings" }
@@ -12683,7 +12683,7 @@ void main() {
   window.cassiniAbout = { open, addTab, esc, close: () => show(false), credits: CREDITS };
 
   // ---- which version this is: this page's build id (build.py writes it), and what the frame server says it serves ----
-  const BUILD = /*BUILD*/"6b71bd589c8c";
+  const BUILD = /*BUILD*/"59b134ac5663";
   const FRAMES = (() => {                       // the frame server, chosen as the camera window chooses it
     const q = new URLSearchParams(location.search).get("frames");
     if (q) return q.replace(/\/$/, "");
