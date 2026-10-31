@@ -568,9 +568,11 @@ def look():
 """
 How a balanced color picture maps its filters to color (color plan phase 2b): "natural" (the default) turns a
 true color set into the colors an eye would see (natural_mix) and balances a false color set so the body comes
-out gray (false_mix); "raw" draws each filter straight as a channel, as before. The classic look is always raw.
+out gray (false_mix); "raw" draws each filter straight as a channel, as before; "eye" (natural color emulation)
+draws a true color set as "natural" does and any other set as what an eye would have seen of it (eye_mix). The
+classic look is always raw.
 """
-COLORS = ("natural", "raw")
+COLORS = ("natural", "raw", "eye")
 _colors = contextvars.ContextVar("colors", default="natural")
 
 
@@ -588,13 +590,13 @@ def coloring(name):
 
 
 """
-The display model in use, for cache names: "classic", "balanced" (natural color) or "raw" (balanced, filters drawn
-straight)
+The display model in use, for cache names: "classic", "balanced" (natural color), "raw" (balanced, filters drawn
+straight) or "eye" (balanced, natural color emulation)
 """
 def style():
     if look() == "classic":
         return "classic"
-    return "raw" if colors() == "raw" else "balanced"
+    return colors() if colors() in ("raw", "eye") else "balanced"
 
 
 @contextlib.contextmanager
@@ -682,6 +684,9 @@ SURFACE_WINDOW = {"TITAN": "CB3"}
 
 
 def color_mix(camera, bands, target=None, gains=None, own=False):
+    if style() == "eye" and len(bands) in (2, 3):
+        return natural_mix(camera, bands) if len(bands) == 3 and natural_mix(camera, bands) is not None \
+            else eye_mix(camera, bands, target)
     if style() != "balanced" or len(bands) not in (2, 3):
         return None
     if len(bands) == 2:
@@ -749,6 +754,117 @@ def natural_mix(camera, bands):
 
 
 _bodies = None
+_wavelengths = None
+
+
+def band_wavelength(camera, band):
+    """A color filter's effective wavelength in nm on the camera ("N" or "W"), with the other wheel clear
+    (filter_calibration.csv), or None."""
+    global _wavelengths
+    if _wavelengths is None:
+        _wavelengths = {}
+        with open(os.path.join(os.path.dirname(os.path.abspath(__file__)), "filter_calibration.csv")) as f:
+            next(f)
+            for line in f:
+                cam, filters, nm = line.strip().split(",")[:3]
+                for clear in ("CL1", "CL2"):
+                    for name in (filters[3:] if filters.startswith(clear) else None,
+                                 filters[:3] if filters.endswith(clear) and len(filters) == 6 else None):
+                        if name and name not in ("CL1", "CL2"):
+                            _wavelengths[(cam[3], name)] = float(nm)
+    cam = "N" if str(camera or "").startswith("N") or camera == "ISSNA" else "W"
+    return _wavelengths.get((cam, band)) or _wavelengths.get(("W" if cam == "N" else "N", band))
+
+
+def body_level(target, band, camera=None, sure=True):
+    """The body's typical lit I/F in a band over the mission (false_color_bodies.json, the camera's own, else both
+    cameras'), or None: too few frames (BODY_MIN) or, when sure, a spread past BODY_SPREAD (false_gains' rules)."""
+    global _bodies
+    if _bodies is None:
+        path = os.path.join(os.path.dirname(os.path.abspath(__file__)), "false_color_bodies.json")
+        _bodies = {}
+        if os.path.exists(path):
+            with open(path) as f:
+                _bodies = json.load(f)
+    body = _bodies.get(str(target or "").upper(), {})
+    cam = "N" if str(camera or "").startswith("N") or camera == "ISSNA" else "W"
+    for m in (body.get(cam, {}).get(band), body.get(band)):
+        if m and m.get("n", 0) >= BODY_MIN and m["median"] > 0 and \
+                (not sure or m["iqr"][1] <= BODY_SPREAD * max(m["iqr"][0], 1e-9)):
+            return m["median"]
+    return None
+
+
+"""
+Natural color emulation (colors=eye): what an eye would have seen of a set taken through other filters than red,
+green and blue. Each of RED, GRN and BL1 is estimated from the set's own bands, then the camera's natural matrix
+(natural_mix) turns them into color, so the whole mix is one 3x3 matrix on the set's linear channels, the same as a
+true color set's (the page mixes it as it does those).
+- A band's brightness is read against the body's typical brightness in it (body_level, measured by this same
+  pipeline over the mission, so a filter's calibration cancels out). Where every band is at its typical share the
+  body has its own color (eye_tint: as the true color sets draw it, else BODY_TINTS, else gray); where they differ,
+  the color leans the way the bands do: at a visible wavelength between two bands by their ratios interpolated
+  linearly in wavelength, past the set's bands by the nearest band's. A body without a measure in every band is
+  taken as gray (each ratio is the band's I/F).
+- Methane bands (MT1, MT2, MT3) see how high the clouds are, not the color of what is there, and stay out of the
+  estimate while the set has another band (Saturn's MT3 + CB2 + MT2 is drawn from CB2 alone, in Saturn's color).
+- A two-filter set is its two bands, as color_mix's channels: longer, mean, shorter.
+camera = "N" or "W"; bands = the set's color filters in channel order; target = TARGET_NAME
+"""
+METHANE = ("MT1", "MT2", "MT3")
+EYE_BANDS = ("RED", "GRN", "BL1")
+_eye_colors = None
+
+
+def eye_tint(target):
+    """The body's own color for eye_mix, linear red, green, blue of mean 1: as the pipeline's true color composites
+    draw it (eye_colors.json, web/frames/eye_colors.py), else BODY_TINTS, else gray."""
+    global _eye_colors
+    if _eye_colors is None:
+        path = os.path.join(os.path.dirname(os.path.abspath(__file__)), "eye_colors.json")
+        _eye_colors = {}
+        if os.path.exists(path):
+            with open(path) as f:
+                _eye_colors = {k: v for k, v in json.load(f).items() if not k.startswith("_")}
+    got = _eye_colors.get(str(target or "").upper())
+    return got["rgb"] if got else tint_of(target) or [1.0, 1.0, 1.0]
+
+
+def eye_mix(camera, bands, target=None):
+    bands = list(bands)
+    if len(bands) not in (2, 3):
+        return None
+    nm = [band_wavelength(camera, b) for b in bands]
+    if any(v is None for v in nm):
+        return None
+    use = [i for i, b in enumerate(bands) if b not in METHANE] or list(range(len(bands)))
+    natural = natural_mix(camera, list(EYE_BANDS)).astype(np.float64)
+    # the body's natural color as what RED, GRN and BL1 would measure of it (the natural matrix undone)
+    eye = np.linalg.solve(natural, np.asarray(eye_tint(target), np.float64))
+    ref = {i: body_level(target, bands[i], camera, sure=False) for i in use}
+    if any(v is None for v in ref.values()):
+        ref = {i: 1.0 for i in use}
+    want = [band_wavelength(camera, b) for b in EYE_BANDS]
+    order = sorted(use, key=lambda i: nm[i])
+    a = np.zeros((3, len(bands)), np.float64)
+    for k, w in enumerate(want):
+        # the ratio to the typical at w: the nearest band's past the ends, else the two bands' either side, linearly
+        lo = [i for i in order if nm[i] <= w]
+        hi = [i for i in order if nm[i] > w]
+        if not lo or not hi:
+            parts = [((lo or hi)[-1 if lo else 0], 1.0)]
+        else:
+            i, j = lo[-1], hi[0]
+            t = (w - nm[i]) / (nm[j] - nm[i])
+            parts = [(i, 1 - t), (j, t)]
+        for i, share in parts:
+            a[k, i] += eye[k] * share / ref[i]
+    # brightness kept: the body at its typical brightness in the bands comes out as bright as their mean
+    level = np.mean([ref[i] for i in use])
+    a *= level
+    if len(bands) == 2:
+        a = np.stack([a[:, 0], np.zeros(3), a[:, 1]], axis=1)
+    return (natural @ a).astype(np.float32)
 
 
 """
