@@ -1,4 +1,5 @@
-// The Movie Editor's one-frame edits, driven in a browser: a frame darkened and grayed on its own (This frame), its
+// The Movie Editor's one-frame edits, driven in a browser: a frame darkened and grayed on its own (Look, Apply to:
+// This frame), its
 // neighbors left as they were, the frame's look finished in Cassini Studio (Use for this frame), picked frames
 // warmed together, Reset and undo, and the recipe, the export's plan and a download taking the edit. Screenshots
 // and a screen recording go to OUT.
@@ -28,13 +29,17 @@ const check = (ok, what) => { console.log(ok ? "ok" : "FAIL", what); if (!ok) pr
   await page.evaluate(([a, b]) => cassiniExport.mark(utcToEt(a), utcToEt(b), "new"), [from, until]);
   await page.waitForTimeout(500);
   await page.evaluate(() => document.getElementById("segedit").click());
-  await page.waitForFunction(() => cassiniMovieEdit.state.frames.length > 0 && !cassiniMovieEdit.state.loading, null, { timeout: 120000 });
+  // (the editor opens small while the stretch loads, then grows into the whole editor)
+  const opened = () => page.waitForFunction(() => cassiniMovieEdit.state.frames.length > 0 && !cassiniMovieEdit.state.loading && !document.getElementById("mecard").classList.contains("loading"), null, { timeout: 600000 });
+  await opened();
   clearInterval(awake);
   await page.waitForTimeout(2500);
-  const has = await page.evaluate(() => !!document.getElementById("meownedit"));
+  // the strip's Nth frame on screen (one camera's tab of a stretch with both; left-out frames hidden)
+  const th = k => `#mestrip .meth:not([hidden]) >> nth=${k}`;
+  const has = await page.evaluate(() => !!document.getElementById("mescope"));
   if (!has) {
     // the editor before one-frame edits (the before half of the clip): the look goes on every frame
-    await page.click('.meth[data-i="10"]'); await page.waitForTimeout(1500);
+    await page.click(th(10)); await page.waitForTimeout(1500);
     await page.screenshot({ path: `${out}/before.png` });
     for (let k = 0; k < 4; k++) { await page.keyboard.press("ArrowRight"); await page.waitForTimeout(900); }
     console.log("before: no This frame section");
@@ -43,20 +48,23 @@ const check = (ok, what) => { console.log(ok ? "ok" : "FAIL", what); if (!ok) pr
   const S = () => page.evaluate(() => { const s = cassiniMovieEdit.state; return { sel: s.sel, id: s.frames[s.sel] && s.frames[s.sel].id, fedit: Object.fromEntries(s.fedit), picked: s.picked.size }; });
   const slideTo = (id, v) => page.evaluate(([id, v]) => { const z = document.getElementById(id); z.value = v; z.dispatchEvent(new Event("input")); z.dispatchEvent(new Event("change")); }, [id, v]);
 
-  // the frame in front: darkened and grayed on its own
-  await page.click('.meth[data-i="10"]'); await page.waitForTimeout(1500);
+  // the frame in front: darkened and grayed on its own (Look applies to the whole movie until This frame is chosen)
+  check(/whole movie/i.test(await page.textContent("#mescopetag")), "Look starts on the whole movie");
+  await page.click('#mescope [data-v="frames"]');
+  await page.click(th(10)); await page.waitForTimeout(1500);
+  check(/this frame only/i.test(await page.textContent("#mescopetag")), "Apply to: This frame, said on the picture");
   await page.screenshot({ path: `${out}/1_frame_as_made.png` });
-  await slideTo("meown-ex", -1.2); await page.waitForTimeout(400);
-  await slideTo("meown-sa", -100); await page.waitForTimeout(1500);
+  await slideTo("melk-ex", -1.2); await page.waitForTimeout(400);
+  await slideTo("melk-sa", -100); await page.waitForTimeout(1500);
   let s = await S();
   console.log(JSON.stringify(s));
   check(Object.keys(s.fedit).length === 1 && s.fedit[s.id] === "ex:-1.2,sa:-100", `only the frame in front has its own look (${JSON.stringify(s.fedit)})`);
   await page.screenshot({ path: `${out}/2_frame_edited.png` });
   const edited = s.id;
   const look = id => page.evaluate(id => { const s = cassiniMovieEdit.state, e = s.frames.find(x => x.id === id); return cassiniStudio.decode(s.fedit.has(id) ? `${s.edit},${s.fedit.get(id)}` : s.edit); }, id);
-  const next = await page.evaluate(() => cassiniMovieEdit.state.frames[11].id);
+  const next = await page.locator(th(11)).evaluate(b => cassiniMovieEdit.state.frames[+b.dataset.i].id);
   check((await look(next)).exposure === 0 && (await look(next)).saturation === 0, "the next frame keeps the movie's look");
-  check(await page.evaluate(id => document.querySelector(`.meth[data-i="10"]`).classList.contains("own"), edited), "the edited frame has a dot in the strip");
+  check(await page.locator(th(10)).evaluate(b => b.classList.contains("own")), "the edited frame has a dot in the strip");
   check(/own look/.test(await page.textContent("#metag")), "the frame's tag says it has its own look");
   // stepping past it and back: neighbors as made, the frame as edited
   for (const k of ["ArrowLeft", "ArrowRight", "ArrowRight", "ArrowLeft"]) { await page.keyboard.press(k); await page.waitForTimeout(900); }
@@ -70,7 +78,7 @@ const check = (ok, what) => { console.log(ok ? "ok" : "FAIL", what); if (!ok) pr
   await page.evaluate(() => { cassiniMovieEdit.state.edit = ""; });
 
   // Cassini Studio on the frame: Use for this frame
-  await page.click("#meownedit");
+  await page.click("#melkedit");
   await page.waitForFunction(() => !document.getElementById("stucard").hidden && document.getElementById("stusave").textContent === "Use for this frame", null, { timeout: 300000 });
   check(true, "Studio opens with Use for this frame");
   await page.waitForTimeout(1500);
@@ -85,28 +93,28 @@ const check = (ok, what) => { console.log(ok ? "ok" : "FAIL", what); if (!ok) pr
   await page.screenshot({ path: `${out}/5_after_studio.png` });
 
   // picked frames edited together, Mac picking: Shift-click a run
-  await page.click('.meth[data-i="20"]'); await page.waitForTimeout(400);
-  await page.click('.meth[data-i="22"]', { modifiers: ["Shift"] }); await page.waitForTimeout(600);
-  check(/These 3 frames/.test(await page.textContent("#meownh")), "the section names the picked frames");
-  await slideTo("meown-wa", 70); await page.waitForTimeout(1200);
+  await page.click(th(20)); await page.waitForTimeout(400);
+  await page.click(th(22), { modifiers: ["Shift"] }); await page.waitForTimeout(600);
+  check(/3 picked/.test(await page.textContent('#mescope [data-v="frames"]')), "Apply to names the picked frames");
+  await slideTo("melk-wa", 70); await page.waitForTimeout(1200);
   s = await S();
   check(Object.keys(s.fedit).length === 4 && ["20", "21", "22"].every(() => true), `three picked frames warmed together (${Object.keys(s.fedit).length} with own looks)`);
   await page.screenshot({ path: `${out}/6_picked_warmed.png` });
-  await page.click("#meownclear"); await page.waitForTimeout(600);
+  await page.click("#melkclear"); await page.waitForTimeout(600);
   check(Object.keys((await S()).fedit).length === 1, "Reset gives the picked frames the movie's look again");
   await page.keyboard.press("Control+z"); await page.waitForTimeout(600);
   check(Object.keys((await S()).fedit).length === 4, "undo brings them back");
   await page.keyboard.press("Control+z"); await page.waitForTimeout(600);
   check(Object.keys((await S()).fedit).length === 1, "undo again takes the warmth off");
   // a frame far off brought back further than the studio's old ±2 EV
-  await page.click('.meth[data-i="30"]'); await page.waitForTimeout(600);
-  await slideTo("meown-ex", 2.8); await page.waitForTimeout(800);
+  await page.click(th(30)); await page.waitForTimeout(600);
+  await slideTo("melk-ex", 2.8); await page.waitForTimeout(800);
   s = await S();
   check(s.fedit[s.id] === "ex:2.8", `exposure +2.8 on one frame (${s.fedit[s.id]})`);
   await page.keyboard.press("Control+z"); await page.waitForTimeout(600);
 
   // Play through the edited frame
-  await page.click('.meth[data-i="7"]'); await page.waitForTimeout(800);
+  await page.click(th(7)); await page.waitForTimeout(800);
   await page.keyboard.press(" "); await page.waitForTimeout(4000); await page.keyboard.press(" ");
 
   // the recipe, a reload from it, the export's plan and a download
@@ -115,9 +123,9 @@ const check = (ok, what) => { console.log(ok ? "ok" : "FAIL", what); if (!ok) pr
   check(new URLSearchParams(rec).get("fedit") === `${edited}~ex:-1.2,sa:-100,fi:noir`, "the recipe carries the frame's own look");
   const back = await page.evaluate(r => { cassiniMovieEdit.open(r); return Object.fromEntries(cassiniMovieEdit.state.fedit); }, rec);
   check(back[edited] === "ex:-1.2,sa:-100,fi:noir", "a link's recipe opens with it");
-  await page.waitForFunction(() => cassiniMovieEdit.state.frames.length > 0 && !cassiniMovieEdit.state.loading, null, { timeout: 120000 });
-  await page.click('.meth[data-i="10"]'); await page.waitForTimeout(1200);
-  const plan = await page.evaluate(async ([a, b]) => { cassiniExport.mark(); const r = await fetch(`/export/plan.json?from=${a}&until=${b}&cams=NW${cassiniMovieCut()}`); return [r.status, cassiniMovieCut()]; }, [from, until]);
+  await opened();
+  await page.click(th(10)); await page.waitForTimeout(1200);
+  const plan = await page.evaluate(async ([a, b]) => { cassiniExport.mark(cassiniMovieEdit.state.a, cassiniMovieEdit.state.b, "new"); const r = await fetch(`/export/plan.json?from=${a}&until=${b}&cams=NW${cassiniMovieCut()}`); return [r.status, cassiniMovieCut()]; }, [from, until]);
   check(plan[0] === 200 && /fedit=/.test(plan[1]), "the export takes the edit");
   const [dl] = await Promise.all([page.waitForEvent("download", { timeout: 120000 }), page.click("#medl")]);
   await dl.saveAs(`${out}/${dl.suggestedFilename()}`);

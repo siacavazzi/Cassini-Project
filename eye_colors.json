@@ -1,0 +1,75 @@
+{
+ "_about": "Bodies' own colors for natural color emulation (calibration.eye_mix): linear red, green, blue of mean 1, the median of the pipeline's true color composites of the body (web/frames/eye_colors.py).",
+ "ATLAS": {
+  "rgb": [
+   1.1766,
+   1.0217,
+   0.8024
+  ],
+  "sets": 6
+ },
+ "DIONE": {
+  "rgb": [
+   1.0633,
+   1.0075,
+   0.9352
+  ],
+  "sets": 14
+ },
+ "ENCELADUS": {
+  "rgb": [
+   1.1188,
+   1.0145,
+   0.7681
+  ],
+  "sets": 10
+ },
+ "IAPETUS": {
+  "rgb": [
+   1.1469,
+   0.9878,
+   0.8618
+  ],
+  "sets": 6
+ },
+ "MIMAS": {
+  "rgb": [
+   1.0482,
+   1.0581,
+   0.8048
+  ],
+  "sets": 6
+ },
+ "RHEA": {
+  "rgb": [
+   1.0838,
+   1.0232,
+   0.8966
+  ],
+  "sets": 17
+ },
+ "SATURN": {
+  "rgb": [
+   1.2555,
+   1.0371,
+   0.6962
+  ],
+  "sets": 6
+ },
+ "TETHYS": {
+  "rgb": [
+   1.0738,
+   1.0107,
+   0.9242
+  ],
+  "sets": 5
+ },
+ "TITAN": {
+  "rgb": [
+   1.2924,
+   1.0196,
+   0.6987
+  ],
+  "sets": 12
+ }
+}

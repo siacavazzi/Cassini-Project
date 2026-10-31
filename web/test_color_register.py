@@ -208,6 +208,36 @@ assert om.colour_of({"RED": 6, "GRN": 6, "BL1": 6}, NMS) == ["RED", "GRN", "BL1"
 assert om.colour_of({"MT3": 6, "CB2": 6, "MT2": 6}, NMS) == ["MT3", "CB2", "MT2"]
 assert om.colour_of({"CL1/CL2": 6, "CB2": 6, "MT2": 6}, NMS) == ["CB2", "MT2", "CL1/CL2"]   # (as on main)
 
+# a movie whose tile counts make it grey still plays in colour when it takes colour sets of three or more filters
+# (_set_colour): the NAC Titan wind stare ISS_009TI_1X1WND10001_PRIME (2005-06-04) takes CB3 three times a cycle
+WND = {"CB3": 937.9, "MT3": 889.2, "IR3": 925.9, "CB1": 619.5, "MT1": 619.0, "UV1": 266.7, "UV3": 343.1}
+wnd = [(f"p{i}", f"N{1496546246 + dt}_1", f, 1496546246.0 + dt, WND[f], 0, 0, 1e6) for i, (f, dt) in enumerate(
+    zip(["CB3", "MT3", "IR3", "CB3", "CB3", "CB1", "MT1", "UV1", "UV3"], [0, 174, 244, 1232, 2220, 2275, 2307, 2507, 2579]))]
+assert om.colour_of({"CB3": 3, "MT3": 1, "IR3": 1, "CB1": 1, "MT1": 1, "UV1": 1, "UV3": 1}, WND) is None
+assert om._filters({"key": ("TITAN", "X", "N", 0), "frames": wnd, "z": 1e6, "kind": "movie"})[3] == ["CB3", "MT1", "UV1"]
+assert om._filters({"key": ("TITAN", "X", "N", 0), "frames": wnd, "z": 1e6, "kind": "mosaic"})[3] is None   # mosaics: as before
+two = [(f"p{i}", f"W{1486330000 + i}_1", ["CB2", "CB2", "CB2", "MT2"][i % 4], 1000.0 + 37 * i, NMS["CB2"], 0, 0, 1e6) for i in range(9)]
+assert om._filters({"key": ("SATURN", "X", "W", 0), "frames": two, "z": 1e6, "kind": "movie"})[3] is None     # two-filter sets: grey
+# ... and the lone filters' cosmic rays (no frame of their filter either side to take them out against) are cleaned
+# from the set's planes as a still composite's channels are (_despiked): only the hits change, a star in every filter stays
+sp_rng = np.random.default_rng(1)
+yy, xx = np.mgrid[:300, :300]
+on = (yy - 150) ** 2 + (xx - 150) ** 2 < 80 ** 2
+sp = []
+for lvl in (180, 150, 90):
+    a = np.zeros((300, 300, 4), np.uint8)
+    a[..., :3] = np.clip(np.where(on, lvl, 0) + sp_rng.normal(0, 2, (300, 300)) * on, 0, 255)[..., None]
+    a[..., 3] = 255
+    sp.append(a)
+hits = [(20, 30), (150, 140), (200, 260), (100, 120)]
+for y, x in hits:
+    sp[2][y, x:x + 2, :3] = 250
+for a in sp:
+    a[40, 250, :3] = 230
+clean = om._despiked(sp, 2.2)
+assert all(clean[2][y, x, 0] < 100 for y, x in hits) and all(c[40, 250, 0] == 230 for c in clean)
+assert [int((c[..., 0] != a[..., 0]).sum()) for c, a in zip(clean, sp)] == [0, 0, 2 * len(hits)]
+
 cache = tempfile.mkdtemp()
 levels = {"CB2": 160, "MT2": 60}          # Saturn's methane band dark against its continuum, on the grey scale
 scale = {"blacks": {}, "white": 1, "gamma": 2.2, "balance": {"CB2": 110 / 160, "MT2": 110 / 60}}

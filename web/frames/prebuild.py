@@ -304,6 +304,10 @@ def make_pass(u, cache, sizes=(1024, 512), within=None, style=None, made=None, s
         if stopped and stopped():
             return 0
         obs_mosaic.tile(u, j, cache, p["display_scale"])
+    if u["mosaic"] and last == len(u["frames"]) - 1:
+        # (every tile made: their reports in one file too, which a server's first look at the pass reads instead of
+        # a file a tile, obs_mosaic.REPORTS_FILE)
+        obs_mosaic.keep_reports(u, cache, p)
     kind, n = u.get("kind"), 0
 
     def movie(f, size):
@@ -322,7 +326,9 @@ def make_pass(u, cache, sizes=(1024, 512), within=None, style=None, made=None, s
                 obs_mosaic.rolling_webp(f[1], size, cache, style.get("laps", 1), wait=True,
                                         fade=(style.get("fade", 0), style.get("persist", 0)))
             elif u["mosaic"]:
-                obs_mosaic._mosaic_at(u, j, size, cache)
+                # (one made is found, not read: a pass made before, run again for its tile maps, reads no pictures)
+                if not obs_mosaic._mosaic_made(u, j, size, cache):
+                    obs_mosaic._mosaic_at(u, j, size, cache)
             else:
                 movie(f, size)
             # a toss-up, a pass the pointing alone cannot tell a movie from a mosaic (obs_mosaic._judge), has the other
@@ -331,6 +337,13 @@ def make_pass(u, cache, sizes=(1024, 512), within=None, style=None, made=None, s
                 movie(f, size)
             elif u.get("tossup") and kind == "movie":
                 obs_mosaic._mosaic_at(u, j, size, cache)
+        if kind != "mosaic_movie" and u["mosaic"]:
+            # its tile map too (obs_mosaic.tile_map, kept in MAPS_DIR), which the server works out behind a mosaic's
+            # first view (_map_later: the layout at every tile up to it) and the window's first hover reads
+            try:
+                obs_mosaic.tile_map(f[1], cache)
+            except Exception as e:   # noqa: BLE001  (a map not made here the server works out; the pictures go on)
+                print(f"tile map {f[1]}: {type(e).__name__}: {e}"[:300], flush=True)
         if f[3] >= t0:
             n += 1
             if made:
