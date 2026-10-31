@@ -1,7 +1,8 @@
 // Additional stabilization in the Movie Editor (Framing, under Auto center; film-steady.html), driven in a browser: a
-// stretch of a small moon whose centering wobbles, played in the editor with it off and then on. With it on, the
+// stretch of a small moon whose centering wobbles, which the editor steadies by itself (film_steady.auto: the moon is
+// a few px across), played with it slid to Off and then to 12. With it on, the
 // note counts the pictures it gets and matches, every frame of the film gets a move, the preview is drawn with it, the
-// recipe keeps the setting (stab=), Reset puts it back as Settings has it, and a film the frame server makes is sent
+// recipe keeps the setting (stab=), Reset puts it back as Settings has it (on by itself), and a film the frame server makes is sent
 // the moves (POST /export's body, steadied=). Each frame of the stage is saved to OUT as off-NN.png and on-NN.png
 // (the before/after: web/frames/film_steady_evidence.py measures where the moon is in them).
 // Run: node web/test_film_steady_page.cjs http://127.0.0.1:PORT OUT [FROM UNTIL] [THREE_DIR] [MUXER_DIR]
@@ -31,7 +32,21 @@ const check = (ok, what) => { console.log(ok ? "ok" : "FAIL", what); if (!ok) pr
   await page.waitForTimeout(1500);
   const n = await page.evaluate(() => cassiniMovieEdit.state.frames.length);
   check(n > 5, `the stretch has ${n} frames`);
-  check(await page.evaluate(() => /^Off/.test(document.getElementById("mestabnote").textContent) && document.getElementById("mestabv").textContent === "Off"), "Additional stabilization is off by default");
+  // a small moon: on by itself
+  const notes = new Set();
+  for (const t0 = Date.now(); Date.now() - t0 < 120000;) {
+    const t = await page.evaluate(() => document.getElementById("mestabnote").textContent);
+    notes.add(t.replace(/\d[\d,]*/g, "#"));
+    if (/^Steadied/.test(t)) break;
+    await page.waitForTimeout(100);
+  }
+  const auto = await page.evaluate(() => [document.getElementById("mestabv").textContent, document.getElementById("mestabnote").textContent]);
+  console.log("  on by itself:", auto.join(" | "));
+  check(auto[0] === "Auto · 12 pictures" && /On by itself: the body is about \d+ px across/.test(auto[1]), "a small moon is steadied by itself");
+  // slid to Off: the frames as Auto center has them
+  await page.evaluate(() => { const el = document.getElementById("mestab"); el.value = 0; el.dispatchEvent(new Event("input")); el.dispatchEvent(new Event("change")); });
+  await page.waitForTimeout(800);
+  check(await page.evaluate(() => cassiniMovieEdit.state.stab === 0 && /^Off/.test(document.getElementById("mestabnote").textContent) && document.getElementById("mestabv").textContent === "Off" && !cassiniFilmSteady.at(cassiniMovieEdit.state.frames[3].id)), "slid to Off, it is off");
 
   // each frame of the film, as the stage draws it
   async function frames(tag) {
@@ -46,7 +61,6 @@ const check = (ok, what) => { console.log(ok ? "ok" : "FAIL", what); if (!ok) pr
 
   // on: 12 pictures (the slider, as a hand would move it)
   await page.evaluate(() => { const el = document.getElementById("mestab"); el.value = 12; el.dispatchEvent(new Event("input")); el.dispatchEvent(new Event("change")); });
-  const notes = new Set();
   const t0 = Date.now();
   while (Date.now() - t0 < 120000) {
     const t = await page.evaluate(() => document.getElementById("mestabnote").textContent);
@@ -71,10 +85,10 @@ const check = (ok, what) => { console.log(ok ? "ok" : "FAIL", what); if (!ok) pr
     const FS = window.cassiniFilmSteady;
     await fetch(`${location.origin}/export?from=x`, { method: "POST", body: FS.body(), headers: { "Content-Type": "application/x-www-form-urlencoded" } });
   });
-  // Reset: as Settings has it (off)
+  // Reset: as Settings has it (on by itself, for this moon)
   await page.evaluate(() => document.getElementById("mefrclear").click());
   await page.waitForTimeout(800);
-  check(await page.evaluate(() => cassiniMovieEdit.state.stab === null && !cassiniFilmSteady.at(cassiniMovieEdit.state.frames[3].id) && document.getElementById("mestabv").textContent === "Off"), "Reset puts it back as Settings has it (off)");
+  check(await page.evaluate(() => cassiniMovieEdit.state.stab === null && !!cassiniFilmSteady.at(cassiniMovieEdit.state.frames[3].id) && document.getElementById("mestabv").textContent === "Auto · 12 pictures"), "Reset puts it back as Settings has it (on by itself)");
   // undo brings it back, at once (the matching is kept)
   await page.evaluate(() => document.getElementById("meundo").click());
   await page.waitForTimeout(1200);

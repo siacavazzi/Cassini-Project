@@ -2680,6 +2680,8 @@ body.ambient.phone .amb-where { font-size: 18px; }
   D({ key: "movies.filmSteady", section: "Movie", label: "Additional stabilization", type: "range", value: 0, min: 0, max: 60, step: 2,
       format: v => (+v ? `${v} pictures` : "Off"),
       hint: "For the Movie Editor and saved movies: Auto center puts each picture's body where SPICE says it is, and on a small moon in the narrow-angle camera that can be off by a good part of the moon, differently from picture to picture, so the movie wobbles. On, this computer matches each picture of the movie to the one before it by what the two show (the pipeline's own alignment) and takes the wobble out, keeping slow motion over this many pictures. Higher holds the body stiller; the Movie Editor's Framing sets it for each movie." });
+  D({ key: "movies.filmSteadyAuto", section: "Movie", label: "Steady small bodies by themselves", type: "toggle", value: true,
+      hint: "With Additional stabilization Off, a movie of a small body (under a tenth of the frame across, as Atlas or Pan in the narrow-angle camera, where SPICE's few pixels of error are a good part of the body) is steadied anyway, over 12 pictures. The Movie Editor's Framing slider still sets it for each movie, Off included." });
   D({ key: "movies.laps", section: "Movie", label: "Mosaic movies keep", type: "range", value: 1, min: 1, max: 6, step: 1, unit: "laps",
       hint: "A mosaic movie (the camera going over the same mosaic again and again, as on the approach to Jupiter) plays as a mosaic that never empties: each new tile replaces its own earlier copy. 1 is a time-lapse; more keeps that many copies of each tile, older ones under the newest." });
   // how often a mosaic movie's picture changes (head-quiet.html complete and cameraFeed, export.py whole=)
@@ -3704,7 +3706,7 @@ onmessage = async e => {
   // the arithmetic, shared by the page, its worker and the test (web/test_film_steady.py runs it in node)
   const MATH = function () {
     const f = Math.fround;
-    const C = { SIDE: 512, MOST: 0.08, SMOOTH: 12, SMOOTH_MOST: 60, PLACES: 5 };
+    const C = { SIDE: 512, MOST: 0.08, SMOOTH: 12, SMOOTH_MOST: 60, PLACES: 5, LEAST: 32, AUTO: 0.05, FRAME: 1024 };
 
     // Python's round(x): half to even
     const pyRound = x => { let r = Math.round(x); if (r - x === 0.5 && r % 2 !== 0) r -= 1; return r; };
@@ -3722,7 +3724,41 @@ onmessage = async e => {
       for (let i = 0, p = 0; i < g.length; i++, p += 4) g[i] = rgba[p + 3] > 0 ? (rgba[p] * 4899 + rgba[p + 1] * 9617 + rgba[p + 2] * 1868 + 8192) >> 14 : 0;
       return g;
     }
+    // film_steady.valid: 1 where the picture has picture (its alpha whole)
+    function valid(rgba, w, h) {
+      const v = new Uint8Array(w * h);
+      for (let i = 0, p = 3; i < v.length; i++, p += 4) v[i] = rgba[p] === 255 ? 1 : 0;
+      return v;
+    }
+    // film_steady.window: the largest box of the pictures' shape round their middle that both have picture all over
+    // (so the line between a centred picture and its fill, which stays where SPICE put it, is left out of the match);
+    // the whole pictures when both are whole, or the box would be under LEAST
+    function windowOf(v0, v1, w, h) {
+      const W1 = w + 1, ii = new Int32Array(W1 * (h + 1));
+      let all = true;
+      for (let y = 0; y < h; y++) {
+        let row = 0;
+        for (let x = 0; x < w; x++) { const b = v0[y * w + x] & v1[y * w + x]; if (!b) all = false; row += b; ii[(y + 1) * W1 + x + 1] = ii[y * W1 + x + 1] + row; }
+      }
+      if (all) return [0, 0, w, h];
+      const m = Math.min(w, h), cx = Math.floor(w / 2), cy = Math.floor(h / 2);
+      let best = null;
+      for (let k = 1; k <= Math.floor(m / 2); k++) {
+        const hw = Math.floor(k * w / m), hh = Math.floor(k * h / m);
+        const x0 = Math.max(cx - hw, 0), y0 = Math.max(cy - hh, 0), x1 = Math.min(cx + hw, w), y1 = Math.min(cy + hh, h);
+        if (ii[y1 * W1 + x1] - ii[y0 * W1 + x1] - ii[y1 * W1 + x0] + ii[y0 * W1 + x0] !== (x1 - x0) * (y1 - y0)) break;
+        best = [x0, y0, x1, y1];
+      }
+      if (!best || Math.min(best[2] - best[0], best[3] - best[1]) < C.LEAST) return [0, 0, w, h];
+      return best;
+    }
+    const crop = (g, w, [x0, y0, x1, y1]) => { const cw = x1 - x0, out = new Uint8Array(cw * (y1 - y0)); for (let y = y0; y < y1; y++) out.set(g.subarray(y * w + x0, y * w + x1), (y - y0) * cw); return out; };
     const most = (w, h) => Math.max(1, pyRound(C.MOST * Math.max(w, h)));
+    // film_steady.auto: steadied without being asked when the median of its body's radius (full resolution px) is under AUTO of a frame
+    function auto(radii) {
+      const r = radii.filter(v => v != null && v > 0).sort((a, b) => a - b);
+      return r.length > 0 && r[Math.floor(r.length / 2)] < C.AUTO * C.FRAME;
+    }
 
     // cv2.GaussianBlur(float32, (0, 0), sigma): cv2.getGaussianKernel's float32 kernel (25 taps at sigma 3), rows then
     // columns, the border reflected without its edge pixel (BORDER_REFLECT_101)
@@ -3910,9 +3946,13 @@ onmessage = async e => {
       return [dx, dy];
     }
 
-    // film_steady.shift: phase correlation, then the centroid
-    function shift(g0, g1, w, h) {
+    // film_steady.shift: phase correlation, then the centroid, within the window both have picture in (v: valid, or null)
+    function shift(g0, g1, w, h, v0, v1) {
       const m = most(w, h);
+      if (v0 && v1) {
+        const b = windowOf(v0, v1, w, h);
+        if (b[2] - b[0] !== w || b[3] - b[1] !== h) { g0 = crop(g0, w, b); g1 = crop(g1, w, b); w = b[2] - b[0]; h = b[3] - b[1]; }
+      }
       let s = findShift(g0, g1, w, h, m);
       if (s) return { s, how: "phase" };
       s = centroidShift(g0, g1, w, h, m);
@@ -3936,7 +3976,7 @@ onmessage = async e => {
       for (let k = 1; k < run.length; k++) {
         let s = null, how = "", j = k - 1;
         for (j of [...new Set([k - 1, good])]) {
-          ({ s, how } = shift(pics[run[j]].g, pics[run[k]].g, pics[run[k]].w, pics[run[k]].h));
+          ({ s, how } = shift(pics[run[j]].g, pics[run[k]].g, pics[run[k]].w, pics[run[k]].h, pics[run[j]].v, pics[run[k]].v));
           if (s) break;
         }
         if (s) { places.push([places[j][0] + s[0], places[j][1] + s[1]]); good = k; } else places.push(places[places.length - 1].slice());
@@ -3981,7 +4021,7 @@ onmessage = async e => {
       return moves(pics, m, smooth);
     }
 
-    return { C, grey, most, blur, optimal, fft2, phaseCorrelate, findShift, centroidShift, shift, runs, chain, held, measure, moves, offsets, pyRoundN };
+    return { C, grey, valid, windowOf, auto, most, blur, optimal, fft2, phaseCorrelate, findShift, centroidShift, shift, runs, chain, held, measure, moves, offsets, pyRoundN };
   };
   const M = MATH(), C = M.C;
 
@@ -4007,13 +4047,14 @@ onmessage = async e => {
     const id = ++asks;
     return new Promise((res, rej) => { waiting.set(id, { res, rej, tick }); w.postMessage({ id, pics }); });
   }
-  // a picture (an image or bitmap) as the matching sees it: at SIDE on its longer side, grey ({g, w, h})
+  // a picture (an image or bitmap) as the matching sees it: at SIDE on its longer side, grey, and where it has picture ({g, v, w, h})
   function greyOf(im) {
     const W = im.width, H = im.height, k = C.SIDE / Math.max(W, H), w = Math.max(1, Math.round(W * k)), h = Math.max(1, Math.round(H * k));
     const c = typeof OffscreenCanvas !== "undefined" ? new OffscreenCanvas(w, h) : Object.assign(document.createElement("canvas"), { width: w, height: h });
     const g = c.getContext("2d", { willReadFrequently: true });
     g.imageSmoothingQuality = "high"; g.drawImage(im, 0, 0, w, h);
-    return { g: M.grey(g.getImageData(0, 0, w, h).data, w, h), w, h };
+    const d = g.getImageData(0, 0, w, h).data;
+    return { g: M.grey(d, w, h), v: M.valid(d, w, h), w, h };
   }
 
   window.cassiniFilmSteady = Object.assign(window.cassiniFilmSteady || {}, { C, math: M, measure, greyOf });
@@ -10802,12 +10843,39 @@ void main() {
   // to the next on this computer, and each moved so its body holds still: the moves go on the preview, Play, each
   // downloaded frame and the film (made here: export.html; made by the frame server: export.py steadied=, sent with it)
   const FS = window.cassiniFilmSteady;
-  const stabOf = () => clamp(Math.round(ME.stab ?? (+opt("movies.filmSteady", 0) || 0)), 0, STAB);
+  // the smoothing: the editor's, else Settings', else, with Settings' "small bodies" on, SMOOTH when the film's body is
+  // small (film_steady.auto: its radius on the pictures, from the catalog's km per pixel and the body's radii)
+  const stabOf = () => {
+    const set = ME.stab ?? (+opt("movies.filmSteady", 0) || 0);
+    return clamp(Math.round(set || ME.stab != null || !FS || opt("movies.filmSteadyAuto", true) === false || !smallFilm() ? set : FS.C.SMOOTH), 0, STAB);
+  };
+  const autoNow = () => ME.stab == null && !(+opt("movies.filmSteady", 0) || 0) && stabOf() > 0;
+  // each picture's body radius, full resolution px (null where the catalog has no scale or the body no size)
+  let catIds = null, catOf = null, smallSig = "", smallWas = false, smallPx = 0;
+  function radiusPx(id) {
+    if (typeof catalog === "undefined" || !catalog || !catalog.km_per_px || typeof bodies === "undefined") return null;
+    if (catOf !== catalog) { catOf = catalog; catIds = new Map(catalog.id.map((v, k) => [v, k])); }
+    const k = catIds.get(id), b = k == null ? null : bodies[String(catalog.target[k] || "").toUpperCase()], kp = k == null ? 0 : +catalog.km_per_px[k];
+    return b && b.radii && kp > 0 ? b.radii.reduce((a, v) => a + v, 0) / b.radii.length / kp : null;
+  }
+  function smallFilm() {
+    let film;
+    try { film = ME.a == null || ME.loading ? [] : evs().film; } catch (err) { return false; }   // (the editor still setting up)
+    const sig = film.length ? `${film[0].id}|${film[film.length - 1].id}|${film.length}` : "";
+    if (sig !== smallSig) {
+      smallSig = sig;
+      const r = film.filter((e, i) => i % Math.max(1, Math.floor(film.length / 60)) === 0).map(e => radiusPx(e.id));
+      smallWas = FS.math.auto(r);
+      const known = r.filter(v => v > 0).sort((a, b) => a - b);
+      smallPx = known.length ? known[Math.floor(known.length / 2)] : 0;
+    }
+    return smallWas;
+  }
   // SD: what was measured (sig: the film's pictures' addresses), the chains, how far it is, and each frame's move
   const SD = { sig: "", pics: null, ids: [], measured: null, smooth: 0, done: 0, total: 0, matched: 0, phase: "", error: "", moves: new Map(), run: 0 };
   // the pictures the film shows for frame e, whatever the strip shows (export.py Pictures.picture: the first the server has)
   const filmTries = e => { const s = ME.src; ME.src = "movie"; try { return tries(e, 1024); } finally { ME.src = s; } };
-  const greys = new Map();    // a picture's address -> its grey at SIDE (a few hundred KB of them at most)
+  const greys = new Map();    // a picture's address -> its grey and where it has picture, at SIDE (half a MB each; the newest 1,000 kept)
   async function greyAt(urls) {
     for (const url of urls) {
       if (greys.has(url)) return greys.get(url);
@@ -10817,7 +10885,7 @@ void main() {
         const b = await createImageBitmap(await r.blob()), g = FS.greyOf(b);
         if (b.close) b.close();
         greys.set(url, g);
-        if (greys.size > 6000) greys.delete(greys.keys().next().value);
+        if (greys.size > 1000) greys.delete(greys.keys().next().value);
         return g;
       } catch (err) { /* the next stand-in */ }
     }
@@ -10889,17 +10957,19 @@ void main() {
     const el = $("mestab"), v = stabOf(), note = $("mestabnote");
     if (!el) return;
     if (document.activeElement !== el || !el.matches(":active")) el.value = v;
-    $("mestabv").textContent = v ? `${v} pictures` : "Off";
+    $("mestabv").textContent = v ? `${autoNow() ? "Auto · " : ""}${v} pictures` : "Off";
     note.textContent = !FS ? "" : !v ? "Off. For when SPICE's centering wobbles, as on a small moon in the NAC: slide it up to steady the movie by what the pictures show."
       : SD.error || (SD.phase === "fetch" ? `Steadying: getting pictures, ${SD.done.toLocaleString()} of ${SD.total.toLocaleString()}…`
         : SD.phase === "match" ? `Steadying: matching pictures, ${SD.done.toLocaleString()} of ${SD.total.toLocaleString()}…`
-          : SD.measured ? steadyText() : "Steadying…");
+          : SD.measured && SD.smooth === v ? steadyText() : "Steadying…");
   }
   function steadyText() {
     const n = SD.pics.length, held = n - SD.matched, px = [...SD.moves.values()].map(([x, y]) => Math.hypot(x, y) * 1024);
     const most = px.length ? Math.max(...px) : 0, mean = px.length ? px.reduce((a, b) => a + b, 0) / n : 0;
     return `Steadied ${n.toLocaleString()} picture${n === 1 ? "" : "s"}: moved ${mean.toFixed(1)} px on average, ${most.toFixed(1)} px at most (of 1024)`
-      + (held > 0 ? `; ${held.toLocaleString()} matched nothing and keep their place.` : ".") + (ME.stab == null ? " As Settings > Movie has it." : "");
+      + (held > 0 ? `; ${held.toLocaleString()} matched nothing and keep their place.` : ".")
+      + (autoNow() ? ` On by itself: the body is about ${Math.max(1, Math.round(2 * smallPx))} px across (of 1024), small enough for SPICE's few pixels to show. Slide to Off to leave it out.`
+        : ME.stab == null ? " As Settings > Movie has it." : "");
   }
 
   const WHOLE = [0, 0, 1, 1], boxStr = b => b.map(v => +v.toFixed(4)).join("_");
@@ -11268,7 +11338,7 @@ void main() {
   }
   new ResizeObserver(() => paint()).observe(stage);
   if (window.cassiniSettings) window.cassiniSettings.on("cameras.background", () => paint());
-  if (window.cassiniSettings) window.cassiniSettings.on("movies.filmSteady", () => { if (ME.stab == null) { sideSteady(); steadySoon(); } });
+  if (window.cassiniSettings) ["movies.filmSteady", "movies.filmSteadyAuto"].forEach(k => window.cassiniSettings.on(k, () => { if (ME.stab == null) { sideSteady(); steadySoon(); } }));
 
   // ---------- picking frames ----------
   function select(i, how = {}) {
@@ -12520,7 +12590,7 @@ void main() {
   window.cassiniAbout = { open, addTab, esc, close: () => show(false), credits: CREDITS };
 
   // ---- which version this is: this page's build id (build.py writes it), and what the frame server says it serves ----
-  const BUILD = /*BUILD*/"8e510abd7ee5";
+  const BUILD = /*BUILD*/"cf381df69859";
   const FRAMES = (() => {                       // the frame server, chosen as the camera window chooses it
     const q = new URLSearchParams(location.search).get("frames");
     if (q) return q.replace(/\/$/, "");
