@@ -865,6 +865,13 @@ function makeCassini() {
   const eng = new THREE.Mesh(new THREE.ConeGeometry(0.45, 0.9, 16, 1, true), dark); eng.rotation.x = -Math.PI / 2; eng.position.z = -2.5; g.add(eng);
   return g;
 }
+// where each camera's cone starts: the front of its tube on the model, in the cassini group's own metres (the
+// primitive model's NAC and WAC above; a page that swaps in another model moves these onto its cameras)
+const CAM_MOUNT = { N: new THREE.Vector3(0.3, 1.96, 0.4), W: new THREE.Vector3(-0.3, 1.76, 0.4) };
+// that point in the scene, on the model as it is turned and scaled this frame
+function camMountAt(cam, out) {
+  return out.copy(CAM_MOUNT[cam]).applyQuaternion(cassini.quaternion).multiplyScalar(cassini.scale.x).add(cassini.position);
+}
 
 // ---------- state ----------
 const state = { et: 0, playing: true, speed: 600, focus: "TITAN", enlarge: false, allOrbits: false, follow: false, view: [0, 0], tlFollow: true, dragging: false, context: "SATURN" };
@@ -1308,15 +1315,17 @@ function updateFov() {
     const c = CAM_TO_BODY[cam];
     qmul([c[0], -c[1], -c[2], -c[3]], qBody, qCam, 0);
     const R = q2rows(qCam), cx = toScene(R[0], new THREE.Vector3()), cy = toScene(R[1], new THREE.Vector3()), cz = toScene(R[2], new THREE.Vector3());
-    const L = tp ? Math.max(cassini.position.distanceTo(tp), 1e-3) : Math.max(camera.position.distanceTo(cassini.position), 1e-3);
+    camMountAt(cam, fov.position);
+    const L = tp ? Math.max(fov.position.distanceTo(tp), 1e-3) : Math.max(camera.position.distanceTo(cassini.position), 1e-3);
     const h = L * Math.tan(rad(FOV_HALF[cam]));
-    fov.position.copy(cassini.position); fov.scale.set(h, h, L * 1.02);
+    fov.scale.set(h, h, L * 1.02);
     fov.quaternion.setFromRotationMatrix(mB.makeBasis(cx, cy, cz));
   } else {
     if (!tp) return;
-    const L = cassini.position.distanceTo(tp); if (!(L > 0)) return;
+    camMountAt(cam, fov.position);
+    const L = fov.position.distanceTo(tp); if (!(L > 0)) return;
     const h = L * Math.tan(rad(FOV_HALF[cam]));
-    fov.position.copy(cassini.position); fov.scale.set(h, h, L * 1.02); fov.lookAt(tp);
+    fov.scale.set(h, h, L * 1.02); fov.lookAt(tp);
   }
   const col = catalog.cam[k] === "N" ? 0x8ec9ff : 0x9fb6d6;
   fov.children[0].material.color.setHex(col); fov.children[1].material.color.setHex(col);

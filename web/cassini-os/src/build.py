@@ -524,6 +524,12 @@ function makeCassini() {
       // scale so the high-gain dish is its real 4 m across
       const dish = m.getObjectByName("dish"), box = new THREE.Box3().setFromObject(dish), sz = box.getSize(new THREE.Vector3());
       m.scale.setScalar(4 / Math.max(sz.x, sz.y, sz.z));
+      // the camera cones start at the front of the two camera tubes on the remote sensing pallet (model metres,
+      // measured on the model: the wide 28 cm tube is the NAC, the slim 11 cm one beside it the WAC; 1 cm out
+      // so the cone's tip is not hidden inside the tube)
+      m.updateMatrix();
+      CAM_MOUNT.N.set(0.589, 0.401, 1.827).applyMatrix4(m.matrix);
+      CAM_MOUNT.W.set(0.981, 0.615, 1.593).applyMatrix4(m.matrix);
       m.traverse(o => {
         o.layers.set(1);
         if (/_h$/.test(o.name)) cassiniProbe.push(o);
