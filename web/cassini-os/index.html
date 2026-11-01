@@ -2612,12 +2612,11 @@ body.ambient.phone .amb-where { font-size: 18px; }
   }
   // Where a visit with no moment of its own lands: one of these famous moments, picked at random on each visit, so
   // the first minute is something a visitor may know and something happens in it. Each starts a little before its
-  // pictures (or its cutscene) at a speed that plays them in about a minute. Start time can pin any one of them.
+  // pictures at a speed that plays them in about a minute. Start time can pin any one of them. No cutscene moments
+  // (Huygens, Saturn arrival, the Grand Finale): those are for visitors who go to them (Sam, 2026-11-01).
   const LANDINGS = window.cassiniLandings = [
     { t: "2006-09-15T14:28:00", speed: 600, label: "In Saturn's Shadow" },
     { t: "2013-07-19T22:23:19", speed: 600, label: "The Day the Earth Smiled" },
-    { t: "2005-01-14T09:00:52", speed: 60, label: "Huygens descends to Titan" },
-    { t: "2004-07-01T01:09:00", speed: 60, label: "Arrival at Saturn" },
     { t: "2010-11-30T07:25:10", speed: 600, label: "The plumes of Enceladus" },
     { t: "2005-09-26T00:40:07", speed: 600, label: "Hyperion, the sponge moon" },
     { t: "2010-02-13T17:54:31", speed: 60, label: "Mimas, the Death Star moon" },
@@ -12683,7 +12682,7 @@ void main() {
   window.cassiniAbout = { open, addTab, esc, close: () => show(false), credits: CREDITS };
 
   // ---- which version this is: this page's build id (build.py writes it), and what the frame server says it serves ----
-  const BUILD = /*BUILD*/"59b134ac5663";
+  const BUILD = /*BUILD*/"e9f8c696305f";
   const FRAMES = (() => {                       // the frame server, chosen as the camera window chooses it
     const q = new URLSearchParams(location.search).get("frames");
     if (q) return q.replace(/\/$/, "");

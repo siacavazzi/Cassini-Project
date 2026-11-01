@@ -53,6 +53,13 @@ async function open(br, path, seed, keepLast, slices) {
   }
   check("In Saturn's Shadow is one of the moments", list.some(m => m.t === "2006-09-15T14:28:00" && /Saturn's Shadow/.test(m.label)));
   check("random visits do not all land in the same place", seen.size > 1, seen.size);
+  // no landing plays into a cutscene in its first minutes: those are for visitors who go to them (Sam, 2026-11-01)
+  const CUTS = [["Saturn arrival", "2004-07-01T01:12:00"], ["Huygens release", "2004-12-25T02:00:00"], ["Huygens entry", "2005-01-14T09:05:52"], ["Grand Finale", "2017-09-15T10:31:00"]];
+  for (const l of list) {
+    const a = Date.parse(l.t + "Z"), b = a + 300 * l.speed * 1000;   // five minutes of playback
+    const hit = CUTS.find(([, c]) => Date.parse(c + "Z") >= a - 86400e3 && Date.parse(c + "Z") <= b);
+    check(`${l.label}: no cutscene in its first five minutes`, !hit, hit && hit[0]);
+  }
   // not the same moment twice in a row on one browser
   for (let k = 0; k < 4; k++) {
     const last = list[k % list.length].t, r = await open(br, "", null, last);
