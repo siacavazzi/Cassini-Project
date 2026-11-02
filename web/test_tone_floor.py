@@ -2,7 +2,7 @@
 an even bright surface with no sky (Titan's haze) spreads over the range instead of sitting at near-white; a lit sky
 that fails the sky test, and a star field's even offset, go near black (GLOW_IOF), faint rings as dim do not
 (GLOW_FINE); an even body beside sky (a moon close-up) gets its floor taken off, a body with a terminator or a ring
-shadow does not; a night side the sky test counts as sky fades out instead of a ragged cut while the real sky stays
+shadow does not; an icy close-up's few cracks and a small dim moon beside a bright ring are not drawn black; a night side the sky test counts as sky fades out instead of a ragged cut while the real sky stays
 black; one black for every channel keeps the color; saturated pixels draw white (draw_saturated), and a frame
 saturated over most of it keeps its dim edge soft (SATURATED_FLOOR); and a reel's shared scale (tiles_scale) still
 fits every tile's white. Run: python web/test_tone_floor.py"""
@@ -117,6 +117,42 @@ disc += rng.normal(0, 0.0005, (H, H))
 before, after = draw([disc], floor=False)[0], draw([disc])[0]
 print("terminator disc: largest change", int(np.abs(before.astype(int) - after).max()))
 assert np.abs(before.astype(int) - after).max() <= 1
+
+# ---- an icy close-up without sky (Enceladus): a few cracks, rarer than the 0.5 percentile the floor was taken at, keep
+# their light instead of going black ink; the floor is their brightness (spot check round 3, R1) ----
+ice = 0.9 + 0.1 * smooth + rng.normal(0, 0.003, (H, H))
+crack = (np.abs(yy - (0.4 * xx + 120)) < 1.5) & (xx < 150)
+ice[crack] *= 0.45 + 0.15 * smooth[crack]
+keep = cal.FLOOR_PCT
+cal.FLOOR_PCT = 0.5
+try:
+    ink = draw([ice])[0]
+finally:
+    cal.FLOOR_PCT = keep
+after = draw([ice])[0]
+print("ice cracks (%.1f%% of it) p50: at the 0.5 percentile floor %d, now %d" % (100 * crack.mean(), np.median(ink[crack]),
+                                                                              np.median(after[crack])))
+assert crack.mean() < 0.005 and np.median(ink[crack]) < 5 and np.percentile(after[crack], 10) > 60
+
+# ---- with sky: a small dim moon (and a narrow faint ring) under a bright even ring band (Mimas under the A ring): the
+# band's floor black would draw them black; the moon's median is the floor instead (FLOOR_BODY) ----
+scene = np.where(yy < 150, 0.3 + 0.05 * smooth, 0.0)
+small = np.hypot(xx - 200, yy - 400) < 12
+scene[small] = 0.06 + 0.03 * np.clip((xx[small] - 188) / 24, 0, 1)
+narrow = np.abs(yy - (220 + 0.1 * xx)) < 1.5
+scene[narrow] = 0.02
+scene += 0.0005 + rng.normal(0, 0.0004, (H, H))
+before, after = draw([scene], floor=False)[0], draw([scene])[0]
+keep = cal.FLOOR_BODY
+cal.FLOOR_BODY = 2.0                                          # no lit thing counts: the band's floor alone
+try:
+    crushed = draw([scene])[0]
+finally:
+    cal.FLOOR_BODY = keep
+print("small moon p50: band's floor black %d, now %d, without a floor %d | narrow ring p50: %d, now %d"
+      % (np.median(crushed[small]), np.median(after[small]), np.median(before[small]), np.median(crushed[narrow]),
+         np.median(after[narrow])))
+assert np.median(crushed[small]) < 10 and np.median(after[small]) > 100 and np.median(after[narrow]) > 40
 
 # ---- a crescent whose dim night side the sky test counts as sky: the glow stays, the real sky stays black ----
 crescent = np.where((r < 180) & (xx < 200), 0.3 * np.clip((215 - xx) / 120, 0.02, 1), 0.0)

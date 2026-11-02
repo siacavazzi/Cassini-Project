@@ -357,21 +357,43 @@ def _match(im1, im2, g, mask1, mask2, within=None):
     shift, how = find_shift(im1, im2), "phase"
     if shift is None and g is not None:
         # SPICE knows about where the frame is: the frames are matched again near there first
-        shift, how = guided_shift(im1, im2, g)
+        shift, how = guided_shift(im1, im2, g, weak=True)
+    rejected = []
     if shift is None:
-        shift, how = star_shift(im1, im2), "stars"
+        shift, how = _plausible(star_shift(im1, im2), "stars", g, rejected)
     if shift is None:
         shift, how = find_shift(edges(im1), edges(im2)), "edges"
         # an edge match at exactly no shift is the camera's own fixed pattern (dust rings, bad
         # columns) matching itself, not the target: it says nothing
         if shift is not None and abs(shift[0]) < 0.25 and abs(shift[1]) < 0.25:
             shift = None
+        shift, how = _plausible(shift, how, g, rejected)
         if shift is None:
             shift, how = centroid_shift(im1, im2), "centroid"
     if shift is None and g is not None:
-        # nothing matched anywhere: SPICE's offset, where it lines the frames up better than none
+        # nothing matched anywhere (or only wild fits): SPICE's offset, where it lines the frames up better than none
         shift, how = spice_shift(im1, im2, mask1, mask2, g)
+    if rejected:
+        how = f"{how} ({', '.join(rejected)} rejected)"
     return shift, how
+
+
+"""
+A star or edge fit (the fallbacks after phase correlation) found far from SPICE's offset g is taken for a false one:
+stars on a ring frame or an all-planet frame, edges of rings, the noise of an empty sky (W1874655257_1: stars 106 px
+from SPICE, W1537024388_1: +32,-92, N1716316428_1: -17,-65). Within FIT_REACH px of g it stands; without g it stands as
+before. The centroid is not checked: it is taken only when the whole target is in both frames, and SPICE's offset
+between two filters is itself up to 30 px off (N1830230441_1: SPICE 27 px, the centroid and phase both under 3 px).
+(shift or None, how); a rejected fit is noted in rejected.
+"""
+FIT_REACH = 32.0    # px: past the 27 to 30 px SPICE is seen off between a set's filters (W1714632762_1, N1830230441_1)
+
+
+def _plausible(shift, how, g, rejected):
+    if shift is None or g is None or np.hypot(shift[0] - g[0], shift[1] - g[1]) <= FIT_REACH:
+        return shift, how
+    rejected.append(f"{how} {shift[0]:+.1f},{shift[1]:+.1f}")
+    return None, how
 
 
 """
@@ -469,7 +491,8 @@ Here the frame is first moved by SPICE's offset, then matched again within GUESS
 believed within the same window). SPICE's pointing can itself be tens of pixels off (a WAC set of 2012-05-02,
 W1714632762_1, moved 30 px that SPICE doesn't show), so when nothing matches near it the frames' own fallbacks still
 run (align_with_masks), and only then SPICE's offset (spice_shift). A guess past GUESS_MAX is no help: the frames
-show different parts of the scene.
+show different parts of the scene. weak = a colour set's channels (not a mosaic's tiles): phase correlation and edges
+that agree within WEAK_AGREE px are believed down to GUESS_WEAK.
 returns ((dx, dy), how) or (None, "not aligned")
 """
 GUESS_WINDOW = 12     # px: SPICE's pointing is 3 to 5 px off from panel to panel, 11 at most (obs_mosaic.PANEL_MAX)
@@ -478,7 +501,11 @@ GUESS_MAX = 256       # px: a quarter of the frame
 AGREE_MARGIN = 0.02   # how much better SPICE's offset must line the edges up than no shift does
 
 
-def guided_shift(im1, im2, guess, window=GUESS_WINDOW):
+GUESS_WEAK = 0.05     # the least peak believed when phase correlation and edges agree (weak=True)
+WEAK_AGREE = 3.0      # px: how near the two must agree
+
+
+def guided_shift(im1, im2, guess, window=GUESS_WINDOW, weak=False):
     gx, gy = float(guess[0]), float(guess[1])
     if np.hypot(gx, gy) > GUESS_MAX:
         return None, "not aligned"
@@ -494,16 +521,29 @@ def guided_shift(im1, im2, guess, window=GUESS_WINDOW):
     found = centroid_shift(im1, im2)
     if found is not None and np.hypot(found[0] - gx, found[1] - gy) <= window:
         return found, "centroid near SPICE"
+    if weak:
+        # a weaker peak both on the frames and on their edges, at the same place: two matches agreeing are believed
+        # where neither alone is (WAC Grand Finale rings, W1874655257_1: phase and edges both 18,175 px at 0.07 and
+        # 0.08 where SPICE says 28,169, which leaves a fringe on every ringlet)
+        pa = find_shift(im1, moved, window, GUESS_WEAK)
+        pe = find_shift(edges(im1), edges(moved), window, GUESS_WEAK) if pa is not None else None
+        if pe is not None and np.hypot(pa[0] - pe[0], pa[1] - pe[1]) <= WEAK_AGREE:
+            return (gx + (pa[0] + pe[0]) / 2, gy + (pa[1] + pe[1]) / 2), "phase and edges near SPICE"
     return None, "not aligned"
 
 
 """
 SPICE's offset guess for im2 when no match was found anywhere, if it lines the frames' edges up better than no shift
-(by AGREE_MARGIN), else none. masks = the two frames' valid pixels (label.valid_mask)
+(by AGREE_MARGIN) or is under SPICE_SURE px, else none (the set is then drawn grey, color_image.grey_from). masks = the two frames' valid pixels (label.valid_mask)
 returns ((dx, dy), "SPICE") or (None, "not aligned")
 """
+SPICE_SURE = 2.0   # px: an offset this small is taken as it is (no shift or SPICE's differ by less than a fringe)
+
+
 def spice_shift(im1, im2, mask1, mask2, guess):
     gx, gy = float(guess[0]), float(guess[1])
+    if np.hypot(gx, gy) <= SPICE_SURE:
+        return (gx, gy), "SPICE"
     if np.hypot(gx, gy) <= GUESS_MAX and \
             _agreement(im1, im2, mask1, mask2, (gx, gy)) > _agreement(im1, im2, mask1, mask2, (0.0, 0.0)) + AGREE_MARGIN:
         return (gx, gy), "SPICE"
@@ -581,7 +621,7 @@ Offset of im2 from im1 matched on point sources (stars, specks of moons), for a 
 phase correlation and the lit area's centroid fail (N1807503852_1: SKY, no SPICE target, a centroid 35 px off).
 The points of each frame (star_points) vote for every offset between a point of one and a point of the other
 within max_shift; the offset most pairs agree on (STAR_BIN px), by at least STAR_LEAST pairs and STAR_SHARE of
-the fewer points, wins, refined to the mean of those pairs. Hot pixels are taken out first (a 3 x 3 median), as
+the fewer points, wins, refined to the mean of those pairs. Only on frames lit over at most STAR_DARK. Hot pixels are taken out first (a 3 x 3 median), as
 they sit still and would vote for no shift. returns (dx, dy) or None
 """
 STAR_MOST = 150     # brightest points kept per frame
@@ -589,6 +629,17 @@ STAR_SIGMA = 6.0    # a point stands this many noise sigmas over what is round i
 STAR_LEAST = 5      # pairs agreeing on the offset, at least
 STAR_SHARE = 0.3    # ... and this share of the fewer points
 STAR_BIN = 2.0      # px
+STAR_DARK = 0.1     # of the frame: the most a star field may be lit (lit_share)
+
+
+def lit_share(im):
+    """The share of the frame lit over a fifth of its brightest above its sky (its 5th percentile), 3 px blurred as
+    find_shift sees a target, after a 3 x 3 median so hot pixels don't set the brightest"""
+    gray = cv2.cvtColor(im, cv2.COLOR_BGR2GRAY) if im.ndim == 3 else im
+    blurred = cv2.GaussianBlur(cv2.medianBlur(np.ascontiguousarray(gray).astype(np.float32), 3), (0, 0), 3)
+    blurred -= np.percentile(blurred, 5)
+    top = float(blurred.max())
+    return float((blurred > 0.2 * top).mean()) if top > 0 else 0.0
 
 
 def star_points(im):
@@ -614,6 +665,10 @@ def star_points(im):
 
 
 def star_shift(im1, im2, max_shift=100):
+    # stars are seen only on a black sky: a frame lit over more than STAR_DARK (a planet, rings, a moon filling it,
+    # an empty sky stretched into grey noise) has no stars to match, only texture that votes for a false offset
+    if lit_share(im1) > STAR_DARK or lit_share(im2) > STAR_DARK:
+        return None
     p1, p2 = star_points(im1), star_points(im2)
     if len(p1) < STAR_LEAST or len(p2) < STAR_LEAST:
         return None
