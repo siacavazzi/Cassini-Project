@@ -35,7 +35,8 @@ n = color_image.EDGE_PX
 assert not t[:n].any() and not t[-n:].any() and not t[:, :n].any() and not t[:, -n:].any()
 assert t[n:-n, n:-n].all(), "only the outermost lines and columns go"
 assert full.all(), "the mask given is not changed"
-for lines, want in ((512, 2 * n), (256, 4 * n)):
+m = color_image.SUMMED_EDGE_PX
+for lines, want in ((512, max(m, 2 * n)), (256, max(m, 4 * n))):
     t = color_image.edge_trimmed(full, Lbl(lines))
     assert not t[:, :want].any() and t[want:-want, want:-want].all(), (lines, want)
 assert color_image.edge_trimmed(full, Lbl("N/A"))[n:-n, n:-n].all()
@@ -43,7 +44,7 @@ lost = full.copy()
 lost[500:510] = False    # lost lines stay lost
 t = color_image.edge_trimmed(lost, Lbl(1024))
 assert not t[500:510].any() and t[n:500, n:-n].all()
-print(f"trim: {n} of the frame's own pixels ({n}, {2 * n} or {4 * n} px of a 1024, 512 or 256 line frame), nothing else")
+print(f"trim: {n} px of a full frame, {max(m, 2 * n)} or {max(m, 4 * n)} px of a 512 or 256 line one, nothing else")
 
 # a frame whose first and last columns and first line are bright (the camera's own, in nearly every frame of the
 # archive), drawn as processed_frame draws it: alpha = mask.png where the frame has pixels, turned (linear, colour and
@@ -80,6 +81,13 @@ print("brightest pixel along the turned frame's edge, on black (sky inside 10): 
       ", ".join(f"{k} {v:.1f}" for k, v in cases.items()))
 assert cases["before"] > 20 and cases["mask only"] > 5 and cases["summed, 127 under the edge"] > cases["summed, after"] + 3, "the cases to fix"
 assert cases["after"] <= 10 and cases["summed, after"] <= 10, "no edge brighter than the sky"
+# N1349081639_2's own edge (512 lines, the Mini's edge profile): its bright columns run 8 full-resolution px in
+jup = np.zeros((1024, 1024), np.uint8)
+jup[:, :10] = [127, 127, 39, 41, 14, 14, 19, 19, 2, 2]
+j512 = color_image.edge_trimmed(full, Lbl(512))
+jup_after = turned_rim(color_image.rim_coloured(jup, j512), j512)
+print(f"Jupiter 2000's summed edge: before {turned_rim(jup, full):.1f}, after {jup_after:.1f}")
+assert jup_after <= 1, "no line from a summed frame's bright edge columns"
 painted = color_image.rim_coloured(half, summed)
 assert np.array_equal(painted[summed], half[summed]), "the picture itself as it was"
 assert np.abs(painted[8:-8, :8].astype(int) - 10).max() <= 2, "the left-out edge painted from the picture"

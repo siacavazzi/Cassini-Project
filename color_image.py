@@ -108,10 +108,11 @@ neighbours have 112, W1295204353_1 29 against 24) and the first line often does 
 frame's second line can too (W1507745867_2). Drawn at the soft edge's first value (mask.png's 46 of 255) on a
 stretched dark sky, turned north up and resized, they became dotted bright lines along two edges of every frame
 (Titan 2006 020TI, Jupiter 2000, Phoebe, Titan 2007 054TI) and white specks along every ring film's edge (113RI).
-A frame's mask (pixels it has) leaves out EDGE_PX of the frame's own pixels at each edge: 2 full-resolution pixels of
-a 1024 line frame, 4 of a 512 line one, 8 of a 256 line one (the valid mask already leaves out a summed frame's first
-pixel; its second is bright too: N1349081639_2, Jupiter 2000, 53 and 45 against 16 and then 0 in the sky, the faint
-line the Mini's second render still showed).
+A frame's mask (pixels it has) leaves out EDGE_PX full-resolution pixels at each edge of a full frame, and
+SUMMED_EDGE_PX of a summed one (4 of a 512 line frame's own pixels, 2 of a 256 line one's): a summed frame's bright
+edge runs further in. N1349081639_2 (Jupiter 2000, 512 lines), on the full-resolution grid from the edge: 127 127
+(the valid mask's left-out first pixel), 39 41, 14 14, 19 19, 2 2, then 0 in the sky; the Mini's second and third
+renders, which left out 2 of its own pixels, still showed a faint line from the third and fourth.
 Leaving a pixel out of the mask is not enough on its own: turning the frame north up (label.translate, linear on
 colour and alpha apart) mixes a left-out pixel's colour into the new edge, and the calibrated path leaves 127 (half
 scale) under a summed frame's left-out edge column. That was most of the dotted lines (the Mini's edge profile of
@@ -121,16 +122,18 @@ the picture is the picture's own nearest colour (rim_coloured), as load_aligned 
 (mask.png) is unchanged; it starts edge_px in.
 """
 EDGE_PX = 2
+SUMMED_EDGE_PX = 8
 
 
 def edge_px(lbl, side=1024):
     """How many full-resolution pixels at each edge of frame lbl (on a side px grid) are not picture: EDGE_PX of
-    its own pixels."""
+    a full frame, SUMMED_EDGE_PX (or EDGE_PX of its own pixels, if more) of a summed one."""
     try:
         lines = int(lbl.info.get("LINES", side))
     except (TypeError, ValueError, AttributeError):
         lines = side
-    return EDGE_PX * max(1, side // max(1, min(lines, side)))
+    summing = max(1, side // max(1, min(lines, side)))
+    return EDGE_PX if summing == 1 else max(SUMMED_EDGE_PX, EDGE_PX * summing)
 
 
 def edge_trimmed(mask, lbl):
