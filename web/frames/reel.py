@@ -57,7 +57,7 @@ import stacking  # noqa: E402
 import sets_passes  # noqa: E402
 
 # bumped whenever the way reel pictures are made changes, so older ones are not served again
-VERSIONS = {"balanced": "reel-v35", "raw": "reel-v18", "eye": "reel-v35-eye", "classic": "reel-v12"}   # one per calibration.style(); v35/v18/v12: the CISSCAL 4.1 dark current (#231) and the colour-set repeat and pointing rule (#232); v34/v17/v11: the CISSCAL 2 Hz noise, pixel pair and sky band steps (#230); v33/v16/v10: the batch-4 fixes (thin ringlets, compressed frames, movie holds, Titan wind color); v32/v15/v9: the batch-3 fixes (Titan color, saturated white, movie strobe, line holes, pass kinds); v31/v14/v8: the small artifact and two-filter color fixes (groups I, F); v30/v13/v7: the restart's calibration, tone and tile fixes; v29/v12/v6: flat field
+VERSIONS = {"balanced": "reel-v36", "raw": "reel-v19", "eye": "reel-v36-eye", "false": "reel-v36-false", "classic": "reel-v13"}   # one per calibration.style(); v36/v19/v13: the colour-set registration fixes (#235) and natural filters and palette for colour sets (#237); v35/v18/v12: the CISSCAL 4.1 dark current (#231) and the colour-set repeat and pointing rule (#232); v34/v17/v11: the CISSCAL 2 Hz noise, pixel pair and sky band steps (#230); v33/v16/v10: the batch-4 fixes (thin ringlets, compressed frames, movie holds, Titan wind color); v32/v15/v9: the batch-3 fixes (Titan color, saturated white, movie strobe, line holes, pass kinds); v31/v14/v8: the small artifact and two-filter color fixes (groups I, F); v30/v13/v7: the restart's calibration, tone and tile fixes; v29/v12/v6: flat field
 
 
 def version():
