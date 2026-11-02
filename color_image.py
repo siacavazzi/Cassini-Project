@@ -251,6 +251,11 @@ def load_aligned(paths, hdr=False, scale=None, repeat_window=120, around=None):
             # the picture is drawn, never where its channels land
             with cal.looking("classic"):
                 guide = cal.load_channels(lbls, imgs, iofs=iofs)
+            # what the camera saturated in each channel (merged in I/F: what every exposure saturated), moved with
+            # its channel below: filled from the channels that did not saturate there (calibration.tone, fill_saturated)
+            each = [_saturated_of(l, img.shape[:2]) if clip is None else clip for l, img, clip in zip(lbls, imgs, clips)]
+            if any(m is not None and m.any() for m in each):
+                full = [np.zeros(imgs[0].shape[:2], np.float32) if m is None else m.astype(np.float32) for m in each]
         elif linear is None:
             # puts every filter on the same brightness scale (see calibration.py)
             before = imgs
@@ -274,6 +279,8 @@ def load_aligned(paths, hdr=False, scale=None, repeat_window=120, around=None):
         masks = [m if w is None else warp_frame(m.astype(np.float32), w) > 0.99 for m, w in zip(masks, warps)]
         if guide is not None:
             guide = [g if w is None else warp_frame(g, w) for g, w in zip(guide, warps)]
+            if full is not None and len(lbls) > 1:
+                full = [m if w is None else warp_frame(m, w) for m, w in zip(full, warps)]
             linear = ([c if w is None else warp_frame(c, w) for c, w in zip(linear[0], warps)],) + tuple(linear[1:])
         else:
             imgs = [i if w is None else warp_frame(i, w) for i, w in zip(imgs, warps)]
@@ -290,7 +297,11 @@ def load_aligned(paths, hdr=False, scale=None, repeat_window=120, around=None):
             shifts = []
             ic.align_with_masks(guide, [m.copy() for m in masks], ref, aligned, found=shifts, guess=guess)
             channels, masks = ic.align_with_masks(linear[0], masks, ref, use=shifts)
-            imgs = cal.tone(*_greyed(channels, linear, ref, aligned))
+            if full is not None:
+                full = [m if d is None else ic.shift_image(m, *d) for m, d in zip(full, shifts)]
+            # a set drawn grey (a channel not aligned) is every channel the reference's, so no channel fill
+            imgs = cal.tone(*_greyed(channels, linear, ref, aligned),
+                            saturated=None if unaligned(aligned) else _saturated_masks(full))
         else:
             imgs, masks = ic.align_with_masks(imgs, masks, ref, aligned, guess=guess)
     except Exception:
@@ -299,7 +310,8 @@ def load_aligned(paths, hdr=False, scale=None, repeat_window=120, around=None):
         if linear is not None:
             guide = None
     if linear is not None and guide is None:
-        imgs = cal.tone(*_greyed(linear[0], linear, ref, aligned))
+        imgs = cal.tone(*_greyed(linear[0], linear, ref, aligned),
+                        saturated=_saturated_masks(full) if len(lbls) > 1 and not unaligned(aligned) else None)
     grey = unaligned(aligned)
     if grey:
         # a channel neither its own match nor SPICE could place: drawn grey from the reference alone, never in colours
@@ -370,6 +382,27 @@ def _greyed(channels, linear, ref, aligned):
     if unaligned(aligned):
         return grey_from(channels, ref), linear[1], None
     return channels, linear[1], linear[2]
+
+
+"""
+calibration.saturated_of, or None for a frame whose codes can't be read
+"""
+def _saturated_of(lbl, shape):
+    try:
+        return cal.saturated_of(lbl, shape)
+    except Exception as e:
+        print(f"Can't read {lbl.get_info().get('path')} for its saturated pixels: {e}")
+        return None
+
+
+"""
+Each channel's saturated pixels as masks (from float32 masks moved with their channels), or None when none saturated
+"""
+def _saturated_masks(masks):
+    if not masks:
+        return None
+    out = [m > 0.5 for m in masks]
+    return out if any(m.any() for m in out) else None
 
 
 """
