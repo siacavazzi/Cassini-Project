@@ -350,9 +350,9 @@ def load_aligned(paths, hdr=False, scale=None, repeat_window=120, around=None):
 Where the sky of a color set is when its own sky test finds too little of it (calibration.load_linear's off_disk):
 every pixel off its target's disk in every frame of the set, as SPICE places it (the geometry cache), DISK_MARGIN
 wider for SPICE's error, as a mask of the given shape (a frame's, its channels not yet aligned). The sky round a moon
-can be lit all over, so its own test (calibration._sky, under a twentieth of the brightest) finds none: a pedestal of
-stray light over half of Mimas's frames in the 2010 color set (126MI, magenta and pink) or the faint offset round
-Phoebe a few dozen pixels across (2004, violet). None when SPICE can't place the target on every frame, or for a
+can be lit all over, so its own test (calibration._sky, under a twentieth of the brightest) finds none: the faint offset
+round Phoebe a few dozen pixels across (2004, violet). (Mimas's 2010 color set, 126MI, is not one: its "sky" is Saturn
+behind it, too bright for dim_off_disk, and its magenta is Saturn's limb moving between the filters.) None when SPICE can't place the target on every frame, or for a
 target whose own light reaches past its disk (DISK_LIT: Saturn's rings, Titan's haze), whose sky is not all sky.
 """
 DISK_LIT = ("SATURN", "TITAN")
