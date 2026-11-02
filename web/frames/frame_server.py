@@ -555,11 +555,12 @@ def composite(ids, channel=None, centre=None):
     chans = [img[..., 0] if img.ndim == 3 else img for img in imgs]
     alpha = np.where(valid, 255, 0).astype(np.uint8)
     report["ids"] = list(ids)
+    # the last step of every picture: a light unsharp mask (color_image.unsharp)
     if len(chans) == 1:
-        return Image.fromarray(np.dstack([chans[0], alpha]), "LA"), report
+        return Image.fromarray(color_image.unsharp(np.dstack([chans[0], alpha])), "LA"), report
     if len(chans) == 2:
         chans = [chans[0], ((chans[0].astype(np.uint16) + chans[1]) // 2).astype(np.uint8), chans[1]]
-    return Image.fromarray(np.dstack(chans + [alpha]), "RGBA"), report
+    return Image.fromarray(color_image.unsharp(np.dstack(chans + [alpha])), "RGBA"), report
 
 
 def centred(ids, view):
@@ -596,9 +597,10 @@ def centred(ids, view):
         out[y0 - top:y1 - top, x0 - left:x1 - left] = image[y0:y1, x0:x1]
     report = dict(report, ids=list(ids), centred_view={"side": side, "pass": view.get("pass"),
                                                           "centre": bool(view.get("centre"))})
+    # the last step of every picture: a light unsharp mask (color_image.unsharp); one frame on its one channel
     if len(ids) == 1:
-        return Image.fromarray(np.ascontiguousarray(out[..., [0, 3]]), "LA"), report
-    return Image.fromarray(out, "RGBA"), report
+        return Image.fromarray(color_image.unsharp(np.ascontiguousarray(out[..., [0, 3]])), "LA"), report
+    return Image.fromarray(color_image.unsharp(out), "RGBA"), report
 
 
 # the last few composites made, so a window opening each of a set's channels in turn runs load_aligned once

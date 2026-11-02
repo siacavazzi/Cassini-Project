@@ -3041,8 +3041,10 @@ def _keep_made(path, picture):
 
 
 def _part(path, w, h):
-    """A tile at w x h canvas pixels (RGBA): read and resized once and kept in memory (up to PARTS_KEEP bytes),
-    since every mosaic of a pass is drawn again from all of its tiles and a tile never changes once made."""
+    """A tile at w x h canvas pixels (RGBA): read, resized and lightly sharpened at that size (color_image.unsharp,
+    the last step of every picture: in a movie frame and a mosaic alike, and in the planes a browser moves, gains and
+    mixes, so its pictures are sharpened as the server's are) once, and kept in memory (up to PARTS_KEEP bytes), since
+    every mosaic of a pass is drawn again from all of its tiles and a tile never changes once made."""
     key = (path, w, h)
     with _lock:
         part = _parts.get(key)
@@ -3052,7 +3054,7 @@ def _part(path, w, h):
         made = _made_pictures.get(path)
     # a tile just made is resized from its picture in memory, the pixels its PNG holds
     im = Image.fromarray(made) if made is not None else Image.open(path).convert("RGBA")
-    part = np.asarray(im.resize((w, h), Image.LANCZOS))
+    part = color_image.unsharp(np.asarray(im.resize((w, h), Image.LANCZOS)))
     with _lock:
         if key not in _parts:
             _parts[key] = part

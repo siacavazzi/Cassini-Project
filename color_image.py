@@ -603,52 +603,45 @@ def sharpen(image):
     return ImageEnhance.Sharpness(image).enhance(1.5)
 
 
-# Sharpness (Settings > Processing): a light unsharp mask on a finished picture, the last step before it is shown.
-# The page runs it on the pictures it is sent (web/cassini-os/src/sharpen.html, a line-for-line port tested against
-# this by web/test_sharpen_local.py), so every setting is the viewer's own and the server's pictures do not change.
-SHARPEN_TAPS = (1, 4, 6, 4, 1)   # the blur: binomial, a Gaussian of sigma 1 px (whole numbers, so page and server agree to the bit)
+# A light unsharp mask, the last step of every picture the site serves (frame_server's stills and composites, and every
+# tile obs_mosaic draws into a movie frame or a mosaic, at the size it is drawn): fine detail raised a little, the same
+# for everyone (Sam, 2026-11-02: "build it into the pipeline", no setting)
+SHARPEN = 0.5                    # how much: each pixel moved away from its neighbourhood by this times the difference
+SHARPEN_TAPS = (1, 4, 6, 4, 1)   # the neighbourhood: binomial, a Gaussian of sigma 1 px
 SHARPEN_GATE = 3.0               # differences under this many levels (of 255) are raised less, so sky noise stays quiet
-SHARPEN_MAX = 1.5                # the slider's 100: amount 1.5; its default 35 is about 0.5
 
 
-def unsharp(px, amount, taps=SHARPEN_TAPS, gate=SHARPEN_GATE):
+def unsharp(px, amount=SHARPEN, taps=SHARPEN_TAPS, gate=SHARPEN_GATE):
     """Picture px (uint8: H x W grey, or H x W x 2|3|4 with alpha last when 2 or 4) with its fine detail raised: each
     pixel's brightness (the mean of its colors) less its neighbourhood's (the binomial blur taps, over the picture's own
-    pixels only, weighted by alpha, so the empty canvas round a frame or a mosaic does not ring at its edge), times
+    pixels only, weighted by alpha, so the empty canvas round a frame or a tile does not ring at its edge), times
     amount, added to every channel alike (no colour fringes where the filters are slightly off). A difference d under
-    gate levels is scaled by |d| / gate, so faint noise is raised far less than edges. Alpha is kept as it is.
-    The arithmetic is float64 in a fixed order, the page's own (Math in doubles), so both give the same bytes."""
+    gate levels is scaled by |d| / gate, so faint noise is raised far less than edges. Alpha is kept as it is; a pixel
+    with none is not touched."""
     px = np.asarray(px)
-    if amount <= 0:
+    if amount <= 0 or px.size == 0:
         return px.copy()
     a3 = px[..., None] if px.ndim == 2 else px
     n = a3.shape[2]
     colors = n - 1 if n in (2, 4) else n
-    rgb = a3[..., :colors].astype(np.float64)
-    alpha = a3[..., colors].astype(np.float64) / 255 if colors < n else np.ones(a3.shape[:2])
-    lum = rgb[..., 0]
-    for c in range(1, colors):
-        lum = lum + rgb[..., c]
-    if colors > 1:
-        lum = lum / colors
-    tap = np.asarray(taps, np.float64)
-    r = len(taps) // 2
-
-    def blur(v):
-        # rows then columns; outside the picture counts as nothing (zero), as the alpha weight does
-        for axis in (1, 0):
-            p = np.pad(v, [(r, r) if k == axis else (0, 0) for k in range(2)])
-            acc = np.zeros_like(v)
-            for i in range(len(tap)):
-                acc = acc + tap[i] * (p[:, i:i + v.shape[1]] if axis == 1 else p[i:i + v.shape[0], :])
-            v = acc
-        return v
-    weight = blur(alpha)
-    mean = np.where(weight > 0, blur(lum * alpha) / np.where(weight > 0, weight, 1), lum)
+    rgb = a3[..., :colors].astype(np.float32)
+    alpha = a3[..., colors].astype(np.float32) / 255 if colors < n else None
+    lum = rgb[..., 0] if colors == 1 else rgb.mean(axis=2)
+    k = np.asarray(taps, np.float32) / float(sum(taps))
+    blur = lambda v: cv2.sepFilter2D(v, cv2.CV_32F, k, k, borderType=cv2.BORDER_CONSTANT)
+    if alpha is None:
+        # outside the picture counts as nothing: the blur of a picture of ones is the weight
+        weight = blur(np.ones_like(lum))
+        mean = blur(lum) / weight
+    else:
+        weight = blur(alpha)
+        mean = np.where(weight > 1e-6, blur(lum * alpha) / np.maximum(weight, 1e-6), lum)
     d = lum - mean
     d = np.where(np.abs(d) < gate, d * (np.abs(d) / gate), d) * amount
-    out = np.floor(np.clip(rgb + d[..., None], 0, 255) + 0.5)
-    out = np.where((alpha > 0)[..., None], out, rgb).astype(np.uint8)
+    out = np.clip(rgb + d[..., None], 0, 255) + 0.5
+    out = out.astype(np.uint8)
+    if alpha is not None:
+        out = np.where((alpha > 0)[..., None], out, a3[..., :colors])
     res = np.concatenate([out, a3[..., colors:]], axis=2) if colors < n else out
     return res[..., 0] if px.ndim == 2 else res
 
