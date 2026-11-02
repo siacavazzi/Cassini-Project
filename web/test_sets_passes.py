@@ -73,6 +73,32 @@ def synthetic(seed, n=4000):
     return {k: [v[i] for i in order] for k, v in cat.items()}
 
 
+# repeat exposures and pointings (Day the Earth Smiled, ISS_195RI_HIPHASEC001_VIMS W, 2013-07-20): each pointing takes
+# VIO, IR3, BL1, GRN, RED twice each. A filter seen again used to end the set, so every set was two filters and each
+# pointing's last RED joined the next pointing's VIO..GRN (set 35884: RED 860 px from its BL1 and GRN). Now the
+# second exposure of a filter is a repeat in its set, and a camera move past SET_PLACE ends the set
+seq = [(f, 0) for f in ("VIO", "VIO", "IR3", "IR3", "BL1", "BL1", "GRN", "GRN", "RED", "RED")] + \
+      [(f, 1) for f in ("VIO", "IR3", "BL1", "GRN", "RED")]
+fr = [("W", "SATURN", "OBS", f, 30.0 * i) for i, (f, _) in enumerate(seq)]
+assert sets_passes.runs(fr) == [list(range(10)), list(range(10, 15))], sets_passes.runs(fr)
+placed = [x + ((-2535.0 - 861 * p, -970.0),) for x, (_, p) in zip(fr, seq)]
+assert sets_passes.runs(placed) == [list(range(10)), list(range(10, 15))]
+# a pointing that takes each filter once, the camera moving on between: the jump ends the set even within SET_GAP
+once = [("W", "S", "O", f, 30.0 * i, (900.0 * (i // 3), 0.0)) for i, f in enumerate(["RED", "GRN", "BL1"] * 2)]
+assert sets_passes.runs(once) == [[0, 1, 2], [3, 4, 5]]
+drift = [("W", "S", "O", f, 30.0 * i, (60.0 * i, 0.0)) for i, f in enumerate(["RED", "GRN", "BL1"])]
+assert sets_passes.runs(drift) == [[0, 1, 2]]                     # a 120 px drift is the same pointing
+jump = [("W", "S", "O", f, 30.0 * i, (0.0 if i < 2 else 400.0, 0.0)) for i, f in enumerate(["RED", "GRN", "BL1"])]
+assert sets_passes.runs(jump) == [[0, 1]]                          # the BL1 is at another pointing: a two-filter set
+# channels are each filter's first frame; repeats only of one filter are no set; at most REPEAT_MAX in a row
+assert sets_passes.channels(["RED", "RED", "GRN", "BL1"], [650, 650, 570, 450]) == ("true", [0, 2, 3])
+assert sets_passes.channels(["CB2", "CB2", "MT2"], [750, 750, 727]) == ("two", [0, 2])
+assert sets_passes.runs([("N", "S", "O", "RED", 10.0 * i) for i in range(4)]) == []
+many = [("N", "S", "O", "RED", 10.0 * i) for i in range(7)] + [("N", "S", "O", "GRN", 70.0)]
+assert sets_passes.runs(many) == [[5, 6, 7]]
+assert sets_passes.runs([("N", "S", "O", f, t) for f, t in [("RED", 0), ("RED", 200), ("GRN", 230)]]) == [[1, 2]]   # past REPEAT_GAP
+print("repeat exposures stay in their set; a pointing jump ends it")
+
 cats = [synthetic(s) for s in range(4)] + [json.load(open(p)) for p in sys.argv[1:]]
 for cat in cats:
     _, rule, _ = rule_sets(cat)
