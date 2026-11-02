@@ -109,11 +109,15 @@ frame's second line can too (W1507745867_2). Drawn at the soft edge's first valu
 stretched dark sky, turned north up and resized, they became dotted bright lines along two edges of every frame
 (Titan 2006 020TI, Jupiter 2000, Phoebe, Titan 2007 054TI) and white specks along every ring film's edge (113RI).
 A frame's mask (pixels it has) leaves out edge_px full-resolution pixels at each edge (EDGE_PX, and at least one of
-the frame's own pixels when it was summed: 512 or 256 lines are 2 or 4 full-resolution pixels a pixel), and those
-pixels take the values of the first line or column inside them (edge_filled): leaving them out of the mask alone is
-not enough, since turning the frame north up mixes colour and alpha apart (linear), so a pixel of the new edge would
-still take part of a left-out pixel's bright colour (the Mini's first render of this fix: the lines unchanged). The
-soft edge (mask.png) is unchanged; it starts edge_px in.
+the frame's own pixels when it was summed: 512 or 256 lines are 2 or 4 full-resolution pixels a pixel, which the
+frame's valid mask already leaves out).
+Leaving a pixel out of the mask is not enough on its own: turning the frame north up (label.translate, linear on
+colour and alpha apart) mixes a left-out pixel's colour into the new edge, and the calibrated path leaves 127 (half
+scale) under a summed frame's left-out edge column. That was most of the dotted lines (the Mini's edge profile of
+W1576834985_1, N1515805292_1, N1349081639_2: 127 in the left-out columns, 0 to 13 in the sky beside them; the first
+render of this fix, which trimmed the mask only, kept the lines). So the colour under every left-out pixel next to
+the picture is the picture's own nearest colour (rim_coloured), as load_aligned hands its pictures on. The soft edge
+(mask.png) is unchanged; it starts edge_px in.
 """
 EDGE_PX = 2
 
@@ -140,17 +144,25 @@ def edge_trimmed(mask, lbl):
     return out
 
 
-def edge_filled(img, lbl):
-    """img (a frame on the 1024 px grid, any bands) with its outermost edge_px lines and columns the values of the
-    first line or column inside them; None stays None."""
-    if img is None:
+RIM_PX = 8   # how far past the picture (pixels) rim_coloured paints: past what a linear turn and LANCZOS resize reach
+
+
+def rim_coloured(img, valid):
+    """img (uint8, one band or three) with the left-out pixels within RIM_PX of the picture (valid) the colour of
+    the picture's nearest pixel, so no colour that is not the picture's reaches its edge when it is turned or
+    resized. The picture itself is unchanged."""
+    if img is None or valid is None or valid.all() or not valid.any() or img.dtype != np.uint8:
         return img
-    n = edge_px(lbl, img.shape[0])
+    dist, labels = cv2.distanceTransformWithLabels((~valid).astype(np.uint8), cv2.DIST_L2, 3,
+                                                   labelType=cv2.DIST_LABEL_PIXEL)
+    band = (dist > 0) & (dist <= RIM_PX)
+    if not band.any():
+        return img
+    # each label is one picture pixel (a zero of the transform's input), numbered from 1 in row-major order
+    flat = np.flatnonzero(valid.ravel())[labels[band] - 1]
+    near = np.stack([flat // valid.shape[1], flat % valid.shape[1]], 1)
     out = img.copy()
-    out[:n] = out[n]
-    out[-n:] = out[-n - 1]
-    out[:, :n] = out[:, n:n + 1]
-    out[:, -n:] = out[:, -n - 1:-n]
+    out[band] = img[near[:, 0], near[:, 1]]
     return out
 
 
@@ -264,11 +276,9 @@ def load_aligned(paths, hdr=False, scale=None, repeat_window=120, around=None):
     if fill:
         imgs = [ic.fill_invalid(img, mask) for img, mask in zip(imgs, masks)]
         iofs = [None if iof is None else ic.fill_invalid(iof, mask) for iof, mask in zip(iofs, masks)]
-    # each frame's outermost lines and columns are not picture (edge_trimmed), and hold the values inside them
-    # (edge_filled), so they move with the frame as it is aligned and drop out of every picture made of it
+    # each frame's outermost lines and columns are not picture (edge_trimmed), so they move with the frame as it is
+    # aligned and drop out of every picture made of it
     masks = [edge_trimmed(mask, lbl) for mask, lbl in zip(masks, lbls)]
-    imgs = [edge_filled(img, lbl) for img, lbl in zip(imgs, lbls)]
-    iofs = [edge_filled(iof, lbl) for iof, lbl in zip(iofs, lbls)]
     dropped = []
     if calibrating and len(lbls) > 1:
         # each frame calibrated once, here, for the display models below to share
@@ -377,7 +387,10 @@ def load_aligned(paths, hdr=False, scale=None, repeat_window=120, around=None):
     if shares and max(shares) > 0:
         # the share of the frame the camera saturated in every exposure merged (the most of any channel): drawn white
         report["saturated_share"] = round(max(shares), 4)
-    return imgs, np.logical_and.reduce(masks), lbls[ref], report
+    valid = np.logical_and.reduce(masks)
+    # no colour that is not the picture's under the pixels round it (rim_coloured)
+    imgs = [rim_coloured(img, valid) for img in imgs]
+    return imgs, valid, lbls[ref], report
 
 
 """

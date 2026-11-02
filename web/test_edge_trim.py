@@ -67,18 +67,29 @@ def turned_rim(img, valid, angle=23.0):
 
 
 trimmed = color_image.edge_trimmed(full, Lbl(1024))
+# the calibrated path leaves 127 (half scale) under a summed frame's left-out edge column (the Mini's edge profile)
+half = sky.copy()
+half[:, :4] = 127
+summed = color_image.edge_trimmed(full, Lbl(256))
 cases = {"before": turned_rim(sky, full), "mask only": turned_rim(sky, trimmed),
-         "after": turned_rim(color_image.edge_filled(sky, Lbl(1024)), trimmed)}
+         "after": turned_rim(color_image.rim_coloured(sky, trimmed), trimmed),
+         "summed, 127 under the edge": turned_rim(half, summed),
+         "summed, after": turned_rim(color_image.rim_coloured(half, summed), summed)}
 print("brightest pixel along the turned frame's edge, on black (sky inside 10): " +
       ", ".join(f"{k} {v:.1f}" for k, v in cases.items()))
-assert cases["before"] > 20 and cases["mask only"] > 5, "the case is there to fix"
-assert cases["after"] <= 10, "no edge brighter than the sky"
-filled = color_image.edge_filled(sky, Lbl(1024))
-assert np.array_equal(filled[n:-n, n:-n], sky[n:-n, n:-n]), "inside the edge as it was"
-assert (filled[:n] == 10).all() and (filled[:, -n:] == 10).all()
-rgb = np.dstack([sky] * 3)
-assert np.array_equal(color_image.edge_filled(rgb, Lbl(1024))[..., 1], filled), "any bands"
-assert color_image.edge_filled(None, Lbl(1024)) is None
+assert cases["before"] > 20 and cases["mask only"] > 5 and cases["summed, 127 under the edge"] > cases["summed, after"] + 3, "the cases to fix"
+assert cases["after"] <= 10 and cases["summed, after"] <= 10, "no edge brighter than the sky"
+painted = color_image.rim_coloured(half, summed)
+assert np.array_equal(painted[summed], half[summed]), "the picture itself as it was"
+assert np.abs(painted[:, :4].astype(int) - 10).max() <= 2, "the left-out edge painted from the picture"
+rgb = np.dstack([half] * 3)
+assert np.array_equal(color_image.rim_coloured(rgb, summed)[..., 1], painted), "three bands alike"
+assert color_image.rim_coloured(sky, full) is sky, "nothing left out: nothing to do"
+import time  # noqa: E402
+t0 = time.perf_counter()
+for _ in range(5):
+    color_image.rim_coloured(rgb, summed)
+print(f"rim_coloured: {(time.perf_counter() - t0) / 5 * 1000:.1f} ms a 1024 px colour frame")
 
 # 2. the WebP save
 side = 256
