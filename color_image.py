@@ -379,8 +379,27 @@ def spice_warps(lbls, ref):
         if moves < WARP_LEAST or abs(scale - 1) > WARP_MOST or abs(turn) > WARP_TURN:
             out.append(None)
             continue
-        out.append((ba.CCD_CENTER - float(loc[0]), ba.CCD_CENTER - float(loc[1]), scale, turn))
+        # about the target's centre; a close-up wholly on its target's disk about the frame's middle: its centre
+        # is thousands of px off (Titan at 6,000 km), and a scale about it moves the whole frame by hundreds
+        if _on_disk(lbls[ref], locs[ref]) or _on_disk(lbls[len(out)], loc):
+            out.append((ba.CCD_CENTER, ba.CCD_CENTER, scale, turn))
+        else:
+            out.append((ba.CCD_CENTER - float(loc[0]), ba.CCD_CENTER - float(loc[1]), scale, turn))
     return out
+
+
+def _on_disk(lbl, loc):
+    """True when SPICE puts the frame wholly on its target's disk (sets_passes.pointing, the colour sets' rule)"""
+    if lbl is None or loc is None:
+        return False
+    try:
+        import obs_mosaic
+        import sets_passes
+    except ImportError:
+        return False
+    info = getattr(lbl, "info", None) or {}
+    cam = "W" if info.get("INSTRUMENT_ID") == "ISSWA" else "N"
+    return sets_passes.pointing(tuple(loc[:3]), obs_mosaic.RADIUS.get(info.get("TARGET_NAME")), obs_mosaic.IFOV[cam]) is None
 
 
 """

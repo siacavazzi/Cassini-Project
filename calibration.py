@@ -701,12 +701,14 @@ def look():
 
 """
 How a balanced color picture maps its filters to color (color plan phase 2b): "natural" (the default) turns a
-true color set into the colors an eye would see (natural_mix) and balances a false color set so the body comes
-out gray (false_mix); "raw" draws each filter straight as a channel, as before; "eye" (natural color emulation)
-draws a true color set as "natural" does and any other set as what an eye would have seen of it (eye_mix). The
-classic look is always raw.
+true color set into the colors an eye would see (natural_mix), a set with a methane band into what an eye would
+have seen of it (eye_mix, as "eye" does: Sam 2026-11-02, fix plan group C, methane sets came out teal, pink or
+green) and balances any other false color set so the body comes out gray (false_mix); "false" balances every false
+color set, methane ones too, as "natural" did before; "raw" draws each filter straight as a channel, as before;
+"eye" (natural color emulation) draws a true color set as "natural" does and any other set as what an eye would
+have seen of it (eye_mix). The classic look is always raw.
 """
-COLORS = ("natural", "raw", "eye")
+COLORS = ("natural", "raw", "eye", "false")
 _colors = contextvars.ContextVar("colors", default="natural")
 
 
@@ -725,12 +727,18 @@ def coloring(name):
 
 """
 The display model in use, for cache names: "classic", "balanced" (natural color), "raw" (balanced, filters drawn
-straight) or "eye" (balanced, natural color emulation)
+straight), "eye" (balanced, natural color emulation) or "false" (balanced, every false color set balanced gray)
 """
 def style():
     if look() == "classic":
         return "classic"
-    return colors() if colors() in ("raw", "eye") else "balanced"
+    return colors() if colors() in ("raw", "eye", "false") else "balanced"
+
+
+def false_balanced():
+    """True when false color sets the style draws with a false color balance (false_mix) are balanced: natural
+    color and false color, the balanced look's mixes."""
+    return style() in ("balanced", "false")
 
 
 @contextlib.contextmanager
@@ -821,11 +829,24 @@ NATURAL_PAIR = ("RED", "GRN", "BL1", "BL2", "VIO")
 SURFACE_WINDOW = {"TITAN": "CB3"}
 
 
+def emulated(bands, target=None):
+    """True when natural color draws a set as natural color emulation does (eye_mix): it has a methane band, which
+    shows how high the clouds are, not their color, and balanced turns the planet teal, pink or green. A two-filter
+    set through a body's surface window (SURFACE_WINDOW: Titan's CB3 and MT1) keeps its own drawing."""
+    if not any(is_methane(b) for b in bands):
+        return False
+    return not (len(bands) == 2 and SURFACE_WINDOW.get(str(target or "").upper()) in bands)
+
+
 def color_mix(camera, bands, target=None, gains=None, own=False):
-    if style() == "eye" and len(bands) in (2, 3):
-        return natural_mix(camera, bands) if len(bands) == 3 and natural_mix(camera, bands) is not None \
-            else eye_mix(camera, bands, target)
-    if style() != "balanced" or len(bands) not in (2, 3):
+    if len(bands) in (2, 3) and (style() == "eye" or style() == "balanced" and emulated(bands, target)):
+        if len(bands) == 3 and natural_mix(camera, bands) is not None:
+            return natural_mix(camera, bands)
+        m = eye_mix(camera, bands, target)
+        if m is not None or style() == "eye":
+            return m
+        # no eye mix (a filter without a wavelength): natural color balances it as before
+    if not false_balanced() or len(bands) not in (2, 3):
         return None
     if len(bands) == 2:
         if all(b in NATURAL_PAIR for b in bands) or SURFACE_WINDOW.get(str(target or "").upper()) in bands:
@@ -896,8 +917,8 @@ _wavelengths = None
 
 
 def band_wavelength(camera, band):
-    """A color filter's effective wavelength in nm on the camera ("N" or "W"), with the other wheel clear
-    (filter_calibration.csv), or None."""
+    """A color filter's effective wavelength in nm on the camera ("N" or "W"), with the other wheel clear, or of
+    two stacked filters ("IR2/IR1") the pair's (filter_calibration.csv), or None."""
     global _wavelengths
     if _wavelengths is None:
         _wavelengths = {}
@@ -910,6 +931,9 @@ def band_wavelength(camera, band):
                                  filters[:3] if filters.endswith(clear) and len(filters) == 6 else None):
                         if name and name not in ("CL1", "CL2"):
                             _wavelengths[(cam[3], name)] = float(nm)
+                if len(filters) == 6 and "CL" not in (filters[:2], filters[3:5]):
+                    # two color filters stacked, one on each wheel ("IR2/IR1", as band_of names it): the pair's own
+                    _wavelengths[(cam[3], filters[:3] + "/" + filters[3:])] = float(nm)
     cam = "N" if str(camera or "").startswith("N") or camera == "ISSNA" else "W"
     return _wavelengths.get((cam, band)) or _wavelengths.get(("W" if cam == "N" else "N", band))
 
@@ -942,15 +966,26 @@ true color set's (the page mixes it as it does those).
   pipeline over the mission, so a filter's calibration cancels out). Where every band is at its typical share the
   body has its own color (eye_tint: as the true color sets draw it, else BODY_TINTS, else gray); where they differ,
   the color leans the way the bands do: at a visible wavelength between two bands by their ratios interpolated
-  linearly in wavelength, past the set's bands by the nearest band's. A body without a measure in every band is
-  taken as gray (each ratio is the band's I/F).
+  linearly in wavelength, past the set's bands by the nearest band's.
 - Methane bands (MT1, MT2, MT3) see how high the clouds are, not the color of what is there, and stay out of the
-  estimate while the set has another band (Saturn's MT3 + CB2 + MT2 is drawn from CB2 alone, in Saturn's color).
+  color while the set has another band (Saturn's MT3 + CB2 + MT2 takes its color from CB2 alone, Saturn's color).
+  They stay in the brightness, METHANE_DETAIL of a band's share (each against its typical), so their clouds and
+  belts show as lighter and darker in the body's color instead of the set flattening to one cream (Saturn's
+  MT3 + MT2 + BL1).
+- A body whose measure is unsure in a color band (body_level's sure: too few frames, or a spread past BODY_SPREAD,
+  two-toned Iapetus) or that has none is drawn in one color, its own (eye_tint, gray when it has none), with the
+  bands' brightness: ratios to an unsure typical are not its color (Iapetus came out hot pink).
 - A two-filter set is its two bands, as color_mix's channels: longer, mean, shorter.
 camera = "N" or "W"; bands = the set's color filters in channel order; target = TARGET_NAME
 """
 METHANE = ("MT1", "MT2", "MT3")
 EYE_BANDS = ("RED", "GRN", "BL1")
+METHANE_DETAIL = 0.5   # a methane band's share of the brightness against another band's
+
+
+def is_methane(band):
+    """True for a methane band, alone or stacked ("MT2", "IR2/MT2"); sets_passes.is_methane's rule."""
+    return any(p in METHANE for p in str(band or "").split("/"))
 _eye_colors = None
 
 
@@ -975,28 +1010,43 @@ def eye_mix(camera, bands, target=None):
     nm = [band_wavelength(camera, b) for b in bands]
     if any(v is None for v in nm):
         return None
-    use = [i for i, b in enumerate(bands) if b not in METHANE] or list(range(len(bands)))
+    use = [i for i, b in enumerate(bands) if not is_methane(b)] or list(range(len(bands)))
     natural = natural_mix(camera, list(EYE_BANDS)).astype(np.float64)
     # the body's natural color as what RED, GRN and BL1 would measure of it (the natural matrix undone)
     eye = np.linalg.solve(natural, np.asarray(eye_tint(target), np.float64))
-    ref = {i: body_level(target, bands[i], camera, sure=False) for i in use}
-    if any(v is None for v in ref.values()):
-        ref = {i: 1.0 for i in use}
-    want = [band_wavelength(camera, b) for b in EYE_BANDS]
-    order = sorted(use, key=lambda i: nm[i])
+    n = range(len(bands))
+    sure = [body_level(target, bands[i], camera) for i in n]
+    # a body drawn in one color: a color band without a sure measure
+    one = any(sure[i] is None for i in use)
+    # the typical each band is read against: the sure measure; for a body drawn in one color none, each band's I/F
+    # as it is (an unsure typical, Iapetus' IR3 at 0.02 against a lit side at 0.3, blew the picture out)
+    ref = [1.0] * len(bands) if one else sure
+    # the brightness: each band against its typical, a methane band (one the color leaves out) at METHANE_DETAIL of
+    # a band's share, where its typical is known
+    weight = [1.0 if i in use else METHANE_DETAIL if ref[i] is not None else 0.0 for i in n]
+    ref = [v or 1.0 for v in ref]
+    bright = np.array([w / (sum(weight) * ref[i]) for i, w in enumerate(weight)], np.float64)
     a = np.zeros((3, len(bands)), np.float64)
-    for k, w in enumerate(want):
-        # the ratio to the typical at w: the nearest band's past the ends, else the two bands' either side, linearly
-        lo = [i for i in order if nm[i] <= w]
-        hi = [i for i in order if nm[i] > w]
-        if not lo or not hi:
-            parts = [((lo or hi)[-1 if lo else 0], 1.0)]
-        else:
-            i, j = lo[-1], hi[0]
-            t = (w - nm[i]) / (nm[j] - nm[i])
-            parts = [(i, 1 - t), (j, t)]
-        for i, share in parts:
-            a[k, i] += eye[k] * share / ref[i]
+    if one:
+        a = np.outer(eye, bright)
+    else:
+        want = [band_wavelength(camera, b) for b in EYE_BANDS]
+        order = sorted(use, key=lambda i: nm[i])
+        for k, w in enumerate(want):
+            # the ratio to the typical at w: the nearest band's past the ends, else the two bands' either side, linearly
+            lo = [i for i in order if nm[i] <= w]
+            hi = [i for i in order if nm[i] > w]
+            if not lo or not hi:
+                parts = [((lo or hi)[-1 if lo else 0], 1.0)]
+            else:
+                i, j = lo[-1], hi[0]
+                t = (w - nm[i]) / (nm[j] - nm[i])
+                parts = [(i, 1 - t), (j, t)]
+            for i, share in parts:
+                a[k, i] += eye[k] * share / ref[i]
+        if len(use) < len(bands):
+            # the methane bands' brightness, in the body's color: none at the body's typical shares
+            a += np.outer(eye, bright - np.array([1 / (len(use) * ref[i]) if i in use else 0.0 for i in n]))
     # brightness kept: the body at its typical brightness in the bands comes out as bright as their mean
     level = np.mean([ref[i] for i in use])
     a *= level
