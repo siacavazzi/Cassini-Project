@@ -60,6 +60,26 @@ import sets_passes  # noqa: E402
 VERSIONS = {"balanced": "reel-v35", "raw": "reel-v18", "eye": "reel-v35-eye", "classic": "reel-v12"}   # one per calibration.style(); v35/v18/v12: the CISSCAL 4.1 dark current (#231) and the colour-set repeat and pointing rule (#232); v34/v17/v11: the CISSCAL 2 Hz noise, pixel pair and sky band steps (#230); v33/v16/v10: the batch-4 fixes (thin ringlets, compressed frames, movie holds, Titan wind color); v32/v15/v9: the batch-3 fixes (Titan color, saturated white, movie strobe, line holes, pass kinds); v31/v14/v8: the small artifact and two-filter color fixes (groups I, F); v30/v13/v7: the restart's calibration, tone and tile fixes; v29/v12/v6: flat field
 
 
+WEBP_FAINT = 4   # of 255: a pixel this transparent or more is saved black (save_webp)
+
+
+def save_webp(im, out, **kwargs):
+    """im saved as WebP to out (kwargs: the saver's, quality and method). A picture with transparency keeps black
+    under every pixel whose alpha is under WEBP_FAINT. Left to itself, lossy WebP fills the colour under fully
+    transparent pixels with copies of the picture's nearest blocks to save bytes (about 1%), and a picture resized
+    on 8-bit premultiplied colour (PIL's LANCZOS on RGBA) has its faintest pixels' colour rounded far off, up to
+    white; any reader that drops the alpha (Cassini Studio's WebGL pass, a contact sheet, a review crop) showed them
+    as a staircase of grey blocks with white specks along every turned frame's edge (the ring films, movies #9 of spot
+    check 4). Shown with its alpha the picture is the same, but for at most 3 of 255 of those faintest pixels'
+    colour."""
+    if im.mode in ("RGBA", "LA"):
+        a = np.array(im)
+        a[..., :-1][a[..., -1] < WEBP_FAINT] = 0
+        im = Image.fromarray(a, im.mode)
+        kwargs["exact"] = True
+    im.save(out, "WEBP", **kwargs)
+
+
 def version():
     return VERSIONS[calibration.style()] + calibration.variant() + "-q95"   # WebP quality 95 (frame_server.QUALITY)
 SET_GAP = sets_passes.SET_GAP   # seconds between frames of one filter set
@@ -463,7 +483,7 @@ def shot_webp(target, n, size, cache, use_mosaic=True, slots=None):
         if size < OUT:
             im = im.resize((size, size), Image.LANCZOS)
         out = io.BytesIO()
-        im.save(out, "WEBP", quality=95, method=4)
+        save_webp(im, out, quality=95, method=4)
         return out.getvalue()
 
     data = _cached(path, make)

@@ -102,6 +102,37 @@ def get_mask():
 
 
 """
+The camera's outermost lines and columns are not picture. Across the archive the first and last column of nearly every
+frame read brighter than the columns beside them (in sky and on bright ground alike: N1503242138_1 has 201 where its
+neighbours have 112, W1295204353_1 29 against 24) and the first line often does (N1503242138_1: 173 against 151); a WAC
+frame's second line can too (W1507745867_2). Drawn at the soft edge's first value (mask.png's 46 of 255) on a
+stretched dark sky, turned north up and resized, they became dotted bright lines along two edges of every frame
+(Titan 2006 020TI, Jupiter 2000, Phoebe, Titan 2007 054TI) and white specks along every ring film's edge (113RI). A
+frame's mask (pixels it has) leaves out EDGE_PX full-resolution pixels at each edge, and at least one of the frame's
+own pixels when it was summed (512 or 256 lines: 2 or 4 full-resolution pixels a pixel). The soft edge (mask.png) is
+unchanged; it starts EDGE_PX in.
+"""
+EDGE_PX = 2
+
+
+def edge_trimmed(mask, lbl):
+    """mask (pixels a frame has, the 1024 px grid) with the frame's outermost lines and columns left out."""
+    if mask is None:
+        return mask
+    try:
+        lines = int(lbl.info.get("LINES", 1024))
+    except (TypeError, ValueError, AttributeError):
+        lines = 1024
+    n = max(EDGE_PX, mask.shape[0] // max(1, min(lines, mask.shape[0])))
+    out = mask.copy()
+    out[:n] = False
+    out[-n:] = False
+    out[:, :n] = False
+    out[:, -n:] = False
+    return out
+
+
+"""
 Builds one frame up to (not including) the mosaic step
 row = one row of the image index: the label path for each filter plus seconds_1970
 returns a PIL image and the label it was centered with
@@ -211,6 +242,9 @@ def load_aligned(paths, hdr=False, scale=None, repeat_window=120, around=None):
     if fill:
         imgs = [ic.fill_invalid(img, mask) for img, mask in zip(imgs, masks)]
         iofs = [None if iof is None else ic.fill_invalid(iof, mask) for iof, mask in zip(iofs, masks)]
+    # each frame's outermost lines and columns are not picture (edge_trimmed), so they move with the frame as it is
+    # aligned and drop out of every picture made of it
+    masks = [edge_trimmed(mask, lbl) for mask, lbl in zip(masks, lbls)]
     dropped = []
     if calibrating and len(lbls) > 1:
         # each frame calibrated once, here, for the display models below to share
