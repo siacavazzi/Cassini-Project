@@ -692,6 +692,7 @@ TOE = 0.05           # balanced composites: a margin up to this share of white (
                      # it and centred on it, so a night side or twilight it reaches into (the sky test counts it as sky)
                      # fades out smoothly instead of being cut off with a ragged edge; from twice this (a floor black,
                      # FLOOR_SHARE) the toe is an eighth of the margin, starting at it, as before; in between, a blend
+TOE_NEUTRAL = True   # balanced composites: through the toe a pixel's color fades in with its brightness (tone; fix plan D)
 SATURATED = 4.0      # balanced, one frame: a pixel the camera saturated is drawn at least this many times white above its
                      # black (past the shoulder: white), whatever the picture's scale puts it at (draw_saturated)
 SATURATED_FLOOR = (0.05, 0.25)  # ... and a frame saturated over more than SATURATED_FLOOR[0] of it has less of its floor (and
@@ -1481,7 +1482,7 @@ def tone(channels, margin, mix=None, shoulder=SHOULDER, gamma=2.2, saturated=Non
         # start to all of it at its top, so the sky's grain and what is left of a faint veil (one filter's noisier
         # sky, a stray light offset) fade to black without a tint (fix plan D: violet, teal, brown, blue-gray skies)
         k = np.clip((lum - start) / w, 0, 1)
-        if (k < 1).any():
+        if TOE_NEUTRAL and (k < 1).any():
             gray = x.mean(axis=0)
             x += (gray - x) * (1 - k * k * (3 - 2 * k))
     eased = eased_gamma(gamma, lit_median(x.max(axis=0)))
