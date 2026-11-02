@@ -239,7 +239,8 @@ def load_aligned(paths, hdr=False, scale=None, repeat_window=120, around=None):
                 full = [cal.saturated_of(lbls[0], imgs[0].shape[:2]) if iofs[0] is None else clips[0]]
                 full = None if full[0] is None else full
                 share = float(full[0].mean()) if full else 0.0
-            linear = cal.load_linear(lbls, imgs, iofs, floor=cal.saturated_floor(share), glow=cal.saturated_glow(share))
+            linear = cal.load_linear(lbls, imgs, iofs, floor=cal.saturated_floor(share), glow=cal.saturated_glow(share),
+                                     off_disk=lambda linear: dim_off_disk(lbls, linear))
         if linear is not None:
             calibrated = True
             if full is not None:
@@ -343,6 +344,67 @@ def load_aligned(paths, hdr=False, scale=None, repeat_window=120, around=None):
         # the share of the frame the camera saturated in every exposure merged (the most of any channel): drawn white
         report["saturated_share"] = round(max(shares), 4)
     return imgs, np.logical_and.reduce(masks), lbls[ref], report
+
+
+"""
+Where the sky of a color set is when its own sky test finds too little of it (calibration.load_linear's off_disk):
+every pixel off its target's disk in every frame of the set, as SPICE places it (the geometry cache), DISK_MARGIN
+wider for SPICE's error, as a mask of the given shape (a frame's, its channels not yet aligned). The sky round a moon
+can be lit all over, so its own test (calibration._sky, under a twentieth of the brightest) finds none: the faint offset
+round Phoebe a few dozen pixels across (2004, violet). (Mimas's 2010 color set, 126MI, is not one: its "sky" is Saturn
+behind it, too bright for dim_off_disk, and its magenta is Saturn's limb moving between the filters.) None when SPICE can't place the target on every frame, or for a
+target whose own light reaches past its disk (DISK_LIT: Saturn's rings, Titan's haze), whose sky is not all sky.
+"""
+DISK_LIT = ("SATURN", "TITAN")
+DISK_MARGIN = (0.2, 16)   # the disk this much wider (of its radius, and full resolution pixels), as obs_mosaic's
+
+
+def off_disk(lbls, shape):
+    target = lbls[0].info.get("TARGET_NAME")
+    if target in DISK_LIT:
+        return None
+    try:
+        import obs_mosaic
+    except ImportError:
+        return None
+    if target not in obs_mosaic.RADIUS:
+        return None
+    locs = _spice_locs(lbls)
+    if locs is None or any(loc is None or len(loc) < 3 or not loc[2] for loc in locs):
+        return None
+    k = 1024 / shape[0]   # (a summed frame's pixels are full resolution ones scaled to 1024)
+    rows = np.arange(shape[0], dtype=np.float32)[:, None] * k
+    cols = np.arange(shape[1], dtype=np.float32)[None, :] * k
+    sky = np.ones(shape, dtype=bool)
+    for lbl, loc in zip(lbls, locs):
+        cam = "W" if lbl.info.get("INSTRUMENT_ID") == "ISSWA" else "N"
+        radius = obs_mosaic.RADIUS[target] / (float(loc[2]) * obs_mosaic.IFOV[cam])
+        reach = radius * (1 + DISK_MARGIN[0]) + DISK_MARGIN[1]
+        cy, cx = ba.CCD_CENTER - float(loc[1]), ba.CCD_CENTER - float(loc[0])
+        sky &= (rows - cy) ** 2 + (cols - cx) ** 2 >= reach * reach
+    return sky
+
+
+"""
+calibration.load_linear's off_disk for a color set (off_disk), only where the sky it gives is dim in every channel:
+its OFF_DISK_PCT percentile (the noise floor's, calibration.sky_levels) under OFF_DISK_DIM of the 99th percentile on
+the disk. Light off the disk brighter than that is something lit (Saturn behind Mimas in 126MI, whose limb moved
+between the filters; an Enceladus plume), not sky: taken for sky, it set a noise margin that dimmed the plume
+"""
+OFF_DISK_DIM = 0.05
+OFF_DISK_PCT = 98
+
+
+def dim_off_disk(lbls, iofs):
+    sky = off_disk(lbls, iofs[0].shape)
+    if sky is None or sky.all() or not sky.any():
+        return None
+    disk = ~sky
+    for iof in iofs:
+        top = float(np.percentile(iof[disk], 99))
+        if not top > 0 or not float(np.percentile(iof[sky], OFF_DISK_PCT)) < OFF_DISK_DIM * top:
+            return None
+    return sky
 
 
 """
