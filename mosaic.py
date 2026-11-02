@@ -1046,6 +1046,7 @@ def _blended(out, infos, gains, offsets, gamma, area, level, pin=None, kept=None
     outline = np.zeros((y1 - y0, x1 - x0), np.float32) # the same with the frames' slanted edges (_support)
     weight = np.zeros((y1 - y0, x1 - x0), np.float32)  # what is drawn so far's own ramp, drawn over each other
     alpha = np.zeros((y1 - y0, x1 - x0), np.float32)   # the most of the frames' own alphas
+    owner = np.full((y1 - y0, x1 - x0), -1, np.int32)  # the newest frame with picture at each pixel (_narrow_gap)
     width = 0.0
     levels = _levels_of()
     margin = 4 << levels
@@ -1107,17 +1108,100 @@ def _blended(out, infos, gains, offsets, gamma, area, level, pin=None, kept=None
                                      "ramp": ramp, "a": a, "seam": seam, "level": fields[i]})
         weight[sl] = ramp + wb * (1 - ramp)
         cover[sl] = np.maximum(below, has)
+        owner[sl][has > 0] = i
         alpha[sl] = np.maximum(alpha[sl], own * has)
         outline[sl] = np.maximum(outline[sl], support)
     if width > 0:
+        gap = _narrow_gap(cover > 0, width * GAP_REACH, owner)
+        filled = None
+        if gap is not None:
+            filled = _fill_gap(rgb if not one else rgb[..., None], gap, alpha, width * GAP_REACH)
+            cover[gap] = 1
+            outline[gap] = 1
         # never more transparent than the most opaque frame there, so a frame's own corners and a lost line's gap keep
         # the edge they were made with
         alpha = np.maximum(alpha, _outer_edge(outline, cover, width, alpha >= EDGE_AT / 255))
+        if filled is not None:
+            # (a filled gap is as opaque as the picture on either side of it: whole inside the mosaic, as soft as the
+            # outer edge where it reaches that)
+            k = 2 * int(width * GAP_REACH) + 1
+            alpha[filled] = np.maximum(alpha, cv2.dilate(alpha, np.ones((k, k), np.uint8)))[filled]
     if kept is not None:
         kept.extend(decisions)
     rgb = np.clip(rgb, 0, 255).round()
     out[y0:y1, x0:x1, :3] = rgb[..., None] if one else rgb
     out[y0:y1, x0:x1, 3] = (alpha * 255).round()
+
+
+"""
+A narrow gap inside a mosaic: frames placed side by side that do not quite meet (a 3x3 raster with no overlap, its
+columns a few pixels apart as SPICE places them: Saturn, 2005-02-05, 003SA 3X3MOVIEB001, 10-17 px of a 600 px tile on the canvas).
+Left to the mosaic's soft outer edge (_outer_edge) such a gap is that edge from both sides, a dark band three times as
+wide as the gap itself between every two columns. A run of pixels with no picture, along a row or a column, with
+picture at both ends is such a gap; where the frames end (the mosaic's outer edge, a notch at a corner of it) there is
+picture on one side only and the soft edge stays. With owner (the frame drawn at each pixel), only a gap between two
+frames or more: a frame's own lost lines stay as they came. reach: GAP_REACH of the frames'
+own soft edge (_edge_width), so the same share of a frame at any scale: gaps up to twice that, the soft edge's
+width, are filled whole (a closing along rows and along columns): about 4% of a frame's side. None when there is none.
+"""
+GAP_REACH = 1 / 2
+
+
+def _narrow_gap(has, reach, owner=None):
+    r = int(reach)
+    if r < 1 or has.all() or not has.any():
+        return None
+    on = has.astype(np.uint8)
+    gap = np.zeros(has.shape, bool)
+    for k in (np.ones((1, 2 * r + 1), np.uint8), np.ones((2 * r + 1, 1), np.uint8)):
+        # a closing along rows, and one along columns: a gap narrower than the line is filled whole, never in part, and
+        # one open to a side (past the array's border too) is not
+        closed = cv2.erode(cv2.dilate(on, k), k, borderType=cv2.BORDER_CONSTANT, borderValue=0)
+        gap |= closed > 0
+    gap &= ~has
+    # (not the pixel or two a slanted outer edge steps by from row to row)
+    gap = cv2.morphologyEx(gap.astype(np.uint8), cv2.MORPH_OPEN, np.ones((3, 3), np.uint8)) > 0
+    # and a hole left where four frames' corners meet (wider than the gaps that run into it), shut in all round by
+    # picture and those gaps, and not much wider than them
+    n, lab, stats, _ = cv2.connectedComponentsWithStats((~(has | gap)).astype(np.uint8), connectivity=4)
+    h, w = has.shape
+    for i in range(1, n):
+        x, y, bw, bh, area = stats[i]
+        if x > 0 and y > 0 and x + bw < w and y + bh < h and max(bw, bh) <= 8 * r:
+            gap |= lab == i
+    if owner is not None and gap.any():
+        # only between frames: a gap inside one frame (its lines lost in downlink, where no other frame covers) is
+        # that frame's and stays a gap
+        n, lab = cv2.connectedComponents(gap.astype(np.uint8), connectivity=8)
+        ring = cv2.dilate(lab.astype(np.float32), np.ones((3, 3), np.uint8)).astype(np.int32)
+        edge = (ring > 0) & has
+        pairs = np.unique(np.stack([ring[edge], owner[edge]], 1), axis=0)
+        between = np.bincount(pairs[:, 0], minlength=n) >= 2
+        between[0] = False
+        gap = between[lab]
+    return gap if gap.any() else None
+
+
+def _fill_gap(rgb, gap, alpha, reach):
+    """A narrow gap (_narrow_gap) filled from the picture beside it, in place: the gap and the faint part of the frames'
+    soft edges along it (their own alpha under GAP_TRUST, where turning a tile mixed its colour with the black round
+    it) take the colour of the nearest pixel the frames draw whole, softened across by a blur of reach, so the two
+    sides meet without a step and the mosaic's outer edge does not run down the gap from both sides. Returns what it
+    filled, which _blended draws opaque."""
+    k = 2 * int(reach) + 1
+    near = cv2.dilate(gap.astype(np.uint8), np.ones((k, k), np.uint8)) > 0
+    fill = gap | (near & (alpha > 0) & (alpha < GAP_TRUST))
+    _nearest(rgb, fill, (alpha >= GAP_TRUST) & ~gap)
+    # (the blur of what has picture only, so the black round the mosaic is not blurred in)
+    real = ((alpha >= GAP_TRUST) | fill).astype(np.float32)
+    sigma = max(reach / 2, 1.0)
+    soft = cv2.GaussianBlur(rgb * real[..., None], (0, 0), sigma).reshape(rgb.shape)
+    soft /= np.maximum(cv2.GaussianBlur(real, (0, 0), sigma), 1e-6)[..., None]
+    rgb[fill] = soft[fill]
+    return fill
+
+
+GAP_TRUST = 0.8   # (_fill_gap) a frame's own alpha from which its colour along a gap is its picture's
 
 
 def moved(decision, y, x):
