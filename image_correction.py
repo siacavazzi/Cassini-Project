@@ -555,7 +555,8 @@ def find_shift(im1, im2, max_shift=100, min_response=0.3):
         if len(ys) == 0:
             return None
     h, w = im1_gray.shape
-    reach = int(np.ceil(max_shift))
+    # (at least FIND_MARGIN round the target, so a small search keeps the limb clear of the window's taper)
+    reach = max(int(np.ceil(max_shift)), FIND_MARGIN)
     y0, y1 = max(ys.min() - reach, 0), min(ys.max() + reach, h)
     x0, x1 = max(xs.min() - reach, 0), min(xs.max() + reach, w)
     a = im1_gray[y0:y1, x0:x1]
@@ -570,6 +571,8 @@ def find_shift(im1, im2, max_shift=100, min_response=0.3):
     return dx, dy
 
 
+FIND_MARGIN = 100   # px: the least margin round the target that find_shift correlates over (a 12 px margin put the limb
+                    # under the window's taper and biased a small search by half a pixel)
 DARK_SHARE = 0.02   # of the frame: a reference lit over less than this is a black scene (find_shift)
 
 
