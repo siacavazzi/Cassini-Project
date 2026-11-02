@@ -503,8 +503,8 @@ def webp(frame_id, size, cache, fmt="webp"):
 # the caches of the pictures drawn from I/F, one per display model (calibration.style), so the classic look keeps the
 # pictures made before the balanced display model and raw colors the balanced ones made before natural color
 # color-v36/v19/v13, proc-v15/v9: the CISSCAL 4.1 dark current (#231) and the colour-set repeat and pointing rule (#232); color-v35/v18/v12, proc-v14/v8: the CISSCAL 2 Hz noise, pixel pair and sky band steps (#230); color-v34/v17/v11, proc-v13/v7: thin ringlets kept by the garbled-line check (#212), heavily compressed frames smoothed and saturated frames' glow black softened (#222), natural color (eye, #219); color-v33/v16/v10, proc-v12/v6: Titan color (#198), saturated white kept white (#205), movie strobe (#206), line holes after lost packets and star spikes (#201); color-v32/v15/v9, proc-v11/v5: star boxes, fill dashes, garbled lines (group I), color sets aligned near SPICE and two-filter/methane balance (group F); color-v31/v14/v8, proc-v10/v4: the calibration fixes (overclock lines, UV2 flat, pinholes) and the single-picture tone; color-v30/v13/v7, proc-v9/v3: calibration takes the flat field (dust rings, mottle) and the nonlinearity out
-COLOR_VERSIONS = {"balanced": "color-v36", "raw": "color-v19", "eye": "color-v36-eye", "classic": "color-v13"}
-PROC_VERSIONS = {"balanced": "proc-v15", "raw": "proc-v15", "eye": "proc-v15", "classic": "proc-v9"}   # one frame: no colors to mix
+COLOR_VERSIONS = {"balanced": "color-v36", "raw": "color-v19", "eye": "color-v36-eye", "false": "color-v36-false", "classic": "color-v13"}
+PROC_VERSIONS = {"balanced": "proc-v15", "raw": "proc-v15", "eye": "proc-v15", "false": "proc-v15", "classic": "proc-v9"}   # one frame: no colors to mix
 # Auto center (center=1): the same pictures centred on the body by SPICE, cached beside them in folders of their own
 HOLD_AGREE = 40   # full resolution px: SPICE's place for a held still and the pass's may differ by this much
 CENTRE_VERSION = "ctr5"   # ctr2: the shift stops at the frame's data edge; ctr3: only when the body's disk is cut by it;

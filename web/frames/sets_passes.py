@@ -14,8 +14,8 @@ sets each taking a filter from the next pointing. Where the geometry cache place
 the camera moves more than SET_PLACE px (the next pointing of a mosaic). A run of two or more filters is a set; its
 channel of each filter is that filter's first frame in it. Its channels (channels): RED (or the 619 nm continuum CB1 where a set
 has no RED, the narrow-angle camera at Jupiter), GRN and a blue (BL1, else BL2 or VIO) make true colour; any other
-three or more filters make false colour, longest wavelength as red, the middle one as green, the shortest as blue;
-two filters make a two-filter picture.
+three or more filters make false colour from the three nearest the visible (nearest_visible), longest wavelength as
+red, the middle one as green, the shortest as blue; two filters make a two-filter picture.
 
 Pass: obs_mosaic.units, the frames of one camera, one target and one observation, split where the camera pauses or
 the distance to the body changes, with its laps joined (a mosaic movie). Its kind is obs_mosaic._judge's: "mosaic",
@@ -40,6 +40,34 @@ HALF_DIAGONAL = 724                    # full resolution px: a frame's middle to
 PLACE_REACH = {"N": 50000, "W": 5000, "ISSNA": 50000, "ISSWA": 5000}
 TRUE_REDS = ("RED", "CB1")             # the red of a true colour set, in order of preference
 TRUE_BLUES = ("BL1", "BL2", "VIO")     # the blue of a true colour set, in order of preference
+# A false colour set's three channels, when it took more than three filters: the three nearest what an eye's red,
+# green and blue see (RED, GRN, BL1: 650, 568, 451 nm), longest as red, so a set keeps its visible filters (GRN over
+# UV1, IR3 + GRN + UV3 of Pandora's IR3, GRN, UV3, UV1; CB2 + CB1 + BL1 of a gas giant's continuum filters) and
+# leaves out its methane bands (MT1, MT2, MT3, which show how high the clouds are, not their colour) wherever three
+# others are there. Sam 2026-11-02 (fix plan group C).
+VISIBLE_NM = (650.0, 568.0, 451.0)
+
+
+def is_methane(f):
+    """True for a methane band filter, alone or stacked ("MT2", "MT3", "IR2/MT2")."""
+    return any(p.startswith("MT") for p in str(f or "").split("/"))
+
+
+def nearest_visible(filters, nms):
+    """The positions in filters (distinct colour filters, nms their wavelengths) of the three a false colour set
+    draws, longest wavelength first: the fewest methane bands, then the least distance in wavelength from
+    VISIBLE_NM, then the order the filters come in. Three or fewer filters: all of them, longest first."""
+    import itertools
+    order = sorted(range(len(filters)), key=lambda j: -nms[j])
+    if len(order) <= 3:
+        return order
+    best = None
+    for three in itertools.combinations(order, 3):
+        key = (sum(is_methane(filters[j]) for j in three),
+               sum(abs(nms[j] - w) for j, w in zip(three, VISIBLE_NM)), three)
+        if best is None or key < best:
+            best = key
+    return list(best[2])
 
 
 def is_polarizer(f1, f2):
@@ -131,8 +159,9 @@ def channels(filters, nms, times=None):
     blue = next((f for f in TRUE_BLUES if f in at), None)
     if red and "GRN" in at and blue:
         return "true", [at[red], at["GRN"], at[blue]]
-    w = sorted(at.values(), key=lambda j: -nms[j])
-    return ("false", [w[0], w[len(w) // 2], w[-1]]) if len(w) >= 3 else ("two", w)
+    fs = list(at)
+    w = [at[fs[k]] for k in nearest_visible(fs, [nms[at[f]] for f in fs])]
+    return ("false", w) if len(w) >= 3 else ("two", w)
 
 
 def filter_sets(cams, targets, obs, f1s, f2s, t, nm, places=None):
