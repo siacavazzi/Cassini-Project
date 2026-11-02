@@ -163,17 +163,20 @@ def main():
     dark = passes(*OBS[9])
     assert dark[0]["kind"] == "mosaic" and dark[0]["aside"] and om._aside(dark[0]["frames"], dark[0]) == set(), kinds(dark)
 
-    # a plain map keeps its folder
+    # a map round Dione's disk and its middle, split at ZOOM, are one map again: the middle lay inside the ring's
+    # rectangle but on ground the ring left empty (_zoom_join on _ground), in LAID's folder
     reg = passes(*OBS[10])
-    assert kinds(reg) == [("mosaic", 41), ("mosaic", 39)] and not any(u["relaid"] for u in reg), kinds(reg)
-    assert om.folder(reg[0], "/c").endswith("DIONE_ISS_129DI_REGMAP001_PRIME_N_0")
+    assert kinds(reg) == [("mosaic", 80)] and reg[0]["joined"] and reg[0]["zoom_ground"], kinds(reg)
+    assert om.folder(reg[0], "/c").endswith("DIONE_ISS_129DI_REGMAP001_PRIME_N_0" + om.LAID)
 
     # the camera turning under a mosaic: the footprint holds every tile v46 placed (one angle left most outside)
     for name, v in cases["v46"].items():
         target, obs, cam, n = v["key"]
         first = v["tiles"][0][0]
         u = next(u for u in passes(target, obs, cam) if u["frames"] and u["frames"][0][1] == first)
-        if not u.get("twist"):   # (173RI_DRCLOSE001 is a movie now: its footprint as a mosaic's)
+        if obs != "ISS_208TI_HIRES002_VIMS":   # (the ring passes are movies now, toss-ups turned as their mosaics are)
+            assert u.get("twist"), name
+        if not u.get("twist"):
             u = dict(u, twist={fr[1]: t for fr in u["frames"] for t in [om.reel.turns([fr[1]]).get(fr[1])] if t is not None})
         ref = next(fr[1] for fr in u["frames"] if fr[7] and math.hypot(fr[5], fr[6]) > 200)
         new = om.footprint(u, v["angle"], ref, om._aside(u["frames"], u))
@@ -254,7 +257,10 @@ def main():
     arc, az = passes(*OBS[11]), passes(*OBS[24])
     assert kinds(arc) == [("movie", 51)] and arc[0]["strip"] and arc[0]["tossup"] and not arc[0]["mosaic"], kinds(arc)
     assert kinds(az) == [("mosaic", 267), ("movie", 59)] and az[1]["strip"] and not az[0]["strip"], kinds(az)
-    assert all(om.folder(u, "/c").endswith(om.STRIPPED) for u in arc + az)
+    # ... and its toss-up mosaic is turned frame by frame as the camera turns under it (135 degrees: one angle drew
+    # its tiles off the canvas), every pass of both observations in LAID's folder after it
+    assert arc[0]["twist"] and az[1]["twist"], (bool(arc[0].get("twist")), bool(az[1].get("twist")))
+    assert all(om.folder(u, "/c").endswith(om.LAID) for u in arc + az)
     assert not any(u["strip"] for key in (OBS[7], OBS[23], OBS[29], OBS[33]) for u in passes(*key))
     assert not om.folder(passes(*OBS[23])[0], "/c").endswith(om.STRIPPED)
 
