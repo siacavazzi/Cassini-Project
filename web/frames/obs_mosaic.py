@@ -4211,8 +4211,12 @@ def unfit(frames, n, tile_of):
     if s >= SATURATED_ALL:
         return True   # (saturated all over: nothing of the picture, whatever is round it)
     f = frames[n][2]
-    near = [j for j in (next((j for j in range(n - 1, -1, -1) if frames[j][2] == f), None),
-                        next((j for j in range(n + 1, len(frames)) if frames[j][2] == f), None)) if j is not None]
+    # its filter's nearest frames either side that show a picture: one saturated all over is held itself, so it is no
+    # run of over-exposed frames to play with (SPOLEDYN001 2009: a clear frame 92% saturated between two 99-100%
+    # saturated ones played as a white slab; its filter's frames shown round it are dark)
+    shows = lambda j: frames[j][2] == f and tile_of(j).get("saturated", 0.0) < SATURATED_ALL
+    near = [j for j in (next((j for j in range(n - 1, -1, -1) if shows(j)), None),
+                        next((j for j in range(n + 1, len(frames)) if shows(j)), None)) if j is not None]
     if over_exposed(t):
         return not any(over_exposed(tile_of(j)) for j in near)
     return bool(near) and all(s >= OVER_STEP * tile_of(j).get("saturated", 0.0) for j in near)
