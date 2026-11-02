@@ -240,8 +240,14 @@ body.phone .srow input[type=range] { width: 96px; }
       hint: "Lines a frame lost on its way to Earth are filled from the lines round them, so they don't show as black stripes or throw off the stretch. Off leaves them black." },
     { key: "processing.calibrate", step: "calibrate", label: "Calibrate",
       hint: "Every frame is turned into reflectance (I/F: bias, exposure, gain, filter and distance from the Sun taken out) and drawn on one display scale, so filters and mosaic tiles match and colors are true. Off shows each frame on the archive's own stretch, as it came down." },
+    { key: "processing.twohz", step: "twohz", label: "2 Hz noise",
+      hint: "Takes out the faint horizontal bands (\"2 Hz noise\") the camera's electronics added while each picture was read out, line by line from the extra pixels the camera read past the end of every line, as the camera team's calibration (CISSCAL) does. Most visible in dark sky and faint pictures. Full-size frames only. Off leaves the bands in. Needs Calibrate." },
+    { key: "processing.twohzsky", step: "twohzsky", label: "Bands from the sky",
+      hint: "Measures the 2 Hz bands from the picture's own dark sky (the median of each line with stars and bodies masked out, CISSCAL's \"image mean\" method) instead of from the few extra pixels past each line, which catch only part of them. Takes the bands out far more completely, and also on the 8-bit and lossy frames CISSCAL skips. Used where at least 9 lines in 10 have some clear sky; a frame filled by a moon or Saturn keeps the extra-pixel method. Off uses the extra pixels only, as CISSCAL does by default. Needs 2 Hz noise." },
     { key: "processing.dark", step: "dark", label: "Dark current",
       hint: "Takes out the charge the camera's detector gathers without any light, which grows with the exposure and with how long each line waits to be read out, with the camera team's own dark model. Most visible on long exposures: night sides, rings, Titan's surface. Off leaves them in. Needs Calibrate." },
+    { key: "processing.pairs", step: "pairs", label: "Pixel pairs",
+      hint: "In anti-blooming mode the detector leaves pairs of pixels, one too bright sitting on one too dark, scattered over the picture. As the camera team's calibration (CISSCAL) does, each pair more than 30 DN off its neighbors is replaced by the mean of the pixels either side of it. Full-size frames with anti-blooming on only. Off leaves them in. Needs Calibrate." },
     { key: "processing.flat", step: "flat", label: "Flat field",
       hint: "Takes out what the camera itself adds to every picture, with the mission's own calibration maps: the dust rings (shadows of dust on the narrow-angle camera's optics, more of them as the mission went on), the fine mottle that appeared in late 2003, the darker corners and the faint column pattern of the detector. Off leaves them in. Needs Calibrate." },
     { key: "processing.hotpix", step: "hotpix", label: "Hot pixels",
@@ -358,9 +364,54 @@ body.phone .srow input[type=range] { width: 96px; }
       new MutationObserver(() => { if (!quiet) S.set(key, pressed()); }).observe(b, { attributes: true, attributeFilter: ["aria-pressed"] });
     });
   }
-  D({ key: "playback.start", section: "Playback", label: "Start time", type: "choice", value: "2006-09-15T14:28:00", reload: true,
-      options: [["2006-09-15T14:28:00", "In Saturn's Shadow"], ["2005-01-14T09:30:00", "Huygens lands"], ["2004-07-01T00:00:00", "Saturn arrival"]],
-      hint: "The moment Cassini OS opens on. A shared link still opens on its own moment." });
+  // Where a visit with no moment of its own lands: one of these famous moments, picked at random on each visit, so
+  // the first minute is something a visitor may know and something happens in it. Each starts a little before its
+  // pictures at a speed that plays them in about a minute. Start time can pin any one of them. No cutscene moments
+  // (Huygens, Saturn arrival, the Grand Finale): those are for visitors who go to them (Sam, 2026-11-01).
+  const LANDINGS = window.cassiniLandings = [
+    { t: "2006-09-15T14:28:00", speed: 600, label: "In Saturn's Shadow" },
+    { t: "2013-07-19T22:23:19", speed: 600, label: "The Day the Earth Smiled" },
+    { t: "2010-11-30T07:25:10", speed: 600, label: "The plumes of Enceladus" },
+    { t: "2005-09-26T00:40:07", speed: 600, label: "Hyperion, the sponge moon" },
+    { t: "2010-02-13T17:54:31", speed: 60, label: "Mimas, the Death Star moon" },
+    { t: "2000-12-29T03:04:00", speed: 600, label: "Jupiter portrait" },
+    { t: "2017-04-26T07:48:14", speed: 60, label: "The first dive inside the rings" }
+  ];
+  const OLD_STARTS = [["2005-01-14T09:30:00", "Huygens lands"], ["2004-07-01T00:00:00", "Saturn arrival"]];
+  D({ key: "playback.start", section: "Playback", label: "Start time", type: "choice", menu: true, value: "random", reload: true, was: ["2006-09-15T14:28:00"],
+      options: [["random", "A famous moment, at random"], ...LANDINGS.map(l => [l.t, l.label]), ...OLD_STARTS],
+      hint: "The moment Cassini OS opens on. At random, each visit lands on one of the famous moments in this list, at its own speed. A shared link still opens on its own moment." });
+  // a visit with no moment of its own: put the landing's moment in the address, as a shared link would, so the viewer,
+  // the links and the cutscenes all start from it (no view: the view stays the Settings one, as a bare visit's did). A pinned start from the old list keeps its old way (time only).
+  (function land() {
+    const u = new URL(location.href);
+    if (["t", "ambient", "finale", "movie"].some(k => u.searchParams.has(k))) return;
+    const v = S.get("playback.start");
+    let pick = LANDINGS.find(l => l.t === v);
+    if (v === "random") {
+      // a per-viewer nicety: not the same moment twice in a row
+      let last = ""; try { last = localStorage.getItem("cassini-os-landing") || ""; } catch (e) {}
+      const pool = LANDINGS.length > 1 ? LANDINGS.filter(l => l.t !== last) : LANDINGS;
+      pick = pool[Math.floor(Math.random() * pool.length)];
+      try { localStorage.setItem("cassini-os-landing", pick.t); } catch (e) {}
+    }
+    if (!pick) return;
+    const keep = u.search.slice(1);
+    const put = l => {
+      window.cassiniLanding = l;
+      try { history.replaceState(history.state, "", u.pathname + `?t=${l.t}&speed=${l.speed}` + (keep ? "&" + keep : "") + u.hash); } catch (e) {}
+    };
+    put(pick);
+    // the viewer, when the picture cache holds only some years and the landing is outside them (Only years with
+    // pictures built): a landing inside them instead, if the list has one (its time), else null
+    window.cassiniLandingIn = inside => {
+      if (inside(utcToEt(window.cassiniLanding.t))) return null;
+      const pool = v === "random" ? LANDINGS.filter(l => inside(utcToEt(l.t))) : [];
+      if (!pool.length) return null;
+      put(pool[Math.floor(Math.random() * pool.length)]);
+      return utcToEt(window.cassiniLanding.t);
+    };
+  })();
   D({ key: "playback.autoplay", section: "Playback", label: "Play when Cassini OS opens", type: "toggle", value: true,
       hint: "Off opens paused at the starting moment." });
   D({ key: "playback.builtOnly", section: "Playback", label: "Only years with pictures built", type: "toggle", value: true, reload: true,
@@ -402,6 +453,17 @@ body.phone .srow input[type=range] { width: 96px; }
   // the viewer's camera cones read view.conesEverywhere
   D({ key: "view.conesEverywhere", section: "View", label: "Camera cones on every view", type: "toggle", value: false,
       hint: "Draw the cameras' fields of view when looking at a body too. Off shows them only while the view is on Cassini." });
+  // the viewer's picture footprints (updateFootprints) read view.footprints and view.footprintCount
+  D({ key: "view.footprints", section: "View", label: "Picture footprints", type: "toggle", value: false,
+      hint: "Outline on each body where Cassini's last pictures landed: every frame's field of view from the pointing data, laid on the surface and turning with it, the newest in warm white and older ones fading. Narrow-angle frames are the small blue squares, wide-angle the large grey-blue ones." });
+  D({ key: "view.footprintCount", section: "View", label: "Footprints of the last", type: "range", log: true, value: 50, min: 1, max: 1000,
+      stops: [1, 2, 3, 5, 10, 20, 30, 50, 100, 200, 300, 500, 1000], format: v => `${v} ${+v === 1 ? "picture" : "pictures"}`,
+      hint: "How many of the latest pictures leave a footprint. Only pictures that land on a body count." });
+  D({ key: "view.footprintPictures", section: "View", label: "Pictures in the footprints", type: "toggle", value: false,
+      hint: "With Picture footprints on, the newest footprints show the pictures themselves, laid on the body where the camera saw them: the frame server's processed frame (as in the camera windows, not centered), stretched over the footprint ray by ray, so each part of the picture sits where it looked. Newest on top; older ones fade." });
+  D({ key: "view.footprintPictureCount", section: "View", label: "Pictures laid down", type: "range", log: true, value: 20, min: 1, max: 100,
+      stops: [1, 2, 3, 5, 10, 20, 30, 50, 100], format: v => `${v} ${+v === 1 ? "picture" : "pictures"}`,
+      hint: "How many of the newest footprints show their picture. Each one is a picture to load, so more is slower." });
   // a new key, so a saved "off" from when follow started off does not carry over
   D({ key: "view.followcam", section: "View", label: "Follow camera", type: "toggle", value: true, hint: "Look where Cassini's camera points (needs the pointing data)." });
   mirror("view.followcam", "followcam");
