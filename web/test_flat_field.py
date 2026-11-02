@@ -138,17 +138,19 @@ print("WAC ring: before", round(before, 4), "after", round(after, 4))
 assert before < -0.025 and abs(after) < 0.008
 assert abs(np.median(correction) - 1) < 0.002                          # nothing but the ring changes
 
-np.savez(f"{root}/wac_dust.npz", **{"2009Q2": correction.astype(np.float16),
-                                    "2009_CB3_CL2": np.full((1024, 1024), 0.5, np.float16)})
+np.savez(f"{root}/wac_dust.npz", **{"CL1_CL2_2008": correction.astype(np.float16),
+                                    "CB3_CL2_2004": np.full((1024, 1024), 0.5, np.float16)})
 ff.WAC_DUST = f"{root}/wac_dust.npz"
 WAC = {**INFO, "INSTRUMENT_ID": "ISSWA", "FILTER_NAME": '("CL1","CL2")', "IMAGE_TIME": "2009-206T19:40:48.860"}
-assert ff.quarter_of(WAC) == 2009 * 4 + 2 and ff.quarter_key(2009 * 4 + 2) == "2009Q3"
-assert ff.wac_dust_name(WAC) == "wac_dust_2009Q2"                        # its own quarter has none: the nearest
-assert ff.wac_dust_name({**WAC, "FILTER_NAME": '("CB3","CL2")'}) == "wac_dust_2009_CB3_CL2"   # its filter's own
-assert ff.wac_dust_name({**WAC, "IMAGE_TIME": "2010-206T00:00:00"}) is None   # too far
-got = ff._wac_dust("2009Q2", "full")
+assert ff.year_of(WAC) == 2009 and ff.dust_epoch(2009) == 2008 and ff.dust_epoch(2017) == 2012
+assert ff.wac_dust_name(WAC) == "wac_dust_CL1_CL2_2008"                  # its pair and epoch
+assert ff.wac_dust_name({**WAC, "IMAGE_TIME": "2015-001T00:00:00"}) == "wac_dust_CL1_CL2_2008"   # nearest epoch
+assert ff.wac_dust_name({**WAC, "FILTER_NAME": '("CB3","CL2")'}) == "wac_dust_CB3_CL2_2004"       # its own pair's
+assert ff.wac_dust_name({**WAC, "FILTER_NAME": '("CL1","RED")'}) is None # a pair with no map: none (not another's)
+key = "CL1_CL2_2008"
+got = ff._wac_dust(key, "full")
 assert np.allclose(got, correction, atol=2e-3)
-assert ff._wac_dust("2009Q2", "sum2").shape == (512, 512)
+assert ff._wac_dust(key, "sum2").shape == (512, 512)
 assert ff.dust_name(INFO) == "nac_dustring_1502443470"                  # the NAC's are CISSCAL's, as before
 assert np.allclose(ff.correction(WAC), correction, atol=2e-3)          # (no WAC flat in this folder: the map alone)
 ff.WAC_DUST_USE = False                                                # as the map builder measures
