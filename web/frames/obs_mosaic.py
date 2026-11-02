@@ -1821,6 +1821,13 @@ def pass_scale(frames, u, drawn=None, true_colour=False, sky_tops=None, lit_leve
                     tops[f] = max(margin, top)
             toe = SKY_TOE * max(tops.values())
             blacks = {f: max(blacks[f], level + tops[f]) for f, level in zip(by, levels)}
+    if calibration.look() == "balanced" and white > 0:
+        # a bright subject (a moon's limb, lit rings) sits in the top tenth of the range on the benchmark's gamma 3.0
+        # and reads as blown out: the gamma eases toward the single pictures' (calibration.EASE_PASS) by the pass's lit
+        # median (its brightest filter's, white = 1), as a single picture's highlights do (calibration.tone)
+        lit = max(calibration.lit_median((np.concatenate([i.ravel() for i in iofs]) - blacks[f]) / white)
+                  for f, iofs in by.items())
+        gamma = calibration.eased_gamma(gamma, lit, calibration.EASE_PASS)
     out = {"blacks": blacks, "white": white, "gamma": gamma, "filled": filled, "floor": round(floor, 3)}
     if toe:
         out["toe"], out["sky_tops"] = toe, tops
