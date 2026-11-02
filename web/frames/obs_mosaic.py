@@ -2765,29 +2765,24 @@ def dim_under(u, p, f, mine, cache):
 def dim_places(u, p, f, mine, tiles, cache):
     """The tiles of mine (filter f's) a pass's mosaic draws under the picture before them (dim_under), decided once for
     every filter at a pointing so a colour set's filters go under together (decided filter by filter, a pointing just
-    at the line went under in UV3 alone and its place came out blue): measured on the pass's grey filter where it has
-    tiles (else on f), and each of f's tiles takes the decision of that filter's tile at its pointing (SAME_PLACE),
-    the nearest (then nearest in time); a tile with none there is measured on its own filter."""
-    ref = p.get("grey")
-    if f == LUM or not ref or ref == f:
+    at the line went under in UV3 alone and its place came out blue): each of f's tiles takes the decision of its
+    pointing's first tile (_pointing_root, the tile C8 registers the pointing's filters to), measured on that tile's
+    own filter. The first tile is taken before the others, so its decision is there when each of them is first drawn
+    and never changes as later tiles come in: a mosaic grown a tile at a time keeps what it drew (decided on the
+    pointing's grey tile, taken last, Dione 221DI's colour tiles were drawn over the lit disk while the frames before
+    the grey one came in, and the grown mosaic kept them there, a black square)."""
+    if f == LUM:
         return set(dim_under(u, p, f, mine, cache))
-    theirs = [t for t in tiles if t.get("filter") == ref and "offset" in t]
-    if len(theirs) < 2:
-        return set(dim_under(u, p, f, mine, cache))
-    low = dim_under(u, p, ref, theirs, cache)
-    out, alone = set(), []
-    for t in mine:
-        near = [(math.hypot(q["offset"][0] - t["offset"][0], q["offset"][1] - t["offset"][1]), abs(q["t"] - t["t"]), q["n"])
-                for q in theirs]
-        near = [x for x in near if x[0] <= SAME_PLACE * FRAME]
-        if near:
-            if min(near)[2] in low:
-                out.add(t["n"])
-        else:
-            alone.append(t)
-    if alone:
-        out |= set(dim_under(u, p, f, mine, cache)) & {t["n"] for t in alone}
-    return out
+    placed = sorted((t for t in tiles if "offset" in t), key=lambda t: t["n"])
+    by_n = {t["n"]: t for t in placed}
+    roots = {}
+    for t in placed:
+        roots[t["n"]] = _pointing_root(u, t["n"], roots)
+    first = {t["n"]: by_n.get(roots.get(t["n"], t["n"]), t) for t in mine}
+    low = set()
+    for g in dict.fromkeys(r["filter"] for r in first.values()):
+        low |= set(dim_under(u, p, g, [t for t in placed if t["filter"] == g], cache))
+    return {n for n, r in first.items() if r["n"] in low}
 
 
 def _rewrite(path, kept):

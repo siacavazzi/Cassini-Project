@@ -2,7 +2,9 @@
 dim_places): the same ground seen again from far round the body, past the terminator (Dione 221DI's last 20 tiles,
 4 to 20 times darker on their overlaps, were drawn over the lit disk as a dark column). A tile a little darker (an
 exposure error the seams even out) stays over it, a tile overlapping nothing stays, and every filter of a colour set
-at one pointing takes the grey filter's decision. Synthetic tiles on a strip.
+at one pointing takes the decision of the pointing's first tile, which never changes as later tiles come in (decided
+on the grey tile, taken last, Dione 221DI's colour tiles were first drawn over the disk and the grown mosaic kept them
+there). Synthetic tiles on a strip.
 Run: python web/test_dim_under.py"""
 import sys; import os; HERE = os.path.dirname(os.path.abspath(__file__)); sys.path[:0] = [os.path.join(HERE, "frames"), os.path.dirname(HERE)]
 import tempfile  # noqa: E402
@@ -30,24 +32,43 @@ def pic(name, linear):
     return path
 
 
-# (n, filter, x offset, linear brightness): lit tiles, one 15% darker (stays), one 8 times darker (goes under),
-# one beside nothing (stays), and the dark tile's colour filters at its pointing
-plan = [(0, "CL1/CL2", 0, 0.5), (1, "CL1/CL2", 250, 0.43), (2, "CL1/CL2", 120, 0.06), (3, "CL1/CL2", 3000, 0.05),
-        (4, "GRN", 0, 0.55), (5, "GRN", 120, 0.07), (6, "GRN", 250, 0.5)]
-tiles = [{"n": n, "filter": f, "t": 10.0 * n, "offset": [float(x), 0.0], "box": [-200, -200, 400, 400], "pic": pic(f"t{n}", v)}
-         for n, f, x, v in plan]
+# (n, filter, x offset, linear brightness, time): pointings 1000 s apart, a grey and a colour tile at each, 10 s
+# apart (_register_to puts the second on the first): lit ones, one 15% darker (stays), one 8 times darker (goes under),
+# one beside nothing (stays); then a dark pointing whose colour tile is taken first (9 GRN, then 10 CL), as on Dione
+# 221DI
+plan = [(0, "CL1/CL2", 0, 0.5, 0), (1, "GRN", 0, 0.55, 10), (2, "CL1/CL2", 250, 0.43, 1000), (3, "GRN", 250, 0.5, 1010),
+        (4, "CL1/CL2", 120, 0.06, 2000), (5, "GRN", 120, 0.07, 2010), (6, "CL1/CL2", 3000, 0.05, 3000),
+        (7, "GRN", 3000, 0.05, 3010), (8, "CL1/CL2", 500, 0.5, 4000), (9, "GRN", 620, 0.05, 5000),
+        (10, "CL1/CL2", 620, 0.04, 5010)]
+tiles = [{"n": n, "filter": f, "t": float(s), "offset": [float(x), 0.0], "box": [-200, -200, 400, 400], "pic": pic(f"t{n}", v)}
+         for n, f, x, v, s in plan]
+# the frames as the pass holds them (_register_to: name, id, filter, time, -, place x, y, distance)
+u["frames"] = [(f"N{n}", n, f, float(s), None, float(x), 0.0, u["z"]) for n, f, x, v, s in plan]
 grey = [t for t in tiles if t["filter"] == "CL1/CL2"]
 low = om.dim_under(u, p, "CL1/CL2", grey, cache)
 print("under:", low)
-assert set(low) == {2}, low
-assert low[2] < 0.2, low
-# measured once and kept: asked again (one more tile), the same answer from the folder
+assert set(low) == {4, 10}, low
+assert low[4] < 0.2, low
+# measured once and kept: asked again, the same answer from the folder
 again = om.dim_under(u, p, "CL1/CL2", grey, cache)
 assert again == low, again
-# the colour filter at the dark tile's pointing goes under with it, whatever its own overlaps say
+# the colour filter at the dark tile's pointing goes under with it, whatever its own overlaps say; at the pointing
+# whose colour tile came first, the grey tile takes the colour tile's decision
 green = [t for t in tiles if t["filter"] == "GRN"]
-assert om.dim_places(u, p, "GRN", green, tiles, cache) == {5}
+greens = om.dim_places(u, p, "GRN", green, tiles, cache)
+print("green under:", greens)
+assert greens == {5, 9}, greens
+assert om.dim_places(u, p, "CL1/CL2", grey, tiles, cache) == {4, 10}
+# decided once: as the tiles come in one at a time, no tile's decision changes once it is drawn
+for f in ("GRN", "CL1/CL2"):
+    seen = {}
+    for m in range(1, len(tiles) + 1):
+        so_far = tiles[:m]
+        now = om.dim_places(u, p, f, [t for t in so_far if t["filter"] == f], so_far, cache)
+        for t in so_far:
+            if t["filter"] == f:
+                assert seen.setdefault(t["n"], t["n"] in now) == (t["n"] in now), (f, t["n"], m)
 # and the mosaic's drawing order puts it first (under every whole tile), as a partial frame
-order = [t["n"] for t in om.under_first([dict(t, under=True) if t["n"] == 2 else t for t in grey])]
-assert order == [2, 0, 1, 3], order
+order = [t["n"] for t in om.under_first([dict(t, under=True) if t["n"] == 4 else t for t in grey])]
+assert order == [4, 0, 2, 6, 8, 10], order
 print("ok")
