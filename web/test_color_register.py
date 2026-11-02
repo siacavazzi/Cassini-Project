@@ -104,8 +104,9 @@ else:
     import inspect
     sys.path.insert(0, os.path.join(HERE, "frames"))
     import obs_mosaic
-    # mosaic registration searches only near SPICE's place (REGISTER_MAX), its tiles' borders left out
-    assert "within=REGISTER_MAX * FRAME" in inspect.getsource(obs_mosaic._register)
+    # a WAC mosaic's tiles are searched only near SPICE's place (REGISTER_NEAR), their borders left out; the NAC's whole
+    assert "REGISTER_NEAR.get(u[\"key\"][2])" in inspect.getsource(obs_mosaic._register).replace("'", '"')
+    assert "N" not in obs_mosaic.REGISTER_NEAR and obs_mosaic.REGISTER_MAX == 0.04
     print("no guess, two frames: same as main")
 
 # ---------- colour mixes ----------

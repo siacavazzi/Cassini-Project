@@ -99,7 +99,14 @@ def load_index():
     # where SPICE puts each frame (the geometry cache, when there is one), so a set ends where the camera moves on to
     # the next pointing of a mosaic
     at = geometry(idx["id"].tolist())
-    places = [at.get(i) for i in idx["id"].tolist()] if at else None
+    places = None
+    if at:
+        # a frame wholly on its target's disk has no place (sets_passes.pointing: on a close flyby the centre
+        # offset says nothing of the ground); obs_mosaic's radius table, imported here as obs_mosaic imports reel
+        import obs_mosaic
+        ifov = {"ISSNA": obs_mosaic.IFOV["N"], "ISSWA": obs_mosaic.IFOV["W"]}
+        places = [sets_passes.pointing(at.get(i), obs_mosaic.RADIUS.get(g), ifov.get(c, obs_mosaic.IFOV["N"]))
+                  for i, g, c in zip(idx["id"].tolist(), targets, cams)]
     set_of, sets = sets_passes.filter_sets(cams, targets, obs, f1s, f2s, t, lambda q: wavelength(cams[q], f1s[q] + f2s[q]),
                                            places)
     set_of = np.array(set_of)
