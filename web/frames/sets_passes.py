@@ -36,6 +36,7 @@ SET_PLACE = 256                        # full resolution px: a camera move furth
 # full resolution px: the furthest the target's centre may sit off the frame for SPICE's place to say where the camera
 # points (0.3 rad: the place is the target's direction on the camera's flat image plane, which runs off to hundreds of
 # thousands of px for a target behind the camera, Jupiter flat fields at 440,000 px)
+HALF_DIAGONAL = 724                    # full resolution px: a frame's middle to its corner
 PLACE_REACH = {"N": 50000, "W": 5000, "ISSNA": 50000, "ISSWA": 5000}
 TRUE_REDS = ("RED", "CB1")             # the red of a true colour set, in order of preference
 TRUE_BLUES = ("BL1", "BL2", "VIO")     # the blue of a true colour set, in order of preference
@@ -87,6 +88,17 @@ def runs(frames):
     return out
 
 
+def pointing(place, radius_km, ifov):
+    """place (x, y, range km), as runs takes it, or None for a frame that lies wholly on its target's disk: there
+    SPICE's centre offset cannot say whether two frames show the same ground, as the view swings across a close
+    flyby (Titan at 6,000 km: 5 degrees, 15,000 px, in the 200 s of a CB3, MT3, MT1 set on one patch of haze), and
+    a set is joined on time and filters alone, as before the pointing rule. radius_km: the target's radius (None:
+    unknown, the place kept); ifov: radians per full resolution px."""
+    if place is None or place[0] is None or not radius_km or len(place) < 3 or not place[2] or place[2] <= 0:
+        return place
+    return None if (place[0] ** 2 + place[1] ** 2) ** 0.5 + HALF_DIAGONAL < radius_km / (place[2] * ifov) else place
+
+
 def moved(a, b):
     """True when SPICE puts two frames more than SET_PLACE px apart (a, b: (x, y, range km) or None); False when
     either has no place. The places are compared on the ground: the body's centre is off a close-up by tens of
@@ -99,12 +111,22 @@ def moved(a, b):
     return ((a[0] * k - b[0]) ** 2 + (a[1] * k - b[1]) ** 2) ** 0.5 > SET_PLACE
 
 
-def channels(filters, nms):
+def channels(filters, nms, times=None):
     """(kind, positions of the red, green and blue channels in filters) of a set: "true", "false" or "two" (two
-    positions, longer wavelength first). nms: each filter's effective wavelength, in the same order."""
+    positions, longer wavelength first). nms: each filter's effective wavelength, in the same order. times: when
+    each was taken; a filter's channel is then its frame nearest in time to a frame of another filter (a run of
+    repeat exposures ends next to the next filter: Titan N1574127426_1, CB3 three times 105 s apart, then MT1),
+    else its first frame. The repeats around a channel are stacked into it (stacking.find_repeats)."""
     at = {}
     for j, f in enumerate(filters):
-        at.setdefault(f, j)   # a filter's first frame is its channel; repeat exposures after it are stacked into it
+        if times is None:
+            at.setdefault(f, j)
+            continue
+        gap = min((abs(times[j] - times[i]) for i, g in enumerate(filters) if g != f), default=0.0)
+        if f not in at or gap < at[f][1]:
+            at[f] = (j, gap)
+    if times is not None:
+        at = {f: j for f, (j, _) in at.items()}
     red = next((f for f in TRUE_REDS if f in at), None)
     blue = next((f for f in TRUE_BLUES if f in at), None)
     if red and "GRN" in at and blue:
@@ -123,7 +145,7 @@ def filter_sets(cams, targets, obs, f1s, f2s, t, nm, places=None):
     set_of, sets = [-1] * len(fs), []
     cols = (cams, targets, obs, fs, t) if places is None else (cams, targets, obs, fs, t, places)
     for at in runs(list(zip(*cols))):
-        kind, use = channels([fs[q] for q in at], [nm(q) for q in at])
+        kind, use = channels([fs[q] for q in at], [nm(q) for q in at], [t[q] for q in at])
         use = [at[j] for j in use]
         for q in at:
             set_of[q] = len(sets)

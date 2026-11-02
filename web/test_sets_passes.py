@@ -100,6 +100,18 @@ assert sets_passes.runs(far) == [[0, 1, 2]]                        # a target be
 # channels are each filter's first frame; repeats only of one filter are no set; at most REPEAT_MAX in a row
 assert sets_passes.channels(["RED", "RED", "GRN", "BL1"], [650, 650, 570, 450]) == ("true", [0, 2, 3])
 assert sets_passes.channels(["CB2", "CB2", "MT2"], [750, 750, 727]) == ("two", [0, 2])
+# given the times, a filter's channel is its frame nearest another filter's (Titan N1574127426_1: CB3 x3, MT1)
+assert sets_passes.channels(["CB3", "CB3", "CB3", "MT1"], [938, 938, 938, 619], [0, 105, 210, 308]) == ("two", [2, 3])
+assert sets_passes.channels(["RED", "GRN", "GRN", "BL1", "BL1"], [650, 570, 570, 450, 450], [0, 30, 60, 90, 120]) == ("true", [0, 1, 3])
+# a frame wholly on its target's disk has no place: a close flyby's set joins on time and filters (Titan at 6,000 km,
+# the centre 16,000 px off and swinging), a frame showing the limb keeps its place
+assert sets_passes.pointing((-16350.0, -4239.0, 6000.0), 2575, 6e-6) is None
+assert sets_passes.pointing((-300.0, 0.0, 400000.0), 764, 6e-6) == (-300.0, 0.0, 400000.0)
+assert sets_passes.pointing((-300.0, 0.0, 400000.0), None, 6e-6) == (-300.0, 0.0, 400000.0)
+assert sets_passes.pointing(None, 2575, 6e-6) is None
+swing = [("N", "TITAN", "O", f, 90.0 * i, sets_passes.pointing(p, 2575, 6e-6))
+         for i, (f, p) in enumerate([("MT3", (-16350.0, -4239.0, 6000.0)), ("CB3", (-322.0, -1210.0, 5100.0)), ("MT1", (900.0, 3000.0, 4800.0))])]
+assert sets_passes.runs(swing) == [[0, 1, 2]]
 assert sets_passes.runs([("N", "S", "O", "RED", 10.0 * i) for i in range(4)]) == []
 many = [("N", "S", "O", "RED", 10.0 * i) for i in range(7)] + [("N", "S", "O", "GRN", 70.0)]
 assert sets_passes.runs(many) == [[5, 6, 7]]
