@@ -116,9 +116,10 @@ def main():
             mock.patch.object(cal.ds, "lut8", lambda: True), \
             mock.patch.object(cal, "sun_distance", lambda info: 9.5):
         hum = cn.two_hz(info, *cal.overclock_avg(info))
-        with cal.stepping("dark,flat,hotpix"):
+        # (the overclock method: the frame is flat, so the sky method finds no bands in it)
+        with cal.stepping("dark,flat,hotpix,twohzsky"):
             on = cal.calibrate(codes, info, smooth=False)
-        with cal.stepping("dark,flat,hotpix,twohz"):
+        with cal.stepping("dark,flat,hotpix,twohz,twohzsky"):
             off = cal.calibrate(codes, info, smooth=False)
     ratio = (off - on).mean(axis=1) / np.where(np.abs(hum) > 0.5, hum, np.nan)
     ratio = ratio[np.isfinite(ratio)]
@@ -126,6 +127,58 @@ def main():
                          hum is not None and np.abs(hum).max() > 2 and np.ptp(ratio) < 0.02 * np.abs(ratio).mean(),
                          f"hum amplitude {np.abs(hum).max():.2f} DN"))
     results.append(check("... subtracted, not added", ratio.mean() > 0))
+    # the image mean method (cisscal_noise.image_hum) against CISSCAL's, on two 8-bit table frames at gain 29 (with the
+    # IDL's skip of those frames taken out), one of them with lines lost in downlink, and a 12-bit frame
+    img_ref = np.load(os.path.join(os.path.dirname(os.path.abspath(__file__)), "test_data", "cisscal_image_ref.npz"))
+    img_labels = json.loads(str(img_ref["labels"]))
+    for fid, lab in img_labels.items():
+        raw = img_ref[f"{fid}/raw"].astype(np.int64)
+        strip = float(lab["BIAS_STRIP_MEAN"])
+        if lab["DATA_CONVERSION_TYPE"] == "TABLE":
+            image = cal.LUT[raw] - cal.LUT[int(strip)]
+        else:
+            image = raw - strip
+        missing = cn.missing_pixels(raw)
+        image = np.where(missing, 0.0, image)
+        want_missing = np.unpackbits(img_ref[f"{fid}/missing"]).reshape(1024, 1024).astype(bool)
+        want_mask = np.unpackbits(img_ref[f"{fid}/mask"]).reshape(1024, 1024).astype(bool)
+        mask, _ = cn.image_mask(image, missing)
+        hum = cn.image_hum(image, missing, lab, guard=False)
+        guarded = cn.image_hum(image, missing, lab) is not None
+        want = img_ref[f"{fid}/hum"]
+        d = np.nanmax(np.abs(hum - want)) if hum is not None else np.inf
+        results.append(check(f"{fid} image mean method", (missing == want_missing).all()
+                             and (mask.astype(bool) != want_mask).sum() <= 20 and d < 1e-3 and guarded,
+                             f"{int(want_missing.sum())} missing pixels, mask {int((mask.astype(bool) != want_mask).sum())} "
+                             f"pixels apart, 2 Hz max {d:.1e} DN, signal rms {np.nanstd(want):.2f}"))
+    # too little sky (a body over most of the frame): the image method stands aside
+    # a frame filled by a body (no dark sky): the image method stands aside, even where the body has horizontal bands of
+    # its own (Saturn's belts) that the mask lets through
+    rng = np.random.default_rng(8)
+    yy = np.arange(1024)[:, None]
+    belts = 900 + 300 * np.sin(2 * np.pi * yy / 33.0) + 50 * np.sin(2 * np.pi * yy / 9.0) + rng.normal(0, 3, (1024, 1024))
+    belts[:, :30] = rng.normal(0, 1, (1024, 30))          # a strip of sky down one edge, too narrow to measure from
+    results.append(check("image method stands aside on a frame filled by Saturn",
+                         cn.image_hum(belts, np.zeros((1024, 1024), bool), img_labels["N1511812985_1"]) is None))
+
+    # wiring: an 8-bit table frame at gain 29 (no 2 Hz step in CISSCAL) of dark sky carrying bands, its stars masked
+    rng = np.random.default_rng(4)
+    sky = 30 + 2.5 * np.sin(2 * np.pi * lines / 37.0)[:, None] + rng.normal(0, 1.0, (1024, 1024))
+    sky[rng.integers(0, 1024, 300), rng.integers(0, 1024, 300)] += 200
+    table = {**info, "DATA_CONVERSION_TYPE": "TABLE", "GAIN_MODE_ID": "29 ELECTRONS PER DN", "BIAS_STRIP_MEAN": "6.9",
+             "INST_CMPRS_TYPE": "LOSSLESS"}
+    codes8 = np.clip(np.round(np.interp(sky + cal.LUT[6], cal.LUT, np.arange(256))), 1, 255).astype(np.uint8)
+    with mock.patch.object(cal.ds, "read_bytes", lambda p: open(p, "rb").read()), \
+            mock.patch.object(cal.ds, "lut8", lambda: True), \
+            mock.patch.object(cal, "sun_distance", lambda info: 9.5):
+        with cal.stepping("dark,flat,hotpix,pairs"):
+            on = cal.calibrate(codes8, table, smooth=False)
+        with cal.stepping("dark,flat,hotpix,pairs,twohzsky"):
+            off = cal.calibrate(codes8, table, smooth=False)
+    rows = lambda x: np.sort(x, axis=1)[:, 100:-100].mean(axis=1)   # noqa: E731  (each line's mean, stars left out)
+    band_on, band_off = rows(on).std() / np.median(on), rows(off).std() / np.median(off)
+    results.append(check("calibrate takes the bands off an 8-bit low gain frame from its sky", band_on < band_off / 3,
+                         f"line to line spread {band_off:.4f} -> {band_on:.4f} of the sky"))
     print(f"{sum(results)} of {len(results)} passed")
     return 0 if all(results) else 1
 

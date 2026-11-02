@@ -19,7 +19,10 @@ the label allows:
   3. subtract the bias: fitted down the frame from the overclocked pixels in each line's
      prefix where the archive has them (overclock_bias), else BIAS_STRIP_MEAN (as CISSCAL 4,
      also for 8-bit table frames under 12 e-/DN), and the 2 Hz noise (horizontal banding)
-     line by line from the same overclocks (cisscal_noise.two_hz; the "twohz" step)
+     line by line (the "twohz" step): measured from the frame's own background where it has
+     enough (CISSCAL's image mean method, cisscal_noise.image_hum; the "twohzsky" step, also on
+     the 8-bit low gain and lossy frames CISSCAL leaves alone), else from the same overclocks
+     (CISSCAL's default, cisscal_noise.two_hz)
   4. subtract the dark current (dark_current.py; the "dark" step), then replace the
      anti-blooming bright/dark pixel pairs (cisscal_noise.bright_dark; the "pairs" step)
   5. correct the camera's nonlinearity (CISSCAL's linearize tables, by gain state)
@@ -471,9 +474,20 @@ def calibrate(png, info, image=None, smooth=True):
     spots = None
     lines_bias = overclock_bias(info)
     if step("twohz"):
-        # CISSCAL's 2 Hz noise (cisscal_noise.two_hz), one value per line, taken off with the bias
-        got = overclock_avg(info)
-        hum = cn.two_hz(info, *got) if got is not None else None
+        # CISSCAL's 2 Hz noise, one value per line, taken off with the bias: measured from the frame's own background
+        # where it has enough (cisscal_noise.image_hum, the "twohzsky" step; CISSCAL's image mean method, here also on
+        # the 8-bit low gain and lossy frames CISSCAL leaves alone), else from the overclocked pixels (two_hz)
+        hum = None
+        full_size = shape == (int(_value(info, "LINES", "0") or 0), int(_value(info, "LINE_SAMPLES", "0") or 0))
+        if step("twohzsky") and full_size:
+            image = _lookup(pixels, dn) if codes else np.asarray(dn, dtype=np.float64)
+            if lines_bias is not None:
+                image = image - (lines_bias - bias)[:, None]
+            missing = cn.missing_pixels(pixels)
+            hum = cn.image_hum(np.where(missing, 0.0, image), missing, info, dc.dark_dn(info))
+        if hum is None:
+            got = overclock_avg(info)
+            hum = cn.two_hz(info, *got) if got is not None else None
         if hum is not None:
             lines_bias = (lines_bias if lines_bias is not None else np.full(len(hum), float(bias))) + hum
     if lines_bias is not None:
@@ -684,7 +698,8 @@ each one does: "stack" (repeat exposures of the same filter merged, stacking.loa
 exposure bracket merged into one picture in mosaics and movies, stacking.load_hdr; off merges only identical
 exposures, a plain stack), "fill" (pixels lost in downlink filled from round them), "calibrate" (every frame put on
 I/F and one display scale; off shows each frame on the archive's own stretch), "twohz" (calibrate's 2 Hz noise, the
-horizontal banding, taken out line by line, cisscal_noise.two_hz), "dark" (calibrate's dark current and
+horizontal banding, taken out line by line), "twohzsky" (the 2 Hz noise measured from the frame's own background,
+cisscal_noise.image_hum; off measures it from the overclocked pixels only, cisscal_noise.two_hz), "dark" (calibrate's dark current and
 the WAC's hot pixels taken out, dark_current.py), "pairs" (calibrate's anti-blooming bright/dark pixel pairs replaced,
 cisscal_noise.bright_dark), "flat" (calibrate's flat field: dust rings, mottle and the
 detector's flat taken out, flat_field.py), "hotpix" (calibrate's repair of the hot and dead pixels, which stay put
@@ -698,7 +713,7 @@ only how tiles are drawn together, or redraw or move tiles from the tiles made, 
 left out of variant (a mosaic with them off draws the same tiles) and the mosaics name them themselves
 (mosaic.drawing; obs_mosaic.SURFACE_TAG, PANEL_TAG, EDGE_TAG).
 """
-STEPS = ("stack", "hdr", "fill", "calibrate", "twohz", "dark", "pairs", "flat", "hotpix", "align", "blend", "level", "surface", "panels")
+STEPS = ("stack", "hdr", "fill", "calibrate", "twohz", "twohzsky", "dark", "pairs", "flat", "hotpix", "align", "blend", "level", "surface", "panels")
 _off = contextvars.ContextVar("off", default=frozenset())
 
 
