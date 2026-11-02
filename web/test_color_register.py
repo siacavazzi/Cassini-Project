@@ -104,8 +104,9 @@ else:
     import inspect
     sys.path.insert(0, os.path.join(HERE, "frames"))
     import obs_mosaic
-    assert "guess" not in inspect.getsource(obs_mosaic._shift_onto)
-    print("no guess: same as main")
+    # mosaic registration searches only near SPICE's place (REGISTER_MAX), its tiles' borders left out
+    assert "within=REGISTER_MAX * FRAME" in inspect.getsource(obs_mosaic._register)
+    print("no guess, two frames: same as main")
 
 # ---------- colour mixes ----------
 assert cal.color_mix("N", ["RED", "BL1"], "SATURN") is None          # visible pairs stay straight (N1542600445_1)

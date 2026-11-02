@@ -96,7 +96,12 @@ def load_index():
     cams, targets, obs = idx["INSTRUMENT_ID"].tolist(), idx["TARGET_NAME"].tolist(), idx["OBSERVATION_ID"].tolist()
     f1s, f2s, t = idx["filter1"].astype(str).tolist(), idx["filter2"].astype(str).tolist(), idx["seconds_1970"].to_numpy()
     # the filter sets, by the one rule (sets_passes: the camera windows', the pre-build's and the data's)
-    set_of, sets = sets_passes.filter_sets(cams, targets, obs, f1s, f2s, t, lambda q: wavelength(cams[q], f1s[q] + f2s[q]))
+    # where SPICE puts each frame (the geometry cache, when there is one), so a set ends where the camera moves on to
+    # the next pointing of a mosaic
+    at = geometry(idx["id"].tolist())
+    places = [at.get(i) for i in idx["id"].tolist()] if at else None
+    set_of, sets = sets_passes.filter_sets(cams, targets, obs, f1s, f2s, t, lambda q: wavelength(cams[q], f1s[q] + f2s[q]),
+                                           places)
     set_of = np.array(set_of)
     idx["set"] = set_of
     # copied whole once, which puts the columns added above into the frame's blocks (consolidates it): otherwise the
