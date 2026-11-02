@@ -336,11 +336,16 @@ const THEME = {
   nowGlow: cssVar("--tl-now-glow").replace(/"/g, ""), barStyle: cssVar("--tl-bar-style") || "solid"
 };
 ''')
-# Cassini OS opens at the Settings window's start time (playback.start; by default "In Saturn's Shadow",
-# 2006-09-15, the WAC mosaic of Saturn backlit by the Sun, the benchmark in web/frames/mosaic_benchmark.py);
-# a ?t= link wins
+# Cassini OS opens at the Settings window's start time (playback.start). By default a visit with no ?t= lands on
+# one of a few famous moments at random (settings.html, window.cassiniLandings), written into the address as a
+# link; a pinned time from the older list is read here. The fallback is "In Saturn's Shadow", 2006-09-15, the WAC
+# mosaic of Saturn backlit by the Sun, the benchmark in web/frames/mosaic_benchmark.py; a ?t= link wins
 rep('get("t") || "2005-01-14T09:30:00"',
-    'get("t") || (window.cassiniSettings && cassiniSettings.get("playback.start")) || "2006-09-15T14:28:00"')
+    'get("t") || (window.cassiniSettings && /^\\d{4}-/.test(cassiniSettings.get("playback.start")) && cassiniSettings.get("playback.start")) || "2006-09-15T14:28:00"')
+
+# a landing moment (settings.html) outside the years the picture cache holds: another landing inside them, if any
+rep('if (!inside(startEt)) startEt = (encounters.find(',
+    'if (!inside(startEt)) startEt = (window.cassiniLandingIn && cassiniLandingIn(inside)) || (encounters.find(')
 
 # surface map size: a ?tex= link wins, then the Settings window's choice
 rep('const TEX_TIER = (new URLSearchParams(location.search).get("tex") || (location.hash.match(/^#tex-(\\w+)$/) || [])[1] || "2k").toLowerCase();',
@@ -524,6 +529,12 @@ function makeCassini() {
       // scale so the high-gain dish is its real 4 m across
       const dish = m.getObjectByName("dish"), box = new THREE.Box3().setFromObject(dish), sz = box.getSize(new THREE.Vector3());
       m.scale.setScalar(4 / Math.max(sz.x, sz.y, sz.z));
+      // the camera cones start at the front of the two camera tubes on the remote sensing pallet (model metres,
+      // measured on the model: the wide 28 cm tube is the NAC, the slim 11 cm one beside it the WAC; 1 cm out
+      // so the cone's tip is not hidden inside the tube)
+      m.updateMatrix();
+      CAM_MOUNT.N.set(0.589, 0.401, 1.827).applyMatrix4(m.matrix);
+      CAM_MOUNT.W.set(0.981, 0.615, 1.593).applyMatrix4(m.matrix);
       m.traverse(o => {
         o.layers.set(1);
         if (/_h$/.test(o.name)) cassiniProbe.push(o);
