@@ -22,34 +22,67 @@ def typical(target, camera, bands):
 assert abs(cal.band_wavelength("W", "CB2") - 752.3) < 0.1 and abs(cal.band_wavelength("N", "BL1") - 456.8) < 0.1
 assert abs(cal.band_wavelength("N", "IR3") - 925.9) < 0.1 and abs(cal.band_wavelength("W", "VIO") - 419.7) < 0.1
 
-# Saturn's methane stare (WAC MT3 + CB2 + MT2): drawn from CB2 alone, in Saturn's color, at its typical brightness
-m = cal.eye_mix("W", ["MT3", "CB2", "MT2"], "SATURN")
-assert np.all(m[:, [0, 2]] == 0)
-out = m @ typical("SATURN", "W", ["MT3", "CB2", "MT2"])
+# a stacked pair has its own wavelength (WAC IR2 + IR1, 826 nm), so Titan's CB3 + IR2/IR1 has an eye mix
+assert abs(cal.band_wavelength("W", "IR2/IR1") - 826.3) < 0.1 and cal.eye_mix("W", ["CB3", "IR2/IR1"], "TITAN") is not None
+
+# Saturn's methane stare (WAC MT3 + CB2 + MT2): its color from CB2 alone, Saturn's, at its typical brightness
+bands = ["MT3", "CB2", "MT2"]
+m = cal.eye_mix("W", bands, "SATURN")
+out = m @ typical("SATURN", "W", bands)
 assert np.allclose(hue(out), hue(cal.eye_tint("SATURN")), atol=1e-4)
 assert abs(out.mean() / typical("SATURN", "W", ["CB2"]).mean() - 1) < 0.01
-# a cloud twice as bright in CB2 is twice as bright, same color; MT3 and MT2 change nothing
-v = typical("SATURN", "W", ["MT3", "CB2", "MT2"]) * [1, 2, 1]
-assert np.allclose(m @ v, 2 * out, rtol=1e-5)
-assert np.allclose(m @ (v * [5, 1, 0.2]), m @ v)
+# the methane bands stay in the brightness (METHANE_DETAIL of a band's share), never in the color: a cloud brighter
+# in MT3 (high) is brighter, one darker in it darker, both Saturn's color
+v = typical("SATURN", "W", bands)
+high, low = m @ (v * [2, 1, 1]), m @ (v * [0.5, 1, 1])
+assert high.sum() > out.sum() > low.sum()
+assert np.allclose(hue(high), hue(out), atol=1e-4) and np.allclose(hue(low), hue(out), atol=1e-4)
+w = cal.METHANE_DETAIL
+assert abs(high.sum() / out.sum() - (1 + w / (1 + 2 * w))) < 1e-4
+# the NAC's MT3 + MT2 + BL1 (set 37, which flattened to one cream): the methane bands' belts show as brightness
+bands = ["MT3", "MT2", "BL1"]
+m = cal.eye_mix("N", bands, "SATURN")
+v = typical("SATURN", "N", bands)
+assert (m @ (v * [1.5, 1.5, 1])).sum() > 1.2 * (m @ v).sum()
 
-# Titan's two-filter CB3 + MT1 (channels: longer, mean, shorter): orange, from CB3, the green column empty
+# twice a band's share (METHANE_DETAIL): set 37's storm and c32's belts stood out too little and the planet read pale;
+# Titan's CB3 + MT2 + MT1 holds its surface window (SURFACE_WINDOW), where more methane haze would wash out the dark
+# terrain, so its methane bands keep METHANE_DETAIL_WINDOW
+assert cal.METHANE_DETAIL > 1 and cal.METHANE_DETAIL_WINDOW < 1
+bands = ["CB3", "MT2", "MT1"]
+m = cal.eye_mix("N", bands, "TITAN")
+v = typical("TITAN", "N", bands)
+w = cal.METHANE_DETAIL_WINDOW
+assert abs((m @ (v * [2, 1, 1])).sum() / (m @ v).sum() - (1 + 1 / (1 + 2 * w))) < 1e-3
+
+# Titan's two-filter CB3 + MT1 (channels: longer, mean, shorter): orange, its color from CB3, the green column empty
 m = cal.eye_mix("N", ["CB3", "MT1"], "TITAN")
-assert m.shape == (3, 3) and np.all(m[:, 1:] == 0)
+assert m.shape == (3, 3) and np.all(m[:, 1] == 0)
 assert np.allclose(hue(m[:, 0]), hue(cal.eye_tint("TITAN")), atol=1e-4)
+assert np.allclose(hue(m @ [0.2, 0, 0.05]), hue(cal.eye_tint("TITAN")), atol=1e-4)   # MT1: brightness, no color
 
-# a body with no measure in a band (Phoebe): gray where the set's bands read alike, and the set's own slope where
-# they don't: brighter in IR3 than UV3 leans red, the other way blue
+# a body with no measure in a band (Phoebe): gray, whatever its bands read (their ratios to nothing are no color)
 m = cal.eye_mix("N", ["IR3", "GRN", "UV3"], "PHOEBE")
-assert np.allclose(hue(m @ [0.3, 0.3, 0.3]), [1 / 3] * 3, atol=1e-4)
-red, blue = m @ [0.4, 0.3, 0.2], m @ [0.2, 0.3, 0.4]
-assert red[0] > red[1] > red[2] and blue[2] > blue[1] > blue[0]
+for v in ([0.3, 0.3, 0.3], [0.4, 0.3, 0.2], [0.2, 0.3, 0.4]):
+    assert np.allclose(hue(m @ v), [1 / 3] * 3, atol=1e-4)
+assert (m @ [0.4, 0.4, 0.4]).sum() > (m @ [0.3, 0.3, 0.3]).sum()
 
-# Iapetus' dark side against its typical (both sides): redder in IR3 than in UV3 comes out redder than the body
+# Iapetus, whose measure is unsure (two-toned: its spread is past BODY_SPREAD), in one color, its own, with its
+# bands' brightness: the hot pink of set 35 (IR3 + GRN + UV3, ISS_214IA_IAPETUS091) is gone
+assert cal.body_level("IAPETUS", "GRN", "N") is None
 t = typical("IAPETUS", "N", ["IR3", "GRN", "UV3"])
 m = cal.eye_mix("N", ["IR3", "GRN", "UV3"], "IAPETUS")
 body, dark = m @ t, m @ (t * [0.5, 0.3, 0.15])
-assert np.allclose(hue(body), hue(cal.eye_tint("IAPETUS")), atol=1e-4) and dark[0] / dark[2] > 1.5 * body[0] / body[2]
+assert np.allclose(hue(body), hue(cal.eye_tint("IAPETUS")), atol=1e-4) and np.allclose(hue(dark), hue(body), atol=1e-4)
+assert dark.sum() < body.sum()
+# a body measured surely leans the way its bands do (Saturn's storm set, CB3 + MT2 + GRN: its color from CB3 and GRN)
+bands = ["CB3", "MT2", "GRN"]
+assert all(cal.body_level("SATURN", b, "N") for b in bands)
+t = typical("SATURN", "N", bands)
+m = cal.eye_mix("N", bands, "SATURN")
+body, red = m @ t, m @ (t * [1.3, 1, 0.8])
+assert np.allclose(hue(body), hue(cal.eye_tint("SATURN")), atol=1e-4) and red[0] / red[2] > 1.05 * body[0] / body[2]
+
 # the measured colors: Saturn and Titan warm, the icy moons near gray, a body without one gray
 assert cal.eye_tint("SATURN")[2] < 0.8 and abs(cal.eye_tint("DIONE")[2] - 1) < 0.15 and cal.eye_tint("PHOEBE") == [1.0] * 3
 
@@ -64,6 +97,34 @@ with cal.coloring("eye"):
     chans = [np.full((8, 8), v, np.float32) for v in lvl]
     px = [int(c[0, 0, 0]) for c in cal.tone(chans, 0.0, got)]
     assert px[0] > px[1] > px[2], px
+# Natural color (the default) draws a set with a methane band as the eye style does (fix plan group C: Saturn
+# teal, Jupiter green, Titan salmon); other false color sets keep the false color balance; Titan's surface window
+# pair (CB3 + MT1) keeps its own drawing
 with cal.coloring("natural"):
-    assert cal.style() == "balanced" and isinstance(cal.color_mix("W", ["MT3", "CB2", "MT2"], "SATURN"), cal.FalseMix)
+    assert cal.style() == "balanced"
+    for cam, bands, target in (("W", ["MT3", "CB2", "MT2"], "SATURN"), ("N", ["MT3", "MT2", "BL1"], "JUPITER"),
+                               ("N", ["CB3", "MT2", "MT1"], "TITAN"), ("W", ["CB2", "MT2"], "SATURN")):
+        got = cal.color_mix(cam, bands, target)
+        assert not isinstance(got, cal.FalseMix) and np.allclose(got, cal.eye_mix(cam, bands, target)), bands
+    assert isinstance(cal.color_mix("N", ["IR3", "GRN", "UV3"], "ENCELADUS", own=True), cal.FalseMix)
+    assert cal.color_mix("N", ["CB3", "MT1"], "TITAN") is None
+    assert np.allclose(cal.color_mix("N", ["RED", "GRN", "BL1"], "SATURN"), cal.natural_mix("N", ["RED", "GRN", "BL1"]))
+# False color (Settings > Filter colors) balances methane sets as Natural color did before, in its own cache
+with cal.coloring("false"):
+    assert cal.style() == "false" and cal.false_balanced()
+    assert isinstance(cal.color_mix("W", ["MT3", "CB2", "MT2"], "SATURN"), cal.FalseMix)
+    assert np.allclose(cal.color_mix("N", ["RED", "GRN", "BL1"], "SATURN"), cal.natural_mix("N", ["RED", "GRN", "BL1"]))
+with cal.coloring("raw"):
+    assert cal.color_mix("W", ["MT3", "CB2", "MT2"], "SATURN") is None
+
+# a false color set of more than three filters draws the three nearest red, green and blue, methane bands last
+import sets_passes  # noqa: E402
+nm = lambda fs: [cal.band_wavelength("N", f) for f in fs]
+pick = lambda fs: [fs[j] for j in sets_passes.nearest_visible(fs, nm(fs))]
+assert pick(["IR3", "GRN", "UV3", "UV1"]) == ["IR3", "GRN", "UV3"]          # Pandora: GRN over UV1
+assert pick(["MT3", "CB2", "CB1", "MT2", "BL1", "UV1"]) == ["CB2", "CB1", "BL1"]   # a gas giant's continuum
+assert pick(["MT3", "CB2", "MT2", "BL1"]) == ["CB2", "MT2", "BL1"]           # one methane band where it must
+assert pick(["CB3", "CB1", "MT1", "UV1", "UV3"]) == ["CB3", "CB1", "UV3"]       # a Titan wind stare
+assert pick(["IR3", "UV3", "UV1"]) == ["IR3", "UV3", "UV1"]                  # three: all of them, longest first
+assert sets_passes.channels(["IR3", "GRN", "UV3", "UV1"], nm(["IR3", "GRN", "UV3", "UV1"])) == ("false", [0, 1, 2])
 print("ok")

@@ -78,7 +78,7 @@ def module_from_main(name, ref="origin/main"):
     path = os.path.join(folder, f"{name}_main.py")
     with open(path, "w") as f:
         f.write(src.stdout)
-    for data in ("color_matrices.json", "false_color_bodies.json"):   # the tables it reads beside itself
+    for data in ("color_matrices.json", "false_color_bodies.json", "filter_calibration.csv", "eye_colors.json"):   # the tables it reads beside itself
         with open(os.path.join(folder, data), "w") as f:
             f.write(subprocess.run(["git", "show", f"{ref}:{data}"], cwd=os.path.join(HERE, ".."),
                                    capture_output=True, text=True).stdout)
@@ -86,6 +86,12 @@ def module_from_main(name, ref="origin/main"):
     mod = importlib.util.module_from_spec(spec)
     spec.loader.exec_module(mod)
     return mod
+
+
+def false_colors(mod):
+    """mod's False color (colors=false, the false color balance of every false color set: Natural color before fix
+    plan C), or Natural color in a calibration that has no False color yet"""
+    return mod.coloring("false" if "false" in mod.COLORS else "natural")
 
 
 old_ic = module_from_main("image_correction")
@@ -104,37 +110,46 @@ else:
     import inspect
     sys.path.insert(0, os.path.join(HERE, "frames"))
     import obs_mosaic
-    assert "guess" not in inspect.getsource(obs_mosaic._shift_onto)
-    print("no guess: same as main")
+    # a WAC mosaic's tiles are searched only near SPICE's place (REGISTER_NEAR), their borders left out; the NAC's whole
+    assert "REGISTER_NEAR.get(u[\"key\"][2])" in inspect.getsource(obs_mosaic._register).replace("'", '"')
+    assert "N" not in obs_mosaic.REGISTER_NEAR and obs_mosaic.REGISTER_MAX == 0.04
+    print("no guess, two frames: same as main")
 
 # ---------- colour mixes ----------
 assert cal.color_mix("N", ["RED", "BL1"], "SATURN") is None          # visible pairs stay straight (N1542600445_1)
 assert cal.color_mix("W", ["RED", "VIO"], "SATURN") is None
 two = cal.color_mix("W", ["IR3", "VIO"], "SATURN", own=True)
 assert isinstance(two, cal.FalseMix) and two.shape == (3, 3)
-assert isinstance(cal.color_mix("N", ["MT3", "BL1"], "TITAN", own=True), cal.FalseMix)
+# a set with a methane band: natural color emulation (fix plan C), the false balance under colors=false
+assert np.allclose(cal.color_mix("N", ["MT3", "BL1"], "TITAN", own=True), cal.eye_mix("N", ["MT3", "BL1"], "TITAN"))
+with cal.coloring("false"):
+    assert isinstance(cal.color_mix("N", ["MT3", "BL1"], "TITAN", own=True), cal.FalseMix)
+    assert isinstance(cal.color_mix("N", ["CB3", "MT1", "UV3"], "TITAN", own=True), cal.FalseMix)
 # Titan's CB3 (its surface window) with another band stays straight, as before #188: its surface shows as the bands'
 # difference, which the balance flattened into one orange (042TI_GLOBMAP001, N1687507569_1)
 assert cal.color_mix("N", ["CB3", "MT1"], "TITAN", own=True) is None
 assert cal.color_mix("W", ["IR1", "CB3"], "TITAN", own=True) is None
 assert isinstance(cal.color_mix("N", ["BL1", "UV3"], "TITAN", own=True), cal.FalseMix)
 assert isinstance(cal.color_mix("W", ["CB3", "VIO"], "SATURN", own=True), cal.FalseMix)
-assert isinstance(cal.color_mix("N", ["CB3", "MT1", "UV3"], "TITAN", own=True), cal.FalseMix)
+assert not isinstance(cal.color_mix("N", ["CB3", "MT1", "UV3"], "TITAN", own=True), cal.FalseMix)
 assert cal.two_bands([4.0, 2.0]) == [4.0, 3.0, 2.0] and cal.two_bands([1, 2, 3]) == [1, 2, 3]
 with cal.coloring("raw"):
     assert cal.color_mix("W", ["IR3", "VIO"], "SATURN", own=True) is None
 
 old_cal = module_from_main("calibration")
 if old_cal is not None:
-    # three-band sets (every mosaic, movie and composite of three filters) mix as they did on main
+    # three-band sets (every mosaic, movie and composite of three filters) mix as they did on main, under False color
+    # (main's Natural color; Natural color now draws methane sets as natural color emulation, test_color_eye.py)
     for cam in ("N", "W"):
         for target in ("SATURN", "TITAN", "JUPITER", "ENCELADUS", "RHEA", "DIONE", "PAN"):
             for bands in (["RED", "GRN", "BL1"], ["MT3", "CB2", "MT2"], ["IR3", "GRN", "UV3"], ["CB3", "MT3", "CB2"],
                           ["IR1", "GRN", "VIO"], ["IR3", "MT2", "UV1"]):
                 for gains in (None, [1.3, 0.9, 1.7]):
                     for own in (False, True):
-                        a = cal.color_mix(cam, bands, target, gains, own)
-                        b = old_cal.color_mix(cam, bands, target, gains, own)
+                        with cal.coloring("false"):
+                            a = cal.color_mix(cam, bands, target, gains, own)
+                        with false_colors(old_cal):
+                            b = old_cal.color_mix(cam, bands, target, gains, own)
                         assert (a is None) == (b is None) and (a is None or np.array_equal(np.asarray(a), np.asarray(b))), \
                             (cam, target, bands, a, b)
                         assert (a is None) or (getattr(a, "tint", None) == getattr(b, "tint", None))
@@ -182,6 +197,8 @@ assert len(pair) == 2
 # of methane Saturn pink-white, W1694956960_1 and 17 more): load_linear and tone, byte for byte
 old_cal = module_from_main("calibration", "069c6ee^1")
 if old_cal is not None:
+    # the floor black changed since (round 3: darkest real feature, small dim bodies), not what #188 is about
+    old_cal._floor = cal._floor
     for bands, levels, target in ((["MT3", "CB2", "MT2"], [0.0236, 0.40, 0.135], "DIONE"),
                                   (["MT3", "CB2", "MT2"], [0.0236, 0.40, 0.135], "SATURN"),
                                   (["MT3", "MT2", "BL1"], [0.03, 0.2, 0.35], "SATURN"), (["IR3", "GRN", "UV3"], [0.3, 0.2, 0.1], "TITAN")):
@@ -189,8 +206,10 @@ if old_cal is not None:
         got = []
         for mod in (cal, old_cal):
             labels = [Label(b, target) for b in bands]
-            chans, margin, mix = mod.load_linear(labels, [np.zeros((H, H, 3), np.uint8)] * 3, [i.copy() for i in iofs])
-            got.append((np.asarray(mix).tobytes(), [c.tobytes() for c in mod.tone(chans, margin, mix)]))
+            # (under False color: Natural color now draws methane sets as natural color emulation, fix plan C)
+            with false_colors(mod):
+                chans, margin, mix = mod.load_linear(labels, [np.zeros((H, H, 3), np.uint8)] * 3, [i.copy() for i in iofs])
+                got.append((np.asarray(mix).tobytes(), [c.tobytes() for c in mod.tone(chans, margin, mix)]))
         assert got[0] == got[1], (bands, target)
     print("three-band composites: as before #188")
 
@@ -214,7 +233,8 @@ WND = {"CB3": 937.9, "MT3": 889.2, "IR3": 925.9, "CB1": 619.5, "MT1": 619.0, "UV
 wnd = [(f"p{i}", f"N{1496546246 + dt}_1", f, 1496546246.0 + dt, WND[f], 0, 0, 1e6) for i, (f, dt) in enumerate(
     zip(["CB3", "MT3", "IR3", "CB3", "CB3", "CB1", "MT1", "UV1", "UV3"], [0, 174, 244, 1232, 2220, 2275, 2307, 2507, 2579]))]
 assert om.colour_of({"CB3": 3, "MT3": 1, "IR3": 1, "CB1": 1, "MT1": 1, "UV1": 1, "UV3": 1}, WND) is None
-assert om._filters({"key": ("TITAN", "X", "N", 0), "frames": wnd, "z": 1e6, "kind": "movie"})[3] == ["CB3", "MT1", "UV1"]
+# (its sets' three nearest the visible, methane last, fix plan C: CB3 + CB1 + UV3, was CB3 + MT1 + UV1)
+assert om._filters({"key": ("TITAN", "X", "N", 0), "frames": wnd, "z": 1e6, "kind": "movie"})[3] == ["CB3", "CB1", "UV3"]
 assert om._filters({"key": ("TITAN", "X", "N", 0), "frames": wnd, "z": 1e6, "kind": "mosaic"})[3] is None   # mosaics: as before
 two = [(f"p{i}", f"W{1486330000 + i}_1", ["CB2", "CB2", "CB2", "MT2"][i % 4], 1000.0 + 37 * i, NMS["CB2"], 0, 0, 1e6) for i in range(9)]
 assert om._filters({"key": ("SATURN", "X", "W", 0), "frames": two, "z": 1e6, "kind": "movie"})[3] is None     # two-filter sets: grey

@@ -2492,8 +2492,16 @@ body.ambient.phone .amb-where { font-size: 18px; }
       hint: "Lines a frame lost on its way to Earth are filled from the lines round them, so they don't show as black stripes or throw off the stretch. Off leaves them black." },
     { key: "processing.calibrate", step: "calibrate", label: "Calibrate",
       hint: "Every frame is turned into reflectance (I/F: bias, exposure, gain, filter and distance from the Sun taken out) and drawn on one display scale, so filters and mosaic tiles match and colors are true. Off shows each frame on the archive's own stretch, as it came down." },
+    { key: "processing.twohz", step: "twohz", label: "2 Hz noise",
+      hint: "Takes out the faint horizontal bands (\"2 Hz noise\") the camera's electronics added while each picture was read out, line by line from the extra pixels the camera read past the end of every line, as the camera team's calibration (CISSCAL) does. Most visible in dark sky and faint pictures. Full-size frames only. Off leaves the bands in. Needs Calibrate." },
+    { key: "processing.twohzsky", step: "twohzsky", label: "Bands from the sky",
+      hint: "Measures the 2 Hz bands from the picture's own dark sky (the median of each line with stars and bodies masked out, CISSCAL's \"image mean\" method) instead of from the few extra pixels past each line, which catch only part of them. Takes the bands out far more completely, and also on the 8-bit and lossy frames CISSCAL skips. Used where at least 9 lines in 10 have some clear sky; a frame filled by a moon or Saturn keeps the extra-pixel method. Off uses the extra pixels only, as CISSCAL does by default. Needs 2 Hz noise." },
+    { key: "processing.skysmooth", step: "skysmooth", label: "Smooth dark sky",
+      hint: "The archive keeps a dark sky as only a handful of brightness steps, so once the bands are measured from the sky each line still sits a fraction of a step above or below the next and the bands show again when the sky is stretched. Where the bands were measured from the sky, its one-step speckle is evened out over a few pixels; stars, cosmic rays and edges, several steps brighter, are left as they were. Off shows the sky's steps as they came down. Needs Bands from the sky." },
     { key: "processing.dark", step: "dark", label: "Dark current",
       hint: "Takes out the charge the camera's detector gathers without any light, which grows with the exposure and with how long each line waits to be read out, with the camera team's own dark model. Most visible on long exposures: night sides, rings, Titan's surface. Off leaves them in. Needs Calibrate." },
+    { key: "processing.pairs", step: "pairs", label: "Pixel pairs",
+      hint: "In anti-blooming mode the detector leaves pairs of pixels, one too bright sitting on one too dark, scattered over the picture. As the camera team's calibration (CISSCAL) does, each pair more than 30 DN off its neighbors is replaced by the mean of the pixels either side of it. Full-size frames with anti-blooming on only. Off leaves them in. Needs Calibrate." },
     { key: "processing.flat", step: "flat", label: "Flat field",
       hint: "Takes out what the camera itself adds to every picture, with the mission's own calibration maps: the dust rings (shadows of dust on the narrow-angle camera's optics, more of them as the mission went on), the fine mottle that appeared in late 2003, the darker corners and the faint column pattern of the detector. Off leaves them in. Needs Calibrate." },
     { key: "processing.hotpix", step: "hotpix", label: "Hot pixels",
@@ -2515,8 +2523,8 @@ body.ambient.phone .amb-where { font-size: 18px; }
   D({ key: "cameras.balancedColor", section: "Processing", label: "Balanced color", type: "toggle", value: true,
       hint: "A gentler color stretch: black sits just above the sky's noise so grain and scan lines stay dark, white sits at the bright part of the body but never stretches dim pictures far, bright edges roll off instead of clipping, and mosaic tiles are evened out without changing the mosaic's overall level. Off shows the earlier stretch." });
   D({ key: "cameras.colors", section: "Processing", label: "Filter colors", type: "choice", value: "natural",
-      options: [["natural", "Natural color"], ["eye", "Natural color (emulated)"], ["raw", "Raw filters"]],
-      hint: "Natural color turns red, green and blue filter sets into the colors an eye would see, and balances false color sets (methane, ultraviolet, infrared) so the planet comes out gray and only its differences between filters show as color. Natural color (emulated) shows false color sets too as an eye would have seen them: the body in its own color (Saturn and Jupiter cream, Titan orange, the icy moons gray), with what the filters show as its brightness and, where they reach both sides of the visible, as its shades. Methane bands give no color. It is worked out on this computer, in movie passes for now (with Steady movies on this computer); still pictures and mosaics keep Natural color. Raw filters draws each filter straight as a channel. Needs Balanced color." });
+      options: [["natural", "Natural color"], ["eye", "Natural color (emulated)"], ["false", "False color"], ["raw", "Raw filters"]],
+      hint: "Natural color turns red, green and blue filter sets into the colors an eye would see, shows sets taken through a methane filter as Natural color (emulated) does, and balances other false color sets (ultraviolet, infrared) so the planet comes out gray and only its differences between filters show as color. Where a set took more than three filters, the three nearest red, green and blue are used. Natural color (emulated) shows false color sets too as an eye would have seen them: the body in its own color (Saturn and Jupiter cream, Titan orange, the icy moons gray), with what the filters show as its brightness and, where they reach both sides of the visible, as its shades. Methane bands give no color. It is worked out on this computer, in movie passes for now (with Steady movies on this computer); still pictures and mosaics keep Natural color. False color balances every false color set, methane ones too, as Natural color did before November 2026: the cloud heights a methane filter sees show as color. Raw filters draws each filter straight as a channel. Needs Balanced color." });
   D({ key: "cameras.autoCenter", section: "Processing", label: "Auto center", type: "toggle", value: true,
       hint: "Every picture of a moon or a planet whose whole disk fits is turned north up with the body in the middle, by SPICE, even where a picture caught only its edge, at one size for the whole pass, so the body holds still from picture to picture. Ring, spoke and sky pictures, and a body too big for the picture, stay as the camera took them. Each camera window's settings button (the slider icon in its title bar) can turn it on or off for that window." });
   // where a centred picture's frame does not reach (Auto center keeps the body in the middle however much of the
@@ -2548,7 +2556,7 @@ body.ambient.phone .amb-where { font-size: 18px; }
   // the pipeline steps turned off (Settings > Processing): nothing while every step is on, so the usual pictures keep their addresses
   window.cassiniOff = () => { const off = window.cassiniSteps.filter(st => S.get(st.key) === false).map(st => st.step); return off.length ? `&off=${off.join(",")}` : ""; };
   window.cassiniLook = (o = {}) => (S.get("cameras.balancedColor") === false ? "&look=classic"
-    : S.get("cameras.colors") === "raw" ? "&colors=raw" : "") + window.cassiniOff() + (o.center ? "&center=1" : "");
+    : ["raw", "false"].includes(S.get("cameras.colors")) ? `&colors=${S.get("cameras.colors")}` : "") + window.cassiniOff() + (o.center ? "&center=1" : "");
   // Natural color (emulated): worked out on this computer (steady-local.html, the pass table's eye mix), never asked of
   // the server, so it needs no pictures of its own; with the earlier stretch the filters are drawn as before
   window.cassiniEye = () => S.get("cameras.colors") === "eye" && S.get("cameras.balancedColor") !== false;
@@ -2610,9 +2618,54 @@ body.ambient.phone .amb-where { font-size: 18px; }
       new MutationObserver(() => { if (!quiet) S.set(key, pressed()); }).observe(b, { attributes: true, attributeFilter: ["aria-pressed"] });
     });
   }
-  D({ key: "playback.start", section: "Playback", label: "Start time", type: "choice", value: "2006-09-15T14:28:00", reload: true,
-      options: [["2006-09-15T14:28:00", "In Saturn's Shadow"], ["2005-01-14T09:30:00", "Huygens lands"], ["2004-07-01T00:00:00", "Saturn arrival"]],
-      hint: "The moment Cassini OS opens on. A shared link still opens on its own moment." });
+  // Where a visit with no moment of its own lands: one of these famous moments, picked at random on each visit, so
+  // the first minute is something a visitor may know and something happens in it. Each starts a little before its
+  // pictures at a speed that plays them in about a minute. Start time can pin any one of them. No cutscene moments
+  // (Huygens, Saturn arrival, the Grand Finale): those are for visitors who go to them (Sam, 2026-11-01).
+  const LANDINGS = window.cassiniLandings = [
+    { t: "2006-09-15T14:28:00", speed: 600, label: "In Saturn's Shadow" },
+    { t: "2013-07-19T22:23:19", speed: 600, label: "The Day the Earth Smiled" },
+    { t: "2010-11-30T07:25:10", speed: 600, label: "The plumes of Enceladus" },
+    { t: "2005-09-26T00:40:07", speed: 600, label: "Hyperion, the sponge moon" },
+    { t: "2010-02-13T17:54:31", speed: 60, label: "Mimas, the Death Star moon" },
+    { t: "2000-12-29T03:04:00", speed: 600, label: "Jupiter portrait" },
+    { t: "2017-04-26T07:48:14", speed: 60, label: "The first dive inside the rings" }
+  ];
+  const OLD_STARTS = [["2005-01-14T09:30:00", "Huygens lands"], ["2004-07-01T00:00:00", "Saturn arrival"]];
+  D({ key: "playback.start", section: "Playback", label: "Start time", type: "choice", menu: true, value: "random", reload: true, was: ["2006-09-15T14:28:00"],
+      options: [["random", "A famous moment, at random"], ...LANDINGS.map(l => [l.t, l.label]), ...OLD_STARTS],
+      hint: "The moment Cassini OS opens on. At random, each visit lands on one of the famous moments in this list, at its own speed. A shared link still opens on its own moment." });
+  // a visit with no moment of its own: put the landing's moment in the address, as a shared link would, so the viewer,
+  // the links and the cutscenes all start from it (no view: the view stays the Settings one, as a bare visit's did). A pinned start from the old list keeps its old way (time only).
+  (function land() {
+    const u = new URL(location.href);
+    if (["t", "ambient", "finale", "movie"].some(k => u.searchParams.has(k))) return;
+    const v = S.get("playback.start");
+    let pick = LANDINGS.find(l => l.t === v);
+    if (v === "random") {
+      // a per-viewer nicety: not the same moment twice in a row
+      let last = ""; try { last = localStorage.getItem("cassini-os-landing") || ""; } catch (e) {}
+      const pool = LANDINGS.length > 1 ? LANDINGS.filter(l => l.t !== last) : LANDINGS;
+      pick = pool[Math.floor(Math.random() * pool.length)];
+      try { localStorage.setItem("cassini-os-landing", pick.t); } catch (e) {}
+    }
+    if (!pick) return;
+    const keep = u.search.slice(1);
+    const put = l => {
+      window.cassiniLanding = l;
+      try { history.replaceState(history.state, "", u.pathname + `?t=${l.t}&speed=${l.speed}` + (keep ? "&" + keep : "") + u.hash); } catch (e) {}
+    };
+    put(pick);
+    // the viewer, when the picture cache holds only some years and the landing is outside them (Only years with
+    // pictures built): a landing inside them instead, if the list has one (its time), else null
+    window.cassiniLandingIn = inside => {
+      if (inside(utcToEt(window.cassiniLanding.t))) return null;
+      const pool = v === "random" ? LANDINGS.filter(l => inside(utcToEt(l.t))) : [];
+      if (!pool.length) return null;
+      put(pool[Math.floor(Math.random() * pool.length)]);
+      return utcToEt(window.cassiniLanding.t);
+    };
+  })();
   D({ key: "playback.autoplay", section: "Playback", label: "Play when Cassini OS opens", type: "toggle", value: true,
       hint: "Off opens paused at the starting moment." });
   D({ key: "playback.builtOnly", section: "Playback", label: "Only years with pictures built", type: "toggle", value: true, reload: true,
@@ -2654,6 +2707,17 @@ body.ambient.phone .amb-where { font-size: 18px; }
   // the viewer's camera cones read view.conesEverywhere
   D({ key: "view.conesEverywhere", section: "View", label: "Camera cones on every view", type: "toggle", value: false,
       hint: "Draw the cameras' fields of view when looking at a body too. Off shows them only while the view is on Cassini." });
+  // the viewer's picture footprints (updateFootprints) read view.footprints and view.footprintCount
+  D({ key: "view.footprints", section: "View", label: "Picture footprints", type: "toggle", value: false,
+      hint: "Outline on each body where Cassini's last pictures landed: every frame's field of view from the pointing data, laid on the surface and turning with it, the newest in warm white and older ones fading. Narrow-angle frames are the small blue squares, wide-angle the large grey-blue ones." });
+  D({ key: "view.footprintCount", section: "View", label: "Footprints of the last", type: "range", log: true, value: 50, min: 1, max: 1000,
+      stops: [1, 2, 3, 5, 10, 20, 30, 50, 100, 200, 300, 500, 1000], format: v => `${v} ${+v === 1 ? "picture" : "pictures"}`,
+      hint: "How many of the latest pictures leave a footprint. Only pictures that land on a body count." });
+  D({ key: "view.footprintPictures", section: "View", label: "Pictures in the footprints", type: "toggle", value: false,
+      hint: "With Picture footprints on, the newest footprints show the pictures themselves, laid on the body where the camera saw them: the frame server's processed frame (as in the camera windows, not centered), stretched over the footprint ray by ray, so each part of the picture sits where it looked. Newest on top; older ones fade." });
+  D({ key: "view.footprintPictureCount", section: "View", label: "Pictures laid down", type: "range", log: true, value: 20, min: 1, max: 100,
+      stops: [1, 2, 3, 5, 10, 20, 30, 50, 100], format: v => `${v} ${+v === 1 ? "picture" : "pictures"}`,
+      hint: "How many of the newest footprints show their picture. Each one is a picture to load, so more is slower." });
   // a new key, so a saved "off" from when follow started off does not carry over
   D({ key: "view.followcam", section: "View", label: "Follow camera", type: "toggle", value: true, hint: "Look where Cassini's camera points (needs the pointing data)." });
   mirror("view.followcam", "followcam");
@@ -2837,8 +2901,9 @@ body.ambient.phone .amb-where { font-size: 18px; }
     return "http://localhost:8765";
   })();
   const tell = word => { try { navigator.sendBeacon(`${FRAMES}/usage`, word); } catch (e) {} };
-  // opened on a shared moment: arrived with a time in the link, not a reload of a page that wrote its own
-  const opened = new URLSearchParams(location.search).has("t") && ((performance.getEntriesByType("navigation")[0] || {}).type || "navigate") === "navigate";
+  // opened on a shared moment: arrived with a time in the link, not a reload of a page that wrote its own, nor a
+  // landing moment the settings put there (settings.html)
+  const opened = !window.cassiniLanding && new URLSearchParams(location.search).has("t") && ((performance.getEntriesByType("navigation")[0] || {}).type || "navigate") === "navigate";
   const num = v => (+(+v).toPrecision(4)).toString().replace("e+", "e");   // short, and no "+" (a space in a query)
   const utc = et => new Date(etToMs(et)).toISOString().slice(0, 19);
   // the link for the moment on screen; other pages (flagging) use it too
@@ -4627,7 +4692,7 @@ onmessage = async e => {
   // false colour, longest wavelength as red, the middle one as green and the shortest as blue; two
   // filters make a two-filter picture, longer as red, shorter as blue and green from both.
   const FILTER_NM = {"N:BL1/BL2":441.2,"N:BL1/CB1":540.4,"N:BL1/CB1A":516.6,"N:BL1/CB1B":635.4,"N:BL1/CB2":585.9,"N:BL1/CB3":462.6,"N:BL1/CBB":603.8,"N:BL1/CL2":456.8,"N:BL1/GRN":497.4,"N:BL1/IR1":697.6,"N:BL1/IR3":806.7,"N:BL1/MT1":465.9,"N:BL1/MT2":520.2,"N:BL1/MT3":451.1,"N:BL1/UV3":389.6,"N:CL1/BL2":441.1,"N:CL1/CB1":619.5,"N:CL1/CB1A":602.9,"N:CL1/CB1B":634.5,"N:CL1/CB2":750.5,"N:CL1/CB3":937.9,"N:CL1/CBA":634.6,"N:CL1/CBB":603.0,"N:CL1/CL2":661.2,"N:CL1/GRN":569.3,"N:CL1/IR1":751.0,"N:CL1/IR3":925.9,"N:CL1/MT1":619.0,"N:CL1/MT2":727.4,"N:CL1/MT3":889.2,"N:CL1/UV3":343.1,"N:HAL/BL2":586.0,"N:HAL/CB1":650.5,"N:HAL/CB1A":604.2,"N:HAL/CB1B":650.6,"N:HAL/CB2":663.5,"N:HAL/CB3":656.3,"N:HAL/CBA":652.7,"N:HAL/CL2":655.6,"N:HAL/GRN":648.0,"N:HAL/IR1":663.7,"N:HAL/IR3":662.5,"N:HAL/MT1":623.4,"N:HAL/MT2":676.7,"N:HAL/MT3":655.0,"N:HAL/UV3":603.7,"N:IR2/BL2":871.1,"N:IR2/CB1":730.2,"N:IR2/CB1A":602.9,"N:IR2/CB1B":761.9,"N:IR2/CB2":768.4,"N:IR2/CB3":933.5,"N:IR2/CBA":638.9,"N:IR2/CL2":860.8,"N:IR2/GRN":829.6,"N:IR2/IR1":827.4,"N:IR2/IR3":901.4,"N:IR2/MT1":871.9,"N:IR2/MT2":791.9,"N:IR2/MT3":889.2,"N:IR2/UV3":845.0,"N:IR4/BL2":734.2,"N:IR4/CB1":624.1,"N:IR4/CB1A":602.9,"N:IR4/CB1B":634.6,"N:IR4/CB2":750.6,"N:IR4/CB3":972.9,"N:IR4/CL2":1001.5,"N:IR4/GRN":610.8,"N:IR4/IR1":914.6,"N:IR4/IR3":996.2,"N:IR4/MT1":878.9,"N:IR4/MT2":727.2,"N:IR4/MT3":972.4,"N:IR4/UV3":995.0,"N:IRP0/BL2":830.2,"N:IRP0/BL2_B":762.9,"N:IRP0/CB1":622.9,"N:IRP0/CB1A":604.4,"N:IRP0/CB1A_B":604.2,"N:IRP0/CB1B":634.6,"N:IRP0/CB1B_B":633.9,"N:IRP0/CB1_B":615.2,"N:IRP0/CB2":750.5,"N:IRP0/CB2_B":750.5,"N:IRP0/CB3":937.9,"N:IRP0/CB3_B":937.9,"N:IRP0/CBA":634.7,"N:IRP0/CBB":604.5,"N:IRP0/CL2":741.1,"N:IRP0/CL2_B":662.0,"N:IRP0/GRN":613.9,"N:IRP0/GRN_B":612.0,"N:IRP0/IR1":752.0,"N:IRP0/IR1_B":730.2,"N:IRP0/IR3":926.1,"N:IRP0/IR3_B":934.5,"N:IRP0/MT1":619.0,"N:IRP0/MT1_B":618.9,"N:IRP0/MT2":727.4,"N:IRP0/MT2_B":727.4,"N:IRP0/MT3":889.2,"N:IRP0/MT3_B":889.7,"N:IRP0/UV3":825.7,"N:IRP0/UV3_B":853.4,"N:P0/BL2":441.2,"N:P0/BL2_B":439.9,"N:P0/CB1":620.1,"N:P0/CB1A":602.9,"N:P0/CB1A_B":603.1,"N:P0/CB1B":634.6,"N:P0/CB1B_B":634.9,"N:P0/CB1_B":623.7,"N:P0/CB2":750.5,"N:P0/CB2_B":750.7,"N:P0/CB3":647.8,"N:P0/CB3_B":738.2,"N:P0/CBA":634.7,"N:P0/CBB":603.0,"N:P0/CL2":636.3,"N:P0/CL2_B":738.3,"N:P0/GRN":569.7,"N:P0/GRN_B":566.5,"N:P0/IR1":737.0,"N:P0/IR1_B":761.1,"N:P0/IR3":734.7,"N:P0/IR3_B":768.5,"N:P0/MT1":618.9,"N:P0/MT1_B":619.2,"N:P0/MT2":727.4,"N:P0/MT2_B":727.5,"N:P0/MT3":633.3,"N:P0/MT3_B":739.3,"N:P0/UV3":345.4,"N:P0/UV3_B":348.0,"N:P120/BL2":441.2,"N:P120/BL2_B":439.9,"N:P120/CB1":620.1,"N:P120/CB1A":602.9,"N:P120/CB1A_B":603.1,"N:P120/CB1B":634.6,"N:P120/CB1B_B":634.9,"N:P120/CB1_B":623.7,"N:P120/CB2":750.5,"N:P120/CB2_B":750.7,"N:P120/CB3":647.8,"N:P120/CB3_B":738.2,"N:P120/CBA":634.7,"N:P120/CBB":603.0,"N:P120/CL2":636.3,"N:P120/CL2_B":738.3,"N:P120/GRN":569.7,"N:P120/GRN_B":566.5,"N:P120/IR1":737.0,"N:P120/IR1_B":761.1,"N:P120/IR3":734.7,"N:P120/IR3_B":768.5,"N:P120/MT1":618.9,"N:P120/MT1_B":619.2,"N:P120/MT2":727.4,"N:P120/MT2_B":727.5,"N:P120/MT3":633.3,"N:P120/MT3_B":739.3,"N:P120/UV3":345.4,"N:P120/UV3_B":348.0,"N:P60/BL2":441.2,"N:P60/BL2_B":439.9,"N:P60/CB1":620.1,"N:P60/CB1A":602.9,"N:P60/CB1A_B":603.1,"N:P60/CB1B":634.6,"N:P60/CB1B_B":634.9,"N:P60/CB1_B":623.7,"N:P60/CB2":750.5,"N:P60/CB2_B":750.7,"N:P60/CB3":647.8,"N:P60/CB3_B":738.2,"N:P60/CBA":634.7,"N:P60/CBB":603.0,"N:P60/CL2":636.3,"N:P60/CL2_B":738.3,"N:P60/GRN":569.7,"N:P60/GRN_B":566.5,"N:P60/IR1":737.0,"N:P60/IR1_B":761.1,"N:P60/IR3":734.7,"N:P60/IR3_B":768.5,"N:P60/MT1":618.9,"N:P60/MT1_B":619.2,"N:P60/MT2":727.4,"N:P60/MT2_B":727.5,"N:P60/MT3":633.3,"N:P60/MT3_B":739.3,"N:P60/UV3":345.4,"N:P60/UV3_B":348.0,"N:RED/BL2":629.9,"N:RED/CB1":619.7,"N:RED/CB1A":603.0,"N:RED/CB1B":634.6,"N:RED/CB2":744.3,"N:RED/CB3":649.3,"N:RED/CBA":634.6,"N:RED/CBB":603.1,"N:RED/CL2":650.7,"N:RED/GRN":601.0,"N:RED/IR1":701.9,"N:RED/IR3":695.4,"N:RED/MT1":618.9,"N:RED/MT2":726.6,"N:RED/MT3":646.4,"N:RED/UV3":643.6,"N:UV1/BL2":438.0,"N:UV1/CB1":616.3,"N:UV1/CB1A":601.9,"N:UV1/CB1B":634.3,"N:UV1/CB2":747.4,"N:UV1/CB3":929.6,"N:UV1/CL2":266.7,"N:UV1/GRN":569.2,"N:UV1/IR1":753.2,"N:UV1/IR3":920.1,"N:UV1/MT1":611.5,"N:UV1/MT2":711.2,"N:UV1/MT3":886.3,"N:UV1/UV3":353.8,"N:UV2/BL2":413.9,"N:UV2/CB1":600.4,"N:UV2/CB1A":589.0,"N:UV2/CB1B":634.8,"N:UV2/CB2":720.7,"N:UV2/CB3":903.2,"N:UV2/CL2":306.5,"N:UV2/GRN":560.2,"N:UV2/IR1":767.3,"N:UV2/IR3":919.8,"N:UV2/MT1":524.1,"N:UV2/MT2":669.5,"N:UV2/MT3":862.7,"N:UV2/UV3":317.6,"W:CB2/BL1":533.6,"W:CB2/CL2":752.3,"W:CB2/GRN":570.7,"W:CB2/HAL":704.7,"W:CB2/IR1":752.3,"W:CB2/IRP0":752.3,"W:CB2/IRP0_B":752.3,"W:CB2/IRP90":752.3,"W:CB2/IRP90_B":752.3,"W:CB2/RED":747.3,"W:CB2/VIO":670.3,"W:CB3/BL1":485.4,"W:CB3/CL2":938.4,"W:CB3/GRN":579.8,"W:CB3/HAL":708.5,"W:CB3/IR1":817.0,"W:CB3/IRP0":938.6,"W:CB3/IRP0_B":938.5,"W:CB3/IRP90":938.6,"W:CB3/IRP90_B":938.5,"W:CB3/RED":642.8,"W:CB3/VIO":587.4,"W:CL1/BL1":462.0,"W:CL1/CL2":635.0,"W:CL1/GRN":568.6,"W:CL1/HAL":656.4,"W:CL1/IR1":740.5,"W:CL1/IRP0":706.4,"W:CL1/IRP0_B":637.1,"W:CL1/IRP90":706.4,"W:CL1/IRP90_B":637.1,"W:CL1/RED":647.6,"W:CL1/VIO":419.7,"W:IR2/BL1":822.9,"W:IR2/CL2":852.0,"W:IR2/GRN":806.2,"W:IR2/HAL":862.9,"W:IR2/IR1":826.3,"W:IR2/IRP0":852.1,"W:IR2/IRP0_B":883.1,"W:IR2/IRP90":852.1,"W:IR2/IRP90_B":883.1,"W:IR2/RED":718.7,"W:IR2/VIO":863.6,"W:IR3/BL1":907.9,"W:IR3/CL2":914.7,"W:IR3/GRN":907.8,"W:IR3/HAL":764.8,"W:IR3/IR1":783.2,"W:IR3/IRP0":914.7,"W:IR3/IRP0_B":925.7,"W:IR3/IRP90":914.7,"W:IR3/IRP90_B":925.7,"W:IR3/RED":690.2,"W:IR3/VIO":907.4,"W:IR4/BL1":496.3,"W:IR4/CL2":1001.2,"W:IR4/GRN":589.1,"W:IR4/HAL":721.4,"W:IR4/IR1":824.0,"W:IR4/IRP0":1001.3,"W:IR4/IRP0_B":1000.7,"W:IR4/IRP90":1001.3,"W:IR4/IRP90_B":1000.7,"W:IR4/RED":648.3,"W:IR4/VIO":636.5,"W:IR5/BL1":469.2,"W:IR5/CL2":1033.2,"W:IR5/GRN":562.0,"W:IR5/HAL":672.0,"W:IR5/IR1":759.7,"W:IR5/IRP0":1034.5,"W:IR5/IRP0_B":1034.9,"W:IR5/IRP90":1034.5,"W:IR5/IRP90_B":1034.9,"W:IR5/RED":651.3,"W:IR5/VIO":463.7,"W:MT2/BL1":488.1,"W:MT2/CL2":728.6,"W:MT2/GRN":582.4,"W:MT2/HAL":674.1,"W:MT2/IR1":728.4,"W:MT2/IRP0":728.6,"W:MT2/IRP0_B":728.7,"W:MT2/IRP90":728.6,"W:MT2/IRP90_B":728.7,"W:MT2/RED":727.6,"W:MT2/VIO":509.4,"W:MT3/BL1":578.7,"W:MT3/CL2":890.3,"W:MT3/GRN":614.4,"W:MT3/HAL":850.8,"W:MT3/IR1":860.6,"W:MT3/IRP0":890.4,"W:MT3/IRP0_B":890.0,"W:MT3/IRP90":890.4,"W:MT3/IRP90_B":890.0,"W:MT3/RED":656.8,"W:MT3/VIO":775.8};
-  const SET_GAP = 300;
+  const SET_GAP = 300, SET_REPEAT_GAP = 120, SET_REPEAT_MAX = 5;   // sets_passes.SET_GAP, REPEAT_GAP, REPEAT_MAX
   const KIND = { true: "True color", false: "False color", two: "Two-filter color" };
   const colourFilter = k => {
     const a = catalog.f1[k], b = catalog.f2[k];
@@ -4635,16 +4700,47 @@ onmessage = async e => {
     return [a, b].filter(x => !/^CL/.test(x)).join("/") || null;
   };
   const nmOf = k => FILTER_NM[`${catalog.cam[k]}:${catalog.f1[k]}/${catalog.f2[k]}`] || 0;
+  // a false colour set of more than three filters draws the three nearest what an eye's red, green and blue see,
+  // methane bands left out wherever three others are there (sets_passes.nearest_visible, line for line)
+  const VISIBLE_NM = [650, 568, 451];
+  const isMethane = f => String(f || "").split("/").some(p => p.startsWith("MT"));
+  function nearestVisible(filters, nms) {
+    const order = filters.map((f, j) => j).sort((a, b) => nms[b] - nms[a]);
+    if (order.length <= 3) return order;
+    let best = null;
+    for (let a = 0; a < order.length; a++) for (let b = a + 1; b < order.length; b++) for (let c = b + 1; c < order.length; c++) {
+      const three = [order[a], order[b], order[c]];
+      let m = 0;
+      three.forEach(j => { m += isMethane(filters[j]) ? 1 : 0; });
+      const key = [m, Math.abs(nms[three[1]] - VISIBLE_NM[1]), Math.abs(nms[three[0]] - VISIBLE_NM[0]) + Math.abs(nms[three[2]] - VISIBLE_NM[2]), ...three];
+      const i = best ? key.findIndex((v, q) => v !== best[q]) : -1;
+      if (!best || (i >= 0 && key[i] < best[i])) best = key;   // the least key, compared item by item (Python's tuples)
+    }
+    return best.slice(3);
+  }
   function pickChannels(s) {
-    const by = f => s.frames[s.filters.indexOf(f)], blue = ["BL1", "BL2", "VIO"].find(f => s.filters.includes(f));
+    // a filter's channel: its frame nearest in time to a frame of another filter (a run of repeat exposures ends
+    // next to the next filter), the first of those as near (sets_passes.channels)
+    const pick = {};
+    s.frames.forEach((k, j) => {
+      const f = s.filters[j];
+      let gap = Infinity;
+      s.frames.forEach((q, i) => { if (s.filters[i] !== f) gap = Math.min(gap, Math.abs(catalog.et[k] - catalog.et[q])); });
+      if (gap === Infinity) gap = 0;
+      if (!(f in pick) || gap < pick[f][1]) pick[f] = [k, gap];
+    });
+    const by = f => pick[f][0], blue = ["BL1", "BL2", "VIO"].find(f => s.filters.includes(f));
     // red: RED, or the 619 nm continuum filter CB1 when a set has no RED (the narrow-angle camera at Jupiter), as
     // obs_mosaic picks the filter nearest 650 nm
     const red = ["RED", "CB1"].find(f => s.filters.includes(f));
     if (red && s.filters.includes("GRN") && blue) { s.kind = "true"; s.use = [by(red), by("GRN"), by(blue)]; }
     else {
-      const w = s.frames.slice().sort((p, q) => nmOf(q) - nmOf(p));
+      // each filter's channel frame, in the order the filters were first taken; the three nearest the visible,
+      // longest wavelength first (sets_passes.nearest_visible)
+      const fs = s.filters.filter((f, j) => s.filters.indexOf(f) === j);
+      const w = nearestVisible(fs, fs.map(f => nmOf(by(f)))).map(j => by(fs[j]));
       s.kind = w.length >= 3 ? "false" : "two";
-      s.use = w.length >= 3 ? [w[0], w[w.length >> 1], w[w.length - 1]] : w;
+      s.use = w;
     }
     s.ready = Math.max(...s.use.map(k => catalog.et[k]));   // the picture exists once its last channel is taken
   }
@@ -4661,7 +4757,7 @@ onmessage = async e => {
       r.frames.push(k); r.filters.push(colourFilter(k));
     }
     for (const r of at.values()) {
-      if (r.frames.length < 2) continue;
+      if (new Set(r.filters).size < 2) continue;
       const t = catalog.groups.sets[r.id], use = t ? t[1].map(kOf) : [];
       if (t && use.every(q => q >= 0)) { r.kind = t[0]; r.use = use; r.ready = Math.max(...use.map(q => catalog.et[q])); }
       else pickChannels(r);
@@ -4675,7 +4771,7 @@ onmessage = async e => {
     const n = catalog.et.length, setOf = new Int32Array(n).fill(-1), sets = [], run = {}, all = catalog.allOrder || order;
     const close = cam => {
       const r = run[cam]; run[cam] = null;
-      if (!r || r.frames.length < 2) return;
+      if (!r || new Set(r.filters).size < 2) return;
       pickChannels(r);
       for (const q of r.frames) setOf[q] = sets.length;
       sets.push(r);
@@ -4683,11 +4779,15 @@ onmessage = async e => {
     for (let i = 0; i < n; i++) {
       const k = all[i], cam = catalog.cam[k], f = colourFilter(k), r = run[cam];
       if (!f) { close(cam); continue; }
-      if (r && catalog.target[k] === r.target && catalog.obs[k] === r.obs && catalog.et[k] - r.last <= SET_GAP && !r.filters.includes(f)) {
-        r.frames.push(k); r.filters.push(f); r.last = catalog.et[k];
+      // a repeat exposure (the filter of the frame just before, within SET_REPEAT_GAP s, at most SET_REPEAT_MAX in a
+      // row) stays in its set; any other filter seen again starts a new one (sets_passes.runs, the one rule)
+      const same = r && catalog.target[k] === r.target && catalog.obs[k] === r.obs && catalog.et[k] - r.last <= SET_GAP;
+      const repeat = same && f === r.filters[r.filters.length - 1] && catalog.et[k] - r.last <= SET_REPEAT_GAP && r.row < SET_REPEAT_MAX;
+      if (same && (repeat || !r.filters.includes(f))) {
+        r.frames.push(k); r.filters.push(f); r.last = catalog.et[k]; r.row = repeat ? r.row + 1 : 1;
       } else {
         close(cam);
-        run[cam] = { cam, target: catalog.target[k], obs: catalog.obs[k], frames: [k], filters: [f], last: catalog.et[k] };
+        run[cam] = { cam, target: catalog.target[k], obs: catalog.obs[k], frames: [k], filters: [f], last: catalog.et[k], row: 1 };
       }
     }
     close("N"); close("W");
@@ -5145,6 +5245,9 @@ onmessage = async e => {
     const own = card.dataset.body || null, cam = card.dataset.cam, win = card.closest(".win") || card, well = card.querySelector(".well"), shot = card.querySelector(".shot"), chans = card.querySelector(".chans");
     const field = f => card.querySelector(`[data-f="${f}"]`) || { set textContent(v) {}, set innerHTML(v) {} };
     let shownAt = 0, mosaicAt = 0, wantAt = 0;   // when the last picture and the last pass mosaic went up, and the picture wanted now was asked for (behind)
+    let upEt = null;   // the mission time of the frame whose picture is up (display), whichever months are loaded
+    let jumpTimer = 0;   // a jump's loading card, unless the picture wanted comes first (update)
+    const JUMP_WAIT = 150;   // ms
     let body = own || viewBody(), heldBody = null;   // heldBody: the body the picture up is of
     let want = null, shownKey = null, shown = null, next = [], lastK = -2, lastReady = null, stripKey = "", stripSet = null;
     // steady size: shapeOf is the target and observation whose pass mosaic gave the picture its shape, which it
@@ -5395,7 +5498,7 @@ onmessage = async e => {
       const keep = obsShown && catalog.obs[v.k] === obsShown && playsAs(v.k) !== "movie" && !(playsAs(v.k) === "mosaic_movie" && rolls());
       // the same picture again at another size (full view's full resolution one) is not a new picture
       const again = shown && shown.k === v.k && shown.set === v.set;
-      shownKey = v.key; shown = v; shownAt = performance.now();
+      shownKey = v.key; shown = v; shownAt = performance.now(); upEt = catalog.et[v.k];
       // shot.dataset.src / .report: what the picture on screen was made from, for flagging (flag.html)
       if (!keep) {
         shot.src = im.src; shot.dataset.src = v.key; shot.dataset.report = ""; obsShown = null; obsK = -1; well.classList.remove("mosaic"); saving(v.key);
@@ -5835,7 +5938,7 @@ onmessage = async e => {
         const notes = [rep.calibrated ? "calibrated" : "not calibrated (each frame stretched on its own)",
           stacked ? `${stacked} repeat exposure${stacked > 1 ? "s" : ""} stacked` : "",
           rep.aligned.length && rep.aligned.every(a => a === "off") ? "not aligned (turned off)" :
-          n ? `${n} channel${n > 1 ? "s" : ""} could not be aligned` : rep.aligned.some(a => a.startsWith("centroid")) ? "aligned by centroid" : "aligned",
+          n ? `${n} channel${n > 1 ? "s" : ""} could not be aligned${rep.grey ? ", drawn grey from one filter" : ""}` : rep.aligned.some(a => a.startsWith("centroid")) ? "aligned by centroid" : "aligned",
           rep.filled === false ? "lost lines not filled" : ""].filter(Boolean);
         made.set(w.set, notes.join(", "));
         if (catalog.setOf[lastK] === w.set) field("colour").textContent = field("colour").title = colourText(catalog.sets[w.set], w.set);
@@ -6386,8 +6489,9 @@ onmessage = async e => {
       // which closes by itself) keeps its picture
       const stale = S.get("cameras.stale") * (lastK >= 0 ? importance() : 1);
       if (k < 0 && holdUp && up) { field("status").textContent = "Waiting for the next picture"; return; }
-      // (while pinned, cassiniPin, a picture already up stays however old it gets)
-      const keep = lastK >= 0 && well.classList.contains("has-frame") && window.cassiniPin && cassiniPin.pinned();
+      // (while pinned, cassiniPin, a picture already up stays however old it gets: that picture, the camera's frame
+      // still; after a jump to another frame, an old one is idle as at any time, never brought up)
+      const keep = lastK >= 0 && k === lastK && well.classList.contains("has-frame") && window.cassiniPin && cassiniPin.pinned();
       if (k < 0 || (!holdUp && !keep && state.et - catalog.et[k] > stale * 3600)) {
         field("status").textContent = k < 0 ? "Camera" : `Last frame ${fmtDur(state.et - catalog.et[k])} ago`;
         strip(null); filmstrip(-1);
@@ -6408,6 +6512,21 @@ onmessage = async e => {
       if (k === lastK && ready === lastReady && !force) return;
       lastK = k; lastReady = ready;
       want = view(k, state.et); wantAt = performance.now();
+      // a jump in time (a timeline click, a Moment, another year): the picture up is from far away (further than the
+      // stale time, so it would have gone idle on the way there), and it does not stay up under the new moment's
+      // lines while the new one loads; the window says it is loading, keeping its size. A picture the browser has
+      // already (the look-ahead's, as in movie mode's leaps from pass to pass) replaces it within JUMP_WAIT, with no
+      // card in between. A window that holds (a body window, or in a body's view) keeps its picture until the next
+      // one, which dissolves in (bodymode.html)
+      if (!holdUp && upEt !== null && well.classList.contains("has-frame") && Math.abs(catalog.et[k] - upEt) > stale * 3600) {
+        const w = want, from = upEt, msg = `<b>Loading</b>${titleCase(catalog.target[k] || "Unknown")} · ${catalog.id[k]}`;
+        clearTimeout(jumpTimer);
+        jumpTimer = setTimeout(() => {
+          if (want !== w || upEt !== from || !well.classList.contains("has-frame") || hold) return;
+          noFrame(msg, true);
+          shownKey = null; shown = null; upEt = null;
+        }, JUMP_WAIT);
+      }
       if (!want.movie) filmstrip(k);   // a movie frame moves the filmstrip when it is on screen (display)
       // a possible mosaic tile: the frame before is of the same pass (body and observation), and a frame of a colour
       // set only once its composite is shown (the mosaic is made of composites)
@@ -7372,7 +7491,7 @@ onmessage = async e => {
     const st = (h.stacked || []).filter(n => n > 1);
     return [h.centred ? "centered, north up" : h.frame_offset ? "close-up, placed on the body, north up" : "not centered",
             st.length ? `stacked ${st.join("+")}` : "", h.calibrated ? "calibrated" : "",
-            (h.aligned || []).some(a => /not aligned|failed/.test(a)) ? "channels not aligned" : "",
+            (h.aligned || []).some(a => /^not aligned|^failed/.test(a)) ? (h.grey ? "channels not aligned, drawn grey" : "channels not aligned") : "",
             h.mosaic > 1 ? `mosaic of ${h.mosaic}` : ""].filter(Boolean).join(" · ");
   }
   function show(i) {
@@ -8156,7 +8275,9 @@ onmessage = async e => {
   };
 
   // dragging across the timeline's lanes marks a stretch (a click still moves the clock there; the row of dates along
-  // the top still pans); dragging a marked edge moves it; shift-drag marks one anywhere, the date row included
+  // the top still pans); dragging a marked edge moves it; shift-drag marks one anywhere, the date row included.
+  // Dragging the playhead itself scrubs the clock (index.html), as a playhead does everywhere, and a click on a marked
+  // edge that does not move it moves the clock there, as a click anywhere else in the lanes does
   const tl = $("tl"), MOVE = 5;
   let drag = null, press = null;
   const etAt = e => { const r = tl.getBoundingClientRect(); return xToEt(e.clientX - r.left, r.width); };
@@ -8164,8 +8285,9 @@ onmessage = async e => {
     if (e.target !== tl || !catalog || e.button > 0) return;
     const r = tl.getBoundingClientRect(), x = e.clientX - r.left, near = v => v != null && Math.abs(etToX(v, r.width) - x) < 7;
     if (e.shiftKey) drag = { from: etAt(e), edge: null };
-    else if (near(X.a)) drag = { edge: "a" };
-    else if (near(X.b)) drag = { edge: "b" };
+    else if (near(X.a)) drag = { edge: "a", x0: e.clientX };
+    else if (near(X.b)) drag = { edge: "b", x0: e.clientX };
+    else if (near(state.et)) return;   // the playhead: index.html scrubs as it is dragged
     else {
       // a press in the lanes scrubs as a click does (index.html); once it moves MOVE px it becomes a highlight from
       // where it was pressed, and the clock goes back to where it was
@@ -8183,6 +8305,7 @@ onmessage = async e => {
     }
     if (!drag) return;
     e.stopImmediatePropagation();
+    if (drag.edge && !drag.moved) { if (Math.abs(e.clientX - drag.x0) <= MOVE) return; drag.moved = true; }
     const t = etAt(e);
     if (drag.edge) mark(drag.edge === "a" ? t : null, drag.edge === "b" ? t : null);
     else if (!drag.held) { const g = guarded(Math.min(drag.from, t), Math.max(drag.from, t), "new"); if (g) { X.a = g[0]; X.b = g[1]; mark(); } else drag.held = true; }
@@ -8191,8 +8314,9 @@ onmessage = async e => {
     press = null;
     if (!drag) return;
     e.stopImmediatePropagation();
-    const made = !drag.edge;
+    const made = !drag.edge, click = drag.edge && !drag.moved;
     drag = null; tl.style.cursor = "";
+    if (click) { state.tlFollow = true; setTime(etAt(e)); return; }
     if (made && X.a != null && X.b - X.a > 1) marked();
     else if (made) clear();
   }, true);
@@ -12636,7 +12760,7 @@ void main() {
   window.cassiniAbout = { open, addTab, esc, close: () => show(false), credits: CREDITS };
 
   // ---- which version this is: this page's build id (build.py writes it), and what the frame server says it serves ----
-  const BUILD = /*BUILD*/"d3f6dcf01131";
+  const BUILD = /*BUILD*/"5b13e2d213f0";
   const FRAMES = (() => {                       // the frame server, chosen as the camera window chooses it
     const q = new URLSearchParams(location.search).get("frames");
     if (q) return q.replace(/\/$/, "");
@@ -12988,6 +13112,7 @@ void main() {
         G.setAttribute(k, new THREE.InstancedBufferAttribute(new Float32Array(3 * M.cap), 3));
       G.dispose();   // new buffers: drop the old ones from the GPU
     }
+    if (!G.attributes.instanceStart) { G.instanceCount = 0; return; }   // a line with no segments yet
     const A = G.attributes.instanceStart.array, B = G.attributes.instanceEnd.array, CA = G.attributes.instanceColorStart.array, CB = G.attributes.instanceColorEnd.array;
     const p = pa.array, ps = pa.itemSize, c = ca && ca.array, cs = ca && ca.itemSize, at = k => ix ? ix.array[k] : k;
     const put = (j, a, b) => {
@@ -13798,6 +13923,13 @@ function makeCassiniPrimitive() {
   const eng = new THREE.Mesh(new THREE.ConeGeometry(0.45, 0.9, 16, 1, true), dark); eng.rotation.x = -Math.PI / 2; eng.position.z = -2.5; g.add(eng);
   return g;
 }
+// where each camera's cone starts: the front of its tube on the model, in the cassini group's own metres (the
+// primitive model's NAC and WAC above; a page that swaps in another model moves these onto its cameras)
+const CAM_MOUNT = { N: new THREE.Vector3(0.3, 1.96, 0.4), W: new THREE.Vector3(-0.3, 1.76, 0.4) };
+// that point in the scene, on the model as it is turned and scaled this frame
+function camMountAt(cam, out) {
+  return out.copy(CAM_MOUNT[cam]).applyQuaternion(cassini.quaternion).multiplyScalar(cassini.scale.x).add(cassini.position);
+}
 
 // NASA's Cassini-Huygens model replaces the primitive one once it has loaded.
 const HUYGENS_RELEASE_ET = 157212064.18; // 2004-12-25 02:00 UTC, Huygens separates (same as the release milestone)
@@ -13817,6 +13949,12 @@ function makeCassini() {
       // scale so the high-gain dish is its real 4 m across
       const dish = m.getObjectByName("dish"), box = new THREE.Box3().setFromObject(dish), sz = box.getSize(new THREE.Vector3());
       m.scale.setScalar(4 / Math.max(sz.x, sz.y, sz.z));
+      // the camera cones start at the front of the two camera tubes on the remote sensing pallet (model metres,
+      // measured on the model: the wide 28 cm tube is the NAC, the slim 11 cm one beside it the WAC; 1 cm out
+      // so the cone's tip is not hidden inside the tube)
+      m.updateMatrix();
+      CAM_MOUNT.N.set(0.589, 0.401, 1.827).applyMatrix4(m.matrix);
+      CAM_MOUNT.W.set(0.981, 0.615, 1.593).applyMatrix4(m.matrix);
       m.traverse(o => {
         o.layers.set(1);
         if (/_h$/.test(o.name)) cassiniProbe.push(o);
@@ -14005,7 +14143,7 @@ async function load(startEt) {
       coverage = [Math.max(coverage[0], built[0][0] + 1), Math.min(coverage[1], built[built.length - 1][1] - 1)];
       const inside = et => built.some(([a, b]) => et >= a && et < b);
       encounters = encounters.filter(e => inside(e.et));
-      if (!inside(startEt)) startEt = (encounters.find(e => e.kind === "observation") || encounters[0] || { et: coverage[0] }).et;
+      if (!inside(startEt)) startEt = (window.cassiniLandingIn && cassiniLandingIn(inside)) || (encounters.find(e => e.kind === "observation") || encounters[0] || { et: coverage[0] }).et;
     }
     await requestYears(partOf(Math.min(coverage[1], Math.max(coverage[0], startEt))));
     lastWantedYear = partOf(Math.min(coverage[1], Math.max(coverage[0], startEt)));
@@ -14239,6 +14377,7 @@ function updateBodies() {
   markerPts.geometry.attributes.position.needsUpdate = true;
   markerPts.geometry.attributes.color.needsUpdate = true;
   updateFov();
+  updateFootprints();
 
   starPts.position.copy(camera.position);
   if (skyMesh) { skyMesh.matrix.copy(skyMesh.userData.basis).setPosition(camera.position); skyMesh.matrixWorld.copy(skyMesh.matrix); }
@@ -14286,20 +14425,235 @@ function updateFov() {
     const c = CAM_TO_BODY[cam];
     qmul([c[0], -c[1], -c[2], -c[3]], qBody, qCam, 0);
     const R = q2rows(qCam), cx = toScene(R[0], new THREE.Vector3()), cy = toScene(R[1], new THREE.Vector3()), cz = toScene(R[2], new THREE.Vector3());
-    const L = tp ? Math.max(cassini.position.distanceTo(tp), 1e-3) : Math.max(camera.position.distanceTo(cassini.position), 1e-3);
+    camMountAt(cam, fov.position);
+    const L = tp ? Math.max(fov.position.distanceTo(tp), 1e-3) : Math.max(camera.position.distanceTo(cassini.position), 1e-3);
     const h = L * Math.tan(rad(FOV_HALF[cam]));
-    fov.position.copy(cassini.position); fov.scale.set(h, h, L * 1.02);
+    fov.scale.set(h, h, L * 1.02);
     fov.quaternion.setFromRotationMatrix(mB.makeBasis(cx, cy, cz));
   } else {
     if (!tp) return;
-    const L = cassini.position.distanceTo(tp); if (!(L > 0)) return;
+    camMountAt(cam, fov.position);
+    const L = fov.position.distanceTo(tp); if (!(L > 0)) return;
     const h = L * Math.tan(rad(FOV_HALF[cam]));
-    fov.position.copy(cassini.position); fov.scale.set(h, h, L * 1.02); fov.lookAt(tp);
+    fov.scale.set(h, h, L * 1.02); fov.lookAt(tp);
   }
   const col = catalog.cam[k] === "N" ? THEME.fov : THEME.fovW;
   fov.children[0].material.color.set(col); fov.children[1].material.color.set(col);
   fov.visible = true;
 }
+
+// ---------- picture footprints ----------
+// Where the last pictures landed on the bodies: each frame's field of view, from the pointing at that frame and
+// Cassini's and the body's positions then, cut against the body's ellipsoid and kept fixed to its surface, so the
+// trail turns with the body. A frame across the limb is drawn only where it is on the body.
+// Settings view.footprints (on/off) and view.footprintCount (how many pictures); window.cassiniFootprints for tests.
+const FP_GRID = 17;                    // samples along each side of a frame: a 16 x 16 mesh per footprint
+const FP_SCAN = 6000;                  // frames looked back through for the trail
+const fpState = { cat: null, cache: new Map(), groups: {}, key: "", list: [] };
+const fpOn = () => !!(window.cassiniSettings && cassiniSettings.get("view.footprints")) || /[?&]footprints=1/.test(location.search);
+const fpCount = () => Math.max(1, Math.round((window.cassiniSettings && cassiniSettings.get("view.footprintCount")) || 50));
+// one frame's footprint on its target: body-fixed points (scene units) on a FP_GRID x FP_GRID mesh, or null
+function footprintOf(k) {
+  if (fpState.cache.has(k)) return fpState.cache.get(k);
+  let out = null;
+  const T = catalog.target[k], b = bodies[T], et = catalog.et[k];
+  if (b && b.radii && meshes[T] && tracks[T] && tracks.CASSINI && et >= tracks[T].start && et <= tracks[T].end) {
+    const q = attitudeAt(att, et, new Float64Array(4));
+    if (q) {
+      const cam = catalog.cam[k] === "W" ? "W" : "N", c = CAM_TO_BODY[cam], qc = new Float64Array(4);
+      qmul([c[0], -c[1], -c[2], -c[3]], q, qc, 0);
+      const C = q2rows(qc), B = iauMatrix(b, et), r = b.radii;
+      const pc = positionAt(tracks.CASSINI, et, v3()), pb = positionAt(tracks[T], et, v3()), rel = sub(pc, pb, v3());
+      // in body-fixed coordinates scaled by the radii, the body is the unit sphere
+      const o = [dot(B[0], rel) / r[0], dot(B[1], rel) / r[1], dot(B[2], rel) / r[2]];
+      const h = Math.tan(rad(FOV_HALF[cam])), pts = new Float32Array(3 * FP_GRID * FP_GRID), on = new Uint8Array(FP_GRID * FP_GRID);
+      let hits = 0, centre = false;
+      for (let j = 0; j < FP_GRID; j++) for (let i = 0; i < FP_GRID; i++) {
+        const u = (2 * i / (FP_GRID - 1) - 1) * h, w = (2 * j / (FP_GRID - 1) - 1) * h;
+        const dj = [C[2][0] + u * C[0][0] + w * C[1][0], C[2][1] + u * C[0][1] + w * C[1][1], C[2][2] + u * C[0][2] + w * C[1][2]];
+        const d = [dot(B[0], dj) / r[0], dot(B[1], dj) / r[1], dot(B[2], dj) / r[2]];
+        const A = dot(d, d), Bq = dot(o, d), Cq = dot(o, o) - 1, disc = Bq * Bq - A * Cq;
+        let t, hit = false;
+        if (disc >= 0 && (t = (-Bq - Math.sqrt(disc)) / A) > 0) hit = true;
+        else t = Math.max(0, -Bq / A);   // past the limb: the ray's closest point, pulled onto the surface below
+        let x = o[0] + t * d[0], y = o[1] + t * d[1], z = o[2] + t * d[2];
+        if (!hit) { const l = Math.hypot(x, y, z); x /= l; y /= l; z /= l; }
+        if (hit) { hits++; on[j * FP_GRID + i] = 1; if (i === (FP_GRID - 1) / 2 && j === (FP_GRID - 1) / 2) centre = true; }
+        const n = 3 * (j * FP_GRID + i);
+        pts[n] = x * r[0] / KM; pts[n + 1] = y * r[1] / KM; pts[n + 2] = z * r[2] / KM;
+      }
+      // a frame that only grazes the limb (sky, rings, a moon in front) leaves no footprint
+      if (centre || hits >= FP_GRID * FP_GRID / 4) out = { k, body: T, cam, et, pts, on, hits };
+    }
+  }
+  fpState.cache.set(k, out);
+  return out;
+}
+const FP_BANDS = 6;                    // outlines in this many age bands, each with its own opacity
+function fpGroup(T) {
+  let g = fpState.groups[T];
+  if (g) return g;
+  // normal blending: on Saturn's bright clouds an additive trail would only burn to white
+  const fill = new THREE.Mesh(new THREE.BufferGeometry(), new THREE.MeshBasicMaterial({ vertexColors: true, transparent: true, depthWrite: false, side: THREE.DoubleSide }));
+  const edges = [];
+  for (let k = 0; k < FP_BANDS; k++) {
+    const e = new THREE.LineSegments(new THREE.BufferGeometry(), new THREE.LineBasicMaterial({ vertexColors: true, transparent: true, depthWrite: false, opacity: 0.95 * (1 - 0.75 * k / (FP_BANDS - 1)) }));
+    e.renderOrder = 5; e.frustumCulled = false; edges.push(e);
+  }
+  g = new THREE.Group(); g.add(fill, ...edges); g.userData = { fill, edges };
+  // drawn after the globes, rings and hazes
+  fill.renderOrder = 4; fill.frustumCulled = false;
+  g.visible = false; scene.add(g); fpState.groups[T] = g;
+  return g;
+}
+// the newest frames that landed on a body, newest first
+function footprintList(n) {
+  const i0 = lastImageIndex(state.et), list = [];
+  for (let i = i0; i >= 0 && i > i0 - FP_SCAN && list.length < n; i--) { const f = footprintOf(order[i]); if (f) list.push(f); }
+  return list;
+}
+// NAC blue and WAC grey-blue as the cones, a shade deeper so they read on Saturn's pale clouds; the newest one amber
+const FP_COL = { N: [0.36, 0.66, 1.0], W: [0.55, 0.65, 0.86], new: [1.0, 0.8, 0.45] };
+function rebuildFootprints(list, n) {
+  const per = {};
+  list.forEach((f, rank) => (per[f.body] = per[f.body] || []).push([f, rank]));
+  for (const T in fpState.groups) if (!per[T]) fpState.groups[T].visible = false;
+  const G = FP_GRID, cells = (G - 1) * (G - 1);
+  const ring = [];   // the frame's edge, round the grid
+  for (let i = 0; i < G - 1; i++) ring.push(i);
+  for (let j = 0; j < G - 1; j++) ring.push(j * G + G - 1);
+  for (let i = G - 1; i > 0; i--) ring.push((G - 1) * G + i);
+  for (let j = G - 1; j > 0; j--) ring.push(j * G);
+  for (const T in per) {
+    const g = fpGroup(T), fs = per[T];
+    const fp = new Float32Array(fs.length * cells / 4 * 18), fc = new Float32Array(fs.length * cells / 4 * 24);
+    const ep = [], ec = [];
+    for (let k = 0; k < FP_BANDS; k++) { ep.push([]); ec.push([]); }
+    let a = 0, c4 = 0;
+    for (const [f, rank] of fs) {
+      // newest strongest, older ones fade toward the far end of the trail
+      const age = n > 1 ? rank / (n - 1) : 0, fa = 0.2 * (1 - 0.8 * age), band = Math.min(FP_BANDS - 1, Math.floor(age * FP_BANDS));
+      const col = rank === 0 ? FP_COL.new : FP_COL[f.cam], P = f.pts;
+      // the tint on every other ray (8 x 8 cells; the pictures use them all), only the cells wholly on the body: a
+      // cell past the limb would smear along it
+      for (let j = 0; j < G - 1; j += 2) for (let i = 0; i < G - 1; i += 2) {
+        const p00 = j * G + i, p10 = p00 + 2, p01 = p00 + 2 * G, p11 = p01 + 2;
+        if (!f.on[p00] || !f.on[p10] || !f.on[p01] || !f.on[p11]) continue;
+        for (const idx of [p00, p10, p11, p00, p11, p01]) {
+          fp[a] = P[3 * idx]; fp[a + 1] = P[3 * idx + 1]; fp[a + 2] = P[3 * idx + 2]; a += 3;
+          fc[c4] = col[0]; fc[c4 + 1] = col[1]; fc[c4 + 2] = col[2]; fc[c4 + 3] = fa; c4 += 4;
+        }
+      }
+      // the outline only where the frame's edge is on the surface: along the limb it would only trace the globe
+      for (let s = 0; s < ring.length; s++) {
+        const i0 = ring[s], i1 = ring[(s + 1) % ring.length];
+        if (!f.on[i0] || !f.on[i1]) continue;
+        for (const idx of [i0, i1]) { ep[band].push(P[3 * idx], P[3 * idx + 1], P[3 * idx + 2]); ec[band].push(...col); }
+      }
+    }
+    const { fill, edges } = g.userData;
+    fill.geometry.dispose();
+    fill.geometry = new THREE.BufferGeometry();
+    fill.geometry.setAttribute("position", new THREE.BufferAttribute(fp.subarray(0, a), 3)); fill.geometry.setAttribute("color", new THREE.BufferAttribute(fc.subarray(0, c4), 4));
+    edges.forEach((e, k) => {
+      e.geometry.dispose(); e.geometry = new THREE.BufferGeometry();
+      e.geometry.setAttribute("position", new THREE.Float32BufferAttribute(ep[k], 3)); e.geometry.setAttribute("color", new THREE.Float32BufferAttribute(ec[k], 3));
+    });
+    g.visible = true;
+  }
+}
+function updateFootprints() {
+  const on = fpOn() && !!att && !!catalog;
+  if (!on) { for (const T in fpState.groups) fpState.groups[T].visible = false; fpState.key = ""; fpState.list = []; syncPictures(); return; }
+  if (fpState.cat !== catalog) { fpState.cat = catalog; fpState.cache.clear(); fpState.key = ""; }
+  const n = fpCount(), i0 = lastImageIndex(state.et), key = `${i0}:${n}`;
+  // while playing fast, at most a few rebuilds a second
+  if (key !== fpState.key && (!state.playing || performance.now() - (fpState.built || 0) > 250)) {
+    fpState.key = key; fpState.built = performance.now(); fpState.list = footprintList(n); rebuildFootprints(fpState.list, n);
+  }
+  syncPictures();
+  // each trail sits on its body as it is now: the body's rotation, its size (enlarged moons too), lifted a hair
+  // above the globe's facets and more from afar, so the log depth buffer keeps it on top of the surface
+  for (const T in fpState.groups) {
+    const g = fpState.groups[T];
+    if (!g.visible) continue;
+    const m = meshes[T], b = bodies[T];
+    if (!m || !m.group.visible) { g.visible = false; continue; }
+    const R = iauMatrix(b, state.et);
+    g.position.copy(m.group.position);
+    g.quaternion.setFromRotationMatrix(mB.makeBasis(toScene(R[0], new THREE.Vector3()), toScene(R[1], new THREE.Vector3()), toScene(R[2], new THREE.Vector3())));
+    const rs = Math.max(...b.radii) / KM, d = Math.max(0, camera.position.distanceTo(m.group.position) - rs);
+    const lift = Math.max(T === "SATURN" ? 3e-4 : 8e-4, Math.min(4e-3, 1e-3 * d / rs));
+    g.scale.setScalar(enlargeOf(T) * (1 + lift));
+  }
+}
+// ---------- the pictures themselves, laid into their footprints ----------
+// The newest footprints show the picture the frame server makes of that frame (/frames/processed: the pipeline's
+// stacked, calibrated frame on its display scale, as the camera windows show it, not centred), stretched over the
+// footprint's mesh. Each mesh vertex is a ray through the frame, so the picture lands where that pixel looked; the
+// pipeline's camera convention (bootleg_autonav.project, cas_iss_v10.ti): samples increase toward the camera frame's
+// -X, lines toward -Y. Settings view.footprintPictures and view.footprintPictureCount.
+const FRAMES_ORIGIN = (() => {                 // the frame server, chosen as the camera window chooses it
+  const q = new URLSearchParams(location.search).get("frames");
+  if (q) return q.replace(/\/$/, "");
+  if (/^https?:$/.test(location.protocol) && !/claude\.ai$|claudeusercontent\.com$|claude\.site$/.test(location.hostname)) return location.origin;
+  return "http://localhost:8765";
+})();
+const PIC_SIZE = 512, PIC_RETRY_MS = 20000;
+const picState = { shown: new Map(), failed: new Map(), loader: new THREE.TextureLoader() };
+const picOn = () => fpOn() && (!!(window.cassiniSettings && cassiniSettings.get("view.footprintPictures")) || /[?&]footprintPictures=1/.test(location.search));
+const picCount = () => Math.max(1, Math.round((window.cassiniSettings && cassiniSettings.get("view.footprintPictureCount")) || 20));
+const picUrl = id => `${FRAMES_ORIGIN}/frames/processed/${id}.webp?size=${PIC_SIZE}${window.cassiniLook ? window.cassiniLook() : ""}`;
+function pictureMesh(f) {
+  const G = FP_GRID, P = f.pts, pos = [], uv = [];
+  for (let j = 0; j < G - 1; j++) for (let i = 0; i < G - 1; i++) {
+    const p00 = j * G + i, p10 = p00 + 1, p01 = p00 + G, p11 = p01 + 1;
+    if (!f.on[p00] || !f.on[p10] || !f.on[p01] || !f.on[p11]) continue;
+    for (const idx of [p00, p10, p11, p00, p11, p01]) {
+      const gi = idx % G, gj = (idx - gi) / G;
+      pos.push(P[3 * idx], P[3 * idx + 1], P[3 * idx + 2]);
+      // grid i runs along +X and j along +Y; sample = 1 - i, line = 1 - j, and the texture's v is 1 - line
+      uv.push(1 - gi / (G - 1), gj / (G - 1));
+    }
+  }
+  const g = new THREE.BufferGeometry();
+  g.setAttribute("position", new THREE.Float32BufferAttribute(pos, 3)); g.setAttribute("uv", new THREE.Float32BufferAttribute(uv, 2));
+  const m = new THREE.Mesh(g, new THREE.MeshBasicMaterial({ transparent: true, depthWrite: false, side: THREE.DoubleSide, opacity: 0 }));
+  m.frustumCulled = false; m.visible = false;
+  return m;
+}
+function syncPictures() {
+  const want = new Map();
+  if (picOn()) for (const f of fpState.list.slice(0, picCount())) want.set(catalog.id[f.k], f);
+  for (const [id, p] of picState.shown) if (!want.has(id) || p.f !== want.get(id)) {
+    if (p.mesh.parent) p.mesh.parent.remove(p.mesh); p.mesh.geometry.dispose(); p.mesh.material.dispose(); if (p.tex) p.tex.dispose();
+    picState.shown.delete(id);
+  }
+  const ranks = [...want.keys()], M = ranks.length;
+  ranks.forEach((id, rank) => {
+    const f = want.get(id);
+    let p = picState.shown.get(id);
+    if (!p) {
+      if (Date.now() - (picState.failed.get(id) || -Infinity) < PIC_RETRY_MS) return;
+      p = { f, mesh: pictureMesh(f), tex: null };
+      fpGroup(f.body).add(p.mesh);
+      picState.shown.set(id, p);
+      p.tex = picState.loader.load(picUrl(id), tex => {
+        if (picState.shown.get(id) !== p) { tex.dispose(); return; }
+        tex.anisotropy = 4; p.mesh.material.map = tex; p.mesh.material.needsUpdate = true; p.mesh.visible = true;
+      }, undefined, () => { picState.failed.set(id, Date.now()); if (picState.shown.get(id) === p) { if (p.mesh.parent) p.mesh.parent.remove(p.mesh); picState.shown.delete(id); } });
+    }
+    // newest on top and whole, older ones fading under it
+    const age = M > 1 ? rank / (M - 1) : 0;
+    p.mesh.material.opacity = 1 - 0.6 * age;
+    p.mesh.renderOrder = 4.1 + 0.8 * (1 - age);
+  });
+}
+window.cassiniFootprints = {
+  get pictures() { return [...picState.shown.entries()].map(([id, p]) => ({ id, loaded: !!p.mesh.material.map, opacity: p.mesh.material.opacity })); },
+  get list() { return fpState.list.map(f => ({ id: catalog.id[f.k], body: f.body, cam: f.cam, et: f.et, hits: f.hits })); },
+  footprintOf: k => footprintOf(k), refresh() { fpState.key = ""; }
+};
 
 function updateTrail() {
   const N = trailLine.userData.N;
@@ -15039,7 +15393,7 @@ function frame(now) {
 
 (async function main() {
   // ?t=1999-08-18T03:00 opens at that moment
-  let start = utcToEt(new URLSearchParams(location.search).get("t") || (window.cassiniSettings && cassiniSettings.get("playback.start")) || "2006-09-15T14:28:00");
+  let start = utcToEt(new URLSearchParams(location.search).get("t") || (window.cassiniSettings && /^\d{4}-/.test(cassiniSettings.get("playback.start")) && cassiniSettings.get("playback.start")) || "2006-09-15T14:28:00");
   try {
     start = await load(start);
   } catch (err) {
