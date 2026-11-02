@@ -402,7 +402,8 @@ unnoticed (W1643279524_1 took a -50.7 px phase match, N1807503852_1 a +12.9,-33.
 are matched with each other too; that third match must equal the difference of the first two. Within LOOP_CLOSE px
 the three are solved together (least squares, the error shared); further, the pair of the three matches that lines
 the edges up best (_agreement) stands and the third follows from it; and a channel that matched nothing takes its
-place from the other one through their own match. shifts and hows (per channel, None for the reference) are changed.
+place from the other one through their own match (that match tried both ways round, so the set's order does not
+decide it). shifts and hows (per channel, None for the reference) are changed.
 """
 LOOP_CLOSE = 1.0   # px
 
@@ -416,6 +417,11 @@ def _loop(orig, masks, ref, shifts, hows, guess):
     if sa is None and sb is None:
         return
     sab, how = _match(orig[a], orig[b], g, masks[a], masks[b])
+    if sab is None:
+        # the match the other way round: the set's order must not decide whether it is found (Dione, N1855916434_1
+        # UV3 + N1855916451_1 GRN + N1855916468_1 IR1: IR1 matched to UV3 near SPICE, UV3 to IR1 not)
+        back, how = _match(orig[b], orig[a], None if g is None else (-g[0], -g[1]), masks[b], masks[a])
+        sab = None if back is None else (-back[0], -back[1])
     if sab is None:
         return
     if sa is None or sb is None:
