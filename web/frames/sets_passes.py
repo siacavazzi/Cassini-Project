@@ -88,11 +88,15 @@ def runs(frames):
 
 
 def moved(a, b):
-    """True when SPICE puts two frames more than SET_PLACE px apart (a, b: (x, y, ...) or None); False when either
-    has no place."""
+    """True when SPICE puts two frames more than SET_PLACE px apart (a, b: (x, y, range km) or None); False when
+    either has no place. The places are compared on the ground: the body's centre is off a close-up by tens of
+    thousands of px, and a range change of a few percent between filters moves it by thousands though the camera
+    keeps looking at the same ground (Titan, N1616821718_1). So a's offset is scaled to b's range before they are
+    compared (offset x range is the ground's sky-plane distance from the centre, which stays put)."""
     if a is None or b is None or a[0] is None or b[0] is None:
         return False
-    return ((a[0] - b[0]) ** 2 + (a[1] - b[1]) ** 2) ** 0.5 > SET_PLACE
+    k = a[2] / b[2] if len(a) > 2 and len(b) > 2 and a[2] and b[2] else 1.0
+    return ((a[0] * k - b[0]) ** 2 + (a[1] * k - b[1]) ** 2) ** 0.5 > SET_PLACE
 
 
 def channels(filters, nms):

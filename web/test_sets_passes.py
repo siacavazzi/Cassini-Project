@@ -90,6 +90,11 @@ drift = [("W", "S", "O", f, 30.0 * i, (60.0 * i, 0.0)) for i, f in enumerate(["R
 assert sets_passes.runs(drift) == [[0, 1, 2]]                     # a 120 px drift is the same pointing
 jump = [("W", "S", "O", f, 30.0 * i, (0.0 if i < 2 else 400.0, 0.0)) for i, f in enumerate(["RED", "GRN", "BL1"])]
 assert sets_passes.runs(jump) == [[0, 1]]                          # the BL1 is at another pointing: a two-filter set
+# a close flyby: the centre 16,000 px off the frame and the range 20% shorter by the last filter; the camera holds the
+# same ground, so the offset grows as the range shrinks: one set (N1616821718_1, Titan CB3+MT3+MT1)
+flyby = [("N", "TITAN", "O", f, 30.0 * i, (-16350.0 / (1 - 0.1 * i), -4239.0 / (1 - 0.1 * i), 3000.0 * (1 - 0.1 * i)))
+         for i, f in enumerate(["CB3", "MT3", "MT1"])]
+assert sets_passes.runs(flyby) == [[0, 1, 2]]
 far = [("N", "S", "O", f, 30.0 * i, (440000.0 * i, 0.0)) for i, f in enumerate(["RED", "GRN", "BL1"])]
 assert sets_passes.runs(far) == [[0, 1, 2]]                        # a target behind the camera says nothing
 # channels are each filter's first frame; repeats only of one filter are no set; at most REPEAT_MAX in a row
