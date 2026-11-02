@@ -4708,13 +4708,13 @@ onmessage = async e => {
     let best = null;
     for (let a = 0; a < order.length; a++) for (let b = a + 1; b < order.length; b++) for (let c = b + 1; c < order.length; c++) {
       const three = [order[a], order[b], order[c]];
-      let m = 0, d = 0;
-      three.forEach((j, k) => { m += isMethane(filters[j]) ? 1 : 0; d += Math.abs(nms[j] - VISIBLE_NM[k]); });
-      const key = [m, d, ...three];
+      let m = 0;
+      three.forEach(j => { m += isMethane(filters[j]) ? 1 : 0; });
+      const key = [m, Math.abs(nms[three[1]] - VISIBLE_NM[1]), Math.abs(nms[three[0]] - VISIBLE_NM[0]) + Math.abs(nms[three[2]] - VISIBLE_NM[2]), ...three];
       const i = best ? key.findIndex((v, q) => v !== best[q]) : -1;
       if (!best || (i >= 0 && key[i] < best[i])) best = key;   // the least key, compared item by item (Python's tuples)
     }
-    return best.slice(2);
+    return best.slice(3);
   }
   function pickChannels(s) {
     // a filter's channel: its frame nearest in time to a frame of another filter (a run of repeat exposures ends
@@ -12734,7 +12734,7 @@ void main() {
   window.cassiniAbout = { open, addTab, esc, close: () => show(false), credits: CREDITS };
 
   // ---- which version this is: this page's build id (build.py writes it), and what the frame server says it serves ----
-  const BUILD = /*BUILD*/"eaa9bfeee578";
+  const BUILD = /*BUILD*/"9c93d672c274";
   const FRAMES = (() => {                       // the frame server, chosen as the camera window chooses it
     const q = new URLSearchParams(location.search).get("frames");
     if (q) return q.replace(/\/$/, "");

@@ -55,19 +55,21 @@ def is_methane(f):
 
 def nearest_visible(filters, nms):
     """The positions in filters (distinct colour filters, nms their wavelengths) of the three a false colour set
-    draws, longest wavelength first: the fewest methane bands, then the least distance in wavelength from
-    VISIBLE_NM, then the order the filters come in. Three or fewer filters: all of them, longest first."""
+    draws, longest wavelength first: the fewest methane bands, then the green nearest GRN, then the red and blue
+    nearest RED and BL1 (the least sum of their distances), then the order the filters come in (a Titan wind stare's
+    CB3, CB1, MT1, UV1, UV3 draws CB3 + CB1 + UV3). Three or fewer filters: all of them, longest first."""
     import itertools
     order = sorted(range(len(filters)), key=lambda j: -nms[j])
     if len(order) <= 3:
         return order
     best = None
     for three in itertools.combinations(order, 3):
-        key = (sum(is_methane(filters[j]) for j in three),
-               sum(abs(nms[j] - w) for j, w in zip(three, VISIBLE_NM)), three)
+        r, g, b = three
+        key = (sum(is_methane(filters[j]) for j in three), abs(nms[g] - VISIBLE_NM[1]),
+               abs(nms[r] - VISIBLE_NM[0]) + abs(nms[b] - VISIBLE_NM[2]), three)
         if best is None or key < best:
             best = key
-    return list(best[2])
+    return list(best[3])
 
 
 def is_polarizer(f1, f2):

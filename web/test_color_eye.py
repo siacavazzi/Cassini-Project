@@ -114,6 +114,7 @@ pick = lambda fs: [fs[j] for j in sets_passes.nearest_visible(fs, nm(fs))]
 assert pick(["IR3", "GRN", "UV3", "UV1"]) == ["IR3", "GRN", "UV3"]          # Pandora: GRN over UV1
 assert pick(["MT3", "CB2", "CB1", "MT2", "BL1", "UV1"]) == ["CB2", "CB1", "BL1"]   # a gas giant's continuum
 assert pick(["MT3", "CB2", "MT2", "BL1"]) == ["CB2", "MT2", "BL1"]           # one methane band where it must
+assert pick(["CB3", "CB1", "MT1", "UV1", "UV3"]) == ["CB3", "CB1", "UV3"]       # a Titan wind stare
 assert pick(["IR3", "UV3", "UV1"]) == ["IR3", "UV3", "UV1"]                  # three: all of them, longest first
 assert sets_passes.channels(["IR3", "GRN", "UV3", "UV1"], nm(["IR3", "GRN", "UV3", "UV1"])) == ("false", [0, 1, 2])
 print("ok")
