@@ -97,6 +97,49 @@ def test_does_its_job():
     print("edges steeper, flat and empty canvas untouched, faint noise held to a level, 0 is off")
 
 
+def test_in_chromium():
+    """The page's whole path in Chromium: apply() on an Image (canvas, the worker, PNG back to an Image) gives the
+    Python's bytes at Sharpness 35, and the worker's run() the same as the page thread's math."""
+    tmp = tempfile.mkdtemp(dir=os.environ.get("TMPDIR"))
+    pic = scene(11, 256)[..., :3]
+    Image.fromarray(pic).save(f"{tmp}/p.png")
+    want = rgba_of(C.unsharp(pic, 35 / 100 * C.SHARPEN_MAX))
+    page = ("<!doctype html><script>window.cassiniSettings = { get: () => 35 };</script><script>"
+            + script.replace("</script>", "<\\/script>") + "</script>")
+    open(f"{tmp}/page.html", "w").write(page)
+    runner = r"""
+const { chromium } = require('playwright'), fs = require('fs');
+const dir = process.argv[2];
+(async () => {
+  const b = await chromium.launch(), p = await b.newPage();
+  await p.route('**/*', r => r.request().url().endsWith('.png') ? r.fulfill({ contentType: 'image/png', body: fs.readFileSync(dir + '/p.png') })
+    : r.fulfill({ contentType: 'text/html', body: fs.readFileSync(dir + '/page.html') }));
+  await p.goto('http://localhost/t.html');
+  const out = await p.evaluate(async () => {
+    const im = new Image(); im.src = '/p.png'; await im.decode();
+    const o = await window.cassiniSharpen.apply(im), c = document.createElement('canvas'); c.width = o.naturalWidth; c.height = o.naturalHeight;
+    const g = c.getContext('2d', { willReadFrequently: true }); g.drawImage(o, 0, 0);
+    const r = g.getImageData(0, 0, c.width, c.height).data;
+    let s = ''; for (let i = 0; i < r.length; i += 32768) s += String.fromCharCode.apply(null, r.subarray(i, i + 32768));
+    return btoa(s);
+  });
+  fs.writeFileSync(dir + '/out.bin', Buffer.from(out, 'base64'));
+  await b.close();
+})();
+"""
+    open(f"{tmp}/run.cjs", "w").write(runner)
+    env = dict(os.environ, NODE_PATH=subprocess.run(["npm", "root", "-g"], capture_output=True, text=True).stdout.strip())
+    res = subprocess.run(["node", f"{tmp}/run.cjs", tmp], capture_output=True, text=True, env=env)
+    if res.returncode and "Cannot find module 'playwright'" in res.stderr:
+        print("in Chromium: skipped (no playwright)")
+        return
+    assert res.returncode == 0, res.stderr
+    got = np.fromfile(f"{tmp}/out.bin", np.uint8).reshape(want.shape)
+    diff = np.abs(got.astype(int) - want.astype(int))
+    assert diff.max() == 0, (int(diff.max()), int((diff > 0).sum()))
+    print("in Chromium: apply() (canvas, worker, PNG) == python byte for byte at Sharpness 35")
+
+
 def test_real():
     folder = os.environ.get("SHARPEN_REAL")
     if not folder:
@@ -108,5 +151,6 @@ def test_real():
 if __name__ == "__main__":
     test_conformance()
     test_does_its_job()
+    test_in_chromium()
     test_real()
     print("ok")
