@@ -5913,7 +5913,7 @@ onmessage = async e => {
         const notes = [rep.calibrated ? "calibrated" : "not calibrated (each frame stretched on its own)",
           stacked ? `${stacked} repeat exposure${stacked > 1 ? "s" : ""} stacked` : "",
           rep.aligned.length && rep.aligned.every(a => a === "off") ? "not aligned (turned off)" :
-          n ? `${n} channel${n > 1 ? "s" : ""} could not be aligned` : rep.aligned.some(a => a.startsWith("centroid")) ? "aligned by centroid" : "aligned",
+          n ? `${n} channel${n > 1 ? "s" : ""} could not be aligned${rep.grey ? ", drawn grey from one filter" : ""}` : rep.aligned.some(a => a.startsWith("centroid")) ? "aligned by centroid" : "aligned",
           rep.filled === false ? "lost lines not filled" : ""].filter(Boolean);
         made.set(w.set, notes.join(", "));
         if (catalog.setOf[lastK] === w.set) field("colour").textContent = field("colour").title = colourText(catalog.sets[w.set], w.set);
@@ -7450,7 +7450,7 @@ onmessage = async e => {
     const st = (h.stacked || []).filter(n => n > 1);
     return [h.centred ? "centered, north up" : h.frame_offset ? "close-up, placed on the body, north up" : "not centered",
             st.length ? `stacked ${st.join("+")}` : "", h.calibrated ? "calibrated" : "",
-            (h.aligned || []).some(a => /not aligned|failed/.test(a)) ? "channels not aligned" : "",
+            (h.aligned || []).some(a => /^not aligned|^failed/.test(a)) ? (h.grey ? "channels not aligned, drawn grey" : "channels not aligned") : "",
             h.mosaic > 1 ? `mosaic of ${h.mosaic}` : ""].filter(Boolean).join(" · ");
   }
   function show(i) {
@@ -12714,7 +12714,7 @@ void main() {
   window.cassiniAbout = { open, addTab, esc, close: () => show(false), credits: CREDITS };
 
   // ---- which version this is: this page's build id (build.py writes it), and what the frame server says it serves ----
-  const BUILD = /*BUILD*/"d3a63a7cbf33";
+  const BUILD = /*BUILD*/"579c1e231d7d";
   const FRAMES = (() => {                       // the frame server, chosen as the camera window chooses it
     const q = new URLSearchParams(location.search).get("frames");
     if (q) return q.replace(/\/$/, "");

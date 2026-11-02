@@ -2578,7 +2578,7 @@ body.idle .win.full .titlebar { opacity: 0; }
         const notes = [rep.calibrated ? "calibrated" : "not calibrated (each frame stretched on its own)",
           stacked ? `${stacked} repeat exposure${stacked > 1 ? "s" : ""} stacked` : "",
           rep.aligned.length && rep.aligned.every(a => a === "off") ? "not aligned (turned off)" :
-          n ? `${n} channel${n > 1 ? "s" : ""} could not be aligned` : rep.aligned.some(a => a.startsWith("centroid")) ? "aligned by centroid" : "aligned",
+          n ? `${n} channel${n > 1 ? "s" : ""} could not be aligned${rep.grey ? ", drawn grey from one filter" : ""}` : rep.aligned.some(a => a.startsWith("centroid")) ? "aligned by centroid" : "aligned",
           rep.filled === false ? "lost lines not filled" : ""].filter(Boolean);
         made.set(w.set, notes.join(", "));
         if (catalog.setOf[lastK] === w.set) field("colour").textContent = field("colour").title = colourText(catalog.sets[w.set], w.set);
