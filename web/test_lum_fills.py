@@ -9,7 +9,6 @@ minute before, and lum_frames left the MT1 frame out (a CB3 frame is at its plac
 - lum_base: a pass drawn in its grey filter alone draws its base once it has a fill
 Run: python web/test_lum_fills.py"""
 import io
-import json
 import os
 import sys
 import tempfile
