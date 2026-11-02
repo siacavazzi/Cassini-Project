@@ -228,6 +228,7 @@ where report says how each frame was calibrated and aligned, and report["dropped
 left out because they can't be calibrated (then there is one image fewer than paths: a two-filter picture).
 A two-filter set balanced like false color (calibration.color_mix) comes back as three images, green the mean of the two.
 Channels whose own match fails are aligned near where SPICE puts them (spice_offsets, image_correction.guided_shift).
+A channel that nothing places (unaligned) makes the whole set grey from the reference (grey_from, report["grey"]).
 """
 def load_aligned(paths, hdr=False, scale=None, repeat_window=120, around=None):
     # Settings > Processing turns steps off per request (calibration.step); stacking checks its own
@@ -320,6 +321,11 @@ def load_aligned(paths, hdr=False, scale=None, repeat_window=120, around=None):
             # the picture is drawn, never where its channels land
             with cal.looking("classic"):
                 guide = cal.load_channels(lbls, imgs, iofs=iofs)
+            # what the camera saturated in each channel (merged in I/F: what every exposure saturated), moved with
+            # its channel below: filled from the channels that did not saturate there (calibration.tone, fill_saturated)
+            each = [_saturated_of(l, img.shape[:2]) if clip is None else clip for l, img, clip in zip(lbls, imgs, clips)]
+            if any(m is not None and m.any() for m in each):
+                full = [np.zeros(imgs[0].shape[:2], np.float32) if m is None else m.astype(np.float32) for m in each]
         elif linear is None:
             # puts every filter on the same brightness scale (see calibration.py)
             before = imgs
@@ -343,6 +349,8 @@ def load_aligned(paths, hdr=False, scale=None, repeat_window=120, around=None):
         masks = [m if w is None else warp_frame(m.astype(np.float32), w) > 0.99 for m, w in zip(masks, warps)]
         if guide is not None:
             guide = [g if w is None else warp_frame(g, w) for g, w in zip(guide, warps)]
+            if full is not None and len(lbls) > 1:
+                full = [m if w is None else warp_frame(m, w) for m, w in zip(full, warps)]
             linear = ([c if w is None else warp_frame(c, w) for c, w in zip(linear[0], warps)],) + tuple(linear[1:])
         else:
             imgs = [i if w is None else warp_frame(i, w) for i, w in zip(imgs, warps)]
@@ -359,7 +367,11 @@ def load_aligned(paths, hdr=False, scale=None, repeat_window=120, around=None):
             shifts = []
             ic.align_with_masks(guide, [m.copy() for m in masks], ref, aligned, found=shifts, guess=guess)
             channels, masks = ic.align_with_masks(linear[0], masks, ref, use=shifts)
-            imgs = cal.tone(channels, linear[1], linear[2])
+            if full is not None:
+                full = [m if d is None else ic.shift_image(m, *d) for m, d in zip(full, shifts)]
+            # a set drawn grey (a channel not aligned) is every channel the reference's, so no channel fill
+            imgs = cal.tone(*_greyed(channels, linear, ref, aligned),
+                            saturated=None if unaligned(aligned) else _saturated_masks(full))
         else:
             imgs, masks = ic.align_with_masks(imgs, masks, ref, aligned, guess=guess)
     except Exception:
@@ -368,8 +380,19 @@ def load_aligned(paths, hdr=False, scale=None, repeat_window=120, around=None):
         if linear is not None:
             guide = None
     if linear is not None and guide is None:
-        imgs = cal.tone(linear[0], linear[1], linear[2])
+        imgs = cal.tone(*_greyed(linear[0], linear, ref, aligned),
+                        saturated=_saturated_masks(full) if len(lbls) > 1 and not unaligned(aligned) else None)
+    grey = unaligned(aligned)
+    if grey:
+        # a channel neither its own match nor SPICE could place: drawn grey from the reference alone, never in colours
+        # that sit apart (its valid pixels are the reference's own)
+        if linear is None:
+            imgs = grey_from(imgs, ref)
+        masks = [masks[ref]]
     report = {"calibrated": calibrated, "stacked": stacked, "aligned": aligned}
+    if grey:
+        # drawn grey from one filter (grey_from): the channels could not be lined up
+        report["grey"] = "not aligned"
     if warps and any(w is not None for w in warps):
         # each channel's scale and turn onto the reference (SPICE's range and twist), None where it needed none
         report["warped"] = [None if w is None else [round(w[2], 4), round(w[3], 3)] for w in warps]
@@ -393,6 +416,66 @@ def load_aligned(paths, hdr=False, scale=None, repeat_window=120, around=None):
     # no colour that is not the picture's under the pixels round it (rim_coloured)
     imgs = [rim_coloured(img, valid) for img in imgs]
     return imgs, valid, lbls[ref], report
+
+
+"""
+Whether a set's alignment (load_aligned's report["aligned"]) left a channel unplaced: "not aligned" (no match, and
+SPICE's offset neither lined the frames up nor was within image_correction.SPICE_SURE) or "failed". Such a set is drawn
+grey (grey_from), not in colours that sit apart. Alignment turned off ("off") is the viewer's own choice and stays.
+"""
+UNALIGNED = ("not aligned", "failed")
+
+
+def unaligned(aligned):
+    return len(aligned) > 1 and any(a in UNALIGNED for a in aligned)
+
+
+"""
+A set's channels drawn grey from one of them: every channel takes channels[src] where region is True (everywhere when
+region is None), so those pixels come out neutral, as the reference filter saw them. Works on the linear channels
+(before calibration.tone: the same values give the same grey in every channel) and on drawn 8-bit images. A region
+(a body that moved between the filters) greys only that part of the picture; None, the whole set (a channel not
+aligned, load_aligned).
+"""
+def grey_from(channels, src, region=None):
+    if region is None:
+        return [channels[src].copy() for _ in channels]
+    out = []
+    for c in channels:
+        r = region if c.ndim == region.ndim else region[..., None]
+        out.append(np.where(r, channels[src], c).astype(c.dtype))
+    return out
+
+
+"""
+calibration.tone's arguments for the linear channels (linear = load_linear's (channels, margin, mix)): as they are, or,
+when a channel was not aligned (unaligned), every channel the reference's and no colour mix, so the picture is grey
+"""
+def _greyed(channels, linear, ref, aligned):
+    if unaligned(aligned):
+        return grey_from(channels, ref), linear[1], None
+    return channels, linear[1], linear[2]
+
+
+"""
+calibration.saturated_of, or None for a frame whose codes can't be read
+"""
+def _saturated_of(lbl, shape):
+    try:
+        return cal.saturated_of(lbl, shape)
+    except Exception as e:
+        print(f"Can't read {lbl.get_info().get('path')} for its saturated pixels: {e}")
+        return None
+
+
+"""
+Each channel's saturated pixels as masks (from float32 masks moved with their channels), or None when none saturated
+"""
+def _saturated_masks(masks):
+    if not masks:
+        return None
+    out = [m > 0.5 for m in masks]
+    return out if any(m.any() for m in out) else None
 
 
 """

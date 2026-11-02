@@ -78,7 +78,7 @@ def module_from_main(name, ref="origin/main"):
     path = os.path.join(folder, f"{name}_main.py")
     with open(path, "w") as f:
         f.write(src.stdout)
-    for data in ("color_matrices.json", "false_color_bodies.json"):   # the tables it reads beside itself
+    for data in ("color_matrices.json", "false_color_bodies.json", "filter_calibration.csv", "eye_colors.json"):   # the tables it reads beside itself
         with open(os.path.join(folder, data), "w") as f:
             f.write(subprocess.run(["git", "show", f"{ref}:{data}"], cwd=os.path.join(HERE, ".."),
                                    capture_output=True, text=True).stdout)
@@ -86,6 +86,12 @@ def module_from_main(name, ref="origin/main"):
     mod = importlib.util.module_from_spec(spec)
     spec.loader.exec_module(mod)
     return mod
+
+
+def false_colors(mod):
+    """mod's False color (colors=false, the false color balance of every false color set: Natural color before fix
+    plan C), or Natural color in a calibration that has no False color yet"""
+    return mod.coloring("false" if "false" in mod.COLORS else "natural")
 
 
 old_ic = module_from_main("image_correction")
@@ -142,7 +148,8 @@ if old_cal is not None:
                     for own in (False, True):
                         with cal.coloring("false"):
                             a = cal.color_mix(cam, bands, target, gains, own)
-                        b = old_cal.color_mix(cam, bands, target, gains, own)
+                        with false_colors(old_cal):
+                            b = old_cal.color_mix(cam, bands, target, gains, own)
                         assert (a is None) == (b is None) and (a is None or np.array_equal(np.asarray(a), np.asarray(b))), \
                             (cam, target, bands, a, b)
                         assert (a is None) or (getattr(a, "tint", None) == getattr(b, "tint", None))
@@ -190,6 +197,8 @@ assert len(pair) == 2
 # of methane Saturn pink-white, W1694956960_1 and 17 more): load_linear and tone, byte for byte
 old_cal = module_from_main("calibration", "069c6ee^1")
 if old_cal is not None:
+    # the floor black changed since (round 3: darkest real feature, small dim bodies), not what #188 is about
+    old_cal._floor = cal._floor
     for bands, levels, target in ((["MT3", "CB2", "MT2"], [0.0236, 0.40, 0.135], "DIONE"),
                                   (["MT3", "CB2", "MT2"], [0.0236, 0.40, 0.135], "SATURN"),
                                   (["MT3", "MT2", "BL1"], [0.03, 0.2, 0.35], "SATURN"), (["IR3", "GRN", "UV3"], [0.3, 0.2, 0.1], "TITAN")):
@@ -198,7 +207,7 @@ if old_cal is not None:
         for mod in (cal, old_cal):
             labels = [Label(b, target) for b in bands]
             # (under False color: Natural color now draws methane sets as natural color emulation, fix plan C)
-            with cal.coloring("false" if mod is cal else "natural"):
+            with false_colors(mod):
                 chans, margin, mix = mod.load_linear(labels, [np.zeros((H, H, 3), np.uint8)] * 3, [i.copy() for i in iofs])
                 got.append((np.asarray(mix).tobytes(), [c.tobytes() for c in mod.tone(chans, margin, mix)]))
         assert got[0] == got[1], (bands, target)
