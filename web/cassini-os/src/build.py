@@ -134,6 +134,12 @@ smooth = open(os.path.join(os.path.dirname(os.path.abspath(sys.argv[2])), "colou
 study = study.replace("<script>\n// ---------- Cassini OS chrome", smooth[smooth.index("<script>"):smooth.index("</script>") + 9]
                       + "\n<script>\n// ---------- Cassini OS chrome")
 
+# sharpness on this computer (sharpen.html): its script runs before the chrome script, whose camera feed asks
+# window.cassiniSharpen to sharpen each picture it shows
+sharp = open(os.path.join(os.path.dirname(os.path.abspath(sys.argv[2])), "sharpen.html")).read()
+study = study.replace("<script>\n// ---------- Cassini OS chrome", sharp[sharp.index("<script>"):sharp.index("</script>") + 9]
+                      + "\n<script>\n// ---------- Cassini OS chrome")
+
 # additional stabilization of a film on this computer (film-steady.html): its script runs before the chrome script, so
 # the Movie Editor and the film export find window.cassiniFilmSteady
 filmsteady = open(os.path.join(os.path.dirname(os.path.abspath(sys.argv[2])), "film-steady.html")).read()
