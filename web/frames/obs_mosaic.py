@@ -1949,7 +1949,7 @@ def _tile_made(u, n, cache, scale, base):
     try:
         image, _, rep = color_image.processed_frame([path], hdr=True, scale=tile_scale(scale, f, bool(u.get("movie") or disk), seen, disk),
                                                     repeat_window=u.get("repeat_gap", mosaic_benchmark.REPEAT_GAP),
-                                                    around=_around(u, n) if u.get("movie") else None)
+                                                    around=_around(u, n) if u.get("movie") else _same_pointing(u, n))
     except Exception as e:
         image, rep = None, {"why": f"{type(e).__name__}: {e}"[:200]}
     if (image is not None and u.get("mosaic") and rep.get("calibrated") is False and calibration.step("calibrate")
@@ -2005,6 +2005,27 @@ def _around(u, n):
     before = next((frames[j][0] for j in range(n - 1, -1, -1) if frames[j][2] == f), None)
     after = next((frames[j][0] for j in range(n + 1, len(frames)) if frames[j][2] == f), None)
     return [before, after]
+
+
+SPIKE_GAP = 600      # s: a frame of the pass this near in time, at the same pointing, is what a tile's spikes are checked against
+SPIKE_FRAMES = 2
+
+
+def _same_pointing(u, n):
+    """The paths of the frames of the pass at tile n's pointing (SAME_PLACE, by the geometry cache), up to SPIKE_FRAMES
+    of them nearest in time within SPIKE_GAP, any filter: what a mosaic's tile is checked against for one-frame spikes
+    (color_image.load_aligned, image_correction.spikes), as a movie's frame is against its neighbours (_around). A
+    cosmic ray is in one frame only, a star in every filter at that pointing, so the long exposures of a moon's dark
+    side (Pandora ISS_253PA_PANDORA001_PIE) no longer speckle the mosaic with them. None for a frame SPICE has no place
+    for or with no other frame at its pointing."""
+    frames = u["frames"]
+    _, _, f, t, _, x, y, z = frames[n]
+    if not z:
+        return None
+    k = z / u["z"] if u["z"] else 1.0
+    near = sorted((abs(tj - t), pj) for j, (pj, _, fj, tj, _, xj, yj, zj) in enumerate(frames)
+                  if j != n and zj and abs(tj - t) <= SPIKE_GAP and math.hypot(x - xj, y - yj) * k <= SAME_PLACE * FRAME)
+    return [p for _, p in near[:SPIKE_FRAMES]] or None
 
 
 REGISTER_GAP = 180   # s: a tile of another filter taken this soon before, at the same pointing, is what it is registered to
