@@ -108,9 +108,10 @@ neighbours have 112, W1295204353_1 29 against 24) and the first line often does 
 frame's second line can too (W1507745867_2). Drawn at the soft edge's first value (mask.png's 46 of 255) on a
 stretched dark sky, turned north up and resized, they became dotted bright lines along two edges of every frame
 (Titan 2006 020TI, Jupiter 2000, Phoebe, Titan 2007 054TI) and white specks along every ring film's edge (113RI).
-A frame's mask (pixels it has) leaves out edge_px full-resolution pixels at each edge (EDGE_PX, and at least one of
-the frame's own pixels when it was summed: 512 or 256 lines are 2 or 4 full-resolution pixels a pixel, which the
-frame's valid mask already leaves out).
+A frame's mask (pixels it has) leaves out EDGE_PX of the frame's own pixels at each edge: 2 full-resolution pixels of
+a 1024 line frame, 4 of a 512 line one, 8 of a 256 line one (the valid mask already leaves out a summed frame's first
+pixel; its second is bright too: N1349081639_2, Jupiter 2000, 53 and 45 against 16 and then 0 in the sky, the faint
+line the Mini's second render still showed).
 Leaving a pixel out of the mask is not enough on its own: turning the frame north up (label.translate, linear on
 colour and alpha apart) mixes a left-out pixel's colour into the new edge, and the calibrated path leaves 127 (half
 scale) under a summed frame's left-out edge column. That was most of the dotted lines (the Mini's edge profile of
@@ -123,12 +124,13 @@ EDGE_PX = 2
 
 
 def edge_px(lbl, side=1024):
-    """How many full-resolution pixels at each edge of frame lbl (on a side px grid) are not picture."""
+    """How many full-resolution pixels at each edge of frame lbl (on a side px grid) are not picture: EDGE_PX of
+    its own pixels."""
     try:
         lines = int(lbl.info.get("LINES", side))
     except (TypeError, ValueError, AttributeError):
         lines = side
-    return max(EDGE_PX, side // max(1, min(lines, side)))
+    return EDGE_PX * max(1, side // max(1, min(lines, side)))
 
 
 def edge_trimmed(mask, lbl):

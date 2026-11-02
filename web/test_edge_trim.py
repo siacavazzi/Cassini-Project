@@ -1,12 +1,13 @@
 """Synthetic checks of the frame edge fixes (fix plan group K):
 
-1. color_image.edge_trimmed leaves out a frame's outermost lines and columns (EDGE_PX full-resolution pixels, at
-   least one of a summed frame's own pixels) and nothing else, and load_aligned's mask (the alpha of every picture
-   made of a frame) no longer has them: a frame whose first and last columns and first line are bright, as the
-   camera's are, shows none of that brightness once drawn with its alpha.
-2. reel.save_webp keeps black under every fully transparent (and nearly transparent) pixel of a lossy WebP (left to itself the encoder copies
-   the picture's nearest blocks there: the staircase of grey blocks along a turned frame's edge), changes nothing a
-   reader drawing the alpha sees, and leaves a picture without transparency as the plain save makes it.
+1. color_image.edge_trimmed leaves out a frame's outermost lines and columns (EDGE_PX of the frame's own pixels)
+   and nothing else, and load_aligned's mask (the alpha of every picture made of a frame) no longer has them; with
+   color_image.rim_coloured, a frame whose edge is bright (the camera's own) or carries a fill value under it (the
+   calibrated path's 127) shows none of it once turned and drawn with its alpha.
+2. reel.save_webp keeps black under every fully (and nearly) transparent pixel of a lossy WebP (left to itself the
+   encoder copies the picture's nearest blocks there: the staircase of grey blocks along a turned frame's edge),
+   changes nothing a reader drawing the alpha sees, and leaves a picture without transparency as the plain save
+   makes it.
 3. frame_server.encode goes through it.
 Run: python web/test_edge_trim.py"""
 import io
@@ -34,7 +35,7 @@ n = color_image.EDGE_PX
 assert not t[:n].any() and not t[-n:].any() and not t[:, :n].any() and not t[:, -n:].any()
 assert t[n:-n, n:-n].all(), "only the outermost lines and columns go"
 assert full.all(), "the mask given is not changed"
-for lines, want in ((512, max(n, 2)), (256, max(n, 4))):
+for lines, want in ((512, 2 * n), (256, 4 * n)):
     t = color_image.edge_trimmed(full, Lbl(lines))
     assert not t[:, :want].any() and t[want:-want, want:-want].all(), (lines, want)
 assert color_image.edge_trimmed(full, Lbl("N/A"))[n:-n, n:-n].all()
@@ -42,7 +43,7 @@ lost = full.copy()
 lost[500:510] = False    # lost lines stay lost
 t = color_image.edge_trimmed(lost, Lbl(1024))
 assert not t[500:510].any() and t[n:500, n:-n].all()
-print(f"trim: {n} px of a full frame, one pixel of a summed frame (2 or 4 px), nothing else")
+print(f"trim: {n} of the frame's own pixels ({n}, {2 * n} or {4 * n} px of a 1024, 512 or 256 line frame), nothing else")
 
 # a frame whose first and last columns and first line are bright (the camera's own, in nearly every frame of the
 # archive), drawn as processed_frame draws it: alpha = mask.png where the frame has pixels, turned (linear, colour and
@@ -69,7 +70,7 @@ def turned_rim(img, valid, angle=23.0):
 trimmed = color_image.edge_trimmed(full, Lbl(1024))
 # the calibrated path leaves 127 (half scale) under a summed frame's left-out edge column (the Mini's edge profile)
 half = sky.copy()
-half[:, :4] = 127
+half[:, :8] = 127
 summed = color_image.edge_trimmed(full, Lbl(256))
 cases = {"before": turned_rim(sky, full), "mask only": turned_rim(sky, trimmed),
          "after": turned_rim(color_image.rim_coloured(sky, trimmed), trimmed),
@@ -81,7 +82,7 @@ assert cases["before"] > 20 and cases["mask only"] > 5 and cases["summed, 127 un
 assert cases["after"] <= 10 and cases["summed, after"] <= 10, "no edge brighter than the sky"
 painted = color_image.rim_coloured(half, summed)
 assert np.array_equal(painted[summed], half[summed]), "the picture itself as it was"
-assert np.abs(painted[:, :4].astype(int) - 10).max() <= 2, "the left-out edge painted from the picture"
+assert np.abs(painted[8:-8, :8].astype(int) - 10).max() <= 2, "the left-out edge painted from the picture"
 rgb = np.dstack([half] * 3)
 assert np.array_equal(color_image.rim_coloured(rgb, summed)[..., 1], painted), "three bands alike"
 assert color_image.rim_coloured(sky, full) is sky, "nothing left out: nothing to do"
