@@ -4743,7 +4743,7 @@ LAP_MIN = 400            # lit pixels both copies share, at LAP_SIDE, for a matc
 LAP_BELIEVE = 3.2        # the largest step (linear) from one copy to the next taken for an exposure (either way):
                          # SPOLEDYN001's short and long exposures of one place differ 2.6-2.8 times
 LAP_GAIN = (0.25, 4.0)   # the furthest a copy's gain goes, over every lap
-LAP_RULE = "g1"          # in the pictures' names: these gains, and the base drawn under the picture
+LAP_RULE = "g2"          # in the pictures' names: these gains (g2: one step per place and lap, _lap_lead), and the base drawn under the picture
 
 
 def _lap_prev(u):
@@ -4798,24 +4798,64 @@ def _lap_step(u, p, cache, a, b):
     return g
 
 
+def _lap_lead(u):
+    """For each frame of a mosaic movie, the frame whose lap step its copy takes (lap_gain): the first frame of its
+    filter at its slot in its lap (lap_of) takes the step of the first frame of the lap at that slot, whatever its
+    filter, so every filter of a place moves by one gain and the colour stays as the filters gave it; a later frame
+    of the same filter there (a second exposure at one place) takes its own step to the copy before it, as before.
+    The frame itself when it leads, or has no slot."""
+    if "_lap_lead" in u:
+        return u["_lap_lead"]
+    where, lap, first, out = slots(u), lap_of(u), {}, []
+    for j, fr in enumerate(u["frames"]):
+        if where[j] is None:
+            out.append(j)
+            continue
+        here = first.setdefault((where[j], lap[j]), {})
+        out.append(here.setdefault("lead", j) if fr[2] not in here else j)
+        here.setdefault(fr[2], j)
+    u["_lap_lead"] = out
+    return out
+
+
 def lap_gain(u, p, cache, j, report, made_only=False, skipped=None):
     """The gain tile j of a mosaic movie is drawn at: its place's copies, from the first, each brought to the one
-    before it (_lap_step), within LAP_GAIN; a copy of another scene starts again at 1. report(i): tile i's report,
-    or None when it is not made (made_only), which then goes in skipped and ends the chain there: the picture is
-    not the frame's own yet (its name says which gains it drew)."""
-    prev = _lap_prev(u)
-    chain, i = [j], prev[j]
-    while i is not None:
-        t = report(i)
-        if t is None:
-            if skipped is not None and i not in skipped:
-                skipped.append(i)
+    before it (_lap_step), within LAP_GAIN; a copy of another scene starts again at 1. The step is one per place and
+    lap (_lap_lead: measured on the lap's first tile there), not one per filter: chained per filter, each colour
+    drifted on its own over the laps (the 2013 hexagon movie's 26 laps went pink and blue). report(i): tile i's
+    report, or None when it is not made (made_only), which then goes in skipped and ends the chain there: the
+    picture is not the frame's own yet (its name says which gains it drew)."""
+    prev, lead = _lap_prev(u), _lap_lead(u)
+
+    def placed(i):
+        # the newest copy at or before i (back through the copies of its filter at its slot) that is placed; None
+        # when there is none, or one is not made yet (skipped)
+        while i is not None:
+            t = report(i)
+            if t is None:
+                if skipped is not None and i not in skipped:
+                    skipped.append(i)
+                return None
+            if "offset" in t:
+                return i
+            i = prev[i]
+        return None
+    links, cur = [], j
+    while True:
+        b = placed(lead[cur])
+        if b is None:
             break
-        if "offset" in t:
-            chain.append(i)
-        i = prev[i]
+        if lead[b] != b:
+            # (the lap's lead there is not placed: the copy before it, which takes its own lap's step)
+            cur = b
+            continue
+        a = placed(prev[b])
+        if a is None:
+            break
+        links.append((a, b))
+        cur = a
     g = 1.0
-    for a, b in zip(chain[::-1], chain[-2::-1]):
+    for a, b in links[::-1]:
         step = _lap_step(u, p, cache, report(a), report(b))
         g = 1.0 if step is None else float(np.clip(g * step, *LAP_GAIN))
     return round(g, 4)

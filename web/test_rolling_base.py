@@ -217,4 +217,40 @@ assert all(area[n] >= 0.97 * area[n - 1] for n in range(1, len(area))), area
 made = om.rolling_layout(u, 8, cache)
 assert sorted((t["n"], t["filter"]) for t in made[1] if t.get("base")) == [(2, "P0/GRN"), (4, "P0/GRN"), (6, "P0/GRN"), (8, "BL1")], \
     [(t["n"], t["filter"], t.get("base")) for t in made[1]]
+# ---------- 4. a colour mosaic movie keeps its colour over many laps ----------
+# Each lap's step was measured and chained per filter, so the small errors of each filter's steps (the ground
+# turning, the limb coming in, a lit mask that differs with the filter's level) added up on their own: the 2013
+# hexagon movie's 26 laps went pink and blue in patches. The step is now one per place and lap, measured on the
+# lap's first tile there, and every filter of the place takes it.
+LEVEL.update({"CL1/CL2": 160})
+LAPS = 12
+seq = [(f, q, 1.0) for _ in range(LAPS) for q in range(2) for f in ("RED", "GRN", "BL1")]
+u, cache = make_pass("HUE", seq, ["RED", "GRN", "BL1"], "RED")
+use(u)
+p = om.plan(u, cache)
+# each filter's measured step a little off, the same way every lap (as a filter's own bias would be)
+BIAS = {"RED": 1.04, "GRN": 1.0, "BL1": 0.96}
+step = om._lap_step
+om._lap_step = lambda u_, p_, c_, a, b: BIAS[b["filter"]]
+report = lambda i: om.tile(u, i, cache, SCALE)
+gains = [om.lap_gain(u, p, cache, j, report) for j in range(len(seq))]
+om._lap_step = step
+lead = om._lap_lead(u)
+for j in range(len(seq)):
+    # every filter of a place in a lap takes the gain of the lap's first tile there
+    assert gains[j] == gains[lead[j]], (j, gains[j], lead[j], gains[lead[j]])
+last = [gains[len(seq) - 6 + k] for k in range(3)]
+print("last lap's gains at place 0 (RED, GRN, BL1):", last)
+assert last[0] == last[1] == last[2], last
+# per filter they would have been 1.04^11 apart from 0.96^11: about 2.4 times
+assert abs(last[0] - 1.04 ** (LAPS - 1)) < 0.01, last
+
+# a second exposure of one filter at a place in one lap still takes its own step to the copy before it
+seq = [("CL1/CL2", 0, 1.0), ("CL1/CL2", 1, 1.0)] + [("CL1/CL2", 0, 0.37), ("CL1/CL2", 0, 1.0), ("CL1/CL2", 1, 1.0)]
+u, cache = make_pass("TWICE", seq, None, "CL1/CL2")
+use(u)
+p = om.plan(u, cache)
+g = [om.lap_gain(u, p, cache, j, lambda i: om.tile(u, i, cache, SCALE)) for j in range(len(seq))]
+print("two exposures at one place:", g)
+assert abs(g[2] * 0.37 - 1) < 0.03 and abs(g[3] - 1) < 0.03, g
 print("ok")
