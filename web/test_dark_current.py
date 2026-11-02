@@ -37,9 +37,12 @@ def write_cube(path, a, tile=128):
 rng = np.random.default_rng(3)
 L = 256
 # charge at the 8 grid times: growing with time, different per pixel, a few negative at 0 s
-params = np.cumsum(rng.uniform(0, 60, (8, L, L)), axis=0) - 20
-write_cube(f"{root}/darkcurrent/nac_dark_parameters.sum4.cub", params)
-write_cube(f"{root}/darkcurrent/wac_dark_parameters.sum4.cub", params)
+# (the full resolution maps; a SUM4 frame's are their 4x4 block sums, as cisscal makes them)
+full_params = (np.cumsum(rng.uniform(0, 60, (8, L, L)), axis=0) - 20).repeat(4, 1).repeat(4, 2) / 16
+full_params += rng.uniform(-0.5, 0.5, full_params.shape)
+params = full_params.reshape(8, L, 4, L, 4).sum(axis=(2, 4))
+write_cube(f"{root}/darkcurrent/nac_dark_parameters.full.cub", full_params)
+write_cube(f"{root}/darkcurrent/wac_dark_parameters.full.cub", full_params)
 open(f"{root}/darkcurrent/NAC_hotpix2006.9_140219.tab", "w").write("""PDS_VERSION_ID = PDS3
 END
 \\begindata
@@ -72,7 +75,8 @@ assert r is not None and r[-1] == "NAC_hotpix2006.9_140219.tab"                 
 assert dc.readout({**INFO, "IMAGE_TIME": "2013-300T00:00:00"})[-1] == "NAC_hotpix2014.3_171204.tab"
 assert dc.readout({**INFO, "READOUT_CYCLE_INDEX": "UNKNOWN"}) is None
 assert dc.readout({**INFO, "GAIN_MODE_ID": "95ELECTRONSPERDN"}) == r                    # as label_handler gives it
-assert dc.readout({**INFO, "INSTRUMENT_DATA_RATE": "-999.0"}) is None
+assert dc.readout({**INFO, "INSTRUMENT_DATA_RATE": "-999.0"}) == r                 # an odd rate is taken as 24 pps
+assert dc.readout({**INFO, "INSTRUMENT_DATA_RATE": "243.5"})[7] == 32
 t = np.array([dc.line_time(r, i + 1) for i in range(L)])
 assert abs(t[0] - (46.020 + 0.68 * 255 / 256)) < 1e-9 and 46.7 < t[-1] < 50 and (np.diff(t) > 0).all()  # exposure, erase, readout
 print("line times", round(t[0], 3), "...", round(t[-1], 3))
@@ -87,10 +91,12 @@ def neighborhood(tg, y, a):
 
 
 def slow(r):
-    """MakeManyLineDark and ComputeDarkDN as cisscal writes them, line by line, on the maps with the hot pixels in"""
-    p = params.astype(np.float64).copy()
-    for y, x, curve in dc._hot_pixels(f"{root}/darkcurrent/{r[-1]}", L):
+    """makedarkarray and the DN conversion as cisscal writes them, line by line, on the full resolution maps with
+    the hot pixels in, summed over 4x4 blocks"""
+    p = full_params.astype(np.float32).astype(np.float64)
+    for y, x, curve in dc._hot_pixels(f"{root}/darkcurrent/{r[-1]}"):
         p[:, y, x] = curve
+    p = p.reshape(8, L, 4, L, 4).sum(axis=(2, 4))
     t = [dc.line_time(r, i + 1) for i in range(L)]
     eye = np.eye(8)
     coef = {}                                   # the spline differences for a span, worked out once per span
@@ -133,7 +139,7 @@ open(f"{root}/darkcurrent/WAC_hotpix2015.7_171204.tab", "w").write(
 dc._hot_lists.cache_clear()
 late = {**INFO, "INSTRUMENT_ID": "ISSWA", "IMAGE_TIME": "2015-200T00:00:00"}
 assert dc.readout(late)[-1] == "WAC_hotpix2015.7_171204.tab"
-hot = dc._hot_pixels(f"{root}/darkcurrent/WAC_hotpix2015.7_171204.tab", L)
+hot = dc._hot_pixels(f"{root}/darkcurrent/WAC_hotpix2015.7_171204.tab")
 assert len(hot) == 2 and all(np.isfinite(c).all() for _, _, c in hot)
 dc._parameters.cache_clear(); dc._dark.cache_clear()
 d = dc.dark_dn(late)
