@@ -76,7 +76,16 @@ for c in range(12):
             stretch += 1
         logs[str(n)] = [round(float(crng.normal(0, 0.3) + (0.8 if crng.random() < 0.05 else 0)), 5), stretch,
                         colour and stretch % 3 != 0]
-    CHAINS.append({"logs": logs, "flash": om.EXPOSURE_FLASH, "gain": om.EXPOSURE_GAIN, "greyRun": om.EXPOSURE_GREY_RUN})
+    CHAINS.append({"logs": logs, "flash": om.EXPOSURE_FLASH, "gain": om.EXPOSURE_GAIN, "greyRun": om.EXPOSURE_GREY_RUN,
+                   "roll": om.EXPOSURE_ROLL, "free": om.EXPOSURE_FREE})
+# and scenes that brighten or darken steadily (the rolling scale), with noise and a flash or two
+for c in range(6):
+    M = int(crng.integers(20, 130))
+    slope = float(crng.choice([-1, 1]) * crng.uniform(0.5, 2.5))
+    logs = {str(n): [round(slope * n / M + float(crng.normal(0, 0.15)) + (0.8 if crng.random() < 0.04 else 0), 5), 0, False]
+            for n in range(M)}
+    CHAINS.append({"logs": logs, "flash": om.EXPOSURE_FLASH, "gain": om.EXPOSURE_GAIN, "greyRun": om.EXPOSURE_GREY_RUN,
+                   "roll": om.EXPOSURE_ROLL, "free": om.EXPOSURE_FREE})
 
 
 def server_gains(chain, smooth):
