@@ -67,6 +67,12 @@ assert abs(lit(grown) - lit(ref)) < 2.0, (lit(small), lit(grown), lit(ref))
 # no change worth a pixel: none
 locs[1] = [C - 480, C - 470, 10000.3, 30.0]
 assert color_image.spice_warps([None, None], 0) == [None, None]
+# a close-up wholly on Titan's disk (the centre 16,000 px off at 6,000 km): scaled about the frame's middle
+class L:
+    info = {"INSTRUMENT_ID": "ISSNA", "TARGET_NAME": "TITAN"}
+locs[:] = [[-16350.0, -4239.0, 6000.0, 30.0], [-16000.0, -4100.0, 5500.0, 30.0]]
+w = color_image.spice_warps([L(), L()], 0)
+assert w[1] is not None and w[1][:2] == (C, C) and abs(w[1][2] - 5500 / 6000) < 1e-6, w
 print("4. scale and turn: radius", round(lit(small), 1), "->", round(lit(grown), 1), "reference", round(lit(ref), 1))
 
 # ---------- 5. stars ----------
