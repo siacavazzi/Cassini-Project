@@ -2000,7 +2000,12 @@ def _around(u, n):
 
 
 REGISTER_GAP = 180   # s: a tile of another filter taken this soon before, at the same pointing, is what it is registered to
-REGISTER_MAX = 0.04  # of a frame: the largest correction to SPICE's placement that is believed
+# of a frame: the largest correction to SPICE's placement that is believed, and how far round SPICE's place a tile is
+# searched. Between the filters of one pointing the camera drifts 3 to 5 px more than SPICE shows (stars of WAC
+# W1752982634_1..722_16); the 41 px (0.04) this was let false matches on a black scene move 61 tiles of Day the Earth
+# Smiled (W1752982722_16) by 15 to 40 px, and the filters landed apart in magenta and green
+REGISTER_MAX = 12 / 1024
+REGISTER_INSET = 16  # px: each tile's edge (where its alpha ends) is left out of the match by this much
 
 
 def _register_to(u, n):
@@ -2038,7 +2043,7 @@ def _register(u, n, out, crop, cache, scale):
         ref = _made_pictures.get(path)
     if ref is None:
         ref = np.asarray(Image.open(path).convert("RGBA"))
-    shift, how = _shift_onto(q, ref, q["offset"], out, crop, out["offset"])
+    shift, how = _shift_onto(q, ref, q["offset"], out, crop, out["offset"], within=REGISTER_MAX * FRAME)
     if shift is None and how is not None and how.startswith("failed"):
         out["registered"] = {"to": q["id"], "why": how[7:]}
         return
@@ -2053,12 +2058,15 @@ def _register(u, n, out, crop, cache, scale):
     out["registered"] = {"to": q["id"], "how": how, "shift": [round(dx, 2), round(dy, 2)]}
 
 
-def _shift_onto(q, ref, at_q, t, crop, at_t):
+def _shift_onto(q, ref, at_q, t, crop, at_t, within=None):
     """How far tile t (its picture crop, its middle put at at_t) is from tile q (picture ref, middle at at_q) over
     the part of the view both cover, by the pipeline's own alignment of a set's channels
     (image_correction.align_with_masks: phase correlation, then on edges, then by the lit area's centroid): (dx, dy),
     reference pixels, that t's place moves back by to land on q, and how it was found; (None, how) when nothing was
-    found, (None, None) when the two hardly overlap there, (None, "failed <why>") when the alignment broke."""
+    found, (None, None) when the two hardly overlap there, (None, "failed <why>") when the alignment broke.
+    within = px: only a move this small from where the two are placed is searched (image_correction.guided_shift's
+    search round no shift), and each tile's edge (REGISTER_INSET) is left out of both, so neither tile's border is
+    matched as if it were the scene (_register); None: the whole alignment, as the stabilization chains use it."""
     corners = []
     for s, at, im in ((q, at_q, ref), (t, at_t, crop)):
         corners.append((at[0] + s["box"][0], at[1] + s["box"][1], im))
@@ -2078,11 +2086,16 @@ def _shift_onto(q, ref, at_q, t, crop, at_t):
     h = min(i.shape[0] for i in imgs)
     w = min(i.shape[1] for i in imgs)
     imgs, masks = [i[:h, :w] for i in imgs], [m[:h, :w] for m in masks]
+    if within is not None:
+        # only where both tiles have picture, well inside each: the same ground in both
+        k = np.ones((2 * REGISTER_INSET + 1, 2 * REGISTER_INSET + 1), np.uint8)
+        both = np.logical_and.reduce([cv2.erode(m.astype(np.uint8), k, borderValue=1) > 0 for m in masks])
+        imgs = [np.where(both[..., None], i, 0).astype(np.uint8) for i in imgs]
     # the rounding of each crop's corner to whole pixels, put back on the shift found
     rest = [(cx - x0) - round(cx - x0) for cx, _, _ in corners], [(cy - y0) - round(cy - y0) for _, cy, _ in corners]
     shifts, how = [], []
     try:
-        image_correction.align_with_masks(imgs, masks, 0, how, found=shifts)
+        image_correction.align_with_masks(imgs, masks, 0, how, found=shifts, within=within)
     except Exception as e:
         return None, f"failed {type(e).__name__}: {e}"[:200]
     if shifts[1] is None:

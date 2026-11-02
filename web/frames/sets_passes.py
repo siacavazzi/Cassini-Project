@@ -33,6 +33,10 @@ SET_GAP = 300                          # seconds between the frames of one filte
 REPEAT_GAP = 120                       # seconds: the same filter again this soon after is a repeat exposure (stacking)
 REPEAT_MAX = 5                         # ... at most this many frames of a filter in a row (stacking.load_stacked's)
 SET_PLACE = 256                        # full resolution px: a camera move further than this ends a set (obs_mosaic.SAME_PLACE)
+# full resolution px: the furthest the target's centre may sit off the frame for SPICE's place to say where the camera
+# points (0.3 rad: the place is the target's direction on the camera's flat image plane, which runs off to hundreds of
+# thousands of px for a target behind the camera, Jupiter flat fields at 440,000 px)
+PLACE_REACH = {"N": 50000, "W": 5000, "ISSNA": 50000, "ISSWA": 5000}
 TRUE_REDS = ("RED", "CB1")             # the red of a true colour set, in order of preference
 TRUE_BLUES = ("BL1", "BL2", "VIO")     # the blue of a true colour set, in order of preference
 
@@ -66,6 +70,9 @@ def runs(frames):
         if not f:
             close(cam)
             continue
+        reach = PLACE_REACH.get(cam)
+        if place is not None and (reach is None or place[0] is None or max(abs(place[0]), abs(place[1])) > reach):
+            place = None
         same = r and target == r["target"] and obs == r["obs"] and t - r["last"] <= SET_GAP and not moved(r["place"], place)
         repeat = same and f == r["filters"][-1] and t - r["last"] <= REPEAT_GAP and r["row"] < REPEAT_MAX
         if same and (repeat or f not in r["filters"]):

@@ -299,11 +299,30 @@ IR) it can fail to find a match. A whole target in every frame then still lines 
 its centroid (centroid_shift).
 report = optional list that gets one entry per frame: how it was aligned
 guess = optional list, one per frame: where SPICE says the frame's target sits relative to the reference's,
-(dx, dy) in the frames' pixels, or None (see guided_shift). Only a colour set's channels pass it
-(color_image.load_aligned); mosaic registration (obs_mosaic._shift_onto) does not, so its tiles stay where they were
+(dx, dy) in the frames' pixels, or None (see guided_shift). A colour set's channels pass it
+(color_image.load_aligned)
+within = px: each frame searched only this near its guess (or no shift), nothing else tried (_match): a mosaic's
+tiles, already at SPICE's places (obs_mosaic._register)
+Three frames (a colour set) are also matched with one another and solved together (_loop).
 returns (imgs, masks)
 """
-def align_with_masks(imgs, masks, ref=0, report=None, found=None, use=None, guess=None):
+def align_with_masks(imgs, masks, ref=0, report=None, found=None, use=None, guess=None, within=None):
+    # the frames as they came, for matching the channels with one another (the loop check below)
+    orig, omasks = list(imgs), [m.copy() for m in masks]
+    shifts, hows = [None] * len(imgs), [None] * len(imgs)
+    for i in range(0, len(imgs)):
+        if i == ref:
+            continue
+        if use is not None:
+            # shifts found on other versions of these frames (see color_image.load_aligned)
+            if use[i] is not None:
+                imgs[i] = shift_image(imgs[i], *use[i])
+                masks[i] = shift_image(masks[i].astype(np.float32), *use[i]) > 0.99
+            continue
+        g = guess[i] if guess is not None else None
+        shifts[i], hows[i] = _match(orig[ref], orig[i], g, omasks[ref], omasks[i], within)
+    if use is None and within is None and len(imgs) == 3:
+        _loop(orig, omasks, ref, shifts, hows, guess)
     for i in range(0, len(imgs)):
         if i == ref:
             if report is not None:
@@ -312,27 +331,8 @@ def align_with_masks(imgs, masks, ref=0, report=None, found=None, use=None, gues
                 found.append(None)
             continue
         if use is not None:
-            # shifts found on other versions of these frames (see color_image.load_aligned)
-            if use[i] is not None:
-                imgs[i] = shift_image(imgs[i], *use[i])
-                masks[i] = shift_image(masks[i].astype(np.float32), *use[i]) > 0.99
             continue
-        shift, how = find_shift(imgs[ref], imgs[i]), "phase"
-        g = guess[i] if guess is not None else None
-        if shift is None and g is not None:
-            # SPICE knows about where the frame is: the frames are matched again near there first
-            shift, how = guided_shift(imgs[ref], imgs[i], g)
-        if shift is None:
-            shift, how = find_shift(edges(imgs[ref]), edges(imgs[i])), "edges"
-            # an edge match at exactly no shift is the camera's own fixed pattern (dust rings, bad
-            # columns) matching itself, not the target: it says nothing
-            if shift is not None and abs(shift[0]) < 0.25 and abs(shift[1]) < 0.25:
-                shift = None
-            if shift is None:
-                shift, how = centroid_shift(imgs[ref], imgs[i]), "centroid"
-        if shift is None and g is not None:
-            # nothing matched anywhere: SPICE's offset, where it lines the frames up better than none
-            shift, how = spice_shift(imgs[ref], imgs[i], masks[ref], masks[i], g)
+        shift, how = shifts[i], hows[i]
         if shift is not None:
             imgs[i] = shift_image(imgs[i], *shift)
             masks[i] = shift_image(masks[i].astype(np.float32), *shift) > 0.99
@@ -341,6 +341,83 @@ def align_with_masks(imgs, masks, ref=0, report=None, found=None, use=None, gues
         if found is not None:
             found.append(shift)
     return imgs, masks
+
+
+"""
+How far im2 is from im1, (dx, dy) as shift_image moves im2 back by, and how it was found: phase correlation; then,
+with SPICE's offset g, again near it (guided_shift); then on stars (star_shift: a star field, a black sky); then on
+edges, then by the lit area's centroid; then SPICE's offset alone where it lines the edges up better than none.
+within = only near g (or no shift) within that many px (guided_shift's search alone): a mosaic tile already at
+SPICE's place, where a larger move is a false match (obs_mosaic._register). ((dx, dy) or None, how)
+"""
+def _match(im1, im2, g, mask1, mask2, within=None):
+    if within is not None:
+        found, how = guided_shift(im1, im2, g if g is not None else (0.0, 0.0), window=within)
+        return found, how
+    shift, how = find_shift(im1, im2), "phase"
+    if shift is None and g is not None:
+        # SPICE knows about where the frame is: the frames are matched again near there first
+        shift, how = guided_shift(im1, im2, g)
+    if shift is None:
+        shift, how = star_shift(im1, im2), "stars"
+    if shift is None:
+        shift, how = find_shift(edges(im1), edges(im2)), "edges"
+        # an edge match at exactly no shift is the camera's own fixed pattern (dust rings, bad
+        # columns) matching itself, not the target: it says nothing
+        if shift is not None and abs(shift[0]) < 0.25 and abs(shift[1]) < 0.25:
+            shift = None
+        if shift is None:
+            shift, how = centroid_shift(im1, im2), "centroid"
+    if shift is None and g is not None:
+        # nothing matched anywhere: SPICE's offset, where it lines the frames up better than none
+        shift, how = spice_shift(im1, im2, mask1, mask2, g)
+    return shift, how
+
+
+"""
+The loop check of a three-channel set: each channel was matched to the reference on its own, so a wrong match went
+unnoticed (W1643279524_1 took a -50.7 px phase match, N1807503852_1 a +12.9,-33.9 centroid). The two other channels
+are matched with each other too; that third match must equal the difference of the first two. Within LOOP_CLOSE px
+the three are solved together (least squares, the error shared); further, the pair of the three matches that lines
+the edges up best (_agreement) stands and the third follows from it; and a channel that matched nothing takes its
+place from the other one through their own match. shifts and hows (per channel, None for the reference) are changed.
+"""
+LOOP_CLOSE = 1.0   # px
+
+
+def _loop(orig, masks, ref, shifts, hows, guess):
+    a, b = [i for i in range(3) if i != ref]
+    sa, sb = shifts[a], shifts[b]
+    g = None
+    if guess is not None and guess[a] is not None and guess[b] is not None:
+        g = (guess[b][0] - guess[a][0], guess[b][1] - guess[a][1])
+    if sa is None and sb is None:
+        return
+    sab, how = _match(orig[a], orig[b], g, masks[a], masks[b])
+    if sab is None:
+        return
+    if sa is None or sb is None:
+        # the channel that matched nothing lands through the other one
+        if sa is None:
+            shifts[a], hows[a] = (sb[0] - sab[0], sb[1] - sab[1]), f"{how} via the other channel"
+        else:
+            shifts[b], hows[b] = (sa[0] + sab[0], sa[1] + sab[1]), f"{how} via the other channel"
+        return
+    rx, ry = sab[0] - (sb[0] - sa[0]), sab[1] - (sb[1] - sa[1])
+    if np.hypot(rx, ry) <= LOOP_CLOSE:
+        shifts[a] = ((2 * sa[0] + sb[0] - sab[0]) / 3, (2 * sa[1] + sb[1] - sab[1]) / 3)
+        shifts[b] = ((sa[0] + 2 * sb[0] + sab[0]) / 3, (sa[1] + 2 * sb[1] + sab[1]) / 3)
+        return
+    # the loop does not close: one of the three matches is wrong
+    candidates = [(sa, sb, None), (sa, (sa[0] + sab[0], sa[1] + sab[1]), b), ((sb[0] - sab[0], sb[1] - sab[1]), sb, a)]
+
+    def score(c):
+        return _agreement(orig[ref], orig[a], masks[ref], masks[a], c[0]) + \
+            _agreement(orig[ref], orig[b], masks[ref], masks[b], c[1])
+    best = max(candidates, key=score)
+    shifts[a], shifts[b] = best[0], best[1]
+    if best[2] is not None:
+        hows[best[2]] = f"{how} via the other channel (loop {np.hypot(rx, ry):.1f} px)"
 
 
 """
@@ -401,13 +478,13 @@ GUESS_MAX = 256       # px: a quarter of the frame
 AGREE_MARGIN = 0.02   # how much better SPICE's offset must line the edges up than no shift does
 
 
-def guided_shift(im1, im2, guess):
+def guided_shift(im1, im2, guess, window=GUESS_WINDOW):
     gx, gy = float(guess[0]), float(guess[1])
     if np.hypot(gx, gy) > GUESS_MAX:
         return None, "not aligned"
     moved = shift_image(im2, gx, gy)
     for how, a, b in (("phase", im1, moved), ("edges", edges(im1), edges(moved))):
-        found = find_shift(a, b, GUESS_WINDOW, GUESS_RESPONSE)
+        found = find_shift(a, b, window, GUESS_RESPONSE)
         if found is not None:
             dx, dy = gx + found[0], gy + found[1]
             # as align_with_masks: an edge match at exactly no shift is the camera's fixed pattern
@@ -415,7 +492,7 @@ def guided_shift(im1, im2, guess):
                 continue
             return (dx, dy), how + " near SPICE"
     found = centroid_shift(im1, im2)
-    if found is not None and np.hypot(found[0] - gx, found[1] - gy) <= GUESS_WINDOW:
+    if found is not None and np.hypot(found[0] - gx, found[1] - gy) <= window:
         return found, "centroid near SPICE"
     return None, "not aligned"
 
@@ -467,6 +544,16 @@ def find_shift(im1, im2, max_shift=100, min_response=0.3):
     if len(ys) == 0:
         print("Image alignment skipped: blank reference frame")
         return None
+    if len(ys) < DARK_SHARE * blurred.size:
+        # a black scene (stars, a backlit ring, a speck of a moon): its brightest pixels may be hot pixels and its
+        # texture the camera's fixed pattern, which sit still while the scene moves and pull the match to no shift.
+        # A 3 x 3 median takes the one-pixel ones out of both frames before they are matched
+        im1_gray = cv2.medianBlur(im1_gray, 3)
+        im2_gray = cv2.medianBlur(im2_gray, 3)
+        blurred = cv2.GaussianBlur(im1_gray, (0,0), 3)
+        ys, xs = np.nonzero(blurred > 0.2 * blurred.max())
+        if len(ys) == 0:
+            return None
     h, w = im1_gray.shape
     y0, y1 = max(ys.min() - max_shift, 0), min(ys.max() + max_shift, h)
     x0, x1 = max(xs.min() - max_shift, 0), min(xs.max() + max_shift, w)
@@ -480,6 +567,68 @@ def find_shift(im1, im2, max_shift=100, min_response=0.3):
         print(f"Image alignment failure: shift ({dx:.1f}, {dy:.1f}) response {response:.2f}")
         return None
     return dx, dy
+
+
+DARK_SHARE = 0.02   # of the frame: a reference lit over less than this is a black scene (find_shift)
+
+
+"""
+Offset of im2 from im1 matched on point sources (stars, specks of moons), for a star field or a black sky where
+phase correlation and the lit area's centroid fail (N1807503852_1: SKY, no SPICE target, a centroid 35 px off).
+The points of each frame (star_points) vote for every offset between a point of one and a point of the other
+within max_shift; the offset most pairs agree on (STAR_BIN px), by at least STAR_LEAST pairs and STAR_SHARE of
+the fewer points, wins, refined to the mean of those pairs. Hot pixels are taken out first (a 3 x 3 median), as
+they sit still and would vote for no shift. returns (dx, dy) or None
+"""
+STAR_MOST = 150     # brightest points kept per frame
+STAR_SIGMA = 6.0    # a point stands this many noise sigmas over what is round it
+STAR_LEAST = 5      # pairs agreeing on the offset, at least
+STAR_SHARE = 0.3    # ... and this share of the fewer points
+STAR_BIN = 2.0      # px
+
+
+def star_points(im):
+    gray = cv2.cvtColor(im, cv2.COLOR_BGR2GRAY) if im.ndim == 3 else im
+    gray = cv2.medianBlur(gray.astype(np.float32), 3)
+    detail = gray - cv2.medianBlur(np.clip(gray, 0, 255).astype(np.uint8), 15).astype(np.float32)
+    sigma = 1.4826 * np.median(np.abs(detail - np.median(detail))) + 1e-3
+    peak = (detail == cv2.dilate(detail, np.ones((5, 5), np.uint8))) & (detail > STAR_SIGMA * sigma)
+    peak[:4] = peak[-4:] = False
+    peak[:, :4] = peak[:, -4:] = False
+    ys, xs = np.nonzero(peak)
+    if len(ys) > STAR_MOST:
+        keep = np.argsort(detail[ys, xs])[-STAR_MOST:]
+        ys, xs = ys[keep], xs[keep]
+    pts = []
+    for y, x in zip(ys, xs):
+        w = np.clip(detail[y - 2:y + 3, x - 2:x + 3], 0, None)
+        if w.sum() <= 0:
+            continue
+        gy, gx = np.mgrid[-2:3, -2:3]
+        pts.append((x + (w * gx).sum() / w.sum(), y + (w * gy).sum() / w.sum()))
+    return np.array(pts, np.float32).reshape(-1, 2)
+
+
+def star_shift(im1, im2, max_shift=100):
+    p1, p2 = star_points(im1), star_points(im2)
+    if len(p1) < STAR_LEAST or len(p2) < STAR_LEAST:
+        return None
+    d = (p2[None, :, :] - p1[:, None, :]).reshape(-1, 2)
+    d = d[(np.abs(d[:, 0]) <= max_shift) & (np.abs(d[:, 1]) <= max_shift)]
+    if len(d) == 0:
+        return None
+    cells = np.floor(d / STAR_BIN).astype(np.int64)
+    keys, counts = np.unique(cells[:, 0] * 100003 + cells[:, 1], return_counts=True)
+    best = keys[np.argmax(counts)]
+    cx, cy = (best + 50001) // 100003, best - ((best + 50001) // 100003) * 100003
+    centre = (np.array([cx, cy]) + 0.5) * STAR_BIN
+    near = d[np.abs(d - centre).max(axis=1) <= STAR_BIN]
+    if len(near) < max(STAR_LEAST, STAR_SHARE * min(len(p1), len(p2))):
+        return None
+    dx, dy = np.median(near, axis=0)
+    near = d[np.hypot(d[:, 0] - dx, d[:, 1] - dy) <= 1.0]
+    dx, dy = near.mean(axis=0)
+    return float(dx), float(dy)
 
 
 def shift_image(im, dx, dy):

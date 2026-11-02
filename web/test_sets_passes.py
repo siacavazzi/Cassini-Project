@@ -90,6 +90,8 @@ drift = [("W", "S", "O", f, 30.0 * i, (60.0 * i, 0.0)) for i, f in enumerate(["R
 assert sets_passes.runs(drift) == [[0, 1, 2]]                     # a 120 px drift is the same pointing
 jump = [("W", "S", "O", f, 30.0 * i, (0.0 if i < 2 else 400.0, 0.0)) for i, f in enumerate(["RED", "GRN", "BL1"])]
 assert sets_passes.runs(jump) == [[0, 1]]                          # the BL1 is at another pointing: a two-filter set
+far = [("N", "S", "O", f, 30.0 * i, (440000.0 * i, 0.0)) for i, f in enumerate(["RED", "GRN", "BL1"])]
+assert sets_passes.runs(far) == [[0, 1, 2]]                        # a target behind the camera says nothing
 # channels are each filter's first frame; repeats only of one filter are no set; at most REPEAT_MAX in a row
 assert sets_passes.channels(["RED", "RED", "GRN", "BL1"], [650, 650, 570, 450]) == ("true", [0, 2, 3])
 assert sets_passes.channels(["CB2", "CB2", "MT2"], [750, 750, 727]) == ("two", [0, 2])
