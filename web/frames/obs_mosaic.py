@@ -65,8 +65,8 @@ import stacking  # noqa: E402
 # bumped whenever the way observation mosaics are made changes, so older ones are not served again; one per
 # display model (calibration.style), classic being the mosaics made before the balanced display model, raw the
 # balanced ones before natural color
-# obs-v55/v38/v25: the tone shoulder, shadow floor and saturated colour fill (#241) and the dark-sky row band fixes (#242); obs-v54/v37/v24: the colour-set registration fixes (#235) and natural filters and palette for colour sets (#237); obs-v53/v36/v23: the CISSCAL 4.1 dark current (#231) and the colour-set repeat and pointing rule (#232); obs-v52/v35/v22: the CISSCAL 2 Hz noise, pixel pair and sky band steps (#230); obs-v51/v34/v21: the batch-4 fixes (thin ringlets kept, gentler compressed frames, movie long exposures held and first whole frame, Titan wind stares in color, natural color); obs-v50/v33/v20: the batch-3 fixes (Titan color, saturated white, movie strobe, small bright bodies keep their surface, line holes, pass kinds and scan rule, ride-along pans and ring strips, scan creep); obs-v49/v32/v19: movie cosmic rays and the small artifact fixes (group I), two-filter passes in color (group F), edge registration of clouded passes (group H2); obs-v48/v31/v18: repeats merged only at the same pointing, Auto center, movie tiles, mosaic movies and the calibration fixes; obs-v47/v30/v17: calibration takes the flat field (dust rings, mottle) and the nonlinearity out
-VERSIONS = {"balanced": "obs-v55", "raw": "obs-v38", "eye": "obs-v55-eye", "false": "obs-v55-false", "classic": "obs-v25-classic"}
+# obs-v56/v39/v26: the colour-set alignment fixes, wild star and edge fits rejected and grey where a channel is not aligned (#236); obs-v55/v38/v25: the tone shoulder, shadow floor and saturated colour fill (#241) and the dark-sky row band fixes (#242); obs-v54/v37/v24: the colour-set registration fixes (#235) and natural filters and palette for colour sets (#237); obs-v53/v36/v23: the CISSCAL 4.1 dark current (#231) and the colour-set repeat and pointing rule (#232); obs-v52/v35/v22: the CISSCAL 2 Hz noise, pixel pair and sky band steps (#230); obs-v51/v34/v21: the batch-4 fixes (thin ringlets kept, gentler compressed frames, movie long exposures held and first whole frame, Titan wind stares in color, natural color); obs-v50/v33/v20: the batch-3 fixes (Titan color, saturated white, movie strobe, small bright bodies keep their surface, line holes, pass kinds and scan rule, ride-along pans and ring strips, scan creep); obs-v49/v32/v19: movie cosmic rays and the small artifact fixes (group I), two-filter passes in color (group F), edge registration of clouded passes (group H2); obs-v48/v31/v18: repeats merged only at the same pointing, Auto center, movie tiles, mosaic movies and the calibration fixes; obs-v47/v30/v17: calibration takes the flat field (dust rings, mottle) and the nonlinearity out
+VERSIONS = {"balanced": "obs-v56", "raw": "obs-v39", "eye": "obs-v56-eye", "false": "obs-v56-false", "classic": "obs-v26-classic"}
 CANVAS = 2048        # longest side of the canvas the view is drawn on
 OUT = 1024           # longest side of the picture sent
 FRAME = 1024         # full resolution frame
@@ -4358,7 +4358,10 @@ def movie_webp(frame_id, size, cache, trail=0, colour=True, wait=False, ahead=6,
     if not wait and ((_footprint_kept(u, rec) is None and
                       not all(os.path.exists(os.path.join(folder(u, cache), f)) for f in (PLAN_FILE, _footprint_file(u))))
                      or (steady and not _steady_ready(u, cache, rec)) or (exposure and not _exposure_ready(u, cache, rec, (bool(colour), bool(centre), 0)))):
-        warm_movie(u, n, ahead, cache, steady=bool(steady), exposure=(bool(colour), bool(centre), 0) if exposure else None)
+        # (footprint: a mosaic movie played as a movie, the Mosaic / Movie switch on Movie, needs the footprint its
+        # rolling picture does without, or this answers "working out the pass" for ever)
+        warm_movie(u, n, ahead, cache, steady=bool(steady), exposure=(bool(colour), bool(centre), 0) if exposure else None,
+                   footprint=True)
         return None, {"why": "working out the pass", "observation": u["key"][1], "pass": u["key"][3]}
     # (a feature track's frames, at their steady places, are named apart from the frames it played before, and so
     # are a stabilized movie's, by its smoothing; a filled pass's frame before detail() by _d0)
@@ -4408,15 +4411,18 @@ MOVIE_WORKERS = int(os.environ.get("CASSINI_MOVIE_WORKERS", "2"))
 _movie_background = threading.Semaphore(MOVIE_WORKERS)   # movie frames made ahead, beside the mosaics' one at a time
 
 
-def warm_movie(u, n, ahead, cache, steady=False, exposure=None):
+def warm_movie(u, n, ahead, cache, steady=False, exposure=None, footprint=False):
     """A movie is at frame n of the pass: work out its plan and make tiles n .. n+ahead in the background, from
     where the movie is rather than from the pass's start, MOVIE_WORKERS at once (a fast movie at high playback
-    speed needs several frames a second). steady: the pass's stabilization chain too (steady_chain); exposure: (colour, centre, steady) of its brightness chain (exposure_chain) to work out too."""
+    speed needs several frames a second). steady: the pass's stabilization chain too (steady_chain); exposure: (colour, centre, steady) of its brightness chain (exposure_chain) to work out too.
+    The pass's movie footprint (movie_footprint) is worked out too, except for a mosaic movie's rolling picture,
+    which does without it; footprint True: a mosaic movie's too (movie_webp: the pass played as a movie)."""
     mode = calibration.mode()
     key, last = (u["key"], mode), min(n + ahead, len(u["frames"]) - 1)
+    rolling = u.get("kind", "movie" if u.get("movie") else None) == "mosaic_movie" and not footprint
     # nothing to make (the plan, footprint and those tiles are in memory): no workers
     rec = _record(u, cache)
-    if rec is not None and (_footprint_kept(u, rec) is not None or u.get("kind", "movie" if u.get("movie") else None) == "mosaic_movie") \
+    if rec is not None and (_footprint_kept(u, rec) is not None or rolling) \
             and _all_made(u, cache, rec["plan"], n, last, look=True) and not (steady and not _steady_ready(u, cache, rec)) \
             and not (exposure and not _exposure_ready(u, cache, rec, exposure)):
         return
@@ -4432,12 +4438,14 @@ def warm_movie(u, n, ahead, cache, steady=False, exposure=None):
         try:
             with _movie_background, calibration.in_mode(mode):
                 p = plan(u, cache)
-                if u.get("kind", "movie" if u.get("movie") else None) != "mosaic_movie":
+                if not rolling:
                     movie_footprint(u, cache, p)
-                    if steady:
-                        steady_chain(u, cache, p)
-                    if exposure:
-                        exposure_chain(u, cache, p, *exposure)
+                # (asked for by name, the chains are worked out for any pass: a mosaic movie played as a steady
+                # movie waits on them as any movie does)
+                if steady:
+                    steady_chain(u, cache, p)
+                if exposure:
+                    exposure_chain(u, cache, p, *exposure)
                 while True:
                     with _lock:
                         first, last = _movie_ahead.get(key, (0, -1))

@@ -136,7 +136,9 @@ body.phone #excard:not(.full) { width: calc(100% - 16px) !important; left: 8px !
   };
 
   // dragging across the timeline's lanes marks a stretch (a click still moves the clock there; the row of dates along
-  // the top still pans); dragging a marked edge moves it; shift-drag marks one anywhere, the date row included
+  // the top still pans); dragging a marked edge moves it; shift-drag marks one anywhere, the date row included.
+  // Dragging the playhead itself scrubs the clock (index.html), as a playhead does everywhere, and a click on a marked
+  // edge that does not move it moves the clock there, as a click anywhere else in the lanes does
   const tl = $("tl"), MOVE = 5;
   let drag = null, press = null;
   const etAt = e => { const r = tl.getBoundingClientRect(); return xToEt(e.clientX - r.left, r.width); };
@@ -144,8 +146,9 @@ body.phone #excard:not(.full) { width: calc(100% - 16px) !important; left: 8px !
     if (e.target !== tl || !catalog || e.button > 0) return;
     const r = tl.getBoundingClientRect(), x = e.clientX - r.left, near = v => v != null && Math.abs(etToX(v, r.width) - x) < 7;
     if (e.shiftKey) drag = { from: etAt(e), edge: null };
-    else if (near(X.a)) drag = { edge: "a" };
-    else if (near(X.b)) drag = { edge: "b" };
+    else if (near(X.a)) drag = { edge: "a", x0: e.clientX };
+    else if (near(X.b)) drag = { edge: "b", x0: e.clientX };
+    else if (near(state.et)) return;   // the playhead: index.html scrubs as it is dragged
     else {
       // a press in the lanes scrubs as a click does (index.html); once it moves MOVE px it becomes a highlight from
       // where it was pressed, and the clock goes back to where it was
@@ -163,6 +166,7 @@ body.phone #excard:not(.full) { width: calc(100% - 16px) !important; left: 8px !
     }
     if (!drag) return;
     e.stopImmediatePropagation();
+    if (drag.edge && !drag.moved) { if (Math.abs(e.clientX - drag.x0) <= MOVE) return; drag.moved = true; }
     const t = etAt(e);
     if (drag.edge) mark(drag.edge === "a" ? t : null, drag.edge === "b" ? t : null);
     else if (!drag.held) { const g = guarded(Math.min(drag.from, t), Math.max(drag.from, t), "new"); if (g) { X.a = g[0]; X.b = g[1]; mark(); } else drag.held = true; }
@@ -171,8 +175,9 @@ body.phone #excard:not(.full) { width: calc(100% - 16px) !important; left: 8px !
     press = null;
     if (!drag) return;
     e.stopImmediatePropagation();
-    const made = !drag.edge;
+    const made = !drag.edge, click = drag.edge && !drag.moved;
     drag = null; tl.style.cursor = "";
+    if (click) { state.tlFollow = true; setTime(etAt(e)); return; }
     if (made && X.a != null && X.b - X.a > 1) marked();
     else if (made) clear();
   }, true);
