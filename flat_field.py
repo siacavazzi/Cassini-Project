@@ -17,7 +17,15 @@ detector loses or gains compared with the middle of the frame, taken out of a ca
      It holds the detector's pixel to pixel sensitivity, the vignetting at the corners, the column pattern of the
      anti-blooming pixel pairs and the dust rings that were on the detector before launch
 
-The maps are CISSCAL's own, from the USGS ISIS data mirror ("helper programs/fetch_cisscal.py" downloads them, about
+  4. WAC dust rings (beyond CISSCAL, which has no WAC dust map): the WAC's optics gathered dust in flight too, and
+     the ground flats only hold what was there before launch, so frames of bright extended scenes show in-flight
+     donuts that the flat field leaves (and a stretched sky makes plain: the 2009 south pole movie, 099SA). Measured
+     from the archive itself, like the hot pixel maps: "helper programs/build_wac_dust.py" takes WAC frames of
+     evenly lit scenes in each quarter year, each over its own blur (dust_ratio), their median per pixel, then
+     undoes the blur's share (dust_correction). One map per quarter in WAC_DUST, used like the NAC's epochs, from
+     the frame's own quarter or the nearest one within WAC_DUST_QUARTERS
+
+The maps of steps 1-3 are CISSCAL's own, from the USGS ISIS data mirror ("helper programs/fetch_cisscal.py" downloads them, about
 1 GB) into the folder CASSINI_CISSCAL names (default: cisscal_calibration in the main folder), laid out like the
 mirror: slope/slope_db_2.tab, slope/flat/flat<NNN>.<full|sum2|sum4>.cub, dustring/*.cub. Without them nothing is
 corrected (correction returns None) and a warning says so once.
@@ -27,12 +35,18 @@ import glob
 import os
 import re
 import threading
+import warnings
 
 import cv2
 import numpy as np
 
 
 ROOT = os.environ.get("CASSINI_CISSCAL", os.path.join(os.path.dirname(os.path.abspath(__file__)), "cisscal_calibration"))
+# the WAC dust ring maps ("helper programs/build_wac_dust.py"): keys like 2009Q3, the correction (what a FULL frame is
+# multiplied by) as float16 at 1024 x 1024
+WAC_DUST = os.environ.get("CASSINI_WAC_DUST") or os.path.join(ROOT, "wac_dust.npz")
+WAC_DUST_QUARTERS = 2   # a frame in a quarter with no map uses the nearest quarter's within this many
+WAC_DUST_USE = True     # the map builder measures with this off
 
 # no mottle before this image number (cisscal: 2003-286T10:28:04)
 MOTTLE_FROM = 1455892746
@@ -171,6 +185,145 @@ def dust_name(info):
     return f"nac_dustring_{held[-1]}" if held else "nac_dustring_venus"
 
 
+def quarter_of(info):
+    """The frame's quarter year (IMAGE_TIME "2009-206T19:40:48"): year * 4 + quarter - 1, or None."""
+    time = _value(info, "IMAGE_TIME", "")
+    if not (time[0:4].isdigit() and time[5:8].isdigit()):
+        return None
+    year, day = int(time[0:4]), int(time[5:8])
+    return year * 4 + min((day - 1) * 4 // 365, 3)
+
+
+def quarter_key(quarter):
+    return f"{quarter // 4}Q{quarter % 4 + 1}"
+
+
+@functools.lru_cache(maxsize=None)
+def _wac_dust_maps():
+    """The quarters WAC_DUST has maps for, its keys and the open file (its maps are read when used)."""
+    if not os.path.exists(WAC_DUST):
+        _warn(f"{os.path.basename(WAC_DUST)} missing, no WAC dust ring correction")
+        return {}, frozenset(), None
+    store = np.load(WAC_DUST)
+    quarters = {}
+    for key in store.files:
+        if re.fullmatch(r"\d{4}Q[1-4]", key):
+            quarters[int(key[:4]) * 4 + int(key[5]) - 1] = key
+    return quarters, frozenset(store.files), store
+
+
+def wac_dust_name(info):
+    """The WAC dust ring map for a WAC frame (wac_dust_<key>): its filter pair's own map of its year (the dust's
+    fringes scale with the wavelength), else its quarter's for every filter, else the nearest quarter's within
+    WAC_DUST_QUARTERS (the earlier one on a tie: dust stays on), else None."""
+    quarter = quarter_of(info)
+    quarters, keys, _ = _wac_dust_maps()
+    if quarter is None or not keys:
+        return None
+    own = f"{quarter // 4}_" + "_".join((_filters(info) + [""])[:2])
+    if own in keys:
+        return "wac_dust_" + own
+    for d in range(WAC_DUST_QUARTERS + 1):
+        for q in (quarter - d, quarter + d):
+            if q in quarters:
+                return "wac_dust_" + quarters[q]
+    return None
+
+
+@functools.lru_cache(maxsize=8)
+def _wac_dust(key, mode):
+    """A WAC dust ring correction at the summing mode's size (a summed frame's pixel sees its block's mean), or None."""
+    _, keys, store = _wac_dust_maps()
+    if store is None or key not in keys:
+        return None
+    full = np.asarray(store[key], np.float32)
+    k = {"full": 1, "sum2": 2, "sum4": 4}[mode]
+    if k > 1:
+        full = full.reshape(full.shape[0] // k, k, full.shape[1] // k, k).mean(axis=(1, 3))
+    return np.where(np.isfinite(full) & (full > 0), full, 1.0).astype(np.float32)
+
+
+"""
+Measuring the WAC dust rings (step 4) from one calibrated frame (I/F, flat field on, WAC_DUST_USE off): how much
+brighter or darker each pixel is than its neighborhood, the frame over its blur over DUST_SIGMA pixels, where the
+scene can say so: lit (at least DUST_LIT of its bright end, its blur too), not saturated (bad), away from the lit
+area's edge, and not on a feature of the scene (a limb or ring edge: more than DUST_CLIP off). NaN elsewhere. The
+median of many frames' ratios at a pixel is the dust (the scene moves between them, the dust stays put).
+"""
+DUST_SIGMA = 40.0     # px at full resolution: wider than the rings' dark annulus, so it holds the neighborhood
+DUST_LIT = 0.3        # a pixel counts when the frame is at least this share of its 99th percentile there
+DUST_CLIP = 0.15      # a ratio further than this from 1 is the scene, not dust
+DUST_ITERATIONS = 8
+DUST_SMOOTH = 1.5     # px: the map is smoothed this much (the rings are broad; a pixel's own noise is not dust)
+DUST_TEXTURE = 0.02   # a frame whose ratios spread more than this (median absolute deviation) is too busy to use
+DUST_LEAST = 8        # a pixel needs this many frames' say
+
+
+def _normalized_blur(x, weight, sigma):
+    num = cv2.GaussianBlur(np.where(weight > 0, x, 0).astype(np.float32), (0, 0), sigma)
+    den = cv2.GaussianBlur(weight.astype(np.float32), (0, 0), sigma)
+    return num / np.maximum(den, 1e-6), den
+
+
+def dust_ratio(iof, bad=None):
+    iof = np.asarray(iof, np.float32)
+    good = np.isfinite(iof)
+    if bad is not None:
+        good &= ~cv2.dilate(np.asarray(bad, np.uint8), np.ones((5, 5), np.uint8)).astype(bool)
+    if good.mean() < 0.5:
+        return None
+    top = float(np.percentile(iof[good], 99))
+    if not top > 0:
+        return None
+    lit = good & (iof >= DUST_LIT * top)
+    if lit.mean() < 0.3:
+        return None
+    smooth, cover = _normalized_blur(np.where(lit, iof, 0), lit.astype(np.float32), DUST_SIGMA)
+    r = iof / np.maximum(smooth, 1e-12)
+    keep = lit & (cover > 0.9) & (smooth >= DUST_LIT * top) & (np.abs(r - 1) < DUST_CLIP)
+    if keep.mean() < 0.2 or float(np.median(np.abs(r[keep] - 1))) > DUST_TEXTURE:
+        return None
+    return np.where(keep, r, np.nan).astype(np.float32)
+
+
+"""
+Many frames' ratios (dust_ratio, frames, lines, samples) combined per pixel: the mean of the middle half (the scene's
+leftovers spread both ways round the dust and its odd edges are cut), NaN where fewer than DUST_LEAST said anything.
+"""
+def dust_combine(ratios):
+    stack = np.asarray(ratios, np.float32)
+    count = np.isfinite(stack).sum(axis=0)
+    with warnings.catch_warnings(), np.errstate(invalid="ignore"):
+        warnings.simplefilter("ignore", RuntimeWarning)       # pixels no frame measured
+        lo, hi = np.nanpercentile(stack, [25, 75], axis=0)
+        middle = np.where((stack >= lo) & (stack <= hi), stack, np.nan)
+        out = np.nanmean(middle, axis=0)
+    out[count < DUST_LEAST] = np.nan
+    return out.astype(np.float32)
+
+
+"""
+The correction (what a frame is multiplied by) from the median ratio of many frames, ratio (NaN where too few
+frames said anything). The ratio is the dust over its own blur (a broad ring takes part of its blur down with
+it, so it reads shallower than it is); the dust is found again by putting the blur back, a few times over:
+dust = ratio * blur(dust). That also lifts the slow swells of what the scenes left, which are the flat field's
+business anyway, so the result keeps only what differs from its own blur over 3 x DUST_SIGMA. Unmeasured pixels are 1
+(no correction).
+"""
+def dust_correction(ratio):
+    ratio = np.asarray(ratio, np.float32)
+    known = np.isfinite(ratio)
+    q = np.where(known, ratio, 1.0).astype(np.float32)
+    q = _normalized_blur(q, known.astype(np.float32) + 1e-3, DUST_SMOOTH)[0]
+    dust = q.copy()
+    for _ in range(DUST_ITERATIONS):
+        blur, _ = _normalized_blur(dust, known.astype(np.float32) + 1e-3, DUST_SIGMA)
+        dust = q * blur
+    dust /= cv2.GaussianBlur(dust, (0, 0), 3 * DUST_SIGMA)
+    dust = np.clip(np.where(known, dust, 1.0), 1 - 2 * DUST_CLIP, 1 + 2 * DUST_CLIP)
+    return (1.0 / dust).astype(np.float32)
+
+
 def mottle_strength(info):
     """How strong the mottle is in the frame's filter pair (cisscal's strength factor)."""
     f1, f2 = (_filters(info) + [""])[:2]
@@ -196,7 +349,7 @@ def _map(name, mode):
 
 """
 What the frame's calibrated image is multiplied by to take the flat field out (dust rings, mottle and the flat, steps
-1-3 above), at the camera's resolution for the frame's summing mode, float32; or None when there is nothing to correct
+1-4 above), at the camera's resolution for the frame's summing mode, float32; or None when there is nothing to correct
 (a frame taken with the shutter disabled, as cisscal) or the maps aren't there. A step with its map missing is left
 out, the others still done.
 """
@@ -211,7 +364,7 @@ def correction(info):
         return None
     nac = _value(info, "INSTRUMENT_ID") == "ISSNA"
     flat = flat_name(info)
-    dust = dust_name(info) if nac else None
+    dust = dust_name(info) if nac else wac_dust_name(info) if WAC_DUST_USE else None
     aboff = nac and _value(info, "ANTIBLOOMING_STATE_FLAG", "ON").upper() == "OFF"
     mottle = nac and (_number(_value(info, "IMAGE_NUMBER", "0"), 0) or 0) >= MOTTLE_FROM
     strength = round(mottle_strength(info), 6) if mottle else 0.0
@@ -226,7 +379,11 @@ def _correction(flat, dust, aboff, strength, mode):
         nonlocal out
         out = m.copy() if out is None else out * m
 
-    if dust:
+    if dust and dust.startswith("wac_dust_"):
+        d = _wac_dust(dust[len("wac_dust_"):], mode)
+        if d is not None:
+            times(d)
+    elif dust:
         d = _map(dust, mode)
         if d is None:
             _warn(f"{dust}.{mode}.cub missing, no dust ring correction")

@@ -112,6 +112,50 @@ with cal.stepping("flat"):
     plain = cal.calibrate(codes[::4, ::4], quarter)
 assert np.allclose(cal.calibrate(codes[::4, ::4], quarter), plain)
 
+# the WAC dust rings (step 4, beyond CISSCAL): measured from many frames of moving, lit scenes, the map recovers a
+# ring the WAC's flat doesn't hold, and a frame through it comes out even again
+rng = np.random.default_rng(5)
+wac_dust = (1 - 0.03 * np.exp(-((np.hypot(yy - 500, xx - 600) - 50) / 6) ** 2)).astype(np.float32)
+ratios = []
+for i in range(40):
+    angle = rng.uniform(0, np.pi)
+    u = xx * np.cos(angle) + yy * np.sin(angle)
+    scene = 1 + 0.02 * np.sin(u / rng.uniform(15, 60) + rng.uniform(0, 6)) + 0.3 * u / 2000
+    limb = np.hypot(yy - rng.uniform(-500, 1500), xx - rng.uniform(-500, 1500)) < rng.uniform(600, 1200)
+    frame = np.where(limb, scene, 0.02) * wac_dust * (1 + rng.normal(0, 0.01, scene.shape))
+    r = ff.dust_ratio(frame.astype(np.float32))
+    if r is not None:
+        ratios.append(r)
+busy = (1 + 0.2 * np.sin(xx / 5.0)).astype(np.float32)                 # a scene too busy to say anything
+assert ff.dust_ratio(busy) is None and ff.dust_ratio(np.full((1024, 1024), 1e-4, np.float32) * (xx < 100)) is None
+assert len(ratios) >= 15, len(ratios)
+correction = ff.dust_correction(ff.dust_combine(ratios))
+annulus = np.abs(np.hypot(yy - 500, xx - 600) - 50) < 3
+around = np.abs(np.hypot(yy - 500, xx - 600) - 90) < 3
+before = wac_dust[annulus].mean() / wac_dust[around].mean() - 1
+after = (wac_dust * correction)[annulus].mean() / (wac_dust * correction)[around].mean() - 1
+print("WAC ring: before", round(before, 4), "after", round(after, 4))
+assert before < -0.025 and abs(after) < 0.008
+assert abs(np.median(correction) - 1) < 0.002                          # nothing but the ring changes
+
+np.savez(f"{root}/wac_dust.npz", **{"2009Q2": correction.astype(np.float16),
+                                    "2009_CB3_CL2": np.full((1024, 1024), 0.5, np.float16)})
+ff.WAC_DUST = f"{root}/wac_dust.npz"
+WAC = {**INFO, "INSTRUMENT_ID": "ISSWA", "FILTER_NAME": '("CL1","CL2")', "IMAGE_TIME": "2009-206T19:40:48.860"}
+assert ff.quarter_of(WAC) == 2009 * 4 + 2 and ff.quarter_key(2009 * 4 + 2) == "2009Q3"
+assert ff.wac_dust_name(WAC) == "wac_dust_2009Q2"                        # its own quarter has none: the nearest
+assert ff.wac_dust_name({**WAC, "FILTER_NAME": '("CB3","CL2")'}) == "wac_dust_2009_CB3_CL2"   # its filter's own
+assert ff.wac_dust_name({**WAC, "IMAGE_TIME": "2010-206T00:00:00"}) is None   # too far
+got = ff._wac_dust("2009Q2", "full")
+assert np.allclose(got, correction, atol=2e-3)
+assert ff._wac_dust("2009Q2", "sum2").shape == (512, 512)
+assert ff.dust_name(INFO) == "nac_dustring_1502443470"                  # the NAC's are CISSCAL's, as before
+assert np.allclose(ff.correction(WAC), correction, atol=2e-3)          # (no WAC flat in this folder: the map alone)
+ff.WAC_DUST_USE = False                                                # as the map builder measures
+assert ff.correction(WAC) is None
+ff.WAC_DUST_USE = True
+print("WAC dust ok")
+
 # without the maps nothing changes but the nonlinearity, and calibrate still works
 ff.ROOT = os.path.join(root, "missing")
 ff._slope_db.cache_clear()
