@@ -265,6 +265,17 @@ def load_aligned(paths, hdr=False, scale=None, repeat_window=120, around=None):
     ref = order[len(order)//2]
     # where SPICE says each channel's target sits relative to the reference's, for when the frames' own match fails
     guess = spice_offsets(lbls, ref) if align and len(lbls) > 1 else None
+    # the body grows or turns between the filters of a close flyby (the range or the camera's twist changes): each
+    # channel is first scaled and turned onto the reference's about its target's centre, so the translation found
+    # below lines up the whole limb, not only its middle
+    warps = spice_warps(lbls, ref) if align and len(lbls) > 1 else None
+    if warps and any(w is not None for w in warps):
+        masks = [m if w is None else warp_frame(m.astype(np.float32), w) > 0.99 for m, w in zip(masks, warps)]
+        if guide is not None:
+            guide = [g if w is None else warp_frame(g, w) for g, w in zip(guide, warps)]
+            linear = ([c if w is None else warp_frame(c, w) for c, w in zip(linear[0], warps)],) + tuple(linear[1:])
+        else:
+            imgs = [i if w is None else warp_frame(i, w) for i, w in zip(imgs, warps)]
 
     # masks move with the frames, so pixels alignment leaves uncovered become invalid too
     aligned = []
@@ -289,6 +300,9 @@ def load_aligned(paths, hdr=False, scale=None, repeat_window=120, around=None):
     if linear is not None and guide is None:
         imgs = cal.tone(linear[0], linear[1], linear[2])
     report = {"calibrated": calibrated, "stacked": stacked, "aligned": aligned}
+    if warps and any(w is not None for w in warps):
+        # each channel's scale and turn onto the reference (SPICE's range and twist), None where it needed none
+        report["warped"] = [None if w is None else [round(w[2], 4), round(w[3], 3)] for w in warps]
     if not fill:
         report["filled"] = False
     if lost:
@@ -316,6 +330,15 @@ body moved. None for a frame SPICE can't place; None for the whole set when the 
 pipeline, which loads no kernels for this) or the frames are of different targets.
 """
 def spice_offsets(lbls, ref):
+    locs = _spice_locs(lbls)
+    if locs is None or locs[ref] is None:
+        return None
+    return [None if loc is None else (locs[ref][0] - loc[0], locs[ref][1] - loc[1]) for loc in locs]
+
+
+def _spice_locs(lbls):
+    """label.target_loc of each frame ([x, y, range km, north angle], None where SPICE can't place it), or None when
+    the geometry cache is off or the frames are of different targets."""
     if not ba.GEOMETRY_CACHE or len({lbl.info.get("TARGET_NAME") for lbl in lbls}) != 1:
         return None
     locs = []
@@ -325,9 +348,50 @@ def spice_offsets(lbls, ref):
                 locs.append(lbl.target_loc())
             except Exception:
                 locs.append(None)
-    if locs[ref] is None:
+    return locs
+
+
+"""
+How each channel of a set is scaled and turned onto the reference frame (lbls[ref]) about its target's centre, from
+SPICE: (centre x, centre y, scale, degrees counter clockwise as cv2.getRotationMatrix2D takes them) per frame, or None
+where it needs none (under WARP_LEAST px anywhere in the frame) or SPICE can't place it; None for the whole set
+without the geometry cache. The range changes between filters on a close flyby (an Enceladus set, N1489051187_2,
+17% closer by its last filter: the limb 120 px off where the middle lines up) and the camera turns in a slew.
+"""
+WARP_LEAST = 0.5     # px at the frame's corner (HALF_DIAGONAL from its middle)
+WARP_MOST = 0.5      # a scale change past this share, or a turn past WARP_TURN degrees, is no use (not the same view)
+WARP_TURN = 30.0
+HALF_DIAGONAL = 724
+
+
+def spice_warps(lbls, ref):
+    locs = _spice_locs(lbls)
+    if locs is None or locs[ref] is None or len(locs[ref]) < 4 or not locs[ref][2]:
         return None
-    return [None if loc is None else (locs[ref][0] - loc[0], locs[ref][1] - loc[1]) for loc in locs]
+    out = []
+    for loc in locs:
+        if loc is None or len(loc) < 4 or not loc[2] or loc[3] is None or locs[ref][3] is None:
+            out.append(None)
+            continue
+        scale = float(loc[2]) / float(locs[ref][2])
+        turn = ((float(loc[3]) - float(locs[ref][3]) + 180) % 360) - 180
+        moves = HALF_DIAGONAL * (abs(scale - 1) + abs(np.radians(turn)))
+        if moves < WARP_LEAST or abs(scale - 1) > WARP_MOST or abs(turn) > WARP_TURN:
+            out.append(None)
+            continue
+        out.append((ba.CCD_CENTER - float(loc[0]), ba.CCD_CENTER - float(loc[1]), scale, turn))
+    return out
+
+
+"""
+A frame (or its mask as float32) scaled and turned about a point, warp = (x, y, scale, degrees) as spice_warps gives
+"""
+def warp_frame(im, warp):
+    x, y, scale, turn = warp
+    M = cv2.getRotationMatrix2D((x, y), turn, scale)
+    h, w = im.shape[:2]
+    return cv2.warpAffine(im, M, (w, h), flags=cv2.INTER_CUBIC if im.dtype != np.float32 or im.ndim == 3 else cv2.INTER_LINEAR,
+                          borderMode=cv2.BORDER_CONSTANT)
 
 
 """

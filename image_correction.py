@@ -555,8 +555,9 @@ def find_shift(im1, im2, max_shift=100, min_response=0.3):
         if len(ys) == 0:
             return None
     h, w = im1_gray.shape
-    y0, y1 = max(ys.min() - max_shift, 0), min(ys.max() + max_shift, h)
-    x0, x1 = max(xs.min() - max_shift, 0), min(xs.max() + max_shift, w)
+    reach = int(np.ceil(max_shift))
+    y0, y1 = max(ys.min() - reach, 0), min(ys.max() + reach, h)
+    x0, x1 = max(xs.min() - reach, 0), min(xs.max() + reach, w)
     a = im1_gray[y0:y1, x0:x1]
     b = im2_gray[y0:y1, x0:x1]
 
