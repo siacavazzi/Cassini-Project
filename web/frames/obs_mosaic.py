@@ -144,6 +144,9 @@ JOIN_ZOOM = ZOOM * ZOOM   # a map units split at ZOOM is joined again while its 
 TWIST = 0.04         # of a frame: a pass the camera turns under (reel.turns) by more than this at its frames' places is drawn
                      # on a footprint turned frame by frame, and judged on its frames' places turned so (_flat)
 DRIFT_LAPS = 0.5     # the least share of a frame the places of a time series' laps in a row overlap by (median) as they drift
+TOUCH_GAP = 0.2      # frames of a mosaic this share of a frame apart or less touch (_touching): a grid of tiles taken as Cassini
+                     # closes in, each tile smaller on the canvas than the step between them (016DI_TARGFLYBY001's ring of
+                     # eight round its middle, 5% of a frame apart)
 LONE_SHARE = 0.5     # a mosaic's lone frames (_lone: no frame at another of its places touches theirs) fewer than this share
                      # of its frames show as single pictures (u["off"]); a mosaic of more is no mosaic but pieces (_scatter)
 LAID = "_g9"         # the folder suffix, after STRIPPED's, of every pass of an observation where the pass layout rules of
@@ -249,7 +252,7 @@ def units(target, obs, cam):
     for u in out:
         _drop_strays(u)
     laps, shifted, relaid, retracked, rescanned, panned = [], False, False, False, False, False
-    for u in out:
+    for n, u in enumerate(out):
         u["key"] = (target, obs, cam, len(laps))
         _judge(u)
         retracked = retracked or u["retracked"]
@@ -273,7 +276,7 @@ def units(target, obs, cam):
             _judge(prev)
             rescanned = rescanned or prev["rescanned"]
             panned = panned or prev["panned"]
-        elif prev and _zoom_join(prev, u):
+        elif prev and _zoom_join(prev, u, _ahead(out, n, (target, obs, cam, len(laps) + 1))):
             relaid = True   # (the passes after it are renumbered)
             rescanned = rescanned or prev["rescanned"]
             panned = panned or prev["panned"]
@@ -436,7 +439,26 @@ def _overlap(a, b):
     return both / either if either > 0 else 0.0
 
 
-def _zoom_join(prev, u):
+def _zoom_box(prev, u):
+    """_zoom_join's tests on the rectangles: None when u cannot join prev at all (not both mosaics, more than GAP
+    apart, a frame beyond JOIN_ZOOM), else (boxed, held, ...): boxed when the rectangles touch and u's is not
+    LAP_INSIDE inside prev's, held when it is."""
+    if prev["kind"] != "mosaic" or u["kind"] != "mosaic" or not u["frames"] or not prev["z"]:
+        return None
+    if u["frames"][0][3] - prev["last"] > GAP:
+        return None
+    zs = [fr[7] for fr in u["frames"] if fr[7]]
+    if not zs or not (1 / JOIN_ZOOM < min(zs) / prev["z"] and max(zs) / prev["z"] < JOIN_ZOOM):
+        return None
+    p, q = _box(prev, prev["z"]), _box(u, prev["z"])
+    if not p or not q:
+        return None
+    w, h = min(p[2], q[2]) - max(p[0], q[0]), min(p[3], q[3]) - max(p[1], q[1])
+    boxed = not (w <= 0 or h <= 0 or w * h >= LAP_INSIDE * (q[2] - q[0]) * (q[3] - q[1]))
+    return boxed, w > 0 and h > 0 and not boxed
+
+
+def _zoom_join(prev, u, nxt=None):
     """Joins pass u into prev when the two are one map that units split where the distance changed by ZOOM (Titan's
     042TI_GLOBMAP001: its middle, then the ring round it as Cassini closed in, drawn as two mosaics with a hole in the
     second): both mosaics, u straight after prev (within GAP), every frame of u within JOIN_ZOOM of prev's distance,
@@ -447,21 +469,14 @@ def _zoom_join(prev, u):
     frames round Dione before it, lay inside that ring's rectangle, so it was taken for a closer look at ground the
     ring had taken and drawn as a pass of its own (the window showed half of Dione). A rule the rectangles judged
     otherwise marks both passes zoom_ground (LAID)."""
-    if prev["kind"] != "mosaic" or u["kind"] != "mosaic" or not u["frames"] or not prev["z"]:
+    box = _zoom_box(prev, u)
+    if box is None:
         return False
-    if u["frames"][0][3] - prev["last"] > GAP:
-        return False
-    zs = [fr[7] for fr in u["frames"] if fr[7]]
-    if not zs or not (1 / JOIN_ZOOM < min(zs) / prev["z"] and max(zs) / prev["z"] < JOIN_ZOOM):
-        return False
-    p, q = _box(prev, prev["z"]), _box(u, prev["z"])
-    if not p or not q:
-        return False
-    w, h = min(p[2], q[2]) - max(p[0], q[0]), min(p[3], q[3]) - max(p[1], q[1])
-    boxed = not (w <= 0 or h <= 0 or w * h >= LAP_INSIDE * (q[2] - q[0]) * (q[3] - q[1]))
+    boxed, held = box   # (held: u's rectangle inside prev's, the only case the ground judges again)
     a, b = _ground(prev, prev["z"]), _ground(u, prev["z"])
     near = {(i + di, j + dj) for i, j in a for di in (-1, 0, 1) for dj in (-1, 0, 1)}
-    grounded = bool(b & near) and len(a & b) < LAP_INSIDE * len(b)
+    # (the ground only adds joins: a pass the rectangles join stays joined, 016DI_TARGFLYBY001's closer look kept on)
+    grounded = boxed or held and bool(b & near) and len(a & b) < LAP_INSIDE * len(b)
     if not (boxed or grounded):
         return False
     joined = dict(prev, **{k: prev[k] + u[k] for k in ("frames", "all", "taken")})
@@ -469,6 +484,16 @@ def _zoom_join(prev, u):
     _judge(joined)
     if joined["kind"] != "mosaic":
         return False
+    # (a join only the ground allows is one map, not two scans the islands would cut apart again: 016DI_TARGFLYBY001's
+    # two flyby mosaics joined were cut into other pieces than the two it had, splitting its second mosaic)
+    if grounded and not boxed and len(_retargets(dict(joined))) > 1:
+        grounded = False
+    # (nor does the ground take u from the pass after it, that the rectangles join u to: 016DI_TARGFLYBY001's second
+    # flyby mosaic, 40 frames then 29 at another distance, lost its first 40 to the mosaic before it)
+    if grounded and not boxed and nxt is not None:
+        ahead = _zoom_box(u, nxt)
+        if ahead and ahead[0]:
+            grounded = False
     if boxed != grounded:
         prev["zoom_ground"] = u["zoom_ground"] = joined["zoom_ground"] = True
     if not grounded:
@@ -476,6 +501,15 @@ def _zoom_join(prev, u):
     prev.clear()
     prev.update(joined, joined=True)
     return True
+
+
+def _ahead(out, n, key):
+    """The unit after out[n], judged as the laps loop will judge it (a copy: the loop judges it again), or None."""
+    if n + 1 >= len(out):
+        return None
+    v = dict(out[n + 1], key=key)
+    _judge(v)
+    return v
 
 
 def _ground(u, z):
@@ -617,8 +651,8 @@ def _turns(u):
 
 def _touching(xy, ks):
     """(N x N) which frames at canvas places xy (reference pixels), each ks of a frame across (its distance over the
-    pass's), touch: their squares overlap."""
-    side = (ks[:, None] + ks[None]) / 2 * FRAME
+    pass's), touch: their squares overlap, or are no more than TOUCH_GAP of a frame apart."""
+    side = ((ks[:, None] + ks[None]) / 2 + TOUCH_GAP) * FRAME
     return (np.abs(xy[:, None] - xy[None]) < side[..., None]).all(2)
 
 
