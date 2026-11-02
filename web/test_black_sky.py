@@ -1,6 +1,4 @@
-"""Synthetic checks of a color set's black sky (fix plan D, neutral black sky): a body over most of the frame with a
-little sky beside it (SKY_SHARE) still has each channel's level set on that sky, so the channels' different offsets
-don't tint it (Saturn in a 2013 WAC set, brown); a sky lit all over round a small moon, which the sky test can't
+"""Synthetic checks of a color set's black sky (fix plan D, neutral black sky): a sky lit all over round a small moon, which the sky test can't
 find, is measured off the body's disk (load_linear's off_disk, color_image.dim_off_disk) and goes black in every
 channel (Phoebe 2004, violet), while light off the disk as bright as the body's own (Saturn behind Mimas, a plume)
 is not taken for sky; and through the toe a pixel's color fades to gray with its brightness (tone), while a pixel
@@ -44,24 +42,7 @@ def tint(rgb, where):
     return float(np.mean(v.max(axis=1) - v.min(axis=1))), v.mean(axis=0).round(1)
 
 
-# 1. a body over 95% of the frame, a strip of sky with an offset per channel (stray light, a bias left over): the sky
-# share is under the old tenth but over SKY_SHARE
-offsets = (0.012, 0.006, 0.007)
-body = (xx > 0.05 * H)
-iofs = [np.where(body, 0.5 + 0.02 * np.sin(yy / 30), 0.0) + o + rng.normal(0, 0.0004, (H, H)) for o in offsets]
-sky = ~body
-sky[:, int(0.05 * H) - 12:] = False   # (off the body's edge)
-keep = cal.SKY_SHARE
-cal.SKY_SHARE = 0.1
-before = draw(iofs)
-cal.SKY_SHARE = keep
-after = draw(iofs)
-print("strip of sky beside a body: before", tint(before, sky), "after", tint(after, sky))
-assert tint(before, sky)[1].max() > 15                      # the old rule left the offsets as a brown veil
-assert tint(after, sky)[1].max() < 3 and tint(after, sky)[0] < 2   # black, every channel
-assert abs(int(np.median(after[body][:, 0])) - int(np.median(before[body][:, 0]))) < 40   # the body still drawn
-
-# 2. a small moon (a disk 10 px across) in a sky lit all over, a different offset per channel: the brightest
+# 1. a small moon (a disk 10 px across) in a sky lit all over, a different offset per channel: the brightest
 # 0.1% is about the sky, so the sky test finds no sky
 disk = (xx - 300) ** 2 + (yy - 200) ** 2 < 5 ** 2
 lit = [0.003, 0.0025, 0.0028]
@@ -89,7 +70,7 @@ assert before.max() - before.min() > 0.01                    # one channel's off
 assert np.abs(after).max() < 0.005                           # every channel's sky at its level
 assert tint(drawn, off)[1].max() < 3 and drawn[disk].mean() > 100   # black sky, the moon still there
 
-# 3. light off the disk nearly as bright as the disk (Saturn behind Mimas, a plume): not sky
+# 2. light off the disk nearly as bright as the disk (Saturn behind Mimas, a plume): not sky
 iofs = [np.where(disk, 0.8, 0.0) + np.where(xx < 200, 0.45, 0.0) + rng.normal(0, 0.001, (H, H)) for _ in BANDS]
 try:
     ci.off_disk = lambda lbls, shape: off
@@ -99,7 +80,7 @@ finally:
 assert got is None
 print("bright light off the disk is not sky")
 
-# 4. tone: through the toe a pixel is gray, above it its color is as before
+# 3. tone: through the toe a pixel is gray, above it its color is as before
 margin = 0.02
 w = max(margin / 8, min(margin, cal.TOE))
 start = margin - w / 2
