@@ -4346,7 +4346,10 @@ def movie_webp(frame_id, size, cache, trail=0, colour=True, wait=False, ahead=6,
     if not wait and ((_footprint_kept(u, rec) is None and
                       not all(os.path.exists(os.path.join(folder(u, cache), f)) for f in (PLAN_FILE, _footprint_file(u))))
                      or (steady and not _steady_ready(u, cache, rec)) or (exposure and not _exposure_ready(u, cache, rec, (bool(colour), bool(centre), 0)))):
-        warm_movie(u, n, ahead, cache, steady=bool(steady), exposure=(bool(colour), bool(centre), 0) if exposure else None)
+        # (footprint: a mosaic movie played as a movie, the Mosaic / Movie switch on Movie, needs the footprint its
+        # rolling picture does without, or this answers "working out the pass" for ever)
+        warm_movie(u, n, ahead, cache, steady=bool(steady), exposure=(bool(colour), bool(centre), 0) if exposure else None,
+                   footprint=True)
         return None, {"why": "working out the pass", "observation": u["key"][1], "pass": u["key"][3]}
     # (a feature track's frames, at their steady places, are named apart from the frames it played before, and so
     # are a stabilized movie's, by its smoothing; a filled pass's frame before detail() by _d0)
@@ -4396,15 +4399,18 @@ MOVIE_WORKERS = int(os.environ.get("CASSINI_MOVIE_WORKERS", "2"))
 _movie_background = threading.Semaphore(MOVIE_WORKERS)   # movie frames made ahead, beside the mosaics' one at a time
 
 
-def warm_movie(u, n, ahead, cache, steady=False, exposure=None):
+def warm_movie(u, n, ahead, cache, steady=False, exposure=None, footprint=False):
     """A movie is at frame n of the pass: work out its plan and make tiles n .. n+ahead in the background, from
     where the movie is rather than from the pass's start, MOVIE_WORKERS at once (a fast movie at high playback
-    speed needs several frames a second). steady: the pass's stabilization chain too (steady_chain); exposure: (colour, centre, steady) of its brightness chain (exposure_chain) to work out too."""
+    speed needs several frames a second). steady: the pass's stabilization chain too (steady_chain); exposure: (colour, centre, steady) of its brightness chain (exposure_chain) to work out too.
+    The pass's movie footprint (movie_footprint) is worked out too, except for a mosaic movie's rolling picture,
+    which does without it; footprint True: a mosaic movie's too (movie_webp: the pass played as a movie)."""
     mode = calibration.mode()
     key, last = (u["key"], mode), min(n + ahead, len(u["frames"]) - 1)
+    rolling = u.get("kind", "movie" if u.get("movie") else None) == "mosaic_movie" and not footprint
     # nothing to make (the plan, footprint and those tiles are in memory): no workers
     rec = _record(u, cache)
-    if rec is not None and (_footprint_kept(u, rec) is not None or u.get("kind", "movie" if u.get("movie") else None) == "mosaic_movie") \
+    if rec is not None and (_footprint_kept(u, rec) is not None or rolling) \
             and _all_made(u, cache, rec["plan"], n, last, look=True) and not (steady and not _steady_ready(u, cache, rec)) \
             and not (exposure and not _exposure_ready(u, cache, rec, exposure)):
         return
@@ -4420,12 +4426,14 @@ def warm_movie(u, n, ahead, cache, steady=False, exposure=None):
         try:
             with _movie_background, calibration.in_mode(mode):
                 p = plan(u, cache)
-                if u.get("kind", "movie" if u.get("movie") else None) != "mosaic_movie":
+                if not rolling:
                     movie_footprint(u, cache, p)
-                    if steady:
-                        steady_chain(u, cache, p)
-                    if exposure:
-                        exposure_chain(u, cache, p, *exposure)
+                # (asked for by name, the chains are worked out for any pass: a mosaic movie played as a steady
+                # movie waits on them as any movie does)
+                if steady:
+                    steady_chain(u, cache, p)
+                if exposure:
+                    exposure_chain(u, cache, p, *exposure)
                 while True:
                     with _lock:
                         first, last = _movie_ahead.get(key, (0, -1))
