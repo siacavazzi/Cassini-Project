@@ -473,6 +473,7 @@ def calibrate(png, info, image=None, smooth=True):
     offset = None
     spots = None
     lines_bias = overclock_bias(info)
+    sky = None
     if step("twohz"):
         # CISSCAL's 2 Hz noise, one value per line, taken off with the bias: measured from the frame's own background
         # where it has enough (cisscal_noise.image_hum, the "twohzsky" step; CISSCAL's image mean method, here also on
@@ -483,8 +484,14 @@ def calibrate(png, info, image=None, smooth=True):
             image = _lookup(pixels, dn) if codes else np.asarray(dn, dtype=np.float64)
             if lines_bias is not None:
                 image = image - (lines_bias - bias)[:, None]
-            missing = cn.missing_pixels(pixels)
-            hum = cn.image_hum(np.where(missing, 0.0, image), missing, info, dc.dark_dn(info))
+            # the zeros of the stored codes: the picture calibrated is their display stretch, whose zero is the
+            # frame's darkest code, on a dark sky a good share of its pixels (taken for lost ones, they were left out
+            # of the sky the noise is measured on, most on the lines the noise pulls down)
+            raw = np.asarray(png)
+            missing = cn.missing_pixels(raw if raw.shape == pixels.shape else pixels)
+            measured = []
+            hum = cn.image_hum(np.where(missing, 0.0, image), missing, info, dc.dark_dn(info), sky_out=measured)
+            sky = measured[0] if measured else None
         if hum is None:
             got = overclock_avg(info)
             hum = cn.two_hz(info, *got) if got is not None else None
@@ -526,6 +533,10 @@ def calibrate(png, info, image=None, smooth=True):
         dc.repair_hot(per_second, info, spots)
     if smooth:
         per_second = deblock(per_second, pixels, info)
+        if sky is not None and step("skysmooth"):
+            # on the stored codes (the image a picture is calibrated from is their display stretch, a code several
+            # levels apart there)
+            per_second = smooth_sky(per_second, png, sky)
 
     gain_ratio = GAIN_RATIOS[camera][GAIN_STATES[gain]]
     slope, start = SENSITIVITY[camera]
@@ -574,6 +585,45 @@ def deblock(iof, pixels, info):
     near = np.abs(codes - cv2.GaussianBlur(codes, (0, 0), sigma)) / LOSSY_STEP
     weight = share * np.clip(1 - near, 0, 1)
     return iof + weight * (cv2.GaussianBlur(iof, (0, 0), sigma) - iof)
+
+
+SKY_SMOOTH = LOSSY_SMOOTH  # smooth_sky: the dark sky drawn towards its blur over this many pixels (sigma, at full resolution),
+SKY_STEP = LOSSY_STEP      # ... where the stored codes are within this many of that blur, as deblock does
+SKY_HOLE = 41              # ... with the holes in the dark sky up to about this many pixels across filled (stars)
+
+
+"""
+The dark sky's one-code steps smoothed, on a frame whose 2 Hz noise was measured from its sky (calibrate's
+"twohzsky"; the "skysmooth" step). A dark sky in the lean archive is a handful of codes (4 or 5 on the 2004 approach
+frames): the 2 Hz noise shows in it as how many of a line's pixels sit a code up or down, so once each line's level is
+taken off (right on average) the code most of a line's pixels share lands a fraction of a code higher or lower than
+the next line's, and a picture stretched to show the sky draws those as the bands again. As deblock: the frame drawn
+towards its blur over SKY_SMOOTH pixels where the stored codes are within SKY_STEP of theirs (stars, edges and real
+detail, more codes apart, stay as they were), here only on the dark sky the 2 Hz noise was measured on
+(cisscal_noise.dark_sky, its edge feathered over the same blur), and blurred over the steps alone. iof = the frame
+calibrated, png = its stored codes, sky = that dark sky, all the same size.
+"""
+def smooth_sky(iof, png, sky):
+    pixels = np.asarray(png)
+    if pixels.shape != iof.shape or np.shape(sky) != iof.shape:
+        return iof
+    sigma = SKY_SMOOTH * iof.shape[1] / 1024
+    codes = pixels.astype(np.float32)
+    # fully smoothed up to a code from the blur (the steps themselves), less so on to SKY_STEP; the blur taken again
+    # without what is further than that from the first one, so the sky round a star is measured against the sky's
+    # own codes, not lifted by the star (it would keep its steps in a ring round every star)
+    step = np.ones_like(codes)
+    for _ in range(2):
+        blur = cv2.GaussianBlur(codes * step, (0, 0), sigma) / np.maximum(cv2.GaussianBlur(step, (0, 0), sigma), 1e-6)
+        step = np.clip(1 - (np.abs(codes - blur) - 1) / (SKY_STEP - 1), 0, 1).astype(np.float32)
+    # the blur of the steps alone (a star, a cosmic ray or an edge left out of it, so none spreads a halo round itself)
+    blur = cv2.GaussianBlur(iof * step, (0, 0), sigma) / np.maximum(cv2.GaussianBlur(step, (0, 0), sigma), 1e-6)
+    # the sky with its small holes closed (a star, a cosmic ray and the margin the noise measurement leaves round
+    # them), so the sky round a star is smoothed as the rest is and the star itself is kept by its own codes (step)
+    area = cv2.morphologyEx(np.asarray(sky, dtype=np.uint8), cv2.MORPH_CLOSE,
+                            cv2.getStructuringElement(cv2.MORPH_ELLIPSE, (SKY_HOLE, SKY_HOLE)))
+    weight = step * cv2.GaussianBlur(area.astype(np.float32), (0, 0), sigma)
+    return iof + weight * (blur - iof)
 
 
 """
@@ -707,7 +757,8 @@ exposure bracket merged into one picture in mosaics and movies, stacking.load_hd
 exposures, a plain stack), "fill" (pixels lost in downlink filled from round them), "calibrate" (every frame put on
 I/F and one display scale; off shows each frame on the archive's own stretch), "twohz" (calibrate's 2 Hz noise, the
 horizontal banding, taken out line by line), "twohzsky" (the 2 Hz noise measured from the frame's own background,
-cisscal_noise.image_hum; off measures it from the overclocked pixels only, cisscal_noise.two_hz), "dark" (calibrate's dark current and
+cisscal_noise.image_hum; off measures it from the overclocked pixels only, cisscal_noise.two_hz), "skysmooth" (that dark
+sky's one-code steps smoothed, smooth_sky), "dark" (calibrate's dark current and
 the WAC's hot pixels taken out, dark_current.py), "pairs" (calibrate's anti-blooming bright/dark pixel pairs replaced,
 cisscal_noise.bright_dark), "flat" (calibrate's flat field: dust rings, mottle and the
 detector's flat taken out, flat_field.py), "hotpix" (calibrate's repair of the hot and dead pixels, which stay put
@@ -721,7 +772,7 @@ only how tiles are drawn together, or redraw or move tiles from the tiles made, 
 left out of variant (a mosaic with them off draws the same tiles) and the mosaics name them themselves
 (mosaic.drawing; obs_mosaic.SURFACE_TAG, PANEL_TAG, EDGE_TAG).
 """
-STEPS = ("stack", "hdr", "fill", "calibrate", "twohz", "twohzsky", "dark", "pairs", "flat", "hotpix", "align", "blend", "level", "surface", "panels")
+STEPS = ("stack", "hdr", "fill", "calibrate", "twohz", "twohzsky", "skysmooth", "dark", "pairs", "flat", "hotpix", "align", "blend", "level", "surface", "panels")
 _off = contextvars.ContextVar("off", default=frozenset())
 
 

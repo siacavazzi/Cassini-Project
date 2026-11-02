@@ -179,6 +179,45 @@ def main():
     band_on, band_off = rows(on).std() / np.median(on), rows(off).std() / np.median(off)
     results.append(check("calibrate takes the bands off an 8-bit low gain frame from its sky", band_on < band_off / 3,
                          f"line to line spread {band_off:.4f} -> {band_on:.4f} of the sky"))
+
+    # a sky the lean archive keeps as a handful of codes (the 2004 approach frames: most pixels on one code, the bands
+    # in how many sit a code up or down), calibrated as the picture routes do it, from the display stretch of the codes
+    # (whose zero is the sky's darkest code, not a lost pixel)
+    rng = np.random.default_rng(5)
+    sky = 14 + 1.2 * np.sin(2 * np.pi * lines / 37.0)[:, None] + rng.normal(0, 0.4, (1024, 1024))
+    stars = rng.integers(20, 1004, (2, 60))
+    sky[stars[0], stars[1]] += 150
+    few = np.clip(np.round(np.interp(sky + cal.LUT[6], cal.LUT, np.arange(256))), 1, 255).astype(np.uint8)
+    with mock.patch.object(cal.ds, "read_bytes", lambda p: open(p, "rb").read()), \
+            mock.patch.object(cal.ds, "lut8", lambda: True), \
+            mock.patch.object(cal, "sun_distance", lambda info: 9.5):
+        shown = cal.display_stretch(few, table)
+        with cal.stepping("dark,flat,hotpix,pairs"):
+            raw_on = cal.calibrate(few, table, smooth=False)
+            on = cal.calibrate(few, table, shown, smooth=False)
+            smoothed = cal.calibrate(few, table, shown)
+        with cal.stepping("dark,flat,hotpix,pairs,skysmooth"):
+            unsmoothed = cal.calibrate(few, table, shown)
+    scale = np.median(raw_on)
+    seen = []
+    hum_of = cn.image_hum
+    def spy(image, missing, *args, **kwargs):
+        seen.append(int(np.asarray(missing).sum()))
+        return hum_of(image, missing, *args, **kwargs)
+    with mock.patch.object(cn, "image_hum", spy), mock.patch.object(cal.ds, "lut8", lambda: True), \
+            mock.patch.object(cal, "sun_distance", lambda info: 9.5), cal.stepping("dark,flat,hotpix,pairs"):
+        again = cal.calibrate(few, table, shown, smooth=False)
+    results.append(check("the picture routes measure the bands on all of the sky (its darkest code, the display "
+                         "stretch's zero, is sky, not lost pixels)", seen == [0] and np.allclose(again, on),
+                         f"{int((shown == 0).sum())} pixels on the darkest code, {seen} taken for lost"))
+    bulk = lambda x: np.median(x[:, 12:-4], axis=1).std() / scale   # noqa: E731  (the code most of each line sits on)
+    star = (stars[0], stars[1])
+    results.append(check("the dark sky's one-code steps smoothed (skysmooth): each line's bulk level evens out, its "
+                         "mean and the stars stay", bulk(smoothed) < bulk(unsmoothed) / 3
+                         and abs(smoothed.mean() - unsmoothed.mean()) < 0.01 * scale
+                         and np.allclose(smoothed[star], unsmoothed[star], rtol=0.05),
+                         f"bulk line to line spread {bulk(unsmoothed):.4f} -> {bulk(smoothed):.4f} of the sky, "
+                         f"stars {float(np.median(smoothed[star] / unsmoothed[star])):.3f} of before"))
     print(f"{sum(results)} of {len(results)} passed")
     return 0 if all(results) else 1
 
