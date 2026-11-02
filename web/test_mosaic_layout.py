@@ -32,6 +32,10 @@ of those observations as the Mac Mini's index and geometry cache have them (web/
   one view (064RI_BEDG4FILT002, _one_view);
 - a long thin scan across the rings plays as a movie, its mosaic the window's other choice (033RI_AZDKMRHPH001,
   032RI_AZSCNLOPH001's second pass; _strip, Sam 2026-10-29);
+- a toss-up is turned frame by frame as a mosaic is (081RI_AZSCANDRK001, 283RI_HRRADSCNU001); a time series of one
+  view drifting over the canvas is a movie (175SA_NPOLVORT001, _drifting); a map split at ZOOM is joined on the ground
+  its frames cover (129DI_REGMAP001, _zoom_join); a mosaic's lone frames show as themselves and a mosaic mostly of
+  them is cut into pieces (006TI_HIGHRESNA001, 101SA_AURORA002, 281SA_HIRESWACS001; _scatter), in LAID's folder;
 - the passes these rules change get RELAID's folder (RETRACKED's for TRACK_SPAN, RESCANNED's for the scan rule,
   ISLANDS' for the islands, PANNED's for the ride-along pans, STRIPPED's for the ring strips), every other pass keeps its own.
 Run: python web/test_mosaic_layout.py; with --refresh (and the index and CASSINI_GEOMETRY_CACHE) it writes the frames
@@ -62,7 +66,10 @@ OBS = [("SATURN", "ISS_267SA_LIMBINT002_PRIME", "N"), ("SATURN", "ISS_191SA_FEAT
        ("TITAN", "ISS_153TI_FIRNADMAP001_CIRS", "W"), ("TITAN", "ISS_175TI_CLOUD001_PRIME", "N"),
        ("SATURN", "ISS_159SA_WIND5HR001_PRIME", "N"), ("SATURN", "IOSIC_057RI_TEMPL10LP001_SI", "W"),
        ("SATURN", "ISS_104RI_TDIFS20HP001_CIRS", "W"), ("SATURN", "ISS_036RI_SUBML27HP002_CIRS", "N"),
-       ("SATURN", "ISS_064RI_BEDG4FILT002_PRIME", "N"), ("SATURN", "IOSIC_079RI_TEMPN20LP001_SI", "W")]
+       ("SATURN", "ISS_064RI_BEDG4FILT002_PRIME", "N"), ("SATURN", "IOSIC_079RI_TEMPN20LP001_SI", "W"),
+       ("SATURN", "ISS_175SA_NPOLVORT001_PIE", "N"), ("TITAN", "ISS_006TI_HIGHRESNA001_PRIME", "N"),
+       ("SATURN", "ISS_101SA_AURORA002_UVIS", "N"), ("SATURN", "ISS_281SA_HIRESWACS001_PIE", "W"),
+       ("SATURN", "ISS_081RI_AZSCANDRK001_PRIME", "N"), ("SATURN", "ISS_283RI_HRRADSCNU001_PIE", "N")]
 # the v46 cache's plan (angle, the frame it was measured on) and tile outlines of three passes the camera turns under
 # (/mnt/project-files/mosaic-layout/qc-data/v46-json)
 V46 = "/mnt/project-files/mosaic-layout/qc-data/v46-json"
@@ -263,6 +270,29 @@ def main():
     assert all(om.folder(u, "/c").endswith(om.LAID) for u in arc + az)
     assert not any(u["strip"] for key in (OBS[7], OBS[23], OBS[29], OBS[33]) for u in passes(*key))
     assert not om.folder(passes(*OBS[23])[0], "/c").endswith(om.STRIPPED)
+
+    # pass layout (fix plan PR 13, 2026-11-02): the ring strips' toss-ups turned frame by frame as the camera turns under
+    # them (081RI 32 degrees, 283RI 4: one angle drew their mosaics off the canvas), still the movies they play as
+    for key in (OBS[38], OBS[39]):
+        us = [u for u in passes(*key) if u.get("strip")]
+        assert us and all(u["kind"] == "movie" and u["tossup"] and u["twist"] for u in us), (key, kinds(passes(*key)))
+        assert all(om.folder(u, "/c").endswith(om.LAID) for u in passes(*key))
+    # Saturn's north polar vortex, seven filters every 50 minutes for six hours, its place drifting 2,200 px as Cassini
+    # climbs: one view, a movie (drawn as a mosaic the vortex showed five times)
+    vort = passes(*OBS[34])
+    assert kinds(vort) == [("movie", 49)] and vort[0]["drifting"] and vort[0]["revisit"], kinds(vort)
+    assert om.folder(vort[0], "/c").endswith(om.LAID)
+    # Titan's five stares two to three frames apart: no mosaic but a pass each; the mosaic before them keeps its
+    # tiles that touch, its lone frames shown as single pictures
+    titan = passes(*OBS[35])
+    assert [k for k, _ in kinds(titan)[1:6]] == ["movie"] * 5 and all(u["scattered"] for u in titan[1:6]), kinds(titan)
+    assert titan[0]["kind"] == "mosaic" and titan[0]["off"], kinds(titan)
+    # the aurora pointings four frames apart round one long stare: pieces, the stare a movie of its own
+    aur = passes(*OBS[36])
+    assert ("movie", 10) in kinds(aur) and not any(u["kind"] == "mosaic" and len(u["frames"]) == 20 for u in aur), kinds(aur)
+    # the HIRESWACS strip keeps its mosaic; its two frames off the strip show as themselves
+    wacs = passes(*OBS[37])
+    assert kinds(wacs) == [("mosaic", 5), ("mosaic", 38)] and len(wacs[1]["off"]) == 2, kinds(wacs)
 
     print("mosaic layout ok:", {o: kinds(passes(t, o, c)) for t, o, c in OBS})
 
