@@ -144,7 +144,10 @@ def main():
                 spics[j] = np.asarray(Image.open(surfaced[j]).convert("RGBA"))
             return spics[j]
         om.PANEL_MAX = 0.06
-        surface = pairs(u, p, tiles, spice, spic) if surfaced else []
+        # (a redrawn tile's picture sits on its own box, grown by how far its ground moved: surface_box)
+        boxed = getattr(om, "surface_box", lambda path, t: t["box"])
+        surface = pairs(u, p, [dict(t, box=boxed(surfaced[t["n"]], t)) if t["n"] in surfaced else t for t in tiles],
+                        spice, spic) if surfaced else []
         om.PANEL_MAX = cap
         t1 = time.time()
         report = {}

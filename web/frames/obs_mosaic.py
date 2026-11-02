@@ -2423,8 +2423,15 @@ def _pointing_root(u, n, roots):
 
 SURFACE_STEP = 16    # reference px: the grid a tile's surface motion (reproject.sky_field) is worked out on
 # a pass's tiles redrawn as at its epoch (surface_pictures), kept beside its tiles; renamed whenever the rule changes
-SURFACE_DIR = "surface4"
-SURFACE_TAG = "-s4"  # in the name of a layout whose tiles are redrawn so (layout), so its pictures are its own
+SURFACE_DIR = "surface5"
+SURFACE_TAG = "-s5"  # in the name of a layout whose tiles are redrawn so (layout), so its pictures are its own
+# a redrawn tile's picture is drawn on its box grown by the furthest its surface moves (and cut to what is on it): the
+# ground the redrawing moves past the tile's own box stays in the picture. Drawn inside the box as taken (surface4),
+# that ground was cut off, and the strip it left on the other side lay empty: where a neighbor's ground had moved in
+# from beside, nothing filled it, and the moons' mapping mosaics had curved black slots inside their disks
+# (Enceladus ISS_004EN_REGEO002, Rhea ISS_162RH_REGMAP001, where SPICE's frames overlap). Its box is kept beside it
+SURFACE_BOX = ".json"
+SURFACE_REACH = 256  # reference px (a whole number of SURFACE_STEPs): the furthest round its box a tile's ground is kept
 # what is seen of these is cloud or haze that moves on its own, not a surface turning with the body (Titan's
 # mapping mosaic came out 25 px apart redrawn, Saturn's rings pass lost its one match): their tiles stay as taken
 SURFACE_CLOUDED = frozenset({"SATURN", "JUPITER", "TITAN", "URANUS", "NEPTUNE", "VENUS", "EARTH"})
@@ -2510,7 +2517,7 @@ def surface_pictures(u, cache, p, tiles):
         if "offset" not in t or t["n"] in taken:
             continue
         path = os.path.join(out_dir, f"{t['n']}.png")
-        if os.path.exists(path):
+        if os.path.exists(path) and os.path.exists(path + SURFACE_BOX):
             out[t["n"]] = path
         elif os.path.exists(os.path.join(there, f"{t['n']}.png")):
             todo.append(t)
@@ -2550,18 +2557,20 @@ def surface_pictures(u, cache, p, tiles):
                 image = _made_pictures.get(src)
             if image is None:
                 image = np.asarray(Image.open(src).convert("RGBA"))
-            h, w = image.shape[:2]
-            # (the grid's first point is the tile's pixel (0, 0), at the tile's corner on the sky)
-            gy, gx = np.mgrid[0:h + SURFACE_STEP:SURFACE_STEP, 0:w + SURFACE_STEP:SURFACE_STEP].astype(np.float64)
-            x0, y0 = t["offset"][0] + t["box"][0], t["offset"][1] + t["box"][1]
-            dx, dy, weight = rp.sky_field(epoch, view, gx + x0, gy + y0, km_px)
+            # (the field worked out SURFACE_REACH round the tile too, where its ground may move to: surface_redrawn)
+            dx, dy, weight = surface_field(rp, epoch, view, image.shape[:2], t, km_px)
             path = os.path.join(out_dir, f"{t['n']}.png")
-            stretch = rp.field_stretch(dx, dy, weight, SURFACE_STEP)
+            r = SURFACE_REACH // SURFACE_STEP
+            stretch = rp.field_stretch(dx[r:-r, r:-r], dy[r:-r, r:-r], weight[r:-r, r:-r], SURFACE_STEP)
             if stretch > SURFACE_STRETCH:
                 print(f"surface: tile {t['n']} kept as taken (stretch {stretch:.2f})", flush=True)
                 found.add(t["n"])
                 continue
-            Image.fromarray(rp.warp_sky(image, dx, dy, weight, SURFACE_STEP)).save(path + ".part.png", compress_level=1)
+            picture, box = surface_redrawn(rp, image, t, dx, dy, weight)
+            # (the box first, so a picture never sits there without it)
+            with open(path + SURFACE_BOX, "w") as fh:
+                json.dump(box, fh)
+            Image.fromarray(picture).save(path + ".part.png", compress_level=1)
             os.replace(path + ".part.png", path)
             out[t["n"]] = path
         if not found <= taken:
@@ -2575,6 +2584,58 @@ def surface_pictures(u, cache, p, tiles):
             except OSError as e:
                 print(f"cannot keep {kept} in the cache ({e})", flush=True)
     return out
+
+
+def surface_field(rp, epoch, view, shape, t, km_px):
+    """reproject.sky_field for tile t (its picture shape, h x w) on SURFACE_STEP's grid over its box grown by
+    SURFACE_REACH each way: the grid's point (SURFACE_REACH // SURFACE_STEP, the same) is the tile's pixel (0, 0), at
+    the tile's corner on the sky, so the grid's inner part is the field over the tile's own box."""
+    h, w = shape
+    m = SURFACE_REACH
+    gy, gx = np.mgrid[-m:h + m + SURFACE_STEP:SURFACE_STEP, -m:w + m + SURFACE_STEP:SURFACE_STEP].astype(np.float64)
+    x0, y0 = t["offset"][0] + t["box"][0], t["offset"][1] + t["box"][1]
+    return rp.sky_field(epoch, view, gx + x0, gy + y0, km_px)
+
+
+def surface_redrawn(rp, image, t, dx, dy, weight):
+    """Tile t's picture (image, RGBA, on its box t["box"] about t["offset"]) redrawn as at the epoch: (picture, box),
+    the picture on the box grown by the furthest its surface moves (up to SURFACE_REACH) and cut to its drawn
+    pixels, and that box (reference px about the tile's offset, as t["box"]). dx, dy, weight: surface_field's."""
+    h, w = image.shape[:2]
+    r = SURFACE_REACH // SURFACE_STEP
+    inner = weight[r:-r, r:-r] > 0
+    reach = float(max(np.abs(dx[r:-r, r:-r][inner]).max(), np.abs(dy[r:-r, r:-r][inner]).max())) if inner.any() else 0.0
+    # the grown box: a whole number of grid steps out, up to SURFACE_REACH
+    steps = min(r, math.ceil(reach / SURFACE_STEP))
+    pad = steps * SURFACE_STEP
+    cut = slice(r - steps, dx.shape[0] - (r - steps)), slice(r - steps, dx.shape[1] - (r - steps))
+    picture = rp.warp_sky(np.pad(image, ((pad, pad), (pad, pad), (0, 0))), dx[cut], dy[cut], weight[cut], SURFACE_STEP)
+    found = Image.fromarray(picture).getbbox(alpha_only=True)
+    if found is None:
+        return np.ascontiguousarray(image), list(t["box"])
+    c0, r0, c1, r1 = found
+    return (np.ascontiguousarray(picture[r0:r1, c0:c1]),
+            [t["box"][0] - pad + c0, t["box"][1] - pad + r0, c1 - c0, r1 - r0])
+
+
+def surface_box(path, t):
+    """The box (SURFACE_BOX) of the redrawn picture at path, of tile t; t's own box when none is kept."""
+    with _lock:
+        box = _surface_boxes.get(path)
+    if box is None:
+        try:
+            with open(path + SURFACE_BOX) as fh:
+                box = json.load(fh)
+        except (OSError, ValueError):
+            return t["box"]
+        with _lock:
+            if len(_surface_boxes) > 200000:
+                _surface_boxes.clear()
+            _surface_boxes[path] = box
+    return box
+
+
+_surface_boxes = {}
 
 
 def panel_places(u, cache, p, tiles, pic=None, report=None):
@@ -3100,7 +3161,8 @@ def layout(u, n, cache):
     # ones before it where they overlap (panel registration: what is left is SPICE's pointing, a few pixels)
     surfaced = surface_pictures(u, cache, p, tiles)
     if surfaced:
-        tiles = [dict(t, pic=surfaced[t["n"]]) if t["n"] in surfaced else t for t in tiles]
+        tiles = [dict(t, pic=surfaced[t["n"]], box=surface_box(surfaced[t["n"]], t)) if t["n"] in surfaced else t
+                 for t in tiles]
     moved = panel_places(u, cache, p, tiles)
     if moved:
         tiles = [dict(t, offset=[t["offset"][0] + moved[t["n"]][0], t["offset"][1] + moved[t["n"]][1]], spice_place=t["offset"])
