@@ -406,7 +406,7 @@ behind a moon (Mimas 126MI, N1644787450_1: the limb sits in the green frame wher
 Saturn, a magenta square). Fix plan PR 5: such parts are drawn grey from the reference frame (grey_from), not in
 colours that sit apart. A general rule on the aligned channels, nothing per moment:
 
-1. Each channel is set against the reference at MOVED_SIZE px, both on their own brightness (MOVED_TOP percentile)
+1. Each channel is set against the reference at MOVED_SIZE px, both on their own brightness (MOVED_TOP percentile, or half a small body's peak)
    and the channel scaled by the set's typical ratio of the two over what both see lit (so a colour of the whole
    picture is no difference).
 2. A pixel differs when one of the two is lit (over MOVED_LIT) and the other at least MOVED_RATIO times fainter:
@@ -423,7 +423,9 @@ aligned channels, linear (calibration.load_linear) or drawn (8-bit, grey or BGR)
 channel; bands = each channel's filters (calibration.band_of), None when not known.
 """
 MOVED_SIZE = 512       # px on the longer side, where the channels are compared
-MOVED_TOP = 99.5       # a channel's percentile taken as its full brightness
+MOVED_TOP = 99.5       # a channel's percentile taken as its full brightness,
+MOVED_PEAK = 0.5       # or at least this share of its MOVED_PEAK_AT percentile (a small body's)
+MOVED_PEAK_AT = 99.95
 MOVED_LIT = 0.08       # of full brightness: lit
 MOVED_RATIO = 6.0      # the other frame at least this much fainter: something there in one frame only
 MOVED_RATIO_LOW = 1.5  # what is widened over: still this much fainter, next to a patch kept
@@ -451,7 +453,8 @@ def moved_region(channels, ref, valid=None, bands=None):
         if c.ndim == 3:
             c = c.mean(axis=2)
         c = cv2.resize(c, small, interpolation=cv2.INTER_AREA) if f < 1 else c
-        top = float(np.percentile(c, MOVED_TOP))
+        # a small body (a crescent over a sky that fills the frame) is the frame's full brightness, not its sky
+        top = max(float(np.percentile(c, MOVED_TOP)), MOVED_PEAK * float(np.percentile(c, MOVED_PEAK_AT)))
         return np.clip(c, 0, None) / top if top > 0 else None
 
     ok = np.ones(small[::-1], bool)

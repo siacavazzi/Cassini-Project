@@ -79,7 +79,12 @@ field = lambda dx: noisy(sum(disk(x + dx, y, 1.2, 0.7) for x, y in stars) + 0.9 
 ray = field(0)
 ray[300:302, 100:400] += 1.0                                   # a cosmic ray in one frame
 assert ci.moved_region([ray, field(0), field(3)], 1, None) is None
-print("methane band, red body, tint, stars, cosmic ray: colour kept")
+# a small crescent over a sky glow tinted in one filter (N1358114660_1's set, Mini): the glow is no body
+crescent = disk(512, 380, 40) * (1 - disk(512, 350, 45))
+glow = np.clip(1 - np.hypot(xx - 512, yy - 512) / 700, 0, 1) * 0.03
+chans = [noisy(crescent + glow), noisy(crescent + glow * 0.1), noisy(crescent + glow * 0.08)]
+assert ci.moved_region(chans, 1, None) is None
+print("methane band, red body, tint, stars, cosmic ray, a crescent's tinted glow: colour kept")
 
 # ---------- moved over most of the picture: the whole set grey ----------
 band = lambda dy: noisy(((np.abs((yy - 512 - dy) - 0.3 * (xx - 512)) % 160) < 50).astype(np.float32) * 0.8)  # noqa
