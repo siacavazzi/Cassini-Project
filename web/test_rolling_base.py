@@ -217,4 +217,56 @@ assert all(area[n] >= 0.97 * area[n - 1] for n in range(1, len(area))), area
 made = om.rolling_layout(u, 8, cache)
 assert sorted((t["n"], t["filter"]) for t in made[1] if t.get("base")) == [(2, "P0/GRN"), (4, "P0/GRN"), (6, "P0/GRN"), (8, "BL1")], \
     [(t["n"], t["filter"], t.get("base")) for t in made[1]]
+# a lap's first colour copy at a place waits for the other two (set_laps): the place's three filters, and which place
+# lies over which in each filter's mosaic, are always one lap's (the 2013 hexagon movie: whole panels green or magenta)
+seq = [(f, q, 1.0) for _ in range(2) for q in range(2) for f in ("RED", "GRN", "BL1")]
+u, cache = make_pass("SETS", seq, ["RED", "GRN", "BL1"], "RED")
+use(u)
+drawn = lambda n: sorted(t["n"] for t in om.rolling_layout(u, n, cache)[1] if t["filter"] in ("RED", "GRN", "BL1"))
+assert drawn(6) == [0, 1, 2, 3, 4, 5], drawn(6)          # lap 2's RED at place 0: lap 1's set stays
+assert drawn(7) == [0, 1, 2, 3, 4, 5], drawn(7)
+assert drawn(8) == [3, 4, 5, 6, 7, 8], drawn(8)          # its BL1 completes the set: all three go up together
+assert drawn(11) == [6, 7, 8, 9, 10, 11], drawn(11)
+print("a place's colour changes a whole set at a time; ok")
+
+# ---------- 4. a colour mosaic movie keeps its colour over many laps ----------
+# Each lap's step was measured and chained per filter, so one filter's step at a place could differ from the others'
+# (the 2012 north pole map movie: a place's RED copy stepped down 12% in its last lap, GRN and BL1 did not, and the
+# place turned blue-green). The step is now one per place and lap, measured on the lap's first tile there, and every
+# filter of the place takes it.
+LEVEL.update({"CL1/CL2": 160})
+LAPS = 6
+seq = [(f, q, 1.0) for _ in range(LAPS) for q in range(2) for f in ("RED", "GRN", "BL1")]
+u, cache = make_pass("HUE", seq, ["RED", "GRN", "BL1"], "RED")
+use(u)
+p = om.plan(u, cache)
+# each filter's measured step a little off, the same way every lap (as a filter's own bias would be)
+BIAS = {"RED": 1.2, "GRN": 1.0, "BL1": 0.8}
+step = om._lap_step
+om._lap_step = lambda u_, p_, c_, a, b: BIAS[b["filter"]]
+report = lambda i: om.tile(u, i, cache, SCALE)
+gains = [om.lap_gain(u, p, cache, j, report) for j in range(len(seq))]
+om._lap_step = step
+lead = om._lap_lead(u)
+for j in range(len(seq)):
+    # every filter of a place in a lap takes the gain of the lap's first tile there
+    assert gains[j] == gains[lead[j]], (j, gains[j], lead[j], gains[lead[j]])
+last = [gains[len(seq) - 6 + k] for k in range(3)]
+print("last lap's gains at place 0 (RED, GRN, BL1):", last)
+assert last[0] == last[1] == last[2], last
+# per filter they would have been 1.2^5 apart from 0.8^5: about 7.6 times
+assert abs(last[0] - 1.2 ** (LAPS - 1)) < 0.01, last
+# a step under LAP_FREE (the scene brightening slowly, as the hexagon's places did 2-5% a lap) is kept
+om._lap_step = lambda u_, p_, c_, a, b: 0.95
+assert all(om.lap_gain(u, p, cache, j, report) == 1.0 for j in range(len(seq))), "slow change taken out"
+om._lap_step = step
+
+# a second exposure of one filter at a place in one lap still takes its own step to the copy before it
+seq = [("CL1/CL2", 0, 1.0), ("CL1/CL2", 1, 1.0)] + [("CL1/CL2", 0, 0.37), ("CL1/CL2", 0, 1.0), ("CL1/CL2", 1, 1.0)]
+u, cache = make_pass("TWICE", seq, None, "CL1/CL2")
+use(u)
+p = om.plan(u, cache)
+g = [om.lap_gain(u, p, cache, j, lambda i: om.tile(u, i, cache, SCALE)) for j in range(len(seq))]
+print("two exposures at one place:", g)
+assert abs(g[2] * 0.37 - 1) < 0.03 and abs(g[3] - 1) < 0.03, g
 print("ok")

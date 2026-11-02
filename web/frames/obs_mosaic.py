@@ -4747,7 +4747,10 @@ LAP_MIN = 400            # lit pixels both copies share, at LAP_SIDE, for a matc
 LAP_BELIEVE = 3.2        # the largest step (linear) from one copy to the next taken for an exposure (either way):
                          # SPOLEDYN001's short and long exposures of one place differ 2.6-2.8 times
 LAP_GAIN = (0.25, 4.0)   # the furthest a copy's gain goes, over every lap
-LAP_RULE = "g1"          # in the pictures' names: these gains, and the base drawn under the picture
+LAP_FREE = 0.12          # log: a step smaller than this (about 12% either way) is the scene's own change, kept as it is.
+                         # Taken out lap after lap, the slow brightening of the 2013 hexagon movie's places (2-5% a lap,
+                         # more at some places than others) left them up to twice as bright as each other by its end
+LAP_RULE = "g3s"         # in the pictures' names: these gains, the base drawn under the picture, and whole colour sets (set_laps)
 
 
 def _lap_prev(u):
@@ -4802,25 +4805,68 @@ def _lap_step(u, p, cache, a, b):
     return g
 
 
+def _lap_lead(u):
+    """For each frame of a mosaic movie, the frame whose lap step its copy takes (lap_gain): the first frame of its
+    filter at its slot in its lap (lap_of) takes the step of the first frame of the lap at that slot, whatever its
+    filter, so every filter of a place moves by one gain and the colour stays as the filters gave it; a later frame
+    of the same filter there (a second exposure at one place) takes its own step to the copy before it, as before.
+    The frame itself when it leads, or has no slot."""
+    if "_lap_lead" in u:
+        return u["_lap_lead"]
+    where, lap, first, out = slots(u), lap_of(u), {}, []
+    for j, fr in enumerate(u["frames"]):
+        if where[j] is None:
+            out.append(j)
+            continue
+        here = first.setdefault((where[j], lap[j]), {})
+        out.append(here.setdefault("lead", j) if fr[2] not in here else j)
+        here.setdefault(fr[2], j)
+    u["_lap_lead"] = out
+    return out
+
+
 def lap_gain(u, p, cache, j, report, made_only=False, skipped=None):
     """The gain tile j of a mosaic movie is drawn at: its place's copies, from the first, each brought to the one
-    before it (_lap_step), within LAP_GAIN; a copy of another scene starts again at 1. report(i): tile i's report,
-    or None when it is not made (made_only), which then goes in skipped and ends the chain there: the picture is
-    not the frame's own yet (its name says which gains it drew)."""
-    prev = _lap_prev(u)
-    chain, i = [j], prev[j]
-    while i is not None:
-        t = report(i)
-        if t is None:
-            if skipped is not None and i not in skipped:
-                skipped.append(i)
+    before it (_lap_step), within LAP_GAIN; a copy of another scene starts again at 1. The step is one per place and
+    lap (_lap_lead: measured on the lap's first tile there), not one per filter: chained per filter, each colour
+    drifted on its own (a place's RED copy of the 2012 north pole map movie's last lap stepped down 12% while its
+    GRN and BL1 did not: the place turned blue-green). A step under LAP_FREE is the scene's own and kept. report(i): tile i's
+    report, or None when it is not made (made_only), which then goes in skipped and ends the chain there: the
+    picture is not the frame's own yet (its name says which gains it drew)."""
+    prev, lead = _lap_prev(u), _lap_lead(u)
+
+    def placed(i):
+        # the newest copy at or before i (back through the copies of its filter at its slot) that is placed; None
+        # when there is none, or one is not made yet (skipped)
+        while i is not None:
+            t = report(i)
+            if t is None:
+                if skipped is not None and i not in skipped:
+                    skipped.append(i)
+                return None
+            if "offset" in t:
+                return i
+            i = prev[i]
+        return None
+    links, cur = [], j
+    while True:
+        b = placed(lead[cur])
+        if b is None:
             break
-        if "offset" in t:
-            chain.append(i)
-        i = prev[i]
+        if lead[b] != b:
+            # (the lap's lead there is not placed: the copy before it, which takes its own lap's step)
+            cur = b
+            continue
+        a = placed(prev[b])
+        if a is None:
+            break
+        links.append((a, b))
+        cur = a
     g = 1.0
-    for a, b in zip(chain[::-1], chain[-2::-1]):
+    for a, b in links[::-1]:
         step = _lap_step(u, p, cache, report(a), report(b))
+        if step is not None and abs(math.log(step)) < LAP_FREE:
+            continue   # (the scene's own slow change, kept)
         g = 1.0 if step is None else float(np.clip(g * step, *LAP_GAIN))
     return round(g, 4)
 
@@ -4845,6 +4891,30 @@ def rolling_base(u, p, tiles, used):
             fill[key] = t
     base += fill.values()
     return {t["n"] for t in base} if lum_base(u, p, tiles, used, base) else set()
+
+
+def set_laps(u, n, colour):
+    """For a colour mosaic movie at frame n: {(slot, filter): the newest of its frames there that the picture draws}
+    for each colour filter at each slot where a lap has taken all of them by then, the frame of that filter in the
+    newest such lap (lap_of). A lap's first colour copy at a place used to go up at once over the last lap's other
+    two: the place drew one filter from this lap and two from the last, each filter's mosaic of the pass laid with
+    its own newest copy on top, so where two places overlap one filter showed one and another the other (the 2013
+    hexagon movie, 193SA NPOLMOV001: whole panels green at a RED frame, magenta, and grey steps; 175SA NPOLMAP001:
+    salmon and purple blocks). {} for a pass that is not in colour."""
+    if not colour or len(colour) < 2:
+        return {}
+    where, lap = slots(u), lap_of(u)
+    want = set(colour)
+    took = {}   # (slot, lap) -> {filter: newest frame}
+    for j in range(n + 1):
+        f = u["frames"][j][2]
+        if f in want and where[j] is not None:
+            took.setdefault((where[j], lap[j]), {})[f] = j
+    best = {}
+    for (slot, k), got in took.items():
+        if len(got) == len(want) and (slot not in best or k > best[slot][0]):
+            best[slot] = (k, got)
+    return {(slot, f): j for slot, (_, got) in best.items() for f, j in got.items()}
 
 
 def rolling_layout(u, n, cache, laps=1, made_only=False, skipped=None, fade=(0, 0)):
@@ -4875,6 +4945,10 @@ def rolling_layout(u, n, cache, laps=1, made_only=False, skipped=None, fade=(0, 
                 return None
             t = kept[j] = tile(u, j, cache, p["display_scale"])
         return t
+    # a colour pass's colour filters at a place show the copies of its newest whole set (set_laps): a lap's first
+    # colour copy waits for the others, so the three filters at a place, and which place lies over which, are the
+    # same lap's
+    held = set_laps(u, n, p["colour"])
     # each place's newest copies that are there to draw: a copy not made yet (made_only) or one SPICE could not
     # place leaves the copy before it up, so a place never drops out of the mosaic and comes back
     keep, seen, spare = [], {}, {}
@@ -4883,6 +4957,8 @@ def rolling_layout(u, n, cache, laps=1, made_only=False, skipped=None, fade=(0, 
         # place of every other such frame)
         key = (where[j] if where[j] is not None else ("frame", j), u["frames"][j][2])
         if seen.get(key, 0) >= laps:
+            continue
+        if key in held and j > held[key]:
             continue
         t = report(j)
         if t is None:
