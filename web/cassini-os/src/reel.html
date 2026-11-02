@@ -125,7 +125,7 @@ body.phone #reelcard:not(.full) { width: calc(100% - 16px) !important; left: 8px
     const st = (h.stacked || []).filter(n => n > 1);
     return [h.centred ? "centered, north up" : h.frame_offset ? "close-up, placed on the body, north up" : "not centered",
             st.length ? `stacked ${st.join("+")}` : "", h.calibrated ? "calibrated" : "",
-            (h.aligned || []).some(a => /not aligned|failed/.test(a)) ? "channels not aligned" : "",
+            (h.aligned || []).some(a => /^not aligned|^failed/.test(a)) ? (h.grey ? "channels not aligned, drawn grey" : "channels not aligned") : "",
             h.mosaic > 1 ? `mosaic of ${h.mosaic}` : ""].filter(Boolean).join(" · ");
   }
   function show(i) {
