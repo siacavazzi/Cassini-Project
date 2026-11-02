@@ -14,8 +14,8 @@ sets each taking a filter from the next pointing. Where the geometry cache place
 the camera moves more than SET_PLACE px (the next pointing of a mosaic). A run of two or more filters is a set; its
 channel of each filter is that filter's first frame in it. Its channels (channels): RED (or the 619 nm continuum CB1 where a set
 has no RED, the narrow-angle camera at Jupiter), GRN and a blue (BL1, else BL2 or VIO) make true colour; any other
-three or more filters make false colour, longest wavelength as red, the middle one as green, the shortest as blue;
-two filters make a two-filter picture.
+three or more filters make false colour from the three nearest the visible (nearest_visible), longest wavelength as
+red, the middle one as green, the shortest as blue; two filters make a two-filter picture.
 
 Pass: obs_mosaic.units, the frames of one camera, one target and one observation, split where the camera pauses or
 the distance to the body changes, with its laps joined (a mosaic movie). Its kind is obs_mosaic._judge's: "mosaic",
@@ -36,9 +36,40 @@ SET_PLACE = 256                        # full resolution px: a camera move furth
 # full resolution px: the furthest the target's centre may sit off the frame for SPICE's place to say where the camera
 # points (0.3 rad: the place is the target's direction on the camera's flat image plane, which runs off to hundreds of
 # thousands of px for a target behind the camera, Jupiter flat fields at 440,000 px)
+HALF_DIAGONAL = 724                    # full resolution px: a frame's middle to its corner
 PLACE_REACH = {"N": 50000, "W": 5000, "ISSNA": 50000, "ISSWA": 5000}
 TRUE_REDS = ("RED", "CB1")             # the red of a true colour set, in order of preference
 TRUE_BLUES = ("BL1", "BL2", "VIO")     # the blue of a true colour set, in order of preference
+# A false colour set's three channels, when it took more than three filters: the three nearest what an eye's red,
+# green and blue see (RED, GRN, BL1: 650, 568, 451 nm), longest as red, so a set keeps its visible filters (GRN over
+# UV1, IR3 + GRN + UV3 of Pandora's IR3, GRN, UV3, UV1; CB2 + CB1 + BL1 of a gas giant's continuum filters) and
+# leaves out its methane bands (MT1, MT2, MT3, which show how high the clouds are, not their colour) wherever three
+# others are there. Sam 2026-11-02 (fix plan group C).
+VISIBLE_NM = (650.0, 568.0, 451.0)
+
+
+def is_methane(f):
+    """True for a methane band filter, alone or stacked ("MT2", "MT3", "IR2/MT2")."""
+    return any(p.startswith("MT") for p in str(f or "").split("/"))
+
+
+def nearest_visible(filters, nms):
+    """The positions in filters (distinct colour filters, nms their wavelengths) of the three a false colour set
+    draws, longest wavelength first: the fewest methane bands, then the green nearest GRN, then the red and blue
+    nearest RED and BL1 (the least sum of their distances), then the order the filters come in (a Titan wind stare's
+    CB3, CB1, MT1, UV1, UV3 draws CB3 + CB1 + UV3). Three or fewer filters: all of them, longest first."""
+    import itertools
+    order = sorted(range(len(filters)), key=lambda j: -nms[j])
+    if len(order) <= 3:
+        return order
+    best = None
+    for three in itertools.combinations(order, 3):
+        r, g, b = three
+        key = (sum(is_methane(filters[j]) for j in three), abs(nms[g] - VISIBLE_NM[1]),
+               abs(nms[r] - VISIBLE_NM[0]) + abs(nms[b] - VISIBLE_NM[2]), three)
+        if best is None or key < best:
+            best = key
+    return list(best[3])
 
 
 def is_polarizer(f1, f2):
@@ -87,26 +118,52 @@ def runs(frames):
     return out
 
 
+def pointing(place, radius_km, ifov):
+    """place (x, y, range km), as runs takes it, or None for a frame that lies wholly on its target's disk: there
+    SPICE's centre offset cannot say whether two frames show the same ground, as the view swings across a close
+    flyby (Titan at 6,000 km: 5 degrees, 15,000 px, in the 200 s of a CB3, MT3, MT1 set on one patch of haze), and
+    a set is joined on time and filters alone, as before the pointing rule. radius_km: the target's radius (None:
+    unknown, the place kept); ifov: radians per full resolution px."""
+    if place is None or place[0] is None or not radius_km or len(place) < 3 or not place[2] or place[2] <= 0:
+        return place
+    return None if (place[0] ** 2 + place[1] ** 2) ** 0.5 + HALF_DIAGONAL < radius_km / (place[2] * ifov) else place
+
+
 def moved(a, b):
-    """True when SPICE puts two frames more than SET_PLACE px apart (a, b: (x, y, ...) or None); False when either
-    has no place."""
+    """True when SPICE puts two frames more than SET_PLACE px apart (a, b: (x, y, range km) or None); False when
+    either has no place. The places are compared on the ground: the body's centre is off a close-up by tens of
+    thousands of px, and a range change of a few percent between filters moves it by thousands though the camera
+    keeps looking at the same ground (Titan, N1616821718_1). So a's offset is scaled to b's range before they are
+    compared (offset x range is the ground's sky-plane distance from the centre, which stays put)."""
     if a is None or b is None or a[0] is None or b[0] is None:
         return False
-    return ((a[0] - b[0]) ** 2 + (a[1] - b[1]) ** 2) ** 0.5 > SET_PLACE
+    k = a[2] / b[2] if len(a) > 2 and len(b) > 2 and a[2] and b[2] else 1.0
+    return ((a[0] * k - b[0]) ** 2 + (a[1] * k - b[1]) ** 2) ** 0.5 > SET_PLACE
 
 
-def channels(filters, nms):
+def channels(filters, nms, times=None):
     """(kind, positions of the red, green and blue channels in filters) of a set: "true", "false" or "two" (two
-    positions, longer wavelength first). nms: each filter's effective wavelength, in the same order."""
+    positions, longer wavelength first). nms: each filter's effective wavelength, in the same order. times: when
+    each was taken; a filter's channel is then its frame nearest in time to a frame of another filter (a run of
+    repeat exposures ends next to the next filter: Titan N1574127426_1, CB3 three times 105 s apart, then MT1),
+    else its first frame. The repeats around a channel are stacked into it (stacking.find_repeats)."""
     at = {}
     for j, f in enumerate(filters):
-        at.setdefault(f, j)   # a filter's first frame is its channel; repeat exposures after it are stacked into it
+        if times is None:
+            at.setdefault(f, j)
+            continue
+        gap = min((abs(times[j] - times[i]) for i, g in enumerate(filters) if g != f), default=0.0)
+        if f not in at or gap < at[f][1]:
+            at[f] = (j, gap)
+    if times is not None:
+        at = {f: j for f, (j, _) in at.items()}
     red = next((f for f in TRUE_REDS if f in at), None)
     blue = next((f for f in TRUE_BLUES if f in at), None)
     if red and "GRN" in at and blue:
         return "true", [at[red], at["GRN"], at[blue]]
-    w = sorted(at.values(), key=lambda j: -nms[j])
-    return ("false", [w[0], w[len(w) // 2], w[-1]]) if len(w) >= 3 else ("two", w)
+    fs = list(at)
+    w = [at[fs[k]] for k in nearest_visible(fs, [nms[at[f]] for f in fs])]
+    return ("false", w) if len(w) >= 3 else ("two", w)
 
 
 def filter_sets(cams, targets, obs, f1s, f2s, t, nm, places=None):
@@ -119,7 +176,7 @@ def filter_sets(cams, targets, obs, f1s, f2s, t, nm, places=None):
     set_of, sets = [-1] * len(fs), []
     cols = (cams, targets, obs, fs, t) if places is None else (cams, targets, obs, fs, t, places)
     for at in runs(list(zip(*cols))):
-        kind, use = channels([fs[q] for q in at], [nm(q) for q in at])
+        kind, use = channels([fs[q] for q in at], [nm(q) for q in at], [t[q] for q in at])
         use = [at[j] for j in use]
         for q in at:
             set_of[q] = len(sets)

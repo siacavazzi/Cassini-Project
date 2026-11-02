@@ -2496,6 +2496,8 @@ body.ambient.phone .amb-where { font-size: 18px; }
       hint: "Takes out the faint horizontal bands (\"2 Hz noise\") the camera's electronics added while each picture was read out, line by line from the extra pixels the camera read past the end of every line, as the camera team's calibration (CISSCAL) does. Most visible in dark sky and faint pictures. Full-size frames only. Off leaves the bands in. Needs Calibrate." },
     { key: "processing.twohzsky", step: "twohzsky", label: "Bands from the sky",
       hint: "Measures the 2 Hz bands from the picture's own dark sky (the median of each line with stars and bodies masked out, CISSCAL's \"image mean\" method) instead of from the few extra pixels past each line, which catch only part of them. Takes the bands out far more completely, and also on the 8-bit and lossy frames CISSCAL skips. Used where at least 9 lines in 10 have some clear sky; a frame filled by a moon or Saturn keeps the extra-pixel method. Off uses the extra pixels only, as CISSCAL does by default. Needs 2 Hz noise." },
+    { key: "processing.skysmooth", step: "skysmooth", label: "Smooth dark sky",
+      hint: "The archive keeps a dark sky as only a handful of brightness steps, so once the bands are measured from the sky each line still sits a fraction of a step above or below the next and the bands show again when the sky is stretched. Where the bands were measured from the sky, its one-step speckle is evened out over a few pixels; stars, cosmic rays and edges, several steps brighter, are left as they were. Off shows the sky's steps as they came down. Needs Bands from the sky." },
     { key: "processing.dark", step: "dark", label: "Dark current",
       hint: "Takes out the charge the camera's detector gathers without any light, which grows with the exposure and with how long each line waits to be read out, with the camera team's own dark model. Most visible on long exposures: night sides, rings, Titan's surface. Off leaves them in. Needs Calibrate." },
     { key: "processing.pairs", step: "pairs", label: "Pixel pairs",
@@ -2521,8 +2523,8 @@ body.ambient.phone .amb-where { font-size: 18px; }
   D({ key: "cameras.balancedColor", section: "Processing", label: "Balanced color", type: "toggle", value: true,
       hint: "A gentler color stretch: black sits just above the sky's noise so grain and scan lines stay dark, white sits at the bright part of the body but never stretches dim pictures far, bright edges roll off instead of clipping, and mosaic tiles are evened out without changing the mosaic's overall level. Off shows the earlier stretch." });
   D({ key: "cameras.colors", section: "Processing", label: "Filter colors", type: "choice", value: "natural",
-      options: [["natural", "Natural color"], ["eye", "Natural color (emulated)"], ["raw", "Raw filters"]],
-      hint: "Natural color turns red, green and blue filter sets into the colors an eye would see, and balances false color sets (methane, ultraviolet, infrared) so the planet comes out gray and only its differences between filters show as color. Natural color (emulated) shows false color sets too as an eye would have seen them: the body in its own color (Saturn and Jupiter cream, Titan orange, the icy moons gray), with what the filters show as its brightness and, where they reach both sides of the visible, as its shades. Methane bands give no color. It is worked out on this computer, in movie passes for now (with Steady movies on this computer); still pictures and mosaics keep Natural color. Raw filters draws each filter straight as a channel. Needs Balanced color." });
+      options: [["natural", "Natural color"], ["eye", "Natural color (emulated)"], ["false", "False color"], ["raw", "Raw filters"]],
+      hint: "Natural color turns red, green and blue filter sets into the colors an eye would see, shows sets taken through a methane filter as Natural color (emulated) does, and balances other false color sets (ultraviolet, infrared) so the planet comes out gray and only its differences between filters show as color. Where a set took more than three filters, the three nearest red, green and blue are used. Natural color (emulated) shows false color sets too as an eye would have seen them: the body in its own color (Saturn and Jupiter cream, Titan orange, the icy moons gray), with what the filters show as its brightness and, where they reach both sides of the visible, as its shades. Methane bands give no color. It is worked out on this computer, in movie passes for now (with Steady movies on this computer); still pictures and mosaics keep Natural color. False color balances every false color set, methane ones too, as Natural color did before November 2026: the cloud heights a methane filter sees show as color. Raw filters draws each filter straight as a channel. Needs Balanced color." });
   D({ key: "cameras.autoCenter", section: "Processing", label: "Auto center", type: "toggle", value: true,
       hint: "Every picture of a moon or a planet whose whole disk fits is turned north up with the body in the middle, by SPICE, even where a picture caught only its edge, at one size for the whole pass, so the body holds still from picture to picture. Ring, spoke and sky pictures, and a body too big for the picture, stay as the camera took them. Each camera window's settings button (the slider icon in its title bar) can turn it on or off for that window." });
   // where a centred picture's frame does not reach (Auto center keeps the body in the middle however much of the
@@ -2554,7 +2556,7 @@ body.ambient.phone .amb-where { font-size: 18px; }
   // the pipeline steps turned off (Settings > Processing): nothing while every step is on, so the usual pictures keep their addresses
   window.cassiniOff = () => { const off = window.cassiniSteps.filter(st => S.get(st.key) === false).map(st => st.step); return off.length ? `&off=${off.join(",")}` : ""; };
   window.cassiniLook = (o = {}) => (S.get("cameras.balancedColor") === false ? "&look=classic"
-    : S.get("cameras.colors") === "raw" ? "&colors=raw" : "") + window.cassiniOff() + (o.center ? "&center=1" : "");
+    : ["raw", "false"].includes(S.get("cameras.colors")) ? `&colors=${S.get("cameras.colors")}` : "") + window.cassiniOff() + (o.center ? "&center=1" : "");
   // Natural color (emulated): worked out on this computer (steady-local.html, the pass table's eye mix), never asked of
   // the server, so it needs no pictures of its own; with the earlier stretch the filters are drawn as before
   window.cassiniEye = () => S.get("cameras.colors") === "eye" && S.get("cameras.balancedColor") !== false;
@@ -4698,17 +4700,47 @@ onmessage = async e => {
     return [a, b].filter(x => !/^CL/.test(x)).join("/") || null;
   };
   const nmOf = k => FILTER_NM[`${catalog.cam[k]}:${catalog.f1[k]}/${catalog.f2[k]}`] || 0;
+  // a false colour set of more than three filters draws the three nearest what an eye's red, green and blue see,
+  // methane bands left out wherever three others are there (sets_passes.nearest_visible, line for line)
+  const VISIBLE_NM = [650, 568, 451];
+  const isMethane = f => String(f || "").split("/").some(p => p.startsWith("MT"));
+  function nearestVisible(filters, nms) {
+    const order = filters.map((f, j) => j).sort((a, b) => nms[b] - nms[a]);
+    if (order.length <= 3) return order;
+    let best = null;
+    for (let a = 0; a < order.length; a++) for (let b = a + 1; b < order.length; b++) for (let c = b + 1; c < order.length; c++) {
+      const three = [order[a], order[b], order[c]];
+      let m = 0;
+      three.forEach(j => { m += isMethane(filters[j]) ? 1 : 0; });
+      const key = [m, Math.abs(nms[three[1]] - VISIBLE_NM[1]), Math.abs(nms[three[0]] - VISIBLE_NM[0]) + Math.abs(nms[three[2]] - VISIBLE_NM[2]), ...three];
+      const i = best ? key.findIndex((v, q) => v !== best[q]) : -1;
+      if (!best || (i >= 0 && key[i] < best[i])) best = key;   // the least key, compared item by item (Python's tuples)
+    }
+    return best.slice(3);
+  }
   function pickChannels(s) {
-    const by = f => s.frames[s.filters.indexOf(f)], blue = ["BL1", "BL2", "VIO"].find(f => s.filters.includes(f));
+    // a filter's channel: its frame nearest in time to a frame of another filter (a run of repeat exposures ends
+    // next to the next filter), the first of those as near (sets_passes.channels)
+    const pick = {};
+    s.frames.forEach((k, j) => {
+      const f = s.filters[j];
+      let gap = Infinity;
+      s.frames.forEach((q, i) => { if (s.filters[i] !== f) gap = Math.min(gap, Math.abs(catalog.et[k] - catalog.et[q])); });
+      if (gap === Infinity) gap = 0;
+      if (!(f in pick) || gap < pick[f][1]) pick[f] = [k, gap];
+    });
+    const by = f => pick[f][0], blue = ["BL1", "BL2", "VIO"].find(f => s.filters.includes(f));
     // red: RED, or the 619 nm continuum filter CB1 when a set has no RED (the narrow-angle camera at Jupiter), as
     // obs_mosaic picks the filter nearest 650 nm
     const red = ["RED", "CB1"].find(f => s.filters.includes(f));
     if (red && s.filters.includes("GRN") && blue) { s.kind = "true"; s.use = [by(red), by("GRN"), by(blue)]; }
     else {
-      // each filter's first frame (repeat exposures after it are stacked into it)
-      const w = s.frames.filter((k, j) => s.filters.indexOf(s.filters[j]) === j).sort((p, q) => nmOf(q) - nmOf(p));
+      // each filter's channel frame, in the order the filters were first taken; the three nearest the visible,
+      // longest wavelength first (sets_passes.nearest_visible)
+      const fs = s.filters.filter((f, j) => s.filters.indexOf(f) === j);
+      const w = nearestVisible(fs, fs.map(f => nmOf(by(f)))).map(j => by(fs[j]));
       s.kind = w.length >= 3 ? "false" : "two";
-      s.use = w.length >= 3 ? [w[0], w[w.length >> 1], w[w.length - 1]] : w;
+      s.use = w;
     }
     s.ready = Math.max(...s.use.map(k => catalog.et[k]));   // the picture exists once its last channel is taken
   }
@@ -12704,7 +12736,7 @@ void main() {
   window.cassiniAbout = { open, addTab, esc, close: () => show(false), credits: CREDITS };
 
   // ---- which version this is: this page's build id (build.py writes it), and what the frame server says it serves ----
-  const BUILD = /*BUILD*/"fae1d211893d";
+  const BUILD = /*BUILD*/"0a4906511d2c";
   const FRAMES = (() => {                       // the frame server, chosen as the camera window chooses it
     const q = new URLSearchParams(location.search).get("frames");
     if (q) return q.replace(/\/$/, "");

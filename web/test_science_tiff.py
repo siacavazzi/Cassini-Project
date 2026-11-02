@@ -47,7 +47,7 @@ im = Image.open(io.BytesIO(tif))
 iof = np.asarray(im)
 print("mode", im.mode, "size", im.size, "dtype", iof.dtype, "body", float(iof[512, 512]), "sky", float(iof[5, 5]))
 assert im.mode == "F" and im.size == (1024, 1024) and iof.dtype == np.float32
-want = cal.calibrate(codes, frame_server.color_image.lh.label("nac_data/N1465674000_1.png", as_png=True).get_info())
+want = cal.calibrate(codes, frame_server.color_image.lh.label("nac_data/N1465674000_1.png", as_png=True).get_info(), smooth=False)
 assert np.allclose(iof, want, rtol=1e-6, equal_nan=True)         # the pipeline's I/F, nothing done to it
 assert abs(float(iof[5, 5])) < 1e-6 and float(iof[512, 512]) > 0   # sky at the bias is zero, the body above it
 desc = im.tag_v2[270]

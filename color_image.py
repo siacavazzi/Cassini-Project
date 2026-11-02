@@ -250,6 +250,11 @@ def load_aligned(paths, hdr=False, scale=None, repeat_window=120, around=None):
             # the picture is drawn, never where its channels land
             with cal.looking("classic"):
                 guide = cal.load_channels(lbls, imgs, iofs=iofs)
+            # what the camera saturated in each channel (merged in I/F: what every exposure saturated), moved with
+            # its channel below: filled from the channels that did not saturate there (calibration.tone, fill_saturated)
+            each = [_saturated_of(l, img.shape[:2]) if clip is None else clip for l, img, clip in zip(lbls, imgs, clips)]
+            if any(m is not None and m.any() for m in each):
+                full = [np.zeros(imgs[0].shape[:2], np.float32) if m is None else m.astype(np.float32) for m in each]
         elif linear is None:
             # puts every filter on the same brightness scale (see calibration.py)
             before = imgs
@@ -273,6 +278,8 @@ def load_aligned(paths, hdr=False, scale=None, repeat_window=120, around=None):
         masks = [m if w is None else warp_frame(m.astype(np.float32), w) > 0.99 for m, w in zip(masks, warps)]
         if guide is not None:
             guide = [g if w is None else warp_frame(g, w) for g, w in zip(guide, warps)]
+            if full is not None and len(lbls) > 1:
+                full = [m if w is None else warp_frame(m, w) for m, w in zip(full, warps)]
             linear = ([c if w is None else warp_frame(c, w) for c, w in zip(linear[0], warps)],) + tuple(linear[1:])
         else:
             imgs = [i if w is None else warp_frame(i, w) for i, w in zip(imgs, warps)]
@@ -289,7 +296,9 @@ def load_aligned(paths, hdr=False, scale=None, repeat_window=120, around=None):
             shifts = []
             ic.align_with_masks(guide, [m.copy() for m in masks], ref, aligned, found=shifts, guess=guess)
             channels, masks = ic.align_with_masks(linear[0], masks, ref, use=shifts)
-            imgs = cal.tone(channels, linear[1], linear[2])
+            if full is not None:
+                full = [m if d is None else ic.shift_image(m, *d) for m, d in zip(full, shifts)]
+            imgs = cal.tone(channels, linear[1], linear[2], saturated=_saturated_masks(full))
         else:
             imgs, masks = ic.align_with_masks(imgs, masks, ref, aligned, guess=guess)
     except Exception:
@@ -298,7 +307,7 @@ def load_aligned(paths, hdr=False, scale=None, repeat_window=120, around=None):
         if linear is not None:
             guide = None
     if linear is not None and guide is None:
-        imgs = cal.tone(linear[0], linear[1], linear[2])
+        imgs = cal.tone(linear[0], linear[1], linear[2], saturated=_saturated_masks(full) if len(lbls) > 1 else None)
     report = {"calibrated": calibrated, "stacked": stacked, "aligned": aligned}
     if warps and any(w is not None for w in warps):
         # each channel's scale and turn onto the reference (SPICE's range and twist), None where it needed none
@@ -320,6 +329,27 @@ def load_aligned(paths, hdr=False, scale=None, repeat_window=120, around=None):
         # the share of the frame the camera saturated in every exposure merged (the most of any channel): drawn white
         report["saturated_share"] = round(max(shares), 4)
     return imgs, np.logical_and.reduce(masks), lbls[ref], report
+
+
+"""
+calibration.saturated_of, or None for a frame whose codes can't be read
+"""
+def _saturated_of(lbl, shape):
+    try:
+        return cal.saturated_of(lbl, shape)
+    except Exception as e:
+        print(f"Can't read {lbl.get_info().get('path')} for its saturated pixels: {e}")
+        return None
+
+
+"""
+Each channel's saturated pixels as masks (from float32 masks moved with their channels), or None when none saturated
+"""
+def _saturated_masks(masks):
+    if not masks:
+        return None
+    out = [m > 0.5 for m in masks]
+    return out if any(m.any() for m in out) else None
 
 
 """
@@ -379,8 +409,27 @@ def spice_warps(lbls, ref):
         if moves < WARP_LEAST or abs(scale - 1) > WARP_MOST or abs(turn) > WARP_TURN:
             out.append(None)
             continue
-        out.append((ba.CCD_CENTER - float(loc[0]), ba.CCD_CENTER - float(loc[1]), scale, turn))
+        # about the target's centre; a close-up wholly on its target's disk about the frame's middle: its centre
+        # is thousands of px off (Titan at 6,000 km), and a scale about it moves the whole frame by hundreds
+        if _on_disk(lbls[ref], locs[ref]) or _on_disk(lbls[len(out)], loc):
+            out.append((ba.CCD_CENTER, ba.CCD_CENTER, scale, turn))
+        else:
+            out.append((ba.CCD_CENTER - float(loc[0]), ba.CCD_CENTER - float(loc[1]), scale, turn))
     return out
+
+
+def _on_disk(lbl, loc):
+    """True when SPICE puts the frame wholly on its target's disk (sets_passes.pointing, the colour sets' rule)"""
+    if lbl is None or loc is None:
+        return False
+    try:
+        import obs_mosaic
+        import sets_passes
+    except ImportError:
+        return False
+    info = getattr(lbl, "info", None) or {}
+    cam = "W" if info.get("INSTRUMENT_ID") == "ISSWA" else "N"
+    return sets_passes.pointing(tuple(loc[:3]), obs_mosaic.RADIUS.get(info.get("TARGET_NAME")), obs_mosaic.IFOV[cam]) is None
 
 
 """
