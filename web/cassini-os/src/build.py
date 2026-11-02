@@ -336,11 +336,16 @@ const THEME = {
   nowGlow: cssVar("--tl-now-glow").replace(/"/g, ""), barStyle: cssVar("--tl-bar-style") || "solid"
 };
 ''')
-# Cassini OS opens at the Settings window's start time (playback.start; by default "In Saturn's Shadow",
-# 2006-09-15, the WAC mosaic of Saturn backlit by the Sun, the benchmark in web/frames/mosaic_benchmark.py);
-# a ?t= link wins
+# Cassini OS opens at the Settings window's start time (playback.start). By default a visit with no ?t= lands on
+# one of a few famous moments at random (settings.html, window.cassiniLandings), written into the address as a
+# link; a pinned time from the older list is read here. The fallback is "In Saturn's Shadow", 2006-09-15, the WAC
+# mosaic of Saturn backlit by the Sun, the benchmark in web/frames/mosaic_benchmark.py; a ?t= link wins
 rep('get("t") || "2005-01-14T09:30:00"',
-    'get("t") || (window.cassiniSettings && cassiniSettings.get("playback.start")) || "2006-09-15T14:28:00"')
+    'get("t") || (window.cassiniSettings && /^\\d{4}-/.test(cassiniSettings.get("playback.start")) && cassiniSettings.get("playback.start")) || "2006-09-15T14:28:00"')
+
+# a landing moment (settings.html) outside the years the picture cache holds: another landing inside them, if any
+rep('if (!inside(startEt)) startEt = (encounters.find(',
+    'if (!inside(startEt)) startEt = (window.cassiniLandingIn && cassiniLandingIn(inside)) || (encounters.find(')
 
 # surface map size: a ?tex= link wins, then the Settings window's choice
 rep('const TEX_TIER = (new URLSearchParams(location.search).get("tex") || (location.hash.match(/^#tex-(\\w+)$/) || [])[1] || "2k").toLowerCase();',
