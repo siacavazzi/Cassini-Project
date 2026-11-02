@@ -197,19 +197,14 @@ print("sorts and nearest rows the same")
 
 # ---------- the floor black ----------
 def floor_before(iofs, levels, sky=None):
-    # _floor without sky, every step worked out (no fast path for a picture brighter than lit sky)
     lum = iofs[0] - np.float32(levels[0]) if len(iofs) == 1 else \
         np.mean([iof - np.float32(level) for iof, level in zip(iofs, levels)], axis=0)
-    lum = np.ascontiguousarray(lum, dtype=np.float32)
-    dark = cv2.medianBlur(lum, 3)
-    middle, bright = (float(v) for v in np.percentile(lum, (50, cal.GLOW_PCT)))
-    lit = (lum >= 0.05 * np.percentile(lum, 99.9)) & cal._inner(lum.shape)
-    lit = lit if lit.sum() > 100 else np.ones(lum.shape, dtype=bool)
-    floor, top = (float(v) for v in np.percentile(dark[lit], (cal.FLOOR_PCT, cal.WHITE_PCT)))
+    floor, middle, glow = (float(v) for v in np.percentile(lum, (cal.FLOOR_PCT, 50, cal.GLOW_PCT)))
     black = cal.FLOOR_SHARE * max(floor, 0.0)
     dim = np.log(cal.GLOW_IOF[1] / max(middle, 1e-12)) / np.log(cal.GLOW_IOF[1] / cal.GLOW_IOF[0])
     smooth = (cal.GLOW_FINE[1] - cal.fine_structure(lum)) / (cal.GLOW_FINE[1] - cal.GLOW_FINE[0])
-    return black + min(max(float(dim), 0.0), 1.0) * min(max(smooth, 0.0), 1.0) * max(bright - black, 0.0)
+    return black + min(max(float(dim), 0.0), 1.0) * min(max(smooth, 0.0), 1.0) * max(glow - black, 0.0)
+
 
 for k in range(300):
     lum = (10 ** rng.uniform(-5, 0) * (1 + rng.normal(0, rng.choice([0.0, 0.05, 0.5]), (40, 40)))).astype(np.float32)

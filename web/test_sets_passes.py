@@ -73,51 +73,6 @@ def synthetic(seed, n=4000):
     return {k: [v[i] for i in order] for k, v in cat.items()}
 
 
-# repeat exposures and pointings (Day the Earth Smiled, ISS_195RI_HIPHASEC001_VIMS W, 2013-07-20): each pointing takes
-# VIO, IR3, BL1, GRN, RED twice each. A filter seen again used to end the set, so every set was two filters and each
-# pointing's last RED joined the next pointing's VIO..GRN (set 35884: RED 860 px from its BL1 and GRN). Now the
-# second exposure of a filter is a repeat in its set, and a camera move past SET_PLACE ends the set
-seq = [(f, 0) for f in ("VIO", "VIO", "IR3", "IR3", "BL1", "BL1", "GRN", "GRN", "RED", "RED")] + \
-      [(f, 1) for f in ("VIO", "IR3", "BL1", "GRN", "RED")]
-fr = [("W", "SATURN", "OBS", f, 30.0 * i) for i, (f, _) in enumerate(seq)]
-assert sets_passes.runs(fr) == [list(range(10)), list(range(10, 15))], sets_passes.runs(fr)
-placed = [x + ((-2535.0 - 861 * p, -970.0),) for x, (_, p) in zip(fr, seq)]
-assert sets_passes.runs(placed) == [list(range(10)), list(range(10, 15))]
-# a pointing that takes each filter once, the camera moving on between: the jump ends the set even within SET_GAP
-once = [("W", "S", "O", f, 30.0 * i, (900.0 * (i // 3), 0.0)) for i, f in enumerate(["RED", "GRN", "BL1"] * 2)]
-assert sets_passes.runs(once) == [[0, 1, 2], [3, 4, 5]]
-drift = [("W", "S", "O", f, 30.0 * i, (60.0 * i, 0.0)) for i, f in enumerate(["RED", "GRN", "BL1"])]
-assert sets_passes.runs(drift) == [[0, 1, 2]]                     # a 120 px drift is the same pointing
-jump = [("W", "S", "O", f, 30.0 * i, (0.0 if i < 2 else 400.0, 0.0)) for i, f in enumerate(["RED", "GRN", "BL1"])]
-assert sets_passes.runs(jump) == [[0, 1]]                          # the BL1 is at another pointing: a two-filter set
-# a close flyby: the centre 16,000 px off the frame and the range 20% shorter by the last filter; the camera holds the
-# same ground, so the offset grows as the range shrinks: one set (N1616821718_1, Titan CB3+MT3+MT1)
-flyby = [("N", "TITAN", "O", f, 30.0 * i, (-16350.0 / (1 - 0.1 * i), -4239.0 / (1 - 0.1 * i), 3000.0 * (1 - 0.1 * i)))
-         for i, f in enumerate(["CB3", "MT3", "MT1"])]
-assert sets_passes.runs(flyby) == [[0, 1, 2]]
-far = [("N", "S", "O", f, 30.0 * i, (440000.0 * i, 0.0)) for i, f in enumerate(["RED", "GRN", "BL1"])]
-assert sets_passes.runs(far) == [[0, 1, 2]]                        # a target behind the camera says nothing
-# channels are each filter's first frame; repeats only of one filter are no set; at most REPEAT_MAX in a row
-assert sets_passes.channels(["RED", "RED", "GRN", "BL1"], [650, 650, 570, 450]) == ("true", [0, 2, 3])
-assert sets_passes.channels(["CB2", "CB2", "MT2"], [750, 750, 727]) == ("two", [0, 2])
-# given the times, a filter's channel is its frame nearest another filter's (Titan N1574127426_1: CB3 x3, MT1)
-assert sets_passes.channels(["CB3", "CB3", "CB3", "MT1"], [938, 938, 938, 619], [0, 105, 210, 308]) == ("two", [2, 3])
-assert sets_passes.channels(["RED", "GRN", "GRN", "BL1", "BL1"], [650, 570, 570, 450, 450], [0, 30, 60, 90, 120]) == ("true", [0, 1, 3])
-# a frame wholly on its target's disk has no place: a close flyby's set joins on time and filters (Titan at 6,000 km,
-# the centre 16,000 px off and swinging), a frame showing the limb keeps its place
-assert sets_passes.pointing((-16350.0, -4239.0, 6000.0), 2575, 6e-6) is None
-assert sets_passes.pointing((-300.0, 0.0, 400000.0), 764, 6e-6) == (-300.0, 0.0, 400000.0)
-assert sets_passes.pointing((-300.0, 0.0, 400000.0), None, 6e-6) == (-300.0, 0.0, 400000.0)
-assert sets_passes.pointing(None, 2575, 6e-6) is None
-swing = [("N", "TITAN", "O", f, 90.0 * i, sets_passes.pointing(p, 2575, 6e-6))
-         for i, (f, p) in enumerate([("MT3", (-16350.0, -4239.0, 6000.0)), ("CB3", (-322.0, -1210.0, 5100.0)), ("MT1", (900.0, 3000.0, 4800.0))])]
-assert sets_passes.runs(swing) == [[0, 1, 2]]
-assert sets_passes.runs([("N", "S", "O", "RED", 10.0 * i) for i in range(4)]) == []
-many = [("N", "S", "O", "RED", 10.0 * i) for i in range(7)] + [("N", "S", "O", "GRN", 70.0)]
-assert sets_passes.runs(many) == [[5, 6, 7]]
-assert sets_passes.runs([("N", "S", "O", f, t) for f, t in [("RED", 0), ("RED", 200), ("GRN", 230)]]) == [[1, 2]]   # past REPEAT_GAP
-print("repeat exposures stay in their set; a pointing jump ends it")
-
 cats = [synthetic(s) for s in range(4)] + [json.load(open(p)) for p in sys.argv[1:]]
 for cat in cats:
     _, rule, _ = rule_sets(cat)

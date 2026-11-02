@@ -7,15 +7,10 @@ month chunks, which the page uses instead of working them out itself) all group 
 Filter set: the frames that together make one colour picture. A run of frames from one camera on one target, in
 one observation, each taken within SET_GAP seconds of the one before, through different colour filters. Clear and
 polarizer frames end a run, and a filter coming round again starts a new one (the next mosaic tile or colour
-cycle). A frame taken again through the filter of the frame just before it, within REPEAT_GAP seconds (at most
-REPEAT_MAX of them), is a repeat exposure: it stays in the run (the pipeline stacks it into that channel) instead of
-starting a new one, so a pointing that takes two exposures through each filter is one set, not a chain of two-filter
-sets each taking a filter from the next pointing. Where the geometry cache places the frames, a run also ends where
-the camera moves more than SET_PLACE px (the next pointing of a mosaic). A run of two or more filters is a set; its
-channel of each filter is that filter's first frame in it. Its channels (channels): RED (or the 619 nm continuum CB1 where a set
+cycle). A run of two or more frames is a set. Its channels (channels): RED (or the 619 nm continuum CB1 where a set
 has no RED, the narrow-angle camera at Jupiter), GRN and a blue (BL1, else BL2 or VIO) make true colour; any other
-three or more filters make false colour from the three nearest the visible (nearest_visible), longest wavelength as
-red, the middle one as green, the shortest as blue; two filters make a two-filter picture.
+three or more filters make false colour, longest wavelength as red, the middle one as green, the shortest as blue;
+two filters make a two-filter picture.
 
 Pass: obs_mosaic.units, the frames of one camera, one target and one observation, split where the camera pauses or
 the distance to the body changes, with its laps joined (a mosaic movie). Its kind is obs_mosaic._judge's: "mosaic",
@@ -30,46 +25,8 @@ import os
 import sys
 
 SET_GAP = 300                          # seconds between the frames of one filter set
-REPEAT_GAP = 120                       # seconds: the same filter again this soon after is a repeat exposure (stacking)
-REPEAT_MAX = 5                         # ... at most this many frames of a filter in a row (stacking.load_stacked's)
-SET_PLACE = 256                        # full resolution px: a camera move further than this ends a set (obs_mosaic.SAME_PLACE)
-# full resolution px: the furthest the target's centre may sit off the frame for SPICE's place to say where the camera
-# points (0.3 rad: the place is the target's direction on the camera's flat image plane, which runs off to hundreds of
-# thousands of px for a target behind the camera, Jupiter flat fields at 440,000 px)
-HALF_DIAGONAL = 724                    # full resolution px: a frame's middle to its corner
-PLACE_REACH = {"N": 50000, "W": 5000, "ISSNA": 50000, "ISSWA": 5000}
 TRUE_REDS = ("RED", "CB1")             # the red of a true colour set, in order of preference
 TRUE_BLUES = ("BL1", "BL2", "VIO")     # the blue of a true colour set, in order of preference
-# A false colour set's three channels, when it took more than three filters: the three nearest what an eye's red,
-# green and blue see (RED, GRN, BL1: 650, 568, 451 nm), longest as red, so a set keeps its visible filters (GRN over
-# UV1, IR3 + GRN + UV3 of Pandora's IR3, GRN, UV3, UV1; CB2 + CB1 + BL1 of a gas giant's continuum filters) and
-# leaves out its methane bands (MT1, MT2, MT3, which show how high the clouds are, not their colour) wherever three
-# others are there. Sam 2026-11-02 (fix plan group C).
-VISIBLE_NM = (650.0, 568.0, 451.0)
-
-
-def is_methane(f):
-    """True for a methane band filter, alone or stacked ("MT2", "MT3", "IR2/MT2")."""
-    return any(p.startswith("MT") for p in str(f or "").split("/"))
-
-
-def nearest_visible(filters, nms):
-    """The positions in filters (distinct colour filters, nms their wavelengths) of the three a false colour set
-    draws, longest wavelength first: the fewest methane bands, then the green nearest GRN, then the red and blue
-    nearest RED and BL1 (the least sum of their distances), then the order the filters come in (a Titan wind stare's
-    CB3, CB1, MT1, UV1, UV3 draws CB3 + CB1 + UV3). Three or fewer filters: all of them, longest first."""
-    import itertools
-    order = sorted(range(len(filters)), key=lambda j: -nms[j])
-    if len(order) <= 3:
-        return order
-    best = None
-    for three in itertools.combinations(order, 3):
-        r, g, b = three
-        key = (sum(is_methane(filters[j]) for j in three), abs(nms[g] - VISIBLE_NM[1]),
-               abs(nms[r] - VISIBLE_NM[0]) + abs(nms[b] - VISIBLE_NM[2]), three)
-        if best is None or key < best:
-            best = key
-    return list(best[3])
 
 
 def is_polarizer(f1, f2):
@@ -85,98 +42,50 @@ def colour_filter(f1, f2):
 
 def runs(frames):
     """The filter sets among frames, in time order: frames is a list of (cam, target, observation, colour filter
-    or None, t), each optionally with a sixth item, where SPICE places the frame ((x, y, ...) as stacking.places
-    gives it, or None); the answer is each set's positions in frames, in time order, in the order the sets end."""
+    or None, t); the answer is each set's positions in frames, in time order, in the order the sets end."""
     out, run = [], {}
 
     def close(cam):
         r = run.pop(cam, None)
-        if r and len(set(r["filters"])) >= 2:
+        if r and len(r["at"]) >= 2:
             out.append(r["at"])
 
-    for q, fr in enumerate(frames):
-        cam, target, obs, f, t = fr[:5]
-        place = fr[5] if len(fr) > 5 else None
+    for q, (cam, target, obs, f, t) in enumerate(frames):
         r = run.get(cam)
         if not f:
             close(cam)
             continue
-        reach = PLACE_REACH.get(cam)
-        if place is not None and (reach is None or place[0] is None or max(abs(place[0]), abs(place[1])) > reach):
-            place = None
-        same = r and target == r["target"] and obs == r["obs"] and t - r["last"] <= SET_GAP and not moved(r["place"], place)
-        repeat = same and f == r["filters"][-1] and t - r["last"] <= REPEAT_GAP and r["row"] < REPEAT_MAX
-        if same and (repeat or f not in r["filters"]):
+        if r and target == r["target"] and obs == r["obs"] and t - r["last"] <= SET_GAP and f not in r["filters"]:
             r["at"].append(q); r["filters"].append(f); r["last"] = t
-            r["row"] = r["row"] + 1 if repeat else 1
-            r["place"] = place if place is not None else r["place"]
         else:
             close(cam)
-            run[cam] = {"target": target, "obs": obs, "at": [q], "filters": [f], "last": t, "row": 1, "place": place}
+            run[cam] = {"target": target, "obs": obs, "at": [q], "filters": [f], "last": t}
     for cam in list(run):
         close(cam)
     return out
 
 
-def pointing(place, radius_km, ifov):
-    """place (x, y, range km), as runs takes it, or None for a frame that lies wholly on its target's disk: there
-    SPICE's centre offset cannot say whether two frames show the same ground, as the view swings across a close
-    flyby (Titan at 6,000 km: 5 degrees, 15,000 px, in the 200 s of a CB3, MT3, MT1 set on one patch of haze), and
-    a set is joined on time and filters alone, as before the pointing rule. radius_km: the target's radius (None:
-    unknown, the place kept); ifov: radians per full resolution px."""
-    if place is None or place[0] is None or not radius_km or len(place) < 3 or not place[2] or place[2] <= 0:
-        return place
-    return None if (place[0] ** 2 + place[1] ** 2) ** 0.5 + HALF_DIAGONAL < radius_km / (place[2] * ifov) else place
-
-
-def moved(a, b):
-    """True when SPICE puts two frames more than SET_PLACE px apart (a, b: (x, y, range km) or None); False when
-    either has no place. The places are compared on the ground: the body's centre is off a close-up by tens of
-    thousands of px, and a range change of a few percent between filters moves it by thousands though the camera
-    keeps looking at the same ground (Titan, N1616821718_1). So a's offset is scaled to b's range before they are
-    compared (offset x range is the ground's sky-plane distance from the centre, which stays put)."""
-    if a is None or b is None or a[0] is None or b[0] is None:
-        return False
-    k = a[2] / b[2] if len(a) > 2 and len(b) > 2 and a[2] and b[2] else 1.0
-    return ((a[0] * k - b[0]) ** 2 + (a[1] * k - b[1]) ** 2) ** 0.5 > SET_PLACE
-
-
-def channels(filters, nms, times=None):
+def channels(filters, nms):
     """(kind, positions of the red, green and blue channels in filters) of a set: "true", "false" or "two" (two
-    positions, longer wavelength first). nms: each filter's effective wavelength, in the same order. times: when
-    each was taken; a filter's channel is then its frame nearest in time to a frame of another filter (a run of
-    repeat exposures ends next to the next filter: Titan N1574127426_1, CB3 three times 105 s apart, then MT1),
-    else its first frame. The repeats around a channel are stacked into it (stacking.find_repeats)."""
-    at = {}
-    for j, f in enumerate(filters):
-        if times is None:
-            at.setdefault(f, j)
-            continue
-        gap = min((abs(times[j] - times[i]) for i, g in enumerate(filters) if g != f), default=0.0)
-        if f not in at or gap < at[f][1]:
-            at[f] = (j, gap)
-    if times is not None:
-        at = {f: j for f, (j, _) in at.items()}
+    positions, longer wavelength first). nms: each filter's effective wavelength, in the same order."""
+    at = {f: j for j, f in enumerate(filters)}
     red = next((f for f in TRUE_REDS if f in at), None)
     blue = next((f for f in TRUE_BLUES if f in at), None)
     if red and "GRN" in at and blue:
         return "true", [at[red], at["GRN"], at[blue]]
-    fs = list(at)
-    w = [at[fs[k]] for k in nearest_visible(fs, [nms[at[f]] for f in fs])]
-    return ("false", w) if len(w) >= 3 else ("two", w)
+    w = sorted(range(len(filters)), key=lambda j: -nms[j])
+    return ("false", [w[0], w[len(w) // 2], w[-1]]) if len(w) >= 3 else ("two", w)
 
 
-def filter_sets(cams, targets, obs, f1s, f2s, t, nm, places=None):
+def filter_sets(cams, targets, obs, f1s, f2s, t, nm):
     """Every filter set of the frames given as columns, in time order (cams "ISSNA"/"ISSWA" or "N"/"W"; nm(q):
-    frame q's effective wavelength; places: where SPICE puts each frame, (x, y, ...) or None, or None for none):
-    (set of each frame, -1 outside any, and the sets, each {"kind", "use" (its channels' frame positions), "rows",
-    "filters", "ready" (when its last channel was taken)})."""
+    frame q's effective wavelength): (set of each frame, -1 outside any, and the sets, each {"kind", "use" (its
+    channels' frame positions), "rows", "filters", "ready" (when its last channel was taken)})."""
     colour = {pair: colour_filter(*pair) for pair in set(zip(f1s, f2s))}
     fs = [colour[a, b] for a, b in zip(f1s, f2s)]
     set_of, sets = [-1] * len(fs), []
-    cols = (cams, targets, obs, fs, t) if places is None else (cams, targets, obs, fs, t, places)
-    for at in runs(list(zip(*cols))):
-        kind, use = channels([fs[q] for q in at], [nm(q) for q in at], [t[q] for q in at])
+    for at in runs(list(zip(cams, targets, obs, fs, t))):
+        kind, use = channels([fs[q] for q in at], [nm(q) for q in at])
         use = [at[j] for j in use]
         for q in at:
             set_of[q] = len(sets)
@@ -260,20 +169,6 @@ def main():
         kinds[s["kind"]] = kinds.get(s["kind"], 0) + 1
     print(f"{len(idx)} frames, {len(sets)} filter sets {kinds}, {sum(len(s['rows']) for s in sets)} frames in sets", flush=True)
     moved = {}
-    # repeats and pointings (REPEAT_GAP, SET_PLACE): the sets whose channels changed from the rule before them (no
-    # repeat exposures in a set, no pointing), named by their channels' ids, for a remake of their composites
-    keep = globals()["REPEAT_MAX"]
-    globals()["REPEAT_MAX"] = 0
-    try:
-        _, before = filter_sets(idx["INSTRUMENT_ID"].tolist(), idx["TARGET_NAME"].tolist(), idx["OBSERVATION_ID"].tolist(),
-                                idx["filter1"].astype(str).tolist(), idx["filter2"].astype(str).tolist(),
-                                idx["seconds_1970"].tolist(), lambda q: reel.wavelength(idx["INSTRUMENT_ID"].iat[q],
-                                                                                      idx["filter1"].iat[q] + idx["filter2"].iat[q]))
-    finally:
-        globals()["REPEAT_MAX"] = keep
-    was = {tuple(b["use"]) for b in before}
-    moved["set_rule"] = [[ids[q] for q in s["use"]] for s in sets if tuple(s["use"]) not in was]
-    print(f"sets new or changed by the repeat and pointing rule: {len(moved['set_rule'])}", flush=True)
     # reel (body reels, movie export): CB1 is now a true red, as the camera windows and the pre-build had it
     old = _old_reel_sets(idx)
     moved["reel_sets"] = [[ids[q] for q in o] for o, s in zip(old, sets) if o != s["use"]]

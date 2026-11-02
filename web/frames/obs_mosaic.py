@@ -65,8 +65,8 @@ import stacking  # noqa: E402
 # bumped whenever the way observation mosaics are made changes, so older ones are not served again; one per
 # display model (calibration.style), classic being the mosaics made before the balanced display model, raw the
 # balanced ones before natural color
-# obs-v56/v39/v26: the colour-set alignment fixes, wild star and edge fits rejected and grey where a channel is not aligned (#236); obs-v55/v38/v25: the tone shoulder, shadow floor and saturated colour fill (#241) and the dark-sky row band fixes (#242); obs-v54/v37/v24: the colour-set registration fixes (#235) and natural filters and palette for colour sets (#237); obs-v53/v36/v23: the CISSCAL 4.1 dark current (#231) and the colour-set repeat and pointing rule (#232); obs-v52/v35/v22: the CISSCAL 2 Hz noise, pixel pair and sky band steps (#230); obs-v51/v34/v21: the batch-4 fixes (thin ringlets kept, gentler compressed frames, movie long exposures held and first whole frame, Titan wind stares in color, natural color); obs-v50/v33/v20: the batch-3 fixes (Titan color, saturated white, movie strobe, small bright bodies keep their surface, line holes, pass kinds and scan rule, ride-along pans and ring strips, scan creep); obs-v49/v32/v19: movie cosmic rays and the small artifact fixes (group I), two-filter passes in color (group F), edge registration of clouded passes (group H2); obs-v48/v31/v18: repeats merged only at the same pointing, Auto center, movie tiles, mosaic movies and the calibration fixes; obs-v47/v30/v17: calibration takes the flat field (dust rings, mottle) and the nonlinearity out
-VERSIONS = {"balanced": "obs-v56", "raw": "obs-v39", "eye": "obs-v56-eye", "false": "obs-v56-false", "classic": "obs-v26-classic"}
+# obs-v51/v34/v21: the batch-4 fixes (thin ringlets kept, gentler compressed frames, movie long exposures held and first whole frame, Titan wind stares in color, natural color); obs-v50/v33/v20: the batch-3 fixes (Titan color, saturated white, movie strobe, small bright bodies keep their surface, line holes, pass kinds and scan rule, ride-along pans and ring strips, scan creep); obs-v49/v32/v19: movie cosmic rays and the small artifact fixes (group I), two-filter passes in color (group F), edge registration of clouded passes (group H2); obs-v48/v31/v18: repeats merged only at the same pointing, Auto center, movie tiles, mosaic movies and the calibration fixes; obs-v47/v30/v17: calibration takes the flat field (dust rings, mottle) and the nonlinearity out
+VERSIONS = {"balanced": "obs-v51", "raw": "obs-v34", "eye": "obs-v51-eye", "classic": "obs-v21-classic"}
 CANVAS = 2048        # longest side of the canvas the view is drawn on
 OUT = 1024           # longest side of the picture sent
 FRAME = 1024         # full resolution frame
@@ -1365,7 +1365,7 @@ def colour_of(count, nms):
     """The pass's colour filters, [red, green, blue], or None for grey. count = tiles per filter, nms = each
     filter's wavelength. (Near) true colour when the pass takes GRN and a blue at a good share of its tiles, with
     RED or else the continuum filter nearest red (not a methane band); otherwise false colour from the filters
-    taken at most tiles, the three nearest the visible (sets_passes.nearest_visible, longest wavelength red). Polarizers are left out (they are not a colour). A pass of two
+    taken at most tiles (longest wavelength red). Polarizers are left out (they are not a colour). A pass of two
     colour filters (CB2 and MT2) is [longer, shorter], drawn as a two-filter composite is (calibration.two_bands:
     green their mean); a clear filter is not one of the two."""
     most = max(count.values())
@@ -1386,8 +1386,7 @@ def colour_of(count, nms):
     if blue and red and "GRN" in good:
         return [red, "GRN", blue]
     if len(common) >= 3:
-        # the three nearest the visible, methane bands last (the filter sets' rule, sets_passes.nearest_visible)
-        return [common[j] for j in sets_passes.nearest_visible(common, [nms[f] for f in common])]
+        return [common[0], common[len(common) // 2], common[-1]]
     two = [f for f in common if f in plain]
     return two if len(two) == 2 else None
 
@@ -1822,18 +1821,11 @@ def pass_scale(frames, u, drawn=None, true_colour=False, sky_tops=None, lit_leve
                     tops[f] = max(margin, top)
             toe = SKY_TOE * max(tops.values())
             blacks = {f: max(blacks[f], level + tops[f]) for f, level in zip(by, levels)}
-    if calibration.look() == "balanced" and white > 0:
-        # a bright subject (a moon's limb, lit rings) sits in the top tenth of the range on the benchmark's gamma 3.0
-        # and reads as blown out: the gamma eases toward the single pictures' (calibration.EASE_PASS) by the pass's lit
-        # median (its brightest filter's, white = 1), as a single picture's highlights do (calibration.tone)
-        lit = max(calibration.lit_median((np.concatenate([i.ravel() for i in iofs]) - blacks[f]) / white)
-                  for f, iofs in by.items())
-        gamma = calibration.eased_gamma(gamma, lit, calibration.EASE_PASS)
     out = {"blacks": blacks, "white": white, "gamma": gamma, "filled": filled, "floor": round(floor, 3)}
     if toe:
         out["toe"], out["sky_tops"] = toe, tops
     mine = [f for f in (drawn or []) if f in by]
-    if calibration.false_balanced() and len(mine) == 3 and not true_colour:
+    if calibration.style() == "balanced" and len(mine) == 3 and not true_colour:
         # false color: each band's gain to bring the body's lit median (above that band's black) to the bands'
         # mean, so the planet comes out gray and only its differences between bands show (calibration.false_gains);
         # measured on the whole pass, so every tile has the same balance
@@ -1847,7 +1839,7 @@ def pass_scale(frames, u, drawn=None, true_colour=False, sky_tops=None, lit_leve
             # and the body's typical color after it, so the broad-color flattening holds one color as tiles arrive
             shown = [out["balance"][f] * v for f, v in zip(mine, levels)]
             out["typical"] = {f: float(np.log(v * len(shown) / sum(shown))) for f, v in zip(mine, shown)}
-    elif calibration.false_balanced() and len(mine) == 2:
+    elif calibration.style() == "balanced" and len(mine) == 2:
         # two filters: each band's gain to the pair's mean, which calibration.color_mix balances as three channels
         # (two_bands), and the typical color of those three, a list (the green channel is no one filter's)
         levels = []
@@ -2009,14 +2001,6 @@ def _around(u, n):
 
 REGISTER_GAP = 180   # s: a tile of another filter taken this soon before, at the same pointing, is what it is registered to
 REGISTER_MAX = 0.04  # of a frame: the largest correction to SPICE's placement that is believed
-# of a frame, per camera: a camera whose tiles are searched only this near SPICE's place (and their edges left out,
-# REGISTER_INSET), a larger move being a false match. The WAC: between the filters of one pointing it drifts 3 to 5 px
-# more than SPICE shows (stars of W1752982634_1..722_16), and a whole search let false matches on a black scene move
-# 61 tiles of Day the Earth Smiled (W1752982722_16) by 15 to 40 px. Not the NAC: its pixels are ten times finer and
-# SPICE's place of a frame is often 20 to 30 px off the others' on a close moon (Rhea ISS_018RH_REGCOL001, +22,-18
-# on 22 tiles; Iapetus ISS_049IA_REGMAPTRL001), which a 12 px search could not reach (the filters landed apart)
-REGISTER_NEAR = {"W": 8 / 1024}
-REGISTER_INSET = 16  # px: each tile's edge (where its alpha ends) is left out of the match by this much
 
 
 def _register_to(u, n):
@@ -2054,8 +2038,7 @@ def _register(u, n, out, crop, cache, scale):
         ref = _made_pictures.get(path)
     if ref is None:
         ref = np.asarray(Image.open(path).convert("RGBA"))
-    near = REGISTER_NEAR.get(u["key"][2])
-    shift, how = _shift_onto(q, ref, q["offset"], out, crop, out["offset"], within=near * FRAME if near else None)
+    shift, how = _shift_onto(q, ref, q["offset"], out, crop, out["offset"])
     if shift is None and how is not None and how.startswith("failed"):
         out["registered"] = {"to": q["id"], "why": how[7:]}
         return
@@ -2070,15 +2053,12 @@ def _register(u, n, out, crop, cache, scale):
     out["registered"] = {"to": q["id"], "how": how, "shift": [round(dx, 2), round(dy, 2)]}
 
 
-def _shift_onto(q, ref, at_q, t, crop, at_t, within=None):
+def _shift_onto(q, ref, at_q, t, crop, at_t):
     """How far tile t (its picture crop, its middle put at at_t) is from tile q (picture ref, middle at at_q) over
     the part of the view both cover, by the pipeline's own alignment of a set's channels
     (image_correction.align_with_masks: phase correlation, then on edges, then by the lit area's centroid): (dx, dy),
     reference pixels, that t's place moves back by to land on q, and how it was found; (None, how) when nothing was
-    found, (None, None) when the two hardly overlap there, (None, "failed <why>") when the alignment broke.
-    within = px: only a move this small from where the two are placed is searched (image_correction.guided_shift's
-    search round no shift), and each tile's edge (REGISTER_INSET) is left out of both, so neither tile's border is
-    matched as if it were the scene (_register); None: the whole alignment, as the stabilization chains use it."""
+    found, (None, None) when the two hardly overlap there, (None, "failed <why>") when the alignment broke."""
     corners = []
     for s, at, im in ((q, at_q, ref), (t, at_t, crop)):
         corners.append((at[0] + s["box"][0], at[1] + s["box"][1], im))
@@ -2098,16 +2078,11 @@ def _shift_onto(q, ref, at_q, t, crop, at_t, within=None):
     h = min(i.shape[0] for i in imgs)
     w = min(i.shape[1] for i in imgs)
     imgs, masks = [i[:h, :w] for i in imgs], [m[:h, :w] for m in masks]
-    if within is not None:
-        # only where both tiles have picture, well inside each: the same ground in both
-        k = np.ones((2 * REGISTER_INSET + 1, 2 * REGISTER_INSET + 1), np.uint8)
-        both = np.logical_and.reduce([cv2.erode(m.astype(np.uint8), k, borderValue=1) > 0 for m in masks])
-        imgs = [np.where(both[..., None], i, 0).astype(np.uint8) for i in imgs]
     # the rounding of each crop's corner to whole pixels, put back on the shift found
     rest = [(cx - x0) - round(cx - x0) for cx, _, _ in corners], [(cy - y0) - round(cy - y0) for _, cy, _ in corners]
     shifts, how = [], []
     try:
-        image_correction.align_with_masks(imgs, masks, 0, how, found=shifts, within=within)
+        image_correction.align_with_masks(imgs, masks, 0, how, found=shifts)
     except Exception as e:
         return None, f"failed {type(e).__name__}: {e}"[:200]
     if shifts[1] is None:
@@ -4358,10 +4333,7 @@ def movie_webp(frame_id, size, cache, trail=0, colour=True, wait=False, ahead=6,
     if not wait and ((_footprint_kept(u, rec) is None and
                       not all(os.path.exists(os.path.join(folder(u, cache), f)) for f in (PLAN_FILE, _footprint_file(u))))
                      or (steady and not _steady_ready(u, cache, rec)) or (exposure and not _exposure_ready(u, cache, rec, (bool(colour), bool(centre), 0)))):
-        # (footprint: a mosaic movie played as a movie, the Mosaic / Movie switch on Movie, needs the footprint its
-        # rolling picture does without, or this answers "working out the pass" for ever)
-        warm_movie(u, n, ahead, cache, steady=bool(steady), exposure=(bool(colour), bool(centre), 0) if exposure else None,
-                   footprint=True)
+        warm_movie(u, n, ahead, cache, steady=bool(steady), exposure=(bool(colour), bool(centre), 0) if exposure else None)
         return None, {"why": "working out the pass", "observation": u["key"][1], "pass": u["key"][3]}
     # (a feature track's frames, at their steady places, are named apart from the frames it played before, and so
     # are a stabilized movie's, by its smoothing; a filled pass's frame before detail() by _d0)
@@ -4411,18 +4383,15 @@ MOVIE_WORKERS = int(os.environ.get("CASSINI_MOVIE_WORKERS", "2"))
 _movie_background = threading.Semaphore(MOVIE_WORKERS)   # movie frames made ahead, beside the mosaics' one at a time
 
 
-def warm_movie(u, n, ahead, cache, steady=False, exposure=None, footprint=False):
+def warm_movie(u, n, ahead, cache, steady=False, exposure=None):
     """A movie is at frame n of the pass: work out its plan and make tiles n .. n+ahead in the background, from
     where the movie is rather than from the pass's start, MOVIE_WORKERS at once (a fast movie at high playback
-    speed needs several frames a second). steady: the pass's stabilization chain too (steady_chain); exposure: (colour, centre, steady) of its brightness chain (exposure_chain) to work out too.
-    The pass's movie footprint (movie_footprint) is worked out too, except for a mosaic movie's rolling picture,
-    which does without it; footprint True: a mosaic movie's too (movie_webp: the pass played as a movie)."""
+    speed needs several frames a second). steady: the pass's stabilization chain too (steady_chain); exposure: (colour, centre, steady) of its brightness chain (exposure_chain) to work out too."""
     mode = calibration.mode()
     key, last = (u["key"], mode), min(n + ahead, len(u["frames"]) - 1)
-    rolling = u.get("kind", "movie" if u.get("movie") else None) == "mosaic_movie" and not footprint
     # nothing to make (the plan, footprint and those tiles are in memory): no workers
     rec = _record(u, cache)
-    if rec is not None and (_footprint_kept(u, rec) is not None or rolling) \
+    if rec is not None and (_footprint_kept(u, rec) is not None or u.get("kind", "movie" if u.get("movie") else None) == "mosaic_movie") \
             and _all_made(u, cache, rec["plan"], n, last, look=True) and not (steady and not _steady_ready(u, cache, rec)) \
             and not (exposure and not _exposure_ready(u, cache, rec, exposure)):
         return
@@ -4438,14 +4407,12 @@ def warm_movie(u, n, ahead, cache, steady=False, exposure=None, footprint=False)
         try:
             with _movie_background, calibration.in_mode(mode):
                 p = plan(u, cache)
-                if not rolling:
+                if u.get("kind", "movie" if u.get("movie") else None) != "mosaic_movie":
                     movie_footprint(u, cache, p)
-                # (asked for by name, the chains are worked out for any pass: a mosaic movie played as a steady
-                # movie waits on them as any movie does)
-                if steady:
-                    steady_chain(u, cache, p)
-                if exposure:
-                    exposure_chain(u, cache, p, *exposure)
+                    if steady:
+                        steady_chain(u, cache, p)
+                    if exposure:
+                        exposure_chain(u, cache, p, *exposure)
                 while True:
                     with _lock:
                         first, last = _movie_ahead.get(key, (0, -1))

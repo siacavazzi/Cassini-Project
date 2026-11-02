@@ -77,14 +77,9 @@ for name, filters, base in (("EYE3", ["MT3", "CB2", "MT2"], 1600200000), ("EYE2"
     table = om._steady_table(u, 0, cache, True, True)
     eye = table["eye"]
     assert eye and eye["by"], table.get("eye")
+    assert table["sets"] is None   # the default draws these on the server (a false colour balance)
     want_mix = calibration.eye_mix("W", filters, "SATURN")
     assert np.allclose(eye["mix"], want_mix)
-    # Natural color, the default, draws a set with a methane band as Natural color (emulated) does (fix plan group
-    # C), so a three-filter one is mixed on this computer too, with the same mix (a two-filter set: the server)
-    if len(filters) == 3:
-        assert table["sets"] and np.allclose(table["sets"]["mix"], want_mix) and table["sets"]["by"] == eye["by"]
-    else:
-        assert table["sets"] is None
     cases, wants, labels = [], [], []
     for n in range(N):
         recipe = eye["by"].get(str(n))
@@ -101,9 +96,6 @@ for name, filters, base in (("EYE3", ["MT3", "CB2", "MT2"], 1600200000), ("EYE2"
             planes.append(grey)
         with calibration.coloring("eye"):
             B = np.asarray(om.movie_frame(u, n, cache, colour=True, centre=True)[0])
-        if len(filters) == 3:
-            # the default style's colour frame is the eye style's
-            assert np.abs(np.asarray(om.movie_frame(u, n, cache, colour=True, centre=True)[0]).astype(int) - B).max() <= 1
         cases.append(planes)
         wants.append(B)
         labels.append((n, recipe))

@@ -57,7 +57,7 @@ import stacking  # noqa: E402
 import sets_passes  # noqa: E402
 
 # bumped whenever the way reel pictures are made changes, so older ones are not served again
-VERSIONS = {"balanced": "reel-v38", "raw": "reel-v21", "eye": "reel-v38-eye", "false": "reel-v38-false", "classic": "reel-v15"}   # one per calibration.style(); v38/v21/v15: the colour-set alignment fixes, wild star and edge fits rejected and grey where a channel is not aligned (#236); v37/v20/v14: the tone shoulder, shadow floor and saturated colour fill (#241) and the dark-sky row band fixes (#242); v36/v19/v13: the colour-set registration fixes (#235) and natural filters and palette for colour sets (#237); v35/v18/v12: the CISSCAL 4.1 dark current (#231) and the colour-set repeat and pointing rule (#232); v34/v17/v11: the CISSCAL 2 Hz noise, pixel pair and sky band steps (#230); v33/v16/v10: the batch-4 fixes (thin ringlets, compressed frames, movie holds, Titan wind color); v32/v15/v9: the batch-3 fixes (Titan color, saturated white, movie strobe, line holes, pass kinds); v31/v14/v8: the small artifact and two-filter color fixes (groups I, F); v30/v13/v7: the restart's calibration, tone and tile fixes; v29/v12/v6: flat field
+VERSIONS = {"balanced": "reel-v33", "raw": "reel-v16", "eye": "reel-v33-eye", "classic": "reel-v10"}   # one per calibration.style(); v33/v16/v10: the batch-4 fixes (thin ringlets, compressed frames, movie holds, Titan wind color); v32/v15/v9: the batch-3 fixes (Titan color, saturated white, movie strobe, line holes, pass kinds); v31/v14/v8: the small artifact and two-filter color fixes (groups I, F); v30/v13/v7: the restart's calibration, tone and tile fixes; v29/v12/v6: flat field
 
 
 def version():
@@ -96,19 +96,7 @@ def load_index():
     cams, targets, obs = idx["INSTRUMENT_ID"].tolist(), idx["TARGET_NAME"].tolist(), idx["OBSERVATION_ID"].tolist()
     f1s, f2s, t = idx["filter1"].astype(str).tolist(), idx["filter2"].astype(str).tolist(), idx["seconds_1970"].to_numpy()
     # the filter sets, by the one rule (sets_passes: the camera windows', the pre-build's and the data's)
-    # where SPICE puts each frame (the geometry cache, when there is one), so a set ends where the camera moves on to
-    # the next pointing of a mosaic
-    at = geometry(idx["id"].tolist())
-    places = None
-    if at:
-        # a frame wholly on its target's disk has no place (sets_passes.pointing: on a close flyby the centre
-        # offset says nothing of the ground); obs_mosaic's radius table, imported here as obs_mosaic imports reel
-        import obs_mosaic
-        ifov = {"ISSNA": obs_mosaic.IFOV["N"], "ISSWA": obs_mosaic.IFOV["W"]}
-        places = [sets_passes.pointing(at.get(i), obs_mosaic.RADIUS.get(g), ifov.get(c, obs_mosaic.IFOV["N"]))
-                  for i, g, c in zip(idx["id"].tolist(), targets, cams)]
-    set_of, sets = sets_passes.filter_sets(cams, targets, obs, f1s, f2s, t, lambda q: wavelength(cams[q], f1s[q] + f2s[q]),
-                                           places)
+    set_of, sets = sets_passes.filter_sets(cams, targets, obs, f1s, f2s, t, lambda q: wavelength(cams[q], f1s[q] + f2s[q]))
     set_of = np.array(set_of)
     idx["set"] = set_of
     # copied whole once, which puts the columns added above into the frame's blocks (consolidates it): otherwise the

@@ -161,7 +161,6 @@ where report says how each frame was calibrated and aligned, and report["dropped
 left out because they can't be calibrated (then there is one image fewer than paths: a two-filter picture).
 A two-filter set balanced like false color (calibration.color_mix) comes back as three images, green the mean of the two.
 Channels whose own match fails are aligned near where SPICE puts them (spice_offsets, image_correction.guided_shift).
-A channel that nothing places (unaligned) makes the whole set grey from the reference (grey_from, report["grey"]).
 """
 def load_aligned(paths, hdr=False, scale=None, repeat_window=120, around=None):
     # Settings > Processing turns steps off per request (calibration.step); stacking checks its own
@@ -251,11 +250,6 @@ def load_aligned(paths, hdr=False, scale=None, repeat_window=120, around=None):
             # the picture is drawn, never where its channels land
             with cal.looking("classic"):
                 guide = cal.load_channels(lbls, imgs, iofs=iofs)
-            # what the camera saturated in each channel (merged in I/F: what every exposure saturated), moved with
-            # its channel below: filled from the channels that did not saturate there (calibration.tone, fill_saturated)
-            each = [_saturated_of(l, img.shape[:2]) if clip is None else clip for l, img, clip in zip(lbls, imgs, clips)]
-            if any(m is not None and m.any() for m in each):
-                full = [np.zeros(imgs[0].shape[:2], np.float32) if m is None else m.astype(np.float32) for m in each]
         elif linear is None:
             # puts every filter on the same brightness scale (see calibration.py)
             before = imgs
@@ -271,19 +265,6 @@ def load_aligned(paths, hdr=False, scale=None, repeat_window=120, around=None):
     ref = order[len(order)//2]
     # where SPICE says each channel's target sits relative to the reference's, for when the frames' own match fails
     guess = spice_offsets(lbls, ref) if align and len(lbls) > 1 else None
-    # the body grows or turns between the filters of a close flyby (the range or the camera's twist changes): each
-    # channel is first scaled and turned onto the reference's about its target's centre, so the translation found
-    # below lines up the whole limb, not only its middle
-    warps = spice_warps(lbls, ref) if align and len(lbls) > 1 else None
-    if warps and any(w is not None for w in warps):
-        masks = [m if w is None else warp_frame(m.astype(np.float32), w) > 0.99 for m, w in zip(masks, warps)]
-        if guide is not None:
-            guide = [g if w is None else warp_frame(g, w) for g, w in zip(guide, warps)]
-            if full is not None and len(lbls) > 1:
-                full = [m if w is None else warp_frame(m, w) for m, w in zip(full, warps)]
-            linear = ([c if w is None else warp_frame(c, w) for c, w in zip(linear[0], warps)],) + tuple(linear[1:])
-        else:
-            imgs = [i if w is None else warp_frame(i, w) for i, w in zip(imgs, warps)]
 
     # masks move with the frames, so pixels alignment leaves uncovered become invalid too
     aligned = []
@@ -297,11 +278,7 @@ def load_aligned(paths, hdr=False, scale=None, repeat_window=120, around=None):
             shifts = []
             ic.align_with_masks(guide, [m.copy() for m in masks], ref, aligned, found=shifts, guess=guess)
             channels, masks = ic.align_with_masks(linear[0], masks, ref, use=shifts)
-            if full is not None:
-                full = [m if d is None else ic.shift_image(m, *d) for m, d in zip(full, shifts)]
-            # a set drawn grey (a channel not aligned) is every channel the reference's, so no channel fill
-            imgs = cal.tone(*_greyed(channels, linear, ref, aligned),
-                            saturated=None if unaligned(aligned) else _saturated_masks(full))
+            imgs = cal.tone(channels, linear[1], linear[2])
         else:
             imgs, masks = ic.align_with_masks(imgs, masks, ref, aligned, guess=guess)
     except Exception:
@@ -310,22 +287,8 @@ def load_aligned(paths, hdr=False, scale=None, repeat_window=120, around=None):
         if linear is not None:
             guide = None
     if linear is not None and guide is None:
-        imgs = cal.tone(*_greyed(linear[0], linear, ref, aligned),
-                        saturated=_saturated_masks(full) if len(lbls) > 1 and not unaligned(aligned) else None)
-    grey = unaligned(aligned)
-    if grey:
-        # a channel neither its own match nor SPICE could place: drawn grey from the reference alone, never in colours
-        # that sit apart (its valid pixels are the reference's own)
-        if linear is None:
-            imgs = grey_from(imgs, ref)
-        masks = [masks[ref]]
+        imgs = cal.tone(linear[0], linear[1], linear[2])
     report = {"calibrated": calibrated, "stacked": stacked, "aligned": aligned}
-    if grey:
-        # drawn grey from one filter (grey_from): the channels could not be lined up
-        report["grey"] = "not aligned"
-    if warps and any(w is not None for w in warps):
-        # each channel's scale and turn onto the reference (SPICE's range and twist), None where it needed none
-        report["warped"] = [None if w is None else [round(w[2], 4), round(w[3], 3)] for w in warps]
     if not fill:
         report["filled"] = False
     if lost:
@@ -346,66 +309,6 @@ def load_aligned(paths, hdr=False, scale=None, repeat_window=120, around=None):
 
 
 """
-Whether a set's alignment (load_aligned's report["aligned"]) left a channel unplaced: "not aligned" (no match, and
-SPICE's offset neither lined the frames up nor was within image_correction.SPICE_SURE) or "failed". Such a set is drawn
-grey (grey_from), not in colours that sit apart. Alignment turned off ("off") is the viewer's own choice and stays.
-"""
-UNALIGNED = ("not aligned", "failed")
-
-
-def unaligned(aligned):
-    return len(aligned) > 1 and any(a in UNALIGNED for a in aligned)
-
-
-"""
-A set's channels drawn grey from one of them: every channel takes channels[src] where region is True (everywhere when
-region is None), so those pixels come out neutral, as the reference filter saw them. Works on the linear channels
-(before calibration.tone: the same values give the same grey in every channel) and on drawn 8-bit images. A region
-(a body that moved between the filters) greys only that part of the picture; None, the whole set (a channel not
-aligned, load_aligned).
-"""
-def grey_from(channels, src, region=None):
-    if region is None:
-        return [channels[src].copy() for _ in channels]
-    out = []
-    for c in channels:
-        r = region if c.ndim == region.ndim else region[..., None]
-        out.append(np.where(r, channels[src], c).astype(c.dtype))
-    return out
-
-
-"""
-calibration.tone's arguments for the linear channels (linear = load_linear's (channels, margin, mix)): as they are, or,
-when a channel was not aligned (unaligned), every channel the reference's and no colour mix, so the picture is grey
-"""
-def _greyed(channels, linear, ref, aligned):
-    if unaligned(aligned):
-        return grey_from(channels, ref), linear[1], None
-    return channels, linear[1], linear[2]
-
-
-"""
-calibration.saturated_of, or None for a frame whose codes can't be read
-"""
-def _saturated_of(lbl, shape):
-    try:
-        return cal.saturated_of(lbl, shape)
-    except Exception as e:
-        print(f"Can't read {lbl.get_info().get('path')} for its saturated pixels: {e}")
-        return None
-
-
-"""
-Each channel's saturated pixels as masks (from float32 masks moved with their channels), or None when none saturated
-"""
-def _saturated_masks(masks):
-    if not masks:
-        return None
-    out = [m > 0.5 for m in masks]
-    return out if any(m.any() for m in out) else None
-
-
-"""
 SPICE's offset of each frame's target from the reference frame's (lbls[ref]), (dx, dy) in full resolution pixels,
 as image_correction.align_with_masks takes it (guess): the geometry cache places the target on every frame
 (label.target_loc), and between the filters of a set it moves only as far as the camera's pointing drifted and the
@@ -413,15 +316,6 @@ body moved. None for a frame SPICE can't place; None for the whole set when the 
 pipeline, which loads no kernels for this) or the frames are of different targets.
 """
 def spice_offsets(lbls, ref):
-    locs = _spice_locs(lbls)
-    if locs is None or locs[ref] is None:
-        return None
-    return [None if loc is None else (locs[ref][0] - loc[0], locs[ref][1] - loc[1]) for loc in locs]
-
-
-def _spice_locs(lbls):
-    """label.target_loc of each frame ([x, y, range km, north angle], None where SPICE can't place it), or None when
-    the geometry cache is off or the frames are of different targets."""
     if not ba.GEOMETRY_CACHE or len({lbl.info.get("TARGET_NAME") for lbl in lbls}) != 1:
         return None
     locs = []
@@ -431,69 +325,9 @@ def _spice_locs(lbls):
                 locs.append(lbl.target_loc())
             except Exception:
                 locs.append(None)
-    return locs
-
-
-"""
-How each channel of a set is scaled and turned onto the reference frame (lbls[ref]) about its target's centre, from
-SPICE: (centre x, centre y, scale, degrees counter clockwise as cv2.getRotationMatrix2D takes them) per frame, or None
-where it needs none (under WARP_LEAST px anywhere in the frame) or SPICE can't place it; None for the whole set
-without the geometry cache. The range changes between filters on a close flyby (an Enceladus set, N1489051187_2,
-17% closer by its last filter: the limb 120 px off where the middle lines up) and the camera turns in a slew.
-"""
-WARP_LEAST = 0.5     # px at the frame's corner (HALF_DIAGONAL from its middle)
-WARP_MOST = 0.5      # a scale change past this share, or a turn past WARP_TURN degrees, is no use (not the same view)
-WARP_TURN = 30.0
-HALF_DIAGONAL = 724
-
-
-def spice_warps(lbls, ref):
-    locs = _spice_locs(lbls)
-    if locs is None or locs[ref] is None or len(locs[ref]) < 4 or not locs[ref][2]:
+    if locs[ref] is None:
         return None
-    out = []
-    for loc in locs:
-        if loc is None or len(loc) < 4 or not loc[2] or loc[3] is None or locs[ref][3] is None:
-            out.append(None)
-            continue
-        scale = float(loc[2]) / float(locs[ref][2])
-        turn = ((float(loc[3]) - float(locs[ref][3]) + 180) % 360) - 180
-        moves = HALF_DIAGONAL * (abs(scale - 1) + abs(np.radians(turn)))
-        if moves < WARP_LEAST or abs(scale - 1) > WARP_MOST or abs(turn) > WARP_TURN:
-            out.append(None)
-            continue
-        # about the target's centre; a close-up wholly on its target's disk about the frame's middle: its centre
-        # is thousands of px off (Titan at 6,000 km), and a scale about it moves the whole frame by hundreds
-        if _on_disk(lbls[ref], locs[ref]) or _on_disk(lbls[len(out)], loc):
-            out.append((ba.CCD_CENTER, ba.CCD_CENTER, scale, turn))
-        else:
-            out.append((ba.CCD_CENTER - float(loc[0]), ba.CCD_CENTER - float(loc[1]), scale, turn))
-    return out
-
-
-def _on_disk(lbl, loc):
-    """True when SPICE puts the frame wholly on its target's disk (sets_passes.pointing, the colour sets' rule)"""
-    if lbl is None or loc is None:
-        return False
-    try:
-        import obs_mosaic
-        import sets_passes
-    except ImportError:
-        return False
-    info = getattr(lbl, "info", None) or {}
-    cam = "W" if info.get("INSTRUMENT_ID") == "ISSWA" else "N"
-    return sets_passes.pointing(tuple(loc[:3]), obs_mosaic.RADIUS.get(info.get("TARGET_NAME")), obs_mosaic.IFOV[cam]) is None
-
-
-"""
-A frame (or its mask as float32) scaled and turned about a point, warp = (x, y, scale, degrees) as spice_warps gives
-"""
-def warp_frame(im, warp):
-    x, y, scale, turn = warp
-    M = cv2.getRotationMatrix2D((x, y), turn, scale)
-    h, w = im.shape[:2]
-    return cv2.warpAffine(im, M, (w, h), flags=cv2.INTER_CUBIC if im.dtype != np.float32 or im.ndim == 3 else cv2.INTER_LINEAR,
-                          borderMode=cv2.BORDER_CONSTANT)
+    return [None if loc is None else (locs[ref][0] - loc[0], locs[ref][1] - loc[1]) for loc in locs]
 
 
 """

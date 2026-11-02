@@ -1,13 +1,7 @@
 # -*- coding: utf-8 -*-
 """
-CISSCAL's dark current step (cassimg__subtractdark.pro and cisscal_linetime.pro, CISSCAL 4.1): the charge every pixel
-of the CCD gathers with no light, which is taken out of a frame in DN after the bias. First ported from ISIS 3's cisscal
-(DarkCurrent.cpp); where ISIS differs from the camera team's IDL, this follows the IDL (web/test_dark_current_idl.py
-checks the line times and the dark against CISSCAL 4.1 run in GDL): the 32 packet/s telemetry band (243-244 kbit/s,
-ISIS 203-204), any other data rate taken as 24 packets/s (ISIS fails), the lossy readout rates by summing mode (ISIS
-has them reversed), the botsim wait rounded to nearest (ISIS always down), lossless 8-bit botsim frames' readout (ISIS
-leaves the case out), a summed frame's hot pixels put in at full resolution before the k x k sum (ISIS puts the curve in
-place of the whole block's sum), and the hot pixel epoch by the year's 365.25 days.
+CISSCAL's dark current step (cassimg_subtractdark.pro), as ISIS 3's cisscal runs it (DarkCurrent.cpp): the charge
+every pixel of the CCD gathers with no light, which is taken out of a frame in DN after the bias.
 
 The camera team measured each pixel's dark charge at eight times (0, 10, 32, 100, 220, 320, 460 and 1200 s;
 darkcurrent/<nac|wac>_dark_parameters.<full|sum2|sum4>.cub, electrons). A pixel's charge sits in the CCD from the
@@ -23,10 +17,9 @@ Done line by line in cisscal; here the sum over the lines below is a convolution
 spends in a line depends only on how many lines it still has to travel), done once per frame with FFTs of the
 parameter maps worked out once per map. A frame's dark is kept for the next frame with the same readout.
 
-The parameter maps are the camera team's (COISS_0011 calib/darkcurrent/*_dark_parameters.xdr, big-endian); ISIS's
-.full.cub copies hold the same numbers little-endian. Not as cisscal: a time past the last grid point (1200 s) is taken at the grid's end instead of failing; the
-readout order (which camera is read first; cisscal reads it from the raw file's binary header, which the archive
-doesn't keep) is the label's READOUT_ORDER when it has one, else 0 (the NAC first, the usual order); and the NAC's hot pixel lists are left out (HOT_PIXEL_CAMERAS). Their
+Not as cisscal: a time past the last grid point (1200 s) is taken at the grid's end instead of failing; the
+readout order (which camera is read first) is not in the PDS label, so the label's READOUT_ORDER is used when it has
+one, else 0 (the NAC first, the usual order); and the NAC's hot pixel lists are left out (HOT_PIXEL_CAMERAS). Their
 curves, put in exactly as cisscal does, are 3 to 6 times the hot pixels' real excess on raw NAC frames (median 0.17 to
 0.29 of the model over 2006-2014 frames, smaller still on the brightest), so taking them out dug dark holes where the
 hot pixels were (pixels under -5 sigma: 478 to 1177 on N1778453158); the WAC's lists match (about 0.99) and stay.
@@ -59,11 +52,8 @@ GAIN_RATIOS = {"ISSNA": {215: 0.135386, 95: 0.309569, 29: 1.0, 12: 2.357285},
                "ISSWA": {215: 0.125446, 95: 0.290637, 29: 1.0, 12: 2.360374}}
 E_SATURATION = {"ISSNA": 123700, "ISSWA": 113300}
 DN_SATURATION = 4095.0
-# cassimg__subtractdark.pro's packet rates by INSTRUMENT_DATA_RATE (kbit/s); any other rate is taken as 24 (ISIS has
-# 203-204 for 32 and fails on the rest)
-TELEMETRY = ((60.0, 61.0, 8), (121.0, 122.0, 16), (182.0, 183.0, 24), (243.0, 244.0, 32), (304.0, 305.0, 40),
+TELEMETRY = ((60.0, 61.0, 8), (121.0, 122.0, 16), (182.0, 183.0, 24), (203.0, 204.0, 32), (304.0, 305.0, 40),
              (365.0, 366.0, 48))
-TELEMETRY_DEFAULT = 24
 TELEM_ORDER = (8, 16, 24, 32, 40, 48)
 # ComputeLineTime's readout rates (lines/s): (rate, flight software 1.4 correction, telem0, telem by rate 8..48)
 NOT_COMPRESSED = {
@@ -83,8 +73,7 @@ LOSSLESS = {
     ("8Bit", 512): (91.429, 0.4411, 1.0050, 1.0013, (0.9950, 1.0000, 1.0000, 1.0000, 1.0001, 1.0)),
     ("8Bit", 256): (152.350, 0.5417, 1.0080, 0.9986, (0.9863, 1.0017, 1.0021, 1.0010, 1.0017, 1.0)),
 }
-# lossy readout rates (lines/s) by summing mode: FULL, SUM2, SUM4 (cisscal_linetime's r1[sindex]; ISIS has them reversed)
-LOSSY_RATES = {1024: 89.754, 512: 110.131, 256: 201.734}
+LOSSY_RATES = {256: 89.754, 512: 110.131, 1024: 201.734}
 
 
 def _value(info, key, default=""):
@@ -108,18 +97,13 @@ def readout(info):
     if comp is None:
         return None
     ratio = 1.0 if comp == "NotCompressed" else ff._number(_value(info, "INST_CMPRS_RATIO", "1"), None)
-    if ratio == -1:
-        ratio = ff._number(_value(info, "COMPRESSION_RATIO", "0"), None)
-    if comp == "Lossless" and not ratio:
-        ratio = 2.0                                     # cisscal_linetime: "if not keyword_set(ratio) then ratio = 2."
     rate = ff._number(_value(info, "INSTRUMENT_DATA_RATE", "-999"), -999.0)
-    telemetry = next((t for lo, hi, t in TELEMETRY if lo <= rate <= hi), TELEMETRY_DEFAULT)
+    telemetry = next((t for lo, hi, t in TELEMETRY if lo <= rate <= hi), None)
     cycle = _value(info, "READOUT_CYCLE_INDEX", "UNKNOWN")
     delayed = {"NO": 0, "YES": 1}.get(_value(info, "DELAYED_READOUT_FLAG").upper())
     if ratio is None or telemetry is None or not cycle.lstrip("-").isdigit() or delayed is None:
         return None
-    # cisscal_linetime takes a version it can't read (0) as 1.4
-    fsw = ff._number(_value(info, "FLIGHT_SOFTWARE_VERSION_ID", "0"), 0.0) or 1.4
+    fsw = ff._number(_value(info, "FLIGHT_SOFTWARE_VERSION_ID", "0"), 0.0)
     conv = "12Bit" if _value(info, "DATA_CONVERSION_TYPE").upper() == "12BIT" else "8Bit"
     order = int(ff._number(_value(info, "READOUT_ORDER", "0"), 0) or 0)
     exposure = ff._number(_value(info, "EXPOSURE_DURATION", "0"), 0.0)
@@ -197,8 +181,8 @@ def line_time(r, lline):
     readouts = {0: 50, 1: 25, 2: 14, 3: 6}
     if cycle // 4 not in readouts:
         raise ValueError("readout cycle index out of range")
-    # IDL's ROUND, half away from zero (ISIS rounds down always: its "nearest" test compares the number with itself)
-    t1 = math.floor(readouts[cycle // 4] * (6.0 / tlm) + 0.5) + 0.539
+    # cisscal rounds readout * 6 / tlm down always (its "nearest" test compares the number with itself)
+    t1 = math.floor(readouts[cycle // 4] * (6.0 / tlm)) + 0.539
     linetime = t0 + line / r0
     line_break = buffer + fpacket + 1
     if conv == "12Bit" and comp == "NotCompressed":
@@ -219,10 +203,6 @@ def line_time(r, lline):
                 linetime = t0 + trans_line / r0 + (line - trans_line) / r1 + biu_swap
             if line > line_break:
                 linetime = t0 + trans_line / r0 + (line_break - trans_line) / r1 + (line - line_break) / r2 + biu_swap
-        return linetime
-    # lossless 8-bit fits in the image memory: read at r1 once transmission starts (ISIS leaves this case out)
-    if conv != "12Bit" and comp == "Lossless" and line > trans_line:
-        linetime = t0 + trans_line / r0 + (line - trans_line) / r1 + biu_swap
     return linetime
 
 
@@ -255,7 +235,7 @@ def _hot_lists(prefix):
 
 def _year(info):
     time = _value(info, "IMAGE_TIME", "0000-000")
-    return float(time[0:4]) + float(time[5:8]) / 365.25 if time[0:4].isdigit() and time[5:8].isdigit() else 0.0
+    return float(time[0:4]) + float(time[5:8]) / 365 if time[0:4].isdigit() and time[5:8].isdigit() else 0.0
 
 
 def hot_file(camera, year, every=False):
@@ -270,8 +250,8 @@ def hot_file(camera, year, every=False):
     return name
 
 
-def _hot_pixels(path):
-    """[(line, sample, charge at each TGRID time)] at full resolution from a hot pixel list (cisscal's makedarkarray)."""
+def _hot_pixels(path, lines):
+    """[(line, sample, charge at each TGRID time)] from a hot pixel list (cisscal's MakeDarkArray)."""
     with open(path) as f:
         text = f.read().split("\\begindata", 1)[-1]
     rows = [r.split() for r in text.splitlines() if r.strip()]
@@ -279,7 +259,7 @@ def _hot_pixels(path):
     out = []
     for cols in rows[2:]:
         values = [float(v) for v in cols]
-        x, y = int(values[0]), int(values[1])
+        x, y = int(math.floor(values[0] / 1024 * lines)), int(math.floor(values[1] / 1024 * lines))
         elec, hotsat = values[2:-1], values[-1]
         if hotsat == 0.0:
             continue
@@ -299,37 +279,22 @@ def _hot_pixels(path):
     return out
 
 
-def _sum_blocks(p, lines):
-    """(8, 1024, 1024) maps summed over k x k blocks to (8, lines, lines), as cisscal sums them for SUM2 and SUM4"""
-    k = p.shape[1] // lines
-    return p if k == 1 else p.reshape(p.shape[0], lines, k, lines, k).sum(axis=(2, 4))
-
-
 @functools.lru_cache(maxsize=4)
 def _parameters(camera, lines, hot):
-    """The dark parameter maps (8, lines, samples) with the hot pixels put in, and their FFTs down each column. As
-    cisscal's makedarkarray: the full resolution maps, each listed hot pixel's curve put in at its own pixel, the WAC's
-    0 s map taken as none, then for a summed mode each k x k block summed (ISIS reads its pre-summed cubes and puts a
-    hot pixel's curve in place of the whole block's sum)."""
-    path = os.path.join(ff.ROOT, "darkcurrent", f"{'nac' if camera == 'ISSNA' else 'wac'}_dark_parameters.full.cub")
+    """The dark parameter maps (8, lines, samples) with the hot pixels put in, and their FFTs down each column."""
+    mode = {1024: "full", 512: "sum2", 256: "sum4"}[lines]
+    path = os.path.join(ff.ROOT, "darkcurrent", f"{'nac' if camera == 'ISSNA' else 'wac'}_dark_parameters.{mode}.cub")
     if not os.path.exists(path):
         ff._warn(f"{os.path.basename(path)} missing, no dark current")
         return None
-    full = np.nan_to_num(ff.read_cube(path).astype(np.float64))
-    if camera == "ISSWA":
-        full[0] = 0.0       # the WAC's dark at 0 s is taken as none (the NAC's has negatives near its left edge)
-    p = _sum_blocks(full, lines)
+    p = np.nan_to_num(ff.read_cube(path).astype(np.float64))
     if camera in SMOOTH_MAP_CAMERAS:
         p = np.stack([cv2.medianBlur(band.astype(np.float32), 3) for band in p]).astype(np.float64)
     if hot:
-        k = 1024 // lines
-        # a pixel listed twice takes its last curve, as cisscal's loop overwrites it
-        curves = {(y, x): curve for y, x, curve in _hot_pixels(os.path.join(ff.ROOT, "darkcurrent", hot))}
-        for (y, x), curve in curves.items():
-            if camera == "ISSWA":
-                curve = np.concatenate([[0.0], curve[1:]])
-            # what the hot pixel adds over the map's own value there, onto its block
-            p[:, y // k, x // k] += curve - full[:, y, x]
+        for y, x, curve in _hot_pixels(os.path.join(ff.ROOT, "darkcurrent", hot), lines):
+            p[:, y, x] = curve
+    if camera == "ISSWA":
+        p[0] = 0.0          # the WAC's dark at 0 s is taken as none (the NAC's has negatives near its left edge)
     spectra = np.fft.rfft(p, n=2 * lines, axis=1).astype(np.complex64)
     return p[0].astype(np.float32), spectra
 

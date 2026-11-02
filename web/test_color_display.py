@@ -180,9 +180,7 @@ with cal.looking("balanced"):
     assert orange[0] > 1.0 and orange[2] < 0.6                      # more saturated than the filters' straight mix
     with cal.coloring("raw"):
         assert cal.style() == "raw" and cal.color_mix("N", ["RED", "GRN", "BL1"]) is None
-    # (a methane set: False color balances it; Natural color draws it as natural color emulation, test_color_eye.py)
-    with cal.coloring("false"):
-        g = cal.color_mix("N", ["CB2", "MT2", "BL1"], gains=cal.balance([0.054, 0.018, 0.036]))
+    g = cal.color_mix("N", ["CB2", "MT2", "BL1"], gains=cal.balance([0.054, 0.018, 0.036]))
     lv = np.diag(g) * [0.054, 0.018, 0.036]
     assert np.ptp(lv) < 0.5 * (0.054 - 0.018) and np.isclose(lv.sum(), 0.108)   # toward gray, brightness kept
 with cal.looking("classic"):
