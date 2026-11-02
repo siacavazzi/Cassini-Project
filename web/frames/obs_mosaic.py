@@ -1454,6 +1454,40 @@ def lum_frames(u, p):
     return out
 
 
+def lum_fills(u, p, tiles):
+    """The frames (indices, as tiles are numbered) of the luminance base's other filters that fill in under a place
+    whose every frame of the grey filter came down partial or was left out (partial; or not placed: an 8LSB frame, one
+    saturated all over), from the tiles made: lum_frames leaves out a frame of another filter wherever a grey frame
+    is at its place, so the part of a grey frame lost in downlink stayed a hole though a frame of another filter
+    covered it (Titan ISS_021TI_GLOBMAPNA001: CB3 N1519692683_2 lost a third of its lines, MT1 N1519692611_1 beside
+    it). Decided only once every grey frame at the place is made, so the set only grows as the pass goes on. The
+    base draws these under its other tiles (under_first), so they show only where nothing else is."""
+    lum = _luminance(p)
+    grey, allowed = lum["filters"][0], set(lum["filters"])
+    frames = u["frames"]
+    made = {t["n"]: t for t in tiles}
+    last = max(made) if made else -1
+    if not any(t["filter"] == grey and ("offset" not in t or partial(t)) for t in tiles):
+        return set()   # (the usual pass: every grey frame whole and placed)
+
+    def at(fr):
+        return (-fr[5] * fr[7] / u["z"], -fr[6] * fr[7] / u["z"]) if fr[7] and u["z"] else None
+    base = lum_frames(u, p)
+    greys = [(j, at(fr)) for j, fr in enumerate(frames) if fr[2] == grey and at(fr)]
+    out = set()
+    for t in tiles:
+        n = t["n"]
+        if n in base or t["filter"] not in allowed or "offset" not in t or partial(t):
+            continue
+        q = at(frames[n])
+        if q is None:
+            continue
+        there = [j for j, g in greys if math.hypot(q[0] - g[0], q[1] - g[1]) <= SAME_PLACE * FRAME]
+        if there and all(j <= last and j in made and ("offset" not in made[j] or partial(made[j])) for j in there):
+            out.add(n)
+    return out
+
+
 def _mine(u, p, tiles, f):
     """The placed tiles filter_mosaic draws for f: the filter's own, or for LUM the luminance base's (lum_frames),
     a band other than the grey filter carrying its gain (applied by _shade, times a mosaic movie copy's own lap gain)."""
@@ -1461,13 +1495,16 @@ def _mine(u, p, tiles, f):
         return [t for t in tiles if t["filter"] == f and "offset" in t]
     lum = _luminance(p)
     # (a mosaic movie's picture marks its own base, rolling_base)
-    frames = {t["n"] for t in tiles if t.get("base")} if any("base" in t for t in tiles) else lum_frames(u, p)
+    rolling = any("base" in t for t in tiles)
+    frames = {t["n"] for t in tiles if t.get("base")} if rolling else lum_frames(u, p)
+    fills = set() if rolling else lum_fills(u, p, tiles)
     gamma = p["display_scale"].get("gamma", 2.2)
     out = []
     for t in tiles:
-        if "offset" in t and t["n"] in frames:
+        if "offset" in t and (t["n"] in frames or t["n"] in fills):
             g = lum["gains"].get(t["filter"], 1.0)
-            out.append(dict(t, gain=round(g * t.get("gain", 1.0), 4), gamma=gamma) if g != 1.0 else t)
+            t = dict(t, gain=round(g * t.get("gain", 1.0), 4), gamma=gamma) if g != 1.0 else t
+            out.append(dict(t, fill=True) if t["n"] in fills else t)
     return out
 
 
@@ -1499,13 +1536,14 @@ def lum_base(u, p, tiles, used, base=None):
     if any("base" in t for t in tiles):
         return any(t.get("base") for t in tiles)   # (a mosaic movie's picture: rolling_base said)
     if base is None:
-        frames = lum_frames(u, p)
+        frames = lum_frames(u, p) | lum_fills(u, p, tiles)
         base = [t for t in tiles if "offset" in t and t["n"] in frames]
     if len(used) == 1:
         return any(t["filter"] != used[0] for t in base)
     by = {f: [t["offset"] for t in tiles if t["filter"] == f and "offset" in t] for f in used}
     near = lambda o, os_: any(math.hypot(o[0] - q[0], o[1] - q[1]) <= SAME_PLACE * FRAME for q in os_)
-    return any(not all(near(t["offset"], by[f]) for f in used) for t in base)
+    # (or a frame filling in under a partial grey frame, lum_fills: its colour's own frames may be partial there too)
+    return any(not all(near(t["offset"], by[f]) for f in used) for t in base) or bool(lum_fills(u, p, tiles))
 
 
 LUM_MATCH = (0.25, 4.0)   # the furthest the gray's match to the colour it borders goes, per channel
@@ -2753,9 +2791,11 @@ def view_rect(p, tiles=None):
 
 
 def under_first(tiles):
-    """The tiles in the order a mosaic draws them, each over the ones before: partial frames (partial) first, the
-    newest lowest (as _grown leaves a partial tile it draws under the picture so far), then the rest as given."""
-    return sorted((t for t in tiles if partial(t)), key=lambda t: -t["n"]) + [t for t in tiles if not partial(t)]
+    """The tiles in the order a mosaic draws them, each over the ones before: the luminance base's fills (lum_fills)
+    lowest, then partial frames (partial), the newest lowest (as _grown leaves a partial tile it draws under the
+    picture so far), then the rest as given."""
+    return ([t for t in tiles if t.get("fill")] + sorted((t for t in tiles if partial(t) and not t.get("fill")), key=lambda t: -t["n"])
+            + [t for t in tiles if not partial(t) and not t.get("fill")])
 
 
 def _window(u, p, mine, rect, cache):
@@ -2878,7 +2918,7 @@ def _over(u, p, rgba, t, rect, cache, match=True, kept=None):
     top = round((t["offset"][1] + by - rect[1]) * k)
     sw, sh = max(1, round(bw * k)), max(1, round(bh * k))
     draw_over(rgba, lambda: _shade(_part(_pic(u, cache, p["display_scale"], t), sw, sh), t),
-              left, top, sw, sh, k, match, kept, under=partial(t))
+              left, top, sw, sh, k, match, kept, under=partial(t) or bool(t.get("fill")))
 
 
 def draw_over(rgba, part, left, top, sw, sh, k, match=True, kept=None, under=False):
@@ -3027,7 +3067,9 @@ def filter_mosaic(u, p, f, tiles, rect, cache, ref=None, tag=""):
 
     def make():
         # (panel registration's tiles are every tile up to the newest too, each kept where it was first put)
-        if not balanced and tag in ("", PANEL_TAG, EDGE_TAG, SURFACE_TAG, SURFACE_TAG + PANEL_TAG) and len(mine) > GROW_FROM:
+        # (and not a base with fills, lum_fills: one joins it under the tiles before it, not as the newest on top)
+        if (not balanced and tag in ("", PANEL_TAG, EDGE_TAG, SURFACE_TAG, SURFACE_TAG + PANEL_TAG) and len(mine) > GROW_FROM
+                and not any(t.get("fill") for t in mine)):
             return _grown(u, p, f, mine, rect, cache, tag)
         window, shown = _window(u, p, mine, rect, cache)
         corrections = None
@@ -3155,7 +3197,7 @@ def layout(u, n, cache):
     luminance base (so_far), whose tiles the name counts (L<n>) when it holds more than the filters used. None
     before a tile of the base is placed: the gray never starts in a filter it then leaves."""
     p = plan(u, cache)
-    tiles = _reports(u, cache, p, range(n + 1))
+    tiles = [_silhouette(t) for t in _reports(u, cache, p, range(n + 1))]
     rect = view_rect(p, tiles)
     # each tile's surface redrawn as at the pass's epoch (surface reprojection), then each pointing moved onto the
     # ones before it where they overlap (panel registration: what is left is SPICE's pointing, a few pixels)
@@ -3174,7 +3216,7 @@ def layout(u, n, cache):
     if not count:
         return None
     colour = p["colour"]
-    frames = lum_frames(u, p)
+    frames = lum_frames(u, p) | lum_fills(u, p, tiles)
     base = [t["filter"] for t in tiles if "offset" in t and t["n"] in frames]
     if colour and all(count.get(f) for f in colour):
         used = colour
@@ -4122,6 +4164,7 @@ OVER_LEAST = 0.05    # ... and so is one saturated this much of the frame, where
 OVER_STEP = 3.0      # (unfit) a frame saturated OVER_LEAST or more, and this many times as much as its filter's frames
 #                      before and after it, is a long exposure among short ones
 SATURATED_ALL = 0.95   # ... and one saturated this much of carries no picture (left out of mosaics, never shown in movies)
+SATURATED_LIT = 0.9    # ... and in a mosaic, one saturated over this much of its lit part (and OVER_LEAST of the frame)
 LIT_LEVEL = 16       # levels: the tile's pixels at least this bright are its lit part (its report's "lit", _tile_made)
 
 
@@ -4134,6 +4177,22 @@ def over_exposed(t):
     exposure normalization, every other frame), white since saturated pixels are drawn white (#205)."""
     s = t.get("saturated", 0.0)
     return s >= OVER_EXPOSED or (s >= OVER_LEAST and s >= OVER_EXPOSED * t.get("lit", 1.0))
+
+
+def _silhouette(t):
+    """Tile report t as a mosaic draws it (layout): a tile the camera saturated over nearly all of what is lit in it
+    (SATURATED_LIT of its "lit", and OVER_LEAST of the frame) is left out, as one saturated all over is (_tile_made):
+    it holds no picture of the body, only its outline drawn white, and drawn in a mosaic that outline stood out in the
+    sky as a second limb. Iapetus ISS_049IA_REGMAPTRL001: the CL1/CL2 frames N1568160488_2 and N1568160638_2, long
+    exposures off the dark leading side's limb, saturated 99.5% of their lit part; the limb they drew white lay
+    ~250 px left of where the mosaic's dark ground (drawn near black) seemed to end, and read as a misplaced tile.
+    Applied when drawn, so reports already made keep working; a movie keeps its own rule (unfit)."""
+    s = t.get("saturated", 0.0)
+    if "offset" not in t or s < OVER_LEAST or s < SATURATED_LIT * t.get("lit", 1.0):
+        return t
+    out = {k: v for k, v in t.items() if k not in ("offset", "box", "native_offset", "spice_offset", "outline", "registered")}
+    out["why"] = f"saturated over {s / max(t.get('lit', 1.0), 1e-6):.0%} of what is lit in it: left out of the mosaic"
+    return out
 
 
 def unfit(frames, n, tile_of):
@@ -5162,7 +5221,7 @@ def tile_map(frame_id, cache):
             _maps[key] = found
         return found
     p, tiles, rect, count, used, _ = made
-    frames = lum_frames(u, p)
+    frames = lum_frames(u, p) | lum_fills(u, p, tiles)
     colour = used if len(used) > 1 else None
     x0, y0, w, h = rect
     frac = lambda x, y: [round((x - x0) / w, 5), round((y - y0) / h, 5)]
