@@ -1908,6 +1908,9 @@ body.idle .win.full .titlebar { opacity: 0; }
     const own = card.dataset.body || null, cam = card.dataset.cam, win = card.closest(".win") || card, well = card.querySelector(".well"), shot = card.querySelector(".shot"), chans = card.querySelector(".chans");
     const field = f => card.querySelector(`[data-f="${f}"]`) || { set textContent(v) {}, set innerHTML(v) {} };
     let shownAt = 0, mosaicAt = 0, wantAt = 0;   // when the last picture and the last pass mosaic went up, and the picture wanted now was asked for (behind)
+    let upEt = null;   // the mission time of the frame whose picture is up (display), whichever months are loaded
+    let jumpTimer = 0;   // a jump's loading card, unless the picture wanted comes first (update)
+    const JUMP_WAIT = 150;   // ms
     let body = own || viewBody(), heldBody = null;   // heldBody: the body the picture up is of
     let want = null, shownKey = null, shown = null, next = [], lastK = -2, lastReady = null, stripKey = "", stripSet = null;
     // steady size: shapeOf is the target and observation whose pass mosaic gave the picture its shape, which it
@@ -2164,7 +2167,7 @@ body.idle .win.full .titlebar { opacity: 0; }
       const keep = obsShown && catalog.obs[v.k] === obsShown && playsAs(v.k) !== "movie" && !(playsAs(v.k) === "mosaic_movie" && rolls());
       // the same picture again at another size (full view's full resolution one) is not a new picture
       const again = shown && shown.k === v.k && shown.set === v.set;
-      shownKey = v.key; shown = v; shownAt = performance.now();
+      shownKey = v.key; shown = v; shownAt = performance.now(); upEt = catalog.et[v.k];
       // shot.dataset.src / .report: what the picture on screen was made from, for flagging (flag.html)
       if (!keep) {
         shot.src = im.src; shot.dataset.src = v.key; shot.dataset.report = ""; obsShown = null; obsK = -1; well.classList.remove("mosaic"); saving(v.key);
@@ -3155,8 +3158,9 @@ body.idle .win.full .titlebar { opacity: 0; }
       // which closes by itself) keeps its picture
       const stale = S.get("cameras.stale") * (lastK >= 0 ? importance() : 1);
       if (k < 0 && holdUp && up) { field("status").textContent = "Waiting for the next picture"; return; }
-      // (while pinned, cassiniPin, a picture already up stays however old it gets)
-      const keep = lastK >= 0 && well.classList.contains("has-frame") && window.cassiniPin && cassiniPin.pinned();
+      // (while pinned, cassiniPin, a picture already up stays however old it gets: that picture, the camera's frame
+      // still; after a jump to another frame, an old one is idle as at any time, never brought up)
+      const keep = lastK >= 0 && k === lastK && well.classList.contains("has-frame") && window.cassiniPin && cassiniPin.pinned();
       if (k < 0 || (!holdUp && !keep && state.et - catalog.et[k] > stale * 3600)) {
         field("status").textContent = k < 0 ? "Camera" : `Last frame ${fmtDur(state.et - catalog.et[k])} ago`;
         strip(null); filmstrip(-1);
@@ -3177,6 +3181,21 @@ body.idle .win.full .titlebar { opacity: 0; }
       if (k === lastK && ready === lastReady && !force) return;
       lastK = k; lastReady = ready;
       want = view(k, state.et); wantAt = performance.now();
+      // a jump in time (a timeline click, a Moment, another year): the picture up is from far away (further than the
+      // stale time, so it would have gone idle on the way there), and it does not stay up under the new moment's
+      // lines while the new one loads; the window says it is loading, keeping its size. A picture the browser has
+      // already (the look-ahead's, as in movie mode's leaps from pass to pass) replaces it within JUMP_WAIT, with no
+      // card in between. A window that holds (a body window, or in a body's view) keeps its picture until the next
+      // one, which dissolves in (bodymode.html)
+      if (!holdUp && upEt !== null && well.classList.contains("has-frame") && Math.abs(catalog.et[k] - upEt) > stale * 3600) {
+        const w = want, from = upEt, msg = `<b>Loading</b>${titleCase(catalog.target[k] || "Unknown")} · ${catalog.id[k]}`;
+        clearTimeout(jumpTimer);
+        jumpTimer = setTimeout(() => {
+          if (want !== w || upEt !== from || !well.classList.contains("has-frame") || hold) return;
+          noFrame(msg, true);
+          shownKey = null; shown = null; upEt = null;
+        }, JUMP_WAIT);
+      }
       if (!want.movie) filmstrip(k);   // a movie frame moves the filmstrip when it is on screen (display)
       // a possible mosaic tile: the frame before is of the same pass (body and observation), and a frame of a colour
       // set only once its composite is shown (the mosaic is made of composites)
