@@ -473,6 +473,7 @@ def calibrate(png, info, image=None, smooth=True):
     offset = None
     spots = None
     lines_bias = overclock_bias(info)
+    sky = None
     if step("twohz"):
         # CISSCAL's 2 Hz noise, one value per line, taken off with the bias: measured from the frame's own background
         # where it has enough (cisscal_noise.image_hum, the "twohzsky" step; CISSCAL's image mean method, here also on
@@ -483,8 +484,14 @@ def calibrate(png, info, image=None, smooth=True):
             image = _lookup(pixels, dn) if codes else np.asarray(dn, dtype=np.float64)
             if lines_bias is not None:
                 image = image - (lines_bias - bias)[:, None]
-            missing = cn.missing_pixels(pixels)
-            hum = cn.image_hum(np.where(missing, 0.0, image), missing, info, dc.dark_dn(info))
+            # the zeros of the stored codes: the picture calibrated is their display stretch, whose zero is the
+            # frame's darkest code, on a dark sky a good share of its pixels (taken for lost ones, they were left out
+            # of the sky the noise is measured on, most on the lines the noise pulls down)
+            raw = np.asarray(png)
+            missing = cn.missing_pixels(raw if raw.shape == pixels.shape else pixels)
+            measured = []
+            hum = cn.image_hum(np.where(missing, 0.0, image), missing, info, dc.dark_dn(info), sky_out=measured)
+            sky = measured[0] if measured else None
         if hum is None:
             got = overclock_avg(info)
             hum = cn.two_hz(info, *got) if got is not None else None
@@ -526,6 +533,10 @@ def calibrate(png, info, image=None, smooth=True):
         dc.repair_hot(per_second, info, spots)
     if smooth:
         per_second = deblock(per_second, pixels, info)
+        if sky is not None and step("skysmooth"):
+            # on the stored codes (the image a picture is calibrated from is their display stretch, a code several
+            # levels apart there)
+            per_second = smooth_sky(per_second, png, sky)
 
     gain_ratio = GAIN_RATIOS[camera][GAIN_STATES[gain]]
     slope, start = SENSITIVITY[camera]
@@ -576,6 +587,45 @@ def deblock(iof, pixels, info):
     return iof + weight * (cv2.GaussianBlur(iof, (0, 0), sigma) - iof)
 
 
+SKY_SMOOTH = LOSSY_SMOOTH  # smooth_sky: the dark sky drawn towards its blur over this many pixels (sigma, at full resolution),
+SKY_STEP = LOSSY_STEP      # ... where the stored codes are within this many of that blur, as deblock does
+SKY_HOLE = 41              # ... with the holes in the dark sky up to about this many pixels across filled (stars)
+
+
+"""
+The dark sky's one-code steps smoothed, on a frame whose 2 Hz noise was measured from its sky (calibrate's
+"twohzsky"; the "skysmooth" step). A dark sky in the lean archive is a handful of codes (4 or 5 on the 2004 approach
+frames): the 2 Hz noise shows in it as how many of a line's pixels sit a code up or down, so once each line's level is
+taken off (right on average) the code most of a line's pixels share lands a fraction of a code higher or lower than
+the next line's, and a picture stretched to show the sky draws those as the bands again. As deblock: the frame drawn
+towards its blur over SKY_SMOOTH pixels where the stored codes are within SKY_STEP of theirs (stars, edges and real
+detail, more codes apart, stay as they were), here only on the dark sky the 2 Hz noise was measured on
+(cisscal_noise.dark_sky, its edge feathered over the same blur), and blurred over the steps alone. iof = the frame
+calibrated, png = its stored codes, sky = that dark sky, all the same size.
+"""
+def smooth_sky(iof, png, sky):
+    pixels = np.asarray(png)
+    if pixels.shape != iof.shape or np.shape(sky) != iof.shape:
+        return iof
+    sigma = SKY_SMOOTH * iof.shape[1] / 1024
+    codes = pixels.astype(np.float32)
+    # fully smoothed up to a code from the blur (the steps themselves), less so on to SKY_STEP; the blur taken again
+    # without what is further than that from the first one, so the sky round a star is measured against the sky's
+    # own codes, not lifted by the star (it would keep its steps in a ring round every star)
+    step = np.ones_like(codes)
+    for _ in range(2):
+        blur = cv2.GaussianBlur(codes * step, (0, 0), sigma) / np.maximum(cv2.GaussianBlur(step, (0, 0), sigma), 1e-6)
+        step = np.clip(1 - (np.abs(codes - blur) - 1) / (SKY_STEP - 1), 0, 1).astype(np.float32)
+    # the blur of the steps alone (a star, a cosmic ray or an edge left out of it, so none spreads a halo round itself)
+    blur = cv2.GaussianBlur(iof * step, (0, 0), sigma) / np.maximum(cv2.GaussianBlur(step, (0, 0), sigma), 1e-6)
+    # the sky with its small holes closed (a star, a cosmic ray and the margin the noise measurement leaves round
+    # them), so the sky round a star is smoothed as the rest is and the star itself is kept by its own codes (step)
+    area = cv2.morphologyEx(np.asarray(sky, dtype=np.uint8), cv2.MORPH_CLOSE,
+                            cv2.getStructuringElement(cv2.MORPH_ELLIPSE, (SKY_HOLE, SKY_HOLE)))
+    weight = step * cv2.GaussianBlur(area.astype(np.float32), (0, 0), sigma)
+    return iof + weight * (blur - iof)
+
+
 """
 Which pixels of a frame the camera saturated (the top of its 12 bit range, or of the 8 bit
 table). codes = the frame's PNG as stored; image = optional image on the same scale (resized or
@@ -615,13 +665,21 @@ SKY_DARK = 99        # balanced composites: this percentile of the dark sky's br
 SHOULDER = 0.8       # balanced composites: above this share of white, brightness rolls off softly instead
                      # of clipping (limbs and ring highlights past the white keep their shape)
 FLOOR_SHARE = 0.8    # balanced: the black is at least this share of the lit picture's floor, the FLOOR_PCT percentile of
-FLOOR_PCT = 0.5      # its brightness (the channels' mean above their sky levels), so a picture whose lit part is one even
-                     # surface (Titan's haze, a moon close-up) spreads over the range instead of the gamma lifting it to
-                     # near-white, and a lit sky that fails the sky test (a plume's, stray light) goes dark.
+FLOOR_PCT = 0.05     # its brightness (the channels' mean above their sky levels, after a 3x3 median), so a picture whose lit
+                     # part is one even surface (Titan's haze, a moon close-up) spreads over the range instead of the gamma
+                     # lifting it to near-white, and a lit sky that fails the sky test (a plume's, stray light) goes dark.
+                     # The floor is the lit part's darkest real feature: at the 0.5 percentile, the few cracks and crater
+                     # shadows under it went black ink on Enceladus and Rhea close-ups (spot check round 3)
 FLOOR_EDGE = 10      # With sky, the floor is taken at least FLOOR_EDGE pixels from it (none when under FLOOR_MIN of the
-FLOOR_MIN = 0.01     # picture is that far), and only an even lit part has it taken off: none when the floor is under
-FLOOR_EVEN = (0.3, 0.6)  # FLOOR_EVEN[0] of the lit part's WHITE_PCT percentile, all of FLOOR_SHARE from FLOOR_EVEN[1],
-                     # so dim things between the sky and the body (faint rings, a shadow, a night side) keep their light
+FLOOR_MIN = 0.01     # picture is that far), and only an even lit part has it taken off (with sky or without): none when
+FLOOR_EVEN = (0.3, 0.6)  # the floor is under FLOOR_EVEN[0] of the lit part's WHITE_PCT percentile, all of FLOOR_SHARE from
+                     # FLOOR_EVEN[1], so dim things between the sky and the body (faint rings, a shadow, a night side) keep
+                     # their light
+FLOOR_BODY = 2e-4    # ... and a lit thing of at least this share of the picture with no pixel FLOOR_EDGE from the sky (a small
+                     # moon, a narrow ring) whose median is lower is the floor, so a dim moon beside a bright ring is not
+                     # drawn black (Mimas under the A ring, spot check round 3)
+FLOOR_BORDER = 4     # ... and none of it within this many px (of 1024) of the frame's edge: the CCD's last columns read dark
+                     # on many frames (N1492367324_1, Titan's even haze: columns 1022-1023), and the 3x3 median keeps them
 GLOW_IOF = (1e-3, 5e-3)  # balanced, no sky: a picture whose median brightness (I/F) is under GLOW_IOF[0] is lit sky (a plume's
 GLOW_PCT = 50        # or the E ring's glow, stray light, a star field's offset), not a sunlit surface, which is brighter than
                      # GLOW_IOF[1]: its black is its GLOW_PCT percentile, so the sky goes near black and only the glow
@@ -645,18 +703,34 @@ SATURATED_GLOW = (0.001, 0.01, 0.5)  # ... and a frame saturated over SATURATED_
                      # keeps a soft edge instead of a hard black cut-out (none of the glow black lifts the haze to flat gray)
 
 
+EASE_GAMMA = 1.6     # balanced: a bright subject's highlights are drawn on a gamma eased toward this (eased_gamma), never
+EASE_LIT = (0.55, 0.85)  # below it: a moon close-up, a bright limb, the lit rings, whose lit median (its brightest channel,
+                     # white = 1) sits from EASE_LIT[0] of white to EASE_LIT[1] and over. At gamma 2.2 a body that bright is
+                     # drawn in the top tenth of the range (a median at 0.83 of white is 234 of 255) and reads as blown out
+                     # though nothing clipped; eased, its brightest 40% spreads over 68 levels instead of 54. A dim picture
+                     # (a crescent, a star field, a night side, most of whose lit pixels are well under white) keeps 2.2
+EASE_TOE = (0.25, 0.75)  # ... and the shadows keep theirs: a single picture's curve (encode_eased) is gamma's own up to
+                     # EASE_TOE[0] of white (a crack, a crater's shadow, a dim moon beside a bright ring are not darkened)
+                     # and the eased gamma's from EASE_TOE[1], blended (smoothstep) in between
+EASE_PASS = 2.2      # a mosaic's or movie's pass (obs_mosaic.pass_scale, drawn on one gamma number, also in the page) eases
+                     # from the benchmark's 3.0 no lower than this, the single pictures' gamma, so its night sides and
+                     # shadows are no darker than a single picture's
+
+
 def look():
     return _look.get()
 
 
 """
 How a balanced color picture maps its filters to color (color plan phase 2b): "natural" (the default) turns a
-true color set into the colors an eye would see (natural_mix) and balances a false color set so the body comes
-out gray (false_mix); "raw" draws each filter straight as a channel, as before; "eye" (natural color emulation)
-draws a true color set as "natural" does and any other set as what an eye would have seen of it (eye_mix). The
-classic look is always raw.
+true color set into the colors an eye would see (natural_mix), a set with a methane band into what an eye would
+have seen of it (eye_mix, as "eye" does: Sam 2026-11-02, fix plan group C, methane sets came out teal, pink or
+green) and balances any other false color set so the body comes out gray (false_mix); "false" balances every false
+color set, methane ones too, as "natural" did before; "raw" draws each filter straight as a channel, as before;
+"eye" (natural color emulation) draws a true color set as "natural" does and any other set as what an eye would
+have seen of it (eye_mix). The classic look is always raw.
 """
-COLORS = ("natural", "raw", "eye")
+COLORS = ("natural", "raw", "eye", "false")
 _colors = contextvars.ContextVar("colors", default="natural")
 
 
@@ -675,12 +749,18 @@ def coloring(name):
 
 """
 The display model in use, for cache names: "classic", "balanced" (natural color), "raw" (balanced, filters drawn
-straight) or "eye" (balanced, natural color emulation)
+straight), "eye" (balanced, natural color emulation) or "false" (balanced, every false color set balanced gray)
 """
 def style():
     if look() == "classic":
         return "classic"
-    return colors() if colors() in ("raw", "eye") else "balanced"
+    return colors() if colors() in ("raw", "eye", "false") else "balanced"
+
+
+def false_balanced():
+    """True when false color sets the style draws with a false color balance (false_mix) are balanced: natural
+    color and false color, the balanced look's mixes."""
+    return style() in ("balanced", "false")
 
 
 @contextlib.contextmanager
@@ -699,7 +779,8 @@ exposure bracket merged into one picture in mosaics and movies, stacking.load_hd
 exposures, a plain stack), "fill" (pixels lost in downlink filled from round them), "calibrate" (every frame put on
 I/F and one display scale; off shows each frame on the archive's own stretch), "twohz" (calibrate's 2 Hz noise, the
 horizontal banding, taken out line by line), "twohzsky" (the 2 Hz noise measured from the frame's own background,
-cisscal_noise.image_hum; off measures it from the overclocked pixels only, cisscal_noise.two_hz), "dark" (calibrate's dark current and
+cisscal_noise.image_hum; off measures it from the overclocked pixels only, cisscal_noise.two_hz), "skysmooth" (that dark
+sky's one-code steps smoothed, smooth_sky), "dark" (calibrate's dark current and
 the WAC's hot pixels taken out, dark_current.py), "pairs" (calibrate's anti-blooming bright/dark pixel pairs replaced,
 cisscal_noise.bright_dark), "flat" (calibrate's flat field: dust rings, mottle and the
 detector's flat taken out, flat_field.py), "hotpix" (calibrate's repair of the hot and dead pixels, which stay put
@@ -713,7 +794,7 @@ only how tiles are drawn together, or redraw or move tiles from the tiles made, 
 left out of variant (a mosaic with them off draws the same tiles) and the mosaics name them themselves
 (mosaic.drawing; obs_mosaic.SURFACE_TAG, PANEL_TAG, EDGE_TAG).
 """
-STEPS = ("stack", "hdr", "fill", "calibrate", "twohz", "twohzsky", "dark", "pairs", "flat", "hotpix", "align", "blend", "level", "surface", "panels")
+STEPS = ("stack", "hdr", "fill", "calibrate", "twohz", "twohzsky", "skysmooth", "dark", "pairs", "flat", "hotpix", "align", "blend", "level", "surface", "panels")
 _off = contextvars.ContextVar("off", default=frozenset())
 
 
@@ -770,11 +851,24 @@ NATURAL_PAIR = ("RED", "GRN", "BL1", "BL2", "VIO")
 SURFACE_WINDOW = {"TITAN": "CB3"}
 
 
+def emulated(bands, target=None):
+    """True when natural color draws a set as natural color emulation does (eye_mix): it has a methane band, which
+    shows how high the clouds are, not their color, and balanced turns the planet teal, pink or green. A two-filter
+    set through a body's surface window (SURFACE_WINDOW: Titan's CB3 and MT1) keeps its own drawing."""
+    if not any(is_methane(b) for b in bands):
+        return False
+    return not (len(bands) == 2 and SURFACE_WINDOW.get(str(target or "").upper()) in bands)
+
+
 def color_mix(camera, bands, target=None, gains=None, own=False):
-    if style() == "eye" and len(bands) in (2, 3):
-        return natural_mix(camera, bands) if len(bands) == 3 and natural_mix(camera, bands) is not None \
-            else eye_mix(camera, bands, target)
-    if style() != "balanced" or len(bands) not in (2, 3):
+    if len(bands) in (2, 3) and (style() == "eye" or style() == "balanced" and emulated(bands, target)):
+        if len(bands) == 3 and natural_mix(camera, bands) is not None:
+            return natural_mix(camera, bands)
+        m = eye_mix(camera, bands, target)
+        if m is not None or style() == "eye":
+            return m
+        # no eye mix (a filter without a wavelength): natural color balances it as before
+    if not false_balanced() or len(bands) not in (2, 3):
         return None
     if len(bands) == 2:
         if all(b in NATURAL_PAIR for b in bands) or SURFACE_WINDOW.get(str(target or "").upper()) in bands:
@@ -845,8 +939,8 @@ _wavelengths = None
 
 
 def band_wavelength(camera, band):
-    """A color filter's effective wavelength in nm on the camera ("N" or "W"), with the other wheel clear
-    (filter_calibration.csv), or None."""
+    """A color filter's effective wavelength in nm on the camera ("N" or "W"), with the other wheel clear, or of
+    two stacked filters ("IR2/IR1") the pair's (filter_calibration.csv), or None."""
     global _wavelengths
     if _wavelengths is None:
         _wavelengths = {}
@@ -859,6 +953,9 @@ def band_wavelength(camera, band):
                                  filters[:3] if filters.endswith(clear) and len(filters) == 6 else None):
                         if name and name not in ("CL1", "CL2"):
                             _wavelengths[(cam[3], name)] = float(nm)
+                if len(filters) == 6 and "CL" not in (filters[:2], filters[3:5]):
+                    # two color filters stacked, one on each wheel ("IR2/IR1", as band_of names it): the pair's own
+                    _wavelengths[(cam[3], filters[:3] + "/" + filters[3:])] = float(nm)
     cam = "N" if str(camera or "").startswith("N") or camera == "ISSNA" else "W"
     return _wavelengths.get((cam, band)) or _wavelengths.get(("W" if cam == "N" else "N", band))
 
@@ -891,15 +988,26 @@ true color set's (the page mixes it as it does those).
   pipeline over the mission, so a filter's calibration cancels out). Where every band is at its typical share the
   body has its own color (eye_tint: as the true color sets draw it, else BODY_TINTS, else gray); where they differ,
   the color leans the way the bands do: at a visible wavelength between two bands by their ratios interpolated
-  linearly in wavelength, past the set's bands by the nearest band's. A body without a measure in every band is
-  taken as gray (each ratio is the band's I/F).
+  linearly in wavelength, past the set's bands by the nearest band's.
 - Methane bands (MT1, MT2, MT3) see how high the clouds are, not the color of what is there, and stay out of the
-  estimate while the set has another band (Saturn's MT3 + CB2 + MT2 is drawn from CB2 alone, in Saturn's color).
+  color while the set has another band (Saturn's MT3 + CB2 + MT2 takes its color from CB2 alone, Saturn's color).
+  They stay in the brightness, METHANE_DETAIL of a band's share (each against its typical), so their clouds and
+  belts show as lighter and darker in the body's color instead of the set flattening to one cream (Saturn's
+  MT3 + MT2 + BL1).
+- A body whose measure is unsure in a color band (body_level's sure: too few frames, or a spread past BODY_SPREAD,
+  two-toned Iapetus) or that has none is drawn in one color, its own (eye_tint, gray when it has none), with the
+  bands' brightness: ratios to an unsure typical are not its color (Iapetus came out hot pink).
 - A two-filter set is its two bands, as color_mix's channels: longer, mean, shorter.
 camera = "N" or "W"; bands = the set's color filters in channel order; target = TARGET_NAME
 """
 METHANE = ("MT1", "MT2", "MT3")
 EYE_BANDS = ("RED", "GRN", "BL1")
+METHANE_DETAIL = 0.5   # a methane band's share of the brightness against another band's
+
+
+def is_methane(band):
+    """True for a methane band, alone or stacked ("MT2", "IR2/MT2"); sets_passes.is_methane's rule."""
+    return any(p in METHANE for p in str(band or "").split("/"))
 _eye_colors = None
 
 
@@ -924,28 +1032,43 @@ def eye_mix(camera, bands, target=None):
     nm = [band_wavelength(camera, b) for b in bands]
     if any(v is None for v in nm):
         return None
-    use = [i for i, b in enumerate(bands) if b not in METHANE] or list(range(len(bands)))
+    use = [i for i, b in enumerate(bands) if not is_methane(b)] or list(range(len(bands)))
     natural = natural_mix(camera, list(EYE_BANDS)).astype(np.float64)
     # the body's natural color as what RED, GRN and BL1 would measure of it (the natural matrix undone)
     eye = np.linalg.solve(natural, np.asarray(eye_tint(target), np.float64))
-    ref = {i: body_level(target, bands[i], camera, sure=False) for i in use}
-    if any(v is None for v in ref.values()):
-        ref = {i: 1.0 for i in use}
-    want = [band_wavelength(camera, b) for b in EYE_BANDS]
-    order = sorted(use, key=lambda i: nm[i])
+    n = range(len(bands))
+    sure = [body_level(target, bands[i], camera) for i in n]
+    # a body drawn in one color: a color band without a sure measure
+    one = any(sure[i] is None for i in use)
+    # the typical each band is read against: the sure measure; for a body drawn in one color none, each band's I/F
+    # as it is (an unsure typical, Iapetus' IR3 at 0.02 against a lit side at 0.3, blew the picture out)
+    ref = [1.0] * len(bands) if one else sure
+    # the brightness: each band against its typical, a methane band (one the color leaves out) at METHANE_DETAIL of
+    # a band's share, where its typical is known
+    weight = [1.0 if i in use else METHANE_DETAIL if ref[i] is not None else 0.0 for i in n]
+    ref = [v or 1.0 for v in ref]
+    bright = np.array([w / (sum(weight) * ref[i]) for i, w in enumerate(weight)], np.float64)
     a = np.zeros((3, len(bands)), np.float64)
-    for k, w in enumerate(want):
-        # the ratio to the typical at w: the nearest band's past the ends, else the two bands' either side, linearly
-        lo = [i for i in order if nm[i] <= w]
-        hi = [i for i in order if nm[i] > w]
-        if not lo or not hi:
-            parts = [((lo or hi)[-1 if lo else 0], 1.0)]
-        else:
-            i, j = lo[-1], hi[0]
-            t = (w - nm[i]) / (nm[j] - nm[i])
-            parts = [(i, 1 - t), (j, t)]
-        for i, share in parts:
-            a[k, i] += eye[k] * share / ref[i]
+    if one:
+        a = np.outer(eye, bright)
+    else:
+        want = [band_wavelength(camera, b) for b in EYE_BANDS]
+        order = sorted(use, key=lambda i: nm[i])
+        for k, w in enumerate(want):
+            # the ratio to the typical at w: the nearest band's past the ends, else the two bands' either side, linearly
+            lo = [i for i in order if nm[i] <= w]
+            hi = [i for i in order if nm[i] > w]
+            if not lo or not hi:
+                parts = [((lo or hi)[-1 if lo else 0], 1.0)]
+            else:
+                i, j = lo[-1], hi[0]
+                t = (w - nm[i]) / (nm[j] - nm[i])
+                parts = [(i, 1 - t), (j, t)]
+            for i, share in parts:
+                a[k, i] += eye[k] * share / ref[i]
+        if len(use) < len(bands):
+            # the methane bands' brightness, in the body's color: none at the body's typical shares
+            a += np.outer(eye, bright - np.array([1 / (len(use) * ref[i]) if i in use else 0.0 for i in n]))
     # brightness kept: the body at its typical brightness in the bands comes out as bright as their mean
     level = np.mean([ref[i] for i in use])
     a *= level
@@ -1313,9 +1436,17 @@ brightness (the channels' mean) through a toe (TOE), black up to its start (the 
 black), then turning into the brightness less the margin, and every channel is scaled by the same factor, so a pixel
 keeps its color.
 Past the shoulder the brightest channel rolls off softly (roll_off), the others by the same factor. mix = the
-set's channel mix (color_mix), applied first, on the linear values.
+set's channel mix (color_mix), applied first, on the linear values. A bright subject's highlights are drawn on an
+eased gamma (eased_gamma, from its lit median; encode_eased). saturated = optional list, one per channel, of the pixels
+the camera saturated in it (a color set's, aligned with the channels, or None): a channel saturated where another is
+not is filled from those (fill_saturated), so channels that clipped at different levels don't come out yellow, red or
+cyan (a saturated limb, Hyperion's bright side) and the surface the others saw stays; where every channel saturated,
+neutral white.
 """
-def tone(channels, margin, mix=None, shoulder=SHOULDER, gamma=2.2):
+def tone(channels, margin, mix=None, shoulder=SHOULDER, gamma=2.2, saturated=None):
+    every = None
+    if saturated is not None and any(m is not None and m.any() for m in saturated):
+        channels, every = fill_saturated(channels, saturated)
     if mix is not None:
         # a two-filter set's mix is on three channels, green the mean of the two (color_mix)
         channels = two_bands(channels)
@@ -1331,10 +1462,87 @@ def tone(channels, margin, mix=None, shoulder=SHOULDER, gamma=2.2):
         toed = np.where(lum <= start, 0, np.where(lum <= start + w, (lum - start) ** 2 / (2 * w),
                                                   lum - margin - late))
         x *= np.where(lum > 0, toed / np.maximum(lum, 1e-12), 0)
+    eased = eased_gamma(gamma, lit_median(x.max(axis=0)))
     if shoulder:
         _shoulder(x, shoulder)
+    if every is not None:
+        x[:, every] = 1.0
     x = np.clip(x, 0, 1)
-    return [cv2.cvtColor((encode(c, gamma) * 255 + 0.5).astype(np.uint8), cv2.COLOR_GRAY2BGR) for c in x]
+    return [cv2.cvtColor((encode_eased(c, gamma, eased) * 255 + 0.5).astype(np.uint8), cv2.COLOR_GRAY2BGR) for c in x]
+
+
+"""
+A color set's channels (linear, aligned) with each channel's saturated pixels (masks, one per channel or None) filled
+from the channels that did not saturate there: each of those scaled by the set's typical ratio of the two (the median
+over the lit pixels neither saturated), averaged. The camera says nothing of the color there (the clipped value is only
+a floor of the true one, and the channels clip at different levels: a limb glare yellow, Hyperion's bright side cyan),
+so it gets the picture's typical color with the surface the others saw. Returns (channels, the pixels every channel saturated, or None)
+"""
+def fill_saturated(channels, masks):
+    masks = [np.zeros(channels[0].shape, bool) if m is None else np.asarray(m, bool) for m in masks]
+    x = [np.asarray(c, np.float32) for c in channels]
+    top = np.max(x, axis=0)
+    lit = top > 0.2 * np.percentile(top, 99)
+    out = []
+    for i, (c, m) in enumerate(zip(x, masks)):
+        if not m.any():
+            out.append(c)
+            continue
+        total = np.zeros(c.shape, np.float32)
+        count = np.zeros(c.shape, np.float32)
+        for j, (o, n) in enumerate(zip(x, masks)):
+            both = lit & ~m & ~n & (o > 0)
+            if j == i or both.sum() < 100:
+                continue
+            ratio = np.float32(np.median(c[both] / o[both]))
+            use = m & ~n
+            total[use] += ratio * o[use]
+            count[use] += 1
+        filled = c.copy()
+        some = count > 0
+        filled[some] = total[some] / count[some]
+        out.append(filled)
+    every = np.logical_and.reduce(masks)
+    return out, (every if every.any() else None)
+
+
+"""
+The median of a picture's lit pixels, on its brightest channel (white = 1): those over a fifth of its 99th percentile,
+as false color's balance takes them, and not the ones drawn saturated (draw_saturated puts them far past white). 0 for
+a picture with under 100 such pixels
+"""
+def lit_median(top):
+    top = np.asarray(top, dtype=np.float32)
+    unsaturated = top[top < SATURATED / 2]
+    if unsaturated.size < 100:
+        return 0.0
+    lit = unsaturated[unsaturated > 0.2 * np.percentile(unsaturated, 99)]
+    return float(np.median(lit)) if lit.size >= 100 else 0.0
+
+
+"""
+The gamma a bright subject's highlights are drawn on: gamma, eased toward least (EASE_GAMMA; never raised, never below
+it) as its lit median (lit, white = 1) goes from EASE_LIT[0] to EASE_LIT[1], so a bright subject spreads over the range
+instead of sitting in the top tenth of it; gamma as given when it is a curve ("srgb") or already at or under least
+"""
+def eased_gamma(gamma, lit, least=EASE_GAMMA):
+    if isinstance(gamma, str) or gamma <= least:
+        return gamma
+    t = min(max((lit - EASE_LIT[0]) / (EASE_LIT[1] - EASE_LIT[0]), 0.0), 1.0)
+    return round(float(gamma - (gamma - least) * t), 4)
+
+
+"""
+Display brightness (0-1) from linear brightness (0-1, white = 1) for a single picture (tone): encode at gamma up to
+EASE_TOE[0], at eased from EASE_TOE[1], a smoothstep blend of the two in between (monotonic for gammas from 1.5 up);
+encode itself when eased is gamma
+"""
+def encode_eased(x, gamma, eased):
+    if eased == gamma:
+        return encode(x, gamma)
+    t = np.clip((x - np.float32(EASE_TOE[0])) / np.float32(EASE_TOE[1] - EASE_TOE[0]), 0, 1)
+    shadows = encode(x, gamma)
+    return shadows + t * t * (3 - 2 * t) * (encode(x, eased) - shadows)
 
 
 """
@@ -1468,35 +1676,70 @@ def fine_structure(lum):
 
 """
 The black a picture's floor sets (FLOOR_SHARE): a share of the FLOOR_PCT percentile of its brightness above the sky
-levels. sky = the sky mask, or None for a picture without sky: then every pixel, and FLOOR_SHARE of it, or up to its
-GLOW_PCT percentile when the picture is as dim as lit sky (GLOW_IOF) and smooth (GLOW_FINE), glow (0 to 1) of that. With sky, the
-pixels at least FLOOR_EDGE from it, and a share from 0 to FLOOR_SHARE as that floor goes from FLOOR_EVEN[0] to
-FLOOR_EVEN[1] of their WHITE_PCT percentile; 0 when under FLOOR_MIN of the picture is that far from the sky
+levels, taken after a 3x3 median (so a dead pixel or a lost line's edge doesn't set it): the darkest real feature of the
+lit part, a crack, a crater's shadow, so it keeps some light above the black instead of going black (FLOOR_PCT).
+sky = the sky mask, or None for a picture without sky: then every pixel brighter than the sky test's cut (_sky: a
+border of empty columns is not the floor) and not FLOOR_BORDER from the frame's edge, and FLOOR_SHARE of it, or up to
+its GLOW_PCT percentile when the picture is as dim as lit sky (GLOW_IOF) and smooth (GLOW_FINE). With sky, the pixels
+at least FLOOR_EDGE from it (and FLOOR_BORDER from the edge), and FLOOR_SHARE of it as that floor goes from FLOOR_EVEN[0]
+to FLOOR_EVEN[1] of their WHITE_PCT percentile; 0 when under
+FLOOR_MIN of the picture is that far from the sky, and no higher than the median of any other lit thing in the picture
+too small or thin to be that far from the sky (a small moon, a narrow ring: FLOOR_BODY), so it is not drawn black
 """
 def _floor(iofs, levels, sky=None, glow=1.0):
     lum = iofs[0] - np.float32(levels[0]) if len(iofs) == 1 else \
         np.mean([iof - np.float32(level) for iof, level in zip(iofs, levels)], axis=0)
+    lum = np.ascontiguousarray(lum, dtype=np.float32)
+    dark = cv2.medianBlur(lum, 3)
     if sky is None:
-        floor, middle, lit = (float(v) for v in np.percentile(lum, (FLOOR_PCT, 50, GLOW_PCT)))
+        middle, bright = (float(v) for v in np.percentile(lum, (50, GLOW_PCT)))
+        lit = (lum >= 0.05 * np.percentile(lum, 99.9)) & _inner(lum.shape)
+        lit = lit if lit.sum() > 100 else np.ones(lum.shape, dtype=bool)
+        floor, top = (float(v) for v in np.percentile(dark[lit], (FLOOR_PCT, WHITE_PCT)))
         black = FLOOR_SHARE * max(floor, 0.0)
         dim = min(max(float(np.log(GLOW_IOF[1] / max(middle, 1e-12)) / np.log(GLOW_IOF[1] / GLOW_IOF[0])), 0.0), 1.0)
-        lit = max(lit - black, 0.0)
+        bright = max(bright - black, 0.0)
         if dim == 0 and -1e30 < lum.min() and lum.max() < 1e30:
             # a picture brighter than lit sky (most): none of its glow whatever its fine structure, a finite share for
             # pixels of this size (their blurs cannot overflow into a NaN), so the same number (zero, of the same
             # sign) without measuring it (two blurs, ~35 ms)
-            return black + glow * dim * lit
+            return black + glow * dim * bright
         smooth = (GLOW_FINE[1] - fine_structure(lum)) / (GLOW_FINE[1] - GLOW_FINE[0])
-        return black + glow * dim * min(max(smooth, 0.0), 1.0) * lit
+        return black + glow * dim * min(max(smooth, 0.0), 1.0) * bright
     side = 2 * FLOOR_EDGE + 1
-    far = cv2.erode((~sky).astype(np.uint8), np.ones((side, side), np.uint8)).astype(bool)
+    lit = (~sky).astype(np.uint8)
+    far = cv2.erode(lit, np.ones((side, side), np.uint8)).astype(bool) & _inner(lum.shape)
     if far.sum() < FLOOR_MIN * far.size:
         return 0.0
-    floor, top = (float(v) for v in np.percentile(lum[far], (FLOOR_PCT, WHITE_PCT)))
+    floor, top = (float(v) for v in np.percentile(dark[far], (FLOOR_PCT, WHITE_PCT)))
+    # a lit thing with no pixel that far from the sky: its median, when lower, is the floor
+    count, labels, stats, _ = cv2.connectedComponentsWithStats(lit, connectivity=8)
+    if count > 2:
+        reached = np.zeros(count, dtype=bool)
+        reached[np.unique(labels[far])] = True
+        small = [i for i in range(1, count) if not reached[i] and stats[i, cv2.CC_STAT_AREA] >= FLOOR_BODY * lum.size]
+        for i in small:
+            x, y, w, h = (int(v) for v in stats[i, :4])
+            box = labels[y:y + h, x:x + w] == i
+            floor = min(floor, float(np.median(lum[y:y + h, x:x + w][box])))
     if floor <= 0 or top <= 0:
         return 0.0
-    even = min(max((floor / top - FLOOR_EVEN[0]) / (FLOOR_EVEN[1] - FLOOR_EVEN[0]), 0.0), 1.0)
-    return FLOOR_SHARE * even * floor
+    return FLOOR_SHARE * _even(floor, top) * floor
+
+
+"""The pixels of a picture of shape (rows, columns) at least FLOOR_BORDER (scaled from 1024 px) from its edge"""
+def _inner(shape):
+    border = max(1, int(round(FLOOR_BORDER * shape[1] / 1024)))
+    inner = np.zeros(shape, dtype=bool)
+    inner[border:-border, border:-border] = True
+    return inner
+
+
+"""How even a lit part is (FLOOR_EVEN): 0 to 1 as its floor goes from FLOOR_EVEN[0] to FLOOR_EVEN[1] of its top"""
+def _even(floor, top):
+    if floor <= 0 or top <= 0:
+        return 0.0
+    return min(max((floor / top - FLOOR_EVEN[0]) / (FLOOR_EVEN[1] - FLOOR_EVEN[0]), 0.0), 1.0)
 
 
 """

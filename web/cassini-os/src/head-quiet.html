@@ -1363,17 +1363,47 @@ body.idle .win.full .titlebar { opacity: 0; }
     return [a, b].filter(x => !/^CL/.test(x)).join("/") || null;
   };
   const nmOf = k => FILTER_NM[`${catalog.cam[k]}:${catalog.f1[k]}/${catalog.f2[k]}`] || 0;
+  // a false colour set of more than three filters draws the three nearest what an eye's red, green and blue see,
+  // methane bands left out wherever three others are there (sets_passes.nearest_visible, line for line)
+  const VISIBLE_NM = [650, 568, 451];
+  const isMethane = f => String(f || "").split("/").some(p => p.startsWith("MT"));
+  function nearestVisible(filters, nms) {
+    const order = filters.map((f, j) => j).sort((a, b) => nms[b] - nms[a]);
+    if (order.length <= 3) return order;
+    let best = null;
+    for (let a = 0; a < order.length; a++) for (let b = a + 1; b < order.length; b++) for (let c = b + 1; c < order.length; c++) {
+      const three = [order[a], order[b], order[c]];
+      let m = 0;
+      three.forEach(j => { m += isMethane(filters[j]) ? 1 : 0; });
+      const key = [m, Math.abs(nms[three[1]] - VISIBLE_NM[1]), Math.abs(nms[three[0]] - VISIBLE_NM[0]) + Math.abs(nms[three[2]] - VISIBLE_NM[2]), ...three];
+      const i = best ? key.findIndex((v, q) => v !== best[q]) : -1;
+      if (!best || (i >= 0 && key[i] < best[i])) best = key;   // the least key, compared item by item (Python's tuples)
+    }
+    return best.slice(3);
+  }
   function pickChannels(s) {
-    const by = f => s.frames[s.filters.indexOf(f)], blue = ["BL1", "BL2", "VIO"].find(f => s.filters.includes(f));
+    // a filter's channel: its frame nearest in time to a frame of another filter (a run of repeat exposures ends
+    // next to the next filter), the first of those as near (sets_passes.channels)
+    const pick = {};
+    s.frames.forEach((k, j) => {
+      const f = s.filters[j];
+      let gap = Infinity;
+      s.frames.forEach((q, i) => { if (s.filters[i] !== f) gap = Math.min(gap, Math.abs(catalog.et[k] - catalog.et[q])); });
+      if (gap === Infinity) gap = 0;
+      if (!(f in pick) || gap < pick[f][1]) pick[f] = [k, gap];
+    });
+    const by = f => pick[f][0], blue = ["BL1", "BL2", "VIO"].find(f => s.filters.includes(f));
     // red: RED, or the 619 nm continuum filter CB1 when a set has no RED (the narrow-angle camera at Jupiter), as
     // obs_mosaic picks the filter nearest 650 nm
     const red = ["RED", "CB1"].find(f => s.filters.includes(f));
     if (red && s.filters.includes("GRN") && blue) { s.kind = "true"; s.use = [by(red), by("GRN"), by(blue)]; }
     else {
-      // each filter's first frame (repeat exposures after it are stacked into it)
-      const w = s.frames.filter((k, j) => s.filters.indexOf(s.filters[j]) === j).sort((p, q) => nmOf(q) - nmOf(p));
+      // each filter's channel frame, in the order the filters were first taken; the three nearest the visible,
+      // longest wavelength first (sets_passes.nearest_visible)
+      const fs = s.filters.filter((f, j) => s.filters.indexOf(f) === j);
+      const w = nearestVisible(fs, fs.map(f => nmOf(by(f)))).map(j => by(fs[j]));
       s.kind = w.length >= 3 ? "false" : "two";
-      s.use = w.length >= 3 ? [w[0], w[w.length >> 1], w[w.length - 1]] : w;
+      s.use = w;
     }
     s.ready = Math.max(...s.use.map(k => catalog.et[k]));   // the picture exists once its last channel is taken
   }
@@ -2571,7 +2601,7 @@ body.idle .win.full .titlebar { opacity: 0; }
         const notes = [rep.calibrated ? "calibrated" : "not calibrated (each frame stretched on its own)",
           stacked ? `${stacked} repeat exposure${stacked > 1 ? "s" : ""} stacked` : "",
           rep.aligned.length && rep.aligned.every(a => a === "off") ? "not aligned (turned off)" :
-          n ? `${n} channel${n > 1 ? "s" : ""} could not be aligned` : rep.aligned.some(a => a.startsWith("centroid")) ? "aligned by centroid" : "aligned",
+          n ? `${n} channel${n > 1 ? "s" : ""} could not be aligned${rep.grey ? ", drawn grey from one filter" : ""}` : rep.aligned.some(a => a.startsWith("centroid")) ? "aligned by centroid" : "aligned",
           rep.filled === false ? "lost lines not filled" : ""].filter(Boolean);
         made.set(w.set, notes.join(", "));
         if (catalog.setOf[lastK] === w.set) field("colour").textContent = field("colour").title = colourText(catalog.sets[w.set], w.set);
