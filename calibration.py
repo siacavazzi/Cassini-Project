@@ -634,6 +634,10 @@ TOE = 0.05           # balanced composites: a margin up to this share of white (
                      # it and centred on it, so a night side or twilight it reaches into (the sky test counts it as sky)
                      # fades out smoothly instead of being cut off with a ragged edge; from twice this (a floor black,
                      # FLOOR_SHARE) the toe is an eighth of the margin, starting at it, as before; in between, a blend
+SKY_SHARE = 0.02     # balanced composites: a color set with at least this share of sky (_sky, or off its body's disk:
+                     # load_linear's off_disk) has each channel's level set on it (sky_levels), so the sky is black in
+                     # every channel; a body over nine tenths of the frame (Saturn in a 2013 WAC set) left too little of
+                     # the old tenth and the channels' offsets showed as a brown veil (fix plan D). One frame keeps 0.1
 SATURATED = 4.0      # balanced, one frame: a pixel the camera saturated is drawn at least this many times white above its
                      # black (past the shoulder: white), whatever the picture's scale puts it at (draw_saturated)
 SATURATED_FLOOR = (0.05, 0.25)  # ... and a frame saturated over more than SATURATED_FLOOR[0] of it has less of its floor (and
@@ -1278,9 +1282,11 @@ everything only a little brighter than the sky, a shadowed ring or a night side:
 dimmest there loses the largest share of itself. tone takes it off the picture's brightness instead, so
 dim parts keep the color the camera measured and only get darker.
 labels, images, iofs = as load_channels; floor = how much of the picture's floor black to take (0 to 1, saturated_floor); glow = how much of its glow black (0 to 1, saturated_glow)
+off_disk = for a color set, a function of its channels' I/F giving where its sky is off its body's disk (a mask, or None),
+asked only when _sky finds under SKY_SHARE of sky (color_image.dim_off_disk)
 returns (channels, margin, the channel mix (color_mix) or None), or None when a frame can't be calibrated or there is nothing to draw
 """
-def load_linear(labels, images=None, iofs=None, floor=1.0, glow=1.0):
+def load_linear(labels, images=None, iofs=None, floor=1.0, glow=1.0, off_disk=None):
     if images is None:
         images = [lbl.resize_image() for lbl in labels]
     iofs = _calibrated(labels, images, iofs)
@@ -1288,7 +1294,14 @@ def load_linear(labels, images=None, iofs=None, floor=1.0, glow=1.0):
         return None
     # the sky is measured once, for the scale and the toe below
     sky = _sky(iofs)
-    levels, margin, white, measured = _balanced_scale(iofs, sky=sky, floor=floor, glow=glow)
+    share = SKY_SHARE if len(iofs) > 1 else 0.1
+    if len(iofs) > 1 and not sky.mean() > share and off_disk is not None:
+        # a color set's sky lit all over (stray light, a faint offset round a small moon): everything off the body's
+        # disk is its sky (off_disk), so each channel's level is set on it and none of the light tints the sky
+        disk_sky = off_disk(iofs)
+        if disk_sky is not None and disk_sky.mean() > share:
+            sky = disk_sky
+    levels, margin, white, measured = _balanced_scale(iofs, share, sky=sky, floor=floor, glow=glow)
     if white <= 0:
         return None
     channels = [(iof - np.float32(level)) / np.float32(white) for iof, level in zip(iofs, levels)]
@@ -1381,6 +1394,13 @@ def tone(channels, margin, mix=None, shoulder=SHOULDER, gamma=2.2):
         toed = np.where(lum <= start, 0, np.where(lum <= start + w, (lum - start) ** 2 / (2 * w),
                                                   lum - margin - late))
         x *= np.where(lum > 0, toed / np.maximum(lum, 1e-12), 0)
+        # and neutral at black: through the toe a pixel's color comes in with its brightness, from gray at the toe's
+        # start to all of it at its top, so the sky's grain and what is left of a faint veil (one filter's noisier
+        # sky, a stray light offset) fade to black without a tint (fix plan D: violet, teal, brown, blue-gray skies)
+        k = np.clip((lum - start) / w, 0, 1)
+        if (k < 1).any():
+            gray = x.mean(axis=0)
+            x += (gray - x) * (1 - k * k * (3 - 2 * k))
     if shoulder:
         _shoulder(x, shoulder)
     x = np.clip(x, 0, 1)
