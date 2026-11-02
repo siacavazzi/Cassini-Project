@@ -45,19 +45,40 @@ assert not t[500:510].any() and t[n:500, n:-n].all()
 print(f"trim: {n} px of a full frame, one pixel of a summed frame (2 or 4 px), nothing else")
 
 # a frame whose first and last columns and first line are bright (the camera's own, in nearly every frame of the
-# archive), drawn as processed_frame draws it: alpha = mask.png where the frame has pixels
+# archive), drawn as processed_frame draws it: alpha = mask.png where the frame has pixels, turned (linear, colour and
+# alpha apart, as label.translate turns it north up) and shown on black. Leaving the edge out of the mask alone still
+# shows it: the turn mixes a left-out pixel's colour into the new edge's (the Mini's first render of this fix)
+import cv2  # noqa: E402
 sky = np.full((1024, 1024), 10, np.uint8)
 sky[:, 0] = sky[:, -1] = 220
-sky[0] = 200
+sky[:2] = 200          # a WAC frame's second line can be bright too (W1507745867_2)
+sky[:, 1] = 180
 soft = np.asarray(Image.open(os.path.join(os.path.dirname(HERE), "mask.png")).convert("L"))
-for name, valid in (("before", full), ("after", color_image.edge_trimmed(full, Lbl(1024)))):
-    alpha = np.where(valid, soft, 0).astype(np.float32) / 255
-    shown = sky * alpha
-    rim = max(shown[:, 0].max(), shown[:, -1].max(), shown[0].max())
-    print(f"{name}: brightest edge pixel over black {rim:.1f} of 255 (sky inside {sky[512, 512]})")
-    if name == "after":
-        assert rim == 0, "no edge pixel is drawn"
-        assert shown[n:-n, n:-n].max() <= 10, "the rest of the frame as it was"
+
+
+def turned_rim(img, valid, angle=23.0):
+    rgba = np.dstack([img, img, img, np.where(valid, soft, 0).astype(np.uint8)])
+    rgba = cv2.copyMakeBorder(rgba, 300, 300, 300, 300, cv2.BORDER_CONSTANT, value=[0, 0, 0, 0])
+    R = cv2.getRotationMatrix2D((811.5, 811.5), angle, 1)
+    t = cv2.warpAffine(rgba, R, (1624, 1624), flags=cv2.INTER_LINEAR).astype(np.float32)
+    shown = t[..., 0] * t[..., 3] / 255
+    rim = (t[..., 3] > 0) & (t[..., 3] < 128)
+    return shown[rim].max()
+
+
+trimmed = color_image.edge_trimmed(full, Lbl(1024))
+cases = {"before": turned_rim(sky, full), "mask only": turned_rim(sky, trimmed),
+         "after": turned_rim(color_image.edge_filled(sky, Lbl(1024)), trimmed)}
+print("brightest pixel along the turned frame's edge, on black (sky inside 10): " +
+      ", ".join(f"{k} {v:.1f}" for k, v in cases.items()))
+assert cases["before"] > 20 and cases["mask only"] > 5, "the case is there to fix"
+assert cases["after"] <= 10, "no edge brighter than the sky"
+filled = color_image.edge_filled(sky, Lbl(1024))
+assert np.array_equal(filled[n:-n, n:-n], sky[n:-n, n:-n]), "inside the edge as it was"
+assert (filled[:n] == 10).all() and (filled[:, -n:] == 10).all()
+rgb = np.dstack([sky] * 3)
+assert np.array_equal(color_image.edge_filled(rgb, Lbl(1024))[..., 1], filled), "any bands"
+assert color_image.edge_filled(None, Lbl(1024)) is None
 
 # 2. the WebP save
 side = 256

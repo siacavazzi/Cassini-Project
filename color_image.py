@@ -107,28 +107,50 @@ frame read brighter than the columns beside them (in sky and on bright ground al
 neighbours have 112, W1295204353_1 29 against 24) and the first line often does (N1503242138_1: 173 against 151); a WAC
 frame's second line can too (W1507745867_2). Drawn at the soft edge's first value (mask.png's 46 of 255) on a
 stretched dark sky, turned north up and resized, they became dotted bright lines along two edges of every frame
-(Titan 2006 020TI, Jupiter 2000, Phoebe, Titan 2007 054TI) and white specks along every ring film's edge (113RI). A
-frame's mask (pixels it has) leaves out EDGE_PX full-resolution pixels at each edge, and at least one of the frame's
-own pixels when it was summed (512 or 256 lines: 2 or 4 full-resolution pixels a pixel). The soft edge (mask.png) is
-unchanged; it starts EDGE_PX in.
+(Titan 2006 020TI, Jupiter 2000, Phoebe, Titan 2007 054TI) and white specks along every ring film's edge (113RI).
+A frame's mask (pixels it has) leaves out edge_px full-resolution pixels at each edge (EDGE_PX, and at least one of
+the frame's own pixels when it was summed: 512 or 256 lines are 2 or 4 full-resolution pixels a pixel), and those
+pixels take the values of the first line or column inside them (edge_filled): leaving them out of the mask alone is
+not enough, since turning the frame north up mixes colour and alpha apart (linear), so a pixel of the new edge would
+still take part of a left-out pixel's bright colour (the Mini's first render of this fix: the lines unchanged). The
+soft edge (mask.png) is unchanged; it starts edge_px in.
 """
 EDGE_PX = 2
 
 
+def edge_px(lbl, side=1024):
+    """How many full-resolution pixels at each edge of frame lbl (on a side px grid) are not picture."""
+    try:
+        lines = int(lbl.info.get("LINES", side))
+    except (TypeError, ValueError, AttributeError):
+        lines = side
+    return max(EDGE_PX, side // max(1, min(lines, side)))
+
+
 def edge_trimmed(mask, lbl):
-    """mask (pixels a frame has, the 1024 px grid) with the frame's outermost lines and columns left out."""
+    """mask (pixels a frame has, the 1024 px grid) with the frame's outermost edge_px lines and columns left out."""
     if mask is None:
         return mask
-    try:
-        lines = int(lbl.info.get("LINES", 1024))
-    except (TypeError, ValueError, AttributeError):
-        lines = 1024
-    n = max(EDGE_PX, mask.shape[0] // max(1, min(lines, mask.shape[0])))
+    n = edge_px(lbl, mask.shape[0])
     out = mask.copy()
     out[:n] = False
     out[-n:] = False
     out[:, :n] = False
     out[:, -n:] = False
+    return out
+
+
+def edge_filled(img, lbl):
+    """img (a frame on the 1024 px grid, any bands) with its outermost edge_px lines and columns the values of the
+    first line or column inside them; None stays None."""
+    if img is None:
+        return img
+    n = edge_px(lbl, img.shape[0])
+    out = img.copy()
+    out[:n] = out[n]
+    out[-n:] = out[-n - 1]
+    out[:, :n] = out[:, n:n + 1]
+    out[:, -n:] = out[:, -n - 1:-n]
     return out
 
 
@@ -242,9 +264,11 @@ def load_aligned(paths, hdr=False, scale=None, repeat_window=120, around=None):
     if fill:
         imgs = [ic.fill_invalid(img, mask) for img, mask in zip(imgs, masks)]
         iofs = [None if iof is None else ic.fill_invalid(iof, mask) for iof, mask in zip(iofs, masks)]
-    # each frame's outermost lines and columns are not picture (edge_trimmed), so they move with the frame as it is
-    # aligned and drop out of every picture made of it
+    # each frame's outermost lines and columns are not picture (edge_trimmed), and hold the values inside them
+    # (edge_filled), so they move with the frame as it is aligned and drop out of every picture made of it
     masks = [edge_trimmed(mask, lbl) for mask, lbl in zip(masks, lbls)]
+    imgs = [edge_filled(img, lbl) for img, lbl in zip(imgs, lbls)]
+    iofs = [edge_filled(iof, lbl) for iof, lbl in zip(iofs, lbls)]
     dropped = []
     if calibrating and len(lbls) > 1:
         # each frame calibrated once, here, for the display models below to share
