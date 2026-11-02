@@ -2000,11 +2000,14 @@ def _around(u, n):
 
 
 REGISTER_GAP = 180   # s: a tile of another filter taken this soon before, at the same pointing, is what it is registered to
-# of a frame: the largest correction to SPICE's placement that is believed, and how far round SPICE's place a tile is
-# searched. Between the filters of one pointing the camera drifts 3 to 5 px more than SPICE shows (stars of WAC
-# W1752982634_1..722_16); the 41 px (0.04) this was let false matches on a black scene move 61 tiles of Day the Earth
-# Smiled (W1752982722_16) by 15 to 40 px, and the filters landed apart in magenta and green
-REGISTER_MAX = 12 / 1024
+REGISTER_MAX = 0.04  # of a frame: the largest correction to SPICE's placement that is believed
+# of a frame, per camera: a camera whose tiles are searched only this near SPICE's place (and their edges left out,
+# REGISTER_INSET), a larger move being a false match. The WAC: between the filters of one pointing it drifts 3 to 5 px
+# more than SPICE shows (stars of W1752982634_1..722_16), and a whole search let false matches on a black scene move
+# 61 tiles of Day the Earth Smiled (W1752982722_16) by 15 to 40 px. Not the NAC: its pixels are ten times finer and
+# SPICE's place of a frame is often 20 to 30 px off the others' on a close moon (Rhea ISS_018RH_REGCOL001, +22,-18
+# on 22 tiles; Iapetus ISS_049IA_REGMAPTRL001), which a 12 px search could not reach (the filters landed apart)
+REGISTER_NEAR = {"W": 8 / 1024}
 REGISTER_INSET = 16  # px: each tile's edge (where its alpha ends) is left out of the match by this much
 
 
@@ -2043,7 +2046,8 @@ def _register(u, n, out, crop, cache, scale):
         ref = _made_pictures.get(path)
     if ref is None:
         ref = np.asarray(Image.open(path).convert("RGBA"))
-    shift, how = _shift_onto(q, ref, q["offset"], out, crop, out["offset"], within=REGISTER_MAX * FRAME)
+    near = REGISTER_NEAR.get(u["key"][2])
+    shift, how = _shift_onto(q, ref, q["offset"], out, crop, out["offset"], within=near * FRAME if near else None)
     if shift is None and how is not None and how.startswith("failed"):
         out["registered"] = {"to": q["id"], "why": how[7:]}
         return

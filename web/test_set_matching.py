@@ -1,6 +1,6 @@
 """Colour filter matching (thread "Review color filter frame matching", 2026-11-02), the registration half; the set
 rule's half is in test_sets_passes.py. Synthetic frames.
-  2. a mosaic tile is searched only near SPICE's place (obs_mosaic._register, REGISTER_MAX), its border left out
+  2. a WAC mosaic tile is searched only near SPICE's place (obs_mosaic._register, REGISTER_NEAR), its border left out
   3. a set's three channels are matched with one another too, and a wrong match is caught (image_correction._loop)
   4. a channel is scaled and turned onto the reference about its target's centre (color_image.spice_warps)
   5. a star field is matched on its stars (image_correction.star_shift), hot pixels left out
@@ -109,7 +109,7 @@ def tile(dx, dy, level, black=False):
 
 q = {"offset": [0.0, 0.0], "box": [-N / 2, -N / 2, N, N]}
 t = {"offset": [0.0, 0.0], "box": [-N / 2, -N / 2, N, N]}
-within = obs_mosaic.REGISTER_MAX * obs_mosaic.FRAME
+within = obs_mosaic.REGISTER_NEAR["W"] * obs_mosaic.FRAME
 for d in ((3.4, -2.2), (-7.0, 5.5)):
     shift, how = obs_mosaic._shift_onto(q, tile(0, 0, 200), q["offset"], t, tile(*d, 150), t["offset"], within=within)
     assert shift is not None and np.hypot(shift[0] - d[0], shift[1] - d[1]) < 0.3, (d, shift, how)
