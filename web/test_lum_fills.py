@@ -1,4 +1,4 @@
-"""PR12 (tile placement): a grey frame that came down partial (obs_mosaic.partial) or was left out leaves no hole in
+"""PR12 (tile placement): a grey frame that lost lines in downlink (obs_mosaic._lossy, LOST_FILL) or was left out leaves no hole in
 the luminance base where a frame of another of its filters covers that place (obs_mosaic.lum_fills). Titan
 ISS_021TI_GLOBMAPNA001: CB3 N1519692683_2 lost a third of its lines, MT1 N1519692611_1 was taken at the same place a
 minute before, and lum_frames left the MT1 frame out (a CB3 frame is at its place), so the picture had a black hole.
@@ -56,6 +56,20 @@ assert all(3 not in g for g in grown), "place B's CB3 frame is whole: its MT1 fr
 out = [dict(t) for t in tiles]
 out[1].pop("offset"); out[1].pop("lost")
 assert om.lum_fills(u, p, out) == {0}
+# a frame that lost a third of its lines (Titan's CB3: not partial, under half lost) leaves a gap all the same
+third = [dict(t) for t in tiles]
+third[1]["lost"] = 0.3438
+assert not om.partial(third[1]) and om.lum_fills(u, p, third) == {0}
+# ... and the usual few lost lines at a frame's edge (0.4%) do not
+edge = [dict(t) for t in tiles]
+edge[1]["lost"] = 0.0039
+assert om.lum_fills(u, p, edge) == set()
+# a colour pass draws its base under a colour tile with lost lines (Dione 016DI's GRN N1507742100_3, 2.8%): the colour
+# is only where every filter is, so the lost lines were a black strip; with every colour tile whole, no base
+ct = [{k: v for k, v in t.items() if k != "lost"} for t in tiles[:4]]   # places A and B, both filters at each
+assert not om.lum_base(u, p, ct, ["CB3", "MT1"])
+ct[3] = dict(ct[3], lost=0.028)
+assert om.lum_base(u, p, ct, ["CB3", "MT1"])
 # the usual pass: every grey frame whole, nothing to work out
 whole = [dict(t) for t in tiles]
 whole[1].pop("lost")

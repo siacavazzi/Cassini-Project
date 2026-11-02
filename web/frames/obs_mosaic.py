@@ -1454,10 +1454,19 @@ def lum_frames(u, p):
     return out
 
 
+LOST_FILL = 0.01   # of a frame: a tile that lost this much in downlink (lines no repeat or fill made up) has a gap to fill
+
+
+def _lossy(t):
+    """True when tile report t leaves a gap where its frame is: not placed (left out: 8LSB, saturated all over, a
+    silhouette), or LOST_FILL of it lost in downlink (a partial frame most of all). A frame's usual few lost lines at
+    its edge (0.4%) are not."""
+    return "offset" not in t or t.get("lost", 0.0) >= LOST_FILL
+
+
 def lum_fills(u, p, tiles):
     """The frames (indices, as tiles are numbered) of the luminance base's other filters that fill in under a place
-    whose every frame of the grey filter came down partial or was left out (partial; or not placed: an 8LSB frame, one
-    saturated all over), from the tiles made: lum_frames leaves out a frame of another filter wherever a grey frame
+    whose every frame of the grey filter lost lines in downlink or was left out (_lossy), from the tiles made: lum_frames leaves out a frame of another filter wherever a grey frame
     is at its place, so the part of a grey frame lost in downlink stayed a hole though a frame of another filter
     covered it (Titan ISS_021TI_GLOBMAPNA001: CB3 N1519692683_2 lost a third of its lines, MT1 N1519692611_1 beside
     it). Decided only once every grey frame at the place is made, so the set only grows as the pass goes on. The
@@ -1467,7 +1476,7 @@ def lum_fills(u, p, tiles):
     frames = u["frames"]
     made = {t["n"]: t for t in tiles}
     last = max(made) if made else -1
-    if not any(t["filter"] == grey and ("offset" not in t or partial(t)) for t in tiles):
+    if not any(t["filter"] == grey and _lossy(t) for t in tiles):
         return set()   # (the usual pass: every grey frame whole and placed)
 
     def at(fr):
@@ -1483,7 +1492,7 @@ def lum_fills(u, p, tiles):
         if q is None:
             continue
         there = [j for j, g in greys if math.hypot(q[0] - g[0], q[1] - g[1]) <= SAME_PLACE * FRAME]
-        if there and all(j <= last and j in made and ("offset" not in made[j] or partial(made[j])) for j in there):
+        if there and all(j <= last and j in made and _lossy(made[j]) for j in there):
             out.add(n)
     return out
 
@@ -1542,8 +1551,10 @@ def lum_base(u, p, tiles, used, base=None):
         return any(t["filter"] != used[0] for t in base)
     by = {f: [t["offset"] for t in tiles if t["filter"] == f and "offset" in t] for f in used}
     near = lambda o, os_: any(math.hypot(o[0] - q[0], o[1] - q[1]) <= SAME_PLACE * FRAME for q in os_)
-    # (or a frame filling in under a partial grey frame, lum_fills: its colour's own frames may be partial there too)
-    return any(not all(near(t["offset"], by[f]) for f in used) for t in base) or bool(lum_fills(u, p, tiles))
+    # (or a colour tile with lines lost in downlink: the colour is only where all its filters are, so its lost lines were
+    # a black strip, Dione ISS_016DI_TARGFLYBY001's GRN N1507742100_3; or a frame filling in under a lossy grey one)
+    return (any(not all(near(t["offset"], by[f]) for f in used) for t in base)
+            or any(t["filter"] in used and "offset" in t and _lossy(t) for t in tiles) or bool(lum_fills(u, p, tiles)))
 
 
 LUM_MATCH = (0.25, 4.0)   # the furthest the gray's match to the colour it borders goes, per channel
@@ -2577,7 +2588,18 @@ def surface_pictures(u, cache, p, tiles):
             return out
         os.makedirs(out_dir, exist_ok=True)
         found = set()
+        roots = {}
+        for t in tiles:
+            if "offset" in t:
+                roots[t["n"]] = _pointing_root(u, t["n"], roots)
         for t in todo:
+            # the filters of one pointing are redrawn or kept alike, as its first tile was (SURFACE_STRETCH is
+            # measured on it): a pointing half redrawn put its colours apart and left the min of their edges as a gap
+            # (Rhea ISS_162RH_REGMAP001: UV3 redrawn, GRN and IR1 of the same pointing kept)
+            root = roots.get(t["n"], t["n"])
+            if root != t["n"] and (root in taken or root in found):
+                found.add(t["n"])
+                continue
             if time.gmtime(t["t"]).tm_year != time.gmtime(mid[3]).tm_year:
                 # (one year's kernels at a time: a pass across New Year keeps those tiles as they are, without loading
                 # the other year's kernels for them and the epoch's again for the next tile)
@@ -2600,7 +2622,7 @@ def surface_pictures(u, cache, p, tiles):
             path = os.path.join(out_dir, f"{t['n']}.png")
             r = SURFACE_REACH // SURFACE_STEP
             stretch = rp.field_stretch(dx[r:-r, r:-r], dy[r:-r, r:-r], weight[r:-r, r:-r], SURFACE_STEP)
-            if stretch > SURFACE_STRETCH:
+            if stretch > SURFACE_STRETCH and (root == t["n"] or root not in out):
                 print(f"surface: tile {t['n']} kept as taken (stretch {stretch:.2f})", flush=True)
                 found.add(t["n"])
                 continue

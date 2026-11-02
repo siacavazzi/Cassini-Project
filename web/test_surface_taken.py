@@ -66,7 +66,16 @@ def surface_before(u, cache, p, tiles):
             print(f"no surface for {u['key'][0]}: {type(e).__name__}: {e}"[:200], flush=True)
             return out
         os.makedirs(out_dir, exist_ok=True)
+        # (the rule since PR12: a pointing's filters are redrawn or kept as its first tile was)
+        roots = {}
+        for t in tiles:
+            if "offset" in t:
+                roots[t["n"]] = om._pointing_root(u, t["n"], roots)
         for t in todo:
+            root = roots.get(t["n"], t["n"])
+            follows = root != t["n"] and root in roots   # (a root SPICE did not place: the tile decides alone)
+            if follows and not os.path.exists(os.path.join(out_dir, f"{root}.png")):
+                continue
             if t["id"] not in ets or not om._with_kernels(t["t"]):
                 continue
             try:
@@ -87,7 +96,7 @@ def surface_before(u, cache, p, tiles):
             path = os.path.join(out_dir, f"{t['n']}.png")
             r = om.SURFACE_REACH // om.SURFACE_STEP
             stretch = rp.field_stretch(dx[r:-r, r:-r], dy[r:-r, r:-r], weight[r:-r, r:-r], om.SURFACE_STEP)
-            if stretch > om.SURFACE_STRETCH:
+            if stretch > om.SURFACE_STRETCH and not follows:
                 pass   # (it printed "surface: tile n kept as taken")
                 continue
             picture, box = om.surface_redrawn(rp, image, t, dx, dy, weight)
