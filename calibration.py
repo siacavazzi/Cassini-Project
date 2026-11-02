@@ -17,8 +17,11 @@ the label allows:
      frames whose brightest and darkest pixels are less than 254 DN apart)
   2. undo the camera's 12 -> 8 bit square root table
   3. subtract the bias: fitted down the frame from the overclocked pixels in each line's
-     prefix where the archive has them (overclock_bias), else BIAS_STRIP_MEAN
-  4. subtract the dark current (dark_current.py; the "dark" step)
+     prefix where the archive has them (overclock_bias), else BIAS_STRIP_MEAN (as CISSCAL 4,
+     also for 8-bit table frames under 12 e-/DN), and the 2 Hz noise (horizontal banding)
+     line by line from the same overclocks (cisscal_noise.two_hz; the "twohz" step)
+  4. subtract the dark current (dark_current.py; the "dark" step), then replace the
+     anti-blooming bright/dark pixel pairs (cisscal_noise.bright_dark; the "pairs" step)
   5. correct the camera's nonlinearity (CISSCAL's linearize tables, by gain state)
   6. divide by the exposure time, corrected for the shutter offset
   7. take the flat field out: dust rings, mottle and the ground calibration's flat
@@ -31,8 +34,9 @@ the label allows:
      distance from the sun, giving I/F
 
 Not done: bit weights (the converter's uneven steps, under 1 DN, mostly lost in the 8-bit
-archive), and the 2 Hz noise and anti-blooming pixel pair filters (which CISSCAL itself
-counts as filters rather than calibration, and ISIS's cisscal leaves out).
+archive). The 2 Hz and pixel pair steps come from CISSCAL 4.1's IDL (ISIS's cisscal leaves
+them out); CISSCAL's optional image-mean 2 Hz method is not ported (its default is the
+overclocks).
 
 Frames that can't be unstretched return None and the caller keeps the old behavior.
 """
@@ -47,6 +51,7 @@ import os
 import cv2
 import numpy as np
 
+import cisscal_noise as cn
 import dark_current as dc
 import data_source as ds
 import flat_field as ff
@@ -351,19 +356,18 @@ def _fsw(info):
 
 
 """
-CISSCAL's bias from the overclocked pixels (cisscal ComputeBias, OverclockFit; ciss2isis ComputeOverclockAvg): the
-two overclocked pixel sums each line's binary prefix carries (bytes 12-13 and 22-23, the lean archive's
-.prefix.gz), averaged as the summing mode needs (one valid column before flight software 1.3), in DN (through the
-12 -> 8 bit table for TABLE frames), and a straight line fitted to them down the frame: the bias at each line. Lines
-lost in downlink (no valid pixels) are left out of the fit, and so are lines whose overclocks came down garbled
-(OVERCLOCK_OUTLIER: more than 10 DN or 10 sigma from the frame's median; a partial downlink can keep a line's count
-but not its prefix: N1413937500_2's line 129 reads -8,155 DN, which tilted the fitted bias by 36 DN down the frame,
-a bright band at the top of a dark star field). Not as cisscal, which fits every line; a frame with no such line
-is fitted the same. None where cisscal uses the strip mean instead (a lossy frame, whose overclocks are corrupt) or
-the prefixes aren't there.
+The line-averaged overclocked pixels in DN, as cisscal's OverclockAvg gives them (ciss2isis ComputeOverclockAvg): the
+two overclocked pixel sums each line's binary prefix carries (bytes 12-13 and 22-23, the lean archive's .prefix.gz),
+averaged as the summing mode needs (one valid column before flight software 1.3), through the 12 -> 8 bit table for
+TABLE frames, the first line taken from the second when it is over twice it. Returns (averages, kept): kept = the lines
+whose overclocks can be used, leaving out lines lost in downlink (no valid pixels) and lines whose overclocks came down
+garbled (OVERCLOCK_OUTLIER: more than 10 DN or 10 sigma from the frame's median; a partial downlink can keep a line's
+count but not its prefix: N1413937500_2's line 129 reads -8,155 DN, which tilted the fitted bias by 36 DN down the
+frame, a bright band at the top of a dark star field). Not as cisscal, which uses every line. None for a lossy frame
+(cisscal reads no overclocks from those: they are corrupt) or when the prefixes aren't there.
 """
 OVERCLOCK_OUTLIER = (10.0, 10.0)    # DN, robust sigmas: a line's overclock average further from the median than both
-def overclock_bias(info):
+def overclock_avg(info):
     path = info.get("path")
     if not path or _value(info, "INST_CMPRS_TYPE", "").upper() == "LOSSY":
         return None
@@ -402,7 +406,23 @@ def overclock_bias(info):
     kept &= np.abs(avg - middle) <= max(OVERCLOCK_OUTLIER[0], OVERCLOCK_OUTLIER[1] * spread)
     if kept.sum() < 2:
         return None
-    n = np.arange(1, lines + 1, dtype=np.float64)
+    return avg, kept
+
+
+"""
+CISSCAL's bias from the overclocked pixels (cassimg__debias.pro, cisscal ComputeBias, OverclockFit): a straight line
+fitted down the frame to the kept lines' overclock averages (overclock_avg), the bias at each line. None where
+CISSCAL 4 uses the strip mean instead: a lossy frame, an 8-bit table frame at a gain under 12 e-/DN (CISSCAL 4.0's
+rule; its overclocks are too coarse after the table, cisscal_noise.table_low_gain), or no prefixes.
+"""
+def overclock_bias(info):
+    if cn.table_low_gain(info):
+        return None
+    got = overclock_avg(info)
+    if got is None:
+        return None
+    avg, kept = got
+    n = np.arange(1, len(avg) + 1, dtype=np.float64)
     b, a = np.polyfit(n[kept], avg[kept], 1)
     return a + b * n
 
@@ -450,6 +470,12 @@ def calibrate(png, info, image=None, smooth=True):
     offset = None
     spots = None
     lines_bias = overclock_bias(info)
+    if step("twohz"):
+        # CISSCAL's 2 Hz noise (cisscal_noise.two_hz), one value per line, taken off with the bias
+        got = overclock_avg(info)
+        hum = cn.two_hz(info, *got) if got is not None else None
+        if hum is not None:
+            lines_bias = (lines_bias if lines_bias is not None else np.full(len(hum), float(bias))) + hum
     if lines_bias is not None:
         rows = np.interp(np.linspace(0, len(lines_bias) - 1, shape[0]), np.arange(len(lines_bias)), lines_bias)
         offset = (rows - bias)[:, None] * np.ones((1, shape[1]))
@@ -461,6 +487,13 @@ def calibrate(png, info, image=None, smooth=True):
     if offset is not None:
         dn = (_lookup(pixels, dn) if codes else dn) - offset
         codes = False
+    if step("pairs") and cn.wants_pairs(info) and shape == (int(_value(info, "LINES", "0") or 0),
+                                                            int(_value(info, "LINE_SAMPLES", "0") or 0)):
+        # CISSCAL's anti-blooming bright/dark pixel pairs (cisscal_noise.bright_dark), in DN after the dark
+        full = _lookup(pixels, dn) if codes else dn
+        fixed, count = cn.bright_dark(full)
+        if count:
+            dn, codes = fixed, False
     # CISSCAL's linearize: the factor for the whole DN below (a negative DN takes DN 0's)
     dn = dn * linearity(camera, GAIN_STATES[gain])[np.clip(dn, 0, 4095).astype(np.int64)]
 
@@ -650,8 +683,10 @@ The pipeline's steps a request turns off (Settings > Processing; the picture rou
 each one does: "stack" (repeat exposures of the same filter merged, stacking.load_stacked and load_hdr), "hdr" (an
 exposure bracket merged into one picture in mosaics and movies, stacking.load_hdr; off merges only identical
 exposures, a plain stack), "fill" (pixels lost in downlink filled from round them), "calibrate" (every frame put on
-I/F and one display scale; off shows each frame on the archive's own stretch), "dark" (calibrate's dark current and
-the WAC's hot pixels taken out, dark_current.py), "flat" (calibrate's flat field: dust rings, mottle and the
+I/F and one display scale; off shows each frame on the archive's own stretch), "twohz" (calibrate's 2 Hz noise, the
+horizontal banding, taken out line by line, cisscal_noise.two_hz), "dark" (calibrate's dark current and
+the WAC's hot pixels taken out, dark_current.py), "pairs" (calibrate's anti-blooming bright/dark pixel pairs replaced,
+cisscal_noise.bright_dark), "flat" (calibrate's flat field: dust rings, mottle and the
 detector's flat taken out, flat_field.py), "hotpix" (calibrate's repair of the hot and dead pixels, which stay put
 while the sky moves, dark_current.repair_hot), "align" (a color set's channels moved onto one another), "blend" (a
 mosaic's tiles blended where they meet, mosaic.composite), "level" (each tile leveled to the tiles round it along
@@ -663,7 +698,7 @@ only how tiles are drawn together, or redraw or move tiles from the tiles made, 
 left out of variant (a mosaic with them off draws the same tiles) and the mosaics name them themselves
 (mosaic.drawing; obs_mosaic.SURFACE_TAG, PANEL_TAG, EDGE_TAG).
 """
-STEPS = ("stack", "hdr", "fill", "calibrate", "dark", "flat", "hotpix", "align", "blend", "level", "surface", "panels")
+STEPS = ("stack", "hdr", "fill", "calibrate", "twohz", "dark", "pairs", "flat", "hotpix", "align", "blend", "level", "surface", "panels")
 _off = contextvars.ContextVar("off", default=frozenset())
 
 
