@@ -1,0 +1,30 @@
+LUT conversion (Y or N)                     : Y
+bitweight correction (Y or N)               : Y
+bias subtraction (Y or N)                   : Y
+bias subtraction type (BSM or OC or IM)     : OC
+  maskfile (auto if not set)                : 
+  missingfile (not used)                    : 
+  threshold (auto = 0.0)                    : 0.0
+  pixrange (default = 9.0)                  : 9.0
+dark subtraction (Y or N)                   : Y
+  dark file (overrides model)               : 
+  remove hot pixels (Y or N)                : Y
+anti-blooming pixel pair removal            : Y
+  abpp threshold (default = 30.0)           : 30.0
+linearize (Y or N)                          : Y
+flatfield (Y or N)                          : Y
+flux conversion (Y or N)                    : Y
+flux conversion type (I or IOF)             : IOF
+  spectrum file (overrides solar)           : 
+  distance from sun (J, S, or AU)           : S
+  multiply by gain (Y or N)                 : Y
+  divide by exposure time (Y or N)          : Y
+  divide by optics area/solid angle (Y or N): Y
+  divide by system transmission (Y or N)    : Y
+absolute flux corr (Y or N)                 : Y
+  sensitivity vs. time correction (Y or N)  : Y
+geometric correction (Y or N)               : N
+
+output filename suffix                      : .IMG.cal
+output sat. pixel value (NAN/value or null) : NAN
+output missing pixel value (NAN or value)   : NAN
