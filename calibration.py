@@ -1002,9 +1002,11 @@ camera = "N" or "W"; bands = the set's color filters in channel order; target = 
 """
 METHANE = ("MT1", "MT2", "MT3")
 EYE_BANDS = ("RED", "GRN", "BL1")
-METHANE_DETAIL = 1.0   # a methane band's share of the brightness against another band's: an equal share, so its
-                       # belts, storms and high clouds keep their contrast (at half, Saturn's storm and Jupiter's belts in
-                       # MT3 + MT2 + BL1 or UV1 faded into the color band's even disk)
+METHANE_DETAIL = 2.0   # a methane band's share of the brightness against another band's: twice, so the cloud heights
+                       # the methane bands see (Jupiter's belts and red spot, Saturn's storms) stand out against the color
+                       # band's even disk; at half they faded into it and the planet read pale (MT3 + MT2 + UV1, BL1)
+METHANE_DETAIL_WINDOW = 0.5   # the share against a body's surface window (SURFACE_WINDOW): there the methane bands see
+                              # the haze that hides the surface, and more of them washes out Titan's dark terrain in CB3
 
 
 def is_methane(band):
@@ -1047,7 +1049,8 @@ def eye_mix(camera, bands, target=None):
     ref = [1.0] * len(bands) if one else sure
     # the brightness: each band against its typical, a methane band (one the color leaves out) at METHANE_DETAIL of
     # a band's share, where its typical is known
-    weight = [1.0 if i in use else METHANE_DETAIL if ref[i] is not None else 0.0 for i in n]
+    detail = METHANE_DETAIL_WINDOW if SURFACE_WINDOW.get(str(target or "").upper()) in bands else METHANE_DETAIL
+    weight = [1.0 if i in use else detail if ref[i] is not None else 0.0 for i in n]
     ref = [v or 1.0 for v in ref]
     bright = np.array([w / (sum(weight) * ref[i]) for i, w in enumerate(weight)], np.float64)
     a = np.zeros((3, len(bands)), np.float64)
@@ -1071,11 +1074,9 @@ def eye_mix(camera, bands, target=None):
         if len(use) < len(bands):
             # the methane bands' brightness, in the body's color: none at the body's typical shares
             a += np.outer(eye, bright - np.array([1 / (len(use) * ref[i]) if i in use else 0.0 for i in n]))
-    # brightness kept: the body at its typical brightness in the bands comes out as bright as the mean of all of them,
-    # methane bands too where their typical is known, as the false color balance keeps it (balance); the mean of the
-    # color bands alone (CB2's 0.40 on Saturn against MT3's 0.02) drew a methane set up to twice as bright, into the
-    # shoulder, pale and flat (Jupiter MT3 + MT2 + UV1, N1353557567_1)
-    level = np.mean([ref[i] for i in n if weight[i] > 0])
+    # brightness kept: the body at its typical brightness in the bands comes out as bright as their mean (the mean over
+    # all bands, methane ones too, drew methane sets 15-28% darker and flatter, not less pale)
+    level = np.mean([ref[i] for i in use])
     a *= level
     if len(bands) == 2:
         a = np.stack([a[:, 0], np.zeros(3), a[:, 1]], axis=1)

@@ -25,14 +25,12 @@ assert abs(cal.band_wavelength("N", "IR3") - 925.9) < 0.1 and abs(cal.band_wavel
 # a stacked pair has its own wavelength (WAC IR2 + IR1, 826 nm), so Titan's CB3 + IR2/IR1 has an eye mix
 assert abs(cal.band_wavelength("W", "IR2/IR1") - 826.3) < 0.1 and cal.eye_mix("W", ["CB3", "IR2/IR1"], "TITAN") is not None
 
-# Saturn's methane stare (WAC MT3 + CB2 + MT2): its color from CB2 alone, Saturn's, and as bright as the mean of the
-# three bands' typicals (as the false color balance keeps it: from CB2's alone it came out twice as bright, into the
-# shoulder, pale and flat)
+# Saturn's methane stare (WAC MT3 + CB2 + MT2): its color from CB2 alone, Saturn's, at its typical brightness
 bands = ["MT3", "CB2", "MT2"]
 m = cal.eye_mix("W", bands, "SATURN")
 out = m @ typical("SATURN", "W", bands)
 assert np.allclose(hue(out), hue(cal.eye_tint("SATURN")), atol=1e-4)
-assert abs(out.mean() / typical("SATURN", "W", bands).mean() - 1) < 0.01
+assert abs(out.mean() / typical("SATURN", "W", ["CB2"]).mean() - 1) < 0.01
 # the methane bands stay in the brightness (METHANE_DETAIL of a band's share), never in the color: a cloud brighter
 # in MT3 (high) is brighter, one darker in it darker, both Saturn's color
 v = typical("SATURN", "W", bands)
@@ -46,6 +44,16 @@ bands = ["MT3", "MT2", "BL1"]
 m = cal.eye_mix("N", bands, "SATURN")
 v = typical("SATURN", "N", bands)
 assert (m @ (v * [1.5, 1.5, 1])).sum() > 1.2 * (m @ v).sum()
+
+# twice a band's share (METHANE_DETAIL): set 37's storm and c32's belts stood out too little and the planet read pale;
+# Titan's CB3 + MT2 + MT1 holds its surface window (SURFACE_WINDOW), where more methane haze would wash out the dark
+# terrain, so its methane bands keep METHANE_DETAIL_WINDOW
+assert cal.METHANE_DETAIL > 1 and cal.METHANE_DETAIL_WINDOW < 1
+bands = ["CB3", "MT2", "MT1"]
+m = cal.eye_mix("N", bands, "TITAN")
+v = typical("TITAN", "N", bands)
+w = cal.METHANE_DETAIL_WINDOW
+assert abs((m @ (v * [2, 1, 1])).sum() / (m @ v).sum() - (1 + 1 / (1 + 2 * w))) < 1e-3
 
 # Titan's two-filter CB3 + MT1 (channels: longer, mean, shorter): orange, its color from CB3, the green column empty
 m = cal.eye_mix("N", ["CB3", "MT1"], "TITAN")
