@@ -7,6 +7,7 @@ https://asc-isisdata.s3.us-west-2.amazonaws.com/usgs_data/cassini/calibration/
   slope/flat/flat<NNN>.<full|sum2|sum4>.cub  the flat fields (ground calibration slope files, inverted, normalized)
   dustring/*.cub                             the NAC dust ring maps (one per epoch) and the mottle map
   darkcurrent/*_dark_parameters.*.cub        the dark current model's per pixel maps (dark_current.py)
+  offset/*fm_so_*.full.cub                   the shutter offset across the frame (calibration.shutter_offsets)
   darkcurrent/*_hotpix*.tab                  the hot pixel lists, one per epoch
 
 into the folder flat_field.py reads (CASSINI_CISSCAL, default cisscal_calibration in the main folder), keeping the
@@ -26,7 +27,7 @@ import flat_field  # noqa: E402
 
 BUCKET = "https://asc-isisdata.s3.us-west-2.amazonaws.com"
 PREFIX = "usgs_data/cassini/calibration/"
-FOLDERS = ("slope/", "dustring/", "darkcurrent/")
+FOLDERS = ("slope/", "dustring/", "darkcurrent/", "offset/")
 
 
 def listing(folder):
@@ -49,7 +50,8 @@ def wanted(path):
     return (path == "slope/slope_db_2.tab" or re.fullmatch(r"slope/flat/flat\d+\.(full|sum2|sum4)\.cub", path)
             or re.fullmatch(r"dustring/nac_\w+\.(full|sum2|sum4)\.cub", path)
             or re.fullmatch(r"darkcurrent/(nac|wac)_dark_parameters\.(full|sum2|sum4)\.cub", path)
-            or re.fullmatch(r"darkcurrent/(NAC|WAC)_hotpix[\d.]+_\d+\.tab", path))
+            or re.fullmatch(r"darkcurrent/(NAC|WAC)_hotpix[\d.]+_\d+\.tab", path)
+            or re.fullmatch(r"offset/(nac|wac)fm_so_(m10|p5|p25)\.full\.cub", path))
 
 
 def fetch(path, size, root):

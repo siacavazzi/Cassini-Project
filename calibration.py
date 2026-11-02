@@ -46,6 +46,7 @@ Frames that can't be unstretched return None and the caller keeps the old behavi
 import contextlib
 import contextvars
 import datetime
+import functools
 import gzip
 import json
 import math
@@ -136,9 +137,36 @@ def linearity(camera, state):
 SUM_FACTORS = {"FULL": 1.0, "SUM2": 0.25, "SUM4": 0.0625}
 
 # Shutter offset in ms (CISSCAL cassimg__dividebyexpot.pro): a constant from the 2013
-# Rhea calibration plus a small slope across the frame, fit to offset/*fm_so_p5.
+# Rhea calibration plus the shutter blades' travel across the frame, sample by sample, from CISSCAL's offset file for
+# the camera and optics temperature (offset/<nac|wac>fm_so_<m10|p5|p25>; shutter_offsets). Without the files, a
+# straight line fit to the +5 C ones (SHUTTER_SLOPE).
 SHUTTER_OFFSET = {"ISSNA": 2.75, "ISSWA": 2.67}
 SHUTTER_SLOPE = {"ISSNA": (0.1409, -0.1896), "ISSWA": (-0.5339, -0.6368)}  # first, last sample
+
+
+@functools.lru_cache(maxsize=None)
+def _offset_file(camera, temperature):
+    path = os.path.join(ff.ROOT, "offset", f"{'nac' if camera == 'ISSNA' else 'wac'}fm_so_{temperature}.full.cub")
+    if not os.path.exists(path):
+        ff._warn(f"{os.path.basename(path)} missing, shutter offset from a straight line")
+        return None
+    row = np.asarray(ff.read_cube(path), np.float64).ravel()
+    return row if row.size == 1024 and np.isfinite(row).all() else None
+
+
+def shutter_offsets(info, width):
+    """The shutter offset across the frame in ms, one per sample of an image width wide, without the constant:
+    CISSCAL's offset file for the camera and the frame's optics temperature (flat_field.temperature_name, as
+    CISSCAL picks it), averaged over the samples a summed pixel covers (IDL's REBIN) or drawn out to a resized
+    image's width; else the straight line."""
+    camera = _value(info, "INSTRUMENT_ID", "")
+    row = _offset_file(camera, ff.temperature_name(info))
+    if row is None:
+        first, last = SHUTTER_SLOPE[camera]
+        return np.linspace(first, last, width)
+    if width <= 1024 and 1024 % width == 0:
+        return row.reshape(width, 1024 // width).mean(axis=1)
+    return np.interp((np.arange(width) + 0.5) * 1024 / width - 0.5, np.arange(1024), row)
 
 # Sensitivity decline over the mission (Knowles et al. 2020, cassimg__sensvstime.pro)
 SENSITIVITY = {"ISSNA": (1.89457e-10, 1.47036e9), "ISSWA": (9.28360e-11, 1.51463e9)}
@@ -512,8 +540,7 @@ def calibrate(png, info, image=None, smooth=True):
     dn = dn * linearity(camera, GAIN_STATES[gain])[np.clip(dn, 0, 4095).astype(np.int64)]
 
     if _value(info, "SHUTTER_STATE_ID", "ENABLED") != "DISABLED":
-        first, last = SHUTTER_SLOPE[camera]
-        exposure = exposure - np.linspace(first, last, pixels.shape[1] if codes else dn.shape[1]) - SHUTTER_OFFSET[camera]
+        exposure = exposure - shutter_offsets(info, pixels.shape[1] if codes else dn.shape[1]) - SHUTTER_OFFSET[camera]
         exposure = np.maximum(exposure, 0.1)
     dn = dn * 1000.0
     per_second = (_lookup(pixels, dn) if codes else dn) / exposure
