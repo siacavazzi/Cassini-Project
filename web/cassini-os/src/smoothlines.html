@@ -121,6 +121,7 @@
         G.setAttribute(k, new THREE.InstancedBufferAttribute(new Float32Array(3 * M.cap), 3));
       G.dispose();   // new buffers: drop the old ones from the GPU
     }
+    if (!G.attributes.instanceStart) { G.instanceCount = 0; return; }   // a line with no segments yet
     const A = G.attributes.instanceStart.array, B = G.attributes.instanceEnd.array, CA = G.attributes.instanceColorStart.array, CB = G.attributes.instanceColorEnd.array;
     const p = pa.array, ps = pa.itemSize, c = ca && ca.array, cs = ca && ca.itemSize, at = k => ix ? ix.array[k] : k;
     const put = (j, a, b) => {
