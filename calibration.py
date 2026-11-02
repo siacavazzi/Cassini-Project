@@ -967,11 +967,9 @@ def eye_mix(camera, bands, target=None):
     sure = [body_level(target, bands[i], camera) for i in n]
     # a body drawn in one color: a color band without a sure measure
     one = any(sure[i] is None for i in use)
-    # the typical each band is read against: the sure measure; for a body drawn in one color, the brightness alone,
-    # the measure however unsure, or for none when a color band has none (each band's I/F)
-    ref = [body_level(target, bands[i], camera, sure=False) for i in n] if one else sure
-    if any(ref[i] is None for i in use):
-        ref = [1.0] * len(bands)
+    # the typical each band is read against: the sure measure; for a body drawn in one color none, each band's I/F
+    # as it is (an unsure typical, Iapetus' IR3 at 0.02 against a lit side at 0.3, blew the picture out)
+    ref = [1.0] * len(bands) if one else sure
     # the brightness: each band against its typical, a methane band (one the color leaves out) at METHANE_DETAIL of
     # a band's share, where its typical is known
     weight = [1.0 if i in use else METHANE_DETAIL if ref[i] is not None else 0.0 for i in n]
