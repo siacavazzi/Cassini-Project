@@ -180,6 +180,22 @@ The list of bodies and their sessions comes from `web/replay/build_data.py` (`da
 `data/targets/<body>.json`, made with the rest of the whole-mission data). `window.cassiniBodyMode` (name, enter, exit,
 index, sessions) is the way in for other parts of the page.
 
+## Picture footprints
+
+Settings > View > Picture footprints (off by default) outlines on each body where Cassini's last pictures landed
+(`updateFootprints` in `web/replay/index.html`). Each frame's field of view is cast from the pointing at that frame
+(`data/attitude`, the same file the camera cone uses) and Cassini's and the body's positions then, onto the body's
+ellipsoid, and kept in the body's own frame so the trail turns with it. Only the part of a frame on the body is drawn.
+"Footprints of the last" sets how many pictures (1 to 1000; only pictures that land on a body count). The newest
+footprint is amber, narrow-angle frames blue, wide-angle grey-blue, older ones fading.
+
+"Pictures in the footprints" lays the pictures themselves into the newest footprints ("Pictures laid down", 1 to 100):
+the frame server's `/frames/processed/<ID>.webp` (the pipeline's frame as the camera windows show it, not centred),
+stretched over the footprint's mesh ray by ray, with the pipeline's camera convention (samples toward the camera
+frame's -X, lines toward -Y; `bootleg_autonav.project`). `?footprints=1` and `&footprintPictures=1` turn them on for one
+visit. `bench/footprints.cjs` checks them (each footprint's middle on its frame's boresight, the cone's axis through
+the newest one, the count slider).
+
 ## Shareable links
 
 The address bar always holds the moment on screen (`src/link.html`), so a copied link opens on it again:
