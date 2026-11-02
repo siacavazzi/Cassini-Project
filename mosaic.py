@@ -1124,8 +1124,10 @@ def _blended(out, infos, gains, offsets, gamma, area, level, pin=None, kept=None
         if filled is not None:
             # (a filled gap is as opaque as the picture on either side of it: whole inside the mosaic, as soft as the
             # outer edge where it reaches that)
+            # (along the row or the column that crosses it, so where a gap meets the outer edge it is as soft as that)
             k = 2 * int(width * GAP_REACH) + 1
-            alpha[filled] = np.maximum(alpha, cv2.dilate(alpha, np.ones((k, k), np.uint8)))[filled]
+            across = np.maximum(cv2.dilate(alpha, np.ones((1, k), np.uint8)), cv2.dilate(alpha, np.ones((k, 1), np.uint8)))
+            alpha[filled] = np.maximum(alpha, across)[filled]
     if kept is not None:
         kept.extend(decisions)
     rgb = np.clip(rgb, 0, 255).round()
