@@ -369,14 +369,14 @@ def image_mask(image, missing):
     return mask, img
 
 
-def image_hum(image, missing, info, dark=None, guard=True):
+def image_hum(image, missing, info, dark=None, guard=True, sky_out=None):
     """The 2 Hz noise of each line in DN by the image mean method (cassimg__twohz.pro): each line's median over
     samples 12 to NS-5 with the masked pixels put at the mean of the line's background, filtered as filter_hum.
     image = the frame after the bias, (lines, samples) at full size; missing = missing_pixels of the raw frame;
     dark = the frame's dark current in DN (dark_current.dark_dn), or None.
     None for a summed frame or, with guard, one with too little dark sky (IMAGE_MIN_SKY pixels in IMAGE_MIN_LINES of
     its lines, dark_sky); guard=False is CISSCAL's method as it is (each line's median of the image outside the
-    mask)."""
+    mask). sky_out: a list, given the dark sky measured on (dark_sky) when the guard lets the frame through."""
     if _value(info, "INSTRUMENT_MODE_ID", "FULL").upper() != "FULL":
         return None
     mask, img = image_mask(image, missing)
@@ -395,6 +395,8 @@ def image_hum(image, missing, info, dark=None, guard=True):
         means = sums / np.maximum(counts, 1)
         y = np.arange(nl)
         means = np.interp(y, y[enough], means[enough])   # a line with too little sky takes its neighbors'
+        if sky_out is not None:
+            sky_out.append(sky)
         return filter_hum(means, info, overclocks=False, fine=True)
     ngood = (1.0 - mask).sum(axis=1)
     avg = (img * (1.0 - mask)).sum(axis=1) / np.maximum(ngood, 1.0)
