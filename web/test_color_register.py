@@ -199,6 +199,8 @@ old_cal = module_from_main("calibration", "069c6ee^1")
 if old_cal is not None:
     # the floor black changed since (round 3: darkest real feature, small dim bodies), not what #188 is about
     old_cal._floor = cal._floor
+    # nor the neutral toe (fix plan D, calibration.TOE_NEUTRAL): the sky's last tint fading to gray is not either
+    cal.TOE_NEUTRAL = False
     for bands, levels, target in ((["MT3", "CB2", "MT2"], [0.0236, 0.40, 0.135], "DIONE"),
                                   (["MT3", "CB2", "MT2"], [0.0236, 0.40, 0.135], "SATURN"),
                                   (["MT3", "MT2", "BL1"], [0.03, 0.2, 0.35], "SATURN"), (["IR3", "GRN", "UV3"], [0.3, 0.2, 0.1], "TITAN")):
@@ -211,6 +213,7 @@ if old_cal is not None:
                 chans, margin, mix = mod.load_linear(labels, [np.zeros((H, H, 3), np.uint8)] * 3, [i.copy() for i in iofs])
                 got.append((np.asarray(mix).tobytes(), [c.tobytes() for c in mod.tone(chans, margin, mix)]))
         assert got[0] == got[1], (bands, target)
+    cal.TOE_NEUTRAL = True
     print("three-band composites: as before #188")
 
 # ---------- two-filter passes play and mosaic in colour (obs_mosaic.colour_of, colour_picture) ----------

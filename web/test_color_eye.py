@@ -45,6 +45,16 @@ m = cal.eye_mix("N", bands, "SATURN")
 v = typical("SATURN", "N", bands)
 assert (m @ (v * [1.5, 1.5, 1])).sum() > 1.2 * (m @ v).sum()
 
+# twice a band's share (METHANE_DETAIL): set 37's storm and c32's belts stood out too little and the planet read pale;
+# Titan's CB3 + MT2 + MT1 holds its surface window (SURFACE_WINDOW), where more methane haze would wash out the dark
+# terrain, so its methane bands keep METHANE_DETAIL_WINDOW
+assert cal.METHANE_DETAIL > 1 and cal.METHANE_DETAIL_WINDOW < 1
+bands = ["CB3", "MT2", "MT1"]
+m = cal.eye_mix("N", bands, "TITAN")
+v = typical("TITAN", "N", bands)
+w = cal.METHANE_DETAIL_WINDOW
+assert abs((m @ (v * [2, 1, 1])).sum() / (m @ v).sum() - (1 + 1 / (1 + 2 * w))) < 1e-3
+
 # Titan's two-filter CB3 + MT1 (channels: longer, mean, shorter): orange, its color from CB3, the green column empty
 m = cal.eye_mix("N", ["CB3", "MT1"], "TITAN")
 assert m.shape == (3, 3) and np.all(m[:, 1] == 0)
