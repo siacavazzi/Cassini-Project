@@ -58,8 +58,16 @@ with calibration.looking("balanced"):
     assert abs(shown[FLASH] / shown[FLASH - 1] - 1) < 0.08 and abs(shown[FLASH] / shown[FLASH + 1] - 1) < 0.08, shown[FLASH - 2:FLASH + 3]
     # the step is spread out: no frame more than 1.15x the one before it (it was 1.6x), and none flickers by more than 8%
     assert max(steps) < 1.15 and min(steps) > 0.92, np.round(steps, 3).tolist()
-    # the whole step is kept, and the slow brightening (1% a frame) too
-    assert abs(shown[N - 2] / shown[2] / (bright[N - 2] / bright[2]) - 1) < 0.1, (shown[2], shown[-2])
+    # the step and the slow brightening (1% a frame) are kept as the rolling scale keeps them (om.rolled: within
+    # EXPOSURE_FREE of the stretch's middle as they are, past it EXPOSURE_ROLL taken out)
+    kept = om.rolled(np.log([bright[n] / level[filters[n]] for n in range(N)]))
+    assert abs(shown[N - 2] / shown[2] / math.exp(kept[N - 2] - kept[2]) - 1) < 0.1, (shown[2], shown[-2])
+    assert 1.4 < shown[N - 2] / shown[2] < bright[N - 2] / bright[2], (shown[2], shown[-2])
+    # a scene that brightens steadily 40 times over (the first dive 271SA): the scale follows it, the movie's start
+    # brought up and its end down (within EXPOSURE_GAIN), and a scene that stays within EXPOSURE_FREE is left as it is
+    dive = om.evened_gains([3.66 * n / 125 for n in range(126)], 8)
+    assert dive[0] > 3 and dive[-1] < 0.4 and abs(dive[62] - 1) < 0.05, (dive[0], dive[62], dive[-1])
+    assert om.evened_gains([0.4 * n / 59 for n in range(60)], 8) == [1.0] * 60
     assert om.exposure_gains(u, cache, smooth=0) == {}
     # a pass that plays in colour: a short run of grey frames before the set is complete (a filter each) keeps gain 1
     real = om.exposure_chain
