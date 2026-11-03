@@ -102,6 +102,76 @@ def get_mask():
 
 
 """
+The camera's outermost lines and columns are not picture. Across the archive the first and last column of nearly every
+frame read brighter than the columns beside them (in sky and on bright ground alike: N1503242138_1 has 201 where its
+neighbours have 112, W1295204353_1 29 against 24) and the first line often does (N1503242138_1: 173 against 151); a WAC
+frame's second line can too (W1507745867_2). Drawn at the soft edge's first value (mask.png's 46 of 255) on a
+stretched dark sky, turned north up and resized, they became dotted bright lines along two edges of every frame
+(Titan 2006 020TI, Jupiter 2000, Phoebe, Titan 2007 054TI) and white specks along every ring film's edge (113RI).
+A frame's mask (pixels it has) leaves out EDGE_PX full-resolution pixels at each edge of a full frame, and
+SUMMED_EDGE_PX of a summed one (4 of a 512 line frame's own pixels, 2 of a 256 line one's): a summed frame's bright
+edge runs further in. N1349081639_2 (Jupiter 2000, 512 lines), on the full-resolution grid from the edge: 127 127
+(the valid mask's left-out first pixel), 39 41, 14 14, 19 19, 2 2, then 0 in the sky; the Mini's second and third
+renders, which left out 2 of its own pixels, still showed a faint line from the third and fourth.
+Leaving a pixel out of the mask is not enough on its own: turning the frame north up (label.translate, linear on
+colour and alpha apart) mixes a left-out pixel's colour into the new edge, and the calibrated path leaves 127 (half
+scale) under a summed frame's left-out edge column. That was most of the dotted lines (the Mini's edge profile of
+W1576834985_1, N1515805292_1, N1349081639_2: 127 in the left-out columns, 0 to 13 in the sky beside them; the first
+render of this fix, which trimmed the mask only, kept the lines). So the colour under every left-out pixel next to
+the picture is the picture's own nearest colour (rim_coloured), as load_aligned hands its pictures on. The soft edge
+(mask.png) is unchanged; it starts edge_px in.
+"""
+EDGE_PX = 2
+SUMMED_EDGE_PX = 8
+
+
+def edge_px(lbl, side=1024):
+    """How many full-resolution pixels at each edge of frame lbl (on a side px grid) are not picture: EDGE_PX of
+    a full frame, SUMMED_EDGE_PX (or EDGE_PX of its own pixels, if more) of a summed one."""
+    try:
+        lines = int(lbl.info.get("LINES", side))
+    except (TypeError, ValueError, AttributeError):
+        lines = side
+    summing = max(1, side // max(1, min(lines, side)))
+    return EDGE_PX if summing == 1 else max(SUMMED_EDGE_PX, EDGE_PX * summing)
+
+
+def edge_trimmed(mask, lbl):
+    """mask (pixels a frame has, the 1024 px grid) with the frame's outermost edge_px lines and columns left out."""
+    if mask is None:
+        return mask
+    n = edge_px(lbl, mask.shape[0])
+    out = mask.copy()
+    out[:n] = False
+    out[-n:] = False
+    out[:, :n] = False
+    out[:, -n:] = False
+    return out
+
+
+RIM_PX = 8   # how far past the picture (pixels) rim_coloured paints: past what a linear turn and LANCZOS resize reach
+
+
+def rim_coloured(img, valid):
+    """img (uint8, one band or three) with the left-out pixels within RIM_PX of the picture (valid) the colour of
+    the picture's nearest pixel, so no colour that is not the picture's reaches its edge when it is turned or
+    resized. The picture itself is unchanged."""
+    if img is None or valid is None or valid.all() or not valid.any() or img.dtype != np.uint8:
+        return img
+    dist, labels = cv2.distanceTransformWithLabels((~valid).astype(np.uint8), cv2.DIST_L2, 3,
+                                                   labelType=cv2.DIST_LABEL_PIXEL)
+    band = (dist > 0) & (dist <= RIM_PX)
+    if not band.any():
+        return img
+    # each label is one picture pixel (a zero of the transform's input), numbered from 1 in row-major order
+    flat = np.flatnonzero(valid.ravel())[labels[band] - 1]
+    near = np.stack([flat // valid.shape[1], flat % valid.shape[1]], 1)
+    out = img.copy()
+    out[band] = img[near[:, 0], near[:, 1]]
+    return out
+
+
+"""
 Builds one frame up to (not including) the mosaic step
 row = one row of the image index: the label path for each filter plus seconds_1970
 returns a PIL image and the label it was centered with
@@ -215,6 +285,9 @@ def load_aligned(paths, hdr=False, scale=None, repeat_window=120, around=None):
     if fill:
         imgs = [ic.fill_invalid(img, mask) for img, mask in zip(imgs, masks)]
         iofs = [None if iof is None else ic.fill_invalid(iof, mask) for iof, mask in zip(iofs, masks)]
+    # each frame's outermost lines and columns are not picture (edge_trimmed), so they move with the frame as it is
+    # aligned and drop out of every picture made of it
+    masks = [edge_trimmed(mask, lbl) for mask, lbl in zip(masks, lbls)]
     dropped = []
     if calibrating and len(lbls) > 1:
         # each frame calibrated once, here, for the display models below to share
@@ -242,7 +315,8 @@ def load_aligned(paths, hdr=False, scale=None, repeat_window=120, around=None):
                 full = [cal.saturated_of(lbls[0], imgs[0].shape[:2]) if iofs[0] is None else clips[0]]
                 full = None if full[0] is None else full
                 share = float(full[0].mean()) if full else 0.0
-            linear = cal.load_linear(lbls, imgs, iofs, floor=cal.saturated_floor(share), glow=cal.saturated_glow(share))
+            linear = cal.load_linear(lbls, imgs, iofs, floor=cal.saturated_floor(share), glow=cal.saturated_glow(share),
+                                     off_disk=lambda linear: dim_off_disk(lbls, linear))
         if linear is not None:
             calibrated = True
             if full is not None:
@@ -256,9 +330,12 @@ def load_aligned(paths, hdr=False, scale=None, repeat_window=120, around=None):
                 guide = cal.load_channels(lbls, imgs, iofs=iofs)
             # what the camera saturated in each channel (merged in I/F: what every exposure saturated), moved with
             # its channel below: filled from the channels that did not saturate there (calibration.tone, fill_saturated)
-            each = [_saturated_of(l, img.shape[:2]) if clip is None else clip for l, img, clip in zip(lbls, imgs, clips)]
+            # (on the channels' grid: a summed frame's own mask is 512 px, and one with nothing saturated comes back
+            # at its own size, N1356864915_2 in a Jupiter set of 1024 px frames)
+            shape = linear[0][0].shape[:2]
+            each = [_saturated_of(l, shape) if clip is None else clip for l, clip in zip(lbls, clips)]
             if any(m is not None and m.any() for m in each):
-                full = [np.zeros(imgs[0].shape[:2], np.float32) if m is None else m.astype(np.float32) for m in each]
+                full = [np.zeros(shape, np.float32) if m is None else _on_grid(m, shape) for m in each]
         elif linear is None:
             # puts every filter on the same brightness scale (see calibration.py)
             before = imgs
@@ -359,7 +436,71 @@ def load_aligned(paths, hdr=False, scale=None, repeat_window=120, around=None):
     if shares and max(shares) > 0:
         # the share of the frame the camera saturated in every exposure merged (the most of any channel): drawn white
         report["saturated_share"] = round(max(shares), 4)
-    return imgs, np.logical_and.reduce(masks), lbls[ref], report
+    valid = np.logical_and.reduce(masks)
+    # no colour that is not the picture's under the pixels round it (rim_coloured)
+    imgs = [rim_coloured(img, valid) for img in imgs]
+    return imgs, valid, lbls[ref], report
+
+
+"""
+Where the sky of a color set is when its own sky test finds too little of it (calibration.load_linear's off_disk):
+every pixel off its target's disk in every frame of the set, as SPICE places it (the geometry cache), DISK_MARGIN
+wider for SPICE's error, as a mask of the given shape (a frame's, its channels not yet aligned). The sky round a moon
+can be lit all over, so its own test (calibration._sky, under a twentieth of the brightest) finds none: the faint offset
+round Phoebe a few dozen pixels across (2004, violet). (Mimas's 2010 color set, 126MI, is not one: its "sky" is Saturn
+behind it, too bright for dim_off_disk, and its magenta is Saturn's limb moving between the filters.) None when SPICE can't place the target on every frame, or for a
+target whose own light reaches past its disk (DISK_LIT: Saturn's rings, Titan's haze), whose sky is not all sky.
+"""
+DISK_LIT = ("SATURN", "TITAN")
+DISK_MARGIN = (0.2, 16)   # the disk this much wider (of its radius, and full resolution pixels), as obs_mosaic's
+
+
+def off_disk(lbls, shape):
+    target = lbls[0].info.get("TARGET_NAME")
+    if target in DISK_LIT:
+        return None
+    try:
+        import obs_mosaic
+    except ImportError:
+        return None
+    if target not in obs_mosaic.RADIUS:
+        return None
+    locs = _spice_locs(lbls)
+    if locs is None or any(loc is None or len(loc) < 3 or not loc[2] for loc in locs):
+        return None
+    k = 1024 / shape[0]   # (a summed frame's pixels are full resolution ones scaled to 1024)
+    rows = np.arange(shape[0], dtype=np.float32)[:, None] * k
+    cols = np.arange(shape[1], dtype=np.float32)[None, :] * k
+    sky = np.ones(shape, dtype=bool)
+    for lbl, loc in zip(lbls, locs):
+        cam = "W" if lbl.info.get("INSTRUMENT_ID") == "ISSWA" else "N"
+        radius = obs_mosaic.RADIUS[target] / (float(loc[2]) * obs_mosaic.IFOV[cam])
+        reach = radius * (1 + DISK_MARGIN[0]) + DISK_MARGIN[1]
+        cy, cx = ba.CCD_CENTER - float(loc[1]), ba.CCD_CENTER - float(loc[0])
+        sky &= (rows - cy) ** 2 + (cols - cx) ** 2 >= reach * reach
+    return sky
+
+
+"""
+calibration.load_linear's off_disk for a color set (off_disk), only where the sky it gives is dim in every channel:
+its OFF_DISK_PCT percentile (the noise floor's, calibration.sky_levels) under OFF_DISK_DIM of the 99th percentile on
+the disk. Light off the disk brighter than that is something lit (Saturn behind Mimas in 126MI, whose limb moved
+between the filters; an Enceladus plume), not sky: taken for sky, it set a noise margin that dimmed the plume
+"""
+OFF_DISK_DIM = 0.05
+OFF_DISK_PCT = 98
+
+
+def dim_off_disk(lbls, iofs):
+    sky = off_disk(lbls, iofs[0].shape)
+    if sky is None or sky.all() or not sky.any():
+        return None
+    disk = ~sky
+    for iof in iofs:
+        top = float(np.percentile(iof[disk], 99))
+        if not top > 0 or not float(np.percentile(iof[sky], OFF_DISK_PCT)) < OFF_DISK_DIM * top:
+            return None
+    return sky
 
 
 """
@@ -572,6 +713,16 @@ def _saturated_of(lbl, shape):
     except Exception as e:
         print(f"Can't read {lbl.get_info().get('path')} for its saturated pixels: {e}")
         return None
+
+
+"""
+A saturated mask as float32 at shape (rows, columns), resized nearest when it is another size
+"""
+def _on_grid(mask, shape):
+    mask = np.asarray(mask).astype(np.float32)
+    if mask.shape[:2] != tuple(shape):
+        mask = cv2.resize(mask, tuple(shape)[::-1], interpolation=cv2.INTER_NEAREST)
+    return mask
 
 
 """
