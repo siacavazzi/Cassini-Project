@@ -151,10 +151,12 @@
       return out;
     }
     // obs_mosaic.held_of: the frame shown in frame n's place, n or, when n is partial (most of it lost in downlink,
-    // over-exposed: t.partial), the last earlier placed frame of its filter that is not, else of any filter; with none
-    // before it, the first later one of its filter, else of any; n when there is none
+    // over-exposed: t.partial), the last earlier placed frame of its filter that is not, nor over-exposed (t.over:
+    // obs_mosaic.holds), else of any filter; with none before it, the first later one of its filter, else of any; n
+    // when there is none
     function heldOf(t, n) {
-      const partial = new Set(t.partial || []), placed = new Set(t.n), whole = j => placed.has(j) && !partial.has(j);
+      const partial = new Set(t.partial || []), over = new Set(t.over || []), placed = new Set(t.n);
+      const whole = j => placed.has(j) && !partial.has(j) && !over.has(j);
       if (!partial.has(n)) return n;
       for (let j = n - 1; j >= 0; j--) if (t.filters[j] === t.filters[n] && whole(j)) return j;
       for (let j = n - 1; j >= 0; j--) if (whole(j)) return j;

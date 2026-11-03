@@ -4260,10 +4260,10 @@ def _steady_table(u, n, cache, centre=True, colour=False):
     step = {}
     for m in ns if colour else ():
         s, got = shown_of(u, p, m, not_shown, tile_of)
-        if not got and s != held_of([fr[2] for fr in u["frames"]], m, not_shown, lambda j: j in tiles and not not_shown(j)):
+        if not got and s != held_of([fr[2] for fr in u["frames"]], m, not_shown, holds(tile_of, not_shown)):
             step[str(m)] = s
     return {"local": True, "fixed": True, "ids": [fr[1] for fr in u["frames"]], "n": ns, "exposure": exposure,
-            "partial": [m for m in ns if not_shown(m)], "step": step,
+            "partial": [m for m in ns if not_shown(m)], "over": [m for m in ns if over_exposed(tiles[m])], "step": step,
             "sets": _colour_recipes(u, p, cache, ns, tiles) if colour and p.get("colour") else None,
             "eye": _eye_recipes(u, p, ns, tiles) if colour and p.get("colour") else None,
             "filters": [fr[2] for fr in u["frames"]], "trail_most": TRAIL,
@@ -4854,15 +4854,25 @@ def box_cover(t, q):
     return max(0.0, w) * max(0.0, h) / max(1e-9, (a[2] - a[0]) * (a[3] - a[1]))
 
 
+def holds(tile_of, not_shown):
+    """whole(j) for held_of: frame j placed, shown (not not_shown) and not over-exposed. A frame held in another's place
+    is never a white slab: the 2009 south pole movie's empty clear frames held the 88% saturated one before them."""
+    return lambda j: "offset" in tile_of(j) and not not_shown(j) and not over_exposed(tile_of(j))
+
+
 def shown_of(u, p, n, not_shown, tile_of):
     """(the frame whose picture frame n of a movie shows, the colour set it shows or None), as movie_frame draws it
     with colour on: the set (set_of) when the pass plays in colour (plays_colour); else the frame held_of holds, put
     through step_frame when the pass plays its grey filter."""
     frames, want = u["frames"], p.get("colour")
     placed = lambda j: "offset" in tile_of(j)
-    whole = lambda j: placed(j) and not not_shown(j)
-    s = held_of([fr[2] for fr in frames], n, not_shown, whole)
-    if want and plays_colour(u, want, p["grey"]):
+    colours = bool(want) and plays_colour(u, want, p["grey"])
+    # in a pass playing in colour an over-exposed frame (a run of them too: the 2009 south pole movie's clear frames,
+    # 86-92% saturated) is never shown, its colour set or the frame before it is
+    hidden = (lambda j: not_shown(j) or over_exposed(tile_of(j))) if colours else not_shown
+    whole = holds(tile_of, hidden)
+    s = held_of([fr[2] for fr in frames], n, hidden, whole)
+    if colours:
         covers = lambda got: all(box_cover(tile_of(n), tile_of(j)) >= HELD_COVER for j in got.values())
         got = set_of(u, n, want, not_shown, placed, covers)
         if got:
@@ -4907,7 +4917,7 @@ def movie_frame(u, n, cache, trail=0, colour=True, out=OUT, centre=True, steady=
         if j not in held:
             held[j] = unfit(frames, j, tile_of)
         return held[j]
-    whole = lambda j: "offset" in tile_of(j) and not not_shown(j)
+    whole = holds(tile_of, not_shown)
     # a partial frame (lines lost in downlink), an uncalibrated, over-exposed or empty one (unfit) shows the last whole
     # frame of its filter in its place; with colour on, the frame plays its colour set (set_of) or, in a pass playing
     # its grey filter, that filter's frame beside it (step_frame): shown_of

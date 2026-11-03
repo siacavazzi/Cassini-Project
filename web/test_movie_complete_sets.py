@@ -60,6 +60,23 @@ assert [om.blank_frame(frames, n, lambda j: tiles[j]) for n in range(5)] == [Fal
 tiles = [span(0, 200), span(0, 160), span(0, 90), span(0, 150), span(0, 40)]
 assert not any(om.blank_frame(frames, n, lambda j: tiles[j]) for n in range(5))
 print("empty, blank and lost-line frames hold the frame before them; ok")
+# a held frame is never over-exposed (holds): the 2009 south pole movie's clear frames, empty or saturated all over,
+# held the 88% saturated one before them as a white slab; and in a pass playing in colour an over-exposed run is held too
+over = lambda s: {**placed, "saturated": s, "lit": 1.0, "floor": 19, "top": 255}
+far = {"offset": [5000.0, 0.0], "box": [-512, -512, 1024, 1024], "floor": 0, "top": 200}
+fs = ["CL1/CL2", "CL1/CL2", "CL1/CL2", "GRN", "CL1/CL2", "CL1/CL2", "RED", "GRN", "BL1", "RED", "GRN", "BL1"]
+frames = fr(fs)
+tiles = [span(18, 19), over(0.86), over(0.88), span(0, 200), span(17, 17), over(1.0)] + [far] * 6
+tile_of = lambda j: tiles[j]
+bad = lambda j: om.unfit(frames, j, tile_of)
+assert not bad(1) and not bad(2) and bad(5)            # a run of over-exposed frames plays (colour off) ...
+assert om.held_of(fs, 5, bad, om.holds(tile_of, bad)) == 3                      # ... but is never held
+assert om.held_of(fs, 5, bad, lambda j: "offset" in tiles[j] and not bad(j)) == 2   # (as it was)
+u = {"frames": frames, "_sets": [[("RED", 6), ("GRN", 7), ("BL1", 8)], [("RED", 9), ("GRN", 10), ("BL1", 11)]]}
+pc = {"colour": ["RED", "GRN", "BL1"], "grey": "CL1/CL2"}
+assert om.plays_colour(u, pc["colour"], pc["grey"])
+assert [om.shown_of(u, pc, n, bad, tile_of) for n in (1, 2, 5)] == [(3, None)] * 3   # no set takes in its place
+print("held frames are never over-exposed; ok")
 
 # ---------- 1. a colour movie opens on its first complete set; sets update whole ----------
 # a lead-in of grey frames, then RED GRN BL1 sets (each within SET_GAP)
@@ -227,5 +244,13 @@ with calibration.looking("balanced"):
             assert page_shown == [0, 1, 2, 3, 4, 5, 5, 7, 8, 9, 10, 11], page_shown
             assert [[q[1] for q in u["frames"]].index(om.movie_frame(u, n, cache, colour=False, centre=True)[1].get("held", u["frames"][n][1]))
                     for n in range(len(seq))] == page_shown
+# the page's heldOf never holds an over-exposed frame either (the steady table's "over")
+fs = ["CL1/CL2"] * 3 + ["GRN"] + ["CL1/CL2"] * 2
+t = {"n": list(range(6)), "partial": [0, 4, 5], "over": [1, 2], "filters": fs}
+js = ("const window = {};\n" + script + "\nconst M = window.cassiniSteadyMath(), t = " + json.dumps(t) + ";\n"
+      "console.log(JSON.stringify(t.n.map(n => M.heldOf(t, n))));")
+page_held = json.loads(subprocess.run(["node", "-e", js], capture_output=True, text=True, check=True).stdout)
+server_held = [om.held_of(fs, n, lambda j: j in t["partial"], lambda j: j not in t["partial"] + t["over"]) for n in range(6)]
+assert page_held == server_held == [3, 1, 2, 3, 3, 3], (page_held, server_held)
 print("the page shows the frame the server does; ok")
 print("ok")
