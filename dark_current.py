@@ -41,6 +41,7 @@ import functools
 import glob
 import math
 import os
+import warnings
 
 import cv2
 import numpy as np
@@ -580,3 +581,129 @@ def defects(frames):
     hot, dead = np.argwhere(above >= need), np.argwhere(below >= need)
     return np.concatenate([np.column_stack([hot, np.ones(len(hot), np.int64)]),
                            np.column_stack([dead, -np.ones(len(dead), np.int64)])]).astype(np.int16)
+
+
+"""
+What the dark model leaves in the frame's own dark sky (the "darksky" step, beyond CISSCAL). CISSCAL's dark model is
+right on average, but not in detail: on a long star field (N1800459066_1) or the short frames round a moon (c34 Dione,
+N1855916451_1) it leaves the sky a DN or so brighter towards the edges, and its column pattern (1-1.5 DN from column to
+column) is only loosely the frame's own, so taking it away adds faint vertical stripes. The display stretch lifts both
+into an edge glow and a grainy, striped sky. sky_residual measures them on the frame's dark sky, after the dark model
+(image = the frame in DN with bias, 2 Hz noise and the dark taken away; stars and anything bright left out):
+  - the column stripes: each column's mean over the sky less the columns round it (SKY_COLUMNS), taken from the whole
+    column, as the 2 Hz step does for lines (cisscal_noise.image_hum), where at most SKY_STRIPES DN;
+  - the lift: the sky's mean in SKY_BLOCKS x SKY_BLOCKS blocks, filled in under the bodies from the blocks round them,
+    smoothed, less the sky's level in the middle of the frame, so only what lifts the sky round the edges above it is
+    taken away; only near the frame's edges, where the glow is (SKY_EDGE: a plume or a faint ring in the middle of the frame stays), and
+    only when at most SKY_LIFT DN (more is light, not the dark: a ring, Saturn's glow).
+Used when at least SKY_SHARE of the blocks are sky and that sky is dark (within SKY_DARK DN of the dark model). Returns the correction in DN (added to the dark), or None.
+"""
+SKY_BLOCKS = 32
+SKY_SHARE = 0.25
+SKY_DARK = 10.0       # DN: the sky's median, after the dark, at most this (else it is lit, not dark sky)
+SKY_COLUMNS = 24.0    # columns: the stripes are what a column's sky median has beyond a blur this wide
+SKY_STRIPES = 4.0     # DN
+SKY_LIFT = 6.0        # DN
+SKY_EDGE = 0.2        # the lift is taken away within this share of the frame's edges, fading out by twice it
+SKY_LEAST = 64        # sky pixels a column needs to be measured
+SKY_ODD = 2.5         # DN: a block this far from the blocks round it (their median) is left out of the lift
+
+
+def sky_mask(image):
+    """The frame's dark sky: far from anything bright, stars out."""
+    h, w = image.shape
+    smooth = cv2.GaussianBlur(image.astype(np.float32), (0, 0), max(h / 128, 2))
+    floor = float(np.percentile(smooth, 5))
+    spread = max(float(np.percentile(smooth, 50)) - floor, 1.0)
+    # dark: at most SKY_LIFT above the darkest sky, and nothing standing out of the sky round it (the glow at the
+    # frame's edges is sky, what the step is to take away; a body, a ring or a plume is not)
+    around = cv2.GaussianBlur(smooth, (0, 0), h / 16)
+    sky = (smooth < floor + 3 * spread + SKY_LIFT) & (smooth - around < 3 * spread)
+    sky &= cv2.erode(sky.astype(np.uint8), np.ones((15, 15), np.uint8)) > 0
+    if sky.any():
+        sky &= image <= float(np.percentile(image[sky], 99))
+    return sky
+
+
+def sky_residual(image):
+    image = np.asarray(image, np.float64)
+    h, w = image.shape
+    b = SKY_BLOCKS
+    if h % b or w % b or min(h, w) < 4 * b:
+        return None
+    sky = sky_mask(image)
+    if not sky.any() or abs(float(np.median(image[sky]))) > SKY_DARK:
+        return None      # no dark sky: a frame filled by Venus, a lit haze, a sky Saturn lights
+    cell = lambda a: a.reshape(b, h // b, b, w // b).transpose(0, 2, 1, 3).reshape(b, b, -1)
+    m, x = cell(sky), cell(image)
+    share = m.mean(axis=2)
+    use = share > 0.5
+    if use.mean() < SKY_SHARE:
+        return None
+    out = np.zeros((h, w))
+    # the column stripes
+    masked = np.where(sky, image, np.nan)
+    with warnings.catch_warnings():
+        warnings.simplefilter("ignore", RuntimeWarning)
+        cols = np.nanmean(masked, axis=0)     # a mean: the archive's 8-bit codes put a median on a step
+    counts = sky.sum(axis=0)
+    good = (counts >= SKY_LEAST) & np.isfinite(cols)
+    if good.mean() > 0.8:
+        c = np.where(good, cols, 0.0)
+        wgt = good.astype(np.float64)
+        blur = lambda a: cv2.GaussianBlur(a.reshape(1, -1), (0, 0), SKY_COLUMNS, borderType=cv2.BORDER_REFLECT).ravel()
+        stripes = np.where(good, c - blur(c) / np.maximum(blur(wgt), 1e-6), 0.0)
+        odd = np.abs(stripes) > SKY_STRIPES     # more is a column of its own (a hot or dead one: hotpix), not the dark's
+        stripes[odd] = 0.0
+        out += stripes[None, :]
+        image = image - stripes[None, :]
+        sky = sky & ~odd[None, :]
+        m, x = cell(sky), cell(image)
+    # the lift
+    with np.errstate(invalid="ignore", divide="ignore"):
+        means = np.where(use, (x * m).sum(axis=2) / np.maximum(m.sum(axis=2), 1), 0.0).astype(np.float32)
+    known = use.astype(np.float32)
+    for _ in range(2):   # a block a bright star's wings or a body's edge still lift is left out, then filled like one
+        filled = _fill_blocks(means, known)
+        odd = (known > 0) & (np.abs(filled - cv2.medianBlur(filled, 3)) > SKY_ODD)
+        if not odd.any():
+            break
+        known[odd] = 0
+    use = known > 0
+    if use.mean() < SKY_SHARE:
+        return out if out.any() else None
+    surface = filled
+    edge = cv2.resize(_border(h, w).astype(np.float32), (b, b), interpolation=cv2.INTER_AREA)
+    inner = use & (edge < 0.5)
+    if inner.sum() < 4:
+        return out if out.any() else None
+    lift = surface - float(np.percentile(surface[inner], 25))   # the sky's own level, below a faint plume or haze
+    lift = np.clip(cv2.resize(lift, (w, h), interpolation=cv2.INTER_LINEAR), 0, None) * _border(h, w)
+    top = float(lift[sky].max()) if sky.any() else 0.0
+    if 0 < top <= SKY_LIFT:
+        out += np.minimum(lift, top)
+    return out if out.any() else None
+
+
+@functools.lru_cache(maxsize=4)
+def _border(h, w):
+    """1 within SKY_EDGE of the frame's edges, down to 0 at twice that, in a smooth step."""
+    def ramp(n):
+        d = np.minimum(np.arange(n), np.arange(n)[::-1]) / (SKY_EDGE * n)
+        t = np.clip(2.0 - d, 0.0, 1.0)
+        return t * t * (3 - 2 * t)
+    return np.maximum(ramp(h)[:, None], ramp(w)[None, :])
+
+
+def _fill_blocks(means, known):
+    """Block means with the blocks not known filled from the known ones round them, nearest first."""
+    fill = lambda a, s: cv2.GaussianBlur(a, (0, 0), s, borderType=cv2.BORDER_REFLECT)
+    filled, done = means.copy(), known > 0
+    for s in (1.0, 2.0, 4.0, 8.0, 16.0):
+        num, den = fill(means * known, s), fill(known, s)
+        new = ~done & (den > 1e-3)
+        filled[new] = num[new] / den[new]
+        done |= new
+        if done.all():
+            break
+    return filled

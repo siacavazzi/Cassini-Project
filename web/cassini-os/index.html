@@ -2500,6 +2500,8 @@ body.ambient.phone .amb-where { font-size: 18px; }
       hint: "The archive keeps a dark sky as only a handful of brightness steps, so once the bands are measured from the sky each line still sits a fraction of a step above or below the next and the bands show again when the sky is stretched. Where the bands were measured from the sky, its one-step speckle is evened out over a few pixels; stars, cosmic rays and edges, several steps brighter, are left as they were. Off shows the sky's steps as they came down. Needs Bands from the sky." },
     { key: "processing.dark", step: "dark", label: "Dark current",
       hint: "Takes out the charge the camera's detector gathers without any light, which grows with the exposure and with how long each line waits to be read out, with the camera team's own dark model. Most visible on long exposures: night sides, rings, Titan's surface. Off leaves them in. Needs Calibrate." },
+    { key: "processing.darksky", step: "darksky", label: "Dark from the sky",
+      hint: "The camera team's dark model is right on average but not in detail: on long star fields and the dark sky round a moon it leaves a faint glow round the picture's edges and fine vertical stripes, which the display stretch lifts into a grey, striped sky. Where a picture has enough dark sky, what the model leaves there is measured and taken out too: the stripes column by column, the glow near the edges only (a plume or a faint ring in the middle stays). Lit pictures are left alone. Off uses the model as it is, as the camera team's calibration (CISSCAL) does. Needs Dark current." },
     { key: "processing.pairs", step: "pairs", label: "Pixel pairs",
       hint: "In anti-blooming mode the detector leaves pairs of pixels, one too bright sitting on one too dark, scattered over the picture. As the camera team's calibration (CISSCAL) does, each pair more than 30 DN off its neighbors is replaced by the mean of the pixels either side of it. Full-size frames with anti-blooming on only. Off leaves them in. Needs Calibrate." },
     { key: "processing.flat", step: "flat", label: "Flat field",
@@ -12770,7 +12772,7 @@ void main() {
   window.cassiniAbout = { open, addTab, esc, close: () => show(false), credits: CREDITS };
 
   // ---- which version this is: this page's build id (build.py writes it), and what the frame server says it serves ----
-  const BUILD = /*BUILD*/"dae12b887196";
+  const BUILD = /*BUILD*/"f1c4a4902e64";
   const FRAMES = (() => {                       // the frame server, chosen as the camera window chooses it
     const q = new URLSearchParams(location.search).get("frames");
     if (q) return q.replace(/\/$/, "");

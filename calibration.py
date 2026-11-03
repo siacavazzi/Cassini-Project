@@ -503,6 +503,12 @@ def calibrate(png, info, image=None, smooth=True):
     if step("dark"):
         dark = dc.dark_for(info, shape)
         if dark is not None:
+            if step("darksky"):
+                # what the dark model leaves in the frame's own dark sky (dc.sky_residual, beyond CISSCAL)
+                before = _lookup(pixels, dn) if codes else np.asarray(dn, np.float64)
+                left = dc.sky_residual(before - (offset if offset is not None else 0.0) - dark)
+                if left is not None:
+                    dark = dark + left
             offset = dark.astype(np.float64) if offset is None else offset + dark
             spots = dc.dark_spots(info)
     if offset is not None:
@@ -783,7 +789,8 @@ I/F and one display scale; off shows each frame on the archive's own stretch), "
 horizontal banding, taken out line by line), "twohzsky" (the 2 Hz noise measured from the frame's own background,
 cisscal_noise.image_hum; off measures it from the overclocked pixels only, cisscal_noise.two_hz), "skysmooth" (that dark
 sky's one-code steps smoothed, smooth_sky), "dark" (calibrate's dark current and
-the WAC's hot pixels taken out, dark_current.py), "pairs" (calibrate's anti-blooming bright/dark pixel pairs replaced,
+the WAC's hot pixels taken out, dark_current.py), "darksky" (what the dark model leaves in the frame's own dark
+sky, its column stripes and lift, taken out too, dark_current.sky_residual; off uses the model as it is), "pairs" (calibrate's anti-blooming bright/dark pixel pairs replaced,
 cisscal_noise.bright_dark), "flat" (calibrate's flat field: dust rings, mottle and the
 detector's flat taken out, flat_field.py), "hotpix" (calibrate's repair of the hot and dead pixels, which stay put
 while the sky moves, dark_current.repair_hot), "align" (a color set's channels moved onto one another), "blend" (a
@@ -796,7 +803,7 @@ only how tiles are drawn together, or redraw or move tiles from the tiles made, 
 left out of variant (a mosaic with them off draws the same tiles) and the mosaics name them themselves
 (mosaic.drawing; obs_mosaic.SURFACE_TAG, PANEL_TAG, EDGE_TAG).
 """
-STEPS = ("stack", "hdr", "fill", "calibrate", "twohz", "twohzsky", "skysmooth", "dark", "pairs", "flat", "hotpix", "align", "blend", "level", "surface", "panels")
+STEPS = ("stack", "hdr", "fill", "calibrate", "twohz", "twohzsky", "skysmooth", "dark", "darksky", "pairs", "flat", "hotpix", "align", "blend", "level", "surface", "panels")
 _off = contextvars.ContextVar("off", default=frozenset())
 
 
