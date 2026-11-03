@@ -1500,8 +1500,14 @@ from the channels that did not saturate there: each of those scaled by the set's
 over the lit pixels neither saturated), averaged. The camera says nothing of the color there (the clipped value is only
 a floor of the true one, and the channels clip at different levels: a limb glare yellow, Hyperion's bright side cyan),
 so it gets the picture's typical color with the surface the others saw. Returns (channels, the pixels every channel saturated, or None)
+reach: the ratio the picture has near each pixel instead (over a Gaussian of reach pixels, the typical one where too
+little near it says), for a picture whose colour changes across it: a mosaic of Saturn from its pole's blue-green to its
+gold lower latitudes, where the one typical ratio gave the clipped gold the pole's green.
 """
-def fill_saturated(channels, masks):
+FILL_NEAR = 0.05   # (fill_saturated's reach) the share of the pixels round one measured, from which their ratio is used whole
+
+
+def fill_saturated(channels, masks, reach=None):
     masks = [np.zeros(channels[0].shape, bool) if m is None else np.asarray(m, bool) for m in masks]
     x = [np.asarray(c, np.float32) for c in channels]
     top = np.max(x, axis=0)
@@ -1519,7 +1525,21 @@ def fill_saturated(channels, masks):
                 continue
             ratio = np.float32(np.median(c[both] / o[both]))
             use = m & ~n
-            total[use] += ratio * o[use]
+            if reach:
+                # (worked out at a smaller size: the blur is wide)
+                q = max(1, int(reach // 8))
+                small = lambda v: cv2.resize(v, (max(1, v.shape[1] // q), max(1, v.shape[0] // q)), interpolation=cv2.INTER_AREA)
+                big = lambda v: cv2.resize(v, (c.shape[1], c.shape[0]), interpolation=cv2.INTER_LINEAR)
+                w = both.astype(np.float32)
+                num = cv2.GaussianBlur(small(c * w), (0, 0), reach / q)
+                den = cv2.GaussianBlur(small(o * w), (0, 0), reach / q)
+                near = cv2.GaussianBlur(small(w), (0, 0), reach / q)
+                # (where little near says, eased to the typical ratio)
+                k = np.clip(near / FILL_NEAR, 0, 1)
+                field = big(k * num / np.maximum(den, 1e-6) + (1 - k) * ratio)
+                total[use] += field[use] * o[use]
+            else:
+                total[use] += ratio * o[use]
             count[use] += 1
         filled = c.copy()
         some = count > 0
