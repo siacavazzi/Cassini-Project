@@ -126,11 +126,11 @@ assert om.small_body({"key": ("SATURN", "OBS", "N", 0)}, ("p", "N1_1", "CL1", 0,
 assert om.small_body({"key": ("S_RINGS", "OBS", "N", 0)}, ("p", "N1_1", "CL1", 0, 0, 0, 0, 1e6)) is None   # no disk
 assert om.small_body(u, ("p", "N1_1", "CL1", 0, 0, 0, 0, 0)) is None                                     # no place
 # Earth from Saturn (Day the Earth Smiled, N1752969273_1: 1.45e9 km) is a speck under a pixel, kept out of the
-# filled scale (FILL_RADIUS)
+# filled scale, centring and the colour sets' rules (SPECKS, not RADIUS)
 earth = om.small_body({"key": ("EARTH", "ISS_195RI_HIPHASEC001_VIMS", "N", 0)},
                       ("p", "N1752969273_1", "GRN", 0, 0, -10.5, -7.0, 1.4459e9))
 assert earth is not None and earth[2] < 1, earth
-assert "EARTH" not in om.FILL_RADIUS
+assert "EARTH" not in om.FILL_RADIUS and "EARTH" not in om.RADIUS
 
 rng = np.random.default_rng(3)
 

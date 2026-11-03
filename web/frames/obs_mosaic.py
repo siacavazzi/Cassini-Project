@@ -166,14 +166,15 @@ SMALL_RADIUS = {"JANUS": 89.5, "EPIMETHEUS": 58.1, "PROMETHEUS": 43.1, "PANDORA"
                 "ERRIAPUS": 5, "ERRIAPO": 5, "SKATHI": 4, "SKADI": 4, "THRYMR": 4, "THRYM": 4, "HYROKKIN": 4,
                 "SUTTUNGR": 3.5, "SUTTUNG": 3.5, "MUNDILFARI": 3.5, "NARVI": 3.5, "BESTLA": 3.5, "KARI": 3.5,
                 "TARQEQ": 3.5, "BEBHIONN": 3, "BERGELMIR": 3, "FORNJOT": 3, "HATI": 3, "LOGE": 3, "SKOLL": 3, "SURTUR": 3,
-                "JARNSAXA": 3, "GREIP": 3, "S13_2004": 3, "S12_2004": 2.5,
-                # and Earth (equatorial radius), a speck under a pixel from Saturn in all 13 of its frames (Day the Earth
-                # Smiled, 195RI HIPHASEC001, 2013-07-19: 0.7 NAC px at 1.45e9 km; 269RI HIPHASEFB001, 2017): with a disk
-                # its movie's white is set on it and each frame's black over its stray-light veil (small_body,
-                # tile_scale). Without one the 99.9th percentile of the pass was the veil, stretched black to white,
-                # which showed its leftover 2 Hz line bands (0.3% of the sky, columns once turned north up) and its
-                # per-filter levels as gray, yellow and cyan frames
-                "EARTH": 6378}
+                "JARNSAXA": 3, "GREIP": 3, "S13_2004": 3, "S12_2004": 2.5}
+# bodies only ever seen as specks, under a pixel (Earth from Saturn, equatorial radius: Day the Earth Smiled, 195RI
+# HIPHASEC001, 2013-07-19, 0.7 NAC px at 1.45e9 km; 269RI HIPHASEFB001, 2017): a disk for the pass's display scale
+# only (small_body, pass_scale's white), so the movie's white is set on the body and each frame's black over its
+# stray-light veil. Without one the 99.9th percentile of the pass was the veil, stretched black to white, which showed
+# its leftover 2 Hz line bands (0.3% of the sky, columns once turned north up) and each filter's sky level as gray,
+# yellow and cyan frames. Not in RADIUS: centred on SPICE's place its movie's filters landed 10-20 px apart, and its
+# colour sets' sky off the disk drew Earth gray ("moved")
+SPECKS = {"EARTH": 6378}
 FILL_RADIUS = dict(RADIUS)
 RADIUS.update(SMALL_RADIUS)
 IFOV = {"N": 6.0e-6, "W": 60e-6}   # radians per full resolution pixel
@@ -1995,9 +1996,10 @@ def small_body(u, frame):
     is small on it (under SMALL_BODY of a frame in radius: a small moon, a speck), else None: the sky round it is
     the whole frame but the disk (tile_scale)."""
     *_, x, y, z = frame
-    if not z or u["key"][0] not in RADIUS:
+    km = RADIUS.get(u["key"][0]) or SPECKS.get(u["key"][0])
+    if not z or not km:
         return None   # (a target with no disk of its own, rings or sky, is not one)
-    radius = RADIUS[u["key"][0]] / (z * IFOV[u["key"][2]])
+    radius = km / (z * IFOV[u["key"][2]])
     return (x, y, radius) if radius < SMALL_BODY * FRAME else None
 
 
@@ -2019,7 +2021,8 @@ def pass_scale(frames, u, drawn=None, true_colour=False, sky_tops=None, lit_leve
             q = iof[::4, ::4].astype(np.float32)
             by.setdefault(f, []).append(q)
             if z:
-                disks.setdefault(f, []).append(_disk_pixels(q, iof.shape, x, y, RADIUS.get(u["key"][0], 0) / (z * IFOV[u["key"][2]])))
+                km = RADIUS.get(u["key"][0]) or SPECKS.get(u["key"][0], 0)
+                disks.setdefault(f, []).append(_disk_pixels(q, iof.shape, x, y, km / (z * IFOV[u["key"][2]])))
     if not by:
         return {"blacks": {}, "white": 1.0, "gamma": 3.0, "filled": False}
     scale = calibration.shared_scale(list(by.values()), 99.9, gamma=3.0)
