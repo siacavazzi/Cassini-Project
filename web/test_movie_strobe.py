@@ -11,7 +11,8 @@
   pass's first frame held shows the first whole frame after it (010SA EUVFUV003, 011RI IMPACT003 opened white)
 - a small body's frame lit all over by stray light (no dark sky) takes its own black from everything off the disk
   (tile_scale's disk), so the veil goes (Pallene 139PL, Hati 182OT, Kiviuq 112OT); a frame with dark sky, a plume
-  movie's Enceladus (64 px) and a pass without a small body keep the rule they had
+  movie's Enceladus (64 px) and a pass without a small body keep the rule they had; Earth from Saturn is one (fix
+  plan PR 10: 195RI's stray-light veil drew gray, yellow and cyan frames with line bands)
 Run: python web/test_movie_strobe.py"""
 import json, os, sys, tempfile  # noqa: E401
 HERE = os.path.dirname(os.path.abspath(__file__)); sys.path[:0] = [os.path.join(HERE, "frames"), os.path.dirname(HERE)]
@@ -124,6 +125,12 @@ assert om.small_body({"key": ("ENCELADUS", "OBS", "N", 0)}, ("p", "N1_1", "CL1",
 assert om.small_body({"key": ("SATURN", "OBS", "N", 0)}, ("p", "N1_1", "CL1", 0, 0, 0, 0, 1.9e6)) is None
 assert om.small_body({"key": ("S_RINGS", "OBS", "N", 0)}, ("p", "N1_1", "CL1", 0, 0, 0, 0, 1e6)) is None   # no disk
 assert om.small_body(u, ("p", "N1_1", "CL1", 0, 0, 0, 0, 0)) is None                                     # no place
+# Earth from Saturn (Day the Earth Smiled, N1752969273_1: 1.45e9 km) is a speck under a pixel, kept out of the
+# filled scale (FILL_RADIUS)
+earth = om.small_body({"key": ("EARTH", "ISS_195RI_HIPHASEC001_VIMS", "N", 0)},
+                      ("p", "N1752969273_1", "GRN", 0, 0, -10.5, -7.0, 1.4459e9))
+assert earth is not None and earth[2] < 1, earth
+assert "EARTH" not in om.FILL_RADIUS
 
 rng = np.random.default_rng(3)
 

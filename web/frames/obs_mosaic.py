@@ -166,7 +166,14 @@ SMALL_RADIUS = {"JANUS": 89.5, "EPIMETHEUS": 58.1, "PROMETHEUS": 43.1, "PANDORA"
                 "ERRIAPUS": 5, "ERRIAPO": 5, "SKATHI": 4, "SKADI": 4, "THRYMR": 4, "THRYM": 4, "HYROKKIN": 4,
                 "SUTTUNGR": 3.5, "SUTTUNG": 3.5, "MUNDILFARI": 3.5, "NARVI": 3.5, "BESTLA": 3.5, "KARI": 3.5,
                 "TARQEQ": 3.5, "BEBHIONN": 3, "BERGELMIR": 3, "FORNJOT": 3, "HATI": 3, "LOGE": 3, "SKOLL": 3, "SURTUR": 3,
-                "JARNSAXA": 3, "GREIP": 3, "S13_2004": 3, "S12_2004": 2.5}
+                "JARNSAXA": 3, "GREIP": 3, "S13_2004": 3, "S12_2004": 2.5,
+                # and Earth (equatorial radius), a speck under a pixel from Saturn in all 13 of its frames (Day the Earth
+                # Smiled, 195RI HIPHASEC001, 2013-07-19: 0.7 NAC px at 1.45e9 km; 269RI HIPHASEFB001, 2017): with a disk
+                # its movie's white is set on it and each frame's black over its stray-light veil (small_body,
+                # tile_scale). Without one the 99.9th percentile of the pass was the veil, stretched black to white,
+                # which showed its leftover 2 Hz line bands (0.3% of the sky, columns once turned north up) and its
+                # per-filter levels as gray, yellow and cyan frames
+                "EARTH": 6378}
 FILL_RADIUS = dict(RADIUS)
 RADIUS.update(SMALL_RADIUS)
 IFOV = {"N": 6.0e-6, "W": 60e-6}   # radians per full resolution pixel
