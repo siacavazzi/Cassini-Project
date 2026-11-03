@@ -2194,6 +2194,14 @@ def _tile_made(u, n, cache, scale, base):
             inside = image[..., 3] > 0
             lit = inside & (image[..., :3].max(axis=2) >= LIT_LEVEL)
             out["lit"] = round(float(lit.sum()) / max(1, int(inside.sum())), 4)
+    if image is not None and disk is None:
+        # what the tile shows, levels on the display scale: its floor (1st percentile) and top (99.99th: a hundred
+        # pixels of a frame, a small lit crescent) inside its alpha, what empty() measures (a speck's frame, whose
+        # body is under a hundred pixels, is never empty: none written)
+        inside = image[..., 3] > 0
+        if inside.any():
+            v = image[..., :3].max(axis=2)[inside]
+            out["floor"], out["top"] = (int(x) for x in np.percentile(v, [1, EMPTY_TOP_PCT], method="lower"))
     os.makedirs(os.path.dirname(base), exist_ok=True)
     if image is not None and "frame_offset" in rep:
         side = round(image.shape[0] * k)
@@ -4121,8 +4129,16 @@ def _steady_table(u, n, cache, centre=True, colour=False):
                     "roll": EXPOSURE_ROLL, "free": EXPOSURE_FREE}
     else:
         warm_movie(u, n, 6, cache, exposure=how)
+    tile_of = lambda j: tiles.get(j) or {}
+    not_shown = lambda j: unfit(u["frames"], j, tile_of)
+    # (colour on: the frames a pass playing its grey filter shows another frame of that filter for, step_frame)
+    step = {}
+    for m in ns if colour else ():
+        s, got = shown_of(u, p, m, not_shown, tile_of)
+        if not got and s != held_of([fr[2] for fr in u["frames"]], m, not_shown, lambda j: j in tiles and not not_shown(j)):
+            step[str(m)] = s
     return {"local": True, "fixed": True, "ids": [fr[1] for fr in u["frames"]], "n": ns, "exposure": exposure,
-            "partial": [m for m in ns if unfit(u["frames"], m, lambda j: tiles.get(j) or {})],
+            "partial": [m for m in ns if not_shown(m)], "step": step,
             "sets": _colour_recipes(u, p, cache, ns, tiles) if colour and p.get("colour") else None,
             "eye": _eye_recipes(u, p, ns, tiles) if colour and p.get("colour") else None,
             "filters": [fr[2] for fr in u["frames"]], "trail_most": TRAIL,
@@ -4160,21 +4176,21 @@ def _colour_recipes(u, p, cache, ns, tiles):
     if isinstance(mix, calibration.FalseMix) or len(want) != 3:
         return None   # (two filters: the green of their mean, colour_picture's, is the server's too)
     return {"filters": list(want), "mix": None if mix is None else np.asarray(mix, float).tolist(),
-            "gamma": scale.get("gamma", 2.2), "shoulder": calibration.SHOULDER, "by": _colour_by(u, want, ns, tiles)}
+            "gamma": scale.get("gamma", 2.2), "shoulder": calibration.SHOULDER, "by": _colour_by(u, want, ns, tiles, p["grey"])}
 
 
-def _colour_by(u, want, ns, tiles):
-    """{frame n: the tiles of its colour set in the filters' order} for the frames of ns drawn with a set (the set
-    movie_frame picks at SPICE's places)."""
+def _colour_by(u, want, ns, tiles, grey):
+    """{frame n: the tiles of its colour set in the filters' order} for the frames of ns drawn with a set (set_of, the
+    set movie_frame picks at SPICE's places); none when the pass plays its grey filter (plays_colour; grey: its
+    plan's)."""
     by, placed = {}, set(ns)
+    if not plays_colour(u, want, grey):
+        return by
+    not_shown = lambda j: j in placed and unfit(u["frames"], j, lambda i: tiles.get(i) or {})
     for n in ns:
-        for run in reversed(colour_sets(u["frames"][:n + 1])):
-            got = {f: j for f, j in run if f in want and not (j in placed and unfit(u["frames"], j, lambda i: tiles.get(i) or {}))}
-            if len(got) < len(want):
-                continue
-            if all(got[f] in placed for f in want):
-                by[str(n)] = [got[f] for f in want]
-            break
+        got = set_of(u, n, want, not_shown, lambda j: j in placed)
+        if got:
+            by[str(n)] = [got[f] for f in want]
     return by
 
 
@@ -4192,7 +4208,7 @@ def _eye_recipes(u, p, ns, tiles):
         mix = calibration.color_mix(u["key"][2], want, u["key"][0])
     if mix is None:
         return None
-    by = _colour_by(u, want, ns, tiles)
+    by = _colour_by(u, want, ns, tiles, p["grey"])
     if len(want) == 2:
         by = {n: [a, a, b] for n, (a, b) in by.items()}
     return {"filters": list(want), "mix": np.asarray(mix, float).tolist(),
@@ -4456,6 +4472,30 @@ def over_exposed(t):
     return s >= OVER_EXPOSED or (s >= OVER_LEAST and s >= OVER_EXPOSED * t.get("lit", 1.0))
 
 
+MOVIE_LOST = 0.03    # of a frame: a movie frame with more of it lost in downlink than this (its tile's "lost": lines no
+#                      repeat or fill made up) is not shown, its filter's frame before it held (unfit). A mosaic keeps
+#                      such a frame (its other tiles cover the gap), drawing only a partial one under the rest
+EMPTY_SPREAD = 16    # levels: a frame whose top (EMPTY_TOP_PCT) is less than this over its floor shows nothing lit ...
+EMPTY_FLOOR = 96     # ... unless its floor is this bright or more (a featureless disk or haze filling the frame)
+EMPTY_TOP_PCT = 99.99
+
+
+def empty(t):
+    """True when tile report t shows nothing lit: its levels on the display scale ("floor" and "top", _tile_made)
+    span under EMPTY_SPREAD, and it is no bright featureless field. The 2009 south pole movie's frames past the limb
+    (099SA SPOLEDYN001 W: sky stretched to a grey square), the 2010 plume movie's blank GRN frame (141EN PLMHPHR001:
+    a colour set built from it held for seven frames). A tile made before its report had the levels is never empty."""
+    if "top" not in t or "offset" not in t:
+        return False
+    return t["top"] - t.get("floor", 0) < EMPTY_SPREAD and t.get("floor", 0) < EMPTY_FLOOR
+
+
+def patchy(t):
+    """True when tile report t is a movie frame with lines lost past MOVIE_LOST, or nothing lit (empty): a mosaic
+    movie draws it only where its place has no other copy (rolling_layout), a movie holds the frame before it."""
+    return "offset" in t and (t.get("lost", 0.0) > MOVIE_LOST or empty(t))
+
+
 def unfit(frames, n, tile_of):
     """True when frame n of a movie (frames: the pass's, tile_of(j): tile j's report) is not shown, its filter's
     whole frame before it held in its place (held_of): a partial frame (partial), a frame that can't be calibrated
@@ -4464,12 +4504,13 @@ def unfit(frames, n, tile_of):
     that are not (a pass alternating short and long exposures; a run of over-exposed frames is what the camera saw,
     and plays), or a long exposure among short ones: saturated OVER_LEAST of the frame or more and OVER_STEP times as
     much as its filter's frames on either side (007RI HIPHASE001's clear frames, ~9% saturated after ones that are not:
-    the B ring a white band, flashing), or a frame saturated all over (SATURATED_ALL), which shows nothing. One rule
-    for the server's movies and the page's (steady table's "partial")."""
+    the B ring a white band, flashing), or a frame saturated all over (SATURATED_ALL), which shows nothing, or one
+    with lines lost past MOVIE_LOST or nothing lit (patchy). One rule for the server's movies and the page's (steady
+    table's "partial")."""
     t = tile_of(n)
     if "offset" not in t:
         return False
-    if partial(t) or (t.get("calibrated") is False and calibration.step("calibrate")):
+    if partial(t) or patchy(t) or (t.get("calibrated") is False and calibration.step("calibrate")):
         return True
     s = t.get("saturated", 0.0)
     if s < OVER_LEAST:
@@ -4557,6 +4598,104 @@ def _own_sets(frames):
     return [[(frames[j][2], j) for j in run] for run in sorted(at, key=lambda r: r[0])]
 
 
+COLOUR_STEPS = 2     # a movie plays in colour when it takes at least this many sets of its colour filters (plays_colour) ...
+STEP_FRAMES = 4      # ... or one, and its grey filter fewer frames than this (one visit through many filters: 125TI
+#                      CLOUD002's twelve frames, three CB3). Otherwise its grey filter plays: a Titan cloud watch takes
+#                      CB3 every step and one RED, GRN, BL1 set part way (167TI CLOUD001), which froze the clouds from it on
+STEP_RUN = 12        # frames: in a movie playing its grey filter, a run of other filters this long or shorter shows the
+#                      grey filter's frame beside it (step_frame): one filter a step, not a strobe of looks (273TI
+#                      LRMONITOR002's MT1 between CB3s, 054TI CLOUDMAP001's IR2/IR1)
+
+
+def _pass_sets(u):
+    """colour_sets of the whole pass, worked out once."""
+    if "_sets" not in u:
+        u["_sets"] = colour_sets(u["frames"])
+    return u["_sets"]
+
+
+def plays_colour(u, want, grey):
+    """True when a movie of pass u with colour filters want plays in colour (movie_frame, colour on): it takes
+    COLOUR_STEPS sets of them, or one and under STEP_FRAMES frames of its grey filter. A set is one of the camera
+    windows' (colour_sets) holding every filter of want."""
+    if not want:
+        return False
+    sets = sum(1 for run in _pass_sets(u) if set(want) <= {f for f, _ in run})
+    return sets >= COLOUR_STEPS or (sets >= 1 and sum(fr[2] == grey for fr in u["frames"]) < STEP_FRAMES)
+
+
+def set_of(u, n, want, not_shown, placed):
+    """{filter: frame} of the colour set frame n of pass u shows (pure but for the pass's sets: the page's sets come
+    from it, _colour_by), or None: the newest set taken by then whose frames of want are all shown (not_shown: unfit)
+    and placed, so a set updates only once every channel of the next one is in; before the first, the first such set
+    (a film opens on colour, not on 2 to 43 grey frames as its filters come in: the 2000 Jupiter and 2004 Saturn
+    approach movies). A set with a frame not shown leaves the one before it up."""
+    def whole(run):
+        got = {f: j for f, j in run if f in want and not not_shown(j)}
+        return got if len(got) == len(want) and all(placed(j) for j in got.values()) else None
+    runs = _pass_sets(u)
+    for run in reversed([r for r in runs if max(j for _, j in r) <= n]):
+        got = whole(run)
+        if got:
+            return got
+    for run in runs:
+        if max(j for _, j in run) > n:
+            got = whole(run)
+            if got:
+                return got
+    return None
+
+
+def step_frame(filters, s, grey, whole, near):
+    """The frame shown for frame s (held_of's) in a movie playing its grey filter (pure, ported to the page through
+    the steady table's "step"): s when it is the grey filter's; else, in a run of at most STEP_RUN frames of other
+    filters, the grey filter's last whole frame before the run (whole(j): placed, shown), else its first after it,
+    that near(j) (its place takes in most of s's); s when there is none."""
+    if filters[s] == grey:
+        return s
+    a, b = s, s
+    while a > 0 and filters[a - 1] != grey:
+        a -= 1
+    while b + 1 < len(filters) and filters[b + 1] != grey:
+        b += 1
+    if b - a + 1 > STEP_RUN:
+        return s
+    before = (j for j in range(a - 1, -1, -1) if filters[j] == grey and whole(j))
+    after = (j for j in range(b + 1, len(filters)) if filters[j] == grey and whole(j))
+    for j in (next(before, None), next(after, None)):
+        if j is not None and near(j):
+            return j
+    return s
+
+
+def box_cover(t, q):
+    """The share of tile t's place (its box where SPICE puts it) that tile q's place covers: 0.0 off it."""
+    def at(x):
+        bx, by, bw, bh = x["box"]
+        return x["offset"][0] + bx, x["offset"][1] + by, x["offset"][0] + bx + bw, x["offset"][1] + by + bh
+    a, b = at(t), at(q)
+    w, h = min(a[2], b[2]) - max(a[0], b[0]), min(a[3], b[3]) - max(a[1], b[1])
+    return max(0.0, w) * max(0.0, h) / max(1e-9, (a[2] - a[0]) * (a[3] - a[1]))
+
+
+def shown_of(u, p, n, not_shown, tile_of):
+    """(the frame whose picture frame n of a movie shows, the colour set it shows or None), as movie_frame draws it
+    with colour on: the set (set_of) when the pass plays in colour (plays_colour); else the frame held_of holds, put
+    through step_frame when the pass plays its grey filter."""
+    frames, want = u["frames"], p.get("colour")
+    placed = lambda j: "offset" in tile_of(j)
+    whole = lambda j: placed(j) and not not_shown(j)
+    s = held_of([fr[2] for fr in frames], n, not_shown, whole)
+    if want and plays_colour(u, want, p["grey"]):
+        got = set_of(u, n, want, not_shown, placed)
+        if got:
+            return s, got
+    if placed(s) and len({fr[2] for fr in frames}) > 1:
+        s = step_frame([fr[2] for fr in frames], s, p["grey"], whole,
+                       lambda j: box_cover(tile_of(s), tile_of(j)) >= HELD_COVER)
+    return s, None
+
+
 def movie_frame(u, n, cache, trail=0, colour=True, out=OUT, centre=True, steady=0, exposure=0, sharpen=True):
     """Frame n of the pass played as a movie, RGBA out px on its longest side, and its report; (None, report)
     when SPICE could not place it. The frame is the pass's tile n (color_image.processed_frame: repeat exposures
@@ -4565,8 +4704,11 @@ def movie_frame(u, n, cache, trail=0, colour=True, out=OUT, centre=True, steady=
     size for the whole pass, and the body holds still. colour: when the pass's plan has colour filters and the
     newest frame of each of them was taken within reel.SET_GAP of this one, the three are drawn as one colour
     picture (each where SPICE puts it), as the pass's mosaic does; otherwise the frame in grey. trail: up to that
-    many earlier frames of the same filter drawn under it, fading with age (a rolling trail). In a colour pass every
-    frame shows the newest complete colour set, held until the next one is complete. centre: the body in the
+    many earlier frames of the same filter drawn under it, fading with age (a rolling trail). In a pass that plays in
+    colour (plays_colour) every frame shows the newest complete colour set, held until the next one is complete, and
+    the frames before the first show the first (set_of); a pass that plays its grey filter shows that filter's frame
+    for a short run of others (step_frame); a frame not fit to show (unfit: lines lost, nothing lit, over-exposed)
+    shows the frame before it of its filter (held_of). centre: the body in the
     middle of the view (movie_rect). steady: image stabilization (Settings > Movie), every tile drawn at its
     stabilized place (steady_places, smoothed over that many frames) instead of SPICE's; 0: SPICE's places.
     exposure: exposure normalization (Settings > Movie), the whole picture drawn with frame n's exposure gain
@@ -4589,9 +4731,14 @@ def movie_frame(u, n, cache, trail=0, colour=True, out=OUT, centre=True, steady=
             held[j] = unfit(frames, j, tile_of)
         return held[j]
     whole = lambda j: "offset" in tile_of(j) and not not_shown(j)
-    # a partial frame (most of its lines lost in downlink), an uncalibrated or an over-exposed one (unfit) shows the
-    # last whole frame of its filter in its place
-    s = held_of([fr[2] for fr in frames], n, not_shown, whole)
+    # a partial frame (lines lost in downlink), an uncalibrated, over-exposed or empty one (unfit) shows the last whole
+    # frame of its filter in its place; with colour on, the frame plays its colour set (set_of) or, in a pass playing
+    # its grey filter, that filter's frame beside it (step_frame): shown_of
+    got = None
+    if colour:
+        s, got = shown_of(u, p, n, not_shown, tile_of)
+    else:
+        s = held_of([fr[2] for fr in frames], n, not_shown, whole)
     if s != n:
         rep["held"] = frames[s][1]
         t = tile_of(s)
@@ -4626,26 +4773,18 @@ def movie_frame(u, n, cache, trail=0, colour=True, out=OUT, centre=True, steady=
     rep["centred"] = rect[0] == -rect[2] / 2 and rect[1] == -rect[3] / 2
     k = out / max(rect[2], rect[3])
     W, H = max(1, math.ceil(rect[2] * k)), max(1, math.ceil(rect[3] * k))
-    # only the frames this picture needs are made: the newest of each colour filter within SET_GAP, the trail
+    # only the frames this picture needs are made: the colour set's, the trail
     used, newest = None, {}
-    # a pass with colour plays in colour: every frame shows the newest colour set taken by then (colour_sets, the
-    # camera windows' sets, so the movie mixes the frames color.webp does), held until the next set is complete, as
-    # the camera windows hold a colour movie's last set; a frame of another filter (CB2, a methane band) keeps it up
-    if colour and p["colour"]:
+    # a pass that plays in colour (plays_colour): every frame shows the newest colour set taken by then (colour_sets,
+    # the camera windows' sets, so the movie mixes the frames color.webp does) whose every channel is in, held until
+    # the next set is complete, as the camera windows hold a colour movie's last set; a frame of another filter (CB2,
+    # a methane band) keeps it up; the frames before the first set show the first (set_of)
+    if got:
         want = p["colour"]
-        for run in reversed(colour_sets(frames[:n + 1])):
-            # (a partial member leaves its set incomplete: the set before it is held)
-            got = {f: j for f, j in run if f in want and not not_shown(j)}
-            if len(got) < len(want):
-                continue
-            for f, j in got.items():
-                # (frame n's own tile as made: at() is applied once, below, so its gain is not taken twice)
-                q = raw if j == n else tile(u, j, cache, p["display_scale"])
-                if "offset" in q:
-                    newest[f] = at(q)
-            if len(newest) == len(want):
-                used = want
-            break
+        for f, j in got.items():
+            # (frame n's own tile as made: at() is applied once, below, so its gain is not taken twice)
+            newest[f] = at(raw if j == n else tile(u, j, cache, p["display_scale"]))
+        used = want
     if used:
         planes = [_place(u, newest[f], rect, k, W, H, cache, p["display_scale"]) for f in used]
         # a colour filter the pass takes once (a cycle's lone MT1 and UV1, _set_colour's Titan stares) has no frame of
@@ -5159,28 +5298,66 @@ def rolling_base(u, p, tiles, used):
     return {t["n"] for t in base} if lum_base(u, p, tiles, used, base) else set()
 
 
-def set_laps(u, n, colour):
+def _drawable(report):
+    """(set_laps) whether tile j is a copy a colour set at its place can be made of: placed, not partial, no lines
+    lost past MOVIE_LOST and something lit (patchy); a tile not made yet (report(j) None) is taken as one, so the
+    picture drawn while it is made (made_only, named apart) waits for nothing."""
+    def ok(j):
+        t = report(j) if report is not None else None
+        return t is None or ("offset" in t and not partial(t) and not patchy(t))
+    return ok
+
+
+def _whole_sets(u, upto, colour, report=None):
+    """{slot: (lap, {filter: frame}, the frame that completed it)} of the newest lap at each slot of a mosaic movie
+    that has taken a copy of every colour filter there that can be drawn (_drawable) by frame upto, and in order of
+    frames the slots as each first completes ({slot: frame}): set_laps' and colour_start's one scan."""
+    where, lap, ok = slots(u), lap_of(u), _drawable(report)
+    want = set(colour)
+    took, best, first = {}, {}, {}
+    for j in range(upto + 1):
+        f = u["frames"][j][2]
+        if f in want and where[j] is not None and ok(j):
+            got = took.setdefault((where[j], lap[j]), {})
+            got[f] = j
+            if len(got) == len(want) and (where[j] not in best or lap[j] >= best[where[j]][0]):
+                best[where[j]] = (lap[j], dict(got), j)
+                first.setdefault(where[j], j)
+    return best, first
+
+
+def set_laps(u, n, colour, report=None):
     """For a colour mosaic movie at frame n: {(slot, filter): the newest of its frames there that the picture draws}
     for each colour filter at each slot where a lap has taken all of them by then, the frame of that filter in the
     newest such lap (lap_of). A lap's first colour copy at a place used to go up at once over the last lap's other
     two: the place drew one filter from this lap and two from the last, each filter's mosaic of the pass laid with
     its own newest copy on top, so where two places overlap one filter showed one and another the other (the 2013
     hexagon movie, 193SA NPOLMOV001: whole panels green at a RED frame, magenta, and grey steps; 175SA NPOLMAP001:
-    salmon and purple blocks). {} for a pass that is not in colour."""
+    salmon and purple blocks). Only copies that can be drawn count (report: tile j's report, _drawable): a lap whose
+    copy of one filter SPICE could not place, or that came down partial, leaves the lap before it up whole, rather than
+    its other two filters over that filter's older copy. {} for a pass that is not in colour."""
     if not colour or len(colour) < 2:
         return {}
+    best, _ = _whole_sets(u, n, colour, report)
+    return {(slot, f): j for slot, (_, got, _) in best.items() for f, j in got.items()}
+
+
+def colour_start(u, colour, report=None):
+    """The frame a colour mosaic movie's picture starts at: the first by which every slot its first lap takes in a
+    colour filter, and that its first two laps complete, has a whole colour set (_whole_sets). Its frames before then show the
+    picture there (rolling_layout), so the film opens on colour rather than on grey panels filling in one filter at a
+    time (2000 Jupiter, C23RI RMOV001; 2004 Saturn, 00ASA 2X2MOVIEA001; the 2015 equator map's blown grey lead-in,
+    221SA EQUAMAP001). 0 for a pass that is not in colour, or whose first lap's slots never complete."""
+    if not colour or len(colour) < 2 or not u["frames"]:
+        return 0
     where, lap = slots(u), lap_of(u)
-    want = set(colour)
-    took = {}   # (slot, lap) -> {filter: newest frame}
-    for j in range(n + 1):
-        f = u["frames"][j][2]
-        if f in want and where[j] is not None:
-            took.setdefault((where[j], lap[j]), {})[f] = j
-    best = {}
-    for (slot, k), got in took.items():
-        if len(got) == len(want) and (slot not in best or k > best[slot][0]):
-            best[slot] = (k, got)
-    return {(slot, f): j for slot, (_, got) in best.items() for f, j in got.items()}
+    # (looked for over its first two laps: a slot the second lap does not complete either is not waited for, and the
+    # pass's later tiles are not made for it)
+    upto = max(j for j in range(len(lap)) if lap[j] <= 2)
+    best, first = _whole_sets(u, upto, colour, report)
+    lap1 = {where[j] for j, fr in enumerate(u["frames"]) if lap[j] == 1 and where[j] is not None and fr[2] in colour}
+    need = [first[slot] for slot in lap1 if slot in first]
+    return max(need) if need else 0
 
 
 def rolling_layout(u, n, cache, laps=1, made_only=False, skipped=None, fade=(0, 0)):
@@ -5211,10 +5388,19 @@ def rolling_layout(u, n, cache, laps=1, made_only=False, skipped=None, fade=(0, 
                 return None
             t = kept[j] = tile(u, j, cache, p["display_scale"])
         return t
+    # a colour pass opens on its first whole colour picture (colour_start): the frames before it show it
+    n = max(n, colour_start(u, p["colour"], report)) if p["colour"] else n
     # a colour pass's colour filters at a place show the copies of its newest whole set (set_laps): a lap's first
     # colour copy waits for the others, so the three filters at a place, and which place lies over which, are the
     # same lap's
-    held = set_laps(u, n, p["colour"])
+    held = set_laps(u, n, p["colour"], report)
+    # ... and each place's set lies over or under another's as a whole, by the frame that completed it, so where two
+    # places overlap all three filters show the same place (by frame alone, a set taken a filter at a time across the
+    # places, every place's RED then every place's GRN, could lay one place's RED over the other's and its GRN under)
+    rank = {}
+    for (slot, _), j in held.items():
+        rank[slot] = max(rank.get(slot, -1), j)
+    rank = {j: rank[slot] for (slot, _), j in held.items()}
     # each place's newest copies that are there to draw: a copy not made yet (made_only) or one SPICE could not
     # place leaves the copy before it up, so a place never drops out of the mosaic and comes back
     keep, seen, spare = [], {}, {}
@@ -5233,16 +5419,17 @@ def rolling_layout(u, n, cache, laps=1, made_only=False, skipped=None, fade=(0, 
             continue
         if "offset" not in t:
             continue
-        if partial(t):
-            # a partial copy (most of it lost in downlink) holds the place's whole copy before it up instead, and is
-            # drawn (under the rest, _window) only where its place has no whole copy
+        if partial(t) or patchy(t):
+            # a partial copy (most of it lost in downlink), or one with lines lost or nothing lit (patchy), holds the
+            # place's whole copy before it up instead, and is drawn (a partial one under the rest, _window) only where
+            # its place has no whole copy
             spare.setdefault(key, t)
             continue
         seen[key] = seen.get(key, 0) + 1
         keep.append(t)
     keep += [t for key, t in spare.items() if not seen.get(key)]
     # (in the order they are drawn, so a fade's brightness map, _faded and the page's, lays them alike)
-    tiles = under_first(sorted(keep, key=lambda t: t["n"]))
+    tiles = under_first(sorted(keep, key=lambda t: (rank.get(t["n"], t["n"]), t["n"])))
     count = {}
     for t in tiles:
         count[t["filter"]] = count.get(t["filter"], 0) + 1

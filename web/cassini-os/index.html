@@ -3254,6 +3254,12 @@ body.ambient.phone .amb-where { font-size: 18px; }
       for (let j = n + 1; j < t.filters.length; j++) if (whole(j)) return j;
       return n;
     }
+    // obs_mosaic.movie_frame's frame shown for frame n: with colour on, the grey filter's frame step_frame picks
+    // (t.step, worked out by the server), else heldOf's
+    function shownOf(t, n, colour) {
+      if (colour && t.step && t.step[n] !== undefined) return t.step[n];
+      return heldOf(t, n);
+    }
     // movie_frame's rolling trail: the up to trail earlier placed frames of frame n's filter (n: the frame shown,
     // heldOf), partial ones left out, oldest first
     function trailOf(t, n, trail) {
@@ -3376,7 +3382,7 @@ body.ambient.phone .amb-where { font-size: 18px; }
       }
       return out;
     }
-    return { pyRound, pyRound2, places, shift, evenedGains, gains, lut, mix, heldOf, trailOf, blendTrail, fadeWeight, fadeLight, resizeLinear, applyLight,
+    return { pyRound, pyRound2, places, shift, evenedGains, gains, lut, mix, heldOf, shownOf, trailOf, blendTrail, fadeWeight, fadeLight, resizeLinear, applyLight,
       gaussKernel, detailInputs, detailFinish, blurCPU };
   };
   window.cassiniSteadyMath = STEADY_MATH;
@@ -3592,10 +3598,12 @@ onmessage = async e => {
       if (!e) return null;
       const recipes = o.eye ? e.table.eye : e.table.sets;
       const T = e.table, set = o.color && recipes ? recipes.by[e.n] : null, M = window.cassiniSteadyMath();
-      // a partial frame shows the whole one before it (the server's plane of frame n, im, is that frame's picture)
-      const shown = M.heldOf(T, e.n);
+      // a partial frame shows the whole one before it (the server's plane of frame n, im, is that frame's picture);
+      // with colour on, a pass playing its grey filter shows that filter's frame beside another filter's (T.step,
+      // obs_mosaic.step_frame), fetched as its own plane
+      const held = M.heldOf(T, e.n), shown = M.shownOf(T, e.n, !!o.color);
       const load = async j => {
-        if (j === e.n || j === shown) return createImageBitmap(im);
+        if (j === e.n || j === held) return createImageBitmap(im);
         const r = await fetch(o.planeUrl(T.ids[j]) + (o.raw ? "&detail=0" : ""));
         if (!r.ok) throw new Error(`plane ${T.ids[j]}: ${r.status}`);
         return createImageBitmap(await r.blob());
@@ -12772,7 +12780,7 @@ void main() {
   window.cassiniAbout = { open, addTab, esc, close: () => show(false), credits: CREDITS };
 
   // ---- which version this is: this page's build id (build.py writes it), and what the frame server says it serves ----
-  const BUILD = /*BUILD*/"f1c4a4902e64";
+  const BUILD = /*BUILD*/"20a290895dcd";
   const FRAMES = (() => {                       // the frame server, chosen as the camera window chooses it
     const q = new URLSearchParams(location.search).get("frames");
     if (q) return q.replace(/\/$/, "");
