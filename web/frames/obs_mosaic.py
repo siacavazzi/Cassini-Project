@@ -65,8 +65,8 @@ import stacking  # noqa: E402
 # bumped whenever the way observation mosaics are made changes, so older ones are not served again; one per
 # display model (calibration.style), classic being the mosaics made before the balanced display model, raw the
 # balanced ones before natural color
-# obs-v59/v42/v29: the batch of #247 (summed and full-size colour sets), #239 (edge trim), #240 (pass layout), #252 (grey where a moving body can't register), #249 (light sharpening), #258 (classic black sky), #261 (dark sky: edge glow and column stripes), #262 (mosaic despike) and #263 (steady mosaic movie colour, 3x3 seams, saturated frames held); obs-v58/v41/v28: even brightness across a pass and dim tiles decided by each pointing's first tile (#253); obs-v57/v40/v27: natural colour emulation keeps today's brightness with methane belt detail at twice a band's share (#254); obs-v56/v39/v26: the colour-set alignment fixes, wild star and edge fits rejected and grey where a channel is not aligned (#236); obs-v55/v38/v25: the tone shoulder, shadow floor and saturated colour fill (#241) and the dark-sky row band fixes (#242); obs-v54/v37/v24: the colour-set registration fixes (#235) and natural filters and palette for colour sets (#237); obs-v53/v36/v23: the CISSCAL 4.1 dark current (#231) and the colour-set repeat and pointing rule (#232); obs-v52/v35/v22: the CISSCAL 2 Hz noise, pixel pair and sky band steps (#230); obs-v51/v34/v21: the batch-4 fixes (thin ringlets kept, gentler compressed frames, movie long exposures held and first whole frame, Titan wind stares in color, natural color); obs-v50/v33/v20: the batch-3 fixes (Titan color, saturated white, movie strobe, small bright bodies keep their surface, line holes, pass kinds and scan rule, ride-along pans and ring strips, scan creep); obs-v49/v32/v19: movie cosmic rays and the small artifact fixes (group I), two-filter passes in color (group F), edge registration of clouded passes (group H2); obs-v48/v31/v18: repeats merged only at the same pointing, Auto center, movie tiles, mosaic movies and the calibration fixes; obs-v47/v30/v17: calibration takes the flat field (dust rings, mottle) and the nonlinearity out
-VERSIONS = {"balanced": "obs-v59", "raw": "obs-v42", "eye": "obs-v59-eye", "false": "obs-v59-false", "classic": "obs-v29-classic"}
+# obs-v60/v43/v30: mosaic tile placement: slots inside disks, Titan hole, Iapetus white limb (#251); obs-v59/v42/v29: the batch of #247 (summed and full-size colour sets), #239 (edge trim), #240 (pass layout), #252 (grey where a moving body can't register), #249 (light sharpening), #258 (classic black sky), #261 (dark sky: edge glow and column stripes), #262 (mosaic despike) and #263 (steady mosaic movie colour, 3x3 seams, saturated frames held); obs-v58/v41/v28: even brightness across a pass and dim tiles decided by each pointing's first tile (#253); obs-v57/v40/v27: natural colour emulation keeps today's brightness with methane belt detail at twice a band's share (#254); obs-v56/v39/v26: the colour-set alignment fixes, wild star and edge fits rejected and grey where a channel is not aligned (#236); obs-v55/v38/v25: the tone shoulder, shadow floor and saturated colour fill (#241) and the dark-sky row band fixes (#242); obs-v54/v37/v24: the colour-set registration fixes (#235) and natural filters and palette for colour sets (#237); obs-v53/v36/v23: the CISSCAL 4.1 dark current (#231) and the colour-set repeat and pointing rule (#232); obs-v52/v35/v22: the CISSCAL 2 Hz noise, pixel pair and sky band steps (#230); obs-v51/v34/v21: the batch-4 fixes (thin ringlets kept, gentler compressed frames, movie long exposures held and first whole frame, Titan wind stares in color, natural color); obs-v50/v33/v20: the batch-3 fixes (Titan color, saturated white, movie strobe, small bright bodies keep their surface, line holes, pass kinds and scan rule, ride-along pans and ring strips, scan creep); obs-v49/v32/v19: movie cosmic rays and the small artifact fixes (group I), two-filter passes in color (group F), edge registration of clouded passes (group H2); obs-v48/v31/v18: repeats merged only at the same pointing, Auto center, movie tiles, mosaic movies and the calibration fixes; obs-v47/v30/v17: calibration takes the flat field (dust rings, mottle) and the nonlinearity out
+VERSIONS = {"balanced": "obs-v60", "raw": "obs-v43", "eye": "obs-v60-eye", "false": "obs-v60-false", "classic": "obs-v30-classic"}
 CANVAS = 2048        # longest side of the canvas the view is drawn on
 OUT = 1024           # longest side of the picture sent
 FRAME = 1024         # full resolution frame
@@ -1670,6 +1670,49 @@ def lum_frames(u, p):
     return out
 
 
+LOST_FILL = 0.01   # of a frame: a tile that lost this much in downlink (lines no repeat or fill made up) has a gap to fill
+
+
+def _lossy(t):
+    """True when tile report t leaves a gap where its frame is: not placed (left out: 8LSB, saturated all over, a
+    silhouette), or LOST_FILL of it lost in downlink (a partial frame most of all). A frame's usual few lost lines at
+    its edge (0.4%) are not."""
+    return "offset" not in t or t.get("lost", 0.0) >= LOST_FILL
+
+
+def lum_fills(u, p, tiles):
+    """The frames (indices, as tiles are numbered) of the luminance base's other filters that fill in under a place
+    whose every frame of the grey filter lost lines in downlink or was left out (_lossy), from the tiles made: lum_frames leaves out a frame of another filter wherever a grey frame
+    is at its place, so the part of a grey frame lost in downlink stayed a hole though a frame of another filter
+    covered it (Titan ISS_021TI_GLOBMAPNA001: CB3 N1519692683_2 lost a third of its lines, MT1 N1519692611_1 beside
+    it). Decided only once every grey frame at the place is made, so the set only grows as the pass goes on. The
+    base draws these under its other tiles (under_first), so they show only where nothing else is."""
+    lum = _luminance(p)
+    grey, allowed = lum["filters"][0], set(lum["filters"])
+    frames = u["frames"]
+    made = {t["n"]: t for t in tiles}
+    last = max(made) if made else -1
+    if not any(t["filter"] == grey and _lossy(t) for t in tiles):
+        return set()   # (the usual pass: every grey frame whole and placed)
+
+    def at(fr):
+        return (-fr[5] * fr[7] / u["z"], -fr[6] * fr[7] / u["z"]) if fr[7] and u["z"] else None
+    base = lum_frames(u, p)
+    greys = [(j, at(fr)) for j, fr in enumerate(frames) if fr[2] == grey and at(fr)]
+    out = set()
+    for t in tiles:
+        n = t["n"]
+        if n in base or t["filter"] not in allowed or "offset" not in t or partial(t):
+            continue
+        q = at(frames[n])
+        if q is None:
+            continue
+        there = [j for j, g in greys if math.hypot(q[0] - g[0], q[1] - g[1]) <= SAME_PLACE * FRAME]
+        if there and all(j <= last and j in made and _lossy(made[j]) for j in there):
+            out.add(n)
+    return out
+
+
 def _mine(u, p, tiles, f):
     """The placed tiles filter_mosaic draws for f: the filter's own, or for LUM the luminance base's (lum_frames),
     a band other than the grey filter carrying its gain (applied by _shade, times a mosaic movie copy's own lap gain)."""
@@ -1677,13 +1720,16 @@ def _mine(u, p, tiles, f):
         return [t for t in tiles if t["filter"] == f and "offset" in t]
     lum = _luminance(p)
     # (a mosaic movie's picture marks its own base, rolling_base)
-    frames = {t["n"] for t in tiles if t.get("base")} if any("base" in t for t in tiles) else lum_frames(u, p)
+    rolling = any("base" in t for t in tiles)
+    frames = {t["n"] for t in tiles if t.get("base")} if rolling else lum_frames(u, p)
+    fills = set() if rolling else lum_fills(u, p, tiles)
     gamma = p["display_scale"].get("gamma", 2.2)
     out = []
     for t in tiles:
-        if "offset" in t and t["n"] in frames:
+        if "offset" in t and (t["n"] in frames or t["n"] in fills):
             g = lum["gains"].get(t["filter"], 1.0)
-            out.append(dict(t, gain=round(g * t.get("gain", 1.0), 4), gamma=gamma) if g != 1.0 else t)
+            t = dict(t, gain=round(g * t.get("gain", 1.0), 4), gamma=gamma) if g != 1.0 else t
+            out.append(dict(t, fill=True) if t["n"] in fills else t)
     return out
 
 
@@ -1715,13 +1761,16 @@ def lum_base(u, p, tiles, used, base=None):
     if any("base" in t for t in tiles):
         return any(t.get("base") for t in tiles)   # (a mosaic movie's picture: rolling_base said)
     if base is None:
-        frames = lum_frames(u, p)
+        frames = lum_frames(u, p) | lum_fills(u, p, tiles)
         base = [t for t in tiles if "offset" in t and t["n"] in frames]
     if len(used) == 1:
         return any(t["filter"] != used[0] for t in base)
     by = {f: [t["offset"] for t in tiles if t["filter"] == f and "offset" in t] for f in used}
     near = lambda o, os_: any(math.hypot(o[0] - q[0], o[1] - q[1]) <= SAME_PLACE * FRAME for q in os_)
-    return any(not all(near(t["offset"], by[f]) for f in used) for t in base)
+    # (or a colour tile with lines lost in downlink: the colour is only where all its filters are, so its lost lines were
+    # a black strip, Dione ISS_016DI_TARGFLYBY001's GRN N1507742100_3; or a frame filling in under a lossy grey one)
+    return (any(not all(near(t["offset"], by[f]) for f in used) for t in base)
+            or any(t["filter"] in used and "offset" in t and _lossy(t) for t in tiles) or bool(lum_fills(u, p, tiles)))
 
 
 LUM_MATCH = (0.25, 4.0)   # the furthest the gray's match to the colour it borders goes, per channel
@@ -2668,8 +2717,15 @@ def _pointing_root(u, n, roots):
 
 SURFACE_STEP = 16    # reference px: the grid a tile's surface motion (reproject.sky_field) is worked out on
 # a pass's tiles redrawn as at its epoch (surface_pictures), kept beside its tiles; renamed whenever the rule changes
-SURFACE_DIR = "surface4"
-SURFACE_TAG = "-s4"  # in the name of a layout whose tiles are redrawn so (layout), so its pictures are its own
+SURFACE_DIR = "surface5"
+SURFACE_TAG = "-s5"  # in the name of a layout whose tiles are redrawn so (layout), so its pictures are its own
+# a redrawn tile's picture is drawn on its box grown by the furthest its surface moves (and cut to what is on it): the
+# ground the redrawing moves past the tile's own box stays in the picture. Drawn inside the box as taken (surface4),
+# that ground was cut off, and the strip it left on the other side lay empty: where a neighbor's ground had moved in
+# from beside, nothing filled it, and the moons' mapping mosaics had curved black slots inside their disks
+# (Enceladus ISS_004EN_REGEO002, Rhea ISS_162RH_REGMAP001, where SPICE's frames overlap). Its box is kept beside it
+SURFACE_BOX = ".json"
+SURFACE_REACH = 256  # reference px (a whole number of SURFACE_STEPs): the furthest round its box a tile's ground is kept
 # what is seen of these is cloud or haze that moves on its own, not a surface turning with the body (Titan's
 # mapping mosaic came out 25 px apart redrawn, Saturn's rings pass lost its one match): their tiles stay as taken
 SURFACE_CLOUDED = frozenset({"SATURN", "JUPITER", "TITAN", "URANUS", "NEPTUNE", "VENUS", "EARTH"})
@@ -2755,7 +2811,7 @@ def surface_pictures(u, cache, p, tiles):
         if "offset" not in t or t["n"] in taken:
             continue
         path = os.path.join(out_dir, f"{t['n']}.png")
-        if os.path.exists(path):
+        if os.path.exists(path) and os.path.exists(path + SURFACE_BOX):
             out[t["n"]] = path
         elif os.path.exists(os.path.join(there, f"{t['n']}.png")):
             todo.append(t)
@@ -2777,7 +2833,18 @@ def surface_pictures(u, cache, p, tiles):
             return out
         os.makedirs(out_dir, exist_ok=True)
         found = set()
+        roots = {}
+        for t in tiles:
+            if "offset" in t:
+                roots[t["n"]] = _pointing_root(u, t["n"], roots)
         for t in todo:
+            # the filters of one pointing are redrawn or kept alike, as its first tile was (SURFACE_STRETCH is
+            # measured on it): a pointing half redrawn put its colours apart and left the min of their edges as a gap
+            # (Rhea ISS_162RH_REGMAP001: UV3 redrawn, GRN and IR1 of the same pointing kept)
+            root = roots.get(t["n"], t["n"])
+            if root != t["n"] and (root in taken or root in found):
+                found.add(t["n"])
+                continue
             if time.gmtime(t["t"]).tm_year != time.gmtime(mid[3]).tm_year:
                 # (one year's kernels at a time: a pass across New Year keeps those tiles as they are, without loading
                 # the other year's kernels for them and the epoch's again for the next tile)
@@ -2795,18 +2862,20 @@ def surface_pictures(u, cache, p, tiles):
                 image = _made_pictures.get(src)
             if image is None:
                 image = np.asarray(Image.open(src).convert("RGBA"))
-            h, w = image.shape[:2]
-            # (the grid's first point is the tile's pixel (0, 0), at the tile's corner on the sky)
-            gy, gx = np.mgrid[0:h + SURFACE_STEP:SURFACE_STEP, 0:w + SURFACE_STEP:SURFACE_STEP].astype(np.float64)
-            x0, y0 = t["offset"][0] + t["box"][0], t["offset"][1] + t["box"][1]
-            dx, dy, weight = rp.sky_field(epoch, view, gx + x0, gy + y0, km_px)
+            # (the field worked out SURFACE_REACH round the tile too, where its ground may move to: surface_redrawn)
+            dx, dy, weight = surface_field(rp, epoch, view, image.shape[:2], t, km_px)
             path = os.path.join(out_dir, f"{t['n']}.png")
-            stretch = rp.field_stretch(dx, dy, weight, SURFACE_STEP)
-            if stretch > SURFACE_STRETCH:
+            r = SURFACE_REACH // SURFACE_STEP
+            stretch = rp.field_stretch(dx[r:-r, r:-r], dy[r:-r, r:-r], weight[r:-r, r:-r], SURFACE_STEP)
+            if stretch > SURFACE_STRETCH and (root == t["n"] or root not in out):
                 print(f"surface: tile {t['n']} kept as taken (stretch {stretch:.2f})", flush=True)
                 found.add(t["n"])
                 continue
-            Image.fromarray(rp.warp_sky(image, dx, dy, weight, SURFACE_STEP)).save(path + ".part.png", compress_level=1)
+            picture, box = surface_redrawn(rp, image, t, dx, dy, weight)
+            # (the box first, so a picture never sits there without it)
+            with open(path + SURFACE_BOX, "w") as fh:
+                json.dump(box, fh)
+            Image.fromarray(picture).save(path + ".part.png", compress_level=1)
             os.replace(path + ".part.png", path)
             out[t["n"]] = path
         if not found <= taken:
@@ -2820,6 +2889,58 @@ def surface_pictures(u, cache, p, tiles):
             except OSError as e:
                 print(f"cannot keep {kept} in the cache ({e})", flush=True)
     return out
+
+
+def surface_field(rp, epoch, view, shape, t, km_px):
+    """reproject.sky_field for tile t (its picture shape, h x w) on SURFACE_STEP's grid over its box grown by
+    SURFACE_REACH each way: the grid's point (SURFACE_REACH // SURFACE_STEP, the same) is the tile's pixel (0, 0), at
+    the tile's corner on the sky, so the grid's inner part is the field over the tile's own box."""
+    h, w = shape
+    m = SURFACE_REACH
+    gy, gx = np.mgrid[-m:h + m + SURFACE_STEP:SURFACE_STEP, -m:w + m + SURFACE_STEP:SURFACE_STEP].astype(np.float64)
+    x0, y0 = t["offset"][0] + t["box"][0], t["offset"][1] + t["box"][1]
+    return rp.sky_field(epoch, view, gx + x0, gy + y0, km_px)
+
+
+def surface_redrawn(rp, image, t, dx, dy, weight):
+    """Tile t's picture (image, RGBA, on its box t["box"] about t["offset"]) redrawn as at the epoch: (picture, box),
+    the picture on the box grown by the furthest its surface moves (up to SURFACE_REACH) and cut to its drawn
+    pixels, and that box (reference px about the tile's offset, as t["box"]). dx, dy, weight: surface_field's."""
+    h, w = image.shape[:2]
+    r = SURFACE_REACH // SURFACE_STEP
+    inner = weight[r:-r, r:-r] > 0
+    reach = float(max(np.abs(dx[r:-r, r:-r][inner]).max(), np.abs(dy[r:-r, r:-r][inner]).max())) if inner.any() else 0.0
+    # the grown box: a whole number of grid steps out, up to SURFACE_REACH
+    steps = min(r, math.ceil(reach / SURFACE_STEP))
+    pad = steps * SURFACE_STEP
+    cut = slice(r - steps, dx.shape[0] - (r - steps)), slice(r - steps, dx.shape[1] - (r - steps))
+    picture = rp.warp_sky(np.pad(image, ((pad, pad), (pad, pad), (0, 0))), dx[cut], dy[cut], weight[cut], SURFACE_STEP)
+    found = Image.fromarray(picture).getbbox(alpha_only=True)
+    if found is None:
+        return np.ascontiguousarray(image), list(t["box"])
+    c0, r0, c1, r1 = found
+    return (np.ascontiguousarray(picture[r0:r1, c0:c1]),
+            [t["box"][0] - pad + c0, t["box"][1] - pad + r0, c1 - c0, r1 - r0])
+
+
+def surface_box(path, t):
+    """The box (SURFACE_BOX) of the redrawn picture at path, of tile t; t's own box when none is kept."""
+    with _lock:
+        box = _surface_boxes.get(path)
+    if box is None:
+        try:
+            with open(path + SURFACE_BOX) as fh:
+                box = json.load(fh)
+        except (OSError, ValueError):
+            return t["box"]
+        with _lock:
+            if len(_surface_boxes) > 200000:
+                _surface_boxes.clear()
+            _surface_boxes[path] = box
+    return box
+
+
+_surface_boxes = {}
 
 
 def panel_places(u, cache, p, tiles, pic=None, report=None):
@@ -2937,11 +3058,13 @@ def view_rect(p, tiles=None):
 
 
 def under_first(tiles):
-    """The tiles in the order a mosaic draws them, each over the ones before: partial frames (partial) and tiles far
-    darker than the picture before them (dim_under, marked "under") first, the newest lowest (as _grown leaves a tile
-    it draws under the picture so far), then the rest as given."""
-    low = lambda t: partial(t) or t.get("under")
-    return sorted((t for t in tiles if low(t)), key=lambda t: -t["n"]) + [t for t in tiles if not low(t)]
+    """The tiles in the order a mosaic draws them, each over the ones before: the luminance base's fills (lum_fills)
+    lowest, then partial frames (partial) and tiles far darker than the picture before them (dim_under, marked
+    "under"), the newest lowest (as _grown leaves a tile it draws under the picture so far), then the rest as given."""
+    fill = lambda t: bool(t.get("fill"))
+    low = lambda t: not fill(t) and (partial(t) or t.get("under"))
+    return ([t for t in tiles if fill(t)] + sorted((t for t in tiles if low(t)), key=lambda t: -t["n"])
+            + [t for t in tiles if not fill(t) and not low(t)])
 
 
 DIM_UNDER = 0.7     # of the picture drawn before it, on their overlap: a tile darker than this goes under it (dim_under)
@@ -3157,7 +3280,7 @@ def _over(u, p, rgba, t, rect, cache, match=True, kept=None):
     top = round((t["offset"][1] + by - rect[1]) * k)
     sw, sh = max(1, round(bw * k)), max(1, round(bh * k))
     draw_over(rgba, lambda: _shade(_part(_pic(u, cache, p["display_scale"], t), sw, sh), t),
-              left, top, sw, sh, k, match, kept, under=partial(t) or bool(t.get("under")))
+              left, top, sw, sh, k, match, kept, under=partial(t) or bool(t.get("under")) or bool(t.get("fill")))
 
 
 def draw_over(rgba, part, left, top, sw, sh, k, match=True, kept=None, under=False):
@@ -3312,7 +3435,8 @@ def filter_mosaic(u, p, f, tiles, rect, cache, ref=None, tag=""):
 
     def make():
         # (panel registration's tiles are every tile up to the newest too, each kept where it was first put)
-        if not balanced and whole and len(mine) > GROW_FROM:
+        # (and not a base with fills, lum_fills: one joins it under the tiles before it, not as the newest on top)
+        if not balanced and whole and len(mine) > GROW_FROM and not any(t.get("fill") for t in mine):
             return _grown(u, p, f, mine, rect, cache, tag)
         window, shown = _window(u, p, mine, rect, cache)
         corrections = None
@@ -3442,13 +3566,14 @@ def layout(u, n, cache):
     luminance base (so_far), whose tiles the name counts (L<n>) when it holds more than the filters used. None
     before a tile of the base is placed: the gray never starts in a filter it then leaves."""
     p = plan(u, cache)
-    tiles = _reports(u, cache, p, range(n + 1))
+    tiles = [_silhouette(t) for t in _reports(u, cache, p, range(n + 1))]
     rect = view_rect(p, tiles)
     # each tile's surface redrawn as at the pass's epoch (surface reprojection), then each pointing moved onto the
     # ones before it where they overlap (panel registration: what is left is SPICE's pointing, a few pixels)
     surfaced = surface_pictures(u, cache, p, tiles)
     if surfaced:
-        tiles = [dict(t, pic=surfaced[t["n"]]) if t["n"] in surfaced else t for t in tiles]
+        tiles = [dict(t, pic=surfaced[t["n"]], box=surface_box(surfaced[t["n"]], t)) if t["n"] in surfaced else t
+                 for t in tiles]
     moved = panel_places(u, cache, p, tiles)
     if moved:
         tiles = [dict(t, offset=[t["offset"][0] + moved[t["n"]][0], t["offset"][1] + moved[t["n"]][1]], spice_place=t["offset"])
@@ -3460,7 +3585,7 @@ def layout(u, n, cache):
     if not count:
         return None
     colour = p["colour"]
-    frames = lum_frames(u, p)
+    frames = lum_frames(u, p) | lum_fills(u, p, tiles)
     base = [t["filter"] for t in tiles if "offset" in t and t["n"] in frames]
     if colour and all(count.get(f) for f in colour):
         used = colour
@@ -4458,6 +4583,7 @@ OVER_LEAST = 0.05    # ... and so is one saturated this much of the frame, where
 OVER_STEP = 3.0      # (unfit) a frame saturated OVER_LEAST or more, and this many times as much as its filter's frames
 #                      before and after it, is a long exposure among short ones
 SATURATED_ALL = 0.95   # ... and one saturated this much of carries no picture (left out of mosaics, never shown in movies)
+SATURATED_LIT = 0.9    # ... and in a mosaic, one saturated over this much of its lit part (and OVER_LEAST of the frame)
 LIT_LEVEL = 16       # levels: the tile's pixels at least this bright are its lit part (its report's "lit", _tile_made)
 
 
@@ -4494,6 +4620,22 @@ def patchy(t):
     """True when tile report t is a movie frame with lines lost past MOVIE_LOST, or nothing lit (empty): a mosaic
     movie draws it only where its place has no other copy (rolling_layout), a movie holds the frame before it."""
     return "offset" in t and (t.get("lost", 0.0) > MOVIE_LOST or empty(t))
+
+
+def _silhouette(t):
+    """Tile report t as a mosaic draws it (layout): a tile the camera saturated over nearly all of what is lit in it
+    (SATURATED_LIT of its "lit", and OVER_LEAST of the frame) is left out, as one saturated all over is (_tile_made):
+    it holds no picture of the body, only its outline drawn white, and drawn in a mosaic that outline stood out in the
+    sky as a second limb. Iapetus ISS_049IA_REGMAPTRL001: the CL1/CL2 frames N1568160488_2 and N1568160638_2, long
+    exposures off the dark leading side's limb, saturated 99.5% of their lit part; the limb they drew white lay
+    ~250 px left of where the mosaic's dark ground (drawn near black) seemed to end, and read as a misplaced tile.
+    Applied when drawn, so reports already made keep working; a movie keeps its own rule (unfit)."""
+    s = t.get("saturated", 0.0)
+    if "offset" not in t or s < OVER_LEAST or s < SATURATED_LIT * t.get("lit", 1.0):
+        return t
+    out = {k: v for k, v in t.items() if k not in ("offset", "box", "native_offset", "spice_offset", "outline", "registered")}
+    out["why"] = f"saturated over {s / max(t.get('lit', 1.0), 1e-6):.0%} of what is lit in it: left out of the mosaic"
+    return out
 
 
 def unfit(frames, n, tile_of):
@@ -5749,7 +5891,7 @@ def tile_map(frame_id, cache):
             _maps[key] = found
         return found
     p, tiles, rect, count, used, _ = made
-    frames = lum_frames(u, p)
+    frames = lum_frames(u, p) | lum_fills(u, p, tiles)
     colour = used if len(used) > 1 else None
     x0, y0, w, h = rect
     frac = lambda x, y: [round((x - x0) / w, 5), round((y - y0) / h, 5)]
