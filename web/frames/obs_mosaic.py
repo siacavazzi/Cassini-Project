@@ -4313,7 +4313,8 @@ def _colour_by(u, want, ns, tiles, grey):
         return by
     not_shown = lambda j: j in placed and unfit(u["frames"], j, lambda i: tiles.get(i) or {})
     for n in ns:
-        got = set_of(u, n, want, not_shown, lambda j: j in placed)
+        covers = lambda got: all(box_cover(tiles[n], tiles[j]) >= HELD_COVER for j in got.values())
+        got = set_of(u, n, want, not_shown, lambda j: j in placed, covers)
         if got:
             by[str(n)] = [got[f] for f in want]
     return by
@@ -4638,6 +4639,33 @@ def _silhouette(t):
     return out
 
 
+BLANK_SHARE = 0.5    # a frame whose levels span (top over floor) less than this share of both its filter's nearest
+#                      frames either side shows little of what they show (blank)
+
+
+def _span(t):
+    return t["top"] - t.get("floor", 0) if "top" in t and "offset" in t else None
+
+
+def blank_frame(frames, n, tile_of):
+    """True when frame n of a movie spans under BLANK_SHARE of the levels its filter's nearest frames on both sides
+    span (_span: the tile's top over its floor): a grey square among frames of its filter that show the scene. The
+    2010 plume movie (141EN PLMHPHR001): seven frames, a whole set among them, came down as flat grey squares (levels
+    23-75, against 0-160 either side), and the set built from them was shown for seven frames. A pass that brightens
+    or dims steadily has a brighter frame on one side, so its frames are never blank by this rule."""
+    me = _span(tile_of(n))
+    if me is None:
+        return False
+    f = frames[n][2]
+    near = []
+    for js in (range(n - 1, -1, -1), range(n + 1, len(frames))):
+        j = next((j for j in js if frames[j][2] == f and _span(tile_of(j)) is not None), None)
+        if j is None:
+            return False
+        near.append(_span(tile_of(j)))
+    return all(me < BLANK_SHARE * v for v in near)
+
+
 def unfit(frames, n, tile_of):
     """True when frame n of a movie (frames: the pass's, tile_of(j): tile j's report) is not shown, its filter's
     whole frame before it held in its place (held_of): a partial frame (partial), a frame that can't be calibrated
@@ -4647,12 +4675,12 @@ def unfit(frames, n, tile_of):
     and plays), or a long exposure among short ones: saturated OVER_LEAST of the frame or more and OVER_STEP times as
     much as its filter's frames on either side (007RI HIPHASE001's clear frames, ~9% saturated after ones that are not:
     the B ring a white band, flashing), or a frame saturated all over (SATURATED_ALL), which shows nothing, or one
-    with lines lost past MOVIE_LOST or nothing lit (patchy). One rule for the server's movies and the page's (steady
-    table's "partial")."""
+    with lines lost past MOVIE_LOST or nothing lit (patchy), or a blank among its filter's frames (blank_frame). One rule
+    for the server's movies and the page's (steady table's "partial")."""
     t = tile_of(n)
     if "offset" not in t:
         return False
-    if partial(t) or patchy(t) or (t.get("calibrated") is False and calibration.step("calibrate")):
+    if partial(t) or patchy(t) or (t.get("calibrated") is False and calibration.step("calibrate")) or blank_frame(frames, n, tile_of):
         return True
     s = t.get("saturated", 0.0)
     if s < OVER_LEAST:
@@ -4766,25 +4794,31 @@ def plays_colour(u, want, grey):
     return sets >= COLOUR_STEPS or (sets >= 1 and sum(fr[2] == grey for fr in u["frames"]) < STEP_FRAMES)
 
 
-def set_of(u, n, want, not_shown, placed):
+def set_of(u, n, want, not_shown, placed, covers=None):
     """{filter: frame} of the colour set frame n of pass u shows (pure but for the pass's sets: the page's sets come
     from it, _colour_by), or None: the newest set taken by then whose frames of want are all shown (not_shown: unfit)
     and placed, so a set updates only once every channel of the next one is in; before the first, the first such set
     (a film opens on colour, not on 2 to 43 grey frames as its filters come in: the 2000 Jupiter and 2004 Saturn
-    approach movies). A set with a frame not shown leaves the one before it up."""
+    approach movies). A set with a frame not shown leaves the one before it up. covers(got): whether a set takes in
+    frame n's place; when the newest does not (the camera has moved on to the next pointing, whose set is still
+    coming in), the next set does if it covers it: the 2009 south pole movie's frames at each new pointing showed
+    grey filter after grey filter, and white slabs, until its set was in."""
     def whole(run):
         got = {f: j for f, j in run if f in want and not not_shown(j)}
         return got if len(got) == len(want) and all(placed(j) for j in got.values()) else None
+    ok = covers or (lambda got: True)
     runs = _pass_sets(u)
     for run in reversed([r for r in runs if max(j for _, j in r) <= n]):
         got = whole(run)
         if got:
-            return got
+            if ok(got):
+                return got
+            break
     for run in runs:
         if max(j for _, j in run) > n:
             got = whole(run)
             if got:
-                return got
+                return got if ok(got) else None
     return None
 
 
@@ -4829,7 +4863,8 @@ def shown_of(u, p, n, not_shown, tile_of):
     whole = lambda j: placed(j) and not not_shown(j)
     s = held_of([fr[2] for fr in frames], n, not_shown, whole)
     if want and plays_colour(u, want, p["grey"]):
-        got = set_of(u, n, want, not_shown, placed)
+        covers = lambda got: all(box_cover(tile_of(n), tile_of(j)) >= HELD_COVER for j in got.values())
+        got = set_of(u, n, want, not_shown, placed, covers)
         if got:
             return s, got
     if placed(s) and len({fr[2] for fr in frames}) > 1:

@@ -51,7 +51,15 @@ tile_of = lambda j: tiles[j]
 held = [om.held_of([f[2] for f in frames], n, lambda j: om.unfit(frames, j, tile_of),
                    lambda j: not om.unfit(frames, j, tile_of)) for n in range(5)]
 assert held == [0, 1, 1, 1, 4], held
-print("empty and lost-line frames hold the frame before them; ok")
+# a grey square among frames of its filter that show the scene (141EN PLMHPHR001's frames 18-23: levels 23-75
+# against 0-160 either side) is blank; a pass dimming steadily is not
+span = lambda lo, hi: {**placed, "floor": lo, "top": hi}
+frames = fr(["GRN", "RED", "GRN", "RED", "GRN"])
+tiles = [span(0, 163), span(0, 160), span(23, 75), span(0, 150), span(0, 150)]
+assert [om.blank_frame(frames, n, lambda j: tiles[j]) for n in range(5)] == [False, False, True, False, False]
+tiles = [span(0, 200), span(0, 160), span(0, 90), span(0, 150), span(0, 40)]
+assert not any(om.blank_frame(frames, n, lambda j: tiles[j]) for n in range(5))
+print("empty, blank and lost-line frames hold the frame before them; ok")
 
 # ---------- 1. a colour movie opens on its first complete set; sets update whole ----------
 # a lead-in of grey frames, then RED GRN BL1 sets (each within SET_GAP)
@@ -67,6 +75,9 @@ bad = lambda j: j == 7
 assert [sorted(om.set_of(u, n, want, bad, ok).values()) for n in range(9)] == [[3, 4, 5]] * 9
 # its RED not placed by SPICE: the same
 assert [sorted(om.set_of(u, n, want, none, lambda j: j != 6).values()) for n in range(9)] == [[3, 4, 5]] * 9
+# the newest set does not take in frame n's place (the camera moved on): the next set does, if it covers it
+assert sorted(om.set_of(u, 6, want, none, ok, lambda got: min(got.values()) >= 6).values()) == [6, 7, 8]
+assert om.set_of(u, 6, want, none, ok, lambda got: False) is None
 print("colour from the first frame, sets whole; ok")
 
 # ---------- 2. one filter a step ----------
