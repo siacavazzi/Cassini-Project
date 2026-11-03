@@ -1906,6 +1906,11 @@ def tile_scale(scale, f, own_sky=False, seen=None, disk=None):
         top_of_sky = 0.05 * np.percentile(q, 99.9)
         m = q < top_of_sky
         veiled = False
+        if disk is not None and disk[2] < SPECK_PX:
+            # a body under a pixel across (Earth from Saturn, a few km moon far off): the frame is all sky, and a dark
+            # sky found under 5% of its brightest is still the veil's lower part, whose line bands and other filters'
+            # levels then showed over black (195RI: N1752968916_1's gray lines, N1752969019_1 a red wash over its set)
+            m = np.zeros(q.shape, bool)
         if m.mean() <= SKY_MIN:
             if disk is None:
                 return None
@@ -1980,6 +1985,7 @@ def _disk_mask(qshape, shape, x, y, radius):
     return (rows - cy) ** 2 + (cols - cx) ** 2 < r * r
 
 
+SPECK_PX = 1.0      # tile_scale: a small body under this radius (full resolution px) always takes the veil's black
 VEIL_TOP = 99       # tile_scale: a small body's veiled frame's black is over this percentile of its smoothed sky
 SMALL_BODY = 0.02   # of a frame: a body whose disk's radius is under this is small (small_body): a speck, not
                    # Enceladus 64 px across the edge of a plume movie, whose plume fills the frame

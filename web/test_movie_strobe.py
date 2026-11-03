@@ -166,6 +166,16 @@ also = om.tile_scale({**pal, "blacks": {"CL1/CL2": 0.0}, "sky_tops": {"CL1/CL2":
 assert kept == also, (kept, also)
 # without a small body (the plume movie's Enceladus) a veiled frame keeps the pass's black, as before
 assert om.tile_scale({**pal, "sky_tops": {"CL1/CL2": 0.001}}, "CL1/CL2", True)["black_of"](veiled(0.2)) is None
+# a speck under a pixel (Earth from Saturn) whose veil fades to a dark corner: the dark corner is not its sky, the
+# veil goes under black all the same (195RI N1752968916_1, N1752969019_1)
+spk = (0.0, 0.0, 0.7)
+iof = (2e-4 * (1 + 0.5 * np.linspace(0, 1, 1024)[None, :]) + rng.normal(0, 4e-6, (1024, 1024))).astype(np.float32)
+iof[:, :200] = rng.normal(0, 2e-6, (1024, 200))           # the dark corner (a fifth of the frame)
+iof[509:514, 509:514] = 0.02                               # Earth
+got = om.tile_scale({**pal, "blacks": {"CL1/CL2": 0.0}, "sky_tops": {"CL1/CL2": 1e-6}}, "CL1/CL2", True, disk=spk)["black_of"](iof)
+q = iof[::4, ::4]
+assert got is not None and np.mean(q[~om._disk_mask(q.shape, iof.shape, *spk)] > got["black"]) < 0.06, got
+assert got["black"] < 0.02                                 # Earth over it
 print("small body: the stray-light veil under black, the moon over it")
 
 # ---- a mosaic leaves out a tile saturated all over; a movie keeps it (and holds it, unfit)
