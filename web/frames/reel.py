@@ -57,7 +57,27 @@ import stacking  # noqa: E402
 import sets_passes  # noqa: E402
 
 # bumped whenever the way reel pictures are made changes, so older ones are not served again
-VERSIONS = {"balanced": "reel-v38", "raw": "reel-v21", "eye": "reel-v38-eye", "false": "reel-v38-false", "classic": "reel-v15"}   # one per calibration.style(); v38/v21/v15: the colour-set alignment fixes, wild star and edge fits rejected and grey where a channel is not aligned (#236); v37/v20/v14: the tone shoulder, shadow floor and saturated colour fill (#241) and the dark-sky row band fixes (#242); v36/v19/v13: the colour-set registration fixes (#235) and natural filters and palette for colour sets (#237); v35/v18/v12: the CISSCAL 4.1 dark current (#231) and the colour-set repeat and pointing rule (#232); v34/v17/v11: the CISSCAL 2 Hz noise, pixel pair and sky band steps (#230); v33/v16/v10: the batch-4 fixes (thin ringlets, compressed frames, movie holds, Titan wind color); v32/v15/v9: the batch-3 fixes (Titan color, saturated white, movie strobe, line holes, pass kinds); v31/v14/v8: the small artifact and two-filter color fixes (groups I, F); v30/v13/v7: the restart's calibration, tone and tile fixes; v29/v12/v6: flat field
+VERSIONS = {"balanced": "reel-v42", "raw": "reel-v25", "eye": "reel-v42-eye", "false": "reel-v42-false", "classic": "reel-v20"}   # one per calibration.style(); v42/v25/v20: the batch of #247 (summed and full-size colour sets), #239 (edge trim), #240 (pass layout), #252 (grey where a moving body can't register), #249 (light sharpening), #258 (classic black sky), #261 (dark sky: edge glow and column stripes), #262 (mosaic despike) and #263 (steady mosaic movie colour, 3x3 seams, saturated frames held); v19 (classic): a classic color set's sky off its body's disk and neutral near black (classic black sky); v41/v24/v18: neutral black sky: a color set's sky off its body's disk and a neutral toe at black (#248); v40/v23/v17: even brightness across a pass and dim tiles decided by each pointing's first tile (#253); v39/v22/v16: natural colour emulation keeps today's brightness with methane belt detail at twice a band's share (#254); v38/v21/v15: the colour-set alignment fixes, wild star and edge fits rejected and grey where a channel is not aligned (#236); v37/v20/v14: the tone shoulder, shadow floor and saturated colour fill (#241) and the dark-sky row band fixes (#242); v36/v19/v13: the colour-set registration fixes (#235) and natural filters and palette for colour sets (#237); v35/v18/v12: the CISSCAL 4.1 dark current (#231) and the colour-set repeat and pointing rule (#232); v34/v17/v11: the CISSCAL 2 Hz noise, pixel pair and sky band steps (#230); v33/v16/v10: the batch-4 fixes (thin ringlets, compressed frames, movie holds, Titan wind color); v32/v15/v9: the batch-3 fixes (Titan color, saturated white, movie strobe, line holes, pass kinds); v31/v14/v8: the small artifact and two-filter color fixes (groups I, F); v30/v13/v7: the restart's calibration, tone and tile fixes; v29/v12/v6: flat field
+
+
+WEBP_FAINT = 4   # of 255: a pixel this transparent or more is saved black (save_webp)
+
+
+def save_webp(im, out, **kwargs):
+    """im saved as WebP to out (kwargs: the saver's, quality and method). A picture with transparency keeps black
+    under every pixel whose alpha is under WEBP_FAINT. Left to itself, lossy WebP fills the colour under fully
+    transparent pixels with copies of the picture's nearest blocks to save bytes (about 1%), and a picture resized
+    on 8-bit premultiplied colour (PIL's LANCZOS on RGBA) has its faintest pixels' colour rounded far off, up to
+    white; any reader that drops the alpha (Cassini Studio's WebGL pass, a contact sheet, a review crop) showed them
+    as a staircase of grey blocks with white specks along every turned frame's edge (the ring films, movies #9 of spot
+    check 4). Shown with its alpha the picture is the same, but for at most 3 of 255 of those faintest pixels'
+    colour."""
+    if im.mode in ("RGBA", "LA"):
+        a = np.array(im)
+        a[..., :-1][a[..., -1] < WEBP_FAINT] = 0
+        im = Image.fromarray(a, im.mode)
+        kwargs["exact"] = True
+    im.save(out, "WEBP", **kwargs)
 
 
 def version():
@@ -470,7 +490,7 @@ def shot_webp(target, n, size, cache, use_mosaic=True, slots=None):
         if size < OUT:
             im = im.resize((size, size), Image.LANCZOS)
         out = io.BytesIO()
-        im.save(out, "WEBP", quality=95, method=4)
+        save_webp(im, out, quality=95, method=4)
         return out.getvalue()
 
     data = _cached(path, make)

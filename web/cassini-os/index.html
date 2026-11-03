@@ -2500,6 +2500,8 @@ body.ambient.phone .amb-where { font-size: 18px; }
       hint: "The archive keeps a dark sky as only a handful of brightness steps, so once the bands are measured from the sky each line still sits a fraction of a step above or below the next and the bands show again when the sky is stretched. Where the bands were measured from the sky, its one-step speckle is evened out over a few pixels; stars, cosmic rays and edges, several steps brighter, are left as they were. Off shows the sky's steps as they came down. Needs Bands from the sky." },
     { key: "processing.dark", step: "dark", label: "Dark current",
       hint: "Takes out the charge the camera's detector gathers without any light, which grows with the exposure and with how long each line waits to be read out, with the camera team's own dark model. Most visible on long exposures: night sides, rings, Titan's surface. Off leaves them in. Needs Calibrate." },
+    { key: "processing.darksky", step: "darksky", label: "Dark from the sky",
+      hint: "The camera team's dark model is right on average but not in detail: on long star fields and the dark sky round a moon it leaves a faint glow round the picture's edges and fine vertical stripes, which the display stretch lifts into a grey, striped sky. Where a picture has enough dark sky, what the model leaves there is measured and taken out too: the stripes column by column, the glow near the edges only (a plume or a faint ring in the middle stays). Lit pictures are left alone. Off uses the model as it is, as the camera team's calibration (CISSCAL) does. Needs Dark current." },
     { key: "processing.pairs", step: "pairs", label: "Pixel pairs",
       hint: "In anti-blooming mode the detector leaves pairs of pixels, one too bright sitting on one too dark, scattered over the picture. As the camera team's calibration (CISSCAL) does, each pair more than 30 DN off its neighbors is replaced by the mean of the pixels either side of it. Full-size frames with anti-blooming on only. Off leaves them in. Needs Calibrate." },
     { key: "processing.flat", step: "flat", label: "Flat field",
@@ -3134,7 +3136,8 @@ body.ambient.phone .amb-where { font-size: 18px; }
       return [p[0] - s[0], p[1] - s[1]];
     }
     // obs_mosaic.evened_gains for one stretch's log brightnesses in order: a running median over FLASH frames, a
-    // Gaussian-weighted line over smooth frames (_gaussian_line), the gain to that line within GAIN either way, to 1/200
+    // Gaussian-weighted line over smooth frames (_gaussian_line), the rolling scale (rolled), the gain to that line within
+    // GAIN either way, to 1/200
     function evenedGains(L, smooth, c) {
       const N = L.length, h = Math.floor(c.flash / 2), pad = [];
       for (let k = 0; k < h; k++) pad.push(L[0]);
@@ -3145,7 +3148,7 @@ body.ambient.phone .amb-where { font-size: 18px; }
         const w = pad.slice(k, k + c.flash).sort((a, b) => a - b), m = w.length >> 1;
         steady.push(w.length % 2 ? w[m] : (w[m - 1] + w[m]) / 2);
       }
-      const out = [];
+      const want = [];
       for (let a = 0; a < N; a++) {
         let s0 = 0, s1 = 0, s2 = 0, t0 = 0, t1 = 0;
         for (let b = 0; b < N; b++) {
@@ -3155,8 +3158,17 @@ body.ambient.phone .amb-where { font-size: 18px; }
           s0 += w; s1 += w * d; s2 += w * d * d; t0 += w * steady[b]; t1 += w * d * steady[b];
         }
         const det = s0 * s2 - s1 * s1, ok = det > 1e-9 * Math.max(s0 * s2, 1e-300);
-        const want = ok ? (s2 * t0 - s1 * t1) / det : t0 / s0;
-        out.push(pyRound(Math.min(Math.max(Math.exp(want - L[a]), 1 / c.gain), c.gain) * 200) / 200);
+        want.push(ok ? (s2 * t0 - s1 * t1) / det : t0 / s0);
+      }
+      // obs_mosaic.rolled: drift past FREE of the stretch's mean, ROLL of it taken out (a missing roll: none, older servers)
+      let mid = 0;
+      for (const v of want) mid += v;
+      mid /= N;
+      const out = [];
+      for (let a = 0; a < N; a++) {
+        const dev = want[a] - mid, roll = c.roll || 0, free = c.free || 0;
+        const w = want[a] - roll * Math.sign(dev) * Math.max(Math.abs(dev) - free, 0);
+        out.push(pyRound(Math.min(Math.max(Math.exp(w - L[a]), 1 / c.gain), c.gain) * 200) / 200);
       }
       return out;
     }
@@ -12760,7 +12772,7 @@ void main() {
   window.cassiniAbout = { open, addTab, esc, close: () => show(false), credits: CREDITS };
 
   // ---- which version this is: this page's build id (build.py writes it), and what the frame server says it serves ----
-  const BUILD = /*BUILD*/"5b13e2d213f0";
+  const BUILD = /*BUILD*/"f1c4a4902e64";
   const FRAMES = (() => {                       // the frame server, chosen as the camera window chooses it
     const q = new URLSearchParams(location.search).get("frames");
     if (q) return q.replace(/\/$/, "");

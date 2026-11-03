@@ -44,7 +44,8 @@
       return [p[0] - s[0], p[1] - s[1]];
     }
     // obs_mosaic.evened_gains for one stretch's log brightnesses in order: a running median over FLASH frames, a
-    // Gaussian-weighted line over smooth frames (_gaussian_line), the gain to that line within GAIN either way, to 1/200
+    // Gaussian-weighted line over smooth frames (_gaussian_line), the rolling scale (rolled), the gain to that line within
+    // GAIN either way, to 1/200
     function evenedGains(L, smooth, c) {
       const N = L.length, h = Math.floor(c.flash / 2), pad = [];
       for (let k = 0; k < h; k++) pad.push(L[0]);
@@ -55,7 +56,7 @@
         const w = pad.slice(k, k + c.flash).sort((a, b) => a - b), m = w.length >> 1;
         steady.push(w.length % 2 ? w[m] : (w[m - 1] + w[m]) / 2);
       }
-      const out = [];
+      const want = [];
       for (let a = 0; a < N; a++) {
         let s0 = 0, s1 = 0, s2 = 0, t0 = 0, t1 = 0;
         for (let b = 0; b < N; b++) {
@@ -65,8 +66,17 @@
           s0 += w; s1 += w * d; s2 += w * d * d; t0 += w * steady[b]; t1 += w * d * steady[b];
         }
         const det = s0 * s2 - s1 * s1, ok = det > 1e-9 * Math.max(s0 * s2, 1e-300);
-        const want = ok ? (s2 * t0 - s1 * t1) / det : t0 / s0;
-        out.push(pyRound(Math.min(Math.max(Math.exp(want - L[a]), 1 / c.gain), c.gain) * 200) / 200);
+        want.push(ok ? (s2 * t0 - s1 * t1) / det : t0 / s0);
+      }
+      // obs_mosaic.rolled: drift past FREE of the stretch's mean, ROLL of it taken out (a missing roll: none, older servers)
+      let mid = 0;
+      for (const v of want) mid += v;
+      mid /= N;
+      const out = [];
+      for (let a = 0; a < N; a++) {
+        const dev = want[a] - mid, roll = c.roll || 0, free = c.free || 0;
+        const w = want[a] - roll * Math.sign(dev) * Math.max(Math.abs(dev) - free, 0);
+        out.push(pyRound(Math.min(Math.max(Math.exp(w - L[a]), 1 / c.gain), c.gain) * 200) / 200);
       }
       return out;
     }

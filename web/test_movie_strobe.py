@@ -103,6 +103,16 @@ assert om._speck({"key": ("KIVIUQ", "O", "N", 0), "frames": [("p", "N1_1", "CL1"
 assert not om._speck({"key": ("TITAN", "O", "N", 0), "frames": [("p", "N1_1", "CL1", 0, 0, 0.0, 0.0, 1e5)] * 3})
 assert not om._speck({"key": ("KIVIUQ", "O", "N", 0), "frames": [("p", "N1_1", "CL1", 0, 0, 0, 0, 0)] * 3})
 
+# ---- an over-exposed frame between frames saturated all over (held themselves) is no run: held too, when its
+# filter's frames shown either side are not over-exposed (SPOLEDYN001 2009, W1609824382_1: 92% saturated between
+# 100% and 99% ones, a white slab in a dark movie)
+tiles7 = [{**placed, "saturated": s} for s in (0.0, 1.0, 0.92, 0.99, 0.0)]
+assert shown(frames[:5], tiles7) == [0, 0, 0, 0, 4], shown(frames[:5], tiles7)
+# ... and still plays inside a real run of over-exposed frames
+tiles7b = [{**placed, "saturated": s} for s in (0.8, 1.0, 0.92, 0.99, 0.8)]
+assert shown(frames[:5], tiles7b)[2] == 2, shown(frames[:5], tiles7b)
+print("an over-exposed frame between frames saturated all over is held; ok")
+
 # ---- the steady table's "partial" list (the page's heldOf) is unfit's
 assert [m for m in range(8) if om.unfit(frames, m, lambda j: [{**placed, "saturated": 0.17 if n % 2 == 0 else 0.75}
                                                               for n in range(8)][j])] == [1, 3, 5, 7]
