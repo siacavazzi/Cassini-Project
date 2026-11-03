@@ -857,10 +857,12 @@ def _cells(a, c, oy, ox):
     return a.reshape(H // c, c, W // c, c, *a.shape[2:]).sum(axis=(1, 3)), (oy // c, ox // c)
 
 
-def _levels(boxes, colors, hases, ramps, pin=None):
+def _levels(boxes, colors, hases, ramps, pin=None, reach=0):
     """Seam leveling (above) of the frames (boxes in the area, colours as toned, where each has picture, their
     weights): a list of each frame's (log gains of its cells (rows, columns, 1 or 3), the cells' size, the area pixel
-    the first cell's corner lies at (y, x)), or None for a frame that needs none; _field makes its gains."""
+    the first cell's corner lies at (y, x)), or None for a frame that needs none; _field makes its gains. reach: two
+    frames that do not overlap but come within twice that of each other (a narrow gap, _narrow_gap) are measured
+    across the gap (_across), 0 for none."""
     from scipy.sparse import coo_matrix
     from scipy.sparse.linalg import spsolve
     n = len(boxes)
@@ -895,6 +897,7 @@ def _levels(boxes, colors, hases, ramps, pin=None):
         return calm[i]
 
     measured = 0.0
+    met = set()   # the pairs measured where they overlap
     for i in range(n):
         for j in range(i + 1, n):
             a, b = boxes[i], boxes[j]
@@ -949,6 +952,29 @@ def _levels(boxes, colors, hases, ramps, pin=None):
             if ki is not None and kj is not None:
                 rows += [ki, kj]; cols += [kj, ki]; vals += [-w, -w]
             measured += float(w.sum())
+            met.add((i, j))
+    if reach >= 1 and pin is None:
+        for i in range(n):
+            for j in range(i + 1, n):
+                if (i, j) in met or boxes[i] is None or boxes[j] is None:
+                    continue
+                got = _across(boxes[i], boxes[j], colors[i][..., :ch], colors[j][..., :ch], hases[i], hases[j],
+                              calm_of(i), calm_of(j), int(reach), c)
+                if got is None:
+                    continue
+                (Y, X), w, d = got
+                # (the gap's cells lie outside a frame's box: each frame's own cells nearest them take it)
+                ki = (grids[i][4] + (np.clip(Y, grids[i][0], grids[i][0] + grids[i][2] - 1) - grids[i][0]) * grids[i][3]
+                      + (np.clip(X, grids[i][1], grids[i][1] + grids[i][3] - 1) - grids[i][1])) if grids[i] else None
+                kj = (grids[j][4] + (np.clip(Y, grids[j][0], grids[j][0] + grids[j][2] - 1) - grids[j][0]) * grids[j][3]
+                      + (np.clip(X, grids[j][1], grids[j][1] + grids[j][3] - 1) - grids[j][1])) if grids[j] else None
+                if ki is not None:
+                    rows.append(ki); cols.append(ki); vals.append(w); np.add.at(rhs, ki, w[:, None] * d)
+                if kj is not None:
+                    rows.append(kj); cols.append(kj); vals.append(w); np.add.at(rhs, kj, -w[:, None] * d)
+                if ki is not None and kj is not None:
+                    rows += [ki, kj]; cols += [kj, ki]; vals += [-w, -w]
+                measured += float(w.sum())
     if measured == 0:
         return [None] * n
     # within each frame its neighbouring cells alike, and every cell held to 0 just so much that a correction fades
@@ -976,6 +1002,61 @@ def _levels(boxes, colors, hases, ramps, pin=None):
         grid = np.clip(f[k0:k0 + gh * gw].reshape(gh, gw, ch), -math.log(LEVEL_MAX), math.log(LEVEL_MAX))
         out.append((grid.astype(np.float32), c, gy0 * c, gx0 * c) if np.abs(grid).max() > 1e-4 else None)
     return out
+
+
+def _across(a, b, fa, fb, ha, hb, ca, cb, r, c):
+    """Two frames that do not overlap, measured across the narrow gap between them (_levels' reach r): each frame's
+    colour carried on from its picture (its own soft rim, GAP_RIM of r, left out: a turned tile's edge mixed with the
+    black round it) over the pixels within r of both, where they are compared as an overlap is. Boxes a, b (y0, y1,
+    x0, x1 in the area), colours fa, fb (h, w, bands), has ha, hb, calm (_levels) ca, cb; c the cells' size. None
+    when they overlap, are further apart or nothing is measured, else ((cell rows, cell columns), weights, f_a - f_b
+    per cell as _levels has it)."""
+    # (the boxes' meeting, and as far again as reach to either side, where the picture on each side lies)
+    y0, y1, x0, x1 = max(a[0], b[0]) - 2 * r, min(a[1], b[1]) + 2 * r, max(a[2], b[2]) - 2 * r, min(a[3], b[3]) + 2 * r
+    y0, y1, x0, x1 = max(y0, min(a[0], b[0])), min(y1, max(a[1], b[1])), max(x0, min(a[2], b[2])), min(x1, max(a[3], b[3]))
+    if y1 <= y0 or x1 <= x0:
+        return None
+
+    def on(box, v, fill=0):
+        out = np.full((y1 - y0, x1 - x0) + v.shape[2:], fill, v.dtype)
+        ya, yb, xa, xb = max(box[0], y0), min(box[1], y1), max(box[2], x0), min(box[3], x1)
+        if yb > ya and xb > xa:
+            out[ya - y0:yb - y0, xa - x0:xb - x0] = v[ya - box[0]:yb - box[0], xa - box[2]:xb - box[2]]
+        return out
+
+    pa, pb = on(a, ha) > 0, on(b, hb) > 0
+    if (pa & pb).any() or not pa.any() or not pb.any():
+        return None
+    near = lambda p: cv2.distanceTransform((~p).astype(np.uint8), cv2.DIST_L2, 5) <= r
+    zone = near(pa) & near(pb) & ~(pa & pb)
+    if not zone.any():
+        return None
+    rim = max(1, int(round(r * GAP_RIM)))
+    vals = []
+    for box, f, p, calm in ((a, fa, pa, ca), (b, fb, pb, cb)):
+        good = cv2.erode(p.astype(np.uint8), np.ones((2 * rim + 1, 2 * rim + 1), np.uint8)) > 0
+        if not good.any():
+            return None
+        col = on(box, f.astype(np.float32))
+        still = on(box, calm.astype(np.float32))[..., None]
+        _nearest(col, zone & ~good, good)
+        _nearest(still, zone & ~good, good)
+        vals.append((col, still[..., 0] > 0.5))
+    (ga, sa), (gb, sb) = vals
+    lit = zone & (_of_bands(ga, np.minimum) > LEVEL_LIT) & (_of_bands(gb, np.minimum) > LEVEL_LIT) & sa & sb
+    if not lit.any():
+        return None
+    ratio = np.log(np.maximum(gb, 1)) - np.log(np.maximum(ga, 1))
+    ok = lit & (_of_bands(np.abs(ratio), np.maximum) < math.log(LEVEL_MAX))
+    cnt, (cy, cx) = _cells(ok.astype(np.float32), c, y0, x0)
+    tot, _ = _cells(ratio * ok[..., None], c, y0, x0)
+    gy, gx = np.nonzero(cnt >= LEVEL_FILL * c * c)
+    if not len(gy):
+        return None
+    return (cy + gy, cx + gx), cnt[gy, gx] / (c * c), tot[gy, gx] / cnt[gy, gx][:, None]
+
+
+GAP_RIM = 1 / 4   # (_across) of the reach: a frame's rim along a gap, left out of what it is measured on
 
 
 def _field(level, box):
@@ -1061,7 +1142,8 @@ def _blended(out, infos, gains, offsets, gamma, area, level, pin=None, kept=None
         boxes = [None if info is None else (info[0][0] - y0, info[0][1] - y0, info[0][2] - x0, info[0][3] - x0) for info in infos]
         found = _levels(boxes, toned, [None if info is None else (info[4] > 0).astype(np.float32) for info in infos],
                         [None if info is None else info[4] for info in infos],
-                        None if pin is None else range(len(infos))[pin])
+                        None if pin is None else range(len(infos))[pin],
+                        max(info[5] for info in infos if info is not None) * GAP_REACH)
         toned = [t if lv is None else t * _field(lv, b) for t, lv, b in zip(toned, found, boxes)]
         if _watch is not None:
             fields = [None if lv is None else _field(lv, b) for lv, b in zip(found, boxes)]
@@ -1116,8 +1198,11 @@ def _blended(out, infos, gains, offsets, gamma, area, level, pin=None, kept=None
         filled = None
         if gap is not None:
             filled = _fill_gap(rgb if not one else rgb[..., None], gap, alpha, width * GAP_REACH)
-            cover[gap] = 1
-            outline[gap] = 1
+            # (the frames' faint rims along it too: left in what the outer edge is read off, they made the mosaic a
+            # few per cent transparent over the soft edge's width along every filled gap, a faint dark line that
+            # detail() tripled)
+            cover[filled] = 1
+            outline[filled] = 1
         # never more transparent than the most opaque frame there, so a frame's own corners and a lost line's gap keep
         # the edge they were made with
         alpha = np.maximum(alpha, _outer_edge(outline, cover, width, alpha >= EDGE_AT / 255))

@@ -167,6 +167,26 @@ row = on[1600, 900:1012, 3].astype(int)
 assert row[0] == 255 and row[-1] == 0 and np.all(np.diff(row) <= 0) and (row > 0).sum() - (row == 255).sum() > 30, row
 print("a narrow gap between tiles is filled, a wide one keeps a soft edge; ok")
 
+# and the two sides of such a gap, which never overlap, are leveled across it (mosaic._across) as an overlap is: the
+# 3x3's columns, 4-8% apart in brightness, met in a step that detail() turned into a dark and a light line. The
+# mosaic stays opaque over the frames' faint rims along the gap too (a few per cent transparent there was a faint
+# dark line of its own).
+def side_by_side(gap, tint):
+    frames = []
+    for i, x0 in enumerate((0, 1024 + gap)):
+        f = np.zeros((1100, 2300, 4), np.uint8)
+        f[TOP:TOP + 1024, x0:x0 + 1024, :3] = np.clip(np.array((200, 180, 140)) * (tint if i else 1), 0, 255)
+        f[TOP:TOP + 1024, x0:x0 + 1024, 3] = mask
+        frames.append(f)
+    return frames
+frames = side_by_side(30, 1.08)
+on, flat = draw(frames), draw(frames, "level")
+step = lambda pic: pic[560, 1024 + 30 + 40, 0] / pic[560, 1024 - 40, 0]
+assert step(flat) > 1.06, step(flat)
+assert step(on) < 1.02, step(on)
+assert on[TOP + 100:TOP + 900, 900:1180, 3].min() == 255, on[TOP + 100:TOP + 900, 900:1180, 3].min()
+print("the sides of a narrow gap are leveled across it (%.3f, %.3f without), opaque all along it; ok" % (step(on), step(flat)))
+
 # a mosaic grown a tile at a time over the picture so far (obs_mosaic.draw_over: the part of the picture round the
 # tile, composed with the tile as a picture drawn so far, under=0), the same place drawn again and again as a mosaic
 # movie's is: the picture's outer edge round it, a neighbour's, stays as it was drawn, never eaten into a few pixels
