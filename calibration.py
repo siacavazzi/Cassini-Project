@@ -503,6 +503,12 @@ def calibrate(png, info, image=None, smooth=True):
     if step("dark"):
         dark = dc.dark_for(info, shape)
         if dark is not None:
+            if step("darksky"):
+                # what the dark model leaves in the frame's own dark sky (dc.sky_residual, beyond CISSCAL)
+                before = _lookup(pixels, dn) if codes else np.asarray(dn, np.float64)
+                left = dc.sky_residual(before - (offset if offset is not None else 0.0) - dark)
+                if left is not None:
+                    dark = dark + left
             offset = dark.astype(np.float64) if offset is None else offset + dark
             spots = dc.dark_spots(info)
     if offset is not None:
@@ -692,6 +698,7 @@ TOE = 0.05           # balanced composites: a margin up to this share of white (
                      # it and centred on it, so a night side or twilight it reaches into (the sky test counts it as sky)
                      # fades out smoothly instead of being cut off with a ragged edge; from twice this (a floor black,
                      # FLOOR_SHARE) the toe is an eighth of the margin, starting at it, as before; in between, a blend
+CLASSIC_NEUTRAL = 0.02   # classic color sets: a pixel under this share of white (its channels' mean, linear) fades to gray
 TOE_NEUTRAL = True   # balanced composites: through the toe a pixel's color fades in with its brightness (tone; fix plan D)
 SATURATED = 4.0      # balanced, one frame: a pixel the camera saturated is drawn at least this many times white above its
                      # black (past the shoulder: white), whatever the picture's scale puts it at (draw_saturated)
@@ -782,7 +789,8 @@ I/F and one display scale; off shows each frame on the archive's own stretch), "
 horizontal banding, taken out line by line), "twohzsky" (the 2 Hz noise measured from the frame's own background,
 cisscal_noise.image_hum; off measures it from the overclocked pixels only, cisscal_noise.two_hz), "skysmooth" (that dark
 sky's one-code steps smoothed, smooth_sky), "dark" (calibrate's dark current and
-the WAC's hot pixels taken out, dark_current.py), "pairs" (calibrate's anti-blooming bright/dark pixel pairs replaced,
+the WAC's hot pixels taken out, dark_current.py), "darksky" (what the dark model leaves in the frame's own dark
+sky, its column stripes and lift, taken out too, dark_current.sky_residual; off uses the model as it is), "pairs" (calibrate's anti-blooming bright/dark pixel pairs replaced,
 cisscal_noise.bright_dark), "flat" (calibrate's flat field: dust rings, mottle and the
 detector's flat taken out, flat_field.py), "hotpix" (calibrate's repair of the hot and dead pixels, which stay put
 while the sky moves, dark_current.repair_hot), "align" (a color set's channels moved onto one another), "blend" (a
@@ -795,7 +803,7 @@ only how tiles are drawn together, or redraw or move tiles from the tiles made, 
 left out of variant (a mosaic with them off draws the same tiles) and the mosaics name them themselves
 (mosaic.drawing; obs_mosaic.SURFACE_TAG, PANEL_TAG, EDGE_TAG).
 """
-STEPS = ("stack", "hdr", "fill", "calibrate", "twohz", "twohzsky", "skysmooth", "dark", "pairs", "flat", "hotpix", "align", "blend", "level", "surface", "panels")
+STEPS = ("stack", "hdr", "fill", "calibrate", "twohz", "twohzsky", "skysmooth", "dark", "darksky", "pairs", "flat", "hotpix", "align", "blend", "level", "surface", "panels")
 _off = contextvars.ContextVar("off", default=frozenset())
 
 
@@ -1289,12 +1297,14 @@ scale = optional fixed display scale shared by every picture of a mosaic, a dict
 optionally "gamma" and "shoulder"; without it each picture is stretched on its own as below
 saturated = with scale, optional list, one per label: the pixels the camera saturated (stacking.load_hdr's clipped,
 saturated_of), drawn white, or None
+off_disk = without scale, for a color set drawn in the classic look (color_image.load_aligned): as load_linear's, the
+sky its blacks are measured on when _sky finds too little, so that sky is black in every channel (fix plan D)
 Returns one BGR uint8 image per label. If every frame calibrates, all channels share one
 stretch so their relative brightness is what the camera measured. Otherwise the images
 are returned unchanged, each with its own stretch as before.
 """
 def load_channels(labels, images=None, sky_fraction=0.1, sky_percentile=98, gamma=2.2, iofs=None, scale=None,
-                  saturated=None):
+                  saturated=None, off_disk=None):
     if images is None:
         images = [lbl.resize_image() for lbl in labels]
     iofs = _calibrated(labels, images, iofs)
@@ -1316,11 +1326,38 @@ def load_channels(labels, images=None, sky_fraction=0.1, sky_percentile=98, gamm
             if full is not None:
                 picture[full] = 255
         return out
-    blacks, white, _ = picture_scale(iofs, sky_fraction, sky_percentile)
+    sky = None
+    if off_disk is not None and len(iofs) > 1 and not _sky(iofs).mean() > sky_fraction:
+        # a color set's sky lit all over (a faint offset round a small moon): everything off the body's disk
+        sky = off_disk(iofs)
+    blacks, white, _ = picture_scale(iofs, sky_fraction, sky_percentile, sky=sky)
     if white <= 0:
         return images
     shoulder = SHOULDER if look() == "balanced" else None
     return [display(iof, black, white, gamma, shoulder) for iof, black in zip(iofs, blacks)]
+
+
+"""
+A classic color picture's channels (linear, 0-1, white = 1) with their darkest part neutral: a pixel's color fades in
+with its brightness (the channels' mean) from gray at 0 to all of it at CLASSIC_NEUTRAL, as the balanced look's toe
+does (tone), so what is left over one channel's black (a stray light glow in one filter, its noisier sky) is not a
+tint. Brightness is unchanged
+"""
+def neutral_dark(x):
+    x = np.stack(x).astype(np.float32)
+    k = np.clip(x.mean(axis=0) / np.float32(CLASSIC_NEUTRAL), 0, 1)
+    if (k < 1).any():
+        x += (x.mean(axis=0) - x) * (1 - k * k * (3 - 2 * k))
+    return x
+
+
+"""
+neutral_dark on a classic color picture already drawn and aligned (BGR uint8 images, one per channel, gamma encoded),
+after its alignment, so the channels it was aligned on are the ones it was drawn with before
+"""
+def neutral_display(imgs, gamma=2.2):
+    x = neutral_dark([decode(im[..., 0].astype(np.float32) / 255, gamma) for im in imgs])
+    return [cv2.cvtColor((encode(np.clip(c, 0, 1), gamma) * 255 + 0.5).astype(np.uint8), cv2.COLOR_GRAY2BGR) for c in x]
 
 
 """
@@ -1573,9 +1610,10 @@ One picture's own display scale, as load_channels uses it: (black per channel, w
 blacks were measured on the sky or left at zero for want of sky), in I/F.
 iofs = the picture's channels, float32 I/F
 """
-def picture_scale(iofs, sky_fraction=0.1, sky_percentile=98, floor=True):
-    # Sky is where every channel is dark; without enough sky the black point stays at zero.
-    sky = _sky(iofs)
+def picture_scale(iofs, sky_fraction=0.1, sky_percentile=98, floor=True, sky=None):
+    # Sky is where every channel is dark; without enough sky the black point stays at zero. sky: a sky of the
+    # caller's instead (load_channels' off_disk)
+    sky = _sky(iofs) if sky is None else sky
     blacks = [0.0] * len(iofs)
     measured = bool(sky.mean() > sky_fraction)
     if look() == "classic":
