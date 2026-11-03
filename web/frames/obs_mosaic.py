@@ -4507,7 +4507,7 @@ def movie_webp(frame_id, size, cache, trail=0, colour=True, wait=False, ahead=6,
         if max(im.size) > size:
             im.thumbnail((size, size), Image.LANCZOS)
         buf = io.BytesIO()
-        im.save(buf, "WEBP", quality=QUALITY, method=4)
+        reel.save_webp(im, buf, quality=QUALITY, method=4)
         return buf.getvalue()
 
     try:
@@ -5354,7 +5354,7 @@ def pointing_picture(frame_id, n, cache, size="full", fmt="webp", slots=None, ch
         if fmt == "png":
             im.save(buf, "PNG", compress_level=6)
         else:
-            im.save(buf, "WEBP", quality=QUALITY, method=4)
+            reel.save_webp(im, buf, quality=QUALITY, method=4)
         return buf.getvalue()
 
     bx, by, bw, bh = pointing_box(layers)
@@ -5631,7 +5631,7 @@ def _make_mosaic(u, n, size, path, cache, slots, made, fmt="webp", out=OUT, post
         if fmt == "png":
             im.save(buf, "PNG", compress_level=6)
         else:
-            im.save(buf, "WEBP", quality=QUALITY, method=4)
+            reel.save_webp(im, buf, quality=QUALITY, method=4)
         reel._cached(meta, lambda: json.dumps(rep).encode())
         reel.keep_report(meta, rep)
         return buf.getvalue()

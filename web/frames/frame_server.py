@@ -405,7 +405,11 @@ def encode(im, size, fmt="webp", quality=QUALITY):
         im = im.copy()
         im.thumbnail((shrink, shrink), Image.LANCZOS)
     out = io.BytesIO()
-    im.save(out, kind, **dict(args))
+    if kind == "WEBP":
+        # (black under what is transparent, reel.save_webp)
+        reel.save_webp(im, out, **dict(args))
+    else:
+        im.save(out, kind, **dict(args))
     return out.getvalue()
 
 
