@@ -102,6 +102,76 @@ def get_mask():
 
 
 """
+The camera's outermost lines and columns are not picture. Across the archive the first and last column of nearly every
+frame read brighter than the columns beside them (in sky and on bright ground alike: N1503242138_1 has 201 where its
+neighbours have 112, W1295204353_1 29 against 24) and the first line often does (N1503242138_1: 173 against 151); a WAC
+frame's second line can too (W1507745867_2). Drawn at the soft edge's first value (mask.png's 46 of 255) on a
+stretched dark sky, turned north up and resized, they became dotted bright lines along two edges of every frame
+(Titan 2006 020TI, Jupiter 2000, Phoebe, Titan 2007 054TI) and white specks along every ring film's edge (113RI).
+A frame's mask (pixels it has) leaves out EDGE_PX full-resolution pixels at each edge of a full frame, and
+SUMMED_EDGE_PX of a summed one (4 of a 512 line frame's own pixels, 2 of a 256 line one's): a summed frame's bright
+edge runs further in. N1349081639_2 (Jupiter 2000, 512 lines), on the full-resolution grid from the edge: 127 127
+(the valid mask's left-out first pixel), 39 41, 14 14, 19 19, 2 2, then 0 in the sky; the Mini's second and third
+renders, which left out 2 of its own pixels, still showed a faint line from the third and fourth.
+Leaving a pixel out of the mask is not enough on its own: turning the frame north up (label.translate, linear on
+colour and alpha apart) mixes a left-out pixel's colour into the new edge, and the calibrated path leaves 127 (half
+scale) under a summed frame's left-out edge column. That was most of the dotted lines (the Mini's edge profile of
+W1576834985_1, N1515805292_1, N1349081639_2: 127 in the left-out columns, 0 to 13 in the sky beside them; the first
+render of this fix, which trimmed the mask only, kept the lines). So the colour under every left-out pixel next to
+the picture is the picture's own nearest colour (rim_coloured), as load_aligned hands its pictures on. The soft edge
+(mask.png) is unchanged; it starts edge_px in.
+"""
+EDGE_PX = 2
+SUMMED_EDGE_PX = 8
+
+
+def edge_px(lbl, side=1024):
+    """How many full-resolution pixels at each edge of frame lbl (on a side px grid) are not picture: EDGE_PX of
+    a full frame, SUMMED_EDGE_PX (or EDGE_PX of its own pixels, if more) of a summed one."""
+    try:
+        lines = int(lbl.info.get("LINES", side))
+    except (TypeError, ValueError, AttributeError):
+        lines = side
+    summing = max(1, side // max(1, min(lines, side)))
+    return EDGE_PX if summing == 1 else max(SUMMED_EDGE_PX, EDGE_PX * summing)
+
+
+def edge_trimmed(mask, lbl):
+    """mask (pixels a frame has, the 1024 px grid) with the frame's outermost edge_px lines and columns left out."""
+    if mask is None:
+        return mask
+    n = edge_px(lbl, mask.shape[0])
+    out = mask.copy()
+    out[:n] = False
+    out[-n:] = False
+    out[:, :n] = False
+    out[:, -n:] = False
+    return out
+
+
+RIM_PX = 8   # how far past the picture (pixels) rim_coloured paints: past what a linear turn and LANCZOS resize reach
+
+
+def rim_coloured(img, valid):
+    """img (uint8, one band or three) with the left-out pixels within RIM_PX of the picture (valid) the colour of
+    the picture's nearest pixel, so no colour that is not the picture's reaches its edge when it is turned or
+    resized. The picture itself is unchanged."""
+    if img is None or valid is None or valid.all() or not valid.any() or img.dtype != np.uint8:
+        return img
+    dist, labels = cv2.distanceTransformWithLabels((~valid).astype(np.uint8), cv2.DIST_L2, 3,
+                                                   labelType=cv2.DIST_LABEL_PIXEL)
+    band = (dist > 0) & (dist <= RIM_PX)
+    if not band.any():
+        return img
+    # each label is one picture pixel (a zero of the transform's input), numbered from 1 in row-major order
+    flat = np.flatnonzero(valid.ravel())[labels[band] - 1]
+    near = np.stack([flat // valid.shape[1], flat % valid.shape[1]], 1)
+    out = img.copy()
+    out[band] = img[near[:, 0], near[:, 1]]
+    return out
+
+
+"""
 Builds one frame up to (not including) the mosaic step
 row = one row of the image index: the label path for each filter plus seconds_1970
 returns a PIL image and the label it was centered with
@@ -162,6 +232,9 @@ left out because they can't be calibrated (then there is one image fewer than pa
 A two-filter set balanced like false color (calibration.color_mix) comes back as three images, green the mean of the two.
 Channels whose own match fails are aligned near where SPICE puts them (spice_offsets, image_correction.guided_shift).
 A channel that nothing places (unaligned) makes the whole set grey from the reference (grey_from, report["grey"]).
+What moved between the filters once the set is aligned on its target (a second moon, the rings or Saturn's limb behind
+it) is drawn grey from the reference too (grey_plan, moved_region): that part (report["grey_moved"], its share of the
+picture), or the whole set when it is most of the picture (report["grey"] = "moved").
 """
 def load_aligned(paths, hdr=False, scale=None, repeat_window=120, around=None):
     # Settings > Processing turns steps off per request (calibration.step); stacking checks its own
@@ -212,6 +285,9 @@ def load_aligned(paths, hdr=False, scale=None, repeat_window=120, around=None):
     if fill:
         imgs = [ic.fill_invalid(img, mask) for img, mask in zip(imgs, masks)]
         iofs = [None if iof is None else ic.fill_invalid(iof, mask) for iof, mask in zip(iofs, masks)]
+    # each frame's outermost lines and columns are not picture (edge_trimmed), so they move with the frame as it is
+    # aligned and drop out of every picture made of it
+    masks = [edge_trimmed(mask, lbl) for mask, lbl in zip(masks, lbls)]
     dropped = []
     if calibrating and len(lbls) > 1:
         # each frame calibrated once, here, for the display models below to share
@@ -255,9 +331,12 @@ def load_aligned(paths, hdr=False, scale=None, repeat_window=120, around=None):
                 guide = cal.load_channels(lbls, imgs, iofs=iofs)
             # what the camera saturated in each channel (merged in I/F: what every exposure saturated), moved with
             # its channel below: filled from the channels that did not saturate there (calibration.tone, fill_saturated)
-            each = [_saturated_of(l, img.shape[:2]) if clip is None else clip for l, img, clip in zip(lbls, imgs, clips)]
+            # (on the channels' grid: a summed frame's own mask is 512 px, and one with nothing saturated comes back
+            # at its own size, N1356864915_2 in a Jupiter set of 1024 px frames)
+            shape = linear[0][0].shape[:2]
+            each = [_saturated_of(l, shape) if clip is None else clip for l, clip in zip(lbls, clips)]
             if any(m is not None and m.any() for m in each):
-                full = [np.zeros(imgs[0].shape[:2], np.float32) if m is None else m.astype(np.float32) for m in each]
+                full = [np.zeros(shape, np.float32) if m is None else _on_grid(m, shape) for m in each]
         elif linear is None:
             # puts every filter on the same brightness scale (see calibration.py)
             before = imgs
@@ -292,6 +371,8 @@ def load_aligned(paths, hdr=False, scale=None, repeat_window=120, around=None):
 
     # masks move with the frames, so pixels alignment leaves uncovered become invalid too
     aligned = []
+    why = region = None
+    bands = [cal.band_of(lbl.info) for lbl in lbls]
     try:
         if not align:
             # Settings > Processing: the channels as the camera took them, one over the other
@@ -304,11 +385,19 @@ def load_aligned(paths, hdr=False, scale=None, repeat_window=120, around=None):
             channels, masks = ic.align_with_masks(linear[0], masks, ref, use=shifts)
             if full is not None:
                 full = [m if d is None else ic.shift_image(m, *d) for m, d in zip(full, shifts)]
-            # a set drawn grey (a channel not aligned) is every channel the reference's, so no channel fill
-            imgs = cal.tone(*_greyed(channels, linear, ref, aligned),
-                            saturated=None if unaligned(aligned) else _saturated_masks(full))
+            # a body that moved between the filters (grey_plan): drawn grey from the reference there, or everywhere
+            why, region = grey_plan(aligned, channels, ref, np.logical_and.reduce(masks), bands)
+            # a set drawn grey (a channel not aligned) is every channel the reference's, so no channel fill; a part
+            # drawn grey keeps no channel's fill there either (the fill would put a colour back)
+            imgs = cal.tone(*_greyed(channels, linear, ref, aligned, why, region),
+                            saturated=None if why and region is None else _saturated_masks(full, region))
+            if why and region is not None:
+                imgs = neutral(imgs, region)
         else:
             imgs, masks = ic.align_with_masks(imgs, masks, ref, aligned, guess=guess)
+            why, region = grey_plan(aligned, imgs, ref, np.logical_and.reduce(masks), bands)
+            if why == "moved":
+                imgs = grey_from(imgs, ref, region)
     except Exception:
         print("Image alignment failure")
         aligned = ["failed"] * len(imgs)
@@ -317,20 +406,24 @@ def load_aligned(paths, hdr=False, scale=None, repeat_window=120, around=None):
     if linear is not None and guide is None:
         imgs = cal.tone(*_greyed(linear[0], linear, ref, aligned),
                         saturated=_saturated_masks(full) if len(lbls) > 1 and not unaligned(aligned) else None)
-    grey = unaligned(aligned)
+    grey = unaligned(aligned) or (why == "moved" and region is None)
     if alone and calibrated and not grey and len(imgs) > 1:
         # the classic look's color set: its darkest part neutral (calibration.neutral_display), drawn after it was aligned
         imgs = cal.neutral_display(imgs)
     if grey:
-        # a channel neither its own match nor SPICE could place: drawn grey from the reference alone, never in colours
-        # that sit apart (its valid pixels are the reference's own)
+        # a channel neither its own match nor SPICE could place, or a body that moved over most of the picture: drawn
+        # grey from the reference alone, never in colours that sit apart (its valid pixels are the reference's own)
         if linear is None:
             imgs = grey_from(imgs, ref)
         masks = [masks[ref]]
     report = {"calibrated": calibrated, "stacked": stacked, "aligned": aligned}
     if grey:
-        # drawn grey from one filter (grey_from): the channels could not be lined up
-        report["grey"] = "not aligned"
+        # drawn grey from one filter (grey_from): the channels could not be lined up ("not aligned"), or a body
+        # moved between the filters over most of the picture ("moved")
+        report["grey"] = "not aligned" if unaligned(aligned) else "moved"
+    elif region is not None:
+        # the share of the picture drawn grey from the reference where a body moved between the filters (grey_plan)
+        report["grey_moved"] = round(float(np.mean(region)), 4)
     if warps and any(w is not None for w in warps):
         # each channel's scale and turn onto the reference (SPICE's range and twist), None where it needed none
         report["warped"] = [None if w is None else [round(w[2], 4), round(w[3], 3)] for w in warps]
@@ -350,7 +443,10 @@ def load_aligned(paths, hdr=False, scale=None, repeat_window=120, around=None):
     if shares and max(shares) > 0:
         # the share of the frame the camera saturated in every exposure merged (the most of any channel): drawn white
         report["saturated_share"] = round(max(shares), 4)
-    return imgs, np.logical_and.reduce(masks), lbls[ref], report
+    valid = np.logical_and.reduce(masks)
+    # no colour that is not the picture's under the pixels round it (rim_coloured)
+    imgs = [rim_coloured(img, valid) for img in imgs]
+    return imgs, valid, lbls[ref], report
 
 
 """
@@ -439,17 +535,179 @@ def grey_from(channels, src, region=None):
     out = []
     for c in channels:
         r = region if c.ndim == region.ndim else region[..., None]
-        out.append(np.where(r, channels[src], c).astype(c.dtype))
+        if r.dtype == bool:
+            out.append(np.where(r, channels[src], c).astype(c.dtype))
+        else:
+            # a soft region (grey_plan's, 0 to 1): the reference's share of each pixel, so its edge is no seam
+            mixed = c.astype(np.float32) * (1 - r) + channels[src].astype(np.float32) * r
+            if np.issubdtype(c.dtype, np.integer):
+                mixed = np.clip(mixed + 0.5, np.iinfo(c.dtype).min, np.iinfo(c.dtype).max)
+            out.append(mixed.astype(c.dtype))
     return out
+
+
+"""
+Where a set's channels can't be lined up because something in the picture moved between the filters, after the set
+was aligned on its target: a second moon whose copies sit apart (Enceladus 2015, three coloured dots), a moon over
+the rings (Janus 2006, three coloured blobs), the rings behind a distant Earth (N1870757502_1), or Saturn's limb
+behind a moon (Mimas 126MI, N1644787450_1: the limb sits in the green frame where the red and blue frames see only
+Saturn, a magenta square). Fix plan PR 5: such parts are drawn grey from the reference frame (grey_from), not in
+colours that sit apart. A general rule on the aligned channels, nothing per moment:
+
+1. Each channel is set against the reference at MOVED_SIZE px, both on their own brightness (MOVED_TOP percentile, or half a small body's peak)
+   and the channel scaled by the set's typical ratio of the two over what both see lit (so a colour of the whole
+   picture is no difference).
+2. A pixel differs when one of the two is lit (over MOVED_LIT) and the other at least MOVED_RATIO times fainter:
+   something is there in one filter and not in the other. No colour of a surface in the visible and near infrared is
+   that strong; a band that sees another layer of an atmosphere is (a methane band: Saturn dark where its rings are
+   bright; the ultraviolet: Titan's detached haze), so a channel through one (other_layer) is not compared.
+3. Patches of at least MOVED_AREA px once thinned by a px are kept (a star, a cosmic ray or a lit line is no body),
+   widened over what touches them and still differs by MOVED_RATIO_LOW (the moved body's soft edge, no further than
+   the patch is across), then by MOVED_GROW, softened over MOVED_SOFT (full resolution px), and drawn grey.
+4. Over MOVED_WHOLE of what is lit in the picture, the whole set is drawn grey.
+
+Returns the region as float32 (0 to 1) at the channels' size, "whole", or None when nothing moved. channels = the
+aligned channels, linear (calibration.load_linear) or drawn (8-bit, grey or BGR); valid = pixels valid in every
+channel; bands = each channel's filters (calibration.band_of), None when not known.
+"""
+MOVED_SIZE = 512       # px on the longer side, where the channels are compared
+MOVED_TOP = 99.5       # a channel's percentile taken as its full brightness,
+MOVED_PEAK = 0.5       # or at least this share of its MOVED_PEAK_AT percentile (a small body's)
+MOVED_PEAK_AT = 99.95
+MOVED_LIT = 0.08       # of full brightness: lit
+MOVED_RATIO = 6.0      # the other frame at least this much fainter: something there in one frame only
+MOVED_RATIO_LOW = 1.5  # what is widened over: still this much fainter, next to a patch kept
+MOVED_AREA = 4         # px at MOVED_SIZE, once thinned by a px: smaller or thinner patches are left
+MOVED_GROW = 8         # full resolution px the region is widened by (the soft edges of what moved)
+MOVED_SOFT = 16        # full resolution px over which the region fades
+MOVED_WHOLE = 0.4      # of the lit picture: the whole set drawn grey
+
+
+def other_layer(band):
+    """True for a band that sees another layer of an atmosphere than the visible and near infrared continuum: a
+    methane band (calibration.is_methane) or the ultraviolet (UV1 to UV3), alone or stacked ("CL1/UV3")"""
+    return cal.is_methane(band) or any(p.startswith("UV") for p in str(band or "").split("/"))
+
+
+def moved_region(channels, ref, valid=None, bands=None):
+    if len(channels) < 2 or (bands and other_layer(bands[ref])):
+        return None
+    shape = channels[ref].shape[:2]
+    f = min(1.0, MOVED_SIZE / max(shape))
+    small = (max(1, round(shape[1] * f)), max(1, round(shape[0] * f)))
+
+    def level(c):
+        c = np.asarray(c, np.float32)
+        if c.ndim == 3:
+            c = c.mean(axis=2)
+        c = cv2.resize(c, small, interpolation=cv2.INTER_AREA) if f < 1 else c
+        # a small body (a crescent over a sky that fills the frame) is the frame's full brightness, not its sky
+        top = max(float(np.percentile(c, MOVED_TOP)), MOVED_PEAK * float(np.percentile(c, MOVED_PEAK_AT)))
+        return np.clip(c, 0, None) / top if top > 0 else None
+
+    ok = np.ones(small[::-1], bool)
+    if valid is not None:
+        ok = cv2.resize(np.asarray(valid, np.uint8), small, interpolation=cv2.INTER_NEAREST) > 0 if f < 1 else valid
+        ok = cv2.erode(ok.astype(np.uint8), np.ones((3, 3), np.uint8)) > 0
+    r = level(channels[ref])
+    if r is None:
+        return None
+    k = np.ones((3, 3), np.uint8)
+    found = np.zeros(r.shape, bool)
+    within = np.zeros(r.shape, bool)
+    for j, c in enumerate(channels):
+        if j == ref or (bands and other_layer(bands[j])):
+            continue
+        c = level(c)
+        if c is None:
+            continue
+        both = ok & (c > MOVED_LIT) & (r > MOVED_LIT)
+        if both.sum() >= 200:
+            c = c / float(np.clip(np.median(c[both] / r[both]), 0.25, 4.0))
+        hi, lo = np.maximum(c, r), np.minimum(c, r)
+        differs = ok & (hi > MOVED_LIT) & (lo * MOVED_RATIO < hi)
+        if not differs.any():
+            continue
+        differs = cv2.morphologyEx(differs.astype(np.uint8), cv2.MORPH_CLOSE, k) > 0
+        n, labels, stats, _ = cv2.connectedComponentsWithStats(differs.astype(np.uint8), connectivity=8)
+        kept = np.zeros(r.shape, bool)
+        for i in range(1, n):
+            if stats[i, cv2.CC_STAT_AREA] < MOVED_AREA:
+                continue
+            x, y, w, h = stats[i, :4]
+            patch = np.pad((labels[y:y + h, x:x + w] == i).astype(np.uint8), 1)
+            if int((cv2.erode(patch, k) > 0).sum()) < MOVED_AREA:
+                # a line or a speck (a cosmic ray, a star's trail): no body
+                continue
+            kept[y:y + h, x:x + w] |= patch[1:-1, 1:-1] > 0
+            # how far it is widened below: no further than the patch is across (a limb's glow, not the sky's)
+            reach = int(max(4, w, h))
+            r0, r1, c0, c1 = max(y - reach, 0), y + h + reach, max(x - reach, 0), x + w + reach
+            away = cv2.distanceTransform((labels[r0:r1, c0:c1] != i).astype(np.uint8), cv2.DIST_L2, 3)
+            within[r0:r1, c0:c1] |= away <= reach
+        if kept.any():
+            # widened over the moved body's soft edge (a limb's glow, its own blur): what still differs by
+            # MOVED_RATIO_LOW, touches a patch kept and is within its reach
+            near = (ok & within & (hi > MOVED_LIT / 2) & (lo * MOVED_RATIO_LOW < hi)) | kept
+            n, labels = cv2.connectedComponents(near.astype(np.uint8), connectivity=8)
+            hit = np.unique(labels[kept])
+            found |= np.isin(labels, hit[hit > 0])
+    if not found.any():
+        return None
+    lit = ok & ((r > MOVED_LIT) | found)
+    if found.sum() > MOVED_WHOLE * max(int(lit.sum()), 1):
+        return "whole"
+    region = found.astype(np.uint8)
+    if f < 1:
+        region = cv2.resize(region, (shape[1], shape[0]), interpolation=cv2.INTER_NEAREST)
+    grow = cv2.getStructuringElement(cv2.MORPH_ELLIPSE, (2 * MOVED_GROW + 1,) * 2)
+    region = cv2.dilate(region, grow).astype(np.float32)
+    region = cv2.GaussianBlur(region, (0, 0), MOVED_SOFT / 2)
+    return np.clip(region * 2, 0, 1)
+
+
+"""
+Whether, and where, a set is drawn grey from the reference (grey_from), the one rule load_aligned (and the movie,
+Day the Earth Smiled and per-body registration fixes, PRs 7, 10 and 15) asks: returns (why, region) where why is
+None (colour as aligned), "not aligned" (a channel nothing placed, unaligned: the whole set) or "moved" (moved_region:
+region the soft part to grey, or None for the whole set). Alignment turned off is the viewer's own choice: nothing grey.
+bands = each channel's filters (calibration.band_of), for moved_region.
+"""
+def grey_plan(aligned, channels, ref, valid=None, bands=None):
+    if unaligned(aligned):
+        return "not aligned", None
+    if len(channels) < 2 or any(a == "off" for a in aligned):
+        return None, None
+    region = moved_region(channels, ref, valid, bands)
+    if region is None:
+        return None, None
+    return "moved", (None if isinstance(region, str) else region)
+
+
+"""
+Drawn channels (8-bit, as calibration.tone returns them) made neutral where region is (0 to 1, grey_plan's): each
+pixel there takes the mean of the channels. The channels were already made equal there before the mix (grey_from), so
+a natural color mix (its rows add up to one) leaves them grey and this changes nothing; a false color mix's gains and
+its body's tint would color them again.
+"""
+def neutral(drawn, region):
+    x = [np.asarray(d, np.float32) for d in drawn]
+    mean = sum(x) / len(x)
+    r = region if x[0].ndim == region.ndim else region[..., None]
+    return [np.clip(c * (1 - r) + mean * r + 0.5, 0, 255).astype(np.uint8) for c in x]
 
 
 """
 calibration.tone's arguments for the linear channels (linear = load_linear's (channels, margin, mix)): as they are, or,
 when a channel was not aligned (unaligned), every channel the reference's and no colour mix, so the picture is grey
 """
-def _greyed(channels, linear, ref, aligned):
-    if unaligned(aligned):
+def _greyed(channels, linear, ref, aligned, why=None, region=None):
+    if unaligned(aligned) or (why and region is None):
         return grey_from(channels, ref), linear[1], None
+    if why:
+        # a part drawn grey keeps the set's mix elsewhere: a natural mix's rows each add up to one, so equal channels
+        # stay neutral, and a false color mix's gains are taken out after drawing (neutral)
+        return grey_from(channels, ref, region), linear[1], linear[2]
     return channels, linear[1], linear[2]
 
 
@@ -465,12 +723,25 @@ def _saturated_of(lbl, shape):
 
 
 """
+A saturated mask as float32 at shape (rows, columns), resized nearest when it is another size
+"""
+def _on_grid(mask, shape):
+    mask = np.asarray(mask).astype(np.float32)
+    if mask.shape[:2] != tuple(shape):
+        mask = cv2.resize(mask, tuple(shape)[::-1], interpolation=cv2.INTER_NEAREST)
+    return mask
+
+
+"""
 Each channel's saturated pixels as masks (from float32 masks moved with their channels), or None when none saturated
 """
-def _saturated_masks(masks):
+def _saturated_masks(masks, region=None):
     if not masks:
         return None
     out = [m > 0.5 for m in masks]
+    if region is not None:
+        # none where the set is drawn grey from the reference (grey_plan), which the fill would colour again
+        out = [m & ~(region > 0) for m in out]
     return out if any(m.any() for m in out) else None
 
 
@@ -670,6 +941,49 @@ def frame_path(row, target, folder):
 
 def sharpen(image):
     return ImageEnhance.Sharpness(image).enhance(1.5)
+
+
+# A light unsharp mask, the last step of every picture the site serves (frame_server's stills and composites, and every
+# tile obs_mosaic draws into a movie frame or a mosaic, at the size it is drawn): fine detail raised a little, the same
+# for everyone (Sam, 2026-11-02: "build it into the pipeline", no setting)
+SHARPEN = 0.5                    # how much: each pixel moved away from its neighbourhood by this times the difference
+SHARPEN_TAPS = (1, 4, 6, 4, 1)   # the neighbourhood: binomial, a Gaussian of sigma 1 px
+SHARPEN_GATE = 3.0               # differences under this many levels (of 255) are raised less, so sky noise stays quiet
+
+
+def unsharp(px, amount=SHARPEN, taps=SHARPEN_TAPS, gate=SHARPEN_GATE):
+    """Picture px (uint8: H x W grey, or H x W x 2|3|4 with alpha last when 2 or 4) with its fine detail raised: each
+    pixel's brightness (the mean of its colors) less its neighbourhood's (the binomial blur taps, over the picture's own
+    pixels only, weighted by alpha, so the empty canvas round a frame or a tile does not ring at its edge), times
+    amount, added to every channel alike (no colour fringes where the filters are slightly off). A difference d under
+    gate levels is scaled by |d| / gate, so faint noise is raised far less than edges. Alpha is kept as it is; a pixel
+    with none is not touched."""
+    px = np.asarray(px)
+    if amount <= 0 or px.size == 0:
+        return px.copy()
+    a3 = px[..., None] if px.ndim == 2 else px
+    n = a3.shape[2]
+    colors = n - 1 if n in (2, 4) else n
+    rgb = a3[..., :colors].astype(np.float32)
+    alpha = a3[..., colors].astype(np.float32) / 255 if colors < n else None
+    lum = rgb[..., 0] if colors == 1 else rgb.mean(axis=2)
+    k = np.asarray(taps, np.float32) / float(sum(taps))
+    blur = lambda v: cv2.sepFilter2D(v, cv2.CV_32F, k, k, borderType=cv2.BORDER_CONSTANT)
+    if alpha is None:
+        # outside the picture counts as nothing: the blur of a picture of ones is the weight
+        weight = blur(np.ones_like(lum))
+        mean = blur(lum) / weight
+    else:
+        weight = blur(alpha)
+        mean = np.where(weight > 1e-6, blur(lum * alpha) / np.maximum(weight, 1e-6), lum)
+    d = lum - mean
+    d = np.where(np.abs(d) < gate, d * (np.abs(d) / gate), d) * amount
+    out = np.clip(rgb + d[..., None], 0, 255) + 0.5
+    out = out.astype(np.uint8)
+    if alpha is not None:
+        out = np.where((alpha > 0)[..., None], out, a3[..., :colors])
+    res = np.concatenate([out, a3[..., colors:]], axis=2) if colors < n else out
+    return res[..., 0] if px.ndim == 2 else res
 
 
 """
