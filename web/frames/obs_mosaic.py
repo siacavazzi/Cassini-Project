@@ -3298,6 +3298,10 @@ def _despiked(planes, gamma):
     return out
 
 
+CLIP_FROM = 240   # (colour_picture) a band this bright and up is taken as clipped, wholly so at 255
+CLIP_REACH = 1 / 16   # (colour_picture) of the picture's side: how far round a clipped band its colour is read from
+
+
 def colour_picture(u, p, colour, planes):
     """The colour picture of a pass's three colour filters' planes (RGBA, each on the pass's display scale), RGBA:
     the pass's mosaic and its movie frames mixed alike. Natural color: a true color pass turned into what an eye
@@ -3318,10 +3322,33 @@ def colour_picture(u, p, colour, planes):
     typical = scale.get("typical")
     if isinstance(mix, calibration.FalseMix) and typical:
         mix.typical = typical if isinstance(typical, list) else [typical[f] for f in colour]
-    if mix is not None:
+    alpha = np.min([a[..., 3] for a in planes], axis=0)
+    clipped = [(rgb[..., i] >= CLIP_FROM) & (alpha > 0) for i in range(3)]
+    if any(c.any() for c in clipped) and not all(np.array_equal(clipped[0], c) for c in clipped[1:]):
+        # a band clipped where another is not (the camera saturated in it, or it is past the scale's white): filled
+        # from the bands that are not, as a colour set's camera window draws it (calibration.tone's fill_saturated),
+        # then mixed and rolled off with the brightest band, so it keeps a colour: left at white, a clipped red over a
+        # green that just was not drew pink patches with ragged edges along the green's own clipping (North Pole
+        # map movie, 175SA NPOLMAP001: RED saturated over 70% of the disk, GRN over 44%)
+        g = scale["gamma"]
+        x = calibration.decode(np.moveaxis(rgb.astype(np.float32) / 255, -1, 0), g).astype(np.float32)
+        filled, every = calibration.fill_saturated(list(x), clipped, CLIP_REACH * max(x.shape[1:]))
+        # (eased in from CLIP_FROM to white: a tile's clipped white, resampled and blended onto the canvas, comes in a
+        # few levels under 255 along its edges)
+        w = np.clip((rgb.astype(np.float32) - CLIP_FROM) / (255 - CLIP_FROM), 0, 1)
+        w = np.moveaxis(w * w * (3 - 2 * w), -1, 0)
+        x = x + w * (np.stack(filled) - x)
+        if every is not None:
+            every &= np.logical_and.reduce([c >= 255 for c in np.moveaxis(rgb, -1, 0)])
+        if mix is not None:
+            x = calibration.apply_mix(mix, x)
+        calibration._shoulder(x, calibration.SHOULDER)
+        if every is not None:
+            x[:, every] = 1.0
+        rgb = np.moveaxis((calibration.encode(np.clip(x, 0, 1), g) * 255 + 0.5).astype(np.uint8), 0, -1)
+    elif mix is not None:
         rgb = calibration.mix_display(rgb, mix, scale["gamma"])
     # only where every filter has the picture: past one filter's edge the others alone are a coloured rim
-    alpha = np.min([a[..., 3] for a in planes], axis=0)
     rgb = (rgb * (alpha[..., None] / np.float32(255)) + 0.5).astype(np.uint8)
     return np.dstack([rgb, alpha])
 
