@@ -94,3 +94,28 @@ assert out[1].max() - out[1].min() <= max(2, out[1].max() // 4)
 lit_ratio = out[3] / out[3].max()
 assert abs(lit_ratio[2] - lit_ratio[0] * (0.7 / 1.3) ** (1 / 2.2)) < 0.03   # (gamma encoded, the same color)
 print("ok")
+
+# 4. the classic look (Balanced color off), a color set drawn on its own: the same small moon's sky measured off its
+# disk and black in every channel; a glow in one filter over its black fades to gray (neutral_dark), the moon keeps
+# its color; and without off_disk (its alignment guides, mosaics) it is drawn as before
+iofs = [np.where(disk, l, 0.0) + o + rng.normal(0, 0.00002, (H, H)) for l, o in zip(lit, offsets)]
+labels = [Label(b) for b in BANDS]
+try:
+    ci.off_disk = lambda lbls, shape: off
+    with cal.looking("classic"):
+        plain = cal.load_channels(labels, [None] * 3, iofs=[i.astype(np.float32) for i in iofs])
+        fixed = cal.neutral_display(cal.load_channels(labels, [None] * 3, iofs=[i.astype(np.float32) for i in iofs],
+                                                      off_disk=lambda linear: ci.dim_off_disk(labels, linear)))
+finally:
+    ci.off_disk = real
+plain, fixed = (np.stack([c[..., 0] for c in p], axis=-1).astype(int) for p in (plain, fixed))
+print("classic, lit sky round a small moon: before", tint(plain, off), "after", tint(fixed, off))
+assert tint(plain, off)[1].max() > 10                        # the old stretch: a tinted sky
+assert tint(fixed, off)[1].max() < 3                         # black
+assert fixed[disk].mean() > 100
+glow = [np.float32(0.0)] * 2 + [np.float32(0.004)]
+x = cal.neutral_dark([np.full((4, 4), v, np.float32) for v in glow])
+assert np.ptp(x[:, 0, 0]) < 0.05 * 0.004                       # a one-filter glow near black: gray
+x = cal.neutral_dark([np.full((4, 4), v, np.float32) for v in (0.5, 0.4, 0.3)])
+assert np.allclose(x[:, 0, 0], (0.5, 0.4, 0.3))               # a lit pixel keeps its color
+print("ok (classic)")

@@ -303,6 +303,7 @@ def load_aligned(paths, hdr=False, scale=None, repeat_window=120, around=None):
             if scale is not None:
                 scale = dict(scale, blacks=[scale["blacks"][j] for j in keep])
     calibrated = False
+    alone = False   # a color set drawn on its own in the classic look (its sky made neutral after alignment)
     guide = linear = saturated = full = None
     if calibrating:
         if scale is None and cal.look() != "classic":
@@ -343,7 +344,10 @@ def load_aligned(paths, hdr=False, scale=None, repeat_window=120, around=None):
                 # a mosaic's or movie's shared scale: what the camera saturated is white, as in a one frame picture
                 clips = [cal.saturated_of(l, img.shape[:2]) if clip is None else clip
                          for l, img, clip in zip(lbls, imgs, clips)]
-            imgs = cal.load_channels(lbls, imgs, iofs=iofs, scale=scale, saturated=clips if scale is not None else None)
+            # (a set drawn on its own: its sky black in every channel, as the balanced look's, fix plan D)
+            alone = scale is None and len(lbls) > 1 and cal.look() == "classic"
+            imgs = cal.load_channels(lbls, imgs, iofs=iofs, scale=scale, saturated=clips if scale is not None else None,
+                                     off_disk=(lambda linear: dim_off_disk(lbls, linear)) if alone else None)
             calibrated = imgs is not before
 
     # align to the middle frame in time so the largest offset is as small as possible
@@ -403,6 +407,9 @@ def load_aligned(paths, hdr=False, scale=None, repeat_window=120, around=None):
         imgs = cal.tone(*_greyed(linear[0], linear, ref, aligned),
                         saturated=_saturated_masks(full) if len(lbls) > 1 and not unaligned(aligned) else None)
     grey = unaligned(aligned) or (why == "moved" and region is None)
+    if alone and calibrated and not grey and len(imgs) > 1:
+        # the classic look's color set: its darkest part neutral (calibration.neutral_display), drawn after it was aligned
+        imgs = cal.neutral_display(imgs)
     if grey:
         # a channel neither its own match nor SPICE could place, or a body that moved over most of the picture: drawn
         # grey from the reference alone, never in colours that sit apart (its valid pixels are the reference's own)
