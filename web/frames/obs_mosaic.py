@@ -65,8 +65,8 @@ import stacking  # noqa: E402
 # bumped whenever the way observation mosaics are made changes, so older ones are not served again; one per
 # display model (calibration.style), classic being the mosaics made before the balanced display model, raw the
 # balanced ones before natural color
-# obs-v56/v39/v26: the colour-set alignment fixes, wild star and edge fits rejected and grey where a channel is not aligned (#236); obs-v55/v38/v25: the tone shoulder, shadow floor and saturated colour fill (#241) and the dark-sky row band fixes (#242); obs-v54/v37/v24: the colour-set registration fixes (#235) and natural filters and palette for colour sets (#237); obs-v53/v36/v23: the CISSCAL 4.1 dark current (#231) and the colour-set repeat and pointing rule (#232); obs-v52/v35/v22: the CISSCAL 2 Hz noise, pixel pair and sky band steps (#230); obs-v51/v34/v21: the batch-4 fixes (thin ringlets kept, gentler compressed frames, movie long exposures held and first whole frame, Titan wind stares in color, natural color); obs-v50/v33/v20: the batch-3 fixes (Titan color, saturated white, movie strobe, small bright bodies keep their surface, line holes, pass kinds and scan rule, ride-along pans and ring strips, scan creep); obs-v49/v32/v19: movie cosmic rays and the small artifact fixes (group I), two-filter passes in color (group F), edge registration of clouded passes (group H2); obs-v48/v31/v18: repeats merged only at the same pointing, Auto center, movie tiles, mosaic movies and the calibration fixes; obs-v47/v30/v17: calibration takes the flat field (dust rings, mottle) and the nonlinearity out
-VERSIONS = {"balanced": "obs-v56", "raw": "obs-v39", "eye": "obs-v56-eye", "false": "obs-v56-false", "classic": "obs-v26-classic"}
+# obs-v58/v41/v28: even brightness across a pass and dim tiles decided by each pointing's first tile (#253); obs-v57/v40/v27: natural colour emulation keeps today's brightness with methane belt detail at twice a band's share (#254); obs-v56/v39/v26: the colour-set alignment fixes, wild star and edge fits rejected and grey where a channel is not aligned (#236); obs-v55/v38/v25: the tone shoulder, shadow floor and saturated colour fill (#241) and the dark-sky row band fixes (#242); obs-v54/v37/v24: the colour-set registration fixes (#235) and natural filters and palette for colour sets (#237); obs-v53/v36/v23: the CISSCAL 4.1 dark current (#231) and the colour-set repeat and pointing rule (#232); obs-v52/v35/v22: the CISSCAL 2 Hz noise, pixel pair and sky band steps (#230); obs-v51/v34/v21: the batch-4 fixes (thin ringlets kept, gentler compressed frames, movie long exposures held and first whole frame, Titan wind stares in color, natural color); obs-v50/v33/v20: the batch-3 fixes (Titan color, saturated white, movie strobe, small bright bodies keep their surface, line holes, pass kinds and scan rule, ride-along pans and ring strips, scan creep); obs-v49/v32/v19: movie cosmic rays and the small artifact fixes (group I), two-filter passes in color (group F), edge registration of clouded passes (group H2); obs-v48/v31/v18: repeats merged only at the same pointing, Auto center, movie tiles, mosaic movies and the calibration fixes; obs-v47/v30/v17: calibration takes the flat field (dust rings, mottle) and the nonlinearity out
+VERSIONS = {"balanced": "obs-v58", "raw": "obs-v41", "eye": "obs-v58-eye", "false": "obs-v58-false", "classic": "obs-v28-classic"}
 CANVAS = 2048        # longest side of the canvas the view is drawn on
 OUT = 1024           # longest side of the picture sent
 FRAME = 1024         # full resolution frame
@@ -2692,9 +2692,104 @@ def view_rect(p, tiles=None):
 
 
 def under_first(tiles):
-    """The tiles in the order a mosaic draws them, each over the ones before: partial frames (partial) first, the
-    newest lowest (as _grown leaves a partial tile it draws under the picture so far), then the rest as given."""
-    return sorted((t for t in tiles if partial(t)), key=lambda t: -t["n"]) + [t for t in tiles if not partial(t)]
+    """The tiles in the order a mosaic draws them, each over the ones before: partial frames (partial) and tiles far
+    darker than the picture before them (dim_under, marked "under") first, the newest lowest (as _grown leaves a tile
+    it draws under the picture so far), then the rest as given."""
+    low = lambda t: partial(t) or t.get("under")
+    return sorted((t for t in tiles if low(t)), key=lambda t: -t["n"]) + [t for t in tiles if not low(t)]
+
+
+DIM_UNDER = 0.7     # of the picture drawn before it, on their overlap: a tile darker than this goes under it (dim_under)
+DIM_K = 0.125       # canvas scale (of full resolution pixels) the overlaps are measured at
+DIM_LEAST = 200     # pixels at DIM_K: the least lit overlap that says anything
+DIM_FILE = "under1-{}.json"
+
+
+def dim_under(u, p, f, mine, cache):
+    """The tiles of mine (one filter's, in time order) that a pass's mosaic draws under the picture before them: those
+    whose overlap with the earlier tiles, where those are lit, is under DIM_UNDER as bright in linear brightness (the
+    median of the ratio, over every earlier tile it overlaps that is not itself under). Such a tile is the same ground
+    seen again from far round the body, past the terminator: Dione 221DI's last 20 tiles, shot 1.7 hours after the
+    rest, show the right side of the disk 4 to 20 times darker on their overlaps and were drawn over it as a dark column.
+    Under the picture, they fill only where nothing else is. A tile's brightness is its own (no gain here: what the
+    seams and leveling take out is a few per cent). Measured once per tile (each on the tiles before it only) and kept
+    in the pass's folder. {n: ratio} for the tiles that go under."""
+    path = os.path.join(folder(u, cache), DIM_FILE.format(f.replace("/", "_")))
+    kept = {}
+    if os.path.exists(path):
+        try:
+            with open(path) as fh:
+                kept = {int(n): v for n, v in json.load(fh).items()}
+        except (OSError, ValueError):
+            kept = {}
+    gamma = p["display_scale"].get("gamma", 2.2)
+    if any(t["n"] not in kept for t in mine):
+        drawn, out = [], {}
+        for t in mine:
+            bx, by, bw, bh = t["box"]
+            pic = _pic(u, cache, p["display_scale"], t)
+            a = np.asarray(Image.open(pic).convert("RGBA").resize((max(1, round(bw * DIM_K)), max(1, round(bh * DIM_K))),
+                                                                  Image.BILINEAR)).astype(np.float32)
+            x0, y0 = round((t["offset"][0] + bx) * DIM_K), round((t["offset"][1] + by) * DIM_K)
+            me = (x0, y0, a)
+            if t["n"] in kept:
+                ratio = kept[t["n"]]
+            else:
+                logs, weights = [], []
+                for xi, yi, b in drawn:
+                    X0, Y0 = max(x0, xi), max(y0, yi)
+                    X1, Y1 = min(x0 + a.shape[1], xi + b.shape[1]), min(y0 + a.shape[0], yi + b.shape[0])
+                    if X1 <= X0 or Y1 <= Y0:
+                        continue
+                    A, B = a[Y0 - y0:Y1 - y0, X0 - x0:X1 - x0], b[Y0 - yi:Y1 - yi, X0 - xi:X1 - xi]
+                    on = (A[..., 3] == 255) & (B[..., 3] == 255) & (B[..., :3].mean(axis=2) > LIT_LEVEL)
+                    if on.sum() < DIM_LEAST / 4:
+                        continue
+                    la = calibration.decode(np.maximum(A[..., :3].mean(axis=2)[on], 1) / 255, gamma)
+                    lb = calibration.decode(B[..., :3].mean(axis=2)[on] / 255, gamma)
+                    logs.append(float(np.median(np.log(la / lb))))
+                    weights.append(int(on.sum()))
+                ratio = (round(math.exp(sum(l * w for l, w in zip(logs, weights)) / sum(weights)), 4)
+                         if sum(weights) >= DIM_LEAST else 1.0)
+            out[t["n"]] = ratio
+            if ratio >= DIM_UNDER:
+                drawn.append(me)
+        kept = {**kept, **out}
+        try:
+            _rewrite(path, kept)
+        except OSError:
+            pass
+    return {t["n"]: kept[t["n"]] for t in mine if kept.get(t["n"], 1.0) < DIM_UNDER}
+
+
+def dim_places(u, p, f, mine, tiles, cache):
+    """The tiles of mine (filter f's) a pass's mosaic draws under the picture before them (dim_under), decided once for
+    every filter at a pointing so a colour set's filters go under together (decided filter by filter, a pointing just
+    at the line went under in UV3 alone and its place came out blue): each of f's tiles takes the decision of its
+    pointing's first tile (_pointing_root, the tile C8 registers the pointing's filters to), measured on that tile's
+    own filter. The first tile is taken before the others, so its decision is there when each of them is first drawn
+    and never changes as later tiles come in: a mosaic grown a tile at a time keeps what it drew (decided on the
+    pointing's grey tile, taken last, Dione 221DI's colour tiles were drawn over the lit disk while the frames before
+    the grey one came in, and the grown mosaic kept them there, a black square)."""
+    if f == LUM:
+        return set(dim_under(u, p, f, mine, cache))
+    placed = sorted((t for t in tiles if "offset" in t), key=lambda t: t["n"])
+    by_n = {t["n"]: t for t in placed}
+    roots = {}
+    for t in placed:
+        roots[t["n"]] = _pointing_root(u, t["n"], roots)
+    first = {t["n"]: by_n.get(roots.get(t["n"], t["n"]), t) for t in mine}
+    low = set()
+    for g in dict.fromkeys(r["filter"] for r in first.values()):
+        low |= set(dim_under(u, p, g, [t for t in placed if t["filter"] == g], cache))
+    return {n for n, r in first.items() if r["n"] in low}
+
+
+def _rewrite(path, kept):
+    part = f"{path}.{os.getpid()}.{threading.get_ident()}.part"
+    with open(part, "w") as fh:
+        json.dump({str(n): v for n, v in sorted(kept.items())}, fh)
+    os.replace(part, path)
 
 
 def _window(u, p, mine, rect, cache):
@@ -2817,7 +2912,7 @@ def _over(u, p, rgba, t, rect, cache, match=True, kept=None):
     top = round((t["offset"][1] + by - rect[1]) * k)
     sw, sh = max(1, round(bw * k)), max(1, round(bh * k))
     draw_over(rgba, lambda: _shade(_part(_pic(u, cache, p["display_scale"], t), sw, sh), t),
-              left, top, sw, sh, k, match, kept, under=partial(t))
+              left, top, sw, sh, k, match, kept, under=partial(t) or bool(t.get("under")))
 
 
 def draw_over(rgba, part, left, top, sw, sh, k, match=True, kept=None, under=False):
@@ -2953,6 +3048,12 @@ def filter_mosaic(u, p, f, tiles, rect, cache, ref=None, tag=""):
     up to the newest (a mosaic movie's lap, rolling_layout): it has a name of its own and is not grown, since
     growing takes the tiles as the pass's first ones in time order. f = LUM: the pass's luminance base (_mine)."""
     mine = _mine(u, p, tiles, f)
+    whole = tag in ("", PANEL_TAG, EDGE_TAG, SURFACE_TAG, SURFACE_TAG + PANEL_TAG)   # every tile up to the newest
+    if whole and not _rolling.get() and calibration.step("level") and not all("under" in t for t in mine):
+        # a pass's mosaic (not a mosaic movie's lap): a tile far darker than the picture before it goes under it
+        # (decided here on all the pass's tiles; the mosaic of fewer tiles _grown starts from keeps the decisions)
+        low = dim_places(u, p, f, mine, tiles, cache)
+        mine = [dict(t, under=t["n"] in low) for t in mine]
     balanced = calibration.look() == "balanced" and SHARED_SEAMS and f != LUM
     ref = ref or f
     solved_on = f"-{ref.replace('/', '_')}{sum(1 for t in tiles if t['filter'] == ref and 'offset' in t)}" if balanced else ""
@@ -2966,7 +3067,7 @@ def filter_mosaic(u, p, f, tiles, rect, cache, ref=None, tag=""):
 
     def make():
         # (panel registration's tiles are every tile up to the newest too, each kept where it was first put)
-        if not balanced and tag in ("", PANEL_TAG, EDGE_TAG, SURFACE_TAG, SURFACE_TAG + PANEL_TAG) and len(mine) > GROW_FROM:
+        if not balanced and whole and len(mine) > GROW_FROM:
             return _grown(u, p, f, mine, rect, cache, tag)
         window, shown = _window(u, p, mine, rect, cache)
         corrections = None
@@ -3555,7 +3656,9 @@ EXPOSURE_SIDE = 160      # px: the movie pictures a pass's brightness is measure
 # a movie's brightness chain (exposure_chain), kept with the pass for each way of drawing it; renamed (with the movie
 # frames drawn with it, movie_webp) whenever the rule changes
 EXPOSURE_FILE = "exposure5-{}-" + PLAN_FILE
-EXPOSURE_RULE = 7        # the way the gains are worked out from the chain: in the movie frames' names (movie_webp)
+EXPOSURE_ROLL = 0.75     # of a stretch's slow drift past EXPOSURE_FREE: how much the rolling scale takes out (evened_gains)
+EXPOSURE_FREE = 0.26     # log brightness (about 30% either way of the stretch's middle): slow drift kept as it is
+EXPOSURE_RULE = 8        # the way the gains are worked out from the chain: in the movie frames' names (movie_webp)
 EXPOSURE_GREY_RUN = 6    # frames: a colour pass's grey frames (its filters coming in) evened only in a run this long
 EXPOSURE_SAME = 0.5      # of the larger lit area: two pictures sharing less lit view than this show different scenes
 
@@ -3676,8 +3779,8 @@ def exposure_gains(u, cache, p=None, smooth=EXPOSURE_SMOOTH, colour=True, centre
 def evened_gains(logs, smooth):
     """exposure_gains' math on its own for a movie's frames in order (pure, so it can be ported to the viewer with a
     conformance test): their log brightnesses (exposure_chain) in, each frame's gain out: flashes shorter than
-    EXPOSURE_FLASH frames taken out by a running median, the rest smoothed with a Gaussian over smooth frames, the gain
-    the smoothed brightness over the frame's own, within EXPOSURE_GAIN either way, to 1/200 (the movie frame's lookup
+    EXPOSURE_FLASH frames taken out by a running median, the rest smoothed with a Gaussian over smooth frames and put
+    through the rolling scale (rolled), the gain the smoothed brightness over the frame's own, within EXPOSURE_GAIN either way, to 1/200 (the movie frame's lookup
     table is made once per gain)."""
     L = np.asarray(logs, float)
     h = EXPOSURE_FLASH // 2
@@ -3685,8 +3788,20 @@ def evened_gains(logs, smooth):
     steady = np.array([np.median(pad[k:k + EXPOSURE_FLASH]) for k in range(len(L))])
     # (a line through the frames round each, so a pass brightening all through keeps its brightening at its ends)
     target = _gaussian_line(steady, smooth)
+    target = rolled(target)
     return [round(float(np.clip(math.exp(want - own), 1 / EXPOSURE_GAIN, EXPOSURE_GAIN)) * 200) / 200
             for own, want in zip(L, target)]
+
+
+def rolled(target):
+    """The rolling scale on a stretch's smoothed log brightnesses (evened_gains): a scene that brightens or darkens steadily
+    over the stretch (the first dive 271SA, dark polar cloud to the lit equator: five times brighter) keeps its drift
+    within EXPOSURE_FREE of the stretch's middle (the mean), and past that EXPOSURE_ROLL of it is taken out, so the scale
+    follows the scene instead of drawing its start dark and its end white. A stretch that stays within it is unchanged."""
+    t = np.asarray(target, float)
+    # (summed in order, as the page does)
+    dev = t - sum(float(v) for v in t) / len(t)
+    return t - EXPOSURE_ROLL * np.sign(dev) * np.maximum(np.abs(dev) - EXPOSURE_FREE, 0)
 
 
 def steady_table(frame_id, cache, centre=True, colour=False):
@@ -3736,7 +3851,8 @@ def _steady_table(u, n, cache, centre=True, colour=False):
         logs = exposure_chain(u, cache, p, *how)
         exposure = {"local": all(tiles[m].get("gain", 1.0) == 1.0 for m in ns),
                     "logs": {str(m): v for m, v in logs.items()}, "gamma": p["display_scale"].get("gamma", 2.2),
-                    "flash": EXPOSURE_FLASH, "gain": EXPOSURE_GAIN, "greyRun": EXPOSURE_GREY_RUN, "most": EXPOSURE_MOST}
+                    "flash": EXPOSURE_FLASH, "gain": EXPOSURE_GAIN, "greyRun": EXPOSURE_GREY_RUN, "most": EXPOSURE_MOST,
+                    "roll": EXPOSURE_ROLL, "free": EXPOSURE_FREE}
     else:
         warm_movie(u, n, 6, cache, exposure=how)
     return {"local": True, "fixed": True, "ids": [fr[1] for fr in u["frames"]], "n": ns, "exposure": exposure,
