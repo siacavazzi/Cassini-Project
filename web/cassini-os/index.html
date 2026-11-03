@@ -3243,16 +3243,24 @@ body.ambient.phone .amb-where { font-size: 18px; }
       return out;
     }
     // obs_mosaic.held_of: the frame shown in frame n's place, n or, when n is partial (most of it lost in downlink,
-    // over-exposed: t.partial), the last earlier placed frame of its filter that is not, else of any filter; with none
-    // before it, the first later one of its filter, else of any; n when there is none
+    // over-exposed: t.partial), the last earlier placed frame of its filter that is not, nor over-exposed (t.over:
+    // obs_mosaic.holds), else of any filter; with none before it, the first later one of its filter, else of any; n
+    // when there is none
     function heldOf(t, n) {
-      const partial = new Set(t.partial || []), placed = new Set(t.n), whole = j => placed.has(j) && !partial.has(j);
+      const partial = new Set(t.partial || []), over = new Set(t.over || []), placed = new Set(t.n);
+      const whole = j => placed.has(j) && !partial.has(j) && !over.has(j);
       if (!partial.has(n)) return n;
       for (let j = n - 1; j >= 0; j--) if (t.filters[j] === t.filters[n] && whole(j)) return j;
       for (let j = n - 1; j >= 0; j--) if (whole(j)) return j;
       for (let j = n + 1; j < t.filters.length; j++) if (t.filters[j] === t.filters[n] && whole(j)) return j;
       for (let j = n + 1; j < t.filters.length; j++) if (whole(j)) return j;
       return n;
+    }
+    // obs_mosaic.movie_frame's frame shown for frame n: with colour on, the grey filter's frame step_frame picks
+    // (t.step, worked out by the server), else heldOf's
+    function shownOf(t, n, colour) {
+      if (colour && t.step && t.step[n] !== undefined) return t.step[n];
+      return heldOf(t, n);
     }
     // movie_frame's rolling trail: the up to trail earlier placed frames of frame n's filter (n: the frame shown,
     // heldOf), partial ones left out, oldest first
@@ -3376,7 +3384,7 @@ body.ambient.phone .amb-where { font-size: 18px; }
       }
       return out;
     }
-    return { pyRound, pyRound2, places, shift, evenedGains, gains, lut, mix, heldOf, trailOf, blendTrail, fadeWeight, fadeLight, resizeLinear, applyLight,
+    return { pyRound, pyRound2, places, shift, evenedGains, gains, lut, mix, heldOf, shownOf, trailOf, blendTrail, fadeWeight, fadeLight, resizeLinear, applyLight,
       gaussKernel, detailInputs, detailFinish, blurCPU };
   };
   window.cassiniSteadyMath = STEADY_MATH;
@@ -3592,10 +3600,12 @@ onmessage = async e => {
       if (!e) return null;
       const recipes = o.eye ? e.table.eye : e.table.sets;
       const T = e.table, set = o.color && recipes ? recipes.by[e.n] : null, M = window.cassiniSteadyMath();
-      // a partial frame shows the whole one before it (the server's plane of frame n, im, is that frame's picture)
-      const shown = M.heldOf(T, e.n);
+      // a partial frame shows the whole one before it (the server's plane of frame n, im, is that frame's picture);
+      // with colour on, a pass playing its grey filter shows that filter's frame beside another filter's (T.step,
+      // obs_mosaic.step_frame), fetched as its own plane
+      const held = M.heldOf(T, e.n), shown = M.shownOf(T, e.n, !!o.color);
       const load = async j => {
-        if (j === e.n || j === shown) return createImageBitmap(im);
+        if (j === e.n || j === held) return createImageBitmap(im);
         const r = await fetch(o.planeUrl(T.ids[j]) + (o.raw ? "&detail=0" : ""));
         if (!r.ok) throw new Error(`plane ${T.ids[j]}: ${r.status}`);
         return createImageBitmap(await r.blob());
@@ -12772,7 +12782,7 @@ void main() {
   window.cassiniAbout = { open, addTab, esc, close: () => show(false), credits: CREDITS };
 
   // ---- which version this is: this page's build id (build.py writes it), and what the frame server says it serves ----
-  const BUILD = /*BUILD*/"f1c4a4902e64";
+  const BUILD = /*BUILD*/"615bcb13db06";
   const FRAMES = (() => {                       // the frame server, chosen as the camera window chooses it
     const q = new URLSearchParams(location.search).get("frames");
     if (q) return q.replace(/\/$/, "");
