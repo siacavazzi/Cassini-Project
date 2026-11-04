@@ -2467,6 +2467,14 @@ REGISTER_MAX = 0.04  # of a frame: the largest correction to SPICE's placement t
 # on 22 tiles; Iapetus ISS_049IA_REGMAPTRL001), which a 12 px search could not reach (the filters landed apart)
 REGISTER_NEAR = {"W": 8 / 1024}
 REGISTER_INSET = 16  # px: each tile's edge (where its alpha ends) is left out of the match by this much
+# of a frame, per camera: two colour filters' tiles of one pointing that do not match within REGISTER_NEAR (or match
+# only by the lit area's centroid) are searched this far, and a match is believed where phase correlation over the
+# whole overlap peaks high (REGISTER_SURE[2]), or where it and the edges' (peaks of REGISTER_SURE[0] and [1] at least)
+# agree (image_correction.WEAK_AGREE). 195RI HIPHASEC001's RED and GRN frames on the rings sit 10 to 29 px off their
+# BL1 (peaks of 0.4 to 1.0), past the WAC's 8 px, and kept SPICE's places: red and green rims on every ring edge. The
+# false matches the near search keeps out were black scenes and violet or infrared frames, which this does not search
+REGISTER_FAR = {"W": 32 / 1024}
+REGISTER_SURE = (0.2, 0.1, 0.5)   # least peaks: phase, edges with it, phase alone
 
 
 def _register_to(u, n):
@@ -2478,11 +2486,28 @@ def _register_to(u, n):
     if not z:
         return None
     k = z / u["z"] if u["z"] else 1.0
-    for j in range(n):
-        _, _, fj, tj, _, xj, yj, zj = frames[j]
-        if fj != f and zj and 0 <= t - tj <= REGISTER_GAP and math.hypot(x - xj, y - yj) * k <= SAME_PLACE * FRAME:
-            return j
-    return None
+    there = [j for j in range(n) if frames[j][2] != f and frames[j][7] and 0 <= t - frames[j][3] <= REGISTER_GAP
+             and math.hypot(x - frames[j][5], y - frames[j][6]) * k <= SAME_PLACE * FRAME]
+    if not there:
+        return None
+    # a colour filter's frame lands on the pointing's first frame in a colour filter, when there is one: the others
+    # (a violet or infrared frame taken first) can look nothing like it (195RI HIPHASEC001's VIO frames near the limb
+    # are black, its IR3 frames another scene), so the match failed and RED and GRN kept SPICE's places, 5 to 12 px off
+    # BL1: red and green rims on every ring edge
+    colour = _colour_filters(u)
+    if f in colour:
+        mine = [j for j in there if frames[j][2] in colour]
+        if mine:
+            return mine[0]
+    return there[0]
+
+
+def _colour_filters(u):
+    """The pass's colour filters (_filters), worked out once; none when a frame has no wavelength (a test's)."""
+    if "_colour_filters" not in u:
+        known = all(fr[4] is not None for fr in u["frames"])
+        u["_colour_filters"] = frozenset((_filters(u)[3] if known else None) or ())
+    return u["_colour_filters"]
 
 
 def _register(u, n, out, crop, cache, scale):
@@ -2506,6 +2531,14 @@ def _register(u, n, out, crop, cache, scale):
         ref = np.asarray(Image.open(path).convert("RGBA"))
     near = REGISTER_NEAR.get(u["key"][2])
     shift, how = _shift_onto(q, ref, q["offset"], out, crop, out["offset"], within=near * FRAME if near else None)
+    far = REGISTER_FAR.get(u["key"][2])
+    colour = _colour_filters(u)
+    if (shift is None and how == "not aligned" or how is not None and how.startswith("centroid")) and far \
+            and u["frames"][n][2] in colour and u["frames"][j][2] in colour:
+        # (a centroid's match too: 195RI's W1752977411_1 landed 5.8 px from SPICE by it, 19 px off its BL1)
+        wide, said = _shift_onto(q, ref, q["offset"], out, crop, out["offset"], within=far * FRAME, sure=REGISTER_SURE)
+        if wide is not None or shift is None:
+            shift, how = wide, said
     if shift is None and how is not None and how.startswith("failed"):
         out["registered"] = {"to": q["id"], "why": how[7:]}
         return
@@ -2520,7 +2553,7 @@ def _register(u, n, out, crop, cache, scale):
     out["registered"] = {"to": q["id"], "how": how, "shift": [round(dx, 2), round(dy, 2)]}
 
 
-def _shift_onto(q, ref, at_q, t, crop, at_t, within=None):
+def _shift_onto(q, ref, at_q, t, crop, at_t, within=None, sure=None):
     """How far tile t (its picture crop, its middle put at at_t) is from tile q (picture ref, middle at at_q) over
     the part of the view both cover, by the pipeline's own alignment of a set's channels
     (image_correction.align_with_masks: phase correlation, then on edges, then by the lit area's centroid): (dx, dy),
@@ -2528,7 +2561,9 @@ def _shift_onto(q, ref, at_q, t, crop, at_t, within=None):
     found, (None, None) when the two hardly overlap there, (None, "failed <why>") when the alignment broke.
     within = px: only a move this small from where the two are placed is searched (image_correction.guided_shift's
     search round no shift), and each tile's edge (REGISTER_INSET) is left out of both, so neither tile's border is
-    matched as if it were the scene (_register); None: the whole alignment, as the stabilization chains use it."""
+    matched as if it were the scene (_register); None: the whole alignment, as the stabilization chains use it.
+    sure = least phase correlation peaks (REGISTER_SURE) for REGISTER_FAR's wider search, over the whole overlap
+    (_phase): a match is believed when its peak is high, or when the edges' match agrees with it."""
     corners = []
     for s, at, im in ((q, at_q, ref), (t, at_t, crop)):
         corners.append((at[0] + s["box"][0], at[1] + s["box"][1], im))
@@ -2555,6 +2590,17 @@ def _shift_onto(q, ref, at_q, t, crop, at_t, within=None):
         imgs = [np.where(both[..., None], i, 0).astype(np.uint8) for i in imgs]
     # the rounding of each crop's corner to whole pixels, put back on the shift found
     rest = [(cx - x0) - round(cx - x0) for cx, _, _ in corners], [(cy - y0) - round(cy - y0) for _, cy, _ in corners]
+    if sure is not None:
+        pa = _phase(imgs[0], imgs[1], within, sure[0])
+        pe = _phase(image_correction.edges(imgs[0]), image_correction.edges(imgs[1]), within, sure[1]) \
+            if pa is not None else None
+        if pa is not None and pa[2] >= sure[2]:
+            got, how = pa[:2], "phase"
+        elif pe is not None and math.hypot(pa[0] - pe[0], pa[1] - pe[1]) <= image_correction.WEAK_AGREE:
+            got, how = ((pa[0] + pe[0]) / 2, (pa[1] + pe[1]) / 2), "phase and edges"
+        else:
+            return None, "not aligned"
+        return (got[0] + rest[0][1] - rest[0][0], got[1] + rest[1][1] - rest[1][0]), f"{how}, {within:.0f} px search"
     shifts, how = [], []
     try:
         image_correction.align_with_masks(imgs, masks, 0, how, found=shifts, within=within)
@@ -2563,6 +2609,19 @@ def _shift_onto(q, ref, at_q, t, crop, at_t, within=None):
     if shifts[1] is None:
         return None, how[1]
     return (shifts[1][0] + rest[0][1] - rest[0][0], shifts[1][1] + rest[1][1] - rest[1][0]), how[1]
+
+
+def _phase(a, b, within, least):
+    """b's shift from a by phase correlation over the whole of both (BGR pictures, the same size) and its peak,
+    (dx, dy, peak), when the peak is least at least and the shift within px of none; else None. Not image_correction.find_shift, which correlates only
+    round the brightest part of a: on a ring tile that is a sliver of a bright ringlet or the limb's glow, and the
+    match found there was noise (195RI HIPHASEC001 W1752967654_1, a 0.74 peak over the whole overlap, 0.02 there)."""
+    ga = cv2.cvtColor(a, cv2.COLOR_BGR2GRAY).astype(np.float32)
+    gb = cv2.cvtColor(b, cv2.COLOR_BGR2GRAY).astype(np.float32)
+    (dx, dy), peak = cv2.phaseCorrelate(ga, gb, cv2.createHanningWindow((ga.shape[1], ga.shape[0]), cv2.CV_32F))
+    if peak < least or abs(dx) > within or abs(dy) > within:
+        return None
+    return dx, dy, peak
 
 
 # of a frame: the largest correction to SPICE's place of a pointing that registration is believed for. SPICE's pointing
