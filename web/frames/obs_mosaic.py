@@ -3721,6 +3721,12 @@ def colour_picture(u, p, colour, planes):
         g = scale["gamma"]
         x = calibration.decode(np.moveaxis(rgb.astype(np.float32) / 255, -1, 0), g).astype(np.float32)
         filled, every = calibration.fill_saturated(list(x), clipped, CLIP_REACH * max(x.shape[1:]))
+        # never under what the band read: a clipped band is at least as bright as its clipped value, and the ratio
+        # the fill reads is measured where the band did not clip, its dimmer part, so where most of a frame clipped
+        # it came out under the band's own reading and turned the tile green, blue or flat yellow with ragged edges
+        # along each band's clipping (289SA SHEMMAP001, a VIMS ride-along map: RED saturated over 17-90% of every
+        # frame, GRN up to 66%, BL1 up to 67%). Floored, a band meets its own clipping edge without a step.
+        filled = [np.maximum(f, c) for f, c in zip(filled, x)]
         # (eased in from CLIP_FROM to white: a tile's clipped white, resampled and blended onto the canvas, comes in a
         # few levels under 255 along its edges)
         w = np.clip((rgb.astype(np.float32) - CLIP_FROM) / (255 - CLIP_FROM), 0, 1)

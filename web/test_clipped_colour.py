@@ -41,3 +41,18 @@ old = without(planes(r2, g2, b2)).astype(float)[100, 170, :3]
 now, then = np.abs(hue(left) - hue(right)).max(), np.abs(hue(left) - hue(old)).max()
 assert now < then / 2 and now < 0.06, (left, right, old)
 print("a band clipped where another is not keeps the colour round it (%s, %s; before %s); ok" % (left, right, old))
+
+# most of the picture clipped (289SA SHEMMAP001, a VIMS ride-along map: RED saturated over most of every frame): the
+# only place every band reads is a dim bluish strip, so the ratio the fill reads there drew the clipped part under
+# the bands' own clipped values, green where red alone clipped and blue-gray where green did too. A clipped band is
+# never drawn under what it read: the bright part stays warm, as bright as its red and green read, and meets green's
+# clipping edge without a step
+r3 = np.full((200, 200), 150.0); g3 = np.full((200, 200), 150.0); b3 = np.full((200, 200), 165.0)
+r3[:, 60:] = 255; g3[:, 60:] = 255; b3[:, 60:] = 215
+g3[:, 60:110] = 235   # green just under its clipping here
+a = om.colour_picture(u, p, ["RED", "GRN", "BL1"], planes(r3, g3, b3)).astype(int)
+for x in (100, 120, 180):
+    c = a[100, x, :3]
+    assert c[0] >= 240 and c[0] >= c[1] >= c[2], (x, c)
+assert np.abs(a[100, 108, :3] - a[100, 112, :3]).max() < 25, (a[100, 108, :3], a[100, 112, :3])
+print("a picture mostly clipped stays as bright as its clipped bands read (%s, %s); ok" % (a[100, 100, :3], a[100, 180, :3]))
