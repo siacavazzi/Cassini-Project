@@ -10,6 +10,7 @@ The page's own script (src/export.html) runs in Chromium (Playwright) with a sta
 for the rest of Cassini OS; export.py's render runs with a stand-in Pictures that hands it the same pictures.
 
   python web/test_export_here.py
+  BOOM=1 python web/test_export_here.py     (the same on a Boomerang film)
 """
 import base64
 import io
@@ -76,9 +77,14 @@ for n in range(30):
         files[src] = picture(n * 10 + q, w, h)
     pics.append(e)
 export.timing(pics, "auto")
+# BOOM=1: the same check on a Boomerang film (export.boomerang: forward, then back to the first picture)
+forward = len(pics) if os.environ.get("BOOM") == "1" else 0
+if forward:
+    pics = export.boomerang(pics)
 opt = {"cams": "NW", "size": SIZE, "caption": True, "fps": "auto", "movie": {}, "sound": True}
 plan = {"pictures": pics, "count": len(pics), "seconds": round(sum(e["frames"] for e in pics) / export.FPS, 2),
-        "frames": sum(e["frames"] for e in pics), "width": export.width(opt), "height": export.height(opt)}
+        "frames": sum(e["frames"] for e in pics), "width": export.width(opt), "height": export.height(opt),
+        **({"boomerang": forward} if forward else {})}
 public = export.public_plan(plan)
 tmp = tempfile.mkdtemp()
 
