@@ -224,11 +224,12 @@ with calibration.looking("balanced"):
         gains = got["gains"][str(x)] if x else {}
         for n in range(N):
             recipe = table["sets"]["by"].get(str(n)) or [n]
-            planes = []
+            planes, strip = [], 0
             for j in recipe:
                 A = np.asarray(om.movie_frame(u2, j, cache, colour=False, centre=True)[0])
                 dx, dy = got[str(s)]["shifts"][table["n"].index(j)] if s else (0, 0)
                 C = moved(A, dx, dy)
+                strip += abs(dx) * A.shape[0] + abs(dy) * A.shape[1]
                 if gains.get(str(n), 1.0) != 1.0:
                     C[..., :3] = np.array(server_lut(gains[str(n)], table["exposure"]["gamma"]), np.uint8)[C[..., :3]]
                 planes.append(C)
@@ -239,13 +240,20 @@ with calibration.looking("balanced"):
             else:
                 cases.append(planes)
                 wants.append(B)
-                labels.append((s, x, n, recipe))
+                labels.append((s, x, n, recipe, strip))
     # numpy's 3x3 mix (tensordot) runs through BLAS, whose vector and remainder loops round a few pixels' sums
     # differently by position, and differently again with another BLAS (the Mini's Accelerate): the page sums in
     # order, so a handful of pixels in millions may be a level apart, never more
-    off, total = 0, 0
+    # (and, as for one frame above, where a moved plane uncovers a strip along the view's edge, picture the steady-0
+    # view had cut off, the page's picture has none: a view fitted to what the frames show, fitted_half, can cut the
+    # corners of frames turned north up)
+    off, total, edge = 0, 0, 0
     for out, B, lab in zip(node_mix(cases, table["sets"]), wants, labels):
-        diff = np.abs(out.astype(int) - B.astype(int))
+        have = out[..., 3] > 0
+        lack = (B[..., 3] > 0) & ~have
+        assert lack.sum() <= lab[-1], (lab, int(lack.sum()))
+        edge = max(edge, int(lack.sum()))
+        diff = np.abs(out.astype(int) - B.astype(int)) * have[..., None]
         if diff.max() > 1:
             w = np.argwhere(diff > 1)
             print("DIFF", lab, len(w), [(tuple(map(int, i)), int(out[tuple(i)]), int(B[tuple(i)])) for i in w[:4]])
@@ -254,7 +262,8 @@ with calibration.looking("balanced"):
         total += diff.size
     assert off <= total * 1e-6, (off, total)
     print(f"colour: {len(cases)} colour pictures and {alone} frames alone, stabilized (0, 12) and exposure-normalized "
-          f"(0, 8): the page's moved, gained and mixed picture equals the server's but for {off} values of {total} a level apart")
+          f"(0, 8): the page's moved, gained and mixed picture equals the server's but for {off} values of {total} a level apart, "
+          f"at most {edge} px uncovered at an edge")
 def node_trail(table, trails, cases):
     """The page's trail (cassiniSteadyMath.trailOf, then blendTrail over each case's planes, oldest first), in node."""
     tmp = tempfile.mkdtemp()
