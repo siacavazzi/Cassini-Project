@@ -596,6 +596,9 @@ def deblock(iof, pixels, info):
 SKY_SMOOTH = LOSSY_SMOOTH  # smooth_sky: the dark sky drawn towards its blur over this many pixels (sigma, at full resolution),
 SKY_STEP = LOSSY_STEP      # ... where the stored codes are within this many of that blur, as deblock does
 SKY_HOLE = 41              # ... with the holes in the dark sky up to about this many pixels across filled (stars)
+SKY_RAMP = 60              # ... and over SKY_GLOW where its level rises half a code to a code or more over this many pixels
+SKY_GLOW = 16              # ... (sigma, at full resolution): a glow's own slope
+SKY_LEVEL = 20             # ... that level the stored codes blurred over this many pixels (sigma, at full resolution)
 
 
 """
@@ -629,6 +632,18 @@ def smooth_sky(iof, png, sky):
     area = cv2.morphologyEx(np.asarray(sky, dtype=np.uint8), cv2.MORPH_CLOSE,
                             cv2.getStructuringElement(cv2.MORPH_ELLIPSE, (SKY_HOLE, SKY_HOLE)))
     weight = step * cv2.GaussianBlur(area.astype(np.float32), (0, 0), sigma)
+    # a glow that rises a code within SKY_RAMP pixels (a plume's fan, a moon's halo) is smoothed over SKY_GLOW pixels
+    # instead: its one-code steps are its brightness contours, tens of pixels apart, and smoothed over SKY_SMOOTH between
+    # them it was drawn as flat terraces whose edges the 2 Hz bands scalloped (spot check 7: ISS_279EN_PLUME001_PIE
+    # N1876460140_1, Enceladus's plume a stack of blocks); over SKY_GLOW they blend into its slope. A stray light
+    # gradient across the frame, a few codes over its width, is smoothed as the rest of the sky
+    # (each line's median taken off first, so the 2 Hz bands themselves are no rise)
+    level = cv2.GaussianBlur(codes - np.median(codes, axis=1, keepdims=True), (0, 0), SKY_LEVEL * iof.shape[1] / 1024)
+    rise = np.hypot(*np.gradient(level)) * SKY_RAMP * 1024 / iof.shape[1]
+    glow = np.clip(2.0 * rise - 1.0, 0, 1).astype(np.float32)
+    if glow.any():
+        wide = SKY_GLOW * iof.shape[1] / 1024
+        blur = blur + glow * (cv2.GaussianBlur(iof * step, (0, 0), wide) / np.maximum(cv2.GaussianBlur(step, (0, 0), wide), 1e-6) - blur)
     return iof + weight * (blur - iof)
 
 
