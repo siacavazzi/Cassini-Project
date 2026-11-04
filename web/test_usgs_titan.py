@@ -1,5 +1,6 @@
 """Check the USGS Titan pointing (spice_extra/usgs_titan): its kernels are loaded after a year's kernels, cover every
-frame of its image list (plus the WAC frames taken at the same moment), and a frame of the list that the geometry cache answered before the
+frame of its image list (plus the WAC frames taken at the same moment, and the frames its correction is carried
+over to), and a frame of the list that the geometry cache answered before the
 kernels were added is worked out again (once). Run: python web/test_usgs_titan.py"""
 import os
 import sys
@@ -13,11 +14,20 @@ sys.path.insert(0, ROOT)
 import spiceypy as sp  # noqa: E402
 import bootleg_autonav as ba  # noqa: E402
 
-ck, spk = ba.extra_kernels()
+neighbours_ck, ck, spk = ba.extra_kernels()  # in load order: USGS's own last, so they win
 frames = ba.usgs_titan_frames()
 nac = {line.strip() for line in open(os.path.join(ba.USGS_TITAN_DIR, "images.lis")) if line.strip()}
 assert len(nac) == 6896 and all(f.startswith("N") for f in nac), len(nac)
-assert len(frames) == 6896 + 44 and all(f.startswith("W") for f in frames - nac)
+carried = {line.strip() for line in open(os.path.join(ba.USGS_TITAN_DIR, "neighbours.lis")) if line.strip()}
+assert len(frames) == 6896 + 44 + len(carried) and not carried & nac
+# the carried-over correction: one segment per frame of neighbours.lis, in the same frame as USGS's
+assert list(sp.ckobj(neighbours_ck)) == [-82000]
+handle, ids = sp.dafopr(neighbours_ck), []
+sp.dafbfs(handle)
+while sp.daffna():
+    ids.append(sp.dafgn())
+sp.dafcls(handle)
+assert sorted(ids) == sorted(carried), (len(ids), len(carried))
 # one segment per image: Cassini's attitude (-82000) and Cassini (-82) relative to Titan (606)
 assert list(sp.ckobj(ck)) == [-82000] and list(sp.spkobj(spk)) == [-82]
 assert sp.wncard(sp.ckcov(ck, -82000, False, "INTERVAL", 0.0, "SCLK")) == len(nac)

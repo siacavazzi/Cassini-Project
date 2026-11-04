@@ -19,7 +19,8 @@ sys.path.insert(0, os.path.join(REPO, "web", "frames"))
 sys.path.insert(0, REPO)
 
 # (name, first tile of the pass: the same frame before and after, so unit_of finds the same pass)
-PASSES = [("titan_017TI_HIGHRESNA001", "N1509148673_2"), ("titan_00ATI_LRMONITOR001", "N1477417390_2")]
+PASSES = [("titan_017TI_GLOBMAP001", "N1509133503_2"), ("titan_017TI_HIGHRESNA001", "N1509148673_2"),
+          ("titan_040TI_GLOBMAP001", "N1552213701_1")]
 
 ap = argparse.ArgumentParser()
 ap.add_argument("--out", required=True)
