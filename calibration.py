@@ -642,8 +642,15 @@ def smooth_sky(iof, png, sky):
     rise = np.hypot(*np.gradient(level)) * SKY_RAMP * 1024 / iof.shape[1]
     glow = np.clip(2.0 * rise - 1.0, 0, 1).astype(np.float32)
     if glow.any():
+        # (only from and onto pixels whose codes are within a code of that wider blur's, found as step is: the moon's
+        # night side beside a plume's root, a few codes darker, kept its own level; blurred with the plume it went gray)
         wide = SKY_GLOW * iof.shape[1] / 1024
-        blur = blur + glow * (cv2.GaussianBlur(iof * step, (0, 0), wide) / np.maximum(cv2.GaussianBlur(step, (0, 0), wide), 1e-6) - blur)
+        near = step.copy()
+        for _ in range(2):
+            spread = cv2.GaussianBlur(codes * near, (0, 0), wide) / np.maximum(cv2.GaussianBlur(near, (0, 0), wide), 1e-6)
+            near = step * np.clip(1 - (np.abs(codes - spread) - 1) / (SKY_STEP - 1), 0, 1).astype(np.float32)
+        spread = cv2.GaussianBlur(iof * near, (0, 0), wide) / np.maximum(cv2.GaussianBlur(near, (0, 0), wide), 1e-6)
+        blur = blur + glow * near * (spread - blur)
     return iof + weight * (blur - iof)
 
 
