@@ -123,13 +123,19 @@ from the surface normal. Moving clouds from one frame to another keeps their alb
 changes their lighting, so the brightness is scaled by the ratio of the two.
 """
 def brightness(view, points):
+    b, mu0, _ = lighting(view, points)
+    return b, mu0
+
+
+def lighting(view, points):
+    """brightness's (Minnaert brightness, mu0) and mu as well: view needs "observer", "radii" and "sun"."""
     normal = points / view["radii"] ** 2
     normal /= np.linalg.norm(normal, axis=-1, keepdims=True)
     to_camera = view["observer"] - points
     to_camera /= np.linalg.norm(to_camera, axis=-1, keepdims=True)
     mu0 = np.clip(normal @ view["sun"], 0, 1)
     mu = np.clip((normal * to_camera).sum(-1), 1e-3, 1)
-    return mu0 ** minnaert_k * mu ** (minnaert_k - 1), mu0
+    return mu0 ** minnaert_k * mu ** (minnaert_k - 1), mu0, mu
 
 
 """
@@ -251,6 +257,11 @@ def surface_to_sky(view, points, km_px):
     d = np.linalg.norm(view["c"])
     sky = v * (d / (v @ view["ch"]))[..., None] - view["c"]
     return -(sky @ view["east"]) / km_px, -(sky @ view["north"]) / km_px, visible
+
+
+def sky_lighting(view, points):
+    """lighting (Minnaert brightness, mu0, mu) of body-fixed points as seen and lit at a sky_view's time."""
+    return lighting({"observer": view["rot"] @ -view["c"], "radii": view["radii"], "sun": view["sun"]}, points)
 
 
 LIMB_TAPER = 0.25         # the shift fades to none where the epoch sees the surface at a cosine below this (the limb)

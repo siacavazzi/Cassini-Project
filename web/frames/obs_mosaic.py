@@ -2786,6 +2786,139 @@ def _ets(ids):
     return out
 
 
+# ---------- seams measured on the surface's own brightness ----------
+# A pass's tiles are taken minutes to an hour apart, and between them the body turns under the sun and Cassini moves,
+# so the same ground is lit and seen at other angles in two tiles that overlap: near the terminator its brightness
+# changes by tens of per cent from one tile to the next. The seam gains (mosaic.match_gains, match_offsets) asked the
+# tiles to agree there, so they took that change of lighting up as a brightness error of the whole tile, and a tile
+# with the terminator in its overlap came out brighter or darker everywhere (Rhea ISS_018RH_REGCOL001's bright step,
+# ISS_162RH_REGMAP001's wedge). The overlaps are measured relit instead: each tile's levels times the Minnaert
+# brightness (reproject.lighting, minnaert_k) of the ground it shows at the mosaic's epoch over that at its own time,
+# so the gains solved take up only the tiles' own brightness errors. The gains are applied to the tiles as taken: the
+# picture keeps each tile's own lighting. Where the sun or the camera is low over the ground (LIGHT_LOW) the overlap is
+# not measured. Off for a clouded body (SURFACE_CLOUDED), and the overlaps measured as drawn when SPICE cannot say.
+LIGHT_SEAMS = True
+LIGHT_LOW = 0.15          # cosine of the sun's or the camera's angle from the ground below which nothing is measured
+LIGHT_MOST = 3.0          # most a relighting may brighten or darken what is measured
+LIGHT_KEEP = 8            # passes whose views (the epoch's and each tile's) are kept in memory
+_light_views = collections.OrderedDict()   # pass key -> {"epoch": sky_view, "km_px", "views": {tile id: sky_view}}
+
+
+def _light_pass(u, p, tiles):
+    """The pass's views for relighting (the epoch's, the mosaic's middle frame as surface_pictures takes it, and each of
+    tiles' that SPICE gives), or None for no relighting (LIGHT_SEAMS off, a clouded body, no geometry or kernels)."""
+    if not LIGHT_SEAMS or clouded(u) or not u.get("z"):
+        return None
+    import reproject as rp
+    key = u["key"]
+    with _lock:
+        got = _light_views.get(key)
+        if got is not None:
+            _light_views.move_to_end(key)
+    want = [t for t in tiles if "offset" in t and (got is None or t["id"] not in got["views"])]
+    if got is not None and not want:
+        return got
+    fr = u["frames"]
+    mid = fr[len(fr) // 2]
+    ets = _ets(([] if got is not None else [mid[1]]) + [t["id"] for t in want])
+    with _spice_lock:
+        if got is None:
+            if mid[1] not in ets or not _with_kernels(mid[3]):
+                return None
+            try:
+                got = {"epoch": rp.sky_view(key[0], ets[mid[1]]), "km_px": IFOV[key[2]] * u["z"], "views": {},
+                       "year": time.gmtime(mid[3]).tm_year}
+            except Exception as e:
+                print(f"no lighting for {key[0]}: {type(e).__name__}: {e}"[:200], flush=True)
+                return None
+        for t in want:
+            # (one year's kernels at a time, as surface_pictures: a tile across New Year is measured as drawn)
+            if t["id"] not in ets or time.gmtime(t["t"]).tm_year != got["year"] or not _with_kernels(t["t"]):
+                got["views"][t["id"]] = None
+                continue
+            try:
+                got["views"][t["id"]] = rp.sky_view(key[0], ets[t["id"]])
+            except Exception:
+                got["views"][t["id"]] = None
+    with _lock:
+        _light_views[key] = got
+        _light_views.move_to_end(key)
+        while len(_light_views) > LIGHT_KEEP:
+            _light_views.popitem(last=False)
+    return got
+
+
+def _relight(rp, lp, p, rect, ts, y0, x0, h, w):
+    """Each of tiles ts' relighting (mosaic.overlaps' light) over the canvas pixels y0..y0+h, x0..x0+w, at 1/4 scale
+    (every 4th pixel from y0, x0): a factor on its levels to the epoch's lighting, 1 off the body, NaN where the sun or
+    the camera is low (LIGHT_LOW); None for a tile SPICE gives no view of."""
+    k = p["k"]
+    gy, gx = np.mgrid[0:h:4, 0:w:4].astype(np.float64)
+    x = rect[0] + (gx + x0) / k
+    y = rect[1] + (gy + y0) / k
+    gamma = p["display_scale"].get("gamma", 2.2)
+    gamma = 2.2 if gamma == "srgb" else float(gamma)
+    epoch, km_px = lp["epoch"], lp["km_px"]
+    pe, he = rp.sky_to_surface(epoch, x, y, km_px)
+    be, mu0e, mue = rp.sky_lighting(epoch, pe)
+    out = []
+    for t in ts:
+        view = lp["views"].get(t["id"])
+        if view is None:
+            out.append(None)
+            continue
+        # the ground the tile shows there: the epoch's, its surface redrawn as at the epoch (surface_pictures), else
+        # its own time's
+        pt, ht = (pe, he) if t.get("pic") else rp.sky_to_surface(view, x, y, km_px)
+        bt, mu0t, mut = rp.sky_lighting(view, pt)
+        low = np.minimum(np.minimum(mu0e, mu0t), np.minimum(mue, mut)) < LIGHT_LOW
+        r = np.clip(be / np.maximum(bt, 1e-9), 1 / LIGHT_MOST, LIGHT_MOST) ** (1 / gamma)
+        on = he | ht
+        out.append(np.where(on, np.where(low | ~(he & ht), np.nan, r), 1.0).astype(np.float32))
+    return out
+
+
+def lights(u, p, shown, rect, shape):
+    """The relighting of the tiles shown, each drawn on the whole canvas of the view rect (shape: H, W), as _window
+    draws them: for mosaic.overlaps (light), or None when the pass is not relit."""
+    lp = _light_pass(u, p, shown)
+    if lp is None or len(shown) < 2:
+        return None
+    import reproject as rp
+    return _relight(rp, lp, p, rect, shown, 0, 0, shape[0], shape[1])
+
+
+def over_light(u, p, t, before, rect, y0, x0, h, w):
+    """The relighting of the part of the canvas (y0, x0, h, w) where tile t is laid over the mosaic of the tiles before
+    (in the order they were drawn, _over): (the mosaic's, t's), or None when the pass is not relit. The mosaic's pixel
+    takes the relighting of the last tile before whose box holds it (the tile drawn there)."""
+    k = p["k"]
+    near = []
+    for b in before:
+        if "offset" not in b:
+            continue
+        bx, by, bw, bh = b["box"]
+        left, top = round((b["offset"][0] + bx - rect[0]) * k), round((b["offset"][1] + by - rect[1]) * k)
+        right, bottom = left + max(1, round(bw * k)), top + max(1, round(bh * k))
+        if right > x0 and left < x0 + w and bottom > y0 and top < y0 + h:
+            near.append((b, left, top, right, bottom))
+    lp = _light_pass(u, p, [t] + [b[0] for b in near])
+    if lp is None:
+        return None
+    import reproject as rp
+    got = _relight(rp, lp, p, rect, [t] + [b[0] for b in near], y0, x0, h, w)
+    mine, rest = got[0], got[1:]
+    below = np.ones_like(mine) if mine is not None else None
+    if below is None:
+        return None
+    gy = y0 + 4 * np.arange(below.shape[0])[:, None]
+    gx = x0 + 4 * np.arange(below.shape[1])[None, :]
+    for (b, left, top, right, bottom), r in zip(near, rest):
+        inside = (gy >= top) & (gy < bottom) & (gx >= left) & (gx < right)
+        below = np.where(inside, np.nan if r is None else r, below)
+    return below, mine
+
+
 def _surface_taken(u, cache, p, out_dir):
     """The tiles of the pass that surface_pictures keeps as taken (SURFACE_TAKEN): read once, then from the pass's
     record."""
@@ -3257,26 +3390,30 @@ def _png(rgba):
     return out.getvalue()
 
 
-def held_level(frames):
+def held_level(frames, light=None):
     """The seams' (gains, offsets) of frames on one calibrated scale, none pinned (mosaic.seams' pin None), for
     mosaic.compose's corrections. Pinned to none, the gains all sink together toward their limit as overlaps come
     in (the data asks only that they agree), so a mosaic dimmed about 9% while it filled: their mean log is held
-    at 0 instead, so the pass keeps the level its scale gave it from the first tile to the last."""
-    gains = mosaic.match_gains(frames, mosaic.calibrated_gain, None, mosaic.calibrated_overlap)
+    at 0 instead, so the pass keeps the level its scale gave it from the first tile to the last. light: the frames'
+    relighting (lights), measured relit."""
+    gains = mosaic.match_gains(frames, mosaic.calibrated_gain, None, mosaic.calibrated_overlap, light=light)
     gains = gains / np.exp(np.log(gains).mean(axis=0))
-    return gains, mosaic.match_offsets(frames, gains, None, mosaic.calibrated_overlap)
+    return gains, mosaic.match_offsets(frames, gains, None, mosaic.calibrated_overlap, light=light)
 
 
 def _compose(window, k, **kw):
     """mosaic.compose on the view's canvas, with the benchmark's soft edge on its 0.5 scale canvas at this
-    canvas's scale."""
+    canvas's scale. light: the frames' relighting for their seams (lights, over_light), or None."""
     feather = mosaic.feather_px
+    light = kw.pop("light", None)
     with reel._mosaic_lock:
         try:
             mosaic.feather_px = max(8, round(64 * k / 0.5))
             mosaic.reset()
             if kw.get("pin", -1) is None and "corrections" not in kw and "gamma" not in kw and len(window) > 1:
-                kw = {**kw, "corrections": held_level([np.asarray(w[0]) for w in window])}
+                kw = {**kw, "corrections": held_level([np.asarray(w[0]) for w in window], light)}
+            elif "corrections" not in kw and light is not None:
+                kw = {**kw, "light": light}
             rgba = mosaic.compose(window, False, calibrated=True, **kw)
             mosaic.reset()
         finally:
@@ -3284,26 +3421,32 @@ def _compose(window, k, **kw):
     return rgba
 
 
-def _over(u, p, rgba, t, rect, cache, match=True, kept=None):
+def _over(u, p, rgba, t, rect, cache, match=True, kept=None, before=None):
     """Tile t composed over the mosaic rgba (in place) and matched to it (pin 0): only the tile's part of the
     canvas, and a margin for its soft edge, is composed, since nothing outside it changes. match=False: drawn
     over it with its soft edge as it is, on the pass's one scale (a mosaic movie's new lap is not pulled toward
     the older picture of its place under it). kept: as draw_over. A partial frame (partial) is drawn under the
-    picture instead, so it shows only where nothing else is."""
+    picture instead, so it shows only where nothing else is. before: the tiles the mosaic rgba was drawn from, in
+    order, so the match is measured relit (over_light); None measures it as drawn."""
     k = p["k"]
     bx, by, bw, bh = t["box"]
     left = round((t["offset"][0] + bx - rect[0]) * k)
     top = round((t["offset"][1] + by - rect[1]) * k)
     sw, sh = max(1, round(bw * k)), max(1, round(bh * k))
+    light = None
+    if before is not None and match:
+        light = lambda y0, x0, h, w: over_light(u, p, t, before, rect, y0, x0, h, w)
     draw_over(rgba, lambda: _shade(_part(_pic(u, cache, p["display_scale"], t), sw, sh), t),
-              left, top, sw, sh, k, match, kept, under=partial(t) or bool(t.get("under")) or bool(t.get("fill")))
+              left, top, sw, sh, k, match, kept, under=partial(t) or bool(t.get("under")) or bool(t.get("fill")),
+              light=light)
 
 
-def draw_over(rgba, part, left, top, sw, sh, k, match=True, kept=None, under=False):
+def draw_over(rgba, part, left, top, sw, sh, k, match=True, kept=None, under=False, light=None):
     """_over's drawing: the tile part() (RGBA, sw x sh canvas pixels, its top left corner at left, top) composed over
     the mosaic rgba in place, on the tile's part of the canvas and a margin for its soft edge. kept: a list that gets
     what the blend step decided for the tile (mosaic.composite's kept, at the canvas's pixels), or None. under: the
-    tile drawn under the picture instead (matched to it, pin on the picture), and nothing kept for it."""
+    tile drawn under the picture instead (matched to it, pin on the picture), and nothing kept for it. light: (y0, x0,
+    h, w) -> the relighting (below's, the tile's) of that part of the canvas for the match (over_light), or None."""
     H, W = rgba.shape[:2]
     pad = max(8, round(64 * k / 0.5)) + 1
     x0, y0 = max(left - pad, 0), max(top - pad, 0)
@@ -3318,16 +3461,17 @@ def draw_over(rgba, part, left, top, sw, sh, k, match=True, kept=None, under=Fal
         frame[b0 - y0:b1 - y0, a0 - x0:a1 - x0] = part[b0 - top:b1 - top, a0 - left:a1 - left]
         below = np.ascontiguousarray(rgba[y0:y1, x0:x1])
         same = (np.ones((2, 3)), np.zeros((2, 3)))
+        lit = light(y0, x0, y1 - y0, x1 - x0) if light is not None and match else None
         # matched to the picture so far (pin 0), and with the level step leveled to it along its seams as well
         # (mosaic._levels, pinned to it): leveled alone (gains of 1, each tile on the pass's one scale away from its
         # seams), Saturn's 725 tile mosaic movie of 2013 drawn whole came out 12% darker at the bottom than matched
         if under:
-            kw = {"corrections": same, "level": False} if not match else {"pin": 1}
+            kw = {"corrections": same, "level": False} if not match else {"pin": 1, "light": None if lit is None else lit[::-1]}
             rgba[y0:y1, x0:x1] = _compose([(frame, None, None, None), (below, None, None, None)], k, under=1, **kw)
             if kept is not None:
                 kept.append(None)
             return
-        kw = {"corrections": same, "level": False} if not match else {"pin": 0}
+        kw = {"corrections": same, "level": False} if not match else {"pin": 0, "light": lit}
         decided = [] if kept is not None else None
         rgba[y0:y1, x0:x1] = _compose([(below, None, None, None), (frame, None, None, None)], k, under=0, kept=decided, **kw)
         if kept is not None:
@@ -3353,7 +3497,7 @@ def _grown(u, p, f, mine, rect, cache, tag=""):
         m -= 1
     rgba = filter_mosaic(u, p, f, mine[:m], rect, cache, tag=tag).copy()
     for j in range(m, len(mine)):
-        _over(u, p, rgba, mine[j], rect, cache)
+        _over(u, p, rgba, mine[j], rect, cache, before=under_first(mine[:j]))
         path = named(j + 1)
         with _lock:
             _grown_last[path] = rgba.copy() if j + 1 < len(mine) else rgba
@@ -3469,7 +3613,7 @@ def filter_mosaic(u, p, f, tiles, rect, cache, ref=None, tag=""):
         elif corrections:
             rgba = _compose(window, k, pin=None, gamma=p["display_scale"]["gamma"], corrections=corrections)
         else:
-            rgba = _compose(window, k, pin=None)
+            rgba = _compose(window, k, pin=None, light=lights(u, p, shown, rect, window[0][0].shape[:2]))
         drew["rgba"] = rgba
         return _png(rgba)
 
