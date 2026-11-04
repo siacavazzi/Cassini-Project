@@ -93,4 +93,14 @@ with calibration.looking("balanced"):
         assert not json.load(fh).get("held"), "SPICE's places stand"
     print(f"usual SPICE: stabilized max {calm.max():.1f} px", seen)
     assert calm.max() < 6
+# 3. a bright blob the moon's size against a tile's edge (a cut corner's wedge) is not taken for the moon
+u3, cache3 = make("EDGE", bad)
+p3 = om.plan(u3, cache3)
+made, pic, there = om._every_tile(u3, cache3, p3)
+edge = dict(made[5]); im = pic(5).copy()
+im[..., :3] = 0
+im[180:250, 0:60, :3] = 220   # (the moon gone, a wedge at the left edge)
+pics = {5: im}
+held, why = om.seen_places(u3, [edge], lambda n: pics[n], there)
+assert held == {} and why["found"] == 0, (held, why)
 print("ok")

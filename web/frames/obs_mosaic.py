@@ -4033,6 +4033,7 @@ STEADY_FILE = "steady3-" + PLAN_FILE   # steady2: held on the target (steady_gui
 # takes the pictures' places of the moon instead of SPICE's (seen_places)
 STEADY_JUMPY = 8.0    # px
 STEADY_JUMPS = 0.1    # of the neighbouring pairs
+STEADY_EDGE = 16     # px: a blob found nearer the tile's edge than its radius and this is not the moon (seen_places)
 STEADY_SEEN = 0.5     # of the placed tiles: the least share the moon must be found on for the pictures to be believed
 
 
@@ -4104,7 +4105,15 @@ def seen_places(u, made, pic, there):
     for t in placed:
         # (a tile's picture is in reference pixels, its corner at its place plus box; SPICE's target at 0)
         bx, by = t["box"][0], t["box"][1]
-        got = color_image.find_small_body(pic(t["n"]), -t["offset"][0] - bx, -t["offset"][1] - by, radius)
+        im = pic(t["n"])
+        got = color_image.find_small_body(im, -t["offset"][0] - bx, -t["offset"][1] - by, radius)
+        if got is not None:
+            # (not a blob against the tile's edge: a bright wedge where the picture's corner is cut, which Pan
+            # ISS_264PN_PAN001_PIE's methane frames locked onto 860 px from the moon)
+            inside = cv2.distanceTransform(np.pad(im[..., 3] > 0, 1).astype(np.uint8), cv2.DIST_L2, 3)[1:-1, 1:-1]
+            yi, xi = min(int(got[1]), im.shape[0] - 1), min(int(got[0]), im.shape[1] - 1)
+            if inside[max(yi, 0), max(xi, 0)] < radius + STEADY_EDGE:
+                got = None
         if got is not None:
             off[t["n"]] = (-(bx + got[0]) - t["offset"][0], -(by + got[1]) - t["offset"][1])
     if not placed or len(off) < STEADY_SEEN * len(placed) or len(off) < 2:
