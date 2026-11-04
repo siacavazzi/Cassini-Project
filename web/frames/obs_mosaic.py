@@ -2437,9 +2437,17 @@ PANEL_NCC = 0.25     # the least the two overlaps must agree (normalized cross-c
 PANEL_GAIN = 0.02    # ... and how much better than at SPICE's places they must agree, for a move of over half a pixel
 PANEL_LEAST = 0.3    # px: a smaller move is the measure's own noise, and the pointing stays where SPICE put it
 PANEL_AGREE = 2.0    # px: matches further than this from the others' median are left out
+# ... a pointing further off than PANEL_MAX is moved too, up to PANEL_FAR, when its surface is redrawn (surface_pictures:
+# the body's turning is taken out, so what is left is SPICE's pointing) and at least PANEL_FAR_MATCHES matches, each
+# agreeing at PANEL_FAR_NCC once moved, all agree (PANEL_AGREE). Rhea ISS_018RH_REGCOL001's first pointing is 19 px off
+# its other three (6 matches +18.6 to +21.2, ncc 0.86 once moved; the other three agree with each other within a
+# pixel), so its limb stepped at both of its joins (spot check 7, panel_probe on the Mini)
+PANEL_FAR = 32 / 1024
+PANEL_FAR_MATCHES = 3
+PANEL_FAR_NCC = 0.6
 # a pass's panel registration (panel_places), kept with it; renamed whenever the rule changes
-PANEL_FILE = "panels1-" + PLAN_FILE
-PANEL_TAG = "-p1"    # in the name of a layout whose tiles registration moved (layout), so its pictures are its own
+PANEL_FILE = "panels2-" + PLAN_FILE   # (2: PANEL_FAR)
+PANEL_TAG = "-p2"    # in the name of a layout whose tiles registration moved (layout), so its pictures are its own
 # a clouded body's (SURFACE_CLOUDED: Saturn, Titan, the rings) pointings are measured on edges only (edge_shift): its
 # clouds turn with it and drift on its winds between panels (on Saturn's disk the turning alone is tens to hundreds of
 # px in a few minutes), so its detail matches that motion, never SPICE's pointing, and #169 kept SPICE's places there,
@@ -2503,7 +2511,7 @@ def _agree(a, b, mask):
     return float((x * y).sum()) / d if d > 0 else 0.0
 
 
-def panel_shift(q, ref, at_q, t, crop, at_t):
+def panel_shift(q, ref, at_q, t, crop, at_t, most=None):
     """How far tile t (its picture crop, its middle put at at_t) is from tile q (picture ref, middle at at_q), where
     two pointings of a mosaic overlap: (dx, dy) reference pixels that t's place moves back by to land on q (as
     _shift_onto), and what was measured {"ncc": [at SPICE's places, moved], "area", "response"}; (None, why) when
@@ -2546,7 +2554,7 @@ def panel_shift(q, ref, at_q, t, crop, at_t):
     after = _agree(ds[0], moved, inner)
     seen = {"ncc": [round(before, 3), round(after, 3)], "area": area, "response": round(float(response), 3)}
     shift = (dx + rx[1] - rx[0], dy + ry[1] - ry[0])
-    if math.hypot(*shift) > PANEL_MAX * FRAME:
+    if math.hypot(*shift) > (most or PANEL_MAX) * FRAME:
         return None, f"too far {shift[0]:+.1f},{shift[1]:+.1f}"
     if after < PANEL_NCC or (math.hypot(*shift) > 0.5 and after < before + PANEL_GAIN):
         return None, f"not believed {shift[0]:+.1f},{shift[1]:+.1f} ncc {before:.2f}->{after:.2f}"
@@ -3025,7 +3033,7 @@ def panel_places(u, cache, p, tiles, pic=None, report=None):
                 h = min(a[1] + s["box"][1] + s["box"][3], b[1] + t["box"][1] + t["box"][3]) - max(a[1] + s["box"][1], b[1] + t["box"][1])
                 if w >= PANEL_NARROW and h >= PANEL_NARROW:
                     cands.append((s["filter"] != t["filter"], -w * h, s["n"]))
-            found, seen = [], {}
+            found, seen, far = [], {}, []
             mine = picture(n)
             for _, _, j in sorted(cands)[:PANEL_MATCHES]:
                 ref = picture(j)
@@ -3034,18 +3042,28 @@ def panel_places(u, cache, p, tiles, pic=None, report=None):
                 s = by_n[j]
                 # measured where SPICE put both (the overlap SPICE says, the same however far the earlier one has
                 # been moved), and taken from where the earlier one now is
-                shift, how = (edge_shift if edges else panel_shift)(s, ref, s["offset"], t, mine, here)
+                shift, how = (edge_shift(s, ref, s["offset"], t, mine, here) if edges else
+                              panel_shift(s, ref, s["offset"], t, mine, here, PANEL_FAR if surfaced else None))
                 seen[j] = how if shift is None else {**how, "shift": [round(shift[0], 2), round(shift[1], 2)]}
                 if shift is not None:
                     was = kept.get(j, [0, 0])
                     found.append(((was[0] - shift[0], was[1] - shift[1]), how.get("normal")) if edges else
                                  (was[0] - shift[0], was[1] - shift[1]))
+                    if not edges:
+                        far.append(how["ncc"][1] if math.hypot(*shift) > PANEL_MAX * FRAME else None)
             move = [0.0, 0.0]
             if found and edges:
                 fit = _combine(found)
                 if fit is not None and math.hypot(*fit) >= PANEL_LEAST:
                     move = [round(float(v), 2) for v in fit]
             elif found:
+                beyond = [v for v in far if v is not None]
+                if beyond and not (len(found) >= PANEL_FAR_MATCHES and min(beyond) >= PANEL_FAR_NCC
+                                   and (np.hypot(*(np.array(found) - np.median(found, axis=0)).T) <= PANEL_AGREE).all()):
+                    # (a match past PANEL_MAX is believed only when every match agrees with it: otherwise the near
+                    # ones decide, as before)
+                    found = [xy for xy, v in zip(found, far) if v is None]
+            if found and not edges:
                 f = np.array(found)
                 mid = np.median(f, axis=0)
                 ok = f[np.hypot(*(f - mid).T) <= PANEL_AGREE]
