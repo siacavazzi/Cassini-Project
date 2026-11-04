@@ -4346,9 +4346,9 @@ def movie_rect(fp, t, radius=0.0, centre=False, seen=None):
     footprint fp (movie_footprint) when that is at most MOVIE_FIT frames across, so the body holds still while the
     pointing wanders; otherwise a window MOVIE_FIT frames across centred on frame t, kept inside fp (a creeping
     ring or limb movie moves along). Either way one size for the whole pass, so the picture never rescales.
-    centre: a square view centred on the body (radius: its disk, reference pixels), wide enough for the whole
-    footprint round it (a stare's rings stay in) and at least a frame or the disk with CENTRE_MARGIN round it, up
-    to MOVIE_FIT frames, when centre_half centres the pass (seen: its frames, pass_seen): the body sits in the
+    centre: a square view centred on the body (radius: its disk, reference pixels), at least a frame or the disk with
+    CENTRE_MARGIN round it and wide enough for what the frames show round it (fitted_half: a stare's rings stay in,
+    a frame's corners turned north up do not widen it), up to MOVIE_FIT frames, when centre_half centres the pass (seen: its frames, pass_seen): the body sits in the
     middle of every frame, north up. A body bigger than that, one no frame looks at (a ring movie on both ansae, a
     plume stare above the limb) or a pass the square would cut (a mosaic or retarget reaching further) keeps the
     view above. All of it decided once for the pass (fp, radius and seen are the pass's)."""
@@ -4371,15 +4371,42 @@ def centre_half(fp, radius, seen):
     look at the body, not only round it, as a ring movie on both ansae does, whose footprint fp takes in Saturn's
     centre though no frame shows it); and the square, round the whole footprint up to MOVIE_FIT frames, keeps
     CENTRE_KEEP of the frames' area and part of every frame (a mosaic or retarget reaching further than that is not
-    cut down to it, nor a stray frame dropped from the picture)."""
+    cut down to it, nor a stray frame dropped from the picture). The view is then drawn no bigger than what the
+    frames show needs (fitted_half)."""
     x0, y0, x1, y1 = fp
     side = MOVIE_FIT * FRAME
     around = max(FRAME, 2 * radius * (1 + CENTRE_MARGIN))
     if not (radius > 0 and around <= side and seen and seen[0]):
         return None
-    half = min(side, max(around, 2 * max(-x0, x1, -y0, y1))) / 2
-    inside = kept(seen, half)
-    return half if inside.mean() >= CENTRE_KEEP and inside.any(1).all() else None
+    wide = min(side, max(around, 2 * max(-x0, x1, -y0, y1))) / 2
+    inside = kept(seen, wide)
+    if not (inside.mean() >= CENTRE_KEEP and inside.any(1).all()):
+        return None
+    return fitted_half(seen, around / 2, wide)
+
+
+def fitted_half(seen, least, most):
+    """How big a centred view is drawn (Sam 2026-11-03: the pictures looked zoomed out, the body a quarter of the
+    window): half the side of the smallest square round the body's centre, from least (a frame, or the disk with
+    CENTRE_MARGIN round it) to most (the whole footprint, centre_half's test), that keeps CENTRE_KEEP of what the
+    frames show within the circle across each frame (SEEN_DISK of its seen points) and part of every frame. The
+    corners of a frame turned north up swing out past a frame-wide square however the camera points (a frame turned
+    45 degrees spans 1.41 frames), and MOVIE_MARGIN pads the footprint for the frames between its samples: sized to
+    the footprint, a one-place moon movie was drawn about 1.9 frames across, half the size its single pictures
+    (one frame, centre_view) show it at. The circle is the same however the frame is turned, so the view is a
+    frame wide for frames on the body, and wider only as far as the pointing wanders off it."""
+    pts = seen[1].reshape(-1, SEEN_GRID * SEEN_GRID, 2)[:, SEEN_DISK]
+    need = np.abs(pts).max(2)   # the half side of the square round the body's centre each point needs to be in
+    if not need.size:
+        return most
+    # the CENTRE_KEEP share of the points, and the nearest point of every frame
+    share = float(np.quantile(need, CENTRE_KEEP, method="inverted_cdf"))
+    return float(min(most, max(least, share, need.min(1).max())))
+
+
+_g = (np.arange(SEEN_GRID) + 0.5) / SEEN_GRID - 0.5
+SEEN_DISK = (np.add.outer(_g ** 2, _g ** 2) <= 0.25).ravel()   # a frame's seen points within the circle across it
+del _g
 
 
 def kept(seen, half):

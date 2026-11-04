@@ -1,6 +1,7 @@
 """Synthetic check of obs_mosaic.movie_rect's Center the body rule (centre_half): a body whose disk fits MOVIE_FIT
 frames, whose centre is on at least one frame, and round which the square view keeps CENTRE_KEEP of the frames' area,
-sits in the middle of a square view that keeps the footprint round it; a body bigger than that, one no frame looks at
+sits in the middle of a square view as big as what the frames show round it needs (fitted_half: at least a frame,
+the corners of a frame turned north up left out, the frames' wandering kept in); a body bigger than that, one no frame looks at
 (frames on both ansae of the rings, a plume stare above the limb) or a pass the square would cut keeps the
 footprint's view. frames_seen turns each frame north up as label_handler.middle_rotation turns the tiles.
 Run: python web/test_movie_center.py"""
@@ -38,9 +39,11 @@ S = om.MOVIE_FIT * F
 small = [(0, 0), (60, -40), (-50, 30)]                     # a moon movie: frames on a small moon
 fp = box(*small)
 assert om.movie_rect(fp, t) == (fp[0], fp[1], fp[2] - fp[0], fp[3] - fp[1])                 # today's view: the whole footprint
-half = max(-fp[0], fp[2], -fp[1], fp[3])
+half = om.centre_half(fp, 60, seen(*small))
+wide = max(-fp[0], fp[2], -fp[1], fp[3])                   # the footprint's view (before 2026-11-03: the view drawn)
+assert F / 2 <= half < F / 2 + 60 < wide                   # about a frame: the frames wander 60 px off the body
 assert om.movie_rect(fp, t, radius=60, centre=True, seen=seen(*small)) == (-half, -half, 2 * half, 2 * half)
-assert om.movie_rect(fp, t, radius=500, centre=True, seen=seen(*small)) == (-half, -half, 2 * half, 2 * half)
+assert om.centre_half(fp, 500, seen(*small)) == 600.0      # the disk and its margin, when bigger
 assert om.movie_rect(fp, t, radius=200, centre=False, seen=seen(*small)) == om.movie_rect(fp, t)    # the setting off
 assert om.movie_rect(fp, t, radius=5000, centre=True, seen=seen(*small)) == om.movie_rect(fp, t)    # bigger than the view
 moon = (-300.0, -200.0, 350.0, 250.0)                      # a footprint within a frame of the body
@@ -48,7 +51,9 @@ assert om.movie_rect(moon, t, radius=60, centre=True, seen=seen((0, 0))) == (-F 
 assert om.movie_rect(moon, t, radius=500, centre=True, seen=seen((0, 0))) == (-600.0, -600.0, 1200.0, 1200.0)  # its disk and a margin
 stare = [(-150, 0), (-200, 50)]                            # a stare: the body on the frames, rings past the disk
 fp = box(*stare)
-half = max(-fp[0], fp[2], -fp[1], fp[3])                   # the rings stay in
+half = om.centre_half(fp, 300, seen(*stare))               # the rings on the frames stay in
+assert F / 2 + 50 < half < max(-fp[0], fp[2], -fp[1], fp[3])
+assert om.kept_share(seen(*stare), half) >= 0.9
 assert om.movie_rect(fp, t, radius=300, centre=True, seen=seen(*stare)) == (-half, -half, 2 * half, 2 * half)
 
 # (A) the body's centre on no frame, though the footprint takes it in: the footprint's view
@@ -69,7 +74,8 @@ assert om.movie_rect(fp, t, radius=200, centre=True, seen=seen(*retarget)) == om
 # ... while a little outer sky lost keeps it centred (Iapetus mosaics: the body on most frames)
 most = [(0, 0)] * 30 + [(700, 0)]
 assert om.CENTRE_KEEP <= om.kept_share(seen(*most), S / 2) < 1
-assert om.centre_half(box(*most), 200, seen(*most)) == S / 2
+assert om.centre_half(box(*most), 200, seen(*most)) == F / 2   # drawn a frame wide: the one frame off it keeps a part
+assert om.kept(seen(*most), F / 2)[-1].any()
 
 # ... but not when that loses a frame altogether (a stray frame of another pointing)
 stray = [(0, 0)] * 60 + [(2000, 0)]
@@ -93,6 +99,12 @@ assert np.allclose(pts.mean(0), (R[:, :2] @ [300, -120]), atol=1e-6)
 # ... so a frame turned 45 degrees on the body's centre spills out of a frame-wide square at its corners
 angles.update(F0=45.0)
 assert 0.8 < om.kept_share(seen((0, 0)), F / 2) < 0.86
+# ... which does not widen a centred view: a moon movie whose frames are turned is drawn a frame wide, as its single
+# pictures are (centre_view), not 1.41 frames and more (Hyperion 141HY, 2010-11-28: 1.9 frames)
+assert om.centre_half(box((0, 0)), 60, seen((0, 0))) == F / 2
+angles.update({f"F{i}": 124.0 for i in range(6)})
+flyby = [(66, 80), (62, 88), (67, 86), (63, 84), (67, 87), (66, 80)]
+assert om.centre_half(box(*flyby), 250, seen(*flyby)) < 0.53 * F
 angles.clear()
 assert om.kept_share(seen((0, 0)), F / 2) == 1.0
 print("ok")
