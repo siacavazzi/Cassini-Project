@@ -191,7 +191,7 @@ def corrections(u, made, cache):
         tagged = bool(tag)
         blend = calibration.step("blend")
         for f in filters:
-            mine = om._mine(u, p, tiles, f)
+            mine = om._mine(u, p, om.visit_tiles(u, tiles, colour) if colour and f in colour else tiles, f)
             first = mine if tagged or len(mine) <= om.GROW_FROM else mine[:om.GROW_FROM]
             got = out[f] = {}
             window, shown = om._window(u, p, first, rect, cache)
@@ -222,11 +222,11 @@ def corrections(u, made, cache):
                     got[t["n"]].append(_packed(kept[0]))
                 om._yield()
         if colour and base:
-            picture = om.colour_picture(u, p, colour, [om.filter_mosaic(u, p, f, tiles, rect, cache, ref, tag) for f in colour])
+            picture = om.colour_picture(u, p, colour, om.colour_planes(u, p, colour, tiles, rect, cache, ref, tag))
             grey = om.filter_mosaic(u, p, om.LUM, tiles, rect, cache, None, tag)
             if om.mixes(u, p, tiles, colour):
                 shape = picture.shape[:2]
-                picture = om.unmixed(picture, om.set_mask([om.set_times(shape, om.placed_tiles(u, p, om._mine(u, p, tiles, f), rect, cache))
+                picture = om.unmixed(picture, om.set_mask([om.set_times(shape, om.placed_tiles(u, p, om._mine(u, p, om.visit_tiles(u, tiles, colour), f), rect, cache))
                                                            for f in colour], p["k"]), grey)
             g = om.grey_gain(picture, grey, p["k"], p["display_scale"]["gamma"])
             out["_grey"] = None if g is None else list(map(float, g))
@@ -366,12 +366,12 @@ def block(u, made, corr, k, x0, y0, w, h, cache):
     planes, times = {}, {}
     mixing = bool(colour and base and om.mixes(u, p, tiles, colour))
     for f in filters:
-        mine = om._mine(u, pk, tiles, f)
+        mine = om._mine(u, pk, om.visit_tiles(u, tiles, colour) if colour and f in colour else tiles, f)
         window, shown = om._window(u, pk, mine, sub, cache)
         if mixing and f in colour:
             # (when each frame on top was taken, as so_far's set_mask measures it, on this block's frames)
             times[f] = om.set_times(window[0][0].shape[:2] if window else (math.ceil(sub[3] * k), math.ceil(sub[2] * k)),
-                                    ((u["frames"][t["n"]][3], w[0][..., 3], 0, 0) for w, t in zip(window, shown)))
+                                    ((om.set_time(u, t["n"]), w[0][..., 3], 0, 0) for w, t in zip(window, shown)))
         if not window:
             planes[f] = np.zeros((math.ceil(sub[3] * k), math.ceil(sub[2] * k), 4), np.uint8)
             continue

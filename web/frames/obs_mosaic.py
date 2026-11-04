@@ -1864,7 +1864,7 @@ def over_grey(colour, grey, k, gamma=2.2, gain=...):
 # another, while the clouds turned between them (Jupiter turns 26 degrees in 43 minutes): green and pink blotches in
 # the bands, flat green and magenta blocks on Saturn's night side. There the gray base (its own frames, matched to the
 # colour round it, over_grey) shows instead
-MIX_SPAN = 2 * sets_passes.SET_GAP   # s: the longest a colour set's frames take, first to last
+MIX_SPAN = sets_passes.SET_GAP   # s: frames on top taken further apart than this mix visits (a camera set's own count as one)
 MIX_LEAST = 0.02                     # of a frame: a mixed patch narrower than this (a seam's sliver) keeps its colour
 
 
@@ -1875,11 +1875,13 @@ def mixes(u, p, tiles, colour):
     # (a mosaic movie's picture shows each place's newest lap by design: rolling_layout, its tiles marked "base")
     if not colour or len(colour) < 2 or not clouded(u) or _rolling.get() or any("base" in t for t in tiles):
         return False
+    if len(visit_tiles(u, tiles, colour)) < len(tiles):
+        return True   # (a partial visit left out of the colour: the gray shows there)
     mine = [t for t in tiles if t["filter"] in colour and "offset" in t]
     if len(mine) < 2:
         return False
     f = np.array([colour.index(t["filter"]) for t in mine])
-    when = np.array([u["frames"][t["n"]][3] for t in mine], float)
+    when = np.array([set_time(u, t["n"]) for t in mine], float)
     x0 = np.array([t["offset"][0] + t["box"][0] for t in mine], float)
     y0 = np.array([t["offset"][1] + t["box"][1] for t in mine], float)
     x1, y1 = x0 + np.array([t["box"][2] for t in mine]), y0 + np.array([t["box"][3] for t in mine])
@@ -1889,6 +1891,44 @@ def mixes(u, p, tiles, colour):
                 & (y0[j] < y1[i]) & (y0[i] < y1[j])).any():
             return True
     return False
+
+
+def visit_frames(u, colour):
+    """The frames (indices) of a clouded pass's colour filters that take part in a whole colour visit: every other
+    colour filter has a frame within SAME_PLACE of a frame at its place and taken within MIX_SPAN of it (set_time).
+    A pointing that took only some of the filters (Jupiter C23 NSMAP101: 15 of 21) is drawn in the gray base instead of
+    the colour, so the colour under it is a whole visit's, not one filter of each visit. Decided on the pass's frames
+    from the geometry cache (as lum_frames), so it only grows as the pass goes on; every frame on any other body."""
+    key = tuple(colour)
+    hit = u.get("_visits")
+    if hit and hit[0] == key:
+        return hit[1]
+    frames = u["frames"]
+
+    def at(fr):
+        return (-fr[5] * fr[7] / u["z"], -fr[6] * fr[7] / u["z"]) if fr[7] and u["z"] else None
+    whole = set(range(len(frames)))
+    if clouded(u) and len(colour) >= 2:
+        by = {f: [(j, at(fr), set_time(u, j)) for j, fr in enumerate(frames) if fr[2] == f] for f in colour}
+        whole = {j for j, fr in enumerate(frames) if fr[2] not in colour}
+        for f in colour:
+            for j, q, t in by[f]:
+                if q is not None and all(any(r is not None and abs(t - tg) <= MIX_SPAN
+                                             and math.hypot(q[0] - r[0], q[1] - r[1]) <= SAME_PLACE * FRAME
+                                             for _, r, tg in by[g]) for g in colour if g != f):
+                    whole.add(j)
+    whole = frozenset(whole)
+    u["_visits"] = (key, whole)
+    return whole
+
+
+def visit_tiles(u, tiles, colour):
+    """The tiles a colour picture draws (visit_frames): the same list when every colour tile is part of a whole visit."""
+    if _rolling.get() or any("base" in t for t in tiles):
+        return tiles   # (a mosaic movie's picture shows each place's newest lap: rolling_layout)
+    keep = visit_frames(u, colour)
+    out = [t for t in tiles if t["filter"] not in colour or t["n"] in keep]
+    return tiles if len(out) == len(tiles) else out
 
 
 def set_times(shape, placed):
@@ -1914,7 +1954,20 @@ def placed_tiles(u, p, mine, rect, cache):
         left = round((t["offset"][0] + bx - rect[0]) * k)
         top = round((t["offset"][1] + by - rect[1]) * k)
         sw, sh = max(1, round(bw * k)), max(1, round(bh * k))
-        yield u["frames"][t["n"]][3], _part(_pic(u, cache, p["display_scale"], t), sw, sh)[..., 3], left, top
+        yield set_time(u, t["n"]), _part(_pic(u, cache, p["display_scale"], t), sw, sh)[..., 3], left, top
+
+
+def set_time(u, n):
+    """When frame n's visit began: the first frame of its camera set (colour_sets), or its own time outside one, so a
+    set's filters count as one visit however long the set took (a moon's 12 filter set)."""
+    if "_set_time" not in u:
+        first = {}
+        for run in _pass_sets(u):
+            t0 = min(u["frames"][j][3] for _, j in run)
+            for _, j in run:
+                first[j] = t0
+        u["_set_time"] = first
+    return u["_set_time"].get(n, u["frames"][n][3])
 
 
 def set_mask(times, k):
@@ -3512,18 +3565,32 @@ def _roll(u, p, key, mine, rect, cache):
     return rgba
 
 
-def filter_mosaic(u, p, f, tiles, rect, cache, ref=None, tag=""):
+VISIT_TAG = "-v"   # in the name of a colour filter's mosaic drawn without the partial visits (visit_tiles)
+
+
+def colour_planes(u, p, colour, tiles, rect, cache, ref=None, tag=""):
+    """The colour filters' mosaics a colour picture is made of (filter_mosaic of each), drawn of whole visits only
+    (visit_tiles), under names of their own when that leaves tiles out; which tiles go under (dim_places) is decided
+    on all of the pass's tiles, as for its other pictures."""
+    mine = visit_tiles(u, tiles, colour)
+    extra = VISIT_TAG if len(mine) < len(tiles) else ""
+    return [filter_mosaic(u, p, f, mine, rect, cache, ref, tag + extra, every=tiles) for f in colour]
+
+
+def filter_mosaic(u, p, f, tiles, rect, cache, ref=None, tag="", every=None):
     """The filter f's mosaic of these tiles in the view rect, RGBA on the view's canvas (kept in the cache).
     ref = the filter the seams are solved on (balanced look, seams). Past GROW_FROM tiles it grows from the
     one before (_grown) instead of composing every tile again. tag names a set of tiles that is not every tile
     up to the newest (a mosaic movie's lap, rolling_layout): it has a name of its own and is not grown, since
     growing takes the tiles as the pass's first ones in time order. f = LUM: the pass's luminance base (_mine)."""
     mine = _mine(u, p, tiles, f)
-    whole = tag in ("", PANEL_TAG, EDGE_TAG, SURFACE_TAG, SURFACE_TAG + PANEL_TAG)   # every tile up to the newest
+    # every tile up to the newest (less a colour filter's partial visits, VISIT_TAG: those are left out from the start)
+    plain = tag[:-len(VISIT_TAG)] if tag.endswith(VISIT_TAG) else tag
+    whole = plain in ("", PANEL_TAG, EDGE_TAG, SURFACE_TAG, SURFACE_TAG + PANEL_TAG)
     if whole and not _rolling.get() and calibration.step("level") and not all("under" in t for t in mine):
         # a pass's mosaic (not a mosaic movie's lap): a tile far darker than the picture before it goes under it
         # (decided here on all the pass's tiles; the mosaic of fewer tiles _grown starts from keeps the decisions)
-        low = dim_places(u, p, f, mine, tiles, cache)
+        low = dim_places(u, p, f, mine, tiles if every is None else every, cache)
         mine = [dict(t, under=t["n"] in low) for t in mine]
     balanced = calibration.look() == "balanced" and SHARED_SEAMS and f != LUM
     ref = ref or f
@@ -3868,13 +3935,13 @@ def so_far(u, n, cache, made=None, out=OUT):
     base = lum_base(u, p, tiles, used)
     if len(used) > 1:
         colour = used
-        acc = [filter_mosaic(u, p, f, tiles, rect, cache, ref, tag) for f in colour]
+        acc = colour_planes(u, p, colour, tiles, rect, cache, ref, tag)
         rgba, used = colour_picture(u, p, colour, acc), colour
         if base:
             grey = filter_mosaic(u, p, LUM, tiles, rect, cache, None, tag)
             if mixes(u, p, tiles, colour):
                 shape = rgba.shape[:2]
-                rgba = unmixed(rgba, set_mask([set_times(shape, placed_tiles(u, p, _mine(u, p, tiles, f), rect, cache))
+                rgba = unmixed(rgba, set_mask([set_times(shape, placed_tiles(u, p, _mine(u, p, visit_tiles(u, tiles, colour), f), rect, cache))
                                                for f in colour], p["k"]), grey)
             rgba = over_grey(rgba, grey, p["k"], p["display_scale"]["gamma"])
     elif base:

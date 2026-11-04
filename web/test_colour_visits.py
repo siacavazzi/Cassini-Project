@@ -7,6 +7,8 @@ blotches in the bands, the flat green and magenta blocks on 195RI HIPHASEC001's 
   (its BL1 is the old one), gray there; the old set's part outside it keeps its colour
 - the same overlap with a whole new set: not mixed, colour everywhere
 - a seam's sliver (narrower than MIX_LEAST) keeps its colour
+- a visit that took only some of the filters is left out of the colour planes (visit_frames), so the colour under it
+  is a whole visit's and the gray base draws it
 - a moon (not clouded, its surface is redrawn) and a mosaic movie's picture (rolling) never mix
 Run: python web/test_colour_visits.py"""
 import os
@@ -82,4 +84,10 @@ out = om.over_grey(om.unmixed(colour, m, grey), grey, 0.25).astype(int)
 assert abs(out[128, 200, 0] - out[129, 200, 0]) > 20, "the mixed part shows the gray's own picture"
 assert abs(out[128, 20, 0] - out[129, 20, 0]) < 3 and out[128, 20, 0] > out[128, 20, 2] + 100, "the old set's own part keeps its colour"
 assert om.unmixed(colour, None, grey) is colour
+# visit_frames: a visit that took RED and GRN only is left out of the colour (drawn in the gray), a whole set kept
+assert om.visit_frames(u, COLOUR) == frozenset({0, 1, 2}), om.visit_frames(u, COLOUR)
+assert om.visit_frames(u2, COLOUR) == frozenset(range(6))
+assert om.visit_tiles(u2, tiles2, COLOUR) is tiles2
+assert [t["n"] for t in om.visit_tiles(u, tiles, COLOUR)] == [0, 1, 2]
+assert om.visit_frames(u4, COLOUR) == frozenset(range(5)), "a moon keeps every frame"
 print("ok")
