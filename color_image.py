@@ -951,7 +951,9 @@ FIND_AREA = (0.25, 4.0)  # a body's lit area, as a share of the disk SPICE gives
 FIND_SPAN = 3.0        # its width and height are under this many times its disk's diameter (a ring arc is not a moon)
 FIND_LIT = 0.5         # under this share of its disk lit (a crescent, or cut by the frame's edge), its centroid sits
                        # off its centre, so it is used only where SPICE is off by more than the disk's radius
-FIND_MIN_RADIUS = 3.0  # px: smaller bodies are specks, left where SPICE puts them
+FIND_MIN_RADIUS = 12.0  # px: smaller bodies look like a cosmic ray's track or a clump of them (Aegaeon N1829224056_1,
+                        # 9 px: the blob found was a track 190 px off), so they are left where SPICE puts them
+FIND_ROUND = 0.3       # a body's blob is this round or more (short over long side, and its share of its box)
 FIND_MAX_RADIUS = 256  # px: bigger bodies fill the frame; SPICE places them, as before
 
 
@@ -984,6 +986,8 @@ def find_small_body(image, cx, cy, radius):
         x, y, w, h, area = stats[k]
         if not FIND_AREA[0] * disk <= area <= FIND_AREA[1] * disk or max(w, h) > FIND_SPAN * 2 * radius:
             continue
+        if min(w, h) < FIND_ROUND * max(w, h) or area < FIND_ROUND * w * h:
+            continue   # a track or a ring arc, not a moon
         if best is None or area > stats[best][4]:
             best = k
     if best is None:

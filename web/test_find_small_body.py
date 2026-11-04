@@ -46,5 +46,9 @@ assert color_image.find_small_body(canvas([(700, 700, 100, 0.3)]), 690, 700, 100
 assert color_image.find_small_body(canvas(), 700, 700, 10) is None
 # a body that fills the frame, or a speck: SPICE's place, as before
 assert color_image.find_small_body(canvas([(700, 700, 400, 1)]), 700, 700, 400) is None
-assert color_image.find_small_body(canvas([(700, 700, 2, 1)]), 700, 700, 2) is None
+assert color_image.find_small_body(canvas([(700, 700, 9, 1)]), 650, 700, 9) is None
+# a cosmic ray's track the size of a small disk is not the moon
+im = canvas()
+im[700:704, 400:520, :3] = 255
+assert color_image.find_small_body(im, 700, 700, 30) is None
 print("ok")
