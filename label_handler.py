@@ -84,15 +84,19 @@ GARBLE_SHARE = 0.5
 
 """
 The lines of a frame (codes, lines x samples) that are one value from end to end, in runs of FLAT_RUN or more, other
-than the camera's saturation (255): no picture is that even, so they are lines the downlink lost that the
-decompressor filled with one value. A lossy frame whose last packets never came (N1468700888_1, AURORAA003 2004:
+than the camera's saturation (255) and the frame's own sky (its 1st percentile, or the code most of the rest of it
+reads: a dark sky can come out one code along whole lines, test_science_tiff's sky at the bias): no picture is that even above its sky, so they are lines the
+downlink lost that the decompressor filled with one value. A lossy frame whose last packets never came (N1468700888_1, AURORAA003 2004:
 lines 752-1023 all code 128, its prefix counting every pixel valid, MISSING_LINES "N/A") was drawn with a flat grey
 block over Saturn. Returns a bool per line.
 """
 FLAT_RUN = 8
 def flat_lines(img):
     img = np.asarray(img)
-    flat = (img.min(axis=1) == img.max(axis=1)) & (img[:, 0] < 255)
+    flat = (img.min(axis=1) == img.max(axis=1)) & (img[:, 0] < 255) & (img[:, 0] > np.percentile(img, 1))
+    if flat.any() and not flat.all():
+        # nor the code most of the rest of the frame reads (a dark sky a code or so above a few darker columns)
+        flat &= img[:, 0] != np.bincount(img[~flat].ravel(), minlength=256).argmax()
     out = np.zeros(flat.shape, bool)
     y = 0
     while y < len(flat):

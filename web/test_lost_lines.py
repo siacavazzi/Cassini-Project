@@ -156,4 +156,10 @@ img[25:28] = 9            # a few even lines: not lost
 got = lh.flat_lines(img)
 assert got[40:].all() and not got[:40].any(), np.where(got)[0]
 assert not lh.flat_lines(np.clip(rng.normal(60, 4, (64, 64)), 0, 255).astype(np.uint8)).any()
+# a dark sky at the frame's floor, one code along whole lines (the bias, test_science_tiff): not lost
+dark = np.full((64, 64), 12, np.uint8)
+dark[20:44, 20:44] = 200
+assert not lh.flat_lines(dark).any()
+dark[:, :3] = 10          # a few darker columns: the sky is no longer the floor, but it is still what most lines read
+assert not lh.flat_lines(dark).any()
 print("lines filled with one value are lost; ok")
