@@ -1542,6 +1542,7 @@ little near it says), for a picture whose colour changes across it: a mosaic of 
 gold lower latitudes, where the one typical ratio gave the clipped gold the pole's green.
 """
 FILL_NEAR = 0.05   # (fill_saturated's reach) the share of the pixels round one measured, from which their ratio is used whole
+FILL_FLOOR = 99.9  # (fill_saturated) percentile of a channel's unsaturated lit pixels a pixel it saturated is filled no darker than
 
 
 def fill_saturated(channels, masks, reach=None):
@@ -1581,6 +1582,16 @@ def fill_saturated(channels, masks, reach=None):
         filled = c.copy()
         some = count > 0
         filled[some] = total[some] / count[some]
+        # never under the channel's clipping: a saturated pixel is at least as bright as the brightest the channel
+        # read where it did not saturate (the top of its unsaturated lit pixels, just under where it clipped). The
+        # ratio is measured where the channel did not clip, its dimmer part, so a channel that clipped over much of
+        # the frame was filled under its own clipping and the other's colour took over: Saturn 2011 (150SA
+        # NHEMMOVIE001, RED saturated over a third of the frame, GRN over a tenth) drew flat yellow-green patches
+        # with ragged edges along GRN's clipping
+        under = lit & ~m
+        if some.any() and under.sum() >= 100:
+            floor = np.float32(np.percentile(c[under], FILL_FLOOR))
+            filled[some] = np.maximum(filled[some], floor)
         out.append(filled)
     every = np.logical_and.reduce(masks)
     return out, (every if every.any() else None)
