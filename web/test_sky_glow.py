@@ -42,4 +42,15 @@ print("sky: grain", round(float(iof[flat].std()), 3), "->", round(float(out[flat
 assert out[flat].std() < 0.6 * iof[flat].std()
 # and its mean stays
 assert abs(float(out[flat].mean()) - float(iof[flat].mean())) < 0.05
+# the fan's root, too bright for the dark sky (dark_sky leaves it out), is smoothed with the rest of the glow: kept at
+# its stored codes it was a few flat levels with a hard grainy edge where the smoothed fan met it (Sam, 11-04)
+root = fan > 5
+sky2 = ~root
+out2 = cal.smooth_sky(iof, codes, sky2)
+rp = (slice(770, 830), slice(280, 320))
+assert root[rp].all()
+root_after = terraces(out2, *rp)
+print("root: off its slope", round(terraces(iof, *rp), 3), "->", round(root_after, 3))
+assert root_after < 0.03, root_after
+assert float(np.abs(out2 - iof)[rp].mean()) > 0.1    # it was drawn, not left as stored
 print("ok")
