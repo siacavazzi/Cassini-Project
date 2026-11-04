@@ -4633,6 +4633,7 @@ OVER_LEAST = 0.05    # ... and so is one saturated this much of the frame, where
 OVER_STEP = 3.0      # (unfit) a frame saturated OVER_LEAST or more, and this many times as much as its filter's frames
 #                      before and after it, is a long exposure among short ones
 SATURATED_ALL = 0.95   # ... and one saturated this much of carries no picture (left out of mosaics, never shown in movies)
+BLOWN = 0.5            # (unfit) a filter more than this share of whose frames in a movie are over-exposed or saturated all over
 SATURATED_LIT = 0.9    # ... and in a mosaic, one saturated over this much of its lit part (and OVER_LEAST of the frame)
 LIT_LEVEL = 16       # levels: the tile's pixels at least this bright are its lit part (its report's "lit", _tile_made)
 
@@ -4737,6 +4738,17 @@ def unfit(frames, n, tile_of):
     if s >= SATURATED_ALL:
         return True   # (saturated all over: nothing of the picture, whatever is round it)
     f = frames[n][2]
+    # a filter the pass over-exposed through: when most of its frames are over-exposed, saturated all over, blank or lit nowhere
+    # (one saturated all over calibrates to one flat level), its
+    # frames saturated OVER_LEAST or more are held too, as the rest of them are, so its least saturated one is not
+    # left to play alone, half white (SPOLEDYN001 2009: clear frames 92-100% saturated round W1609834686_1, 39%,
+    # which played twice, held in the 65% one's place, late in the dark south pole movie). A run in a pass whose
+    # filter is mostly well exposed still plays (a bright limb coming in)
+    mine = [j for j in range(len(frames)) if frames[j][2] == f and "offset" in tile_of(j)]
+    blown = sum(1 for j in mine if over_exposed(tile_of(j)) or tile_of(j).get("saturated", 0.0) >= SATURATED_ALL
+                or patchy(tile_of(j)) or blank_frame(frames, j, tile_of))
+    if len(mine) >= 3 and blown > BLOWN * len(mine):
+        return True
     # its filter's nearest frames either side that show a picture: one saturated all over is held itself, so it is no
     # run of over-exposed frames to play with (SPOLEDYN001 2009: a clear frame 92% saturated between two 99-100%
     # saturated ones played as a white slab; its filter's frames shown round it are dark)
