@@ -67,9 +67,10 @@ out beforehand (seams), used instead of solving them here; offsets are always on
 level = seam leveling where the level step is on (composite); False draws the frames as the gains leave them.
 under = the frame that is a picture drawn so far (composite).
 kept, decided = what the blend step decided for each frame (its leveling and its seam) kept, or given (composite).
+kinds = what each frame shows, for measuring its seams only where like meets like (overlaps), or None.
 """
 def compose(window, reproject=None, calibrated=False, pin=-1, gamma=None, corrections=None, level=True, under=None,
-            kept=None, decided=None):
+            kept=None, decided=None, kinds=None):
     if reproject is None:
         reproject = reproject_surface
     frames = [np.asarray(entry[0]) for entry in window]
@@ -85,7 +86,7 @@ def compose(window, reproject=None, calibrated=False, pin=-1, gamma=None, correc
         return composite(frames, *corrections, gamma=gamma, **more)
     if not calibrated:
         return composite(frames, match_gains(frames, pin=pin), **more)
-    return composite(frames, *seams(frames, pin, gamma), gamma=gamma, **more)
+    return composite(frames, *seams(frames, pin, gamma, kinds=kinds), gamma=gamma, **more)
 
 
 """
@@ -96,14 +97,14 @@ toward = (gains, offsets) the corrections are pulled toward instead of 1 and 0 (
 filter's seams at the same pointings, so this filter keeps their overall level and takes them where its
 own overlaps say nothing.
 """
-def seams(frames, pin=-1, gamma=None, toward=None):
+def seams(frames, pin=-1, gamma=None, toward=None, kinds=None):
     anchored = pin is None and gamma is not None
     toward = toward if anchored else None
     gains = match_gains(frames, calibrated_gain, pin, calibrated_overlap, gamma, anchored,
-                        None if toward is None else toward[0])
+                        None if toward is None else toward[0], kinds)
     # the offsets stay on the levels, each filter its own, as without gamma: on linear values a sky offset of a
     # fraction of a percent of white is tens of levels at the black end of a steep curve, and tints the sky
-    return gains, match_offsets(frames, gains, pin, calibrated_overlap)
+    return gains, match_offsets(frames, gains, pin, calibrated_overlap, kinds=kinds)
 
 
 """
@@ -188,8 +189,13 @@ scale and [(i, j, slices of the box both frames cover, overlap mask in that box,
 Each pair is looked at only inside the box where both frames have pixels, and pairs whose boxes miss
 each other are skipped, so a mosaic of many tiles (most pairs far apart) is quick; the pixels used are
 the same as over the whole frame.
+kinds = for each frame, what it shows: a number, or an array of them at 1/4 scale (the shape of its 1/4 scale copy,
+for a frame that is a mosaic drawn so far: what each of its pixels shows). Two frames' overlap is then only where
+their kinds are the same: a moon's mosaic tile redrawn as at the pass's epoch and one kept as taken show the ground at
+different times, tens of per cent apart in brightness where the terminator or the limb is near (obs_mosaic.kinds), and
+asking them to agree there pushed every gain of Rhea's ISS_162RH_REGMAP001 to its limit.
 """
-def overlaps(frames, overlap=None):
+def overlaps(frames, overlap=None, kinds=None):
     small = [f[::4, ::4] for f in frames]
     inside = [s[..., 3] == 255 for s in small]
     boxes = []
@@ -207,10 +213,17 @@ def overlaps(frames, overlap=None):
                 continue
             sl = (slice(y0, y1), slice(x0, x1))
             ov = inside[i][sl] & inside[j][sl]
+            if kinds is not None:
+                ov = ov & (_kind(kinds[i], sl) == _kind(kinds[j], sl))
             N = int(ov.sum())
             if N >= (overlap or min_overlap):
                 pairs.append((i, j, sl, ov, N))
     return small, pairs
+
+
+def _kind(kind, sl):
+    """A frame's kinds (overlaps) over the box sl: its number, or its array's part."""
+    return kind[sl] if isinstance(kind, np.ndarray) else kind
 
 
 """
@@ -228,15 +241,16 @@ pair asks log g_i - log g_j = log(mean_j / mean_i), weighted by how well the pai
 and every log gain is pulled toward 0 (anchor_pull), which holds their mean at 0. Without that the
 pull above is too weak for a whole mosaic: the solve shrinks every gain until the limit stops it.
 toward = gains (frames, 3) to pull toward instead of 1 (anchored), whose mean log the result keeps.
+kinds = what each frame shows (overlaps): overlaps measured only where like meets like.
 returns array of shape (frames, 3)
 """
-def match_gains(frames, limit=None, pin=-1, overlap=None, gamma=None, anchored=False, toward=None):
+def match_gains(frames, limit=None, pin=-1, overlap=None, gamma=None, anchored=False, toward=None, kinds=None):
     n = len(frames)
     gains = np.ones((n, 3))
     if n < 2:
         return gains
 
-    small, pairs = overlaps(frames, overlap)
+    small, pairs = overlaps(frames, overlap, kinds)
     if gamma is not None:
         small = linear(small, gamma)
     limit = limit or max_gain
@@ -306,14 +320,15 @@ frame to frame and shows as a step at every seam of a faint background. The pinn
 (pin None: the offsets average about 0); the others are matched to it through their overlaps, by least squares on the median difference
 over each overlap where both are above black (stars and cosmic rays don't move a median). Frames that overlap nothing (fewer
 than overlap pixels, as match_gains) keep 0. toward = offsets (frames, 3) to pull toward instead of 0 (pin None).
+kinds = as match_gains.
 returns array of shape (frames, 3)
 """
-def match_offsets(frames, gains, pin=-1, overlap=None, toward=None):
+def match_offsets(frames, gains, pin=-1, overlap=None, toward=None, kinds=None):
     n = len(frames)
     offsets = np.zeros((n, 3))
     if n < 2:
         return offsets
-    small, pairs = overlaps(frames, overlap)
+    small, pairs = overlaps(frames, overlap, kinds)
     for c in range(3):
         A = np.eye(n) * 1e-3   # small pull toward 0 (or toward) for frames without overlaps
         b = np.zeros(n) if toward is None else 1e-3 * np.asarray(toward, dtype=float)[:, c]
@@ -836,7 +851,7 @@ def leveling():
     return calibration.step("blend") and calibration.step("level")
 
 
-DRAWING = 10   # bumped when the blend or level steps change how a mosaic is drawn
+DRAWING = 11   # bumped when the blend or level steps, or the seam gains (11: like with like), change how a mosaic is drawn
 
 
 def drawing():

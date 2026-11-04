@@ -3257,26 +3257,64 @@ def _png(rgba):
     return out.getvalue()
 
 
-def held_level(frames):
+def kind(t):
+    """What tile t's picture shows, for its seams (mosaic.overlaps' kinds): 1 its surface redrawn as at the pass's
+    epoch (surface_pictures), 0 as taken. The two are not measured against each other: they show the ground at
+    different times, and on Rhea's ISS_162RH_REGMAP001 the limb tiles kept as taken read 30 to 100% darker than the
+    redrawn tiles over them, which pushed every tile's gain to its limit."""
+    return 1 if t.get("pic") else 0
+
+
+def kinds_under(p, before, rect, y0, x0, h, w):
+    """What the mosaic of the tiles before (in the order they were drawn) shows at 1/4 scale over the canvas pixels
+    y0..y0+h, x0..x0+w (every 4th pixel from y0, x0): the kind of the last tile whose box holds each pixel (the tile
+    drawn there), -1 where none does."""
+    k = p["k"]
+    gy = y0 + 4 * np.arange((h + 3) // 4)[:, None]
+    gx = x0 + 4 * np.arange((w + 3) // 4)[None, :]
+    out = np.full((len(gy), gx.shape[1]), -1, np.int8)
+    for b in before:
+        if "offset" not in b:
+            continue
+        bx, by, bw, bh = b["box"]
+        left, top = round((b["offset"][0] + bx - rect[0]) * k), round((b["offset"][1] + by - rect[1]) * k)
+        right, bottom = left + max(1, round(bw * k)), top + max(1, round(bh * k))
+        if right > x0 and left < x0 + w and bottom > y0 and top < y0 + h:
+            out[(gy >= top) & (gy < bottom) & (gx >= left) & (gx < right)] = kind(b)
+    return out
+
+
+def held_level(frames, kinds=None):
     """The seams' (gains, offsets) of frames on one calibrated scale, none pinned (mosaic.seams' pin None), for
     mosaic.compose's corrections. Pinned to none, the gains all sink together toward their limit as overlaps come
     in (the data asks only that they agree), so a mosaic dimmed about 9% while it filled: their mean log is held
-    at 0 instead, so the pass keeps the level its scale gave it from the first tile to the last."""
-    gains = mosaic.match_gains(frames, mosaic.calibrated_gain, None, mosaic.calibrated_overlap)
-    gains = gains / np.exp(np.log(gains).mean(axis=0))
-    return gains, mosaic.match_offsets(frames, gains, None, mosaic.calibrated_overlap)
+    at 0 instead, so the pass keeps the level its scale gave it from the first tile to the last. The mean is taken
+    over the frames that overlap another (the others keep a gain of 1), before the gains are held within
+    mosaic.calibrated_gain: held first, a mosaic whose overlaps all asked for more than that (every gain at the limit)
+    had the few tiles that overlap nothing brightened by the whole limit against the rest (Rhea ISS_162RH_REGMAP001's
+    first two tiles, 9% brighter). kinds: what each frame shows (kind), measured only where like meets like."""
+    gains = mosaic.match_gains(frames, mosaic.max_gain, None, mosaic.calibrated_overlap, kinds=kinds)
+    _, pairs = mosaic.overlaps(frames, mosaic.calibrated_overlap, kinds)
+    linked = sorted({i for i, j, *_ in pairs} | {j for i, j, *_ in pairs})
+    if linked:
+        gains[linked] /= np.exp(np.log(gains[linked]).mean(axis=0))
+    gains = np.clip(gains, 1 / mosaic.calibrated_gain, mosaic.calibrated_gain)
+    return gains, mosaic.match_offsets(frames, gains, None, mosaic.calibrated_overlap, kinds=kinds)
 
 
 def _compose(window, k, **kw):
     """mosaic.compose on the view's canvas, with the benchmark's soft edge on its 0.5 scale canvas at this
-    canvas's scale."""
+    canvas's scale. kinds: what each frame shows, for their seams (kind, kinds_under), or None."""
     feather = mosaic.feather_px
+    kinds = kw.pop("kinds", None)
     with reel._mosaic_lock:
         try:
             mosaic.feather_px = max(8, round(64 * k / 0.5))
             mosaic.reset()
             if kw.get("pin", -1) is None and "corrections" not in kw and "gamma" not in kw and len(window) > 1:
-                kw = {**kw, "corrections": held_level([np.asarray(w[0]) for w in window])}
+                kw = {**kw, "corrections": held_level([np.asarray(w[0]) for w in window], kinds)}
+            elif "corrections" not in kw and kinds is not None:
+                kw = {**kw, "kinds": kinds}
             rgba = mosaic.compose(window, False, calibrated=True, **kw)
             mosaic.reset()
         finally:
@@ -3284,26 +3322,32 @@ def _compose(window, k, **kw):
     return rgba
 
 
-def _over(u, p, rgba, t, rect, cache, match=True, kept=None):
+def _over(u, p, rgba, t, rect, cache, match=True, kept=None, before=None):
     """Tile t composed over the mosaic rgba (in place) and matched to it (pin 0): only the tile's part of the
     canvas, and a margin for its soft edge, is composed, since nothing outside it changes. match=False: drawn
     over it with its soft edge as it is, on the pass's one scale (a mosaic movie's new lap is not pulled toward
     the older picture of its place under it). kept: as draw_over. A partial frame (partial) is drawn under the
-    picture instead, so it shows only where nothing else is."""
+    picture instead, so it shows only where nothing else is. before: the tiles the mosaic rgba was drawn from, in
+    order, so the match is measured only where the tile meets tiles of its kind (kind); None measures it everywhere."""
     k = p["k"]
     bx, by, bw, bh = t["box"]
     left = round((t["offset"][0] + bx - rect[0]) * k)
     top = round((t["offset"][1] + by - rect[1]) * k)
     sw, sh = max(1, round(bw * k)), max(1, round(bh * k))
+    kinds = None
+    if before is not None:
+        kinds = lambda y0, x0, h, w: (kinds_under(p, before, rect, y0, x0, h, w), kind(t))
     draw_over(rgba, lambda: _shade(_part(_pic(u, cache, p["display_scale"], t), sw, sh), t),
-              left, top, sw, sh, k, match, kept, under=partial(t) or bool(t.get("under")) or bool(t.get("fill")))
+              left, top, sw, sh, k, match, kept, under=partial(t) or bool(t.get("under")) or bool(t.get("fill")),
+              kinds=kinds)
 
 
-def draw_over(rgba, part, left, top, sw, sh, k, match=True, kept=None, under=False):
+def draw_over(rgba, part, left, top, sw, sh, k, match=True, kept=None, under=False, kinds=None):
     """_over's drawing: the tile part() (RGBA, sw x sh canvas pixels, its top left corner at left, top) composed over
     the mosaic rgba in place, on the tile's part of the canvas and a margin for its soft edge. kept: a list that gets
     what the blend step decided for the tile (mosaic.composite's kept, at the canvas's pixels), or None. under: the
-    tile drawn under the picture instead (matched to it, pin on the picture), and nothing kept for it."""
+    tile drawn under the picture instead (matched to it, pin on the picture), and nothing kept for it. kinds: (y0, x0,
+    h, w) -> what that part of the canvas shows (the picture's, the tile's) for the match (_over), or None."""
     H, W = rgba.shape[:2]
     pad = max(8, round(64 * k / 0.5)) + 1
     x0, y0 = max(left - pad, 0), max(top - pad, 0)
@@ -3318,16 +3362,17 @@ def draw_over(rgba, part, left, top, sw, sh, k, match=True, kept=None, under=Fal
         frame[b0 - y0:b1 - y0, a0 - x0:a1 - x0] = part[b0 - top:b1 - top, a0 - left:a1 - left]
         below = np.ascontiguousarray(rgba[y0:y1, x0:x1])
         same = (np.ones((2, 3)), np.zeros((2, 3)))
+        sort = kinds(y0, x0, y1 - y0, x1 - x0) if kinds is not None and match else None
         # matched to the picture so far (pin 0), and with the level step leveled to it along its seams as well
         # (mosaic._levels, pinned to it): leveled alone (gains of 1, each tile on the pass's one scale away from its
         # seams), Saturn's 725 tile mosaic movie of 2013 drawn whole came out 12% darker at the bottom than matched
         if under:
-            kw = {"corrections": same, "level": False} if not match else {"pin": 1}
+            kw = {"corrections": same, "level": False} if not match else {"pin": 1, "kinds": None if sort is None else sort[::-1]}
             rgba[y0:y1, x0:x1] = _compose([(frame, None, None, None), (below, None, None, None)], k, under=1, **kw)
             if kept is not None:
                 kept.append(None)
             return
-        kw = {"corrections": same, "level": False} if not match else {"pin": 0}
+        kw = {"corrections": same, "level": False} if not match else {"pin": 0, "kinds": sort}
         decided = [] if kept is not None else None
         rgba[y0:y1, x0:x1] = _compose([(below, None, None, None), (frame, None, None, None)], k, under=0, kept=decided, **kw)
         if kept is not None:
@@ -3353,7 +3398,7 @@ def _grown(u, p, f, mine, rect, cache, tag=""):
         m -= 1
     rgba = filter_mosaic(u, p, f, mine[:m], rect, cache, tag=tag).copy()
     for j in range(m, len(mine)):
-        _over(u, p, rgba, mine[j], rect, cache)
+        _over(u, p, rgba, mine[j], rect, cache, before=under_first(mine[:j]))
         path = named(j + 1)
         with _lock:
             _grown_last[path] = rgba.copy() if j + 1 < len(mine) else rgba
@@ -3469,7 +3514,7 @@ def filter_mosaic(u, p, f, tiles, rect, cache, ref=None, tag=""):
         elif corrections:
             rgba = _compose(window, k, pin=None, gamma=p["display_scale"]["gamma"], corrections=corrections)
         else:
-            rgba = _compose(window, k, pin=None)
+            rgba = _compose(window, k, pin=None, kinds=[kind(t) for t in shown])
         drew["rgba"] = rgba
         return _png(rgba)
 

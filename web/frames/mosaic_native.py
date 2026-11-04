@@ -195,29 +195,34 @@ def corrections(u, made, cache):
             first = mine if tagged or len(mine) <= om.GROW_FROM else mine[:om.GROW_FROM]
             got = out[f] = {}
             window, shown = om._window(u, p, first, rect, cache)
+            kinds = [om.kind(t) for t in shown]
             if len(window) > 1:
                 with reel._mosaic_lock:
-                    gains, offsets = om.held_level([np.asarray(w[0]) for w in window])
+                    gains, offsets = om.held_level([np.asarray(w[0]) for w in window], kinds)
                 for t, g, o in zip(shown, gains, offsets):
                     got[t["n"]] = [list(map(float, g)), list(map(float, o))]
             if blend and len(window) > 1:
                 # drawn as filter_mosaic draws them, what the blend step decides for each tile kept
                 kept = []
-                rgba = om._compose(window, p["k"], pin=None, kept=kept)
+                rgba = om._compose(window, p["k"], pin=None, kept=kept, kinds=kinds)
                 for t, d in zip(shown, kept):
                     got[t["n"]].append(_packed(d))
             elif len(first) < len(mine):
                 rgba = om.filter_mosaic(u, p, f, first, rect, cache).copy()
-            for t in mine[len(first):]:
+            for j in range(len(first), len(mine)):
+                t = mine[j]
                 pair = _pair(u, p, rgba, t, rect, cache)
                 if pair is not None:
+                    # measured where the tile meets tiles of its kind, as _grown's _over measures it
+                    pair, (y0, x0) = pair
+                    sort = (om.kinds_under(p, om.under_first(mine[:j]), rect, y0, x0, *pair[0].shape[:2]), om.kind(t))
                     with reel._mosaic_lock:
                         mosaic.reset()
-                        gains, offsets = mosaic.seams(pair, 0)
+                        gains, offsets = mosaic.seams(pair, 0, kinds=sort)
                         mosaic.reset()
                     got[t["n"]] = [list(map(float, gains[1])), list(map(float, offsets[1]))]
                 kept = [] if blend else None
-                om._over(u, p, rgba, t, rect, cache, kept=kept)
+                om._over(u, p, rgba, t, rect, cache, kept=kept, before=om.under_first(mine[:j]))
                 if kept and t["n"] in got:
                     got[t["n"]].append(_packed(kept[0]))
                 om._yield()
@@ -321,7 +326,8 @@ def _decided(d, r, top, left):
 
 def _pair(u, p, rgba, t, rect, cache):
     """The two frames obs_mosaic._over composes when tile t is laid over the mosaic rgba (the mosaic under the
-    tile's part of the canvas and a margin for its soft edge, and the tile on it), or None when it is off the canvas."""
+    tile's part of the canvas and a margin for its soft edge, and the tile on it) and where that part's corner lies on
+    the canvas (y0, x0), or None when it is off the canvas."""
     k = p["k"]
     H, W = rgba.shape[:2]
     pad = max(8, round(64 * k / 0.5)) + 1
@@ -338,7 +344,7 @@ def _pair(u, p, rgba, t, rect, cache):
     part = om._shade(om._part(om._pic(u, cache, p["display_scale"], t), sw, sh), t)
     frame = np.zeros((y1 - y0, x1 - x0, 4), np.uint8)
     frame[b0 - y0:b1 - y0, a0 - x0:a1 - x0] = part[b0 - top:b1 - top, a0 - left:a1 - left]
-    return [np.ascontiguousarray(rgba[y0:y1, x0:x1]), frame]
+    return [np.ascontiguousarray(rgba[y0:y1, x0:x1]), frame], (y0, x0)
 
 
 # ---------- drawing ----------
