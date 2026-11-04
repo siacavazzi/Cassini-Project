@@ -66,11 +66,14 @@ import studio_look  # noqa: E402
 import colour_smooth  # noqa: E402
 
 # bumped whenever the way films are made changes, so older ones are not served again
-VERSION = "export-v42"   # v42: movies use complete colour sets (#266) reaches exported pictures; v41: mosaic tile placement: slots inside disks, Titan hole, Iapetus white limb (#251) reaches exported pictures; v40: the batch of #247 (summed and full-size colour sets), #239 (edge trim), #240 (pass layout), #252 (grey where a moving body can't register), #249 (light sharpening), #258 (classic black sky), #261 (dark sky: edge glow and column stripes), #262 (mosaic despike) and #263 (steady mosaic movie colour, 3x3 seams, saturated frames held) reaches exported pictures; v39: the classic look's black sky (a classic color set's sky off its body's disk, neutral near black) reaches exported pictures; v38: neutral black sky: a color set's sky off its body's disk and a neutral toe at black (#248) reaches exported pictures; v37: even brightness across a pass and dim tiles decided by each pointing's first tile (#253) reaches exported pictures; v36: natural colour emulation keeps today's brightness with methane belt detail at twice a band's share (#254) reaches exported pictures; v35: the colour-set alignment fixes, wild star and edge fits rejected and grey where a channel is not aligned (#236) reach exported pictures; v34: the tone shoulder, shadow floor and saturated colour fill (#241) and the dark-sky row band fixes (#242) reach exported pictures; v33: the colour-set registration fixes (#235) and natural filters and palette for colour sets (#237) reach exported pictures; v32: the CISSCAL 4.1 dark current (#231) and the colour-set repeat and pointing rule (#232) reach exported pictures; v31: the CISSCAL 2 Hz noise, pixel pair and sky band steps (#230) reach exported pictures; v30: the batch-4 fixes reach exported pictures (thin ringlets kept, gentler heavily compressed frames, Titan wind stares in color, movie long exposures held); v29: Mosaics Off (mos=off), every frame of a mosaic on its own; v28: Complete color pictures only (a color set once, at its last channel) and one color mix a camera and target through the film (movie audit); v27: the batch-3 fixes (Titan color, saturated white, movie strobe, small bright bodies, line holes, pass kinds) reach exported pictures; v26: the small artifact, edge registration and two-filter color fixes (groups I, H2, F) reach exported pictures; v25: the restart's calibration and tone fixes (groups G, C) reach exported pictures; v24: Whole mosaics keep a mosaic movie's whole laps only, its drifting tiles one copy each (obs_mosaic.slots); v23: a mosaic pass is its mosaic at every frame, and stays a mosaic (or mosaic movie) in Full color only; v22: the flat fielded, dark subtracted, hot pixel repaired pictures; v21: Auto center centres the pictures shown on their own too, as the windows do
+VERSION = "export-v43"   # v43: the last picture holds the film's own step, no 1.5 s pause at the end, and Boomerang (boom=1); v42: movies use complete colour sets (#266) reaches exported pictures; v41: mosaic tile placement: slots inside disks, Titan hole, Iapetus white limb (#251) reaches exported pictures; v40: the batch of #247 (summed and full-size colour sets), #239 (edge trim), #240 (pass layout), #252 (grey where a moving body can't register), #249 (light sharpening), #258 (classic black sky), #261 (dark sky: edge glow and column stripes), #262 (mosaic despike) and #263 (steady mosaic movie colour, 3x3 seams, saturated frames held) reaches exported pictures; v39: the classic look's black sky (a classic color set's sky off its body's disk, neutral near black) reaches exported pictures; v38: neutral black sky: a color set's sky off its body's disk and a neutral toe at black (#248) reaches exported pictures; v37: even brightness across a pass and dim tiles decided by each pointing's first tile (#253) reaches exported pictures; v36: natural colour emulation keeps today's brightness with methane belt detail at twice a band's share (#254) reaches exported pictures; v35: the colour-set alignment fixes, wild star and edge fits rejected and grey where a channel is not aligned (#236) reach exported pictures; v34: the tone shoulder, shadow floor and saturated colour fill (#241) and the dark-sky row band fixes (#242) reach exported pictures; v33: the colour-set registration fixes (#235) and natural filters and palette for colour sets (#237) reach exported pictures; v32: the CISSCAL 4.1 dark current (#231) and the colour-set repeat and pointing rule (#232) reach exported pictures; v31: the CISSCAL 2 Hz noise, pixel pair and sky band steps (#230) reach exported pictures; v30: the batch-4 fixes reach exported pictures (thin ringlets kept, gentler heavily compressed frames, Titan wind stares in color, movie long exposures held); v29: Mosaics Off (mos=off), every frame of a mosaic on its own; v28: Complete color pictures only (a color set once, at its last channel) and one color mix a camera and target through the film (movie audit); v27: the batch-3 fixes (Titan color, saturated white, movie strobe, small bright bodies, line holes, pass kinds) reach exported pictures; v26: the small artifact, edge registration and two-filter color fixes (groups I, H2, F) reach exported pictures; v25: the restart's calibration and tone fixes (groups G, C) reach exported pictures; v24: Whole mosaics keep a mosaic movie's whole laps only, its drifting tiles one copy each (obs_mosaic.slots); v23: a mosaic pass is its mosaic at every frame, and stays a mosaic (or mosaic movie) in Full color only; v22: the flat fielded, dark subtracted, hot pixel repaired pictures; v21: Auto center centres the pictures shown on their own too, as the windows do
 FPS = 30                     # frames a second in the file
 HOLD_MIN, HOLD_MAX = 1 / FPS, 0.5
 TYPICAL = 1 / 8              # adaptive: how long the stretch's median gap lasts on screen
-LAST = 1.5                   # seconds the last picture stays
+# the last picture stays as long as a picture of the film does (fixed: 1/fps; adaptive: its median hold), not a held
+# pause at the end (Sam, 2026-11-04: "dead space at the end of the movie"; it was 1.5 s); a film of one picture
+# stays ONLY seconds
+ONLY = 1.5
 # pictures in a film at most, 0 for no limit (the default: a film is drawn a picture at a time, so a month of pictures
 # is only a longer film); a public site sets CASSINI_EXPORT_MAX. The Movie Editor's list (list=1) has no cap either way
 MAX_PICTURES = int(os.environ.get("CASSINI_EXPORT_MAX", "0") or 0)
@@ -246,7 +249,7 @@ def options(q):
             "levels": levels, "even": even, "fedit": fedit, "frame": {"crop": crop, "crop2": crop2, "nudge": nudge},
             "pictures": pictures, "list": get("list", "0") == "1",
             "from": t0, "until": t1, "cams": cams, "fps": fps, "size": size,
-            "sound": get("sound", "1") != "0", "caption": get("caption", "1") != "0",
+            "sound": get("sound", "1") != "0", "caption": get("caption", "1") != "0", "boom": get("boom", "0") == "1",
             "look": look if look in calibration.LOOKS else calibration.LOOKS[0],
             "colors": colors if colors in calibration.COLORS else calibration.COLORS[0], "movie": movie}
 
@@ -276,6 +279,8 @@ def job_id(opt):
         key["frame"] = opt["frame"]
     if opt.get("pictures", "movie") != "movie":
         key["pictures"] = opt["pictures"]
+    if opt.get("boom"):
+        key["boom"] = True
     return hashlib.sha1(json.dumps([VERSION, key], sort_keys=True).encode()).hexdigest()[:16]
 
 
@@ -459,12 +464,17 @@ def plan(opt, cache=None, work=False, progress=None):
         raise OverflowError(f"{len(out):,} pictures: an export holds at most {MAX_PICTURES:,}; pick a shorter stretch")
     tell(int(hi - lo), int(hi - lo), "frames")
     timing(out, opt["fps"])
+    forward = len(out)
+    if opt.get("boom") and not opt.get("list") and forward >= 3:
+        out = boomerang(out)
+    else:
+        forward = 0
     if big(opt):
         tell(0, 1, "sizes")
     full = full_size(opt, out, cache, work) if big(opt) else None
     return dict({"pictures": out, "count": len(out), "seconds": round(sum(e["frames"] for e in out) / FPS, 2),
                  "frames": sum(e["frames"] for e in out), "width": width(opt), "height": height(opt)},
-                **({"full": full} if full else {}))
+                **({"full": full} if full else {}), **({"boomerang": forward} if forward else {}))
 
 
 NATIVE_KINDS = ("mosaic", "rolling")   # the tries drawn at native resolution at Full (Pictures.picture)
@@ -529,7 +539,8 @@ def cut(pics, opt):
 
 
 def timing(pics, fps):
-    """Each picture's hold, start in the film and whole frames, by the fixed or adaptive rule."""
+    """Each picture's hold, start in the film and whole frames, by the fixed or adaptive rule. The last picture holds
+    for the film's own step (the fixed rate's, or the adaptive holds' median), so the film ends as it plays."""
     gaps = [b["t"] - a["t"] for a, b in zip(pics, pics[1:])]
     if fps == "auto":
         c = max(1e-3, float(np.median([g for g in gaps if g > 0] or [1]))) / TYPICAL
@@ -537,15 +548,43 @@ def timing(pics, fps):
         for e, g, h in zip(pics, gaps, holds):
             if g > SKIP_NOTE and g / c > HOLD_MAX:
                 e["skipped"] = g
+        holds.append(float(np.median(holds)) if holds else ONLY)
     else:
         holds = [1 / fps] * len(gaps)
-    holds.append(LAST)
-    at = carry = 0.0
+        holds.append(1 / fps if gaps else ONLY)
     for e, h in zip(pics, holds):
+        e["hold"] = h
+    frames(pics)
+
+
+def frames(pics):
+    """Each picture's start in the film and whole frames from its hold, the rounding carried forward."""
+    at = carry = 0.0
+    for e in pics:
+        h = e["hold"]
         n = max(1, round(h * FPS + carry))
         carry += h * FPS - n
         e["at"], e["hold"], e["frames"] = round(at, 4), round(h, 4), n
         at += n / FPS
+
+
+def boomerang(pics):
+    """Boomerang (the export's choice, Sam 2026-11-04): the film plays forward, then back to its first picture. The
+    pictures after the last one are the ones before it in reverse, each a copy marked back (the film's picture it
+    mirrors is mirror(n, forward)), each held as long as it was going forward; the last forward picture holds its
+    own step once, at the turn. Fewer than three pictures stay as they are."""
+    if len(pics) < 3:
+        return pics
+    out = pics + [dict(e, back=True) for e in reversed(pics[:-1])]
+    for e in out:
+        e.pop("at", None)
+    frames(out)
+    return out
+
+
+def mirror(n, forward):
+    """The forward picture a boomerang film's picture n shows (n itself on the way out)."""
+    return n if not forward or n < forward else 2 * (forward - 1) - n
 
 
 # ---------- the Movie Editor's exposure levels and framing ----------
@@ -944,7 +983,10 @@ def render(opt, p, pictures, path, progress=lambda done, total: None, workers=3)
     look = studio_look.parse(opt.get("edit", ""))
     # the Movie Editor's exposure levels (Even out measures the stretch's pictures first) and framing
     logs = measure(opt, pictures.cache, pictures, wait=True)["logs"] if opt.get("even") and evener() else None
-    evs = exposures(opt, pics, logs)[0]
+    # a Boomerang film's way back shows its forward pictures again, each with its forward exposure and crop
+    fwd = p.get("boomerang") or 0
+    evs = exposures(opt, pics[:fwd] if fwd else pics, logs)[0]
+    evs = [evs[mirror(n, fwd)] for n in range(len(pics))]
     fr = opt.get("frame") or FRAME
     # a frame edited on its own: the movie's look with its own keys over it
     own = {k: studio_look.parse(f"{opt.get('edit', '')},{r}") for k, r in (opt.get("fedit") or {}).items()}
@@ -988,7 +1030,7 @@ def render(opt, p, pictures, path, progress=lambda done, total: None, workers=3)
                     measured.pop(n, None)
                 kinds[what or "none"] += 1
                 if im is not None:
-                    im = framed(im, crop_at(fr, n, len(pics)), fr["nudge"].get(e["id"], (0, 0)))
+                    im = framed(im, crop_at(fr, mirror(n, fwd), fwd or len(pics)), fr["nudge"].get(e["id"], (0, 0)))
                 its = own[e["id"]] if e["id"] in own else look
                 if im is not None and (its or evs[n]):
                     # the movie editor's look (or the frame's own), as Cassini Studio draws it, at this picture's
@@ -1186,7 +1228,7 @@ def public_plan(p):
     """The plan as the page gets it: what shows when, and the best picture each may be (mosaic, color or
     processed); tries: every picture to make, best first, as [kind, address], which the page follows when it makes
     the film itself (export.html: a film made on this computer)."""
-    keep = ("id", "cam", "t", "target", "filters", "obs", "nm", "set", "set_nm", "at", "hold", "frames", "skipped", "pass")
+    keep = ("id", "cam", "t", "target", "filters", "obs", "nm", "set", "set_nm", "at", "hold", "frames", "skipped", "pass", "back")
     pics = [dict({k: e[k] for k in keep if k in e}, first=e["try"][0][0], src=source(*e["try"][0]),
                  tries=[[k, source(k, a)] for k, a in e["try"]]) for e in p["pictures"]]
     return dict(p, pictures=pics)
