@@ -127,6 +127,7 @@ body.phone #galtoast { bottom: calc(env(safe-area-inset-bottom, 0px) + var(--app
       <button class="galbtn go" id="galgo" title="Set the mission clock and the view to when this was saved">Go to this moment</button>
       <button class="galbtn" id="galsharebtn" aria-haspopup="true">Share…</button>
       <a class="galbtn" id="galdl" download>Download</a>
+      <label class="galchk" id="galorbit" title="Put a card in the picture's corner: Cassini's orbit at that moment, what the camera looked at, the date and the distance"><input type="checkbox"> Orbit graphic</label>
       <button class="galbtn" id="galkeep" hidden>Add to my Gallery</button>
       <span class="sp"></span>
       <button class="galbtn" id="galdel">Remove</button>
@@ -155,16 +156,16 @@ body.phone #galtoast { bottom: calc(env(safe-area-inset-bottom, 0px) + var(--app
   if (S) S.define({ key: "gallery.exportMeta", section: "Gallery", label: "Export with metadata", type: "toggle", value: false,
     hint: "Export Library also writes how each item was made and its thumbnail (gallery.json), so Import can bring the gallery back. Off: just the pictures and films." });
   const withMeta = () => !!(S && S.get("gallery.exportMeta"));
-  if (S) S.define({ key: "gallery.orbitInset", section: "Gallery", label: "Orbit diagram on saved pictures", type: "toggle", value: false,
-    hint: "A downloaded or shared picture gets a small map of Cassini's orbit in its corner, with the line to what the camera looked at, as the camera windows' orbit icon shows it." });
-  // a picture handed out (downloaded, shared) with the orbit diagram in its corner, when that is on: at the moment it was
-  // saved, looking at its first frame's target (cassiniOrbit.inset, orbit.html)
+  if (S) S.define({ key: "gallery.orbitInset", section: "Gallery", label: "Orbit graphic on saved pictures", type: "toggle", value: false,
+    hint: "A downloaded or shared picture gets a small card in its corner: Cassini's orbit at that moment, the line to what the camera looked at, the date and the distance. The same box is in a picture's save menu and by the gallery's Download." });
+  // a picture handed out (downloaded, shared) with the orbit graphic in its corner, when that is on: at the moment of
+  // its first frame (or the moment it was saved), looking at that frame's target (cassiniOrbit.inset, orbit.html)
+  const graphicOn = () => !!(S && S.get("gallery.orbitInset") && window.cassiniOrbit);
   async function withOrbit(blob, item) {
-    if (!blob || !S || !S.get("gallery.orbitInset") || !window.cassiniOrbit || item.kind === "movie") return blob;
-    const t = ((item.moment || []).find(p => p[0] === "t") || [])[1];
-    const et = t ? utcToEt(t) : state.et;
-    const id = (item.ids || [])[0], k = id && typeof catalog !== "undefined" && catalog ? catalog.id.indexOf(id) : -1;
-    return cassiniOrbit.inset(blob, { et, target: k >= 0 ? catalog.target[k] : null });
+    if (!blob || !graphicOn() || item.kind === "movie") return blob;
+    const t = ((item.moment || []).find(p => p[0] === "t") || [])[1], a = cassiniOrbit.about(item.ids);
+    if (a.target == null && t) a.et = utcToEt(t);
+    return cassiniOrbit.inset(blob, a);
   }
   const ICON = {
     add: '<svg viewBox="0 0 10 10" aria-hidden="true"><path d="M5 1.5v7M1.5 5h7"/></svg>',
@@ -462,10 +463,11 @@ body.phone #galtoast { bottom: calc(env(safe-area-inset-bottom, 0px) + var(--app
     $("galinfo").textContent = [item.sub, when && `saved at ${when} UTC`, item.hasFile ? `${fmtBytes(item.bytes)} on this device` : shared ? "shared link" : "kept as a recipe"].filter(Boolean).join(" · ");
     const pos = G.items.indexOf(item);
     $("galpos").textContent = shared ? "Shared with you" : `${pos + 1} of ${G.items.length}`;
+    $("galorbit").hidden = item.kind === "movie" || !window.cassiniOrbit;
     $("galdel").hidden = !!shared; $("galkeep").hidden = !shared; $("galedit").hidden = !window.cassiniStudio;
     $("galnote").textContent = shared ? "Made just now by the frame server from the archive, the same way it was made for whoever shared it." : "";
     let file = item.hasFile && !shared ? await getFile(item.id).catch(() => null) : null;
-    if (file && item.kind === "picture") file = await withOrbit(await jpeg(file), item);   // items saved as WebP before pictures were kept as JPEG
+    if (file && item.kind === "picture") file = await jpeg(file);   // items saved as WebP before pictures were kept as JPEG
     const dl = $("galdl"), base = fileName(item);
     if (item.kind === "movie") {
       const v = document.createElement("video"); v.controls = true; v.playsInline = true; v.preload = "metadata";
@@ -480,8 +482,7 @@ body.phone #galtoast { bottom: calc(env(safe-area-inset-bottom, 0px) + var(--app
         edited(item, null).then(b => {
           if (G.cur !== item && G.shared !== item) return;
           if (!b) { wait.textContent = "The frame server could not make this picture (is it running?)"; return; }
-          wait.remove(); im.src = objUrl(b); dl.setAttribute("download", base + ".jpg");
-          withOrbit(b, item).then(j => { dl.href = j === b ? im.src : objUrl(j); });
+          wait.remove(); im.src = objUrl(b); dl.href = im.src; dl.setAttribute("download", base + ".jpg");
         });
       }
       else if (item.src) {
@@ -489,7 +490,7 @@ body.phone #galtoast { bottom: calc(env(safe-area-inset-bottom, 0px) + var(--app
         im.onload = () => wait.remove(); im.onerror = () => { wait.textContent = "The frame server could not make this picture (is it running?)"; };
         im.src = sized(item.src, "full");
         dl.href = sized(item.src, "full") + "&format=png&download=1"; dl.setAttribute("download", base + ".png");
-        fetch(sized(item.src, "full")).then(r => r.ok ? r.blob() : null).then(b => jpeg(b)).then(j => withOrbit(j, item)).then(j => {
+        fetch(sized(item.src, "full")).then(r => r.ok ? r.blob() : null).then(b => jpeg(b)).then(j => {
           if (j && /jpeg/.test(j.type) && (G.cur === item || G.shared === item)) { dl.href = objUrl(j); dl.setAttribute("download", base + ".jpg"); }
         }).catch(() => {});
       }
@@ -760,6 +761,22 @@ body.phone #galtoast { bottom: calc(env(safe-area-inset-bottom, 0px) + var(--app
   $("galexport").addEventListener("click", exportLibrary);
   $("galmeta").checked = withMeta();
   $("galmeta").addEventListener("change", e => { if (S) S.set("gallery.exportMeta", e.target.checked); });
+  // the Orbit graphic box by Download: the picture downloads with the graphic in its corner (the picture on the stage
+  // stays as it is)
+  const orbitBox = $("galorbit").querySelector("input");
+  orbitBox.checked = graphicOn();
+  orbitBox.addEventListener("change", () => { if (S) S.set("gallery.orbitInset", orbitBox.checked); });
+  if (S) S.on("gallery.orbitInset", v => { orbitBox.checked = !!v; });
+  $("galdl").addEventListener("click", async e => {
+    const it = G.cur || G.shared, dl = $("galdl");
+    if (!it || it.kind === "movie" || !graphicOn() || !dl.href || dl.dataset.graphic) return;
+    e.preventDefault();
+    const b = await fetch(dl.href).then(r => r.ok ? r.blob() : null).catch(() => null);
+    if (!b) { toast("The picture is not ready yet"); return; }
+    const out = await withOrbit(await jpeg(b), it), a = document.createElement("a");
+    a.href = URL.createObjectURL(out); a.download = `${fileName(it)} orbit.jpg`; a.dataset.graphic = "1";
+    document.body.appendChild(a); a.click(); a.remove(); setTimeout(() => URL.revokeObjectURL(a.href), 60000);
+  });
   if (S) S.on("gallery.exportMeta", v => { $("galmeta").checked = !!v; });
   $("galimport").addEventListener("click", () => $("galfile").click());
   $("galfile").addEventListener("change", e => { const f = e.target.files[0]; e.target.value = ""; if (f) importLibrary(f); });

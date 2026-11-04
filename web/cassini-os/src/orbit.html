@@ -1,18 +1,20 @@
 <!-- The orbit diagram for Cassini OS: a very small top-down map of where Cassini is on its orbit, and what its cameras
-     point at. One drawing, used everywhere: the small icon in a camera window's corner, the quiet camera's picture
-     well, and as an inset on saved pictures (export). build.py splices the style into the head and the script after
-     the chrome script.
+     point at. One drawing, used everywhere: in the top-right corner of a camera window's picture in full view (click
+     it to open it over the picture), and as the orbit graphic on saved pictures (the Orbit graphic box in a picture's
+     save menu and by the gallery's Download; Settings > Gallery). build.py splices the style into the head and the
+     script after the chrome script.
 
      window.cassiniOrbit.svg(et, opts) returns the diagram as an SVG string (or "" before the trajectories load):
        opts.target   the body the camera looks at (catalog name, "TITAN"); a dot on its orbit and Cassini's line of sight
-       opts.size     "icon" (no labels, thick strokes for 30-60 px) or "full" (labels, Sun direction, scale note)
+       opts.size     "icon" (no labels, thick strokes for 30-60 px) or "full" (labels, Sun direction)
        opts.ahead    "next": the target is the next picture's, so the line of sight is dashed
-     window.cassiniOrbit.canvas(et, opts, px) resolves to a canvas of px × px with the same drawing (for exports).
+     cassiniOrbit.canvas(et, opts, px) resolves to a canvas of px × px with the same drawing; inset(blob, {et, target,
+     range}) to the picture as a JPEG with the graphic card in its corner; download(src, name, ids) saves that.
 
      Around Saturn the view looks down on the ring plane, the Sun up. Cassini's orbit is drawn from half an orbit back
      (solid) to half an orbit ahead (dashed), using the real trajectory, not an ellipse. Distances from Saturn are
-     drawn on a square-root scale so the inner moons stay apart from Saturn on a long orbit (a note says so in the
-     full size). During the cruise the Sun is in the middle and the planets' orbits are drawn instead of the moons'. -->
+     drawn on a square-root scale so the inner moons stay apart from Saturn on a long orbit. During the cruise the Sun
+     is in the middle and the planets' orbits are drawn instead of the moons'. -->
 <style>
 .orbitdg { display: block; width: 100%; height: 100%; overflow: visible; }
 .orbitdg text { font: 500 5.2px var(--ui, -apple-system, sans-serif); fill: rgba(232,236,242,.62); letter-spacing: .02em; text-transform: none; }
@@ -136,22 +138,68 @@
       im.src = "data:image/svg+xml;charset=utf-8," + encodeURIComponent(s);
     });
   }
-  // a saved picture with the diagram in its bottom-right corner, on a dark rounded square (Settings > Gallery > Orbit
-  // diagram on saved pictures): o.et the picture's time, o.target its target. The picture as it was when the
-  // trajectory of that time is not loaded
+  // a saved picture with the orbit graphic in its bottom-right corner (the save menu's and the gallery's "Orbit
+  // graphic" box, gallery.orbitInset): a dark card with CASSINI and the date over the diagram, and what the camera
+  // looked at under it. o.et the picture's time, o.target its target, o.range its distance in km. The picture as it
+  // was when the trajectory of that time is not loaded. Always a JPEG (exports are JPEG)
+  const MON = ["Jan", "Feb", "Mar", "Apr", "May", "Jun", "Jul", "Aug", "Sep", "Oct", "Nov", "Dec"];
   async function inset(blob, o = {}) {
     try {
-      const bmp = await createImageBitmap(blob), W = bmp.width, H = bmp.height, s = Math.round(Math.min(W, H) * .24), m = Math.round(Math.min(W, H) * .025);
-      const oc = await canvas(o.et, { target: o.target }, s);
+      const bmp = await createImageBitmap(blob), W = bmp.width, H = bmp.height, side = Math.min(W, H);
+      const s = Math.round(side * .26), m = Math.round(side * .03), pad = Math.round(s * .07);
+      const fs = Math.max(9, Math.round(s * .052)), head = Math.round(fs * 2.4), foot = o.target ? Math.round(fs * 3.6) : Math.round(fs * .8);
+      const ds = s - 2 * pad, oc = await canvas(o.et, { target: o.target }, ds * 2);
       if (!oc) return blob;
+      const cw = s, ch = head + ds + foot + pad;
       const c = document.createElement("canvas"); c.width = W; c.height = H;
       const g = c.getContext("2d"); g.fillStyle = "#000"; g.fillRect(0, 0, W, H); g.drawImage(bmp, 0, 0);
-      const x = W - s - m, y = H - s - m, r = s * .06;
-      g.fillStyle = "rgba(8,9,12,.74)"; g.beginPath(); g.moveTo(x + r, y); g.arcTo(x + s, y, x + s, y + s, r); g.arcTo(x + s, y + s, x, y + s, r); g.arcTo(x, y + s, x, y, r); g.arcTo(x, y, x + s, y, r); g.fill();
-      g.drawImage(oc, x, y);
+      const x = W - cw - m, y = H - ch - m, r = Math.round(s * .045);
+      const box = () => { g.beginPath(); g.moveTo(x + r, y); g.arcTo(x + cw, y, x + cw, y + ch, r); g.arcTo(x + cw, y + ch, x, y + ch, r); g.arcTo(x, y + ch, x, y, r); g.arcTo(x, y, x + cw, y, r); g.closePath(); };
+      g.save(); g.shadowColor = "rgba(0,0,0,.55)"; g.shadowBlur = s * .06; g.fillStyle = "rgba(9,10,13,.82)"; box(); g.fill(); g.restore();
+      g.strokeStyle = "rgba(255,255,255,.14)"; g.lineWidth = Math.max(1, s * .004); box(); g.stroke();
+      const sans = '-apple-system, "Helvetica Neue", Arial, sans-serif';
+      // the head: CASSINI, spaced out, and the moment
+      g.textBaseline = "middle"; g.fillStyle = "rgba(232,236,242,.92)"; g.font = `600 ${fs}px ${sans}`;
+      const hy = y + head / 2 + pad * .3;
+      if ("letterSpacing" in g) g.letterSpacing = `${fs * .28}px`;
+      g.fillText("CASSINI", x + pad, hy);
+      if ("letterSpacing" in g) g.letterSpacing = "0px";
+      const d = typeof etToMs === "function" && o.et != null ? new Date(etToMs(o.et)) : null;
+      const nameW = fs * 7 * 0.95;   // CASSINI, spaced out (measureText leaves the spacing out where it is not supported)
+      if (d) {
+        g.font = `400 ${fs * .9}px ${sans}`; g.fillStyle = "rgba(232,236,242,.6)"; g.textAlign = "right";
+        const day = `${d.getUTCDate()} ${MON[d.getUTCMonth()]} ${d.getUTCFullYear()}`, full = `${day} · ${String(d.getUTCHours()).padStart(2, "0")}:${String(d.getUTCMinutes()).padStart(2, "0")} UTC`;
+        const room = cw - 2 * pad - nameW - fs;
+        g.fillText(g.measureText(full).width <= room ? full : day, x + cw - pad, hy); g.textAlign = "left";
+      }
+      g.fillStyle = "rgba(138,182,255,.8)"; g.fillRect(x + pad, y + head + pad * .2, fs * 1.6, Math.max(1, s * .006));
+      g.drawImage(oc, x + pad, y + head + pad * .4, ds, ds);
+      // the foot: what the camera looked at, and from how far
+      if (o.target) {
+        const fy = y + head + pad * .4 + ds + fs * .9;
+        g.fillStyle = "rgba(232,236,242,.55)"; g.font = `400 ${fs * .85}px ${sans}`; g.fillText("Looking at", x + pad, fy);
+        g.fillStyle = "rgba(255,255,255,.95)"; g.font = `500 ${fs * 1.25}px ${sans}`;
+        g.fillText(titleCase(o.target), x + pad, fy + fs * 1.5);
+        if (o.range) { g.fillStyle = "rgba(232,236,242,.6)"; g.font = `400 ${fs * .9}px ${sans}`; g.textAlign = "right";
+          g.fillText(`${Math.round(o.range).toLocaleString("en-US")} km away`, x + cw - pad, fy + fs * 1.55); g.textAlign = "left"; }
+      }
       return await new Promise(res => c.toBlob(b => res(b || blob), "image/jpeg", .92));
     } catch (e) { return blob; }
   }
-  window.cassiniOrbit = { svg, canvas, model, inset };
+  // a picture's moment and target for its graphic, from its frame ids (the catalog's months loaded) or the clock now
+  function about(ids, et) {
+    const k = (ids || []).map(id => typeof catalog !== "undefined" && catalog ? catalog.id.indexOf(id) : -1).find(i => i >= 0);
+    return k !== undefined && k >= 0 ? { et: et ?? catalog.et[k], target: catalog.target[k], range: catalog.range_km ? catalog.range_km[k] : null } : { et: et ?? state.et, target: null };
+  }
+  // save a picture (a frame server address or a blob) with the graphic, as a JPEG file named name
+  async function download(src, name, ids, et) {
+    const blob = src instanceof Blob ? src : await fetch(src).then(r => r.ok ? r.blob() : null).catch(() => null);
+    if (!blob) return false;
+    const out = await inset(blob, about(ids, et));
+    const a = document.createElement("a"); a.href = URL.createObjectURL(out); a.download = name.replace(/\.(png|webp|jpe?g)$/i, "") + ".jpg";
+    document.body.appendChild(a); a.click(); a.remove(); setTimeout(() => URL.revokeObjectURL(a.href), 60000);
+    return true;
+  }
+  window.cassiniOrbit = { svg, canvas, model, inset, about, download };
 })();
 </script>

@@ -378,8 +378,8 @@ body { color: var(--q-text); }
 .well, .camwin.zoomed .well, .well.has-frame, .camwin.zoomed .well.has-frame { border: 1px solid var(--q-line); border-radius: 4px; box-shadow: none; background: rgba(0,0,0,.55); color: var(--q-dim); height: auto; aspect-ratio: 1; }
 /* the caption: the target and its frame (a link to NASA's archive) with the camera's status on the right, the filter
    and color under it; the (i) button opens the rest (details, credit) */
-.capline { display: grid; grid-template-columns: auto minmax(0, 1fr) auto; gap: 1px 8px; align-items: center; font-size: 10.5px; line-height: 1.4; min-width: 0; }
-.capline :is(.cap1, .cap2) { grid-column: 2; display: flex; align-items: baseline; gap: 6px; min-width: 0; white-space: nowrap; }
+.capline { display: grid; grid-template-columns: minmax(0, 1fr) auto; gap: 1px 8px; align-items: center; font-size: 10.5px; line-height: 1.4; min-width: 0; }
+.capline :is(.cap1, .cap2) { grid-column: 1; display: flex; align-items: baseline; gap: 6px; min-width: 0; white-space: nowrap; }
 .capline [data-f="target"] { color: #fff; font-weight: 500; font-size: 11.5px; flex: none; max-width: 50%; }
 .capline [data-f="range"] { color: var(--q-dim); flex: 0 1 auto; }
 .capline [data-f] { min-width: 0; overflow: hidden; text-overflow: ellipsis; }
@@ -398,19 +398,20 @@ body { color: var(--q-text); }
 .capline .cap2 [data-f="colour"] { flex: 1 1 0; }
 .capline .cap2 [data-f]:not(:empty) ~ [data-f]:not(:empty)::before { content: "·"; margin-right: 6px; }
 .capline .cap2 [data-f="frame"] { flex: none; color: var(--q-text); }
-/* the orbit icon, left of the caption: a live, very small map of Cassini's orbit (orbit.html); a click opens it big */
-.orbitbtn { all: unset; grid-column: 1; grid-row: 1 / span 2; width: 30px; height: 30px; border-radius: 6px; cursor: pointer; display: block; box-sizing: border-box; padding: 1px;
-  background: rgba(0,0,0,.35); border: 1px solid var(--q-line); }
-.orbitbtn[hidden], .well:has(.idlecard) ~ .capline .orbitbtn { display: none; }
-.orbitbtn:hover, .orbitbtn[aria-expanded="true"] { border-color: rgba(138,182,255,.6); background: rgba(138,182,255,.1); }
-.orbitbtn:focus-visible { outline: 1px solid var(--q-accent); }
+/* full view only: a live map of Cassini's orbit in the picture's top-right corner (orbit.html); a click opens it big */
+.orbitcorner { all: unset; display: none; position: absolute; right: 8px; top: 24px; z-index: 3; width: clamp(130px, 16%, 220px); aspect-ratio: 1; box-sizing: border-box; padding: 4px;
+  border-radius: 8px; background: rgba(8,9,12,.62); border: 1px solid var(--q-line); cursor: pointer; }
+.win.full .well .orbitcorner:not(:empty) { display: block; }
+.orbitcorner:hover { border-color: rgba(138,182,255,.6); }
+.orbitcorner:focus-visible { outline: 1px solid var(--q-accent); }
+body.idle .win.full .orbitcorner { opacity: .55; }
 .orbitpop { position: absolute; inset: 0; z-index: 4; background: rgba(8,9,12,.92); -webkit-backdrop-filter: blur(6px); backdrop-filter: blur(6px); cursor: pointer; }
 .orbitpop[hidden] { display: none; }
 .orbitpop .orbitbig { position: absolute; inset: 6% 6% 12% 6%; }
 .orbitpop .orbitnote { position: absolute; left: 10px; right: 10px; bottom: 8px; font: 10px/1.3 var(--ui); color: var(--q-dim); text-transform: none; letter-spacing: normal; text-align: left; }
 .camwin.more .capline .cap2 { white-space: normal; flex-wrap: wrap; row-gap: 0; }
 .camwin.more .capline .cap2 [data-f="colour"] { flex-basis: auto; overflow: visible; }
-.infobtn { all: unset; grid-column: 3; grid-row: 1 / span 2; align-self: start; width: 18px; height: 18px; display: grid; place-items: center; border-radius: 50%; color: var(--q-dim); cursor: pointer; }
+.infobtn { all: unset; grid-column: 2; grid-row: 1 / span 2; align-self: start; width: 18px; height: 18px; display: grid; place-items: center; border-radius: 50%; color: var(--q-dim); cursor: pointer; }
 .infobtn svg { width: 13px; height: 13px; } .infobtn svg * { fill: none; stroke: currentColor; stroke-width: 1.1; } .infobtn svg .dot { fill: currentColor; stroke: none; }
 .infobtn:hover, .camwin.more .infobtn { color: #fff; background: rgba(255,255,255,.1); }
 .infobtn:focus-visible { outline: 1px solid var(--q-accent); }
@@ -421,22 +422,21 @@ body { color: var(--q-text); }
   mask: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 8 8'%3E%3Cpath d='M3 1H1v6h6V5M4.5 1H7v2.5M7 1 3.5 4.5' fill='none' stroke='%23000' stroke-width='1.1'/%3E%3C/svg%3E") center / contain no-repeat; }
 .capline a.pds:hover { color: var(--q-accent); text-decoration: underline solid; }
 .capline a.pds:hover::after { opacity: 1; }
-/* a quiet camera: Cassini's orbit fills the square, and the next picture sits in its corner (cameraFeed quiet) */
+/* a quiet camera: a short strip in place of the square, with the camera's next picture and a button that goes
+   there (cameraFeed quiet; Sam 2026-11-04: a small countdown, out of the way, only while there is no picture) */
+.well:has(.idlecard), .camwin.zoomed .well:has(.idlecard) { aspect-ratio: auto; height: 58px; }
 .well .wellmsg:has(.idlecard) { position: absolute; inset: 0; }
-.idlecard { position: absolute; inset: 0; display: block; text-transform: none; letter-spacing: normal; text-align: left; font: 11px/1.3 var(--ui); color: var(--q-dim); }
-.idleorbit { position: absolute; inset: 6% 6% 18% 6%; opacity: .9; }
-.idletext { position: absolute; left: 10px; bottom: 9px; right: 10px; display: grid; grid-template-columns: auto 1fr; align-items: baseline; gap: 0 8px; }
+.idlecard { position: absolute; inset: 0; display: flex; align-items: center; gap: 10px; padding: 0 10px; text-transform: none; letter-spacing: normal; text-align: left; font: 11px/1.3 var(--ui); color: var(--q-dim); }
+.idletext { flex: 1; min-width: 0; display: grid; grid-template-columns: auto minmax(0, 1fr); align-items: baseline; gap: 1px 7px; }
 .idlek { grid-column: 1 / -1; font-size: 9px; letter-spacing: .1em; text-transform: uppercase; color: var(--q-dim); }
-.idlewhat { font-size: 15px; color: var(--q-text); font-weight: 500; }
-.idlewhen { color: var(--q-text); font-variant-numeric: tabular-nums; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
-.idlego { all: unset; grid-column: 1 / -1; justify-self: start; margin-top: 5px; display: inline-flex; align-items: center; gap: 5px; padding: 3px 9px 3px 7px; border-radius: 10px;
+.idlewhat { font-size: 13px; color: var(--q-text); font-weight: 500; white-space: nowrap; }
+.idlewhen { color: var(--q-dim); font-variant-numeric: tabular-nums; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+.idlego { all: unset; flex: none; display: inline-flex; align-items: center; gap: 5px; padding: 3px 9px 3px 7px; border-radius: 10px;
   border: 1px solid var(--q-line); color: var(--q-text); font-size: 10.5px; cursor: pointer; }
 .idlego[hidden] { display: none; }
 .idlego svg { width: 10px; height: 10px; } .idlego svg * { fill: currentColor; stroke: currentColor; stroke-width: 1.2; stroke-linejoin: round; }
 .idlego:hover { border-color: var(--q-accent); color: #fff; background: rgba(138,182,255,.12); }
 .idlego:focus-visible { outline: 1px solid var(--q-accent); }
-/* a small window: only the next picture, no orbit */
-.camwin:not(.zoomed):not(.full) .well:not(.has-frame) .idleorbit { inset: 4% 4% 30% 4%; }
 
 /* the frame ids along the picture's bottom edge say what the caption says, so they show only while the caption is
    away: resting, on a phone, or with Frame details off (a mosaic's, which name every tile, always show) */
@@ -734,6 +734,10 @@ body.idle .win.full .savewrap { opacity: .35; } body.idle .win.full .savewrap:ho
 .savemenu a:hover, .savemenu a:focus-visible { background: rgba(138,182,255,.16); color: #fff; outline: none; }
 .savemenu a span { color: var(--q-dim); font-size: 10px; }
 .savemenu li.now a { color: #fff; }
+.savemenu .orbitrow label { display: flex; align-items: center; gap: 7px; padding: 6px 12px; cursor: pointer; color: var(--q-text); white-space: nowrap; }
+.savemenu .orbitrow label:hover { background: rgba(138,182,255,.16); color: #fff; }
+.savemenu .orbitrow input { margin: 0; accent-color: var(--q-accent); }
+.savemenu .orbitrow span { margin-left: auto; padding-left: 14px; color: var(--q-dim); font-size: 10px; }
 /* on a phone the save menu is a sheet along the bottom of the screen */
 body.phone .savemenu { position: fixed; left: 8px; right: 8px; bottom: calc(env(safe-area-inset-bottom, 0px) + 8px); min-width: 0; z-index: 2000; font-size: 13px; }
 body.phone .savemenu a { padding: 11px 14px; }
@@ -1935,7 +1939,6 @@ body.ambient.phone .amb-where { font-size: 18px; }
       <div class="well"><div class="wellmsg"><b>No signal</b>Waiting for the frame server</div><img class="shot" alt="" crossorigin="anonymous"><span class="shottag"></span><span class="kindtag"></span></div>
       <div class="chans" aria-label="Filter channels"></div>
       <div class="capline">
-        <button class="orbitbtn" type="button" aria-label="Where Cassini is on its orbit" aria-expanded="false" title="Where Cassini is on its orbit"></button>
         <div class="cap1"><span data-f="target"></span><span data-f="range"></span><span class="capstat"><span class="led"></span><span data-f="status">Camera</span></span></div>
         <div class="cap2"><span data-f="frame"></span><span data-f="filter"></span><span data-f="colour"></span></div>
         <button class="infobtn" type="button" aria-label="More about this picture" aria-expanded="false" title="More about this picture"><svg viewBox="0 0 12 12" aria-hidden="true"><circle cx="6" cy="6" r="5"/><path d="M6 5.4v3.1"/><circle class="dot" cx="6" cy="3.6" r=".7"/></svg></button>
@@ -1954,7 +1957,6 @@ body.ambient.phone .amb-where { font-size: 18px; }
       <div class="well"><div class="wellmsg"><b>No signal</b>Waiting for the frame server</div><img class="shot" alt="" crossorigin="anonymous"><span class="shottag"></span><span class="kindtag"></span></div>
       <div class="chans" aria-label="Filter channels"></div>
       <div class="capline">
-        <button class="orbitbtn" type="button" aria-label="Where Cassini is on its orbit" aria-expanded="false" title="Where Cassini is on its orbit"></button>
         <div class="cap1"><span data-f="target"></span><span data-f="range"></span><span class="capstat"><span class="led"></span><span data-f="status">Camera</span></span></div>
         <div class="cap2"><span data-f="frame"></span><span data-f="filter"></span><span data-f="colour"></span></div>
         <button class="infobtn" type="button" aria-label="More about this picture" aria-expanded="false" title="More about this picture"><svg viewBox="0 0 12 12" aria-hidden="true"><circle cx="6" cy="6" r="5"/><path d="M6 5.4v3.1"/><circle class="dot" cx="6" cy="3.6" r=".7"/></svg></button>
@@ -2130,6 +2132,7 @@ body.ambient.phone .amb-where { font-size: 18px; }
       <button class="galbtn go" id="galgo" title="Set the mission clock and the view to when this was saved">Go to this moment</button>
       <button class="galbtn" id="galsharebtn" aria-haspopup="true">Share…</button>
       <a class="galbtn" id="galdl" download>Download</a>
+      <label class="galchk" id="galorbit" title="Put a card in the picture's corner: Cassini's orbit at that moment, what the camera looked at, the date and the distance"><input type="checkbox"> Orbit graphic</label>
       <button class="galbtn" id="galkeep" hidden>Add to my Gallery</button>
       <span class="sp"></span>
       <button class="galbtn" id="galdel">Remove</button>
@@ -5338,10 +5341,8 @@ onmessage = async e => {
   // a link on the picture opens OPUS, not the picture's own click (a mosaic pointing, full view)
   for (const t of ["click", "dblclick", "pointerdown"]) document.addEventListener(t, e => { if (e.target.closest && e.target.closest("a.pds")) e.stopPropagation(); }, true);
   // a quiet camera's square (cameraFeed quiet): the orbit diagram, and the next picture over it
-  const IDLE_HTML = `<div class="idlecard"><div class="idleorbit"></div><div class="idletext"><span class="idlek">Next picture</span>
-    <span class="idlewhat"></span><span class="idlewhen"></span>
-    <button class="idlego" type="button" title="Go to the next picture"><svg viewBox="0 0 12 12" aria-hidden="true"><path d="M2.5 2.5l4 3.5-4 3.5zM7.5 2.5l0 7"/></svg>Go to it</button></div>
-    </div>`;
+  const IDLE_HTML = `<div class="idlecard"><div class="idletext"><span class="idlek">Next picture</span><span class="idlewhat"></span><span class="idlewhen"></span></div>
+    <button class="idlego" type="button" title="Go to the next picture"><svg viewBox="0 0 12 12" aria-hidden="true"><path d="M2.5 2.5l4 3.5-4 3.5zM7.5 2.5l0 7"/></svg>Go to it</button></div>`;
   const allFeeds = new Set();   // every camera window's feed, the body windows' too (playback.maxBehind)
   function cameraFeed(card) {
     // body: a body window's own target; the two camera windows show the body in view in the body view, else every target
@@ -5396,18 +5397,22 @@ onmessage = async e => {
     // the orbit icon by the caption (cassiniOrbit, orbit.html): where Cassini is on its orbit and the line to the
     // target of the picture up, redrawn when the picture changes (and at most once a second while the clock runs);
     // a click opens it big over the picture, another (or Esc) closes it
-    const orbitBtn = card.querySelector(".orbitbtn");
+    const orbitBtn = document.createElement("button");
+    orbitBtn.className = "orbitcorner"; orbitBtn.type = "button"; orbitBtn.title = "Where Cassini is on its orbit"; orbitBtn.setAttribute("aria-expanded", "false");
+    for (const t of ["dblclick", "pointerdown"]) orbitBtn.addEventListener(t, e => e.stopPropagation());
+    well.appendChild(orbitBtn);
     let orbitK = -1, orbitAt = 0, orbitPop = null;
+    // (drawn only while the window is in full view; Sam 2026-11-04: the orbit map shows only there)
     function orbitIcon(k) {
       if (k !== undefined) orbitK = k;
-      if (!orbitBtn || !window.cassiniOrbit) return;
+      if (!window.cassiniOrbit) return;
+      if (!win.classList.contains("full")) { if (orbitBtn.innerHTML) orbitBtn.innerHTML = ""; if (orbitPop && !orbitPop.hidden) orbitOpen(false); return; }
       const now = performance.now();
-      if (k === undefined && now - orbitAt < 1000) return;
+      if (k === undefined && now - orbitAt < 1000 && orbitBtn.innerHTML) return;
       orbitAt = now;
       const t = orbitK >= 0 ? catalog.target[orbitK] : null;
-      orbitBtn.innerHTML = cassiniOrbit.svg(state.et, { target: t, size: "icon" });
-      orbitBtn.hidden = !orbitBtn.innerHTML;
-      if (orbitPop && !orbitPop.hidden) orbitPop.querySelector(".orbitbig").innerHTML = cassiniOrbit.svg(state.et, { target: t, size: "full" });
+      orbitBtn.innerHTML = cassiniOrbit.svg(state.et, { target: t, size: "full" });
+      if (orbitPop && !orbitPop.hidden) orbitPop.querySelector(".orbitbig").innerHTML = orbitBtn.innerHTML;
     }
     function orbitOpen(on) {
       if (!orbitPop) {
@@ -5419,7 +5424,7 @@ onmessage = async e => {
       orbitPop.hidden = !on; orbitBtn.setAttribute("aria-expanded", String(on)); well.classList.toggle("orbiting", on);
       if (on) { orbitAt = 0; orbitIcon(orbitK); }
     }
-    if (orbitBtn) orbitBtn.addEventListener("click", e => { e.stopPropagation(); orbitOpen(!orbitPop || orbitPop.hidden); if (e.detail) orbitBtn.blur(); });
+    orbitBtn.addEventListener("click", e => { e.stopPropagation(); orbitOpen(!orbitPop || orbitPop.hidden); if (e.detail) orbitBtn.blur(); });
     window.addEventListener("keydown", e => { if (e.key === "Escape" && orbitPop && !orbitPop.hidden) orbitOpen(false); });
     const centreOn = () => opts.get("autoCenter") ?? S.get("cameras.autoCenter") ?? true;
     const uncentred = new Set(), centreFailed = new Set();   // passes the server does not centre / frames it could not
@@ -5447,6 +5452,16 @@ onmessage = async e => {
     saveMenu.addEventListener("click", e => {
       const a = e.target.closest("a");
       if (a && a.dataset.native && nativeSave(a, e)) return;
+      // the Orbit graphic box: a picture comes as a JPEG with the orbit graphic in its corner (cassiniOrbit.download)
+      if (a && a.dataset.pic && S.get("gallery.orbitInset") && window.cassiniOrbit) {
+        e.preventDefault();
+        const ids = a.href.match(/[NW]\d{10}_\d+/g) || [], label = a.firstChild.textContent;
+        a.querySelector("span").textContent = "JPEG · adding the graphic…";
+        cassiniOrbit.download(a.href, `Cassini ${ids[0] || "picture"}${ids.length > 1 ? ` +${ids.length - 1}` : ""} orbit`, ids, ids.length ? undefined : state.et)
+          .then(ok => { if (a.isConnected) a.querySelector("span").textContent = ok ? "JPEG · with orbit graphic" : "could not be saved"; });
+        setTimeout(() => { saveOpen(false); if (e.detail) document.activeElement.blur(); }, 900);
+        return;
+      }
       if (a) setTimeout(() => { saveOpen(false); if (e.detail) document.activeElement.blur(); }, 0);
     });
     document.addEventListener("click", () => saveOpen(false));
@@ -5455,11 +5470,18 @@ onmessage = async e => {
       if (on) {
         const rows = savesFor(shot.dataset.src || "");
         saveMenu.innerHTML = rows.map(r => r === "-" ? '<li class="sep" role="separator"></li>'
-          : `<li class="${r.now ? "now" : ""}"><a role="menuitem" href="${r.href}" download${r.native ? ` data-native="${r.native}"` : ""}>${r.label}<span>${r.note}</span></a></li>`).join("");
+          : `<li class="${r.now ? "now" : ""}"><a role="menuitem" href="${r.href}" download${r.native ? ` data-native="${r.native}"` : ""}${pic(r) ? ' data-pic="1"' : ""}>${r.label}<span>${pic(r) && graphic() ? "JPEG · with orbit graphic" : r.note}</span></a></li>`).join("")
+          // a picture can be saved with the orbit graphic in its corner (Sam 2026-11-04): the box at the foot
+          + (rows.some(pic) && window.cassiniOrbit ? `<li class="sep" role="separator"></li><li class="orbitrow"><label><input type="checkbox"${graphic() ? " checked" : ""}> Orbit graphic<span>where Cassini was, in the corner</span></label></li>` : "");
+        const box = saveMenu.querySelector(".orbitrow input");
+        if (box) box.addEventListener("change", () => { S.set("gallery.orbitInset", box.checked); saveOpen(true); });
         for (const a of saveMenu.querySelectorAll("a[data-native]")) nativeNote(a);
       }
       saveWrap.classList.toggle("open", !!on); save.setAttribute("aria-expanded", String(!!on));
     }
+    // a row that saves a picture (not the archive's raw frame, science data or label), and whether the graphic goes on it
+    const pic = r => r !== "-" && /^PNG/.test(r.note) && !/raw/.test(r.note);
+    const graphic = () => !!S.get("gallery.orbitInset");
     // what can be saved from the picture at url: the picture as shown first, then the parts and sources of it
     // (a composite's channels on its scale; a frame on the pipeline's scale and as archived), each a frame server route
     const nameOf = id => { const k = kOf(id); return k >= 0 ? `${fname(k)} ${Math.round(nmOf(k))} nm` : id; };
@@ -5630,8 +5652,8 @@ onmessage = async e => {
       }
       return { key: shownFrameUrl(k, sz), set: -1, k };
     }
-    // a quiet camera: its square shows where Cassini is on its orbit (cassiniOrbit, orbit.html) and when this camera
-    // takes its next picture, of what, with a button that goes there. Kept up to date while the clock runs (a few
+    // a quiet camera: a short strip saying when this camera takes its next picture, of what, with a button that goes
+    // there. Kept up to date while the clock runs (a few
     // times a second at most); the card is made once, so its button can be clicked while the countdown changes
     let idleAt = 0, idleNext = undefined;
     function quiet(p) {
@@ -5643,9 +5665,6 @@ onmessage = async e => {
       const ks = framesOf(cam, body).ks, nk = ks[p + 1];
       idleNext = nk;
       const nt = nk !== undefined ? catalog.target[nk] : null;
-      const orbit = window.cassiniOrbit ? cassiniOrbit.svg(state.et, { target: nt, size: "full", ahead: "next" }) : "";
-      const o = card0.querySelector(".idleorbit");
-      if (o.dataset.svg !== orbit) { o.innerHTML = orbit; o.dataset.svg = orbit; }
       card0.querySelector(".idlewhat").textContent = nk !== undefined ? titleCase(nt || "Unknown") : "None in the months loaded";
       const d = nk !== undefined && new Date(etToMs(catalog.et[nk]));
       card0.querySelector(".idlewhen").textContent = d ? `in ${fmtDur(catalog.et[nk] - state.et)} · ${d.getUTCDate()} ${MONTHS[d.getUTCMonth()]} ${String(d.getUTCHours()).padStart(2, "0")}:${String(d.getUTCMinutes()).padStart(2, "0")} UTC` : "";
@@ -7450,7 +7469,7 @@ onmessage = async e => {
     return `<div class="pane" data-cam="${cam}" data-body="${name}">
         <div class="well"><div class="wellmsg"><b>No signal</b>Waiting for the frame server</div><img class="shot" alt="" crossorigin="anonymous"><span class="shottag"></span><span class="kindtag"></span></div>
         <div class="chans" aria-label="Filter channels"></div>
-        <div class="capline"><button class="orbitbtn" type="button" aria-label="Where Cassini is on its orbit" aria-expanded="false" title="Where Cassini is on its orbit"></button><div class="cap1"><span data-f="target"></span><span data-f="range"></span><span class="capstat"><span class="led"></span><span data-f="status"></span></span></div><div class="cap2"><span data-f="frame"></span><span data-f="filter"></span><span data-f="colour"></span></div><button class="infobtn" type="button" aria-label="More about this picture" aria-expanded="false" title="More about this picture"><svg viewBox="0 0 12 12" aria-hidden="true"><circle cx="6" cy="6" r="5"/><path d="M6 5.4v3.1"/><circle class="dot" cx="6" cy="3.6" r=".7"/></svg></button></div>
+        <div class="capline"><div class="cap1"><span data-f="target"></span><span data-f="range"></span><span class="capstat"><span class="led"></span><span data-f="status"></span></span></div><div class="cap2"><span data-f="frame"></span><span data-f="filter"></span><span data-f="colour"></span></div><button class="infobtn" type="button" aria-label="More about this picture" aria-expanded="false" title="More about this picture"><svg viewBox="0 0 12 12" aria-hidden="true"><circle cx="6" cy="6" r="5"/><path d="M6 5.4v3.1"/><circle class="dot" cx="6" cy="3.6" r=".7"/></svg></button></div>
         <dl class="info"><dt>Details</dt><dd data-f="details"></dd><dt>Pass</dt><dd data-f="obs"></dd><dt>Credit</dt><dd><button class="credit" data-about="iss" title="Credits">NASA/JPL-Caltech/SSI</button></dd></dl>
       </div>`;
   }
@@ -9368,16 +9387,16 @@ onmessage = async e => {
   if (S) S.define({ key: "gallery.exportMeta", section: "Gallery", label: "Export with metadata", type: "toggle", value: false,
     hint: "Export Library also writes how each item was made and its thumbnail (gallery.json), so Import can bring the gallery back. Off: just the pictures and films." });
   const withMeta = () => !!(S && S.get("gallery.exportMeta"));
-  if (S) S.define({ key: "gallery.orbitInset", section: "Gallery", label: "Orbit diagram on saved pictures", type: "toggle", value: false,
-    hint: "A downloaded or shared picture gets a small map of Cassini's orbit in its corner, with the line to what the camera looked at, as the camera windows' orbit icon shows it." });
-  // a picture handed out (downloaded, shared) with the orbit diagram in its corner, when that is on: at the moment it was
-  // saved, looking at its first frame's target (cassiniOrbit.inset, orbit.html)
+  if (S) S.define({ key: "gallery.orbitInset", section: "Gallery", label: "Orbit graphic on saved pictures", type: "toggle", value: false,
+    hint: "A downloaded or shared picture gets a small card in its corner: Cassini's orbit at that moment, the line to what the camera looked at, the date and the distance. The same box is in a picture's save menu and by the gallery's Download." });
+  // a picture handed out (downloaded, shared) with the orbit graphic in its corner, when that is on: at the moment of
+  // its first frame (or the moment it was saved), looking at that frame's target (cassiniOrbit.inset, orbit.html)
+  const graphicOn = () => !!(S && S.get("gallery.orbitInset") && window.cassiniOrbit);
   async function withOrbit(blob, item) {
-    if (!blob || !S || !S.get("gallery.orbitInset") || !window.cassiniOrbit || item.kind === "movie") return blob;
-    const t = ((item.moment || []).find(p => p[0] === "t") || [])[1];
-    const et = t ? utcToEt(t) : state.et;
-    const id = (item.ids || [])[0], k = id && typeof catalog !== "undefined" && catalog ? catalog.id.indexOf(id) : -1;
-    return cassiniOrbit.inset(blob, { et, target: k >= 0 ? catalog.target[k] : null });
+    if (!blob || !graphicOn() || item.kind === "movie") return blob;
+    const t = ((item.moment || []).find(p => p[0] === "t") || [])[1], a = cassiniOrbit.about(item.ids);
+    if (a.target == null && t) a.et = utcToEt(t);
+    return cassiniOrbit.inset(blob, a);
   }
   const ICON = {
     add: '<svg viewBox="0 0 10 10" aria-hidden="true"><path d="M5 1.5v7M1.5 5h7"/></svg>',
@@ -9675,10 +9694,11 @@ onmessage = async e => {
     $("galinfo").textContent = [item.sub, when && `saved at ${when} UTC`, item.hasFile ? `${fmtBytes(item.bytes)} on this device` : shared ? "shared link" : "kept as a recipe"].filter(Boolean).join(" · ");
     const pos = G.items.indexOf(item);
     $("galpos").textContent = shared ? "Shared with you" : `${pos + 1} of ${G.items.length}`;
+    $("galorbit").hidden = item.kind === "movie" || !window.cassiniOrbit;
     $("galdel").hidden = !!shared; $("galkeep").hidden = !shared; $("galedit").hidden = !window.cassiniStudio;
     $("galnote").textContent = shared ? "Made just now by the frame server from the archive, the same way it was made for whoever shared it." : "";
     let file = item.hasFile && !shared ? await getFile(item.id).catch(() => null) : null;
-    if (file && item.kind === "picture") file = await withOrbit(await jpeg(file), item);   // items saved as WebP before pictures were kept as JPEG
+    if (file && item.kind === "picture") file = await jpeg(file);   // items saved as WebP before pictures were kept as JPEG
     const dl = $("galdl"), base = fileName(item);
     if (item.kind === "movie") {
       const v = document.createElement("video"); v.controls = true; v.playsInline = true; v.preload = "metadata";
@@ -9693,8 +9713,7 @@ onmessage = async e => {
         edited(item, null).then(b => {
           if (G.cur !== item && G.shared !== item) return;
           if (!b) { wait.textContent = "The frame server could not make this picture (is it running?)"; return; }
-          wait.remove(); im.src = objUrl(b); dl.setAttribute("download", base + ".jpg");
-          withOrbit(b, item).then(j => { dl.href = j === b ? im.src : objUrl(j); });
+          wait.remove(); im.src = objUrl(b); dl.href = im.src; dl.setAttribute("download", base + ".jpg");
         });
       }
       else if (item.src) {
@@ -9702,7 +9721,7 @@ onmessage = async e => {
         im.onload = () => wait.remove(); im.onerror = () => { wait.textContent = "The frame server could not make this picture (is it running?)"; };
         im.src = sized(item.src, "full");
         dl.href = sized(item.src, "full") + "&format=png&download=1"; dl.setAttribute("download", base + ".png");
-        fetch(sized(item.src, "full")).then(r => r.ok ? r.blob() : null).then(b => jpeg(b)).then(j => withOrbit(j, item)).then(j => {
+        fetch(sized(item.src, "full")).then(r => r.ok ? r.blob() : null).then(b => jpeg(b)).then(j => {
           if (j && /jpeg/.test(j.type) && (G.cur === item || G.shared === item)) { dl.href = objUrl(j); dl.setAttribute("download", base + ".jpg"); }
         }).catch(() => {});
       }
@@ -9973,6 +9992,22 @@ onmessage = async e => {
   $("galexport").addEventListener("click", exportLibrary);
   $("galmeta").checked = withMeta();
   $("galmeta").addEventListener("change", e => { if (S) S.set("gallery.exportMeta", e.target.checked); });
+  // the Orbit graphic box by Download: the picture downloads with the graphic in its corner (the picture on the stage
+  // stays as it is)
+  const orbitBox = $("galorbit").querySelector("input");
+  orbitBox.checked = graphicOn();
+  orbitBox.addEventListener("change", () => { if (S) S.set("gallery.orbitInset", orbitBox.checked); });
+  if (S) S.on("gallery.orbitInset", v => { orbitBox.checked = !!v; });
+  $("galdl").addEventListener("click", async e => {
+    const it = G.cur || G.shared, dl = $("galdl");
+    if (!it || it.kind === "movie" || !graphicOn() || !dl.href || dl.dataset.graphic) return;
+    e.preventDefault();
+    const b = await fetch(dl.href).then(r => r.ok ? r.blob() : null).catch(() => null);
+    if (!b) { toast("The picture is not ready yet"); return; }
+    const out = await withOrbit(await jpeg(b), it), a = document.createElement("a");
+    a.href = URL.createObjectURL(out); a.download = `${fileName(it)} orbit.jpg`; a.dataset.graphic = "1";
+    document.body.appendChild(a); a.click(); a.remove(); setTimeout(() => URL.revokeObjectURL(a.href), 60000);
+  });
   if (S) S.on("gallery.exportMeta", v => { $("galmeta").checked = !!v; });
   $("galimport").addEventListener("click", () => $("galfile").click());
   $("galfile").addEventListener("change", e => { const f = e.target.files[0]; e.target.value = ""; if (f) importLibrary(f); });
@@ -10979,9 +11014,9 @@ void main() {
     let blob = await made(); if (!blob) return;
     // Settings > Gallery > Orbit diagram on saved pictures: the diagram in the corner, at the picture's moment
     if (!isMovie() && window.cassiniOrbit && setting("gallery.orbitInset", false)) {
-      const t = ((st.item && st.item.moment) || []).find(p => p[0] === "t"), id = ((st.item && st.item.ids) || [])[0];
-      const k = id && typeof catalog !== "undefined" && catalog ? catalog.id.indexOf(id) : -1;
-      blob = await cassiniOrbit.inset(blob, { et: t ? utcToEt(t[1]) : state.et, target: k >= 0 ? catalog.target[k] : null });
+      const t = ((st.item && st.item.moment) || []).find(p => p[0] === "t"), a = cassiniOrbit.about(st.item && st.item.ids);
+      if (a.target == null && t) a.et = utcToEt(t[1]);
+      blob = await cassiniOrbit.inset(blob, a);
     }
     const ext = /mp4/.test(blob.type) ? "mp4" : /webm/.test(blob.type) ? "webm" : "jpg";
     const a = document.createElement("a"); a.href = URL.createObjectURL(blob);
@@ -12765,23 +12800,69 @@ void main() {
       im.src = "data:image/svg+xml;charset=utf-8," + encodeURIComponent(s);
     });
   }
-  // a saved picture with the diagram in its bottom-right corner, on a dark rounded square (Settings > Gallery > Orbit
-  // diagram on saved pictures): o.et the picture's time, o.target its target. The picture as it was when the
-  // trajectory of that time is not loaded
+  // a saved picture with the orbit graphic in its bottom-right corner (the save menu's and the gallery's "Orbit
+  // graphic" box, gallery.orbitInset): a dark card with CASSINI and the date over the diagram, and what the camera
+  // looked at under it. o.et the picture's time, o.target its target, o.range its distance in km. The picture as it
+  // was when the trajectory of that time is not loaded. Always a JPEG (exports are JPEG)
+  const MON = ["Jan", "Feb", "Mar", "Apr", "May", "Jun", "Jul", "Aug", "Sep", "Oct", "Nov", "Dec"];
   async function inset(blob, o = {}) {
     try {
-      const bmp = await createImageBitmap(blob), W = bmp.width, H = bmp.height, s = Math.round(Math.min(W, H) * .24), m = Math.round(Math.min(W, H) * .025);
-      const oc = await canvas(o.et, { target: o.target }, s);
+      const bmp = await createImageBitmap(blob), W = bmp.width, H = bmp.height, side = Math.min(W, H);
+      const s = Math.round(side * .26), m = Math.round(side * .03), pad = Math.round(s * .07);
+      const fs = Math.max(9, Math.round(s * .052)), head = Math.round(fs * 2.4), foot = o.target ? Math.round(fs * 3.6) : Math.round(fs * .8);
+      const ds = s - 2 * pad, oc = await canvas(o.et, { target: o.target }, ds * 2);
       if (!oc) return blob;
+      const cw = s, ch = head + ds + foot + pad;
       const c = document.createElement("canvas"); c.width = W; c.height = H;
       const g = c.getContext("2d"); g.fillStyle = "#000"; g.fillRect(0, 0, W, H); g.drawImage(bmp, 0, 0);
-      const x = W - s - m, y = H - s - m, r = s * .06;
-      g.fillStyle = "rgba(8,9,12,.74)"; g.beginPath(); g.moveTo(x + r, y); g.arcTo(x + s, y, x + s, y + s, r); g.arcTo(x + s, y + s, x, y + s, r); g.arcTo(x, y + s, x, y, r); g.arcTo(x, y, x + s, y, r); g.fill();
-      g.drawImage(oc, x, y);
+      const x = W - cw - m, y = H - ch - m, r = Math.round(s * .045);
+      const box = () => { g.beginPath(); g.moveTo(x + r, y); g.arcTo(x + cw, y, x + cw, y + ch, r); g.arcTo(x + cw, y + ch, x, y + ch, r); g.arcTo(x, y + ch, x, y, r); g.arcTo(x, y, x + cw, y, r); g.closePath(); };
+      g.save(); g.shadowColor = "rgba(0,0,0,.55)"; g.shadowBlur = s * .06; g.fillStyle = "rgba(9,10,13,.82)"; box(); g.fill(); g.restore();
+      g.strokeStyle = "rgba(255,255,255,.14)"; g.lineWidth = Math.max(1, s * .004); box(); g.stroke();
+      const sans = '-apple-system, "Helvetica Neue", Arial, sans-serif';
+      // the head: CASSINI, spaced out, and the moment
+      g.textBaseline = "middle"; g.fillStyle = "rgba(232,236,242,.92)"; g.font = `600 ${fs}px ${sans}`;
+      const hy = y + head / 2 + pad * .3;
+      if ("letterSpacing" in g) g.letterSpacing = `${fs * .28}px`;
+      g.fillText("CASSINI", x + pad, hy);
+      if ("letterSpacing" in g) g.letterSpacing = "0px";
+      const d = typeof etToMs === "function" && o.et != null ? new Date(etToMs(o.et)) : null;
+      const nameW = fs * 7 * 0.95;   // CASSINI, spaced out (measureText leaves the spacing out where it is not supported)
+      if (d) {
+        g.font = `400 ${fs * .9}px ${sans}`; g.fillStyle = "rgba(232,236,242,.6)"; g.textAlign = "right";
+        const day = `${d.getUTCDate()} ${MON[d.getUTCMonth()]} ${d.getUTCFullYear()}`, full = `${day} · ${String(d.getUTCHours()).padStart(2, "0")}:${String(d.getUTCMinutes()).padStart(2, "0")} UTC`;
+        const room = cw - 2 * pad - nameW - fs;
+        g.fillText(g.measureText(full).width <= room ? full : day, x + cw - pad, hy); g.textAlign = "left";
+      }
+      g.fillStyle = "rgba(138,182,255,.8)"; g.fillRect(x + pad, y + head + pad * .2, fs * 1.6, Math.max(1, s * .006));
+      g.drawImage(oc, x + pad, y + head + pad * .4, ds, ds);
+      // the foot: what the camera looked at, and from how far
+      if (o.target) {
+        const fy = y + head + pad * .4 + ds + fs * .9;
+        g.fillStyle = "rgba(232,236,242,.55)"; g.font = `400 ${fs * .85}px ${sans}`; g.fillText("Looking at", x + pad, fy);
+        g.fillStyle = "rgba(255,255,255,.95)"; g.font = `500 ${fs * 1.25}px ${sans}`;
+        g.fillText(titleCase(o.target), x + pad, fy + fs * 1.5);
+        if (o.range) { g.fillStyle = "rgba(232,236,242,.6)"; g.font = `400 ${fs * .9}px ${sans}`; g.textAlign = "right";
+          g.fillText(`${Math.round(o.range).toLocaleString("en-US")} km away`, x + cw - pad, fy + fs * 1.55); g.textAlign = "left"; }
+      }
       return await new Promise(res => c.toBlob(b => res(b || blob), "image/jpeg", .92));
     } catch (e) { return blob; }
   }
-  window.cassiniOrbit = { svg, canvas, model, inset };
+  // a picture's moment and target for its graphic, from its frame ids (the catalog's months loaded) or the clock now
+  function about(ids, et) {
+    const k = (ids || []).map(id => typeof catalog !== "undefined" && catalog ? catalog.id.indexOf(id) : -1).find(i => i >= 0);
+    return k !== undefined && k >= 0 ? { et: et ?? catalog.et[k], target: catalog.target[k], range: catalog.range_km ? catalog.range_km[k] : null } : { et: et ?? state.et, target: null };
+  }
+  // save a picture (a frame server address or a blob) with the graphic, as a JPEG file named name
+  async function download(src, name, ids, et) {
+    const blob = src instanceof Blob ? src : await fetch(src).then(r => r.ok ? r.blob() : null).catch(() => null);
+    if (!blob) return false;
+    const out = await inset(blob, about(ids, et));
+    const a = document.createElement("a"); a.href = URL.createObjectURL(out); a.download = name.replace(/\.(png|webp|jpe?g)$/i, "") + ".jpg";
+    document.body.appendChild(a); a.click(); a.remove(); setTimeout(() => URL.revokeObjectURL(a.href), 60000);
+    return true;
+  }
+  window.cassiniOrbit = { svg, canvas, model, inset, about, download };
 })();
 </script>
 <script>
@@ -13105,7 +13186,7 @@ void main() {
   window.cassiniAbout = { open, addTab, esc, close: () => show(false), credits: CREDITS };
 
   // ---- which version this is: this page's build id (build.py writes it), and what the frame server says it serves ----
-  const BUILD = /*BUILD*/"c6ab520221df";
+  const BUILD = /*BUILD*/"c0674c40ec2f";
   const FRAMES = (() => {                       // the frame server, chosen as the camera window chooses it
     const q = new URLSearchParams(location.search).get("frames");
     if (q) return q.replace(/\/$/, "");
