@@ -1778,7 +1778,8 @@ def lum_base(u, p, tiles, used, base=None):
     # (or a colour tile with lines lost in downlink: the colour is only where all its filters are, so its lost lines were
     # a black strip, Dione ISS_016DI_TARGFLYBY001's GRN N1507742100_3; or a frame filling in under a lossy grey one)
     return (any(not all(near(t["offset"], by[f]) for f in used) for t in base)
-            or any(t["filter"] in used and "offset" in t and _lossy(t) for t in tiles) or bool(lum_fills(u, p, tiles)))
+            or any(t["filter"] in used and "offset" in t and _lossy(t) for t in tiles) or bool(lum_fills(u, p, tiles))
+            or (bool(base) and mixes(u, p, tiles, used)))
 
 
 LUM_MATCH = (0.25, 4.0)   # the furthest the gray's match to the colour it borders goes, per channel
@@ -1854,6 +1855,92 @@ def over_grey(colour, grey, k, gamma=2.2, gain=...):
     alpha = w + ga * (1 - w)
     return np.dstack([np.clip(out + 0.5, 0, 255).astype(np.uint8), np.clip(alpha * 255 + 0.5, 0, 255).astype(np.uint8)])
 
+
+
+# a clouded body's colour mosaic (clouded: Saturn, Jupiter, Titan, the rings) shows colour only where the three filters'
+# frames on top at a place were taken within MIX_SPAN of one another. Each filter's mosaic is drawn on its own, its
+# newest frame on top, so where a pointing took only some of the filters (195RI HIPHASEC001: 21 of 51 pointings), or
+# laps an hour apart overlap (Jupiter C23 NSMAP101: 15 of 21 pointings), red came from one visit and blue from
+# another, while the clouds turned between them (Jupiter turns 26 degrees in 43 minutes): green and pink blotches in
+# the bands, flat green and magenta blocks on Saturn's night side. There the gray base (its own frames, matched to the
+# colour round it, over_grey) shows instead
+MIX_SPAN = 2 * sets_passes.SET_GAP   # s: the longest a colour set's frames take, first to last
+MIX_LEAST = 0.02                     # of a frame: a mixed patch narrower than this (a seam's sliver) keeps its colour
+
+
+def mixes(u, p, tiles, colour):
+    """True when a clouded pass's colour mosaic of these tiles mixes visits: two tiles of different colour filters
+    overlap (their boxes) and were taken more than MIX_SPAN apart. Decided on where the tiles are, so the luminance
+    base (lum_base) is drawn for the gray set_mask leaves."""
+    # (a mosaic movie's picture shows each place's newest lap by design: rolling_layout, its tiles marked "base")
+    if not colour or len(colour) < 2 or not clouded(u) or _rolling.get() or any("base" in t for t in tiles):
+        return False
+    mine = [t for t in tiles if t["filter"] in colour and "offset" in t]
+    if len(mine) < 2:
+        return False
+    f = np.array([colour.index(t["filter"]) for t in mine])
+    when = np.array([u["frames"][t["n"]][3] for t in mine], float)
+    x0 = np.array([t["offset"][0] + t["box"][0] for t in mine], float)
+    y0 = np.array([t["offset"][1] + t["box"][1] for t in mine], float)
+    x1, y1 = x0 + np.array([t["box"][2] for t in mine]), y0 + np.array([t["box"][3] for t in mine])
+    for i in range(len(mine) - 1):
+        j = slice(i + 1, None)
+        if ((f[j] != f[i]) & (np.abs(when[j] - when[i]) > MIX_SPAN) & (x0[j] < x1[i]) & (x0[i] < x1[j])
+                & (y0[j] < y1[i]) & (y0[i] < y1[j])).any():
+            return True
+    return False
+
+
+def set_times(shape, placed):
+    """When the frame on top at each canvas pixel was taken (float, NaN where none): placed yields (time, alpha,
+    left, top) in the order the filter's mosaic draws its tiles (under_first), each alpha (uint8) at left, top."""
+    out = np.full(shape, np.nan, np.float64)
+    H, W = shape
+    for when, alpha, left, top in placed:
+        h, w = alpha.shape
+        x0, y0, x1, y1 = max(left, 0), max(top, 0), min(left + w, W), min(top + h, H)
+        if x1 <= x0 or y1 <= y0:
+            continue
+        on = alpha[y0 - top:y1 - top, x0 - left:x1 - left] > 127
+        out[y0:y1, x0:x1][on] = when
+    return out
+
+
+def placed_tiles(u, p, mine, rect, cache):
+    """set_times' input for a filter's tiles (mine) on the view rect's canvas, as _window places them."""
+    k = p["k"]
+    for t in under_first(mine):
+        bx, by, bw, bh = t["box"]
+        left = round((t["offset"][0] + bx - rect[0]) * k)
+        top = round((t["offset"][1] + by - rect[1]) * k)
+        sw, sh = max(1, round(bw * k)), max(1, round(bh * k))
+        yield u["frames"][t["n"]][3], _part(_pic(u, cache, p["display_scale"], t), sw, sh)[..., 3], left, top
+
+
+def set_mask(times, k):
+    """Where a colour picture mixes visits (bool, canvas pixels): every colour filter has a frame on top there
+    (times: set_times of each) and the first and last were taken more than MIX_SPAN apart, less patches narrower
+    than MIX_LEAST of a frame (at k canvas px per reference px). None when nowhere."""
+    stack = np.stack(times)
+    every = ~np.isnan(stack).any(axis=0)
+    if not every.any():
+        return None
+    with np.errstate(invalid="ignore"):
+        spread = np.nanmax(stack, axis=0) - np.nanmin(stack, axis=0)
+    mixed = (every & (spread > MIX_SPAN)).astype(np.uint8)
+    r = max(1, round(MIX_LEAST * FRAME * k / 2))
+    mixed = cv2.morphologyEx(mixed, cv2.MORPH_OPEN, cv2.getStructuringElement(cv2.MORPH_ELLIPSE, (2 * r + 1, 2 * r + 1)))
+    return mixed.astype(bool) if mixed.any() else None
+
+
+def unmixed(colour, mixed, grey):
+    """The colour picture (colour_picture's RGBA) left out where it mixes visits (set_mask) and the gray base (grey)
+    lies under it, so over_grey draws the gray there, fading the colour into it over its feather."""
+    if mixed is None:
+        return colour
+    out = colour.copy()
+    out[..., 3][mixed & (grey[..., 3] > 127)] = 0
+    return out
 
 FILLED = 0.5       # a pass is all body when the body's disk covers the middle of more than this share of its frames
 FILL_DISK = 0.5    # ... and its white is its disk's (DISK_WHITE) when the disk covers less than this share of them
@@ -3784,8 +3871,12 @@ def so_far(u, n, cache, made=None, out=OUT):
         acc = [filter_mosaic(u, p, f, tiles, rect, cache, ref, tag) for f in colour]
         rgba, used = colour_picture(u, p, colour, acc), colour
         if base:
-            rgba = over_grey(rgba, filter_mosaic(u, p, LUM, tiles, rect, cache, None, tag), p["k"],
-                             p["display_scale"]["gamma"])
+            grey = filter_mosaic(u, p, LUM, tiles, rect, cache, None, tag)
+            if mixes(u, p, tiles, colour):
+                shape = rgba.shape[:2]
+                rgba = unmixed(rgba, set_mask([set_times(shape, placed_tiles(u, p, _mine(u, p, tiles, f), rect, cache))
+                                               for f in colour], p["k"]), grey)
+            rgba = over_grey(rgba, grey, p["k"], p["display_scale"]["gamma"])
     elif base:
         rgba = filter_mosaic(u, p, LUM, tiles, rect, cache, None, tag)
     else:

@@ -223,7 +223,12 @@ def corrections(u, made, cache):
                 om._yield()
         if colour and base:
             picture = om.colour_picture(u, p, colour, [om.filter_mosaic(u, p, f, tiles, rect, cache, ref, tag) for f in colour])
-            g = om.grey_gain(picture, om.filter_mosaic(u, p, om.LUM, tiles, rect, cache, None, tag), p["k"], p["display_scale"]["gamma"])
+            grey = om.filter_mosaic(u, p, om.LUM, tiles, rect, cache, None, tag)
+            if om.mixes(u, p, tiles, colour):
+                shape = picture.shape[:2]
+                picture = om.unmixed(picture, om.set_mask([om.set_times(shape, om.placed_tiles(u, p, om._mine(u, p, tiles, f), rect, cache))
+                                                           for f in colour], p["k"]), grey)
+            g = om.grey_gain(picture, grey, p["k"], p["display_scale"]["gamma"])
             out["_grey"] = None if g is None else list(map(float, g))
         return json.dumps(out).encode()
 
@@ -358,10 +363,15 @@ def block(u, made, corr, k, x0, y0, w, h, cache):
     px, py = pad + (x0 - pad) % mosaic.GRID, pad + (y0 - pad) % mosaic.GRID
     sub = (rect[0] + (x0 - px) / k, rect[1] + (y0 - py) / k, (w + px + pad) / k, (h + py + pad) / k)
     pk = dict(p, k=k)
-    planes = {}
+    planes, times = {}, {}
+    mixing = bool(colour and base and om.mixes(u, p, tiles, colour))
     for f in filters:
         mine = om._mine(u, pk, tiles, f)
         window, shown = om._window(u, pk, mine, sub, cache)
+        if mixing and f in colour:
+            # (when each frame on top was taken, as so_far's set_mask measures it, on this block's frames)
+            times[f] = om.set_times(window[0][0].shape[:2] if window else (math.ceil(sub[3] * k), math.ceil(sub[2] * k)),
+                                    ((u["frames"][t["n"]][3], w[0][..., 3], 0, 0) for w, t in zip(window, shown)))
         if not window:
             planes[f] = np.zeros((math.ceil(sub[3] * k), math.ceil(sub[2] * k), 4), np.uint8)
             continue
@@ -375,6 +385,8 @@ def block(u, made, corr, k, x0, y0, w, h, cache):
     if colour:
         rgba = om.colour_picture(u, p, colour, [planes[f] for f in colour])
         if base:
+            if mixing:
+                rgba = om.unmixed(rgba, om.set_mask([times[f] for f in colour], k), planes[om.LUM])
             rgba = om.over_grey(rgba, planes[om.LUM], k, p["display_scale"]["gamma"], gain=corr.get("_grey"))
     else:
         rgba = planes[filters[0]]
