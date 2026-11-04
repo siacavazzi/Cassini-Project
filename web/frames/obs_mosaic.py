@@ -1936,7 +1936,11 @@ def tile_scale(scale, f, own_sky=False, seen=None, disk=None):
         if veiled:
             # (the veil is all stray light, smooth, brighter on one side: black over the top of it, SKY_SMOOTH pixels
             # round, so none of it shows; stars and the moon are sharp and stay over it)
-            level = float(np.percentile(cv2.blur(q, (SKY_SMOOTH, SKY_SMOOTH))[m], VEIL_TOP))
+            # The mean is taken along the lines and along the columns, each on its own, and black goes over the higher:
+            # a round box spread the veil's 2 Hz line bands and column stripes over their neighbours, so the bands
+            # rose over a black set under them (195RI, Day the Earth Smiled: thin lines up to 23 of 255 on the first
+            # colour set, N1752968916_1's and N1752969019_1's line bands)
+            level = max(float(np.percentile(cv2.blur(q, k)[m], VEIL_TOP)) for k in ((SKY_SMOOTH, 1), (1, SKY_SMOOTH)))
         # the band's height over the sky at least this frame's own (its sky's fine structure, as pass_scale measures
         # the pass's): a frame lit by stray light has a grainier sky than the pass's typical one, and in the Jupiter
         # approach movie its red and green grain rose over a black set by the pass's height, a faint red cast

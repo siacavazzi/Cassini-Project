@@ -176,6 +176,16 @@ got = om.tile_scale({**pal, "blacks": {"CL1/CL2": 0.0}, "sky_tops": {"CL1/CL2": 
 q = iof[::4, ::4]
 assert got is not None and np.mean(q[~om._disk_mask(q.shape, iof.shape, *spk)] > got["black"]) < 0.06, got
 assert got["black"] < 0.02                                 # Earth over it
+# ... and the veil's 2 Hz line bands (one line in ten, here 5% brighter, as on 195RI's first colour set) go under black
+# too: a round box mean spread a band over its neighbouring lines, and the bands rose over the black as thin lines
+band = (2e-4 + rng.normal(0, 2e-6, (1024, 1024))).astype(np.float32)
+rows = rng.choice(1024, 100, replace=False)
+band[rows] *= 1.05
+band[509:514, 509:514] = 0.02
+got = om.tile_scale({**pal, "blacks": {"CL1/CL2": 0.0}, "sky_tops": {"CL1/CL2": 1e-6}}, "CL1/CL2", True, disk=spk)["black_of"](band)
+lines = band[rows]
+assert got is not None and np.mean(lines > got["black"]) < 0.02, (got, np.mean(lines > got["black"]))
+assert got["black"] < 0.02                                 # Earth over it
 print("small body: the stray-light veil under black, the moon over it")
 
 # ---- a mosaic leaves out a tile saturated all over; a movie keeps it (and holds it, unfit)
