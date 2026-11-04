@@ -1865,7 +1865,7 @@ def over_grey(colour, grey, k, gamma=2.2, gain=...):
 # the bands, flat green and magenta blocks on Saturn's night side. There the gray base (its own frames, matched to the
 # colour round it, over_grey) shows instead
 MIX_SPAN = sets_passes.SET_GAP   # s: frames on top taken further apart than this mix visits (a camera set's own count as one)
-MIX_LEAST = 0.02                     # of a frame: a mixed patch narrower than this (a seam's sliver) keeps its colour
+MIX_LEAST = 0.15   # of a frame: a mixed patch narrower than this keeps its colour (a seam's strip where one filter of the newer visit reaches less far: 195RI, up to a tenth of a frame)
 
 
 def mixes(u, p, tiles, colour):
@@ -3286,7 +3286,7 @@ def dim_under(u, p, f, mine, cache):
     return {t["n"]: kept[t["n"]] for t in mine if kept.get(t["n"], 1.0) < DIM_UNDER}
 
 
-def dim_places(u, p, f, mine, tiles, cache):
+def dim_places(u, p, f, mine, tiles, cache, among=None):
     """The tiles of mine (filter f's) a pass's mosaic draws under the picture before them (dim_under), decided once for
     every filter at a pointing so a colour set's filters go under together (decided filter by filter, a pointing just
     at the line went under in UV3 alone and its place came out blue): each of f's tiles takes the decision of its
@@ -3303,6 +3303,17 @@ def dim_places(u, p, f, mine, tiles, cache):
     for t in placed:
         roots[t["n"]] = _pointing_root(u, t["n"], roots)
     first = {t["n"]: by_n.get(roots.get(t["n"], t["n"]), t) for t in mine}
+    if among:
+        # (a colour picture's tiles take the decision of their pointing's first tile in one of its colour filters, not
+        # of a filter it does not draw: 195RI HIPHASEC001's VIO frames near the limb came out black, 0.0001 of the
+        # picture before them, and every colour tile of their pointings went under with them, drawn beneath the
+        # pointings before in one filter and over them in another: green and purple blocks on the rings)
+        keep = set(among)
+        firsts = {}
+        for t in placed:
+            if t["filter"] in keep:
+                firsts.setdefault(roots.get(t["n"], t["n"]), t)
+        first = {n: firsts.get(roots.get(n, n), r) for n, r in first.items()}
     low = set()
     for g in dict.fromkeys(r["filter"] for r in first.values()):
         low |= set(dim_under(u, p, g, [t for t in placed if t["filter"] == g], cache))
@@ -3590,7 +3601,8 @@ def filter_mosaic(u, p, f, tiles, rect, cache, ref=None, tag="", every=None):
     if whole and not _rolling.get() and calibration.step("level") and not all("under" in t for t in mine):
         # a pass's mosaic (not a mosaic movie's lap): a tile far darker than the picture before it goes under it
         # (decided here on all the pass's tiles; the mosaic of fewer tiles _grown starts from keeps the decisions)
-        low = dim_places(u, p, f, mine, tiles if every is None else every, cache)
+        colour = p.get("colour") or []
+        low = dim_places(u, p, f, mine, tiles if every is None else every, cache, colour if f in colour else None)
         mine = [dict(t, under=t["n"] in low) for t in mine]
     balanced = calibration.look() == "balanced" and SHARED_SEAMS and f != LUM
     ref = ref or f
