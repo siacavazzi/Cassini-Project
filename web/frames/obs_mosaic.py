@@ -2330,19 +2330,27 @@ REGISTER_INSET = 16  # px: each tile's edge (where its alpha ends) is left out o
 
 
 def _register_to(u, n):
-    """The tile tile n is registered to (_register): the first frame of the pass in another filter at its pointing
-    (SAME_PLACE, by the geometry cache) taken at most REGISTER_GAP before it, so every filter of a pointing lands on
-    that pointing's first frame; None for a pointing's first frame, or one SPICE (the geometry cache) has no place for."""
+    """The tile tile n is registered to (_register): of the frames of the pass in another filter at its pointing
+    (SAME_PLACE, by the geometry cache) taken at most REGISTER_GAP before it, the one nearest it in wavelength (the
+    first of those as near), so each filter lands on the one most like it and through it on that pointing's first
+    frame; None for a pointing's first frame, or one SPICE (the geometry cache) has no place for. Nearest in
+    wavelength, not simply the first: a Titan cycle through many filters (215TI M90R1CLD125: CB3, MT1, MT3, RED, GRN,
+    BL1, ...) put RED and GRN each on MT3, where Titan's haze looks nothing like it does in the visible, and the two
+    matches (edges, centroid) landed 4 px apart, a magenta and green rim round Titan in the movie; GRN now lands on
+    RED and BL1 on GRN."""
     frames = u["frames"]
-    _, _, f, t, _, x, y, z = frames[n]
+    _, _, f, t, nm, x, y, z = frames[n]
     if not z:
         return None
     k = z / u["z"] if u["z"] else 1.0
+    best = None
     for j in range(n):
-        _, _, fj, tj, _, xj, yj, zj = frames[j]
+        _, _, fj, tj, nmj, xj, yj, zj = frames[j]
         if fj != f and zj and 0 <= t - tj <= REGISTER_GAP and math.hypot(x - xj, y - yj) * k <= SAME_PLACE * FRAME:
-            return j
-    return None
+            gap = abs((nmj or 0) - (nm or 0))
+            if best is None or gap < best[0]:
+                best = (gap, j)
+    return best[1] if best else None
 
 
 def _register(u, n, out, crop, cache, scale):
@@ -2725,8 +2733,8 @@ def clouded(u):
 
 
 def _pointing_root(u, n, roots):
-    """The tile whose correction tile n takes: the tile C8 registers it to (_register_to, the first frame of its
-    pointing in another filter), followed back to the pointing's first; n itself for a pointing's first tile."""
+    """The tile whose correction tile n takes: the tile C8 registers it to (_register_to, a frame of its pointing in
+    another filter), followed back to the pointing's first; n itself for a pointing's first tile."""
     j = _register_to(u, n)
     return roots.get(j, j) if j is not None else n
 
