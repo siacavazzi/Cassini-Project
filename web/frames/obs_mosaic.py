@@ -1870,14 +1870,21 @@ MIX_LEAST = 0.15   # of a frame: a mixed patch narrower than this keeps its colo
 
 def mixes(u, p, tiles, colour):
     """True when a clouded pass's colour mosaic of these tiles mixes visits: two tiles of different colour filters
-    overlap (their boxes) and were taken more than MIX_SPAN apart. Decided on where the tiles are, so the luminance
+    overlap (their boxes) and were taken more than MIX_SPAN apart, neither with a newer tile of its filter at its place. Decided on where the tiles are, so the luminance
     base (lum_base) is drawn for the gray set_mask leaves."""
     # (a mosaic movie's picture shows each place's newest lap by design: rolling_layout, its tiles marked "base")
     if not colour or len(colour) < 2 or not clouded(u) or _rolling.get() or any("base" in t for t in tiles):
         return False
     if len(visit_tiles(u, tiles, colour)) < len(tiles):
         return True   # (a partial visit left out of the colour: the gray shows there)
-    mine = [t for t in tiles if t["filter"] in colour and "offset" in t]
+    mine = []
+    # (a tile with a newer one of its filter at its place is under it, and shows nowhere: the laps of a repeated
+    # mosaic, Saturn ISS_003SA_3X3MOVIEB001's eleven, are each a whole set, and only the newest is seen)
+    for t in sorted((t for t in tiles if t["filter"] in colour and "offset" in t), key=lambda t: -t["n"]):
+        if not any(q["filter"] == t["filter"] and math.hypot(q["offset"][0] - t["offset"][0],
+                                                             q["offset"][1] - t["offset"][1]) <= SAME_PLACE * FRAME
+                   for q in mine):
+            mine.append(t)
     if len(mine) < 2:
         return False
     f = np.array([colour.index(t["filter"]) for t in mine])

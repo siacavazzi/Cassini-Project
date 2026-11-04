@@ -9,6 +9,7 @@ blotches in the bands, the flat green and magenta blocks on 195RI HIPHASEC001's 
 - a seam's sliver (narrower than MIX_LEAST) keeps its colour
 - a visit that took only some of the filters is left out of the colour planes (visit_frames), so the colour under it
   is a whole visit's and the gray base draws it
+- a repeated mosaic's laps (each a whole set at the same places) do not mix
 - a moon (not clouded, its surface is redrawn) and a mosaic movie's picture (rolling) never mix
 Run: python web/test_colour_visits.py"""
 import os
@@ -68,6 +69,11 @@ assert m2 is None, "every place shows one visit's three frames"
 # a sliver: the new whole set's BL1 a few px short of its RED and GRN (registration), the old BL1 shows in a thin strip
 u3, tiles3 = make("JUPITER", old + [("RED", 512.0, 3600.0), ("GRN", 512.0, 3660.0), ("BL1", 520.0, 3720.0)])
 assert mask_of(u3, tiles3) is None, "a seam's sliver keeps its colour"
+
+# a repeated mosaic, a whole set at the same place every lap an hour apart (Saturn 3x3): only the newest lap shows,
+# nothing mixes (and so no luminance base is drawn under it)
+u5, tiles5 = make("SATURN", old + [("BL1", 0.0, 3600.0), ("GRN", 0.0, 3660.0), ("RED", 0.0, 3720.0)])
+assert not om.mixes(u5, {}, tiles5, COLOUR)
 
 # a moon (its surface redrawn as at one epoch) never mixes, nor does a mosaic movie's picture
 u4, tiles4 = make("RHEA", old + [("RED", 512.0, 3600.0), ("GRN", 512.0, 3660.0)])
