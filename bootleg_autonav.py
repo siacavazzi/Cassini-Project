@@ -284,13 +284,49 @@ def _row(frame, target_loc=None, geometry=None, error=None):
 
 
 """
+How much a shift worked out at the scale scale (find_target's pixel_scale, SPICE's pinhole camera) grows on a frame
+of camera (a NAIF frame name) as the pipeline draws it: a WAC frame corrected by CISSCAL's geometric correction
+(geometric_correction.py, the "geom" step) is a pinhole camera of focal length F_LINEAR (200.956 mm) where the
+instrument kernel has 200.77 mm, so its pixels are LINEAR_SCALE / scale of SPICE's. 1 for the NAC, and for a WAC frame
+the request leaves uncorrected. info = the frame's label (its shutter state), or None to ask only the request's steps.
+"""
+def linear_ratio(camera, scale, info=None):
+    if camera != CAMERA_FRAMES["WAC"] or not scale:
+        return 1.0
+    import geometric_correction as gc
+    if info is not None:
+        on = gc.active(info)
+    else:
+        import calibration as cal
+        on = cal.step("calibrate") and cal.step("geom")
+    return gc.LINEAR_SCALE / float(scale) if on else 1.0
+
+
+"""
+find_target's answer [x, y, z, angle] for label on the frame as the pipeline draws it (linear_ratio): the shift and
+label.geometry's scale grown for a corrected WAC frame. The cache keeps SPICE's own answer, so it stays good with the
+"geom" step on or off.
+"""
+def linearized(label, target_loc):
+    g = getattr(label, "geometry", None)
+    if target_loc is None or not g:
+        return target_loc
+    ratio = linear_ratio(g.get("camera"), g.get("scale"), label.info)
+    if ratio == 1.0:
+        return target_loc
+    label.geometry = dict(g, scale=float(g["scale"]) * ratio)
+    return [target_loc[0] * ratio, target_loc[1] * ratio, *target_loc[2:]]
+
+
+"""
 find_target through the cache: the cached answer, or find_target's (kernels for the frame's
-year must be loaded then; load_year is called first to load them) added to the cache
+year must be loaded then; load_year is called first to load them) added to the cache, on the frame
+as the pipeline draws it (linearized)
 """
 def find_target_cached(label, load_year=None):
     target_loc = cached_target(label)
     if target_loc is not None:
-        return target_loc
+        return linearized(label, target_loc)
     if load_year:
         load_year()
     try:
@@ -301,7 +337,7 @@ def find_target_cached(label, load_year=None):
         raise
     if GEOMETRY_CACHE:
         _store_rows([_row(frame_id(label), target_loc, label.geometry)])
-    return target_loc
+    return linearized(label, target_loc)
 
 
 """
