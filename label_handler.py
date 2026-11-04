@@ -81,6 +81,32 @@ GARBLE_FAR = 8
 GARBLE_SHARE = 0.5
 
 
+
+"""
+The lines of a frame (codes, lines x samples) that are one value from end to end, in runs of FLAT_RUN or more, other
+than the camera's saturation (255): no picture is that even, so they are lines the downlink lost that the
+decompressor filled with one value. A lossy frame whose last packets never came (N1468700888_1, AURORAA003 2004:
+lines 752-1023 all code 128, its prefix counting every pixel valid, MISSING_LINES "N/A") was drawn with a flat grey
+block over Saturn. Returns a bool per line.
+"""
+FLAT_RUN = 8
+def flat_lines(img):
+    img = np.asarray(img)
+    flat = (img.min(axis=1) == img.max(axis=1)) & (img[:, 0] < 255)
+    out = np.zeros(flat.shape, bool)
+    y = 0
+    while y < len(flat):
+        if flat[y]:
+            e = y
+            while e < len(flat) and flat[e]:
+                e += 1
+            if e - y >= FLAT_RUN:
+                out[y:e] = True
+            y = e
+        else:
+            y += 1
+    return out
+
 """
 The garbled ends of a frame's lines (True = garbled), from its stored image (img) and the valid mask the line prefix
 gives (mask). When a compressed line loses a packet, the decompressor can lose its place: from there to the end of
@@ -304,10 +330,14 @@ class label:
                 tail = np.where(nonzero.any(1), np.argmax(nonzero, 1), samples)
                 tail = np.where(tail >= 16, tail, 0)
                 mask &= np.arange(samples) < (samples - tail)[:, None]
+        img = ds.imread(base + ".png", cv2.IMREAD_GRAYSCALE)
+        if img is not None and img.shape == mask.shape:
+            # lines the decompressor filled with one value where the data never came, whatever the prefix and
+            # label say (flat_lines)
+            mask &= ~flat_lines(img)[:, None]
         if self.info.get("MISSING_PACKET_FLAG") == "YES" or not mask.all():
             # where a packet was lost the decompressor can lose its place in the line too: the rest of that line
             # (and now and then a whole one) is garbage the prefix counts as valid, drawn as bright streaks
-            img = ds.imread(base + ".png", cv2.IMREAD_GRAYSCALE)
             if img is not None and img.shape == mask.shape:
                 mask &= ~garbled_lines(img, mask)
         if lines < 1024:

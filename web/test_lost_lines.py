@@ -143,3 +143,17 @@ _, b, _, valid = stacking.load_hdr("a.png", valid=True)
 assert np.array_equal(a, b) and np.array_equal(valid, edge)
 print("load_hdr ok")
 print("ok")
+
+# ---- lines the decompressor filled with one value (label_handler.flat_lines): a lossy frame whose last packets
+# never came (N1468700888_1, 2004 AURORAA003: lines 752-1023 all code 128, the prefix counting every pixel valid) was
+# drawn with a flat grey block; runs of FLAT_RUN or more such lines are lost, saturated lines (255) and a few even
+# lines of a smooth sky are not
+import label_handler as lh  # noqa: E402
+img = np.clip(rng.normal(60, 4, (64, 64)), 0, 254).astype(np.uint8)
+img[40:] = 128
+img[5:20] = 255           # saturated all along: not lost
+img[25:28] = 9            # a few even lines: not lost
+got = lh.flat_lines(img)
+assert got[40:].all() and not got[:40].any(), np.where(got)[0]
+assert not lh.flat_lines(np.clip(rng.normal(60, 4, (64, 64)), 0, 255).astype(np.uint8)).any()
+print("lines filled with one value are lost; ok")
