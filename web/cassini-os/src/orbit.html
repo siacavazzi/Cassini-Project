@@ -1,0 +1,157 @@
+<!-- The orbit diagram for Cassini OS: a very small top-down map of where Cassini is on its orbit, and what its cameras
+     point at. One drawing, used everywhere: the small icon in a camera window's corner, the quiet camera's picture
+     well, and as an inset on saved pictures (export). build.py splices the style into the head and the script after
+     the chrome script.
+
+     window.cassiniOrbit.svg(et, opts) returns the diagram as an SVG string (or "" before the trajectories load):
+       opts.target   the body the camera looks at (catalog name, "TITAN"); a dot on its orbit and Cassini's line of sight
+       opts.size     "icon" (no labels, thick strokes for 30-60 px) or "full" (labels, Sun direction, scale note)
+       opts.ahead    "next": the target is the next picture's, so the line of sight is dashed
+     window.cassiniOrbit.canvas(et, opts, px) resolves to a canvas of px × px with the same drawing (for exports).
+
+     Around Saturn the view looks down on the ring plane, the Sun up. Cassini's orbit is drawn from half an orbit back
+     (solid) to half an orbit ahead (dashed), using the real trajectory, not an ellipse. Distances from Saturn are
+     drawn on a square-root scale so the inner moons stay apart from Saturn on a long orbit (a note says so in the
+     full size). During the cruise the Sun is in the middle and the planets' orbits are drawn instead of the moons'. -->
+<style>
+.orbitdg { display: block; width: 100%; height: 100%; overflow: visible; }
+.orbitdg text { font: 500 5.2px var(--ui, -apple-system, sans-serif); fill: rgba(232,236,242,.62); letter-spacing: .02em; text-transform: none; }
+.orbitdg text.big { fill: rgba(232,236,242,.85); }
+</style>
+
+<script>
+// ---------- the orbit diagram ----------
+(function () {
+  const PALE = "rgba(232,236,242,", BLUE = "138,182,255";
+  const ok = () => typeof tracks !== "undefined" && tracks.CASSINI && typeof E !== "undefined" && E && typeof positionAt === "function";
+  const v = () => [0, 0, 0];
+  const at = (name, et) => tracks[name] && et >= tracks[name].start && et <= tracks[name].end ? positionAt(tracks[name], et, v()) : null;
+  const minus = (a, b) => [a[0] - b[0], a[1] - b[1], a[2] - b[2]];
+  const dotp = (a, b) => a[0] * b[0] + a[1] * b[1] + a[2] * b[2];
+  const RS = 60268;   // Saturn's equatorial radius, km
+  // the J2000 ecliptic, for the cruise
+  const EPS = 23.4392911 * Math.PI / 180, ECL = [[1, 0, 0], [0, Math.cos(EPS), Math.sin(EPS)]];
+  // the period of the orbit Cassini is on now (vis-viva), or a few weeks while it is not bound
+  function period(c, centre, mu, et) {
+    const a0 = at("CASSINI", et), b0 = at(centre, et), a1 = at("CASSINI", et + 60), b1 = at(centre, et + 60);
+    if (!a0 || !b0 || !a1 || !b1) return 30 * 86400;
+    const r = minus(a0, b0), vel = minus(minus(a1, b1), r).map(x => x / 60), rl = Math.hypot(...r);
+    const a = 1 / (2 / rl - dotp(vel, vel) / mu);
+    return a > 0 ? 2 * Math.PI * Math.sqrt(a * a * a / mu) : 30 * 86400;
+  }
+  // the drawing in numbers: points on a plane, in km from the centre body, the Sun's direction straight up
+  function model(et, target) {
+    if (!ok()) return null;
+    const cas = at("CASSINI", et), sat = at("SATURN", et);
+    if (!cas) return null;
+    const saturn = !!sat && Math.hypot(...minus(cas, sat)) < (typeof SYSTEM_KM !== "undefined" ? SYSTEM_KM.SATURN : 1.2e8);
+    const centre = saturn ? "SATURN" : "SUN", c0 = at(centre, et) || [0, 0, 0];
+    // the plane: Saturn's ring plane (E rows 0 and 2) around Saturn, the ecliptic in the cruise
+    const ax = saturn ? [E[0], E[2]] : ECL;
+    let rot = 0;
+    if (saturn) { const sun = at("SUN", et); if (sun) { const d = minus(sun, c0); rot = Math.atan2(dotp(d, ax[1]), dotp(d, ax[0])); } }
+    else rot = Math.PI / 2;   // the cruise: the ecliptic as it is, vernal equinox to the right
+    // turned so the Sun is up (screen y grows downward)
+    const turn = Math.PI / 2 - rot, ct = Math.cos(turn), st = Math.sin(turn);
+    const flat = (p, c = c0) => { const d = minus(p, c), x = dotp(d, ax[0]), y = dotp(d, ax[1]); return [x * ct - y * st, -(x * st + y * ct)]; };
+    const mu = saturn ? 37931207.7 : 1.32712440018e11;
+    const P = Math.min(period(cas, centre, mu, et), saturn ? 200 * 86400 : 8 * 365.25 * 86400);
+    const path = [];
+    const t0 = Math.max(tracks.CASSINI.start, et - P / 2), t1 = Math.min(tracks.CASSINI.end, et + P / 2), N = 240;
+    for (let i = 0; i <= N; i++) {
+      const t = t0 + (t1 - t0) * i / N, p = at("CASSINI", t), c = at(centre, t);
+      if (p && c) path.push({ p: flat(p, c), past: t <= et });
+    }
+    // the orbits of the bodies that matter here: Titan always around Saturn, the target if it is another moon; the
+    // planets in the cruise
+    const rings = [], bodies = [];
+    const orbit = name => { const p = at(name, et); if (p) rings.push({ name, r: Math.hypot(...flat(p)) }); };
+    if (saturn) { orbit("TITAN"); if (target && target !== "TITAN" && target !== "SATURN") orbit(target); }
+    else for (const pl of ["VENUS", "EARTH", "JUPITER", "SATURN"]) { const p = at(pl, et); if (p) { rings.push({ name: pl, r: Math.hypot(...flat(p)) }); bodies.push({ name: pl, p: flat(p) }); } }
+    let tgt = null;
+    if (target && target !== centre) { const p = at(target, et); if (p) tgt = { name: target, p: flat(p) }; }
+    else if (target === centre) tgt = { name: target, p: [0, 0] };
+    return { centre, saturn, cas: flat(cas), path, rings, bodies, tgt };
+  }
+  const titleCase = s => String(s).toLowerCase().replace(/\b\w/g, c => c.toUpperCase());
+  const f1 = n => Math.round(n * 10) / 10;
+  function svg(et, opts = {}) {
+    const m = model(et, opts.target);
+    if (!m) return "";
+    const full = opts.size === "full", W = 100, C = W / 2, pad = full ? 9 : 5;
+    // the scale: square root of the distance (inner moons keep apart from Saturn on a long orbit), fitted to the
+    // orbit drawn, the target and the orbits of the bodies shown
+    const radii = m.path.map(q => Math.hypot(...q.p)).concat(m.rings.map(r => r.r), m.tgt ? [Math.hypot(...m.tgt.p)] : [], [Math.hypot(...m.cas)]);
+    const rmax = Math.max(...radii, m.saturn ? 3 * RS : 1);
+    const k = (C - pad) / Math.sqrt(rmax);
+    const sc = p => { const r = Math.hypot(p[0], p[1]); if (!r) return [C, C]; const s = k * Math.sqrt(r) / r; return [C + p[0] * s, C + p[1] * s]; };
+    const sr = r => k * Math.sqrt(r);
+    const sw = full ? 0.8 : 1.6;   // stroke widths: an icon is drawn at 30-60 px, so its lines are thicker
+    const out = [];
+    // a label beside a point, on its left when it would run off the right edge
+    const lbl = (x, y, dx, text, cls) => { const left = x + dx + text.length * 2.7 > W - 1; return `<text${cls ? ` class="${cls}"` : ""} x="${f1(left ? x - dx : x + dx)}" y="${f1(y)}"${left ? ' text-anchor="end"' : ""}>${text}</text>`; };
+    // orbits of moons (or planets)
+    for (const r of m.rings) out.push(`<circle cx="${C}" cy="${C}" r="${f1(sr(r.r))}" fill="none" stroke="${PALE}.16)" stroke-width="${sw * .6}"/>`);
+    // the centre: Saturn with its rings, or the Sun
+    if (m.saturn) {
+      const rs = Math.max(full ? 2.2 : 3.4, sr(RS)), rr = Math.max(rs * 1.9, sr(2.3 * RS));
+      out.push(`<circle cx="${C}" cy="${C}" r="${f1(rr)}" fill="none" stroke="rgba(216,201,163,.45)" stroke-width="${sw * .8}"/>`);
+      out.push(`<circle cx="${C}" cy="${C}" r="${f1(rs)}" fill="#d8c9a3"/>`);
+    } else out.push(`<circle cx="${C}" cy="${C}" r="${full ? 2.6 : 3.6}" fill="#ffd27a"/>`);
+    for (const b of m.bodies) { const [x, y] = sc(b.p); out.push(`<circle cx="${f1(x)}" cy="${f1(y)}" r="${full ? 1.3 : 2}" fill="${PALE}.55)"/>`); if (full) out.push(lbl(x, y + 1.8, 2.4, titleCase(b.name))); }
+    // Cassini's orbit: where it has been, solid; where it is going, dashed
+    const line = pts => pts.map((q, i) => `${i ? "L" : "M"}${f1(sc(q.p)[0])} ${f1(sc(q.p)[1])}`).join("");
+    const past = m.path.filter(q => q.past), ahead = m.path.filter(q => !q.past);
+    if (past.length > 1) out.push(`<path d="${line(past)}" fill="none" stroke="rgba(${BLUE},.9)" stroke-width="${sw}" stroke-linejoin="round" stroke-linecap="round"/>`);
+    if (ahead.length) out.push(`<path d="${line([{ p: m.cas }].concat(ahead))}" fill="none" stroke="rgba(${BLUE},.45)" stroke-width="${sw}" stroke-dasharray="${full ? "1.6 1.6" : "3 2.4"}" stroke-linecap="round"/>`);
+    const [cx, cy] = sc(m.cas);
+    let near = false;
+    // where the camera points: a line to the target, and the target on its orbit
+    if (m.tgt) {
+      const [tx, ty] = sc(m.tgt.p);
+      out.push(`<line x1="${f1(cx)}" y1="${f1(cy)}" x2="${f1(tx)}" y2="${f1(ty)}" stroke="${PALE}.7)" stroke-width="${sw * .6}"${opts.ahead === "next" ? ` stroke-dasharray="1.4 1.4"` : ""}/>`);
+      if (m.tgt.name !== m.centre) out.push(`<circle cx="${f1(tx)}" cy="${f1(ty)}" r="${full ? 1.9 : 3}" fill="#ffbe6e"/>`);
+      // (a flyby puts the two on one spot: one label says both)
+      near = Math.hypot(tx - cx, ty - cy) < 9;
+      if (full && !near) out.push(lbl(tx, ty + 1.8, 3, titleCase(m.tgt.name), "big"));
+    }
+    out.push(`<circle cx="${f1(cx)}" cy="${f1(cy)}" r="${full ? 3.6 : 5}" fill="rgba(${BLUE},.25)"/><circle cx="${f1(cx)}" cy="${f1(cy)}" r="${full ? 1.8 : 2.8}" fill="#fff"/>`);
+    if (full) {
+      out.push(lbl(cx, cy - 2.6, 3.6, near && m.tgt.name !== m.centre ? `Cassini at ${titleCase(m.tgt.name)}` : "Cassini", "big"));
+      // the Sun's direction, at the top edge, around Saturn (the cruise has the Sun in the middle)
+      if (m.saturn) out.push(`<g stroke="${PALE}.5)" stroke-width=".6" fill="none"><circle cx="${C}" cy="3.4" r="1.3"/><path d="M${C} .6v.9M${C} 5.3v.9M${C - 2.8} 3.4h.9M${C + 1.9} 3.4h.9"/></g>`);
+    }
+    const label = `Cassini's orbit${m.saturn ? " around Saturn" : " around the Sun"}${m.tgt ? `, looking at ${titleCase(m.tgt.name)}` : ""}`;
+    return `<svg class="orbitdg" viewBox="0 0 ${W} ${W}" role="img" aria-label="${label}"><title>${label}</title>${out.join("")}</svg>`;
+  }
+  // the same drawing on a canvas of px × px (for the pictures saved with it)
+  function canvas(et, opts, px) {
+    const s = svg(et, Object.assign({ size: "full" }, opts)).replace('<svg class="orbitdg"', `<svg xmlns="http://www.w3.org/2000/svg" width="${px}" height="${px}"`)
+      .replace("<title>", `<style>text{font:500 5.2px -apple-system,"Helvetica Neue",Arial,sans-serif;fill:rgba(232,236,242,.62)}text.big{fill:rgba(232,236,242,.85)}</style><title>`);
+    return new Promise(res => {
+      if (!s) return res(null);
+      const im = new Image();
+      im.onload = () => { const c = document.createElement("canvas"); c.width = c.height = px; c.getContext("2d").drawImage(im, 0, 0, px, px); res(c); };
+      im.onerror = () => res(null);
+      im.src = "data:image/svg+xml;charset=utf-8," + encodeURIComponent(s);
+    });
+  }
+  // a saved picture with the diagram in its bottom-right corner, on a dark rounded square (Settings > Gallery > Orbit
+  // diagram on saved pictures): o.et the picture's time, o.target its target. The picture as it was when the
+  // trajectory of that time is not loaded
+  async function inset(blob, o = {}) {
+    try {
+      const bmp = await createImageBitmap(blob), W = bmp.width, H = bmp.height, s = Math.round(Math.min(W, H) * .24), m = Math.round(Math.min(W, H) * .025);
+      const oc = await canvas(o.et, { target: o.target }, s);
+      if (!oc) return blob;
+      const c = document.createElement("canvas"); c.width = W; c.height = H;
+      const g = c.getContext("2d"); g.fillStyle = "#000"; g.fillRect(0, 0, W, H); g.drawImage(bmp, 0, 0);
+      const x = W - s - m, y = H - s - m, r = s * .06;
+      g.fillStyle = "rgba(8,9,12,.74)"; g.beginPath(); g.moveTo(x + r, y); g.arcTo(x + s, y, x + s, y + s, r); g.arcTo(x + s, y + s, x, y + s, r); g.arcTo(x, y + s, x, y, r); g.arcTo(x, y, x + s, y, r); g.fill();
+      g.drawImage(oc, x, y);
+      return await new Promise(res => c.toBlob(b => res(b || blob), "image/jpeg", .92));
+    } catch (e) { return blob; }
+  }
+  window.cassiniOrbit = { svg, canvas, model, inset };
+})();
+</script>

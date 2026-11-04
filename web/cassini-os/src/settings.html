@@ -60,7 +60,7 @@ body.s-nolabels #labels, body.s-nolabels #reticle { display: none; }
 body.s-nohudline #mread { display: none; }
 body.s-nochans .camwin .chans { display: none !important; }
 body.s-nofilmstrip .camwin .filmstrip { display: none !important; }
-body.s-noinfo .camwin .info { display: none; }
+body.s-noinfo .camwin :is(.info, .capline) { display: none; }
 body.phone #settings { left: 8px !important; top: calc(env(safe-area-inset-top, 0px) + 30px) !important; width: calc(100% - 16px) !important; height: calc(100% - 50px) !important; }
 body.phone #settings .sbody { grid-template-columns: 1fr; grid-template-rows: auto minmax(0, 1fr); }
 body.phone #settings nav { flex-direction: row; border-right: 0; border-bottom: 1px solid var(--q-line); overflow-x: auto; }
@@ -328,7 +328,7 @@ body.phone .srow input[type=range] { width: 96px; }
       hint: "The frames that make up a color picture, in a strip under it." });
   cls("cameras.channels", "s-nochans", false);
   D({ key: "cameras.details", section: "Cameras", label: "Frame details", type: "toggle", value: true,
-      hint: "Status, frame, filter, color and scale under each picture." });
+      hint: "The caption under each picture: its target and frame, the camera's status, filter and color. The (i) button by it shows the scale and credit too." });
   cls("cameras.details", "s-noinfo", false);
   D({ key: "cameras.steady", section: "Cameras", label: "Steady picture size", type: "toggle", value: true,
       hint: "While a color set or a mosaic builds, the picture keeps its size: the filter strip stays in place for the whole observation and a mosaic's shape holds until the observation ends. Off lets the window fit each picture." });

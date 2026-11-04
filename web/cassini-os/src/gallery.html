@@ -155,6 +155,17 @@ body.phone #galtoast { bottom: calc(env(safe-area-inset-bottom, 0px) + var(--app
   if (S) S.define({ key: "gallery.exportMeta", section: "Gallery", label: "Export with metadata", type: "toggle", value: false,
     hint: "Export Library also writes how each item was made and its thumbnail (gallery.json), so Import can bring the gallery back. Off: just the pictures and films." });
   const withMeta = () => !!(S && S.get("gallery.exportMeta"));
+  if (S) S.define({ key: "gallery.orbitInset", section: "Gallery", label: "Orbit diagram on saved pictures", type: "toggle", value: false,
+    hint: "A downloaded or shared picture gets a small map of Cassini's orbit in its corner, with the line to what the camera looked at, as the camera windows' orbit icon shows it." });
+  // a picture handed out (downloaded, shared) with the orbit diagram in its corner, when that is on: at the moment it was
+  // saved, looking at its first frame's target (cassiniOrbit.inset, orbit.html)
+  async function withOrbit(blob, item) {
+    if (!blob || !S || !S.get("gallery.orbitInset") || !window.cassiniOrbit || item.kind === "movie") return blob;
+    const t = ((item.moment || []).find(p => p[0] === "t") || [])[1];
+    const et = t ? utcToEt(t) : state.et;
+    const id = (item.ids || [])[0], k = id && typeof catalog !== "undefined" && catalog ? catalog.id.indexOf(id) : -1;
+    return cassiniOrbit.inset(blob, { et, target: k >= 0 ? catalog.target[k] : null });
+  }
   const ICON = {
     add: '<svg viewBox="0 0 10 10" aria-hidden="true"><path d="M5 1.5v7M1.5 5h7"/></svg>',
     link: '<svg viewBox="0 0 16 16"><path d="M7 9a3 3 0 0 0 4.2 0l2.3-2.3a3 3 0 0 0-4.2-4.2L8.2 3.6M9 7a3 3 0 0 0-4.2 0L2.5 9.3a3 3 0 0 0 4.2 4.2l1.1-1.1"/></svg>',
@@ -454,7 +465,7 @@ body.phone #galtoast { bottom: calc(env(safe-area-inset-bottom, 0px) + var(--app
     $("galdel").hidden = !!shared; $("galkeep").hidden = !shared; $("galedit").hidden = !window.cassiniStudio;
     $("galnote").textContent = shared ? "Made just now by the frame server from the archive, the same way it was made for whoever shared it." : "";
     let file = item.hasFile && !shared ? await getFile(item.id).catch(() => null) : null;
-    if (file && item.kind === "picture") file = await jpeg(file);   // items saved as WebP before pictures were kept as JPEG
+    if (file && item.kind === "picture") file = await withOrbit(await jpeg(file), item);   // items saved as WebP before pictures were kept as JPEG
     const dl = $("galdl"), base = fileName(item);
     if (item.kind === "movie") {
       const v = document.createElement("video"); v.controls = true; v.playsInline = true; v.preload = "metadata";
@@ -469,7 +480,8 @@ body.phone #galtoast { bottom: calc(env(safe-area-inset-bottom, 0px) + var(--app
         edited(item, null).then(b => {
           if (G.cur !== item && G.shared !== item) return;
           if (!b) { wait.textContent = "The frame server could not make this picture (is it running?)"; return; }
-          wait.remove(); im.src = objUrl(b); dl.href = im.src; dl.setAttribute("download", base + ".jpg");
+          wait.remove(); im.src = objUrl(b); dl.setAttribute("download", base + ".jpg");
+          withOrbit(b, item).then(j => { dl.href = j === b ? im.src : objUrl(j); });
         });
       }
       else if (item.src) {
@@ -477,7 +489,7 @@ body.phone #galtoast { bottom: calc(env(safe-area-inset-bottom, 0px) + var(--app
         im.onload = () => wait.remove(); im.onerror = () => { wait.textContent = "The frame server could not make this picture (is it running?)"; };
         im.src = sized(item.src, "full");
         dl.href = sized(item.src, "full") + "&format=png&download=1"; dl.setAttribute("download", base + ".png");
-        fetch(sized(item.src, "full")).then(r => r.ok ? r.blob() : null).then(b => jpeg(b)).then(j => {
+        fetch(sized(item.src, "full")).then(r => r.ok ? r.blob() : null).then(b => jpeg(b)).then(j => withOrbit(j, item)).then(j => {
           if (j && /jpeg/.test(j.type) && (G.cur === item || G.shared === item)) { dl.href = objUrl(j); dl.setAttribute("download", base + ".jpg"); }
         }).catch(() => {});
       }
@@ -536,7 +548,7 @@ body.phone #galtoast { bottom: calc(env(safe-area-inset-bottom, 0px) + var(--app
     let b = item.hasFile ? await getFile(item.id).catch(() => null) : null;
     if (!b && item.src) b = item.edit ? await edited(item, null) : await edited({ src: item.src }, null);
     if (!b) return null;
-    if (item.kind === "picture") b = await jpeg(b);
+    if (item.kind === "picture") b = await withOrbit(await jpeg(b), item);
     const type = b.type || (item.kind === "movie" ? "video/mp4" : "image/jpeg");
     return new File([b], `${fileName(item)}.${ext(type)}`, { type });
   }

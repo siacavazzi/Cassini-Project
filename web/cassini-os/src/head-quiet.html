@@ -343,29 +343,97 @@ body { color: var(--q-text); }
 .lights:hover .close { background: #ff5f57; } .lights:hover .min { background: #febc2e; } .lights:hover .zoom { background: #28c840; }
 .lights:hover button { color: rgba(0,0,0,.55); font-size: 8px; }
 
-/* camera window: the main feature, so it is the biggest thing on screen after the view itself */
-#imgcard { width: clamp(300px, 32vw, 480px); }
-/* zoomed, the window still fits above the dock on a laptop screen: its square picture, details and filmstrip */
-/* never narrower than the window unzoomed */
-#imgcard.zoomed { width: max(clamp(300px, 32vw, 480px), min(clamp(420px, 52vw, 860px), max(420px, calc(100vh - 330px)))); }
-#imgcard.zoomed:has(.chans.on) { width: max(clamp(300px, 32vw, 480px), min(clamp(420px, 52vw, 860px), max(420px, calc(100vh - 480px)))); }
-.camwin .body { background: none; padding: 2px 8px 8px; gap: 7px; }
-.well, .camwin.zoomed .well { border: 1px solid var(--q-line); border-radius: 4px; box-shadow: none; background: rgba(0,0,0,.55); color: var(--q-dim); height: 90px; }
-/* with no picture the window stays small; a frame opens it up to a full square */
-.well.has-frame, .camwin.zoomed .well.has-frame { height: auto; aspect-ratio: 1; }
-#imgcard:not(:has(.well.has-frame, .well.kept)) { width: 260px; }
+/* camera window: the main feature, so it is the biggest thing on screen after the view itself. The window is its
+   square picture with a two-line caption under it, about as tall as it is wide, and sized so that it ends above the
+   main window at the bottom of the screen (--camroom: the height the menu bar, the main window and the dock leave) */
+.camwin { --camroom: calc(100vh - 36px - var(--dockh, 160px) - var(--appdockh, 0px) - 34px); }
+/* (one width whether a color set's channel strip is up or not, so the window never changes size on its own) */
+#imgcard { width: clamp(260px, min(32vw, var(--camroom) - 120px), 480px); }
+/* zoomed: bigger, still above the main window, never narrower than unzoomed */
+#imgcard.zoomed { width: max(clamp(260px, min(32vw, var(--camroom) - 120px), 480px), min(clamp(420px, 52vw, 860px), var(--camroom) - 120px)); }
+.camwin .body { background: none; padding: 2px 8px 7px; gap: 6px; }
+/* the picture is always a square, with a picture or without (a quiet camera keeps its window's size) */
+.well, .camwin.zoomed .well, .well.has-frame, .camwin.zoomed .well.has-frame { border: 1px solid var(--q-line); border-radius: 4px; box-shadow: none; background: rgba(0,0,0,.55); color: var(--q-dim); height: auto; aspect-ratio: 1; }
+/* the caption: the target and its frame (a link to NASA's archive) with the camera's status on the right, the filter
+   and color under it; the (i) button opens the rest (details, credit) */
+.capline { display: grid; grid-template-columns: auto minmax(0, 1fr) auto; gap: 1px 8px; align-items: center; font-size: 10.5px; line-height: 1.4; min-width: 0; }
+.capline :is(.cap1, .cap2) { grid-column: 2; display: flex; align-items: baseline; gap: 6px; min-width: 0; white-space: nowrap; }
+.capline [data-f="target"] { color: #fff; font-weight: 500; font-size: 11.5px; flex: none; max-width: 50%; }
+.capline [data-f="range"] { color: var(--q-dim); flex: 0 1 auto; }
+.capline [data-f] { min-width: 0; overflow: hidden; text-overflow: ellipsis; }
+.capline [data-f]:empty { display: none; }
+.capline [data-f="frame"] { color: var(--q-text); flex: 0 0 auto; max-width: 100%; }
+.capline .capstat { margin-left: auto; flex: 0 1 auto; min-width: 0; display: flex; align-items: baseline; color: var(--q-dim); }
+.capline .capstat [data-f="status"] { white-space: nowrap; }
+.capline .capstat .led { flex: none; align-self: center; }
+.capline .cap2 { color: var(--q-dim); }
+/* a narrow window (the wide-angle camera, a body window) drops the distance first, then the status's words (its light
+   stays, the words in its tooltip) */
+.capline :is(.cap1, .cap2) { container-type: inline-size; }
+@container (max-width: 250px) { .capline [data-f="range"] { display: none; } }
+@container (max-width: 170px) { .capline .capstat [data-f="status"] { display: none; } }
+.capline .cap2 [data-f="filter"] { flex: none; max-width: 60%; }
+.capline .cap2 [data-f="colour"] { flex: 1 1 0; }
+.capline .cap2 [data-f]:not(:empty) ~ [data-f]:not(:empty)::before { content: "·"; margin-right: 6px; }
+.capline .cap2 [data-f="frame"] { flex: none; color: var(--q-text); }
+/* the orbit icon, left of the caption: a live, very small map of Cassini's orbit (orbit.html); a click opens it big */
+.orbitbtn { all: unset; grid-column: 1; grid-row: 1 / span 2; width: 30px; height: 30px; border-radius: 6px; cursor: pointer; display: block; box-sizing: border-box; padding: 1px;
+  background: rgba(0,0,0,.35); border: 1px solid var(--q-line); }
+.orbitbtn[hidden], .well:has(.idlecard) ~ .capline .orbitbtn { display: none; }
+.orbitbtn:hover, .orbitbtn[aria-expanded="true"] { border-color: rgba(138,182,255,.6); background: rgba(138,182,255,.1); }
+.orbitbtn:focus-visible { outline: 1px solid var(--q-accent); }
+.orbitpop { position: absolute; inset: 0; z-index: 4; background: rgba(8,9,12,.92); -webkit-backdrop-filter: blur(6px); backdrop-filter: blur(6px); cursor: pointer; }
+.orbitpop[hidden] { display: none; }
+.orbitpop .orbitbig { position: absolute; inset: 6% 6% 12% 6%; }
+.orbitpop .orbitnote { position: absolute; left: 10px; right: 10px; bottom: 8px; font: 10px/1.3 var(--ui); color: var(--q-dim); text-transform: none; letter-spacing: normal; text-align: left; }
+.camwin.more .capline .cap2 { white-space: normal; flex-wrap: wrap; row-gap: 0; }
+.camwin.more .capline .cap2 [data-f="colour"] { flex-basis: auto; overflow: visible; }
+.infobtn { all: unset; grid-column: 3; grid-row: 1 / span 2; align-self: start; width: 18px; height: 18px; display: grid; place-items: center; border-radius: 50%; color: var(--q-dim); cursor: pointer; }
+.infobtn svg { width: 13px; height: 13px; } .infobtn svg * { fill: none; stroke: currentColor; stroke-width: 1.1; } .infobtn svg .dot { fill: currentColor; stroke: none; }
+.infobtn:hover, .camwin.more .infobtn { color: #fff; background: rgba(255,255,255,.1); }
+.infobtn:focus-visible { outline: 1px solid var(--q-accent); }
+/* the frame id opens its page in NASA's archive: it says so, with the arrow of a link that leaves the page */
+.capline a.pds { color: var(--q-text); text-decoration: underline dotted rgba(232,236,242,.4); text-underline-offset: 2px; }
+.capline a.pds::after { content: ""; display: inline-block; width: 8px; height: 8px; margin-left: 3px; vertical-align: 0; background: currentColor; opacity: .7;
+  -webkit-mask: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 8 8'%3E%3Cpath d='M3 1H1v6h6V5M4.5 1H7v2.5M7 1 3.5 4.5' fill='none' stroke='%23000' stroke-width='1.1'/%3E%3C/svg%3E") center / contain no-repeat;
+  mask: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 8 8'%3E%3Cpath d='M3 1H1v6h6V5M4.5 1H7v2.5M7 1 3.5 4.5' fill='none' stroke='%23000' stroke-width='1.1'/%3E%3C/svg%3E") center / contain no-repeat; }
+.capline a.pds:hover { color: var(--q-accent); text-decoration: underline solid; }
+.capline a.pds:hover::after { opacity: 1; }
+/* a quiet camera: Cassini's orbit fills the square, and the next picture sits in its corner (cameraFeed quiet) */
+.well .wellmsg:has(.idlecard) { position: absolute; inset: 0; }
+.idlecard { position: absolute; inset: 0; display: block; text-transform: none; letter-spacing: normal; text-align: left; font: 11px/1.3 var(--ui); color: var(--q-dim); }
+.idleorbit { position: absolute; inset: 6% 6% 18% 6%; opacity: .9; }
+.idletext { position: absolute; left: 10px; bottom: 9px; right: 10px; display: grid; grid-template-columns: auto 1fr; align-items: baseline; gap: 0 8px; }
+.idlek { grid-column: 1 / -1; font-size: 9px; letter-spacing: .1em; text-transform: uppercase; color: var(--q-dim); }
+.idlewhat { font-size: 15px; color: var(--q-text); font-weight: 500; }
+.idlewhen { color: var(--q-text); font-variant-numeric: tabular-nums; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+.idlego { all: unset; grid-column: 1 / -1; justify-self: start; margin-top: 5px; display: inline-flex; align-items: center; gap: 5px; padding: 3px 9px 3px 7px; border-radius: 10px;
+  border: 1px solid var(--q-line); color: var(--q-text); font-size: 10.5px; cursor: pointer; }
+.idlego[hidden] { display: none; }
+.idlego svg { width: 10px; height: 10px; } .idlego svg * { fill: currentColor; stroke: currentColor; stroke-width: 1.2; stroke-linejoin: round; }
+.idlego:hover { border-color: var(--q-accent); color: #fff; background: rgba(138,182,255,.12); }
+.idlego:focus-visible { outline: 1px solid var(--q-accent); }
+/* a small window: only the next picture, no orbit */
+.camwin:not(.zoomed):not(.full) .well:not(.has-frame) .idleorbit { inset: 4% 4% 30% 4%; }
+
+/* the frame ids along the picture's bottom edge say what the caption says, so they show only while the caption is
+   away: resting, on a phone, or with Frame details off (a mosaic's, which name every tile, always show) */
+.camwin .well .shottag { transition: opacity .7s ease; }
+body:not(.idle):not(.s-noinfo):not(.phone) .camwin .well:not(.mosaic) .shottag { opacity: 0; }
+body:not(.idle):not(.s-noinfo):not(.phone) .camwin .well:not(.mosaic) .shottag a.pds { pointer-events: none; }
+
+/* the rest, under the caption while (i) is on */
+.camwin:not(.more) .info { display: none; }
+.camwin .info { padding-top: 5px; border-top: 1px solid var(--q-line); }
 .well b { color: var(--q-text); text-shadow: none; }
 .shottag { color: var(--q-text); }
-.info { grid-template-columns: 50px 1fr; font-size: 10.5px; }
+.info { grid-template-columns: 44px 1fr; font-size: 10.5px; }
 .info dt { color: var(--q-dim); font-weight: normal; }
 .led { background: rgba(255,255,255,.25); box-shadow: none; }
 .camwin.live .led { background: var(--q-accent); box-shadow: 0 0 4px var(--q-accent); }
 /* the wide-angle camera: its own, smaller window beside the narrow-angle one, so the feeds never alternate */
-#wacard { top: calc(env(safe-area-inset-top, 0px) + 36px); left: calc(max(14px, env(safe-area-inset-left, 0px)) + clamp(300px, 32vw, 480px) + 10px); width: clamp(200px, 19vw, 300px); }
-#wacard.zoomed { width: min(clamp(300px, 34vw, 560px), max(300px, calc(100vh - 330px))); }
-#wacard.zoomed:has(.chans.on) { width: min(clamp(300px, 34vw, 560px), max(300px, calc(100vh - 480px))); }
-#wacard:not(:has(.well.has-frame, .well.kept)) { width: 200px; }
-#wacard .info { grid-template-columns: 42px 1fr; }
+#wacard { top: calc(env(safe-area-inset-top, 0px) + 36px); left: calc(max(14px, env(safe-area-inset-left, 0px)) + clamp(260px, 32vw, 480px) + 10px); width: clamp(220px, min(19vw, var(--camroom) - 120px), 300px); }
+#wacard.zoomed { width: max(300px, min(clamp(300px, 34vw, 560px), var(--camroom) - 120px)); }
 /* a frame id links to its page in NASA's archive (OPUS): plain until pointed at */
 .shottag a.pds, .info a.pds { color: inherit; text-decoration: none; }
 .info a.pds { text-decoration: underline dotted; text-underline-offset: 2px; }
@@ -376,8 +444,15 @@ body { color: var(--q-text); }
 .shottag a.pds:hover { text-underline-offset: 1px; }
 :is(.shottag, .info) a.pds:focus-visible { outline: 1px solid currentColor; outline-offset: 1px; border-radius: 2px; }
 /* colour sets: the channels that went into the composite, under the main picture */
-.chans { display: none; grid-template-columns: repeat(var(--n, 3), minmax(0, 76px)); gap: 6px; }
-.camwin.zoomed .chans { grid-template-columns: repeat(var(--n, 3), minmax(0, 120px)); }
+/* small square tiles in one row, each named inside its corner; a set's other filters beside them, so the strip is one
+   tile tall */
+.chans { display: none; grid-template-columns: repeat(var(--n, 3), minmax(0, 56px)) minmax(0, 1fr); gap: 5px; align-items: end; }
+.camwin.zoomed .chans { grid-template-columns: repeat(var(--n, 3), minmax(0, 72px)) minmax(0, 1fr); }
+.chans figure { position: relative; }
+.chans figure figcaption { position: absolute; left: 3px; right: 2px; bottom: 2px; color: var(--q-text); text-shadow: 0 0 2px #000, 0 0 4px #000; pointer-events: none; }
+.chans figure figcaption .nm { display: none; }
+:is(.camwin.zoomed, .win.full) .chans figure figcaption .nm { display: inline; }
+.chans .more { grid-column: -2 / -1; white-space: normal !important; display: -webkit-box; -webkit-box-orient: vertical; -webkit-line-clamp: 3; line-clamp: 3; align-self: end; }
 .chans.on { display: grid; }
 .chans figure { margin: 0; display: grid; gap: 2px; }
 .chans .tile { aspect-ratio: 1; border: 1px solid var(--q-line); border-radius: 3px; background: rgba(0,0,0,.55); overflow: hidden; position: relative; }
@@ -387,7 +462,7 @@ body { color: var(--q-text); }
 .chans figcaption { font-size: 9.5px; line-height: 1.2; color: var(--q-dim); white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
 .chans figcaption i { display: inline-block; width: 6px; height: 6px; border-radius: 50%; margin-right: 4px; vertical-align: 0; }
 .chans figcaption b { color: var(--q-text); font-weight: normal; }
-.chans .more { grid-column: 1 / -1; font-size: 9.5px; color: var(--q-dim); white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+.chans .more { font-size: 9.5px; color: var(--q-dim); overflow: hidden; }
 .camwin .shottag { right: 5px; text-align: left; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
 .kindtag { position: absolute; right: 5px; top: 4px; font: 9px/1 var(--hudf); color: var(--q-text); text-shadow: 0 0 3px #000, 0 0 6px #000; display: none; letter-spacing: .04em; }
 .well.has-frame.composite .kindtag, .well.has-frame.mosaic .kindtag { display: block; }
@@ -412,7 +487,6 @@ body.idle .camwin .filmstrip { opacity: .8; }
 :is(.well, .camwin.zoomed .well).kept { height: auto; aspect-ratio: 1; }
 body.s-steady .chans .more { min-height: 1.2em; }
 body.s-steady .info dd { white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
-body.s-steady .info dd[data-f="colour"] { white-space: normal; display: -webkit-box; -webkit-box-orient: vertical; -webkit-line-clamp: 2; line-clamp: 2; min-height: 2lh; }
 
 /* moments: plain rows on the panel */
 .colhead { background: none; border-bottom: 1px solid var(--q-line); color: var(--q-dim); }
@@ -536,9 +610,9 @@ body.idle :is(#menubar, .win) { opacity: 0; pointer-events: none; }
 body.idle .lbl:not(.focus):not(.cassini) { opacity: .35; }
 /* ...except the camera feed: while a frame is showing, the picture stays and only its frame fades
    (named by id: the rule above counts as an id selector, so a class-only rule here would lose to it) */
-.camwin, .camwin .titlebar, .camwin .info, .well { transition: opacity .7s ease, background-color .7s ease, border-color .7s ease, box-shadow .7s ease; }
+.camwin, .camwin .titlebar, .camwin .info, .camwin .capline, .well { transition: opacity .7s ease, background-color .7s ease, border-color .7s ease, box-shadow .7s ease; }
 body.idle #app .camwin:has(.well.has-frame) { opacity: 1; pointer-events: auto; background: transparent; border-color: transparent; box-shadow: none; -webkit-backdrop-filter: none; backdrop-filter: none; }
-body.idle .camwin:has(.well.has-frame) :is(.titlebar, .info) { opacity: 0; }
+body.idle .camwin:has(.well.has-frame) :is(.titlebar, .info, .capline) { opacity: 0; }
 body.idle .camwin .well.has-frame { border-color: transparent; box-shadow: 0 6px 30px rgba(0,0,0,.6); }
 /* ...and while pinned (paused, a stretch highlighted, an editor open: cassiniPin) a camera window stays even with no
    picture in it yet */
@@ -546,7 +620,7 @@ body.idle.pinned #app .camwin { opacity: 1; pointer-events: auto; }
 @media (prefers-reduced-motion: reduce) { #menubar, .win, #dock, #labels { transition: none; } }
 
 /* resizing: every window has a grip in its bottom-right corner; a picture window's picture follows its width */
-.grip { position: absolute; right: 0; bottom: 0; width: 16px; height: 16px; cursor: nwse-resize; touch-action: none; z-index: 5; opacity: 0; transition: opacity .2s ease;
+.grip { position: absolute; right: 0; bottom: 0; width: 18px; height: 18px; cursor: nwse-resize; touch-action: none; z-index: 5; opacity: 0; transition: opacity .2s ease;
   background: linear-gradient(135deg, transparent 0 55%, rgba(232,236,242,.35) 55% 60%, transparent 60% 70%, rgba(232,236,242,.35) 70% 75%, transparent 75%); }
 .win:hover > .grip, .grip:active { opacity: 1; }
 .win.shaded > .grip, .win.full > .grip, body.idle .grip { display: none; }
@@ -563,7 +637,7 @@ body.idle.pinned #app .camwin { opacity: 1; pointer-events: auto; }
 .win.full > .body { flex: 1; min-height: 0; }
 .camwin.full .body { grid-template-rows: minmax(0, 1fr) auto auto; }
 .win.full .well, .win.full .well.has-frame { height: auto !important; aspect-ratio: auto !important; min-height: 0; }
-.camwin.full .chans { grid-template-columns: repeat(var(--n, 3), minmax(0, 140px)); }
+.camwin.full .chans { grid-template-columns: repeat(var(--n, 3), minmax(0, 140px)) minmax(0, 1fr); }
 .camwin.full .info { grid-template-columns: 50px minmax(0, 1fr) 50px minmax(0, 1fr); }
 .bodywin.full .panes { height: 100%; align-items: stretch; }
 /* a body window holds one camera's pane (bodywin.html): in full view, and once the viewer has given the window a
@@ -727,12 +801,15 @@ body.idle .win.full .titlebar { opacity: 0; }
     <div class="body">
       <div class="well"><div class="wellmsg"><b>No signal</b>Waiting for the frame server</div><img class="shot" alt="" crossorigin="anonymous"><span class="shottag"></span><span class="kindtag"></span></div>
       <div class="chans" aria-label="Filter channels"></div>
+      <div class="capline">
+        <button class="orbitbtn" type="button" aria-label="Where Cassini is on its orbit" aria-expanded="false" title="Where Cassini is on its orbit"></button>
+        <div class="cap1"><span data-f="target"></span><span data-f="range"></span><span class="capstat"><span class="led"></span><span data-f="status">Camera</span></span></div>
+        <div class="cap2"><span data-f="frame"></span><span data-f="filter"></span><span data-f="colour"></span></div>
+        <button class="infobtn" type="button" aria-label="More about this picture" aria-expanded="false" title="More about this picture"><svg viewBox="0 0 12 12" aria-hidden="true"><circle cx="6" cy="6" r="5"/><path d="M6 5.4v3.1"/><circle class="dot" cx="6" cy="3.6" r=".7"/></svg></button>
+      </div>
       <dl class="info">
-        <dt>Status</dt><dd><span class="led"></span><span data-f="status">Camera</span></dd>
-        <dt>Frame</dt><dd data-f="frame">—</dd>
-        <dt>Filter</dt><dd data-f="filter">—</dd>
-        <dt>Color</dt><dd data-f="colour">—</dd>
-        <dt>Details</dt><dd data-f="details">—</dd>
+        <dt>Details</dt><dd data-f="details"></dd>
+        <dt>Pass</dt><dd data-f="obs"></dd>
         <dt>Credit</dt><dd><button class="credit" data-about="iss" title="Credits">NASA/JPL-Caltech/SSI</button></dd>
       </dl>
     </div>
@@ -743,10 +820,15 @@ body.idle .win.full .titlebar { opacity: 0; }
     <div class="body">
       <div class="well"><div class="wellmsg"><b>No signal</b>Waiting for the frame server</div><img class="shot" alt="" crossorigin="anonymous"><span class="shottag"></span><span class="kindtag"></span></div>
       <div class="chans" aria-label="Filter channels"></div>
+      <div class="capline">
+        <button class="orbitbtn" type="button" aria-label="Where Cassini is on its orbit" aria-expanded="false" title="Where Cassini is on its orbit"></button>
+        <div class="cap1"><span data-f="target"></span><span data-f="range"></span><span class="capstat"><span class="led"></span><span data-f="status">Camera</span></span></div>
+        <div class="cap2"><span data-f="frame"></span><span data-f="filter"></span><span data-f="colour"></span></div>
+        <button class="infobtn" type="button" aria-label="More about this picture" aria-expanded="false" title="More about this picture"><svg viewBox="0 0 12 12" aria-hidden="true"><circle cx="6" cy="6" r="5"/><path d="M6 5.4v3.1"/><circle class="dot" cx="6" cy="3.6" r=".7"/></svg></button>
+      </div>
       <dl class="info">
-        <dt>Status</dt><dd><span class="led"></span><span data-f="status">Camera</span></dd>
-        <dt>Filter</dt><dd data-f="filter">—</dd>
-        <dt>Color</dt><dd data-f="colour">—</dd>
+        <dt>Details</dt><dd data-f="details"></dd>
+        <dt>Pass</dt><dd data-f="obs"></dd>
         <dt>Credit</dt><dd><button class="credit" data-about="iss" title="Credits">NASA/JPL-Caltech/SSI</button></dd>
       </dl>
     </div>
@@ -924,7 +1006,9 @@ body.idle .win.full .titlebar { opacity: 0; }
     grip.addEventListener("pointermove", e => {
       if (!rs) return;
       const r = w.getBoundingClientRect(), dx = e.clientX - rs.x, dy = e.clientY - rs.y;
-      const grow = rs.both || Math.abs(dx) >= Math.abs(dy) ? dx : dy * rs.w / rs.h;
+      // a picture window's height grows as its width does (its picture is square), so the corner moves along the
+      // diagonal: the pointer's move projected on it, and the corner stays under the pointer whichever way it goes
+      const grow = rs.both ? dx : (dx + dy) / 2;
       const was = w.style.width;
       w.style.width = Math.round(Math.max(MIN_W, Math.min(innerWidth - r.left - 4, rs.w + grow))) + "px";
       // a picture window's height follows its width: it stops growing at the bottom of the screen, so the grip stays in reach
@@ -1902,11 +1986,31 @@ body.idle .win.full .titlebar { opacity: 0; }
     .replace(/\b[NW]\d{10}_\d+\b/g, id => `<a class="pds" href="${opusUrl(id).replace(/&/g, "&amp;")}" target="_blank" rel="noopener" title="${id} in NASA's Planetary Data System (OPUS)">${id}</a>`);
   // a link on the picture opens OPUS, not the picture's own click (a mosaic pointing, full view)
   for (const t of ["click", "dblclick", "pointerdown"]) document.addEventListener(t, e => { if (e.target.closest && e.target.closest("a.pds")) e.stopPropagation(); }, true);
+  // a quiet camera's square (cameraFeed quiet): the orbit diagram, and the next picture over it
+  const IDLE_HTML = `<div class="idlecard"><div class="idleorbit"></div><div class="idletext"><span class="idlek">Next picture</span>
+    <span class="idlewhat"></span><span class="idlewhen"></span>
+    <button class="idlego" type="button" title="Go to the next picture"><svg viewBox="0 0 12 12" aria-hidden="true"><path d="M2.5 2.5l4 3.5-4 3.5zM7.5 2.5l0 7"/></svg>Go to it</button></div>
+    </div>`;
   const allFeeds = new Set();   // every camera window's feed, the body windows' too (playback.maxBehind)
   function cameraFeed(card) {
     // body: a body window's own target; the two camera windows show the body in view in the body view, else every target
     const own = card.dataset.body || null, cam = card.dataset.cam, win = card.closest(".win") || card, well = card.querySelector(".well"), shot = card.querySelector(".shot"), chans = card.querySelector(".chans");
-    const field = f => card.querySelector(`[data-f="${f}"]`) || { set textContent(v) {}, set innerHTML(v) {} };
+    const field0 = f => card.querySelector(`[data-f="${f}"]`) || { set textContent(v) {}, set innerHTML(v) {} };
+    // the frame line ("Titan · N1487162110_2", wherever it is written) goes to the caption in two parts: the target,
+    // first on its top line, and the frame id (a link to NASA's archive) under it
+    const frameLine = html => {
+      const s = String(html), i = s.indexOf(" · ");
+      field0("target").innerHTML = i >= 0 ? s.slice(0, i) : "";
+      field0("frame").innerHTML = i >= 0 ? s.slice(i + 3) : s;
+    };
+    const esc = t => String(t).replace(/[&<>"]/g, c => `&#${c.charCodeAt(0)};`);
+    const field = f => f === "frame" ? { set innerHTML(v) { frameLine(v); }, set textContent(v) { frameLine(esc(v)); } } : field0(f);
+    // the target's distance and the picture's scale, beside its name (with the orbit icon showing where it is)
+    const rangeLine = k => {
+      const r = catalog.range_km && catalog.range_km[k], kp = catalog.km_per_px[k];
+      field0("range").textContent = [r ? `${r < 100 ? r.toFixed(1) : fmt(r)} km` : "", kp ? `${kp < 10 ? kp.toFixed(2) : fmt(kp)} km/px` : ""].filter(Boolean).join(" · ");
+      orbitIcon(k);
+    };
     let shownAt = 0, mosaicAt = 0, wantAt = 0;   // when the last picture and the last pass mosaic went up, and the picture wanted now was asked for (behind)
     let upEt = null;   // the mission time of the frame whose picture is up (display), whichever months are loaded
     let jumpTimer = 0;   // a jump's loading card, unless the picture wanted comes first (update)
@@ -1931,6 +2035,41 @@ body.idle .win.full .titlebar { opacity: 0; }
     // centred on its body by the frame server (the pipeline's processed frame, placed north up by SPICE) unless the
     // server said its pass is not centred (rings, sky, a body too big) or could not place the frame: then as it is
     const opts = winOpts(win, card);
+    // the (i) button under the picture: the rest of the picture's details, remembered for each window
+    const infoBtn = card.querySelector(".infobtn");
+    if (infoBtn) {
+      const more = v => { win.classList.toggle("more", v); infoBtn.setAttribute("aria-expanded", String(v)); };
+      more(!!opts.get("more"));
+      infoBtn.addEventListener("click", e => { e.stopPropagation(); const v = !win.classList.contains("more"); more(v); opts.set("more", v || null); if (e.detail) infoBtn.blur(); });
+    }
+    // the orbit icon by the caption (cassiniOrbit, orbit.html): where Cassini is on its orbit and the line to the
+    // target of the picture up, redrawn when the picture changes (and at most once a second while the clock runs);
+    // a click opens it big over the picture, another (or Esc) closes it
+    const orbitBtn = card.querySelector(".orbitbtn");
+    let orbitK = -1, orbitAt = 0, orbitPop = null;
+    function orbitIcon(k) {
+      if (k !== undefined) orbitK = k;
+      if (!orbitBtn || !window.cassiniOrbit) return;
+      const now = performance.now();
+      if (k === undefined && now - orbitAt < 1000) return;
+      orbitAt = now;
+      const t = orbitK >= 0 ? catalog.target[orbitK] : null;
+      orbitBtn.innerHTML = cassiniOrbit.svg(state.et, { target: t, size: "icon" });
+      orbitBtn.hidden = !orbitBtn.innerHTML;
+      if (orbitPop && !orbitPop.hidden) orbitPop.querySelector(".orbitbig").innerHTML = cassiniOrbit.svg(state.et, { target: t, size: "full" });
+    }
+    function orbitOpen(on) {
+      if (!orbitPop) {
+        orbitPop = document.createElement("div"); orbitPop.className = "orbitpop"; orbitPop.hidden = true;
+        orbitPop.innerHTML = '<div class="orbitbig"></div><span class="orbitnote">Seen from above the rings, the Sun up. Distances from Saturn on a square-root scale.</span>';
+        for (const t of ["click", "dblclick", "pointerdown"]) orbitPop.addEventListener(t, e => { e.stopPropagation(); if (t === "click") orbitOpen(false); });
+        well.appendChild(orbitPop);
+      }
+      orbitPop.hidden = !on; orbitBtn.setAttribute("aria-expanded", String(on)); well.classList.toggle("orbiting", on);
+      if (on) { orbitAt = 0; orbitIcon(orbitK); }
+    }
+    if (orbitBtn) orbitBtn.addEventListener("click", e => { e.stopPropagation(); orbitOpen(!orbitPop || orbitPop.hidden); if (e.detail) orbitBtn.blur(); });
+    window.addEventListener("keydown", e => { if (e.key === "Escape" && orbitPop && !orbitPop.hidden) orbitOpen(false); });
     const centreOn = () => opts.get("autoCenter") ?? S.get("cameras.autoCenter") ?? true;
     const uncentred = new Set(), centreFailed = new Set();   // passes the server does not centre / frames it could not
     const centres = k => centreOn() && !uncentred.has(passOf(k)) && !centreFailed.has(catalog.id[k]);
@@ -2140,6 +2279,36 @@ body.idle .win.full .titlebar { opacity: 0; }
       }
       return { key: shownFrameUrl(k, sz), set: -1, k };
     }
+    // a quiet camera: its square shows where Cassini is on its orbit (cassiniOrbit, orbit.html) and when this camera
+    // takes its next picture, of what, with a button that goes there. Kept up to date while the clock runs (a few
+    // times a second at most); the card is made once, so its button can be clicked while the countdown changes
+    let idleAt = 0, idleNext = undefined;
+    function quiet(p) {
+      const card0 = well.querySelector(".idlecard");
+      if (!card0) return;
+      const now = performance.now();
+      if (now - idleAt < 250) return;
+      idleAt = now;
+      const ks = framesOf(cam, body).ks, nk = ks[p + 1];
+      idleNext = nk;
+      const nt = nk !== undefined ? catalog.target[nk] : null;
+      const orbit = window.cassiniOrbit ? cassiniOrbit.svg(state.et, { target: nt, size: "full", ahead: "next" }) : "";
+      const o = card0.querySelector(".idleorbit");
+      if (o.dataset.svg !== orbit) { o.innerHTML = orbit; o.dataset.svg = orbit; }
+      card0.querySelector(".idlewhat").textContent = nk !== undefined ? titleCase(nt || "Unknown") : "None in the months loaded";
+      const d = nk !== undefined && new Date(etToMs(catalog.et[nk]));
+      card0.querySelector(".idlewhen").textContent = d ? `in ${fmtDur(catalog.et[nk] - state.et)} · ${d.getUTCDate()} ${MONTHS[d.getUTCMonth()]} ${String(d.getUTCHours()).padStart(2, "0")}:${String(d.getUTCMinutes()).padStart(2, "0")} UTC` : "";
+      card0.querySelector(".idlego").hidden = nk === undefined;
+    }
+    well.addEventListener("click", e => {
+      const go = e.target.closest(".idlego");
+      if (!go || idleNext === undefined) return;
+      e.stopPropagation();
+      // a little before the picture, so it comes in as the clock reaches it
+      setTime(catalog.et[idleNext] - Math.min(30, Math.max(2, state.speed * 2)));
+      if (typeof keepNowInView === "function") keepNowInView();
+      if (e.detail) go.blur();
+    });
     // kept: a frame that cannot be shown keeps the picture's space (steady size) instead of shrinking the window
     function noFrame(msg, kept) {
       well.classList.toggle("kept", !!kept && steady() && well.matches(".has-frame, .kept"));
@@ -2179,7 +2348,7 @@ body.idle .win.full .titlebar { opacity: 0; }
       // fewer frames a second than the clock passes, and the caption should say which frame is on screen (also a
       // frame shown as it is while its pass is steadied, which went up in place of the movie frame asked for)
       if (v.movie || steadying) {
-        field("frame").innerHTML = pdsLinks(`${titleCase(catalog.target[v.k] || "Unknown")} · ${catalog.id[v.k]}`);
+        field("frame").innerHTML = pdsLinks(`${titleCase(catalog.target[v.k] || "Unknown")} · ${catalog.id[v.k]}`); rangeLine(v.k);
         filmstrip(v.k);
       }
       // the caption on the picture names the picture on screen (a stand-in shown while the one wanted loads, a
@@ -2616,8 +2785,8 @@ body.idle .win.full .titlebar { opacity: 0; }
         stripKey = key; stripSet = s;
         // steady size: three columns for every set, so a two-filter set's tiles are no bigger than a three-filter one's
         chans.style.setProperty("--n", steady() ? 3 : s.use.length);
-        chans.innerHTML = s.use.map((q, j) => `<figure data-ch="${slots[j]}"><div class="tile"></div>
-          <figcaption><i style="background:${CH_COLOUR[slots[j]]}"></i><b>${fname(q)}</b> ${Math.round(nmOf(q))} nm</figcaption></figure>`).join("")
+        chans.innerHTML = s.use.map((q, j) => `<figure data-ch="${slots[j]}" title="${fname(q)} · ${Math.round(nmOf(q))} nm · ${catalog.id[q]}"><div class="tile"></div>
+          <figcaption><i style="background:${CH_COLOUR[slots[j]]}"></i><b>${fname(q)}</b><span class="nm"> ${Math.round(nmOf(q))} nm</span></figcaption></figure>`).join("")
           + (s.frames.length > s.use.length ? `<div class="more">Also in this set: ${s.frames.filter(q => !s.use.includes(q)).map(fname).join(", ")}</div>` : steady() ? '<div class="more"></div>' : "");
         chans.classList.add("on");
         if (shown && shown.set >= 0 && catalog.sets[shown.set] === s) channelsFrom(shot, s);
@@ -3027,7 +3196,7 @@ body.idle .win.full .titlebar { opacity: 0; }
       // the info lines describe the held picture, not the live camera
       field("status").textContent = "Held · the clock plays on";
       if (t.lines) for (const f of LINES) field(f).innerHTML = t.lines[f] || "—";
-      card.querySelectorAll(".info dd[data-f]").forEach(dd => { dd.title = dd.textContent; });
+      card.querySelectorAll(":is(.info, .capline) [data-f]").forEach(dd => { dd.title = dd.textContent; });
       drillable();
       draw(null);
       if (url === levelKey) return;
@@ -3097,6 +3266,7 @@ body.idle .win.full .titlebar { opacity: 0; }
     }
     let cat = null, letGone = false, hiddenGone = false;
     function update(force) {
+      orbitIcon();
       finishSync();
       if (dataWait()) { if (!letGone) { letGone = true; letGo(window.cassiniAway && cassiniAway.on); } return; }
       letGone = false;
@@ -3160,10 +3330,12 @@ body.idle .win.full .titlebar { opacity: 0; }
         strip(null); filmstrip(-1);
         if (lastK !== -1) {
           lastK = -1; want = null; shownKey = null; shown = null; well.classList.remove("inpass");
-          noFrame(k < 0 && holdUp ? `<b>${titleCase(body)}</b>No ${cam === "N" ? "narrow" : "wide"}-angle pictures of it near this time`
-            : k < 0 ? "<b>No signal</b>No frames from this camera yet this year" : `<b>Idle</b>No frames from this camera in the last ${+stale.toFixed(1)} h`, holdUp);
-          for (const f of ["frame", "filter", "colour", "details"]) field(f).textContent = "—";
+          if (k < 0 && holdUp) noFrame(`<b>${titleCase(body)}</b>No ${cam === "N" ? "narrow" : "wide"}-angle pictures of it near this time`, holdUp);
+          else { noFrame(IDLE_HTML); idleAt = 0; }
+          for (const f of ["frame", "filter", "colour", "details", "range", "obs"]) field(f).textContent = "";
+          orbitIcon(-1);
         }
+        if (!(k < 0 && holdUp)) quiet(p);
         return;
       }
       const ago = state.et - catalog.et[k];
@@ -3202,13 +3374,14 @@ body.idle .win.full .titlebar { opacity: 0; }
       // (want.held: a colour set held up while the next is taken, as on opening paused inside a pass)
       if ((obsShown && catalog.obs[k] === obsShown) || ((want.tile || want.held) && (mosaicPass(k) || modeOf(k) === "mosaic" || modeOf(k) === "mosaic_movie"))) mosaicOf(want.held ? { key: want.key, set: -1, k } : want, true);
       const kp = catalog.km_per_px[k];
-      if (!want.movie) field("frame").innerHTML = pdsLinks(`${titleCase(catalog.target[k] || "Unknown")} · ${catalog.id[k]}`);
+      if (!want.movie) { field("frame").innerHTML = pdsLinks(`${titleCase(catalog.target[k] || "Unknown")} · ${catalog.id[k]}`); rangeLine(k); }
       if (!want.movie) field("filter").innerHTML = filterHtml(k);
       field("colour").textContent = !s ? (colourFilter(k) ? "Single filter" : "Clear, no color") : ready
         ? colourText(s, si) : `${KIND[s.kind]} set, ${s.use.filter(q => catalog.et[q] <= state.et).length} of ${s.use.length} channels taken`;
       const n24 = p - lastOfCam(cam, state.et - 86400, body);
-      field("details").textContent = `${kp ? `${kp < 10 ? kp.toFixed(2) : fmt(kp)} km/px · ` : ""}${fmt(n24)} frames in the last 24 h`;
-      card.querySelectorAll(".info dd[data-f]").forEach(dd => { dd.title = dd.textContent; });   // the whole line, when steady size cuts it short
+      field("details").textContent = `${fmt(n24)} frames in the last 24 h`;
+      field("obs").textContent = catalog.obs ? catalog.obs[k] || "" : "";
+      card.querySelectorAll(":is(.info, .capline) [data-f]").forEach(dd => { dd.title = dd.textContent; });   // the whole line, when steady size cuts it short
       const ks = framesOf(cam, body).ks;
       // look ahead: the next 6 frames, or up to 12 when they come within 4 s of playback (a burst), nearest first
       const ahead = []; for (let d = 1; d <= 12 && ks[p + d] !== undefined && (d <= 6 || catalog.et[ks[p + d]] - state.et <= 4 * state.speed); d++) ahead.push(ks[p + d]);

@@ -15,8 +15,6 @@
 .bodywin .pane { width: var(--pw); display: grid; gap: 6px; }
 .bodywin .pane[data-cam="W"] { width: calc(var(--pw) * .72); }
 .bodywin .info { grid-template-columns: 38px 1fr; font-size: 10px; }
-.bodywin .well { height: 70px; }
-.bodywin .well.has-frame { height: auto; }
 .bodywin .chans { grid-template-columns: repeat(var(--n, 3), minmax(0, 1fr)); }
 /* new windows pop up, old ones fade out */
 .bodywin.opening { animation: bwopen .32s cubic-bezier(.2, .8, .3, 1); }
@@ -107,7 +105,8 @@ body.idle #app .bodywin:has(.well.has-frame) { opacity: 1; pointer-events: auto;
     return `<div class="pane" data-cam="${cam}" data-body="${name}">
         <div class="well"><div class="wellmsg"><b>No signal</b>Waiting for the frame server</div><img class="shot" alt="" crossorigin="anonymous"><span class="shottag"></span><span class="kindtag"></span></div>
         <div class="chans" aria-label="Filter channels"></div>
-        <dl class="info"><dt>Status</dt><dd><span class="led"></span><span data-f="status">—</span></dd><dt>Filter</dt><dd data-f="filter">—</dd><dt>Color</dt><dd data-f="colour">—</dd><dt>Credit</dt><dd><button class="credit" data-about="iss" title="Credits">NASA/JPL-Caltech/SSI</button></dd></dl>
+        <div class="capline"><button class="orbitbtn" type="button" aria-label="Where Cassini is on its orbit" aria-expanded="false" title="Where Cassini is on its orbit"></button><div class="cap1"><span data-f="target"></span><span data-f="range"></span><span class="capstat"><span class="led"></span><span data-f="status"></span></span></div><div class="cap2"><span data-f="frame"></span><span data-f="filter"></span><span data-f="colour"></span></div><button class="infobtn" type="button" aria-label="More about this picture" aria-expanded="false" title="More about this picture"><svg viewBox="0 0 12 12" aria-hidden="true"><circle cx="6" cy="6" r="5"/><path d="M6 5.4v3.1"/><circle class="dot" cx="6" cy="3.6" r=".7"/></svg></button></div>
+        <dl class="info"><dt>Details</dt><dd data-f="details"></dd><dt>Pass</dt><dd data-f="obs"></dd><dt>Credit</dt><dd><button class="credit" data-about="iss" title="Credits">NASA/JPL-Caltech/SSI</button></dd></dl>
       </div>`;
   }
   // a free place for a new window: the first slot in rows from the top left that no open window covers
