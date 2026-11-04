@@ -1896,8 +1896,11 @@ def tile_scale(scale, f, own_sky=False, seen=None, disk=None):
     as the stray light faded). seen: a dict the raised black is put in."""
     out = {**scale, "blacks": [scale["blacks"].get(f, 0.0)]}
     top = scale.get("sky_tops", {}).get(f)
-    if not own_sky or (top is None and disk is None):
+    if not own_sky:
         return out
+    # (a pass with no sky height of its own and no small body: only a frame lit all over by a glow gets a black of its
+    # own, every other frame keeps the pass's)
+    glow_only = top is None and disk is None
     black = out["blacks"][0]
 
     def black_of(iof):
@@ -1905,15 +1908,24 @@ def tile_scale(scale, f, own_sky=False, seen=None, disk=None):
         q = iof[::4, ::4].astype(np.float32)
         top_of_sky = 0.05 * np.percentile(q, 99.9)
         m = q < top_of_sky
-        veiled = False
+        veiled = glow = False
         if disk is not None and disk[2] < SPECK_PX:
             # a body under a pixel across (Earth from Saturn, a few km moon far off): the frame is all sky, and a dark
             # sky found under 5% of its brightest is still the veil's lower part, whose line bands and other filters'
             # levels then showed over black (195RI: N1752968916_1's gray lines, N1752969019_1 a red wash over its set)
             m = np.zeros(q.shape, bool)
-        if m.mean() <= SKY_MIN:
-            if disk is None:
+        if glow_only and m.mean() > SKY_MIN:
+            return None
+        if m.mean() <= SKY_MIN and disk is None:
+            # no dark sky under 5% of the top: a frame lit all over by a glow (the forward-scattered light round a
+            # backlit plume, ISS_155EN_PLMHPHR001_PIE's jet frames: their sky at a sixth of the jets' root, every one
+            # of them a flat gray square in the movie) has a flat floor, its sky; a frame a lit body fills (its darkest
+            # quarter terrain) does not, and keeps the pass's black
+            lo, floor, hi = (float(v) for v in np.percentile(q, [1, GLOW_FLOOR_PCT, 99.9]))
+            if not (hi > floor and floor - lo <= GLOW_FLAT * (hi - floor)):
                 return None
+            m, top_of_sky, glow = q <= floor, floor, True
+        elif m.mean() <= SKY_MIN:
             # no dark sky: a small body's frame lit all over (stray light), its sky everything off the disk
             m = ~_disk_mask(q.shape, iof.shape, *disk)
             top_of_sky, veiled = float(np.percentile(q[m], 99.9)) if m.any() else 0.0, True
@@ -1933,6 +1945,11 @@ def tile_scale(scale, f, own_sky=False, seen=None, disk=None):
             if m.mean() <= SKY_MIN:
                 return None
         (level,), margin = calibration.sky_levels([[q]], [[m]])
+        if glow:
+            # (the glow's floor is its far side, a gentle slope up to the jets' halo: black over the frame's middle,
+            # GLOW_BLACK_PCT of it smoothed, so the frame's edge does not show as a square; the jets and the halo
+            # close round them stay over it)
+            level = float(np.percentile(cv2.blur(q, (SKY_SMOOTH, SKY_SMOOTH)), GLOW_BLACK_PCT))
         if veiled:
             # (the veil is all stray light, smooth, brighter on one side: black over the top of it, SKY_SMOOTH pixels
             # round, so none of it shows; stars and the moon are sharp and stay over it)
@@ -1947,9 +1964,9 @@ def tile_scale(scale, f, own_sky=False, seen=None, disk=None):
         if raised <= black:
             return None
         # and never at or over the frame's lit median (its pixels over the sky): a black there draws the frame black
-        # (a veiled frame's lit pixels are its veil: the sky, which is what goes black)
+        # (a veiled or glowing frame's lit pixels are its veil or glow: the sky, which is what goes black)
         lit = q[q >= top_of_sky]
-        if not veiled and lit.size and raised >= float(np.median(lit)):
+        if not (veiled or glow) and lit.size and raised >= float(np.median(lit)):
             return None
         if seen is not None:
             seen["black"] = raised
@@ -1987,6 +2004,9 @@ def _disk_mask(qshape, shape, x, y, radius):
 
 SPECK_PX = 1.0      # tile_scale: a small body under this radius (full resolution px) always takes the veil's black
 VEIL_TOP = 99       # tile_scale: a small body's veiled frame's black is over this percentile of its smoothed sky
+GLOW_FLOOR_PCT = 25  # tile_scale: a movie frame with no dark sky, lit all over by a glow: its sky is under this percentile
+GLOW_BLACK_PCT = 50  # ... and its black over this percentile of the frame, smoothed
+GLOW_FLAT = 0.1      # ... when that floor is flat: from the 1st percentile to it under this share of the way on to the top
 SMALL_BODY = 0.02   # of a frame: a body whose disk's radius is under this is small (small_body): a speck, not
                    # Enceladus 64 px across the edge of a plume movie, whose plume fills the frame
 
