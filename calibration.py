@@ -803,14 +803,15 @@ WAC: its barrel distortion and each filter pair's focal length taken out, every 
 grid, geometric_correction.py; the masks of lost and saturated pixels moved with it), "align" (a color set's channels moved onto one another), "blend" (a
 mosaic's tiles blended where they meet, mosaic.composite), "level" (each tile leveled to the tiles round it along
 their seams, mosaic._level), "surface" (a mosaic's tiles' surface redrawn as at one moment,
-obs_mosaic.surface_pictures) and "panels" (a mosaic's pointings moved onto one another where they overlap,
+obs_mosaic.surface_pictures), "rings" (a Saturn mosaic's tiles' rings redrawn as at one moment and its
+pointings registered on the rings' radial profile, reproject.ring_field, obs_mosaic.ring_shift) and "panels" (a mosaic's pointings moved onto one another where they overlap,
 obs_mosaic.panel_places). Every step is on by default; off steps go into the cache names (variant), so the pictures
-made with every step on keep their names. "blend", "level", "surface" and "panels" are the exception: they change
+made with every step on keep their names. "blend", "level", "surface", "rings" and "panels" are the exception: they change
 only how tiles are drawn together, or redraw or move tiles from the tiles made, never a frame or a tile, so they are
 left out of variant (a mosaic with them off draws the same tiles) and the mosaics name them themselves
 (mosaic.drawing; obs_mosaic.SURFACE_TAG, PANEL_TAG, EDGE_TAG).
 """
-STEPS = ("stack", "hdr", "fill", "calibrate", "twohz", "twohzsky", "skysmooth", "dark", "darksky", "pairs", "flat", "hotpix", "geom", "align", "blend", "level", "surface", "panels")
+STEPS = ("stack", "hdr", "fill", "calibrate", "twohz", "twohzsky", "skysmooth", "dark", "darksky", "pairs", "flat", "hotpix", "geom", "align", "blend", "level", "surface", "rings", "panels")
 _off = contextvars.ContextVar("off", default=frozenset())
 
 
@@ -821,7 +822,7 @@ def step(name):
 
 def variant():
     """What a cache name gets for the steps turned off: "" with every step on, else "-off-" and their names."""
-    off = _off.get() - {"blend", "level", "surface", "panels"}
+    off = _off.get() - {"blend", "level", "surface", "rings", "panels"}
     return "-off-" + "-".join(s for s in STEPS if s in off) if off else ""
 
 

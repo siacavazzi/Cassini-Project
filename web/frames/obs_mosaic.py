@@ -2719,6 +2719,195 @@ def _combine(found):
     return move
 
 
+def ringed(u):
+    """True when pass u's tiles have their rings redrawn and registered on them (Saturn, Settings > Processing's rings
+    step on)."""
+    return u["key"][0] == "SATURN" and calibration.step("rings")
+
+
+def _ring_profile(gray, keep, r, g):
+    """The radial profile of gray over the pixels keep: its mean in bins of RING_BIN px of radius r (km; g km a px
+    radially), and the detail of it (less its mean over RING_HIGH px) scaled to unit spread; (first bin, detail, valid)."""
+    b = np.floor(r[keep] / (g * RING_BIN)).astype(np.int64)
+    if not len(b):
+        return None
+    lo = int(b.min())
+    b -= lo
+    count = np.bincount(b)
+    total = np.bincount(b, gray[keep].astype(np.float64))
+    valid = count >= 3
+    prof = np.where(valid, total / np.maximum(count, 1), 0.0)
+    if valid.sum() * RING_BIN < RING_SPAN:
+        return None
+    sigma = RING_HIGH / RING_BIN
+    w = cv2.GaussianBlur(valid.astype(np.float64)[None], (0, 0), sigma)[0]
+    low = cv2.GaussianBlur((prof * valid)[None], (0, 0), sigma)[0] / np.maximum(w, 1e-6)
+    d = np.where(valid, prof - low, 0.0)
+    sd = float(d[valid].std())
+    if sd < 1e-6:
+        return None
+    return lo, d / sd, valid
+
+
+def _profile_lag(a, b, most):
+    """How far (bins) profile b = (first bin, detail, valid) sits out from a, as b(s) = a(s - lag): (lag, ncc there,
+    ncc at no lag, rival: the best other peak more than EDGE_APART px off as a share of it); None when they share too
+    little."""
+    (la, da, va), (lb, db, vb) = a, b
+    lo, hi = min(la, lb) - most, max(la + len(da), lb + len(db)) + most
+    A, B = np.zeros(hi - lo), np.zeros(hi - lo)
+    MA, MB = np.zeros(hi - lo, bool), np.zeros(hi - lo, bool)
+    A[la - lo:la - lo + len(da)], MA[la - lo:la - lo + len(da)] = da, va
+    B[lb - lo:lb - lo + len(db)], MB[lb - lo:lb - lo + len(db)] = db, vb
+    lags = np.arange(-most, most + 1)
+    ncc = np.full(len(lags), -1.0)
+    least = RING_SPAN / RING_BIN
+    for i, k in enumerate(lags):
+        # b at s against a at s - k
+        m = MB & np.roll(MA, k)
+        if m.sum() < least:
+            continue
+        x, y = np.roll(A, k)[m], B[m]
+        x, y = x - x.mean(), y - y.mean()
+        den = math.sqrt(float((x * x).sum() * (y * y).sum()))
+        ncc[i] = float((x * y).sum()) / den if den > 0 else -1.0
+    if ncc.max() <= -1:
+        return None
+    i = int(np.argmax(ncc))
+    lag = float(lags[i])
+    if 0 < i < len(lags) - 1 and ncc[i - 1] > -1 and ncc[i + 1] > -1:
+        den = ncc[i - 1] - 2 * ncc[i] + ncc[i + 1]
+        if den < 0:
+            lag += 0.5 * (ncc[i - 1] - ncc[i + 1]) / den
+    peaks = [ncc[j] for j in range(1, len(lags) - 1) if ncc[j] >= ncc[j - 1] and ncc[j] >= ncc[j + 1]
+             and abs(j - i) * RING_BIN > EDGE_APART]
+    rival = max(peaks) / ncc[i] if peaks and ncc[i] > 0 else 0.0
+    return lag, float(ncc[i]), float(ncc[most]), float(rival)
+
+
+def ring_shift(q, ref, at_q, t, crop, at_t, epoch, km_px):
+    """panel_shift on Saturn's rings: how far tile t is from tile q where they overlap, measured on the rings' radial
+    profile. The radius under every pixel of the overlap comes from SPICE (reproject.sky_to_ring, at the pass's epoch,
+    to which ring_field has redrawn both tiles), the lit rings only (Saturn's disk, its shadow and the sky masked off,
+    RING_INSET inside them); the overlap's ring pixels are split by the direction radius grows in (RING_SECTOR), and
+    in each sector t's profile is matched to q's (1-D, _profile_lag), which says how far t is off across the ringlets
+    there. The sectors' offsets are solved together (least squares, as _combine) for the move; with all of them one
+    way the move along the ringlets is left as SPICE has it (min-norm) and seen["normal"] says which way. A 2-D match
+    of ringlets slides along them and onto the next ringlet (EDGE_RIVAL); a profile spans many ringlets of all
+    widths at once. (dx, dy) and seen as edge_shift's, or (None, why). One filter only."""
+    import reproject as rp
+    if q["filter"] != t["filter"]:
+        return None, "other filter"
+    corners = [(at[0] + s["box"][0], at[1] + s["box"][1], im) for s, at, im in ((q, at_q, ref), (t, at_t, crop))]
+    x0 = max(c[0] for c in corners)
+    y0 = max(c[1] for c in corners)
+    x1 = min(c[0] + c[2].shape[1] for c in corners)
+    y1 = min(c[1] + c[2].shape[0] for c in corners)
+    if x1 - x0 < PANEL_NARROW + 2 * EDGE_INSET or y1 - y0 < PANEL_NARROW + 2 * EDGE_INSET:
+        return None, "apart"
+    grays, masks = [], []
+    for cx, cy, im in corners:
+        left, top = int(round(x0 - cx)), int(round(y0 - cy))
+        part = im[top:top + int(y1 - y0), left:left + int(x1 - x0)]
+        grays.append(part[..., :3].astype(np.float32).mean(axis=2))
+        masks.append(part[..., 3] > 0)
+    h, w = min(g.shape[0] for g in grays), min(g.shape[1] for g in grays)
+    grays, masks = [g[:h, :w] for g in grays], [m[:h, :w] for m in masks]
+    common = np.pad(masks[0] & masks[1], 1).astype(np.uint8)
+    both = cv2.erode(common, np.ones((2 * EDGE_INSET + 1, 2 * EDGE_INSET + 1), np.uint8))[1:-1, 1:-1] > 0
+    # the radius and the lit rings on a grid of 4 px over the overlap, filled in between
+    step = 4
+    gy, gx = np.mgrid[0:h + step:step, 0:w + step:step].astype(np.float64)
+    _, r, ok = rp.sky_to_ring(epoch, gx + x0, gy + y0, km_px)
+    gry, grx = np.gradient(r, step)
+    fy, fx = np.meshgrid(np.arange(h, dtype=np.float32) / step, np.arange(w, dtype=np.float32) / step, indexing="ij")
+    fine = lambda a: cv2.remap(a.astype(np.float32), fx, fy, cv2.INTER_LINEAR, borderMode=cv2.BORDER_REPLICATE)
+    okf = fine(ok.astype(np.float32)) > 0.999
+    okf = cv2.erode(np.pad(okf, 1).astype(np.uint8), np.ones((2 * RING_INSET + 1,) * 2, np.uint8))[1:-1, 1:-1] > 0
+    # (r on the grid in float64: km over 1e5 needs more than float32's 7 digits for half-pixel bins)
+    rf = cv2.remap(r, fx, fy, cv2.INTER_LINEAR, borderMode=cv2.BORDER_REPLICATE)
+    gxf, gyf = fine(grx), fine(gry)
+    keep = both & okf
+    if keep.sum() < RING_LEAST:
+        return None, "no rings"
+    angle = np.degrees(np.arctan2(gyf, gxf))
+    sector = np.floor((angle + 180) / RING_SECTOR).astype(int)
+    rows, used = [], []
+    most = int(round(EDGE_MAX * FRAME / RING_BIN))
+    for k in np.unique(sector[keep]):
+        m = keep & (sector == k)
+        if m.sum() < RING_LEAST:
+            continue
+        gm = float(np.median(np.hypot(gxf[m], gyf[m])))
+        if gm <= 0:
+            continue
+        n = np.array([float(np.mean(gxf[m])), float(np.mean(gyf[m]))])
+        n /= max(np.linalg.norm(n), 1e-12)
+        pa, pb = _ring_profile(grays[0], m, rf, gm), _ring_profile(grays[1], m, rf, gm)
+        if pa is None or pb is None:
+            continue
+        found = _profile_lag(pa, pb, most)
+        if found is None:
+            continue
+        lag, after, before, rival = found
+        seen = {"sector": int(k), "px": int(m.sum()), "lag": round(lag * RING_BIN, 2), "ncc": [round(before, 3), round(after, 3)],
+                "rival": round(rival, 3)}
+        moved = abs(lag * RING_BIN) > 0.5
+        if after < RING_NCC or (moved and after < before + RING_GAIN) or rival > EDGE_RIVAL:
+            seen["no"] = True
+            used.append(seen)
+            continue
+        used.append(seen)
+        rows.append((n, lag * RING_BIN, after * math.sqrt(m.sum())))
+    if not rows:
+        return None, {"why": "no profile believed", "sectors": used}
+    a = sum(wt * np.outer(n, n) for n, _, wt in rows)
+    b = sum(wt * n * d for n, d, wt in rows)
+    vals, vecs = np.linalg.eigh(a)
+    line = vals[0] < EDGE_LINE * vals[1]
+    move = np.linalg.pinv(a, rcond=EDGE_LINE) @ b
+    rx = [(cx - x0) - round(cx - x0) for cx, _, _ in corners]
+    ry = [(cy - y0) - round(cy - y0) for _, cy, _ in corners]
+    shift = (float(move[0]) + rx[1] - rx[0], float(move[1]) + ry[1] - ry[0])
+    seen = {"ring": True, "sectors": used, "area": int(keep.sum()), "edge": True,
+            "ncc": [round(min(s["ncc"][0] for s in used if "no" not in s), 3), round(min(s["ncc"][1] for s in used if "no" not in s), 3)]}
+    if line:
+        normal = vecs[:, 1]
+        across = float(shift[0] * normal[0] + shift[1] * normal[1])
+        shift = (across * float(normal[0]), across * float(normal[1]))
+        seen["normal"] = [round(float(normal[0]), 4), round(float(normal[1]), 4)]
+    if math.hypot(*shift) > EDGE_MAX * FRAME:
+        return None, f"too far {shift[0]:+.1f},{shift[1]:+.1f}"
+    return shift, seen
+
+
+_ring_epochs = {}
+
+
+def _ring_epoch(u):
+    """The pass's epoch (its middle frame's time, as surface_pictures) as reproject.ring_view, and km a reference px
+    spans; None when SPICE or the geometry cache cannot say."""
+    import reproject as rp
+    key = u["key"]
+    with _lock:
+        if key in _ring_epochs:
+            return _ring_epochs[key]
+    fr = u["frames"]
+    mid = fr[len(fr) // 2]
+    ets = _ets([mid[1]])
+    found = None
+    if mid[1] in ets:
+        with _spice_lock:
+            if _with_kernels(mid[3]):
+                try:
+                    found = rp.ring_view(ets[mid[1]]), IFOV[key[2]] * u["z"]
+                except Exception as e:
+                    print(f"no ring geometry for {key}: {type(e).__name__}: {e}"[:200], flush=True)
+    with _lock:
+        _ring_epochs[key] = found
+    return found
+
+
 def clouded(u):
     """True when pass u's body shows clouds or haze that move on their own (SURFACE_CLOUDED; the rings are Saturn's
     passes): its panels are registered on edges only (edge_shift) and its surface is not redrawn."""
@@ -2755,6 +2944,19 @@ SURFACE_STRETCH = 0.5
 # every mosaic, tile map and look-ahead of the pass
 SURFACE_TAKEN = "taken.json"
 _spice_lock = threading.RLock()
+# Saturn's rings (ring reprojection, reproject.ring_field): a Saturn pass's tiles have their lit rings redrawn as at the
+# pass's epoch, the disk, the sky and Saturn's shadow kept as taken, kept in RING_DIR beside the tiles; then the
+# pointings are registered on the rings' radial profile (ring_shift) before the edges (edge_shift)
+RING_DIR = "rings2"
+RING_TAG = "-rg2"    # in the name of a layout whose tiles' rings are redrawn so, instead of SURFACE_TAG
+RING_SECTOR = 15.0   # degrees: an overlap's ring pixels are split by the direction radius grows in, a profile each
+RING_BIN = 0.5       # reference px: a radial profile's bins (along the direction radius grows in)
+RING_HIGH = 8.0      # reference px: a profile's detail is what is left over its mean over this (the ringlets)
+RING_SPAN = 48       # reference px: the least radial span a sector's profile covers, in both tiles
+RING_LEAST = 400     # ring pixels a sector holds at least
+RING_NCC = 0.6       # the least the two profiles must agree once moved
+RING_GAIN = 0.05     # ... and how much better than at SPICE's places, for a move of over half a pixel
+RING_INSET = 8       # px: the ring mask eroded this far (SPICE's pointing is a few px off at the limb and the shadow)
 
 
 def _with_kernels(t):
@@ -2787,12 +2989,12 @@ def _ets(ids):
     return out
 
 
-def _surface_taken(u, cache, p, out_dir):
+def _surface_taken(u, cache, p, out_dir, key="surface_taken"):
     """The tiles of the pass that surface_pictures keeps as taken (SURFACE_TAKEN): read once, then from the pass's
-    record."""
+    record (under key: the rings' are kept apart, "ring_taken")."""
     rec = _kept_tiles(u, cache, p["display_scale"])
     with _lock:
-        taken = rec.get("surface_taken") if rec is not None else None
+        taken = rec.get(key) if rec is not None else None
     if taken is None:
         try:
             with open(os.path.join(out_dir, SURFACE_TAKEN)) as fh:
@@ -2801,7 +3003,7 @@ def _surface_taken(u, cache, p, out_dir):
             taken = set()
         if rec is not None:
             with _lock:
-                taken = rec.setdefault("surface_taken", taken)
+                taken = rec.setdefault(key, taken)
     return taken
 
 
@@ -2817,12 +3019,14 @@ def surface_pictures(u, cache, p, tiles):
     when the kernels or the geometry cache cannot say; none for a clouded body (SURFACE_CLOUDED), and not a tile
     the redrawing would distort (SURFACE_STRETCH), which keeps SPICE's place and the panels step's nudge (found
     once and kept too, SURFACE_TAKEN)."""
-    if not calibration.step("surface") or not tiles or clouded(u):
+    ring = ringed(u)
+    if not tiles or not ring and (not calibration.step("surface") or clouded(u)):
         return {}
     import reproject as rp
     there = _tiles(u, cache, p["display_scale"])
-    out_dir = os.path.join(there, SURFACE_DIR)
-    taken = _surface_taken(u, cache, p, out_dir)
+    out_dir = os.path.join(there, RING_DIR if ring else SURFACE_DIR)
+    taken = _surface_taken(u, cache, p, out_dir, "ring_taken" if ring else "surface_taken")
+    view_at = rp.ring_view if ring else (lambda et: rp.sky_view(u["key"][0], et))
     out, todo = {}, []
     for t in tiles:
         if "offset" not in t or t["n"] in taken:
@@ -2844,7 +3048,7 @@ def surface_pictures(u, cache, p, tiles):
         if not _with_kernels(mid[3]):
             return out
         try:
-            epoch = rp.sky_view(u["key"][0], ets[mid[1]])
+            epoch = view_at(ets[mid[1]])
         except Exception as e:
             print(f"no surface for {u['key'][0]}: {type(e).__name__}: {e}"[:200], flush=True)
             return out
@@ -2870,7 +3074,7 @@ def surface_pictures(u, cache, p, tiles):
             if t["id"] not in ets or not _with_kernels(t["t"]):
                 continue
             try:
-                view = rp.sky_view(u["key"][0], ets[t["id"]])
+                view = view_at(ets[t["id"]])
             except Exception as e:
                 print(f"no surface for {t['id']}: {type(e).__name__}: {e}"[:200], flush=True)
                 continue
@@ -2880,7 +3084,7 @@ def surface_pictures(u, cache, p, tiles):
             if image is None:
                 image = np.asarray(Image.open(src).convert("RGBA"))
             # (the field worked out SURFACE_REACH round the tile too, where its ground may move to: surface_redrawn)
-            dx, dy, weight = surface_field(rp, epoch, view, image.shape[:2], t, km_px)
+            dx, dy, weight = surface_field(rp, epoch, view, image.shape[:2], t, km_px, ring)
             path = os.path.join(out_dir, f"{t['n']}.png")
             r = SURFACE_REACH // SURFACE_STEP
             stretch = rp.field_stretch(dx[r:-r, r:-r], dy[r:-r, r:-r], weight[r:-r, r:-r], SURFACE_STEP)
@@ -2888,7 +3092,11 @@ def surface_pictures(u, cache, p, tiles):
                 print(f"surface: tile {t['n']} kept as taken (stretch {stretch:.2f})", flush=True)
                 found.add(t["n"])
                 continue
-            picture, box = surface_redrawn(rp, image, t, dx, dy, weight)
+            fine = None
+            if ring:
+                x0, y0 = t["offset"][0] + t["box"][0], t["offset"][1] + t["box"][1]
+                fine = lambda pad, h, w, view=view, x0=x0, y0=y0: rp.ring_weight(epoch, view, x0 - pad, y0 - pad, h, w, km_px)
+            picture, box = surface_redrawn(rp, image, t, dx, dy, weight, fine)
             # (the box first, so a picture never sits there without it)
             with open(path + SURFACE_BOX, "w") as fh:
                 json.dump(box, fh)
@@ -2908,7 +3116,7 @@ def surface_pictures(u, cache, p, tiles):
     return out
 
 
-def surface_field(rp, epoch, view, shape, t, km_px):
+def surface_field(rp, epoch, view, shape, t, km_px, ring=False):
     """reproject.sky_field for tile t (its picture shape, h x w) on SURFACE_STEP's grid over its box grown by
     SURFACE_REACH each way: the grid's point (SURFACE_REACH // SURFACE_STEP, the same) is the tile's pixel (0, 0), at
     the tile's corner on the sky, so the grid's inner part is the field over the tile's own box."""
@@ -2916,13 +3124,16 @@ def surface_field(rp, epoch, view, shape, t, km_px):
     m = SURFACE_REACH
     gy, gx = np.mgrid[-m:h + m + SURFACE_STEP:SURFACE_STEP, -m:w + m + SURFACE_STEP:SURFACE_STEP].astype(np.float64)
     x0, y0 = t["offset"][0] + t["box"][0], t["offset"][1] + t["box"][1]
+    if ring:
+        return rp.ring_field(epoch, view, gx + x0, gy + y0, km_px, SURFACE_STEP)
     return rp.sky_field(epoch, view, gx + x0, gy + y0, km_px)
 
 
-def surface_redrawn(rp, image, t, dx, dy, weight):
+def surface_redrawn(rp, image, t, dx, dy, weight, fine=None):
     """Tile t's picture (image, RGBA, on its box t["box"] about t["offset"]) redrawn as at the epoch: (picture, box),
     the picture on the box grown by the furthest its surface moves (up to SURFACE_REACH) and cut to its drawn
-    pixels, and that box (reference px about the tile's offset, as t["box"]). dx, dy, weight: surface_field's."""
+    pixels, and that box (reference px about the tile's offset, as t["box"]). dx, dy, weight: surface_field's; fine(pad,
+    h, w): the weight per pixel of the picture grown by pad px (h x w), for the rings (reproject.ring_weight)."""
     h, w = image.shape[:2]
     r = SURFACE_REACH // SURFACE_STEP
     inner = weight[r:-r, r:-r] > 0
@@ -2931,7 +3142,9 @@ def surface_redrawn(rp, image, t, dx, dy, weight):
     steps = min(r, math.ceil(reach / SURFACE_STEP))
     pad = steps * SURFACE_STEP
     cut = slice(r - steps, dx.shape[0] - (r - steps)), slice(r - steps, dx.shape[1] - (r - steps))
-    picture = rp.warp_sky(np.pad(image, ((pad, pad), (pad, pad), (0, 0))), dx[cut], dy[cut], weight[cut], SURFACE_STEP)
+    grown = np.pad(image, ((pad, pad), (pad, pad), (0, 0)))
+    picture = rp.warp_sky(grown, dx[cut], dy[cut], weight[cut], SURFACE_STEP,
+                          None if fine is None else fine(pad, *grown.shape[:2]))
     found = Image.fromarray(picture).getbbox(alpha_only=True)
     if found is None:
         return np.ascontiguousarray(image), list(t["box"])
@@ -2978,10 +3191,13 @@ def panel_places(u, cache, p, tiles, pic=None, report=None):
     # (measured on the tiles as drawn: their surface redrawn as at the epoch, or not, each kept apart)
     surfaced = any("pic" in t for t in tiles)
     edges = clouded(u)
-    path = os.path.join(folder(u, cache), (SURFACE_DIR + "-" if surfaced else "") + (EDGE_FILE if edges else "") + PANEL_FILE)
+    # (a Saturn pass's tiles redrawn on its rings are registered on them first, ring_shift)
+    rings = ringed(u) and surfaced and _ring_epoch(u)
+    redrawn = RING_DIR if rings else SURFACE_DIR
+    path = os.path.join(folder(u, cache), (redrawn + "-" if surfaced else "") + (EDGE_FILE if edges else "") + PANEL_FILE)
     rec = _kept_tiles(u, cache, p["display_scale"])
     with _ulock(u):
-        name = "panels" + SURFACE_TAG * surfaced + EDGE_TAG * edges
+        name = "panels" + (RING_TAG if rings else SURFACE_TAG) * surfaced + EDGE_TAG * edges
         kept = rec.get(name) if rec is not None else None
         if kept is None:
             kept = {}
@@ -3035,7 +3251,15 @@ def panel_places(u, cache, p, tiles, pic=None, report=None):
                 s = by_n[j]
                 # measured where SPICE put both (the overlap SPICE says, the same however far the earlier one has
                 # been moved), and taken from where the earlier one now is
-                shift, how = (edge_shift if edges else panel_shift)(s, ref, s["offset"], t, mine, here)
+                shift, how = None, None
+                if rings:
+                    shift, how = ring_shift(s, ref, s["offset"], t, mine, here, *rings)
+                    if shift is None:
+                        why = how
+                        shift, how = edge_shift(s, ref, s["offset"], t, mine, here)
+                        how = {"ring": why, "edge": how} if shift is None else {**how, "ring": why}
+                else:
+                    shift, how = (edge_shift if edges else panel_shift)(s, ref, s["offset"], t, mine, here)
                 seen[j] = how if shift is None else {**how, "shift": [round(shift[0], 2), round(shift[1], 2)]}
                 if shift is not None:
                     was = kept.get(j, [0, 0])
@@ -3433,7 +3657,7 @@ def filter_mosaic(u, p, f, tiles, rect, cache, ref=None, tag=""):
     up to the newest (a mosaic movie's lap, rolling_layout): it has a name of its own and is not grown, since
     growing takes the tiles as the pass's first ones in time order. f = LUM: the pass's luminance base (_mine)."""
     mine = _mine(u, p, tiles, f)
-    whole = tag in ("", PANEL_TAG, EDGE_TAG, SURFACE_TAG, SURFACE_TAG + PANEL_TAG)   # every tile up to the newest
+    whole = tag in ("", PANEL_TAG, EDGE_TAG, SURFACE_TAG, SURFACE_TAG + PANEL_TAG, RING_TAG, RING_TAG + EDGE_TAG)   # every tile up to the newest
     if whole and not _rolling.get() and calibration.step("level") and not all("under" in t for t in mine):
         # a pass's mosaic (not a mosaic movie's lap): a tile far darker than the picture before it goes under it
         # (decided here on all the pass's tiles; the mosaic of fewer tiles _grown starts from keeps the decisions)
@@ -3591,6 +3815,7 @@ def layout(u, n, cache):
     if surfaced:
         tiles = [dict(t, pic=surfaced[t["n"]], box=surface_box(surfaced[t["n"]], t)) if t["n"] in surfaced else t
                  for t in tiles]
+    redrawn = (RING_TAG if ringed(u) else SURFACE_TAG) if surfaced else ""
     moved = panel_places(u, cache, p, tiles)
     if moved:
         tiles = [dict(t, offset=[t["offset"][0] + moved[t["n"]][0], t["offset"][1] + moved[t["n"]][1]], spice_place=t["offset"])
@@ -3615,7 +3840,7 @@ def layout(u, n, cache):
     name = "_".join(f"{f.replace('/', '-')}{count[f]}" for f in used)
     if any(f not in used for f in base):
         name += f"_L{len(base)}"
-    return p, tiles, rect, count, used, name + "_" + "_".join(str(round(v)) for v in rect) + (SURFACE_TAG if surfaced else "") + ((EDGE_TAG if clouded(u) else PANEL_TAG) if moved else "")
+    return p, tiles, rect, count, used, name + "_" + "_".join(str(round(v)) for v in rect) + redrawn + ((EDGE_TAG if clouded(u) else PANEL_TAG) if moved else "")
 
 
 TUNE_MAX = 0.5   # furthest a pointing can be moved, as a fraction of the picture
@@ -3774,7 +3999,7 @@ def so_far(u, n, cache, made=None, out=OUT):
     plain, _, tuned = name.partition("-tune")
     # (and a layout whose tiles panel registration moved: its tiles are not where the pre-built pictures have them)
     tag = ("-" + plain.rsplit("-", 1)[1] if plain.startswith("lap-") else "") + \
-        "".join(x for x in (SURFACE_TAG, PANEL_TAG, EDGE_TAG) if x in plain) + ("-tune" + tuned if tuned else "")
+        "".join(x for x in (RING_TAG, SURFACE_TAG, PANEL_TAG, EDGE_TAG) if x in plain) + ("-tune" + tuned if tuned else "")
     # the seams are solved on the best covered filter drawn and shared by all (balanced look)
     ref = max(used, key=lambda f: count[f])
     # the luminance base under the picture, where it holds tiles the picture would not show (a mosaic movie's

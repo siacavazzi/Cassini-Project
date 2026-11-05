@@ -288,17 +288,119 @@ def field_stretch(dx, dy, weight, step):
     return worst
 
 
-def warp_sky(image, dx, dy, weight, step):
+def warp_sky(image, dx, dy, weight, step, fine_weight=None):
     """image (RGBA, its pixel (0, 0) at the field's grid point (0, 0)) redrawn as at the field's epoch: dx, dy,
     weight on a grid of step pixels (sky_field), filled in between; off the body (weight 0) it stays as it is (the
     shift fades to none at the limb, so the cells the limb crosses need nothing worked out pixel by pixel)."""
     h, w = image.shape[:2]
     fy, fx = np.meshgrid(np.arange(h, dtype=np.float32) / step, np.arange(w, dtype=np.float32) / step, indexing="ij")
     fine = lambda a: cv2.remap(a, fx, fy, cv2.INTER_LINEAR, borderMode=cv2.BORDER_REPLICATE)
-    sx, sy, wt = fine(dx), fine(dy), fine(weight)
+    sx, sy = fine(dx), fine(dy)
+    # (fine_weight: the weight per pixel instead, ring_weight)
+    wt = fine(weight) if fine_weight is None else fine_weight
     px, py = np.meshgrid(np.arange(w, dtype=np.float32), np.arange(h, dtype=np.float32))
     # (Lanczos, as the tiles are resized: a linear lookup softened every crater rim)
     warped = cv2.remap(image, px + sx, py + sy, cv2.INTER_LANCZOS4, borderMode=cv2.BORDER_CONSTANT,
                        borderValue=(0, 0, 0, 0)).astype(np.float32)
     k = wt[..., None]
     return np.clip(warped * k + image.astype(np.float32) * (1 - k), 0, 255).round().astype(np.uint8)
+
+
+"""
+Ring reprojection for Saturn's passes, on the same sky places as sky_field (x = -east, y = -north on the sky plane at
+Saturn's centre, reference pixels of km_px km). A ring mosaic's panels are taken minutes apart while Cassini moves, so
+one place on the sky looks at a different radius of the rings in each panel; and SPICE's pointing is a few pixels off
+for each pointing, so the ringlets step radially at the panels' seams. ring_field redraws a picture's ring pixels as
+the epoch sees them: each sky place at the epoch is traced to the point of the ring plane under it (Saturn's equator
+plane), and that point (fixed in J2000: the rings look alike all round, so their turning is left out) is looked up in
+the picture at its own time. Only the lit rings move: where Saturn is in front of the rings or the rings behind it,
+in Saturn's shadow on the rings, and off RING_RADII, the picture stays as it is (and RING_MARGIN px inside those
+edges: SPICE's pointing is a few px off there too).
+"""
+RING_RADII = (74000.0, 140500.0)   # km: the D ring's outer edge to just past the F ring
+RING_MARGIN = 4.0                  # reference px inside the mask's edges kept as taken (SPICE's pointing error)
+
+
+def ring_view(et):
+    """sky_view of Saturn at et, with Saturn's pole and the direction to the sun in J2000."""
+    v = sky_view("SATURN", et)
+    v["pole"] = v["rot"][2].copy()
+    v["sun_j2000"] = v["rot"].T @ v["sun"]
+    return v
+
+
+def _ellipsoid_hit(view, origin, ray):
+    """Where rays (J2000, from origin points relative to Saturn's centre) first meet Saturn's ellipsoid: (hit, t)."""
+    o = (origin @ view["rot"].T) / view["radii"]
+    d = (ray @ view["rot"].T) / view["radii"]
+    a = (d * d).sum(-1)
+    b = 2 * (d * o).sum(-1)
+    cc = (o * o).sum(-1) - 1
+    disc = b * b - 4 * a * cc
+    hit = disc >= 0
+    t = (-b - np.sqrt(np.where(hit, disc, 0))) / (2 * a)
+    return hit, t
+
+
+def sky_to_ring(view, x, y, km_px):
+    """The ring-plane points (J2000 km from Saturn's centre) under sky places x, y, their radius (km), and which are
+    lit rings seen: in front of the camera, Saturn not in front of them nor they in front of Saturn (its disk shows
+    through the thinner rings), out of Saturn's shadow, and within RING_RADII."""
+    d = view["c"] + (-x * km_px)[..., None] * view["east"] + (-y * km_px)[..., None] * view["north"]
+    o = -view["c"]
+    pole = view["pole"]
+    denom = d @ pole
+    s = np.where(np.abs(denom) > 1e-12, -(o @ pole) / np.where(np.abs(denom) > 1e-12, denom, 1), -1)
+    points = o + s[..., None] * d
+    r = np.linalg.norm(points, axis=-1)
+    hit, _ = _ellipsoid_hit(view, np.broadcast_to(o, d.shape), d)
+    ok = (s > 0) & ~hit & (r >= RING_RADII[0]) & (r <= RING_RADII[1])
+    sun = np.broadcast_to(view["sun_j2000"], points.shape)
+    shadow, t = _ellipsoid_hit(view, points, sun)
+    ok &= ~(shadow & (t > 0))
+    return points, r, ok
+
+
+def ring_to_sky(view, points, km_px):
+    """Sky places (reference pixels from Saturn's centre) of ring-plane points, and which this view sees (in front of
+    the camera, Saturn not in front of them)."""
+    v = view["c"] + points
+    along = v @ view["ch"]
+    sky = v * (np.linalg.norm(view["c"]) / np.where(along > 0, along, 1))[..., None] - view["c"]
+    hit, _ = _ellipsoid_hit(view, np.broadcast_to(-view["c"], v.shape), v)
+    return -(sky @ view["east"]) / km_px, -(sky @ view["north"]) / km_px, (along > 0) & ~hit
+
+
+def ring_field(epoch, view, x, y, km_px, step=16):
+    """sky_field for the rings: for sky places x, y (a grid of step reference px) at the epoch's view, where the
+    picture taken at view shows the same ring point (its shift dx, dy from x, y), and weight 1 on the lit rings both
+    see, 0 elsewhere. Unlike the moons' surface the shift does not fade toward the mask's edge: Cassini's motion over a
+    ring mosaic moves the rings 10 to 40 px against Saturn's centre, a fade over a few tens of px squeezed the rings by
+    half there, and the limb and the shadow's edge are where the rings truly end (Saturn's disk is kept as taken). The
+    shift is worked out off the mask too (on the ring plane behind Saturn and past the rings), so the grid's
+    interpolation across the mask's edge does not pull it toward none; ring_weight draws the edge itself, per pixel."""
+    points, _, ok = sky_to_ring(epoch, x, y, km_px)
+    sx, sy, seen = ring_to_sky(view, points, km_px)
+    finite = np.isfinite(sx) & np.isfinite(sy) & (np.abs(sx - x) < 1e4) & (np.abs(sy - y) < 1e4)
+    ok &= seen & finite
+    dx = np.where(finite, sx - x, 0).astype(np.float32)
+    dy = np.where(finite, sy - y, 0).astype(np.float32)
+    return dx, dy, ok.astype(np.float32)
+
+
+RING_FINE = 2     # reference px: the grid ring_weight works the mask out on
+
+
+def ring_weight(epoch, view, x0, y0, h, w, km_px):
+    """ring_field's weight per pixel of a picture of h x w whose pixel (0, 0) is sky place x0, y0: 1 on the lit rings
+    both views see, RING_MARGIN px inside the mask's edges (Saturn's limb, its shadow's edge, the rings' ends: SPICE's
+    pointing is a few px off there), 0 elsewhere, softened over a pixel or two."""
+    import cv2
+    gy, gx = np.mgrid[0:h + RING_FINE:RING_FINE, 0:w + RING_FINE:RING_FINE].astype(np.float64)
+    points, _, ok = sky_to_ring(epoch, gx + x0, gy + y0, km_px)
+    _, _, seen = ring_to_sky(view, points, km_px)
+    ok = (ok & seen).astype(np.uint8)
+    inside = cv2.distanceTransform(np.pad(ok, 1), cv2.DIST_L2, 3)[1:-1, 1:-1] * RING_FINE
+    k = np.clip((inside - RING_MARGIN) / RING_FINE, 0, 1).astype(np.float32)
+    fy, fx = np.meshgrid(np.arange(h, dtype=np.float32) / RING_FINE, np.arange(w, dtype=np.float32) / RING_FINE, indexing="ij")
+    return cv2.remap(k, fx, fy, cv2.INTER_LINEAR, borderMode=cv2.BORDER_REPLICATE)
