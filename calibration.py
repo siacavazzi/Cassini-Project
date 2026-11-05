@@ -58,6 +58,7 @@ import cisscal_noise as cn
 import dark_current as dc
 import data_source as ds
 import flat_field as ff
+import geometric_correction as gc
 
 
 # Inverse of the camera's 12 -> 8 bit table, from CISSCAL calib/lut/lut.tab
@@ -559,6 +560,10 @@ def calibrate(png, info, image=None, smooth=True):
     per_second *= SUM_FACTORS[mode]
     per_second *= sensitivity
     per_second *= distance ** 2
+    # CISSCAL's step 11, the WAC's geometric distortion and per-filter focal length (geometric_correction.py; the
+    # "geom" step), last as in CISSCAL: the frame resampled onto one straight grid for every filter
+    if step("geom"):
+        per_second = gc.correct(per_second, info)
     return per_second
 
 
@@ -645,8 +650,8 @@ def saturated(codes, info, image=None):
         if stored_range(codes, info)[1] < top:
             return np.zeros(image.shape, bool)
         # the display stretch puts the top at 254; a resized frame's partly full pixels count too
-        return image >= 250
-    return image >= 254
+        return gc.correct_mask(image >= 250, info)
+    return gc.correct_mask(image >= 254, info)
 
 
 """
@@ -793,7 +798,9 @@ the WAC's hot pixels taken out, dark_current.py), "darksky" (what the dark model
 sky, its column stripes and lift, taken out too, dark_current.sky_residual; off uses the model as it is), "pairs" (calibrate's anti-blooming bright/dark pixel pairs replaced,
 cisscal_noise.bright_dark), "flat" (calibrate's flat field: dust rings, mottle and the
 detector's flat taken out, flat_field.py), "hotpix" (calibrate's repair of the hot and dead pixels, which stay put
-while the sky moves, dark_current.repair_hot), "align" (a color set's channels moved onto one another), "blend" (a
+while the sky moves, dark_current.repair_hot), "geom" (calibrate's last step, CISSCAL's geometric correction of the
+WAC: its barrel distortion and each filter pair's focal length taken out, every WAC frame resampled onto one straight
+grid, geometric_correction.py; the masks of lost and saturated pixels moved with it), "align" (a color set's channels moved onto one another), "blend" (a
 mosaic's tiles blended where they meet, mosaic.composite), "level" (each tile leveled to the tiles round it along
 their seams, mosaic._level), "surface" (a mosaic's tiles' surface redrawn as at one moment,
 obs_mosaic.surface_pictures) and "panels" (a mosaic's pointings moved onto one another where they overlap,
@@ -803,7 +810,7 @@ only how tiles are drawn together, or redraw or move tiles from the tiles made, 
 left out of variant (a mosaic with them off draws the same tiles) and the mosaics name them themselves
 (mosaic.drawing; obs_mosaic.SURFACE_TAG, PANEL_TAG, EDGE_TAG).
 """
-STEPS = ("stack", "hdr", "fill", "calibrate", "twohz", "twohzsky", "skysmooth", "dark", "darksky", "pairs", "flat", "hotpix", "align", "blend", "level", "surface", "panels")
+STEPS = ("stack", "hdr", "fill", "calibrate", "twohz", "twohzsky", "skysmooth", "dark", "darksky", "pairs", "flat", "hotpix", "geom", "align", "blend", "level", "surface", "panels")
 _off = contextvars.ContextVar("off", default=frozenset())
 
 
