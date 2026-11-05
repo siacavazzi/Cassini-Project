@@ -2473,6 +2473,8 @@ def _same_pointing(u, n):
 
 REGISTER_GAP = 180   # s: a tile of another filter taken this soon before, at the same pointing, is what it is registered to
 REGISTER_MAX = 0.04  # of a frame: the largest correction to SPICE's placement that is believed
+REGISTER_BODY_MAX = 0.1   # ... or up to this much, when the lit area's centroid agrees with it (_register)
+REGISTER_AGREE = 3.0      # px: how near the centroid's move must be to the match's
 # of a frame, per camera: a camera whose tiles are searched only this near SPICE's place (and their edges left out,
 # REGISTER_INSET), a larger move being a false match. The WAC: between the filters of one pointing it drifts 3 to 5 px
 # more than SPICE shows (stars of W1752982634_1..722_16), and a whole search let false matches on a black scene move
@@ -2560,7 +2562,19 @@ def _register(u, n, out, crop, cache, scale):
     if shift is None and how is not None and how.startswith("failed"):
         out["registered"] = {"to": q["id"], "why": how[7:]}
         return
-    if shift is None or math.hypot(*shift) > REGISTER_MAX * FRAME:
+    if shift is not None and REGISTER_MAX * FRAME < math.hypot(*shift) <= REGISTER_BODY_MAX * FRAME:
+        # SPICE's pointing jumps 20 to 45 px between frames 19 s apart in Dione's 038DI ZEROPHASE001 (N1549196942_1 sits
+        # 42 px from the frames either side of it): GRN's 44 px match was past REGISTER_MAX while UV3's 38 px one was
+        # not, so one set's channels were split between two places, three Diones in a column. A match past
+        # REGISTER_MAX is believed, up to REGISTER_BODY_MAX, when the lit area's centroid in the two tiles (the whole
+        # body in both) moves within REGISTER_AGREE of it
+        c = _centroid_onto(q, ref, q["offset"], out, crop, out["offset"])
+        if c is not None and math.hypot(c[0] - shift[0], c[1] - shift[1]) <= REGISTER_AGREE:
+            how = f"{how}, centroid agrees ({c[0]:+.1f},{c[1]:+.1f})"
+        else:
+            out["registered"] = {"to": q["id"], "how": how, "kept": "SPICE's place"}
+            return
+    elif shift is None or math.hypot(*shift) > REGISTER_MAX * FRAME:
         if how is not None:
             out["registered"] = {"to": q["id"], "how": how, "kept": "SPICE's place"}
         return
@@ -2569,6 +2583,44 @@ def _register(u, n, out, crop, cache, scale):
     out["spice_offset"] = out["offset"]
     out["offset"] = [out["offset"][0] - dx, out["offset"][1] - dy]
     out["registered"] = {"to": q["id"], "how": how, "shift": [round(dx, 2), round(dy, 2)]}
+
+
+def _overlap(q, ref, at_q, t, crop, at_t):
+    """The part of the view tiles q (picture ref, middle at at_q) and t (picture crop, middle at at_t) both cover:
+    ([q's, t's] grey BGR crops, [their alpha masks], the rounding of each crop's corner to whole pixels as
+    ([x of q, x of t], [y of q, y of t])), or None when they overlap by under 64 px either way."""
+    corners = []
+    for s, at, im in ((q, at_q, ref), (t, at_t, crop)):
+        corners.append((at[0] + s["box"][0], at[1] + s["box"][1], im))
+    x0 = max(c[0] for c in corners)
+    y0 = max(c[1] for c in corners)
+    x1 = min(c[0] + c[2].shape[1] for c in corners)
+    y1 = min(c[1] + c[2].shape[0] for c in corners)
+    if x1 - x0 < 64 or y1 - y0 < 64:
+        return None
+    imgs, masks = [], []
+    for cx, cy, im in corners:
+        left, top = int(round(x0 - cx)), int(round(y0 - cy))
+        part = im[top:top + int(y1 - y0), left:left + int(x1 - x0)]
+        gray = cv2.cvtColor(np.ascontiguousarray(part[..., :3]), cv2.COLOR_RGB2GRAY)
+        imgs.append(cv2.cvtColor(np.where(part[..., 3] > 0, gray, 0).astype(np.uint8), cv2.COLOR_GRAY2BGR))
+        masks.append(part[..., 3] > 0)
+    h = min(i.shape[0] for i in imgs)
+    w = min(i.shape[1] for i in imgs)
+    rest = [(cx - x0) - round(cx - x0) for cx, _, _ in corners], [(cy - y0) - round(cy - y0) for _, cy, _ in corners]
+    return [i[:h, :w] for i in imgs], [m[:h, :w] for m in masks], rest
+
+
+def _centroid_onto(q, ref, at_q, t, crop, at_t):
+    """How far tile t is from tile q by the lit area's centroid (image_correction.centroid_shift) over the part of
+    the view both cover, as _shift_onto measures (reference pixels t's place moves back by); None when the body is
+    not wholly inside that part in both."""
+    got = _overlap(q, ref, at_q, t, crop, at_t)
+    if got is None:
+        return None
+    imgs, _, rest = got
+    c = image_correction.centroid_shift(imgs[0], imgs[1], max_shift=REGISTER_BODY_MAX * FRAME)
+    return None if c is None else (c[0] + rest[0][1] - rest[0][0], c[1] + rest[1][1] - rest[1][0])
 
 
 def _shift_onto(q, ref, at_q, t, crop, at_t, within=None, sure=None):
@@ -2582,32 +2634,16 @@ def _shift_onto(q, ref, at_q, t, crop, at_t, within=None, sure=None):
     matched as if it were the scene (_register); None: the whole alignment, as the stabilization chains use it.
     sure = least phase correlation peaks (REGISTER_SURE) for REGISTER_FAR's wider search, over the whole overlap
     (image_correction.find_shift_whole): a match is believed when its peak is high, or when the edges' match agrees with it."""
-    corners = []
-    for s, at, im in ((q, at_q, ref), (t, at_t, crop)):
-        corners.append((at[0] + s["box"][0], at[1] + s["box"][1], im))
-    x0 = max(c[0] for c in corners)
-    y0 = max(c[1] for c in corners)
-    x1 = min(c[0] + c[2].shape[1] for c in corners)
-    y1 = min(c[1] + c[2].shape[0] for c in corners)
-    if x1 - x0 < 64 or y1 - y0 < 64:
+    got = _overlap(q, ref, at_q, t, crop, at_t)
+    if got is None:
         return None, None
-    imgs, masks = [], []
-    for cx, cy, im in corners:
-        left, top = int(round(x0 - cx)), int(round(y0 - cy))
-        part = im[top:top + int(y1 - y0), left:left + int(x1 - x0)]
-        gray = cv2.cvtColor(np.ascontiguousarray(part[..., :3]), cv2.COLOR_RGB2GRAY)
-        imgs.append(cv2.cvtColor(np.where(part[..., 3] > 0, gray, 0).astype(np.uint8), cv2.COLOR_GRAY2BGR))
-        masks.append(part[..., 3] > 0)
-    h = min(i.shape[0] for i in imgs)
-    w = min(i.shape[1] for i in imgs)
-    imgs, masks = [i[:h, :w] for i in imgs], [m[:h, :w] for m in masks]
+    imgs, masks, rest = got
     if within is not None:
         # only where both tiles have picture, well inside each: the same ground in both
         k = np.ones((2 * REGISTER_INSET + 1, 2 * REGISTER_INSET + 1), np.uint8)
         both = np.logical_and.reduce([cv2.erode(m.astype(np.uint8), k, borderValue=1) > 0 for m in masks])
         imgs = [np.where(both[..., None], i, 0).astype(np.uint8) for i in imgs]
-    # the rounding of each crop's corner to whole pixels, put back on the shift found
-    rest = [(cx - x0) - round(cx - x0) for cx, _, _ in corners], [(cy - y0) - round(cy - y0) for _, cy, _ in corners]
+    # (rest: the rounding of each crop's corner to whole pixels, put back on the shift found)
     if sure is not None:
         pa = image_correction.find_shift_whole(imgs[0], imgs[1], within, sure[0])
         pe = image_correction.find_shift_whole(image_correction.edges(imgs[0]), image_correction.edges(imgs[1]), within, sure[1]) \
