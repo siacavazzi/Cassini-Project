@@ -2947,8 +2947,8 @@ _spice_lock = threading.RLock()
 # Saturn's rings (ring reprojection, reproject.ring_field): a Saturn pass's tiles have their lit rings redrawn as at the
 # pass's epoch, the disk, the sky and Saturn's shadow kept as taken, kept in RING_DIR beside the tiles; then the
 # pointings are registered on the rings' radial profile (ring_shift) before the edges (edge_shift)
-RING_DIR = "rings2"
-RING_TAG = "-rg2"    # in the name of a layout whose tiles' rings are redrawn so, instead of SURFACE_TAG
+RING_DIR = "rings3"
+RING_TAG = "-rg3"    # in the name of a layout whose tiles' rings are redrawn so, instead of SURFACE_TAG
 RING_SECTOR = 15.0   # degrees: an overlap's ring pixels are split by the direction radius grows in, a profile each
 RING_BIN = 0.5       # reference px: a radial profile's bins (along the direction radius grows in)
 RING_HIGH = 8.0      # reference px: a profile's detail is what is left over its mean over this (the ringlets)

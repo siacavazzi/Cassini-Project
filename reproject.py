@@ -302,6 +302,11 @@ def warp_sky(image, dx, dy, weight, step, fine_weight=None):
     # (Lanczos, as the tiles are resized: a linear lookup softened every crater rim)
     warped = cv2.remap(image, px + sx, py + sy, cv2.INTER_LANCZOS4, borderMode=cv2.BORDER_CONSTANT,
                        borderValue=(0, 0, 0, 0)).astype(np.float32)
+    if fine_weight is not None:
+        # (the rings: where the picture never saw the ring point the epoch shows there, it lies past the picture's edge,
+        # the picture keeps what it took instead of a hole: the first panel of 007RI TEMPU11HP001, alone at the limb,
+        # left a black wedge there, redrawn from its time 40 px from the epoch's)
+        wt = wt * np.clip(warped[..., 3] / 255.0, 0, 1)
     k = wt[..., None]
     return np.clip(warped * k + image.astype(np.float32) * (1 - k), 0, 255).round().astype(np.uint8)
 
