@@ -355,7 +355,7 @@ def block(u, made, corr, k, x0, y0, w, h, cache):
     p, tiles, rect, count, used, name = made
     filters, colour, base, _, _ = drawn(u, made)
     blend = calibration.step("blend")
-    filled = p["display_scale"].get("filled")
+    filled = om.sharpens(p["display_scale"])
     sigma = om.DETAIL_SIGMA * om.FRAME * k
     pad = max(8, round(64 * k / 0.5)) + 2 + (math.ceil(4 * sigma) + 2 if filled else 0)
     # the block's frames start on the blend step's grid (mosaic.GRID) of the whole canvas, so blocks side by side lay
