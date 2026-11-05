@@ -166,6 +166,21 @@ on = apart(200)
 row = on[1600, 900:1012, 3].astype(int)
 assert row[0] == 255 and row[-1] == 0 and np.all(np.diff(row) <= 0) and (row > 0).sum() - (row == 255).sum() > 30, row
 print("a narrow gap between tiles is filled, a wide one keeps a soft edge; ok")
+# but where the tiles' staggered edges end at the mosaic's outer edge, the shallow notch between two of them (a tile
+# set lower between two others, 76 px wide and 30 deep) is that outer edge: filled, it was drawn opaque, a flat box
+# standing out past the soft edge (00ARI RADCOLOR001 at full resolution, a white box above the C ring)
+def notch():
+    frames = []
+    for x0, y0 in ((550, 30), (0, 0), (1100, 0)):
+        f = np.zeros((1200, 2200, 4), np.uint8)
+        f[y0:y0 + 1024, x0:x0 + 1024, :3] = (230, 215, 160)
+        f[y0:y0 + 1024, x0:x0 + 1024, 3] = mask
+        frames.append(f)
+    return draw(frames)
+on = notch()
+assert on[8, 1062, 3] < 128 and on[8, 400, 3] < 128, (on[8, 1062, 3], on[8, 400, 3])
+assert on[600, 1062, 3] == 255, on[600, 1062, 3]
+print("a shallow notch at the outer edge between two tiles keeps the soft edge; ok")
 
 # and the two sides of such a gap, which never overlap, are leveled across it (mosaic._across) as an overlap is: the
 # 3x3's columns, 4-8% apart in brightness, met in a step that detail() turned into a dark and a light line. The
