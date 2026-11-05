@@ -462,12 +462,149 @@ def build_geometry_cache(years=None, target=None, usgs_only=False):
     unload_kernels()
 
 
+"""
+The other bodies in each frame, beside its target: where SPICE puts every Saturn moon (NAIF 601-653), Saturn and
+Jupiter whose disk touches the frame, kept in the geometry cache's bodies table, so a movie's stabilization can be
+held on its target when a second moon is in the picture (obs_mosaic.steady_chain: Sam 2026-11-04, a moon transiting
+another pulled the stabilization off the target and back). One row per body in the frame: x, y where its centre is
+from the CCD's centre (full resolution pixels, the camera's own axes, as find_target projects it), r its radius
+(pixels, the PCK's mean radius over the distance) and km its distance, so which is in front is known; a frame worked out with no body in it but its target has one row
+with body '' so it reads as done. Filled by `python bootleg_autonav.py bodies`, a year of kernels at a time, for the
+frames the target table places.
+"""
+BODIES_VERSION = 1
+BODY_CODES = [699, 599] + list(range(601, 654))
+BODY_MARGIN = 0.1   # of a frame: a body this far past the frame's edge is listed too (a limb coming in)
+
+
+def _bodies_db():
+    db = _geometry_db()
+    db.execute("CREATE TABLE IF NOT EXISTS bodies (frame TEXT, version INTEGER, body TEXT, x REAL, y REAL, r REAL, km REAL)")
+    db.execute("CREATE INDEX IF NOT EXISTS bodies_frame ON bodies (frame)")
+    return db
+
+
+_radii = {}
+
+
+def _mean_radius(code):
+    if code not in _radii:
+        try:
+            _radii[code] = float(np.mean(sp.bodvcd(code, "RADII", 3)[1]))
+        except Exception:
+            _radii[code] = None
+    return _radii[code]
+
+
+def bodies_in_frame(et, frame, target):
+    """[(body, x, y, r, km)] for every body of BODY_CODES but target whose disk touches the frame (BODY_MARGIN round
+    it) at et seen by camera frame: x, y its centre from the CCD's centre (full resolution pixels, camera axes), r its
+    radius in pixels, km its distance. Kernels for et must be loaded."""
+    cam = sp.pxform("J2000", frame, et)
+    scale = pixel_scale(frame)
+    reach = FULL_FRAME / 2 * (1 + 2 * BODY_MARGIN)
+    out = []
+    for code in BODY_CODES:
+        try:
+            name = sp.bodc2n(code)
+        except Exception:
+            continue
+        if name == target:
+            continue
+        radius = _mean_radius(code)
+        if not radius:
+            continue
+        try:
+            position, _ = sp.spkpos(str(code), et, "J2000", ABCORR, "CASSINI")
+        except Exception:
+            continue
+        vector = sp.mxv(cam, position)
+        if vector[2] <= 0:
+            continue
+        sample, line = project(vector, scale)
+        r = radius / sp.vnorm(position) * scale
+        x, y = sample - CCD_CENTER, line - CCD_CENTER
+        if max(abs(x), abs(y)) - r <= reach:
+            out.append((name, float(x), float(y), float(r), float(sp.vnorm(position))))
+    return out
+
+
+def bodies_of(ids):
+    """{frame id: [(body, x, y, r, km)]} from the bodies table, for the frames ids that were worked out ([] for one
+    with no other body in it); a frame not worked out is left out. On the frame as it is drawn, as stacking.places
+    reads the target's shift: a WAC frame's x, y and r grown by its geometric correction (linear_ratio)."""
+    if not GEOMETRY_CACHE or not os.path.exists(GEOMETRY_CACHE):
+        return {}
+    db, out = _bodies_db(), {}
+    for k in range(0, len(ids), 900):
+        part = ids[k:k + 900]
+        for frame, body, x, y, r, km, camera, scale in db.execute(
+                f"SELECT b.frame, b.body, b.x, b.y, b.r, b.km, t.camera, t.scale FROM bodies b LEFT JOIN target t "
+                f"ON t.frame = b.frame AND t.version = ? WHERE b.version = ? AND b.frame IN ({','.join('?' * len(part))})",
+                (GEOMETRY_VERSION, BODIES_VERSION, *part)):
+            got = out.setdefault(frame, [])
+            if body:
+                k_ = linear_ratio(camera, scale)
+                got.append((body, x * k_, y * k_, r * k_, km))
+    return out
+
+
+def build_bodies_cache(years=None, observations=None):
+    """Fills the bodies table for every frame the target table places (or only those of the observations named),
+    a year of kernels at a time; frames already in it are skipped, so it can be stopped and run again."""
+    import contextlib
+    import io
+    import time
+    import pandas as pd
+    index = pd.read_csv(os.path.join(os.path.dirname(os.path.abspath(__file__)), "Image_index.csv"),
+                        usecols=["path", "IMAGE_MID_TIME", "OBSERVATION_ID"], low_memory=False)
+    index = index[index["path"].notna() & index["IMAGE_MID_TIME"].notna()]
+    if observations:
+        index = index[index["OBSERVATION_ID"].isin(observations)]
+    index = index.assign(year=index["IMAGE_MID_TIME"].str[:4].astype(int),
+                         frame=index["path"].str.rsplit("/", n=1).str[-1].str.split(".").str[0])
+    db = _bodies_db()
+    placed = {f: (et, cam, tgt) for f, et, cam, tgt in db.execute(
+        "SELECT frame, et, camera, target FROM target WHERE version = ? AND error IS NULL", (GEOMETRY_VERSION,))}
+    done = {f for (f,) in db.execute("SELECT DISTINCT frame FROM bodies WHERE version = ?", (BODIES_VERSION,))}
+    for year, rows in index.groupby("year"):
+        if years and year not in years:
+            continue
+        frames = [f for f in rows["frame"] if f in placed and f not in done]
+        if not frames:
+            continue
+        start = time.time()
+        with contextlib.redirect_stdout(io.StringIO()):
+            unload_kernels()
+            load_kernels(year, year)
+        loaded = time.time() - start
+        out = []
+        for f in frames:
+            et, cam, tgt = placed[f]
+            try:
+                found = bodies_in_frame(et, cam, tgt)
+            except Exception:
+                continue   # (no pointing for it this year's kernels hold: left for another run)
+            out += [(f, BODIES_VERSION, *b) for b in found] or [(f, BODIES_VERSION, "", None, None, None, None)]
+            if len(out) >= 5000:
+                db.execute("BEGIN")
+                db.executemany("INSERT INTO bodies VALUES (?, ?, ?, ?, ?, ?, ?)", out)
+                db.execute("COMMIT")
+                out = []
+        db.execute("BEGIN")
+        db.executemany("INSERT INTO bodies VALUES (?, ?, ?, ?, ?, ?, ?)", out)
+        db.execute("COMMIT")
+        print(f"{year}: {len(frames)} frames in {time.time() - start:.0f} s (kernels {loaded:.0f} s)", flush=True)
+    unload_kernels()
+
+
 if __name__ == "__main__":
     import argparse
     ap = argparse.ArgumentParser(description="Fills the geometry cache (CASSINI_GEOMETRY_CACHE) from Image_index.csv")
-    ap.add_argument("what", choices=["geometry"])
+    ap.add_argument("what", choices=["geometry", "bodies"])
     ap.add_argument("--years", help="e.g. 2005 or 2004-2017 (default: every year)")
     ap.add_argument("--target", help="only frames of this target, e.g. ENCELADUS")
+    ap.add_argument("--observations", nargs="*", help="bodies: only the frames of these OBSERVATION_IDs")
     ap.add_argument("--usgs-titan", action="store_true", help="only the frames the USGS Titan kernels cover")
     args = ap.parse_args()
     if not GEOMETRY_CACHE:
@@ -476,6 +613,9 @@ if __name__ == "__main__":
     if args.years:
         first, _, last = args.years.partition("-")
         years = set(range(int(first), int(last or first) + 1))
-    if args.usgs_titan and not usgs_titan_frames():
-        ap.error(f"no USGS Titan kernels in {USGS_TITAN_DIR} (or CASSINI_USGS_TITAN=0)")
-    build_geometry_cache(years, args.target, args.usgs_titan)
+    if args.what == "bodies":
+        build_bodies_cache(years, args.observations)
+    else:
+        if args.usgs_titan and not usgs_titan_frames():
+            ap.error(f"no USGS Titan kernels in {USGS_TITAN_DIR} (or CASSINI_USGS_TITAN=0)")
+        build_geometry_cache(years, args.target, args.usgs_titan)

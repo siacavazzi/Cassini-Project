@@ -2624,10 +2624,12 @@ def _register(u, n, out, crop, cache, scale):
     out["registered"] = {"to": q["id"], "how": how, "shift": [round(dx, 2), round(dy, 2)]}
 
 
-def _overlap(q, ref, at_q, t, crop, at_t):
+def _overlap(q, ref, at_q, t, crop, at_t, around=None, where=None):
     """The part of the view tiles q (picture ref, middle at at_q) and t (picture crop, middle at at_t) both cover:
     ([q's, t's] grey BGR crops, [their alpha masks], the rounding of each crop's corner to whole pixels as
-    ([x of q, x of t], [y of q, y of t])), or None when they overlap by under 64 px either way."""
+    ([x of q, x of t], [y of q, y of t])), or None when they overlap by under 64 px either way. around = (x, y, half):
+    only the square of half side half round (x, y) of it, unless that leaves under 64 px (_shift_onto's); where, a
+    dict, is given the part's corner (x0, y0) and whether around cut it ("cut")."""
     corners = []
     for s, at, im in ((q, at_q, ref), (t, at_t, crop)):
         corners.append((at[0] + s["box"][0], at[1] + s["box"][1], im))
@@ -2637,6 +2639,15 @@ def _overlap(q, ref, at_q, t, crop, at_t):
     y1 = min(c[1] + c[2].shape[0] for c in corners)
     if x1 - x0 < 64 or y1 - y0 < 64:
         return None
+    cut = False
+    if around is not None:
+        ax, ay, half = around
+        box = (max(x0, ax - half), max(y0, ay - half), min(x1, ax + half), min(y1, ay + half))
+        if box[2] - box[0] >= 64 and box[3] - box[1] >= 64:
+            x0, y0, x1, y1 = box
+            cut = True
+    if where is not None:
+        where.update(x0=x0, y0=y0, cut=cut)
     imgs, masks = [], []
     for cx, cy, im in corners:
         left, top = int(round(x0 - cx)), int(round(y0 - cy))
@@ -2662,7 +2673,7 @@ def _centroid_onto(q, ref, at_q, t, crop, at_t):
     return None if c is None else (c[0] + rest[0][1] - rest[0][0], c[1] + rest[1][1] - rest[1][0])
 
 
-def _shift_onto(q, ref, at_q, t, crop, at_t, within=None, sure=None):
+def _shift_onto(q, ref, at_q, t, crop, at_t, within=None, sure=None, around=None, holes=(), kept=None):
     """How far tile t (its picture crop, its middle put at at_t) is from tile q (picture ref, middle at at_q) over
     the part of the view both cover, by the pipeline's own alignment of a set's channels
     (image_correction.align_with_masks: phase correlation, then on edges, then by the lit area's centroid): (dx, dy),
@@ -2672,11 +2683,39 @@ def _shift_onto(q, ref, at_q, t, crop, at_t, within=None, sure=None):
     search round no shift), and each tile's edge (REGISTER_INSET) is left out of both, so neither tile's border is
     matched as if it were the scene (_register); None: the whole alignment, as the stabilization chains use it.
     sure = least phase correlation peaks (REGISTER_SURE) for REGISTER_FAR's wider search, over the whole overlap
-    (image_correction.find_shift_whole): a match is believed when its peak is high, or when the edges' match agrees with it."""
-    got = _overlap(q, ref, at_q, t, crop, at_t)
+    (image_correction.find_shift_whole): a match is believed when its peak is high, or when the edges' match agrees with it.
+    around = (x, y, half): only the square of half side half round (x, y) is matched (the stabilization chain's
+    target, steady_chain), unless that leaves under 64 px; holes = [(x, y, r, behind)]: discs left out of both
+    pictures (other bodies, steady_chain), behind for a body further off than the target, whose disc stops at
+    kept = (x, y, r), the target's own disk, which is in front of it; a hole over the square round a small target
+    (around) matches nothing: (None, "other body"). All in the coordinates of at_q and at_t."""
+    where = {}
+    got = _overlap(q, ref, at_q, t, crop, at_t, around, where)
     if got is None:
         return None, None
     imgs, masks, rest = got
+    if holes:
+        # (the same discs out of both, so neither picture's other body is matched, and the holes themselves stay put)
+        h, w = masks[0].shape
+        x0, y0 = where["x0"], where["y0"]
+        yy, xx = np.mgrid[0:h, 0:w]
+        disc = lambda cx, cy, r: (xx + 0.5 + x0 - cx) ** 2 + (yy + 0.5 + y0 - cy) ** 2 <= r * r
+        out, behind = np.zeros((h, w), bool), np.zeros((h, w), bool)
+        for hx, hy, r, back in holes:
+            if back:
+                behind |= disc(hx, hy, r)
+            else:
+                out |= disc(hx, hy, r)
+        out |= behind & ~disc(*kept) if kept is not None else behind
+        if out.any() and where["cut"]:
+            # another body over the square round a small target: what is left is too little of it to match on its own
+            # (on a square mostly sky the alignment takes a star fit), so SPICE alone places the frame
+            return None, "other body"
+        if out.any():
+            imgs = [np.where(out[..., None], 0, i).astype(np.uint8) for i in imgs]
+            masks = [m & ~out for m in masks]
+            if min(int(m.sum()) for m in masks) < 32 * 32:
+                return None, "other body"
     if within is not None:
         # only where both tiles have picture, well inside each: the same ground in both
         k = np.ones((2 * REGISTER_INSET + 1, 2 * REGISTER_INSET + 1), np.uint8)
@@ -4270,14 +4309,16 @@ def _every_tile(u, cache, p):
     return made, pic, there
 
 
-def _chain(made, pic, there, believed, step):
+def _chain(made, pic, there, believed, step, guide=None):
     """Each placed tile registered to the tile before it ({n: [x, y]} and how), the chain track_places and
     steady_places are made of. Tile n is put first where step(j, n) says it is from tile j's place, and registered
     there to the tile before it, or to the newest earlier tile of its own filter (another filter can look too
     different: a methane band after a continuum), by the pipeline's own alignment of a set's channels (_shift_onto,
     as C8 registers a pointing's filters); a shift of at most believed (reference pixels) moves it, otherwise it
     keeps step's place from the tile before it. step(places, j, n) reads the places made so far. The first tile keeps
-    SPICE's place."""
+    SPICE's place. guide(places, j, n, at): what the match is held to, {"around", "holes"} for _shift_onto and
+    "reach", how far from the tile's own SPICE place the place found may be (steady_chain's: the pass's target as
+    SPICE puts it); None: the whole overlap, no reach (track_places)."""
     places, hows, prev, newest = {}, {}, None, {}
     for t in made:
         n = t["n"]
@@ -4288,9 +4329,15 @@ def _chain(made, pic, there, believed, step):
         else:
             for j in dict.fromkeys(j for j in (prev, newest.get(t["filter"])) if j is not None):
                 at = step(places, j, n)
-                shift, how = _shift_onto(made[j], pic(j), (0.0, 0.0), t, pic(n), (at[0] - places[j][0], at[1] - places[j][1]))
+                g = guide(places, j, n, at) if guide else {}
+                shift, how = _shift_onto(made[j], pic(j), (0.0, 0.0), t, pic(n), (at[0] - places[j][0], at[1] - places[j][1]),
+                                         around=g.get("around"), holes=g.get("holes", ()), kept=g.get("kept"))
                 if shift is not None and math.hypot(*shift) <= believed:
-                    places[n] = [at[0] - shift[0], at[1] - shift[1]]
+                    found = [at[0] - shift[0], at[1] - shift[1]]
+                    # (further from SPICE's own place than SPICE is ever off: what moved is not the target)
+                    if g.get("reach") is not None and math.hypot(found[0] - t["offset"][0], found[1] - t["offset"][1]) > g["reach"]:
+                        continue
+                    places[n] = found
                     hows[n] = f"{how} to {j}"
                     break
             else:
@@ -4346,11 +4393,18 @@ def track_places(u, cache, p=None):
 
 
 STEADY_MAX = 0.05     # of a frame: the largest correction to SPICE's step between two frames that registration is believed for
+STEADY_REACH = image_correction.FIT_REACH   # px: the furthest a stabilized tile may be from its own SPICE place (SPICE
+                      # is 3 to 5 px off, 27 to 30 at worst between a set's filters); a match further off followed
+                      # something else that moves, another moon crossing the frame (Sam 2026-11-04)
+STEADY_PAD = 4        # px round another body's disk left out of a stabilization match (steady_chain)
+STEADY_AROUND = 32    # px: half the least square round a small target a stabilization match is made on, and twice what
+                      # is added round its disk (CENTRE_MARGIN): SPICE's few px off, the disk most of the square, so the
+                      # match is the disk's own (on a square mostly sky the alignment takes it for a star field)
 STEADY_SMOOTH = 12    # frames: Settings > Movie's stabilization smoothing by default (0: SPICE's places)
 STEADY_MOST = 60      # frames: the most smoothing asked for
 # a movie's stabilization chain (steady_chain), kept with the pass; renamed (with the movie frames drawn on it,
 # movie_webp) whenever the rule changes
-STEADY_FILE = "steady1-" + PLAN_FILE
+STEADY_FILE = "steady2-" + PLAN_FILE   # steady2: held on the target (steady_guide)
 
 
 def steady_chain(u, cache, p=None):
@@ -4362,8 +4416,11 @@ def steady_chain(u, cache, p=None):
     alignment of a set's channels (_shift_onto) moves it onto tile j by what the pictures show, up to STEADY_MAX of a
     frame; a tile that matches neither keeps SPICE's step. The chain follows the pictures frame to frame, so it
     drifts away from SPICE slowly (each registration is a fraction of a pixel off): steady_places holds it to SPICE
-    over longer spans. Worked out once over every tile of the pass and kept with it; {} with Settings > Processing's
-    alignment off."""
+    over longer spans. The matches are held on the pass's target as SPICE puts it (steady_guide): only round its disk,
+    with every other body SPICE puts in the frames left out, and never further than STEADY_REACH from SPICE's own
+    place, so a second moon in the picture (a mutual event, a moon crossing another) cannot pull the chain onto
+    itself. Worked out once over every tile of the pass and kept with it; {} with Settings > Processing's alignment
+    off."""
     p = p or plan(u, cache)
     if not calibration.step("align"):
         return {}
@@ -4375,8 +4432,54 @@ def steady_chain(u, cache, p=None):
             # SPICE's step from tile j to tile n, from where tile j was put
             return [places[j][0] + made[n]["offset"][0] - made[j]["offset"][0],
                     places[j][1] + made[n]["offset"][1] - made[j]["offset"][1]]
-        return _chain(made, pic, there, STEADY_MAX * FRAME, step)
+        return _chain(made, pic, there, STEADY_MAX * FRAME, step, steady_guide(u))
     return _chained(u, cache, p, STEADY_FILE, "steady", work)
+
+
+def other_bodies(u):
+    """{tile n: [(x, y, r, behind)]}: every body but its target that SPICE puts on tile n of pass u
+    (bootleg_autonav.bodies_of, the geometry cache's bodies table), its centre from the target's centre and its radius,
+    north up, in the pass's reference pixels (where the tiles are drawn: frames_seen's turn and scale), and whether it
+    is further off than the target (behind it). Tiles whose frame the table has not
+    worked out, or with no other body, are left out."""
+    import bootleg_autonav as ba
+    frames = u["frames"]
+    got = ba.bodies_of([fr[1] for fr in frames if fr[7]])
+    if not any(got.values()):
+        return {}
+    angles = reel.north_angles([fr[1] for fr in frames if fr[1] in got])
+    out = {}
+    for n, fr in enumerate(frames):
+        if not got.get(fr[1]) or not fr[7]:
+            continue
+        x, y, fz = fr[5], fr[6], fr[7]
+        a = math.radians(angles.get(fr[1], 0.0))
+        c, sn, k = math.cos(a), math.sin(a), fz / u["z"]
+        # (the body from the target on the camera's axes: the target is at -x, -y from the frame's middle)
+        out[n] = [((c * (bx + x) + sn * (by + y)) * k, (c * (by + y) - sn * (bx + x)) * k, r * k, bool(km and km > fz))
+                  for _, bx, by, r, km in got[fr[1]]]
+    return out
+
+
+def steady_guide(u):
+    """What steady_chain's matches are held to (_chain's guide): the pass's target as SPICE puts it. Each match is
+    made only on the square round the target's disk (CENTRE_MARGIN round it and STEADY_AROUND / 2 more, at least
+    STEADY_AROUND each way) when the disk is smaller than a frame, with every other body SPICE puts in either frame
+    (other_bodies, STEADY_PAD round its disk, but for the target's own disk in front of one behind it) left out of
+    both, and the place found must stay within STEADY_REACH
+    of the tile's own SPICE place. A tile's target sits at minus its place, in _chain's match coordinates (tile j's
+    middle at 0)."""
+    radius = RADIUS.get(u["key"][0], 0) / (u["z"] * IFOV[u["key"][2]]) if u.get("z") else 0
+    half = max(STEADY_AROUND, radius * (1 + CENTRE_MARGIN) + STEADY_AROUND / 2)
+    small = 0 < radius and half < FRAME / 2
+    others = other_bodies(u)
+
+    def guide(places, j, n, at):
+        cx, cy = -places[j][0], -places[j][1]
+        holes = [(cx + x, cy + y, r + STEADY_PAD, back) for k in (j, n) for x, y, r, back in others.get(k, ())]
+        return {"around": (cx, cy, half) if small else None, "holes": holes, "kept": (cx, cy, radius + 1),
+                "reach": STEADY_REACH}
+    return guide
 
 
 def steady_places(u, cache, p=None, smooth=STEADY_SMOOTH):
