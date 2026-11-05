@@ -69,9 +69,11 @@ frames = fr(fs)
 tiles = [span(18, 19), over(0.86), over(0.88), span(0, 200), span(17, 17), over(1.0)] + [far] * 6
 tile_of = lambda j: tiles[j]
 bad = lambda j: om.unfit(frames, j, tile_of)
-assert not bad(1) and not bad(2) and bad(5)            # a run of over-exposed frames plays (colour off) ...
-assert om.held_of(fs, 5, bad, om.holds(tile_of, bad)) == 3                      # ... but is never held
-assert om.held_of(fs, 5, bad, lambda j: "offset" in tiles[j] and not bad(j)) == 2   # (as it was)
+# a run of over-exposed frames of a filter the pass over-exposed through (most of its clear frames here) is held
+# as a whole (BLOWN), and never held in another's place
+assert bad(1) and bad(2) and bad(5)
+assert om.held_of(fs, 5, bad, om.holds(tile_of, bad)) == 3
+assert om.held_of(fs, 5, bad, lambda j: "offset" in tiles[j] and not bad(j)) == 3
 u = {"frames": frames, "_sets": [[("RED", 6), ("GRN", 7), ("BL1", 8)], [("RED", 9), ("GRN", 10), ("BL1", 11)]]}
 pc = {"colour": ["RED", "GRN", "BL1"], "grey": "CL1/CL2"}
 assert om.plays_colour(u, pc["colour"], pc["grey"])
