@@ -647,8 +647,14 @@ def saturated(codes, info, image=None):
     image = np.asarray(codes if image is None else image)
     if ds.lut8() and conversion in ("TABLE", "12BIT"):
         top = 4095 if conversion == "12BIT" else 255
-        if stored_range(codes, info)[1] < top:
+        low, high = stored_range(codes, info)
+        if high < top:
             return np.zeros(image.shape, bool)
+        if low >= top:
+            # every pixel at the top: the display stretch has no range to spread and draws the frame black (0), so a
+            # display image marks none of it (080EN PLMHINCL001's 82-220 s WAC frames near the Sun, saturated all
+            # over, drew as flat tiles in the flat field's pattern instead of being left out of the mosaic)
+            return np.ones(image.shape, bool)
         # the display stretch puts the top at 254; a resized frame's partly full pixels count too
         return gc.correct_mask(image >= 250, info)
     return gc.correct_mask(image >= 254, info)
