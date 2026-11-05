@@ -1747,8 +1747,11 @@ _luts = {}
 
 def _shade(part, t):
     """A tile's picture (RGBA at its canvas size) with its tile dict's "gain" applied: the luminance base's gain of
-    a band other than the grey filter, on linear brightness (the pass's display gamma, t["gamma"]), alpha as it
-    is. The same array when the tile has none."""
+    a band other than the grey filter, or a movie frame's exposure gain, on linear brightness (the pass's display
+    gamma, t["gamma"]), alpha as it is. The same array when the tile has none. A gain under 1 leaves white white:
+    a clipped pixel (CLIP_FROM and up, eased in to 255) is at least as bright as white, so dimmed it would draw a
+    floor as a value: the sun's saturated glare in the 2006 backlit Saturn movie (028RG HIPHASE002, exposure gain
+    0.7) came out a flat grey blob among frames where it is white."""
     g = t.get("gain")
     if not g or g == 1.0:
         return part
@@ -1756,8 +1759,11 @@ def _shade(part, t):
     lut = _luts.get(key)
     if lut is None:
         v = np.arange(256, dtype=np.float64) / 255
-        lut = _luts[key] = (calibration.encode(np.clip(calibration.decode(v, key[1]) * g, 0, 1), key[1]) * 255
-                            + 0.5).astype(np.uint8)
+        lin = calibration.encode(np.clip(calibration.decode(v, key[1]) * g, 0, 1), key[1])
+        if g < 1.0:
+            w = np.clip((v * 255 - CLIP_FROM) / (255 - CLIP_FROM), 0, 1)
+            lin = lin + w * w * (3 - 2 * w) * (v - lin)
+        lut = _luts[key] = (lin * 255 + 0.5).astype(np.uint8)
     out = part.copy()
     out[..., :3] = lut[part[..., :3]]
     return out
